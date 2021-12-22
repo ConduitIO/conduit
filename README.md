@@ -32,7 +32,7 @@ Conduit was created and open-sourced by [Meroxa](https://meroxa.io).
 - [API](#api)
 - [UI](#ui)
 - [Documentation](#documentation)
-- [Sharp edges](#sharp-edges)
+- [Future improvements](#future-improvements)
 - [Contributing](#contributing)
 
 ## Installation guide
@@ -126,7 +126,7 @@ If you are interested in internals of Conduit we have prepared some technical do
 * [Connector Plugins](https://github.com/ConduitIO/conduit/blob/main/docs/plugins.md) contains insights about how 
   Conduit is communicating with connector plugins and how you can build your own connector plugin.
 
-## Sharp edges
+## Future improvements
 
 While Conduit is built on strong foundations and experiences from running similar systems, it's not production ready
 at the moment. Following features are on the roadmap and yet to be implemented:
