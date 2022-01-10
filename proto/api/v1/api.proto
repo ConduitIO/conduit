@@ -121,6 +121,36 @@ service PipelineService {
       body: "*"
       response_body: "pipeline"
     };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+			responses: {
+        key: "400";
+        value: {
+          schema: {
+            json_schema: {
+              ref: ".google.rpc.Status";
+            }
+          }
+          examples: {
+            key: "application/json"
+            value: '{ "code": 3, "message": "invalid arguments error", "details": [] }';
+          }
+        }
+      }
+      responses: {
+        key: "409";
+        value: {
+          schema: {
+            json_schema: {
+              ref: ".google.rpc.Status";
+            }
+          }
+          examples: {
+            key: "application/json"
+            value: '{ "code": 6, "message": "already exists error", "details": [] }';
+          }
+        }
+      }
+		};
   };
 
   rpc GetPipeline(GetPipelineRequest) returns (GetPipelineResponse) {
@@ -128,6 +158,22 @@ service PipelineService {
       get: "/v1/pipelines/{id}"
       response_body: "pipeline"
     };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      responses: {
+        key: "404";
+        value: {
+          schema: {
+            json_schema: {
+              ref: ".google.rpc.Status";
+            }
+          }
+          examples: {
+            key: "application/json"
+            value: '{ "code": 5, "message": "resource not found error", "details": [] }';
+          }
+        }
+      }
+		};
   };
 
   rpc UpdatePipeline(UpdatePipelineRequest) returns (UpdatePipelineResponse) {
@@ -136,24 +182,158 @@ service PipelineService {
       body: "*"
       response_body: "pipeline"
     };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      responses: {
+        key: "404";
+        value: {
+          schema: {
+            json_schema: {
+              ref: ".google.rpc.Status";
+            }
+          }
+          examples: {
+            key: "application/json"
+            value: '{ "code": 5, "message": "resource not found error", "details": [] }';
+          }
+        }
+      }
+			responses: {
+        key: "400";
+        value: {
+          schema: {
+            json_schema: {
+              ref: ".google.rpc.Status";
+            }
+          }
+          examples: {
+            key: "application/json"
+            value: '{ "code": 3, "message": "invalid arguments error", "details": [] }';
+          }
+        }
+      }
+      responses: {
+        key: "409";
+        value: {
+          schema: {
+            json_schema: {
+              ref: ".google.rpc.Status";
+            }
+          }
+          examples: {
+            key: "application/json"
+            value: '{ "code": 6, "message": "already exists error", "details": [] }';
+          }
+        }
+      }
+		};
   };
 
   rpc DeletePipeline(DeletePipelineRequest) returns (DeletePipelineResponse) {
     option (google.api.http) = {
       delete: "/v1/pipelines/{id}"
     };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      responses: {
+        key: "404";
+        value: {
+          schema: {
+            json_schema: {
+              ref: ".google.rpc.Status";
+            }
+          }
+          examples: {
+            key: "application/json"
+            value: '{ "code": 5, "message": "resource not found error", "details": [] }';
+          }
+        }
+      }
+			responses: {
+        key: "400";
+        value: {
+          schema: {
+            json_schema: {
+              ref: ".google.rpc.Status";
+            }
+          }
+          examples: {
+            key: "application/json"
+            value: '{ "code": 9, "message": "failed precondition error", "details": [] }';
+          }
+        }
+      }
+		};
   };
 
   rpc StartPipeline(StartPipelineRequest) returns (StartPipelineResponse) {
     option (google.api.http) = {
       post: "/v1/pipelines/{id}/start"
     };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      responses: {
+        key: "404";
+        value: {
+          schema: {
+            json_schema: {
+              ref: ".google.rpc.Status";
+            }
+          }
+          examples: {
+            key: "application/json"
+            value: '{ "code": 5, "message": "resource not found error", "details": [] }';
+          }
+        }
+      }
+			responses: {
+        key: "400";
+        value: {
+          schema: {
+            json_schema: {
+              ref: ".google.rpc.Status";
+            }
+          }
+          examples: {
+            key: "application/json"
+            value: '{ "code": 9, "message": "failed precondition error", "details": [] }';
+          }
+        }
+      }
+		};
   };
 
   rpc StopPipeline(StopPipelineRequest) returns (StopPipelineResponse) {
     option (google.api.http) = {
       post: "/v1/pipelines/{id}/stop"
     };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      responses: {
+        key: "404";
+        value: {
+          schema: {
+            json_schema: {
+              ref: ".google.rpc.Status";
+            }
+          }
+          examples: {
+            key: "application/json"
+            value: '{ "code": 5, "message": "resource not found error", "details": [] }';
+          }
+        }
+      }
+			responses: {
+        key: "400";
+        value: {
+          schema: {
+            json_schema: {
+              ref: ".google.rpc.Status";
+            }
+          }
+          examples: {
+            key: "application/json"
+            value: '{ "code": 9, "message": "failed precondition error", "details": [] }';
+          }
+        }
+      }
+		};
   };
 
   rpc ExportPipeline(ExportPipelineRequest) returns (ExportPipelineResponse) {
@@ -243,6 +423,22 @@ service ConnectorService {
       get: "/v1/connectors/{id}"
       response_body: "connector"
     };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      responses: {
+        key: "404";
+        value: {
+          schema: {
+            json_schema: {
+              ref: ".google.rpc.Status";
+            }
+          }
+          examples: {
+            key: "application/json"
+            value: '{ "code": 5, "message": "resource not found error", "details": [] }';
+          }
+        }
+      }
+    };
   };
 
   rpc CreateConnector(CreateConnectorRequest) returns (CreateConnectorResponse) {
@@ -251,6 +447,22 @@ service ConnectorService {
       body: "*"
       response_body: "connector"
     };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+			responses: {
+        key: "400";
+        value: {
+          schema: {
+            json_schema: {
+              ref: ".google.rpc.Status";
+            }
+          }
+          examples: {
+            key: "application/json"
+            value: '{ "code": 3, "message": "invalid arguments error", "details": [] }';
+          }
+        }
+      }
+		};
   };
 
   rpc UpdateConnector(UpdateConnectorRequest) returns (UpdateConnectorResponse) {
@@ -259,11 +471,71 @@ service ConnectorService {
       body: "*"
       response_body: "connector"
     };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      responses: {
+        key: "404";
+        value: {
+          schema: {
+            json_schema: {
+              ref: ".google.rpc.Status";
+            }
+          }
+          examples: {
+            key: "application/json"
+            value: '{ "code": 5, "message": "resource not found error", "details": [] }';
+          }
+        }
+      }
+			responses: {
+        key: "400";
+        value: {
+          schema: {
+            json_schema: {
+              ref: ".google.rpc.Status";
+            }
+          }
+          examples: {
+            key: "application/json"
+            value: '{ "code": 3, "message": "invalid arguments error", "details": [] }';
+          }
+        }
+      }
+		};
   };
 
   rpc DeleteConnector(DeleteConnectorRequest) returns (DeleteConnectorResponse) {
     option (google.api.http) = {
       delete: "/v1/connectors/{id}"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      responses: {
+        key: "404";
+        value: {
+          schema: {
+            json_schema: {
+              ref: ".google.rpc.Status";
+            }
+          }
+          examples: {
+            key: "application/json"
+            value: '{ "code": 5, "message": "resource not found error", "details": [] }';
+          }
+        }
+      }
+      responses: {
+        key: "400";
+        value: {
+          schema: {
+            json_schema: {
+              ref: ".google.rpc.Status";
+            }
+          }
+          examples: {
+            key: "application/json"
+            value: '{ "code": 9, "message": "failed precondition error", "details": [] }';
+          }
+        }
+      }
     };
   };
 }
@@ -321,6 +593,22 @@ service ProcessorService {
       get: "/v1/processors/{id}"
       response_body: "processor"
     };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      responses: {
+        key: "404";
+        value: {
+          schema: {
+            json_schema: {
+              ref: ".google.rpc.Status";
+            }
+          }
+          examples: {
+            key: "application/json"
+            value: '{ "code": 5, "message": "resource not found error", "details": [] }';
+          }
+        }
+      }
+    };
   };
 
   rpc CreateProcessor(CreateProcessorRequest) returns (CreateProcessorResponse) {
@@ -329,6 +617,22 @@ service ProcessorService {
       body: "*"
       response_body: "processor"
     };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+			responses: {
+        key: "400";
+        value: {
+          schema: {
+            json_schema: {
+              ref: ".google.rpc.Status";
+            }
+          }
+          examples: {
+            key: "application/json"
+            value: '{ "code": 3, "message": "invalid arguments error", "details": [] }';
+          }
+        }
+      }
+		};
   };
 
   rpc UpdateProcessor(UpdateProcessorRequest) returns (UpdateProcessorResponse) {
@@ -337,11 +641,71 @@ service ProcessorService {
       body: "*"
       response_body: "processor"
     };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      responses: {
+        key: "404";
+        value: {
+          schema: {
+            json_schema: {
+              ref: ".google.rpc.Status";
+            }
+          }
+          examples: {
+            key: "application/json"
+            value: '{ "code": 5, "message": "resource not found error", "details": [] }';
+          }
+        }
+      }
+			responses: {
+        key: "400";
+        value: {
+          schema: {
+            json_schema: {
+              ref: ".google.rpc.Status";
+            }
+          }
+          examples: {
+            key: "application/json"
+            value: '{ "code": 3, "message": "invalid arguments error", "details": [] }';
+          }
+        }
+      }
+		};
   };
 
   rpc DeleteProcessor(DeleteProcessorRequest) returns (DeleteProcessorResponse) {
     option (google.api.http) = {
       delete: "/v1/processors/{id}"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      responses: {
+        key: "404";
+        value: {
+          schema: {
+            json_schema: {
+              ref: ".google.rpc.Status";
+            }
+          }
+          examples: {
+            key: "application/json"
+            value: '{ "code": 5, "message": "resource not found error", "details": [] }';
+          }
+        }
+      }
+      responses: {
+        key: "400";
+        value: {
+          schema: {
+            json_schema: {
+              ref: ".google.rpc.Status";
+            }
+          }
+          examples: {
+            key: "application/json"
+            value: '{ "code": 9, "message": "failed precondition error", "details": [] }';
+          }
+        }
+      }
     };
   };
 }
@@ -404,3 +768,34 @@ message Info {
   string os = 2;
   string arch = 3;
 }
+
+option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
+	info: {
+		title: "Conduit REST API";
+		version: "0.1";
+		contact: {
+			name: "Conduit project";
+			url: "https://github.com/conduitio/conduit";
+			email: "";
+		}
+		license: {
+			name: "Apache License Version 2.0";
+			url: "https://github.com/ConduitIO/conduit/blob/main/README.md";
+		}
+	}
+
+  responses: {
+		key: "500";
+		value: {
+			schema: {
+				json_schema: {
+					ref: ".google.rpc.Status";
+				}
+			}
+      examples: {
+        key: "application/json"
+        value: '{ "code": 13, "message": "server error", "details": [] }';
+      }
+		}
+	}
+};
