@@ -56,7 +56,30 @@ The config passed to `Open` can contain the following fields.
 
 
 ### Known Limitations
-
 * If a pipeline restarts during the snapshot, then the connector will start scanning the
   objects from the beginning of the bucket, which could result in duplications.
 
+
+## Destination
+The S3 Destination Connector connects to an S3 bucket with the provided configurations, using
+`aws.bucket`, `aws.access-key-id`,`aws.secret-access-key` and `aws.region`. Then will
+call `Open` to start the connection. If the bucket doesn't exist, or the permissions
+fail, then the `Open` method will fail, and the Connector will not be ready to Write.
+
+### Writer
+The S3 destination writer has a buffer with the size of `buffer-size`, for each time 
+`Write` is called, a new record is added to the buffer. When the buffer is full, 
+all the records from it will be written to the S3 bucket configured.
+
+### Configuration
+The config passed to `Open` can contain the following fields.
+
+| name                  | description                                                                                                     | required             | example             |
+|-----------------------|-----------------------------------------------------------------------------------------------------------------|----------------------|---------------------|
+| aws.access-key-id     | AWS access key id                                                                                               | yes                  | "THE_ACCESS_KEY_ID" |
+| aws.secret-access-key | AWS secret access key                                                                                           | yes                  | "SECRET_ACCESS_KEY" |
+| aws.region            | the AWS S3 bucket region                                                                                        | yes                  | "us-east-1"         |
+| aws.bucket            | the AWS S3 bucket name                                                                                          | yes                  | "bucket_name"       |
+| format                | the destination format, either "json" or "parquet"                                                              | yes                  | "json"              |
+| buffer-size           | the buffer size {when full, the files will be written to destination}, default is "1000", max is "100000"       | no                   | "100"               |
+| prefix                | the key prefix for S3 destination                                                                               | no                   | "conduit-"          |
