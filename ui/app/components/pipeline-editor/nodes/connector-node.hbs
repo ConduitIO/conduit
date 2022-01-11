@@ -1,0 +1,33 @@
+<div
+  class="w-full border-2 {{if this.isSelected 'border-purple-600 rounded-lg' 'border-transparent'}}"
+  data-test-connector-node={{dasherize (concat @connectorType " " @connector.name)}}
+  ...attributes
+>
+  <div
+    class="rounded-md cursor-pointer p-4 bg-white shadow hover:shadow-md relative"
+    {{did-insert this.registerNode @connectorType this.pipelineNodeManager @connector}}
+    {{will-destroy this.unregisterNode @connectorType this.pipelineNodeManager}}
+    {{on "click" (fn @selectNode @connector)}}
+    {{on-click-outside (fn @selectNode null) "#editor-container"}}
+  >
+    <div class="flex items-center justify-between mb-1">
+      <div class="text-xs font-medium" data-test-connector-node-name>
+        {{@connector.name}}
+      </div>
+      <div class="text-gray-500 text-xs" data-test-connector-node-plugin-name>
+        {{@connector.connectorPlugin.name}}
+      </div>
+    </div>
+    <div class="flex items-center">
+      <div class="text-gray-500 text-xs">
+        {{@connector.processors.length}}
+        {{#if (eq @connector.processors.length 1)}}
+          Transform
+        {{else}}
+          Transforms
+        {{/if}}
+      </div>
+    </div>
+  </div>
+</div>
+<div class="mb-4 last:mb-0"></div>

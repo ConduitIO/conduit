@@ -1,0 +1,71 @@
+### Go ###
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+/vendor
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+
+### Intellij ###
+.idea
+
+### VisualStudioCode ###
+.vscode
+
+### Conduit ###
+
+# Badger DB
+conduit.db
+
+# Ignore plugin binaries
+pkg/plugins/file/file
+pkg/plugins/pg/pg
+pkg/plugins/s3/s3
+pkg/plugins/kafka/kafka
+pkg/plugins/generator/generator
+
+# Binary, built with `make build`
+/conduit
+
+### Conduit UI ###
+
+# compiled output
+/ui/dist/
+/ui/tmp/
+/pkg/web/ui/dist/*
+!/pkg/web/ui/dist/.keep
+
+# dependencies
+/ui/node_modules/
+
+# misc
+/ui/.env*
+/ui/.pnp*
+/ui/.sass-cache
+/ui/.eslintcache
+/ui/connect.lock
+/ui/coverage/
+/ui/libpeerconnection.log
+/ui/npm-debug.log*
+/ui/testem.log
+/ui/yarn-error.log
+
+# ember-try
+/ui/.node_modules.ember-try/
+/ui/bower.json.ember-try
+/ui/package.json.ember-try
+
+# Local Netlify folder
+/ui/.netlify
+
+### OS ###
+.DS_Store
+
+dist/

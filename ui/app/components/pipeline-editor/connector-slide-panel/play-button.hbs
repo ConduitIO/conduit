@@ -1,0 +1,10 @@
+<button
+  class="disabled:cursor-not-allowed"
+  disabled={{this.isDisabled}}
+  {{on "click" @clickAction}}
+  ...attributes
+>
+  <svg class="{{this.textColorClass}} fill-current h-3 w-3">
+    <use xlink:href="/ui/svg-defs.svg#play-16"></use>
+  </svg>
+</button>

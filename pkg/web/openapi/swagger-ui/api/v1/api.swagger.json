@@ -1,0 +1,1086 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "api/v1/api.proto",
+    "version": "version not set"
+  },
+  "tags": [
+    {
+      "name": "PipelineService"
+    },
+    {
+      "name": "ConnectorService"
+    },
+    {
+      "name": "ProcessorService"
+    },
+    {
+      "name": "InformationService"
+    }
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {
+    "/info": {
+      "get": {
+        "operationId": "InformationService_GetInfo",
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/apiv1Info"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "InformationService"
+        ]
+      }
+    },
+    "/v1/connectors": {
+      "get": {
+        "operationId": "ConnectorService_ListConnectors",
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/v1Connector"
+              }
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "pipelineId",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "ConnectorService"
+        ]
+      },
+      "post": {
+        "operationId": "ConnectorService_CreateConnector",
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/v1Connector"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1CreateConnectorRequest"
+            }
+          }
+        ],
+        "tags": [
+          "ConnectorService"
+        ]
+      }
+    },
+    "/v1/connectors/{id}": {
+      "get": {
+        "operationId": "ConnectorService_GetConnector",
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/v1Connector"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "ConnectorService"
+        ]
+      },
+      "delete": {
+        "operationId": "ConnectorService_DeleteConnector",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1DeleteConnectorResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "ConnectorService"
+        ]
+      },
+      "put": {
+        "operationId": "ConnectorService_UpdateConnector",
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/v1Connector"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "properties": {
+                "config": {
+                  "$ref": "#/definitions/v1ConnectorConfig"
+                }
+              }
+            }
+          }
+        ],
+        "tags": [
+          "ConnectorService"
+        ]
+      }
+    },
+    "/v1/pipelines": {
+      "get": {
+        "operationId": "PipelineService_ListPipelines",
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/v1Pipeline"
+              }
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "PipelineService"
+        ]
+      },
+      "post": {
+        "operationId": "PipelineService_CreatePipeline",
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/v1Pipeline"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1CreatePipelineRequest"
+            }
+          }
+        ],
+        "tags": [
+          "PipelineService"
+        ]
+      }
+    },
+    "/v1/pipelines/import": {
+      "post": {
+        "operationId": "PipelineService_ImportPipeline",
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/v1Pipeline"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1Pipeline"
+            }
+          }
+        ],
+        "tags": [
+          "PipelineService"
+        ]
+      }
+    },
+    "/v1/pipelines/{id}": {
+      "get": {
+        "operationId": "PipelineService_GetPipeline",
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/v1Pipeline"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "PipelineService"
+        ]
+      },
+      "delete": {
+        "operationId": "PipelineService_DeletePipeline",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1DeletePipelineResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "PipelineService"
+        ]
+      },
+      "put": {
+        "operationId": "PipelineService_UpdatePipeline",
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/v1Pipeline"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "properties": {
+                "config": {
+                  "$ref": "#/definitions/v1PipelineConfig"
+                }
+              }
+            }
+          }
+        ],
+        "tags": [
+          "PipelineService"
+        ]
+      }
+    },
+    "/v1/pipelines/{id}/export": {
+      "post": {
+        "operationId": "PipelineService_ExportPipeline",
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/v1Pipeline"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "PipelineService"
+        ]
+      }
+    },
+    "/v1/pipelines/{id}/start": {
+      "post": {
+        "operationId": "PipelineService_StartPipeline",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1StartPipelineResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "PipelineService"
+        ]
+      }
+    },
+    "/v1/pipelines/{id}/stop": {
+      "post": {
+        "operationId": "PipelineService_StopPipeline",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1StopPipelineResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "PipelineService"
+        ]
+      }
+    },
+    "/v1/processors": {
+      "get": {
+        "operationId": "ProcessorService_ListProcessors",
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/v1Processor"
+              }
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "parentIds",
+            "in": "query",
+            "required": false,
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "collectionFormat": "multi"
+          }
+        ],
+        "tags": [
+          "ProcessorService"
+        ]
+      },
+      "post": {
+        "operationId": "ProcessorService_CreateProcessor",
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/v1Processor"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1CreateProcessorRequest"
+            }
+          }
+        ],
+        "tags": [
+          "ProcessorService"
+        ]
+      }
+    },
+    "/v1/processors/{id}": {
+      "get": {
+        "operationId": "ProcessorService_GetProcessor",
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/v1Processor"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "ProcessorService"
+        ]
+      },
+      "delete": {
+        "operationId": "ProcessorService_DeleteProcessor",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1DeleteProcessorResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "ProcessorService"
+        ]
+      },
+      "put": {
+        "operationId": "ProcessorService_UpdateProcessor",
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/v1Processor"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "properties": {
+                "config": {
+                  "$ref": "#/definitions/v1ProcessorConfig"
+                }
+              }
+            }
+          }
+        ],
+        "tags": [
+          "ProcessorService"
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "ConnectorDestinationState": {
+      "type": "object",
+      "properties": {
+        "positions": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "format": "byte"
+          }
+        }
+      }
+    },
+    "ConnectorSourceState": {
+      "type": "object",
+      "properties": {
+        "position": {
+          "type": "string",
+          "format": "byte"
+        }
+      }
+    },
+    "PipelineState": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "$ref": "#/definitions/v1PipelineStatus"
+        },
+        "error": {
+          "type": "string"
+        }
+      }
+    },
+    "ProcessorParent": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "$ref": "#/definitions/ProcessorParentType"
+        },
+        "id": {
+          "type": "string"
+        }
+      }
+    },
+    "ProcessorParentType": {
+      "type": "string",
+      "enum": [
+        "TYPE_UNSPECIFIED",
+        "TYPE_CONNECTOR",
+        "TYPE_PIPELINE"
+      ],
+      "default": "TYPE_UNSPECIFIED"
+    },
+    "apiv1Info": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "string"
+        },
+        "os": {
+          "type": "string"
+        },
+        "arch": {
+          "type": "string"
+        }
+      }
+    },
+    "googlerpcStatus": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "message": {
+          "type": "string"
+        },
+        "details": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/protobufAny"
+          }
+        }
+      }
+    },
+    "protobufAny": {
+      "type": "object",
+      "properties": {
+        "@type": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": {}
+    },
+    "v1Connector": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "readOnly": true
+        },
+        "destinationState": {
+          "$ref": "#/definitions/ConnectorDestinationState"
+        },
+        "sourceState": {
+          "$ref": "#/definitions/ConnectorSourceState"
+        },
+        "config": {
+          "$ref": "#/definitions/v1ConnectorConfig"
+        },
+        "type": {
+          "$ref": "#/definitions/v1ConnectorType"
+        },
+        "plugin": {
+          "type": "string"
+        },
+        "pipelineId": {
+          "type": "string"
+        },
+        "processorIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "title": "-- children connections ---------------------------------------------------",
+          "readOnly": true
+        }
+      }
+    },
+    "v1ConnectorConfig": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "settings": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "v1ConnectorType": {
+      "type": "string",
+      "enum": [
+        "TYPE_UNSPECIFIED",
+        "TYPE_SOURCE",
+        "TYPE_DESTINATION"
+      ],
+      "default": "TYPE_UNSPECIFIED"
+    },
+    "v1CreateConnectorRequest": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "$ref": "#/definitions/v1ConnectorType"
+        },
+        "plugin": {
+          "type": "string"
+        },
+        "pipelineId": {
+          "type": "string"
+        },
+        "config": {
+          "$ref": "#/definitions/v1ConnectorConfig"
+        }
+      }
+    },
+    "v1CreateConnectorResponse": {
+      "type": "object",
+      "properties": {
+        "connector": {
+          "$ref": "#/definitions/v1Connector"
+        }
+      }
+    },
+    "v1CreatePipelineRequest": {
+      "type": "object",
+      "properties": {
+        "config": {
+          "$ref": "#/definitions/v1PipelineConfig"
+        }
+      }
+    },
+    "v1CreatePipelineResponse": {
+      "type": "object",
+      "properties": {
+        "pipeline": {
+          "$ref": "#/definitions/v1Pipeline"
+        }
+      }
+    },
+    "v1CreateProcessorRequest": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/definitions/v1ProcessorType"
+        },
+        "parent": {
+          "$ref": "#/definitions/ProcessorParent"
+        },
+        "config": {
+          "$ref": "#/definitions/v1ProcessorConfig"
+        }
+      }
+    },
+    "v1CreateProcessorResponse": {
+      "type": "object",
+      "properties": {
+        "processor": {
+          "$ref": "#/definitions/v1Processor"
+        }
+      }
+    },
+    "v1DeleteConnectorResponse": {
+      "type": "object"
+    },
+    "v1DeletePipelineResponse": {
+      "type": "object"
+    },
+    "v1DeleteProcessorResponse": {
+      "type": "object"
+    },
+    "v1ExportPipelineResponse": {
+      "type": "object",
+      "properties": {
+        "pipeline": {
+          "$ref": "#/definitions/v1Pipeline"
+        }
+      }
+    },
+    "v1GetConnectorResponse": {
+      "type": "object",
+      "properties": {
+        "connector": {
+          "$ref": "#/definitions/v1Connector"
+        }
+      }
+    },
+    "v1GetInfoResponse": {
+      "type": "object",
+      "properties": {
+        "info": {
+          "$ref": "#/definitions/apiv1Info"
+        }
+      }
+    },
+    "v1GetPipelineResponse": {
+      "type": "object",
+      "properties": {
+        "pipeline": {
+          "$ref": "#/definitions/v1Pipeline"
+        }
+      }
+    },
+    "v1GetProcessorResponse": {
+      "type": "object",
+      "properties": {
+        "processor": {
+          "$ref": "#/definitions/v1Processor"
+        }
+      }
+    },
+    "v1ImportPipelineResponse": {
+      "type": "object",
+      "properties": {
+        "pipeline": {
+          "$ref": "#/definitions/v1Pipeline"
+        }
+      }
+    },
+    "v1ListConnectorsResponse": {
+      "type": "object",
+      "properties": {
+        "connectors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/v1Connector"
+          }
+        }
+      }
+    },
+    "v1ListPipelinesResponse": {
+      "type": "object",
+      "properties": {
+        "pipelines": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/v1Pipeline"
+          }
+        }
+      }
+    },
+    "v1ListProcessorsResponse": {
+      "type": "object",
+      "properties": {
+        "processors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/v1Processor"
+          }
+        }
+      }
+    },
+    "v1Pipeline": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "readOnly": true
+        },
+        "state": {
+          "$ref": "#/definitions/PipelineState"
+        },
+        "config": {
+          "$ref": "#/definitions/v1PipelineConfig"
+        },
+        "connectorIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "title": "-- children connections ---------------------------------------------------",
+          "readOnly": true
+        },
+        "processorIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "readOnly": true
+        }
+      }
+    },
+    "v1PipelineConfig": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        }
+      }
+    },
+    "v1PipelineStatus": {
+      "type": "string",
+      "enum": [
+        "STATUS_UNSPECIFIED",
+        "STATUS_RUNNING",
+        "STATUS_STOPPED",
+        "STATUS_DEGRADED"
+      ],
+      "default": "STATUS_UNSPECIFIED"
+    },
+    "v1Processor": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "readOnly": true
+        },
+        "config": {
+          "$ref": "#/definitions/v1ProcessorConfig"
+        },
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/definitions/v1ProcessorType"
+        },
+        "parent": {
+          "$ref": "#/definitions/ProcessorParent"
+        }
+      }
+    },
+    "v1ProcessorConfig": {
+      "type": "object",
+      "properties": {
+        "settings": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "v1ProcessorType": {
+      "type": "string",
+      "enum": [
+        "TYPE_UNSPECIFIED",
+        "TYPE_TRANSFORM",
+        "TYPE_FILTER"
+      ],
+      "default": "TYPE_UNSPECIFIED"
+    },
+    "v1StartPipelineResponse": {
+      "type": "object"
+    },
+    "v1StopPipelineResponse": {
+      "type": "object"
+    },
+    "v1UpdateConnectorResponse": {
+      "type": "object",
+      "properties": {
+        "connector": {
+          "$ref": "#/definitions/v1Connector"
+        }
+      }
+    },
+    "v1UpdatePipelineResponse": {
+      "type": "object",
+      "properties": {
+        "pipeline": {
+          "$ref": "#/definitions/v1Pipeline"
+        }
+      }
+    },
+    "v1UpdateProcessorResponse": {
+      "type": "object",
+      "properties": {
+        "processor": {
+          "$ref": "#/definitions/v1Processor"
+        }
+      }
+    }
+  }
+}

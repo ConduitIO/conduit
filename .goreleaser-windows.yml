@@ -1,0 +1,75 @@
+before:
+  hooks:
+    - make ui-dist
+builds:
+  - main: ./cmd/conduit/main.go
+    id: conduit
+    binary: conduit
+    goos:
+      - windows
+    goarch:
+      - amd64
+    env:
+      - CGO_ENABLED=0
+    tags:
+      - ui
+  # The S3 plugin
+  - main: pkg/plugins/s3/cmd/s3/main.go
+    id: s3
+    binary: pkg/plugins/s3/s3
+    goos:
+      - windows
+    goarch:
+      - amd64
+    env:
+      - CGO_ENABLED=0
+  # The Postgres plugin
+  - main: pkg/plugins/pg/cmd/pg/main.go
+    id: pg
+    binary: pkg/plugins/pg/pg
+    goos:
+      - windows
+    goarch:
+      - amd64
+    env:
+      - CGO_ENABLED=0
+  # The file plugin
+  - main: pkg/plugins/file/cmd/file/main.go
+    id: file
+    binary: pkg/plugins/file/file
+    goos:
+      - windows
+    goarch:
+      - amd64
+    env:
+      - CGO_ENABLED=0
+  # The generator plugin
+  - main: pkg/plugins/generator/cmd/generator/main.go
+    id: generator
+    binary: pkg/plugins/generator/generator
+    goos:
+      - windows
+    goarch:
+      - amd64
+    env:
+      - CGO_ENABLED=0
+archives:
+  - builds:
+      - conduit
+      - s3
+      - pg
+      - file
+      - generator
+    allow_different_binary_count: true
+    replacements:
+      darwin: Darwin
+      linux: Linux
+      windows: Windows
+      386: i386
+      amd64: x86_64
+checksum:
+  name_template: 'checksums_windows.txt'
+snapshot:
+  name_template: "{{ incpatch .Version }}-snapshot"
+changelog:
+  skip: true

@@ -1,0 +1,9 @@
+syntax = "proto3";
+package proto;
+
+option go_package = "github.com/conduitio/conduit/pkg/record/schema/proto/data";
+
+message Foo {
+    string key = 1;
+    string value = 2;
+}

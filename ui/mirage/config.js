@@ -1,0 +1,68 @@
+import config from 'conduit-ui/config/environment';
+
+export default function () {
+  // TODO when backend supports describing blueprints
+  // this.get('/connector-plugins');
+  // this.get('/transforms');
+
+  // v1 Conduit REST API
+  this.urlPrefix = config.conduitAPIURL;
+  this.namespace = '/v1';
+
+  if (config.isDevMirageEnabled || config.environment === 'test') {
+    this.get('/pipelines');
+    this.get('/pipelines/:id');
+    this.post('/pipelines', function ({ pipelines }, request) {
+      let attrs = JSON.parse(request.requestBody);
+      attrs.state = {
+        status: 'STATUS_STOPPED',
+        error: '',
+      };
+
+      return pipelines.create(attrs);
+    });
+    this.put('/pipelines/:id');
+    this.delete('/pipelines/:id');
+
+    this.post('/pipelines/:id/start', function ({ pipelines }, request) {
+      const pipeline = pipelines.find(request.params.id);
+      pipeline.update('state', { status: 'STATUS_RUNNING', error: '' });
+
+      return {};
+    });
+
+    this.post('/pipelines/:id/stop', function ({ pipelines }, request) {
+      const pipeline = pipelines.find(request.params.id);
+      pipeline.update('state', { status: 'STATUS_STOPPED', error: '' });
+
+      return {};
+    });
+
+    this.get('/connectors', function ({ connectors }, request) {
+      const conns = connectors.all();
+      const pipelineConns = conns.models.filter((connector) => {
+        return connector.pipelineId === request.queryParams.pipeline_id;
+      });
+
+      return pipelineConns;
+    });
+
+    this.post('/connectors');
+    this.put('/connectors/:id');
+    this.delete('/connectors/:id');
+
+    this.get('/processors');
+    this.post('/processors');
+    this.put('/processors/:id');
+    this.delete('/processors/:id');
+  } else {
+    this.passthrough('/pipelines');
+    this.passthrough('/pipelines/:id');
+    this.passthrough('/pipelines/:id/start');
+    this.passthrough('/pipelines/:id/stop');
+    this.passthrough('/connectors');
+    this.passthrough('/connectors/:id');
+    this.passthrough('/processors');
+    this.passthrough('/processors/:id');
+  }
+}

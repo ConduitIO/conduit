@@ -1,0 +1,35 @@
+name: 🔁 Connector Request
+description: Request a new connector.
+title: "Connector: <resource> [Source/Destination]"
+labels: [triage]
+body:
+- type: input
+  attributes:
+    label: Resource name
+    description: Name of the resource this connector would read data from/to.
+    placeholder: PostgreSQL
+  validations:
+    required: true
+- type: input
+  attributes:
+    label: Resource link
+    description: Link to the official page of the resource.
+    placeholder: https://www.postgresql.org/
+  validations:
+    required: true
+- type: dropdown
+  attributes:
+    label: Connector type
+    options:
+      - Source
+      - Destination
+  validations:
+    required: true
+- type: textarea
+  attributes:
+    label: Expected connector behavior
+    description: A clear and concise description of how you expect this connector to work.
+    placeholder: The connector should take a list of tables and detect inserts, updates and deletes [...]
+  validations:
+    required: true
+

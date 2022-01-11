@@ -1,0 +1,85 @@
+import Model, { attr, hasMany } from '@ember-data/model';
+import axios from 'axios';
+import config from 'conduit-ui/config/environment';
+import Ember from 'ember';
+import { task, timeout } from 'ember-concurrency';
+
+const STATUS_MAP = {
+  STATUS_STOPPED: 'paused',
+  STATUS_DEGRADED: 'degraded',
+  STATUS_RUNNING: 'running',
+};
+
+export default class PipelineModel extends Model {
+  @attr()
+  config;
+
+  @attr()
+  state;
+
+  @hasMany('connector')
+  connectors;
+
+  get name() {
+    return this.config.name;
+  }
+
+  set name(newName) {
+    this.config.name = newName;
+  }
+
+  get description() {
+    return this.config.description;
+  }
+
+  set description(newDescription) {
+    this.config.description = newDescription;
+  }
+
+  get humanFriendlyStatus() {
+    return this.state.status ? STATUS_MAP[this.state.status] : null;
+  }
+
+  get humanFriendlyStatusError() {
+    return this.state.error;
+  }
+
+  get isDegraded() {
+    return this.state.status === 'STATUS_DEGRADED';
+  }
+
+  get isRunning() {
+    return this.state.status === 'STATUS_RUNNING';
+  }
+
+  get isPaused() {
+    return this.isDegraded || this.state.status === 'STATUS_PAUSED';
+  }
+
+  async startPipeline() {
+    await axios.post(`${config.conduitAPIURL}/v1/pipelines/${this.id}/start`);
+  }
+
+  async stopPipeline() {
+    await axios.post(`${config.conduitAPIURL}/v1/pipelines/${this.id}/stop`);
+  }
+
+  @task
+  *pollPipeline() {
+    let interval = Ember.testing ? 100 : 1000;
+    while (this.isRunning) {
+      yield timeout(interval);
+      yield this.reload();
+      if (this.isDegraded) {
+        this.trigger('onPipelineDegraded', this);
+        return;
+      }
+      if (this.isPaused) {
+        return;
+      }
+      if (Ember.testing) {
+        return;
+      }
+    }
+  }
+}

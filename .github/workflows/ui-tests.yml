@@ -1,0 +1,35 @@
+name: UI tests
+
+on:
+  # Trigger the workflow on push or pull request,
+  # but only for the main branch
+  push:
+    branches:
+      - main
+    paths:
+      - 'ui/**'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'ui/**'
+
+jobs:
+  test-app:
+    name: Running Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v2
+
+      - name: Use Node
+        uses: actions/setup-node@v2.5.1
+        with:
+          node-version: '14'
+
+      - name: Install dependencies
+        run: make ui-dependencies
+
+      - name: ember t
+        run: make ui-test

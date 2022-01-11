@@ -1,0 +1,68 @@
+// Copyright © 2022 Meroxa, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package api
+
+import (
+	"context"
+	"testing"
+
+	"github.com/conduitio/conduit/pkg/foundation/assert"
+	"github.com/conduitio/conduit/pkg/pipeline"
+	"github.com/conduitio/conduit/pkg/web/api/mock"
+	apiv1 "github.com/conduitio/conduit/proto/api/v1"
+	"github.com/golang/mock/gomock"
+	"github.com/google/uuid"
+)
+
+func TestPipelineAPIv1_CreatePipeline(t *testing.T) {
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+	psMock := mock.NewPipelineOrchestrator(ctrl)
+	api := NewPipelineAPIv1(psMock)
+
+	config := pipeline.Config{
+		Name:        "test-pipeline",
+		Description: "description of my test pipeline",
+	}
+	pl := &pipeline.Instance{
+		ID:     uuid.NewString(),
+		Config: config,
+		Status: pipeline.StatusSystemStopped,
+	}
+
+	psMock.EXPECT().Create(ctx, config).Return(pl, nil).Times(1)
+
+	want := &apiv1.CreatePipelineResponse{
+		Pipeline: &apiv1.Pipeline{
+			Id: pl.ID,
+			State: &apiv1.Pipeline_State{
+				Status: apiv1.Pipeline_STATUS_STOPPED,
+			},
+			Config: &apiv1.Pipeline_Config{
+				Name:        config.Name,
+				Description: config.Description,
+			},
+		},
+	}
+	got, err := api.CreatePipeline(
+		ctx,
+		&apiv1.CreatePipelineRequest{
+			Config: want.Pipeline.Config,
+		},
+	)
+
+	assert.Ok(t, err)
+	assert.Equal(t, want, got)
+}

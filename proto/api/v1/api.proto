@@ -1,0 +1,406 @@
+syntax = "proto3";
+
+package api.v1;
+option go_package = "github.com/conduitio/conduit/proto/api/v1;api";
+
+import "google/api/field_behavior.proto";
+import "google/api/annotations.proto";
+import "protoc-gen-openapiv2/options/annotations.proto";
+
+message Pipeline {
+  enum Status {
+    STATUS_UNSPECIFIED    = 0;
+    STATUS_RUNNING        = 1;
+    STATUS_STOPPED        = 2;
+    STATUS_DEGRADED       = 3;
+  }
+
+  message State {
+    Status status = 1;
+    string error  = 2;
+  }
+  message Config {
+    string name        = 1;
+    string description = 2;
+  }
+
+  string id     = 1 [(google.api.field_behavior) = OUTPUT_ONLY];
+  State state   = 2;
+  Config config = 3;
+
+  // -- children connections ---------------------------------------------------
+  repeated string connector_ids = 5 [(google.api.field_behavior) = OUTPUT_ONLY];
+  repeated string processor_ids = 6 [(google.api.field_behavior) = OUTPUT_ONLY];
+}
+
+message Connector {
+  enum Type {
+    TYPE_UNSPECIFIED = 0;
+    TYPE_SOURCE      = 1;
+    TYPE_DESTINATION = 2;
+  }
+
+  message SourceState {
+    bytes position = 1;
+  }
+
+  message DestinationState {
+    map<string,bytes> positions = 1;
+  }
+
+  message Config {
+    string name                 = 1;
+    map<string,string> settings = 2;
+  }
+
+  string id     = 1 [(google.api.field_behavior) = OUTPUT_ONLY];
+  oneof state {
+    DestinationState destination_state = 2;
+    SourceState source_state           = 3;
+  }
+  Config config = 4;
+
+  // -- immutable fields -------------------------------------------------------
+
+  Type type          = 5 [(google.api.field_behavior) = IMMUTABLE];
+  string plugin      = 6 [(google.api.field_behavior) = IMMUTABLE];
+  string pipeline_id = 7 [(google.api.field_behavior) = IMMUTABLE];
+
+  // -- children connections ---------------------------------------------------
+  repeated string processor_ids = 8 [(google.api.field_behavior) = OUTPUT_ONLY];
+}
+
+message Processor {
+  enum Type {
+    TYPE_UNSPECIFIED = 0;
+    TYPE_TRANSFORM   = 1;
+    TYPE_FILTER      = 2;
+  }
+  message Parent {
+    enum Type {
+      TYPE_UNSPECIFIED = 0;
+      TYPE_CONNECTOR   = 1;
+      TYPE_PIPELINE    = 2;
+    }
+
+    Type type = 1;
+    string id = 2;
+  }
+  message Config {
+    map<string,string> settings = 1;
+  }
+
+  string id = 1 [(google.api.field_behavior) = OUTPUT_ONLY];
+  reserved 2; reserved "state"; // message does not track state
+  Config config = 3;
+
+  // -- immutable fields -------------------------------------------------------
+
+  string name   = 4 [(google.api.field_behavior) = IMMUTABLE];
+  Type type     = 5 [(google.api.field_behavior) = IMMUTABLE];
+  Parent parent = 6 [(google.api.field_behavior) = IMMUTABLE];
+}
+
+// PipelineService exposes functionality for managing pipelines.
+// Endpoints in this service can be used to create, fetch, modify or delete a
+// pipeline. Entities connected to a pipeline (e.g. processors, connectors) can
+// be fetched together with a pipeline, although they can not be modified
+// through this service. Modifying these entities needs to be done through the
+// service responsible for managing the corresponding entity.
+service PipelineService {
+  rpc ListPipelines(ListPipelinesRequest) returns (ListPipelinesResponse) {
+    option (google.api.http) = {
+      get: "/v1/pipelines"
+      response_body: "pipelines"
+    };
+  };
+
+  rpc CreatePipeline(CreatePipelineRequest) returns (CreatePipelineResponse) {
+    option (google.api.http) = {
+      post: "/v1/pipelines"
+      body: "*"
+      response_body: "pipeline"
+    };
+  };
+
+  rpc GetPipeline(GetPipelineRequest) returns (GetPipelineResponse) {
+    option (google.api.http) = {
+      get: "/v1/pipelines/{id}"
+      response_body: "pipeline"
+    };
+  };
+
+  rpc UpdatePipeline(UpdatePipelineRequest) returns (UpdatePipelineResponse) {
+    option (google.api.http) = {
+      put: "/v1/pipelines/{id}"
+      body: "*"
+      response_body: "pipeline"
+    };
+  };
+
+  rpc DeletePipeline(DeletePipelineRequest) returns (DeletePipelineResponse) {
+    option (google.api.http) = {
+      delete: "/v1/pipelines/{id}"
+    };
+  };
+
+  rpc StartPipeline(StartPipelineRequest) returns (StartPipelineResponse) {
+    option (google.api.http) = {
+      post: "/v1/pipelines/{id}/start"
+    };
+  };
+
+  rpc StopPipeline(StopPipelineRequest) returns (StopPipelineResponse) {
+    option (google.api.http) = {
+      post: "/v1/pipelines/{id}/stop"
+    };
+  };
+
+  rpc ExportPipeline(ExportPipelineRequest) returns (ExportPipelineResponse) {
+    option (google.api.http) = {
+      post: "/v1/pipelines/{id}/export"
+      response_body: "pipeline"
+    };
+  };
+
+  rpc ImportPipeline(ImportPipelineRequest) returns (ImportPipelineResponse) {
+    option (google.api.http) = {
+      post: "/v1/pipelines/import"
+      body: "pipeline"
+      response_body: "pipeline"
+    };
+  };
+}
+
+message ListPipelinesRequest {
+  // filters eventually
+}
+message ListPipelinesResponse {
+  repeated Pipeline pipelines = 1;
+}
+
+message CreatePipelineRequest {
+  Pipeline.Config config = 1;
+}
+message CreatePipelineResponse {
+  Pipeline pipeline = 1;
+}
+
+message GetPipelineRequest {
+  string id = 1;
+}
+message GetPipelineResponse {
+  Pipeline pipeline = 1;
+}
+
+message UpdatePipelineRequest {
+  string id = 1;
+  Pipeline.Config config = 2;
+}
+message UpdatePipelineResponse {
+  Pipeline pipeline = 1;
+}
+
+message DeletePipelineRequest {
+  string id = 1;
+}
+message DeletePipelineResponse {}
+
+message StartPipelineRequest {
+  string id = 1;
+}
+message StartPipelineResponse {}
+
+message StopPipelineRequest {
+  string id = 1;
+}
+message StopPipelineResponse {}
+
+message ExportPipelineRequest {
+  string id = 1;
+}
+message ExportPipelineResponse {
+  Pipeline pipeline = 1;
+}
+message ImportPipelineRequest {
+  Pipeline pipeline = 1;
+}
+message ImportPipelineResponse {
+  Pipeline pipeline = 1;
+}
+
+// ConnectorService exposes CRUD functionality for managing connectors.
+service ConnectorService {
+  rpc ListConnectors(ListConnectorsRequest) returns (ListConnectorsResponse) {
+    option (google.api.http) = {
+      get: "/v1/connectors"
+      response_body: "connectors"
+    };
+  };
+
+  rpc GetConnector(GetConnectorRequest) returns (GetConnectorResponse) {
+    option (google.api.http) = {
+      get: "/v1/connectors/{id}"
+      response_body: "connector"
+    };
+  };
+
+  rpc CreateConnector(CreateConnectorRequest) returns (CreateConnectorResponse) {
+    option (google.api.http) = {
+      post: "/v1/connectors"
+      body: "*"
+      response_body: "connector"
+    };
+  };
+
+  rpc UpdateConnector(UpdateConnectorRequest) returns (UpdateConnectorResponse) {
+    option (google.api.http) = {
+      put: "/v1/connectors/{id}"
+      body: "*"
+      response_body: "connector"
+    };
+  };
+
+  rpc DeleteConnector(DeleteConnectorRequest) returns (DeleteConnectorResponse) {
+    option (google.api.http) = {
+      delete: "/v1/connectors/{id}"
+    };
+  };
+}
+
+message CreateConnectorRequest {
+  Connector.Type type     = 1;
+  string plugin           = 2;
+  string pipeline_id      = 3;
+  Connector.Config config = 4;
+}
+
+message CreateConnectorResponse {
+  Connector connector = 1;
+}
+
+message ListConnectorsRequest {
+  string pipeline_id = 1;
+}
+
+message ListConnectorsResponse {
+  repeated Connector connectors = 1;
+}
+
+message GetConnectorRequest {
+  string id = 1;
+}
+message GetConnectorResponse {
+  Connector connector = 1;
+}
+
+message UpdateConnectorRequest {
+  string id = 1;
+  Connector.Config config = 2;
+}
+message UpdateConnectorResponse {
+  Connector connector = 1;
+}
+
+message DeleteConnectorRequest {
+  string id = 1;
+}
+message DeleteConnectorResponse {}
+
+// ProcessorService exposes CRUD functionality for managing processors.
+service ProcessorService {
+  rpc ListProcessors(ListProcessorsRequest) returns (ListProcessorsResponse) {
+    option (google.api.http) = {
+      get: "/v1/processors"
+      response_body: "processors"
+    };
+  };
+
+  rpc GetProcessor(GetProcessorRequest) returns (GetProcessorResponse) {
+    option (google.api.http) = {
+      get: "/v1/processors/{id}"
+      response_body: "processor"
+    };
+  };
+
+  rpc CreateProcessor(CreateProcessorRequest) returns (CreateProcessorResponse) {
+    option (google.api.http) = {
+      post: "/v1/processors"
+      body: "*"
+      response_body: "processor"
+    };
+  };
+
+  rpc UpdateProcessor(UpdateProcessorRequest) returns (UpdateProcessorResponse) {
+    option (google.api.http) = {
+      put: "/v1/processors/{id}"
+      body: "*"
+      response_body: "processor"
+    };
+  };
+
+  rpc DeleteProcessor(DeleteProcessorRequest) returns (DeleteProcessorResponse) {
+    option (google.api.http) = {
+      delete: "/v1/processors/{id}"
+    };
+  };
+}
+
+message ListProcessorsRequest {
+  repeated string parent_ids = 1;
+}
+
+message ListProcessorsResponse {
+  repeated Processor processors = 1;
+}
+
+message CreateProcessorRequest {
+  string name             = 1;
+  Processor.Type type     = 2;
+  Processor.Parent parent = 3;
+  Processor.Config config = 4;
+}
+message CreateProcessorResponse {
+  Processor processor = 1;
+}
+
+message GetProcessorRequest {
+  string id = 1;
+}
+message GetProcessorResponse {
+  Processor processor = 1;
+}
+
+message UpdateProcessorRequest {
+  string id = 1;
+  Processor.Config config = 2;
+}
+message UpdateProcessorResponse {
+  Processor processor = 1;
+}
+
+message DeleteProcessorRequest {
+  string id = 1;
+}
+message DeleteProcessorResponse {}
+
+service InformationService {
+  rpc GetInfo (GetInfoRequest) returns (GetInfoResponse) {
+    option (google.api.http) = {
+      get: "/info"
+      response_body: "info"
+    };
+  };
+}
+
+message GetInfoRequest {}
+
+message GetInfoResponse {
+  Info info = 1;
+}
+
+message Info {
+  string version = 1;
+  string os = 2;
+  string arch = 3;
+}

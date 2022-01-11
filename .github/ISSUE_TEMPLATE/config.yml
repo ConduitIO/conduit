@@ -1,0 +1,9 @@
+blank_issues_enabled: true
+contact_links:
+  - name: ❓ Ask a Question
+    url: https://github.com/ConduitIO/conduit/discussions
+    about: Please ask and answer questions here.
+  - name: 📄 Documentation Issue
+    # update URL to point to the correct repo
+    url: https://github.com/ConduitIO/docs.conduit.io
+    about: Please report issues regarding documentation here.

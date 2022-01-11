@@ -1,0 +1,19 @@
+@import "tailwindcss/base";
+
+@import "tailwindcss/components";
+
+@import "tailwindcss/utilities";
+
+@layer base {
+  a.mxa-link {
+    @apply border-transparent;
+  }
+  a.active.mxa-link {
+    @apply border-purple-600;
+    @apply text-gray-900;
+  }
+
+  nav a.active.nav-link {
+    @apply bg-gray-800;
+  }
+}

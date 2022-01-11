@@ -1,0 +1,101 @@
+syntax = "proto3";
+
+package conduit.plugins;
+
+option go_package = "github.com/conduitio/conduit/pkg/plugins/proto";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+import "google/protobuf/descriptor.proto";
+
+message Empty {}
+
+message Position {
+    bytes position = 1;
+}
+
+message Record {
+    Position position = 1;
+    Metadata metadata = 2;
+    google.protobuf.Timestamp createdAt = 3;
+
+    oneof key {
+        RawData keyRaw = 4;
+        google.protobuf.Struct keyStructured = 5;
+    }
+    oneof payload {
+        RawData payloadRaw = 6;
+        google.protobuf.Struct payloadStructured = 7;
+    }
+}
+
+message RawData {
+    message ProtobufSchema {
+        int32 version = 1;
+        google.protobuf.FileDescriptorSet fileDescriptorSet = 2;
+    }
+    message JSONSchema {
+        int32 version = 1;
+        google.protobuf.Struct schema = 2;
+    }
+    message AvroSchema {
+        int32 version = 1;
+        google.protobuf.Struct schema = 2;
+    }
+
+    bytes raw = 1;
+    oneof schema {
+        ProtobufSchema protobufSchema = 2;
+        AvroSchema avroSchema         = 3;
+        JSONSchema jsonSchema         = 4;
+    }
+}
+
+message Metadata {
+    map<string, string> values = 1;
+}
+
+message Validation {
+    string type = 1;
+    repeated string params = 2;
+}
+
+message Specification {
+    string summary = 1;
+    string description = 2;
+    string version = 3;
+    string author = 4;
+    map<string, Parameter> destinationSpec = 5;
+    map<string, Parameter> sourceSpec = 6;
+}
+
+message Parameter {
+    string default = 1;
+    bool required = 2;
+    string description = 3;
+}
+
+message Config {
+    map<string, string> values = 1;
+}
+
+service Source {
+    rpc Open(Config) returns (Empty);
+    rpc Teardown(Empty) returns (Empty);
+    rpc Validate(Config) returns (Empty);
+
+    rpc Read(Position) returns (Record);
+    rpc Ack(Position) returns (Empty);
+}
+
+service Destination {
+    rpc Open(Config) returns (Empty);
+    rpc Teardown(Empty) returns (Empty);
+    rpc Validate(Config) returns (Empty);
+
+    rpc Write(Record) returns (Position);
+}
+
+service Specifications {
+    rpc Specify(Empty) returns (Specification);
+}

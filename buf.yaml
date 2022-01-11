@@ -1,0 +1,14 @@
+version: v1beta1
+name: buf.build/conduitio/conduit
+build:
+  roots:
+    - proto
+lint:
+  use:
+    - DEFAULT
+breaking:
+  use:
+    - FILE
+deps:
+  - buf.build/googleapis/googleapis
+  - buf.build/grpc-ecosystem/grpc-gateway
