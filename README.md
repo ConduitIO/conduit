@@ -32,6 +32,7 @@ Conduit was created and open-sourced by [Meroxa](https://meroxa.io).
 - [API](#api)
 - [UI](#ui)
 - [Documentation](#documentation)
+- [Known limitations](#known-limitations)
 - [Contributing](#contributing)
 
 ## Installation guide
@@ -124,6 +125,18 @@ If you are interested in internals of Conduit we have prepared some technical do
   Conduit exposes metrics.
 * [Connector Plugins](https://github.com/ConduitIO/conduit/blob/main/docs/plugins.md) contains insights about how 
   Conduit is communicating with connector plugins and how you can build your own connector plugin.
+
+## Known limitations
+
+While Conduit is built on strong foundations and experiences from running similar systems, it's not production ready
+at the moment. Following features are on the roadmap and yet to be implemented:
+1. Standard record format - we plan to have the records implement a single standard for CDC events.
+2. Delivery and ordering guarantees - from the experience we have so far, messages created internally are reliably delivered through
+   Conduit (from source nodes, over processing nodes to destination nodes). However, we still need good end-to-end, full-scale
+   tests to actually prove that.
+3. Performance guarantees (for the core) - reasons are identical to reasons for delivery guarantees.
+4. Dynamic loading of list of plugins - currently, the API cannot return the list of all available plugins and the available
+   configuration parameters. Consequently, the UI has the plugin paths and configuration parameters hard-coded.
 
 ## Contributing
 
