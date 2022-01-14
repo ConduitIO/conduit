@@ -15,9 +15,12 @@ export default class PipelineController extends Controller {
   async startPipeline(pipeline) {
     await pipeline.startPipeline();
     await pipeline.reload();
-    pipeline.on('onPipelineDegraded', this, this._handlePipelineRunError);
+    pipeline.onPipelineEvent(
+      'onPipelineDegraded',
+      this,
+      this._handlePipelineRunError
+    );
     pipeline.pollPipeline.perform();
-    return;
   }
 
   @action
