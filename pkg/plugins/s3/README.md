@@ -46,13 +46,13 @@ record key is the key read from the S3 bucket.
 ### Configuration
 The config passed to `Open` can contain the following fields.
 
-| name                  | description                                                                                    | required             | example             |
-|-----------------------|------------------------------------------------------------------------------------------------|----------------------|---------------------|
-| aws.access-key-id     | AWS access key id                                                                              | yes                  | "THE_ACCESS_KEY_ID" |
-| aws.secret-access-key | AWS secret access key                                                                          | yes                  | "SECRET_ACCESS_KEY" |
-| aws.region            | the AWS S3 bucket region                                                                       | yes                  | "us-east-1"         |
-| aws.bucket            | the AWS S3 bucket name                                                                         | yes                  | "bucket_name"       |
-| polling-period        | polling period for the CDC mode, formatted as a time.Duration string. default is "1s"          | no                   | "2s", "500ms"       |
+| name                  | description                                                                            | required  | example             |
+|-----------------------|----------------------------------------------------------------------------------------|-----------|---------------------|
+| aws.access-key-id     | AWS access key id                                                                      | yes       | "THE_ACCESS_KEY_ID" |
+| aws.secret-access-key | AWS secret access key                                                                  | yes       | "SECRET_ACCESS_KEY" |
+| aws.region            | the AWS S3 bucket region                                                               | yes       | "us-east-1"         |
+| aws.bucket            | the AWS S3 bucket name                                                                 | yes       | "bucket_name"       |
+| polling-period        | polling period for the CDC mode, formatted as a time.Duration string. default is "1s"  | no        | "2s", "500ms"       |
 
 
 ### Known Limitations
@@ -74,12 +74,12 @@ all the records from it will be written to the S3 bucket configured.
 ### Configuration
 The config passed to `Open` can contain the following fields.
 
-| name                  | description                                                                                                     | required             | example             |
-|-----------------------|-----------------------------------------------------------------------------------------------------------------|----------------------|---------------------|
-| aws.access-key-id     | AWS access key id                                                                                               | yes                  | "THE_ACCESS_KEY_ID" |
-| aws.secret-access-key | AWS secret access key                                                                                           | yes                  | "SECRET_ACCESS_KEY" |
-| aws.region            | the AWS S3 bucket region                                                                                        | yes                  | "us-east-1"         |
-| aws.bucket            | the AWS S3 bucket name                                                                                          | yes                  | "bucket_name"       |
-| format                | the destination format, either "json" or "parquet"                                                              | yes                  | "json"              |
-| buffer-size           | the buffer size {when full, the files will be written to destination}, default is "1000", max is "100000"       | no                   | "100"               |
-| prefix                | the key prefix for S3 destination                                                                               | no                   | "conduit-"          |
+| name                  | description                                                                                                     | required | example             |
+|-----------------------|-----------------------------------------------------------------------------------------------------------------|----------|---------------------|
+| aws.access-key-id     | AWS access key id                                                                                               | yes      | "THE_ACCESS_KEY_ID" |
+| aws.secret-access-key | AWS secret access key                                                                                           | yes      | "SECRET_ACCESS_KEY" |
+| aws.region            | the AWS S3 bucket region                                                                                        | yes      | "us-east-1"         |
+| aws.bucket            | the AWS S3 bucket name                                                                                          | yes      | "bucket_name"       |
+| format                | the destination format, either "json" or "parquet"                                                              | yes      | "json"              |
+| buffer-size           | the buffer size {when full, the files will be written to destination}, default is "1000", max is "100000"       | no       | "100"               |
+| prefix                | the key prefix for S3 destination                                                                               | no       | "conduit-"          |
