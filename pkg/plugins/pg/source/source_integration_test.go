@@ -26,6 +26,8 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/plugins"
 	"github.com/conduitio/conduit/pkg/record"
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
@@ -515,6 +517,44 @@ func TestRead_Iterator(t *testing.T) {
 	err = src.Teardown()
 	assert.Ok(t, err)
 	assert.True(t, src.sub == nil, "failed to cleanup subscription")
+}
+func TestByteaKeys(t *testing.T) {
+	_ = getTestPostgres(t)
+	s := &Source{}
+	err := s.Open(context.Background(), plugins.Config{
+		Settings: map[string]string{
+			"table": "records",
+			"key":   "key",
+			"url":   RepDBURL,
+		},
+	})
+	assert.Ok(t, err)
+	// assert that we are keying by id by default
+	assert.Equal(t, s.key, "key")
+	// assert that we are collecting all columns by default
+	assert.Equal(t, []string{"id", "key", "column1", "column2", "column3"}, s.columns)
+	r1, err := s.Read(context.Background(), nil)
+	assert.Ok(t, err)
+	diff := cmp.Diff(record.Record{
+		Position: record.Position("1"),
+		Metadata: map[string]string{
+			"key":   "key",
+			"table": "records",
+		},
+		SourceID: "",
+		Key:      record.StructuredData{"key": "1"},
+		Payload: record.StructuredData{
+			"column1": "foo",
+			"column2": int64(123),
+			"column3": false,
+			"id":      int64(1),
+			"key":     "1",
+		}}, r1, cmpopts.IgnoreFields(record.Record{}, "CreatedAt"))
+	if diff != "" {
+		t.Errorf("failed to get proper record: %s", diff)
+	}
+	err = s.Teardown()
+	assert.True(t, cerrors.Is(err, ErrSnapshotInterrupt), "failed to get snapshot interrupt error")
 }
 
 // getTestPostgres is a testing helper that fails if it can't setup a Postgres
