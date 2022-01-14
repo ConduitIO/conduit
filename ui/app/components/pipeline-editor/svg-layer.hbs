@@ -5,7 +5,7 @@
   )
 }}
   <svg id="svg-container" class="absolute top-0 left-0 pointer-events-none w-full h-full">
-    <g id="svg-g-container" {{zoom-zoom pipelineNodeManager}}>
+    <g id="svg-g-container" {{zoom-zoom this.pipelineNodeManager}}>
       {{#each this.pipelineNodeManager.paths as |p|}}
         <PipelineEditor::SvgLine @path={{p.svgPath}} />
       {{/each}}
