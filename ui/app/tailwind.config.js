@@ -29,6 +29,13 @@ module.exports = {
         152: '41rem',
         228: '61.5rem',
       },
+      width: {
+        container: '846px',
+        box: '500px',
+        sidebar: '60px',
+        sidepane: '30rem',
+        editor: '900px',
+      },
       animation: {
         spinrev: 'spin 1s linear infinite reverse',
       },
