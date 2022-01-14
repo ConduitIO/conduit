@@ -71,7 +71,7 @@ export default class PipelineModel extends Model {
       yield timeout(interval);
       yield this.reload();
       if (this.isDegraded) {
-        this.trigger('onPipelineDegraded', this);
+        this.triggerPipelineEvent('onPipelineDegraded', this);
         return;
       }
       if (this.isPaused) {
@@ -81,5 +81,18 @@ export default class PipelineModel extends Model {
         return;
       }
     }
+  }
+
+  events = {};
+
+  onPipelineEvent(eventName, ctx, fn) {
+    this.events[eventName] = { ctx, fn };
+  }
+
+  triggerPipelineEvent(eventName, ...args) {
+    const ctx = this.events[eventName].ctx;
+    const fn = this.events[eventName].fn;
+
+    fn.apply(ctx, args);
   }
 }
