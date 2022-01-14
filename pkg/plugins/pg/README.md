@@ -1,144 +1,149 @@
 Conduit PostgreSQL Connectors 
-============================
+=============================
 
-# Source
+Source
+======
 The Postgres Source Connector connects to a database with the provided `url` and
-then will call `Ping` and test the connection. If the `Ping` fails, the `Open`
-method will fail and the Connector will not be ready to Read. 
+then will call `Ping` to test the connection. If the `Ping` fails, the `Open`
+method will fail and the Connector won't be started.
+
+Upon starting, the source takes a snapshot of a given table in the database, 
+then switches into CDC mode. In CDC mode, the plugin reads from a buffer of 
+CDC events.
+
+## Snapshot Capture
+When the connector first starts, snpashot mode is enabled. The connector
+acquires a read-only lock on the table, and then reads all rows of the table 
+into Conduit. Once all of the rows in that initial snapshot are read, then the 
+connector releases it's lock and switches into CDC mode. 
+
+This behavior is enabled by default, but can be turned off by adding 
+`"snapshot":"off"` to the Source configuration.
 
 ## Change Data Capture
-This connector implements CDC features for PostgreSQL by reading WAL log events 
-into a buffer that is checked on each Read request after the initial table Rows 
-have been read.
+This connector implements CDC features for PostgreSQL by reading WAL events 
+into a buffer that is checked on each call of `Read` after the initial snapshot
+has occurred. If there is a record in the buffer, it grabs and returns that 
+record. If it's empty, it returns `ErrEndData` signaling that Conduit should 
+backoff-retry.
 
-## CDC  Configuration
-When Open is called, the connector will attempt to start all necessary 
-connections and will run some initial setup commands to create the logical 
-replication slots it needs to run and start its own subscription. 
+ This behavior is enabled by default, but can be turned off by adding 
+ `"cdc": "off"` to the Source configuration.
 
-The connector user specified in the connection URL must have sufficient 
-privileges to run all of these commands or it will fail.
+### CDC  Configuration
+When the connector switches to CDC mode, it attempts to start all necessary 
+connections and runs the initial setup commands to create its logical 
+replication slots and publications. It will connect to an existing slot if one
+with the configured name exists.
 
-If the `cdc` field in the plugin.Configuration is set to any truthy value, it 
-will be enabled. 
+The Postgres user specified in the connection URL must have sufficient 
+privileges to run all of these setup commands or it will fail.
 
 Publication and slot name are user configurable, and must be correctly set. 
 The plugin will do what it can to be smart about publication and slot 
 management, but it can't handle everything.
 
-If a replication_url is provided, it will be used for CDC features instead of 
-the url. If no replication_url is provided, but cdc is enabled, then it will 
+If a `replication_url` is provided, it will be used for CDC features instead of 
+the url. If no `replication_url` is provided, but cdc is enabled, then it will 
 attempt to use that url value for CDC features and logical replication setup.
-
 Example configuration for CDC features:
 ```
 "cdc":              "true",
 "publication_name": "meroxademo",
 "slot_name":        "meroxademo",
-"url":              url,
+"url":              url, // connection url to the database
 "replication_url":  url,
-"table":            "records",
-"columns":          "key,column1,column2,column3",
+"key":              "key", // postgres column name of your table's primary key
+"table":            "records", // table that the connector should watch
+"columns":          "key,column1,column2,column3", // columns to include in payload
 ```
 
-### Internal Event Buffer
+### CDC Event Buffer
 There is a private variable bufferSize that dictates the size of the channel 
 buffer that holds WAL events. If it's full, pushing to that channel will be a 
 blocking operation, and thus execution will stop if the handler for WAL events 
 cannot push into that buffer. That blocking execution could have unknown 
 negative performance consequences, so we should have this be sufficiently high 
 and possibly configured by environment variable.
-WAL Events
 
-In all cases we should aim for consistency between WAL event records and 
-standard Row records, so any discrepancies between the formats of those should 
-be pointed out. I've addressed some where I've found them, for example the 
-integer handling in `withValues` function treats all numbers as `int64` since 
-that's how the row queries are handled as well.
-
-### Go and PostgreSQL Data Types
-We handle the basic Postgres types for now, but we will need an exhaustive test 
-suite of all the different data types that Postgres can handle.
-
-### Position Handling
-The WAL uses Postgres' internal LSN (log sequence number) to track positions of 
-WAL events, but they're not an exact science, and they are subject to 
-wrap-around at their high end limit. This means that once the plugin is reading 
-only WAL events, the LSN will likely be orders of magnitude higher than the row
-Position of the last read row. This could cause some issues, but can still be 
-handled by the Connector setting Position back to 0 and reading the table from 
-the start again. 
-
-However, that isn't the greatest long-term solution and we should handle this by
-adding a highwater mark for the last read Row in our database query.
-
-
-## Position 
-The position argument let's the connector know what the _current_ position of
-the Read is at. When you call Read, it takes that _current_ position and 
-attempts to get the next one. Because of this, we attempt to parse the Position 
-as an integer and then increment it.
-
-The read query will perform a lookup for a row where `key >= $1` where key is 
-the name of the key column and $1 is the value of the incremented Position.
-`plugins.ErrEndData` is returned if no row can be found that matches this 
-selection.
-
-## Record Keys
-Position currently references the `key` column when querying. 
-Thus, `key` must be a column of integer, serial or bigserial type, or be a
-string that can be parsed as an integer.
-
-Positions are parsed to integers with `ParseInt` and then parsed back to strings
-with `FormatInt`. `incrementPosition` and `withPosition` respectively handle 
-this logic.
-
+## Key Handling
 If no `key` field is provided, then the connector will attempt to look up the 
 primary key column of the table. If that can't be determined it will error.
 
-## Configuration 
-The config passed to `Open` can be contain the following fields.
-
-| name             | description                                                                                                                     | required             |
-|------------------|---------------------------------------------------------------------------------------------------------------------------------|----------------------|
-| table            | the name of the table in Postgres that the connector should read                                                                | yes                  |
-| url              | formatted connection string to the database.                                                                                    | yes                  |
-| columns          | comma separated string list of column names that should be built in to each Record's payload.                                   | no                   |
-| key              | column name that records should use for their `Key` fields. defaults to the column's primary key if nothing is specified        | no                   |
-| cdc              | enables CDC features                                                                                                            | req. for CDC mode    |
-| publication_name | name of the publication to listen for WAL events                                                                                | req.  for CDC mode   |
-| slot_name        | name of the slot opened for replication events                                                                                  | req.  for CDC mode   |
-| replication_url  | URL for the CDC connection to use. If no replication_url is provided, then the CDC connection attempts the use the `url` value. | optional in CDC mode |
-
 ## Columns
 If no column names are provided in the config, then the plugin will assume 
-that all columns in the table should be queried. It will attempt to get the 
+that all columns in the table should be returned. It will attempt to get the 
 column names for the configured table and set them in memory.
 
-## Record Keys 
-Currently the Postgres source takes a `key` property and uses that column name
-to key records. The key column must be unique and must be able to be parsed 
-as an integer. 
+## Configuration Options
 
-We plan to support alphanumeric and composite record keys soon.
+| name             | description                                                                                                                     | required             | default              |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------- | -------------------- | -------------------- |
+| table            | the name of the table in Postgres that the connector should read                                                                | yes                  | n/a                  |
+| url              | formatted connection string to the database.                                                                                    | yes                  | n/a                  |
+| columns          | comma separated string list of column names that should be built in to each Record's payload.                                   | no                   | `*` (all columns)    |
+| key              | column name that records should use for their `Key` fields. defaults to the column's primary key if nothing is specified        | no                   | primary key of table |
+| snapshot         | whether or not the plugin will take a snapshot of the entire table acquiring a read level lock before starting cdc mode         | n/a                  | enabled              |
+| cdc              | enables CDC features                                                                                                            | req. for CDC mode    | off                  |
+| publication_name | name of the publication to listen for WAL events                                                                                | req. for CDC mode    | `pglogrepl`          |
+| slot_name        | name of the slot opened for replication events                                                                                  | req. for CDC mode    | `pglogrepl_demo`     |
+| replication_url  | URL for the CDC connection to use. If no replication_url is provided, then the CDC connection attempts the use the `url` value. | optional in CDC mode | n/a                  |
 
-# Roadmap 
-- [x] Change data capture handling
-- [ ] Composite key support 
-- [ ] Alphanumeric position handling 
-- [ ] JSONB support
+Destination 
+===========
+The Postgres Destination takes a `record.Record` and parses it into a valid 
+SQL query. The Destination is designed to handle different payloads and keys.
+decause of this, each record is individually parsed and upserted. 
+
+## Table Name
+Every record must have a `table` property set in it's metadata, otherwise it
+will error out. However, because of this, our Destination write can support 
+multiple tables in the same connector provided the user has proper access to 
+those tables.
+
+## Keys
+Keys in the Destination are optional and must be unique if they are set.
+
+If a Key is included in a Payload, it will be removed.  This is because the Key 
+is also inserted into the database, so the Payload removes it. 
+
+This means a Payload value will be ignored if it's also the Key value.
+
+### Upsert Behavior
+If there is a conflict on a Key, the Destination will upsert with its current 
+received values. Because Keys must be unique, this can overwrite and thus 
+potentially lose data, so keys should be assigned correctly from the Source.
+
+## Configuration Options
+
+| name | description                                  | required | default |
+| ---- | -------------------------------------------- | -------- | ------- |
+| url  | the connection URI for the Postgres database | yes      | n/a     |
 
 # Testing 
-Run the docker-compose from the project root:
+If you're running the integration tests, you'll need a Postgres database with 
+replication enabled. You can use our docker-compose file that works with the 
+default test settings by running:
+
 ```bash
-docker-compose -f ./test/docker-compose-postgres.yml up
+docker-compose -f ./test/docker-compose-postgres.yml up -d
 ```
 
-Run all connector tests:
+*Note*: remove the -d flag from either docker-compose command to hold the
+container connection open and watch its logs.
+
+Once the docker-compose services are running, you can run the integration tests:
+
 ```bash
-go test -race ./pkg/plugins/pg/...
+go test -race -v -timeout 10s --tags=integration ./pkg/plugins/pg/...
+```
+
+Run all connector unit tests:
+```bash
+go test -race -v -timeout 10s ./pkg/plugins/pg/...
 ```
 
 # References 
-- https://github.com/batchcorp/pgoutput
+- https://github.com/batchcorp/pgoutput 
 - https://github.com/bitnami/bitnami-docker-postgresql-repmgr
+- https://github.com/Masterminds/squirrel"
