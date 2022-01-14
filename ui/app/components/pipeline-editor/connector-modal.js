@@ -58,8 +58,17 @@ export default class PipelineEditorNewConnectorModal extends Component {
     }
   }
 
+  @action
   validateConnector() {
     this.connector.validate();
+  }
+
+  get headerText() {
+    if (this.isEditing) {
+      return `Edit ${this.connector.name}`;
+    } else {
+      return this.connector.name ? this.connector.name : 'Name your connector';
+    }
   }
 
   get requiredFields() {
