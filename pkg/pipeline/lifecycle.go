@@ -378,6 +378,7 @@ func (s *Service) runPipeline(ctx context.Context, pl *Instance) error {
 
 	measure.PipelinesGauge.WithValues(strings.ToLower(pl.Status.String())).Dec()
 	pl.Status = StatusRunning
+	pl.Error = ""
 	measure.PipelinesGauge.WithValues(strings.ToLower(pl.Status.String())).Inc()
 
 	err := s.store.Set(ctx, pl.ID, pl)
