@@ -6,7 +6,7 @@ require (
 	github.com/Masterminds/squirrel v1.5.2
 	github.com/NYTimes/gziphandler v1.1.1
 	github.com/antchfx/jsonquery v1.1.5
-	github.com/aws/aws-sdk-go-v2 v1.12.0
+	github.com/aws/aws-sdk-go-v2 v1.13.0
 	github.com/aws/aws-sdk-go-v2/config v1.12.0
 	github.com/aws/aws-sdk-go-v2/credentials v1.7.0
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.23.0
@@ -57,7 +57,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.10.0 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sso v1.8.0 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.13.0 // indirect
-	github.com/aws/smithy-go v1.9.1 // indirect
+	github.com/aws/smithy-go v1.10.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash v1.1.0 // indirect
 	github.com/cespare/xxhash/v2 v2.1.1 // indirect
