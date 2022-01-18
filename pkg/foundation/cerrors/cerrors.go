@@ -35,6 +35,7 @@ var (
 	Errorf = xerrors.Errorf //nolint:forbidigo // xerrors.Errorf is allowed here, but not anywhere else
 	Is     = errors.Is
 	As     = errors.As
+	Unwrap = errors.Unwrap
 )
 
 type Frame struct {
