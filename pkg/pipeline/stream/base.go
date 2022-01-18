@@ -90,11 +90,6 @@ func (n *pubSubNodeBase) Send(
 
 // pubNodeBase can be used as the base for nodes that implement PubNode.
 type pubNodeBase struct {
-	// stopChan controls the graceful shutdown, if this channel is closed then
-	// run will return without an error.
-	stopChan chan struct{}
-	// stopReason is the error that's returned when the node is stopped.
-	stopReason error
 	// out is the channel to which outgoing messages will be sent.
 	out chan<- *Message
 	// running is true when the node is running and false when it's not.
@@ -125,7 +120,6 @@ func (n *pubNodeBase) Trigger(
 		return nil, nil, cerrors.New("tried to run PubNode twice")
 	}
 
-	n.stopChan = make(chan struct{})
 	n.running = true
 
 	// cleanup should be called with defer in the caller
@@ -135,7 +129,6 @@ func (n *pubNodeBase) Trigger(
 		close(n.out)
 		n.out = nil
 		n.running = false
-		n.stopChan = nil
 		n.lock.Unlock()
 		logger.Trace(ctx).Msg("PubNode cleaned up")
 	}
@@ -147,7 +140,6 @@ func (n *pubNodeBase) Trigger(
 
 	cases := []reflect.SelectCase{
 		{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(ctx.Done())},
-		{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(n.stopChan)},
 		{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(errChan)},
 	}
 	if triggerChan != nil {
@@ -164,9 +156,6 @@ func (n *pubNodeBase) Trigger(
 			logger.Debug(ctx).Msg("context closed while waiting for message")
 			return nil, ctx.Err()
 		case 1:
-			logger.Debug(ctx).Msg("stop channel closed")
-			return nil, n.stopReason
-		case 2:
 			err := value.Interface().(error)
 			logger.Debug(ctx).Err(err).Msg("received error on error channel")
 			return nil, err
@@ -208,23 +197,6 @@ func (n *pubNodeBase) Send(
 		logger.Trace(msg.Ctx).Msg("sent message to outgoing channel")
 	}
 	return nil
-}
-
-// Stop will gracefully stop the node.
-func (n *pubNodeBase) Stop(reason error) {
-	n.lock.Lock()
-	defer n.lock.Unlock()
-
-	if n.stopChan == nil {
-		return // noop
-	}
-
-	select {
-	case <-n.stopChan: // stopChan already closed
-	default:
-		n.stopReason = reason
-		close(n.stopChan)
-	}
 }
 
 func (n *pubNodeBase) Pub() <-chan *Message {

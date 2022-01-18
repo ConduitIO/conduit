@@ -27,7 +27,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/noop"
 	"github.com/conduitio/conduit/pkg/pipeline/stream"
-	"github.com/conduitio/conduit/pkg/plugins"
+	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/conduitio/conduit/pkg/processor"
 	procmock "github.com/conduitio/conduit/pkg/processor/mock"
 	"github.com/conduitio/conduit/pkg/record"
@@ -69,7 +69,7 @@ func Example_simpleStream() {
 	// stop node after 150ms, which should be enough to process the 10 messages
 	time.AfterFunc(150*time.Millisecond, func() { node1.Stop(nil) })
 	// give the node some time to process the records, plus a bit of time to stop
-	if waitTimeout(&wg, 200*time.Millisecond) {
+	if waitTimeout(&wg, 1000*time.Millisecond) {
 		killAll()
 	} else {
 		logger.Info(ctx).Msg("finished successfully")
@@ -96,7 +96,7 @@ func Example_simpleStream() {
 	// DBG received ack message_id=generator/9 node_id=generator
 	// DBG got record message_id=generator/10 node_id=printer
 	// DBG received ack message_id=generator/10 node_id=generator
-	// DBG stop channel closed component=SourceNode node_id=generator
+	// INF stopping source connector component=SourceNode node_id=generator
 	// DBG incoming messages channel closed component=DestinationNode node_id=printer
 	// INF finished successfully
 }
@@ -175,7 +175,7 @@ func Example_complexStream() {
 		},
 	)
 	// give the nodes some time to process the records, plus a bit of time to stop
-	if waitTimeout(&wg, 300*time.Millisecond) {
+	if waitTimeout(&wg, 1000*time.Millisecond) {
 		killAll()
 	} else {
 		logger.Info(ctx).Msgf("counter node counted %d messages", count)
@@ -243,8 +243,8 @@ func Example_complexStream() {
 	// DBG got record message_id=generator1/10 node_id=printer2
 	// DBG got record message_id=generator1/10 node_id=printer1
 	// DBG received ack message_id=generator1/10 node_id=generator1
-	// DBG stop channel closed component=SourceNode node_id=generator1
-	// DBG stop channel closed component=SourceNode node_id=generator2
+	// INF stopping source connector component=SourceNode node_id=generator1
+	// INF stopping source connector component=SourceNode node_id=generator2
 	// DBG incoming messages channel closed component=ProcessorNode node_id=counter
 	// DBG incoming messages channel closed component=DestinationNode node_id=printer2
 	// DBG incoming messages channel closed component=DestinationNode node_id=printer1
@@ -268,6 +268,7 @@ func newLogger() log.CtxLogger {
 func generatorSource(ctrl *gomock.Controller, logger log.CtxLogger, nodeID string, recordCount int, delay time.Duration) connector.Source {
 	position := 0
 
+	stop := make(chan struct{})
 	source := connmock.NewSource(ctrl)
 	source.EXPECT().Open(gomock.Any()).Return(nil).Times(1)
 	source.EXPECT().Teardown(gomock.Any()).Return(nil).Times(1)
@@ -280,13 +281,19 @@ func generatorSource(ctrl *gomock.Controller, logger log.CtxLogger, nodeID strin
 
 		position++
 		if position > recordCount {
-			return record.Record{}, plugins.ErrEndData
+			// block until Stop is called
+			<-stop
+			return record.Record{}, plugin.ErrStreamNotOpen
 		}
 
 		return record.Record{
 			Position: record.Position(strconv.Itoa(position)),
 		}, nil
 	}).MinTimes(recordCount + 1)
+	source.EXPECT().Stop(gomock.Any()).DoAndReturn(func(context.Context) error {
+		close(stop)
+		return nil
+	})
 	source.EXPECT().Errors().Return(make(chan error))
 
 	return source

@@ -38,6 +38,9 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/metrics/prometheus"
 	"github.com/conduitio/conduit/pkg/orchestrator"
 	"github.com/conduitio/conduit/pkg/pipeline"
+	"github.com/conduitio/conduit/pkg/plugin"
+	"github.com/conduitio/conduit/pkg/plugin/builtin"
+	"github.com/conduitio/conduit/pkg/plugin/standalone"
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/web/api"
 	"github.com/conduitio/conduit/pkg/web/openapi"
@@ -159,7 +162,18 @@ func newServices(
 	connPersister *connector.Persister,
 ) (*pipeline.Service, *connector.Service, *processor.Service, error) {
 	pipelineService := pipeline.NewService(logger, db)
-	connectorService := connector.NewService(logger, db, connector.NewDefaultBuilder(logger, connPersister))
+	connectorService := connector.NewService(
+		logger,
+		db,
+		connector.NewDefaultBuilder(
+			logger,
+			connPersister,
+			plugin.NewRegistry(
+				builtin.NewRegistry(builtin.DefaultDispenserFactories...),
+				standalone.NewRegistry(logger),
+			),
+		),
+	)
 	processorService := processor.NewService(logger, db, processor.GlobalBuilderRegistry)
 	return pipelineService, connectorService, processorService, nil
 }

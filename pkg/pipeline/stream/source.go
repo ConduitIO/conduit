@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/conduitio/conduit/pkg/record"
 
 	"github.com/conduitio/conduit/pkg/connector"
@@ -36,8 +37,9 @@ type SourceNode struct {
 	ConnectorTimer metrics.Timer
 	PipelineTimer  metrics.Timer
 
-	base   pubNodeBase
-	logger log.CtxLogger
+	stopReason error
+	base       pubNodeBase
+	logger     log.CtxLogger
 }
 
 // ID returns a properly formatted SourceNode ID prefixed with `source/`
@@ -115,6 +117,10 @@ func (n *SourceNode) Run(ctx context.Context) (err error) {
 	for {
 		msg, err := trigger()
 		if err != nil || msg == nil {
+			if cerrors.Is(err, plugin.ErrStreamNotOpen) {
+				// node was stopped gracefully, return stop reason
+				return n.stopReason
+			}
 			if plugins.IsRecoverableError(err) {
 				n.logger.Trace(ctx).Err(err).Msg("backing off because of recoverable error")
 				ticker.Reset(b.Duration())
@@ -159,7 +165,10 @@ func (n *SourceNode) Run(ctx context.Context) (err error) {
 }
 
 func (n *SourceNode) Stop(reason error) {
-	n.base.Stop(reason)
+	ctx := context.TODO() // TODO get context as parameter
+	n.logger.Err(ctx, reason).Msg("stopping source connector")
+	n.stopReason = reason
+	_ = n.Source.Stop(ctx) // TODO return error
 }
 
 func (n *SourceNode) Pub() <-chan *Message {

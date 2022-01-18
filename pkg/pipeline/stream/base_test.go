@@ -374,32 +374,6 @@ func TestPubNodeBase_TriggerCancelledContext(t *testing.T) {
 	assert.Nil(t, got)
 }
 
-func TestPubNodeBase_Stop(t *testing.T) {
-	ctx := context.Background()
-	logger := log.Nop()
-
-	n := &pubNodeBase{}
-	n.Pub()
-
-	trigger, cleanup, err := n.Trigger(ctx, logger, nil, nil, nil)
-	assert.Ok(t, err)
-	assert.NotNil(t, trigger)
-	assert.NotNil(t, cleanup)
-
-	defer cleanup()
-
-	// if the node is stopped trigger should return no message
-	wantErr := cerrors.New("my error")
-	n.Stop(wantErr)
-
-	got, err := trigger()
-	assert.Equal(t, wantErr, err)
-	assert.Nil(t, got)
-
-	(&pubNodeBase{}).Stop(nil) // stop can be called on a non-running node
-	n.Stop(nil)                // stop is idempotent
-}
-
 func TestPubNodeBase_Send(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*100)
 	defer cancel()
