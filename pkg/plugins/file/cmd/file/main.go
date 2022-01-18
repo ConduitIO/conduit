@@ -15,10 +15,10 @@
 package main
 
 import (
-	"github.com/conduitio/conduit/pkg/plugins"
+	"github.com/conduitio/conduit/pkg/plugin/sdk"
 	"github.com/conduitio/conduit/pkg/plugins/file"
 )
 
 func main() {
-	plugins.Run(&file.Source{}, &file.Destination{}, file.Spec{})
+	sdk.Serve(file.Specification, file.NewSource, file.NewDestination)
 }
