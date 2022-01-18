@@ -111,6 +111,16 @@ func (l CtxLogger) Component() string {
 	return l.ch.name
 }
 
+// ZerologWithComponent returns a zerolog.Logger that adds the component field
+// to all log entries.
+func (l CtxLogger) ZerologWithComponent() zerolog.Logger {
+	out := l.Logger
+	if l.Component() != "" {
+		out = out.With().Str(ComponentField, l.Component()).Logger()
+	}
+	return out
+}
+
 // Trace starts a new message with trace level and context ctx.
 //
 // You must call Msg on the returned event in order to send the event.
