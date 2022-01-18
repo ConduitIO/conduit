@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/plugins"
 )
 
 const (
@@ -37,25 +36,25 @@ type Config struct {
 	Fields      map[string]string
 }
 
-func Parse(config plugins.Config) (Config, error) {
+func Parse(config map[string]string) (Config, error) {
 	parsed := Config{}
 	// default value
 	parsed.RecordCount = -1
-	if recCount, ok := config.Settings[RecordCount]; ok {
+	if recCount, ok := config[RecordCount]; ok {
 		recCountParsed, err := strconv.ParseInt(recCount, 10, 64)
 		if err != nil {
 			return Config{}, cerrors.Errorf("invalid record count: %w", err)
 		}
 		parsed.RecordCount = recCountParsed
 	}
-	if readTime, ok := config.Settings[ReadTime]; ok {
+	if readTime, ok := config[ReadTime]; ok {
 		readTimeParsed, err := time.ParseDuration(readTime)
 		if err != nil || readTimeParsed < 0 {
 			return Config{}, cerrors.Errorf("invalid processing time: %w", err)
 		}
 		parsed.ReadTime = readTimeParsed
 	}
-	fieldsConcat := config.Settings[Fields]
+	fieldsConcat := config[Fields]
 	if fieldsConcat == "" {
 		return Config{}, cerrors.New("no fields specified")
 	}
