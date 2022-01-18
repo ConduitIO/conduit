@@ -20,12 +20,14 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin"
 	builtinv1 "github.com/conduitio/conduit/pkg/plugin/builtin/v1"
 	"github.com/conduitio/conduit/pkg/plugin/sdk"
+	"github.com/conduitio/conduit/pkg/plugins/file"
 	"github.com/conduitio/conduit/pkg/plugins/generator"
 )
 
 var (
 	DefaultDispenserFactories = []DispenserFactory{
 		sdkDispenserFactory(generator.Specification, generator.NewSource, nil),
+		sdkDispenserFactory(file.Specification, file.NewSource, file.NewDestination),
 	}
 )
 

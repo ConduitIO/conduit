@@ -21,39 +21,72 @@ import (
 	"io"
 	"os"
 	"strconv"
-	"time"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/plugins"
-	"github.com/conduitio/conduit/pkg/record"
+	"github.com/conduitio/conduit/pkg/plugin/sdk"
 	"github.com/nxadm/tail"
 )
 
 // Source connector
 type Source struct {
-	Tail   *tail.Tail
-	Config map[string]string
+	sdk.UnimplementedSource
 
-	lastPosition record.Position
+	tail   *tail.Tail
+	config map[string]string
+
+	lastPosition sdk.Position
 	nextOffset   int64
-	nextPosition record.Position
+	nextPosition sdk.Position
 }
 
-func (c *Source) Ack(ctx context.Context, position record.Position) error {
-	return nil // no ack needed
+func NewSource() sdk.Source {
+	return &Source{}
 }
 
-func (c *Source) Open(ctx context.Context, config plugins.Config) error {
-	err := c.Validate(config)
+func (s *Source) Configure(ctx context.Context, m map[string]string) error {
+	err := s.validateConfig(m)
 	if err != nil {
 		return err
 	}
-	c.Config = config.Settings
+	s.config = m
 	return nil
 }
 
-func (c *Source) seek(p record.Position) error {
-	if bytes.Equal(c.lastPosition, p) && c.Tail != nil {
+func (s *Source) Open(ctx context.Context, position sdk.Position) error {
+	return s.seek(position)
+}
+
+func (s *Source) Read(ctx context.Context) (sdk.Record, error) {
+	select {
+	case line := <-s.tail.Lines:
+		s.lastPosition = s.nextPosition
+		// calculate next offset by adding the bytes in the current line plus
+		// 1 byte for the line break
+		s.nextOffset += int64(len(line.Text)) + 1
+		s.nextPosition = sdk.Position(strconv.FormatInt(s.nextOffset, 10))
+		return sdk.Record{
+			Position:  s.lastPosition,
+			CreatedAt: line.Time,
+			Payload:   sdk.RawData(line.Text),
+		}, nil
+	case <-ctx.Done():
+		return sdk.Record{}, ctx.Err()
+	}
+}
+
+func (s *Source) Ack(ctx context.Context, position sdk.Position) error {
+	return nil // no ack needed
+}
+
+func (s *Source) Teardown(ctx context.Context) error {
+	if s.tail != nil {
+		return s.tail.Stop()
+	}
+	return nil
+}
+
+func (s *Source) seek(p sdk.Position) error {
+	if bytes.Equal(s.lastPosition, p) && s.tail != nil {
 		// we are at the required position
 		return nil
 	}
@@ -70,7 +103,7 @@ func (c *Source) seek(p record.Position) error {
 	fmt.Printf("seeking to position %d\n", offset)
 
 	t, err := tail.TailFile(
-		c.Config[ConfigPath],
+		s.config[ConfigPath],
 		tail.Config{
 			Follow: true,
 			Location: &tail.SeekInfo{
@@ -84,54 +117,26 @@ func (c *Source) seek(p record.Position) error {
 		return cerrors.Errorf("could not tail file: %w", err)
 	}
 
-	c.nextOffset = offset
+	s.nextOffset = offset
 	if p != nil {
 		// read line at position so that Read returns next line
 		line := <-t.Lines
-		c.nextOffset += int64(len(line.Text)) + 1
+		s.nextOffset += int64(len(line.Text)) + 1
 	}
-	c.nextPosition = record.Position(strconv.FormatInt(c.nextOffset, 10))
-	c.lastPosition = p
-	c.Tail = t
+	s.nextPosition = sdk.Position(strconv.FormatInt(s.nextOffset, 10))
+	s.lastPosition = p
+	s.tail = t
 
 	return nil
 }
 
-func (c *Source) Read(ctx context.Context, p record.Position) (record.Record, error) {
-	err := c.seek(p)
-	if err != nil {
-		return record.Record{}, cerrors.Errorf("could not seek to position: %w", err)
-	}
-
-	select {
-	case line := <-c.Tail.Lines:
-		c.lastPosition = c.nextPosition
-		// calculate next offset by adding the bytes in the current line plus
-		// 1 byte for the line break
-		c.nextOffset += int64(len(line.Text)) + 1
-		c.nextPosition = record.Position(strconv.FormatInt(c.nextOffset, 10))
-		return record.Record{
-			Position:  c.lastPosition,
-			CreatedAt: line.Time,
-			Payload: record.RawData{
-				Raw: []byte(line.Text),
-			},
-		}, nil
-	case <-time.After(time.Millisecond * 100):
-		return record.Record{}, plugins.ErrEndData
-	}
-}
-func (c *Source) Teardown() error {
-	return c.Tail.Stop()
-}
-
-func (c *Source) Validate(cfg plugins.Config) error {
-	if _, ok := cfg.Settings[ConfigPath]; !ok {
+func (s *Source) validateConfig(cfg map[string]string) error {
+	if _, ok := cfg[ConfigPath]; !ok {
 		return requiredConfigErr(ConfigPath)
 	}
 
 	// make sure we can stat the file, we don't care if it doesn't exist though
-	_, err := os.Stat(cfg.Settings[ConfigPath])
+	_, err := os.Stat(cfg[ConfigPath])
 	if err != nil && !os.IsNotExist(err) {
 		return cerrors.Errorf(
 			"%q config value does not contain a valid path: %w",
