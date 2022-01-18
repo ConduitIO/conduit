@@ -20,9 +20,8 @@ import (
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/conduitio/conduit/pkg/plugins"
+	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/conduitio/conduit/pkg/record"
-	"github.com/hashicorp/go-plugin"
 )
 
 type source struct {
@@ -39,20 +38,16 @@ type source struct {
 	// persister is used for persisting the connector state when it changes.
 	persister *Persister
 
+	// pluginDispenser TODO
+	pluginDispenser plugin.Dispenser
+
 	// errs is used to signal the node that the connector experienced an error
 	// when it was processing something asynchronously (e.g. persisting state).
 	errs chan error
 
-	// bellow fields are nil when source is created and are managed by source
+	// below fields are nil when source is created and are managed by source
 	// internally.
-
-	client *plugin.Client
-	plugin plugins.Source
-
-	// lastPosition tracks the position for Read calls, the position in XState
-	// is only updated on Ack to have strong delivery guarantees between
-	// restarts.
-	lastPosition record.Position
+	plugin plugin.SourcePlugin
 
 	// m can lock a source from concurrent access (e.g. in connector persister)
 	m sync.Mutex
@@ -83,7 +78,7 @@ func (s *source) SetState(state SourceState) {
 }
 
 func (s *source) IsRunning() bool {
-	return s.client != nil
+	return s.plugin != nil
 }
 
 func (s *source) Errors() <-chan error {
@@ -91,78 +86,81 @@ func (s *source) Errors() <-chan error {
 }
 
 func (s *source) Validate(ctx context.Context, settings map[string]string) error {
-	plug := s.plugin
-
-	if !s.IsRunning() {
-		client := plugins.NewClient(ctx, s.logger.Logger, s.XConfig.Plugin)
-		// start plugin only to validate that the config is valid
-		defer client.Kill()
-
-		var err error
-		plug, err = plugins.DispenseSource(client)
-		if err != nil {
-			return err
-		}
-	}
-
-	config := plugins.Config{Settings: settings}
-	err := plug.Validate(config)
+	src, err := s.pluginDispenser.DispenseSource()
 	if err != nil {
-		return cerrors.Errorf("invalid source config: %w", err)
+		return err
 	}
+	defer func() {
+		_ = src.Teardown(ctx)
+	}()
 
+	err = src.Configure(ctx, settings)
+	if err != nil {
+		return cerrors.Errorf("invalid plugin config: %w", err)
+	}
 	return nil
 }
 
 func (s *source) Open(ctx context.Context) error {
 	if s.IsRunning() {
-		return plugins.ErrAlreadyRunning
+		return plugin.ErrPluginRunning
 	}
 
 	s.logger.Debug(ctx).Msg("starting source connector plugin")
-	client := plugins.NewClient(ctx, s.logger.Logger, s.XConfig.Plugin)
-	plug, err := plugins.DispenseSource(client)
+	src, err := s.pluginDispenser.DispenseSource()
 	if err != nil {
-		client.Kill()
 		return err
 	}
 
-	s.logger.Debug(ctx).Msg("opening source connector plugin")
-	err = plug.Open(ctx, plugins.Config{Settings: s.XConfig.Settings})
+	s.logger.Debug(ctx).Msg("configuring source connector plugin")
+	err = src.Configure(ctx, s.XConfig.Settings)
 	if err != nil {
-		errTd := plug.Teardown()
-		if errTd != nil {
-			s.logger.Err(ctx, errTd).Msg("could not tear down plugin")
-		}
-		client.Kill()
+		_ = src.Teardown(ctx)
+		return err
+	}
+
+	err = src.Start(ctx, s.XState.Position)
+	if err != nil {
+		_ = src.Teardown(ctx)
 		return err
 	}
 
 	s.logger.Info(ctx).Msg("source connector plugin successfully started")
 
-	s.lastPosition = s.XState.Position
-	s.client = client
-	s.plugin = plug
+	s.plugin = src
 	s.persister.ConnectorStarted()
+	return nil
+}
+
+func (s *source) Stop(ctx context.Context) error {
+	if !s.IsRunning() {
+		return cerrors.New("plugin is not running")
+	}
+
+	s.logger.Debug(ctx).Msg("stopping source connector plugin")
+	err := s.plugin.Stop(ctx)
+	if err != nil {
+		return cerrors.Errorf("could not stop plugin: %w", err)
+	}
+
+	s.logger.Info(ctx).Msg("connector plugin successfully stopped")
 	return nil
 }
 
 func (s *source) Teardown(ctx context.Context) error {
 	if !s.IsRunning() {
-		return plugins.ErrNotRunning
+		return plugin.ErrPluginNotRunning
 	}
 
 	s.logger.Debug(ctx).Msg("tearing down source connector plugin")
-	err := s.plugin.Teardown()
 
-	// kill client even if teardown fails to stop child process
-	s.client.Kill()
-	s.client = nil
+	err := s.plugin.Teardown(ctx)
+
 	s.plugin = nil
 	s.persister.ConnectorStopped()
 
 	if err != nil {
-		return cerrors.Errorf("could not teardown plugin: %w", err)
+		return cerrors.Errorf("could not tear down plugin: %w", err)
 	}
 
 	s.logger.Info(ctx).Msg("connector plugin successfully torn down")
@@ -171,20 +169,20 @@ func (s *source) Teardown(ctx context.Context) error {
 
 func (s *source) Read(ctx context.Context) (record.Record, error) {
 	if !s.IsRunning() {
-		return record.Record{}, plugins.ErrNotRunning
+		return record.Record{}, plugin.ErrPluginNotRunning
 	}
 
-	r, err := s.plugin.Read(ctx, s.lastPosition)
+	r, err := s.plugin.Read(ctx)
 	if err != nil {
 		return r, err
 	}
-	s.lastPosition = r.Position
+
 	return r, nil
 }
 
 func (s *source) Ack(ctx context.Context, p record.Position) error {
 	if !s.IsRunning() {
-		return plugins.ErrNotRunning
+		return plugin.ErrPluginNotRunning
 	}
 
 	err := s.plugin.Ack(ctx, p)

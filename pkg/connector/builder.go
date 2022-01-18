@@ -17,7 +17,9 @@ package connector
 import (
 	"context"
 
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/plugin"
 )
 
 // Builder represents an object that can build a connector.
@@ -35,16 +37,18 @@ type Builder interface {
 type DefaultBuilder struct {
 	logger    log.CtxLogger
 	persister *Persister
+	registry  *plugin.Registry
 }
 
-func NewDefaultBuilder(logger log.CtxLogger, persister *Persister) DefaultBuilder {
-	return DefaultBuilder{
+func NewDefaultBuilder(logger log.CtxLogger, persister *Persister, registry *plugin.Registry) *DefaultBuilder {
+	return &DefaultBuilder{
 		logger:    logger,
 		persister: persister,
+		registry:  registry,
 	}
 }
 
-func (b DefaultBuilder) Build(t Type) (Connector, error) {
+func (b *DefaultBuilder) Build(t Type) (Connector, error) {
 	var c Connector
 	switch t {
 	case TypeSource:
@@ -57,26 +61,33 @@ func (b DefaultBuilder) Build(t Type) (Connector, error) {
 	return c, nil
 }
 
-func (b DefaultBuilder) Init(c Connector, id string, config Config) error {
+func (b *DefaultBuilder) Init(c Connector, id string, config Config) error {
 	connLogger := b.logger
 	connLogger.Logger = connLogger.Logger.With().
-		Str(log.ConnectorIDField, c.ID()).
+		Str(log.ConnectorIDField, id).
 		Logger()
+
+	p, err := b.registry.New(connLogger, config.Plugin)
+	if err != nil {
+		return cerrors.Errorf("could not create plugin %q: %w", config.Plugin, err)
+	}
 
 	switch v := c.(type) {
 	case *source:
 		v.XID = id
 		v.XConfig = config
-		connLogger = connLogger.WithComponent("source")
+		connLogger = connLogger.WithComponent("connector.Source")
 		v.logger = connLogger
 		v.persister = b.persister
+		v.pluginDispenser = p
 		v.errs = make(chan error)
 	case *destination:
 		v.XID = id
 		v.XConfig = config
-		connLogger = connLogger.WithComponent("destination")
+		connLogger = connLogger.WithComponent("connector.Destination")
 		v.logger = connLogger
 		v.persister = b.persister
+		v.pluginDispenser = p
 		v.errs = make(chan error)
 	default:
 		return ErrInvalidConnectorType
