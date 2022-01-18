@@ -1,7 +1,7 @@
 {{#in-element (get-element "top-nav")}}
   <PipelineTopNav @pipeline={{@model.pipeline}} />
 {{/in-element}}
-<div class="p-6 bg-white border-b border-gray-200">
+<div class="pl-9 pr-6 py-6 max-h-26 bg-white border-b border-gray-200 -mx-9 -mt-9 mb-10">
   {{#if @model.pipeline.name}}
     <div class="flex items-center">
       <div class="font-medium text-2xl" data-test-pipeline-subheader-name>
