@@ -22,6 +22,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/web/api/fromproto"
+	"github.com/conduitio/conduit/pkg/web/api/status"
 	"github.com/conduitio/conduit/pkg/web/api/toproto"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	"google.golang.org/grpc"
@@ -83,7 +84,7 @@ func (p *ProcessorAPIv1) GetProcessor(
 	// fetch the processor from the ProcessorOrchestrator
 	pr, err := p.ps.Get(ctx, req.Id)
 	if err != nil {
-		return nil, cerrors.Errorf("failed to get processor by ID: %w", err)
+		return nil, status.ProcessorError(cerrors.Errorf("failed to get processor by ID: %w", err))
 	}
 
 	resp := toproto.Processor(pr)
@@ -106,7 +107,7 @@ func (p *ProcessorAPIv1) CreateProcessor(
 	)
 
 	if err != nil {
-		return nil, cerrors.Errorf("failed to create processor: %w", err)
+		return nil, status.ProcessorError(cerrors.Errorf("failed to create processor: %w", err))
 	}
 
 	pr := toproto.Processor(created)
@@ -125,7 +126,7 @@ func (p *ProcessorAPIv1) UpdateProcessor(
 	updated, err := p.ps.Update(ctx, req.Id, fromproto.ProcessorConfig(req.Config))
 
 	if err != nil {
-		return nil, cerrors.Errorf("failed to update processor: %w", err)
+		return nil, status.ProcessorError(cerrors.Errorf("failed to update processor: %w", err))
 	}
 
 	pr := toproto.Processor(updated)
@@ -137,7 +138,7 @@ func (p *ProcessorAPIv1) DeleteProcessor(ctx context.Context, req *apiv1.DeleteP
 	err := p.ps.Delete(ctx, req.Id)
 
 	if err != nil {
-		return nil, cerrors.Errorf("failed to delete processor: %w", err)
+		return nil, status.ProcessorError(cerrors.Errorf("failed to delete processor: %w", err))
 	}
 
 	return &apiv1.DeleteProcessorResponse{}, nil

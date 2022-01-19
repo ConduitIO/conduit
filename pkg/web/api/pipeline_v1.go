@@ -22,6 +22,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	"github.com/conduitio/conduit/pkg/web/api/fromproto"
+	"github.com/conduitio/conduit/pkg/web/api/status"
 	"github.com/conduitio/conduit/pkg/web/api/toproto"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	"google.golang.org/grpc"
@@ -66,13 +67,13 @@ func (p *PipelineAPIv1) GetPipeline(
 	req *apiv1.GetPipelineRequest,
 ) (*apiv1.GetPipelineResponse, error) {
 	if req.Id == "" {
-		return nil, cerrors.ErrEmptyID
+		return nil, status.PipelineError(cerrors.ErrEmptyID)
 	}
 
 	// fetch the pipeline from the PipelineOrchestrator
 	pl, err := p.ps.Get(ctx, req.Id)
 	if err != nil {
-		return nil, cerrors.Errorf("failed to get pipeline by ID: %w", err)
+		return nil, status.PipelineError(cerrors.Errorf("failed to get pipeline by ID: %w", err))
 	}
 
 	// setup an empty pipeline to hydrate.
@@ -108,7 +109,7 @@ func (p *PipelineAPIv1) CreatePipeline(
 	// create the pipeline
 	created, err := p.ps.Create(ctx, cfg)
 	if err != nil {
-		return nil, cerrors.Errorf("failed to create pipeline: %w", err)
+		return nil, status.PipelineError(cerrors.Errorf("failed to create pipeline: %w", err))
 	}
 
 	// translate persisted config to proto response
@@ -129,7 +130,7 @@ func (p *PipelineAPIv1) UpdatePipeline(
 	updated, err := p.ps.Update(ctx, req.Id, cfg)
 
 	if err != nil {
-		return nil, cerrors.Errorf("failed to update pipeline: %w", err)
+		return nil, status.PipelineError(cerrors.Errorf("failed to update pipeline: %w", err))
 	}
 
 	pl := toproto.Pipeline(updated)
@@ -144,7 +145,7 @@ func (p *PipelineAPIv1) DeletePipeline(
 	err := p.ps.Delete(ctx, req.Id)
 
 	if err != nil {
-		return nil, cerrors.Errorf("failed to delete pipeline: %w", err)
+		return nil, status.PipelineError(cerrors.Errorf("failed to delete pipeline: %w", err))
 	}
 
 	return &apiv1.DeletePipelineResponse{}, nil
@@ -156,7 +157,7 @@ func (p *PipelineAPIv1) StartPipeline(
 ) (*apiv1.StartPipelineResponse, error) {
 	err := p.ps.Start(ctx, req.Id)
 	if err != nil {
-		return nil, cerrors.Errorf("failed to start pipeline: %w", err)
+		return nil, status.PipelineError(cerrors.Errorf("failed to start pipeline: %w", err))
 	}
 
 	return &apiv1.StartPipelineResponse{}, nil
@@ -168,7 +169,7 @@ func (p *PipelineAPIv1) StopPipeline(
 ) (*apiv1.StopPipelineResponse, error) {
 	err := p.ps.Stop(ctx, req.Id)
 	if err != nil {
-		return nil, cerrors.Errorf("failed to stop pipeline: %w", err)
+		return nil, status.PipelineError(cerrors.Errorf("failed to stop pipeline: %w", err))
 	}
 
 	return &apiv1.StopPipelineResponse{}, nil

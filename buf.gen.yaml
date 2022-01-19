@@ -19,3 +19,4 @@ plugins:
     opt:
       - logtostderr=true
       - allow_repeated_fields_in_body=true
+      - disable_default_errors=true

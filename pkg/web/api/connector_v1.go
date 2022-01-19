@@ -21,6 +21,7 @@ import (
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/web/api/fromproto"
+	"github.com/conduitio/conduit/pkg/web/api/status"
 	"github.com/conduitio/conduit/pkg/web/api/toproto"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	"google.golang.org/grpc"
@@ -69,13 +70,13 @@ func (c *ConnectorAPIv1) GetConnector(
 	req *apiv1.GetConnectorRequest,
 ) (*apiv1.GetConnectorResponse, error) {
 	if req.Id == "" {
-		return nil, cerrors.ErrEmptyID
+		return nil, status.ConnectorError(cerrors.ErrEmptyID)
 	}
 
 	// fetch the connector from the ConnectorOrchestrator
 	pr, err := c.cs.Get(ctx, req.Id)
 	if err != nil {
-		return nil, cerrors.Errorf("failed to get connector by ID: %w", err)
+		return nil, status.ConnectorError(cerrors.Errorf("failed to get connector by ID: %w", err))
 	}
 
 	resp := toproto.Connector(pr)
@@ -96,7 +97,7 @@ func (c *ConnectorAPIv1) CreateConnector(
 	)
 
 	if err != nil {
-		return nil, cerrors.Errorf("failed to create connector: %w", err)
+		return nil, status.ConnectorError(cerrors.Errorf("failed to create connector: %w", err))
 	}
 
 	co := toproto.Connector(created)
@@ -114,7 +115,7 @@ func (c *ConnectorAPIv1) UpdateConnector(
 
 	old, err := c.cs.Get(ctx, req.Id)
 	if err != nil {
-		return nil, cerrors.Errorf("failed to get connector by ID: %w", err)
+		return nil, status.ConnectorError(cerrors.Errorf("failed to get connector by ID: %w", err))
 	}
 
 	config := fromproto.ConnectorConfig(
@@ -127,7 +128,7 @@ func (c *ConnectorAPIv1) UpdateConnector(
 	updated, err := c.cs.Update(ctx, req.Id, config)
 
 	if err != nil {
-		return nil, cerrors.Errorf("failed to update connector: %w", err)
+		return nil, status.ConnectorError(cerrors.Errorf("failed to update connector: %w", err))
 	}
 
 	co := toproto.Connector(updated)
@@ -139,7 +140,7 @@ func (c *ConnectorAPIv1) DeleteConnector(ctx context.Context, req *apiv1.DeleteC
 	err := c.cs.Delete(ctx, req.Id)
 
 	if err != nil {
-		return nil, cerrors.Errorf("failed to delete connector: %w", err)
+		return nil, status.ConnectorError(cerrors.Errorf("failed to delete connector: %w", err))
 	}
 
 	return &apiv1.DeleteConnectorResponse{}, nil
