@@ -33,7 +33,7 @@ func PipelineError(err error) error {
 	case cerrors.Is(err, pipeline.ErrInstanceNotFound):
 		code = codes.NotFound
 	default:
-		code = CodeFromError(err)
+		code = codeFromError(err)
 	}
 
 	return grpcstatus.Error(code, err.Error())
@@ -48,7 +48,7 @@ func ConnectorError(err error) error {
 	case cerrors.Is(err, connector.ErrInstanceNotFound):
 		code = codes.NotFound
 	default:
-		code = CodeFromError(err)
+		code = codeFromError(err)
 	}
 
 	return grpcstatus.Error(code, err.Error())
@@ -63,13 +63,13 @@ func ProcessorError(err error) error {
 	case cerrors.Is(err, processor.ErrInstanceNotFound):
 		code = codes.NotFound
 	default:
-		code = CodeFromError(err)
+		code = codeFromError(err)
 	}
 
 	return grpcstatus.Error(code, err.Error())
 }
 
-func CodeFromError(err error) codes.Code {
+func codeFromError(err error) codes.Code {
 	switch {
 	case cerrors.Is(err, cerrors.ErrNotImpl):
 		return codes.Unimplemented
