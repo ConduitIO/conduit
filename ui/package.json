@@ -70,7 +70,7 @@
     "ember-test-selectors": "^6.0.0",
     "ember-tooltips": "^3.5.1",
     "ember-truth-helpers": "^3.0.0",
-    "eslint": "^7.32.0",
+    "eslint": "^8.7.0",
     "eslint-config-prettier": "^8.3.0",
     "eslint-plugin-ember": "^10.5.8",
     "eslint-plugin-node": "^11.1.0",
