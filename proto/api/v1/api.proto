@@ -122,7 +122,7 @@ service PipelineService {
       response_body: "pipeline"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-			responses: {
+      responses: {
         key: "400";
         value: {
           schema: {
@@ -150,7 +150,7 @@ service PipelineService {
           }
         }
       }
-		};
+    };
   };
 
   rpc GetPipeline(GetPipelineRequest) returns (GetPipelineResponse) {
@@ -173,7 +173,7 @@ service PipelineService {
           }
         }
       }
-		};
+    };
   };
 
   rpc UpdatePipeline(UpdatePipelineRequest) returns (UpdatePipelineResponse) {
@@ -197,7 +197,7 @@ service PipelineService {
           }
         }
       }
-			responses: {
+      responses: {
         key: "400";
         value: {
           schema: {
@@ -225,7 +225,7 @@ service PipelineService {
           }
         }
       }
-		};
+    };
   };
 
   rpc DeletePipeline(DeletePipelineRequest) returns (DeletePipelineResponse) {
@@ -247,7 +247,7 @@ service PipelineService {
           }
         }
       }
-			responses: {
+      responses: {
         key: "400";
         value: {
           schema: {
@@ -261,7 +261,7 @@ service PipelineService {
           }
         }
       }
-		};
+    };
   };
 
   rpc StartPipeline(StartPipelineRequest) returns (StartPipelineResponse) {
@@ -283,7 +283,7 @@ service PipelineService {
           }
         }
       }
-			responses: {
+      responses: {
         key: "400";
         value: {
           schema: {
@@ -297,7 +297,7 @@ service PipelineService {
           }
         }
       }
-		};
+    };
   };
 
   rpc StopPipeline(StopPipelineRequest) returns (StopPipelineResponse) {
@@ -319,7 +319,7 @@ service PipelineService {
           }
         }
       }
-			responses: {
+      responses: {
         key: "400";
         value: {
           schema: {
@@ -333,7 +333,7 @@ service PipelineService {
           }
         }
       }
-		};
+    };
   };
 
   rpc ExportPipeline(ExportPipelineRequest) returns (ExportPipelineResponse) {
@@ -448,7 +448,7 @@ service ConnectorService {
       response_body: "connector"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-			responses: {
+      responses: {
         key: "400";
         value: {
           schema: {
@@ -462,7 +462,7 @@ service ConnectorService {
           }
         }
       }
-		};
+    };
   };
 
   rpc UpdateConnector(UpdateConnectorRequest) returns (UpdateConnectorResponse) {
@@ -486,7 +486,7 @@ service ConnectorService {
           }
         }
       }
-			responses: {
+      responses: {
         key: "400";
         value: {
           schema: {
@@ -500,7 +500,7 @@ service ConnectorService {
           }
         }
       }
-		};
+    };
   };
 
   rpc DeleteConnector(DeleteConnectorRequest) returns (DeleteConnectorResponse) {
@@ -618,7 +618,7 @@ service ProcessorService {
       response_body: "processor"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-			responses: {
+      responses: {
         key: "400";
         value: {
           schema: {
@@ -632,7 +632,7 @@ service ProcessorService {
           }
         }
       }
-		};
+    };
   };
 
   rpc UpdateProcessor(UpdateProcessorRequest) returns (UpdateProcessorResponse) {
@@ -656,7 +656,7 @@ service ProcessorService {
           }
         }
       }
-			responses: {
+      responses: {
         key: "400";
         value: {
           schema: {
@@ -670,7 +670,7 @@ service ProcessorService {
           }
         }
       }
-		};
+    };
   };
 
   rpc DeleteProcessor(DeleteProcessorRequest) returns (DeleteProcessorResponse) {
@@ -770,32 +770,32 @@ message Info {
 }
 
 option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
-	info: {
-		title: "Conduit REST API";
-		version: "0.1";
-		contact: {
-			name: "Conduit project";
-			url: "https://github.com/conduitio/conduit";
-			email: "";
-		}
-		license: {
-			name: "Apache License Version 2.0";
-			url: "https://github.com/ConduitIO/conduit/blob/main/README.md";
-		}
-	}
+  info: {
+    title: "Conduit REST API";
+    version: "v0.1.0";
+    contact: {
+    name: "Conduit project";
+      url: "https://github.com/conduitio/conduit";
+      email: "";
+    }
+    license: {
+      name: "Apache License Version 2.0";
+      url: "https://github.com/ConduitIO/conduit/blob/main/LICENSE.md";
+    }
+  }
 
   responses: {
-		key: "500";
-		value: {
-			schema: {
-				json_schema: {
-					ref: ".google.rpc.Status";
-				}
-			}
+    key: "500";
+    value: {
+      schema: {
+        json_schema: {
+        ref: ".google.rpc.Status";
+        }
+      }
       examples: {
         key: "application/json"
         value: '{ "code": 13, "message": "server error", "details": [] }';
       }
-		}
-	}
+    }
+  }
 };
