@@ -20,14 +20,14 @@ import (
 	"io/ioutil"
 	"path"
 
-	"github.com/conduitio/conduit/pkg/record"
+	"github.com/conduitio/conduit/pkg/plugin/sdk"
 )
 
 // Local writer dumps bytes into a local file. The file will be placed in a
 // directory defined by path property.
 type Local struct {
 	Path     string
-	Position record.Position
+	Position sdk.Position
 	Count    uint
 }
 
@@ -61,6 +61,6 @@ func (w *Local) Write(ctx context.Context, batch *Batch) error {
 }
 
 // LastPosition returns the last persisted position
-func (w *Local) LastPosition() record.Position {
+func (w *Local) LastPosition() sdk.Position {
 	return w.Position
 }
