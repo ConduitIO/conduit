@@ -22,14 +22,16 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin/sdk"
 	"github.com/conduitio/conduit/pkg/plugins/file"
 	"github.com/conduitio/conduit/pkg/plugins/generator"
+	"github.com/conduitio/conduit/pkg/plugins/s3"
+	s3destination "github.com/conduitio/conduit/pkg/plugins/s3/destination"
+	s3source "github.com/conduitio/conduit/pkg/plugins/s3/source"
 )
 
-var (
-	DefaultDispenserFactories = []DispenserFactory{
-		sdkDispenserFactory(generator.Specification, generator.NewSource, nil),
-		sdkDispenserFactory(file.Specification, file.NewSource, file.NewDestination),
-	}
-)
+var DefaultDispenserFactories = []DispenserFactory{
+	sdkDispenserFactory(generator.Specification, generator.NewSource, nil),
+	sdkDispenserFactory(file.Specification, file.NewSource, file.NewDestination),
+	sdkDispenserFactory(s3.Specification, s3source.NewSource, s3destination.NewDestination),
+}
 
 type Registry struct {
 	builders map[string]DispenserFactory
