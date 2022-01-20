@@ -5,7 +5,7 @@ _Data Integration for Production Data Stores. :dizzy:_
 
 [![License](https://img.shields.io/badge/license-Apache%202-blue)](https://github.com/ConduitIO/conduit/blob/main/LICENSE.md)
 [![Build](https://github.com/ConduitIO/conduit/actions/workflows/build.yml/badge.svg)](https://github.com/ConduitIO/conduit/actions/workflows/build.yml)
-[![Go Reference](https://pkg.go.dev/badge/github.com/ConduitIO/conduit.svg)](https://pkg.go.dev/github.com/ConduitIO/conduit)
+[![Go Reference](https://pkg.go.dev/badge/github.com/conduitio/conduit.svg)](https://pkg.go.dev/github.com/conduitio/conduit)
 [![Go Report Card](https://goreportcard.com/badge/github.com/conduitio/conduit)](https://goreportcard.com/report/github.com/conduitio/conduit)
 [![Discord](https://img.shields.io/discord/828680256877363200?label=discord&logo=discord)](https://discord.meroxa.com)
 [![Docs](https://img.shields.io/badge/conduit-docs-blue)](https://docs.conduit.io)
