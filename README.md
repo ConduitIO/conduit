@@ -22,8 +22,7 @@ received records won't change, it also takes care of consistency by propagating 
 pipeline only when a record is successfully processed on all destinations.
 
 Conduit connectors are plugins that communicate with Conduit via a gRPC interface. This means that plugins can be
-written in any language as long as they conform to the required interface. For more information see the
-[Connector Plugins](https://github.com/ConduitIO/conduit/blob/main/docs/plugins.md) documentation.
+written in any language as long as they conform to the required interface.
 
 Conduit was created and open-sourced by [Meroxa](https://meroxa.io).
 
@@ -123,8 +122,6 @@ If you are interested in internals of Conduit we have prepared some technical do
   overview of Conduit.
 * [Conduit Metrics](https://github.com/ConduitIO/conduit/blob/main/docs/metrics.md) provides more information about how
   Conduit exposes metrics.
-* [Connector Plugins](https://github.com/ConduitIO/conduit/blob/main/docs/plugins.md) contains insights about how 
-  Conduit is communicating with connector plugins and how you can build your own connector plugin.
 
 ## Known limitations
 
@@ -145,7 +142,7 @@ For a complete guide to contributing to Conduit, see the
 
 We welcome you to join the community and contribute to Conduit to make it better! When something does not work as
 intended please check if there is already an [issue](https://github.com/ConduitIO/conduit/issues) that describes your
-problem, otherwise please [open an issue](https://github.com/ConduitIO/conduit/issues/new) and let us know. When you are
+problem, otherwise please [open an issue](https://github.com/ConduitIO/conduit/issues/new/choose) and let us know. When you are
 not sure how to do something please [open a discussion](https://github.com/ConduitIO/conduit/discussions) or hit us up
 on [Discord](https://discord.meroxa.com).
 
