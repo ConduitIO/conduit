@@ -16,7 +16,7 @@ package format
 
 import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/record"
+	"github.com/conduitio/conduit/pkg/plugin/sdk"
 )
 
 // Format defines the format the data will be persisted in by Destination
@@ -71,7 +71,7 @@ func (f Format) MimeType() string {
 }
 
 // MakeBytes returns a slice of bytes representing records in a given format
-func (f Format) MakeBytes(records []record.Record) ([]byte, error) {
+func (f Format) MakeBytes(records []sdk.Record) ([]byte, error) {
 	switch f {
 	case Parquet:
 		return makeParquetBytes(records)

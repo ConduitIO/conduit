@@ -18,7 +18,7 @@ import (
 	"bytes"
 	"encoding/json"
 
-	"github.com/conduitio/conduit/pkg/record"
+	"github.com/conduitio/conduit/pkg/plugin/sdk"
 )
 
 type jsonRecord struct {
@@ -30,7 +30,7 @@ type jsonRecord struct {
 	CreatedAt int64             `json:"CreatedAt"`
 }
 
-func makeJSONBytes(records []record.Record) ([]byte, error) {
+func makeJSONBytes(records []sdk.Record) ([]byte, error) {
 	buf := bytes.NewBuffer([]byte{})
 
 	for _, r := range records {
