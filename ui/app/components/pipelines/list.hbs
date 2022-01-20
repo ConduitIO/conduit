@@ -57,20 +57,9 @@
             </div>
           </td>
           <td class="p-4 border-gray-300 text-gray-900">
-            <div class="flex items-center">
-              <div class="h-1.5 w-1.5 rounded-full bg-yellow-400 mr-2"></div>
-              <span class="text-xs">
-                {{pipeline.sourceCount}}
-                Sources
-              </span>
-            </div>
-            <div class="flex items-center">
-              <div class="h-1.5 w-1.5 rounded-full bg-teal-600 mr-2"></div>
-              <span class="text-xs">
-                {{pipeline.destinationCount}}
-                Destinations
-              </span>
-            </div>
+            <span class="font-medium text-xs italic">
+              {{pluralize pipeline.connectorCount "connector"}}
+            </span>
           </td>
           <td class="p-4">
             <div class="flex items-center w-full space-x-4">

@@ -17,6 +17,9 @@ export default class PipelineModel extends Model {
   @attr()
   state;
 
+  @attr()
+  connectorIds;
+
   @hasMany('connector')
   connectors;
 
@@ -34,6 +37,10 @@ export default class PipelineModel extends Model {
 
   set description(newDescription) {
     this.config.description = newDescription;
+  }
+
+  get connectorCount() {
+    return this.connectorIds.length;
   }
 
   get humanFriendlyStatus() {
