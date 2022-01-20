@@ -1,7 +1,7 @@
 # Conduit
 ![Logo](https://raw.githubusercontent.com/ConduitIO/.github/main/images/conduit-logo-outlined.svg)
 
-_Real-time data integration for developers. :dizzy:_
+_Data Integration for Production Data Stores. :dizzy:_
 
 [![License](https://img.shields.io/badge/license-Apache%202-blue)](https://github.com/ConduitIO/conduit/blob/main/LICENSE.md)
 [![Build](https://github.com/ConduitIO/conduit/actions/workflows/build.yml/badge.svg)](https://github.com/ConduitIO/conduit/actions/workflows/build.yml)
