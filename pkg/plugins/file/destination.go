@@ -57,9 +57,9 @@ func (d *Destination) Open(ctx context.Context) error {
 	return nil
 }
 
-func (d *Destination) Write(ctx context.Context, r sdk.Record, ackFunc sdk.AckFunc) error {
+func (d *Destination) Write(ctx context.Context, r sdk.Record) error {
 	_, err := d.file.Write(append(r.Payload.Bytes(), byte('\n')))
-	return ackFunc(err)
+	return err
 }
 
 func (d *Destination) Flush(ctx context.Context) error {
