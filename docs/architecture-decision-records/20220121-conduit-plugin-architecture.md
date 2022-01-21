@@ -125,25 +125,25 @@ Conduit internally defines its own plugin interfaces:
 
 ```go
 type SourcePlugin interface {
-Configure(context.Context, map[string]string) error
-Start(context.Context, record.Position) error
-Read(context.Context) (record.Record, error)
-Ack(context.Context, record.Position) error
-Stop(context.Context) error
-Teardown(context.Context) error
+  Configure(context.Context, map[string]string) error
+  Start(context.Context, record.Position) error
+  Read(context.Context) (record.Record, error)
+  Ack(context.Context, record.Position) error
+  Stop(context.Context) error
+  Teardown(context.Context) error
 }
 
 type DestinationPlugin interface {
-Configure(context.Context, map[string]string) error
-Start(context.Context) error
-Write(context.Context, record.Record) error
-Ack(context.Context) (record.Position, error)
-Stop(context.Context) error
-Teardown(context.Context) error
+  Configure(context.Context, map[string]string) error
+  Start(context.Context) error
+  Write(context.Context, record.Record) error
+  Ack(context.Context) (record.Position, error)
+  Stop(context.Context) error
+  Teardown(context.Context) error
 }
 
 type SpecifierPlugin interface {
-Specify() (Specification, error)
+  Specify() (Specification, error)
 }
 ```
 
@@ -168,9 +168,9 @@ through go-plugin (i.e. plugin runs in a standalone process) or directly through
 
 ```go
 type Dispenser interface {
-DispenseSpecifier() (SpecifierPlugin, error)
-DispenseSource() (SourcePlugin, error)
-DispenseDestination() (DestinationPlugin, error)
+  DispenseSpecifier() (SpecifierPlugin, error)
+  DispenseSource() (SourcePlugin, error)
+  DispenseDestination() (DestinationPlugin, error)
 }
 ```
 
@@ -193,7 +193,7 @@ The plugin registry is the last missing piece that contains information about th
 
 ```protobuf
 type registry interface {
-New(logger log.CtxLogger, name string) (Dispenser, error)
+  New(logger log.CtxLogger, name string) (Dispenser, error)
     }
 ```
 
@@ -212,13 +212,13 @@ writing a plugin (e.g. leveled and structured logging, backoff retries).
 
 ```go
 type Source interface {
-Configure(context.Context, map[string]string) error
-Open(context.Context, Position) error
-Read(context.Context) (Record, error)
-Ack(context.Context, Position) error
-Teardown(context.Context) error
+  Configure(context.Context, map[string]string) error
+  Open(context.Context, Position) error
+  Read(context.Context) (Record, error)
+  Ack(context.Context, Position) error
+  Teardown(context.Context) error
 
-mustEmbedUnimplementedSource()
+  mustEmbedUnimplementedSource()
 }
 ```
 
@@ -247,14 +247,14 @@ version that any of the imported plugins depend on.
 
 ```go
 type Destination interface {
-Configure(context.Context, map[string]string) error
-Open(context.Context) error
-WriteAsync(context.Context, Record, AckFunc) error
-Write(context.Context, Record) error
-Flush(context.Context) error
-Teardown(context.Context) error
+  Configure(context.Context, map[string]string) error
+  Open(context.Context) error
+  WriteAsync(context.Context, Record, AckFunc) error
+  Write(context.Context, Record) error
+  Flush(context.Context) error
+  Teardown(context.Context) error
 
-mustEmbedUnimplementedDestination()
+  mustEmbedUnimplementedDestination()
 }
 ```
 
@@ -288,9 +288,9 @@ call `Write` instead.
 
 ```go
 func Serve(
-specFactory func () Specification,
-sourceFactory func() Source,
-destinationFactory func () Destination,
+  specFactory func () Specification,
+  sourceFactory func() Source,
+  destinationFactory func () Destination,
 )
 ```
 
