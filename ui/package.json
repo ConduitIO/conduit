@@ -31,7 +31,7 @@
     "@glimmer/component": "^1.0.4",
     "@glimmer/tracking": "^1.0.4",
     "@meroxa/ui-base": "https://github.com/meroxa/ui-base.git#553298b082c15e03c9904dba1dcc7ec0b4f13ab4",
-    "autoprefixer": "^10.4.1",
+    "autoprefixer": "^10.4.2",
     "babel-eslint": "^10.1.0",
     "broccoli-asset-rev": "^3.0.0",
     "ember-auto-import": "^2.2.4",
