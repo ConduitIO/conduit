@@ -61,8 +61,8 @@ func Parse(cfg map[string]string) (Config, error) {
 		return Config{}, cerrors.Errorf("invalid servers: %w", err)
 	}
 	var parsed = Config{
-		Servers:          servers,
-		Topic:            cfg[Topic],
+		Servers: servers,
+		Topic:   cfg[Topic],
 	}
 	// parse acknowledgment setting
 	ack, err := parseAcks(cfg[Acks])
