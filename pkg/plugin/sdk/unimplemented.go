@@ -25,7 +25,10 @@ func (UnimplementedDestination) Configure(context.Context, map[string]string) er
 func (UnimplementedDestination) Open(context.Context) error {
 	return ErrUnimplemented
 }
-func (UnimplementedDestination) Write(context.Context, Record, AckFunc) error {
+func (UnimplementedDestination) Write(context.Context, Record) error {
+	return ErrUnimplemented
+}
+func (UnimplementedDestination) WriteAsync(context.Context, Record, AckFunc) error {
 	return ErrUnimplemented
 }
 func (UnimplementedDestination) Flush(context.Context) error {

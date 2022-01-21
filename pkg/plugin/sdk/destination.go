@@ -39,20 +39,30 @@ type Destination interface {
 	// this function.
 	Open(context.Context) error
 
-	// Write receives a Record and is supposed to write the record to the
-	// destination or cache it internally and write it at a later time. Once the
-	// record is successfully written to the destination the plugin must call
-	// the provided AckFunc function with a nil error. If the plugin failed to
-	// write the record to the destination it must call the supplied AckFunc
-	// with a non-nil error. If any AckFunc is left uncalled the connector will
-	// not be able to exit gracefully. The Write function should only return an
-	// error in case a critical error happened, it is expected that all future
-	// calls to Write will fail with the same error.
+	// WriteAsync receives a Record and can cache it internally and write it at
+	// a later time. Once the record is successfully written to the destination
+	// the plugin must call the provided AckFunc function with a nil error. If
+	// the plugin failed to write the record to the destination it must call the
+	// supplied AckFunc with a non-nil error. If any AckFunc is left uncalled
+	// the connector will not be able to exit gracefully. The WriteAsync
+	// function should only return an error in case a critical error happened,
+	// it is expected that all future calls to WriteAsync will fail with the
+	// same error.
 	// If the plugin caches records before writing them to the destination it
 	// needs to store the AckFunc as well and call it once the record is
 	// written.
 	// AckFunc will panic if it's called more than once.
-	Write(context.Context, Record, AckFunc) error
+	// If WriteAsync returns ErrUnimplemented the SDK will fall back and call
+	// Write instead.
+	WriteAsync(context.Context, Record, AckFunc) error
+
+	// Write receives a Record and is supposed to write the record to the
+	// destination right away. If the function returns nil the record is assumed
+	// to have reached the destination.
+	// WriteAsync takes precedence and will be tried first to write a record. If
+	// WriteAsync is not implemented the SDK will fall back and use Write
+	// instead.
+	Write(context.Context, Record) error
 
 	// Flush signals the plugin it should flush any cached records and call all
 	// outstanding AckFunc functions. No more calls to Write will be issued
@@ -93,6 +103,24 @@ func (a *destinationPluginAdapter) Start(ctx context.Context, req cpluginv1.Dest
 }
 
 func (a *destinationPluginAdapter) Run(ctx context.Context, stream cpluginv1.DestinationRunStream) error {
+	var writeFunc func(context.Context, Record, cpluginv1.DestinationRunStream) error
+	// writeFunc will overwrite itself the first time it is called, depending
+	// on what the destination supports. If it supports async writes it will be
+	// replaced with writeAsync, if not it will be replaced with write.
+	writeFunc = func(ctx context.Context, r Record, stream cpluginv1.DestinationRunStream) error {
+		err := a.writeAsync(ctx, r, stream)
+		if cerrors.Is(err, ErrUnimplemented) {
+			// WriteAsync is not implemented, fallback to Write and overwrite
+			// writeFunc, so we don't try WriteAsync again.
+			writeFunc = a.write
+			return a.write(ctx, r, stream)
+		}
+		// WriteAsync is implemented, overwrite writeFunc as we don't need the
+		// fallback logic anymore
+		writeFunc = a.writeAsync
+		return err
+	}
+
 	for {
 		req, err := stream.Recv()
 		if err != nil {
@@ -108,12 +136,26 @@ func (a *destinationPluginAdapter) Run(ctx context.Context, stream cpluginv1.Des
 			return cerrors.Errorf("write stream error: %w", err)
 		}
 		r := a.convertRecord(req.Record)
+
 		a.wgAckFuncs.Add(1)
-		err = a.impl.Write(ctx, r, a.ackFunc(r, stream))
+		err = writeFunc(ctx, r, stream)
 		if err != nil {
-			return cerrors.Errorf("write plugin error: %w", err)
+			return err
 		}
 	}
+}
+
+// write will call the Write function and send the acknowledgment back to
+// Conduit when it returns.
+func (a *destinationPluginAdapter) write(ctx context.Context, r Record, stream cpluginv1.DestinationRunStream) error {
+	err := a.impl.Write(ctx, r)
+	return a.ackFunc(r, stream)(err)
+}
+
+// writeAsync will call the WriteAsync function and provide the ack function to
+// the implementation without calling it.
+func (a *destinationPluginAdapter) writeAsync(ctx context.Context, r Record, stream cpluginv1.DestinationRunStream) error {
+	return a.impl.WriteAsync(ctx, r, a.ackFunc(r, stream))
 }
 
 func (a *destinationPluginAdapter) ackFunc(r Record, stream cpluginv1.DestinationRunStream) AckFunc {
