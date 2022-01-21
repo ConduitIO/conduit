@@ -48,8 +48,7 @@ func TestDestination_Write_Simple(t *testing.T) {
 	assert.Ok(t, writeErr)
 	assert.Equal(t, record.Position, result)
 
-	// todo wait at most a certain amount of time
-	message, err := waitForReaderMessage(cfg.Settings[kafka.Topic], 5*time.Second)
+	message, err := waitForReaderMessage(cfg.Settings[kafka.Topic], 10*time.Second)
 	assert.Ok(t, err)
 	assert.Equal(t, record.Payload.Bytes(), message.Value)
 }
