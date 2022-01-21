@@ -12,32 +12,32 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package kafka
+package kafka_test
 
 import (
 	"context"
-	"encoding/json"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/plugins"
+	"github.com/conduitio/conduit/pkg/plugins/kafka"
 	"github.com/conduitio/conduit/pkg/plugins/kafka/mock"
-	"github.com/conduitio/conduit/pkg/record"
-	"github.com/confluentinc/confluent-kafka-go/kafka"
 	"github.com/golang/mock/gomock"
+	"github.com/google/uuid"
+	skafka "github.com/segmentio/kafka-go"
 )
 
 func TestOpenSource_FailsWhenConfigEmpty(t *testing.T) {
-	underTest := Source{}
+	underTest := kafka.Source{}
 	err := underTest.Open(context.TODO(), plugins.Config{})
 	assert.Error(t, err)
 	assert.True(t, strings.HasPrefix(err.Error(), "config is invalid:"), "incorrect error msg")
 }
 
 func TestOpenSource_FailsWhenConfigInvalid(t *testing.T) {
-	underTest := Source{}
+	underTest := kafka.Source{}
 	err := underTest.Open(context.TODO(), plugins.Config{Settings: map[string]string{"foobar": "foobar"}})
 	assert.Error(t, err)
 	assert.True(t, strings.HasPrefix(err.Error(), "config is invalid:"), "incorrect error msg")
@@ -52,91 +52,56 @@ func TestTeardownSource_ClosesClient(t *testing.T) {
 		Close().
 		Return()
 
-	underTest := Source{Consumer: consumerMock, Config: connectorCfg()}
+	underTest := kafka.Source{Consumer: consumerMock, Config: connectorCfg()}
 	assert.Ok(t, underTest.Teardown())
 }
 
-func TestRead_SpecialPositions(t *testing.T) {
-	testCases := []struct {
-		name string
-		pos  record.Position
-	}{
-		{
-			name: "empty position",
-			pos:  record.Position{},
-		},
-		{
-			name: "nil position",
-			pos:  nil,
-		},
-	}
-
-	for _, tt := range testCases {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			testReadPosition(t, tt.pos)
-		})
-	}
-}
-
-func testReadPosition(t *testing.T, pos record.Position) {
+func TestReadPosition(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
 	kafkaMsg := testKafkaMsg()
 	cfg := connectorCfg()
-	expPos := map[int32]int64{}
+	groupID := uuid.NewString()
 
 	consumerMock := mock.NewConsumer(ctrl)
 	consumerMock.
 		EXPECT().
-		StartFrom(cfg.Topic, map[int32]int64{}, cfg.ReadFromBeginning)
+		StartFrom(cfg, groupID)
 	consumerMock.
 		EXPECT().
-		Get(msgTimeout).
-		Return(kafkaMsg, expPos, nil)
+		Get(gomock.Any()).
+		Return(kafkaMsg, groupID, nil)
 
-	underTest := Source{Consumer: consumerMock, Config: cfg}
-	rec, err := underTest.Read(context.TODO(), pos)
+	underTest := kafka.Source{Consumer: consumerMock, Config: cfg}
+	rec, err := underTest.Read(context.TODO(), []byte(groupID))
 	assert.Ok(t, err)
 	assert.Equal(t, rec.Key.Bytes(), kafkaMsg.Key)
 	assert.Equal(t, rec.Payload.Bytes(), kafkaMsg.Value)
 
-	var actPos map[int32]int64
-	err = json.Unmarshal(rec.Position, &actPos)
-	assert.Ok(t, err)
-	assert.Equal(t, expPos, actPos)
+	assert.Equal(t, groupID, string(rec.Position))
 }
 
 func TestRead_StartFromCalledOnce(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
 	cfg := connectorCfg()
-	pos1 := map[int32]int64{0: 122, 1: 455}
-	pos1Bytes, _ := json.Marshal(pos1)
-
-	pos2 := map[int32]int64{0: 122, 1: 456}
-	pos2Bytes, _ := json.Marshal(pos2)
+	pos := uuid.NewString()
 
 	consumerMock := mock.NewConsumer(ctrl)
 	consumerMock.
 		EXPECT().
-		StartFrom(cfg.Topic, pos1, cfg.ReadFromBeginning)
+		StartFrom(cfg, pos)
 	consumerMock.
 		EXPECT().
-		Get(msgTimeout).
-		Return(testKafkaMsg(), pos2, nil).
-		Times(1)
-	consumerMock.
-		EXPECT().
-		Get(msgTimeout).
-		Return(nil, pos2, nil).
-		Times(1)
+		Get(gomock.Any()).
+		Return(testKafkaMsg(), pos, nil).
+		Times(2)
 
-	underTest := Source{Consumer: consumerMock, Config: cfg}
-	_, err := underTest.Read(context.TODO(), pos1Bytes)
+	underTest := kafka.Source{Consumer: consumerMock, Config: cfg}
+	_, err := underTest.Read(context.TODO(), []byte(pos))
 	assert.Ok(t, err)
-	_, err = underTest.Read(context.TODO(), pos2Bytes)
-	assert.True(t, plugins.IsRecoverableError(err), "expected recoverable error")
+	_, err = underTest.Read(context.TODO(), []byte(pos))
+	assert.Ok(t, err)
 }
 
 func TestRead(t *testing.T) {
@@ -144,71 +109,33 @@ func TestRead(t *testing.T) {
 
 	kafkaMsg := testKafkaMsg()
 	cfg := connectorCfg()
-	startPos := map[int32]int64{0: 122, 1: 455}
-	startPosBytes, _ := json.Marshal(startPos)
-	expPos := map[int32]int64{0: 123, 1: 456}
+	pos := uuid.NewString()
 
 	consumerMock := mock.NewConsumer(ctrl)
 	consumerMock.
 		EXPECT().
-		StartFrom(cfg.Topic, startPos, cfg.ReadFromBeginning)
+		StartFrom(cfg, pos)
 	consumerMock.
 		EXPECT().
-		Get(msgTimeout).
-		Return(kafkaMsg, expPos, nil)
+		Get(gomock.Any()).
+		Return(kafkaMsg, pos, nil)
 
-	underTest := Source{Consumer: consumerMock, Config: cfg}
-	rec, err := underTest.Read(context.TODO(), startPosBytes)
+	underTest := kafka.Source{Consumer: consumerMock, Config: cfg}
+	rec, err := underTest.Read(context.TODO(), []byte(pos))
 	assert.Ok(t, err)
 	assert.Equal(t, rec.Key.Bytes(), kafkaMsg.Key)
 	assert.Equal(t, rec.Payload.Bytes(), kafkaMsg.Value)
-
-	var actPos map[int32]int64
-	err = json.Unmarshal(rec.Position, &actPos)
-	assert.Ok(t, err)
-	assert.Equal(t, expPos, actPos)
+	assert.Equal(t, pos, string(rec.Position))
 }
 
-func TestRead_InvalidPosition(t *testing.T) {
-	underTest := Source{}
-	rec, err := underTest.Read(context.TODO(), []byte("foobar"))
-	assert.Equal(t, record.Record{}, rec)
-	assert.Error(t, err)
-	assert.True(
-		t,
-		strings.HasPrefix(err.Error(), "couldn't start from position: invalid position"),
-		"expected msg to have prefix 'couldn't start from position: invalid position'",
-	)
-}
-
-func TestRead_NilMsgReturned(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	cfg := connectorCfg()
-
-	consumerMock := mock.NewConsumer(ctrl)
-	consumerMock.
-		EXPECT().
-		StartFrom(cfg.Topic, map[int32]int64{}, cfg.ReadFromBeginning)
-	consumerMock.
-		EXPECT().
-		Get(msgTimeout).
-		Return(nil, map[int32]int64{}, nil)
-
-	underTest := Source{Consumer: consumerMock, Config: cfg}
-	rec, err := underTest.Read(context.TODO(), record.Position{})
-	assert.Equal(t, record.Record{}, rec)
-	assert.Error(t, err)
-	assert.True(t, plugins.IsRecoverableError(err), "expected a recoverable error")
-}
-
-func testKafkaMsg() *kafka.Message {
-	return &kafka.Message{
-		TopicPartition: kafka.TopicPartition{},
-		Value:          []byte("test-value"),
-		Key:            []byte("test-key"),
-		Timestamp:      time.Time{},
-		TimestampType:  0,
-		Opaque:         nil,
-		Headers:        nil,
+func testKafkaMsg() *skafka.Message {
+	return &skafka.Message{
+		Topic:         "test",
+		Partition:     0,
+		Offset:        123,
+		HighWaterMark: 234,
+		Key:           []byte("test-key"),
+		Value:         []byte("test-value"),
+		Time:          time.Time{},
 	}
 }

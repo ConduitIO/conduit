@@ -5,11 +5,12 @@
 package mock
 
 import (
+	context "context"
 	reflect "reflect"
-	time "time"
 
-	kafka "github.com/confluentinc/confluent-kafka-go/kafka"
+	kafka "github.com/conduitio/conduit/pkg/plugins/kafka"
 	gomock "github.com/golang/mock/gomock"
+	kafka0 "github.com/segmentio/kafka-go"
 )
 
 // Consumer is a mock of Consumer interface.
@@ -35,6 +36,20 @@ func (m *Consumer) EXPECT() *ConsumerMockRecorder {
 	return m.recorder
 }
 
+// Ack mocks base method.
+func (m *Consumer) Ack() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Ack")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Ack indicates an expected call of Ack.
+func (mr *ConsumerMockRecorder) Ack() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Ack", reflect.TypeOf((*Consumer)(nil).Ack))
+}
+
 // Close mocks base method.
 func (m *Consumer) Close() {
 	m.ctrl.T.Helper()
@@ -48,11 +63,11 @@ func (mr *ConsumerMockRecorder) Close() *gomock.Call {
 }
 
 // Get mocks base method.
-func (m *Consumer) Get(arg0 time.Duration) (*kafka.Message, map[int32]int64, error) {
+func (m *Consumer) Get(arg0 context.Context) (*kafka0.Message, string, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Get", arg0)
-	ret0, _ := ret[0].(*kafka.Message)
-	ret1, _ := ret[1].(map[int32]int64)
+	ret0, _ := ret[0].(*kafka0.Message)
+	ret1, _ := ret[1].(string)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2
 }
@@ -64,15 +79,15 @@ func (mr *ConsumerMockRecorder) Get(arg0 interface{}) *gomock.Call {
 }
 
 // StartFrom mocks base method.
-func (m *Consumer) StartFrom(arg0 string, arg1 map[int32]int64, arg2 bool) error {
+func (m *Consumer) StartFrom(arg0 kafka.Config, arg1 string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "StartFrom", arg0, arg1, arg2)
+	ret := m.ctrl.Call(m, "StartFrom", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // StartFrom indicates an expected call of StartFrom.
-func (mr *ConsumerMockRecorder) StartFrom(arg0, arg1, arg2 interface{}) *gomock.Call {
+func (mr *ConsumerMockRecorder) StartFrom(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartFrom", reflect.TypeOf((*Consumer)(nil).StartFrom), arg0, arg1, arg2)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartFrom", reflect.TypeOf((*Consumer)(nil).StartFrom), arg0, arg1)
 }

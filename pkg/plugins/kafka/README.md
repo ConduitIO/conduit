@@ -2,7 +2,7 @@
 The Conduit Kafka plugin provides both, a destination and source Kafka connector, for Conduit.
 
 ### How it works?
-Under the hood, the plugin uses [Confluent's Golang Client for Apache Kafka(tm)](https://github.com/confluentinc/confluent-kafka-go).
+Under the hood, the plugin uses [Segment's Go Client for Apache Kafka(tm)](https://github.com/segmentio/kafka-go).
 This client supports a wide range of configuration parameters, which makes it possible to fine tune the plugin.
 
 #### Source

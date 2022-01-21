@@ -14,7 +14,7 @@
 
 //go:build integration
 
-package kafka
+package kafka_test
 
 import (
 	"context"
@@ -24,24 +24,21 @@ import (
 
 	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/plugins"
+	"github.com/conduitio/conduit/pkg/plugins/kafka"
 	"github.com/conduitio/conduit/pkg/record"
-	"github.com/confluentinc/confluent-kafka-go/kafka"
 	"github.com/google/uuid"
+	skafka "github.com/segmentio/kafka-go"
 )
 
 // todo try optimizing, the test takes 15 seconds to run!
 func TestDestination_Write_Simple(t *testing.T) {
-	// Kafka is started in Docker
-	consumer := newKafkaConsumer(t)
-	defer consumer.Close()
-
 	// prepare test data
 	cfg := newTestConfig(t)
-	createDestinationTopic(t, consumer, cfg.Settings[Topic])
+	createTopic(t, cfg.Settings[kafka.Topic])
 	record := testRecord()
 
 	// prepare SUT
-	underTest := Destination{}
+	underTest := kafka.Destination{}
 	openErr := underTest.Open(context.Background(), cfg)
 	defer underTest.Teardown()
 	assert.Ok(t, openErr)
@@ -51,42 +48,26 @@ func TestDestination_Write_Simple(t *testing.T) {
 	assert.Ok(t, writeErr)
 	assert.Equal(t, record.Position, result)
 
-	message := waitForMessage(consumer, 2000, cfg.Settings[Topic])
-	assert.NotNil(t, message)
+	// todo wait at most a certain amount of time
+	message, err := waitForReaderMessage(cfg.Settings[kafka.Topic], 4000*time.Millisecond)
+	assert.Ok(t, err)
 	assert.Equal(t, record.Payload.Bytes(), message.Value)
+}
+
+func waitForReaderMessage(topic string, timeout time.Duration) (skafka.Message, error) {
+	// Kafka is started in Docker
+	reader := newKafkaReader(topic)
+	defer reader.Close()
+
+	withTimeout, _ := context.WithTimeout(context.Background(), timeout)
+	return reader.ReadMessage(withTimeout)
 }
 
 func newTestConfig(t *testing.T) plugins.Config {
 	return plugins.Config{Settings: map[string]string{
-		Servers: "localhost:9092",
-		Topic:   t.Name() + uuid.NewString(),
+		kafka.Servers: "localhost:9092",
+		kafka.Topic:   t.Name() + uuid.NewString(),
 	}}
-}
-
-func waitForMessage(consumer *kafka.Consumer, timeoutMs int, topic string) *kafka.Message {
-	consumer.SubscribeTopics([]string{topic}, nil)
-
-	var message *kafka.Message
-	waited := 0
-	for waited < timeoutMs && message == nil {
-		event := consumer.Poll(100)
-		messageMaybe, ok := event.(*kafka.Message)
-		if ok {
-			message = messageMaybe
-		}
-	}
-	return message
-}
-
-func createDestinationTopic(t *testing.T, consumer *kafka.Consumer, topic string) {
-	adminClient, _ := kafka.NewAdminClientFromConsumer(consumer)
-	defer adminClient.Close()
-
-	_, err := adminClient.CreateTopics(
-		context.Background(),
-		[]kafka.TopicSpecification{{Topic: topic, NumPartitions: 1}},
-	)
-	assert.Ok(t, err)
 }
 
 func testRecord() record.Record {
@@ -100,15 +81,11 @@ func testRecord() record.Record {
 	}
 }
 
-func newKafkaConsumer(t *testing.T) (consumer *kafka.Consumer) {
-	consumer, err := kafka.NewConsumer(&kafka.ConfigMap{
-		"bootstrap.servers":  "localhost:9092",
-		"auto.offset.reset":  "earliest",
-		"enable.auto.commit": false,
-		"group.id":           "None"})
-
-	if err != nil {
-		t.Fatalf("Failed to create consumer: %s\n", err)
-	}
-	return
+func newKafkaReader(topic string) (reader *skafka.Reader) {
+	return skafka.NewReader(skafka.ReaderConfig{
+		Brokers:     []string{"localhost:9092"},
+		Topic:       topic,
+		StartOffset: skafka.FirstOffset,
+		GroupID:     uuid.NewString(),
+	})
 }

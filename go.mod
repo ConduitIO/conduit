@@ -12,7 +12,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.24.0
 	github.com/batchcorp/pgoutput v0.3.2
 	github.com/bufbuild/buf v1.0.0-rc11
-	github.com/confluentinc/confluent-kafka-go v1.8.2
 	github.com/dgraph-io/badger/v3 v3.2103.2
 	github.com/dop251/goja v0.0.0-20210225094849-f3cfc97811c0
 	github.com/golang/mock v1.6.0
