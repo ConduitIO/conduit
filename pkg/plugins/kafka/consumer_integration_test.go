@@ -109,7 +109,7 @@ func waitForMessage(consumer kafka.Consumer, timeout time.Duration) (*skafka.Mes
 	})
 
 	go func() {
-		msg, pos, err := consumer.Get()
+		msg, pos, err := consumer.Get(context.Background())
 		c <- struct {
 			msg *skafka.Message
 			pos string
@@ -167,7 +167,7 @@ func TestGet_KafkaDown(t *testing.T) {
 	err = consumer.StartFrom(cfg, "")
 	assert.Ok(t, err)
 
-	msg, _, err := consumer.Get()
+	msg, _, err := consumer.Get(context.Background())
 	assert.Nil(t, msg)
 	var cause *net.OpError
 	as := cerrors.As(err, &cause)

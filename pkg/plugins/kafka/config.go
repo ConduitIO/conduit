@@ -38,12 +38,10 @@ var Required = []string{Servers, Topic}
 // When changing this struct, please also change the plugin specification (in main.go) as well as the ReadMe.
 type Config struct {
 	// A list of bootstrap servers, which will be used to discover all the servers in a cluster.
-	// Maps to "bootstrap.servers" in a Kafka consumer's configuration
 	Servers []string
 	Topic   string
-	// Maps to "security.protocol" in a Kafka consumer's configuration
-	SecurityProtocol string
-	// Maps to "acks" in a Kafka consumer's configuration
+	// Required acknowledgments when writing messages to a topic:
+	// Can be: 0, 1, -1 (all)
 	Acks            kafka.RequiredAcks
 	DeliveryTimeout time.Duration
 	// Read all messages present in a source topic.
@@ -65,7 +63,6 @@ func Parse(cfg map[string]string) (Config, error) {
 	var parsed = Config{
 		Servers:          servers,
 		Topic:            cfg[Topic],
-		SecurityProtocol: cfg[SecurityProtocol],
 	}
 	// parse acknowledgment setting
 	ack, err := parseAcks(cfg[Acks])

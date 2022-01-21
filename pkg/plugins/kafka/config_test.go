@@ -137,7 +137,6 @@ func TestParse_Full(t *testing.T) {
 	assert.Ok(t, err)
 	assert.Equal(t, []string{"localhost:9092"}, parsed.Servers)
 	assert.Equal(t, "hello-world-topic", parsed.Topic)
-	assert.Equal(t, "SASL_SSL", parsed.SecurityProtocol)
 	assert.Equal(t, kafka.RequireAll, parsed.Acks)
 	assert.Equal(t, int64(1002), parsed.DeliveryTimeout.Milliseconds())
 	assert.Equal(t, true, parsed.ReadFromBeginning)
