@@ -47,7 +47,7 @@ func TestConsumer_Get_FromBeginning(t *testing.T) {
 
 	err = consumer.StartFrom(cfg, uuid.NewString())
 	assert.Ok(t, err)
-	time.Sleep(4 * time.Second)
+	time.Sleep(5 * time.Second)
 
 	messagesUnseen := map[string]bool{
 		"test-key-1": true,
