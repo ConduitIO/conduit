@@ -28,11 +28,12 @@ import (
 type Destination struct {
 	sdk.UnimplementedDestination
 
-	Buffer []sdk.Record
-	Config Config
-	Error  error
-	Writer writer.Writer
-	Mutex  *sync.Mutex
+	Buffer       []sdk.Record
+	AckFuncCache []sdk.AckFunc
+	Config       Config
+	Error        error
+	Writer       writer.Writer
+	Mutex        *sync.Mutex
 }
 
 func NewDestination() sdk.Destination {
@@ -58,6 +59,7 @@ func (d *Destination) Open(ctx context.Context) error {
 
 	// initializing the buffer
 	d.Buffer = make([]sdk.Record, 0, d.Config.BufferSize)
+	d.AckFuncCache = make([]sdk.AckFunc, 0, d.Config.BufferSize)
 
 	// initializing the writer
 	writer, err := writer.NewS3(ctx, &writer.S3Config{
@@ -96,14 +98,24 @@ func (d *Destination) Write(ctx context.Context, r sdk.Record, ackFunc sdk.AckFu
 		bufferedRecords := d.Buffer
 		d.Buffer = make([]sdk.Record, 0, d.Config.BufferSize)
 
+		// write batch into S3
 		err := d.Writer.Write(ctx, &writer.Batch{
 			Records: bufferedRecords,
 			Format:  d.Config.Format,
 		})
-
 		if err != nil {
 			d.Error = err
 		}
+
+		// call all the written records' ackFunctions
+		for _, ack := range d.AckFuncCache {
+			err := ack(d.Error)
+			if err != nil {
+				return err
+			}
+		}
+		// clear ackFunc cache
+		d.AckFuncCache = make([]sdk.AckFunc, 0, d.Config.BufferSize)
 	}
 
 	return d.Error
