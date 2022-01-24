@@ -55,7 +55,7 @@ func TestLocalParquet(t *testing.T) {
 	}
 
 	for _, record := range generateRecords(50) {
-		err = destination.Write(ctx, record, getAckFunc())
+		err = destination.WriteAsync(ctx, record, getAckFunc())
 
 		if err != nil {
 			t.Fatalf("Write returned an error: %v", err)
@@ -108,7 +108,7 @@ func TestLocalJSON(t *testing.T) {
 	}
 
 	for _, record := range generateRecords(50) {
-		err = destination.Write(ctx, record, getAckFunc())
+		err = destination.WriteAsync(ctx, record, getAckFunc())
 
 		if err != nil {
 			t.Fatalf("Write returned an error: %v", err)
@@ -185,7 +185,7 @@ func TestS3Parquet(t *testing.T) {
 	}
 
 	for _, record := range generateRecords(50) {
-		err = destination.Write(ctx, record, getAckFunc())
+		err = destination.WriteAsync(ctx, record, getAckFunc())
 
 		if err != nil {
 			t.Fatalf("Write returned an error: %v", err)

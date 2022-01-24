@@ -78,10 +78,10 @@ func (d *Destination) Open(ctx context.Context) error {
 	return nil
 }
 
-// Write writes a record into a Destination. Typically Destination maintains an in-memory
+// WriteAsync writes a record into a Destination. Typically Destination maintains an in-memory
 // buffer and doesn't actually perform a write until the buffer has enough
 // records in it. This is done for performance reasons.
-func (d *Destination) Write(ctx context.Context, r sdk.Record, ackFunc sdk.AckFunc) error {
+func (d *Destination) WriteAsync(ctx context.Context, r sdk.Record, ackFunc sdk.AckFunc) error {
 	// If either Destination or Writer have encountered an error, there'd no point in
 	// accepting more records. We better signal the error up the stack and force
 	// the server to maybe re-instantiate plugin or do something else about it.
