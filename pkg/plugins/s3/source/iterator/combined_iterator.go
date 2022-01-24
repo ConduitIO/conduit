@@ -71,7 +71,7 @@ func NewCombinedIterator(
 func (c *CombinedIterator) HasNext(ctx context.Context) bool {
 	switch {
 	case c.snapshotIterator != nil:
-		// case of empty bucket
+		// case of empty bucket or end of bucket
 		if !c.snapshotIterator.HasNext(ctx) {
 			err := c.switchToCDCIterator()
 			if err != nil {

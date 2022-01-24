@@ -97,7 +97,7 @@ func (s *Source) Open(ctx context.Context, rp sdk.Position) error {
 func (s *Source) Read(ctx context.Context) (sdk.Record, error) {
 
 	if !s.iterator.HasNext(ctx) {
-		return sdk.Record{}, ctx.Err()
+		return sdk.Record{}, sdk.ErrBackoffRetry
 	}
 	r, err := s.iterator.Next(ctx)
 	if err != nil {
