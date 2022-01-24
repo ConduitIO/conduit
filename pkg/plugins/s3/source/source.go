@@ -95,7 +95,6 @@ func (s *Source) Open(ctx context.Context, rp sdk.Position) error {
 
 // Read gets an object from s3 bucket according to the position.
 func (s *Source) Read(ctx context.Context) (sdk.Record, error) {
-
 	if !s.iterator.HasNext(ctx) {
 		return sdk.Record{}, sdk.ErrBackoffRetry
 	}

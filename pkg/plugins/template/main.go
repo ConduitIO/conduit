@@ -29,7 +29,7 @@ import (
 var specs = map[string]plugins.Specifier{
 	"kafka": kafka.Spec{},
 	"pg":    pg.Spec{},
-	//"s3":    s3.Spec{},
+	// "s3":    s3.Spec{},
 	// "file":  file.Spec{},
 	// "generator": generator.Spec{},
 }
