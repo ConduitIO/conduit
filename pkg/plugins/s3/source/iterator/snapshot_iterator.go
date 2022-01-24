@@ -17,7 +17,6 @@ package iterator
 import (
 	"context"
 	"io/ioutil"
-	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -42,10 +41,6 @@ type SnapshotIterator struct {
 func NewSnapshotIterator(bucket string, client *s3.Client, p position.Position) (*SnapshotIterator, error) {
 	input := &s3.ListObjectsV2Input{
 		Bucket: aws.String(bucket),
-	}
-	if strings.Compare(p.Key, "") != 0 {
-		// start from the position provided
-		input.StartAfter = aws.String(p.Key)
 	}
 
 	return &SnapshotIterator{
@@ -77,7 +72,7 @@ func (w *SnapshotIterator) refreshPage(ctx context.Context) error {
 		}
 	}
 	if w.page == nil {
-		return ctx.Err()
+		return sdk.ErrBackoffRetry
 	}
 	return nil
 }
