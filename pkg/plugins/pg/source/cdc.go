@@ -28,9 +28,24 @@ import (
 	"github.com/jackc/pgx"
 )
 
+var bufferSize = 1000
+
 // withCDC sets up change data capture for the Postgres Source or returns an
 // error.
-func (s *Source) withCDC(ctx context.Context, cfg plugins.Config) error {
+func (s *Source) withCDC(cfg plugins.Config) error {
+	c := context.Background()
+	ctx, cancel := context.WithCancel(c)
+	s.killswitch = cancel
+	// early return if cdc is disabled
+	v, ok := cfg.Settings["cdc"]
+	// if cdc is set, check the value for falsy values.
+	if ok {
+		switch v {
+		case "disabled", "false", "off", "0":
+			log.Println("cdc behavior turned off")
+			return nil
+		}
+	}
 	// setup a WaitGroup to track our Postgres subscription's goroutine
 	s.subWG = sync.WaitGroup{}
 	// uri is the string used to connect the CDC subscription to Postgres
@@ -47,7 +62,7 @@ func (s *Source) withCDC(ctx context.Context, cfg plugins.Config) error {
 	// * this must be a buffered channel or else it will block the handler
 	// on reads and events won't get processed
 	buf := make(chan record.Record, bufferSize)
-	s.buffer = NewIterator(buf)
+	s.cdc = NewIterator(buf)
 
 	// check for the existence of a table field, error if it's not set
 	table, ok := cfg.Settings["table"]
@@ -132,6 +147,8 @@ func (s *Source) withCDC(ctx context.Context, cfg plugins.Config) error {
 	go func() {
 		defer func() {
 			s.sub = nil
+			log.Printf("cleaning up replication subscription")
+			cancel()
 			s.subWG.Done()
 		}()
 		log.Printf("starting up subscription for %s", slotName)
@@ -141,6 +158,7 @@ func (s *Source) withCDC(ctx context.Context, cfg plugins.Config) error {
 			if err == context.Canceled {
 				// if the error is a context cancellation, don't assign the
 				// error because we consider this correct handling.
+				log.Println("context cancellation detected - returning")
 				return
 			}
 			s.subErr = cerrors.Errorf("postgres subscription produced an error: %w", err)

@@ -17,7 +17,6 @@
 package source
 
 import (
-	"context"
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/foundation/assert"
@@ -26,9 +25,8 @@ import (
 )
 
 func TestSnapshotterReads(t *testing.T) {
-	ctx := context.Background()
 	db := getTestPostgres(t)
-	s, err := NewSnapshotter(ctx, db, "records", []string{"id",
+	s, err := NewSnapshotter(db, "records", []string{"id",
 		"column1", "key"}, "key")
 	assert.Ok(t, err)
 	i := 0
@@ -47,9 +45,8 @@ func TestSnapshotterReads(t *testing.T) {
 }
 
 func TestSnapshotterTeardown(t *testing.T) {
-	ctx := context.Background()
 	db := getTestPostgres(t)
-	s, err := NewSnapshotter(ctx, db, "records", []string{"id",
+	s, err := NewSnapshotter(db, "records", []string{"id",
 		"column1", "key"}, "key")
 	assert.Ok(t, err)
 	assert.True(t, s.HasNext(), "failed to queue up record")
@@ -63,9 +60,8 @@ func TestSnapshotterTeardown(t *testing.T) {
 }
 
 func TestPrematureDBClose(t *testing.T) {
-	ctx := context.Background()
 	db := getTestPostgres(t)
-	s, err := NewSnapshotter(ctx, db, "records", []string{"id",
+	s, err := NewSnapshotter(db, "records", []string{"id",
 		"column1", "key"}, "key")
 	assert.Ok(t, err)
 	// assert that we have at least one row and it's loading as expected

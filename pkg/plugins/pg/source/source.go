@@ -28,7 +28,6 @@ import (
 	"github.com/conduitio/conduit/pkg/plugins"
 	"github.com/conduitio/conduit/pkg/record"
 
-	sq "github.com/Masterminds/squirrel"
 	"github.com/batchcorp/pgoutput"
 )
 
@@ -40,20 +39,17 @@ var (
 	// ErrInvalidURL is returned when the DB can't be connected to with the
 	// provided URL
 	ErrInvalidURL = cerrors.New("incorrect url")
+	// ErrEmptyConfig is returned when no config is provided
+	ErrEmptyConfig = cerrors.Errorf("must provide a plugin config")
 )
 
-// Declare Postgres $ placeholder format
-var psql = sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
-
-// bufferSize is the size of the WAL buffer.
-var bufferSize = 1000
+// required is a set of our plugin defaults for the purposes of validation
+var required = []string{"url", "table"}
 
 // Source holds a connection to the database.
 type Source struct {
 	// subWG holds a WaitGroup used for Postgres subscription orchestration
 	subWG sync.WaitGroup
-	// killswitch is a context CancelFunc that gets hit at Teardown
-	killswitch context.CancelFunc
 	// inherit from Mutex so we can gain locks on our Source.
 	sync.Mutex
 	// holds a reference to our base Postgres database for Read queries.
@@ -68,17 +64,19 @@ type Source struct {
 	sub *pgoutput.Subscription
 	// subErr is the return value of the `sub.Start` function in withCDC
 	subErr error
-	// buffer holds a reference to our CDCIterator so that we can read
-	// from the buffer when rows are no longer available.
-	buffer *CDCIterator
+	// cdc holds a reference to our CDCIterator so that we can read
+	// from the cdc when rows are no longer available.
+	cdc Iterator
 	// snapshotter takes an Iterator of a snapshot of the database
 	snapshotter Iterator
+	// killswitch holds a context cancel that hooks into the postgres logical
+	// replication subscription.
+	killswitch context.CancelFunc
 }
 
 // Open attempts to open a database connection to Postgres. We use the `with`
 // pattern here to mutate the Source struct at each point.
 func (s *Source) Open(ctx context.Context, cfg plugins.Config) error {
-	ctx, s.killswitch = context.WithCancel(ctx)
 	err := s.withTable(cfg)
 	if err != nil {
 		return cerrors.Errorf("failed to set table: %w", err)
@@ -98,60 +96,61 @@ func (s *Source) Open(ctx context.Context, cfg plugins.Config) error {
 	if err != nil {
 		return cerrors.Errorf("failed to set columns: %w", err)
 	}
-	// if cdc is set, turn on CDC subscription
-	if v, ok := cfg.Settings["cdc"]; ok && v == "true" {
-		err = s.withCDC(ctx, cfg)
-		if err != nil {
-			return cerrors.Errorf("failed to set reader: %w", err)
-		}
+	err = s.withCDC(cfg)
+	if err != nil {
+		return cerrors.Errorf("failed to set reader: %w", err)
 	}
-	// set snapshotter if configured and inherit same column and table settings
-	if v, ok := cfg.Settings["shapshot"]; ok && v == "true" {
-		snap, err := NewSnapshotter(ctx, s.db, s.table, s.columns, s.key)
-		if err != nil {
-			return cerrors.Errorf("failed to set snapshotter: %w", err)
-		}
-		s.snapshotter = snap
+	err = s.withSnapshot(cfg)
+	if err != nil {
+		return cerrors.Errorf("failed to set snapshot: %w", err)
 	}
-
 	return nil
 }
 
 // Teardown hits the killswitch and waits for the database connection and CDC
 // subscriptions to close.
 func (s *Source) Teardown() error {
-	if s.killswitch != nil {
-		s.killswitch()
-	}
-
-	var teardownErr error
+	log.Printf("attempting graceful shutdown...")
+	var teardownErr, dbErr error
 	if s.snapshotter != nil {
 		teardownErr = s.snapshotter.Teardown()
 	}
-
+	if s.killswitch != nil {
+		s.killswitch()
+	}
 	// wait for PG subscription and DB to close and return any errors.
 	s.subWG.Wait()
-	dbErr := s.db.Close()
+	// check that db exists before trying to close it.
+	if s.db != nil {
+		dbErr = s.db.Close()
+	}
 	return multierror.Append(dbErr, s.subErr, teardownErr)
 }
 
-// Validate opens up a connection to the DB to see if it was successful and then
-// calls Teardown to drop the DB connection and clean up.
+// Validate checks for the existence of all required keys in a config and
+// returns an error if any of them are missing.
 func (s *Source) Validate(cfg plugins.Config) error {
-	err := s.Open(context.Background(), cfg)
-	if err != nil {
-		return cerrors.Errorf("invalid config: %w", err)
+	if cfg.Settings == nil {
+		return ErrEmptyConfig
 	}
-	return s.Teardown()
+	for _, k := range required {
+		if _, ok := cfg.Settings[k]; !ok {
+			return cerrors.Errorf("plugin config missing required field %s", k)
+		}
+	}
+	return nil
 }
 
-// Read attempts to increment the Position and then queries for the row at
-// that Position.
-// * It builds the payload from the rows and assigns a timestamp, key,
-// metadata, payload, and position to the record.
-// * Read takes the _current_ position of the connector, and returns the row
-// at the _next_ position.
-func (s *Source) Read(ctx context.Context, pos record.Position) (record.Record, error) {
+// Read takes a context and a Position and returns a Record or an error.
+// * This currently doesn't respect which Position it is fed.
+// * Instead Read will send the next record in the Snapshot over until the
+// initial table snapshot is finished.
+// * Once the table snapshot is finished, it checks for a CDC buffer and if
+// one exists it reads off that buffer.
+// * If not CDC buffer exists it will return ErrEndData and switch to long
+// polling the database.
+// * Position is thus assigned to an anonymous variable to be explicit.
+func (s *Source) Read(ctx context.Context, _ record.Position) (record.Record, error) {
 	// read from Snapshotter if incomplete.
 	// Snapshot completely ignores position so we don't care to even pass it.
 	if s.snapshotter != nil {
@@ -166,72 +165,23 @@ func (s *Source) Read(ctx context.Context, pos record.Position) (record.Record, 
 			s.snapshotter = nil
 			return record.Record{}, plugins.ErrEndData
 		}
-
 		return s.snapshotter.Next()
 	}
 
-	// TODO: Pull this code out into its own integer iterator
-	i, err := incrementPosition(pos)
-	if err != nil {
-		return record.Record{}, cerrors.Errorf("failed to increment: %w", err)
-	}
-	// query row at the incremented position i
-	query, args, err := psql.
-		Select(s.columns...).
-		From(s.table).
-		Where(sq.GtOrEq{s.key: i}).
-		Limit(1).
-		ToSql()
-	if err != nil {
-		return record.Record{}, cerrors.Errorf("failed to create read query: %w", err)
-	}
-	rows, err := s.db.QueryContext(ctx, query, args...)
-	if err != nil {
-		return record.Record{}, cerrors.Errorf("failed to query context: %w", err)
-	}
-	defer rows.Close()
-	rec := record.Record{}
-	rec, err = s.build(rows, i, rec)
-	if err != nil {
-		// if we're at the end of rows, then read from the CDCIterator
-		if cerrors.Is(err, plugins.ErrEndData) {
-			if s.buffer != nil {
-				if s.buffer.HasNext() {
-					next, err := s.buffer.Next()
-					return next, err
-				}
-			}
-			return record.Record{}, plugins.ErrEndData
+	// check cdc buffer
+	if s.cdc != nil {
+		if s.cdc.HasNext() {
+			next, err := s.cdc.Next()
+			return next, err
 		}
-		return record.Record{}, cerrors.Errorf("failed to build payload: %w", err)
 	}
-	return rec, nil
+	// TODO: implement long polling reader here
+	// no buffer present, return err end data.
+	return record.Record{}, plugins.ErrEndData
 }
 
 func (s *Source) Ack(ctx context.Context, pos record.Position) error {
 	return nil // noop because Postgres has no concept of acks
-}
-
-// turns the record position into a big.Int and increments it
-func incrementPosition(pos record.Position) (int64, error) {
-	// if position is nil, we assume position is 0 and set the highwater there
-	if pos == nil {
-		return int64(1), nil
-	}
-	// we must perform an additional nil check because of how Go handles empty
-	// interfaces. we use the String() function and compare to its nil value.
-	if pos.String() == "<nil>" {
-		return int64(1), nil
-	}
-	// attempt to parse the int as a string and fail if we can't
-	i, err := strconv.ParseInt(string(pos), 10, 64)
-	if err != nil {
-		return 0, cerrors.Errorf("incrementPosition failed to parse int: %w", err)
-	}
-	// set the highwater position to i since we don't know if the _next_ record
-	// finally, we increment and return
-	inc := i + 1
-	return inc, nil
 }
 
 // getDefaultKeyColumn handles the query for getting the name of the primary
@@ -258,38 +208,6 @@ func getDefaultKeyColumn(db *sql.DB, table string) (string, error) {
 func withPosition(rec record.Record, i int64) record.Record {
 	rec.Position = record.Position(strconv.FormatInt(i, 10))
 	return rec
-}
-
-// build takes the sql.Rows `rows` and a position `i` and builds out the record
-// fields on `rec`. It returns a Record or an error.
-func (s *Source) build(
-	rows *sql.Rows,
-	pos int64,
-	rec record.Record,
-) (record.Record, error) {
-	rec = withPosition(rec, pos)
-	rec = withMetadata(rec, s.table, s.key)
-	rec = withTimestampNow(rec)
-
-	// tick to the next record, return end of data error if none exists.
-	cont := rows.Next()
-	if !cont {
-		// check the rows error after ticking
-		if rows.Err() != nil {
-			return record.Record{}, cerrors.Errorf("failed to read next record: %w", rows.Err())
-		}
-		// if there's no error, but no next, that means that we're at the end
-		// of the table because our query returned nothing.
-		return record.Record{}, plugins.ErrEndData
-	}
-
-	// assign the payload
-	rec, err := withPayload(rec, rows, s.columns, s.key)
-	if err != nil {
-		return record.Record{}, cerrors.Errorf("failed to build payload: %w", rows.Err())
-	}
-
-	return rec, nil
 }
 
 // withMetadata sets the Metadata field on a Record.
