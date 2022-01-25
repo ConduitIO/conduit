@@ -268,6 +268,49 @@ func TestCDCIterator(t *testing.T) {
 	assert.True(t, len(rec.Payload.Bytes()) > 0, "failed to get cdc payload")
 }
 
+// TestSnapshotIdempotentTeardown asserts that Teardown can be called
+// idempotently in snapshot mode. Since the snapshot should not be finished,
+// we call it immediately and thus the snapshot interrupt error is expected.
+func TestSnapshotIdempotentTeardown(t *testing.T) {
+	_ = getTestPostgres(t)
+	s := Source{}
+	err := s.Open(context.Background(), plugins.Config{
+		Settings: map[string]string{
+			"table":            "records",
+			"url":              RepDBURL,
+			"slot_name":        "meroxatestsnapshotidempotentteardown",
+			"publication_name": "meroxatestsnapshotidempotentteardown",
+		},
+	})
+	assert.Ok(t, err)
+	err = s.Teardown()
+	assert.Equal(t, ErrSnapshotInterrupt, err)
+	err = s.Teardown()
+	assert.Equal(t, ErrSnapshotInterrupt, err)
+	err = s.Teardown()
+	assert.Equal(t, ErrSnapshotInterrupt, err)
+}
+
+// TestCDCIdempotentTeardown asserts that Teardown can be called idempotently
+// when the plugin is operating in CDC mode, so we turn snapshot behavior off.
+func TestCDCIdempotentTeardown(t *testing.T) {
+	_ = getTestPostgres(t)
+	s := Source{}
+	err := s.Open(context.Background(), plugins.Config{
+		Settings: map[string]string{
+			"table":            "records",
+			"url":              RepDBURL,
+			"snapshot":         "disabled",
+			"slot_name":        "meroxatestcdcidempotentteardown",
+			"publication_name": "meroxatestcdcidempotentteardown",
+		},
+	})
+	assert.Ok(t, err)
+	assert.Ok(t, s.Teardown())
+	assert.Ok(t, s.Teardown())
+	assert.Ok(t, s.Teardown())
+}
+
 // getTestPostgres is a testing helper that fails if it can't setup a Postgres
 // connection and returns a DB and the connection string.
 // * It starts and migrates a db with 5 rows for Test_Read* and Test_Open*
