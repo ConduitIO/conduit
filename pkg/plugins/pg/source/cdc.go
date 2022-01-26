@@ -33,8 +33,7 @@ var bufferSize = 1000
 // withCDC sets up change data capture for the Postgres Source or returns an
 // error.
 func (s *Source) withCDC(cfg plugins.Config) error {
-	c := context.Background()
-	ctx, cancel := context.WithCancel(c)
+	ctx, cancel := context.WithCancel(context.Background())
 	s.killswitch = cancel
 	// early return if cdc is disabled
 	v, ok := cfg.Settings["cdc"]

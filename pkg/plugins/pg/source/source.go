@@ -39,8 +39,8 @@ var (
 	// ErrInvalidURL is returned when the DB can't be connected to with the
 	// provided URL
 	ErrInvalidURL = cerrors.New("incorrect url")
-	// ErrEmptyConfig is returned when no config is provided
-	ErrEmptyConfig = cerrors.Errorf("must provide a plugin config")
+	// ErrNilConfig is returned when no config is provided
+	ErrNilConfig = cerrors.Errorf("must provide a plugin config")
 )
 
 // required is a set of our plugin defaults for the purposes of validation
@@ -98,11 +98,11 @@ func (s *Source) Open(ctx context.Context, cfg plugins.Config) error {
 	}
 	err = s.withCDC(cfg)
 	if err != nil {
-		return cerrors.Errorf("failed to set reader: %w", err)
+		return cerrors.Errorf("failed to start cdc: %w", err)
 	}
 	err = s.withSnapshot(cfg)
 	if err != nil {
-		return cerrors.Errorf("failed to set snapshot: %w", err)
+		return cerrors.Errorf("failed to start snapshot: %w", err)
 	}
 	return nil
 }
@@ -131,7 +131,7 @@ func (s *Source) Teardown() error {
 // returns an error if any of them are missing.
 func (s *Source) Validate(cfg plugins.Config) error {
 	if cfg.Settings == nil {
-		return ErrEmptyConfig
+		return ErrNilConfig
 	}
 	for _, k := range required {
 		if _, ok := cfg.Settings[k]; !ok {
@@ -147,8 +147,8 @@ func (s *Source) Validate(cfg plugins.Config) error {
 // initial table snapshot is finished.
 // * Once the table snapshot is finished, it checks for a CDC buffer and if
 // one exists it reads off that buffer.
-// * If not CDC buffer exists it will return ErrEndData and switch to long
-// polling the database.
+// * If the CDC buffer doesn't exist, it will return ErrEndData and switch to
+// long polling the database.
 // * Position is thus assigned to an anonymous variable to be explicit.
 func (s *Source) Read(ctx context.Context, _ record.Position) (record.Record, error) {
 	// read from Snapshotter if incomplete.

@@ -79,7 +79,7 @@ func NewSnapshotter(
 		snapshotComplete: false,
 	}
 	// load our initial set of rows into the snapshotter after we've set the db
-	err := s.loadRows(db)
+	err := s.loadRows()
 	if err != nil {
 		return nil, cerrors.Errorf("failed to get rows for snapshot: %w", err)
 	}
@@ -156,7 +156,7 @@ func (s *Snapshotter) Teardown() error {
 // or returns an error.
 // * It returns nil if no error was detected.
 // * rows.Close and rows.Err are called at Teardown.
-func (s *Snapshotter) loadRows(db *sql.DB) error {
+func (s *Snapshotter) loadRows() error {
 	query, args, err := psql.Select(s.columns...).From(s.table).ToSql()
 	if err != nil {
 		return cerrors.Errorf("failed to create read query: %w", err)
