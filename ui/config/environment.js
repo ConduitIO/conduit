@@ -1,12 +1,16 @@
 'use strict';
 
 module.exports = function (environment) {
+  const conduitAPIURL =
+    environment === 'production'
+      ? null
+      : process.env.CONDUIT_API_URL || 'http://localhost:8080';
   let ENV = {
     modulePrefix: 'conduit-ui',
     environment,
     rootURL: '/ui/',
     locationType: 'auto',
-    conduitAPIURL: process.env.CONDUIT_API_URL || 'http://localhost:8080',
+    conduitAPIURL,
     isDevMirageEnabled: process.env.ENABLE_DEV_MIRAGE === 'true' || false,
     EmberENV: {
       FEATURES: {
