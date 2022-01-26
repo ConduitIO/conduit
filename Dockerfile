@@ -7,8 +7,8 @@ RUN apt-get update &&\
     apt-get install -y build-essential &&\
     apt-get install -y git
 
-# Install Node@v12
-RUN curl -sL https://deb.nodesource.com/setup_12.x | bash - &&\
+# Install Node@v16
+RUN curl -sL https://deb.nodesource.com/setup_16.x | bash - &&\
     apt-get install -y nodejs &&\
     npm update &&\
     npm i -g yarn@1.22.17
