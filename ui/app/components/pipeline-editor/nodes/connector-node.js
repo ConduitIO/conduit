@@ -1,25 +1,25 @@
-import Component from "@glimmer/component";
-import { inject as service } from "@ember/service";
+import Component from '@glimmer/component';
+import { inject as service } from '@ember/service';
 
 export default class PipelineEditorNodesConnectorNodeComponent extends Component {
   @service pipelineNodeManager;
 
   registerNode(element, [nodeType, pipelineNodeManager, model]) {
-    if (nodeType === "source") {
+    if (nodeType === 'source') {
       pipelineNodeManager.registerSourceNode(element, model);
     }
 
-    if (nodeType === "destination") {
+    if (nodeType === 'destination') {
       pipelineNodeManager.registerDestinationNode(element, model);
     }
   }
 
   unregisterNode(element, [nodeType, pipelineNodeManager]) {
-    if (nodeType === "source") {
+    if (nodeType === 'source') {
       pipelineNodeManager.unregisterSourceNode(element);
     }
 
-    if (nodeType === "destination") {
+    if (nodeType === 'destination') {
       pipelineNodeManager.unregisterDestinationNode(element);
     }
   }

@@ -2,7 +2,7 @@ import Controller from '@ember/controller';
 import { tracked } from '@glimmer/tracking';
 
 export default class TransformsController extends Controller {
-  queryParams = ['filter', 'fuzzy', 'page']
+  queryParams = ['filter', 'fuzzy', 'page'];
 
   @tracked
   filter = null;
@@ -17,7 +17,7 @@ export default class TransformsController extends Controller {
   model;
 
   get filteredTransforms() {
-    switch(this.filter) {
+    switch (this.filter) {
       case 'builtin':
         return this.model.filterBy('isCustom', false);
       case 'custom':
@@ -52,7 +52,7 @@ export default class TransformsController extends Controller {
     if (this.selectedPage < this.totalPages) {
       return this.selectedPage * 8;
     } else {
-      return ((this.totalPages - 1) * 8) + this.filteredTransforms.length % 8
+      return (this.totalPages - 1) * 8 + (this.filteredTransforms.length % 8);
     }
   }
 

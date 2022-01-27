@@ -16,7 +16,8 @@ const page = {
   pipelineAddNewNodeButton: '[data-test-pipeline-editor-add-node]',
 
   pipelineAddNewSourceButton: '[data-test-pipeline-editor-add-node-source]',
-  pipelineAddNewDestinationButton: '[data-test-pipeline-editor-add-node-destination]',
+  pipelineAddNewDestinationButton:
+    '[data-test-pipeline-editor-add-node-destination]',
 
   connectorModalOptionalTab: '[data-test-connector-modal-optional-tab]',
 };

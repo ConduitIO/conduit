@@ -9,7 +9,7 @@ module(
   function (hooks) {
     setupRenderingTest(hooks);
 
-    module('text input', function (hooks) {
+    module('text input', function () {
       module(
         'with a string type and no inclusion validation',
         function (hooks) {

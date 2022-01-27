@@ -1,14 +1,14 @@
-import Service from "@ember/service";
-import { A } from "@ember/array";
-import { tracked } from "@glimmer/tracking";
-import { action } from "@ember/object";
-import { zoomIdentity } from "d3-zoom";
+import Service from '@ember/service';
+import { A } from '@ember/array';
+import { tracked } from '@glimmer/tracking';
+import { action } from '@ember/object';
+import { zoomIdentity } from 'd3-zoom';
 import {
   SourceNode,
   DestinationNode,
   StreamNode,
-} from "conduit-ui/utils/node-pather/nodes";
-import { QuadraticPath } from "conduit-ui/utils/node-pather/paths";
+} from 'conduit-ui/utils/node-pather/nodes';
+import { QuadraticPath } from 'conduit-ui/utils/node-pather/paths';
 
 export default class PipelineNodeManagerService extends Service {
   @tracked sourceNodes = A([]);
@@ -36,6 +36,7 @@ export default class PipelineNodeManagerService extends Service {
     return [...source, ...destination];
   }
 
+  /* eslint-disable no-self-assign */
   regeneratePaths() {
     this.sourceNodes.forEach((node) => {
       node.outputHandle = node.outputHandle;
@@ -48,6 +49,7 @@ export default class PipelineNodeManagerService extends Service {
     this.streamNode.outputHandle = this.streamNode.outputHandle;
     this.streamNode.inputHandle = this.streamNode.inputHandle;
   }
+  /* eslint-enable no-self-assign */
 
   registerSourceNode(element, model) {
     const sourceNode = new SourceNode({
@@ -76,11 +78,13 @@ export default class PipelineNodeManagerService extends Service {
   }
 
   unregisterSourceNode(element) {
-    this.sourceNodes.removeObject(this.sourceNodes.findBy("element", element));
+    this.sourceNodes.removeObject(this.sourceNodes.findBy('element', element));
   }
 
   unregisterDestinationNode(element) {
-    this.destinationNodes.removeObject(this.destinationNodes.findBy("element", element));
+    this.destinationNodes.removeObject(
+      this.destinationNodes.findBy('element', element)
+    );
   }
 
   unregisterNodes() {

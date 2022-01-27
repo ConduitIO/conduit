@@ -12,7 +12,7 @@ export class InputHandle {
   }
 
   get yPos() {
-    return this.element.offsetTop + (this.element.offsetHeight / 2);
+    return this.element.offsetTop + this.element.offsetHeight / 2;
   }
 }
 
@@ -28,6 +28,6 @@ export class OutputHandle {
   }
 
   get yPos() {
-    return this.element.offsetTop + (this.element.offsetHeight / 2);
+    return this.element.offsetTop + this.element.offsetHeight / 2;
   }
 }
