@@ -35,7 +35,7 @@ require (
 	github.com/segmentio/kafka-go v0.4.27
 	github.com/xitongsys/parquet-go v1.6.0
 	github.com/xitongsys/parquet-go-source v0.0.0-20201108113611-f372b7d813be
-	golang.org/x/tools v0.1.8
+	golang.org/x/tools v0.1.9
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1
 	google.golang.org/genproto v0.0.0-20220118154757-00ab72f36ad5
 	google.golang.org/grpc v1.44.0
