@@ -76,7 +76,7 @@ func TestSource_SuccessfulSnapshot(t *testing.T) {
 
 	_, err = source.Read(ctx)
 	if !cerrors.Is(err, sdk.ErrBackoffRetry) {
-		t.Fatalf("expected a recoverable error, got: %v", err)
+		t.Fatalf("expected a BackoffRetry error, got: %v", err)
 	}
 
 	_ = source.Teardown(ctx)
@@ -101,7 +101,6 @@ func TestSource_SnapshotRestart(t *testing.T) {
 	testFiles := addObjectsToBucket(ctx, t, testBucket, client, 10)
 
 	// read and assert
-
 	for _, file := range testFiles {
 		// first position is not nil, then snapshot will start from beginning
 		_, err := readAndAssert(ctx, t, source, file)
@@ -126,11 +125,10 @@ func TestSource_EmptyBucket(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// nil for the first page
 	_, err = source.Read(ctx)
 
 	if !cerrors.Is(err, sdk.ErrBackoffRetry) {
-		t.Fatalf("expected a recoverable error, got: %v", err)
+		t.Fatalf("expected a BackoffRetry error, got: %v", err)
 	}
 	_ = source.Teardown(ctx)
 }
@@ -154,7 +152,7 @@ func TestSource_StartCDCAfterEmptyBucket(t *testing.T) {
 	_, err = source.Read(ctx)
 
 	if !cerrors.Is(err, sdk.ErrBackoffRetry) {
-		t.Fatalf("expected a recoverable error, got: %v", err)
+		t.Fatalf("expected a BackoffRetry error, got: %v", err)
 	}
 
 	// write files to bucket
@@ -177,7 +175,7 @@ func TestSource_NonExistentBucket(t *testing.T) {
 
 	source := &Source{}
 
-	// set the bucket to a unique uuid
+	// set the bucket name to a unique uuid
 	cfg[config.ConfigKeyAWSBucket] = uuid.NewString()
 
 	err := source.Configure(context.Background(), cfg)
@@ -229,7 +227,6 @@ func TestSource_CDC_ReadRecordsInsert(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// "lastPosition" is the next expected position, since it was the position for the last read object
 	obj, err := readWithTimeout(ctx, source, time.Second*15)
 	if err != nil {
 		t.Fatal(err)
@@ -286,7 +283,6 @@ func TestSource_CDC_ReadRecordsUpdate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// lastPosition is the next expected position for the source
 	obj, err := readWithTimeout(ctx, source, time.Second*10)
 	if err != nil {
 		t.Fatal(err)
@@ -402,7 +398,7 @@ func TestSource_CDC_EmptyBucketWithDeletedObjects(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// we need the deleted file to be in the past
+	// we need the deleted file's modified date to be in the past
 	time.Sleep(time.Second)
 
 	// read and assert
@@ -413,7 +409,7 @@ func TestSource_CDC_EmptyBucketWithDeletedObjects(t *testing.T) {
 		}
 	}
 
-	// should have changed to CDC, lastPosition is still nil
+	// should have changed to CDC
 	// CDC should NOT read the deleted object
 	_, err = readWithTimeout(ctx, source, time.Second)
 	if !cerrors.Is(err, context.DeadlineExceeded) {
@@ -456,18 +452,17 @@ func TestSource_CDCPosition(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// connector will start detecting changes from the past, so all the bucket is new data
+	// initialize the connector to start detecting changes from the past, so all the bucket is new data
 	err = source.Open(context.Background(), []byte("file0001_c1634049397"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = source.Read(ctx) // time in the past
+	_, err = source.Read(ctx)
 	// error is expected after resetting the connector with a new CDC position
 	if err == nil {
-		t.Fatalf("S3 connector should return a recoverable error for the first Read() call after starting CDC")
+		t.Fatalf("S3 connector should return a BackoffRetry error for the first Read() call after starting CDC")
 	}
 
-	// conduit would call the Read function again with the same position that returned an error
 	obj, err := readWithTimeout(ctx, source, time.Second*10)
 	if err != nil {
 		t.Fatal(err)

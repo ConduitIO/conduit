@@ -40,8 +40,7 @@ func NewDestination() sdk.Destination {
 	return &Destination{}
 }
 
-// Configure parses and initializes the config and makes sure everything is prepared
-// to receive records.
+// Configure parses and initializes the config.
 func (d *Destination) Configure(ctx context.Context, cfg map[string]string) error {
 	configuration, err := Parse(cfg)
 
@@ -54,6 +53,7 @@ func (d *Destination) Configure(ctx context.Context, cfg map[string]string) erro
 	return nil
 }
 
+// Open makes sure everything is prepared to receive records.
 func (d *Destination) Open(ctx context.Context) error {
 	d.Mutex = &sync.Mutex{}
 

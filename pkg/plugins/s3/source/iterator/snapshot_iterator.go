@@ -37,7 +37,7 @@ type SnapshotIterator struct {
 }
 
 // NewSnapshotIterator takes the s3 bucket, the client, and the position.
-// it returns an snapshotIterator starting from the position provided.
+// it returns a snapshotIterator starting from the position provided.
 func NewSnapshotIterator(bucket string, client *s3.Client, p position.Position) (*SnapshotIterator, error) {
 	input := &s3.ListObjectsV2Input{
 		Bucket: aws.String(bucket),

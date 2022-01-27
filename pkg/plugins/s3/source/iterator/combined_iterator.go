@@ -52,7 +52,7 @@ func NewCombinedIterator(
 		if len(p.Key) != 0 {
 			fmt.Printf("Warning: got position: %s, snapshot will be restarted from the beginning of the bucket\n", p.ToRecordPosition())
 		}
-		p = position.Position{} // always start from nil
+		p = position.Position{} // always start snapshot from the beginning, so position is nil
 		c.snapshotIterator, err = NewSnapshotIterator(bucket, client, p)
 		if err != nil {
 			return nil, cerrors.Errorf("could not create the snapshot iterator: %w", err)

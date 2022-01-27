@@ -36,8 +36,7 @@ type Config struct {
 	PollingPeriod time.Duration
 }
 
-// Parse attempts to parse plugins.Config into a Config struct that Source could
-// utilize
+// Parse attempts to parse the configurations into a Config struct that Source could utilize
 func Parse(cfg map[string]string) (Config, error) {
 	common, err := config.Parse(cfg)
 	if err != nil {
