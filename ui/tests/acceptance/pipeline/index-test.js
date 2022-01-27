@@ -122,6 +122,7 @@ module('Acceptance | pipeline/index', function (hooks) {
   module('adding a connector to a pipeline', function (hooks) {
     hooks.beforeEach(async function () {
       const pipeline = this.server.create('pipeline');
+      this.pipeline = pipeline;
 
       await visit(`/pipelines/${pipeline.id}`);
     });
@@ -142,6 +143,24 @@ module('Acceptance | pipeline/index', function (hooks) {
       await click(page.pipelineAddNewSourceButton);
       await click(page.newConnectorModalCancelButton);
       assert.dom(page.newConnectorModal).doesNotExist();
+    });
+
+    module('canceling adding a connector', function (hooks) {
+      hooks.beforeEach(async function () {
+        await click(page.pipelineAddNewNodeButton);
+        await click(page.pipelineAddNewSourceButton);
+        await click(page.newConnectorModalCancelButton);
+
+        await click(page.pipelineAddNewNodeButton);
+        await click(page.pipelineAddNewSourceButton);
+        await click(page.newConnectorModalCancelButton);
+      });
+
+      test('unloads the new record and doesnt leave ghost connectors in the pipeline', async function (assert) {
+        await click(page.pipelineTopNavIndexLink);
+        await click(`[data-test-pipeline-list-item='${this.pipeline.id}']`);
+        assert.dom(page.pipelineEditorZeroState).exists();
+      });
     });
   });
 

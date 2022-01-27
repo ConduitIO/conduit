@@ -24,6 +24,10 @@ export default Factory.extend({
     },
   }),
 
+  connector_ids() {
+    return [];
+  },
+
   withFileConnectors: trait({
     afterCreate(pipeline, server) {
       let fileSourcePlugin = server.db.connectorPlugins.findBy({
