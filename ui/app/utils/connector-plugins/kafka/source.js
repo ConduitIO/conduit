@@ -26,23 +26,6 @@ export default class KafkaSource extends ConnectorPlugin {
         { isRequired: true }
       ),
       generateBlueprint(
-        'securityProtocol',
-        'Security Protocol',
-        'Protocol used to communicate with brokers',
-        'string',
-        {
-          isRequired: false,
-          validations: [
-            {
-              type: 'inclusion',
-              options: {
-                list: ['PLAINTEXT', 'SSL', 'SASL_PLAINTEXT', 'SASL_SSL'],
-              },
-            },
-          ],
-        }
-      ),
-      generateBlueprint(
         'readFromBeginning',
         'Read from beginning',
         'Whether or not to read a topic from beginning',
