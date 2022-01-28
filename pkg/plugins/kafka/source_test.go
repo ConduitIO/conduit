@@ -31,14 +31,14 @@ import (
 
 func TestOpenSource_FailsWhenConfigEmpty(t *testing.T) {
 	underTest := kafka.Source{}
-	err := underTest.Open(context.TODO(), plugins.Config{})
+	err := underTest.Open(context.Background(), plugins.Config{})
 	assert.Error(t, err)
 	assert.True(t, strings.HasPrefix(err.Error(), "config is invalid:"), "incorrect error msg")
 }
 
 func TestOpenSource_FailsWhenConfigInvalid(t *testing.T) {
 	underTest := kafka.Source{}
-	err := underTest.Open(context.TODO(), plugins.Config{Settings: map[string]string{"foobar": "foobar"}})
+	err := underTest.Open(context.Background(), plugins.Config{Settings: map[string]string{"foobar": "foobar"}})
 	assert.Error(t, err)
 	assert.True(t, strings.HasPrefix(err.Error(), "config is invalid:"), "incorrect error msg")
 }
@@ -73,7 +73,7 @@ func TestReadPosition(t *testing.T) {
 		Return(kafkaMsg, groupID, nil)
 
 	underTest := kafka.Source{Consumer: consumerMock, Config: cfg}
-	rec, err := underTest.Read(context.TODO(), []byte(groupID))
+	rec, err := underTest.Read(context.Background(), []byte(groupID))
 	assert.Ok(t, err)
 	assert.Equal(t, rec.Key.Bytes(), kafkaMsg.Key)
 	assert.Equal(t, rec.Payload.Bytes(), kafkaMsg.Value)
@@ -98,9 +98,9 @@ func TestRead_StartFromCalledOnce(t *testing.T) {
 		Times(2)
 
 	underTest := kafka.Source{Consumer: consumerMock, Config: cfg}
-	_, err := underTest.Read(context.TODO(), []byte(pos))
+	_, err := underTest.Read(context.Background(), []byte(pos))
 	assert.Ok(t, err)
-	_, err = underTest.Read(context.TODO(), []byte(pos))
+	_, err = underTest.Read(context.Background(), []byte(pos))
 	assert.Ok(t, err)
 }
 
@@ -121,7 +121,7 @@ func TestRead(t *testing.T) {
 		Return(kafkaMsg, pos, nil)
 
 	underTest := kafka.Source{Consumer: consumerMock, Config: cfg}
-	rec, err := underTest.Read(context.TODO(), []byte(pos))
+	rec, err := underTest.Read(context.Background(), []byte(pos))
 	assert.Ok(t, err)
 	assert.Equal(t, rec.Key.Bytes(), kafkaMsg.Key)
 	assert.Equal(t, rec.Payload.Bytes(), kafkaMsg.Value)
