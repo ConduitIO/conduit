@@ -61,7 +61,7 @@ Requirements:
 ```shell
 git clone git@github.com:ConduitIO/conduit.git
 cd conduit
-make build
+make
 ./conduit
 ```
 
