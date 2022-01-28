@@ -26,19 +26,19 @@
   },
   "devDependencies": {
     "@ember/optional-features": "^2.0.0",
-    "@ember/render-modifiers": "^2.0.0",
+    "@ember/render-modifiers": "^2.0.3",
     "@ember/test-helpers": "^2.6.0",
     "@glimmer/component": "^1.0.4",
     "@glimmer/tracking": "^1.0.4",
     "@meroxa/ui-base": "https://github.com/meroxa/ui-base.git#553298b082c15e03c9904dba1dcc7ec0b4f13ab4",
-    "autoprefixer": "^10.4.1",
+    "autoprefixer": "^10.4.2",
     "babel-eslint": "^10.1.0",
     "broccoli-asset-rev": "^3.0.0",
     "ember-auto-import": "^2.2.4",
     "ember-basic-dropdown": "^4.0.2",
     "ember-changeset": "^3.15.0",
     "ember-changeset-validations": "^3.16.0",
-    "ember-cli": "~3.28.5",
+    "ember-cli": "~4.1.0",
     "ember-cli-app-version": "^5.0.0",
     "ember-cli-babel": "^7.26.11",
     "ember-cli-code-coverage": "^1.0.3",
@@ -49,7 +49,7 @@
     "ember-cli-inject-live-reload": "^2.1.0",
     "ember-cli-mirage": "^2.2.0",
     "ember-cli-netlify": "^0.4.1",
-    "ember-cli-postcss": "^7.0.2",
+    "ember-cli-postcss": "^8.0.0",
     "ember-cli-sri": "^2.1.1",
     "ember-cli-terser": "^4.0.2",
     "ember-concurrency": "^2.2.0",
@@ -59,7 +59,7 @@
     "ember-fetch": "^8.1.1",
     "ember-load-initializers": "^2.1.2",
     "ember-maybe-import-regenerator": "^1.0.0",
-    "ember-modifier": "^3.0.0",
+    "ember-modifier": "^3.1.0",
     "ember-page-title": "^7.0.0",
     "ember-qunit": "^5.1.5",
     "ember-resolver": "^8.0.3",
@@ -92,9 +92,9 @@
     "edition": "octane"
   },
   "dependencies": {
-    "axios": "^0.24.0",
+    "axios": "^0.25.0",
     "d3-selection": "^3.0.0",
     "d3-zoom": "^3.0.0",
-    "webpack": "^5.65.0"
+    "webpack": "^5.67.0"
   }
 }

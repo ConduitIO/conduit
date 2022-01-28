@@ -37,6 +37,7 @@ export default class ApplicationAdapter extends RESTAdapter {
       this.flashMessages.add({
         type: 'error',
         message: payload.message || 'Server Error',
+        sticky: true,
       });
     }
     return handledResponse;
