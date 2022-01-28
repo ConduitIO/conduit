@@ -7,8 +7,8 @@ builds:
     binary: conduit
     goos:
       - darwin
-    goarch:
-      - amd64
+      - linux
+      - windows
     env:
       - CGO_ENABLED=0
     tags:
@@ -19,8 +19,8 @@ builds:
     binary: pkg/plugins/s3/s3
     goos:
       - darwin
-    goarch:
-      - amd64
+      - linux
+      - windows
     env:
       - CGO_ENABLED=0
   # The Postgres plugin
@@ -29,8 +29,8 @@ builds:
     binary: pkg/plugins/pg/pg
     goos:
       - darwin
-    goarch:
-      - amd64
+      - linux
+      - windows
     env:
       - CGO_ENABLED=0
   # The file plugin
@@ -39,8 +39,8 @@ builds:
     binary: pkg/plugins/file/file
     goos:
       - darwin
-    goarch:
-      - amd64
+      - linux
+      - windows
     env:
       - CGO_ENABLED=0
   # The generator plugin
@@ -49,8 +49,8 @@ builds:
     binary: pkg/plugins/generator/generator
     goos:
       - darwin
-    goarch:
-      - amd64
+      - linux
+      - windows
     env:
       - CGO_ENABLED=0
   # The Kafka plugin
@@ -59,10 +59,10 @@ builds:
     binary: pkg/plugins/kafka/kafka
     goos:
       - darwin
-    goarch:
-      - amd64
+      - linux
+      - windows
     env:
-      - CGO_ENABLED=1
+      - CGO_ENABLED=0
 archives:
   - builds:
       - conduit
@@ -71,16 +71,32 @@ archives:
       - file
       - generator
       - kafka
-    allow_different_binary_count: true
     replacements:
-      darwin: Darwin
+      darwin: macOS
       linux: Linux
       windows: Windows
       386: i386
       amd64: x86_64
 checksum:
-  name_template: 'checksums_darwin.txt'
+  name_template: 'checksums.txt'
 snapshot:
   name_template: "{{ incpatch .Version }}-snapshot"
 changelog:
-  skip: true
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^npm:'
+      - '^go.mod:'
+      - Merge branch
+release:
+  mode: append
+  footer: |
+    ## Docker images
+
+    To pull the image, you can execute the following command:
+    ```
+    docker pull ghcr.io/conduitio/conduit:{{ .Tag }}
+    ```
