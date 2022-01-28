@@ -5404,10 +5404,10 @@ ember-rfc176-data@^0.3.15, ember-rfc176-data@^0.3.17:
   resolved "https://registry.yarnpkg.com/ember-rfc176-data/-/ember-rfc176-data-0.3.17.tgz#d4fc6c33abd6ef7b3440c107a28e04417b49860a"
   integrity sha512-EVzTTKqxv9FZbEh6Ktw56YyWRAA0MijKvl7H8C06wVF+8f/cRRz3dXxa4nkwjzyVwx4rzKGuIGq77hxJAQhWWw==
 
-ember-root-url@^1.0.0:
-  version "1.0.0"
-  resolved "https://registry.yarnpkg.com/ember-root-url/-/ember-root-url-1.0.0.tgz#91c0715b2c73f7ae973b0ed8592ddbf4563be196"
-  integrity sha512-rn/3weQOUj14gHBJentCbRX+9+gNFHfdYhB7LJ6HYkSJxOZOm6U4jygxTHJvcQ74QCKKFoJoTAhaDIUpfqKkrQ==
+ember-root-url@^1.0.1:
+  version "1.0.1"
+  resolved "https://registry.yarnpkg.com/ember-root-url/-/ember-root-url-1.0.1.tgz#27e834370ea5b46d37b84fa697c46bf3a069135a"
+  integrity sha512-e3aKAxY/EMhWEynfZnF0Gy6rZpQ9sJxNWm/GsDGj0cO7b5f4hmA6sSQGQh6puKe4jl2Q5a4w8DlnUyMaZoC/sA==
   dependencies:
     ember-cli-babel "^7.26.6"
     ember-cli-htmlbars "^5.7.1"
