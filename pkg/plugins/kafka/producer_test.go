@@ -12,75 +12,41 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package kafka
+package kafka_test
 
 import (
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/plugins/kafka"
 )
 
 func TestNewProducer_MissingRequired(t *testing.T) {
 	testCases := []struct {
 		name   string
-		config Config
+		config kafka.Config
 		exp    error
 	}{
 		{
 			name:   "servers missing",
-			config: Config{Topic: "topic"},
-			exp:    ErrServersMissing,
+			config: kafka.Config{Topic: "topic"},
+			exp:    kafka.ErrServersMissing,
 		},
 		{
 			name:   "topic missing",
-			config: Config{Servers: "irrelevant servers"},
-			exp:    ErrTopicMissing,
+			config: kafka.Config{Servers: []string{"irrelevant servers"}},
+			exp:    kafka.ErrTopicMissing,
 		},
 	}
 
 	for _, tc := range testCases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			producer, err := NewProducer(tc.config)
+			producer, err := kafka.NewProducer(tc.config)
 			assert.Nil(t, producer)
 			assert.Error(t, err)
 			assert.True(t, cerrors.Is(err, tc.exp), "expected "+tc.exp.Error())
-		})
-	}
-}
-
-func TestNewProducer_InvalidServers(t *testing.T) {
-	testCases := []struct {
-		name   string
-		config Config
-		exp    string
-	}{
-		{
-			name: "empty server string in the middle",
-			config: Config{
-				Servers: "host1:1111,,host2:2222",
-				Topic:   "topic",
-			},
-			exp: "invalid servers: empty 1. server",
-		},
-		{
-			name: "single blank server string",
-			config: Config{
-				Servers: "     ",
-				Topic:   "topic",
-			},
-			exp: "invalid servers: empty 0. server",
-		},
-	}
-
-	for _, tc := range testCases {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			producer, err := NewProducer(tc.config)
-			assert.Nil(t, producer)
-			assert.Error(t, err)
-			assert.Equal(t, tc.exp, err.Error())
 		})
 	}
 }
