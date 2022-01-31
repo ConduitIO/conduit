@@ -27,7 +27,7 @@ require (
 	github.com/lib/pq v1.10.4
 	github.com/nxadm/tail v1.4.8
 	github.com/piotrkowalczuk/promgrpc/v4 v4.0.4
-	github.com/prometheus/client_golang v1.12.0
+	github.com/prometheus/client_golang v1.12.1
 	github.com/prometheus/client_model v0.2.0
 	github.com/prometheus/common v0.32.1
 	github.com/rs/zerolog v1.26.1
