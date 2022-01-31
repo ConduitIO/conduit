@@ -9,7 +9,7 @@ require (
 	github.com/aws/aws-sdk-go-v2 v1.13.0
 	github.com/aws/aws-sdk-go-v2/config v1.13.0
 	github.com/aws/aws-sdk-go-v2/credentials v1.8.0
-	github.com/aws/aws-sdk-go-v2/service/s3 v1.24.0
+	github.com/aws/aws-sdk-go-v2/service/s3 v1.24.1
 	github.com/batchcorp/pgoutput v0.3.2
 	github.com/bufbuild/buf v1.0.0-rc11
 	github.com/dgraph-io/badger/v3 v3.2103.2
