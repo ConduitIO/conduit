@@ -2,7 +2,7 @@
 
 ## Summary
 
-This doc describes the design for the conduit plugin architecture. It spans from how Conduit communicates with built-in
+This document describes the design for the Conduit plugin architecture. It spans from how Conduit communicates with built-in
 and standalone plugins, where and how the interface is defined, how the plugin SDK is defined.
 
 ## Context
@@ -34,8 +34,7 @@ use [remote generation](https://docs.buf.build/bsr/remote-generation/overview) s
 code.
 
 Alongside the proto files, the repository contains helper structs and methods that hide the gRPC implementation from the
-user without changing any semantics. No other code needs to know that the communication happens through gRPC (i.e.
-neither Conduit nor the plugin SDK).
+user without changing any semantics. The plugin SDK does not need to know that the communication happens through gRPC.
 
 There are 3 gRPC services that a plugin needs to implement - `SourcePlugin`, `DestinationPlugin` and `SpecifierPlugin`.
 Notice that request/response messages are defined in a very verbose way to give us the ability to adapt them in the
@@ -56,7 +55,7 @@ service SourcePlugin {
 Functions will be called in the order in which they are defined.
 
 - `Configure` - the plugin needs to validate the configuration it receives and either store the configuration and return
-  no error or discard it and return an error explaining why the config is invalid. This function serves two purposes:
+  no error or discard it and return an error explaining why the configuration is invalid. This function serves two purposes:
     - Config validation - Conduit calls `Configure` when the connector is first created or when the configuration is
       updated to validate the configuration. In this case the next call is `Teardown` and the plugin is stopped.
     - Configuring the plugin - Conduit calls `Configure` when the pipeline is started to provide the plugin with its
@@ -300,7 +299,7 @@ those can be lazily instantiated. The function will block until the plugin shoul
 lifecycle of a standalone plugin. In the case of a built-in plugin, this function won’t be called, since Conduit will
 directly use the `Specification`, `Source` and `Destination` structs. For this to be possible the plugin needs to define
 these structs in a package that is not called `main` (we suggest using
-the `[/cmd/connector](https://github.com/golang-standards/project-layout/tree/master/cmd)` pattern for the main package)
+the [/cmd/connector](https://github.com/golang-standards/project-layout/tree/master/cmd) pattern for the main package)
 .
 
 ## Consequences
