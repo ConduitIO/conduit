@@ -53,7 +53,7 @@ and exploring the HTTP API through Swagger UI.
 
 Requirements:
 * [Go](https://golang.org/) (1.17 or later)
-* [Node.js](https://nodejs.org/) (14.x)
+* [Node.js](https://nodejs.org/) (16.x)
 * [Yarn](https://yarnpkg.com/) (latest 1.x)
 * [Ember CLI](https://ember-cli.com/)
 * [Make](https://www.gnu.org/software/make/)
@@ -61,7 +61,7 @@ Requirements:
 ```shell
 git clone git@github.com:ConduitIO/conduit.git
 cd conduit
-make build
+make
 ./conduit
 ```
 

@@ -50,11 +50,6 @@ module('Acceptance | pipeline/index/connectors/kafka', function (hooks) {
 
     test('shows the connectors optional fields', async function (assert) {
       await click(page.connectorModalOptionalTab);
-      assert.dom('[data-test-config-field="securityProtocol"]').exists();
-      assert
-        .dom('[data-test-config-field="securityProtocol"]')
-        .hasAttribute('type', 'button');
-
       assert.dom('[data-test-config-field="readFromBeginning"]').exists();
       assert
         .dom('[data-test-config-field="readFromBeginning"] [data-test-toggle]')
@@ -130,11 +125,6 @@ module('Acceptance | pipeline/index/connectors/kafka', function (hooks) {
 
     test('shows the connectors optional fields', async function (assert) {
       await click(page.connectorModalOptionalTab);
-      assert.dom('[data-test-config-field="securityProtocol"]').exists();
-      assert
-        .dom('[data-test-config-field="securityProtocol"]')
-        .hasAttribute('type', 'button');
-
       assert.dom('[data-test-config-field="acks"]').exists();
       assert
         .dom('[data-test-config-field="acks"]')

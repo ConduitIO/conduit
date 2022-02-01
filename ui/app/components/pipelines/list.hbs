@@ -49,7 +49,12 @@
       {{#each @pipelines as |pipeline|}}
         <tr class="border-b border-gray-300">
           <td class="p-4 border-gray-300">
-            <LinkTo class="font-medium text-sm" @route="pipeline" @model={{pipeline.id}}>
+            <LinkTo
+              class="font-medium text-sm"
+              @route="pipeline"
+              @model={{pipeline.id}}
+              data-test-pipeline-list-item={{pipeline.id}}
+            >
               {{truncate pipeline.name}}
             </LinkTo>
             <div class="text-xs text-gray-500">
