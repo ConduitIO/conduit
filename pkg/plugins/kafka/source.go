@@ -17,17 +17,14 @@ package kafka
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"time"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/plugins"
 	"github.com/conduitio/conduit/pkg/record"
-	"github.com/confluentinc/confluent-kafka-go/kafka"
+	"github.com/segmentio/kafka-go"
 )
-
-const msgTimeout = time.Second * 5
 
 type Source struct {
 	Consumer         Consumer
@@ -43,7 +40,7 @@ func (s *Source) Open(ctx context.Context, cfg plugins.Config) error {
 	}
 	s.Config = parsed
 
-	client, err := NewConsumer(s.Config)
+	client, err := NewConsumer()
 	if err != nil {
 		return cerrors.Errorf("failed to create Kafka client: %w", err)
 	}
@@ -69,14 +66,14 @@ func (s *Source) Read(ctx context.Context, position record.Position) (record.Rec
 		return record.Record{}, cerrors.Errorf("couldn't start from position: %w", err)
 	}
 
-	message, positions, err := s.Consumer.Get(msgTimeout)
+	message, kafkaPos, err := s.Consumer.Get(ctx)
 	if err != nil {
 		return record.Record{}, cerrors.Errorf("failed getting a message %w", err)
 	}
 	if message == nil {
 		return record.Record{}, plugins.ErrEndData
 	}
-	rec, err := toRecord(message, positions)
+	rec, err := toRecord(message, kafkaPos)
 	if err != nil {
 		return record.Record{}, cerrors.Errorf("couldn't transform record %w", err)
 	}
@@ -85,21 +82,12 @@ func (s *Source) Read(ctx context.Context, position record.Position) (record.Rec
 }
 
 func (s *Source) startFrom(position record.Position) error {
-	// The check is in place, to avoid instructing the Kafka client to "seek"
-	// to a position if it's already at it.
-	// The position is actually a map, but we compare the "raw" byte representations
-	// to avoid needless parsing.
-	// Note: Map key ordering is not guaranteed, however,
-	// json.Marshall() orders the keys itself, so using it in comparisons is safe.
+	// The check is in place, to avoid reconstructing the Kafka consumer.
 	if s.lastPositionRead != nil && bytes.Equal(s.lastPositionRead, position) {
 		return nil
 	}
-	positionMap, err := toKafkaPosition(position)
-	if err != nil {
-		return cerrors.Errorf("invalid position %v %w", string(position), err)
-	}
 
-	err = s.Consumer.StartFrom(s.Config.Topic, positionMap, s.Config.ReadFromBeginning)
+	err := s.Consumer.StartFrom(s.Config, string(position))
 	if err != nil {
 		return cerrors.Errorf("couldn't start from given position %v due to %w", string(position), err)
 	}
@@ -107,26 +95,9 @@ func (s *Source) startFrom(position record.Position) error {
 	return nil
 }
 
-func toKafkaPosition(position record.Position) (map[int32]int64, error) {
-	if position == nil || len(position) == 0 {
-		return map[int32]int64{}, nil
-	}
-
-	var p map[int32]int64
-	err := json.Unmarshal(position, &p)
-	if err != nil {
-		return nil, cerrors.Errorf("couldn't deserialize position %w", err)
-	}
-	return p, nil
-}
-
-func toRecord(message *kafka.Message, position map[int32]int64) (record.Record, error) {
-	posBytes, err := json.Marshal(position)
-	if err != nil {
-		return record.Record{}, cerrors.Errorf("couldn't serialize position %w", err)
-	}
+func toRecord(message *kafka.Message, position string) (record.Record, error) {
 	return record.Record{
-		Position:  posBytes,
+		Position:  []byte(position),
 		CreatedAt: time.Time{},
 		ReadAt:    time.Time{},
 		Key:       record.RawData{Raw: message.Key},
@@ -135,5 +106,5 @@ func toRecord(message *kafka.Message, position map[int32]int64) (record.Record, 
 }
 
 func (s *Source) Ack(context.Context, record.Position) error {
-	return nil
+	return s.Consumer.Ack()
 }

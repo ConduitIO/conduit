@@ -16,14 +16,10 @@ RUN curl -sL https://deb.nodesource.com/setup_16.x | bash - &&\
 # Build the full app binary
 WORKDIR /app
 COPY . .
-# The Kafka plugin currently uses Confluent's Go client for Kafka
-# which uses librdkafka, a C library under the hood, so we set CGO_ENABLED=1.
-# Soon we should switch to another, CGo-free, client, so we'll be able to set CGO_ENABLED to 0.
-RUN GOOS=linux GOARCH=amd64 CGO_ENABLED=1 make build
+RUN GOOS=linux GOARCH=amd64 CGO_ENABLED=0 make build
 
 # Copy built binaries to production slim image.
-# minideb provides glibc, which librdkafka needs.
-FROM bitnami/minideb:bullseye AS final
+FROM alpine:3.14 AS final
 # HTTP API
 EXPOSE 8080/tcp
 # gRPC API
