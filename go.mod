@@ -11,7 +11,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/credentials v1.8.0
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.24.1
 	github.com/batchcorp/pgoutput v0.3.2
-	github.com/bufbuild/buf v1.0.0-rc11
+	github.com/bufbuild/buf v1.0.0-rc12
 	github.com/dgraph-io/badger/v3 v3.2103.2
 	github.com/dop251/goja v0.0.0-20210225094849-f3cfc97811c0
 	github.com/golang/mock v1.6.0
@@ -86,7 +86,7 @@ require (
 	github.com/jackc/puddle v1.2.0 // indirect
 	github.com/jdxcode/netrc v0.0.0-20210204082910-926c7f70242a // indirect
 	github.com/jhump/protoreflect v1.10.2-0.20220118162304-602a8db873e3 // indirect
-	github.com/klauspost/compress v1.14.1 // indirect
+	github.com/klauspost/compress v1.14.2 // indirect
 	github.com/klauspost/pgzip v1.2.5 // indirect
 	github.com/kr/text v0.2.0 // indirect
 	github.com/lann/builder v0.0.0-20180802200727-47ae307949d0 // indirect
