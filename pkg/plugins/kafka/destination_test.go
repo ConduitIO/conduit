@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package kafka
+package kafka_test
 
 import (
 	"context"
@@ -23,6 +23,7 @@ import (
 
 	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/plugins"
+	"github.com/conduitio/conduit/pkg/plugins/kafka"
 	"github.com/conduitio/conduit/pkg/plugins/kafka/mock"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/golang/mock/gomock"
@@ -30,21 +31,21 @@ import (
 )
 
 func TestOpen_FailsWhenConfigEmpty(t *testing.T) {
-	underTest := Destination{}
+	underTest := kafka.Destination{}
 	err := underTest.Open(context.TODO(), plugins.Config{})
 	assert.Error(t, err)
 	assert.True(t, strings.HasPrefix(err.Error(), "config is invalid:"), "incorrect error msg")
 }
 
 func TestOpen_FailsWhenConfigInvalid(t *testing.T) {
-	underTest := Destination{}
+	underTest := kafka.Destination{}
 	err := underTest.Open(context.TODO(), plugins.Config{Settings: map[string]string{"foobar": "foobar"}})
 	assert.Error(t, err)
 	assert.True(t, strings.HasPrefix(err.Error(), "config is invalid:"), "incorrect error msg")
 }
 
 func TestOpen_KafkaProducerCreated(t *testing.T) {
-	underTest := Destination{}
+	underTest := kafka.Destination{}
 	err := underTest.Open(context.TODO(), config())
 	assert.Ok(t, err)
 	assert.NotNil(t, underTest.Client)
@@ -59,7 +60,7 @@ func TestTeardown_ClosesClient(t *testing.T) {
 		Close().
 		Return()
 
-	underTest := Destination{Client: clientMock, Config: connectorCfg()}
+	underTest := kafka.Destination{Client: clientMock, Config: connectorCfg()}
 	assert.Ok(t, underTest.Teardown())
 }
 
@@ -77,15 +78,15 @@ func TestWrite_ClientSendsMessage(t *testing.T) {
 		).
 		Return(nil)
 
-	underTest := Destination{Client: clientMock, Config: connectorCfg()}
+	underTest := kafka.Destination{Client: clientMock, Config: connectorCfg()}
 
 	res, err := underTest.Write(context.TODO(), rec)
 	assert.Ok(t, err)
 	assert.NotNil(t, res)
 }
 
-func connectorCfg() Config {
-	cfg, _ := Parse(configMap())
+func connectorCfg() kafka.Config {
+	cfg, _ := kafka.Parse(configMap())
 	return cfg
 }
 
@@ -94,7 +95,7 @@ func config() plugins.Config {
 }
 
 func configMap() map[string]string {
-	return map[string]string{Servers: "localhost:9092", Topic: "test"}
+	return map[string]string{kafka.Servers: "localhost:9092", kafka.Topic: "test"}
 }
 
 func testRec() record.Record {
