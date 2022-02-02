@@ -20,6 +20,7 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin"
 	builtinv1 "github.com/conduitio/conduit/pkg/plugin/builtin/v1"
 	"github.com/conduitio/conduit/pkg/plugin/sdk"
+	"github.com/conduitio/conduit/pkg/plugins/file"
 	"github.com/conduitio/conduit/pkg/plugins/generator"
 	"github.com/conduitio/conduit/pkg/plugins/s3"
 	s3destination "github.com/conduitio/conduit/pkg/plugins/s3/destination"
@@ -28,6 +29,7 @@ import (
 
 var DefaultDispenserFactories = []DispenserFactory{
 	sdkDispenserFactory(generator.Specification, generator.NewSource, nil),
+	sdkDispenserFactory(file.Specification, file.NewSource, file.NewDestination),
 	sdkDispenserFactory(s3.Specification, s3source.NewSource, s3destination.NewDestination),
 }
 
