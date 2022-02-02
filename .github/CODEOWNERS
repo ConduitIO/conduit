@@ -1,2 +1,2 @@
-*   @ConduitIO/conduit-core
-ui/ @ConduitIO/conduit-ui
+*       @ConduitIO/conduit-core
+/ui/    @ConduitIO/conduit-ui
