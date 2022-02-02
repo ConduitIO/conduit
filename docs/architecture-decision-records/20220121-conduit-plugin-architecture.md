@@ -14,7 +14,17 @@ itself.
 
 ## Decision
 
-The decision can be broken up into 4 parts:
+First, an overview of the decision:
+
+Conduit will internally define a plugin interface that will consume and produce internal structs, making it easy to use
+internally. We will have a plugin registry that will know how to dispense a plugin based on its identifier (e.g. plugin
+name). The plugin registry will produce two different implementations of the plugin interface, one that runs the plugin
+in a separate process and communicates with it through gRPC, and one that calls the plugin directly as if it was a Go
+library compiled into the Conduit binary. The plugin interface will be defined in gRPC and won't be aware of internal
+Conduit structs at all. The plugin SDK will build on that interface, it will not depend on Conduit, hide implementation
+details and provide utilities to make plugin development as easy as possible.
+
+The decision can be broken up into 4 parts, these are explained in detail later on in the document:
 
 - We defined the plugin interface in gRPC
 - We defined the interface used internally in Conduit to communicate with plugins
@@ -295,12 +305,13 @@ func Serve(
 
 The plugin SDK provides a method `Serve` that should be called in the `main` function to start serving the plugin. It
 expects functions that will be called when a `Specification`, `Source` or `Destination` is actually requested so that
-those can be lazily instantiated. The function will block until the plugin should exit, so it takes care of the whole
-lifecycle of a standalone plugin. In the case of a built-in plugin, this function won’t be called, since Conduit will
-directly use the `Specification`, `Source` and `Destination` structs. For this to be possible the plugin needs to define
-these structs in a package that is not called `main` (we suggest using
-the [/cmd/connector](https://github.com/golang-standards/project-layout/tree/master/cmd) pattern for the main package)
-.
+those can be lazily instantiated. In case a plugin only implements either the `Source` or the `Destination` it can
+supply `nil` to the `Serve` function and it will automatically fall back to the unimplemented version of that interface.
+`Serve` will block until the plugin should exit, so it takes care of the whole lifecycle of a standalone plugin. In the
+case of a built-in plugin, this function won’t be called, since Conduit will directly use the `Specification`, `Source`
+and `Destination` structs. For this to be possible the plugin needs to define these structs in a package that is not
+called `main` (we suggest using the [/cmd/connector](https://github.com/golang-standards/project-layout/tree/master/cmd)
+pattern for the main package).
 
 ## Consequences
 
