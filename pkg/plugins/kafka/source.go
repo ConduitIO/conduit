@@ -98,7 +98,7 @@ func toRecord(message *kafka.Message, position string) (sdk.Record, error) {
 		Position:  []byte(position),
 		CreatedAt: time.Time{},
 		Key:       sdk.RawData(message.Key),
-		Payload:   sdk.RawData(message.Key),
+		Payload:   sdk.RawData(message.Value),
 	}, nil
 }
 
