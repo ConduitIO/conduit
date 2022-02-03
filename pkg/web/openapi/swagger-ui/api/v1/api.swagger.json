@@ -1,8 +1,16 @@
 {
   "swagger": "2.0",
   "info": {
-    "title": "api/v1/api.proto",
-    "version": "version not set"
+    "title": "Conduit REST API",
+    "version": "0.1",
+    "contact": {
+      "name": "Conduit project",
+      "url": "https://github.com/conduitio/conduit"
+    },
+    "license": {
+      "name": "Apache License Version 2.0",
+      "url": "https://github.com/ConduitIO/conduit/blob/main/README.md"
+    }
   },
   "tags": [
     {
@@ -35,10 +43,17 @@
               "$ref": "#/definitions/apiv1Info"
             }
           },
-          "default": {
-            "description": "An unexpected error response.",
+          "500": {
+            "description": "",
             "schema": {
               "$ref": "#/definitions/googlerpcStatus"
+            },
+            "examples": {
+              "application/json": {
+                "code": 13,
+                "message": "server error",
+                "details": []
+              }
             }
           }
         },
@@ -60,10 +75,17 @@
               }
             }
           },
-          "default": {
-            "description": "An unexpected error response.",
+          "500": {
+            "description": "",
             "schema": {
               "$ref": "#/definitions/googlerpcStatus"
+            },
+            "examples": {
+              "application/json": {
+                "code": 13,
+                "message": "server error",
+                "details": []
+              }
             }
           }
         },
@@ -88,10 +110,30 @@
               "$ref": "#/definitions/v1Connector"
             }
           },
-          "default": {
-            "description": "An unexpected error response.",
+          "400": {
+            "description": "",
             "schema": {
               "$ref": "#/definitions/googlerpcStatus"
+            },
+            "examples": {
+              "application/json": {
+                "code": 3,
+                "message": "invalid arguments error",
+                "details": []
+              }
+            }
+          },
+          "500": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            },
+            "examples": {
+              "application/json": {
+                "code": 13,
+                "message": "server error",
+                "details": []
+              }
             }
           }
         },
@@ -120,10 +162,30 @@
               "$ref": "#/definitions/v1Connector"
             }
           },
-          "default": {
-            "description": "An unexpected error response.",
+          "404": {
+            "description": "",
             "schema": {
               "$ref": "#/definitions/googlerpcStatus"
+            },
+            "examples": {
+              "application/json": {
+                "code": 5,
+                "message": "resource not found error",
+                "details": []
+              }
+            }
+          },
+          "500": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            },
+            "examples": {
+              "application/json": {
+                "code": 13,
+                "message": "server error",
+                "details": []
+              }
             }
           }
         },
@@ -148,10 +210,43 @@
               "$ref": "#/definitions/v1DeleteConnectorResponse"
             }
           },
-          "default": {
-            "description": "An unexpected error response.",
+          "400": {
+            "description": "",
             "schema": {
               "$ref": "#/definitions/googlerpcStatus"
+            },
+            "examples": {
+              "application/json": {
+                "code": 9,
+                "message": "failed precondition error",
+                "details": []
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            },
+            "examples": {
+              "application/json": {
+                "code": 5,
+                "message": "resource not found error",
+                "details": []
+              }
+            }
+          },
+          "500": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            },
+            "examples": {
+              "application/json": {
+                "code": 13,
+                "message": "server error",
+                "details": []
+              }
             }
           }
         },
@@ -176,10 +271,43 @@
               "$ref": "#/definitions/v1Connector"
             }
           },
-          "default": {
-            "description": "An unexpected error response.",
+          "400": {
+            "description": "",
             "schema": {
               "$ref": "#/definitions/googlerpcStatus"
+            },
+            "examples": {
+              "application/json": {
+                "code": 3,
+                "message": "invalid arguments error",
+                "details": []
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            },
+            "examples": {
+              "application/json": {
+                "code": 5,
+                "message": "resource not found error",
+                "details": []
+              }
+            }
+          },
+          "500": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            },
+            "examples": {
+              "application/json": {
+                "code": 13,
+                "message": "server error",
+                "details": []
+              }
             }
           }
         },
@@ -222,10 +350,17 @@
               }
             }
           },
-          "default": {
-            "description": "An unexpected error response.",
+          "500": {
+            "description": "",
             "schema": {
               "$ref": "#/definitions/googlerpcStatus"
+            },
+            "examples": {
+              "application/json": {
+                "code": 13,
+                "message": "server error",
+                "details": []
+              }
             }
           }
         },
@@ -242,10 +377,43 @@
               "$ref": "#/definitions/v1Pipeline"
             }
           },
-          "default": {
-            "description": "An unexpected error response.",
+          "400": {
+            "description": "",
             "schema": {
               "$ref": "#/definitions/googlerpcStatus"
+            },
+            "examples": {
+              "application/json": {
+                "code": 3,
+                "message": "invalid arguments error",
+                "details": []
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            },
+            "examples": {
+              "application/json": {
+                "code": 6,
+                "message": "already exists error",
+                "details": []
+              }
+            }
+          },
+          "500": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            },
+            "examples": {
+              "application/json": {
+                "code": 13,
+                "message": "server error",
+                "details": []
+              }
             }
           }
         },
@@ -274,10 +442,17 @@
               "$ref": "#/definitions/v1Pipeline"
             }
           },
-          "default": {
-            "description": "An unexpected error response.",
+          "500": {
+            "description": "",
             "schema": {
               "$ref": "#/definitions/googlerpcStatus"
+            },
+            "examples": {
+              "application/json": {
+                "code": 13,
+                "message": "server error",
+                "details": []
+              }
             }
           }
         },
@@ -306,10 +481,30 @@
               "$ref": "#/definitions/v1Pipeline"
             }
           },
-          "default": {
-            "description": "An unexpected error response.",
+          "404": {
+            "description": "",
             "schema": {
               "$ref": "#/definitions/googlerpcStatus"
+            },
+            "examples": {
+              "application/json": {
+                "code": 5,
+                "message": "resource not found error",
+                "details": []
+              }
+            }
+          },
+          "500": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            },
+            "examples": {
+              "application/json": {
+                "code": 13,
+                "message": "server error",
+                "details": []
+              }
             }
           }
         },
@@ -334,10 +529,43 @@
               "$ref": "#/definitions/v1DeletePipelineResponse"
             }
           },
-          "default": {
-            "description": "An unexpected error response.",
+          "400": {
+            "description": "",
             "schema": {
               "$ref": "#/definitions/googlerpcStatus"
+            },
+            "examples": {
+              "application/json": {
+                "code": 9,
+                "message": "failed precondition error",
+                "details": []
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            },
+            "examples": {
+              "application/json": {
+                "code": 5,
+                "message": "resource not found error",
+                "details": []
+              }
+            }
+          },
+          "500": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            },
+            "examples": {
+              "application/json": {
+                "code": 13,
+                "message": "server error",
+                "details": []
+              }
             }
           }
         },
@@ -362,10 +590,56 @@
               "$ref": "#/definitions/v1Pipeline"
             }
           },
-          "default": {
-            "description": "An unexpected error response.",
+          "400": {
+            "description": "",
             "schema": {
               "$ref": "#/definitions/googlerpcStatus"
+            },
+            "examples": {
+              "application/json": {
+                "code": 3,
+                "message": "invalid arguments error",
+                "details": []
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            },
+            "examples": {
+              "application/json": {
+                "code": 5,
+                "message": "resource not found error",
+                "details": []
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            },
+            "examples": {
+              "application/json": {
+                "code": 6,
+                "message": "already exists error",
+                "details": []
+              }
+            }
+          },
+          "500": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            },
+            "examples": {
+              "application/json": {
+                "code": 13,
+                "message": "server error",
+                "details": []
+              }
             }
           }
         },
@@ -405,10 +679,17 @@
               "$ref": "#/definitions/v1Pipeline"
             }
           },
-          "default": {
-            "description": "An unexpected error response.",
+          "500": {
+            "description": "",
             "schema": {
               "$ref": "#/definitions/googlerpcStatus"
+            },
+            "examples": {
+              "application/json": {
+                "code": 13,
+                "message": "server error",
+                "details": []
+              }
             }
           }
         },
@@ -435,10 +716,43 @@
               "$ref": "#/definitions/v1StartPipelineResponse"
             }
           },
-          "default": {
-            "description": "An unexpected error response.",
+          "400": {
+            "description": "",
             "schema": {
               "$ref": "#/definitions/googlerpcStatus"
+            },
+            "examples": {
+              "application/json": {
+                "code": 9,
+                "message": "failed precondition error",
+                "details": []
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            },
+            "examples": {
+              "application/json": {
+                "code": 5,
+                "message": "resource not found error",
+                "details": []
+              }
+            }
+          },
+          "500": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            },
+            "examples": {
+              "application/json": {
+                "code": 13,
+                "message": "server error",
+                "details": []
+              }
             }
           }
         },
@@ -465,10 +779,43 @@
               "$ref": "#/definitions/v1StopPipelineResponse"
             }
           },
-          "default": {
-            "description": "An unexpected error response.",
+          "400": {
+            "description": "",
             "schema": {
               "$ref": "#/definitions/googlerpcStatus"
+            },
+            "examples": {
+              "application/json": {
+                "code": 9,
+                "message": "failed precondition error",
+                "details": []
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            },
+            "examples": {
+              "application/json": {
+                "code": 5,
+                "message": "resource not found error",
+                "details": []
+              }
+            }
+          },
+          "500": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            },
+            "examples": {
+              "application/json": {
+                "code": 13,
+                "message": "server error",
+                "details": []
+              }
             }
           }
         },
@@ -498,10 +845,17 @@
               }
             }
           },
-          "default": {
-            "description": "An unexpected error response.",
+          "500": {
+            "description": "",
             "schema": {
               "$ref": "#/definitions/googlerpcStatus"
+            },
+            "examples": {
+              "application/json": {
+                "code": 13,
+                "message": "server error",
+                "details": []
+              }
             }
           }
         },
@@ -530,10 +884,30 @@
               "$ref": "#/definitions/v1Processor"
             }
           },
-          "default": {
-            "description": "An unexpected error response.",
+          "400": {
+            "description": "",
             "schema": {
               "$ref": "#/definitions/googlerpcStatus"
+            },
+            "examples": {
+              "application/json": {
+                "code": 3,
+                "message": "invalid arguments error",
+                "details": []
+              }
+            }
+          },
+          "500": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            },
+            "examples": {
+              "application/json": {
+                "code": 13,
+                "message": "server error",
+                "details": []
+              }
             }
           }
         },
@@ -562,10 +936,30 @@
               "$ref": "#/definitions/v1Processor"
             }
           },
-          "default": {
-            "description": "An unexpected error response.",
+          "404": {
+            "description": "",
             "schema": {
               "$ref": "#/definitions/googlerpcStatus"
+            },
+            "examples": {
+              "application/json": {
+                "code": 5,
+                "message": "resource not found error",
+                "details": []
+              }
+            }
+          },
+          "500": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            },
+            "examples": {
+              "application/json": {
+                "code": 13,
+                "message": "server error",
+                "details": []
+              }
             }
           }
         },
@@ -590,10 +984,43 @@
               "$ref": "#/definitions/v1DeleteProcessorResponse"
             }
           },
-          "default": {
-            "description": "An unexpected error response.",
+          "400": {
+            "description": "",
             "schema": {
               "$ref": "#/definitions/googlerpcStatus"
+            },
+            "examples": {
+              "application/json": {
+                "code": 9,
+                "message": "failed precondition error",
+                "details": []
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            },
+            "examples": {
+              "application/json": {
+                "code": 5,
+                "message": "resource not found error",
+                "details": []
+              }
+            }
+          },
+          "500": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            },
+            "examples": {
+              "application/json": {
+                "code": 13,
+                "message": "server error",
+                "details": []
+              }
             }
           }
         },
@@ -618,10 +1045,43 @@
               "$ref": "#/definitions/v1Processor"
             }
           },
-          "default": {
-            "description": "An unexpected error response.",
+          "400": {
+            "description": "",
             "schema": {
               "$ref": "#/definitions/googlerpcStatus"
+            },
+            "examples": {
+              "application/json": {
+                "code": 3,
+                "message": "invalid arguments error",
+                "details": []
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            },
+            "examples": {
+              "application/json": {
+                "code": 5,
+                "message": "resource not found error",
+                "details": []
+              }
+            }
+          },
+          "500": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            },
+            "examples": {
+              "application/json": {
+                "code": 13,
+                "message": "server error",
+                "details": []
+              }
             }
           }
         },
