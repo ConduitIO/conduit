@@ -26,3 +26,7 @@ Docker builds.
 Nightly builds are created in the same way, it's only the triggering which is different. Namely, we have a GitHub action
 (defined in [trigger-nightly.yml](/.github/workflows/trigger-nightly.yml)) which is creating snapshot tags once in 24 hours.
 A new snapshot tag then triggers a new release. The mentioned GitHub action also cleans up older tags, releases and Docker images.
+
+The "Trigger nightly build" GH action requires a personal access token, and _not_ a GitHub token provided by Actions. The 
+reason is that a workflow which produces an event using a GitHub token cannot trigger another workflow through that event.
+For more information, please check [Triggering a workflow from a workflow](https://docs.github.com/en/actions/using-workflows/triggering-a-workflow#triggering-a-workflow-from-a-workflow).
