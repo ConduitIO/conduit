@@ -27,9 +27,15 @@ import (
 )
 
 type Source struct {
+	sdk.UnimplementedSource
+
 	Consumer         Consumer
 	Config           Config
 	lastPositionRead sdk.Position
+}
+
+func NewSource() sdk.Source {
+	return &Source{}
 }
 
 func (s *Source) Configure(ctx context.Context, cfg map[string]string) error {
@@ -96,11 +102,11 @@ func toRecord(message *kafka.Message, position string) (sdk.Record, error) {
 	}, nil
 }
 
-func (s *Source) Ack(context.Context, sdk.Position) error {
+func (s *Source) Ack(ctx context.Context, position sdk.Position) error {
 	return s.Consumer.Ack()
 }
 
-func (s *Source) Teardown() error {
+func (s *Source) Teardown(context.Context) error {
 	fmt.Println("Tearing down a Kafka Source...")
 	s.Consumer.Close()
 	return nil

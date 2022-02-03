@@ -19,6 +19,7 @@ import (
 	"fmt"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/plugin/sdk"
 	"github.com/conduitio/conduit/pkg/plugins"
 	"github.com/conduitio/conduit/pkg/record"
 )
@@ -26,6 +27,10 @@ import (
 type Destination struct {
 	Client Producer
 	Config Config
+}
+
+func NewDestination() sdk.Destination {
+	return nil
 }
 
 func (s *Destination) Open(ctx context.Context, cfg plugins.Config) error {
