@@ -72,7 +72,7 @@ archives:
       - generator
       - kafka
     replacements:
-      darwin: macOS
+      darwin: Darwin
       linux: Linux
       windows: Windows
       386: i386
