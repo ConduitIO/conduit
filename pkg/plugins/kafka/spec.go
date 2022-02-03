@@ -25,7 +25,7 @@ func (s Spec) Specify() (plugins.Specification, error) {
 	return plugins.Specification{
 		Summary:     "A Kafka source and destination plugin for Conduit, written in Go.",
 		Description: "",
-		Version:     "v0.5.0",
+		Version:     "v0.1.0",
 		Author:      "Meroxa",
 		DestinationParams: map[string]plugins.Parameter{
 			"servers": {
@@ -37,11 +37,6 @@ func (s Spec) Specify() (plugins.Specification, error) {
 				Default:     "",
 				Required:    true,
 				Description: "The topic to which records will be written to.",
-			},
-			"securityProtocol": {
-				Default:     "",
-				Required:    false,
-				Description: "Protocol used to communicate with brokers. Valid values are: PLAINTEXT, SSL, SASL_PLAINTEXT, SASL_SSL.",
 			},
 			"acks": {
 				Default:     "all",
@@ -64,11 +59,6 @@ func (s Spec) Specify() (plugins.Specification, error) {
 				Default:     "",
 				Required:    true,
 				Description: "The topic to which records will be written to.",
-			},
-			"securityProtocol": {
-				Default:     "",
-				Required:    false,
-				Description: "Protocol used to communicate with brokers. Valid values are: PLAINTEXT, SSL, SASL_PLAINTEXT, SASL_SSL.",
 			},
 			"readFromBeginning": {
 				Default:     "false",

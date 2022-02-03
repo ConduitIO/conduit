@@ -21,7 +21,12 @@ import (
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/plugins"
+
+	sq "github.com/Masterminds/squirrel"
 )
+
+// Declare Postgres $ placeholder format
+var psql = sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
 
 // withTable sets the table that the Source should read from Postgres or errors
 // if one isn't provided.
