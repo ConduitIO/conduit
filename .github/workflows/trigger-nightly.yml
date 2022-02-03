@@ -1,0 +1,46 @@
+name: Trigger nightly build
+
+on:
+  schedule:
+    # * is a special character in YAML so you have to quote this string
+    - cron:  '0 * * * *'
+  workflow_dispatch:
+
+jobs:
+  trigger-nightly:
+    name: Push tag for nightly build
+    runs-on: ubuntu-latest
+    steps:
+      -
+        name: 'Checkout'
+        uses: actions/checkout@v2
+        with:
+          token: ${{ secrets.NIGHTLY_BUILD_GH_TOKEN }}
+      -
+        name: 'Push new tag'
+        # TODO determine snapshot version based on latest minor version
+        run: |
+          git config user.name "${GITHUB_ACTOR}"
+          git config user.email "${GITHUB_ACTOR}@users.noreply.github.com"
+
+          TAG=v0.2.0-snapshot.$(date +'%s')
+          git tag -a $TAG -m "$TAG: nightly build"
+          git push origin $TAG
+      - name: 'Clean up snapshot releases'
+        uses: dev-drprasad/delete-older-releases@v0.2.0
+        with:
+          keep_latest: 7
+          delete_tags: true
+          delete_tag_pattern: snapshot
+        env:
+          GITHUB_TOKEN: ${{ secrets.NIGHTLY_BUILD_GH_TOKEN }}
+      - name: 'Delete nightly containers older than a week'
+        uses: snok/container-retention-policy@v1
+        with:
+          image-names: conduit
+          cut-off: 1 week ago UTC
+          account-type: org
+          org-name: ConduitIO
+          keep-at-least: 7
+          token: ${{ secrets.NIGHTLY_BUILD_GH_TOKEN }}
+          filter-tags: '*-snapshot*'
