@@ -30,7 +30,7 @@ type Destination struct {
 }
 
 func NewDestination() sdk.Destination {
-	return nil
+	return &Destination{}
 }
 
 func (d *Destination) Configure(ctx context.Context, cfg map[string]string) error {
