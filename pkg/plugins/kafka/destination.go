@@ -34,7 +34,7 @@ func NewDestination() sdk.Destination {
 }
 
 func (d *Destination) Configure(ctx context.Context, cfg map[string]string) error {
-	fmt.Println("Opening a Kafka Destination...")
+	fmt.Println("Configuring a Kafka Destination...")
 	parsed, err := Parse(cfg)
 	if err != nil {
 		return cerrors.Errorf("config is invalid: %w", err)
