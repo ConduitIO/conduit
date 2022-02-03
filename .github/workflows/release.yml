@@ -106,9 +106,9 @@ jobs:
           # Makes no sense to have an image with tag v0, hence the check in the last line.
           tags: |
             type=semver,pattern={{raw}}
-            type=raw,value=latest-nightly,enable=${{ contains(github.ref, '-snapshot')  }}
-            type=semver,pattern=v{{major}}.{{minor}},enable=${{ !contains(github.ref, '-snapshot') }}
-            type=semver,pattern=v{{major}},enable=${{ !contains(github.ref, '-snapshot') && !startsWith(github.ref, 'refs/tags/v0.') }}
+            type=raw,value=latest-nightly,enable=${{ contains(github.ref, '-nightly')  }}
+            type=semver,pattern=v{{major}}.{{minor}},enable=${{ !contains(github.ref, '-nightly') }}
+            type=semver,pattern=v{{major}},enable=${{ !contains(github.ref, '-nightly') && !startsWith(github.ref, 'refs/tags/v0.') }}
           labels: |
             maintainer=ConduitIO
             org.opencontainers.image.title=Conduit

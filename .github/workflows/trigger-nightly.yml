@@ -18,20 +18,20 @@ jobs:
           token: ${{ secrets.NIGHTLY_BUILD_GH_TOKEN }}
       -
         name: 'Push new tag'
-        # TODO determine snapshot version based on latest minor version
+        # TODO determine nightly version based on latest minor version
         run: |
           git config user.name "${GITHUB_ACTOR}"
           git config user.email "${GITHUB_ACTOR}@users.noreply.github.com"
 
-          TAG=v0.2.0-snapshot.$(date +'%s')
+          TAG=v0.2.0-nightly.$(date +'%s')
           git tag -a $TAG -m "$TAG: nightly build"
           git push origin $TAG
-      - name: 'Clean up snapshot releases'
+      - name: 'Clean up nightly releases'
         uses: dev-drprasad/delete-older-releases@v0.2.0
         with:
           keep_latest: 7
           delete_tags: true
-          delete_tag_pattern: snapshot
+          delete_tag_pattern: nightly
         env:
           GITHUB_TOKEN: ${{ secrets.NIGHTLY_BUILD_GH_TOKEN }}
       - name: 'Delete nightly containers older than a week'
@@ -43,4 +43,4 @@ jobs:
           org-name: ConduitIO
           keep-at-least: 7
           token: ${{ secrets.NIGHTLY_BUILD_GH_TOKEN }}
-          filter-tags: '*-snapshot*'
+          filter-tags: '*-nightly*'
