@@ -2,6 +2,10 @@
 
 VERSION=`./scripts/get-tag.sh`
 
+# The build target should stay at the top since we want it to be the default target.
+build: ui-dist build-plugins
+	go build -ldflags "-X github.com/conduitio/conduit/pkg/conduit.Version=${VERSION}" -o conduit -tags ui ./cmd/conduit/main.go
+
 build-file-plugin:
 	go build -o pkg/plugins/file/file pkg/plugins/file/cmd/file/main.go
 
@@ -26,9 +30,6 @@ test-integration: build-file-plugin
 	go test -v -race --tags=integration ./...; ret=$$?; \
 		docker-compose -f test/docker-compose-postgres.yml -f test/docker-compose-kafka.yml down; \
 		exit $$ret
-
-build: ui-dist build-plugins
-	go build -ldflags "-X github.com/conduitio/conduit/pkg/conduit.Version=${VERSION}" -o conduit -tags ui ./cmd/conduit/main.go
 
 build-server: build-plugins
 	go build -ldflags "-X 'github.com/conduitio/conduit/pkg/conduit.Version=${VERSION}'" -o conduit ./cmd/conduit/main.go

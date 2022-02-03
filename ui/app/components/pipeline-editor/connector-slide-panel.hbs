@@ -53,63 +53,15 @@
       </div>
       <div class="flex text-center mb-2 border-b border-gray-300">
         <div
-          class="w-1/2 flex-auto pb-2
-            {{if this.isShowingDetailsTab 'border-b-2 font-medium'}}
-            border-teal-900 uppercase text-xs cursor-pointer"
-          {{on "click" (fn (mut this.isShowingDetailsTab) true)}}
-        >
-          Details
-        </div>
-        <div
-          class="w-1/2 flex-auto pb-2
-            {{if (not this.isShowingDetailsTab) 'border-b-2 font-medium'}}
-            border-teal-900 uppercase text-xs cursor-pointer"
-          {{on "click" (fn (mut this.isShowingDetailsTab) false)}}
+          class="w-full flex-auto pb-2 border-b-2 font-medium border-teal-900 uppercase text-xs cursor-pointer"
           data-test-transforms-tab
         >
           Transforms
           {{this.sortedTransforms.length}}
         </div>
       </div>
-      <div
-        class="w-152 transform transition-transform duration-500 ease-in-out flex h-full
-          {{if (not this.isShowingDetailsTab) '-translate-x-76'}}"
-      >
-        <div class="w-76">
-          <div class="px-4 py-2 border-gray-200 mb-4">
-            <div class="text-xs uppercase">
-              Metrics
-            </div>
-            <div class="grid grid-cols-3 gap-2 text-center">
-              <div class="bg-gray-100 p-2">
-                <div class="text-xs">
-                  Availability
-                </div>
-                <div>
-                  —
-                </div>
-              </div>
-              <div class="bg-gray-100 p-2">
-                <div class="text-xs">
-                  Throughput
-                </div>
-                <div>
-                  —
-                </div>
-              </div>
-              <div class="bg-gray-100 p-2">
-                <div class="text-xs">
-                  Latency
-                </div>
-                <div>
-                  —
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="w-76">
+      <div class="flex h-full">
+        <div class="w-full">
           <div class="px-4 mb-6 mt-4">
             <Mxa::Button
               @buttonType="secondary"
