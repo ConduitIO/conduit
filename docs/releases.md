@@ -7,7 +7,22 @@ A Conduit release has the following parts:
   * the source code
 * a GitHub package, which is the official Docker image for Conduit. It's available on GitHub's Container Registry.
 
-### How to release a new version?
+### How to release a new version
 A release is triggered by pushing a new tag which starts with `v` (for example `v1.2.3`). Everything else is then handled by 
-GoReleaser and GitHub actions. To push a new tag, please use the script [tag.sh](https://github.com/ConduitIO/conduit/blob/main/scripts/tag.sh), 
-which also checks if the version conforms to SemVer.
+GoReleaser and GitHub actions. To push a new tag, please use the script [scripts/tag.sh](https://github.com/ConduitIO/conduit/blob/main/scripts/tag.sh), 
+which also checks if the version conforms to SemVer. Example:
+```
+scripts/tag.sh 1.2.3
+```
+
+### Nightly builds
+We provide nightly builds (binaries and Docker images) and keep them for 7 days.
+
+### Implementation
+The GitHub release is created with [GoReleaser](https://github.com/goreleaser/goreleaser/). GoReleaser _can_ build Docker images,
+but we're building those "ourselves" (using Docker's official GitHub actions), since GoReleaser doesn't work with multi-stage
+Docker builds.
+
+Nightly builds are created in the same way, it's only the triggering which is different. Namely, we have a GitHub action
+(defined in [trigger-nightly.yml](/.github/workflows/trigger-nightly.yml)) which is creating snapshot tags once in 24 hours.
+A new snapshot tag then triggers a new release. The mentioned GitHub action also cleans up older tags, releases and Docker images.
