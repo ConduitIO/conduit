@@ -10,12 +10,17 @@ const STATUS_MAP = {
   STATUS_RUNNING: 'running',
 };
 
+const API_URL = config.conduitAPIURL ? config.conduitAPIURL : '';
+
 export default class PipelineModel extends Model {
   @attr()
   config;
 
   @attr()
   state;
+
+  @attr()
+  connectorIds;
 
   @hasMany('connector')
   connectors;
@@ -34,6 +39,10 @@ export default class PipelineModel extends Model {
 
   set description(newDescription) {
     this.config.description = newDescription;
+  }
+
+  get connectorCount() {
+    return this.connectorIds.length;
   }
 
   get humanFriendlyStatus() {
@@ -57,11 +66,11 @@ export default class PipelineModel extends Model {
   }
 
   async startPipeline() {
-    await axios.post(`${config.conduitAPIURL}/v1/pipelines/${this.id}/start`);
+    await axios.post(`${API_URL}/v1/pipelines/${this.id}/start`);
   }
 
   async stopPipeline() {
-    await axios.post(`${config.conduitAPIURL}/v1/pipelines/${this.id}/stop`);
+    await axios.post(`${API_URL}/v1/pipelines/${this.id}/stop`);
   }
 
   @task

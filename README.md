@@ -1,11 +1,11 @@
 # Conduit
 ![Logo](https://raw.githubusercontent.com/ConduitIO/.github/main/images/conduit-logo-outlined.svg)
 
-_Build real-time data pipelines in minutes, not months :dizzy:_ **TODO change slogan**
+_Data Integration for Production Data Stores. :dizzy:_
 
 [![License](https://img.shields.io/badge/license-Apache%202-blue)](https://github.com/ConduitIO/conduit/blob/main/LICENSE.md)
 [![Build](https://github.com/ConduitIO/conduit/actions/workflows/build.yml/badge.svg)](https://github.com/ConduitIO/conduit/actions/workflows/build.yml)
-[![Go Reference](https://pkg.go.dev/badge/github.com/ConduitIO/conduit.svg)](https://pkg.go.dev/github.com/ConduitIO/conduit)
+[![Go Reference](https://pkg.go.dev/badge/github.com/conduitio/conduit.svg)](https://pkg.go.dev/github.com/conduitio/conduit)
 [![Go Report Card](https://goreportcard.com/badge/github.com/conduitio/conduit)](https://goreportcard.com/report/github.com/conduitio/conduit)
 [![Discord](https://img.shields.io/discord/828680256877363200?label=discord&logo=discord)](https://discord.meroxa.com)
 [![Docs](https://img.shields.io/badge/conduit-docs-blue)](https://docs.conduit.io)
@@ -22,8 +22,7 @@ received records won't change, it also takes care of consistency by propagating 
 pipeline only when a record is successfully processed on all destinations.
 
 Conduit connectors are plugins that communicate with Conduit via a gRPC interface. This means that plugins can be
-written in any language as long as they conform to the required interface. For more information see the
-[Connector Plugins](https://github.com/ConduitIO/conduit/blob/main/docs/plugins.md) documentation.
+written in any language as long as they conform to the required interface.
 
 Conduit was created and open-sourced by [Meroxa](https://meroxa.io).
 
@@ -54,7 +53,7 @@ and exploring the HTTP API through Swagger UI.
 
 Requirements:
 * [Go](https://golang.org/) (1.17 or later)
-* [Node.js](https://nodejs.org/) (14.x)
+* [Node.js](https://nodejs.org/) (16.x)
 * [Yarn](https://yarnpkg.com/) (latest 1.x)
 * [Ember CLI](https://ember-cli.com/)
 * [Make](https://www.gnu.org/software/make/)
@@ -62,7 +61,7 @@ Requirements:
 ```shell
 git clone git@github.com:ConduitIO/conduit.git
 cd conduit
-make build
+make
 ./conduit
 ```
 
@@ -123,8 +122,6 @@ If you are interested in internals of Conduit we have prepared some technical do
   overview of Conduit.
 * [Conduit Metrics](https://github.com/ConduitIO/conduit/blob/main/docs/metrics.md) provides more information about how
   Conduit exposes metrics.
-* [Connector Plugins](https://github.com/ConduitIO/conduit/blob/main/docs/plugins.md) contains insights about how 
-  Conduit is communicating with connector plugins and how you can build your own connector plugin.
 
 ## Known limitations
 
@@ -145,7 +142,7 @@ For a complete guide to contributing to Conduit, see the
 
 We welcome you to join the community and contribute to Conduit to make it better! When something does not work as
 intended please check if there is already an [issue](https://github.com/ConduitIO/conduit/issues) that describes your
-problem, otherwise please [open an issue](https://github.com/ConduitIO/conduit/issues/new) and let us know. When you are
+problem, otherwise please [open an issue](https://github.com/ConduitIO/conduit/issues/new/choose) and let us know. When you are
 not sure how to do something please [open a discussion](https://github.com/ConduitIO/conduit/discussions) or hit us up
 on [Discord](https://discord.meroxa.com).
 

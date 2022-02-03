@@ -18,7 +18,6 @@ package kafka
 
 import (
 	"context"
-	"strings"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/segmentio/kafka-go"
@@ -40,18 +39,15 @@ type segmentProducer struct {
 // NewProducer creates a new Kafka producer.
 // The current implementation uses Segment's kafka-go client.
 func NewProducer(config Config) (Producer, error) {
-	if config.Servers == "" {
+	if len(config.Servers) == 0 {
 		return nil, ErrServersMissing
 	}
 	if config.Topic == "" {
 		return nil, ErrTopicMissing
 	}
-	servers, err := split(config.Servers)
-	if err != nil {
-		return nil, cerrors.Errorf("invalid servers: %w", err)
-	}
+
 	writer := &kafka.Writer{
-		Addr:         kafka.TCP(servers...),
+		Addr:         kafka.TCP(config.Servers...),
 		Topic:        config.Topic,
 		BatchSize:    1,
 		WriteTimeout: config.DeliveryTimeout,
@@ -61,18 +57,6 @@ func NewProducer(config Config) (Producer, error) {
 		// Transport: nil,
 	}
 	return &segmentProducer{writer: writer}, nil
-}
-
-func split(serversString string) ([]string, error) {
-	split := strings.Split(serversString, ",")
-	servers := make([]string, 0)
-	for i, s := range split {
-		if strings.Trim(s, " ") == "" {
-			return nil, cerrors.Errorf("empty %d. server", i)
-		}
-		servers = append(servers, s)
-	}
-	return servers, nil
 }
 
 func (c *segmentProducer) Send(key []byte, payload []byte) error {
