@@ -16,12 +16,11 @@ package kafka
 
 import (
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/confluentinc/confluent-kafka-go/kafka"
-	"github.com/google/uuid"
-	skafka "github.com/segmentio/kafka-go"
+	"github.com/segmentio/kafka-go"
 )
 
 const (
@@ -39,34 +38,15 @@ var Required = []string{Servers, Topic}
 // When changing this struct, please also change the plugin specification (in main.go) as well as the ReadMe.
 type Config struct {
 	// A list of bootstrap servers, which will be used to discover all the servers in a cluster.
-	// Maps to "bootstrap.servers" in a Kafka consumer's configuration
-	Servers string
+	Servers []string
 	Topic   string
-	// Maps to "security.protocol" in a Kafka consumer's configuration
-	SecurityProtocol string
-	// Maps to "acks" in a Kafka consumer's configuration
-	Acks            skafka.RequiredAcks
+	// Required acknowledgments when writing messages to a topic:
+	// Can be: 0, 1, -1 (all)
+	Acks            kafka.RequiredAcks
 	DeliveryTimeout time.Duration
 	// Read all messages present in a source topic.
 	// Default value: false (only new messages are read)
 	ReadFromBeginning bool
-}
-
-func (c Config) AsKafkaCfg() *kafka.ConfigMap {
-	kafkaCfg := &kafka.ConfigMap{
-		"bootstrap.servers": c.Servers,
-		"group.id":          uuid.New().String(),
-		// because we wan't to be able to 'seek' to specific positions in a topic
-		// we need to manually manage the consumer state.
-		"enable.auto.commit": false,
-		"client.id":          "conduit-kafka-source",
-	}
-
-	if c.SecurityProtocol != "" {
-		// nolint:errcheck // returns nil always
-		kafkaCfg.SetKey("security.protocol", c.SecurityProtocol)
-	}
-	return kafkaCfg
 }
 
 func Parse(cfg map[string]string) (Config, error) {
@@ -75,10 +55,14 @@ func Parse(cfg map[string]string) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	// parse servers
+	servers, err := split(cfg[Servers])
+	if err != nil {
+		return Config{}, cerrors.Errorf("invalid servers: %w", err)
+	}
 	var parsed = Config{
-		Servers:          cfg[Servers],
-		Topic:            cfg[Topic],
-		SecurityProtocol: cfg[SecurityProtocol],
+		Servers: servers,
+		Topic:   cfg[Topic],
 	}
 	// parse acknowledgment setting
 	ack, err := parseAcks(cfg[Acks])
@@ -107,12 +91,12 @@ func Parse(cfg map[string]string) (Config, error) {
 	return parsed, nil
 }
 
-func parseAcks(ack string) (skafka.RequiredAcks, error) {
+func parseAcks(ack string) (kafka.RequiredAcks, error) {
 	// when ack is empty, return default (which is 'all')
 	if ack == "" {
-		return skafka.RequireAll, nil
+		return kafka.RequireAll, nil
 	}
-	acks := skafka.RequiredAcks(0)
+	acks := kafka.RequiredAcks(0)
 	err := acks.UnmarshalText([]byte(ack))
 	if err != nil {
 		return 0, cerrors.Errorf("unknown ack mode: %w", err)
@@ -156,4 +140,16 @@ func checkRequired(cfg map[string]string) error {
 
 func requiredConfigErr(name string) error {
 	return cerrors.Errorf("%q config value must be set", name)
+}
+
+func split(serversString string) ([]string, error) {
+	split := strings.Split(serversString, ",")
+	servers := make([]string, 0)
+	for i, s := range split {
+		if strings.Trim(s, " ") == "" {
+			return nil, cerrors.Errorf("empty %d. server", i)
+		}
+		servers = append(servers, s)
+	}
+	return servers, nil
 }

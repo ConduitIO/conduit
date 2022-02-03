@@ -13,7 +13,13 @@ export default class PipelineController extends Controller {
   @action
   @waitFor
   async startPipeline(pipeline) {
-    await pipeline.startPipeline();
+    try {
+      await pipeline.startPipeline();
+    } catch (error) {
+      this._handleStartStopPipelineError(error);
+      return;
+    }
+
     await pipeline.reload();
     pipeline.onPipelineEvent(
       'onPipelineDegraded',
@@ -24,8 +30,14 @@ export default class PipelineController extends Controller {
   }
 
   @action
+  @waitFor
   async stopPipeline(pipeline) {
-    await pipeline.stopPipeline();
+    try {
+      await pipeline.stopPipeline();
+    } catch (error) {
+      this._handleStartStopPipelineError(error);
+      return;
+    }
     await pipeline.reload();
   }
 
@@ -40,5 +52,22 @@ export default class PipelineController extends Controller {
         this.pipelinesController.setPipelineRunningError(pipeline.state.error);
       },
     });
+  }
+
+  _handleStartStopPipelineError(error) {
+    if (error.response?.data) {
+      const message = error.response.data.message;
+      this.flashMessages.add({
+        type: 'error',
+        message,
+        sticky: true,
+      });
+    } else {
+      this.flashMessages.add({
+        type: 'error',
+        message: error.message,
+        sticky: true,
+      });
+    }
   }
 }

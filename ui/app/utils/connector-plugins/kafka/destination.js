@@ -26,23 +26,6 @@ export default class KafkaDestination extends ConnectorPlugin {
         { isRequired: true }
       ),
       generateBlueprint(
-        'securityProtocol',
-        'Security Protocol',
-        'Protocol used to communicate with brokers',
-        'string',
-        {
-          isRequired: false,
-          validations: [
-            {
-              type: 'inclusion',
-              options: {
-                list: ['PLAINTEXT', 'SSL', 'SASL_PLAINTEXT', 'SASL_SSL'],
-              },
-            },
-          ],
-        }
-      ),
-      generateBlueprint(
         'acks',
         'Acknowledgements',
         'The number of acknowledgments required before considering a record written to Kafka',
