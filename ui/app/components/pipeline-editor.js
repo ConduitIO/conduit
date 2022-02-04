@@ -175,6 +175,9 @@ export default class PipelineEditorComponent extends Component {
 
   @action
   cancelCreateConnectorModal() {
+    if (this.connectorModalModel) {
+      this.connectorModalModel.data.unloadRecord();
+    }
     this.connectorModalModel = null;
     this.isShowingNewConnectorModal = false;
   }
@@ -283,5 +286,11 @@ export default class PipelineEditorComponent extends Component {
     run(() => {
       this.pipelineNodeManager.regeneratePaths();
     });
+  }
+
+  willDestroy() {
+    super.willDestroy(...arguments);
+
+    this.cancelCreateConnectorModal();
   }
 }

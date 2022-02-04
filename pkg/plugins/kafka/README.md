@@ -1,16 +1,18 @@
 ### General
-The Conduit Kafka plugin provides both, a destination and source Kafka connector, for Conduit.
+The Conduit Kafka plugin provides both, a source and a destination Kafka connector, for Conduit.
 
 ### How it works?
-Under the hood, the plugin uses [Confluent's Golang Client for Apache Kafka(tm)](https://github.com/confluentinc/confluent-kafka-go).
-This client supports a wide range of configuration parameters, which makes it possible to fine tune the plugin.
+Under the hood, the plugin uses [Segment's Go Client for Apache Kafka(tm)](https://github.com/segmentio/kafka-go). It was 
+chosen since it has no CGo dependency, making it possible to build the plugin for a wider range of platforms and architectures.
+It also supports contexts, which will likely use in the future.
 
 #### Source
-The Kafka source manages the offsets manually. The main reason for this is that the source connector needs to be able to
-"seek" to any offset in a Kafka topic.
+A Kafka source connector is represented by a single consumer in a Kafka consumer group. By virtue of that, a source's 
+logical position is the respective consumer's offset in Kafka. Internally, though, we're not saving the offset as the 
+position: instead, we're saving the consumer group ID, since that's all which is needed for Kafka to find the offsets for
+our consumer.
 
-If a messages is not received from a broker in a specified timeout (which is 5 seconds, and defined by `msgTimeout` in `source.go`),
-the Kafka source returns a "recoverable error", which indicates to Conduit that it should try reading data after some time again.
+A source is getting associated with a consumer group ID the first time the `Read()` method is called.
 
 #### Destination
 The destination connector uses **synchronous** writes to Kafka. Proper buffering support which will enable asynchronous 
@@ -32,7 +34,6 @@ There's no global, plugin configuration. Each connector instance is configured s
 |------|---------|-------------|----------|---------------|
 |`servers`|destination, source|A list of bootstrap servers to which the plugin will connect.|true| |
 |`topic`|destination, source|The topic to which records will be written to.|true| |
-|`securityProtocol`|destination, source|Protocol used to communicate with brokers. Valid values are: PLAINTEXT, SSL, SASL_PLAINTEXT, SASL_SSL.|false| |
 |`acks`|destination|The number of acknowledgments required before considering a record written to Kafka. Valid values: 0, 1, all|false|`all`|
 |`deliveryTimeout`|destination|Message delivery timeout.|false|`10s`|
 |`readFromBeginning`|destination|Whether or not to read a topic from beginning (i.e. existing messages or only new messages).|false|`false`|

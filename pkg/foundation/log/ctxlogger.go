@@ -17,7 +17,6 @@ package log
 import (
 	"context"
 	"os"
-	"time"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/rs/zerolog"
@@ -53,7 +52,11 @@ func Nop() CtxLogger {
 // Prod returns a production logger. Output is formatted as JSON, minimum level
 // is set to INFO.
 func Prod() CtxLogger {
-	zlogger := zerolog.New(os.Stderr).
+	w := zerolog.NewConsoleWriter()
+	w.TimeFormat = "2006-01-02T15:04:05+00:00"
+	w.Out = os.Stderr
+
+	zlogger := zerolog.New(w).
 		With().
 		Timestamp().
 		Stack().
@@ -67,7 +70,7 @@ func Prod() CtxLogger {
 // set to DEBUG.
 func Dev() CtxLogger {
 	w := zerolog.NewConsoleWriter()
-	w.TimeFormat = time.StampMilli
+	w.TimeFormat = "2006-01-02T15:04:05+00:00"
 
 	zlogger := zerolog.New(w).
 		With().

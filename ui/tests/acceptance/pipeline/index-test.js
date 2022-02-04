@@ -2,6 +2,7 @@ import { assert, module, test } from 'qunit';
 import { find, visit, click, waitUntil } from '@ember/test-helpers';
 import { setupApplicationTest } from 'ember-qunit';
 import { setupMirage } from 'ember-cli-mirage/test-support';
+import { Response } from 'ember-cli-mirage';
 
 const page = {
   pipelineSubheaderName: '[data-test-pipeline-subheader-name]',
@@ -26,6 +27,7 @@ const page = {
   pipelineStatusIndicator: '[data-test-pipeline-status-indicator]',
   pipelineStatusButton: '[data-test-pipeline-status] button',
   pipelineStatusStart: "[data-test-pipeline-status-action='start']",
+  pipelineStatusStop: "[data-test-pipeline-status-action='stop']",
 
   connectorOverviewListItem: '[data-test-connector-overview-list-item]',
   connectorOverviewButton: '[data-test-connector-overview-button]',
@@ -120,6 +122,7 @@ module('Acceptance | pipeline/index', function (hooks) {
   module('adding a connector to a pipeline', function (hooks) {
     hooks.beforeEach(async function () {
       const pipeline = this.server.create('pipeline');
+      this.pipeline = pipeline;
 
       await visit(`/pipelines/${pipeline.id}`);
     });
@@ -140,6 +143,24 @@ module('Acceptance | pipeline/index', function (hooks) {
       await click(page.pipelineAddNewSourceButton);
       await click(page.newConnectorModalCancelButton);
       assert.dom(page.newConnectorModal).doesNotExist();
+    });
+
+    module('canceling adding a connector', function (hooks) {
+      hooks.beforeEach(async function () {
+        await click(page.pipelineAddNewNodeButton);
+        await click(page.pipelineAddNewSourceButton);
+        await click(page.newConnectorModalCancelButton);
+
+        await click(page.pipelineAddNewNodeButton);
+        await click(page.pipelineAddNewSourceButton);
+        await click(page.newConnectorModalCancelButton);
+      });
+
+      test('unloads the new record and doesnt leave ghost connectors in the pipeline', async function (assert) {
+        await click(page.pipelineTopNavIndexLink);
+        await click(`[data-test-pipeline-list-item='${this.pipeline.id}']`);
+        assert.dom(page.pipelineEditorZeroState).exists();
+      });
     });
   });
 
@@ -163,6 +184,68 @@ module('Acceptance | pipeline/index', function (hooks) {
       // We reload the pipeline up front, and then again when polling
       // 3 assertions total (including dom assertion) to confirm polling works.
       assert.expect(3);
+    });
+  });
+
+  module('starting a pipeline that synchronously errors out', function (hooks) {
+    hooks.beforeEach(async function () {
+      const pipeline = this.server.create('pipeline');
+      this.set('pipeline', pipeline);
+
+      this.server.post('/pipelines/:id/start', function () {
+        return new Response(
+          500,
+          {},
+          {
+            code: 13,
+            message: 'failed to start pipeline',
+            details: [],
+          }
+        );
+      });
+
+      await visit(`/pipelines/${pipeline.id}`);
+
+      await click(page.pipelineStatusButton);
+
+      await click(page.pipelineStatusStart);
+    });
+
+    test('it displays an error notification', function (assert) {
+      assert.dom(page.errorTitle).containsText('failed to start pipeline');
+    });
+  });
+
+  module('stopping a pipeline that synchronously errors out', function (hooks) {
+    hooks.beforeEach(async function () {
+      const pipeline = this.server.create(
+        'pipeline',
+        { state: { status: 'STATUS_RUNNING' } },
+        'withFileConnectors'
+      );
+      this.set('pipeline', pipeline);
+
+      this.server.post('/pipelines/:id/stop', function () {
+        return new Response(
+          500,
+          {},
+          {
+            code: 13,
+            message: 'failed to stop pipeline',
+            details: [],
+          }
+        );
+      });
+
+      await visit(`/pipelines/${pipeline.id}`);
+
+      await click(page.pipelineStatusButton);
+
+      await click(page.pipelineStatusStop);
+    });
+
+    test('it displays an error notification', function (assert) {
+      assert.dom(page.errorTitle).containsText('failed to stop pipeline');
     });
   });
 

@@ -30,9 +30,6 @@ export default class PipelineEditorConnectorSlidePanel extends Component {
   store;
 
   @tracked
-  isShowingDetailsTab = true;
-
-  @tracked
   isShowingAvailableTransforms = false;
 
   @tracked

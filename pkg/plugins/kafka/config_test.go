@@ -40,9 +40,45 @@ func TestParse_ServersMissing(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestNewProducer_InvalidServers(t *testing.T) {
+	testCases := []struct {
+		name   string
+		config map[string]string
+		exp    string
+	}{
+		{
+			name: "empty server string in the middle",
+			config: map[string]string{
+				Servers: "host1:1111,,host2:2222",
+				Topic:   "topic",
+			},
+			exp: "invalid servers: empty 1. server",
+		},
+		{
+			name: "single blank server string",
+			config: map[string]string{
+				Servers: "     ",
+				Topic:   "topic",
+			},
+			exp: "invalid servers: empty 0. server",
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			parsed, err := Parse(tc.config)
+			assert.Equal(t, Config{}, parsed)
+			assert.Error(t, err)
+			assert.Equal(t, tc.exp, err.Error())
+		})
+	}
+}
+
 func TestParse_OneMissing_OnePresent(t *testing.T) {
 	parsed, err := Parse(map[string]string{
-		Servers: "localhost:9092"})
+		Servers: "localhost:9092",
+	})
 	assert.Equal(t, Config{}, parsed)
 	assert.Error(t, err)
 }
@@ -50,11 +86,11 @@ func TestParse_OneMissing_OnePresent(t *testing.T) {
 func TestParse_FullRequired(t *testing.T) {
 	parsed, err := Parse(map[string]string{
 		Servers: "localhost:9092",
-		Topic:   "hello-world-topic"})
+		Topic:   "hello-world-topic",
+	})
 
 	assert.Ok(t, err)
-	assert.True(t, Config{} != parsed, "expected parsed config not to be empty")
-	assert.Equal(t, "localhost:9092", parsed.Servers)
+	assert.Equal(t, []string{"localhost:9092"}, parsed.Servers)
 	assert.Equal(t, "hello-world-topic", parsed.Topic)
 }
 
@@ -99,10 +135,8 @@ func TestParse_Full(t *testing.T) {
 	})
 
 	assert.Ok(t, err)
-	assert.True(t, Config{} != parsed, "expected parsed config not to be empty")
-	assert.Equal(t, "localhost:9092", parsed.Servers)
+	assert.Equal(t, []string{"localhost:9092"}, parsed.Servers)
 	assert.Equal(t, "hello-world-topic", parsed.Topic)
-	assert.Equal(t, "SASL_SSL", parsed.SecurityProtocol)
 	assert.Equal(t, kafka.RequireAll, parsed.Acks)
 	assert.Equal(t, int64(1002), parsed.DeliveryTimeout.Milliseconds())
 	assert.Equal(t, true, parsed.ReadFromBeginning)
