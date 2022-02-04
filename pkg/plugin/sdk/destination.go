@@ -25,9 +25,14 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 )
 
-// Destination TODO
+// Destination receives records from Conduit and writes them to 3rd party
+// resources.
 // All implementations must embed UnimplementedDestination for forward
 // compatibility.
+// When implementing Destination you can choose between implementing the method
+// WriteAsync or Write. If both are implemented, then WriteAsync will be used.
+// Use WriteAsync if the plugin will cache records and write them to the 3rd
+// party resource in batches, otherwise use Write.
 type Destination interface {
 	// Configure is the first function to be called in a plugin. It provides the
 	// plugin with the configuration that needs to be validated and stored. In
@@ -158,6 +163,12 @@ func (a *destinationPluginAdapter) writeAsync(ctx context.Context, r Record, str
 	return a.impl.WriteAsync(ctx, r, a.ackFunc(r, stream))
 }
 
+// ackFunc creates an AckFunc that can be called to signal that the record was
+// processed. The destination plugin adapter keeps track of how many AckFunc
+// functions still need to be called, once an AckFunc returns it decrements the
+// internal counter by one.
+// It is allowed to call AckFunc only once, if it's called more than once it
+// will panic.
 func (a *destinationPluginAdapter) ackFunc(r Record, stream cpluginv1.DestinationRunStream) AckFunc {
 	var isCalled int32
 	return func(ackErr error) error {
@@ -194,7 +205,7 @@ func (a *destinationPluginAdapter) waitForAcks(ctx context.Context) error {
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
-	case <-time.After(time.Minute): // TODO make the timeout configurable
+	case <-time.After(time.Minute): // TODO make the timeout configurable (https://github.com/ConduitIO/conduit/issues/183)
 		return cerrors.New("stop timeout reached")
 	}
 }

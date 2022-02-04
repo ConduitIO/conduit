@@ -29,7 +29,7 @@ func Serve(
 ) {
 	err := serve(specFactory, sourceFactory, destinationFactory)
 	if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "error running source plugin: %+v", err)
+		_, _ = fmt.Fprintf(os.Stderr, "error running plugin: %+v", err)
 		os.Exit(1)
 	}
 }
