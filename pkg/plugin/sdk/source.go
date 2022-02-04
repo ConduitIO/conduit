@@ -26,7 +26,7 @@ import (
 	"gopkg.in/tomb.v2"
 )
 
-// Source TODO
+// Source fetches records from 3rd party resources and sends them to Conduit.
 // All implementations must embed UnimplementedSource for forward compatibility.
 type Source interface {
 	// Configure is the first function to be called in a plugin. It provides the
@@ -123,7 +123,7 @@ func (a *sourcePluginAdapter) Run(ctx context.Context, stream cpluginv1.SourceRu
 }
 
 func (a *sourcePluginAdapter) runRead(ctx context.Context, stream cpluginv1.SourceRunStream) error {
-	// TODO make backoff params configurable
+	// TODO make backoff params configurable (https://github.com/ConduitIO/conduit/issues/184)
 	b := &backoff.Backoff{
 		Factor: 2,
 		Min:    time.Millisecond * 100,
@@ -227,7 +227,7 @@ func (a *sourcePluginAdapter) Stop(ctx context.Context, req cpluginv1.SourceStop
 }
 
 func (a *sourcePluginAdapter) Teardown(ctx context.Context, req cpluginv1.SourceTeardownRequest) (cpluginv1.SourceTeardownResponse, error) {
-	// TODO add a timeout and kill plugin forcefully if needed
+	// TODO add a timeout and kill plugin forcefully if needed (https://github.com/ConduitIO/conduit/issues/185)
 	if a.t != nil {
 		_ = a.t.Wait() // wait for Run to stop running
 	}
