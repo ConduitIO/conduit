@@ -1,0 +1,109 @@
+name: public-roadmap
+
+on:
+  issues:
+    types: [demilestoned, milestoned]
+
+jobs:
+  # for debugging purpoeses
+  event_data:
+    runs-on: ubuntu-latest
+    steps:
+      - name: echo
+        env:
+          GITHUB_PAYLOAD: ${{ toJson(github) }}
+        run: |
+          echo "$GITHUB_PAYLOAD"
+
+
+  add_to_public_roadmap:
+    runs-on: ubuntu-latest
+    if: github.event.action == 'milestoned'
+    steps:
+      - name: Fetch project data
+        env:
+          GITHUB_TOKEN: ${{ secrets.PROJECT_AUTOMATION }}
+          ORGANIZATION: ConduitIO
+          PROJECT_NUMBER: 4
+        run: |
+          gh api graphql -f query='
+            query($org: String!, $number: Int!) {
+              organization(login: $org){
+                projectNext(number: $number) {
+                  id
+                  fields(first:20) {
+                    nodes {
+                      id
+                      name
+                    }
+                  }
+                }
+              }
+            }' -f org=$ORGANIZATION -F number=$PROJECT_NUMBER > project_data.json
+
+          echo 'PROJECT_ID='$(jq '.data.organization.projectNext.id' project_data.json) >> $GITHUB_ENV
+
+      # note that if the item was already on the roadmap we
+      # get an error from the api. that's ok.
+      - name: Add to Roadmap
+        env:
+          GITHUB_TOKEN: ${{ secrets.PROJECT_AUTOMATION }}
+          ISSUE_ID: ${{ github.event.issue.node_id }}
+        run: |
+          item_id="$( gh api graphql -f query='
+            mutation($project:ID!, $issue:ID!) {
+              addProjectNextItem(input: {projectId: $project, contentId: $issue}) {
+                projectNextItem {
+                  id
+                }
+              }
+            }' -f project=$PROJECT_ID -f issue=$ISSUE_ID --jq '.data.addProjectNextItem.projectNextItem.id')"
+
+
+  remove_from_public_roadmap:
+    runs-on: ubuntu-latest
+    # only remove if the mileston is null. If you change between milestones
+    # github will include the demilestoned event.
+    if: github.event.action == 'demilestoned' && github.event.issue.milestone == ''
+    steps:
+      - name: Fetch project data
+        env:
+          GITHUB_TOKEN: ${{ secrets.PROJECT_AUTOMATION }}
+          ORGANIZATION: ConduitIO
+          PROJECT_NUMBER: 4
+        run: |
+          gh api graphql -f query='
+            query($org: String!, $number: Int!) {
+              organization(login: $org){
+                projectNext(number: $number) {
+                  id
+                  fields(first:20) {
+                    nodes {
+                      id
+                      name
+                    }
+                  }
+                }
+              }
+            }' -f org=$ORGANIZATION -F number=$PROJECT_NUMBER > project_data.json
+
+          echo 'PROJECT_ID='$(jq '.data.organization.projectNext.id' project_data.json) >> $GITHUB_ENV
+
+      - name: Checkout Repo
+        uses: actions/checkout@v2
+
+      - name: Set Node Version
+        uses: actions/setup-node@v1
+        with:
+          node-version: '16'
+          cache: 'npm'
+
+      - name: Delete item from public roadmap
+        env:
+          GITHUB_TOKEN: ${{ secrets.PROJECT_AUTOMATION }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+        working-directory: ./.github/actions/
+        run: |
+          npm install
+          npm run roadmap
+
