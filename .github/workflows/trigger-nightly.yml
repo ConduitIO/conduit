@@ -24,7 +24,7 @@ jobs:
           git config user.name "${GITHUB_ACTOR}"
           git config user.email "${GITHUB_ACTOR}@users.noreply.github.com"
 
-          TAG=v0.2.0-nightly.$(date +'%s')
+          TAG=v0.2.0-nightly.$(date +'%Y%m%d')
           git tag -a $TAG -m "$TAG: nightly build"
           git push origin $TAG
       - name: 'Clean up nightly releases'
