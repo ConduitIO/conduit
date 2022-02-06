@@ -17,6 +17,7 @@ package connector
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -176,6 +177,15 @@ func (s *source) Read(ctx context.Context) (record.Record, error) {
 	if err != nil {
 		return r, err
 	}
+
+	if r.Key == nil {
+		r.Key = record.RawData{}
+	}
+	if r.Payload == nil {
+		r.Payload = record.RawData{}
+	}
+	r.ReadAt = time.Now().UTC() // TODO now that records can be read asynchronously, should we move this to the plugin SDK?
+	r.SourceID = s.ID()
 
 	return r, nil
 }
