@@ -19,23 +19,18 @@ import (
 	"sync"
 	"time"
 
-	"github.com/conduitio/conduit/pkg/plugin"
-	"github.com/conduitio/conduit/pkg/record"
-
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics"
-	"github.com/conduitio/conduit/pkg/plugins"
-	"github.com/jpillora/backoff"
+	"github.com/conduitio/conduit/pkg/plugin"
 )
 
 // SourceNode wraps a Source connector and implements the Pub node interface
 type SourceNode struct {
-	Name           string
-	Source         connector.Source
-	ConnectorTimer metrics.Timer
-	PipelineTimer  metrics.Timer
+	Name          string
+	Source        connector.Source
+	PipelineTimer metrics.Timer
 
 	stopReason error
 	base       pubNodeBase
@@ -74,38 +69,18 @@ func (n *SourceNode) Run(ctx context.Context) (err error) {
 		}
 	}()
 
-	b := &backoff.Backoff{
-		Factor: 2,
-		Min:    time.Millisecond * 100,
-		Max:    time.Second * 5,
-	}
-	ticker := time.NewTicker(1) // first tick happens right away
-	defer ticker.Stop()
-
 	trigger, cleanup, err := n.base.Trigger(
 		ctx,
 		n.logger,
-		ticker.C,
 		n.Source.Errors(),
-		func(tick interface{}) (*Message, error) {
+		func(ctx context.Context) (*Message, error) {
 			n.logger.Trace(ctx).Msg("reading record from source connector")
 
-			readTime := time.Now().UTC()
 			r, err := n.Source.Read(ctx)
 			if err != nil {
 				return nil, cerrors.Errorf("error reading from source: %w", err)
 			}
-			if r.Key == nil {
-				r.Key = record.RawData{}
-			}
-			if r.Payload == nil {
-				r.Payload = record.RawData{}
-			}
-			// only record metric if no error occurred, this way we don't record
-			// empty reads
-			n.ConnectorTimer.Update(time.Since(readTime))
-			r.ReadAt = readTime
-			r.SourceID = n.ID()
+
 			return &Message{Record: r}, nil
 		},
 	)
@@ -120,11 +95,6 @@ func (n *SourceNode) Run(ctx context.Context) (err error) {
 			if cerrors.Is(err, plugin.ErrStreamNotOpen) {
 				// node was stopped gracefully, return stop reason
 				return n.stopReason
-			}
-			if plugins.IsRecoverableError(err) {
-				n.logger.Trace(ctx).Err(err).Msg("backing off because of recoverable error")
-				ticker.Reset(b.Duration())
-				continue
 			}
 			return err
 		}
@@ -158,9 +128,6 @@ func (n *SourceNode) Run(ctx context.Context) (err error) {
 			msg.Drop()
 			return err
 		}
-
-		ticker.Reset(1) // next tick should happen right away
-		b.Reset()       // reset backoff retry
 	}
 }
 
