@@ -21,7 +21,7 @@ const main = async function() {
       queryResult = await graphqlWithAuth(`
       query {
         organization(login: "conduitio") {
-          projectNext(number: 4) {
+          projectNext(number: 3) {
             items(first: 100) {
               totalCount
               pageInfo {
@@ -42,7 +42,7 @@ const main = async function() {
       queryResult = await graphqlWithAuth(`
       query pageResults($afterid: String!) {
         organization(login: "conduitio") {
-          projectNext(number: 4) {
+          projectNext(number: 3) {
             items(first: 100, after: $afterid) {
               totalCount
               pageInfo {
@@ -79,7 +79,7 @@ const main = async function() {
 
   // delete from project
   if (found_id.length > 1) {
-    console.log("DELETING PROJECT");
+    console.log("DELETING PROJECT ISSUE");
     console.log("  - ID: " + found_id);
     await graphqlWithAuth(`
       mutation($project:ID!, $issue:ID!) {

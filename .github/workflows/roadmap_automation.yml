@@ -31,7 +31,7 @@ jobs:
 
   remove_from_public_roadmap:
     runs-on: ubuntu-latest
-    # only remove if the mileston is null. If you change between milestones
+    # only remove if the milestone is null. If you change between milestones
     # github will include the demilestoned event.
     if: github.event.action == 'demilestoned' && github.event.issue.milestone == ''
     steps:
@@ -49,8 +49,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.PROJECT_AUTOMATION }}
           ISSUE_TITLE: ${{ github.event.issue.title }}
           PROJECT_ID: PN_kwDOBL3ZPs4AAigJ
-          ORGANIZATION: ConduitIO
-          PROJECT_NUMBER: 3
         working-directory: ./.github/actions/
         run: |
           npm install
