@@ -47,11 +47,11 @@ func TestConfigureDestination_KafkaProducerCreated(t *testing.T) {
 	underTest := kafka.Destination{}
 	err := underTest.Configure(context.Background(), configMap())
 	assert.Ok(t, err)
-	assert.NotNil(t, underTest.Client)
-	defer underTest.Client.Close()
 
 	err = underTest.Open(context.Background())
 	assert.Ok(t, err)
+	assert.NotNil(t, underTest.Client)
+	defer underTest.Client.Close()
 }
 
 func TestTeardown_ClosesClient(t *testing.T) {
