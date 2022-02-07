@@ -65,9 +65,6 @@ func TestReadPosition(t *testing.T) {
 	consumerMock := mock.NewConsumer(ctrl)
 	consumerMock.
 		EXPECT().
-		StartFrom(cfg, groupID)
-	consumerMock.
-		EXPECT().
 		Get(gomock.Any()).
 		Return(kafkaMsg, groupID, nil)
 
@@ -80,29 +77,6 @@ func TestReadPosition(t *testing.T) {
 	assert.Equal(t, groupID, string(rec.Position))
 }
 
-func TestRead_StartFromCalledOnce(t *testing.T) {
-	ctrl := gomock.NewController(t)
-
-	cfg := connectorCfg()
-	pos := uuid.NewString()
-
-	consumerMock := mock.NewConsumer(ctrl)
-	consumerMock.
-		EXPECT().
-		StartFrom(cfg, pos)
-	consumerMock.
-		EXPECT().
-		Get(gomock.Any()).
-		Return(testKafkaMsg(), pos, nil).
-		Times(2)
-
-	underTest := kafka.Source{Consumer: consumerMock, Config: cfg}
-	_, err := underTest.Read(context.Background())
-	assert.Ok(t, err)
-	_, err = underTest.Read(context.Background())
-	assert.Ok(t, err)
-}
-
 func TestRead(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
@@ -111,9 +85,6 @@ func TestRead(t *testing.T) {
 	pos := uuid.NewString()
 
 	consumerMock := mock.NewConsumer(ctrl)
-	consumerMock.
-		EXPECT().
-		StartFrom(cfg, pos)
 	consumerMock.
 		EXPECT().
 		Get(gomock.Any()).
