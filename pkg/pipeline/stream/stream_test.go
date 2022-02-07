@@ -43,10 +43,9 @@ func Example_simpleStream() {
 	ctrl := gomockCtrl(logger)
 
 	node1 := &stream.SourceNode{
-		Name:           "generator",
-		Source:         generatorSource(ctrl, logger, "generator", 10, time.Millisecond*10),
-		ConnectorTimer: noop.Timer{},
-		PipelineTimer:  noop.Timer{},
+		Name:          "generator",
+		Source:        generatorSource(ctrl, logger, "generator", 10, time.Millisecond*10),
+		PipelineTimer: noop.Timer{},
 	}
 	node2 := &stream.DestinationNode{
 		Name:           "printer",
@@ -97,6 +96,7 @@ func Example_simpleStream() {
 	// DBG got record message_id=generator/10 node_id=printer
 	// DBG received ack message_id=generator/10 node_id=generator
 	// INF stopping source connector component=SourceNode node_id=generator
+	// DBG received error on error channel error="error reading from source: stream not open" component=SourceNode node_id=generator
 	// DBG incoming messages channel closed component=DestinationNode node_id=printer
 	// INF finished successfully
 }
@@ -111,16 +111,14 @@ func Example_complexStream() {
 	var count int
 
 	node1 := &stream.SourceNode{
-		Name:           "generator1",
-		Source:         generatorSource(ctrl, logger, "generator1", 10, time.Millisecond*10),
-		ConnectorTimer: noop.Timer{},
-		PipelineTimer:  noop.Timer{},
+		Name:          "generator1",
+		Source:        generatorSource(ctrl, logger, "generator1", 10, time.Millisecond*10),
+		PipelineTimer: noop.Timer{},
 	}
 	node2 := &stream.SourceNode{
-		Name:           "generator2",
-		Source:         generatorSource(ctrl, logger, "generator2", 10, time.Millisecond*10),
-		ConnectorTimer: noop.Timer{},
-		PipelineTimer:  noop.Timer{},
+		Name:          "generator2",
+		Source:        generatorSource(ctrl, logger, "generator2", 10, time.Millisecond*10),
+		PipelineTimer: noop.Timer{},
 	}
 	node3 := &stream.FaninNode{Name: "fanin"}
 	node4 := &stream.ProcessorNode{
@@ -245,6 +243,8 @@ func Example_complexStream() {
 	// DBG received ack message_id=generator1/10 node_id=generator1
 	// INF stopping source connector component=SourceNode node_id=generator1
 	// INF stopping source connector component=SourceNode node_id=generator2
+	// DBG received error on error channel error="error reading from source: stream not open" component=SourceNode node_id=generator1
+	// DBG received error on error channel error="error reading from source: stream not open" component=SourceNode node_id=generator2
 	// DBG incoming messages channel closed component=ProcessorNode node_id=counter
 	// DBG incoming messages channel closed component=DestinationNode node_id=printer2
 	// DBG incoming messages channel closed component=DestinationNode node_id=printer1
@@ -287,6 +287,7 @@ func generatorSource(ctrl *gomock.Controller, logger log.CtxLogger, nodeID strin
 		}
 
 		return record.Record{
+			SourceID: nodeID,
 			Position: record.Position(strconv.Itoa(position)),
 		}, nil
 	}).MinTimes(recordCount + 1)

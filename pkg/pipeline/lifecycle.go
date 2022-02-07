@@ -253,11 +253,6 @@ func (s *Service) buildSourceNodes(
 		sourceNode := stream.SourceNode{
 			Name:   instance.ID(),
 			Source: instance.(connector.Source),
-			ConnectorTimer: measure.ConnectorExecutionDurationTimer.WithValues(
-				pl.Config.Name,
-				instance.Config().Plugin,
-				strings.ToLower(instance.Type().String()),
-			),
 			PipelineTimer: measure.PipelineExecutionDurationTimer.WithValues(
 				pl.Config.Name,
 			),
