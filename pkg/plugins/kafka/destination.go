@@ -24,7 +24,7 @@ import (
 
 type Destination struct {
 	sdk.UnimplementedDestination
-	
+
 	Client Producer
 	Config Config
 }

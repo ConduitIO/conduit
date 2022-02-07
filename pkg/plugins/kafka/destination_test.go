@@ -22,33 +22,36 @@ import (
 	"time"
 
 	"github.com/conduitio/conduit/pkg/foundation/assert"
-	"github.com/conduitio/conduit/pkg/plugins"
+	"github.com/conduitio/conduit/pkg/plugin/sdk"
 	"github.com/conduitio/conduit/pkg/plugins/kafka"
 	"github.com/conduitio/conduit/pkg/plugins/kafka/mock"
-	"github.com/conduitio/conduit/pkg/record"
 	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
 )
 
-func TestOpen_FailsWhenConfigEmpty(t *testing.T) {
+func TestConfigureDestination_FailsWhenConfigEmpty(t *testing.T) {
 	underTest := kafka.Destination{}
-	err := underTest.Open(context.TODO(), plugins.Config{})
+	err := underTest.Configure(context.Background(), make(map[string]string))
 	assert.Error(t, err)
 	assert.True(t, strings.HasPrefix(err.Error(), "config is invalid:"), "incorrect error msg")
 }
 
-func TestOpen_FailsWhenConfigInvalid(t *testing.T) {
+func TestConfigureDestination_FailsWhenConfigInvalid(t *testing.T) {
 	underTest := kafka.Destination{}
-	err := underTest.Open(context.TODO(), plugins.Config{Settings: map[string]string{"foobar": "foobar"}})
+	err := underTest.Configure(context.Background(), map[string]string{"foobar": "foobar"})
 	assert.Error(t, err)
 	assert.True(t, strings.HasPrefix(err.Error(), "config is invalid:"), "incorrect error msg")
 }
 
-func TestOpen_KafkaProducerCreated(t *testing.T) {
+func TestConfigureDestination_KafkaProducerCreated(t *testing.T) {
 	underTest := kafka.Destination{}
-	err := underTest.Open(context.TODO(), config())
+	err := underTest.Configure(context.Background(), configMap())
 	assert.Ok(t, err)
 	assert.NotNil(t, underTest.Client)
+	defer underTest.Client.Close()
+
+	err = underTest.Open(context.Background())
+	assert.Ok(t, err)
 }
 
 func TestTeardown_ClosesClient(t *testing.T) {
@@ -61,7 +64,7 @@ func TestTeardown_ClosesClient(t *testing.T) {
 		Return()
 
 	underTest := kafka.Destination{Client: clientMock, Config: connectorCfg()}
-	assert.Ok(t, underTest.Teardown())
+	assert.Ok(t, underTest.Teardown(context.Background()))
 }
 
 func TestWrite_ClientSendsMessage(t *testing.T) {
@@ -80,9 +83,8 @@ func TestWrite_ClientSendsMessage(t *testing.T) {
 
 	underTest := kafka.Destination{Client: clientMock, Config: connectorCfg()}
 
-	res, err := underTest.Write(context.TODO(), rec)
+	err := underTest.Write(context.Background(), rec)
 	assert.Ok(t, err)
-	assert.NotNil(t, res)
 }
 
 func connectorCfg() kafka.Config {
@@ -90,21 +92,16 @@ func connectorCfg() kafka.Config {
 	return cfg
 }
 
-func config() plugins.Config {
-	return plugins.Config{Settings: configMap()}
-}
-
 func configMap() map[string]string {
 	return map[string]string{kafka.Servers: "localhost:9092", kafka.Topic: "test"}
 }
 
-func testRec() record.Record {
-	return record.Record{
+func testRec() sdk.Record {
+	return sdk.Record{
 		Position:  []byte(uuid.NewString()),
 		Metadata:  nil,
 		CreatedAt: time.Time{},
-		ReadAt:    time.Time{},
-		Key:       record.RawData{Raw: []byte(uuid.NewString())},
-		Payload:   record.RawData{Raw: []byte(fmt.Sprintf("test message %s", time.Now()))},
+		Key:       sdk.RawData(uuid.NewString()),
+		Payload:   sdk.RawData(fmt.Sprintf("test message %s", time.Now())),
 	}
 }
