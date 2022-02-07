@@ -4,7 +4,7 @@ on:
   schedule:
     # * is a special character in YAML, so you have to quote this string
     # we want the nightly builds only on work days
-    - cron:  '0 * * * 1-5'
+    - cron:  '0 0 * * 1-5'
   workflow_dispatch:
 
 jobs:
