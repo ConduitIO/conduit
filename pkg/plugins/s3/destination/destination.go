@@ -93,6 +93,7 @@ func (d *Destination) WriteAsync(ctx context.Context, r sdk.Record, ackFunc sdk.
 	defer d.Mutex.Unlock()
 
 	d.Buffer = append(d.Buffer, r)
+	d.AckFuncCache = append(d.AckFuncCache, ackFunc)
 
 	if len(d.Buffer) >= int(d.Config.BufferSize) {
 		bufferedRecords := d.Buffer
