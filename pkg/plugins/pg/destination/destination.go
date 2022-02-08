@@ -99,13 +99,15 @@ func (s *Destination) Write(ctx context.Context, r record.Record) (record.Positi
 		}
 
 		// add key data to the query
-		for k, v := range d {
-			colArgs = append(colArgs, k)
-			valArgs = append(valArgs, v)
-			keyCol = k // set the key column variable for later reference
+		for key, val := range d {
+			keyCol = key
+			if _, ok := payload[key]; ok {
+				break
+			}
+			colArgs = append(colArgs, key)
+			valArgs = append(valArgs, val)
 		}
 	}
-
 	// check if the record has a table set. if it does, write the record to that
 	// table. if it doesn't, error out.
 	table, ok := r.Metadata["table"]
@@ -156,7 +158,6 @@ func (s *Destination) Write(ctx context.Context, r record.Record) (record.Positi
 		// return current position that hasn't been updated and the error
 		return s.Position, cerrors.Errorf("insert exec failed: %w", err)
 	}
-
 	// assign s.Position after we've successfully written the record
 	s.Position = r.Position
 	return s.Position, nil
