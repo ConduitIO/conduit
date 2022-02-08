@@ -16,8 +16,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.PROJECT_AUTOMATION }}
           ISSUE_ID: ${{ github.event.issue.node_id }}
           PROJECT_ID: PN_kwDOBL3ZPs4AAigJ
-          ORGANIZATION: ConduitIO
-          PROJECT_NUMBER: 3
         run: |
           item_id="$( gh api graphql -f query='
             mutation($project:ID!, $issue:ID!) {
@@ -49,6 +47,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.PROJECT_AUTOMATION }}
           ISSUE_TITLE: ${{ github.event.issue.title }}
           PROJECT_ID: PN_kwDOBL3ZPs4AAigJ
+          ISSUE_ID: ${{ github.event.issue.node_id }}
         working-directory: ./.github/actions/
         run: |
           npm install

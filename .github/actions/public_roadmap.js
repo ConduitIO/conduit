@@ -9,78 +9,48 @@ const main = async function() {
     },
   });
 
-  var found_id = "";
-  var title = process.env.ISSUE_TITLE;
   var queryResult;
-  var cursor = "";
+  var issueToFind = process.env.ISSUE_ID;
+  var projectToFind = process.env.PROJECT_ID;
+  var found_id;
 
-  console.log("LOOKING FOR ISSUE: " + title);
-
-  do {
-    if (cursor.length == 0) {
-      queryResult = await graphqlWithAuth(`
-      query {
-        organization(login: "conduitio") {
-          projectNext(number: 3) {
-            items(first: 100) {
-              totalCount
-              pageInfo {
-                endCursor
-                hasNextPage
-              }
-              nodes {
+  // Find the issue on the project boards. Don't think we'll have
+  // tons of project boards, so we'll hard code this in.
+  //
+  console.log("LOOKING FOR ISSUE: " + issueToFind);
+  queryResult = await graphqlWithAuth(`
+    query findIssue($issue_id: ID!) {
+      node(id: $issue_id) {
+        ... on Issue {
+          projectNextItems(first: 100) {
+            totalCount
+            nodes {
+              id
+              title
+              project {
                 id
-                title
-                databaseId
               }
             }
           }
         }
       }
-      `);
-    } else {
-      queryResult = await graphqlWithAuth(`
-      query pageResults($afterid: String!) {
-        organization(login: "conduitio") {
-          projectNext(number: 3) {
-            items(first: 100, after: $afterid) {
-              totalCount
-              pageInfo {
-                endCursor
-                hasNextPage
-              }
-              nodes {
-                id
-                title
-                databaseId
-              }
-            }
-          }
-        }
-      }
-      `,
-      {
-        afterid: cursor
-      });
     }
+  `,
+  {
+    issue_id: issueToFind
+  });
+  console.log("queryResult: " + JSON.stringify(queryResult));
 
-    console.log("queryResult: " + JSON.stringify(queryResult));
-    last_cursor = queryResult["organization"]["projectNext"]["items"]["pageInfo"]["endCursor"];
-    nodes = queryResult["organization"]["projectNext"]["items"]["nodes"];
-
-    for(let node_id = 0; node_id < nodes.length; node_id++) {
-      console.log(JSON.stringify(nodes[node_id]));
-      if (nodes[node_id]["title"] === title) {
-        found_id = nodes[node_id]["id"];
-      }
+  nodes = queryResult["node"]["projectNextItems"]["nodes"];
+  for(let node_id = 0; node_id < nodes.length; node_id++) {
+    console.log(JSON.stringify(nodes[node_id]));
+    if (nodes[node_id]["project"]["id"] === projectToFind) {
+      found_id = nodes[node_id]["id"];
     }
-  } while (queryResult["organization"]["projectNext"]["items"]["pageInfo"]["hasNextPage"] && found_id.length == 0);
+  }
 
-
-  // delete from project
   if (found_id.length > 1) {
-    console.log("DELETING PROJECT ISSUE");
-    console.log("  - ID: " + found_id);
+    console.log("DELETING PROJECT ISSUE: " + issueToFind);
     await graphqlWithAuth(`
       mutation($project:ID!, $issue:ID!) {
         deleteProjectNextItem(input: {projectId: $project, itemId: $issue}) {
@@ -89,11 +59,12 @@ const main = async function() {
       }
     `,
     {
-      project: process.env.PROJECT_ID,
+      project: projectToFind,
       issue: found_id,
     })
+  } else {
+    console.log("COULDNT FIND ISSUE " + issueToFind + " on Project " + projectToFind);
   }
-
 
 }
 main();
