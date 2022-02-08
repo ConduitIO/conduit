@@ -14,25 +14,27 @@
 
 package pg
 
-import "github.com/conduitio/conduit/pkg/plugins"
+import (
+	"github.com/conduitio/conduit/pkg/plugin/sdk"
+)
 
 type Spec struct{}
 
 // Specify returns the Plugin's Specification
-func (s Spec) Specify() (plugins.Specification, error) {
-	return plugins.Specification{
+func (s Spec) Specify() (sdk.Specification, error) {
+	return sdk.Specification{
 		// Name: "postgres",// TODO uncomment after plugin is updated to SDK
 		Summary: "A PostgreSQL source and destination plugin for Conduit, written in Go.",
 		Version: "v0.0.1",
 		Author:  "Meroxa, Inc.",
-		DestinationParams: map[string]plugins.Parameter{
+		DestinationParams: map[string]sdk.Parameter{
 			"url": {
 				Default:     "true",
 				Required:    true,
 				Description: "connection url to the postgres destination.",
 			},
 		},
-		SourceParams: map[string]plugins.Parameter{
+		SourceParams: map[string]sdk.Parameter{
 			"table": {
 				Default:     "",
 				Required:    true,

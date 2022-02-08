@@ -14,13 +14,6 @@
 
 package main
 
-import (
-	"github.com/conduitio/conduit/pkg/plugins"
-	"github.com/conduitio/conduit/pkg/plugins/pg"
-	"github.com/conduitio/conduit/pkg/plugins/pg/destination"
-	"github.com/conduitio/conduit/pkg/plugins/pg/source"
-)
-
 func main() {
-	plugins.Run(&source.Source{}, &destination.Destination{}, pg.Spec{})
+	// plugins.Run(&source.Source{}, &destination.Destination{}, pg.Spec{})
 }

@@ -16,7 +16,7 @@
 
 package source
 
-import "github.com/conduitio/conduit/pkg/record"
+import "github.com/conduitio/conduit/pkg/plugin/sdk"
 
 // Iterator defines an iterator interface that all Iterators must fulfill.
 // It iterates over a first in first out queue.
@@ -24,12 +24,12 @@ type Iterator interface {
 	// Insert a record into the queue. This cannot error so it cannot be
 	// considered final or acknowledged, as Teardown will destroy the queue
 	// even if it has records in it.
-	Push(record.Record)
+	Push(sdk.Record)
 	// HasNext checks if there is a record in the queue. Must be called before
 	// calling Next.
 	HasNext() bool
 	// Next pops off the next record in the queue or an error.
-	Next() (record.Record, error)
+	Next() (sdk.Record, error)
 	// Teardown attempts to gracefully teardown the queue.
 	Teardown() error
 }
