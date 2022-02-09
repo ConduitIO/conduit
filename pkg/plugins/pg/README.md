@@ -1,8 +1,6 @@
-Conduit PostgreSQL Connectors 
-=============================
+# Conduit PostgreSQL Connectors 
 
-Source
-======
+# Source
 The Postgres Source Connector connects to a database with the provided `url` and
 then will call `Ping` to test the connection. If the `Ping` fails, the `Open`
 method will fail and the Connector won't be started.
@@ -51,11 +49,11 @@ Example configuration for CDC features:
 "cdc":              "true",
 "publication_name": "meroxademo",
 "slot_name":        "meroxademo",
-"url":              url, // connection url to the database
+"url":              url,
 "replication_url":  url,
-"key":              "key", // postgres column name of your table's primary key
-"table":            "records", // table that the connector should watch
-"columns":          "key,column1,column2,column3", // columns to include in payload
+"key":              "key",
+"table":            "records",
+"columns":          "key,column1,column2,column3",
 ```
 
 ### CDC Event Buffer
@@ -89,8 +87,7 @@ column names for the configured table and set them in memory.
 | slot_name        | name of the slot opened for replication events                                                                                  | req. for CDC mode    | `pglogrepl_demo`     |
 | replication_url  | URL for the CDC connection to use. If no replication_url is provided, then the CDC connection attempts the use the `url` value. | optional in CDC mode | n/a                  |
 
-Destination 
-===========
+# Destination 
 The Postgres Destination takes a `record.Record` and parses it into a valid 
 SQL query. The Destination is designed to handle different payloads and keys.
 decause of this, each record is individually parsed and upserted. 
