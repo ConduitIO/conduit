@@ -154,6 +154,38 @@ func TestDestination_Write(t *testing.T) {
 			},
 			want:    big.NewInt(int64(1)).Bytes(),
 			wantErr: true,
+		}, {
+			name: "should dedupe key out of payload upsert query",
+			fields: fields{
+				Position: big.NewInt(int64(5)).Bytes(),
+				db:       db,
+			},
+			args: args{
+				ctx: context.Background(),
+				r: record.Record{
+					Position: big.NewInt(int64(6)).Bytes(),
+					Key: record.StructuredData{
+						"key": "dupetest", // same key as in payload
+					},
+					Payload: record.StructuredData{
+						"key":     "dupetest",
+						"column1": "bizz",
+						"column2": 462,
+						"column3": false,
+					},
+					CreatedAt: time.Now(),
+					Metadata: map[string]string{
+						"table": "records",
+					},
+				},
+			},
+			want: big.NewInt(int64(6)).Bytes(),
+			payload: record.StructuredData{
+				"column1": "bizz",
+				"column2": 462,
+				"column3": false,
+			},
+			wantErr: false,
 		},
 	}
 	for _, tt := range tests {
@@ -189,7 +221,6 @@ func TestDestination_Write(t *testing.T) {
 					val = v
 					break
 				}
-
 				// get the key from the DB and compare it against what we wanted
 				checkAndCompare(t, tt.fields.db, key, val, tt.payload)
 			}
