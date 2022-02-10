@@ -135,7 +135,7 @@ func (s *source) Open(ctx context.Context) error {
 
 func (s *source) Stop(ctx context.Context) error {
 	if !s.IsRunning() {
-		return cerrors.New("plugin is not running")
+		return plugin.ErrPluginNotRunning
 	}
 
 	s.logger.Debug(ctx).Msg("stopping source connector plugin")
