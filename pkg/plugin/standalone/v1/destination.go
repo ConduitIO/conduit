@@ -93,21 +93,29 @@ func (s *destinationPluginClient) Write(ctx context.Context, r record.Record) er
 
 	err = s.stream.Send(protoReq)
 	if err != nil {
+		err = s.writeErrorCause(err)
 		if err == io.EOF {
-			// actual error can be discovered through Recv, let's do it
-			_, err = s.stream.Recv()
-			if err == nil {
-				// Recv did not return an error, we just read an ack, that's a huge bug!
-				panic(err)
-			}
-			if err == io.EOF {
-				// Recv also returned EOF, stream was gracefully closed
-				return plugin.ErrStreamNotOpen
-			}
+			// stream was gracefully closed
+			return plugin.ErrStreamNotOpen
 		}
 		return unwrapGRPCError(err)
 	}
 	return nil
+}
+
+func (s *destinationPluginClient) writeErrorCause(err error) error {
+	if err != io.EOF {
+		// this is an actual error, return it
+		return err
+	}
+
+	// actual error can be discovered through Recv, let's do it
+	_, recvErr := s.stream.Recv()
+	if recvErr == nil {
+		// Recv did not return an error, we just read an ack, that's a huge bug!
+		panic(cerrors.Errorf("tried to get error cause of Write, read an ack instead, this is a bug! original error: %w", err))
+	}
+	return recvErr
 }
 
 func (s *destinationPluginClient) Ack(ctx context.Context) (record.Position, error) {

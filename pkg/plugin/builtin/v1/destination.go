@@ -29,6 +29,11 @@ import (
 	"github.com/rs/zerolog"
 )
 
+// destinationPluginAdapter implements the destination plugin interface used
+// internally in Conduit and relays the calls to a destination plugin defined in
+// conduit-plugin (cpluginv1). This adapter needs to make sure it behaves in the
+// same way as the standalone plugin adapter, which communicates with the plugin
+// through gRPC, so that the caller can use both of them interchangeably.
 // TODO make sure a panic in a plugin doesn't crash Conduit
 type destinationPluginAdapter struct {
 	impl cpluginv1.DestinationPlugin
