@@ -51,6 +51,6 @@ func Data(in record.Data) (cpluginv1.Data, error) {
 	case record.StructuredData:
 		return cpluginv1.StructuredData(v), nil
 	default:
-		return nil, cerrors.New("invalid Data type")
+		return nil, cerrors.Errorf("invalid Data type '%T'", in)
 	}
 }
