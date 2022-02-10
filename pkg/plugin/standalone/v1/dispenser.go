@@ -81,6 +81,7 @@ func (d *Dispenser) teardown() {
 
 	if !d.dispensed {
 		// nothing to do here
+		return
 	}
 
 	d.logger.Debug().Msg("killing plugin client")
