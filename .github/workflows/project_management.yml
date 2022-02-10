@@ -1,0 +1,16 @@
+name: project-management
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  add_new_issue_to_project:
+    runs_on: ubuntu-latest
+    steps:
+      - name: Add Triage to Board
+        uses: alex-page/github-project-automation-plus@v0.8.1
+        with:
+          project: Main
+          column: Triage
+          repo-token: ${{ secrets.PROJECT_AUTOMATION }}
