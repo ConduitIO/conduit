@@ -29,7 +29,7 @@ type Dispenser struct {
 	path   string
 	opts   []ClientOption
 
-	dispensed int
+	dispensed bool
 	client    *goplugin.Client
 	m         sync.Mutex
 }
@@ -59,40 +59,40 @@ func (d *Dispenser) initClient() error {
 	return nil
 }
 
-func (d *Dispenser) increaseDispensed() error {
+func (d *Dispenser) dispense() error {
 	d.m.Lock()
 	defer d.m.Unlock()
 
-	d.dispensed++
-
-	if d.client == nil {
-		err := d.initClient()
-		if err != nil {
-			return err
-		}
+	if d.dispensed {
+		return cerrors.New("plugin already dispensed, can't dispense twice")
+	}
+	err := d.initClient()
+	if err != nil {
+		return err
 	}
 
+	d.dispensed = true
 	return nil
 }
 
-func (d *Dispenser) decreaseDispensed() {
+func (d *Dispenser) teardown() {
 	d.m.Lock()
 	defer d.m.Unlock()
 
-	d.dispensed--
-	if d.dispensed > 0 {
+	if !d.dispensed {
 		// nothing to do here
 		return
 	}
 
 	d.logger.Debug().Msg("killing plugin client")
-	// no more dispensed plugins, kill the process
+	// kill the process
 	d.client.Kill()
 	d.client = nil
+	d.dispensed = false
 }
 
 func (d *Dispenser) DispenseSpecifier() (plugin.SpecifierPlugin, error) {
-	err := d.increaseDispensed()
+	err := d.dispense()
 	if err != nil {
 		return nil, err
 	}
@@ -115,7 +115,7 @@ func (d *Dispenser) DispenseSpecifier() (plugin.SpecifierPlugin, error) {
 }
 
 func (d *Dispenser) DispenseSource() (plugin.SourcePlugin, error) {
-	err := d.increaseDispensed()
+	err := d.dispense()
 	if err != nil {
 		return nil, err
 	}
@@ -138,7 +138,7 @@ func (d *Dispenser) DispenseSource() (plugin.SourcePlugin, error) {
 }
 
 func (d *Dispenser) DispenseDestination() (plugin.DestinationPlugin, error) {
-	err := d.increaseDispensed()
+	err := d.dispense()
 	if err != nil {
 		return nil, err
 	}
@@ -166,7 +166,7 @@ type specifierPluginDispenserSignaller struct {
 }
 
 func (s specifierPluginDispenserSignaller) Specify() (plugin.Specification, error) {
-	defer s.d.decreaseDispensed()
+	defer s.d.teardown()
 	return s.SpecifierPlugin.Specify()
 }
 
@@ -176,7 +176,7 @@ type sourcePluginDispenserSignaller struct {
 }
 
 func (s sourcePluginDispenserSignaller) Teardown(ctx context.Context) error {
-	defer s.d.decreaseDispensed()
+	defer s.d.teardown()
 	return s.SourcePlugin.Teardown(ctx)
 }
 
@@ -186,6 +186,6 @@ type destinationPluginDispenserSignaller struct {
 }
 
 func (s destinationPluginDispenserSignaller) Teardown(ctx context.Context) error {
-	defer s.d.decreaseDispensed()
+	defer s.d.teardown()
 	return s.DestinationPlugin.Teardown(ctx)
 }

@@ -65,6 +65,6 @@ func Data(in record.Data) (*connectorv1.Data, error) {
 			},
 		}, nil
 	default:
-		return nil, cerrors.New("invalid Data type")
+		return nil, cerrors.Errorf("invalid Data type '%T'", in)
 	}
 }
