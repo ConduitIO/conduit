@@ -6,7 +6,7 @@ on:
 
 jobs:
   add_new_issue_to_project:
-    runs_on: ubuntu-latest
+    runs-on: ubuntu-latest
     steps:
       - name: Add Triage to Board
         uses: alex-page/github-project-automation-plus@v0.8.1
