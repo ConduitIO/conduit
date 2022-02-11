@@ -26,8 +26,8 @@ import (
 
 var (
 	DefaultDispenserFactories = []DispenserFactory{
-		sdkDispenserFactory(generator.Specification, generator.NewSource, nil),
 		sdkDispenserFactory(file.Specification, file.NewSource, file.NewDestination),
+		sdkDispenserFactory(generator.Specification, generator.NewSource, nil),
 	}
 )
 
