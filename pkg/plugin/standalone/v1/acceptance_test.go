@@ -12,23 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package log
+package standalonev1
 
-const (
-	ComponentField      = "component"
-	ConnectorIDField    = "connector_id"
-	DurationField       = "duration"
-	MessageIDField      = "message_id"
-	NodeIDField         = "node_id"
-	PipelineIDField     = "pipeline_id"
-	RecordPositionField = "record_position"
-	RequestIDField      = "request_id"
-	ServerAddressField  = "address"
+import (
+	"testing"
 
-	GRPCMethodField     = "grpc_method"
-	GRPCStatusCodeField = "grpc_status_code"
-	HTTPEndpointField   = "http_endpoint"
-
-	PluginTypeField = "plugin_type"
-	PluginNameField = "plugin_name"
+	"github.com/conduitio/conduit-plugin/cpluginv1/mock"
+	"github.com/conduitio/conduit/pkg/plugin"
+	"github.com/rs/zerolog"
 )
+
+func TestAcceptance(t *testing.T) {
+	logger := zerolog.Nop()
+	plugin.AcceptanceTestV1(t, func(t *testing.T) (plugin.Dispenser, *mock.SpecifierPlugin, *mock.SourcePlugin, *mock.DestinationPlugin) {
+		return newTestDispenser(t, logger)
+	})
+}

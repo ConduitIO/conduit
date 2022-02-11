@@ -12,23 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package log
+package fromproto
 
-const (
-	ComponentField      = "component"
-	ConnectorIDField    = "connector_id"
-	DurationField       = "duration"
-	MessageIDField      = "message_id"
-	NodeIDField         = "node_id"
-	PipelineIDField     = "pipeline_id"
-	RecordPositionField = "record_position"
-	RequestIDField      = "request_id"
-	ServerAddressField  = "address"
-
-	GRPCMethodField     = "grpc_method"
-	GRPCStatusCodeField = "grpc_status_code"
-	HTTPEndpointField   = "http_endpoint"
-
-	PluginTypeField = "plugin_type"
-	PluginNameField = "plugin_name"
+import (
+	"github.com/conduitio/conduit/pkg/record"
+	connectorv1 "go.buf.build/library/go-grpc/conduitio/conduit-plugin/connector/v1"
 )
+
+func SourceRunResponse(in *connectorv1.Source_Run_Response) (record.Record, error) {
+	out, err := Record(in.Record)
+	if err != nil {
+		return record.Record{}, nil
+	}
+	return out, nil
+}

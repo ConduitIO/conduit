@@ -12,23 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package log
+package builtinv1
 
-const (
-	ComponentField      = "component"
-	ConnectorIDField    = "connector_id"
-	DurationField       = "duration"
-	MessageIDField      = "message_id"
-	NodeIDField         = "node_id"
-	PipelineIDField     = "pipeline_id"
-	RecordPositionField = "record_position"
-	RequestIDField      = "request_id"
-	ServerAddressField  = "address"
+import (
+	"testing"
 
-	GRPCMethodField     = "grpc_method"
-	GRPCStatusCodeField = "grpc_status_code"
-	HTTPEndpointField   = "http_endpoint"
-
-	PluginTypeField = "plugin_type"
-	PluginNameField = "plugin_name"
+	"github.com/conduitio/conduit/pkg/plugin"
 )
+
+func TestAcceptance(t *testing.T) {
+	plugin.AcceptanceTestV1(t, newTestDispenser)
+}

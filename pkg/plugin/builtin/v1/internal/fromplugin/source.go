@@ -12,23 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package log
+package fromplugin
 
-const (
-	ComponentField      = "component"
-	ConnectorIDField    = "connector_id"
-	DurationField       = "duration"
-	MessageIDField      = "message_id"
-	NodeIDField         = "node_id"
-	PipelineIDField     = "pipeline_id"
-	RecordPositionField = "record_position"
-	RequestIDField      = "request_id"
-	ServerAddressField  = "address"
-
-	GRPCMethodField     = "grpc_method"
-	GRPCStatusCodeField = "grpc_status_code"
-	HTTPEndpointField   = "http_endpoint"
-
-	PluginTypeField = "plugin_type"
-	PluginNameField = "plugin_name"
+import (
+	"github.com/conduitio/conduit-plugin/cpluginv1"
+	"github.com/conduitio/conduit/pkg/record"
 )
+
+func SourceRunResponse(in cpluginv1.SourceRunResponse) (record.Record, error) {
+	out, err := Record(in.Record)
+	if err != nil {
+		return record.Record{}, nil
+	}
+	return out, nil
+}

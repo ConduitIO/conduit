@@ -12,23 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package log
+package standalone
 
-const (
-	ComponentField      = "component"
-	ConnectorIDField    = "connector_id"
-	DurationField       = "duration"
-	MessageIDField      = "message_id"
-	NodeIDField         = "node_id"
-	PipelineIDField     = "pipeline_id"
-	RecordPositionField = "record_position"
-	RequestIDField      = "request_id"
-	ServerAddressField  = "address"
-
-	GRPCMethodField     = "grpc_method"
-	GRPCStatusCodeField = "grpc_status_code"
-	HTTPEndpointField   = "http_endpoint"
-
-	PluginTypeField = "plugin_type"
-	PluginNameField = "plugin_name"
+import (
+	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/plugin"
+	standalonev1 "github.com/conduitio/conduit/pkg/plugin/standalone/v1"
 )
+
+type Registry struct {
+	logger log.CtxLogger
+}
+
+func NewRegistry(logger log.CtxLogger) *Registry {
+	return &Registry{
+		logger: logger,
+	}
+}
+
+func (r *Registry) New(logger log.CtxLogger, path string) (plugin.Dispenser, error) {
+	return standalonev1.NewDispenser(logger.ZerologWithComponent(), path)
+}
