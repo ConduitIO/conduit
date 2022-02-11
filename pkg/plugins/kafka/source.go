@@ -18,11 +18,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/plugin/sdk"
-	"github.com/conduitio/conduit/pkg/plugins"
 	"github.com/segmentio/kafka-go"
 )
 
@@ -69,7 +67,7 @@ func (s *Source) Read(ctx context.Context) (sdk.Record, error) {
 		return sdk.Record{}, cerrors.Errorf("failed getting a message %w", err)
 	}
 	if message == nil {
-		return sdk.Record{}, plugins.ErrEndData
+		return sdk.Record{}, sdk.ErrBackoffRetry
 	}
 	rec, err := toRecord(message, kafkaPos)
 	if err != nil {
@@ -96,7 +94,7 @@ func (s *Source) startFrom(position sdk.Position) error {
 func toRecord(message *kafka.Message, position string) (sdk.Record, error) {
 	return sdk.Record{
 		Position:  []byte(position),
-		CreatedAt: time.Time{},
+		CreatedAt: message.Time,
 		Key:       sdk.RawData(message.Key),
 		Payload:   sdk.RawData(message.Value),
 	}, nil
