@@ -15,7 +15,6 @@
 package file
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -33,10 +32,6 @@ type Source struct {
 
 	tail   *tail.Tail
 	config map[string]string
-
-	lastPosition sdk.Position
-	nextOffset   int64
-	nextPosition sdk.Position
 }
 
 func NewSource() sdk.Source {
@@ -59,13 +54,8 @@ func (s *Source) Open(ctx context.Context, position sdk.Position) error {
 func (s *Source) Read(ctx context.Context) (sdk.Record, error) {
 	select {
 	case line := <-s.tail.Lines:
-		s.lastPosition = s.nextPosition
-		// calculate next offset by adding the bytes in the current line plus
-		// 1 byte for the line break
-		s.nextOffset += int64(len(line.Text)) + 1
-		s.nextPosition = sdk.Position(strconv.FormatInt(s.nextOffset, 10))
 		return sdk.Record{
-			Position:  s.lastPosition,
+			Position:  sdk.Position(strconv.FormatInt(line.SeekInfo.Offset, 10)),
 			CreatedAt: line.Time,
 			Payload:   sdk.RawData(line.Text),
 		}, nil
@@ -86,11 +76,6 @@ func (s *Source) Teardown(ctx context.Context) error {
 }
 
 func (s *Source) seek(p sdk.Position) error {
-	if bytes.Equal(s.lastPosition, p) && s.tail != nil {
-		// we are at the required position
-		return nil
-	}
-
 	var offset int64
 	if p != nil {
 		var err error
@@ -117,16 +102,7 @@ func (s *Source) seek(p sdk.Position) error {
 		return cerrors.Errorf("could not tail file: %w", err)
 	}
 
-	s.nextOffset = offset
-	if p != nil {
-		// read line at position so that Read returns next line
-		line := <-t.Lines
-		s.nextOffset += int64(len(line.Text)) + 1
-	}
-	s.nextPosition = sdk.Position(strconv.FormatInt(s.nextOffset, 10))
-	s.lastPosition = p
 	s.tail = t
-
 	return nil
 }
 

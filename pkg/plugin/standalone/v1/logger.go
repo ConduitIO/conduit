@@ -141,7 +141,11 @@ func (h *hcLogger) applyArgs(e *zerolog.Event, args []interface{}) *zerolog.Even
 		e.Str(log.PluginNameField, h.name)
 	}
 	for i := 0; i < len(args)-1; i += 2 {
-		key := args[i].(string) // keys must be strings
+		key, ok := args[i].(string) // keys should be strings
+		if !ok {
+			// do our best to format the key as a string
+			key = fmt.Sprintf("%v", args[i])
+		}
 		switch key {
 		case "timestamp":
 			// skip timestamps, they are added by our internal logger
@@ -151,8 +155,20 @@ func (h *hcLogger) applyArgs(e *zerolog.Event, args []interface{}) *zerolog.Even
 		}
 
 		val := args[i+1]
-		e.Interface(key, val)
+		switch v := val.(type) {
+		case error:
+			e.AnErr(key, v)
+		default:
+			e.Interface(key, val)
+		}
 	}
+
+	if len(args)%2 == 1 {
+		// odd number of params means they are not pairs
+		// add last param with empty key, so it's not lost
+		e.Interface("", args[len(args)-1])
+	}
+
 	return e
 }
 

@@ -29,6 +29,11 @@ import (
 	"github.com/rs/zerolog"
 )
 
+// destinationPluginAdapter implements the destination plugin interface used
+// internally in Conduit and relays the calls to a destination plugin defined in
+// conduit-plugin (cpluginv1). This adapter needs to make sure it behaves in the
+// same way as the standalone plugin adapter, which communicates with the plugin
+// through gRPC, so that the caller can use both of them interchangeably.
 // TODO make sure a panic in a plugin doesn't crash Conduit
 type destinationPluginAdapter struct {
 	impl cpluginv1.DestinationPlugin
@@ -161,108 +166,6 @@ func (s *destinationPluginAdapter) Teardown(ctx context.Context) error {
 
 	return nil
 }
-
-// func newDestinationRunStream(ctx context.Context) *destinationRunStream {
-// 	reqCtx, reqCancel := context.WithCancel(ctx)
-// 	respCtx, respCancel := context.WithCancel(ctx)
-//
-// 	return &destinationRunStream{
-// 		reqCtx:  reqCtx,
-// 		respCtx: respCtx,
-//
-// 		reqCancel:  reqCancel,
-// 		respCancel: respCancel,
-//
-// 		reqChan:  make(chan cpluginv1.DestinationRunRequest),
-// 		respChan: make(chan cpluginv1.DestinationRunResponse),
-// 	}
-// }
-//
-// type destinationRunStream struct {
-// 	reqCtx  context.Context
-// 	respCtx context.Context
-//
-// 	reqCancel  context.CancelFunc
-// 	respCancel context.CancelFunc
-//
-// 	reqChan  chan cpluginv1.DestinationRunRequest
-// 	respChan chan cpluginv1.DestinationRunResponse
-//
-// 	reason error
-//
-// 	m sync.RWMutex
-// }
-//
-// func (s *destinationRunStream) Send(resp cpluginv1.DestinationRunResponse) error {
-// 	select {
-// 	case <-s.respCtx.Done():
-// 		return io.EOF // TODO is this correct? Should it be ctx.Err()?
-// 	case s.respChan <- resp:
-// 		return nil
-// 	}
-// }
-//
-// func (s *destinationRunStream) Recv() (cpluginv1.DestinationRunRequest, error) {
-// 	select {
-// 	case <-s.reqCtx.Done():
-// 		return cpluginv1.DestinationRunRequest{}, io.EOF // TODO is this correct? Should it be ctx.Err()?
-// 	case req := <-s.reqChan:
-// 		return req, nil
-// 	}
-// }
-//
-// func (s *destinationRunStream) recvInternal() (cpluginv1.DestinationRunResponse, error) {
-// 	if reason := s.getStopReason(); reason != nil {
-// 		return cpluginv1.DestinationRunResponse{}, reason
-// 	}
-//
-// 	select {
-// 	case <-ctx.Done():
-// 		return cpluginv1.DestinationRunResponse{}, ctx.Err()
-// 	case <-s.respCtx.Done():
-// 		return cpluginv1.DestinationRunResponse{}, io.EOF
-// 	case resp := <-s.respChan:
-// 		return resp, nil
-// 	}
-// }
-//
-// func (s *destinationRunStream) sendInternal(ctx context.Context, req cpluginv1.DestinationRunRequest) error {
-// 	if reason := s.getStopReason(); reason != nil {
-// 		return reason
-// 	}
-//
-// 	select {
-// 	case <-ctx.Done():
-// 		return ctx.Err()
-// 	case <-s.reqCtx.Done():
-// 		return plugin.ErrStreamNotOpen
-// 	case s.reqChan <- req:
-// 		return nil
-// 	}
-// }
-//
-// func (s *destinationRunStream) getStopReason() error {
-// 	s.m.RLock()
-// 	defer s.m.RUnlock()
-// 	return s.reason
-// }
-//
-// func (s *destinationRunStream) stop(reason error) {
-// 	s.m.Lock()
-// 	defer s.m.Unlock()
-//
-// 	s.reason = reason
-// 	s.stopReq()
-// 	s.stopResp()
-// }
-//
-// func (s *destinationRunStream) stopReq() {
-// 	s.reqCancel()
-// }
-//
-// func (s *destinationRunStream) stopResp() {
-// 	s.respCancel()
-// }
 
 func newDestinationRunStream(ctx context.Context) *destinationRunStream {
 	return &destinationRunStream{
