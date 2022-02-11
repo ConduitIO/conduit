@@ -23,21 +23,22 @@ import (
 	"time"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/plugins"
-	"github.com/conduitio/conduit/pkg/record"
+	"github.com/conduitio/conduit/pkg/plugin/sdk"
 )
 
 // Source connector
 type Source struct {
+	sdk.UnimplementedSource
+
 	created int64
 	Config  Config
 }
 
-func (s *Source) Ack(ctx context.Context, position record.Position) error {
-	return nil // no ack needed
+func NewSource() sdk.Source {
+	return &Source{}
 }
 
-func (s *Source) Open(ctx context.Context, config plugins.Config) error {
+func (s *Source) Configure(ctx context.Context, config map[string]string) error {
 	parsedCfg, err := Parse(config)
 	if err != nil {
 		return cerrors.Errorf("invalid config: %w", err)
@@ -46,9 +47,15 @@ func (s *Source) Open(ctx context.Context, config plugins.Config) error {
 	return nil
 }
 
-func (s *Source) Read(ctx context.Context, p record.Position) (record.Record, error) {
+func (s *Source) Open(ctx context.Context, position sdk.Position) error {
+	return nil // nothing to start
+}
+
+func (s *Source) Read(ctx context.Context) (sdk.Record, error) {
 	if s.created >= s.Config.RecordCount && s.Config.RecordCount >= 0 {
-		return record.Record{}, plugins.ErrEndData
+		// nothing more to produce, block until context is done
+		<-ctx.Done()
+		return sdk.Record{}, ctx.Err()
 	}
 	s.created++
 
@@ -57,15 +64,24 @@ func (s *Source) Read(ctx context.Context, p record.Position) (record.Record, er
 	}
 	data, err := s.toRawData(s.newRecord(s.created))
 	if err != nil {
-		return record.Record{}, err
+		return sdk.Record{}, err
 	}
-	return record.Record{
+	return sdk.Record{
 		Position:  []byte(strconv.FormatInt(s.created, 10)),
 		Metadata:  nil,
-		Key:       record.RawData{Raw: []byte(fmt.Sprintf("key #%d", s.created))},
+		Key:       sdk.RawData(fmt.Sprintf("key #%d", s.created)),
 		Payload:   data,
 		CreatedAt: time.Now(),
 	}, nil
+}
+
+func (s *Source) Ack(ctx context.Context, position sdk.Position) error {
+	sdk.Logger(ctx).Debug().Str("position", string(position)).Msg("got ack")
+	return nil // no ack needed
+}
+
+func (s *Source) Teardown(ctx context.Context) error {
+	return nil // nothing to stop
 }
 
 func (s *Source) newRecord(i int64) map[string]interface{} {
@@ -74,18 +90,6 @@ func (s *Source) newRecord(i int64) map[string]interface{} {
 		rec[name] = s.newDummyValue(typeString, i)
 	}
 	return rec
-}
-
-func (s *Source) Teardown() error {
-	return nil
-}
-
-func (s *Source) Validate(cfg plugins.Config) error {
-	_, err := Parse(cfg)
-	if err != nil {
-		return cerrors.Errorf("invalid config: %w", err)
-	}
-	return nil
 }
 
 func (s *Source) newDummyValue(typeString string, i int64) interface{} {
@@ -103,12 +107,10 @@ func (s *Source) newDummyValue(typeString string, i int64) interface{} {
 	}
 }
 
-func (s *Source) toRawData(rec map[string]interface{}) (record.Data, error) {
+func (s *Source) toRawData(rec map[string]interface{}) (sdk.Data, error) {
 	bytes, err := json.Marshal(rec)
 	if err != nil {
 		return nil, cerrors.Errorf("couldn't serialize data: %w", err)
 	}
-	return record.RawData{
-		Raw: bytes,
-	}, nil
+	return sdk.RawData(bytes), nil
 }
