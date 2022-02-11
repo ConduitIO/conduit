@@ -23,9 +23,9 @@ import (
 	"time"
 
 	"github.com/conduitio/conduit/pkg/foundation/assert"
+	"github.com/conduitio/conduit/pkg/plugin/sdk"
 	"github.com/conduitio/conduit/pkg/plugins"
 	"github.com/conduitio/conduit/pkg/plugins/kafka"
-	"github.com/conduitio/conduit/pkg/record"
 	"github.com/google/uuid"
 	skafka "github.com/segmentio/kafka-go"
 )
@@ -39,14 +39,13 @@ func TestDestination_Write_Simple(t *testing.T) {
 
 	// prepare SUT
 	underTest := kafka.Destination{}
-	openErr := underTest.Open(context.Background(), cfg)
-	defer underTest.Teardown()
+	openErr := underTest.Open(context.Background())
+	defer underTest.Teardown(context.Background())
 	assert.Ok(t, openErr)
 
 	// act and assert
-	result, writeErr := underTest.Write(context.Background(), record)
-	assert.Ok(t, writeErr)
-	assert.Equal(t, record.Position, result)
+	err := underTest.Write(context.Background(), record)
+	assert.Ok(t, err)
 
 	message, err := waitForReaderMessage(cfg.Settings[kafka.Topic], 10*time.Second)
 	assert.Ok(t, err)
@@ -69,14 +68,13 @@ func newTestConfig(t *testing.T) plugins.Config {
 	}}
 }
 
-func testRecord() record.Record {
-	return record.Record{
+func testRecord() sdk.Record {
+	return sdk.Record{
 		Position:  []byte(uuid.NewString()),
 		Metadata:  nil,
 		CreatedAt: time.Time{},
-		ReadAt:    time.Time{},
-		Key:       record.RawData{Raw: []byte(uuid.NewString())},
-		Payload:   record.RawData{Raw: []byte(fmt.Sprintf("test message %s", time.Now()))},
+		Key:       sdk.RawData(uuid.NewString()),
+		Payload:   sdk.RawData(fmt.Sprintf("test message %s", time.Now())),
 	}
 }
 
