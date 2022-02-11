@@ -16,7 +16,6 @@ package stream
 
 import (
 	"context"
-	"reflect"
 	"sync"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -29,9 +28,8 @@ import (
 // should stop calling the trigger and discard the trigger function.
 type triggerFunc func() (*Message, error)
 
-// msgFetcherFunc is used in pubNodeBase to transform the object returned from
-// the trigger channel into a message.
-type msgFetcherFunc func(interface{}) (*Message, error)
+// msgFetcherFunc is used in pubNodeBase to fetch the next message.
+type msgFetcherFunc func(context.Context) (*Message, error)
 
 // cleanupFunc should be called to release any resources.
 type cleanupFunc func()
@@ -56,8 +54,8 @@ func (n *pubSubNodeBase) Trigger(
 		return nil, nil, err
 	}
 
-	// call Trigger only to get the cleanup function, we won't use the trigger
-	_, cleanup2, err := n.pubNodeBase.Trigger(ctx, logger, nil, nil, nil)
+	// call Trigger to set up node as running and get cleanup func
+	_, cleanup2, err := n.pubNodeBase.Trigger(ctx, logger, nil, nil)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -90,11 +88,7 @@ func (n *pubSubNodeBase) Send(
 
 // pubNodeBase can be used as the base for nodes that implement PubNode.
 type pubNodeBase struct {
-	// stopChan controls the graceful shutdown, if this channel is closed then
-	// run will return without an error.
-	stopChan chan struct{}
-	// stopReason is the error that's returned when the node is stopped.
-	stopReason error
+	nodeBase
 	// out is the channel to which outgoing messages will be sent.
 	out chan<- *Message
 	// running is true when the node is running and false when it's not.
@@ -103,16 +97,18 @@ type pubNodeBase struct {
 	lock sync.Mutex
 }
 
-// Trigger returns a function that will block until the PubNode should emit a
-// new message. After the trigger returns an error or an empty object it is done
-// and should be discarded. The trigger needs to be called continuously until
-// that happens. The returned cleanup function has to be called after the last
-// call of the trigger function to release resources.
+// Trigger sets up 2 goroutines, one that listens to the external error channel
+// and forwards it to the trigger function and one that continuously calls the
+// supplied msgFetcherFunc and supplies the result to the trigger function. The
+// trigger function should be continuously called to retrieve a message or an
+// error. After the trigger returns an error or an empty object, it is done and
+// should be discarded. The trigger needs to be called continuously until that
+// happens. The returned cleanup function has to be called after the last call
+// of the trigger function to release resources.
 func (n *pubNodeBase) Trigger(
 	ctx context.Context,
 	logger log.CtxLogger,
-	triggerChan interface{},
-	errChan <-chan error,
+	externalErrChan <-chan error,
 	msgFetcher msgFetcherFunc,
 ) (triggerFunc, cleanupFunc, error) {
 	n.lock.Lock()
@@ -125,66 +121,61 @@ func (n *pubNodeBase) Trigger(
 		return nil, nil, cerrors.New("tried to run PubNode twice")
 	}
 
-	n.stopChan = make(chan struct{})
 	n.running = true
+	internalErrChan := make(chan error)
+	msgChan := make(chan *Message)
 
-	// cleanup should be called with defer in the caller
-	cleanup := func() {
-		logger.Trace(ctx).Msg("cleaning up PubNode")
-		n.lock.Lock()
-		close(n.out)
-		n.out = nil
-		n.running = false
-		n.stopChan = nil
-		n.lock.Unlock()
-		logger.Trace(ctx).Msg("PubNode cleaned up")
+	if externalErrChan != nil {
+		// spawn goroutine that forwards external errors into the internal error
+		// channel
+		go func() {
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case err := <-externalErrChan:
+					internalErrChan <- err
+				}
+			}
+		}()
 	}
 
-	if errChan == nil {
-		// create dummy channel
-		errChan = make(chan error)
-	}
-
-	cases := []reflect.SelectCase{
-		{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(ctx.Done())},
-		{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(n.stopChan)},
-		{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(errChan)},
-	}
-	if triggerChan != nil {
-		cases = append(cases, reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(triggerChan)})
-	} else {
-		// there is no channel, use default case instead
-		cases = append(cases, reflect.SelectCase{Dir: reflect.SelectDefault})
+	if msgFetcher != nil {
+		// spawn goroutine that is fetching messages and either forwards an error
+		// into the internal error channel or a message into the message channel
+		go func() {
+			for {
+				msg, err := msgFetcher(ctx)
+				if err != nil {
+					internalErrChan <- err
+					return
+				}
+				msgChan <- msg
+			}
+		}()
 	}
 
 	trigger := func() (*Message, error) {
-		chosen, value, ok := reflect.Select(cases)
-		switch chosen {
-		case 0:
-			logger.Debug(ctx).Msg("context closed while waiting for message")
-			return nil, ctx.Err()
-		case 1:
-			logger.Debug(ctx).Msg("stop channel closed")
-			return nil, n.stopReason
-		case 2:
-			err := value.Interface().(error)
-			logger.Debug(ctx).Err(err).Msg("received error on error channel")
-			return nil, err
-		default:
-			// supplied channel sent a value (or default case)
-			if !ok && triggerChan != nil {
-				logger.Debug(ctx).Msg("incoming messages channel closed")
-				return nil, nil
-			}
-
-			var v interface{}
-			if triggerChan != nil {
-				v = value.Interface()
-			}
-			return msgFetcher(v)
-		}
+		return n.nodeBase.Receive(ctx, logger, msgChan, internalErrChan)
 	}
+	cleanup := func() {
+		// TODO make sure spawned goroutines are stopped and internal channels
+		//  are drained
+		n.cleanup(ctx, logger)
+	}
+
 	return trigger, cleanup, nil
+}
+
+func (n *pubNodeBase) cleanup(ctx context.Context, logger log.CtxLogger) {
+	n.lock.Lock()
+	defer n.lock.Unlock()
+
+	logger.Trace(ctx).Msg("cleaning up PubNode")
+	close(n.out)
+	n.out = nil
+	n.running = false
+	logger.Trace(ctx).Msg("PubNode cleaned up")
 }
 
 // Send is a utility function to send the message to the next node. Before
@@ -196,35 +187,7 @@ func (n *pubNodeBase) Send(
 	logger log.CtxLogger,
 	msg *Message,
 ) error {
-	if msg.Ctx == nil {
-		msg.Ctx = ctxutil.ContextWithMessageID(ctx, msg.ID())
-	}
-
-	select {
-	case <-ctx.Done():
-		logger.Debug(msg.Ctx).Msg("context closed while sending message")
-		return ctx.Err()
-	case n.out <- msg:
-		logger.Trace(msg.Ctx).Msg("sent message to outgoing channel")
-	}
-	return nil
-}
-
-// Stop will gracefully stop the node.
-func (n *pubNodeBase) Stop(reason error) {
-	n.lock.Lock()
-	defer n.lock.Unlock()
-
-	if n.stopChan == nil {
-		return // noop
-	}
-
-	select {
-	case <-n.stopChan: // stopChan already closed
-	default:
-		n.stopReason = reason
-		close(n.stopChan)
-	}
+	return n.nodeBase.Send(ctx, logger, msg, n.out)
 }
 
 func (n *pubNodeBase) Pub() <-chan *Message {
@@ -241,6 +204,7 @@ func (n *pubNodeBase) Pub() <-chan *Message {
 
 // subNodeBase can be used as the base for nodes that implement SubNode.
 type subNodeBase struct {
+	nodeBase
 	// in is the channel on which incoming messages will be received.
 	in <-chan *Message
 	// running is true when the node is running and false when it's not.
@@ -271,40 +235,29 @@ func (n *subNodeBase) Trigger(
 
 	n.running = true
 
-	// cleanup should be called with defer in the caller
-	cleanup := func() {
-		logger.Trace(ctx).Msg("cleaning up SubNode")
-		n.lock.Lock()
-		defer n.lock.Unlock()
-
-		n.running = false
-		logger.Trace(ctx).Msg("SubNode cleaned up")
-	}
-
 	if errChan == nil {
 		// create dummy channel
 		errChan = make(chan error)
 	}
 
 	trigger := func() (*Message, error) {
-		select {
-		case <-ctx.Done():
-			logger.Debug(ctx).Msg("context closed while waiting for message")
-			return nil, ctx.Err()
-		case err := <-errChan:
-			logger.Debug(ctx).Err(err).Msg("received error on error channel")
-			return nil, err
-		case msg, ok := <-n.in:
-			if !ok {
-				logger.Debug(ctx).Msg("incoming messages channel closed")
-				return nil, nil
-			}
+		return n.nodeBase.Receive(ctx, logger, n.in, errChan)
+	}
 
-			return msg, nil
-		}
+	cleanup := func() {
+		n.cleanup(ctx, logger)
 	}
 
 	return trigger, cleanup, nil
+}
+
+func (n *subNodeBase) cleanup(ctx context.Context, logger log.CtxLogger) {
+	n.lock.Lock()
+	defer n.lock.Unlock()
+
+	logger.Trace(ctx).Msg("cleaning up SubNode")
+	n.running = false
+	logger.Trace(ctx).Msg("SubNode cleaned up")
 }
 
 func (n *subNodeBase) Sub(in <-chan *Message) {
@@ -315,4 +268,57 @@ func (n *subNodeBase) Sub(in <-chan *Message) {
 		panic(cerrors.New("can't connect SubNode to more than one in"))
 	}
 	n.in = in
+}
+
+type nodeBase struct{}
+
+// Receive is a utility function that blocks until any of these things happen:
+// * Context is closed - in this case ctx.Err() is returned
+// * An error is received on errChan - in this case the error is returned
+// * A message is received on in channel - in this case the message is returned
+// * The message channel is closed - in this case nil is returned
+func (n *nodeBase) Receive(
+	ctx context.Context,
+	logger log.CtxLogger,
+	in <-chan *Message,
+	errChan <-chan error,
+) (*Message, error) {
+	select {
+	case <-ctx.Done():
+		logger.Debug(ctx).Msg("context closed while waiting for message")
+		return nil, ctx.Err()
+	case err := <-errChan:
+		logger.Debug(ctx).Err(err).Msg("received error on error channel")
+		return nil, err
+	case msg, ok := <-in:
+		if !ok {
+			logger.Debug(ctx).Msg("incoming messages channel closed")
+			return nil, nil
+		}
+		return msg, nil
+	}
+}
+
+// Send is a utility function to send the message to the next node. Before
+// sending the message out it checks if the message contains a context and adds
+// it if needed. It listens for context cancellation while trying to send the
+// message and returns an error if the context is canceled in the meantime.
+func (n *nodeBase) Send(
+	ctx context.Context,
+	logger log.CtxLogger,
+	msg *Message,
+	out chan<- *Message,
+) error {
+	if msg.Ctx == nil {
+		msg.Ctx = ctxutil.ContextWithMessageID(ctx, msg.ID())
+	}
+
+	select {
+	case <-ctx.Done():
+		logger.Debug(msg.Ctx).Msg("context closed while sending message")
+		return ctx.Err()
+	case out <- msg:
+		logger.Trace(msg.Ctx).Msg("sent message to outgoing channel")
+	}
+	return nil
 }

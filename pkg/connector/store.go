@@ -148,12 +148,9 @@ func (*Store) encode(c Connector) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	typedConnector := typedJSON{Data: tempJSON}
-	switch c.Type() {
-	case TypeDestination:
-		typedConnector.Type = "destination"
-	case TypeSource:
-		typedConnector.Type = "source"
+	typedConnector := typedJSON{
+		Data: tempJSON,
+		Type: c.Type().String(),
 	}
 
 	b, err := json.Marshal(typedConnector)
@@ -175,12 +172,12 @@ func (s *Store) decode(raw []byte) (Connector, error) {
 
 	var conn Connector
 	switch typedConnector.Type {
-	case "source":
+	case TypeSource.String():
 		conn, err = s.connBuilder.Build(TypeSource)
 		if err != nil {
 			return nil, err
 		}
-	case "destination":
+	case TypeDestination.String():
 		conn, err = s.connBuilder.Build(TypeDestination)
 		if err != nil {
 			return nil, err

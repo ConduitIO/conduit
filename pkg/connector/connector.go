@@ -58,6 +58,7 @@ type Connector interface {
 	// as running (IsRunning returns true) and can be stopped again with
 	// Teardown. Open will return an error if called on a running connector.
 	Open(context.Context) error
+
 	// Teardown will call the Teardown method on the plugin and stop the plugin
 	// process. After the connector has been successfully torn down it is
 	// considered as stopped (IsRunning returns false) and can be opened again
@@ -80,6 +81,11 @@ type Source interface {
 	// Ack signals to the source that the message has been successfully
 	// processed and can be acknowledged.
 	Ack(context.Context, record.Position) error
+
+	// Stop signals to the source to stop producing records. Note that after
+	// this call Read can still produce records that have been cached by the
+	// connector.
+	Stop(context.Context) error
 }
 
 // Destination is a connector that can write records to a destination.

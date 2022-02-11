@@ -25,6 +25,9 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/database/inmemory"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/plugin"
+	"github.com/conduitio/conduit/pkg/plugin/builtin"
+	"github.com/conduitio/conduit/pkg/plugin/standalone"
 	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
 )
@@ -115,8 +118,10 @@ func TestService_CreateError(t *testing.T) {
 	ctx := context.Background()
 	logger := log.Nop()
 	db := &inmemory.DB{}
+	builder := connector.NewDefaultBuilder(logger, nil, plugin.NewRegistry(
+		builtin.NewRegistry(), standalone.NewRegistry(logger)))
 
-	service := connector.NewService(logger, db, connector.DefaultBuilder{})
+	service := connector.NewService(logger, db, builder)
 
 	testCases := []struct {
 		name     string
@@ -132,12 +137,21 @@ func TestService_CreateError(t *testing.T) {
 			PipelineID: uuid.NewString(),
 		},
 	}, {
-		name:     "invalid plugin",
+		name:     "invalid external plugin",
 		connType: connector.TypeSource,
 		data: connector.Config{
 			Name:       "test-connector",
 			Settings:   map[string]string{"foo": "bar"},
 			Plugin:     "non-existing-file",
+			PipelineID: uuid.NewString(),
+		},
+	}, {
+		name:     "invalid builtin plugin",
+		connType: connector.TypeSource,
+		data: connector.Config{
+			Name:       "test-connector",
+			Settings:   map[string]string{"foo": "bar"},
+			Plugin:     "builtin:non-existing-plugin",
 			PipelineID: uuid.NewString(),
 		},
 	}, {
@@ -205,7 +219,7 @@ func TestService_GetInstanceNotFound(t *testing.T) {
 	logger := log.Nop()
 	db := &inmemory.DB{}
 
-	service := connector.NewService(logger, db, connector.DefaultBuilder{})
+	service := connector.NewService(logger, db, mock.Builder{})
 
 	// get connector that does not exist
 	got, err := service.Get(ctx, uuid.NewString())
@@ -254,7 +268,7 @@ func TestService_DeleteInstanceNotFound(t *testing.T) {
 	logger := log.Nop()
 	db := &inmemory.DB{}
 
-	service := connector.NewService(logger, db, connector.DefaultBuilder{})
+	service := connector.NewService(logger, db, mock.Builder{})
 	// delete connector that does not exist
 	err := service.Delete(ctx, uuid.NewString())
 	assert.Error(t, err)
@@ -366,7 +380,7 @@ func TestService_UpdateInstanceNotFound(t *testing.T) {
 	logger := log.Nop()
 	db := &inmemory.DB{}
 
-	service := connector.NewService(logger, db, connector.DefaultBuilder{})
+	service := connector.NewService(logger, db, mock.Builder{})
 	// update connector that does not exist
 	got, err := service.Update(ctx, uuid.NewString(), connector.Config{})
 	assert.Error(t, err)

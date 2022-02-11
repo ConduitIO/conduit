@@ -45,6 +45,10 @@ func Record(in cpluginv1.Record) (record.Record, error) {
 }
 
 func Data(in cpluginv1.Data) (record.Data, error) {
+	if in == nil {
+		return nil, nil
+	}
+
 	switch v := in.(type) {
 	case cpluginv1.RawData:
 		return record.RawData{
