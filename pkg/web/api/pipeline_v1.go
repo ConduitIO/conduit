@@ -18,6 +18,7 @@ package api
 
 import (
 	"context"
+	"regexp"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/pipeline"
@@ -87,10 +88,22 @@ func (p *PipelineAPIv1) ListPipelines(
 	ctx context.Context,
 	req *apiv1.ListPipelinesRequest,
 ) (*apiv1.ListPipelinesResponse, error) {
-	// TODO: Implement filtering and limiting.
+	var nameFilter *regexp.Regexp
+	if req.GetName() != "" {
+		var err error
+		nameFilter, err = regexp.Compile("^" + req.GetName() + "$")
+		if err != nil {
+			return nil, status.PipelineError(cerrors.New("invalid name regex"))
+		}
+	}
+
 	list := p.ps.List(ctx)
 	var plist []*apiv1.Pipeline
+
 	for _, v := range list {
+		if nameFilter != nil && !nameFilter.MatchString(v.Config.Name) {
+			continue // don't add to result list, filter didn't match
+		}
 		plist = append(plist, toproto.Pipeline(v))
 	}
 

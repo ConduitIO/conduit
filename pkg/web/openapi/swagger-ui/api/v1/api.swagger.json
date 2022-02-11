@@ -2,14 +2,14 @@
   "swagger": "2.0",
   "info": {
     "title": "Conduit REST API",
-    "version": "0.1",
+    "version": "v0.1.0",
     "contact": {
       "name": "Conduit project",
       "url": "https://github.com/conduitio/conduit"
     },
     "license": {
       "name": "Apache License Version 2.0",
-      "url": "https://github.com/ConduitIO/conduit/blob/main/README.md"
+      "url": "https://github.com/ConduitIO/conduit/blob/main/LICENSE.md"
     }
   },
   "tags": [
@@ -364,6 +364,14 @@
             }
           }
         },
+        "parameters": [
+          {
+            "name": "name",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
         "tags": [
           "PipelineService"
         ]
