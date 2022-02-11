@@ -24,7 +24,6 @@ import (
 
 	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/plugin/sdk"
-	"github.com/conduitio/conduit/pkg/plugins"
 	"github.com/conduitio/conduit/pkg/plugins/kafka"
 	"github.com/google/uuid"
 	skafka "github.com/segmentio/kafka-go"
@@ -34,20 +33,23 @@ import (
 func TestDestination_Write_Simple(t *testing.T) {
 	// prepare test data
 	cfg := newTestConfig(t)
-	createTopic(t, cfg.Settings[kafka.Topic])
+	createTopic(t, cfg[kafka.Topic])
 	record := testRecord()
 
 	// prepare SUT
 	underTest := kafka.Destination{}
-	openErr := underTest.Open(context.Background())
-	defer underTest.Teardown(context.Background())
-	assert.Ok(t, openErr)
-
-	// act and assert
-	err := underTest.Write(context.Background(), record)
+	err := underTest.Configure(context.Background(), cfg)
 	assert.Ok(t, err)
 
-	message, err := waitForReaderMessage(cfg.Settings[kafka.Topic], 10*time.Second)
+	err = underTest.Open(context.Background())
+	defer underTest.Teardown(context.Background())
+	assert.Ok(t, err)
+
+	// act and assert
+	err = underTest.Write(context.Background(), record)
+	assert.Ok(t, err)
+
+	message, err := waitForReaderMessage(cfg[kafka.Topic], 10*time.Second)
 	assert.Ok(t, err)
 	assert.Equal(t, record.Payload.Bytes(), message.Value)
 }
@@ -61,11 +63,11 @@ func waitForReaderMessage(topic string, timeout time.Duration) (skafka.Message, 
 	return reader.ReadMessage(withTimeout)
 }
 
-func newTestConfig(t *testing.T) plugins.Config {
-	return plugins.Config{Settings: map[string]string{
+func newTestConfig(t *testing.T) map[string]string {
+	return map[string]string{
 		kafka.Servers: "localhost:9092",
 		kafka.Topic:   t.Name() + uuid.NewString(),
-	}}
+	}
 }
 
 func testRecord() sdk.Record {
