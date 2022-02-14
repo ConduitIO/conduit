@@ -98,7 +98,7 @@ learn more about the gRPC API please have a look at the
 
 The HTTP API is by default running on port 8080. You can define a custom address using the CLI flag `-http.address`. It
 is generated using [gRPC gateway](https://github.com/grpc-ecosystem/grpc-gateway) and is thus providing the same
-functionality as the gRPC API. To learn more about the HTTP API please have a look at the
+functionality as the gRPC API. To learn more about the HTTP API please have a look at the [API documentation](https://www.conduit.io/api), 
 [OpenAPI definition](https://github.com/ConduitIO/conduit/blob/main/pkg/web/openapi/swagger-ui/api/v1/api.swagger.json)
 or run Conduit and navigate to `http://localhost:8080/openapi/` to open a
 [Swagger UI](https://github.com/swagger-api/swagger-ui) which makes it easy to try it out.
