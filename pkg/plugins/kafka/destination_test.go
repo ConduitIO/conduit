@@ -67,14 +67,6 @@ func TestTeardown_ClosesClient(t *testing.T) {
 	assert.Ok(t, underTest.Teardown(context.Background()))
 }
 func TestTeardown_NoOpen(t *testing.T) {
-	ctrl := gomock.NewController(t)
-
-	clientMock := mock.NewProducer(ctrl)
-	clientMock.
-		EXPECT().
-		Close().
-		Return()
-
 	underTest := kafka.NewDestination()
 	assert.Ok(t, underTest.Teardown(context.Background()))
 }
