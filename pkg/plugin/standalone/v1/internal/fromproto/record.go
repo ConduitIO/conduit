@@ -59,6 +59,6 @@ func Data(in *connectorv1.Data) (record.Data, error) {
 	case *connectorv1.Data_StructuredData:
 		return record.StructuredData(v.StructuredData.AsMap()), nil
 	default:
-		return nil, cerrors.New("invalid Data type")
+		return nil, cerrors.Errorf("invalid Data type '%T'", d)
 	}
 }

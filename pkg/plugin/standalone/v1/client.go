@@ -122,6 +122,9 @@ func WithDelve(port int) ClientOption {
 }
 
 func getFreePort() int {
+	// Excerpt from net.Listen godoc:
+	// If the port in the address parameter is empty or "0", as in
+	// "127.0.0.1:" or "[::1]:0", a port number is automatically chosen.
 	l, err := net.Listen("tcp", "localhost:0")
 	if err != nil {
 		panic(err)
