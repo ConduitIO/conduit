@@ -24,6 +24,8 @@ library compiled into the Conduit binary. The plugin interface will be defined i
 Conduit structs at all. The plugin SDK will build on that interface, it will not depend on Conduit, hide implementation
 details and provide utilities to make plugin development as easy as possible.
 
+![Plugin Architecture - Simple](https://user-images.githubusercontent.com/8320753/153413544-8702081f-6afe-417d-9685-71e3fa53eac9.svg)
+
 The decision can be broken up into 4 parts, these are explained in detail later on in the document:
 
 - We defined the plugin interface in gRPC
@@ -171,6 +173,8 @@ things to point out
       call `Ack` which will block until either an error occurs or an acknowledgment is produced by the plugin.
 
 ### Plugin registries
+
+![Plugin Architecture - Registries](https://user-images.githubusercontent.com/8320753/153414135-83f3c196-5d1e-4b03-8172-0427c0a01c03.svg)
 
 We introduced a plugin dispenser interface with two implementations that allow us to interact with the plugin either
 through go-plugin (i.e. plugin runs in a standalone process) or directly through Go (i.e. plugin acts as a library).

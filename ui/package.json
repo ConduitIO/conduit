@@ -35,7 +35,7 @@
     "babel-eslint": "^10.1.0",
     "broccoli-asset-rev": "^3.0.0",
     "ember-auto-import": "^2.4.0",
-    "ember-basic-dropdown": "^4.0.2",
+    "ember-basic-dropdown": "^4.0.3",
     "ember-changeset": "^3.15.0",
     "ember-changeset-validations": "^3.16.0",
     "ember-cli": "~4.1.1",
@@ -52,7 +52,7 @@
     "ember-cli-postcss": "^8.0.0",
     "ember-cli-sri": "^2.1.1",
     "ember-cli-terser": "^4.0.2",
-    "ember-concurrency": "^2.2.0",
+    "ember-concurrency": "^2.2.1",
     "ember-css-transitions": "^2.1.1",
     "ember-data": "~3.28.8",
     "ember-export-application-global": "^2.0.1",
@@ -92,7 +92,7 @@
     "edition": "octane"
   },
   "dependencies": {
-    "axios": "^0.25.0",
+    "axios": "^0.26.0",
     "d3-selection": "^3.0.0",
     "d3-zoom": "^3.0.0",
     "webpack": "^5.68.0"
