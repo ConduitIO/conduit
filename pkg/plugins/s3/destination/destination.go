@@ -82,7 +82,7 @@ func (d *Destination) Open(ctx context.Context) error {
 // buffer and doesn't actually perform a write until the buffer has enough
 // records in it. This is done for performance reasons.
 func (d *Destination) WriteAsync(ctx context.Context, r sdk.Record, ackFunc sdk.AckFunc) error {
-	// If either Destination or Writer have encountered an error, there'd no point in
+	// If either Destination or Writer have encountered an error, there's no point in
 	// accepting more records. We better signal the error up the stack and force
 	// the server to maybe re-instantiate plugin or do something else about it.
 	if d.Error != nil {
@@ -97,7 +97,7 @@ func (d *Destination) WriteAsync(ctx context.Context, r sdk.Record, ackFunc sdk.
 
 	if len(d.Buffer) >= int(d.Config.BufferSize) {
 		bufferedRecords := d.Buffer
-		d.Buffer = make([]sdk.Record, 0, d.Config.BufferSize)
+		d.Buffer = d.Buffer[:0]
 
 		// write batch into S3
 		err := d.Writer.Write(ctx, &writer.Batch{
@@ -116,7 +116,7 @@ func (d *Destination) WriteAsync(ctx context.Context, r sdk.Record, ackFunc sdk.
 			}
 		}
 		// clear ackFunc cache
-		d.AckFuncCache = make([]sdk.AckFunc, 0, d.Config.BufferSize)
+		d.AckFuncCache = d.AckFuncCache[:0]
 	}
 
 	return d.Error
@@ -125,4 +125,28 @@ func (d *Destination) WriteAsync(ctx context.Context, r sdk.Record, ackFunc sdk.
 // Teardown gracefully disconnects the client
 func (d *Destination) Teardown(ctx context.Context) error {
 	return nil // TODO
+}
+
+func (d *Destination) Flush(ctx context.Context) error {
+	bufferedRecords := d.Buffer
+	d.Buffer = d.Buffer[:0]
+
+	// write batch into S3
+	err := d.Writer.Write(ctx, &writer.Batch{
+		Records: bufferedRecords,
+		Format:  d.Config.Format,
+	})
+	if err != nil {
+		d.Error = err
+	}
+
+	// call all the written records' ackFunctions
+	for _, ack := range d.AckFuncCache {
+		err := ack(d.Error)
+		if err != nil {
+			return err
+		}
+	}
+	d.AckFuncCache = d.AckFuncCache[:0]
+	return nil
 }

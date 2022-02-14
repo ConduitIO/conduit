@@ -54,12 +54,12 @@ func Specification() sdk.Specification {
 			destination.ConfigKeyBufferSize: {
 				Default:     "1000",
 				Required:    false,
-				Description: "the buffer size {when full, the files will be written to destination}, max is \"100000\".",
+				Description: `the buffer size {when full, the files will be written to destination}, max is "100000".`,
 			},
 			destination.ConfigKeyFormat: {
 				Default:     "",
 				Required:    false,
-				Description: "the destination format, either \"json\" or \"parquet\".",
+				Description: `the destination format, either "json" or "parquet".`,
 			},
 			destination.ConfigKeyPrefix: {
 				Default:     "",
