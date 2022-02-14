@@ -8,5 +8,7 @@ export default class PipelineEditorNodesStreamNodeComponent extends Component {
     pipelineNodeManager.registerStreamNode(element);
   }
 
-  unregisterNode() {}
+  unregisterNode(element, [, pipelineNodeManager]) {
+    pipelineNodeManager.unregisterStreamNode(element);
+  }
 }

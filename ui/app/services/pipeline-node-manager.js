@@ -93,6 +93,10 @@ export default class PipelineNodeManagerService extends Service {
     this.streamNode = null;
   }
 
+  unregisterStreamNode() {
+    this.streamNode = null;
+  }
+
   @action
   zoomInAction() {
     this.zoomSelection.transition().call(this.zoomObject.scaleBy, 1.4);
