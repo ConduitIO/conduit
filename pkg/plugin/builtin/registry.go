@@ -27,9 +27,9 @@ import (
 
 var (
 	DefaultDispenserFactories = []DispenserFactory{
-		sdkDispenserFactory(generator.Specification, generator.NewSource, nil),
 		sdkDispenserFactory(file.Specification, file.NewSource, file.NewDestination),
 		sdkDispenserFactory(kafka.Specification, kafka.NewSource, kafka.NewDestination),
+		sdkDispenserFactory(generator.Specification, generator.NewSource, nil),
 	}
 )
 

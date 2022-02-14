@@ -107,16 +107,17 @@ func (s *Source) seek(p sdk.Position) error {
 }
 
 func (s *Source) validateConfig(cfg map[string]string) error {
-	if _, ok := cfg[ConfigPath]; !ok {
+	path, ok := cfg[ConfigPath]
+	if !ok {
 		return requiredConfigErr(ConfigPath)
 	}
 
 	// make sure we can stat the file, we don't care if it doesn't exist though
-	_, err := os.Stat(cfg[ConfigPath])
+	_, err := os.Stat(path)
 	if err != nil && !os.IsNotExist(err) {
 		return cerrors.Errorf(
-			"%q config value does not contain a valid path: %w",
-			ConfigPath, err,
+			"%q config value %q does not contain a valid path: %w",
+			ConfigPath, path, err,
 		)
 	}
 
