@@ -11,7 +11,7 @@
         <div>
           <BasicDropdown @horizontalPosition="auto-left" as |dd|>
             <dd.Trigger data-test-pipeline-open-menu>
-              <button class="text-sm py-1 px-2 bg-white text-gray-900">
+              <button class="text-sm py-1 px-2 bg-white text-gray-900" type="button">
                 <svg class="text-gray-500 stroke-current h-6 w-6">
                   <use xlink:href="/ui/svg-defs.svg#down-arrow-24"></use>
                 </svg>
@@ -23,9 +23,9 @@
                   <LinkTo
                     @route="pipeline.settings"
                     @model={{@model.pipeline.id}}
-                    @invokeAction={{dd.actions.close}}
                     class="flex items-center cursor-select hover:bg-gray-100 pr-16 pl-4 pt-4 pb-2"
                     data-test-pipeline-menu-item="settings"
+                    {{on "click" dd.actions.close}}
                   >
                     <svg class="fill-current h-4 w-4 mr-2">
                       <use xlink:href="/ui/svg-defs.svg#settings-16"></use>
@@ -59,6 +59,7 @@
                 "click"
                 (fn this.pipelinesController.setPipelineRunningError @model.pipeline.state.error)
               }}
+              type="button"
               data-test-pipeline-degraded-button
             >
               <svg class="stroke-current h-6 w-6 text-gray-900">
