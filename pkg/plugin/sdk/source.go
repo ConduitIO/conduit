@@ -43,12 +43,13 @@ type Source interface {
 	// a new record or the context gets cancelled. It can also return the error
 	// ErrBackoffRetry to signal to the SDK it should call Read again with a
 	// backoff retry.
-	// It's guaranteed that Read will be called with a cancelled context at
-	// least once, or that the context will get cancelled while Read is running.
-	// In that case Read must stop retrieving new records from the source system
-	// and start returning records that may have already been buffered. If there
-	// are no buffered records left Read must return the context error to signal
-	// a graceful stop.
+	// If Read receives a cancelled context or the context is cancelled while
+	// Read is running it must stop retrieving new records from the source
+	// system and start returning records that have already been buffered. If
+	// there are no buffered records left Read must return the context error to
+	// signal a graceful stop. If Read returns ErrBackoffRetry while the context
+	// is cancelled it will also signal that there are no records left and Read
+	// won't be called again.
 	// After Read returns an error the function won't be called again (except if
 	// the error is ErrBackoffRetry, as mentioned above).
 	// Read can be called concurrently with Ack.
@@ -140,9 +141,12 @@ func (a *sourcePluginAdapter) runRead(ctx context.Context, stream cpluginv1.Sour
 				// the plugin wants us to retry reading later
 				select {
 				case <-ctx.Done():
+					// the plugin is using the SDK for long polling and relying
+					// on the SDK to check for a cancelled context
+					return nil
 				case <-time.After(b.Duration()):
+					continue
 				}
-				continue
 			}
 			return cerrors.Errorf("read plugin error: %w", err)
 		}
