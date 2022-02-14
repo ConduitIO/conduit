@@ -17,64 +17,63 @@ package file
 import (
 	"bufio"
 	"context"
-	"log"
 	"os"
-	"strconv"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/plugins"
-	"github.com/conduitio/conduit/pkg/record"
+	"github.com/conduitio/conduit/pkg/plugin/sdk"
 )
 
 // Destination connector
 type Destination struct {
-	Scanner *bufio.Scanner
-	File    *os.File
-	Config  map[string]string
+	sdk.UnimplementedDestination
+
+	config map[string]string
+
+	scanner *bufio.Scanner
+	file    *os.File
 }
 
-func (c *Destination) Open(ctx context.Context, config plugins.Config) error {
-	cfg := config.Settings
-	path, ok := cfg[ConfigPath]
-	if !ok {
-		return cerrors.New("path does not exist")
-	}
+func NewDestination() sdk.Destination {
+	return &Destination{}
+}
 
-	file, err := openOrCreate(path)
+func (d *Destination) Configure(ctx context.Context, m map[string]string) error {
+	err := d.validateConfig(m)
 	if err != nil {
-		log.Printf("ErrOpen: %+v", err)
+		return err
+	}
+	d.config = m
+	return nil
+}
+
+func (d *Destination) Open(ctx context.Context) error {
+	file, err := d.openOrCreate(d.config[ConfigPath])
+	if err != nil {
 		return err
 	}
 
-	c.Scanner = bufio.NewScanner(file)
-	c.File = file
-	c.Config = cfg
+	d.scanner = bufio.NewScanner(file)
+	d.file = file
 	return nil
 }
 
-func (c *Destination) Teardown() error {
-	return c.File.Close()
+func (d *Destination) Write(ctx context.Context, r sdk.Record) error {
+	_, err := d.file.Write(append(r.Payload.Bytes(), byte('\n')))
+	return err
 }
 
-func (c *Destination) Validate(cfg plugins.Config) error {
-	return nil
+func (d *Destination) Flush(ctx context.Context) error {
+	return d.file.Sync()
 }
 
-func (c *Destination) Write(ctx context.Context, r record.Record) (record.Position, error) {
-	b := r.Payload.Bytes()
-
-	n, err := c.File.Write(append(b, byte('\n')))
-	if err != nil {
-		return record.Position{}, cerrors.Errorf("fileconn write: write error: %w", err)
+func (d *Destination) Teardown(ctx context.Context) error {
+	if d.file != nil {
+		return d.file.Close()
 	}
-
-	// TODO figure out actual position of written record
-	bs := []byte(strconv.Itoa(n))
-
-	return bs, nil
+	return nil
 }
 
-func openOrCreate(path string) (*os.File, error) {
+func (d *Destination) openOrCreate(path string) (*os.File, error) {
 	_, err := os.Stat(path)
 	if os.IsNotExist(err) {
 		file, err := os.Create(path)
@@ -94,4 +93,22 @@ func openOrCreate(path string) (*os.File, error) {
 	}
 
 	return file, nil
+}
+
+func (d *Destination) validateConfig(cfg map[string]string) error {
+	path, ok := cfg[ConfigPath]
+	if !ok {
+		return requiredConfigErr(ConfigPath)
+	}
+
+	// make sure we can stat the file, we don't care if it doesn't exist though
+	_, err := os.Stat(path)
+	if err != nil && !os.IsNotExist(err) {
+		return cerrors.Errorf(
+			"%q config value %q does not contain a valid path: %w",
+			ConfigPath, path, err,
+		)
+	}
+
+	return nil
 }
