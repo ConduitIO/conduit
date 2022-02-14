@@ -55,6 +55,11 @@ func TestTeardownSource_ClosesClient(t *testing.T) {
 	assert.Ok(t, underTest.Teardown(context.Background()))
 }
 
+func TestTeardownSource_NoOpen(t *testing.T) {
+	underTest := kafka.NewSource()
+	assert.Ok(t, underTest.Teardown(context.Background()))
+}
+
 func TestReadPosition(t *testing.T) {
 	ctrl := gomock.NewController(t)
 

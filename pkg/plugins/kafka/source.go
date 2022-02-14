@@ -17,7 +17,6 @@ package kafka
 import (
 	"bytes"
 	"context"
-	"fmt"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/plugin/sdk"
@@ -37,7 +36,7 @@ func NewSource() sdk.Source {
 }
 
 func (s *Source) Configure(ctx context.Context, cfg map[string]string) error {
-	fmt.Println("Configuring a Kafka Source...")
+	sdk.Logger(ctx).Info().Msg("Configuring a Kafka Source...")
 	parsed, err := Parse(cfg)
 	if err != nil {
 		return cerrors.Errorf("config is invalid: %w", err)
@@ -104,8 +103,10 @@ func (s *Source) Ack(ctx context.Context, position sdk.Position) error {
 	return s.Consumer.Ack()
 }
 
-func (s *Source) Teardown(context.Context) error {
-	fmt.Println("Tearing down a Kafka Source...")
-	s.Consumer.Close()
+func (s *Source) Teardown(ctx context.Context) error {
+	sdk.Logger(ctx).Info().Msg("Tearing down a Kafka Source...")
+	if s.Consumer != nil {
+		s.Consumer.Close()
+	}
 	return nil
 }

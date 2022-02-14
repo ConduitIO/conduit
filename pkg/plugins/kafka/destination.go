@@ -16,7 +16,6 @@ package kafka
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/plugin/sdk"
@@ -34,7 +33,7 @@ func NewDestination() sdk.Destination {
 }
 
 func (d *Destination) Configure(ctx context.Context, cfg map[string]string) error {
-	fmt.Println("Configuring a Kafka Destination...")
+	sdk.Logger(ctx).Info().Msg("Configuring a Kafka Destination...")
 	parsed, err := Parse(cfg)
 	if err != nil {
 		return cerrors.Errorf("config is invalid: %w", err)
@@ -69,8 +68,10 @@ func (d *Destination) Flush(context.Context) error {
 }
 
 // Teardown shuts down the Kafka client.
-func (d *Destination) Teardown(context.Context) error {
-	fmt.Println("Tearing down a Kafka Destination...")
-	d.Client.Close()
+func (d *Destination) Teardown(ctx context.Context) error {
+	sdk.Logger(ctx).Info().Msg("Tearing down a Kafka Destination...")
+	if d.Client != nil {
+		d.Client.Close()
+	}
 	return nil
 }
