@@ -22,11 +22,13 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin/sdk"
 	"github.com/conduitio/conduit/pkg/plugins/file"
 	"github.com/conduitio/conduit/pkg/plugins/generator"
+	"github.com/conduitio/conduit/pkg/plugins/kafka"
 )
 
 var (
 	DefaultDispenserFactories = []DispenserFactory{
 		sdkDispenserFactory(file.Specification, file.NewSource, file.NewDestination),
+		sdkDispenserFactory(kafka.Specification, kafka.NewSource, kafka.NewDestination),
 		sdkDispenserFactory(generator.Specification, generator.NewSource, nil),
 	}
 )
