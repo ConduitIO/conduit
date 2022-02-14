@@ -1,0 +1,16 @@
+{
+  "name": "actions",
+  "version": "1.0.0",
+  "description": "",
+  "main": "public_roadmap.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "roadmap": "node public_roadmap.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@octokit/graphql": "^4.8.0",
+    "octokit": "^1.7.1"
+  }
+}

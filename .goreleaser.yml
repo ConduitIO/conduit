@@ -92,6 +92,7 @@ changelog:
       - '^go.mod:'
       - Merge branch
 release:
+  prerelease: auto
   mode: append
   footer: |
     ## Docker images
