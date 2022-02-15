@@ -75,7 +75,7 @@ module('Acceptance | pipeline/index/connectors/kafka', function (hooks) {
                 },
               },
               pipeline_id: pipelineID,
-              plugin: 'pkg/plugins/kafka/kafka',
+              plugin: 'builtin:kafka',
               type: 'TYPE_SOURCE',
             },
             'it calls the API with the correct protocol'
@@ -155,7 +155,7 @@ module('Acceptance | pipeline/index/connectors/kafka', function (hooks) {
                 },
               },
               pipeline_id: pipelineID,
-              plugin: 'pkg/plugins/kafka/kafka',
+              plugin: 'builtin:kafka',
               type: 'TYPE_DESTINATION',
             },
             'it calls the API with the correct protocol'
