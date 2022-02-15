@@ -96,29 +96,11 @@ func (d *Destination) WriteAsync(ctx context.Context, r sdk.Record, ackFunc sdk.
 	d.AckFuncCache = append(d.AckFuncCache, ackFunc)
 
 	if len(d.Buffer) >= int(d.Config.BufferSize) {
-		bufferedRecords := d.Buffer
-		d.Buffer = d.Buffer[:0]
-
-		// write batch into S3
-		err := d.Writer.Write(ctx, &writer.Batch{
-			Records: bufferedRecords,
-			Format:  d.Config.Format,
-		})
+		err := d.Flush(ctx)
 		if err != nil {
-			d.Error = err
+			return err
 		}
-
-		// call all the written records' ackFunctions
-		for _, ack := range d.AckFuncCache {
-			err := ack(d.Error)
-			if err != nil {
-				return err
-			}
-		}
-		// clear ackFunc cache
-		d.AckFuncCache = d.AckFuncCache[:0]
 	}
-
 	return d.Error
 }
 
