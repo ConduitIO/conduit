@@ -25,11 +25,13 @@ import (
 	"github.com/conduitio/conduit/pkg/plugins/s3"
 	s3destination "github.com/conduitio/conduit/pkg/plugins/s3/destination"
 	s3source "github.com/conduitio/conduit/pkg/plugins/s3/source"
+	"github.com/conduitio/conduit/pkg/plugins/kafka"
 )
 
 var (
 	DefaultDispenserFactories = []DispenserFactory{
 		sdkDispenserFactory(file.Specification, file.NewSource, file.NewDestination),
+		sdkDispenserFactory(kafka.Specification, kafka.NewSource, kafka.NewDestination),
 		sdkDispenserFactory(generator.Specification, generator.NewSource, nil),
 		sdkDispenserFactory(s3.Specification, s3source.NewSource, s3destination.NewDestination),
 	}

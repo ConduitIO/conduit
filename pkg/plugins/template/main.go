@@ -21,17 +21,19 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/conduitio/conduit/pkg/plugins"
+	"github.com/conduitio/conduit/pkg/plugin/sdk"
+	"github.com/conduitio/conduit/pkg/plugins/file"
+	"github.com/conduitio/conduit/pkg/plugins/generator"
 	"github.com/conduitio/conduit/pkg/plugins/kafka"
-	"github.com/conduitio/conduit/pkg/plugins/pg"
+	"github.com/conduitio/conduit/pkg/plugins/s3"
 )
 
-var specs = map[string]plugins.Specifier{
-	"kafka": kafka.Spec{},
-	"pg":    pg.Spec{},
-	// "s3":    s3.Spec{},
-	// "file":  file.Spec{},
-	// "generator": generator.Spec{},
+var specs = map[string]sdk.Specification{
+	"kafka": kafka.Specification(),
+	// "pg":    pg.Spec{},
+	"s3":        s3.Specification(),
+	"file":      file.Specification(),
+	"generator": generator.Specification(),
 }
 
 func main() {
@@ -41,15 +43,9 @@ func main() {
 	}
 
 	plugin := os.Args[2]
-	specifier, ok := specs[strings.ToLower(plugin)]
+	spec, ok := specs[strings.ToLower(plugin)]
 	if !ok {
 		fmt.Fprintf(os.Stderr, "unknown plugin %v\n", plugin)
-		os.Exit(1)
-	}
-
-	s, err := specifier.Specify()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "couldn't get plugin specification: %+v\n", err)
 		os.Exit(1)
 	}
 
@@ -61,7 +57,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "couldn't read README template: %+v\n", err)
 		os.Exit(1)
 	}
-	err = tpl.Execute(os.Stdout, s)
+	err = tpl.Execute(os.Stdout, spec)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "couldn't execute README template: %+v\n", err)
 		os.Exit(1)
