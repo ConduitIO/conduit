@@ -9,23 +9,23 @@ import "protoc-gen-openapiv2/options/annotations.proto";
 
 message Pipeline {
   enum Status {
-    STATUS_UNSPECIFIED    = 0;
-    STATUS_RUNNING        = 1;
-    STATUS_STOPPED        = 2;
-    STATUS_DEGRADED       = 3;
+    STATUS_UNSPECIFIED = 0;
+    STATUS_RUNNING = 1;
+    STATUS_STOPPED = 2;
+    STATUS_DEGRADED = 3;
   }
 
   message State {
     Status status = 1;
-    string error  = 2;
+    string error = 2;
   }
   message Config {
-    string name        = 1;
+    string name = 1;
     string description = 2;
   }
 
-  string id     = 1 [(google.api.field_behavior) = OUTPUT_ONLY];
-  State state   = 2;
+  string id = 1 [(google.api.field_behavior) = OUTPUT_ONLY];
+  State state = 2;
   Config config = 3;
 
   // -- children connections ---------------------------------------------------
@@ -36,7 +36,7 @@ message Pipeline {
 message Connector {
   enum Type {
     TYPE_UNSPECIFIED = 0;
-    TYPE_SOURCE      = 1;
+    TYPE_SOURCE = 1;
     TYPE_DESTINATION = 2;
   }
 
@@ -45,25 +45,25 @@ message Connector {
   }
 
   message DestinationState {
-    map<string,bytes> positions = 1;
+    map<string, bytes> positions = 1;
   }
 
   message Config {
-    string name                 = 1;
-    map<string,string> settings = 2;
+    string name = 1;
+    map<string, string> settings = 2;
   }
 
-  string id     = 1 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string id = 1 [(google.api.field_behavior) = OUTPUT_ONLY];
   oneof state {
     DestinationState destination_state = 2;
-    SourceState source_state           = 3;
+    SourceState source_state = 3;
   }
   Config config = 4;
 
   // -- immutable fields -------------------------------------------------------
 
-  Type type          = 5 [(google.api.field_behavior) = IMMUTABLE];
-  string plugin      = 6 [(google.api.field_behavior) = IMMUTABLE];
+  Type type = 5 [(google.api.field_behavior) = IMMUTABLE];
+  string plugin = 6 [(google.api.field_behavior) = IMMUTABLE];
   string pipeline_id = 7 [(google.api.field_behavior) = IMMUTABLE];
 
   // -- children connections ---------------------------------------------------
@@ -73,21 +73,21 @@ message Connector {
 message Processor {
   enum Type {
     TYPE_UNSPECIFIED = 0;
-    TYPE_TRANSFORM   = 1;
-    TYPE_FILTER      = 2;
+    TYPE_TRANSFORM = 1;
+    TYPE_FILTER = 2;
   }
   message Parent {
     enum Type {
       TYPE_UNSPECIFIED = 0;
-      TYPE_CONNECTOR   = 1;
-      TYPE_PIPELINE    = 2;
+      TYPE_CONNECTOR = 1;
+      TYPE_PIPELINE = 2;
     }
 
     Type type = 1;
     string id = 2;
   }
   message Config {
-    map<string,string> settings = 1;
+    map<string, string> settings = 1;
   }
 
   string id = 1 [(google.api.field_behavior) = OUTPUT_ONLY];
@@ -96,8 +96,8 @@ message Processor {
 
   // -- immutable fields -------------------------------------------------------
 
-  string name   = 4 [(google.api.field_behavior) = IMMUTABLE];
-  Type type     = 5 [(google.api.field_behavior) = IMMUTABLE];
+  string name = 4 [(google.api.field_behavior) = IMMUTABLE];
+  Type type = 5 [(google.api.field_behavior) = IMMUTABLE];
   Parent parent = 6 [(google.api.field_behavior) = IMMUTABLE];
 }
 
@@ -353,7 +353,7 @@ service PipelineService {
 }
 
 message ListPipelinesRequest {
-  // filters eventually
+  string name = 1;
 }
 message ListPipelinesResponse {
   repeated Pipeline pipelines = 1;
@@ -541,9 +541,9 @@ service ConnectorService {
 }
 
 message CreateConnectorRequest {
-  Connector.Type type     = 1;
-  string plugin           = 2;
-  string pipeline_id      = 3;
+  Connector.Type type = 1;
+  string plugin = 2;
+  string pipeline_id = 3;
   Connector.Config config = 4;
 }
 
@@ -719,8 +719,8 @@ message ListProcessorsResponse {
 }
 
 message CreateProcessorRequest {
-  string name             = 1;
-  Processor.Type type     = 2;
+  string name = 1;
+  Processor.Type type = 2;
   Processor.Parent parent = 3;
   Processor.Config config = 4;
 }
@@ -774,7 +774,7 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
     title: "Conduit REST API";
     version: "v0.1.0";
     contact: {
-    name: "Conduit project";
+      name: "Conduit project";
       url: "https://github.com/conduitio/conduit";
       email: "";
     }
@@ -789,7 +789,7 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
     value: {
       schema: {
         json_schema: {
-        ref: ".google.rpc.Status";
+          ref: ".google.rpc.Status";
         }
       }
       examples: {
