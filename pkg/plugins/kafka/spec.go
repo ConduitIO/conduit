@@ -18,9 +18,6 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin/sdk"
 )
 
-type Spec struct {
-}
-
 // Specification returns the Kafka plugin's specification.
 // Any changes here must also be reflected in the ReadMe.
 func Specification() sdk.Specification {

@@ -21,8 +21,6 @@ import (
 	"github.com/conduitio/conduit/pkg/plugins/s3/source"
 )
 
-type Spec struct{}
-
 // Specification returns the Plugin's Specification.
 func Specification() sdk.Specification {
 	return sdk.Specification{
