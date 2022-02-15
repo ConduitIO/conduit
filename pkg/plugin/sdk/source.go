@@ -20,7 +20,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/conduitio/conduit-plugin/cpluginv1"
+	"github.com/conduitio/connector-plugin/cpluginv1"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/jpillora/backoff"
 	"gopkg.in/tomb.v2"

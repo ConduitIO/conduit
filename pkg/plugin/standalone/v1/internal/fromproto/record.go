@@ -19,7 +19,7 @@ import (
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/record"
-	connectorv1 "go.buf.build/library/go-grpc/conduitio/conduit-plugin/connector/v1"
+	connectorv1 "go.buf.build/library/go-grpc/conduitio/connector-plugin/connector/v1"
 )
 
 func Record(in *connectorv1.Record) (record.Record, error) {

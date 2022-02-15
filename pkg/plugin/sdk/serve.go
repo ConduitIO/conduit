@@ -18,8 +18,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/conduitio/conduit-plugin/cpluginv1"
-	"github.com/conduitio/conduit-plugin/cpluginv1/server"
+	"github.com/conduitio/connector-plugin/cpluginv1"
+	"github.com/conduitio/connector-plugin/cpluginv1/server"
 )
 
 func Serve(

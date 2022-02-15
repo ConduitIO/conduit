@@ -19,7 +19,7 @@ import (
 	"io"
 	"sync"
 
-	"github.com/conduitio/conduit-plugin/cpluginv1"
+	"github.com/conduitio/connector-plugin/cpluginv1"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
@@ -31,7 +31,7 @@ import (
 
 // sourcePluginAdapter implements the source plugin interface used
 // internally in Conduit and relays the calls to a source plugin defined in
-// conduit-plugin (cpluginv1). This adapter needs to make sure it behaves in the
+// connector-plugin (cpluginv1). This adapter needs to make sure it behaves in the
 // same way as the standalone plugin adapter, which communicates with the plugin
 // through gRPC, so that the caller can use both of them interchangeably.
 // TODO make sure a panic in a plugin doesn't crash Conduit

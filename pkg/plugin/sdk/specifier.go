@@ -17,7 +17,7 @@ package sdk
 import (
 	"context"
 
-	"github.com/conduitio/conduit-plugin/cpluginv1"
+	"github.com/conduitio/connector-plugin/cpluginv1"
 )
 
 // Specification is returned by a plugin when Specify is called.

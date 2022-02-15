@@ -17,7 +17,7 @@ package builtinv1
 import (
 	"context"
 
-	"github.com/conduitio/conduit-plugin/cpluginv1"
+	"github.com/conduitio/connector-plugin/cpluginv1"
 	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/conduitio/conduit/pkg/plugin/builtin/v1/internal/fromplugin"
 	"github.com/conduitio/conduit/pkg/plugin/builtin/v1/internal/toplugin"

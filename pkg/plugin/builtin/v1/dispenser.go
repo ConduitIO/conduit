@@ -15,7 +15,7 @@
 package builtinv1
 
 import (
-	"github.com/conduitio/conduit-plugin/cpluginv1"
+	"github.com/conduitio/connector-plugin/cpluginv1"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
 )
