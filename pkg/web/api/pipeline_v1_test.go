@@ -66,3 +66,52 @@ func TestPipelineAPIv1_CreatePipeline(t *testing.T) {
 	assert.Ok(t, err)
 	assert.Equal(t, want, got)
 }
+
+func TestConnectorAPIv1_ListPipelinesByName(t *testing.T) {
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+	psMock := mock.NewPipelineOrchestrator(ctrl)
+	api := NewPipelineAPIv1(psMock)
+
+	names := []string{"do-not-want-this-pipeline", "want-p1", "want-p2", "skip", "another-skipped"}
+	pls := make([]*pipeline.Instance, 0)
+	plsMap := make(map[string]*pipeline.Instance)
+
+	for _, name := range names {
+		p := &pipeline.Instance{
+			ID:     uuid.NewString(),
+			Config: pipeline.Config{Name: name},
+		}
+		pls = append(pls, p)
+		plsMap[p.ID] = p
+	}
+
+	psMock.EXPECT().
+		List(ctx).
+		Return(plsMap).
+		Times(1)
+
+	want := &apiv1.ListPipelinesResponse{
+		Pipelines: []*apiv1.Pipeline{{
+			Id:    pls[1].ID,
+			State: &apiv1.Pipeline_State{},
+			Config: &apiv1.Pipeline_Config{
+				Name: pls[1].Config.Name,
+			},
+		}, {
+			Id:    pls[2].ID,
+			State: &apiv1.Pipeline_State{},
+			Config: &apiv1.Pipeline_Config{
+				Name: pls[2].Config.Name,
+			},
+		}},
+	}
+
+	got, err := api.ListPipelines(
+		ctx,
+		&apiv1.ListPipelinesRequest{Name: "want-.*"},
+	)
+
+	assert.Ok(t, err)
+	assert.Equal(t, want, got)
+}
