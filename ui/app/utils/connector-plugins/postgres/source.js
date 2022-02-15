@@ -6,7 +6,7 @@ export default class PostgresSource extends ConnectorPlugin {
 
   static name = 'Postgres Source';
   static connectorType = 'source';
-  static pluginPath = 'pkg/plugins/pg/pg';
+  static pluginPath = 'builtin:pg';
 
   static get blueprint() {
     const requiredURL = generateBlueprint(

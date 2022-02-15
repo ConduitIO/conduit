@@ -6,7 +6,7 @@ export default class S3Source extends ConnectorPlugin {
 
   static name = 'S3 Source';
   static connectorType = 'source';
-  static pluginPath = 'pkg/plugins/s3/s3';
+  static pluginPath = 'builtin:s3';
 
   static get blueprint() {
     return [
