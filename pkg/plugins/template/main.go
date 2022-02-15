@@ -25,12 +25,13 @@ import (
 	"github.com/conduitio/conduit/pkg/plugins/file"
 	"github.com/conduitio/conduit/pkg/plugins/generator"
 	"github.com/conduitio/conduit/pkg/plugins/kafka"
+	"github.com/conduitio/conduit/pkg/plugins/s3"
 )
 
 var specs = map[string]sdk.Specification{
 	"kafka": kafka.Specification(),
 	// "pg":    pg.Spec{},
-	// "s3":        s3.Specification(),
+	"s3":        s3.Specification(),
 	"file":      file.Specification(),
 	"generator": generator.Specification(),
 }

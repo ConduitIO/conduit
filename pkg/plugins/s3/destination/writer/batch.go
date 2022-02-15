@@ -15,14 +15,14 @@
 package writer
 
 import (
+	"github.com/conduitio/conduit/pkg/plugin/sdk"
 	"github.com/conduitio/conduit/pkg/plugins/s3/destination/format"
-	"github.com/conduitio/conduit/pkg/record"
 )
 
 // Batch describes the data that needs to be saved by the Writer
 type Batch struct {
 	Format  format.Format
-	Records []record.Record
+	Records []sdk.Record
 }
 
 // Bytes returns a byte representation for the Writer to write into a file.
@@ -31,7 +31,7 @@ func (b *Batch) Bytes() ([]byte, error) {
 }
 
 // LastPosition returns the position of the last record in the batch.
-func (b *Batch) LastPosition() record.Position {
+func (b *Batch) LastPosition() sdk.Position {
 	if len(b.Records) == 0 {
 		return nil
 	}

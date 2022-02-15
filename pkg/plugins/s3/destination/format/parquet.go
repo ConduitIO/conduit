@@ -18,7 +18,7 @@ import (
 	"io/ioutil"
 	"os"
 
-	"github.com/conduitio/conduit/pkg/record"
+	"github.com/conduitio/conduit/pkg/plugin/sdk"
 	"github.com/xitongsys/parquet-go-source/local"
 	"github.com/xitongsys/parquet-go/parquet"
 	"github.com/xitongsys/parquet-go/writer"
@@ -33,7 +33,7 @@ type parquetRecord struct {
 	Timestamp int64             `parquet:"name=timestamp, type=INT64, convertedtype=TIME_MICROS"`
 }
 
-func makeParquetBytes(records []record.Record) ([]byte, error) {
+func makeParquetBytes(records []sdk.Record) ([]byte, error) {
 	var err error
 
 	// TODO: make this less dumb

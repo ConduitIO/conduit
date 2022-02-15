@@ -21,8 +21,8 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/plugin/sdk"
 	"github.com/conduitio/conduit/pkg/plugins/s3/source/position"
-	"github.com/conduitio/conduit/pkg/record"
 )
 
 type CombinedIterator struct {
@@ -52,7 +52,7 @@ func NewCombinedIterator(
 		if len(p.Key) != 0 {
 			fmt.Printf("Warning: got position: %s, snapshot will be restarted from the beginning of the bucket\n", p.ToRecordPosition())
 		}
-		p = position.Position{} // always start from nil
+		p = position.Position{} // always start snapshot from the beginning, so position is nil
 		c.snapshotIterator, err = NewSnapshotIterator(bucket, client, p)
 		if err != nil {
 			return nil, cerrors.Errorf("could not create the snapshot iterator: %w", err)
@@ -71,7 +71,7 @@ func NewCombinedIterator(
 func (c *CombinedIterator) HasNext(ctx context.Context) bool {
 	switch {
 	case c.snapshotIterator != nil:
-		// case of empty bucket
+		// case of empty bucket or end of bucket
 		if !c.snapshotIterator.HasNext(ctx) {
 			err := c.switchToCDCIterator()
 			if err != nil {
@@ -87,23 +87,23 @@ func (c *CombinedIterator) HasNext(ctx context.Context) bool {
 	}
 }
 
-func (c *CombinedIterator) Next(ctx context.Context) (record.Record, error) {
+func (c *CombinedIterator) Next(ctx context.Context) (sdk.Record, error) {
 	switch {
 	case c.snapshotIterator != nil:
 		r, err := c.snapshotIterator.Next(ctx)
 		if err != nil {
-			return record.Record{}, err
+			return sdk.Record{}, err
 		}
 		if !c.snapshotIterator.HasNext(ctx) {
 			// switch to cdc iterator
 			err := c.switchToCDCIterator()
 			if err != nil {
-				return record.Record{}, err
+				return sdk.Record{}, err
 			}
 			// change the last record's position to CDC
 			r.Position, err = position.ConvertToCDCPosition(r.Position)
 			if err != nil {
-				return record.Record{}, err
+				return sdk.Record{}, err
 			}
 		}
 		return r, nil
@@ -111,7 +111,7 @@ func (c *CombinedIterator) Next(ctx context.Context) (record.Record, error) {
 	case c.cdcIterator != nil:
 		return c.cdcIterator.Next(ctx)
 	default:
-		return record.Record{}, cerrors.New("no initialized iterator")
+		return sdk.Record{}, cerrors.New("no initialized iterator")
 	}
 }
 
