@@ -15,9 +15,9 @@
 package builtinv1
 
 import (
-	"github.com/conduitio/connector-plugin/cpluginv1"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
+	"github.com/conduitio/connector-plugin/cpluginv1"
 )
 
 type Dispenser struct {

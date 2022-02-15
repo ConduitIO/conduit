@@ -24,11 +24,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/conduitio/connector-plugin/cpluginv1"
-	"github.com/conduitio/connector-plugin/cpluginv1/mock"
 	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/record"
+	"github.com/conduitio/connector-plugin/cpluginv1"
+	"github.com/conduitio/connector-plugin/cpluginv1/mock"
 	"github.com/golang/mock/gomock"
 	"github.com/google/go-cmp/cmp"
 )

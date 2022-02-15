@@ -15,8 +15,8 @@
 package toplugin
 
 import (
-	"github.com/conduitio/connector-plugin/cpluginv1"
 	"github.com/conduitio/conduit/pkg/record"
+	"github.com/conduitio/connector-plugin/cpluginv1"
 )
 
 func DestinationConfigureRequest(in map[string]string) (cpluginv1.DestinationConfigureRequest, error) {

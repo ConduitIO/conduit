@@ -17,10 +17,10 @@ package builtinv1
 import (
 	"context"
 
-	"github.com/conduitio/connector-plugin/cpluginv1"
 	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/conduitio/conduit/pkg/plugin/builtin/v1/internal/fromplugin"
 	"github.com/conduitio/conduit/pkg/plugin/builtin/v1/internal/toplugin"
+	"github.com/conduitio/connector-plugin/cpluginv1"
 )
 
 // TODO make sure a panic in a plugin doesn't crash Conduit

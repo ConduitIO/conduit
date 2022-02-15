@@ -15,8 +15,8 @@
 package fromplugin
 
 import (
-	"github.com/conduitio/connector-plugin/cpluginv1"
 	"github.com/conduitio/conduit/pkg/record"
+	"github.com/conduitio/connector-plugin/cpluginv1"
 )
 
 func SourceRunResponse(in cpluginv1.SourceRunResponse) (record.Record, error) {

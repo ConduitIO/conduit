@@ -19,13 +19,13 @@ import (
 	"io"
 	"sync"
 
-	"github.com/conduitio/connector-plugin/cpluginv1"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/conduitio/conduit/pkg/plugin/builtin/v1/internal/fromplugin"
 	"github.com/conduitio/conduit/pkg/plugin/builtin/v1/internal/toplugin"
 	"github.com/conduitio/conduit/pkg/record"
+	"github.com/conduitio/connector-plugin/cpluginv1"
 	"github.com/rs/zerolog"
 )
 
