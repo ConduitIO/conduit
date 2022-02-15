@@ -5,10 +5,11 @@ _Data Integration for Production Data Stores. :dizzy:_
 
 [![License](https://img.shields.io/badge/license-Apache%202-blue)](https://github.com/ConduitIO/conduit/blob/main/LICENSE.md)
 [![Build](https://github.com/ConduitIO/conduit/actions/workflows/build.yml/badge.svg)](https://github.com/ConduitIO/conduit/actions/workflows/build.yml)
-[![Go Reference](https://pkg.go.dev/badge/github.com/conduitio/conduit.svg)](https://pkg.go.dev/github.com/conduitio/conduit)
 [![Go Report Card](https://goreportcard.com/badge/github.com/conduitio/conduit)](https://goreportcard.com/report/github.com/conduitio/conduit)
 [![Discord](https://img.shields.io/discord/828680256877363200?label=discord&logo=discord)](https://discord.meroxa.com)
-[![Docs](https://img.shields.io/badge/conduit-docs-blue)](https://docs.conduit.io)
+[![Go Reference](https://pkg.go.dev/badge/github.com/conduitio/conduit.svg)](https://pkg.go.dev/github.com/conduitio/conduit)
+[![Conduit docs](https://img.shields.io/badge/conduit-docs-blue)](https://docs.conduit.io)
+[![API docs](https://img.shields.io/badge/HTTP_API-docs-blue)](https://docs.conduit.io/api)
 
 ## Overview
 
@@ -98,7 +99,7 @@ learn more about the gRPC API please have a look at the
 
 The HTTP API is by default running on port 8080. You can define a custom address using the CLI flag `-http.address`. It
 is generated using [gRPC gateway](https://github.com/grpc-ecosystem/grpc-gateway) and is thus providing the same
-functionality as the gRPC API. To learn more about the HTTP API please have a look at the
+functionality as the gRPC API. To learn more about the HTTP API please have a look at the [API documentation](https://www.conduit.io/api), 
 [OpenAPI definition](https://github.com/ConduitIO/conduit/blob/main/pkg/web/openapi/swagger-ui/api/v1/api.swagger.json)
 or run Conduit and navigate to `http://localhost:8080/openapi/` to open a
 [Swagger UI](https://github.com/swagger-api/swagger-ui) which makes it easy to try it out.
