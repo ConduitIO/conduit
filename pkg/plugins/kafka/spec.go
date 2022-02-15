@@ -25,6 +25,7 @@ type Spec struct {
 // Any changes here must also be reflected in the ReadMe.
 func Specification() sdk.Specification {
 	return sdk.Specification{
+		Name:        "kafka",
 		Summary:     "A Kafka source and destination plugin for Conduit, written in Go.",
 		Description: "",
 		Version:     "v0.1.0",
