@@ -25,12 +25,12 @@ build-generator-plugin:
 	go build -o pkg/plugins/generator/generator pkg/plugins/generator/cmd/generator/main.go
 
 test: build-file-plugin
-	go test -v -race ./...
+	go test $(GOTEST_FLAGS) -race ./...
 
 test-integration: build-file-plugin
 	# run required docker containers, execute integration tests, stop containers after tests
 	docker-compose -f test/docker-compose-postgres.yml -f test/docker-compose-kafka.yml up -d
-	go test -v -race --tags=integration ./...; ret=$$?; \
+	go test $(GOTEST_FLAGS) -race --tags=integration ./...; ret=$$?; \
 		docker-compose -f test/docker-compose-postgres.yml -f test/docker-compose-kafka.yml down; \
 		exit $$ret
 
