@@ -42,7 +42,6 @@ export class SourceNode extends BaseNode {
   }
 }
 
-
 export class DestinationNode extends BaseNode {
   @tracked inputHandle = null;
   model;

@@ -8,19 +8,6 @@ import { run } from '@ember/runloop';
 
 import { validatePresence } from 'ember-changeset-validations/validators';
 
-const TRANSFORM_SUFFIXES = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-
-function* transformSuffixGenerator() {
-  let count = 0;
-
-  while (count % 26 < 26) {
-    yield TRANSFORM_SUFFIXES[count % 26];
-    count++;
-  }
-}
-
-const SUFFIX_GENERATOR = transformSuffixGenerator();
-
 const ConnectorTransformValidations = {
   name: validatePresence({ presence: true }),
 };
@@ -166,12 +153,12 @@ export default class PipelineEditorConnectorSlidePanel extends Component {
   }
 
   @action
-  onDragStart(item, event) {
+  onDragStart(item) {
     this.draggingItem = item;
   }
 
   @action
-  onDragStop(item, event) {
+  onDragStop() {
     this.draggingItem = null;
   }
 }

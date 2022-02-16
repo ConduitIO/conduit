@@ -17,7 +17,8 @@ const page = {
   connectorTransforms: '[data-test-connector-transform]',
   configFields: '[data-test-config-field]',
   sourceNode: '[data-test-connector-node="source-source-one"] > div',
-  destinationNode: '[data-test-connector-node="destination-destination-one"] > div',
+  destinationNode:
+    '[data-test-connector-node="destination-destination-one"] > div',
 };
 
 module('Acceptance | pipeline/index/processors', function (hooks) {

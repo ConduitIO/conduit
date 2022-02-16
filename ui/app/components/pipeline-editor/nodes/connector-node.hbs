@@ -9,6 +9,7 @@
     {{will-destroy this.unregisterNode @connectorType this.pipelineNodeManager}}
     {{on "click" (fn @selectNode @connector)}}
     {{on-click-outside (fn @selectNode null) "#editor-container"}}
+    role="button"
   >
     <div class="flex items-center justify-between mb-1">
       <div class="text-xs font-medium" data-test-connector-node-name>

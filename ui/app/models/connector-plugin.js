@@ -1,13 +1,13 @@
-import Model, { attr } from "@ember-data/model";
+import Model, { attr } from '@ember-data/model';
 
 export default class ConnectorPluginModel extends Model {
-  @attr("string")
+  @attr('string')
   name;
 
-  @attr("string")
+  @attr('string')
   connectorType;
 
-  @attr("string")
+  @attr('string')
   pluginPath;
 
   @attr()
