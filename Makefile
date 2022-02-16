@@ -29,9 +29,9 @@ test: build-file-plugin
 
 test-integration: build-file-plugin
 	# run required docker containers, execute integration tests, stop containers after tests
-	docker-compose -f test/docker-compose-postgres.yml -f test/docker-compose-kafka.yml up -d --wait
+	docker compose -f test/docker-compose-postgres.yml -f test/docker-compose-kafka.yml up -d --wait
 	go test $(GOTEST_FLAGS) -race --tags=integration ./...; ret=$$?; \
-		docker-compose -f test/docker-compose-postgres.yml -f test/docker-compose-kafka.yml down; \
+		docker compose -f test/docker-compose-postgres.yml -f test/docker-compose-kafka.yml down; \
 		exit $$ret
 
 build-server: build-plugins
