@@ -1,4 +1,4 @@
-version: '2'
+version: '3.4'
 services:
   zookeeper:
     image: confluentinc/cp-zookeeper:7.0.0
@@ -8,6 +8,14 @@ services:
 
   kafka:
     image: confluentinc/cp-kafka:7.0.0
+    healthcheck:
+      test: kafka-topics --list --bootstrap-server localhost:9092
+      # healthchecks happen every 10s, failures in the first 30s are not counted toward the maximum number of retries,
+      # after 3 failed healthchecks the service is marked as unhealthy
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     depends_on:
       - zookeeper
     ports:
