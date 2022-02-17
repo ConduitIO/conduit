@@ -9,7 +9,7 @@ build: ui-dist
 	@echo "Get started by running:"
 	@echo " ./conduit"
 
-test: build-server
+test:
 	go test -v -race ./...
 
 test-integration:
