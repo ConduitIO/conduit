@@ -1,0 +1,11 @@
+name: roadmap
+
+on:
+  issues:
+    types: [labeled, unlabeled]
+
+jobs:
+  roadmap:
+    uses: ConduitIO/automation/.github/workflows/roadmap.yml@main
+    secrets:
+      project-automation-token: ${{ secrets.PROJECT_AUTOMATION }}
