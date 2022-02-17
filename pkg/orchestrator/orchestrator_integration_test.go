@@ -86,7 +86,7 @@ func TestPipelineSimple(t *testing.T) {
 		connector.Config{
 			Name:       "test-destination",
 			Settings:   map[string]string{"path": destinationPath},
-			Plugin:     "../plugins/file/file", // use standalone plugin
+			Plugin:     "builtin:file", // use builtin plugin
 			PipelineID: pl.ID,
 		},
 	)
