@@ -16,10 +16,6 @@ export default class PipelineEditorConfigFieldComponent extends Component {
     return !this.isFieldInvalid;
   }
 
-  validateField() {
-    this.args.field.validate();
-  }
-
   constructor() {
     super(...arguments);
 
@@ -105,5 +101,10 @@ export default class PipelineEditorConfigFieldComponent extends Component {
     this.args.setInputValue(changeset, {
       target: { value: event.target.checked },
     });
+  }
+
+  @action
+  validateField() {
+    this.args.field.validate();
   }
 }

@@ -16,6 +16,7 @@ package api
 
 import (
 	"context"
+	"sort"
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/foundation/assert"
@@ -67,7 +68,7 @@ func TestPipelineAPIv1_CreatePipeline(t *testing.T) {
 	assert.Equal(t, want, got)
 }
 
-func TestConnectorAPIv1_ListPipelinesByName(t *testing.T) {
+func TestPipelineAPIv1_ListPipelinesByName(t *testing.T) {
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	psMock := mock.NewPipelineOrchestrator(ctrl)
@@ -111,7 +112,15 @@ func TestConnectorAPIv1_ListPipelinesByName(t *testing.T) {
 		ctx,
 		&apiv1.ListPipelinesRequest{Name: "want-.*"},
 	)
-
 	assert.Ok(t, err)
+
+	sortPipelines(want.Pipelines)
+	sortPipelines(got.Pipelines)
 	assert.Equal(t, want, got)
+}
+
+func sortPipelines(p []*apiv1.Pipeline) {
+	sort.Slice(p, func(i, j int) bool {
+		return p[i].Id < p[j].Id
+	})
 }

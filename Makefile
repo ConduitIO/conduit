@@ -14,9 +14,9 @@ test:
 
 test-integration:
 	# run required docker containers, execute integration tests, stop containers after tests
-	docker-compose -f test/docker-compose-postgres.yml -f test/docker-compose-kafka.yml up -d
-	go test -v -race --tags=integration ./...; ret=$$?; \
-		docker-compose -f test/docker-compose-postgres.yml -f test/docker-compose-kafka.yml down; \
+	docker compose -f test/docker-compose-postgres.yml -f test/docker-compose-kafka.yml up --quiet-pull -d --wait
+	go test $(GOTEST_FLAGS) -race --tags=integration ./...; ret=$$?; \
+		docker compose -f test/docker-compose-postgres.yml -f test/docker-compose-kafka.yml down; \
 		exit $$ret
 
 build-server:

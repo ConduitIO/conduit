@@ -49,7 +49,7 @@ func TestDestination_Write_Simple(t *testing.T) {
 	err = underTest.Write(context.Background(), record)
 	assert.Ok(t, err)
 
-	message, err := waitForReaderMessage(cfg[kafka.Topic], 10*time.Second)
+	message, err := waitForReaderMessage(cfg[kafka.Topic], 15*time.Second)
 	assert.Ok(t, err)
 	assert.Equal(t, record.Payload.Bytes(), message.Value)
 }

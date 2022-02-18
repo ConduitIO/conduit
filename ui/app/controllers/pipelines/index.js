@@ -1,12 +1,12 @@
-import Controller, { inject as controller } from "@ember/controller";
-import { tracked } from "@glimmer/tracking";
-import { action } from "@ember/object";
+import Controller, { inject as controller } from '@ember/controller';
+import { tracked } from '@glimmer/tracking';
+import { action } from '@ember/object';
 
 export default class PipelinesIndexController extends Controller {
-  @controller("pipelines")
+  @controller('pipelines')
   pipelinesController;
 
-  queryParams = ["filter", "page"];
+  queryParams = ['filter', 'page'];
 
   @tracked
   filter = null;
@@ -21,14 +21,14 @@ export default class PipelinesIndexController extends Controller {
   model;
 
   get filteredPipelines() {
-    const savedModels = this.model.filterBy("isNew", false);
+    const savedModels = this.model.filterBy('isNew', false);
     switch (this.filter) {
-      case "starred":
-        return savedModels.filterBy("favorite", true);
-      case "running":
-        return savedModels.filterBy("pipelineState", "running");
-      case "paused":
-        return savedModels.filterBy("pipelineState", "paused");
+      case 'starred':
+        return savedModels.filterBy('favorite', true);
+      case 'running':
+        return savedModels.filterBy('pipelineState', 'running');
+      case 'paused':
+        return savedModels.filterBy('pipelineState', 'paused');
       default:
         return savedModels;
     }

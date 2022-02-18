@@ -8,6 +8,7 @@
             <BasicDropdown @horizontalPosition="auto-right" as |dd|>
               <dd.Trigger>
                 <button
+                  type="button"
                   class="text-xl py-1 px-1.5 bg-gray-200 border-none text-gray-900 leading-5 rounded"
                   data-test-pipeline-editor-add-node
                 >
@@ -59,7 +60,7 @@
           <div id="editor-container" class="w-full h-full">
             <PipelineEditor::SvgLayer />
             <div id="editor-bg" class="p-12 w-full h-full absolute">
-              <div class="flex items-center space-x-16" style="width: 900px;">
+              <div class="flex items-center space-x-16 w-editor">
                 <PipelineEditor::ConnectorColumn
                   @connectorType="source"
                   @connectors={{this.sourceConnectors}}
@@ -84,6 +85,7 @@
             <div class="absolute bottom-2 left-2">
               <div class="flex flex-col items-center justify-center space-y-2">
                 <button
+                  type="button"
                   class="h-6 w-6 bg-white shadow hover:shadow-lg rounded-sm cursor-pointer"
                   {{on "click" this.pipelineNodeManager.zoomResetAction}}
                 >
@@ -93,12 +95,14 @@
                 </button>
                 <div class="flex flex-col bg-white shadow rounded-sm">
                   <button
+                    type="button"
                     class="h-6 w-6 text-center cursor-pointer"
                     {{on "click" this.pipelineNodeManager.zoomInAction}}
                   >
                     +
                   </button>
                   <button
+                    type="button"
                     class="h-6 w-6 text-center cursor-pointer"
                     {{on "click" this.pipelineNodeManager.zoomOutAction}}
                   >
