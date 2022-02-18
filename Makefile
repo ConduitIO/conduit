@@ -10,7 +10,7 @@ build: ui-dist
 	@echo " ./conduit"
 
 test:
-	go test -v -race ./...
+	go test $(GOTEST_FLAGS) -race ./...
 
 test-integration:
 	# run required docker containers, execute integration tests, stop containers after tests
