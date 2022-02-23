@@ -5,6 +5,9 @@ VERSION=`./scripts/get-tag.sh`
 # The build target should stay at the top since we want it to be the default target.
 build: ui-dist build-plugins
 	go build -ldflags "-X github.com/conduitio/conduit/pkg/conduit.Version=${VERSION}" -o conduit -tags ui ./cmd/conduit/main.go
+	@echo "\nBuild complete. Enjoy using Conduit!"
+	@echo "Get started by running:"
+	@echo " ./conduit"
 
 build-file-plugin:
 	go build -o pkg/plugins/file/file pkg/plugins/file/cmd/file/main.go
@@ -22,13 +25,13 @@ build-generator-plugin:
 	go build -o pkg/plugins/generator/generator pkg/plugins/generator/cmd/generator/main.go
 
 test: build-file-plugin
-	go test -v -race ./...
+	go test $(GOTEST_FLAGS) -race ./...
 
 test-integration: build-file-plugin
 	# run required docker containers, execute integration tests, stop containers after tests
-	docker-compose -f test/docker-compose-postgres.yml -f test/docker-compose-kafka.yml up -d
-	go test -v -race --tags=integration ./...; ret=$$?; \
-		docker-compose -f test/docker-compose-postgres.yml -f test/docker-compose-kafka.yml down; \
+	docker compose -f test/docker-compose-postgres.yml -f test/docker-compose-kafka.yml up --quiet-pull -d --wait
+	go test $(GOTEST_FLAGS) -race --tags=integration ./...; ret=$$?; \
+		docker compose -f test/docker-compose-postgres.yml -f test/docker-compose-kafka.yml down; \
 		exit $$ret
 
 build-server: build-plugins

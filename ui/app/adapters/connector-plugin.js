@@ -1,5 +1,5 @@
-import JSONAPIAdapter from "@ember-data/adapter/json-api";
+import JSONAPIAdapter from '@ember-data/adapter/json-api';
 
 export default class ConnectorPluginAdapter extends JSONAPIAdapter {
-  namespace = "v1";
+  namespace = 'v1';
 }

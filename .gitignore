@@ -43,6 +43,7 @@ pkg/plugins/generator/generator
 !/pkg/web/ui/dist/.keep
 
 # dependencies
+/.github/actions/node_modules/
 /ui/node_modules/
 
 # misc

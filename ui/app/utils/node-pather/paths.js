@@ -1,4 +1,4 @@
-import { tracked } from "@glimmer/tracking";
+import { tracked } from '@glimmer/tracking';
 
 // A path goes from left to right
 // It expects a starting node with an output handle

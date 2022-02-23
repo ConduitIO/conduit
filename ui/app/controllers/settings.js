@@ -1,6 +1,6 @@
 import Controller from '@ember/controller';
 import { tracked } from '@glimmer/tracking';
-import { action } from "@ember/object";
+import { action } from '@ember/object';
 
 export default class SettingsController extends Controller {
   @tracked
@@ -8,6 +8,8 @@ export default class SettingsController extends Controller {
 
   @action
   setTelemetryOptIn(event) {
-    event.target.checked ? this.telemetryOptInLabel = "I'm in" : this.telemetryOptInLabel = 'No thanks'
+    event.target.checked
+      ? (this.telemetryOptInLabel = "I'm in")
+      : (this.telemetryOptInLabel = 'No thanks');
   }
 }

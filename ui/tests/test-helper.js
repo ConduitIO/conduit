@@ -6,7 +6,6 @@ import { setup } from 'qunit-dom';
 import { start } from 'ember-qunit';
 import './helpers/flash-message';
 
-
 setApplication(Application.create(config.APP));
 
 setup(QUnit.assert);

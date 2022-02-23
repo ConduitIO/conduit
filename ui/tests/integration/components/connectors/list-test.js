@@ -1,18 +1,18 @@
-import { module, skip } from "qunit";
-import { setupRenderingTest } from "ember-qunit";
-import { render } from "@ember/test-helpers";
-import { hbs } from "ember-cli-htmlbars";
+import { module, skip } from 'qunit';
+import { setupRenderingTest } from 'ember-qunit';
+import { render } from '@ember/test-helpers';
+import { hbs } from 'ember-cli-htmlbars';
 
-module("Integration | Component | connectors/list", function (hooks) {
+module('Integration | Component | connectors/list', function (hooks) {
   setupRenderingTest(hooks);
 
-  skip("it renders", async function (assert) {
+  skip('it renders', async function (assert) {
     // Set any properties with this.set('myProperty', 'value');
     // Handle any actions with this.set('myAction', function(val) { ... });
 
     await render(hbs`<Connectors::List @connectors=[] />`);
 
-    assert.equal(this.element.textContent.trim(), "");
+    assert.equal(this.element.textContent.trim(), '');
 
     // Template block usage:
     await render(hbs`
@@ -21,6 +21,6 @@ module("Integration | Component | connectors/list", function (hooks) {
       </Connectors::List>
     `);
 
-    assert.equal(this.element.textContent.trim(), "template block text");
+    assert.equal(this.element.textContent.trim(), 'template block text');
   });
 });
