@@ -4,7 +4,7 @@ VERSION=`./scripts/get-tag.sh`
 
 # The build target should stay at the top since we want it to be the default target.
 build: ui-dist build-plugins
-	go build -ldflags "-X github.com/conduitio/conduit/pkg/conduit.Version=${VERSION}" -o conduit -tags ui ./cmd/conduit/main.go
+	go build -ldflags "-X github.com/conduitio/conduit/pkg/conduit.version=${VERSION}" -o conduit -tags ui ./cmd/conduit/main.go
 	@echo "\nBuild complete. Enjoy using Conduit!"
 	@echo "Get started by running:"
 	@echo " ./conduit"
@@ -35,7 +35,7 @@ test-integration: build-file-plugin
 		exit $$ret
 
 build-server: build-plugins
-	go build -ldflags "-X 'github.com/conduitio/conduit/pkg/conduit.Version=${VERSION}'" -o conduit ./cmd/conduit/main.go
+	go build -ldflags "-X 'github.com/conduitio/conduit/pkg/conduit.version=${VERSION}'" -o conduit ./cmd/conduit/main.go
 	@echo "build version: ${VERSION}"
 
 build-plugins: build-file-plugin build-pg-plugin build-s3-plugin build-kafka-plugin build-generator-plugin
