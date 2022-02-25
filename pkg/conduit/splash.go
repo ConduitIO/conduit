@@ -17,25 +17,6 @@ package conduit
 import "fmt"
 
 func Splash() string {
-	return splash1() + "\n" +
-		splash2() + "\n" +
-		splash3()
-}
-
-func splash1() string {
-	const splash = `
-        __________       
-       /          \      
-  ____/    ____    \____ 
- /        /    \        \
- \____    \____/    ____/
-      \            /     
-       \__________/      Conduit %s
-`
-	return fmt.Sprintf(splash, Version(true))
-}
-
-func splash2() string {
 	const splash = "" +
 		"             ....            \n" +
 		"         .::::::::::.        \n" +
@@ -45,23 +26,7 @@ func splash2() string {
 		" `::::::::          ::::::::‘\n" +
 		"      `::::        ::::‘     \n" +
 		"       `:::::....:::::‘      \n" +
-		"         `::::::::::‘        \n" +
-		"             ‘‘‘‘            Conduit %s"
-	return fmt.Sprintf(splash, Version(true))
-}
-
-func splash3() string {
-	const splash = `
-            &BGGPPGB#&           
-         #PJ??????????YG&        
-       &5????J5PGGPY?????G       
-      #J???Y#       &G????P      
- GYJJJ????J&          G????JJJJ5&
- P????????Y           B????????J#
-     &B????P&        #J???Y#     
-       BJ????5GB##BPY????5&      
-        &GJ????????????5B        
-           #BP5YYY55GB&          Conduit %s
-`
+		"         `::::::::::‘        Conduit %s\n" +
+		"             ‘‘‘‘            "
 	return fmt.Sprintf(splash, Version(true))
 }
