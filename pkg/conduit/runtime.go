@@ -61,11 +61,6 @@ const (
 	exitTimeout = 10 * time.Second
 )
 
-// Version is set during the build process (i.e. the Makefile)
-// It follows Go's convention for module version, where the version
-// starts with the letter v, followed by a semantic version.
-var Version string
-
 // Runtime sets up all services for serving and monitoring a Conduit instance.
 type Runtime struct {
 	Config Config
@@ -105,7 +100,7 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 	}
 
 	configurePrometheus()
-	measure.ConduitInfo.WithValues(Version).Inc()
+	measure.ConduitInfo.WithValues(Version(true)).Inc()
 
 	// Start the connector persister
 	connectorPersister := connector.NewPersister(logger, db,
@@ -271,7 +266,7 @@ func (r *Runtime) serveGRPCAPI(ctx context.Context, t *tomb.Tomb) (net.Addr, err
 	connectorAPIv1 := api.NewConnectorAPIv1(r.Orchestrator.Connectors)
 	connectorAPIv1.Register(grpcServer)
 
-	info := api.NewInformation(Version)
+	info := api.NewInformation(Version(false))
 	info.Register(grpcServer)
 
 	healthService := api.NewHealthChecker()

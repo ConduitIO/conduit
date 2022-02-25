@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"runtime"
 
 	"github.com/conduitio/conduit/pkg/conduit"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -37,6 +36,8 @@ func main() {
 	if err != nil {
 		exitWithError(cerrors.Errorf("failed to setup conduit runtime: %w", err))
 	}
+
+	_, _ = fmt.Fprintf(os.Stdout, "%s\n", conduit.Splash())
 
 	// As per the docs, the signals SIGKILL and SIGSTOP may not be caught by a program
 	ctx := cancelOnInterrupt(context.Background())
@@ -68,7 +69,7 @@ func parseConfig() conduit.Config {
 
 	// check if the -version flag is set
 	if *version {
-		_, _ = fmt.Fprintf(os.Stdout, "%s %s/%s\n", conduit.Version, runtime.GOOS, runtime.GOARCH)
+		_, _ = fmt.Fprintf(os.Stdout, "%s\n", conduit.Version(true))
 		os.Exit(0)
 	}
 
