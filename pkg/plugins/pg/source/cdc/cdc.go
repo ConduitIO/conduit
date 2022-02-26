@@ -15,15 +15,14 @@
 package cdc
 
 import (
-	"bytes"
 	"context"
-	"encoding/binary"
 	"fmt"
 	"log"
 	"strings"
 	"sync"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/multierror"
 	"github.com/conduitio/conduit/pkg/plugin/sdk"
 
 	"github.com/batchcorp/pgoutput"
@@ -105,7 +104,7 @@ func NewCDCIterator(ctx context.Context, config Config) (*Iterator, error) {
 		return nil, cerrors.Errorf("failed to setup subscription %w", err)
 	}
 
-	err = i.setPosition(config.Position)
+	err = i.setPosition()
 	if err != nil {
 		return nil, cerrors.Errorf("failed to set starting position: %w", err)
 	}
@@ -118,44 +117,36 @@ func NewCDCIterator(ctx context.Context, config Config) (*Iterator, error) {
 	return i, nil
 }
 
-func (i *Iterator) setPosition(position sdk.Position) error {
-	if len(position) == 0 {
-		log.Printf("no position configured - defaulting to confirmed flush LSN")
-		err := i.setToFlushLSN()
-		if err != nil {
-			return cerrors.Errorf("failed to set default flush lsn: %w", err)
-		}
-	}
-
-	n, err := parsePosition(position)
+func (i *Iterator) setPosition() error {
+	log.Printf("no position configured - defaulting to confirmed flush LSN")
+	err := i.setToFlushLSN()
 	if err != nil {
-		return cerrors.Errorf("failed to parse position from bytes: %w", err)
+		return cerrors.Errorf("failed to set default flush lsn: %w", err)
 	}
-	i.lsn = n
 
 	return nil
 }
 
-// parsePosition attempts to parse a position as a uint64 for replication.
-func parsePosition(position sdk.Position) (uint64, error) {
-	encoded, err := binary.ReadUvarint(bytes.NewReader(position))
-	if err != nil {
-		return 0, cerrors.Errorf("failed to read bytes: %v - %w", position, err)
-	}
-	return encoded, err
-}
-
 func (i *Iterator) setToFlushLSN() error {
-	flushLSN, err := i.getFlushLSN()
+	rows, err := i.conn.Query("select restart_lsn, confirmed_flush_lsn from pg_catalog.pg_replication_slots where slot_name = $1;", i.config.SlotName)
 	if err != nil {
-		return cerrors.Errorf("failed to get flush lsn: %w", err)
+		return cerrors.Errorf("set to flush failed to find a default: %w", err)
+	}
+	defer rows.Close()
+
+	if rows.Err() != nil {
+		log.Printf("rows error: %v", err)
+	}
+	var restartLSN *string
+	if !rows.Next() {
+		return cerrors.Errorf("failed to find lsn for slot %w: ", err)
 	}
 
-	parsedLSN, err := pgx.ParseLSN(flushLSN)
+	err = rows.Scan(&restartLSN)
 	if err != nil {
-		return cerrors.Errorf("failed to parse lsn: %w", err)
+		return cerrors.Errorf("failed to scan restart_lsn: %w", err)
 	}
-	i.lsn = parsedLSN
+
 	return nil
 }
 
@@ -178,11 +169,15 @@ func (i *Iterator) Push(r sdk.Record) {
 }
 
 // Teardown will kill the CDC subscription and wait for it to be done, then
-// closes its subscription to the database.
+// closes its connection to the database and cleans up connector slots and
+// publications.
 func (i *Iterator) Teardown() error {
+	log.Printf("tearing down postgres cdc connector")
 	i.killswitch()
 	i.wg.Wait()
-	return i.conn.Close()
+	cleanupErr := i.cleanupConnector()
+	dbErr := i.conn.Close()
+	return multierror.Append(cleanupErr, dbErr)
 }
 
 func (i *Iterator) setupSubscription() error {
@@ -329,39 +324,36 @@ func (i *Iterator) subscribe(ctx context.Context) error {
 			if err == context.Canceled {
 				return
 			}
-			// TODO: Maybe it should just be a single error not a channel
-			// NB: Is this the best way to handle these errors?
-			// Should we kill the process when we get an error?
 			i.errCollector <- err
 		}
 	}()
 	return nil
 }
 
-// getFlushLSN ...
-func (i *Iterator) getFlushLSN() (string, error) {
-	query := `select confirmed_flush_lsn 
-		from pg_catalog.pg_replication_slots
-		where slot_name = $1;`
+// // getFlushLSN ...
+// func (i *Iterator) getFlushLSN() (string, error) {
+// 	query := `select confirmed_flush_lsn
+// 		from pg_catalog.pg_replication_slots
+// 		where slot_name = 'conduitslot'`
 
-	rows, err := i.conn.Query(query, i.config.SlotName)
-	if err != nil {
-		return "", cerrors.Errorf("failed to query for flush_lsn: %w", err)
-	}
-	defer rows.Close()
+// 	rows, err := i.conn.Query(query)
+// 	if err != nil {
+// 		return "", cerrors.Errorf("failed to query for flush_lsn: %w", err)
+// 	}
+// 	defer rows.Close()
 
-	if !rows.Next() {
-		return "", cerrors.Errorf("failed to find slot with name %s: %w",
-			i.config.SlotName, err)
-	}
+// 	if !rows.Next() {
+// 		return "", cerrors.Errorf("failed to find slot with name %s: %w",
+// 			i.config.SlotName, err)
+// 	}
 
-	var flushLSN *string
-	if err := rows.Scan(&flushLSN); err != nil {
-		return "", cerrors.Errorf("failed to scan lsn position: %w", err)
-	}
+// 	var flushLSN *string
+// 	if err := rows.Scan(&flushLSN); err != nil {
+// 		return "", cerrors.Errorf("failed to scan lsn position: %w", err)
+// 	}
 
-	return *flushLSN, nil
-}
+// 	return *flushLSN, nil
+// }
 
 // withKeyColumn queries the db for the name of the primary key column
 // for a table if one exists and sets it to the internal list.
@@ -420,5 +412,50 @@ func (i *Iterator) withColumns() error {
 	}
 
 	log.Printf("setting source to read columns [%+v]", i.config.Columns)
+
+	return nil
+}
+
+func (i *Iterator) cleanupConnector() error {
+	termErr := i.terminateBackend()
+	dropReplErr := i.dropReplicationSlot()
+	dropPubErr := i.dropPublication()
+
+	return multierror.Append(
+		termErr,
+		dropReplErr,
+		dropPubErr,
+	)
+}
+
+func (i *Iterator) terminateBackend() error {
+	rows, err := i.conn.Query(`select pg_terminate_backend(active_pid) 
+		from pg_replication_slots
+		where slot_name = $1;`, i.config.SlotName)
+	if err != nil {
+		return cerrors.Errorf("failed to terminate replication slot: %w", err)
+	}
+	defer rows.Close()
+	return nil
+}
+
+func (i *Iterator) dropReplicationSlot() error {
+	rows, err := i.conn.Query(`select pg_drop_replication_slot(slot_name) 
+		from pg_replication_slots
+		where slot_name = $1;`, i.config.SlotName)
+	if err != nil {
+		return cerrors.Errorf("failed to drop replication slot: %w", err)
+	}
+	defer rows.Close()
+	return nil
+}
+
+func (i *Iterator) dropPublication() error {
+	query := fmt.Sprintf("drop publication %s", i.config.PublicationName)
+	rows, err := i.conn.Query(query)
+	if err != nil {
+		return cerrors.Errorf("failed to connecto to replication: %w", err)
+	}
+	defer rows.Close()
 	return nil
 }

@@ -70,7 +70,10 @@ func TestCDC(t *testing.T) {
 		diff := cmp.Diff(
 			got,
 			want,
-			cmpopts.IgnoreFields(sdk.Record{}, "CreatedAt", "Position"))
+			cmpopts.IgnoreFields(sdk.Record{},
+				"CreatedAt", // TODO: Assert what we can about time and date
+				"Position",  // TODO: Assert what we can about position
+			))
 		if diff != "" {
 			t.Errorf("%s", diff)
 		}
@@ -112,8 +115,8 @@ func TestCDC(t *testing.T) {
 			want,
 			cmpopts.IgnoreFields(
 				sdk.Record{},
-				"CreatedAt",
-				"Position", // TODO: sanity check assert on position
+				"CreatedAt", // TODO: Assert what we can about time and date
+				"Position",  // TODO: Assert what we can about position
 			)); diff != "" {
 			t.Errorf("%s", diff)
 		}
@@ -157,7 +160,6 @@ func getDefaultConnector(t *testing.T) *Iterator {
 	config := Config{
 		URL:       CDC_TEST_URL,
 		TableName: "records",
-		// Position:  sdk.Position("0"),
 	}
 	i, err := NewCDCIterator(ctx, config)
 	assert.Ok(t, err)
@@ -185,7 +187,6 @@ func getTestPostgres(t *testing.T) *pgx.Conn {
 		('3', 'baz', 789, false),
 		('4', null, null, null);`,
 	}
-	// db, err := Open("postgres", CDC_TEST_URL)
 	conn, err := pgx.Connect(context.Background(), CDC_TEST_URL)
 	assert.Ok(t, err)
 	conn = migrate(t, conn, prepareDB)

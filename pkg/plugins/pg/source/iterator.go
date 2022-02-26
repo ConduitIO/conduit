@@ -24,6 +24,7 @@ type Iterator interface {
 	// Insert a record into the queue. This cannot error so it cannot be
 	// considered final or acknowledged, as Teardown will destroy the queue
 	// even if it has records in it.
+	// TODO: Maybe get rid of Push and instead replace it with Ack.
 	Push(sdk.Record)
 	// HasNext checks if there is a record in the queue. Must be called before
 	// calling Next.
