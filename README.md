@@ -78,6 +78,8 @@ docker pull ghcr.io/conduitio/conduit:latest
 ```
 The Docker images include the UI and the following plugins: S3, Postgres, Kafka, file and generator.
 
+### Deploy with Heroku
+[![Deploy](https://www.herokucdn.com/deploy/button.svg)](https://heroku.com/deploy)
 
 ## Testing
 
