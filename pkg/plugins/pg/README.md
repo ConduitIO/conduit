@@ -10,10 +10,10 @@ then switches into CDC mode. In CDC mode, the plugin reads from a buffer of
 CDC events.
 
 ## Snapshot Capture
-When the connector first starts, snpashot mode is enabled. The connector
+When the connector first starts, snapshot mode is enabled. The connector
 acquires a read-only lock on the table, and then reads all rows of the table 
 into Conduit. Once all of the rows in that initial snapshot are read, then the 
-connector releases it's lock and switches into CDC mode. 
+connector releases its lock and switches into CDC mode. 
 
 This behavior is enabled by default, but can be turned off by adding 
 `"snapshot":"off"` to the Source configuration.
@@ -90,10 +90,10 @@ column names for the configured table and set them in memory.
 # Destination 
 The Postgres Destination takes a `record.Record` and parses it into a valid 
 SQL query. The Destination is designed to handle different payloads and keys.
-decause of this, each record is individually parsed and upserted. 
+Because of this, each record is individually parsed and upserted. 
 
 ## Table Name
-Every record must have a `table` property set in it's metadata, otherwise it
+Every record must have a `table` property set in its metadata, otherwise it
 will error out. However, because of this, our Destination write can support 
 multiple tables in the same connector provided the user has proper access to 
 those tables.
@@ -143,4 +143,4 @@ go test -race -v -timeout 10s ./pkg/plugins/pg/...
 # References 
 - https://github.com/batchcorp/pgoutput 
 - https://github.com/bitnami/bitnami-docker-postgresql-repmgr
-- https://github.com/Masterminds/squirrel"
+- https://github.com/Masterminds/squirrel
