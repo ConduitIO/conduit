@@ -55,7 +55,7 @@ func (s Spec) Specify() (plugins.Specification, error) {
 			"cdc": {
 				Default:     "true",
 				Required:    false,
-				Description: "",
+				Description: "The connector listens for changes in the specified table. Requires logical replication to be enabled.",
 			},
 			"publication_name": {
 				Default:     "pglogrepl",
