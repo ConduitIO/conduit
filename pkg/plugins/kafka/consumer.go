@@ -21,7 +21,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	"io/ioutil"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/google/uuid"
@@ -118,23 +117,18 @@ func newTLSDialer(cfg Config) (*kafka.Dialer, error) {
 	}, nil
 }
 
-func newTLSConfig(clientCertFile, clientKeyFile, caCertFile string, serverNoVerify bool) (*tls.Config, error) {
+func newTLSConfig(clientCert, clientKey, caCert string, serverNoVerify bool) (*tls.Config, error) {
 	tlsConfig := tls.Config{MinVersion: tls.VersionTLS12}
 
 	// Load client cert
-	cert, err := tls.LoadX509KeyPair(clientCertFile, clientKeyFile)
+	cert, err := tls.X509KeyPair([]byte(clientCert), []byte(clientKey))
 	if err != nil {
 		return nil, err
 	}
 	tlsConfig.Certificates = []tls.Certificate{cert}
 
-	// Load CA cert
-	caCert, err := ioutil.ReadFile(caCertFile)
-	if err != nil {
-		return nil, err
-	}
 	caCertPool := x509.NewCertPool()
-	caCertPool.AppendCertsFromPEM(caCert)
+	caCertPool.AppendCertsFromPEM([]byte(caCert))
 	tlsConfig.RootCAs = caCertPool
 
 	tlsConfig.InsecureSkipVerify = serverNoVerify
