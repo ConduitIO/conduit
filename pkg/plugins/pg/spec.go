@@ -21,6 +21,7 @@ type Spec struct{}
 // Specify returns the Plugin's Specification
 func (s Spec) Specify() (plugins.Specification, error) {
 	return plugins.Specification{
+		// Name: "postgres",// TODO uncomment after plugin is updated to SDK
 		Summary: "A PostgreSQL source and destination plugin for Conduit, written in Go.",
 		Version: "v0.0.1",
 		Author:  "Meroxa, Inc.",
