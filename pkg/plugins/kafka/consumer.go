@@ -119,7 +119,7 @@ func newTLSDialer(cfg Config) (*kafka.Dialer, error) {
 }
 
 func newTLSConfig(clientCertFile, clientKeyFile, caCertFile string, serverNoVerify bool) (*tls.Config, error) {
-	tlsConfig := tls.Config{}
+	tlsConfig := tls.Config{MinVersion: tls.VersionTLS12}
 
 	// Load client cert
 	cert, err := tls.LoadX509KeyPair(clientCertFile, clientKeyFile)
@@ -137,7 +137,7 @@ func newTLSConfig(clientCertFile, clientKeyFile, caCertFile string, serverNoVeri
 	caCertPool.AppendCertsFromPEM(caCert)
 	tlsConfig.RootCAs = caCertPool
 
-	tlsConfig.InsecureSkipVerify = true
+	tlsConfig.InsecureSkipVerify = serverNoVerify
 	return &tlsConfig, err
 }
 
