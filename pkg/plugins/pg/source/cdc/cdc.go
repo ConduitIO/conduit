@@ -67,7 +67,7 @@ type Iterator struct {
 // NewCDCIterator takes a config and returns up a new CDCIterator or returns an
 // error.
 func NewCDCIterator(ctx context.Context, config Config) (*Iterator, error) {
-	wctx, cancel := context.WithCancel(ctx)
+	_, cancel := context.WithCancel(ctx)
 	i := &Iterator{
 		config:       config,
 		messages:     make(chan sdk.Record, cdcBufferSize),
@@ -109,12 +109,15 @@ func NewCDCIterator(ctx context.Context, config Config) (*Iterator, error) {
 		return nil, cerrors.Errorf("failed to set starting position: %w", err)
 	}
 
-	err = i.subscribe(wctx)
-	if err != nil {
-		return nil, cerrors.Errorf("failed to start cdc subscription: %w", err)
-	}
-
 	return i, nil
+}
+
+func (i *Iterator) Start(ctx context.Context) error {
+	err := i.subscribe(ctx)
+	if err != nil {
+		return cerrors.Errorf("failed to start cdc subscription: %w", err)
+	}
+	return nil
 }
 
 func (i *Iterator) setPosition() error {

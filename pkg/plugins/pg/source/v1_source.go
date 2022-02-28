@@ -50,7 +50,6 @@ func (s *V1Source) Configure(ctx context.Context, cfg map[string]string) error {
 	return nil
 }
 func (s *V1Source) Open(ctx context.Context, pos sdk.Position) error {
-	// TODO: Detect plugin mode and assign appropriate strategy
 	switch s.config["mode"] {
 	case "cdc":
 		i, err := cdc.NewCDCIterator(ctx, cdc.Config{})
@@ -59,11 +58,12 @@ func (s *V1Source) Open(ctx context.Context, pos sdk.Position) error {
 		}
 		s.Iterator = i
 	}
-	// TODO: Create the CDC iterator or Snapshot iterator here
-	return cerrors.ErrNotImpl
+	return nil
 }
+
+// TODO: need to handle starts and opens differently.
 func (s *V1Source) Start(context.Context, sdk.Position) error {
-	return cerrors.ErrNotImpl
+	return cerrors.Errorf("not impl")
 }
 func (s *V1Source) Read(context.Context) (sdk.Record, error) {
 	if s.Iterator == nil {
