@@ -18,7 +18,10 @@ package kafka
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
+	"io/ioutil"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/google/uuid"
@@ -66,11 +69,15 @@ func (c *segmentConsumer) StartFrom(config Config, groupID string) error {
 	if config.Topic == "" {
 		return ErrTopicMissing
 	}
-	c.reader = newReader(config, groupID)
+	reader, err := newReader(config, groupID)
+	if err != nil {
+		return cerrors.Errorf("couldn't create reader: %w")
+	}
+	c.reader = reader
 	return nil
 }
 
-func newReader(cfg Config, groupID string) *kafka.Reader {
+func newReader(cfg Config, groupID string) (*kafka.Reader, error) {
 	readerCfg := kafka.ReaderConfig{
 		Brokers:               cfg.Servers,
 		Topic:                 cfg.Topic,
@@ -88,7 +95,50 @@ func newReader(cfg Config, groupID string) *kafka.Reader {
 	} else {
 		readerCfg.StartOffset = kafka.LastOffset
 	}
-	return kafka.NewReader(readerCfg)
+	// TLS config
+	if cfg.ClientCertFile != "" {
+		dialer, err := newTLSDialer(cfg)
+		if err != nil {
+			return nil, cerrors.Errorf("couldn't create dialer: %w", err)
+		}
+		readerCfg.Dialer = dialer
+	}
+	return kafka.NewReader(readerCfg), nil
+}
+
+func newTLSDialer(cfg Config) (*kafka.Dialer, error) {
+	tlsCfg, err := newTLSConfig(cfg.ClientCertFile, cfg.ClientKeyFile, cfg.CACertFile, cfg.InsecureSkipVerify)
+	if err != nil {
+		return nil, cerrors.Errorf("invalid TLS config: %w", err)
+	}
+	return &kafka.Dialer{
+		ClientID:  "",
+		DualStack: true,
+		TLS:       tlsCfg,
+	}, nil
+}
+
+func newTLSConfig(clientCertFile, clientKeyFile, caCertFile string, serverNoVerify bool) (*tls.Config, error) {
+	tlsConfig := tls.Config{}
+
+	// Load client cert
+	cert, err := tls.LoadX509KeyPair(clientCertFile, clientKeyFile)
+	if err != nil {
+		return nil, err
+	}
+	tlsConfig.Certificates = []tls.Certificate{cert}
+
+	// Load CA cert
+	caCert, err := ioutil.ReadFile(caCertFile)
+	if err != nil {
+		return nil, err
+	}
+	caCertPool := x509.NewCertPool()
+	caCertPool.AppendCertsFromPEM(caCert)
+	tlsConfig.RootCAs = caCertPool
+
+	tlsConfig.InsecureSkipVerify = true
+	return &tlsConfig, err
 }
 
 func (c *segmentConsumer) Get(ctx context.Context) (*kafka.Message, string, error) {

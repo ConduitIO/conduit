@@ -24,12 +24,16 @@ import (
 )
 
 const (
-	Servers           = "servers"
-	Topic             = "topic"
-	SecurityProtocol  = "securityProtocol"
-	Acks              = "acks"
-	DeliveryTimeout   = "deliveryTimeout"
-	ReadFromBeginning = "readFromBeginning"
+	Servers            = "servers"
+	Topic              = "topic"
+	SecurityProtocol   = "securityProtocol"
+	Acks               = "acks"
+	DeliveryTimeout    = "deliveryTimeout"
+	ReadFromBeginning  = "readFromBeginning"
+	ClientCertFile     = "clientCertFile"
+	ClientKeyFile      = "clientKeyFile"
+	CACertFile         = "caCertFile"
+	InsecureSkipVerify = "insecureSkipVerify"
 )
 
 var Required = []string{Servers, Topic}
@@ -47,6 +51,11 @@ type Config struct {
 	// Read all messages present in a source topic.
 	// Default value: false (only new messages are read)
 	ReadFromBeginning bool
+	// TLS
+	ClientCertFile     string
+	ClientKeyFile      string
+	CACertFile         string
+	InsecureSkipVerify bool
 }
 
 func Parse(cfg map[string]string) (Config, error) {
@@ -88,7 +97,37 @@ func Parse(cfg map[string]string) (Config, error) {
 		return Config{}, cerrors.New("invalid delivery timeout: has to be > 0ms")
 	}
 	parsed.DeliveryTimeout = timeout
+
+	err = setTLSConfigs(&parsed, cfg)
+	if err != nil {
+		return Config{}, cerrors.Errorf("invalid TLS config: %w", err)
+	}
 	return parsed, nil
+}
+
+func setTLSConfigs(parsed *Config, cfg map[string]string) error {
+	// All three values should be set so that TLS works
+	// If none of the three values are set, then TLS should not be used.
+	tlsCfgOk := (cfg[ClientCertFile] == "") == (cfg[ClientKeyFile] == "")
+	tlsCfgOk = tlsCfgOk && (cfg[ClientKeyFile] == "") == (cfg[CACertFile] == "")
+	if !tlsCfgOk {
+		return cerrors.New("TLS config not OK (all values need to be set or all values need to be unset)")
+	}
+	parsed.ClientCertFile = cfg[ClientCertFile]
+	parsed.ClientKeyFile = cfg[ClientKeyFile]
+	parsed.CACertFile = cfg[CACertFile]
+	// Parse InsecureSkipVerify, default is 'false'
+	insecureString, ok := cfg[InsecureSkipVerify]
+	if ok {
+		insecure, err := strconv.ParseBool(insecureString)
+		if err != nil {
+			return cerrors.Errorf("value %q for InsecureSkipVerify is not valid", insecureString)
+		}
+		parsed.InsecureSkipVerify = insecure
+	} else {
+		parsed.InsecureSkipVerify = false
+	}
+	return nil
 }
 
 func parseAcks(ack string) (kafka.RequiredAcks, error) {
