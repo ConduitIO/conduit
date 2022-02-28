@@ -38,23 +38,31 @@ type segmentProducer struct {
 
 // NewProducer creates a new Kafka producer.
 // The current implementation uses Segment's kafka-go client.
-func NewProducer(config Config) (Producer, error) {
-	if len(config.Servers) == 0 {
+func NewProducer(cfg Config) (Producer, error) {
+	if len(cfg.Servers) == 0 {
 		return nil, ErrServersMissing
 	}
-	if config.Topic == "" {
+	if cfg.Topic == "" {
 		return nil, ErrTopicMissing
 	}
 
 	writer := &kafka.Writer{
-		Addr:         kafka.TCP(config.Servers...),
-		Topic:        config.Topic,
+		Addr:         kafka.TCP(cfg.Servers...),
+		Topic:        cfg.Topic,
 		BatchSize:    1,
-		WriteTimeout: config.DeliveryTimeout,
-		RequiredAcks: config.Acks,
+		WriteTimeout: cfg.DeliveryTimeout,
+		RequiredAcks: cfg.Acks,
 		MaxAttempts:  3,
-		// todo use a secure transport
-		// Transport: nil,
+	}
+	// TLS config
+	if cfg.ClientCertFile != "" {
+		tlsCfg, err := newTLSConfig(cfg.ClientCertFile, cfg.ClientKeyFile, cfg.CACertFile, cfg.InsecureSkipVerify)
+		if err != nil {
+			return nil, cerrors.Errorf("invalid TLS config: %w", err)
+		}
+		writer.Transport = &kafka.Transport{
+			TLS: tlsCfg,
+		}
 	}
 	return &segmentProducer{writer: writer}, nil
 }
