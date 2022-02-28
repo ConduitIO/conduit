@@ -95,7 +95,7 @@ func newReader(cfg Config, groupID string) (*kafka.Reader, error) {
 		readerCfg.StartOffset = kafka.LastOffset
 	}
 	// TLS config
-	if cfg.ClientCertFile != "" {
+	if cfg.ClientCert != "" {
 		dialer, err := newTLSDialer(cfg)
 		if err != nil {
 			return nil, cerrors.Errorf("couldn't create dialer: %w", err)
@@ -106,7 +106,7 @@ func newReader(cfg Config, groupID string) (*kafka.Reader, error) {
 }
 
 func newTLSDialer(cfg Config) (*kafka.Dialer, error) {
-	tlsCfg, err := newTLSConfig(cfg.ClientCertFile, cfg.ClientKeyFile, cfg.CACertFile, cfg.InsecureSkipVerify)
+	tlsCfg, err := newTLSConfig(cfg.ClientCert, cfg.ClientKey, cfg.CACert, cfg.InsecureSkipVerify)
 	if err != nil {
 		return nil, cerrors.Errorf("invalid TLS config: %w", err)
 	}

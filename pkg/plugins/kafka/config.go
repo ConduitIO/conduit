@@ -30,9 +30,9 @@ const (
 	Acks               = "acks"
 	DeliveryTimeout    = "deliveryTimeout"
 	ReadFromBeginning  = "readFromBeginning"
-	ClientCertFile     = "clientCertFile"
-	ClientKeyFile      = "clientKeyFile"
-	CACertFile         = "caCertFile"
+	ClientCert         = "clientCert"
+	ClientKey          = "clientKey"
+	CACert             = "caCert"
 	InsecureSkipVerify = "insecureSkipVerify"
 )
 
@@ -52,9 +52,9 @@ type Config struct {
 	// Default value: false (only new messages are read)
 	ReadFromBeginning bool
 	// TLS
-	ClientCertFile     string
-	ClientKeyFile      string
-	CACertFile         string
+	ClientCert         string
+	ClientKey          string
+	CACert             string
 	InsecureSkipVerify bool
 }
 
@@ -108,14 +108,14 @@ func Parse(cfg map[string]string) (Config, error) {
 func setTLSConfigs(parsed *Config, cfg map[string]string) error {
 	// All three values should be set so that TLS works
 	// If none of the three values are set, then TLS should not be used.
-	tlsCfgOk := (cfg[ClientCertFile] == "") == (cfg[ClientKeyFile] == "")
-	tlsCfgOk = tlsCfgOk && (cfg[ClientKeyFile] == "") == (cfg[CACertFile] == "")
+	tlsCfgOk := (cfg[ClientCert] == "") == (cfg[ClientKey] == "")
+	tlsCfgOk = tlsCfgOk && (cfg[ClientKey] == "") == (cfg[CACert] == "")
 	if !tlsCfgOk {
 		return cerrors.New("TLS config not OK (all values need to be set or all values need to be unset)")
 	}
-	parsed.ClientCertFile = cfg[ClientCertFile]
-	parsed.ClientKeyFile = cfg[ClientKeyFile]
-	parsed.CACertFile = cfg[CACertFile]
+	parsed.ClientCert = cfg[ClientCert]
+	parsed.ClientKey = cfg[ClientKey]
+	parsed.CACert = cfg[CACert]
 	// Parse InsecureSkipVerify, default is 'false'
 	insecureString, ok := cfg[InsecureSkipVerify]
 	if ok {

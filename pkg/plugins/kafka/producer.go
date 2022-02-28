@@ -55,8 +55,8 @@ func NewProducer(cfg Config) (Producer, error) {
 		MaxAttempts:  3,
 	}
 	// TLS config
-	if cfg.ClientCertFile != "" {
-		tlsCfg, err := newTLSConfig(cfg.ClientCertFile, cfg.ClientKeyFile, cfg.CACertFile, cfg.InsecureSkipVerify)
+	if cfg.ClientCert != "" {
+		tlsCfg, err := newTLSConfig(cfg.ClientCert, cfg.ClientKey, cfg.CACert, cfg.InsecureSkipVerify)
 		if err != nil {
 			return nil, cerrors.Errorf("invalid TLS config: %w", err)
 		}

@@ -103,9 +103,9 @@ func TestParse_TLSConfig(t *testing.T) {
 		{
 			name: "TLS config incomplete",
 			cfg: map[string]string{
-				Servers:        "localhost:9092",
-				Topic:          "hello-world-topic",
-				ClientCertFile: "/path/ClientCertFile",
+				Servers:    "localhost:9092",
+				Topic:      "hello-world-topic",
+				ClientCert: "/path/ClientCert",
 			},
 			assertFn: func(t *testing.T, config Config, err error) {
 				assert.Error(t, err)
@@ -114,11 +114,11 @@ func TestParse_TLSConfig(t *testing.T) {
 		{
 			name: "InsecureSkipVerify is false by default",
 			cfg: map[string]string{
-				Servers:        "localhost:9092",
-				Topic:          "hello-world-topic",
-				ClientCertFile: "/path/ClientCertFile",
-				ClientKeyFile:  "/path/ClientKeyFile",
-				CACertFile:     "/path/CACertFile",
+				Servers:    "localhost:9092",
+				Topic:      "hello-world-topic",
+				ClientCert: "/path/ClientCert",
+				ClientKey:  "/path/ClientKey",
+				CACert:     "/path/CACert",
 			},
 			assertFn: func(t *testing.T, config Config, err error) {
 				assert.Ok(t, err)
@@ -130,9 +130,9 @@ func TestParse_TLSConfig(t *testing.T) {
 			cfg: map[string]string{
 				Servers:            "localhost:9092",
 				Topic:              "hello-world-topic",
-				ClientCertFile:     "/path/ClientCertFile",
-				ClientKeyFile:      "/path/ClientKeyFile",
-				CACertFile:         "/path/CACertFile",
+				ClientCert:         "/path/ClientCert",
+				ClientKey:          "/path/ClientKey",
+				CACert:             "/path/CACert",
 				InsecureSkipVerify: "true",
 			},
 			assertFn: func(t *testing.T, config Config, err error) {
@@ -145,9 +145,9 @@ func TestParse_TLSConfig(t *testing.T) {
 			cfg: map[string]string{
 				Servers:            "localhost:9092",
 				Topic:              "hello-world-topic",
-				ClientCertFile:     "/path/ClientCertFile",
-				ClientKeyFile:      "/path/ClientKeyFile",
-				CACertFile:         "/path/CACertFile",
+				ClientCert:         "/path/ClientCert",
+				ClientKey:          "/path/ClientKey",
+				CACert:             "/path/CACert",
 				InsecureSkipVerify: "     false",
 			},
 			assertFn: func(t *testing.T, config Config, err error) {
@@ -202,9 +202,9 @@ func TestParse_Full(t *testing.T) {
 		Acks:              "all",
 		DeliveryTimeout:   "1s2ms",
 		ReadFromBeginning: "true",
-		ClientCertFile:    "/path/ClientCertFile",
-		ClientKeyFile:     "/path/ClientKeyFile",
-		CACertFile:        "/path/CACertFile",
+		ClientCert:        "/path/ClientCert",
+		ClientKey:         "/path/ClientKey",
+		CACert:            "/path/CACert",
 	})
 
 	assert.Ok(t, err)
@@ -213,9 +213,9 @@ func TestParse_Full(t *testing.T) {
 	assert.Equal(t, kafka.RequireAll, parsed.Acks)
 	assert.Equal(t, int64(1002), parsed.DeliveryTimeout.Milliseconds())
 	assert.Equal(t, true, parsed.ReadFromBeginning)
-	assert.Equal(t, "/path/ClientCertFile", parsed.ClientCertFile)
-	assert.Equal(t, "/path/ClientKeyFile", parsed.ClientKeyFile)
-	assert.Equal(t, "/path/CACertFile", parsed.CACertFile)
+	assert.Equal(t, "/path/ClientCert", parsed.ClientCert)
+	assert.Equal(t, "/path/ClientKey", parsed.ClientKey)
+	assert.Equal(t, "/path/CACert", parsed.CACert)
 }
 
 func TestParse_Ack(t *testing.T) {
