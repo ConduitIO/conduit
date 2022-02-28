@@ -25,7 +25,8 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/database"
 )
 
-// DB is a naive store that stores values in memory. Do not use in production.
+// DB is a naive store that stores values in memory. Do not use in production,
+// changes are lost on restart.
 type DB struct {
 	initOnce sync.Once
 	values   map[string][]byte
