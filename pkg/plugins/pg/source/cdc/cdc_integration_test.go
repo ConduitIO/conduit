@@ -80,78 +80,155 @@ func TestCDC(t *testing.T) {
 		assert.True(t, got.CreatedAt.After(now), "failed to set CreatedAt")
 	})
 
-	t.Run("should detect update", func(t *testing.T) {
-		_ = getTestPostgres(t)
-		i := getDefaultConnector(t)
-		t.Cleanup(func() {
-			assert.Ok(t, i.Teardown())
-		})
-		now := time.Now()
-		_, err := i.conn.Query(`update records
-			set column1 = 'fizz', column2 = 789, column3 = true
-			where id = 1;
-		`)
-		assert.Ok(t, err)
-		time.Sleep(1 * time.Second)
-		assert.True(t, i.HasNext(), "failed to queue a cdc record after update")
+	// t.Run("should detect update", func(t *testing.T) {
+	// 	_ = getTestPostgres(t)
+	// 	i := getDefaultConnector(t)
+	// 	t.Cleanup(func() {
+	// 		assert.Ok(t, i.Teardown())
+	// 	})
+	// 	now := time.Now()
+	// 	_, err := i.conn.Query(`update records
+	// 		set column1 = 'fizz', column2 = 789, column3 = true
+	// 		where id = 1;
+	// 	`)
+	// 	assert.Ok(t, err)
+	// 	time.Sleep(1 * time.Second)
+	// 	assert.True(t, i.HasNext(), "failed to queue a cdc record after update")
 
-		want := sdk.Record{
-			Key: sdk.StructuredData{"id": int64(1)},
-			Metadata: map[string]string{
-				"action": "update",
-				"table":  "records",
-			},
-			Payload: sdk.StructuredData{
-				"column1": string("fizz"),
-				"column2": int32(789),
-				"column3": bool(true),
-				"key":     []uint8("1"),
-			},
-		}
-		got, err := i.Next()
-		assert.Ok(t, err)
-		if diff := cmp.Diff(
-			got,
-			want,
-			cmpopts.IgnoreFields(
-				sdk.Record{},
-				"CreatedAt", // TODO: Assert what we can about time and date
-				"Position",  // TODO: Assert what we can about position
-			)); diff != "" {
-			t.Errorf("%s", diff)
-		}
-		assert.True(t, got.CreatedAt.After(now), "failed to set CreatedAt")
-	})
+	// 	want := sdk.Record{
+	// 		Key: sdk.StructuredData{"id": int64(1)},
+	// 		Metadata: map[string]string{
+	// 			"action": "update",
+	// 			"table":  "records",
+	// 		},
+	// 		Payload: sdk.StructuredData{
+	// 			"column1": string("fizz"),
+	// 			"column2": int32(789),
+	// 			"column3": bool(true),
+	// 			"key":     []uint8("1"),
+	// 		},
+	// 	}
+	// 	got, err := i.Next()
+	// 	assert.Ok(t, err)
+	// 	if diff := cmp.Diff(
+	// 		got,
+	// 		want,
+	// 		cmpopts.IgnoreFields(
+	// 			sdk.Record{},
+	// 			"CreatedAt", // TODO: Assert what we can about time and date
+	// 			"Position",  // TODO: Assert what we can about position
+	// 		)); diff != "" {
+	// 		t.Errorf("%s", diff)
+	// 	}
+	// 	assert.True(t, got.CreatedAt.After(now), "failed to set CreatedAt")
+	// })
 
-	t.Run("should detect a row delete", func(t *testing.T) {
-		_ = getTestPostgres(t)
-		i := getDefaultConnector(t)
-		t.Cleanup(func() {
-			assert.Ok(t, i.Teardown())
-		})
-		_, err := i.conn.Query(`delete from records where column1 = 'bar';`)
-		assert.Ok(t, err)
-		want := sdk.Record{
-			Key: sdk.StructuredData{"id": int64(2)},
-			Metadata: map[string]string{
-				"action": "delete",
-				"table":  "records",
+	// t.Run("should detect delete", func(t *testing.T) {
+	// 	_ = getTestPostgres(t)
+	// 	i := getDefaultConnector(t)
+	// 	t.Cleanup(func() {
+	// 		assert.Ok(t, i.Teardown())
+	// 	})
+	// 	_, err := i.conn.Query(`delete from records where column1 = 'bar';`)
+	// 	assert.Ok(t, err)
+	// 	want := sdk.Record{
+	// 		Key: sdk.StructuredData{"id": int64(2)},
+	// 		Metadata: map[string]string{
+	// 			"action": "delete",
+	// 			"table":  "records",
+	// 		},
+	// 		Payload: nil,
+	// 	}
+	// 	got, err := i.Next()
+	// 	assert.Ok(t, err)
+	// 	if diff := cmp.Diff(
+	// 		got,
+	// 		want,
+	// 		cmpopts.IgnoreFields(
+	// 			sdk.Record{},
+	// 			"CreatedAt", // TODO: Assert what we can about time and date
+	// 			"Position",  // TODO: Assert what we can about position
+	// 		)); diff != "" {
+	// 		t.Errorf("%s", diff)
+	// 	}
+	// })
+}
+
+func TestIterator_Next(t *testing.T) {
+	tests := []struct {
+		name    string
+		want    sdk.Record
+		action  func(t *testing.T, db *pgx.Conn)
+		wantErr bool
+	}{
+		{
+			name: "should detect insert",
+			action: func(t *testing.T, db *pgx.Conn) {
+				rows, err := db.Query(context.Background(), `insert into
+				records(id, column1, column2, column3)
+				values (6, 'bizz', 456, false);`)
+				assert.Ok(t, err)
+				rows.Close()
 			},
-			Payload: nil,
-		}
-		got, err := i.Next()
-		assert.Ok(t, err)
-		if diff := cmp.Diff(
-			got,
-			want,
-			cmpopts.IgnoreFields(
-				sdk.Record{},
-				"CreatedAt", // TODO: Assert what we can about time and date
-				"Position",  // TODO: Assert what we can about position
-			)); diff != "" {
-			t.Errorf("%s", diff)
-		}
-	})
+			wantErr: false,
+			want: sdk.Record{
+				Key: sdk.StructuredData{"id": int64(6)},
+				Metadata: map[string]string{
+					"table":  "records",
+					"action": "insert",
+				},
+				Payload: sdk.StructuredData{
+					"column1": string("bizz"),
+					"column2": int32(456),
+					"column3": bool(false),
+				},
+			},
+		},
+		{
+			name: "should detect update",
+			action: func(t *testing.T, db *pgx.Conn) {
+				rows, err := db.Query(context.Background(),
+					`update records
+					set column1 = 'fizz', column2 = 789, column3 = true
+					where id = 1;`)
+				assert.Ok(t, err)
+				rows.Close()
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db := getTestPostgres(t)
+			i := getDefaultConnector(t)
+			t.Cleanup(func() {
+				assert.Ok(t, i.Teardown())
+			})
+
+			tt.action(t, db)
+			// now := time.Now()
+			time.Sleep(1 * time.Second)
+
+			got, err := i.Next()
+			assert.Ok(t, err)
+
+			diff := cmp.Diff(
+				got,
+				tt.want,
+				cmpopts.IgnoreFields(
+					sdk.Record{},
+					"CreatedAt", // TODO: Assert what we can about time and date
+					"Position",  // TODO: Assert what we can about position
+				))
+			if diff != "" {
+				t.Errorf("%s", diff)
+			}
+			t.Logf("record: %v", got)
+			// assert.True(t, got.CreatedAt.After(now), "CreatedAt should be After now")
+			// assert.True(t, got.CreatedAt.Second() > 0, "CreatedAt should be a non-zero value")
+
+			// TODO: assert that i.lsn is equal to the position from the last record we handled
+		})
+	}
 }
 
 func getDefaultConnector(t *testing.T) *Iterator {

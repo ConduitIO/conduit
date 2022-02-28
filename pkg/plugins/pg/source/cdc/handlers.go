@@ -39,7 +39,7 @@ func (i *Iterator) handleInsert(
 	rec = i.withKey(rec, values)
 	rec = i.withPosition(rec, int64(pos))
 	rec = i.withPayload(rec, values)
-	i.Push(rec)
+	i.push(rec)
 	return nil
 }
 
@@ -61,7 +61,7 @@ func (i *Iterator) handleUpdate(
 	rec = i.withKey(rec, values)
 	rec = i.withPosition(rec, int64(pos))
 	rec = i.withPayload(rec, values)
-	i.Push(rec)
+	i.push(rec)
 	return nil
 }
 
@@ -82,7 +82,7 @@ func (i *Iterator) handleDelete(
 	rec = i.withKey(rec, values)
 	rec = i.withPosition(rec, int64(pos))
 	// NB: Delete's shouldn't have payloads. Key + delete action is sufficient.
-	i.Push(rec)
+	i.push(rec)
 	return nil
 }
 

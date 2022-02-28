@@ -27,12 +27,12 @@ import (
 var Required = []string{"url", "table"}
 
 // Enforce that we fulfill V1Source
-var _ sdk.Source = (*V1Source)(nil)
+var _ sdk.Source = (*Source)(nil)
 var _ Iterator = (*cdc.Iterator)(nil)
 var _ Iterator = (*snapshot.Snapshotter)(nil)
 
-// V1Source implements the new transition to the new plugin SDK for Postgres.
-type V1Source struct {
+// Source implements the new transition to the new plugin SDK for Postgres.
+type Source struct {
 	sdk.UnimplementedSource
 
 	Iterator Iterator
@@ -41,7 +41,7 @@ type V1Source struct {
 }
 
 // Configure validates a config map and returns an error if anything is invalid.
-func (s *V1Source) Configure(ctx context.Context, cfg map[string]string) error {
+func (s *Source) Configure(ctx context.Context, cfg map[string]string) error {
 	err := validateConfig(cfg, Required)
 	if err != nil {
 		return cerrors.Errorf("config failed validation: %w", err)
@@ -49,9 +49,21 @@ func (s *V1Source) Configure(ctx context.Context, cfg map[string]string) error {
 	s.config = cfg
 	return nil
 }
-func (s *V1Source) Open(ctx context.Context, pos sdk.Position) error {
+func (s *Source) Open(ctx context.Context, pos sdk.Position) error {
 	switch s.config["mode"] {
 	case "cdc":
+		i, err := cdc.NewCDCIterator(ctx, cdc.Config{})
+		if err != nil {
+			return cerrors.Errorf("failed to open cdc connection: %w", err)
+		}
+		s.Iterator = i
+	case "":
+		i, err := cdc.NewCDCIterator(ctx, cdc.Config{})
+		if err != nil {
+			return cerrors.Errorf("failed to open cdc connection: %w", err)
+		}
+		s.Iterator = i
+	default:
 		i, err := cdc.NewCDCIterator(ctx, cdc.Config{})
 		if err != nil {
 			return cerrors.Errorf("failed to open cdc connection: %w", err)
@@ -61,28 +73,19 @@ func (s *V1Source) Open(ctx context.Context, pos sdk.Position) error {
 	return nil
 }
 
-// TODO: need to handle starts and opens differently.
-func (s *V1Source) Start(context.Context, sdk.Position) error {
-	return cerrors.Errorf("not impl")
-}
-func (s *V1Source) Read(context.Context) (sdk.Record, error) {
-	if s.Iterator == nil {
-		return sdk.Record{}, cerrors.Errorf("connector no assigned Reader")
-	}
+func (s *Source) Read(context.Context) (sdk.Record, error) {
 	if !s.Iterator.HasNext() {
-		// TODO: handle no record case
-		return sdk.Record{}, cerrors.Errorf("TODO")
+		return sdk.Record{}, sdk.ErrBackoffRetry
 	}
 
 	return s.Iterator.Next()
 }
-func (s *V1Source) Ack(context.Context, sdk.Position) error {
+
+func (s *Source) Ack(context.Context, sdk.Position) error {
 	return cerrors.ErrNotImpl
 }
-func (s *V1Source) Stop(context.Context) error {
-	return cerrors.ErrNotImpl
-}
-func (s *V1Source) Teardown(context.Context) error {
+
+func (s *Source) Teardown(context.Context) error {
 	return cerrors.ErrNotImpl
 }
 

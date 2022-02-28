@@ -43,8 +43,6 @@ type Config struct {
 	TableName       string
 	KeyColumnName   string
 	Columns         []string
-
-	// startingLSN uint64
 }
 
 // Iterator listens for events from the WAL and pushes them into its buffer.
@@ -67,22 +65,17 @@ type Iterator struct {
 // NewCDCIterator takes a config and returns up a new CDCIterator or returns an
 // error.
 func NewCDCIterator(ctx context.Context, config Config) (*Iterator, error) {
-	_, cancel := context.WithCancel(ctx)
+	wctx, cancel := context.WithCancel(ctx)
 	i := &Iterator{
-		config:       config,
+		config: config,
+		// TODO: remove buffer since iterator can now block on read
 		messages:     make(chan sdk.Record, cdcBufferSize),
 		wg:           &sync.WaitGroup{},
 		errCollector: make(chan error),
 		killswitch:   cancel,
 	}
 
-	go func() {
-		// TODO: Not sure if error collection like this is best
-		// or if we should close the thread and error out
-		for err := range i.errCollector {
-			log.Printf("[ERROR]: %+v", err)
-		}
-	}()
+	go errorListener(i)
 
 	err := i.connect()
 	if err != nil {
@@ -104,53 +97,19 @@ func NewCDCIterator(ctx context.Context, config Config) (*Iterator, error) {
 		return nil, cerrors.Errorf("failed to setup subscription %w", err)
 	}
 
-	err = i.setPosition()
+	err = i.subscribe(wctx)
 	if err != nil {
-		return nil, cerrors.Errorf("failed to set starting position: %w", err)
+		return nil, cerrors.Errorf("failed to start cdc subscription: %w", err)
 	}
 
 	return i, nil
 }
 
-func (i *Iterator) Start(ctx context.Context) error {
-	err := i.subscribe(ctx)
-	if err != nil {
-		return cerrors.Errorf("failed to start cdc subscription: %w", err)
+func errorListener(i *Iterator) {
+	for err := range i.errCollector {
+		log.Printf("[ERROR]: %+v", err)
+		i.killswitch()
 	}
-	return nil
-}
-
-func (i *Iterator) setPosition() error {
-	log.Printf("no position configured - defaulting to confirmed flush LSN")
-	err := i.setToFlushLSN()
-	if err != nil {
-		return cerrors.Errorf("failed to set default flush lsn: %w", err)
-	}
-
-	return nil
-}
-
-func (i *Iterator) setToFlushLSN() error {
-	rows, err := i.conn.Query("select restart_lsn, confirmed_flush_lsn from pg_catalog.pg_replication_slots where slot_name = $1;", i.config.SlotName)
-	if err != nil {
-		return cerrors.Errorf("set to flush failed to find a default: %w", err)
-	}
-	defer rows.Close()
-
-	if rows.Err() != nil {
-		log.Printf("rows error: %v", err)
-	}
-	var restartLSN *string
-	if !rows.Next() {
-		return cerrors.Errorf("failed to find lsn for slot %w: ", err)
-	}
-
-	err = rows.Scan(&restartLSN)
-	if err != nil {
-		return cerrors.Errorf("failed to scan restart_lsn: %w", err)
-	}
-
-	return nil
 }
 
 // HasNext returns true if there is an item in the buffer.
@@ -166,8 +125,8 @@ func (i *Iterator) Next() (sdk.Record, error) {
 	return r, nil
 }
 
-// Push pushes a record into the buffer.
-func (i *Iterator) Push(r sdk.Record) {
+// push pushes a record into the buffer.
+func (i *Iterator) push(r sdk.Record) {
 	i.messages <- r
 }
 
@@ -175,12 +134,12 @@ func (i *Iterator) Push(r sdk.Record) {
 // closes its connection to the database and cleans up connector slots and
 // publications.
 func (i *Iterator) Teardown() error {
-	log.Printf("tearing down postgres cdc connector")
+	flushErr := i.sub.Flush()
+	// TODO: do we need to cleanupErr := i.cleanupConnector() still?
 	i.killswitch()
 	i.wg.Wait()
-	cleanupErr := i.cleanupConnector()
 	dbErr := i.conn.Close()
-	return multierror.Append(cleanupErr, dbErr)
+	return multierror.Append(dbErr, flushErr)
 }
 
 func (i *Iterator) setupSubscription() error {
@@ -333,31 +292,6 @@ func (i *Iterator) subscribe(ctx context.Context) error {
 	return nil
 }
 
-// // getFlushLSN ...
-// func (i *Iterator) getFlushLSN() (string, error) {
-// 	query := `select confirmed_flush_lsn
-// 		from pg_catalog.pg_replication_slots
-// 		where slot_name = 'conduitslot'`
-
-// 	rows, err := i.conn.Query(query)
-// 	if err != nil {
-// 		return "", cerrors.Errorf("failed to query for flush_lsn: %w", err)
-// 	}
-// 	defer rows.Close()
-
-// 	if !rows.Next() {
-// 		return "", cerrors.Errorf("failed to find slot with name %s: %w",
-// 			i.config.SlotName, err)
-// 	}
-
-// 	var flushLSN *string
-// 	if err := rows.Scan(&flushLSN); err != nil {
-// 		return "", cerrors.Errorf("failed to scan lsn position: %w", err)
-// 	}
-
-// 	return *flushLSN, nil
-// }
-
 // withKeyColumn queries the db for the name of the primary key column
 // for a table if one exists and sets it to the internal list.
 // * TODO: Determine if tables must have keys
@@ -419,6 +353,7 @@ func (i *Iterator) withColumns() error {
 	return nil
 }
 
+// cleanupConnector will remove the connector and its publication.
 func (i *Iterator) cleanupConnector() error {
 	termErr := i.terminateBackend()
 	dropReplErr := i.dropReplicationSlot()
@@ -426,8 +361,8 @@ func (i *Iterator) cleanupConnector() error {
 
 	return multierror.Append(
 		termErr,
-		dropReplErr,
 		dropPubErr,
+		dropReplErr,
 	)
 }
 
