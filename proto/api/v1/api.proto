@@ -353,6 +353,7 @@ service PipelineService {
 }
 
 message ListPipelinesRequest {
+  // regex to filter pipelines by name
   string name = 1;
 }
 message ListPipelinesResponse {
@@ -799,3 +800,61 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
     }
   }
 };
+
+service PluginService {
+  rpc ListPlugins(ListPluginsRequest) returns (ListPluginsResponse) {
+    option (google.api.http) = {
+      get: "/v1/plugins"
+      response_body: "plugins"
+    };
+  };
+  rpc GetPlugin(GetPluginRequest) returns (GetPluginResponse) {
+    option (google.api.http) = {
+      get: "/v1/plugin/{name}"
+      response_body: "plugin"
+    };
+  };
+}
+
+message ListPluginsRequest {
+}
+
+message ListPluginsResponse{
+  repeated PluginSpecifications plugins = 1;
+}
+
+message GetPluginRequest {
+  string name = 1;
+}
+
+message GetPluginResponse {
+  PluginSpecifications plugin = 1;
+}
+
+message PluginSpecifications{
+  enum Type {
+    TYPE_UNSPECIFIED = 0;
+    TYPE_STRING = 1;
+    TYPE_INT = 2;
+    TYPE_FLOAT = 3;
+    TYPE_BOOL = 4;
+    TYPE_ENUM = 5;
+  }
+
+  message Parameter {
+    string default = 1;
+    bool required = 2;
+    string description = 3;
+    Type type = 4;
+    repeated string enum = 5; // specify the enum expected values
+  }
+
+  string name = 1;
+  string summary = 2;
+  string description = 3;
+  string version = 4;
+  string author = 5;
+  map<string, Parameter> destination_params = 6;
+  map<string, Parameter> source_params = 7;
+}
+

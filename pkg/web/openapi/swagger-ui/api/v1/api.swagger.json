@@ -24,6 +24,9 @@
     },
     {
       "name": "InformationService"
+    },
+    {
+      "name": "PluginService"
     }
   ],
   "consumes": [
@@ -367,6 +370,7 @@
         "parameters": [
           {
             "name": "name",
+            "description": "regex to filter pipelines by name.",
             "in": "query",
             "required": false,
             "type": "string"
@@ -840,6 +844,75 @@
         ]
       }
     },
+    "/v1/plugin/{name}": {
+      "get": {
+        "operationId": "PluginService_GetPlugin",
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/v1PluginSpecifications"
+            }
+          },
+          "500": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            },
+            "examples": {
+              "application/json": {
+                "code": 13,
+                "message": "server error",
+                "details": []
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "PluginService"
+        ]
+      }
+    },
+    "/v1/plugins": {
+      "get": {
+        "operationId": "PluginService_ListPlugins",
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/v1PluginSpecifications"
+              }
+            }
+          },
+          "500": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            },
+            "examples": {
+              "application/json": {
+                "code": 13,
+                "message": "server error",
+                "details": []
+              }
+            }
+          }
+        },
+        "tags": [
+          "PluginService"
+        ]
+      }
+    },
     "/v1/processors": {
       "get": {
         "operationId": "ProcessorService_ListProcessors",
@@ -1153,6 +1226,29 @@
         }
       }
     },
+    "PluginSpecificationsParameter": {
+      "type": "object",
+      "properties": {
+        "default": {
+          "type": "string"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "description": {
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/definitions/v1PluginSpecificationsType"
+        },
+        "enum": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
     "ProcessorParent": {
       "type": "object",
       "properties": {
@@ -1379,6 +1475,14 @@
         }
       }
     },
+    "v1GetPluginResponse": {
+      "type": "object",
+      "properties": {
+        "plugin": {
+          "$ref": "#/definitions/v1PluginSpecifications"
+        }
+      }
+    },
     "v1GetProcessorResponse": {
       "type": "object",
       "properties": {
@@ -1413,6 +1517,17 @@
           "type": "array",
           "items": {
             "$ref": "#/definitions/v1Pipeline"
+          }
+        }
+      }
+    },
+    "v1ListPluginsResponse": {
+      "type": "object",
+      "properties": {
+        "plugins": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/v1PluginSpecifications"
           }
         }
       }
@@ -1478,6 +1593,50 @@
         "STATUS_DEGRADED"
       ],
       "default": "STATUS_UNSPECIFIED"
+    },
+    "v1PluginSpecifications": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "author": {
+          "type": "string"
+        },
+        "destinationParams": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/PluginSpecificationsParameter"
+          }
+        },
+        "sourceParams": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/PluginSpecificationsParameter"
+          }
+        }
+      }
+    },
+    "v1PluginSpecificationsType": {
+      "type": "string",
+      "enum": [
+        "TYPE_UNSPECIFIED",
+        "TYPE_STRING",
+        "TYPE_INT",
+        "TYPE_FLOAT",
+        "TYPE_BOOL",
+        "TYPE_ENUM"
+      ],
+      "default": "TYPE_UNSPECIFIED"
     },
     "v1Processor": {
       "type": "object",
