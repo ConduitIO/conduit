@@ -56,7 +56,7 @@ type Iterator struct {
 	messages   chan sdk.Record
 	killswitch context.CancelFunc
 
-	conn *pgx.Conn
+	db *pgx.Conn
 }
 
 // NewCDCIterator takes a config and returns up a new CDCIterator or returns an
@@ -76,16 +76,6 @@ func NewCDCIterator(ctx context.Context, config Config) (*Iterator, error) {
 		return nil, cerrors.Errorf("failed to connect: %v", err)
 	}
 
-	err = i.withColumns()
-	if err != nil {
-		return nil, cerrors.Errorf("failed to find table columns: %v", err)
-	}
-
-	err = i.withKeyColumn()
-	if err != nil {
-		return nil, cerrors.Errorf("failed to find key: %w", err)
-	}
-
 	sub, err := i.setupSubscription()
 	if err != nil {
 		return nil, cerrors.Errorf("failed to setup subscription %w", err)
@@ -94,12 +84,6 @@ func NewCDCIterator(ctx context.Context, config Config) (*Iterator, error) {
 	go i.listen(wctx, sub)
 
 	return i, nil
-}
-
-func handleTeardown(wg *sync.WaitGroup, sub *pgoutput.Subscription) {
-	log.Printf("tearing down subscription")
-	sub.Flush()
-	wg.Done()
 }
 
 // listen is meant to be used in a goroutine. It starts the subscription
@@ -116,6 +100,12 @@ func (i *Iterator) listen(ctx context.Context, sub *pgoutput.Subscription) {
 		}
 		return
 	}
+}
+
+func handleTeardown(wg *sync.WaitGroup, sub *pgoutput.Subscription) {
+	log.Printf("tearing down subscription")
+	sub.Flush()
+	wg.Done()
 }
 
 // Next returns the next record in the buffer. This is a blocking operation
@@ -143,7 +133,8 @@ func (i *Iterator) push(r sdk.Record) {
 func (i *Iterator) Teardown() error {
 	i.killswitch()
 	i.wg.Wait()
-	return i.conn.Close()
+	i.terminateBackend()
+	return i.db.Close()
 }
 
 func (i *Iterator) setupSubscription() (*pgoutput.Subscription, error) {
@@ -154,7 +145,17 @@ func (i *Iterator) setupSubscription() (*pgoutput.Subscription, error) {
 		i.config.SlotName = "conduitslot" // TODO: update these defaults in the spec
 	}
 
-	replConn, err := i.getReplicationConnection()
+	err := i.configureColumns()
+	if err != nil {
+		return nil, cerrors.Errorf("failed to find table columns: %v", err)
+	}
+
+	err = i.configureKeyColumn()
+	if err != nil {
+		return nil, cerrors.Errorf("failed to find key: %w", err)
+	}
+
+	replConn, err := getReplicationConnection(i.config.URL)
 	if err != nil {
 		return nil, cerrors.Errorf("failed to get replication conn: %w", err)
 	}
@@ -164,9 +165,13 @@ func (i *Iterator) setupSubscription() (*pgoutput.Subscription, error) {
 		return nil, cerrors.Errorf("failed to create publication: %w", err)
 	}
 
-	err = i.createReplicationSlot(replConn)
+	err = replConn.CreateReplicationSlot(i.config.SlotName, "pgoutput")
 	if err != nil {
-		return nil, cerrors.Errorf("failed to create replication slot: %w", err)
+		if !strings.Contains(err.Error(), "SQLSTATE 42710") {
+			return nil, cerrors.Errorf("failed to create replication slot: %v", err)
+		}
+		log.Printf("replication slot %s already exists - continuing startup",
+			i.config.SlotName)
 	}
 
 	var maxWalRetain uint64 = 0
@@ -181,24 +186,11 @@ func (i *Iterator) setupSubscription() (*pgoutput.Subscription, error) {
 	return sub, nil
 }
 
-func (i *Iterator) createReplicationSlot(conn *pgx.ReplicationConn) error {
-	err := conn.CreateReplicationSlot(i.config.SlotName, "pgoutput")
-	if err != nil {
-		if !strings.Contains(err.Error(), "SQLSTATE 42710") {
-			return cerrors.Errorf("failed to create replication slot: %v", err)
-		}
-		log.Printf("replication slot %s already exists - continuing startup",
-			i.config.SlotName)
-	}
-	return nil
-}
-
-// createPublicationForTable ...
 func (i *Iterator) createPublicationForTable() error {
 	log.Printf("attempting to setup publication %s for table %s;",
 		i.config.PublicationName,
 		i.config.TableName)
-	_, err := i.conn.Exec(
+	_, err := i.db.Exec(
 		fmt.Sprintf("create publication %s for table %s;",
 			i.config.PublicationName,
 			i.config.TableName))
@@ -222,18 +214,15 @@ func (i *Iterator) connect() error {
 	if err != nil {
 		return cerrors.Errorf("pgx failed to connect to replication: %w", err)
 	}
-	i.conn = conn
+	i.db = conn
 	return nil
 }
 
-// registerMessageHandlers returns a Handler for attaching to each message type.
+// registerMessageHandlers returns a Handler that switches on message type.
 func (i *Iterator) registerMessageHandlers() pgoutput.Handler {
-	// pgx relation sets relate a schema to a pgx message
-	set := pgoutput.NewRelationSet(i.conn.ConnInfo)
+	// NB: pgx relation sets map a postgres schema to a pgx Message
+	set := pgoutput.NewRelationSet(i.db.ConnInfo)
 
-	// declare our message handler for each Message we receive from postgres.
-	// * this receives a Message and that Message's WAL position.
-	// https://github.com/batchcorp/pgoutput/commit/54ebe1782ab770d6f706c2f0e53335cbe2f2fee0
 	handler := func(m pgoutput.Message, messageWalPos uint64) error {
 		switch v := m.(type) {
 		case pgoutput.Relation:
@@ -265,8 +254,8 @@ func (i *Iterator) registerMessageHandlers() pgoutput.Handler {
 	return handler
 }
 
-func (i *Iterator) getReplicationConnection() (*pgx.ReplicationConn, error) {
-	connInfo, err := pgx.ParseConnectionString(i.config.URL)
+func getReplicationConnection(url string) (*pgx.ReplicationConn, error) {
+	connInfo, err := pgx.ParseConnectionString(url)
 	if err != nil {
 		return nil, cerrors.Errorf("failed to parse connection info: %w", err)
 	}
@@ -277,16 +266,16 @@ func (i *Iterator) getReplicationConnection() (*pgx.ReplicationConn, error) {
 	return replConn, nil
 }
 
-// withKeyColumn queries the db for the name of the primary key column
+// configureKeyColumn queries the db for the name of the primary key column
 // for a table if one exists and sets it to the internal list.
 // * TODO: Determine if tables must have keys
-func (i *Iterator) withKeyColumn() error {
+func (i *Iterator) configureKeyColumn() error {
 	if i.config.KeyColumnName != "" {
 		log.Printf("keying records with row %s", i.config.KeyColumnName)
 		return nil
 	}
 
-	row := i.conn.QueryRow(`SELECT column_name
+	row := i.db.QueryRow(`SELECT column_name
 		FROM information_schema.key_column_usage
 		WHERE table_name = $1 AND constraint_name LIKE '%_pkey'
 		LIMIT 1;`, i.config.TableName)
@@ -305,10 +294,10 @@ func (i *Iterator) withKeyColumn() error {
 	return nil
 }
 
-// withColumns sets the default config to include all of the table's columns
+// configureColumns sets the default config to include all of the table's columns
 // unless otherwise specified.
 // * If other columns are specified, it uses them instead.
-func (i *Iterator) withColumns() error {
+func (i *Iterator) configureColumns() error {
 	if len(i.config.Columns) > 0 {
 		log.Printf("watching %v from %s", i.config.Columns, i.config.TableName)
 		return nil
@@ -317,7 +306,7 @@ func (i *Iterator) withColumns() error {
 	query := fmt.Sprintf(`SELECT column_name 
 		FROM INFORMATION_SCHEMA.COLUMNS 
 		WHERE table_name = '%s'`, i.config.TableName)
-	rows, err := i.conn.Query(query)
+	rows, err := i.db.Query(query)
 	if err != nil {
 		return cerrors.Errorf("withColumns query failed: %w", err)
 	}
@@ -337,18 +326,18 @@ func (i *Iterator) withColumns() error {
 	return nil
 }
 
-// func (i *Iterator) terminateBackend() error {
-// 	rows, err := i.conn.Query(fmt.Sprintf(
-// 		`select pg_terminate_backend(active_pid)
-// 		from pg_replication_slots
-// 		where slot_name = '%s';`,
-// 		i.config.SlotName))
-// 	if err != nil {
-// 		return cerrors.Errorf("failed to terminate replication slot: %w", err)
-// 	}
-// 	defer rows.Close()
-// 	return nil
-// }
+func (i *Iterator) terminateBackend() error {
+	rows, err := i.db.Query(fmt.Sprintf(
+		`select pg_terminate_backend(active_pid)
+		from pg_replication_slots
+		where slot_name = '%s';`,
+		i.config.SlotName))
+	if err != nil {
+		return cerrors.Errorf("failed to terminate replication slot: %w", err)
+	}
+	defer rows.Close()
+	return nil
+}
 
 // func (i *Iterator) dropReplicationSlot() error {
 // 	rows, err := i.conn.Query(fmt.Sprintf(
