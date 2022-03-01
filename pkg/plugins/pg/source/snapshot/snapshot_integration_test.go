@@ -18,6 +18,7 @@
 package snapshot
 
 import (
+	"context"
 	"database/sql"
 	"testing"
 
@@ -42,7 +43,7 @@ func TestSnapshotterReads(t *testing.T) {
 			break
 		}
 		i++
-		_, err := s.Next()
+		_, err := s.Next(context.Background())
 		assert.Ok(t, err)
 	}
 	assert.Equal(t, 4, i)
@@ -57,7 +58,7 @@ func TestSnapshotterTeardown(t *testing.T) {
 		"column1", "key"}, "key")
 	assert.Ok(t, err)
 	assert.True(t, s.HasNext(), "failed to queue up record")
-	_, err = s.Next()
+	_, err = s.Next(context.Background())
 	assert.Ok(t, err)
 	assert.True(t, !s.snapshotComplete,
 		"snapshot prematurely marked complete")
@@ -76,11 +77,11 @@ func TestPrematureDBClose(t *testing.T) {
 	teardownErr := s.Teardown()
 	assert.True(t, cerrors.Is(teardownErr, ErrSnapshotInterrupt),
 		"failed to get snapshot interrupt error")
-	_, err = s.Next()
+	_, err = s.Next(context.Background())
 	assert.Error(t, err)
 	next2 := s.HasNext()
 	assert.Equal(t, false, next2)
-	rec, err := s.Next()
+	rec, err := s.Next(context.Background())
 	assert.Equal(t, rec, sdk.Record{})
 	assert.True(t, cerrors.Is(err, ErrNoRows),
 		"failed to get snapshot incomplete")

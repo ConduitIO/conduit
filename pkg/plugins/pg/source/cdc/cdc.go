@@ -22,7 +22,6 @@ import (
 	"sync"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/foundation/multierror"
 	"github.com/conduitio/conduit/pkg/plugin/sdk"
 
 	"github.com/batchcorp/pgoutput"
@@ -53,13 +52,11 @@ type Iterator struct {
 
 	config Config
 
-	lsn          uint64 // TODO: or maybe use an LSN type here
-	messages     chan sdk.Record
-	errCollector chan error
-	killswitch   context.CancelFunc
+	lsn        uint64 // TODO: or maybe use an LSN type here
+	messages   chan sdk.Record
+	killswitch context.CancelFunc
 
-	conn *pgx.ReplicationConn
-	sub  *pgoutput.Subscription
+	conn *pgx.Conn
 }
 
 // NewCDCIterator takes a config and returns up a new CDCIterator or returns an
@@ -69,13 +66,10 @@ func NewCDCIterator(ctx context.Context, config Config) (*Iterator, error) {
 	i := &Iterator{
 		config: config,
 		// TODO: remove buffer since iterator can now block on read
-		messages:     make(chan sdk.Record, cdcBufferSize),
-		wg:           &sync.WaitGroup{},
-		errCollector: make(chan error),
-		killswitch:   cancel,
+		messages:   make(chan sdk.Record, cdcBufferSize),
+		wg:         &sync.WaitGroup{},
+		killswitch: cancel,
 	}
-
-	go errorListener(i)
 
 	err := i.connect()
 	if err != nil {
@@ -92,37 +86,50 @@ func NewCDCIterator(ctx context.Context, config Config) (*Iterator, error) {
 		return nil, cerrors.Errorf("failed to find key: %w", err)
 	}
 
-	err = i.setupSubscription()
+	sub, err := i.setupSubscription()
 	if err != nil {
 		return nil, cerrors.Errorf("failed to setup subscription %w", err)
 	}
 
-	err = i.subscribe(wctx)
-	if err != nil {
-		return nil, cerrors.Errorf("failed to start cdc subscription: %w", err)
-	}
+	go i.listen(wctx, sub)
 
 	return i, nil
 }
 
-func errorListener(i *Iterator) {
-	for err := range i.errCollector {
-		log.Printf("[ERROR]: %+v", err)
-		i.killswitch()
-	}
+func handleTeardown(wg *sync.WaitGroup, sub *pgoutput.Subscription) {
+	log.Printf("tearing down subscription")
+	sub.Flush()
+	wg.Done()
 }
 
-// HasNext returns true if there is an item in the buffer.
-func (i *Iterator) HasNext() bool {
-	return len(i.messages) > 0
+// listen is meant to be used in a goroutine. It starts the subscription
+// passed to it and handles the the subscription flush
+func (i *Iterator) listen(ctx context.Context, sub *pgoutput.Subscription) {
+	i.wg.Add(1)
+	defer handleTeardown(i.wg, sub)
+
+	err := sub.Start(ctx, i.lsn, i.registerMessageHandlers())
+	if err != nil {
+		log.Printf("subscription passed priority: %v", err)
+		if err == context.Canceled {
+			return
+		}
+		return
+	}
 }
 
 // Next returns the next record in the buffer. This is a blocking operation
 // so it should only be called if we've checked that HasNext is true or else
 // it will block until a record is inserted into the queue.
-func (i *Iterator) Next() (sdk.Record, error) {
-	r := <-i.messages
-	return r, nil
+func (i *Iterator) Next(ctx context.Context) (sdk.Record, error) {
+	for {
+		select {
+		case r := <-i.messages:
+			return r, nil
+		case <-ctx.Done():
+			return sdk.Record{}, sdk.ErrBackoffRetry
+		}
+	}
 }
 
 // push pushes a record into the buffer.
@@ -134,15 +141,12 @@ func (i *Iterator) push(r sdk.Record) {
 // closes its connection to the database and cleans up connector slots and
 // publications.
 func (i *Iterator) Teardown() error {
-	flushErr := i.sub.Flush()
-	// TODO: do we need to cleanupErr := i.cleanupConnector() still?
 	i.killswitch()
 	i.wg.Wait()
-	dbErr := i.conn.Close()
-	return multierror.Append(dbErr, flushErr)
+	return i.conn.Close()
 }
 
-func (i *Iterator) setupSubscription() error {
+func (i *Iterator) setupSubscription() (*pgoutput.Subscription, error) {
 	if i.config.PublicationName == "" {
 		i.config.PublicationName = "conduitpub" // TODO: update these default values in the spec
 	}
@@ -150,35 +154,35 @@ func (i *Iterator) setupSubscription() error {
 		i.config.SlotName = "conduitslot" // TODO: update these defaults in the spec
 	}
 
-	err := i.connect()
+	replConn, err := i.getReplicationConnection()
 	if err != nil {
-		return cerrors.Errorf("failed to connecto to replication: %w", err)
+		return nil, cerrors.Errorf("failed to get replication conn: %w", err)
 	}
 
 	err = i.createPublicationForTable()
 	if err != nil {
-		return cerrors.Errorf("failed to create publication: %w", err)
+		return nil, cerrors.Errorf("failed to create publication: %w", err)
 	}
 
-	err = i.createReplicationSlot()
+	err = i.createReplicationSlot(replConn)
 	if err != nil {
-		return cerrors.Errorf("failed to create replication slot: %w", err)
+		return nil, cerrors.Errorf("failed to create replication slot: %w", err)
 	}
 
-	var maxWalRetain uint64 = 0 // TODO: see if we need to set walRetain to anything bigger than 0
+	var maxWalRetain uint64 = 0
 	var failOnHandler bool = false
-	i.sub = pgoutput.NewSubscription(
-		i.conn,
+	sub := pgoutput.NewSubscription(
+		replConn,
 		i.config.SlotName,
 		i.config.PublicationName,
 		maxWalRetain,
 		failOnHandler)
 
-	return nil
+	return sub, nil
 }
 
-func (i *Iterator) createReplicationSlot() error {
-	err := i.conn.CreateReplicationSlot(i.config.SlotName, "pgoutput")
+func (i *Iterator) createReplicationSlot(conn *pgx.ReplicationConn) error {
+	err := conn.CreateReplicationSlot(i.config.SlotName, "pgoutput")
 	if err != nil {
 		if !strings.Contains(err.Error(), "SQLSTATE 42710") {
 			return cerrors.Errorf("failed to create replication slot: %v", err)
@@ -214,7 +218,7 @@ func (i *Iterator) connect() error {
 	if err != nil {
 		return cerrors.Errorf("pgx failed to parse uri: %w", err)
 	}
-	conn, err := pgx.ReplicationConnect(pgConnInfo)
+	conn, err := pgx.Connect(pgConnInfo)
 	if err != nil {
 		return cerrors.Errorf("pgx failed to connect to replication: %w", err)
 	}
@@ -261,35 +265,16 @@ func (i *Iterator) registerMessageHandlers() pgoutput.Handler {
 	return handler
 }
 
-// subscribe starts the subscription at the configured LSN in a goroutine and
-// then returns any errors that occurred.
-// * The waitgroup on Iterator waits on the goroutine created here at teardown.
-func (i *Iterator) subscribe(ctx context.Context) error {
-	var walRetain uint64 = 0
-	sub := pgoutput.NewSubscription(
-		i.conn,
-		i.config.SlotName,
-		i.config.PublicationName,
-		walRetain,
-		false,
-	)
-	i.sub = sub
-	i.wg.Add(1)
-	go func() {
-		defer func() {
-			log.Printf("cdc subscription closed")
-			i.wg.Done()
-		}()
-
-		err := i.sub.Start(ctx, i.lsn, i.registerMessageHandlers())
-		if err != nil {
-			if err == context.Canceled {
-				return
-			}
-			i.errCollector <- err
-		}
-	}()
-	return nil
+func (i *Iterator) getReplicationConnection() (*pgx.ReplicationConn, error) {
+	connInfo, err := pgx.ParseConnectionString(i.config.URL)
+	if err != nil {
+		return nil, cerrors.Errorf("failed to parse connection info: %w", err)
+	}
+	replConn, err := pgx.ReplicationConnect(connInfo)
+	if err != nil {
+		return nil, cerrors.Errorf("failed to create replication connection: %w", err)
+	}
+	return replConn, nil
 }
 
 // withKeyColumn queries the db for the name of the primary key column
@@ -332,7 +317,6 @@ func (i *Iterator) withColumns() error {
 	query := fmt.Sprintf(`SELECT column_name 
 		FROM INFORMATION_SCHEMA.COLUMNS 
 		WHERE table_name = '%s'`, i.config.TableName)
-
 	rows, err := i.conn.Query(query)
 	if err != nil {
 		return cerrors.Errorf("withColumns query failed: %w", err)
@@ -353,47 +337,37 @@ func (i *Iterator) withColumns() error {
 	return nil
 }
 
-// cleanupConnector will remove the connector and its publication.
-func (i *Iterator) cleanupConnector() error {
-	termErr := i.terminateBackend()
-	dropReplErr := i.dropReplicationSlot()
-	dropPubErr := i.dropPublication()
+// func (i *Iterator) terminateBackend() error {
+// 	rows, err := i.conn.Query(fmt.Sprintf(
+// 		`select pg_terminate_backend(active_pid)
+// 		from pg_replication_slots
+// 		where slot_name = '%s';`,
+// 		i.config.SlotName))
+// 	if err != nil {
+// 		return cerrors.Errorf("failed to terminate replication slot: %w", err)
+// 	}
+// 	defer rows.Close()
+// 	return nil
+// }
 
-	return multierror.Append(
-		termErr,
-		dropPubErr,
-		dropReplErr,
-	)
-}
+// func (i *Iterator) dropReplicationSlot() error {
+// 	rows, err := i.conn.Query(fmt.Sprintf(
+// 		`select pg_drop_replication_slot(slot_name)
+// 		from pg_replication_slots
+// 		where slot_name = '%s;`, i.config.SlotName))
+// 	if err != nil {
+// 		return cerrors.Errorf("failed to drop replication slot: %w", err)
+// 	}
+// 	defer rows.Close()
+// 	return nil
+// }
 
-func (i *Iterator) terminateBackend() error {
-	rows, err := i.conn.Query(`select pg_terminate_backend(active_pid) 
-		from pg_replication_slots
-		where slot_name = $1;`, i.config.SlotName)
-	if err != nil {
-		return cerrors.Errorf("failed to terminate replication slot: %w", err)
-	}
-	defer rows.Close()
-	return nil
-}
-
-func (i *Iterator) dropReplicationSlot() error {
-	rows, err := i.conn.Query(`select pg_drop_replication_slot(slot_name) 
-		from pg_replication_slots
-		where slot_name = $1;`, i.config.SlotName)
-	if err != nil {
-		return cerrors.Errorf("failed to drop replication slot: %w", err)
-	}
-	defer rows.Close()
-	return nil
-}
-
-func (i *Iterator) dropPublication() error {
-	query := fmt.Sprintf("drop publication %s", i.config.PublicationName)
-	rows, err := i.conn.Query(query)
-	if err != nil {
-		return cerrors.Errorf("failed to connecto to replication: %w", err)
-	}
-	defer rows.Close()
-	return nil
-}
+// func (i *Iterator) dropPublication() error {
+// 	query := fmt.Sprintf("drop publication %s", i.config.PublicationName)
+// 	rows, err := i.conn.Query(query)
+// 	if err != nil {
+// 		return cerrors.Errorf("failed to connecto to replication: %w", err)
+// 	}
+// 	defer rows.Close()
+// 	return nil
+// }

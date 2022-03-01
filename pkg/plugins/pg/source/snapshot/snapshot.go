@@ -15,6 +15,7 @@
 package snapshot
 
 import (
+	"context"
 	"database/sql"
 	"log"
 	"reflect"
@@ -103,7 +104,7 @@ func (s *Snapshotter) HasNext() bool {
 // Next returns the next row in the snapshotter's rows.
 // * If Next is called after HasNext has returned false, it will
 // return an ErrNoRows error.
-func (s *Snapshotter) Next() (sdk.Record, error) {
+func (s *Snapshotter) Next(ctx context.Context) (sdk.Record, error) {
 	if s.snapshotComplete {
 		return sdk.Record{}, ErrNoRows
 	}

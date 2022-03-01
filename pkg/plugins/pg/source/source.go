@@ -28,14 +28,14 @@ var Required = []string{"url", "table"}
 
 // Enforce that we fulfill V1Source
 var _ sdk.Source = (*Source)(nil)
-var _ Iterator = (*cdc.Iterator)(nil)
-var _ Iterator = (*snapshot.Snapshotter)(nil)
+var _ Strategy = (*cdc.Iterator)(nil)
+var _ Strategy = (*snapshot.Snapshotter)(nil)
 
 // Source implements the new transition to the new plugin SDK for Postgres.
 type Source struct {
 	sdk.UnimplementedSource
 
-	Iterator Iterator
+	Iterator Strategy
 
 	config map[string]string
 }
@@ -73,12 +73,8 @@ func (s *Source) Open(ctx context.Context, pos sdk.Position) error {
 	return nil
 }
 
-func (s *Source) Read(context.Context) (sdk.Record, error) {
-	if !s.Iterator.HasNext() {
-		return sdk.Record{}, sdk.ErrBackoffRetry
-	}
-
-	return s.Iterator.Next()
+func (s *Source) Read(ctx context.Context) (sdk.Record, error) {
+	return s.Iterator.Next(ctx)
 }
 
 func (s *Source) Ack(context.Context, sdk.Position) error {
@@ -86,7 +82,7 @@ func (s *Source) Ack(context.Context, sdk.Position) error {
 }
 
 func (s *Source) Teardown(context.Context) error {
-	return cerrors.ErrNotImpl
+	return s.Iterator.Teardown()
 }
 
 // returns an error if the cfg passed does not have all of the keys in required
