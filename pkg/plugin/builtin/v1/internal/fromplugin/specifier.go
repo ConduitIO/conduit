@@ -15,8 +15,8 @@
 package fromplugin
 
 import (
+	"github.com/conduitio/conduit-plugin-protocol/cpluginv1"
 	"github.com/conduitio/conduit/pkg/plugin"
-	"github.com/conduitio/connector-plugin/cpluginv1"
 )
 
 func SpecifierSpecifyResponse(in cpluginv1.SpecifierSpecifyResponse) (plugin.Specification, error) {

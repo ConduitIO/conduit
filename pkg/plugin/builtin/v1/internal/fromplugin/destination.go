@@ -15,8 +15,8 @@
 package fromplugin
 
 import (
+	"github.com/conduitio/conduit-plugin-protocol/cpluginv1"
 	"github.com/conduitio/conduit/pkg/record"
-	"github.com/conduitio/connector-plugin/cpluginv1"
 )
 
 func DestinationRunResponse(in cpluginv1.DestinationRunResponse) (record.Position, string) {

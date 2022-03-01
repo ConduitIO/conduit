@@ -17,9 +17,9 @@ package fromplugin
 import (
 	"time"
 
+	"github.com/conduitio/conduit-plugin-protocol/cpluginv1"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/record"
-	"github.com/conduitio/connector-plugin/cpluginv1"
 )
 
 func Record(in cpluginv1.Record) (record.Record, error) {

@@ -19,10 +19,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/conduitio/conduit-plugin-protocol/cpluginv1"
+	"github.com/conduitio/conduit-plugin-protocol/cpluginv1/mock"
+	"github.com/conduitio/conduit-plugin-protocol/cpluginv1/server"
 	"github.com/conduitio/conduit/pkg/plugin"
-	"github.com/conduitio/connector-plugin/cpluginv1"
-	"github.com/conduitio/connector-plugin/cpluginv1/mock"
-	"github.com/conduitio/connector-plugin/cpluginv1/server"
 	"github.com/golang/mock/gomock"
 	goplugin "github.com/hashicorp/go-plugin"
 	"github.com/rs/zerolog"

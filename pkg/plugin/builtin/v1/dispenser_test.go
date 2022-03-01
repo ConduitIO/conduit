@@ -17,9 +17,9 @@ package builtinv1
 import (
 	"testing"
 
+	"github.com/conduitio/conduit-plugin-protocol/cpluginv1/mock"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
-	"github.com/conduitio/connector-plugin/cpluginv1/mock"
 	"github.com/golang/mock/gomock"
 )
 

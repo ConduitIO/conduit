@@ -25,7 +25,7 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin/standalone/v1/internal/toproto"
 	"github.com/conduitio/conduit/pkg/record"
 	goplugin "github.com/hashicorp/go-plugin"
-	connectorv1 "go.buf.build/library/go-grpc/conduitio/connector-plugin/connector/v1"
+	connectorv1 "go.buf.build/library/go-grpc/conduitio/conduit-plugin-protocol/connector/v1"
 	"google.golang.org/grpc"
 )
 

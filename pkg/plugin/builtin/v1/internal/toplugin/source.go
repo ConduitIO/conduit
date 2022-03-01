@@ -15,8 +15,8 @@
 package toplugin
 
 import (
+	"github.com/conduitio/conduit-plugin-protocol/cpluginv1"
 	"github.com/conduitio/conduit/pkg/record"
-	"github.com/conduitio/connector-plugin/cpluginv1"
 )
 
 func SourceConfigureRequest(in map[string]string) (cpluginv1.SourceConfigureRequest, error) {
