@@ -88,7 +88,7 @@ func TestConfig_Validate(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			var validConfig Config
-			validConfig.DB.Type = DBTypeBadger
+			validConfig.DB.Type = DBTypeInMemory
 			validConfig.DB.Badger.Path = "conduit.app"
 			validConfig.DB.Postgres.Table = "conduit_kv_store"
 			validConfig.DB.Postgres.ConnectionString = "postgres://user:pass@localhost:5432/mydb?sslmode=disable"
