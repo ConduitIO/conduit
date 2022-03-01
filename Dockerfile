@@ -31,4 +31,4 @@ COPY --from=base /app/pkg/plugins/file/file /app/pkg/plugins/file/file
 COPY --from=base /app/pkg/plugins/pg/pg /app/pkg/plugins/pg/pg
 COPY --from=base /app/pkg/plugins/s3/s3 /app/pkg/plugins/s3/s3
 COPY --from=base /app/pkg/plugins/kafka/kafka /app/pkg/plugins/kafka/kafka
-ENTRYPOINT ["/app/conduit"]
+CMD ["/app/conduit"]
