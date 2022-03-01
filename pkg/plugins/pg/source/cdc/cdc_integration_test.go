@@ -93,7 +93,6 @@ func TestIterator_Next(t *testing.T) {
 			db := getTestPostgres(t)
 			i := getDefaultConnector(t)
 			t.Cleanup(func() {
-				t.Logf("test tearing down")
 				assert.Ok(t, i.Teardown())
 			})
 

@@ -206,15 +206,11 @@ func (i *Iterator) createPublicationForTable() error {
 }
 
 func (i *Iterator) connect() error {
-	pgConnInfo, err := pgx.ParseURI(i.config.URL)
+	rc, err := getReplicationConnection(i.config.URL)
 	if err != nil {
-		return cerrors.Errorf("pgx failed to parse uri: %w", err)
+		return cerrors.Errorf("failed to get replication connection: %w", err)
 	}
-	conn, err := pgx.Connect(pgConnInfo)
-	if err != nil {
-		return cerrors.Errorf("pgx failed to connect to replication: %w", err)
-	}
-	i.db = conn
+	i.db = rc.Conn
 	return nil
 }
 
@@ -252,18 +248,6 @@ func (i *Iterator) registerMessageHandlers() pgoutput.Handler {
 	}
 
 	return handler
-}
-
-func getReplicationConnection(url string) (*pgx.ReplicationConn, error) {
-	connInfo, err := pgx.ParseConnectionString(url)
-	if err != nil {
-		return nil, cerrors.Errorf("failed to parse connection info: %w", err)
-	}
-	replConn, err := pgx.ReplicationConnect(connInfo)
-	if err != nil {
-		return nil, cerrors.Errorf("failed to create replication connection: %w", err)
-	}
-	return replConn, nil
 }
 
 // configureKeyColumn queries the db for the name of the primary key column
@@ -337,6 +321,18 @@ func (i *Iterator) terminateBackend() error {
 	}
 	defer rows.Close()
 	return nil
+}
+
+func getReplicationConnection(url string) (*pgx.ReplicationConn, error) {
+	connInfo, err := pgx.ParseConnectionString(url)
+	if err != nil {
+		return nil, cerrors.Errorf("failed to parse connection info: %w", err)
+	}
+	replConn, err := pgx.ReplicationConnect(connInfo)
+	if err != nil {
+		return nil, cerrors.Errorf("failed to create replication connection: %w", err)
+	}
+	return replConn, nil
 }
 
 // func (i *Iterator) dropReplicationSlot() error {
