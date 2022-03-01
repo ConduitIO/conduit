@@ -36,7 +36,8 @@ type Source interface {
 
 	// Open is called after Configure to signal the plugin it can prepare to
 	// start producing records. If needed, the plugin should open connections in
-	// this function.
+	// this function. The context passed to Open will be cancelled once the
+	// plugin receives a stop signal from Conduit.
 	Open(context.Context, Position) error
 
 	// Read returns a new Record and is supposed to block until there is either
@@ -86,6 +87,7 @@ type sourcePluginAdapter struct {
 	// readDone will be closed after runRead stops running.
 	readDone chan struct{}
 
+	openCancel context.CancelFunc
 	readCancel context.CancelFunc
 	ackCancel  context.CancelFunc
 	t          *tomb.Tomb
@@ -97,6 +99,7 @@ func (a *sourcePluginAdapter) Configure(ctx context.Context, req cpluginv1.Sourc
 }
 
 func (a *sourcePluginAdapter) Start(ctx context.Context, req cpluginv1.SourceStartRequest) (cpluginv1.SourceStartResponse, error) {
+	ctx, a.openCancel = context.WithCancel(ctx)
 	err := a.impl.Open(ctx, req.Position)
 	return cpluginv1.SourceStartResponse{}, err
 }
@@ -221,8 +224,10 @@ func (a *sourcePluginAdapter) runAck(ctx context.Context, stream cpluginv1.Sourc
 }
 
 func (a *sourcePluginAdapter) Stop(ctx context.Context, req cpluginv1.SourceStopRequest) (cpluginv1.SourceStopResponse, error) {
-	a.readCancel() // stop reading new messages
-	<-a.readDone   // wait for read to actually stop running
+	// stop reading new messages
+	a.openCancel()
+	a.readCancel()
+	<-a.readDone // wait for read to actually stop running
 	if atomic.LoadInt32(&a.openAcks) == 0 {
 		// we aren't waiting for any further acks, let's stop the ack goroutine as well
 		a.ackCancel()
