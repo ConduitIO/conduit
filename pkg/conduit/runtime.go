@@ -30,6 +30,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/ctxutil"
 	"github.com/conduitio/conduit/pkg/foundation/database"
 	"github.com/conduitio/conduit/pkg/foundation/database/badger"
+	"github.com/conduitio/conduit/pkg/foundation/database/inmemory"
 	"github.com/conduitio/conduit/pkg/foundation/database/postgres"
 	"github.com/conduitio/conduit/pkg/foundation/grpcutil"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -88,10 +89,13 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 	var db database.DB
 	var err error
 	switch cfg.DB.Type {
-	case "badger":
+	case DBTypeBadger:
 		db, err = badger.New(logger.Logger, cfg.DB.Badger.Path)
-	case "postgres":
+	case DBTypePostgres:
 		db, err = postgres.New(context.Background(), logger, cfg.DB.Postgres.ConnectionString, cfg.DB.Postgres.Table)
+	case DBTypeInMemory:
+		db = &inmemory.DB{}
+		logger.Warn(context.Background()).Msg("Using in-memory store, all pipeline configurations will be lost when Conduit stops.")
 	default:
 		err = cerrors.Errorf("invalid DB type %q", cfg.DB.Type)
 	}

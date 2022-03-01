@@ -52,7 +52,7 @@ func parseConfig() conduit.Config {
 	// TODO allow parsing config from a file or from env variables
 	flags := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 	var (
-		dbType                     = flags.String("db.type", "badger", "database type; accepts badger,postgres")
+		dbType                     = flags.String("db.type", "badger", "database type; accepts badger,postgres,inmemory")
 		dbBadgerPath               = flags.String("db.badger.path", "conduit.db", "path to badger DB")
 		dbPostgresConnectionString = flags.String("db.postgres.connection-string", "", "postgres connection string")
 		dbPostgresTable            = flags.String("db.postgres.table", "conduit_kv_store", "postgres table in which to store data (will be created if it does not exist)")
