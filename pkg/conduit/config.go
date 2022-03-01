@@ -19,6 +19,7 @@ import "github.com/conduitio/conduit/pkg/foundation/cerrors"
 const (
 	DBTypeBadger   = "badger"
 	DBTypePostgres = "postgres"
+	DBTypeInMemory = "inmemory"
 )
 
 // Config holds all configurable values for Conduit.
@@ -57,6 +58,8 @@ func (c Config) Validate() error {
 		if c.DB.Postgres.Table == "" {
 			return requiredConfigFieldErr("db.postgres.table")
 		}
+	case DBTypeInMemory:
+		// all good
 	default:
 		return invalidConfigFieldErr("db.type")
 	}

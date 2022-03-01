@@ -26,4 +26,4 @@ EXPOSE 8080/tcp
 EXPOSE 8084/tcp
 WORKDIR /app
 COPY --from=base /app/conduit /app
-ENTRYPOINT ["/app/conduit"]
+CMD ["/app/conduit"]
