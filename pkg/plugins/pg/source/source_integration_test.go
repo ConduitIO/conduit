@@ -22,12 +22,3 @@ package source
 // Assigning tests unique slot names also means we can relate container logs
 // to specific tests when debugging.
 // Any test that calls `Open` successfully should call `Teardown`.
-
-// const (
-// 	// DBURL is the URI for the Postgres server used for integration tests
-// 	DBURL = "postgres://meroxauser:meroxapass@localhost:5432/meroxadb?sslmode=disable"
-// 	// RepDBURL is the URI for the _logical replication_ server and user.
-// 	// This is separate from the DB_URL used above since it requires a different
-// 	// user and permissions for replication.
-// 	RepDBURL = "postgres://repmgr:repmgrmeroxa@localhost:5432/meroxadb?sslmode=disable"
-// )

@@ -23,10 +23,9 @@ import (
 	"github.com/conduitio/conduit/pkg/plugins/pg/source/snapshot"
 )
 
-// Required is a list of our plugin required config fields for validation
-var Required = []string{"url", "table"}
+// requiredFields is a list of our plugin required config fields for validation
+var requiredFields = []string{"url", "table"}
 
-// Enforce that we fulfill V1Source
 var _ sdk.Source = (*Source)(nil)
 var _ Strategy = (*cdc.Iterator)(nil)
 var _ Strategy = (*snapshot.Snapshotter)(nil)
@@ -40,9 +39,8 @@ type Source struct {
 	config map[string]string
 }
 
-// Configure validates a config map and returns an error if anything is invalid.
 func (s *Source) Configure(ctx context.Context, cfg map[string]string) error {
-	err := validateConfig(cfg, Required)
+	err := validateConfig(cfg, requiredFields)
 	if err != nil {
 		return cerrors.Errorf("config failed validation: %w", err)
 	}

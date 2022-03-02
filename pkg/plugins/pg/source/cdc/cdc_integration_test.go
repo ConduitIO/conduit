@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// TODO: Uncomment before final push
-// //go:build integration
+// go:build integration
+
 package cdc
 
 import (
@@ -93,6 +93,23 @@ func TestIterator_Next(t *testing.T) {
 					"column2": int32(123),
 					"column3": bool(false),
 					"key":     []uint8("1"),
+				},
+			},
+		},
+		{
+			name: "should detect delete",
+			action: func(t *testing.T, db *pgx.Conn) {
+				rows, err := db.Query(context.Background(),
+					`delete from records where id = 3;`)
+				assert.Ok(t, err)
+				defer rows.Close()
+			},
+			wantErr: false,
+			want: sdk.Record{
+				Key: sdk.StructuredData{"id": int64(3)},
+				Metadata: map[string]string{
+					"table":  "records",
+					"action": "delete",
 				},
 			},
 		},
