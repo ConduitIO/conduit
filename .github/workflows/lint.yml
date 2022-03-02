@@ -9,7 +9,7 @@ jobs:
   golangci-lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - uses: actions/setup-go@v2
         with:
           go-version: 1.17
@@ -22,7 +22,7 @@ jobs:
   buf-lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - uses: bufbuild/buf-setup-action@v1.0.0
+      - uses: actions/checkout@v3
+      - uses: bufbuild/buf-setup-action@v1.1.0
       - uses: bufbuild/buf-lint-action@v1.0.0
 
