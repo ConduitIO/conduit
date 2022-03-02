@@ -17,7 +17,7 @@ package standalonev1
 import (
 	"testing"
 
-	"github.com/conduitio/conduit-plugin-protocol/cpluginv1/mock"
+	"github.com/conduitio/conduit-connector-protocol/cpluginv1/mock"
 	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/rs/zerolog"
 )

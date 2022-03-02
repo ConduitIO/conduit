@@ -19,7 +19,7 @@ import (
 	"io"
 	"sync"
 
-	"github.com/conduitio/conduit-plugin-protocol/cpluginv1"
+	"github.com/conduitio/conduit-connector-protocol/cpluginv1"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
@@ -31,7 +31,7 @@ import (
 
 // destinationPluginAdapter implements the destination plugin interface used
 // internally in Conduit and relays the calls to a destination plugin defined in
-// conduit-plugin-protocol (cpluginv1). This adapter needs to make sure it behaves in the
+// conduit-connector-protocol (cpluginv1). This adapter needs to make sure it behaves in the
 // same way as the standalone plugin adapter, which communicates with the plugin
 // through gRPC, so that the caller can use both of them interchangeably.
 // TODO make sure a panic in a plugin doesn't crash Conduit
