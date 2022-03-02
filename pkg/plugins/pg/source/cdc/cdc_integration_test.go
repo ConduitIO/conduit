@@ -18,6 +18,8 @@ package cdc
 
 import (
 	"context"
+	"fmt"
+	"math/rand"
 	"testing"
 	"time"
 
@@ -36,6 +38,11 @@ const (
 )
 
 func TestIterator_Next(t *testing.T) {
+	db := getTestPostgres(t)
+	i := getDefaultConnector(t)
+	t.Cleanup(func() {
+		assert.Ok(t, i.Teardown())
+	})
 	tests := []struct {
 		name    string
 		want    sdk.Record
@@ -69,9 +76,8 @@ func TestIterator_Next(t *testing.T) {
 			name: "should detect update",
 			action: func(t *testing.T, db *pgx.Conn) {
 				rows, err := db.Query(context.Background(),
-					`update records
-					set column1 = 'fizz', column2 = 789, column3 = true
-					where id = 1;`)
+					`update records * set column1 = 'test cdc updates' 
+					where key = '1';`)
 				assert.Ok(t, err)
 				defer rows.Close()
 			},
@@ -83,18 +89,16 @@ func TestIterator_Next(t *testing.T) {
 					"action": "update",
 				},
 				Payload: sdk.StructuredData{
-					// TODO:
+					"column1": string("test cdc updates"),
+					"column2": int32(123),
+					"column3": bool(false),
+					"key":     []uint8("1"),
 				},
 			},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			db := getTestPostgres(t)
-			i := getDefaultConnector(t)
-			t.Cleanup(func() {
-				assert.Ok(t, i.Teardown())
-			})
 
 			now := time.Now()
 			tt.action(t, db)
@@ -108,19 +112,14 @@ func TestIterator_Next(t *testing.T) {
 				tt.want,
 				cmpopts.IgnoreFields(
 					sdk.Record{},
-					"CreatedAt", // TODO: Assert what we can about time and date
-					"Position",  // TODO: Assert what we can about position
+					"CreatedAt",
+					"Position", // TODO: Assert what we can about position
 				))
 			if diff != "" {
 				t.Errorf("%s", diff)
 			}
-			t.Logf("record: %v", got)
 			assert.True(t, got.CreatedAt.After(now), "CreatedAt should be After now")
-
-			// n, err := strconv.ParseUint(string(got.Position), 10, 64)
-			// assert.Ok(t, err)
-			// i.sub.AdvanceLSN(n) // this should be set by the record handler
-			// TODO: assert that i.lsn is equal to the position from the last record we handled
+			assert.Ok(t, i.Ack(context.Background(), got.Position))
 		})
 	}
 }
@@ -128,9 +127,11 @@ func TestIterator_Next(t *testing.T) {
 func getDefaultConnector(t *testing.T) *Iterator {
 	_ = getTestPostgres(t)
 	ctx := context.Background()
+	randSlotName := fmt.Sprintf("conduit%d", rand.Int())
 	config := Config{
 		URL:       CDC_TEST_URL,
 		TableName: "records",
+		SlotName:  randSlotName,
 	}
 	i, err := NewCDCIterator(ctx, config)
 	assert.Ok(t, err)
@@ -145,6 +146,8 @@ func getDefaultConnector(t *testing.T) *Iterator {
 // * It starts and migrates a db with 5 rows for Test_Read* and Test_Open*
 func getTestPostgres(t *testing.T) *pgx.Conn {
 	prepareDB := []string{
+		// `DROP DATABASE IF EXISTS meroxadb;`,
+		// `CREATE DATABASE IF NOT EXISTS meroxadb;`,
 		`DROP TABLE IF EXISTS records;`,
 		`CREATE TABLE IF NOT EXISTS records (
 		id bigserial PRIMARY KEY,

@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -27,10 +28,6 @@ import (
 	"github.com/batchcorp/pgoutput"
 	"github.com/jackc/pgx"
 )
-
-// cdcBufferSize is the size of the message buffer created for cdc messages.
-// If this fills up it will block on calls to Source#Read.
-const cdcBufferSize int = 1000
 
 // Config holds configuration values for our V1 Source. It is parsed from the
 // map[string]string passed to the Connector at Configure time.
@@ -54,6 +51,7 @@ type Iterator struct {
 
 	lsn        uint64 // TODO: or maybe use an LSN type here
 	messages   chan sdk.Record
+	acker      chan sdk.Position
 	killswitch context.CancelFunc
 
 	db *pgx.Conn
@@ -64,9 +62,9 @@ type Iterator struct {
 func NewCDCIterator(ctx context.Context, config Config) (*Iterator, error) {
 	wctx, cancel := context.WithCancel(ctx)
 	i := &Iterator{
-		config: config,
-		// TODO: remove buffer since iterator can now block on read
-		messages:   make(chan sdk.Record, cdcBufferSize),
+		config:     config,
+		messages:   make(chan sdk.Record),
+		acker:      make(chan sdk.Position),
 		wg:         &sync.WaitGroup{},
 		killswitch: cancel,
 	}
@@ -76,7 +74,7 @@ func NewCDCIterator(ctx context.Context, config Config) (*Iterator, error) {
 		return nil, cerrors.Errorf("failed to connect: %v", err)
 	}
 
-	sub, err := i.setupSubscription()
+	sub, err := i.makeSubscription()
 	if err != nil {
 		return nil, cerrors.Errorf("failed to setup subscription %w", err)
 	}
@@ -90,11 +88,13 @@ func NewCDCIterator(ctx context.Context, config Config) (*Iterator, error) {
 // passed to it and handles the the subscription flush
 func (i *Iterator) listen(ctx context.Context, sub *pgoutput.Subscription) {
 	i.wg.Add(1)
-	defer handleTeardown(i.wg, sub)
+	defer cleanupListener(i.wg, sub)
 
+	go i.acknowledger(ctx, sub)
+
+	log.Printf("starting subscription at position %d", i.lsn)
 	err := sub.Start(ctx, i.lsn, i.registerMessageHandlers())
 	if err != nil {
-		log.Printf("subscription passed priority: %v", err)
 		if err == context.Canceled {
 			return
 		}
@@ -102,7 +102,21 @@ func (i *Iterator) listen(ctx context.Context, sub *pgoutput.Subscription) {
 	}
 }
 
-func handleTeardown(wg *sync.WaitGroup, sub *pgoutput.Subscription) {
+// acknowledger is a go func for acking the position of a record
+func (i *Iterator) acknowledger(ctx context.Context, sub *pgoutput.Subscription) {
+	for {
+		select {
+		case pos := <-i.acker:
+			lsn := mustParsePosition(string(pos))
+			sub.AdvanceLSN(lsn)
+		case <-ctx.Done():
+			log.Printf("context cancelled - acknowledger is closing")
+			return
+		}
+	}
+}
+
+func cleanupListener(wg *sync.WaitGroup, sub *pgoutput.Subscription) {
 	log.Printf("tearing down subscription")
 	sub.Flush()
 	wg.Done()
@@ -122,6 +136,11 @@ func (i *Iterator) Next(ctx context.Context) (sdk.Record, error) {
 	}
 }
 
+func (i *Iterator) Ack(ctx context.Context, pos sdk.Position) error {
+	i.acker <- pos
+	return nil
+}
+
 // push pushes a record into the buffer.
 func (i *Iterator) push(r sdk.Record) {
 	i.messages <- r
@@ -134,10 +153,15 @@ func (i *Iterator) Teardown() error {
 	i.killswitch()
 	i.wg.Wait()
 	i.terminateBackend()
+	i.dropReplicationSlot()
+	i.dropPublication()
 	return i.db.Close()
 }
 
-func (i *Iterator) setupSubscription() (*pgoutput.Subscription, error) {
+// makeSubscription builds a subscription with its own dedicated replication
+// connection. It prepares a replication slot and publication for the connector
+// if they're not yet setup with sane defaults if they're not configured.
+func (i *Iterator) makeSubscription() (*pgoutput.Subscription, error) {
 	if i.config.PublicationName == "" {
 		i.config.PublicationName = "conduitpub" // TODO: update these default values in the spec
 	}
@@ -199,8 +223,8 @@ func (i *Iterator) createPublicationForTable() error {
 			return cerrors.Errorf("failed to create publication %s: %w",
 				i.config.SlotName, err)
 		}
-		log.Printf("publication %s already exists - continuing to slot setup",
-			i.config.PublicationName)
+		log.Printf("publication %s created for table %s",
+			i.config.PublicationName, i.config.TableName)
 	}
 	return nil
 }
@@ -335,24 +359,33 @@ func getReplicationConnection(url string) (*pgx.ReplicationConn, error) {
 	return replConn, nil
 }
 
-// func (i *Iterator) dropReplicationSlot() error {
-// 	rows, err := i.conn.Query(fmt.Sprintf(
-// 		`select pg_drop_replication_slot(slot_name)
-// 		from pg_replication_slots
-// 		where slot_name = '%s;`, i.config.SlotName))
-// 	if err != nil {
-// 		return cerrors.Errorf("failed to drop replication slot: %w", err)
-// 	}
-// 	defer rows.Close()
-// 	return nil
-// }
+func mustParsePosition(pos string) uint64 {
+	n, err := strconv.ParseUint(pos, 10, 64)
+	if err != nil {
+		log.Fatalf("failed to parse uint64 from position %s: %v", pos, err)
+	}
+	return n
+}
 
-// func (i *Iterator) dropPublication() error {
-// 	query := fmt.Sprintf("drop publication %s", i.config.PublicationName)
-// 	rows, err := i.conn.Query(query)
-// 	if err != nil {
-// 		return cerrors.Errorf("failed to connecto to replication: %w", err)
-// 	}
-// 	defer rows.Close()
-// 	return nil
-// }
+func (i *Iterator) dropReplicationSlot() error {
+	rows, err := i.db.Query(fmt.Sprintf(
+		`select pg_drop_replication_slot(slot_name)
+		from pg_replication_slots
+		where slot_name = '%s;`, i.config.SlotName))
+	if err != nil {
+		return cerrors.Errorf("failed to drop replication slot: %w", err)
+	}
+	defer rows.Close()
+	return nil
+}
+
+func (i *Iterator) dropPublication() error {
+	query := fmt.Sprintf("drop publication if exists %s",
+		i.config.PublicationName)
+	rows, err := i.db.Query(query)
+	if err != nil {
+		return cerrors.Errorf("failed to connecto to replication: %w", err)
+	}
+	defer rows.Close()
+	return nil
+}
