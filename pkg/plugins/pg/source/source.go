@@ -16,6 +16,7 @@ package source
 
 import (
 	"context"
+	"strings"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/plugin/sdk"
@@ -26,7 +27,6 @@ import (
 // requiredFields is a list of our plugin required config fields for validation
 var requiredFields = []string{"url", "table"}
 
-var _ sdk.Source = (*Source)(nil)
 var _ Strategy = (*cdc.Iterator)(nil)
 var _ Strategy = (*snapshot.Snapshotter)(nil)
 
@@ -39,6 +39,10 @@ type Source struct {
 	config map[string]string
 }
 
+func NewSource() sdk.Source {
+	return &Source{}
+}
+
 func (s *Source) Configure(ctx context.Context, cfg map[string]string) error {
 	err := validateConfig(cfg, requiredFields)
 	if err != nil {
@@ -49,20 +53,21 @@ func (s *Source) Configure(ctx context.Context, cfg map[string]string) error {
 }
 func (s *Source) Open(ctx context.Context, pos sdk.Position) error {
 	switch s.config["mode"] {
-	case "cdc":
-		i, err := cdc.NewCDCIterator(ctx, cdc.Config{})
-		if err != nil {
-			return cerrors.Errorf("failed to open cdc connection: %w", err)
-		}
-		s.Iterator = i
-	case "":
-		i, err := cdc.NewCDCIterator(ctx, cdc.Config{})
-		if err != nil {
-			return cerrors.Errorf("failed to open cdc connection: %w", err)
-		}
-		s.Iterator = i
+	// TODO add other modes
 	default:
-		i, err := cdc.NewCDCIterator(ctx, cdc.Config{})
+		var columns []string
+		if colsRaw := s.config["columns"]; colsRaw != "" {
+			columns = strings.Split(s.config["columns"], ",")
+		}
+		i, err := cdc.NewCDCIterator(ctx, cdc.Config{
+			Position:        pos,
+			URL:             s.config["url"],
+			SlotName:        s.config["slot_name"],
+			PublicationName: s.config["publication_name"],
+			TableName:       s.config["table"],
+			KeyColumnName:   s.config["key"],
+			Columns:         columns,
+		})
 		if err != nil {
 			return cerrors.Errorf("failed to open cdc connection: %w", err)
 		}
@@ -76,10 +81,13 @@ func (s *Source) Read(ctx context.Context) (sdk.Record, error) {
 }
 
 func (s *Source) Ack(context.Context, sdk.Position) error {
-	return cerrors.ErrNotImpl
+	return nil
 }
 
 func (s *Source) Teardown(context.Context) error {
+	if s.Iterator == nil {
+		return nil
+	}
 	return s.Iterator.Teardown()
 }
 

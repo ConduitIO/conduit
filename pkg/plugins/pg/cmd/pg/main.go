@@ -14,6 +14,12 @@
 
 package main
 
+import (
+	"github.com/conduitio/conduit/pkg/plugin/sdk"
+	"github.com/conduitio/conduit/pkg/plugins/pg"
+	"github.com/conduitio/conduit/pkg/plugins/pg/source"
+)
+
 func main() {
-	// plugins.Run(&source.Source{}, &destination.Destination{}, pg.Spec{})
+	sdk.Serve(pg.Specification, source.NewSource, nil)
 }

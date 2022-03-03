@@ -90,7 +90,7 @@ func NewCDCIterator(ctx context.Context, config Config) (*Iterator, error) {
 }
 
 func (i *Iterator) setPosition(pos sdk.Position) error {
-	if string(pos) == "" {
+	if pos == nil || string(pos) == "" {
 		i.lsn = 0
 		return nil
 	}
@@ -170,10 +170,10 @@ func (i *Iterator) Teardown() error {
 // if they're not yet setup with sane defaults if they're not configured.
 func (i *Iterator) attachSubscription() error {
 	if i.config.PublicationName == "" {
-		i.config.PublicationName = "conduitpub" // TODO: update these default values in the spec
+		i.config.PublicationName = "conduitpub"
 	}
 	if i.config.SlotName == "" {
-		i.config.SlotName = "conduitslot" // TODO: update these defaults in the spec
+		i.config.SlotName = "conduitslot"
 	}
 
 	err := i.configureColumns()

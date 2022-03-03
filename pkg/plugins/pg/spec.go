@@ -18,9 +18,7 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin/sdk"
 )
 
-type Spec struct{}
-
-func (s Spec) Specify() (sdk.Specification, error) {
+func Specification() sdk.Specification {
 	return sdk.Specification{
 		Name:    "postgres",
 		Summary: "A PostgreSQL source and destination plugin for Conduit, written in Go.",
@@ -70,5 +68,5 @@ func (s Spec) Specify() (sdk.Specification, error) {
 				Description: "Determines which replication slot the CDC iterator uses.",
 			},
 		},
-	}, nil
+	}
 }
