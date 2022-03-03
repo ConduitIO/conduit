@@ -281,7 +281,7 @@ func withPayload(rec sdk.Record, rows *sql.Rows, columns []string, key string) (
 			}
 			payload[col] = b
 		default:
-			sdk.Logger(context.Background()).Err(cerrors.Errorf("failed to handle type %T", t.DatabaseTypeName()))
+			sdk.Logger(context.Background()).Err(cerrors.Errorf("failed to handle type %T", t.DatabaseTypeName())).Send()
 			payload[col] = nil
 		}
 	}
