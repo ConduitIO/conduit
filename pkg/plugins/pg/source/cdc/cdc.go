@@ -17,7 +17,6 @@ package cdc
 import (
 	"context"
 	"fmt"
-	"log"
 	"strconv"
 	"strings"
 	"sync"
@@ -109,7 +108,7 @@ func (i *Iterator) listen(ctx context.Context) {
 	i.wg.Add(1)
 	defer cleanupListener(i.wg, i.sub)
 
-	log.Printf("starting subscription at position %d", i.lsn)
+	sdk.Logger(ctx).Printf("starting subscription at position %d", i.lsn)
 	err := i.sub.Start(ctx, i.lsn, i.registerMessageHandlers())
 	if err != nil {
 		if err == context.Canceled {
@@ -120,7 +119,6 @@ func (i *Iterator) listen(ctx context.Context) {
 }
 
 func cleanupListener(wg *sync.WaitGroup, sub *pgoutput.Subscription) {
-	log.Printf("tearing down subscription")
 	sub.Flush()
 	wg.Done()
 }
@@ -201,8 +199,6 @@ func (i *Iterator) attachSubscription() error {
 		if !strings.Contains(err.Error(), "SQLSTATE 42710") {
 			return cerrors.Errorf("failed to create replication slot: %v", err)
 		}
-		log.Printf("replication slot %s already exists - continuing startup",
-			i.config.SlotName)
 	}
 
 	var maxWalRetain uint64
@@ -215,14 +211,10 @@ func (i *Iterator) attachSubscription() error {
 		failOnHandler)
 
 	i.sub = sub
-	log.Printf("subscription attached to %s", i.config.SlotName)
 	return nil
 }
 
 func (i *Iterator) createPublicationForTable() error {
-	log.Printf("attempting to setup publication %s for table %s;",
-		i.config.PublicationName,
-		i.config.TableName)
 	_, err := i.db.Exec(
 		fmt.Sprintf("create publication %s for table %s;",
 			i.config.PublicationName,
@@ -232,8 +224,6 @@ func (i *Iterator) createPublicationForTable() error {
 			return cerrors.Errorf("failed to create publication %s: %w",
 				i.config.SlotName, err)
 		}
-		log.Printf("publication %s created for table %s",
-			i.config.PublicationName, i.config.TableName)
 	}
 	return nil
 }
@@ -288,7 +278,6 @@ func (i *Iterator) registerMessageHandlers() pgoutput.Handler {
 // * TODO: Determine if tables must have keys
 func (i *Iterator) configureKeyColumn() error {
 	if i.config.KeyColumnName != "" {
-		log.Printf("keying records with row %s", i.config.KeyColumnName)
 		return nil
 	}
 
@@ -316,7 +305,6 @@ func (i *Iterator) configureKeyColumn() error {
 // * If other columns are specified, it uses them instead.
 func (i *Iterator) configureColumns() error {
 	if len(i.config.Columns) > 0 {
-		log.Printf("watching %v from %s", i.config.Columns, i.config.TableName)
 		return nil
 	}
 
@@ -337,8 +325,6 @@ func (i *Iterator) configureColumns() error {
 		}
 		i.config.Columns = append(i.config.Columns, *val)
 	}
-
-	log.Printf("setting source to read columns [%+v]", i.config.Columns)
 
 	return nil
 }

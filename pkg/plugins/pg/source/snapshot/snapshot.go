@@ -17,7 +17,6 @@ package snapshot
 import (
 	"context"
 	"database/sql"
-	"log"
 	"reflect"
 	"strconv"
 	"time"
@@ -131,7 +130,6 @@ func (s *Snapshotter) Next(ctx context.Context) (sdk.Record, error) {
 // * Teardown handles all of its manual cleanup first then calls cancel to
 // stop any unhandled contexts that we've received.
 func (s *Snapshotter) Teardown() error {
-	log.Printf("snapshotter attempting graceful teardown")
 	// throw interrupt error if we're not finished with snapshot
 	var interruptErr error
 	if !s.snapshotComplete {
@@ -283,7 +281,7 @@ func withPayload(rec sdk.Record, rows *sql.Rows, columns []string, key string) (
 			}
 			payload[col] = b
 		default:
-			log.Printf("failed to handle type: %s", t.DatabaseTypeName())
+			sdk.Logger(context.Background()).Err(cerrors.Errorf("failed to handle type %T", t.DatabaseTypeName()))
 			payload[col] = nil
 		}
 	}
