@@ -3,7 +3,7 @@
 VERSION=`./scripts/get-tag.sh`
 
 # The build target should stay at the top since we want it to be the default target.
-build: ui-dist build-plugins
+build: pkg/web/ui/dist build-plugins
 	go build -ldflags "-X github.com/conduitio/conduit/pkg/conduit.version=${VERSION}" -o conduit -tags ui ./cmd/conduit/main.go
 	@echo "\nBuild complete. Enjoy using Conduit!"
 	@echo "Get started by running:"
@@ -71,6 +71,7 @@ clean:
 	@rm -f pkg/plugins/s3/s3
 	@rm -f pkg/plugins/kafka/kafka
 	@rm -f pkg/plugins/generator/generator
+	@rm -rf pkg/web/ui/dist
 
 download:
 	@echo Download go.mod dependencies
@@ -83,6 +84,9 @@ install-tools: download
 
 generate:
 	go generate ./...
+
+pkg/web/ui/dist:
+	make ui-dist
 
 ui-%:
 	@cd ui && make $*
