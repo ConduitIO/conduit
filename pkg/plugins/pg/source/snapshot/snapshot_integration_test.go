@@ -12,8 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// TODO: Uncomment before final push
-// //go:build integration
+//go:build integration
 
 package snapshot
 
