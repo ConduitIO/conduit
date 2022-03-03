@@ -18,8 +18,8 @@ package cdc
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
-	"math/rand"
 	"testing"
 	"time"
 
@@ -31,10 +31,10 @@ import (
 )
 
 const (
-	// CDC_TEST_URL is the URI for the _logical replication_ server and user.
+	// CDCTestURL is the URI for the _logical replication_ server and user.
 	// This is separate from the DB_URL used above since it requires a different
 	// user and permissions for replication.
-	CDC_TEST_URL = "postgres://repmgr:repmgrmeroxa@localhost:5432/meroxadb?sslmode=disable"
+	CDCTestURL = "postgres://repmgr:repmgrmeroxa@localhost:5432/meroxadb?sslmode=disable"
 )
 
 func TestIterator_Next(t *testing.T) {
@@ -116,7 +116,6 @@ func TestIterator_Next(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-
 			now := time.Now()
 			tt.action(t, db)
 			time.Sleep(1 * time.Second)
@@ -141,12 +140,15 @@ func TestIterator_Next(t *testing.T) {
 	}
 }
 
+// getDefaultConnector
 func getDefaultConnector(t *testing.T) *Iterator {
 	_ = getTestPostgres(t)
 	ctx := context.Background()
-	randSlotName := fmt.Sprintf("conduit%d", rand.Int())
+	n, err := rand.Prime(rand.Reader, 4)
+	assert.Ok(t, err)
+	randSlotName := fmt.Sprintf("conduit%d", n)
 	config := Config{
-		URL:       CDC_TEST_URL,
+		URL:       CDCTestURL,
 		TableName: "records",
 		SlotName:  randSlotName,
 	}
@@ -178,7 +180,7 @@ func getTestPostgres(t *testing.T) *pgx.Conn {
 		('3', 'baz', 789, false),
 		('4', null, null, null);`,
 	}
-	conn, err := pgx.Connect(context.Background(), CDC_TEST_URL)
+	conn, err := pgx.Connect(context.Background(), CDCTestURL)
 	assert.Ok(t, err)
 	conn = migrate(t, conn, prepareDB)
 	assert.Ok(t, err)

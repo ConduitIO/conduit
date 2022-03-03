@@ -23,6 +23,7 @@ import (
 	"sync"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/multierror"
 	"github.com/conduitio/conduit/pkg/plugin/sdk"
 
 	"github.com/batchcorp/pgoutput"
@@ -51,10 +52,10 @@ type Iterator struct {
 
 	lsn        uint64 // TODO: or maybe use an LSN type here
 	messages   chan sdk.Record
-	acker      chan sdk.Position
 	killswitch context.CancelFunc
 
-	db *pgx.Conn
+	sub *pgoutput.Subscription
+	db  *pgx.Conn
 }
 
 // NewCDCIterator takes a config and returns up a new CDCIterator or returns an
@@ -62,57 +63,59 @@ type Iterator struct {
 func NewCDCIterator(ctx context.Context, config Config) (*Iterator, error) {
 	wctx, cancel := context.WithCancel(ctx)
 	i := &Iterator{
+		wg:         &sync.WaitGroup{},
 		config:     config,
 		messages:   make(chan sdk.Record),
-		acker:      make(chan sdk.Position),
-		wg:         &sync.WaitGroup{},
 		killswitch: cancel,
 	}
 
-	err := i.connect()
+	err := i.connectDB()
 	if err != nil {
 		return nil, cerrors.Errorf("failed to connect: %v", err)
 	}
 
-	sub, err := i.makeSubscription()
+	err = i.attachSubscription()
 	if err != nil {
 		return nil, cerrors.Errorf("failed to setup subscription %w", err)
 	}
 
-	go i.listen(wctx, sub)
+	err = i.setPosition(config.Position)
+	if err != nil {
+		return nil, cerrors.Errorf("failed to set starting position: %w", err)
+	}
+
+	go i.listen(wctx)
 
 	return i, nil
 }
 
+func (i *Iterator) setPosition(pos sdk.Position) error {
+	if string(pos) == "" {
+		i.lsn = 0
+		return nil
+	}
+
+	lsn, err := parsePosition(string(pos))
+	if err != nil {
+		return err
+	}
+	i.lsn = lsn
+	return nil
+}
+
 // listen is meant to be used in a goroutine. It starts the subscription
 // passed to it and handles the the subscription flush
-func (i *Iterator) listen(ctx context.Context, sub *pgoutput.Subscription) {
+func (i *Iterator) listen(ctx context.Context) {
 	i.wg.Add(1)
-	defer cleanupListener(i.wg, sub)
-
-	go i.acknowledger(ctx, sub)
+	defer cleanupListener(i.wg, i.sub)
 
 	log.Printf("starting subscription at position %d", i.lsn)
-	err := sub.Start(ctx, i.lsn, i.registerMessageHandlers())
+	err := i.sub.Start(ctx, i.lsn, i.registerMessageHandlers())
 	if err != nil {
 		if err == context.Canceled {
 			return
 		}
 		return
-	}
-}
-
-// acknowledger is a go func for acking the position of a record
-func (i *Iterator) acknowledger(ctx context.Context, sub *pgoutput.Subscription) {
-	for {
-		select {
-		case pos := <-i.acker:
-			lsn := mustParsePosition(string(pos))
-			sub.AdvanceLSN(lsn)
-		case <-ctx.Done():
-			log.Printf("context cancelled - acknowledger is closing")
-			return
-		}
 	}
 }
 
@@ -137,8 +140,11 @@ func (i *Iterator) Next(ctx context.Context) (sdk.Record, error) {
 }
 
 func (i *Iterator) Ack(ctx context.Context, pos sdk.Position) error {
-	i.acker <- pos
-	return nil
+	n, err := parsePosition(string(pos))
+	if err != nil {
+		return cerrors.Errorf("failed to parse position")
+	}
+	return i.sub.AdvanceLSN(n)
 }
 
 // push pushes a record into the buffer.
@@ -146,22 +152,23 @@ func (i *Iterator) push(r sdk.Record) {
 	i.messages <- r
 }
 
-// Teardown will kill the CDC subscription and wait for it to be done, then
-// closes its connection to the database and cleans up connector slots and
-// publications.
+// Teardown kills the CDC subscription and waits for it to be done, closes its
+// connection to the database, then cleans up its slot and publication.
 func (i *Iterator) Teardown() error {
 	i.killswitch()
 	i.wg.Wait()
-	i.terminateBackend()
-	i.dropReplicationSlot()
-	i.dropPublication()
-	return i.db.Close()
+	defer i.db.Close()
+
+	termErr := i.terminateBackend()
+	dropReplErr := i.dropReplicationSlot()
+	dropPubErr := i.dropPublication()
+	return multierror.Append(termErr, dropPubErr, dropReplErr)
 }
 
-// makeSubscription builds a subscription with its own dedicated replication
+// attachSubscription builds a subscription with its own dedicated replication
 // connection. It prepares a replication slot and publication for the connector
 // if they're not yet setup with sane defaults if they're not configured.
-func (i *Iterator) makeSubscription() (*pgoutput.Subscription, error) {
+func (i *Iterator) attachSubscription() error {
 	if i.config.PublicationName == "" {
 		i.config.PublicationName = "conduitpub" // TODO: update these default values in the spec
 	}
@@ -171,35 +178,35 @@ func (i *Iterator) makeSubscription() (*pgoutput.Subscription, error) {
 
 	err := i.configureColumns()
 	if err != nil {
-		return nil, cerrors.Errorf("failed to find table columns: %v", err)
+		return cerrors.Errorf("failed to find table columns: %v", err)
 	}
 
 	err = i.configureKeyColumn()
 	if err != nil {
-		return nil, cerrors.Errorf("failed to find key: %w", err)
+		return cerrors.Errorf("failed to find key: %w", err)
 	}
 
 	replConn, err := getReplicationConnection(i.config.URL)
 	if err != nil {
-		return nil, cerrors.Errorf("failed to get replication conn: %w", err)
+		return cerrors.Errorf("failed to get replication conn: %w", err)
 	}
 
 	err = i.createPublicationForTable()
 	if err != nil {
-		return nil, cerrors.Errorf("failed to create publication: %w", err)
+		return cerrors.Errorf("failed to create publication: %w", err)
 	}
 
 	err = replConn.CreateReplicationSlot(i.config.SlotName, "pgoutput")
 	if err != nil {
 		if !strings.Contains(err.Error(), "SQLSTATE 42710") {
-			return nil, cerrors.Errorf("failed to create replication slot: %v", err)
+			return cerrors.Errorf("failed to create replication slot: %v", err)
 		}
 		log.Printf("replication slot %s already exists - continuing startup",
 			i.config.SlotName)
 	}
 
-	var maxWalRetain uint64 = 0
-	var failOnHandler bool = false
+	var maxWalRetain uint64
+	var failOnHandler bool
 	sub := pgoutput.NewSubscription(
 		replConn,
 		i.config.SlotName,
@@ -207,7 +214,9 @@ func (i *Iterator) makeSubscription() (*pgoutput.Subscription, error) {
 		maxWalRetain,
 		failOnHandler)
 
-	return sub, nil
+	i.sub = sub
+	log.Printf("subscription attached to %s", i.config.SlotName)
+	return nil
 }
 
 func (i *Iterator) createPublicationForTable() error {
@@ -229,7 +238,7 @@ func (i *Iterator) createPublicationForTable() error {
 	return nil
 }
 
-func (i *Iterator) connect() error {
+func (i *Iterator) connectDB() error {
 	rc, err := getReplicationConnection(i.config.URL)
 	if err != nil {
 		return cerrors.Errorf("failed to get replication connection: %w", err)
@@ -359,12 +368,12 @@ func getReplicationConnection(url string) (*pgx.ReplicationConn, error) {
 	return replConn, nil
 }
 
-func mustParsePosition(pos string) uint64 {
+func parsePosition(pos string) (uint64, error) {
 	n, err := strconv.ParseUint(pos, 10, 64)
 	if err != nil {
-		log.Fatalf("failed to parse uint64 from position %s: %v", pos, err)
+		return 0, err
 	}
-	return n
+	return n, nil
 }
 
 func (i *Iterator) dropReplicationSlot() error {

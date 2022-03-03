@@ -29,8 +29,8 @@ import (
 	_ "github.com/lib/pq"
 )
 
-// SNAPSHOT_TEST_URL is a non-replication user url for the test postgres d
-const SNAPSHOT_TEST_URL = "postgres://meroxauser:meroxapass@localhost:5432/meroxadb?sslmode=disable"
+// SnapshotTestURL is a non-replication user url for the test postgres d
+const SnapshotTestURL = "postgres://meroxauser:meroxapass@localhost:5432/meroxadb?sslmode=disable"
 
 func TestSnapshotterReads(t *testing.T) {
 	db := getTestPostgres(t)
@@ -108,7 +108,7 @@ func getTestPostgres(t *testing.T) *sql.DB {
 		('3', 'baz', 789, false),
 		('4', null, null, null);`,
 	}
-	db, err := sql.Open("postgres", SNAPSHOT_TEST_URL)
+	db, err := sql.Open("postgres", SnapshotTestURL)
 	assert.Ok(t, err)
 	db = migrate(t, db, prepareDB)
 	assert.Ok(t, err)
