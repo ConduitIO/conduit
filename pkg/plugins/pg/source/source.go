@@ -16,6 +16,7 @@ package source
 
 import (
 	"context"
+	"database/sql"
 	"strings"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -53,12 +54,23 @@ func (s *Source) Configure(ctx context.Context, cfg map[string]string) error {
 }
 func (s *Source) Open(ctx context.Context, pos sdk.Position) error {
 	switch s.config["mode"] {
-	// TODO add other modes
-	default:
-		var columns []string
-		if colsRaw := s.config["columns"]; colsRaw != "" {
-			columns = strings.Split(s.config["columns"], ",")
+	case "snapshot":
+		db, err := sql.Open("postgres", s.config["url"])
+		if err != nil {
+			return cerrors.Errorf("failed to connect to database: %w", err)
 		}
+		columns := parseColumns(s.config)
+		snap, err := snapshot.NewSnapshotter(
+			db,
+			s.config["table"],
+			columns,
+			s.config["key"])
+		if err != nil {
+			return cerrors.Errorf("failed to open snapshotter: %w", err)
+		}
+		s.Iterator = snap
+	default:
+		columns := parseColumns(s.config)
 		i, err := cdc.NewCDCIterator(ctx, cdc.Config{
 			Position:        pos,
 			URL:             s.config["url"],
@@ -99,4 +111,12 @@ func validateConfig(cfg map[string]string, required []string) error {
 		}
 	}
 	return nil
+}
+
+func parseColumns(config map[string]string) []string {
+	var columns []string
+	if colsRaw := config["columns"]; colsRaw != "" {
+		columns = strings.Split(config["columns"], ",")
+	}
+	return columns
 }

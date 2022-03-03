@@ -71,7 +71,7 @@ func NewCDCIterator(ctx context.Context, config Config) (*Iterator, error) {
 
 	err := i.connectDB()
 	if err != nil {
-		return nil, cerrors.Errorf("failed to connect: %v", err)
+		return nil, cerrors.Errorf("failed to connect to postgres: %w", err)
 	}
 
 	err = i.attachSubscription()
@@ -178,7 +178,7 @@ func (i *Iterator) attachSubscription() error {
 
 	err := i.configureColumns()
 	if err != nil {
-		return cerrors.Errorf("failed to find table columns: %v", err)
+		return cerrors.Errorf("failed to find table columns: %w", err)
 	}
 
 	err = i.configureKeyColumn()

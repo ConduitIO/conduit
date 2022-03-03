@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// go:build integration
+// // go:build integration
 
 package cdc
 
@@ -39,7 +39,7 @@ const (
 
 func TestIterator_Next(t *testing.T) {
 	db := getTestPostgres(t)
-	i := getDefaultConnector(t)
+	i := getDefaultIterator(t)
 	t.Cleanup(func() {
 		assert.Ok(t, i.Teardown())
 	})
@@ -140,8 +140,8 @@ func TestIterator_Next(t *testing.T) {
 	}
 }
 
-// getDefaultConnector
-func getDefaultConnector(t *testing.T) *Iterator {
+// getDefaultIterator
+func getDefaultIterator(t *testing.T) *Iterator {
 	_ = getTestPostgres(t)
 	ctx := context.Background()
 	n, err := rand.Prime(rand.Reader, 4)
