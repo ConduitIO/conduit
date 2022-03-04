@@ -28,6 +28,9 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/database/badger"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/pipeline"
+	"github.com/conduitio/conduit/pkg/plugin"
+	"github.com/conduitio/conduit/pkg/plugin/builtin"
+	"github.com/conduitio/conduit/pkg/plugin/standalone"
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/google/go-cmp/cmp"
 )
@@ -46,10 +49,15 @@ func TestPipelineSimple(t *testing.T) {
 		assert.Ok(t, err)
 	})
 
+	pluginRegistry := plugin.NewRegistry(
+		builtin.NewRegistry(builtin.DefaultDispenserFactories...),
+		standalone.NewRegistry(logger),
+	)
+
 	orc := NewOrchestrator(
 		db,
 		pipeline.NewService(logger, db),
-		connector.NewService(logger, db, connector.NewDefaultBuilder(logger, connector.NewPersister(logger, db, time.Second, 3))),
+		connector.NewService(logger, db, connector.NewDefaultBuilder(logger, connector.NewPersister(logger, db, time.Second, 3), pluginRegistry)),
 		processor.NewService(logger, db, processor.GlobalBuilderRegistry),
 	)
 
@@ -66,7 +74,7 @@ func TestPipelineSimple(t *testing.T) {
 		connector.Config{
 			Name:       "test-source",
 			Settings:   map[string]string{"path": sourcePath},
-			Plugin:     "../plugins/file/file",
+			Plugin:     "builtin:file", // use builtin plugin
 			PipelineID: pl.ID,
 		},
 	)
@@ -78,7 +86,7 @@ func TestPipelineSimple(t *testing.T) {
 		connector.Config{
 			Name:       "test-destination",
 			Settings:   map[string]string{"path": destinationPath},
-			Plugin:     "../plugins/file/file",
+			Plugin:     "builtin:file", // use builtin plugin
 			PipelineID: pl.ID,
 		},
 	)
@@ -89,7 +97,7 @@ func TestPipelineSimple(t *testing.T) {
 	assert.Ok(t, err)
 
 	// give the pipeline time to run through
-	time.Sleep(2 * time.Second)
+	time.Sleep(time.Second)
 
 	t.Log("stopping pipeline")
 	err = orc.Pipelines.Stop(ctx, pl.ID)

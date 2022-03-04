@@ -88,7 +88,7 @@ module('Acceptance | pipeline/index/connectors/s3', function (hooks) {
                 },
               },
               pipeline_id: pipelineID,
-              plugin: 'pkg/plugins/s3/s3',
+              plugin: 'builtin:s3',
               type: 'TYPE_SOURCE',
             },
             'it calls the API with the correct protocol'
@@ -187,7 +187,7 @@ module('Acceptance | pipeline/index/connectors/s3', function (hooks) {
                 },
               },
               pipeline_id: pipelineID,
-              plugin: 'pkg/plugins/s3/s3',
+              plugin: 'builtin:s3',
               type: 'TYPE_DESTINATION',
             },
             'it calls the API with the correct protocol'

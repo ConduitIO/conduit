@@ -80,7 +80,7 @@ func (n *DestinationNode) Run(ctx context.Context) (err error) {
 		err = n.Destination.Write(msg.Ctx, msg.Record)
 		n.ConnectorTimer.Update(time.Since(writeTime))
 		if err != nil {
-			n.logger.Trace(msg.Ctx).Msg("nacking message")
+			n.logger.Trace(msg.Ctx).Err(err).Msg("nacking message")
 			err = msg.Nack(err)
 			if err != nil {
 				msg.Drop()

@@ -12,6 +12,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.25.0
 	github.com/batchcorp/pgoutput v0.3.2
 	github.com/bufbuild/buf v1.1.0
+	github.com/conduitio/conduit-connector-protocol v0.0.0-20220302182649-4f4c215c2b83
 	github.com/dgraph-io/badger/v3 v3.2103.2
 	github.com/dop251/goja v0.0.0-20210225094849-f3cfc97811c0
 	github.com/golang/mock v1.6.0
@@ -34,6 +35,7 @@ require (
 	github.com/segmentio/kafka-go v0.4.29
 	github.com/xitongsys/parquet-go v1.6.0
 	github.com/xitongsys/parquet-go-source v0.0.0-20201108113611-f372b7d813be
+	go.buf.build/library/go-grpc/conduitio/conduit-connector-protocol v1.4.1
 	golang.org/x/tools v0.1.9
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1
 	google.golang.org/genproto v0.0.0-20220302033224-9aa15565e42a

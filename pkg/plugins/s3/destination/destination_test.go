@@ -24,25 +24,28 @@ import (
 	"testing"
 	"time"
 
-	"github.com/conduitio/conduit/pkg/plugins"
+	"github.com/conduitio/conduit/pkg/plugin/sdk"
 	"github.com/conduitio/conduit/pkg/plugins/s3/destination/filevalidator"
 	"github.com/conduitio/conduit/pkg/plugins/s3/destination/writer"
-	"github.com/conduitio/conduit/pkg/record"
 )
 
 func TestLocalParquet(t *testing.T) {
 	ctx := context.Background()
 	destination := &Destination{}
 
-	err := destination.Open(context.Background(), plugins.Config{Settings: map[string]string{
+	err := destination.Configure(ctx, map[string]string{
 		"aws.access-key-id":     "123",
 		"aws.secret-access-key": "secret",
 		"aws.region":            "us-west-2",
 		"aws.bucket":            "foobucket",
 		"buffer-size":           "25",
 		"format":                "parquet",
-	}})
+	})
+	if err != nil {
+		t.Fatalf("failed to parse the Configuration: %v", err)
+	}
 
+	err = destination.Open(context.Background())
 	if err != nil {
 		t.Fatalf("failed to initialize destination: %v", err)
 	}
@@ -52,7 +55,7 @@ func TestLocalParquet(t *testing.T) {
 	}
 
 	for _, record := range generateRecords(50) {
-		_, err = destination.Write(ctx, record)
+		err = destination.WriteAsync(ctx, record, getAckFunc())
 
 		if err != nil {
 			t.Fatalf("Write returned an error: %v", err)
@@ -83,15 +86,19 @@ func TestLocalJSON(t *testing.T) {
 	ctx := context.Background()
 	destination := &Destination{}
 
-	err := destination.Open(context.Background(), plugins.Config{Settings: map[string]string{
+	err := destination.Configure(ctx, map[string]string{
 		"aws.access-key-id":     "123",
 		"aws.secret-access-key": "secret",
 		"aws.region":            "us-west-2",
 		"aws.bucket":            "foobucket",
 		"buffer-size":           "25",
 		"format":                "json",
-	}})
+	})
+	if err != nil {
+		t.Fatalf("failed to parse the Configuration: %v", err)
+	}
 
+	err = destination.Open(context.Background())
 	if err != nil {
 		t.Fatalf("failed to initialize destination: %v", err)
 	}
@@ -101,7 +108,7 @@ func TestLocalJSON(t *testing.T) {
 	}
 
 	for _, record := range generateRecords(50) {
-		_, err = destination.Write(ctx, record)
+		err = destination.WriteAsync(ctx, record, getAckFunc())
 
 		if err != nil {
 			t.Fatalf("Write returned an error: %v", err)
@@ -158,7 +165,7 @@ func TestS3Parquet(t *testing.T) {
 
 	destination := &Destination{}
 
-	err := destination.Open(context.Background(), plugins.Config{Settings: map[string]string{
+	err := destination.Configure(ctx, map[string]string{
 		"aws.access-key-id":     awsAccessKeyID,
 		"aws.secret-access-key": awsSecretAccessKey,
 		"aws.session-token":     awsSessionToken,
@@ -167,14 +174,18 @@ func TestS3Parquet(t *testing.T) {
 		"buffer-size":           "25",
 		"format":                "parquet",
 		"prefix":                "test",
-	}})
+	})
+	if err != nil {
+		t.Fatalf("failed to parse the Configuration: %v", err)
+	}
 
+	err = destination.Open(context.Background())
 	if err != nil {
 		t.Fatalf("failed to initialize destination: %v", err)
 	}
 
 	for _, record := range generateRecords(50) {
-		_, err = destination.Write(ctx, record)
+		err = destination.WriteAsync(ctx, record, getAckFunc())
 
 		if err != nil {
 			t.Fatalf("Write returned an error: %v", err)
@@ -210,18 +221,14 @@ func TestS3Parquet(t *testing.T) {
 	}
 }
 
-func generateRecords(count int) []record.Record {
-	var result []record.Record
+func generateRecords(count int) []sdk.Record {
+	var result []sdk.Record
 
 	for i := 0; i < count; i++ {
-		result = append(result, record.Record{
-			Position: []byte(strconv.Itoa(i)),
-			Payload: record.RawData{
-				Raw: []byte(fmt.Sprintf("this is a message #%d", i+1)),
-			},
-			Key: record.RawData{
-				Raw: []byte(fmt.Sprintf("key-%d", i)),
-			},
+		result = append(result, sdk.Record{
+			Position:  []byte(strconv.Itoa(i)),
+			Payload:   sdk.RawData(fmt.Sprintf("this is a message #%d", i+1)),
+			Key:       sdk.RawData(fmt.Sprintf("key-%d", i)),
 			Metadata:  map[string]string{"number": fmt.Sprint(i)},
 			CreatedAt: time.Date(2020, 1, 1, 1, 0, 0, 0, time.UTC).Add(time.Duration(i) * time.Second),
 		})
@@ -248,4 +255,8 @@ func validateReferences(validator filevalidator.FileValidator, paths ...string) 
 	}
 
 	return nil
+}
+
+func getAckFunc() sdk.AckFunc {
+	return func(ackErr error) error { return nil }
 }

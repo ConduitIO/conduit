@@ -15,12 +15,12 @@
 package main
 
 import (
-	"github.com/conduitio/conduit/pkg/plugins"
+	"github.com/conduitio/conduit/pkg/plugin/sdk"
 	"github.com/conduitio/conduit/pkg/plugins/s3"
 	"github.com/conduitio/conduit/pkg/plugins/s3/destination"
 	"github.com/conduitio/conduit/pkg/plugins/s3/source"
 )
 
 func main() {
-	plugins.Run(&source.Source{}, &destination.Destination{}, s3.Spec{})
+	sdk.Serve(s3.Specification, source.NewSource, destination.NewDestination)
 }

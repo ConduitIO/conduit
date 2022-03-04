@@ -213,7 +213,7 @@ func TestPubNodeBase_TriggerWithoutPub(t *testing.T) {
 	logger := log.Nop()
 
 	n := &pubNodeBase{}
-	trigger, cleanup, err := n.Trigger(ctx, logger, nil, nil, nil)
+	trigger, cleanup, err := n.Trigger(ctx, logger, nil, nil)
 	assert.Nil(t, trigger)
 	assert.Nil(t, cleanup)
 	assert.Error(t, err)
@@ -225,12 +225,12 @@ func TestPubNodeBase_TriggerTwice(t *testing.T) {
 
 	n := &pubNodeBase{}
 	n.Pub()
-	trigger, cleanup, err := n.Trigger(ctx, logger, nil, nil, nil)
+	trigger, cleanup, err := n.Trigger(ctx, logger, nil, nil)
 	assert.Ok(t, err)
 	assert.NotNil(t, trigger)
 	assert.NotNil(t, cleanup)
 
-	trigger, cleanup, err = n.Trigger(ctx, logger, nil, nil, nil)
+	trigger, cleanup, err = n.Trigger(ctx, logger, nil, nil)
 	assert.Nil(t, trigger)
 	assert.Nil(t, cleanup)
 	assert.Error(t, err)
@@ -258,9 +258,7 @@ func TestPubNodeBase_TriggerSuccess(t *testing.T) {
 		ctx,
 		logger,
 		nil,
-		nil,
-		func(i interface{}) (*Message, error) {
-			assert.Nil(t, i)
+		func(context.Context) (*Message, error) {
 			return want, nil
 		},
 	)
@@ -273,59 +271,6 @@ func TestPubNodeBase_TriggerSuccess(t *testing.T) {
 	got, err := trigger()
 	assert.Ok(t, err)
 	assert.Equal(t, want, got)
-}
-
-func TestPubNodeBase_TriggerWithTriggerChan(t *testing.T) {
-	ctx := context.Background()
-	logger := log.Nop()
-
-	n := &pubNodeBase{}
-	n.Pub()
-
-	want := &Message{}
-	trigger, cleanup, err := n.Trigger(
-		ctx,
-		logger,
-		time.Tick(time.Millisecond*1),
-		nil,
-		func(i interface{}) (*Message, error) {
-			_, ok := i.(time.Time)
-			assert.True(t, ok, "expected a tick")
-			return want, nil
-		},
-	)
-	assert.Ok(t, err)
-	assert.NotNil(t, trigger)
-	assert.NotNil(t, cleanup)
-
-	defer cleanup()
-
-	got, err := trigger()
-	assert.Ok(t, err)
-	assert.Equal(t, want, got)
-}
-
-func TestPubNodeBase_TriggerWithClosedTriggerChan(t *testing.T) {
-	ctx := context.Background()
-	logger := log.Nop()
-
-	n := &pubNodeBase{}
-	n.Pub()
-
-	triggerChan := make(chan struct{})
-	trigger, cleanup, err := n.Trigger(ctx, logger, triggerChan, nil, nil)
-	assert.Ok(t, err)
-	assert.NotNil(t, trigger)
-	assert.NotNil(t, cleanup)
-
-	defer cleanup()
-
-	// a closed trigger chan should stop the trigger
-	close(triggerChan)
-
-	got, err := trigger()
-	assert.Ok(t, err)
-	assert.Nil(t, got)
 }
 
 func TestPubNodeBase_TriggerWithErrorChan(t *testing.T) {
@@ -336,7 +281,7 @@ func TestPubNodeBase_TriggerWithErrorChan(t *testing.T) {
 	n.Pub()
 
 	errChan := make(chan error, 1) // buffered channel to prevent locking
-	trigger, cleanup, err := n.Trigger(ctx, logger, nil, errChan, nil)
+	trigger, cleanup, err := n.Trigger(ctx, logger, errChan, nil)
 	assert.Ok(t, err)
 	assert.NotNil(t, trigger)
 	assert.NotNil(t, cleanup)
@@ -359,7 +304,7 @@ func TestPubNodeBase_TriggerCancelledContext(t *testing.T) {
 	n := &pubNodeBase{}
 	n.Pub()
 
-	trigger, cleanup, err := n.Trigger(ctx, logger, nil, nil, nil)
+	trigger, cleanup, err := n.Trigger(ctx, logger, nil, nil)
 	assert.Ok(t, err)
 	assert.NotNil(t, trigger)
 	assert.NotNil(t, cleanup)
@@ -372,32 +317,6 @@ func TestPubNodeBase_TriggerCancelledContext(t *testing.T) {
 	got, err := trigger()
 	assert.Error(t, err)
 	assert.Nil(t, got)
-}
-
-func TestPubNodeBase_Stop(t *testing.T) {
-	ctx := context.Background()
-	logger := log.Nop()
-
-	n := &pubNodeBase{}
-	n.Pub()
-
-	trigger, cleanup, err := n.Trigger(ctx, logger, nil, nil, nil)
-	assert.Ok(t, err)
-	assert.NotNil(t, trigger)
-	assert.NotNil(t, cleanup)
-
-	defer cleanup()
-
-	// if the node is stopped trigger should return no message
-	wantErr := cerrors.New("my error")
-	n.Stop(wantErr)
-
-	got, err := trigger()
-	assert.Equal(t, wantErr, err)
-	assert.Nil(t, got)
-
-	(&pubNodeBase{}).Stop(nil) // stop can be called on a non-running node
-	n.Stop(nil)                // stop is idempotent
 }
 
 func TestPubNodeBase_Send(t *testing.T) {

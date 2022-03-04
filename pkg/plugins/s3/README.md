@@ -1,10 +1,11 @@
 # S3 Connector
 
 ## Source
-The S3 Source Connector connects to an S3 bucket with the provided configurations, using
+The S3 Source Connector connects to a S3 bucket with the provided configurations, using
 `aws.bucket`, `aws.access-key-id`,`aws.secret-access-key` and `aws.region`. Then will
-call `Open` to start the connection. If the bucket doesn't exist, or the permissions
-fail, then the `Open` method will fail, and the Connector will not be ready to Read.
+call `Configure` to parse the configurations and make sure the bucket exists, If the
+bucket doesn't exist, or the permissions fail, then an error will occur. After that, the
+`Open` method is called to start the connection from the provided position.
 
 ### Change Data Capture (CDC)
 This connector implements CDC features for S3 by scanning the bucket for changes every
@@ -63,13 +64,15 @@ The config passed to `Open` can contain the following fields.
 ## Destination
 The S3 Destination Connector connects to an S3 bucket with the provided configurations, using
 `aws.bucket`, `aws.access-key-id`,`aws.secret-access-key` and `aws.region`. Then will
-call `Open` to start the connection. If the bucket doesn't exist, or the permissions
-fail, then the `Open` method will fail, and the Connector will not be ready to Write.
+call `Configure` to parse the configurations, If parsing was not successful, then an 
+error will occur. After that, the `Open` method is called to start the connection. If
+the permissions fail, the connector will not be ready for writing to S3.
 
 ### Writer
-The S3 destination writer has a buffer with the size of `buffer-size`, for each time 
-`Write` is called, a new record is added to the buffer. When the buffer is full, 
-all the records from it will be written to the S3 bucket configured.
+The S3 destination writer has a buffer with the size of `buffer-size`, for each time
+`Write` is called, a new record is added to the buffer. When the buffer is full,
+all the records from it will be written to the S3 bucket, and an ack function will be
+called for each record after being written.
 
 ### Configuration
 The config passed to `Open` can contain the following fields.

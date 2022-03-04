@@ -16,55 +16,62 @@ package kafka
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/plugins"
-	"github.com/conduitio/conduit/pkg/record"
+	"github.com/conduitio/conduit/pkg/plugin/sdk"
 )
 
 type Destination struct {
+	sdk.UnimplementedDestination
+
 	Client Producer
 	Config Config
 }
 
-func (s *Destination) Open(ctx context.Context, cfg plugins.Config) error {
-	fmt.Println("Opening a Kafka Destination...")
-	parsed, err := Parse(cfg.Settings)
+func NewDestination() sdk.Destination {
+	return &Destination{}
+}
+
+func (d *Destination) Configure(ctx context.Context, cfg map[string]string) error {
+	sdk.Logger(ctx).Info().Msg("Configuring a Kafka Destination...")
+	parsed, err := Parse(cfg)
 	if err != nil {
 		return cerrors.Errorf("config is invalid: %w", err)
 	}
-	s.Config = parsed
+	d.Config = parsed
+	return nil
+}
 
-	client, err := NewProducer(s.Config)
+func (d *Destination) Open(ctx context.Context) error {
+	client, err := NewProducer(d.Config)
 	if err != nil {
 		return cerrors.Errorf("failed to create Kafka client: %w", err)
 	}
 
-	s.Client = client
+	d.Client = client
 	return nil
 }
 
-func (s *Destination) Write(ctx context.Context, record record.Record) (record.Position, error) {
-	err := s.Client.Send(
+func (d *Destination) Write(ctx context.Context, record sdk.Record) error {
+	err := d.Client.Send(
 		record.Key.Bytes(),
 		record.Payload.Bytes(),
 	)
 	if err != nil {
-		return nil, cerrors.Errorf("message not delivered %w", err)
+		return cerrors.Errorf("message not delivered %w", err)
 	}
-	return record.Position, nil
-}
-
-// Teardown shuts down the Kafka client.
-func (s *Destination) Teardown() error {
-	fmt.Println("Tearing down a Kafka Destination...")
-	s.Client.Close()
 	return nil
 }
 
-// Validate takes config and returns an error if some values are missing or incorrect.
-func (s *Destination) Validate(cfg plugins.Config) error {
-	_, err := Parse(cfg.Settings)
-	return err
+func (d *Destination) Flush(context.Context) error {
+	return nil
+}
+
+// Teardown shuts down the Kafka client.
+func (d *Destination) Teardown(ctx context.Context) error {
+	sdk.Logger(ctx).Info().Msg("Tearing down a Kafka Destination...")
+	if d.Client != nil {
+		d.Client.Close()
+	}
+	return nil
 }

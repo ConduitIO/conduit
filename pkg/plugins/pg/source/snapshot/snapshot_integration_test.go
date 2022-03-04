@@ -14,15 +14,22 @@
 
 //go:build integration
 
-package source
+package snapshot
 
 import (
+	"context"
+	"database/sql"
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/record"
+	"github.com/conduitio/conduit/pkg/plugin/sdk"
+
+	_ "github.com/lib/pq"
 )
+
+// SnapshotTestURL is a non-replication user url for the test postgres d
+const SnapshotTestURL = "postgres://meroxauser:meroxapass@localhost:5432/meroxadb?sslmode=disable"
 
 func TestSnapshotterReads(t *testing.T) {
 	db := getTestPostgres(t)
@@ -35,7 +42,7 @@ func TestSnapshotterReads(t *testing.T) {
 			break
 		}
 		i++
-		_, err := s.Next()
+		_, err := s.Next(context.Background())
 		assert.Ok(t, err)
 	}
 	assert.Equal(t, 4, i)
@@ -50,7 +57,7 @@ func TestSnapshotterTeardown(t *testing.T) {
 		"column1", "key"}, "key")
 	assert.Ok(t, err)
 	assert.True(t, s.HasNext(), "failed to queue up record")
-	_, err = s.Next()
+	_, err = s.Next(context.Background())
 	assert.Ok(t, err)
 	assert.True(t, !s.snapshotComplete,
 		"snapshot prematurely marked complete")
@@ -64,24 +71,55 @@ func TestPrematureDBClose(t *testing.T) {
 	s, err := NewSnapshotter(db, "records", []string{"id",
 		"column1", "key"}, "key")
 	assert.Ok(t, err)
-	// assert that we have at least one row and it's loading as expected
 	next1 := s.HasNext()
 	assert.Equal(t, true, next1)
-	// teardown to prematurely kill our DB connection and assert we get
-	// an ErrSnapshotInterrupt error
 	teardownErr := s.Teardown()
 	assert.True(t, cerrors.Is(teardownErr, ErrSnapshotInterrupt),
 		"failed to get snapshot interrupt error")
-	// assert Next fails because we have no rows to read.
-	_, err = s.Next()
+	_, err = s.Next(context.Background())
 	assert.Error(t, err)
-	// assert calling HasNext again returns false.
 	next2 := s.HasNext()
 	assert.Equal(t, false, next2)
-	// finally , assert calling Next when HasNext has returned false returns
-	// an ErrNoRows error for calling after database is closed.
-	rec, err := s.Next()
-	assert.Equal(t, rec, record.Record{})
+	rec, err := s.Next(context.Background())
+	assert.Equal(t, rec, sdk.Record{})
 	assert.True(t, cerrors.Is(err, ErrNoRows),
 		"failed to get snapshot incomplete")
+}
+
+// getTestPostgres is a testing helper that fails if it can't setup a Postgres
+// connection and returns a DB and the connection string.
+// * It starts and migrates a db with 5 rows for Test_Read* and Test_Open*
+func getTestPostgres(t *testing.T) *sql.DB {
+	prepareDB := []string{
+		// drop any existing data
+		`DROP TABLE IF EXISTS records;`,
+		// setup records table
+		`CREATE TABLE IF NOT EXISTS records (
+		id bigserial PRIMARY KEY,
+		key bytea,
+		column1 varchar(256),
+		column2 integer,
+		column3 boolean);`,
+		// seed values
+		`INSERT INTO records(key, column1, column2, column3)
+		VALUES('1', 'foo', 123, false),
+		('2', 'bar', 456, true),
+		('3', 'baz', 789, false),
+		('4', null, null, null);`,
+	}
+	db, err := sql.Open("postgres", SnapshotTestURL)
+	assert.Ok(t, err)
+	db = migrate(t, db, prepareDB)
+	assert.Ok(t, err)
+	return db
+}
+
+// migrate will run a set of migrations on a database to prepare it for a test
+// it fails the test if any migrations are not applied.
+func migrate(t *testing.T, db *sql.DB, migrations []string) *sql.DB {
+	for _, migration := range migrations {
+		_, err := db.Exec(migration)
+		assert.Ok(t, err)
+	}
+	return db
 }

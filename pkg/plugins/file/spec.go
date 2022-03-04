@@ -14,29 +14,29 @@
 
 package file
 
-import "github.com/conduitio/conduit/pkg/plugins"
+import (
+	"github.com/conduitio/conduit/pkg/plugin/sdk"
+)
 
-type Spec struct{}
-
-// Specify returns the Plugin's Specification
-func (s Spec) Specify() (plugins.Specification, error) {
-	return plugins.Specification{
+func Specification() sdk.Specification {
+	return sdk.Specification{
+		Name:    "file",
 		Summary: "A file source and destination plugin for Conduit, written in Go.",
 		Version: "v0.0.1",
 		Author:  "Meroxa, Inc.",
-		DestinationParams: map[string]plugins.Parameter{
+		DestinationParams: map[string]sdk.Parameter{
 			"path": {
 				Default:     "",
 				Description: "the file path where the file destination writes messages",
 				Required:    true,
 			},
 		},
-		SourceParams: map[string]plugins.Parameter{
+		SourceParams: map[string]sdk.Parameter{
 			"path": {
 				Default:     "",
 				Description: "the file path from which the file source reads messages",
 				Required:    true,
 			},
 		},
-	}, nil
+	}
 }

@@ -18,9 +18,9 @@ package kafka
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/plugin/sdk"
 	"github.com/google/uuid"
 	"github.com/segmentio/kafka-go"
 )
@@ -115,7 +115,7 @@ func (c *segmentConsumer) Close() {
 	// this will also make the loops in the reader goroutines stop
 	err := c.reader.Close()
 	if err != nil {
-		fmt.Printf("couldn't close reader: %v\n", err)
+		sdk.Logger(context.Background()).Err(err).Msg("couldn't close reader")
 	}
 }
 

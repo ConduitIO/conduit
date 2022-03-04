@@ -36,11 +36,11 @@ The decision can be broken up into 4 parts, these are explained in detail later 
 ### Conduit plugin interface (gRPC)
 
 The Conduit plugin interface is defined in gRPC, is standalone (does not depend on Conduit or the SDK) and lives
-in https://github.com/conduitio/conduit-plugin. This repository is the only common thing between Conduit and a plugin,
+in https://github.com/conduitio/connector-plugin. This repository is the only common thing between Conduit and a plugin,
 meaning that Conduit uses the interface to interact with plugins and plugins implement the interface.
 
 The proto files define the messages and gRPC interface that needs to be implemented by the connector plugin. The
-interface is uploaded to the [buf schema registry](https://buf.build/conduitio/conduit-plugin), which allows us to
+interface is uploaded to the [buf schema registry](https://buf.build/conduitio/connector-plugin), which allows us to
 easily generate the code in any programming language. For Go we
 use [remote generation](https://docs.buf.build/bsr/remote-generation/overview) so we don’t have to manually generate any
 code.
@@ -194,7 +194,7 @@ implementations of a dispenser:
 - The built-in dispenser will dispense plugins that communicate with the plugin via direct Go calls. This means that
   Conduit can import a plugin as any other library, register it in the built-in plugin registry and use it without
   having a separate binary for the plugin. The implementation behind the built-in plugin is using the thin layer defined
-  in the conduit-plugin repository (see previous chapter), meaning that it is irrelevant which SDK the plugin uses (if
+  in the connector-plugin repository (see previous chapter), meaning that it is irrelevant which SDK the plugin uses (if
   any), as long as it implements the interfaces defined in that thin layer.
 - The standalone dispenser will dispense plugins that communicate with the plugin via go-plugin and gRPC. It will start
   the plugin in a separate process as soon as a call to dispense a plugin comes in. When the method `Teardown` gets

@@ -23,8 +23,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/plugin/sdk"
 	"github.com/conduitio/conduit/pkg/plugins/s3/source/position"
-	"github.com/conduitio/conduit/pkg/record"
 	"gopkg.in/tomb.v2"
 )
 
@@ -32,7 +32,7 @@ import (
 type CDCIterator struct {
 	bucket        string
 	client        *s3.Client
-	buffer        chan record.Record
+	buffer        chan sdk.Record
 	ticker        *time.Ticker
 	lastModified  time.Time
 	caches        chan []CacheEntry
@@ -52,7 +52,7 @@ func NewCDCIterator(bucket string, pollingPeriod time.Duration, client *s3.Clien
 	cdc := CDCIterator{
 		bucket:        bucket,
 		client:        client,
-		buffer:        make(chan record.Record, 1),
+		buffer:        make(chan sdk.Record, 1),
 		caches:        make(chan []CacheEntry),
 		ticker:        time.NewTicker(pollingPeriod),
 		isTruncated:   true,
@@ -74,14 +74,14 @@ func (w *CDCIterator) HasNext(ctx context.Context) bool {
 }
 
 // Next returns the next record from the buffer.
-func (w *CDCIterator) Next(ctx context.Context) (record.Record, error) {
+func (w *CDCIterator) Next(ctx context.Context) (sdk.Record, error) {
 	select {
 	case r := <-w.buffer:
 		return r, nil
 	case <-w.tomb.Dead():
-		return record.Record{}, w.tomb.Err()
+		return sdk.Record{}, w.tomb.Err()
 	case <-ctx.Done():
-		return record.Record{}, ctx.Err()
+		return sdk.Record{}, ctx.Err()
 	}
 }
 
@@ -145,7 +145,7 @@ func (w *CDCIterator) flush() error {
 		case cache := <-w.caches:
 			for i := 0; i < len(cache); i++ {
 				entry := cache[i]
-				var output record.Record
+				var output sdk.Record
 
 				if entry.deleteMarker {
 					output = w.createDeletedRecord(entry)
@@ -213,11 +213,11 @@ func (w *CDCIterator) getLatestObjects(ctx context.Context) ([]CacheEntry, error
 }
 
 // createRecord creates the record for the object fetched from S3 (for updates and inserts)
-func (w *CDCIterator) createRecord(entry CacheEntry, object *s3.GetObjectOutput) (record.Record, error) {
+func (w *CDCIterator) createRecord(entry CacheEntry, object *s3.GetObjectOutput) (sdk.Record, error) {
 	// build record
 	rawBody, err := ioutil.ReadAll(object.Body)
 	if err != nil {
-		return record.Record{}, err
+		return sdk.Record{}, err
 	}
 	p := position.Position{
 		Key:       entry.key,
@@ -225,36 +225,30 @@ func (w *CDCIterator) createRecord(entry CacheEntry, object *s3.GetObjectOutput)
 		Type:      position.TypeCDC,
 	}
 
-	return record.Record{
+	return sdk.Record{
 		Metadata: map[string]string{
 			"content-type": *object.ContentType,
 		},
-		Position: p.ToRecordPosition(),
-		Payload: record.RawData{
-			Raw: rawBody,
-		},
-		Key: record.RawData{
-			Raw: []byte(entry.key),
-		},
+		Position:  p.ToRecordPosition(),
+		Payload:   sdk.RawData(rawBody),
+		Key:       sdk.RawData(entry.key),
 		CreatedAt: *object.LastModified,
 	}, nil
 }
 
 // createDeletedRecord creates the record for the object fetched from S3 (for deletes)
-func (w *CDCIterator) createDeletedRecord(entry CacheEntry) record.Record {
+func (w *CDCIterator) createDeletedRecord(entry CacheEntry) sdk.Record {
 	p := position.Position{
 		Key:       entry.key,
 		Timestamp: entry.lastModified,
 		Type:      position.TypeCDC,
 	}
-	return record.Record{
+	return sdk.Record{
 		Metadata: map[string]string{
 			"action": "delete",
 		},
-		Position: p.ToRecordPosition(),
-		Key: record.RawData{
-			Raw: []byte(entry.key),
-		},
+		Position:  p.ToRecordPosition(),
+		Key:       sdk.RawData(entry.key),
 		CreatedAt: entry.lastModified,
 	}
 }

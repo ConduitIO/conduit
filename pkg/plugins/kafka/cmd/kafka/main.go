@@ -15,11 +15,14 @@
 package main
 
 import (
+	"github.com/conduitio/conduit/pkg/plugin/sdk"
 	"github.com/conduitio/conduit/pkg/plugins/kafka"
-
-	"github.com/conduitio/conduit/pkg/plugins"
 )
 
 func main() {
-	plugins.Run(&kafka.Source{}, &kafka.Destination{}, kafka.Spec{})
+	sdk.Serve(
+		kafka.Specification,
+		kafka.NewSource,
+		kafka.NewDestination,
+	)
 }

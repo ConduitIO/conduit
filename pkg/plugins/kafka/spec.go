@@ -14,20 +14,20 @@
 
 package kafka
 
-import "github.com/conduitio/conduit/pkg/plugins"
+import (
+	"github.com/conduitio/conduit/pkg/plugin/sdk"
+)
 
-type Spec struct {
-}
-
-// Specify returns the Kafka plugin's specification.
+// Specification returns the Kafka plugin's specification.
 // Any changes here must also be reflected in the ReadMe.
-func (s Spec) Specify() (plugins.Specification, error) {
-	return plugins.Specification{
+func Specification() sdk.Specification {
+	return sdk.Specification{
+		Name:        "kafka",
 		Summary:     "A Kafka source and destination plugin for Conduit, written in Go.",
 		Description: "",
 		Version:     "v0.1.0",
 		Author:      "Meroxa",
-		DestinationParams: map[string]plugins.Parameter{
+		DestinationParams: map[string]sdk.Parameter{
 			"servers": {
 				Default:     "",
 				Required:    true,
@@ -49,7 +49,7 @@ func (s Spec) Specify() (plugins.Specification, error) {
 				Description: "Message delivery timeout.",
 			},
 		},
-		SourceParams: map[string]plugins.Parameter{
+		SourceParams: map[string]sdk.Parameter{
 			"servers": {
 				Default:     "",
 				Required:    true,
@@ -66,5 +66,5 @@ func (s Spec) Specify() (plugins.Specification, error) {
 				Description: "Whether or not to read a topic from beginning (i.e. existing messages or only new messages).",
 			},
 		},
-	}, nil
+	}
 }

@@ -17,15 +17,13 @@ package iterator
 import (
 	"context"
 	"io/ioutil"
-	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/plugins"
+	"github.com/conduitio/conduit/pkg/plugin/sdk"
 	"github.com/conduitio/conduit/pkg/plugins/s3/source/position"
-	"github.com/conduitio/conduit/pkg/record"
 )
 
 // SnapshotIterator to iterate through S3 objects in a specific bucket.
@@ -39,14 +37,10 @@ type SnapshotIterator struct {
 }
 
 // NewSnapshotIterator takes the s3 bucket, the client, and the position.
-// it returns an snapshotIterator starting from the position provided.
+// it returns a snapshotIterator starting from the position provided.
 func NewSnapshotIterator(bucket string, client *s3.Client, p position.Position) (*SnapshotIterator, error) {
 	input := &s3.ListObjectsV2Input{
 		Bucket: aws.String(bucket),
-	}
-	if strings.Compare(p.Key, "") != 0 {
-		// start from the position provided
-		input.StartAfter = aws.String(p.Key)
 	}
 
 	return &SnapshotIterator{
@@ -78,7 +72,7 @@ func (w *SnapshotIterator) refreshPage(ctx context.Context) error {
 		}
 	}
 	if w.page == nil {
-		return plugins.ErrEndData
+		return sdk.ErrBackoffRetry
 	}
 	return nil
 }
@@ -96,11 +90,11 @@ func (w *SnapshotIterator) HasNext(ctx context.Context) bool {
 
 // Next returns the next record in the iterator.
 // returns an empty record and an error if anything wrong happened.
-func (w *SnapshotIterator) Next(ctx context.Context) (record.Record, error) {
+func (w *SnapshotIterator) Next(ctx context.Context) (sdk.Record, error) {
 	if w.shouldRefreshPage() {
 		err := w.refreshPage(ctx)
 		if err != nil {
-			return record.Record{}, err
+			return sdk.Record{}, err
 		}
 	}
 
@@ -114,7 +108,7 @@ func (w *SnapshotIterator) Next(ctx context.Context) (record.Record, error) {
 		Key:    key,
 	})
 	if err != nil {
-		return record.Record{}, cerrors.Errorf("could not fetch the next object: %w", err)
+		return sdk.Record{}, cerrors.Errorf("could not fetch the next object: %w", err)
 	}
 
 	// check if maxLastModified should be updated
@@ -124,7 +118,7 @@ func (w *SnapshotIterator) Next(ctx context.Context) (record.Record, error) {
 
 	rawBody, err := ioutil.ReadAll(object.Body)
 	if err != nil {
-		return record.Record{}, cerrors.Errorf("could not read the object's body: %w", err)
+		return sdk.Record{}, cerrors.Errorf("could not read the object's body: %w", err)
 	}
 
 	p := position.Position{
@@ -134,19 +128,18 @@ func (w *SnapshotIterator) Next(ctx context.Context) (record.Record, error) {
 	}
 
 	// create the record
-	output := record.Record{
+	output := sdk.Record{
 		Metadata: map[string]string{
 			"content-type": *object.ContentType,
 		},
-		Position: p.ToRecordPosition(),
-		Payload: record.RawData{
-			Raw: rawBody,
-		},
-		Key: record.RawData{
-			Raw: []byte(*key),
-		},
+		Position:  p.ToRecordPosition(),
+		Payload:   sdk.RawData(rawBody),
+		Key:       sdk.RawData(*key),
 		CreatedAt: *object.LastModified,
 	}
 
 	return output, nil
+}
+func (w *SnapshotIterator) Stop() {
+	// nothing to stop
 }

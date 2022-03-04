@@ -21,7 +21,7 @@ import (
 	"time"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/record"
+	"github.com/conduitio/conduit/pkg/plugin/sdk"
 )
 
 const (
@@ -42,7 +42,7 @@ type Position struct {
 	Type      Type
 }
 
-func ParseRecordPosition(p record.Position) (Position, error) {
+func ParseRecordPosition(p sdk.Position) (Position, error) {
 	if p == nil {
 		// empty Position would have the fields with their default values
 		return Position{}, nil
@@ -72,7 +72,7 @@ func ParseRecordPosition(p record.Position) (Position, error) {
 	}, err
 }
 
-func (p Position) ToRecordPosition() record.Position {
+func (p Position) ToRecordPosition() sdk.Position {
 	char := snapshotPrefixChar
 	if p.Type == TypeCDC {
 		char = cdcPrefixChar
@@ -80,10 +80,10 @@ func (p Position) ToRecordPosition() record.Position {
 	return []byte(fmt.Sprintf("%s_%c%d", p.Key, char, p.Timestamp.Unix()))
 }
 
-func ConvertToCDCPosition(p record.Position) (record.Position, error) {
+func ConvertToCDCPosition(p sdk.Position) (sdk.Position, error) {
 	cdcPos, err := ParseRecordPosition(p)
 	if err != nil {
-		return record.Position{}, err
+		return sdk.Position{}, err
 	}
 	cdcPos.Type = TypeCDC
 	return cdcPos.ToRecordPosition(), nil

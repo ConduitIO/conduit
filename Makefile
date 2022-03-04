@@ -1,44 +1,27 @@
-.PHONY: build-file-plugin build-pg-plugin build-s3-plugin build-kafka-plugin build-generator-plugin test test-integration build run proto proto-api proto-plugins proto-lint clean download install-tools generate
+.PHONY: test test-integration build run proto proto-api proto-plugins proto-lint clean download install-tools generate
 
 VERSION=`./scripts/get-tag.sh`
 
 # The build target should stay at the top since we want it to be the default target.
-build: pkg/web/ui/dist build-plugins
+build: pkg/web/ui/dist
 	go build -ldflags "-X github.com/conduitio/conduit/pkg/conduit.version=${VERSION}" -o conduit -tags ui ./cmd/conduit/main.go
 	@echo "\nBuild complete. Enjoy using Conduit!"
 	@echo "Get started by running:"
 	@echo " ./conduit"
 
-build-file-plugin:
-	go build -o pkg/plugins/file/file pkg/plugins/file/cmd/file/main.go
-
-build-pg-plugin:
-	go build -o pkg/plugins/pg/pg pkg/plugins/pg/cmd/pg/main.go
-
-build-s3-plugin:
-	go build -o pkg/plugins/s3/s3 pkg/plugins/s3/cmd/s3/main.go
-
-build-kafka-plugin:
-	go build -o pkg/plugins/kafka/kafka pkg/plugins/kafka/cmd/kafka/main.go
-
-build-generator-plugin:
-	go build -o pkg/plugins/generator/generator pkg/plugins/generator/cmd/generator/main.go
-
-test: build-file-plugin
+test:
 	go test $(GOTEST_FLAGS) -race ./...
 
-test-integration: build-file-plugin
+test-integration:
 	# run required docker containers, execute integration tests, stop containers after tests
 	docker compose -f test/docker-compose-postgres.yml -f test/docker-compose-kafka.yml up --quiet-pull -d --wait
 	go test $(GOTEST_FLAGS) -race --tags=integration ./...; ret=$$?; \
 		docker compose -f test/docker-compose-postgres.yml -f test/docker-compose-kafka.yml down; \
 		exit $$ret
 
-build-server: build-plugins
+build-server:
 	go build -ldflags "-X 'github.com/conduitio/conduit/pkg/conduit.version=${VERSION}'" -o conduit ./cmd/conduit/main.go
 	@echo "build version: ${VERSION}"
-
-build-plugins: build-file-plugin build-pg-plugin build-s3-plugin build-kafka-plugin build-generator-plugin
 
 run:
 	go run ./cmd/conduit/main.go
@@ -66,11 +49,6 @@ proto-lint:
 
 clean:
 	@rm -f conduit
-	@rm -f pkg/plugins/file/file
-	@rm -f pkg/plugins/pg/pg
-	@rm -f pkg/plugins/s3/s3
-	@rm -f pkg/plugins/kafka/kafka
-	@rm -f pkg/plugins/generator/generator
 	@rm -rf pkg/web/ui/dist
 
 download:
