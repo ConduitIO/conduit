@@ -17,9 +17,10 @@ package main
 import (
 	"github.com/conduitio/conduit/pkg/plugin/sdk"
 	"github.com/conduitio/conduit/pkg/plugins/pg"
+	"github.com/conduitio/conduit/pkg/plugins/pg/destination"
 	"github.com/conduitio/conduit/pkg/plugins/pg/source"
 )
 
 func main() {
-	sdk.Serve(pg.Specification, source.NewSource, nil)
+	sdk.Serve(pg.Specification, source.NewSource, destination.NewDestination)
 }
