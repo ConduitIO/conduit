@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:build integration
+// //go:build integration
 
 package destination
 
@@ -32,7 +32,6 @@ const DBURL = "postgres://meroxauser:meroxapass@localhost:5432/meroxadb?sslmode=
 func TestAdapter_Write(t *testing.T) {
 	type fields struct {
 		UnimplementedDestination sdk.UnimplementedDestination
-		Position                 sdk.Position
 		conn                     *pgx.Conn
 		config                   config
 	}
@@ -61,7 +60,7 @@ func TestAdapter_Write(t *testing.T) {
 						"table":  "records",
 					},
 					Key: sdk.StructuredData{
-						"key": "abcasdf",
+						"key": "uuid-mimicking-key-1234",
 					},
 					Payload: sdk.StructuredData{
 						"column1": "foo",
@@ -87,7 +86,7 @@ func TestAdapter_Write(t *testing.T) {
 						"table":  "records",
 					},
 					Key: sdk.StructuredData{
-						"key": "abcasdf",
+						"key": "uuid-mimicking-key-1234",
 					},
 					Payload: sdk.StructuredData{
 						"column1": "updateonconflict",
@@ -101,9 +100,8 @@ func TestAdapter_Write(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			d := &Adapter{
+			d := &Destination{
 				UnimplementedDestination: tt.fields.UnimplementedDestination,
-				Position:                 tt.fields.Position,
 				conn:                     tt.fields.conn,
 				config:                   tt.fields.config,
 			}

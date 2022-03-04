@@ -29,10 +29,8 @@ import (
 // Postgres requires use of a different variable placeholder.
 var psql = sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
 
-type Adapter struct {
+type Destination struct {
 	sdk.UnimplementedDestination
-
-	Position sdk.Position
 
 	conn   *pgx.Conn
 	config config
@@ -50,11 +48,11 @@ type config struct {
 	keyColumnName string
 }
 
-func New() sdk.Destination {
-	return &Adapter{}
+func NewDestination() sdk.Destination {
+	return &Destination{}
 }
 
-func (d *Adapter) Configure(ctx context.Context, cfg map[string]string) error {
+func (d *Destination) Configure(ctx context.Context, cfg map[string]string) error {
 	d.config = config{
 		url:           cfg["url"],
 		tableName:     cfg["table"],
@@ -63,27 +61,29 @@ func (d *Adapter) Configure(ctx context.Context, cfg map[string]string) error {
 	return nil
 }
 
-func (d *Adapter) Open(ctx context.Context) error {
+func (d *Destination) Open(ctx context.Context) error {
 	if err := d.connect(ctx, d.config.url); err != nil {
 		return fmt.Errorf("failed to connecto to postgres: %w", err)
 	}
 	return nil
 }
 
-func (d *Adapter) Write(ctx context.Context, record sdk.Record) error {
+func (d *Destination) Write(ctx context.Context, record sdk.Record) error {
 	return d.write(ctx, record)
 }
 
-func (d *Adapter) Flush(context.Context) error {
+func (d *Destination) Flush(context.Context) error {
 	return nil
 }
 
-func (d *Adapter) Teardown(ctx context.Context) error {
-	return d.conn.Close(ctx)
+func (d *Destination) Teardown(ctx context.Context) error {
+	if d.conn != nil {
+		return d.conn.Close(ctx)
+	}
+	return nil
 }
 
-// connect connects the Adapter to postgres or returns an error
-func (d *Adapter) connect(ctx context.Context, uri string) error {
+func (d *Destination) connect(ctx context.Context, uri string) error {
 	conn, err := pgx.Connect(ctx, uri)
 	if err != nil {
 		return fmt.Errorf("failed to open connection: %w", err)
@@ -92,7 +92,7 @@ func (d *Adapter) connect(ctx context.Context, uri string) error {
 	return nil
 }
 
-func (d *Adapter) write(ctx context.Context, r sdk.Record) error {
+func (d *Destination) write(ctx context.Context, r sdk.Record) error {
 	action, ok := r.Metadata["action"]
 	if !ok {
 		return d.upsert(ctx, r)
@@ -112,19 +112,19 @@ func (d *Adapter) write(ctx context.Context, r sdk.Record) error {
 	}
 }
 
-func (d *Adapter) handleInsert(ctx context.Context, r sdk.Record) error {
+func (d *Destination) handleInsert(ctx context.Context, r sdk.Record) error {
 	return d.upsert(ctx, r)
 }
 
-func (d *Adapter) handleUpdate(ctx context.Context, r sdk.Record) error {
+func (d *Destination) handleUpdate(ctx context.Context, r sdk.Record) error {
 	return d.upsert(ctx, r)
 }
 
-func (d *Adapter) handleDelete(ctx context.Context, r sdk.Record) error {
+func (d *Destination) handleDelete(ctx context.Context, r sdk.Record) error {
 	return fmt.Errorf("not impl")
 }
 
-func (d *Adapter) upsert(ctx context.Context, r sdk.Record) error {
+func (d *Destination) upsert(ctx context.Context, r sdk.Record) error {
 	payload, err := getPayload(r)
 	if err != nil {
 		return fmt.Errorf("failed to get payload: %w", err)
@@ -239,21 +239,16 @@ func formatColumnsAndValues(key, payload sdk.StructuredData) ([]string, []interf
 		valArgs = append(valArgs, value)
 	}
 
-	if len(colArgs) != len(valArgs) {
-		panic("how should we handle this case?")
-	}
-
 	return colArgs, valArgs
 }
 
 // return either the records metadata value for table or the default configured
 // value for table. Otherwise it will error since we require some table to be
 // set to write into.
-func (d *Adapter) getTableName(metadata map[string]string) (string, error) {
+func (d *Destination) getTableName(metadata map[string]string) (string, error) {
 	tableName, ok := metadata["table"]
 	if !ok {
 		if d.config.tableName == "" {
-			// NB: Should we set a default here or error?
 			return "", fmt.Errorf("no table provided for default writes")
 		}
 		return d.config.tableName, nil
