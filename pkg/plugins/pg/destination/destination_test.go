@@ -12,20 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// //go:build integration
+//go:build integration
 
 package destination
 
 import (
 	"context"
-	"database/sql"
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/plugin/sdk"
-	"github.com/conduitio/conduit/pkg/record"
 
-	sq "github.com/Masterminds/squirrel"
 	"github.com/jackc/pgx/v4"
 )
 
@@ -143,43 +140,4 @@ func migrate(t *testing.T, db *pgx.Conn, migrations []string) *pgx.Conn {
 		assert.Ok(t, err)
 	}
 	return db
-}
-
-// checkAndCompare will fetch a row from the database where colkey is equal
-// to keyVal and will assert that it was written and equal to want.
-// want expects a map of column names and associated values, in this test case
-// those are column1, column2, and column3.
-func checkAndCompare(t *testing.T, db *sql.DB, colKey string, keyVal interface{}, want record.StructuredData) {
-	psql := sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
-	equal := sq.Eq{}
-	equal[colKey] = keyVal
-	sql, args, err := psql.
-		Select("key, column1, column2, column3").
-		From("records").
-		Where(equal).
-		ToSql()
-	if err != nil {
-		t.Errorf("failed to construct assertion query: %s", err)
-	}
-	row := db.QueryRow(sql, args...)
-	var (
-		k    string
-		col1 string
-		col2 int
-		col3 bool
-	)
-	if row.Err() != nil {
-		t.Errorf("failed to query row: %s", err)
-	}
-	err = row.Scan(&k, &col1, &col2, &col3)
-	if err != nil {
-		t.Errorf("failed to scan row: %s", err)
-	}
-	assert.Equal(t, k, keyVal)
-	r := record.StructuredData{
-		"column1": col1,
-		"column2": col2,
-		"column3": col3,
-	}
-	assert.Equal(t, want, r)
 }
