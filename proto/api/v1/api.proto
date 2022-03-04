@@ -808,15 +808,11 @@ service PluginService {
       response_body: "plugins"
     };
   };
-  rpc GetPlugin(GetPluginRequest) returns (GetPluginResponse) {
-    option (google.api.http) = {
-      get: "/v1/plugin/{name}"
-      response_body: "plugin"
-    };
-  };
 }
 
 message ListPluginsRequest {
+  // regex to filter plugins by name
+  string name = 1;
 }
 
 message ListPluginsResponse{
@@ -832,16 +828,17 @@ message GetPluginResponse {
 }
 
 message PluginSpecifications{
-  enum Type {
-    TYPE_UNSPECIFIED = 0;
-    TYPE_STRING = 1;
-    TYPE_INT = 2;
-    TYPE_FLOAT = 3;
-    TYPE_BOOL = 4;
-    TYPE_ENUM = 5;
-  }
 
   message Parameter {
+    enum Type {
+      TYPE_UNSPECIFIED = 0;
+      TYPE_STRING = 1;
+      TYPE_INT = 2;
+      TYPE_FLOAT = 3;
+      TYPE_BOOL = 4;
+      TYPE_ENUM = 5;
+    }
+
     string default = 1;
     bool required = 2;
     string description = 3;
