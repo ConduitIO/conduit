@@ -19,14 +19,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/conduitio/conduit/pkg/record"
+	"github.com/conduitio/conduit/pkg/plugin/sdk"
 )
 
 func Test_ParseRecordPosition(t *testing.T) {
 	var positionTests = []struct {
 		name    string
 		wantErr bool
-		in      record.Position
+		in      sdk.Position
 		out     Position
 	}{
 		{
@@ -86,7 +86,7 @@ func Test_ToRecordPosition(t *testing.T) {
 		name    string
 		wantErr bool
 		in      Position
-		out     record.Position
+		out     sdk.Position
 	}{
 		{
 			name:    "zero position",
@@ -131,8 +131,8 @@ func Test_ConvertSnapshotPositionToCDC(t *testing.T) {
 	var positionTests = []struct {
 		name    string
 		wantErr bool
-		in      record.Position
-		out     record.Position
+		in      sdk.Position
+		out     sdk.Position
 	}{
 		{
 			name:    "convert snapshot position to cdc",

@@ -16,114 +16,178 @@ package destination
 
 import (
 	"context"
-	"database/sql"
+	"encoding/json"
 	"fmt"
 	"strings"
 
-	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/plugins"
-	"github.com/conduitio/conduit/pkg/record"
+	"github.com/conduitio/conduit/pkg/plugin/sdk"
 
 	sq "github.com/Masterminds/squirrel"
-	_ "github.com/lib/pq" // Blank import to register the PostgreSQL driver
+	"github.com/jackc/pgx/v4"
 )
 
-// Destination fulfills the Destination interface
-type Destination struct {
-	Position record.Position
+// Postgres requires use of a different variable placeholder.
+var psql = sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
 
-	db *sql.DB
+type Destination struct {
+	sdk.UnimplementedDestination
+
+	conn   *pgx.Conn
+	config config
 }
 
-// Open attempts to open a database connection to Postgres.
-func (s *Destination) Open(ctx context.Context, cfg plugins.Config) error {
-	url, ok := cfg.Settings["url"]
-	if !ok {
-		return cerrors.New("must provide a connection URL")
+const (
+	actionDelete = "delete"
+	actionInsert = "insert"
+	actionUpdate = "update"
+)
+
+type config struct {
+	url           string
+	tableName     string
+	keyColumnName string
+}
+
+func NewDestination() sdk.Destination {
+	return &Destination{}
+}
+
+func (d *Destination) Configure(ctx context.Context, cfg map[string]string) error {
+	d.config = config{
+		url:           cfg["url"],
+		tableName:     cfg["table"],
+		keyColumnName: cfg["keyColumnName"],
 	}
-	db, err := sql.Open("postgres", url)
-	if err != nil {
-		return cerrors.Errorf("failed to open source DB: %w", err)
-	}
-	err = db.Ping()
-	if err != nil {
-		return cerrors.Errorf("failed to ping opened db: %w", err)
-	}
-	s.db = db
 	return nil
 }
 
-// Teardown will attempt to gracefully close the database connection.
-func (s *Destination) Teardown() error {
-	return s.db.Close()
+func (d *Destination) Open(ctx context.Context) error {
+	if err := d.connect(ctx, d.config.url); err != nil {
+		return fmt.Errorf("failed to connecto to postgres: %w", err)
+	}
+	return nil
 }
 
-// Validate will validate a configuration.
-func (s *Destination) Validate(cfg plugins.Config) error {
-	return nil // TODO
+func (d *Destination) Write(ctx context.Context, record sdk.Record) error {
+	return d.write(ctx, record)
 }
 
-// Write will write the record to the Destination and then returns the written
-// Position or an error.
-func (s *Destination) Write(ctx context.Context, r record.Record) (record.Position, error) {
-	// Postgres requires use of a different variable placeholder.
-	psql := sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
+func (d *Destination) Flush(context.Context) error {
+	return nil
+}
 
-	// assert that we're working with structured data
-	payload, ok := r.Payload.(record.StructuredData)
+func (d *Destination) Teardown(ctx context.Context) error {
+	if d.conn != nil {
+		return d.conn.Close(ctx)
+	}
+	return nil
+}
+
+func (d *Destination) connect(ctx context.Context, uri string) error {
+	conn, err := pgx.Connect(ctx, uri)
+	if err != nil {
+		return fmt.Errorf("failed to open connection: %w", err)
+	}
+	d.conn = conn
+	return nil
+}
+
+func (d *Destination) write(ctx context.Context, r sdk.Record) error {
+	action, ok := r.Metadata["action"]
 	if !ok {
-		// TODO: Handle Raw Data with a Warehouse Writer
-		return s.Position, cerrors.New("cannot handle unstructured data")
+		return d.upsert(ctx, r)
 	}
 
-	// turn the structured data into a slice of ordered columns and values
-	var colArgs []string
-	var valArgs []interface{}
-	for field, value := range payload {
-		colArgs = append(colArgs, field)
-		valArgs = append(valArgs, value)
+	switch action {
+	case actionDelete:
+		return d.handleDelete(ctx, r)
+	case actionInsert:
+		return d.handleInsert(ctx, r)
+	case actionUpdate:
+		return d.handleUpdate(ctx, r)
+	default:
+		// NB: Do we want to default to upsert behavior? Or insert behavior?
+		// Or something else?
+		return d.upsert(ctx, r)
+	}
+}
+
+func (d *Destination) handleInsert(ctx context.Context, r sdk.Record) error {
+	return d.upsert(ctx, r)
+}
+
+func (d *Destination) handleUpdate(ctx context.Context, r sdk.Record) error {
+	return d.upsert(ctx, r)
+}
+
+func (d *Destination) handleDelete(ctx context.Context, r sdk.Record) error {
+	return fmt.Errorf("not impl")
+}
+
+func (d *Destination) upsert(ctx context.Context, r sdk.Record) error {
+	payload, err := getPayload(r)
+	if err != nil {
+		return fmt.Errorf("failed to get payload: %w", err)
 	}
 
-	// keyCol holds the name of the column that records are keyed against.
-	var keyCol string
-	if r.Key != nil {
-		d, ok := r.Key.(record.StructuredData)
-		if !ok {
-			return s.Position, cerrors.Errorf("failed to parse key: %+v", r.Key)
-		}
-
-		// TODO: Handle composite keys
-		// Explicitly error out if we detect more than one key.
-		if len(d) > 1 {
-			return s.Position, cerrors.New("composite keys not yet supported")
-		}
-
-		// add key data to the query
-		for key, val := range d {
-			keyCol = key
-			if _, ok := payload[key]; ok {
-				break
-			}
-			colArgs = append(colArgs, key)
-			valArgs = append(valArgs, val)
-		}
-	}
-	// check if the record has a table set. if it does, write the record to that
-	// table. if it doesn't, error out.
-	table, ok := r.Metadata["table"]
-	if !ok {
-		return s.Position, cerrors.New("record must provide a table name")
+	key, err := getKey(r)
+	if err != nil {
+		return fmt.Errorf("failed to get key: %w", err)
 	}
 
-	// manually format the upsert and on conflict part of the query.
-	// the ON CONFLICT portion of this query needs to specify the constraint
-	// name. in our case, we can only rely on the record.Key's parsed
-	// StructuredData key.
-	// note: if other schema constraints prevent a write, this won't upsert on
-	// that conflict.
-	upsertQuery := fmt.Sprintf("ON CONFLICT (%s) DO UPDATE SET", keyCol)
+	keyColumnName := getKeyColumnName(key, d.config.keyColumnName)
 
-	// range over the record's payload and create the upsert query and args
+	tableName, err := d.getTableName(r.Metadata)
+	if err != nil {
+		return fmt.Errorf("failed to get table name for write: %w", err)
+	}
+
+	query, args, err := formatQuery(key, payload, keyColumnName, tableName)
+	if err != nil {
+		return fmt.Errorf("error formatting query: %w", err)
+	}
+
+	_, err = d.conn.Exec(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("insert exec failed: %w", err)
+	}
+
+	return nil
+}
+
+func getPayload(r sdk.Record) (sdk.StructuredData, error) {
+	return structuredDataFormatter(r.Payload.Bytes())
+}
+
+func getKey(r sdk.Record) (sdk.StructuredData, error) {
+	return structuredDataFormatter(r.Key.Bytes())
+}
+
+func structuredDataFormatter(raw []byte) (sdk.StructuredData, error) {
+	if len(raw) == 0 {
+		return sdk.StructuredData{}, nil
+	}
+	data := make(map[string]interface{})
+	err := json.Unmarshal(raw, &data)
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
+}
+
+// formatQuery manually formats the UPSERT and ON CONFLICT query statements.
+// the `ON CONFLICT` portion of this query needs to specify the constraint
+// name.
+// * In our case, we can only rely on the record.Key's parsed key value.
+// * If other schema constraints prevent a write, this won't upsert on
+// that conflict.
+func formatQuery(
+	key sdk.StructuredData,
+	payload sdk.StructuredData,
+	keyColumnName string,
+	tableName string,
+) (string, []interface{}, error) {
+	upsertQuery := fmt.Sprintf("ON CONFLICT (%s) DO UPDATE SET", keyColumnName)
 	for column := range payload {
 		// tuples form a comma separated list, so they need a comma at the end.
 		// `EXCLUDED` references the new record's values. This will overwrite
@@ -141,24 +205,67 @@ func (s *Destination) Write(ctx context.Context, r record.Record) (record.Positi
 	// we have to manually append a semi colon to the upsert sql;
 	upsertQuery += ";"
 
-	// prepare SQL to insert cols and args into the appropriate table.
-	// suffix sql and args for upsert behavior.
-	query, args, err := psql.Insert(table).
+	colArgs, valArgs := formatColumnsAndValues(key, payload)
+
+	query, args, err := psql.
+		Insert(tableName).
 		Columns(colArgs...).
 		Values(valArgs...).
 		SuffixExpr(sq.Expr(upsertQuery)).
 		ToSql()
 	if err != nil {
-		return s.Position, cerrors.Errorf("error formatting query: %w", err)
+		return "", nil, fmt.Errorf("error formatting query: %w", err)
 	}
 
-	// attempt to run the query
-	_, err = s.db.Exec(query, args...)
-	if err != nil {
-		// return current position that hasn't been updated and the error
-		return s.Position, cerrors.Errorf("insert exec failed: %w", err)
+	return query, args, nil
+}
+
+// formatColumnsAndValues turns the key and payload into a slice of ordered
+// columns and values for upserting into Postgres.
+func formatColumnsAndValues(key, payload sdk.StructuredData) ([]string, []interface{}) {
+	var colArgs []string
+	var valArgs []interface{}
+
+	// range over both the key and payload values in order to format the
+	// query for args and values in proper order
+	for key, val := range key {
+		colArgs = append(colArgs, key)
+		valArgs = append(valArgs, val)
+		delete(payload, key) // NB: Delete Key from payload arguments
 	}
-	// assign s.Position after we've successfully written the record
-	s.Position = r.Position
-	return s.Position, nil
+
+	for field, value := range payload {
+		colArgs = append(colArgs, field)
+		valArgs = append(valArgs, value)
+	}
+
+	return colArgs, valArgs
+}
+
+// return either the records metadata value for table or the default configured
+// value for table. Otherwise it will error since we require some table to be
+// set to write into.
+func (d *Destination) getTableName(metadata map[string]string) (string, error) {
+	tableName, ok := metadata["table"]
+	if !ok {
+		if d.config.tableName == "" {
+			return "", fmt.Errorf("no table provided for default writes")
+		}
+		return d.config.tableName, nil
+	}
+	return tableName, nil
+}
+
+// getKeyColumnName will return the name of the first item in the key.
+func getKeyColumnName(key sdk.StructuredData, defaultKeyName string) string {
+	if len(key) > 1 {
+		// Go maps aren't order preserving, so anything over len 1 will have
+		// non deterministic results until we handle composite keys.
+		panic("composite keys not yet supported")
+	}
+	for k := range key {
+		return k
+	}
+
+	return defaultKeyName
 }

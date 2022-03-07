@@ -173,6 +173,20 @@ func (mr *SourceMockRecorder) State() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "State", reflect.TypeOf((*Source)(nil).State))
 }
 
+// Stop mocks base method.
+func (m *Source) Stop(arg0 context.Context) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Stop", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Stop indicates an expected call of Stop.
+func (mr *SourceMockRecorder) Stop(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*Source)(nil).Stop), arg0)
+}
+
 // Teardown mocks base method.
 func (m *Source) Teardown(arg0 context.Context) error {
 	m.ctrl.T.Helper()

@@ -6,7 +6,7 @@ export default class PostgresDestination extends ConnectorPlugin {
 
   static name = 'Postgres Destination';
   static connectorType = 'destination';
-  static pluginPath = 'pkg/plugins/pg/pg';
+  static pluginPath = 'builtin:postgres';
 
   static get blueprint() {
     const requiredURL = generateBlueprint(

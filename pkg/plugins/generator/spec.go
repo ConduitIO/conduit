@@ -14,19 +14,20 @@
 
 package generator
 
-import "github.com/conduitio/conduit/pkg/plugins"
+import (
+	"github.com/conduitio/conduit/pkg/plugin/sdk"
+)
 
-type Spec struct{}
-
-// Specify returns the Plugin's Specification
-func (s Spec) Specify() (plugins.Specification, error) {
-	return plugins.Specification{
+// Specification returns the Plugin's Specification.
+func Specification() sdk.Specification {
+	return sdk.Specification{
+		Name:              "generator",
 		Summary:           "Generator plugin",
 		Description:       "A plugin capable of generating dummy records (in JSON format).",
 		Version:           "v0.5.0",
 		Author:            "Meroxa",
-		DestinationParams: map[string]plugins.Parameter{},
-		SourceParams: map[string]plugins.Parameter{
+		DestinationParams: map[string]sdk.Parameter{},
+		SourceParams: map[string]sdk.Parameter{
 			RecordCount: {
 				Default:     "-1",
 				Required:    false,
@@ -43,5 +44,5 @@ func (s Spec) Specify() (plugins.Specification, error) {
 				Description: "A comma-separated list of name:type tokens, where type can be: int, string, time, bool.",
 			},
 		},
-	}, nil
+	}
 }

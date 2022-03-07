@@ -17,71 +17,66 @@ package kafka
 import (
 	"bytes"
 	"context"
-	"fmt"
-	"time"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/plugins"
-	"github.com/conduitio/conduit/pkg/record"
+	"github.com/conduitio/conduit/pkg/plugin/sdk"
 	"github.com/segmentio/kafka-go"
 )
 
 type Source struct {
+	sdk.UnimplementedSource
+
 	Consumer         Consumer
 	Config           Config
-	lastPositionRead record.Position
+	lastPositionRead sdk.Position
 }
 
-func (s *Source) Open(ctx context.Context, cfg plugins.Config) error {
-	fmt.Println("Opening a Kafka Source...")
-	parsed, err := Parse(cfg.Settings)
+func NewSource() sdk.Source {
+	return &Source{}
+}
+
+func (s *Source) Configure(ctx context.Context, cfg map[string]string) error {
+	sdk.Logger(ctx).Info().Msg("Configuring a Kafka Source...")
+	parsed, err := Parse(cfg)
 	if err != nil {
 		return cerrors.Errorf("config is invalid: %w", err)
 	}
 	s.Config = parsed
+	return nil
+}
 
+func (s *Source) Open(ctx context.Context, pos sdk.Position) error {
 	client, err := NewConsumer()
 	if err != nil {
 		return cerrors.Errorf("failed to create Kafka client: %w", err)
 	}
-
 	s.Consumer = client
-	return nil
-}
 
-func (s *Source) Teardown() error {
-	fmt.Println("Tearing down a Kafka Source...")
-	s.Consumer.Close()
-	return nil
-}
-
-func (s *Source) Validate(cfg plugins.Config) error {
-	_, err := Parse(cfg.Settings)
-	return err
-}
-
-func (s *Source) Read(ctx context.Context, position record.Position) (record.Record, error) {
-	err := s.startFrom(position)
+	err = s.startFrom(pos)
 	if err != nil {
-		return record.Record{}, cerrors.Errorf("couldn't start from position: %w", err)
+		return cerrors.Errorf("couldn't start from position: %w", err)
 	}
 
+	return nil
+}
+
+func (s *Source) Read(ctx context.Context) (sdk.Record, error) {
 	message, kafkaPos, err := s.Consumer.Get(ctx)
 	if err != nil {
-		return record.Record{}, cerrors.Errorf("failed getting a message %w", err)
+		return sdk.Record{}, cerrors.Errorf("failed getting a message %w", err)
 	}
 	if message == nil {
-		return record.Record{}, plugins.ErrEndData
+		return sdk.Record{}, sdk.ErrBackoffRetry
 	}
 	rec, err := toRecord(message, kafkaPos)
 	if err != nil {
-		return record.Record{}, cerrors.Errorf("couldn't transform record %w", err)
+		return sdk.Record{}, cerrors.Errorf("couldn't transform record %w", err)
 	}
 	s.lastPositionRead = rec.Position
 	return rec, nil
 }
 
-func (s *Source) startFrom(position record.Position) error {
+func (s *Source) startFrom(position sdk.Position) error {
 	// The check is in place, to avoid reconstructing the Kafka consumer.
 	if s.lastPositionRead != nil && bytes.Equal(s.lastPositionRead, position) {
 		return nil
@@ -95,16 +90,23 @@ func (s *Source) startFrom(position record.Position) error {
 	return nil
 }
 
-func toRecord(message *kafka.Message, position string) (record.Record, error) {
-	return record.Record{
+func toRecord(message *kafka.Message, position string) (sdk.Record, error) {
+	return sdk.Record{
 		Position:  []byte(position),
-		CreatedAt: time.Time{},
-		ReadAt:    time.Time{},
-		Key:       record.RawData{Raw: message.Key},
-		Payload:   record.RawData{Raw: message.Value},
+		CreatedAt: message.Time,
+		Key:       sdk.RawData(message.Key),
+		Payload:   sdk.RawData(message.Value),
 	}, nil
 }
 
-func (s *Source) Ack(context.Context, record.Position) error {
+func (s *Source) Ack(ctx context.Context, position sdk.Position) error {
 	return s.Consumer.Ack()
+}
+
+func (s *Source) Teardown(ctx context.Context) error {
+	sdk.Logger(ctx).Info().Msg("Tearing down a Kafka Source...")
+	if s.Consumer != nil {
+		s.Consumer.Close()
+	}
+	return nil
 }

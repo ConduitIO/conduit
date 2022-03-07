@@ -41,7 +41,7 @@ export default Factory.extend({
       if (!fileSourcePlugin) {
         fileSourcePlugin = server.create('connector-plugin', 'source', {
           name: 'File Source',
-          pluginPath: 'pkg/plugins/file/file',
+          pluginPath: 'builtin:file',
         });
       }
 
@@ -51,7 +51,7 @@ export default Factory.extend({
           'destination',
           {
             name: 'File Destination',
-            pluginPath: 'pkg/plugins/file/file',
+            pluginPath: 'builtin:file',
           }
         );
       }

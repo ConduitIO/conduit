@@ -30,10 +30,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/plugins"
+	"github.com/conduitio/conduit/pkg/plugin/sdk"
 	"github.com/conduitio/conduit/pkg/plugins/s3/config"
 	"github.com/conduitio/conduit/pkg/plugins/s3/source/position"
-	"github.com/conduitio/conduit/pkg/record"
 	"github.com/google/uuid"
 )
 
@@ -46,9 +45,13 @@ func TestSource_SuccessfulSnapshot(t *testing.T) {
 	client, cfg := prepareIntegrationTest(t)
 
 	ctx := context.Background()
-	testBucket := cfg.Settings[config.ConfigKeyAWSBucket]
+	testBucket := cfg[config.ConfigKeyAWSBucket]
 	source := &Source{}
-	err := source.Open(context.Background(), cfg)
+	err := source.Configure(context.Background(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = source.Open(context.Background(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,9 +59,9 @@ func TestSource_SuccessfulSnapshot(t *testing.T) {
 	testFiles := addObjectsToBucket(ctx, t, testBucket, client, 5)
 
 	// read and assert
-	var lastPosition record.Position
+	var lastPosition sdk.Position
 	for _, file := range testFiles {
-		rec, err := readAndAssert(ctx, t, source, lastPosition, file)
+		rec, err := readAndAssert(ctx, t, source, file)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -71,21 +74,26 @@ func TestSource_SuccessfulSnapshot(t *testing.T) {
 		t.Fatalf("expected last position from snapshot to have a CDC type, got: %s", lastPosition)
 	}
 
-	_, err = source.Read(ctx, lastPosition)
-	if !plugins.IsRecoverableError(err) {
-		t.Fatalf("expected a recoverable error, got: %v", err)
+	_, err = source.Read(ctx)
+	if !cerrors.Is(err, sdk.ErrBackoffRetry) {
+		t.Fatalf("expected a BackoffRetry error, got: %v", err)
 	}
 
-	_ = source.Teardown()
+	_ = source.Teardown(ctx)
 }
 
 func TestSource_SnapshotRestart(t *testing.T) {
 	client, cfg := prepareIntegrationTest(t)
 
 	ctx := context.Background()
-	testBucket := cfg.Settings[config.ConfigKeyAWSBucket]
+	testBucket := cfg[config.ConfigKeyAWSBucket]
 	source := &Source{}
-	err := source.Open(context.Background(), cfg)
+	err := source.Configure(context.Background(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// set a non nil position
+	err = source.Open(context.Background(), []byte("file3_s0"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,17 +101,14 @@ func TestSource_SnapshotRestart(t *testing.T) {
 	testFiles := addObjectsToBucket(ctx, t, testBucket, client, 10)
 
 	// read and assert
-	var lastPosition record.Position
-	lastPosition = []byte("file3_s0")
 	for _, file := range testFiles {
 		// first position is not nil, then snapshot will start from beginning
-		rec, err := readAndAssert(ctx, t, source, lastPosition, file)
+		_, err := readAndAssert(ctx, t, source, file)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		lastPosition = rec.Position
 	}
-	_ = source.Teardown()
+	_ = source.Teardown(ctx)
 }
 
 func TestSource_EmptyBucket(t *testing.T) {
@@ -111,43 +116,50 @@ func TestSource_EmptyBucket(t *testing.T) {
 
 	ctx := context.Background()
 	source := &Source{}
-	err := source.Open(context.Background(), cfg)
+	err := source.Configure(context.Background(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = source.Open(context.Background(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// nil for the first page
-	_, err = source.Read(ctx, nil)
+	_, err = source.Read(ctx)
 
-	if !plugins.IsRecoverableError(err) {
-		t.Fatalf("expected a recoverable error, got: %v", err)
+	if !cerrors.Is(err, sdk.ErrBackoffRetry) {
+		t.Fatalf("expected a BackoffRetry error, got: %v", err)
 	}
-	_ = source.Teardown()
+	_ = source.Teardown(ctx)
 }
 
 func TestSource_StartCDCAfterEmptyBucket(t *testing.T) {
 	client, cfg := prepareIntegrationTest(t)
 
 	ctx := context.Background()
-	testBucket := cfg.Settings[config.ConfigKeyAWSBucket]
+	testBucket := cfg[config.ConfigKeyAWSBucket]
 	source := &Source{}
-	err := source.Open(context.Background(), cfg)
+	err := source.Configure(context.Background(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = source.Open(context.Background(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// read bucket while empty
-	_, err = source.Read(ctx, nil)
+	_, err = source.Read(ctx)
 
-	if !plugins.IsRecoverableError(err) {
-		t.Fatalf("expected a recoverable error, got: %v", err)
+	if !cerrors.Is(err, sdk.ErrBackoffRetry) {
+		t.Fatalf("expected a BackoffRetry error, got: %v", err)
 	}
 
 	// write files to bucket
 	addObjectsToBucket(ctx, t, testBucket, client, 3)
 
 	// read one record and assert position type is CDC
-	obj, err := readWithTimeout(ctx, source, nil, time.Second*10)
+	obj, err := readWithTimeout(ctx, source, time.Second*10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -155,7 +167,7 @@ func TestSource_StartCDCAfterEmptyBucket(t *testing.T) {
 	if pos.Type != position.TypeCDC {
 		t.Fatalf("expected first position after reading an empty bucket to be CDC, got: %s", obj.Position)
 	}
-	_ = source.Teardown()
+	_ = source.Teardown(ctx)
 }
 
 func TestSource_NonExistentBucket(t *testing.T) {
@@ -163,10 +175,10 @@ func TestSource_NonExistentBucket(t *testing.T) {
 
 	source := &Source{}
 
-	// set the bucket to a unique uuid
-	cfg.Settings[config.ConfigKeyAWSBucket] = uuid.NewString()
+	// set the bucket name to a unique uuid
+	cfg[config.ConfigKeyAWSBucket] = uuid.NewString()
 
-	err := source.Open(context.Background(), cfg)
+	err := source.Configure(context.Background(), cfg)
 	if err == nil {
 		t.Fatal("should return an error for non existent buckets")
 	}
@@ -176,9 +188,13 @@ func TestSource_CDC_ReadRecordsInsert(t *testing.T) {
 	client, cfg := prepareIntegrationTest(t)
 
 	ctx := context.Background()
-	testBucket := cfg.Settings[config.ConfigKeyAWSBucket]
+	testBucket := cfg[config.ConfigKeyAWSBucket]
 	source := &Source{}
-	err := source.Open(context.Background(), cfg)
+	err := source.Configure(context.Background(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = source.Open(context.Background(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -186,13 +202,11 @@ func TestSource_CDC_ReadRecordsInsert(t *testing.T) {
 	testFiles := addObjectsToBucket(ctx, t, testBucket, client, 3)
 
 	// read and assert
-	var lastPosition record.Position
 	for _, file := range testFiles {
-		rec, err := readAndAssert(ctx, t, source, lastPosition, file)
+		_, err := readAndAssert(ctx, t, source, file)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		lastPosition = rec.Position
 	}
 
 	// make sure the update action has a different lastModifiedDate
@@ -213,8 +227,7 @@ func TestSource_CDC_ReadRecordsInsert(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// "lastPosition" is the next expected position, since it was the position for the last read object
-	obj, err := readWithTimeout(ctx, source, lastPosition, time.Second*15)
+	obj, err := readWithTimeout(ctx, source, time.Second*15)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -224,16 +237,20 @@ func TestSource_CDC_ReadRecordsInsert(t *testing.T) {
 		t.Fatalf("expected key: %s, got: %s", testFileName, string(obj.Key.Bytes()))
 	}
 
-	_ = source.Teardown()
+	_ = source.Teardown(ctx)
 }
 
 func TestSource_CDC_ReadRecordsUpdate(t *testing.T) {
 	client, cfg := prepareIntegrationTest(t)
 
 	ctx := context.Background()
-	testBucket := cfg.Settings[config.ConfigKeyAWSBucket]
+	testBucket := cfg[config.ConfigKeyAWSBucket]
 	source := &Source{}
-	err := source.Open(context.Background(), cfg)
+	err := source.Configure(context.Background(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = source.Open(context.Background(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -241,13 +258,11 @@ func TestSource_CDC_ReadRecordsUpdate(t *testing.T) {
 	testFiles := addObjectsToBucket(ctx, t, testBucket, client, 3)
 
 	// read and assert
-	var lastPosition record.Position
 	for _, file := range testFiles {
-		rec, err := readAndAssert(ctx, t, source, lastPosition, file)
+		_, err := readAndAssert(ctx, t, source, file)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		lastPosition = rec.Position
 	}
 
 	// make sure the update action has a different lastModifiedDate
@@ -268,8 +283,7 @@ func TestSource_CDC_ReadRecordsUpdate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// lastPosition is the next expected position for the source
-	obj, err := readWithTimeout(ctx, source, lastPosition, time.Second*10)
+	obj, err := readWithTimeout(ctx, source, time.Second*10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -279,16 +293,20 @@ func TestSource_CDC_ReadRecordsUpdate(t *testing.T) {
 		t.Fatalf("expected key: %s, got: %s", testFileName, string(obj.Key.Bytes()))
 	}
 
-	_ = source.Teardown()
+	_ = source.Teardown(ctx)
 }
 
 func TestSource_CDC_DeleteWithVersioning(t *testing.T) {
 	client, cfg := prepareIntegrationTest(t)
 
 	ctx := context.Background()
-	testBucket := cfg.Settings[config.ConfigKeyAWSBucket]
+	testBucket := cfg[config.ConfigKeyAWSBucket]
 	source := &Source{}
-	err := source.Open(context.Background(), cfg)
+	err := source.Configure(context.Background(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = source.Open(context.Background(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -305,13 +323,11 @@ func TestSource_CDC_DeleteWithVersioning(t *testing.T) {
 	}
 
 	// read and assert
-	var lastPosition record.Position
 	for _, file := range testFiles {
-		rec, err := readAndAssert(ctx, t, source, lastPosition, file)
+		_, err := readAndAssert(ctx, t, source, file)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		lastPosition = rec.Position
 	}
 
 	// make sure the update action has a different lastModifiedDate
@@ -329,7 +345,7 @@ func TestSource_CDC_DeleteWithVersioning(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	obj, err := readWithTimeout(ctx, source, lastPosition, time.Second*10)
+	obj, err := readWithTimeout(ctx, source, time.Second*10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -341,16 +357,20 @@ func TestSource_CDC_DeleteWithVersioning(t *testing.T) {
 		t.Fatalf("expected action: %s, got: %s", expectedAction, obj.Metadata["action"])
 	}
 
-	_ = source.Teardown()
+	_ = source.Teardown(ctx)
 }
 
 func TestSource_CDC_EmptyBucketWithDeletedObjects(t *testing.T) {
 	client, cfg := prepareIntegrationTest(t)
 
 	ctx := context.Background()
-	testBucket := cfg.Settings[config.ConfigKeyAWSBucket]
+	testBucket := cfg[config.ConfigKeyAWSBucket]
 	source := &Source{}
-	err := source.Open(context.Background(), cfg)
+	err := source.Configure(context.Background(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = source.Open(context.Background(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -378,35 +398,34 @@ func TestSource_CDC_EmptyBucketWithDeletedObjects(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// we need the deleted file to be in the past
+	// we need the deleted file's modified date to be in the past
 	time.Sleep(time.Second)
 
 	// read and assert
-	var lastPosition record.Position
 	for _, file := range testFiles {
-		_, err := readAndAssert(ctx, t, source, lastPosition, file)
-		if !plugins.IsRecoverableError(err) {
+		_, err := readAndAssert(ctx, t, source, file)
+		if !cerrors.Is(err, sdk.ErrBackoffRetry) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	}
 
-	// should have changed to CDC, lastPosition is still nil
+	// should have changed to CDC
 	// CDC should NOT read the deleted object
-	_, err = readWithTimeout(ctx, source, lastPosition, time.Second)
+	_, err = readWithTimeout(ctx, source, time.Second)
 	if !cerrors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("error should be DeadlineExceeded")
 	}
 
-	_ = source.Teardown()
+	_ = source.Teardown(ctx)
 }
 
 func TestSource_CDCPosition(t *testing.T) {
 	client, cfg := prepareIntegrationTest(t)
 
 	ctx := context.Background()
-	testBucket := cfg.Settings[config.ConfigKeyAWSBucket]
+	testBucket := cfg[config.ConfigKeyAWSBucket]
 	source := &Source{}
-	err := source.Open(context.Background(), cfg)
+	err := source.Configure(context.Background(), cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -433,15 +452,18 @@ func TestSource_CDCPosition(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// connector will start detecting changes from the past, so all the bucket is new data
-	_, err = source.Read(ctx, []byte("file0001_c1634049397")) // time in the past
+	// initialize the connector to start detecting changes from the past, so all the bucket is new data
+	err = source.Open(context.Background(), []byte("file0001_c1634049397"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = source.Read(ctx)
 	// error is expected after resetting the connector with a new CDC position
 	if err == nil {
-		t.Fatalf("S3 connector should return a recoverable error for the first Read() call after starting CDC")
+		t.Fatalf("S3 connector should return a BackoffRetry error for the first Read() call after starting CDC")
 	}
 
-	// conduit would call the Read function again with the same position that returned an error
-	obj, err := readWithTimeout(ctx, source, []byte("file0001_c1634049397"), time.Second*10)
+	obj, err := readWithTimeout(ctx, source, time.Second*10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -451,8 +473,7 @@ func TestSource_CDCPosition(t *testing.T) {
 	}
 
 	// next read should return the deleted file
-	nextPosition := obj.Position
-	obj2, err := readWithTimeout(ctx, source, nextPosition, time.Second*10)
+	obj2, err := readWithTimeout(ctx, source, time.Second*10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -462,10 +483,10 @@ func TestSource_CDCPosition(t *testing.T) {
 	if strings.Compare(obj2.Metadata["action"], expectedAction) != 0 {
 		t.Fatalf("expected action: %s, got: %s", expectedAction, obj2.Metadata["action"])
 	}
-	_ = source.Teardown()
+	_ = source.Teardown(ctx)
 }
 
-func prepareIntegrationTest(t *testing.T) (*s3.Client, plugins.Config) {
+func prepareIntegrationTest(t *testing.T) (*s3.Client, map[string]string) {
 	cfg, err := parseIntegrationConfig()
 	if err != nil {
 		t.Skip(err)
@@ -483,21 +504,21 @@ func prepareIntegrationTest(t *testing.T) (*s3.Client, plugins.Config) {
 		deleteTestBucket(t, client, bucket)
 	})
 
-	cfg.Settings[config.ConfigKeyAWSBucket] = bucket
+	cfg[config.ConfigKeyAWSBucket] = bucket
 
 	return client, cfg
 }
 
-func newS3Client(cfg plugins.Config) (*s3.Client, error) {
+func newS3Client(cfg map[string]string) (*s3.Client, error) {
 	awsCredsProvider := credentials.NewStaticCredentialsProvider(
-		cfg.Settings[config.ConfigKeyAWSAccessKeyID],
-		cfg.Settings[config.ConfigKeyAWSSecretAccessKey],
+		cfg[config.ConfigKeyAWSAccessKeyID],
+		cfg[config.ConfigKeyAWSSecretAccessKey],
 		"",
 	)
 
 	awsConfig, err := awsconfig.LoadDefaultConfig(
 		context.Background(),
-		awsconfig.WithRegion(cfg.Settings[config.ConfigKeyAWSRegion]),
+		awsconfig.WithRegion(cfg[config.ConfigKeyAWSRegion]),
 		awsconfig.WithCredentialsProvider(awsCredsProvider),
 	)
 	if err != nil {
@@ -589,29 +610,29 @@ func clearTestBucket(t *testing.T, client *s3.Client, bucket string) {
 	}
 }
 
-func parseIntegrationConfig() (plugins.Config, error) {
+func parseIntegrationConfig() (map[string]string, error) {
 	awsAccessKeyID := os.Getenv("AWS_ACCESS_KEY_ID")
 
 	if awsAccessKeyID == "" {
-		return plugins.Config{}, cerrors.New("AWS_ACCESS_KEY_ID env var must be set")
+		return map[string]string{}, cerrors.New("AWS_ACCESS_KEY_ID env var must be set")
 	}
 
 	awsSecretAccessKey := os.Getenv("AWS_SECRET_ACCESS_KEY")
 	if awsSecretAccessKey == "" {
-		return plugins.Config{}, cerrors.New("AWS_SECRET_ACCESS_KEY env var must be set")
+		return map[string]string{}, cerrors.New("AWS_SECRET_ACCESS_KEY env var must be set")
 	}
 
 	awsRegion := os.Getenv("AWS_REGION")
 	if awsRegion == "" {
-		return plugins.Config{}, cerrors.New("AWS_REGION env var must be set")
+		return map[string]string{}, cerrors.New("AWS_REGION env var must be set")
 	}
 
-	return plugins.Config{Settings: map[string]string{
+	return map[string]string{
 		config.ConfigKeyAWSAccessKeyID:     awsAccessKeyID,
 		config.ConfigKeyAWSSecretAccessKey: awsSecretAccessKey,
 		config.ConfigKeyAWSRegion:          awsRegion,
 		ConfigKeyPollingPeriod:             "100ms",
-	}}, nil
+	}, nil
 }
 
 func addObjectsToBucket(ctx context.Context, t *testing.T, testBucket string, client *s3.Client, num int) []Object {
@@ -638,12 +659,12 @@ func addObjectsToBucket(ctx context.Context, t *testing.T, testBucket string, cl
 }
 
 // readWithTimeout will try to read the next record until the timeout is reached.
-func readWithTimeout(ctx context.Context, source *Source, position record.Position, timeout time.Duration) (record.Record, error) {
+func readWithTimeout(ctx context.Context, source *Source, timeout time.Duration) (sdk.Record, error) {
 	timeoutTimer := time.After(timeout)
 
 	for {
-		rec, err := source.Read(ctx, position)
-		if !plugins.IsRecoverableError(err) {
+		rec, err := source.Read(ctx)
+		if !cerrors.Is(err, sdk.ErrBackoffRetry) {
 			return rec, err
 		}
 
@@ -651,15 +672,15 @@ func readWithTimeout(ctx context.Context, source *Source, position record.Positi
 		case <-time.After(time.Millisecond * 100):
 			// try again
 		case <-timeoutTimer:
-			return record.Record{}, context.DeadlineExceeded
+			return sdk.Record{}, context.DeadlineExceeded
 		}
 	}
 }
 
 // readAndAssert will read the next record and assert that the returned record is
 // the same as the wanted object.
-func readAndAssert(ctx context.Context, t *testing.T, source *Source, position record.Position, want Object) (record.Record, error) {
-	got, err := source.Read(ctx, position)
+func readAndAssert(ctx context.Context, t *testing.T, source *Source, want Object) (sdk.Record, error) {
+	got, err := source.Read(ctx)
 	if err != nil {
 		return got, err
 	}

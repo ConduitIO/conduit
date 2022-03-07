@@ -6,7 +6,7 @@ export default class KafkaSource extends ConnectorPlugin {
 
   static name = 'Kafka Source';
   static connectorType = 'source';
-  static pluginPath = 'pkg/plugins/kafka/kafka';
+  static pluginPath = 'builtin:kafka';
 
   static get blueprint() {
     return [

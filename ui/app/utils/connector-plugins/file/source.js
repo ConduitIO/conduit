@@ -6,7 +6,7 @@ export default class FileSource extends ConnectorPlugin {
 
   static name = 'File Source';
   static connectorType = 'source';
-  static pluginPath = 'pkg/plugins/file/file';
+  static pluginPath = 'builtin:file';
 
   static get blueprint() {
     const requiredString = generateBlueprint(

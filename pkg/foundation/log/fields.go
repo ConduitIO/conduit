@@ -28,4 +28,7 @@ const (
 	GRPCMethodField     = "grpc_method"
 	GRPCStatusCodeField = "grpc_status_code"
 	HTTPEndpointField   = "http_endpoint"
+
+	PluginTypeField = "plugin_type"
+	PluginNameField = "plugin_name"
 )

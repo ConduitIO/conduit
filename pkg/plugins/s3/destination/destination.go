@@ -18,96 +18,117 @@ import (
 	"context"
 	"sync"
 
-	"github.com/conduitio/conduit/pkg/plugins"
+	"github.com/conduitio/conduit/pkg/plugin/sdk"
 	"github.com/conduitio/conduit/pkg/plugins/s3/destination/writer"
-	"github.com/conduitio/conduit/pkg/record"
 )
 
 // Destination S3 Connector persists records to an S3 storage. The records are usually
 // buffered and written in batches for performance reasons. The buffer size is
 // determined by config.
 type Destination struct {
-	Buffer []record.Record
-	Config Config
-	Error  error
-	Writer writer.Writer
-	Mutex  *sync.Mutex
+	sdk.UnimplementedDestination
+
+	Buffer       []sdk.Record
+	AckFuncCache []sdk.AckFunc
+	Config       Config
+	Error        error
+	Writer       writer.Writer
+	Mutex        *sync.Mutex
 }
 
-// Open parses and initializes the config and makes sure everything is prepared
-// to receive records.
-func (s *Destination) Open(ctx context.Context, cfg plugins.Config) error {
-	configuration, err := Parse(cfg.Settings)
+func NewDestination() sdk.Destination {
+	return &Destination{}
+}
+
+// Configure parses and initializes the config.
+func (d *Destination) Configure(ctx context.Context, cfg map[string]string) error {
+	configuration, err := Parse(cfg)
 
 	if err != nil {
 		return err
 	}
 
-	s.Config = configuration
-	s.Mutex = &sync.Mutex{}
+	d.Config = configuration
+
+	return nil
+}
+
+// Open makes sure everything is prepared to receive records.
+func (d *Destination) Open(ctx context.Context) error {
+	d.Mutex = &sync.Mutex{}
 
 	// initializing the buffer
-	s.Buffer = make([]record.Record, 0, s.Config.BufferSize)
+	d.Buffer = make([]sdk.Record, 0, d.Config.BufferSize)
+	d.AckFuncCache = make([]sdk.AckFunc, 0, d.Config.BufferSize)
 
 	// initializing the writer
 	writer, err := writer.NewS3(ctx, &writer.S3Config{
-		AccessKeyID:     s.Config.AWSAccessKeyID,
-		SecretAccessKey: s.Config.AWSSecretAccessKey,
-		Region:          s.Config.AWSRegion,
-		Bucket:          s.Config.AWSBucket,
-		KeyPrefix:       s.Config.Prefix,
+		AccessKeyID:     d.Config.AWSAccessKeyID,
+		SecretAccessKey: d.Config.AWSSecretAccessKey,
+		Region:          d.Config.AWSRegion,
+		Bucket:          d.Config.AWSBucket,
+		KeyPrefix:       d.Config.Prefix,
 	})
 
 	if err != nil {
 		return err
 	}
 
-	s.Writer = writer
-
+	d.Writer = writer
 	return nil
 }
 
-// Teardown gracefully disconnects the client
-func (s *Destination) Teardown() error {
-	return nil // TODO
-}
-
-// Validate takes config and returns an error if some values are missing or
-// incorrect.
-func (s *Destination) Validate(cfg plugins.Config) error {
-	_, err := Parse(cfg.Settings)
-	return err
-}
-
-// Write writes a record into a Destination. Typically Destination maintains an in-memory
+// WriteAsync writes a record into a Destination. Typically Destination maintains an in-memory
 // buffer and doesn't actually perform a write until the buffer has enough
 // records in it. This is done for performance reasons.
-func (s *Destination) Write(ctx context.Context, r record.Record) (record.Position, error) {
+func (d *Destination) WriteAsync(ctx context.Context, r sdk.Record, ackFunc sdk.AckFunc) error {
 	// If either Destination or Writer have encountered an error, there's no point in
 	// accepting more records. We better signal the error up the stack and force
 	// the server to maybe re-instantiate plugin or do something else about it.
-	if s.Error != nil {
-		return nil, s.Error
+	if d.Error != nil {
+		return d.Error
 	}
 
-	s.Mutex.Lock()
-	defer s.Mutex.Unlock()
+	d.Mutex.Lock()
+	defer d.Mutex.Unlock()
 
-	s.Buffer = append(s.Buffer, r)
+	d.Buffer = append(d.Buffer, r)
+	d.AckFuncCache = append(d.AckFuncCache, ackFunc)
 
-	if len(s.Buffer) >= int(s.Config.BufferSize) {
-		bufferedRecords := s.Buffer
-		s.Buffer = make([]record.Record, 0, s.Config.BufferSize)
-
-		err := s.Writer.Write(ctx, &writer.Batch{
-			Records: bufferedRecords,
-			Format:  s.Config.Format,
-		})
-
+	if len(d.Buffer) >= int(d.Config.BufferSize) {
+		err := d.Flush(ctx)
 		if err != nil {
-			s.Error = err
+			return err
 		}
 	}
+	return d.Error
+}
 
-	return s.Writer.LastPosition(), s.Error
+// Teardown gracefully disconnects the client
+func (d *Destination) Teardown(ctx context.Context) error {
+	return nil // TODO
+}
+
+func (d *Destination) Flush(ctx context.Context) error {
+	bufferedRecords := d.Buffer
+	d.Buffer = d.Buffer[:0]
+
+	// write batch into S3
+	err := d.Writer.Write(ctx, &writer.Batch{
+		Records: bufferedRecords,
+		Format:  d.Config.Format,
+	})
+	if err != nil {
+		d.Error = err
+	}
+
+	// call all the written records' ackFunctions
+	for _, ack := range d.AckFuncCache {
+		err := ack(d.Error)
+		if err != nil {
+			return err
+		}
+	}
+	d.AckFuncCache = d.AckFuncCache[:0]
+	return nil
 }

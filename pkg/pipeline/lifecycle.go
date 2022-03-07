@@ -87,9 +87,9 @@ func (s *Service) stopWithReason(ctx context.Context, pl *Instance, reason error
 
 	s.logger.Debug(ctx).Str(log.PipelineIDField, pl.ID).Msg("stopping pipeline")
 	for _, n := range pl.n {
-		s.logger.Trace(ctx).Str(log.NodeIDField, n.ID()).Msg("stopping node")
 		if node, ok := n.(stream.StoppableNode); ok {
 			// stop all pub nodes
+			s.logger.Trace(ctx).Str(log.NodeIDField, n.ID()).Msg("stopping node")
 			node.Stop(reason)
 		}
 	}
@@ -253,11 +253,6 @@ func (s *Service) buildSourceNodes(
 		sourceNode := stream.SourceNode{
 			Name:   instance.ID(),
 			Source: instance.(connector.Source),
-			ConnectorTimer: measure.ConnectorExecutionDurationTimer.WithValues(
-				pl.Config.Name,
-				instance.Config().Plugin,
-				strings.ToLower(instance.Type().String()),
-			),
 			PipelineTimer: measure.PipelineExecutionDurationTimer.WithValues(
 				pl.Config.Name,
 			),

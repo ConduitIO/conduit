@@ -58,7 +58,7 @@ func TestConsumer_Get_FromBeginning(t *testing.T) {
 		"test-key-6": true,
 	}
 	for i := 1; i <= 6; i++ {
-		message, _, err := waitForMessage(consumer, 200 * time.Millisecond)
+		message, _, err := waitForMessage(consumer, 200*time.Millisecond)
 		assert.NotNil(t, message)
 		assert.Ok(t, err)
 		delete(messagesUnseen, string(message.Key))
@@ -93,7 +93,7 @@ func TestConsumer_Get_OnlyNew(t *testing.T) {
 		"test-key-9": true,
 	}
 	for i := 1; i <= 3; i++ {
-		message, _, err := waitForMessage(consumer, 200 * time.Millisecond)
+		message, _, err := waitForMessage(consumer, 200*time.Millisecond)
 		assert.NotNil(t, message)
 		assert.Ok(t, err)
 		delete(messagesUnseen, string(message.Key))

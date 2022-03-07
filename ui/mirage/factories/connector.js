@@ -5,7 +5,7 @@ export default Factory.extend({
     return { name: 'Some Source Connector', settings: {} };
   },
 
-  plugin: 'pkg/plugins/file/file',
+  plugin: 'builtin:file',
 
   state() {
     return { position: '' };

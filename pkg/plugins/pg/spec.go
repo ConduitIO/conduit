@@ -14,70 +14,59 @@
 
 package pg
 
-import "github.com/conduitio/conduit/pkg/plugins"
+import (
+	"github.com/conduitio/conduit/pkg/plugin/sdk"
+)
 
-type Spec struct{}
-
-// Specify returns the Plugin's Specification
-func (s Spec) Specify() (plugins.Specification, error) {
-	return plugins.Specification{
-		// Name: "postgres",// TODO uncomment after plugin is updated to SDK
+func Specification() sdk.Specification {
+	return sdk.Specification{
+		Name:    "postgres",
 		Summary: "A PostgreSQL source and destination plugin for Conduit, written in Go.",
 		Version: "v0.0.1",
 		Author:  "Meroxa, Inc.",
-		DestinationParams: map[string]plugins.Parameter{
+		DestinationParams: map[string]sdk.Parameter{
 			"url": {
 				Default:     "true",
 				Required:    true,
 				Description: "connection url to the postgres destination.",
 			},
 		},
-		SourceParams: map[string]plugins.Parameter{
-			"table": {
-				Default:     "",
-				Required:    true,
-				Description: "Table name for source to read",
-			},
-			"columns": {
-				Default:     "all columns from table",
-				Required:    false,
-				Description: "Comma-separated list of column names that the iterator should include in payloads.",
-			},
-			"key": {
-				Default:     "primary key of column",
-				Required:    false,
-				Description: "If no key is specified, the connector will attempt to lookup the tables primary key column. if no primary key column is found, then the source will return an error.",
-			},
-			"snapshot": {
-				Default:     "true",
-				Required:    false,
-				Description: "The connector acquires a read-only lock and takes a snapshot of the table before switching into CDC mode.",
-			},
-			"cdc": {
-				Default:     "true",
-				Required:    false,
-				Description: "The connector listens for changes in the specified table. Requires logical replication to be enabled.",
-			},
-			"publication_name": {
-				Default:     "pglogrepl",
-				Required:    false,
-				Description: "Required in CDC mode. Determines which publication the CDC iterator consumes.",
-			},
-			"slot_name": {
-				Default:     "pglogrepl_demo",
-				Required:    false,
-				Description: "Required in CDC mode. Determines which replication slot the CDC iterator uses.",
-			},
+		SourceParams: map[string]sdk.Parameter{
 			"url": {
 				Default:     "",
 				Required:    true,
 				Description: "Connection url to the postgres source.",
 			},
-			"replication_url": {
-				Default:     "",
+			"mode": {
+				Default:     "cdc",
 				Required:    false,
-				Description: "Optional url for the CDC iterator to use instead if a different connection url is required for logical replication.",
+				Description: "Sets the connector's operation mode. Available modes: ['cdc', 'snapshot']",
+			},
+			"table": {
+				Default:     "",
+				Required:    true,
+				Description: "Table name for connector to read.",
+			},
+			"columns": {
+				Default:     "all columns from table",
+				Required:    false,
+				Description: "Comma-separated list of column names that the connector should include in payloads. Key column will be excluded if set.",
+			},
+			"key": {
+				Default:     "primary key of column",
+				Required:    false,
+				Description: "The column name used to populate record Keys. If no key is specified, the connector will attempt to lookup the table's primary key column. If no primary key column is found, then the source will return an error.",
+			},
+			"publication_name": {
+				Default:     "conduitpub",
+				Required:    false,
+				Description: "Determines which publication the CDC iterator consumes.",
+			},
+			"slot_name": {
+				Default:     "conduitslot",
+				Required:    false,
+				Description: "Determines which replication slot the CDC iterator uses.",
 			},
 		},
-	}, nil
+	}
 }

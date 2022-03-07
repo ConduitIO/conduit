@@ -15,10 +15,14 @@
 package main
 
 import (
-	"github.com/conduitio/conduit/pkg/plugins"
+	"github.com/conduitio/conduit/pkg/plugin/sdk"
 	"github.com/conduitio/conduit/pkg/plugins/generator"
 )
 
 func main() {
-	plugins.Run(&generator.Source{}, nil, generator.Spec{})
+	sdk.Serve(
+		generator.Specification,
+		generator.NewSource,
+		nil,
+	)
 }

@@ -20,9 +20,9 @@ import (
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/conduitio/conduit/pkg/plugins"
+	"github.com/conduitio/conduit/pkg/foundation/multierror"
+	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/conduitio/conduit/pkg/record"
-	"github.com/hashicorp/go-plugin"
 )
 
 type destination struct {
@@ -39,15 +39,15 @@ type destination struct {
 	// persister is used for persisting the connector state when it changes.
 	persister *Persister
 
+	pluginDispenser plugin.Dispenser
+
 	// errs is used to signal the node that the connector experienced an error
 	// when it was processing something asynchronously (e.g. persisting state).
 	errs chan error
 
-	// bellow fields are nil when destination is created and are managed by destination
-	// internally.
-
-	client *plugin.Client
-	plugin plugins.Destination
+	// below fields are nil when destination is created and are managed by
+	// destination internally.
+	plugin plugin.DestinationPlugin
 
 	// m can lock a destination from concurrent access (e.g. in connector persister)
 	m sync.Mutex
@@ -78,7 +78,7 @@ func (s *destination) SetState(state DestinationState) {
 }
 
 func (s *destination) IsRunning() bool {
-	return s.client != nil
+	return s.plugin != nil
 }
 
 func (s *destination) Errors() <-chan error {
@@ -86,73 +86,70 @@ func (s *destination) Errors() <-chan error {
 }
 
 func (s *destination) Validate(ctx context.Context, settings map[string]string) error {
-	plug := s.plugin
-
-	if !s.IsRunning() {
-		client := plugins.NewClient(ctx, s.logger.Logger, s.XConfig.Plugin)
-		// start plugin only to validate that the config is valid
-		defer client.Kill()
-
-		var err error
-		plug, err = plugins.DispenseDestination(client)
-		if err != nil {
-			return err
-		}
+	dest, err := s.pluginDispenser.DispenseDestination()
+	if err != nil {
+		return err
 	}
+	defer func() {
+		_ = dest.Teardown(ctx)
+	}()
 
-	config := plugins.Config{Settings: settings}
-	err := plug.Validate(config)
+	err = dest.Configure(ctx, settings)
 	if err != nil {
 		return cerrors.Errorf("invalid destination config: %w", err)
 	}
-
 	return nil
 }
 
 func (s *destination) Open(ctx context.Context) error {
 	if s.IsRunning() {
-		return plugins.ErrAlreadyRunning
+		return plugin.ErrPluginRunning
 	}
 
 	s.logger.Debug(ctx).Msg("starting destination connector plugin")
-	client := plugins.NewClient(ctx, s.logger.Logger, s.XConfig.Plugin)
-	plug, err := plugins.DispenseDestination(client)
+	dest, err := s.pluginDispenser.DispenseDestination()
 	if err != nil {
-		client.Kill()
 		return err
 	}
 
-	s.logger.Debug(ctx).Msg("opening destination connector plugin")
-	err = plug.Open(ctx, plugins.Config{Settings: s.XConfig.Settings})
+	s.logger.Debug(ctx).Msg("configuring destination connector plugin")
+	err = dest.Configure(ctx, s.XConfig.Settings)
 	if err != nil {
-		client.Kill()
+		_ = dest.Teardown(ctx)
+		return err
+	}
+
+	err = dest.Start(ctx)
+	if err != nil {
+		_ = dest.Teardown(ctx)
 		return err
 	}
 
 	s.logger.Info(ctx).Msg("destination connector plugin successfully started")
 
-	s.client = client
-	s.plugin = plug
+	s.plugin = dest
 	s.persister.ConnectorStarted()
 	return nil
 }
 
 func (s *destination) Teardown(ctx context.Context) error {
 	if !s.IsRunning() {
-		return plugins.ErrNotRunning
+		return plugin.ErrPluginNotRunning
 	}
 
-	s.logger.Debug(ctx).Msg("tearing down destination connector plugin")
-	err := s.plugin.Teardown()
+	// TODO call Stop separately before Teardown. The idea is to let the plugin
+	//  know it should flush any unwritten changes and send back the acks
+	s.logger.Debug(ctx).Msg("stopping destination connector plugin")
+	err := s.plugin.Stop(ctx)
 
-	// kill client even if teardown fails, we need to stop the child process
-	s.client.Kill()
-	s.client = nil
+	s.logger.Debug(ctx).Msg("tearing down destination connector plugin")
+	err = multierror.Append(err, s.plugin.Teardown(ctx))
+
 	s.plugin = nil
 	s.persister.ConnectorStopped()
 
 	if err != nil {
-		return cerrors.Errorf("could not teardown plugin: %w", err)
+		return cerrors.Errorf("could not tear down plugin: %w", err)
 	}
 
 	s.logger.Info(ctx).Msg("connector plugin successfully torn down")
@@ -161,28 +158,22 @@ func (s *destination) Teardown(ctx context.Context) error {
 
 func (s *destination) Write(ctx context.Context, r record.Record) error {
 	if !s.IsRunning() {
-		return plugins.ErrNotRunning
+		return plugin.ErrPluginNotRunning
 	}
 
-	p, err := s.plugin.Write(ctx, r)
+	err := s.plugin.Write(ctx, r)
 	if err != nil {
-		return err
+		return cerrors.Errorf("error writing record: %w", err)
 	}
 
-	// lock to prevent race condition with connector persister
-	s.m.Lock()
-	defer s.m.Unlock()
-
-	if s.XState.Positions == nil {
-		s.XState.Positions = make(map[string]record.Position)
+	// TODO calling ack here makes the writing of records synchronous, we need
+	//  to add AckFunc parameter to destination.Write and call it asynchronously
+	_, err = s.plugin.Ack(ctx)
+	if err != nil {
+		return cerrors.Errorf("error receiving ack: %w", err)
 	}
-	s.XState.Positions[r.SourceID] = p
-	s.persister.Persist(ctx, s, func(err error) {
-		if err != nil {
-			s.errs <- err
-		}
-	})
-	return err
+
+	return nil
 }
 
 func (s *destination) Lock() {
