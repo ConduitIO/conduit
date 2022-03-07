@@ -829,21 +829,33 @@ message GetPluginResponse {
 
 message PluginSpecifications{
 
+  message Validation{
+    enum Type {
+      TYPE_UNSPECIFIED = 0;
+      TYPE_REQUIRED = 1;
+      TYPE_INCLUSION = 2;
+      TYPE_EXCLUSION = 3;
+      TYPE_GREATER_THAN = 4;
+      TYPE_LESS_THAN = 5;
+      TYPE_REGEX = 6;
+    }
+    Type validation =1;
+    repeated string value =2;
+  }
+
   message Parameter {
     enum Type {
       TYPE_UNSPECIFIED = 0;
       TYPE_STRING = 1;
-      TYPE_INT = 2;
-      TYPE_FLOAT = 3;
-      TYPE_BOOL = 4;
-      TYPE_ENUM = 5;
+      TYPE_NUMBER = 2;
+      TYPE_BOOL = 3;
+      TYPE_FILE = 4;
     }
 
-    string default = 1;
-    bool required = 2;
-    string description = 3;
-    Type type = 4;
-    repeated string enum = 5; // specify the enum expected values
+    string name = 1;
+    string description = 2;
+    Type type = 3;
+    repeated Validation validations = 4;
   }
 
   string name = 1;
