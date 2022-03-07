@@ -4,7 +4,7 @@ VERSION=`./scripts/get-tag.sh`
 
 # The build target should stay at the top since we want it to be the default target.
 build: pkg/web/ui/dist
-	go build -ldflags "-X github.com/conduitio/conduit/pkg/conduit.version=${VERSION}" -o conduit -tags ui ./cmd/conduit/main.go
+	go build -ldflags "-X 'github.com/conduitio/conduit/pkg/conduit.version=${VERSION}'" -o conduit -tags ui ./cmd/conduit/main.go
 	@echo "\nBuild complete. Enjoy using Conduit!"
 	@echo "Get started by running:"
 	@echo " ./conduit"
