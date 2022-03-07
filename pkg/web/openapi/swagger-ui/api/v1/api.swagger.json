@@ -844,43 +844,6 @@
         ]
       }
     },
-    "/v1/plugin/{name}": {
-      "get": {
-        "operationId": "PluginService_GetPlugin",
-        "responses": {
-          "200": {
-            "description": "",
-            "schema": {
-              "$ref": "#/definitions/v1PluginSpecifications"
-            }
-          },
-          "500": {
-            "description": "",
-            "schema": {
-              "$ref": "#/definitions/googlerpcStatus"
-            },
-            "examples": {
-              "application/json": {
-                "code": 13,
-                "message": "server error",
-                "details": []
-              }
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "name",
-            "in": "path",
-            "required": true,
-            "type": "string"
-          }
-        ],
-        "tags": [
-          "PluginService"
-        ]
-      }
-    },
     "/v1/plugins": {
       "get": {
         "operationId": "PluginService_ListPlugins",
@@ -908,6 +871,15 @@
             }
           }
         },
+        "parameters": [
+          {
+            "name": "name",
+            "description": "regex to filter plugins by name.",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
         "tags": [
           "PluginService"
         ]
@@ -1229,25 +1201,60 @@
     "PluginSpecificationsParameter": {
       "type": "object",
       "properties": {
-        "default": {
+        "name": {
           "type": "string"
-        },
-        "required": {
-          "type": "boolean"
         },
         "description": {
           "type": "string"
         },
         "type": {
-          "$ref": "#/definitions/v1PluginSpecificationsType"
+          "$ref": "#/definitions/PluginSpecificationsParameterType"
         },
-        "enum": {
+        "validations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/PluginSpecificationsValidation"
+          }
+        }
+      }
+    },
+    "PluginSpecificationsParameterType": {
+      "type": "string",
+      "enum": [
+        "TYPE_UNSPECIFIED",
+        "TYPE_STRING",
+        "TYPE_NUMBER",
+        "TYPE_BOOL",
+        "TYPE_FILE"
+      ],
+      "default": "TYPE_UNSPECIFIED"
+    },
+    "PluginSpecificationsValidation": {
+      "type": "object",
+      "properties": {
+        "validation": {
+          "$ref": "#/definitions/PluginSpecificationsValidationType"
+        },
+        "value": {
           "type": "array",
           "items": {
             "type": "string"
           }
         }
       }
+    },
+    "PluginSpecificationsValidationType": {
+      "type": "string",
+      "enum": [
+        "TYPE_UNSPECIFIED",
+        "TYPE_REQUIRED",
+        "TYPE_INCLUSION",
+        "TYPE_EXCLUSION",
+        "TYPE_GREATER_THAN",
+        "TYPE_LESS_THAN",
+        "TYPE_REGEX"
+      ],
+      "default": "TYPE_UNSPECIFIED"
     },
     "ProcessorParent": {
       "type": "object",
@@ -1475,14 +1482,6 @@
         }
       }
     },
-    "v1GetPluginResponse": {
-      "type": "object",
-      "properties": {
-        "plugin": {
-          "$ref": "#/definitions/v1PluginSpecifications"
-        }
-      }
-    },
     "v1GetProcessorResponse": {
       "type": "object",
       "properties": {
@@ -1625,18 +1624,6 @@
           }
         }
       }
-    },
-    "v1PluginSpecificationsType": {
-      "type": "string",
-      "enum": [
-        "TYPE_UNSPECIFIED",
-        "TYPE_STRING",
-        "TYPE_INT",
-        "TYPE_FLOAT",
-        "TYPE_BOOL",
-        "TYPE_ENUM"
-      ],
-      "default": "TYPE_UNSPECIFIED"
     },
     "v1Processor": {
       "type": "object",
