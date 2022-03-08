@@ -41,7 +41,7 @@ jobs:
           image-names: conduit
           cut-off: 1 week ago UTC
           account-type: org
-          org-name: conduitio
+          org-name: ConduitIO
           keep-at-least: 5
           token: ${{ secrets.NIGHTLY_BUILD_GH_TOKEN }}
           filter-tags: '*-nightly*'
