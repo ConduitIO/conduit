@@ -4,7 +4,7 @@ on:
   schedule:
     # * is a special character in YAML, so you have to quote this string
     # we want the nightly builds only on work days
-    - cron:  '0 0 * * 1-5'
+    - cron:  '0 0 * * 2-6'
   workflow_dispatch:
 
 jobs:
@@ -41,7 +41,7 @@ jobs:
           image-names: conduit
           cut-off: 1 week ago UTC
           account-type: org
-          org-name: ConduitIO
+          org-name: conduitio
           keep-at-least: 5
           token: ${{ secrets.NIGHTLY_BUILD_GH_TOKEN }}
           filter-tags: '*-nightly*'
