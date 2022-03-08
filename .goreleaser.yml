@@ -37,6 +37,7 @@ changelog:
       - '^test:'
       - '^npm:'
       - '^go.mod:'
+      - '^.github:'
       - Merge branch
 release:
   prerelease: auto
