@@ -846,7 +846,7 @@ message PluginSpecifications{
         TYPE_REGEX = 6;
       }
 
-      Type validation =1;
+      Type type =1;
       // the value to be compared with the parameter,
       // or a comma separated list in case of Validation.TYPE_INCLUSION or Validation.TYPE_EXCLUSION
       string value =2;

@@ -1190,7 +1190,7 @@
     "ParameterValidation": {
       "type": "object",
       "properties": {
-        "validation": {
+        "type": {
           "$ref": "#/definitions/ParameterValidationType"
         },
         "value": {
