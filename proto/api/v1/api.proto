@@ -353,6 +353,7 @@ service PipelineService {
 }
 
 message ListPipelinesRequest {
+  // regex to filter pipelines by name
   string name = 1;
 }
 message ListPipelinesResponse {
@@ -799,3 +800,78 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
     }
   }
 };
+
+service PluginService {
+  rpc ListPlugins(ListPluginsRequest) returns (ListPluginsResponse) {
+    option (google.api.http) = {
+      get: "/v1/plugins"
+      response_body: "plugins"
+    };
+  };
+}
+
+message ListPluginsRequest {
+  // regex to filter plugins by name
+  string name = 1;
+}
+
+message ListPluginsResponse{
+  repeated PluginSpecifications plugins = 1;
+}
+
+message GetPluginRequest {
+  string name = 1;
+}
+
+message GetPluginResponse {
+  PluginSpecifications plugin = 1;
+}
+
+message PluginSpecifications{
+  message Parameter {
+    message Validation{
+      enum Type {
+        TYPE_UNSPECIFIED = 0;
+        // parameter must be present
+        TYPE_REQUIRED = 1;
+        // parameter must be greater than {value}
+        TYPE_GREATER_THAN = 2;
+        // parameter must be less than {value}
+        TYPE_LESS_THAN = 3;
+        // parameter must be included in the comma separated list {value}
+        TYPE_INCLUSION = 4;
+        // parameter must not be included in the comma separated list {value}
+        TYPE_EXCLUSION = 5;
+        // parameter must match the regex {value}
+        TYPE_REGEX = 6;
+      }
+
+      Type type =1;
+      // the value to be compared with the parameter,
+      // or a comma separated list in case of Validation.TYPE_INCLUSION or Validation.TYPE_EXCLUSION
+      string value =2;
+    }
+
+    enum Type {
+      TYPE_UNSPECIFIED = 0;
+      TYPE_STRING = 1;
+      TYPE_NUMBER = 2;
+      TYPE_BOOL = 3;
+      TYPE_FILE = 4;
+      TYPE_DURATION = 5;
+    }
+
+    string description = 1;
+    Type type = 2;
+    repeated Validation validations = 3;
+  }
+
+  string name = 1;
+  string summary = 2;
+  string description = 3;
+  string version = 4;
+  string author = 5;
+  map<string, Parameter> destination_params = 6;
+  map<string, Parameter> source_params = 7;
+}
+

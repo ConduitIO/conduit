@@ -24,6 +24,9 @@
     },
     {
       "name": "InformationService"
+    },
+    {
+      "name": "PluginService"
     }
   ],
   "consumes": [
@@ -367,6 +370,7 @@
         "parameters": [
           {
             "name": "name",
+            "description": "regex to filter pipelines by name.",
             "in": "query",
             "required": false,
             "type": "string"
@@ -840,6 +844,47 @@
         ]
       }
     },
+    "/v1/plugins": {
+      "get": {
+        "operationId": "PluginService_ListPlugins",
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/v1PluginSpecifications"
+              }
+            }
+          },
+          "500": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            },
+            "examples": {
+              "application/json": {
+                "code": 13,
+                "message": "server error",
+                "details": []
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "name",
+            "description": "regex to filter plugins by name.",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "PluginService"
+        ]
+      }
+    },
     "/v1/processors": {
       "get": {
         "operationId": "ProcessorService_ListProcessors",
@@ -1142,6 +1187,32 @@
         }
       }
     },
+    "ParameterValidation": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "$ref": "#/definitions/ParameterValidationType"
+        },
+        "value": {
+          "type": "string",
+          "title": "the value to be compared with the parameter,\nor a comma separated list in case of Validation.TYPE_INCLUSION or Validation.TYPE_EXCLUSION"
+        }
+      }
+    },
+    "ParameterValidationType": {
+      "type": "string",
+      "enum": [
+        "TYPE_UNSPECIFIED",
+        "TYPE_REQUIRED",
+        "TYPE_GREATER_THAN",
+        "TYPE_LESS_THAN",
+        "TYPE_INCLUSION",
+        "TYPE_EXCLUSION",
+        "TYPE_REGEX"
+      ],
+      "default": "TYPE_UNSPECIFIED",
+      "title": "- TYPE_REQUIRED: parameter must be present\n - TYPE_GREATER_THAN: parameter must be greater than {value}\n - TYPE_LESS_THAN: parameter must be less than {value}\n - TYPE_INCLUSION: parameter must be included in the comma separated list {value}\n - TYPE_EXCLUSION: parameter must not be included in the comma separated list {value}\n - TYPE_REGEX: parameter must match the regex {value}"
+    },
     "PipelineState": {
       "type": "object",
       "properties": {
@@ -1152,6 +1223,35 @@
           "type": "string"
         }
       }
+    },
+    "PluginSpecificationsParameter": {
+      "type": "object",
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/definitions/PluginSpecificationsParameterType"
+        },
+        "validations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ParameterValidation"
+          }
+        }
+      }
+    },
+    "PluginSpecificationsParameterType": {
+      "type": "string",
+      "enum": [
+        "TYPE_UNSPECIFIED",
+        "TYPE_STRING",
+        "TYPE_NUMBER",
+        "TYPE_BOOL",
+        "TYPE_FILE",
+        "TYPE_DURATION"
+      ],
+      "default": "TYPE_UNSPECIFIED"
     },
     "ProcessorParent": {
       "type": "object",
@@ -1417,6 +1517,17 @@
         }
       }
     },
+    "v1ListPluginsResponse": {
+      "type": "object",
+      "properties": {
+        "plugins": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/v1PluginSpecifications"
+          }
+        }
+      }
+    },
     "v1ListProcessorsResponse": {
       "type": "object",
       "properties": {
@@ -1478,6 +1589,38 @@
         "STATUS_DEGRADED"
       ],
       "default": "STATUS_UNSPECIFIED"
+    },
+    "v1PluginSpecifications": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "author": {
+          "type": "string"
+        },
+        "destinationParams": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/PluginSpecificationsParameter"
+          }
+        },
+        "sourceParams": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/PluginSpecificationsParameter"
+          }
+        }
+      }
     },
     "v1Processor": {
       "type": "object",
