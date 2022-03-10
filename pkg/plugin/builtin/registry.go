@@ -15,20 +15,20 @@
 package builtin
 
 import (
+	file "github.com/conduitio/conduit-connector-file"
+	generator "github.com/conduitio/conduit-connector-generator"
+	kafka "github.com/conduitio/conduit-connector-kafka"
+	postgres "github.com/conduitio/conduit-connector-postgres"
+	pgdest "github.com/conduitio/conduit-connector-postgres/destination"
+	pgsource "github.com/conduitio/conduit-connector-postgres/source"
+	s3 "github.com/conduitio/conduit-connector-s3"
+	s3destination "github.com/conduitio/conduit-connector-s3/destination"
+	s3source "github.com/conduitio/conduit-connector-s3/source"
+	"github.com/conduitio/conduit-connector-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
 	builtinv1 "github.com/conduitio/conduit/pkg/plugin/builtin/v1"
-	"github.com/conduitio/conduit/pkg/plugin/sdk"
-	"github.com/conduitio/conduit/pkg/plugins/file"
-	"github.com/conduitio/conduit/pkg/plugins/generator"
-	"github.com/conduitio/conduit/pkg/plugins/kafka"
-	"github.com/conduitio/conduit/pkg/plugins/pg"
-	pgdest "github.com/conduitio/conduit/pkg/plugins/pg/destination"
-	pgsource "github.com/conduitio/conduit/pkg/plugins/pg/source"
-	"github.com/conduitio/conduit/pkg/plugins/s3"
-	s3destination "github.com/conduitio/conduit/pkg/plugins/s3/destination"
-	s3source "github.com/conduitio/conduit/pkg/plugins/s3/source"
 )
 
 var (
@@ -37,7 +37,7 @@ var (
 		sdkDispenserFactory(kafka.Specification, kafka.NewSource, kafka.NewDestination),
 		sdkDispenserFactory(generator.Specification, generator.NewSource, nil),
 		sdkDispenserFactory(s3.Specification, s3source.NewSource, s3destination.NewDestination),
-		sdkDispenserFactory(pg.Specification, pgsource.NewSource, pgdest.NewDestination),
+		sdkDispenserFactory(postgres.Specification, pgsource.NewSource, pgdest.NewDestination),
 	}
 )
 

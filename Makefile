@@ -26,19 +26,11 @@ build-server:
 run:
 	go run ./cmd/conduit/main.go
 
-proto: proto-api proto-plugins
+proto: proto-api
 
 proto-api:
 	@echo Generate proto code
 	@buf generate
-
-# TODO remove target once plugins are moved to the connector SDK
-proto-plugins:
-	@echo Generate plugins proto code
-	@protoc -I=pkg/plugins/proto \
-		--go_out=pkg/plugins/proto      --go_opt=paths=source_relative \
-		--go-grpc_out=pkg/plugins/proto --go-grpc_opt=paths=source_relative \
-		pkg/plugins/proto/plugins.proto
 
 proto-update:
 	@echo Download proto dependencies
@@ -69,5 +61,3 @@ pkg/web/ui/dist:
 ui-%:
 	@cd ui && make $*
 
-readme-%:
-	go run ./pkg/plugins/template/main.go pkg/plugins/template/readme-template.md $*

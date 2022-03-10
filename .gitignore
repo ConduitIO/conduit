@@ -24,13 +24,6 @@
 # Badger DB
 conduit.db
 
-# Ignore plugin binaries
-pkg/plugins/file/file
-pkg/plugins/pg/pg
-pkg/plugins/s3/s3
-pkg/plugins/kafka/kafka
-pkg/plugins/generator/generator
-
 # Binary, built with `make build`
 /conduit
 
