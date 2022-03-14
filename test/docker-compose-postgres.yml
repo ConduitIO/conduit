@@ -1,0 +1,30 @@
+version: '2'
+services:
+  pg-0:
+    image: docker.io/bitnami/postgresql-repmgr:11
+    ports:
+      - "5432:5432"
+    volumes:
+      - "pg_0_data:/bitnami/postgresql"
+      - "./conf.d/:/bitnami/postgresql/conf/conf.d/"
+    healthcheck:
+      test: [ "CMD", "pg_isready", "-q", "-d", "meroxadb", "-U", "meroxauser" ]
+      timeout: 30s
+      interval: 10s
+      retries: 5
+    environment:
+      - POSTGRESQL_POSTGRES_PASSWORD=meroxaadmin
+      - POSTGRESQL_USERNAME=meroxauser
+      - POSTGRESQL_PASSWORD=meroxapass
+      - POSTGRESQL_DATABASE=meroxadb
+      - REPMGR_USERNAME=repmgr
+      - REPMGR_PASSWORD=repmgrmeroxa
+      - REPMGR_PRIMARY_HOST=pg-0
+      - REPMGR_PRIMARY_PORT=5432
+      - REPMGR_PARTNER_NODES=pg-0
+      - REPMGR_NODE_NAME=pg-0
+      - REPMGR_NODE_NETWORK_NAME=pg-0
+      - REPMGR_PORT_NUMBER=5432
+volumes:
+  pg_0_data:
+    driver: local
