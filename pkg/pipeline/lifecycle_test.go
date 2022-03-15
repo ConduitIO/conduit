@@ -28,7 +28,6 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/database/inmemory"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/conduitio/conduit/pkg/plugins"
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/golang/mock/gomock"
@@ -52,7 +51,7 @@ func TestServiceLifecycle_PipelineSuccess(t *testing.T) {
 
 	// create mocked connectors
 	ctrl := gomock.NewController(t)
-	source, wantRecords := generatorSource(ctrl, 10, plugins.ErrEndData, false)
+	source, wantRecords := generatorSource(ctrl, 10, ctx.Err(), false)
 	destination := asserterDestination(ctrl, t, wantRecords, false)
 
 	pl, err = ps.AddConnector(ctx, pl, source.ID())

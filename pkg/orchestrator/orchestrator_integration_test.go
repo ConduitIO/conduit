@@ -66,7 +66,7 @@ func TestPipelineSimple(t *testing.T) {
 	assert.Ok(t, err)
 
 	// create connectors
-	sourcePath := "../plugins/fixtures/file-source.txt"
+	sourcePath := "./fixtures/file-source.txt"
 	destinationPath := t.TempDir() + "/destination.txt"
 	_, err = orc.Connectors.Create(
 		ctx,
