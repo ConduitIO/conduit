@@ -1,4 +1,4 @@
-.PHONY: test test-integration build run proto proto-api proto-plugins proto-lint clean download install-tools generate
+.PHONY: test test-integration build run proto-api proto-lint clean download install-tools generate
 
 VERSION=`./scripts/get-tag.sh`
 
@@ -25,8 +25,6 @@ build-server:
 
 run:
 	go run ./cmd/conduit/main.go
-
-proto: proto-api
 
 proto-api:
 	@echo Generate proto code

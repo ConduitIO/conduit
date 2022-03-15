@@ -1,12 +1,11 @@
 version: '3'
 services:
   pg-0:
-    image: postgres
+    image: postgres:14
     ports:
       - "5432:5432"
     volumes:
       - pg_0_data:/bitnami/postgresql
-      - ./conf.d/:/bitnami/postgresql/conf/conf.d/
     environment:
       - POSTGRES_USER=meroxauser
       - POSTGRES_PASSWORD=meroxapass
