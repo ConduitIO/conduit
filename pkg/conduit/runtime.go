@@ -59,6 +59,7 @@ import (
 
 	// NB: anonymous import triggers transform registry creation
 	_ "github.com/conduitio/conduit/pkg/processor/transform/txfbuiltin"
+	_ "github.com/conduitio/conduit/pkg/processor/transform/txfjs"
 )
 
 const (
