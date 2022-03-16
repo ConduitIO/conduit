@@ -30,7 +30,7 @@ require (
 	github.com/prometheus/common v0.32.1
 	github.com/rs/zerolog v1.26.1
 	go.buf.build/library/go-grpc/conduitio/conduit-connector-protocol v1.4.1
-	golang.org/x/tools v0.1.9
+	golang.org/x/tools v0.1.10
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1
 	google.golang.org/genproto v0.0.0-20220308174144-ae0e22291548
 	google.golang.org/grpc v1.46.0-dev
@@ -118,7 +118,7 @@ require (
 	go.uber.org/multierr v1.8.0 // indirect
 	go.uber.org/zap v1.21.0 // indirect
 	golang.org/x/crypto v0.0.0-20211215165025-cf75a172585e // indirect
-	golang.org/x/mod v0.5.1 // indirect
+	golang.org/x/mod v0.6.0-dev.0.20220106191415-9b9b3d81d5e3 // indirect
 	golang.org/x/net v0.0.0-20220225172249-27dd8689420f // indirect
 	golang.org/x/sys v0.0.0-20220307203707-22a9840ba4d7 // indirect
 	golang.org/x/term v0.0.0-20210927222741-03fcf44c2211 // indirect
