@@ -29,13 +29,13 @@ import (
 func TestPipelineOrchestrator_Start_Success(t *testing.T) {
 	ctx := context.Background()
 	db := &inmemory.DB{}
-	plsMock, consMock, procsMock := newMockServices(t)
+	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
 
 	plBefore := &pipeline.Instance{
 		ID:     uuid.NewString(),
 		Status: pipeline.StatusSystemStopped,
 	}
-	orc := NewOrchestrator(db, plsMock, consMock, procsMock)
+	orc := NewOrchestrator(db, plsMock, consMock, procsMock, pluginMock)
 
 	plsMock.EXPECT().
 		Get(gomock.AssignableToTypeOf(ctxType), plBefore.ID).
@@ -51,7 +51,7 @@ func TestPipelineOrchestrator_Start_Success(t *testing.T) {
 func TestPipelineOrchestrator_Start_Fail(t *testing.T) {
 	ctx := context.Background()
 	db := &inmemory.DB{}
-	plsMock, consMock, procsMock := newMockServices(t)
+	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
 
 	plBefore := &pipeline.Instance{
 		ID:     uuid.NewString(),
@@ -63,7 +63,7 @@ func TestPipelineOrchestrator_Start_Fail(t *testing.T) {
 		Get(gomock.AssignableToTypeOf(ctxType), gomock.AssignableToTypeOf("")).
 		Return(nil, wantErr)
 
-	orc := NewOrchestrator(db, plsMock, consMock, procsMock)
+	orc := NewOrchestrator(db, plsMock, consMock, procsMock, pluginMock)
 	err := orc.Pipelines.Start(ctx, plBefore.ID)
 	assert.Error(t, err)
 }
@@ -71,14 +71,14 @@ func TestPipelineOrchestrator_Start_Fail(t *testing.T) {
 func TestPipelineOrchestrator_Stop_Success(t *testing.T) {
 	ctx := context.Background()
 	db := &inmemory.DB{}
-	plsMock, consMock, procsMock := newMockServices(t)
+	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
 
 	plBefore := &pipeline.Instance{
 		ID:     uuid.NewString(),
 		Status: pipeline.StatusRunning,
 	}
 
-	orc := NewOrchestrator(db, plsMock, consMock, procsMock)
+	orc := NewOrchestrator(db, plsMock, consMock, procsMock, pluginMock)
 	plsMock.EXPECT().
 		Get(gomock.AssignableToTypeOf(ctxType), plBefore.ID).
 		Return(plBefore, nil)
@@ -93,7 +93,7 @@ func TestPipelineOrchestrator_Stop_Success(t *testing.T) {
 func TestPipelineOrchestrator_Stop_Fail(t *testing.T) {
 	ctx := context.Background()
 	db := &inmemory.DB{}
-	plsMock, consMock, procsMock := newMockServices(t)
+	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
 
 	plBefore := &pipeline.Instance{
 		ID:     uuid.NewString(),
@@ -105,7 +105,7 @@ func TestPipelineOrchestrator_Stop_Fail(t *testing.T) {
 		Get(gomock.AssignableToTypeOf(ctxType), gomock.AssignableToTypeOf("")).
 		Return(nil, wantErr)
 
-	orc := NewOrchestrator(db, plsMock, consMock, procsMock)
+	orc := NewOrchestrator(db, plsMock, consMock, procsMock, pluginMock)
 	err := orc.Pipelines.Stop(ctx, plBefore.ID)
 	assert.Error(t, err)
 }
@@ -113,7 +113,7 @@ func TestPipelineOrchestrator_Stop_Fail(t *testing.T) {
 func TestPipelineOrchestrator_Update_Success(t *testing.T) {
 	ctx := context.Background()
 	db := &inmemory.DB{}
-	plsMock, consMock, procsMock := newMockServices(t)
+	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
 
 	plBefore := &pipeline.Instance{
 		ID:     uuid.NewString(),
@@ -127,7 +127,7 @@ func TestPipelineOrchestrator_Update_Success(t *testing.T) {
 		Config: pipeline.Config{Name: "new pipeline"},
 	}
 
-	orc := NewOrchestrator(db, plsMock, consMock, procsMock)
+	orc := NewOrchestrator(db, plsMock, consMock, procsMock, pluginMock)
 	plsMock.EXPECT().
 		Get(gomock.AssignableToTypeOf(ctxType), plBefore.ID).
 		Return(plBefore, nil)
@@ -143,7 +143,7 @@ func TestPipelineOrchestrator_Update_Success(t *testing.T) {
 func TestPipelineOrchestrator_Update_PipelineRunning(t *testing.T) {
 	ctx := context.Background()
 	db := &inmemory.DB{}
-	plsMock, consMock, procsMock := newMockServices(t)
+	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
 
 	plBefore := &pipeline.Instance{
 		ID:     uuid.NewString(),
@@ -152,7 +152,7 @@ func TestPipelineOrchestrator_Update_PipelineRunning(t *testing.T) {
 	}
 	newConfig := pipeline.Config{Name: "new pipeline"}
 
-	orc := NewOrchestrator(db, plsMock, consMock, procsMock)
+	orc := NewOrchestrator(db, plsMock, consMock, procsMock, pluginMock)
 	plsMock.EXPECT().
 		Get(gomock.AssignableToTypeOf(ctxType), plBefore.ID).
 		Return(plBefore, nil)
@@ -166,14 +166,14 @@ func TestPipelineOrchestrator_Update_PipelineRunning(t *testing.T) {
 func TestPipelineOrchestrator_Delete_Success(t *testing.T) {
 	ctx := context.Background()
 	db := &inmemory.DB{}
-	plsMock, consMock, procsMock := newMockServices(t)
+	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
 
 	plBefore := &pipeline.Instance{
 		ID:     uuid.NewString(),
 		Status: pipeline.StatusSystemStopped,
 	}
 
-	orc := NewOrchestrator(db, plsMock, consMock, procsMock)
+	orc := NewOrchestrator(db, plsMock, consMock, procsMock, pluginMock)
 	plsMock.EXPECT().
 		Get(gomock.AssignableToTypeOf(ctxType), plBefore.ID).
 		Return(plBefore, nil)
@@ -188,14 +188,14 @@ func TestPipelineOrchestrator_Delete_Success(t *testing.T) {
 func TestPipelineOrchestrator_Delete_PipelineRunning(t *testing.T) {
 	ctx := context.Background()
 	db := &inmemory.DB{}
-	plsMock, consMock, procsMock := newMockServices(t)
+	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
 
 	plBefore := &pipeline.Instance{
 		ID:     uuid.NewString(),
 		Status: pipeline.StatusRunning,
 	}
 
-	orc := NewOrchestrator(db, plsMock, consMock, procsMock)
+	orc := NewOrchestrator(db, plsMock, consMock, procsMock, pluginMock)
 	plsMock.EXPECT().
 		Get(gomock.AssignableToTypeOf(ctxType), plBefore.ID).
 		Return(plBefore, nil)
@@ -208,7 +208,7 @@ func TestPipelineOrchestrator_Delete_PipelineRunning(t *testing.T) {
 func TestPipelineOrchestrator_Delete_PipelineHasProcessorsAttached(t *testing.T) {
 	ctx := context.Background()
 	db := &inmemory.DB{}
-	plsMock, consMock, procsMock := newMockServices(t)
+	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
 
 	plBefore := &pipeline.Instance{
 		ID:           uuid.NewString(),
@@ -216,7 +216,7 @@ func TestPipelineOrchestrator_Delete_PipelineHasProcessorsAttached(t *testing.T)
 		ProcessorIDs: []string{uuid.NewString()},
 	}
 
-	orc := NewOrchestrator(db, plsMock, consMock, procsMock)
+	orc := NewOrchestrator(db, plsMock, consMock, procsMock, pluginMock)
 	plsMock.EXPECT().
 		Get(gomock.AssignableToTypeOf(ctxType), plBefore.ID).
 		Return(plBefore, nil)
@@ -229,7 +229,7 @@ func TestPipelineOrchestrator_Delete_PipelineHasProcessorsAttached(t *testing.T)
 func TestPipelineOrchestrator_Delete_PipelineHasConnectorsAttached(t *testing.T) {
 	ctx := context.Background()
 	db := &inmemory.DB{}
-	plsMock, consMock, procsMock := newMockServices(t)
+	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
 
 	plBefore := &pipeline.Instance{
 		ID:           uuid.NewString(),
@@ -237,7 +237,7 @@ func TestPipelineOrchestrator_Delete_PipelineHasConnectorsAttached(t *testing.T)
 		ConnectorIDs: []string{uuid.NewString()},
 	}
 
-	orc := NewOrchestrator(db, plsMock, consMock, procsMock)
+	orc := NewOrchestrator(db, plsMock, consMock, procsMock, pluginMock)
 	plsMock.EXPECT().
 		Get(gomock.AssignableToTypeOf(ctxType), plBefore.ID).
 		Return(plBefore, nil)
@@ -250,10 +250,10 @@ func TestPipelineOrchestrator_Delete_PipelineHasConnectorsAttached(t *testing.T)
 func TestPipelineOrchestrator_Delete_PipelineDoesntExist(t *testing.T) {
 	ctx := context.Background()
 	db := &inmemory.DB{}
-	plsMock, consMock, procsMock := newMockServices(t)
+	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
 
 	wantErr := cerrors.New("pipeline doesn't exist")
-	orc := NewOrchestrator(db, plsMock, consMock, procsMock)
+	orc := NewOrchestrator(db, plsMock, consMock, procsMock, pluginMock)
 	plsMock.EXPECT().
 		Get(gomock.AssignableToTypeOf(ctxType), gomock.AssignableToTypeOf("")).
 		Return(nil, wantErr)
