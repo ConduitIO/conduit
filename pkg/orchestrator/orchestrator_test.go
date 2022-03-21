@@ -27,10 +27,11 @@ import (
 // a context is passed to a function.
 var ctxType = reflect.TypeOf((*context.Context)(nil)).Elem()
 
-func newMockServices(t *testing.T) (*mock.PipelineService, *mock.ConnectorService, *mock.ProcessorService) {
+func newMockServices(t *testing.T) (*mock.PipelineService, *mock.ConnectorService, *mock.ProcessorService, *mock.PluginService) {
 	ctrl := gomock.NewController(t)
 
 	return mock.NewPipelineService(ctrl),
 		mock.NewConnectorService(ctrl),
-		mock.NewProcessorService(ctrl)
+		mock.NewProcessorService(ctrl),
+		mock.NewPluginService(ctrl)
 }

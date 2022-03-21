@@ -16,7 +16,6 @@ package plugin
 
 import (
 	"context"
-
 	"github.com/conduitio/conduit/pkg/record"
 )
 
@@ -108,7 +107,25 @@ type Parameter struct {
 	// Default is the default value of the parameter, if any.
 	Default string
 	// Required is whether it must be provided in the Config or not.
-	Required bool
+	Type string
 	// Description holds a description of the field and how to configure it.
 	Description string
+	//
+	Validations []Validation
 }
+
+type Validation struct {
+	VType ValidationType
+	Value string
+}
+
+type ValidationType int64
+
+const (
+	ValidationTypeRequired ValidationType = iota
+	ValidationTypeGreaterThan
+	ValidationTypeLessThan
+	ValidationTypeExclusion
+	ValidationTypeInclusion
+	ValidationTypeRegex
+)

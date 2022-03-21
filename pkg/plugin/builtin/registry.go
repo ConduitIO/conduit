@@ -42,6 +42,8 @@ var (
 )
 
 type Registry struct {
+	logger log.CtxLogger
+
 	builders map[string]DispenserFactory
 }
 
@@ -96,4 +98,23 @@ func (r *Registry) New(logger log.CtxLogger, name string) (plugin.Dispenser, err
 		return nil, cerrors.Errorf("plugin %q not found", name)
 	}
 	return builder(name, logger), nil
+}
+
+func (r *Registry) List() (map[string]plugin.Specification, error) {
+	logger := r.logger.WithComponent("plugin")
+
+	specs := make(map[string]plugin.Specification)
+
+	for name, dispenser := range r.builders {
+		d := dispenser(name, logger)
+		spec, err := d.DispenseSpecifier()
+		if err != nil {
+			panic(cerrors.Errorf("could not dispense specifier for built in plugin: %w", err))
+		}
+		specs[plugin.BuiltinPluginPrefix+name], err = spec.Specify()
+		if err != nil {
+			panic(cerrors.Errorf("could not get specs for built in plugin: %w", err))
+		}
+	}
+	return specs, nil
 }

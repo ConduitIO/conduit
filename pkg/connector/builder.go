@@ -37,14 +37,14 @@ type Builder interface {
 type DefaultBuilder struct {
 	logger    log.CtxLogger
 	persister *Persister
-	registry  *plugin.Registry
+	service   *plugin.Service
 }
 
-func NewDefaultBuilder(logger log.CtxLogger, persister *Persister, registry *plugin.Registry) *DefaultBuilder {
+func NewDefaultBuilder(logger log.CtxLogger, persister *Persister, service *plugin.Service) *DefaultBuilder {
 	return &DefaultBuilder{
 		logger:    logger,
 		persister: persister,
-		registry:  registry,
+		service:   service,
 	}
 }
 
@@ -67,7 +67,7 @@ func (b *DefaultBuilder) Init(c Connector, id string, config Config) error {
 		Str(log.ConnectorIDField, id).
 		Logger()
 
-	p, err := b.registry.New(connLogger, config.Plugin)
+	p, err := b.service.NewDispenser(connLogger, config.Plugin)
 	if err != nil {
 		return cerrors.Errorf("could not create plugin %q: %w", config.Plugin, err)
 	}

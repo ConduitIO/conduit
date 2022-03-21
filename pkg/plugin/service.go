@@ -15,12 +15,13 @@
 package plugin
 
 import (
+	"context"
 	"strings"
 
 	"github.com/conduitio/conduit/pkg/foundation/log"
 )
 
-const builtinPluginPrefix = "builtin:"
+const BuiltinPluginPrefix = "builtin:"
 
 // registry is an object that can create new plugin dispensers. We need to use
 // an interface to prevent a cyclic dependency between the plugin package and
@@ -34,26 +35,39 @@ const builtinPluginPrefix = "builtin:"
 //   compiled independently of Conduit and can be included at runtime.
 type registry interface {
 	New(logger log.CtxLogger, name string) (Dispenser, error)
+	List() (map[string]Specification, error)
 }
 
-type Registry struct {
+type Service struct {
+	logger log.CtxLogger
+
 	builtin    registry
 	standalone registry
 }
 
-func NewRegistry(builtin registry, standalone registry) *Registry {
-	return &Registry{
+func NewService(builtin registry, standalone registry) *Service {
+	return &Service{
 		builtin:    builtin,
 		standalone: standalone,
 	}
 }
 
-func (r *Registry) New(logger log.CtxLogger, name string) (Dispenser, error) {
+func (r *Service) NewDispenser(logger log.CtxLogger, name string) (Dispenser, error) {
 	logger = logger.WithComponent("plugin")
 
-	if strings.HasPrefix(name, builtinPluginPrefix) {
-		return r.builtin.New(logger, strings.TrimPrefix(name, builtinPluginPrefix))
+	if strings.HasPrefix(name, BuiltinPluginPrefix) {
+		return r.builtin.New(logger, strings.TrimPrefix(name, BuiltinPluginPrefix))
 	}
 
 	return r.standalone.New(logger, name)
+}
+
+func (r *Service) List(ctx context.Context) (map[string]Specification, error) {
+	// todo: attache standalone list
+	specs, err := r.builtin.List()
+	if err != nil {
+		return nil, err
+	}
+
+	return specs, nil
 }

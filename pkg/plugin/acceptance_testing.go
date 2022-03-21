@@ -97,12 +97,12 @@ func testSpecifier_Specify_Success(t *testing.T, tdf testDispenserFunc) {
 		Version:     "v1.2.3",
 		Author:      "Donald Duck",
 		SourceParams: map[string]Parameter{
-			"param1.1": {Default: "foo", Required: false, Description: "Param 1.1 description"},
-			"param2.1": {Default: "bar", Required: true, Description: "Param 1.2 description"},
+			"param1.1": {Default: "foo", Description: "Param 1.1 description"},
+			"param2.1": {Default: "bar", Description: "Param 1.2 description", Validations: []Validation{{VType: ValidationTypeRequired}}},
 		},
 		DestinationParams: map[string]Parameter{
-			"param2.1": {Default: "baz", Required: false, Description: "Param 2.1 description"},
-			"param2.2": {Default: "qux", Required: true, Description: "Param 2.2 description"},
+			"param2.1": {Default: "baz", Description: "Param 2.1 description"},
+			"param2.2": {Default: "qux", Description: "Param 2.2 description", Validations: []Validation{{VType: ValidationTypeRequired}}},
 		},
 	}
 

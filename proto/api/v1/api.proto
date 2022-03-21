@@ -819,14 +819,6 @@ message ListPluginsResponse{
   repeated PluginSpecifications plugins = 1;
 }
 
-message GetPluginRequest {
-  string name = 1;
-}
-
-message GetPluginResponse {
-  PluginSpecifications plugin = 1;
-}
-
 message PluginSpecifications{
   message Parameter {
     message Validation{
@@ -862,8 +854,9 @@ message PluginSpecifications{
     }
 
     string description = 1;
-    Type type = 2;
-    repeated Validation validations = 3;
+    string default = 2;
+    Type type = 3;
+    repeated Validation validations = 4;
   }
 
   string name = 1;
