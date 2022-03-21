@@ -16,6 +16,7 @@ package plugin
 
 import (
 	"context"
+
 	"github.com/conduitio/conduit/pkg/record"
 )
 

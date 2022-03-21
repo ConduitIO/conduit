@@ -39,8 +39,6 @@ type registry interface {
 }
 
 type Service struct {
-	logger log.CtxLogger
-
 	builtin    registry
 	standalone registry
 }
