@@ -43,16 +43,9 @@ func TestPluginAPIv1_ListPluginByName(t *testing.T) {
 		standalone.NewRegistry(logger),
 	)
 
-	var plist []*apiv1.PluginSpecifications
 	plsMap, err := pluginService.List(ctx)
 	if err != nil {
 		t.Fatal(err)
-	}
-
-	// build the mock returned map
-	for k, _ := range plsMap {
-		spec := plsMap[k]
-		plist = append(plist, toproto.Plugin(&spec))
 	}
 
 	psMock.EXPECT().
@@ -67,7 +60,7 @@ func TestPluginAPIv1_ListPluginByName(t *testing.T) {
 
 	// build the expected response
 	var plugins []*apiv1.PluginSpecifications
-	for k, _ := range plsMap {
+	for k := range plsMap {
 		plugins = append(plugins, &apiv1.PluginSpecifications{
 			Name:              plsMap[k].Name,
 			Summary:           plsMap[k].Summary,
