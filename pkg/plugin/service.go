@@ -18,6 +18,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 )
 
@@ -61,10 +62,10 @@ func (r *Service) NewDispenser(logger log.CtxLogger, name string) (Dispenser, er
 }
 
 func (r *Service) List(ctx context.Context) (map[string]Specification, error) {
-	// todo: attache standalone list
+	// todo: attach standalone list
 	specs, err := r.builtin.List()
 	if err != nil {
-		return nil, err
+		return nil, cerrors.Errorf("failed to list the builtin plugins: %w", err)
 	}
 
 	return specs, nil

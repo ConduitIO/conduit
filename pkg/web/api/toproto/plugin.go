@@ -19,6 +19,17 @@ import (
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 )
 
+func _() {
+	// An "invalid array index" compiler error signifies that the constant values have changed.
+	var vTypes [1]struct{}
+	_ = vTypes[int(plugin.ValidationTypeRequired)-int(apiv1.PluginSpecifications_Parameter_Validation_TYPE_REQUIRED)]
+	_ = vTypes[int(plugin.ValidationTypeGreaterThan)-int(apiv1.PluginSpecifications_Parameter_Validation_TYPE_GREATER_THAN)]
+	_ = vTypes[int(plugin.ValidationTypeLessThan)-int(apiv1.PluginSpecifications_Parameter_Validation_TYPE_LESS_THAN)]
+	_ = vTypes[int(plugin.ValidationTypeInclusion)-int(apiv1.PluginSpecifications_Parameter_Validation_TYPE_INCLUSION)]
+	_ = vTypes[int(plugin.ValidationTypeExclusion)-int(apiv1.PluginSpecifications_Parameter_Validation_TYPE_EXCLUSION)]
+	_ = vTypes[int(plugin.ValidationTypeRegex)-int(apiv1.PluginSpecifications_Parameter_Validation_TYPE_REGEX)]
+}
+
 func Plugin(in *plugin.Specification) *apiv1.PluginSpecifications {
 	return &apiv1.PluginSpecifications{
 		Name:              in.Name,
@@ -45,31 +56,17 @@ func PluginParamsMap(in map[string]plugin.Parameter) map[string]*apiv1.PluginSpe
 }
 
 func PluginParamValidations(in []plugin.Validation) []*apiv1.PluginSpecifications_Parameter_Validation {
+	// we need an empty slice here so that the returned JSON would be "validations":[] instead of "validations":null
 	out := make([]*apiv1.PluginSpecifications_Parameter_Validation, 0)
 	for _, v := range in {
 		out = append(out, &apiv1.PluginSpecifications_Parameter_Validation{
-			Type:  PluginValidationType(v.VType),
+			Type:  ValidationType(v.Type),
 			Value: v.Value,
 		})
 	}
 	return out
 }
 
-func PluginValidationType(in plugin.ValidationType) apiv1.PluginSpecifications_Parameter_Validation_Type {
-	switch in {
-	case plugin.ValidationTypeRequired:
-		return apiv1.PluginSpecifications_Parameter_Validation_TYPE_REQUIRED
-	case plugin.ValidationTypeGreaterThan:
-		return apiv1.PluginSpecifications_Parameter_Validation_TYPE_GREATER_THAN
-	case plugin.ValidationTypeLessThan:
-		return apiv1.PluginSpecifications_Parameter_Validation_TYPE_LESS_THAN
-	case plugin.ValidationTypeExclusion:
-		return apiv1.PluginSpecifications_Parameter_Validation_TYPE_EXCLUSION
-	case plugin.ValidationTypeInclusion:
-		return apiv1.PluginSpecifications_Parameter_Validation_TYPE_INCLUSION
-	case plugin.ValidationTypeRegex:
-		return apiv1.PluginSpecifications_Parameter_Validation_TYPE_REGEX
-	}
-
-	return apiv1.PluginSpecifications_Parameter_Validation_TYPE_UNSPECIFIED
+func ValidationType(in plugin.ValidationType) apiv1.PluginSpecifications_Parameter_Validation_Type {
+	return apiv1.PluginSpecifications_Parameter_Validation_Type(in)
 }

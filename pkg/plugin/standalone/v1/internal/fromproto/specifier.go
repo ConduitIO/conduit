@@ -57,10 +57,10 @@ func SpecifierSpecifyResponse(in *connectorv1.Specifier_Specify_Response) (plugi
 }
 
 func SpecifierParameter(in *connectorv1.Specifier_Parameter) (plugin.Parameter, error) {
-	validations := make([]plugin.Validation, 0)
+	var validations []plugin.Validation
 	if in.Required {
 		validations = append(validations, plugin.Validation{
-			VType: plugin.ValidationTypeRequired,
+			Type: plugin.ValidationTypeRequired,
 		})
 	}
 

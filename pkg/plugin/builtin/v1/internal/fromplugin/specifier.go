@@ -40,10 +40,10 @@ func SpecifierSpecifyResponse(in cpluginv1.SpecifierSpecifyResponse) (plugin.Spe
 }
 
 func SpecifierParameter(in cpluginv1.SpecifierParameter) plugin.Parameter {
-	validations := make([]plugin.Validation, 0)
+	var validations []plugin.Validation
 	if in.Required {
 		validations = append(validations, plugin.Validation{
-			VType: plugin.ValidationTypeRequired,
+			Type: plugin.ValidationTypeRequired,
 		})
 	}
 	return plugin.Parameter{

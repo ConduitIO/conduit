@@ -162,23 +162,21 @@ func newServices(
 	connPersister *connector.Persister,
 ) (*pipeline.Service, *connector.Service, *processor.Service, *plugin.Service, error) {
 	pipelineService := pipeline.NewService(logger, db)
+	pluginService := plugin.NewService(
+		builtin.NewRegistry(logger, builtin.DefaultDispenserFactories...),
+		standalone.NewRegistry(logger),
+	)
 	connectorService := connector.NewService(
 		logger,
 		db,
 		connector.NewDefaultBuilder(
 			logger,
 			connPersister,
-			plugin.NewService(
-				builtin.NewRegistry(builtin.DefaultDispenserFactories...),
-				standalone.NewRegistry(logger),
-			),
+			pluginService,
 		),
 	)
 	processorService := processor.NewService(logger, db, processor.GlobalBuilderRegistry)
-	pluginService := plugin.NewService(
-		builtin.NewRegistry(builtin.DefaultDispenserFactories...),
-		standalone.NewRegistry(logger),
-	)
+
 	return pipelineService, connectorService, processorService, pluginService, nil
 }
 

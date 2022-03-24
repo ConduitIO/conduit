@@ -20,4 +20,5 @@ var (
 	ErrStreamNotOpen    = cerrors.New("stream not open")
 	ErrPluginRunning    = cerrors.New("plugin is running")
 	ErrPluginNotRunning = cerrors.New("plugin is not running")
+	ErrPluginListFail   = cerrors.New("error while listing plugins")
 )

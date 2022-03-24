@@ -56,12 +56,14 @@ func (p *PluginAPIv1) ListPlugins(
 		var err error
 		nameFilter, err = regexp.Compile("^" + req.GetName() + "$")
 		if err != nil {
-			// todo: make plugin error
-			return nil, status.PipelineError(cerrors.New("invalid name regex"))
+			return nil, status.PluginError(cerrors.New("invalid name regex"))
 		}
 	}
 
-	mp, _ := p.ps.List(ctx)
+	mp, err := p.ps.List(ctx)
+	if err != nil {
+		return nil, status.PluginError(err)
+	}
 	var plist []*apiv1.PluginSpecifications
 
 	for k, v := range mp {

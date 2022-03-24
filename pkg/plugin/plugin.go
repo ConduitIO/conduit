@@ -111,22 +111,22 @@ type Parameter struct {
 	Type string
 	// Description holds a description of the field and how to configure it.
 	Description string
-	//
+	// Validations list of validations to check for the parameter.
 	Validations []Validation
 }
 
 type Validation struct {
-	VType ValidationType
+	Type  ValidationType
 	Value string
 }
 
 type ValidationType int64
 
 const (
-	ValidationTypeRequired ValidationType = iota
+	ValidationTypeRequired ValidationType = iota + 1
 	ValidationTypeGreaterThan
 	ValidationTypeLessThan
-	ValidationTypeExclusion
 	ValidationTypeInclusion
+	ValidationTypeExclusion
 	ValidationTypeRegex
 )

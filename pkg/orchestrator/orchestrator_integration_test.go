@@ -50,7 +50,7 @@ func TestPipelineSimple(t *testing.T) {
 	})
 
 	pluginService := plugin.NewService(
-		builtin.NewRegistry(builtin.DefaultDispenserFactories...),
+		builtin.NewRegistry(logger, builtin.DefaultDispenserFactories...),
 		standalone.NewRegistry(logger),
 	)
 
