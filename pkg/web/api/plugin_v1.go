@@ -66,11 +66,11 @@ func (p *PluginAPIv1) ListPlugins(
 	}
 	var plist []*apiv1.PluginSpecifications
 
-	for k, v := range mp {
-		if nameFilter != nil && !nameFilter.MatchString(v.Name) {
+	for name, v := range mp {
+		if nameFilter != nil && !nameFilter.MatchString(name) {
 			continue // don't add to result list, filter didn't match
 		}
-		plist = append(plist, toproto.Plugin(mp[k]))
+		plist = append(plist, toproto.Plugin(name, v))
 	}
 
 	return &apiv1.ListPluginsResponse{Plugins: plist}, nil
