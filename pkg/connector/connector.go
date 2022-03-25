@@ -95,7 +95,17 @@ type Destination interface {
 	State() DestinationState
 	SetState(state DestinationState)
 
+	// Write sends a record to the connector and returns nil if the record was
+	// successfully received. This does not necessarily mean that the record was
+	// successfully processed and written to the 3rd party system, it might have
+	// been cached and will be written at a later point in time. Acknowledgments
+	// can be received through Ack to figure out if a record was actually
+	// processed or if an error happened while processing it.
 	Write(context.Context, record.Record) error
+	// Ack blocks until an acknowledgment is received that a record was
+	// processed and returns the position of that record. If the record wasn't
+	// successfully processed the function returns the position and an error.
+	Ack(context.Context) (record.Position, error)
 }
 
 // Config collects common data stored for a connector.

@@ -78,17 +78,20 @@ func (n *DestinationNode) Run(ctx context.Context) (err error) {
 
 		writeTime := time.Now()
 		err = n.Destination.Write(msg.Ctx, msg.Record)
-		n.ConnectorTimer.Update(time.Since(writeTime))
+		if err == nil {
+			// TODO do this properly, this is only an intermediary step towards
+			//  the solution of providing asynchronous writes
+			_, err = n.Destination.Ack(msg.Ctx)
+		}
 		if err != nil {
-			n.logger.Trace(msg.Ctx).Err(err).Msg("nacking message")
-			err = msg.Nack(err)
+			err = n.nack(msg, err)
 			if err != nil {
-				msg.Drop()
-				return cerrors.Errorf("error writing to destination: %w", err)
+				return err
 			}
 			// nack was handled successfully, we recovered
 			continue
 		}
+		n.ConnectorTimer.Update(time.Since(writeTime))
 
 		n.logger.Trace(msg.Ctx).Msg("acking message")
 		err = msg.Ack()
@@ -96,6 +99,16 @@ func (n *DestinationNode) Run(ctx context.Context) (err error) {
 			return cerrors.Errorf("error acking message: %w", err)
 		}
 	}
+}
+
+func (n *DestinationNode) nack(msg *Message, reason error) error {
+	n.logger.Trace(msg.Ctx).Err(reason).Msg("nacking message")
+	err := msg.Nack(reason)
+	if err != nil {
+		msg.Drop()
+		return cerrors.Errorf("error writing to destination: %w", err)
+	}
+	return nil
 }
 
 // Sub will subscribe this node to an incoming channel.

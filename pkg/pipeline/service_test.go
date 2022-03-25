@@ -59,6 +59,7 @@ func (s *serviceTestSetup) basicDestinationMock(ctrl *gomock.Controller) *connmo
 	destination.EXPECT().Open(gomock.Any()).AnyTimes()
 	destination.EXPECT().Teardown(gomock.Any()).AnyTimes()
 	destination.EXPECT().Write(gomock.Any(), gomock.Any()).AnyTimes()
+	destination.EXPECT().Ack(gomock.Any()).AnyTimes()
 	destination.EXPECT().Errors().AnyTimes()
 	return destination
 }

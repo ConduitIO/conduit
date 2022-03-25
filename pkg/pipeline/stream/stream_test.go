@@ -310,6 +310,7 @@ func printerDestination(ctrl *gomock.Controller, logger log.CtxLogger, nodeID st
 			Msg("got record")
 		return nil
 	}).AnyTimes()
+	destination.EXPECT().Ack(gomock.Any()).Return(nil, nil).AnyTimes()
 	destination.EXPECT().Errors().Return(make(chan error))
 
 	return destination

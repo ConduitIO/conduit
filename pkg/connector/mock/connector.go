@@ -252,6 +252,21 @@ func (m *Destination) EXPECT() *DestinationMockRecorder {
 	return m.recorder
 }
 
+// Ack mocks base method.
+func (m *Destination) Ack(arg0 context.Context) (record.Position, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Ack", arg0)
+	ret0, _ := ret[0].(record.Position)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Ack indicates an expected call of Ack.
+func (mr *DestinationMockRecorder) Ack(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Ack", reflect.TypeOf((*Destination)(nil).Ack), arg0)
+}
+
 // Config mocks base method.
 func (m *Destination) Config() connector.Config {
 	m.ctrl.T.Helper()

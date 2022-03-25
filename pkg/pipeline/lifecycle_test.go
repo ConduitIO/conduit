@@ -255,6 +255,7 @@ func asserterDestination(ctrl *gomock.Controller, t *testing.T, want []record.Re
 		recordCount++
 		return nil
 	}).AnyTimes()
+	destination.EXPECT().Ack(gomock.Any()).Return(nil, nil).AnyTimes()
 	t.Cleanup(func() {
 		assert.Equal(t, len(want), recordCount)
 	})
