@@ -69,6 +69,10 @@ func ProcessorError(err error) error {
 	return grpcstatus.Error(code, err.Error())
 }
 
+func PluginError(err error) error {
+	return grpcstatus.Error(codeFromError(err), err.Error())
+}
+
 func codeFromError(err error) codes.Code {
 	switch {
 	case cerrors.Is(err, cerrors.ErrNotImpl):

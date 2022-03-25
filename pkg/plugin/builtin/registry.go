@@ -42,6 +42,8 @@ var (
 )
 
 type Registry struct {
+	logger log.CtxLogger
+
 	builders map[string]DispenserFactory
 }
 
@@ -70,7 +72,7 @@ func sdkDispenserFactory(
 	}
 }
 
-func NewRegistry(factories ...DispenserFactory) *Registry {
+func NewRegistry(logger log.CtxLogger, factories ...DispenserFactory) *Registry {
 	builders := make(map[string]DispenserFactory, len(factories))
 	for _, builder := range factories {
 		p := builder("", log.CtxLogger{})
@@ -87,7 +89,7 @@ func NewRegistry(factories ...DispenserFactory) *Registry {
 		}
 		builders[specs.Name] = builder
 	}
-	return &Registry{builders: builders}
+	return &Registry{builders: builders, logger: logger.WithComponent("builtin.Registry")}
 }
 
 func (r *Registry) New(logger log.CtxLogger, name string) (plugin.Dispenser, error) {
@@ -96,4 +98,21 @@ func (r *Registry) New(logger log.CtxLogger, name string) (plugin.Dispenser, err
 		return nil, cerrors.Errorf("plugin %q not found", name)
 	}
 	return builder(name, logger), nil
+}
+
+func (r *Registry) List() (map[string]plugin.Specification, error) {
+	specs := make(map[string]plugin.Specification)
+
+	for name, dispenser := range r.builders {
+		d := dispenser(name, r.logger)
+		spec, err := d.DispenseSpecifier()
+		if err != nil {
+			return nil, cerrors.Errorf("could not dispense specifier for built in plugin: %w", err)
+		}
+		specs[plugin.BuiltinPluginPrefix+name], err = spec.Specify()
+		if err != nil {
+			return nil, cerrors.Errorf("could not get specs for built in plugin: %w", err)
+		}
+	}
+	return specs, nil
 }

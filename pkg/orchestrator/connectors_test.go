@@ -31,7 +31,7 @@ import (
 func TestConnectorOrchestrator_Create_Success(t *testing.T) {
 	ctx := context.Background()
 	db := &inmemory.DB{}
-	plsMock, consMock, procsMock := newMockServices(t)
+	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
 	connBuilder := connmock.Builder{Ctrl: gomock.NewController(t)}
 
 	pl := &pipeline.Instance{
@@ -60,7 +60,7 @@ func TestConnectorOrchestrator_Create_Success(t *testing.T) {
 		AddConnector(gomock.AssignableToTypeOf(ctxType), pl, want.ID()).
 		Return(pl, nil)
 
-	orc := NewOrchestrator(db, plsMock, consMock, procsMock)
+	orc := NewOrchestrator(db, plsMock, consMock, procsMock, pluginMock)
 	got, err := orc.Connectors.Create(ctx, connector.TypeSource, config)
 	assert.Ok(t, err)
 	assert.Equal(t, want, got)
@@ -69,7 +69,7 @@ func TestConnectorOrchestrator_Create_Success(t *testing.T) {
 func TestConnectorOrchestrator_Create_PipelineNotExist(t *testing.T) {
 	ctx := context.Background()
 	db := &inmemory.DB{}
-	plsMock, consMock, procsMock := newMockServices(t)
+	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
 
 	pipelineID := uuid.NewString()
 	wantErr := pipeline.ErrInstanceNotFound
@@ -77,7 +77,7 @@ func TestConnectorOrchestrator_Create_PipelineNotExist(t *testing.T) {
 		Get(gomock.AssignableToTypeOf(ctxType), pipelineID).
 		Return(nil, wantErr)
 
-	orc := NewOrchestrator(db, plsMock, consMock, procsMock)
+	orc := NewOrchestrator(db, plsMock, consMock, procsMock, pluginMock)
 	got, err := orc.Connectors.Create(ctx, connector.TypeSource, connector.Config{PipelineID: pipelineID})
 	assert.Error(t, err)
 	assert.True(t, cerrors.Is(err, wantErr), "errors did not match")
@@ -87,7 +87,7 @@ func TestConnectorOrchestrator_Create_PipelineNotExist(t *testing.T) {
 func TestConnectorOrchestrator_Create_PipelineRunning(t *testing.T) {
 	ctx := context.Background()
 	db := &inmemory.DB{}
-	plsMock, consMock, procsMock := newMockServices(t)
+	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
 
 	pl := &pipeline.Instance{
 		ID:     uuid.NewString(),
@@ -98,7 +98,7 @@ func TestConnectorOrchestrator_Create_PipelineRunning(t *testing.T) {
 		Get(gomock.AssignableToTypeOf(ctxType), pl.ID).
 		Return(pl, nil)
 
-	orc := NewOrchestrator(db, plsMock, consMock, procsMock)
+	orc := NewOrchestrator(db, plsMock, consMock, procsMock, pluginMock)
 	got, err := orc.Connectors.Create(ctx, connector.TypeSource, connector.Config{PipelineID: pl.ID})
 	assert.Error(t, err)
 	assert.True(t, cerrors.Is(err, pipeline.ErrPipelineRunning), "expected pipeline.ErrPipelineRunning")
@@ -108,7 +108,7 @@ func TestConnectorOrchestrator_Create_PipelineRunning(t *testing.T) {
 func TestConnectorOrchestrator_Create_CreateConnectorError(t *testing.T) {
 	ctx := context.Background()
 	db := &inmemory.DB{}
-	plsMock, consMock, procsMock := newMockServices(t)
+	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
 
 	pl := &pipeline.Instance{
 		ID:     uuid.NewString(),
@@ -128,7 +128,7 @@ func TestConnectorOrchestrator_Create_CreateConnectorError(t *testing.T) {
 		).
 		Return(nil, wantErr)
 
-	orc := NewOrchestrator(db, plsMock, consMock, procsMock)
+	orc := NewOrchestrator(db, plsMock, consMock, procsMock, pluginMock)
 	got, err := orc.Connectors.Create(ctx, connector.TypeSource, config)
 	assert.Error(t, err)
 	assert.True(t, cerrors.Is(err, wantErr), "errors did not match")
@@ -138,7 +138,7 @@ func TestConnectorOrchestrator_Create_CreateConnectorError(t *testing.T) {
 func TestConnectorOrchestrator_Create_AddConnectorError(t *testing.T) {
 	ctx := context.Background()
 	db := &inmemory.DB{}
-	plsMock, consMock, procsMock := newMockServices(t)
+	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
 	connBuilder := connmock.Builder{Ctrl: gomock.NewController(t)}
 
 	pl := &pipeline.Instance{
@@ -168,7 +168,7 @@ func TestConnectorOrchestrator_Create_AddConnectorError(t *testing.T) {
 		Delete(gomock.AssignableToTypeOf(ctxType), conn.ID()).
 		Return(nil)
 
-	orc := NewOrchestrator(db, plsMock, consMock, procsMock)
+	orc := NewOrchestrator(db, plsMock, consMock, procsMock, pluginMock)
 	got, err := orc.Connectors.Create(ctx, connector.TypeSource, config)
 	assert.Error(t, err)
 	assert.True(t, cerrors.Is(err, wantErr), "errors did not match")
@@ -178,7 +178,7 @@ func TestConnectorOrchestrator_Create_AddConnectorError(t *testing.T) {
 func TestConnectorOrchestrator_Delete_Success(t *testing.T) {
 	ctx := context.Background()
 	db := &inmemory.DB{}
-	plsMock, consMock, procsMock := newMockServices(t)
+	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
 	connBuilder := connmock.Builder{Ctrl: gomock.NewController(t)}
 
 	pl := &pipeline.Instance{
@@ -201,7 +201,7 @@ func TestConnectorOrchestrator_Delete_Success(t *testing.T) {
 		RemoveConnector(gomock.AssignableToTypeOf(ctxType), pl, want.ID()).
 		Return(pl, nil)
 
-	orc := NewOrchestrator(db, plsMock, consMock, procsMock)
+	orc := NewOrchestrator(db, plsMock, consMock, procsMock, pluginMock)
 	err := orc.Connectors.Delete(ctx, want.ID())
 	assert.Ok(t, err)
 }
@@ -209,7 +209,7 @@ func TestConnectorOrchestrator_Delete_Success(t *testing.T) {
 func TestConnectorOrchestrator_Delete_ConnectorNotExist(t *testing.T) {
 	ctx := context.Background()
 	db := &inmemory.DB{}
-	plsMock, consMock, procsMock := newMockServices(t)
+	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
 	connBuilder := connmock.Builder{Ctrl: gomock.NewController(t)}
 
 	pl := &pipeline.Instance{
@@ -230,7 +230,7 @@ func TestConnectorOrchestrator_Delete_ConnectorNotExist(t *testing.T) {
 		Get(gomock.AssignableToTypeOf(ctxType), want.ID()).
 		Return(nil, wantErr)
 
-	orc := NewOrchestrator(db, plsMock, consMock, procsMock)
+	orc := NewOrchestrator(db, plsMock, consMock, procsMock, pluginMock)
 	err := orc.Connectors.Delete(ctx, want.ID())
 	assert.Error(t, err)
 	assert.True(t, cerrors.Is(err, wantErr), "errors did not match")
@@ -239,7 +239,7 @@ func TestConnectorOrchestrator_Delete_ConnectorNotExist(t *testing.T) {
 func TestConnectorOrchestrator_Delete_PipelineRunning(t *testing.T) {
 	ctx := context.Background()
 	db := &inmemory.DB{}
-	plsMock, consMock, procsMock := newMockServices(t)
+	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
 	connBuilder := connmock.Builder{Ctrl: gomock.NewController(t)}
 
 	pl := &pipeline.Instance{
@@ -262,7 +262,7 @@ func TestConnectorOrchestrator_Delete_PipelineRunning(t *testing.T) {
 		Get(gomock.AssignableToTypeOf(ctxType), pl.ID).
 		Return(pl, nil)
 
-	orc := NewOrchestrator(db, plsMock, consMock, procsMock)
+	orc := NewOrchestrator(db, plsMock, consMock, procsMock, pluginMock)
 	err := orc.Connectors.Delete(ctx, want.ID())
 	assert.Error(t, err)
 	assert.Equal(t, pipeline.ErrPipelineRunning, err)
@@ -271,7 +271,7 @@ func TestConnectorOrchestrator_Delete_PipelineRunning(t *testing.T) {
 func TestConnectorOrchestrator_Delete_ProcessorAttached(t *testing.T) {
 	ctx := context.Background()
 	db := &inmemory.DB{}
-	plsMock, consMock, procsMock := newMockServices(t)
+	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
 	connBuilder := connmock.Builder{Ctrl: gomock.NewController(t)}
 
 	pl := &pipeline.Instance{
@@ -291,7 +291,7 @@ func TestConnectorOrchestrator_Delete_ProcessorAttached(t *testing.T) {
 		Get(gomock.AssignableToTypeOf(ctxType), want.ID()).
 		Return(want, nil)
 
-	orc := NewOrchestrator(db, plsMock, consMock, procsMock)
+	orc := NewOrchestrator(db, plsMock, consMock, procsMock, pluginMock)
 	err := orc.Connectors.Delete(ctx, want.ID())
 	assert.Error(t, err)
 	assert.True(t, cerrors.Is(err, ErrConnectorHasProcessorsAttached), "errors did not match")
@@ -300,7 +300,7 @@ func TestConnectorOrchestrator_Delete_ProcessorAttached(t *testing.T) {
 func TestConnectorOrchestrator_Delete_Fail(t *testing.T) {
 	ctx := context.Background()
 	db := &inmemory.DB{}
-	plsMock, consMock, procsMock := newMockServices(t)
+	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
 	connBuilder := connmock.Builder{Ctrl: gomock.NewController(t)}
 
 	pl := &pipeline.Instance{
@@ -326,7 +326,7 @@ func TestConnectorOrchestrator_Delete_Fail(t *testing.T) {
 		Delete(gomock.AssignableToTypeOf(ctxType), want.ID()).
 		Return(wantErr)
 
-	orc := NewOrchestrator(db, plsMock, consMock, procsMock)
+	orc := NewOrchestrator(db, plsMock, consMock, procsMock, pluginMock)
 	err := orc.Connectors.Delete(ctx, want.ID())
 	assert.Error(t, err)
 	assert.True(t, cerrors.Is(err, wantErr), "errors did not match")
@@ -335,7 +335,7 @@ func TestConnectorOrchestrator_Delete_Fail(t *testing.T) {
 func TestConnectorOrchestrator_Delete_RemoveConnectorFailed(t *testing.T) {
 	ctx := context.Background()
 	db := &inmemory.DB{}
-	plsMock, consMock, procsMock := newMockServices(t)
+	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
 	connBuilder := connmock.Builder{Ctrl: gomock.NewController(t)}
 
 	pl := &pipeline.Instance{
@@ -373,7 +373,7 @@ func TestConnectorOrchestrator_Delete_RemoveConnectorFailed(t *testing.T) {
 		).
 		Return(want, nil)
 
-	orc := NewOrchestrator(db, plsMock, consMock, procsMock)
+	orc := NewOrchestrator(db, plsMock, consMock, procsMock, pluginMock)
 	err := orc.Connectors.Delete(ctx, want.ID())
 	assert.Error(t, err)
 	assert.True(t, cerrors.Is(err, wantErr), "errors did not match")
@@ -382,7 +382,7 @@ func TestConnectorOrchestrator_Delete_RemoveConnectorFailed(t *testing.T) {
 func TestConnectorOrchestrator_Update_Success(t *testing.T) {
 	ctx := context.Background()
 	db := &inmemory.DB{}
-	plsMock, consMock, procsMock := newMockServices(t)
+	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
 	connBuilder := connmock.Builder{Ctrl: gomock.NewController(t)}
 
 	pl := &pipeline.Instance{
@@ -421,7 +421,7 @@ func TestConnectorOrchestrator_Update_Success(t *testing.T) {
 		).
 		Return(want, nil)
 
-	orc := NewOrchestrator(db, plsMock, consMock, procsMock)
+	orc := NewOrchestrator(db, plsMock, consMock, procsMock, pluginMock)
 	got, err := orc.Connectors.Update(ctx, before.ID(), newConfig)
 	assert.NotNil(t, got)
 	assert.Equal(t, got, want)
@@ -431,7 +431,7 @@ func TestConnectorOrchestrator_Update_Success(t *testing.T) {
 func TestConnectorOrchestrator_Update_ConnectorNotExist(t *testing.T) {
 	ctx := context.Background()
 	db := &inmemory.DB{}
-	plsMock, consMock, procsMock := newMockServices(t)
+	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
 	connBuilder := connmock.Builder{Ctrl: gomock.NewController(t)}
 
 	pl := &pipeline.Instance{
@@ -457,7 +457,7 @@ func TestConnectorOrchestrator_Update_ConnectorNotExist(t *testing.T) {
 		Get(gomock.AssignableToTypeOf(ctxType), before.ID()).
 		Return(nil, wantErr)
 
-	orc := NewOrchestrator(db, plsMock, consMock, procsMock)
+	orc := NewOrchestrator(db, plsMock, consMock, procsMock, pluginMock)
 	got, err := orc.Connectors.Update(ctx, before.ID(), newConfig)
 	assert.Nil(t, got)
 	assert.Error(t, err)
@@ -467,7 +467,7 @@ func TestConnectorOrchestrator_Update_ConnectorNotExist(t *testing.T) {
 func TestConnectorOrchestrator_Update_PipelineRunning(t *testing.T) {
 	ctx := context.Background()
 	db := &inmemory.DB{}
-	plsMock, consMock, procsMock := newMockServices(t)
+	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
 	connBuilder := connmock.Builder{Ctrl: gomock.NewController(t)}
 
 	pl := &pipeline.Instance{
@@ -495,7 +495,7 @@ func TestConnectorOrchestrator_Update_PipelineRunning(t *testing.T) {
 		Get(gomock.AssignableToTypeOf(ctxType), pl.ID).
 		Return(pl, nil)
 
-	orc := NewOrchestrator(db, plsMock, consMock, procsMock)
+	orc := NewOrchestrator(db, plsMock, consMock, procsMock, pluginMock)
 	got, err := orc.Connectors.Update(ctx, conn.ID(), newConfig)
 	assert.Nil(t, got)
 	assert.Error(t, err)
@@ -505,7 +505,7 @@ func TestConnectorOrchestrator_Update_PipelineRunning(t *testing.T) {
 func TestConnectorOrchestrator_Update_Fail(t *testing.T) {
 	ctx := context.Background()
 	db := &inmemory.DB{}
-	plsMock, consMock, procsMock := newMockServices(t)
+	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
 	connBuilder := connmock.Builder{Ctrl: gomock.NewController(t)}
 
 	pl := &pipeline.Instance{
@@ -546,7 +546,7 @@ func TestConnectorOrchestrator_Update_Fail(t *testing.T) {
 		).
 		Return(want, wantErr)
 
-	orc := NewOrchestrator(db, plsMock, consMock, procsMock)
+	orc := NewOrchestrator(db, plsMock, consMock, procsMock, pluginMock)
 	got, err := orc.Connectors.Update(ctx, before.ID(), newConfig)
 	assert.Nil(t, got)
 	assert.Error(t, err)

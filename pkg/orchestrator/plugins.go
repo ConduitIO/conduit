@@ -16,22 +16,12 @@ package orchestrator
 
 import (
 	"context"
-	"reflect"
-	"testing"
 
-	"github.com/conduitio/conduit/pkg/orchestrator/mock"
-	"github.com/golang/mock/gomock"
+	"github.com/conduitio/conduit/pkg/plugin"
 )
 
-// ctxType can be used in tests in call to gomock.AssignableToTypeOf to assert
-// a context is passed to a function.
-var ctxType = reflect.TypeOf((*context.Context)(nil)).Elem()
+type PluginOrchestrator base
 
-func newMockServices(t *testing.T) (*mock.PipelineService, *mock.ConnectorService, *mock.ProcessorService, *mock.PluginService) {
-	ctrl := gomock.NewController(t)
-
-	return mock.NewPipelineService(ctrl),
-		mock.NewConnectorService(ctrl),
-		mock.NewProcessorService(ctrl),
-		mock.NewPluginService(ctrl)
+func (ps *PluginOrchestrator) List(ctx context.Context) (map[string]plugin.Specification, error) {
+	return ps.plugins.List(ctx)
 }

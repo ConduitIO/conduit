@@ -49,16 +49,17 @@ func TestPipelineSimple(t *testing.T) {
 		assert.Ok(t, err)
 	})
 
-	pluginRegistry := plugin.NewRegistry(
-		builtin.NewRegistry(builtin.DefaultDispenserFactories...),
+	pluginService := plugin.NewService(
+		builtin.NewRegistry(logger, builtin.DefaultDispenserFactories...),
 		standalone.NewRegistry(logger),
 	)
 
 	orc := NewOrchestrator(
 		db,
 		pipeline.NewService(logger, db),
-		connector.NewService(logger, db, connector.NewDefaultBuilder(logger, connector.NewPersister(logger, db, time.Second, 3), pluginRegistry)),
+		connector.NewService(logger, db, connector.NewDefaultBuilder(logger, connector.NewPersister(logger, db, time.Second, 3), pluginService)),
 		processor.NewService(logger, db, processor.GlobalBuilderRegistry),
+		pluginService,
 	)
 
 	// create a host pipeline

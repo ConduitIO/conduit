@@ -108,7 +108,25 @@ type Parameter struct {
 	// Default is the default value of the parameter, if any.
 	Default string
 	// Required is whether it must be provided in the Config or not.
-	Required bool
+	Type string
 	// Description holds a description of the field and how to configure it.
 	Description string
+	// Validations list of validations to check for the parameter.
+	Validations []Validation
 }
+
+type Validation struct {
+	Type  ValidationType
+	Value string
+}
+
+type ValidationType int64
+
+const (
+	ValidationTypeRequired ValidationType = iota + 1
+	ValidationTypeGreaterThan
+	ValidationTypeLessThan
+	ValidationTypeInclusion
+	ValidationTypeExclusion
+	ValidationTypeRegex
+)

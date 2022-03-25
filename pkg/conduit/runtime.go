@@ -117,12 +117,12 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 	)
 
 	// Create all necessary internal services
-	plService, connService, procService, err := newServices(logger, db, connectorPersister)
+	plService, connService, procService, pluginService, err := newServices(logger, db, connectorPersister)
 	if err != nil {
 		return nil, cerrors.Errorf("failed to create services: %w", err)
 	}
 
-	orc := orchestrator.NewOrchestrator(db, plService, connService, procService)
+	orc := orchestrator.NewOrchestrator(db, plService, connService, procService, pluginService)
 
 	r := &Runtime{
 		Config:       cfg,
@@ -160,22 +160,24 @@ func newServices(
 	logger log.CtxLogger,
 	db database.DB,
 	connPersister *connector.Persister,
-) (*pipeline.Service, *connector.Service, *processor.Service, error) {
+) (*pipeline.Service, *connector.Service, *processor.Service, *plugin.Service, error) {
 	pipelineService := pipeline.NewService(logger, db)
+	pluginService := plugin.NewService(
+		builtin.NewRegistry(logger, builtin.DefaultDispenserFactories...),
+		standalone.NewRegistry(logger),
+	)
 	connectorService := connector.NewService(
 		logger,
 		db,
 		connector.NewDefaultBuilder(
 			logger,
 			connPersister,
-			plugin.NewRegistry(
-				builtin.NewRegistry(builtin.DefaultDispenserFactories...),
-				standalone.NewRegistry(logger),
-			),
+			pluginService,
 		),
 	)
 	processorService := processor.NewService(logger, db, processor.GlobalBuilderRegistry)
-	return pipelineService, connectorService, processorService, nil
+
+	return pipelineService, connectorService, processorService, pluginService, nil
 }
 
 // Run initializes all of Conduit's underlying services and starts the GRPC and
@@ -285,6 +287,9 @@ func (r *Runtime) serveGRPCAPI(ctx context.Context, t *tomb.Tomb) (net.Addr, err
 	connectorAPIv1 := api.NewConnectorAPIv1(r.Orchestrator.Connectors)
 	connectorAPIv1.Register(grpcServer)
 
+	pluginAPIv1 := api.NewPluginAPIv1(r.Orchestrator.Plugins)
+	pluginAPIv1.Register(grpcServer)
+
 	info := api.NewInformation(Version(false))
 	info.Register(grpcServer)
 
@@ -328,6 +333,12 @@ func (r *Runtime) serveHTTPAPI(
 	if err != nil {
 		return nil, cerrors.Errorf("failed to register processors handler: %w", err)
 	}
+
+	err = apiv1.RegisterPluginServiceHandler(ctx, gwmux, conn)
+	if err != nil {
+		return nil, cerrors.Errorf("failed to register plugins handler: %w", err)
+	}
+
 	err = apiv1.RegisterInformationServiceHandler(ctx, gwmux, conn)
 	if err != nil {
 		return nil, cerrors.Errorf("failed to register Information handler: %w", err)
