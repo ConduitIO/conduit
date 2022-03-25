@@ -70,8 +70,7 @@ func (p *PluginAPIv1) ListPlugins(
 		if nameFilter != nil && !nameFilter.MatchString(v.Name) {
 			continue // don't add to result list, filter didn't match
 		}
-		spec := mp[k]
-		plist = append(plist, toproto.Plugin(&spec))
+		plist = append(plist, toproto.Plugin(mp[k]))
 	}
 
 	return &apiv1.ListPluginsResponse{Plugins: plist}, nil

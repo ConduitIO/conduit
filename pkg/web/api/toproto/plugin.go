@@ -30,7 +30,7 @@ func _() {
 	_ = vTypes[int(plugin.ValidationTypeRegex)-int(apiv1.PluginSpecifications_Parameter_Validation_TYPE_REGEX)]
 }
 
-func Plugin(in *plugin.Specification) *apiv1.PluginSpecifications {
+func Plugin(in plugin.Specification) *apiv1.PluginSpecifications {
 	return &apiv1.PluginSpecifications{
 		Name:              in.Name,
 		Summary:           in.Summary,

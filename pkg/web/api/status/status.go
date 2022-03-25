@@ -19,7 +19,6 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/orchestrator"
 	"github.com/conduitio/conduit/pkg/pipeline"
-	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/conduitio/conduit/pkg/processor"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
@@ -71,19 +70,7 @@ func ProcessorError(err error) error {
 }
 
 func PluginError(err error) error {
-	var code codes.Code
-
-	// todo: decide which errors go to which codes
-	switch {
-	case cerrors.Is(err, plugin.ErrStreamNotOpen):
-		code = codes.InvalidArgument
-	case cerrors.Is(err, plugin.ErrPluginListFail):
-		code = codes.NotFound
-	default:
-		code = codeFromError(err)
-	}
-
-	return grpcstatus.Error(code, err.Error())
+	return grpcstatus.Error(codeFromError(err), err.Error())
 }
 
 func codeFromError(err error) codes.Code {

@@ -89,7 +89,7 @@ func NewRegistry(logger log.CtxLogger, factories ...DispenserFactory) *Registry 
 		}
 		builders[specs.Name] = builder
 	}
-	return &Registry{builders: builders, logger: logger.WithComponent("plugin")}
+	return &Registry{builders: builders, logger: logger.WithComponent("builtin.Registry")}
 }
 
 func (r *Registry) New(logger log.CtxLogger, name string) (plugin.Dispenser, error) {

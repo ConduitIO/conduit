@@ -20,15 +20,11 @@ import (
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/foundation/assert"
-	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
-	"github.com/conduitio/conduit/pkg/plugin/builtin"
-	"github.com/conduitio/conduit/pkg/plugin/standalone"
 	"github.com/conduitio/conduit/pkg/web/api/mock"
 	"github.com/conduitio/conduit/pkg/web/api/toproto"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	"github.com/golang/mock/gomock"
-	"github.com/rs/zerolog"
 )
 
 func TestPluginAPIv1_ListPluginByName(t *testing.T) {
@@ -36,16 +32,30 @@ func TestPluginAPIv1_ListPluginByName(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	psMock := mock.NewPluginOrchestrator(ctrl)
 	api := NewPluginAPIv1(psMock)
-	logger := log.New(zerolog.Nop())
 
-	pluginService := plugin.NewService(
-		builtin.NewRegistry(logger, builtin.DefaultDispenserFactories...),
-		standalone.NewRegistry(logger),
-	)
+	names := []string{"do-not-want-this-plugin", "want-p1", "want-p2", "skip", "another-skipped"}
 
-	plsMap, err := pluginService.List(ctx)
-	if err != nil {
-		t.Fatal(err)
+	plsMap := make(map[string]plugin.Specification)
+	pls := make([]plugin.Specification, 0)
+
+	for _, name := range names {
+		ps := plugin.Specification{
+			Name:        name,
+			Description: "desc",
+			Version:     "v1.0",
+			Author:      "Aaron",
+			SourceParams: map[string]plugin.Parameter{
+				"param": {
+					Type: "string",
+					Validations: []plugin.Validation{{
+						Type: plugin.ValidationTypeRequired,
+					}},
+				},
+			},
+			DestinationParams: map[string]plugin.Parameter{},
+		}
+		pls = append(pls, ps)
+		plsMap[name] = ps
 	}
 
 	psMock.EXPECT().
@@ -53,28 +63,33 @@ func TestPluginAPIv1_ListPluginByName(t *testing.T) {
 		Return(plsMap, nil).
 		Times(1)
 
+	want := &apiv1.ListPluginsResponse{
+		Plugins: []*apiv1.PluginSpecifications{
+			{
+				Name:              pls[1].Name,
+				Description:       pls[1].Description,
+				Summary:           pls[1].Summary,
+				Author:            pls[1].Author,
+				Version:           pls[1].Version,
+				SourceParams:      toproto.PluginParamsMap(pls[1].SourceParams),
+				DestinationParams: toproto.PluginParamsMap(pls[1].DestinationParams),
+			},
+			{
+				Name:              pls[2].Name,
+				Description:       pls[2].Description,
+				Summary:           pls[2].Summary,
+				Author:            pls[2].Author,
+				Version:           pls[2].Version,
+				SourceParams:      toproto.PluginParamsMap(pls[2].SourceParams),
+				DestinationParams: toproto.PluginParamsMap(pls[2].DestinationParams),
+			},
+		},
+	}
+
 	got, err := api.ListPlugins(
 		ctx,
-		&apiv1.ListPluginsRequest{},
+		&apiv1.ListPluginsRequest{Name: "want-.*"},
 	)
-
-	// build the expected response
-	var plugins []*apiv1.PluginSpecifications
-	for k := range plsMap {
-		plugins = append(plugins, &apiv1.PluginSpecifications{
-			Name:              plsMap[k].Name,
-			Summary:           plsMap[k].Summary,
-			Description:       plsMap[k].Description,
-			Version:           plsMap[k].Version,
-			Author:            plsMap[k].Author,
-			SourceParams:      toproto.PluginParamsMap(plsMap[k].SourceParams),
-			DestinationParams: toproto.PluginParamsMap(plsMap[k].DestinationParams),
-		})
-	}
-
-	want := &apiv1.ListPluginsResponse{
-		Plugins: plugins,
-	}
 
 	assert.Ok(t, err)
 
