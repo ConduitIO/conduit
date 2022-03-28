@@ -124,8 +124,8 @@ github.com/beorn7/perks v1.0.0/go.mod h1:KWe93zE9D1o94FZ5RNwFwVgaQK1VOXiVxmqh+Ce
 github.com/beorn7/perks v1.0.1 h1:VlbKKnNfV8bJzeqoa4cOKqO6bYr3WgKZxO8Z16+hsOM=
 github.com/beorn7/perks v1.0.1/go.mod h1:G2ZrVWU2WbWT9wwq4/hrbKbnv/1ERSJQ0ibhJ6rlkpw=
 github.com/boombuler/barcode v1.0.0/go.mod h1:paBWMcWSl3LHKBqUq+rly7CNSldXjb2rDl3JlRe0mD8=
-github.com/bufbuild/buf v1.2.1 h1:rEjRF9noYZHbU4OjVbzUHptm88kZSsnth9D1mHRk5ic=
-github.com/bufbuild/buf v1.2.1/go.mod h1:2+YDhYsLYzHnEZvigKafao+dY58ZHp830hC9T5NVZY0=
+github.com/bufbuild/buf v1.3.0 h1:rjLGRdAF0rK2UcfoHMUVcI95aejdulh3vs6F51q/ZGE=
+github.com/bufbuild/buf v1.3.0/go.mod h1:2+YDhYsLYzHnEZvigKafao+dY58ZHp830hC9T5NVZY0=
 github.com/census-instrumentation/opencensus-proto v0.2.1/go.mod h1:f6KPmirojxKA12rnyqOA5BBL4O983OfeGPqjHWSTneU=
 github.com/cespare/xxhash v1.1.0 h1:a6HrQnmkObjyL+Gs60czilIUGqrzKutQD6XZog3p+ko=
 github.com/cespare/xxhash v1.1.0/go.mod h1:XrSqR1VqqWfGrhpAt58auRo0WTKS1nRRg3ghfAqPWnc=
