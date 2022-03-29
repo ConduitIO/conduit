@@ -14,7 +14,11 @@
 
 package conduit
 
-import "github.com/conduitio/conduit/pkg/foundation/cerrors"
+import (
+	"strings"
+
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+)
 
 const (
 	DBTypeBadger   = "badger"
@@ -40,6 +44,11 @@ type Config struct {
 	}
 	GRPC struct {
 		Address string
+	}
+
+	Log struct {
+		Level  string
+		Format string
 	}
 }
 
@@ -70,6 +79,21 @@ func (c Config) Validate() error {
 
 	if c.HTTP.Address == "" {
 		return requiredConfigFieldErr("http.address")
+	}
+
+	if c.Log.Level == "" {
+		return requiredConfigFieldErr("log.level")
+	}
+	levels := map[string]int{"debug": 1, "info": 2, "warn": 3, "error": 4, "trace": 5}
+	if _, f := levels[c.Log.Level]; !f {
+		return invalidConfigFieldErr("log.level")
+	}
+
+	if c.Log.Format == "" {
+		return requiredConfigFieldErr("log.format")
+	}
+	if !strings.EqualFold(c.Log.Format, "cli") && !strings.EqualFold(c.Log.Format, "json") {
+		return invalidConfigFieldErr("log.format")
 	}
 
 	return nil
