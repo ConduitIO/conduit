@@ -62,7 +62,7 @@ export default class PipelineModel extends Model {
   }
 
   get isPaused() {
-    return this.isDegraded || this.state.status === 'STATUS_PAUSED';
+    return this.isDegraded || this.state.status === 'STATUS_STOPPED';
   }
 
   async startPipeline() {

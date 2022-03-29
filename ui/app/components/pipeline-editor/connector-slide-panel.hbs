@@ -69,6 +69,7 @@
               class="w-full text-teal-900 text-sm"
               {{on "click" (fn (mut this.isShowingAvailableTransforms) true)}}
               data-test-button="add-connector-transform"
+              disabled={{@pipeline.isRunning}}
             >
               Add transform
             </Mxa::Button>
@@ -82,61 +83,97 @@
               }}
             >
               {{#each this.wrappedSortedTransforms as |connectorTransform idx|}}
-                <li
-                  tabindex="0"
-                  class="{{if
-                      (eq connectorTransform this.draggingItem)
-                      'border-purple-600 z-50 transition-none'
-                      'border-transparent z-0 transition'
-                    }}
-                    relative mb-2 rounded border-2"
-                  {{sortable-item
-                    model=connectorTransform
-                    onDragStart=(action this.onDragStart)
-                    onDragStop=(action this.onDragStop)
-                  }}
-                  data-test-connector-transform
-                >
-                  <div
-                    class="py-4 pr-4 pl-2 rounded border border-gray-300 flex items-center justify-between
-                      {{if connectorTransform.hasPendingChanges 'bg-purple-100' 'bg-white'}}"
+                {{#if @pipeline.isRunning}}
+                  <li
+                    tabindex="0"
+                    class="relative mb-2 rounded border-2 border-transparent z-0"
+                    data-test-connector-transform
                   >
-                    <div class="flex items-center">
-                      <span class="cursor-move" {{sortable-handle}}>
-                        <svg class="text-gray-500 fill-current h-4 w-4">
-                          <use xlink:href="/ui/svg-defs.svg#drag-handle-16"></use>
-                        </svg>
-                      </span>
-                      <div
-                        class="rounded-full h-6 w-6 bg-gray-100 text-center text-sm flex items-center justify-center mr-2"
-                      >
-                        {{add-one idx}}
-                      </div>
-                      <div>
-                        <div class="text-xs font-medium">
-                          {{connectorTransform.transform.label}}
+                    <div
+                      class="py-4 pr-4 pl-2 rounded border border-gray-300 flex items-center justify-between
+                        {{if connectorTransform.hasPendingChanges 'bg-purple-100' 'bg-white'}}"
+                    >
+                      <div class="flex items-center">
+                        <div
+                          class="rounded-full h-6 w-6 bg-gray-100 text-center text-sm flex items-center justify-center mr-2"
+                        >
+                          {{add-one idx}}
                         </div>
-                        <div class="text-gray-500 text-xs">
-                          {{connectorTransform.transform.name}}
+                        <div>
+                          <div class="text-xs font-medium">
+                            {{connectorTransform.transform.label}}
+                          </div>
+                          <div class="text-gray-500 text-xs">
+                            {{connectorTransform.transform.name}}
+                          </div>
                         </div>
                       </div>
                     </div>
-                    <svg
-                      class="text-gray-500 stroke-current h-4 w-4 cursor-pointer"
-                      fill="none"
-                      {{on "click" (fn this.showEditTransformPanel connectorTransform)}}
-                      data-test-button="edit-transform"
+                  </li>
+                {{else}}
+                  <li
+                    tabindex="0"
+                    class="{{if
+                        (eq connectorTransform this.draggingItem)
+                        'border-purple-600 z-50 transition-none'
+                        'border-transparent z-0 transition'
+                      }}
+                      relative mb-2 rounded border-2"
+                    {{sortable-item
+                      model=connectorTransform
+                      onDragStart=(action this.onDragStart)
+                      onDragStop=(action this.onDragStop)
+                    }}
+                    data-test-connector-transform
+                  >
+                    <div
+                      class="py-4 pr-4 pl-2 rounded border border-gray-300 flex items-center justify-between
+                        {{if connectorTransform.hasPendingChanges 'bg-purple-100' 'bg-white'}}"
                     >
-                      <use xlink:href="/ui/svg-defs.svg#pencil-16"></use>
-                    </svg>
-                  </div>
-                </li>
+                      <div class="flex items-center">
+                        <span class="cursor-move" {{sortable-handle}}>
+                          <svg class="text-gray-500 fill-current h-4 w-4">
+                            <use xlink:href="/ui/svg-defs.svg#drag-handle-16"></use>
+                          </svg>
+                        </span>
+                        <div
+                          class="rounded-full h-6 w-6 bg-gray-100 text-center text-sm flex items-center justify-center mr-2"
+                        >
+                          {{add-one idx}}
+                        </div>
+                        <div>
+                          <div class="text-xs font-medium">
+                            {{connectorTransform.transform.label}}
+                          </div>
+                          <div class="text-gray-500 text-xs">
+                            {{connectorTransform.transform.name}}
+                          </div>
+                        </div>
+                      </div>
+                      <svg
+                        class="text-gray-500 stroke-current h-4 w-4 cursor-pointer"
+                        fill="none"
+                        {{on "click" (fn this.showEditTransformPanel connectorTransform)}}
+                        data-test-button="edit-transform"
+                      >
+                        <use xlink:href="/ui/svg-defs.svg#pencil-16"></use>
+                      </svg>
+                    </div>
+                  </li>
+
+                {{/if}}
+
               {{else}}
                 <div class="text-center text-gray-500 text-xs">
                   No transforms configured for this source
                 </div>
               {{/each}}
             </ol>
+
+            {{#if @pipeline.isRunning}}
+              <div class="text-orange-700 text-sm font-normal flex justify-end mt-4">You must pause
+                the pipeline if you'd like to update it's transforms.</div>
+            {{/if}}
           </div>
         </div>
       </div>
