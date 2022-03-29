@@ -94,6 +94,8 @@ func TestConfig_Validate(t *testing.T) {
 			validConfig.DB.Postgres.ConnectionString = "postgres://user:pass@localhost:5432/mydb?sslmode=disable"
 			validConfig.HTTP.Address = ":8080"
 			validConfig.GRPC.Address = ":8084"
+			validConfig.Log.Level = "info"
+			validConfig.Log.Format = "cli"
 
 			underTest := tc.setupConfig(validConfig)
 			got := underTest.Validate()
