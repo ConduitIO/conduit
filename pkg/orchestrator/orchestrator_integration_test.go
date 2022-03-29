@@ -18,6 +18,7 @@ package orchestrator
 
 import (
 	"context"
+	"github.com/rs/zerolog"
 	"os"
 	"testing"
 	"time"
@@ -39,7 +40,7 @@ func TestPipelineSimple(t *testing.T) {
 	ctx, killAll := context.WithCancel(context.Background())
 	defer killAll()
 
-	logger := log.Dev()
+	logger := log.InitLogger(zerolog.InfoLevel, "cli")
 	logger = logger.CtxHook(ctxutil.MessageIDLogCtxHook{})
 
 	db, err := badger.New(logger.Logger, t.TempDir()+"/test.db")
