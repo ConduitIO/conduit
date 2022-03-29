@@ -192,8 +192,10 @@ func (s *Service) buildNodes(
 	nodes = append(nodes, destinationNodes...)
 
 	// set up logger for all nodes that need it
+	nodeLogger := s.logger
+	nodeLogger.Logger = nodeLogger.Logger.With().Str(log.PipelineIDField, pl.ID).Logger()
 	for _, n := range nodes {
-		stream.SetLogger(n, s.logger)
+		stream.SetLogger(n, nodeLogger)
 	}
 
 	return nodes, nil
