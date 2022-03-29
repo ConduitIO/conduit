@@ -8,7 +8,7 @@ require (
 	github.com/bufbuild/buf v1.3.0
 	github.com/conduitio/conduit-connector-file v0.0.0-20220304165706-4cd6c275d2b0
 	github.com/conduitio/conduit-connector-generator v0.0.0-20220307173009-a7744489e9db
-	github.com/conduitio/conduit-connector-kafka v0.0.0-20220308200638-8cc8f4b37298
+	github.com/conduitio/conduit-connector-kafka v0.0.0-20220329121707-8ec203838b8c
 	github.com/conduitio/conduit-connector-postgres v0.0.0-20220309140906-3330671a8955
 	github.com/conduitio/conduit-connector-protocol v0.0.0-20220304172523-dcb690811ba6
 	github.com/conduitio/conduit-connector-s3 v0.0.0-20220308112711-bb3e0119a762
@@ -26,12 +26,12 @@ require (
 	github.com/piotrkowalczuk/promgrpc/v4 v4.0.4
 	github.com/prometheus/client_golang v1.12.1
 	github.com/prometheus/client_model v0.2.0
-	github.com/prometheus/common v0.32.1
+	github.com/prometheus/common v0.33.0
 	github.com/rs/zerolog v1.26.1
 	go.buf.build/library/go-grpc/conduitio/conduit-connector-protocol v1.4.1
 	golang.org/x/tools v0.1.10
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1
-	google.golang.org/genproto v0.0.0-20220317150908-0efb43f6373e
+	google.golang.org/genproto v0.0.0-20220329135034-5a5e19f58d62
 	google.golang.org/grpc v1.46.0-dev.0.20220224182858-328efcc9276e
 	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.2.0
 	google.golang.org/protobuf v1.28.0
@@ -43,6 +43,7 @@ require (
 	github.com/antchfx/xpath v1.2.0 // indirect
 	github.com/apache/arrow/go/arrow v0.0.0-20211112161151-bc219186db40 // indirect
 	github.com/apache/thrift v0.16.0 // indirect
+	github.com/avast/retry-go v3.0.0+incompatible // indirect
 	github.com/aws/aws-sdk-go-v2 v1.15.0 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.4.0 // indirect
 	github.com/aws/aws-sdk-go-v2/config v1.15.0 // indirect
@@ -112,6 +113,8 @@ require (
 	github.com/segmentio/kafka-go v0.4.30 // indirect
 	github.com/spf13/cobra v1.4.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
+	github.com/xdg/scram v1.0.5 // indirect
+	github.com/xdg/stringprep v1.0.3 // indirect
 	github.com/xitongsys/parquet-go v1.6.2 // indirect
 	github.com/xitongsys/parquet-go-source v0.0.0-20211228015320-b4f792c43cd0 // indirect
 	go.opencensus.io v0.23.0 // indirect
