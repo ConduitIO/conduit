@@ -365,6 +365,7 @@ func (s *Service) runPipeline(ctx context.Context, pl *Instance) error {
 				return nil
 			}
 			if err != nil {
+				s.logger.Err(ctx, err).Msgf("node %s stopped", node.ID())
 				return cerrors.Errorf("node %s stopped with error: %w", node.ID(), err)
 			}
 			return nil
