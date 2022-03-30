@@ -52,16 +52,23 @@ func Example_simpleStream() {
 		Destination:    printerDestination(ctrl, logger, "printer"),
 		ConnectorTimer: noop.Timer{},
 	}
+	node3 := &stream.AckerNode{
+		Name:        "printer-acker",
+		Destination: node2.Destination,
+	}
+	node2.AckerNode = node3
 
 	stream.SetLogger(node1, logger)
 	stream.SetLogger(node2, logger)
+	stream.SetLogger(node3, logger)
 
 	// put everything together
 	out := node1.Pub()
 	node2.Sub(out)
 
 	var wg sync.WaitGroup
-	wg.Add(2)
+	wg.Add(3)
+	go runNode(ctx, &wg, node3)
 	go runNode(ctx, &wg, node2)
 	go runNode(ctx, &wg, node1)
 
@@ -75,26 +82,26 @@ func Example_simpleStream() {
 	}
 
 	// Output:
-	// DBG got record message_id=generator/1 node_id=printer
-	// DBG received ack message_id=generator/1 node_id=generator
-	// DBG got record message_id=generator/2 node_id=printer
-	// DBG received ack message_id=generator/2 node_id=generator
-	// DBG got record message_id=generator/3 node_id=printer
-	// DBG received ack message_id=generator/3 node_id=generator
-	// DBG got record message_id=generator/4 node_id=printer
-	// DBG received ack message_id=generator/4 node_id=generator
-	// DBG got record message_id=generator/5 node_id=printer
-	// DBG received ack message_id=generator/5 node_id=generator
-	// DBG got record message_id=generator/6 node_id=printer
-	// DBG received ack message_id=generator/6 node_id=generator
-	// DBG got record message_id=generator/7 node_id=printer
-	// DBG received ack message_id=generator/7 node_id=generator
-	// DBG got record message_id=generator/8 node_id=printer
-	// DBG received ack message_id=generator/8 node_id=generator
-	// DBG got record message_id=generator/9 node_id=printer
-	// DBG received ack message_id=generator/9 node_id=generator
-	// DBG got record message_id=generator/10 node_id=printer
-	// DBG received ack message_id=generator/10 node_id=generator
+	// DBG got record message_id=p/generator-1 node_id=printer
+	// DBG received ack message_id=p/generator-1 node_id=generator
+	// DBG got record message_id=p/generator-2 node_id=printer
+	// DBG received ack message_id=p/generator-2 node_id=generator
+	// DBG got record message_id=p/generator-3 node_id=printer
+	// DBG received ack message_id=p/generator-3 node_id=generator
+	// DBG got record message_id=p/generator-4 node_id=printer
+	// DBG received ack message_id=p/generator-4 node_id=generator
+	// DBG got record message_id=p/generator-5 node_id=printer
+	// DBG received ack message_id=p/generator-5 node_id=generator
+	// DBG got record message_id=p/generator-6 node_id=printer
+	// DBG received ack message_id=p/generator-6 node_id=generator
+	// DBG got record message_id=p/generator-7 node_id=printer
+	// DBG received ack message_id=p/generator-7 node_id=generator
+	// DBG got record message_id=p/generator-8 node_id=printer
+	// DBG received ack message_id=p/generator-8 node_id=generator
+	// DBG got record message_id=p/generator-9 node_id=printer
+	// DBG received ack message_id=p/generator-9 node_id=generator
+	// DBG got record message_id=p/generator-10 node_id=printer
+	// DBG received ack message_id=p/generator-10 node_id=generator
 	// INF stopping source connector component=SourceNode node_id=generator
 	// DBG received error on error channel error="error reading from source: stream not open" component=SourceNode node_id=generator
 	// DBG incoming messages channel closed component=DestinationNode node_id=printer
@@ -137,6 +144,16 @@ func Example_complexStream() {
 		Destination:    printerDestination(ctrl, logger, "printer2"),
 		ConnectorTimer: noop.Timer{},
 	}
+	node8 := &stream.AckerNode{
+		Name:        "printer1-acker",
+		Destination: node6.Destination,
+	}
+	node6.AckerNode = node8
+	node9 := &stream.AckerNode{
+		Name:        "printer2-acker",
+		Destination: node7.Destination,
+	}
+	node7.AckerNode = node9
 
 	// put everything together
 	out := node1.Pub()
@@ -155,7 +172,7 @@ func Example_complexStream() {
 	node7.Sub(out)
 
 	// run nodes
-	nodes := []stream.Node{node1, node2, node3, node4, node5, node6, node7}
+	nodes := []stream.Node{node1, node2, node3, node4, node5, node6, node7, node8, node9}
 
 	var wg sync.WaitGroup
 	wg.Add(len(nodes))
@@ -181,66 +198,66 @@ func Example_complexStream() {
 	}
 
 	// Unordered output:
-	// DBG got record message_id=generator2/1 node_id=printer2
-	// DBG got record message_id=generator2/1 node_id=printer1
-	// DBG received ack message_id=generator2/1 node_id=generator2
-	// DBG got record message_id=generator1/1 node_id=printer1
-	// DBG got record message_id=generator1/1 node_id=printer2
-	// DBG received ack message_id=generator1/1 node_id=generator1
-	// DBG got record message_id=generator2/2 node_id=printer2
-	// DBG got record message_id=generator2/2 node_id=printer1
-	// DBG received ack message_id=generator2/2 node_id=generator2
-	// DBG got record message_id=generator1/2 node_id=printer1
-	// DBG got record message_id=generator1/2 node_id=printer2
-	// DBG received ack message_id=generator1/2 node_id=generator1
-	// DBG got record message_id=generator2/3 node_id=printer2
-	// DBG got record message_id=generator2/3 node_id=printer1
-	// DBG received ack message_id=generator2/3 node_id=generator2
-	// DBG got record message_id=generator1/3 node_id=printer1
-	// DBG got record message_id=generator1/3 node_id=printer2
-	// DBG received ack message_id=generator1/3 node_id=generator1
-	// DBG got record message_id=generator2/4 node_id=printer2
-	// DBG got record message_id=generator2/4 node_id=printer1
-	// DBG received ack message_id=generator2/4 node_id=generator2
-	// DBG got record message_id=generator1/4 node_id=printer2
-	// DBG got record message_id=generator1/4 node_id=printer1
-	// DBG received ack message_id=generator1/4 node_id=generator1
-	// DBG got record message_id=generator2/5 node_id=printer2
-	// DBG got record message_id=generator2/5 node_id=printer1
-	// DBG received ack message_id=generator2/5 node_id=generator2
-	// DBG got record message_id=generator1/5 node_id=printer1
-	// DBG got record message_id=generator1/5 node_id=printer2
-	// DBG received ack message_id=generator1/5 node_id=generator1
-	// DBG got record message_id=generator2/6 node_id=printer2
-	// DBG got record message_id=generator2/6 node_id=printer1
-	// DBG received ack message_id=generator2/6 node_id=generator2
-	// DBG got record message_id=generator1/6 node_id=printer1
-	// DBG got record message_id=generator1/6 node_id=printer2
-	// DBG received ack message_id=generator1/6 node_id=generator1
-	// DBG got record message_id=generator2/7 node_id=printer2
-	// DBG got record message_id=generator2/7 node_id=printer1
-	// DBG received ack message_id=generator2/7 node_id=generator2
-	// DBG got record message_id=generator1/7 node_id=printer1
-	// DBG got record message_id=generator1/7 node_id=printer2
-	// DBG received ack message_id=generator1/7 node_id=generator1
-	// DBG got record message_id=generator2/8 node_id=printer2
-	// DBG got record message_id=generator2/8 node_id=printer1
-	// DBG received ack message_id=generator2/8 node_id=generator2
-	// DBG got record message_id=generator1/8 node_id=printer1
-	// DBG got record message_id=generator1/8 node_id=printer2
-	// DBG received ack message_id=generator1/8 node_id=generator1
-	// DBG got record message_id=generator2/9 node_id=printer1
-	// DBG got record message_id=generator2/9 node_id=printer2
-	// DBG received ack message_id=generator2/9 node_id=generator2
-	// DBG got record message_id=generator1/9 node_id=printer2
-	// DBG got record message_id=generator1/9 node_id=printer1
-	// DBG received ack message_id=generator1/9 node_id=generator1
-	// DBG got record message_id=generator2/10 node_id=printer1
-	// DBG got record message_id=generator2/10 node_id=printer2
-	// DBG received ack message_id=generator2/10 node_id=generator2
-	// DBG got record message_id=generator1/10 node_id=printer2
-	// DBG got record message_id=generator1/10 node_id=printer1
-	// DBG received ack message_id=generator1/10 node_id=generator1
+	// DBG got record message_id=p/generator2-1 node_id=printer2
+	// DBG got record message_id=p/generator2-1 node_id=printer1
+	// DBG received ack message_id=p/generator2-1 node_id=generator2
+	// DBG got record message_id=p/generator1-1 node_id=printer1
+	// DBG got record message_id=p/generator1-1 node_id=printer2
+	// DBG received ack message_id=p/generator1-1 node_id=generator1
+	// DBG got record message_id=p/generator2-2 node_id=printer2
+	// DBG got record message_id=p/generator2-2 node_id=printer1
+	// DBG received ack message_id=p/generator2-2 node_id=generator2
+	// DBG got record message_id=p/generator1-2 node_id=printer1
+	// DBG got record message_id=p/generator1-2 node_id=printer2
+	// DBG received ack message_id=p/generator1-2 node_id=generator1
+	// DBG got record message_id=p/generator2-3 node_id=printer2
+	// DBG got record message_id=p/generator2-3 node_id=printer1
+	// DBG received ack message_id=p/generator2-3 node_id=generator2
+	// DBG got record message_id=p/generator1-3 node_id=printer1
+	// DBG got record message_id=p/generator1-3 node_id=printer2
+	// DBG received ack message_id=p/generator1-3 node_id=generator1
+	// DBG got record message_id=p/generator2-4 node_id=printer2
+	// DBG got record message_id=p/generator2-4 node_id=printer1
+	// DBG received ack message_id=p/generator2-4 node_id=generator2
+	// DBG got record message_id=p/generator1-4 node_id=printer2
+	// DBG got record message_id=p/generator1-4 node_id=printer1
+	// DBG received ack message_id=p/generator1-4 node_id=generator1
+	// DBG got record message_id=p/generator2-5 node_id=printer2
+	// DBG got record message_id=p/generator2-5 node_id=printer1
+	// DBG received ack message_id=p/generator2-5 node_id=generator2
+	// DBG got record message_id=p/generator1-5 node_id=printer1
+	// DBG got record message_id=p/generator1-5 node_id=printer2
+	// DBG received ack message_id=p/generator1-5 node_id=generator1
+	// DBG got record message_id=p/generator2-6 node_id=printer2
+	// DBG got record message_id=p/generator2-6 node_id=printer1
+	// DBG received ack message_id=p/generator2-6 node_id=generator2
+	// DBG got record message_id=p/generator1-6 node_id=printer1
+	// DBG got record message_id=p/generator1-6 node_id=printer2
+	// DBG received ack message_id=p/generator1-6 node_id=generator1
+	// DBG got record message_id=p/generator2-7 node_id=printer2
+	// DBG got record message_id=p/generator2-7 node_id=printer1
+	// DBG received ack message_id=p/generator2-7 node_id=generator2
+	// DBG got record message_id=p/generator1-7 node_id=printer1
+	// DBG got record message_id=p/generator1-7 node_id=printer2
+	// DBG received ack message_id=p/generator1-7 node_id=generator1
+	// DBG got record message_id=p/generator2-8 node_id=printer2
+	// DBG got record message_id=p/generator2-8 node_id=printer1
+	// DBG received ack message_id=p/generator2-8 node_id=generator2
+	// DBG got record message_id=p/generator1-8 node_id=printer1
+	// DBG got record message_id=p/generator1-8 node_id=printer2
+	// DBG received ack message_id=p/generator1-8 node_id=generator1
+	// DBG got record message_id=p/generator2-9 node_id=printer1
+	// DBG got record message_id=p/generator2-9 node_id=printer2
+	// DBG received ack message_id=p/generator2-9 node_id=generator2
+	// DBG got record message_id=p/generator1-9 node_id=printer2
+	// DBG got record message_id=p/generator1-9 node_id=printer1
+	// DBG received ack message_id=p/generator1-9 node_id=generator1
+	// DBG got record message_id=p/generator2-10 node_id=printer1
+	// DBG got record message_id=p/generator2-10 node_id=printer2
+	// DBG received ack message_id=p/generator2-10 node_id=generator2
+	// DBG got record message_id=p/generator1-10 node_id=printer2
+	// DBG got record message_id=p/generator1-10 node_id=printer1
+	// DBG received ack message_id=p/generator1-10 node_id=generator1
 	// INF stopping source connector component=SourceNode node_id=generator1
 	// INF stopping source connector component=SourceNode node_id=generator2
 	// DBG received error on error channel error="error reading from source: stream not open" component=SourceNode node_id=generator1
@@ -287,8 +304,11 @@ func generatorSource(ctrl *gomock.Controller, logger log.CtxLogger, nodeID strin
 		}
 
 		return record.Record{
-			SourceID: nodeID,
-			Position: record.Position(strconv.Itoa(position)),
+			// SourceID would normally be the source node ID, but since we need
+			// to add the node ID to the position to create unique positions we
+			// just use "p" here to create a nicer test output
+			SourceID: "p",
+			Position: record.Position(nodeID + "-" + strconv.Itoa(position)),
 		}, nil
 	}).MinTimes(recordCount + 1)
 	source.EXPECT().Stop(gomock.Any()).DoAndReturn(func(context.Context) error {
@@ -301,16 +321,31 @@ func generatorSource(ctrl *gomock.Controller, logger log.CtxLogger, nodeID strin
 }
 
 func printerDestination(ctrl *gomock.Controller, logger log.CtxLogger, nodeID string) connector.Destination {
+	rchan := make(chan record.Record)
 	destination := connmock.NewDestination(ctrl)
 	destination.EXPECT().Open(gomock.Any()).Return(nil).Times(1)
-	destination.EXPECT().Teardown(gomock.Any()).Return(nil).Times(1)
 	destination.EXPECT().Write(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, r record.Record) error {
 		logger.Debug(ctx).
 			Str("node_id", nodeID).
 			Msg("got record")
+		rchan <- r
 		return nil
 	}).AnyTimes()
-	destination.EXPECT().Ack(gomock.Any()).Return(nil, nil).AnyTimes()
+	destination.EXPECT().Ack(gomock.Any()).DoAndReturn(func(ctx context.Context) (record.Position, error) {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case r, ok := <-rchan:
+			if !ok {
+				return nil, nil
+			}
+			return r.Position, nil
+		}
+	}).AnyTimes()
+	destination.EXPECT().Teardown(gomock.Any()).DoAndReturn(func(ctx context.Context) error {
+		close(rchan)
+		return nil
+	}).Times(1)
 	destination.EXPECT().Errors().Return(make(chan error))
 
 	return destination

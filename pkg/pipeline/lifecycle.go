@@ -286,6 +286,15 @@ func (s *Service) buildMetricsNode(
 	}
 }
 
+func (s *Service) buildAckerNode(
+	dest connector.Destination,
+) *stream.AckerNode {
+	return &stream.AckerNode{
+		Name:        dest.ID() + "-acker",
+		Destination: dest,
+	}
+}
+
 func (s *Service) buildDestinationNodes(
 	ctx context.Context,
 	connFetcher ConnectorFetcher,
@@ -305,6 +314,7 @@ func (s *Service) buildDestinationNodes(
 			continue // skip any connector that's not a destination
 		}
 
+		ackerNode := s.buildAckerNode(instance.(connector.Destination))
 		destinationNode := stream.DestinationNode{
 			Name:        instance.ID(),
 			Destination: instance.(connector.Destination),
@@ -313,6 +323,7 @@ func (s *Service) buildDestinationNodes(
 				instance.Config().Plugin,
 				strings.ToLower(instance.Type().String()),
 			),
+			AckerNode: ackerNode,
 		}
 		metricsNode := s.buildMetricsNode(pl, instance)
 		destinationNode.Sub(metricsNode.Pub())
@@ -323,7 +334,7 @@ func (s *Service) buildDestinationNodes(
 		}
 
 		nodes = append(nodes, connNodes...)
-		nodes = append(nodes, metricsNode, &destinationNode)
+		nodes = append(nodes, metricsNode, &destinationNode, ackerNode)
 	}
 
 	return nodes, nil
