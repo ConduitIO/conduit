@@ -33,13 +33,15 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin/standalone"
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/google/go-cmp/cmp"
+	"github.com/rs/zerolog"
 )
 
 func TestPipelineSimple(t *testing.T) {
+	t.Skip("race condition in test, will be fixed in https://github.com/ConduitIO/conduit/issues/259")
 	ctx, killAll := context.WithCancel(context.Background())
 	defer killAll()
 
-	logger := log.Dev()
+	logger := log.InitLogger(zerolog.InfoLevel, log.FormatCLI)
 	logger = logger.CtxHook(ctxutil.MessageIDLogCtxHook{})
 
 	db, err := badger.New(logger.Logger, t.TempDir()+"/test.db")
@@ -49,16 +51,17 @@ func TestPipelineSimple(t *testing.T) {
 		assert.Ok(t, err)
 	})
 
-	pluginRegistry := plugin.NewRegistry(
-		builtin.NewRegistry(builtin.DefaultDispenserFactories...),
+	pluginService := plugin.NewService(
+		builtin.NewRegistry(logger, builtin.DefaultDispenserFactories...),
 		standalone.NewRegistry(logger),
 	)
 
 	orc := NewOrchestrator(
 		db,
 		pipeline.NewService(logger, db),
-		connector.NewService(logger, db, connector.NewDefaultBuilder(logger, connector.NewPersister(logger, db, time.Second, 3), pluginRegistry)),
+		connector.NewService(logger, db, connector.NewDefaultBuilder(logger, connector.NewPersister(logger, db, time.Second, 3), pluginService)),
 		processor.NewService(logger, db, processor.GlobalBuilderRegistry),
+		pluginService,
 	)
 
 	// create a host pipeline
@@ -66,7 +69,7 @@ func TestPipelineSimple(t *testing.T) {
 	assert.Ok(t, err)
 
 	// create connectors
-	sourcePath := "../plugins/fixtures/file-source.txt"
+	sourcePath := "./fixtures/file-source.txt"
 	destinationPath := t.TempDir() + "/destination.txt"
 	_, err = orc.Connectors.Create(
 		ctx,

@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 
 	"github.com/conduitio/conduit/pkg/conduit"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -32,12 +33,14 @@ const (
 
 func main() {
 	cfg := parseConfig()
+	if cfg.Log.Format == "cli" {
+		_, _ = fmt.Fprintf(os.Stdout, "%s\n", conduit.Splash())
+	}
+
 	runtime, err := conduit.NewRuntime(cfg)
 	if err != nil {
 		exitWithError(cerrors.Errorf("failed to setup conduit runtime: %w", err))
 	}
-
-	_, _ = fmt.Fprintf(os.Stdout, "%s\n", conduit.Splash())
 
 	// As per the docs, the signals SIGKILL and SIGSTOP may not be caught by a program
 	ctx := cancelOnInterrupt(context.Background())
@@ -62,6 +65,9 @@ func parseConfig() conduit.Config {
 		httpAddress = flags.String("http.address", ":8080", "address for serving the HTTP API")
 
 		version = flags.Bool("version", false, "prints current Conduit version")
+
+		level  = flags.String("log.level", "info", "sets logging level; accepts debug, info, warn, error, trace")
+		format = flags.String("log.format", "cli", "sets the format of the logging; accepts json, cli")
 	)
 
 	// flags is set up to exit on error, we can safely ignore the error
@@ -80,6 +86,8 @@ func parseConfig() conduit.Config {
 	cfg.DB.Postgres.Table = stringPtrToVal(dbPostgresTable)
 	cfg.GRPC.Address = stringPtrToVal(grpcAddress)
 	cfg.HTTP.Address = stringPtrToVal(httpAddress)
+	cfg.Log.Level = strings.ToLower(stringPtrToVal(level))
+	cfg.Log.Format = strings.ToLower(stringPtrToVal(format))
 
 	return cfg
 }

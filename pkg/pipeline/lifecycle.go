@@ -192,8 +192,10 @@ func (s *Service) buildNodes(
 	nodes = append(nodes, destinationNodes...)
 
 	// set up logger for all nodes that need it
+	nodeLogger := s.logger
+	nodeLogger.Logger = nodeLogger.Logger.With().Str(log.PipelineIDField, pl.ID).Logger()
 	for _, n := range nodes {
-		stream.SetLogger(n, s.logger)
+		stream.SetLogger(n, nodeLogger)
 	}
 
 	return nodes, nil
@@ -341,13 +343,19 @@ func (s *Service) runPipeline(ctx context.Context, pl *Instance) error {
 		nodesWg.Add(1)
 		node := pl.n[id]
 
-		nodesTomb.Go(func() error {
+		nodesTomb.Go(func() (errOut error) {
 			// If any of the nodes stops, the nodesTomb will be put into a dying state
 			// and ctx will be cancelled.
 			// This way, the other nodes will be notified that they need to stop too.
 			ctx := nodesTomb.Context(nil) //nolint:staticcheck // required by tomb
-			s.logger.Trace(ctx).Msgf("running node %q", node.ID())
-			defer s.logger.Trace(ctx).Msgf("node %q stopped", node.ID())
+			s.logger.Trace(ctx).Str(log.NodeIDField, node.ID()).Msg("running node")
+			defer func() {
+				e := s.logger.Trace(ctx)
+				if errOut != nil {
+					e = s.logger.Err(ctx, errOut) // increase the log level to error
+				}
+				e.Str(log.NodeIDField, node.ID()).Msg("node stopped")
+			}()
 			defer nodesWg.Done()
 
 			err := node.Run(ctx)

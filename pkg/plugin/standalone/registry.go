@@ -33,3 +33,10 @@ func NewRegistry(logger log.CtxLogger) *Registry {
 func (r *Registry) New(logger log.CtxLogger, path string) (plugin.Dispenser, error) {
 	return standalonev1.NewDispenser(logger.ZerologWithComponent(), path)
 }
+
+func (r *Registry) List() (map[string]plugin.Specification, error) {
+	// return an empty map for now
+	specs := make(map[string]plugin.Specification)
+
+	return specs, nil
+}

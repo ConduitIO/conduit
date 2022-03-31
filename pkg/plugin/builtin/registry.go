@@ -15,20 +15,20 @@
 package builtin
 
 import (
+	file "github.com/conduitio/conduit-connector-file"
+	generator "github.com/conduitio/conduit-connector-generator"
+	kafka "github.com/conduitio/conduit-connector-kafka"
+	postgres "github.com/conduitio/conduit-connector-postgres"
+	pgdest "github.com/conduitio/conduit-connector-postgres/destination"
+	pgsource "github.com/conduitio/conduit-connector-postgres/source"
+	s3 "github.com/conduitio/conduit-connector-s3"
+	s3destination "github.com/conduitio/conduit-connector-s3/destination"
+	s3source "github.com/conduitio/conduit-connector-s3/source"
+	"github.com/conduitio/conduit-connector-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
 	builtinv1 "github.com/conduitio/conduit/pkg/plugin/builtin/v1"
-	"github.com/conduitio/conduit/pkg/plugin/sdk"
-	"github.com/conduitio/conduit/pkg/plugins/file"
-	"github.com/conduitio/conduit/pkg/plugins/generator"
-	"github.com/conduitio/conduit/pkg/plugins/kafka"
-	"github.com/conduitio/conduit/pkg/plugins/pg"
-	pgdest "github.com/conduitio/conduit/pkg/plugins/pg/destination"
-	pgsource "github.com/conduitio/conduit/pkg/plugins/pg/source"
-	"github.com/conduitio/conduit/pkg/plugins/s3"
-	s3destination "github.com/conduitio/conduit/pkg/plugins/s3/destination"
-	s3source "github.com/conduitio/conduit/pkg/plugins/s3/source"
 )
 
 var (
@@ -37,11 +37,13 @@ var (
 		sdkDispenserFactory(kafka.Specification, kafka.NewSource, kafka.NewDestination),
 		sdkDispenserFactory(generator.Specification, generator.NewSource, nil),
 		sdkDispenserFactory(s3.Specification, s3source.NewSource, s3destination.NewDestination),
-		sdkDispenserFactory(pg.Specification, pgsource.NewSource, pgdest.NewDestination),
+		sdkDispenserFactory(postgres.Specification, pgsource.NewSource, pgdest.NewDestination),
 	}
 )
 
 type Registry struct {
+	logger log.CtxLogger
+
 	builders map[string]DispenserFactory
 }
 
@@ -70,7 +72,7 @@ func sdkDispenserFactory(
 	}
 }
 
-func NewRegistry(factories ...DispenserFactory) *Registry {
+func NewRegistry(logger log.CtxLogger, factories ...DispenserFactory) *Registry {
 	builders := make(map[string]DispenserFactory, len(factories))
 	for _, builder := range factories {
 		p := builder("", log.CtxLogger{})
@@ -87,7 +89,7 @@ func NewRegistry(factories ...DispenserFactory) *Registry {
 		}
 		builders[specs.Name] = builder
 	}
-	return &Registry{builders: builders}
+	return &Registry{builders: builders, logger: logger.WithComponent("builtin.Registry")}
 }
 
 func (r *Registry) New(logger log.CtxLogger, name string) (plugin.Dispenser, error) {
@@ -96,4 +98,21 @@ func (r *Registry) New(logger log.CtxLogger, name string) (plugin.Dispenser, err
 		return nil, cerrors.Errorf("plugin %q not found", name)
 	}
 	return builder(name, logger), nil
+}
+
+func (r *Registry) List() (map[string]plugin.Specification, error) {
+	specs := make(map[string]plugin.Specification)
+
+	for name, dispenser := range r.builders {
+		d := dispenser(name, r.logger)
+		spec, err := d.DispenseSpecifier()
+		if err != nil {
+			return nil, cerrors.Errorf("could not dispense specifier for built in plugin: %w", err)
+		}
+		specs[plugin.BuiltinPluginPrefix+name], err = spec.Specify()
+		if err != nil {
+			return nil, cerrors.Errorf("could not get specs for built in plugin: %w", err)
+		}
+	}
+	return specs, nil
 }

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:generate mockgen -destination=mock/orchestrator.go -package=mock -mock_names=PipelineService=PipelineService,ConnectorService=ConnectorService,ProcessorService=ProcessorService . PipelineService,ConnectorService,ProcessorService
+//go:generate mockgen -destination=mock/orchestrator.go -package=mock -mock_names=PipelineService=PipelineService,ConnectorService=ConnectorService,ProcessorService=ProcessorService,PluginService=PluginService . PipelineService,ConnectorService,ProcessorService,PluginService
 
 package orchestrator
 
@@ -22,6 +22,7 @@ import (
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/database"
 	"github.com/conduitio/conduit/pkg/pipeline"
+	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/conduitio/conduit/pkg/processor"
 )
 
@@ -29,6 +30,7 @@ type Orchestrator struct {
 	Processors *ProcessorOrchestrator
 	Pipelines  *PipelineOrchestrator
 	Connectors *ConnectorOrchestrator
+	Plugins    *PluginOrchestrator
 }
 
 func NewOrchestrator(
@@ -36,18 +38,21 @@ func NewOrchestrator(
 	pipelines PipelineService,
 	connectors ConnectorService,
 	processors ProcessorService,
+	plugins PluginService,
 ) *Orchestrator {
 	b := base{
 		db:         db,
 		pipelines:  pipelines,
 		connectors: connectors,
 		processors: processors,
+		plugins:    plugins,
 	}
 
 	return &Orchestrator{
 		Processors: (*ProcessorOrchestrator)(&b),
 		Pipelines:  (*PipelineOrchestrator)(&b),
 		Connectors: (*ConnectorOrchestrator)(&b),
+		Plugins:    (*PluginOrchestrator)(&b),
 	}
 }
 
@@ -57,6 +62,7 @@ type base struct {
 	pipelines  PipelineService
 	connectors ConnectorService
 	processors ProcessorService
+	plugins    PluginService
 }
 
 type PipelineService interface {
@@ -95,4 +101,8 @@ type ProcessorService interface {
 	Create(ctx context.Context, id string, name string, t processor.Type, parent processor.Parent, cfg processor.Config) (*processor.Instance, error)
 	Update(ctx context.Context, id string, cfg processor.Config) (*processor.Instance, error)
 	Delete(ctx context.Context, id string) error
+}
+
+type PluginService interface {
+	List(ctx context.Context) (map[string]plugin.Specification, error)
 }

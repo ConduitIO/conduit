@@ -12,17 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package main
+package orchestrator
 
 import (
-	"github.com/conduitio/conduit/pkg/plugin/sdk"
-	"github.com/conduitio/conduit/pkg/plugins/kafka"
+	"context"
+
+	"github.com/conduitio/conduit/pkg/plugin"
 )
 
-func main() {
-	sdk.Serve(
-		kafka.Specification,
-		kafka.NewSource,
-		kafka.NewDestination,
-	)
+type PluginOrchestrator base
+
+func (ps *PluginOrchestrator) List(ctx context.Context) (map[string]plugin.Specification, error) {
+	return ps.plugins.List(ctx)
 }

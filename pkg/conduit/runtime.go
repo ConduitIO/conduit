@@ -51,6 +51,7 @@ import (
 	"github.com/piotrkowalczuk/promgrpc/v4"
 	promclient "github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/rs/zerolog"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/health/grpc_health_v1"
@@ -59,6 +60,7 @@ import (
 
 	// NB: anonymous import triggers transform registry creation
 	_ "github.com/conduitio/conduit/pkg/processor/transform/txfbuiltin"
+	_ "github.com/conduitio/conduit/pkg/processor/transform/txfjs"
 )
 
 const (
@@ -87,7 +89,7 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 		return nil, cerrors.Errorf("invalid config: %w", err)
 	}
 
-	logger := newLogger()
+	logger := newLogger(cfg.Log.Level, cfg.Log.Format)
 
 	var db database.DB
 	var err error
@@ -116,12 +118,12 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 	)
 
 	// Create all necessary internal services
-	plService, connService, procService, err := newServices(logger, db, connectorPersister)
+	plService, connService, procService, pluginService, err := newServices(logger, db, connectorPersister)
 	if err != nil {
 		return nil, cerrors.Errorf("failed to create services: %w", err)
 	}
 
-	orc := orchestrator.NewOrchestrator(db, plService, connService, procService)
+	orc := orchestrator.NewOrchestrator(db, plService, connService, procService, pluginService)
 
 	r := &Runtime{
 		Config:       cfg,
@@ -139,9 +141,11 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 	return r, nil
 }
 
-func newLogger() log.CtxLogger {
-	// TODO make logger configurable (level, hooks, format)
-	logger := log.Dev()
+func newLogger(level string, format string) log.CtxLogger {
+	// TODO make logger hooks configurable
+	l, _ := zerolog.ParseLevel(level)
+	f, _ := log.ParseFormat(format)
+	logger := log.InitLogger(l, f)
 	logger = logger.CtxHook(
 		ctxutil.MessageIDLogCtxHook{},
 		ctxutil.RequestIDLogCtxHook{},
@@ -159,22 +163,24 @@ func newServices(
 	logger log.CtxLogger,
 	db database.DB,
 	connPersister *connector.Persister,
-) (*pipeline.Service, *connector.Service, *processor.Service, error) {
+) (*pipeline.Service, *connector.Service, *processor.Service, *plugin.Service, error) {
 	pipelineService := pipeline.NewService(logger, db)
+	pluginService := plugin.NewService(
+		builtin.NewRegistry(logger, builtin.DefaultDispenserFactories...),
+		standalone.NewRegistry(logger),
+	)
 	connectorService := connector.NewService(
 		logger,
 		db,
 		connector.NewDefaultBuilder(
 			logger,
 			connPersister,
-			plugin.NewRegistry(
-				builtin.NewRegistry(builtin.DefaultDispenserFactories...),
-				standalone.NewRegistry(logger),
-			),
+			pluginService,
 		),
 	)
 	processorService := processor.NewService(logger, db, processor.GlobalBuilderRegistry)
-	return pipelineService, connectorService, processorService, nil
+
+	return pipelineService, connectorService, processorService, pluginService, nil
 }
 
 // Run initializes all of Conduit's underlying services and starts the GRPC and
@@ -284,6 +290,9 @@ func (r *Runtime) serveGRPCAPI(ctx context.Context, t *tomb.Tomb) (net.Addr, err
 	connectorAPIv1 := api.NewConnectorAPIv1(r.Orchestrator.Connectors)
 	connectorAPIv1.Register(grpcServer)
 
+	pluginAPIv1 := api.NewPluginAPIv1(r.Orchestrator.Plugins)
+	pluginAPIv1.Register(grpcServer)
+
 	info := api.NewInformation(Version(false))
 	info.Register(grpcServer)
 
@@ -327,6 +336,12 @@ func (r *Runtime) serveHTTPAPI(
 	if err != nil {
 		return nil, cerrors.Errorf("failed to register processors handler: %w", err)
 	}
+
+	err = apiv1.RegisterPluginServiceHandler(ctx, gwmux, conn)
+	if err != nil {
+		return nil, cerrors.Errorf("failed to register plugins handler: %w", err)
+	}
+
 	err = apiv1.RegisterInformationServiceHandler(ctx, gwmux, conn)
 	if err != nil {
 		return nil, cerrors.Errorf("failed to register Information handler: %w", err)

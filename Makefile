@@ -1,4 +1,4 @@
-.PHONY: test test-integration build run proto proto-api proto-plugins proto-lint clean download install-tools generate
+.PHONY: test test-integration build run proto-api proto-lint clean download install-tools generate
 
 VERSION=`./scripts/get-tag.sh`
 
@@ -14,9 +14,9 @@ test:
 
 test-integration:
 	# run required docker containers, execute integration tests, stop containers after tests
-	docker compose -f test/docker-compose-postgres.yml -f test/docker-compose-kafka.yml up --quiet-pull -d --wait
+	docker compose -f test/docker-compose-postgres.yml up --quiet-pull -d --wait
 	go test $(GOTEST_FLAGS) -race --tags=integration ./...; ret=$$?; \
-		docker compose -f test/docker-compose-postgres.yml -f test/docker-compose-kafka.yml down; \
+		docker compose -f test/docker-compose-postgres.yml down; \
 		exit $$ret
 
 build-server:
@@ -26,19 +26,9 @@ build-server:
 run:
 	go run ./cmd/conduit/main.go
 
-proto: proto-api proto-plugins
-
 proto-api:
 	@echo Generate proto code
 	@buf generate
-
-# TODO remove target once plugins are moved to the connector SDK
-proto-plugins:
-	@echo Generate plugins proto code
-	@protoc -I=pkg/plugins/proto \
-		--go_out=pkg/plugins/proto      --go_opt=paths=source_relative \
-		--go-grpc_out=pkg/plugins/proto --go-grpc_opt=paths=source_relative \
-		pkg/plugins/proto/plugins.proto
 
 proto-update:
 	@echo Download proto dependencies
@@ -69,5 +59,3 @@ pkg/web/ui/dist:
 ui-%:
 	@cd ui && make $*
 
-readme-%:
-	go run ./pkg/plugins/template/main.go pkg/plugins/template/readme-template.md $*

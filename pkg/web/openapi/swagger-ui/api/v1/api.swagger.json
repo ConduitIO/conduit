@@ -1230,6 +1230,9 @@
         "description": {
           "type": "string"
         },
+        "default": {
+          "type": "string"
+        },
         "type": {
           "$ref": "#/definitions/PluginSpecificationsParameterType"
         },

@@ -35,6 +35,8 @@ func TestRuntime(t *testing.T) {
 	cfg.DB.Badger.Path = testingDBPath
 	cfg.GRPC.Address = ":0"
 	cfg.HTTP.Address = ":0"
+	cfg.Log.Level = "info"
+	cfg.Log.Format = "cli"
 
 	e, err := conduit.NewRuntime(cfg)
 	t.Cleanup(func() {

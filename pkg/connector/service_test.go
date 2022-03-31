@@ -118,8 +118,8 @@ func TestService_CreateError(t *testing.T) {
 	ctx := context.Background()
 	logger := log.Nop()
 	db := &inmemory.DB{}
-	builder := connector.NewDefaultBuilder(logger, nil, plugin.NewRegistry(
-		builtin.NewRegistry(), standalone.NewRegistry(logger)))
+	builder := connector.NewDefaultBuilder(logger, nil, plugin.NewService(
+		builtin.NewRegistry(logger), standalone.NewRegistry(logger)))
 
 	service := connector.NewService(logger, db, builder)
 
@@ -133,7 +133,7 @@ func TestService_CreateError(t *testing.T) {
 		data: connector.Config{
 			Name:       "test-connector",
 			Settings:   map[string]string{"foo": "bar"},
-			Plugin:     "../plugins/file/file",
+			Plugin:     "builtin:file",
 			PipelineID: uuid.NewString(),
 		},
 	}, {
@@ -169,7 +169,7 @@ func TestService_CreateError(t *testing.T) {
 		data: connector.Config{
 			Name:       "test-connector",
 			Settings:   map[string]string{"foo": "bar"},
-			Plugin:     "../plugins/file/file",
+			Plugin:     "builtin:file",
 			PipelineID: "",
 		},
 	}}

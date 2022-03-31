@@ -14,7 +14,11 @@
 
 package conduit
 
-import "github.com/conduitio/conduit/pkg/foundation/cerrors"
+import (
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/rs/zerolog"
+)
 
 const (
 	DBTypeBadger   = "badger"
@@ -40,6 +44,11 @@ type Config struct {
 	}
 	GRPC struct {
 		Address string
+	}
+
+	Log struct {
+		Level  string
+		Format string
 	}
 }
 
@@ -70,6 +79,22 @@ func (c Config) Validate() error {
 
 	if c.HTTP.Address == "" {
 		return requiredConfigFieldErr("http.address")
+	}
+
+	if c.Log.Level == "" {
+		return requiredConfigFieldErr("log.level")
+	}
+	_, err := zerolog.ParseLevel(c.Log.Level)
+	if err != nil {
+		return invalidConfigFieldErr("log.level")
+	}
+
+	if c.Log.Format == "" {
+		return requiredConfigFieldErr("log.format")
+	}
+	_, err = log.ParseFormat(c.Log.Format)
+	if err != nil {
+		return invalidConfigFieldErr("log.format")
 	}
 
 	return nil
