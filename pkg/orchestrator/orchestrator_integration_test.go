@@ -33,13 +33,15 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin/standalone"
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/google/go-cmp/cmp"
+	"github.com/rs/zerolog"
 )
 
 func TestPipelineSimple(t *testing.T) {
+	t.Skip("race condition in test, will be fixed in https://github.com/ConduitIO/conduit/issues/259")
 	ctx, killAll := context.WithCancel(context.Background())
 	defer killAll()
 
-	logger := log.Dev()
+	logger := log.InitLogger(zerolog.InfoLevel, log.FormatCLI)
 	logger = logger.CtxHook(ctxutil.MessageIDLogCtxHook{})
 
 	db, err := badger.New(logger.Logger, t.TempDir()+"/test.db")

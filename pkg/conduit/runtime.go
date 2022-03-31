@@ -51,6 +51,7 @@ import (
 	"github.com/piotrkowalczuk/promgrpc/v4"
 	promclient "github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/rs/zerolog"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/health/grpc_health_v1"
@@ -88,7 +89,7 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 		return nil, cerrors.Errorf("invalid config: %w", err)
 	}
 
-	logger := newLogger()
+	logger := newLogger(cfg.Log.Level, cfg.Log.Format)
 
 	var db database.DB
 	var err error
@@ -140,9 +141,11 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 	return r, nil
 }
 
-func newLogger() log.CtxLogger {
-	// TODO make logger configurable (level, hooks, format)
-	logger := log.Dev()
+func newLogger(level string, format string) log.CtxLogger {
+	// TODO make logger hooks configurable
+	l, _ := zerolog.ParseLevel(level)
+	f, _ := log.ParseFormat(format)
+	logger := log.InitLogger(l, f)
 	logger = logger.CtxHook(
 		ctxutil.MessageIDLogCtxHook{},
 		ctxutil.RequestIDLogCtxHook{},
