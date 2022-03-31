@@ -18,10 +18,11 @@ package orchestrator
 
 import (
 	"context"
-	"github.com/rs/zerolog"
 	"os"
 	"testing"
 	"time"
+
+	"github.com/rs/zerolog"
 
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/assert"
@@ -37,6 +38,7 @@ import (
 )
 
 func TestPipelineSimple(t *testing.T) {
+	t.Skip("race condition in test, will be fixed in https://github.com/ConduitIO/conduit/issues/259")
 	ctx, killAll := context.WithCancel(context.Background())
 	defer killAll()
 
