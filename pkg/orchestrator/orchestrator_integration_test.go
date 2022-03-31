@@ -40,7 +40,7 @@ func TestPipelineSimple(t *testing.T) {
 	ctx, killAll := context.WithCancel(context.Background())
 	defer killAll()
 
-	logger := log.InitLogger(zerolog.InfoLevel, "cli")
+	logger := log.InitLogger(zerolog.InfoLevel, log.FormatCLI)
 	logger = logger.CtxHook(ctxutil.MessageIDLogCtxHook{})
 
 	db, err := badger.New(logger.Logger, t.TempDir()+"/test.db")

@@ -25,7 +25,7 @@ import (
 )
 
 func newTestDispenser(t *testing.T) (plugin.Dispenser, *mock.SpecifierPlugin, *mock.SourcePlugin, *mock.DestinationPlugin) {
-	logger := log.InitLogger(zerolog.InfoLevel, "cli")
+	logger := log.InitLogger(zerolog.InfoLevel, log.FormatCLI)
 	ctrl := gomock.NewController(t)
 
 	mockSpecifier := mock.NewSpecifierPlugin(ctrl)
