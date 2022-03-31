@@ -33,12 +33,14 @@ const (
 
 func main() {
 	cfg := parseConfig()
+	if cfg.Log.Format == "cli" {
+		_, _ = fmt.Fprintf(os.Stdout, "%s\n", conduit.Splash())
+	}
+
 	runtime, err := conduit.NewRuntime(cfg)
 	if err != nil {
 		exitWithError(cerrors.Errorf("failed to setup conduit runtime: %w", err))
 	}
-
-	_, _ = fmt.Fprintf(os.Stdout, "%s\n", conduit.Splash())
 
 	// As per the docs, the signals SIGKILL and SIGSTOP may not be caught by a program
 	ctx := cancelOnInterrupt(context.Background())
