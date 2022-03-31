@@ -143,29 +143,14 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 
 func newLogger(level string, format string) log.CtxLogger {
 	// TODO make logger hooks configurable
-	logger := log.InitLogger(stringToLogLevel(level), format)
+	l, _ := zerolog.ParseLevel(level)
+	f, _ := log.ParseFormat(format)
+	logger := log.InitLogger(l, f)
 	logger = logger.CtxHook(
 		ctxutil.MessageIDLogCtxHook{},
 		ctxutil.RequestIDLogCtxHook{},
 	)
 	return logger
-}
-
-func stringToLogLevel(level string) zerolog.Level {
-	switch {
-	case strings.EqualFold(level, "debug"):
-		return zerolog.DebugLevel
-	case strings.EqualFold(level, "info"):
-		return zerolog.InfoLevel
-	case strings.EqualFold(level, "warn"):
-		return zerolog.WarnLevel
-	case strings.EqualFold(level, "error"):
-		return zerolog.ErrorLevel
-	case strings.EqualFold(level, "trace"):
-		return zerolog.TraceLevel
-	default:
-		return zerolog.InfoLevel
-	}
 }
 
 func configurePrometheus() {

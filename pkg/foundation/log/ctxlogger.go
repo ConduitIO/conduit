@@ -16,8 +16,6 @@ package log
 
 import (
 	"context"
-	"os"
-	"strings"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/rs/zerolog"
@@ -51,27 +49,16 @@ func Nop() CtxLogger {
 }
 
 // InitLogger returns a logger initialized with the wanted level and format
-func InitLogger(level zerolog.Level, format string) CtxLogger {
-	w := zerolog.NewConsoleWriter()
-	w.TimeFormat = "2006-01-02T15:04:05+00:00"
-	var zlogger zerolog.Logger
-	if strings.EqualFold(format, "cli") {
-		zlogger = zerolog.New(w).
-			With().
-			Timestamp().
-			Stack().
-			Logger().
-			Level(level)
-	} else { // JSON
-		zlogger = zerolog.New(os.Stdout).
-			With().
-			Timestamp().
-			Stack().
-			Logger().
-			Level(level)
-	}
+func InitLogger(level zerolog.Level, f Format) CtxLogger {
+	var w = GetWriter(f)
+	logger := zerolog.New(w).
+		With().
+		Timestamp().
+		Stack().
+		Logger().
+		Level(level)
 
-	return New(zlogger)
+	return New(logger)
 }
 
 // CtxHook defines an interface for a log context hook.

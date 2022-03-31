@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 
 	"github.com/conduitio/conduit/pkg/conduit"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -83,8 +84,8 @@ func parseConfig() conduit.Config {
 	cfg.DB.Postgres.Table = stringPtrToVal(dbPostgresTable)
 	cfg.GRPC.Address = stringPtrToVal(grpcAddress)
 	cfg.HTTP.Address = stringPtrToVal(httpAddress)
-	cfg.Log.Level = stringPtrToVal(level)
-	cfg.Log.Format = stringPtrToVal(format)
+	cfg.Log.Level = strings.ToLower(stringPtrToVal(level))
+	cfg.Log.Format = strings.ToLower(stringPtrToVal(format))
 
 	return cfg
 }
