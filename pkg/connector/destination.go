@@ -137,8 +137,6 @@ func (s *destination) Teardown(ctx context.Context) error {
 		return plugin.ErrPluginNotRunning
 	}
 
-	// TODO call Stop separately before Teardown. The idea is to let the plugin
-	//  know it should flush any unwritten changes and send back the acks
 	s.logger.Debug(ctx).Msg("stopping destination connector plugin")
 	err := s.plugin.Stop(ctx)
 

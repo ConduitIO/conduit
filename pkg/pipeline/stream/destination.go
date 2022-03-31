@@ -52,7 +52,12 @@ func (n *DestinationNode) Run(ctx context.Context) (err error) {
 		return cerrors.Errorf("could not open destination connector: %w", err)
 	}
 	defer func() {
-		// TODO wait for acker node to be done with all acks
+		// wait for acker node to receive all outstanding acks, time out after
+		// 1 minute or right away if the context is already canceled.
+		waitCtx, cancel := context.WithTimeout(ctx, time.Minute)
+		defer cancel()
+		n.AckerNode.Wait(waitCtx)
+
 		// teardown will kill the plugin process
 		tdErr := n.Destination.Teardown(connectorCtx)
 		if tdErr != nil {
