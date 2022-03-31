@@ -83,6 +83,34 @@ func TestConfig_Validate(t *testing.T) {
 			return c
 		},
 		want: requiredConfigFieldErr("grpc.address"),
+	}, {
+		name: "invalid Log level (invalid)",
+		setupConfig: func(c Config) Config {
+			c.Log.Level = "who"
+			return c
+		},
+		want: invalidConfigFieldErr("log.level"),
+	}, {
+		name: "invalid Log format (invalid)",
+		setupConfig: func(c Config) Config {
+			c.Log.Format = "someFormat"
+			return c
+		},
+		want: invalidConfigFieldErr("log.format"),
+	}, {
+		name: "required Log level",
+		setupConfig: func(c Config) Config {
+			c.Log.Level = ""
+			return c
+		},
+		want: requiredConfigFieldErr("log.level"),
+	}, {
+		name: "required Log format",
+		setupConfig: func(c Config) Config {
+			c.Log.Format = ""
+			return c
+		},
+		want: requiredConfigFieldErr("log.format"),
 	}}
 
 	for _, tc := range testCases {
@@ -94,6 +122,8 @@ func TestConfig_Validate(t *testing.T) {
 			validConfig.DB.Postgres.ConnectionString = "postgres://user:pass@localhost:5432/mydb?sslmode=disable"
 			validConfig.HTTP.Address = ":8080"
 			validConfig.GRPC.Address = ":8084"
+			validConfig.Log.Level = "info"
+			validConfig.Log.Format = "cli"
 
 			underTest := tc.setupConfig(validConfig)
 			got := underTest.Validate()

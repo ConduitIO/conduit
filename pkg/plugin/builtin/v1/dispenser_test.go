@@ -21,10 +21,11 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/golang/mock/gomock"
+	"github.com/rs/zerolog"
 )
 
 func newTestDispenser(t *testing.T) (plugin.Dispenser, *mock.SpecifierPlugin, *mock.SourcePlugin, *mock.DestinationPlugin) {
-	logger := log.Dev()
+	logger := log.InitLogger(zerolog.InfoLevel, log.FormatCLI)
 	ctrl := gomock.NewController(t)
 
 	mockSpecifier := mock.NewSpecifierPlugin(ctrl)
