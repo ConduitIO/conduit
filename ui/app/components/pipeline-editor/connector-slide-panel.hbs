@@ -18,14 +18,16 @@
         </span>
         <div>
           {{#if @pipeline.isRunning}}
-            <EmberTooltip @side="left">
-              <div class="text-xs">
-                You must pause the pipeline if you'd like to update it's connectors
-              </div>
-            </EmberTooltip>
-            <svg class="text-gray-900 fill-current h-4 w-4">
-              <use xlink:href="/ui/svg-defs.svg#action-menu-16"></use>
-            </svg>
+            <div data-test-dropdown-trigger="connector-panel-options-disabled">
+              <EmberTooltip @side="left">
+                <div class="text-xs">
+                  You must pause the pipeline if you'd like to update it's connectors
+                </div>
+              </EmberTooltip>
+              <svg class="text-gray-900 fill-current h-4 w-4">
+                <use xlink:href="/ui/svg-defs.svg#action-menu-16"></use>
+              </svg>
+            </div>
           {{else}}
             <BasicDropdown as |dd|>
               <dd.Trigger data-test-dropdown-trigger="connector-panel-options">
@@ -182,8 +184,10 @@
             </ol>
 
             {{#if @pipeline.isRunning}}
-              <div class="text-orange-700 text-sm font-normal flex justify-end mt-4">You must pause
-                the pipeline if you'd like to update it's connectors or transforms.</div>
+              <div
+                class="text-orange-700 text-sm font-normal flex justify-end mt-4"
+                data-test-disabled-connectors-transforms
+              >You must pause the pipeline if you'd like to update it's connectors or transforms.</div>
             {{/if}}
           </div>
         </div>

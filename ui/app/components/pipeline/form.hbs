@@ -48,8 +48,10 @@
     {{yield @pipeline}}
 
     {{#if (and (not @pipeline.isNew) @pipeline.isRunning)}}
-      <div class="text-orange-700 text-sm font-normal flex justify-end mt-4">You cannot edit a
-        pipeline's settings while it is running</div>
+      <div
+        class="text-orange-700 text-sm font-normal flex justify-end mt-4"
+        data-test-pipeline-settings-disabled
+      >You cannot edit a pipeline's settings while it is running</div>
     {{/if}}
   </Mxa::DialogCard>
 </div>

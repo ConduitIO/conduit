@@ -21,6 +21,8 @@ const page = {
     '[data-test-connector-column="destination"] [data-test-connector-node]',
 
   pipelineAddNewNodeButton: '[data-test-pipeline-editor-add-node]',
+  pipelineAddNewNodeDisabledButton:
+    '[data-test-pipeline-editor-add-node-disabled]',
   pipelineAddNewSourceButton: '[data-test-pipeline-editor-add-node-source]',
 
   pipelineStatus: '[data-test-pipeline-status-label]',
@@ -28,6 +30,9 @@ const page = {
   pipelineStatusButton: '[data-test-pipeline-status] button',
   pipelineStatusStart: "[data-test-pipeline-status-action='start']",
   pipelineStatusStop: "[data-test-pipeline-status-action='stop']",
+
+  pipelineSettingsSaveButton: '[data-test-button="create-pipeline"]',
+  pipelineSettingsDisabledMessage: '[data-test-pipeline-settings-disabled]',
 
   connectorOverviewListItem: '[data-test-connector-overview-list-item]',
   connectorOverviewButton: '[data-test-connector-overview-button]',
@@ -40,6 +45,13 @@ const page = {
 
   pipelineDegradedButton: '[data-test-pipeline-degraded-button]',
   pipelineErrorModal: '[data-test-pipeline-error-modal]',
+
+  addConnectorTransformButton: '[data-test-button="add-connector-transform"]',
+  disabledConnectorsAndTransformsMessage:
+    '[data-test-disabled-connectors-transforms]',
+
+  connectorPanelOptionsDisabled:
+    '[data-test-dropdown-trigger="connector-panel-options-disabled"]',
 };
 
 module('Acceptance | pipeline/index', function (hooks) {
@@ -327,12 +339,34 @@ module('Acceptance | pipeline/index', function (hooks) {
 
   module('viewing a healthy running pipeline', function (hooks) {
     hooks.beforeEach(async function () {
-      const pipeline = this.server.create('pipeline', 'withFileConnectors');
-      await visit(`/pipelines/${pipeline.id}`);
+      this.pipeline = this.server.create(
+        'pipeline',
+        { state: { status: 'STATUS_RUNNING' } },
+        'withFileConnectors'
+      );
+      await visit(`/pipelines/${this.pipeline.id}`);
     });
 
-    test('does not show a degraded button', async function () {
+    test('does not show a degraded button', function () {
       assert.dom(page.pipelineDegradedButton).doesNotExist();
+    });
+
+    test('it disables adding connectors', function () {
+      assert.dom(page.pipelineAddNewNodeDisabledButton).exists();
+    });
+
+    test('it disables updating transforms', async function () {
+      await click('[data-test-connector-node="source-source-one"] > div');
+      assert.dom(page.connectorPanelOptionsDisabled).exists();
+      assert.dom(page.pipelineAddNewNodeDisabledButton).exists();
+      assert.dom(page.addConnectorTransformButton).isDisabled();
+      assert.dom(page.disabledConnectorsAndTransformsMessage).exists();
+    });
+
+    test('it disables updating pipeline settings', async function () {
+      await visit(`/pipelines/${this.pipeline.id}/settings`);
+      assert.dom(page.pipelineSettingsSaveButton).isDisabled();
+      assert.dom(page.pipelineSettingsDisabledMessage).exists();
     });
   });
 });
