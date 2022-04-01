@@ -58,11 +58,29 @@ func (n *AckerNode) ID() string {
 
 // Run continuously fetches acks from the destination and forwards them to the
 // correct message by calling Ack or Nack on that message.
-func (n *AckerNode) Run(ctx context.Context) error {
+func (n *AckerNode) Run(ctx context.Context) (err error) {
 	n.logger.Trace(ctx).Msg("starting acker node")
 	defer n.logger.Trace(ctx).Msg("acker node stopped")
 
 	n.init()
+	defer func() {
+		var dropped int
+		n.cache.Range(func(pos record.Position, msg *Message) bool {
+			msg.Drop()
+			dropped++
+			return true
+		})
+		if dropped > 0 {
+			droppedErr := cerrors.Errorf("dropped %d messages when stopping acker node", dropped)
+			if err != nil {
+				// we are already returning an error, just log this one
+				n.logger.Err(ctx, droppedErr).Msg("acker node stopped without processing all messages")
+			} else {
+				// return droppedErr instead
+				err = droppedErr
+			}
+		}
+	}()
 
 	select {
 	case <-ctx.Done():
@@ -209,6 +227,22 @@ func (m *positionMessageMap) LoadOrStore(pos record.Position, msg *Message) (act
 		atomic.AddUint32(&m.length, 1) // increment
 	}
 	return val.(*Message), loaded
+}
+
+// Range calls f sequentially for each key and value present in the map.
+// If f returns false, range stops the iteration.
+//
+// Range does not necessarily correspond to any consistent snapshot of the Map's
+// contents: no key will be visited more than once, but if the value for any key
+// is stored or deleted concurrently, Range may reflect any mapping for that key
+// from any point during the Range call.
+//
+// Range may be O(N) with the number of elements in the map even if f returns
+// false after a constant number of calls.
+func (m *positionMessageMap) Range(f func(pos record.Position, msg *Message) bool) {
+	m.m.Range(func(key, value interface{}) bool {
+		return f(record.Position(key.(string)), value.(*Message))
+	})
 }
 
 // Len returns the number of elements in the map.
