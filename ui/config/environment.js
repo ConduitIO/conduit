@@ -31,7 +31,7 @@ module.exports = function (environment) {
 
   if (environment === 'development') {
     ENV['ember-cli-mirage'] = {
-      enabled: true,
+      enabled: ENV.isDevMirageEnabled,
     };
 
     // ENV.APP.LOG_RESOLVER = true;
