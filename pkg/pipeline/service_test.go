@@ -18,7 +18,6 @@ import (
 	"context"
 	"fmt"
 	"testing"
-	"time"
 
 	"github.com/conduitio/conduit/pkg/connector"
 	connmock "github.com/conduitio/conduit/pkg/connector/mock"
@@ -28,6 +27,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
+	"github.com/matryer/is"
 	"github.com/rs/zerolog"
 )
 
@@ -44,7 +44,8 @@ func (s *serviceTestSetup) basicSourceMock(ctrl *gomock.Controller) *connmock.So
 	source.EXPECT().Type().Return(connector.TypeSource).AnyTimes()
 	source.EXPECT().Config().Return(connector.Config{}).AnyTimes()
 	source.EXPECT().Open(gomock.Any()).AnyTimes()
-	source.EXPECT().Read(gomock.Any()).AnyTimes()
+	// block read until context is done
+	source.EXPECT().Read(gomock.Any()).Do(func(ctx context.Context) { <-ctx.Done() }).AnyTimes()
 	source.EXPECT().Ack(gomock.Any(), gomock.Any()).AnyTimes()
 	source.EXPECT().Errors().AnyTimes()
 	source.EXPECT().Teardown(gomock.Any()).AnyTimes()
@@ -147,6 +148,7 @@ func TestService_Init_Rerun(t *testing.T) {
 }
 
 func testServiceInit(t *testing.T, status Status, expected Status) {
+	is := is.New(t)
 	ctx, killAll := context.WithCancel(context.Background())
 	defer killAll()
 	setup := serviceTestSetup{t: t}
@@ -157,9 +159,9 @@ func testServiceInit(t *testing.T, status Status, expected Status) {
 	service := NewService(logger, db)
 
 	pl, source, destination, err := setup.createPipeline(ctx, service, status)
-	assert.Ok(t, err)
+	is.NoErr(err)
 	err = store.Set(ctx, pl.ID, pl)
-	assert.Ok(t, err)
+	is.NoErr(err)
 
 	// create a new pipeline service and initialize it
 	service = NewService(logger, db)
@@ -171,23 +173,12 @@ func testServiceInit(t *testing.T, status Status, expected Status) {
 		},
 		testProcessorFetcher{},
 	)
-	assert.Ok(t, err)
-
-	// pipelines start asynchronously, give them some time to start
-	time.Sleep(time.Millisecond * 100)
+	is.NoErr(err)
 
 	got := service.List(ctx)
-	assert.Equal(t, len(got), 1)
-
-	for _, plGot := range got {
-		if plGot.ID == pl.ID {
-			// TODO remove this, only here to see why test fails on CI
-			if expected != plGot.Status {
-				t.Logf("status not same, error in pipeline: %s", plGot.Error)
-			}
-			assert.Equal(t, expected, plGot.Status)
-		}
-	}
+	is.Equal(len(got), 1)
+	is.True(got[pl.ID] != nil)
+	is.Equal(got[pl.ID].Status, expected)
 }
 
 func TestService_CreateSuccess(t *testing.T) {
