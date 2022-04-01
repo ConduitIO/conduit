@@ -64,7 +64,7 @@ func (s *Service) Init(
 	// some instances may be in a running state, try to run them
 	for _, instance := range instances {
 		s.instanceNames[instance.Config.Name] = true
-		if instance.Status == StatusRunning || instance.Status == StatusSystemStopped {
+		if instance.Status == StatusRunning {
 			// change status to "stopped" to allow pipeline to be started
 			instance.Status = StatusSystemStopped
 		}

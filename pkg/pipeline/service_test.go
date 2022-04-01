@@ -181,6 +181,10 @@ func testServiceInit(t *testing.T, status Status, expected Status) {
 
 	for _, plGot := range got {
 		if plGot.ID == pl.ID {
+			// TODO remove this, only here to see why test fails on CI
+			if expected != plGot.Status {
+				t.Logf("status not same, error in pipeline: %s", plGot.Error)
+			}
 			assert.Equal(t, expected, plGot.Status)
 		}
 	}
