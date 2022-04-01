@@ -17,39 +17,50 @@
           {{@selectedNode.name}}
         </span>
         <div>
-          <BasicDropdown as |dd|>
-            <dd.Trigger data-test-dropdown-trigger="connector-panel-options">
-              <svg class="text-gray-900 fill-current h-4 w-4">
-                <use xlink:href="/ui/svg-defs.svg#action-menu-16"></use>
-              </svg>
-            </dd.Trigger>
-            <dd.Content class="bg-white rounded-md border border-gray-200 shadow-md text-sm">
-              <ul class="font-semibold">
-                <li
-                  class="cursor-pointer pl-2 pr-16 py-4 hover:bg-gray-100 flex items-center"
-                  data-test-dropdown-button="connector-panel-edit"
-                  {{on "click" @showEditConnectorModal}}
-                  {{on "click" dd.actions.close}}
-                >
-                  <svg class="fill-current h-4 w-4 mr-2">
-                    <use xlink:href="/ui/svg-defs.svg#settings-16"></use>
-                  </svg>
-                  Edit Connector
-                </li>
-                <li
-                  class="cursor-pointer text-orange-700 pl-2 pr-16 py-4 hover:bg-gray-100 flex items-center"
-                  data-test-dropdown-button="connector-panel-delete"
-                  {{on "click" @showDeleteConnectorModal}}
-                  {{on "click" dd.actions.close}}
-                >
-                  <svg class="fill-current text-orange-700 h-4 w-4 mr-2">
-                    <use xlink:href="/ui/svg-defs.svg#delete-16"></use>
-                  </svg>
-                  Remove Connector
-                </li>
-              </ul>
-            </dd.Content>
-          </BasicDropdown>
+          {{#if @pipeline.isRunning}}
+            <EmberTooltip @side="left">
+              <div class="text-xs">
+                You must pause the pipeline if you'd like to update it's connectors
+              </div>
+            </EmberTooltip>
+            <svg class="text-gray-900 fill-current h-4 w-4">
+              <use xlink:href="/ui/svg-defs.svg#action-menu-16"></use>
+            </svg>
+          {{else}}
+            <BasicDropdown as |dd|>
+              <dd.Trigger data-test-dropdown-trigger="connector-panel-options">
+                <svg class="text-gray-900 fill-current h-4 w-4">
+                  <use xlink:href="/ui/svg-defs.svg#action-menu-16"></use>
+                </svg>
+              </dd.Trigger>
+              <dd.Content class="bg-white rounded-md border border-gray-200 shadow-md text-sm">
+                <ul class="font-semibold">
+                  <li
+                    class="cursor-pointer pl-2 pr-16 py-4 hover:bg-gray-100 flex items-center"
+                    data-test-dropdown-button="connector-panel-edit"
+                    {{on "click" @showEditConnectorModal}}
+                    {{on "click" dd.actions.close}}
+                  >
+                    <svg class="fill-current h-4 w-4 mr-2">
+                      <use xlink:href="/ui/svg-defs.svg#settings-16"></use>
+                    </svg>
+                    Edit Connector
+                  </li>
+                  <li
+                    class="cursor-pointer text-orange-700 pl-2 pr-16 py-4 hover:bg-gray-100 flex items-center"
+                    data-test-dropdown-button="connector-panel-delete"
+                    {{on "click" @showDeleteConnectorModal}}
+                    {{on "click" dd.actions.close}}
+                  >
+                    <svg class="fill-current text-orange-700 h-4 w-4 mr-2">
+                      <use xlink:href="/ui/svg-defs.svg#delete-16"></use>
+                    </svg>
+                    Remove Connector
+                  </li>
+                </ul>
+              </dd.Content>
+            </BasicDropdown>
+          {{/if}}
         </div>
       </div>
       <div class="flex text-center mb-2 border-b border-gray-300">
@@ -172,7 +183,7 @@
 
             {{#if @pipeline.isRunning}}
               <div class="text-orange-700 text-sm font-normal flex justify-end mt-4">You must pause
-                the pipeline if you'd like to update it's transforms.</div>
+                the pipeline if you'd like to update it's connectors or transforms.</div>
             {{/if}}
           </div>
         </div>
