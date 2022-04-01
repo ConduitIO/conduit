@@ -5,7 +5,11 @@
   as |pipeline|
 >
   <div class="flex items-center justify-end">
-    <Mxa::Button {{on 'click' (fn this.savePipeline pipeline)}} data-test-button="create-pipeline" disabled={{not pipeline.isValid}}>
+    <Mxa::Button
+      {{on "click" (fn this.savePipeline pipeline)}}
+      data-test-button="create-pipeline"
+      disabled={{or (not pipeline.isValid) (and (not pipeline.isNew) pipeline.isRunning)}}
+    >
       Save Changes
     </Mxa::Button>
   </div>
