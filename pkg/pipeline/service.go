@@ -67,6 +67,10 @@ func (s *Service) Init(
 		if instance.Status == StatusRunning || instance.Status == StatusSystemStopped {
 			// change status to "stopped" to allow pipeline to be started
 			instance.Status = StatusSystemStopped
+		}
+		measure.PipelinesGauge.WithValues(strings.ToLower(instance.Status.String())).Inc()
+
+		if instance.Status == StatusSystemStopped {
 			startErr := s.Start(ctx, connFetcher, procFetcher, instance)
 			if startErr != nil {
 				// try to start remaining pipelines and gather errors
@@ -76,9 +80,6 @@ func (s *Service) Init(
 	}
 
 	s.logger.Info(ctx).Int("count", len(s.instances)).Msg("pipelines initialized")
-	for _, i := range instances {
-		measure.PipelinesGauge.WithValues(strings.ToLower(i.Status.String())).Inc()
-	}
 
 	return err
 }

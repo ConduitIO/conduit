@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/conduitio/conduit/pkg/connector"
 	connmock "github.com/conduitio/conduit/pkg/connector/mock"
@@ -171,6 +172,9 @@ func testServiceInit(t *testing.T, status Status, expected Status) {
 		testProcessorFetcher{},
 	)
 	assert.Ok(t, err)
+
+	// pipelines start asynchronously, give them some time to start
+	time.Sleep(time.Millisecond * 100)
 
 	got := service.List(ctx)
 	assert.Equal(t, len(got), 1)
