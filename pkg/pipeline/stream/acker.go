@@ -64,21 +64,13 @@ func (n *AckerNode) Run(ctx context.Context) (err error) {
 
 	n.init()
 	defer func() {
-		var dropped int
-		n.cache.Range(func(pos record.Position, msg *Message) bool {
-			msg.Drop()
-			dropped++
-			return true
-		})
-		if dropped > 0 {
-			droppedErr := cerrors.Errorf("dropped %d messages when stopping acker node", dropped)
-			if err != nil {
-				// we are already returning an error, just log this one
-				n.logger.Err(ctx, droppedErr).Msg("acker node stopped without processing all messages")
-			} else {
-				// return droppedErr instead
-				err = droppedErr
-			}
+		dropAllErr := n.teardown()
+		if err != nil {
+			// we are already returning an error, just log this one
+			n.logger.Err(ctx, dropAllErr).Msg("acker node stopped without processing all messages")
+		} else {
+			// return dropAllErr instead
+			err = dropAllErr
 		}
 	}()
 
@@ -116,6 +108,21 @@ func (n *AckerNode) Run(ctx context.Context) (err error) {
 			return err
 		}
 	}
+}
+
+// teardown will drop all messages still in the cache and return an error in
+// case there were still unprocessed messages in the cache.
+func (n *AckerNode) teardown() error {
+	var dropped int
+	n.cache.Range(func(pos record.Position, msg *Message) bool {
+		msg.Drop()
+		dropped++
+		return true
+	})
+	if dropped > 0 {
+		return cerrors.Errorf("dropped %d messages when stopping acker node", dropped)
+	}
+	return nil
 }
 
 // handleAck either acks or nacks the message, depending on the supplied error.
