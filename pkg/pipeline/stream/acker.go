@@ -153,7 +153,14 @@ func (n *AckerNode) ExpectAck(msg *Message) error {
 	_, loaded := n.cache.LoadOrStore(msg.Record.Position, msg)
 	if loaded {
 		// we already have a message with the same position in the cache
-		return cerrors.Errorf("encountered two records with the same position %q, can't differentiate them (could be that you are using a pipeline with two same source connectors and they both produced a record with the same position at the same time, could also be a badly written source connector that doesn't assign unique positions to records)", msg.Record.Position.String())
+		n.logger.Error(msg.Ctx).Msg("encountered two records with the same" +
+			"position and can't differentiate them (could be that you are using" +
+			"a pipeline with two same source connectors and they both produced" +
+			"a record with the same position at the same time, could also be a" +
+			"badly written source connector that doesn't assign unique positions" +
+			"to records)")
+		return cerrors.Errorf("encountered two records with the same position (%q)",
+			msg.Record.Position.String())
 	}
 	return nil
 }
