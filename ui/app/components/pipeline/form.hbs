@@ -1,13 +1,17 @@
 <div class="mx-auto max-w-2xl pt-20 pb-10">
   <Mxa::DialogCard class="p-8">
-    <div class="font-medium py-4 text-lg">{{@title}}</div>
-    <div class="text-xs uppercase pb-2">
+    <div class="font-medium pt-4 text-lg">
+      {{@title}}
+    </div>
+
+    <div class="text-xs uppercase mt-2 pb-2">
       <label class="inline-block mb-2">Name</label>
       <Mxa::UnboundInput
         @value={{@pipeline.name}}
         @placeholder="Pipeline Name"
         @isValid={{this.isPipelineNameValid}}
         @onInput={{fn this.setPipelineName @pipeline}}
+        disabled={{and (not @pipeline.isNew) @pipeline.isRunning}}
         data-test-pipeline-form-name-input
       />
     </div>
@@ -36,10 +40,18 @@
         class="text-sm px-4 py-2 block w-full border border-gray-300 rounded resize-none focus:outline-none focus:border-purple-600"
         rows="6"
         cols="80"
+        disabled={{and (not @pipeline.isNew) @pipeline.isRunning}}
         data-test-pipeline-form-description-input
       />
     </div>
 
     {{yield @pipeline}}
+
+    {{#if (and (not @pipeline.isNew) @pipeline.isRunning)}}
+      <div
+        class="text-orange-700 text-sm font-normal flex justify-end mt-4"
+        data-test-pipeline-settings-disabled
+      >You cannot edit a pipeline's settings while it is running</div>
+    {{/if}}
   </Mxa::DialogCard>
 </div>
