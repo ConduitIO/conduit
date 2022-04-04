@@ -1197,7 +1197,8 @@
           "type": "string",
           "title": "the value to be compared with the parameter,\nor a comma separated list in case of Validation.TYPE_INCLUSION or Validation.TYPE_EXCLUSION"
         }
-      }
+      },
+      "title": "Validation to be made on the parameter"
     },
     "ParameterValidationType": {
       "type": "string",
@@ -1220,7 +1221,8 @@
           "$ref": "#/definitions/v1PipelineStatus"
         },
         "error": {
-          "type": "string"
+          "type": "string",
+          "description": "Error message when pipeline status is STATUS_DEGRADED."
         }
       }
     },
@@ -1254,7 +1256,8 @@
         "TYPE_FILE",
         "TYPE_DURATION"
       ],
-      "default": "TYPE_UNSPECIFIED"
+      "default": "TYPE_UNSPECIFIED",
+      "description": "Type shows the parameter type.\n\n - TYPE_STRING: Parameter is a string.\n - TYPE_NUMBER: Parameter is a number.\n - TYPE_BOOL: Parameter is a boolean.\n - TYPE_FILE: Parameter is a file.\n - TYPE_DURATION: Parameter is a duration."
     },
     "ProcessorParent": {
       "type": "object",
@@ -1274,7 +1277,8 @@
         "TYPE_CONNECTOR",
         "TYPE_PIPELINE"
       ],
-      "default": "TYPE_UNSPECIFIED"
+      "default": "TYPE_UNSPECIFIED",
+      "description": "Type shows the processor's parent type.\n\n - TYPE_CONNECTOR: Processor parent is a connector.\n - TYPE_PIPELINE: Processor parent is a pipeline."
     },
     "apiv1Info": {
       "type": "object",
@@ -1347,7 +1351,6 @@
           "items": {
             "type": "string"
           },
-          "title": "-- children connections ---------------------------------------------------",
           "readOnly": true
         }
       }
@@ -1373,7 +1376,8 @@
         "TYPE_SOURCE",
         "TYPE_DESTINATION"
       ],
-      "default": "TYPE_UNSPECIFIED"
+      "default": "TYPE_UNSPECIFIED",
+      "description": "Type shows the connector type.\n\n - TYPE_SOURCE: Connector is a source.\n - TYPE_DESTINATION: Connector is a destination."
     },
     "v1CreateConnectorRequest": {
       "type": "object",
@@ -1382,10 +1386,12 @@
           "$ref": "#/definitions/v1ConnectorType"
         },
         "plugin": {
-          "type": "string"
+          "type": "string",
+          "title": "Plugin name"
         },
         "pipelineId": {
-          "type": "string"
+          "type": "string",
+          "title": "Pipeline id of which the connector will be in"
         },
         "config": {
           "$ref": "#/definitions/v1ConnectorConfig"
@@ -1560,7 +1566,6 @@
           "items": {
             "type": "string"
           },
-          "title": "-- children connections ---------------------------------------------------",
           "readOnly": true
         },
         "processorIds": {
@@ -1591,7 +1596,8 @@
         "STATUS_STOPPED",
         "STATUS_DEGRADED"
       ],
-      "default": "STATUS_UNSPECIFIED"
+      "default": "STATUS_UNSPECIFIED",
+      "description": "Status describes the pipeline status.\n\n - STATUS_RUNNING: Pipeline is running.\n - STATUS_STOPPED: Pipeline gracefully stopped.\n - STATUS_DEGRADED: Pipeline stopped with an error (see State.error)."
     },
     "v1PluginSpecifications": {
       "type": "object",
@@ -1664,7 +1670,8 @@
         "TYPE_TRANSFORM",
         "TYPE_FILTER"
       ],
-      "default": "TYPE_UNSPECIFIED"
+      "default": "TYPE_UNSPECIFIED",
+      "description": "Type shows the processor type.\n\n - TYPE_TRANSFORM: Processor is a transform.\n - TYPE_FILTER: Processor is a filter."
     },
     "v1StartPipelineResponse": {
       "type": "object"
