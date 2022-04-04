@@ -235,6 +235,7 @@ func basicSourceMock(ctrl *gomock.Controller) *connmock.Source {
 // match the expected records. On teardown it also makes sure that it received
 // all expected records.
 func asserterDestination(ctrl *gomock.Controller, t *testing.T, want []record.Record, teardown bool) connector.Destination {
+	rchan := make(chan record.Record)
 	recordCount := 0
 
 	destination := connmock.NewDestination(ctrl)
@@ -245,6 +246,7 @@ func asserterDestination(ctrl *gomock.Controller, t *testing.T, want []record.Re
 	destination.EXPECT().Errors().Return(make(chan error))
 	if teardown {
 		destination.EXPECT().Teardown(gomock.Any()).DoAndReturn(func(ctx context.Context) error {
+			close(rchan)
 			return nil
 		}).Times(1)
 	}
@@ -253,7 +255,19 @@ func asserterDestination(ctrl *gomock.Controller, t *testing.T, want []record.Re
 		assert.Ok(t, err)
 		assert.Equal(t, want[position], r)
 		recordCount++
+		rchan <- r
 		return nil
+	}).AnyTimes()
+	destination.EXPECT().Ack(gomock.Any()).DoAndReturn(func(ctx context.Context) (record.Position, error) {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case r, ok := <-rchan:
+			if !ok {
+				return nil, nil
+			}
+			return r.Position, nil
+		}
 	}).AnyTimes()
 	t.Cleanup(func() {
 		assert.Equal(t, len(want), recordCount)

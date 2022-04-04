@@ -29,6 +29,8 @@ type DestinationNode struct {
 	Name           string
 	Destination    connector.Destination
 	ConnectorTimer metrics.Timer
+	// AckerNode is responsible for handling acks
+	AckerNode *AckerNode
 
 	base   subNodeBase
 	logger log.CtxLogger
@@ -50,6 +52,12 @@ func (n *DestinationNode) Run(ctx context.Context) (err error) {
 		return cerrors.Errorf("could not open destination connector: %w", err)
 	}
 	defer func() {
+		// wait for acker node to receive all outstanding acks, time out after
+		// 1 minute or right away if the context is already canceled.
+		waitCtx, cancel := context.WithTimeout(ctx, time.Minute)
+		defer cancel()
+		n.AckerNode.Wait(waitCtx)
+
 		// teardown will kill the plugin process
 		tdErr := n.Destination.Teardown(connectorCtx)
 		if tdErr != nil {
@@ -76,25 +84,20 @@ func (n *DestinationNode) Run(ctx context.Context) (err error) {
 
 		n.logger.Trace(msg.Ctx).Msg("writing record to destination connector")
 
-		writeTime := time.Now()
-		err = n.Destination.Write(msg.Ctx, msg.Record)
-		n.ConnectorTimer.Update(time.Since(writeTime))
+		// first signal ack handler we might receive an ack, since this could
+		// already happen before write returns
+		err = n.AckerNode.ExpectAck(msg)
 		if err != nil {
-			n.logger.Trace(msg.Ctx).Err(err).Msg("nacking message")
-			err = msg.Nack(err)
-			if err != nil {
-				msg.Drop()
-				return cerrors.Errorf("error writing to destination: %w", err)
-			}
-			// nack was handled successfully, we recovered
-			continue
+			return err
 		}
 
-		n.logger.Trace(msg.Ctx).Msg("acking message")
-		err = msg.Ack()
+		writeTime := time.Now()
+		err = n.Destination.Write(msg.Ctx, msg.Record)
 		if err != nil {
-			return cerrors.Errorf("error acking message: %w", err)
+			n.AckerNode.ForgetAndDrop(msg)
+			return cerrors.Errorf("error writing to destination: %w", err)
 		}
+		n.ConnectorTimer.Update(time.Since(writeTime))
 	}
 }
 

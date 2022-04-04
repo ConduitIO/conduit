@@ -162,8 +162,9 @@ github.com/conduitio/conduit-connector-protocol v0.0.0-20220304172523-dcb690811b
 github.com/conduitio/conduit-connector-s3 v0.0.0-20220308112711-bb3e0119a762 h1:zrMn3RCCeJ+oJ36XklFijd6BEeg+GMTvOVS8bFtwKRU=
 github.com/conduitio/conduit-connector-s3 v0.0.0-20220308112711-bb3e0119a762/go.mod h1:PUQg3eGnsvcCdO3LHudiDETOkZWjkHM/2ru/bgnJeME=
 github.com/conduitio/conduit-connector-sdk v0.0.0-20220302183659-cde4aa4147ae/go.mod h1:XiYwUhsC2Rgl8f8L3+nhwfPgIvApUpIHBivIJffaTWw=
-github.com/conduitio/conduit-connector-sdk v0.0.0-20220304172424-32a20f262a14 h1:WIXGOWENHELn3lXKAh2kAP4x16hX2o3kIokNEz45SaA=
 github.com/conduitio/conduit-connector-sdk v0.0.0-20220304172424-32a20f262a14/go.mod h1:XiYwUhsC2Rgl8f8L3+nhwfPgIvApUpIHBivIJffaTWw=
+github.com/conduitio/conduit-connector-sdk v0.0.0-20220404170930-453c4ad1fafc h1:C1GrF7OYSCKebxFkM3aKkpdBWqm6u4/1H5JC3YHXzG4=
+github.com/conduitio/conduit-connector-sdk v0.0.0-20220404170930-453c4ad1fafc/go.mod h1:qJUIPBWRb3gU7lMaHWlfLs56wfTJL+eJM0MGy8NpgC8=
 github.com/coreos/etcd v3.3.10+incompatible/go.mod h1:uF7uidLiAD3TWHmW31ZFd/JWoc32PjwdhPthX9715RE=
 github.com/coreos/go-etcd v2.0.0+incompatible/go.mod h1:Jez6KQU2B/sWsbdaef3ED8NzMklzPG4d5KIOhIy30Tk=
 github.com/coreos/go-semver v0.2.0/go.mod h1:nnelYz7RCh+5ahJtPPxZlU+153eP4D4r3EedlOD2RNk=
