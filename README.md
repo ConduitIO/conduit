@@ -94,7 +94,7 @@ Conduit ships with a number of built-in connectors:
 Additionally, we have prepared a [Kafka Connect wrapper](https://github.com/conduitio/conduit-kafka-connect-wrapper) that allows you to run any Apache 
 Kafka Connect connector as part of a Conduit pipeline.
 
-Conduit is also able to run standalone connectors, if you are interested in writing a connector yourself have a look at our [Go Connector SDK](https://github.com/ConduitIO/conduit-connector-sdk). Since standalone connectors communicate with Conduit through gRPC they can be written in virtually any programming language, as long as the connector follows the [Conduit Connector Protocol](https://github.com/ConduitIO/conduit-connector-protocol).
+Conduit is also able to run standalone connectors. If you are interested in writing a connector yourself, have a look at our [Go Connector SDK](https://github.com/ConduitIO/conduit-connector-sdk). Since standalone connectors communicate with Conduit through gRPC they can be written in virtually any programming language, as long as the connector follows the [Conduit Connector Protocol](https://github.com/ConduitIO/conduit-connector-protocol).
 
 ## Testing
 
