@@ -12,7 +12,7 @@ require (
 	github.com/conduitio/conduit-connector-postgres v0.0.0-20220309140906-3330671a8955
 	github.com/conduitio/conduit-connector-protocol v0.0.0-20220304172523-dcb690811ba6
 	github.com/conduitio/conduit-connector-s3 v0.0.0-20220308112711-bb3e0119a762
-	github.com/conduitio/conduit-connector-sdk v0.0.0-20220304172424-32a20f262a14
+	github.com/conduitio/conduit-connector-sdk v0.0.0-20220404170930-453c4ad1fafc
 	github.com/dgraph-io/badger/v3 v3.2103.2
 	github.com/dop251/goja v0.0.0-20210225094849-f3cfc97811c0
 	github.com/golang/mock v1.6.0
@@ -23,6 +23,7 @@ require (
 	github.com/hashicorp/go-plugin v1.4.3
 	github.com/jackc/pgtype v1.10.0
 	github.com/jackc/pgx/v4 v4.15.0
+	github.com/matryer/is v1.4.0
 	github.com/piotrkowalczuk/promgrpc/v4 v4.0.4
 	github.com/prometheus/client_golang v1.12.1
 	github.com/prometheus/client_model v0.2.0

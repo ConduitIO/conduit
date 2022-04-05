@@ -8,7 +8,7 @@ _Data Integration for Production Data Stores. :dizzy:_
 [![Go Report Card](https://goreportcard.com/badge/github.com/conduitio/conduit)](https://goreportcard.com/report/github.com/conduitio/conduit)
 [![Discord](https://img.shields.io/discord/828680256877363200?label=discord&logo=discord)](https://discord.meroxa.com)
 [![Go Reference](https://pkg.go.dev/badge/github.com/conduitio/conduit.svg)](https://pkg.go.dev/github.com/conduitio/conduit)
-[![Conduit docs](https://img.shields.io/badge/conduit-docs-blue)](https://docs.conduit.io)
+[![Conduit docs](https://img.shields.io/badge/conduit-docs-blue)](https://www.conduit.io/docs/introduction/getting-started)
 [![API docs](https://img.shields.io/badge/HTTP_API-docs-blue)](https://docs.conduit.io/api)
 
 ## Overview
@@ -28,6 +28,7 @@ written in any language as long as they conform to the required interface.
 Conduit was created and open-sourced by [Meroxa](https://meroxa.io).
 
 - [Installation guide](#installation-guide)
+- [Connectors](#connectors)
 - [Testing](#testing)
 - [API](#api)
 - [UI](#ui)
@@ -72,12 +73,28 @@ as a simple backend service.
 
 ### Docker
 
-Our Docker images are hosted on GitHub's Container Registry. To pull the latest tag, you should run the following in your command line:
+Our Docker images are hosted on GitHub's Container Registry. To pull the latest tag, you should run the following command:
+
 ```
 docker pull ghcr.io/conduitio/conduit:latest
 ```
-The Docker images include the UI and the following plugins: S3, Postgres, Kafka, file and generator.
 
+The Docker images include the [UI](#ui).
+
+## Connectors
+
+Conduit ships with a number of built-in connectors:
+
+- [File connector](https://github.com/ConduitIO/conduit-connector-file) provides a source/destination to read/write a local file (useful for quickly trying out Conduit without additional setup).
+- [Kafka connector](https://github.com/ConduitIO/conduit-connector-kafka) provides a source/destination for Apache Kafka.
+- [Postgres connector](https://github.com/ConduitIO/conduit-connector-postgres) provides a source/destination for PostgreSQL.
+- [S3 connector](https://github.com/ConduitIO/conduit-connector-s3) provides a source/destination for AWS S3.
+- [Generator connector](https://github.com/ConduitIO/conduit-connector-generator) provides a source which generates random data (useful for testing).
+
+Additionally, we have prepared a [Kafka Connect wrapper](https://github.com/conduitio/conduit-kafka-connect-wrapper) that allows you to run any Apache 
+Kafka Connect connector as part of a Conduit pipeline.
+
+Conduit is also able to run standalone connectors. If you are interested in writing a connector yourself, have a look at our [Go Connector SDK](https://github.com/ConduitIO/conduit-connector-sdk). Since standalone connectors communicate with Conduit through gRPC they can be written in virtually any programming language, as long as the connector follows the [Conduit Connector Protocol](https://github.com/ConduitIO/conduit-connector-protocol).
 
 ## Testing
 

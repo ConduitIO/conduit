@@ -137,8 +137,6 @@ func (s *destination) Teardown(ctx context.Context) error {
 		return plugin.ErrPluginNotRunning
 	}
 
-	// TODO call Stop separately before Teardown. The idea is to let the plugin
-	//  know it should flush any unwritten changes and send back the acks
 	s.logger.Debug(ctx).Msg("stopping destination connector plugin")
 	err := s.plugin.Stop(ctx)
 
@@ -166,14 +164,20 @@ func (s *destination) Write(ctx context.Context, r record.Record) error {
 		return cerrors.Errorf("error writing record: %w", err)
 	}
 
-	// TODO calling ack here makes the writing of records synchronous, we need
-	//  to add AckFunc parameter to destination.Write and call it asynchronously
-	_, err = s.plugin.Ack(ctx)
-	if err != nil {
-		return cerrors.Errorf("error receiving ack: %w", err)
+	return nil
+}
+
+func (s *destination) Ack(ctx context.Context) (record.Position, error) {
+	if !s.IsRunning() {
+		return nil, plugin.ErrPluginNotRunning
 	}
 
-	return nil
+	p, err := s.plugin.Ack(ctx)
+	if err != nil {
+		return nil, cerrors.Errorf("error receiving ack: %w", err)
+	}
+
+	return p, nil
 }
 
 func (s *destination) Lock() {

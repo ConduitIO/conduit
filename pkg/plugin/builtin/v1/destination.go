@@ -93,9 +93,9 @@ func (s *destinationPluginAdapter) Start(ctx context.Context) error {
 		s.logger.Trace(ctx).Msg("calling Run")
 		err := s.impl.Run(s.withLogger(ctx), s.stream)
 		if err != nil {
-			s.stream.stop(cerrors.Errorf("error in run: %w", err))
+			s.stream.stopAll(cerrors.Errorf("error in run: %w", err))
 		} else {
-			s.stream.stop(plugin.ErrStreamNotOpen)
+			s.stream.stopAll(plugin.ErrStreamNotOpen)
 		}
 		s.logger.Trace(ctx).Msg("Run stopped")
 	}()
@@ -146,6 +146,8 @@ func (s *destinationPluginAdapter) Stop(ctx context.Context) error {
 		return plugin.ErrStreamNotOpen
 	}
 
+	s.stream.stopSend()
+
 	s.logger.Trace(ctx).Msg("calling Stop")
 	resp, err := s.impl.Stop(s.withLogger(ctx), toplugin.DestinationStopRequest())
 	if err != nil {
@@ -168,19 +170,25 @@ func (s *destinationPluginAdapter) Teardown(ctx context.Context) error {
 }
 
 func newDestinationRunStream(ctx context.Context) *destinationRunStream {
+	sendCtx, sendCancel := context.WithCancel(ctx)
+	recvCtx, recvCancel := context.WithCancel(ctx)
 	return &destinationRunStream{
-		ctx:      ctx,
-		stopChan: make(chan struct{}),
-		reqChan:  make(chan cpluginv1.DestinationRunRequest),
-		respChan: make(chan cpluginv1.DestinationRunResponse),
+		sendCtx:   sendCtx,
+		recvCtx:   recvCtx,
+		closeSend: sendCancel,
+		closeRecv: recvCancel,
+		reqChan:   make(chan cpluginv1.DestinationRunRequest),
+		respChan:  make(chan cpluginv1.DestinationRunResponse),
 	}
 }
 
 type destinationRunStream struct {
-	ctx      context.Context
-	stopChan chan struct{}
-	reqChan  chan cpluginv1.DestinationRunRequest
-	respChan chan cpluginv1.DestinationRunResponse
+	sendCtx   context.Context
+	recvCtx   context.Context
+	closeSend context.CancelFunc
+	closeRecv context.CancelFunc
+	reqChan   chan cpluginv1.DestinationRunRequest
+	respChan  chan cpluginv1.DestinationRunResponse
 
 	reason error
 	m      sync.RWMutex
@@ -188,9 +196,7 @@ type destinationRunStream struct {
 
 func (s *destinationRunStream) Send(resp cpluginv1.DestinationRunResponse) error {
 	select {
-	case <-s.ctx.Done():
-		return s.ctx.Err()
-	case <-s.stopChan:
+	case <-s.sendCtx.Done():
 		return io.EOF
 	case s.respChan <- resp:
 		return nil
@@ -199,9 +205,7 @@ func (s *destinationRunStream) Send(resp cpluginv1.DestinationRunResponse) error
 
 func (s *destinationRunStream) Recv() (cpluginv1.DestinationRunRequest, error) {
 	select {
-	case <-s.ctx.Done():
-		return cpluginv1.DestinationRunRequest{}, s.ctx.Err()
-	case <-s.stopChan:
+	case <-s.recvCtx.Done():
 		return cpluginv1.DestinationRunRequest{}, io.EOF
 	case req := <-s.reqChan:
 		return req, nil
@@ -209,10 +213,10 @@ func (s *destinationRunStream) Recv() (cpluginv1.DestinationRunRequest, error) {
 }
 
 func (s *destinationRunStream) recvInternal() (cpluginv1.DestinationRunResponse, error) {
+	// note that contexts are named from the perspective of the server, while
+	// this function is used from the perspective of the client
 	select {
-	case <-s.ctx.Done():
-		return cpluginv1.DestinationRunResponse{}, cerrors.New(s.ctx.Err().Error())
-	case <-s.stopChan:
+	case <-s.sendCtx.Done():
 		return cpluginv1.DestinationRunResponse{}, s.reason
 	case resp := <-s.respChan:
 		return resp, nil
@@ -220,17 +224,24 @@ func (s *destinationRunStream) recvInternal() (cpluginv1.DestinationRunResponse,
 }
 
 func (s *destinationRunStream) sendInternal(req cpluginv1.DestinationRunRequest) error {
+	// note that contexts are named from the perspective of the server, while
+	// this function is used from the perspective of the client
 	select {
-	case <-s.ctx.Done():
-		return cerrors.New(s.ctx.Err().Error()) // TODO should this be s.ctx.Err()?
-	case <-s.stopChan:
-		return s.reason
+	case <-s.recvCtx.Done():
+		return plugin.ErrStreamNotOpen
 	case s.reqChan <- req:
 		return nil
 	}
 }
 
-func (s *destinationRunStream) stop(reason error) {
+func (s *destinationRunStream) stopAll(reason error) {
 	s.reason = reason
-	close(s.stopChan)
+	s.closeSend()
+	s.closeRecv()
+}
+
+func (s *destinationRunStream) stopSend() {
+	// we want to stop the stream towards the server, so we close the receiving
+	// context from the servers perspective
+	s.closeRecv()
 }
