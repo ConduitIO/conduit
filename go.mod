@@ -10,9 +10,9 @@ require (
 	github.com/conduitio/conduit-connector-generator v0.0.0-20220307173009-a7744489e9db
 	github.com/conduitio/conduit-connector-kafka v0.0.0-20220329121707-8ec203838b8c
 	github.com/conduitio/conduit-connector-postgres v0.0.0-20220309140906-3330671a8955
-	github.com/conduitio/conduit-connector-protocol v0.0.0-20220304172523-dcb690811ba6
+	github.com/conduitio/conduit-connector-protocol v0.2.0
 	github.com/conduitio/conduit-connector-s3 v0.0.0-20220308112711-bb3e0119a762
-	github.com/conduitio/conduit-connector-sdk v0.0.0-20220404170930-453c4ad1fafc
+	github.com/conduitio/conduit-connector-sdk v0.2.0
 	github.com/dgraph-io/badger/v3 v3.2103.2
 	github.com/dop251/goja v0.0.0-20210225094849-f3cfc97811c0
 	github.com/golang/mock v1.6.0
@@ -32,7 +32,7 @@ require (
 	go.buf.build/library/go-grpc/conduitio/conduit-connector-protocol v1.4.1
 	golang.org/x/tools v0.1.10
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1
-	google.golang.org/genproto v0.0.0-20220329135034-5a5e19f58d62
+	google.golang.org/genproto v0.0.0-20220401170504-314d38edb7de
 	google.golang.org/grpc v1.46.0-dev.0.20220224182858-328efcc9276e
 	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.2.0
 	google.golang.org/protobuf v1.28.0
@@ -124,8 +124,8 @@ require (
 	go.uber.org/zap v1.21.0 // indirect
 	golang.org/x/crypto v0.0.0-20211215165025-cf75a172585e // indirect
 	golang.org/x/mod v0.6.0-dev.0.20220106191415-9b9b3d81d5e3 // indirect
-	golang.org/x/net v0.0.0-20220325170049-de3da57026de // indirect
-	golang.org/x/sys v0.0.0-20220319134239-a9b59b0215f8 // indirect
+	golang.org/x/net v0.0.0-20220403103023-749bd193bc2b // indirect
+	golang.org/x/sys v0.0.0-20220405052023-b1e9470b6e64 // indirect
 	golang.org/x/term v0.0.0-20210927222741-03fcf44c2211 // indirect
 	golang.org/x/text v0.3.7 // indirect
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
