@@ -79,7 +79,7 @@ Our Docker images are hosted on GitHub's Container Registry. To run the latest C
 docker run -p 8080:8080 ghcr.io/conduitio/conduit:latest
 ```
 
-The Docker image includes the [UI](#ui), it is accessible if you navigate to `http://localhost:8080/ui`.
+The Docker image includes the [UI](#ui), you can access it by navigating to `http://localhost:8080/ui`.
 
 ## Connectors
 
