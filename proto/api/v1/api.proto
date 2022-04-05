@@ -8,15 +8,20 @@ import "google/api/annotations.proto";
 import "protoc-gen-openapiv2/options/annotations.proto";
 
 message Pipeline {
+  // Status describes the pipeline status.
   enum Status {
     STATUS_UNSPECIFIED = 0;
+    // Pipeline is running.
     STATUS_RUNNING = 1;
+    // Pipeline gracefully stopped.
     STATUS_STOPPED = 2;
+    // Pipeline stopped with an error (see State.error).
     STATUS_DEGRADED = 3;
   }
 
   message State {
     Status status = 1;
+    // Error message when pipeline status is STATUS_DEGRADED.
     string error = 2;
   }
   message Config {
@@ -29,14 +34,18 @@ message Pipeline {
   Config config = 3;
 
   // -- children connections ---------------------------------------------------
+
   repeated string connector_ids = 5 [(google.api.field_behavior) = OUTPUT_ONLY];
   repeated string processor_ids = 6 [(google.api.field_behavior) = OUTPUT_ONLY];
 }
 
 message Connector {
+  // Type shows the connector type.
   enum Type {
     TYPE_UNSPECIFIED = 0;
+    // Connector is a source.
     TYPE_SOURCE = 1;
+    // Connector is a destination.
     TYPE_DESTINATION = 2;
   }
 
@@ -67,19 +76,26 @@ message Connector {
   string pipeline_id = 7 [(google.api.field_behavior) = IMMUTABLE];
 
   // -- children connections ---------------------------------------------------
+
   repeated string processor_ids = 8 [(google.api.field_behavior) = OUTPUT_ONLY];
 }
 
 message Processor {
+  // Type shows the processor type.
   enum Type {
     TYPE_UNSPECIFIED = 0;
+    // Processor is a transform.
     TYPE_TRANSFORM = 1;
+    // Processor is a filter.
     TYPE_FILTER = 2;
   }
   message Parent {
+    // Type shows the processor's parent type.
     enum Type {
       TYPE_UNSPECIFIED = 0;
+      // Processor parent is a connector.
       TYPE_CONNECTOR = 1;
+      // Processor parent is a pipeline.
       TYPE_PIPELINE = 2;
     }
 
@@ -353,7 +369,7 @@ service PipelineService {
 }
 
 message ListPipelinesRequest {
-  // regex to filter pipelines by name
+  // Regex to filter pipelines by name.
   string name = 1;
 }
 message ListPipelinesResponse {
@@ -543,7 +559,9 @@ service ConnectorService {
 
 message CreateConnectorRequest {
   Connector.Type type = 1;
+  // Plugin name is the name of the builtin plugin, or the absolute path of a standalone plugin.
   string plugin = 2;
+  // ID of the pipeline to which the connector will get attached.
   string pipeline_id = 3;
   Connector.Config config = 4;
 }
@@ -811,7 +829,7 @@ service PluginService {
 }
 
 message ListPluginsRequest {
-  // regex to filter plugins by name
+  // Regex to filter plugins by name.
   string name = 1;
 }
 
@@ -821,35 +839,42 @@ message ListPluginsResponse{
 
 message PluginSpecifications{
   message Parameter {
+    // Validation to be made on the parameter.
     message Validation{
       enum Type {
         TYPE_UNSPECIFIED = 0;
-        // parameter must be present
+        // Parameter must be present.
         TYPE_REQUIRED = 1;
-        // parameter must be greater than {value}
+        // Parameter must be greater than {value}.
         TYPE_GREATER_THAN = 2;
-        // parameter must be less than {value}
+        // Parameter must be less than {value}.
         TYPE_LESS_THAN = 3;
-        // parameter must be included in the comma separated list {value}
+        // Parameter must be included in the comma separated list {value}.
         TYPE_INCLUSION = 4;
-        // parameter must not be included in the comma separated list {value}
+        // Parameter must not be included in the comma separated list {value}.
         TYPE_EXCLUSION = 5;
-        // parameter must match the regex {value}
+        // Parameter must match the regex {value}.
         TYPE_REGEX = 6;
       }
 
       Type type =1;
-      // the value to be compared with the parameter,
-      // or a comma separated list in case of Validation.TYPE_INCLUSION or Validation.TYPE_EXCLUSION
+      // The value to be compared with the parameter,
+      // or a comma separated list in case of Validation.TYPE_INCLUSION or Validation.TYPE_EXCLUSION.
       string value =2;
     }
 
+    // Type shows the parameter type.
     enum Type {
       TYPE_UNSPECIFIED = 0;
+      // Parameter is a string.
       TYPE_STRING = 1;
+      // Parameter is a number.
       TYPE_NUMBER = 2;
+      // Parameter is a boolean.
       TYPE_BOOL = 3;
+      // Parameter is a file.
       TYPE_FILE = 4;
+      // Parameter is a duration.
       TYPE_DURATION = 5;
     }
 
