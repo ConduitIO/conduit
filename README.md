@@ -73,7 +73,7 @@ as a simple backend service.
 
 ### Docker
 
-Our Docker images are hosted on GitHub's Container Registry. To run the latest Conduit version, you should run the following commands:
+Our Docker images are hosted on GitHub's Container Registry. To run the latest Conduit version, you should run the following command:
 
 ```
 docker run -p 8080:8080 ghcr.io/conduitio/conduit:latest
