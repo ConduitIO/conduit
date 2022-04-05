@@ -9,7 +9,7 @@ require (
 	github.com/conduitio/conduit-connector-file v0.1.0
 	github.com/conduitio/conduit-connector-generator v0.1.0
 	github.com/conduitio/conduit-connector-kafka v0.1.0
-	github.com/conduitio/conduit-connector-postgres v0.0.0-20220309140906-3330671a8955
+	github.com/conduitio/conduit-connector-postgres v0.1.0
 	github.com/conduitio/conduit-connector-protocol v0.2.0
 	github.com/conduitio/conduit-connector-s3 v0.0.0-20220308112711-bb3e0119a762
 	github.com/conduitio/conduit-connector-sdk v0.2.0
@@ -61,7 +61,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sso v1.11.0 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.16.0 // indirect
 	github.com/aws/smithy-go v1.11.1 // indirect
-	github.com/batchcorp/pgoutput v0.3.2 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash v1.1.0 // indirect
 	github.com/cespare/xxhash/v2 v2.1.2 // indirect
@@ -85,10 +84,10 @@ require (
 	github.com/jackc/chunkreader/v2 v2.0.1 // indirect
 	github.com/jackc/pgconn v1.11.0 // indirect
 	github.com/jackc/pgio v1.0.0 // indirect
+	github.com/jackc/pglogrepl v0.0.0-20220305000529-420b8467887a // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgproto3/v2 v2.2.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20200714003250-2b9c44734f2b // indirect
-	github.com/jackc/pgx v3.6.2+incompatible // indirect
 	github.com/jackc/puddle v1.2.1 // indirect
 	github.com/jdxcode/netrc v0.0.0-20210204082910-926c7f70242a // indirect
 	github.com/jhump/protocompile v0.0.0-20220216033700-d705409f108f // indirect
