@@ -73,13 +73,13 @@ as a simple backend service.
 
 ### Docker
 
-Our Docker images are hosted on GitHub's Container Registry. To pull the latest tag, you should run the following command:
+Our Docker images are hosted on GitHub's Container Registry. To run the latest Conduit version, you should run the following command:
 
 ```
-docker pull ghcr.io/conduitio/conduit:latest
+docker run -p 8080:8080 ghcr.io/conduitio/conduit:latest
 ```
 
-The Docker images include the [UI](#ui).
+The Docker image includes the [UI](#ui), you can access it by navigating to `http://localhost:8080/ui`.
 
 ## Connectors
 
