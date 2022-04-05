@@ -148,8 +148,8 @@ github.com/cncf/xds/go v0.0.0-20211011173535-cb28da3451f1/go.mod h1:eXthEFrGJvWH
 github.com/cockroachdb/apd v1.1.0 h1:3LFP3629v+1aKXU5Q37mxmRxX/pIu1nijXydLShEq5I=
 github.com/cockroachdb/apd v1.1.0/go.mod h1:8Sl8LxpKi29FqWXR16WEFZRNSz3SoPzUzeMeY4+DwBQ=
 github.com/colinmarc/hdfs/v2 v2.1.1/go.mod h1:M3x+k8UKKmxtFu++uAZ0OtDU8jR3jnaZIAc6yK4Ue0c=
-github.com/conduitio/conduit-connector-file v0.0.0-20220304165706-4cd6c275d2b0 h1:L8CxGEnNobWo6GBo0F50UYOlQ8KwawfVDFoEVix6V5Q=
-github.com/conduitio/conduit-connector-file v0.0.0-20220304165706-4cd6c275d2b0/go.mod h1:5PmLVNbKoYzBhm0T/8aOY1n9Lz5iKQj/eH1lP1cRckM=
+github.com/conduitio/conduit-connector-file v0.1.0 h1:uHGqc9Oubpft9DJ22NCcc8ET5igJcfuB0LYUkAH6r6g=
+github.com/conduitio/conduit-connector-file v0.1.0/go.mod h1:3WQYIxyT+QtE13EiZ/Ti8S6Br37TFkRX2qEbHOo7PFs=
 github.com/conduitio/conduit-connector-generator v0.0.0-20220307173009-a7744489e9db h1:Bh7llobvPIzSU1P24oQwUQkMi0P73KtgYRIDFtJcyac=
 github.com/conduitio/conduit-connector-generator v0.0.0-20220307173009-a7744489e9db/go.mod h1:5dLVlOd1S/lCXnpEqIxWVgGcLHf8/r3gdxFwfVC6eHA=
 github.com/conduitio/conduit-connector-kafka v0.0.0-20220329121707-8ec203838b8c h1:bH/45S4nEE5wcIj18hP5cCaW36hS0gim9cX264Bi5zM=
