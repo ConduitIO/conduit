@@ -370,7 +370,7 @@
         "parameters": [
           {
             "name": "name",
-            "description": "regex to filter pipelines by name.",
+            "description": "Regex to filter pipelines by name.",
             "in": "query",
             "required": false,
             "type": "string"
@@ -874,7 +874,7 @@
         "parameters": [
           {
             "name": "name",
-            "description": "regex to filter plugins by name.",
+            "description": "Regex to filter plugins by name.",
             "in": "query",
             "required": false,
             "type": "string"
@@ -1195,10 +1195,10 @@
         },
         "value": {
           "type": "string",
-          "title": "the value to be compared with the parameter,\nor a comma separated list in case of Validation.TYPE_INCLUSION or Validation.TYPE_EXCLUSION"
+          "description": "The value to be compared with the parameter,\nor a comma separated list in case of Validation.TYPE_INCLUSION or Validation.TYPE_EXCLUSION."
         }
       },
-      "title": "Validation to be made on the parameter"
+      "description": "Validation to be made on the parameter."
     },
     "ParameterValidationType": {
       "type": "string",
@@ -1212,7 +1212,7 @@
         "TYPE_REGEX"
       ],
       "default": "TYPE_UNSPECIFIED",
-      "title": "- TYPE_REQUIRED: parameter must be present\n - TYPE_GREATER_THAN: parameter must be greater than {value}\n - TYPE_LESS_THAN: parameter must be less than {value}\n - TYPE_INCLUSION: parameter must be included in the comma separated list {value}\n - TYPE_EXCLUSION: parameter must not be included in the comma separated list {value}\n - TYPE_REGEX: parameter must match the regex {value}"
+      "description": " - TYPE_REQUIRED: Parameter must be present.\n - TYPE_GREATER_THAN: Parameter must be greater than {value}.\n - TYPE_LESS_THAN: Parameter must be less than {value}.\n - TYPE_INCLUSION: Parameter must be included in the comma separated list {value}.\n - TYPE_EXCLUSION: Parameter must not be included in the comma separated list {value}.\n - TYPE_REGEX: Parameter must match the regex {value}."
     },
     "PipelineState": {
       "type": "object",
@@ -1387,11 +1387,11 @@
         },
         "plugin": {
           "type": "string",
-          "title": "Plugin name"
+          "description": "Plugin name is the name of the builtin plugin, or the absolute path of a standalone plugin."
         },
         "pipelineId": {
           "type": "string",
-          "title": "Pipeline id of which the connector will be in"
+          "description": "ID of the pipeline to which the connector will get attached."
         },
         "config": {
           "$ref": "#/definitions/v1ConnectorConfig"

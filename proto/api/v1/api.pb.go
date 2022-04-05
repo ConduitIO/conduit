@@ -302,17 +302,17 @@ type PluginSpecifications_Parameter_Validation_Type int32
 
 const (
 	PluginSpecifications_Parameter_Validation_TYPE_UNSPECIFIED PluginSpecifications_Parameter_Validation_Type = 0
-	// parameter must be present
+	// Parameter must be present.
 	PluginSpecifications_Parameter_Validation_TYPE_REQUIRED PluginSpecifications_Parameter_Validation_Type = 1
-	// parameter must be greater than {value}
+	// Parameter must be greater than {value}.
 	PluginSpecifications_Parameter_Validation_TYPE_GREATER_THAN PluginSpecifications_Parameter_Validation_Type = 2
-	// parameter must be less than {value}
+	// Parameter must be less than {value}.
 	PluginSpecifications_Parameter_Validation_TYPE_LESS_THAN PluginSpecifications_Parameter_Validation_Type = 3
-	// parameter must be included in the comma separated list {value}
+	// Parameter must be included in the comma separated list {value}.
 	PluginSpecifications_Parameter_Validation_TYPE_INCLUSION PluginSpecifications_Parameter_Validation_Type = 4
-	// parameter must not be included in the comma separated list {value}
+	// Parameter must not be included in the comma separated list {value}.
 	PluginSpecifications_Parameter_Validation_TYPE_EXCLUSION PluginSpecifications_Parameter_Validation_Type = 5
-	// parameter must match the regex {value}
+	// Parameter must match the regex {value}.
 	PluginSpecifications_Parameter_Validation_TYPE_REGEX PluginSpecifications_Parameter_Validation_Type = 6
 )
 
@@ -656,7 +656,7 @@ type ListPipelinesRequest struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	// regex to filter pipelines by name
+	// Regex to filter pipelines by name.
 	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 }
 
@@ -1485,9 +1485,9 @@ type CreateConnectorRequest struct {
 	unknownFields protoimpl.UnknownFields
 
 	Type Connector_Type `protobuf:"varint,1,opt,name=type,proto3,enum=api.v1.Connector_Type" json:"type,omitempty"`
-	// Plugin name
+	// Plugin name is the name of the builtin plugin, or the absolute path of a standalone plugin.
 	Plugin string `protobuf:"bytes,2,opt,name=plugin,proto3" json:"plugin,omitempty"`
-	// Pipeline id of which the connector will be in
+	// ID of the pipeline to which the connector will get attached.
 	PipelineId string            `protobuf:"bytes,3,opt,name=pipeline_id,json=pipelineId,proto3" json:"pipeline_id,omitempty"`
 	Config     *Connector_Config `protobuf:"bytes,4,opt,name=config,proto3" json:"config,omitempty"`
 }
@@ -2620,7 +2620,7 @@ type ListPluginsRequest struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	// regex to filter plugins by name
+	// Regex to filter plugins by name.
 	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 }
 
@@ -3238,15 +3238,15 @@ func (x *PluginSpecifications_Parameter) GetValidations() []*PluginSpecification
 	return nil
 }
 
-// Validation to be made on the parameter
+// Validation to be made on the parameter.
 type PluginSpecifications_Parameter_Validation struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
 	Type PluginSpecifications_Parameter_Validation_Type `protobuf:"varint,1,opt,name=type,proto3,enum=api.v1.PluginSpecifications_Parameter_Validation_Type" json:"type,omitempty"`
-	// the value to be compared with the parameter,
-	// or a comma separated list in case of Validation.TYPE_INCLUSION or Validation.TYPE_EXCLUSION
+	// The value to be compared with the parameter,
+	// or a comma separated list in case of Validation.TYPE_INCLUSION or Validation.TYPE_EXCLUSION.
 	Value string `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
 }
 

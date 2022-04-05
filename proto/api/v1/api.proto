@@ -369,7 +369,7 @@ service PipelineService {
 }
 
 message ListPipelinesRequest {
-  // regex to filter pipelines by name
+  // Regex to filter pipelines by name.
   string name = 1;
 }
 message ListPipelinesResponse {
@@ -559,9 +559,9 @@ service ConnectorService {
 
 message CreateConnectorRequest {
   Connector.Type type = 1;
-  // Plugin name
+  // Plugin name is the name of the builtin plugin, or the absolute path of a standalone plugin.
   string plugin = 2;
-  // Pipeline id of which the connector will be in
+  // ID of the pipeline to which the connector will get attached.
   string pipeline_id = 3;
   Connector.Config config = 4;
 }
@@ -829,7 +829,7 @@ service PluginService {
 }
 
 message ListPluginsRequest {
-  // regex to filter plugins by name
+  // Regex to filter plugins by name.
   string name = 1;
 }
 
@@ -839,27 +839,27 @@ message ListPluginsResponse{
 
 message PluginSpecifications{
   message Parameter {
-    // Validation to be made on the parameter
+    // Validation to be made on the parameter.
     message Validation{
       enum Type {
         TYPE_UNSPECIFIED = 0;
-        // parameter must be present
+        // Parameter must be present.
         TYPE_REQUIRED = 1;
-        // parameter must be greater than {value}
+        // Parameter must be greater than {value}.
         TYPE_GREATER_THAN = 2;
-        // parameter must be less than {value}
+        // Parameter must be less than {value}.
         TYPE_LESS_THAN = 3;
-        // parameter must be included in the comma separated list {value}
+        // Parameter must be included in the comma separated list {value}.
         TYPE_INCLUSION = 4;
-        // parameter must not be included in the comma separated list {value}
+        // Parameter must not be included in the comma separated list {value}.
         TYPE_EXCLUSION = 5;
-        // parameter must match the regex {value}
+        // Parameter must match the regex {value}.
         TYPE_REGEX = 6;
       }
 
       Type type =1;
-      // the value to be compared with the parameter,
-      // or a comma separated list in case of Validation.TYPE_INCLUSION or Validation.TYPE_EXCLUSION
+      // The value to be compared with the parameter,
+      // or a comma separated list in case of Validation.TYPE_INCLUSION or Validation.TYPE_EXCLUSION.
       string value =2;
     }
 
