@@ -8,7 +8,7 @@ require (
 	github.com/bufbuild/buf v1.3.1
 	github.com/conduitio/conduit-connector-file v0.1.0
 	github.com/conduitio/conduit-connector-generator v0.1.0
-	github.com/conduitio/conduit-connector-kafka v0.0.0-20220329121707-8ec203838b8c
+	github.com/conduitio/conduit-connector-kafka v0.1.0
 	github.com/conduitio/conduit-connector-postgres v0.0.0-20220309140906-3330671a8955
 	github.com/conduitio/conduit-connector-protocol v0.2.0
 	github.com/conduitio/conduit-connector-s3 v0.0.0-20220308112711-bb3e0119a762
@@ -111,7 +111,7 @@ require (
 	github.com/pkg/profile v1.6.0 // indirect
 	github.com/prometheus/procfs v0.7.3 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
-	github.com/segmentio/kafka-go v0.4.30 // indirect
+	github.com/segmentio/kafka-go v0.4.31 // indirect
 	github.com/spf13/cobra v1.4.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/xdg/scram v1.0.5 // indirect
@@ -122,7 +122,7 @@ require (
 	go.uber.org/atomic v1.9.0 // indirect
 	go.uber.org/multierr v1.8.0 // indirect
 	go.uber.org/zap v1.21.0 // indirect
-	golang.org/x/crypto v0.0.0-20211215165025-cf75a172585e // indirect
+	golang.org/x/crypto v0.0.0-20220331220935-ae2d96664a29 // indirect
 	golang.org/x/mod v0.6.0-dev.0.20220106191415-9b9b3d81d5e3 // indirect
 	golang.org/x/net v0.0.0-20220403103023-749bd193bc2b // indirect
 	golang.org/x/sys v0.0.0-20220405052023-b1e9470b6e64 // indirect
