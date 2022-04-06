@@ -52,12 +52,12 @@ func TestAckerNode_Run_StopAfterWait(t *testing.T) {
 	dest.EXPECT().Ack(gomock.Any()).Return(nil, plugin.ErrStreamNotOpen)
 
 	// give the test 1 second to finish
-	ctx, cancel := context.WithTimeout(ctx, time.Second)
+	waitCtx, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
-	node.Wait(ctx)
+	node.Wait(waitCtx)
 
 	select {
-	case <-ctx.Done():
+	case <-waitCtx.Done():
 		is.Fail() // expected node to stop running
 	case <-nodeDone:
 		// all good
@@ -97,11 +97,11 @@ func TestAckerNode_Run_StopAfterExpectAck(t *testing.T) {
 	is.NoErr(err)
 
 	// give the test 1 second to finish
-	ctx, cancel := context.WithTimeout(ctx, time.Second)
+	waitCtx, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
 
 	select {
-	case <-ctx.Done():
+	case <-waitCtx.Done():
 		is.Fail() // expected node to stop running
 	case <-nodeDone:
 		// all good
