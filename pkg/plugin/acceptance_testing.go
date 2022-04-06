@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//nolint:revive,dogsled,stylecheck // this is a test file
+//nolint:revive,dogsled // this is a test file
 package plugin
 
 import (
