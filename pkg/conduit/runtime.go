@@ -319,7 +319,7 @@ func (r *Runtime) serveHTTPAPI(
 		grpcruntime.WithOutgoingHeaderMatcher(grpcutil.HeaderMatcher),
 		grpcutil.WithErrorHandler(r.logger),
 		grpcutil.WithPrettyJSONMarshaler(),
-		grpcutil.WithHealthzEndpoint(conn),
+		grpcruntime.WithHealthzEndpoint(grpc_health_v1.NewHealthClient(conn)),
 	)
 
 	err = apiv1.RegisterPipelineServiceHandler(ctx, gwmux, conn)
