@@ -10,5 +10,5 @@ GO_VERSION=$(go version | { read -r _ _ v _; echo "${v#go}"; })
 REQUIRED_GO_VERSION="1.18"
 
 if version_lt "$GO_VERSION" "$REQUIRED_GO_VERSION"; then
-    echo "WARNING: minimum recommended Go version is go$REQUIRED_GO_VERSION, version installed is go$GO_VERSION"
+    echo "ERROR: min Go version required is go$REQUIRED_GO_VERSION, version installed is go$GO_VERSION"
 fi

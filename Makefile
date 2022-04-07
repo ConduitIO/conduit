@@ -1,11 +1,10 @@
-.PHONY: test test-integration build run proto-api proto-lint clean download install-tools generate
+.PHONY: test test-integration build run proto-api proto-lint clean download install-tools generate check-go-version
 
 VERSION=`./scripts/get-tag.sh`
 GO_VERSION_CHECK=`./scripts/check-go-version.sh`
 
 # The build target should stay at the top since we want it to be the default target.
-build: pkg/web/ui/dist
-	@echo ${GO_VERSION_CHECK}
+build: check-go-version pkg/web/ui/dist
 	go build -ldflags "-X 'github.com/conduitio/conduit/pkg/conduit.version=${VERSION}'" -o conduit -tags ui ./cmd/conduit/main.go
 	@echo "\nBuild complete. Enjoy using Conduit!"
 	@echo "Get started by running:"
@@ -21,8 +20,7 @@ test-integration:
 		docker compose -f test/docker-compose-postgres.yml down; \
 		exit $$ret
 
-build-server:
-	@echo ${GO_VERSION_CHECK}
+build-server: check-go-version
 	go build -ldflags "-X 'github.com/conduitio/conduit/pkg/conduit.version=${VERSION}'" -o conduit ./cmd/conduit/main.go
 	@echo "build version: ${VERSION}"
 
@@ -62,3 +60,8 @@ pkg/web/ui/dist:
 ui-%:
 	@cd ui && make $*
 
+check-go-version:
+	@if [ "${GO_VERSION_CHECK}" != "" ]; then\
+        echo "${GO_VERSION_CHECK}";\
+        exit 1;\
+    fi
