@@ -23,17 +23,17 @@ import (
 type Dispenser struct {
 	name              string
 	logger            log.CtxLogger
-	specifierPlugin   cpluginv1.SpecifierPlugin
-	sourcePlugin      cpluginv1.SourcePlugin
-	destinationPlugin cpluginv1.DestinationPlugin
+	specifierPlugin   func() cpluginv1.SpecifierPlugin
+	sourcePlugin      func() cpluginv1.SourcePlugin
+	destinationPlugin func() cpluginv1.DestinationPlugin
 }
 
 func NewDispenser(
 	name string,
 	logger log.CtxLogger,
-	specifierPlugin cpluginv1.SpecifierPlugin,
-	sourcePlugin cpluginv1.SourcePlugin,
-	destinationPlugin cpluginv1.DestinationPlugin,
+	specifierPlugin func() cpluginv1.SpecifierPlugin,
+	sourcePlugin func() cpluginv1.SourcePlugin,
+	destinationPlugin func() cpluginv1.DestinationPlugin,
 ) *Dispenser {
 	return &Dispenser{
 		name:              name,
@@ -45,15 +45,15 @@ func NewDispenser(
 }
 
 func (d *Dispenser) DispenseSpecifier() (plugin.SpecifierPlugin, error) {
-	return newSpecifierPluginAdapter(d.specifierPlugin), nil
+	return newSpecifierPluginAdapter(d.specifierPlugin()), nil
 }
 
 func (d *Dispenser) DispenseSource() (plugin.SourcePlugin, error) {
-	return newSourcePluginAdapter(d.sourcePlugin, d.pluginLogger("source")), nil
+	return newSourcePluginAdapter(d.sourcePlugin(), d.pluginLogger("source")), nil
 }
 
 func (d *Dispenser) DispenseDestination() (plugin.DestinationPlugin, error) {
-	return newDestinationPluginAdapter(d.destinationPlugin, d.pluginLogger("destination")), nil
+	return newDestinationPluginAdapter(d.destinationPlugin(), d.pluginLogger("destination")), nil
 }
 
 func (d *Dispenser) pluginLogger(pluginType string) log.CtxLogger {
