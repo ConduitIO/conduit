@@ -38,7 +38,7 @@ Conduit was created and open-sourced by [Meroxa](https://meroxa.io).
 
 ## Installation guide
 
-### Download release
+### Download and run release
 
 Download a pre-built binary from the [latest release](https://github.com/conduitio/conduit/releases/latest) and simply
 run it!
@@ -50,6 +50,8 @@ run it!
 Once you see that the service is running you may access a user-friendly web interface at `http://localhost:8080/ui/`.
 You can also interact with the [Conduit API](#api) directly, we recommend navigating to `http://localhost:8080/openapi/`
 and exploring the HTTP API through Swagger UI.
+
+Conduit can be configured through command line parameters. To view the full list of available options, run `./conduit --help`.
 
 ### Build from source
 
