@@ -62,6 +62,6 @@ ui-%:
 
 check-go-version:
 	@if [ "${GO_VERSION_CHECK}" != "" ]; then\
-        echo "${GO_VERSION_CHECK}";\
-        exit 1;\
-    fi
+		echo "${GO_VERSION_CHECK}";\
+		exit 1;\
+	fi
