@@ -234,8 +234,9 @@ func (m *positionMessageMap) LoadAndDelete(pos record.Position) (msg *Message, l
 	val, loaded := m.m.LoadAndDelete(m.key(pos))
 	if loaded {
 		atomic.AddUint32(&m.length, ^uint32(0)) // decrement
+		return val.(*Message), loaded
 	}
-	return val.(*Message), loaded
+	return nil, false
 }
 
 // LoadOrStore returns the existing value for the key if present.
