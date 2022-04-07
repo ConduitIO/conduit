@@ -1,9 +1,11 @@
 .PHONY: test test-integration build run proto-api proto-lint clean download install-tools generate
 
 VERSION=`./scripts/get-tag.sh`
+GO_VERSION_CHECK=`./scripts/check-go-version.sh`
 
 # The build target should stay at the top since we want it to be the default target.
 build: pkg/web/ui/dist
+	@echo ${GO_VERSION_CHECK}
 	go build -ldflags "-X 'github.com/conduitio/conduit/pkg/conduit.version=${VERSION}'" -o conduit -tags ui ./cmd/conduit/main.go
 	@echo "\nBuild complete. Enjoy using Conduit!"
 	@echo "Get started by running:"
@@ -20,6 +22,7 @@ test-integration:
 		exit $$ret
 
 build-server:
+	@echo ${GO_VERSION_CHECK}
 	go build -ldflags "-X 'github.com/conduitio/conduit/pkg/conduit.version=${VERSION}'" -o conduit ./cmd/conduit/main.go
 	@echo "build version: ${VERSION}"
 

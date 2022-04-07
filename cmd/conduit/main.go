@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"runtime"
 	"strings"
 
 	"github.com/conduitio/conduit/pkg/conduit"
@@ -30,13 +29,9 @@ import (
 const (
 	exitCodeErr       = 1
 	exitCodeInterrupt = 2
-	goVersion         = "go1.18"
 )
 
 func main() {
-	if runtime.Version() < goVersion {
-		_, _ = fmt.Fprintf(os.Stdout, "WARNING: min Go version required is \"%s\", version installed is \"%s\"\n", goVersion, runtime.Version())
-	}
 	cfg := parseConfig()
 	if cfg.Log.Format == "cli" {
 		_, _ = fmt.Fprintf(os.Stdout, "%s\n", conduit.Splash())
