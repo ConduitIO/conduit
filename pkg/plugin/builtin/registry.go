@@ -21,6 +21,7 @@ import (
 	postgres "github.com/conduitio/conduit-connector-postgres"
 	pgdest "github.com/conduitio/conduit-connector-postgres/destination"
 	pgsource "github.com/conduitio/conduit-connector-postgres/source"
+	"github.com/conduitio/conduit-connector-protocol/cpluginv1"
 	s3 "github.com/conduitio/conduit-connector-s3"
 	s3destination "github.com/conduitio/conduit-connector-s3/destination"
 	s3source "github.com/conduitio/conduit-connector-s3/source"
@@ -65,9 +66,9 @@ func sdkDispenserFactory(
 		return builtinv1.NewDispenser(
 			name,
 			logger,
-			sdk.NewSpecifierPlugin(specFactory()),
-			sdk.NewSourcePlugin(sourceFactory()),
-			sdk.NewDestinationPlugin(destinationFactory()),
+			func() cpluginv1.SpecifierPlugin { return sdk.NewSpecifierPlugin(specFactory()) },
+			func() cpluginv1.SourcePlugin { return sdk.NewSourcePlugin(sourceFactory()) },
+			func() cpluginv1.DestinationPlugin { return sdk.NewDestinationPlugin(destinationFactory()) },
 		)
 	}
 }
