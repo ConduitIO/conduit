@@ -57,7 +57,9 @@ func (n *SourceNode) Run(ctx context.Context) (err error) {
 	var wgOpenMessages sync.WaitGroup
 	defer func() {
 		// wait for open messages before tearing down connector
+		n.logger.Trace(ctx).Msg("waiting for open messages to be processed")
 		wgOpenMessages.Wait()
+		n.logger.Trace(ctx).Msg("all messages processed, tearing down source")
 		tdErr := n.Source.Teardown(connectorCtx)
 		if tdErr != nil {
 			if err == nil {

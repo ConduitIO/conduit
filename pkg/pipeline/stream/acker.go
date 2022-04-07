@@ -76,7 +76,7 @@ func (n *AckerNode) Run(ctx context.Context) (err error) {
 
 	select {
 	case <-ctx.Done():
-		return nil
+		return ctx.Err()
 	case <-n.start:
 		// received first message for ack, destination is open now, we can
 		// safely start listening to acks
@@ -160,11 +160,11 @@ func (n *AckerNode) ExpectAck(msg *Message) error {
 	_, loaded := n.cache.LoadOrStore(msg.Record.Position, msg)
 	if loaded {
 		// we already have a message with the same position in the cache
-		n.logger.Error(msg.Ctx).Msg("encountered two records with the same" +
-			"position and can't differentiate them (could be that you are using" +
-			"a pipeline with two same source connectors and they both produced" +
-			"a record with the same position at the same time, could also be a" +
-			"badly written source connector that doesn't assign unique positions" +
+		n.logger.Error(msg.Ctx).Msg("encountered two records with the same " +
+			"position and can't differentiate them (could be that you are using " +
+			"a pipeline with two same source connectors and they both produced " +
+			"a record with the same position at the same time, could also be a " +
+			"badly written source connector that doesn't assign unique positions " +
 			"to records)")
 		return cerrors.Errorf("encountered two records with the same position (%q)",
 			msg.Record.Position.String())
@@ -188,6 +188,12 @@ func (n *AckerNode) ForgetAndDrop(msg *Message) {
 // Wait can be used to wait for the count of outstanding acks to drop to 0 or
 // the context gets canceled.
 func (n *AckerNode) Wait(ctx context.Context) {
+	// in case ExpectAck wasn't called we call it here
+	n.startOnce.Do(func() {
+		n.init()
+		close(n.start)
+	})
+
 	t := time.NewTimer(time.Second)
 	defer t.Stop()
 	for {
