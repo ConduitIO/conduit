@@ -38,7 +38,7 @@ func newSpecifierPluginAdapter(impl cpluginv1.SpecifierPlugin) *specifierPluginA
 
 func (s *specifierPluginAdapter) Specify() (plugin.Specification, error) {
 	req := toplugin.SpecifierSpecifyRequest()
-	resp, err := s.impl.Specify(context.Background(), req)
+	resp, err := runSandbox(s.impl.Specify, context.Background(), req)
 	if err != nil {
 		return plugin.Specification{}, err
 	}

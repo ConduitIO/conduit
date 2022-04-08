@@ -25,9 +25,9 @@ import (
 // It is specifically designed to run functions that take a context and a
 // request and return a response and an error (i.e. plugin calls).
 func runSandbox[REQ any, RES any](
-	ctx context.Context,
-	req REQ,
 	f func(context.Context, REQ) (RES, error),
+	ctx context.Context, // context is the second parameter on purpose
+	req REQ,
 ) (res RES, err error) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -39,4 +39,16 @@ func runSandbox[REQ any, RES any](
 		}
 	}()
 	return f(ctx, req)
+}
+
+func runSandboxNoResp[REQ any](
+	f func(context.Context, REQ) error,
+	ctx context.Context, // context is the second parameter on purpose
+	req REQ,
+) error {
+	_, err := runSandbox(func(ctx context.Context, req REQ) (any, error) {
+		err := f(ctx, req)
+		return nil, err
+	}, ctx, req)
+	return err
 }

@@ -65,7 +65,7 @@ func (s *sourcePluginAdapter) Configure(ctx context.Context, cfg map[string]stri
 		return err
 	}
 	s.logger.Trace(ctx).Msg("calling Configure")
-	resp, err := s.impl.Configure(s.withLogger(ctx), req)
+	resp, err := runSandbox(s.impl.Configure, s.withLogger(ctx), req)
 	if err != nil {
 		// TODO create new errors as strings, this happens when they are
 		//  transmitted through gRPC and we don't want to falsely rely on types
@@ -87,7 +87,7 @@ func (s *sourcePluginAdapter) Start(ctx context.Context, p record.Position) erro
 	}
 
 	s.logger.Trace(ctx).Msg("calling Start")
-	resp, err := s.impl.Start(s.withLogger(ctx), req)
+	resp, err := runSandbox(s.impl.Start, s.withLogger(ctx), req)
 	if err != nil {
 		return err
 	}
@@ -96,7 +96,7 @@ func (s *sourcePluginAdapter) Start(ctx context.Context, p record.Position) erro
 	s.stream = newSourceRunStream(ctx)
 	go func() {
 		s.logger.Trace(ctx).Msg("calling Run")
-		err := s.impl.Run(s.withLogger(ctx), s.stream)
+		err := runSandboxNoResp(s.impl.Run, s.withLogger(ctx), cpluginv1.SourceRunStream(s.stream))
 		if err != nil {
 			s.stream.stop(cerrors.Errorf("error in run: %w", err))
 		} else {
@@ -152,7 +152,7 @@ func (s *sourcePluginAdapter) Stop(ctx context.Context) error {
 	}
 
 	s.logger.Trace(ctx).Msg("calling Stop")
-	resp, err := s.impl.Stop(s.withLogger(ctx), toplugin.SourceStopRequest())
+	resp, err := runSandbox(s.impl.Stop, s.withLogger(ctx), toplugin.SourceStopRequest())
 	if err != nil {
 		return err
 	}
@@ -163,7 +163,7 @@ func (s *sourcePluginAdapter) Stop(ctx context.Context) error {
 
 func (s *sourcePluginAdapter) Teardown(ctx context.Context) error {
 	s.logger.Trace(ctx).Msg("calling Teardown")
-	resp, err := s.impl.Teardown(s.withLogger(ctx), toplugin.SourceTeardownRequest())
+	resp, err := runSandbox(s.impl.Teardown, s.withLogger(ctx), toplugin.SourceTeardownRequest())
 	if err != nil {
 		return err
 	}
