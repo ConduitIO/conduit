@@ -39,20 +39,23 @@ type source struct {
 	// persister is used for persisting the connector state when it changes.
 	persister *Persister
 
-	// pluginDispenser TODO
+	// pluginDispenser is used to dispense the plugin.
 	pluginDispenser plugin.Dispenser
 
 	// errs is used to signal the node that the connector experienced an error
 	// when it was processing something asynchronously (e.g. persisting state).
 	errs chan error
 
-	// below fields are nil when source is created and are managed by source
-	// internally.
+	// plugin is the running instance of the source plugin.
 	plugin plugin.SourcePlugin
 
-	// m can lock a source from concurrent access (e.g. in connector persister)
+	// m can lock a source from concurrent access (e.g. in connector persister).
 	m sync.Mutex
+	// wg tracks the number of in flight calls to the plugin.
+	wg sync.WaitGroup
 }
+
+// not running -> running -> stopping -> not running
 
 func (s *source) ID() string {
 	return s.XID
@@ -79,6 +82,8 @@ func (s *source) SetState(state SourceState) {
 }
 
 func (s *source) IsRunning() bool {
+	s.m.Lock()
+	defer s.m.Unlock()
 	return s.plugin != nil
 }
 
@@ -103,7 +108,10 @@ func (s *source) Validate(ctx context.Context, settings map[string]string) error
 }
 
 func (s *source) Open(ctx context.Context) error {
-	if s.IsRunning() {
+	// lock source as we are about to mutate the plugin field
+	s.m.Lock()
+	defer s.m.Unlock()
+	if s.plugin != nil {
 		return plugin.ErrPluginRunning
 	}
 
@@ -134,6 +142,9 @@ func (s *source) Open(ctx context.Context) error {
 }
 
 func (s *source) Stop(ctx context.Context) error {
+	// increase wait group so Teardown knows a call to the plugin is running
+	s.wg.Add(1)
+	defer s.wg.Done()
 	if !s.IsRunning() {
 		return plugin.ErrPluginNotRunning
 	}
@@ -149,9 +160,15 @@ func (s *source) Stop(ctx context.Context) error {
 }
 
 func (s *source) Teardown(ctx context.Context) error {
-	if !s.IsRunning() {
+	// lock source as we are about to mutate the plugin field
+	s.m.Lock()
+	defer s.m.Unlock()
+	if s.plugin == nil {
 		return plugin.ErrPluginNotRunning
 	}
+
+	// wait for any calls to the plugin to stop running first (e.g. Stop, Ack or Read)
+	s.wg.Wait()
 
 	s.logger.Debug(ctx).Msg("tearing down source connector plugin")
 
@@ -169,6 +186,9 @@ func (s *source) Teardown(ctx context.Context) error {
 }
 
 func (s *source) Read(ctx context.Context) (record.Record, error) {
+	// increase wait group so Teardown knows a call to the plugin is running
+	s.wg.Add(1)
+	defer s.wg.Done()
 	if !s.IsRunning() {
 		return record.Record{}, plugin.ErrPluginNotRunning
 	}
@@ -191,6 +211,9 @@ func (s *source) Read(ctx context.Context) (record.Record, error) {
 }
 
 func (s *source) Ack(ctx context.Context, p record.Position) error {
+	// increase wait group so Teardown knows a call to the plugin is running
+	s.wg.Add(1)
+	defer s.wg.Done()
 	if !s.IsRunning() {
 		return plugin.ErrPluginNotRunning
 	}

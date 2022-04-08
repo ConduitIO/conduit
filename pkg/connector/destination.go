@@ -39,18 +39,20 @@ type destination struct {
 	// persister is used for persisting the connector state when it changes.
 	persister *Persister
 
+	// pluginDispenser is used to dispense the plugin.
 	pluginDispenser plugin.Dispenser
 
 	// errs is used to signal the node that the connector experienced an error
 	// when it was processing something asynchronously (e.g. persisting state).
 	errs chan error
 
-	// below fields are nil when destination is created and are managed by
-	// destination internally.
+	// plugin is the running instance of the destination plugin.
 	plugin plugin.DestinationPlugin
 
-	// m can lock a destination from concurrent access (e.g. in connector persister)
+	// m can lock a destination from concurrent access (e.g. in connector persister).
 	m sync.Mutex
+	// wg tracks the number of in flight calls to the plugin.
+	wg sync.WaitGroup
 }
 
 func (s *destination) ID() string {
@@ -78,6 +80,8 @@ func (s *destination) SetState(state DestinationState) {
 }
 
 func (s *destination) IsRunning() bool {
+	s.m.Lock()
+	defer s.m.Unlock()
 	return s.plugin != nil
 }
 
@@ -102,7 +106,10 @@ func (s *destination) Validate(ctx context.Context, settings map[string]string) 
 }
 
 func (s *destination) Open(ctx context.Context) error {
-	if s.IsRunning() {
+	// lock destination as we are about to mutate the plugin field
+	s.m.Lock()
+	defer s.m.Unlock()
+	if s.plugin != nil {
 		return plugin.ErrPluginRunning
 	}
 
@@ -133,12 +140,18 @@ func (s *destination) Open(ctx context.Context) error {
 }
 
 func (s *destination) Teardown(ctx context.Context) error {
-	if !s.IsRunning() {
+	// lock destination as we are about to mutate the plugin field
+	s.m.Lock()
+	defer s.m.Unlock()
+	if s.plugin == nil {
 		return plugin.ErrPluginNotRunning
 	}
 
 	s.logger.Debug(ctx).Msg("stopping destination connector plugin")
 	err := s.plugin.Stop(ctx)
+
+	// wait for any calls to the plugin to stop running first (e.g. Ack or Write)
+	s.wg.Wait()
 
 	s.logger.Debug(ctx).Msg("tearing down destination connector plugin")
 	err = multierror.Append(err, s.plugin.Teardown(ctx))
@@ -155,6 +168,9 @@ func (s *destination) Teardown(ctx context.Context) error {
 }
 
 func (s *destination) Write(ctx context.Context, r record.Record) error {
+	// increase wait group so Teardown knows a call to the plugin is running
+	s.wg.Add(1)
+	defer s.wg.Done()
 	if !s.IsRunning() {
 		return plugin.ErrPluginNotRunning
 	}
@@ -168,6 +184,9 @@ func (s *destination) Write(ctx context.Context, r record.Record) error {
 }
 
 func (s *destination) Ack(ctx context.Context) (record.Position, error) {
+	// increase wait group so Teardown knows a call to the plugin is running
+	s.wg.Add(1)
+	defer s.wg.Done()
 	if !s.IsRunning() {
 		return nil, plugin.ErrPluginNotRunning
 	}
