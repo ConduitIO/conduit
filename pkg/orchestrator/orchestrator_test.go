@@ -51,7 +51,6 @@ func newMockServices(t *testing.T) (*mock.PipelineService, *mock.ConnectorServic
 }
 
 func TestPipelineSimple(t *testing.T) {
-	t.Skip("race condition in test, will be fixed in https://github.com/ConduitIO/conduit/issues/259")
 	ctx, killAll := context.WithCancel(context.Background())
 	defer killAll()
 
