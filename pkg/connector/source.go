@@ -142,15 +142,14 @@ func (s *source) Open(ctx context.Context) error {
 }
 
 func (s *source) Stop(ctx context.Context) error {
-	// increase wait group so Teardown knows a call to the plugin is running
-	s.wg.Add(1)
-	defer s.wg.Done()
-	if !s.IsRunning() {
-		return plugin.ErrPluginNotRunning
+	cleanup, err := s.preparePluginCall()
+	defer cleanup()
+	if err != nil {
+		return err
 	}
 
 	s.logger.Debug(ctx).Msg("stopping source connector plugin")
-	err := s.plugin.Stop(ctx)
+	err = s.plugin.Stop(ctx)
 	if err != nil {
 		return cerrors.Errorf("could not stop plugin: %w", err)
 	}
@@ -186,11 +185,10 @@ func (s *source) Teardown(ctx context.Context) error {
 }
 
 func (s *source) Read(ctx context.Context) (record.Record, error) {
-	// increase wait group so Teardown knows a call to the plugin is running
-	s.wg.Add(1)
-	defer s.wg.Done()
-	if !s.IsRunning() {
-		return record.Record{}, plugin.ErrPluginNotRunning
+	cleanup, err := s.preparePluginCall()
+	defer cleanup()
+	if err != nil {
+		return record.Record{}, err
 	}
 
 	r, err := s.plugin.Read(ctx)
@@ -211,14 +209,13 @@ func (s *source) Read(ctx context.Context) (record.Record, error) {
 }
 
 func (s *source) Ack(ctx context.Context, p record.Position) error {
-	// increase wait group so Teardown knows a call to the plugin is running
-	s.wg.Add(1)
-	defer s.wg.Done()
-	if !s.IsRunning() {
-		return plugin.ErrPluginNotRunning
+	cleanup, err := s.preparePluginCall()
+	defer cleanup()
+	if err != nil {
+		return err
 	}
 
-	err := s.plugin.Ack(ctx, p)
+	err = s.plugin.Ack(ctx, p)
 	if err != nil {
 		return err
 	}
@@ -234,6 +231,20 @@ func (s *source) Ack(ctx context.Context, p record.Position) error {
 		}
 	})
 	return nil
+}
+
+// preparePluginCall makes sure the plugin is running and registers a new plugin
+// call in the wait group. The returned function should be called in a deferred
+// statement to signal the plugin call is over.
+func (s *source) preparePluginCall() (func(), error) {
+	s.m.Lock()
+	defer s.m.Unlock()
+	if s.plugin == nil {
+		return func() { /* do nothing */ }, plugin.ErrPluginNotRunning
+	}
+	// increase wait group so Teardown knows a call to the plugin is running
+	s.wg.Add(1)
+	return s.wg.Done, nil
 }
 
 func (s *source) Lock() {

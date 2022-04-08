@@ -168,14 +168,13 @@ func (s *destination) Teardown(ctx context.Context) error {
 }
 
 func (s *destination) Write(ctx context.Context, r record.Record) error {
-	// increase wait group so Teardown knows a call to the plugin is running
-	s.wg.Add(1)
-	defer s.wg.Done()
-	if !s.IsRunning() {
-		return plugin.ErrPluginNotRunning
+	cleanup, err := s.preparePluginCall()
+	defer cleanup()
+	if err != nil {
+		return err
 	}
 
-	err := s.plugin.Write(ctx, r)
+	err = s.plugin.Write(ctx, r)
 	if err != nil {
 		return cerrors.Errorf("error writing record: %w", err)
 	}
@@ -184,11 +183,10 @@ func (s *destination) Write(ctx context.Context, r record.Record) error {
 }
 
 func (s *destination) Ack(ctx context.Context) (record.Position, error) {
-	// increase wait group so Teardown knows a call to the plugin is running
-	s.wg.Add(1)
-	defer s.wg.Done()
-	if !s.IsRunning() {
-		return nil, plugin.ErrPluginNotRunning
+	cleanup, err := s.preparePluginCall()
+	defer cleanup()
+	if err != nil {
+		return nil, err
 	}
 
 	p, err := s.plugin.Ack(ctx)
@@ -197,6 +195,20 @@ func (s *destination) Ack(ctx context.Context) (record.Position, error) {
 	}
 
 	return p, nil
+}
+
+// preparePluginCall makes sure the plugin is running and registers a new plugin
+// call in the wait group. The returned function should be called in a deferred
+// statement to signal the plugin call is over.
+func (s *destination) preparePluginCall() (func(), error) {
+	s.m.Lock()
+	defer s.m.Unlock()
+	if s.plugin == nil {
+		return func() { /* do nothing */ }, plugin.ErrPluginNotRunning
+	}
+	// increase wait group so Teardown knows a call to the plugin is running
+	s.wg.Add(1)
+	return s.wg.Done, nil
 }
 
 func (s *destination) Lock() {
