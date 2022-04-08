@@ -14,11 +14,21 @@
 
 package builtinv1
 
-import "github.com/conduitio/conduit/pkg/foundation/cerrors"
+import (
+	"context"
+
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+)
 
 // runSandbox takes a function and runs it in a sandboxed mode that catches
 // panics and converts them into an error instead.
-func runSandbox(f func() error) (err error) {
+// It is specifically designed to run functions that take a context and a
+// request and return a response and an error (i.e. plugin calls).
+func runSandbox[REQ any, RES any](
+	ctx context.Context,
+	req REQ,
+	f func(context.Context, REQ) (RES, error),
+) (res RES, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			panicErr, ok := r.(error)
@@ -28,5 +38,5 @@ func runSandbox(f func() error) (err error) {
 			err = panicErr
 		}
 	}()
-	return f()
+	return f(ctx, req)
 }

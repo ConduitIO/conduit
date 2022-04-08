@@ -15,6 +15,7 @@
 package builtinv1
 
 import (
+	"context"
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -22,17 +23,32 @@ import (
 )
 
 func TestRunSandbox(t *testing.T) {
+	ctx := context.Background()
 	is := is.New(t)
 	haveErr := cerrors.New("test error")
 
+	type testReq struct {
+		foo string
+	}
+	type testResp struct {
+		bar int
+	}
+
 	testData := []struct {
 		name    string
-		f       func() error
+		f       func(context.Context, any) (any, error)
+		req     any
+		resp    any
 		wantErr error
 		strict  bool
 	}{{
-		name:    "func returns nil",
-		f:       func() error { return nil },
+		name: "func returns string",
+		f: func(ctx context.Context, req any) (any, error) {
+			is.Equal(req, testReq{foo: "foo"})
+			return testResp{bar: 1}, nil
+		},
+		req:     testReq{foo: "foo"},
+		resp:    testResp{bar: 1},
 		wantErr: nil,
 		strict:  true,
 	}, {
@@ -41,30 +57,35 @@ func TestRunSandbox(t *testing.T) {
 		wantErr: cerrors.New("runtime error: invalid memory address or nil pointer dereference"),
 		strict:  false,
 	}, {
-		name:    "func returns error",
-		f:       func() error { return haveErr },
+		name: "func returns error",
+		f: func(ctx context.Context, req any) (any, error) {
+			is.Equal(req, "foo")
+			return nil, haveErr
+		},
+		req:     "foo",
 		wantErr: haveErr,
 		strict:  true,
 	}, {
 		name:    "func returns error in panic",
-		f:       func() error { panic(haveErr) },
+		f:       func(context.Context, any) (any, error) { panic(haveErr) },
 		wantErr: haveErr,
 		strict:  true,
 	}, {
 		name:    "func returns string in panic",
-		f:       func() error { panic("oh noes something went bad") },
+		f:       func(context.Context, any) (any, error) { panic("oh noes something went bad") },
 		wantErr: cerrors.New("panic: oh noes something went bad"),
 		strict:  false,
 	}, {
 		name:    "func returns number in panic",
-		f:       func() error { panic(1) },
+		f:       func(context.Context, any) (any, error) { panic(1) },
 		wantErr: cerrors.New("panic: 1"),
 		strict:  false,
 	}}
 
 	for _, td := range testData {
 		t.Run(td.name, func(t *testing.T) {
-			gotErr := runSandbox(td.f)
+			gotResp, gotErr := runSandbox(ctx, td.req, td.f)
+			is.Equal(gotResp, td.resp)
 			if td.strict {
 				// strict mode means we expect a very specific error
 				is.Equal(gotErr, td.wantErr)
