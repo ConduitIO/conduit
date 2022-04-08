@@ -232,9 +232,10 @@ type positionMessageMap struct {
 // The loaded result reports whether the key was present.
 func (m *positionMessageMap) LoadAndDelete(pos record.Position) (msg *Message, loaded bool) {
 	val, loaded := m.m.LoadAndDelete(m.key(pos))
-	if loaded {
-		atomic.AddUint32(&m.length, ^uint32(0)) // decrement
+	if !loaded {
+		return nil, false
 	}
+	atomic.AddUint32(&m.length, ^uint32(0)) // decrement
 	return val.(*Message), loaded
 }
 

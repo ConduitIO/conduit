@@ -90,10 +90,20 @@ func TestAckerNode_Run_StopAfterExpectAck(t *testing.T) {
 	msg := &Message{
 		Record: record.Record{Position: record.Position("test-position")},
 	}
-	c1 := dest.EXPECT().Ack(gomock.Any()).Return(msg.Record.Position, nil)         // first return position
-	dest.EXPECT().Ack(gomock.Any()).Return(nil, plugin.ErrStreamNotOpen).After(c1) // second return closed stream
+	// first return position
+	expectAck := make(chan struct{})
+	c1 := dest.EXPECT().Ack(gomock.Any()).
+		DoAndReturn(func(ctx context.Context) (record.Position, error) {
+			// wait until ExpectAck is called
+			<-expectAck
+			return msg.Record.Position, nil
+		})
+	// second return closed stream
+	dest.EXPECT().Ack(gomock.Any()).
+		Return(nil, plugin.ErrStreamNotOpen).After(c1)
 
 	err := node.ExpectAck(msg)
+	close(expectAck) // signal to mock that ExpectAck returned
 	is.NoErr(err)
 
 	// give the test 1 second to finish
