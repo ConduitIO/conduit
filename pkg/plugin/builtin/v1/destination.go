@@ -91,7 +91,7 @@ func (s *destinationPluginAdapter) Start(ctx context.Context) error {
 	s.stream = newDestinationRunStream(ctx)
 	go func() {
 		s.logger.Trace(ctx).Msg("calling Run")
-		err := runSandboxNoResp(s.impl.Run, s.withLogger(ctx), cpluginv1.DestinationRunStream(s.stream)) // TODO sandbox
+		err := runSandboxNoResp(s.impl.Run, s.withLogger(ctx), cpluginv1.DestinationRunStream(s.stream))
 		if err != nil {
 			s.stream.stopAll(cerrors.Errorf("error in run: %w", err))
 		} else {
