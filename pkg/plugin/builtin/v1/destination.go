@@ -34,7 +34,6 @@ import (
 // conduit-connector-protocol (cpluginv1). This adapter needs to make sure it behaves in the
 // same way as the standalone plugin adapter, which communicates with the plugin
 // through gRPC, so that the caller can use both of them interchangeably.
-// TODO make sure a panic in a plugin doesn't crash Conduit
 type destinationPluginAdapter struct {
 	impl cpluginv1.DestinationPlugin
 	// logger is used as the internal logger of destinationPluginAdapter.
