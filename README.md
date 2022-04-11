@@ -145,9 +145,8 @@ If you are interested in internals of Conduit we have prepared some technical do
 
 ## Known limitations
 
-While Conduit is built on strong foundations and experiences from running similar systems, it's not production ready
-at the moment. Following features are on the roadmap and yet to be implemented:
-1. Standard record format - we plan to have the records implement a single standard for CDC events.
+Conduit is currently in a pre-1.0 state. While Conduit is built on strong foundations and experiences from running similar systems, it's not production ready at the moment. Following features are on the roadmap and yet to be implemented. These features will change the behavior of the systems:
+1. Standard record format - we plan to have the records implement a single standard for CDC events. [See PR](https://github.com/ConduitIO/conduit/pull/326).
 2. Delivery and ordering guarantees - from the experience we have so far, messages created internally are reliably delivered through
    Conduit (from source nodes, over processing nodes to destination nodes). However, we still need good end-to-end, full-scale
    tests to actually prove that.
