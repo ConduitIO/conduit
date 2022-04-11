@@ -36,12 +36,17 @@ type AckerNode struct {
 	logger log.CtxLogger
 	// cache stores the messages that are still waiting for an ack/nack.
 	cache *positionMessageMap
+
 	// start is closed once the first message is received in the destination node.
 	start chan struct{}
+	// stop is closed once the last message is received in the destination node.
+	stop chan struct{}
 	// initOnce initializes internal fields.
 	initOnce sync.Once
-	// startOnce closes startRunning.
+	// startOnce closes start.
 	startOnce sync.Once
+	// stopOnce closes stop.
+	stopOnce sync.Once
 }
 
 // init initializes AckerNode internal fields.
@@ -49,6 +54,7 @@ func (n *AckerNode) init() {
 	n.initOnce.Do(func() {
 		n.cache = &positionMessageMap{}
 		n.start = make(chan struct{})
+		n.stop = make(chan struct{})
 	})
 }
 
@@ -77,6 +83,10 @@ func (n *AckerNode) Run(ctx context.Context) (err error) {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
+	case <-n.stop:
+		// destination actually stopped without ever receiving a message, we can
+		// just return here
+		return nil
 	case <-n.start:
 		// received first message for ack, destination is open now, we can
 		// safely start listening to acks
@@ -186,12 +196,13 @@ func (n *AckerNode) ForgetAndDrop(msg *Message) {
 }
 
 // Wait can be used to wait for the count of outstanding acks to drop to 0 or
-// the context gets canceled.
+// the context gets canceled. Wait is expected to be the last function called on
+// AckerNode, after Wait returns AckerNode will soon stop running.
 func (n *AckerNode) Wait(ctx context.Context) {
-	// in case ExpectAck wasn't called we call it here
-	n.startOnce.Do(func() {
+	// happens only once to signal that the destination is stopping
+	n.stopOnce.Do(func() {
 		n.init()
-		close(n.start)
+		close(n.stop)
 	})
 
 	t := time.NewTimer(time.Second)

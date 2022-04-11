@@ -47,9 +47,8 @@ func TestAckerNode_Run_StopAfterWait(t *testing.T) {
 	// give Go a chance to run the node
 	time.Sleep(time.Millisecond)
 
-	// up to this point there should have been no calls to the destination
-	// only after the call to Wait should the node try to fetch any acks
-	dest.EXPECT().Ack(gomock.Any()).Return(nil, plugin.ErrStreamNotOpen)
+	// note that there should be no calls to the destination at all if we didn't
+	// receive any ExpectedAck call
 
 	// give the test 1 second to finish
 	waitCtx, cancel := context.WithTimeout(ctx, time.Second)
