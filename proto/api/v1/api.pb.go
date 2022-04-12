@@ -22,13 +22,17 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// Status describes the pipeline status.
 type Pipeline_Status int32
 
 const (
 	Pipeline_STATUS_UNSPECIFIED Pipeline_Status = 0
-	Pipeline_STATUS_RUNNING     Pipeline_Status = 1
-	Pipeline_STATUS_STOPPED     Pipeline_Status = 2
-	Pipeline_STATUS_DEGRADED    Pipeline_Status = 3
+	// Pipeline is running.
+	Pipeline_STATUS_RUNNING Pipeline_Status = 1
+	// Pipeline gracefully stopped.
+	Pipeline_STATUS_STOPPED Pipeline_Status = 2
+	// Pipeline stopped with an error (see State.error).
+	Pipeline_STATUS_DEGRADED Pipeline_Status = 3
 )
 
 // Enum value maps for Pipeline_Status.
@@ -74,11 +78,14 @@ func (Pipeline_Status) EnumDescriptor() ([]byte, []int) {
 	return file_api_v1_api_proto_rawDescGZIP(), []int{0, 0}
 }
 
+// Type shows the connector type.
 type Connector_Type int32
 
 const (
 	Connector_TYPE_UNSPECIFIED Connector_Type = 0
-	Connector_TYPE_SOURCE      Connector_Type = 1
+	// Connector is a source.
+	Connector_TYPE_SOURCE Connector_Type = 1
+	// Connector is a destination.
 	Connector_TYPE_DESTINATION Connector_Type = 2
 )
 
@@ -123,12 +130,15 @@ func (Connector_Type) EnumDescriptor() ([]byte, []int) {
 	return file_api_v1_api_proto_rawDescGZIP(), []int{1, 0}
 }
 
+// Type shows the processor type.
 type Processor_Type int32
 
 const (
 	Processor_TYPE_UNSPECIFIED Processor_Type = 0
-	Processor_TYPE_TRANSFORM   Processor_Type = 1
-	Processor_TYPE_FILTER      Processor_Type = 2
+	// Processor is a transform.
+	Processor_TYPE_TRANSFORM Processor_Type = 1
+	// Processor is a filter.
+	Processor_TYPE_FILTER Processor_Type = 2
 )
 
 // Enum value maps for Processor_Type.
@@ -172,12 +182,15 @@ func (Processor_Type) EnumDescriptor() ([]byte, []int) {
 	return file_api_v1_api_proto_rawDescGZIP(), []int{2, 0}
 }
 
+// Type shows the processor's parent type.
 type Processor_Parent_Type int32
 
 const (
 	Processor_Parent_TYPE_UNSPECIFIED Processor_Parent_Type = 0
-	Processor_Parent_TYPE_CONNECTOR   Processor_Parent_Type = 1
-	Processor_Parent_TYPE_PIPELINE    Processor_Parent_Type = 2
+	// Processor parent is a connector.
+	Processor_Parent_TYPE_CONNECTOR Processor_Parent_Type = 1
+	// Processor parent is a pipeline.
+	Processor_Parent_TYPE_PIPELINE Processor_Parent_Type = 2
 )
 
 // Enum value maps for Processor_Parent_Type.
@@ -221,15 +234,21 @@ func (Processor_Parent_Type) EnumDescriptor() ([]byte, []int) {
 	return file_api_v1_api_proto_rawDescGZIP(), []int{2, 0, 0}
 }
 
+// Type shows the parameter type.
 type PluginSpecifications_Parameter_Type int32
 
 const (
 	PluginSpecifications_Parameter_TYPE_UNSPECIFIED PluginSpecifications_Parameter_Type = 0
-	PluginSpecifications_Parameter_TYPE_STRING      PluginSpecifications_Parameter_Type = 1
-	PluginSpecifications_Parameter_TYPE_NUMBER      PluginSpecifications_Parameter_Type = 2
-	PluginSpecifications_Parameter_TYPE_BOOL        PluginSpecifications_Parameter_Type = 3
-	PluginSpecifications_Parameter_TYPE_FILE        PluginSpecifications_Parameter_Type = 4
-	PluginSpecifications_Parameter_TYPE_DURATION    PluginSpecifications_Parameter_Type = 5
+	// Parameter is a string.
+	PluginSpecifications_Parameter_TYPE_STRING PluginSpecifications_Parameter_Type = 1
+	// Parameter is a number.
+	PluginSpecifications_Parameter_TYPE_NUMBER PluginSpecifications_Parameter_Type = 2
+	// Parameter is a boolean.
+	PluginSpecifications_Parameter_TYPE_BOOL PluginSpecifications_Parameter_Type = 3
+	// Parameter is a file.
+	PluginSpecifications_Parameter_TYPE_FILE PluginSpecifications_Parameter_Type = 4
+	// Parameter is a duration.
+	PluginSpecifications_Parameter_TYPE_DURATION PluginSpecifications_Parameter_Type = 5
 )
 
 // Enum value maps for PluginSpecifications_Parameter_Type.
@@ -283,17 +302,17 @@ type PluginSpecifications_Parameter_Validation_Type int32
 
 const (
 	PluginSpecifications_Parameter_Validation_TYPE_UNSPECIFIED PluginSpecifications_Parameter_Validation_Type = 0
-	// parameter must be present
+	// Parameter must be present.
 	PluginSpecifications_Parameter_Validation_TYPE_REQUIRED PluginSpecifications_Parameter_Validation_Type = 1
-	// parameter must be greater than {value}
+	// Parameter must be greater than {value}.
 	PluginSpecifications_Parameter_Validation_TYPE_GREATER_THAN PluginSpecifications_Parameter_Validation_Type = 2
-	// parameter must be less than {value}
+	// Parameter must be less than {value}.
 	PluginSpecifications_Parameter_Validation_TYPE_LESS_THAN PluginSpecifications_Parameter_Validation_Type = 3
-	// parameter must be included in the comma separated list {value}
+	// Parameter must be included in the comma separated list {value}.
 	PluginSpecifications_Parameter_Validation_TYPE_INCLUSION PluginSpecifications_Parameter_Validation_Type = 4
-	// parameter must not be included in the comma separated list {value}
+	// Parameter must not be included in the comma separated list {value}.
 	PluginSpecifications_Parameter_Validation_TYPE_EXCLUSION PluginSpecifications_Parameter_Validation_Type = 5
-	// parameter must match the regex {value}
+	// Parameter must match the regex {value}.
 	PluginSpecifications_Parameter_Validation_TYPE_REGEX PluginSpecifications_Parameter_Validation_Type = 6
 )
 
@@ -351,12 +370,11 @@ type Pipeline struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	Id     string           `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	State  *Pipeline_State  `protobuf:"bytes,2,opt,name=state,proto3" json:"state,omitempty"`
-	Config *Pipeline_Config `protobuf:"bytes,3,opt,name=config,proto3" json:"config,omitempty"`
-	// -- children connections ---------------------------------------------------
-	ConnectorIds []string `protobuf:"bytes,5,rep,name=connector_ids,json=connectorIds,proto3" json:"connector_ids,omitempty"`
-	ProcessorIds []string `protobuf:"bytes,6,rep,name=processor_ids,json=processorIds,proto3" json:"processor_ids,omitempty"`
+	Id           string           `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	State        *Pipeline_State  `protobuf:"bytes,2,opt,name=state,proto3" json:"state,omitempty"`
+	Config       *Pipeline_Config `protobuf:"bytes,3,opt,name=config,proto3" json:"config,omitempty"`
+	ConnectorIds []string         `protobuf:"bytes,5,rep,name=connector_ids,json=connectorIds,proto3" json:"connector_ids,omitempty"`
+	ProcessorIds []string         `protobuf:"bytes,6,rep,name=processor_ids,json=processorIds,proto3" json:"processor_ids,omitempty"`
 }
 
 func (x *Pipeline) Reset() {
@@ -435,13 +453,12 @@ type Connector struct {
 	// Types that are assignable to State:
 	//	*Connector_DestinationState_
 	//	*Connector_SourceState_
-	State      isConnector_State `protobuf_oneof:"state"`
-	Config     *Connector_Config `protobuf:"bytes,4,opt,name=config,proto3" json:"config,omitempty"`
-	Type       Connector_Type    `protobuf:"varint,5,opt,name=type,proto3,enum=api.v1.Connector_Type" json:"type,omitempty"`
-	Plugin     string            `protobuf:"bytes,6,opt,name=plugin,proto3" json:"plugin,omitempty"`
-	PipelineId string            `protobuf:"bytes,7,opt,name=pipeline_id,json=pipelineId,proto3" json:"pipeline_id,omitempty"`
-	// -- children connections ---------------------------------------------------
-	ProcessorIds []string `protobuf:"bytes,8,rep,name=processor_ids,json=processorIds,proto3" json:"processor_ids,omitempty"`
+	State        isConnector_State `protobuf_oneof:"state"`
+	Config       *Connector_Config `protobuf:"bytes,4,opt,name=config,proto3" json:"config,omitempty"`
+	Type         Connector_Type    `protobuf:"varint,5,opt,name=type,proto3,enum=api.v1.Connector_Type" json:"type,omitempty"`
+	Plugin       string            `protobuf:"bytes,6,opt,name=plugin,proto3" json:"plugin,omitempty"`
+	PipelineId   string            `protobuf:"bytes,7,opt,name=pipeline_id,json=pipelineId,proto3" json:"pipeline_id,omitempty"`
+	ProcessorIds []string          `protobuf:"bytes,8,rep,name=processor_ids,json=processorIds,proto3" json:"processor_ids,omitempty"`
 }
 
 func (x *Connector) Reset() {
@@ -639,7 +656,7 @@ type ListPipelinesRequest struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	// regex to filter pipelines by name
+	// Regex to filter pipelines by name.
 	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 }
 
@@ -1467,8 +1484,10 @@ type CreateConnectorRequest struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	Type       Connector_Type    `protobuf:"varint,1,opt,name=type,proto3,enum=api.v1.Connector_Type" json:"type,omitempty"`
-	Plugin     string            `protobuf:"bytes,2,opt,name=plugin,proto3" json:"plugin,omitempty"`
+	Type Connector_Type `protobuf:"varint,1,opt,name=type,proto3,enum=api.v1.Connector_Type" json:"type,omitempty"`
+	// Plugin name is the name of the builtin plugin, or the absolute path of a standalone plugin.
+	Plugin string `protobuf:"bytes,2,opt,name=plugin,proto3" json:"plugin,omitempty"`
+	// ID of the pipeline to which the connector will get attached.
 	PipelineId string            `protobuf:"bytes,3,opt,name=pipeline_id,json=pipelineId,proto3" json:"pipeline_id,omitempty"`
 	Config     *Connector_Config `protobuf:"bytes,4,opt,name=config,proto3" json:"config,omitempty"`
 }
@@ -2601,7 +2620,7 @@ type ListPluginsRequest struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	// regex to filter plugins by name
+	// Regex to filter plugins by name.
 	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 }
 
@@ -2792,7 +2811,8 @@ type Pipeline_State struct {
 	unknownFields protoimpl.UnknownFields
 
 	Status Pipeline_Status `protobuf:"varint,1,opt,name=status,proto3,enum=api.v1.Pipeline_Status" json:"status,omitempty"`
-	Error  string          `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	// Error message when pipeline status is STATUS_DEGRADED.
+	Error string `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
 }
 
 func (x *Pipeline_State) Reset() {
@@ -3218,14 +3238,15 @@ func (x *PluginSpecifications_Parameter) GetValidations() []*PluginSpecification
 	return nil
 }
 
+// Validation to be made on the parameter.
 type PluginSpecifications_Parameter_Validation struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
 	Type PluginSpecifications_Parameter_Validation_Type `protobuf:"varint,1,opt,name=type,proto3,enum=api.v1.PluginSpecifications_Parameter_Validation_Type" json:"type,omitempty"`
-	// the value to be compared with the parameter,
-	// or a comma separated list in case of Validation.TYPE_INCLUSION or Validation.TYPE_EXCLUSION
+	// The value to be compared with the parameter,
+	// or a comma separated list in case of Validation.TYPE_INCLUSION or Validation.TYPE_EXCLUSION.
 	Value string `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
 }
 

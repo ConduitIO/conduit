@@ -90,6 +90,11 @@ func LoggerUnaryServerInterceptor(logger log.CtxLogger) grpc.UnaryServerIntercep
 		defer func() {
 			duration := time.Since(start)
 			e := logger.Err(ctx, err)
+			// set logger level to trace if it's a healthcheck request and has no error
+			if info.FullMethod == "/grpc.health.v1.Health/Check" && err == nil {
+				e = logger.Trace(ctx)
+			}
+
 			if httpEndpoint != "" {
 				// request was forwarded by GRPC gateway, output the endpoint
 				e = e.Str(log.HTTPEndpointField, httpEndpoint)

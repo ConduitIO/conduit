@@ -81,6 +81,8 @@ func (p *Persister) ConnectorStarted() {
 // connectors this persister is persisting. Once all connectors are stopped the
 // Wait function stops blocking.
 func (p *Persister) ConnectorStopped() {
+	p.m.Lock()
+	defer p.m.Unlock()
 	p.triggerFlush(context.Background())
 	p.connWg.Done()
 }

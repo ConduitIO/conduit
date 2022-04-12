@@ -28,7 +28,7 @@ type Dispenser interface {
 }
 
 type SourcePlugin interface {
-	// Configure provides the configuration to the plugin and sets it up so it's
+	// Configure provides the configuration to the plugin and sets it up, so it's
 	// ready to start running. If the configuration is invalid the method will
 	// return an error.
 	Configure(context.Context, map[string]string) error
@@ -66,18 +66,47 @@ type SourcePlugin interface {
 }
 
 type DestinationPlugin interface {
+	// Configure provides the configuration to the plugin and sets it up, so it's
+	// ready to start running. If the configuration is invalid the method will
+	// return an error.
 	Configure(context.Context, map[string]string) error
 
+	// Start will trigger a background process in the plugin that will stream
+	// records to the plugin and listen to acks. After Start returns Conduit is
+	// allowed to call methods Write and Ack. The stream will keep running until
+	// the context passed to Start is closed. If the context is closed no more
+	// records or acks can be passed between Conduit or the plugin (hard stop).
+	// To stop the stream gracefully use the method Stop.
 	Start(context.Context) error
 
+	// Write sends a record to the plugin and returns nil if the record was
+	// successfully received. This does not necessarily mean that the record was
+	// successfully processed and written to the 3rd party system, it might have
+	// been cached and will be written at a later point in time. Acknowledgments
+	// can be received through Ack to figure out if a record was actually
+	// processed or if an error happened while processing it.
 	Write(context.Context, record.Record) error
+	// Ack blocks until an acknowledgment is received that a record was
+	// processed and returns the position of that record. If the record wasn't
+	// successfully processed the function returns the position and an error.
 	Ack(context.Context) (record.Position, error)
 
+	// Stop should be called to invoke a graceful shutdown of the stream. It
+	// will signal the plugin that no more records will be written to the stream
+	// and that it should flush any records that might be cached. The stream
+	// will still remain open so Conduit can fetch the remaining acks. After the
+	// stream is closed the Ack method will return the appropriate error
+	// signaling the stream is closed.
 	Stop(context.Context) error
+
+	// Teardown is the last call that must be issued before discarding the
+	// plugin. It signals to the plugin it can release any open resources and
+	// prepare for a graceful shutdown.
 	Teardown(context.Context) error
 }
 
 type SpecifierPlugin interface {
+	// Specify returns the plugin specification.
 	Specify() (Specification, error)
 }
 

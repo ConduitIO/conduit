@@ -8,7 +8,7 @@ _Data Integration for Production Data Stores. :dizzy:_
 [![Go Report Card](https://goreportcard.com/badge/github.com/conduitio/conduit)](https://goreportcard.com/report/github.com/conduitio/conduit)
 [![Discord](https://img.shields.io/discord/828680256877363200?label=discord&logo=discord)](https://discord.meroxa.com)
 [![Go Reference](https://pkg.go.dev/badge/github.com/conduitio/conduit.svg)](https://pkg.go.dev/github.com/conduitio/conduit)
-[![Conduit docs](https://img.shields.io/badge/conduit-docs-blue)](https://docs.conduit.io)
+[![Conduit docs](https://img.shields.io/badge/conduit-docs-blue)](https://www.conduit.io/docs/introduction/getting-started)
 [![API docs](https://img.shields.io/badge/HTTP_API-docs-blue)](https://docs.conduit.io/api)
 
 ## Overview
@@ -28,6 +28,7 @@ written in any language as long as they conform to the required interface.
 Conduit was created and open-sourced by [Meroxa](https://meroxa.io).
 
 - [Installation guide](#installation-guide)
+- [Connectors](#connectors)
 - [Testing](#testing)
 - [API](#api)
 - [UI](#ui)
@@ -37,7 +38,7 @@ Conduit was created and open-sourced by [Meroxa](https://meroxa.io).
 
 ## Installation guide
 
-### Download release
+### Download and run release
 
 Download a pre-built binary from the [latest release](https://github.com/conduitio/conduit/releases/latest) and simply
 run it!
@@ -50,10 +51,12 @@ Once you see that the service is running you may access a user-friendly web inte
 You can also interact with the [Conduit API](#api) directly, we recommend navigating to `http://localhost:8080/openapi/`
 and exploring the HTTP API through Swagger UI.
 
+Conduit can be configured through command line parameters. To view the full list of available options, run `./conduit --help`.
+
 ### Build from source
 
 Requirements:
-* [Go](https://golang.org/) (1.17 or later)
+* [Go](https://golang.org/) (1.18 or later)
 * [Node.js](https://nodejs.org/) (16.x)
 * [Yarn](https://yarnpkg.com/) (latest 1.x)
 * [Ember CLI](https://ember-cli.com/)
@@ -72,12 +75,28 @@ as a simple backend service.
 
 ### Docker
 
-Our Docker images are hosted on GitHub's Container Registry. To pull the latest tag, you should run the following in your command line:
-```
-docker pull ghcr.io/conduitio/conduit:latest
-```
-The Docker images include the UI and the following plugins: S3, Postgres, Kafka, file and generator.
+Our Docker images are hosted on GitHub's Container Registry. To run the latest Conduit version, you should run the following command:
 
+```
+docker run -p 8080:8080 ghcr.io/conduitio/conduit:latest
+```
+
+The Docker image includes the [UI](#ui), you can access it by navigating to `http://localhost:8080/ui`.
+
+## Connectors
+
+Conduit ships with a number of built-in connectors:
+
+- [File connector](https://github.com/ConduitIO/conduit-connector-file) provides a source/destination to read/write a local file (useful for quickly trying out Conduit without additional setup).
+- [Kafka connector](https://github.com/ConduitIO/conduit-connector-kafka) provides a source/destination for Apache Kafka.
+- [Postgres connector](https://github.com/ConduitIO/conduit-connector-postgres) provides a source/destination for PostgreSQL.
+- [S3 connector](https://github.com/ConduitIO/conduit-connector-s3) provides a source/destination for AWS S3.
+- [Generator connector](https://github.com/ConduitIO/conduit-connector-generator) provides a source which generates random data (useful for testing).
+
+Additionally, we have prepared a [Kafka Connect wrapper](https://github.com/conduitio/conduit-kafka-connect-wrapper) that allows you to run any Apache 
+Kafka Connect connector as part of a Conduit pipeline.
+
+Conduit is also able to run standalone connectors. If you are interested in writing a connector yourself, have a look at our [Go Connector SDK](https://github.com/ConduitIO/conduit-connector-sdk). Since standalone connectors communicate with Conduit through gRPC they can be written in virtually any programming language, as long as the connector follows the [Conduit Connector Protocol](https://github.com/ConduitIO/conduit-connector-protocol).
 
 ## Testing
 
@@ -126,9 +145,8 @@ If you are interested in internals of Conduit we have prepared some technical do
 
 ## Known limitations
 
-While Conduit is built on strong foundations and experiences from running similar systems, it's not production ready
-at the moment. Following features are on the roadmap and yet to be implemented:
-1. Standard record format - we plan to have the records implement a single standard for CDC events.
+Conduit is currently in a pre-1.0 state. While Conduit is built on strong foundations and experiences from running similar systems, it's not production ready at the moment. Following features are on the roadmap and yet to be implemented. These features will change the behavior of the systems:
+1. Standard record format - we plan to have the records implement a single standard for CDC events. [See PR](https://github.com/ConduitIO/conduit/pull/326).
 2. Delivery and ordering guarantees - from the experience we have so far, messages created internally are reliably delivered through
    Conduit (from source nodes, over processing nodes to destination nodes). However, we still need good end-to-end, full-scale
    tests to actually prove that.

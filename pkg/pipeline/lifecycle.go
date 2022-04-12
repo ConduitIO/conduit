@@ -288,6 +288,15 @@ func (s *Service) buildMetricsNode(
 	}
 }
 
+func (s *Service) buildAckerNode(
+	dest connector.Destination,
+) *stream.AckerNode {
+	return &stream.AckerNode{
+		Name:        dest.ID() + "-acker",
+		Destination: dest,
+	}
+}
+
 func (s *Service) buildDestinationNodes(
 	ctx context.Context,
 	connFetcher ConnectorFetcher,
@@ -307,6 +316,7 @@ func (s *Service) buildDestinationNodes(
 			continue // skip any connector that's not a destination
 		}
 
+		ackerNode := s.buildAckerNode(instance.(connector.Destination))
 		destinationNode := stream.DestinationNode{
 			Name:        instance.ID(),
 			Destination: instance.(connector.Destination),
@@ -315,6 +325,7 @@ func (s *Service) buildDestinationNodes(
 				instance.Config().Plugin,
 				strings.ToLower(instance.Type().String()),
 			),
+			AckerNode: ackerNode,
 		}
 		metricsNode := s.buildMetricsNode(pl, instance)
 		destinationNode.Sub(metricsNode.Pub())
@@ -325,7 +336,7 @@ func (s *Service) buildDestinationNodes(
 		}
 
 		nodes = append(nodes, connNodes...)
-		nodes = append(nodes, metricsNode, &destinationNode)
+		nodes = append(nodes, metricsNode, &destinationNode, ackerNode)
 	}
 
 	return nodes, nil
@@ -347,7 +358,7 @@ func (s *Service) runPipeline(ctx context.Context, pl *Instance) error {
 			// If any of the nodes stops, the nodesTomb will be put into a dying state
 			// and ctx will be cancelled.
 			// This way, the other nodes will be notified that they need to stop too.
-			ctx := nodesTomb.Context(nil) //nolint:staticcheck // required by tomb
+			ctx := nodesTomb.Context(nil)
 			s.logger.Trace(ctx).Str(log.NodeIDField, node.ID()).Msg("running node")
 			defer func() {
 				e := s.logger.Trace(ctx)
@@ -394,7 +405,7 @@ func (s *Service) runPipeline(ctx context.Context, pl *Instance) error {
 	// before declaring the pipeline as stopped.
 	pl.t = &tomb.Tomb{}
 	pl.t.Go(func() error {
-		ctx := pl.t.Context(nil) //nolint:staticcheck // required by tomb
+		ctx := pl.t.Context(nil)
 		err := nodesTomb.Wait()
 
 		measure.PipelinesGauge.WithValues(strings.ToLower(pl.Status.String())).Dec()

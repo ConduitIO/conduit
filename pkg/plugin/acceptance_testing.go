@@ -12,12 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//nolint:revive,dogsled,stylecheck // this is a test file
+//nolint:revive,dogsled // this is a test file
 package plugin
 
 import (
 	"context"
 	"fmt"
+	"io"
 	"reflect"
 	"runtime"
 	"strings"
@@ -26,11 +27,11 @@ import (
 
 	"github.com/conduitio/conduit-connector-protocol/cpluginv1"
 	"github.com/conduitio/conduit-connector-protocol/cpluginv1/mock"
-	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/golang/mock/gomock"
 	"github.com/google/go-cmp/cmp"
+	"github.com/matryer/is"
 )
 
 // AcceptanceTestV1 is the acceptance test that all implementations of v1
@@ -73,6 +74,7 @@ func AcceptanceTestV1(t *testing.T, tdf testDispenserFunc) {
 	run(t, tdf, testDestination_Ack_WithoutStart)
 	run(t, tdf, testDestination_Run_Fail)
 	run(t, tdf, testDestination_Teardown_Success)
+	run(t, tdf, testDestination_Stop_CloseSend)
 }
 
 func run(t *testing.T, tdf testDispenserFunc, test func(*testing.T, testDispenserFunc)) {
@@ -410,6 +412,7 @@ func testSource_Read_AfterStop(t *testing.T, tdf testDispenserFunc) {
 }
 
 func testSource_Read_CancelContext(t *testing.T, tdf testDispenserFunc) {
+	is := is.New(t)
 	ctx := context.Background()
 	dispenser, _, mockSource, _ := tdf(t)
 
@@ -442,7 +445,7 @@ func testSource_Read_CancelContext(t *testing.T, tdf testDispenserFunc) {
 	})
 
 	_, err = source.Read(ctx)
-	assert.Error(t, err)
+	is.True(err != nil)
 	// TODO see if we can change this error into context.Canceled, right now we
 	//  follow the default gRPC behavior
 	if cerrors.Is(err, context.Canceled) {
@@ -932,6 +935,7 @@ func testDestination_Ack_WithoutStart(t *testing.T, tdf testDispenserFunc) {
 }
 
 func testDestination_Run_Fail(t *testing.T, tdf testDispenserFunc) {
+	is := is.New(t)
 	ctx := context.Background()
 	dispenser, _, _, mockDestination := tdf(t)
 
@@ -980,23 +984,11 @@ func testDestination_Run_Fail(t *testing.T, tdf testDispenserFunc) {
 		got = unwrapped
 		unwrapped = cerrors.Unwrap(unwrapped)
 	}
+	is.Equal(got.Error(), want.Error())
 
-	if got.Error() != want.Error() {
-		t.Fatalf("want: %+v, got: %+v", want, got)
-	}
-
-	// Error is returned through the Write function, that's the outgoing stream.
+	// Write returns just a generic error
 	err = destination.Write(ctx, record.Record{})
-	// Unwrap inner-most error
-	got = nil
-	for unwrapped := err; unwrapped != nil; {
-		got = unwrapped
-		unwrapped = cerrors.Unwrap(unwrapped)
-	}
-
-	if got.Error() != want.Error() {
-		t.Fatalf("want: %+v, got: %+v", want, got)
-	}
+	is.True(cerrors.Is(err, ErrStreamNotOpen))
 }
 
 func testDestination_Teardown_Success(t *testing.T, tdf testDispenserFunc) {
@@ -1009,6 +1001,9 @@ func testDestination_Teardown_Success(t *testing.T, tdf testDispenserFunc) {
 	mockDestination.EXPECT().
 		Start(gomock.Any(), cpluginv1.DestinationStartRequest{}).
 		Return(cpluginv1.DestinationStartResponse{}, nil)
+	mockDestination.EXPECT().
+		Stop(gomock.Any(), cpluginv1.DestinationStopRequest{}).
+		Return(cpluginv1.DestinationStopResponse{}, nil)
 	mockDestination.EXPECT().
 		Run(gomock.Any(), gomock.Any()).
 		DoAndReturn(func(ctx context.Context, stream cpluginv1.DestinationRunStream) error {
@@ -1029,6 +1024,10 @@ func testDestination_Teardown_Success(t *testing.T, tdf testDispenserFunc) {
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
+	err = destination.Stop(ctx)
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
 
 	got := destination.Teardown(ctx)
 	if got.Error() != want.Error() {
@@ -1041,4 +1040,64 @@ func testDestination_Teardown_Success(t *testing.T, tdf testDispenserFunc) {
 	case <-time.After(time.Second):
 		t.Fatal("should've received call to destination.Run")
 	}
+}
+
+func testDestination_Stop_CloseSend(t *testing.T, tdf testDispenserFunc) {
+	is := is.New(t)
+
+	ctx := context.Background()
+	dispenser, _, _, mockDestination := tdf(t)
+
+	closeCh := make(chan struct{})
+	mockDestination.EXPECT().
+		Start(gomock.Any(), cpluginv1.DestinationStartRequest{}).
+		Return(cpluginv1.DestinationStartResponse{}, nil)
+	mockDestination.EXPECT().
+		Stop(gomock.Any(), cpluginv1.DestinationStopRequest{}).
+		Return(cpluginv1.DestinationStopResponse{}, nil)
+	mockDestination.EXPECT().
+		Run(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(ctx context.Context, stream cpluginv1.DestinationRunStream) error {
+			_, recvErr := stream.Recv()
+			is.Equal(recvErr, io.EOF)
+			close(closeCh)
+
+			// we should still be able to send acks back even if incoming stream
+			// is closed
+			sendErr := stream.Send(cpluginv1.DestinationRunResponse{})
+			is.NoErr(sendErr)
+
+			return recvErr
+		})
+	mockDestination.EXPECT().
+		Teardown(gomock.Any(), cpluginv1.DestinationTeardownRequest{}).
+		Return(cpluginv1.DestinationTeardownResponse{}, nil)
+
+	destination, err := dispenser.DispenseDestination()
+	if err != nil {
+		t.Fatalf("error dispensing destination: %+v", err)
+	}
+
+	err = destination.Start(ctx)
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+	err = destination.Stop(ctx)
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+
+	select {
+	case <-closeCh:
+		// all good, outgoing stream was closed
+	case <-time.After(time.Second):
+		is.Fail() // expected outgoing stream to be closed
+	}
+
+	// fetching an ack should still work
+	_, err = destination.Ack(ctx)
+	is.NoErr(err)
+
+	err = destination.Teardown(ctx)
+	is.NoErr(err)
 }

@@ -21,8 +21,6 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/google/uuid"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
@@ -74,31 +72,6 @@ func WithErrorHandler(logger log.CtxLogger) runtime.ServeMuxOption {
 			runtime.DefaultHTTPErrorHandler(ctx, mux, marshaler, w, r, err)
 		},
 	)
-}
-
-// WithHealthzEndpoint returns a ServeMuxOption that will add a /healthz endpoint to the created ServeMux.
-// When called the handler will forward the request to the upstream grpc service health check
-// todo: use the method from this PR after it gets merged https://github.com/grpc-ecosystem/grpc-gateway/pull/2319
-func WithHealthzEndpoint(conn grpc.ClientConnInterface) runtime.ServeMuxOption {
-	healthCheckClient := grpc_health_v1.NewHealthClient(conn)
-
-	return func(s *runtime.ServeMux) {
-		// error can be ignored since pattern is definitely valid
-		_ = s.HandlePath(
-			http.MethodGet, "/healthz", func(w http.ResponseWriter, r *http.Request, _ map[string]string,
-			) {
-				_, outboundMarshaler := runtime.MarshalerForRequest(s, r)
-
-				serviceQueryParam := r.URL.Query().Get("service")
-
-				// error can be ignored, always nil
-				resp, _ := healthCheckClient.Check(r.Context(), &grpc_health_v1.HealthCheckRequest{
-					Service: serviceQueryParam,
-				})
-
-				_ = outboundMarshaler.NewEncoder(w).Encode(resp)
-			})
-	}
 }
 
 // WithDefaultGatewayMiddleware wraps the handler with the default GRPC Gateway
