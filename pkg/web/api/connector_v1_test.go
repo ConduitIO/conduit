@@ -24,7 +24,6 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/record"
 	apimock "github.com/conduitio/conduit/pkg/web/api/mock"
-	"github.com/conduitio/conduit/pkg/web/api/toproto"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
@@ -305,9 +304,12 @@ func TestConnectorAPIv1_ValidateConnector(t *testing.T) {
 	got, err := api.ValidateConnector(
 		ctx,
 		&apiv1.ValidateConnectorRequest{
-			Type:   toproto.ConnectorType(connector.TypeSource),
+			Type:   apiv1.Connector_Type(source.Type()),
 			Plugin: source.Config().Plugin,
-			Config: toproto.ConnectorConfig(source.Config()),
+			Config: &apiv1.Connector_Config{
+				Name:     source.Config().Name,
+				Settings: source.Config().Settings,
+			},
 		},
 	)
 
