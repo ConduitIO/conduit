@@ -147,7 +147,8 @@ func (c *ConnectorAPIv1) DeleteConnector(ctx context.Context, req *apiv1.DeleteC
 	return &apiv1.DeleteConnectorResponse{}, nil
 }
 
-// ValidateConnector hi
+// ValidateConnector validates whether the connector configurations are valid or not
+// returns an empty response if valid, an error otherwise
 func (c *ConnectorAPIv1) ValidateConnector(
 	ctx context.Context,
 	req *apiv1.ValidateConnectorRequest,
