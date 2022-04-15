@@ -21,6 +21,7 @@ import (
 
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/database"
+	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/conduitio/conduit/pkg/processor"
@@ -105,4 +106,5 @@ type ProcessorService interface {
 
 type PluginService interface {
 	List(ctx context.Context) (map[string]plugin.Specification, error)
+	NewDispenser(logger log.CtxLogger, name string) (plugin.Dispenser, error)
 }

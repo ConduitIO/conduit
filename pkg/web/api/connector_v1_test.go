@@ -24,6 +24,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/record"
 	apimock "github.com/conduitio/conduit/pkg/web/api/mock"
+	"github.com/conduitio/conduit/pkg/web/api/toproto"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
@@ -277,6 +278,36 @@ func TestConnectorAPIv1_DeleteConnector(t *testing.T) {
 		ctx,
 		&apiv1.DeleteConnectorRequest{
 			Id: id,
+		},
+	)
+
+	assert.Ok(t, err)
+	assert.Equal(t, want, got)
+}
+
+func TestConnectorAPIv1_ValidateConnector(t *testing.T) {
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+	csMock := apimock.NewConnectorOrchestrator(ctrl)
+	api := NewConnectorAPIv1(csMock)
+	connBuilder := connmock.Builder{Ctrl: ctrl}
+
+	source := connBuilder.NewSourceMock(uuid.NewString(), connector.Config{
+		Name:     "A source connector",
+		Settings: map[string]string{"path": "path/to"},
+		Plugin:   "builtin:file",
+	})
+
+	csMock.EXPECT().Validate(ctx, source.Type(), source.Config()).Return(nil).Times(1)
+
+	want := &apiv1.ValidateConnectorResponse{}
+
+	got, err := api.ValidateConnector(
+		ctx,
+		&apiv1.ValidateConnectorRequest{
+			Type:   toproto.ConnectorType(connector.TypeSource),
+			Plugin: source.Config().Plugin,
+			Config: toproto.ConnectorConfig(source.Config()),
 		},
 	)
 

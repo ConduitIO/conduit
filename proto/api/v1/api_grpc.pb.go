@@ -399,6 +399,7 @@ type ConnectorServiceClient interface {
 	ListConnectors(ctx context.Context, in *ListConnectorsRequest, opts ...grpc.CallOption) (*ListConnectorsResponse, error)
 	GetConnector(ctx context.Context, in *GetConnectorRequest, opts ...grpc.CallOption) (*GetConnectorResponse, error)
 	CreateConnector(ctx context.Context, in *CreateConnectorRequest, opts ...grpc.CallOption) (*CreateConnectorResponse, error)
+	ValidateConnector(ctx context.Context, in *ValidateConnectorRequest, opts ...grpc.CallOption) (*ValidateConnectorResponse, error)
 	UpdateConnector(ctx context.Context, in *UpdateConnectorRequest, opts ...grpc.CallOption) (*UpdateConnectorResponse, error)
 	DeleteConnector(ctx context.Context, in *DeleteConnectorRequest, opts ...grpc.CallOption) (*DeleteConnectorResponse, error)
 }
@@ -438,6 +439,15 @@ func (c *connectorServiceClient) CreateConnector(ctx context.Context, in *Create
 	return out, nil
 }
 
+func (c *connectorServiceClient) ValidateConnector(ctx context.Context, in *ValidateConnectorRequest, opts ...grpc.CallOption) (*ValidateConnectorResponse, error) {
+	out := new(ValidateConnectorResponse)
+	err := c.cc.Invoke(ctx, "/api.v1.ConnectorService/ValidateConnector", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *connectorServiceClient) UpdateConnector(ctx context.Context, in *UpdateConnectorRequest, opts ...grpc.CallOption) (*UpdateConnectorResponse, error) {
 	out := new(UpdateConnectorResponse)
 	err := c.cc.Invoke(ctx, "/api.v1.ConnectorService/UpdateConnector", in, out, opts...)
@@ -463,6 +473,7 @@ type ConnectorServiceServer interface {
 	ListConnectors(context.Context, *ListConnectorsRequest) (*ListConnectorsResponse, error)
 	GetConnector(context.Context, *GetConnectorRequest) (*GetConnectorResponse, error)
 	CreateConnector(context.Context, *CreateConnectorRequest) (*CreateConnectorResponse, error)
+	ValidateConnector(context.Context, *ValidateConnectorRequest) (*ValidateConnectorResponse, error)
 	UpdateConnector(context.Context, *UpdateConnectorRequest) (*UpdateConnectorResponse, error)
 	DeleteConnector(context.Context, *DeleteConnectorRequest) (*DeleteConnectorResponse, error)
 	mustEmbedUnimplementedConnectorServiceServer()
@@ -480,6 +491,9 @@ func (UnimplementedConnectorServiceServer) GetConnector(context.Context, *GetCon
 }
 func (UnimplementedConnectorServiceServer) CreateConnector(context.Context, *CreateConnectorRequest) (*CreateConnectorResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreateConnector not implemented")
+}
+func (UnimplementedConnectorServiceServer) ValidateConnector(context.Context, *ValidateConnectorRequest) (*ValidateConnectorResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ValidateConnector not implemented")
 }
 func (UnimplementedConnectorServiceServer) UpdateConnector(context.Context, *UpdateConnectorRequest) (*UpdateConnectorResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UpdateConnector not implemented")
@@ -554,6 +568,24 @@ func _ConnectorService_CreateConnector_Handler(srv interface{}, ctx context.Cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ConnectorService_ValidateConnector_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ValidateConnectorRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConnectorServiceServer).ValidateConnector(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/api.v1.ConnectorService/ValidateConnector",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConnectorServiceServer).ValidateConnector(ctx, req.(*ValidateConnectorRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _ConnectorService_UpdateConnector_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(UpdateConnectorRequest)
 	if err := dec(in); err != nil {
@@ -608,6 +640,10 @@ var ConnectorService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CreateConnector",
 			Handler:    _ConnectorService_CreateConnector_Handler,
+		},
+		{
+			MethodName: "ValidateConnector",
+			Handler:    _ConnectorService_ValidateConnector_Handler,
 		},
 		{
 			MethodName: "UpdateConnector",

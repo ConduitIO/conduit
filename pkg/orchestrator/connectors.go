@@ -16,6 +16,8 @@ package orchestrator
 
 import (
 	"context"
+	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/rs/zerolog"
 
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -162,4 +164,43 @@ func (c *ConnectorOrchestrator) Update(ctx context.Context, id string, config co
 	}
 	r.Skip()
 	return conn, nil
+}
+
+func (c *ConnectorOrchestrator) Validate(
+	ctx context.Context,
+	t connector.Type,
+	config connector.Config,
+) error {
+	logger := log.CtxLogger{Logger: zerolog.Nop()}
+	d, err := c.plugins.NewDispenser(logger, config.Plugin)
+	if err != nil {
+		return cerrors.Errorf("couldn't get dispenser: %w", err)
+	}
+
+	switch t {
+	case connector.TypeSource:
+		src, _ := d.DispenseSource()
+		err := src.Configure(ctx, config.Settings)
+		if err != nil {
+			return cerrors.Errorf("configurations failed: %w", err)
+		}
+		err = src.Teardown(ctx)
+		if err != nil {
+			return cerrors.Errorf("couldn't teardown the connector: %w", err)
+		}
+	case connector.TypeDestination:
+		dest, _ := d.DispenseSource()
+		err := dest.Configure(ctx, config.Settings)
+		if err != nil {
+			return cerrors.Errorf("configurations failed: %w", err)
+		}
+		err = dest.Teardown(ctx)
+		if err != nil {
+			return cerrors.Errorf("couldn't teardown the connector: %w", err)
+		}
+	default:
+		return cerrors.Errorf("invalid connector type: %w", err)
+	}
+
+	return nil
 }

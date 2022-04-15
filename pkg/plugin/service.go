@@ -35,7 +35,7 @@ const BuiltinPluginPrefix = "builtin:"
 //   separate process and communicates with it via gRPC. These plugins are
 //   compiled independently of Conduit and can be included at runtime.
 type registry interface {
-	New(logger log.CtxLogger, name string) (Dispenser, error)
+	NewDispenser(logger log.CtxLogger, name string) (Dispenser, error)
 	List() (map[string]Specification, error)
 }
 
@@ -55,10 +55,10 @@ func (r *Service) NewDispenser(logger log.CtxLogger, name string) (Dispenser, er
 	logger = logger.WithComponent("plugin")
 
 	if strings.HasPrefix(name, BuiltinPluginPrefix) {
-		return r.builtin.New(logger, strings.TrimPrefix(name, BuiltinPluginPrefix))
+		return r.builtin.NewDispenser(logger, strings.TrimPrefix(name, BuiltinPluginPrefix))
 	}
 
-	return r.standalone.New(logger, name)
+	return r.standalone.NewDispenser(logger, name)
 }
 
 func (r *Service) List(ctx context.Context) (map[string]Specification, error) {

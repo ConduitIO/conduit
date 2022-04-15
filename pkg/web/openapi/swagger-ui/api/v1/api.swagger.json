@@ -155,6 +155,45 @@
         ]
       }
     },
+    "/v1/connectors/validate": {
+      "post": {
+        "operationId": "ConnectorService_ValidateConnector",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ValidateConnectorResponse"
+            }
+          },
+          "500": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            },
+            "examples": {
+              "application/json": {
+                "code": 13,
+                "message": "server error",
+                "details": []
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1ValidateConnectorRequest"
+            }
+          }
+        ],
+        "tags": [
+          "ConnectorService"
+        ]
+      }
+    },
     "/v1/connectors/{id}": {
       "get": {
         "operationId": "ConnectorService_GetConnector",
@@ -470,7 +509,7 @@
         },
         "parameters": [
           {
-            "name": "body",
+            "name": "pipeline",
             "in": "body",
             "required": true,
             "schema": {
@@ -1702,6 +1741,25 @@
           "$ref": "#/definitions/v1Processor"
         }
       }
+    },
+    "v1ValidateConnectorRequest": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "$ref": "#/definitions/v1ConnectorType"
+        },
+        "plugin": {
+          "type": "string",
+          "description": "Plugin name is the name of the builtin plugin (builtin:name), or the absolute path of a standalone plugin."
+        },
+        "config": {
+          "$ref": "#/definitions/v1ConnectorConfig",
+          "title": "Configurations for the connector to get validated"
+        }
+      }
+    },
+    "v1ValidateConnectorResponse": {
+      "type": "object"
     }
   }
 }
