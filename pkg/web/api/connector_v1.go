@@ -17,6 +17,7 @@ package api
 
 import (
 	"context"
+
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/web/api/fromproto"

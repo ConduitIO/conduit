@@ -16,13 +16,13 @@ package api
 
 import (
 	"context"
-	"errors"
 	"sort"
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/connector"
 	connmock "github.com/conduitio/conduit/pkg/connector/mock"
 	"github.com/conduitio/conduit/pkg/foundation/assert"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/record"
 	apimock "github.com/conduitio/conduit/pkg/web/api/mock"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
@@ -330,7 +330,7 @@ func TestConnectorAPIv1_ValidateConnectorError(t *testing.T) {
 		Plugin:   "builtin:file",
 	}
 	ctype := connector.TypeSource
-	err := errors.New("validation error")
+	err := cerrors.New("validation error")
 
 	csMock.EXPECT().Validate(ctx, ctype, config).Return(err).Times(1)
 
