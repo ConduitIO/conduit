@@ -17,7 +17,6 @@ package api
 
 import (
 	"context"
-
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/web/api/fromproto"
@@ -160,7 +159,7 @@ func (c *ConnectorAPIv1) ValidateConnector(
 	)
 
 	if err != nil {
-		return nil, status.ConnectorError(err)
+		return nil, status.PluginError(err)
 	}
 
 	return &apiv1.ValidateConnectorResponse{}, nil

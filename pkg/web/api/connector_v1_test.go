@@ -16,6 +16,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"sort"
 	"testing"
 
@@ -289,32 +290,63 @@ func TestConnectorAPIv1_ValidateConnector(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	csMock := apimock.NewConnectorOrchestrator(ctrl)
 	api := NewConnectorAPIv1(csMock)
-	connBuilder := connmock.Builder{Ctrl: ctrl}
 
-	source := connBuilder.NewSourceMock(uuid.NewString(), connector.Config{
+	config := connector.Config{
 		Name:     "A source connector",
 		Settings: map[string]string{"path": "path/to"},
 		Plugin:   "builtin:file",
-	})
+	}
+	ctype := connector.TypeSource
 
-	csMock.EXPECT().Validate(ctx, source.Type(), source.Config()).Return(nil).Times(1)
+	csMock.EXPECT().Validate(ctx, ctype, config).Return(nil).Times(1)
 
 	want := &apiv1.ValidateConnectorResponse{}
 
 	got, err := api.ValidateConnector(
 		ctx,
 		&apiv1.ValidateConnectorRequest{
-			Type:   apiv1.Connector_Type(source.Type()),
-			Plugin: source.Config().Plugin,
+			Type:   apiv1.Connector_Type(ctype),
+			Plugin: config.Plugin,
 			Config: &apiv1.Connector_Config{
-				Name:     source.Config().Name,
-				Settings: source.Config().Settings,
+				Name:     config.Name,
+				Settings: config.Settings,
 			},
 		},
 	)
 
 	assert.Ok(t, err)
 	assert.Equal(t, want, got)
+}
+
+func TestConnectorAPIv1_ValidateConnectorError(t *testing.T) {
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+	csMock := apimock.NewConnectorOrchestrator(ctrl)
+	api := NewConnectorAPIv1(csMock)
+
+	config := connector.Config{
+		Name:     "A source connector",
+		Settings: map[string]string{"path": "path/to"},
+		Plugin:   "builtin:file",
+	}
+	ctype := connector.TypeSource
+	err := errors.New("validation error")
+
+	csMock.EXPECT().Validate(ctx, ctype, config).Return(err).Times(1)
+
+	_, err = api.ValidateConnector(
+		ctx,
+		&apiv1.ValidateConnectorRequest{
+			Type:   apiv1.Connector_Type(ctype),
+			Plugin: config.Plugin,
+			Config: &apiv1.Connector_Config{
+				Name:     config.Name,
+				Settings: config.Settings,
+			},
+		},
+	)
+
+	assert.Error(t, err)
 }
 
 func sortConnectors(c []*apiv1.Connector) {

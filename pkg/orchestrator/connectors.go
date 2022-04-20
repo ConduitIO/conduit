@@ -22,6 +22,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/rollback"
 	"github.com/conduitio/conduit/pkg/pipeline"
+	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 )
@@ -182,7 +183,7 @@ func (c *ConnectorOrchestrator) Validate(
 		src, _ := d.DispenseSource()
 		err := src.Configure(ctx, config.Settings)
 		if err != nil {
-			return cerrors.Errorf("configurations failed: %w", err)
+			return &plugin.ValidationError{Err: err}
 		}
 		err = src.Teardown(ctx)
 		if err != nil {
@@ -192,7 +193,7 @@ func (c *ConnectorOrchestrator) Validate(
 		dest, _ := d.DispenseSource()
 		err := dest.Configure(ctx, config.Settings)
 		if err != nil {
-			return cerrors.Errorf("configurations failed: %w", err)
+			return &plugin.ValidationError{Err: err}
 		}
 		err = dest.Teardown(ctx)
 		if err != nil {

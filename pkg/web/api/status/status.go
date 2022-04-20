@@ -19,6 +19,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/orchestrator"
 	"github.com/conduitio/conduit/pkg/pipeline"
+	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/conduitio/conduit/pkg/processor"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
@@ -86,6 +87,8 @@ func codeFromError(err error) codes.Code {
 	case cerrors.Is(err, pipeline.ErrNameAlreadyExists):
 		return codes.AlreadyExists
 	case cerrors.Is(err, connector.ErrConnectorRunning):
+		return codes.FailedPrecondition
+	case cerrors.Is(err, &plugin.ValidationError{}):
 		return codes.FailedPrecondition
 	case cerrors.Is(err, orchestrator.ErrPipelineHasConnectorsAttached):
 		return codes.FailedPrecondition
