@@ -474,3 +474,31 @@ func (mr *PluginServiceMockRecorder) NewDispenser(arg0, arg1 interface{}) *gomoc
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewDispenser", reflect.TypeOf((*PluginService)(nil).NewDispenser), arg0, arg1)
 }
+
+// ValidateDestinationConfig mocks base method.
+func (m *PluginService) ValidateDestinationConfig(arg0 context.Context, arg1 plugin.Dispenser, arg2 map[string]string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ValidateDestinationConfig", arg0, arg1, arg2)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ValidateDestinationConfig indicates an expected call of ValidateDestinationConfig.
+func (mr *PluginServiceMockRecorder) ValidateDestinationConfig(arg0, arg1, arg2 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateDestinationConfig", reflect.TypeOf((*PluginService)(nil).ValidateDestinationConfig), arg0, arg1, arg2)
+}
+
+// ValidateSourceConfig mocks base method.
+func (m *PluginService) ValidateSourceConfig(arg0 context.Context, arg1 plugin.Dispenser, arg2 map[string]string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ValidateSourceConfig", arg0, arg1, arg2)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ValidateSourceConfig indicates an expected call of ValidateSourceConfig.
+func (mr *PluginServiceMockRecorder) ValidateSourceConfig(arg0, arg1, arg2 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateSourceConfig", reflect.TypeOf((*PluginService)(nil).ValidateSourceConfig), arg0, arg1, arg2)
+}

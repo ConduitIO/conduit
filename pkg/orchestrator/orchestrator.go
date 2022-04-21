@@ -107,4 +107,6 @@ type ProcessorService interface {
 type PluginService interface {
 	List(ctx context.Context) (map[string]plugin.Specification, error)
 	NewDispenser(logger log.CtxLogger, name string) (plugin.Dispenser, error)
+	ValidateSourceConfig(ctx context.Context, d plugin.Dispenser, settings map[string]string) error
+	ValidateDestinationConfig(ctx context.Context, d plugin.Dispenser, settings map[string]string) error
 }

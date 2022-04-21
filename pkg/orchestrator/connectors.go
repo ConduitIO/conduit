@@ -22,7 +22,6 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/rollback"
 	"github.com/conduitio/conduit/pkg/pipeline"
-	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 )
@@ -180,27 +179,15 @@ func (c *ConnectorOrchestrator) Validate(
 
 	switch t {
 	case connector.TypeSource:
-		src, _ := d.DispenseSource()
-		err := src.Configure(ctx, config.Settings)
-		if err != nil {
-			return &plugin.ValidationError{Err: err}
-		}
-		err = src.Teardown(ctx)
-		if err != nil {
-			return cerrors.Errorf("couldn't teardown the connector: %w", err)
-		}
+		err = c.plugins.ValidateSourceConfig(ctx, d, config.Settings)
 	case connector.TypeDestination:
-		dest, _ := d.DispenseSource()
-		err := dest.Configure(ctx, config.Settings)
-		if err != nil {
-			return &plugin.ValidationError{Err: err}
-		}
-		err = dest.Teardown(ctx)
-		if err != nil {
-			return cerrors.Errorf("couldn't teardown the connector: %w", err)
-		}
+		err = c.plugins.ValidateDestinationConfig(ctx, d, config.Settings)
 	default:
 		return cerrors.Errorf("invalid connector type: %w", err)
+	}
+
+	if err != nil {
+		return err
 	}
 
 	return nil

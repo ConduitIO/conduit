@@ -165,6 +165,19 @@
               "$ref": "#/definitions/v1ValidateConnectorResponse"
             }
           },
+          "400": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            },
+            "examples": {
+              "application/json": {
+                "code": 9,
+                "message": "validation error: `aws.accessKeyId` config value must be set",
+                "details": []
+              }
+            }
+          },
           "500": {
             "description": "",
             "schema": {
@@ -173,7 +186,7 @@
             "examples": {
               "application/json": {
                 "code": 13,
-                "message": "server error",
+                "message": "could not dispense destination",
                 "details": []
               }
             }

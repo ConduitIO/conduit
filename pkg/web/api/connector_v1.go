@@ -160,7 +160,7 @@ func (c *ConnectorAPIv1) ValidateConnector(
 	)
 
 	if err != nil {
-		return nil, status.PluginError(err)
+		return nil, status.ConnectorError(err)
 	}
 
 	return &apiv1.ValidateConnectorResponse{}, nil

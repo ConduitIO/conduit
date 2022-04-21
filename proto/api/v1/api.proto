@@ -486,6 +486,36 @@ service ConnectorService {
       post: "/v1/connectors/validate"
       body: "*"
     };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      responses: {
+        key: "500";
+        value: {
+          schema: {
+            json_schema: {
+              ref: ".google.rpc.Status";
+            }
+          }
+          examples: {
+            key: "application/json"
+            value: '{ "code": 13, "message": "could not dispense destination", "details": [] }';
+          }
+        }
+      }
+      responses: {
+        key: "400";
+        value: {
+          schema: {
+            json_schema: {
+              ref: ".google.rpc.Status";
+            }
+          }
+          examples: {
+            key: "application/json"
+            value: '{ "code": 9, "message": "validation error: `aws.accessKeyId` config value must be set", "details": [] }';
+          }
+        }
+      }
+    };
   }
 
   rpc UpdateConnector(UpdateConnectorRequest) returns (UpdateConnectorResponse) {

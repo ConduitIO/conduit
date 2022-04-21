@@ -27,7 +27,7 @@ var (
 )
 
 type ValidationError struct {
-	Err error
+	err error
 }
 
 // Error formats the error message.
@@ -35,7 +35,7 @@ func (e *ValidationError) Error() string {
 	if e == nil {
 		return ""
 	}
-	return fmt.Sprintf("validation error: %v", e.Err)
+	return fmt.Sprintf("validation error: %v", e.err)
 }
 
 // Unwrap returns the underlying error.
@@ -43,7 +43,7 @@ func (e *ValidationError) Unwrap() error {
 	if e == nil {
 		return nil
 	}
-	return e.Err
+	return e.err
 }
 
 func (e *ValidationError) Is(target error) bool {

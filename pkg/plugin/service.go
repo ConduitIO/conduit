@@ -70,3 +70,45 @@ func (r *Service) List(ctx context.Context) (map[string]Specification, error) {
 
 	return specs, nil
 }
+
+func (r *Service) ValidateSourceConfig(ctx context.Context, d Dispenser, settings map[string]string) error {
+	src, err := d.DispenseSource()
+	if err != nil {
+		return cerrors.Errorf("could not dispense source: %w", err)
+	}
+
+	defer func(src SourcePlugin, ctx context.Context) {
+		err := src.Teardown(ctx)
+		if err != nil {
+			return
+		}
+	}(src, ctx)
+
+	err = src.Configure(ctx, settings)
+	if err != nil {
+		return &ValidationError{err: err}
+	}
+
+	return nil
+}
+
+func (r *Service) ValidateDestinationConfig(ctx context.Context, d Dispenser, settings map[string]string) error {
+	dest, err := d.DispenseDestination()
+	if err != nil {
+		return cerrors.Errorf("could not dispense destination: %w", err)
+	}
+
+	defer func(dest DestinationPlugin, ctx context.Context) {
+		err := dest.Teardown(ctx)
+		if err != nil {
+			return
+		}
+	}(dest, ctx)
+
+	err = dest.Configure(ctx, settings)
+	if err != nil {
+		return &ValidationError{err: err}
+	}
+
+	return nil
+}
