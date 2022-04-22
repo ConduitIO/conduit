@@ -21,7 +21,7 @@ require (
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.10.0
 	github.com/hashicorp/go-hclog v1.2.0
 	github.com/hashicorp/go-plugin v1.4.3
-	github.com/jackc/pgtype v1.10.0
+	github.com/jackc/pgtype v1.11.0
 	github.com/jackc/pgx/v4 v4.15.0
 	github.com/matryer/is v1.4.0
 	github.com/piotrkowalczuk/promgrpc/v4 v4.0.4
