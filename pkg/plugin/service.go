@@ -77,12 +77,12 @@ func (r *Service) ValidateSourceConfig(ctx context.Context, d Dispenser, setting
 		return cerrors.Errorf("could not dispense source: %w", err)
 	}
 
-	defer func(src SourcePlugin, ctx context.Context) {
-		err := src.Teardown(ctx)
-		if err != nil {
-			return
+	defer func() {
+		terr := src.Teardown(ctx)
+		if err == nil {
+			err = terr // only overwrite error if it's nil
 		}
-	}(src, ctx)
+	}()
 
 	err = src.Configure(ctx, settings)
 	if err != nil {
@@ -98,12 +98,12 @@ func (r *Service) ValidateDestinationConfig(ctx context.Context, d Dispenser, se
 		return cerrors.Errorf("could not dispense destination: %w", err)
 	}
 
-	defer func(dest DestinationPlugin, ctx context.Context) {
-		err := dest.Teardown(ctx)
-		if err != nil {
-			return
+	defer func() {
+		terr := dest.Teardown(ctx)
+		if err == nil {
+			err = terr // only overwrite error if it's nil
 		}
-	}(dest, ctx)
+	}()
 
 	err = dest.Configure(ctx, settings)
 	if err != nil {

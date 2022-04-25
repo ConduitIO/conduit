@@ -19,11 +19,9 @@ import (
 
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/rollback"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	"github.com/google/uuid"
-	"github.com/rs/zerolog"
 )
 
 type ConnectorOrchestrator base
@@ -171,8 +169,7 @@ func (c *ConnectorOrchestrator) Validate(
 	t connector.Type,
 	config connector.Config,
 ) error {
-	logger := log.CtxLogger{Logger: zerolog.Nop()}
-	d, err := c.plugins.NewDispenser(logger, config.Plugin)
+	d, err := c.plugins.NewDispenser(c.logger, config.Plugin)
 	if err != nil {
 		return cerrors.Errorf("couldn't get dispenser: %w", err)
 	}

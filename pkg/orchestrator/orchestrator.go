@@ -36,6 +36,7 @@ type Orchestrator struct {
 
 func NewOrchestrator(
 	db database.DB,
+	logger log.CtxLogger,
 	pipelines PipelineService,
 	connectors ConnectorService,
 	processors ProcessorService,
@@ -43,6 +44,7 @@ func NewOrchestrator(
 ) *Orchestrator {
 	b := base{
 		db:         db,
+		logger:     logger,
 		pipelines:  pipelines,
 		connectors: connectors,
 		processors: processors,
@@ -58,7 +60,8 @@ func NewOrchestrator(
 }
 
 type base struct {
-	db database.DB
+	db     database.DB
+	logger log.CtxLogger
 
 	pipelines  PipelineService
 	connectors ConnectorService
