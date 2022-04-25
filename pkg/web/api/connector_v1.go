@@ -33,6 +33,7 @@ type ConnectorOrchestrator interface {
 	Get(ctx context.Context, id string) (connector.Connector, error)
 	Delete(ctx context.Context, id string) error
 	Update(ctx context.Context, id string, config connector.Config) (connector.Connector, error)
+	Validate(ctx context.Context, t connector.Type, config connector.Config) error
 }
 
 type ConnectorAPIv1 struct {
@@ -144,4 +145,23 @@ func (c *ConnectorAPIv1) DeleteConnector(ctx context.Context, req *apiv1.DeleteC
 	}
 
 	return &apiv1.DeleteConnectorResponse{}, nil
+}
+
+// ValidateConnector validates whether the connector configurations are valid or not
+// returns an empty response if valid, an error otherwise
+func (c *ConnectorAPIv1) ValidateConnector(
+	ctx context.Context,
+	req *apiv1.ValidateConnectorRequest,
+) (*apiv1.ValidateConnectorResponse, error) {
+	err := c.cs.Validate(
+		ctx,
+		fromproto.ConnectorType(req.Type),
+		fromproto.ConnectorConfig(req.Config, req.Plugin, "", nil),
+	)
+
+	if err != nil {
+		return nil, status.ConnectorError(err)
+	}
+
+	return &apiv1.ValidateConnectorResponse{}, nil
 }

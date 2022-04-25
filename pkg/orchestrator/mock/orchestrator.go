@@ -9,6 +9,7 @@ import (
 	reflect "reflect"
 
 	connector "github.com/conduitio/conduit/pkg/connector"
+	log "github.com/conduitio/conduit/pkg/foundation/log"
 	pipeline "github.com/conduitio/conduit/pkg/pipeline"
 	plugin "github.com/conduitio/conduit/pkg/plugin"
 	processor "github.com/conduitio/conduit/pkg/processor"
@@ -457,4 +458,47 @@ func (m *PluginService) List(arg0 context.Context) (map[string]plugin.Specificat
 func (mr *PluginServiceMockRecorder) List(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "List", reflect.TypeOf((*PluginService)(nil).List), arg0)
+}
+
+// NewDispenser mocks base method.
+func (m *PluginService) NewDispenser(arg0 log.CtxLogger, arg1 string) (plugin.Dispenser, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NewDispenser", arg0, arg1)
+	ret0, _ := ret[0].(plugin.Dispenser)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// NewDispenser indicates an expected call of NewDispenser.
+func (mr *PluginServiceMockRecorder) NewDispenser(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewDispenser", reflect.TypeOf((*PluginService)(nil).NewDispenser), arg0, arg1)
+}
+
+// ValidateDestinationConfig mocks base method.
+func (m *PluginService) ValidateDestinationConfig(arg0 context.Context, arg1 plugin.Dispenser, arg2 map[string]string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ValidateDestinationConfig", arg0, arg1, arg2)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ValidateDestinationConfig indicates an expected call of ValidateDestinationConfig.
+func (mr *PluginServiceMockRecorder) ValidateDestinationConfig(arg0, arg1, arg2 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateDestinationConfig", reflect.TypeOf((*PluginService)(nil).ValidateDestinationConfig), arg0, arg1, arg2)
+}
+
+// ValidateSourceConfig mocks base method.
+func (m *PluginService) ValidateSourceConfig(arg0 context.Context, arg1 plugin.Dispenser, arg2 map[string]string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ValidateSourceConfig", arg0, arg1, arg2)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ValidateSourceConfig indicates an expected call of ValidateSourceConfig.
+func (mr *PluginServiceMockRecorder) ValidateSourceConfig(arg0, arg1, arg2 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateSourceConfig", reflect.TypeOf((*PluginService)(nil).ValidateSourceConfig), arg0, arg1, arg2)
 }

@@ -163,3 +163,29 @@ func (c *ConnectorOrchestrator) Update(ctx context.Context, id string, config co
 	r.Skip()
 	return conn, nil
 }
+
+func (c *ConnectorOrchestrator) Validate(
+	ctx context.Context,
+	t connector.Type,
+	config connector.Config,
+) error {
+	d, err := c.plugins.NewDispenser(c.logger, config.Plugin)
+	if err != nil {
+		return cerrors.Errorf("couldn't get dispenser: %w", err)
+	}
+
+	switch t {
+	case connector.TypeSource:
+		err = c.plugins.ValidateSourceConfig(ctx, d, config.Settings)
+	case connector.TypeDestination:
+		err = c.plugins.ValidateDestinationConfig(ctx, d, config.Settings)
+	default:
+		return cerrors.Errorf("invalid connector type: %w", err)
+	}
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}

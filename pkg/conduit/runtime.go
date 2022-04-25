@@ -123,7 +123,7 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 		return nil, cerrors.Errorf("failed to create services: %w", err)
 	}
 
-	orc := orchestrator.NewOrchestrator(db, plService, connService, procService, pluginService)
+	orc := orchestrator.NewOrchestrator(db, logger, plService, connService, procService, pluginService)
 
 	r := &Runtime{
 		Config:       cfg,

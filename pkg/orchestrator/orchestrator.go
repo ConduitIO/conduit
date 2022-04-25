@@ -21,6 +21,7 @@ import (
 
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/database"
+	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/conduitio/conduit/pkg/processor"
@@ -35,6 +36,7 @@ type Orchestrator struct {
 
 func NewOrchestrator(
 	db database.DB,
+	logger log.CtxLogger,
 	pipelines PipelineService,
 	connectors ConnectorService,
 	processors ProcessorService,
@@ -42,6 +44,7 @@ func NewOrchestrator(
 ) *Orchestrator {
 	b := base{
 		db:         db,
+		logger:     logger.WithComponent("orchestrator"),
 		pipelines:  pipelines,
 		connectors: connectors,
 		processors: processors,
@@ -57,7 +60,8 @@ func NewOrchestrator(
 }
 
 type base struct {
-	db database.DB
+	db     database.DB
+	logger log.CtxLogger
 
 	pipelines  PipelineService
 	connectors ConnectorService
@@ -105,4 +109,7 @@ type ProcessorService interface {
 
 type PluginService interface {
 	List(ctx context.Context) (map[string]plugin.Specification, error)
+	NewDispenser(logger log.CtxLogger, name string) (plugin.Dispenser, error)
+	ValidateSourceConfig(ctx context.Context, d plugin.Dispenser, settings map[string]string) error
+	ValidateDestinationConfig(ctx context.Context, d plugin.Dispenser, settings map[string]string) error
 }

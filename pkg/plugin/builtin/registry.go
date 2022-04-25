@@ -93,7 +93,7 @@ func NewRegistry(logger log.CtxLogger, factories ...DispenserFactory) *Registry 
 	return &Registry{builders: builders, logger: logger.WithComponent("builtin.Registry")}
 }
 
-func (r *Registry) New(logger log.CtxLogger, name string) (plugin.Dispenser, error) {
+func (r *Registry) NewDispenser(logger log.CtxLogger, name string) (plugin.Dispenser, error) {
 	builder, ok := r.builders[name]
 	if !ok {
 		return nil, cerrors.Errorf("plugin %q not found", name)
