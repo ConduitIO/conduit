@@ -71,7 +71,7 @@ func (r *Service) List(ctx context.Context) (map[string]Specification, error) {
 	return specs, nil
 }
 
-func (r *Service) ValidateSourceConfig(ctx context.Context, d Dispenser, settings map[string]string) error {
+func (r *Service) ValidateSourceConfig(ctx context.Context, d Dispenser, settings map[string]string) (err error) {
 	src, err := d.DispenseSource()
 	if err != nil {
 		return cerrors.Errorf("could not dispense source: %w", err)
@@ -92,7 +92,7 @@ func (r *Service) ValidateSourceConfig(ctx context.Context, d Dispenser, setting
 	return nil
 }
 
-func (r *Service) ValidateDestinationConfig(ctx context.Context, d Dispenser, settings map[string]string) error {
+func (r *Service) ValidateDestinationConfig(ctx context.Context, d Dispenser, settings map[string]string) (err error) {
 	dest, err := d.DispenseDestination()
 	if err != nil {
 		return cerrors.Errorf("could not dispense destination: %w", err)

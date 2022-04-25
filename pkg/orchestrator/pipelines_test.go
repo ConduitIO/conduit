@@ -25,7 +25,6 @@ import (
 	"github.com/conduitio/conduit/pkg/pipeline"
 	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
-	"github.com/rs/zerolog"
 )
 
 func TestPipelineOrchestrator_Start_Success(t *testing.T) {
@@ -37,8 +36,7 @@ func TestPipelineOrchestrator_Start_Success(t *testing.T) {
 		ID:     uuid.NewString(),
 		Status: pipeline.StatusSystemStopped,
 	}
-	logger := log.InitLogger(zerolog.InfoLevel, log.FormatCLI)
-	orc := NewOrchestrator(db, logger, plsMock, consMock, procsMock, pluginMock)
+	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
 
 	plsMock.EXPECT().
 		Get(gomock.AssignableToTypeOf(ctxType), plBefore.ID).
@@ -66,8 +64,7 @@ func TestPipelineOrchestrator_Start_Fail(t *testing.T) {
 		Get(gomock.AssignableToTypeOf(ctxType), gomock.AssignableToTypeOf("")).
 		Return(nil, wantErr)
 
-	logger := log.InitLogger(zerolog.InfoLevel, log.FormatCLI)
-	orc := NewOrchestrator(db, logger, plsMock, consMock, procsMock, pluginMock)
+	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
 	err := orc.Pipelines.Start(ctx, plBefore.ID)
 	assert.Error(t, err)
 }
@@ -82,8 +79,7 @@ func TestPipelineOrchestrator_Stop_Success(t *testing.T) {
 		Status: pipeline.StatusRunning,
 	}
 
-	logger := log.InitLogger(zerolog.InfoLevel, log.FormatCLI)
-	orc := NewOrchestrator(db, logger, plsMock, consMock, procsMock, pluginMock)
+	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
 	plsMock.EXPECT().
 		Get(gomock.AssignableToTypeOf(ctxType), plBefore.ID).
 		Return(plBefore, nil)
@@ -110,8 +106,7 @@ func TestPipelineOrchestrator_Stop_Fail(t *testing.T) {
 		Get(gomock.AssignableToTypeOf(ctxType), gomock.AssignableToTypeOf("")).
 		Return(nil, wantErr)
 
-	logger := log.InitLogger(zerolog.InfoLevel, log.FormatCLI)
-	orc := NewOrchestrator(db, logger, plsMock, consMock, procsMock, pluginMock)
+	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
 	err := orc.Pipelines.Stop(ctx, plBefore.ID)
 	assert.Error(t, err)
 }
@@ -133,8 +128,7 @@ func TestPipelineOrchestrator_Update_Success(t *testing.T) {
 		Config: pipeline.Config{Name: "new pipeline"},
 	}
 
-	logger := log.InitLogger(zerolog.InfoLevel, log.FormatCLI)
-	orc := NewOrchestrator(db, logger, plsMock, consMock, procsMock, pluginMock)
+	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
 	plsMock.EXPECT().
 		Get(gomock.AssignableToTypeOf(ctxType), plBefore.ID).
 		Return(plBefore, nil)
@@ -159,8 +153,7 @@ func TestPipelineOrchestrator_Update_PipelineRunning(t *testing.T) {
 	}
 	newConfig := pipeline.Config{Name: "new pipeline"}
 
-	logger := log.InitLogger(zerolog.InfoLevel, log.FormatCLI)
-	orc := NewOrchestrator(db, logger, plsMock, consMock, procsMock, pluginMock)
+	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
 	plsMock.EXPECT().
 		Get(gomock.AssignableToTypeOf(ctxType), plBefore.ID).
 		Return(plBefore, nil)
@@ -181,8 +174,7 @@ func TestPipelineOrchestrator_Delete_Success(t *testing.T) {
 		Status: pipeline.StatusSystemStopped,
 	}
 
-	logger := log.InitLogger(zerolog.InfoLevel, log.FormatCLI)
-	orc := NewOrchestrator(db, logger, plsMock, consMock, procsMock, pluginMock)
+	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
 	plsMock.EXPECT().
 		Get(gomock.AssignableToTypeOf(ctxType), plBefore.ID).
 		Return(plBefore, nil)
@@ -204,8 +196,7 @@ func TestPipelineOrchestrator_Delete_PipelineRunning(t *testing.T) {
 		Status: pipeline.StatusRunning,
 	}
 
-	logger := log.InitLogger(zerolog.InfoLevel, log.FormatCLI)
-	orc := NewOrchestrator(db, logger, plsMock, consMock, procsMock, pluginMock)
+	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
 	plsMock.EXPECT().
 		Get(gomock.AssignableToTypeOf(ctxType), plBefore.ID).
 		Return(plBefore, nil)
@@ -226,8 +217,7 @@ func TestPipelineOrchestrator_Delete_PipelineHasProcessorsAttached(t *testing.T)
 		ProcessorIDs: []string{uuid.NewString()},
 	}
 
-	logger := log.InitLogger(zerolog.InfoLevel, log.FormatCLI)
-	orc := NewOrchestrator(db, logger, plsMock, consMock, procsMock, pluginMock)
+	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
 	plsMock.EXPECT().
 		Get(gomock.AssignableToTypeOf(ctxType), plBefore.ID).
 		Return(plBefore, nil)
@@ -248,8 +238,7 @@ func TestPipelineOrchestrator_Delete_PipelineHasConnectorsAttached(t *testing.T)
 		ConnectorIDs: []string{uuid.NewString()},
 	}
 
-	logger := log.InitLogger(zerolog.InfoLevel, log.FormatCLI)
-	orc := NewOrchestrator(db, logger, plsMock, consMock, procsMock, pluginMock)
+	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
 	plsMock.EXPECT().
 		Get(gomock.AssignableToTypeOf(ctxType), plBefore.ID).
 		Return(plBefore, nil)
@@ -265,8 +254,7 @@ func TestPipelineOrchestrator_Delete_PipelineDoesntExist(t *testing.T) {
 	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
 
 	wantErr := cerrors.New("pipeline doesn't exist")
-	logger := log.InitLogger(zerolog.InfoLevel, log.FormatCLI)
-	orc := NewOrchestrator(db, logger, plsMock, consMock, procsMock, pluginMock)
+	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
 	plsMock.EXPECT().
 		Get(gomock.AssignableToTypeOf(ctxType), gomock.AssignableToTypeOf("")).
 		Return(nil, wantErr)

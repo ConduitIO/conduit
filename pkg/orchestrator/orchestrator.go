@@ -44,7 +44,7 @@ func NewOrchestrator(
 ) *Orchestrator {
 	b := base{
 		db:         db,
-		logger:     logger,
+		logger:     logger.WithComponent("orchestrator"),
 		pipelines:  pipelines,
 		connectors: connectors,
 		processors: processors,

@@ -28,7 +28,6 @@ import (
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
-	"github.com/rs/zerolog"
 )
 
 func TestProcessorOrchestrator_CreateOnPipeline_Success(t *testing.T) {
@@ -69,8 +68,7 @@ func TestProcessorOrchestrator_CreateOnPipeline_Success(t *testing.T) {
 		AddProcessor(gomock.AssignableToTypeOf(ctxType), pl, want.ID).
 		Return(pl, nil)
 
-	logger := log.InitLogger(zerolog.InfoLevel, log.FormatCLI)
-	orc := NewOrchestrator(db, logger, plsMock, consMock, procsMock, pluginMock)
+	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
 	got, err := orc.Processors.Create(ctx, want.Name, processor.TypeTransform, want.Parent, want.Config)
 	assert.Ok(t, err)
 	assert.Equal(t, want, got)
@@ -90,8 +88,7 @@ func TestProcessorOrchestrator_CreateOnPipeline_PipelineNotExist(t *testing.T) {
 		Get(gomock.AssignableToTypeOf(ctxType), parent.ID).
 		Return(nil, wantErr)
 
-	logger := log.InitLogger(zerolog.InfoLevel, log.FormatCLI)
-	orc := NewOrchestrator(db, logger, plsMock, consMock, procsMock, pluginMock)
+	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
 	got, err := orc.Processors.Create(ctx, "test-processor", processor.TypeTransform, parent, processor.Config{})
 	assert.Error(t, err)
 	assert.True(t, cerrors.Is(err, wantErr), "errors did not match")
@@ -115,8 +112,7 @@ func TestProcessorOrchestrator_CreateOnPipeline_PipelineRunning(t *testing.T) {
 		Get(gomock.AssignableToTypeOf(ctxType), pl.ID).
 		Return(pl, nil)
 
-	logger := log.InitLogger(zerolog.InfoLevel, log.FormatCLI)
-	orc := NewOrchestrator(db, logger, plsMock, consMock, procsMock, pluginMock)
+	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
 	got, err := orc.Processors.Create(ctx, "test-processor", processor.TypeTransform, parent, processor.Config{})
 	assert.Error(t, err)
 	assert.Equal(t, pipeline.ErrPipelineRunning, err)
@@ -152,8 +148,7 @@ func TestProcessorOrchestrator_CreateOnPipeline_CreateProcessorError(t *testing.
 		).
 		Return(nil, wantErr)
 
-	logger := log.InitLogger(zerolog.InfoLevel, log.FormatCLI)
-	orc := NewOrchestrator(db, logger, plsMock, consMock, procsMock, pluginMock)
+	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
 	got, err := orc.Processors.Create(ctx, "test-processor", processor.TypeTransform, parent, processor.Config{})
 	assert.Error(t, err)
 	assert.True(t, cerrors.Is(err, wantErr), "errors did not match")
@@ -203,8 +198,7 @@ func TestProcessorOrchestrator_CreateOnPipeline_AddProcessorError(t *testing.T) 
 		Delete(gomock.AssignableToTypeOf(ctxType), proc.ID).
 		Return(nil)
 
-	logger := log.InitLogger(zerolog.InfoLevel, log.FormatCLI)
-	orc := NewOrchestrator(db, logger, plsMock, consMock, procsMock, pluginMock)
+	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
 	got, err := orc.Processors.Create(ctx, proc.Name, processor.TypeTransform, proc.Parent, proc.Config)
 	assert.Error(t, err)
 	assert.True(t, cerrors.Is(err, wantErr), "errors did not match")
@@ -254,8 +248,7 @@ func TestProcessorOrchestrator_CreateOnConnector_Success(t *testing.T) {
 		AddProcessor(gomock.AssignableToTypeOf(ctxType), conn.ID(), want.ID).
 		Return(conn, nil)
 
-	logger := log.InitLogger(zerolog.InfoLevel, log.FormatCLI)
-	orc := NewOrchestrator(db, logger, plsMock, consMock, procsMock, pluginMock)
+	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
 	got, err := orc.Processors.Create(ctx, want.Name, processor.TypeTransform, want.Parent, want.Config)
 	assert.Ok(t, err)
 	assert.Equal(t, want, got)
@@ -275,8 +268,7 @@ func TestProcessorOrchestrator_CreateOnConnector_ConnectorNotExist(t *testing.T)
 		Get(gomock.AssignableToTypeOf(ctxType), parent.ID).
 		Return(nil, wantErr)
 
-	logger := log.InitLogger(zerolog.InfoLevel, log.FormatCLI)
-	orc := NewOrchestrator(db, logger, plsMock, consMock, procsMock, pluginMock)
+	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
 	got, err := orc.Processors.Create(ctx, "test-processor", processor.TypeTransform, parent, processor.Config{})
 	assert.Error(t, err)
 	assert.True(t, cerrors.Is(err, wantErr), "errors did not match")
@@ -328,8 +320,7 @@ func TestProcessorOrchestrator_UpdateOnPipeline_Success(t *testing.T) {
 		Update(gomock.AssignableToTypeOf(ctxType), want.ID, want.Config).
 		Return(want, nil)
 
-	logger := log.InitLogger(zerolog.InfoLevel, log.FormatCLI)
-	orc := NewOrchestrator(db, logger, plsMock, consMock, procsMock, pluginMock)
+	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
 	got, err := orc.Processors.Update(ctx, before.ID, newConfig)
 	assert.Ok(t, err)
 	assert.Equal(t, want, got)
@@ -364,8 +355,7 @@ func TestProcessorOrchestrator_UpdateOnPipeline_ProcessorNotExist(t *testing.T) 
 		Get(gomock.AssignableToTypeOf(ctxType), before.ID).
 		Return(nil, wantErr)
 
-	logger := log.InitLogger(zerolog.InfoLevel, log.FormatCLI)
-	orc := NewOrchestrator(db, logger, plsMock, consMock, procsMock, pluginMock)
+	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
 	got, err := orc.Processors.Update(ctx, before.ID, newConfig)
 	assert.Error(t, err)
 	assert.True(t, cerrors.Is(err, wantErr), "errors did not match")
@@ -403,8 +393,7 @@ func TestProcessorOrchestrator_UpdateOnPipeline_PipelineRunning(t *testing.T) {
 		Get(gomock.AssignableToTypeOf(ctxType), pl.ID).
 		Return(pl, nil)
 
-	logger := log.InitLogger(zerolog.InfoLevel, log.FormatCLI)
-	orc := NewOrchestrator(db, logger, plsMock, consMock, procsMock, pluginMock)
+	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
 	got, err := orc.Processors.Update(ctx, before.ID, newConfig)
 	assert.Error(t, err)
 	assert.Equal(t, pipeline.ErrPipelineRunning, err)
@@ -457,8 +446,7 @@ func TestProcessorOrchestrator_UpdateOnPipeline_UpdateFail(t *testing.T) {
 		Update(gomock.AssignableToTypeOf(ctxType), want.ID, want.Config).
 		Return(nil, wantErr)
 
-	logger := log.InitLogger(zerolog.InfoLevel, log.FormatCLI)
-	orc := NewOrchestrator(db, logger, plsMock, consMock, procsMock, pluginMock)
+	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
 	got, err := orc.Processors.Update(ctx, before.ID, newConfig)
 	assert.Error(t, err)
 	assert.Equal(t, wantErr, err)
@@ -499,8 +487,7 @@ func TestProcessorOrchestrator_UpdateOnConnector_ConnectorNotExist(t *testing.T)
 		Get(gomock.AssignableToTypeOf(ctxType), conn.ID()).
 		Return(nil, wantErr)
 
-	logger := log.InitLogger(zerolog.InfoLevel, log.FormatCLI)
-	orc := NewOrchestrator(db, logger, plsMock, consMock, procsMock, pluginMock)
+	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
 	got, err := orc.Processors.Update(ctx, want.ID, newConfig)
 	assert.Error(t, err)
 	assert.True(t, cerrors.Is(err, wantErr), "errors did not match")
@@ -541,8 +528,7 @@ func TestProcessorOrchestrator_DeleteOnPipeline_Success(t *testing.T) {
 		RemoveProcessor(gomock.AssignableToTypeOf(ctxType), pl, want.ID).
 		Return(pl, nil)
 
-	logger := log.InitLogger(zerolog.InfoLevel, log.FormatCLI)
-	orc := NewOrchestrator(db, logger, plsMock, consMock, procsMock, pluginMock)
+	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
 	err := orc.Processors.Delete(ctx, want.ID)
 	assert.Ok(t, err)
 }
@@ -573,8 +559,7 @@ func TestProcessorOrchestrator_DeleteOnPipeline_ProcessorNotExist(t *testing.T) 
 		Get(gomock.AssignableToTypeOf(ctxType), want.ID).
 		Return(nil, wantErr)
 
-	logger := log.InitLogger(zerolog.InfoLevel, log.FormatCLI)
-	orc := NewOrchestrator(db, logger, plsMock, consMock, procsMock, pluginMock)
+	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
 	err := orc.Processors.Delete(ctx, want.ID)
 	assert.Error(t, err)
 	assert.True(t, cerrors.Is(err, wantErr), "errors did not match")
@@ -608,8 +593,7 @@ func TestProcessorOrchestrator_DeleteOnPipeline_PipelineRunning(t *testing.T) {
 		Get(gomock.AssignableToTypeOf(ctxType), pl.ID).
 		Return(pl, nil)
 
-	logger := log.InitLogger(zerolog.InfoLevel, log.FormatCLI)
-	orc := NewOrchestrator(db, logger, plsMock, consMock, procsMock, pluginMock)
+	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
 	err := orc.Processors.Delete(ctx, want.ID)
 	assert.Error(t, err)
 	assert.Equal(t, pipeline.ErrPipelineRunning, err)
@@ -647,8 +631,7 @@ func TestProcessorOrchestrator_DeleteOnPipeline_Fail(t *testing.T) {
 		Delete(gomock.AssignableToTypeOf(ctxType), want.ID).
 		Return(wantErr)
 
-	logger := log.InitLogger(zerolog.InfoLevel, log.FormatCLI)
-	orc := NewOrchestrator(db, logger, plsMock, consMock, procsMock, pluginMock)
+	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
 	err := orc.Processors.Delete(ctx, want.ID)
 	assert.Error(t, err)
 	assert.True(t, cerrors.Is(err, wantErr), "errors did not match")
@@ -700,8 +683,7 @@ func TestProcessorOrchestrator_DeleteOnPipeline_RemoveProcessorFail(t *testing.T
 		).
 		Return(want, nil)
 
-	logger := log.InitLogger(zerolog.InfoLevel, log.FormatCLI)
-	orc := NewOrchestrator(db, logger, plsMock, consMock, procsMock, pluginMock)
+	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
 	err := orc.Processors.Delete(ctx, want.ID)
 	assert.Error(t, err)
 }
@@ -757,8 +739,7 @@ func TestProcessorOrchestrator_DeleteOnConnector_Fail(t *testing.T) {
 		).
 		Return(want, nil)
 
-	logger := log.InitLogger(zerolog.InfoLevel, log.FormatCLI)
-	orc := NewOrchestrator(db, logger, plsMock, consMock, procsMock, pluginMock)
+	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
 	err := orc.Processors.Delete(ctx, want.ID)
 	assert.Error(t, err)
 }
