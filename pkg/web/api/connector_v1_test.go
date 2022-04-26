@@ -16,6 +16,9 @@ package api
 
 import (
 	"context"
+	"sort"
+	"testing"
+
 	"github.com/conduitio/conduit/pkg/connector"
 	connmock "github.com/conduitio/conduit/pkg/connector/mock"
 	"github.com/conduitio/conduit/pkg/foundation/assert"
@@ -25,8 +28,6 @@ import (
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
-	"sort"
-	"testing"
 )
 
 func TestConnectorAPIv1_ListConnectors(t *testing.T) {
@@ -44,7 +45,6 @@ func TestConnectorAPIv1_ListConnectors(t *testing.T) {
 		Return(map[string]connector.Connector{source.ID(): source, destination.ID(): destination}).
 		Times(1)
 
-	//tn := time.Now()
 	want := &apiv1.ListConnectorsResponse{
 		Connectors: []*apiv1.Connector{
 			{
@@ -60,9 +60,6 @@ func TestConnectorAPIv1_ListConnectors(t *testing.T) {
 				Plugin:       source.Config().Plugin,
 				PipelineId:   source.Config().PipelineID,
 				ProcessorIds: source.Config().ProcessorIDs,
-				//CreatedAt: timestamppb.New(tn),
-				//UpdatedAt: timestamppb.New(tn),
-
 			},
 
 			{
