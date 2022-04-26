@@ -19,6 +19,7 @@ package connector
 
 import (
 	"context"
+	"time"
 
 	"github.com/conduitio/conduit/pkg/record"
 )
@@ -41,6 +42,11 @@ type Connector interface {
 
 	Config() Config
 	SetConfig(Config)
+
+	CreatedAt() time.Time
+	SetCreatedAt(time.Time)
+	UpdatedAt() time.Time
+	SetUpdatedAt(time.Time)
 
 	// IsRunning returns true if the connector is running and ready to accept
 	// calls to Read or Write (depending on the connector type).

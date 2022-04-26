@@ -16,6 +16,7 @@ package processor
 
 import (
 	"context"
+	"time"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/database"
@@ -101,8 +102,11 @@ func (s *Service) Create(
 		return nil, cerrors.Errorf("processor is of type %s and not %s", pt, t)
 	}
 
+	tn := time.Now()
 	instance := &Instance{
 		ID:        id,
+		UpdatedAt: tn,
+		CreatedAt: tn,
 		Name:      name,
 		Parent:    parent,
 		Config:    cfg,
@@ -138,6 +142,7 @@ func (s *Service) Update(ctx context.Context, id string, cfg Config) (*Instance,
 
 	instance.Processor = p
 	instance.Config = cfg
+	instance.UpdatedAt = time.Now()
 
 	// persist instance
 	err = s.store.Set(ctx, instance.ID, instance)

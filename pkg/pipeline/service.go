@@ -17,6 +17,7 @@ package pipeline
 import (
 	"context"
 	"strings"
+	"time"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/database"
@@ -118,10 +119,13 @@ func (s *Service) Create(ctx context.Context, id string, cfg Config) (*Instance,
 		return nil, ErrNameAlreadyExists
 	}
 
+	t := time.Now()
 	pl := &Instance{
-		ID:     id,
-		Config: cfg,
-		Status: StatusUserStopped,
+		ID:        id,
+		Config:    cfg,
+		Status:    StatusUserStopped,
+		CreatedAt: t,
+		UpdatedAt: t,
 	}
 
 	err := s.store.Set(ctx, pl.ID, pl)
@@ -150,6 +154,7 @@ func (s *Service) Update(ctx context.Context, pl *Instance, cfg Config) (*Instan
 
 	delete(s.instanceNames, pl.Config.Name) // delete the old name
 	pl.Config = cfg
+	pl.UpdatedAt = time.Now()
 	// update the name in the names set
 	s.instanceNames[cfg.Name] = true
 	err := s.store.Set(ctx, pl.ID, pl)

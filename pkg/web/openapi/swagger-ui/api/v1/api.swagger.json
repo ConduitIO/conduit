@@ -470,7 +470,7 @@
         },
         "parameters": [
           {
-            "name": "body",
+            "name": "pipeline",
             "in": "body",
             "required": true,
             "schema": {
@@ -1352,6 +1352,14 @@
             "type": "string"
           },
           "readOnly": true
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
         }
       }
     },
@@ -1574,6 +1582,14 @@
             "type": "string"
           },
           "readOnly": true
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
         }
       }
     },
@@ -1649,6 +1665,14 @@
         },
         "parent": {
           "$ref": "#/definitions/ProcessorParent"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
         }
       }
     },

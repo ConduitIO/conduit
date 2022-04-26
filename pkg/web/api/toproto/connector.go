@@ -17,6 +17,7 @@ package toproto
 import (
 	"github.com/conduitio/conduit/pkg/connector"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func _() {
@@ -29,6 +30,8 @@ func _() {
 func Connector(in connector.Connector) *apiv1.Connector {
 	apiConnector := &apiv1.Connector{
 		Id:           in.ID(),
+		CreatedAt:    timestamppb.New(in.CreatedAt()),
+		UpdatedAt:    timestamppb.New(in.UpdatedAt()),
 		Config:       ConnectorConfig(in.Config()),
 		Plugin:       in.Config().Plugin,
 		PipelineId:   in.Config().PipelineID,

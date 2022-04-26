@@ -36,6 +36,10 @@ type source struct {
 	// logger is used for logging and is set when source is created.
 	logger log.CtxLogger
 
+	// timestamps
+	XCreatedAt time.Time
+	XUpdatedAt time.Time
+
 	// persister is used for persisting the connector state when it changes.
 	persister *Persister
 
@@ -71,6 +75,22 @@ func (s *source) Config() Config {
 
 func (s *source) SetConfig(d Config) {
 	s.XConfig = d
+}
+
+func (s *source) CreatedAt() time.Time {
+	return s.XCreatedAt
+}
+
+func (s *source) SetCreatedAt(t time.Time) {
+	s.XCreatedAt = t
+}
+
+func (s *source) UpdatedAt() time.Time {
+	return s.XUpdatedAt
+}
+
+func (s *source) SetUpdatedAt(t time.Time) {
+	s.XUpdatedAt = t
 }
 
 func (s *source) State() SourceState {

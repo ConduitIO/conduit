@@ -17,6 +17,7 @@ package connector
 import (
 	"context"
 	"strings"
+	"time"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/database"
@@ -101,6 +102,11 @@ func (s *Service) Create(ctx context.Context, id string, t Type, cfg Config) (Co
 		return nil, cerrors.Errorf("could not init connector: %w", err)
 	}
 
+	// set timestamps
+	tn := time.Now()
+	conn.SetCreatedAt(tn)
+	conn.SetUpdatedAt(tn)
+
 	// persist instance
 	err = s.store.Set(ctx, id, conn)
 	if err != nil {
@@ -147,6 +153,7 @@ func (s *Service) Update(ctx context.Context, id string, data Config) (Connector
 	}
 
 	conn.SetConfig(data)
+	conn.SetUpdatedAt(time.Now())
 
 	// persist conn
 	err = s.store.Set(ctx, id, conn)
