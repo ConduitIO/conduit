@@ -71,6 +71,7 @@ func TestPipelineSimple(t *testing.T) {
 
 	orc := NewOrchestrator(
 		db,
+		logger,
 		pipeline.NewService(logger, db),
 		connector.NewService(logger, db, connector.NewDefaultBuilder(logger, connector.NewPersister(logger, db, time.Second, 3), pluginService)),
 		processor.NewService(logger, db, processor.GlobalBuilderRegistry),

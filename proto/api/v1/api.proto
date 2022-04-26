@@ -491,6 +491,42 @@ service ConnectorService {
       }
     };
   };
+  rpc ValidateConnector(ValidateConnectorRequest) returns (ValidateConnectorResponse) {
+    option (google.api.http) = {
+      post: "/v1/connectors/validate"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      responses: {
+        key: "500";
+        value: {
+          schema: {
+            json_schema: {
+              ref: ".google.rpc.Status";
+            }
+          }
+          examples: {
+            key: "application/json"
+            value: '{ "code": 13, "message": "could not dispense destination", "details": [] }';
+          }
+        }
+      }
+      responses: {
+        key: "400";
+        value: {
+          schema: {
+            json_schema: {
+              ref: ".google.rpc.Status";
+            }
+          }
+          examples: {
+            key: "application/json"
+            value: '{ "code": 9, "message": "validation error: `aws.accessKeyId` config value must be set", "details": [] }';
+          }
+        }
+      }
+    };
+  }
 
   rpc UpdateConnector(UpdateConnectorRequest) returns (UpdateConnectorResponse) {
     option (google.api.http) = {
@@ -578,6 +614,17 @@ message CreateConnectorRequest {
 
 message CreateConnectorResponse {
   Connector connector = 1;
+}
+
+message ValidateConnectorRequest {
+  Connector.Type type = 1;
+  // Plugin name is the name of the builtin plugin (builtin:name), or the absolute path of a standalone plugin.
+  string plugin = 2;
+  // Configurations for the connector to get validated
+  Connector.Config config = 4;
+}
+
+message ValidateConnectorResponse {
 }
 
 message ListConnectorsRequest {

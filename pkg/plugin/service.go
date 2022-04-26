@@ -35,7 +35,7 @@ const BuiltinPluginPrefix = "builtin:"
 //   separate process and communicates with it via gRPC. These plugins are
 //   compiled independently of Conduit and can be included at runtime.
 type registry interface {
-	New(logger log.CtxLogger, name string) (Dispenser, error)
+	NewDispenser(logger log.CtxLogger, name string) (Dispenser, error)
 	List() (map[string]Specification, error)
 }
 
@@ -55,10 +55,10 @@ func (r *Service) NewDispenser(logger log.CtxLogger, name string) (Dispenser, er
 	logger = logger.WithComponent("plugin")
 
 	if strings.HasPrefix(name, BuiltinPluginPrefix) {
-		return r.builtin.New(logger, strings.TrimPrefix(name, BuiltinPluginPrefix))
+		return r.builtin.NewDispenser(logger, strings.TrimPrefix(name, BuiltinPluginPrefix))
 	}
 
-	return r.standalone.New(logger, name)
+	return r.standalone.NewDispenser(logger, name)
 }
 
 func (r *Service) List(ctx context.Context) (map[string]Specification, error) {
@@ -69,4 +69,46 @@ func (r *Service) List(ctx context.Context) (map[string]Specification, error) {
 	}
 
 	return specs, nil
+}
+
+func (r *Service) ValidateSourceConfig(ctx context.Context, d Dispenser, settings map[string]string) (err error) {
+	src, err := d.DispenseSource()
+	if err != nil {
+		return cerrors.Errorf("could not dispense source: %w", err)
+	}
+
+	defer func() {
+		terr := src.Teardown(ctx)
+		if err == nil {
+			err = terr // only overwrite error if it's nil
+		}
+	}()
+
+	err = src.Configure(ctx, settings)
+	if err != nil {
+		return &ValidationError{err: err}
+	}
+
+	return nil
+}
+
+func (r *Service) ValidateDestinationConfig(ctx context.Context, d Dispenser, settings map[string]string) (err error) {
+	dest, err := d.DispenseDestination()
+	if err != nil {
+		return cerrors.Errorf("could not dispense destination: %w", err)
+	}
+
+	defer func() {
+		terr := dest.Teardown(ctx)
+		if err == nil {
+			err = terr // only overwrite error if it's nil
+		}
+	}()
+
+	err = dest.Configure(ctx, settings)
+	if err != nil {
+		return &ValidationError{err: err}
+	}
+
+	return nil
 }

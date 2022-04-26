@@ -30,7 +30,7 @@ func NewRegistry(logger log.CtxLogger) *Registry {
 	}
 }
 
-func (r *Registry) New(logger log.CtxLogger, path string) (plugin.Dispenser, error) {
+func (r *Registry) NewDispenser(logger log.CtxLogger, path string) (plugin.Dispenser, error) {
 	return standalonev1.NewDispenser(logger.ZerologWithComponent(), path)
 }
 

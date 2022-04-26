@@ -19,6 +19,7 @@ import (
 	"github.com/conduitio/conduit/pkg/connector"
 	connmock "github.com/conduitio/conduit/pkg/connector/mock"
 	"github.com/conduitio/conduit/pkg/foundation/assert"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/record"
 	apimock "github.com/conduitio/conduit/pkg/web/api/mock"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
@@ -287,6 +288,70 @@ func TestConnectorAPIv1_DeleteConnector(t *testing.T) {
 
 	assert.Ok(t, err)
 	assert.Equal(t, want, got)
+}
+
+func TestConnectorAPIv1_ValidateConnector(t *testing.T) {
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+	csMock := apimock.NewConnectorOrchestrator(ctrl)
+	api := NewConnectorAPIv1(csMock)
+
+	config := connector.Config{
+		Name:     "A source connector",
+		Settings: map[string]string{"path": "path/to"},
+		Plugin:   "builtin:file",
+	}
+	ctype := connector.TypeSource
+
+	csMock.EXPECT().Validate(ctx, ctype, config).Return(nil).Times(1)
+
+	want := &apiv1.ValidateConnectorResponse{}
+
+	got, err := api.ValidateConnector(
+		ctx,
+		&apiv1.ValidateConnectorRequest{
+			Type:   apiv1.Connector_Type(ctype),
+			Plugin: config.Plugin,
+			Config: &apiv1.Connector_Config{
+				Name:     config.Name,
+				Settings: config.Settings,
+			},
+		},
+	)
+
+	assert.Ok(t, err)
+	assert.Equal(t, want, got)
+}
+
+func TestConnectorAPIv1_ValidateConnectorError(t *testing.T) {
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+	csMock := apimock.NewConnectorOrchestrator(ctrl)
+	api := NewConnectorAPIv1(csMock)
+
+	config := connector.Config{
+		Name:     "A source connector",
+		Settings: map[string]string{"path": "path/to"},
+		Plugin:   "builtin:file",
+	}
+	ctype := connector.TypeSource
+	err := cerrors.New("validation error")
+
+	csMock.EXPECT().Validate(ctx, ctype, config).Return(err).Times(1)
+
+	_, err = api.ValidateConnector(
+		ctx,
+		&apiv1.ValidateConnectorRequest{
+			Type:   apiv1.Connector_Type(ctype),
+			Plugin: config.Plugin,
+			Config: &apiv1.Connector_Config{
+				Name:     config.Name,
+				Settings: config.Settings,
+			},
+		},
+	)
+
+	assert.Error(t, err)
 }
 
 func sortConnectors(c []*apiv1.Connector) {
