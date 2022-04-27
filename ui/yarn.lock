@@ -1348,6 +1348,14 @@
     ember-cli-version-checker "^5.1.2"
     semver "^7.3.5"
 
+"@embroider/addon-shim@^1.5.0":
+  version "1.6.0"
+  resolved "https://registry.yarnpkg.com/@embroider/addon-shim/-/addon-shim-1.6.0.tgz#d2d6d1d820605a48273a123a9adb49e163c8de1c"
+  integrity sha512-wHXsBsDsKxF6Ftnh67SBzV0OvwCBCBlgN5IVm661ByEdDacwWzYywFpVNcNJpCUttEJPMrqB5MJK7xf/xEqihg==
+  dependencies:
+    "@embroider/shared-internals" "^1.6.0"
+    semver "^7.3.5"
+
 "@embroider/macros@0.41.0", "@embroider/macros@^0.41.0":
   version "0.41.0"
   resolved "https://registry.yarnpkg.com/@embroider/macros/-/macros-0.41.0.tgz#3e78b6f388d7229906abf4c75edfff8bb0208aca"
@@ -1420,6 +1428,20 @@
     babel-import-util "^1.1.0"
     ember-rfc176-data "^0.3.17"
     fs-extra "^9.1.0"
+    lodash "^4.17.21"
+    resolve-package-path "^4.0.1"
+    semver "^7.3.5"
+    typescript-memoize "^1.0.1"
+
+"@embroider/shared-internals@^1.6.0":
+  version "1.6.0"
+  resolved "https://registry.yarnpkg.com/@embroider/shared-internals/-/shared-internals-1.6.0.tgz#35ade2ce1202e529107bf6d1fae4ca753f6ebe5a"
+  integrity sha512-es7+pV2S9+tgX5T4losppheXfa+xWtKD6x0gq7mxqA4DIdE14mORNeSWM8/Fu9f/t0tJnPqttddbgnDYw+SvrA==
+  dependencies:
+    babel-import-util "^1.1.0"
+    ember-rfc176-data "^0.3.17"
+    fs-extra "^9.1.0"
+    js-string-escape "^1.0.1"
     lodash "^4.17.21"
     resolve-package-path "^4.0.1"
     semver "^7.3.5"
@@ -5322,12 +5344,12 @@ ember-concurrency@^2.2.1:
     ember-compatibility-helpers "^1.2.0"
     ember-destroyable-polyfill "^2.0.2"
 
-ember-css-transitions@^3.1.0:
-  version "3.1.0"
-  resolved "https://registry.yarnpkg.com/ember-css-transitions/-/ember-css-transitions-3.1.0.tgz#8003c2efc6c6850c1f700bc13cfac97e606e9a52"
-  integrity sha512-4mbcjOZ5gWLpd60ccWWYe3zgx7IMHb+EH+asbI7MhRMrExeZdt16va4GlhB9o4zXBMO86JW5PX+zAi/at3eW/Q==
+ember-css-transitions@^4.0.0:
+  version "4.0.0"
+  resolved "https://registry.yarnpkg.com/ember-css-transitions/-/ember-css-transitions-4.0.0.tgz#6656b87ee98053bd39009fe9fe64f673f9d447b5"
+  integrity sha512-GYMhYhfbJDB5dQEb7tuFI9r4EQNwlQAYwv88breAomrLZB1F3EhwVcWH+PRHBnDbxcMDGl5OIIoSWBpNrUxnRg==
   dependencies:
-    ember-cli-babel "^7.26.11"
+    "@embroider/addon-shim" "^1.5.0"
     ember-modifier "^2.1.2 || ^3.1.0"
 
 ember-data@~3.28.9:
