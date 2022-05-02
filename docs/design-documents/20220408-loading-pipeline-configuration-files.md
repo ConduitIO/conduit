@@ -128,19 +128,11 @@ type Config struct {
 }
 ```
 
-The above configuration is parsed at start time and produces our template 
-configuration.  
-
-After parsing it, we inject environment variables into their corresponding 
-templated locations, if any.
-
-We bind our parsed `Config` to our parsed and injected `ConfigFileAsDatabase` 
-and use that to back our `Store` implementations with a read-only database.
+The above configuration is parsed at start time and provies a reference to our 
+pipeline configuration file. After parsing that file, we inject environment 
+variables into their corresponding templated locations, if any.
 
 ```go
-// ConfigFileAsDatabase fulfills Database for a read-only database.
-type ConfigFileAsDatabase struct{} 
-
 // DB defines the interface for a key-value store.
 type DB interface {
 	// NewTransaction starts and returns a new transaction.
@@ -166,7 +158,8 @@ operations, including transaction handling, enforcing our immutability
 during operation.
 
 We pass that `ConfigFileAsADatabase` to each new service at start time.
-
+Our ConfigFileAsDatabase will be bound with an in-memory database and passed
+to each new service when Conduit is starting.
 
 ```go
 // NewService initializes and returns a pipeline Service.
@@ -240,6 +233,7 @@ environments will have long-term consequences for its adoption and use.
 Beyond that, technical consequences include:
 
 - Increased complexity of a second operational mode.
+- Pipeline configurations can be checked into version control.
 
 ## Related 
 
