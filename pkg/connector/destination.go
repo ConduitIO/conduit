@@ -80,10 +80,6 @@ func (s *destination) CreatedAt() time.Time {
 	return s.XCreatedAt
 }
 
-func (s *destination) SetCreatedAt(t time.Time) {
-	s.XCreatedAt = t
-}
-
 func (s *destination) UpdatedAt() time.Time {
 	return s.XUpdatedAt
 }

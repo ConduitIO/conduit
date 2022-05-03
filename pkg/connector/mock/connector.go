@@ -162,18 +162,6 @@ func (mr *SourceMockRecorder) SetConfig(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetConfig", reflect.TypeOf((*Source)(nil).SetConfig), arg0)
 }
 
-// SetCreatedAt mocks base method.
-func (m *Source) SetCreatedAt(arg0 time.Time) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "SetCreatedAt", arg0)
-}
-
-// SetCreatedAt indicates an expected call of SetCreatedAt.
-func (mr *SourceMockRecorder) SetCreatedAt(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetCreatedAt", reflect.TypeOf((*Source)(nil).SetCreatedAt), arg0)
-}
-
 // SetState mocks base method.
 func (m *Source) SetState(arg0 connector.SourceState) {
 	m.ctrl.T.Helper()
@@ -414,18 +402,6 @@ func (m *Destination) SetConfig(arg0 connector.Config) {
 func (mr *DestinationMockRecorder) SetConfig(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetConfig", reflect.TypeOf((*Destination)(nil).SetConfig), arg0)
-}
-
-// SetCreatedAt mocks base method.
-func (m *Destination) SetCreatedAt(arg0 time.Time) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "SetCreatedAt", arg0)
-}
-
-// SetCreatedAt indicates an expected call of SetCreatedAt.
-func (mr *DestinationMockRecorder) SetCreatedAt(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetCreatedAt", reflect.TypeOf((*Destination)(nil).SetCreatedAt), arg0)
 }
 
 // SetState mocks base method.

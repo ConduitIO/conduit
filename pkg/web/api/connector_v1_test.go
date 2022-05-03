@@ -18,6 +18,7 @@ import (
 	"context"
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/conduitio/conduit/pkg/connector"
 	connmock "github.com/conduitio/conduit/pkg/connector/mock"
@@ -28,6 +29,7 @@ import (
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func TestConnectorAPIv1_ListConnectors(t *testing.T) {
@@ -45,6 +47,7 @@ func TestConnectorAPIv1_ListConnectors(t *testing.T) {
 		Return(map[string]connector.Connector{source.ID(): source, destination.ID(): destination}).
 		Times(1)
 
+	tn := time.Now()
 	want := &apiv1.ListConnectorsResponse{
 		Connectors: []*apiv1.Connector{
 			{
@@ -60,6 +63,8 @@ func TestConnectorAPIv1_ListConnectors(t *testing.T) {
 				Plugin:       source.Config().Plugin,
 				PipelineId:   source.Config().PipelineID,
 				ProcessorIds: source.Config().ProcessorIDs,
+				CreatedAt:    timestamppb.New(tn),
+				UpdatedAt:    timestamppb.New(tn),
 			},
 
 			{
@@ -77,8 +82,8 @@ func TestConnectorAPIv1_ListConnectors(t *testing.T) {
 				Plugin:       destination.Config().Plugin,
 				PipelineId:   destination.Config().PipelineID,
 				ProcessorIds: destination.Config().ProcessorIDs,
-				//CreatedAt: timestamppb.New(tn),
-				//UpdatedAt: timestamppb.New(tn),
+				CreatedAt:    timestamppb.New(tn),
+				UpdatedAt:    timestamppb.New(tn),
 			},
 		},
 	}
@@ -88,6 +93,12 @@ func TestConnectorAPIv1_ListConnectors(t *testing.T) {
 		&apiv1.ListConnectorsRequest{},
 	)
 	assert.Ok(t, err)
+
+	// copy expected times
+	for i, conn := range got.Connectors {
+		conn.CreatedAt = want.Connectors[i].CreatedAt
+		conn.UpdatedAt = want.Connectors[i].UpdatedAt
+	}
 
 	sortConnectors(want.Connectors)
 	sortConnectors(got.Connectors)
@@ -108,6 +119,7 @@ func TestConnectorAPIv1_ListConnectorsByPipeline(t *testing.T) {
 		Return(map[string]connector.Connector{source.ID(): source, destination.ID(): destination}).
 		Times(1)
 
+	tn := time.Now()
 	want := &apiv1.ListConnectorsResponse{
 		Connectors: []*apiv1.Connector{
 			{
@@ -123,6 +135,8 @@ func TestConnectorAPIv1_ListConnectorsByPipeline(t *testing.T) {
 				Plugin:       source.Config().Plugin,
 				PipelineId:   source.Config().PipelineID,
 				ProcessorIds: source.Config().ProcessorIDs,
+				CreatedAt:    timestamppb.New(tn),
+				UpdatedAt:    timestamppb.New(tn),
 			},
 		},
 	}
@@ -131,8 +145,14 @@ func TestConnectorAPIv1_ListConnectorsByPipeline(t *testing.T) {
 		ctx,
 		&apiv1.ListConnectorsRequest{PipelineId: source.Config().PipelineID},
 	)
-
 	assert.Ok(t, err)
+
+	// copy expected time
+	for i, conn := range got.Connectors {
+		conn.CreatedAt = want.Connectors[i].CreatedAt
+		conn.UpdatedAt = want.Connectors[i].UpdatedAt
+	}
+
 	assert.Equal(t, want, got)
 }
 
@@ -146,6 +166,7 @@ func TestConnectorAPIv1_CreateConnector(t *testing.T) {
 
 	csMock.EXPECT().Create(ctx, source.Type(), source.Config()).Return(source, nil).Times(1)
 
+	tn := time.Now()
 	want := &apiv1.CreateConnectorResponse{Connector: &apiv1.Connector{
 		Id: source.ID(),
 		State: &apiv1.Connector_SourceState_{
@@ -159,6 +180,8 @@ func TestConnectorAPIv1_CreateConnector(t *testing.T) {
 		Plugin:       source.Config().Plugin,
 		PipelineId:   source.Config().PipelineID,
 		ProcessorIds: source.Config().ProcessorIDs,
+		UpdatedAt:    timestamppb.New(tn),
+		CreatedAt:    timestamppb.New(tn),
 	}}
 
 	got, err := api.CreateConnector(
@@ -172,6 +195,11 @@ func TestConnectorAPIv1_CreateConnector(t *testing.T) {
 	)
 
 	assert.Ok(t, err)
+
+	// copy expected time
+	got.Connector.CreatedAt = want.Connector.CreatedAt
+	got.Connector.UpdatedAt = want.Connector.UpdatedAt
+
 	assert.Equal(t, want, got)
 }
 
@@ -185,6 +213,7 @@ func TestConnectorAPIv1_GetConnector(t *testing.T) {
 
 	csMock.EXPECT().Get(ctx, source.ID()).Return(source, nil).Times(1)
 
+	tn := time.Now()
 	want := &apiv1.GetConnectorResponse{Connector: &apiv1.Connector{
 		Id: source.ID(),
 		State: &apiv1.Connector_SourceState_{
@@ -198,6 +227,8 @@ func TestConnectorAPIv1_GetConnector(t *testing.T) {
 		Plugin:       source.Config().Plugin,
 		PipelineId:   source.Config().PipelineID,
 		ProcessorIds: source.Config().ProcessorIDs,
+		UpdatedAt:    timestamppb.New(tn),
+		CreatedAt:    timestamppb.New(tn),
 	}}
 
 	got, err := api.GetConnector(
@@ -208,6 +239,11 @@ func TestConnectorAPIv1_GetConnector(t *testing.T) {
 	)
 
 	assert.Ok(t, err)
+
+	// copy expected time
+	got.Connector.CreatedAt = want.Connector.CreatedAt
+	got.Connector.UpdatedAt = want.Connector.UpdatedAt
+
 	assert.Equal(t, want, got)
 }
 
@@ -237,6 +273,7 @@ func TestConnectorAPIv1_UpdateConnector(t *testing.T) {
 	csMock.EXPECT().Get(ctx, before.ID()).Return(before, nil).Times(1)
 	csMock.EXPECT().Update(ctx, before.ID(), newConfig).Return(after, nil).Times(1)
 
+	tn := time.Now()
 	want := &apiv1.UpdateConnectorResponse{Connector: &apiv1.Connector{
 		Id: after.ID(),
 		State: &apiv1.Connector_SourceState_{
@@ -250,6 +287,8 @@ func TestConnectorAPIv1_UpdateConnector(t *testing.T) {
 		Plugin:       after.Config().Plugin,
 		PipelineId:   after.Config().PipelineID,
 		ProcessorIds: after.Config().ProcessorIDs,
+		CreatedAt:    timestamppb.New(tn),
+		UpdatedAt:    timestamppb.New(tn),
 	}}
 
 	got, err := api.UpdateConnector(
@@ -259,8 +298,12 @@ func TestConnectorAPIv1_UpdateConnector(t *testing.T) {
 			Config: want.Connector.Config,
 		},
 	)
-
 	assert.Ok(t, err)
+
+	// copy expected time
+	got.Connector.CreatedAt = want.Connector.CreatedAt
+	got.Connector.UpdatedAt = want.Connector.UpdatedAt
+
 	assert.Equal(t, want, got)
 }
 
@@ -365,6 +408,8 @@ func newTestSource(connBuilder connmock.Builder) *connmock.Source {
 		PipelineID: uuid.NewString(),
 	})
 	source.EXPECT().State().Return(connector.SourceState{Position: []byte("irrelevant")})
+	source.EXPECT().CreatedAt().AnyTimes()
+	source.EXPECT().UpdatedAt().AnyTimes()
 	return source
 }
 
@@ -375,5 +420,7 @@ func newTestDestination(connBuilder connmock.Builder) *connmock.Destination {
 		Plugin:     "path/to/plugin",
 		PipelineID: uuid.NewString(),
 	})
+	destination.EXPECT().CreatedAt().AnyTimes()
+	destination.EXPECT().UpdatedAt().AnyTimes()
 	return destination
 }

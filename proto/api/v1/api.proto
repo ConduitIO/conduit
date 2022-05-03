@@ -36,11 +36,11 @@ message Pipeline {
 
   // -- children connections ---------------------------------------------------
 
-  repeated string connector_ids = 4 [(google.api.field_behavior) = OUTPUT_ONLY];
-  repeated string processor_ids = 5 [(google.api.field_behavior) = OUTPUT_ONLY];
+  repeated string connector_ids = 5 [(google.api.field_behavior) = OUTPUT_ONLY];
+  repeated string processor_ids = 6 [(google.api.field_behavior) = OUTPUT_ONLY];
 
-  google.protobuf.Timestamp created_at = 6;
-  google.protobuf.Timestamp updated_at = 7;
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp updated_at = 8;
 }
 
 message Connector {

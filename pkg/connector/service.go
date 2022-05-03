@@ -102,11 +102,6 @@ func (s *Service) Create(ctx context.Context, id string, t Type, cfg Config) (Co
 		return nil, cerrors.Errorf("could not init connector: %w", err)
 	}
 
-	// set timestamps
-	tn := time.Now()
-	conn.SetCreatedAt(tn)
-	conn.SetUpdatedAt(tn)
-
 	// persist instance
 	err = s.store.Set(ctx, id, conn)
 	if err != nil {

@@ -32,13 +32,12 @@ type source struct {
 	XID     string
 	XConfig Config
 	XState  SourceState
-
-	// logger is used for logging and is set when source is created.
-	logger log.CtxLogger
-
 	// timestamps
 	XCreatedAt time.Time
 	XUpdatedAt time.Time
+
+	// logger is used for logging and is set when source is created.
+	logger log.CtxLogger
 
 	// persister is used for persisting the connector state when it changes.
 	persister *Persister
@@ -79,10 +78,6 @@ func (s *source) SetConfig(d Config) {
 
 func (s *source) CreatedAt() time.Time {
 	return s.XCreatedAt
-}
-
-func (s *source) SetCreatedAt(t time.Time) {
-	s.XCreatedAt = t
 }
 
 func (s *source) UpdatedAt() time.Time {

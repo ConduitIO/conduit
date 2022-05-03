@@ -44,7 +44,6 @@ type Connector interface {
 	SetConfig(Config)
 
 	CreatedAt() time.Time
-	SetCreatedAt(time.Time)
 	UpdatedAt() time.Time
 	SetUpdatedAt(time.Time)
 

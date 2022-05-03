@@ -16,6 +16,7 @@ package connector
 
 import (
 	"context"
+	"time"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -72,10 +73,13 @@ func (b *DefaultBuilder) Init(c Connector, id string, config Config) error {
 		return cerrors.Errorf("could not create plugin %q: %w", config.Plugin, err)
 	}
 
+	tn := time.Now()
 	switch v := c.(type) {
 	case *source:
 		v.XID = id
 		v.XConfig = config
+		v.XUpdatedAt = tn
+		v.XCreatedAt = tn
 		connLogger = connLogger.WithComponent("connector.Source")
 		v.logger = connLogger
 		v.persister = b.persister
@@ -84,6 +88,8 @@ func (b *DefaultBuilder) Init(c Connector, id string, config Config) error {
 	case *destination:
 		v.XID = id
 		v.XConfig = config
+		v.XUpdatedAt = tn
+		v.XCreatedAt = tn
 		connLogger = connLogger.WithComponent("connector.Destination")
 		v.logger = connLogger
 		v.persister = b.persister
