@@ -90,14 +90,14 @@ message reaches the end of the pipeline.
 ### Messages are delivered in order
 
 Since messages are passed between nodes in channels and a node only processes one message at a time, it is guaranteed
-that messages will flow through the Conduit pipeline in the same order as they are received by the source.
+that messages will flow through the Conduit pipeline in the same order that was produced by the source.
 
 There are two caveats:
 
-- If a pipeline contains multiple source connectors then the order of two messages coming from different connectors is
+- If a pipeline contains multiple source connectors, the order of two messages coming from different connectors is
   nondeterministic. Messages coming from the same source connector are still guaranteed to retain their order.
-- If a dead letter queue is configured then negatively acknowledged messages will be removed from the stream while the
-  pipeline will be kept running, thus impacting the order of messages.
+- If a dead letter queue is configured, negatively acknowledged messages will be removed from the stream while the
+  pipeline will keep running, thus impacting the order of messages.
 
 The order guarantee only holds inside of Conduit. Once a message reaches a destination connector, it is allowed to buffer
 messages and batch write them to 3rd party systems. Normally the connector would retain the order, although we can't
@@ -107,7 +107,7 @@ vouch for badly written connectors that don't follow this behavior.
 
 Between pipeline restarts, it is guaranteed that any message that is processed successfully by all nodes and not
 filtered out will be delivered to a destination connector at least once. Multiple deliveries can occur in pipelines with
-multiple destinations that stopped because of a negatively acknowledged record, or pipelines, where a destination
+multiple destinations that stopped because of a negatively acknowledged record, or pipelines where a destination
 negatively acknowledged a record and processed more messages after that. For this reason, we strongly recommend
 implementing the write operation of a destination connector in an idempotent way (if possible).
 
@@ -117,8 +117,9 @@ drops unsuccessfully processed messages.
 ### Acks are delivered in order
 
 Conduit ensures that acknowledgments are sent to the source connector in the exact same order as records produced by the
-connector. This guarantee still holds, even if a destination connector acknowledges records in a different order or if a
-later record gets filtered out faster than an earlier record managed to get written to all destinations.
+connector. This guarantee still holds, even if a badly implemented destination connector acknowledges records in a
+different order, or if a processor filters out a record (i.e. acks the message) while a message that came before it is
+still being processed.
 
 ### Acks are delivered at most once
 
@@ -162,7 +163,8 @@ A pipeline can be stopped in two ways - either it's stopped gracefully or forcef
 - A graceful stop is initiated either by Conduit shutting down or by the user requesting the pipeline to stop. Only the
   source connector nodes will receive the signal to stop running. The source nodes will stop running and close their
   outgoing channels, notifying the downstream nodes that there will be no more messages. This behavior propagates down
-  the pipeline until the last node stops running, draining any open messages in the process.
+  the pipeline until the last node stops running. Any messages that were being processed while the pipeline received a
+  stop signal will be processed normally and written to all destinations.
 - A forceful stop is initiated when a node stops running because it experienced an unrecoverable error. In that case,
   the context that is shared by all nodes will get canceled, signaling to all nodes simultaneously that they should stop
   running as soon as possible. Messages that are in the pipeline won't be drained, instead, they are dropped and will be
