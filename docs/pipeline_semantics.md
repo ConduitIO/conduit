@@ -99,7 +99,7 @@ There are two caveats:
 - If a dead letter queue is configured then negatively acknowledged messages will be removed from the stream while the
   pipeline will be kept running, thus impacting the order of messages.
 
-The order guarantee only holds inside of Conduit. Once a message reaches a destination connector it is allowed to buffer
+The order guarantee only holds inside of Conduit. Once a message reaches a destination connector, it is allowed to buffer
 messages and batch write them to 3rd party systems. Normally the connector would retain the order, although we can't
 vouch for badly written connectors that don't follow this behavior.
 
