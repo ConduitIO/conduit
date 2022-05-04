@@ -51,11 +51,18 @@ func NewDefaultBuilder(logger log.CtxLogger, persister *Persister, service *plug
 
 func (b *DefaultBuilder) Build(t Type) (Connector, error) {
 	var c Connector
+	tn := time.Now()
 	switch t {
 	case TypeSource:
-		c = &source{}
+		c = &source{
+			XCreatedAt: tn,
+			XUpdatedAt: tn,
+		}
 	case TypeDestination:
-		c = &destination{}
+		c = &destination{
+			XCreatedAt: tn,
+			XUpdatedAt: tn,
+		}
 	default:
 		return nil, ErrInvalidConnectorType
 	}
@@ -73,13 +80,10 @@ func (b *DefaultBuilder) Init(c Connector, id string, config Config) error {
 		return cerrors.Errorf("could not create plugin %q: %w", config.Plugin, err)
 	}
 
-	tn := time.Now()
 	switch v := c.(type) {
 	case *source:
 		v.XID = id
 		v.XConfig = config
-		v.XUpdatedAt = tn
-		v.XCreatedAt = tn
 		connLogger = connLogger.WithComponent("connector.Source")
 		v.logger = connLogger
 		v.persister = b.persister
@@ -88,8 +92,6 @@ func (b *DefaultBuilder) Init(c Connector, id string, config Config) error {
 	case *destination:
 		v.XID = id
 		v.XConfig = config
-		v.XUpdatedAt = tn
-		v.XCreatedAt = tn
 		connLogger = connLogger.WithComponent("connector.Destination")
 		v.logger = connLogger
 		v.persister = b.persister
