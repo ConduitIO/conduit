@@ -89,7 +89,7 @@ message reaches the end of the pipeline.
 
 ### Messages are delivered in order
 
-Since messages are passed between nodes in channels and a node only processes one message at a time it is guaranteed
+Since messages are passed between nodes in channels and a node only processes one message at a time, it is guaranteed
 that messages will flow through the Conduit pipeline in the same order as they are received by the source.
 
 There are two caveats:
