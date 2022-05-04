@@ -153,8 +153,9 @@ accommodate the abilities of the slowest destination connector.
 
 Messages that get negatively acknowledged can be rerouted to another destination called a dead letter queue (DLQ) where
 they are stored and can be reprocessed at a later point in time after manual intervention. If rerouting is set up and
-the message successfully reaches the DLQ the message will be acked instead. The user has the option to configure a DLQ
-that simply logs a warning and drops messages to achieve "at most once" delivery guarantees.
+the message successfully reaches the DLQ the message will be internally nacked, but an acknowledgment will be sent to
+the source connector since Conduit handled the message and it can be discarded from the source. The user has the option
+to configure a DLQ that simply logs a warning and drops messages to achieve "at most once" delivery guarantees.
 
 ### Pipeline stop
 
