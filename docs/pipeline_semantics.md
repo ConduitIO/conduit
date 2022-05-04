@@ -62,7 +62,7 @@ A message can be in one of 3 states:
   or a destination connector. A pipeline won't stop until all messages transition from the open state into one of the
   other two states.
 - **Acked** - a message was successfully processed and acknowledged. This can be done either by a processor (e.g. it
-  filtered the message out) or by a destination. If a pipeline contains multiple destinations the message needs to be
+  filtered the message out) or by a destination. If a pipeline contains multiple destinations, the message needs to be
   acknowledged by all destinations before it is marked as acked. Acks are propagated back to the source connector and
   can be used to advance the position in the source system if applicable.
 - **Nacked** - a message was negatively acknowledged either by a processor (e.g. a transform failed) or by a
