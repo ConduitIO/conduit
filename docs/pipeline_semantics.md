@@ -46,7 +46,7 @@ etc.).
 ## Message
 
 A message is a wrapper around a record that manages the record's lifecycle as it flows through the pipeline. Messages
-are created in source nodes when the receive records from the source connector, and they are passed down the pipeline
+are created in source nodes when they receive records from the source connector, and they are passed down the pipeline
 between nodes until they are acked or nacked. Nodes are only allowed to hold a reference to a single message at a time,
 meaning that they need to pass the message to the next node before taking another message¹. This also means there is no
 explicit buffer in Conduit, a pipeline can only hold only as many messages as there are nodes in the pipeline (see
