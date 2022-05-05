@@ -102,11 +102,11 @@ func (s *Service) Create(
 		return nil, cerrors.Errorf("processor is of type %s and not %s", pt, t)
 	}
 
-	tn := time.Now()
+	now := time.Now()
 	instance := &Instance{
 		ID:        id,
-		UpdatedAt: tn,
-		CreatedAt: tn,
+		UpdatedAt: now,
+		CreatedAt: now,
 		Name:      name,
 		Parent:    parent,
 		Config:    cfg,

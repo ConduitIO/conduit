@@ -47,7 +47,7 @@ func TestConnectorAPIv1_ListConnectors(t *testing.T) {
 		Return(map[string]connector.Connector{source.ID(): source, destination.ID(): destination}).
 		Times(1)
 
-	tn := time.Now()
+	now := time.Now()
 	want := &apiv1.ListConnectorsResponse{
 		Connectors: []*apiv1.Connector{
 			{
@@ -63,8 +63,8 @@ func TestConnectorAPIv1_ListConnectors(t *testing.T) {
 				Plugin:       source.Config().Plugin,
 				PipelineId:   source.Config().PipelineID,
 				ProcessorIds: source.Config().ProcessorIDs,
-				CreatedAt:    timestamppb.New(tn),
-				UpdatedAt:    timestamppb.New(tn),
+				CreatedAt:    timestamppb.New(now),
+				UpdatedAt:    timestamppb.New(now),
 			},
 
 			{
@@ -82,8 +82,8 @@ func TestConnectorAPIv1_ListConnectors(t *testing.T) {
 				Plugin:       destination.Config().Plugin,
 				PipelineId:   destination.Config().PipelineID,
 				ProcessorIds: destination.Config().ProcessorIDs,
-				CreatedAt:    timestamppb.New(tn),
-				UpdatedAt:    timestamppb.New(tn),
+				CreatedAt:    timestamppb.New(now),
+				UpdatedAt:    timestamppb.New(now),
 			},
 		},
 	}
@@ -119,7 +119,7 @@ func TestConnectorAPIv1_ListConnectorsByPipeline(t *testing.T) {
 		Return(map[string]connector.Connector{source.ID(): source, destination.ID(): destination}).
 		Times(1)
 
-	tn := time.Now()
+	now := time.Now()
 	want := &apiv1.ListConnectorsResponse{
 		Connectors: []*apiv1.Connector{
 			{
@@ -135,8 +135,8 @@ func TestConnectorAPIv1_ListConnectorsByPipeline(t *testing.T) {
 				Plugin:       source.Config().Plugin,
 				PipelineId:   source.Config().PipelineID,
 				ProcessorIds: source.Config().ProcessorIDs,
-				CreatedAt:    timestamppb.New(tn),
-				UpdatedAt:    timestamppb.New(tn),
+				CreatedAt:    timestamppb.New(now),
+				UpdatedAt:    timestamppb.New(now),
 			},
 		},
 	}
@@ -166,7 +166,7 @@ func TestConnectorAPIv1_CreateConnector(t *testing.T) {
 
 	csMock.EXPECT().Create(ctx, source.Type(), source.Config()).Return(source, nil).Times(1)
 
-	tn := time.Now()
+	now := time.Now()
 	want := &apiv1.CreateConnectorResponse{Connector: &apiv1.Connector{
 		Id: source.ID(),
 		State: &apiv1.Connector_SourceState_{
@@ -180,8 +180,8 @@ func TestConnectorAPIv1_CreateConnector(t *testing.T) {
 		Plugin:       source.Config().Plugin,
 		PipelineId:   source.Config().PipelineID,
 		ProcessorIds: source.Config().ProcessorIDs,
-		UpdatedAt:    timestamppb.New(tn),
-		CreatedAt:    timestamppb.New(tn),
+		UpdatedAt:    timestamppb.New(now),
+		CreatedAt:    timestamppb.New(now),
 	}}
 
 	got, err := api.CreateConnector(
@@ -213,7 +213,7 @@ func TestConnectorAPIv1_GetConnector(t *testing.T) {
 
 	csMock.EXPECT().Get(ctx, source.ID()).Return(source, nil).Times(1)
 
-	tn := time.Now()
+	now := time.Now()
 	want := &apiv1.GetConnectorResponse{Connector: &apiv1.Connector{
 		Id: source.ID(),
 		State: &apiv1.Connector_SourceState_{
@@ -227,8 +227,8 @@ func TestConnectorAPIv1_GetConnector(t *testing.T) {
 		Plugin:       source.Config().Plugin,
 		PipelineId:   source.Config().PipelineID,
 		ProcessorIds: source.Config().ProcessorIDs,
-		UpdatedAt:    timestamppb.New(tn),
-		CreatedAt:    timestamppb.New(tn),
+		UpdatedAt:    timestamppb.New(now),
+		CreatedAt:    timestamppb.New(now),
 	}}
 
 	got, err := api.GetConnector(
@@ -273,7 +273,7 @@ func TestConnectorAPIv1_UpdateConnector(t *testing.T) {
 	csMock.EXPECT().Get(ctx, before.ID()).Return(before, nil).Times(1)
 	csMock.EXPECT().Update(ctx, before.ID(), newConfig).Return(after, nil).Times(1)
 
-	tn := time.Now()
+	now := time.Now()
 	want := &apiv1.UpdateConnectorResponse{Connector: &apiv1.Connector{
 		Id: after.ID(),
 		State: &apiv1.Connector_SourceState_{
@@ -287,8 +287,8 @@ func TestConnectorAPIv1_UpdateConnector(t *testing.T) {
 		Plugin:       after.Config().Plugin,
 		PipelineId:   after.Config().PipelineID,
 		ProcessorIds: after.Config().ProcessorIDs,
-		CreatedAt:    timestamppb.New(tn),
-		UpdatedAt:    timestamppb.New(tn),
+		CreatedAt:    timestamppb.New(now),
+		UpdatedAt:    timestamppb.New(now),
 	}}
 
 	got, err := api.UpdateConnector(

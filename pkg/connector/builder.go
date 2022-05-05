@@ -51,17 +51,17 @@ func NewDefaultBuilder(logger log.CtxLogger, persister *Persister, service *plug
 
 func (b *DefaultBuilder) Build(t Type) (Connector, error) {
 	var c Connector
-	tn := time.Now()
+	now := time.Now()
 	switch t {
 	case TypeSource:
 		c = &source{
-			XCreatedAt: tn,
-			XUpdatedAt: tn,
+			XCreatedAt: now,
+			XUpdatedAt: now,
 		}
 	case TypeDestination:
 		c = &destination{
-			XCreatedAt: tn,
-			XUpdatedAt: tn,
+			XCreatedAt: now,
+			XUpdatedAt: now,
 		}
 	default:
 		return nil, ErrInvalidConnectorType
