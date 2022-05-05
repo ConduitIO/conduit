@@ -67,6 +67,8 @@ func (b Builder) NewDestinationMock(id string, d connector.Config) *Destination 
 	m.EXPECT().Type().Return(connector.TypeDestination).AnyTimes()
 	m.EXPECT().ID().Return(id).AnyTimes()
 	m.EXPECT().Config().Return(d).AnyTimes()
+	m.EXPECT().CreatedAt().AnyTimes()
+	m.EXPECT().UpdatedAt().AnyTimes()
 	if b.SetupDestination != nil {
 		b.SetupDestination(m)
 	}
@@ -78,6 +80,8 @@ func (b Builder) NewSourceMock(id string, d connector.Config) *Source {
 	m.EXPECT().Type().Return(connector.TypeSource).AnyTimes()
 	m.EXPECT().ID().Return(id).AnyTimes()
 	m.EXPECT().Config().Return(d).AnyTimes()
+	m.EXPECT().CreatedAt().AnyTimes()
+	m.EXPECT().UpdatedAt().AnyTimes()
 	if b.SetupSource != nil {
 		b.SetupSource(m)
 	}

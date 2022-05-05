@@ -25,6 +25,7 @@ import (
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func TestPipelineAPIv1_CreatePipeline(t *testing.T) {
@@ -55,6 +56,8 @@ func TestPipelineAPIv1_CreatePipeline(t *testing.T) {
 				Name:        config.Name,
 				Description: config.Description,
 			},
+			CreatedAt: timestamppb.New(pl.CreatedAt),
+			UpdatedAt: timestamppb.New(pl.UpdatedAt),
 		},
 	}
 	got, err := api.CreatePipeline(
@@ -99,12 +102,16 @@ func TestPipelineAPIv1_ListPipelinesByName(t *testing.T) {
 			Config: &apiv1.Pipeline_Config{
 				Name: pls[1].Config.Name,
 			},
+			CreatedAt: timestamppb.New(pls[1].CreatedAt),
+			UpdatedAt: timestamppb.New(pls[1].UpdatedAt),
 		}, {
 			Id:    pls[2].ID,
 			State: &apiv1.Pipeline_State{},
 			Config: &apiv1.Pipeline_Config{
 				Name: pls[2].Config.Name,
 			},
+			CreatedAt: timestamppb.New(pls[2].CreatedAt),
+			UpdatedAt: timestamppb.New(pls[2].UpdatedAt),
 		}},
 	}
 

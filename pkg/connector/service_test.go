@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/connector/mock"
@@ -349,11 +350,19 @@ func TestService_UpdateSuccess(t *testing.T) {
 		PipelineID: uuid.NewString(),
 	}
 
+	beforeUpdate := time.Now()
+
 	connBuilder := mock.Builder{
 		Ctrl: ctrl,
 		SetupSource: func(source *mock.Source) {
 			source.EXPECT().Validate(ctx, want.Settings).Return(nil)
 			source.EXPECT().SetConfig(want)
+			source.
+				EXPECT().
+				SetUpdatedAt(gomock.AssignableToTypeOf(time.Time{})).
+				Do(func(got time.Time) {
+					assert.Equal(t, got.After(beforeUpdate), true)
+				})
 		},
 	}
 

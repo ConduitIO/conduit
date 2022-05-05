@@ -7,6 +7,7 @@ package mock
 import (
 	context "context"
 	reflect "reflect"
+	time "time"
 
 	connector "github.com/conduitio/conduit/pkg/connector"
 	record "github.com/conduitio/conduit/pkg/record"
@@ -62,6 +63,20 @@ func (m *Source) Config() connector.Config {
 func (mr *SourceMockRecorder) Config() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Config", reflect.TypeOf((*Source)(nil).Config))
+}
+
+// CreatedAt mocks base method.
+func (m *Source) CreatedAt() time.Time {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreatedAt")
+	ret0, _ := ret[0].(time.Time)
+	return ret0
+}
+
+// CreatedAt indicates an expected call of CreatedAt.
+func (mr *SourceMockRecorder) CreatedAt() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreatedAt", reflect.TypeOf((*Source)(nil).CreatedAt))
 }
 
 // Errors mocks base method.
@@ -159,6 +174,18 @@ func (mr *SourceMockRecorder) SetState(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetState", reflect.TypeOf((*Source)(nil).SetState), arg0)
 }
 
+// SetUpdatedAt mocks base method.
+func (m *Source) SetUpdatedAt(arg0 time.Time) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetUpdatedAt", arg0)
+}
+
+// SetUpdatedAt indicates an expected call of SetUpdatedAt.
+func (mr *SourceMockRecorder) SetUpdatedAt(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetUpdatedAt", reflect.TypeOf((*Source)(nil).SetUpdatedAt), arg0)
+}
+
 // State mocks base method.
 func (m *Source) State() connector.SourceState {
 	m.ctrl.T.Helper()
@@ -213,6 +240,20 @@ func (m *Source) Type() connector.Type {
 func (mr *SourceMockRecorder) Type() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Type", reflect.TypeOf((*Source)(nil).Type))
+}
+
+// UpdatedAt mocks base method.
+func (m *Source) UpdatedAt() time.Time {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdatedAt")
+	ret0, _ := ret[0].(time.Time)
+	return ret0
+}
+
+// UpdatedAt indicates an expected call of UpdatedAt.
+func (mr *SourceMockRecorder) UpdatedAt() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdatedAt", reflect.TypeOf((*Source)(nil).UpdatedAt))
 }
 
 // Validate mocks base method.
@@ -279,6 +320,20 @@ func (m *Destination) Config() connector.Config {
 func (mr *DestinationMockRecorder) Config() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Config", reflect.TypeOf((*Destination)(nil).Config))
+}
+
+// CreatedAt mocks base method.
+func (m *Destination) CreatedAt() time.Time {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreatedAt")
+	ret0, _ := ret[0].(time.Time)
+	return ret0
+}
+
+// CreatedAt indicates an expected call of CreatedAt.
+func (mr *DestinationMockRecorder) CreatedAt() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreatedAt", reflect.TypeOf((*Destination)(nil).CreatedAt))
 }
 
 // Errors mocks base method.
@@ -361,6 +416,18 @@ func (mr *DestinationMockRecorder) SetState(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetState", reflect.TypeOf((*Destination)(nil).SetState), arg0)
 }
 
+// SetUpdatedAt mocks base method.
+func (m *Destination) SetUpdatedAt(arg0 time.Time) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetUpdatedAt", arg0)
+}
+
+// SetUpdatedAt indicates an expected call of SetUpdatedAt.
+func (mr *DestinationMockRecorder) SetUpdatedAt(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetUpdatedAt", reflect.TypeOf((*Destination)(nil).SetUpdatedAt), arg0)
+}
+
 // State mocks base method.
 func (m *Destination) State() connector.DestinationState {
 	m.ctrl.T.Helper()
@@ -401,6 +468,20 @@ func (m *Destination) Type() connector.Type {
 func (mr *DestinationMockRecorder) Type() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Type", reflect.TypeOf((*Destination)(nil).Type))
+}
+
+// UpdatedAt mocks base method.
+func (m *Destination) UpdatedAt() time.Time {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdatedAt")
+	ret0, _ := ret[0].(time.Time)
+	return ret0
+}
+
+// UpdatedAt indicates an expected call of UpdatedAt.
+func (mr *DestinationMockRecorder) UpdatedAt() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdatedAt", reflect.TypeOf((*Destination)(nil).UpdatedAt))
 }
 
 // Validate mocks base method.

@@ -18,6 +18,7 @@ import (
 	"context"
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/processor"
@@ -26,6 +27,7 @@ import (
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func TestProcessorAPIv1_ListProcessors(t *testing.T) {
@@ -40,6 +42,7 @@ func TestProcessorAPIv1_ListProcessors(t *testing.T) {
 		Settings: map[string]string{"titan": "armored"},
 	}
 
+	now := time.Now()
 	prs := []*processor.Instance{
 		{
 			ID:   uuid.NewString(),
@@ -50,6 +53,8 @@ func TestProcessorAPIv1_ListProcessors(t *testing.T) {
 			},
 			Config:    config,
 			Processor: p,
+			UpdatedAt: now,
+			CreatedAt: now,
 		},
 		{
 			ID:   uuid.NewString(),
@@ -60,6 +65,8 @@ func TestProcessorAPIv1_ListProcessors(t *testing.T) {
 			},
 			Config:    config,
 			Processor: p,
+			UpdatedAt: now,
+			CreatedAt: now,
 		},
 	}
 
@@ -80,6 +87,8 @@ func TestProcessorAPIv1_ListProcessors(t *testing.T) {
 				Id:   prs[0].Parent.ID,
 				Type: apiv1.Processor_Parent_Type(prs[0].Parent.Type),
 			},
+			CreatedAt: timestamppb.New(prs[0].CreatedAt),
+			UpdatedAt: timestamppb.New(prs[0].UpdatedAt),
 		},
 
 		{
@@ -93,6 +102,8 @@ func TestProcessorAPIv1_ListProcessors(t *testing.T) {
 				Id:   prs[1].Parent.ID,
 				Type: apiv1.Processor_Parent_Type(prs[1].Parent.Type),
 			},
+			CreatedAt: timestamppb.New(prs[1].CreatedAt),
+			UpdatedAt: timestamppb.New(prs[1].UpdatedAt),
 		},
 	},
 	}
@@ -116,6 +127,7 @@ func TestProcessorAPIv1_ListProcessorsByParents(t *testing.T) {
 	config := processor.Config{
 		Settings: map[string]string{"titan": "armored"},
 	}
+	now := time.Now()
 
 	sharedParent := uuid.NewString()
 	prs := []*processor.Instance{
@@ -128,6 +140,8 @@ func TestProcessorAPIv1_ListProcessorsByParents(t *testing.T) {
 			},
 			Config:    config,
 			Processor: p,
+			UpdatedAt: now,
+			CreatedAt: now,
 		},
 		{
 			ID:   uuid.NewString(),
@@ -138,6 +152,8 @@ func TestProcessorAPIv1_ListProcessorsByParents(t *testing.T) {
 			},
 			Config:    config,
 			Processor: p,
+			UpdatedAt: now,
+			CreatedAt: now,
 		},
 		{
 			ID:   uuid.NewString(),
@@ -148,6 +164,8 @@ func TestProcessorAPIv1_ListProcessorsByParents(t *testing.T) {
 			},
 			Config:    processor.Config{},
 			Processor: p,
+			UpdatedAt: now,
+			CreatedAt: now,
 		},
 		{
 			ID:   uuid.NewString(),
@@ -158,6 +176,8 @@ func TestProcessorAPIv1_ListProcessorsByParents(t *testing.T) {
 			},
 			Config:    processor.Config{},
 			Processor: p,
+			UpdatedAt: now,
+			CreatedAt: now,
 		},
 	}
 
@@ -180,6 +200,8 @@ func TestProcessorAPIv1_ListProcessorsByParents(t *testing.T) {
 				Id:   prs[0].Parent.ID,
 				Type: apiv1.Processor_Parent_Type(prs[0].Parent.Type),
 			},
+			CreatedAt: timestamppb.New(prs[0].CreatedAt),
+			UpdatedAt: timestamppb.New(prs[0].UpdatedAt),
 		},
 
 		{
@@ -193,6 +215,8 @@ func TestProcessorAPIv1_ListProcessorsByParents(t *testing.T) {
 				Id:   prs[2].Parent.ID,
 				Type: apiv1.Processor_Parent_Type(prs[2].Parent.Type),
 			},
+			CreatedAt: timestamppb.New(prs[1].CreatedAt),
+			UpdatedAt: timestamppb.New(prs[1].UpdatedAt),
 		},
 		{
 			Id:   prs[3].ID,
@@ -205,6 +229,8 @@ func TestProcessorAPIv1_ListProcessorsByParents(t *testing.T) {
 				Id:   prs[3].Parent.ID,
 				Type: apiv1.Processor_Parent_Type(prs[3].Parent.Type),
 			},
+			CreatedAt: timestamppb.New(prs[3].CreatedAt),
+			UpdatedAt: timestamppb.New(prs[3].UpdatedAt),
 		},
 	},
 	}
@@ -229,6 +255,7 @@ func TestProcessorAPIv1_CreateProcessor(t *testing.T) {
 		Settings: map[string]string{"titan": "armored"},
 	}
 
+	now := time.Now()
 	pr := &processor.Instance{
 		ID:   uuid.NewString(),
 		Name: "Pants",
@@ -238,6 +265,8 @@ func TestProcessorAPIv1_CreateProcessor(t *testing.T) {
 		},
 		Config:    config,
 		Processor: p,
+		UpdatedAt: now,
+		CreatedAt: now,
 	}
 	psMock.EXPECT().Create(ctx, pr.Name, pr.Processor.Type(), pr.Parent, config).Return(pr, nil).Times(1)
 
@@ -252,6 +281,8 @@ func TestProcessorAPIv1_CreateProcessor(t *testing.T) {
 			Id:   pr.Parent.ID,
 			Type: apiv1.Processor_Parent_Type(pr.Parent.Type),
 		},
+		CreatedAt: timestamppb.New(pr.CreatedAt),
+		UpdatedAt: timestamppb.New(pr.UpdatedAt),
 	}}
 
 	got, err := api.CreateProcessor(
@@ -276,6 +307,7 @@ func TestProcessorAPIv1_GetProcessor(t *testing.T) {
 	p := procmock.NewProcessor(ctrl)
 	p.EXPECT().Type().Return(processor.TypeTransform).AnyTimes()
 
+	now := time.Now()
 	pr := &processor.Instance{
 		ID:   uuid.NewString(),
 		Name: "Pants",
@@ -287,6 +319,8 @@ func TestProcessorAPIv1_GetProcessor(t *testing.T) {
 			Settings: map[string]string{"titan": "armored"},
 		},
 		Processor: p,
+		CreatedAt: now,
+		UpdatedAt: now,
 	}
 
 	psMock.EXPECT().Get(ctx, pr.ID).Return(pr, nil).Times(1)
@@ -302,6 +336,8 @@ func TestProcessorAPIv1_GetProcessor(t *testing.T) {
 			Id:   pr.Parent.ID,
 			Type: apiv1.Processor_Parent_Type(pr.Parent.Type),
 		},
+		CreatedAt: timestamppb.New(pr.CreatedAt),
+		UpdatedAt: timestamppb.New(pr.UpdatedAt),
 	}}
 
 	got, err := api.GetProcessor(
@@ -327,6 +363,7 @@ func TestProcessorAPIv1_UpdateProcessor(t *testing.T) {
 		Settings: map[string]string{"titan": "armored"},
 	}
 
+	now := time.Now()
 	pr := &processor.Instance{
 		ID:   uuid.NewString(),
 		Name: "Pants",
@@ -336,6 +373,8 @@ func TestProcessorAPIv1_UpdateProcessor(t *testing.T) {
 		},
 		Config:    config,
 		Processor: p,
+		UpdatedAt: now,
+		CreatedAt: now,
 	}
 	psMock.EXPECT().Update(ctx, pr.ID, config).Return(pr, nil).Times(1)
 
@@ -350,6 +389,8 @@ func TestProcessorAPIv1_UpdateProcessor(t *testing.T) {
 			Id:   pr.Parent.ID,
 			Type: apiv1.Processor_Parent_Type(pr.Parent.Type),
 		},
+		CreatedAt: timestamppb.New(pr.CreatedAt),
+		UpdatedAt: timestamppb.New(pr.UpdatedAt),
 	}}
 
 	got, err := api.UpdateProcessor(

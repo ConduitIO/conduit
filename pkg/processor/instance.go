@@ -20,6 +20,7 @@ package processor
 
 import (
 	"context"
+	"time"
 
 	"github.com/conduitio/conduit/pkg/record"
 )
@@ -51,7 +52,9 @@ type Processor interface {
 
 // Instance represents a processor instance.
 type Instance struct {
-	ID string
+	ID        string
+	CreatedAt time.Time
+	UpdatedAt time.Time
 	// Name is the name of the processor under which it is registered in the
 	// builder registry.
 	Name      string
