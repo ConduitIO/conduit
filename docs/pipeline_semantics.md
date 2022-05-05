@@ -4,7 +4,7 @@ This document describes the inner workings of a Conduit pipeline, its structure,
 Conduit message and its lifecycle as it flows through the pipeline.
 
 **NOTE**: Some parts of this document describe behavior that is not yet fully implemented (e.g. DLQs, order of acks).
-For more information see [#383](https://github.com/ConduitIO/conduit/pull/383#pullrequestreview-963196784). This note
+For more information see [#383](https://github.com/ConduitIO/conduit/pull/383). This note
 should be removed once the new behavior is implemented.
 
 ## Pipeline structure
