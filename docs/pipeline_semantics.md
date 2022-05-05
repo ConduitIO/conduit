@@ -3,6 +3,10 @@
 This document describes the inner workings of a Conduit pipeline, its structure, and behavior. It also describes a
 Conduit message and its lifecycle as it flows through the pipeline.
 
+**NOTE**: Some parts of this document describe behavior that is not yet fully implemented (e.g. DLQs, order of acks).
+For more information see [#383](https://github.com/ConduitIO/conduit/pull/383#pullrequestreview-963196784). This note
+should be removed once the new behavior is implemented.
+
 ## Pipeline structure
 
 A Conduit pipeline is a directed acyclic graph of nodes. Each node runs in its own goroutine and is connected to other
@@ -65,10 +69,12 @@ A message can be in one of 3 states:
   filtered the message out) or by a destination. If a pipeline contains multiple destinations, the message needs to be
   acknowledged by all destinations before it is marked as acked. Acks are propagated back to the source connector and
   can be used to advance the position in the source system if applicable.
-- **Nacked** - a message was negatively acknowledged either by a processor (e.g. a transform failed) or by a
-  destination. If a pipeline contains multiple destinations, the message needs to be negatively acknowledged by at least
-  one destination before it is marked as nacked. When a message is nacked the message is passed to
-  the [DLQ](#Dead-letter-queue).
+- **Nacked** - the processing of the message failed and resulted in an error, so the message was negatively
+  acknowledged. This can be done either by a processor (e.g. a transform failed) or by a destination. If a pipeline
+  contains multiple destinations, the message needs to be negatively acknowledged by at least one destination before it
+  is marked as nacked. When a message is nacked, the message is passed to the [DLQ](#Dead-letter-queue) handler, which
+  essentially controls what happens after a message is nacked (stop pipeline, drop message and continue running or store
+  message in DLQ and continue running).
 
 **Important**: if a message gets nacked and the DLQ handler successfully processes the nack (e.g. stores the message in
 the dead letter queue), the source connector will receive an ack as if the message was successfully processed, even
@@ -83,14 +89,16 @@ consequently stop the whole pipeline. The returned error is stored in the pipeli
 
 A pipeline node can register state change handlers on a message that will be called when the message state changes. This
 is used for example to register handlers that reroute nacked messages to a dead letter queue or to update metrics when a
-message reaches the end of the pipeline.
+message reaches the end of the pipeline. If a message state change handler returns an error, the node that triggered the
+ack/nack will stop running, essentially causing the whole pipeline to stop.
 
 ## Semantics
 
 ### Messages are delivered in order
 
 Since messages are passed between nodes in channels and a node only processes one message at a time, it is guaranteed
-that messages will flow through the Conduit pipeline in the same order that was produced by the source.
+that messages from a single source connector will flow through the Conduit pipeline in the same order that was produced
+by that source.
 
 There are two caveats:
 
@@ -166,8 +174,9 @@ A pipeline can be stopped in two ways - either it's stopped gracefully or forcef
   outgoing channels, notifying the downstream nodes that there will be no more messages. This behavior propagates down
   the pipeline until the last node stops running. Any messages that were being processed while the pipeline received a
   stop signal will be processed normally and written to all destinations.
-- A forceful stop is initiated when a node stops running because it experienced an unrecoverable error. In that case,
-  the context that is shared by all nodes will get canceled, signaling to all nodes simultaneously that they should stop
-  running as soon as possible. Messages that are in the pipeline won't be drained, instead, they are dropped and will be
-  requested from the source again once the pipeline is restarted. The error returned from the first node that failed
-  will be stored in the pipeline and can be retrieved through the API.
+- A forceful stop is initiated when a node stops running because it experienced an unrecoverable error (e.g. it nacked a
+  message and received an error because no DLQ is configured, or the connector plugin returned an unexpected error). In
+  that case, the context that is shared by all nodes will get canceled, signaling to all nodes simultaneously that they
+  should stop running as soon as possible. Messages that are in the pipeline won't be drained, instead, they are dropped
+  and will be requested from the source again once the pipeline is restarted. The error returned from the first node
+  that failed will be stored in the pipeline and can be retrieved through the API.
