@@ -17,6 +17,7 @@ package connector
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -35,6 +36,10 @@ type destination struct {
 
 	// logger is used for logging and is set when destination is created.
 	logger log.CtxLogger
+
+	// timestamps
+	XCreatedAt time.Time
+	XUpdatedAt time.Time
 
 	// persister is used for persisting the connector state when it changes.
 	persister *Persister
@@ -69,6 +74,18 @@ func (s *destination) Config() Config {
 
 func (s *destination) SetConfig(d Config) {
 	s.XConfig = d
+}
+
+func (s *destination) CreatedAt() time.Time {
+	return s.XCreatedAt
+}
+
+func (s *destination) UpdatedAt() time.Time {
+	return s.XUpdatedAt
+}
+
+func (s *destination) SetUpdatedAt(t time.Time) {
+	s.XUpdatedAt = t
 }
 
 func (s *destination) State() DestinationState {

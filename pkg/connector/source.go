@@ -32,6 +32,9 @@ type source struct {
 	XID     string
 	XConfig Config
 	XState  SourceState
+	// timestamps
+	XCreatedAt time.Time
+	XUpdatedAt time.Time
 
 	// logger is used for logging and is set when source is created.
 	logger log.CtxLogger
@@ -71,6 +74,18 @@ func (s *source) Config() Config {
 
 func (s *source) SetConfig(d Config) {
 	s.XConfig = d
+}
+
+func (s *source) CreatedAt() time.Time {
+	return s.XCreatedAt
+}
+
+func (s *source) UpdatedAt() time.Time {
+	return s.XUpdatedAt
+}
+
+func (s *source) SetUpdatedAt(t time.Time) {
+	s.XUpdatedAt = t
 }
 
 func (s *source) State() SourceState {

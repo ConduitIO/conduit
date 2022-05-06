@@ -17,6 +17,8 @@
 package pipeline
 
 import (
+	"time"
+
 	"github.com/conduitio/conduit/pkg/pipeline/stream"
 	"gopkg.in/tomb.v2"
 )
@@ -35,10 +37,12 @@ type Status int
 // can be either Destination or Source. The pipeline sets up its publishers and
 // subscribers based on whether the Connector in question is a Destination or a Source.
 type Instance struct {
-	ID     string
-	Config Config
-	Status Status
-	Error  string
+	ID        string
+	Config    Config
+	Status    Status
+	Error     string
+	CreatedAt time.Time
+	UpdatedAt time.Time
 
 	ConnectorIDs []string
 	ProcessorIDs []string

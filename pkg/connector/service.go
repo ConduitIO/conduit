@@ -17,6 +17,7 @@ package connector
 import (
 	"context"
 	"strings"
+	"time"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/database"
@@ -147,6 +148,7 @@ func (s *Service) Update(ctx context.Context, id string, data Config) (Connector
 	}
 
 	conn.SetConfig(data)
+	conn.SetUpdatedAt(time.Now())
 
 	// persist conn
 	err = s.store.Set(ctx, id, conn)
@@ -167,6 +169,7 @@ func (s *Service) AddProcessor(ctx context.Context, connectorID string, processo
 	d := conn.Config()
 	d.ProcessorIDs = append(d.ProcessorIDs, processorID)
 	conn.SetConfig(d)
+	conn.SetUpdatedAt(time.Now())
 
 	// persist conn
 	err = s.store.Set(ctx, connectorID, conn)
@@ -198,6 +201,7 @@ func (s *Service) RemoveProcessor(ctx context.Context, connectorID string, proce
 
 	d.ProcessorIDs = d.ProcessorIDs[:processorIndex+copy(d.ProcessorIDs[processorIndex:], d.ProcessorIDs[processorIndex+1:])]
 	conn.SetConfig(d)
+	conn.SetUpdatedAt(time.Now())
 
 	// persist conn
 	err = s.store.Set(ctx, connectorID, conn)

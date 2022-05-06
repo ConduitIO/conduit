@@ -52,6 +52,11 @@ func TestService_Init_Success(t *testing.T) {
 	assert.Ok(t, err)
 
 	got := service.List(ctx)
+
+	for k := range got {
+		got[k].UpdatedAt = want[k].UpdatedAt
+		got[k].CreatedAt = want[k].CreatedAt
+	}
 	assert.Equal(t, want, got)
 	assert.Equal(t, len(got), 1)
 }
@@ -86,6 +91,8 @@ func TestService_Create_Success(t *testing.T) {
 	got, err := service.Create(ctx, want.ID, want.Name, processor.TypeTransform, want.Parent, want.Config)
 	assert.Ok(t, err)
 	want.ID = got.ID // uuid is random
+	want.CreatedAt = got.CreatedAt
+	want.UpdatedAt = got.UpdatedAt
 	assert.Equal(t, want, got)
 }
 
