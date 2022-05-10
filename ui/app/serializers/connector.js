@@ -33,7 +33,7 @@ export default class ConnectorSerializer extends ApplicationSerializer {
       };
     }
 
-    super.extractRelationship(modelName, value);
+    return super.extractRelationship(modelName, value);
   }
 
   normalize(typeClass, hash) {

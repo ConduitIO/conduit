@@ -39,14 +39,12 @@ const ConfigValidationMap = {
   },
 };
 
-export default function generateBlueprintFields(plugin, connector) {
-  const connectorType = connector.type;
-  const params = plugin[`${connectorType}Params`];
-  const fieldNames = Object.keys(params);
+export default function generateBlueprintFields(blueprint, configurable) {
+  const fieldNames = Object.keys(blueprint);
 
   return fieldNames.map((fieldName) => {
-    const fieldOpts = params[fieldName];
-    const currentConfig = connector.get(`config.settings.${fieldName}`);
+    const fieldOpts = blueprint[fieldName];
+    const currentConfig = configurable.get(`config.settings.${fieldName}`);
     const currentConfigValue = currentConfig ? currentConfig : null;
 
     const validations = generateConfigValidations(fieldOpts.validations);

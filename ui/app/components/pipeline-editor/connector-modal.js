@@ -50,7 +50,7 @@ export default class PipelineEditorNewConnectorModal extends Component {
     this.connector = this.args.connector;
     if (this.isEditing) {
       this.blueprintFields = generateBlueprintFields(
-        this.connector.plugin,
+        this.connector.plugin.getParams(this.connector.type),
         this.connector
       );
     } else {
@@ -147,7 +147,10 @@ export default class PipelineEditorNewConnectorModal extends Component {
     } else {
       this.connector.data.plugin = plugin;
       this.connector.validate();
-      this.blueprintFields = generateBlueprintFields(plugin, this.connector);
+      this.blueprintFields = generateBlueprintFields(
+        plugin.getParams(this.connector.type),
+        this.connector
+      );
     }
   }
 

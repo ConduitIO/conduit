@@ -10,9 +10,6 @@ export default class ConnectorModel extends Model {
   @attr('string')
   type;
 
-  // @attr('string')
-  // plugin;
-
   @belongsTo('pipeline')
   pipeline;
 
@@ -21,14 +18,6 @@ export default class ConnectorModel extends Model {
 
   @belongsTo('plugin')
   plugin;
-
-  // get connectorPlugin() {
-  //   if (this.plugin && this.type) {
-  //     return this.store.peekRecord('plugin', this.plugin);
-  //   } else {
-  //     return null;
-  //   }
-  // }
 
   get name() {
     return this.config.name;

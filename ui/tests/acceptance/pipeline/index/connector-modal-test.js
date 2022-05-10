@@ -37,7 +37,6 @@ module('Acceptance | pipeline/index/connector-modal-test', function (hooks) {
 
   module('creating a source', function (hooks) {
     hooks.beforeEach(async function () {
-      this.server.logging = true;
       const pipeline = this.server.create('pipeline');
       this.set('pipeline', pipeline);
 

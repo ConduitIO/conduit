@@ -58,11 +58,8 @@ export function generateBlankBlueprintField(
   );
 
   const configurable = EmberObject.create();
-  const blueprinted = EmberObject.create({
-    blueprint: [blueprint],
-  });
 
-  const blueprintFields = generateBlueprintFields(blueprinted, configurable);
+  const blueprintFields = generateBlueprintFields(blueprint, configurable);
 
   return blueprintFields.firstObject;
 }

@@ -18,4 +18,14 @@ export default class ConnectorPluginModel extends Model {
 
   @attr()
   sourceParams;
+
+  getParams(type) {
+    if (type === 'source') {
+      return this.sourceParams;
+    }
+    if (type === 'destination') {
+      return this.destinationParams;
+    }
+    return {};
+  }
 }
