@@ -2,7 +2,6 @@ import { Changeset } from 'ember-changeset';
 import lookupValidator from 'ember-changeset-validations';
 import {
   validatePresence,
-  validateLength,
   validateNumber,
   validateInclusion,
   validateExclusion,
@@ -10,47 +9,55 @@ import {
 } from 'ember-changeset-validations/validators';
 
 const ConfigValidationMap = {
-  required: function (options) {
-    return validatePresence(options);
+  TYPE_REQUIRED: function () {
+    return validatePresence(true);
   },
 
-  number: function (options) {
+  TYPE_GREATER_THAN: function (value) {
+    const options = { gt: value };
     return validateNumber(options);
   },
 
-  length: function (options) {
-    return validateLength(options);
+  TYPE_LESS_THAN: function (value) {
+    const options = { lt: value };
+    return validateNumber(options);
   },
 
-  inclusion: function (options) {
+  TYPE_INCLUSION: function (value) {
+    const options = { list: value };
     return validateInclusion(options);
   },
 
-  exclusion: function (options) {
+  TYPE_EXCLUSION: function (value) {
+    const options = { list: value };
     return validateExclusion(options);
   },
 
-  format: function (options) {
+  TYPE_REGEX: function (value) {
+    const options = { regex: new RegExp(value) };
     return validateFormat(options);
   },
 };
 
-export default function generateBlueprintFields(blueprinted, configurable) {
-  const blueprint = blueprinted.blueprint;
+export default function generateBlueprintFields(plugin, connector) {
+  const connectorType = connector.type;
+  const params = plugin[`${connectorType}Params`];
+  const fieldNames = Object.keys(params);
 
-  return blueprint.map((field) => {
-    const currentConfig = configurable.get(`config.settings.${field.id}`);
+  return fieldNames.map((fieldName) => {
+    const fieldOpts = params[fieldName];
+    const currentConfig = connector.get(`config.settings.${fieldName}`);
     const currentConfigValue = currentConfig ? currentConfig : null;
 
-    const validations = generateConfigValidations(field.validations);
+    const validations = generateConfigValidations(fieldOpts.validations);
 
     const fieldModel = {
-      id: field.id,
-      label: field.label,
-      placeholder: field.placeholder,
-      type: field.type,
-      isRequired: !!field.validations.findBy('type', 'required'),
-      rawValidations: field.validations,
+      id: fieldName,
+      label: fieldName,
+      description: fieldOpts.description,
+      type: fieldOpts.type,
+      isRequired: !!fieldOpts.validations.findBy('type', 'TYPE_REQUIRED'),
+      rawValidations: fieldOpts.validations,
       value: currentConfigValue,
       hasUserTakenAction: false,
     };
@@ -61,7 +68,7 @@ export default function generateBlueprintFields(blueprinted, configurable) {
 
 function generateConfigValidations(fieldValidations) {
   const validations = fieldValidations.map((validation) => {
-    return ConfigValidationMap[validation.type](validation.options || true);
+    return ConfigValidationMap[validation.type](validation.value);
   });
 
   return {

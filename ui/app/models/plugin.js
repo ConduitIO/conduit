@@ -5,11 +5,17 @@ export default class ConnectorPluginModel extends Model {
   name;
 
   @attr('string')
-  connectorType;
+  summary;
 
   @attr('string')
-  pluginPath;
+  description;
+
+  @attr('string')
+  author;
 
   @attr()
-  blueprint;
+  destinationParams;
+
+  @attr()
+  sourceParams;
 }

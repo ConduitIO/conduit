@@ -7,8 +7,8 @@ const page = {
   connectorModalNameInput: '[data-test-connector-modal-input="name"]',
   connectorModalPluginSelect: {
     select: '[data-test-connector-modal-select="connector-plugin"]',
-    sourceOption: '[data-test-select-option-button="S3 Source"]',
-    destinationOption: '[data-test-select-option-button="S3 Destination"]',
+    sourceOption: '[data-test-select-option-button="builtin:generic"]',
+    destinationOption: '[data-test-select-option-button="builtin:generic"]',
   },
 
   connectorModalConfigFields: '[data-test-config-field]',
@@ -22,12 +22,22 @@ const page = {
   connectorModalOptionalTab: '[data-test-connector-modal-optional-tab]',
 };
 
-module('Acceptance | pipeline/index/connectors/s3', function (hooks) {
+module('Acceptance | pipeline/index/connector-modal-test', function (hooks) {
   setupApplicationTest(hooks);
   setupMirage(hooks);
 
+  hooks.beforeEach(function () {
+    this.server.create(
+      'plugin',
+      'source',
+      'destination',
+      'withGenericBlueprint'
+    );
+  });
+
   module('creating a source', function (hooks) {
     hooks.beforeEach(async function () {
+      this.server.logging = true;
       const pipeline = this.server.create('pipeline');
       this.set('pipeline', pipeline);
 
@@ -38,33 +48,29 @@ module('Acceptance | pipeline/index/connectors/s3', function (hooks) {
       await click(page.connectorModalPluginSelect.sourceOption);
     });
     test('shows the connectors required fields', function (assert) {
-      assert.dom('[data-test-config-field="aws_access-key-id"]').exists();
+      assert.dom('[data-test-config-field="titan:name"]').exists();
       assert
-        .dom('[data-test-config-field="aws_access-key-id"]')
+        .dom('[data-test-config-field="titan:name"]')
         .hasAttribute('type', 'text');
 
-      assert.dom('[data-test-config-field="aws_bucket"]').exists();
+      assert.dom('[data-test-config-field="titan:height"]').exists();
       assert
-        .dom('[data-test-config-field="aws_bucket"]')
-        .hasAttribute('type', 'text');
+        .dom('[data-test-config-field="titan:height"]')
+        .hasAttribute('type', 'number');
 
-      assert.dom('[data-test-config-field="aws_region"]').exists();
+      assert.dom('[data-test-config-field="titan:type"]').exists();
       assert
-        .dom('[data-test-config-field="aws_region"]')
-        .hasAttribute('type', 'button');
-
-      assert.dom('[data-test-config-field="aws_secret-access-key"]').exists();
-      assert
-        .dom('[data-test-config-field="aws_secret-access-key"]')
+        .dom('[data-test-config-field="titan:type"]')
         .hasAttribute('type', 'text');
     });
 
     test('shows the connectors optional fields', async function (assert) {
       await click(page.connectorModalOptionalTab);
-      assert.dom('[data-test-config-field="polling-period"]').exists();
+
+      assert.dom('[data-test-config-field="titan:founding"]').exists();
       assert
-        .dom('[data-test-config-field="polling-period"]')
-        .hasAttribute('type', 'text');
+        .dom('[data-test-config-field="titan:founding"] [data-test-toggle]')
+        .exists();
     });
 
     test('sends the connectors configuration on save', async function (assert) {
@@ -72,31 +78,39 @@ module('Acceptance | pipeline/index/connectors/s3', function (hooks) {
       const pipelineID = this.pipeline.id;
       this.server.post(
         '/connectors',
-        function ({ connectors }, { requestBody }) {
-          let attrs = JSON.parse(requestBody);
+        function ({ connectors, plugins, pipelines }, request) {
+          let attrs = JSON.parse(request.requestBody);
 
           assert.deepEqual(
             attrs,
             {
               config: {
-                name: 'My S3 Connector',
+                name: 'My Connector',
                 settings: {
-                  'aws.access-key-id': 'sleep',
-                  'aws.bucket': 'jaws',
-                  'aws.region': 'us-east-1',
-                  'aws.secret-access-key': 'token',
+                  'titan:name': 'sleep',
+                  'titan:height': '100',
+                  'titan:type': 'attack',
                 },
               },
               pipeline_id: pipelineID,
-              plugin: 'builtin:s3',
+              plugin: 'builtin:generic',
               type: 'TYPE_SOURCE',
             },
             'it calls the API with the correct protocol'
           );
-          return connectors.create(attrs);
+
+          const plugin = plugins.find(attrs.plugin);
+          const pipeline = pipelines.find(attrs.pipeline_id);
+
+          return connectors.create({
+            type: attrs.type,
+            config: attrs.config,
+            pipeline,
+            plugin,
+          });
         }
       );
-      await fillIn(page.connectorModalNameInput, 'My S3 Connector');
+      await fillIn(page.connectorModalNameInput, 'My Connector');
       await click(page.connectorModalPluginSelect.select);
       await click(page.connectorModalPluginSelect.sourceOption);
 
@@ -105,8 +119,8 @@ module('Acceptance | pipeline/index/connectors/s3', function (hooks) {
       );
 
       await fillIn(configFields[0], 'sleep');
-      await fillIn(configFields[1], 'token');
-      await fillIn(configFields[3], 'jaws');
+      await fillIn(configFields[1], '100');
+      await fillIn(configFields[2], 'attack');
 
       await click('[data-test-connector-modal-create-button]');
 
@@ -126,43 +140,29 @@ module('Acceptance | pipeline/index/connectors/s3', function (hooks) {
       await click(page.connectorModalPluginSelect.destinationOption);
     });
     test('shows the connectors required fields', function (assert) {
-      assert.dom('[data-test-config-field="aws_access-key-id"]').exists();
+      assert.dom('[data-test-config-field="titan:name"]').exists();
       assert
-        .dom('[data-test-config-field="aws_access-key-id"]')
+        .dom('[data-test-config-field="titan:name"]')
         .hasAttribute('type', 'text');
 
-      assert.dom('[data-test-config-field="aws_bucket"]').exists();
+      assert.dom('[data-test-config-field="titan:height"]').exists();
       assert
-        .dom('[data-test-config-field="aws_bucket"]')
+        .dom('[data-test-config-field="titan:height"]')
+        .hasAttribute('type', 'number');
+
+      assert.dom('[data-test-config-field="titan:type"]').exists();
+      assert
+        .dom('[data-test-config-field="titan:type"]')
         .hasAttribute('type', 'text');
-
-      assert.dom('[data-test-config-field="aws_region"]').exists();
-      assert
-        .dom('[data-test-config-field="aws_region"]')
-        .hasAttribute('type', 'button');
-
-      assert.dom('[data-test-config-field="aws_secret-access-key"]').exists();
-      assert
-        .dom('[data-test-config-field="aws_secret-access-key"]')
-        .hasAttribute('type', 'text');
-
-      assert.dom('[data-test-config-field="format"]').exists();
-      assert
-        .dom('[data-test-config-field="format"]')
-        .hasAttribute('type', 'button');
     });
 
     test('shows the connectors optional fields', async function (assert) {
       await click(page.connectorModalOptionalTab);
-      assert.dom('[data-test-config-field="buffer-size"]').exists();
-      assert
-        .dom('[data-test-config-field="buffer-size"]')
-        .hasAttribute('type', 'number');
 
-      assert.dom('[data-test-config-field="prefix"]').exists();
+      assert.dom('[data-test-config-field="titan:founding"]').exists();
       assert
-        .dom('[data-test-config-field="prefix"]')
-        .hasAttribute('type', 'text');
+        .dom('[data-test-config-field="titan:founding"] [data-test-toggle]')
+        .exists();
     });
 
     test('sends the connectors configuration on save', async function (assert) {
@@ -170,32 +170,38 @@ module('Acceptance | pipeline/index/connectors/s3', function (hooks) {
       const pipelineID = this.pipeline.id;
       this.server.post(
         '/connectors',
-        function ({ connectors }, { requestBody }) {
-          let attrs = JSON.parse(requestBody);
+        function ({ connectors, plugins, pipelines }, request) {
+          let attrs = JSON.parse(request.requestBody);
 
           assert.deepEqual(
             attrs,
             {
               config: {
-                name: 'My S3 Connector',
+                name: 'My Connector',
                 settings: {
-                  'aws.access-key-id': 'sleep',
-                  'aws.bucket': 'jaws',
-                  'aws.region': 'us-east-1',
-                  'aws.secret-access-key': 'token',
-                  format: 'json',
+                  'titan:name': 'sleep',
+                  'titan:height': '100',
+                  'titan:type': 'attack',
                 },
               },
               pipeline_id: pipelineID,
-              plugin: 'builtin:s3',
+              plugin: 'builtin:generic',
               type: 'TYPE_DESTINATION',
             },
             'it calls the API with the correct protocol'
           );
-          return connectors.create(attrs);
+          const plugin = plugins.find(attrs.plugin);
+          const pipeline = pipelines.find(attrs.pipeline_id);
+
+          return connectors.create({
+            type: attrs.type,
+            config: attrs.config,
+            pipeline,
+            plugin,
+          });
         }
       );
-      await fillIn(page.connectorModalNameInput, 'My S3 Connector');
+      await fillIn(page.connectorModalNameInput, 'My Connector');
       await click(page.connectorModalPluginSelect.select);
       await click(page.connectorModalPluginSelect.destinationOption);
 
@@ -204,8 +210,8 @@ module('Acceptance | pipeline/index/connectors/s3', function (hooks) {
       );
 
       await fillIn(configFields[0], 'sleep');
-      await fillIn(configFields[1], 'token');
-      await fillIn(configFields[3], 'jaws');
+      await fillIn(configFields[1], '100');
+      await fillIn(configFields[2], 'attack');
 
       await click('[data-test-connector-modal-create-button]');
 

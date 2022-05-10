@@ -50,7 +50,7 @@ export default class PipelineEditorNewConnectorModal extends Component {
     this.connector = this.args.connector;
     if (this.isEditing) {
       this.blueprintFields = generateBlueprintFields(
-        this.connector.connectorPlugin,
+        this.connector.plugin,
         this.connector
       );
     } else {
@@ -80,15 +80,12 @@ export default class PipelineEditorNewConnectorModal extends Component {
   }
 
   get isShowingFields() {
-    return !!this.connector.connectorPlugin;
+    return !!this.connector.plugin;
   }
 
   get selectedConnectorPlugin() {
-    if (this.connector.connectorPlugin) {
-      return this.connectorPluginOptions.findBy(
-        'id',
-        this.connector.get('connectorPlugin.id')
-      );
+    if (this.connector.plugin) {
+      return this.connector.plugin;
     } else {
       return this.connectorPluginDefault;
     }
@@ -96,13 +93,13 @@ export default class PipelineEditorNewConnectorModal extends Component {
 
   get sourceConnectorPlugins() {
     return this.args.connectorPlugins.filter((plugin) => {
-      return plugin.connectorType === 'source';
+      return Object.keys(plugin.sourceParams).length > 0;
     });
   }
 
   get destinationConnectorPlugins() {
     return this.args.connectorPlugins.filter((plugin) => {
-      return plugin.connectorType === 'destination';
+      return Object.keys(plugin.destinationParams).length > 0;
     });
   }
 
@@ -144,11 +141,11 @@ export default class PipelineEditorNewConnectorModal extends Component {
   @action
   setConnectorPlugin(plugin) {
     if (plugin.id === '') {
-      this.connector.data.plugin = '';
+      this.connector.data.plugin = null;
       this.connector.validate();
       this.blueprintFields = [];
     } else {
-      this.connector.data.plugin = plugin.pluginPath;
+      this.connector.data.plugin = plugin;
       this.connector.validate();
       this.blueprintFields = generateBlueprintFields(plugin, this.connector);
     }

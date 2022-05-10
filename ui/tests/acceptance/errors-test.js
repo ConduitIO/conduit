@@ -8,7 +8,7 @@ const page = {
   connectorModalNameInput: '[data-test-connector-modal-input="name"]',
   connectorModalPluginSelect: {
     select: '[data-test-connector-modal-select="connector-plugin"]',
-    option: '[data-test-select-option-button="File Source"]',
+    option: '[data-test-select-option-button="builtin:file"]',
   },
 
   connectorModalConfigFields: '[data-test-config-field]',
@@ -20,6 +20,10 @@ const page = {
 module('Acceptance | error', function (hooks) {
   setupApplicationTest(hooks);
   setupMirage(hooks);
+
+  hooks.beforeEach(function () {
+    this.server.create('plugin', 'source', 'destination');
+  });
 
   module('performing an api action that errors', function (hooks) {
     hooks.beforeEach(async function () {

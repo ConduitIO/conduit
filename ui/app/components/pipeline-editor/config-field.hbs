@@ -24,7 +24,7 @@
         'bg-orange-100 focus:bg-orange-100  border-orange-700 focus:border-orange-700'
       }}"
     value={{@field.value}}
-    placeholder={{@field.placeholder}}
+    placeholder={{@field.description}}
     {{on "input" (fn this.setInputValue @field)}}
     {{did-insert this.validateField}}
     data-test-config-field={{@field.id}}
@@ -41,19 +41,6 @@
         'bg-white border-gray-300'
         'bg-orange-100 focus:bg-orange-100 border-orange-700 focus:border-orange-700'
       }}"
-    value={{@field.value}}
-    placeholder={{@field.placeholder}}
-    {{on "input" (fn this.setInputValue @field)}}
-    {{did-insert this.validateField}}
-    data-test-config-field={{@field.id}}
-  />
-{{/if}}
-
-{{#if (eq this.fieldType "password")}}
-  <input
-    id={{dasherize @field.id}}
-    type="text"
-    class="mxa-input w-full mb-2 bg-white border-gray-300"
     value={{@field.value}}
     placeholder={{@field.placeholder}}
     {{on "input" (fn this.setInputValue @field)}}

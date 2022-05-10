@@ -30,30 +30,12 @@ export default Factory.extend({
 
   withFileConnectors: trait({
     afterCreate(pipeline, server) {
-      let fileSourcePlugin = server.db.connectorPlugins.findBy({
-        name: 'File Source',
+      let filePlugin = server.db.plugins.findBy({
+        id: 'builtin:file',
       });
 
-      let fileDestinationPlugin = server.db.connectorPlugins.findBy({
-        name: 'File Destination',
-      });
-
-      if (!fileSourcePlugin) {
-        fileSourcePlugin = server.create('connector-plugin', 'source', {
-          name: 'File Source',
-          pluginPath: 'builtin:file',
-        });
-      }
-
-      if (!fileDestinationPlugin) {
-        fileDestinationPlugin = server.create(
-          'connector-plugin',
-          'destination',
-          {
-            name: 'File Destination',
-            pluginPath: 'builtin:file',
-          }
-        );
+      if (!filePlugin) {
+        filePlugin = server.create('plugin', 'source', 'destination');
       }
 
       server.create(
@@ -62,6 +44,7 @@ export default Factory.extend({
           type: 'TYPE_SOURCE',
           config: { name: 'Source One' },
           pipeline,
+          plugin: filePlugin,
         },
         'withPopulatedFileConfig'
       );
@@ -72,6 +55,7 @@ export default Factory.extend({
           type: 'TYPE_DESTINATION',
           config: { name: 'Destination One' },
           pipeline,
+          plugin: filePlugin,
         },
         'withPopulatedFileConfig'
       );
@@ -82,48 +66,43 @@ export default Factory.extend({
           type: 'TYPE_DESTINATION',
           config: { name: 'Destination Two' },
           pipeline,
+          plugin: filePlugin,
         },
         'withPopulatedFileConfig'
       );
     },
   }),
 
+  withFilePlugins: trait({
+    afterCreate(pipeline, server) {
+      let filePlugin = server.db.plugins.findBy({
+        id: 'builtin:file',
+      });
+
+      if (!filePlugin) {
+        filePlugin = server.create('plugin', 'source', 'destination');
+      }
+    },
+  }),
+
   withGenericConnectors: trait({
     afterCreate(pipeline, server) {
-      let genericSourcePlugin = server.db.connectorPlugins.findBy({
-        name: 'Generic Source',
+      let genericPlugin = server.db.plugins.findBy({
+        name: 'builtin:generic',
       });
 
-      let genericDestinationPlugin = server.db.connectorPlugins.findBy({
-        name: 'Generic Source',
-      });
-
-      if (!genericSourcePlugin) {
-        genericSourcePlugin = server.create(
-          'connector-plugin',
+      if (!genericPlugin) {
+        genericPlugin = server.create(
+          'plugin',
           'source',
-          'withGenericBlueprint',
-          {
-            name: 'Generic Source',
-          }
-        );
-      }
-
-      if (!genericDestinationPlugin) {
-        genericDestinationPlugin = server.create(
-          'connector-plugin',
-          'destination',
-          'withGenericBlueprint',
-          {
-            name: 'Generic Destination',
-          }
+          'withGenericBlueprint'
         );
       }
 
       server.create(
         'connector',
         {
-          plugin: genericSourcePlugin.pluginPath,
+          plugin: genericPlugin,
           type: 'TYPE_SOURCE',
           config: { name: 'Source One' },
           pipeline,
@@ -134,7 +113,7 @@ export default Factory.extend({
       server.create(
         'connector',
         {
-          plugin: genericSourcePlugin.pluginPath,
+          plugin: genericPlugin,
           type: 'TYPE_DESTINATION',
           config: { name: 'Destination One' },
           pipeline,
@@ -145,7 +124,7 @@ export default Factory.extend({
       server.create(
         'connector',
         {
-          plugin: genericSourcePlugin.pluginPath,
+          plugin: genericPlugin,
           type: 'TYPE_DESTINATION',
           config: { name: 'Destination Two' },
           pipeline,

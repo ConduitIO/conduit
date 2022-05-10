@@ -5,8 +5,6 @@ export default Factory.extend({
     return { name: 'Some Source Connector', settings: {} };
   },
 
-  plugin: 'builtin:file',
-
   state() {
     return { position: '' };
   },
