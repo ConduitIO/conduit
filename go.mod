@@ -8,7 +8,7 @@ require (
 	github.com/bufbuild/buf v1.4.0
 	github.com/conduitio/conduit-connector-file v0.1.0
 	github.com/conduitio/conduit-connector-generator v0.1.0
-	github.com/conduitio/conduit-connector-kafka v0.1.0
+	github.com/conduitio/conduit-connector-kafka v0.1.1
 	github.com/conduitio/conduit-connector-postgres v0.1.0
 	github.com/conduitio/conduit-connector-protocol v0.2.0
 	github.com/conduitio/conduit-connector-s3 v0.1.1
@@ -32,8 +32,8 @@ require (
 	go.buf.build/library/go-grpc/conduitio/conduit-connector-protocol v1.4.1
 	golang.org/x/tools v0.1.10
 	golang.org/x/xerrors v0.0.0-20220411194840-2f41105eb62f
-	google.golang.org/genproto v0.0.0-20220414192740-2d67ff6cf2b4
-	google.golang.org/grpc v1.46.0-dev.0.20220224182858-328efcc9276e
+	google.golang.org/genproto v0.0.0-20220505152158-f39f71e6c8f3
+	google.golang.org/grpc v1.46.0
 	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.2.0
 	google.golang.org/protobuf v1.28.0
 	gopkg.in/tomb.v2 v2.0.0-20161208151619-d5d1b5820637
@@ -93,7 +93,7 @@ require (
 	github.com/jhump/protocompile v0.0.0-20220216033700-d705409f108f // indirect
 	github.com/jhump/protoreflect v1.12.1-0.20220417024638-438db461d753 // indirect
 	github.com/jpillora/backoff v1.0.0 // indirect
-	github.com/klauspost/compress v1.15.1 // indirect
+	github.com/klauspost/compress v1.15.4 // indirect
 	github.com/klauspost/pgzip v1.2.5 // indirect
 	github.com/kr/text v0.2.0 // indirect
 	github.com/lann/builder v0.0.0-20180802200727-47ae307949d0 // indirect
@@ -121,10 +121,10 @@ require (
 	go.uber.org/atomic v1.9.0 // indirect
 	go.uber.org/multierr v1.8.0 // indirect
 	go.uber.org/zap v1.21.0 // indirect
-	golang.org/x/crypto v0.0.0-20220331220935-ae2d96664a29 // indirect
+	golang.org/x/crypto v0.0.0-20220511200225-c6db032c6c88 // indirect
 	golang.org/x/mod v0.6.0-dev.0.20220106191415-9b9b3d81d5e3 // indirect
-	golang.org/x/net v0.0.0-20220412020605-290c469a71a5 // indirect
-	golang.org/x/sys v0.0.0-20220412211240-33da011f77ad // indirect
+	golang.org/x/net v0.0.0-20220425223048-2871e0cb64e4 // indirect
+	golang.org/x/sys v0.0.0-20220503163025-988cb79eb6c6 // indirect
 	golang.org/x/term v0.0.0-20220411215600-e5f449aeb171 // indirect
 	golang.org/x/text v0.3.7 // indirect
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
