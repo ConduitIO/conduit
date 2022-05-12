@@ -7,7 +7,7 @@ const page = {
   connectorModalNameInput: '[data-test-connector-modal-input="name"]',
   connectorModalPluginSelect: {
     select: '[data-test-connector-modal-select="connector-plugin"]',
-    option: '[data-test-select-option-button="File Source"]',
+    option: '[data-test-select-option-button="builtin:file"]',
   },
 
   connectorModalConfigFields: '[data-test-config-field]',
@@ -38,7 +38,7 @@ module('Acceptance | pipeline/index/connectors-test', function (hooks) {
 
   module('with a pipeline with no connectors', function (hooks) {
     hooks.beforeEach(async function () {
-      const pipeline = this.server.create('pipeline');
+      const pipeline = this.server.create('pipeline', 'withFilePlugins');
       this.set('pipeline', pipeline);
 
       await visit(`/pipelines/${pipeline.id}`);
@@ -66,7 +66,7 @@ module('Acceptance | pipeline/index/connectors-test', function (hooks) {
           .dom('[data-test-connector-node="source-titan-connector"]')
           .exists();
         assert.dom(page.connectorNodeName).containsText('Titan Connector');
-        assert.dom(page.connectorNodePluginName).containsText('File Source');
+        assert.dom(page.connectorNodePluginName).containsText('builtin:file');
       });
 
       module('then editing a new connector', function (hooks) {

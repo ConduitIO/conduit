@@ -1,6 +1,5 @@
 import Route from '@ember/routing/route';
 import Transforms from 'conduit-ui/utils/transforms/transforms';
-import ConnectorPlugins from 'conduit-ui/utils/connector-plugins/connector-plugins';
 
 export default class PipelineIndexRoute extends Route {
   async model() {
@@ -14,8 +13,7 @@ export default class PipelineIndexRoute extends Route {
     } else {
       allPipelines = null;
 
-      this.store.pushPayload('connector-plugin', ConnectorPlugins);
-      connectorPlugins = this.store.peekAll('connector-plugin');
+      connectorPlugins = await this.store.findAll('plugin');
 
       this.store.pushPayload('transform', Transforms);
       transforms = this.store.peekAll('transform');

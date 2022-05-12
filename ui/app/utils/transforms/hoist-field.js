@@ -5,14 +5,12 @@ export default class HoistField extends Transform {
   static label = 'HoistField';
   static description = 'Hoist the field';
 
-  static blueprint = [
-    {
-      id: 'field',
-      label: 'Field',
-      placeholder: 'Enter field name',
-      type: 'string',
-      validationType: 'string',
+  static blueprint = {
+    field: {
+      default: '',
+      description: 'Field name',
+      type: 'TYPE_STRING',
       validations: [],
     },
-  ];
+  };
 }

@@ -7,7 +7,7 @@ module('Unit | Model | connector plugin', function (hooks) {
   // Replace this with your real tests.
   test('it exists', function (assert) {
     let store = this.owner.lookup('service:store');
-    let model = store.createRecord('connector-plugin', {});
+    let model = store.createRecord('plugin', {});
     assert.ok(model);
   });
 });

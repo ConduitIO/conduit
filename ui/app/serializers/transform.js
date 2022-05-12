@@ -21,10 +21,12 @@ export default class TransformSerializer extends ApplicationSerializer {
   }
 
   normalize(typeClass, hash) {
-    hash.blueprint = hash.blueprint.map((item) => {
-      item.id = item.id.replace('.', ':');
-      return item;
-    });
+    hash.blueprint = Object.keys(hash.blueprint).reduce((acc, item) => {
+      const replaced = item.replace('.', ':');
+      acc[replaced] = hash.blueprint[item];
+
+      return acc;
+    }, {});
 
     return super.normalize(typeClass, hash);
   }
