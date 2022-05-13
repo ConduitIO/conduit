@@ -195,6 +195,12 @@ The Connector Persister also stores connector information in the database.
 Since we must persist connector information, but we want Conduit services 
 to be immutable, we should pass the `Persister` its own separate database.
 
+
+## Lifecycle methods 
+
+Configuration files should specify whether or not a service should run at
+startup, but should not dictate restart behavior. 
+
 ## Open questions
 
 - Do we ever want to support generating config files from Conduit's other data
@@ -203,11 +209,14 @@ stores?
   a pipeline working and then export it?
 
 - Should we call the file `conduit.yml` or `pipelines.yml`
-  - `conduit` implies application-level configuration values, while pipelines 
+  - `conduit` implies application-level configuration values, while `pipelines` 
   implies a tighter scope.
 
 - Do we have any objection to using `yml` as our default file format?
-  - We could add support for other formats.
+  - We could add support for other formats, but we should pick only one to 
+  start.
+
+- How should Conduit handle degraded states in a production-mode environment?
 
 ## Do nothing 
 
