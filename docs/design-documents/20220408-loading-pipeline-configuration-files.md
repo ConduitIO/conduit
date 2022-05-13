@@ -77,14 +77,15 @@ the problem of secrets management, but we must be in the business of secret
 concealment. Additionally, we already allow environment variables so we must 
 continue handling those correctly. 
 
-We propose merging environment variables with the user's provided configuration 
-file at runtime and replacing templated variables in the configuration file with 
-their secret values at runtime.
+We propose merging environment variables, CLI flags, and the user's provided 
+configuration file, in that order, at runtime into a templated variables in the 
+configuration file with their secret values at runtime.
 
-To enforce immutability, we propose stubbing out mutable operations in the DB
-interface at runtime with no-op functions and providing the connector
-`Persister` a separate database instance. This keeps Conduit's state from being
-mutated at runtime, but allows connector's their persistence as designed.
+We propose merging environment variables and CLI flags into a set of values 
+that is then injected into the provided `pipelines.yml` file. 
+
+We propose supporting Go templating in `pipelines.yml` to allow for dynamic
+injection of those environment variables at runtime.
 
 ## Implementation
 
@@ -148,8 +149,6 @@ type DB interface {
 
 ### Config files as a database implementation
 
-**TODO**: change the ConfigFileAsDatabase name to what we currently use in the spike
-
 `DB` is an interface for storing key-value pairs. Our `ConfigFileAsDatabase` 
 struct will store a reference to a parsed configuration file and 
 environment and maps that to a `Store` for each `Service`.
@@ -184,10 +183,6 @@ including environment information, connector configurations, and processors.
 
 This step will be responsible for populating the service's individual Stores
 with the necessary resources before `Init` is called during start.
-
-**TODO**: more detail about hydration 
-
-**TODO** More detail about environment and secrets injection
 
 ### Immutability
 
