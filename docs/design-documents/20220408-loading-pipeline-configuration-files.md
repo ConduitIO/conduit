@@ -61,11 +61,10 @@ these concerns, but there are additional design decisions to make.
 
 ## Design 
 
-We propose the creation of a single configuration file that contains all of
-Conduit's configuration values as well as those for `n` number of Pipelines.
-We consider a pipeline as `m` number of Connectors and `o` number of Processors.
+We propose the creation of a pipeline configuration file that contains all of
+the configuration values needed for `n` number of full pipelines.
 
-We propose naming this file `conduit.*` and it's default location should be
+We propose naming this file `pipelines.yml` and it's default location should be
 at the root of the project. The format of the file is to be determined, though
 `yaml` has been proposed previously.
 
@@ -149,16 +148,18 @@ type DB interface {
 
 ### Config files as a database implementation
 
+**TODO**: change the ConfigFileAsDatabase name to what we currently use in the spike
+
 `DB` is an interface for storing key-value pairs. Our `ConfigFileAsDatabase` 
-struct will store a reference to a parsed configuration file and map that to
-a key value representation for the `GetAll` call.
+struct will store a reference to a parsed configuration file and 
+environment and maps that to a `Store` for each `Service`.
 
 A key part about `ConfigFileAsADatabase` is that it stubs out mutable
 operations, including transaction handling, enforcing our immutability
 during operation.
 
 We pass that `ConfigFileAsADatabase` to each new service at start time.
-Our ConfigFileAsDatabase will be bound with an in-memory database and passed
+Our `ConfigFileAsDatabase` will be bound with an in-memory database and passed
 to each new service when Conduit is starting.
 
 ```go
@@ -181,26 +182,37 @@ Once the services are started, they will be empty. We must parse our config
 file into a full pipeline by hydrating it with other necessary information 
 including environment information, connector configurations, and processors.
 
-This step will be responsible for populating the service's individual DB
-references with the resources necessary before `Init` is called after `Run`.
+This step will be responsible for populating the service's individual Stores
+with the necessary resources before `Init` is called during start.
+
+**TODO**: more detail about hydration 
+
+**TODO** More detail about environment and secrets injection
 
 ### Immutability
 
 Conduit should be immutable at runtime. We could achieve this by stubbing 
-out all mutable methods as discussed in previous sections.
+out all mutable methods as discussed in previous sections. However, the 
+ConnectorPersister must be able to persist information between restarts.
+To maintain the separation, we should pass the Connector Persister
 
 The Connector Persister also stores connector information in the database. 
-Since we must persist connector information, but we do not want to stub let
-Conduit settings change, we should pass the `Persister` its own separate 
-database with persistence capabilities.
-
-This way, Conduit remains immutable but connector state can be persisted 
-and handled separately from Conduit's state.
+Since we must persist connector information, but we want Conduit services 
+to be immutable, we should pass the `Persister` its own separate database.
 
 ## Open questions
 
 - Do we ever want to support generating config files from Conduit's other data
 stores?
+  - What would this look like? A manual setup and configuration process to get
+  a pipeline working and then export it?
+
+- Should we call the file `conduit.yml` or `pipelines.yml`
+  - `conduit` implies application-level configuration values, while pipelines 
+  implies a tighter scope.
+
+- Do we have any objection to using `yml` as our default file format?
+  - We could add support for other formats.
 
 ## Do nothing 
 
