@@ -12,8 +12,8 @@ configuration files loaded into Conduit at its root or a configured directory.
 
 Our solution proposes an immutable Conduit runtime backed by an in-memory DB
 implementation that merges a user-provided configuration file with environment
-variables and other information at runtime to seed Conduit's services with 
-the necessary information for full operation. 
+variables and CLI flags at runtime to seed Conduit's services with the necessary 
+information for full operation. 
 
 ## Goals 
 
@@ -43,6 +43,11 @@ discussion.
 
 **pipeline** - a Conduit pipeline with `n` number of Source connectors, 
 `m` number of Processors, and `o` number of Destination connectors.
+
+**production mode** - a mode of operation where Conduit pipelines must be
+statically defined and cannot change after Conduit starts. No UI is served in
+production mode, and only pipeline lifecycle methods can be called over the
+API.
 
 ## Context 
 
@@ -177,24 +182,33 @@ svc := NewService(logger, &ConfigAsDatabase{})
 
 ### Hydration 
 
-Once the services are started, they will be empty. We must parse our config 
-file into a full pipeline by hydrating it with other necessary information 
-including environment information, connector configurations, and processors.
+Once Conduit's services are started, they will be empty. We must parse our 
+config file into a full pipeline by hydrating it with other necessary 
+information including environment information, connector configurations, 
+and processors.
 
-This step will be responsible for populating the service's individual Stores
+This step will be responsible for populating the service's individual `Stores` 
 with the necessary resources before `Init` is called during start.
+
+This process can fail, in which a pipeline reports `StatusDegraded`.
+Because we aren't dictating restart behavior in configuration files, this
+should cause Conduit to fail and report the pipeline errors it received.
+
+In production mode, errors should fail fast and immediately report.
 
 ### Immutability
 
-Conduit should be immutable at runtime. We could achieve this by stubbing 
-out all mutable methods as discussed in previous sections. However, the 
-ConnectorPersister must be able to persist information between restarts.
-To maintain the separation, we should pass the Connector Persister
+Immutability provides stronger guarantees to failure resilience and production
+operations. Conduit should be immutable at runtime to take advantage of these
+benefits.
 
-The Connector Persister also stores connector information in the database. 
+We could achieve this by stubbing out all mutable methods as discussed in 
+previous sections. However, the `ConnectorPersister` must be able to persist 
+information between restarts.
+
 Since we must persist connector information, but we want Conduit services 
-to be immutable, we should pass the `Persister` its own separate database.
-
+to be immutable, we should pass the `ConnectorPersister` its own database
+reference at start that it can mutate without changing Conduit.
 
 ## Lifecycle methods 
 
