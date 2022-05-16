@@ -1,0 +1,17 @@
+version: '2'
+services:
+    pg-0:
+        image: docker.io/bitnami/postgresql
+        ports:
+            - 5432:5432
+        volumes:
+            - pg_0_data:/bitnami/postgresql
+        environment:
+            - POSTGRESQL_POSTGRES_PASSWORD=meroxaadmin
+            - POSTGRESQL_USERNAME=meroxauser
+            - POSTGRESQL_PASSWORD=meroxapass
+            - POSTGRESQL_DATABASE=meroxadb
+
+volumes:
+    pg_0_data:
+        driver: local
