@@ -1,13 +1,13 @@
-version: '2'
+version: '3'
 services:
     zookeeper:
-        image: confluentinc/cp-zookeeper:7.0.0
+        image: confluentinc/cp-zookeeper:7.1.1
         environment:
             ZOOKEEPER_CLIENT_PORT: 2181
             ZOOKEEPER_TICK_TIME: 2000
 
-    resources:
-        image: confluentinc/cp-kafka:7.0.0
+    kafka:
+        image: confluentinc/cp-kafka:7.1.1
         depends_on:
             - zookeeper
         ports:
@@ -19,3 +19,4 @@ services:
             KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
             KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
             KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+            KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
