@@ -29,52 +29,78 @@ import (
 const (
 	httpRequestName = "httprequest"
 
-	httpRequestConfigURL = "url"
+	httpRequestConfigURL    = "url"
+	httpRequestConfigMethod = "method"
 )
 
 func init() {
 	processor.GlobalBuilderRegistry.MustRegister(httpRequestName, transform.NewBuilder(HTTPRequest))
 }
 
+// HTTPRequest builds a transform that sends an HTTP request to the specified
+// URL with the specified HTTP method (default is POST). The record payload is
+// used as the request body and the raw response body is put into the record
+// payload.
 func HTTPRequest(config transform.Config) (transform.Transform, error) {
-	return httpRequest(httpRequestName, recordPayloadGetSetter{}, config)
+	return httpRequest(httpRequestName, config)
 }
 
 func httpRequest(
 	transformName string,
-	getSetter recordDataGetSetter,
 	config transform.Config,
 ) (transform.Transform, error) {
-	path := config[httpRequestConfigURL]
-	if path == "" {
-		return nil, cerrors.New("missing url")
+	var (
+		err    error
+		rawURL string
+		method string
+	)
+
+	if rawURL, err = getConfigField(config, httpRequestConfigURL); err != nil {
+		return nil, cerrors.Errorf("%s: %w", transformName, err)
 	}
 
-	_, err := url.Parse(path)
+	_, err = url.Parse(rawURL)
 	if err != nil {
-		return nil, err
+		return nil, cerrors.Errorf("%s: error trying to parse url: %w", transformName, err)
+	}
+
+	method = config[httpRequestConfigMethod]
+	if method == "" {
+		method = http.MethodPost
+	}
+
+	// preflight check
+	_, err = http.NewRequest(
+		method,
+		rawURL,
+		bytes.NewReader([]byte{}),
+	)
+	if err != nil {
+		return nil, cerrors.Errorf("%s: error trying to create HTTP request: %w", transformName, err)
 	}
 
 	return func(r record.Record) (record.Record, error) {
-		data := getSetter.Get(r)
-
-		req, err := http.NewRequest("GET", path, bytes.NewBuffer(data.Bytes()))
+		req, err := http.NewRequest(
+			method,
+			rawURL,
+			bytes.NewReader(r.Payload.Bytes()),
+		)
 		if err != nil {
-			return record.Record{}, err
+			return record.Record{}, cerrors.Errorf("%s: error trying to create HTTP request: %w", transformName, err)
 		}
 
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
-			return record.Record{}, err
+			return record.Record{}, cerrors.Errorf("%s: error trying to execute HTTP request: %w", transformName, err)
 		}
 		defer resp.Body.Close()
 
 		body, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
-			return record.Record{}, err
+			return record.Record{}, cerrors.Errorf("%s: error trying to read response body: %w", transformName, err)
 		}
 
-		r = getSetter.Set(r, record.RawData{Raw: body})
+		r.Payload = record.RawData{Raw: body}
 		return r, nil
 	}, nil
 }
