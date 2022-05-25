@@ -132,9 +132,7 @@ func TestHTTPRequest_TransformRaw(t *testing.T) {
 			txfFunc, err := HTTPRequest(tt.config)
 			is.NoErr(err)
 
-			got, err := txfFunc(record.Record{
-				Payload: record.RawData{Raw: wantBody},
-			})
+			got, err := txfFunc(tt.args.r)
 			is.NoErr(err)
 			is.Equal(got.Payload, record.RawData{Raw: respBody})
 		})
