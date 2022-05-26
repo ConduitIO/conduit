@@ -4,7 +4,7 @@ go 1.18
 
 require (
 	github.com/NYTimes/gziphandler v1.1.1
-	github.com/antchfx/jsonquery v1.1.5
+	github.com/antchfx/jsonquery v1.2.0
 	github.com/bufbuild/buf v1.4.0
 	github.com/conduitio/conduit-connector-file v0.1.0
 	github.com/conduitio/conduit-connector-generator v0.1.0
@@ -41,7 +41,7 @@ require (
 
 require (
 	github.com/Masterminds/squirrel v1.5.2 // indirect
-	github.com/antchfx/xpath v1.2.0 // indirect
+	github.com/antchfx/xpath v1.2.1 // indirect
 	github.com/apache/arrow/go/arrow v0.0.0-20211112161151-bc219186db40 // indirect
 	github.com/apache/thrift v0.16.0 // indirect
 	github.com/avast/retry-go v3.0.0+incompatible // indirect
