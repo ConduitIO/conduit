@@ -19,18 +19,24 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"time"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/processor/transform"
 	"github.com/conduitio/conduit/pkg/record"
+	"github.com/jpillora/backoff"
 )
 
 const (
 	httpRequestName = "httprequest"
 
-	httpRequestConfigURL    = "url"
-	httpRequestConfigMethod = "method"
+	httpRequestConfigURL          = "url"
+	httpRequestConfigMethod       = "method"
+	httpRequestBackoffRetryCount  = "backoffRetry.count"
+	httpRequestBackoffRetryMin    = "backoffRetry.min"
+	httpRequestBackoffRetryMax    = "backoffRetry.max"
+	httpRequestBackoffRetryFactor = "backoffRetry.factor"
 )
 
 func init() {
@@ -55,7 +61,7 @@ func httpRequest(
 		method string
 	)
 
-	if rawURL, err = getConfigField(config, httpRequestConfigURL); err != nil {
+	if rawURL, err = getConfigFieldString(config, httpRequestConfigURL); err != nil {
 		return nil, cerrors.Errorf("%s: %w", transformName, err)
 	}
 
@@ -79,7 +85,45 @@ func httpRequest(
 		return nil, cerrors.Errorf("%s: error trying to create HTTP request: %w", transformName, err)
 	}
 
-	return func(r record.Record) (record.Record, error) {
+	// default retry values (retryCount is a float64 to match the backoff library attempt type)
+	var retryCount float64 = 0
+	b := &backoff.Backoff{
+		Factor: 2,
+		Min:    time.Millisecond * 100,
+		Max:    time.Second * 5,
+	}
+
+	if tmp, err := getConfigFieldInt64(config, httpRequestBackoffRetryCount); err != nil && !cerrors.Is(err, errEmptyConfigField) {
+		return nil, cerrors.Errorf("%s: %w", transformName, err)
+	} else {
+		retryCount = float64(tmp)
+	}
+
+	if retryCount > 0 {
+		// only parse other params if backoff retries are enabled
+		min, err := getConfigFieldDuration(config, httpRequestBackoffRetryMin)
+		if err != nil && !cerrors.Is(err, errEmptyConfigField) {
+			return nil, cerrors.Errorf("%s: %w", transformName, err)
+		} else if err == nil {
+			b.Min = min
+		}
+
+		max, err := getConfigFieldDuration(config, httpRequestBackoffRetryMax)
+		if err != nil && !cerrors.Is(err, errEmptyConfigField) {
+			return nil, cerrors.Errorf("%s: %w", transformName, err)
+		} else if err == nil {
+			b.Max = max
+		}
+
+		factor, err := getConfigFieldFloat64(config, httpRequestBackoffRetryFactor)
+		if err != nil && !cerrors.Is(err, errEmptyConfigField) {
+			return nil, cerrors.Errorf("%s: %w", transformName, err)
+		} else if err == nil {
+			b.Factor = factor
+		}
+	}
+
+	txfFunc := func(r record.Record) (record.Record, error) {
 		req, err := http.NewRequest(
 			method,
 			rawURL,
@@ -100,7 +144,30 @@ func httpRequest(
 			return record.Record{}, cerrors.Errorf("%s: error trying to read response body: %w", transformName, err)
 		}
 
+		if resp.StatusCode > 299 {
+			// regard status codes over 299 as errors
+			return record.Record{}, cerrors.Errorf("%s: invalid status code %v (body: %q)", transformName, resp.StatusCode, string(body))
+		}
+
 		r.Payload = record.RawData{Raw: body}
 		return r, nil
-	}, nil
+	}
+
+	if retryCount > 0 {
+		// wrap transform in a retry loop
+		return func(r record.Record) (record.Record, error) {
+			for {
+				r, err := txfFunc(r)
+				if err != nil && b.Attempt() < retryCount {
+					// TODO log message that we are retrying, include error cause (we don't have access to a proper logger)
+					time.Sleep(b.Duration())
+					continue
+				}
+				b.Reset() // reset for next transform execution
+				return r, err
+			}
+		}, nil
+	}
+
+	return txfFunc, nil
 }

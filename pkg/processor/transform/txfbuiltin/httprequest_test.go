@@ -54,12 +54,36 @@ func TestHTTPRequest_Build(t *testing.T) {
 		args:    args{config: map[string]string{httpRequestConfigURL: "http://example.com", httpRequestConfigMethod: ":foo"}},
 		wantErr: true,
 	}, {
+		name:    "invalid backoffRetry.count returns error",
+		args:    args{config: map[string]string{httpRequestConfigURL: "http://example.com", httpRequestBackoffRetryCount: "not-a-number"}},
+		wantErr: true,
+	}, {
+		name:    "invalid backoffRetry.min returns error",
+		args:    args{config: map[string]string{httpRequestConfigURL: "http://example.com", httpRequestBackoffRetryCount: "1", httpRequestBackoffRetryMin: "not-a-duration"}},
+		wantErr: true,
+	}, {
+		name:    "invalid backoffRetry.max returns error",
+		args:    args{config: map[string]string{httpRequestConfigURL: "http://example.com", httpRequestBackoffRetryCount: "1", httpRequestBackoffRetryMax: "not-a-duration"}},
+		wantErr: true,
+	}, {
+		name:    "invalid backoffRetry.factor returns error",
+		args:    args{config: map[string]string{httpRequestConfigURL: "http://example.com", httpRequestBackoffRetryCount: "1", httpRequestBackoffRetryFactor: "not-a-number"}},
+		wantErr: true,
+	}, {
 		name:    "valid url returns transform",
 		args:    args{config: map[string]string{httpRequestConfigURL: "http://example.com"}},
 		wantErr: false,
 	}, {
 		name:    "valid url and method returns transform",
 		args:    args{config: map[string]string{httpRequestConfigURL: "http://example.com", httpRequestConfigMethod: "GET"}},
+		wantErr: false,
+	}, {
+		name:    "invalid backoff retry config is ignored",
+		args:    args{config: map[string]string{httpRequestConfigURL: "http://example.com", httpRequestBackoffRetryMin: "not-a-duration", httpRequestBackoffRetryMax: "not-a-duration", httpRequestBackoffRetryFactor: "not-a-number"}},
+		wantErr: false,
+	}, {
+		name:    "valid url, method and backoff retry config returns transform",
+		args:    args{config: map[string]string{httpRequestConfigURL: "http://example.com", httpRequestBackoffRetryCount: "1", httpRequestBackoffRetryMin: "10ms", httpRequestBackoffRetryMax: "1s", httpRequestBackoffRetryFactor: "1.3"}},
 		wantErr: false,
 	}}
 	for _, tt := range tests {
@@ -72,7 +96,7 @@ func TestHTTPRequest_Build(t *testing.T) {
 	}
 }
 
-func TestHTTPRequest_TransformRaw(t *testing.T) {
+func TestHTTPRequest_TransformSuccess(t *testing.T) {
 	respBody := []byte("foo-bar/response")
 
 	type args struct {
@@ -137,4 +161,79 @@ func TestHTTPRequest_TransformRaw(t *testing.T) {
 			is.Equal(got.Payload, record.RawData{Raw: respBody})
 		})
 	}
+}
+
+func TestHTTPRequest_TransformRetrySuccess(t *testing.T) {
+	is := is.New(t)
+
+	respBody := []byte("foo-bar/response")
+
+	wantMethod := "POST"
+	wantBody := []byte("random data")
+
+	srvHandlerCount := 0
+
+	srv := httptest.NewServer(http.HandlerFunc(func(resp http.ResponseWriter, req *http.Request) {
+		srvHandlerCount++
+
+		is.Equal(wantMethod, req.Method)
+
+		gotBody, err := ioutil.ReadAll(req.Body)
+		is.NoErr(err)
+		is.Equal(wantBody, gotBody)
+
+		if srvHandlerCount < 5 {
+			// first 4 requests will fail with an internal server error
+			resp.WriteHeader(http.StatusInternalServerError)
+		} else {
+			_, err := resp.Write(respBody)
+			is.NoErr(err)
+		}
+	}))
+	defer srv.Close()
+
+	config := map[string]string{
+		httpRequestConfigURL:          srv.URL,
+		httpRequestBackoffRetryCount:  "4",
+		httpRequestBackoffRetryMin:    "5ms",
+		httpRequestBackoffRetryMax:    "10ms",
+		httpRequestBackoffRetryFactor: "1.2",
+	}
+
+	txfFunc, err := HTTPRequest(config)
+	is.NoErr(err)
+
+	got, err := txfFunc(record.Record{Payload: record.RawData{Raw: wantBody}})
+	is.NoErr(err)
+	is.Equal(got.Payload, record.RawData{Raw: respBody})
+	is.Equal(srvHandlerCount, 5)
+}
+
+func TestHTTPRequest_TransformRetryFail(t *testing.T) {
+	is := is.New(t)
+
+	srvHandlerCount := 0
+
+	srv := httptest.NewServer(http.HandlerFunc(func(resp http.ResponseWriter, req *http.Request) {
+		srvHandlerCount++
+		// all requests fail
+		resp.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	config := map[string]string{
+		httpRequestConfigURL:          srv.URL,
+		httpRequestBackoffRetryCount:  "5",
+		httpRequestBackoffRetryMin:    "5ms",
+		httpRequestBackoffRetryMax:    "10ms",
+		httpRequestBackoffRetryFactor: "1.2",
+	}
+
+	txfFunc, err := HTTPRequest(config)
+	is.NoErr(err)
+
+	got, err := txfFunc(record.Record{Payload: record.RawData{}})
+	is.True(err != nil) // expected an error
+	is.Equal(got, record.Record{})
+	is.Equal(srvHandlerCount, 6) // expected 6 requests (1 regular and 5 retries)
 }
