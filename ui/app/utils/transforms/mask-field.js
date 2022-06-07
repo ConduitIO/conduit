@@ -6,23 +6,18 @@ export default class MaskField extends Transform {
   static description =
     'Replace field with a valid null value for the type or custom replacement.';
 
-  static blueprint = [
-    {
-      id: 'field',
-      label: 'Field',
-      placeholder: 'Enter field name',
-      type: 'string',
-      validationType: 'string',
+  static blueprint = {
+    field: {
+      default: '',
+      description: 'Field name',
+      type: 'TYPE_STRING',
       validations: [],
     },
-
-    {
-      id: 'replacement',
-      label: 'Replacement',
-      placeholder: 'Enter replacement value',
-      type: 'string',
-      validationType: 'string',
+    replacement: {
+      default: '',
+      description: 'Replacement value',
+      type: 'TYPE_STRING',
       validations: [],
     },
-  ];
+  };
 }

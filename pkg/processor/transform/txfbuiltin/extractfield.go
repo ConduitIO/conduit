@@ -65,7 +65,7 @@ func extractField(
 		fieldName string
 	)
 
-	if fieldName, err = getConfigField(config, extractFieldConfigField); err != nil {
+	if fieldName, err = getConfigFieldString(config, extractFieldConfigField); err != nil {
 		return nil, cerrors.Errorf("%s: %w", transformName, err)
 	}
 

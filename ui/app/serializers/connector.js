@@ -20,9 +20,20 @@ export default class ConnectorSerializer extends ApplicationSerializer {
       type: Object.keys(CONNECTOR_TYPE_MAP).find(
         (key) => CONNECTOR_TYPE_MAP[key] === snapshot.record.type
       ),
-      plugin: snapshot.record.plugin,
+      plugin: snapshot.record.plugin.get('id'),
       pipeline_id: snapshot.record.pipeline.get('id'),
     };
+  }
+
+  extractRelationship(modelName, value) {
+    if (modelName === 'plugin' && value) {
+      return {
+        id: value,
+        type: modelName,
+      };
+    }
+
+    return super.extractRelationship(modelName, value);
   }
 
   normalize(typeClass, hash) {

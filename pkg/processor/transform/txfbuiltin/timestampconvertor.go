@@ -66,10 +66,10 @@ func timestampConvertor(
 	)
 
 	// if field is empty then input is raw data
-	if field, err = getConfigField(config, timestampConvertorConfigField); err != nil {
+	if field, err = getConfigFieldString(config, timestampConvertorConfigField); err != nil {
 		return nil, cerrors.Errorf("%s: %w", transformName, err)
 	}
-	if targetType, err = getConfigField(config, timestampConvertorConfigTargetType); err != nil {
+	if targetType, err = getConfigFieldString(config, timestampConvertorConfigTargetType); err != nil {
 		return nil, cerrors.Errorf("%s: %w", transformName, err)
 	}
 	if targetType != stringType && targetType != unixType && targetType != timeType {

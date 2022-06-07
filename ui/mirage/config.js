@@ -47,7 +47,22 @@ export default function () {
       return pipelineConns;
     });
 
-    this.post('/connectors');
+    this.post(
+      '/connectors',
+      function ({ connectors, plugins, pipelines }, request) {
+        const attrs = JSON.parse(request.requestBody);
+        const plugin = plugins.find(attrs.plugin);
+        const pipeline = pipelines.find(attrs.pipeline_id);
+
+        return connectors.create({
+          type: attrs.type,
+          config: attrs.config,
+          pipeline,
+          plugin,
+        });
+      }
+    );
+
     this.put('/connectors/:id');
     this.delete('/connectors/:id');
 
@@ -55,6 +70,8 @@ export default function () {
     this.post('/processors');
     this.put('/processors/:id');
     this.delete('/processors/:id');
+
+    this.get('/plugins');
   } else {
     this.passthrough('/pipelines');
     this.passthrough('/pipelines/:id');
@@ -64,5 +81,6 @@ export default function () {
     this.passthrough('/connectors/:id');
     this.passthrough('/processors');
     this.passthrough('/processors/:id');
+    this.passthrough('/plugins');
   }
 }

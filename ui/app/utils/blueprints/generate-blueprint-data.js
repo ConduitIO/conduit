@@ -1,23 +1,17 @@
 import EmberObject from '@ember/object';
 import generateBlueprintFields from 'conduit-ui/utils/blueprints/generate-blueprint-fields';
 
-export function generateBlueprintValidations(type, params, opts) {
-  const validation = {
+export function generateBlueprintValidations(type, value) {
+  return {
     type,
-    params,
+    value,
   };
-
-  if (opts) {
-    validation.options = opts;
-  }
-
-  return validation;
 }
 
 export function generateBlueprint(
   id,
   label,
-  placeholder,
+  description,
   type,
   validationOpts = {}
 ) {
@@ -25,8 +19,8 @@ export function generateBlueprint(
 
   if (validationOpts.isRequired) {
     const requiredValidation = generateBlueprintValidations(
-      'required',
-      'this field is required'
+      'TYPE_REQUIRED',
+      ''
     );
     validations = [requiredValidation];
   }
@@ -35,36 +29,37 @@ export function generateBlueprint(
     validations = [...validations, ...validationOpts.validations];
   }
 
-  return {
+  const blueprint = {};
+
+  blueprint[id] = {
     id,
     label,
-    placeholder,
+    description,
     type,
     validations,
   };
+
+  return blueprint;
 }
 
 export function generateBlankBlueprintField(
   id,
   label,
-  placeholder,
+  description,
   type,
   validationOpts = {}
 ) {
   const blueprint = generateBlueprint(
     id,
     label,
-    placeholder,
+    description,
     type,
     validationOpts
   );
 
   const configurable = EmberObject.create();
-  const blueprinted = EmberObject.create({
-    blueprint: [blueprint],
-  });
 
-  const blueprintFields = generateBlueprintFields(blueprinted, configurable);
+  const blueprintFields = generateBlueprintFields(blueprint, configurable);
 
   return blueprintFields.firstObject;
 }

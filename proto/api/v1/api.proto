@@ -6,6 +6,7 @@ option go_package = "github.com/conduitio/conduit/proto/api/v1;api";
 import "google/api/field_behavior.proto";
 import "google/api/annotations.proto";
 import "protoc-gen-openapiv2/options/annotations.proto";
+import "google/protobuf/timestamp.proto";
 
 message Pipeline {
   // Status describes the pipeline status.
@@ -37,6 +38,9 @@ message Pipeline {
 
   repeated string connector_ids = 5 [(google.api.field_behavior) = OUTPUT_ONLY];
   repeated string processor_ids = 6 [(google.api.field_behavior) = OUTPUT_ONLY];
+
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp updated_at = 8;
 }
 
 message Connector {
@@ -78,6 +82,9 @@ message Connector {
   // -- children connections ---------------------------------------------------
 
   repeated string processor_ids = 8 [(google.api.field_behavior) = OUTPUT_ONLY];
+
+  google.protobuf.Timestamp created_at = 9;
+  google.protobuf.Timestamp updated_at = 10;
 }
 
 message Processor {
@@ -115,6 +122,9 @@ message Processor {
   string name = 4 [(google.api.field_behavior) = IMMUTABLE];
   Type type = 5 [(google.api.field_behavior) = IMMUTABLE];
   Parent parent = 6 [(google.api.field_behavior) = IMMUTABLE];
+
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp updated_at = 8;
 }
 
 // PipelineService exposes functionality for managing pipelines.

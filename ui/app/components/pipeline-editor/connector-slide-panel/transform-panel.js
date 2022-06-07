@@ -18,7 +18,7 @@ export default class PipelineEditorConnectorSlidePanelTransformPanel extends Com
     super(...arguments);
     this.connectorTransform = this.args.connectorTransform;
     this.blueprintFields = generateBlueprintFields(
-      this.connectorTransform.data.transform,
+      this.connectorTransform.data.transform.blueprint,
       this.connectorTransform
     );
 

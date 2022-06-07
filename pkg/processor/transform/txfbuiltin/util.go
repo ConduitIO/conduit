@@ -15,17 +15,64 @@
 package txfbuiltin
 
 import (
+	"strconv"
+	"time"
+
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/processor/transform"
 	"github.com/conduitio/conduit/pkg/record"
 )
 
-func getConfigField(c transform.Config, field string) (string, error) {
+var errEmptyConfigField = cerrors.New("empty config field")
+
+func getConfigFieldString(c transform.Config, field string) (string, error) {
 	val, ok := c[field]
 	if !ok || val == "" {
-		return "", cerrors.Errorf("empty config field %q", field)
+		return "", cerrors.Errorf("failed to retrieve config field %q: %w", field, errEmptyConfigField)
 	}
 	return val, nil
+}
+
+func getConfigFieldFloat64(c transform.Config, field string) (float64, error) {
+	raw, err := getConfigFieldString(c, field)
+	if err != nil {
+		return 0, err
+	}
+
+	parsed, err := strconv.ParseFloat(raw, 64)
+	if err != nil {
+		return 0, cerrors.Errorf("failed to parse %q as float64: %w", field, err)
+	}
+
+	return parsed, nil
+}
+
+func getConfigFieldInt64(c transform.Config, field string) (int64, error) {
+	raw, err := getConfigFieldString(c, field)
+	if err != nil {
+		return 0, err
+	}
+
+	parsed, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil {
+		return 0, cerrors.Errorf("failed to parse %q as int64: %w", field, err)
+	}
+
+	return parsed, nil
+}
+
+func getConfigFieldDuration(c transform.Config, field string) (time.Duration, error) {
+	raw, err := getConfigFieldString(c, field)
+	if err != nil {
+		return 0, err
+	}
+
+	parsed, err := time.ParseDuration(raw)
+	if err != nil {
+		return 0, cerrors.Errorf("failed to parse %q as time.Duration: %w", field, err)
+	}
+
+	return parsed, nil
 }
 
 // recordDataGetSetter is a utility that returns either the key or the payload

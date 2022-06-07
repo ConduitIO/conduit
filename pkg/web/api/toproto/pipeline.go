@@ -17,6 +17,7 @@ package toproto
 import (
 	"github.com/conduitio/conduit/pkg/pipeline"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func Pipeline(in *pipeline.Instance) *apiv1.Pipeline {
@@ -27,6 +28,8 @@ func Pipeline(in *pipeline.Instance) *apiv1.Pipeline {
 			Error:  in.Error,
 		},
 		Config:       PipelineConfig(in.Config),
+		CreatedAt:    timestamppb.New(in.CreatedAt),
+		UpdatedAt:    timestamppb.New(in.UpdatedAt),
 		ConnectorIds: in.ConnectorIDs,
 		ProcessorIds: in.ProcessorIDs,
 	}

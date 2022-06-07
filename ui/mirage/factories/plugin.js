@@ -2,53 +2,75 @@ import { Factory, trait } from 'ember-cli-mirage';
 import { generateBlueprint } from 'conduit-ui/utils/blueprints/generate-blueprint-data';
 
 export default Factory.extend({
-  name: 'Some Connector Plugin',
-  connectorType: 'source',
-  pluginPath: 'pkg/plugins/foo/bar',
+  id: 'builtin:file',
+  name: 'builtin:file',
 
   source: trait({
-    connectorType: 'source',
+    sourceParams() {
+      return this.blueprint;
+    },
   }),
 
   destination: trait({
-    connectorType: 'destination',
+    destinationParams() {
+      return this.blueprint;
+    },
   }),
+
+  sourceAndDestination: trait({
+    sourceParams() {
+      return this.blueprint;
+    },
+    destinationParams() {
+      return this.blueprint;
+    },
+  }),
+
+  sourceParams() {
+    return {};
+  },
+
+  destinationParams() {
+    return {};
+  },
 
   // Bare minimum blueprint
   blueprint() {
     const requiredString = generateBlueprint(
       'path',
-      'File Path',
-      'Enter path to file',
-      'string',
+      'path',
+      'File path',
+      'TYPE_STRING',
       { isRequired: true }
     );
 
-    return [requiredString];
+    return { ...requiredString };
   },
 
   // Ultra generic blueprint with multiple input types
   withGenericBlueprint: trait({
+    id: 'builtin:generic',
+    name: 'builtin:generic',
     blueprint() {
       const requiredText = generateBlueprint(
         'titan:name',
         'Titan Name',
         'Enter Titan Name',
-        'string',
+        'TYPE_STRING',
         { isRequired: true }
       );
       const requiredNumber = generateBlueprint(
         'titan:height',
         'Titan Height',
         'Enter Titan Height',
-        'int',
+        'TYPE_NUMBER',
         { isRequired: true }
       );
       const requiredSelect = generateBlueprint(
         'titan:type',
         'Titan Type',
         'Enter Titan Type',
-        'string',
+        'TYPE_STRING',
         { isRequired: true }
       );
 
@@ -61,16 +83,16 @@ export default Factory.extend({
         'titan:founding',
         'Founding',
         'Founding',
-        'boolean'
+        'TYPE_BOOL'
       );
 
-      return [
-        requiredText,
-        requiredNumber,
-        requiredSelect,
-        optionalText,
-        optionalBoo,
-      ];
+      return {
+        ...requiredText,
+        ...requiredNumber,
+        ...requiredSelect,
+        ...optionalText,
+        ...optionalBoo,
+      };
     },
   }),
 });

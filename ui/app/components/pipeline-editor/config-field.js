@@ -30,23 +30,20 @@ export default class PipelineEditorConfigFieldComponent extends Component {
   generateFieldType() {
     const field = this.args.field;
 
-    const isString = field.type === 'string' || field.type === 'class';
+    const isString = field.type === 'TYPE_STRING';
 
-    const isNumber = field.type === 'int' || field.type === 'long';
-
-    const isPassword = field.type === 'password';
+    const isNumber = field.type === 'TYPE_NUMBER';
 
     // TODO clean this up, and also check for special case of number, but using inclusion validation
     // for numbers in a list?
     const isTextInput =
-      isString && !field.rawValidations.findBy('type', 'inclusion');
+      isString && !field.rawValidations.findBy('type', 'TYPE_INCLUSION');
     const isNumberInput =
-      isNumber && !field.rawValidations.findBy('type', 'inclusion');
-    const isPasswordInput = isPassword;
-    const isToggleInput = field.type == 'boolean';
+      isNumber && !field.rawValidations.findBy('type', 'TYPE_INCLUSION');
+    const isToggleInput = field.type == 'TYPE_BOOL';
     const isSelectInput =
       (isString || isNumber) &&
-      field.rawValidations.findBy('type', 'inclusion');
+      field.rawValidations.findBy('type', 'TYPE_INCLUSION');
 
     if (isTextInput) {
       return 'text';
@@ -54,10 +51,6 @@ export default class PipelineEditorConfigFieldComponent extends Component {
 
     if (isNumberInput) {
       return 'number';
-    }
-
-    if (isPasswordInput) {
-      return 'password';
     }
 
     if (isToggleInput) {
@@ -72,9 +65,9 @@ export default class PipelineEditorConfigFieldComponent extends Component {
   generateSelectOptions() {
     const inclusionValidation = this.args.field.rawValidations.findBy(
       'type',
-      'inclusion'
+      'TYPE_INCLUSION'
     );
-    return inclusionValidation.options.list.map((item) => {
+    return inclusionValidation.value.map((item) => {
       return {
         name: item,
         value: item,

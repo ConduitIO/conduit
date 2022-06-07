@@ -1523,10 +1523,10 @@
     "@handlebars/parser" "~2.0.0"
     simple-html-tokenizer "^0.5.11"
 
-"@glimmer/tracking@^1.0.1", "@glimmer/tracking@^1.0.4":
-  version "1.0.4"
-  resolved "https://registry.yarnpkg.com/@glimmer/tracking/-/tracking-1.0.4.tgz#f1bc1412fe5e2236d0f8d502994a8f88af1bbb21"
-  integrity sha512-F+oT8I55ba2puSGIzInmVrv/8QA2PcK1VD+GWgFMhF6WC97D+uZX7BFg+a3s/2N4FVBq5KHE+QxZzgazM151Yw==
+"@glimmer/tracking@^1.0.1", "@glimmer/tracking@^1.0.4", "@glimmer/tracking@^1.1.2":
+  version "1.1.2"
+  resolved "https://registry.yarnpkg.com/@glimmer/tracking/-/tracking-1.1.2.tgz#74e71be07b0a7066518d24044d2665d0cf8281eb"
+  integrity sha512-cyV32zsHh+CnftuRX84ALZpd2rpbDrhLhJnTXn9W//QpqdRZ5rdMsxSY9fOsj0CKEc706tmEU299oNnDc0d7tA==
   dependencies:
     "@glimmer/env" "^0.1.7"
     "@glimmer/validator" "^0.44.0"
@@ -5170,6 +5170,22 @@ ember-cli-typescript@^4.1.0, ember-cli-typescript@^4.2.1:
     stagehand "^1.0.0"
     walk-sync "^2.2.0"
 
+ember-cli-typescript@^5.0.0:
+  version "5.1.0"
+  resolved "https://registry.yarnpkg.com/ember-cli-typescript/-/ember-cli-typescript-5.1.0.tgz#460eb848564e29d64f2b36b2a75bbe98172b72a4"
+  integrity sha512-wEZfJPkjqFEZAxOYkiXsDrJ1HY75e/6FoGhQFg8oNFJeGYpIS/3W0tgyl1aRkSEEN1NRlWocDubJ4aZikT+RTA==
+  dependencies:
+    ansi-to-html "^0.6.15"
+    broccoli-stew "^3.0.0"
+    debug "^4.0.0"
+    execa "^4.0.0"
+    fs-extra "^9.0.1"
+    resolve "^1.5.0"
+    rsvp "^4.8.1"
+    semver "^7.3.2"
+    stagehand "^1.0.0"
+    walk-sync "^2.2.0"
+
 ember-cli-version-checker@^2.1.2:
   version "2.2.0"
   resolved "https://registry.yarnpkg.com/ember-cli-version-checker/-/ember-cli-version-checker-2.2.0.tgz#47771b731fe0962705e27c8199a9e3825709f3b3"
@@ -5487,15 +5503,15 @@ ember-modifier@^2.1.0:
     ember-destroyable-polyfill "^2.0.2"
     ember-modifier-manager-polyfill "^1.2.0"
 
-"ember-modifier@^2.1.2 || ^3.0.0", "ember-modifier@^2.1.2 || ^3.1.0", ember-modifier@^3.0.0, ember-modifier@^3.1.0:
-  version "3.1.0"
-  resolved "https://registry.yarnpkg.com/ember-modifier/-/ember-modifier-3.1.0.tgz#ba5b0941302accd787ed3dcfc8d20400b77ffc41"
-  integrity sha512-G5Lj9jVFsD2sVJcRNQfaGKG1p81wT4LGfClBhCuB4TgwP1NGJKdqI+Q8BW2MptONxQt/71UjjUH0YK7Gm9eahg==
+"ember-modifier@^2.1.2 || ^3.0.0", "ember-modifier@^2.1.2 || ^3.1.0", ember-modifier@^3.0.0, ember-modifier@^3.2.7:
+  version "3.2.7"
+  resolved "https://registry.yarnpkg.com/ember-modifier/-/ember-modifier-3.2.7.tgz#f2d35b7c867cbfc549e1acd8d8903c5ecd02ea4b"
+  integrity sha512-ezcPQhH8jUfcJQbbHji4/ZG/h0yyj1jRDknfYue/ypQS8fM8LrGcCMo0rjDZLzL1Vd11InjNs3BD7BdxFlzGoA==
   dependencies:
     ember-cli-babel "^7.26.6"
     ember-cli-normalize-entity-name "^1.0.0"
     ember-cli-string-utils "^1.1.0"
-    ember-cli-typescript "^4.2.1"
+    ember-cli-typescript "^5.0.0"
     ember-compatibility-helpers "^1.2.5"
 
 ember-named-blocks-polyfill@^0.2.4:
@@ -9949,10 +9965,10 @@ qunit-dom@^2.0.0:
     ember-cli-babel "^7.23.0"
     ember-cli-version-checker "^5.1.1"
 
-qunit@^2.18.0:
-  version "2.18.0"
-  resolved "https://registry.yarnpkg.com/qunit/-/qunit-2.18.0.tgz#5a3efc8ee609e9d8f207a1ad317a9b02bb14bc6b"
-  integrity sha512-Xw/zUm5t1JY8SNErki/qtw4fCuaaOZL+bPloZU+0kto+fO8j1JV9MQWqXO4kATfhEyJohlsKZpfg1HF7GOkpXw==
+qunit@^2.19.1:
+  version "2.19.1"
+  resolved "https://registry.yarnpkg.com/qunit/-/qunit-2.19.1.tgz#eb1afd188da9e47f07c13aa70461a1d9c4505490"
+  integrity sha512-gSGuw0vErE/rNjnlBW/JmE7NNubBlGrDPQvsug32ejYhcVFuZec9yoU0+C30+UgeCGwq6Ap89K65dMGo+kDGZQ==
   dependencies:
     commander "7.2.0"
     node-watch "0.7.3"

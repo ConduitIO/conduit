@@ -16,6 +16,7 @@ package connector
 
 import (
 	"context"
+	"time"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -50,11 +51,18 @@ func NewDefaultBuilder(logger log.CtxLogger, persister *Persister, service *plug
 
 func (b *DefaultBuilder) Build(t Type) (Connector, error) {
 	var c Connector
+	now := time.Now()
 	switch t {
 	case TypeSource:
-		c = &source{}
+		c = &source{
+			XCreatedAt: now,
+			XUpdatedAt: now,
+		}
 	case TypeDestination:
-		c = &destination{}
+		c = &destination{
+			XCreatedAt: now,
+			XUpdatedAt: now,
+		}
 	default:
 		return nil, ErrInvalidConnectorType
 	}

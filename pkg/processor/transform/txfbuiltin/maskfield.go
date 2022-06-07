@@ -68,7 +68,7 @@ func maskField(
 		replacement string
 	)
 
-	if fieldName, err = getConfigField(config, maskFieldConfigField); err != nil {
+	if fieldName, err = getConfigFieldString(config, maskFieldConfigField); err != nil {
 		return nil, cerrors.Errorf("%s: %w", transformName, err)
 	}
 	replacement = config[maskFieldConfigReplacement]

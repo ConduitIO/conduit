@@ -18,7 +18,7 @@ module(
               'titan:name',
               'Titan Name',
               'Enter Titan Name',
-              'string'
+              'TYPE_STRING'
             );
             this.field = field;
             this.setInputValue = () => {};
@@ -43,7 +43,7 @@ module(
               'titan:name',
               'Titan Name',
               'Enter Titan Name',
-              'string',
+              'TYPE_STRING',
               { isRequired: true }
             );
             this.field = field;
@@ -80,7 +80,7 @@ module(
             'titan:height',
             'Titan Height',
             'Enter Titan Height',
-            'int'
+            'TYPE_NUMBER'
           );
           this.field = field;
           this.setInputValue = () => {};
@@ -103,7 +103,7 @@ module(
               'titan:height',
               'Titan Height',
               'Enter Titan Height',
-              'int',
+              'TYPE_NUMBER',
               { isRequired: true }
             );
             this.field = field;
@@ -150,7 +150,7 @@ module(
             'titan:eatingyou',
             'Is eating you',
             '',
-            'boolean'
+            'TYPE_BOOL'
           );
           this.field = field;
           this.setInputValue = () => {};
@@ -175,12 +175,12 @@ module(
               'titan:type',
               'Titan Type',
               'Pick titan type',
-              'string',
+              'TYPE_STRING',
               {
                 validations: [
                   {
-                    type: 'inclusion',
-                    options: { list: ['Attack', 'Founding', 'Warhammer'] },
+                    type: 'TYPE_INCLUSION',
+                    value: ['Attack', 'Founding', 'Warhammer'],
                   },
                 ],
               }

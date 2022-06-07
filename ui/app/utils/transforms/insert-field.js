@@ -1,44 +1,34 @@
 import Transform from './transform';
 
-export default class MaskField extends Transform {
+export default class InsertField extends Transform {
   static id = 'insertfield';
   static label = 'InsertField';
   static description = '';
 
-  static blueprint = [
-    {
-      id: 'static.field',
-      label: 'Static field',
-      placeholder: 'Enter static field',
-      type: 'string',
-      validationType: 'string',
+  static blueprint = {
+    'static.field': {
+      default: '',
+      description: 'Static field',
+      type: 'TYPE_STRING',
       validations: [],
     },
-
-    {
-      id: 'static.value',
-      label: 'Static value',
-      placeholder: 'Enter replacement value',
-      type: 'string',
-      validationType: 'string',
+    'static.value': {
+      default: '',
+      description: 'Static value',
+      type: 'TYPE_STRING',
       validations: [],
     },
-    {
-      id: 'timestamp.field',
-      label: 'Timestamp field',
-      placeholder: 'Enter timestamp field',
-      type: 'string',
-      validationType: 'string',
+    'timestamp.field': {
+      default: '',
+      description: 'Timestamp field',
+      type: 'TYPE_STRING',
       validations: [],
     },
-
-    {
-      id: 'position.field',
-      label: 'Position field',
-      placeholder: 'Enter position field',
-      type: 'string',
-      validationType: 'string',
+    'position.field': {
+      default: '',
+      description: 'Position field',
+      type: 'TYPE_STRING',
       validations: [],
     },
-  ];
+  };
 }
