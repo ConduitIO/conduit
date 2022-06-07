@@ -64,7 +64,7 @@ func hoistField(
 		fieldName string
 	)
 
-	if fieldName, err = getConfigField(config, hoistFieldConfigField); err != nil {
+	if fieldName, err = getConfigFieldString(config, hoistFieldConfigField); err != nil {
 		return nil, cerrors.Errorf("%s: %w", transformName, err)
 	}
 

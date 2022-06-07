@@ -72,7 +72,7 @@ func insertField(
 	positionField = config[insertFieldConfigPositionField]
 	staticFieldName, ok := config[insertFieldConfigStaticField]
 	if ok {
-		if staticFieldValue, err = getConfigField(config, insertFieldConfigStaticValue); err != nil {
+		if staticFieldValue, err = getConfigFieldString(config, insertFieldConfigStaticValue); err != nil {
 			return nil, cerrors.Errorf("%s: %w", transformName, err)
 		}
 	}
