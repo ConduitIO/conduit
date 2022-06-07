@@ -85,44 +85,6 @@ func httpRequest(
 		return nil, cerrors.Errorf("%s: error trying to create HTTP request: %w", transformName, err)
 	}
 
-	// default retry values (retryCount is a float64 to match the backoff library attempt type)
-	var retryCount float64 = 0
-	b := &backoff.Backoff{
-		Factor: 2,
-		Min:    time.Millisecond * 100,
-		Max:    time.Second * 5,
-	}
-
-	if tmp, err := getConfigFieldInt64(config, httpRequestBackoffRetryCount); err != nil && !cerrors.Is(err, errEmptyConfigField) {
-		return nil, cerrors.Errorf("%s: %w", transformName, err)
-	} else {
-		retryCount = float64(tmp)
-	}
-
-	if retryCount > 0 {
-		// only parse other params if backoff retries are enabled
-		min, err := getConfigFieldDuration(config, httpRequestBackoffRetryMin)
-		if err != nil && !cerrors.Is(err, errEmptyConfigField) {
-			return nil, cerrors.Errorf("%s: %w", transformName, err)
-		} else if err == nil {
-			b.Min = min
-		}
-
-		max, err := getConfigFieldDuration(config, httpRequestBackoffRetryMax)
-		if err != nil && !cerrors.Is(err, errEmptyConfigField) {
-			return nil, cerrors.Errorf("%s: %w", transformName, err)
-		} else if err == nil {
-			b.Max = max
-		}
-
-		factor, err := getConfigFieldFloat64(config, httpRequestBackoffRetryFactor)
-		if err != nil && !cerrors.Is(err, errEmptyConfigField) {
-			return nil, cerrors.Errorf("%s: %w", transformName, err)
-		} else if err == nil {
-			b.Factor = factor
-		}
-	}
-
 	txfFunc := func(r record.Record) (record.Record, error) {
 		req, err := http.NewRequest(
 			method,
@@ -153,21 +115,67 @@ func httpRequest(
 		return r, nil
 	}
 
-	if retryCount > 0 {
-		// wrap transform in a retry loop
-		return func(r record.Record) (record.Record, error) {
-			for {
-				r, err := txfFunc(r)
-				if err != nil && b.Attempt() < retryCount {
-					// TODO log message that we are retrying, include error cause (we don't have access to a proper logger)
-					time.Sleep(b.Duration())
-					continue
-				}
-				b.Reset() // reset for next transform execution
-				return r, err
-			}
-		}, nil
+	return configureHTTPRequestBackoffRetry(transformName, config, txfFunc)
+}
+
+func configureHTTPRequestBackoffRetry(
+	transformName string,
+	config transform.Config,
+	txfFunc transform.Transform,
+) (transform.Transform, error) {
+	// retryCount is a float64 to match the backoff library attempt type
+	var retryCount float64
+
+	tmp, err := getConfigFieldInt64(config, httpRequestBackoffRetryCount)
+	if err != nil && !cerrors.Is(err, errEmptyConfigField) {
+		return nil, cerrors.Errorf("%s: %w", transformName, err)
+	}
+	retryCount = float64(tmp)
+
+	if retryCount == 0 {
+		// no retries configured, just use the plain transform function
+		return txfFunc, nil
 	}
 
-	return txfFunc, nil
+	// default retry values
+	b := &backoff.Backoff{
+		Factor: 2,
+		Min:    time.Millisecond * 100,
+		Max:    time.Second * 5,
+	}
+
+	min, err := getConfigFieldDuration(config, httpRequestBackoffRetryMin)
+	if err != nil && !cerrors.Is(err, errEmptyConfigField) {
+		return nil, cerrors.Errorf("%s: %w", transformName, err)
+	} else if err == nil {
+		b.Min = min
+	}
+
+	max, err := getConfigFieldDuration(config, httpRequestBackoffRetryMax)
+	if err != nil && !cerrors.Is(err, errEmptyConfigField) {
+		return nil, cerrors.Errorf("%s: %w", transformName, err)
+	} else if err == nil {
+		b.Max = max
+	}
+
+	factor, err := getConfigFieldFloat64(config, httpRequestBackoffRetryFactor)
+	if err != nil && !cerrors.Is(err, errEmptyConfigField) {
+		return nil, cerrors.Errorf("%s: %w", transformName, err)
+	} else if err == nil {
+		b.Factor = factor
+	}
+
+	// wrap transform in a retry loop
+	return func(r record.Record) (record.Record, error) {
+		for {
+			r, err := txfFunc(r)
+			if err != nil && b.Attempt() < retryCount {
+				// TODO log message that we are retrying, include error cause (we don't have access to a proper logger)
+				time.Sleep(b.Duration())
+				continue
+			}
+			b.Reset() // reset for next transform execution
+			return r, err
+		}
+	}, nil
 }
