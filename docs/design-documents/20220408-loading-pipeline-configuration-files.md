@@ -27,6 +27,7 @@ important as what we _do_ want.
 
 - We don't care about the structure or schema of configuration files.
 - We shouldn't implement key management or encryption for secrets.
+- We shouldn't care or design for how environment variables are set or managed.
 
 ## Scope
 
@@ -152,19 +153,22 @@ type DB interface {
 }
 ```
 
-### Config files as a database implementation
+### Configuration driver
 
-`DB` is an interface for storing key-value pairs. Our `ConfigFileAsDatabase` 
+`DB` is an interface for storing key-value pairs. Our `ConfigurationDriver` 
 struct will store a reference to a parsed configuration file and 
 environment and maps that to a `Store` for each `Service`.
 
-A key part about `ConfigFileAsADatabase` is that it stubs out mutable
+A key part about `ConfigurationDriver` is that it stubs out mutable
 operations, including transaction handling, enforcing our immutability
 during operation.
 
-We pass that `ConfigFileAsADatabase` to each new service at start time.
-Our `ConfigFileAsDatabase` will be bound with an in-memory database and passed
+We pass that `ConfigurationDriver` to each new service at start time.
+Our `ConfigurationDriver` will be bound with an in-memory database and passed
 to each new service when Conduit is starting.
+
+The `ConfigurationDriver` will still pass a valid database reference to the 
+ConnectorPersister so that connectors can persist position information.
 
 ```go
 // NewService initializes and returns a pipeline Service.
@@ -177,7 +181,7 @@ func NewService(logger log.CtxLogger, db database.DB) *Service {
 	}
 }
 
-svc := NewService(logger, &ConfigAsDatabase{})
+svc := NewService(logger, &ConfigurationDriver{})
 ```
 
 ### Hydration 
@@ -192,9 +196,7 @@ with the necessary resources before `Init` is called during start.
 
 This process can fail, in which a pipeline reports `StatusDegraded`.
 Because we aren't dictating restart behavior in configuration files, this
-should cause Conduit to fail and report the pipeline errors it received.
-
-In production mode, errors should fail fast and immediately report.
+should cause Conduit to fail the pipeline and report the errors it received.
 
 ### Immutability
 
@@ -221,6 +223,7 @@ startup, but should not dictate restart behavior.
 stores?
   - What would this look like? A manual setup and configuration process to get
   a pipeline working and then export it?
+  - It seems this is a feature we could support, so we should keep it in mind.
 
 - Should we call the file `conduit.yml` or `pipelines.yml`
   - `conduit` implies application-level configuration values, while `pipelines` 
@@ -231,6 +234,8 @@ stores?
   start.
 
 - How should Conduit handle degraded states in a production-mode environment?
+  - It should do as it currently does: Report the error status and fail the
+  pipeline.
 
 ## Do nothing 
 
@@ -249,11 +254,18 @@ aspects of Conduit like performance, acceptance testing, etc...
 
 **Cons**:
 
+- We don't see the benefits of stricter runtime definitions.
 - Production Conduit instances remain manually configured by default.
 
 ## Decision 
 
-> T.B.D.
+Decision points from this document:
+
+- We should allow `n` number of pipeline files to be scanned and loaded.
+- We want to eventually support exporting pipeline configuration files from a
+development instance of Conduit.
+- We shouldn't care or design for how environment variables are set or managed.
+This design is only concerned with their values, not how they're set.
 
 ## Consequences
 
