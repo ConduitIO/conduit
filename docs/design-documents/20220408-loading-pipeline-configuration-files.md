@@ -3,12 +3,12 @@
 ## Summary 
 
 This document describes the design and implementation for loading pipeline 
-configuration files. It details how Conduit loads a configuration file at start.
+configuration files. It details how Conduit loads configuration files at start.
 
 In order to provide a detailed history of configuration changes, better secret
 handling, and increased confidence in a given configuration, we propose
 adding support for loading and subsequently running pipelines entirely from 
-configuration files loaded into Conduit at its root or a configured directory.
+configuration files loaded into Conduit from a configured directory.
 
 Our solution proposes an immutable Conduit runtime backed by an in-memory DB
 implementation that merges a user-provided configuration file with environment
@@ -17,7 +17,7 @@ information for full operation.
 
 ## Goals 
 
-- Fully load and configure pipelines from a file.
+- Fully load and configure pipelines from a directory of pipeline files.
 - Properly handle environment variable injection into that file.
 
 ### Non Goals
@@ -83,14 +83,14 @@ the problem of secrets management, but we must be in the business of secret
 concealment. Additionally, we already allow environment variables so we must 
 continue handling those correctly. 
 
-We propose merging environment variables, CLI flags, and the user's provided 
-configuration file, in that order, at runtime into a templated variables in the 
+We propose merging CLI flags, environment variables, and the user's provided 
+configuration file, in that order, at runtime into template variables in the 
 configuration file with their secret values at runtime.
 
 We propose merging environment variables and CLI flags into a set of values 
-that is then injected into the provided `pipelines.yml` file. 
+that is then injected into the provided set of pipeline files.
 
-We propose supporting Go templating in `pipelines.yml` to allow for dynamic
+We propose supporting Go templating in all pipeline files to allow for dynamic
 injection of those environment variables at runtime.
 
 ## Implementation
@@ -187,7 +187,7 @@ svc := NewService(logger, &ConfigurationDriver{})
 ### Hydration 
 
 Once Conduit's services are started, they will be empty. We must parse our 
-config file into a full pipeline by hydrating it with other necessary 
+configuration files into a full pipeline by hydrating it with other necessary 
 information including environment information, connector configurations, 
 and processors.
 
@@ -210,7 +210,7 @@ information between restarts.
 
 Since we must persist connector information, but we want Conduit services 
 to be immutable, we should pass the `ConnectorPersister` its own database
-reference at start that it can mutate without changing Conduit.
+reference at start that it can mutate without changing Conduit's state. 
 
 ## Lifecycle methods 
 
