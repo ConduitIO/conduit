@@ -30,7 +30,7 @@ type DestinationNode struct {
 	Destination    connector.Destination
 	ConnectorTimer metrics.Timer
 	// AckerNode is responsible for handling acks
-	AckerNode *AckerNode
+	AckerNode *DestinationAckerNode
 
 	base   subNodeBase
 	logger log.CtxLogger

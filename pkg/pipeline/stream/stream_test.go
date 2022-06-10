@@ -52,7 +52,7 @@ func Example_simpleStream() {
 		Destination:    printerDestination(ctrl, logger, "printer"),
 		ConnectorTimer: noop.Timer{},
 	}
-	node3 := &stream.AckerNode{
+	node3 := &stream.DestinationAckerNode{
 		Name:        "printer-acker",
 		Destination: node2.Destination,
 	}
@@ -144,12 +144,12 @@ func Example_complexStream() {
 		Destination:    printerDestination(ctrl, logger, "printer2"),
 		ConnectorTimer: noop.Timer{},
 	}
-	node8 := &stream.AckerNode{
+	node8 := &stream.DestinationAckerNode{
 		Name:        "printer1-acker",
 		Destination: node6.Destination,
 	}
 	node6.AckerNode = node8
-	node9 := &stream.AckerNode{
+	node9 := &stream.DestinationAckerNode{
 		Name:        "printer2-acker",
 		Destination: node7.Destination,
 	}

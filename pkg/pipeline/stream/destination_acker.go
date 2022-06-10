@@ -27,9 +27,9 @@ import (
 	"github.com/conduitio/conduit/pkg/record"
 )
 
-// AckerNode is responsible for handling acknowledgments received from the
-// destination and forwarding them to the correct message.
-type AckerNode struct {
+// DestinationAckerNode is responsible for handling acknowledgments received
+// from the destination and forwarding them to the correct message.
+type DestinationAckerNode struct {
 	Name        string
 	Destination connector.Destination
 
@@ -49,8 +49,8 @@ type AckerNode struct {
 	stopOnce sync.Once
 }
 
-// init initializes AckerNode internal fields.
-func (n *AckerNode) init() {
+// init initializes DestinationAckerNode internal fields.
+func (n *DestinationAckerNode) init() {
 	n.initOnce.Do(func() {
 		n.cache = &positionMessageMap{}
 		n.start = make(chan struct{})
@@ -58,13 +58,13 @@ func (n *AckerNode) init() {
 	})
 }
 
-func (n *AckerNode) ID() string {
+func (n *DestinationAckerNode) ID() string {
 	return n.Name
 }
 
 // Run continuously fetches acks from the destination and forwards them to the
 // correct message by calling Ack or Nack on that message.
-func (n *AckerNode) Run(ctx context.Context) (err error) {
+func (n *DestinationAckerNode) Run(ctx context.Context) (err error) {
 	n.logger.Trace(ctx).Msg("starting acker node")
 	defer n.logger.Trace(ctx).Msg("acker node stopped")
 
@@ -122,7 +122,7 @@ func (n *AckerNode) Run(ctx context.Context) (err error) {
 
 // teardown will drop all messages still in the cache and return an error in
 // case there were still unprocessed messages in the cache.
-func (n *AckerNode) teardown() error {
+func (n *DestinationAckerNode) teardown() error {
 	var dropped int
 	n.cache.Range(func(pos record.Position, msg *Message) bool {
 		msg.Drop()
@@ -138,7 +138,7 @@ func (n *AckerNode) teardown() error {
 // handleAck either acks or nacks the message, depending on the supplied error.
 // If the nacking or acking fails, the message is dropped and the error is
 // returned.
-func (n *AckerNode) handleAck(msg *Message, err error) error {
+func (n *DestinationAckerNode) handleAck(msg *Message, err error) error {
 	switch {
 	case err != nil:
 		n.logger.Trace(msg.Ctx).Err(err).Msg("nacking message")
@@ -160,7 +160,7 @@ func (n *AckerNode) handleAck(msg *Message, err error) error {
 
 // ExpectAck makes the handler aware of the message and signals to it that an
 // ack for this message might be received at some point.
-func (n *AckerNode) ExpectAck(msg *Message) error {
+func (n *DestinationAckerNode) ExpectAck(msg *Message) error {
 	// happens only once to signal Run that the destination is ready to be used.
 	n.startOnce.Do(func() {
 		n.init()
@@ -185,7 +185,7 @@ func (n *AckerNode) ExpectAck(msg *Message) error {
 // ForgetAndDrop signals the handler that an ack for this message won't be
 // received, and it should remove it from its cache. In case an ack for this
 // message wasn't yet received it drops the message, otherwise it does nothing.
-func (n *AckerNode) ForgetAndDrop(msg *Message) {
+func (n *DestinationAckerNode) ForgetAndDrop(msg *Message) {
 	_, ok := n.cache.LoadAndDelete(msg.Record.Position)
 	if !ok {
 		// message wasn't found in the cache, looks like the message was already
@@ -197,8 +197,9 @@ func (n *AckerNode) ForgetAndDrop(msg *Message) {
 
 // Wait can be used to wait for the count of outstanding acks to drop to 0 or
 // the context gets canceled. Wait is expected to be the last function called on
-// AckerNode, after Wait returns AckerNode will soon stop running.
-func (n *AckerNode) Wait(ctx context.Context) {
+// DestinationAckerNode, after Wait returns DestinationAckerNode will soon stop
+// running.
+func (n *DestinationAckerNode) Wait(ctx context.Context) {
 	// happens only once to signal that the destination is stopping
 	n.stopOnce.Do(func() {
 		n.init()
@@ -227,7 +228,7 @@ func (n *AckerNode) Wait(ctx context.Context) {
 }
 
 // SetLogger sets the logger.
-func (n *AckerNode) SetLogger(logger log.CtxLogger) {
+func (n *DestinationAckerNode) SetLogger(logger log.CtxLogger) {
 	n.logger = logger
 }
 

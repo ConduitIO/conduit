@@ -290,8 +290,8 @@ func (s *Service) buildMetricsNode(
 
 func (s *Service) buildAckerNode(
 	dest connector.Destination,
-) *stream.AckerNode {
-	return &stream.AckerNode{
+) *stream.DestinationAckerNode {
+	return &stream.DestinationAckerNode{
 		Name:        dest.ID() + "-acker",
 		Destination: dest,
 	}

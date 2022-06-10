@@ -32,7 +32,7 @@ func TestAckerNode_Run_StopAfterWait(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	dest := mock.NewDestination(ctrl)
 
-	node := &AckerNode{
+	node := &DestinationAckerNode{
 		Name:        "acker-node",
 		Destination: dest,
 	}
@@ -69,7 +69,7 @@ func TestAckerNode_Run_StopAfterExpectAck(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	dest := mock.NewDestination(ctrl)
 
-	node := &AckerNode{
+	node := &DestinationAckerNode{
 		Name:        "acker-node",
 		Destination: dest,
 	}
