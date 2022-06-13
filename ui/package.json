@@ -27,7 +27,7 @@
   "devDependencies": {
     "@ember/optional-features": "^2.0.0",
     "@ember/render-modifiers": "^2.0.4",
-    "@ember/test-helpers": "^2.6.0",
+    "@ember/test-helpers": "^2.8.1",
     "@glimmer/component": "^1.0.4",
     "@glimmer/tracking": "^1.1.2",
     "@meroxa/ui-base": "https://github.com/meroxa/ui-base.git#553298b082c15e03c9904dba1dcc7ec0b4f13ab4",
