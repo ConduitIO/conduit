@@ -67,16 +67,16 @@ these concerns, but there are additional design decisions to make.
 
 ## Design 
 
-We propose the creation of a pipeline configuration file that contains all of
-the configuration values needed for `n` number of full pipelines.
+We propose the creation of a pipeline configuration directory that contains
+configuration values needed for `n` number of full pipelines.
 
-We propose naming this file `pipelines.yml` and it's default location should be
-at the root of the project. The format of the file is to be determined, though
-`yaml` has been proposed previously.
+We propose scanning for `*.yml` files in this directory and loading them into
+Conduit.
 
-If this file is passed at start time, we propose that Conduit run in production 
+If files are detected at start time, we propose that Conduit run in production 
 mode. Production mode initially will not serve the UI. In the future, it would 
-serve a read-only optimized view of Conduit.
+serve a read-only optimized view of Conduit. If no pipeline files are detected
+then Conduit would boot into it's standard development mode of operation.
 
 Configuration must securely accept secret information. We don't want to solve
 the problem of secrets management, but we must be in the business of secret
@@ -98,14 +98,15 @@ injection of those environment variables at runtime.
 Conduit currently defines a `Config` struct in `pkg/conduit` that it 
 accepts at runtime to configure behavior. 
 
-We propose modifying this configuration struct to allow for a configuration
-file to be set for Conduit to read.
+We propose modifying this configuration struct to allow for configuration
+files to be loaded f
 
 ```go
 // Config holds all configurable values for Conduit.
 type Config struct {
-	// File holds a Path to a configuration file that Conduit should load.
-	File struct {
+	// Pipelines holds a path to a directory that Conduit scans at start time 
+  // to detect and load pipelines.
+	Pipelines struct {
 		Path string
 	}
 
@@ -135,8 +136,8 @@ type Config struct {
 ```
 
 The above configuration is parsed at start time and provies a reference to our 
-pipeline configuration file. After parsing that file, we inject environment 
-variables into their corresponding templated locations, if any.
+pipeline configuration file directory. After parsing that file, we inject 
+environment variables into their corresponding templated locations, if any.
 
 ```go
 // DB defines the interface for a key-value store.
@@ -187,7 +188,7 @@ svc := NewService(logger, &ConfigurationDriver{})
 ### Hydration 
 
 Once Conduit's services are started, they will be empty. We must parse our 
-configuration files into a full pipeline by hydrating it with other necessary 
+pipeline files into a full pipeline by hydrating it with other necessary 
 information including environment information, connector configurations, 
 and processors.
 
@@ -262,6 +263,8 @@ aspects of Conduit like performance, acceptance testing, etc...
 Decision points from this document:
 
 - We should allow `n` number of pipeline files to be scanned and loaded.
+   - These will live in a sub-directory by default.
+   - If there are no files, Conduit will start as normal in development mode.
 - We want to eventually support exporting pipeline configuration files from a
 development instance of Conduit.
 - We shouldn't care or design for how environment variables are set or managed.
