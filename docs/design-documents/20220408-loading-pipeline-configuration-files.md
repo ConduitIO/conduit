@@ -215,7 +215,7 @@ reference at start that it can mutate without changing Conduit's state.
 
 ## Lifecycle methods 
 
-Configuration files should specify whether or not a service should run at
+Configuration files should specify whether or not a pipeline should run at
 startup, but should not dictate restart behavior. 
 
 ## Open questions
