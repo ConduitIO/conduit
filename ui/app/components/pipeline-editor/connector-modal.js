@@ -152,6 +152,7 @@ export default class PipelineEditorNewConnectorModal extends Component {
         this.connector
       );
     }
+    this.isShowingRequiredTab = true;
   }
 
   @action
