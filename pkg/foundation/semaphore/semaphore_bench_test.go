@@ -50,7 +50,7 @@ func acquireN(b *testing.B, sem weighted, size int64, N int) {
 	}
 }
 
-func BenchmarkNewSeq(b *testing.B) {
+func BenchmarkNewSem(b *testing.B) {
 	for _, cap := range []int64{1, 128} {
 		b.Run(fmt.Sprintf("Weighted-%d", cap), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
@@ -60,7 +60,7 @@ func BenchmarkNewSeq(b *testing.B) {
 	}
 }
 
-func BenchmarkAcquireSeq(b *testing.B) {
+func BenchmarkAcquireSem(b *testing.B) {
 	for _, c := range []struct {
 		cap, size int64
 		N         int
