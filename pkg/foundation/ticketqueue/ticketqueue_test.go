@@ -215,10 +215,10 @@ func ExampleTicketQueue() {
 	for _, word := range sentence {
 		t := tq.Take()
 		wg.Add(1)
-		go func(word string) {
+		go func(word string, delay time.Duration) {
 			defer wg.Done()
 			// sleep for a random amount of time to simulate work being done
-			time.Sleep(time.Millisecond * time.Duration(r.Intn(100)))
+			time.Sleep(delay)
 			// try to cash in ticket
 			req, res, err := tq.Wait(ctx, t)
 			if err != nil {
@@ -229,7 +229,7 @@ func ExampleTicketQueue() {
 			if err != nil {
 				panic(cerrors.Errorf("unexpected error: %w", err))
 			}
-		}(word)
+		}(word, time.Millisecond*time.Duration(r.Intn(100)))
 	}
 
 	// collect all tickets
