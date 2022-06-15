@@ -36,12 +36,14 @@
 
                 <dd.Content class="bg-white rounded-md border border-gray-200 shadow-md text-sm">
                   <ul>
+                    {{!-- template-lint-disable no-invalid-interactive --}}
                     <li
                       class="py-4 pr-16 pl-4 cursor-pointer flex items-center font-medium hover:bg-gray-100"
                       data-test-pipeline-editor-add-node-source
                       {{on "click" (fn this.showCreateConnectorModal "source")}}
                       {{on "click" dd.actions.close}}
                     >
+                    {{!-- template-lint-enable no-invalid-interactive --}}
                       <svg class="fill-current h-4 w-4 mr-2">
                         <use xlink:href="/ui/svg-defs.svg#source-16"></use>
                       </svg>
