@@ -1617,12 +1617,13 @@
   resolved "https://registry.yarnpkg.com/@istanbuljs/schema/-/schema-0.1.3.tgz#e45e384e4b8ec16bce2fd903af78450f6bf7ec98"
   integrity sha512-ZXRY4jNvVgSVQ8DL3LTcakaAtXwTVUxE81hslsyD2AtoXW/wVob10HkOJ1X/pAlcI7D+2YoZKg5do8G/w6RYgA==
 
-"@lint-todo/utils@^12.0.1":
-  version "12.0.1"
-  resolved "https://registry.yarnpkg.com/@lint-todo/utils/-/utils-12.0.1.tgz#d61ef329f9f6c7332adee7b1f68651f190d53a7f"
-  integrity sha512-Xiy5wN+ns95gEHepJ55TXEBAZrkZlzrF9wTjqoTgv+RYOYL3+qQ+v0RtPH2n/UwPJEFuXJ6QKiT99RnUOt1pzw==
+"@lint-todo/utils@^13.0.3":
+  version "13.0.3"
+  resolved "https://registry.yarnpkg.com/@lint-todo/utils/-/utils-13.0.3.tgz#ca222f38738b43eb43384d56e7292ba9cab3e891"
+  integrity sha512-7Grdii4L/ae8FiykBcsEfum3m9yxVKPNQXpqJDPhWMHsReEunaQDkx/WLsjiNBctRb+roNHZQuXQYlJwoTlqOw==
   dependencies:
     "@types/eslint" "^7.2.13"
+    find-up "^5.0.0"
     fs-extra "^9.1.0"
     proper-lockfile "^4.1.2"
     slash "^3.0.0"
@@ -3028,7 +3029,7 @@ braces@^2.3.1, braces@^2.3.2:
     split-string "^3.0.2"
     to-regex "^3.0.1"
 
-braces@^3.0.1, braces@~3.0.2:
+braces@^3.0.2, braces@~3.0.2:
   version "3.0.2"
   resolved "https://registry.yarnpkg.com/braces/-/braces-3.0.2.tgz#3454e1a462ee8d599e236df336cd9ea4f8afe107"
   integrity sha512-b8um+L1RzM3WDSzvhm6gIz1yfTbBt6YTlcEKAvsmqCZZFw46z626lVj9j1yEPW33H5H+lBQpZMP1k8l+78Ha0A==
@@ -5658,12 +5659,12 @@ ember-style-modifier@^0.7.0:
     ember-cli-babel "^7.26.6"
     ember-modifier "^3.0.0"
 
-ember-template-lint@^4.3.0:
-  version "4.3.0"
-  resolved "https://registry.yarnpkg.com/ember-template-lint/-/ember-template-lint-4.3.0.tgz#4bb6050db57eeeaa8f944151c9fef9cf582e7217"
-  integrity sha512-a+UFZDTGMUStY8wnzFQyD3BmA/UKdegQ4WDikS0TbhVTx9tK6aOnVh5lV33Xr4Fbf3Pee1N1//XdCulWpUajMg==
+ember-template-lint@^4.10.0:
+  version "4.10.0"
+  resolved "https://registry.yarnpkg.com/ember-template-lint/-/ember-template-lint-4.10.0.tgz#7a0a15817ec3e83c5ac9c4b47e8018b007308635"
+  integrity sha512-Cvs7K8UxjhNecONpBlDAx6VzA7IwC7yunFGsvg/3gZqDpNVZvK4lwqCeIe/bsD3lDbMBETVHzKovgCq3pafvdw==
   dependencies:
-    "@lint-todo/utils" "^12.0.1"
+    "@lint-todo/utils" "^13.0.3"
     aria-query "^5.0.0"
     chalk "^4.1.2"
     ci-info "^3.3.0"
@@ -5674,10 +5675,11 @@ ember-template-lint@^4.3.0:
     get-stdin "^9.0.0"
     globby "^13.1.1"
     is-glob "^4.0.3"
-    micromatch "^4.0.4"
+    language-tags "^1.0.5"
+    micromatch "^4.0.5"
     resolve "^1.22.0"
     v8-compile-cache "^2.3.0"
-    yargs "^17.3.1"
+    yargs "^17.5.1"
 
 ember-template-recast@^6.1.3:
   version "6.1.3"
@@ -8057,6 +8059,18 @@ kind-of@^6.0.0, kind-of@^6.0.2:
   resolved "https://registry.yarnpkg.com/kind-of/-/kind-of-6.0.3.tgz#07c05034a6c349fa06e24fa35aa76db4580ce4dd"
   integrity sha512-dcS1ul+9tmeD95T+x28/ehLgd9mENa3LsvDTtzm3vyBEO7RPptvAD+t44WVXaUjTBRcrpFeFlC8WCruUR456hw==
 
+language-subtag-registry@~0.3.2:
+  version "0.3.21"
+  resolved "https://registry.yarnpkg.com/language-subtag-registry/-/language-subtag-registry-0.3.21.tgz#04ac218bea46f04cb039084602c6da9e788dd45a"
+  integrity sha512-L0IqwlIXjilBVVYKFT37X9Ih11Um5NEl9cbJIuU/SwP/zEEAbBPOnEeeuxVMf45ydWQRDQN3Nqc96OgbH1K+Pg==
+
+language-tags@^1.0.5:
+  version "1.0.5"
+  resolved "https://registry.yarnpkg.com/language-tags/-/language-tags-1.0.5.tgz#d321dbc4da30ba8bf3024e040fa5c14661f9193a"
+  integrity sha512-qJhlO9cGXi6hBGKoxEG/sKZDAHD5Hnu9Hs4WbOY3pCWXDhw0N8x1NenNzm2EnNLkLkk7J2SdxAkDSbb6ftT+UQ==
+  dependencies:
+    language-subtag-registry "~0.3.2"
+
 leek@0.0.24:
   version "0.0.24"
   resolved "https://registry.yarnpkg.com/leek/-/leek-0.0.24.tgz#e400e57f0e60d8ef2bd4d068dc428a54345dbcda"
@@ -8722,13 +8736,13 @@ micromatch@^3.1.10, micromatch@^3.1.4:
     snapdragon "^0.8.1"
     to-regex "^3.0.2"
 
-micromatch@^4.0.2, micromatch@^4.0.4:
-  version "4.0.4"
-  resolved "https://registry.yarnpkg.com/micromatch/-/micromatch-4.0.4.tgz#896d519dfe9db25fce94ceb7a500919bf881ebf9"
-  integrity sha512-pRmzw/XUcwXGpD9aI9q/0XOwLNygjETJ8y0ao0wdqprrzDa4YnxLcz7fQRZr8voh8V10kGhABbNcHVk5wHgWwg==
+micromatch@^4.0.2, micromatch@^4.0.4, micromatch@^4.0.5:
+  version "4.0.5"
+  resolved "https://registry.yarnpkg.com/micromatch/-/micromatch-4.0.5.tgz#bc8999a7cbbf77cdc89f132f6e467051b49090c6"
+  integrity sha512-DMy+ERcEW2q8Z2Po+WNXuw3c5YaUSFjAO5GsJqfEl7UjvtIuFKO6ZrKvcItdy98dwFI2N1tg3zNIdKaQT+aNdA==
   dependencies:
-    braces "^3.0.1"
-    picomatch "^2.2.3"
+    braces "^3.0.2"
+    picomatch "^2.3.1"
 
 miller-rabin@^4.0.0:
   version "4.0.1"
@@ -9613,10 +9627,15 @@ picocolors@^1.0.0:
   resolved "https://registry.yarnpkg.com/picocolors/-/picocolors-1.0.0.tgz#cb5bdc74ff3f51892236eaf79d68bc44564ab81c"
   integrity sha512-1fygroTLlHu66zi26VoTDv8yRgm0Fccecssto+MhsZ0D/DGW2sm8E8AjW7NU5VVTRt5GxbeZ5qBuJr+HyLYkjQ==
 
-picomatch@^2.0.4, picomatch@^2.2.1, picomatch@^2.2.3:
+picomatch@^2.0.4, picomatch@^2.2.1:
   version "2.3.0"
   resolved "https://registry.yarnpkg.com/picomatch/-/picomatch-2.3.0.tgz#f1f061de8f6a4bf022892e2d128234fb98302972"
   integrity sha512-lY1Q/PiJGC2zOv/z391WOTD+Z02bCgsFfvxoXXf6h7kv9o+WmsmzYqrAwY63sNgOxE4xEdq0WyUnXfKeBrSvYw==
+
+picomatch@^2.3.1:
+  version "2.3.1"
+  resolved "https://registry.yarnpkg.com/picomatch/-/picomatch-2.3.1.tgz#3ba3833733646d9d3e4995946c1365a67fb07a42"
+  integrity sha512-JU3teHTNjmE2VCGFzuY8EXzCDVwEqB2a8fsIvwaStHhAWJEeVd1o1QD80CU6+ZdEXXSLbSsuLwJjkCBWqRQUVA==
 
 pidtree@^0.3.0:
   version "0.3.1"
@@ -12236,10 +12255,10 @@ yargs-parser@^21.0.0:
   resolved "https://registry.yarnpkg.com/yargs-parser/-/yargs-parser-21.0.0.tgz#a485d3966be4317426dd56bdb6a30131b281dc55"
   integrity sha512-z9kApYUOCwoeZ78rfRYYWdiU/iNL6mwwYlkkZfJoyMR1xps+NEBX5X7XmRpxkZHhXJ6+Ey00IwKxBBSW9FIjyA==
 
-yargs@^17.3.1:
-  version "17.3.1"
-  resolved "https://registry.yarnpkg.com/yargs/-/yargs-17.3.1.tgz#da56b28f32e2fd45aefb402ed9c26f42be4c07b9"
-  integrity sha512-WUANQeVgjLbNsEmGk20f+nlHgOqzRFpiGWVaBrYGYIGANIIu3lWjoyi0fNlFmJkvfhCZ6BXINe7/W2O2bV4iaA==
+yargs@^17.5.1:
+  version "17.5.1"
+  resolved "https://registry.yarnpkg.com/yargs/-/yargs-17.5.1.tgz#e109900cab6fcb7fd44b1d8249166feb0b36e58e"
+  integrity sha512-t6YAJcxDkNX7NFYiVtKvWUz8l+PaKTLiL63mJYWR2GnHq2gjEWISzsLp9wg3aY36dY1j+gfIEL3pIF+XlJJfbA==
   dependencies:
     cliui "^7.0.2"
     escalade "^3.1.1"
