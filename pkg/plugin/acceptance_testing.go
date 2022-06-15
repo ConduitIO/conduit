@@ -45,8 +45,8 @@ import (
 //
 func AcceptanceTestV1(t *testing.T, tdf testDispenserFunc) {
 	// specifier tests
-	run(t, tdf, testSpecifier_Specify_Success)
-	run(t, tdf, testSpecifier_Specify_Fail)
+	run(t, tdf, testSpecifierSpecifySuccess)
+	run(t, tdf, testSpecifierSpecifyFail)
 
 	// source tests
 	run(t, tdf, testSource_Configure_Success)
@@ -89,7 +89,7 @@ type testDispenserFunc func(*testing.T) (Dispenser, *mock.SpecifierPlugin, *mock
 // -- SPECIFIER --
 // ---------------
 
-func testSpecifier_Specify_Success(t *testing.T, tdf testDispenserFunc) {
+func testSpecifierSpecifySuccess(t *testing.T, tdf testDispenserFunc) {
 	dispenser, mockSpecifier, _, _ := tdf(t)
 
 	want := Specification{
@@ -141,7 +141,7 @@ func testSpecifier_Specify_Success(t *testing.T, tdf testDispenserFunc) {
 	}
 }
 
-func testSpecifier_Specify_Fail(t *testing.T, tdf testDispenserFunc) {
+func testSpecifierSpecifyFail(t *testing.T, tdf testDispenserFunc) {
 	dispenser, mockSpecifier, _, _ := tdf(t)
 
 	want := cerrors.New("specify error")
