@@ -16,7 +16,6 @@ package txfjs
 
 import (
 	"bytes"
-	"errors"
 	"testing"
 	"time"
 
@@ -253,7 +252,7 @@ func TestTransformer_JavaScriptException(t *testing.T) {
 	got, err := tr.Transform(r)
 	assert.Error(t, err)
 	target := &goja.Exception{}
-	assert.True(t, errors.As(err, &target), "expected a goja.Exception")
+	assert.True(t, cerrors.As(err, &target), "expected a goja.Exception")
 	assert.Equal(t, record.Record{}, got)
 }
 
@@ -262,5 +261,5 @@ func TestTransformer_BrokenJSCode(t *testing.T) {
 	_, err := NewTransformer(src, zerolog.Nop())
 	assert.Error(t, err)
 	target := &goja.CompilerSyntaxError{}
-	assert.True(t, errors.As(err, &target), "expected a goja.CompilerSyntaxError")
+	assert.True(t, cerrors.As(err, &target), "expected a goja.CompilerSyntaxError")
 }
