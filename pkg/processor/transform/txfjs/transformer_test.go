@@ -16,6 +16,8 @@ package txfjs
 
 import (
 	"bytes"
+	"errors"
+	"github.com/dop251/goja"
 	"testing"
 	"time"
 
@@ -43,9 +45,10 @@ func TestTransformer_Logger(t *testing.T) {
 }
 
 func TestTransformer_Transform_MissingEntrypoint(t *testing.T) {
-	tr, err := NewTransformer(`
-logger.Debug("no entrypoint");
-`, zerolog.Nop())
+	tr, err := NewTransformer(
+		`logger.Debug("no entrypoint");`,
+		zerolog.Nop(),
+	)
 
 	if err == nil {
 		t.Error("expected error if transformer has no entrypoint")
@@ -70,17 +73,17 @@ func TestTransformer_Transform(t *testing.T) {
 		wantErr error
 	}{
 		{
-			name: "change incoming record",
+			name: "complete change incoming record with raw data",
 			fields: fields{
 				src: `
-function transform(record) {
-	record.Position = "3";
-	record.Metadata["returned"] = "JS";
-	record.CreatedAt = new Date(Date.UTC(2021, 0, 2, 3, 4, 5, 6)).toISOString();
-	record.Key.Raw = "baz";
-	record.Payload.Raw = String.fromCharCode.apply(String, record.Payload.Raw) + "bar";
-	return record;
-}`,
+				function transform(record) {
+					record.Position = "3";
+					record.Metadata["returned"] = "JS";
+					record.CreatedAt = new Date(Date.UTC(2021, 0, 2, 3, 4, 5, 6)).toISOString();
+					record.Key.Raw = "baz";
+					record.Payload.Raw = String.fromCharCode.apply(String, record.Payload.Raw) + "bar";
+					return record;
+				}`,
 			},
 			args: args{
 				record: record.Record{
@@ -101,7 +104,7 @@ function transform(record) {
 			wantErr: nil,
 		},
 		{
-			name: "return new record",
+			name: "return new record with raw data",
 			fields: fields{
 				src: `
 				function transform(record) {
@@ -159,4 +162,32 @@ function transform(record) {
 			assert.Equal(t, tt.want, got)
 		})
 	}
+}
+
+func TestTransformer_JavaScriptException(t *testing.T) {
+	src := `function transform(record) {
+		var m;
+		m.test
+	}`
+	tr, err := NewTransformer(src, zerolog.Nop())
+	assert.Ok(t, err)
+
+	r := record.Record{
+		Key:     record.RawData{Raw: []byte("test key")},
+		Payload: record.RawData{Raw: []byte("test payload")},
+	}
+
+	got, err := tr.Transform(r)
+	assert.Error(t, err)
+	target := &goja.Exception{}
+	assert.True(t, errors.As(err, &target), "expected a goja.Exception")
+	assert.Equal(t, record.Record{}, got)
+}
+
+func TestTransformer_BrokenJSCode(t *testing.T) {
+	src := `function {`
+	_, err := NewTransformer(src, zerolog.Nop())
+	assert.Error(t, err)
+	target := &goja.CompilerSyntaxError{}
+	assert.True(t, errors.As(err, &target), "expected a goja.CompilerSyntaxError")
 }
