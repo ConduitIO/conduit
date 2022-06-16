@@ -145,6 +145,20 @@ func TestTransformer_Transform(t *testing.T) {
 			want:    record.Record{},
 			wantErr: cerrors.New("failed to transform to internal record: unexpected type, expected *record.Record, got <nil>"),
 		},
+		{
+			name: "null return value",
+			fields: fields{
+				src: `
+				function transform(record) {
+					return null;
+				}`,
+			},
+			args: args{
+				record: record.Record{},
+			},
+			want:    record.Record{},
+			wantErr: cerrors.New("failed to transform to internal record: unexpected type, expected *record.Record, got <nil>"),
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
