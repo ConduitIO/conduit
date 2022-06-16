@@ -73,6 +73,48 @@ func TestTransformer_Transform(t *testing.T) {
 		wantErr error
 	}{
 		{
+			// todo Once https://github.com/ConduitIO/conduit/issues/468 is implemented
+			// write more tests which validate transforms on structured records
+			name: "change non-payload fields of structured record",
+			fields: fields{
+				src: `
+				function transform(record) {
+					record.Position = "3";
+					record.Metadata["returned"] = "JS";
+					record.CreatedAt = new Date(Date.UTC(2021, 0, 2, 3, 4, 5, 6)).toISOString();
+					record.Key.Raw = "baz";
+					return record;
+				}`,
+			},
+			args: args{
+				record: record.Record{
+					Position:  []byte("2"),
+					Metadata:  map[string]string{"existing": "val"},
+					CreatedAt: time.Now().UTC(),
+					Key:       record.RawData{Raw: []byte("bar")},
+					Payload: record.StructuredData(
+						map[string]interface{}{
+							"aaa": 111,
+							"bbb": []string{"foo", "bar"},
+						},
+					),
+				},
+			},
+			want: record.Record{
+				Position:  []byte("3"),
+				Metadata:  map[string]string{"existing": "val", "returned": "JS"},
+				CreatedAt: time.Date(2021, time.January, 2, 3, 4, 5, 6000000, time.UTC),
+				Key:       record.RawData{Raw: []byte("baz")},
+				Payload: record.StructuredData(
+					map[string]interface{}{
+						"aaa": 111,
+						"bbb": []string{"foo", "bar"},
+					},
+				),
+			},
+			wantErr: nil,
+		},
+		{
 			name: "complete change incoming record with raw data",
 			fields: fields{
 				src: `
