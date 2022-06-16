@@ -159,6 +159,23 @@ func TestTransformer_Transform(t *testing.T) {
 			want:    record.Record{},
 			wantErr: cerrors.New("failed to transform to internal record: unexpected type, expected *record.Record, got <nil>"),
 		},
+		{
+			// todo do we want to allow this and similar transforms?
+			name: "null key and null payload not allowed",
+			fields: fields{
+				src: `
+				function transform(record) {
+					record.Key = null;
+					record.Payload = null;
+					return record;
+				}`,
+			},
+			args: args{
+				record: record.Record{},
+			},
+			want:    record.Record{},
+			wantErr: cerrors.New("failed to transform to internal record: unexpected type, expected *record.Record, got <nil>"),
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
