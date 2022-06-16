@@ -17,13 +17,13 @@ package txfjs
 import (
 	"bytes"
 	"errors"
-	"github.com/dop251/goja"
 	"testing"
 	"time"
 
 	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/record"
+	"github.com/dop251/goja"
 	"github.com/rs/zerolog"
 )
 
