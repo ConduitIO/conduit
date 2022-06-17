@@ -73,5 +73,5 @@ func (f Filter) Filter(r record.Record) (record.Record, error) {
 	if val != f.negate {
 		return record.Record{}, processor.ErrSkipRecord
 	}
-	return record.Record{}, nil
+	return r, nil
 }

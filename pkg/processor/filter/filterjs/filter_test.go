@@ -16,6 +16,7 @@ package filterjs
 
 import (
 	"testing"
+	"time"
 
 	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/processor"
@@ -60,8 +61,17 @@ func TestFilter_RecordShouldNotBeFiltered(t *testing.T) {
 		zerolog.Nop(),
 	)
 	assert.Ok(t, err)
-	r, err := underTest.Filter(record.Record{})
-	assert.Equal(t, record.Record{}, r)
+	in := record.Record{
+		Position:  record.Position("position"),
+		Metadata:  map[string]string{"a": "b"},
+		SourceID:  "source-id",
+		CreatedAt: time.Now(),
+		ReadAt:    time.Now(),
+		Key:       record.RawData{Raw: []byte("key")},
+		Payload:   record.RawData{Raw: []byte("payload")},
+	}
+	out, err := underTest.Filter(in)
+	assert.Equal(t, in, out)
 	assert.Ok(t, err)
 }
 
