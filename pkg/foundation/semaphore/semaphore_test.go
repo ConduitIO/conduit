@@ -15,7 +15,6 @@
 package semaphore_test
 
 import (
-	"context"
 	"math/rand"
 	"runtime"
 	"sync"
@@ -30,7 +29,7 @@ const maxSleep = 1 * time.Millisecond
 func HammerWeighted(sem *semaphore.Weighted, n int64, loops int) {
 	for i := 0; i < loops; i++ {
 		tkn := sem.Enqueue(n)
-		err := sem.Acquire(context.Background(), tkn)
+		err := sem.Acquire(tkn)
 		if err != nil {
 			panic(err)
 		}
@@ -58,17 +57,48 @@ func TestWeighted(t *testing.T) {
 	wg.Wait()
 }
 
-func TestWeightedPanicReleaseUnacquired(t *testing.T) {
+func TestWeightedReleaseUnacquired(t *testing.T) {
 	t.Parallel()
 
-	defer func() {
-		if recover() == nil {
-			t.Fatal("release of an unacquired weighted semaphore did not panic")
-		}
-	}()
 	w := semaphore.NewWeighted(1)
 	tkn := w.Enqueue(1)
-	w.Release(tkn)
+	err := w.Release(tkn)
+	if err == nil {
+		t.Errorf("release of an unacquired ticket did not return an error")
+	}
+}
+
+func TestWeightedReleaseTwice(t *testing.T) {
+	t.Parallel()
+
+	w := semaphore.NewWeighted(1)
+	tkn := w.Enqueue(1)
+	w.Acquire(tkn)
+	err := w.Release(tkn)
+	if err != nil {
+		t.Errorf("release of an acquired ticket errored out: %v", err)
+	}
+
+	err = w.Release(tkn)
+	if err == nil {
+		t.Errorf("release of an already released ticket did not return an error")
+	}
+}
+
+func TestWeightedAcquireTwice(t *testing.T) {
+	t.Parallel()
+
+	w := semaphore.NewWeighted(1)
+	tkn := w.Enqueue(1)
+	err := w.Acquire(tkn)
+	if err != nil {
+		t.Errorf("acquire of a ticket errored out: %v", err)
+	}
+
+	err = w.Acquire(tkn)
+	if err == nil {
+		t.Errorf("acquire of an already acquired ticket did not return an error")
+	}
 }
 
 func TestWeightedPanicEnqueueTooBig(t *testing.T) {
@@ -87,33 +117,35 @@ func TestWeightedPanicEnqueueTooBig(t *testing.T) {
 func TestWeightedAcquire(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
 	sem := semaphore.NewWeighted(2)
-	tryAcquire := func(n int64) bool {
-		ctx, cancel := context.WithTimeout(ctx, 10*time.Millisecond)
-		defer cancel()
 
-		tkn := sem.Enqueue(1)
-		return sem.Acquire(ctx, tkn) == nil
+	tkn1 := sem.Enqueue(1)
+	sem.Acquire(tkn1)
+
+	tkn2 := sem.Enqueue(1)
+	sem.Acquire(tkn2)
+
+	tkn3done := make(chan struct{})
+	go func() {
+		defer close(tkn3done)
+		tkn3 := sem.Enqueue(1)
+		sem.Acquire(tkn3)
+	}()
+
+	select {
+	case <-tkn3done:
+		t.Errorf("tkn3done closed prematurely")
+	case <-time.After(time.Millisecond * 10):
+		// tkn3 Acquire is blocking as expected
 	}
 
-	tries := []bool{}
-	tkn := sem.Enqueue(1)
-	sem.Acquire(ctx, tkn)
-	tries = append(tries, tryAcquire(1))
-	tries = append(tries, tryAcquire(1))
+	sem.Release(tkn1)
 
-	sem.Release(tkn)
-
-	tkn = sem.Enqueue(1)
-	sem.Acquire(ctx, tkn)
-	tries = append(tries, tryAcquire(1))
-
-	want := []bool{true, false, false}
-	for i := range tries {
-		if tries[i] != want[i] {
-			t.Errorf("tries[%d]: got %t, want %t", i, tries[i], want[i])
-		}
+	select {
+	case <-tkn3done:
+		// tkn3 successfully acquired the semaphore
+	case <-time.After(time.Millisecond * 10):
+		t.Errorf("tkn3done didn't get closed")
 	}
 }
 
@@ -122,7 +154,6 @@ func TestWeightedAcquire(t *testing.T) {
 func TestLargeAcquireDoesntStarve(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
 	n := int64(runtime.GOMAXPROCS(0))
 	sem := semaphore.NewWeighted(n)
 	running := true
@@ -131,7 +162,7 @@ func TestLargeAcquireDoesntStarve(t *testing.T) {
 	wg.Add(int(n))
 	for i := n; i > 0; i-- {
 		tkn := sem.Enqueue(1)
-		sem.Acquire(ctx, tkn)
+		sem.Acquire(tkn)
 		go func() {
 			defer func() {
 				sem.Release(tkn)
@@ -141,55 +172,14 @@ func TestLargeAcquireDoesntStarve(t *testing.T) {
 				time.Sleep(1 * time.Millisecond)
 				sem.Release(tkn)
 				tkn = sem.Enqueue(1)
-				sem.Acquire(ctx, tkn)
+				sem.Acquire(tkn)
 			}
 		}()
 	}
 
 	tkn := sem.Enqueue(n)
-	sem.Acquire(ctx, tkn)
+	sem.Acquire(tkn)
 	running = false
 	sem.Release(tkn)
 	wg.Wait()
-}
-
-// translated from https://github.com/zhiqiangxu/util/blob/master/mutex/crwmutex_test.go#L43
-func TestAllocCancelDoesntStarve(t *testing.T) {
-	sem := semaphore.NewWeighted(10)
-
-	// Block off a portion of the semaphore so that Acquire(_, 10) can eventually succeed.
-	tkn := sem.Enqueue(1)
-	sem.Acquire(context.Background(), tkn)
-
-	// In the background, Acquire(_, 10).
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go func() {
-		tkn := sem.Enqueue(10)
-		sem.Acquire(ctx, tkn)
-	}()
-
-	// Wait until the Acquire(_, 10) call blocks.
-	for {
-		ctx, cancel := context.WithTimeout(ctx, time.Millisecond)
-		tkn := sem.Enqueue(1)
-		err := sem.Acquire(ctx, tkn)
-		cancel()
-		if err != nil {
-			break
-		}
-		sem.Release(tkn)
-		runtime.Gosched()
-	}
-
-	// Now try to grab a read lock, and simultaneously unblock the Acquire(_, 10) call.
-	// Both Acquire calls should unblock and return, in either order.
-	go cancel()
-
-	tkn = sem.Enqueue(1)
-	err := sem.Acquire(context.Background(), tkn)
-	if err != nil {
-		t.Fatalf("Acquire(_, 1) failed unexpectedly: %v", err)
-	}
-	sem.Release(tkn)
 }

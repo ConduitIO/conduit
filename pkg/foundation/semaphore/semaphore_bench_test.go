@@ -16,7 +16,6 @@ package semaphore_test
 
 import (
 	"container/list"
-	"context"
 	"fmt"
 	"testing"
 
@@ -27,8 +26,8 @@ import (
 // alternate implementations for testing and benchmarking.
 type weighted interface {
 	Enqueue(int64) semaphore.Ticket
-	Acquire(context.Context, semaphore.Ticket) error
-	Release(semaphore.Ticket)
+	Acquire(semaphore.Ticket) error
+	Release(semaphore.Ticket) error
 }
 
 // acquireN calls Acquire(size) on sem N times and then calls Release(size) N times.
@@ -38,14 +37,7 @@ func acquireN(b *testing.B, sem weighted, size int64, N int) {
 	for i := 0; i < b.N; i++ {
 		tickets.Init()
 		for j := 0; j < N; j++ {
-			ticket := sem.Enqueue(size)
-			tickets.PushBack(ticket)
-			sem.Acquire(context.Background(), ticket)
-		}
-		ticket := tickets.Front()
-		for ticket != nil {
-			sem.Release(ticket.Value.(semaphore.Ticket))
-			ticket = ticket.Next()
+			_ = sem.Enqueue(size)
 		}
 	}
 }

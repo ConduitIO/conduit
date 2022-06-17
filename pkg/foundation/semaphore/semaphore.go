@@ -16,9 +16,9 @@
 package semaphore
 
 import (
-	"container/list"
-	"context"
 	"sync"
+
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 )
 
 // NewWeighted creates a new weighted semaphore with the given
@@ -31,21 +31,28 @@ func NewWeighted(n int64) *Weighted {
 // Weighted provides a way to bound concurrent access to a resource.
 // The callers can request access with a given weight.
 type Weighted struct {
-	size    int64
-	cur     int64
-	mu      sync.Mutex
-	waiters list.List
+	size     int64
+	cur      int64
+	released int
+	mu       sync.Mutex
+
+	waiters []waiter
+	front   int
+	batch   int64
 }
 
 type waiter struct {
-	acquired bool
+	index int
+	n     int64
+	ready chan struct{} // Closed when semaphore acquired.
+
 	released bool
-	n        int64
-	ready    chan struct{} // Closed when semaphore acquired.
+	acquired bool
 }
 
 type Ticket struct {
-	elem *list.Element
+	index int
+	batch int64
 }
 
 func (s *Weighted) Enqueue(n int64) Ticket {
@@ -54,10 +61,16 @@ func (s *Weighted) Enqueue(n int64) Ticket {
 	}
 
 	s.mu.Lock()
-	w := waiter{n: n, ready: make(chan struct{})}
-	e := s.waiters.PushBack(w)
-	s.mu.Unlock()
-	return Ticket{elem: e}
+	defer s.mu.Unlock()
+
+	index := len(s.waiters)
+	w := waiter{index: index, n: n, ready: make(chan struct{})}
+	s.waiters = append(s.waiters, w)
+
+	return Ticket{
+		index: index,
+		batch: s.batch,
+	}
 }
 
 // Acquire acquires the semaphore with a weight of n, blocking until resources
@@ -65,15 +78,24 @@ func (s *Weighted) Enqueue(n int64) Ticket {
 // ctx.Err() and leaves the semaphore unchanged.
 //
 // If ctx is already done, Acquire may still succeed without blocking.
-func (s *Weighted) Acquire(ctx context.Context, t Ticket) error {
-	w := t.elem.Value.(waiter)
-
+func (s *Weighted) Acquire(t Ticket) error {
 	s.mu.Lock()
-	if s.waiters.Front() == t.elem && s.size-s.cur >= w.n {
+	if s.batch != t.batch {
+		s.mu.Unlock()
+		return cerrors.Errorf("semaphore: invalid batch")
+	}
+
+	w := s.waiters[t.index]
+	if w.acquired {
+		return cerrors.New("semaphore: can't acquire ticket that was already acquired")
+	}
+
+	w.acquired = true // mark that Acquire was already called for this Ticket
+	s.waiters[t.index] = w
+
+	if s.front == t.index && s.size-s.cur >= w.n {
 		s.cur += w.n
-		s.waiters.Remove(t.elem)
-		w.acquired = true
-		t.elem.Value = w
+		s.front++
 		// If there are extra tokens left, notify other waiters.
 		if s.size > s.cur {
 			s.notifyWaiters()
@@ -81,71 +103,42 @@ func (s *Weighted) Acquire(ctx context.Context, t Ticket) error {
 		s.mu.Unlock()
 		return nil
 	}
-	if w.n > s.size {
-		// Don't make other Acquire calls block on one that's doomed to fail.
-		s.mu.Unlock()
-		<-ctx.Done()
-		return ctx.Err()
-	}
 	s.mu.Unlock()
 
-	select {
-	case <-ctx.Done():
-		err := ctx.Err()
-		s.mu.Lock()
-		select {
-		case <-w.ready:
-			// Acquired the semaphore after we were canceled.  Rather than trying to
-			// fix up the queue, just pretend we didn't notice the cancelation.
-			err = nil
-		default:
-			isFront := s.waiters.Front() == t.elem
-			s.waiters.Remove(t.elem)
-			// If we're at the front and there are extra tokens left, notify other waiters.
-			if isFront && s.size > s.cur {
-				s.notifyWaiters()
-			}
-		}
-		s.mu.Unlock()
-		return err
-
-	case <-w.ready:
-		return nil
-	}
+	<-w.ready
+	return nil
 }
 
 // Release releases the semaphore with a weight of n.
-func (s *Weighted) Release(t Ticket) {
-	w := t.elem.Value.(waiter)
+func (s *Weighted) Release(t Ticket) error {
 	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.batch != t.batch {
+		return cerrors.Errorf("semaphore: invalid batch")
+	}
+	w := s.waiters[t.index]
 	if !w.acquired {
-		s.mu.Unlock()
-		panic("semaphore: can't release ticket that was not acquired")
+		return cerrors.New("semaphore: can't release ticket that was not acquired")
 	}
 	if w.released {
-		s.mu.Unlock()
-		panic("semaphore: ticket released twice")
+		return cerrors.New("semaphore: ticket already released")
 	}
 
-	s.cur -= t.elem.Value.(waiter).n
+	s.cur -= w.n
 	w.released = true
-	t.elem.Value = w
-	if s.cur < 0 {
-		s.mu.Unlock()
-		panic("semaphore: released more than held")
-	}
+	s.waiters[t.index] = w
+	s.released++
 	s.notifyWaiters()
-	s.mu.Unlock()
+	if s.released == len(s.waiters) {
+		s.increaseBatch()
+	}
+	return nil
 }
 
 func (s *Weighted) notifyWaiters() {
-	for {
-		next := s.waiters.Front()
-		if next == nil {
-			break // No more waiters blocked.
-		}
-
-		w := next.Value.(waiter)
+	for len(s.waiters) > s.front {
+		w := s.waiters[s.front]
 		if s.size-s.cur < w.n {
 			// Not enough tokens for the next waiter.  We could keep going (to try to
 			// find a waiter with a smaller request), but under load that could cause
@@ -161,10 +154,14 @@ func (s *Weighted) notifyWaiters() {
 			break
 		}
 
-		w.acquired = true
-		next.Value = w
 		s.cur += w.n
-		s.waiters.Remove(next)
+		s.front++
 		close(w.ready)
 	}
+}
+
+func (s *Weighted) increaseBatch() {
+	s.waiters = s.waiters[:0]
+	s.batch += 1
+	s.front = 0
 }
