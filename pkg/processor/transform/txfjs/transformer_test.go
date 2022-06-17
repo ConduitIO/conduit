@@ -236,26 +236,6 @@ func TestTransformer_Transform(t *testing.T) {
 	}
 }
 
-func TestTransformer_JavaScriptException(t *testing.T) {
-	src := `function transform(record) {
-		var m;
-		m.test
-	}`
-	tr, err := NewTransformer(src, zerolog.Nop())
-	assert.Ok(t, err)
-
-	r := record.Record{
-		Key:     record.RawData{Raw: []byte("test key")},
-		Payload: record.RawData{Raw: []byte("test payload")},
-	}
-
-	got, err := tr.Transform(r)
-	assert.Error(t, err)
-	target := &goja.Exception{}
-	assert.True(t, cerrors.As(err, &target), "expected a goja.Exception")
-	assert.Equal(t, record.Record{}, got)
-}
-
 func TestTransformer_DataTypes(t *testing.T) {
 	testCases := []struct {
 		name  string
@@ -344,10 +324,64 @@ func TestTransformer_DataTypes(t *testing.T) {
 	}
 }
 
+func TestTransformer_JavaScriptException(t *testing.T) {
+	src := `function transform(record) {
+		var m;
+		m.test
+	}`
+	tr, err := NewTransformer(src, zerolog.Nop())
+	assert.Ok(t, err)
+
+	r := record.Record{
+		Key:     record.RawData{Raw: []byte("test key")},
+		Payload: record.RawData{Raw: []byte("test payload")},
+	}
+
+	got, err := tr.Transform(r)
+	assert.Error(t, err)
+	target := &goja.Exception{}
+	assert.True(t, cerrors.As(err, &target), "expected a goja.Exception")
+	assert.Equal(t, record.Record{}, got)
+}
+
 func TestTransformer_BrokenJSCode(t *testing.T) {
 	src := `function {`
 	_, err := NewTransformer(src, zerolog.Nop())
 	assert.Error(t, err)
 	target := &goja.CompilerSyntaxError{}
 	assert.True(t, cerrors.As(err, &target), "expected a goja.CompilerSyntaxError")
+}
+
+func TestTransformer_ScriptWithMultipleFunctions(t *testing.T) {
+	src := `
+		function getValue() {
+			return "updated_value";
+		}
+		
+		function transform(record) {
+			record.Metadata["updated_key"] = getValue()
+			return record;
+		}
+	`
+	tr, err := NewTransformer(src, zerolog.Nop())
+	assert.Ok(t, err)
+
+	r := record.Record{
+		Metadata: map[string]string{
+			"old_key": "old_value",
+		},
+	}
+
+	got, err := tr.Transform(r)
+	assert.Ok(t, err)
+	assert.Equal(
+		t,
+		record.Record{
+			Metadata: map[string]string{
+				"old_key":     "old_value",
+				"updated_key": "updated_value",
+			},
+		},
+		got,
+	)
 }
