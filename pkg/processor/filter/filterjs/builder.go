@@ -23,8 +23,7 @@ import (
 
 const (
 	// todo maybe change to transformjs?
-	filterName   = "filterjs"
-	configScript = "script"
+	filterName = "filterjs"
 )
 
 func init() {
@@ -40,13 +39,13 @@ func NewProcessorBuilder() processor.Builder {
 
 // todo docs
 func BuildFilter(config Config) (filter.Filter, error) {
-	if config[configScript] == "" {
-		return nil, cerrors.Errorf("%s: unspecified field %q", filterName, configScript)
+	if config.script() == "" {
+		return nil, cerrors.Errorf("%s: missing script", filterName)
 	}
 
 	// TODO get logger from config or some other place
 	logger := zerolog.New(zerolog.NewConsoleWriter()).With().Timestamp().Logger()
-	f, err := NewFilter(config[configScript], logger)
+	f, err := NewFilter(config.script(), config.negate(), logger)
 	if err != nil {
 		return nil, cerrors.Errorf("%s: %w", filterName, err)
 	}
