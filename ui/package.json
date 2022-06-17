@@ -83,7 +83,7 @@
     "mx-ui-components": "https://github.com/conduitio/mx-ui-components.git#a1aa6edfa814734f51c5146162e4514cd6fc73c4",
     "npm-run-all": "^4.1.5",
     "postcss-import": "^14.1.0",
-    "prettier": "^2.7.0",
+    "prettier": "^2.7.1",
     "qunit": "^2.19.1",
     "qunit-dom": "^2.0.0",
     "tailwindcss": "^3.1.3",
