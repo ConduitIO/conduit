@@ -28,10 +28,10 @@ type Function struct {
 
 func NewFunction(src, entrypoint string, logger zerolog.Logger) (Function, error) {
 	rt := goja.New()
-	// err := setRuntimeHelpers(logger, rt)
-	//if err != nil {
-	//	return Function{}, err
-	//}
+	err := setRuntimeHelpers(logger, rt)
+	if err != nil {
+		return Function{}, err
+	}
 
 	prg, err := goja.Compile("", src, false)
 	if err != nil {
@@ -68,4 +68,18 @@ func (e Function) Call(r record.Record) (interface{}, error) {
 	}
 
 	return out, nil
+}
+
+func setRuntimeHelpers(logger zerolog.Logger, rt *goja.Runtime) error {
+	// todo add more, merge with the ones from transform
+	runtimeHelpers := map[string]interface{}{
+		"logger": &logger,
+	}
+
+	for name, helper := range runtimeHelpers {
+		if err := rt.Set(name, helper); err != nil {
+			return cerrors.Errorf("failed to set helper %q: %w", name, err)
+		}
+	}
+	return nil
 }
