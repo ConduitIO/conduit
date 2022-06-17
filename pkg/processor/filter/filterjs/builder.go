@@ -12,38 +12,44 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package txfjs
+package filterjs
 
 import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/processor"
-	"github.com/conduitio/conduit/pkg/processor/transform"
+	"github.com/conduitio/conduit/pkg/processor/filter"
 	"github.com/rs/zerolog"
 )
 
 const (
 	// todo maybe change to transformjs?
-	transformName = "js"
-	configScript  = "script"
+	filterName   = "filterjs"
+	configScript = "script"
 )
 
 func init() {
-	processor.GlobalBuilderRegistry.MustRegister(transformName, transform.NewBuilder(Builder))
+	processor.GlobalBuilderRegistry.MustRegister(filterName, NewProcessorBuilder())
 }
 
-// Builder parses the config and if valid returns a JS transform, an error
-// otherwise. It requires the config field "script".
-func Builder(config transform.Config) (transform.Transform, error) {
+// NewProcessorBuilder is a utility function for creating a processor.Builder for transforms.
+func NewProcessorBuilder() processor.Builder {
+	return func(config processor.Config) (processor.Processor, error) {
+		return BuildFilter(config.Settings)
+	}
+}
+
+// todo docs
+func BuildFilter(config Config) (filter.Filter, error) {
 	if config[configScript] == "" {
-		return nil, cerrors.Errorf("%s: unspecified field %q", transformName, configScript)
+		return nil, cerrors.Errorf("%s: unspecified field %q", filterName, configScript)
 	}
 
 	// TODO get logger from config or some other place
 	logger := zerolog.New(zerolog.NewConsoleWriter()).With().Timestamp().Logger()
-	t, err := NewTransformer(config[configScript], logger)
+	f, err := NewFilter(config[configScript], logger)
 	if err != nil {
-		return nil, cerrors.Errorf("%s: %w", transformName, err)
+		return nil, cerrors.Errorf("%s: %w", filterName, err)
 	}
 
-	return t.Transform, nil
+	return f.Filter, nil
 }

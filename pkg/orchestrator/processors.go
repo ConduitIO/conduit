@@ -172,6 +172,7 @@ func (p *ProcessorOrchestrator) Delete(ctx context.Context, id string) error {
 		return err
 	}
 	r.Append(func() error {
+		// todo support filters here
 		_, err = p.processors.Create(ctx, id, proc.Name, processor.TypeTransform, proc.Parent, proc.Config)
 		return err
 	})
