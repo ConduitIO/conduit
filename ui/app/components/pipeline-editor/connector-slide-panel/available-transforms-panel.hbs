@@ -16,11 +16,13 @@
     </div>
     <ul>
       {{#each this.availableFilteredTransforms as |availableTransform|}}
+        {{!-- template-lint-disable no-invalid-interactive --}}
         <li
           class="border border-gray-300 p-4 flex items-center justify-between rounded-md mb-2 cursor-pointer"
           {{on "click" (fn @showNewTransformPanel availableTransform)}}
           data-test-available-transform={{dasherize availableTransform.label}}
         >
+        {{!-- template-lint-enable no-invalid-interactive --}}
           <div class="w-5/6">
             <div class="text-sm">
               {{availableTransform.label}}

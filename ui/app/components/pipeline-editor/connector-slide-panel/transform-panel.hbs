@@ -17,21 +17,25 @@
 
           <dd.Content class="bg-white rounded-md border border-gray-200 shadow-md p-4 text-sm">
             <ul>
+              {{!-- template-lint-disable no-invalid-interactive --}}
               <li
                 class="cursor-pointer mb-4"
                 {{on "click" (fn @duplicateTransform @connectorTransform)}}
                 {{on "click" dd.actions.close}}
                 data-test-dropdown-button="duplicate-connector-transform"
               >
+              {{!-- template-lint-enable no-invalid-interactive --}}
                 Duplicate
               </li>
 
+              {{!-- template-lint-disable no-invalid-interactive --}}
               <li
                 {{on "click" (fn @removeTransform @connectorTransform)}}
                 {{on "click" dd.actions.close}}
                 class="cursor-pointer text-orange-700"
                 data-test-dropdown-button="delete-connector-transform"
               >
+              {{!-- template-lint-enable no-invalid-interactive --}}
                 Delete
               </li>
             </ul>

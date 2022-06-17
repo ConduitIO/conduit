@@ -33,6 +33,7 @@
                     Pipeline settings
                   </LinkTo>
                 </li>
+                {{!-- template-lint-disable no-invalid-interactive --}}
                 <li
                   class="text-orange-700 font-medium flex items-center cursor-select hover:bg-gray-100 pr-16 pl-4 pb-4 pt-2"
                   data-test-pipeline-menu-item="delete"
@@ -42,6 +43,7 @@
                   }}
                   {{on "click" dd.actions.close}}
                 >
+                {{!-- template-lint-enable no-invalid-interactive --}}
                   <svg class="fill-current text-orange-700 h-4 w-4 mr-2">
                     <use xlink:href="/ui/svg-defs.svg#delete-16"></use>
                   </svg>
