@@ -256,6 +256,94 @@ func TestTransformer_JavaScriptException(t *testing.T) {
 	assert.Equal(t, record.Record{}, got)
 }
 
+func TestTransformer_DataTypes(t *testing.T) {
+	testCases := []struct {
+		name  string
+		src   string
+		input record.Record
+		want  record.Record
+	}{
+		{
+			name: "UTC date is used",
+			src: `function transform(record) {
+        		record.CreatedAt = new Date(Date.UTC(2021, 0, 2, 3, 4, 5, 6)).toISOString();
+				return record;
+			}`,
+			input: record.Record{},
+			want: record.Record{
+				CreatedAt: time.Date(2021, time.January, 2, 3, 4, 5, 6000000, time.UTC),
+			},
+		},
+		{
+			name: "position from string",
+			src: `function transform(record) {
+        		record.Position = "foobar";
+				return record;
+			}`,
+			input: record.Record{},
+			want: record.Record{
+				Position: record.Position("foobar"),
+			},
+		},
+		{
+			name: "raw payload, data from string",
+			src: `function transform(record) {
+				record.Payload = new RawData();
+        		record.Payload.Raw = "foobar";
+				return record;
+			}`,
+			input: record.Record{},
+			want: record.Record{
+				Payload: record.RawData{Raw: []byte("foobar")},
+			},
+		},
+		{
+			name: "raw key, data from string",
+			src: `function transform(record) {
+				record.Key = new RawData();
+        		record.Key.Raw = "foobar";
+				return record;
+			}`,
+			input: record.Record{},
+			want: record.Record{
+				Key: record.RawData{Raw: []byte("foobar")},
+			},
+		},
+		{
+			name: "update metadata",
+			src: `function transform(record) {
+				record.Metadata["new_key"] = "new_value"
+				delete record.Metadata.remove_me;
+				return record;
+			}`,
+			input: record.Record{
+				Metadata: map[string]string{
+					"old_key":   "old_value",
+					"remove_me": "remove_me",
+				},
+			},
+			want: record.Record{
+				Metadata: map[string]string{
+					"old_key": "old_value",
+					"new_key": "new_value",
+				},
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			tr, err := NewTransformer(tc.src, zerolog.Nop())
+			assert.Ok(t, err)
+
+			got, err := tr.Transform(tc.input)
+			assert.Ok(t, err)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
 func TestTransformer_BrokenJSCode(t *testing.T) {
 	src := `function {`
 	_, err := NewTransformer(src, zerolog.Nop())
