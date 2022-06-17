@@ -15,11 +15,12 @@
 package filterjs
 
 import (
+	"testing"
+
 	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/rs/zerolog"
-	"testing"
 )
 
 func TestFilter_Basic(t *testing.T) {

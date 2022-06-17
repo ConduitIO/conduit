@@ -16,6 +16,7 @@ package filter
 
 import (
 	"context"
+
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/record"
 )

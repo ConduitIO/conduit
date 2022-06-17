@@ -16,6 +16,7 @@ package filterjs
 
 import (
 	"fmt"
+
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/processor/javascript"
 	"github.com/conduitio/conduit/pkg/record"
