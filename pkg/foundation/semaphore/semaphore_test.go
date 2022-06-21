@@ -26,9 +26,9 @@ import (
 
 const maxSleep = 1 * time.Millisecond
 
-func HammerWeighted(sem *semaphore.Weighted, n int64, loops int) {
+func HammerSimple(sem *semaphore.Simple, loops int) {
 	for i := 0; i < loops; i++ {
-		tkn := sem.Enqueue(n)
+		tkn := sem.Enqueue()
 		err := sem.Acquire(tkn)
 		if err != nil {
 			panic(err)
@@ -38,41 +38,40 @@ func HammerWeighted(sem *semaphore.Weighted, n int64, loops int) {
 	}
 }
 
-func TestWeighted(t *testing.T) {
+func TestSimple(t *testing.T) {
 	t.Parallel()
 
 	n := runtime.GOMAXPROCS(0)
-	loops := 10000 / n
-	sem := semaphore.NewWeighted(int64(n))
+	loops := 5000 / n
+	sem := &semaphore.Simple{}
 
 	var wg sync.WaitGroup
 	wg.Add(n)
 	for i := 0; i < n; i++ {
-		i := i
 		go func() {
 			defer wg.Done()
-			HammerWeighted(sem, int64(i), loops)
+			HammerSimple(sem, loops)
 		}()
 	}
 	wg.Wait()
 }
 
-func TestWeightedReleaseUnacquired(t *testing.T) {
+func TestSimpleReleaseUnacquired(t *testing.T) {
 	t.Parallel()
 
-	w := semaphore.NewWeighted(1)
-	tkn := w.Enqueue(1)
+	w := &semaphore.Simple{}
+	tkn := w.Enqueue()
 	err := w.Release(tkn)
 	if err == nil {
 		t.Errorf("release of an unacquired ticket did not return an error")
 	}
 }
 
-func TestWeightedReleaseTwice(t *testing.T) {
+func TestSimpleReleaseTwice(t *testing.T) {
 	t.Parallel()
 
-	w := semaphore.NewWeighted(1)
-	tkn := w.Enqueue(1)
+	w := &semaphore.Simple{}
+	tkn := w.Enqueue()
 	w.Acquire(tkn)
 	err := w.Release(tkn)
 	if err != nil {
@@ -85,11 +84,11 @@ func TestWeightedReleaseTwice(t *testing.T) {
 	}
 }
 
-func TestWeightedAcquireTwice(t *testing.T) {
+func TestSimpleAcquireTwice(t *testing.T) {
 	t.Parallel()
 
-	w := semaphore.NewWeighted(1)
-	tkn := w.Enqueue(1)
+	w := &semaphore.Simple{}
+	tkn := w.Enqueue()
 	err := w.Acquire(tkn)
 	if err != nil {
 		t.Errorf("acquire of a ticket errored out: %v", err)
@@ -101,51 +100,35 @@ func TestWeightedAcquireTwice(t *testing.T) {
 	}
 }
 
-func TestWeightedPanicEnqueueTooBig(t *testing.T) {
+func TestSimpleAcquire(t *testing.T) {
 	t.Parallel()
 
-	defer func() {
-		if recover() == nil {
-			t.Fatal("enqueue of size bigger than weighted semaphore did not panic")
-		}
-	}()
-	const n = 5
-	sem := semaphore.NewWeighted(n)
-	sem.Enqueue(n + 1)
-}
+	sem := &semaphore.Simple{}
 
-func TestWeightedAcquire(t *testing.T) {
-	t.Parallel()
-
-	sem := semaphore.NewWeighted(2)
-
-	tkn1 := sem.Enqueue(1)
+	tkn1 := sem.Enqueue()
 	sem.Acquire(tkn1)
 
-	tkn2 := sem.Enqueue(1)
-	sem.Acquire(tkn2)
-
-	tkn3done := make(chan struct{})
+	tkn2done := make(chan struct{})
 	go func() {
-		defer close(tkn3done)
-		tkn3 := sem.Enqueue(1)
-		sem.Acquire(tkn3)
+		defer close(tkn2done)
+		tkn2 := sem.Enqueue()
+		sem.Acquire(tkn2)
 	}()
 
 	select {
-	case <-tkn3done:
-		t.Errorf("tkn3done closed prematurely")
+	case <-tkn2done:
+		t.Errorf("tkn2done closed prematurely")
 	case <-time.After(time.Millisecond * 10):
-		// tkn3 Acquire is blocking as expected
+		// tkn2 Acquire is blocking as expected
 	}
 
 	sem.Release(tkn1)
 
 	select {
-	case <-tkn3done:
+	case <-tkn2done:
 		// tkn3 successfully acquired the semaphore
 	case <-time.After(time.Millisecond * 10):
-		t.Errorf("tkn3done didn't get closed")
+		t.Errorf("tkn2done didn't get closed")
 	}
 }
 
@@ -155,13 +138,13 @@ func TestLargeAcquireDoesntStarve(t *testing.T) {
 	t.Parallel()
 
 	n := int64(runtime.GOMAXPROCS(0))
-	sem := semaphore.NewWeighted(n)
+	sem := &semaphore.Simple{}
 	running := true
 
 	var wg sync.WaitGroup
 	wg.Add(int(n))
 	for i := n; i > 0; i-- {
-		tkn := sem.Enqueue(1)
+		tkn := sem.Enqueue()
 		sem.Acquire(tkn)
 		go func() {
 			defer func() {
@@ -171,13 +154,13 @@ func TestLargeAcquireDoesntStarve(t *testing.T) {
 			for running {
 				time.Sleep(1 * time.Millisecond)
 				sem.Release(tkn)
-				tkn = sem.Enqueue(1)
+				tkn = sem.Enqueue()
 				sem.Acquire(tkn)
 			}
 		}()
 	}
 
-	tkn := sem.Enqueue(n)
+	tkn := sem.Enqueue()
 	sem.Acquire(tkn)
 	running = false
 	sem.Release(tkn)

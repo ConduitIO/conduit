@@ -21,29 +21,19 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 )
 
-// NewWeighted creates a new weighted semaphore with the given
-// maximum combined weight for concurrent access.
-func NewWeighted(n int64) *Weighted {
-	w := &Weighted{size: n}
-	return w
-}
-
-// Weighted provides a way to bound concurrent access to a resource.
-// The callers can request access with a given weight.
-type Weighted struct {
-	size     int64
-	cur      int64
+// Simple provides a way to bound concurrent access to a resource. It only
+// allows one caller to gain access at a time.
+type Simple struct {
+	waiters  []waiter
+	front    int
+	batch    int64
+	acquired bool
 	released int
 	mu       sync.Mutex
-
-	waiters []waiter
-	front   int
-	batch   int64
 }
 
 type waiter struct {
 	index int
-	n     int64
 	ready chan struct{} // Closed when semaphore acquired.
 
 	released bool
@@ -55,16 +45,12 @@ type Ticket struct {
 	batch int64
 }
 
-func (s *Weighted) Enqueue(n int64) Ticket {
-	if n > s.size {
-		panic("semaphore: tried to enqueue more than size of semaphore")
-	}
-
+func (s *Simple) Enqueue() Ticket {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	index := len(s.waiters)
-	w := waiter{index: index, n: n, ready: make(chan struct{})}
+	w := waiter{index: index, ready: make(chan struct{})}
 	s.waiters = append(s.waiters, w)
 
 	return Ticket{
@@ -73,12 +59,10 @@ func (s *Weighted) Enqueue(n int64) Ticket {
 	}
 }
 
-// Acquire acquires the semaphore with a weight of n, blocking until resources
-// are available or ctx is done. On success, returns nil. On failure, returns
-// ctx.Err() and leaves the semaphore unchanged.
-//
-// If ctx is already done, Acquire may still succeed without blocking.
-func (s *Weighted) Acquire(t Ticket) error {
+// Acquire acquires the semaphore, blocking until resources are available. On
+// success, returns nil. On failure, returns an error and leaves the semaphore
+// unchanged.
+func (s *Simple) Acquire(t Ticket) error {
 	s.mu.Lock()
 	if s.batch != t.batch {
 		s.mu.Unlock()
@@ -93,13 +77,9 @@ func (s *Weighted) Acquire(t Ticket) error {
 	w.acquired = true // mark that Acquire was already called for this Ticket
 	s.waiters[t.index] = w
 
-	if s.front == t.index && s.size-s.cur >= w.n {
-		s.cur += w.n
+	if s.front == t.index && !s.acquired {
 		s.front++
-		// If there are extra tokens left, notify other waiters.
-		if s.size > s.cur {
-			s.notifyWaiters()
-		}
+		s.acquired = true
 		s.mu.Unlock()
 		return nil
 	}
@@ -109,8 +89,10 @@ func (s *Weighted) Acquire(t Ticket) error {
 	return nil
 }
 
-// Release releases the semaphore with a weight of n.
-func (s *Weighted) Release(t Ticket) error {
+// Release releases the semaphore and notifies the next in line if any.
+// If the ticket is not holding the lock on the semaphore the function returns
+// an error.
+func (s *Simple) Release(t Ticket) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -125,43 +107,29 @@ func (s *Weighted) Release(t Ticket) error {
 		return cerrors.New("semaphore: ticket already released")
 	}
 
-	s.cur -= w.n
 	w.released = true
 	s.waiters[t.index] = w
+	s.acquired = false
 	s.released++
-	s.notifyWaiters()
+	s.notifyWaiter()
 	if s.released == len(s.waiters) {
 		s.increaseBatch()
 	}
 	return nil
 }
 
-func (s *Weighted) notifyWaiters() {
-	for len(s.waiters) > s.front {
+func (s *Simple) notifyWaiter() {
+	if len(s.waiters) > s.front {
 		w := s.waiters[s.front]
-		if s.size-s.cur < w.n {
-			// Not enough tokens for the next waiter.  We could keep going (to try to
-			// find a waiter with a smaller request), but under load that could cause
-			// starvation for large requests; instead, we leave all remaining waiters
-			// blocked.
-			//
-			// Consider a semaphore used as a read-write lock, with N tokens, N
-			// readers, and one writer.  Each reader can Acquire(1) to obtain a read
-			// lock.  The writer can Acquire(N) to obtain a write lock, excluding all
-			// of the readers.  If we allow the readers to jump ahead in the queue,
-			// the writer will starve — there is always one token available for every
-			// reader.
-			break
-		}
-
-		s.cur += w.n
+		s.acquired = true
 		s.front++
 		close(w.ready)
 	}
 }
 
-func (s *Weighted) increaseBatch() {
+func (s *Simple) increaseBatch() {
 	s.waiters = s.waiters[:0]
 	s.batch += 1
 	s.front = 0
+	s.released = 0
 }

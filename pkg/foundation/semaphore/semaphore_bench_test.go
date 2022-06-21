@@ -22,22 +22,14 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/semaphore"
 )
 
-// weighted is an interface matching a subset of *Weighted.  It allows
-// alternate implementations for testing and benchmarking.
-type weighted interface {
-	Enqueue(int64) semaphore.Ticket
-	Acquire(semaphore.Ticket) error
-	Release(semaphore.Ticket) error
-}
-
 // acquireN calls Acquire(size) on sem N times and then calls Release(size) N times.
-func acquireN(b *testing.B, sem weighted, size int64, N int) {
+func acquireN(b *testing.B, sem *semaphore.Simple, N int) {
 	b.ResetTimer()
 	tickets := list.New()
 	for i := 0; i < b.N; i++ {
 		tickets.Init()
 		for j := 0; j < N; j++ {
-			_ = sem.Enqueue(size)
+			_ = sem.Enqueue()
 		}
 	}
 }
@@ -46,7 +38,7 @@ func BenchmarkNewSem(b *testing.B) {
 	for _, cap := range []int64{1, 128} {
 		b.Run(fmt.Sprintf("Weighted-%d", cap), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				_ = semaphore.NewWeighted(cap)
+				_ = &semaphore.Simple{}
 			}
 		})
 	}
@@ -54,28 +46,28 @@ func BenchmarkNewSem(b *testing.B) {
 
 func BenchmarkAcquireSem(b *testing.B) {
 	for _, c := range []struct {
-		cap, size int64
-		N         int
+		cap int64
+		N   int
 	}{
-		{1, 1, 1},
-		{2, 1, 1},
-		{16, 1, 1},
-		{128, 1, 1},
-		{2, 2, 1},
-		{16, 2, 8},
-		{128, 2, 64},
-		{2, 1, 2},
-		{16, 8, 2},
-		{128, 64, 2},
+		{1, 1},
+		{2, 1},
+		{16, 1},
+		{128, 1},
+		{2, 1},
+		{16, 8},
+		{128, 64},
+		{2, 2},
+		{16, 2},
+		{128, 2},
 	} {
 		for _, w := range []struct {
 			name string
-			w    weighted
+			w    *semaphore.Simple
 		}{
-			{"Weighted", semaphore.NewWeighted(c.cap)},
+			{"Simple", &semaphore.Simple{}},
 		} {
-			b.Run(fmt.Sprintf("%s-acquire-%d-%d-%d", w.name, c.cap, c.size, c.N), func(b *testing.B) {
-				acquireN(b, w.w, c.size, c.N)
+			b.Run(fmt.Sprintf("%s-acquire-%d-%d", w.name, c.cap, c.N), func(b *testing.B) {
+				acquireN(b, w.w, c.N)
 			})
 		}
 	}
