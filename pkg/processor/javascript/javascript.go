@@ -56,18 +56,64 @@ func NewFunction(src, entrypoint string, logger zerolog.Logger) (Function, error
 }
 
 // todo generics
-func (e Function) Call(r record.Record) (interface{}, error) {
-	result, err := e.function(goja.Undefined(), e.runtime.ToValue(r))
+func (f Function) Call(in record.Record) (interface{}, error) {
+	jsRecord := f.toJSRecord(in)
+
+	result, err := f.function(goja.Undefined(), jsRecord)
 	if err != nil {
 		return record.Record{}, cerrors.Errorf("failed to transform to JS record: %w", err)
 	}
 
-	out := result.Export()
+	out, err := f.toInternal(result)
 	if err != nil {
 		return record.Record{}, cerrors.Errorf("failed to transform to internal record: %w", err)
 	}
 
 	return out, nil
+}
+
+func (f Function) toJSRecord(r record.Record) goja.Value {
+	// convert content to pointers to make it mutable
+	switch v := r.Payload.(type) {
+	case record.RawData:
+		r.Payload = &v
+	case record.StructuredData:
+		r.Payload = &v
+	}
+
+	switch v := r.Key.(type) {
+	case record.RawData:
+		r.Key = &v
+	case record.StructuredData:
+		r.Key = &v
+	}
+
+	// we need to send in a pointer to let the user change the value and return it, if they choose to do so
+	return f.runtime.ToValue(&r)
+}
+
+func (f Function) toInternal(v goja.Value) (interface{}, error) {
+	r, ok := v.Export().(*record.Record)
+	if !ok {
+		return v.Export(), nil
+	}
+
+	// dereference content pointers
+	switch v := r.Payload.(type) {
+	case *record.RawData:
+		r.Payload = *v
+	case *record.StructuredData:
+		r.Payload = *v
+	}
+
+	switch v := r.Key.(type) {
+	case *record.RawData:
+		r.Key = *v
+	case *record.StructuredData:
+		r.Key = *v
+	}
+
+	return *r, nil
 }
 
 // todo maybe move into the Function struct
