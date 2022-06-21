@@ -34,7 +34,7 @@ type Transformer struct {
 func NewTransformer(src string, logger zerolog.Logger) (*Transformer, error) {
 	jsFunc, err := javascript.NewFunction(src, entrypoint, logger)
 	if err != nil {
-		return &Transformer{}, fmt.Errorf("failed creating JavaScript function: %w", err)
+		return nil, fmt.Errorf("failed creating JavaScript function: %w", err)
 	}
 
 	return &Transformer{jsFunc: jsFunc}, nil
@@ -48,7 +48,7 @@ func (t *Transformer) Transform(in record.Record) (record.Record, error) {
 
 	outRec, ok := out.(record.Record)
 	if !ok {
-		return record.Record{}, cerrors.Errorf("unexpected type, expected %T, got %T", in, outRec)
+		return record.Record{}, cerrors.Errorf("failed to transform to internal record: unexpected type, expected %T, got %T", &in, out)
 	}
 
 	return outRec, nil

@@ -51,7 +51,7 @@ logger.Debug("no entrypoint");
 		t.Error("expected error if transformer has no entrypoint")
 		return
 	}
-	assert.Equal(t, `failed to get entrypoint function "transform"`, err.Error())
+	assert.Equal(t, `failed creating JavaScript function: failed to get entrypoint function "transform"`, err.Error())
 	assert.True(t, tr == nil, "transformer should be nil")
 }
 
