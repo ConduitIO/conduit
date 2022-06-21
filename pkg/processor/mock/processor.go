@@ -8,7 +8,6 @@ import (
 	context "context"
 	reflect "reflect"
 
-	processor "github.com/conduitio/conduit/pkg/processor"
 	record "github.com/conduitio/conduit/pkg/record"
 	gomock "github.com/golang/mock/gomock"
 )
@@ -49,18 +48,4 @@ func (m *Processor) Execute(arg0 context.Context, arg1 record.Record) (record.Re
 func (mr *ProcessorMockRecorder) Execute(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Execute", reflect.TypeOf((*Processor)(nil).Execute), arg0, arg1)
-}
-
-// Type mocks base method.
-func (m *Processor) Type() processor.Type {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Type")
-	ret0, _ := ret[0].(processor.Type)
-	return ret0
-}
-
-// Type indicates an expected call of Type.
-func (mr *ProcessorMockRecorder) Type() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Type", reflect.TypeOf((*Processor)(nil).Type))
 }

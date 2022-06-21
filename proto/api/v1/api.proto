@@ -88,14 +88,6 @@ message Connector {
 }
 
 message Processor {
-  // Type shows the processor type.
-  enum Type {
-    TYPE_UNSPECIFIED = 0;
-    // Processor is a transform.
-    TYPE_TRANSFORM = 1;
-    // Processor is a filter.
-    TYPE_FILTER = 2;
-  }
   message Parent {
     // Type shows the processor's parent type.
     enum Type {
@@ -106,8 +98,7 @@ message Processor {
       TYPE_PIPELINE = 2;
     }
 
-    Type type = 1;
-    string id = 2;
+    string id = 1;
   }
   message Config {
     map<string, string> settings = 1;
