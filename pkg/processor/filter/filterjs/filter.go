@@ -54,11 +54,11 @@ type Filter struct {
 }
 
 func NewFilter(src string, negate bool, logger zerolog.Logger) (Filter, error) {
-	engine, err := javascript.NewFunction(src, "filter", logger)
+	jsFunc, err := javascript.NewFunction(src, "filter", logger)
 	if err != nil {
 		return Filter{}, fmt.Errorf("failed creating JavaScript function: %w", err)
 	}
-	return Filter{jsFunc: engine, negate: negate}, nil
+	return Filter{jsFunc: jsFunc, negate: negate}, nil
 }
 
 func (f Filter) Filter(r record.Record) (record.Record, error) {

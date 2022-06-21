@@ -70,10 +70,12 @@ func (e Function) Call(r record.Record) (interface{}, error) {
 	return out, nil
 }
 
+// todo maybe move into the Function struct
 func setRuntimeHelpers(logger zerolog.Logger, rt *goja.Runtime) error {
-	// todo add more, merge with the ones from transform
 	runtimeHelpers := map[string]interface{}{
-		"logger": &logger,
+		"logger":  &logger,
+		"Record":  jsRecord(rt),
+		"RawData": jsContentRaw(rt),
 	}
 
 	for name, helper := range runtimeHelpers {
@@ -82,4 +84,30 @@ func setRuntimeHelpers(logger zerolog.Logger, rt *goja.Runtime) error {
 		}
 	}
 	return nil
+}
+
+func jsRecord(rt *goja.Runtime) func(goja.ConstructorCall) *goja.Object {
+	return func(goja.ConstructorCall) *goja.Object {
+		// TODO accept arguments
+		// We return a record.Record struct, however because we are
+		// not changing call.This instanceof will not work as expected.
+
+		r := record.Record{
+			Metadata: make(map[string]string),
+		}
+		// We need to return a pointer to make the returned object mutable.
+		return rt.ToValue(&r).ToObject(rt)
+	}
+}
+
+func jsContentRaw(rt *goja.Runtime) func(goja.ConstructorCall) *goja.Object {
+	return func(goja.ConstructorCall) *goja.Object {
+		// TODO accept arguments
+		// We return a record.RawData struct, however because we are
+		// not changing call.This instanceof will not work as expected.
+
+		r := record.RawData{}
+		// We need to return a pointer to make the returned object mutable.
+		return rt.ToValue(&r).ToObject(rt)
+	}
 }

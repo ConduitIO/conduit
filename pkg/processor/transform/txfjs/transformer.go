@@ -15,7 +15,9 @@
 package txfjs
 
 import (
+	"fmt"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/processor/javascript"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/dop251/goja"
 	"github.com/rs/zerolog"
@@ -27,37 +29,16 @@ const (
 
 // Transformer is able to run transformations defined in JavaScript.
 type Transformer struct {
-	runtime *goja.Runtime
-	f       goja.Callable
+	jsFunc javascript.Function
 }
 
 func NewTransformer(src string, logger zerolog.Logger) (*Transformer, error) {
-	rt := goja.New()
-	err := setRuntimeHelpers(logger, rt)
+	jsFunc, err := javascript.NewFunction(src, "filter", logger)
 	if err != nil {
-		return nil, err
+		return &Transformer{}, fmt.Errorf("failed creating JavaScript function: %w", err)
 	}
 
-	prg, err := goja.Compile("", src, false)
-	if err != nil {
-		return nil, cerrors.Errorf("failed to compile transformer script: %w", err)
-	}
-
-	_, err = rt.RunProgram(prg)
-	if err != nil {
-		return nil, cerrors.Errorf("failed to run program: %w", err)
-	}
-
-	tmp := rt.Get(entrypoint)
-	entrypointFunc, ok := goja.AssertFunction(tmp)
-	if !ok {
-		return nil, cerrors.Errorf("failed to get entrypoint function %q", entrypoint)
-	}
-
-	return &Transformer{
-		runtime: rt,
-		f:       entrypointFunc,
-	}, nil
+	return &Transformer{jsFunc: jsFunc}, nil
 }
 
 func (t *Transformer) Transform(in record.Record) (record.Record, error) {
