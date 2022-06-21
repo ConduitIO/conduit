@@ -1,6 +1,6 @@
 .PHONY: test test-integration build run proto-api proto-lint clean download install-tools generate check-go-version
 
-VERSION=`./scripts/get-tag.sh`
+VERSION=`git describe --tags --dirty`
 GO_VERSION_CHECK=`./scripts/check-go-version.sh`
 
 # The build target should stay at the top since we want it to be the default target.
