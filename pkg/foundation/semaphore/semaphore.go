@@ -39,11 +39,16 @@ type waiter struct {
 	acquired bool
 }
 
+// Ticket reserves a place in the queue and can be used to acquire access to a
+// resource.
 type Ticket struct {
 	index int
 	batch int64
 }
 
+// Enqueue reserves the next place in the queue and returns a Ticket used to
+// acquire access to the resource when it's the callers turn. The Ticket has to
+// be supplied to Release before discarding.
 func (s *Simple) Enqueue() Ticket {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -89,8 +94,8 @@ func (s *Simple) Acquire(t Ticket) error {
 }
 
 // Release releases the semaphore and notifies the next in line if any.
-// If the ticket is not holding the lock on the semaphore the function returns
-// an error.
+// If the ticket was already released the function returns an error. After the
+// ticket is released it should be discarded.
 func (s *Simple) Release(t Ticket) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
