@@ -66,11 +66,14 @@ func (f Filter) Filter(r record.Record) (record.Record, error) {
 	if err != nil {
 		return record.Record{}, fmt.Errorf("failed calling filter function: %w", err)
 	}
-	val, ok := res.(bool)
+	keep, ok := res.(bool)
 	if !ok {
 		return record.Record{}, fmt.Errorf("filter function returned %v instead of a bool", res)
 	}
-	if val != f.negate {
+	if f.negate {
+		keep = !keep
+	}
+	if !keep {
 		return record.Record{}, processor.ErrSkipRecord
 	}
 	return r, nil

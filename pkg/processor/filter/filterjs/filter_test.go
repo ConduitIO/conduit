@@ -27,7 +27,7 @@ import (
 func TestFilter_Basic(t *testing.T) {
 	underTest, err := NewFilter(
 		`function filter(record) {
-			return true;
+			return false;
 		}`,
 		false,
 		zerolog.Nop(),
@@ -41,7 +41,7 @@ func TestFilter_Basic(t *testing.T) {
 func TestFilter_Negate(t *testing.T) {
 	underTest, err := NewFilter(
 		`function filter(record) {
-			return true;
+			return false;
 		}`,
 		true,
 		zerolog.Nop(),
@@ -52,7 +52,7 @@ func TestFilter_Negate(t *testing.T) {
 	assert.Ok(t, err)
 }
 
-func TestFilter_RecordShouldNotBeFiltered(t *testing.T) {
+func TestFilter_RecordShouldBeFiltered(t *testing.T) {
 	underTest, err := NewFilter(
 		`function filter(record) {
 			return record.Metadata["filterme"] != undefined;
@@ -71,11 +71,11 @@ func TestFilter_RecordShouldNotBeFiltered(t *testing.T) {
 		Payload:   record.RawData{Raw: []byte("payload")},
 	}
 	out, err := underTest.Filter(in)
-	assert.Equal(t, in, out)
-	assert.Ok(t, err)
+	assert.Equal(t, record.Record{}, out)
+	assert.Equal(t, processor.ErrSkipRecord, err)
 }
 
-func TestFilter_RecordShouldBeFiltered(t *testing.T) {
+func TestFilter_RecordShouldNotBeFiltered(t *testing.T) {
 	underTest, err := NewFilter(
 		`function filter(record) {
 			return record.Metadata["filterme"] != undefined;
@@ -84,11 +84,12 @@ func TestFilter_RecordShouldBeFiltered(t *testing.T) {
 		zerolog.Nop(),
 	)
 	assert.Ok(t, err)
-	r, err := underTest.Filter(record.Record{
+	in := record.Record{
 		Metadata: map[string]string{
 			"filterme": "yes of course",
 		},
-	})
-	assert.Equal(t, record.Record{}, r)
-	assert.Equal(t, processor.ErrSkipRecord, err)
+	}
+	out, err := underTest.Filter(in)
+	assert.Equal(t, in, out)
+	assert.Ok(t, err)
 }
