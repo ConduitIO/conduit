@@ -29,6 +29,3 @@ var _ processor.Processor = (Filter)(nil)
 func (f Filter) Execute(_ context.Context, record record.Record) (record.Record, error) {
 	return f(record)
 }
-func (f Filter) Type() processor.Type {
-	return processor.TypeFilter
-}

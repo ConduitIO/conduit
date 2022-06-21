@@ -43,9 +43,8 @@ type ParentType int
 
 // Processor is the interface that represents a single message processor that
 // can be executed on one record and manipulate it.
+// todo rename Execute - Process (single method interfaces)
 type Processor interface {
-	// Type returns the processor type.
-	Type() Type
 	// Execute runs the processor function on a record.
 	Execute(ctx context.Context, record record.Record) (record.Record, error)
 }
