@@ -22,24 +22,28 @@
     <dd.Content class="bg-white rounded-md border border-gray-200 shadow-md text-sm">
       <ul>
         {{#if (or (eq @status "paused") (eq @status "degraded"))}}
+          {{!-- template-lint-disable no-invalid-interactive --}}
           <li
             data-test-pipeline-status-action="start"
             class="p-4 cursor-pointer flex items-center hover:bg-gray-100"
             {{on "click" @startPipeline}}
             {{on "click" dd.actions.close}}
           >
+          {{!-- template-lint-enable no-invalid-interactive --}}
             <svg class="text-teal-600 stroke-current h-4 w-4 mr-2">
               <use xlink:href="/ui/svg-defs.svg#play-24"></use>
             </svg>
             Start Pipeline
           </li>
         {{else}}
+          {{!-- template-lint-disable no-invalid-interactive --}}
           <li
             data-test-pipeline-status-action="stop"
             class="p-4 cursor-pointer flex items-center hover:bg-gray-100"
             {{on "click" @stopPipeline}}
             {{on "click" dd.actions.close}}
           >
+          {{!-- template-lint-enable no-invalid-interactive --}}
             <svg class="text-gray-500 stroke-current h-4 w-4 mr-2">
               <use xlink:href="/ui/svg-defs.svg#pause-24"></use>
             </svg>
