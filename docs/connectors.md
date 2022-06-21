@@ -32,6 +32,27 @@ For both, source and destination, the capabilities of the connector will be iden
 
 | Connector | Source | Destination | Support | Tested |
 |-----------|-------|----|-------------|-----|
-| Postgres   |  ✅  | ✅ | Conduit |     |
-| Google
-
+| Postgres   |✅ |✅ | Conduit |     |
+| S3 |✅ |✅ | Conduit | |  
+| Kafka |✅ |✅ | Conduit | | 
+| File |✅ |✅ | Conduit | | 
+| Random Generator |✅ | | Conduit | |
+| Algolia | |✅ | Conduit | |
+| Marketo |✅ | | Community | |
+| Google Sheets |✅ | | Community | |
+| Redis ||✅ | Community | |
+| Zendesk |✅ |✅| Community | |
+| Marketo |✅ | | Community | |
+| Google Cloud Storage |✅ |✅ | Community | |
+| BigQuery |✅ | | Community | |
+| Stripe |✅ | | Community | |
+| Snowflake |✅ | | Community | |
+| Materialize | |✅ | Community | |
+| GCP Pub/Sub |✅ | | Community | |
+| Elastic Search |✅ |✅ | Community | |
+| Azure Storage |✅ | | Community | |
+| Nats | | | Community | |
+| Nats Jetstream | | | Community | |
+| Firebolt | | | Community | |
+| Airtable | | | Community | |
+| HTTP Server | | | Community | |
