@@ -33,8 +33,12 @@ func HammerSimple(sem *semaphore.Simple, loops int) {
 		if err != nil {
 			panic(err)
 		}
+		//nolint:gosec // math/rand is good enough for a test
 		time.Sleep(time.Duration(rand.Int63n(int64(maxSleep/time.Nanosecond))) * time.Nanosecond)
-		sem.Release(tkn)
+		err = sem.Release(tkn)
+		if err != nil {
+			panic(err)
+		}
 	}
 }
 
@@ -72,8 +76,11 @@ func TestSimpleReleaseTwice(t *testing.T) {
 
 	w := &semaphore.Simple{}
 	tkn := w.Enqueue()
-	w.Acquire(tkn)
-	err := w.Release(tkn)
+	err := w.Acquire(tkn)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	err = w.Release(tkn)
 	if err != nil {
 		t.Errorf("release of an acquired ticket errored out: %v", err)
 	}
@@ -106,13 +113,19 @@ func TestSimpleAcquire(t *testing.T) {
 	sem := &semaphore.Simple{}
 
 	tkn1 := sem.Enqueue()
-	sem.Acquire(tkn1)
+	err := sem.Acquire(tkn1)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
 
 	tkn2done := make(chan struct{})
 	go func() {
 		defer close(tkn2done)
 		tkn2 := sem.Enqueue()
-		sem.Acquire(tkn2)
+		err := sem.Acquire(tkn2)
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
 	}()
 
 	select {
@@ -122,7 +135,10 @@ func TestSimpleAcquire(t *testing.T) {
 		// tkn2 Acquire is blocking as expected
 	}
 
-	sem.Release(tkn1)
+	err = sem.Release(tkn1)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
 
 	select {
 	case <-tkn2done:
@@ -145,24 +161,45 @@ func TestLargeAcquireDoesntStarve(t *testing.T) {
 	wg.Add(int(n))
 	for i := n; i > 0; i-- {
 		tkn := sem.Enqueue()
-		sem.Acquire(tkn)
+		err := sem.Acquire(tkn)
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+
 		go func() {
 			defer func() {
-				sem.Release(tkn)
+				err := sem.Release(tkn)
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
 				wg.Done()
 			}()
 			for running {
 				time.Sleep(1 * time.Millisecond)
-				sem.Release(tkn)
+				err := sem.Release(tkn)
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
 				tkn = sem.Enqueue()
-				sem.Acquire(tkn)
+				err = sem.Acquire(tkn)
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
 			}
 		}()
 	}
 
 	tkn := sem.Enqueue()
-	sem.Acquire(tkn)
+	err := sem.Acquire(tkn)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+
 	running = false
-	sem.Release(tkn)
+	err = sem.Release(tkn)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+
 	wg.Wait()
 }

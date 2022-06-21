@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package semaphore provides a weighted semaphore implementation.
 package semaphore
 
 import (
@@ -129,7 +128,7 @@ func (s *Simple) notifyWaiter() {
 
 func (s *Simple) increaseBatch() {
 	s.waiters = s.waiters[:0]
-	s.batch += 1
+	s.batch++
 	s.front = 0
 	s.released = 0
 }

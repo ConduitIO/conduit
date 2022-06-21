@@ -22,53 +22,46 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/semaphore"
 )
 
-// acquireN calls Acquire(size) on sem N times and then calls Release(size) N times.
-func acquireN(b *testing.B, sem *semaphore.Simple, N int) {
-	b.ResetTimer()
-	tickets := list.New()
+func BenchmarkNewSem(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		tickets.Init()
-		for j := 0; j < N; j++ {
-			_ = sem.Enqueue()
-		}
+		_ = &semaphore.Simple{}
 	}
 }
 
-func BenchmarkNewSem(b *testing.B) {
-	for _, cap := range []int64{1, 128} {
-		b.Run(fmt.Sprintf("Weighted-%d", cap), func(b *testing.B) {
+func BenchmarkAcquireSem(b *testing.B) {
+	for _, N := range []int{1, 2, 8, 64, 128} {
+		b.Run(fmt.Sprintf("acquire-%d", N), func(b *testing.B) {
+			b.ResetTimer()
+			sem := &semaphore.Simple{}
 			for i := 0; i < b.N; i++ {
-				_ = &semaphore.Simple{}
+				for j := 0; j < N; j++ {
+					t := sem.Enqueue()
+					_ = sem.Acquire(t)
+					_ = sem.Release(t)
+				}
 			}
 		})
 	}
 }
 
-func BenchmarkAcquireSem(b *testing.B) {
-	for _, c := range []struct {
-		cap int64
-		N   int
-	}{
-		{1, 1},
-		{2, 1},
-		{16, 1},
-		{128, 1},
-		{2, 1},
-		{16, 8},
-		{128, 64},
-		{2, 2},
-		{16, 2},
-		{128, 2},
-	} {
-		for _, w := range []struct {
-			name string
-			w    *semaphore.Simple
-		}{
-			{"Simple", &semaphore.Simple{}},
-		} {
-			b.Run(fmt.Sprintf("%s-acquire-%d-%d", w.name, c.cap, c.N), func(b *testing.B) {
-				acquireN(b, w.w, c.N)
-			})
-		}
+func BenchmarkEnqueueReleaseSem(b *testing.B) {
+	for _, N := range []int{1, 2, 8, 64, 128} {
+		b.Run(fmt.Sprintf("enqueue/release-%d", N), func(b *testing.B) {
+			b.ResetTimer()
+			sem := &semaphore.Simple{}
+			tickets := list.New()
+			for i := 0; i < b.N; i++ {
+				tickets.Init()
+				for j := 0; j < N; j++ {
+					t := sem.Enqueue()
+					tickets.PushBack(t)
+				}
+				ticket := tickets.Front()
+				for ticket != nil {
+					_ = sem.Release(ticket.Value.(semaphore.Ticket))
+					ticket = ticket.Next()
+				}
+			}
+		})
 	}
 }
