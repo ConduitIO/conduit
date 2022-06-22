@@ -23,36 +23,25 @@ At this time, Conduit does not have any commerically supported connectors.
 
 Source means, does the connector have the ability to get data from the upstream data store. Destination means, does the connector have the ability to write to the downstream data store.
 
-For both, source and destination, the capabilities of the connector will be identified as:
-
-* ✅ (GA) -
-* ⚠️  (Beta) -
-
 ### The List
 
-| Connector | Source | Destination | Support | Tested |
-|-----------|-------|----|-------------|-----|
-| Postgres   |✅ |✅ | Conduit |     |
-| S3 |✅ |✅ | Conduit | |  
-| Kafka |✅ |✅ | Conduit | | 
-| File |✅ |✅ | Conduit | | 
-| Random Generator |✅ | | Conduit | |
-| Algolia | |✅ | Conduit | |
-| Marketo |✅ | | Community | |
-| Google Sheets |✅ | | Community | |
-| Redis ||✅ | Community | |
-| Zendesk |✅ |✅| Community | |
-| Marketo |✅ | | Community | |
-| Google Cloud Storage |✅ |✅ | Community | |
-| BigQuery |✅ | | Community | |
-| Stripe |✅ | | Community | |
-| Snowflake |✅ | | Community | |
-| Materialize | |✅ | Community | |
-| GCP Pub/Sub |✅ | | Community | |
-| Elastic Search |✅ |✅ | Community | |
-| Azure Storage |✅ | | Community | |
-| Nats | | | Community | |
-| Nats Jetstream | | | Community | |
-| Firebolt | | | Community | |
-| Airtable | | | Community | |
-| HTTP Server | | | Community | |
+| Connector | Source | Destination | Support |
+|-----------|-------|----|-------------|
+| [Algolia](https://github.com/ConduitIO/conduit-connector-algolia) | |✅ | Conduit |
+| [Azure Storage](https://github.com/miquido/conduit-connector-azure-storage) |✅ | | Community |
+| [BigQuery](https://github.com/neha-Gupta1/conduit-connector-bigquery) |✅ | | Community |
+| [Elastic Search](https://github.com/miquido/conduit-connector-elasticsearch) |✅ |✅ | Community |
+| [File](https://github.com/ConduitIO/conduit-connector-file) |✅ |✅ | Conduit |
+| [Google Cloud Storage](https://github.com/WeirdMagician/conduit-connector-google-cloudstorage) |✅ |✅ | Community |
+| [Google Sheets](https://github.com/gopherslab/conduit-connector-google-sheets) |✅ | | Community |
+| [Kafka](https://github.com/ConduitIO/conduit-connector-kafka) |✅ |✅ | Conduit |
+| [Marketo](https://github.com/rustiever/conduit-connector-marketo) |✅ | | Community |
+| [Materialize](https://github.com/ConduitIO/conduit-connector-materialize) | |✅ | Community |
+| [Postgres](https://github.com/ConduitIO/conduit-connector-postgres)   |✅ |✅ | Conduit |
+| Random Generator |✅ | | Conduit |
+| [Redis](https://github.com/gopherslab/conduit-connector-redis) ||✅ | Community |
+| [S3](https://github.com/ConduitIO/conduit-connector-s3) |✅ |✅ | Conduit |
+| [Salesforce](https://github.com/miquido/conduit-connector-salesforce) | ✅ | ✅ | Community |
+| [Snowflake](https://github.com/ConduitIO/conduit-connector-snowflake) |✅ | | Community |
+| [Stripe](https://github.com/ConduitIO/conduit-connector-stripe) |✅ | | Community |
+| [Zendesk](https://github.com/gopherslab/conduit-connector-zendesk) |✅ |✅| Community |
