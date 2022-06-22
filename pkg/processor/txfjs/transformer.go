@@ -16,6 +16,7 @@ package txfjs
 
 import (
 	"fmt"
+
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/processor/javascript"
