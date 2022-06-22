@@ -35,13 +35,12 @@ func TestService_Init_Success(t *testing.T) {
 
 	name := "processor-name"
 	p := mock.NewProcessor(ctrl)
-	p.EXPECT().Type().Return(processor.TypeTransform).AnyTimes()
 
 	registry := newTestBuilderRegistry(t, map[string]processor.Processor{name: p})
 	service := processor.NewService(log.Nop(), db, registry)
 
 	// create a processor instance
-	_, err := service.Create(ctx, uuid.NewString(), name, processor.TypeTransform, processor.Parent{}, processor.Config{})
+	_, err := service.Create(ctx, uuid.NewString(), name, processor.Parent{}, processor.Config{})
 	assert.Ok(t, err)
 
 	want := service.List(ctx)
@@ -67,7 +66,6 @@ func TestService_Create_Success(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
 	p := mock.NewProcessor(ctrl)
-	p.EXPECT().Type().Return(processor.TypeTransform)
 
 	want := &processor.Instance{
 		ID:   "uuid will be taken from the result",
@@ -88,7 +86,7 @@ func TestService_Create_Success(t *testing.T) {
 	registry := newTestBuilderRegistry(t, map[string]processor.Processor{want.Name: p})
 	service := processor.NewService(log.Nop(), db, registry)
 
-	got, err := service.Create(ctx, want.ID, want.Name, processor.TypeTransform, want.Parent, want.Config)
+	got, err := service.Create(ctx, want.ID, want.Name, want.Parent, want.Config)
 	assert.Ok(t, err)
 	want.ID = got.ID // uuid is random
 	want.CreatedAt = got.CreatedAt
@@ -107,7 +105,6 @@ func TestService_Create_BuilderNotFound(t *testing.T) {
 		ctx,
 		uuid.NewString(),
 		"non-existent processor",
-		processor.TypeTransform,
 		processor.Parent{},
 		processor.Config{},
 	)
@@ -138,36 +135,10 @@ func TestService_Create_BuilderFail(t *testing.T) {
 		ctx,
 		uuid.NewString(),
 		name,
-		processor.TypeTransform,
 		processor.Parent{},
 		processor.Config{},
 	)
 	assert.True(t, cerrors.Is(err, wantErr), "expected builder error")
-	assert.Nil(t, got)
-}
-
-func TestService_Create_ProcessorTypeMismatch(t *testing.T) {
-	ctx := context.Background()
-	db := &inmemory.DB{}
-	ctrl := gomock.NewController(t)
-
-	name := "processor-name"
-	p := mock.NewProcessor(ctrl)
-	p.EXPECT().Type().Return(processor.TypeTransform)
-
-	registry := newTestBuilderRegistry(t, map[string]processor.Processor{name: p})
-	service := processor.NewService(log.Nop(), db, registry)
-
-	got, err := service.Create(
-		ctx,
-		uuid.NewString(),
-		name,
-		processor.TypeFilter, // trying to create a filter when processor is of type transform
-		processor.Parent{},
-		processor.Config{},
-	)
-
-	assert.Error(t, err)
 	assert.Nil(t, got)
 }
 
@@ -178,13 +149,12 @@ func TestService_Delete_Success(t *testing.T) {
 
 	name := "processor-name"
 	p := mock.NewProcessor(ctrl)
-	p.EXPECT().Type().Return(processor.TypeTransform).AnyTimes()
 
 	registry := newTestBuilderRegistry(t, map[string]processor.Processor{name: p})
 	service := processor.NewService(log.Nop(), db, registry)
 
 	// create a processor instance
-	i, err := service.Create(ctx, uuid.NewString(), name, processor.TypeTransform, processor.Parent{}, processor.Config{})
+	i, err := service.Create(ctx, uuid.NewString(), name, processor.Parent{}, processor.Config{})
 	assert.Ok(t, err)
 
 	err = service.Delete(ctx, i.ID)
@@ -211,13 +181,12 @@ func TestService_Get_Success(t *testing.T) {
 
 	name := "processor-name"
 	p := mock.NewProcessor(ctrl)
-	p.EXPECT().Type().Return(processor.TypeTransform)
 
 	registry := newTestBuilderRegistry(t, map[string]processor.Processor{name: p})
 	service := processor.NewService(log.Nop(), db, registry)
 
 	// create a processor instance
-	want, err := service.Create(ctx, uuid.NewString(), name, processor.TypeTransform, processor.Parent{}, processor.Config{})
+	want, err := service.Create(ctx, uuid.NewString(), name, processor.Parent{}, processor.Config{})
 	assert.Ok(t, err)
 
 	got, err := service.Get(ctx, want.ID)
@@ -252,17 +221,16 @@ func TestService_List_Some(t *testing.T) {
 
 	name := "processor-name"
 	p := mock.NewProcessor(ctrl)
-	p.EXPECT().Type().Return(processor.TypeTransform).Times(3)
 
 	registry := newTestBuilderRegistry(t, map[string]processor.Processor{name: p})
 	service := processor.NewService(log.Nop(), db, registry)
 
 	// create a couple of processor instances
-	i1, err := service.Create(ctx, uuid.NewString(), name, processor.TypeTransform, processor.Parent{}, processor.Config{})
+	i1, err := service.Create(ctx, uuid.NewString(), name, processor.Parent{}, processor.Config{})
 	assert.Ok(t, err)
-	i2, err := service.Create(ctx, uuid.NewString(), name, processor.TypeTransform, processor.Parent{}, processor.Config{})
+	i2, err := service.Create(ctx, uuid.NewString(), name, processor.Parent{}, processor.Config{})
 	assert.Ok(t, err)
-	i3, err := service.Create(ctx, uuid.NewString(), name, processor.TypeTransform, processor.Parent{}, processor.Config{})
+	i3, err := service.Create(ctx, uuid.NewString(), name, processor.Parent{}, processor.Config{})
 	assert.Ok(t, err)
 
 	instances := service.List(ctx)
@@ -276,13 +244,12 @@ func TestService_Update_Success(t *testing.T) {
 
 	name := "processor-name"
 	p := mock.NewProcessor(ctrl)
-	p.EXPECT().Type().Return(processor.TypeTransform)
 
 	registry := newTestBuilderRegistry(t, map[string]processor.Processor{name: p})
 	service := processor.NewService(log.Nop(), db, registry)
 
 	// create a processor instance
-	want, err := service.Create(ctx, uuid.NewString(), name, processor.TypeTransform, processor.Parent{}, processor.Config{})
+	want, err := service.Create(ctx, uuid.NewString(), name, processor.Parent{}, processor.Config{})
 	assert.Ok(t, err)
 
 	newConfig := processor.Config{

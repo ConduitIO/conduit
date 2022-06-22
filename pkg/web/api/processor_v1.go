@@ -34,7 +34,7 @@ type ProcessorOrchestrator interface {
 	// Get will return a single Processor or an error if it doesn't exist.
 	Get(ctx context.Context, id string) (*processor.Instance, error)
 	// Create will make a new Processor.
-	Create(ctx context.Context, name string, t processor.Type, parent processor.Parent, cfg processor.Config) (*processor.Instance, error)
+	Create(ctx context.Context, name string, parent processor.Parent, cfg processor.Config) (*processor.Instance, error)
 	// Update will update a Processor's config.
 	Update(ctx context.Context, id string, cfg processor.Config) (*processor.Instance, error)
 	// Delete removes a processor
@@ -101,7 +101,6 @@ func (p *ProcessorAPIv1) CreateProcessor(
 	created, err := p.ps.Create(
 		ctx,
 		req.Name,
-		fromproto.ProcessorType(req.Type),
 		fromproto.ProcessorParent(req.Parent),
 		fromproto.ProcessorConfig(req.Config),
 	)

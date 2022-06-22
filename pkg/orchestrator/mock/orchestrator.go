@@ -350,18 +350,18 @@ func (m *ProcessorService) EXPECT() *ProcessorServiceMockRecorder {
 }
 
 // Create mocks base method.
-func (m *ProcessorService) Create(arg0 context.Context, arg1, arg2 string, arg3 processor.Type, arg4 processor.Parent, arg5 processor.Config) (*processor.Instance, error) {
+func (m *ProcessorService) Create(arg0 context.Context, arg1, arg2 string, arg3 processor.Parent, arg4 processor.Config) (*processor.Instance, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Create", arg0, arg1, arg2, arg3, arg4, arg5)
+	ret := m.ctrl.Call(m, "Create", arg0, arg1, arg2, arg3, arg4)
 	ret0, _ := ret[0].(*processor.Instance)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Create indicates an expected call of Create.
-func (mr *ProcessorServiceMockRecorder) Create(arg0, arg1, arg2, arg3, arg4, arg5 interface{}) *gomock.Call {
+func (mr *ProcessorServiceMockRecorder) Create(arg0, arg1, arg2, arg3, arg4 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*ProcessorService)(nil).Create), arg0, arg1, arg2, arg3, arg4, arg5)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*ProcessorService)(nil).Create), arg0, arg1, arg2, arg3, arg4)
 }
 
 // Delete mocks base method.

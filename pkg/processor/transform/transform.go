@@ -30,9 +30,6 @@ var _ processor.Processor = (Transform)(nil)
 func (t Transform) Execute(_ context.Context, record record.Record) (record.Record, error) {
 	return t(record)
 }
-func (t Transform) Type() processor.Type {
-	return processor.TypeTransform
-}
 
 // Config holds configuration data for building a transform.
 type Config map[string]string

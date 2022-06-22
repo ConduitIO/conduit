@@ -37,7 +37,6 @@ func TestConfigStore_SetGet(t *testing.T) {
 	registry := processor.NewBuilderRegistry()
 	registry.MustRegister(processorName, func(_ processor.Config) (processor.Processor, error) {
 		p := mock.NewProcessor(ctrl)
-		p.EXPECT().Type().Return(processor.TypeTransform).AnyTimes()
 		return p, nil
 	})
 
@@ -77,7 +76,6 @@ func TestConfigStore_GetAll(t *testing.T) {
 	registry := processor.NewBuilderRegistry()
 	registry.MustRegister(processorName, func(_ processor.Config) (processor.Processor, error) {
 		p := mock.NewProcessor(ctrl)
-		p.EXPECT().Type().Return(processor.TypeFilter).AnyTimes()
 		return p, nil
 	})
 
