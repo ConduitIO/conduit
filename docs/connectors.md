@@ -19,7 +19,7 @@ Based on what the Conduit team hears from developers, a [roadmap]() has been bui
 
 At this time, Conduit does not have any commerically supported connectors.
 
-### Source & Destination Stages
+### Source & Destination
 
 Source means, does the connector have the ability to get data from the upstream data store. Destination means, does the connector have the ability to write to the downstream data store.
 
