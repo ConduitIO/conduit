@@ -47,27 +47,33 @@ func Example_simpleStream() {
 		Source:        generatorSource(ctrl, logger, "generator", 10, time.Millisecond*10),
 		PipelineTimer: noop.Timer{},
 	}
-	node2 := &stream.DestinationNode{
+	node2 := &stream.SourceAckerNode{
+		Name:   "generator-acker",
+		Source: node1.Source,
+	}
+	node3 := &stream.DestinationNode{
 		Name:           "printer",
 		Destination:    printerDestination(ctrl, logger, "printer"),
 		ConnectorTimer: noop.Timer{},
 	}
-	node3 := &stream.DestinationAckerNode{
+	node4 := &stream.DestinationAckerNode{
 		Name:        "printer-acker",
-		Destination: node2.Destination,
+		Destination: node3.Destination,
 	}
-	node2.AckerNode = node3
+	node3.AckerNode = node4
 
 	stream.SetLogger(node1, logger)
 	stream.SetLogger(node2, logger)
 	stream.SetLogger(node3, logger)
+	stream.SetLogger(node4, logger)
 
 	// put everything together
-	out := node1.Pub()
-	node2.Sub(out)
+	node2.Sub(node1.Pub())
+	node3.Sub(node2.Pub())
 
 	var wg sync.WaitGroup
-	wg.Add(3)
+	wg.Add(4)
+	go runNode(ctx, &wg, node4)
 	go runNode(ctx, &wg, node3)
 	go runNode(ctx, &wg, node2)
 	go runNode(ctx, &wg, node1)
@@ -104,6 +110,7 @@ func Example_simpleStream() {
 	// DBG received ack message_id=p/generator-10 node_id=generator
 	// INF stopping source connector component=SourceNode node_id=generator
 	// DBG received error on error channel error="error reading from source: stream not open" component=SourceNode node_id=generator
+	// DBG incoming messages channel closed component=SourceAckerNode node_id=generator-acker
 	// DBG incoming messages channel closed component=DestinationNode node_id=printer
 	// INF finished successfully
 }
@@ -122,57 +129,62 @@ func Example_complexStream() {
 		Source:        generatorSource(ctrl, logger, "generator1", 10, time.Millisecond*10),
 		PipelineTimer: noop.Timer{},
 	}
-	node2 := &stream.SourceNode{
+	node2 := &stream.SourceAckerNode{
+		Name:   "generator1-acker",
+		Source: node1.Source,
+	}
+	node3 := &stream.SourceNode{
 		Name:          "generator2",
 		Source:        generatorSource(ctrl, logger, "generator2", 10, time.Millisecond*10),
 		PipelineTimer: noop.Timer{},
 	}
-	node3 := &stream.FaninNode{Name: "fanin"}
-	node4 := &stream.ProcessorNode{
+	node4 := &stream.SourceAckerNode{
+		Name:   "generator2-acker",
+		Source: node3.Source,
+	}
+	node5 := &stream.FaninNode{Name: "fanin"}
+	node6 := &stream.ProcessorNode{
 		Name:           "counter",
 		Processor:      counterProcessor(ctrl, &count),
 		ProcessorTimer: noop.Timer{},
 	}
-	node5 := &stream.FanoutNode{Name: "fanout"}
-	node6 := &stream.DestinationNode{
+	node7 := &stream.FanoutNode{Name: "fanout"}
+	node8 := &stream.DestinationNode{
 		Name:           "printer1",
 		Destination:    printerDestination(ctrl, logger, "printer1"),
 		ConnectorTimer: noop.Timer{},
 	}
-	node7 := &stream.DestinationNode{
+	node9 := &stream.DestinationNode{
 		Name:           "printer2",
 		Destination:    printerDestination(ctrl, logger, "printer2"),
 		ConnectorTimer: noop.Timer{},
 	}
-	node8 := &stream.DestinationAckerNode{
+	node10 := &stream.DestinationAckerNode{
 		Name:        "printer1-acker",
-		Destination: node6.Destination,
+		Destination: node8.Destination,
 	}
-	node6.AckerNode = node8
-	node9 := &stream.DestinationAckerNode{
+	node8.AckerNode = node10
+	node11 := &stream.DestinationAckerNode{
 		Name:        "printer2-acker",
-		Destination: node7.Destination,
+		Destination: node9.Destination,
 	}
-	node7.AckerNode = node9
+	node9.AckerNode = node11
 
 	// put everything together
-	out := node1.Pub()
-	node3.Sub(out)
-	out = node2.Pub()
-	node3.Sub(out)
+	node2.Sub(node1.Pub())
+	node4.Sub(node3.Pub())
 
-	out = node3.Pub()
-	node4.Sub(out)
-	out = node4.Pub()
-	node5.Sub(out)
+	node5.Sub(node2.Pub())
+	node5.Sub(node4.Pub())
 
-	out = node5.Pub()
-	node6.Sub(out)
-	out = node5.Pub()
-	node7.Sub(out)
+	node6.Sub(node5.Pub())
+	node7.Sub(node6.Pub())
+
+	node8.Sub(node7.Pub())
+	node9.Sub(node7.Pub())
 
 	// run nodes
-	nodes := []stream.Node{node1, node2, node3, node4, node5, node6, node7, node8, node9}
+	nodes := []stream.Node{node1, node2, node3, node4, node5, node6, node7, node8, node9, node10, node11}
 
 	var wg sync.WaitGroup
 	wg.Add(len(nodes))
@@ -186,7 +198,7 @@ func Example_complexStream() {
 		250*time.Millisecond,
 		func() {
 			node1.Stop(nil)
-			node2.Stop(nil)
+			node3.Stop(nil)
 		},
 	)
 	// give the nodes some time to process the records, plus a bit of time to stop
@@ -260,6 +272,8 @@ func Example_complexStream() {
 	// DBG received ack message_id=p/generator1-10 node_id=generator1
 	// INF stopping source connector component=SourceNode node_id=generator1
 	// INF stopping source connector component=SourceNode node_id=generator2
+	// DBG incoming messages channel closed component=SourceAckerNode node_id=generator1-acker
+	// DBG incoming messages channel closed component=SourceAckerNode node_id=generator2-acker
 	// DBG received error on error channel error="error reading from source: stream not open" component=SourceNode node_id=generator1
 	// DBG received error on error channel error="error reading from source: stream not open" component=SourceNode node_id=generator2
 	// DBG incoming messages channel closed component=ProcessorNode node_id=counter

@@ -233,6 +233,15 @@ func (s *Service) buildProcessorNodes(
 	return nodes, nil
 }
 
+func (s *Service) buildSourceAckerNode(
+	src connector.Source,
+) *stream.SourceAckerNode {
+	return &stream.SourceAckerNode{
+		Name:   src.ID() + "-acker",
+		Source: src,
+	}
+}
+
 func (s *Service) buildSourceNodes(
 	ctx context.Context,
 	connFetcher ConnectorFetcher,
@@ -259,15 +268,17 @@ func (s *Service) buildSourceNodes(
 				pl.Config.Name,
 			),
 		}
+		ackerNode := s.buildSourceAckerNode(instance.(connector.Source))
+		ackerNode.Sub(sourceNode.Pub())
 		metricsNode := s.buildMetricsNode(pl, instance)
-		metricsNode.Sub(sourceNode.Pub())
+		metricsNode.Sub(ackerNode.Pub())
 
 		procNodes, err := s.buildProcessorNodes(ctx, procFetcher, pl, instance.Config().ProcessorIDs, metricsNode, next)
 		if err != nil {
 			return nil, cerrors.Errorf("could not build processor nodes for connector %s: %w", instance.ID(), err)
 		}
 
-		nodes = append(nodes, &sourceNode, metricsNode)
+		nodes = append(nodes, &sourceNode, ackerNode, metricsNode)
 		nodes = append(nodes, procNodes...)
 	}
 

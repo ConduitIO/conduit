@@ -114,13 +114,6 @@ func (n *SourceNode) Run(ctx context.Context) (err error) {
 			},
 		)
 
-		msg.RegisterAckHandler(
-			func(msg *Message) error {
-				n.logger.Trace(msg.Ctx).Msg("forwarding ack to source connector")
-				return n.Source.Ack(msg.Ctx, msg.Record.Position)
-			},
-		)
-
 		err = n.base.Send(ctx, n.logger, msg)
 		if err != nil {
 			msg.Drop()
