@@ -38,7 +38,7 @@ Source means, does the connector have the ability to get data from the upstream 
 | [Marketo](https://github.com/rustiever/conduit-connector-marketo) |✅ | | Community |
 | [Materialize](https://github.com/ConduitIO/conduit-connector-materialize) | |✅ | Community |
 | [Postgres](https://github.com/ConduitIO/conduit-connector-postgres)   |✅ |✅ | Conduit |
-| Random Generator |✅ | | Conduit |
+| [Random Generator](https://github.com/ConduitIO/conduit-connector-generator) |✅ | | Conduit |
 | [Redis](https://github.com/gopherslab/conduit-connector-redis) ||✅ | Community |
 | [S3](https://github.com/ConduitIO/conduit-connector-s3) |✅ |✅ | Conduit |
 | [Salesforce](https://github.com/miquido/conduit-connector-salesforce) | ✅ | ✅ | Community |
