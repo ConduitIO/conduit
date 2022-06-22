@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package txfbuiltin
+package builtin
 
 import (
 	"reflect"
@@ -24,7 +24,7 @@ import (
 	"github.com/conduitio/conduit/pkg/record/schema/mock"
 )
 
-func TestHoistFieldKey_Build(t *testing.T) {
+func TestExtractFieldKey_Build(t *testing.T) {
 	type args struct {
 		config transform.Config
 	}
@@ -42,25 +42,25 @@ func TestHoistFieldKey_Build(t *testing.T) {
 		wantErr: true,
 	}, {
 		name:    "empty field returns error",
-		args:    args{config: map[string]string{hoistFieldConfigField: ""}},
+		args:    args{config: map[string]string{extractFieldConfigField: ""}},
 		wantErr: true,
 	}, {
 		name:    "non-empty field returns transform",
-		args:    args{config: map[string]string{hoistFieldConfigField: "foo"}},
+		args:    args{config: map[string]string{extractFieldConfigField: "foo"}},
 		wantErr: false,
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := HoistFieldKey(tt.args.config)
+			_, err := ExtractFieldKey(tt.args.config)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("HoistFieldKey() error = %v, wantErr = %v", err, tt.wantErr)
+				t.Errorf("ExtractFieldKey() error = %v, wantErr = %v", err, tt.wantErr)
 				return
 			}
 		})
 	}
 }
 
-func TestHoistFieldKey_Transform(t *testing.T) {
+func TestExtractFieldKey_Transform(t *testing.T) {
 	type args struct {
 		r record.Record
 	}
@@ -72,40 +72,41 @@ func TestHoistFieldKey_Transform(t *testing.T) {
 		wantErr bool
 	}{{
 		name:   "structured data",
-		config: map[string]string{hoistFieldConfigField: "foo"},
+		config: map[string]string{extractFieldConfigField: "foo"},
 		args: args{r: record.Record{
 			Key: record.StructuredData{
-				"bar": 123,
-				"baz": nil,
+				"foo": 123,
 			},
 		}},
 		want: record.Record{
-			Key: record.StructuredData{
-				"foo": map[string]interface{}{
-					"bar": 123,
-					"baz": nil,
-				},
+			Key: record.RawData{
+				Raw: []byte("123"),
 			},
 		},
 		wantErr: false,
 	}, {
+		name:   "structured data field not found",
+		config: map[string]string{extractFieldConfigField: "foo"},
+		args: args{r: record.Record{
+			Key: record.StructuredData{
+				"bar": 123,
+				"baz": []byte("123"),
+			},
+		}},
+		wantErr: true,
+	}, {
 		name:   "raw data without schema",
-		config: map[string]string{hoistFieldConfigField: "foo"},
+		config: map[string]string{extractFieldConfigField: "foo"},
 		args: args{r: record.Record{
 			Key: record.RawData{
 				Raw:    []byte("raw data"),
 				Schema: nil,
 			},
 		}},
-		want: record.Record{
-			Key: record.StructuredData{
-				"foo": []byte("raw data"),
-			},
-		},
-		wantErr: false,
+		wantErr: true, // not supported
 	}, {
 		name:   "raw data with schema",
-		config: map[string]string{hoistFieldConfigField: "foo"},
+		config: map[string]string{extractFieldConfigField: "foo"},
 		args: args{r: record.Record{
 			Key: record.RawData{
 				Raw:    []byte("raw data"),
@@ -117,7 +118,7 @@ func TestHoistFieldKey_Transform(t *testing.T) {
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			txfFunc, err := HoistFieldKey(tt.config)
+			txfFunc, err := ExtractFieldKey(tt.config)
 			assert.Ok(t, err)
 			got, err := txfFunc(tt.args.r)
 			if (err != nil) != tt.wantErr {
@@ -131,7 +132,7 @@ func TestHoistFieldKey_Transform(t *testing.T) {
 	}
 }
 
-func TestHoistFieldPayload_Build(t *testing.T) {
+func TestExtractFieldPayload_Build(t *testing.T) {
 	type args struct {
 		config transform.Config
 	}
@@ -149,25 +150,25 @@ func TestHoistFieldPayload_Build(t *testing.T) {
 		wantErr: true,
 	}, {
 		name:    "empty field returns error",
-		args:    args{config: map[string]string{hoistFieldConfigField: ""}},
+		args:    args{config: map[string]string{extractFieldConfigField: ""}},
 		wantErr: true,
 	}, {
 		name:    "non-empty field returns transform",
-		args:    args{config: map[string]string{hoistFieldConfigField: "foo"}},
+		args:    args{config: map[string]string{extractFieldConfigField: "foo"}},
 		wantErr: false,
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := HoistFieldPayload(tt.args.config)
+			_, err := ExtractFieldPayload(tt.args.config)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("HoistFieldPayload() error = %v, wantErr = %v", err, tt.wantErr)
+				t.Errorf("ExtractFieldPayload() error = %v, wantErr = %v", err, tt.wantErr)
 				return
 			}
 		})
 	}
 }
 
-func TestHoistFieldPayload_Transform(t *testing.T) {
+func TestExtractFieldPayload_Transform(t *testing.T) {
 	type args struct {
 		r record.Record
 	}
@@ -179,40 +180,41 @@ func TestHoistFieldPayload_Transform(t *testing.T) {
 		wantErr bool
 	}{{
 		name:   "structured data",
-		config: map[string]string{hoistFieldConfigField: "foo"},
+		config: map[string]string{extractFieldConfigField: "foo"},
 		args: args{r: record.Record{
 			Payload: record.StructuredData{
-				"bar": 123,
-				"baz": nil,
+				"foo": 123,
 			},
 		}},
 		want: record.Record{
-			Payload: record.StructuredData{
-				"foo": map[string]interface{}{
-					"bar": 123,
-					"baz": nil,
-				},
+			Payload: record.RawData{
+				Raw: []byte("123"),
 			},
 		},
 		wantErr: false,
 	}, {
+		name:   "structured data field not found",
+		config: map[string]string{extractFieldConfigField: "foo"},
+		args: args{r: record.Record{
+			Payload: record.StructuredData{
+				"bar": 123,
+				"baz": []byte("123"),
+			},
+		}},
+		wantErr: true,
+	}, {
 		name:   "raw data without schema",
-		config: map[string]string{hoistFieldConfigField: "foo"},
+		config: map[string]string{extractFieldConfigField: "foo"},
 		args: args{r: record.Record{
 			Payload: record.RawData{
 				Raw:    []byte("raw data"),
 				Schema: nil,
 			},
 		}},
-		want: record.Record{
-			Payload: record.StructuredData{
-				"foo": []byte("raw data"),
-			},
-		},
-		wantErr: false,
+		wantErr: true, // not supported
 	}, {
 		name:   "raw data with schema",
-		config: map[string]string{hoistFieldConfigField: "foo"},
+		config: map[string]string{extractFieldConfigField: "foo"},
 		args: args{r: record.Record{
 			Payload: record.RawData{
 				Raw:    []byte("raw data"),
@@ -224,7 +226,7 @@ func TestHoistFieldPayload_Transform(t *testing.T) {
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			txfFunc, err := HoistFieldPayload(tt.config)
+			txfFunc, err := ExtractFieldPayload(tt.config)
 			assert.Ok(t, err)
 			got, err := txfFunc(tt.args.r)
 			if (err != nil) != tt.wantErr {
