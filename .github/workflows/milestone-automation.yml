@@ -1,0 +1,15 @@
+name: milestone-automation
+
+on:
+  schedule:
+    - cron: '0 * * * 6'
+  workflow_dispatch:
+
+jobs:
+  milestones:
+    uses: ConduitIO/automation/.github/workflows/milestones.yml@main
+    with:
+      org-repo: 'conduitio/conduit'
+      project: PN_kwDOBL3ZPs4AAigJ
+    secrets:
+      project-automation-token: ${{ secrets.PROJECT_AUTOMATION }}
