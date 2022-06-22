@@ -88,14 +88,6 @@ message Connector {
 }
 
 message Processor {
-  // Type shows the processor type.
-  enum Type {
-    TYPE_UNSPECIFIED = 0;
-    // Processor is a transform.
-    TYPE_TRANSFORM = 1;
-    // Processor is a filter.
-    TYPE_FILTER = 2;
-  }
   message Parent {
     // Type shows the processor's parent type.
     enum Type {
@@ -120,11 +112,10 @@ message Processor {
   // -- immutable fields -------------------------------------------------------
 
   string name = 4 [(google.api.field_behavior) = IMMUTABLE];
-  Type type = 5 [(google.api.field_behavior) = IMMUTABLE];
-  Parent parent = 6 [(google.api.field_behavior) = IMMUTABLE];
+  Parent parent = 5 [(google.api.field_behavior) = IMMUTABLE];
 
-  google.protobuf.Timestamp created_at = 7;
-  google.protobuf.Timestamp updated_at = 8;
+  google.protobuf.Timestamp created_at = 6;
+  google.protobuf.Timestamp updated_at = 7;
 }
 
 // PipelineService exposes functionality for managing pipelines.
@@ -796,9 +787,8 @@ message ListProcessorsResponse {
 
 message CreateProcessorRequest {
   string name = 1;
-  Processor.Type type = 2;
-  Processor.Parent parent = 3;
-  Processor.Config config = 4;
+  Processor.Parent parent = 2;
+  Processor.Config config = 3;
 }
 message CreateProcessorResponse {
   Processor processor = 1;

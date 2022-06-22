@@ -26,17 +26,9 @@ import (
 )
 
 const (
-	TypeTransform Type = iota + 1
-	TypeFilter
-)
-
-const (
 	ParentTypeConnector ParentType = iota + 1
 	ParentTypePipeline
 )
-
-// Type defines the processor type.
-type Type int
 
 // ParentType defines the parent type of a processor.
 type ParentType int
@@ -44,8 +36,6 @@ type ParentType int
 // Processor is the interface that represents a single message processor that
 // can be executed on one record and manipulate it.
 type Processor interface {
-	// Type returns the processor type.
-	Type() Type
 	// Execute runs the processor function on a record.
 	Execute(ctx context.Context, record record.Record) (record.Record, error)
 }
