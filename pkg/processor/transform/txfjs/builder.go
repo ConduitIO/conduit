@@ -21,23 +21,21 @@ import (
 )
 
 const (
-	// todo maybe change to transformjs?
-	transformName = "js"
-	configScript  = "script"
+	configScript = "script"
 )
 
 // Builder parses the config and if valid returns a JS transform, an error
 // otherwise. It requires the config field "script".
 func Builder(config transform.Config) (transform.Transform, error) {
 	if config[configScript] == "" {
-		return nil, cerrors.Errorf("%s: unspecified field %q", transformName, configScript)
+		return nil, cerrors.New("missing script")
 	}
 
 	// TODO get logger from config or some other place
 	logger := zerolog.New(zerolog.NewConsoleWriter()).With().Timestamp().Logger()
 	t, err := NewTransformer(config[configScript], logger)
 	if err != nil {
-		return nil, cerrors.Errorf("%s: %w", transformName, err)
+		return nil, cerrors.Errorf("failed creating new transform: %w", err)
 	}
 
 	return t.Transform, nil

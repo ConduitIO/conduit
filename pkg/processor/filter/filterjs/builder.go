@@ -20,22 +20,17 @@ import (
 	"github.com/rs/zerolog"
 )
 
-const (
-	// todo maybe change to transformjs?
-	filterName = "filterjs"
-)
-
 // todo docs
 func BuildFilter(config Config) (filter.Filter, error) {
 	if config.script() == "" {
-		return nil, cerrors.Errorf("%s: missing script", filterName)
+		return nil, cerrors.New("missing script")
 	}
 
 	// TODO get logger from config or some other place
 	logger := zerolog.New(zerolog.NewConsoleWriter()).With().Timestamp().Logger()
 	f, err := NewFilter(config.script(), config.negate(), logger)
 	if err != nil {
-		return nil, cerrors.Errorf("%s: %w", filterName, err)
+		return nil, cerrors.Errorf("failed creating new filter: %w", err)
 	}
 
 	return f.Filter, nil
