@@ -16,11 +16,12 @@ package txfjs
 
 import (
 	"bytes"
+	"errors"
+	"github.com/conduitio/conduit/pkg/processor"
 	"testing"
 	"time"
 
 	"github.com/conduitio/conduit/pkg/foundation/assert"
-	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/rs/zerolog"
 )
@@ -51,7 +52,7 @@ logger.Debug("no entrypoint");
 		t.Error("expected error if transformer has no entrypoint")
 		return
 	}
-	assert.Equal(t, `failed to get entrypoint function "transform"`, err.Error())
+	assert.Equal(t, `failed creating JavaScript function: failed to get entrypoint function "transform"`, err.Error())
 	assert.True(t, tr == nil, "transformer should be nil")
 }
 
@@ -128,20 +129,6 @@ function transform(record) {
 			},
 			wantErr: nil,
 		},
-		{
-			name: "no return value",
-			fields: fields{
-				src: `
-				function transform() {
-					logger.Debug("no return value");
-				}`,
-			},
-			args: args{
-				record: record.Record{},
-			},
-			want:    record.Record{},
-			wantErr: cerrors.New("failed to transform to internal record: unexpected type, expected *record.Record, got <nil>"),
-		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -159,4 +146,19 @@ function transform(record) {
 			assert.Equal(t, tt.want, got)
 		})
 	}
+}
+
+func TestTransformer_Filtering(t *testing.T) {
+	var buf bytes.Buffer
+	logger := zerolog.New(&buf)
+	tr, err := NewTransformer(
+		`function transform(r) {
+			return null;
+		}`,
+		logger,
+	)
+	assert.Ok(t, err)
+
+	_, err = tr.Transform(record.Record{})
+	assert.True(t, errors.Is(err, processor.ErrSkipRecord), "expected ErrSkipRecord")
 }

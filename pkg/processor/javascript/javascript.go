@@ -56,17 +56,17 @@ func NewFunction(src, entrypoint string, logger zerolog.Logger) (Function, error
 }
 
 // todo generics
-func (f Function) Call(in record.Record) (interface{}, error) {
+func (f Function) Call(in record.Record) (*record.Record, error) {
 	jsRecord := f.toJSRecord(in)
 
 	result, err := f.function(goja.Undefined(), jsRecord)
 	if err != nil {
-		return record.Record{}, cerrors.Errorf("failed to transform to JS record: %w", err)
+		return nil, cerrors.Errorf("failed to transform to JS record: %w", err)
 	}
 
 	out, err := f.toInternal(result)
 	if err != nil {
-		return record.Record{}, cerrors.Errorf("failed to transform to internal record: %w", err)
+		return nil, cerrors.Errorf("failed to transform to internal record: %w", err)
 	}
 
 	return out, nil
@@ -92,12 +92,20 @@ func (f Function) toJSRecord(r record.Record) goja.Value {
 	return f.runtime.ToValue(&r)
 }
 
-func (f Function) toInternal(v goja.Value) (interface{}, error) {
-	r, ok := v.Export().(*record.Record)
-	if !ok {
-		return v.Export(), nil
-	}
+func (f Function) toInternal(v goja.Value) (*record.Record, error) {
+	r := v.Export()
 
+	switch v := r.(type) {
+	case *record.Record:
+		return f.dereferenceContent(v), nil
+	case nil:
+		return nil, nil
+	default:
+		return nil, cerrors.Errorf("js function expected to return a Record, but returned: %T", v)
+	}
+}
+
+func (f Function) dereferenceContent(r *record.Record) *record.Record {
 	// dereference content pointers
 	switch v := r.Payload.(type) {
 	case *record.RawData:
@@ -113,7 +121,7 @@ func (f Function) toInternal(v goja.Value) (interface{}, error) {
 		r.Key = *v
 	}
 
-	return *r, nil
+	return r
 }
 
 // todo maybe move into the Function struct

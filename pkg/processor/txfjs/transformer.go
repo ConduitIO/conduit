@@ -15,9 +15,11 @@
 package txfjs
 
 import (
+	"fmt"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/processor"
+	"github.com/conduitio/conduit/pkg/processor/javascript"
 	"github.com/conduitio/conduit/pkg/record"
-	"github.com/dop251/goja"
 	"github.com/rs/zerolog"
 )
 
@@ -27,96 +29,27 @@ const (
 
 // Transformer is able to run transformations defined in JavaScript.
 type Transformer struct {
-	runtime *goja.Runtime
-	f       goja.Callable
+	jsFunc javascript.Function
 }
 
 func NewTransformer(src string, logger zerolog.Logger) (*Transformer, error) {
-	rt := goja.New()
-	err := setRuntimeHelpers(logger, rt)
+	jsFunc, err := javascript.NewFunction(src, entrypoint, logger)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed creating JavaScript function: %w", err)
 	}
 
-	prg, err := goja.Compile("", src, false)
-	if err != nil {
-		return nil, cerrors.Errorf("failed to compile transformer script: %w", err)
-	}
-
-	_, err = rt.RunProgram(prg)
-	if err != nil {
-		return nil, cerrors.Errorf("failed to run program: %w", err)
-	}
-
-	tmp := rt.Get(entrypoint)
-	entrypointFunc, ok := goja.AssertFunction(tmp)
-	if !ok {
-		return nil, cerrors.Errorf("failed to get entrypoint function %q", entrypoint)
-	}
-
-	return &Transformer{
-		runtime: rt,
-		f:       entrypointFunc,
-	}, nil
+	return &Transformer{jsFunc: jsFunc}, nil
 }
 
 func (t *Transformer) Transform(in record.Record) (record.Record, error) {
-	jsRecord := t.toJSRecord(in)
-
-	result, err := t.f(goja.Undefined(), jsRecord)
+	out, err := t.jsFunc.Call(in)
 	if err != nil {
 		return record.Record{}, cerrors.Errorf("failed to transform to JS record: %w", err)
 	}
 
-	// TODO would be nice if we could validate this when creating the transformer
-	out, err := t.toInternalRecord(result)
-	if err != nil {
-		return record.Record{}, cerrors.Errorf("failed to transform to internal record: %w", err)
+	if out == nil {
+		return record.Record{}, processor.ErrSkipRecord
 	}
 
-	return out, nil
-}
-
-func (t *Transformer) toJSRecord(r record.Record) goja.Value {
-	// convert content to pointers to make it mutable
-	switch v := r.Payload.(type) {
-	case record.RawData:
-		r.Payload = &v
-	case record.StructuredData:
-		r.Payload = &v
-	}
-
-	switch v := r.Key.(type) {
-	case record.RawData:
-		r.Key = &v
-	case record.StructuredData:
-		r.Key = &v
-	}
-
-	// we need to send in a pointer to let the user change the value and return it, if they choose to do so
-	return t.runtime.ToValue(&r)
-}
-
-func (t *Transformer) toInternalRecord(v goja.Value) (record.Record, error) {
-	r, ok := v.Export().(*record.Record)
-	if !ok {
-		return record.Record{}, cerrors.Errorf("unexpected type, expected %T, got %T", r, v.Export())
-	}
-
-	// dereference content pointers
-	switch v := r.Payload.(type) {
-	case *record.RawData:
-		r.Payload = *v
-	case *record.StructuredData:
-		r.Payload = *v
-	}
-
-	switch v := r.Key.(type) {
-	case *record.RawData:
-		r.Key = *v
-	case *record.StructuredData:
-		r.Key = *v
-	}
-
-	return *r, nil
+	return *out, nil
 }
