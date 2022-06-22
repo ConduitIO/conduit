@@ -16,7 +16,6 @@ package txfjs
 
 import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/processor/transform"
 	"github.com/rs/zerolog"
 )
@@ -26,10 +25,6 @@ const (
 	transformName = "js"
 	configScript  = "script"
 )
-
-func init() {
-	processor.GlobalBuilderRegistry.MustRegister(transformName, transform.NewBuilder(Builder))
-}
 
 // Builder parses the config and if valid returns a JS transform, an error
 // otherwise. It requires the config field "script".

@@ -16,7 +16,6 @@ package filterjs
 
 import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/processor/filter"
 	"github.com/rs/zerolog"
 )
@@ -25,17 +24,6 @@ const (
 	// todo maybe change to transformjs?
 	filterName = "filterjs"
 )
-
-func init() {
-	processor.GlobalBuilderRegistry.MustRegister(filterName, NewProcessorBuilder())
-}
-
-// NewProcessorBuilder is a utility function for creating a processor.Builder for transforms.
-func NewProcessorBuilder() processor.Builder {
-	return func(config processor.Config) (processor.Processor, error) {
-		return BuildFilter(config.Settings)
-	}
-}
 
 // todo docs
 func BuildFilter(config Config) (filter.Filter, error) {
