@@ -16,8 +16,9 @@ package txfjs
 
 import (
 	"bytes"
-	"errors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/processor"
+	"reflect"
 	"testing"
 	"time"
 
@@ -149,16 +150,58 @@ function transform(record) {
 }
 
 func TestTransformer_Filtering(t *testing.T) {
-	var buf bytes.Buffer
-	logger := zerolog.New(&buf)
-	tr, err := NewTransformer(
-		`function transform(r) {
-			return null;
-		}`,
-		logger,
-	)
-	assert.Ok(t, err)
+	testCases := []struct {
+		name   string
+		src    string
+		input  record.Record
+		filter bool
+	}{
+		{
+			name: "always skip",
+			src: `function transform(r) {
+				return null;
+			}`,
+			input:  record.Record{},
+			filter: false,
+		},
+		{
+			name: "filter based on a field - positive",
+			src: `function transform(r) {
+				if (r.Metadata["keepme"] != undefined) {
+					return r
+				}
+				return null;
+			}`,
+			input:  record.Record{Metadata: map[string]string{"keepme": "yes"}},
+			filter: true,
+		},
+		{
+			name: "filter out based on a field - negative",
+			src: `function transform(r) {
+				if (r.Metadata["keepme"] != undefined) {
+					return r
+				}
+				return null;
+			}`,
+			input:  record.Record{Metadata: map[string]string{"foo": "bar"}},
+			filter: false,
+		},
+	}
 
-	_, err = tr.Transform(record.Record{})
-	assert.True(t, errors.Is(err, processor.ErrSkipRecord), "expected ErrSkipRecord")
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			underTest, err := NewTransformer(tc.src, zerolog.New(zerolog.NewConsoleWriter()))
+			assert.Ok(t, err)
+
+			rec, err := underTest.Transform(tc.input)
+			if tc.filter {
+				assert.Ok(t, err)
+				assert.Equal(t, tc.input, rec)
+			} else {
+				assert.True(t, reflect.ValueOf(rec).IsZero(), "expected zero value of record")
+				assert.True(t, cerrors.Is(err, processor.ErrSkipRecord), "expected ErrSkipRecord")
+			}
+		})
+	}
 }
