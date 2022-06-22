@@ -1,0 +1,44 @@
+---
+- status: STATUS_STOPPED
+  config:
+    name: p1e2ee
+    description: hif
+  connectors: []
+  processors: []
+- status: STATUS_RUNNING
+  config:
+    name: two
+    description: twoo
+  connectors:
+    - type: TYPE_DESTINATION
+      plugin: 'builtin:s3'
+      config:
+        name: s3-dest
+        settings:
+          aws.region: us-east-1
+          aws.bucket: maha-test
+    - type: TYPE_SOURCE
+      plugin: 'builtin:pg'
+      config:
+        name: pg-source
+        settings:
+          pg.region: us-east-1
+          pg.bucket: maha-test
+  processors:
+    - name: d
+      type: TYPE_TRANSFORM
+      parent:
+        type: TYPE_CONNECTOR
+        name: s3-dest # name instead of id, parent not created yet
+      config:
+        settings:
+          additionalProp1: string
+          additionalProp2: string
+          additionalProp3: string
+---
+- status: TEST
+  config:
+    name: p1e2ee
+    description: hif
+  connectors: []
+  processors: []
