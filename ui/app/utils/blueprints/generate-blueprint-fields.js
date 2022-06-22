@@ -7,6 +7,7 @@ import {
   validateExclusion,
   validateFormat,
 } from 'ember-changeset-validations/validators';
+import { underscore } from '@ember/string';
 
 const ConfigValidationMap = {
   TYPE_REQUIRED: function () {
@@ -51,7 +52,7 @@ export default function generateBlueprintFields(blueprint, configurable) {
 
     const fieldModel = {
       id: fieldName,
-      label: fieldName,
+      label: underscore(fieldName).replace('.', '_').split('_').join(' '),
       description: fieldOpts.description,
       type: fieldOpts.type,
       isRequired: !!fieldOpts.validations.findBy('type', 'TYPE_REQUIRED'),

@@ -31,8 +31,9 @@ import (
 )
 
 var (
+	// xerrors is used, since it provides the stack traces too
 	New    = xerrors.New    //nolint:forbidigo // xerrors.New is allowed here, but not anywhere else
-	Errorf = xerrors.Errorf //nolint:forbidigo // xerrors.Errorf is allowed here, but not anywhere else
+	Errorf = xerrors.Errorf //nolint:forbidigo,staticcheck // xerrors.Errorf is allowed here, but not anywhere else
 	Is     = errors.Is
 	As     = errors.As
 	Unwrap = errors.Unwrap
