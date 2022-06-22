@@ -23,6 +23,7 @@ import (
 
 // Transform takes a record and if successful returns the transformed record,
 // an error otherwise.
+// todo remove type, as it's no different from a processor.Processor.
 type Transform func(record.Record) (record.Record, error)
 
 var _ processor.Processor = (Transform)(nil)
