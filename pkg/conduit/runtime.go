@@ -59,9 +59,8 @@ import (
 	"gopkg.in/tomb.v2"
 
 	// NB: anonymous import triggers transform registry creation
-	_ "github.com/conduitio/conduit/pkg/processor/filter/filterjs"
+	_ "github.com/conduitio/conduit/pkg/processor/jsprocessor"
 	_ "github.com/conduitio/conduit/pkg/processor/transform/txfbuiltin"
-	_ "github.com/conduitio/conduit/pkg/processor/transform/txfjs"
 )
 
 const (

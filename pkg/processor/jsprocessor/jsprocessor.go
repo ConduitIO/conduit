@@ -29,7 +29,7 @@ func init() {
 func NewJSProcessorBuilder(config processor.Config) (processor.Processor, error) {
 	f, fErr := filterjs.BuildFilter(config.Settings)
 	t, tErr := txfjs.Builder(config.Settings)
-	if fErr == nil || tErr == nil {
+	if fErr == nil && tErr == nil {
 		return nil, cerrors.New("js script contains two entrypoint functions (transform, filter)")
 	}
 	if fErr != nil && tErr != nil {
