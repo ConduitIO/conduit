@@ -288,7 +288,7 @@ func (s *Service) buildMetricsNode(
 	}
 }
 
-func (s *Service) buildAckerNode(
+func (s *Service) buildDestinationAckerNode(
 	dest connector.Destination,
 ) *stream.DestinationAckerNode {
 	return &stream.DestinationAckerNode{
@@ -316,7 +316,7 @@ func (s *Service) buildDestinationNodes(
 			continue // skip any connector that's not a destination
 		}
 
-		ackerNode := s.buildAckerNode(instance.(connector.Destination))
+		ackerNode := s.buildDestinationAckerNode(instance.(connector.Destination))
 		destinationNode := stream.DestinationNode{
 			Name:        instance.ID(),
 			Destination: instance.(connector.Destination),
@@ -358,7 +358,7 @@ func (s *Service) runPipeline(ctx context.Context, pl *Instance) error {
 			// If any of the nodes stops, the nodesTomb will be put into a dying state
 			// and ctx will be cancelled.
 			// This way, the other nodes will be notified that they need to stop too.
-			//nolint: staticcheck // nil used to use the default (parent provided via WithContext)
+			// nolint: staticcheck // nil used to use the default (parent provided via WithContext)
 			ctx := nodesTomb.Context(nil)
 			s.logger.Trace(ctx).Str(log.NodeIDField, node.ID()).Msg("running node")
 			defer func() {
@@ -406,7 +406,7 @@ func (s *Service) runPipeline(ctx context.Context, pl *Instance) error {
 	// before declaring the pipeline as stopped.
 	pl.t = &tomb.Tomb{}
 	pl.t.Go(func() error {
-		//nolint: staticcheck // nil used to use the default (parent provided via WithContext)
+		// nolint: staticcheck // nil used to use the default (parent provided via WithContext)
 		ctx := pl.t.Context(nil)
 		err := nodesTomb.Wait()
 

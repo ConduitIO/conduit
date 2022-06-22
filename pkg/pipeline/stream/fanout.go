@@ -146,38 +146,27 @@ func (n *FanoutNode) Run(ctx context.Context) error {
 // wrapAckHandler modifies the ack handler, so it's called with the original
 // message received by FanoutNode instead of the new message created by
 // FanoutNode.
-func (n *FanoutNode) wrapAckHandler(origMsg *Message, f AckHandler) AckMiddleware {
-	return func(newMsg *Message, next AckHandler) error {
-		err := f(origMsg)
-		if err != nil {
-			return err
-		}
-		// next handler is called again with new message
-		return next(newMsg)
+func (n *FanoutNode) wrapAckHandler(origMsg *Message, f AckHandler) AckHandler {
+	return func(_ *Message) error {
+		return f(origMsg)
 	}
 }
 
 // wrapNackHandler modifies the nack handler, so it's called with the original
 // message received by FanoutNode instead of the new message created by
 // FanoutNode.
-func (n *FanoutNode) wrapNackHandler(origMsg *Message, f NackHandler) NackMiddleware {
-	return func(newMsg *Message, reason error, next NackHandler) error {
-		err := f(origMsg, reason)
-		if err != nil {
-			return err
-		}
-		// next handler is called again with new message
-		return next(newMsg, err)
+func (n *FanoutNode) wrapNackHandler(origMsg *Message, f NackHandler) NackHandler {
+	return func(_ *Message, reason error) error {
+		return f(origMsg, reason)
 	}
 }
 
 // wrapDropHandler modifies the drop handler, so it's called with the original
 // message received by FanoutNode instead of the new message created by
 // FanoutNode.
-func (n *FanoutNode) wrapDropHandler(origMsg *Message, f DropHandler) DropMiddleware {
-	return func(newMsg *Message, reason error, next DropHandler) {
+func (n *FanoutNode) wrapDropHandler(origMsg *Message, f DropHandler) DropHandler {
+	return func(_ *Message, reason error) {
 		f(origMsg, reason)
-		next(newMsg, reason)
 	}
 }
 

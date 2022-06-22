@@ -143,9 +143,9 @@ func TestProcessorNode_ErrorWithNackHandler(t *testing.T) {
 	out := n.Pub()
 
 	msg := &Message{Ctx: ctx}
-	msg.RegisterNackHandler(func(msg *Message, err error, next NackHandler) error {
+	msg.RegisterNackHandler(func(msg *Message, err error) error {
 		assert.True(t, cerrors.Is(err, wantErr), "expected underlying error to be the transform error")
-		return next(msg, err) // the error should be regarded as handled
+		return nil // the error should be regarded as handled
 	})
 	go func() {
 		// publisher
@@ -186,11 +186,11 @@ func TestProcessorNode_Skip(t *testing.T) {
 
 	// register a dummy AckHandler and NackHandler for tests.
 	counter := 0
-	msg.RegisterAckHandler(func(msg *Message, next AckHandler) error {
+	msg.RegisterAckHandler(func(msg *Message) error {
 		counter++
 		return nil
 	})
-	msg.RegisterNackHandler(func(msg *Message, err error, next NackHandler) error {
+	msg.RegisterNackHandler(func(msg *Message, err error) error {
 		// Our NackHandler shouldn't ever be hit if we're correctly skipping
 		// so fail the test if we get here at all.
 		t.Fail()
