@@ -15,11 +15,11 @@
 package builtin
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/processor"
-	"github.com/conduitio/conduit/pkg/processor/transform"
 	"github.com/conduitio/conduit/pkg/record"
 )
 
@@ -31,8 +31,8 @@ const (
 )
 
 func init() {
-	processor.GlobalBuilderRegistry.MustRegister(extractFieldKeyName, transform.NewBuilder(ExtractFieldKey))
-	processor.GlobalBuilderRegistry.MustRegister(extractFieldPayloadName, transform.NewBuilder(ExtractFieldPayload))
+	processor.GlobalBuilderRegistry.MustRegister(extractFieldKeyName, ExtractFieldKey)
+	processor.GlobalBuilderRegistry.MustRegister(extractFieldPayloadName, ExtractFieldPayload)
 }
 
 // ExtractFieldKey builds the following transform:
@@ -69,36 +69,38 @@ func extractField(
 		return nil, cerrors.Errorf("%s: %w", transformName, err)
 	}
 
-	return func(r record.Record) (record.Record, error) {
-		data := getSetter.Get(r)
+	return funcProcessor{
+		func(_ context.Context, r record.Record) (record.Record, error) {
+			data := getSetter.Get(r)
 
-		switch d := data.(type) {
-		case record.RawData:
-			if d.Schema == nil {
-				return record.Record{}, cerrors.Errorf("%s: schemaless raw data not supported", transformName)
-			}
-			return record.Record{}, cerrors.Errorf("%s: data with schema not supported yet", transformName) // TODO
-		case record.StructuredData:
-			// TODO add support for nested fields
-			extractedField := d[fieldName]
-			if extractedField == nil {
-				return record.Record{}, cerrors.Errorf("%s: field %q not found", transformName, fieldName)
-			}
+			switch d := data.(type) {
+			case record.RawData:
+				if d.Schema == nil {
+					return record.Record{}, cerrors.Errorf("%s: schemaless raw data not supported", transformName)
+				}
+				return record.Record{}, cerrors.Errorf("%s: data with schema not supported yet", transformName) // TODO
+			case record.StructuredData:
+				// TODO add support for nested fields
+				extractedField := d[fieldName]
+				if extractedField == nil {
+					return record.Record{}, cerrors.Errorf("%s: field %q not found", transformName, fieldName)
+				}
 
-			switch v := extractedField.(type) {
-			case map[string]interface{}:
-				data = record.StructuredData(v)
-			case []byte:
-				data = record.RawData{Raw: v}
+				switch v := extractedField.(type) {
+				case map[string]interface{}:
+					data = record.StructuredData(v)
+				case []byte:
+					data = record.RawData{Raw: v}
+				default:
+					// marshal as string by default
+					data = record.RawData{Raw: []byte(fmt.Sprint(v))}
+				}
 			default:
-				// marshal as string by default
-				data = record.RawData{Raw: []byte(fmt.Sprint(v))}
+				return record.Record{}, cerrors.Errorf("%s: unexpected data type %T", transformName, data)
 			}
-		default:
-			return record.Record{}, cerrors.Errorf("%s: unexpected data type %T", transformName, data)
-		}
 
-		r = getSetter.Set(r, data)
-		return r, nil
+			r = getSetter.Set(r, data)
+			return r, nil
+		},
 	}, nil
 }

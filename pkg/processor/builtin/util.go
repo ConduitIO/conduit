@@ -16,6 +16,7 @@ package builtin
 
 import (
 	"context"
+	"github.com/conduitio/conduit/pkg/processor"
 	"strconv"
 	"time"
 
@@ -23,6 +24,9 @@ import (
 	"github.com/conduitio/conduit/pkg/record"
 )
 
+// funcProcessor is a stateless processor.Processor implementation
+// which is using a Go function to process records.
+// todo move out of this file.
 type funcProcessor struct {
 	fn func(context.Context, record.Record) (record.Record, error)
 }
@@ -34,7 +38,7 @@ func (f funcProcessor) Execute(ctx context.Context, record record.Record) (recor
 var errEmptyConfigField = cerrors.New("empty config field")
 
 func getConfigFieldString(c processor.Config, field string) (string, error) {
-	val, ok := c[field]
+	val, ok := c.Settings[field]
 	if !ok || val == "" {
 		return "", cerrors.Errorf("failed to retrieve config field %q: %w", field, errEmptyConfigField)
 	}

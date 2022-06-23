@@ -15,6 +15,8 @@
 package builtin
 
 import (
+	"context"
+	"github.com/conduitio/conduit/pkg/processor"
 	"reflect"
 	"testing"
 
@@ -25,7 +27,7 @@ import (
 
 func TestExtractFieldKey_Build(t *testing.T) {
 	type args struct {
-		config processor.Config
+		config map[string]string
 	}
 	tests := []struct {
 		name    string
@@ -50,7 +52,7 @@ func TestExtractFieldKey_Build(t *testing.T) {
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := ExtractFieldKey(tt.args.config)
+			_, err := ExtractFieldKey(processor.Config{Settings: tt.args.config})
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ExtractFieldKey() error = %v, wantErr = %v", err, tt.wantErr)
 				return
@@ -65,7 +67,7 @@ func TestExtractFieldKey_Transform(t *testing.T) {
 	}
 	tests := []struct {
 		name    string
-		config  processor.Config
+		config  map[string]string
 		args    args
 		want    record.Record
 		wantErr bool
@@ -117,9 +119,9 @@ func TestExtractFieldKey_Transform(t *testing.T) {
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			txfFunc, err := ExtractFieldKey(tt.config)
+			underTest, err := ExtractFieldKey(processor.Config{Settings: tt.config})
 			assert.Ok(t, err)
-			got, err := txfFunc(tt.args.r)
+			got, err := underTest.Execute(context.Background(), tt.args.r)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Transform() error = %v, wantErr = %v", err, tt.wantErr)
 				return
@@ -133,7 +135,7 @@ func TestExtractFieldKey_Transform(t *testing.T) {
 
 func TestExtractFieldPayload_Build(t *testing.T) {
 	type args struct {
-		config processor.Config
+		config map[string]string
 	}
 	tests := []struct {
 		name    string
@@ -158,7 +160,7 @@ func TestExtractFieldPayload_Build(t *testing.T) {
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := ExtractFieldPayload(tt.args.config)
+			_, err := ExtractFieldPayload(processor.Config{Settings: tt.args.config})
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ExtractFieldPayload() error = %v, wantErr = %v", err, tt.wantErr)
 				return
@@ -173,7 +175,7 @@ func TestExtractFieldPayload_Transform(t *testing.T) {
 	}
 	tests := []struct {
 		name    string
-		config  processor.Config
+		config  map[string]string
 		args    args
 		want    record.Record
 		wantErr bool
@@ -225,9 +227,9 @@ func TestExtractFieldPayload_Transform(t *testing.T) {
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			txfFunc, err := ExtractFieldPayload(tt.config)
+			underTest, err := ExtractFieldPayload(processor.Config{Settings: tt.config})
 			assert.Ok(t, err)
-			got, err := txfFunc(tt.args.r)
+			got, err := underTest.Execute(context.Background(), tt.args.r)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Transform() error = %v, wantErr = %v", err, tt.wantErr)
 				return
