@@ -15,6 +15,7 @@
 package conduit
 
 import (
+	"bytes"
 	"fmt"
 	"io/ioutil"
 	"path/filepath"
@@ -32,7 +33,7 @@ func Test_Parser(t *testing.T) {
 		t.Error(err)
 	}
 
-	p, err := Parse(data)
+	p, err := Parse(bytes.NewReader(data))
 	if err != nil {
 		t.Error(err)
 	}

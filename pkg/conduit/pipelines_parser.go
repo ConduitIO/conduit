@@ -12,64 +12,76 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package conduit wires up everything under the hood of a Conduit instance
-// including metrics, telemetry, logging, and server construction.
-// It should only ever interact with the Orchestrator, never individual
-// services. All of that responsibility should be left to the Orchestrator.
 package conduit
 
 import (
-	"bytes"
-	"fmt"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"gopkg.in/yaml.v3"
+	"io"
 )
 
-type Pipelines []struct {
+type PipelineConfig struct {
 	Status string `yaml:"status"`
 	Config struct {
 		Name        string `yaml:"name"`
 		Description string `yaml:"description"`
 	} `yaml:"config"`
-	Connectors []struct {
+	Connectors map[string]struct {
 		Type   string `yaml:"type"`
 		Plugin string `yaml:"plugin"`
 		Config struct {
-			Name     string      `yaml:"name"`
-			Settings interface{} `yaml:"settings"`
+			Name     string            `yaml:"name"`
+			Settings map[string]string `yaml:"settings"`
 		} `yaml:"config"`
+		Processors map[string]struct {
+			Name   string `yaml:"name"`
+			Type   string `yaml:"type"`
+			Config struct {
+				Settings map[string]string `yaml:"settings"`
+			} `yaml:"config"`
+		} `yaml:"processors,omitempty"`
 	} `yaml:"connectors,omitempty"`
-	Processors []struct {
+	Processors map[string]struct {
 		Name   string `yaml:"name"`
 		Type   string `yaml:"type"`
-		Parent struct {
-			Type string `yaml:"type"`
-			Name string `yaml:"name"`
-		} `yaml:"parent"`
 		Config struct {
-			Settings interface{} `yaml:"settings"`
+			Settings map[string]string `yaml:"settings"`
 		} `yaml:"config"`
-	}
+	} `yaml:"processors,omitempty"`
 }
 
-func Parse(data []byte) ([]Pipelines, error) {
-	//p := Pipelines{}
-	//
-	//err := yaml.Unmarshal(data, &p)
-	//if err != nil {
-	//	return nil, cerrors.Errorf("error: %w", err)
-	//}
-	//return &p, nil
+type PipelinesConfig struct {
+	Pipelines map[string]PipelineConfig `yaml:"pipelines"`
+}
 
-	dec := yaml.NewDecoder(bytes.NewReader(data))
+func Parse(data io.Reader) (PipelinesConfig, error) {
+	dec := yaml.NewDecoder(data)
 
-	var docs []Pipelines
+	var docs []PipelinesConfig
 	for {
-		var doc Pipelines
-		if err := dec.Decode(&doc); err != nil {
-			fmt.Println("stopping because of error:", err)
+		var doc PipelinesConfig
+		err := dec.Decode(&doc)
+		if err != nil && cerrors.Is(err, io.EOF) {
 			break
+		} else if err != nil {
+			return PipelinesConfig{}, cerrors.Errorf("error: %w", err)
 		}
 		docs = append(docs, doc)
 	}
-	return docs, nil
+	merged := mergeMaps(docs)
+	return merged, nil
+}
+
+// mergeMaps takes an array of PipelinesConfig and merges them into one map
+func mergeMaps(arr []PipelinesConfig) PipelinesConfig {
+	var mp PipelinesConfig
+	pipelines := make(map[string]PipelineConfig, 0)
+
+	for _, config := range arr {
+		for k, v := range config.Pipelines {
+			pipelines[k] = v
+		}
+	}
+	mp.Pipelines = pipelines
+	return mp
 }
