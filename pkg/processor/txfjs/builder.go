@@ -17,7 +17,6 @@ package txfjs
 import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/processor"
-	"github.com/conduitio/conduit/pkg/processor/transform"
 	"github.com/rs/zerolog"
 )
 
@@ -27,22 +26,22 @@ const (
 )
 
 func init() {
-	processor.GlobalBuilderRegistry.MustRegister(transformName, transform.NewBuilder(Builder))
+	processor.GlobalBuilderRegistry.MustRegister(transformName, Builder)
 }
 
 // Builder parses the config and if valid returns a JS transform, an error
 // otherwise. It requires the config field "script".
-func Builder(config transform.Config) (transform.Transform, error) {
-	if config[configScript] == "" {
+func Builder(config processor.Config) (processor.Processor, error) {
+	if config.Settings[configScript] == "" {
 		return nil, cerrors.Errorf("%s: unspecified field %q", transformName, configScript)
 	}
 
 	// TODO get logger from config or some other place
 	logger := zerolog.New(zerolog.NewConsoleWriter()).With().Timestamp().Logger()
-	t, err := NewTransformer(config[configScript], logger)
+	t, err := NewTransformer(config.Settings[configScript], logger)
 	if err != nil {
 		return nil, cerrors.Errorf("%s: %w", transformName, err)
 	}
 
-	return t.Transform, nil
+	return t, nil
 }

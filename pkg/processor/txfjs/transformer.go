@@ -15,6 +15,7 @@
 package txfjs
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -28,21 +29,21 @@ const (
 	entrypoint = "transform"
 )
 
-// Transformer is able to run transformations defined in JavaScript.
-type Transformer struct {
+// jsProcessor is able to run transformations defined in JavaScript.
+type jsProcessor struct {
 	jsFunc javascript.Function
 }
 
-func NewTransformer(src string, logger zerolog.Logger) (*Transformer, error) {
+func NewTransformer(src string, logger zerolog.Logger) (*jsProcessor, error) {
 	jsFunc, err := javascript.NewFunction(src, entrypoint, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed creating JavaScript function: %w", err)
 	}
 
-	return &Transformer{jsFunc: jsFunc}, nil
+	return &jsProcessor{jsFunc: jsFunc}, nil
 }
 
-func (t *Transformer) Transform(in record.Record) (record.Record, error) {
+func (t *jsProcessor) Execute(_ context.Context, in record.Record) (record.Record, error) {
 	out, err := t.jsFunc.Call(in)
 	if err != nil {
 		return record.Record{}, cerrors.Errorf("failed to transform to JS record: %w", err)
