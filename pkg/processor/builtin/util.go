@@ -15,6 +15,7 @@
 package builtin
 
 import (
+	"context"
 	"strconv"
 	"time"
 
@@ -22,6 +23,14 @@ import (
 	"github.com/conduitio/conduit/pkg/processor/transform"
 	"github.com/conduitio/conduit/pkg/record"
 )
+
+type funcProcessor struct {
+	fn func(context.Context, record.Record) (record.Record, error)
+}
+
+func (f funcProcessor) Execute(ctx context.Context, record record.Record) (record.Record, error) {
+	return f.fn(ctx, record)
+}
 
 var errEmptyConfigField = cerrors.New("empty config field")
 

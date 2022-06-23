@@ -15,11 +15,11 @@
 package builtin
 
 import (
+	"context"
 	"strings"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/processor"
-	"github.com/conduitio/conduit/pkg/processor/transform"
 	"github.com/conduitio/conduit/pkg/record"
 )
 
@@ -29,7 +29,7 @@ const (
 )
 
 func init() {
-	processor.GlobalBuilderRegistry.MustRegister(valueToKeyName, transform.NewBuilder(ValueToKey))
+	processor.GlobalBuilderRegistry.MustRegister(valueToKeyName, ValueToKey)
 }
 
 // ValueToKey builds a transform that replaces the record key with a new key
@@ -39,32 +39,34 @@ func init() {
 //  * If the payload is structured, the created key will also be structured with
 //    a subset of fields.
 //  * If the payload is raw and has no schema, return an error.
-func ValueToKey(config transform.Config) (transform.Transform, error) {
-	if config[valueToKeyConfigFields] == "" {
+func ValueToKey(config processor.Config) (processor.Processor, error) {
+	if config.Settings[valueToKeyConfigFields] == "" {
 		return nil, cerrors.Errorf("%s: unspecified field %q", valueToKeyName, valueToKeyConfigFields)
 	}
 
-	fields := strings.Split(config[valueToKeyConfigFields], ",")
+	fields := strings.Split(config.Settings[valueToKeyConfigFields], ",")
 
-	return func(r record.Record) (_ record.Record, err error) {
-		defer func() {
-			if err != nil {
-				err = cerrors.Errorf("%s: %w", valueToKeyName, err)
-			}
-		}()
+	return funcProcessor{
+		fn: func(_ context.Context, r record.Record) (_ record.Record, err error) {
+			defer func() {
+				if err != nil {
+					err = cerrors.Errorf("%s: %w", valueToKeyName, err)
+				}
+			}()
 
-		switch d := r.Payload.(type) {
-		case record.StructuredData:
-			key := record.StructuredData{}
-			for _, f := range fields {
-				key[f] = d[f]
+			switch d := r.Payload.(type) {
+			case record.StructuredData:
+				key := record.StructuredData{}
+				for _, f := range fields {
+					key[f] = d[f]
+				}
+				r.Key = key
+				return r, nil
+			case record.RawData:
+				return record.Record{}, cerrors.ErrNotImpl
+			default:
+				return record.Record{}, cerrors.Errorf("unexpected payload type %T", r.Payload)
 			}
-			r.Key = key
-			return r, nil
-		case record.RawData:
-			return record.Record{}, cerrors.ErrNotImpl
-		default:
-			return record.Record{}, cerrors.Errorf("unexpected payload type %T", r.Payload)
-		}
+		},
 	}, nil
 }
