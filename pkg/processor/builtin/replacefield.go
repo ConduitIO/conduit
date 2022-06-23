@@ -50,7 +50,7 @@ func init() {
 // be included by default (except if they are configured in "exclude").
 // If "include" is not empty, then all fields are excluded by default and only
 // fields in "include" will be added to the transformed record.
-func ReplaceFieldKey(config processor.Config) (transform.Transform, error) {
+func ReplaceFieldKey(config processor.Config) (processor.Processor, error) {
 	return replaceField(replaceFieldKeyName, recordKeyGetSetter{}, config)
 }
 
@@ -67,7 +67,7 @@ func ReplaceFieldKey(config processor.Config) (transform.Transform, error) {
 // be included by default (except if they are configured in "exclude").
 // If "include" is not empty, then all fields are excluded by default and only
 // fields in "include" will be added to the transformed record.
-func ReplaceFieldPayload(config processor.Config) (transform.Transform, error) {
+func ReplaceFieldPayload(config processor.Config) (processor.Processor, error) {
 	return replaceField(replaceFieldPayloadName, recordPayloadGetSetter{}, config)
 }
 
@@ -75,7 +75,7 @@ func replaceField(
 	transformName string,
 	getSetter recordDataGetSetter,
 	config processor.Config,
-) (transform.Transform, error) {
+) (processor.Processor, error) {
 	var (
 		exclude string
 		include string

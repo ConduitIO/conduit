@@ -38,12 +38,12 @@ func init() {
 }
 
 // TimestampConvertorKey todo
-func TimestampConvertorKey(config processor.Config) (transform.Transform, error) {
+func TimestampConvertorKey(config processor.Config) (processor.Processor, error) {
 	return timestampConvertor(timestampConvertorKeyName, recordKeyGetSetter{}, config)
 }
 
 // TimestampConvertorPayload todo
-func TimestampConvertorPayload(config processor.Config) (transform.Transform, error) {
+func TimestampConvertorPayload(config processor.Config) (processor.Processor, error) {
 	return timestampConvertor(timestampConvertorPayloadName, recordPayloadGetSetter{}, config)
 }
 
@@ -51,7 +51,7 @@ func timestampConvertor(
 	transformName string,
 	getSetter recordDataGetSetter,
 	config processor.Config,
-) (transform.Transform, error) {
+) (processor.Processor, error) {
 	const (
 		stringType = "string"
 		unixType   = "unix"

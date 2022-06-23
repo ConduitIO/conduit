@@ -68,11 +68,11 @@ func init() {
 	processor.GlobalBuilderRegistry.MustRegister(filterFieldPayloadName, transform.NewBuilder(FilterFieldPayload))
 }
 
-func FilterFieldKey(config processor.Config) (transform.Transform, error) {
+func FilterFieldKey(config processor.Config) (processor.Processor, error) {
 	return filterField(filterFieldKeyName, recordKeyGetSetter{}, config)
 }
 
-func FilterFieldPayload(config processor.Config) (transform.Transform, error) {
+func FilterFieldPayload(config processor.Config) (processor.Processor, error) {
 	return filterField(filterFieldPayloadName, recordPayloadGetSetter{}, config)
 }
 
@@ -80,7 +80,7 @@ func filterField(
 	transformName string,
 	getSetter recordDataGetSetter,
 	config processor.Config,
-) (transform.Transform, error) {
+) (processor.Processor, error) {
 	if config == nil {
 		return nil, cerrors.New("must provide a transform config")
 	}

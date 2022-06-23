@@ -41,7 +41,7 @@ func init() {
 //    key data.
 //  * If the key is raw and has no schema, return an error (not supported).
 //  * If the key is structured, set the field(s) in the key data.
-func InsertFieldKey(config processor.Config) (transform.Transform, error) {
+func InsertFieldKey(config processor.Config) (processor.Processor, error) {
 	return insertField(insertFieldKeyName, recordKeyGetSetter{}, config)
 }
 
@@ -50,7 +50,7 @@ func InsertFieldKey(config processor.Config) (transform.Transform, error) {
 //    the payload data.
 //  * If the payload is raw and has no schema, return an error (not supported).
 //  * If the payload is structured, set the field(s) in the payload data.
-func InsertFieldPayload(config processor.Config) (transform.Transform, error) {
+func InsertFieldPayload(config processor.Config) (processor.Processor, error) {
 	return insertField(insertFieldPayloadName, recordPayloadGetSetter{}, config)
 }
 
@@ -58,7 +58,7 @@ func insertField(
 	transformName string,
 	getSetter recordDataGetSetter,
 	config processor.Config,
-) (transform.Transform, error) {
+) (processor.Processor, error) {
 	var (
 		err error
 
