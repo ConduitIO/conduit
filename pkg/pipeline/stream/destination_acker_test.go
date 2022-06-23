@@ -44,9 +44,6 @@ func TestAckerNode_Run_StopAfterWait(t *testing.T) {
 		is.NoErr(err)
 	}()
 
-	// give Go a chance to run the node
-	time.Sleep(time.Millisecond)
-
 	// note that there should be no calls to the destination at all if we didn't
 	// receive any ExpectedAck call
 
@@ -80,9 +77,6 @@ func TestAckerNode_Run_StopAfterExpectAck(t *testing.T) {
 		err := node.Run(ctx)
 		is.NoErr(err)
 	}()
-
-	// give Go a chance to run the node
-	time.Sleep(time.Millisecond)
 
 	// up to this point there should have been no calls to the destination
 	// only after the call to ExpectAck should the node try to fetch any acks
