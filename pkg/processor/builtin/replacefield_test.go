@@ -18,7 +18,6 @@ import (
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/foundation/assert"
-	"github.com/conduitio/conduit/pkg/processor/transform"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/conduitio/conduit/pkg/record/schema/mock"
 	"github.com/google/go-cmp/cmp"
@@ -26,7 +25,7 @@ import (
 
 func TestReplaceFieldKey_Build(t *testing.T) {
 	type args struct {
-		config transform.Config
+		config processor.Config
 	}
 	tests := []struct {
 		name    string
@@ -94,7 +93,7 @@ func TestReplaceFieldKey_Transform(t *testing.T) {
 	}
 	tests := []struct {
 		name    string
-		config  transform.Config
+		config  processor.Config
 		args    args
 		want    record.Record
 		wantErr bool
@@ -269,7 +268,7 @@ func TestReplaceFieldKey_Transform(t *testing.T) {
 
 func TestReplaceFieldPayload_Build(t *testing.T) {
 	type args struct {
-		config transform.Config
+		config processor.Config
 	}
 	tests := []struct {
 		name    string
@@ -337,7 +336,7 @@ func TestReplaceFieldPayload_Transform(t *testing.T) {
 	}
 	tests := []struct {
 		name    string
-		config  transform.Config
+		config  processor.Config
 		args    args
 		want    record.Record
 		wantErr bool

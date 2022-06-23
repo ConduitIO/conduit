@@ -39,7 +39,7 @@ func init() {
 //  * If the key is raw and has no schema, transform it into structured data by
 //    creating a map with the hoisted field and raw data as the value.
 //  * If the key is structured, wrap it using the specified field name in a map.
-func HoistFieldKey(config transform.Config) (transform.Transform, error) {
+func HoistFieldKey(config processor.Config) (transform.Transform, error) {
 	return hoistField(hoistFieldKeyName, recordKeyGetSetter{}, config)
 }
 
@@ -50,14 +50,14 @@ func HoistFieldKey(config transform.Config) (transform.Transform, error) {
 //    by creating a map with the hoisted field and raw data as the value.
 //  * If the payload is structured, wrap it using the specified field name in a
 //    map.
-func HoistFieldPayload(config transform.Config) (transform.Transform, error) {
+func HoistFieldPayload(config processor.Config) (transform.Transform, error) {
 	return hoistField(hoistFieldPayloadName, recordPayloadGetSetter{}, config)
 }
 
 func hoistField(
 	transformName string,
 	getSetter recordDataGetSetter,
-	config transform.Config,
+	config processor.Config,
 ) (transform.Transform, error) {
 	var (
 		err       error

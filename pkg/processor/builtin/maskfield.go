@@ -43,7 +43,7 @@ func init() {
 //  * If the key is raw and has no schema, return an error (not supported).
 //  * If the key is structured, replace the field with the zero value of the
 //    fields type.
-func MaskFieldKey(config transform.Config) (transform.Transform, error) {
+func MaskFieldKey(config processor.Config) (transform.Transform, error) {
 	return maskField(maskFieldKeyName, recordKeyGetSetter{}, config)
 }
 
@@ -53,14 +53,14 @@ func MaskFieldKey(config transform.Config) (transform.Transform, error) {
 //  * If the payload is raw and has no schema, return an error (not supported).
 //  * If the payload is structured, replace the field with the zero value of the
 //    fields type.
-func MaskFieldPayload(config transform.Config) (transform.Transform, error) {
+func MaskFieldPayload(config processor.Config) (transform.Transform, error) {
 	return maskField(maskFieldPayloadName, recordPayloadGetSetter{}, config)
 }
 
 func maskField(
 	transformName string,
 	getSetter recordDataGetSetter,
-	config transform.Config,
+	config processor.Config,
 ) (transform.Transform, error) {
 	var (
 		err         error

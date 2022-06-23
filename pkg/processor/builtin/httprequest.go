@@ -47,13 +47,13 @@ func init() {
 // URL with the specified HTTP method (default is POST). The record payload is
 // used as the request body and the raw response body is put into the record
 // payload.
-func HTTPRequest(config transform.Config) (transform.Transform, error) {
+func HTTPRequest(config processor.Config) (transform.Transform, error) {
 	return httpRequest(httpRequestName, config)
 }
 
 func httpRequest(
 	transformName string,
-	config transform.Config,
+	config processor.Config,
 ) (transform.Transform, error) {
 	var (
 		err    error
@@ -120,7 +120,7 @@ func httpRequest(
 
 func configureHTTPRequestBackoffRetry(
 	transformName string,
-	config transform.Config,
+	config processor.Config,
 	txfFunc transform.Transform,
 ) (transform.Transform, error) {
 	// retryCount is a float64 to match the backoff library attempt type

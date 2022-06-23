@@ -20,14 +20,13 @@ import (
 	"time"
 
 	"github.com/conduitio/conduit/pkg/foundation/assert"
-	"github.com/conduitio/conduit/pkg/processor/transform"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/conduitio/conduit/pkg/record/schema/mock"
 )
 
 func TestInsertFieldKey_Build(t *testing.T) {
 	type args struct {
-		config transform.Config
+		config processor.Config
 	}
 	tests := []struct {
 		name    string
@@ -71,7 +70,7 @@ func TestInsertFieldKey_Transform(t *testing.T) {
 	}
 	tests := []struct {
 		name    string
-		config  transform.Config
+		config  processor.Config
 		args    args
 		want    record.Record
 		wantErr bool
@@ -256,7 +255,7 @@ func TestInsertFieldKey_Transform(t *testing.T) {
 
 func TestInsertFieldPayload_Build(t *testing.T) {
 	type args struct {
-		config transform.Config
+		config processor.Config
 	}
 	tests := []struct {
 		name    string
@@ -300,7 +299,7 @@ func TestInsertFieldPayload_Transform(t *testing.T) {
 	}
 	tests := []struct {
 		name    string
-		config  transform.Config
+		config  processor.Config
 		args    args
 		want    record.Record
 		wantErr bool

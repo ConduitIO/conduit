@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/conduitio/conduit/pkg/foundation/assert"
-	"github.com/conduitio/conduit/pkg/processor/transform"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/conduitio/conduit/pkg/record/schema/mock"
 	"github.com/google/go-cmp/cmp"
@@ -27,7 +26,7 @@ import (
 
 func TestTimestampConvertorKey_Build(t *testing.T) {
 	type args struct {
-		config transform.Config
+		config processor.Config
 	}
 	tests := []struct {
 		name    string
@@ -85,7 +84,7 @@ func TestTimestampConvertorKey_Transform(t *testing.T) {
 	}
 	tests := []struct {
 		name    string
-		config  transform.Config
+		config  processor.Config
 		args    args
 		want    record.Record
 		wantErr bool
@@ -251,7 +250,7 @@ func TestTimestampConvertorKey_Transform(t *testing.T) {
 
 func TestTimestampConvertorPayload_Build(t *testing.T) {
 	type args struct {
-		config transform.Config
+		config processor.Config
 	}
 	tests := []struct {
 		name    string
@@ -292,7 +291,7 @@ func TestTimestampConvertorPayload_Transform(t *testing.T) {
 	}
 	tests := []struct {
 		name    string
-		config  transform.Config
+		config  processor.Config
 		args    args
 		want    record.Record
 		wantErr bool

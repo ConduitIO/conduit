@@ -19,14 +19,13 @@ import (
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/foundation/assert"
-	"github.com/conduitio/conduit/pkg/processor/transform"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/conduitio/conduit/pkg/record/schema/mock"
 )
 
 func TestExtractFieldKey_Build(t *testing.T) {
 	type args struct {
-		config transform.Config
+		config processor.Config
 	}
 	tests := []struct {
 		name    string
@@ -66,7 +65,7 @@ func TestExtractFieldKey_Transform(t *testing.T) {
 	}
 	tests := []struct {
 		name    string
-		config  transform.Config
+		config  processor.Config
 		args    args
 		want    record.Record
 		wantErr bool
@@ -134,7 +133,7 @@ func TestExtractFieldKey_Transform(t *testing.T) {
 
 func TestExtractFieldPayload_Build(t *testing.T) {
 	type args struct {
-		config transform.Config
+		config processor.Config
 	}
 	tests := []struct {
 		name    string
@@ -174,7 +173,7 @@ func TestExtractFieldPayload_Transform(t *testing.T) {
 	}
 	tests := []struct {
 		name    string
-		config  transform.Config
+		config  processor.Config
 		args    args
 		want    record.Record
 		wantErr bool

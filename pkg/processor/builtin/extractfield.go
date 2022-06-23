@@ -41,7 +41,7 @@ func init() {
 //  * If the key is raw and has no schema, return an error (not supported).
 //  * If the key is structured, extract the field and use it to replace the
 //    entire key.
-func ExtractFieldKey(config transform.Config) (transform.Transform, error) {
+func ExtractFieldKey(config processor.Config) (transform.Transform, error) {
 	return extractField(extractFieldKeyName, recordKeyGetSetter{}, config)
 }
 
@@ -51,14 +51,14 @@ func ExtractFieldKey(config transform.Config) (transform.Transform, error) {
 //  * If the payload is raw and has no schema, return an error (not supported).
 //  * If the payload is structured, extract the field and use it to replace the
 //    entire payload.
-func ExtractFieldPayload(config transform.Config) (transform.Transform, error) {
+func ExtractFieldPayload(config processor.Config) (transform.Transform, error) {
 	return extractField(extractFieldPayloadName, recordPayloadGetSetter{}, config)
 }
 
 func extractField(
 	transformName string,
 	getSetter recordDataGetSetter,
-	config transform.Config,
+	config processor.Config,
 ) (transform.Transform, error) {
 	var (
 		err       error

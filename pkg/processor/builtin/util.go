@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/processor/transform"
 	"github.com/conduitio/conduit/pkg/record"
 )
 
@@ -34,7 +33,7 @@ func (f funcProcessor) Execute(ctx context.Context, record record.Record) (recor
 
 var errEmptyConfigField = cerrors.New("empty config field")
 
-func getConfigFieldString(c transform.Config, field string) (string, error) {
+func getConfigFieldString(c processor.Config, field string) (string, error) {
 	val, ok := c[field]
 	if !ok || val == "" {
 		return "", cerrors.Errorf("failed to retrieve config field %q: %w", field, errEmptyConfigField)
@@ -42,7 +41,7 @@ func getConfigFieldString(c transform.Config, field string) (string, error) {
 	return val, nil
 }
 
-func getConfigFieldFloat64(c transform.Config, field string) (float64, error) {
+func getConfigFieldFloat64(c processor.Config, field string) (float64, error) {
 	raw, err := getConfigFieldString(c, field)
 	if err != nil {
 		return 0, err
@@ -56,7 +55,7 @@ func getConfigFieldFloat64(c transform.Config, field string) (float64, error) {
 	return parsed, nil
 }
 
-func getConfigFieldInt64(c transform.Config, field string) (int64, error) {
+func getConfigFieldInt64(c processor.Config, field string) (int64, error) {
 	raw, err := getConfigFieldString(c, field)
 	if err != nil {
 		return 0, err
@@ -70,7 +69,7 @@ func getConfigFieldInt64(c transform.Config, field string) (int64, error) {
 	return parsed, nil
 }
 
-func getConfigFieldDuration(c transform.Config, field string) (time.Duration, error) {
+func getConfigFieldDuration(c processor.Config, field string) (time.Duration, error) {
 	raw, err := getConfigFieldString(c, field)
 	if err != nil {
 		return 0, err

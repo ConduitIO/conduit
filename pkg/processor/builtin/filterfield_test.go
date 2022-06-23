@@ -19,14 +19,13 @@ import (
 
 	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/processor/transform"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/google/go-cmp/cmp"
 )
 
 func TestFilterFieldKey_Build(t *testing.T) {
 	type args struct {
-		config transform.Config
+		config processor.Config
 	}
 	tests := []struct {
 		name    string
@@ -50,7 +49,7 @@ func TestFilterFieldKey_Build(t *testing.T) {
 		{
 			name: "empty type returns error",
 			args: args{
-				config: transform.Config{
+				config: processor.Config{
 					"type":      "",
 					"condition": "$[key]",
 				},
@@ -60,7 +59,7 @@ func TestFilterFieldKey_Build(t *testing.T) {
 		{
 			name: "empty condition returns error",
 			args: args{
-				config: transform.Config{
+				config: processor.Config{
 					"type":      "include",
 					"condition": "",
 					"fail":      "include",
@@ -71,7 +70,7 @@ func TestFilterFieldKey_Build(t *testing.T) {
 		{
 			name: "valid config should return transform",
 			args: args{
-				config: transform.Config{
+				config: processor.Config{
 					"type":      "include",
 					"condition": ".key",
 					"fail":      "include",
@@ -98,7 +97,7 @@ func TestFilterFieldKey_Transform(t *testing.T) {
 	tests := []struct {
 		name    string
 		args    args
-		config  transform.Config
+		config  processor.Config
 		want    record.Record
 		wantErr bool
 		err     error
@@ -216,7 +215,7 @@ func TestFilterFieldKey_Transform(t *testing.T) {
 
 func TestFilterFieldPayload_Build(t *testing.T) {
 	type args struct {
-		config transform.Config
+		config processor.Config
 	}
 	tests := []struct {
 		name    string
@@ -273,7 +272,7 @@ func TestFilterFieldPayload_Build(t *testing.T) {
 
 func TestFilterFieldPayload_Transform(t *testing.T) {
 	type args struct {
-		config transform.Config
+		config processor.Config
 		r      record.Record
 	}
 	tests := []struct {
@@ -291,7 +290,7 @@ func TestFilterFieldPayload_Transform(t *testing.T) {
 						"foo": "bar",
 					},
 				},
-				config: transform.Config{
+				config: processor.Config{
 					"type":          "include",
 					"condition":     "foo",
 					"missingornull": "fail",
@@ -311,7 +310,7 @@ func TestFilterFieldPayload_Transform(t *testing.T) {
 						"foo": "5",
 					},
 				},
-				config: transform.Config{
+				config: processor.Config{
 					"type":      "exclude",
 					"condition": "foo > 1",
 				}},
@@ -327,7 +326,7 @@ func TestFilterFieldPayload_Transform(t *testing.T) {
 						"bar": "3",
 					},
 				},
-				config: transform.Config{
+				config: processor.Config{
 					"type":          "exclude",
 					"condition":     "foo > 1",
 					"exists":        "foo",
