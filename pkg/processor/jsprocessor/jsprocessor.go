@@ -35,32 +35,81 @@ type jsProcessor struct {
 }
 
 func NewJSProcessor(src string, logger zerolog.Logger) (processor.Processor, error) {
-	rt := goja.New()
-	err := setRuntimeHelpers(logger, rt)
+	p := jsProcessor{}
+	err := p.initJSRuntime(logger)
 	if err != nil {
-		return jsProcessor{}, err
+		return jsProcessor{}, cerrors.Errorf("failed initializing JS runtime: %w", err)
 	}
 
+	err = p.initFunction(src)
+	if err != nil {
+		return jsProcessor{}, cerrors.Errorf("failed initializing JS function: %w", err)
+	}
+
+	return p, nil
+}
+
+func (p jsProcessor) initJSRuntime(logger zerolog.Logger) error {
+	rt := goja.New()
+	runtimeHelpers := map[string]interface{}{
+		"logger":  &logger,
+		"Record":  p.jsRecord,
+		"RawData": p.jsContentRaw,
+	}
+
+	for name, helper := range runtimeHelpers {
+		if err := rt.Set(name, helper); err != nil {
+			return cerrors.Errorf("failed to set helper %q: %w", name, err)
+		}
+	}
+	return nil
+}
+
+func (p jsProcessor) initFunction(src string) error {
 	prg, err := goja.Compile("", src, false)
 	if err != nil {
-		return jsProcessor{}, cerrors.Errorf("failed to compile transformer script: %w", err)
+		return cerrors.Errorf("failed to compile transformer script: %w", err)
 	}
 
-	_, err = rt.RunProgram(prg)
+	_, err = p.runtime.RunProgram(prg)
 	if err != nil {
-		return jsProcessor{}, cerrors.Errorf("failed to run program: %w", err)
+		return cerrors.Errorf("failed to run program: %w", err)
 	}
 
-	tmp := rt.Get(entrypoint)
+	tmp := p.runtime.Get(entrypoint)
 	entrypointFunc, ok := goja.AssertFunction(tmp)
 	if !ok {
-		return jsProcessor{}, cerrors.Errorf("failed to get entrypoint function %q", entrypoint)
+		return cerrors.Errorf("failed to get entrypoint function %q", entrypoint)
 	}
 
-	return jsProcessor{
-		runtime:  rt,
-		function: entrypointFunc,
-	}, nil
+	p.function = entrypointFunc
+	return nil
+}
+
+func (p jsProcessor) jsRecord() func(goja.ConstructorCall) *goja.Object {
+	return func(goja.ConstructorCall) *goja.Object {
+		// TODO accept arguments
+		// We return a record.Record struct, however because we are
+		// not changing call.This instanceof will not work as expected.
+
+		r := record.Record{
+			Metadata: make(map[string]string),
+		}
+		// We need to return a pointer to make the returned object mutable.
+		return p.runtime.ToValue(&r).ToObject(p.runtime)
+	}
+}
+
+func (p jsProcessor) jsContentRaw() func(goja.ConstructorCall) *goja.Object {
+	return func(goja.ConstructorCall) *goja.Object {
+		// TODO accept arguments
+		// We return a record.RawData struct, however because we are
+		// not changing call.This instanceof will not work as expected.
+
+		r := record.RawData{}
+		// We need to return a pointer to make the returned object mutable.
+		return p.runtime.ToValue(&r).ToObject(p.runtime)
+	}
 }
 
 func (p jsProcessor) Execute(_ context.Context, in record.Record) (record.Record, error) {
@@ -133,46 +182,4 @@ func (p jsProcessor) dereferenceContent(r *record.Record) *record.Record {
 	}
 
 	return r
-}
-
-// todo maybe move into the Function struct
-func setRuntimeHelpers(logger zerolog.Logger, rt *goja.Runtime) error {
-	runtimeHelpers := map[string]interface{}{
-		"logger":  &logger,
-		"Record":  jsRecord(rt),
-		"RawData": jsContentRaw(rt),
-	}
-
-	for name, helper := range runtimeHelpers {
-		if err := rt.Set(name, helper); err != nil {
-			return cerrors.Errorf("failed to set helper %q: %w", name, err)
-		}
-	}
-	return nil
-}
-
-func jsRecord(rt *goja.Runtime) func(goja.ConstructorCall) *goja.Object {
-	return func(goja.ConstructorCall) *goja.Object {
-		// TODO accept arguments
-		// We return a record.Record struct, however because we are
-		// not changing call.This instanceof will not work as expected.
-
-		r := record.Record{
-			Metadata: make(map[string]string),
-		}
-		// We need to return a pointer to make the returned object mutable.
-		return rt.ToValue(&r).ToObject(rt)
-	}
-}
-
-func jsContentRaw(rt *goja.Runtime) func(goja.ConstructorCall) *goja.Object {
-	return func(goja.ConstructorCall) *goja.Object {
-		// TODO accept arguments
-		// We return a record.RawData struct, however because we are
-		// not changing call.This instanceof will not work as expected.
-
-		r := record.RawData{}
-		// We need to return a pointer to make the returned object mutable.
-		return rt.ToValue(&r).ToObject(rt)
-	}
 }
