@@ -38,10 +38,10 @@ func Builder(config processor.Config) (processor.Processor, error) {
 
 	// TODO get logger from config or some other place
 	logger := zerolog.New(zerolog.NewConsoleWriter()).With().Timestamp().Logger()
-	t, err := NewTransformer(config.Settings[configScript], logger)
+	p, err := NewJSProcessor(config.Settings[configScript], logger)
 	if err != nil {
 		return nil, cerrors.Errorf("%s: %w", transformName, err)
 	}
 
-	return t, nil
+	return p, nil
 }

@@ -30,7 +30,7 @@ import (
 func TestTransformer_Logger(t *testing.T) {
 	var buf bytes.Buffer
 	logger := zerolog.New(&buf)
-	tr, err := NewTransformer(`
+	tr, err := NewJSProcessor(`
 	function transform(r) {
 		logger.Info().Msg("Hello");
 		return r
@@ -45,7 +45,7 @@ func TestTransformer_Logger(t *testing.T) {
 }
 
 func TestTransformer_Transform_MissingEntrypoint(t *testing.T) {
-	tr, err := NewTransformer(`
+	tr, err := NewJSProcessor(`
 logger.Debug("no entrypoint");
 `, zerolog.Nop())
 
@@ -133,7 +133,7 @@ function transform(record) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tr, err := NewTransformer(tt.fields.src, zerolog.Nop())
+			tr, err := NewJSProcessor(tt.fields.src, zerolog.Nop())
 			assert.Ok(t, err)
 
 			got, err := tr.Transform(tt.args.record)
@@ -191,7 +191,7 @@ func TestTransformer_Filtering(t *testing.T) {
 	for _, tc := range testCases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			underTest, err := NewTransformer(tc.src, zerolog.New(zerolog.NewConsoleWriter()))
+			underTest, err := NewJSProcessor(tc.src, zerolog.New(zerolog.NewConsoleWriter()))
 			assert.Ok(t, err)
 
 			rec, err := underTest.Transform(tc.input)
