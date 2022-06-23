@@ -92,8 +92,6 @@ func (n *FanoutNode) Run(ctx context.Context) error {
 								return msg.Ack()
 							case <-msg.Nacked():
 								return cerrors.New("message was nacked by another node")
-							case <-msg.Dropped():
-								return ErrMessageDropped
 							}
 						}),
 					)
@@ -104,31 +102,10 @@ func (n *FanoutNode) Run(ctx context.Context) error {
 							return msg.Nack(reason)
 						}),
 					)
-					newMsg.RegisterDropHandler(
-						// wrap drop handler to make sure msg is not overwritten
-						// by the time drop handler is called
-						n.wrapDropHandler(msg, func(msg *Message, reason error) {
-							defer func() {
-								if err := recover(); err != nil {
-									if cerrors.Is(err.(error), ErrUnexpectedMessageStatus) {
-										// the unexpected message status is expected (I know, right?)
-										// this rare case might happen if one downstream node first
-										// nacks the message and afterwards another node tries to drop
-										// the message
-										// this is a valid use case, the panic is trying to make us
-										// notice all other invalid use cases
-										return
-									}
-									panic(err) // re-panic
-								}
-							}()
-							msg.Drop()
-						}),
-					)
 
 					select {
 					case <-ctx.Done():
-						msg.Drop()
+						_ = msg.Nack(ctx.Err()) // TODO handle this, don't approve PR unless this is handled
 						return
 					case n.out[i] <- newMsg:
 					}
@@ -158,15 +135,6 @@ func (n *FanoutNode) wrapAckHandler(origMsg *Message, f AckHandler) AckHandler {
 func (n *FanoutNode) wrapNackHandler(origMsg *Message, f NackHandler) NackHandler {
 	return func(_ *Message, reason error) error {
 		return f(origMsg, reason)
-	}
-}
-
-// wrapDropHandler modifies the drop handler, so it's called with the original
-// message received by FanoutNode instead of the new message created by
-// FanoutNode.
-func (n *FanoutNode) wrapDropHandler(origMsg *Message, f DropHandler) DropHandler {
-	return func(_ *Message, reason error) {
-		f(origMsg, reason)
 	}
 }
 

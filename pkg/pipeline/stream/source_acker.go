@@ -56,13 +56,13 @@ func (n *SourceAckerNode) Run(ctx context.Context) error {
 
 		// enqueue message in semaphore
 		ticket := n.sem.Enqueue()
+		// TODO make sure that if an ack/nack fails we stop forwarding acks
 		n.registerAckHandler(msg, ticket)
 		n.registerNackHandler(msg, ticket)
 
 		err = n.base.Send(ctx, n.logger, msg)
 		if err != nil {
-			msg.Drop()
-			return err
+			return msg.Nack(err)
 		}
 	}
 }

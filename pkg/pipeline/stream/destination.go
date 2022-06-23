@@ -94,7 +94,8 @@ func (n *DestinationNode) Run(ctx context.Context) (err error) {
 		writeTime := time.Now()
 		err = n.Destination.Write(msg.Ctx, msg.Record)
 		if err != nil {
-			n.AckerNode.ForgetAndDrop(msg)
+			n.AckerNode.Forget(msg)
+			_ = msg.Nack(err) // TODO think this through if it makes sense to return the error
 			return cerrors.Errorf("error writing to destination: %w", err)
 		}
 		n.ConnectorTimer.Update(time.Since(writeTime))

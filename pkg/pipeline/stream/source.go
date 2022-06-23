@@ -116,8 +116,7 @@ func (n *SourceNode) Run(ctx context.Context) (err error) {
 
 		err = n.base.Send(ctx, n.logger, msg)
 		if err != nil {
-			msg.Drop()
-			return err
+			return msg.Nack(err)
 		}
 	}
 }
