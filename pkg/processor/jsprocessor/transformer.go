@@ -12,20 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package txfjs
+package jsProcessor
 
 import (
 	"context"
-	"github.com/dop251/goja"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/record"
+	"github.com/dop251/goja"
 	"github.com/rs/zerolog"
 )
 
 const (
-	entrypoint = "transform"
+	entrypoint = "process"
 )
 
 // jsProcessor is able to run transformations defined in JavaScript.
