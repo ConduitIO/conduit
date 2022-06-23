@@ -113,6 +113,11 @@ func (n *DestinationAckerNode) Run(ctx context.Context) (err error) {
 			continue
 		}
 
+		// TODO make sure acks are called in the right order or this will block
+		//  forever. Right now we rely on connectors sending acks back in the
+		//  correct order and this should generally be true, but we can't be
+		//  completely sure and a badly written connector shouldn't provoke a
+		//  deadlock.
 		err = n.handleAck(msg, err)
 		if err != nil {
 			return err
