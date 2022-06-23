@@ -15,6 +15,8 @@
 package builtin
 
 import (
+	"context"
+	"github.com/conduitio/conduit/pkg/processor"
 	"reflect"
 	"testing"
 
@@ -33,21 +35,28 @@ func TestHoistFieldKey_Build(t *testing.T) {
 		wantErr bool
 	}{{
 		name:    "nil config returns error",
-		args:    args{config: nil},
+		args:    args{config: processor.Config{}},
 		wantErr: true,
 	}, {
-		name:    "empty config returns error",
-		args:    args{config: map[string]string{}},
+		name: "empty config returns error",
+		args: args{config: processor.Config{
+			Settings: map[string]string{},
+		}},
 		wantErr: true,
 	}, {
-		name:    "empty field returns error",
-		args:    args{config: map[string]string{hoistFieldConfigField: ""}},
+		name: "empty field returns error",
+		args: args{config: processor.Config{
+			Settings: map[string]string{hoistFieldConfigField: ""},
+		}},
 		wantErr: true,
 	}, {
-		name:    "non-empty field returns transform",
-		args:    args{config: map[string]string{hoistFieldConfigField: "foo"}},
+		name: "non-empty field returns transform",
+		args: args{config: processor.Config{
+			Settings: map[string]string{hoistFieldConfigField: "foo"},
+		}},
 		wantErr: false,
 	}}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := HoistFieldKey(tt.args.config)
@@ -70,8 +79,10 @@ func TestHoistFieldKey_Transform(t *testing.T) {
 		want    record.Record
 		wantErr bool
 	}{{
-		name:   "structured data",
-		config: map[string]string{hoistFieldConfigField: "foo"},
+		name: "structured data",
+		config: processor.Config{
+			Settings: map[string]string{hoistFieldConfigField: "foo"},
+		},
 		args: args{r: record.Record{
 			Key: record.StructuredData{
 				"bar": 123,
@@ -88,8 +99,10 @@ func TestHoistFieldKey_Transform(t *testing.T) {
 		},
 		wantErr: false,
 	}, {
-		name:   "raw data without schema",
-		config: map[string]string{hoistFieldConfigField: "foo"},
+		name: "raw data without schema",
+		config: processor.Config{
+			Settings: map[string]string{hoistFieldConfigField: "foo"},
+		},
 		args: args{r: record.Record{
 			Key: record.RawData{
 				Raw:    []byte("raw data"),
@@ -103,8 +116,10 @@ func TestHoistFieldKey_Transform(t *testing.T) {
 		},
 		wantErr: false,
 	}, {
-		name:   "raw data with schema",
-		config: map[string]string{hoistFieldConfigField: "foo"},
+		name: "raw data with schema",
+		config: processor.Config{
+			Settings: map[string]string{hoistFieldConfigField: "foo"},
+		},
 		args: args{r: record.Record{
 			Key: record.RawData{
 				Raw:    []byte("raw data"),
@@ -116,9 +131,9 @@ func TestHoistFieldKey_Transform(t *testing.T) {
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			txfFunc, err := HoistFieldKey(tt.config)
+			underTest, err := HoistFieldKey(tt.config)
 			assert.Ok(t, err)
-			got, err := txfFunc(tt.args.r)
+			got, err := underTest.Execute(context.Background(), tt.args.r)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Transform() error = %v, wantErr = %v", err, tt.wantErr)
 				return
@@ -140,21 +155,28 @@ func TestHoistFieldPayload_Build(t *testing.T) {
 		wantErr bool
 	}{{
 		name:    "nil config returns error",
-		args:    args{config: nil},
+		args:    args{config: processor.Config{}},
 		wantErr: true,
 	}, {
-		name:    "empty config returns error",
-		args:    args{config: map[string]string{}},
+		name: "empty config returns error",
+		args: args{config: processor.Config{
+			Settings: map[string]string{},
+		}},
 		wantErr: true,
 	}, {
-		name:    "empty field returns error",
-		args:    args{config: map[string]string{hoistFieldConfigField: ""}},
+		name: "empty field returns error",
+		args: args{config: processor.Config{
+			Settings: map[string]string{hoistFieldConfigField: ""},
+		}},
 		wantErr: true,
 	}, {
-		name:    "non-empty field returns transform",
-		args:    args{config: map[string]string{hoistFieldConfigField: "foo"}},
+		name: "non-empty field returns transform",
+		args: args{config: processor.Config{
+			Settings: map[string]string{hoistFieldConfigField: "foo"},
+		}},
 		wantErr: false,
 	}}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := HoistFieldPayload(tt.args.config)
@@ -177,8 +199,10 @@ func TestHoistFieldPayload_Transform(t *testing.T) {
 		want    record.Record
 		wantErr bool
 	}{{
-		name:   "structured data",
-		config: map[string]string{hoistFieldConfigField: "foo"},
+		name: "structured data",
+		config: processor.Config{
+			Settings: map[string]string{hoistFieldConfigField: "foo"},
+		},
 		args: args{r: record.Record{
 			Payload: record.StructuredData{
 				"bar": 123,
@@ -195,8 +219,10 @@ func TestHoistFieldPayload_Transform(t *testing.T) {
 		},
 		wantErr: false,
 	}, {
-		name:   "raw data without schema",
-		config: map[string]string{hoistFieldConfigField: "foo"},
+		name: "raw data without schema",
+		config: processor.Config{
+			Settings: map[string]string{hoistFieldConfigField: "foo"},
+		},
 		args: args{r: record.Record{
 			Payload: record.RawData{
 				Raw:    []byte("raw data"),
@@ -210,8 +236,10 @@ func TestHoistFieldPayload_Transform(t *testing.T) {
 		},
 		wantErr: false,
 	}, {
-		name:   "raw data with schema",
-		config: map[string]string{hoistFieldConfigField: "foo"},
+		name: "raw data with schema",
+		config: processor.Config{
+			Settings: map[string]string{hoistFieldConfigField: "foo"},
+		},
 		args: args{r: record.Record{
 			Payload: record.RawData{
 				Raw:    []byte("raw data"),
@@ -223,9 +251,9 @@ func TestHoistFieldPayload_Transform(t *testing.T) {
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			txfFunc, err := HoistFieldPayload(tt.config)
+			underTest, err := HoistFieldPayload(tt.config)
 			assert.Ok(t, err)
-			got, err := txfFunc(tt.args.r)
+			got, err := underTest.Execute(context.Background(), tt.args.r)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Transform() error = %v, wantErr = %v", err, tt.wantErr)
 				return

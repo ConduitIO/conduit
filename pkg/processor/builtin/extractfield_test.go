@@ -27,7 +27,7 @@ import (
 
 func TestExtractFieldKey_Build(t *testing.T) {
 	type args struct {
-		config map[string]string
+		config processor.Config
 	}
 	tests := []struct {
 		name    string
@@ -35,24 +35,30 @@ func TestExtractFieldKey_Build(t *testing.T) {
 		wantErr bool
 	}{{
 		name:    "nil config returns error",
-		args:    args{config: nil},
+		args:    args{config: processor.Config{}},
 		wantErr: true,
 	}, {
-		name:    "empty config returns error",
-		args:    args{config: map[string]string{}},
+		name: "empty config returns error",
+		args: args{config: processor.Config{
+			Settings: map[string]string{},
+		}},
 		wantErr: true,
 	}, {
-		name:    "empty field returns error",
-		args:    args{config: map[string]string{extractFieldConfigField: ""}},
+		name: "empty field returns error",
+		args: args{config: processor.Config{
+			Settings: map[string]string{extractFieldConfigField: ""},
+		}},
 		wantErr: true,
 	}, {
-		name:    "non-empty field returns transform",
-		args:    args{config: map[string]string{extractFieldConfigField: "foo"}},
+		name: "non-empty field returns transform",
+		args: args{config: processor.Config{
+			Settings: map[string]string{extractFieldConfigField: "foo"},
+		}},
 		wantErr: false,
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := ExtractFieldKey(processor.Config{Settings: tt.args.config})
+			_, err := ExtractFieldKey(tt.args.config)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ExtractFieldKey() error = %v, wantErr = %v", err, tt.wantErr)
 				return
@@ -67,13 +73,15 @@ func TestExtractFieldKey_Transform(t *testing.T) {
 	}
 	tests := []struct {
 		name    string
-		config  map[string]string
+		config  processor.Config
 		args    args
 		want    record.Record
 		wantErr bool
 	}{{
-		name:   "structured data",
-		config: map[string]string{extractFieldConfigField: "foo"},
+		name: "structured data",
+		config: processor.Config{
+			Settings: map[string]string{extractFieldConfigField: "foo"},
+		},
 		args: args{r: record.Record{
 			Key: record.StructuredData{
 				"foo": 123,
@@ -86,8 +94,10 @@ func TestExtractFieldKey_Transform(t *testing.T) {
 		},
 		wantErr: false,
 	}, {
-		name:   "structured data field not found",
-		config: map[string]string{extractFieldConfigField: "foo"},
+		name: "structured data field not found",
+		config: processor.Config{
+			Settings: map[string]string{extractFieldConfigField: "foo"},
+		},
 		args: args{r: record.Record{
 			Key: record.StructuredData{
 				"bar": 123,
@@ -96,8 +106,10 @@ func TestExtractFieldKey_Transform(t *testing.T) {
 		}},
 		wantErr: true,
 	}, {
-		name:   "raw data without schema",
-		config: map[string]string{extractFieldConfigField: "foo"},
+		name: "raw data without schema",
+		config: processor.Config{
+			Settings: map[string]string{extractFieldConfigField: "foo"},
+		},
 		args: args{r: record.Record{
 			Key: record.RawData{
 				Raw:    []byte("raw data"),
@@ -106,8 +118,10 @@ func TestExtractFieldKey_Transform(t *testing.T) {
 		}},
 		wantErr: true, // not supported
 	}, {
-		name:   "raw data with schema",
-		config: map[string]string{extractFieldConfigField: "foo"},
+		name: "raw data with schema",
+		config: processor.Config{
+			Settings: map[string]string{extractFieldConfigField: "foo"},
+		},
 		args: args{r: record.Record{
 			Key: record.RawData{
 				Raw:    []byte("raw data"),
@@ -117,9 +131,10 @@ func TestExtractFieldKey_Transform(t *testing.T) {
 		want:    record.Record{},
 		wantErr: true, // TODO not implemented
 	}}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			underTest, err := ExtractFieldKey(processor.Config{Settings: tt.config})
+			underTest, err := ExtractFieldKey(tt.config)
 			assert.Ok(t, err)
 			got, err := underTest.Execute(context.Background(), tt.args.r)
 			if (err != nil) != tt.wantErr {
@@ -135,7 +150,7 @@ func TestExtractFieldKey_Transform(t *testing.T) {
 
 func TestExtractFieldPayload_Build(t *testing.T) {
 	type args struct {
-		config map[string]string
+		config processor.Config
 	}
 	tests := []struct {
 		name    string
@@ -143,24 +158,30 @@ func TestExtractFieldPayload_Build(t *testing.T) {
 		wantErr bool
 	}{{
 		name:    "nil config returns error",
-		args:    args{config: nil},
+		args:    args{config: processor.Config{}},
 		wantErr: true,
 	}, {
-		name:    "empty config returns error",
-		args:    args{config: map[string]string{}},
+		name: "empty config returns error",
+		args: args{config: processor.Config{
+			Settings: map[string]string{},
+		}},
 		wantErr: true,
 	}, {
-		name:    "empty field returns error",
-		args:    args{config: map[string]string{extractFieldConfigField: ""}},
+		name: "empty field returns error",
+		args: args{config: processor.Config{
+			Settings: map[string]string{extractFieldConfigField: ""},
+		}},
 		wantErr: true,
 	}, {
-		name:    "non-empty field returns transform",
-		args:    args{config: map[string]string{extractFieldConfigField: "foo"}},
+		name: "non-empty field returns transform",
+		args: args{config: processor.Config{
+			Settings: map[string]string{extractFieldConfigField: "foo"},
+		}},
 		wantErr: false,
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := ExtractFieldPayload(processor.Config{Settings: tt.args.config})
+			_, err := ExtractFieldPayload(tt.args.config)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ExtractFieldPayload() error = %v, wantErr = %v", err, tt.wantErr)
 				return
@@ -175,13 +196,15 @@ func TestExtractFieldPayload_Transform(t *testing.T) {
 	}
 	tests := []struct {
 		name    string
-		config  map[string]string
+		config  processor.Config
 		args    args
 		want    record.Record
 		wantErr bool
 	}{{
-		name:   "structured data",
-		config: map[string]string{extractFieldConfigField: "foo"},
+		name: "structured data",
+		config: processor.Config{
+			Settings: map[string]string{extractFieldConfigField: "foo"},
+		},
 		args: args{r: record.Record{
 			Payload: record.StructuredData{
 				"foo": 123,
@@ -194,8 +217,10 @@ func TestExtractFieldPayload_Transform(t *testing.T) {
 		},
 		wantErr: false,
 	}, {
-		name:   "structured data field not found",
-		config: map[string]string{extractFieldConfigField: "foo"},
+		name: "structured data field not found",
+		config: processor.Config{
+			Settings: map[string]string{extractFieldConfigField: "foo"},
+		},
 		args: args{r: record.Record{
 			Payload: record.StructuredData{
 				"bar": 123,
@@ -204,8 +229,10 @@ func TestExtractFieldPayload_Transform(t *testing.T) {
 		}},
 		wantErr: true,
 	}, {
-		name:   "raw data without schema",
-		config: map[string]string{extractFieldConfigField: "foo"},
+		name: "raw data without schema",
+		config: processor.Config{
+			Settings: map[string]string{extractFieldConfigField: "foo"},
+		},
 		args: args{r: record.Record{
 			Payload: record.RawData{
 				Raw:    []byte("raw data"),
@@ -214,8 +241,10 @@ func TestExtractFieldPayload_Transform(t *testing.T) {
 		}},
 		wantErr: true, // not supported
 	}, {
-		name:   "raw data with schema",
-		config: map[string]string{extractFieldConfigField: "foo"},
+		name: "raw data with schema",
+		config: processor.Config{
+			Settings: map[string]string{extractFieldConfigField: "foo"},
+		},
 		args: args{r: record.Record{
 			Payload: record.RawData{
 				Raw:    []byte("raw data"),
@@ -225,9 +254,10 @@ func TestExtractFieldPayload_Transform(t *testing.T) {
 		want:    record.Record{},
 		wantErr: true, // TODO not implemented
 	}}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			underTest, err := ExtractFieldPayload(processor.Config{Settings: tt.config})
+			underTest, err := ExtractFieldPayload(tt.config)
 			assert.Ok(t, err)
 			got, err := underTest.Execute(context.Background(), tt.args.r)
 			if (err != nil) != tt.wantErr {

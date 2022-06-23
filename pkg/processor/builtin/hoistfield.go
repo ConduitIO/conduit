@@ -15,9 +15,9 @@
 package builtin
 
 import (
+	"context"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/processor"
-	"github.com/conduitio/conduit/pkg/processor/transform"
 	"github.com/conduitio/conduit/pkg/record"
 )
 
@@ -29,8 +29,8 @@ const (
 )
 
 func init() {
-	processor.GlobalBuilderRegistry.MustRegister(hoistFieldKeyName, transform.NewBuilder(HoistFieldKey))
-	processor.GlobalBuilderRegistry.MustRegister(hoistFieldPayloadName, transform.NewBuilder(HoistFieldPayload))
+	processor.GlobalBuilderRegistry.MustRegister(hoistFieldKeyName, HoistFieldKey)
+	processor.GlobalBuilderRegistry.MustRegister(hoistFieldPayloadName, HoistFieldPayload)
 }
 
 // HoistFieldKey builds the following transform:
@@ -68,27 +68,29 @@ func hoistField(
 		return nil, cerrors.Errorf("%s: %w", transformName, err)
 	}
 
-	return func(r record.Record) (record.Record, error) {
-		data := getSetter.Get(r)
+	return funcProcessor{
+		fn: func(_ context.Context, r record.Record) (record.Record, error) {
+			data := getSetter.Get(r)
 
-		switch d := data.(type) {
-		case record.RawData:
-			if d.Schema == nil {
-				data = record.StructuredData{
-					fieldName: d.Raw,
+			switch d := data.(type) {
+			case record.RawData:
+				if d.Schema == nil {
+					data = record.StructuredData{
+						fieldName: d.Raw,
+					}
+				} else {
+					return record.Record{}, cerrors.Errorf("%s: data with schema not supported yet", transformName) // TODO
 				}
-			} else {
-				return record.Record{}, cerrors.Errorf("%s: data with schema not supported yet", transformName) // TODO
+			case record.StructuredData:
+				data = record.StructuredData{
+					fieldName: map[string]interface{}(d),
+				}
+			default:
+				return record.Record{}, cerrors.Errorf("%s: unexpected data type %T", transformName, data)
 			}
-		case record.StructuredData:
-			data = record.StructuredData{
-				fieldName: map[string]interface{}(d),
-			}
-		default:
-			return record.Record{}, cerrors.Errorf("%s: unexpected data type %T", transformName, data)
-		}
 
-		r = getSetter.Set(r, data)
-		return r, nil
+			r = getSetter.Set(r, data)
+			return r, nil
+		},
 	}, nil
 }
