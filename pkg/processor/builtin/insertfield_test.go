@@ -15,6 +15,8 @@
 package builtin
 
 import (
+	"context"
+	"github.com/conduitio/conduit/pkg/processor"
 	"reflect"
 	"testing"
 	"time"
@@ -34,23 +36,39 @@ func TestInsertFieldKey_Build(t *testing.T) {
 		wantErr bool
 	}{{
 		name:    "nil config returns error",
-		args:    args{config: nil},
+		args:    args{config: processor.Config{}},
 		wantErr: true,
 	}, {
-		name:    "empty config returns error",
-		args:    args{config: map[string]string{}},
+		name: "empty config returns error",
+		args: args{config: processor.Config{
+			Settings: map[string]string{},
+		}},
 		wantErr: true,
 	}, {
-		name:    "static field without static value returns error",
-		args:    args{config: map[string]string{insertFieldConfigStaticField: ""}},
+		name: "static field without static value returns error",
+		args: args{config: processor.Config{
+			Settings: map[string]string{
+				insertFieldConfigStaticField: "",
+			},
+		}},
 		wantErr: true,
 	}, {
-		name:    "static field with empty static value returns error",
-		args:    args{config: map[string]string{insertFieldConfigStaticField: "foo", insertFieldConfigStaticValue: ""}},
+		name: "static field with empty static value returns error",
+		args: args{config: processor.Config{
+			Settings: map[string]string{
+				insertFieldConfigStaticField: "foo",
+				insertFieldConfigStaticValue: "",
+			},
+		}},
 		wantErr: true,
 	}, {
-		name:    "static field with static value returns transform",
-		args:    args{config: map[string]string{insertFieldConfigStaticField: "foo", insertFieldConfigStaticValue: "bar"}},
+		name: "static field with static value returns transform",
+		args: args{config: processor.Config{
+			Settings: map[string]string{
+				insertFieldConfigStaticField: "foo",
+				insertFieldConfigStaticValue: "bar",
+			},
+		}},
 		wantErr: false,
 	}}
 	for _, tt := range tests {
@@ -75,8 +93,13 @@ func TestInsertFieldKey_Transform(t *testing.T) {
 		want    record.Record
 		wantErr bool
 	}{{
-		name:   "static field in structured data",
-		config: map[string]string{insertFieldConfigStaticField: "foo", insertFieldConfigStaticValue: "bar"},
+		name: "static field in structured data",
+		config: processor.Config{
+			Settings: map[string]string{
+				insertFieldConfigStaticField: "foo",
+				insertFieldConfigStaticValue: "bar",
+			},
+		},
 		args: args{r: record.Record{
 			Key: record.StructuredData{
 				"bar": 123,
@@ -92,8 +115,13 @@ func TestInsertFieldKey_Transform(t *testing.T) {
 		},
 		wantErr: false,
 	}, {
-		name:   "static field in raw data without schema",
-		config: map[string]string{insertFieldConfigStaticField: "foo", insertFieldConfigStaticValue: "bar"},
+		name: "static field in raw data without schema",
+		config: processor.Config{
+			Settings: map[string]string{
+				insertFieldConfigStaticField: "foo",
+				insertFieldConfigStaticValue: "bar",
+			},
+		},
 		args: args{r: record.Record{
 			Key: record.RawData{
 				Raw:    []byte("raw data"),
@@ -102,8 +130,13 @@ func TestInsertFieldKey_Transform(t *testing.T) {
 		}},
 		wantErr: true, // not supported
 	}, {
-		name:   "static field in raw data with schema",
-		config: map[string]string{insertFieldConfigStaticField: "foo", insertFieldConfigStaticValue: "bar"},
+		name: "static field in raw data with schema",
+		config: processor.Config{
+			Settings: map[string]string{
+				insertFieldConfigStaticField: "foo",
+				insertFieldConfigStaticValue: "bar",
+			},
+		},
 		args: args{r: record.Record{
 			Key: record.RawData{
 				Raw:    []byte("raw data"),
@@ -113,8 +146,12 @@ func TestInsertFieldKey_Transform(t *testing.T) {
 		want:    record.Record{},
 		wantErr: true, // TODO not implemented
 	}, {
-		name:   "position in structured data",
-		config: map[string]string{insertFieldConfigPositionField: "foo"},
+		name: "position in structured data",
+		config: processor.Config{
+			Settings: map[string]string{
+				insertFieldConfigStaticField: "foo",
+			},
+		},
 		args: args{r: record.Record{
 			Position: record.Position("3"),
 			Key: record.StructuredData{
@@ -132,8 +169,12 @@ func TestInsertFieldKey_Transform(t *testing.T) {
 		},
 		wantErr: false,
 	}, {
-		name:   "position in raw data without schema",
-		config: map[string]string{insertFieldConfigPositionField: "foo"},
+		name: "position in raw data without schema",
+		config: processor.Config{
+			Settings: map[string]string{
+				insertFieldConfigStaticField: "foo",
+			},
+		},
 		args: args{r: record.Record{
 			Key: record.RawData{
 				Raw:    []byte("raw data"),
@@ -142,8 +183,12 @@ func TestInsertFieldKey_Transform(t *testing.T) {
 		}},
 		wantErr: true, // not supported
 	}, {
-		name:   "position in raw data with schema",
-		config: map[string]string{insertFieldConfigPositionField: "foo"},
+		name: "position in raw data with schema",
+		config: processor.Config{
+			Settings: map[string]string{
+				insertFieldConfigStaticField: "foo",
+			},
+		},
 		args: args{r: record.Record{
 			Key: record.RawData{
 				Raw:    []byte("raw data"),
@@ -153,8 +198,12 @@ func TestInsertFieldKey_Transform(t *testing.T) {
 		want:    record.Record{},
 		wantErr: true, // TODO not implemented
 	}, {
-		name:   "timestamp in structured data",
-		config: map[string]string{insertFieldConfigTimestampField: "foo"},
+		name: "timestamp in structured data",
+		config: processor.Config{
+			Settings: map[string]string{
+				insertFieldConfigStaticField: "foo",
+			},
+		},
 		args: args{r: record.Record{
 			CreatedAt: time.Unix(1234, 0),
 			Key: record.StructuredData{
@@ -172,8 +221,12 @@ func TestInsertFieldKey_Transform(t *testing.T) {
 		},
 		wantErr: false,
 	}, {
-		name:   "timestamp in raw data without schema",
-		config: map[string]string{insertFieldConfigTimestampField: "foo"},
+		name: "timestamp in raw data without schema",
+		config: processor.Config{
+			Settings: map[string]string{
+				insertFieldConfigStaticField: "foo",
+			},
+		},
 		args: args{r: record.Record{
 			Key: record.RawData{
 				Raw:    []byte("raw data"),
@@ -182,8 +235,12 @@ func TestInsertFieldKey_Transform(t *testing.T) {
 		}},
 		wantErr: true, // not supported
 	}, {
-		name:   "timestamp in raw data with schema",
-		config: map[string]string{insertFieldConfigTimestampField: "foo"},
+		name: "timestamp in raw data with schema",
+		config: processor.Config{
+			Settings: map[string]string{
+				insertFieldConfigStaticField: "foo",
+			},
+		},
 		args: args{r: record.Record{
 			Key: record.RawData{
 				Raw:    []byte("raw data"),
@@ -194,11 +251,13 @@ func TestInsertFieldKey_Transform(t *testing.T) {
 		wantErr: true, // TODO not implemented
 	}, {
 		name: "all fields in structured data",
-		config: map[string]string{
-			insertFieldConfigStaticField:    "fooStatic",
-			insertFieldConfigStaticValue:    "bar",
-			insertFieldConfigPositionField:  "fooPosition",
-			insertFieldConfigTimestampField: "fooTimestamp",
+		config: processor.Config{
+			Settings: map[string]string{
+				insertFieldConfigStaticField:    "fooStatic",
+				insertFieldConfigStaticValue:    "bar",
+				insertFieldConfigPositionField:  "fooPosition",
+				insertFieldConfigTimestampField: "fooTimestamp",
+			},
 		},
 		args: args{r: record.Record{
 			Position:  record.Position("321"),
@@ -222,11 +281,13 @@ func TestInsertFieldKey_Transform(t *testing.T) {
 		wantErr: false,
 	}, {
 		name: "all fields in raw data with schema",
-		config: map[string]string{
-			insertFieldConfigStaticField:    "fooStatic",
-			insertFieldConfigStaticValue:    "bar",
-			insertFieldConfigPositionField:  "fooPosition",
-			insertFieldConfigTimestampField: "fooTimestamp",
+		config: processor.Config{
+			Settings: map[string]string{
+				insertFieldConfigStaticField:    "fooStatic",
+				insertFieldConfigStaticValue:    "bar",
+				insertFieldConfigPositionField:  "fooPosition",
+				insertFieldConfigTimestampField: "fooTimestamp",
+			},
 		},
 		args: args{r: record.Record{
 			Key: record.RawData{
@@ -237,11 +298,12 @@ func TestInsertFieldKey_Transform(t *testing.T) {
 		want:    record.Record{},
 		wantErr: true, // TODO not implemented
 	}}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			txfFunc, err := InsertFieldKey(tt.config)
+			underTest, err := InsertFieldKey(tt.config)
 			assert.Ok(t, err)
-			got, err := txfFunc(tt.args.r)
+			got, err := underTest.Execute(context.Background(), tt.args.r)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Transform() error = %v, wantErr = %v", err, tt.wantErr)
 				return
@@ -263,23 +325,31 @@ func TestInsertFieldPayload_Build(t *testing.T) {
 		wantErr bool
 	}{{
 		name:    "nil config returns error",
-		args:    args{config: nil},
+		args:    args{config: processor.Config{}},
 		wantErr: true,
 	}, {
-		name:    "empty config returns error",
-		args:    args{config: map[string]string{}},
+		name: "empty config returns error",
+		args: args{config: processor.Config{
+			Settings: map[string]string{},
+		}},
 		wantErr: true,
 	}, {
-		name:    "static field without static value returns error",
-		args:    args{config: map[string]string{insertFieldConfigStaticField: ""}},
+		name: "static field without static value returns error",
+		args: args{config: processor.Config{
+			Settings: map[string]string{insertFieldConfigStaticField: ""},
+		}},
 		wantErr: true,
 	}, {
-		name:    "static field with empty static value returns error",
-		args:    args{config: map[string]string{insertFieldConfigStaticField: "foo", insertFieldConfigStaticValue: ""}},
+		name: "static field with empty static value returns error",
+		args: args{config: processor.Config{
+			Settings: map[string]string{insertFieldConfigStaticField: "foo", insertFieldConfigStaticValue: ""},
+		}},
 		wantErr: true,
 	}, {
-		name:    "static field with static value returns transform",
-		args:    args{config: map[string]string{insertFieldConfigStaticField: "foo", insertFieldConfigStaticValue: "bar"}},
+		name: "static field with static value returns transform",
+		args: args{config: processor.Config{
+			Settings: map[string]string{insertFieldConfigStaticField: "foo", insertFieldConfigStaticValue: "bar"},
+		}},
 		wantErr: false,
 	}}
 	for _, tt := range tests {
@@ -304,8 +374,10 @@ func TestInsertFieldPayload_Transform(t *testing.T) {
 		want    record.Record
 		wantErr bool
 	}{{
-		name:   "static field in structured data",
-		config: map[string]string{insertFieldConfigStaticField: "foo", insertFieldConfigStaticValue: "bar"},
+		name: "static field in structured data",
+		config: processor.Config{
+			Settings: map[string]string{insertFieldConfigStaticField: "foo", insertFieldConfigStaticValue: "bar"},
+		},
 		args: args{r: record.Record{
 			Payload: record.StructuredData{
 				"bar": 123,
@@ -321,8 +393,13 @@ func TestInsertFieldPayload_Transform(t *testing.T) {
 		},
 		wantErr: false,
 	}, {
-		name:   "static field in raw data without schema",
-		config: map[string]string{insertFieldConfigStaticField: "foo", insertFieldConfigStaticValue: "bar"},
+		name: "static field in raw data without schema",
+		config: processor.Config{
+			Settings: map[string]string{
+				insertFieldConfigStaticField: "foo",
+				insertFieldConfigStaticValue: "bar",
+			},
+		},
 		args: args{r: record.Record{
 			Payload: record.RawData{
 				Raw:    []byte("raw data"),
@@ -331,8 +408,13 @@ func TestInsertFieldPayload_Transform(t *testing.T) {
 		}},
 		wantErr: true, // not supported
 	}, {
-		name:   "static field in raw data with schema",
-		config: map[string]string{insertFieldConfigStaticField: "foo", insertFieldConfigStaticValue: "bar"},
+		name: "static field in raw data with schema",
+		config: processor.Config{
+			Settings: map[string]string{
+				insertFieldConfigStaticField: "foo",
+				insertFieldConfigStaticValue: "bar",
+			},
+		},
 		args: args{r: record.Record{
 			Payload: record.RawData{
 				Raw:    []byte("raw data"),
@@ -342,8 +424,12 @@ func TestInsertFieldPayload_Transform(t *testing.T) {
 		want:    record.Record{},
 		wantErr: true, // TODO not implemented
 	}, {
-		name:   "position in structured data",
-		config: map[string]string{insertFieldConfigPositionField: "foo"},
+		name: "position in structured data",
+		config: processor.Config{
+			Settings: map[string]string{
+				insertFieldConfigStaticField: "foo",
+			},
+		},
 		args: args{r: record.Record{
 			Position: record.Position("3"),
 			Payload: record.StructuredData{
@@ -361,8 +447,12 @@ func TestInsertFieldPayload_Transform(t *testing.T) {
 		},
 		wantErr: false,
 	}, {
-		name:   "position in raw data without schema",
-		config: map[string]string{insertFieldConfigPositionField: "foo"},
+		name: "position in raw data without schema",
+		config: processor.Config{
+			Settings: map[string]string{
+				insertFieldConfigStaticField: "foo",
+			},
+		},
 		args: args{r: record.Record{
 			Payload: record.RawData{
 				Raw:    []byte("raw data"),
@@ -371,8 +461,12 @@ func TestInsertFieldPayload_Transform(t *testing.T) {
 		}},
 		wantErr: true, // not supported
 	}, {
-		name:   "position in raw data with schema",
-		config: map[string]string{insertFieldConfigPositionField: "foo"},
+		name: "position in raw data with schema",
+		config: processor.Config{
+			Settings: map[string]string{
+				insertFieldConfigStaticField: "foo",
+			},
+		},
 		args: args{r: record.Record{
 			Payload: record.RawData{
 				Raw:    []byte("raw data"),
@@ -382,8 +476,12 @@ func TestInsertFieldPayload_Transform(t *testing.T) {
 		want:    record.Record{},
 		wantErr: true, // TODO not implemented
 	}, {
-		name:   "timestamp in structured data",
-		config: map[string]string{insertFieldConfigTimestampField: "foo"},
+		name: "timestamp in structured data",
+		config: processor.Config{
+			Settings: map[string]string{
+				insertFieldConfigStaticField: "foo",
+			},
+		},
 		args: args{r: record.Record{
 			CreatedAt: time.Unix(1234, 0),
 			Payload: record.StructuredData{
@@ -401,8 +499,12 @@ func TestInsertFieldPayload_Transform(t *testing.T) {
 		},
 		wantErr: false,
 	}, {
-		name:   "timestamp in raw data without schema",
-		config: map[string]string{insertFieldConfigTimestampField: "foo"},
+		name: "timestamp in raw data without schema",
+		config: processor.Config{
+			Settings: map[string]string{
+				insertFieldConfigStaticField: "foo",
+			},
+		},
 		args: args{r: record.Record{
 			Payload: record.RawData{
 				Raw:    []byte("raw data"),
@@ -411,8 +513,12 @@ func TestInsertFieldPayload_Transform(t *testing.T) {
 		}},
 		wantErr: true, // not supported
 	}, {
-		name:   "timestamp in raw data with schema",
-		config: map[string]string{insertFieldConfigTimestampField: "foo"},
+		name: "timestamp in raw data with schema",
+		config: processor.Config{
+			Settings: map[string]string{
+				insertFieldConfigStaticField: "foo",
+			},
+		},
 		args: args{r: record.Record{
 			Payload: record.RawData{
 				Raw:    []byte("raw data"),
@@ -423,11 +529,13 @@ func TestInsertFieldPayload_Transform(t *testing.T) {
 		wantErr: true, // TODO not implemented
 	}, {
 		name: "all fields in structured data",
-		config: map[string]string{
-			insertFieldConfigStaticField:    "fooStatic",
-			insertFieldConfigStaticValue:    "bar",
-			insertFieldConfigPositionField:  "fooPosition",
-			insertFieldConfigTimestampField: "fooTimestamp",
+		config: processor.Config{
+			Settings: map[string]string{
+				insertFieldConfigStaticField:    "fooStatic",
+				insertFieldConfigStaticValue:    "bar",
+				insertFieldConfigPositionField:  "fooPosition",
+				insertFieldConfigTimestampField: "fooTimestamp",
+			},
 		},
 		args: args{r: record.Record{
 			Position:  record.Position("321"),
@@ -451,11 +559,13 @@ func TestInsertFieldPayload_Transform(t *testing.T) {
 		wantErr: false,
 	}, {
 		name: "all fields in raw data with schema",
-		config: map[string]string{
-			insertFieldConfigStaticField:    "fooStatic",
-			insertFieldConfigStaticValue:    "bar",
-			insertFieldConfigPositionField:  "fooPosition",
-			insertFieldConfigTimestampField: "fooTimestamp",
+		config: processor.Config{
+			Settings: map[string]string{
+				insertFieldConfigStaticField:    "fooStatic",
+				insertFieldConfigStaticValue:    "bar",
+				insertFieldConfigPositionField:  "fooPosition",
+				insertFieldConfigTimestampField: "fooTimestamp",
+			},
 		},
 		args: args{r: record.Record{
 			Payload: record.RawData{
@@ -468,9 +578,9 @@ func TestInsertFieldPayload_Transform(t *testing.T) {
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			txfFunc, err := InsertFieldPayload(tt.config)
+			underTest, err := InsertFieldPayload(tt.config)
 			assert.Ok(t, err)
-			got, err := txfFunc(tt.args.r)
+			got, err := underTest.Execute(context.Background(), tt.args.r)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Transform() error = %v, wantErr = %v", err, tt.wantErr)
 				return

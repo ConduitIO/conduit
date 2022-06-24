@@ -15,9 +15,9 @@
 package builtin
 
 import (
+	"context"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/processor"
-	"github.com/conduitio/conduit/pkg/processor/transform"
 	"github.com/conduitio/conduit/pkg/record"
 )
 
@@ -32,8 +32,8 @@ const (
 )
 
 func init() {
-	processor.GlobalBuilderRegistry.MustRegister(insertFieldKeyName, transform.NewBuilder(InsertFieldKey))
-	processor.GlobalBuilderRegistry.MustRegister(insertFieldPayloadName, transform.NewBuilder(InsertFieldPayload))
+	processor.GlobalBuilderRegistry.MustRegister(insertFieldKeyName, InsertFieldKey)
+	processor.GlobalBuilderRegistry.MustRegister(insertFieldPayloadName, InsertFieldPayload)
 }
 
 // InsertFieldKey builds the following transform:
@@ -68,9 +68,9 @@ func insertField(
 		positionField    string
 	)
 
-	timestampField = config[insertFieldConfigTimestampField]
-	positionField = config[insertFieldConfigPositionField]
-	staticFieldName, ok := config[insertFieldConfigStaticField]
+	timestampField = config.Settings[insertFieldConfigTimestampField]
+	positionField = config.Settings[insertFieldConfigPositionField]
+	staticFieldName, ok := config.Settings[insertFieldConfigStaticField]
 	if ok {
 		if staticFieldValue, err = getConfigFieldString(config, insertFieldConfigStaticValue); err != nil {
 			return nil, cerrors.Errorf("%s: %w", transformName, err)
@@ -80,31 +80,33 @@ func insertField(
 		return nil, cerrors.Errorf("%s: no fields configured to be inserted", transformName)
 	}
 
-	return func(r record.Record) (record.Record, error) {
-		data := getSetter.Get(r)
+	return funcProcessor{
+		fn: func(_ context.Context, r record.Record) (record.Record, error) {
+			data := getSetter.Get(r)
 
-		switch d := data.(type) {
-		case record.RawData:
-			if d.Schema == nil {
-				return record.Record{}, cerrors.Errorf("%s: schemaless raw data not supported", transformName)
+			switch d := data.(type) {
+			case record.RawData:
+				if d.Schema == nil {
+					return record.Record{}, cerrors.Errorf("%s: schemaless raw data not supported", transformName)
+				}
+				return record.Record{}, cerrors.Errorf("%s: data with schema not supported yet", transformName) // TODO
+			case record.StructuredData:
+				// TODO add support for nested fields
+				if staticFieldName != "" {
+					d[staticFieldName] = staticFieldValue
+				}
+				if timestampField != "" {
+					d[timestampField] = r.CreatedAt
+				}
+				if positionField != "" {
+					d[positionField] = r.Position
+				}
+			default:
+				return record.Record{}, cerrors.Errorf("%s: unexpected data type %T", transformName, data)
 			}
-			return record.Record{}, cerrors.Errorf("%s: data with schema not supported yet", transformName) // TODO
-		case record.StructuredData:
-			// TODO add support for nested fields
-			if staticFieldName != "" {
-				d[staticFieldName] = staticFieldValue
-			}
-			if timestampField != "" {
-				d[timestampField] = r.CreatedAt
-			}
-			if positionField != "" {
-				d[positionField] = r.Position
-			}
-		default:
-			return record.Record{}, cerrors.Errorf("%s: unexpected data type %T", transformName, data)
-		}
 
-		r = getSetter.Set(r, data)
-		return r, nil
+			r = getSetter.Set(r, data)
+			return r, nil
+		},
 	}, nil
 }
