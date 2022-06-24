@@ -149,7 +149,7 @@ func TestInsertFieldKey_Transform(t *testing.T) {
 		name: "position in structured data",
 		config: processor.Config{
 			Settings: map[string]string{
-				insertFieldConfigStaticField: "foo",
+				insertFieldConfigPositionField: "foo",
 			},
 		},
 		args: args{r: record.Record{
@@ -172,7 +172,7 @@ func TestInsertFieldKey_Transform(t *testing.T) {
 		name: "position in raw data without schema",
 		config: processor.Config{
 			Settings: map[string]string{
-				insertFieldConfigStaticField: "foo",
+				insertFieldConfigPositionField: "foo",
 			},
 		},
 		args: args{r: record.Record{
@@ -186,7 +186,7 @@ func TestInsertFieldKey_Transform(t *testing.T) {
 		name: "position in raw data with schema",
 		config: processor.Config{
 			Settings: map[string]string{
-				insertFieldConfigStaticField: "foo",
+				insertFieldConfigPositionField: "foo",
 			},
 		},
 		args: args{r: record.Record{
@@ -201,7 +201,7 @@ func TestInsertFieldKey_Transform(t *testing.T) {
 		name: "timestamp in structured data",
 		config: processor.Config{
 			Settings: map[string]string{
-				insertFieldConfigStaticField: "foo",
+				insertFieldConfigTimestampField: "foo",
 			},
 		},
 		args: args{r: record.Record{
@@ -224,7 +224,7 @@ func TestInsertFieldKey_Transform(t *testing.T) {
 		name: "timestamp in raw data without schema",
 		config: processor.Config{
 			Settings: map[string]string{
-				insertFieldConfigStaticField: "foo",
+				insertFieldConfigTimestampField: "foo",
 			},
 		},
 		args: args{r: record.Record{
@@ -238,7 +238,7 @@ func TestInsertFieldKey_Transform(t *testing.T) {
 		name: "timestamp in raw data with schema",
 		config: processor.Config{
 			Settings: map[string]string{
-				insertFieldConfigStaticField: "foo",
+				insertFieldConfigTimestampField: "foo",
 			},
 		},
 		args: args{r: record.Record{
@@ -342,13 +342,19 @@ func TestInsertFieldPayload_Build(t *testing.T) {
 	}, {
 		name: "static field with empty static value returns error",
 		args: args{config: processor.Config{
-			Settings: map[string]string{insertFieldConfigStaticField: "foo", insertFieldConfigStaticValue: ""},
+			Settings: map[string]string{
+				insertFieldConfigStaticField: "foo",
+				insertFieldConfigStaticValue: "",
+			},
 		}},
 		wantErr: true,
 	}, {
 		name: "static field with static value returns transform",
 		args: args{config: processor.Config{
-			Settings: map[string]string{insertFieldConfigStaticField: "foo", insertFieldConfigStaticValue: "bar"},
+			Settings: map[string]string{
+				insertFieldConfigStaticField: "foo",
+				insertFieldConfigStaticValue: "bar",
+			},
 		}},
 		wantErr: false,
 	}}
