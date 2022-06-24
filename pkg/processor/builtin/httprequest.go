@@ -16,6 +16,7 @@ package builtin
 
 import (
 	"bytes"
+	"context"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -23,7 +24,6 @@ import (
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/processor"
-	"github.com/conduitio/conduit/pkg/processor/transform"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/jpillora/backoff"
 )
@@ -40,7 +40,7 @@ const (
 )
 
 func init() {
-	processor.GlobalBuilderRegistry.MustRegister(httpRequestName, transform.NewBuilder(HTTPRequest))
+	processor.GlobalBuilderRegistry.MustRegister(httpRequestName, HTTPRequest)
 }
 
 // HTTPRequest builds a transform that sends an HTTP request to the specified
@@ -70,7 +70,7 @@ func httpRequest(
 		return nil, cerrors.Errorf("%s: error trying to parse url: %w", transformName, err)
 	}
 
-	method = config[httpRequestConfigMethod]
+	method = config.Settings[httpRequestConfigMethod]
 	if method == "" {
 		method = http.MethodPost
 	}
@@ -85,7 +85,7 @@ func httpRequest(
 		return nil, cerrors.Errorf("%s: error trying to create HTTP request: %w", transformName, err)
 	}
 
-	txfFunc := func(r record.Record) (record.Record, error) {
+	procFn := func(_ context.Context, r record.Record) (record.Record, error) {
 		req, err := http.NewRequest(
 			method,
 			rawURL,
@@ -115,13 +115,13 @@ func httpRequest(
 		return r, nil
 	}
 
-	return configureHTTPRequestBackoffRetry(transformName, config, txfFunc)
+	return configureHTTPRequestBackoffRetry(transformName, config, procFn)
 }
 
 func configureHTTPRequestBackoffRetry(
 	transformName string,
 	config processor.Config,
-	txfFunc processor.Processor,
+	procFn func(context.Context, record.Record) (record.Record, error),
 ) (processor.Processor, error) {
 	// retryCount is a float64 to match the backoff library attempt type
 	var retryCount float64
@@ -134,7 +134,7 @@ func configureHTTPRequestBackoffRetry(
 
 	if retryCount == 0 {
 		// no retries configured, just use the plain transform function
-		return txfFunc, nil
+		return funcProcessor{fn: procFn}, nil
 	}
 
 	// default retry values
@@ -166,16 +166,18 @@ func configureHTTPRequestBackoffRetry(
 	}
 
 	// wrap transform in a retry loop
-	return func(r record.Record) (record.Record, error) {
-		for {
-			r, err := txfFunc(r)
-			if err != nil && b.Attempt() < retryCount {
-				// TODO log message that we are retrying, include error cause (we don't have access to a proper logger)
-				time.Sleep(b.Duration())
-				continue
+	return funcProcessor{
+		fn: func(ctx context.Context, r record.Record) (record.Record, error) {
+			for {
+				r, err := procFn(ctx, r)
+				if err != nil && b.Attempt() < retryCount {
+					// TODO log message that we are retrying, include error cause (we don't have access to a proper logger)
+					time.Sleep(b.Duration())
+					continue
+				}
+				b.Reset() // reset for next transform execution
+				return r, err
 			}
-			b.Reset() // reset for next transform execution
-			return r, err
-		}
+		},
 	}, nil
 }
