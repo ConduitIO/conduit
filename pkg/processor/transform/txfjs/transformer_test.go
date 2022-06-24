@@ -257,7 +257,7 @@ func TestTransformer_DataTypes(t *testing.T) {
 		{
 			name: "position from string",
 			src: `function transform(record) {
-        		record.Position = "foobar";
+				record.Position = "foobar";
 				return record;
 			}`,
 			input: record.Record{},
@@ -269,7 +269,7 @@ func TestTransformer_DataTypes(t *testing.T) {
 			name: "raw payload, data from string",
 			src: `function transform(record) {
 				record.Payload = new RawData();
-        		record.Payload.Raw = "foobar";
+				record.Payload.Raw = "foobar";
 				return record;
 			}`,
 			input: record.Record{},
@@ -281,7 +281,7 @@ func TestTransformer_DataTypes(t *testing.T) {
 			name: "raw key, data from string",
 			src: `function transform(record) {
 				record.Key = new RawData();
-        		record.Key.Raw = "foobar";
+				record.Key.Raw = "foobar";
 				return record;
 			}`,
 			input: record.Record{},
