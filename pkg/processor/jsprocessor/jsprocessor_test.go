@@ -34,7 +34,7 @@ func TestTransformer_Logger(t *testing.T) {
 
 	var buf bytes.Buffer
 	logger := zerolog.New(&buf)
-	tr, err := NewJSProcessor(`
+	tr, err := New(`
 	function process(r) {
 		logger.Info().Msg("Hello");
 		return r
@@ -51,7 +51,7 @@ func TestTransformer_Logger(t *testing.T) {
 func TestTransformer_Transform_MissingEntrypoint(t *testing.T) {
 	is := is.New(t)
 
-	tr, err := NewJSProcessor(
+	tr, err := New(
 		`logger.Debug("no entrypoint");`,
 		zerolog.Nop(),
 	)
@@ -184,7 +184,7 @@ func TestTransformer_Transform(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			is := is.New(t)
 
-			tr, err := NewJSProcessor(tt.fields.src, zerolog.Nop())
+			tr, err := New(tt.fields.src, zerolog.Nop())
 			is.NoErr(err) // expected no error when creating the JS processor
 
 			got, err := tr.Execute(context.Background(), tt.args.record)
@@ -252,7 +252,7 @@ func TestTransformer_Filtering(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			is := is.New(t)
 
-			underTest, err := NewJSProcessor(tc.src, zerolog.New(zerolog.NewConsoleWriter()))
+			underTest, err := New(tc.src, zerolog.New(zerolog.NewConsoleWriter()))
 			is.NoErr(err) // expected no error when creating the JS processor
 
 			rec, err := underTest.Execute(context.Background(), tc.input)
@@ -347,7 +347,7 @@ func TestTransformer_DataTypes(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			is := is.New(t)
 
-			tr, err := NewJSProcessor(tc.src, zerolog.Nop())
+			tr, err := New(tc.src, zerolog.Nop())
 			is.NoErr(err) // expected no error when creating the JS processor
 
 			got, err := tr.Execute(context.Background(), tc.input)
@@ -364,7 +364,7 @@ func TestTransformer_JavaScriptException(t *testing.T) {
 		var m;
 		m.test
 	}`
-	tr, err := NewJSProcessor(src, zerolog.Nop())
+	tr, err := New(src, zerolog.Nop())
 	is.NoErr(err) // expected no error when creating the JS processor
 
 	r := record.Record{
@@ -383,7 +383,7 @@ func TestTransformer_BrokenJSCode(t *testing.T) {
 	is := is.New(t)
 
 	src := `function {`
-	_, err := NewJSProcessor(src, zerolog.Nop())
+	_, err := New(src, zerolog.Nop())
 	is.True(err != nil) // expected error for invalid JS code
 	target := &goja.CompilerSyntaxError{}
 	is.True(cerrors.As(err, &target)) // expected a goja.CompilerSyntaxError
@@ -402,7 +402,7 @@ func TestTransformer_ScriptWithMultipleFunctions(t *testing.T) {
 			return record;
 		}
 	`
-	tr, err := NewJSProcessor(src, zerolog.Nop())
+	tr, err := New(src, zerolog.Nop())
 	is.NoErr(err) // expected no error when creating the JS processor
 
 	r := record.Record{

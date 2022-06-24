@@ -28,14 +28,14 @@ const (
 	entrypoint = "process"
 )
 
-// jsProcessor is able to run transformations defined in JavaScript.
-type jsProcessor struct {
+// JSProcessor is able to run transformations defined in JavaScript.
+type JSProcessor struct {
 	runtime  *goja.Runtime
 	function goja.Callable
 }
 
-func NewJSProcessor(src string, logger zerolog.Logger) (processor.Processor, error) {
-	p := &jsProcessor{}
+func New(src string, logger zerolog.Logger) (*JSProcessor, error) {
+	p := &JSProcessor{}
 	err := p.initJSRuntime(logger)
 	if err != nil {
 		return nil, cerrors.Errorf("failed initializing JS runtime: %w", err)
@@ -49,7 +49,7 @@ func NewJSProcessor(src string, logger zerolog.Logger) (processor.Processor, err
 	return p, nil
 }
 
-func (p *jsProcessor) initJSRuntime(logger zerolog.Logger) error {
+func (p *JSProcessor) initJSRuntime(logger zerolog.Logger) error {
 	rt := goja.New()
 	runtimeHelpers := map[string]interface{}{
 		"logger":  &logger,
@@ -67,7 +67,7 @@ func (p *jsProcessor) initJSRuntime(logger zerolog.Logger) error {
 	return nil
 }
 
-func (p *jsProcessor) initFunction(src string) error {
+func (p *JSProcessor) initFunction(src string) error {
 	prg, err := goja.Compile("", src, false)
 	if err != nil {
 		return cerrors.Errorf("failed to compile transformer script: %w", err)
@@ -88,7 +88,7 @@ func (p *jsProcessor) initFunction(src string) error {
 	return nil
 }
 
-func (p *jsProcessor) jsRecord(goja.ConstructorCall) *goja.Object {
+func (p *JSProcessor) jsRecord(goja.ConstructorCall) *goja.Object {
 	// TODO accept arguments
 	// We return a record.Record struct, however because we are
 	// not changing call.This instanceof will not work as expected.
@@ -100,7 +100,7 @@ func (p *jsProcessor) jsRecord(goja.ConstructorCall) *goja.Object {
 	return p.runtime.ToValue(&r).ToObject(p.runtime)
 }
 
-func (p *jsProcessor) jsContentRaw(goja.ConstructorCall) *goja.Object {
+func (p *JSProcessor) jsContentRaw(goja.ConstructorCall) *goja.Object {
 	// TODO accept arguments
 	// We return a record.RawData struct, however because we are
 	// not changing call.This instanceof will not work as expected.
@@ -110,7 +110,7 @@ func (p *jsProcessor) jsContentRaw(goja.ConstructorCall) *goja.Object {
 	return p.runtime.ToValue(&r).ToObject(p.runtime)
 }
 
-func (p *jsProcessor) Execute(_ context.Context, in record.Record) (record.Record, error) {
+func (p *JSProcessor) Execute(_ context.Context, in record.Record) (record.Record, error) {
 	jsRecord := p.toJSRecord(in)
 
 	result, err := p.function(goja.Undefined(), jsRecord)
@@ -131,7 +131,7 @@ func (p *jsProcessor) Execute(_ context.Context, in record.Record) (record.Recor
 	return *out, nil
 }
 
-func (p *jsProcessor) toJSRecord(r record.Record) goja.Value {
+func (p *JSProcessor) toJSRecord(r record.Record) goja.Value {
 	// convert content to pointers to make it mutable
 	switch v := r.Payload.(type) {
 	case record.RawData:
@@ -151,7 +151,7 @@ func (p *jsProcessor) toJSRecord(r record.Record) goja.Value {
 	return p.runtime.ToValue(&r)
 }
 
-func (p *jsProcessor) toInternal(v goja.Value) (*record.Record, error) {
+func (p *JSProcessor) toInternal(v goja.Value) (*record.Record, error) {
 	r := v.Export()
 
 	switch v := r.(type) {
@@ -164,7 +164,7 @@ func (p *jsProcessor) toInternal(v goja.Value) (*record.Record, error) {
 	}
 }
 
-func (p *jsProcessor) dereferenceContent(r *record.Record) *record.Record {
+func (p *JSProcessor) dereferenceContent(r *record.Record) *record.Record {
 	// dereference content pointers
 	switch v := r.Payload.(type) {
 	case *record.RawData:
