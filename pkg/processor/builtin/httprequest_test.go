@@ -16,12 +16,12 @@ package builtin
 
 import (
 	"context"
-	"github.com/conduitio/conduit/pkg/processor"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/matryer/is"
 )
