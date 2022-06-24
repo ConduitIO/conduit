@@ -21,73 +21,91 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-type ProcessorConfig map[string]struct {
-	Name   string `yaml:"name"`
-	Type   string `yaml:"type"`
-	Config struct {
-		Settings map[string]string `yaml:"settings"`
-	} `yaml:"config"`
+const ParserVersion = "1.0"
+
+type ProcessorConfig struct {
+	Settings map[string]string `yaml:"settings"`
 }
 
-type ConnectorConfig map[string]struct {
-	Type   string `yaml:"type"`
-	Plugin string `yaml:"plugin"`
-	Config struct {
-		Name     string            `yaml:"name"`
-		Settings map[string]string `yaml:"settings"`
-	} `yaml:"config"`
-	Processors ProcessorConfig `yaml:"processors,omitempty"`
+type ProcessorInfo map[string]struct {
+	Name   string          `yaml:"name"`
+	Type   string          `yaml:"type"`
+	Config ProcessorConfig `yaml:"config"`
+}
+
+type ConnectorConfig struct {
+	Name     string            `yaml:"name"`
+	Settings map[string]string `yaml:"settings"`
+}
+
+type ConnectorInfo map[string]struct {
+	Type       string          `yaml:"type"`
+	Plugin     string          `yaml:"plugin"`
+	Config     ConnectorConfig `yaml:"config"`
+	Processors ProcessorInfo   `yaml:"processors,omitempty"`
 }
 
 type PipelineConfig struct {
-	Status string `yaml:"status"`
-	Config struct {
-		Name        string `yaml:"name"`
-		Description string `yaml:"description"`
-	} `yaml:"config"`
-	Connectors ConnectorConfig `yaml:"connectors,omitempty"`
-	Processors ProcessorConfig `yaml:"processors,omitempty"`
+	Name        string `yaml:"name"`
+	Description string `yaml:"description"`
 }
 
-type PipelinesConfig struct {
-	Version   string                    `yaml:"version"`
-	Pipelines map[string]PipelineConfig `yaml:"pipelines"`
+type PipelineInfo struct {
+	Status     string         `yaml:"status"`
+	Config     PipelineConfig `yaml:"config"`
+	Connectors ConnectorInfo  `yaml:"connectors,omitempty"`
+	Processors ProcessorInfo  `yaml:"processors,omitempty"`
 }
 
-func Parse(data io.Reader) (PipelinesConfig, error) {
+type PipelinesInfo struct {
+	Version   string                  `yaml:"version"`
+	Pipelines map[string]PipelineInfo `yaml:"pipelines"`
+}
+
+func Parse(data io.Reader) (PipelinesInfo, error) {
 	dec := yaml.NewDecoder(data)
 
-	var docs []PipelinesConfig
+	var docs []PipelinesInfo
 	for {
-		var doc PipelinesConfig
+		var doc PipelinesInfo
 		err := dec.Decode(&doc)
 		if err != nil && cerrors.Is(err, io.EOF) {
 			break
 		} else if err != nil {
-			return PipelinesConfig{}, cerrors.Errorf("parsing error: %w", err)
+			return PipelinesInfo{}, cerrors.Errorf("parsing error: %w", err)
+		}
+		// check if version is empty
+		if doc.Version == "" {
+			return PipelinesInfo{}, cerrors.New("version is a mandatory field")
+		}
+		// check if version is invalid
+		if doc.Version != "1" && doc.Version != ParserVersion {
+			return PipelinesInfo{}, cerrors.Errorf("invalid version : %s , try version %s instead", doc.Version, ParserVersion)
 		}
 		docs = append(docs, doc)
 	}
+
 	merged, err := mergeMaps(docs)
 	if err != nil {
-		return PipelinesConfig{}, err
+		return PipelinesInfo{}, err
 	}
 	return merged, nil
 }
 
-// mergeMaps takes an array of PipelinesConfig and merges them into one map
-func mergeMaps(arr []PipelinesConfig) (PipelinesConfig, error) {
-	var mp PipelinesConfig
-	pipelines := make(map[string]PipelineConfig, 0)
+// mergeMaps takes an array of PipelinesInfo and merges them into one map
+func mergeMaps(arr []PipelinesInfo) (PipelinesInfo, error) {
+	var mp PipelinesInfo
+	pipelines := make(map[string]PipelineInfo, 0)
 
 	for _, config := range arr {
 		for k, v := range config.Pipelines {
 			if _, ok := pipelines[k]; ok {
-				return PipelinesConfig{}, cerrors.Errorf("found a duplicated pipeline id: %s", k)
+				return PipelinesInfo{}, cerrors.Errorf("found a duplicated pipeline id: %s", k)
 			}
 			pipelines[k] = v
 		}
 	}
+	mp.Version = ParserVersion
 	mp.Pipelines = pipelines
 	return mp, nil
 }
