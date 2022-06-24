@@ -1,23 +1,24 @@
 ---
+version: 1.1
 pipelines:
   pipeline1:
     status: running
     config:
       name: pipeline1
-      description: nothing
+      description: desc1
     connectors:
       con1:
-        type: TYPE_DESTINATION
+        type: source
         plugin: 'builtin:s3'
         config:
-          name: s3-dest
+          name: s3-source
           settings:
             aws.region: us-east-1
-            aws.bucket: maha-test
+            aws.bucket: my-bucket
         processors:
-          con1proc1:
+          proc1:
             name: connector processor
-            type: TYPE_TRANSFORM
+            type: transform
             config:
               settings:
                 additionalProp1: string
@@ -25,13 +26,14 @@ pipelines:
     processors:
       pipeline1proc1:
         name: pipeline processor
-        type: TYPE_TRANSFORM
+        type: transform
         config:
           settings:
             additionalProp1: string
             additionalProp2: string
 
 ---
+version: 1.0
 pipelines:
   pipeline2:
     status: stopped
@@ -40,29 +42,20 @@ pipelines:
       description: nothing2
     connectors:
       con2:
-        type: TYPE_DESTINATION
-        plugin: 'builtin:s3'
+        type: destination
+        plugin: 'builtin:file'
         config:
-          name: s3-dest
+          name: file-dest
           settings:
-            aws.region: us-east-1
-            aws.bucket: maha-test
+            path: my/path
         processors:
           con2proc1:
             name: connector processor
-            type: TYPE_TRANSFORM
+            type: transform
             config:
               settings:
                 additionalProp1: string
                 additionalProp2: string
-    processors:
-      pipeline2proc1:
-        name: pipeline processor
-        type: TYPE_TRANSFORM
-        config:
-          settings:
-            additionalProp1: string
-            additionalProp2: string
 
   pipeline3:
     status: stopped
