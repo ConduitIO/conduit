@@ -35,21 +35,21 @@ type jsProcessor struct {
 }
 
 func NewJSProcessor(src string, logger zerolog.Logger) (processor.Processor, error) {
-	p := jsProcessor{}
+	p := &jsProcessor{}
 	err := p.initJSRuntime(logger)
 	if err != nil {
-		return jsProcessor{}, cerrors.Errorf("failed initializing JS runtime: %w", err)
+		return nil, cerrors.Errorf("failed initializing JS runtime: %w", err)
 	}
 
 	err = p.initFunction(src)
 	if err != nil {
-		return jsProcessor{}, cerrors.Errorf("failed initializing JS function: %w", err)
+		return nil, cerrors.Errorf("failed initializing JS function: %w", err)
 	}
 
 	return p, nil
 }
 
-func (p jsProcessor) initJSRuntime(logger zerolog.Logger) error {
+func (p *jsProcessor) initJSRuntime(logger zerolog.Logger) error {
 	rt := goja.New()
 	runtimeHelpers := map[string]interface{}{
 		"logger":  &logger,
@@ -62,10 +62,12 @@ func (p jsProcessor) initJSRuntime(logger zerolog.Logger) error {
 			return cerrors.Errorf("failed to set helper %q: %w", name, err)
 		}
 	}
+
+	p.runtime = rt
 	return nil
 }
 
-func (p jsProcessor) initFunction(src string) error {
+func (p *jsProcessor) initFunction(src string) error {
 	prg, err := goja.Compile("", src, false)
 	if err != nil {
 		return cerrors.Errorf("failed to compile transformer script: %w", err)
@@ -86,7 +88,7 @@ func (p jsProcessor) initFunction(src string) error {
 	return nil
 }
 
-func (p jsProcessor) jsRecord() func(goja.ConstructorCall) *goja.Object {
+func (p *jsProcessor) jsRecord() func(goja.ConstructorCall) *goja.Object {
 	return func(goja.ConstructorCall) *goja.Object {
 		// TODO accept arguments
 		// We return a record.Record struct, however because we are
@@ -100,7 +102,7 @@ func (p jsProcessor) jsRecord() func(goja.ConstructorCall) *goja.Object {
 	}
 }
 
-func (p jsProcessor) jsContentRaw() func(goja.ConstructorCall) *goja.Object {
+func (p *jsProcessor) jsContentRaw() func(goja.ConstructorCall) *goja.Object {
 	return func(goja.ConstructorCall) *goja.Object {
 		// TODO accept arguments
 		// We return a record.RawData struct, however because we are
@@ -112,7 +114,7 @@ func (p jsProcessor) jsContentRaw() func(goja.ConstructorCall) *goja.Object {
 	}
 }
 
-func (p jsProcessor) Execute(_ context.Context, in record.Record) (record.Record, error) {
+func (p *jsProcessor) Execute(_ context.Context, in record.Record) (record.Record, error) {
 	jsRecord := p.toJSRecord(in)
 
 	result, err := p.function(goja.Undefined(), jsRecord)
@@ -125,6 +127,7 @@ func (p jsProcessor) Execute(_ context.Context, in record.Record) (record.Record
 		return record.Record{}, cerrors.Errorf("failed to transform to internal record: %w", err)
 	}
 
+	// nil will be returned if the JS function has no return value at all
 	if out == nil {
 		return record.Record{}, processor.ErrSkipRecord
 	}
@@ -132,7 +135,7 @@ func (p jsProcessor) Execute(_ context.Context, in record.Record) (record.Record
 	return *out, nil
 }
 
-func (p jsProcessor) toJSRecord(r record.Record) goja.Value {
+func (p *jsProcessor) toJSRecord(r record.Record) goja.Value {
 	// convert content to pointers to make it mutable
 	switch v := r.Payload.(type) {
 	case record.RawData:
@@ -152,7 +155,7 @@ func (p jsProcessor) toJSRecord(r record.Record) goja.Value {
 	return p.runtime.ToValue(&r)
 }
 
-func (p jsProcessor) toInternal(v goja.Value) (*record.Record, error) {
+func (p *jsProcessor) toInternal(v goja.Value) (*record.Record, error) {
 	r := v.Export()
 
 	switch v := r.(type) {
@@ -165,7 +168,7 @@ func (p jsProcessor) toInternal(v goja.Value) (*record.Record, error) {
 	}
 }
 
-func (p jsProcessor) dereferenceContent(r *record.Record) *record.Record {
+func (p *jsProcessor) dereferenceContent(r *record.Record) *record.Record {
 	// dereference content pointers
 	switch v := r.Payload.(type) {
 	case *record.RawData:
