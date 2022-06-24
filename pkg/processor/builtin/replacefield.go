@@ -15,11 +15,11 @@
 package builtin
 
 import (
+	"context"
 	"strings"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/processor"
-	"github.com/conduitio/conduit/pkg/processor/transform"
 	"github.com/conduitio/conduit/pkg/record"
 )
 
@@ -33,8 +33,8 @@ const (
 )
 
 func init() {
-	processor.GlobalBuilderRegistry.MustRegister(replaceFieldKeyName, transform.NewBuilder(ReplaceFieldKey))
-	processor.GlobalBuilderRegistry.MustRegister(replaceFieldPayloadName, transform.NewBuilder(ReplaceFieldPayload))
+	processor.GlobalBuilderRegistry.MustRegister(replaceFieldKeyName, ReplaceFieldKey)
+	processor.GlobalBuilderRegistry.MustRegister(replaceFieldPayloadName, ReplaceFieldKey)
 }
 
 // ReplaceFieldKey builds a transform which replaces a field in the key in raw
@@ -86,9 +86,9 @@ func replaceField(
 		renameMap  = make(map[string]string)
 	)
 
-	exclude = config[replaceFieldConfigExclude]
-	include = config[replaceFieldConfigInclude]
-	rename = config[replaceFieldConfigRename]
+	exclude = config.Settings[replaceFieldConfigExclude]
+	include = config.Settings[replaceFieldConfigInclude]
+	rename = config.Settings[replaceFieldConfigRename]
 
 	if exclude == "" && include == "" && rename == "" {
 		return nil, cerrors.Errorf(
@@ -128,32 +128,34 @@ func replaceField(
 		}
 	}
 
-	return func(r record.Record) (record.Record, error) {
-		data := getSetter.Get(r)
+	return funcProcessor{
+		fn: func(_ context.Context, r record.Record) (record.Record, error) {
+			data := getSetter.Get(r)
 
-		switch d := data.(type) {
-		case record.RawData:
-			if d.Schema == nil {
-				return record.Record{}, cerrors.Errorf("%s: schemaless raw data not supported", transformName)
-			}
-			return record.Record{}, cerrors.Errorf("%s: data with schema not supported yet", transformName) // TODO
-		case record.StructuredData:
-			// TODO add support for nested fields
-			for field, value := range d {
-				if excludeMap[field] || (len(includeMap) != 0 && !includeMap[field]) {
-					delete(d, field)
-					continue
+			switch d := data.(type) {
+			case record.RawData:
+				if d.Schema == nil {
+					return record.Record{}, cerrors.Errorf("%s: schemaless raw data not supported", transformName)
 				}
-				if newField, ok := renameMap[field]; ok {
-					delete(d, field)
-					d[newField] = value
+				return record.Record{}, cerrors.Errorf("%s: data with schema not supported yet", transformName) // TODO
+			case record.StructuredData:
+				// TODO add support for nested fields
+				for field, value := range d {
+					if excludeMap[field] || (len(includeMap) != 0 && !includeMap[field]) {
+						delete(d, field)
+						continue
+					}
+					if newField, ok := renameMap[field]; ok {
+						delete(d, field)
+						d[newField] = value
+					}
 				}
+			default:
+				return record.Record{}, cerrors.Errorf("%s: unexpected data type %T", transformName, data)
 			}
-		default:
-			return record.Record{}, cerrors.Errorf("%s: unexpected data type %T", transformName, data)
-		}
 
-		r = getSetter.Set(r, data)
-		return r, nil
+			r = getSetter.Set(r, data)
+			return r, nil
+		},
 	}, nil
 }
