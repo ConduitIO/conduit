@@ -76,7 +76,7 @@ func Parse(data io.Reader) (PipelinesInfo, error) {
 		}
 		// check if version is empty
 		if doc.Version == "" {
-			return PipelinesInfo{}, cerrors.New("version is a mandatory field")
+			return PipelinesInfo{}, cerrors.New("version field is not specified")
 		}
 		// check if version is invalid
 		if doc.Version != "1" && doc.Version != ParserVersion {
