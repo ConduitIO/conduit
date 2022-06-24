@@ -19,13 +19,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/record"
+	"github.com/dop251/goja"
+	"github.com/matryer/is"
 	"github.com/rs/zerolog"
 )
 
 func TestTransformer_Logger(t *testing.T) {
+	is := is.New(t)
 	var buf bytes.Buffer
 	logger := zerolog.New(&buf)
 	tr, err := NewTransformer(`
@@ -34,25 +36,28 @@ func TestTransformer_Logger(t *testing.T) {
 		return r
 	}
 	`, logger)
-	assert.Ok(t, err)
+	is.NoErr(err)
 
 	_, err = tr.Transform(record.Record{})
-	assert.Ok(t, err)
+	is.NoErr(err)
 
-	assert.Equal(t, `{"level":"info","message":"Hello"}`+"\n", buf.String())
+	is.Equal(`{"level":"info","message":"Hello"}`+"\n", buf.String())
 }
 
 func TestTransformer_Transform_MissingEntrypoint(t *testing.T) {
-	tr, err := NewTransformer(`
-logger.Debug("no entrypoint");
-`, zerolog.Nop())
+	is := is.New(t)
+
+	tr, err := NewTransformer(
+		`logger.Debug("no entrypoint");`,
+		zerolog.Nop(),
+	)
 
 	if err == nil {
 		t.Error("expected error if transformer has no entrypoint")
 		return
 	}
-	assert.Equal(t, `failed to get entrypoint function "transform"`, err.Error())
-	assert.True(t, tr == nil, "transformer should be nil")
+	is.Equal(`failed to get entrypoint function "transform"`, err.Error())
+	is.True(tr == nil)
 }
 
 func TestTransformer_Transform(t *testing.T) {
@@ -70,17 +75,59 @@ func TestTransformer_Transform(t *testing.T) {
 		wantErr error
 	}{
 		{
-			name: "change incoming record",
+			// todo Once https://github.com/ConduitIO/conduit/issues/468 is implemented
+			// write more tests which validate transforms on structured records
+			name: "change non-payload fields of structured record",
 			fields: fields{
 				src: `
-function transform(record) {
-	record.Position = "3";
-	record.Metadata["returned"] = "JS";
-	record.CreatedAt = new Date(Date.UTC(2021, 0, 2, 3, 4, 5, 6)).toISOString();
-	record.Key.Raw = "baz";
-	record.Payload.Raw = String.fromCharCode.apply(String, record.Payload.Raw) + "bar";
-	return record;
-}`,
+				function transform(record) {
+					record.Position = "3";
+					record.Metadata["returned"] = "JS";
+					record.CreatedAt = new Date(Date.UTC(2021, 0, 2, 3, 4, 5, 6)).toISOString();
+					record.Key.Raw = "baz";
+					return record;
+				}`,
+			},
+			args: args{
+				record: record.Record{
+					Position:  []byte("2"),
+					Metadata:  map[string]string{"existing": "val"},
+					CreatedAt: time.Now().UTC(),
+					Key:       record.RawData{Raw: []byte("bar")},
+					Payload: record.StructuredData(
+						map[string]interface{}{
+							"aaa": 111,
+							"bbb": []string{"foo", "bar"},
+						},
+					),
+				},
+			},
+			want: record.Record{
+				Position:  []byte("3"),
+				Metadata:  map[string]string{"existing": "val", "returned": "JS"},
+				CreatedAt: time.Date(2021, time.January, 2, 3, 4, 5, 6000000, time.UTC),
+				Key:       record.RawData{Raw: []byte("baz")},
+				Payload: record.StructuredData(
+					map[string]interface{}{
+						"aaa": 111,
+						"bbb": []string{"foo", "bar"},
+					},
+				),
+			},
+			wantErr: nil,
+		},
+		{
+			name: "complete change incoming record with raw data",
+			fields: fields{
+				src: `
+				function transform(record) {
+					record.Position = "3";
+					record.Metadata["returned"] = "JS";
+					record.CreatedAt = new Date(Date.UTC(2021, 0, 2, 3, 4, 5, 6)).toISOString();
+					record.Key.Raw = "baz";
+					record.Payload.Raw = String.fromCharCode.apply(String, record.Payload.Raw) + "bar";
+					return record;
+				}`,
 			},
 			args: args{
 				record: record.Record{
@@ -101,7 +148,7 @@ function transform(record) {
 			wantErr: nil,
 		},
 		{
-			name: "return new record",
+			name: "return new record with raw data",
 			fields: fields{
 				src: `
 				function transform(record) {
@@ -142,11 +189,44 @@ function transform(record) {
 			want:    record.Record{},
 			wantErr: cerrors.New("failed to transform to internal record: unexpected type, expected *record.Record, got <nil>"),
 		},
+		{
+			name: "null return value",
+			fields: fields{
+				src: `
+				function transform(record) {
+					return null;
+				}`,
+			},
+			args: args{
+				record: record.Record{},
+			},
+			want:    record.Record{},
+			wantErr: cerrors.New("failed to transform to internal record: unexpected type, expected *record.Record, got <nil>"),
+		},
+		{
+			// todo do we want to allow this and similar transforms?
+			name: "null key and null payload not allowed",
+			fields: fields{
+				src: `
+				function transform(record) {
+					record.Key = null;
+					record.Payload = null;
+					return record;
+				}`,
+			},
+			args: args{
+				record: record.Record{},
+			},
+			want:    record.Record{},
+			wantErr: cerrors.New("failed to transform to internal record: unexpected type, expected *record.Record, got <nil>"),
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			is := is.New(t)
+
 			tr, err := NewTransformer(tt.fields.src, zerolog.Nop())
-			assert.Ok(t, err)
+			is.NoErr(err)
 
 			got, err := tr.Transform(tt.args.record)
 			if err != nil {
@@ -156,7 +236,164 @@ function transform(record) {
 				}
 			}
 
-			assert.Equal(t, tt.want, got)
+			is.Equal(tt.want, got)
 		})
 	}
+}
+
+func TestTransformer_DataTypes(t *testing.T) {
+	testCases := []struct {
+		name  string
+		src   string
+		input record.Record
+		want  record.Record
+	}{
+		{
+			name: "UTC date is used",
+			src: `function transform(record) {
+        		record.CreatedAt = new Date(Date.UTC(2021, 0, 2, 3, 4, 5, 6)).toISOString();
+				return record;
+			}`,
+			input: record.Record{},
+			want: record.Record{
+				CreatedAt: time.Date(2021, time.January, 2, 3, 4, 5, 6000000, time.UTC),
+			},
+		},
+		{
+			name: "position from string",
+			src: `function transform(record) {
+				record.Position = "foobar";
+				return record;
+			}`,
+			input: record.Record{},
+			want: record.Record{
+				Position: record.Position("foobar"),
+			},
+		},
+		{
+			name: "raw payload, data from string",
+			src: `function transform(record) {
+				record.Payload = new RawData();
+				record.Payload.Raw = "foobar";
+				return record;
+			}`,
+			input: record.Record{},
+			want: record.Record{
+				Payload: record.RawData{Raw: []byte("foobar")},
+			},
+		},
+		{
+			name: "raw key, data from string",
+			src: `function transform(record) {
+				record.Key = new RawData();
+				record.Key.Raw = "foobar";
+				return record;
+			}`,
+			input: record.Record{},
+			want: record.Record{
+				Key: record.RawData{Raw: []byte("foobar")},
+			},
+		},
+		{
+			name: "update metadata",
+			src: `function transform(record) {
+				record.Metadata["new_key"] = "new_value"
+				delete record.Metadata.remove_me;
+				return record;
+			}`,
+			input: record.Record{
+				Metadata: map[string]string{
+					"old_key":   "old_value",
+					"remove_me": "remove_me",
+				},
+			},
+			want: record.Record{
+				Metadata: map[string]string{
+					"old_key": "old_value",
+					"new_key": "new_value",
+				},
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			is := is.New(t)
+
+			tr, err := NewTransformer(tc.src, zerolog.Nop())
+			is.NoErr(err)
+
+			got, err := tr.Transform(tc.input)
+			is.NoErr(err)
+			is.Equal(tc.want, got)
+		})
+	}
+}
+
+func TestTransformer_JavaScriptException(t *testing.T) {
+	is := is.New(t)
+
+	src := `function transform(record) {
+		var m;
+		m.test
+	}`
+	tr, err := NewTransformer(src, zerolog.Nop())
+	is.NoErr(err)
+
+	r := record.Record{
+		Key:     record.RawData{Raw: []byte("test key")},
+		Payload: record.RawData{Raw: []byte("test payload")},
+	}
+
+	got, err := tr.Transform(r)
+	is.True(err != nil)
+	target := &goja.Exception{}
+	is.True(cerrors.As(err, &target))
+	is.Equal(record.Record{}, got)
+}
+
+func TestTransformer_BrokenJSCode(t *testing.T) {
+	is := is.New(t)
+
+	src := `function {`
+	_, err := NewTransformer(src, zerolog.Nop())
+	is.True(err != nil)
+	target := &goja.CompilerSyntaxError{}
+	is.True(cerrors.As(err, &target))
+}
+
+func TestTransformer_ScriptWithMultipleFunctions(t *testing.T) {
+	is := is.New(t)
+
+	src := `
+		function getValue() {
+			return "updated_value";
+		}
+		
+		function transform(record) {
+			record.Metadata["updated_key"] = getValue()
+			return record;
+		}
+	`
+	tr, err := NewTransformer(src, zerolog.Nop())
+	is.NoErr(err)
+
+	r := record.Record{
+		Metadata: map[string]string{
+			"old_key": "old_value",
+		},
+	}
+
+	got, err := tr.Transform(r)
+	is.NoErr(err)
+	is.Equal(
+		record.Record{
+			Metadata: map[string]string{
+				"old_key":     "old_value",
+				"updated_key": "updated_value",
+			},
+		},
+		got,
+	)
 }
