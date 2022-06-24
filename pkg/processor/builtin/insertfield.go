@@ -81,33 +81,31 @@ func insertField(
 		return nil, cerrors.Errorf("%s: no fields configured to be inserted", transformName)
 	}
 
-	return funcProcessor{
-		fn: func(_ context.Context, r record.Record) (record.Record, error) {
-			data := getSetter.Get(r)
+	return ProcessorFunc(func(_ context.Context, r record.Record) (record.Record, error) {
+		data := getSetter.Get(r)
 
-			switch d := data.(type) {
-			case record.RawData:
-				if d.Schema == nil {
-					return record.Record{}, cerrors.Errorf("%s: schemaless raw data not supported", transformName)
-				}
-				return record.Record{}, cerrors.Errorf("%s: data with schema not supported yet", transformName) // TODO
-			case record.StructuredData:
-				// TODO add support for nested fields
-				if staticFieldName != "" {
-					d[staticFieldName] = staticFieldValue
-				}
-				if timestampField != "" {
-					d[timestampField] = r.CreatedAt
-				}
-				if positionField != "" {
-					d[positionField] = r.Position
-				}
-			default:
-				return record.Record{}, cerrors.Errorf("%s: unexpected data type %T", transformName, data)
+		switch d := data.(type) {
+		case record.RawData:
+			if d.Schema == nil {
+				return record.Record{}, cerrors.Errorf("%s: schemaless raw data not supported", transformName)
 			}
+			return record.Record{}, cerrors.Errorf("%s: data with schema not supported yet", transformName) // TODO
+		case record.StructuredData:
+			// TODO add support for nested fields
+			if staticFieldName != "" {
+				d[staticFieldName] = staticFieldValue
+			}
+			if timestampField != "" {
+				d[timestampField] = r.CreatedAt
+			}
+			if positionField != "" {
+				d[positionField] = r.Position
+			}
+		default:
+			return record.Record{}, cerrors.Errorf("%s: unexpected data type %T", transformName, data)
+		}
 
-			r = getSetter.Set(r, data)
-			return r, nil
-		},
-	}, nil
+		r = getSetter.Set(r, data)
+		return r, nil
+	}), nil
 }

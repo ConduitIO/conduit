@@ -73,36 +73,34 @@ func maskField(
 	}
 	replacement = config.Settings[maskFieldConfigReplacement]
 
-	return funcProcessor{
-		fn: func(_ context.Context, r record.Record) (record.Record, error) {
-			data := getSetter.Get(r)
+	return ProcessorFunc(func(_ context.Context, r record.Record) (record.Record, error) {
+		data := getSetter.Get(r)
 
-			switch d := data.(type) {
-			case record.RawData:
-				if d.Schema == nil {
-					return record.Record{}, cerrors.Errorf("%s: schemaless raw data not supported", transformName)
-				}
-				return record.Record{}, cerrors.Errorf("%s: data with schema not supported yet", transformName) // TODO
-			case record.StructuredData:
-				// TODO add support for nested fields
-				switch d[fieldName].(type) {
-				case string:
-					d[fieldName] = replacement
-				case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64: // any numeric type
-					// ignore error, i is going to be zero if it fails anyway
-					i, _ := strconv.Atoi(replacement)
-					d[fieldName] = i
-				default:
-					fieldType := reflect.TypeOf(d[fieldName])
-					zeroValue := reflect.New(fieldType).Elem().Interface()
-					d[fieldName] = zeroValue
-				}
-			default:
-				return record.Record{}, cerrors.Errorf("%s: unexpected data type %T", transformName, data)
+		switch d := data.(type) {
+		case record.RawData:
+			if d.Schema == nil {
+				return record.Record{}, cerrors.Errorf("%s: schemaless raw data not supported", transformName)
 			}
+			return record.Record{}, cerrors.Errorf("%s: data with schema not supported yet", transformName) // TODO
+		case record.StructuredData:
+			// TODO add support for nested fields
+			switch d[fieldName].(type) {
+			case string:
+				d[fieldName] = replacement
+			case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64: // any numeric type
+				// ignore error, i is going to be zero if it fails anyway
+				i, _ := strconv.Atoi(replacement)
+				d[fieldName] = i
+			default:
+				fieldType := reflect.TypeOf(d[fieldName])
+				zeroValue := reflect.New(fieldType).Elem().Interface()
+				d[fieldName] = zeroValue
+			}
+		default:
+			return record.Record{}, cerrors.Errorf("%s: unexpected data type %T", transformName, data)
+		}
 
-			r = getSetter.Set(r, data)
-			return r, nil
-		},
-	}, nil
+		r = getSetter.Set(r, data)
+		return r, nil
+	}), nil
 }

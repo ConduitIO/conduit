@@ -134,7 +134,7 @@ func configureHTTPRequestBackoffRetry(
 
 	if retryCount == 0 {
 		// no retries configured, just use the plain transform function
-		return funcProcessor{fn: procFn}, nil
+		return ProcessorFunc(procFn), nil
 	}
 
 	// default retry values
@@ -166,18 +166,16 @@ func configureHTTPRequestBackoffRetry(
 	}
 
 	// wrap transform in a retry loop
-	return funcProcessor{
-		fn: func(ctx context.Context, r record.Record) (record.Record, error) {
-			for {
-				r, err := procFn(ctx, r)
-				if err != nil && b.Attempt() < retryCount {
-					// TODO log message that we are retrying, include error cause (we don't have access to a proper logger)
-					time.Sleep(b.Duration())
-					continue
-				}
-				b.Reset() // reset for next transform execution
-				return r, err
+	return ProcessorFunc(func(ctx context.Context, r record.Record) (record.Record, error) {
+		for {
+			r, err := procFn(ctx, r)
+			if err != nil && b.Attempt() < retryCount {
+				// TODO log message that we are retrying, include error cause (we don't have access to a proper logger)
+				time.Sleep(b.Duration())
+				continue
 			}
-		},
-	}, nil
+			b.Reset() // reset for next transform execution
+			return r, err
+		}
+	}), nil
 }

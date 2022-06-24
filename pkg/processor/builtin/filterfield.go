@@ -102,55 +102,53 @@ func filterField(
 		filternull = "fail"
 	}
 
-	return funcProcessor{
-		fn: func(_ context.Context, r record.Record) (record.Record, error) {
-			data := getSetter.Get(r)
-			switch d := data.(type) {
-			case record.RawData:
-				if d.Schema == nil {
-					return record.Record{}, cerrors.Errorf("%s: schemaless raw data not supported", transformName)
-				}
-				return record.Record{}, cerrors.Errorf("%s: data with schema not supported yet", transformName) // TODO
-			case record.StructuredData:
-				doc, err := jsonquery.Parse(bytes.NewReader(d.Bytes()))
-				if err != nil {
-					return record.Record{}, cerrors.Errorf("filterfield failed to parse path: %w", err)
-				}
-				match := jsonquery.FindOne(doc, filtercondition)
-				if match == nil {
-					// check the filterexists query if one is set.
-					if filterexists != "" {
-						exists := jsonquery.Find(doc, filterexists)
-						// if it matches, handle normal drop record behavior.
-						if exists == nil {
-							// if it doesn't match, defer to filternull behavior
-							switch filternull {
-							case "include":
-								return r, nil
-							case "exclude":
-								return record.Record{}, processor.ErrSkipRecord
-							case "fail":
-								// fail should fail loudly with an existence error
-								return record.Record{}, cerrors.Errorf("field does not exist: %s", filterexists)
-							}
+	return ProcessorFunc(func(_ context.Context, r record.Record) (record.Record, error) {
+		data := getSetter.Get(r)
+		switch d := data.(type) {
+		case record.RawData:
+			if d.Schema == nil {
+				return record.Record{}, cerrors.Errorf("%s: schemaless raw data not supported", transformName)
+			}
+			return record.Record{}, cerrors.Errorf("%s: data with schema not supported yet", transformName) // TODO
+		case record.StructuredData:
+			doc, err := jsonquery.Parse(bytes.NewReader(d.Bytes()))
+			if err != nil {
+				return record.Record{}, cerrors.Errorf("filterfield failed to parse path: %w", err)
+			}
+			match := jsonquery.FindOne(doc, filtercondition)
+			if match == nil {
+				// check the filterexists query if one is set.
+				if filterexists != "" {
+					exists := jsonquery.Find(doc, filterexists)
+					// if it matches, handle normal drop record behavior.
+					if exists == nil {
+						// if it doesn't match, defer to filternull behavior
+						switch filternull {
+						case "include":
+							return r, nil
+						case "exclude":
+							return record.Record{}, processor.ErrSkipRecord
+						case "fail":
+							// fail should fail loudly with an existence error
+							return record.Record{}, cerrors.Errorf("field does not exist: %s", filterexists)
 						}
 					}
-					return record.Record{}, processor.ErrSkipRecord
 				}
-
-				// handle matches based on filtertype as normal
-				switch filtertype {
-				case "include":
-					return r, nil
-				case "exclude":
-					return record.Record{}, processor.ErrSkipRecord
-				default:
-					return record.Record{}, cerrors.Errorf("invalid filtertype: %s", filtertype)
-				}
-
-			default:
-				return record.Record{}, cerrors.Errorf("%s: unexpected data type %T", transformName, data)
+				return record.Record{}, processor.ErrSkipRecord
 			}
-		},
-	}, nil
+
+			// handle matches based on filtertype as normal
+			switch filtertype {
+			case "include":
+				return r, nil
+			case "exclude":
+				return record.Record{}, processor.ErrSkipRecord
+			default:
+				return record.Record{}, cerrors.Errorf("invalid filtertype: %s", filtertype)
+			}
+
+		default:
+			return record.Record{}, cerrors.Errorf("%s: unexpected data type %T", transformName, data)
+		}
+	}), nil
 }

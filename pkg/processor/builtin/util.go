@@ -24,15 +24,13 @@ import (
 	"github.com/conduitio/conduit/pkg/record"
 )
 
-// funcProcessor is a stateless processor.Processor implementation
+// ProcessorFunc is a stateless processor.Processor implementation
 // which is using a Go function to process records.
 // todo move out of this file.
-type funcProcessor struct {
-	fn func(context.Context, record.Record) (record.Record, error)
-}
+type ProcessorFunc func(context.Context, record.Record) (record.Record, error)
 
-func (f funcProcessor) Execute(ctx context.Context, record record.Record) (record.Record, error) {
-	return f.fn(ctx, record)
+func (p ProcessorFunc) Execute(ctx context.Context, record record.Record) (record.Record, error) {
+	return p(ctx, record)
 }
 
 var errEmptyConfigField = cerrors.New("empty config field")

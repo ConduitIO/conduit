@@ -46,27 +46,25 @@ func ValueToKey(config processor.Config) (processor.Processor, error) {
 
 	fields := strings.Split(config.Settings[valueToKeyConfigFields], ",")
 
-	return funcProcessor{
-		fn: func(_ context.Context, r record.Record) (_ record.Record, err error) {
-			defer func() {
-				if err != nil {
-					err = cerrors.Errorf("%s: %w", valueToKeyName, err)
-				}
-			}()
-
-			switch d := r.Payload.(type) {
-			case record.StructuredData:
-				key := record.StructuredData{}
-				for _, f := range fields {
-					key[f] = d[f]
-				}
-				r.Key = key
-				return r, nil
-			case record.RawData:
-				return record.Record{}, cerrors.ErrNotImpl
-			default:
-				return record.Record{}, cerrors.Errorf("unexpected payload type %T", r.Payload)
+	return ProcessorFunc(func(_ context.Context, r record.Record) (_ record.Record, err error) {
+		defer func() {
+			if err != nil {
+				err = cerrors.Errorf("%s: %w", valueToKeyName, err)
 			}
-		},
-	}, nil
+		}()
+
+		switch d := r.Payload.(type) {
+		case record.StructuredData:
+			key := record.StructuredData{}
+			for _, f := range fields {
+				key[f] = d[f]
+			}
+			r.Key = key
+			return r, nil
+		case record.RawData:
+			return record.Record{}, cerrors.ErrNotImpl
+		default:
+			return record.Record{}, cerrors.Errorf("unexpected payload type %T", r.Payload)
+		}
+	}), nil
 }

@@ -69,38 +69,36 @@ func extractField(
 		return nil, cerrors.Errorf("%s: %w", transformName, err)
 	}
 
-	return funcProcessor{
-		func(_ context.Context, r record.Record) (record.Record, error) {
-			data := getSetter.Get(r)
+	return ProcessorFunc(func(_ context.Context, r record.Record) (record.Record, error) {
+		data := getSetter.Get(r)
 
-			switch d := data.(type) {
-			case record.RawData:
-				if d.Schema == nil {
-					return record.Record{}, cerrors.Errorf("%s: schemaless raw data not supported", transformName)
-				}
-				return record.Record{}, cerrors.Errorf("%s: data with schema not supported yet", transformName) // TODO
-			case record.StructuredData:
-				// TODO add support for nested fields
-				extractedField := d[fieldName]
-				if extractedField == nil {
-					return record.Record{}, cerrors.Errorf("%s: field %q not found", transformName, fieldName)
-				}
-
-				switch v := extractedField.(type) {
-				case map[string]interface{}:
-					data = record.StructuredData(v)
-				case []byte:
-					data = record.RawData{Raw: v}
-				default:
-					// marshal as string by default
-					data = record.RawData{Raw: []byte(fmt.Sprint(v))}
-				}
-			default:
-				return record.Record{}, cerrors.Errorf("%s: unexpected data type %T", transformName, data)
+		switch d := data.(type) {
+		case record.RawData:
+			if d.Schema == nil {
+				return record.Record{}, cerrors.Errorf("%s: schemaless raw data not supported", transformName)
+			}
+			return record.Record{}, cerrors.Errorf("%s: data with schema not supported yet", transformName) // TODO
+		case record.StructuredData:
+			// TODO add support for nested fields
+			extractedField := d[fieldName]
+			if extractedField == nil {
+				return record.Record{}, cerrors.Errorf("%s: field %q not found", transformName, fieldName)
 			}
 
-			r = getSetter.Set(r, data)
-			return r, nil
-		},
-	}, nil
+			switch v := extractedField.(type) {
+			case map[string]interface{}:
+				data = record.StructuredData(v)
+			case []byte:
+				data = record.RawData{Raw: v}
+			default:
+				// marshal as string by default
+				data = record.RawData{Raw: []byte(fmt.Sprint(v))}
+			}
+		default:
+			return record.Record{}, cerrors.Errorf("%s: unexpected data type %T", transformName, data)
+		}
+
+		r = getSetter.Set(r, data)
+		return r, nil
+	}), nil
 }

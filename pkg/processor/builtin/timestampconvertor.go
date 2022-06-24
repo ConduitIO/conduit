@@ -80,50 +80,48 @@ func timestampConvertor(
 		return nil, cerrors.Errorf("%s: format is needed to parse the output", transformName)
 	}
 
-	return funcProcessor{
-		fn: func(_ context.Context, r record.Record) (record.Record, error) {
-			data := getSetter.Get(r)
-			switch d := data.(type) {
-			case record.RawData:
-				if d.Schema == nil {
-					return record.Record{}, cerrors.Errorf("%s: schemaless raw data not supported", transformName)
-				}
-				return record.Record{}, cerrors.Errorf("%s: data with schema not supported yet", transformName) // TODO
-			case record.StructuredData:
-				var tm time.Time
-				switch v := d[field].(type) {
-				case int64:
-					tm = time.Unix(0, v)
-				case string:
-					if format == "" {
-						return record.Record{}, cerrors.Errorf("%s: no format to parse the date", transformName)
-					}
-					tm, err = time.Parse(format, v)
-					if err != nil {
-						return record.Record{}, cerrors.Errorf("%s: %w", transformName, err)
-					}
-				case time.Time:
-					tm = v
-				default:
-					return record.Record{}, cerrors.Errorf("%s: unexpected data type %T", transformName, d[field])
-				}
-				// TODO add support for nested fields
-				switch targetType {
-				case stringType: // use "format" to generate the output
-					d[field] = tm.Format(format)
-				case unixType:
-					d[field] = tm.UnixNano()
-				case timeType:
-					d[field] = tm
-				default:
-					return record.Record{}, cerrors.Errorf("%s: unexpected output type %T", transformName, targetType)
-				}
-			default:
-				return record.Record{}, cerrors.Errorf("%s: unexpected data type %T", transformName, data)
+	return ProcessorFunc(func(_ context.Context, r record.Record) (record.Record, error) {
+		data := getSetter.Get(r)
+		switch d := data.(type) {
+		case record.RawData:
+			if d.Schema == nil {
+				return record.Record{}, cerrors.Errorf("%s: schemaless raw data not supported", transformName)
 			}
+			return record.Record{}, cerrors.Errorf("%s: data with schema not supported yet", transformName) // TODO
+		case record.StructuredData:
+			var tm time.Time
+			switch v := d[field].(type) {
+			case int64:
+				tm = time.Unix(0, v)
+			case string:
+				if format == "" {
+					return record.Record{}, cerrors.Errorf("%s: no format to parse the date", transformName)
+				}
+				tm, err = time.Parse(format, v)
+				if err != nil {
+					return record.Record{}, cerrors.Errorf("%s: %w", transformName, err)
+				}
+			case time.Time:
+				tm = v
+			default:
+				return record.Record{}, cerrors.Errorf("%s: unexpected data type %T", transformName, d[field])
+			}
+			// TODO add support for nested fields
+			switch targetType {
+			case stringType: // use "format" to generate the output
+				d[field] = tm.Format(format)
+			case unixType:
+				d[field] = tm.UnixNano()
+			case timeType:
+				d[field] = tm
+			default:
+				return record.Record{}, cerrors.Errorf("%s: unexpected output type %T", transformName, targetType)
+			}
+		default:
+			return record.Record{}, cerrors.Errorf("%s: unexpected data type %T", transformName, data)
+		}
 
-			r = getSetter.Set(r, data)
-			return r, nil
-		},
-	}, nil
+		r = getSetter.Set(r, data)
+		return r, nil
+	}), nil
 }

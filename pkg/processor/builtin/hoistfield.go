@@ -69,29 +69,27 @@ func hoistField(
 		return nil, cerrors.Errorf("%s: %w", transformName, err)
 	}
 
-	return funcProcessor{
-		fn: func(_ context.Context, r record.Record) (record.Record, error) {
-			data := getSetter.Get(r)
+	return ProcessorFunc(func(_ context.Context, r record.Record) (record.Record, error) {
+		data := getSetter.Get(r)
 
-			switch d := data.(type) {
-			case record.RawData:
-				if d.Schema == nil {
-					data = record.StructuredData{
-						fieldName: d.Raw,
-					}
-				} else {
-					return record.Record{}, cerrors.Errorf("%s: data with schema not supported yet", transformName) // TODO
-				}
-			case record.StructuredData:
+		switch d := data.(type) {
+		case record.RawData:
+			if d.Schema == nil {
 				data = record.StructuredData{
-					fieldName: map[string]interface{}(d),
+					fieldName: d.Raw,
 				}
-			default:
-				return record.Record{}, cerrors.Errorf("%s: unexpected data type %T", transformName, data)
+			} else {
+				return record.Record{}, cerrors.Errorf("%s: data with schema not supported yet", transformName) // TODO
 			}
+		case record.StructuredData:
+			data = record.StructuredData{
+				fieldName: map[string]interface{}(d),
+			}
+		default:
+			return record.Record{}, cerrors.Errorf("%s: unexpected data type %T", transformName, data)
+		}
 
-			r = getSetter.Set(r, data)
-			return r, nil
-		},
-	}, nil
+		r = getSetter.Set(r, data)
+		return r, nil
+	}), nil
 }
