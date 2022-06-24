@@ -433,7 +433,7 @@ func TestInsertFieldPayload_Transform(t *testing.T) {
 		name: "position in structured data",
 		config: processor.Config{
 			Settings: map[string]string{
-				insertFieldConfigStaticField: "foo",
+				insertFieldConfigPositionField: "foo",
 			},
 		},
 		args: args{r: record.Record{
@@ -456,7 +456,7 @@ func TestInsertFieldPayload_Transform(t *testing.T) {
 		name: "position in raw data without schema",
 		config: processor.Config{
 			Settings: map[string]string{
-				insertFieldConfigStaticField: "foo",
+				insertFieldConfigPositionField: "foo",
 			},
 		},
 		args: args{r: record.Record{
@@ -470,7 +470,7 @@ func TestInsertFieldPayload_Transform(t *testing.T) {
 		name: "position in raw data with schema",
 		config: processor.Config{
 			Settings: map[string]string{
-				insertFieldConfigStaticField: "foo",
+				insertFieldConfigPositionField: "foo",
 			},
 		},
 		args: args{r: record.Record{
@@ -485,7 +485,7 @@ func TestInsertFieldPayload_Transform(t *testing.T) {
 		name: "timestamp in structured data",
 		config: processor.Config{
 			Settings: map[string]string{
-				insertFieldConfigStaticField: "foo",
+				insertFieldConfigTimestampField: "foo",
 			},
 		},
 		args: args{r: record.Record{
@@ -508,7 +508,7 @@ func TestInsertFieldPayload_Transform(t *testing.T) {
 		name: "timestamp in raw data without schema",
 		config: processor.Config{
 			Settings: map[string]string{
-				insertFieldConfigStaticField: "foo",
+				insertFieldConfigTimestampField: "foo",
 			},
 		},
 		args: args{r: record.Record{
@@ -522,7 +522,7 @@ func TestInsertFieldPayload_Transform(t *testing.T) {
 		name: "timestamp in raw data with schema",
 		config: processor.Config{
 			Settings: map[string]string{
-				insertFieldConfigStaticField: "foo",
+				insertFieldConfigTimestampField: "foo",
 			},
 		},
 		args: args{r: record.Record{
