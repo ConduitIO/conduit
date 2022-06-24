@@ -1,6 +1,11 @@
 .PHONY: test test-integration build run proto-api proto-lint clean download install-tools generate check-go-version
 
-VERSION=`./scripts/get-tag.sh`
+# Version will extract the current version of Conduit based on
+# the latest git tag and commit. If the repository contains any
+# changes the version will have the suffix "-dirty", it will
+# ignore any untracked files though to ensure Docker builds have
+# the correct version.
+VERSION=`git describe --tags --dirty`
 GO_VERSION_CHECK=`./scripts/check-go-version.sh`
 
 # The build target should stay at the top since we want it to be the default target.
