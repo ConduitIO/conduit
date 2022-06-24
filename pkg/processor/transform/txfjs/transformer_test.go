@@ -19,14 +19,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/dop251/goja"
+	"github.com/matryer/is"
 	"github.com/rs/zerolog"
 )
 
 func TestTransformer_Logger(t *testing.T) {
+	is := is.New(t)
 	var buf bytes.Buffer
 	logger := zerolog.New(&buf)
 	tr, err := NewTransformer(`
@@ -35,15 +36,17 @@ func TestTransformer_Logger(t *testing.T) {
 		return r
 	}
 	`, logger)
-	assert.Ok(t, err)
+	is.NoErr(err)
 
 	_, err = tr.Transform(record.Record{})
-	assert.Ok(t, err)
+	is.NoErr(err)
 
-	assert.Equal(t, `{"level":"info","message":"Hello"}`+"\n", buf.String())
+	is.Equal(`{"level":"info","message":"Hello"}`+"\n", buf.String())
 }
 
 func TestTransformer_Transform_MissingEntrypoint(t *testing.T) {
+	is := is.New(t)
+
 	tr, err := NewTransformer(
 		`logger.Debug("no entrypoint");`,
 		zerolog.Nop(),
@@ -53,8 +56,8 @@ func TestTransformer_Transform_MissingEntrypoint(t *testing.T) {
 		t.Error("expected error if transformer has no entrypoint")
 		return
 	}
-	assert.Equal(t, `failed to get entrypoint function "transform"`, err.Error())
-	assert.True(t, tr == nil, "transformer should be nil")
+	is.Equal(`failed to get entrypoint function "transform"`, err.Error())
+	is.True(tr == nil)
 }
 
 func TestTransformer_Transform(t *testing.T) {
@@ -220,8 +223,10 @@ func TestTransformer_Transform(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			is := is.New(t)
+
 			tr, err := NewTransformer(tt.fields.src, zerolog.Nop())
-			assert.Ok(t, err)
+			is.NoErr(err)
 
 			got, err := tr.Transform(tt.args.record)
 			if err != nil {
@@ -231,7 +236,7 @@ func TestTransformer_Transform(t *testing.T) {
 				}
 			}
 
-			assert.Equal(t, tt.want, got)
+			is.Equal(tt.want, got)
 		})
 	}
 }
@@ -314,23 +319,27 @@ func TestTransformer_DataTypes(t *testing.T) {
 	for _, tc := range testCases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
+			is := is.New(t)
+
 			tr, err := NewTransformer(tc.src, zerolog.Nop())
-			assert.Ok(t, err)
+			is.NoErr(err)
 
 			got, err := tr.Transform(tc.input)
-			assert.Ok(t, err)
-			assert.Equal(t, tc.want, got)
+			is.NoErr(err)
+			is.Equal(tc.want, got)
 		})
 	}
 }
 
 func TestTransformer_JavaScriptException(t *testing.T) {
+	is := is.New(t)
+
 	src := `function transform(record) {
 		var m;
 		m.test
 	}`
 	tr, err := NewTransformer(src, zerolog.Nop())
-	assert.Ok(t, err)
+	is.NoErr(err)
 
 	r := record.Record{
 		Key:     record.RawData{Raw: []byte("test key")},
@@ -338,21 +347,25 @@ func TestTransformer_JavaScriptException(t *testing.T) {
 	}
 
 	got, err := tr.Transform(r)
-	assert.Error(t, err)
+	is.True(err != nil)
 	target := &goja.Exception{}
-	assert.True(t, cerrors.As(err, &target), "expected a goja.Exception")
-	assert.Equal(t, record.Record{}, got)
+	is.True(cerrors.As(err, &target))
+	is.Equal(record.Record{}, got)
 }
 
 func TestTransformer_BrokenJSCode(t *testing.T) {
+	is := is.New(t)
+
 	src := `function {`
 	_, err := NewTransformer(src, zerolog.Nop())
-	assert.Error(t, err)
+	is.True(err != nil)
 	target := &goja.CompilerSyntaxError{}
-	assert.True(t, cerrors.As(err, &target), "expected a goja.CompilerSyntaxError")
+	is.True(cerrors.As(err, &target))
 }
 
 func TestTransformer_ScriptWithMultipleFunctions(t *testing.T) {
+	is := is.New(t)
+
 	src := `
 		function getValue() {
 			return "updated_value";
@@ -364,7 +377,7 @@ func TestTransformer_ScriptWithMultipleFunctions(t *testing.T) {
 		}
 	`
 	tr, err := NewTransformer(src, zerolog.Nop())
-	assert.Ok(t, err)
+	is.NoErr(err)
 
 	r := record.Record{
 		Metadata: map[string]string{
@@ -373,9 +386,8 @@ func TestTransformer_ScriptWithMultipleFunctions(t *testing.T) {
 	}
 
 	got, err := tr.Transform(r)
-	assert.Ok(t, err)
-	assert.Equal(
-		t,
+	is.NoErr(err)
+	is.Equal(
 		record.Record{
 			Metadata: map[string]string{
 				"old_key":     "old_value",
