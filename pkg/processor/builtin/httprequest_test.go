@@ -15,6 +15,8 @@
 package builtin
 
 import (
+	"context"
+	"github.com/conduitio/conduit/pkg/processor"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -34,55 +36,111 @@ func TestHTTPRequest_Build(t *testing.T) {
 		wantErr bool
 	}{{
 		name:    "nil config returns error",
-		args:    args{config: nil},
+		args:    args{config: processor.Config{}},
 		wantErr: true,
 	}, {
-		name:    "empty config returns error",
-		args:    args{config: map[string]string{}},
+		name: "empty config returns error",
+		args: args{config: processor.Config{
+			Settings: map[string]string{},
+		}},
 		wantErr: true,
 	}, {
-		name:    "empty url returns error",
-		args:    args{config: map[string]string{httpRequestConfigURL: ""}},
+		name: "empty url returns error",
+		args: args{config: processor.Config{
+			Settings: map[string]string{httpRequestConfigURL: ""},
+		}},
 		wantErr: true,
 	}, {
-		name:    "invalid url returns error",
-		args:    args{config: map[string]string{httpRequestConfigURL: ":not/a/valid/url"}},
+		name: "invalid url returns error",
+		args: args{config: processor.Config{
+			Settings: map[string]string{httpRequestConfigURL: ":not/a/valid/url"},
+		}},
 		wantErr: true,
 	}, {
-		name:    "invalid method returns error",
-		args:    args{config: map[string]string{httpRequestConfigURL: "http://example.com", httpRequestConfigMethod: ":foo"}},
+		name: "invalid method returns error",
+		args: args{config: processor.Config{
+			Settings: map[string]string{
+				httpRequestConfigURL:    "http://example.com",
+				httpRequestConfigMethod: ":foo",
+			},
+		}},
 		wantErr: true,
 	}, {
-		name:    "invalid backoffRetry.count returns error",
-		args:    args{config: map[string]string{httpRequestConfigURL: "http://example.com", httpRequestBackoffRetryCount: "not-a-number"}},
+		name: "invalid backoffRetry.count returns error",
+		args: args{config: processor.Config{
+			Settings: map[string]string{
+				httpRequestConfigURL:         "http://example.com",
+				httpRequestBackoffRetryCount: "not-a-number",
+			},
+		}},
 		wantErr: true,
 	}, {
-		name:    "invalid backoffRetry.min returns error",
-		args:    args{config: map[string]string{httpRequestConfigURL: "http://example.com", httpRequestBackoffRetryCount: "1", httpRequestBackoffRetryMin: "not-a-duration"}},
+		name: "invalid backoffRetry.min returns error",
+		args: args{config: processor.Config{
+			Settings: map[string]string{
+				httpRequestConfigURL:         "http://example.com",
+				httpRequestBackoffRetryCount: "1",
+				httpRequestBackoffRetryMin:   "not-a-duration",
+			},
+		}},
 		wantErr: true,
 	}, {
-		name:    "invalid backoffRetry.max returns error",
-		args:    args{config: map[string]string{httpRequestConfigURL: "http://example.com", httpRequestBackoffRetryCount: "1", httpRequestBackoffRetryMax: "not-a-duration"}},
+		name: "invalid backoffRetry.max returns error",
+		args: args{config: processor.Config{
+			Settings: map[string]string{
+				httpRequestConfigURL:         "http://example.com",
+				httpRequestBackoffRetryCount: "1",
+				httpRequestBackoffRetryMax:   "not-a-duration",
+			},
+		}},
 		wantErr: true,
 	}, {
-		name:    "invalid backoffRetry.factor returns error",
-		args:    args{config: map[string]string{httpRequestConfigURL: "http://example.com", httpRequestBackoffRetryCount: "1", httpRequestBackoffRetryFactor: "not-a-number"}},
+		name: "invalid backoffRetry.factor returns error",
+		args: args{config: processor.Config{
+			Settings: map[string]string{
+				httpRequestConfigURL:          "http://example.com",
+				httpRequestBackoffRetryCount:  "1",
+				httpRequestBackoffRetryFactor: "not-a-number",
+			},
+		}},
 		wantErr: true,
 	}, {
-		name:    "valid url returns transform",
-		args:    args{config: map[string]string{httpRequestConfigURL: "http://example.com"}},
+		name: "valid url returns transform",
+		args: args{config: processor.Config{
+			Settings: map[string]string{httpRequestConfigURL: "http://example.com"},
+		}},
 		wantErr: false,
 	}, {
-		name:    "valid url and method returns transform",
-		args:    args{config: map[string]string{httpRequestConfigURL: "http://example.com", httpRequestConfigMethod: "GET"}},
+		name: "valid url and method returns transform",
+		args: args{config: processor.Config{
+			Settings: map[string]string{
+				httpRequestConfigURL:    "http://example.com",
+				httpRequestConfigMethod: "GET",
+			},
+		}},
 		wantErr: false,
 	}, {
-		name:    "invalid backoff retry config is ignored",
-		args:    args{config: map[string]string{httpRequestConfigURL: "http://example.com", httpRequestBackoffRetryMin: "not-a-duration", httpRequestBackoffRetryMax: "not-a-duration", httpRequestBackoffRetryFactor: "not-a-number"}},
+		name: "invalid backoff retry config is ignored",
+		args: args{config: processor.Config{
+			Settings: map[string]string{
+				httpRequestConfigURL:          "http://example.com",
+				httpRequestBackoffRetryMin:    "not-a-duration",
+				httpRequestBackoffRetryMax:    "not-a-duration",
+				httpRequestBackoffRetryFactor: "not-a-number",
+			},
+		}},
 		wantErr: false,
 	}, {
-		name:    "valid url, method and backoff retry config returns transform",
-		args:    args{config: map[string]string{httpRequestConfigURL: "http://example.com", httpRequestBackoffRetryCount: "1", httpRequestBackoffRetryMin: "10ms", httpRequestBackoffRetryMax: "1s", httpRequestBackoffRetryFactor: "1.3"}},
+		name: "valid url, method and backoff retry config returns transform",
+		args: args{config: processor.Config{
+			Settings: map[string]string{
+				httpRequestConfigURL:          "http://example.com",
+				httpRequestBackoffRetryCount:  "1",
+				httpRequestBackoffRetryMin:    "10ms",
+				httpRequestBackoffRetryMax:    "1s",
+				httpRequestBackoffRetryFactor: "1.3",
+			},
+		}},
 		wantErr: false,
 	}}
 	for _, tt := range tests {
@@ -107,8 +165,10 @@ func TestHTTPRequest_TransformSuccess(t *testing.T) {
 		args   args
 		want   record.Record
 	}{{
-		name:   "structured data",
-		config: map[string]string{httpRequestConfigMethod: "GET"},
+		name: "structured data",
+		config: processor.Config{
+			Settings: map[string]string{httpRequestConfigMethod: "GET"},
+		},
 		args: args{r: record.Record{
 			Payload: record.StructuredData{
 				"bar": 123,
@@ -119,8 +179,10 @@ func TestHTTPRequest_TransformSuccess(t *testing.T) {
 			Payload: record.RawData{Raw: respBody},
 		},
 	}, {
-		name:   "raw data",
-		config: map[string]string{},
+		name: "raw data",
+		config: processor.Config{
+			Settings: map[string]string{},
+		},
 		args: args{r: record.Record{
 			Payload: record.RawData{Raw: []byte("random data")},
 		}},
@@ -133,7 +195,7 @@ func TestHTTPRequest_TransformSuccess(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			is := is.New(t)
 
-			wantMethod := tt.config[httpRequestConfigMethod]
+			wantMethod := tt.config.Settings[httpRequestConfigMethod]
 			if wantMethod == "" {
 				wantMethod = "POST" // default
 			}
@@ -151,11 +213,11 @@ func TestHTTPRequest_TransformSuccess(t *testing.T) {
 			}))
 			defer srv.Close()
 
-			tt.config[httpRequestConfigURL] = srv.URL
-			txfFunc, err := HTTPRequest(tt.config)
+			tt.config.Settings[httpRequestConfigURL] = srv.URL
+			underTest, err := HTTPRequest(tt.config)
 			is.NoErr(err)
 
-			got, err := txfFunc(tt.args.r)
+			got, err := underTest.Execute(context.Background(), tt.args.r)
 			is.NoErr(err)
 			is.Equal(got.Payload, record.RawData{Raw: respBody})
 		})
@@ -191,18 +253,20 @@ func TestHTTPRequest_TransformRetrySuccess(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	config := map[string]string{
-		httpRequestConfigURL:          srv.URL,
-		httpRequestBackoffRetryCount:  "4",
-		httpRequestBackoffRetryMin:    "5ms",
-		httpRequestBackoffRetryMax:    "10ms",
-		httpRequestBackoffRetryFactor: "1.2",
+	config := processor.Config{
+		Settings: map[string]string{
+			httpRequestConfigURL:          srv.URL,
+			httpRequestBackoffRetryCount:  "4",
+			httpRequestBackoffRetryMin:    "5ms",
+			httpRequestBackoffRetryMax:    "10ms",
+			httpRequestBackoffRetryFactor: "1.2",
+		},
 	}
 
-	txfFunc, err := HTTPRequest(config)
+	underTest, err := HTTPRequest(config)
 	is.NoErr(err)
 
-	got, err := txfFunc(record.Record{Payload: record.RawData{Raw: wantBody}})
+	got, err := underTest.Execute(context.Background(), record.Record{Payload: record.RawData{Raw: wantBody}})
 	is.NoErr(err)
 	is.Equal(got.Payload, record.RawData{Raw: respBody})
 	is.Equal(srvHandlerCount, 5)
@@ -220,18 +284,20 @@ func TestHTTPRequest_TransformRetryFail(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	config := map[string]string{
-		httpRequestConfigURL:          srv.URL,
-		httpRequestBackoffRetryCount:  "5",
-		httpRequestBackoffRetryMin:    "5ms",
-		httpRequestBackoffRetryMax:    "10ms",
-		httpRequestBackoffRetryFactor: "1.2",
+	config := processor.Config{
+		Settings: map[string]string{
+			httpRequestConfigURL:          srv.URL,
+			httpRequestBackoffRetryCount:  "5",
+			httpRequestBackoffRetryMin:    "5ms",
+			httpRequestBackoffRetryMax:    "10ms",
+			httpRequestBackoffRetryFactor: "1.2",
+		},
 	}
 
-	txfFunc, err := HTTPRequest(config)
+	underTest, err := HTTPRequest(config)
 	is.NoErr(err)
 
-	got, err := txfFunc(record.Record{Payload: record.RawData{}})
+	got, err := underTest.Execute(context.Background(), record.Record{Payload: record.RawData{}})
 	is.True(err != nil) // expected an error
 	is.Equal(got, record.Record{})
 	is.Equal(srvHandlerCount, 6) // expected 6 requests (1 regular and 5 retries)

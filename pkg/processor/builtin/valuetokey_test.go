@@ -15,6 +15,7 @@
 package builtin
 
 import (
+	"context"
 	"reflect"
 	"testing"
 
@@ -34,19 +35,25 @@ func TestValueToKey_Build(t *testing.T) {
 		wantErr bool
 	}{{
 		name:    "nil config returns error",
-		args:    args{config: nil},
+		args:    args{config: processor.Config{}},
 		wantErr: true,
 	}, {
-		name:    "empty config returns error",
-		args:    args{config: map[string]string{}},
+		name: "empty config returns error",
+		args: args{config: processor.Config{
+			Settings: map[string]string{},
+		}},
 		wantErr: true,
 	}, {
-		name:    "empty field returns error",
-		args:    args{config: map[string]string{valueToKeyConfigFields: ""}},
+		name: "empty field returns error",
+		args: args{config: processor.Config{
+			Settings: map[string]string{valueToKeyConfigFields: ""},
+		}},
 		wantErr: true,
 	}, {
-		name:    "non-empty field returns transform",
-		args:    args{config: map[string]string{valueToKeyConfigFields: "foo"}},
+		name: "non-empty field returns transform",
+		args: args{config: processor.Config{
+			Settings: map[string]string{valueToKeyConfigFields: "foo"},
+		}},
 		wantErr: false,
 	}}
 	for _, tt := range tests {
@@ -71,8 +78,10 @@ func TestValueToKey_Transform(t *testing.T) {
 		want    record.Record
 		wantErr bool
 	}{{
-		name:   "structured data",
-		config: map[string]string{valueToKeyConfigFields: "foo"},
+		name: "structured data",
+		config: processor.Config{
+			Settings: map[string]string{valueToKeyConfigFields: "foo"},
+		},
 		args: args{r: record.Record{
 			Payload: record.StructuredData{
 				"foo": 123,
@@ -90,8 +99,10 @@ func TestValueToKey_Transform(t *testing.T) {
 		},
 		wantErr: false,
 	}, {
-		name:   "raw data without schema",
-		config: map[string]string{valueToKeyConfigFields: "foo"},
+		name: "raw data without schema",
+		config: processor.Config{
+			Settings: map[string]string{valueToKeyConfigFields: "foo"},
+		},
 		args: args{r: record.Record{
 			Payload: record.RawData{
 				Raw:    []byte("raw data"),
@@ -101,8 +112,10 @@ func TestValueToKey_Transform(t *testing.T) {
 		want:    record.Record{},
 		wantErr: true,
 	}, {
-		name:   "raw data with schema",
-		config: map[string]string{valueToKeyConfigFields: "foo"},
+		name: "raw data with schema",
+		config: processor.Config{
+			Settings: map[string]string{valueToKeyConfigFields: "foo"},
+		},
 		args: args{r: record.Record{
 			Payload: record.RawData{
 				Raw:    []byte("raw data"),
@@ -114,9 +127,9 @@ func TestValueToKey_Transform(t *testing.T) {
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			txfFunc, err := ValueToKey(tt.config)
+			underTest, err := ValueToKey(tt.config)
 			assert.Ok(t, err)
-			got, err := txfFunc(tt.args.r)
+			got, err := underTest.Execute(context.Background(), tt.args.r)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Transform() error = %v, wantErr = %v", err, tt.wantErr)
 				return
