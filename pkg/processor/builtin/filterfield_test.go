@@ -15,6 +15,7 @@
 package builtin
 
 import (
+	"github.com/conduitio/conduit/pkg/processor"
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/foundation/assert"
@@ -135,7 +136,7 @@ func TestFilterFieldKey_Transform(t *testing.T) {
 			}},
 			want:    record.Record{},
 			wantErr: true,
-			err:     ErrDropRecord,
+			err:     processor.ErrSkipRecord,
 		},
 		{
 			name: "should handle missing or null by failing",
@@ -188,7 +189,7 @@ func TestFilterFieldKey_Transform(t *testing.T) {
 			}},
 			want:    record.Record{},
 			wantErr: true,
-			err:     ErrDropRecord,
+			err:     processor.ErrSkipRecord,
 		},
 	}
 	for _, tt := range tests {
@@ -224,37 +225,45 @@ func TestFilterFieldPayload_Build(t *testing.T) {
 	}{
 		{
 			name:    "nil config returns error",
-			args:    args{config: nil},
+			args:    args{config: processor.Config{}},
 			wantErr: true,
 		},
 		{
-			name:    "empty config returns error",
-			args:    args{config: map[string]string{}},
+			name: "empty config returns error",
+			args: args{config: processor.Config{
+				Settings: map[string]string{},
+			}},
 			wantErr: true,
 		},
 		{
 			name: "empty condition returns error",
-			args: args{config: map[string]string{
-				"type":          "include",
-				"missingornull": "fail",
-				"condition":     "",
+			args: args{config: processor.Config{
+				Settings: map[string]string{
+					"type":          "include",
+					"missingornull": "fail",
+					"condition":     "",
+				},
 			}},
 			wantErr: true,
 		},
 		{
 			name: "empty type returns error",
-			args: args{config: map[string]string{
-				"type":          "",
-				"condition":     "@id",
-				"missingornull": "fail",
+			args: args{config: processor.Config{
+				Settings: map[string]string{
+					"type":          "",
+					"condition":     "@id",
+					"missingornull": "fail",
+				},
 			}},
 			wantErr: true,
 		},
 		{
 			name: "valid config returns transform",
-			args: args{config: map[string]string{
-				"type":      "include",
-				"condition": "@id",
+			args: args{config: processor.Config{
+				Settings: map[string]string{
+					"type":      "include",
+					"condition": "@id",
+				},
 			}},
 			wantErr: false,
 		},

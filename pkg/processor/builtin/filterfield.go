@@ -17,12 +17,10 @@ package builtin
 import (
 	"bytes"
 
+	"github.com/antchfx/jsonquery"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/processor"
-	"github.com/conduitio/conduit/pkg/processor/transform"
 	"github.com/conduitio/conduit/pkg/record"
-
-	"github.com/antchfx/jsonquery"
 )
 
 const (
@@ -57,11 +55,6 @@ const (
 // 	"exists": "<xpath expression>",
 // 	"missingornull": "fail" // [fail, include, exclude]
 // }
-
-var (
-	// ErrDropRecord is returned when a Record is not being forwarded.
-	ErrDropRecord = cerrors.New("ErrDropRecord")
-)
 
 func init() {
 	processor.GlobalBuilderRegistry.MustRegister(filterFieldKeyName, transform.NewBuilder(FilterFieldKey))
@@ -136,14 +129,14 @@ func filterField(
 						case "include":
 							return r, nil
 						case "exclude":
-							return record.Record{}, ErrDropRecord
+							return record.Record{}, processor.ErrSkipRecord
 						case "fail":
 							// fail should fail loudly with an existence error
 							return record.Record{}, cerrors.Errorf("field does not exist: %s", filterexists)
 						}
 					}
 				}
-				return record.Record{}, ErrDropRecord
+				return record.Record{}, processor.ErrSkipRecord
 			}
 
 			// handle matches based on filtertype as normal
@@ -151,7 +144,7 @@ func filterField(
 			case "include":
 				return r, nil
 			case "exclude":
-				return record.Record{}, ErrDropRecord
+				return record.Record{}, processor.ErrSkipRecord
 			default:
 				return record.Record{}, cerrors.Errorf("invalid filtertype: %s", filtertype)
 			}
