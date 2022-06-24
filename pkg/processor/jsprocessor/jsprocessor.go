@@ -88,30 +88,26 @@ func (p *jsProcessor) initFunction(src string) error {
 	return nil
 }
 
-func (p *jsProcessor) jsRecord() func(goja.ConstructorCall) *goja.Object {
-	return func(goja.ConstructorCall) *goja.Object {
-		// TODO accept arguments
-		// We return a record.Record struct, however because we are
-		// not changing call.This instanceof will not work as expected.
+func (p *jsProcessor) jsRecord(goja.ConstructorCall) *goja.Object {
+	// TODO accept arguments
+	// We return a record.Record struct, however because we are
+	// not changing call.This instanceof will not work as expected.
 
-		r := record.Record{
-			Metadata: make(map[string]string),
-		}
-		// We need to return a pointer to make the returned object mutable.
-		return p.runtime.ToValue(&r).ToObject(p.runtime)
+	r := record.Record{
+		Metadata: make(map[string]string),
 	}
+	// We need to return a pointer to make the returned object mutable.
+	return p.runtime.ToValue(&r).ToObject(p.runtime)
 }
 
-func (p *jsProcessor) jsContentRaw() func(goja.ConstructorCall) *goja.Object {
-	return func(goja.ConstructorCall) *goja.Object {
-		// TODO accept arguments
-		// We return a record.RawData struct, however because we are
-		// not changing call.This instanceof will not work as expected.
+func (p *jsProcessor) jsContentRaw(goja.ConstructorCall) *goja.Object {
+	// TODO accept arguments
+	// We return a record.RawData struct, however because we are
+	// not changing call.This instanceof will not work as expected.
 
-		r := record.RawData{}
-		// We need to return a pointer to make the returned object mutable.
-		return p.runtime.ToValue(&r).ToObject(p.runtime)
-	}
+	r := record.RawData{}
+	// We need to return a pointer to make the returned object mutable.
+	return p.runtime.ToValue(&r).ToObject(p.runtime)
 }
 
 func (p *jsProcessor) Execute(_ context.Context, in record.Record) (record.Record, error) {
