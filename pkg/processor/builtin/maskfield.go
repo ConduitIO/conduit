@@ -15,12 +15,12 @@
 package builtin
 
 import (
+	"context"
 	"reflect"
 	"strconv"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/processor"
-	"github.com/conduitio/conduit/pkg/processor/transform"
 	"github.com/conduitio/conduit/pkg/record"
 )
 
@@ -33,8 +33,8 @@ const (
 )
 
 func init() {
-	processor.GlobalBuilderRegistry.MustRegister(maskFieldKeyName, transform.NewBuilder(MaskFieldKey))
-	processor.GlobalBuilderRegistry.MustRegister(maskFieldPayloadName, transform.NewBuilder(MaskFieldPayload))
+	processor.GlobalBuilderRegistry.MustRegister(maskFieldKeyName, MaskFieldKey)
+	processor.GlobalBuilderRegistry.MustRegister(maskFieldPayloadName, MaskFieldPayload)
 }
 
 // MaskFieldKey builds the following transform:
@@ -71,36 +71,38 @@ func maskField(
 	if fieldName, err = getConfigFieldString(config, maskFieldConfigField); err != nil {
 		return nil, cerrors.Errorf("%s: %w", transformName, err)
 	}
-	replacement = config[maskFieldConfigReplacement]
+	replacement = config.Settings[maskFieldConfigReplacement]
 
-	return func(r record.Record) (record.Record, error) {
-		data := getSetter.Get(r)
+	return funcProcessor{
+		fn: func(_ context.Context, r record.Record) (record.Record, error) {
+			data := getSetter.Get(r)
 
-		switch d := data.(type) {
-		case record.RawData:
-			if d.Schema == nil {
-				return record.Record{}, cerrors.Errorf("%s: schemaless raw data not supported", transformName)
-			}
-			return record.Record{}, cerrors.Errorf("%s: data with schema not supported yet", transformName) // TODO
-		case record.StructuredData:
-			// TODO add support for nested fields
-			switch d[fieldName].(type) {
-			case string:
-				d[fieldName] = replacement
-			case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64: // any numeric type
-				// ignore error, i is going to be zero if it fails anyway
-				i, _ := strconv.Atoi(replacement)
-				d[fieldName] = i
+			switch d := data.(type) {
+			case record.RawData:
+				if d.Schema == nil {
+					return record.Record{}, cerrors.Errorf("%s: schemaless raw data not supported", transformName)
+				}
+				return record.Record{}, cerrors.Errorf("%s: data with schema not supported yet", transformName) // TODO
+			case record.StructuredData:
+				// TODO add support for nested fields
+				switch d[fieldName].(type) {
+				case string:
+					d[fieldName] = replacement
+				case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64: // any numeric type
+					// ignore error, i is going to be zero if it fails anyway
+					i, _ := strconv.Atoi(replacement)
+					d[fieldName] = i
+				default:
+					fieldType := reflect.TypeOf(d[fieldName])
+					zeroValue := reflect.New(fieldType).Elem().Interface()
+					d[fieldName] = zeroValue
+				}
 			default:
-				fieldType := reflect.TypeOf(d[fieldName])
-				zeroValue := reflect.New(fieldType).Elem().Interface()
-				d[fieldName] = zeroValue
+				return record.Record{}, cerrors.Errorf("%s: unexpected data type %T", transformName, data)
 			}
-		default:
-			return record.Record{}, cerrors.Errorf("%s: unexpected data type %T", transformName, data)
-		}
 
-		r = getSetter.Set(r, data)
-		return r, nil
+			r = getSetter.Set(r, data)
+			return r, nil
+		},
 	}, nil
 }
