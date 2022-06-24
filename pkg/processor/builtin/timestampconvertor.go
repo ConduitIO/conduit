@@ -15,11 +15,11 @@
 package builtin
 
 import (
+	"context"
 	"time"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/processor"
-	"github.com/conduitio/conduit/pkg/processor/transform"
 	"github.com/conduitio/conduit/pkg/record"
 )
 
@@ -33,8 +33,8 @@ const (
 )
 
 func init() {
-	processor.GlobalBuilderRegistry.MustRegister(timestampConvertorKeyName, transform.NewBuilder(TimestampConvertorKey))
-	processor.GlobalBuilderRegistry.MustRegister(timestampConvertorPayloadName, transform.NewBuilder(TimestampConvertorPayload))
+	processor.GlobalBuilderRegistry.MustRegister(timestampConvertorKeyName, TimestampConvertorKey)
+	processor.GlobalBuilderRegistry.MustRegister(timestampConvertorPayloadName, TimestampConvertorPayload)
 }
 
 // TimestampConvertorKey todo
@@ -75,53 +75,55 @@ func timestampConvertor(
 	if targetType != stringType && targetType != unixType && targetType != timeType {
 		return nil, cerrors.Errorf("%s: targetType (%s) is not supported", transformName, targetType)
 	}
-	format = config[timestampConvertorConfigFormat] // can be empty
+	format = config.Settings[timestampConvertorConfigFormat] // can be empty
 	if format == "" && targetType == stringType {
 		return nil, cerrors.Errorf("%s: format is needed to parse the output", transformName)
 	}
 
-	return func(r record.Record) (record.Record, error) {
-		data := getSetter.Get(r)
-		switch d := data.(type) {
-		case record.RawData:
-			if d.Schema == nil {
-				return record.Record{}, cerrors.Errorf("%s: schemaless raw data not supported", transformName)
-			}
-			return record.Record{}, cerrors.Errorf("%s: data with schema not supported yet", transformName) // TODO
-		case record.StructuredData:
-			var tm time.Time
-			switch v := d[field].(type) {
-			case int64:
-				tm = time.Unix(0, v)
-			case string:
-				if format == "" {
-					return record.Record{}, cerrors.Errorf("%s: no format to parse the date", transformName)
+	return funcProcessor{
+		fn: func(_ context.Context, r record.Record) (record.Record, error) {
+			data := getSetter.Get(r)
+			switch d := data.(type) {
+			case record.RawData:
+				if d.Schema == nil {
+					return record.Record{}, cerrors.Errorf("%s: schemaless raw data not supported", transformName)
 				}
-				tm, err = time.Parse(format, v)
-				if err != nil {
-					return record.Record{}, cerrors.Errorf("%s: %w", transformName, err)
+				return record.Record{}, cerrors.Errorf("%s: data with schema not supported yet", transformName) // TODO
+			case record.StructuredData:
+				var tm time.Time
+				switch v := d[field].(type) {
+				case int64:
+					tm = time.Unix(0, v)
+				case string:
+					if format == "" {
+						return record.Record{}, cerrors.Errorf("%s: no format to parse the date", transformName)
+					}
+					tm, err = time.Parse(format, v)
+					if err != nil {
+						return record.Record{}, cerrors.Errorf("%s: %w", transformName, err)
+					}
+				case time.Time:
+					tm = v
+				default:
+					return record.Record{}, cerrors.Errorf("%s: unexpected data type %T", transformName, d[field])
 				}
-			case time.Time:
-				tm = v
+				// TODO add support for nested fields
+				switch targetType {
+				case stringType: // use "format" to generate the output
+					d[field] = tm.Format(format)
+				case unixType:
+					d[field] = tm.UnixNano()
+				case timeType:
+					d[field] = tm
+				default:
+					return record.Record{}, cerrors.Errorf("%s: unexpected output type %T", transformName, targetType)
+				}
 			default:
-				return record.Record{}, cerrors.Errorf("%s: unexpected data type %T", transformName, d[field])
+				return record.Record{}, cerrors.Errorf("%s: unexpected data type %T", transformName, data)
 			}
-			// TODO add support for nested fields
-			switch targetType {
-			case stringType: // use "format" to generate the output
-				d[field] = tm.Format(format)
-			case unixType:
-				d[field] = tm.UnixNano()
-			case timeType:
-				d[field] = tm
-			default:
-				return record.Record{}, cerrors.Errorf("%s: unexpected output type %T", transformName, targetType)
-			}
-		default:
-			return record.Record{}, cerrors.Errorf("%s: unexpected data type %T", transformName, data)
-		}
 
-		r = getSetter.Set(r, data)
-		return r, nil
+			r = getSetter.Set(r, data)
+			return r, nil
+		},
 	}, nil
 }
