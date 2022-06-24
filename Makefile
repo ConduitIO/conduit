@@ -1,5 +1,10 @@
 .PHONY: test test-integration build run proto-api proto-lint clean download install-tools generate check-go-version
 
+# Version will extract the current version of Conduit based on
+# the latest git tag and commit. If the repository contains any
+# changes the version will have the suffix "-dirty", it will
+# ignore any untracked files though to ensure Docker builds have
+# the correct version.
 VERSION=`git describe --tags --dirty`
 GO_VERSION_CHECK=`./scripts/check-go-version.sh`
 
