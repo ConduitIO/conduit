@@ -105,7 +105,9 @@ func (n *FanoutNode) Run(ctx context.Context) error {
 
 					select {
 					case <-ctx.Done():
-						_ = msg.Nack(ctx.Err()) // TODO handle this, don't approve PR unless this is handled
+						// we can ignore the error, it will show up in the
+						// original msg
+						_ = newMsg.Nack(ctx.Err())
 						return
 					case n.out[i] <- newMsg:
 					}
@@ -116,6 +118,25 @@ func (n *FanoutNode) Run(ctx context.Context) error {
 			// also there is no need to listen to ctx.Done because that's what
 			// the go routines are doing already
 			wg.Wait()
+
+			// check if the context is still alive
+			if ctx.Err() != nil {
+				// context was closed - if the message was nacked there's a high
+				// chance it was nacked in this node by one of the goroutines
+				if msg.Status() == MessageStatusNacked {
+					// check if the message nack returned an error (Nack is
+					// idempotent and will return the same error as in the first
+					// call), return it if it returns an error
+					if err := msg.Nack(nil); err != nil {
+						return err
+					}
+				}
+				// the message is not nacked, it must have been sent to all
+				// downstream nodes just before the context got cancelled, we
+				// don't care about the message anymore, so we just return the
+				// context error
+				return ctx.Err()
+			}
 		}
 	}
 }

@@ -94,8 +94,14 @@ func (n *DestinationNode) Run(ctx context.Context) (err error) {
 		writeTime := time.Now()
 		err = n.Destination.Write(msg.Ctx, msg.Record)
 		if err != nil {
+			// An error in Write is a fatal error, we probably won't be able to
+			// process any further messages because there is a problem in the
+			// communication with the plugin. We need to let the acker node know
+			// that it shouldn't wait to receive an ack for the message, we need
+			// to nack the message to not leave it open and then return the
+			// error to stop the pipeline.
 			n.AckerNode.Forget(msg)
-			_ = msg.Nack(err) // TODO think this through if it makes sense to return the error
+			_ = msg.Nack(err)
 			return cerrors.Errorf("error writing to destination: %w", err)
 		}
 		n.ConnectorTimer.Update(time.Since(writeTime))
