@@ -77,7 +77,7 @@ func getConfigFieldDuration(c processor.Config, field string) (time.Duration, er
 
 // recordDataGetSetter is a utility that returns either the key or the payload
 // data. It provides also a function to set the key or payload data.
-// It is useful when writing 2 transforms that do the same thing, except that
+// It is useful when writing 2 processors that do the same thing, except that
 // one operates on the key and the other on the payload.
 type recordDataGetSetter interface {
 	Get(record.Record) record.Data

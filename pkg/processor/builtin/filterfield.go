@@ -29,7 +29,7 @@ const (
 	filterFieldKeyName     = "filterfieldkey"
 	filterFieldPayloadName = "filterfieldpayload"
 
-	// Config Fields for each Transform
+	// Config Fields for each processor
 	filterFieldConfigType          = "type"
 	filterFieldConfigCondition     = "condition"
 	filterFieldConfigMissingOrNull = "missingornull"
@@ -49,7 +49,7 @@ const (
 // * If `condition` doesn't match, and `exists` matches nothing too, then it
 // will handle the record as `missingornull` specifies.
 //
-// example transform config with noted possible values
+// example processor config with noted possible values
 // {
 // 	"type": "include", // [include, exclude]
 // 	"condition":"<xpath expression>",
@@ -71,7 +71,7 @@ func FilterFieldPayload(config processor.Config) (processor.Processor, error) {
 }
 
 func filterField(
-	transformName string,
+	processorName string,
 	getSetter recordDataGetSetter,
 	config processor.Config,
 ) (processor.Processor, error) {
@@ -107,9 +107,9 @@ func filterField(
 		switch d := data.(type) {
 		case record.RawData:
 			if d.Schema == nil {
-				return record.Record{}, cerrors.Errorf("%s: schemaless raw data not supported", transformName)
+				return record.Record{}, cerrors.Errorf("%s: schemaless raw data not supported", processorName)
 			}
-			return record.Record{}, cerrors.Errorf("%s: data with schema not supported yet", transformName) // TODO
+			return record.Record{}, cerrors.Errorf("%s: data with schema not supported yet", processorName) // TODO
 		case record.StructuredData:
 			doc, err := jsonquery.Parse(bytes.NewReader(d.Bytes()))
 			if err != nil {
@@ -148,7 +148,7 @@ func filterField(
 			}
 
 		default:
-			return record.Record{}, cerrors.Errorf("%s: unexpected data type %T", transformName, data)
+			return record.Record{}, cerrors.Errorf("%s: unexpected data type %T", processorName, data)
 		}
 	}), nil
 }

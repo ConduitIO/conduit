@@ -37,42 +37,42 @@ func init() {
 	processor.GlobalBuilderRegistry.MustRegister(replaceFieldPayloadName, ReplaceFieldKey)
 }
 
-// ReplaceFieldKey builds a transform which replaces a field in the key in raw
+// ReplaceFieldKey builds a processor which replaces a field in the key in raw
 // data with a schema or in structured data. Raw data without a schema is not
-// supported. The transform can be controlled by 3 variables:
+// supported. The processor can be controlled by 3 variables:
 //  * "exclude" - is a comma separated list of fields that should be excluded
-//    from the transformed record ("exclude" takes precedence over "include").
+//    from the processed record ("exclude" takes precedence over "include").
 //  * "include" - is a comma separated list of fields that should be included
-//    in the transformed record.
+//    in the processed record.
 //  * "rename" - is a comma separated list of pairs separated by colons, that
 //    controls the mapping of old field names to new field names.
 // If "include" is not configured or is empty then all fields in the record will
 // be included by default (except if they are configured in "exclude").
 // If "include" is not empty, then all fields are excluded by default and only
-// fields in "include" will be added to the transformed record.
+// fields in "include" will be added to the processed record.
 func ReplaceFieldKey(config processor.Config) (processor.Processor, error) {
 	return replaceField(replaceFieldKeyName, recordKeyGetSetter{}, config)
 }
 
-// ReplaceFieldPayload builds a transform which replaces a field in the payload
+// ReplaceFieldPayload builds a processor which replaces a field in the payload
 // in raw data with a schema or in structured data. Raw data without a schema is
-// not supported. The transform can be controlled by 3 variables:
+// not supported. The processor can be controlled by 3 variables:
 //  * "exclude" - is a comma separated list of fields that should be excluded
-//    from the transformed record ("exclude" takes precedence over "include").
+//    from the processed record ("exclude" takes precedence over "include").
 //  * "include" - is a comma separated list of fields that should be included
-//    in the transformed record.
+//    in the processed record.
 //  * "rename" - is a comma separated list of pairs separated by colons, that
 //    controls the mapping of old field names to new field names.
 // If "include" is not configured or is empty then all fields in the record will
 // be included by default (except if they are configured in "exclude").
 // If "include" is not empty, then all fields are excluded by default and only
-// fields in "include" will be added to the transformed record.
+// fields in "include" will be added to the processed record.
 func ReplaceFieldPayload(config processor.Config) (processor.Processor, error) {
 	return replaceField(replaceFieldPayloadName, recordPayloadGetSetter{}, config)
 }
 
 func replaceField(
-	transformName string,
+	processorName string,
 	getSetter recordDataGetSetter,
 	config processor.Config,
 ) (processor.Processor, error) {
@@ -93,7 +93,7 @@ func replaceField(
 	if exclude == "" && include == "" && rename == "" {
 		return nil, cerrors.Errorf(
 			"%s: config must include at least one of [%s %s %s]",
-			transformName,
+			processorName,
 			replaceFieldConfigExclude,
 			replaceFieldConfigInclude,
 			replaceFieldConfigRename,
@@ -107,7 +107,7 @@ func replaceField(
 			if len(tokens) != 2 {
 				return nil, cerrors.Errorf(
 					"%s: config field %q contains invalid value %q, expected format is \"foo:c1,bar:c2\"",
-					transformName,
+					processorName,
 					replaceFieldConfigRename,
 					rename,
 				)
@@ -134,9 +134,9 @@ func replaceField(
 		switch d := data.(type) {
 		case record.RawData:
 			if d.Schema == nil {
-				return record.Record{}, cerrors.Errorf("%s: schemaless raw data not supported", transformName)
+				return record.Record{}, cerrors.Errorf("%s: schemaless raw data not supported", processorName)
 			}
-			return record.Record{}, cerrors.Errorf("%s: data with schema not supported yet", transformName) // TODO
+			return record.Record{}, cerrors.Errorf("%s: data with schema not supported yet", processorName) // TODO
 		case record.StructuredData:
 			// TODO add support for nested fields
 			for field, value := range d {
@@ -150,7 +150,7 @@ func replaceField(
 				}
 			}
 		default:
-			return record.Record{}, cerrors.Errorf("%s: unexpected data type %T", transformName, data)
+			return record.Record{}, cerrors.Errorf("%s: unexpected data type %T", processorName, data)
 		}
 
 		r = getSetter.Set(r, data)

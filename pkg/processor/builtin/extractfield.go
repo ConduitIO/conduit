@@ -35,7 +35,7 @@ func init() {
 	processor.GlobalBuilderRegistry.MustRegister(extractFieldPayloadName, ExtractFieldPayload)
 }
 
-// ExtractFieldKey builds the following transform:
+// ExtractFieldKey builds the following processor:
 //  * If the key is raw and has a schema attached, extract the field and use it
 //    to replace the entire key.
 //  * If the key is raw and has no schema, return an error (not supported).
@@ -45,7 +45,7 @@ func ExtractFieldKey(config processor.Config) (processor.Processor, error) {
 	return extractField(extractFieldKeyName, recordKeyGetSetter{}, config)
 }
 
-// ExtractFieldPayload builds the following transformation:
+// ExtractFieldPayload builds the following processor:
 //  * If the payload is raw and has a schema attached, extract the field and use
 //    it to replace the entire payload.
 //  * If the payload is raw and has no schema, return an error (not supported).
@@ -56,7 +56,7 @@ func ExtractFieldPayload(config processor.Config) (processor.Processor, error) {
 }
 
 func extractField(
-	transformName string,
+	processorName string,
 	getSetter recordDataGetSetter,
 	config processor.Config,
 ) (processor.Processor, error) {
@@ -66,7 +66,7 @@ func extractField(
 	)
 
 	if fieldName, err = getConfigFieldString(config, extractFieldConfigField); err != nil {
-		return nil, cerrors.Errorf("%s: %w", transformName, err)
+		return nil, cerrors.Errorf("%s: %w", processorName, err)
 	}
 
 	return processor.ProcessorFunc(func(_ context.Context, r record.Record) (record.Record, error) {
@@ -75,14 +75,14 @@ func extractField(
 		switch d := data.(type) {
 		case record.RawData:
 			if d.Schema == nil {
-				return record.Record{}, cerrors.Errorf("%s: schemaless raw data not supported", transformName)
+				return record.Record{}, cerrors.Errorf("%s: schemaless raw data not supported", processorName)
 			}
-			return record.Record{}, cerrors.Errorf("%s: data with schema not supported yet", transformName) // TODO
+			return record.Record{}, cerrors.Errorf("%s: data with schema not supported yet", processorName) // TODO
 		case record.StructuredData:
 			// TODO add support for nested fields
 			extractedField := d[fieldName]
 			if extractedField == nil {
-				return record.Record{}, cerrors.Errorf("%s: field %q not found", transformName, fieldName)
+				return record.Record{}, cerrors.Errorf("%s: field %q not found", processorName, fieldName)
 			}
 
 			switch v := extractedField.(type) {
@@ -95,7 +95,7 @@ func extractField(
 				data = record.RawData{Raw: []byte(fmt.Sprint(v))}
 			}
 		default:
-			return record.Record{}, cerrors.Errorf("%s: unexpected data type %T", transformName, data)
+			return record.Record{}, cerrors.Errorf("%s: unexpected data type %T", processorName, data)
 		}
 
 		r = getSetter.Set(r, data)

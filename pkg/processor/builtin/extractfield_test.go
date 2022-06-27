@@ -50,7 +50,7 @@ func TestExtractFieldKey_Build(t *testing.T) {
 		}},
 		wantErr: true,
 	}, {
-		name: "non-empty field returns transform",
+		name: "non-empty field returns processor",
 		args: args{config: processor.Config{
 			Settings: map[string]string{extractFieldConfigField: "foo"},
 		}},

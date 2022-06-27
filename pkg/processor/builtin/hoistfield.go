@@ -34,20 +34,20 @@ func init() {
 	processor.GlobalBuilderRegistry.MustRegister(hoistFieldPayloadName, HoistFieldPayload)
 }
 
-// HoistFieldKey builds the following transform:
+// HoistFieldKey builds the following processor:
 //  * If the key is raw and has a schema attached, wrap it using the specified
 //    field name in a struct.
-//  * If the key is raw and has no schema, transform it into structured data by
+//  * If the key is raw and has no schema, transforms it into structured data by
 //    creating a map with the hoisted field and raw data as the value.
 //  * If the key is structured, wrap it using the specified field name in a map.
 func HoistFieldKey(config processor.Config) (processor.Processor, error) {
 	return hoistField(hoistFieldKeyName, recordKeyGetSetter{}, config)
 }
 
-// HoistFieldPayload builds the following transformation:
+// HoistFieldPayload builds the following processor:
 //  * If the payload is raw and has a schema attached, wrap it using the
 //    specified field name in a struct.
-//  * If the payload is raw and has no schema, transform it into structured data
+//  * If the payload is raw and has no schema, transforms it into structured data
 //    by creating a map with the hoisted field and raw data as the value.
 //  * If the payload is structured, wrap it using the specified field name in a
 //    map.
@@ -56,7 +56,7 @@ func HoistFieldPayload(config processor.Config) (processor.Processor, error) {
 }
 
 func hoistField(
-	transformName string,
+	processorName string,
 	getSetter recordDataGetSetter,
 	config processor.Config,
 ) (processor.Processor, error) {
@@ -66,7 +66,7 @@ func hoistField(
 	)
 
 	if fieldName, err = getConfigFieldString(config, hoistFieldConfigField); err != nil {
-		return nil, cerrors.Errorf("%s: %w", transformName, err)
+		return nil, cerrors.Errorf("%s: %w", processorName, err)
 	}
 
 	return processor.ProcessorFunc(func(_ context.Context, r record.Record) (record.Record, error) {
@@ -79,14 +79,14 @@ func hoistField(
 					fieldName: d.Raw,
 				}
 			} else {
-				return record.Record{}, cerrors.Errorf("%s: data with schema not supported yet", transformName) // TODO
+				return record.Record{}, cerrors.Errorf("%s: data with schema not supported yet", processorName) // TODO
 			}
 		case record.StructuredData:
 			data = record.StructuredData{
 				fieldName: map[string]interface{}(d),
 			}
 		default:
-			return record.Record{}, cerrors.Errorf("%s: unexpected data type %T", transformName, data)
+			return record.Record{}, cerrors.Errorf("%s: unexpected data type %T", processorName, data)
 		}
 
 		r = getSetter.Set(r, data)

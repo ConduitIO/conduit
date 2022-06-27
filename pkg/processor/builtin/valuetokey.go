@@ -32,7 +32,7 @@ func init() {
 	processor.GlobalBuilderRegistry.MustRegister(valueToKeyName, ValueToKey)
 }
 
-// ValueToKey builds a transform that replaces the record key with a new key
+// ValueToKey builds a processor that replaces the record key with a new key
 // formed from a subset of fields in the record value.
 //  * If the payload is raw and has a schema attached, the created key will also
 //    have a schema with a subset of fields.
