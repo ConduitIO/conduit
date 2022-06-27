@@ -28,14 +28,14 @@ const (
 	entrypoint = "process"
 )
 
-// JSProcessor is able to run processors defined in JavaScript.
-type JSProcessor struct {
+// Processor is able to run processors defined in JavaScript.
+type Processor struct {
 	runtime  *goja.Runtime
 	function goja.Callable
 }
 
-func New(src string, logger zerolog.Logger) (*JSProcessor, error) {
-	p := &JSProcessor{}
+func New(src string, logger zerolog.Logger) (*Processor, error) {
+	p := &Processor{}
 	err := p.initJSRuntime(logger)
 	if err != nil {
 		return nil, cerrors.Errorf("failed initializing JS runtime: %w", err)
@@ -49,7 +49,7 @@ func New(src string, logger zerolog.Logger) (*JSProcessor, error) {
 	return p, nil
 }
 
-func (p *JSProcessor) initJSRuntime(logger zerolog.Logger) error {
+func (p *Processor) initJSRuntime(logger zerolog.Logger) error {
 	rt := goja.New()
 	runtimeHelpers := map[string]interface{}{
 		"logger":  &logger,
@@ -67,7 +67,7 @@ func (p *JSProcessor) initJSRuntime(logger zerolog.Logger) error {
 	return nil
 }
 
-func (p *JSProcessor) initFunction(src string) error {
+func (p *Processor) initFunction(src string) error {
 	prg, err := goja.Compile("", src, false)
 	if err != nil {
 		return cerrors.Errorf("failed to compile script: %w", err)
@@ -88,7 +88,7 @@ func (p *JSProcessor) initFunction(src string) error {
 	return nil
 }
 
-func (p *JSProcessor) jsRecord(goja.ConstructorCall) *goja.Object {
+func (p *Processor) jsRecord(goja.ConstructorCall) *goja.Object {
 	// TODO accept arguments
 	// We return a record.Record struct, however because we are
 	// not changing call.This instanceof will not work as expected.
@@ -100,7 +100,7 @@ func (p *JSProcessor) jsRecord(goja.ConstructorCall) *goja.Object {
 	return p.runtime.ToValue(&r).ToObject(p.runtime)
 }
 
-func (p *JSProcessor) jsContentRaw(goja.ConstructorCall) *goja.Object {
+func (p *Processor) jsContentRaw(goja.ConstructorCall) *goja.Object {
 	// TODO accept arguments
 	// We return a record.RawData struct, however because we are
 	// not changing call.This instanceof will not work as expected.
@@ -110,7 +110,7 @@ func (p *JSProcessor) jsContentRaw(goja.ConstructorCall) *goja.Object {
 	return p.runtime.ToValue(&r).ToObject(p.runtime)
 }
 
-func (p *JSProcessor) Process(_ context.Context, in record.Record) (record.Record, error) {
+func (p *Processor) Process(_ context.Context, in record.Record) (record.Record, error) {
 	jsRecord := p.toJSRecord(in)
 
 	result, err := p.function(goja.Undefined(), jsRecord)
@@ -131,7 +131,7 @@ func (p *JSProcessor) Process(_ context.Context, in record.Record) (record.Recor
 	return *out, nil
 }
 
-func (p *JSProcessor) toJSRecord(r record.Record) goja.Value {
+func (p *Processor) toJSRecord(r record.Record) goja.Value {
 	// convert content to pointers to make it mutable
 	switch v := r.Payload.(type) {
 	case record.RawData:
@@ -151,7 +151,7 @@ func (p *JSProcessor) toJSRecord(r record.Record) goja.Value {
 	return p.runtime.ToValue(&r)
 }
 
-func (p *JSProcessor) toInternal(v goja.Value) (*record.Record, error) {
+func (p *Processor) toInternal(v goja.Value) (*record.Record, error) {
 	r := v.Export()
 
 	switch v := r.(type) {
@@ -164,7 +164,7 @@ func (p *JSProcessor) toInternal(v goja.Value) (*record.Record, error) {
 	}
 }
 
-func (p *JSProcessor) dereferenceContent(r *record.Record) *record.Record {
+func (p *Processor) dereferenceContent(r *record.Record) *record.Record {
 	// dereference content pointers
 	switch v := r.Payload.(type) {
 	case *record.RawData:
