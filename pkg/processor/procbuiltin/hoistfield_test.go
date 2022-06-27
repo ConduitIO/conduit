@@ -12,20 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package builtin
+package procbuiltin
 
 import (
 	"context"
+	"reflect"
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/conduitio/conduit/pkg/record/schema/mock"
-	"github.com/google/go-cmp/cmp"
 )
 
-func TestMaskFieldKey_Build(t *testing.T) {
+func TestHoistFieldKey_Build(t *testing.T) {
 	type args struct {
 		config processor.Config
 	}
@@ -46,28 +46,29 @@ func TestMaskFieldKey_Build(t *testing.T) {
 	}, {
 		name: "empty field returns error",
 		args: args{config: processor.Config{
-			Settings: map[string]string{maskFieldConfigField: ""},
+			Settings: map[string]string{hoistFieldConfigField: ""},
 		}},
 		wantErr: true,
 	}, {
 		name: "non-empty field returns processor",
 		args: args{config: processor.Config{
-			Settings: map[string]string{maskFieldConfigField: "foo"},
+			Settings: map[string]string{hoistFieldConfigField: "foo"},
 		}},
 		wantErr: false,
 	}}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := MaskFieldKey(tt.args.config)
+			_, err := HoistFieldKey(tt.args.config)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("MaskFieldKey() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("HoistFieldKey() error = %v, wantErr = %v", err, tt.wantErr)
 				return
 			}
 		})
 	}
 }
 
-func TestMaskFieldKey_Process(t *testing.T) {
+func TestHoistFieldKey_Process(t *testing.T) {
 	type args struct {
 		r record.Record
 	}
@@ -78,63 +79,29 @@ func TestMaskFieldKey_Process(t *testing.T) {
 		want    record.Record
 		wantErr bool
 	}{{
-		name: "structured data int",
+		name: "structured data",
 		config: processor.Config{
-			Settings: map[string]string{maskFieldConfigField: "foo"},
+			Settings: map[string]string{hoistFieldConfigField: "foo"},
 		},
 		args: args{r: record.Record{
 			Key: record.StructuredData{
-				"foo": 123,
+				"bar": 123,
 				"baz": nil,
 			},
 		}},
 		want: record.Record{
 			Key: record.StructuredData{
-				"foo": 0,
-				"baz": nil,
-			},
-		},
-		wantErr: false,
-	}, {
-		name: "structured data string",
-		config: processor.Config{
-			Settings: map[string]string{maskFieldConfigField: "foo"},
-		},
-		args: args{r: record.Record{
-			Key: record.StructuredData{
-				"foo": "sensitive data",
-				"baz": nil,
-			},
-		}},
-		want: record.Record{
-			Key: record.StructuredData{
-				"foo": "",
-				"baz": nil,
-			},
-		},
-		wantErr: false,
-	}, {
-		name: "structured data map",
-		config: processor.Config{
-			Settings: map[string]string{maskFieldConfigField: "foo"},
-		},
-		args: args{r: record.Record{
-			Key: record.StructuredData{
-				"foo": map[string]interface{}{"bar": "buz"},
-				"baz": nil,
-			},
-		}},
-		want: record.Record{
-			Key: record.StructuredData{
-				"foo": map[string]interface{}(nil),
-				"baz": nil,
+				"foo": map[string]interface{}{
+					"bar": 123,
+					"baz": nil,
+				},
 			},
 		},
 		wantErr: false,
 	}, {
 		name: "raw data without schema",
 		config: processor.Config{
-			Settings: map[string]string{maskFieldConfigField: "foo"},
+			Settings: map[string]string{hoistFieldConfigField: "foo"},
 		},
 		args: args{r: record.Record{
 			Key: record.RawData{
@@ -142,11 +109,16 @@ func TestMaskFieldKey_Process(t *testing.T) {
 				Schema: nil,
 			},
 		}},
-		wantErr: true, // not supported
+		want: record.Record{
+			Key: record.StructuredData{
+				"foo": []byte("raw data"),
+			},
+		},
+		wantErr: false,
 	}, {
 		name: "raw data with schema",
 		config: processor.Config{
-			Settings: map[string]string{maskFieldConfigField: "foo"},
+			Settings: map[string]string{hoistFieldConfigField: "foo"},
 		},
 		args: args{r: record.Record{
 			Key: record.RawData{
@@ -159,21 +131,21 @@ func TestMaskFieldKey_Process(t *testing.T) {
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			underTest, err := MaskFieldKey(tt.config)
+			underTest, err := HoistFieldKey(tt.config)
 			assert.Ok(t, err)
 			got, err := underTest.Process(context.Background(), tt.args.r)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("process() error = %v, wantErr = %v", err, tt.wantErr)
 				return
 			}
-			if diff := cmp.Diff(got, tt.want); diff != "" {
-				t.Errorf("process() diff = %s", diff)
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("process() got = %v, want = %v", got, tt.want)
 			}
 		})
 	}
 }
 
-func TestMaskFieldPayload_Build(t *testing.T) {
+func TestHoistFieldPayload_Build(t *testing.T) {
 	type args struct {
 		config processor.Config
 	}
@@ -194,28 +166,29 @@ func TestMaskFieldPayload_Build(t *testing.T) {
 	}, {
 		name: "empty field returns error",
 		args: args{config: processor.Config{
-			Settings: map[string]string{maskFieldConfigField: ""},
+			Settings: map[string]string{hoistFieldConfigField: ""},
 		}},
 		wantErr: true,
 	}, {
 		name: "non-empty field returns processor",
 		args: args{config: processor.Config{
-			Settings: map[string]string{maskFieldConfigField: "foo"},
+			Settings: map[string]string{hoistFieldConfigField: "foo"},
 		}},
 		wantErr: false,
 	}}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := MaskFieldPayload(tt.args.config)
+			_, err := HoistFieldPayload(tt.args.config)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("MaskFieldPayload() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("HoistFieldPayload() error = %v, wantErr = %v", err, tt.wantErr)
 				return
 			}
 		})
 	}
 }
 
-func TestMaskFieldPayload_Process(t *testing.T) {
+func TestHoistFieldPayload_Process(t *testing.T) {
 	type args struct {
 		r record.Record
 	}
@@ -226,63 +199,29 @@ func TestMaskFieldPayload_Process(t *testing.T) {
 		want    record.Record
 		wantErr bool
 	}{{
-		name: "structured data int",
+		name: "structured data",
 		config: processor.Config{
-			Settings: map[string]string{maskFieldConfigField: "foo"},
+			Settings: map[string]string{hoistFieldConfigField: "foo"},
 		},
 		args: args{r: record.Record{
 			Payload: record.StructuredData{
-				"foo": 123,
+				"bar": 123,
 				"baz": nil,
 			},
 		}},
 		want: record.Record{
 			Payload: record.StructuredData{
-				"foo": 0,
-				"baz": nil,
-			},
-		},
-		wantErr: false,
-	}, {
-		name: "structured data string",
-		config: processor.Config{
-			Settings: map[string]string{maskFieldConfigField: "foo"},
-		},
-		args: args{r: record.Record{
-			Payload: record.StructuredData{
-				"foo": "sensitive data",
-				"baz": nil,
-			},
-		}},
-		want: record.Record{
-			Payload: record.StructuredData{
-				"foo": "",
-				"baz": nil,
-			},
-		},
-		wantErr: false,
-	}, {
-		name: "structured data map",
-		config: processor.Config{
-			Settings: map[string]string{maskFieldConfigField: "foo"},
-		},
-		args: args{r: record.Record{
-			Payload: record.StructuredData{
-				"foo": map[string]interface{}{"bar": "buz"},
-				"baz": nil,
-			},
-		}},
-		want: record.Record{
-			Payload: record.StructuredData{
-				"foo": map[string]interface{}(nil),
-				"baz": nil,
+				"foo": map[string]interface{}{
+					"bar": 123,
+					"baz": nil,
+				},
 			},
 		},
 		wantErr: false,
 	}, {
 		name: "raw data without schema",
 		config: processor.Config{
-			Settings: map[string]string{maskFieldConfigField: "foo"},
+			Settings: map[string]string{hoistFieldConfigField: "foo"},
 		},
 		args: args{r: record.Record{
 			Payload: record.RawData{
@@ -290,11 +229,16 @@ func TestMaskFieldPayload_Process(t *testing.T) {
 				Schema: nil,
 			},
 		}},
-		wantErr: true, // not supported
+		want: record.Record{
+			Payload: record.StructuredData{
+				"foo": []byte("raw data"),
+			},
+		},
+		wantErr: false,
 	}, {
 		name: "raw data with schema",
 		config: processor.Config{
-			Settings: map[string]string{maskFieldConfigField: "foo"},
+			Settings: map[string]string{hoistFieldConfigField: "foo"},
 		},
 		args: args{r: record.Record{
 			Payload: record.RawData{
@@ -307,15 +251,15 @@ func TestMaskFieldPayload_Process(t *testing.T) {
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			underTest, err := MaskFieldPayload(tt.config)
+			underTest, err := HoistFieldPayload(tt.config)
 			assert.Ok(t, err)
 			got, err := underTest.Process(context.Background(), tt.args.r)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("process() error = %v, wantErr = %v", err, tt.wantErr)
 				return
 			}
-			if diff := cmp.Diff(got, tt.want); diff != "" {
-				t.Errorf("process() diff = %s", diff)
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("process() got = %v, want = %v", got, tt.want)
 			}
 		})
 	}
