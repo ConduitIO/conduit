@@ -29,6 +29,7 @@ Conduit was created and open-sourced by [Meroxa](https://meroxa.io).
 
 - [Installation guide](#installation-guide)
 - [Connectors](#connectors)
+- [Processors](#processors)
 - [Testing](#testing)
 - [API](#api)
 - [UI](#ui)
@@ -97,6 +98,16 @@ Additionally, we have prepared a [Kafka Connect wrapper](https://github.com/cond
 Kafka Connect connector as part of a Conduit pipeline.
 
 Conduit is also able to run standalone connectors. If you are interested in writing a connector yourself, have a look at our [Go Connector SDK](https://github.com/ConduitIO/conduit-connector-sdk). Since standalone connectors communicate with Conduit through gRPC they can be written in virtually any programming language, as long as the connector follows the [Conduit Connector Protocol](https://github.com/ConduitIO/conduit-connector-protocol).
+
+## Processors
+
+Transforms are operations applied on single records. Transforms are optional parts of a pipeline and, when present, they
+come in the form of pipeline components called processors.
+
+Conduit provides a number of built-in transforms, which can be used to filter and replace fields, post payloads to HTTP endpoints etc.
+Conduit also provides the ability to write custom transforms in JavaScript.
+
+More detailed information as well as examples can be found in the [Transforms documentation](/docs/processors.md).
 
 ## Testing
 
