@@ -36,14 +36,14 @@ type ParentType int
 // can be executed on one record and manipulate it.
 type Processor interface {
 	// Execute runs the processor function on a record.
-	Execute(ctx context.Context, record record.Record) (record.Record, error)
+	Process(ctx context.Context, record record.Record) (record.Record, error)
 }
 
 // ProcessorFunc is a stateless processor.Processor implementation
 // which is using a Go function to process records.
 type ProcessorFunc func(context.Context, record.Record) (record.Record, error)
 
-func (p ProcessorFunc) Execute(ctx context.Context, record record.Record) (record.Record, error) {
+func (p ProcessorFunc) Process(ctx context.Context, record record.Record) (record.Record, error) {
 	return p(ctx, record)
 }
 

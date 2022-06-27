@@ -36,7 +36,7 @@ func (m *Processor) EXPECT() *ProcessorMockRecorder {
 }
 
 // Execute mocks base method.
-func (m *Processor) Execute(arg0 context.Context, arg1 record.Record) (record.Record, error) {
+func (m *Processor) Process(arg0 context.Context, arg1 record.Record) (record.Record, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Execute", arg0, arg1)
 	ret0, _ := ret[0].(record.Record)

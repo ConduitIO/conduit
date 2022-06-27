@@ -51,7 +51,7 @@ func (n *ProcessorNode) Run(ctx context.Context) error {
 		}
 
 		executeTime := time.Now()
-		rec, err := n.Processor.Execute(msg.Ctx, msg.Record)
+		rec, err := n.Processor.Process(msg.Ctx, msg.Record)
 		n.ProcessorTimer.Update(time.Since(executeTime))
 		if err != nil {
 			// Check for Skipped records

@@ -129,7 +129,7 @@ func TestValueToKey_Process(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			underTest, err := ValueToKey(tt.config)
 			assert.Ok(t, err)
-			got, err := underTest.Execute(context.Background(), tt.args.r)
+			got, err := underTest.Process(context.Background(), tt.args.r)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("process() error = %v, wantErr = %v", err, tt.wantErr)
 				return

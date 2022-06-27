@@ -215,7 +215,7 @@ func TestFilterFieldKey_Process(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			underTest, err := FilterFieldKey(tt.config)
 			assert.Ok(t, err)
-			got, err := underTest.Execute(context.Background(), tt.args.r)
+			got, err := underTest.Process(context.Background(), tt.args.r)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("FilterFieldKey() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -375,7 +375,7 @@ func TestFilterFieldPayload_Process(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			underTest, err := FilterFieldPayload(tt.args.config)
 			assert.Ok(t, err)
-			got, err := underTest.Execute(context.Background(), tt.args.r)
+			got, err := underTest.Process(context.Background(), tt.args.r)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("FilterFieldPayload Error: %s - wanted: %s", err, tt.err)
 				return

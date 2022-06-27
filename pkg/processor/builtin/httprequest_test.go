@@ -217,7 +217,7 @@ func TestHTTPRequest_Success(t *testing.T) {
 			underTest, err := HTTPRequest(tt.config)
 			is.NoErr(err)
 
-			got, err := underTest.Execute(context.Background(), tt.args.r)
+			got, err := underTest.Process(context.Background(), tt.args.r)
 			is.NoErr(err)
 			is.Equal(got.Payload, record.RawData{Raw: respBody})
 		})
@@ -266,7 +266,7 @@ func TestHTTPRequest_RetrySuccess(t *testing.T) {
 	underTest, err := HTTPRequest(config)
 	is.NoErr(err)
 
-	got, err := underTest.Execute(context.Background(), record.Record{Payload: record.RawData{Raw: wantBody}})
+	got, err := underTest.Process(context.Background(), record.Record{Payload: record.RawData{Raw: wantBody}})
 	is.NoErr(err)
 	is.Equal(got.Payload, record.RawData{Raw: respBody})
 	is.Equal(srvHandlerCount, 5)
@@ -297,7 +297,7 @@ func TestHTTPRequest_RetryFail(t *testing.T) {
 	underTest, err := HTTPRequest(config)
 	is.NoErr(err)
 
-	got, err := underTest.Execute(context.Background(), record.Record{Payload: record.RawData{}})
+	got, err := underTest.Process(context.Background(), record.Record{Payload: record.RawData{}})
 	is.True(err != nil) // expected an error
 	is.Equal(got, record.Record{})
 	is.Equal(srvHandlerCount, 6) // expected 6 requests (1 regular and 5 retries)

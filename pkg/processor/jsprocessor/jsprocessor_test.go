@@ -42,7 +42,7 @@ func TestJSProcessor_Logger(t *testing.T) {
 	`, logger)
 	is.NoErr(err) // expected no error when creating the JS processor
 
-	_, err = underTest.Execute(context.Background(), record.Record{})
+	_, err = underTest.Process(context.Background(), record.Record{})
 	is.NoErr(err) // expected no error when processing record
 
 	is.Equal(`{"level":"info","message":"Hello"}`+"\n", buf.String()) // expected different log message
@@ -184,7 +184,7 @@ func TestJSProcessor_Process(t *testing.T) {
 			underTest, err := New(tt.fields.src, zerolog.Nop())
 			is.NoErr(err) // expected no error when creating the JS processor
 
-			got, err := underTest.Execute(context.Background(), tt.args.record)
+			got, err := underTest.Process(context.Background(), tt.args.record)
 			if tt.wantErr != nil {
 				is.Equal(tt.wantErr, err) // expected different error
 			} else {
@@ -252,7 +252,7 @@ func TestJSProcessor_Filtering(t *testing.T) {
 			underTest, err := New(tc.src, zerolog.New(zerolog.NewConsoleWriter()))
 			is.NoErr(err) // expected no error when creating the JS processor
 
-			rec, err := underTest.Execute(context.Background(), tc.input)
+			rec, err := underTest.Process(context.Background(), tc.input)
 			if tc.filter {
 				is.NoErr(err)           // expected no error for processed record
 				is.Equal(tc.input, rec) // expected different processed record
@@ -347,7 +347,7 @@ func TestJSProcessor_DataTypes(t *testing.T) {
 			underTest, err := New(tc.src, zerolog.Nop())
 			is.NoErr(err) // expected no error when creating the JS processor
 
-			got, err := underTest.Execute(context.Background(), tc.input)
+			got, err := underTest.Process(context.Background(), tc.input)
 			is.NoErr(err)          // expected no error when processing record
 			is.Equal(tc.want, got) // expected different record
 		})
@@ -369,7 +369,7 @@ func TestJSProcessor_JavaScriptException(t *testing.T) {
 		Payload: record.RawData{Raw: []byte("test payload")},
 	}
 
-	got, err := underTest.Execute(context.Background(), r)
+	got, err := underTest.Process(context.Background(), r)
 	is.True(err != nil) // expected error
 	target := &goja.Exception{}
 	is.True(cerrors.As(err, &target)) // expected a goja.Exception
@@ -408,7 +408,7 @@ func TestJSProcessor_ScriptWithMultipleFunctions(t *testing.T) {
 		},
 	}
 
-	got, err := underTest.Execute(context.Background(), r)
+	got, err := underTest.Process(context.Background(), r)
 	is.NoErr(err) // expected no error when processing record
 	is.Equal(
 		record.Record{

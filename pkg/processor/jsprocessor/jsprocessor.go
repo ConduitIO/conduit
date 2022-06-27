@@ -110,7 +110,7 @@ func (p *JSProcessor) jsContentRaw(goja.ConstructorCall) *goja.Object {
 	return p.runtime.ToValue(&r).ToObject(p.runtime)
 }
 
-func (p *JSProcessor) Execute(_ context.Context, in record.Record) (record.Record, error) {
+func (p *JSProcessor) Process(_ context.Context, in record.Record) (record.Record, error) {
 	jsRecord := p.toJSRecord(in)
 
 	result, err := p.function(goja.Undefined(), jsRecord)
