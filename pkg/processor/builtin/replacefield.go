@@ -128,7 +128,7 @@ func replaceField(
 		}
 	}
 
-	return ProcessorFunc(func(_ context.Context, r record.Record) (record.Record, error) {
+	return processor.ProcessorFunc(func(_ context.Context, r record.Record) (record.Record, error) {
 		data := getSetter.Get(r)
 
 		switch d := data.(type) {

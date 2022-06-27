@@ -15,7 +15,6 @@
 package builtin
 
 import (
-	"context"
 	"strconv"
 	"time"
 
@@ -23,15 +22,6 @@ import (
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/record"
 )
-
-// ProcessorFunc is a stateless processor.Processor implementation
-// which is using a Go function to process records.
-// todo move out of this file.
-type ProcessorFunc func(context.Context, record.Record) (record.Record, error)
-
-func (p ProcessorFunc) Execute(ctx context.Context, record record.Record) (record.Record, error) {
-	return p(ctx, record)
-}
 
 var errEmptyConfigField = cerrors.New("empty config field")
 
