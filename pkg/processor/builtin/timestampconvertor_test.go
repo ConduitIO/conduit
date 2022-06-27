@@ -100,7 +100,7 @@ func TestTimestampConvertorKey_Build(t *testing.T) {
 	}
 }
 
-func TestTimestampConvertorKey_Transform(t *testing.T) {
+func TestTimestampConvertorKey_Process(t *testing.T) {
 	type args struct {
 		r record.Record
 	}
@@ -298,11 +298,11 @@ func TestTimestampConvertorKey_Transform(t *testing.T) {
 			assert.Ok(t, err)
 			got, err := underTest.Execute(context.Background(), tt.args.r)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("Transform() error = %v, wantErr = %v", err, tt.wantErr)
+				t.Errorf("process() error = %v, wantErr = %v", err, tt.wantErr)
 				return
 			}
 			if diff := cmp.Diff(got, tt.want); diff != "" {
-				t.Errorf("Transform() diff = %s", diff)
+				t.Errorf("process() diff = %s", diff)
 			}
 		})
 	}
@@ -353,7 +353,7 @@ func TestTimestampConvertorPayload_Build(t *testing.T) {
 	}
 }
 
-func TestTimestampConvertorPayload_Transform(t *testing.T) {
+func TestTimestampConvertorPayload_Process(t *testing.T) {
 	type args struct {
 		r record.Record
 	}
@@ -552,11 +552,11 @@ func TestTimestampConvertorPayload_Transform(t *testing.T) {
 			assert.Ok(t, err)
 			got, err := underTest.Execute(context.Background(), tt.args.r)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("Transform() error = %v, wantErr = %v", err, tt.wantErr)
+				t.Errorf("process() error = %v, wantErr = %v", err, tt.wantErr)
 				return
 			}
 			if diff := cmp.Diff(got, tt.want); diff != "" {
-				t.Errorf("Transform() diff = %s", diff)
+				t.Errorf("process() diff = %s", diff)
 			}
 		})
 	}

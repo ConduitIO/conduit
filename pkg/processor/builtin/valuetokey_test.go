@@ -50,7 +50,7 @@ func TestValueToKey_Build(t *testing.T) {
 		}},
 		wantErr: true,
 	}, {
-		name: "non-empty field returns transform",
+		name: "non-empty field returns processor",
 		args: args{config: processor.Config{
 			Settings: map[string]string{valueToKeyConfigFields: "foo"},
 		}},
@@ -67,7 +67,7 @@ func TestValueToKey_Build(t *testing.T) {
 	}
 }
 
-func TestValueToKey_Transform(t *testing.T) {
+func TestValueToKey_Process(t *testing.T) {
 	type args struct {
 		r record.Record
 	}
@@ -131,11 +131,11 @@ func TestValueToKey_Transform(t *testing.T) {
 			assert.Ok(t, err)
 			got, err := underTest.Execute(context.Background(), tt.args.r)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("Transform() error = %v, wantErr = %v", err, tt.wantErr)
+				t.Errorf("process() error = %v, wantErr = %v", err, tt.wantErr)
 				return
 			}
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("Transform() got = %v, want = %v", got, tt.want)
+				t.Errorf("process() got = %v, want = %v", got, tt.want)
 			}
 		})
 	}

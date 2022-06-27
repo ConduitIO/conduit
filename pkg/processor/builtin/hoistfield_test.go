@@ -50,7 +50,7 @@ func TestHoistFieldKey_Build(t *testing.T) {
 		}},
 		wantErr: true,
 	}, {
-		name: "non-empty field returns transform",
+		name: "non-empty field returns processor",
 		args: args{config: processor.Config{
 			Settings: map[string]string{hoistFieldConfigField: "foo"},
 		}},
@@ -68,7 +68,7 @@ func TestHoistFieldKey_Build(t *testing.T) {
 	}
 }
 
-func TestHoistFieldKey_Transform(t *testing.T) {
+func TestHoistFieldKey_Process(t *testing.T) {
 	type args struct {
 		r record.Record
 	}
@@ -135,11 +135,11 @@ func TestHoistFieldKey_Transform(t *testing.T) {
 			assert.Ok(t, err)
 			got, err := underTest.Execute(context.Background(), tt.args.r)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("Transform() error = %v, wantErr = %v", err, tt.wantErr)
+				t.Errorf("process() error = %v, wantErr = %v", err, tt.wantErr)
 				return
 			}
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("Transform() got = %v, want = %v", got, tt.want)
+				t.Errorf("process() got = %v, want = %v", got, tt.want)
 			}
 		})
 	}
@@ -170,7 +170,7 @@ func TestHoistFieldPayload_Build(t *testing.T) {
 		}},
 		wantErr: true,
 	}, {
-		name: "non-empty field returns transform",
+		name: "non-empty field returns processor",
 		args: args{config: processor.Config{
 			Settings: map[string]string{hoistFieldConfigField: "foo"},
 		}},
@@ -188,7 +188,7 @@ func TestHoistFieldPayload_Build(t *testing.T) {
 	}
 }
 
-func TestHoistFieldPayload_Transform(t *testing.T) {
+func TestHoistFieldPayload_Process(t *testing.T) {
 	type args struct {
 		r record.Record
 	}
@@ -255,11 +255,11 @@ func TestHoistFieldPayload_Transform(t *testing.T) {
 			assert.Ok(t, err)
 			got, err := underTest.Execute(context.Background(), tt.args.r)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("Transform() error = %v, wantErr = %v", err, tt.wantErr)
+				t.Errorf("process() error = %v, wantErr = %v", err, tt.wantErr)
 				return
 			}
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("Transform() got = %v, want = %v", got, tt.want)
+				t.Errorf("process() got = %v, want = %v", got, tt.want)
 			}
 		})
 	}

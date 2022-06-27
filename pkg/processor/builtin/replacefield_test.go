@@ -68,25 +68,25 @@ func TestReplaceFieldKey_Build(t *testing.T) {
 		}},
 		wantErr: true,
 	}, {
-		name: "non-empty exclude returns transform",
+		name: "non-empty exclude returns processor",
 		args: args{config: processor.Config{
 			Settings: map[string]string{replaceFieldConfigExclude: "foo"},
 		}},
 		wantErr: false,
 	}, {
-		name: "non-empty include returns transform",
+		name: "non-empty include returns processor",
 		args: args{config: processor.Config{
 			Settings: map[string]string{replaceFieldConfigInclude: "foo"},
 		}},
 		wantErr: false,
 	}, {
-		name: "valid rename returns transform",
+		name: "valid rename returns processor",
 		args: args{config: processor.Config{
 			Settings: map[string]string{replaceFieldConfigRename: "foo:c1,bar:c2"},
 		}},
 		wantErr: false,
 	}, {
-		name: "non-empty all fields returns transform",
+		name: "non-empty all fields returns processor",
 		args: args{config: processor.Config{
 			Settings: map[string]string{
 				replaceFieldConfigExclude: "foo",
@@ -107,7 +107,7 @@ func TestReplaceFieldKey_Build(t *testing.T) {
 	}
 }
 
-func TestReplaceFieldKey_Transform(t *testing.T) {
+func TestReplaceFieldKey_Process(t *testing.T) {
 	type args struct {
 		r record.Record
 	}
@@ -295,11 +295,11 @@ func TestReplaceFieldKey_Transform(t *testing.T) {
 			assert.Ok(t, err)
 			got, err := underTest.Execute(context.Background(), tt.args.r)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("Transform() error = %v, wantErr = %v", err, tt.wantErr)
+				t.Errorf("process() error = %v, wantErr = %v", err, tt.wantErr)
 				return
 			}
 			if diff := cmp.Diff(got, tt.want); diff != "" {
-				t.Errorf("Transform() diff = %s", diff)
+				t.Errorf("process() diff = %s", diff)
 			}
 		})
 	}
@@ -348,25 +348,25 @@ func TestReplaceFieldPayload_Build(t *testing.T) {
 		}},
 		wantErr: true,
 	}, {
-		name: "non-empty exclude returns transform",
+		name: "non-empty exclude returns processor",
 		args: args{config: processor.Config{
 			Settings: map[string]string{replaceFieldConfigExclude: "foo"},
 		}},
 		wantErr: false,
 	}, {
-		name: "non-empty include returns transform",
+		name: "non-empty include returns processor",
 		args: args{config: processor.Config{
 			Settings: map[string]string{replaceFieldConfigInclude: "foo"},
 		}},
 		wantErr: false,
 	}, {
-		name: "valid rename returns transform",
+		name: "valid rename returns processor",
 		args: args{config: processor.Config{
 			Settings: map[string]string{replaceFieldConfigRename: "foo:c1,bar:c2"},
 		}},
 		wantErr: false,
 	}, {
-		name: "non-empty all fields returns transform",
+		name: "non-empty all fields returns processor",
 		args: args{config: processor.Config{
 			Settings: map[string]string{
 				replaceFieldConfigExclude: "foo",
@@ -388,7 +388,7 @@ func TestReplaceFieldPayload_Build(t *testing.T) {
 	}
 }
 
-func TestReplaceFieldPayload_Transform(t *testing.T) {
+func TestReplaceFieldPayload_Process(t *testing.T) {
 	type args struct {
 		r record.Record
 	}
@@ -576,11 +576,11 @@ func TestReplaceFieldPayload_Transform(t *testing.T) {
 			assert.Ok(t, err)
 			got, err := underTest.Execute(context.Background(), tt.args.r)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("Transform() error = %v, wantErr = %v", err, tt.wantErr)
+				t.Errorf("process() error = %v, wantErr = %v", err, tt.wantErr)
 				return
 			}
 			if diff := cmp.Diff(got, tt.want); diff != "" {
-				t.Errorf("Transform() diff = %s", diff)
+				t.Errorf("process() diff = %s", diff)
 			}
 		})
 	}

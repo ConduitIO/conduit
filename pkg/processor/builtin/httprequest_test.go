@@ -105,13 +105,13 @@ func TestHTTPRequest_Build(t *testing.T) {
 		}},
 		wantErr: true,
 	}, {
-		name: "valid url returns transform",
+		name: "valid url returns processor",
 		args: args{config: processor.Config{
 			Settings: map[string]string{httpRequestConfigURL: "http://example.com"},
 		}},
 		wantErr: false,
 	}, {
-		name: "valid url and method returns transform",
+		name: "valid url and method returns processor",
 		args: args{config: processor.Config{
 			Settings: map[string]string{
 				httpRequestConfigURL:    "http://example.com",
@@ -131,7 +131,7 @@ func TestHTTPRequest_Build(t *testing.T) {
 		}},
 		wantErr: false,
 	}, {
-		name: "valid url, method and backoff retry config returns transform",
+		name: "valid url, method and backoff retry config returns processor",
 		args: args{config: processor.Config{
 			Settings: map[string]string{
 				httpRequestConfigURL:          "http://example.com",

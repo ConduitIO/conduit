@@ -76,7 +76,7 @@ func TestFilterFieldKey_Build(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "valid config should return transform",
+			name: "valid config should return processor",
 			args: args{
 				config: processor.Config{
 					Settings: map[string]string{
@@ -100,7 +100,7 @@ func TestFilterFieldKey_Build(t *testing.T) {
 	}
 }
 
-func TestFilterFieldKey_Transform(t *testing.T) {
+func TestFilterFieldKey_Process(t *testing.T) {
 	type args struct {
 		r record.Record
 	}
@@ -277,7 +277,7 @@ func TestFilterFieldPayload_Build(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "valid config returns transform",
+			name: "valid config returns processor",
 			args: args{config: processor.Config{
 				Settings: map[string]string{
 					"type":      "include",
@@ -298,7 +298,7 @@ func TestFilterFieldPayload_Build(t *testing.T) {
 	}
 }
 
-func TestFilterFieldPayload_Transform(t *testing.T) {
+func TestFilterFieldPayload_Process(t *testing.T) {
 	type args struct {
 		config processor.Config
 		r      record.Record

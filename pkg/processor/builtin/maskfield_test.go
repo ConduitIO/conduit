@@ -50,7 +50,7 @@ func TestMaskFieldKey_Build(t *testing.T) {
 		}},
 		wantErr: true,
 	}, {
-		name: "non-empty field returns transform",
+		name: "non-empty field returns processor",
 		args: args{config: processor.Config{
 			Settings: map[string]string{maskFieldConfigField: "foo"},
 		}},
@@ -67,7 +67,7 @@ func TestMaskFieldKey_Build(t *testing.T) {
 	}
 }
 
-func TestMaskFieldKey_Transform(t *testing.T) {
+func TestMaskFieldKey_Process(t *testing.T) {
 	type args struct {
 		r record.Record
 	}
@@ -163,11 +163,11 @@ func TestMaskFieldKey_Transform(t *testing.T) {
 			assert.Ok(t, err)
 			got, err := underTest.Execute(context.Background(), tt.args.r)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("Transform() error = %v, wantErr = %v", err, tt.wantErr)
+				t.Errorf("process() error = %v, wantErr = %v", err, tt.wantErr)
 				return
 			}
 			if diff := cmp.Diff(got, tt.want); diff != "" {
-				t.Errorf("Transform() diff = %s", diff)
+				t.Errorf("process() diff = %s", diff)
 			}
 		})
 	}
@@ -198,7 +198,7 @@ func TestMaskFieldPayload_Build(t *testing.T) {
 		}},
 		wantErr: true,
 	}, {
-		name: "non-empty field returns transform",
+		name: "non-empty field returns processor",
 		args: args{config: processor.Config{
 			Settings: map[string]string{maskFieldConfigField: "foo"},
 		}},
@@ -215,7 +215,7 @@ func TestMaskFieldPayload_Build(t *testing.T) {
 	}
 }
 
-func TestMaskFieldPayload_Transform(t *testing.T) {
+func TestMaskFieldPayload_Process(t *testing.T) {
 	type args struct {
 		r record.Record
 	}
@@ -311,11 +311,11 @@ func TestMaskFieldPayload_Transform(t *testing.T) {
 			assert.Ok(t, err)
 			got, err := underTest.Execute(context.Background(), tt.args.r)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("Transform() error = %v, wantErr = %v", err, tt.wantErr)
+				t.Errorf("process() error = %v, wantErr = %v", err, tt.wantErr)
 				return
 			}
 			if diff := cmp.Diff(got, tt.want); diff != "" {
-				t.Errorf("Transform() diff = %s", diff)
+				t.Errorf("process() diff = %s", diff)
 			}
 		})
 	}
