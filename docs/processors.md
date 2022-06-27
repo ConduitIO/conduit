@@ -6,23 +6,21 @@ familiar with [pipeline semantics](/docs/pipeline_semantics.md) is highly recomm
 
 ![Pipeline](data/pipeline_example.svg)
 
-Processors are optional components in a pipeline. They can be attached either to a connector or to a pipeline. In other 
-words, processors can process:
-1. Records coming out of a source connector (if the processors is attached to a source connector)
-2. Records coming into a destination connector (if the processor is attached to a destination connector)
-3. All records flowing through a pipeline (if the processor is attached to a pipeline)
+Processors are **optional** components in a pipeline, i.e. a pipeline can be started without them. They can be attached 
+either to a connector or to a pipeline. In other words, we have following types of processors:
+1. **Source processors**: these processors only receive messages originating at a specific source connector. Source 
+processors are created by specifying the corresponding source connector as the parent entity.
+2. **Pipeline processors**: these processors receive all messages that flow through the pipeline, regardless of the
+   source or destination. Pipeline processors are created by specifying the pipeline as the parent entity.
+3. **Destination processors**: these processors receive only messages that are meant to be sent to a specific
+   destination connector. Destination processors are created by specifying the corresponding destination connector as the
+   parent entity.
 
-We'll go a little deeper into the case of _pipeline transforms_ (source and destination transforms are left out for the
-sake of simplicity). At a high-level, source connectors, pipeline transforms and destination connector are laid out as
-in this image:
 
-The main point here is that all pipeline transforms are "grouped together". Records **from all sources** will be sent to
-the transform in processor 1, then processor 2 etc. Pipeline transforms are chained in the order in which they were created.
 
 ## Adding and configuring a transform
 
-Since a transform is a type of processor, all transforms are created through the `processors` endpoint.
-Here's an example:
+Processors are created through the `/processors` endpoint. Here's an example:
 
 ```json lines
 POST /v1/processors
