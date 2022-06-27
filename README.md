@@ -101,13 +101,13 @@ Conduit is also able to run standalone connectors. If you are interested in writ
 
 ## Processors
 
-Transforms are operations applied on single records. Transforms are optional parts of a pipeline and, when present, they
-come in the form of pipeline components called processors.
+A processor is a component that operates on a single record that flows through a pipeline. It can either change the record
+(i.e. **transform** it) or **filter** it out based on some criteria.
 
-Conduit provides a number of built-in transforms, which can be used to filter and replace fields, post payloads to HTTP endpoints etc.
-Conduit also provides the ability to write custom transforms in JavaScript.
+Conduit provides a number of built-in processors, which can be used to filter and replace fields, post payloads to HTTP endpoints etc.
+Conduit also provides the ability to write custom processors in JavaScript.
 
-More detailed information as well as examples can be found in the [Transforms documentation](/docs/processors.md).
+More detailed information as well as examples can be found in the [Processors documentation](/docs/processors.md).
 
 ## Testing
 

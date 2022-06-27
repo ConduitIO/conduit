@@ -13,7 +13,7 @@ A Conduit pipeline is a directed acyclic graph of nodes. Each node runs in its o
 nodes via unbuffered Go channels that can transmit messages. In theory, we could create arbitrarily complex graphs of
 nodes, but for the sake of a simpler API we expose the ability to create graphs with the following structure:
 
-![pipeline](https://user-images.githubusercontent.com/8320753/165359385-79d98217-fd7f-478d-a059-121487e2b4a2.svg)
+![pipeline](data/pipeline_example.svg)
 
 In the diagram above we see 7 sections:
 
