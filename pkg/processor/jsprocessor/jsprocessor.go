@@ -28,7 +28,7 @@ const (
 	entrypoint = "process"
 )
 
-// JSProcessor is able to run transformations defined in JavaScript.
+// JSProcessor is able to run processors defined in JavaScript.
 type JSProcessor struct {
 	runtime  *goja.Runtime
 	function goja.Callable
@@ -70,7 +70,7 @@ func (p *JSProcessor) initJSRuntime(logger zerolog.Logger) error {
 func (p *JSProcessor) initFunction(src string) error {
 	prg, err := goja.Compile("", src, false)
 	if err != nil {
-		return cerrors.Errorf("failed to compile transformer script: %w", err)
+		return cerrors.Errorf("failed to compile script: %w", err)
 	}
 
 	_, err = p.runtime.RunProgram(prg)

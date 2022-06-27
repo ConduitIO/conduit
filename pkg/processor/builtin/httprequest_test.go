@@ -153,7 +153,7 @@ func TestHTTPRequest_Build(t *testing.T) {
 	}
 }
 
-func TestHTTPRequest_TransformSuccess(t *testing.T) {
+func TestHTTPRequest_Success(t *testing.T) {
 	respBody := []byte("foo-bar/response")
 
 	type args struct {
@@ -224,7 +224,7 @@ func TestHTTPRequest_TransformSuccess(t *testing.T) {
 	}
 }
 
-func TestHTTPRequest_TransformRetrySuccess(t *testing.T) {
+func TestHTTPRequest_RetrySuccess(t *testing.T) {
 	is := is.New(t)
 
 	respBody := []byte("foo-bar/response")
@@ -272,7 +272,7 @@ func TestHTTPRequest_TransformRetrySuccess(t *testing.T) {
 	is.Equal(srvHandlerCount, 5)
 }
 
-func TestHTTPRequest_TransformRetryFail(t *testing.T) {
+func TestHTTPRequest_RetryFail(t *testing.T) {
 	is := is.New(t)
 
 	srvHandlerCount := 0

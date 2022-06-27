@@ -29,12 +29,12 @@ import (
 	"github.com/rs/zerolog"
 )
 
-func TestTransformer_Logger(t *testing.T) {
+func TestJSProcessor_Logger(t *testing.T) {
 	is := is.New(t)
 
 	var buf bytes.Buffer
 	logger := zerolog.New(&buf)
-	tr, err := New(`
+	underTest, err := New(`
 	function process(r) {
 		logger.Info().Msg("Hello");
 		return r
@@ -42,29 +42,26 @@ func TestTransformer_Logger(t *testing.T) {
 	`, logger)
 	is.NoErr(err) // expected no error when creating the JS processor
 
-	_, err = tr.Execute(context.Background(), record.Record{})
+	_, err = underTest.Execute(context.Background(), record.Record{})
 	is.NoErr(err) // expected no error when processing record
 
 	is.Equal(`{"level":"info","message":"Hello"}`+"\n", buf.String()) // expected different log message
 }
 
-func TestTransformer_Transform_MissingEntrypoint(t *testing.T) {
+func TestJSProcessor_MissingEntrypoint(t *testing.T) {
 	is := is.New(t)
 
-	tr, err := New(
+	underTest, err := New(
 		`logger.Debug("no entrypoint");`,
 		zerolog.Nop(),
 	)
 
-	if err == nil {
-		t.Error("expected error if transformer has no entrypoint")
-		return
-	}
+	is.True(err != nil)                                                                                   // expected error
 	is.Equal(`failed initializing JS function: failed to get entrypoint function "process"`, err.Error()) // expected different error message
-	is.True(tr == nil)
+	is.True(underTest == nil)
 }
 
-func TestTransformer_Transform(t *testing.T) {
+func TestJSProcessor_Process(t *testing.T) {
 	type fields struct {
 		src string
 	}
@@ -80,7 +77,7 @@ func TestTransformer_Transform(t *testing.T) {
 	}{
 		{
 			// todo Once https://github.com/ConduitIO/conduit/issues/468 is implemented
-			// write more tests which validate transforms on structured records
+			// write more tests which validate processors on structured records
 			name: "change non-payload fields of structured record",
 			fields: fields{
 				src: `
@@ -184,10 +181,10 @@ func TestTransformer_Transform(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			is := is.New(t)
 
-			tr, err := New(tt.fields.src, zerolog.Nop())
+			underTest, err := New(tt.fields.src, zerolog.Nop())
 			is.NoErr(err) // expected no error when creating the JS processor
 
-			got, err := tr.Execute(context.Background(), tt.args.record)
+			got, err := underTest.Execute(context.Background(), tt.args.record)
 			if tt.wantErr != nil {
 				is.Equal(tt.wantErr, err) // expected different error
 			} else {
@@ -199,7 +196,7 @@ func TestTransformer_Transform(t *testing.T) {
 	}
 }
 
-func TestTransformer_Filtering(t *testing.T) {
+func TestJSProcessor_Filtering(t *testing.T) {
 	testCases := []struct {
 		name   string
 		src    string
@@ -257,8 +254,8 @@ func TestTransformer_Filtering(t *testing.T) {
 
 			rec, err := underTest.Execute(context.Background(), tc.input)
 			if tc.filter {
-				is.NoErr(err)           // expected no error for transformed record
-				is.Equal(tc.input, rec) // expected different transformed record
+				is.NoErr(err)           // expected no error for processed record
+				is.Equal(tc.input, rec) // expected different processed record
 			} else {
 				is.True(reflect.ValueOf(rec).IsZero())            // expected zero record
 				is.True(cerrors.Is(err, processor.ErrSkipRecord)) // expected ErrSkipRecord
@@ -267,7 +264,7 @@ func TestTransformer_Filtering(t *testing.T) {
 	}
 }
 
-func TestTransformer_DataTypes(t *testing.T) {
+func TestJSProcessor_DataTypes(t *testing.T) {
 	testCases := []struct {
 		name  string
 		src   string
@@ -347,24 +344,24 @@ func TestTransformer_DataTypes(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			is := is.New(t)
 
-			tr, err := New(tc.src, zerolog.Nop())
+			underTest, err := New(tc.src, zerolog.Nop())
 			is.NoErr(err) // expected no error when creating the JS processor
 
-			got, err := tr.Execute(context.Background(), tc.input)
-			is.NoErr(err)          // expected no error when transforming record
+			got, err := underTest.Execute(context.Background(), tc.input)
+			is.NoErr(err)          // expected no error when processing record
 			is.Equal(tc.want, got) // expected different record
 		})
 	}
 }
 
-func TestTransformer_JavaScriptException(t *testing.T) {
+func TestJSProcessor_JavaScriptException(t *testing.T) {
 	is := is.New(t)
 
 	src := `function process(record) {
 		var m;
 		m.test
 	}`
-	tr, err := New(src, zerolog.Nop())
+	underTest, err := New(src, zerolog.Nop())
 	is.NoErr(err) // expected no error when creating the JS processor
 
 	r := record.Record{
@@ -372,14 +369,14 @@ func TestTransformer_JavaScriptException(t *testing.T) {
 		Payload: record.RawData{Raw: []byte("test payload")},
 	}
 
-	got, err := tr.Execute(context.Background(), r)
+	got, err := underTest.Execute(context.Background(), r)
 	is.True(err != nil) // expected error
 	target := &goja.Exception{}
 	is.True(cerrors.As(err, &target)) // expected a goja.Exception
 	is.Equal(record.Record{}, got)    // expected a zero record
 }
 
-func TestTransformer_BrokenJSCode(t *testing.T) {
+func TestJSProcessor_BrokenJSCode(t *testing.T) {
 	is := is.New(t)
 
 	src := `function {`
@@ -389,7 +386,7 @@ func TestTransformer_BrokenJSCode(t *testing.T) {
 	is.True(cerrors.As(err, &target)) // expected a goja.CompilerSyntaxError
 }
 
-func TestTransformer_ScriptWithMultipleFunctions(t *testing.T) {
+func TestJSProcessor_ScriptWithMultipleFunctions(t *testing.T) {
 	is := is.New(t)
 
 	src := `
@@ -402,7 +399,7 @@ func TestTransformer_ScriptWithMultipleFunctions(t *testing.T) {
 			return record;
 		}
 	`
-	tr, err := New(src, zerolog.Nop())
+	underTest, err := New(src, zerolog.Nop())
 	is.NoErr(err) // expected no error when creating the JS processor
 
 	r := record.Record{
@@ -411,8 +408,8 @@ func TestTransformer_ScriptWithMultipleFunctions(t *testing.T) {
 		},
 	}
 
-	got, err := tr.Execute(context.Background(), r)
-	is.NoErr(err) // expected no error when transforming record
+	got, err := underTest.Execute(context.Background(), r)
+	is.NoErr(err) // expected no error when processing record
 	is.Equal(
 		record.Record{
 			Metadata: map[string]string{
