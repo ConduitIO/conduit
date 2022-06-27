@@ -45,7 +45,7 @@ func TestFilterFieldKey_Build(t *testing.T) {
 			name: "empty config returns error",
 			args: args{
 				config: processor.Config{
-					map[string]string{},
+					Settings: map[string]string{},
 				},
 			},
 			wantErr: true,
