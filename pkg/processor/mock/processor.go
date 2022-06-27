@@ -35,17 +35,17 @@ func (m *Processor) EXPECT() *ProcessorMockRecorder {
 	return m.recorder
 }
 
-// Execute mocks base method.
+// Process mocks base method.
 func (m *Processor) Process(arg0 context.Context, arg1 record.Record) (record.Record, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Execute", arg0, arg1)
+	ret := m.ctrl.Call(m, "Process", arg0, arg1)
 	ret0, _ := ret[0].(record.Record)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// Execute indicates an expected call of Execute.
-func (mr *ProcessorMockRecorder) Execute(arg0, arg1 interface{}) *gomock.Call {
+// Process indicates an expected call of Process.
+func (mr *ProcessorMockRecorder) Process(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Execute", reflect.TypeOf((*Processor)(nil).Execute), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Process", reflect.TypeOf((*Processor)(nil).Process), arg0, arg1)
 }
