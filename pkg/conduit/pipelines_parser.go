@@ -15,7 +15,9 @@
 package conduit
 
 import (
+	"bytes"
 	"io"
+	"os"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"gopkg.in/yaml.v3"
@@ -62,8 +64,10 @@ type PipelinesInfo struct {
 	Pipelines map[string]PipelineInfo `yaml:"pipelines"`
 }
 
-func Parse(data io.Reader) (PipelinesInfo, error) {
-	dec := yaml.NewDecoder(data)
+func Parse(data []byte) (PipelinesInfo, error) {
+	// replace environment variables with their values
+	data = []byte(os.ExpandEnv(string(data)))
+	dec := yaml.NewDecoder(bytes.NewReader(data))
 
 	var docs []PipelinesInfo
 	for {

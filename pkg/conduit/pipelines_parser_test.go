@@ -15,8 +15,8 @@
 package conduit
 
 import (
-	"bytes"
 	"io/ioutil"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -113,7 +113,7 @@ func Test_Parser(t *testing.T) {
 		t.Error(err)
 	}
 
-	got, err := Parse(bytes.NewReader(data))
+	got, err := Parse(data)
 	assert.Nil(t, err)
 	assert.Equal(t, want, got)
 }
@@ -129,7 +129,7 @@ func Test_Parser_Duplicate_Pipeline_Id(t *testing.T) {
 		t.Error(err)
 	}
 
-	p, err := Parse(bytes.NewReader(data))
+	p, err := Parse(data)
 	assert.Error(t, err)
 	assert.Equal(t, p, PipelinesInfo{})
 }
@@ -145,7 +145,62 @@ func Test_Parser_Invalid_Version(t *testing.T) {
 		t.Error(err)
 	}
 
-	p, err := Parse(bytes.NewReader(data))
+	p, err := Parse(data)
 	assert.Error(t, err)
 	assert.Equal(t, p, PipelinesInfo{})
+}
+
+func Test_Parser_Env_Vars(t *testing.T) {
+	filename, err := filepath.Abs("./test/pipelines4.yml")
+	if err != nil {
+		t.Error(err)
+	}
+
+	// set env variables
+	err = os.Setenv("AWS_SECRET", "my-aws-secret")
+	if err != nil {
+		t.Fatalf("Failed to write env var: $AWS_SECRET")
+	}
+	err = os.Setenv("AWS_KEY", "my-aws-key")
+	if err != nil {
+		t.Fatalf("Failed to write env var: $AWS_KEY")
+	}
+	err = os.Setenv("AWS_URL", "aws-url")
+	if err != nil {
+		t.Fatalf("Failed to write env var: $AWS_URL")
+	}
+
+	want := PipelinesInfo{
+		Version: "1.0",
+		Pipelines: map[string]PipelineInfo{
+			"pipeline1": {
+				Status: "running",
+				Config: PipelineConfig{"pipeline1", "desc1"},
+				Connectors: ConnectorInfo{
+					"con1": {
+						Type:   "source",
+						Plugin: "builtin:s3",
+						Config: ConnectorConfig{
+							Name: "s3-source",
+							Settings: map[string]string{
+								// env variables should be replaces with their values
+								"aws.secret": "my-aws-secret",
+								"aws.key":    "my-aws-key",
+								"aws.url":    "my/aws-url/url",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	data, err := ioutil.ReadFile(filename)
+	if err != nil {
+		t.Error(err)
+	}
+
+	got, err := Parse(data)
+	assert.Nil(t, err)
+	assert.Equal(t, want, got)
 }
