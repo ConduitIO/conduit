@@ -34,7 +34,7 @@ func TestService_Init_Success(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
 	name := "processor-name"
-	p := mock.NewInterface(ctrl)
+	p := mock.NewProcessor(ctrl)
 
 	registry := newTestBuilderRegistry(t, map[string]processor.Interface{name: p})
 	service := processor.NewService(log.Nop(), db, registry)
@@ -65,7 +65,7 @@ func TestService_Create_Success(t *testing.T) {
 	db := &inmemory.DB{}
 	ctrl := gomock.NewController(t)
 
-	p := mock.NewInterface(ctrl)
+	p := mock.NewProcessor(ctrl)
 
 	want := &processor.Instance{
 		ID:   "uuid will be taken from the result",

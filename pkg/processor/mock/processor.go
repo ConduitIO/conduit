@@ -12,31 +12,31 @@ import (
 	gomock "github.com/golang/mock/gomock"
 )
 
-// Interface is a mock of Interface interface.
-type Interface struct {
+// Processor is a mock of Interface interface.
+type Processor struct {
 	ctrl     *gomock.Controller
-	recorder *InterfaceMockRecorder
+	recorder *ProcessorMockRecorder
 }
 
-// InterfaceMockRecorder is the mock recorder for Interface.
-type InterfaceMockRecorder struct {
-	mock *Interface
+// ProcessorMockRecorder is the mock recorder for Processor.
+type ProcessorMockRecorder struct {
+	mock *Processor
 }
 
-// NewInterface creates a new mock instance.
-func NewInterface(ctrl *gomock.Controller) *Interface {
-	mock := &Interface{ctrl: ctrl}
-	mock.recorder = &InterfaceMockRecorder{mock}
+// NewProcessor creates a new mock instance.
+func NewProcessor(ctrl *gomock.Controller) *Processor {
+	mock := &Processor{ctrl: ctrl}
+	mock.recorder = &ProcessorMockRecorder{mock}
 	return mock
 }
 
 // EXPECT returns an object that allows the caller to indicate expected use.
-func (m *Interface) EXPECT() *InterfaceMockRecorder {
+func (m *Processor) EXPECT() *ProcessorMockRecorder {
 	return m.recorder
 }
 
 // Process mocks base method.
-func (m *Interface) Process(arg0 context.Context, arg1 record.Record) (record.Record, error) {
+func (m *Processor) Process(arg0 context.Context, arg1 record.Record) (record.Record, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Process", arg0, arg1)
 	ret0, _ := ret[0].(record.Record)
@@ -45,7 +45,7 @@ func (m *Interface) Process(arg0 context.Context, arg1 record.Record) (record.Re
 }
 
 // Process indicates an expected call of Process.
-func (mr *InterfaceMockRecorder) Process(arg0, arg1 interface{}) *gomock.Call {
+func (mr *ProcessorMockRecorder) Process(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Process", reflect.TypeOf((*Interface)(nil).Process), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Process", reflect.TypeOf((*Processor)(nil).Process), arg0, arg1)
 }

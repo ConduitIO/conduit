@@ -41,7 +41,7 @@ func TestProcessorNode_Success(t *testing.T) {
 	}
 	newPosition := []byte(uuid.NewString())
 
-	processor := mock.NewInterface(ctrl)
+	processor := mock.NewProcessor(ctrl)
 	processor.
 		EXPECT().
 		Process(ctx, wantRec).
@@ -96,7 +96,7 @@ func TestProcessorNode_ErrorWithoutNackHandler(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
 	wantErr := cerrors.New("something bad happened")
-	processor := mock.NewInterface(ctrl)
+	processor := mock.NewProcessor(ctrl)
 	processor.EXPECT().Process(ctx, gomock.Any()).Return(record.Record{}, wantErr)
 
 	n := ProcessorNode{
@@ -129,7 +129,7 @@ func TestProcessorNode_ErrorWithNackHandler(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
 	wantErr := cerrors.New("something bad happened")
-	processor := mock.NewInterface(ctrl)
+	processor := mock.NewProcessor(ctrl)
 	processor.EXPECT().Process(ctx, gomock.Any()).Return(record.Record{}, wantErr)
 
 	n := ProcessorNode{
@@ -167,7 +167,7 @@ func TestProcessorNode_Skip(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
 	// create a dummy processor
-	proc := mock.NewInterface(ctrl)
+	proc := mock.NewProcessor(ctrl)
 	proc.EXPECT().Process(ctx, gomock.Any()).Return(record.Record{}, processor.ErrSkipRecord)
 
 	n := ProcessorNode{
