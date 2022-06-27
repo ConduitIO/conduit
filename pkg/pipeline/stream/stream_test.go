@@ -352,7 +352,7 @@ func printerDestination(ctrl *gomock.Controller, logger log.CtxLogger, nodeID st
 }
 
 func counterProcessor(ctrl *gomock.Controller, count *int) processor.Interface {
-	proc := procmock.NewProcessor(ctrl)
+	proc := procmock.NewInterface(ctrl)
 	proc.EXPECT().Process(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, r record.Record) (record.Record, error) {
 		*count++
 		return r, nil
