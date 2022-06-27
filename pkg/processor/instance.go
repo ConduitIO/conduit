@@ -39,8 +39,7 @@ type Interface interface {
 	Process(ctx context.Context, record record.Record) (record.Record, error)
 }
 
-// InterfaceFunc is a stateless processor.Interface implementation
-// which is using a Go function to process records.
+// InterfaceFunc is an adapter allowing use of a function as an Interface.
 type InterfaceFunc func(context.Context, record.Record) (record.Record, error)
 
 func (p InterfaceFunc) Process(ctx context.Context, record record.Record) (record.Record, error) {
