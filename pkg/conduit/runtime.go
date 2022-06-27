@@ -58,7 +58,7 @@ import (
 	"google.golang.org/grpc/stats"
 	"gopkg.in/tomb.v2"
 
-	// NB: anonymous import triggers transform registry creation
+	// NB: anonymous import triggers processor registry creation
 	_ "github.com/conduitio/conduit/pkg/processor/procbuiltin"
 	_ "github.com/conduitio/conduit/pkg/processor/procjs"
 )
