@@ -115,7 +115,7 @@ func (p *JSProcessor) Process(_ context.Context, in record.Record) (record.Recor
 
 	result, err := p.function(goja.Undefined(), jsRecord)
 	if err != nil {
-		return record.Record{}, cerrors.Errorf("failed to transform to JS record: %w", err)
+		return record.Record{}, cerrors.Errorf("failed to execute JS processor function: %w", err)
 	}
 
 	out, err := p.toInternal(result)
