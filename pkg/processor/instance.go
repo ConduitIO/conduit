@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:generate mockgen -destination=mock/processor.go -package=mock -mock_names=Processor=Processor . Processor
+//go:generate mockgen -destination=mock/processor.go -package=mock -mock_names=Interface=Processor . Interface
 //go:generate stringer -type=ParentType -trimprefix ParentType
 
 package processor
@@ -39,8 +39,7 @@ type Interface interface {
 	Process(ctx context.Context, record record.Record) (record.Record, error)
 }
 
-// InterfaceFunc is a stateless processor.Interface implementation
-// which is using a Go function to process records.
+// InterfaceFunc is an adapter allowing use of a function as an Interface.
 type InterfaceFunc func(context.Context, record.Record) (record.Record, error)
 
 func (p InterfaceFunc) Process(ctx context.Context, record record.Record) (record.Record, error) {

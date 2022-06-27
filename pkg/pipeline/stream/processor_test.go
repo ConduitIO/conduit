@@ -117,7 +117,7 @@ func TestProcessorNode_ErrorWithoutNackHandler(t *testing.T) {
 	}()
 
 	err := n.Run(ctx)
-	assert.True(t, cerrors.Is(err, wantErr), "expected underlying error to be the transform error")
+	assert.True(t, cerrors.Is(err, wantErr), "expected underlying error to be the processor error")
 
 	// after the node stops the out channel should be closed
 	_, ok := <-out
@@ -144,7 +144,7 @@ func TestProcessorNode_ErrorWithNackHandler(t *testing.T) {
 
 	msg := &Message{Ctx: ctx}
 	msg.RegisterNackHandler(func(msg *Message, err error, next NackHandler) error {
-		assert.True(t, cerrors.Is(err, wantErr), "expected underlying error to be the transform error")
+		assert.True(t, cerrors.Is(err, wantErr), "expected underlying error to be the processor error")
 		return next(msg, err) // the error should be regarded as handled
 	})
 	go func() {

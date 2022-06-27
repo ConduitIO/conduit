@@ -66,7 +66,7 @@ func (n *ProcessorNode) Run(ctx context.Context) error {
 			err = msg.Nack(err)
 			if err != nil {
 				msg.Drop()
-				return cerrors.Errorf("error applying transform: %w", err)
+				return cerrors.Errorf("failed to execute processor: %w", err)
 			}
 			// nack was handled successfully, we recovered
 			continue
