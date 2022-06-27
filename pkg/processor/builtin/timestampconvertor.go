@@ -38,12 +38,12 @@ func init() {
 }
 
 // TimestampConvertorKey todo
-func TimestampConvertorKey(config processor.Config) (processor.Processor, error) {
+func TimestampConvertorKey(config processor.Config) (processor.Interface, error) {
 	return timestampConvertor(timestampConvertorKeyName, recordKeyGetSetter{}, config)
 }
 
 // TimestampConvertorPayload todo
-func TimestampConvertorPayload(config processor.Config) (processor.Processor, error) {
+func TimestampConvertorPayload(config processor.Config) (processor.Interface, error) {
 	return timestampConvertor(timestampConvertorPayloadName, recordPayloadGetSetter{}, config)
 }
 
@@ -51,7 +51,7 @@ func timestampConvertor(
 	processorName string,
 	getSetter recordDataGetSetter,
 	config processor.Config,
-) (processor.Processor, error) {
+) (processor.Interface, error) {
 	const (
 		stringType = "string"
 		unixType   = "unix"
@@ -80,7 +80,7 @@ func timestampConvertor(
 		return nil, cerrors.Errorf("%s: format is needed to parse the output", processorName)
 	}
 
-	return processor.ProcessorFunc(func(_ context.Context, r record.Record) (record.Record, error) {
+	return processor.InterfaceFunc(func(_ context.Context, r record.Record) (record.Record, error) {
 		data := getSetter.Get(r)
 		switch d := data.(type) {
 		case record.RawData:

@@ -36,7 +36,7 @@ func TestService_Init_Success(t *testing.T) {
 	name := "processor-name"
 	p := mock.NewProcessor(ctrl)
 
-	registry := newTestBuilderRegistry(t, map[string]processor.Processor{name: p})
+	registry := newTestBuilderRegistry(t, map[string]processor.Interface{name: p})
 	service := processor.NewService(log.Nop(), db, registry)
 
 	// create a processor instance
@@ -83,7 +83,7 @@ func TestService_Create_Success(t *testing.T) {
 		Processor: p,
 	}
 
-	registry := newTestBuilderRegistry(t, map[string]processor.Processor{want.Name: p})
+	registry := newTestBuilderRegistry(t, map[string]processor.Interface{want.Name: p})
 	service := processor.NewService(log.Nop(), db, registry)
 
 	got, err := service.Create(ctx, want.ID, want.Name, want.Parent, want.Config)
@@ -123,7 +123,7 @@ func TestService_Create_BuilderFail(t *testing.T) {
 	registry := processor.NewBuilderRegistry()
 	err := registry.Register(
 		name,
-		func(got processor.Config) (processor.Processor, error) {
+		func(got processor.Config) (processor.Interface, error) {
 			return nil, wantErr
 		},
 	)
@@ -150,7 +150,7 @@ func TestService_Delete_Success(t *testing.T) {
 	name := "processor-name"
 	p := mock.NewProcessor(ctrl)
 
-	registry := newTestBuilderRegistry(t, map[string]processor.Processor{name: p})
+	registry := newTestBuilderRegistry(t, map[string]processor.Interface{name: p})
 	service := processor.NewService(log.Nop(), db, registry)
 
 	// create a processor instance
@@ -182,7 +182,7 @@ func TestService_Get_Success(t *testing.T) {
 	name := "processor-name"
 	p := mock.NewProcessor(ctrl)
 
-	registry := newTestBuilderRegistry(t, map[string]processor.Processor{name: p})
+	registry := newTestBuilderRegistry(t, map[string]processor.Interface{name: p})
 	service := processor.NewService(log.Nop(), db, registry)
 
 	// create a processor instance
@@ -222,7 +222,7 @@ func TestService_List_Some(t *testing.T) {
 	name := "processor-name"
 	p := mock.NewProcessor(ctrl)
 
-	registry := newTestBuilderRegistry(t, map[string]processor.Processor{name: p})
+	registry := newTestBuilderRegistry(t, map[string]processor.Interface{name: p})
 	service := processor.NewService(log.Nop(), db, registry)
 
 	// create a couple of processor instances
@@ -245,7 +245,7 @@ func TestService_Update_Success(t *testing.T) {
 	name := "processor-name"
 	p := mock.NewProcessor(ctrl)
 
-	registry := newTestBuilderRegistry(t, map[string]processor.Processor{name: p})
+	registry := newTestBuilderRegistry(t, map[string]processor.Interface{name: p})
 	service := processor.NewService(log.Nop(), db, registry)
 
 	// create a processor instance
@@ -282,12 +282,12 @@ func TestService_Update_Fail(t *testing.T) {
 // newTestBuilderRegistry creates a registry with builders for the supplied
 // processors map keyed by processor name. If a value in the map is nil then a
 // builder will be registered that returns an error.
-func newTestBuilderRegistry(t *testing.T, processors map[string]processor.Processor) *processor.BuilderRegistry {
+func newTestBuilderRegistry(t *testing.T, processors map[string]processor.Interface) *processor.BuilderRegistry {
 	registry := processor.NewBuilderRegistry()
 	for name, p := range processors {
 		err := registry.Register(
 			name,
-			func(got processor.Config) (processor.Processor, error) {
+			func(got processor.Config) (processor.Interface, error) {
 				if p != nil {
 					return p, nil
 				}

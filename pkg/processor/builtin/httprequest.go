@@ -47,14 +47,14 @@ func init() {
 // URL with the specified HTTP method (default is POST). The record payload is
 // used as the request body and the raw response body is put into the record
 // payload.
-func HTTPRequest(config processor.Config) (processor.Processor, error) {
+func HTTPRequest(config processor.Config) (processor.Interface, error) {
 	return httpRequest(httpRequestName, config)
 }
 
 func httpRequest(
 	processorName string,
 	config processor.Config,
-) (processor.Processor, error) {
+) (processor.Interface, error) {
 	var (
 		err    error
 		rawURL string
@@ -122,7 +122,7 @@ func configureHTTPRequestBackoffRetry(
 	processorName string,
 	config processor.Config,
 	procFn func(context.Context, record.Record) (record.Record, error),
-) (processor.Processor, error) {
+) (processor.Interface, error) {
 	// retryCount is a float64 to match the backoff library attempt type
 	var retryCount float64
 
@@ -134,7 +134,7 @@ func configureHTTPRequestBackoffRetry(
 
 	if retryCount == 0 {
 		// no retries configured, just use the plain processor
-		return processor.ProcessorFunc(procFn), nil
+		return processor.InterfaceFunc(procFn), nil
 	}
 
 	// default retry values
@@ -166,7 +166,7 @@ func configureHTTPRequestBackoffRetry(
 	}
 
 	// wrap processor in a retry loop
-	return processor.ProcessorFunc(func(ctx context.Context, r record.Record) (record.Record, error) {
+	return processor.InterfaceFunc(func(ctx context.Context, r record.Record) (record.Record, error) {
 		for {
 			r, err := procFn(ctx, r)
 			if err != nil && b.Attempt() < retryCount {

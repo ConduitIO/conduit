@@ -28,14 +28,14 @@ import (
 	"google.golang.org/grpc"
 )
 
-// ProcessorOrchestrator defines a CRUD interface that manages the Processor resource.
+// ProcessorOrchestrator defines a CRUD interface that manages the Interface resource.
 type ProcessorOrchestrator interface {
 	List(ctx context.Context) map[string]*processor.Instance
-	// Get will return a single Processor or an error if it doesn't exist.
+	// Get will return a single Interface or an error if it doesn't exist.
 	Get(ctx context.Context, id string) (*processor.Instance, error)
-	// Create will make a new Processor.
+	// Create will make a new Interface.
 	Create(ctx context.Context, name string, parent processor.Parent, cfg processor.Config) (*processor.Instance, error)
-	// Update will update a Processor's config.
+	// Update will update a Interface's config.
 	Update(ctx context.Context, id string, cfg processor.Config) (*processor.Instance, error)
 	// Delete removes a processor
 	Delete(ctx context.Context, id string) error
@@ -72,7 +72,7 @@ func (p *ProcessorAPIv1) ListProcessors(
 	return &apiv1.ListProcessorsResponse{Processors: plist}, nil
 }
 
-// GetProcessor returns a single Processor proto response or an error.
+// GetProcessor returns a single Interface proto response or an error.
 func (p *ProcessorAPIv1) GetProcessor(
 	ctx context.Context,
 	req *apiv1.GetProcessorRequest,

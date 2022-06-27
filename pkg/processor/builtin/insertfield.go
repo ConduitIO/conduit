@@ -42,7 +42,7 @@ func init() {
 //    key data.
 //  * If the key is raw and has no schema, return an error (not supported).
 //  * If the key is structured, set the field(s) in the key data.
-func InsertFieldKey(config processor.Config) (processor.Processor, error) {
+func InsertFieldKey(config processor.Config) (processor.Interface, error) {
 	return insertField(insertFieldKeyName, recordKeyGetSetter{}, config)
 }
 
@@ -51,7 +51,7 @@ func InsertFieldKey(config processor.Config) (processor.Processor, error) {
 //    the payload data.
 //  * If the payload is raw and has no schema, return an error (not supported).
 //  * If the payload is structured, set the field(s) in the payload data.
-func InsertFieldPayload(config processor.Config) (processor.Processor, error) {
+func InsertFieldPayload(config processor.Config) (processor.Interface, error) {
 	return insertField(insertFieldPayloadName, recordPayloadGetSetter{}, config)
 }
 
@@ -59,7 +59,7 @@ func insertField(
 	processorName string,
 	getSetter recordDataGetSetter,
 	config processor.Config,
-) (processor.Processor, error) {
+) (processor.Interface, error) {
 	var (
 		err error
 
@@ -81,7 +81,7 @@ func insertField(
 		return nil, cerrors.Errorf("%s: no fields configured to be inserted", processorName)
 	}
 
-	return processor.ProcessorFunc(func(_ context.Context, r record.Record) (record.Record, error) {
+	return processor.InterfaceFunc(func(_ context.Context, r record.Record) (record.Record, error) {
 		data := getSetter.Get(r)
 
 		switch d := data.(type) {

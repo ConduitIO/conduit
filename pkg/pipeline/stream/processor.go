@@ -26,7 +26,7 @@ import (
 
 type ProcessorNode struct {
 	Name           string
-	Processor      processor.Processor
+	Processor      processor.Interface
 	ProcessorTimer metrics.Timer
 
 	base   pubSubNodeBase

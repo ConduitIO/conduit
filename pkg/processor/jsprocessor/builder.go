@@ -31,7 +31,7 @@ func init() {
 
 // Builder parses the config and if valid returns a JS processor, an error
 // otherwise. It requires the config field "script".
-func Builder(config processor.Config) (processor.Processor, error) {
+func Builder(config processor.Config) (processor.Interface, error) {
 	if config.Settings[configScript] == "" {
 		return nil, cerrors.Errorf("%s: unspecified field %q", processorName, configScript)
 	}

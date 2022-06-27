@@ -40,7 +40,7 @@ func init() {
 //  * If the key is raw and has no schema, transforms it into structured data by
 //    creating a map with the hoisted field and raw data as the value.
 //  * If the key is structured, wrap it using the specified field name in a map.
-func HoistFieldKey(config processor.Config) (processor.Processor, error) {
+func HoistFieldKey(config processor.Config) (processor.Interface, error) {
 	return hoistField(hoistFieldKeyName, recordKeyGetSetter{}, config)
 }
 
@@ -51,7 +51,7 @@ func HoistFieldKey(config processor.Config) (processor.Processor, error) {
 //    by creating a map with the hoisted field and raw data as the value.
 //  * If the payload is structured, wrap it using the specified field name in a
 //    map.
-func HoistFieldPayload(config processor.Config) (processor.Processor, error) {
+func HoistFieldPayload(config processor.Config) (processor.Interface, error) {
 	return hoistField(hoistFieldPayloadName, recordPayloadGetSetter{}, config)
 }
 
@@ -59,7 +59,7 @@ func hoistField(
 	processorName string,
 	getSetter recordDataGetSetter,
 	config processor.Config,
-) (processor.Processor, error) {
+) (processor.Interface, error) {
 	var (
 		err       error
 		fieldName string
@@ -69,7 +69,7 @@ func hoistField(
 		return nil, cerrors.Errorf("%s: %w", processorName, err)
 	}
 
-	return processor.ProcessorFunc(func(_ context.Context, r record.Record) (record.Record, error) {
+	return processor.InterfaceFunc(func(_ context.Context, r record.Record) (record.Record, error) {
 		data := getSetter.Get(r)
 
 		switch d := data.(type) {

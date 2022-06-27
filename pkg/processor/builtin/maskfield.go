@@ -43,7 +43,7 @@ func init() {
 //  * If the key is raw and has no schema, return an error (not supported).
 //  * If the key is structured, replace the field with the zero value of the
 //    fields type.
-func MaskFieldKey(config processor.Config) (processor.Processor, error) {
+func MaskFieldKey(config processor.Config) (processor.Interface, error) {
 	return maskField(maskFieldKeyName, recordKeyGetSetter{}, config)
 }
 
@@ -53,7 +53,7 @@ func MaskFieldKey(config processor.Config) (processor.Processor, error) {
 //  * If the payload is raw and has no schema, return an error (not supported).
 //  * If the payload is structured, replace the field with the zero value of the
 //    fields type.
-func MaskFieldPayload(config processor.Config) (processor.Processor, error) {
+func MaskFieldPayload(config processor.Config) (processor.Interface, error) {
 	return maskField(maskFieldPayloadName, recordPayloadGetSetter{}, config)
 }
 
@@ -61,7 +61,7 @@ func maskField(
 	processorName string,
 	getSetter recordDataGetSetter,
 	config processor.Config,
-) (processor.Processor, error) {
+) (processor.Interface, error) {
 	var (
 		err         error
 		fieldName   string
@@ -73,7 +73,7 @@ func maskField(
 	}
 	replacement = config.Settings[maskFieldConfigReplacement]
 
-	return processor.ProcessorFunc(func(_ context.Context, r record.Record) (record.Record, error) {
+	return processor.InterfaceFunc(func(_ context.Context, r record.Record) (record.Record, error) {
 		data := getSetter.Get(r)
 
 		switch d := data.(type) {

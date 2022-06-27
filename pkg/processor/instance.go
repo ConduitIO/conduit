@@ -32,18 +32,18 @@ const (
 // ParentType defines the parent type of a processor.
 type ParentType int
 
-// Processor is the interface that represents a single message processor that
+// Interface is the interface that represents a single message processor that
 // can be executed on one record and manipulate it.
-type Processor interface {
-	// Execute runs the processor function on a record.
+type Interface interface {
+	// Process runs the processor function on a record.
 	Process(ctx context.Context, record record.Record) (record.Record, error)
 }
 
-// ProcessorFunc is a stateless processor.Processor implementation
+// InterfaceFunc is a stateless processor.Interface implementation
 // which is using a Go function to process records.
-type ProcessorFunc func(context.Context, record.Record) (record.Record, error)
+type InterfaceFunc func(context.Context, record.Record) (record.Record, error)
 
-func (p ProcessorFunc) Process(ctx context.Context, record record.Record) (record.Record, error) {
+func (p InterfaceFunc) Process(ctx context.Context, record record.Record) (record.Record, error) {
 	return p(ctx, record)
 }
 
@@ -57,7 +57,7 @@ type Instance struct {
 	Name      string
 	Parent    Parent
 	Config    Config
-	Processor Processor
+	Processor Interface
 }
 
 // Parent represents the connection to the entity a processor is connected to.

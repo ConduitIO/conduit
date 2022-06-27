@@ -41,7 +41,7 @@ func init() {
 //  * If the key is raw and has no schema, return an error (not supported).
 //  * If the key is structured, extract the field and use it to replace the
 //    entire key.
-func ExtractFieldKey(config processor.Config) (processor.Processor, error) {
+func ExtractFieldKey(config processor.Config) (processor.Interface, error) {
 	return extractField(extractFieldKeyName, recordKeyGetSetter{}, config)
 }
 
@@ -51,7 +51,7 @@ func ExtractFieldKey(config processor.Config) (processor.Processor, error) {
 //  * If the payload is raw and has no schema, return an error (not supported).
 //  * If the payload is structured, extract the field and use it to replace the
 //    entire payload.
-func ExtractFieldPayload(config processor.Config) (processor.Processor, error) {
+func ExtractFieldPayload(config processor.Config) (processor.Interface, error) {
 	return extractField(extractFieldPayloadName, recordPayloadGetSetter{}, config)
 }
 
@@ -59,7 +59,7 @@ func extractField(
 	processorName string,
 	getSetter recordDataGetSetter,
 	config processor.Config,
-) (processor.Processor, error) {
+) (processor.Interface, error) {
 	var (
 		err       error
 		fieldName string
@@ -69,7 +69,7 @@ func extractField(
 		return nil, cerrors.Errorf("%s: %w", processorName, err)
 	}
 
-	return processor.ProcessorFunc(func(_ context.Context, r record.Record) (record.Record, error) {
+	return processor.InterfaceFunc(func(_ context.Context, r record.Record) (record.Record, error) {
 		data := getSetter.Get(r)
 
 		switch d := data.(type) {

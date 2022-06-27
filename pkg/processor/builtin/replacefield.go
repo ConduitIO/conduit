@@ -50,7 +50,7 @@ func init() {
 // be included by default (except if they are configured in "exclude").
 // If "include" is not empty, then all fields are excluded by default and only
 // fields in "include" will be added to the processed record.
-func ReplaceFieldKey(config processor.Config) (processor.Processor, error) {
+func ReplaceFieldKey(config processor.Config) (processor.Interface, error) {
 	return replaceField(replaceFieldKeyName, recordKeyGetSetter{}, config)
 }
 
@@ -67,7 +67,7 @@ func ReplaceFieldKey(config processor.Config) (processor.Processor, error) {
 // be included by default (except if they are configured in "exclude").
 // If "include" is not empty, then all fields are excluded by default and only
 // fields in "include" will be added to the processed record.
-func ReplaceFieldPayload(config processor.Config) (processor.Processor, error) {
+func ReplaceFieldPayload(config processor.Config) (processor.Interface, error) {
 	return replaceField(replaceFieldPayloadName, recordPayloadGetSetter{}, config)
 }
 
@@ -75,7 +75,7 @@ func replaceField(
 	processorName string,
 	getSetter recordDataGetSetter,
 	config processor.Config,
-) (processor.Processor, error) {
+) (processor.Interface, error) {
 	var (
 		exclude string
 		include string
@@ -128,7 +128,7 @@ func replaceField(
 		}
 	}
 
-	return processor.ProcessorFunc(func(_ context.Context, r record.Record) (record.Record, error) {
+	return processor.InterfaceFunc(func(_ context.Context, r record.Record) (record.Record, error) {
 		data := getSetter.Get(r)
 
 		switch d := data.(type) {

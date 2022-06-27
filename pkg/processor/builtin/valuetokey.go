@@ -39,14 +39,14 @@ func init() {
 //  * If the payload is structured, the created key will also be structured with
 //    a subset of fields.
 //  * If the payload is raw and has no schema, return an error.
-func ValueToKey(config processor.Config) (processor.Processor, error) {
+func ValueToKey(config processor.Config) (processor.Interface, error) {
 	if config.Settings[valueToKeyConfigFields] == "" {
 		return nil, cerrors.Errorf("%s: unspecified field %q", valueToKeyName, valueToKeyConfigFields)
 	}
 
 	fields := strings.Split(config.Settings[valueToKeyConfigFields], ",")
 
-	return processor.ProcessorFunc(func(_ context.Context, r record.Record) (_ record.Record, err error) {
+	return processor.InterfaceFunc(func(_ context.Context, r record.Record) (_ record.Record, err error) {
 		defer func() {
 			if err != nil {
 				err = cerrors.Errorf("%s: %w", valueToKeyName, err)

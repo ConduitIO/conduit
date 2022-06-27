@@ -62,11 +62,11 @@ func init() {
 	processor.GlobalBuilderRegistry.MustRegister(filterFieldPayloadName, FilterFieldPayload)
 }
 
-func FilterFieldKey(config processor.Config) (processor.Processor, error) {
+func FilterFieldKey(config processor.Config) (processor.Interface, error) {
 	return filterField(filterFieldKeyName, recordKeyGetSetter{}, config)
 }
 
-func FilterFieldPayload(config processor.Config) (processor.Processor, error) {
+func FilterFieldPayload(config processor.Config) (processor.Interface, error) {
 	return filterField(filterFieldPayloadName, recordPayloadGetSetter{}, config)
 }
 
@@ -74,7 +74,7 @@ func filterField(
 	processorName string,
 	getSetter recordDataGetSetter,
 	config processor.Config,
-) (processor.Processor, error) {
+) (processor.Interface, error) {
 	if len(config.Settings) == 0 {
 		return nil, cerrors.New("must provide non-empty config")
 	}
@@ -102,7 +102,7 @@ func filterField(
 		filternull = "fail"
 	}
 
-	return processor.ProcessorFunc(func(_ context.Context, r record.Record) (record.Record, error) {
+	return processor.InterfaceFunc(func(_ context.Context, r record.Record) (record.Record, error) {
 		data := getSetter.Get(r)
 		switch d := data.(type) {
 		case record.RawData:
