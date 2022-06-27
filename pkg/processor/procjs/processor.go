@@ -118,7 +118,7 @@ func (p *Processor) Process(_ context.Context, in record.Record) (record.Record,
 		return record.Record{}, cerrors.Errorf("failed to execute JS processor function: %w", err)
 	}
 
-	out, err := p.toInternal(result)
+	out, err := p.toInternalRecord(result)
 	if err != nil {
 		return record.Record{}, cerrors.Errorf("failed to transform to internal record: %w", err)
 	}
@@ -151,7 +151,7 @@ func (p *Processor) toJSRecord(r record.Record) goja.Value {
 	return p.runtime.ToValue(&r)
 }
 
-func (p *Processor) toInternal(v goja.Value) (*record.Record, error) {
+func (p *Processor) toInternalRecord(v goja.Value) (*record.Record, error) {
 	r := v.Export()
 
 	switch v := r.(type) {
