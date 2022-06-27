@@ -12,15 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package txfbuiltin
+package procbuiltin
 
 import (
+	"context"
 	"reflect"
 	"strconv"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/processor"
-	"github.com/conduitio/conduit/pkg/processor/transform"
 	"github.com/conduitio/conduit/pkg/record"
 )
 
@@ -33,35 +33,35 @@ const (
 )
 
 func init() {
-	processor.GlobalBuilderRegistry.MustRegister(maskFieldKeyName, transform.NewBuilder(MaskFieldKey))
-	processor.GlobalBuilderRegistry.MustRegister(maskFieldPayloadName, transform.NewBuilder(MaskFieldPayload))
+	processor.GlobalBuilderRegistry.MustRegister(maskFieldKeyName, MaskFieldKey)
+	processor.GlobalBuilderRegistry.MustRegister(maskFieldPayloadName, MaskFieldPayload)
 }
 
-// MaskFieldKey builds the following transform:
+// MaskFieldKey builds the following processor:
 //  * If the key is raw and has a schema attached, replace the field with the
 //    zero value of the fields type.
 //  * If the key is raw and has no schema, return an error (not supported).
 //  * If the key is structured, replace the field with the zero value of the
 //    fields type.
-func MaskFieldKey(config transform.Config) (transform.Transform, error) {
+func MaskFieldKey(config processor.Config) (processor.Interface, error) {
 	return maskField(maskFieldKeyName, recordKeyGetSetter{}, config)
 }
 
-// MaskFieldPayload builds the following transformation:
+// MaskFieldPayload builds the following processor:
 //  * If the payload is raw and has a schema attached, replace the field with
 //    the zero value of the fields type.
 //  * If the payload is raw and has no schema, return an error (not supported).
 //  * If the payload is structured, replace the field with the zero value of the
 //    fields type.
-func MaskFieldPayload(config transform.Config) (transform.Transform, error) {
+func MaskFieldPayload(config processor.Config) (processor.Interface, error) {
 	return maskField(maskFieldPayloadName, recordPayloadGetSetter{}, config)
 }
 
 func maskField(
-	transformName string,
+	processorName string,
 	getSetter recordDataGetSetter,
-	config transform.Config,
-) (transform.Transform, error) {
+	config processor.Config,
+) (processor.Interface, error) {
 	var (
 		err         error
 		fieldName   string
@@ -69,19 +69,19 @@ func maskField(
 	)
 
 	if fieldName, err = getConfigFieldString(config, maskFieldConfigField); err != nil {
-		return nil, cerrors.Errorf("%s: %w", transformName, err)
+		return nil, cerrors.Errorf("%s: %w", processorName, err)
 	}
-	replacement = config[maskFieldConfigReplacement]
+	replacement = config.Settings[maskFieldConfigReplacement]
 
-	return func(r record.Record) (record.Record, error) {
+	return processor.InterfaceFunc(func(_ context.Context, r record.Record) (record.Record, error) {
 		data := getSetter.Get(r)
 
 		switch d := data.(type) {
 		case record.RawData:
 			if d.Schema == nil {
-				return record.Record{}, cerrors.Errorf("%s: schemaless raw data not supported", transformName)
+				return record.Record{}, cerrors.Errorf("%s: schemaless raw data not supported", processorName)
 			}
-			return record.Record{}, cerrors.Errorf("%s: data with schema not supported yet", transformName) // TODO
+			return record.Record{}, cerrors.Errorf("%s: data with schema not supported yet", processorName) // TODO
 		case record.StructuredData:
 			// TODO add support for nested fields
 			switch d[fieldName].(type) {
@@ -97,10 +97,10 @@ func maskField(
 				d[fieldName] = zeroValue
 			}
 		default:
-			return record.Record{}, cerrors.Errorf("%s: unexpected data type %T", transformName, data)
+			return record.Record{}, cerrors.Errorf("%s: unexpected data type %T", processorName, data)
 		}
 
 		r = getSetter.Set(r, data)
 		return r, nil
-	}, nil
+	}), nil
 }

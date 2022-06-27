@@ -12,55 +12,56 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package txfjs
+package procjs
 
 import (
 	"bytes"
+	"context"
+	"reflect"
 	"testing"
 	"time"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/dop251/goja"
 	"github.com/matryer/is"
 	"github.com/rs/zerolog"
 )
 
-func TestTransformer_Logger(t *testing.T) {
+func TestJSProcessor_Logger(t *testing.T) {
 	is := is.New(t)
+
 	var buf bytes.Buffer
 	logger := zerolog.New(&buf)
-	tr, err := NewTransformer(`
-	function transform(r) {
+	underTest, err := New(`
+	function process(r) {
 		logger.Info().Msg("Hello");
 		return r
 	}
 	`, logger)
-	is.NoErr(err)
+	is.NoErr(err) // expected no error when creating the JS processor
 
-	_, err = tr.Transform(record.Record{})
-	is.NoErr(err)
+	_, err = underTest.Process(context.Background(), record.Record{})
+	is.NoErr(err) // expected no error when processing record
 
-	is.Equal(`{"level":"info","message":"Hello"}`+"\n", buf.String())
+	is.Equal(`{"level":"info","message":"Hello"}`+"\n", buf.String()) // expected different log message
 }
 
-func TestTransformer_Transform_MissingEntrypoint(t *testing.T) {
+func TestJSProcessor_MissingEntrypoint(t *testing.T) {
 	is := is.New(t)
 
-	tr, err := NewTransformer(
+	underTest, err := New(
 		`logger.Debug("no entrypoint");`,
 		zerolog.Nop(),
 	)
 
-	if err == nil {
-		t.Error("expected error if transformer has no entrypoint")
-		return
-	}
-	is.Equal(`failed to get entrypoint function "transform"`, err.Error())
-	is.True(tr == nil)
+	is.True(err != nil)                                                                                   // expected error
+	is.Equal(`failed initializing JS function: failed to get entrypoint function "process"`, err.Error()) // expected different error message
+	is.True(underTest == nil)
 }
 
-func TestTransformer_Transform(t *testing.T) {
+func TestJSProcessor_Process(t *testing.T) {
 	type fields struct {
 		src string
 	}
@@ -76,11 +77,11 @@ func TestTransformer_Transform(t *testing.T) {
 	}{
 		{
 			// todo Once https://github.com/ConduitIO/conduit/issues/468 is implemented
-			// write more tests which validate transforms on structured records
+			// write more tests which validate processors on structured records
 			name: "change non-payload fields of structured record",
 			fields: fields{
 				src: `
-				function transform(record) {
+				function process(record) {
 					record.Position = "3";
 					record.Metadata["returned"] = "JS";
 					record.CreatedAt = new Date(Date.UTC(2021, 0, 2, 3, 4, 5, 6)).toISOString();
@@ -120,7 +121,7 @@ func TestTransformer_Transform(t *testing.T) {
 			name: "complete change incoming record with raw data",
 			fields: fields{
 				src: `
-				function transform(record) {
+				function process(record) {
 					record.Position = "3";
 					record.Metadata["returned"] = "JS";
 					record.CreatedAt = new Date(Date.UTC(2021, 0, 2, 3, 4, 5, 6)).toISOString();
@@ -151,7 +152,7 @@ func TestTransformer_Transform(t *testing.T) {
 			name: "return new record with raw data",
 			fields: fields{
 				src: `
-				function transform(record) {
+				function process(record) {
 					r = new Record();
 					r.Position = "3";
 					r.Metadata["returned"] = "JS";
@@ -175,73 +176,95 @@ func TestTransformer_Transform(t *testing.T) {
 			},
 			wantErr: nil,
 		},
-		{
-			name: "no return value",
-			fields: fields{
-				src: `
-				function transform() {
-					logger.Debug("no return value");
-				}`,
-			},
-			args: args{
-				record: record.Record{},
-			},
-			want:    record.Record{},
-			wantErr: cerrors.New("failed to transform to internal record: unexpected type, expected *record.Record, got <nil>"),
-		},
-		{
-			name: "null return value",
-			fields: fields{
-				src: `
-				function transform(record) {
-					return null;
-				}`,
-			},
-			args: args{
-				record: record.Record{},
-			},
-			want:    record.Record{},
-			wantErr: cerrors.New("failed to transform to internal record: unexpected type, expected *record.Record, got <nil>"),
-		},
-		{
-			// todo do we want to allow this and similar transforms?
-			name: "null key and null payload not allowed",
-			fields: fields{
-				src: `
-				function transform(record) {
-					record.Key = null;
-					record.Payload = null;
-					return record;
-				}`,
-			},
-			args: args{
-				record: record.Record{},
-			},
-			want:    record.Record{},
-			wantErr: cerrors.New("failed to transform to internal record: unexpected type, expected *record.Record, got <nil>"),
-		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			is := is.New(t)
 
-			tr, err := NewTransformer(tt.fields.src, zerolog.Nop())
-			is.NoErr(err)
+			underTest, err := New(tt.fields.src, zerolog.Nop())
+			is.NoErr(err) // expected no error when creating the JS processor
 
-			got, err := tr.Transform(tt.args.record)
-			if err != nil {
-				if tt.wantErr == nil || tt.wantErr.Error() != err.Error() {
-					t.Errorf("wanted error: %+v - got error: %+v", tt.wantErr, err)
-					return
-				}
+			got, err := underTest.Process(context.Background(), tt.args.record)
+			if tt.wantErr != nil {
+				is.Equal(tt.wantErr, err) // expected different error
+			} else {
+				is.NoErr(err) // expected no error
 			}
 
-			is.Equal(tt.want, got)
+			is.Equal(tt.want, got) // expected different record
 		})
 	}
 }
 
-func TestTransformer_DataTypes(t *testing.T) {
+func TestJSProcessor_Filtering(t *testing.T) {
+	testCases := []struct {
+		name   string
+		src    string
+		input  record.Record
+		filter bool
+	}{
+		{
+			name: "always skip",
+			src: `function process(r) {
+				return null;
+			}`,
+			input:  record.Record{},
+			filter: false,
+		},
+		{
+			name: "filter based on a field - positive",
+			src: `function process(r) {
+				if (r.Metadata["keepme"] != undefined) {
+					return r
+				}
+				return null;
+			}`,
+			input:  record.Record{Metadata: map[string]string{"keepme": "yes"}},
+			filter: true,
+		},
+		{
+			name: "filter out based on a field - negative",
+			src: `function process(r) {
+				if (r.Metadata["keepme"] != undefined) {
+					return r
+				}
+				return null;
+			}`,
+			input:  record.Record{Metadata: map[string]string{"foo": "bar"}},
+			filter: false,
+		},
+		{
+			name: "no return value",
+			src: `
+				function process(record) {
+					logger.Debug("no return value");
+				}`,
+			input:  record.Record{Metadata: map[string]string{"foo": "bar"}},
+			filter: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			is := is.New(t)
+
+			underTest, err := New(tc.src, zerolog.New(zerolog.NewConsoleWriter()))
+			is.NoErr(err) // expected no error when creating the JS processor
+
+			rec, err := underTest.Process(context.Background(), tc.input)
+			if tc.filter {
+				is.NoErr(err)           // expected no error for processed record
+				is.Equal(tc.input, rec) // expected different processed record
+			} else {
+				is.True(reflect.ValueOf(rec).IsZero())            // expected zero record
+				is.True(cerrors.Is(err, processor.ErrSkipRecord)) // expected ErrSkipRecord
+			}
+		})
+	}
+}
+
+func TestJSProcessor_DataTypes(t *testing.T) {
 	testCases := []struct {
 		name  string
 		src   string
@@ -250,7 +273,7 @@ func TestTransformer_DataTypes(t *testing.T) {
 	}{
 		{
 			name: "UTC date is used",
-			src: `function transform(record) {
+			src: `function process(record) {
         		record.CreatedAt = new Date(Date.UTC(2021, 0, 2, 3, 4, 5, 6)).toISOString();
 				return record;
 			}`,
@@ -261,7 +284,7 @@ func TestTransformer_DataTypes(t *testing.T) {
 		},
 		{
 			name: "position from string",
-			src: `function transform(record) {
+			src: `function process(record) {
 				record.Position = "foobar";
 				return record;
 			}`,
@@ -272,7 +295,7 @@ func TestTransformer_DataTypes(t *testing.T) {
 		},
 		{
 			name: "raw payload, data from string",
-			src: `function transform(record) {
+			src: `function process(record) {
 				record.Payload = new RawData();
 				record.Payload.Raw = "foobar";
 				return record;
@@ -284,7 +307,7 @@ func TestTransformer_DataTypes(t *testing.T) {
 		},
 		{
 			name: "raw key, data from string",
-			src: `function transform(record) {
+			src: `function process(record) {
 				record.Key = new RawData();
 				record.Key.Raw = "foobar";
 				return record;
@@ -296,7 +319,7 @@ func TestTransformer_DataTypes(t *testing.T) {
 		},
 		{
 			name: "update metadata",
-			src: `function transform(record) {
+			src: `function process(record) {
 				record.Metadata["new_key"] = "new_value"
 				delete record.Metadata.remove_me;
 				return record;
@@ -321,49 +344,49 @@ func TestTransformer_DataTypes(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			is := is.New(t)
 
-			tr, err := NewTransformer(tc.src, zerolog.Nop())
-			is.NoErr(err)
+			underTest, err := New(tc.src, zerolog.Nop())
+			is.NoErr(err) // expected no error when creating the JS processor
 
-			got, err := tr.Transform(tc.input)
-			is.NoErr(err)
-			is.Equal(tc.want, got)
+			got, err := underTest.Process(context.Background(), tc.input)
+			is.NoErr(err)          // expected no error when processing record
+			is.Equal(tc.want, got) // expected different record
 		})
 	}
 }
 
-func TestTransformer_JavaScriptException(t *testing.T) {
+func TestJSProcessor_JavaScriptException(t *testing.T) {
 	is := is.New(t)
 
-	src := `function transform(record) {
+	src := `function process(record) {
 		var m;
 		m.test
 	}`
-	tr, err := NewTransformer(src, zerolog.Nop())
-	is.NoErr(err)
+	underTest, err := New(src, zerolog.Nop())
+	is.NoErr(err) // expected no error when creating the JS processor
 
 	r := record.Record{
 		Key:     record.RawData{Raw: []byte("test key")},
 		Payload: record.RawData{Raw: []byte("test payload")},
 	}
 
-	got, err := tr.Transform(r)
-	is.True(err != nil)
+	got, err := underTest.Process(context.Background(), r)
+	is.True(err != nil) // expected error
 	target := &goja.Exception{}
-	is.True(cerrors.As(err, &target))
-	is.Equal(record.Record{}, got)
+	is.True(cerrors.As(err, &target)) // expected a goja.Exception
+	is.Equal(record.Record{}, got)    // expected a zero record
 }
 
-func TestTransformer_BrokenJSCode(t *testing.T) {
+func TestJSProcessor_BrokenJSCode(t *testing.T) {
 	is := is.New(t)
 
 	src := `function {`
-	_, err := NewTransformer(src, zerolog.Nop())
-	is.True(err != nil)
+	_, err := New(src, zerolog.Nop())
+	is.True(err != nil) // expected error for invalid JS code
 	target := &goja.CompilerSyntaxError{}
-	is.True(cerrors.As(err, &target))
+	is.True(cerrors.As(err, &target)) // expected a goja.CompilerSyntaxError
 }
 
-func TestTransformer_ScriptWithMultipleFunctions(t *testing.T) {
+func TestJSProcessor_ScriptWithMultipleFunctions(t *testing.T) {
 	is := is.New(t)
 
 	src := `
@@ -371,13 +394,13 @@ func TestTransformer_ScriptWithMultipleFunctions(t *testing.T) {
 			return "updated_value";
 		}
 		
-		function transform(record) {
+		function process(record) {
 			record.Metadata["updated_key"] = getValue()
 			return record;
 		}
 	`
-	tr, err := NewTransformer(src, zerolog.Nop())
-	is.NoErr(err)
+	underTest, err := New(src, zerolog.Nop())
+	is.NoErr(err) // expected no error when creating the JS processor
 
 	r := record.Record{
 		Metadata: map[string]string{
@@ -385,8 +408,8 @@ func TestTransformer_ScriptWithMultipleFunctions(t *testing.T) {
 		},
 	}
 
-	got, err := tr.Transform(r)
-	is.NoErr(err)
+	got, err := underTest.Process(context.Background(), r)
+	is.NoErr(err) // expected no error when processing record
 	is.Equal(
 		record.Record{
 			Metadata: map[string]string{
@@ -395,5 +418,5 @@ func TestTransformer_ScriptWithMultipleFunctions(t *testing.T) {
 			},
 		},
 		got,
-	)
+	) // expected different record
 }
