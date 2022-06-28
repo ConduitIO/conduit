@@ -16,7 +16,6 @@ package stream
 
 import (
 	"context"
-	"errors"
 	"math/rand"
 	"strconv"
 	"sync"
@@ -25,6 +24,7 @@ import (
 
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/connector/mock"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/golang/mock/gomock"
 	"github.com/matryer/is"
@@ -110,7 +110,7 @@ func TestSourceAckerNode_FailedAck(t *testing.T) {
 	expectedCalls := helper.expectAcks(ctx, messages[:500], src)
 	gomock.InOrder(expectedCalls...) // enforce order of acks
 	// the 500th message should be acked unsuccessfully
-	wantErr := errors.New("test error")
+	wantErr := cerrors.New("test error")
 	src.EXPECT().
 		Ack(ctx, messages[500].Record.Position).
 		Return(wantErr).
@@ -170,7 +170,7 @@ func TestSourceAckerNode_FailedNack(t *testing.T) {
 		},
 	)
 
-	wantErr := errors.New("test error")
+	wantErr := cerrors.New("test error")
 	err := messages[500].Nack(wantErr)
 	is.True(err != nil) // expected the 500th message nack to fail with specific error
 
