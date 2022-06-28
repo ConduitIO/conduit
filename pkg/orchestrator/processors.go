@@ -29,7 +29,6 @@ type ProcessorOrchestrator base
 func (p *ProcessorOrchestrator) Create(
 	ctx context.Context,
 	name string,
-	t processor.Type,
 	parent processor.Parent,
 	cfg processor.Config,
 ) (*processor.Instance, error) {
@@ -52,7 +51,7 @@ func (p *ProcessorOrchestrator) Create(
 	}
 
 	// create processor and add to pipeline or connector
-	proc, err := p.processors.Create(ctx, uuid.NewString(), name, t, parent, cfg)
+	proc, err := p.processors.Create(ctx, uuid.NewString(), name, parent, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -172,7 +171,7 @@ func (p *ProcessorOrchestrator) Delete(ctx context.Context, id string) error {
 		return err
 	}
 	r.Append(func() error {
-		_, err = p.processors.Create(ctx, id, proc.Name, processor.TypeTransform, proc.Parent, proc.Config)
+		_, err = p.processors.Create(ctx, id, proc.Name, proc.Parent, proc.Config)
 		return err
 	})
 

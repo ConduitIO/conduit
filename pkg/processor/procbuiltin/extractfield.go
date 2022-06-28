@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package txfbuiltin
+package procbuiltin
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/processor"
-	"github.com/conduitio/conduit/pkg/processor/transform"
 	"github.com/conduitio/conduit/pkg/record"
 )
 
@@ -31,58 +31,58 @@ const (
 )
 
 func init() {
-	processor.GlobalBuilderRegistry.MustRegister(extractFieldKeyName, transform.NewBuilder(ExtractFieldKey))
-	processor.GlobalBuilderRegistry.MustRegister(extractFieldPayloadName, transform.NewBuilder(ExtractFieldPayload))
+	processor.GlobalBuilderRegistry.MustRegister(extractFieldKeyName, ExtractFieldKey)
+	processor.GlobalBuilderRegistry.MustRegister(extractFieldPayloadName, ExtractFieldPayload)
 }
 
-// ExtractFieldKey builds the following transform:
+// ExtractFieldKey builds the following processor:
 //  * If the key is raw and has a schema attached, extract the field and use it
 //    to replace the entire key.
 //  * If the key is raw and has no schema, return an error (not supported).
 //  * If the key is structured, extract the field and use it to replace the
 //    entire key.
-func ExtractFieldKey(config transform.Config) (transform.Transform, error) {
+func ExtractFieldKey(config processor.Config) (processor.Interface, error) {
 	return extractField(extractFieldKeyName, recordKeyGetSetter{}, config)
 }
 
-// ExtractFieldPayload builds the following transformation:
+// ExtractFieldPayload builds the following processor:
 //  * If the payload is raw and has a schema attached, extract the field and use
 //    it to replace the entire payload.
 //  * If the payload is raw and has no schema, return an error (not supported).
 //  * If the payload is structured, extract the field and use it to replace the
 //    entire payload.
-func ExtractFieldPayload(config transform.Config) (transform.Transform, error) {
+func ExtractFieldPayload(config processor.Config) (processor.Interface, error) {
 	return extractField(extractFieldPayloadName, recordPayloadGetSetter{}, config)
 }
 
 func extractField(
-	transformName string,
+	processorName string,
 	getSetter recordDataGetSetter,
-	config transform.Config,
-) (transform.Transform, error) {
+	config processor.Config,
+) (processor.Interface, error) {
 	var (
 		err       error
 		fieldName string
 	)
 
 	if fieldName, err = getConfigFieldString(config, extractFieldConfigField); err != nil {
-		return nil, cerrors.Errorf("%s: %w", transformName, err)
+		return nil, cerrors.Errorf("%s: %w", processorName, err)
 	}
 
-	return func(r record.Record) (record.Record, error) {
+	return processor.InterfaceFunc(func(_ context.Context, r record.Record) (record.Record, error) {
 		data := getSetter.Get(r)
 
 		switch d := data.(type) {
 		case record.RawData:
 			if d.Schema == nil {
-				return record.Record{}, cerrors.Errorf("%s: schemaless raw data not supported", transformName)
+				return record.Record{}, cerrors.Errorf("%s: schemaless raw data not supported", processorName)
 			}
-			return record.Record{}, cerrors.Errorf("%s: data with schema not supported yet", transformName) // TODO
+			return record.Record{}, cerrors.Errorf("%s: data with schema not supported yet", processorName) // TODO
 		case record.StructuredData:
 			// TODO add support for nested fields
 			extractedField := d[fieldName]
 			if extractedField == nil {
-				return record.Record{}, cerrors.Errorf("%s: field %q not found", transformName, fieldName)
+				return record.Record{}, cerrors.Errorf("%s: field %q not found", processorName, fieldName)
 			}
 
 			switch v := extractedField.(type) {
@@ -95,10 +95,10 @@ func extractField(
 				data = record.RawData{Raw: []byte(fmt.Sprint(v))}
 			}
 		default:
-			return record.Record{}, cerrors.Errorf("%s: unexpected data type %T", transformName, data)
+			return record.Record{}, cerrors.Errorf("%s: unexpected data type %T", processorName, data)
 		}
 
 		r = getSetter.Set(r, data)
 		return r, nil
-	}, nil
+	}), nil
 }
