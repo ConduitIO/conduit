@@ -15,58 +15,53 @@
 package conduit
 
 import (
-	"bytes"
 	"io/ioutil"
 	"path/filepath"
 	"testing"
 
-	"github.com/conduitio/conduit/pkg/foundation/assert"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/matryer/is"
 )
 
-func Test_Parser(t *testing.T) {
-	filename, err := filepath.Abs("./test/pipelines1.yml")
+func Test_Parser_Success(t *testing.T) {
+	is := is.New(t)
+	filename, err := filepath.Abs("./test/pipelines1-success.yml")
 	if err != nil {
 		t.Error(err)
 	}
-
-	want := PipelinesInfo{
+	want := PipelinesConfig{
 		Version: "1.0",
-		Pipelines: map[string]PipelineInfo{
+		Pipelines: map[string]PipelineConfig{
 			"pipeline1": {
-				Status: "running",
-				Config: PipelineConfig{"pipeline1", "desc1"},
-				Processors: ProcessorInfo{
+				Status:      "running",
+				Name:        "pipeline1",
+				Description: "desc1",
+				Processors: ProcessorConfig{
 					"pipeline1proc1": {
 						Name: "pipeline processor",
 						Type: "transform",
-						Config: ProcessorConfig{
-							Settings: map[string]string{
-								"additionalProp1": "string",
-								"additionalProp2": "string",
-							},
+						Settings: map[string]string{
+							"additionalProp1": "string",
+							"additionalProp2": "string",
 						},
 					},
 				},
-				Connectors: ConnectorInfo{
+				Connectors: ConnectorConfig{
 					"con1": {
 						Type:   "source",
 						Plugin: "builtin:s3",
-						Config: ConnectorConfig{
-							Name: "s3-source",
-							Settings: map[string]string{
-								"aws.region": "us-east-1",
-								"aws.bucket": "my-bucket",
-							},
+						Name:   "s3-source",
+						Settings: map[string]string{
+							"aws.region": "us-east-1",
+							"aws.bucket": "my-bucket",
 						},
-						Processors: ProcessorInfo{
+						Processors: ProcessorConfig{
 							"proc1": {
 								Name: "connector processor",
 								Type: "transform",
-								Config: ProcessorConfig{
-									Settings: map[string]string{
-										"additionalProp1": "string",
-										"additionalProp2": "string",
-									},
+								Settings: map[string]string{
+									"additionalProp1": "string",
+									"additionalProp2": "string",
 								},
 							},
 						},
@@ -74,27 +69,24 @@ func Test_Parser(t *testing.T) {
 				},
 			},
 			"pipeline2": {
-				Status: "stopped",
-				Config: PipelineConfig{"pipeline2", "desc2"},
-				Connectors: ConnectorInfo{
+				Status:      "stopped",
+				Name:        "pipeline2",
+				Description: "desc2",
+				Connectors: ConnectorConfig{
 					"con2": {
 						Type:   "destination",
 						Plugin: "builtin:file",
-						Config: ConnectorConfig{
-							Name: "file-dest",
-							Settings: map[string]string{
-								"path": "my/path",
-							},
+						Name:   "file-dest",
+						Settings: map[string]string{
+							"path": "my/path",
 						},
-						Processors: ProcessorInfo{
+						Processors: ProcessorConfig{
 							"con2proc1": {
 								Name: "connector processor",
 								Type: "transform",
-								Config: ProcessorConfig{
-									Settings: map[string]string{
-										"additionalProp1": "string",
-										"additionalProp2": "string",
-									},
+								Settings: map[string]string{
+									"additionalProp1": "string",
+									"additionalProp2": "string",
 								},
 							},
 						},
@@ -102,8 +94,9 @@ func Test_Parser(t *testing.T) {
 				},
 			},
 			"pipeline3": {
-				Status: "stopped",
-				Config: PipelineConfig{"pipeline3", "empty"},
+				Status:      "stopped",
+				Name:        "pipeline3",
+				Description: "empty",
 			},
 		},
 	}
@@ -113,13 +106,14 @@ func Test_Parser(t *testing.T) {
 		t.Error(err)
 	}
 
-	got, err := Parse(bytes.NewReader(data))
-	assert.Nil(t, err)
-	assert.Equal(t, want, got)
+	got, err := Parse(data)
+	is.NoErr(err)
+	is.Equal(want, got)
 }
 
 func Test_Parser_Duplicate_Pipeline_Id(t *testing.T) {
-	filename, err := filepath.Abs("./test/pipelines2.yml")
+	is := is.New(t)
+	filename, err := filepath.Abs("./test/pipelines2-duplicate-pipeline-id.yml")
 	if err != nil {
 		t.Error(err)
 	}
@@ -129,13 +123,14 @@ func Test_Parser_Duplicate_Pipeline_Id(t *testing.T) {
 		t.Error(err)
 	}
 
-	p, err := Parse(bytes.NewReader(data))
-	assert.Error(t, err)
-	assert.Equal(t, p, PipelinesInfo{})
+	p, err := Parse(data)
+	is.True(err != nil)
+	is.Equal(p, PipelinesConfig{})
 }
 
-func Test_Parser_Invalid_Version(t *testing.T) {
-	filename, err := filepath.Abs("./test/pipelines3.yml")
+func Test_Parser_Unsupported_Version(t *testing.T) {
+	is := is.New(t)
+	filename, err := filepath.Abs("./test/pipelines3-unsupported-version.yml")
 	if err != nil {
 		t.Error(err)
 	}
@@ -145,7 +140,60 @@ func Test_Parser_Invalid_Version(t *testing.T) {
 		t.Error(err)
 	}
 
-	p, err := Parse(bytes.NewReader(data))
-	assert.Error(t, err)
-	assert.Equal(t, p, PipelinesInfo{})
+	p, err := Parse(data)
+	is.True(err != nil)
+	is.Equal(cerrors.Is(err, ErrUnsupportedVersion), true)
+	is.Equal(p, PipelinesConfig{})
+}
+
+func Test_Parser_Missing_Version(t *testing.T) {
+	is := is.New(t)
+	filename, err := filepath.Abs("./test/pipelines4-missing-version.yml")
+	if err != nil {
+		t.Error(err)
+	}
+
+	data, err := ioutil.ReadFile(filename)
+	if err != nil {
+		t.Error(err)
+	}
+
+	p, err := Parse(data)
+	is.True(err != nil)
+	is.Equal(cerrors.Is(err, ErrUnsupportedVersion), true)
+	is.Equal(p, PipelinesConfig{})
+}
+
+func Test_Parser_Empty_File(t *testing.T) {
+	is := is.New(t)
+	filename, err := filepath.Abs("./test/pipelines5-empty.yml")
+	if err != nil {
+		t.Error(err)
+	}
+
+	data, err := ioutil.ReadFile(filename)
+	if err != nil {
+		t.Error(err)
+	}
+
+	p, err := Parse(data)
+	is.NoErr(err)
+	is.Equal(p, PipelinesConfig{})
+}
+
+func Test_Parser_Invalid_Yaml(t *testing.T) {
+	is := is.New(t)
+	filename, err := filepath.Abs("./test/pipelines6-invalid-yaml.yml")
+	if err != nil {
+		t.Error(err)
+	}
+
+	data, err := ioutil.ReadFile(filename)
+	if err != nil {
+		t.Error(err)
+	}
+
+	p, err := Parse(data)
+	is.True(err != nil)
+	is.Equal(p, PipelinesConfig{})
 }

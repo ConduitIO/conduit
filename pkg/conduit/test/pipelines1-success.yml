@@ -3,62 +3,54 @@ version: 1.0
 pipelines:
   pipeline1:
     status: running
-    config:
-      name: pipeline1
-      description: desc1
+    name: pipeline1
+    description: desc1
     connectors:
       con1:
         type: source
         plugin: builtin:s3
-        config:
-          name: s3-source
-          settings:
+        name: s3-source
+        settings:
             aws.region: us-east-1
             aws.bucket: my-bucket
         processors:
           proc1:
             name: connector processor
             type: transform
-            config:
-              settings:
-                additionalProp1: string
-                additionalProp2: string
+            settings:
+              additionalProp1: string
+              additionalProp2: string
     processors:
       pipeline1proc1:
         name: pipeline processor
         type: transform
-        config:
-          settings:
-            additionalProp1: string
-            additionalProp2: string
+        settings:
+          additionalProp1: string
+          additionalProp2: string
 
 ---
 version: 1.0
 pipelines:
   pipeline2:
     status: stopped
-    config:
-      name: pipeline2
-      description: desc2
+    name: pipeline2
+    description: desc2
     connectors:
       con2:
         type: destination
         plugin: builtin:file
-        config:
-          name: file-dest
-          settings:
-            path: my/path
+        name: file-dest
+        settings:
+          path: my/path
         processors:
           con2proc1:
             name: connector processor
             type: transform
-            config:
-              settings:
-                additionalProp1: string
-                additionalProp2: string
+            settings:
+              additionalProp1: string
+              additionalProp2: string
 
   pipeline3:
     status: stopped
-    config:
-      name: pipeline3
-      description: empty
+    name: pipeline3
+    description: empty

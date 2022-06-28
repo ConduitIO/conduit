@@ -15,6 +15,7 @@
 package conduit
 
 import (
+	"bytes"
 	"io"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -23,84 +24,79 @@ import (
 
 const ParserVersion = "1.0"
 
-type ProcessorConfig struct {
-	Settings map[string]string `yaml:"settings"`
-}
+var ErrUnsupportedVersion = cerrors.New("unsupported parser version")
 
-type ProcessorInfo map[string]struct {
-	Name   string          `yaml:"name"`
-	Type   string          `yaml:"type"`
-	Config ProcessorConfig `yaml:"config"`
-}
-
-type ConnectorConfig struct {
+type ProcessorConfig map[string]struct {
 	Name     string            `yaml:"name"`
+	Type     string            `yaml:"type"`
 	Settings map[string]string `yaml:"settings"`
 }
 
-type ConnectorInfo map[string]struct {
-	Type       string          `yaml:"type"`
-	Plugin     string          `yaml:"plugin"`
-	Config     ConnectorConfig `yaml:"config"`
-	Processors ProcessorInfo   `yaml:"processors,omitempty"`
+type ConnectorConfig map[string]struct {
+	Type       string            `yaml:"type"`
+	Plugin     string            `yaml:"plugin"`
+	Name       string            `yaml:"name"`
+	Settings   map[string]string `yaml:"settings"`
+	Processors ProcessorConfig   `yaml:"processors,omitempty"`
 }
 
 type PipelineConfig struct {
-	Name        string `yaml:"name"`
-	Description string `yaml:"description"`
+	Status      string          `yaml:"status"`
+	Name        string          `yaml:"name"`
+	Description string          `yaml:"description"`
+	Connectors  ConnectorConfig `yaml:"connectors,omitempty"`
+	Processors  ProcessorConfig `yaml:"processors,omitempty"`
 }
 
-type PipelineInfo struct {
-	Status     string         `yaml:"status"`
-	Config     PipelineConfig `yaml:"config"`
-	Connectors ConnectorInfo  `yaml:"connectors,omitempty"`
-	Processors ProcessorInfo  `yaml:"processors,omitempty"`
+type PipelinesConfig struct {
+	Version   string                    `yaml:"version"`
+	Pipelines map[string]PipelineConfig `yaml:"pipelines"`
 }
 
-type PipelinesInfo struct {
-	Version   string                  `yaml:"version"`
-	Pipelines map[string]PipelineInfo `yaml:"pipelines"`
-}
+func Parse(data []byte) (PipelinesConfig, error) {
+	dec := yaml.NewDecoder(bytes.NewReader(data))
 
-func Parse(data io.Reader) (PipelinesInfo, error) {
-	dec := yaml.NewDecoder(data)
-
-	var docs []PipelinesInfo
+	var docs []PipelinesConfig
 	for {
-		var doc PipelinesInfo
+		var doc PipelinesConfig
 		err := dec.Decode(&doc)
-		if err != nil && cerrors.Is(err, io.EOF) {
+		if cerrors.Is(err, io.EOF) {
 			break
 		} else if err != nil {
-			return PipelinesInfo{}, cerrors.Errorf("parsing error: %w", err)
+			return PipelinesConfig{}, cerrors.Errorf("parsing error: %w", err)
 		}
 		// check if version is empty
 		if doc.Version == "" {
-			return PipelinesInfo{}, cerrors.New("version field is not specified")
+			return PipelinesConfig{}, cerrors.Errorf("version is empty: %w", ErrUnsupportedVersion)
 		}
 		// check if version is invalid
 		if doc.Version != "1" && doc.Version != ParserVersion {
-			return PipelinesInfo{}, cerrors.Errorf("invalid version : %s , try version %s instead", doc.Version, ParserVersion)
+			return PipelinesConfig{}, cerrors.Errorf("version %s is not supported : %w", doc.Version, ErrUnsupportedVersion)
 		}
 		docs = append(docs, doc)
 	}
 
+	// empty file
+	if len(docs) == 0 {
+		return PipelinesConfig{}, nil
+	}
+
 	merged, err := mergeMaps(docs)
 	if err != nil {
-		return PipelinesInfo{}, err
+		return PipelinesConfig{}, err
 	}
 	return merged, nil
 }
 
-// mergeMaps takes an array of PipelinesInfo and merges them into one map
-func mergeMaps(arr []PipelinesInfo) (PipelinesInfo, error) {
-	var mp PipelinesInfo
-	pipelines := make(map[string]PipelineInfo, 0)
+// mergeMaps takes an array of PipelinesConfig and merges them into one map
+func mergeMaps(arr []PipelinesConfig) (PipelinesConfig, error) {
+	var mp PipelinesConfig
+	pipelines := make(map[string]PipelineConfig, 0)
 
 	for _, config := range arr {
 		for k, v := range config.Pipelines {
 			if _, ok := pipelines[k]; ok {
-				return PipelinesInfo{}, cerrors.Errorf("found a duplicated pipeline id: %s", k)
+				return PipelinesConfig{}, cerrors.Errorf("found a duplicated pipeline id: %s", k)
 			}
 			pipelines[k] = v
 		}
