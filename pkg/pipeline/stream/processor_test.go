@@ -44,7 +44,7 @@ func TestProcessorNode_Success(t *testing.T) {
 	processor := mock.NewProcessor(ctrl)
 	processor.
 		EXPECT().
-		Execute(ctx, wantRec).
+		Process(ctx, wantRec).
 		DoAndReturn(func(_ context.Context, got record.Record) (record.Record, error) {
 			got.Position = newPosition
 			return got, nil
@@ -97,7 +97,7 @@ func TestProcessorNode_ErrorWithoutNackHandler(t *testing.T) {
 
 	wantErr := cerrors.New("something bad happened")
 	processor := mock.NewProcessor(ctrl)
-	processor.EXPECT().Execute(ctx, gomock.Any()).Return(record.Record{}, wantErr)
+	processor.EXPECT().Process(ctx, gomock.Any()).Return(record.Record{}, wantErr)
 
 	n := ProcessorNode{
 		Name:           "test",
@@ -117,7 +117,7 @@ func TestProcessorNode_ErrorWithoutNackHandler(t *testing.T) {
 	}()
 
 	err := n.Run(ctx)
-	assert.True(t, cerrors.Is(err, wantErr), "expected underlying error to be the transform error")
+	assert.True(t, cerrors.Is(err, wantErr), "expected underlying error to be the processor error")
 
 	// after the node stops the out channel should be closed
 	_, ok := <-out
@@ -130,7 +130,7 @@ func TestProcessorNode_ErrorWithNackHandler(t *testing.T) {
 
 	wantErr := cerrors.New("something bad happened")
 	processor := mock.NewProcessor(ctrl)
-	processor.EXPECT().Execute(ctx, gomock.Any()).Return(record.Record{}, wantErr)
+	processor.EXPECT().Process(ctx, gomock.Any()).Return(record.Record{}, wantErr)
 
 	n := ProcessorNode{
 		Name:           "test",
@@ -144,7 +144,7 @@ func TestProcessorNode_ErrorWithNackHandler(t *testing.T) {
 
 	msg := &Message{Ctx: ctx}
 	msg.RegisterNackHandler(func(msg *Message, err error) error {
-		assert.True(t, cerrors.Is(err, wantErr), "expected underlying error to be the transform error")
+		assert.True(t, cerrors.Is(err, wantErr), "expected underlying error to be the processor error")
 		return nil // the error should be regarded as handled
 	})
 	go func() {
@@ -168,7 +168,7 @@ func TestProcessorNode_Skip(t *testing.T) {
 
 	// create a dummy processor
 	proc := mock.NewProcessor(ctrl)
-	proc.EXPECT().Execute(ctx, gomock.Any()).Return(record.Record{}, processor.ErrSkipRecord)
+	proc.EXPECT().Process(ctx, gomock.Any()).Return(record.Record{}, processor.ErrSkipRecord)
 
 	n := ProcessorNode{
 		Name:           "test",

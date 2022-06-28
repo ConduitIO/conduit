@@ -12,17 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package txfbuiltin
+package procbuiltin
 
 import (
 	"bytes"
-
-	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/processor"
-	"github.com/conduitio/conduit/pkg/processor/transform"
-	"github.com/conduitio/conduit/pkg/record"
+	"context"
 
 	"github.com/antchfx/jsonquery"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/processor"
+	"github.com/conduitio/conduit/pkg/record"
 )
 
 const (
@@ -30,7 +29,7 @@ const (
 	filterFieldKeyName     = "filterfieldkey"
 	filterFieldPayloadName = "filterfieldpayload"
 
-	// Config Fields for each Transform
+	// Config Fields for each processor
 	filterFieldConfigType          = "type"
 	filterFieldConfigCondition     = "condition"
 	filterFieldConfigMissingOrNull = "missingornull"
@@ -50,7 +49,7 @@ const (
 // * If `condition` doesn't match, and `exists` matches nothing too, then it
 // will handle the record as `missingornull` specifies.
 //
-// example transform config with noted possible values
+// example processor config with noted possible values
 // {
 // 	"type": "include", // [include, exclude]
 // 	"condition":"<xpath expression>",
@@ -58,34 +57,26 @@ const (
 // 	"missingornull": "fail" // [fail, include, exclude]
 // }
 
-var (
-	// ErrDropRecord is returned when a Record is not being forwarded.
-	ErrDropRecord = cerrors.New("ErrDropRecord")
-)
-
 func init() {
-	processor.GlobalBuilderRegistry.MustRegister(filterFieldKeyName, transform.NewBuilder(FilterFieldKey))
-	processor.GlobalBuilderRegistry.MustRegister(filterFieldPayloadName, transform.NewBuilder(FilterFieldPayload))
+	processor.GlobalBuilderRegistry.MustRegister(filterFieldKeyName, FilterFieldKey)
+	processor.GlobalBuilderRegistry.MustRegister(filterFieldPayloadName, FilterFieldPayload)
 }
 
-func FilterFieldKey(config transform.Config) (transform.Transform, error) {
+func FilterFieldKey(config processor.Config) (processor.Interface, error) {
 	return filterField(filterFieldKeyName, recordKeyGetSetter{}, config)
 }
 
-func FilterFieldPayload(config transform.Config) (transform.Transform, error) {
+func FilterFieldPayload(config processor.Config) (processor.Interface, error) {
 	return filterField(filterFieldPayloadName, recordPayloadGetSetter{}, config)
 }
 
 func filterField(
-	transformName string,
+	processorName string,
 	getSetter recordDataGetSetter,
-	config transform.Config,
-) (transform.Transform, error) {
-	if config == nil {
-		return nil, cerrors.New("must provide a transform config")
-	}
-	if len(config) == 0 {
-		return nil, cerrors.New("must provide non-empty transform config")
+	config processor.Config,
+) (processor.Interface, error) {
+	if len(config.Settings) == 0 {
+		return nil, cerrors.New("must provide non-empty config")
 	}
 	var (
 		filtertype      string
@@ -95,10 +86,10 @@ func filterField(
 	)
 
 	// assign the values from our config
-	filtertype = config[filterFieldConfigType]
-	filtercondition = config[filterFieldConfigCondition]
-	filternull = config[filterFieldConfigMissingOrNull]
-	filterexists = config[filterFieldConfigExists]
+	filtertype = config.Settings[filterFieldConfigType]
+	filtercondition = config.Settings[filterFieldConfigCondition]
+	filternull = config.Settings[filterFieldConfigMissingOrNull]
+	filterexists = config.Settings[filterFieldConfigExists]
 
 	if filtertype == "" {
 		return nil, cerrors.New("must specify include or exclude filter type")
@@ -111,14 +102,14 @@ func filterField(
 		filternull = "fail"
 	}
 
-	return func(r record.Record) (record.Record, error) {
+	return processor.InterfaceFunc(func(_ context.Context, r record.Record) (record.Record, error) {
 		data := getSetter.Get(r)
 		switch d := data.(type) {
 		case record.RawData:
 			if d.Schema == nil {
-				return record.Record{}, cerrors.Errorf("%s: schemaless raw data not supported", transformName)
+				return record.Record{}, cerrors.Errorf("%s: schemaless raw data not supported", processorName)
 			}
-			return record.Record{}, cerrors.Errorf("%s: data with schema not supported yet", transformName) // TODO
+			return record.Record{}, cerrors.Errorf("%s: data with schema not supported yet", processorName) // TODO
 		case record.StructuredData:
 			doc, err := jsonquery.Parse(bytes.NewReader(d.Bytes()))
 			if err != nil {
@@ -136,14 +127,14 @@ func filterField(
 						case "include":
 							return r, nil
 						case "exclude":
-							return record.Record{}, ErrDropRecord
+							return record.Record{}, processor.ErrSkipRecord
 						case "fail":
 							// fail should fail loudly with an existence error
 							return record.Record{}, cerrors.Errorf("field does not exist: %s", filterexists)
 						}
 					}
 				}
-				return record.Record{}, ErrDropRecord
+				return record.Record{}, processor.ErrSkipRecord
 			}
 
 			// handle matches based on filtertype as normal
@@ -151,13 +142,13 @@ func filterField(
 			case "include":
 				return r, nil
 			case "exclude":
-				return record.Record{}, ErrDropRecord
+				return record.Record{}, processor.ErrSkipRecord
 			default:
 				return record.Record{}, cerrors.Errorf("invalid filtertype: %s", filtertype)
 			}
 
 		default:
-			return record.Record{}, cerrors.Errorf("%s: unexpected data type %T", transformName, data)
+			return record.Record{}, cerrors.Errorf("%s: unexpected data type %T", processorName, data)
 		}
-	}, nil
+	}), nil
 }

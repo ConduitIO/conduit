@@ -12,21 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package txfbuiltin
+package procbuiltin
 
 import (
+	"context"
 	"reflect"
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/foundation/assert"
-	"github.com/conduitio/conduit/pkg/processor/transform"
+	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/conduitio/conduit/pkg/record/schema/mock"
 )
 
 func TestValueToKey_Build(t *testing.T) {
 	type args struct {
-		config transform.Config
+		config processor.Config
 	}
 	tests := []struct {
 		name    string
@@ -34,19 +35,25 @@ func TestValueToKey_Build(t *testing.T) {
 		wantErr bool
 	}{{
 		name:    "nil config returns error",
-		args:    args{config: nil},
+		args:    args{config: processor.Config{}},
 		wantErr: true,
 	}, {
-		name:    "empty config returns error",
-		args:    args{config: map[string]string{}},
+		name: "empty config returns error",
+		args: args{config: processor.Config{
+			Settings: map[string]string{},
+		}},
 		wantErr: true,
 	}, {
-		name:    "empty field returns error",
-		args:    args{config: map[string]string{valueToKeyConfigFields: ""}},
+		name: "empty field returns error",
+		args: args{config: processor.Config{
+			Settings: map[string]string{valueToKeyConfigFields: ""},
+		}},
 		wantErr: true,
 	}, {
-		name:    "non-empty field returns transform",
-		args:    args{config: map[string]string{valueToKeyConfigFields: "foo"}},
+		name: "non-empty field returns processor",
+		args: args{config: processor.Config{
+			Settings: map[string]string{valueToKeyConfigFields: "foo"},
+		}},
 		wantErr: false,
 	}}
 	for _, tt := range tests {
@@ -60,19 +67,21 @@ func TestValueToKey_Build(t *testing.T) {
 	}
 }
 
-func TestValueToKey_Transform(t *testing.T) {
+func TestValueToKey_Process(t *testing.T) {
 	type args struct {
 		r record.Record
 	}
 	tests := []struct {
 		name    string
-		config  transform.Config
+		config  processor.Config
 		args    args
 		want    record.Record
 		wantErr bool
 	}{{
-		name:   "structured data",
-		config: map[string]string{valueToKeyConfigFields: "foo"},
+		name: "structured data",
+		config: processor.Config{
+			Settings: map[string]string{valueToKeyConfigFields: "foo"},
+		},
 		args: args{r: record.Record{
 			Payload: record.StructuredData{
 				"foo": 123,
@@ -90,8 +99,10 @@ func TestValueToKey_Transform(t *testing.T) {
 		},
 		wantErr: false,
 	}, {
-		name:   "raw data without schema",
-		config: map[string]string{valueToKeyConfigFields: "foo"},
+		name: "raw data without schema",
+		config: processor.Config{
+			Settings: map[string]string{valueToKeyConfigFields: "foo"},
+		},
 		args: args{r: record.Record{
 			Payload: record.RawData{
 				Raw:    []byte("raw data"),
@@ -101,8 +112,10 @@ func TestValueToKey_Transform(t *testing.T) {
 		want:    record.Record{},
 		wantErr: true,
 	}, {
-		name:   "raw data with schema",
-		config: map[string]string{valueToKeyConfigFields: "foo"},
+		name: "raw data with schema",
+		config: processor.Config{
+			Settings: map[string]string{valueToKeyConfigFields: "foo"},
+		},
 		args: args{r: record.Record{
 			Payload: record.RawData{
 				Raw:    []byte("raw data"),
@@ -114,15 +127,15 @@ func TestValueToKey_Transform(t *testing.T) {
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			txfFunc, err := ValueToKey(tt.config)
+			underTest, err := ValueToKey(tt.config)
 			assert.Ok(t, err)
-			got, err := txfFunc(tt.args.r)
+			got, err := underTest.Process(context.Background(), tt.args.r)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("Transform() error = %v, wantErr = %v", err, tt.wantErr)
+				t.Errorf("process() error = %v, wantErr = %v", err, tt.wantErr)
 				return
 			}
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("Transform() got = %v, want = %v", got, tt.want)
+				t.Errorf("process() got = %v, want = %v", got, tt.want)
 			}
 		})
 	}

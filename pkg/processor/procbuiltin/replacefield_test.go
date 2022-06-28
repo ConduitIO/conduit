@@ -12,13 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package txfbuiltin
+package procbuiltin
 
 import (
+	"context"
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/foundation/assert"
-	"github.com/conduitio/conduit/pkg/processor/transform"
+	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/conduitio/conduit/pkg/record/schema/mock"
 	"github.com/google/go-cmp/cmp"
@@ -26,7 +27,7 @@ import (
 
 func TestReplaceFieldKey_Build(t *testing.T) {
 	type args struct {
-		config transform.Config
+		config processor.Config
 	}
 	tests := []struct {
 		name    string
@@ -34,49 +35,67 @@ func TestReplaceFieldKey_Build(t *testing.T) {
 		wantErr bool
 	}{{
 		name:    "nil config returns error",
-		args:    args{config: nil},
+		args:    args{config: processor.Config{}},
 		wantErr: true,
 	}, {
-		name:    "empty config returns error",
-		args:    args{config: map[string]string{}},
+		name: "empty config returns error",
+		args: args{config: processor.Config{
+			Settings: map[string]string{},
+		}},
 		wantErr: true,
 	}, {
-		name:    "empty exclude returns error",
-		args:    args{config: map[string]string{replaceFieldConfigExclude: ""}},
+		name: "empty exclude returns error",
+		args: args{config: processor.Config{
+			Settings: map[string]string{replaceFieldConfigExclude: ""},
+		}},
 		wantErr: true,
 	}, {
-		name:    "empty include returns error",
-		args:    args{config: map[string]string{replaceFieldConfigInclude: ""}},
+		name: "empty include returns error",
+		args: args{config: processor.Config{
+			Settings: map[string]string{replaceFieldConfigInclude: ""},
+		}},
 		wantErr: true,
 	}, {
-		name:    "empty rename returns error",
-		args:    args{config: map[string]string{replaceFieldConfigRename: ""}},
+		name: "empty rename returns error",
+		args: args{config: processor.Config{
+			Settings: map[string]string{replaceFieldConfigRename: ""},
+		}},
 		wantErr: true,
 	}, {
-		name:    "invalid rename returns error",
-		args:    args{config: map[string]string{replaceFieldConfigRename: "foo,bar"}},
+		name: "invalid rename returns error",
+		args: args{config: processor.Config{
+			Settings: map[string]string{replaceFieldConfigRename: "foo,bar"},
+		}},
 		wantErr: true,
 	}, {
-		name:    "non-empty exclude returns transform",
-		args:    args{config: map[string]string{replaceFieldConfigExclude: "foo"}},
+		name: "non-empty exclude returns processor",
+		args: args{config: processor.Config{
+			Settings: map[string]string{replaceFieldConfigExclude: "foo"},
+		}},
 		wantErr: false,
 	}, {
-		name:    "non-empty include returns transform",
-		args:    args{config: map[string]string{replaceFieldConfigInclude: "foo"}},
+		name: "non-empty include returns processor",
+		args: args{config: processor.Config{
+			Settings: map[string]string{replaceFieldConfigInclude: "foo"},
+		}},
 		wantErr: false,
 	}, {
-		name:    "valid rename returns transform",
-		args:    args{config: map[string]string{replaceFieldConfigRename: "foo:c1,bar:c2"}},
+		name: "valid rename returns processor",
+		args: args{config: processor.Config{
+			Settings: map[string]string{replaceFieldConfigRename: "foo:c1,bar:c2"},
+		}},
 		wantErr: false,
 	}, {
-		name: "non-empty all fields returns transform",
-		args: args{config: map[string]string{
-			replaceFieldConfigExclude: "foo",
-			replaceFieldConfigInclude: "bar",
-			replaceFieldConfigRename:  "foo:c1,bar:c2"},
-		},
+		name: "non-empty all fields returns processor",
+		args: args{config: processor.Config{
+			Settings: map[string]string{
+				replaceFieldConfigExclude: "foo",
+				replaceFieldConfigInclude: "bar",
+				replaceFieldConfigRename:  "foo:c1,bar:c2"},
+		}},
 		wantErr: false,
 	}}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := ReplaceFieldKey(tt.args.config)
@@ -88,19 +107,21 @@ func TestReplaceFieldKey_Build(t *testing.T) {
 	}
 }
 
-func TestReplaceFieldKey_Transform(t *testing.T) {
+func TestReplaceFieldKey_Process(t *testing.T) {
 	type args struct {
 		r record.Record
 	}
 	tests := []struct {
 		name    string
-		config  transform.Config
+		config  processor.Config
 		args    args
 		want    record.Record
 		wantErr bool
 	}{{
-		name:   "structured data exclude",
-		config: map[string]string{replaceFieldConfigExclude: "foo,bar"},
+		name: "structured data exclude",
+		config: processor.Config{
+			Settings: map[string]string{replaceFieldConfigExclude: "foo,bar"},
+		},
 		args: args{r: record.Record{
 			Key: record.StructuredData{
 				"foo": 123,
@@ -115,8 +136,10 @@ func TestReplaceFieldKey_Transform(t *testing.T) {
 		},
 		wantErr: false,
 	}, {
-		name:   "structured data include",
-		config: map[string]string{replaceFieldConfigInclude: "foo,baz"},
+		name: "structured data include",
+		config: processor.Config{
+			Settings: map[string]string{replaceFieldConfigInclude: "foo,baz"},
+		},
 		args: args{r: record.Record{
 			Key: record.StructuredData{
 				"foo": 123,
@@ -132,8 +155,10 @@ func TestReplaceFieldKey_Transform(t *testing.T) {
 		},
 		wantErr: false,
 	}, {
-		name:   "structured data rename",
-		config: map[string]string{replaceFieldConfigRename: "foo:c1,bar:c2"},
+		name: "structured data rename",
+		config: processor.Config{
+			Settings: map[string]string{replaceFieldConfigRename: "foo:c1,bar:c2"},
+		},
 		args: args{r: record.Record{
 			Key: record.StructuredData{
 				"foo": 123,
@@ -151,9 +176,11 @@ func TestReplaceFieldKey_Transform(t *testing.T) {
 		wantErr: false,
 	}, {
 		name: "structured data exclude and rename",
-		config: map[string]string{
-			replaceFieldConfigExclude: "foo,baz",
-			replaceFieldConfigRename:  "foo:c1,bar:c2",
+		config: processor.Config{
+			Settings: map[string]string{
+				replaceFieldConfigExclude: "foo,baz",
+				replaceFieldConfigRename:  "foo:c1,bar:c2",
+			},
 		},
 		args: args{r: record.Record{
 			Key: record.StructuredData{
@@ -170,9 +197,11 @@ func TestReplaceFieldKey_Transform(t *testing.T) {
 		wantErr: false,
 	}, {
 		name: "structured data include and rename",
-		config: map[string]string{
-			replaceFieldConfigInclude: "foo,baz",
-			replaceFieldConfigRename:  "foo:c1,bar:c2",
+		config: processor.Config{
+			Settings: map[string]string{
+				replaceFieldConfigInclude: "foo,baz",
+				replaceFieldConfigRename:  "foo:c1,bar:c2",
+			},
 		},
 		args: args{r: record.Record{
 			Key: record.StructuredData{
@@ -190,9 +219,11 @@ func TestReplaceFieldKey_Transform(t *testing.T) {
 		wantErr: false,
 	}, {
 		name: "structured data exclude and include",
-		config: map[string]string{
-			replaceFieldConfigExclude: "foo,baz",
-			replaceFieldConfigInclude: "baz,bar",
+		config: processor.Config{
+			Settings: map[string]string{
+				replaceFieldConfigExclude: "foo,baz",
+				replaceFieldConfigInclude: "baz,bar",
+			},
 		},
 		args: args{r: record.Record{
 			Key: record.StructuredData{
@@ -210,10 +241,12 @@ func TestReplaceFieldKey_Transform(t *testing.T) {
 		wantErr: false,
 	}, {
 		name: "structured data exclude, include and rename",
-		config: map[string]string{
-			replaceFieldConfigExclude: "foo,baz",
-			replaceFieldConfigInclude: "baz,bar",
-			replaceFieldConfigRename:  "foo:c1,bar:c2,other:asdf",
+		config: processor.Config{
+			Settings: map[string]string{
+				replaceFieldConfigExclude: "foo,baz",
+				replaceFieldConfigInclude: "baz,bar",
+				replaceFieldConfigRename:  "foo:c1,bar:c2,other:asdf",
+			},
 		},
 		args: args{r: record.Record{
 			Key: record.StructuredData{
@@ -230,8 +263,10 @@ func TestReplaceFieldKey_Transform(t *testing.T) {
 		},
 		wantErr: false,
 	}, {
-		name:   "raw data without schema",
-		config: map[string]string{replaceFieldConfigExclude: "foo"},
+		name: "raw data without schema",
+		config: processor.Config{
+			Settings: map[string]string{replaceFieldConfigExclude: "foo"},
+		},
 		args: args{r: record.Record{
 			Key: record.RawData{
 				Raw:    []byte("raw data"),
@@ -240,8 +275,10 @@ func TestReplaceFieldKey_Transform(t *testing.T) {
 		}},
 		wantErr: true, // not supported
 	}, {
-		name:   "raw data with schema",
-		config: map[string]string{replaceFieldConfigExclude: "foo"},
+		name: "raw data with schema",
+		config: processor.Config{
+			Settings: map[string]string{replaceFieldConfigExclude: "foo"},
+		},
 		args: args{r: record.Record{
 			Key: record.RawData{
 				Raw:    []byte("raw data"),
@@ -251,17 +288,18 @@ func TestReplaceFieldKey_Transform(t *testing.T) {
 		want:    record.Record{},
 		wantErr: true, // TODO not implemented
 	}}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			txfFunc, err := ReplaceFieldKey(tt.config)
+			underTest, err := ReplaceFieldKey(tt.config)
 			assert.Ok(t, err)
-			got, err := txfFunc(tt.args.r)
+			got, err := underTest.Process(context.Background(), tt.args.r)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("Transform() error = %v, wantErr = %v", err, tt.wantErr)
+				t.Errorf("process() error = %v, wantErr = %v", err, tt.wantErr)
 				return
 			}
 			if diff := cmp.Diff(got, tt.want); diff != "" {
-				t.Errorf("Transform() diff = %s", diff)
+				t.Errorf("process() diff = %s", diff)
 			}
 		})
 	}
@@ -269,7 +307,7 @@ func TestReplaceFieldKey_Transform(t *testing.T) {
 
 func TestReplaceFieldPayload_Build(t *testing.T) {
 	type args struct {
-		config transform.Config
+		config processor.Config
 	}
 	tests := []struct {
 		name    string
@@ -277,49 +315,68 @@ func TestReplaceFieldPayload_Build(t *testing.T) {
 		wantErr bool
 	}{{
 		name:    "nil config returns error",
-		args:    args{config: nil},
+		args:    args{config: processor.Config{}},
 		wantErr: true,
 	}, {
-		name:    "empty config returns error",
-		args:    args{config: map[string]string{}},
+		name: "empty config returns error",
+		args: args{config: processor.Config{
+			Settings: map[string]string{},
+		}},
 		wantErr: true,
 	}, {
-		name:    "empty exclude returns error",
-		args:    args{config: map[string]string{replaceFieldConfigExclude: ""}},
+		name: "empty exclude returns error",
+		args: args{config: processor.Config{
+			Settings: map[string]string{replaceFieldConfigExclude: ""},
+		}},
 		wantErr: true,
 	}, {
-		name:    "empty include returns error",
-		args:    args{config: map[string]string{replaceFieldConfigInclude: ""}},
+		name: "empty include returns error",
+		args: args{config: processor.Config{
+			Settings: map[string]string{replaceFieldConfigInclude: ""},
+		}},
 		wantErr: true,
 	}, {
-		name:    "empty rename returns error",
-		args:    args{config: map[string]string{replaceFieldConfigRename: ""}},
+		name: "empty rename returns error",
+		args: args{config: processor.Config{
+			Settings: map[string]string{replaceFieldConfigRename: ""},
+		}},
 		wantErr: true,
 	}, {
-		name:    "invalid rename returns error",
-		args:    args{config: map[string]string{replaceFieldConfigRename: "foo,bar"}},
+		name: "invalid rename returns error",
+		args: args{config: processor.Config{
+			Settings: map[string]string{replaceFieldConfigRename: "foo,bar"},
+		}},
 		wantErr: true,
 	}, {
-		name:    "non-empty exclude returns transform",
-		args:    args{config: map[string]string{replaceFieldConfigExclude: "foo"}},
+		name: "non-empty exclude returns processor",
+		args: args{config: processor.Config{
+			Settings: map[string]string{replaceFieldConfigExclude: "foo"},
+		}},
 		wantErr: false,
 	}, {
-		name:    "non-empty include returns transform",
-		args:    args{config: map[string]string{replaceFieldConfigInclude: "foo"}},
+		name: "non-empty include returns processor",
+		args: args{config: processor.Config{
+			Settings: map[string]string{replaceFieldConfigInclude: "foo"},
+		}},
 		wantErr: false,
 	}, {
-		name:    "valid rename returns transform",
-		args:    args{config: map[string]string{replaceFieldConfigRename: "foo:c1,bar:c2"}},
+		name: "valid rename returns processor",
+		args: args{config: processor.Config{
+			Settings: map[string]string{replaceFieldConfigRename: "foo:c1,bar:c2"},
+		}},
 		wantErr: false,
 	}, {
-		name: "non-empty all fields returns transform",
-		args: args{config: map[string]string{
-			replaceFieldConfigExclude: "foo",
-			replaceFieldConfigInclude: "bar",
-			replaceFieldConfigRename:  "foo:c1,bar:c2"},
-		},
+		name: "non-empty all fields returns processor",
+		args: args{config: processor.Config{
+			Settings: map[string]string{
+				replaceFieldConfigExclude: "foo",
+				replaceFieldConfigInclude: "bar",
+				replaceFieldConfigRename:  "foo:c1,bar:c2",
+			},
+		}},
 		wantErr: false,
 	}}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := ReplaceFieldPayload(tt.args.config)
@@ -331,19 +388,21 @@ func TestReplaceFieldPayload_Build(t *testing.T) {
 	}
 }
 
-func TestReplaceFieldPayload_Transform(t *testing.T) {
+func TestReplaceFieldPayload_Process(t *testing.T) {
 	type args struct {
 		r record.Record
 	}
 	tests := []struct {
 		name    string
-		config  transform.Config
+		config  processor.Config
 		args    args
 		want    record.Record
 		wantErr bool
 	}{{
-		name:   "structured data exclude",
-		config: map[string]string{replaceFieldConfigExclude: "foo,bar"},
+		name: "structured data exclude",
+		config: processor.Config{
+			Settings: map[string]string{replaceFieldConfigExclude: "foo,bar"},
+		},
 		args: args{r: record.Record{
 			Payload: record.StructuredData{
 				"foo": 123,
@@ -358,8 +417,10 @@ func TestReplaceFieldPayload_Transform(t *testing.T) {
 		},
 		wantErr: false,
 	}, {
-		name:   "structured data include",
-		config: map[string]string{replaceFieldConfigInclude: "foo,baz"},
+		name: "structured data include",
+		config: processor.Config{
+			Settings: map[string]string{replaceFieldConfigInclude: "foo,baz"},
+		},
 		args: args{r: record.Record{
 			Payload: record.StructuredData{
 				"foo": 123,
@@ -375,8 +436,10 @@ func TestReplaceFieldPayload_Transform(t *testing.T) {
 		},
 		wantErr: false,
 	}, {
-		name:   "structured data rename",
-		config: map[string]string{replaceFieldConfigRename: "foo:c1,bar:c2"},
+		name: "structured data rename",
+		config: processor.Config{
+			Settings: map[string]string{replaceFieldConfigRename: "foo:c1,bar:c2"},
+		},
 		args: args{r: record.Record{
 			Payload: record.StructuredData{
 				"foo": 123,
@@ -394,9 +457,11 @@ func TestReplaceFieldPayload_Transform(t *testing.T) {
 		wantErr: false,
 	}, {
 		name: "structured data exclude and rename",
-		config: map[string]string{
-			replaceFieldConfigExclude: "foo,baz",
-			replaceFieldConfigRename:  "foo:c1,bar:c2",
+		config: processor.Config{
+			Settings: map[string]string{
+				replaceFieldConfigExclude: "foo,baz",
+				replaceFieldConfigRename:  "foo:c1,bar:c2",
+			},
 		},
 		args: args{r: record.Record{
 			Payload: record.StructuredData{
@@ -413,9 +478,11 @@ func TestReplaceFieldPayload_Transform(t *testing.T) {
 		wantErr: false,
 	}, {
 		name: "structured data include and rename",
-		config: map[string]string{
-			replaceFieldConfigInclude: "foo,baz",
-			replaceFieldConfigRename:  "foo:c1,bar:c2",
+		config: processor.Config{
+			Settings: map[string]string{
+				replaceFieldConfigInclude: "foo,baz",
+				replaceFieldConfigRename:  "foo:c1,bar:c2",
+			},
 		},
 		args: args{r: record.Record{
 			Payload: record.StructuredData{
@@ -433,9 +500,11 @@ func TestReplaceFieldPayload_Transform(t *testing.T) {
 		wantErr: false,
 	}, {
 		name: "structured data exclude and include",
-		config: map[string]string{
-			replaceFieldConfigExclude: "foo,baz",
-			replaceFieldConfigInclude: "baz,bar",
+		config: processor.Config{
+			Settings: map[string]string{
+				replaceFieldConfigExclude: "foo,baz",
+				replaceFieldConfigInclude: "baz,bar",
+			},
 		},
 		args: args{r: record.Record{
 			Payload: record.StructuredData{
@@ -453,10 +522,12 @@ func TestReplaceFieldPayload_Transform(t *testing.T) {
 		wantErr: false,
 	}, {
 		name: "structured data exclude, include and rename",
-		config: map[string]string{
-			replaceFieldConfigExclude: "foo,baz",
-			replaceFieldConfigInclude: "baz,bar",
-			replaceFieldConfigRename:  "foo:c1,bar:c2,other:asdf",
+		config: processor.Config{
+			Settings: map[string]string{
+				replaceFieldConfigExclude: "foo,baz",
+				replaceFieldConfigInclude: "baz,bar",
+				replaceFieldConfigRename:  "foo:c1,bar:c2,other:asdf",
+			},
 		},
 		args: args{r: record.Record{
 			Payload: record.StructuredData{
@@ -473,8 +544,10 @@ func TestReplaceFieldPayload_Transform(t *testing.T) {
 		},
 		wantErr: false,
 	}, {
-		name:   "raw data without schema",
-		config: map[string]string{replaceFieldConfigExclude: "foo"},
+		name: "raw data without schema",
+		config: processor.Config{
+			Settings: map[string]string{replaceFieldConfigExclude: "foo"},
+		},
 		args: args{r: record.Record{
 			Payload: record.RawData{
 				Raw:    []byte("raw data"),
@@ -483,8 +556,10 @@ func TestReplaceFieldPayload_Transform(t *testing.T) {
 		}},
 		wantErr: true, // not supported
 	}, {
-		name:   "raw data with schema",
-		config: map[string]string{replaceFieldConfigExclude: "foo"},
+		name: "raw data with schema",
+		config: processor.Config{
+			Settings: map[string]string{replaceFieldConfigExclude: "foo"},
+		},
 		args: args{r: record.Record{
 			Payload: record.RawData{
 				Raw:    []byte("raw data"),
@@ -494,17 +569,18 @@ func TestReplaceFieldPayload_Transform(t *testing.T) {
 		want:    record.Record{},
 		wantErr: true, // TODO not implemented
 	}}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			txfFunc, err := ReplaceFieldPayload(tt.config)
+			underTest, err := ReplaceFieldPayload(tt.config)
 			assert.Ok(t, err)
-			got, err := txfFunc(tt.args.r)
+			got, err := underTest.Process(context.Background(), tt.args.r)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("Transform() error = %v, wantErr = %v", err, tt.wantErr)
+				t.Errorf("process() error = %v, wantErr = %v", err, tt.wantErr)
 				return
 			}
 			if diff := cmp.Diff(got, tt.want); diff != "" {
-				t.Errorf("Transform() diff = %s", diff)
+				t.Errorf("process() diff = %s", diff)
 			}
 		})
 	}
