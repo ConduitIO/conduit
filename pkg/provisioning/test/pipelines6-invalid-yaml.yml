@@ -1,7 +1,6 @@
-version: 1.3
 pipelines:
   pipeline1:
-    status: running
+                      status: running
     name: pipeline1
     description: desc1
     connectors:
@@ -14,8 +13,7 @@ pipelines:
           aws.bucket: my-bucket
     processors:
       pipeline1proc1:
-        name: pipeline processor
-        type: transform
+        type: js
         settings:
           additionalProp1: string
           additionalProp2: string

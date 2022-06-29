@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package conduit
+package provisioning
 
 import (
 	"bytes"
@@ -26,26 +26,25 @@ const ParserVersion = "1.0"
 
 var ErrUnsupportedVersion = cerrors.New("unsupported parser version")
 
-type ProcessorConfig map[string]struct {
-	Name     string            `yaml:"name"`
+type ProcessorConfig struct {
 	Type     string            `yaml:"type"`
 	Settings map[string]string `yaml:"settings"`
 }
 
-type ConnectorConfig map[string]struct {
-	Type       string            `yaml:"type"`
-	Plugin     string            `yaml:"plugin"`
-	Name       string            `yaml:"name"`
-	Settings   map[string]string `yaml:"settings"`
-	Processors ProcessorConfig   `yaml:"processors,omitempty"`
+type ConnectorConfig struct {
+	Type       string                     `yaml:"type"`
+	Plugin     string                     `yaml:"plugin"`
+	Name       string                     `yaml:"name"`
+	Settings   map[string]string          `yaml:"settings"`
+	Processors map[string]ProcessorConfig `yaml:"processors,omitempty"`
 }
 
 type PipelineConfig struct {
-	Status      string          `yaml:"status"`
-	Name        string          `yaml:"name"`
-	Description string          `yaml:"description"`
-	Connectors  ConnectorConfig `yaml:"connectors,omitempty"`
-	Processors  ProcessorConfig `yaml:"processors,omitempty"`
+	Status      string                     `yaml:"status"`
+	Name        string                     `yaml:"name"`
+	Description string                     `yaml:"description"`
+	Connectors  map[string]ConnectorConfig `yaml:"connectors,omitempty"`
+	Processors  map[string]ProcessorConfig `yaml:"processors,omitempty"`
 }
 
 type PipelinesConfig struct {
@@ -53,7 +52,7 @@ type PipelinesConfig struct {
 	Pipelines map[string]PipelineConfig `yaml:"pipelines"`
 }
 
-func Parse(data []byte) (PipelinesConfig, error) {
+func Parse(data []byte) (map[string]PipelineConfig, error) {
 	dec := yaml.NewDecoder(bytes.NewReader(data))
 
 	var docs []PipelinesConfig
@@ -63,45 +62,42 @@ func Parse(data []byte) (PipelinesConfig, error) {
 		if cerrors.Is(err, io.EOF) {
 			break
 		} else if err != nil {
-			return PipelinesConfig{}, cerrors.Errorf("parsing error: %w", err)
+			return nil, cerrors.Errorf("parsing error: %w", err)
 		}
 		// check if version is empty
 		if doc.Version == "" {
-			return PipelinesConfig{}, cerrors.Errorf("version is empty: %w", ErrUnsupportedVersion)
+			return nil, cerrors.Errorf("version is empty: %w", ErrUnsupportedVersion)
 		}
 		// check if version is invalid
 		if doc.Version != "1" && doc.Version != ParserVersion {
-			return PipelinesConfig{}, cerrors.Errorf("version %s is not supported : %w", doc.Version, ErrUnsupportedVersion)
+			return nil, cerrors.Errorf("version %s is not supported: %w", doc.Version, ErrUnsupportedVersion)
 		}
 		docs = append(docs, doc)
 	}
 
 	// empty file
 	if len(docs) == 0 {
-		return PipelinesConfig{}, nil
+		return nil, nil
 	}
 
-	merged, err := mergeMaps(docs)
+	merged, err := mergePipelinesConfigMaps(docs)
 	if err != nil {
-		return PipelinesConfig{}, err
+		return nil, err
 	}
 	return merged, nil
 }
 
-// mergeMaps takes an array of PipelinesConfig and merges them into one map
-func mergeMaps(arr []PipelinesConfig) (PipelinesConfig, error) {
-	var mp PipelinesConfig
+// mergePipelinesConfigMaps takes an array of PipelinesConfig and merges them into one map
+func mergePipelinesConfigMaps(arr []PipelinesConfig) (map[string]PipelineConfig, error) {
 	pipelines := make(map[string]PipelineConfig, 0)
 
 	for _, config := range arr {
 		for k, v := range config.Pipelines {
 			if _, ok := pipelines[k]; ok {
-				return PipelinesConfig{}, cerrors.Errorf("found a duplicated pipeline id: %s", k)
+				return nil, cerrors.Errorf("found a duplicated pipeline id: %s", k)
 			}
 			pipelines[k] = v
 		}
 	}
-	mp.Version = ParserVersion
-	mp.Pipelines = pipelines
-	return mp, nil
+	return pipelines, nil
 }

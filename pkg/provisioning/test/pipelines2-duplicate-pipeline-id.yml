@@ -15,8 +15,7 @@ pipelines:
           aws.bucket: my-bucket
     processors:
       pipeline1proc1:
-        name: pipeline processor
-        type: transform
+        type: js
         settings:
           additionalProp1: string
           additionalProp2: string
