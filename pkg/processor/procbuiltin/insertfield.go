@@ -12,12 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package txfbuiltin
+package procbuiltin
 
 import (
+	"context"
+
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/processor"
-	"github.com/conduitio/conduit/pkg/processor/transform"
 	"github.com/conduitio/conduit/pkg/record"
 )
 
@@ -32,33 +33,33 @@ const (
 )
 
 func init() {
-	processor.GlobalBuilderRegistry.MustRegister(insertFieldKeyName, transform.NewBuilder(InsertFieldKey))
-	processor.GlobalBuilderRegistry.MustRegister(insertFieldPayloadName, transform.NewBuilder(InsertFieldPayload))
+	processor.GlobalBuilderRegistry.MustRegister(insertFieldKeyName, InsertFieldKey)
+	processor.GlobalBuilderRegistry.MustRegister(insertFieldPayloadName, InsertFieldPayload)
 }
 
-// InsertFieldKey builds the following transform:
+// InsertFieldKey builds the following processor:
 //  * If the key is raw and has a schema attached, insert the field(s) in the
 //    key data.
 //  * If the key is raw and has no schema, return an error (not supported).
 //  * If the key is structured, set the field(s) in the key data.
-func InsertFieldKey(config transform.Config) (transform.Transform, error) {
+func InsertFieldKey(config processor.Config) (processor.Interface, error) {
 	return insertField(insertFieldKeyName, recordKeyGetSetter{}, config)
 }
 
-// InsertFieldPayload builds the following transformation:
+// InsertFieldPayload builds the following processor:
 //  * If the payload is raw and has a schema attached, insert the field(s) in
 //    the payload data.
 //  * If the payload is raw and has no schema, return an error (not supported).
 //  * If the payload is structured, set the field(s) in the payload data.
-func InsertFieldPayload(config transform.Config) (transform.Transform, error) {
+func InsertFieldPayload(config processor.Config) (processor.Interface, error) {
 	return insertField(insertFieldPayloadName, recordPayloadGetSetter{}, config)
 }
 
 func insertField(
-	transformName string,
+	processorName string,
 	getSetter recordDataGetSetter,
-	config transform.Config,
-) (transform.Transform, error) {
+	config processor.Config,
+) (processor.Interface, error) {
 	var (
 		err error
 
@@ -68,27 +69,27 @@ func insertField(
 		positionField    string
 	)
 
-	timestampField = config[insertFieldConfigTimestampField]
-	positionField = config[insertFieldConfigPositionField]
-	staticFieldName, ok := config[insertFieldConfigStaticField]
+	timestampField = config.Settings[insertFieldConfigTimestampField]
+	positionField = config.Settings[insertFieldConfigPositionField]
+	staticFieldName, ok := config.Settings[insertFieldConfigStaticField]
 	if ok {
 		if staticFieldValue, err = getConfigFieldString(config, insertFieldConfigStaticValue); err != nil {
-			return nil, cerrors.Errorf("%s: %w", transformName, err)
+			return nil, cerrors.Errorf("%s: %w", processorName, err)
 		}
 	}
 	if staticFieldName == "" && timestampField == "" && positionField == "" {
-		return nil, cerrors.Errorf("%s: no fields configured to be inserted", transformName)
+		return nil, cerrors.Errorf("%s: no fields configured to be inserted", processorName)
 	}
 
-	return func(r record.Record) (record.Record, error) {
+	return processor.InterfaceFunc(func(_ context.Context, r record.Record) (record.Record, error) {
 		data := getSetter.Get(r)
 
 		switch d := data.(type) {
 		case record.RawData:
 			if d.Schema == nil {
-				return record.Record{}, cerrors.Errorf("%s: schemaless raw data not supported", transformName)
+				return record.Record{}, cerrors.Errorf("%s: schemaless raw data not supported", processorName)
 			}
-			return record.Record{}, cerrors.Errorf("%s: data with schema not supported yet", transformName) // TODO
+			return record.Record{}, cerrors.Errorf("%s: data with schema not supported yet", processorName) // TODO
 		case record.StructuredData:
 			// TODO add support for nested fields
 			if staticFieldName != "" {
@@ -101,10 +102,10 @@ func insertField(
 				d[positionField] = r.Position
 			}
 		default:
-			return record.Record{}, cerrors.Errorf("%s: unexpected data type %T", transformName, data)
+			return record.Record{}, cerrors.Errorf("%s: unexpected data type %T", processorName, data)
 		}
 
 		r = getSetter.Set(r, data)
 		return r, nil
-	}, nil
+	}), nil
 }

@@ -12,28 +12,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package txfbuiltin
+package procbuiltin
 
 import (
 	"strconv"
 	"time"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/processor/transform"
+	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/record"
 )
 
 var errEmptyConfigField = cerrors.New("empty config field")
 
-func getConfigFieldString(c transform.Config, field string) (string, error) {
-	val, ok := c[field]
+func getConfigFieldString(c processor.Config, field string) (string, error) {
+	val, ok := c.Settings[field]
 	if !ok || val == "" {
 		return "", cerrors.Errorf("failed to retrieve config field %q: %w", field, errEmptyConfigField)
 	}
 	return val, nil
 }
 
-func getConfigFieldFloat64(c transform.Config, field string) (float64, error) {
+func getConfigFieldFloat64(c processor.Config, field string) (float64, error) {
 	raw, err := getConfigFieldString(c, field)
 	if err != nil {
 		return 0, err
@@ -47,7 +47,7 @@ func getConfigFieldFloat64(c transform.Config, field string) (float64, error) {
 	return parsed, nil
 }
 
-func getConfigFieldInt64(c transform.Config, field string) (int64, error) {
+func getConfigFieldInt64(c processor.Config, field string) (int64, error) {
 	raw, err := getConfigFieldString(c, field)
 	if err != nil {
 		return 0, err
@@ -61,7 +61,7 @@ func getConfigFieldInt64(c transform.Config, field string) (int64, error) {
 	return parsed, nil
 }
 
-func getConfigFieldDuration(c transform.Config, field string) (time.Duration, error) {
+func getConfigFieldDuration(c processor.Config, field string) (time.Duration, error) {
 	raw, err := getConfigFieldString(c, field)
 	if err != nil {
 		return 0, err
@@ -77,7 +77,7 @@ func getConfigFieldDuration(c transform.Config, field string) (time.Duration, er
 
 // recordDataGetSetter is a utility that returns either the key or the payload
 // data. It provides also a function to set the key or payload data.
-// It is useful when writing 2 transforms that do the same thing, except that
+// It is useful when writing 2 processors that do the same thing, except that
 // one operates on the key and the other on the payload.
 type recordDataGetSetter interface {
 	Get(record.Record) record.Data

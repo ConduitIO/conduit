@@ -59,7 +59,6 @@ func TestProcessorOrchestrator_CreateOnPipeline_Success(t *testing.T) {
 			gomock.AssignableToTypeOf(ctxType),
 			gomock.AssignableToTypeOf(""),
 			want.Name,
-			processor.TypeTransform,
 			want.Parent,
 			want.Config,
 		).
@@ -69,7 +68,7 @@ func TestProcessorOrchestrator_CreateOnPipeline_Success(t *testing.T) {
 		Return(pl, nil)
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
-	got, err := orc.Processors.Create(ctx, want.Name, processor.TypeTransform, want.Parent, want.Config)
+	got, err := orc.Processors.Create(ctx, want.Name, want.Parent, want.Config)
 	assert.Ok(t, err)
 	assert.Equal(t, want, got)
 }
@@ -89,7 +88,7 @@ func TestProcessorOrchestrator_CreateOnPipeline_PipelineNotExist(t *testing.T) {
 		Return(nil, wantErr)
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
-	got, err := orc.Processors.Create(ctx, "test-processor", processor.TypeTransform, parent, processor.Config{})
+	got, err := orc.Processors.Create(ctx, "test-processor", parent, processor.Config{})
 	assert.Error(t, err)
 	assert.True(t, cerrors.Is(err, wantErr), "errors did not match")
 	assert.Nil(t, got)
@@ -113,7 +112,7 @@ func TestProcessorOrchestrator_CreateOnPipeline_PipelineRunning(t *testing.T) {
 		Return(pl, nil)
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
-	got, err := orc.Processors.Create(ctx, "test-processor", processor.TypeTransform, parent, processor.Config{})
+	got, err := orc.Processors.Create(ctx, "test-processor", parent, processor.Config{})
 	assert.Error(t, err)
 	assert.Equal(t, pipeline.ErrPipelineRunning, err)
 	assert.Nil(t, got)
@@ -142,14 +141,13 @@ func TestProcessorOrchestrator_CreateOnPipeline_CreateProcessorError(t *testing.
 			gomock.AssignableToTypeOf(ctxType),
 			gomock.AssignableToTypeOf(""),
 			"test-processor",
-			processor.TypeTransform,
 			parent,
 			processor.Config{},
 		).
 		Return(nil, wantErr)
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
-	got, err := orc.Processors.Create(ctx, "test-processor", processor.TypeTransform, parent, processor.Config{})
+	got, err := orc.Processors.Create(ctx, "test-processor", parent, processor.Config{})
 	assert.Error(t, err)
 	assert.True(t, cerrors.Is(err, wantErr), "errors did not match")
 	assert.Nil(t, got)
@@ -185,7 +183,6 @@ func TestProcessorOrchestrator_CreateOnPipeline_AddProcessorError(t *testing.T) 
 			gomock.AssignableToTypeOf(ctxType),
 			gomock.AssignableToTypeOf(""),
 			proc.Name,
-			processor.TypeTransform,
 			proc.Parent,
 			proc.Config,
 		).
@@ -199,7 +196,7 @@ func TestProcessorOrchestrator_CreateOnPipeline_AddProcessorError(t *testing.T) 
 		Return(nil)
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
-	got, err := orc.Processors.Create(ctx, proc.Name, processor.TypeTransform, proc.Parent, proc.Config)
+	got, err := orc.Processors.Create(ctx, proc.Name, proc.Parent, proc.Config)
 	assert.Error(t, err)
 	assert.True(t, cerrors.Is(err, wantErr), "errors did not match")
 	assert.Nil(t, got)
@@ -239,7 +236,6 @@ func TestProcessorOrchestrator_CreateOnConnector_Success(t *testing.T) {
 			gomock.AssignableToTypeOf(ctxType),
 			gomock.AssignableToTypeOf(""),
 			want.Name,
-			processor.TypeTransform,
 			want.Parent,
 			want.Config,
 		).
@@ -249,7 +245,7 @@ func TestProcessorOrchestrator_CreateOnConnector_Success(t *testing.T) {
 		Return(conn, nil)
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
-	got, err := orc.Processors.Create(ctx, want.Name, processor.TypeTransform, want.Parent, want.Config)
+	got, err := orc.Processors.Create(ctx, want.Name, want.Parent, want.Config)
 	assert.Ok(t, err)
 	assert.Equal(t, want, got)
 }
@@ -269,7 +265,7 @@ func TestProcessorOrchestrator_CreateOnConnector_ConnectorNotExist(t *testing.T)
 		Return(nil, wantErr)
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
-	got, err := orc.Processors.Create(ctx, "test-processor", processor.TypeTransform, parent, processor.Config{})
+	got, err := orc.Processors.Create(ctx, "test-processor", parent, processor.Config{})
 	assert.Error(t, err)
 	assert.True(t, cerrors.Is(err, wantErr), "errors did not match")
 	assert.Nil(t, got)
@@ -677,7 +673,6 @@ func TestProcessorOrchestrator_DeleteOnPipeline_RemoveProcessorFail(t *testing.T
 			gomock.AssignableToTypeOf(ctxType),
 			want.ID,
 			want.Name,
-			processor.TypeTransform,
 			want.Parent,
 			want.Config,
 		).
@@ -733,7 +728,6 @@ func TestProcessorOrchestrator_DeleteOnConnector_Fail(t *testing.T) {
 			gomock.AssignableToTypeOf(ctxType),
 			want.ID,
 			want.Name,
-			processor.TypeTransform,
 			want.Parent,
 			want.Config,
 		).

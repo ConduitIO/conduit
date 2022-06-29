@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package txfbuiltin
+package procbuiltin
 
 import (
+	"context"
 	"strings"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/processor"
-	"github.com/conduitio/conduit/pkg/processor/transform"
 	"github.com/conduitio/conduit/pkg/record"
 )
 
@@ -29,24 +29,24 @@ const (
 )
 
 func init() {
-	processor.GlobalBuilderRegistry.MustRegister(valueToKeyName, transform.NewBuilder(ValueToKey))
+	processor.GlobalBuilderRegistry.MustRegister(valueToKeyName, ValueToKey)
 }
 
-// ValueToKey builds a transform that replaces the record key with a new key
+// ValueToKey builds a processor that replaces the record key with a new key
 // formed from a subset of fields in the record value.
 //  * If the payload is raw and has a schema attached, the created key will also
 //    have a schema with a subset of fields.
 //  * If the payload is structured, the created key will also be structured with
 //    a subset of fields.
 //  * If the payload is raw and has no schema, return an error.
-func ValueToKey(config transform.Config) (transform.Transform, error) {
-	if config[valueToKeyConfigFields] == "" {
+func ValueToKey(config processor.Config) (processor.Interface, error) {
+	if config.Settings[valueToKeyConfigFields] == "" {
 		return nil, cerrors.Errorf("%s: unspecified field %q", valueToKeyName, valueToKeyConfigFields)
 	}
 
-	fields := strings.Split(config[valueToKeyConfigFields], ",")
+	fields := strings.Split(config.Settings[valueToKeyConfigFields], ",")
 
-	return func(r record.Record) (_ record.Record, err error) {
+	return processor.InterfaceFunc(func(_ context.Context, r record.Record) (_ record.Record, err error) {
 		defer func() {
 			if err != nil {
 				err = cerrors.Errorf("%s: %w", valueToKeyName, err)
@@ -66,5 +66,5 @@ func ValueToKey(config transform.Config) (transform.Transform, error) {
 		default:
 			return record.Record{}, cerrors.Errorf("unexpected payload type %T", r.Payload)
 		}
-	}, nil
+	}), nil
 }
