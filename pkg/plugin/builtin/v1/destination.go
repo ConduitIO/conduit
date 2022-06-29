@@ -140,15 +140,15 @@ func (s *destinationPluginAdapter) Ack(ctx context.Context) (record.Position, er
 	return position, nil
 }
 
-func (s *destinationPluginAdapter) Stop(ctx context.Context) error {
+func (s *destinationPluginAdapter) Stop(ctx context.Context, lastPosition record.Position) error {
 	if s.stream == nil {
 		return plugin.ErrStreamNotOpen
 	}
 
 	s.stream.stopSend()
 
-	s.logger.Trace(ctx).Msg("calling Stop")
-	resp, err := runSandbox(s.impl.Stop, s.withLogger(ctx), toplugin.DestinationStopRequest())
+	s.logger.Trace(ctx).Bytes(log.RecordPositionField, lastPosition).Msg("calling Stop")
+	resp, err := runSandbox(s.impl.Stop, s.withLogger(ctx), toplugin.DestinationStopRequest(lastPosition))
 	if err != nil {
 		return err
 	}

@@ -145,19 +145,22 @@ func (s *sourcePluginAdapter) Ack(ctx context.Context, p record.Position) error 
 	return nil
 }
 
-func (s *sourcePluginAdapter) Stop(ctx context.Context) error {
+func (s *sourcePluginAdapter) Stop(ctx context.Context) (record.Position, error) {
 	if s.stream == nil {
-		return plugin.ErrStreamNotOpen
+		return nil, plugin.ErrStreamNotOpen
 	}
 
 	s.logger.Trace(ctx).Msg("calling Stop")
 	resp, err := runSandbox(s.impl.Stop, s.withLogger(ctx), toplugin.SourceStopRequest())
 	if err != nil {
-		return err
+		return nil, err
 	}
-	_ = resp // empty response
+	out, err := fromplugin.SourceStopResponse(resp)
+	if err != nil {
+		return nil, err
+	}
 
-	return nil
+	return out, nil
 }
 
 func (s *sourcePluginAdapter) Teardown(ctx context.Context) error {
