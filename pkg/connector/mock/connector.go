@@ -444,18 +444,17 @@ func (mr *DestinationMockRecorder) State() *gomock.Call {
 }
 
 // Stop mocks base method.
-func (m *Destination) Stop(arg0 context.Context) (record.Position, error) {
+func (m *Destination) Stop(arg0 context.Context, arg1 record.Position) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Stop", arg0)
-	ret0, _ := ret[0].(record.Position)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret := m.ctrl.Call(m, "Stop", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // Stop indicates an expected call of Stop.
-func (mr *DestinationMockRecorder) Stop(arg0 interface{}) *gomock.Call {
+func (mr *DestinationMockRecorder) Stop(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*Destination)(nil).Stop), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*Destination)(nil).Stop), arg0, arg1)
 }
 
 // Teardown mocks base method.

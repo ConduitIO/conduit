@@ -79,7 +79,7 @@ func Example_simpleStream() {
 	go runNode(ctx, &wg, node1)
 
 	// stop node after 150ms, which should be enough to process the 10 messages
-	time.AfterFunc(150*time.Millisecond, func() { node1.Stop(nil) })
+	time.AfterFunc(150*time.Millisecond, func() { _ = node1.Stop(ctx, nil) })
 	// give the node some time to process the records, plus a bit of time to stop
 	if waitTimeout(&wg, 1000*time.Millisecond) {
 		killAll()
@@ -197,8 +197,8 @@ func Example_complexStream() {
 	time.AfterFunc(
 		250*time.Millisecond,
 		func() {
-			node1.Stop(nil)
-			node3.Stop(nil)
+			_ = node1.Stop(ctx, nil)
+			_ = node3.Stop(ctx, nil)
 		},
 	)
 	// give the nodes some time to process the records, plus a bit of time to stop
@@ -310,13 +310,13 @@ func generatorSource(ctrl *gomock.Controller, logger log.CtxLogger, nodeID strin
 	source.EXPECT().Read(gomock.Any()).DoAndReturn(func(ctx context.Context) (record.Record, error) {
 		time.Sleep(delay)
 
-		position++
-		if position > recordCount {
+		if position == recordCount {
 			// block until Stop is called
 			<-stop
 			return record.Record{}, plugin.ErrStreamNotOpen
 		}
 
+		position++
 		return record.Record{
 			// SourceID would normally be the source node ID, but since we need
 			// to add the node ID to the position to create unique positions we
@@ -325,9 +325,9 @@ func generatorSource(ctrl *gomock.Controller, logger log.CtxLogger, nodeID strin
 			Position: record.Position(nodeID + "-" + strconv.Itoa(position)),
 		}, nil
 	}).MinTimes(recordCount + 1)
-	source.EXPECT().Stop(gomock.Any()).DoAndReturn(func(context.Context) error {
+	source.EXPECT().Stop(gomock.Any()).DoAndReturn(func(context.Context) (record.Position, error) {
 		close(stop)
-		return nil
+		return record.Position(nodeID + "-" + strconv.Itoa(position)), nil
 	})
 	source.EXPECT().Errors().Return(make(chan error))
 

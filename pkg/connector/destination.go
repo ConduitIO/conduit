@@ -59,6 +59,8 @@ type destination struct {
 	wg sync.WaitGroup
 }
 
+var _ Destination = (*destination)(nil)
+
 func (s *destination) ID() string {
 	return s.XID
 }

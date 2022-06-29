@@ -58,7 +58,7 @@ type source struct {
 	wg sync.WaitGroup
 }
 
-// not running -> running -> stopping -> not running
+var _ Source = (*source)(nil)
 
 func (s *source) ID() string {
 	return s.XID

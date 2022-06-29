@@ -114,7 +114,7 @@ type Destination interface {
 
 	// Stop signals to the destination that no more records will be produced
 	// after record with the last position.
-	Stop(context.Context) (record.Position, error)
+	Stop(context.Context, record.Position) error
 }
 
 // Config collects common data stored for a connector.

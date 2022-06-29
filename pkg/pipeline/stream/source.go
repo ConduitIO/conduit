@@ -121,11 +121,12 @@ func (n *SourceNode) Run(ctx context.Context) (err error) {
 	}
 }
 
-func (n *SourceNode) Stop(reason error) {
-	ctx := context.TODO() // TODO get context as parameter
+func (n *SourceNode) Stop(ctx context.Context, reason error) error {
 	n.logger.Err(ctx, reason).Msg("stopping source connector")
 	n.stopReason = reason
-	_ = n.Source.Stop(ctx) // TODO return error
+	lastPosition, err := n.Source.Stop(ctx)
+	_ = lastPosition // TODO store lastPosition
+	return err
 }
 
 func (n *SourceNode) Pub() <-chan *Message {
