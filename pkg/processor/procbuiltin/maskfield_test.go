@@ -12,13 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package txfbuiltin
+package procbuiltin
 
 import (
+	"context"
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/foundation/assert"
-	"github.com/conduitio/conduit/pkg/processor/transform"
+	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/conduitio/conduit/pkg/record/schema/mock"
 	"github.com/google/go-cmp/cmp"
@@ -26,7 +27,7 @@ import (
 
 func TestMaskFieldKey_Build(t *testing.T) {
 	type args struct {
-		config transform.Config
+		config processor.Config
 	}
 	tests := []struct {
 		name    string
@@ -34,19 +35,25 @@ func TestMaskFieldKey_Build(t *testing.T) {
 		wantErr bool
 	}{{
 		name:    "nil config returns error",
-		args:    args{config: nil},
+		args:    args{config: processor.Config{}},
 		wantErr: true,
 	}, {
-		name:    "empty config returns error",
-		args:    args{config: map[string]string{}},
+		name: "empty config returns error",
+		args: args{config: processor.Config{
+			Settings: map[string]string{},
+		}},
 		wantErr: true,
 	}, {
-		name:    "empty field returns error",
-		args:    args{config: map[string]string{maskFieldConfigField: ""}},
+		name: "empty field returns error",
+		args: args{config: processor.Config{
+			Settings: map[string]string{maskFieldConfigField: ""},
+		}},
 		wantErr: true,
 	}, {
-		name:    "non-empty field returns transform",
-		args:    args{config: map[string]string{maskFieldConfigField: "foo"}},
+		name: "non-empty field returns processor",
+		args: args{config: processor.Config{
+			Settings: map[string]string{maskFieldConfigField: "foo"},
+		}},
 		wantErr: false,
 	}}
 	for _, tt := range tests {
@@ -60,19 +67,21 @@ func TestMaskFieldKey_Build(t *testing.T) {
 	}
 }
 
-func TestMaskFieldKey_Transform(t *testing.T) {
+func TestMaskFieldKey_Process(t *testing.T) {
 	type args struct {
 		r record.Record
 	}
 	tests := []struct {
 		name    string
-		config  transform.Config
+		config  processor.Config
 		args    args
 		want    record.Record
 		wantErr bool
 	}{{
-		name:   "structured data int",
-		config: map[string]string{maskFieldConfigField: "foo"},
+		name: "structured data int",
+		config: processor.Config{
+			Settings: map[string]string{maskFieldConfigField: "foo"},
+		},
 		args: args{r: record.Record{
 			Key: record.StructuredData{
 				"foo": 123,
@@ -87,8 +96,10 @@ func TestMaskFieldKey_Transform(t *testing.T) {
 		},
 		wantErr: false,
 	}, {
-		name:   "structured data string",
-		config: map[string]string{maskFieldConfigField: "foo"},
+		name: "structured data string",
+		config: processor.Config{
+			Settings: map[string]string{maskFieldConfigField: "foo"},
+		},
 		args: args{r: record.Record{
 			Key: record.StructuredData{
 				"foo": "sensitive data",
@@ -103,8 +114,10 @@ func TestMaskFieldKey_Transform(t *testing.T) {
 		},
 		wantErr: false,
 	}, {
-		name:   "structured data map",
-		config: map[string]string{maskFieldConfigField: "foo"},
+		name: "structured data map",
+		config: processor.Config{
+			Settings: map[string]string{maskFieldConfigField: "foo"},
+		},
 		args: args{r: record.Record{
 			Key: record.StructuredData{
 				"foo": map[string]interface{}{"bar": "buz"},
@@ -119,8 +132,10 @@ func TestMaskFieldKey_Transform(t *testing.T) {
 		},
 		wantErr: false,
 	}, {
-		name:   "raw data without schema",
-		config: map[string]string{maskFieldConfigField: "foo"},
+		name: "raw data without schema",
+		config: processor.Config{
+			Settings: map[string]string{maskFieldConfigField: "foo"},
+		},
 		args: args{r: record.Record{
 			Key: record.RawData{
 				Raw:    []byte("raw data"),
@@ -129,8 +144,10 @@ func TestMaskFieldKey_Transform(t *testing.T) {
 		}},
 		wantErr: true, // not supported
 	}, {
-		name:   "raw data with schema",
-		config: map[string]string{maskFieldConfigField: "foo"},
+		name: "raw data with schema",
+		config: processor.Config{
+			Settings: map[string]string{maskFieldConfigField: "foo"},
+		},
 		args: args{r: record.Record{
 			Key: record.RawData{
 				Raw:    []byte("raw data"),
@@ -142,15 +159,15 @@ func TestMaskFieldKey_Transform(t *testing.T) {
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			txfFunc, err := MaskFieldKey(tt.config)
+			underTest, err := MaskFieldKey(tt.config)
 			assert.Ok(t, err)
-			got, err := txfFunc(tt.args.r)
+			got, err := underTest.Process(context.Background(), tt.args.r)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("Transform() error = %v, wantErr = %v", err, tt.wantErr)
+				t.Errorf("process() error = %v, wantErr = %v", err, tt.wantErr)
 				return
 			}
 			if diff := cmp.Diff(got, tt.want); diff != "" {
-				t.Errorf("Transform() diff = %s", diff)
+				t.Errorf("process() diff = %s", diff)
 			}
 		})
 	}
@@ -158,7 +175,7 @@ func TestMaskFieldKey_Transform(t *testing.T) {
 
 func TestMaskFieldPayload_Build(t *testing.T) {
 	type args struct {
-		config transform.Config
+		config processor.Config
 	}
 	tests := []struct {
 		name    string
@@ -166,19 +183,25 @@ func TestMaskFieldPayload_Build(t *testing.T) {
 		wantErr bool
 	}{{
 		name:    "nil config returns error",
-		args:    args{config: nil},
+		args:    args{config: processor.Config{}},
 		wantErr: true,
 	}, {
-		name:    "empty config returns error",
-		args:    args{config: map[string]string{}},
+		name: "empty config returns error",
+		args: args{config: processor.Config{
+			Settings: map[string]string{},
+		}},
 		wantErr: true,
 	}, {
-		name:    "empty field returns error",
-		args:    args{config: map[string]string{maskFieldConfigField: ""}},
+		name: "empty field returns error",
+		args: args{config: processor.Config{
+			Settings: map[string]string{maskFieldConfigField: ""},
+		}},
 		wantErr: true,
 	}, {
-		name:    "non-empty field returns transform",
-		args:    args{config: map[string]string{maskFieldConfigField: "foo"}},
+		name: "non-empty field returns processor",
+		args: args{config: processor.Config{
+			Settings: map[string]string{maskFieldConfigField: "foo"},
+		}},
 		wantErr: false,
 	}}
 	for _, tt := range tests {
@@ -192,19 +215,21 @@ func TestMaskFieldPayload_Build(t *testing.T) {
 	}
 }
 
-func TestMaskFieldPayload_Transform(t *testing.T) {
+func TestMaskFieldPayload_Process(t *testing.T) {
 	type args struct {
 		r record.Record
 	}
 	tests := []struct {
 		name    string
-		config  transform.Config
+		config  processor.Config
 		args    args
 		want    record.Record
 		wantErr bool
 	}{{
-		name:   "structured data int",
-		config: map[string]string{maskFieldConfigField: "foo"},
+		name: "structured data int",
+		config: processor.Config{
+			Settings: map[string]string{maskFieldConfigField: "foo"},
+		},
 		args: args{r: record.Record{
 			Payload: record.StructuredData{
 				"foo": 123,
@@ -219,8 +244,10 @@ func TestMaskFieldPayload_Transform(t *testing.T) {
 		},
 		wantErr: false,
 	}, {
-		name:   "structured data string",
-		config: map[string]string{maskFieldConfigField: "foo"},
+		name: "structured data string",
+		config: processor.Config{
+			Settings: map[string]string{maskFieldConfigField: "foo"},
+		},
 		args: args{r: record.Record{
 			Payload: record.StructuredData{
 				"foo": "sensitive data",
@@ -235,8 +262,10 @@ func TestMaskFieldPayload_Transform(t *testing.T) {
 		},
 		wantErr: false,
 	}, {
-		name:   "structured data map",
-		config: map[string]string{maskFieldConfigField: "foo"},
+		name: "structured data map",
+		config: processor.Config{
+			Settings: map[string]string{maskFieldConfigField: "foo"},
+		},
 		args: args{r: record.Record{
 			Payload: record.StructuredData{
 				"foo": map[string]interface{}{"bar": "buz"},
@@ -251,8 +280,10 @@ func TestMaskFieldPayload_Transform(t *testing.T) {
 		},
 		wantErr: false,
 	}, {
-		name:   "raw data without schema",
-		config: map[string]string{maskFieldConfigField: "foo"},
+		name: "raw data without schema",
+		config: processor.Config{
+			Settings: map[string]string{maskFieldConfigField: "foo"},
+		},
 		args: args{r: record.Record{
 			Payload: record.RawData{
 				Raw:    []byte("raw data"),
@@ -261,8 +292,10 @@ func TestMaskFieldPayload_Transform(t *testing.T) {
 		}},
 		wantErr: true, // not supported
 	}, {
-		name:   "raw data with schema",
-		config: map[string]string{maskFieldConfigField: "foo"},
+		name: "raw data with schema",
+		config: processor.Config{
+			Settings: map[string]string{maskFieldConfigField: "foo"},
+		},
 		args: args{r: record.Record{
 			Payload: record.RawData{
 				Raw:    []byte("raw data"),
@@ -274,15 +307,15 @@ func TestMaskFieldPayload_Transform(t *testing.T) {
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			txfFunc, err := MaskFieldPayload(tt.config)
+			underTest, err := MaskFieldPayload(tt.config)
 			assert.Ok(t, err)
-			got, err := txfFunc(tt.args.r)
+			got, err := underTest.Process(context.Background(), tt.args.r)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("Transform() error = %v, wantErr = %v", err, tt.wantErr)
+				t.Errorf("process() error = %v, wantErr = %v", err, tt.wantErr)
 				return
 			}
 			if diff := cmp.Diff(got, tt.want); diff != "" {
-				t.Errorf("Transform() diff = %s", diff)
+				t.Errorf("process() diff = %s", diff)
 			}
 		})
 	}

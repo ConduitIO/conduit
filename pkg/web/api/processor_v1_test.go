@@ -36,7 +36,6 @@ func TestProcessorAPIv1_ListProcessors(t *testing.T) {
 	psMock := apimock.NewProcessorOrchestrator(ctrl)
 	api := NewProcessorAPIv1(psMock)
 	p := procmock.NewProcessor(ctrl)
-	p.EXPECT().Type().Return(processor.TypeTransform).AnyTimes()
 
 	config := processor.Config{
 		Settings: map[string]string{"titan": "armored"},
@@ -79,7 +78,6 @@ func TestProcessorAPIv1_ListProcessors(t *testing.T) {
 		{
 			Id:   prs[0].ID,
 			Name: prs[0].Name,
-			Type: apiv1.Processor_Type(prs[0].Processor.Type()),
 			Config: &apiv1.Processor_Config{
 				Settings: prs[0].Config.Settings,
 			},
@@ -94,7 +92,6 @@ func TestProcessorAPIv1_ListProcessors(t *testing.T) {
 		{
 			Id:   prs[1].ID,
 			Name: prs[1].Name,
-			Type: apiv1.Processor_Type(prs[1].Processor.Type()),
 			Config: &apiv1.Processor_Config{
 				Settings: prs[1].Config.Settings,
 			},
@@ -122,7 +119,6 @@ func TestProcessorAPIv1_ListProcessorsByParents(t *testing.T) {
 	psMock := apimock.NewProcessorOrchestrator(ctrl)
 	api := NewProcessorAPIv1(psMock)
 	p := procmock.NewProcessor(ctrl)
-	p.EXPECT().Type().Return(processor.TypeTransform).AnyTimes()
 
 	config := processor.Config{
 		Settings: map[string]string{"titan": "armored"},
@@ -192,7 +188,6 @@ func TestProcessorAPIv1_ListProcessorsByParents(t *testing.T) {
 		{
 			Id:   prs[0].ID,
 			Name: prs[0].Name,
-			Type: apiv1.Processor_Type(prs[0].Processor.Type()),
 			Config: &apiv1.Processor_Config{
 				Settings: prs[0].Config.Settings,
 			},
@@ -207,7 +202,6 @@ func TestProcessorAPIv1_ListProcessorsByParents(t *testing.T) {
 		{
 			Id:   prs[2].ID,
 			Name: prs[2].Name,
-			Type: apiv1.Processor_Type(prs[2].Processor.Type()),
 			Config: &apiv1.Processor_Config{
 				Settings: prs[2].Config.Settings,
 			},
@@ -221,7 +215,6 @@ func TestProcessorAPIv1_ListProcessorsByParents(t *testing.T) {
 		{
 			Id:   prs[3].ID,
 			Name: prs[3].Name,
-			Type: apiv1.Processor_Type(prs[3].Processor.Type()),
 			Config: &apiv1.Processor_Config{
 				Settings: prs[3].Config.Settings,
 			},
@@ -249,7 +242,6 @@ func TestProcessorAPIv1_CreateProcessor(t *testing.T) {
 	psMock := apimock.NewProcessorOrchestrator(ctrl)
 	api := NewProcessorAPIv1(psMock)
 	p := procmock.NewProcessor(ctrl)
-	p.EXPECT().Type().Return(processor.TypeTransform).AnyTimes()
 
 	config := processor.Config{
 		Settings: map[string]string{"titan": "armored"},
@@ -268,12 +260,11 @@ func TestProcessorAPIv1_CreateProcessor(t *testing.T) {
 		UpdatedAt: now,
 		CreatedAt: now,
 	}
-	psMock.EXPECT().Create(ctx, pr.Name, pr.Processor.Type(), pr.Parent, config).Return(pr, nil).Times(1)
+	psMock.EXPECT().Create(ctx, pr.Name, pr.Parent, config).Return(pr, nil).Times(1)
 
 	want := &apiv1.CreateProcessorResponse{Processor: &apiv1.Processor{
 		Id:   pr.ID,
 		Name: pr.Name,
-		Type: apiv1.Processor_Type(pr.Processor.Type()),
 		Config: &apiv1.Processor_Config{
 			Settings: pr.Config.Settings,
 		},
@@ -289,7 +280,6 @@ func TestProcessorAPIv1_CreateProcessor(t *testing.T) {
 		ctx,
 		&apiv1.CreateProcessorRequest{
 			Name:   want.Processor.Name,
-			Type:   want.Processor.Type,
 			Parent: want.Processor.Parent,
 			Config: want.Processor.Config,
 		},
@@ -305,7 +295,6 @@ func TestProcessorAPIv1_GetProcessor(t *testing.T) {
 	psMock := apimock.NewProcessorOrchestrator(ctrl)
 	api := NewProcessorAPIv1(psMock)
 	p := procmock.NewProcessor(ctrl)
-	p.EXPECT().Type().Return(processor.TypeTransform).AnyTimes()
 
 	now := time.Now()
 	pr := &processor.Instance{
@@ -328,7 +317,6 @@ func TestProcessorAPIv1_GetProcessor(t *testing.T) {
 	want := &apiv1.GetProcessorResponse{Processor: &apiv1.Processor{
 		Id:   pr.ID,
 		Name: pr.Name,
-		Type: apiv1.Processor_Type(pr.Processor.Type()),
 		Config: &apiv1.Processor_Config{
 			Settings: pr.Config.Settings,
 		},
@@ -357,7 +345,6 @@ func TestProcessorAPIv1_UpdateProcessor(t *testing.T) {
 	psMock := apimock.NewProcessorOrchestrator(ctrl)
 	api := NewProcessorAPIv1(psMock)
 	p := procmock.NewProcessor(ctrl)
-	p.EXPECT().Type().Return(processor.TypeTransform).AnyTimes()
 
 	config := processor.Config{
 		Settings: map[string]string{"titan": "armored"},
@@ -381,7 +368,6 @@ func TestProcessorAPIv1_UpdateProcessor(t *testing.T) {
 	want := &apiv1.UpdateProcessorResponse{Processor: &apiv1.Processor{
 		Id:   pr.ID,
 		Name: pr.Name,
-		Type: apiv1.Processor_Type(pr.Processor.Type()),
 		Config: &apiv1.Processor_Config{
 			Settings: pr.Config.Settings,
 		},

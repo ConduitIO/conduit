@@ -12,12 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package txfbuiltin
+package procbuiltin
 
 import (
+	"context"
+
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/processor"
-	"github.com/conduitio/conduit/pkg/processor/transform"
 	"github.com/conduitio/conduit/pkg/record"
 )
 
@@ -29,46 +30,46 @@ const (
 )
 
 func init() {
-	processor.GlobalBuilderRegistry.MustRegister(hoistFieldKeyName, transform.NewBuilder(HoistFieldKey))
-	processor.GlobalBuilderRegistry.MustRegister(hoistFieldPayloadName, transform.NewBuilder(HoistFieldPayload))
+	processor.GlobalBuilderRegistry.MustRegister(hoistFieldKeyName, HoistFieldKey)
+	processor.GlobalBuilderRegistry.MustRegister(hoistFieldPayloadName, HoistFieldPayload)
 }
 
-// HoistFieldKey builds the following transform:
+// HoistFieldKey builds the following processor:
 //  * If the key is raw and has a schema attached, wrap it using the specified
 //    field name in a struct.
-//  * If the key is raw and has no schema, transform it into structured data by
+//  * If the key is raw and has no schema, transforms it into structured data by
 //    creating a map with the hoisted field and raw data as the value.
 //  * If the key is structured, wrap it using the specified field name in a map.
-func HoistFieldKey(config transform.Config) (transform.Transform, error) {
+func HoistFieldKey(config processor.Config) (processor.Interface, error) {
 	return hoistField(hoistFieldKeyName, recordKeyGetSetter{}, config)
 }
 
-// HoistFieldPayload builds the following transformation:
+// HoistFieldPayload builds the following processor:
 //  * If the payload is raw and has a schema attached, wrap it using the
 //    specified field name in a struct.
-//  * If the payload is raw and has no schema, transform it into structured data
+//  * If the payload is raw and has no schema, transforms it into structured data
 //    by creating a map with the hoisted field and raw data as the value.
 //  * If the payload is structured, wrap it using the specified field name in a
 //    map.
-func HoistFieldPayload(config transform.Config) (transform.Transform, error) {
+func HoistFieldPayload(config processor.Config) (processor.Interface, error) {
 	return hoistField(hoistFieldPayloadName, recordPayloadGetSetter{}, config)
 }
 
 func hoistField(
-	transformName string,
+	processorName string,
 	getSetter recordDataGetSetter,
-	config transform.Config,
-) (transform.Transform, error) {
+	config processor.Config,
+) (processor.Interface, error) {
 	var (
 		err       error
 		fieldName string
 	)
 
 	if fieldName, err = getConfigFieldString(config, hoistFieldConfigField); err != nil {
-		return nil, cerrors.Errorf("%s: %w", transformName, err)
+		return nil, cerrors.Errorf("%s: %w", processorName, err)
 	}
 
-	return func(r record.Record) (record.Record, error) {
+	return processor.InterfaceFunc(func(_ context.Context, r record.Record) (record.Record, error) {
 		data := getSetter.Get(r)
 
 		switch d := data.(type) {
@@ -78,17 +79,17 @@ func hoistField(
 					fieldName: d.Raw,
 				}
 			} else {
-				return record.Record{}, cerrors.Errorf("%s: data with schema not supported yet", transformName) // TODO
+				return record.Record{}, cerrors.Errorf("%s: data with schema not supported yet", processorName) // TODO
 			}
 		case record.StructuredData:
 			data = record.StructuredData{
 				fieldName: map[string]interface{}(d),
 			}
 		default:
-			return record.Record{}, cerrors.Errorf("%s: unexpected data type %T", transformName, data)
+			return record.Record{}, cerrors.Errorf("%s: unexpected data type %T", processorName, data)
 		}
 
 		r = getSetter.Set(r, data)
 		return r, nil
-	}, nil
+	}), nil
 }

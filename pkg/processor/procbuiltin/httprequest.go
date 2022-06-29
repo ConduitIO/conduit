@@ -12,10 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package txfbuiltin
+package procbuiltin
 
 import (
 	"bytes"
+	"context"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -23,7 +24,6 @@ import (
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/processor"
-	"github.com/conduitio/conduit/pkg/processor/transform"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/jpillora/backoff"
 )
@@ -40,21 +40,21 @@ const (
 )
 
 func init() {
-	processor.GlobalBuilderRegistry.MustRegister(httpRequestName, transform.NewBuilder(HTTPRequest))
+	processor.GlobalBuilderRegistry.MustRegister(httpRequestName, HTTPRequest)
 }
 
-// HTTPRequest builds a transform that sends an HTTP request to the specified
+// HTTPRequest builds a processor that sends an HTTP request to the specified
 // URL with the specified HTTP method (default is POST). The record payload is
 // used as the request body and the raw response body is put into the record
 // payload.
-func HTTPRequest(config transform.Config) (transform.Transform, error) {
+func HTTPRequest(config processor.Config) (processor.Interface, error) {
 	return httpRequest(httpRequestName, config)
 }
 
 func httpRequest(
-	transformName string,
-	config transform.Config,
-) (transform.Transform, error) {
+	processorName string,
+	config processor.Config,
+) (processor.Interface, error) {
 	var (
 		err    error
 		rawURL string
@@ -62,15 +62,15 @@ func httpRequest(
 	)
 
 	if rawURL, err = getConfigFieldString(config, httpRequestConfigURL); err != nil {
-		return nil, cerrors.Errorf("%s: %w", transformName, err)
+		return nil, cerrors.Errorf("%s: %w", processorName, err)
 	}
 
 	_, err = url.Parse(rawURL)
 	if err != nil {
-		return nil, cerrors.Errorf("%s: error trying to parse url: %w", transformName, err)
+		return nil, cerrors.Errorf("%s: error trying to parse url: %w", processorName, err)
 	}
 
-	method = config[httpRequestConfigMethod]
+	method = config.Settings[httpRequestConfigMethod]
 	if method == "" {
 		method = http.MethodPost
 	}
@@ -82,59 +82,59 @@ func httpRequest(
 		bytes.NewReader([]byte{}),
 	)
 	if err != nil {
-		return nil, cerrors.Errorf("%s: error trying to create HTTP request: %w", transformName, err)
+		return nil, cerrors.Errorf("%s: error trying to create HTTP request: %w", processorName, err)
 	}
 
-	txfFunc := func(r record.Record) (record.Record, error) {
+	procFn := func(_ context.Context, r record.Record) (record.Record, error) {
 		req, err := http.NewRequest(
 			method,
 			rawURL,
 			bytes.NewReader(r.Payload.Bytes()),
 		)
 		if err != nil {
-			return record.Record{}, cerrors.Errorf("%s: error trying to create HTTP request: %w", transformName, err)
+			return record.Record{}, cerrors.Errorf("%s: error trying to create HTTP request: %w", processorName, err)
 		}
 
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
-			return record.Record{}, cerrors.Errorf("%s: error trying to execute HTTP request: %w", transformName, err)
+			return record.Record{}, cerrors.Errorf("%s: error trying to execute HTTP request: %w", processorName, err)
 		}
 		defer resp.Body.Close()
 
 		body, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
-			return record.Record{}, cerrors.Errorf("%s: error trying to read response body: %w", transformName, err)
+			return record.Record{}, cerrors.Errorf("%s: error trying to read response body: %w", processorName, err)
 		}
 
 		if resp.StatusCode > 299 {
 			// regard status codes over 299 as errors
-			return record.Record{}, cerrors.Errorf("%s: invalid status code %v (body: %q)", transformName, resp.StatusCode, string(body))
+			return record.Record{}, cerrors.Errorf("%s: invalid status code %v (body: %q)", processorName, resp.StatusCode, string(body))
 		}
 
 		r.Payload = record.RawData{Raw: body}
 		return r, nil
 	}
 
-	return configureHTTPRequestBackoffRetry(transformName, config, txfFunc)
+	return configureHTTPRequestBackoffRetry(processorName, config, procFn)
 }
 
 func configureHTTPRequestBackoffRetry(
-	transformName string,
-	config transform.Config,
-	txfFunc transform.Transform,
-) (transform.Transform, error) {
+	processorName string,
+	config processor.Config,
+	procFn func(context.Context, record.Record) (record.Record, error),
+) (processor.Interface, error) {
 	// retryCount is a float64 to match the backoff library attempt type
 	var retryCount float64
 
 	tmp, err := getConfigFieldInt64(config, httpRequestBackoffRetryCount)
 	if err != nil && !cerrors.Is(err, errEmptyConfigField) {
-		return nil, cerrors.Errorf("%s: %w", transformName, err)
+		return nil, cerrors.Errorf("%s: %w", processorName, err)
 	}
 	retryCount = float64(tmp)
 
 	if retryCount == 0 {
-		// no retries configured, just use the plain transform function
-		return txfFunc, nil
+		// no retries configured, just use the plain processor
+		return processor.InterfaceFunc(procFn), nil
 	}
 
 	// default retry values
@@ -146,36 +146,36 @@ func configureHTTPRequestBackoffRetry(
 
 	min, err := getConfigFieldDuration(config, httpRequestBackoffRetryMin)
 	if err != nil && !cerrors.Is(err, errEmptyConfigField) {
-		return nil, cerrors.Errorf("%s: %w", transformName, err)
+		return nil, cerrors.Errorf("%s: %w", processorName, err)
 	} else if err == nil {
 		b.Min = min
 	}
 
 	max, err := getConfigFieldDuration(config, httpRequestBackoffRetryMax)
 	if err != nil && !cerrors.Is(err, errEmptyConfigField) {
-		return nil, cerrors.Errorf("%s: %w", transformName, err)
+		return nil, cerrors.Errorf("%s: %w", processorName, err)
 	} else if err == nil {
 		b.Max = max
 	}
 
 	factor, err := getConfigFieldFloat64(config, httpRequestBackoffRetryFactor)
 	if err != nil && !cerrors.Is(err, errEmptyConfigField) {
-		return nil, cerrors.Errorf("%s: %w", transformName, err)
+		return nil, cerrors.Errorf("%s: %w", processorName, err)
 	} else if err == nil {
 		b.Factor = factor
 	}
 
-	// wrap transform in a retry loop
-	return func(r record.Record) (record.Record, error) {
+	// wrap processor in a retry loop
+	return processor.InterfaceFunc(func(ctx context.Context, r record.Record) (record.Record, error) {
 		for {
-			r, err := txfFunc(r)
+			r, err := procFn(ctx, r)
 			if err != nil && b.Attempt() < retryCount {
 				// TODO log message that we are retrying, include error cause (we don't have access to a proper logger)
 				time.Sleep(b.Duration())
 				continue
 			}
-			b.Reset() // reset for next transform execution
+			b.Reset() // reset for next processor execution
 			return r, err
 		}
-	}, nil
+	}), nil
 }

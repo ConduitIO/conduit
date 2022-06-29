@@ -12,21 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package txfbuiltin
+package procbuiltin
 
 import (
+	"context"
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/processor/transform"
+	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/google/go-cmp/cmp"
 )
 
 func TestFilterFieldKey_Build(t *testing.T) {
 	type args struct {
-		config transform.Config
+		config processor.Config
 	}
 	tests := []struct {
 		name    string
@@ -36,23 +37,27 @@ func TestFilterFieldKey_Build(t *testing.T) {
 		{
 			name: "nil config returns error",
 			args: args{
-				config: nil,
+				config: processor.Config{},
 			},
 			wantErr: true,
 		},
 		{
 			name: "empty config returns error",
 			args: args{
-				config: map[string]string{},
+				config: processor.Config{
+					Settings: map[string]string{},
+				},
 			},
 			wantErr: true,
 		},
 		{
 			name: "empty type returns error",
 			args: args{
-				config: transform.Config{
-					"type":      "",
-					"condition": "$[key]",
+				config: processor.Config{
+					Settings: map[string]string{
+						"type":      "",
+						"condition": "$[key]",
+					},
 				},
 			},
 			wantErr: true,
@@ -60,21 +65,25 @@ func TestFilterFieldKey_Build(t *testing.T) {
 		{
 			name: "empty condition returns error",
 			args: args{
-				config: transform.Config{
-					"type":      "include",
-					"condition": "",
-					"fail":      "include",
+				config: processor.Config{
+					Settings: map[string]string{
+						"type":      "include",
+						"condition": "",
+						"fail":      "include",
+					},
 				},
 			},
 			wantErr: true,
 		},
 		{
-			name: "valid config should return transform",
+			name: "valid config should return processor",
 			args: args{
-				config: transform.Config{
-					"type":      "include",
-					"condition": ".key",
-					"fail":      "include",
+				config: processor.Config{
+					Settings: map[string]string{
+						"type":      "include",
+						"condition": ".key",
+						"fail":      "include",
+					},
 				},
 			},
 			wantErr: false,
@@ -91,24 +100,26 @@ func TestFilterFieldKey_Build(t *testing.T) {
 	}
 }
 
-func TestFilterFieldKey_Transform(t *testing.T) {
+func TestFilterFieldKey_Process(t *testing.T) {
 	type args struct {
 		r record.Record
 	}
 	tests := []struct {
 		name    string
 		args    args
-		config  transform.Config
+		config  processor.Config
 		want    record.Record
 		wantErr bool
 		err     error
 	}{
 		{
 			name: "should forward record on condition",
-			config: map[string]string{
-				"type":      "include",
-				"condition": ".id",
-				"fail":      "include",
+			config: processor.Config{
+				Settings: map[string]string{
+					"type":      "include",
+					"condition": ".id",
+					"fail":      "include",
+				},
 			},
 			args: args{r: record.Record{
 				Key: record.StructuredData{
@@ -124,10 +135,12 @@ func TestFilterFieldKey_Transform(t *testing.T) {
 		},
 		{
 			name: "should drop record on condition",
-			config: map[string]string{
-				"type":      "exclude",
-				"condition": ".id",
-				"fail":      "include",
+			config: processor.Config{
+				Settings: map[string]string{
+					"type":      "exclude",
+					"condition": ".id",
+					"fail":      "include",
+				},
 			},
 			args: args{r: record.Record{
 				Key: record.StructuredData{
@@ -136,15 +149,17 @@ func TestFilterFieldKey_Transform(t *testing.T) {
 			}},
 			want:    record.Record{},
 			wantErr: true,
-			err:     ErrDropRecord,
+			err:     processor.ErrSkipRecord,
 		},
 		{
 			name: "should handle missing or null by failing",
-			config: map[string]string{
-				"type":          "include",
-				"condition":     "@id",
-				"missingornull": "fail",
-				"exists":        "id",
+			config: processor.Config{
+				Settings: map[string]string{
+					"type":          "include",
+					"condition":     "@id",
+					"missingornull": "fail",
+					"exists":        "id",
+				},
 			},
 			args: args{r: record.Record{
 				Key: record.StructuredData{
@@ -157,11 +172,13 @@ func TestFilterFieldKey_Transform(t *testing.T) {
 		},
 		{
 			name: "should handle missing or null by including",
-			config: map[string]string{
-				"type":          "include",
-				"condition":     "@id",
-				"missingornull": "include",
-				"exists":        "@id",
+			config: processor.Config{
+				Settings: map[string]string{
+					"type":          "include",
+					"condition":     "@id",
+					"missingornull": "include",
+					"exists":        "@id",
+				},
 			},
 			args: args{r: record.Record{
 				Key: record.StructuredData{
@@ -177,10 +194,12 @@ func TestFilterFieldKey_Transform(t *testing.T) {
 		},
 		{
 			name: "should handle missing or null by excluding",
-			config: map[string]string{
-				"type":          "include",
-				"condition":     "@id",
-				"missingornull": "exclude",
+			config: processor.Config{
+				Settings: map[string]string{
+					"type":          "include",
+					"condition":     "@id",
+					"missingornull": "exclude",
+				},
 			},
 			args: args{r: record.Record{
 				Key: record.StructuredData{
@@ -189,14 +208,14 @@ func TestFilterFieldKey_Transform(t *testing.T) {
 			}},
 			want:    record.Record{},
 			wantErr: true,
-			err:     ErrDropRecord,
+			err:     processor.ErrSkipRecord,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			txf, err := FilterFieldKey(tt.config)
+			underTest, err := FilterFieldKey(tt.config)
 			assert.Ok(t, err)
-			got, err := txf(tt.args.r)
+			got, err := underTest.Process(context.Background(), tt.args.r)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("FilterFieldKey() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -216,7 +235,7 @@ func TestFilterFieldKey_Transform(t *testing.T) {
 
 func TestFilterFieldPayload_Build(t *testing.T) {
 	type args struct {
-		config transform.Config
+		config processor.Config
 	}
 	tests := []struct {
 		name    string
@@ -225,37 +244,45 @@ func TestFilterFieldPayload_Build(t *testing.T) {
 	}{
 		{
 			name:    "nil config returns error",
-			args:    args{config: nil},
+			args:    args{config: processor.Config{}},
 			wantErr: true,
 		},
 		{
-			name:    "empty config returns error",
-			args:    args{config: map[string]string{}},
+			name: "empty config returns error",
+			args: args{config: processor.Config{
+				Settings: map[string]string{},
+			}},
 			wantErr: true,
 		},
 		{
 			name: "empty condition returns error",
-			args: args{config: map[string]string{
-				"type":          "include",
-				"missingornull": "fail",
-				"condition":     "",
+			args: args{config: processor.Config{
+				Settings: map[string]string{
+					"type":          "include",
+					"missingornull": "fail",
+					"condition":     "",
+				},
 			}},
 			wantErr: true,
 		},
 		{
 			name: "empty type returns error",
-			args: args{config: map[string]string{
-				"type":          "",
-				"condition":     "@id",
-				"missingornull": "fail",
+			args: args{config: processor.Config{
+				Settings: map[string]string{
+					"type":          "",
+					"condition":     "@id",
+					"missingornull": "fail",
+				},
 			}},
 			wantErr: true,
 		},
 		{
-			name: "valid config returns transform",
-			args: args{config: map[string]string{
-				"type":      "include",
-				"condition": "@id",
+			name: "valid config returns processor",
+			args: args{config: processor.Config{
+				Settings: map[string]string{
+					"type":      "include",
+					"condition": "@id",
+				},
 			}},
 			wantErr: false,
 		},
@@ -271,9 +298,9 @@ func TestFilterFieldPayload_Build(t *testing.T) {
 	}
 }
 
-func TestFilterFieldPayload_Transform(t *testing.T) {
+func TestFilterFieldPayload_Process(t *testing.T) {
 	type args struct {
-		config transform.Config
+		config processor.Config
 		r      record.Record
 	}
 	tests := []struct {
@@ -291,10 +318,12 @@ func TestFilterFieldPayload_Transform(t *testing.T) {
 						"foo": "bar",
 					},
 				},
-				config: transform.Config{
-					"type":          "include",
-					"condition":     "foo",
-					"missingornull": "fail",
+				config: processor.Config{
+					Settings: map[string]string{
+						"type":          "include",
+						"condition":     "foo",
+						"missingornull": "fail",
+					},
 				}},
 			want: record.Record{
 				Payload: record.StructuredData{
@@ -311,13 +340,15 @@ func TestFilterFieldPayload_Transform(t *testing.T) {
 						"foo": "5",
 					},
 				},
-				config: transform.Config{
-					"type":      "exclude",
-					"condition": "foo > 1",
+				config: processor.Config{
+					Settings: map[string]string{
+						"type":      "exclude",
+						"condition": "foo > 1",
+					},
 				}},
 			want:    record.Record{},
 			wantErr: true,
-			err:     ErrDropRecord,
+			err:     processor.ErrSkipRecord,
 		},
 		{
 			name: "should drop record on missing key",
@@ -327,22 +358,24 @@ func TestFilterFieldPayload_Transform(t *testing.T) {
 						"bar": "3",
 					},
 				},
-				config: transform.Config{
-					"type":          "exclude",
-					"condition":     "foo > 1",
-					"exists":        "foo",
-					"missingornull": "exclude",
+				config: processor.Config{
+					Settings: map[string]string{
+						"type":          "exclude",
+						"condition":     "foo > 1",
+						"exists":        "foo",
+						"missingornull": "exclude",
+					},
 				}},
 			want:    record.Record{},
 			wantErr: true,
-			err:     ErrDropRecord,
+			err:     processor.ErrSkipRecord,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			txf, err := FilterFieldPayload(tt.args.config)
+			underTest, err := FilterFieldPayload(tt.args.config)
 			assert.Ok(t, err)
-			got, err := txf(tt.args.r)
+			got, err := underTest.Process(context.Background(), tt.args.r)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("FilterFieldPayload Error: %s - wanted: %s", err, tt.err)
 				return
