@@ -90,11 +90,11 @@ func (s *destinationPluginAdapter) Start(ctx context.Context) error {
 		s.logger.Trace(ctx).Msg("calling Run")
 		err := runSandboxNoResp(s.impl.Run, s.withLogger(ctx), cpluginv1.DestinationRunStream(s.stream))
 		if err != nil {
-			if s.stream.Stop(cerrors.Errorf("error in run: %w", err)) {
+			if s.stream.stop(cerrors.Errorf("error in run: %w", err)) {
 				s.logger.Err(ctx, err).Msg("stream already stopped")
 			}
 		} else {
-			s.stream.Stop(plugin.ErrStreamNotOpen)
+			s.stream.stop(plugin.ErrStreamNotOpen)
 		}
 		s.logger.Trace(ctx).Msg("Run stopped")
 	}()
@@ -113,7 +113,7 @@ func (s *destinationPluginAdapter) Write(ctx context.Context, r record.Record) (
 	}
 
 	s.logger.Trace(ctx).Msg("sending record")
-	err = s.stream.SendInternal(req)
+	err = s.stream.sendInternal(req)
 	if err != nil {
 		return cerrors.Errorf("builtin plugin send failed: %w", err)
 	}
@@ -127,7 +127,7 @@ func (s *destinationPluginAdapter) Ack(ctx context.Context) (record.Position, er
 	}
 
 	s.logger.Trace(ctx).Msg("receiving ack")
-	resp, err := s.stream.RecvInternal()
+	resp, err := s.stream.recvInternal()
 	if err != nil {
 		return nil, err
 	}
@@ -158,7 +158,7 @@ func (s *destinationPluginAdapter) Stop(ctx context.Context, lastPosition record
 func (s *destinationPluginAdapter) Teardown(ctx context.Context) error {
 	if s.stream != nil {
 		// stop stream if it's open
-		_ = s.stream.Stop(nil)
+		_ = s.stream.stop(nil)
 	}
 
 	s.logger.Trace(ctx).Msg("calling Teardown")

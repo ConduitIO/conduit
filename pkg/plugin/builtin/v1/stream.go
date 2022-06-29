@@ -28,12 +28,12 @@ import (
 // sent from the server to the client.
 type stream[REQ any, RES any] struct {
 	ctx      context.Context
-	stopChan chan struct{}
 	reqChan  chan REQ
 	respChan chan RES
+	stopChan chan struct{}
 
 	reason error
-	m      sync.RWMutex
+	m      sync.Mutex
 }
 
 func (s *stream[REQ, RES]) Send(resp RES) error {
@@ -58,7 +58,7 @@ func (s *stream[REQ, RES]) Recv() (REQ, error) {
 	}
 }
 
-func (s *stream[REQ, RES]) RecvInternal() (RES, error) {
+func (s *stream[REQ, RES]) recvInternal() (RES, error) {
 	select {
 	case <-s.ctx.Done():
 		return s.emptyRes(), cerrors.New(s.ctx.Err().Error())
@@ -69,7 +69,7 @@ func (s *stream[REQ, RES]) RecvInternal() (RES, error) {
 	}
 }
 
-func (s *stream[REQ, RES]) SendInternal(req REQ) error {
+func (s *stream[REQ, RES]) sendInternal(req REQ) error {
 	select {
 	case <-s.ctx.Done():
 		return cerrors.New(s.ctx.Err().Error())
@@ -80,7 +80,9 @@ func (s *stream[REQ, RES]) SendInternal(req REQ) error {
 	}
 }
 
-func (s *stream[REQ, RES]) Stop(reason error) bool {
+func (s *stream[REQ, RES]) stop(reason error) bool {
+	s.m.Lock()
+	defer s.m.Unlock()
 	select {
 	case <-s.stopChan:
 		// channel already closed

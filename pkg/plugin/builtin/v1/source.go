@@ -95,11 +95,11 @@ func (s *sourcePluginAdapter) Start(ctx context.Context, p record.Position) erro
 		s.logger.Trace(ctx).Msg("calling Run")
 		err := runSandboxNoResp(s.impl.Run, s.withLogger(ctx), cpluginv1.SourceRunStream(s.stream))
 		if err != nil {
-			if s.stream.Stop(cerrors.Errorf("error in run: %w", err)) {
+			if s.stream.stop(cerrors.Errorf("error in run: %w", err)) {
 				s.logger.Err(ctx, err).Msg("stream already stopped")
 			}
 		} else {
-			s.stream.Stop(plugin.ErrStreamNotOpen)
+			s.stream.stop(plugin.ErrStreamNotOpen)
 		}
 		s.logger.Trace(ctx).Msg("Run stopped")
 	}()
@@ -113,7 +113,7 @@ func (s *sourcePluginAdapter) Read(ctx context.Context) (record.Record, error) {
 	}
 
 	s.logger.Trace(ctx).Msg("receiving record")
-	resp, err := s.stream.RecvInternal()
+	resp, err := s.stream.recvInternal()
 	if err != nil {
 		return record.Record{}, cerrors.Errorf("builtin plugin receive failed: %w", err)
 	}
@@ -137,7 +137,7 @@ func (s *sourcePluginAdapter) Ack(ctx context.Context, p record.Position) error 
 	}
 
 	s.logger.Trace(ctx).Msg("sending ack")
-	err = s.stream.SendInternal(req)
+	err = s.stream.sendInternal(req)
 	if err != nil {
 		return cerrors.Errorf("builtin plugin send failed: %w", err)
 	}
@@ -164,9 +164,8 @@ func (s *sourcePluginAdapter) Stop(ctx context.Context) (record.Position, error)
 }
 
 func (s *sourcePluginAdapter) Teardown(ctx context.Context) error {
-	// TODO stop stream before calling teardown
 	if s.stream != nil {
-		s.stream.Stop(nil)
+		s.stream.stop(nil)
 	}
 
 	s.logger.Trace(ctx).Msg("calling Teardown")
