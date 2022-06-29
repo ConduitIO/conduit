@@ -92,9 +92,11 @@ func (s *destinationPluginAdapter) Start(ctx context.Context) error {
 		s.logger.Trace(ctx).Msg("calling Run")
 		err := runSandboxNoResp(s.impl.Run, s.withLogger(ctx), cpluginv1.DestinationRunStream(s.stream))
 		if err != nil {
-			s.stream.stopAll(cerrors.Errorf("error in run: %w", err))
+			if s.stream.stop(cerrors.Errorf("error in run: %w", err)) {
+				s.logger.Err(ctx, err).Msg("stream already stopped")
+			}
 		} else {
-			s.stream.stopAll(plugin.ErrStreamNotOpen)
+			s.stream.stop(plugin.ErrStreamNotOpen)
 		}
 		s.logger.Trace(ctx).Msg("Run stopped")
 	}()
@@ -145,8 +147,6 @@ func (s *destinationPluginAdapter) Stop(ctx context.Context, lastPosition record
 		return plugin.ErrStreamNotOpen
 	}
 
-	s.stream.stopSend()
-
 	s.logger.Trace(ctx).Bytes(log.RecordPositionField, lastPosition).Msg("calling Stop")
 	resp, err := runSandbox(s.impl.Stop, s.withLogger(ctx), toplugin.DestinationStopRequest(lastPosition))
 	if err != nil {
@@ -158,6 +158,11 @@ func (s *destinationPluginAdapter) Stop(ctx context.Context, lastPosition record
 }
 
 func (s *destinationPluginAdapter) Teardown(ctx context.Context) error {
+	if s.stream != nil {
+		// stop stream if it's open
+		_ = s.stream.stop(nil)
+	}
+
 	s.logger.Trace(ctx).Msg("calling Teardown")
 	resp, err := runSandbox(s.impl.Teardown, s.withLogger(ctx), toplugin.DestinationTeardownRequest())
 	if err != nil {
@@ -169,25 +174,19 @@ func (s *destinationPluginAdapter) Teardown(ctx context.Context) error {
 }
 
 func newDestinationRunStream(ctx context.Context) *destinationRunStream {
-	sendCtx, sendCancel := context.WithCancel(ctx)
-	recvCtx, recvCancel := context.WithCancel(ctx)
 	return &destinationRunStream{
-		sendCtx:   sendCtx,
-		recvCtx:   recvCtx,
-		closeSend: sendCancel,
-		closeRecv: recvCancel,
-		reqChan:   make(chan cpluginv1.DestinationRunRequest),
-		respChan:  make(chan cpluginv1.DestinationRunResponse),
+		ctx:      ctx,
+		stopChan: make(chan struct{}),
+		reqChan:  make(chan cpluginv1.DestinationRunRequest),
+		respChan: make(chan cpluginv1.DestinationRunResponse),
 	}
 }
 
 type destinationRunStream struct {
-	sendCtx   context.Context
-	recvCtx   context.Context
-	closeSend context.CancelFunc
-	closeRecv context.CancelFunc
-	reqChan   chan cpluginv1.DestinationRunRequest
-	respChan  chan cpluginv1.DestinationRunResponse
+	ctx      context.Context
+	stopChan chan struct{}
+	reqChan  chan cpluginv1.DestinationRunRequest
+	respChan chan cpluginv1.DestinationRunResponse
 
 	reason error
 	m      sync.RWMutex
@@ -195,7 +194,9 @@ type destinationRunStream struct {
 
 func (s *destinationRunStream) Send(resp cpluginv1.DestinationRunResponse) error {
 	select {
-	case <-s.sendCtx.Done():
+	case <-s.ctx.Done():
+		return s.ctx.Err()
+	case <-s.stopChan:
 		return io.EOF
 	case s.respChan <- resp:
 		return nil
@@ -204,7 +205,9 @@ func (s *destinationRunStream) Send(resp cpluginv1.DestinationRunResponse) error
 
 func (s *destinationRunStream) Recv() (cpluginv1.DestinationRunRequest, error) {
 	select {
-	case <-s.recvCtx.Done():
+	case <-s.ctx.Done():
+		return cpluginv1.DestinationRunRequest{}, s.ctx.Err()
+	case <-s.stopChan:
 		return cpluginv1.DestinationRunRequest{}, io.EOF
 	case req := <-s.reqChan:
 		return req, nil
@@ -212,10 +215,10 @@ func (s *destinationRunStream) Recv() (cpluginv1.DestinationRunRequest, error) {
 }
 
 func (s *destinationRunStream) recvInternal() (cpluginv1.DestinationRunResponse, error) {
-	// note that contexts are named from the perspective of the server, while
-	// this function is used from the perspective of the client
 	select {
-	case <-s.sendCtx.Done():
+	case <-s.ctx.Done():
+		return cpluginv1.DestinationRunResponse{}, cerrors.New(s.ctx.Err().Error())
+	case <-s.stopChan:
 		return cpluginv1.DestinationRunResponse{}, s.reason
 	case resp := <-s.respChan:
 		return resp, nil
@@ -223,24 +226,24 @@ func (s *destinationRunStream) recvInternal() (cpluginv1.DestinationRunResponse,
 }
 
 func (s *destinationRunStream) sendInternal(req cpluginv1.DestinationRunRequest) error {
-	// note that contexts are named from the perspective of the server, while
-	// this function is used from the perspective of the client
 	select {
-	case <-s.recvCtx.Done():
+	case <-s.ctx.Done():
+		return cerrors.New(s.ctx.Err().Error())
+	case <-s.stopChan:
 		return plugin.ErrStreamNotOpen
 	case s.reqChan <- req:
 		return nil
 	}
 }
 
-func (s *destinationRunStream) stopAll(reason error) {
-	s.reason = reason
-	s.closeSend()
-	s.closeRecv()
-}
-
-func (s *destinationRunStream) stopSend() {
-	// we want to stop the stream towards the server, so we close the receiving
-	// context from the servers perspective
-	s.closeRecv()
+func (s *destinationRunStream) stop(reason error) bool {
+	select {
+	case <-s.stopChan:
+		// channel already closed
+		return false
+	default:
+		s.reason = reason
+		close(s.stopChan)
+		return true
+	}
 }

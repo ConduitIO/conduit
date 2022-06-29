@@ -115,7 +115,6 @@ func (s *sourcePluginClient) Ack(ctx context.Context, p record.Position) error {
 
 	err = s.stream.Send(protoReq)
 	if err != nil {
-		err = s.ackErrorCause(err)
 		if err == io.EOF {
 			// stream was gracefully closed
 			return plugin.ErrStreamNotOpen
@@ -123,21 +122,6 @@ func (s *sourcePluginClient) Ack(ctx context.Context, p record.Position) error {
 		return unwrapGRPCError(err)
 	}
 	return nil
-}
-
-func (s *sourcePluginClient) ackErrorCause(err error) error {
-	if err != io.EOF {
-		// this is an actual error, return it
-		return err
-	}
-
-	// actual error can be discovered through Recv, let's do it
-	_, recvErr := s.stream.Recv()
-	if recvErr == nil {
-		// Recv did not return an error, we just read a record, that's a huge bug!
-		panic(cerrors.Errorf("tried to get error cause of Ack, read a record instead, this is a bug! original error: %w", err))
-	}
-	return recvErr
 }
 
 func (s *sourcePluginClient) Stop(ctx context.Context) (record.Position, error) {

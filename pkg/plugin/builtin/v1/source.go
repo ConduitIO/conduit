@@ -97,7 +97,9 @@ func (s *sourcePluginAdapter) Start(ctx context.Context, p record.Position) erro
 		s.logger.Trace(ctx).Msg("calling Run")
 		err := runSandboxNoResp(s.impl.Run, s.withLogger(ctx), cpluginv1.SourceRunStream(s.stream))
 		if err != nil {
-			s.stream.stop(cerrors.Errorf("error in run: %w", err))
+			if s.stream.stop(cerrors.Errorf("error in run: %w", err)) {
+				s.logger.Err(ctx, err).Msg("stream already stopped")
+			}
 		} else {
 			s.stream.stop(plugin.ErrStreamNotOpen)
 		}
@@ -164,6 +166,11 @@ func (s *sourcePluginAdapter) Stop(ctx context.Context) (record.Position, error)
 }
 
 func (s *sourcePluginAdapter) Teardown(ctx context.Context) error {
+	// TODO stop stream before calling teardown
+	if s.stream != nil {
+		s.stream.stop(nil)
+	}
+
 	s.logger.Trace(ctx).Msg("calling Teardown")
 	resp, err := runSandbox(s.impl.Teardown, s.withLogger(ctx), toplugin.SourceTeardownRequest())
 	if err != nil {
@@ -229,15 +236,22 @@ func (s *sourceRunStream) recvInternal() (cpluginv1.SourceRunResponse, error) {
 func (s *sourceRunStream) sendInternal(req cpluginv1.SourceRunRequest) error {
 	select {
 	case <-s.ctx.Done():
-		return cerrors.New(s.ctx.Err().Error()) // TODO should this be s.ctx.Err()?
+		return cerrors.New(s.ctx.Err().Error())
 	case <-s.stopChan:
-		return s.reason
+		return plugin.ErrStreamNotOpen
 	case s.reqChan <- req:
 		return nil
 	}
 }
 
-func (s *sourceRunStream) stop(reason error) {
-	s.reason = reason
-	close(s.stopChan)
+func (s *sourceRunStream) stop(reason error) bool {
+	select {
+	case <-s.stopChan:
+		// channel already closed
+		return false
+	default:
+		s.reason = reason
+		close(s.stopChan)
+		return true
+	}
 }

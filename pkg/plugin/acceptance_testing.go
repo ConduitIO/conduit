@@ -74,7 +74,7 @@ func AcceptanceTestV1(t *testing.T, tdf testDispenserFunc) {
 	run(t, tdf, testDestination_Ack_WithoutStart)
 	run(t, tdf, testDestination_Run_Fail)
 	run(t, tdf, testDestination_Teardown_Success)
-	run(t, tdf, testDestination_Stop_CloseSend)
+	run(t, tdf, testDestination_Teardown_CloseSend)
 }
 
 func run(t *testing.T, tdf testDispenserFunc, test func(*testing.T, testDispenserFunc)) {
@@ -527,16 +527,9 @@ func testSource_Run_Fail(t *testing.T, tdf testDispenserFunc) {
 
 	is.Equal(got.Error(), want.Error())
 
-	// Error is returned through the Ack function, that's the outgoing stream.
+	// Ack returns just a generic error
 	err = source.Ack(ctx, record.Position("test-position"))
-	// Unwrap inner-most error
-	got = nil
-	for unwrapped := err; unwrapped != nil; {
-		got = unwrapped
-		unwrapped = cerrors.Unwrap(unwrapped)
-	}
-
-	is.Equal(got.Error(), want.Error())
+	is.True(cerrors.Is(err, ErrStreamNotOpen))
 }
 
 func testSource_Teardown_Success(t *testing.T, tdf testDispenserFunc) {
@@ -924,7 +917,7 @@ func testDestination_Teardown_Success(t *testing.T, tdf testDispenserFunc) {
 	}
 }
 
-func testDestination_Stop_CloseSend(t *testing.T, tdf testDispenserFunc) {
+func testDestination_Teardown_CloseSend(t *testing.T, tdf testDispenserFunc) {
 	is := is.New(t)
 
 	ctx := context.Background()
@@ -945,12 +938,6 @@ func testDestination_Stop_CloseSend(t *testing.T, tdf testDispenserFunc) {
 			_, recvErr := stream.Recv()
 			is.Equal(recvErr, io.EOF)
 			close(closeCh)
-
-			// we should still be able to send acks back even if incoming stream
-			// is closed
-			sendErr := stream.Send(cpluginv1.DestinationRunResponse{})
-			is.NoErr(sendErr)
-
 			return recvErr
 		})
 	mockDestination.EXPECT().
@@ -965,6 +952,9 @@ func testDestination_Stop_CloseSend(t *testing.T, tdf testDispenserFunc) {
 	err = destination.Stop(ctx, record.Position("foo"))
 	is.NoErr(err)
 
+	err = destination.Teardown(ctx)
+	is.NoErr(err)
+
 	select {
 	case <-closeCh:
 		// all good, outgoing stream was closed
@@ -972,10 +962,4 @@ func testDestination_Stop_CloseSend(t *testing.T, tdf testDispenserFunc) {
 		is.Fail() // expected outgoing stream to be closed
 	}
 
-	// fetching an ack should still work
-	_, err = destination.Ack(ctx)
-	is.NoErr(err)
-
-	err = destination.Teardown(ctx)
-	is.NoErr(err)
 }

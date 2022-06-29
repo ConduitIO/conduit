@@ -124,33 +124,35 @@ func (s *destinationPluginClient) Ack(ctx context.Context) (record.Position, err
 }
 
 func (s *destinationPluginClient) Stop(ctx context.Context, lastPosition record.Position) error {
-	var errOut error
 	if s.stream == nil {
 		return plugin.ErrStreamNotOpen
 	}
 
-	err := s.stream.CloseSend()
-	if err != nil {
-		errOut = multierror.Append(errOut, unwrapGRPCError(err))
-	}
-
 	protoReq := toproto.DestinationStopRequest(lastPosition)
 	protoResp, err := s.grpcClient.Stop(ctx, protoReq)
-	if err != nil {
-		errOut = multierror.Append(errOut, unwrapGRPCError(err))
-	}
-	_ = protoResp // response is empty
-
-	return errOut
-}
-
-func (s *destinationPluginClient) Teardown(ctx context.Context) error {
-	protoReq := toproto.DestinationTeardownRequest()
-	protoResp, err := s.grpcClient.Teardown(ctx, protoReq)
 	if err != nil {
 		return unwrapGRPCError(err)
 	}
 	_ = protoResp // response is empty
 
 	return nil
+}
+
+func (s *destinationPluginClient) Teardown(ctx context.Context) error {
+	var errOut error
+	if s.stream != nil {
+		err := s.stream.CloseSend()
+		if err != nil {
+			errOut = multierror.Append(errOut, unwrapGRPCError(err))
+		}
+	}
+
+	protoReq := toproto.DestinationTeardownRequest()
+	protoResp, err := s.grpcClient.Teardown(ctx, protoReq)
+	if err != nil {
+		errOut = multierror.Append(errOut, unwrapGRPCError(err))
+	}
+	_ = protoResp // response is empty
+
+	return errOut
 }
