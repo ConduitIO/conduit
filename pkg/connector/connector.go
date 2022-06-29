@@ -87,10 +87,10 @@ type Source interface {
 	// processed and can be acknowledged.
 	Ack(context.Context, record.Position) error
 
-	// Stop signals to the source to stop producing records. Note that after
-	// this call Read can still produce records that have been cached by the
-	// connector.
-	Stop(context.Context) error
+	// Stop signals to the source to stop producing records. After this call
+	// Read will produce records until the record with the last position has
+	// been read (Conduit might have already received that record).
+	Stop(context.Context) (record.Position, error)
 }
 
 // Destination is a connector that can write records to a destination.
@@ -111,6 +111,10 @@ type Destination interface {
 	// processed and returns the position of that record. If the record wasn't
 	// successfully processed the function returns the position and an error.
 	Ack(context.Context) (record.Position, error)
+
+	// Stop signals to the destination that no more records will be produced
+	// after record with the last position.
+	Stop(context.Context) (record.Position, error)
 }
 
 // Config collects common data stored for a connector.

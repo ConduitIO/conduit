@@ -156,21 +156,23 @@ func (s *source) Open(ctx context.Context) error {
 	return nil
 }
 
-func (s *source) Stop(ctx context.Context) error {
+func (s *source) Stop(ctx context.Context) (record.Position, error) {
 	cleanup, err := s.preparePluginCall()
 	defer cleanup()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	s.logger.Debug(ctx).Msg("stopping source connector plugin")
-	err = s.plugin.Stop(ctx)
+	s.logger.Debug(ctx).Msg("sending stop signal to source connector plugin")
+	lastPosition, err := s.plugin.Stop(ctx)
 	if err != nil {
-		return cerrors.Errorf("could not stop plugin: %w", err)
+		return nil, cerrors.Errorf("could not stop source plugin: %w", err)
 	}
 
-	s.logger.Info(ctx).Msg("connector plugin successfully stopped")
-	return nil
+	s.logger.Info(ctx).
+		Bytes(log.RecordPositionField, lastPosition).
+		Msg("source connector plugin successfully responded to stop signal")
+	return lastPosition, nil
 }
 
 func (s *source) Teardown(ctx context.Context) error {
@@ -185,17 +187,16 @@ func (s *source) Teardown(ctx context.Context) error {
 	s.wg.Wait()
 
 	s.logger.Debug(ctx).Msg("tearing down source connector plugin")
-
 	err := s.plugin.Teardown(ctx)
 
 	s.plugin = nil
 	s.persister.ConnectorStopped()
 
 	if err != nil {
-		return cerrors.Errorf("could not tear down plugin: %w", err)
+		return cerrors.Errorf("could not tear down source connector plugin: %w", err)
 	}
 
-	s.logger.Info(ctx).Msg("connector plugin successfully torn down")
+	s.logger.Info(ctx).Msg("source connector plugin successfully torn down")
 	return nil
 }
 

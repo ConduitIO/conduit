@@ -21,7 +21,6 @@ import (
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/conduitio/conduit/pkg/foundation/multierror"
 	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/conduitio/conduit/pkg/record"
 )
@@ -156,6 +155,25 @@ func (s *destination) Open(ctx context.Context) error {
 	return nil
 }
 
+func (s *destination) Stop(ctx context.Context, lastPosition record.Position) error {
+	cleanup, err := s.preparePluginCall()
+	defer cleanup()
+	if err != nil {
+		return err
+	}
+
+	s.logger.Debug(ctx).
+		Bytes(log.RecordPositionField, lastPosition).
+		Msg("sending stop signal to destination connector plugin")
+	err = s.plugin.Stop(ctx, lastPosition)
+	if err != nil {
+		return cerrors.Errorf("could not stop destination plugin: %w", err)
+	}
+
+	s.logger.Debug(ctx).Msg("destination connector plugin successfully responded to stop signal")
+	return nil
+}
+
 func (s *destination) Teardown(ctx context.Context) error {
 	// lock destination as we are about to mutate the plugin field
 	s.m.Lock()
@@ -164,23 +182,20 @@ func (s *destination) Teardown(ctx context.Context) error {
 		return plugin.ErrPluginNotRunning
 	}
 
-	s.logger.Debug(ctx).Msg("stopping destination connector plugin")
-	err := s.plugin.Stop(ctx)
-
-	// wait for any calls to the plugin to stop running first (e.g. Ack or Write)
+	// wait for any calls to the plugin to stop running first (e.g. Stop, Ack or Write)
 	s.wg.Wait()
 
 	s.logger.Debug(ctx).Msg("tearing down destination connector plugin")
-	err = multierror.Append(err, s.plugin.Teardown(ctx))
+	err := s.plugin.Teardown(ctx)
 
 	s.plugin = nil
 	s.persister.ConnectorStopped()
 
 	if err != nil {
-		return cerrors.Errorf("could not tear down plugin: %w", err)
+		return cerrors.Errorf("could not tear down destination connector plugin: %w", err)
 	}
 
-	s.logger.Info(ctx).Msg("connector plugin successfully torn down")
+	s.logger.Info(ctx).Msg("destination connector plugin successfully torn down")
 	return nil
 }
 
