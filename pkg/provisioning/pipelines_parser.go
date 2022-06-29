@@ -17,6 +17,7 @@ package provisioning
 import (
 	"bytes"
 	"io"
+	"os"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"gopkg.in/yaml.v3"
@@ -53,6 +54,8 @@ type PipelinesConfig struct {
 }
 
 func Parse(data []byte) (map[string]PipelineConfig, error) {
+	// replace environment variables with their values
+	data = []byte(os.ExpandEnv(string(data)))
 	dec := yaml.NewDecoder(bytes.NewReader(data))
 
 	var docs []PipelinesConfig

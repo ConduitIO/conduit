@@ -16,6 +16,7 @@ package provisioning
 
 import (
 	"io/ioutil"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -190,4 +191,56 @@ func TestParser_InvalidYaml(t *testing.T) {
 	p, err := Parse(data)
 	is.True(err != nil)
 	is.Equal(p, nil)
+}
+
+func TestParser_EnvVars(t *testing.T) {
+	is := is.New(t)
+	filename, err := filepath.Abs("./test/pipelines7-env-vars.yml")
+	if err != nil {
+		t.Error(err)
+	}
+
+	// set env variables
+	err = os.Setenv("TEST_PARSER_AWS_SECRET", "my-aws-secret")
+	if err != nil {
+		t.Fatalf("Failed to write env var: $TEST_PARSER_AWS_SECRET")
+	}
+	err = os.Setenv("TEST_PARSER_AWS_KEY", "my-aws-key")
+	if err != nil {
+		t.Fatalf("Failed to write env var: $TEST_PARSER_AWS_KEY")
+	}
+	err = os.Setenv("TEST_PARSER_AWS_URL", "aws-url")
+	if err != nil {
+		t.Fatalf("Failed to write env var: $TEST_PARSER_AWS_URL")
+	}
+
+	want := map[string]PipelineConfig{
+		"pipeline1": {
+			Status:      "running",
+			Name:        "pipeline1",
+			Description: "desc1",
+			Connectors: map[string]ConnectorConfig{
+				"con1": {
+					Type:   "source",
+					Plugin: "builtin:s3",
+					Name:   "s3-source",
+					Settings: map[string]string{
+						// env variables should be replaces with their values
+						"aws.secret": "my-aws-secret",
+						"aws.key":    "my-aws-key",
+						"aws.url":    "my/aws-url/url",
+					},
+				},
+			},
+		},
+	}
+
+	data, err := ioutil.ReadFile(filename)
+	if err != nil {
+		t.Error(err)
+	}
+
+	got, err := Parse(data)
+	is.NoErr(err)
+	is.Equal(want, got)
 }
