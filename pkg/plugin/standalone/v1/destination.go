@@ -123,7 +123,7 @@ func (s *destinationPluginClient) Ack(ctx context.Context) (record.Position, err
 	return position, nil
 }
 
-func (s *destinationPluginClient) Stop(ctx context.Context) error {
+func (s *destinationPluginClient) Stop(ctx context.Context, lastPosition record.Position) error {
 	var errOut error
 	if s.stream == nil {
 		return plugin.ErrStreamNotOpen
@@ -134,7 +134,7 @@ func (s *destinationPluginClient) Stop(ctx context.Context) error {
 		errOut = multierror.Append(errOut, unwrapGRPCError(err))
 	}
 
-	protoReq := toproto.DestinationStopRequest()
+	protoReq := toproto.DestinationStopRequest(lastPosition)
 	protoResp, err := s.grpcClient.Stop(ctx, protoReq)
 	if err != nil {
 		errOut = multierror.Append(errOut, unwrapGRPCError(err))

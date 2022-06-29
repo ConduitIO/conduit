@@ -26,3 +26,7 @@ func SourceRunResponse(in *connectorv1.Source_Run_Response) (record.Record, erro
 	}
 	return out, nil
 }
+
+func SourceStopResponse(in *connectorv1.Source_Stop_Response) (record.Position, error) {
+	return in.LastPosition, nil
+}

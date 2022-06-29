@@ -140,18 +140,21 @@ func (s *sourcePluginClient) ackErrorCause(err error) error {
 	return recvErr
 }
 
-func (s *sourcePluginClient) Stop(ctx context.Context) error {
+func (s *sourcePluginClient) Stop(ctx context.Context) (record.Position, error) {
 	if s.stream == nil {
-		return plugin.ErrStreamNotOpen
+		return nil, plugin.ErrStreamNotOpen
 	}
 
 	protoReq := toproto.SourceStopRequest()
 	protoResp, err := s.grpcClient.Stop(ctx, protoReq)
 	if err != nil {
-		return unwrapGRPCError(err)
+		return nil, unwrapGRPCError(err)
 	}
-	_ = protoResp // response is empty
-	return nil
+	goResp, err := fromproto.SourceStopResponse(protoResp)
+	if err != nil {
+		return nil, err
+	}
+	return goResp, nil
 }
 
 func (s *sourcePluginClient) Teardown(ctx context.Context) error {
