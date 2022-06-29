@@ -2,16 +2,14 @@ version: 1.0
 pipelines:
   pipeline1:
     status: running
-    config:
-      name: pipeline1
-      description: desc1
+    name: pipeline1
+    description: desc1
     connectors:
       con1:
         type: source
         plugin: builtin:s3
-        config:
-          name: s3-source
-          settings:
-            aws.secret: ${AWS_SECRET}
-            aws.key: ${AWS_KEY}
-            aws.url: my/${AWS_URL}/url
+        name: s3-source
+        settings:
+          aws.secret: ${TEST_PARSER_AWS_SECRET}
+          aws.key: ${TEST_PARSER_AWS_KEY}
+          aws.url: my/${TEST_PARSER_AWS_URL}/url
