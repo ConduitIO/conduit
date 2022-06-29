@@ -16,8 +16,6 @@ package builtinv1
 
 import (
 	"context"
-	"io"
-	"sync"
 
 	"github.com/conduitio/conduit-connector-protocol/cpluginv1"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -41,7 +39,7 @@ type sourcePluginAdapter struct {
 	// ctxLogger is attached to the context of each call to the plugin.
 	ctxLogger zerolog.Logger
 
-	stream *sourceRunStream
+	stream *stream[cpluginv1.SourceRunRequest, cpluginv1.SourceRunResponse]
 }
 
 var _ plugin.SourcePlugin = (*sourcePluginAdapter)(nil)
@@ -97,11 +95,11 @@ func (s *sourcePluginAdapter) Start(ctx context.Context, p record.Position) erro
 		s.logger.Trace(ctx).Msg("calling Run")
 		err := runSandboxNoResp(s.impl.Run, s.withLogger(ctx), cpluginv1.SourceRunStream(s.stream))
 		if err != nil {
-			if s.stream.stop(cerrors.Errorf("error in run: %w", err)) {
+			if s.stream.Stop(cerrors.Errorf("error in run: %w", err)) {
 				s.logger.Err(ctx, err).Msg("stream already stopped")
 			}
 		} else {
-			s.stream.stop(plugin.ErrStreamNotOpen)
+			s.stream.Stop(plugin.ErrStreamNotOpen)
 		}
 		s.logger.Trace(ctx).Msg("Run stopped")
 	}()
@@ -115,7 +113,7 @@ func (s *sourcePluginAdapter) Read(ctx context.Context) (record.Record, error) {
 	}
 
 	s.logger.Trace(ctx).Msg("receiving record")
-	resp, err := s.stream.recvInternal()
+	resp, err := s.stream.RecvInternal()
 	if err != nil {
 		return record.Record{}, cerrors.Errorf("builtin plugin receive failed: %w", err)
 	}
@@ -139,7 +137,7 @@ func (s *sourcePluginAdapter) Ack(ctx context.Context, p record.Position) error 
 	}
 
 	s.logger.Trace(ctx).Msg("sending ack")
-	err = s.stream.sendInternal(req)
+	err = s.stream.SendInternal(req)
 	if err != nil {
 		return cerrors.Errorf("builtin plugin send failed: %w", err)
 	}
@@ -168,7 +166,7 @@ func (s *sourcePluginAdapter) Stop(ctx context.Context) (record.Position, error)
 func (s *sourcePluginAdapter) Teardown(ctx context.Context) error {
 	// TODO stop stream before calling teardown
 	if s.stream != nil {
-		s.stream.stop(nil)
+		s.stream.Stop(nil)
 	}
 
 	s.logger.Trace(ctx).Msg("calling Teardown")
@@ -181,77 +179,11 @@ func (s *sourcePluginAdapter) Teardown(ctx context.Context) error {
 	return nil
 }
 
-func newSourceRunStream(ctx context.Context) *sourceRunStream {
-	return &sourceRunStream{
+func newSourceRunStream(ctx context.Context) *stream[cpluginv1.SourceRunRequest, cpluginv1.SourceRunResponse] {
+	return &stream[cpluginv1.SourceRunRequest, cpluginv1.SourceRunResponse]{
 		ctx:      ctx,
 		stopChan: make(chan struct{}),
 		reqChan:  make(chan cpluginv1.SourceRunRequest),
 		respChan: make(chan cpluginv1.SourceRunResponse),
-	}
-}
-
-type sourceRunStream struct {
-	ctx      context.Context
-	stopChan chan struct{}
-	reqChan  chan cpluginv1.SourceRunRequest
-	respChan chan cpluginv1.SourceRunResponse
-
-	reason error
-	m      sync.RWMutex
-}
-
-func (s *sourceRunStream) Send(resp cpluginv1.SourceRunResponse) error {
-	select {
-	case <-s.ctx.Done():
-		return s.ctx.Err()
-	case <-s.stopChan:
-		return io.EOF
-	case s.respChan <- resp:
-		return nil
-	}
-}
-
-func (s *sourceRunStream) Recv() (cpluginv1.SourceRunRequest, error) {
-	select {
-	case <-s.ctx.Done():
-		return cpluginv1.SourceRunRequest{}, s.ctx.Err()
-	case <-s.stopChan:
-		return cpluginv1.SourceRunRequest{}, io.EOF
-	case req := <-s.reqChan:
-		return req, nil
-	}
-}
-
-func (s *sourceRunStream) recvInternal() (cpluginv1.SourceRunResponse, error) {
-	select {
-	case <-s.ctx.Done():
-		return cpluginv1.SourceRunResponse{}, cerrors.New(s.ctx.Err().Error())
-	case <-s.stopChan:
-		return cpluginv1.SourceRunResponse{}, s.reason
-	case resp := <-s.respChan:
-		return resp, nil
-	}
-}
-
-func (s *sourceRunStream) sendInternal(req cpluginv1.SourceRunRequest) error {
-	select {
-	case <-s.ctx.Done():
-		return cerrors.New(s.ctx.Err().Error())
-	case <-s.stopChan:
-		return plugin.ErrStreamNotOpen
-	case s.reqChan <- req:
-		return nil
-	}
-}
-
-func (s *sourceRunStream) stop(reason error) bool {
-	select {
-	case <-s.stopChan:
-		// channel already closed
-		return false
-	default:
-		s.reason = reason
-		close(s.stopChan)
-		return true
 	}
 }

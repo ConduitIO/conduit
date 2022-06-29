@@ -16,8 +16,6 @@ package builtinv1
 
 import (
 	"context"
-	"io"
-	"sync"
 
 	"github.com/conduitio/conduit-connector-protocol/cpluginv1"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -41,7 +39,7 @@ type destinationPluginAdapter struct {
 	// ctxLogger is attached to the context of each call to the plugin.
 	ctxLogger zerolog.Logger
 
-	stream *destinationRunStream
+	stream *stream[cpluginv1.DestinationRunRequest, cpluginv1.DestinationRunResponse]
 }
 
 var _ plugin.DestinationPlugin = (*destinationPluginAdapter)(nil)
@@ -92,11 +90,11 @@ func (s *destinationPluginAdapter) Start(ctx context.Context) error {
 		s.logger.Trace(ctx).Msg("calling Run")
 		err := runSandboxNoResp(s.impl.Run, s.withLogger(ctx), cpluginv1.DestinationRunStream(s.stream))
 		if err != nil {
-			if s.stream.stop(cerrors.Errorf("error in run: %w", err)) {
+			if s.stream.Stop(cerrors.Errorf("error in run: %w", err)) {
 				s.logger.Err(ctx, err).Msg("stream already stopped")
 			}
 		} else {
-			s.stream.stop(plugin.ErrStreamNotOpen)
+			s.stream.Stop(plugin.ErrStreamNotOpen)
 		}
 		s.logger.Trace(ctx).Msg("Run stopped")
 	}()
@@ -115,7 +113,7 @@ func (s *destinationPluginAdapter) Write(ctx context.Context, r record.Record) (
 	}
 
 	s.logger.Trace(ctx).Msg("sending record")
-	err = s.stream.sendInternal(req)
+	err = s.stream.SendInternal(req)
 	if err != nil {
 		return cerrors.Errorf("builtin plugin send failed: %w", err)
 	}
@@ -129,7 +127,7 @@ func (s *destinationPluginAdapter) Ack(ctx context.Context) (record.Position, er
 	}
 
 	s.logger.Trace(ctx).Msg("receiving ack")
-	resp, err := s.stream.recvInternal()
+	resp, err := s.stream.RecvInternal()
 	if err != nil {
 		return nil, err
 	}
@@ -160,7 +158,7 @@ func (s *destinationPluginAdapter) Stop(ctx context.Context, lastPosition record
 func (s *destinationPluginAdapter) Teardown(ctx context.Context) error {
 	if s.stream != nil {
 		// stop stream if it's open
-		_ = s.stream.stop(nil)
+		_ = s.stream.Stop(nil)
 	}
 
 	s.logger.Trace(ctx).Msg("calling Teardown")
@@ -173,77 +171,11 @@ func (s *destinationPluginAdapter) Teardown(ctx context.Context) error {
 	return nil
 }
 
-func newDestinationRunStream(ctx context.Context) *destinationRunStream {
-	return &destinationRunStream{
+func newDestinationRunStream(ctx context.Context) *stream[cpluginv1.DestinationRunRequest, cpluginv1.DestinationRunResponse] {
+	return &stream[cpluginv1.DestinationRunRequest, cpluginv1.DestinationRunResponse]{
 		ctx:      ctx,
 		stopChan: make(chan struct{}),
 		reqChan:  make(chan cpluginv1.DestinationRunRequest),
 		respChan: make(chan cpluginv1.DestinationRunResponse),
-	}
-}
-
-type destinationRunStream struct {
-	ctx      context.Context
-	stopChan chan struct{}
-	reqChan  chan cpluginv1.DestinationRunRequest
-	respChan chan cpluginv1.DestinationRunResponse
-
-	reason error
-	m      sync.RWMutex
-}
-
-func (s *destinationRunStream) Send(resp cpluginv1.DestinationRunResponse) error {
-	select {
-	case <-s.ctx.Done():
-		return s.ctx.Err()
-	case <-s.stopChan:
-		return io.EOF
-	case s.respChan <- resp:
-		return nil
-	}
-}
-
-func (s *destinationRunStream) Recv() (cpluginv1.DestinationRunRequest, error) {
-	select {
-	case <-s.ctx.Done():
-		return cpluginv1.DestinationRunRequest{}, s.ctx.Err()
-	case <-s.stopChan:
-		return cpluginv1.DestinationRunRequest{}, io.EOF
-	case req := <-s.reqChan:
-		return req, nil
-	}
-}
-
-func (s *destinationRunStream) recvInternal() (cpluginv1.DestinationRunResponse, error) {
-	select {
-	case <-s.ctx.Done():
-		return cpluginv1.DestinationRunResponse{}, cerrors.New(s.ctx.Err().Error())
-	case <-s.stopChan:
-		return cpluginv1.DestinationRunResponse{}, s.reason
-	case resp := <-s.respChan:
-		return resp, nil
-	}
-}
-
-func (s *destinationRunStream) sendInternal(req cpluginv1.DestinationRunRequest) error {
-	select {
-	case <-s.ctx.Done():
-		return cerrors.New(s.ctx.Err().Error())
-	case <-s.stopChan:
-		return plugin.ErrStreamNotOpen
-	case s.reqChan <- req:
-		return nil
-	}
-}
-
-func (s *destinationRunStream) stop(reason error) bool {
-	select {
-	case <-s.stopChan:
-		// channel already closed
-		return false
-	default:
-		s.reason = reason
-		close(s.stopChan)
-		return true
 	}
 }
