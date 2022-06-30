@@ -332,6 +332,7 @@ func generatorSource(ctrl *gomock.Controller, logger log.CtxLogger, nodeID strin
 }
 
 func printerDestination(ctrl *gomock.Controller, logger log.CtxLogger, nodeID string) connector.Destination {
+	var lastPosition record.Position
 	rchan := make(chan record.Record)
 	destination := connmock.NewDestination(ctrl)
 	destination.EXPECT().Open(gomock.Any()).Return(nil).Times(1)
@@ -339,6 +340,7 @@ func printerDestination(ctrl *gomock.Controller, logger log.CtxLogger, nodeID st
 		logger.Debug(ctx).
 			Str("node_id", nodeID).
 			Msg("got record")
+		lastPosition = r.Position
 		rchan <- r
 		return nil
 	}).AnyTimes()
@@ -353,6 +355,7 @@ func printerDestination(ctrl *gomock.Controller, logger log.CtxLogger, nodeID st
 			return r.Position, nil
 		}
 	}).AnyTimes()
+	destination.EXPECT().Stop(gomock.Any(), EqLazy(func() interface{} { return lastPosition })).Return(nil).Times(1)
 	destination.EXPECT().Teardown(gomock.Any()).DoAndReturn(func(ctx context.Context) error {
 		close(rchan)
 		return nil
@@ -404,4 +407,17 @@ func waitTimeout(wg *sync.WaitGroup, timeout time.Duration) bool {
 	case <-time.After(timeout):
 		return true // timed out
 	}
+}
+
+func EqLazy(x func() interface{}) gomock.Matcher { return eqMatcherLazy{x} }
+
+type eqMatcherLazy struct {
+	x func() interface{}
+}
+
+func (e eqMatcherLazy) Matches(x interface{}) bool {
+	return gomock.Eq(e.x()).Matches(x)
+}
+func (e eqMatcherLazy) String() string {
+	return gomock.Eq(e.x()).String()
 }

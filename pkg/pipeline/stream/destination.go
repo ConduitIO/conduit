@@ -22,6 +22,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics"
+	"github.com/conduitio/conduit/pkg/record"
 )
 
 // DestinationNode wraps a Destination connector and implements the Sub node interface
@@ -51,8 +52,20 @@ func (n *DestinationNode) Run(ctx context.Context) (err error) {
 	if err != nil {
 		return cerrors.Errorf("could not open destination connector: %w", err)
 	}
+
+	// lastPosition stores the position of the last successfully processed record
+	var lastPosition record.Position
 	defer func() {
-		// TODO stop destination before teardown
+		stopErr := n.Destination.Stop(connectorCtx, lastPosition)
+		if stopErr != nil {
+			// log this error right away because we're not sure the connector
+			// will be able to stop right away, we might block for 1 minute
+			// waiting for acks and we don't want the log to be empty
+			n.logger.Err(ctx, err).Msg("could not stop destination connector")
+			if err == nil {
+				err = stopErr
+			}
+		}
 
 		// wait for acker node to receive all outstanding acks, time out after
 		// 1 minute or right away if the context is already canceled.
@@ -106,6 +119,7 @@ func (n *DestinationNode) Run(ctx context.Context) (err error) {
 			_ = msg.Nack(err)
 			return cerrors.Errorf("error writing to destination: %w", err)
 		}
+		lastPosition = msg.Record.Position
 		n.ConnectorTimer.Update(time.Since(writeTime))
 	}
 }
