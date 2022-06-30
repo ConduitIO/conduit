@@ -27,11 +27,12 @@ import (
 	"github.com/rs/zerolog"
 )
 
-// sourcePluginAdapter implements the source plugin interface used
-// internally in Conduit and relays the calls to a source plugin defined in
-// conduit-connector-protocol (cpluginv1). This adapter needs to make sure it behaves in the
-// same way as the standalone plugin adapter, which communicates with the plugin
-// through gRPC, so that the caller can use both of them interchangeably.
+// sourcePluginAdapter implements the source plugin interface used internally in
+// Conduit and relays the calls to a source plugin defined in
+// conduit-connector-protocol (cpluginv1). This adapter needs to make sure it
+// behaves in the same way as the standalone plugin adapter, which communicates
+// with the plugin through gRPC, so that the caller can use both of them
+// interchangeably.
 type sourcePluginAdapter struct {
 	impl cpluginv1.SourcePlugin
 	// logger is used as the internal logger of sourcePluginAdapter.

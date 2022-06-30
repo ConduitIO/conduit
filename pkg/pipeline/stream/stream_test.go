@@ -109,7 +109,6 @@ func Example_simpleStream() {
 	// DBG got record message_id=p/generator-10 node_id=printer
 	// DBG received ack message_id=p/generator-10 node_id=generator
 	// INF stopping source connector component=SourceNode node_id=generator
-	// DBG received error on error channel error="error reading from source: stream not open" component=SourceNode node_id=generator
 	// DBG incoming messages channel closed component=SourceAckerNode node_id=generator-acker
 	// DBG incoming messages channel closed component=DestinationNode node_id=printer
 	// INF finished successfully
@@ -274,8 +273,6 @@ func Example_complexStream() {
 	// INF stopping source connector component=SourceNode node_id=generator2
 	// DBG incoming messages channel closed component=SourceAckerNode node_id=generator1-acker
 	// DBG incoming messages channel closed component=SourceAckerNode node_id=generator2-acker
-	// DBG received error on error channel error="error reading from source: stream not open" component=SourceNode node_id=generator1
-	// DBG received error on error channel error="error reading from source: stream not open" component=SourceNode node_id=generator2
 	// DBG incoming messages channel closed component=ProcessorNode node_id=counter
 	// DBG incoming messages channel closed component=DestinationNode node_id=printer2
 	// DBG incoming messages channel closed component=DestinationNode node_id=printer1

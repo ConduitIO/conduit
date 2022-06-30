@@ -52,6 +52,8 @@ func (n *DestinationNode) Run(ctx context.Context) (err error) {
 		return cerrors.Errorf("could not open destination connector: %w", err)
 	}
 	defer func() {
+		// TODO stop destination before teardown
+
 		// wait for acker node to receive all outstanding acks, time out after
 		// 1 minute or right away if the context is already canceled.
 		waitCtx, cancel := context.WithTimeout(ctx, time.Minute)

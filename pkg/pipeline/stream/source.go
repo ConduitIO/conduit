@@ -15,6 +15,7 @@
 package stream
 
 import (
+	"bytes"
 	"context"
 	"sync"
 	"time"
@@ -23,7 +24,11 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics"
-	"github.com/conduitio/conduit/pkg/plugin"
+	"github.com/conduitio/conduit/pkg/record"
+)
+
+const (
+	ControlMessageStopSourceNode ControlMessageType = "stop-source-node"
 )
 
 // SourceNode wraps a Source connector and implements the Pub node interface
@@ -91,14 +96,28 @@ func (n *SourceNode) Run(ctx context.Context) (err error) {
 	}
 	defer cleanup()
 
+	var (
+		// when source node encounters the record with this position it needs to
+		// stop retrieving new records
+		stopPosition record.Position
+		// last processed position is stored in this position
+		lastPosition record.Position
+	)
+
 	for {
 		msg, err := trigger()
 		if err != nil || msg == nil {
-			if cerrors.Is(err, plugin.ErrStreamNotOpen) {
-				// node was stopped gracefully, return stop reason
+			return cerrors.Errorf("source stream was stopped unexpectedly: %w", err)
+		}
+
+		if msg.ControlMessageType() == ControlMessageStopSourceNode {
+			// this is a control message telling us to stop
+			stopPosition = msg.Record.Position
+			if bytes.Equal(stopPosition, lastPosition) {
+				// we already encountered the record with the last position
 				return n.stopReason
 			}
-			return err
+			continue
 		}
 
 		// register another open message
@@ -106,8 +125,7 @@ func (n *SourceNode) Run(ctx context.Context) (err error) {
 		msg.RegisterStatusHandler(
 			func(msg *Message, change StatusChange) error {
 				// this is the last handler to be executed, once this handler is
-				// reached we know either the message was successfully acked, nacked
-				// or dropped
+				// reached we know either the message was either acked or nacked
 				defer n.PipelineTimer.Update(time.Since(msg.Record.ReadAt))
 				defer wgOpenMessages.Done()
 				return nil
@@ -118,15 +136,30 @@ func (n *SourceNode) Run(ctx context.Context) (err error) {
 		if err != nil {
 			return msg.Nack(err)
 		}
+
+		lastPosition = msg.Record.Position
+		if bytes.Equal(stopPosition, lastPosition) {
+			// it's the last record that we are supposed to process, stop here
+			return n.stopReason
+		}
 	}
 }
 
 func (n *SourceNode) Stop(ctx context.Context, reason error) error {
 	n.logger.Err(ctx, reason).Msg("stopping source connector")
-	n.stopReason = reason
 	lastPosition, err := n.Source.Stop(ctx)
-	_ = lastPosition // TODO store lastPosition
-	return err
+	if err != nil {
+		return cerrors.Errorf("failed to stop source connector: %w", err)
+	}
+
+	n.stopReason = reason
+	// InjectMessage will inject a message into the stream of messages being
+	// processed by SourceNode to let it know when it should stop processing new
+	// messages.
+	return n.base.InjectMessage(ctx, &Message{
+		Record:             record.Record{Position: lastPosition},
+		controlMessageType: ControlMessageStopSourceNode,
+	})
 }
 
 func (n *SourceNode) Pub() <-chan *Message {

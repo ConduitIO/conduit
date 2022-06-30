@@ -95,6 +95,9 @@ type pubNodeBase struct {
 	running bool
 	// lock guards private fields from concurrent changes.
 	lock sync.Mutex
+
+	// msgChan is an internal channel where messages from msgFetcher are collected
+	msgChan chan *Message
 }
 
 // Trigger sets up 2 goroutines, one that listens to the external error channel
@@ -122,8 +125,8 @@ func (n *pubNodeBase) Trigger(
 	}
 
 	n.running = true
+	n.msgChan = make(chan *Message)
 	internalErrChan := make(chan error)
-	msgChan := make(chan *Message)
 
 	if externalErrChan != nil {
 		// spawn goroutine that forwards external errors into the internal error
@@ -150,13 +153,13 @@ func (n *pubNodeBase) Trigger(
 					internalErrChan <- err
 					return
 				}
-				msgChan <- msg
+				n.msgChan <- msg
 			}
 		}()
 	}
 
 	trigger := func() (*Message, error) {
-		return n.nodeBase.Receive(ctx, logger, msgChan, internalErrChan)
+		return n.nodeBase.Receive(ctx, logger, n.msgChan, internalErrChan)
 	}
 	cleanup := func() {
 		// TODO make sure spawned goroutines are stopped and internal channels
@@ -165,6 +168,20 @@ func (n *pubNodeBase) Trigger(
 	}
 
 	return trigger, cleanup, nil
+}
+
+// InjectMessage can be used to inject a message into the message stream. This
+// is used to inject control messages like the last position message when
+// stopping a source connector. It is a bit hacky, but it doesn't require us to
+// create a separate channel for signals which makes it performant and easiest
+// to implement.
+func (n *pubNodeBase) InjectMessage(ctx context.Context, message *Message) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case n.msgChan <- message:
+		return nil
+	}
 }
 
 func (n *pubNodeBase) cleanup(ctx context.Context, logger log.CtxLogger) {
