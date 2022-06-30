@@ -112,7 +112,13 @@ func (n *SourceNode) Run(ctx context.Context) (err error) {
 
 		if msg.ControlMessageType() == ControlMessageStopSourceNode {
 			// this is a control message telling us to stop
-			stopPosition = msg.Record.Position
+			n.logger.Err(ctx, n.stopReason).Msg("stopping source connector")
+			stopPosition, err = n.Source.Stop(ctx)
+			if err != nil {
+				// TODO think through if just exiting here makes sense
+				return cerrors.Errorf("failed to stop source connector: %w", err)
+			}
+
 			if bytes.Equal(stopPosition, lastPosition) {
 				// we already encountered the record with the last position
 				return n.stopReason
@@ -146,18 +152,10 @@ func (n *SourceNode) Run(ctx context.Context) (err error) {
 }
 
 func (n *SourceNode) Stop(ctx context.Context, reason error) error {
-	n.logger.Err(ctx, reason).Msg("stopping source connector")
-	lastPosition, err := n.Source.Stop(ctx)
-	if err != nil {
-		return cerrors.Errorf("failed to stop source connector: %w", err)
-	}
-
-	n.stopReason = reason
 	// InjectMessage will inject a message into the stream of messages being
 	// processed by SourceNode to let it know when it should stop processing new
 	// messages.
 	return n.base.InjectMessage(ctx, &Message{
-		Record:             record.Record{Position: lastPosition},
 		controlMessageType: ControlMessageStopSourceNode,
 	})
 }

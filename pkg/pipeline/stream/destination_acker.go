@@ -214,12 +214,12 @@ func (n *DestinationAckerNode) Wait(ctx context.Context) {
 		}
 		n.logger.Debug(ctx).
 			Int("remaining", cacheSize).
-			Msg("waiting for acker node to process remaining acks")
+			Msg("waiting for destination acker node to process remaining acks")
 		select {
 		case <-ctx.Done():
 			n.logger.Warn(ctx).
 				Int("remaining", cacheSize).
-				Msg("stopped waiting for acker node even though some acks may be remaining")
+				Msg("stopped waiting for destination acker node even though some acks may be remaining")
 			return
 		case <-t.C:
 		}
