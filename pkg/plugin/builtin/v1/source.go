@@ -96,7 +96,7 @@ func (s *sourcePluginAdapter) Start(ctx context.Context, p record.Position) erro
 		s.logger.Trace(ctx).Msg("calling Run")
 		err := runSandboxNoResp(s.impl.Run, s.withLogger(ctx), cpluginv1.SourceRunStream(s.stream))
 		if err != nil {
-			if s.stream.stop(cerrors.Errorf("error in run: %w", err)) {
+			if !s.stream.stop(err) {
 				s.logger.Err(ctx, err).Msg("stream already stopped")
 			}
 		} else {
@@ -165,10 +165,6 @@ func (s *sourcePluginAdapter) Stop(ctx context.Context) (record.Position, error)
 }
 
 func (s *sourcePluginAdapter) Teardown(ctx context.Context) error {
-	if s.stream != nil {
-		s.stream.stop(nil)
-	}
-
 	s.logger.Trace(ctx).Msg("calling Teardown")
 	resp, err := runSandbox(s.impl.Teardown, s.withLogger(ctx), toplugin.SourceTeardownRequest())
 	if err != nil {

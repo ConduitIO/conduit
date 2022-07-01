@@ -60,7 +60,6 @@ func Example_simpleStream() {
 		Name:        "printer-acker",
 		Destination: node3.Destination,
 	}
-	node3.AckerNode = node4
 
 	stream.SetLogger(node1, logger)
 	stream.SetLogger(node2, logger)
@@ -70,6 +69,7 @@ func Example_simpleStream() {
 	// put everything together
 	node2.Sub(node1.Pub())
 	node3.Sub(node2.Pub())
+	node4.Sub(node3.Pub())
 
 	var wg sync.WaitGroup
 	wg.Add(4)
@@ -111,6 +111,7 @@ func Example_simpleStream() {
 	// INF stopping source connector component=SourceNode node_id=generator
 	// DBG incoming messages channel closed component=SourceAckerNode node_id=generator-acker
 	// DBG incoming messages channel closed component=DestinationNode node_id=printer
+	// DBG incoming messages channel closed component=DestinationAckerNode node_id=printer-acker
 	// INF finished successfully
 }
 
@@ -153,23 +154,25 @@ func Example_complexStream() {
 		Destination:    printerDestination(ctrl, logger, "printer1"),
 		ConnectorTimer: noop.Timer{},
 	}
-	node9 := &stream.DestinationNode{
+	node9 := &stream.DestinationAckerNode{
+		Name:        "printer1-acker",
+		Destination: node8.Destination,
+	}
+	node10 := &stream.DestinationNode{
 		Name:           "printer2",
 		Destination:    printerDestination(ctrl, logger, "printer2"),
 		ConnectorTimer: noop.Timer{},
 	}
-	node10 := &stream.DestinationAckerNode{
-		Name:        "printer1-acker",
-		Destination: node8.Destination,
-	}
-	node8.AckerNode = node10
 	node11 := &stream.DestinationAckerNode{
 		Name:        "printer2-acker",
-		Destination: node9.Destination,
+		Destination: node10.Destination,
 	}
-	node9.AckerNode = node11
 
 	// put everything together
+	// this is the pipeline we are building
+	// [1] -> [2] -\                       /-> [8] -> [9]
+	//              |- [5] -> [6] -> [7] -|
+	// [3] -> [4] -/                       \-> [10] -> [11]
 	node2.Sub(node1.Pub())
 	node4.Sub(node3.Pub())
 
@@ -180,7 +183,10 @@ func Example_complexStream() {
 	node7.Sub(node6.Pub())
 
 	node8.Sub(node7.Pub())
-	node9.Sub(node7.Pub())
+	node10.Sub(node7.Pub())
+
+	node9.Sub(node8.Pub())
+	node11.Sub(node10.Pub())
 
 	// run nodes
 	nodes := []stream.Node{node1, node2, node3, node4, node5, node6, node7, node8, node9, node10, node11}
@@ -274,8 +280,10 @@ func Example_complexStream() {
 	// DBG incoming messages channel closed component=SourceAckerNode node_id=generator1-acker
 	// DBG incoming messages channel closed component=SourceAckerNode node_id=generator2-acker
 	// DBG incoming messages channel closed component=ProcessorNode node_id=counter
-	// DBG incoming messages channel closed component=DestinationNode node_id=printer2
 	// DBG incoming messages channel closed component=DestinationNode node_id=printer1
+	// DBG incoming messages channel closed component=DestinationNode node_id=printer2
+	// DBG incoming messages channel closed component=DestinationAckerNode node_id=printer1-acker
+	// DBG incoming messages channel closed component=DestinationAckerNode node_id=printer2-acker
 	// INF counter node counted 20 messages
 	// INF finished successfully
 }
@@ -333,7 +341,7 @@ func generatorSource(ctrl *gomock.Controller, logger log.CtxLogger, nodeID strin
 
 func printerDestination(ctrl *gomock.Controller, logger log.CtxLogger, nodeID string) connector.Destination {
 	var lastPosition record.Position
-	rchan := make(chan record.Record)
+	rchan := make(chan record.Record, 1)
 	destination := connmock.NewDestination(ctrl)
 	destination.EXPECT().Open(gomock.Any()).Return(nil).Times(1)
 	destination.EXPECT().Write(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, r record.Record) error {

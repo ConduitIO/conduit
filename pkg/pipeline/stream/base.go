@@ -48,8 +48,9 @@ type pubSubNodeBase struct {
 func (n *pubSubNodeBase) Trigger(
 	ctx context.Context,
 	logger log.CtxLogger,
+	externalErrChan <-chan error,
 ) (triggerFunc, cleanupFunc, error) {
-	trigger, cleanup1, err := n.subNodeBase.Trigger(ctx, logger, nil)
+	trigger, cleanup1, err := n.subNodeBase.Trigger(ctx, logger, externalErrChan)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -150,7 +151,11 @@ func (n *pubNodeBase) Trigger(
 			for {
 				msg, err := msgFetcher(ctx)
 				if err != nil {
-					internalErrChan <- err
+					if !cerrors.Is(err, context.Canceled) {
+						// ignore context error because it is going to be caught
+						// by nodeBase.Receive anyway
+						internalErrChan <- err
+					}
 					return
 				}
 				n.msgChan <- msg
@@ -176,6 +181,8 @@ func (n *pubNodeBase) Trigger(
 // create a separate channel for signals which makes it performant and easiest
 // to implement.
 func (n *pubNodeBase) InjectMessage(ctx context.Context, message *Message) error {
+	n.lock.Lock()
+	defer n.lock.Unlock()
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -251,11 +258,6 @@ func (n *subNodeBase) Trigger(
 	}
 
 	n.running = true
-
-	if errChan == nil {
-		// create dummy channel
-		errChan = make(chan error)
-	}
 
 	trigger := func() (*Message, error) {
 		return n.nodeBase.Receive(ctx, logger, n.in, errChan)

@@ -91,7 +91,7 @@ func (s *destinationPluginAdapter) Start(ctx context.Context) error {
 		s.logger.Trace(ctx).Msg("calling Run")
 		err := runSandboxNoResp(s.impl.Run, s.withLogger(ctx), cpluginv1.DestinationRunStream(s.stream))
 		if err != nil {
-			if s.stream.stop(cerrors.Errorf("error in run: %w", err)) {
+			if !s.stream.stop(err) {
 				s.logger.Err(ctx, err).Msg("stream already stopped")
 			}
 		} else {
@@ -157,11 +157,6 @@ func (s *destinationPluginAdapter) Stop(ctx context.Context, lastPosition record
 }
 
 func (s *destinationPluginAdapter) Teardown(ctx context.Context) error {
-	if s.stream != nil {
-		// stop stream if it's open
-		_ = s.stream.stop(nil)
-	}
-
 	s.logger.Trace(ctx).Msg("calling Teardown")
 	resp, err := runSandbox(s.impl.Teardown, s.withLogger(ctx), toplugin.DestinationTeardownRequest())
 	if err != nil {

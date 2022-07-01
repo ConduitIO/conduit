@@ -53,6 +53,9 @@ type destination struct {
 	// plugin is the running instance of the destination plugin.
 	plugin plugin.DestinationPlugin
 
+	// stopStream is a function that closes the context of the stream
+	stopStream context.CancelFunc
+
 	// m can lock a destination from concurrent access (e.g. in connector persister).
 	m sync.Mutex
 	// wg tracks the number of in flight calls to the plugin.
@@ -144,8 +147,10 @@ func (s *destination) Open(ctx context.Context) error {
 		return err
 	}
 
-	err = dest.Start(ctx)
+	streamCtx, cancelStreamCtx := context.WithCancel(ctx)
+	err = dest.Start(streamCtx)
 	if err != nil {
+		cancelStreamCtx()
 		_ = dest.Teardown(ctx)
 		return err
 	}
@@ -153,6 +158,7 @@ func (s *destination) Open(ctx context.Context) error {
 	s.logger.Info(ctx).Msg("destination connector plugin successfully started")
 
 	s.plugin = dest
+	s.stopStream = cancelStreamCtx
 	s.persister.ConnectorStarted()
 	return nil
 }
@@ -182,6 +188,12 @@ func (s *destination) Teardown(ctx context.Context) error {
 	defer s.m.Unlock()
 	if s.plugin == nil {
 		return plugin.ErrPluginNotRunning
+	}
+
+	// close stream
+	if s.stopStream != nil {
+		s.stopStream()
+		s.stopStream = nil
 	}
 
 	// wait for any calls to the plugin to stop running first (e.g. Stop, Ack or Write)

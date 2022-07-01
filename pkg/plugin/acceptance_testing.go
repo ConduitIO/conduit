@@ -18,7 +18,6 @@ package plugin
 import (
 	"context"
 	"fmt"
-	"io"
 	"reflect"
 	"runtime"
 	"strings"
@@ -74,7 +73,6 @@ func AcceptanceTestV1(t *testing.T, tdf testDispenserFunc) {
 	run(t, tdf, testDestination_Ack_WithoutStart)
 	run(t, tdf, testDestination_Run_Fail)
 	run(t, tdf, testDestination_Teardown_Success)
-	run(t, tdf, testDestination_Teardown_CloseSend)
 }
 
 func run(t *testing.T, tdf testDispenserFunc, test func(*testing.T, testDispenserFunc)) {
@@ -411,11 +409,7 @@ func testSource_Read_CancelContext(t *testing.T, tdf testDispenserFunc) {
 	})
 
 	_, err = source.Read(ctx)
-	is.True(err != nil)
-	// TODO see if we can change this error into context.Canceled, right now we
-	//  follow the default gRPC behavior
-	is.True(!cerrors.Is(err, context.Canceled))
-	is.True(!cerrors.Is(err, ErrStreamNotOpen))
+	is.True(cerrors.Is(err, context.Canceled))
 
 	close(stopRunCh) // stop run channel
 }
@@ -915,51 +909,4 @@ func testDestination_Teardown_Success(t *testing.T, tdf testDispenserFunc) {
 	case <-time.After(time.Second):
 		t.Fatal("should've received call to destination.Run")
 	}
-}
-
-func testDestination_Teardown_CloseSend(t *testing.T, tdf testDispenserFunc) {
-	is := is.New(t)
-
-	ctx := context.Background()
-	dispenser, _, _, mockDestination := tdf(t)
-
-	closeCh := make(chan struct{})
-	mockDestination.EXPECT().
-		Start(gomock.Any(), cpluginv1.DestinationStartRequest{}).
-		Return(cpluginv1.DestinationStartResponse{}, nil)
-	mockDestination.EXPECT().
-		Stop(gomock.Any(), cpluginv1.DestinationStopRequest{
-			LastPosition: []byte("foo"),
-		}).
-		Return(cpluginv1.DestinationStopResponse{}, nil)
-	mockDestination.EXPECT().
-		Run(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(ctx context.Context, stream cpluginv1.DestinationRunStream) error {
-			_, recvErr := stream.Recv()
-			is.Equal(recvErr, io.EOF)
-			close(closeCh)
-			return recvErr
-		})
-	mockDestination.EXPECT().
-		Teardown(gomock.Any(), cpluginv1.DestinationTeardownRequest{}).
-		Return(cpluginv1.DestinationTeardownResponse{}, nil)
-
-	destination, err := dispenser.DispenseDestination()
-	is.NoErr(err)
-
-	err = destination.Start(ctx)
-	is.NoErr(err)
-	err = destination.Stop(ctx, record.Position("foo"))
-	is.NoErr(err)
-
-	err = destination.Teardown(ctx)
-	is.NoErr(err)
-
-	select {
-	case <-closeCh:
-		// all good, outgoing stream was closed
-	case <-time.After(time.Second):
-		is.Fail() // expected outgoing stream to be closed
-	}
-
 }

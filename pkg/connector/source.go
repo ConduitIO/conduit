@@ -52,6 +52,9 @@ type source struct {
 	// plugin is the running instance of the source plugin.
 	plugin plugin.SourcePlugin
 
+	// stopStream is a function that closes the context of the stream
+	stopStream context.CancelFunc
+
 	// m can lock a source from concurrent access (e.g. in connector persister).
 	m sync.Mutex
 	// wg tracks the number of in flight calls to the plugin.
@@ -143,8 +146,10 @@ func (s *source) Open(ctx context.Context) error {
 		return err
 	}
 
-	err = src.Start(ctx, s.XState.Position)
+	streamCtx, cancelStreamCtx := context.WithCancel(ctx)
+	err = src.Start(streamCtx, s.XState.Position)
 	if err != nil {
+		cancelStreamCtx()
 		_ = src.Teardown(ctx)
 		return err
 	}
@@ -152,6 +157,7 @@ func (s *source) Open(ctx context.Context) error {
 	s.logger.Info(ctx).Msg("source connector plugin successfully started")
 
 	s.plugin = src
+	s.stopStream = cancelStreamCtx
 	s.persister.ConnectorStarted()
 	return nil
 }
@@ -181,6 +187,12 @@ func (s *source) Teardown(ctx context.Context) error {
 	defer s.m.Unlock()
 	if s.plugin == nil {
 		return plugin.ErrPluginNotRunning
+	}
+
+	// close stream
+	if s.stopStream != nil {
+		s.stopStream()
+		s.stopStream = nil
 	}
 
 	// wait for any calls to the plugin to stop running first (e.g. Stop, Ack or Read)

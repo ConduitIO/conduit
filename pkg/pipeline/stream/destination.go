@@ -30,10 +30,8 @@ type DestinationNode struct {
 	Name           string
 	Destination    connector.Destination
 	ConnectorTimer metrics.Timer
-	// AckerNode is responsible for handling acks
-	AckerNode *DestinationAckerNode
 
-	base   subNodeBase
+	base   pubSubNodeBase
 	logger log.CtxLogger
 }
 
@@ -55,6 +53,8 @@ func (n *DestinationNode) Run(ctx context.Context) (err error) {
 
 	// lastPosition stores the position of the last successfully processed record
 	var lastPosition record.Position
+	// openMsgTracker tracks open messages until they are acked or nacked
+	var openMsgTracker OpenMessagesTracker
 	defer func() {
 		stopErr := n.Destination.Stop(connectorCtx, lastPosition)
 		if stopErr != nil {
@@ -67,11 +67,7 @@ func (n *DestinationNode) Run(ctx context.Context) (err error) {
 			}
 		}
 
-		// wait for acker node to receive all outstanding acks, time out after
-		// 1 minute or right away if the context is already canceled.
-		waitCtx, cancel := context.WithTimeout(ctx, time.Minute)
-		defer cancel()
-		n.AckerNode.Wait(waitCtx)
+		openMsgTracker.Wait()
 
 		// teardown will kill the plugin process
 		tdErr := n.Destination.Teardown(connectorCtx)
@@ -99,34 +95,36 @@ func (n *DestinationNode) Run(ctx context.Context) (err error) {
 
 		n.logger.Trace(msg.Ctx).Msg("writing record to destination connector")
 
-		// first signal ack handler we might receive an ack, since this could
-		// already happen before write returns
-		err = n.AckerNode.ExpectAck(msg)
-		if err != nil {
-			return err
-		}
-
 		writeTime := time.Now()
 		err = n.Destination.Write(msg.Ctx, msg.Record)
 		if err != nil {
 			// An error in Write is a fatal error, we probably won't be able to
 			// process any further messages because there is a problem in the
-			// communication with the plugin. We need to let the acker node know
-			// that it shouldn't wait to receive an ack for the message, we need
-			// to nack the message to not leave it open and then return the
-			// error to stop the pipeline.
-			n.AckerNode.Forget(msg)
+			// communication with the plugin. We need to nack the message to not
+			// leave it open and then return the error to stop the pipeline.
 			_ = msg.Nack(err)
 			return cerrors.Errorf("error writing to destination: %w", err)
 		}
-		lastPosition = msg.Record.Position
 		n.ConnectorTimer.Update(time.Since(writeTime))
+
+		openMsgTracker.Add(msg)
+		lastPosition = msg.Record.Position
+
+		err = n.base.Send(ctx, n.logger, msg)
+		if err != nil {
+			return msg.Nack(err)
+		}
 	}
 }
 
 // Sub will subscribe this node to an incoming channel.
 func (n *DestinationNode) Sub(in <-chan *Message) {
 	n.base.Sub(in)
+}
+
+// Pub will return the outgoing channel.
+func (n *DestinationNode) Pub() <-chan *Message {
+	return n.base.Pub()
 }
 
 // SetLogger sets the logger.

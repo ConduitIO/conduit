@@ -38,7 +38,7 @@ func (n *ProcessorNode) ID() string {
 }
 
 func (n *ProcessorNode) Run(ctx context.Context) error {
-	trigger, cleanup, err := n.base.Trigger(ctx, n.logger)
+	trigger, cleanup, err := n.base.Trigger(ctx, n.logger, nil)
 	if err != nil {
 		return err
 	}

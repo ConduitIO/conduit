@@ -17,7 +17,6 @@ package stream
 import (
 	"bytes"
 	"context"
-	"sync"
 	"time"
 
 	"github.com/conduitio/conduit/pkg/connector"
@@ -59,11 +58,12 @@ func (n *SourceNode) Run(ctx context.Context) (err error) {
 		return cerrors.Errorf("could not open source connector: %w", err)
 	}
 
-	var wgOpenMessages sync.WaitGroup
+	// openMsgTracker tracks open messages until they are acked or nacked
+	var openMsgTracker OpenMessagesTracker
 	defer func() {
 		// wait for open messages before tearing down connector
 		n.logger.Trace(ctx).Msg("waiting for open messages to be processed")
-		wgOpenMessages.Wait()
+		openMsgTracker.Wait()
 		n.logger.Trace(ctx).Msg("all messages processed, tearing down source")
 		tdErr := n.Source.Teardown(connectorCtx)
 		if tdErr != nil {
@@ -82,7 +82,6 @@ func (n *SourceNode) Run(ctx context.Context) (err error) {
 		n.Source.Errors(),
 		func(ctx context.Context) (*Message, error) {
 			n.logger.Trace(ctx).Msg("reading record from source connector")
-
 			r, err := n.Source.Read(ctx)
 			if err != nil {
 				return nil, cerrors.Errorf("error reading from source: %w", err)
@@ -126,24 +125,22 @@ func (n *SourceNode) Run(ctx context.Context) (err error) {
 			continue
 		}
 
-		// register another open message
-		wgOpenMessages.Add(1)
+		// track message until it reaches an end state
+		openMsgTracker.Add(msg)
+
 		msg.RegisterStatusHandler(
 			func(msg *Message, change StatusChange) error {
-				// this is the last handler to be executed, once this handler is
-				// reached we know either the message was either acked or nacked
-				defer n.PipelineTimer.Update(time.Since(msg.Record.ReadAt))
-				defer wgOpenMessages.Done()
+				n.PipelineTimer.Update(time.Since(msg.Record.ReadAt))
 				return nil
 			},
 		)
 
+		lastPosition = msg.Record.Position
 		err = n.base.Send(ctx, n.logger, msg)
 		if err != nil {
 			return msg.Nack(err)
 		}
 
-		lastPosition = msg.Record.Position
 		if bytes.Equal(stopPosition, lastPosition) {
 			// it's the last record that we are supposed to process, stop here
 			return n.stopReason
@@ -152,6 +149,7 @@ func (n *SourceNode) Run(ctx context.Context) (err error) {
 }
 
 func (n *SourceNode) Stop(ctx context.Context, reason error) error {
+	n.stopReason = reason
 	// InjectMessage will inject a message into the stream of messages being
 	// processed by SourceNode to let it know when it should stop processing new
 	// messages.

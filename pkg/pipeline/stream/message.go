@@ -261,3 +261,23 @@ func (m *Message) Status() MessageStatus {
 		return MessageStatusOpen
 	}
 }
+
+// OpenMessagesTracker allows you to track messages until they reach the end of
+// the pipeline.
+type OpenMessagesTracker sync.WaitGroup
+
+// Add will increase the counter in the wait group and register a status handler
+// that will decrease the counter when the message is acked or nacked.
+func (t *OpenMessagesTracker) Add(msg *Message) {
+	(*sync.WaitGroup)(t).Add(1)
+	msg.RegisterStatusHandler(
+		func(msg *Message, change StatusChange) error {
+			(*sync.WaitGroup)(t).Done()
+			return nil
+		},
+	)
+}
+
+func (t *OpenMessagesTracker) Wait() {
+	(*sync.WaitGroup)(t).Wait()
+}

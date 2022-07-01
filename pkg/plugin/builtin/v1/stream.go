@@ -19,7 +19,6 @@ import (
 	"io"
 	"sync"
 
-	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/plugin"
 )
 
@@ -61,7 +60,7 @@ func (s *stream[REQ, RES]) Recv() (REQ, error) {
 func (s *stream[REQ, RES]) recvInternal() (RES, error) {
 	select {
 	case <-s.ctx.Done():
-		return s.emptyRes(), cerrors.New(s.ctx.Err().Error())
+		return s.emptyRes(), s.ctx.Err()
 	case <-s.stopChan:
 		return s.emptyRes(), s.reason
 	case resp := <-s.respChan:
@@ -72,7 +71,7 @@ func (s *stream[REQ, RES]) recvInternal() (RES, error) {
 func (s *stream[REQ, RES]) sendInternal(req REQ) error {
 	select {
 	case <-s.ctx.Done():
-		return cerrors.New(s.ctx.Err().Error())
+		return s.ctx.Err()
 	case <-s.stopChan:
 		return plugin.ErrStreamNotOpen
 	case s.reqChan <- req:

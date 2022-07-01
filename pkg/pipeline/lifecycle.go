@@ -340,10 +340,10 @@ func (s *Service) buildDestinationNodes(
 				instance.Config().Plugin,
 				strings.ToLower(instance.Type().String()),
 			),
-			AckerNode: ackerNode,
 		}
 		metricsNode := s.buildMetricsNode(pl, instance)
 		destinationNode.Sub(metricsNode.Pub())
+		ackerNode.Sub(destinationNode.Pub())
 
 		connNodes, err := s.buildProcessorNodes(ctx, procFetcher, pl, instance.Config().ProcessorIDs, prev, metricsNode)
 		if err != nil {
