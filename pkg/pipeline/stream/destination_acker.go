@@ -85,6 +85,7 @@ func (n *DestinationAckerNode) Run(ctx context.Context) (err error) {
 	// start worker that will fetch acks from the connector and forward them to
 	// internal messages
 	go n.worker(connectorCtx, signalChan, errChan)
+	signalChan <- struct{}{} // wait for worker to start before fetching first message
 
 	defer cleanup()
 	for {
@@ -111,6 +112,15 @@ func (n *DestinationAckerNode) worker(
 	signalChan <-chan struct{},
 	errChan chan<- error,
 ) {
+	handleError := func(msg *Message, err error) {
+		// push message back to the front of the queue and return error
+		n.m.Lock()
+		n.queue.PushFront(msg)
+		n.m.Unlock()
+
+		errChan <- err
+	}
+
 	defer close(errChan)
 	for range signalChan {
 		// signal is received when a new message is in the queue
@@ -128,11 +138,11 @@ func (n *DestinationAckerNode) worker(
 			pos, err := n.Destination.Ack(ctx)
 			if pos == nil {
 				// empty position is returned only if an actual error happened
-				errChan <- cerrors.Errorf("failed to receive ack: %w", err)
+				handleError(msg, cerrors.Errorf("failed to receive ack: %w", err))
 				return
 			}
 			if !bytes.Equal(msg.Record.Position, pos) {
-				errChan <- cerrors.Errorf("received unexpected ack, expected position %q but got %q", msg.Record.Position, pos)
+				handleError(msg, cerrors.Errorf("received unexpected ack, expected position %q but got %q", msg.Record.Position, pos))
 				return
 			}
 
