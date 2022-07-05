@@ -17,6 +17,7 @@ package pipeline
 import (
 	"context"
 	"fmt"
+	"github.com/conduitio/conduit/pkg/provisioning"
 	"strconv"
 	"strings"
 	"testing"
@@ -46,7 +47,7 @@ func TestServiceLifecycle_PipelineSuccess(t *testing.T) {
 	ps := NewService(logger, db)
 
 	// create a host pipeline
-	pl, err := ps.Create(ctx, uuid.NewString(), Config{Name: "test pipeline"})
+	pl, err := ps.Create(ctx, uuid.NewString(), Config{Name: "test pipeline"}, provisioning.TypeConduit)
 	assert.Ok(t, err)
 
 	// create mocked connectors
@@ -85,7 +86,7 @@ func TestServiceLifecycle_PipelineError(t *testing.T) {
 	ps := NewService(logger, db)
 
 	// create a host pipeline
-	pl, err := ps.Create(ctx, uuid.NewString(), Config{Name: "test pipeline"})
+	pl, err := ps.Create(ctx, uuid.NewString(), Config{Name: "test pipeline"}, provisioning.TypeConduit)
 	assert.Ok(t, err)
 
 	// create mocked connectors
@@ -136,7 +137,7 @@ func TestServiceLifecycle_PipelineStop(t *testing.T) {
 	ps := NewService(logger, db)
 
 	// create a host pipeline
-	pl, err := ps.Create(ctx, uuid.NewString(), Config{Name: "test pipeline"})
+	pl, err := ps.Create(ctx, uuid.NewString(), Config{Name: "test pipeline"}, provisioning.TypeConduit)
 	assert.Ok(t, err)
 
 	// create mocked connectors

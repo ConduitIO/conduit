@@ -19,6 +19,7 @@ package connector
 
 import (
 	"context"
+	"github.com/conduitio/conduit/pkg/provisioning"
 	"time"
 
 	"github.com/conduitio/conduit/pkg/record"
@@ -42,6 +43,7 @@ type Connector interface {
 
 	Config() Config
 	SetConfig(Config)
+	SetProvisionedBy(provisioning.Type)
 
 	CreatedAt() time.Time
 	UpdatedAt() time.Time

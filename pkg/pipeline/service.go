@@ -16,6 +16,7 @@ package pipeline
 
 import (
 	"context"
+	"github.com/conduitio/conduit/pkg/provisioning"
 	"strings"
 	"time"
 
@@ -111,7 +112,7 @@ func (s *Service) Get(ctx context.Context, id string) (*Instance, error) {
 
 // Create will create a new pipeline instance with the given config and return
 // it if it was successfully saved to the database.
-func (s *Service) Create(ctx context.Context, id string, cfg Config) (*Instance, error) {
+func (s *Service) Create(ctx context.Context, id string, cfg Config, p provisioning.Type) (*Instance, error) {
 	if cfg.Name == "" {
 		return nil, ErrNameMissing
 	}
@@ -121,11 +122,12 @@ func (s *Service) Create(ctx context.Context, id string, cfg Config) (*Instance,
 
 	t := time.Now()
 	pl := &Instance{
-		ID:        id,
-		Config:    cfg,
-		Status:    StatusUserStopped,
-		CreatedAt: t,
-		UpdatedAt: t,
+		ID:            id,
+		Config:        cfg,
+		Status:        StatusUserStopped,
+		CreatedAt:     t,
+		UpdatedAt:     t,
+		ProvisionedBy: p,
 	}
 
 	err := s.store.Set(ctx, pl.ID, pl)
