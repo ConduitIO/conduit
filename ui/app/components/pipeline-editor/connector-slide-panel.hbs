@@ -37,23 +37,27 @@
               </dd.Trigger>
               <dd.Content class="bg-white rounded-md border border-gray-200 shadow-md text-sm">
                 <ul class="font-semibold">
+                  {{!-- template-lint-disable no-invalid-interactive --}}
                   <li
                     class="cursor-pointer pl-2 pr-16 py-4 hover:bg-gray-100 flex items-center"
                     data-test-dropdown-button="connector-panel-edit"
                     {{on "click" @showEditConnectorModal}}
                     {{on "click" dd.actions.close}}
                   >
+                  {{!-- template-lint-enable no-invalid-interactive --}}
                     <svg class="fill-current h-4 w-4 mr-2">
                       <use xlink:href="/ui/svg-defs.svg#settings-16"></use>
                     </svg>
                     Edit Connector
                   </li>
+                  {{!-- template-lint-disable no-invalid-interactive --}}
                   <li
                     class="cursor-pointer text-orange-700 pl-2 pr-16 py-4 hover:bg-gray-100 flex items-center"
                     data-test-dropdown-button="connector-panel-delete"
                     {{on "click" @showDeleteConnectorModal}}
                     {{on "click" dd.actions.close}}
                   >
+                  {{!-- template-lint-enable no-invalid-interactive --}}
                     <svg class="fill-current text-orange-700 h-4 w-4 mr-2">
                       <use xlink:href="/ui/svg-defs.svg#delete-16"></use>
                     </svg>
@@ -163,12 +167,14 @@
                           </div>
                         </div>
                       </div>
+                      {{!-- template-lint-disable no-invalid-interactive --}}
                       <svg
                         class="text-gray-500 stroke-current h-4 w-4 cursor-pointer"
                         fill="none"
                         {{on "click" (fn this.showEditTransformPanel connectorTransform)}}
                         data-test-button="edit-transform"
                       >
+                      {{!-- template-lint-enable no-invalid-interactive --}}
                         <use xlink:href="/ui/svg-defs.svg#pencil-16"></use>
                       </svg>
                     </div>

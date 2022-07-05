@@ -12,8 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:generate mockgen -destination=mock/processor.go -package=mock -mock_names=Processor=Processor . Processor
-//go:generate stringer -type=Type -trimprefix Type
+//go:generate mockgen -destination=mock/processor.go -package=mock -mock_names=Interface=Processor . Interface
 //go:generate stringer -type=ParentType -trimprefix ParentType
 
 package processor
@@ -26,28 +25,25 @@ import (
 )
 
 const (
-	TypeTransform Type = iota + 1
-	TypeFilter
-)
-
-const (
 	ParentTypeConnector ParentType = iota + 1
 	ParentTypePipeline
 )
 
-// Type defines the processor type.
-type Type int
-
 // ParentType defines the parent type of a processor.
 type ParentType int
 
-// Processor is the interface that represents a single message processor that
+// Interface is the interface that represents a single message processor that
 // can be executed on one record and manipulate it.
-type Processor interface {
-	// Type returns the processor type.
-	Type() Type
-	// Execute runs the processor function on a record.
-	Execute(ctx context.Context, record record.Record) (record.Record, error)
+type Interface interface {
+	// Process runs the processor function on a record.
+	Process(ctx context.Context, record record.Record) (record.Record, error)
+}
+
+// InterfaceFunc is an adapter allowing use of a function as an Interface.
+type InterfaceFunc func(context.Context, record.Record) (record.Record, error)
+
+func (p InterfaceFunc) Process(ctx context.Context, record record.Record) (record.Record, error) {
+	return p(ctx, record)
 }
 
 // Instance represents a processor instance.
@@ -60,7 +56,7 @@ type Instance struct {
 	Name      string
 	Parent    Parent
 	Config    Config
-	Processor Processor
+	Processor Interface
 }
 
 // Parent represents the connection to the entity a processor is connected to.

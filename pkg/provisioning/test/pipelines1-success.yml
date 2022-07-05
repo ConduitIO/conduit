@@ -1,0 +1,53 @@
+---
+version: 1.0
+pipelines:
+  pipeline1:
+    status: running
+    name: pipeline1
+    description: desc1
+    connectors:
+      con1:
+        type: source
+        plugin: builtin:s3
+        name: s3-source
+        settings:
+            aws.region: us-east-1
+            aws.bucket: my-bucket
+        processors:
+          proc1:
+            type: js
+            settings:
+              additionalProp1: string
+              additionalProp2: string
+    processors:
+      pipeline1proc1:
+        type: js
+        settings:
+          additionalProp1: string
+          additionalProp2: string
+
+---
+version: 1.0
+pipelines:
+  pipeline2:
+    status: stopped
+    name: pipeline2
+    description: desc2
+    connectors:
+      con2:
+        type: destination
+        plugin: builtin:file
+        name: file-dest
+        settings:
+          path: my/path
+        processors:
+          con2proc1:
+            type: hoistfield
+            settings:
+              additionalProp1: string
+              additionalProp2: string
+
+  pipeline3:
+    status: stopped
+    name: pipeline3
+    description: empty

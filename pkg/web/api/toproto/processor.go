@@ -22,10 +22,6 @@ import (
 
 func _() {
 	// An "invalid array index" compiler error signifies that the constant values have changed.
-	var procTypes [1]struct{}
-	_ = procTypes[int(processor.TypeTransform)-int(apiv1.Processor_TYPE_TRANSFORM)]
-	_ = procTypes[int(processor.TypeFilter)-int(apiv1.Processor_TYPE_FILTER)]
-
 	var parentTypes [1]struct{}
 	_ = parentTypes[int(processor.ParentTypeConnector)-int(apiv1.Processor_Parent_TYPE_CONNECTOR)]
 	_ = parentTypes[int(processor.ParentTypePipeline)-int(apiv1.Processor_Parent_TYPE_PIPELINE)]
@@ -37,7 +33,6 @@ func Processor(in *processor.Instance) *apiv1.Processor {
 		Name:      in.Name,
 		CreatedAt: timestamppb.New(in.CreatedAt),
 		UpdatedAt: timestamppb.New(in.UpdatedAt),
-		Type:      ProcessorType(in.Processor.Type()),
 		Config:    ProcessorConfig(in.Config),
 		Parent:    ProcessorParent(in.Parent),
 	}
@@ -47,10 +42,6 @@ func ProcessorConfig(in processor.Config) *apiv1.Processor_Config {
 	return &apiv1.Processor_Config{
 		Settings: in.Settings,
 	}
-}
-
-func ProcessorType(in processor.Type) apiv1.Processor_Type {
-	return apiv1.Processor_Type(in)
 }
 
 func ProcessorParent(in processor.Parent) *apiv1.Processor_Parent {

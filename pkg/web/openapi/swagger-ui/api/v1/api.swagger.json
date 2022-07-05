@@ -1488,9 +1488,6 @@
         "name": {
           "type": "string"
         },
-        "type": {
-          "$ref": "#/definitions/v1ProcessorType"
-        },
         "parent": {
           "$ref": "#/definitions/ProcessorParent"
         },
@@ -1712,9 +1709,6 @@
         "name": {
           "type": "string"
         },
-        "type": {
-          "$ref": "#/definitions/v1ProcessorType"
-        },
         "parent": {
           "$ref": "#/definitions/ProcessorParent"
         },
@@ -1738,16 +1732,6 @@
           }
         }
       }
-    },
-    "v1ProcessorType": {
-      "type": "string",
-      "enum": [
-        "TYPE_UNSPECIFIED",
-        "TYPE_TRANSFORM",
-        "TYPE_FILTER"
-      ],
-      "default": "TYPE_UNSPECIFIED",
-      "description": "Type shows the processor type.\n\n - TYPE_TRANSFORM: Processor is a transform.\n - TYPE_FILTER: Processor is a filter."
     },
     "v1StartPipelineResponse": {
       "type": "object"
