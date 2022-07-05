@@ -17,25 +17,15 @@ package provisioning
 import (
 	"testing"
 
-	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/matryer/is"
 )
 
-func TestValidator_DefaultValues(t *testing.T) {
+func TestEnrich_DefaultValues(t *testing.T) {
 	is := is.New(t)
 
 	before := map[string]PipelineConfig{
 		"pipeline1": {
 			Description: "desc1",
-			Processors: map[string]ProcessorConfig{
-				"pipeline1proc1": {
-					Type: "js",
-					Settings: map[string]string{
-						"additionalProp1": "string",
-						"additionalProp2": "string",
-					},
-				},
-			},
 			Connectors: map[string]ConnectorConfig{
 				"con1": {
 					Type:   "source",
@@ -92,15 +82,6 @@ func TestValidator_DefaultValues(t *testing.T) {
 			Status:      "running",
 			Name:        "pipeline1",
 			Description: "desc1",
-			Processors: map[string]ProcessorConfig{
-				"pipeline1proc1": {
-					Type: "js",
-					Settings: map[string]string{
-						"additionalProp1": "string",
-						"additionalProp2": "string",
-					},
-				},
-			},
 			Connectors: map[string]ConnectorConfig{
 				"con1": {
 					Type:   "source",
@@ -153,117 +134,6 @@ func TestValidator_DefaultValues(t *testing.T) {
 		},
 	}
 
-	got, err := ValidatePipelinesConfig(before)
-	is.NoErr(err)
+	got := enrichPipelinesConfig(before)
 	is.Equal(after, got)
-}
-
-func TestValidator_ConnectorMandatoryField1(t *testing.T) {
-	is := is.New(t)
-
-	before := map[string]PipelineConfig{
-		"pipeline1": {
-			Status:      "running",
-			Name:        "pipeline1",
-			Description: "desc1",
-			Connectors: map[string]ConnectorConfig{
-				"con1": {
-					// mandatory field
-					Type:   "",
-					Plugin: "builtin:s3",
-					Name:   "",
-					Settings: map[string]string{
-						"aws.region": "us-east-1",
-						"aws.bucket": "my-bucket",
-					},
-				},
-			},
-		},
-	}
-
-	got, err := ValidatePipelinesConfig(before)
-	is.Equal(got, nil)
-	is.Equal(cerrors.Is(err, ErrMandatoryField), true)
-}
-
-func TestValidator_ConnectorMandatoryField2(t *testing.T) {
-	is := is.New(t)
-
-	before := map[string]PipelineConfig{
-		"pipeline1": {
-			Status:      "running",
-			Name:        "pipeline1",
-			Description: "desc1",
-			Connectors: map[string]ConnectorConfig{
-				"con1": {
-					Type: "source",
-					// mandatory field
-					Plugin: "",
-					Name:   "",
-					Settings: map[string]string{
-						"aws.region": "us-east-1",
-						"aws.bucket": "my-bucket",
-					},
-				},
-			},
-		},
-	}
-
-	got, err := ValidatePipelinesConfig(before)
-	is.Equal(got, nil)
-	is.Equal(cerrors.Is(err, ErrMandatoryField), true)
-}
-
-func TestValidator_ConnectorInvalidField(t *testing.T) {
-	is := is.New(t)
-
-	before := map[string]PipelineConfig{
-		"pipeline1": {
-			Status:      "running",
-			Name:        "pipeline1",
-			Description: "desc1",
-			Connectors: map[string]ConnectorConfig{
-				"con1": {
-					// invalid field
-					Type:   "my-type",
-					Plugin: "builtin:s3",
-					Name:   "",
-					Settings: map[string]string{
-						"aws.region": "us-east-1",
-						"aws.bucket": "my-bucket",
-					},
-				},
-			},
-		},
-	}
-
-	got, err := ValidatePipelinesConfig(before)
-	is.Equal(got, nil)
-	is.Equal(cerrors.Is(err, ErrInvalidField), true)
-}
-
-func TestValidator_ProcessorMandatoryField(t *testing.T) {
-	is := is.New(t)
-
-	before := map[string]PipelineConfig{
-		"pipeline1": {
-			Status:      "stopped",
-			Name:        "pipeline1",
-			Description: "desc1",
-			Processors: map[string]ProcessorConfig{
-				"pipeline1proc1": {
-					// mandatory field
-					Type: "",
-					Settings: map[string]string{
-						"additionalProp1": "string",
-						"additionalProp2": "string",
-					},
-				},
-			},
-		},
-	}
-
-	got, err := ValidatePipelinesConfig(before)
-	is.Equal(got, nil)
-	is.Equal(cerrors.Is(err, ErrMandatoryField), true)
 }
