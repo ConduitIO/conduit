@@ -7,7 +7,7 @@ on:
 
 jobs:
   milestones:
-    uses: ConduitIO/automation/.github/workflows/milestones.yml@main
+    uses: ConduitIO/automation/.github/workflows/roadmap-milestones.yml@main
     with:
       org-repo: 'conduitio/conduit'
       project: PN_kwDOBL3ZPs4AAigJ
