@@ -16,7 +16,6 @@ package connector
 
 import (
 	"context"
-	"github.com/conduitio/conduit/pkg/provisioning"
 	"sync"
 	"time"
 
@@ -31,10 +30,10 @@ type destination struct {
 	// exported fields are persisted in the store but must not collide with
 	// interface methods, so they are prefixed with X
 
-	XID           string
-	XConfig       Config
-	XState        DestinationState
-	ProvisionedBy provisioning.Type
+	XID            string
+	XConfig        Config
+	XState         DestinationState
+	XProvisionedBy ProvisionType
 
 	// logger is used for logging and is set when destination is created.
 	logger log.CtxLogger
@@ -76,6 +75,14 @@ func (s *destination) Config() Config {
 
 func (s *destination) SetConfig(d Config) {
 	s.XConfig = d
+}
+
+func (s *destination) ProvisionedBy() ProvisionType {
+	return s.XProvisionedBy
+}
+
+func (s *destination) SetProvisionedBy(p ProvisionType) {
+	s.XProvisionedBy = p
 }
 
 func (s *destination) CreatedAt() time.Time {

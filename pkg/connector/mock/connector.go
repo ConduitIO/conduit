@@ -135,6 +135,20 @@ func (mr *SourceMockRecorder) Open(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Open", reflect.TypeOf((*Source)(nil).Open), arg0)
 }
 
+// ProvisionedBy mocks base method.
+func (m *Source) ProvisionedBy() connector.ProvisionType {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ProvisionedBy")
+	ret0, _ := ret[0].(connector.ProvisionType)
+	return ret0
+}
+
+// ProvisionedBy indicates an expected call of ProvisionedBy.
+func (mr *SourceMockRecorder) ProvisionedBy() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProvisionedBy", reflect.TypeOf((*Source)(nil).ProvisionedBy))
+}
+
 // Read mocks base method.
 func (m *Source) Read(arg0 context.Context) (record.Record, error) {
 	m.ctrl.T.Helper()
@@ -160,6 +174,18 @@ func (m *Source) SetConfig(arg0 connector.Config) {
 func (mr *SourceMockRecorder) SetConfig(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetConfig", reflect.TypeOf((*Source)(nil).SetConfig), arg0)
+}
+
+// SetProvisionedBy mocks base method.
+func (m *Source) SetProvisionedBy(arg0 connector.ProvisionType) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetProvisionedBy", arg0)
+}
+
+// SetProvisionedBy indicates an expected call of SetProvisionedBy.
+func (mr *SourceMockRecorder) SetProvisionedBy(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetProvisionedBy", reflect.TypeOf((*Source)(nil).SetProvisionedBy), arg0)
 }
 
 // SetState mocks base method.
@@ -392,6 +418,20 @@ func (mr *DestinationMockRecorder) Open(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Open", reflect.TypeOf((*Destination)(nil).Open), arg0)
 }
 
+// ProvisionedBy mocks base method.
+func (m *Destination) ProvisionedBy() connector.ProvisionType {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ProvisionedBy")
+	ret0, _ := ret[0].(connector.ProvisionType)
+	return ret0
+}
+
+// ProvisionedBy indicates an expected call of ProvisionedBy.
+func (mr *DestinationMockRecorder) ProvisionedBy() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProvisionedBy", reflect.TypeOf((*Destination)(nil).ProvisionedBy))
+}
+
 // SetConfig mocks base method.
 func (m *Destination) SetConfig(arg0 connector.Config) {
 	m.ctrl.T.Helper()
@@ -402,6 +442,18 @@ func (m *Destination) SetConfig(arg0 connector.Config) {
 func (mr *DestinationMockRecorder) SetConfig(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetConfig", reflect.TypeOf((*Destination)(nil).SetConfig), arg0)
+}
+
+// SetProvisionedBy mocks base method.
+func (m *Destination) SetProvisionedBy(arg0 connector.ProvisionType) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetProvisionedBy", arg0)
+}
+
+// SetProvisionedBy indicates an expected call of SetProvisionedBy.
+func (mr *DestinationMockRecorder) SetProvisionedBy(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetProvisionedBy", reflect.TypeOf((*Destination)(nil).SetProvisionedBy), arg0)
 }
 
 // SetState mocks base method.

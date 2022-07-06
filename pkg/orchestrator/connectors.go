@@ -46,11 +46,15 @@ func (c *ConnectorOrchestrator) Create(
 		return nil, cerrors.Errorf("couldn't get pipeline: %w", err)
 	}
 
+	if pl.ProvisionedBy == pipeline.TypeConfig {
+		return nil, cerrors.Errorf("cannot add a connector to the pipeline %q: %w", pl.ID, ErrImmutableProvisionedByConfig)
+	}
+
 	if pl.Status == pipeline.StatusRunning {
 		return nil, cerrors.Errorf("cannot create connector: %w", pipeline.ErrPipelineRunning)
 	}
 
-	conn, err := c.connectors.Create(ctx, uuid.NewString(), t, config)
+	conn, err := c.connectors.Create(ctx, uuid.NewString(), t, config, connector.TypeAPI)
 	if err != nil {
 		return nil, err
 	}
@@ -94,6 +98,9 @@ func (c *ConnectorOrchestrator) Delete(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
+	if conn.ProvisionedBy() == connector.TypeConfig {
+		return cerrors.Errorf("connector %q cannot be deleted: %w", conn.ID(), ErrImmutableProvisionedByConfig)
+	}
 	if len(conn.Config().ProcessorIDs) != 0 {
 		return ErrConnectorHasProcessorsAttached
 	}
@@ -109,7 +116,7 @@ func (c *ConnectorOrchestrator) Delete(ctx context.Context, id string) error {
 		return err
 	}
 	r.Append(func() error {
-		_, err = c.connectors.Create(ctx, id, conn.Type(), conn.Config())
+		_, err = c.connectors.Create(ctx, id, conn.Type(), conn.Config(), connector.TypeAPI)
 		return err
 	})
 	_, err = c.pipelines.RemoveConnector(ctx, pl, id)
@@ -139,6 +146,9 @@ func (c *ConnectorOrchestrator) Update(ctx context.Context, id string, config co
 	conn, err := c.connectors.Get(ctx, id)
 	if err != nil {
 		return nil, err
+	}
+	if conn.ProvisionedBy() == connector.TypeConfig {
+		return nil, cerrors.Errorf("connector %q cannot be updated: %w", conn.ID(), ErrImmutableProvisionedByConfig)
 	}
 	oldConfig := conn.Config()
 	pl, err := c.pipelines.Get(ctx, conn.Config().PipelineID)

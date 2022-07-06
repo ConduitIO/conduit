@@ -21,4 +21,5 @@ var (
 	ErrPipelineHasProcessorsAttached  = cerrors.New("pipeline has processors attached")
 	ErrPipelineHasConnectorsAttached  = cerrors.New("pipeline has connectors attached")
 	ErrConnectorHasProcessorsAttached = cerrors.New("connector has processors attached")
+	ErrImmutableProvisionedByConfig   = cerrors.New("entity was provisioned by a config file and cannot be mutated")
 )

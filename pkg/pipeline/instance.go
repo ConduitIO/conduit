@@ -17,7 +17,6 @@
 package pipeline
 
 import (
-	"github.com/conduitio/conduit/pkg/provisioning"
 	"time"
 
 	"github.com/conduitio/conduit/pkg/pipeline/stream"
@@ -31,8 +30,17 @@ const (
 	StatusDegraded
 )
 
-// Status defines the running status of a pipeline.
-type Status int
+const (
+	TypeAPI ProvisionType = iota
+	TypeConfig
+)
+
+type (
+	// Status defines the running status of a pipeline.
+	Status int
+	// ProvisionType defines provisioning type
+	ProvisionType int
+)
 
 // Instance manages a collection of Connectors, which
 // can be either Destination or Source. The pipeline sets up its publishers and
@@ -44,7 +52,7 @@ type Instance struct {
 	Error         string
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
-	ProvisionedBy provisioning.Type
+	ProvisionedBy ProvisionType
 
 	ConnectorIDs []string
 	ProcessorIDs []string

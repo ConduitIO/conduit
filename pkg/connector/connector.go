@@ -19,7 +19,6 @@ package connector
 
 import (
 	"context"
-	"github.com/conduitio/conduit/pkg/provisioning"
 	"time"
 
 	"github.com/conduitio/conduit/pkg/record"
@@ -30,11 +29,18 @@ const (
 	TypeDestination
 )
 
+const (
+	TypeAPI ProvisionType = iota
+	TypeConfig
+)
+
 type (
 	// Type defines the connector type.
 	Type int
 	// Status defines the running status of a connector.
 	Status int
+	// ProvisionType defines provisioning type
+	ProvisionType int
 )
 
 type Connector interface {
@@ -43,7 +49,9 @@ type Connector interface {
 
 	Config() Config
 	SetConfig(Config)
-	SetProvisionedBy(provisioning.Type)
+
+	ProvisionedBy() ProvisionType
+	SetProvisionedBy(ProvisionType)
 
 	CreatedAt() time.Time
 	UpdatedAt() time.Time

@@ -23,14 +23,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const (
-	TypeConduit Type = iota
-	TypeConfig
-	TypeAPI
-)
-
-type Type int
-
 const ParserVersion = "1.0"
 
 var ErrUnsupportedVersion = cerrors.New("unsupported parser version")

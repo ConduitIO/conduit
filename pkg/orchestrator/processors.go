@@ -46,12 +46,17 @@ func (p *ProcessorOrchestrator) Create(
 		return nil, err
 	}
 
+	// check if pipeline was provisioned by config
+	if pl.ProvisionedBy == pipeline.TypeConfig {
+		return nil, cerrors.Errorf("cannot add a processor to the pipeline %q: %w", pl.ID, ErrImmutableProvisionedByConfig)
+	}
+
 	if pl.Status == pipeline.StatusRunning {
 		return nil, pipeline.ErrPipelineRunning
 	}
 
 	// create processor and add to pipeline or connector
-	proc, err := p.processors.Create(ctx, uuid.NewString(), name, parent, cfg)
+	proc, err := p.processors.Create(ctx, uuid.NewString(), name, parent, cfg, processor.TypeAPI)
 	if err != nil {
 		return nil, err
 	}
@@ -112,6 +117,12 @@ func (p *ProcessorOrchestrator) Update(ctx context.Context, id string, cfg proce
 	if err != nil {
 		return nil, err
 	}
+
+	// check if processor was provisioned by config
+	if proc.ProvisionedBy == processor.TypeConfig {
+		return nil, cerrors.Errorf("processor %q cannot be updated: %w", proc.ID, ErrImmutableProvisionedByConfig)
+	}
+	// provisioned by API
 	oldConfig := proc.Config
 
 	pl, err := p.getProcessorsPipeline(ctx, proc.Parent)
@@ -157,6 +168,11 @@ func (p *ProcessorOrchestrator) Delete(ctx context.Context, id string) error {
 		return err
 	}
 
+	// check if processor was provisioned by config
+	if proc.ProvisionedBy == processor.TypeConfig {
+		return cerrors.Errorf("processor %q cannot be deleted: %w", proc.ID, ErrImmutableProvisionedByConfig)
+	}
+
 	pl, err := p.getProcessorsPipeline(ctx, proc.Parent)
 	if err != nil {
 		return err
@@ -171,7 +187,7 @@ func (p *ProcessorOrchestrator) Delete(ctx context.Context, id string) error {
 		return err
 	}
 	r.Append(func() error {
-		_, err = p.processors.Create(ctx, id, proc.Name, proc.Parent, proc.Config)
+		_, err = p.processors.Create(ctx, id, proc.Name, proc.Parent, proc.Config, processor.TypeAPI)
 		return err
 	})
 

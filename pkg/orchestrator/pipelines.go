@@ -17,6 +17,7 @@ package orchestrator
 import (
 	"context"
 
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	"github.com/google/uuid"
 )
@@ -50,13 +51,17 @@ func (s *PipelineOrchestrator) Get(ctx context.Context, id string) (*pipeline.In
 }
 
 func (s *PipelineOrchestrator) Create(ctx context.Context, cfg pipeline.Config) (*pipeline.Instance, error) {
-	return s.pipelines.Create(ctx, uuid.NewString(), cfg)
+	return s.pipelines.Create(ctx, uuid.NewString(), cfg, pipeline.TypeAPI)
 }
 
 func (s *PipelineOrchestrator) Update(ctx context.Context, id string, cfg pipeline.Config) (*pipeline.Instance, error) {
 	pl, err := s.pipelines.Get(ctx, id)
 	if err != nil {
 		return nil, err
+	}
+
+	if pl.ProvisionedBy == pipeline.TypeConfig {
+		return nil, cerrors.Errorf("pipeline %q cannot be updated: %w", pl.ID, ErrImmutableProvisionedByConfig)
 	}
 	// TODO lock pipeline
 	if pl.Status == pipeline.StatusRunning {
@@ -69,6 +74,10 @@ func (s *PipelineOrchestrator) Delete(ctx context.Context, id string) error {
 	pl, err := s.pipelines.Get(ctx, id)
 	if err != nil {
 		return err
+	}
+
+	if pl.ProvisionedBy == pipeline.TypeConfig {
+		return cerrors.Errorf("pipeline %q cannot be deleted: %w", pl.ID, ErrImmutableProvisionedByConfig)
 	}
 	if pl.Status == pipeline.StatusRunning {
 		return pipeline.ErrPipelineRunning

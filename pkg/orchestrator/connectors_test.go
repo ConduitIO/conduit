@@ -56,6 +56,7 @@ func TestConnectorOrchestrator_Create_Success(t *testing.T) {
 			gomock.AssignableToTypeOf(""),
 			connector.TypeSource,
 			config,
+			connector.TypeAPI,
 		).Return(want, nil)
 	plsMock.EXPECT().
 		AddConnector(gomock.AssignableToTypeOf(ctxType), pl, want.ID()).
@@ -126,6 +127,7 @@ func TestConnectorOrchestrator_Create_CreateConnectorError(t *testing.T) {
 			gomock.AssignableToTypeOf(""),
 			connector.TypeSource,
 			config,
+			connector.TypeAPI,
 		).
 		Return(nil, wantErr)
 
@@ -159,6 +161,7 @@ func TestConnectorOrchestrator_Create_AddConnectorError(t *testing.T) {
 			gomock.AssignableToTypeOf(""),
 			connector.TypeSource,
 			config,
+			connector.TypeAPI,
 		).
 		Return(conn, nil)
 	plsMock.EXPECT().
@@ -371,6 +374,7 @@ func TestConnectorOrchestrator_Delete_RemoveConnectorFailed(t *testing.T) {
 			want.ID(),
 			want.Type(),
 			want.Config(),
+			connector.TypeAPI,
 		).
 		Return(want, nil)
 

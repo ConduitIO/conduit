@@ -16,7 +16,6 @@ package connector
 
 import (
 	"context"
-	"github.com/conduitio/conduit/pkg/provisioning"
 	"sync"
 	"time"
 
@@ -33,7 +32,7 @@ type source struct {
 	XID            string
 	XConfig        Config
 	XState         SourceState
-	XProvisionedBy provisioning.Type
+	XProvisionedBy ProvisionType
 	// timestamps
 	XCreatedAt time.Time
 	XUpdatedAt time.Time
@@ -76,6 +75,14 @@ func (s *source) Config() Config {
 
 func (s *source) SetConfig(d Config) {
 	s.XConfig = d
+}
+
+func (s *source) ProvisionedBy() ProvisionType {
+	return s.XProvisionedBy
+}
+
+func (s *source) SetProvisionedBy(p ProvisionType) {
+	s.XProvisionedBy = p
 }
 
 func (s *source) CreatedAt() time.Time {
