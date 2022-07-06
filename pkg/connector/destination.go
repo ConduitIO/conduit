@@ -106,13 +106,16 @@ func (s *destination) Errors() <-chan error {
 	return s.errs
 }
 
-func (s *destination) Validate(ctx context.Context, settings map[string]string) error {
+func (s *destination) Validate(ctx context.Context, settings map[string]string) (err error) {
 	dest, err := s.pluginDispenser.DispenseDestination()
 	if err != nil {
 		return err
 	}
 	defer func() {
-		_ = dest.Teardown(ctx)
+		tmpErr := dest.Teardown(ctx)
+		err = cerrors.LogOrReplace(err, tmpErr, func() {
+			s.logger.Err(ctx, tmpErr).Msg("could not teardown destination")
+		})
 	}()
 
 	err = dest.Configure(ctx, settings)
