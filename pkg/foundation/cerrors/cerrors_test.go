@@ -21,6 +21,7 @@ import (
 
 	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/matryer/is"
 )
 
 var _, testFileLocation, _, _ = runtime.Caller(0)
@@ -142,6 +143,55 @@ func TestGetStackTrace(t *testing.T) {
 			act, ok := res.([]cerrors.Frame)
 			assert.True(t, ok, "expected []cerrors.Frame")
 			assert.Equal(t, tc.expected, act)
+		})
+	}
+}
+
+func TestLogOrReplace(t *testing.T) {
+	is := is.New(t)
+
+	errFoo := cerrors.New("foo")
+	errBar := cerrors.New("bar")
+
+	testCases := map[string]struct {
+		oldErr        error
+		newErr        error
+		wantErr       error
+		wantLogCalled bool
+	}{
+		"both nil": {
+			oldErr:        nil,
+			newErr:        nil,
+			wantErr:       nil,
+			wantLogCalled: false,
+		},
+		"oldErr exists, newErr nil": {
+			oldErr:        errFoo,
+			newErr:        nil,
+			wantErr:       errFoo,
+			wantLogCalled: false,
+		},
+		"oldErr nil, newErr exists": {
+			oldErr:        nil,
+			newErr:        errFoo,
+			wantErr:       errFoo,
+			wantLogCalled: false,
+		},
+		"both exist": {
+			oldErr:        errFoo,
+			newErr:        errBar,
+			wantErr:       errFoo,
+			wantLogCalled: true,
+		}}
+
+	for testName, tc := range testCases {
+		t.Run(testName, func(t *testing.T) {
+			logCalled := false
+			gotErr := cerrors.LogOrReplace(tc.oldErr, tc.newErr, func() {
+				logCalled = true
+			})
+			is.Equal(tc.wantErr, gotErr)
+			is.Equal(tc.wantLogCalled, logCalled)
 		})
 	}
 }
