@@ -64,16 +64,33 @@ An up-to-date list of all built-in processors and detailed descriptions can be f
 An example is available in [extract-field-transform.sh](/examples/processors/extract-field-transform.sh). The script will
 set up a pipeline with the built-in extract-field processors.
 
-### JavaScript transforms
+### JavaScript processors
 
-JavaScript transforms make it possible to write custom transforms. The API name for JavaScript transforms (used in the
+JavaScript processors make it possible to write custom processors. The API name for JavaScript processors (used in the
 request to create a transform) is `js`. There's only one configuration parameter, `script`, which is the script itself.
 
-The script needs to implement a function called `transform`, which accepts an `sdk.Record`, and returns an `sdk.Record`:
+The script needs to implement a function called `process`, which accepts an `sdk.Record`, and returns:
+* an `sdk.Record`, in case you want to transform the record,
+* `null`, in case you want to drop the record from the pipeline.
+
+Here's an example of a JS processor, which enriches the metadata on a record:
 ```javascript
-function transform(record) {
-    // do something with the record
-    return record
+function process(record) {
+   record.Metadata["foo-key"] = "foo-value";
+   return record;
+}
+```
+
+Following is an example where we filter records:
+```javascript
+function process(r) {
+    // if the record metadata has a "keepme" key set
+   // we will keep it.
+   // otherwise we return null (i.e. we drop the record from the pipeline)
+    if (r.Metadata["keepme"] != undefined) {
+        return r
+    }
+    return null;
 }
 ```
 
@@ -84,22 +101,26 @@ function doSomething(record) {
     return record
 }
 
-function transform(record) {
+function process(record) {
     doSomething(record)
     return record
 }
 ```
 
 Conduit also provides a number of helper objects and methods which can be used in the JS code. Those are, currently:
-1. `logger` - a `zerolog.Logger` which writes to the Conduit server logs
+1. `logger` - a `zerolog.Logger` which writes to the Conduit server logs. You can use it in the same way you would use 
+it in Go code, i.e. you can write this for example: `logger.Info().Msgf("hello, %v!", "world")`
 2. `Record()` - constructs a `record.Record`.
 3. `RawData()` - constructs `record.RawData`.
 
-All the helpers are defined in [helpers.go](/pkg/processor/transform/txfjs/helpers.go). Following is an example of a JavaScript
-transform:
+Following is an example of a JavaScript processor, where we transform a record and utilize a number of tools mentioned 
+above:
 ```javascript
 // Parses the record payload as JSON
 function parseAsJSON(record) {
+    // we can, of course, use all of the JavaScript built-in functions
+    // we use the record as if we would use it Go code, 
+    // so record.Payload.Bytes() gives us the payload bytes
     return JSON.parse(String.fromCharCode.apply(String, record.Payload.Bytes()))
 }
 
@@ -110,6 +131,7 @@ function transform(record) {
     json["greeting"] = "hello!";
     logger.Info().Msgf("json: %v", json);
 
+    // we're creating a new RawData object, using a helper
     record.Payload = RawData();
     record.Payload.Raw = JSON.stringify(json);
 
