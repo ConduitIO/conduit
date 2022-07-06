@@ -56,7 +56,7 @@ jq -n --arg connector_id "$CONNECTOR_ID" '{
      "name": "extractfieldpayload",
      "parent":
      {
-         "type": 1,
+         "type": "TYPE_CONNECTOR",
          "id": $connector_id
      },
      "config":
