@@ -60,7 +60,7 @@ func TestErrorf(t *testing.T) {
 	assert.Equal(
 		t,
 		"caused by:\n    github.com/conduitio/conduit/pkg/foundation/cerrors_test.TestErrorf\n        "+
-			testFileLocation+":57\n  - "+
+			testFileLocation+":58\n  - "+
 			"foobar:\n    github.com/conduitio/conduit/pkg/foundation/cerrors_test.newError\n        "+
 			helperFilePath+":26",
 		s,
@@ -90,7 +90,7 @@ func TestGetStackTrace(t *testing.T) {
 				{
 					Func: "github.com/conduitio/conduit/pkg/foundation/cerrors_test.TestGetStackTrace",
 					File: testFileLocation,
-					Line: 87,
+					Line: 88,
 				},
 			},
 		},
