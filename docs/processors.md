@@ -7,7 +7,7 @@ familiar with [pipeline semantics](/docs/pipeline_semantics.md) is highly recomm
 ![Pipeline](data/pipeline_example.svg)
 
 Processors are **optional** components in a pipeline, i.e. a pipeline can be started without them. They can be attached 
-either to a connector or to a pipeline. In other words, we have following types of processors:
+either to a connector or to a pipeline. In other words, we have the following types of processors:
 1. **Source processors**: these processors only receive messages originating at a specific source connector. Source 
 processors are created by specifying the corresponding source connector as the parent entity.
 2. **Pipeline processors**: these processors receive all messages that flow through the pipeline, regardless of the
@@ -18,7 +18,7 @@ processors are created by specifying the corresponding source connector as the p
 
 
 
-## Adding and configuring a transform
+## Adding and configuring a processor
 
 Processors are created through the `/processors` endpoint. Here's an example:
 
