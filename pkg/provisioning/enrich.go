@@ -14,8 +14,8 @@
 
 package provisioning
 
-// enrichPipelinesConfig sets default values for pipeline config fields
-func enrichPipelinesConfig(mp map[string]PipelineConfig) map[string]PipelineConfig {
+// EnrichPipelinesConfig sets default values for pipeline config fields
+func EnrichPipelinesConfig(mp map[string]PipelineConfig) map[string]PipelineConfig {
 	for k, cfg := range mp {
 		if cfg.Name == "" {
 			cfg.Name = k

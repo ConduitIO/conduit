@@ -73,11 +73,12 @@ func validateConnectorsConfig(mp map[string]ConnectorConfig) error {
 
 // validateProcessorsConfig validates config field values for processors
 func validateProcessorsConfig(mp map[string]ProcessorConfig) error {
+	var err error
 	for k, cfg := range mp {
 		if cfg.Type == "" {
-			return cerrors.Errorf("processors %q: \"type\" is mandatory: %w", k, ErrMandatoryField)
+			err = multierror.Append(err, cerrors.Errorf("processors %q: \"type\" is mandatory: %w", k, ErrMandatoryField))
 		}
 		mp[k] = cfg
 	}
-	return nil
+	return err
 }

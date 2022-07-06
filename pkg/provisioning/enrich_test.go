@@ -30,50 +30,14 @@ func TestEnrich_DefaultValues(t *testing.T) {
 				"con1": {
 					Type:   "source",
 					Plugin: "builtin:s3",
-					Name:   "",
 					Settings: map[string]string{
 						"aws.region": "us-east-1",
-						"aws.bucket": "my-bucket",
-					},
-					Processors: map[string]ProcessorConfig{
-						"proc1": {
-							Type: "js",
-							Settings: map[string]string{
-								"additionalProp1": "string",
-								"additionalProp2": "string",
-							},
-						},
-					},
-				},
-			},
-		},
-		"pipeline2": {
-			Status:      "stopped",
-			Name:        "",
-			Description: "",
-			Connectors: map[string]ConnectorConfig{
-				"con2": {
-					Type:   "destination",
-					Plugin: "builtin:file",
-					Name:   "",
-					Settings: map[string]string{
-						"path": "my/path",
-					},
-					Processors: map[string]ProcessorConfig{
-						"con2proc1": {
-							Type: "hoistfield",
-							Settings: map[string]string{
-								"additionalProp1": "string",
-								"additionalProp2": "string",
-							},
-						},
 					},
 				},
 			},
 		},
 		"pipeline3": {
 			Status:      "stopped",
-			Name:        "",
 			Description: "empty",
 		},
 	}
@@ -89,40 +53,6 @@ func TestEnrich_DefaultValues(t *testing.T) {
 					Name:   "con1",
 					Settings: map[string]string{
 						"aws.region": "us-east-1",
-						"aws.bucket": "my-bucket",
-					},
-					Processors: map[string]ProcessorConfig{
-						"proc1": {
-							Type: "js",
-							Settings: map[string]string{
-								"additionalProp1": "string",
-								"additionalProp2": "string",
-							},
-						},
-					},
-				},
-			},
-		},
-		"pipeline2": {
-			Status:      "stopped",
-			Name:        "pipeline2",
-			Description: "",
-			Connectors: map[string]ConnectorConfig{
-				"con2": {
-					Type:   "destination",
-					Plugin: "builtin:file",
-					Name:   "con2",
-					Settings: map[string]string{
-						"path": "my/path",
-					},
-					Processors: map[string]ProcessorConfig{
-						"con2proc1": {
-							Type: "hoistfield",
-							Settings: map[string]string{
-								"additionalProp1": "string",
-								"additionalProp2": "string",
-							},
-						},
 					},
 				},
 			},
@@ -134,6 +64,6 @@ func TestEnrich_DefaultValues(t *testing.T) {
 		},
 	}
 
-	got := enrichPipelinesConfig(before)
+	got := EnrichPipelinesConfig(before)
 	is.Equal(after, got)
 }
