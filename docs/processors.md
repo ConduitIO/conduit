@@ -1,4 +1,4 @@
-## Transforms
+## Processors
 
 A processor is a component that operates on a single record that flows through a pipeline. It can either change the record
 (i.e. **transform** it) or **filter** it out based on some criteria. Since they are part of pipelines, making yourself 
@@ -31,7 +31,7 @@ Processors are created through the `/processors` endpoint. Here's an example:
 ```json lines
 POST /v1/processors
 {
-    // name of the transform in Conduit
+    // name of the processor in Conduit
     // note that this is NOT a user-defined name for this processor
     "name": "extractfieldpayload",
     "parent": 
@@ -67,7 +67,7 @@ set up a pipeline with the built-in extract-field processors.
 ### JavaScript processors
 
 JavaScript processors make it possible to write custom processors. The API name for JavaScript processors (used in the
-request to create a transform) is `js`. There's only one configuration parameter, `script`, which is the script itself.
+request to create a processor) is `js`. There's only one configuration parameter, `script`, which is the script itself.
 
 The script needs to implement a function called `process`, which accepts an `sdk.Record`, and returns:
 * an `sdk.Record`, in case you want to transform the record,
@@ -125,7 +125,7 @@ function parseAsJSON(record) {
 }
 
 function process(record) {
-    logger.Info().Msg("entering transform");
+    logger.Info().Msg("entering process");
 
     let json = parseAsJSON(record);
     json["greeting"] = "hello!";
@@ -135,7 +135,7 @@ function process(record) {
     record.Payload = RawData();
     record.Payload.Raw = JSON.stringify(json);
 
-    logger.Info().Msg("exiting transform");
+    logger.Info().Msg("exiting process");
     return record;
 }
 ```
