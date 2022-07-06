@@ -124,7 +124,7 @@ function parseAsJSON(record) {
     return JSON.parse(String.fromCharCode.apply(String, record.Payload.Bytes()))
 }
 
-function transform(record) {
+function process(record) {
     logger.Info().Msg("entering transform");
 
     let json = parseAsJSON(record);
