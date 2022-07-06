@@ -22,8 +22,8 @@ curl -Ss -X POST 'http://localhost:8080/v1/pipelines' -d '
 {
     "config":
     {
-        "name": "test-pipeline-builtin-transform",
-        "description": "Test pipeline with built-in transform"
+        "name": "test-pipeline-builtin-processor",
+        "description": "Test pipeline with built-in processor"
     }
 }' | jq -r '.id'
 )
@@ -50,11 +50,10 @@ jq -n --arg pipeline_id "$PIPELINE_ID" '{
 )
 CONNECTOR_ID=$(curl -Ss -X POST 'http://localhost:8080/v1/connectors' -d "$SOURCE_CONN_REQ" | jq -r '.id')
 
-echo "Creating a built-in transform..."
-TRANSFORM_REQ=$(
+echo "Creating a built-in processor..."
+PROCESSOR_REQ=$(
 jq -n --arg connector_id "$CONNECTOR_ID" '{
      "name": "extractfieldpayload",
-     "type": 1,
      "parent":
      {
          "type": 1,
@@ -69,7 +68,7 @@ jq -n --arg connector_id "$CONNECTOR_ID" '{
      }
  }'
 )
-curl -Ss -X POST 'http://localhost:8080/v1/processors' -d "$TRANSFORM_REQ" > /dev/null
+curl -Ss -X POST 'http://localhost:8080/v1/processors' -d "$PROCESSOR_REQ" > /dev/null
 
 echo "Creating a file destination..."
 DEST_CONN_REQ=$(

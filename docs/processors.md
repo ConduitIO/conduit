@@ -6,8 +6,9 @@ familiar with [pipeline semantics](/docs/pipeline_semantics.md) is highly recomm
 
 ![Pipeline](data/pipeline_example.svg)
 
-Processors are **optional** components in a pipeline, i.e. a pipeline can be started without them. They can be attached 
-either to a connector or to a pipeline. In other words, we have the following types of processors:
+Processors are **optional** components in a pipeline, i.e. a pipeline can be started without them. They are always attached 
+to a single parent, which can be either a connector or a pipeline. With that, we can say that we have the following types 
+of processors:
 1. **Source processors**: these processors only receive messages originating at a specific source connector. Source 
 processors are created by specifying the corresponding source connector as the parent entity.
 2. **Pipeline processors**: these processors receive all messages that flow through the pipeline, regardless of the
@@ -16,7 +17,12 @@ processors are created by specifying the corresponding source connector as the p
    destination connector. Destination processors are created by specifying the corresponding destination connector as the
    parent entity.
 
-
+Given that every processor can have one (and only one) parent, processors cannot be shared. In case the same processing 
+needs to happen for different sources or destinations, you have two options:
+1. If records from all sources (or all destinations) need to be processed in the same way, then you can obviously create
+a pipeline processor
+2. If records from some, but not all, sources (or destinations) need to be processed in the same way, then you need to 
+create multiple processors (one for each source or destination) and configure them in the same way.
 
 ## Adding and configuring a processor
 
@@ -25,10 +31,9 @@ Processors are created through the `/processors` endpoint. Here's an example:
 ```json lines
 POST /v1/processors
 {
-    // name of the transform
+    // name of the transform in Conduit
+    // note that this is NOT a user-defined name for this processor
     "name": "extractfieldpayload",
-    // type of processor: TYPE_TRANSFORM or TYPE_FILTER 
-    "type": "TYPE_TRANSFORM",
     "parent": 
     {
         // type of parent: TYPE_CONNECTOR or TYPE_PIPELINE
@@ -48,16 +53,16 @@ POST /v1/processors
 ```
 The request to create a processor is described in [api.swagger.json](/pkg/web/openapi/swagger-ui/api/v1/api.swagger.json).
 
-## Supported transforms
+## Supported processors
 
-Conduit provides a number of built-in transforms, such as filtering fields, replacing them, posting payloads to HTTP endpoints etc.
-Conduit also provides the ability to write custom transforms in JavaScript.
+Conduit provides a number of built-in processors, such as filtering fields, replacing them, posting payloads to HTTP endpoints etc.
+Conduit also provides the ability to write custom processors in JavaScript.
 
-### Built-in transforms
+### Built-in processors
 
-An up-to-date list of all built-in transforms and detailed descriptions can be found [here](https://pkg.go.dev/github.com/conduitio/conduit/pkg/processor/transform/txfbuiltin).
-An example is available in [extract-field-transform.sh](/examples/transforms/extract-field-transform.sh). The script will
-set up a pipeline with the built-in extract-field transform.
+An up-to-date list of all built-in processors and detailed descriptions can be found [here](https://pkg.go.dev/github.com/conduitio/conduit/pkg/processor/procbuiltin).
+An example is available in [extract-field-transform.sh](/examples/processors/extract-field-transform.sh). The script will
+set up a pipeline with the built-in extract-field processors.
 
 ### JavaScript transforms
 
