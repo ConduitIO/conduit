@@ -72,8 +72,8 @@ func (s *source) Config() Config {
 	return s.XConfig
 }
 
-func (s *source) SetConfig(d Config) {
-	s.XConfig = d
+func (s *source) SetConfig(c Config) {
+	s.XConfig = c
 }
 
 func (s *source) CreatedAt() time.Time {
