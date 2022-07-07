@@ -30,19 +30,29 @@ const (
 	StatusDegraded
 )
 
-// Status defines the running status of a pipeline.
-type Status int
+const (
+	ProvisionTypeAPI ProvisionType = iota
+	ProvisionTypeConfig
+)
+
+type (
+	// Status defines the running status of a pipeline.
+	Status int
+	// ProvisionType defines provisioning type
+	ProvisionType int
+)
 
 // Instance manages a collection of Connectors, which
 // can be either Destination or Source. The pipeline sets up its publishers and
 // subscribers based on whether the Connector in question is a Destination or a Source.
 type Instance struct {
-	ID        string
-	Config    Config
-	Status    Status
-	Error     string
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	ID            string
+	Config        Config
+	Status        Status
+	Error         string
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+	ProvisionedBy ProvisionType
 
 	ConnectorIDs []string
 	ProcessorIDs []string

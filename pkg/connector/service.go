@@ -83,7 +83,7 @@ func (s *Service) Get(ctx context.Context, id string) (Connector, error) {
 }
 
 // Create will create a connector instance, persist it and return it.
-func (s *Service) Create(ctx context.Context, id string, t Type, cfg Config) (Connector, error) {
+func (s *Service) Create(ctx context.Context, id string, t Type, cfg Config, p ProvisionType) (Connector, error) {
 	// determine the path of the Connector binary
 	if cfg.Plugin == "" {
 		return nil, cerrors.New("must provide a path to plugin binary")
@@ -102,6 +102,7 @@ func (s *Service) Create(ctx context.Context, id string, t Type, cfg Config) (Co
 		return nil, cerrors.Errorf("could not init connector: %w", err)
 	}
 
+	conn.SetProvisionedBy(p)
 	// persist instance
 	err = s.store.Set(ctx, id, conn)
 	if err != nil {

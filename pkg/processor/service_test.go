@@ -40,7 +40,7 @@ func TestService_Init_Success(t *testing.T) {
 	service := processor.NewService(log.Nop(), db, registry)
 
 	// create a processor instance
-	_, err := service.Create(ctx, uuid.NewString(), name, processor.Parent{}, processor.Config{})
+	_, err := service.Create(ctx, uuid.NewString(), name, processor.Parent{}, processor.Config{}, processor.ProvisionTypeAPI)
 	assert.Ok(t, err)
 
 	want := service.List(ctx)
@@ -86,7 +86,7 @@ func TestService_Create_Success(t *testing.T) {
 	registry := newTestBuilderRegistry(t, map[string]processor.Interface{want.Name: p})
 	service := processor.NewService(log.Nop(), db, registry)
 
-	got, err := service.Create(ctx, want.ID, want.Name, want.Parent, want.Config)
+	got, err := service.Create(ctx, want.ID, want.Name, want.Parent, want.Config, processor.ProvisionTypeAPI)
 	assert.Ok(t, err)
 	want.ID = got.ID // uuid is random
 	want.CreatedAt = got.CreatedAt
@@ -107,6 +107,7 @@ func TestService_Create_BuilderNotFound(t *testing.T) {
 		"non-existent processor",
 		processor.Parent{},
 		processor.Config{},
+		processor.ProvisionTypeAPI,
 	)
 
 	assert.Error(t, err)
@@ -137,6 +138,7 @@ func TestService_Create_BuilderFail(t *testing.T) {
 		name,
 		processor.Parent{},
 		processor.Config{},
+		processor.ProvisionTypeAPI,
 	)
 	assert.True(t, cerrors.Is(err, wantErr), "expected builder error")
 	assert.Nil(t, got)
@@ -154,7 +156,7 @@ func TestService_Delete_Success(t *testing.T) {
 	service := processor.NewService(log.Nop(), db, registry)
 
 	// create a processor instance
-	i, err := service.Create(ctx, uuid.NewString(), name, processor.Parent{}, processor.Config{})
+	i, err := service.Create(ctx, uuid.NewString(), name, processor.Parent{}, processor.Config{}, processor.ProvisionTypeAPI)
 	assert.Ok(t, err)
 
 	err = service.Delete(ctx, i.ID)
@@ -186,7 +188,7 @@ func TestService_Get_Success(t *testing.T) {
 	service := processor.NewService(log.Nop(), db, registry)
 
 	// create a processor instance
-	want, err := service.Create(ctx, uuid.NewString(), name, processor.Parent{}, processor.Config{})
+	want, err := service.Create(ctx, uuid.NewString(), name, processor.Parent{}, processor.Config{}, processor.ProvisionTypeAPI)
 	assert.Ok(t, err)
 
 	got, err := service.Get(ctx, want.ID)
@@ -226,11 +228,11 @@ func TestService_List_Some(t *testing.T) {
 	service := processor.NewService(log.Nop(), db, registry)
 
 	// create a couple of processor instances
-	i1, err := service.Create(ctx, uuid.NewString(), name, processor.Parent{}, processor.Config{})
+	i1, err := service.Create(ctx, uuid.NewString(), name, processor.Parent{}, processor.Config{}, processor.ProvisionTypeAPI)
 	assert.Ok(t, err)
-	i2, err := service.Create(ctx, uuid.NewString(), name, processor.Parent{}, processor.Config{})
+	i2, err := service.Create(ctx, uuid.NewString(), name, processor.Parent{}, processor.Config{}, processor.ProvisionTypeAPI)
 	assert.Ok(t, err)
-	i3, err := service.Create(ctx, uuid.NewString(), name, processor.Parent{}, processor.Config{})
+	i3, err := service.Create(ctx, uuid.NewString(), name, processor.Parent{}, processor.Config{}, processor.ProvisionTypeAPI)
 	assert.Ok(t, err)
 
 	instances := service.List(ctx)
@@ -249,7 +251,7 @@ func TestService_Update_Success(t *testing.T) {
 	service := processor.NewService(log.Nop(), db, registry)
 
 	// create a processor instance
-	want, err := service.Create(ctx, uuid.NewString(), name, processor.Parent{}, processor.Config{})
+	want, err := service.Create(ctx, uuid.NewString(), name, processor.Parent{}, processor.Config{}, processor.ProvisionTypeAPI)
 	assert.Ok(t, err)
 
 	newConfig := processor.Config{
