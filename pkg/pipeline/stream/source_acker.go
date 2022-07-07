@@ -79,14 +79,9 @@ func (n *SourceAckerNode) registerAckHandler(msg *Message, ticket semaphore.Tick
 					n.fail = true
 				}
 				tmpErr := n.sem.Release(ticket)
-				if tmpErr != nil {
-					if err != nil {
-						// we are already returning an error, log this one instead
-						n.logger.Err(msg.Ctx, tmpErr).Msg("error releasing semaphore ticket for ack")
-					} else {
-						err = tmpErr
-					}
-				}
+				err = cerrors.LogOrReplace(err, tmpErr, func() {
+					n.logger.Err(msg.Ctx, tmpErr).Msg("error releasing semaphore ticket for ack")
+				})
 			}()
 			n.logger.Trace(msg.Ctx).Msg("acquiring semaphore for ack")
 			err = n.sem.Acquire(ticket)
@@ -113,14 +108,9 @@ func (n *SourceAckerNode) registerNackHandler(msg *Message, ticket semaphore.Tic
 					n.fail = true
 				}
 				tmpErr := n.sem.Release(ticket)
-				if tmpErr != nil {
-					if err != nil {
-						// we are already returning an error, log this one instead
-						n.logger.Err(msg.Ctx, tmpErr).Msg("error releasing semaphore ticket for nack")
-					} else {
-						err = tmpErr
-					}
-				}
+				err = cerrors.LogOrReplace(err, tmpErr, func() {
+					n.logger.Err(msg.Ctx, tmpErr).Msg("error releasing semaphore ticket for nack")
+				})
 			}()
 			n.logger.Trace(msg.Ctx).Msg("acquiring semaphore for nack")
 			err = n.sem.Acquire(ticket)
