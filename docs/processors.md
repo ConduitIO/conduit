@@ -68,20 +68,37 @@ set up a pipeline with the built-in extract-field processors.
 
 JavaScript processors make it possible to write custom processors. The API name for JavaScript processors (used in the
 request to create a processor) is `js`. There's only one configuration parameter, `script`, which is the script itself.
+Here's an example of a request payload to create a JavaScript processor:
 
-The script needs to implement a function called `process`, which accepts an `sdk.Record`, and returns:
-* an `sdk.Record`, in case you want to transform the record,
-* `null`, in case you want to drop the record from the pipeline.
-
-Here's an example of a JS processor, which enriches the metadata on a record:
+```json
+{
+  "name": "js",
+  "parent": {
+    "type": "TYPE_CONNECTOR",
+    "id": "d1ae72ea-9d9c-4bb2-b993-fdb7a01825ab"
+  },
+  "config": {
+    "settings": {
+      "script": "function process(record) {\n    record.Metadata[\"foo-key\"] = \"foo-value\";\n    return record;\n}\n"
+    }
+  }
+}
+```
+The above will create a JavaScript processor (`"name": "js"`), attached to a connector (for the parent, we have 
+`"type": "TYPE_CONNECTOR"`). The script used is:
 ```javascript
 function process(record) {
-   record.Metadata["foo-key"] = "foo-value";
-   return record;
+    record.Metadata["foo-key"] = "foo-value";
+    return record;
 }
 ```
 
-Following is an example where we filter records:
+The script needs to define a function called `process`, which accepts an `sdk.Record`, and returns:
+* an `sdk.Record`, in case you want to transform the record,
+* `null`, in case you want to drop the record from the pipeline.
+
+The above example request transforms a record, by "enriching" its metadata (it adds a metadata key). Following is an 
+example where we also filter records:
 ```javascript
 function process(r) {
     // if the record metadata has a "keepme" key set
