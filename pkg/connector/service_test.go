@@ -51,7 +51,7 @@ func TestService_Init_Success(t *testing.T) {
 			Plugin:     "test-plugin",
 			PipelineID: uuid.NewString(),
 		},
-		connector.TypeAPI,
+		connector.ProvisionTypeAPI,
 	)
 	assert.Ok(t, err)
 
@@ -109,7 +109,7 @@ func TestService_CreateSuccess(t *testing.T) {
 				uuid.NewString(),
 				tt.connType,
 				tt.want.Config(),
-				connector.TypeAPI,
+				connector.ProvisionTypeAPI,
 			)
 			assert.Ok(t, err)
 			assert.Equal(t, tt.want, got)
@@ -184,7 +184,7 @@ func TestService_CreateError(t *testing.T) {
 				uuid.NewString(),
 				tt.connType,
 				tt.data,
-				connector.TypeAPI,
+				connector.ProvisionTypeAPI,
 			)
 			assert.Error(t, err)
 			assert.Nil(t, got)
@@ -210,7 +210,7 @@ func TestService_GetSuccess(t *testing.T) {
 			Plugin:     "test-plugin",
 			PipelineID: uuid.NewString(),
 		},
-		connector.TypeAPI,
+		connector.ProvisionTypeAPI,
 	)
 	assert.Ok(t, err)
 
@@ -257,7 +257,7 @@ func TestService_DeleteSuccess(t *testing.T) {
 			Plugin:     "test-plugin",
 			PipelineID: uuid.NewString(),
 		},
-		connector.TypeAPI,
+		connector.ProvisionTypeAPI,
 	)
 	assert.Ok(t, err)
 
@@ -305,7 +305,7 @@ func TestService_DeleteConnectorIsRunning(t *testing.T) {
 			Plugin:     "test-plugin",
 			PipelineID: uuid.NewString(),
 		},
-		connector.TypeAPI,
+		connector.ProvisionTypeAPI,
 	)
 	assert.Ok(t, err)
 
@@ -334,7 +334,7 @@ func TestService_List(t *testing.T) {
 				Plugin:     "test-plugin",
 				PipelineID: uuid.NewString(),
 			},
-			connector.TypeAPI,
+			connector.ProvisionTypeAPI,
 		)
 		assert.Ok(t, err)
 		want[conn.ID()] = conn
@@ -384,7 +384,7 @@ func TestService_UpdateSuccess(t *testing.T) {
 			Plugin:     "test-plugin",
 			PipelineID: uuid.NewString(),
 		},
-		connector.TypeAPI,
+		connector.ProvisionTypeAPI,
 	)
 	assert.Ok(t, err)
 
@@ -437,7 +437,7 @@ func TestService_UpdateInvalidConfig(t *testing.T) {
 			Plugin:     "test-plugin",
 			PipelineID: uuid.NewString(),
 		},
-		connector.TypeAPI,
+		connector.ProvisionTypeAPI,
 	)
 	assert.Ok(t, err)
 

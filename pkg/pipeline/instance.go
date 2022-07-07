@@ -31,8 +31,8 @@ const (
 )
 
 const (
-	TypeAPI ProvisionType = iota
-	TypeConfig
+	ProvisionTypeAPI ProvisionType = iota
+	ProvisionTypeConfig
 )
 
 type (

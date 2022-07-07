@@ -61,7 +61,7 @@ func TestProcessorOrchestrator_CreateOnPipeline_Success(t *testing.T) {
 			want.Name,
 			want.Parent,
 			want.Config,
-			processor.TypeAPI,
+			processor.ProvisionTypeAPI,
 		).
 		Return(want, nil)
 	plsMock.EXPECT().
@@ -144,7 +144,7 @@ func TestProcessorOrchestrator_CreateOnPipeline_CreateProcessorError(t *testing.
 			"test-processor",
 			parent,
 			processor.Config{},
-			processor.TypeAPI,
+			processor.ProvisionTypeAPI,
 		).
 		Return(nil, wantErr)
 
@@ -187,7 +187,7 @@ func TestProcessorOrchestrator_CreateOnPipeline_AddProcessorError(t *testing.T) 
 			proc.Name,
 			proc.Parent,
 			proc.Config,
-			processor.TypeAPI,
+			processor.ProvisionTypeAPI,
 		).
 		Return(proc, nil)
 	plsMock.EXPECT().
@@ -241,7 +241,7 @@ func TestProcessorOrchestrator_CreateOnConnector_Success(t *testing.T) {
 			want.Name,
 			want.Parent,
 			want.Config,
-			processor.TypeAPI,
+			processor.ProvisionTypeAPI,
 		).
 		Return(want, nil)
 	consMock.EXPECT().
@@ -679,7 +679,7 @@ func TestProcessorOrchestrator_DeleteOnPipeline_RemoveProcessorFail(t *testing.T
 			want.Name,
 			want.Parent,
 			want.Config,
-			processor.TypeAPI,
+			processor.ProvisionTypeAPI,
 		).
 		Return(want, nil)
 
@@ -735,7 +735,7 @@ func TestProcessorOrchestrator_DeleteOnConnector_Fail(t *testing.T) {
 			want.Name,
 			want.Parent,
 			want.Config,
-			processor.TypeAPI,
+			processor.ProvisionTypeAPI,
 		).
 		Return(want, nil)
 

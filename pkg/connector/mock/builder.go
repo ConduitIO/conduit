@@ -44,8 +44,8 @@ func (b Builder) Init(c connector.Connector, id string, cfg connector.Config) er
 		m.EXPECT().Type().Return(connector.TypeSource).AnyTimes()
 		m.EXPECT().ID().Return(id).AnyTimes()
 		m.EXPECT().Config().Return(cfg).AnyTimes()
-		m.EXPECT().SetProvisionedBy(connector.TypeAPI).AnyTimes()
-		m.EXPECT().ProvisionedBy().Return(connector.TypeAPI).AnyTimes()
+		m.EXPECT().SetProvisionedBy(connector.ProvisionTypeAPI).AnyTimes()
+		m.EXPECT().ProvisionedBy().Return(connector.ProvisionTypeAPI).AnyTimes()
 		if b.SetupSource != nil {
 			b.SetupSource(m)
 		}
@@ -55,8 +55,8 @@ func (b Builder) Init(c connector.Connector, id string, cfg connector.Config) er
 		m.EXPECT().Type().Return(connector.TypeDestination).AnyTimes()
 		m.EXPECT().ID().Return(id).AnyTimes()
 		m.EXPECT().Config().Return(cfg).AnyTimes()
-		m.EXPECT().SetProvisionedBy(connector.TypeAPI).AnyTimes()
-		m.EXPECT().ProvisionedBy().Return(connector.TypeAPI).AnyTimes()
+		m.EXPECT().SetProvisionedBy(connector.ProvisionTypeAPI).AnyTimes()
+		m.EXPECT().ProvisionedBy().Return(connector.ProvisionTypeAPI).AnyTimes()
 		if b.SetupDestination != nil {
 			b.SetupDestination(m)
 		}
@@ -73,8 +73,8 @@ func (b Builder) NewDestinationMock(id string, d connector.Config) *Destination 
 	m.EXPECT().Config().Return(d).AnyTimes()
 	m.EXPECT().CreatedAt().AnyTimes()
 	m.EXPECT().UpdatedAt().AnyTimes()
-	m.EXPECT().SetProvisionedBy(connector.TypeAPI).AnyTimes()
-	m.EXPECT().ProvisionedBy().Return(connector.TypeAPI).AnyTimes()
+	m.EXPECT().SetProvisionedBy(connector.ProvisionTypeAPI).AnyTimes()
+	m.EXPECT().ProvisionedBy().Return(connector.ProvisionTypeAPI).AnyTimes()
 	if b.SetupDestination != nil {
 		b.SetupDestination(m)
 	}
@@ -88,8 +88,8 @@ func (b Builder) NewSourceMock(id string, d connector.Config) *Source {
 	m.EXPECT().Config().Return(d).AnyTimes()
 	m.EXPECT().CreatedAt().AnyTimes()
 	m.EXPECT().UpdatedAt().AnyTimes()
-	m.EXPECT().SetProvisionedBy(connector.TypeAPI).AnyTimes()
-	m.EXPECT().ProvisionedBy().Return(connector.TypeAPI).AnyTimes()
+	m.EXPECT().SetProvisionedBy(connector.ProvisionTypeAPI).AnyTimes()
+	m.EXPECT().ProvisionedBy().Return(connector.ProvisionTypeAPI).AnyTimes()
 	if b.SetupSource != nil {
 		b.SetupSource(m)
 	}
