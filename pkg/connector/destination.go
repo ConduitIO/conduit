@@ -64,59 +64,62 @@ type destination struct {
 
 var _ Destination = (*destination)(nil)
 
-func (s *destination) ID() string {
-	return s.XID
+func (d *destination) ID() string {
+	return d.XID
 }
 
-func (s *destination) Type() Type {
+func (d *destination) Type() Type {
 	return TypeDestination
 }
 
-func (s *destination) Config() Config {
-	return s.XConfig
+func (d *destination) Config() Config {
+	return d.XConfig
 }
 
-func (s *destination) SetConfig(d Config) {
-	s.XConfig = d
+func (d *destination) SetConfig(c Config) {
+	d.XConfig = c
 }
 
-func (s *destination) CreatedAt() time.Time {
-	return s.XCreatedAt
+func (d *destination) CreatedAt() time.Time {
+	return d.XCreatedAt
 }
 
-func (s *destination) UpdatedAt() time.Time {
-	return s.XUpdatedAt
+func (d *destination) UpdatedAt() time.Time {
+	return d.XUpdatedAt
 }
 
-func (s *destination) SetUpdatedAt(t time.Time) {
-	s.XUpdatedAt = t
+func (d *destination) SetUpdatedAt(t time.Time) {
+	d.XUpdatedAt = t
 }
 
-func (s *destination) State() DestinationState {
-	return s.XState
+func (d *destination) State() DestinationState {
+	return d.XState
 }
 
-func (s *destination) SetState(state DestinationState) {
-	s.XState = state
+func (d *destination) SetState(state DestinationState) {
+	d.XState = state
 }
 
-func (s *destination) IsRunning() bool {
-	s.m.Lock()
-	defer s.m.Unlock()
-	return s.plugin != nil
+func (d *destination) IsRunning() bool {
+	d.m.Lock()
+	defer d.m.Unlock()
+	return d.plugin != nil
 }
 
-func (s *destination) Errors() <-chan error {
-	return s.errs
+func (d *destination) Errors() <-chan error {
+	return d.errs
 }
 
-func (s *destination) Validate(ctx context.Context, settings map[string]string) error {
-	dest, err := s.pluginDispenser.DispenseDestination()
+func (d *destination) Validate(ctx context.Context, settings map[string]string) (err error) {
+	dest, err := d.pluginDispenser.DispenseDestination()
 	if err != nil {
 		return err
 	}
 	defer func() {
-		_ = dest.Teardown(ctx)
+		tmpErr := dest.Teardown(ctx)
+		err = cerrors.LogOrReplace(err, tmpErr, func() {
+			d.logger.Err(ctx, tmpErr).Msg("could not teardown destination")
+		})
 	}()
 
 	err = dest.Configure(ctx, settings)
@@ -126,22 +129,22 @@ func (s *destination) Validate(ctx context.Context, settings map[string]string) 
 	return nil
 }
 
-func (s *destination) Open(ctx context.Context) error {
+func (d *destination) Open(ctx context.Context) error {
 	// lock destination as we are about to mutate the plugin field
-	s.m.Lock()
-	defer s.m.Unlock()
-	if s.plugin != nil {
+	d.m.Lock()
+	defer d.m.Unlock()
+	if d.plugin != nil {
 		return plugin.ErrPluginRunning
 	}
 
-	s.logger.Debug(ctx).Msg("starting destination connector plugin")
-	dest, err := s.pluginDispenser.DispenseDestination()
+	d.logger.Debug(ctx).Msg("starting destination connector plugin")
+	dest, err := d.pluginDispenser.DispenseDestination()
 	if err != nil {
 		return err
 	}
 
-	s.logger.Debug(ctx).Msg("configuring destination connector plugin")
-	err = dest.Configure(ctx, s.XConfig.Settings)
+	d.logger.Debug(ctx).Msg("configuring destination connector plugin")
+	err = dest.Configure(ctx, d.XConfig.Settings)
 	if err != nil {
 		_ = dest.Teardown(ctx)
 		return err
@@ -155,72 +158,71 @@ func (s *destination) Open(ctx context.Context) error {
 		return err
 	}
 
-	s.logger.Info(ctx).Msg("destination connector plugin successfully started")
+	d.logger.Info(ctx).Msg("destination connector plugin successfully started")
 
-	s.plugin = dest
-	s.stopStream = cancelStreamCtx
-	s.persister.ConnectorStarted()
+	d.plugin = dest
+	d.stopStream = cancelStreamCtx
+	d.persister.ConnectorStarted()
 	return nil
 }
 
-func (s *destination) Stop(ctx context.Context, lastPosition record.Position) error {
-	cleanup, err := s.preparePluginCall()
+func (d *destination) Stop(ctx context.Context, lastPosition record.Position) error {
+	cleanup, err := d.preparePluginCall()
 	defer cleanup()
 	if err != nil {
 		return err
 	}
 
-	s.logger.Debug(ctx).
+	d.logger.Debug(ctx).
 		Bytes(log.RecordPositionField, lastPosition).
 		Msg("sending stop signal to destination connector plugin")
-	err = s.plugin.Stop(ctx, lastPosition)
+	err = d.plugin.Stop(ctx, lastPosition)
 	if err != nil {
 		return cerrors.Errorf("could not stop destination plugin: %w", err)
 	}
 
-	s.logger.Debug(ctx).Msg("destination connector plugin successfully responded to stop signal")
+	d.logger.Debug(ctx).Msg("destination connector plugin successfully responded to stop signal")
 	return nil
 }
 
-func (s *destination) Teardown(ctx context.Context) error {
+func (d *destination) Teardown(ctx context.Context) error {
 	// lock destination as we are about to mutate the plugin field
-	s.m.Lock()
-	defer s.m.Unlock()
-	if s.plugin == nil {
+	d.m.Lock()
+	defer d.m.Unlock()
+	if d.plugin == nil {
 		return plugin.ErrPluginNotRunning
 	}
 
 	// close stream
-	if s.stopStream != nil {
-		s.stopStream()
-		s.stopStream = nil
+	if d.stopStream != nil {
+		d.stopStream()
+		d.stopStream = nil
 	}
 
 	// wait for any calls to the plugin to stop running first (e.g. Stop, Ack or Write)
-	s.wg.Wait()
+	d.wg.Wait()
 
-	s.logger.Debug(ctx).Msg("tearing down destination connector plugin")
-	err := s.plugin.Teardown(ctx)
-
-	s.plugin = nil
-	s.persister.ConnectorStopped()
+	d.logger.Debug(ctx).Msg("tearing down destination connector plugin")
+	err := d.plugin.Teardown(ctx)
+	d.plugin = nil
+	d.persister.ConnectorStopped()
 
 	if err != nil {
 		return cerrors.Errorf("could not tear down destination connector plugin: %w", err)
 	}
 
-	s.logger.Info(ctx).Msg("destination connector plugin successfully torn down")
+	d.logger.Info(ctx).Msg("destination connector plugin successfully torn down")
 	return nil
 }
 
-func (s *destination) Write(ctx context.Context, r record.Record) error {
-	cleanup, err := s.preparePluginCall()
+func (d *destination) Write(ctx context.Context, r record.Record) error {
+	cleanup, err := d.preparePluginCall()
 	defer cleanup()
 	if err != nil {
 		return err
 	}
 
-	err = s.plugin.Write(ctx, r)
+	err = d.plugin.Write(ctx, r)
 	if err != nil {
 		return cerrors.Errorf("error writing record: %w", err)
 	}
@@ -228,14 +230,14 @@ func (s *destination) Write(ctx context.Context, r record.Record) error {
 	return nil
 }
 
-func (s *destination) Ack(ctx context.Context) (record.Position, error) {
-	cleanup, err := s.preparePluginCall()
+func (d *destination) Ack(ctx context.Context) (record.Position, error) {
+	cleanup, err := d.preparePluginCall()
 	defer cleanup()
 	if err != nil {
 		return nil, err
 	}
 
-	p, err := s.plugin.Ack(ctx)
+	p, err := d.plugin.Ack(ctx)
 	if err != nil {
 		return nil, cerrors.Errorf("error receiving ack: %w", err)
 	}
@@ -246,21 +248,21 @@ func (s *destination) Ack(ctx context.Context) (record.Position, error) {
 // preparePluginCall makes sure the plugin is running and registers a new plugin
 // call in the wait group. The returned function should be called in a deferred
 // statement to signal the plugin call is over.
-func (s *destination) preparePluginCall() (func(), error) {
-	s.m.Lock()
-	defer s.m.Unlock()
-	if s.plugin == nil {
+func (d *destination) preparePluginCall() (func(), error) {
+	d.m.Lock()
+	defer d.m.Unlock()
+	if d.plugin == nil {
 		return func() { /* do nothing */ }, plugin.ErrPluginNotRunning
 	}
 	// increase wait group so Teardown knows a call to the plugin is running
-	s.wg.Add(1)
-	return s.wg.Done, nil
+	d.wg.Add(1)
+	return d.wg.Done, nil
 }
 
-func (s *destination) Lock() {
-	s.m.Lock()
+func (d *destination) Lock() {
+	d.m.Lock()
 }
 
-func (s *destination) Unlock() {
-	s.m.Unlock()
+func (d *destination) Unlock() {
+	d.m.Unlock()
 }

@@ -70,7 +70,7 @@ func (s *Simple) Acquire(t Ticket) error {
 	s.mu.Lock()
 	if s.batch != t.batch {
 		s.mu.Unlock()
-		return cerrors.Errorf("semaphore: invalid batch")
+		return cerrors.New("semaphore: invalid batch")
 	}
 
 	w := s.waiters[t.index]
@@ -101,7 +101,7 @@ func (s *Simple) Release(t Ticket) error {
 	defer s.mu.Unlock()
 
 	if s.batch != t.batch {
-		return cerrors.Errorf("semaphore: invalid batch")
+		return cerrors.New("semaphore: invalid batch")
 	}
 	w := s.waiters[t.index]
 	if !w.acquired {
