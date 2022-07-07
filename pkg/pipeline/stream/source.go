@@ -66,14 +66,9 @@ func (n *SourceNode) Run(ctx context.Context) (err error) {
 		openMsgTracker.Wait()
 		n.logger.Trace(ctx).Msg("all messages processed, tearing down source")
 		tdErr := n.Source.Teardown(connectorCtx)
-		if tdErr != nil {
-			if err == nil {
-				err = tdErr
-			} else {
-				// we are already returning an error, just log this error
-				n.logger.Err(ctx, err).Msg("could not tear down source connector")
-			}
-		}
+		err = cerrors.LogOrReplace(err, tdErr, func() {
+			n.logger.Err(ctx, tdErr).Msg("could not tear down source connector")
+		})
 	}()
 
 	trigger, cleanup, err := n.base.Trigger(

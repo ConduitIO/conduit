@@ -71,14 +71,9 @@ func (n *DestinationNode) Run(ctx context.Context) (err error) {
 
 		// teardown will kill the plugin process
 		tdErr := n.Destination.Teardown(connectorCtx)
-		if tdErr != nil {
-			if err == nil {
-				err = tdErr
-			} else {
-				// we are already returning an error, just log this error
-				n.logger.Err(ctx, err).Msg("could not tear down destination connector")
-			}
-		}
+		err = cerrors.LogOrReplace(err, tdErr, func() {
+			n.logger.Err(ctx, tdErr).Msg("could not tear down destination connector")
+		})
 	}()
 
 	trigger, cleanup, err := n.base.Trigger(ctx, n.logger, n.Destination.Errors())

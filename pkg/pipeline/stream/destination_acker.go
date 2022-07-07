@@ -57,23 +57,13 @@ func (n *DestinationAckerNode) Run(ctx context.Context) (err error) {
 	defer func() {
 		close(signalChan)
 		workerErr := <-errChan
-		if workerErr != nil {
-			if err != nil {
-				// we are already returning an error, log this one instead
-				n.logger.Err(ctx, workerErr).Msg("destination acker node worker failed")
-			} else {
-				err = workerErr
-			}
-		}
+		err = cerrors.LogOrReplace(err, workerErr, func() {
+			n.logger.Err(ctx, workerErr).Msg("destination acker node worker failed")
+		})
 		teardownErr := n.teardown(err)
-		if teardownErr != nil {
-			if err != nil {
-				// we are already returning an error, log this one instead
-				n.logger.Err(ctx, teardownErr).Msg("destination acker node stopped before processing all messages")
-			} else {
-				err = teardownErr
-			}
-		}
+		err = cerrors.LogOrReplace(err, teardownErr, func() {
+			n.logger.Err(ctx, teardownErr).Msg("destination acker node stopped before processing all messages")
+		})
 	}()
 
 	trigger, cleanup, err := n.base.Trigger(ctx, n.logger, errChan)
