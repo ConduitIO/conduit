@@ -72,8 +72,8 @@ func (s *source) Config() Config {
 	return s.XConfig
 }
 
-func (s *source) SetConfig(d Config) {
-	s.XConfig = d
+func (s *source) SetConfig(c Config) {
+	s.XConfig = c
 }
 
 func (s *source) CreatedAt() time.Time {
@@ -106,13 +106,16 @@ func (s *source) Errors() <-chan error {
 	return s.errs
 }
 
-func (s *source) Validate(ctx context.Context, settings map[string]string) error {
+func (s *source) Validate(ctx context.Context, settings map[string]string) (err error) {
 	src, err := s.pluginDispenser.DispenseSource()
 	if err != nil {
 		return err
 	}
 	defer func() {
-		_ = src.Teardown(ctx)
+		tmpErr := src.Teardown(ctx)
+		err = cerrors.LogOrReplace(err, tmpErr, func() {
+			s.logger.Err(ctx, tmpErr).Msg("could not teardown source")
+		})
 	}()
 
 	err = src.Configure(ctx, settings)
