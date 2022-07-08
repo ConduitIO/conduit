@@ -51,7 +51,8 @@ func (n *DestinationAckerNode) Run(ctx context.Context) (err error) {
 	connectorCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	signalChan := make(chan struct{})
+	// signalChan is buffered to ensure signals don't get lost if worker is busy
+	signalChan := make(chan struct{}, 1)
 	errChan := make(chan error)
 
 	defer func() {
@@ -75,7 +76,6 @@ func (n *DestinationAckerNode) Run(ctx context.Context) (err error) {
 	// start worker that will fetch acks from the connector and forward them to
 	// internal messages
 	go n.worker(connectorCtx, signalChan, errChan)
-	signalChan <- struct{}{} // wait for worker to start before fetching first message
 
 	defer cleanup()
 	for {
