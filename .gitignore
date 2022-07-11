@@ -65,4 +65,4 @@ conduit.db
 dist/
 
 # Examples
-file_destination.txt
+examples/processors/file_destination.txt
