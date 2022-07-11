@@ -66,8 +66,11 @@ set up a pipeline with the built-in extract-field processors.
 
 ### JavaScript processors
 
-JavaScript processors make it possible to write custom processors. The API name for JavaScript processors (used in the
-request to create a processor) is `js`. There's only one configuration parameter, `script`, which is the script itself.
+JavaScript processors make it possible to write custom processors in JavaScript. The API name for JavaScript processors 
+(used in the request to create a processor) is `js`. There's only one configuration parameter, `script`, which is the 
+script itself. To find out what's possible with the JS processors, also refer to the documentation for [goja](https://github.com/dop251/goja), 
+which is the JavaScript engine we use.
+
 Here's an example of a request payload to create a JavaScript processor:
 
 ```json
