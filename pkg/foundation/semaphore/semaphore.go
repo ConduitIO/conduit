@@ -23,26 +23,42 @@ import (
 // Simple provides a way to bound concurrent access to a resource. It only
 // allows one caller to gain access at a time.
 type Simple struct {
-	waiters  []waiter
-	front    int
-	batch    int64
+	// waiters stores all waiters that have yet to acquire the semaphore. The
+	// slice will grow while new waiters are coming in, once tickets for all
+	// waiters are released the batch is incremented and the slice is reset.
+	waiters []waiter
+	// front is the index of the waiter that is next in line to acquire the
+	// semaphore.
+	front int
+	// batch is increased every time the batch is incremented.
+	batch int64
+	// acquired is true if the semaphore is currently in the acquired state and
+	// needs to be released before it's acquired again.
 	acquired bool
+	// released gets incremented every time a ticket is released. Once the count
+	// of waiters equals the number of released tickets the batch gets
+	// incremented and the waiters slice is reset.
 	released int
-	mu       sync.Mutex
+	// mu guards concurrent access to the fields above.
+	mu sync.Mutex
 }
 
 type waiter struct {
-	index int
-	ready chan struct{} // Closed when semaphore acquired.
+	// ready is closed when semaphore acquired.
+	ready chan struct{}
 
-	released bool
+	// acquired is set to true once the waiter acquires the semaphore.
 	acquired bool
+	// released is set to true once the waiter releases the semaphore.
+	released bool
 }
 
 // Ticket reserves a place in the queue and can be used to acquire access to a
 // resource.
 type Ticket struct {
+	// index stores the index of the waiter in the semaphore.
 	index int
+	// batch stores the batch in which this ticket was issued.
 	batch int64
 }
 
@@ -54,7 +70,7 @@ func (s *Simple) Enqueue() Ticket {
 	defer s.mu.Unlock()
 
 	index := len(s.waiters)
-	w := waiter{index: index, ready: make(chan struct{})}
+	w := waiter{ready: make(chan struct{})}
 	s.waiters = append(s.waiters, w)
 
 	return Ticket{
