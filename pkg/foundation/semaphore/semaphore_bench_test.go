@@ -15,7 +15,6 @@
 package semaphore_test
 
 import (
-	"container/list"
 	"fmt"
 	"testing"
 
@@ -28,7 +27,7 @@ func BenchmarkNewSem(b *testing.B) {
 	}
 }
 
-func BenchmarkAcquireSem(b *testing.B) {
+func BenchmarkEnqueueOneByOne(b *testing.B) {
 	for _, N := range []int{1, 2, 8, 64, 128} {
 		b.Run(fmt.Sprintf("acquire-%d", N), func(b *testing.B) {
 			b.ResetTimer()
@@ -36,30 +35,27 @@ func BenchmarkAcquireSem(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				for j := 0; j < N; j++ {
 					t := sem.Enqueue()
-					_ = sem.Acquire(t)
-					_ = sem.Release(t)
+					sem.Acquire(t)
+					sem.Release(t)
 				}
 			}
 		})
 	}
 }
 
-func BenchmarkEnqueueReleaseSem(b *testing.B) {
+func BenchmarkEnqueueAll(b *testing.B) {
 	for _, N := range []int{1, 2, 8, 64, 128} {
 		b.Run(fmt.Sprintf("enqueue/release-%d", N), func(b *testing.B) {
-			b.ResetTimer()
 			sem := &semaphore.Simple{}
-			tickets := list.New()
+			tickets := make([]semaphore.Ticket, N)
+			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				tickets.Init()
 				for j := 0; j < N; j++ {
-					t := sem.Enqueue()
-					tickets.PushBack(t)
+					tickets[j] = sem.Enqueue()
 				}
-				ticket := tickets.Front()
-				for ticket != nil {
-					_ = sem.Release(ticket.Value.(semaphore.Ticket))
-					ticket = ticket.Next()
+				for j := 0; j < N; j++ {
+					_ = sem.Acquire(tickets[j])
+					_ = sem.Release(tickets[j])
 				}
 			}
 		})
