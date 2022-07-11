@@ -22,6 +22,7 @@ import (
 	"sync"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/multierror"
 	"github.com/conduitio/conduit/pkg/record"
 )
 
@@ -84,45 +85,21 @@ type (
 	// a nack or drop.
 	StatusChangeHandler func(*Message, StatusChange) error
 
-	// StatusChangeMiddleware can be registered on a message and will be executed in
-	// case of a status change (see StatusChangeHandler). Middlewares are called in
-	// the reverse order of how they were registered.
-	// The middleware has two options when processing a message status change:
-	//   - If it successfully processed the status change it should call the next
-	//     handler and return its error. The handler may inspect the error and act
-	//     accordingly, but it must return that error (or another error that
-	//     contains it). It must not return an error if the next handler was called
-	//     and it returned nil.
-	//   - If it failed to process the status change successfully it must not call
-	//     the next handler but instead return an error right away.
-	// Applying these rules means each middleware can be sure that all middlewares
-	// before it processed the status change successfully.
-	StatusChangeMiddleware func(*Message, StatusChange, StatusChangeHandler) error
-
 	// AckHandler is a variation of the StatusChangeHandler that is only called
 	// when a message is acked. For more info see StatusChangeHandler.
 	AckHandler func(*Message) error
-	// AckMiddleware is a variation of the StatusChangeMiddleware that is only
-	// called when a message is acked. For more info see StatusChangeMiddleware.
-	AckMiddleware func(*Message, AckHandler) error
 
 	// NackHandler is a variation of the StatusChangeHandler that is only called
 	// when a message is nacked. For more info see StatusChangeHandler.
 	NackHandler func(*Message, error) error
-	// NackMiddleware is a variation of the StatusChangeMiddleware that is only
-	// called when a message is nacked. For more info see StatusChangeMiddleware.
-	NackMiddleware func(*Message, error, NackHandler) error
 
 	// DropHandler is a variation of the StatusChangeHandler that is only called
 	// when a message is dropped. For more info see StatusChangeHandler.
 	DropHandler func(*Message, error)
-	// DropMiddleware is a variation of the StatusChangeMiddleware that is only
-	// called when a message is dropped. For more info see StatusChangeMiddleware.
-	DropMiddleware func(*Message, error, DropHandler)
 )
 
-// StatusChange is passed to StatusChangeMiddleware and StatusChangeHandler when
-// the status of a message changes.
+// StatusChange is passed to StatusChangeHandler when the status of a message
+// changes.
 type StatusChange struct {
 	Old MessageStatus
 	New MessageStatus
@@ -150,9 +127,9 @@ func (m *Message) ID() string {
 
 // RegisterStatusHandler is used to register a function that will be called on
 // any status change of the message. This function can only be called if the
-// message status is open, otherwise it panics. Middlewares are called in the
+// message status is open, otherwise it panics. Handlers are called in the
 // reverse order of how they were registered.
-func (m *Message) RegisterStatusHandler(mw StatusChangeMiddleware) {
+func (m *Message) RegisterStatusHandler(h StatusChangeHandler) {
 	m.init()
 	m.handlerGuard.Lock()
 	defer m.handlerGuard.Unlock()
@@ -163,35 +140,34 @@ func (m *Message) RegisterStatusHandler(mw StatusChangeMiddleware) {
 
 	next := m.handler
 	m.handler = func(msg *Message, change StatusChange) error {
-		return mw(msg, change, next)
+		// all handlers are called and errors collected
+		err1 := h(msg, change)
+		err2 := next(msg, change)
+		return multierror.Append(err1, err2)
 	}
 }
 
 // RegisterAckHandler is used to register a function that will be called when
 // the message is acked. This function can only be called if the message status
 // is open, otherwise it panics.
-func (m *Message) RegisterAckHandler(mw AckMiddleware) {
-	m.RegisterStatusHandler(func(msg *Message, change StatusChange, next StatusChangeHandler) error {
+func (m *Message) RegisterAckHandler(h AckHandler) {
+	m.RegisterStatusHandler(func(msg *Message, change StatusChange) error {
 		if change.New != MessageStatusAcked {
-			return next(msg, change)
+			return nil // skip
 		}
-		return mw(msg, func(msg *Message) error {
-			return next(msg, change)
-		})
+		return h(msg)
 	})
 }
 
 // RegisterNackHandler is used to register a function that will be called when
 // the message is nacked. This function can only be called if the message status
 // is open, otherwise it panics.
-func (m *Message) RegisterNackHandler(mw NackMiddleware) {
-	m.RegisterStatusHandler(func(msg *Message, change StatusChange, next StatusChangeHandler) error {
+func (m *Message) RegisterNackHandler(h NackHandler) {
+	m.RegisterStatusHandler(func(msg *Message, change StatusChange) error {
 		if change.New != MessageStatusNacked {
-			return next(msg, change)
+			return nil // skip
 		}
-		return mw(msg, change.Reason, func(msg *Message, reason error) error {
-			return next(msg, change)
-		})
+		return h(msg, change.Reason)
 	})
 	m.hasNackHandler = true
 }
@@ -199,17 +175,12 @@ func (m *Message) RegisterNackHandler(mw NackMiddleware) {
 // RegisterDropHandler is used to register a function that will be called when
 // the message is dropped. This function can only be called if the message
 // status is open, otherwise it panics.
-func (m *Message) RegisterDropHandler(mw DropMiddleware) {
-	m.RegisterStatusHandler(func(msg *Message, change StatusChange, next StatusChangeHandler) error {
+func (m *Message) RegisterDropHandler(h DropHandler) {
+	m.RegisterStatusHandler(func(msg *Message, change StatusChange) error {
 		if change.New != MessageStatusDropped {
-			return next(msg, change)
+			return nil
 		}
-		mw(msg, change.Reason, func(msg *Message, reason error) {
-			err := next(msg, change)
-			if err != nil {
-				panic(cerrors.Errorf("BUG: drop handlers should never return an error (message %s): %w", msg.ID(), err))
-			}
-		})
+		h(msg, change.Reason)
 		return nil
 	})
 }

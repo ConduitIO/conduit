@@ -81,8 +81,6 @@ func (s *Simple) Release(t Ticket) error {
 	default:
 	}
 
-	if t.next != nil {
-		close(t.next)
-	}
+	close(t.next)
 	return nil
 }

@@ -104,24 +104,13 @@ func (n *SourceNode) Run(ctx context.Context) (err error) {
 		// register another open message
 		wgOpenMessages.Add(1)
 		msg.RegisterStatusHandler(
-			func(msg *Message, change StatusChange, next StatusChangeHandler) error {
+			func(msg *Message, change StatusChange) error {
 				// this is the last handler to be executed, once this handler is
 				// reached we know either the message was successfully acked, nacked
 				// or dropped
 				defer n.PipelineTimer.Update(time.Since(msg.Record.ReadAt))
 				defer wgOpenMessages.Done()
-				return next(msg, change)
-			},
-		)
-
-		msg.RegisterAckHandler(
-			func(msg *Message, next AckHandler) error {
-				n.logger.Trace(msg.Ctx).Msg("forwarding ack to source connector")
-				err := n.Source.Ack(msg.Ctx, msg.Record.Position)
-				if err != nil {
-					return err
-				}
-				return next(msg)
+				return nil
 			},
 		)
 

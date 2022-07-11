@@ -47,7 +47,7 @@ func TestMessage_Ack_WithHandler(t *testing.T) {
 		ackedMessageHandlerCallCount int
 	)
 
-	msg.RegisterAckHandler(func(*Message, AckHandler) error {
+	msg.RegisterAckHandler(func(*Message) error {
 		ackedMessageHandlerCallCount++
 		return nil
 	})
@@ -90,35 +90,34 @@ func TestMessage_Ack_WithFailingHandler(t *testing.T) {
 	)
 
 	{
-		// first handler should never be called
-		msg.RegisterAckHandler(func(*Message, AckHandler) error {
-			t.Fatalf("did not expect first handler to be called")
+		// first handler should still be called
+		msg.RegisterAckHandler(func(*Message) error {
+			ackedMessageHandlerCallCount++
 			return nil
 		})
 		// second handler fails
-		msg.RegisterAckHandler(func(*Message, AckHandler) error {
+		msg.RegisterAckHandler(func(*Message) error {
 			return wantErr
 		})
 		// third handler should work as expected
-		msg.RegisterAckHandler(func(msg *Message, next AckHandler) error {
+		msg.RegisterAckHandler(func(msg *Message) error {
 			ackedMessageHandlerCallCount++
-			return next(msg)
+			return nil
 		})
 		// fourth handler should be called twice, once for ack, once for drop
-		msg.RegisterStatusHandler(func(msg *Message, change StatusChange, next StatusChangeHandler) error {
+		msg.RegisterStatusHandler(func(msg *Message, change StatusChange) error {
 			statusMessageHandlerCallCount++
-			return next(msg, change)
+			return nil
 		})
 		// drop handler should be called after the ack fails
-		msg.RegisterDropHandler(func(msg *Message, reason error, next DropHandler) {
-			if ackedMessageHandlerCallCount != 1 {
-				t.Fatal("expected acked message handler to already be called")
+		msg.RegisterDropHandler(func(msg *Message, reason error) {
+			if ackedMessageHandlerCallCount != 2 {
+				t.Fatal("expected acked message handlers						 to already be called")
 			}
 			droppedMessageHandlerCallCount++
-			next(msg, reason)
 		})
 		// nack handler should not be called
-		msg.RegisterNackHandler(func(*Message, error, NackHandler) error {
+		msg.RegisterNackHandler(func(*Message, error) error {
 			t.Fatalf("did not expect nack handler to be called")
 			return nil
 		})
@@ -131,8 +130,8 @@ func TestMessage_Ack_WithFailingHandler(t *testing.T) {
 			t.Fatalf("ack expected error %v, got: %v", wantErr, err)
 		}
 		assertMessageIsDropped(t, &msg)
-		if ackedMessageHandlerCallCount != 1 {
-			t.Fatalf("expected acked message handler to be called once, got %d calls", ackedMessageHandlerCallCount)
+		if ackedMessageHandlerCallCount != 2 {
+			t.Fatalf("expected acked message handler to be called twice, got %d calls", ackedMessageHandlerCallCount)
 		}
 		if droppedMessageHandlerCallCount != 1 {
 			t.Fatalf("expected dropped message handler to be called once, got %d calls", droppedMessageHandlerCallCount)
@@ -186,12 +185,12 @@ func TestMessage_Nack_WithHandler(t *testing.T) {
 		nackedMessageHandlerCallCount int
 	)
 
-	msg.RegisterNackHandler(func(msg *Message, err error, next NackHandler) error {
+	msg.RegisterNackHandler(func(msg *Message, err error) error {
 		nackedMessageHandlerCallCount++
 		if err != wantErr {
 			t.Fatalf("nacked message handler, expected err %v, got %v", wantErr, err)
 		}
-		return next(msg, err)
+		return nil
 	})
 
 	err := msg.Nack(wantErr)
@@ -225,35 +224,34 @@ func TestMessage_Nack_WithFailingHandler(t *testing.T) {
 	)
 
 	{
-		// first handler should never be called
-		msg.RegisterNackHandler(func(*Message, error, NackHandler) error {
-			t.Fatalf("did not expect first handler to be called")
+		// first handler should still be called
+		msg.RegisterNackHandler(func(*Message, error) error {
+			nackedMessageHandlerCallCount++
 			return nil
 		})
 		// second handler fails
-		msg.RegisterNackHandler(func(*Message, error, NackHandler) error {
+		msg.RegisterNackHandler(func(*Message, error) error {
 			return wantErr
 		})
 		// third handler should work as expected
-		msg.RegisterNackHandler(func(msg *Message, reason error, next NackHandler) error {
+		msg.RegisterNackHandler(func(msg *Message, reason error) error {
 			nackedMessageHandlerCallCount++
-			return next(msg, reason)
+			return nil
 		})
 		// fourth handler should be called twice, once for ack, once for drop
-		msg.RegisterStatusHandler(func(msg *Message, change StatusChange, next StatusChangeHandler) error {
+		msg.RegisterStatusHandler(func(msg *Message, change StatusChange) error {
 			statusMessageHandlerCallCount++
-			return next(msg, change)
+			return nil
 		})
 		// drop handler should be called after the nack fails
-		msg.RegisterDropHandler(func(msg *Message, reason error, next DropHandler) {
-			if nackedMessageHandlerCallCount != 1 {
-				t.Fatal("expected nacked message handler to already be called")
+		msg.RegisterDropHandler(func(msg *Message, reason error) {
+			if nackedMessageHandlerCallCount != 2 {
+				t.Fatal("expected nacked message handlers to already be called")
 			}
 			droppedMessageHandlerCallCount++
-			next(msg, reason)
 		})
 		// ack handler should not be called
-		msg.RegisterAckHandler(func(*Message, AckHandler) error {
+		msg.RegisterAckHandler(func(*Message) error {
 			t.Fatalf("did not expect ack handler to be called")
 			return nil
 		})
@@ -266,8 +264,8 @@ func TestMessage_Nack_WithFailingHandler(t *testing.T) {
 			t.Fatalf("nack expected error %v, got: %v", wantErr, err)
 		}
 		assertMessageIsDropped(t, &msg)
-		if nackedMessageHandlerCallCount != 1 {
-			t.Fatalf("expected nacked message handler to be called once, got %d calls", nackedMessageHandlerCallCount)
+		if nackedMessageHandlerCallCount != 2 {
+			t.Fatalf("expected nacked message handler to be called twice, got %d calls", nackedMessageHandlerCallCount)
 		}
 		if droppedMessageHandlerCallCount != 1 {
 			t.Fatalf("expected dropped message handler to be called once, got %d calls", droppedMessageHandlerCallCount)
@@ -309,14 +307,13 @@ func TestMessage_Drop_WithHandler(t *testing.T) {
 	)
 
 	{
-		msg.RegisterDropHandler(func(msg *Message, reason error, next DropHandler) {
+		msg.RegisterDropHandler(func(msg *Message, reason error) {
 			droppedMessageHandlerCallCount++
-			next(msg, reason)
 		})
 		// second handler should be called once for drop
-		msg.RegisterStatusHandler(func(msg *Message, change StatusChange, next StatusChangeHandler) error {
+		msg.RegisterStatusHandler(func(msg *Message, change StatusChange) error {
 			statusMessageHandlerCallCount++
-			return next(msg, change)
+			return nil
 		})
 	}
 
@@ -337,7 +334,7 @@ func TestMessage_Drop_WithFailingHandler(t *testing.T) {
 	var msg Message
 
 	// handler return error for drop
-	msg.RegisterStatusHandler(func(msg *Message, change StatusChange, next StatusChangeHandler) error {
+	msg.RegisterStatusHandler(func(msg *Message, change StatusChange) error {
 		return cerrors.New("oops")
 	})
 
@@ -391,7 +388,7 @@ func TestMessage_StatusChangeTwice(t *testing.T) {
 	t.Run("nacked message", func(t *testing.T) {
 		var msg Message
 		// need to register a nack handler for message to be nacked
-		msg.RegisterNackHandler(func(*Message, error, NackHandler) error { return nil })
+		msg.RegisterNackHandler(func(*Message, error) error { return nil })
 		err := msg.Nack(nil)
 		if err != nil {
 			t.Fatalf("ack did not expect error, got %v", err)
@@ -424,7 +421,7 @@ func TestMessage_RegisterHandlerFail(t *testing.T) {
 				t.Fatalf("expected msg.RegisterAckHandler to panic")
 			}
 		}()
-		msg.RegisterAckHandler(func(*Message, AckHandler) error { return nil })
+		msg.RegisterAckHandler(func(*Message) error { return nil })
 	}
 	assertRegisterNackHandlerPanics := func(msg *Message) {
 		defer func() {
@@ -432,7 +429,7 @@ func TestMessage_RegisterHandlerFail(t *testing.T) {
 				t.Fatalf("expected msg.RegisterNackHandler to panic")
 			}
 		}()
-		msg.RegisterNackHandler(func(*Message, error, NackHandler) error { return nil })
+		msg.RegisterNackHandler(func(*Message, error) error { return nil })
 	}
 	assertRegisterDropHandlerPanics := func(msg *Message) {
 		defer func() {
@@ -440,7 +437,7 @@ func TestMessage_RegisterHandlerFail(t *testing.T) {
 				t.Fatalf("expected msg.RegisterDropHandler to panic")
 			}
 		}()
-		msg.RegisterDropHandler(func(*Message, error, DropHandler) {})
+		msg.RegisterDropHandler(func(*Message, error) {})
 	}
 
 	// registering a handler after the message is acked should panic
@@ -459,7 +456,7 @@ func TestMessage_RegisterHandlerFail(t *testing.T) {
 	t.Run("nacked message", func(t *testing.T) {
 		var msg Message
 		// need to register a nack handler for message to be nacked
-		msg.RegisterNackHandler(func(*Message, error, NackHandler) error { return nil })
+		msg.RegisterNackHandler(func(*Message, error) error { return nil })
 		err := msg.Nack(nil)
 		if err != nil {
 			t.Fatalf("ack did not expect error, got %v", err)

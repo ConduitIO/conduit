@@ -111,6 +111,7 @@ func TestServiceLifecycle_PipelineError(t *testing.T) {
 	// wait for pipeline to finish
 	err = pl.Wait()
 	assert.Error(t, err)
+	t.Log(err)
 
 	assert.Equal(t, StatusDegraded, pl.Status)
 	// pipeline errors contain only string messages, so we can only compare the errors by the messages
