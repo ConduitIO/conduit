@@ -35,8 +35,8 @@ func BenchmarkEnqueueOneByOne(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				for j := 0; j < N; j++ {
 					t := sem.Enqueue()
-					sem.Acquire(t)
-					sem.Release(t)
+					_ = sem.Acquire(t)
+					_ = sem.Release(t)
 				}
 			}
 		})
