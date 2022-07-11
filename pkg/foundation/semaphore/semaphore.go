@@ -23,43 +23,19 @@ import (
 // Simple provides a way to bound concurrent access to a resource. It only
 // allows one caller to gain access at a time.
 type Simple struct {
-	// waiters stores all waiters that have yet to acquire the semaphore. The
-	// slice will grow while new waiters are coming in, once tickets for all
-	// waiters are released the batch is incremented and the slice is reset.
-	waiters []waiter
-	// front is the index of the waiter that is next in line to acquire the
-	// semaphore.
-	front int
-	// batch is increased every time the batch is incremented.
-	batch int64
-	// acquired is true if the semaphore is currently in the acquired state and
-	// needs to be released before it's acquired again.
-	acquired bool
-	// released gets incremented every time a ticket is released. Once the count
-	// of waiters equals the number of released tickets the batch gets
-	// incremented and the waiters slice is reset.
-	released int
-	// mu guards concurrent access to the fields above.
+	// lastTicket holds the last issued ticket.
+	lastTicket Ticket
+	// mu guards concurrent access to lastTicket.
 	mu sync.Mutex
-}
-
-type waiter struct {
-	// ready is closed when semaphore acquired.
-	ready chan struct{}
-
-	// acquired is set to true once the waiter acquires the semaphore.
-	acquired bool
-	// released is set to true once the waiter releases the semaphore.
-	released bool
 }
 
 // Ticket reserves a place in the queue and can be used to acquire access to a
 // resource.
 type Ticket struct {
-	// index stores the index of the waiter in the semaphore.
-	index int
-	// batch stores the batch in which this ticket was issued.
-	batch int64
+	// ready is closed when the ticket acquired the semaphore.
+	ready chan struct{}
+	// next is closed when the ticket is released.
+	next chan struct{}
 }
 
 // Enqueue reserves the next place in the queue and returns a Ticket used to
@@ -69,87 +45,44 @@ func (s *Simple) Enqueue() Ticket {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	index := len(s.waiters)
-	w := waiter{ready: make(chan struct{})}
-	s.waiters = append(s.waiters, w)
-
-	return Ticket{
-		index: index,
-		batch: s.batch,
+	t := Ticket{
+		ready: s.lastTicket.next,
+		next:  make(chan struct{}),
 	}
+	if t.ready == nil {
+		// first time we create a ticket it will be already acquired
+		t.ready = make(chan struct{})
+		close(t.ready)
+	}
+	s.lastTicket = t
+	return t
 }
 
-// Acquire acquires the semaphore, blocking until resources are available. On
-// success, returns nil. On failure, returns an error and leaves the semaphore
-// unchanged.
-func (s *Simple) Acquire(t Ticket) error {
-	s.mu.Lock()
-	if s.batch != t.batch {
-		s.mu.Unlock()
-		return cerrors.New("semaphore: invalid batch")
-	}
-
-	w := s.waiters[t.index]
-	if w.acquired {
-		return cerrors.New("semaphore: can't acquire ticket that was already acquired")
-	}
-
-	w.acquired = true // mark that Acquire was already called for this Ticket
-	s.waiters[t.index] = w
-
-	if s.front == t.index && !s.acquired {
-		s.front++
-		s.acquired = true
-		s.mu.Unlock()
-		return nil
-	}
-	s.mu.Unlock()
-
-	<-w.ready
-	return nil
+// Acquire acquires the semaphore, blocking until resources are available.
+// Returns nil if acquire was successful or ctx.Err if the context was cancelled
+// in the meantime.
+func (s *Simple) Acquire(t Ticket) {
+	<-t.ready
 }
 
 // Release releases the semaphore and notifies the next in line if any.
 // If the ticket was already released the function returns an error. After the
 // ticket is released it should be discarded.
 func (s *Simple) Release(t Ticket) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if s.batch != t.batch {
-		return cerrors.New("semaphore: invalid batch")
-	}
-	w := s.waiters[t.index]
-	if !w.acquired {
+	select {
+	case <-t.ready:
+	default:
 		return cerrors.New("semaphore: can't release ticket that was not acquired")
 	}
-	if w.released {
+
+	select {
+	case <-t.next:
 		return cerrors.New("semaphore: ticket already released")
+	default:
 	}
 
-	w.released = true
-	s.waiters[t.index] = w
-	s.acquired = false
-	s.released++
-	s.notifyWaiter()
-	if s.released == len(s.waiters) {
-		s.increaseBatch()
+	if t.next != nil {
+		close(t.next)
 	}
 	return nil
-}
-
-func (s *Simple) notifyWaiter() {
-	if len(s.waiters) > s.front {
-		w := s.waiters[s.front]
-		s.acquired = true
-		s.front++
-		close(w.ready)
-	}
-}
-
-func (s *Simple) increaseBatch() {
-	s.waiters = s.waiters[:0]
-	s.batch++
-	s.front = 0
-	s.released = 0
 }
