@@ -18,32 +18,23 @@ import (
 	"sync"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/gammazero/deque"
 )
 
 // Simple provides a way to bound concurrent access to a resource. It only
 // allows one caller to gain access at a time.
 type Simple struct {
-	waiters  []waiter
-	front    int
-	batch    int64
-	acquired bool
-	released int
-	mu       sync.Mutex
-}
-
-type waiter struct {
-	index int
-	ready chan struct{} // Closed when semaphore acquired.
-
-	released bool
-	acquired bool
+	tickets       deque.Deque[Ticket]
+	index         int64
+	acquiredIndex int64
+	mu            sync.Mutex
 }
 
 // Ticket reserves a place in the queue and can be used to acquire access to a
 // resource.
 type Ticket struct {
-	index int
-	batch int64
+	index    int64
+	acquired chan struct{} // Closed when semaphore acquired.
 }
 
 // Enqueue reserves the next place in the queue and returns a Ticket used to
@@ -53,14 +44,11 @@ func (s *Simple) Enqueue() Ticket {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	index := len(s.waiters)
-	w := waiter{index: index, ready: make(chan struct{})}
-	s.waiters = append(s.waiters, w)
+	ticket := Ticket{index: s.index, acquired: make(chan struct{})}
+	s.tickets.PushBack(ticket)
+	s.index++
 
-	return Ticket{
-		index: index,
-		batch: s.batch,
-	}
+	return ticket
 }
 
 // Acquire acquires the semaphore, blocking until resources are available. On
@@ -68,28 +56,23 @@ func (s *Simple) Enqueue() Ticket {
 // unchanged.
 func (s *Simple) Acquire(t Ticket) error {
 	s.mu.Lock()
-	if s.batch != t.batch {
+
+	select {
+	case <-t.acquired:
 		s.mu.Unlock()
-		return cerrors.New("semaphore: invalid batch")
-	}
-
-	w := s.waiters[t.index]
-	if w.acquired {
 		return cerrors.New("semaphore: can't acquire ticket that was already acquired")
+	default:
 	}
 
-	w.acquired = true // mark that Acquire was already called for this Ticket
-	s.waiters[t.index] = w
-
-	if s.front == t.index && !s.acquired {
-		s.front++
-		s.acquired = true
+	if s.acquiredIndex == t.index {
+		s.tickets.PopFront()
+		close(t.acquired)
 		s.mu.Unlock()
 		return nil
 	}
 	s.mu.Unlock()
 
-	<-w.ready
+	<-t.acquired
 	return nil
 }
 
@@ -100,40 +83,20 @@ func (s *Simple) Release(t Ticket) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if s.batch != t.batch {
-		return cerrors.New("semaphore: invalid batch")
-	}
-	w := s.waiters[t.index]
-	if !w.acquired {
+	select {
+	case <-t.acquired:
+	default:
 		return cerrors.New("semaphore: can't release ticket that was not acquired")
 	}
-	if w.released {
-		return cerrors.New("semaphore: ticket already released")
-	}
 
-	w.released = true
-	s.waiters[t.index] = w
-	s.acquired = false
-	s.released++
+	s.acquiredIndex++
 	s.notifyWaiter()
-	if s.released == len(s.waiters) {
-		s.increaseBatch()
-	}
 	return nil
 }
 
 func (s *Simple) notifyWaiter() {
-	if len(s.waiters) > s.front {
-		w := s.waiters[s.front]
-		s.acquired = true
-		s.front++
-		close(w.ready)
+	if s.tickets.Len() > 0 {
+		w := s.tickets.PopFront()
+		close(w.acquired)
 	}
-}
-
-func (s *Simple) increaseBatch() {
-	s.waiters = s.waiters[:0]
-	s.batch++
-	s.front = 0
-	s.released = 0
 }
