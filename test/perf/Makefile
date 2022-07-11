@@ -15,3 +15,6 @@ run-latest: stop
 	docker run --rm  --name conduit-perf-test -p 8080:8080 -d ghcr.io/conduitio/conduit:latest
 	sleep 1
 	./small-messages-low-rate.sh
+
+print-results:
+	go run print_results.go
