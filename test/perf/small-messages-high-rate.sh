@@ -7,10 +7,10 @@
 # * a file destination (it writes to file_destination.txt)
 # * a processor with the built-in extract-field transform.
 
-rm -f file_destination.txt
-touch file_destination.txt
-
-DEST_FILE=$(realpath file_destination.txt)
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+DEST_FILE="$SCRIPT_DIR/file_destination.txt"
+rm -f "$DEST_FILE"
+touch "$DEST_FILE"
 
 echo "Running Conduit..."
 docker run --rm  --name conduit -v "$DEST_FILE":/file_destination.txt -p 8080:8080 -d ghcr.io/conduitio/conduit:latest
@@ -75,5 +75,3 @@ echo "Starting the pipeline..."
 curl -Ss -X POST "http://localhost:8080/v1/pipelines/$PIPELINE_ID/start" > /dev/null
 echo "Pipeline started!"
 date
-
-
