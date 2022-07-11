@@ -129,7 +129,7 @@ func (m *Message) ID() string {
 // any status change of the message. This function can only be called if the
 // message status is open, otherwise it panics. Handlers are called in the
 // reverse order of how they were registered.
-func (m *Message) RegisterStatusHandler(mw StatusChangeHandler) {
+func (m *Message) RegisterStatusHandler(h StatusChangeHandler) {
 	m.init()
 	m.handlerGuard.Lock()
 	defer m.handlerGuard.Unlock()
@@ -141,7 +141,7 @@ func (m *Message) RegisterStatusHandler(mw StatusChangeHandler) {
 	next := m.handler
 	m.handler = func(msg *Message, change StatusChange) error {
 		// all handlers are called and errors collected
-		err1 := mw(msg, change)
+		err1 := h(msg, change)
 		err2 := next(msg, change)
 		return multierror.Append(err1, err2)
 	}
@@ -150,24 +150,24 @@ func (m *Message) RegisterStatusHandler(mw StatusChangeHandler) {
 // RegisterAckHandler is used to register a function that will be called when
 // the message is acked. This function can only be called if the message status
 // is open, otherwise it panics.
-func (m *Message) RegisterAckHandler(mw AckHandler) {
+func (m *Message) RegisterAckHandler(h AckHandler) {
 	m.RegisterStatusHandler(func(msg *Message, change StatusChange) error {
 		if change.New != MessageStatusAcked {
 			return nil // skip
 		}
-		return mw(msg)
+		return h(msg)
 	})
 }
 
 // RegisterNackHandler is used to register a function that will be called when
 // the message is nacked. This function can only be called if the message status
 // is open, otherwise it panics.
-func (m *Message) RegisterNackHandler(mw NackHandler) {
+func (m *Message) RegisterNackHandler(h NackHandler) {
 	m.RegisterStatusHandler(func(msg *Message, change StatusChange) error {
 		if change.New != MessageStatusNacked {
 			return nil // skip
 		}
-		return mw(msg, change.Reason)
+		return h(msg, change.Reason)
 	})
 	m.hasNackHandler = true
 }
@@ -175,12 +175,12 @@ func (m *Message) RegisterNackHandler(mw NackHandler) {
 // RegisterDropHandler is used to register a function that will be called when
 // the message is dropped. This function can only be called if the message
 // status is open, otherwise it panics.
-func (m *Message) RegisterDropHandler(mw DropHandler) {
+func (m *Message) RegisterDropHandler(h DropHandler) {
 	m.RegisterStatusHandler(func(msg *Message, change StatusChange) error {
 		if change.New != MessageStatusDropped {
 			return nil
 		}
-		mw(msg, change.Reason)
+		h(msg, change.Reason)
 		return nil
 	})
 }
