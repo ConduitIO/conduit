@@ -58,6 +58,40 @@ func GetStackTrace(err error) interface{} {
 	return frames
 }
 
+// LogOrReplace is a utility meant to be called in deferred functions that can
+// produce an error. In that case we have two options:
+//
+//  1. Group errors together (e.g. with the multierror package).
+//  2. Use LogOrReplace to either log the error or return it.
+//
+// The second option is preferable when the original error returning from the
+// function is more important than the deferred error. LogOrReplace will return
+// the original error if it is not nil, otherwise it will return the new error.
+// If both errors are not nil, then the log function will be called, that can be
+// used to log the new error.
+//
+// Example how it's supposed to be used:
+//
+//  func() (err error) {
+//    defer func() {
+//      cleanupErr := cleanup()
+//      err = cerrors.LogOrReplace(err, cleanupErr, func() {
+//        fmt.Printf("cleanup error: %v", cleanupErr)
+//      })
+//    }
+//    // execute logic that can produce an error
+//    return err
+//  }
+func LogOrReplace(oldErr, newErr error, log func()) error {
+	if oldErr == nil {
+		return newErr
+	}
+	if newErr != nil {
+		log()
+	}
+	return oldErr
+}
+
 func hasStackTrace(err error) bool {
 	errT := reflect.TypeOf(err)
 	return errT != nil && errT.Elem().PkgPath() == "golang.org/x/xerrors"
