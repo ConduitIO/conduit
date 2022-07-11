@@ -13,7 +13,7 @@ rm -f "$DEST_FILE"
 touch "$DEST_FILE"
 
 echo "Running Conduit..."
-docker run --rm  --name conduit -v "$DEST_FILE":/file_destination.txt -p 8080:8080 -d ghcr.io/conduitio/conduit:latest
+docker run --rm  --name conduit-perf-test -v "$DEST_FILE":/file_destination.txt -p 8080:8080 -d ghcr.io/conduitio/conduit:latest
 
 # todo: implement healthcheck in docker
 sleep 2
@@ -44,8 +44,8 @@ jq -n --arg pipeline_id "$PIPELINE_ID" '{
         {
             "fields": "id:int,name:string,company:string,trial:bool",
             "format": "structured",
-            "readTime": "1s",
-            "recordCount": "18"
+            "readTime": "0ms",
+            "recordCount": "100000"
         }
     }
 }'
@@ -74,4 +74,4 @@ curl -Ss -X POST 'http://localhost:8080/v1/connectors' -d "$DEST_CONN_REQ" > /de
 echo "Starting the pipeline..."
 curl -Ss -X POST "http://localhost:8080/v1/pipelines/$PIPELINE_ID/start" > /dev/null
 echo "Pipeline started!"
-date
+

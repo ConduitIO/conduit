@@ -14,6 +14,7 @@ require (
 	github.com/conduitio/conduit-connector-s3 v0.1.1
 	github.com/conduitio/conduit-connector-sdk v0.2.0
 	github.com/dgraph-io/badger/v3 v3.2103.2
+	github.com/docker/go-units v0.4.0
 	github.com/dop251/goja v0.0.0-20210225094849-f3cfc97811c0
 	github.com/golang/mock v1.6.0
 	github.com/google/go-cmp v0.5.8
