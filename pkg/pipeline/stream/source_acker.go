@@ -83,10 +83,7 @@ func (n *SourceAckerNode) registerAckHandler(msg *Message, ticket semaphore.Tick
 				})
 			}()
 			n.logger.Trace(msg.Ctx).Msg("acquiring semaphore for ack")
-			err = n.sem.Acquire(ticket)
-			if err != nil {
-				return cerrors.Errorf("could not acquire semaphore for ack: %w", err)
-			}
+			n.sem.Acquire(ticket)
 
 			if n.fail {
 				n.logger.Trace(msg.Ctx).Msg("blocking forwarding of ack to source connector, because another message failed to be acked/nacked")
@@ -112,10 +109,7 @@ func (n *SourceAckerNode) registerNackHandler(msg *Message, ticket semaphore.Tic
 				})
 			}()
 			n.logger.Trace(msg.Ctx).Msg("acquiring semaphore for nack")
-			err = n.sem.Acquire(ticket)
-			if err != nil {
-				return cerrors.Errorf("could not acquire semaphore for nack: %w", err)
-			}
+			n.sem.Acquire(ticket)
 
 			if n.fail {
 				n.logger.Trace(msg.Ctx).Msg("blocking forwarding of nack to DLQ handler, because another message failed to be acked/nacked")
