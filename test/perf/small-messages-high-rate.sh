@@ -1,4 +1,7 @@
 #!/bin/bash
+echo "Stopping test instance (if running)..."
+docker stop conduit-perf-test
+
 echo "Running Conduit..."
 docker run --rm  --name conduit-perf-test -v "$DEST_FILE":/file_destination.txt -p 8080:8080 -d ghcr.io/conduitio/conduit:latest
 
