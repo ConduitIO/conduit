@@ -10,7 +10,7 @@ Processors are **optional** components in a pipeline, i.e. a pipeline can be sta
 to a single parent, which can be either a connector or a pipeline. With that, we can say that we have the following types 
 of processors:
 1. **Source processors**: these processors only receive messages originating at a specific source connector. Source 
-processors are created by specifying the corresponding source connector as the parent entity.
+   processors are created by specifying the corresponding source connector as the parent entity.
 2. **Pipeline processors**: these processors receive all messages that flow through the pipeline, regardless of the
    source or destination. Pipeline processors are created by specifying the pipeline as the parent entity.
 3. **Destination processors**: these processors receive only messages that are meant to be sent to a specific
