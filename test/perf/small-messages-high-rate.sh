@@ -1,17 +1,4 @@
 #!/bin/bash
-# This script will start Conduit and set up a pipeline which demonstrates
-# a transform replacing a record's structured payload with one of its fields.
-
-# The pipeline consists of:
-# * a generator source, generating structured records
-# * a file destination (it writes to file_destination.txt)
-# * a processor with the built-in extract-field transform.
-
-SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
-DEST_FILE="$SCRIPT_DIR/file_destination.txt"
-rm -f "$DEST_FILE"
-touch "$DEST_FILE"
-
 echo "Running Conduit..."
 docker run --rm  --name conduit-perf-test -v "$DEST_FILE":/file_destination.txt -p 8080:8080 -d ghcr.io/conduitio/conduit:latest
 
