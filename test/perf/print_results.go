@@ -21,7 +21,7 @@ import (
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/docker/go-units"
-	dto "github.com/prometheus/client_model/go"
+	promclient "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/expfmt"
 )
 
@@ -55,7 +55,7 @@ func main() {
 	fmt.Printf("bytes/s: %v/s\n", units.HumanSize(totalSize/totalTime))
 }
 
-func getPipelineMetrics(families map[string]*dto.MetricFamily) (uint64, float64, error) {
+func getPipelineMetrics(families map[string]*promclient.MetricFamily) (uint64, float64, error) {
 	family, ok := families["conduit_pipeline_execution_duration_seconds"]
 	if !ok {
 		return 0, 0, cerrors.New("metric family conduit_pipeline_execution_duration_seconds not available")
@@ -70,7 +70,7 @@ func getPipelineMetrics(families map[string]*dto.MetricFamily) (uint64, float64,
 	return 0, 0, cerrors.Errorf("metrics for pipeline %q not found", pipelineName)
 }
 
-func getByteMetrics(families map[string]*dto.MetricFamily) float64 {
+func getByteMetrics(families map[string]*promclient.MetricFamily) float64 {
 	for _, m := range families["conduit_connector_bytes"].Metric {
 		if hasLabel(m, "pipeline_name", pipelineName) && hasLabel(m, "type", "source") {
 			return *m.Histogram.SampleSum
@@ -80,7 +80,7 @@ func getByteMetrics(families map[string]*dto.MetricFamily) float64 {
 	return 0
 }
 
-func hasLabel(m *dto.Metric, name string, value string) bool {
+func hasLabel(m *promclient.Metric, name string, value string) bool {
 	for _, labelPair := range m.GetLabel() {
 		if labelPair.GetName() == name && labelPair.GetValue() == value {
 			return true
