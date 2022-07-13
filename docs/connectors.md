@@ -17,7 +17,7 @@ Based on what the Conduit team hears from developers, a [roadmap]() has been bui
 * `Community` - A community connector is one where a developer created a connector and they're the ones supporting it not the Conduit team.
 * `Legacy` - Some connectors are built using non-preferred methods. For example, Kafka Connect connectors can be used on Conduit. This is considered a stop gap measure until `conduit` or `community` connectors are built.
 
-At this time, Conduit does not have any commerically supported connectors.
+At this time, Conduit does not have any commercially supported connectors.
 
 ### Source & Destination
 
