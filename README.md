@@ -85,7 +85,7 @@ The Docker image includes the [UI](#ui), you can access it by navigating to `htt
 
 ## Connectors
 
-For the full list of available connectors, see the [Connector List](docs/connector-list.md). If there's a connector that you're looking for that isn't available in Conduit, please file an [issue](https://github.com/ConduitIO/conduit/issues/new?assignees=&labels=triage&template=3-connector-request.yml&title=Connector%3A+%3Cresource%3E+%5BSource%2FDestination%5D).
+For the full list of available connectors, see the [Connector List](docs/connectors.md). If there's a connector that you're looking for that isn't available in Conduit, please file an [issue](https://github.com/ConduitIO/conduit/issues/new?assignees=&labels=triage&template=3-connector-request.yml&title=Connector%3A+%3Cresource%3E+%5BSource%2FDestination%5D).
 
 Conduit ships with a number of built-in connectors:
 
