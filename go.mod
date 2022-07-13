@@ -4,7 +4,7 @@ go 1.18
 
 require (
 	github.com/NYTimes/gziphandler v1.1.1
-	github.com/antchfx/jsonquery v1.2.0
+	github.com/antchfx/jsonquery v1.3.0
 	github.com/bufbuild/buf v1.6.0
 	github.com/conduitio/conduit-connector-file v0.1.0
 	github.com/conduitio/conduit-connector-generator v0.1.0
