@@ -7,7 +7,7 @@ The difference between Conduit connectors and those you might find from other se
 
 ## Roadmap & Feedback
 
-Based on what the Conduit team hears from developers, a [roadmap]() has been built to facilitate the connectors that need to be built for Conduit. If you have a connector that you really want to see supported or lend your vote for a particular connector, check out that roadmap and upvote the associated issue!
+If you need support for a particular data store that doesn't exist on the connector list, check out the list of requested [source connectors](https://github.com/ConduitIO/conduit/issues?q=is%3Aissue+label%3Aconnector%3Asource+) and the list of requested [destination connectors](https://github.com/ConduitIO/conduit/issues?q=is%3Aissue+label%3Aconnector%3Adestination). Give the issue a `+1` if you really need that connector. The upvote will help the team understand demand for any particular connector. If you find that an issue hasn't been created for your data store, please create a new issue in the Conduit repo.
 
 ## Connectors
 
