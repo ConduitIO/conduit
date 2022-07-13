@@ -4,7 +4,7 @@ go 1.18
 
 require (
 	github.com/NYTimes/gziphandler v1.1.1
-	github.com/antchfx/jsonquery v1.2.0
+	github.com/antchfx/jsonquery v1.3.0
 	github.com/bufbuild/buf v1.6.0
 	github.com/conduitio/conduit-connector-file v0.1.0
 	github.com/conduitio/conduit-connector-generator v0.1.0
@@ -34,7 +34,7 @@ require (
 	golang.org/x/tools v0.1.11
 	golang.org/x/xerrors v0.0.0-20220517211312-f3a8303e98df
 	google.golang.org/genproto v0.0.0-20220617124728-180714bec0ad
-	google.golang.org/grpc v1.47.0
+	google.golang.org/grpc v1.48.0
 	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.2.0
 	google.golang.org/protobuf v1.28.0
 	gopkg.in/tomb.v2 v2.0.0-20161208151619-d5d1b5820637
