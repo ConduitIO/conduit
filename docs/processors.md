@@ -19,7 +19,7 @@ of processors:
 
 Given that every processor can have one (and only one) parent, processors cannot be shared. In case the same processing 
 needs to happen for different sources or destinations, you have two options:
-1. If records from all sources (or all destinations) need to be processed in the same way, then you can obviously create
+1. If records from all sources (or all destinations) need to be processed in the same way, then you can create
 a pipeline processor
 2. If records from some, but not all, sources (or destinations) need to be processed in the same way, then you need to 
 create multiple processors (one for each source or destination) and configure them in the same way.
@@ -114,7 +114,7 @@ function process(r) {
 }
 ```
 
-The script, of course, is not constrained to having only this function, i.e. you can have something like this:
+The script is not constrained to having only this function, i.e. you can have something like this:
 ```javascript
 function doSomething(record) {
     // do something with the record
@@ -138,7 +138,7 @@ above:
 ```javascript
 // Parses the record payload as JSON
 function parseAsJSON(record) {
-    // we can, of course, use all of the JavaScript built-in functions
+    // we can use all of the JavaScript built-in functions
     // we use the record as if we would use it Go code, 
     // so record.Payload.Bytes() gives us the payload bytes
     return JSON.parse(String.fromCharCode.apply(String, record.Payload.Bytes()))
