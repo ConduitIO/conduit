@@ -92,8 +92,6 @@ func (n *FanoutNode) Run(ctx context.Context) error {
 								return msg.Ack()
 							case <-msg.Nacked():
 								return cerrors.New("message was nacked by another node")
-							case <-msg.Dropped():
-								return ErrMessageDropped
 							}
 						}),
 					)
@@ -104,31 +102,12 @@ func (n *FanoutNode) Run(ctx context.Context) error {
 							return msg.Nack(reason)
 						}),
 					)
-					newMsg.RegisterDropHandler(
-						// wrap drop handler to make sure msg is not overwritten
-						// by the time drop handler is called
-						n.wrapDropHandler(msg, func(msg *Message, reason error) {
-							defer func() {
-								if err := recover(); err != nil {
-									if cerrors.Is(err.(error), ErrUnexpectedMessageStatus) {
-										// the unexpected message status is expected (I know, right?)
-										// this rare case might happen if one downstream node first
-										// nacks the message and afterwards another node tries to drop
-										// the message
-										// this is a valid use case, the panic is trying to make us
-										// notice all other invalid use cases
-										return
-									}
-									panic(err) // re-panic
-								}
-							}()
-							msg.Drop()
-						}),
-					)
 
 					select {
 					case <-ctx.Done():
-						msg.Drop()
+						// we can ignore the error, it will show up in the
+						// original msg
+						_ = newMsg.Nack(ctx.Err())
 						return
 					case n.out[i] <- newMsg:
 					}
@@ -139,6 +118,25 @@ func (n *FanoutNode) Run(ctx context.Context) error {
 			// also there is no need to listen to ctx.Done because that's what
 			// the go routines are doing already
 			wg.Wait()
+
+			// check if the context is still alive
+			if ctx.Err() != nil {
+				// context was closed - if the message was nacked there's a high
+				// chance it was nacked in this node by one of the goroutines
+				if msg.Status() == MessageStatusNacked {
+					// check if the message nack returned an error (Nack is
+					// idempotent and will return the same error as in the first
+					// call), return it if it returns an error
+					if err := msg.Nack(nil); err != nil {
+						return err
+					}
+				}
+				// the message is not nacked, it must have been sent to all
+				// downstream nodes just before the context got cancelled, we
+				// don't care about the message anymore, so we just return the
+				// context error
+				return ctx.Err()
+			}
 		}
 	}
 }
@@ -158,15 +156,6 @@ func (n *FanoutNode) wrapAckHandler(origMsg *Message, f AckHandler) AckHandler {
 func (n *FanoutNode) wrapNackHandler(origMsg *Message, f NackHandler) NackHandler {
 	return func(_ *Message, reason error) error {
 		return f(origMsg, reason)
-	}
-}
-
-// wrapDropHandler modifies the drop handler, so it's called with the original
-// message received by FanoutNode instead of the new message created by
-// FanoutNode.
-func (n *FanoutNode) wrapDropHandler(origMsg *Message, f DropHandler) DropHandler {
-	return func(_ *Message, reason error) {
-		f(origMsg, reason)
 	}
 }
 

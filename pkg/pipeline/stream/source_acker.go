@@ -65,8 +65,7 @@ func (n *SourceAckerNode) Run(ctx context.Context) error {
 
 		err = n.base.Send(ctx, n.logger, msg)
 		if err != nil {
-			msg.Drop()
-			return err
+			return msg.Nack(err)
 		}
 	}
 }
