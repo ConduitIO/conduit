@@ -13,7 +13,7 @@ A Conduit pipeline is a directed acyclic graph of nodes. Each node runs in its o
 nodes via unbuffered Go channels that can transmit messages. In theory, we could create arbitrarily complex graphs of
 nodes, but for the sake of a simpler API we expose the ability to create graphs with the following structure:
 
-![pipeline](https://user-images.githubusercontent.com/8320753/165359385-79d98217-fd7f-478d-a059-121487e2b4a2.svg)
+![pipeline](data/pipeline_example.svg)
 
 In the diagram above we see 7 sections:
 
@@ -22,21 +22,21 @@ In the diagram above we see 7 sections:
   connector is managed by a source node that receives records, wraps them in a message, and sends them downstream to the
   next node. A pipeline requires at least one source connector to be runnable.
 - **Source processors** - these processors only receive messages originating at a specific source connector. Source
-  processors are created by specifying the corresponding source connector as the parent entity. Processors are not
+  processors are created by specifying the corresponding source connector as the parent entity. Source processors are not
   required for starting a pipeline.
 - **Fan-in node** - this node is essentially a multiplexer that receives messages produced by all source connectors and
   sends them into one output channel. The order of messages coming from different connectors is nondeterministic. A
   fan-in node is automatically created for all pipelines.
 - **Pipeline processors** - these processors receive all messages that flow through the pipeline, regardless of the
-  source or destination. Pipeline processors are created by specifying the pipeline as the parent entity. Processors are
-  not required for starting a pipeline.
+  source or destination. Pipeline processors are created by specifying the pipeline as the parent entity. Pipeline processors 
+  are not required for starting a pipeline.
 - **Fan-out node** - this node is the counterpart to the fan-in node and acts as a demultiplexer that sends messages
   coming from a single input to multiple downstream nodes (one for each destination). The fan-out node does not buffer
   messages, instead, it waits for a message to be sent to all downstream nodes before processing the next message (see
   [backpressure](#Backpressure)). A fan-out node is automatically created for all pipelines.
 - **Destination processors** - these processors receive only messages that are meant to be sent to a specific
   destination connector. Destination processors are created by specifying the corresponding destination connector as the
-  parent entity. Processors are not required for starting a pipeline.
+  parent entity. Destination processors are not required for starting a pipeline.
 - **Destination connectors** - represents the code that communicates with a 3rd party system and continuously receives
   records from Conduit and writes them to the destination (e.g.
   [kafka connector](https://github.com/conduitio/conduit-connector-kafka)). Every destination connector is managed by a
