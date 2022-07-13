@@ -3,6 +3,8 @@ name: lint
 on:
   push:
     branches: [ main ]
+    paths-ignore:
+      - 'docs/**'
   pull_request:
 
 jobs:
