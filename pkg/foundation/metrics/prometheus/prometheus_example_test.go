@@ -28,7 +28,7 @@ import (
 var (
 	testCounter = metrics.NewCounter("prom_example_counter", "example")
 	testTimer   = metrics.NewTimer("prom_example_timer", "example")
-	// nolint:deadcode,varcheck // the whole point of this is to show that even unused gauges show up in prometheus
+	// nolint:unused,deadcode,varcheck // the whole point of this is to show that even unused gauges show up in prometheus
 	testGauge = metrics.NewGauge("prom_example_gauge", "example")
 )
 

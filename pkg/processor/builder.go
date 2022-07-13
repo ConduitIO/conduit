@@ -25,7 +25,7 @@ import (
 var GlobalBuilderRegistry = NewBuilderRegistry()
 
 // Builder parses the config and if valid returns a processor, an error otherwise.
-type Builder func(Config) (Processor, error)
+type Builder func(Config) (Interface, error)
 
 // BuilderRegistry is a registry for registering or looking up processor
 // builders. The Register and Get methods are safe for concurrent use.

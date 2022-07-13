@@ -26,7 +26,7 @@ import (
 
 type ProcessorNode struct {
 	Name           string
-	Processor      processor.Processor
+	Processor      processor.Interface
 	ProcessorTimer metrics.Timer
 
 	base   pubSubNodeBase
@@ -51,7 +51,7 @@ func (n *ProcessorNode) Run(ctx context.Context) error {
 		}
 
 		executeTime := time.Now()
-		rec, err := n.Processor.Execute(msg.Ctx, msg.Record)
+		rec, err := n.Processor.Process(msg.Ctx, msg.Record)
 		n.ProcessorTimer.Update(time.Since(executeTime))
 		if err != nil {
 			// Check for Skipped records
@@ -66,7 +66,7 @@ func (n *ProcessorNode) Run(ctx context.Context) error {
 			err = msg.Nack(err)
 			if err != nil {
 				msg.Drop()
-				return cerrors.Errorf("error applying transform: %w", err)
+				return cerrors.Errorf("failed to execute processor: %w", err)
 			}
 			// nack was handled successfully, we recovered
 			continue

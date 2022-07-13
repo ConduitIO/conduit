@@ -54,7 +54,7 @@ func (s *Service) Init(ctx context.Context) error {
 	s.logger.Info(ctx).Int("count", len(s.instances)).Msg("processors initialized")
 
 	for _, i := range instances {
-		measure.ProcessorsGauge.WithValues(i.Name, i.Processor.Type().String()).Inc()
+		measure.ProcessorsGauge.WithValues(i.Name).Inc()
 	}
 
 	return nil
@@ -84,7 +84,6 @@ func (s *Service) Create(
 	ctx context.Context,
 	id string,
 	name string,
-	t Type,
 	parent Parent,
 	cfg Config,
 ) (*Instance, error) {
@@ -96,10 +95,6 @@ func (s *Service) Create(
 	p, err := builder(cfg)
 	if err != nil {
 		return nil, cerrors.Errorf("could not build processor: %w", err)
-	}
-
-	if pt := p.Type(); pt != t {
-		return nil, cerrors.Errorf("processor is of type %s and not %s", pt, t)
 	}
 
 	now := time.Now()
@@ -120,7 +115,7 @@ func (s *Service) Create(
 	}
 
 	s.instances[instance.ID] = instance
-	measure.ProcessorsGauge.WithValues(name, t.String()).Inc()
+	measure.ProcessorsGauge.WithValues(name).Inc()
 
 	return instance, nil
 }
@@ -166,7 +161,7 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 		return cerrors.Errorf("could not delete processor instance from store: %w", err)
 	}
 	delete(s.instances, id)
-	measure.ProcessorsGauge.WithValues(instance.Name, instance.Processor.Type().String()).Dec()
+	measure.ProcessorsGauge.WithValues(instance.Name).Dec()
 
 	return nil
 }

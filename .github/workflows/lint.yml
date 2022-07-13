@@ -17,12 +17,12 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v3
         with:
-          version: v1.45.2
+          version: v1.46.2
 
   buf-lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: bufbuild/buf-setup-action@v1.5.0
-      - uses: bufbuild/buf-lint-action@v1.0.0
+      - uses: bufbuild/buf-setup-action@v1.6.0
+      - uses: bufbuild/buf-lint-action@v1.0.1
 
