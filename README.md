@@ -29,6 +29,7 @@ Conduit was created and open-sourced by [Meroxa](https://meroxa.io).
 
 - [Installation guide](#installation-guide)
 - [Connectors](#connectors)
+- [Processors](#processors)
 - [Testing](#testing)
 - [API](#api)
 - [UI](#ui)
@@ -99,6 +100,16 @@ Additionally, we have prepared a [Kafka Connect wrapper](https://github.com/cond
 Kafka Connect connector as part of a Conduit pipeline.
 
 Conduit is also able to run standalone connectors. If you are interested in writing a connector yourself, have a look at our [Go Connector SDK](https://github.com/ConduitIO/conduit-connector-sdk). Since standalone connectors communicate with Conduit through gRPC they can be written in virtually any programming language, as long as the connector follows the [Conduit Connector Protocol](https://github.com/ConduitIO/conduit-connector-protocol).
+
+## Processors
+
+A processor is a component that operates on a single record that flows through a pipeline. It can either change the record
+(i.e. **transform** it) or **filter** it out based on some criteria.
+
+Conduit provides a number of built-in processors, which can be used to filter and replace fields, post payloads to HTTP endpoints etc.
+Conduit also provides the ability to write custom processors in JavaScript.
+
+More detailed information as well as examples can be found in the [Processors documentation](/docs/processors.md).
 
 ## Testing
 
