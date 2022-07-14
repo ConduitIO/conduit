@@ -15,9 +15,11 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/docker/go-units"
@@ -28,6 +30,30 @@ import (
 const pipelineName = "perf-test"
 
 func main() {
+	interval := flag.Duration(
+		"interval",
+		10*time.Second,
+		"interval at which the current performance results will be printed.",
+	)
+	duration := flag.Duration(
+		"duration",
+		10*time.Minute,
+		"duration of the performance test",
+	)
+	until := time.Now().Add(*duration)
+	for {
+		printMetrics()
+		if time.Now().After(until) {
+			break
+		}
+		time.Sleep(*interval)
+	}
+}
+
+func printMetrics() {
+	fmt.Println(time.Now())
+	fmt.Println("-------")
+
 	metrics, err := http.Get("http://localhost:8080/metrics")
 	if err != nil {
 		fmt.Printf("failed getting metrics: %v", err)
@@ -53,6 +79,8 @@ func main() {
 
 	totalSize := getByteMetrics(metricFamilies)
 	fmt.Printf("bytes/s: %v/s\n", units.HumanSize(totalSize/totalTime))
+
+	fmt.Println("---------------------")
 }
 
 func getPipelineMetrics(families map[string]*promclient.MetricFamily) (uint64, float64, error) {
