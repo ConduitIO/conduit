@@ -29,6 +29,7 @@ Conduit was created and open-sourced by [Meroxa](https://meroxa.io).
 
 - [Installation guide](#installation-guide)
 - [Connectors](#connectors)
+- [Processors](#processors)
 - [Testing](#testing)
 - [API](#api)
 - [UI](#ui)
@@ -85,6 +86,8 @@ The Docker image includes the [UI](#ui), you can access it by navigating to `htt
 
 ## Connectors
 
+For the full list of available connectors, see the [Connector List](docs/connectors.md). If there's a connector that you're looking for that isn't available in Conduit, please file an [issue](https://github.com/ConduitIO/conduit/issues/new?assignees=&labels=triage&template=3-connector-request.yml&title=Connector%3A+%3Cresource%3E+%5BSource%2FDestination%5D).
+
 Conduit ships with a number of built-in connectors:
 
 - [File connector](https://github.com/ConduitIO/conduit-connector-file) provides a source/destination to read/write a local file (useful for quickly trying out Conduit without additional setup).
@@ -93,10 +96,20 @@ Conduit ships with a number of built-in connectors:
 - [S3 connector](https://github.com/ConduitIO/conduit-connector-s3) provides a source/destination for AWS S3.
 - [Generator connector](https://github.com/ConduitIO/conduit-connector-generator) provides a source which generates random data (useful for testing).
 
-Additionally, we have prepared a [Kafka Connect wrapper](https://github.com/conduitio/conduit-kafka-connect-wrapper) that allows you to run any Apache 
+Additionally, we have prepared a [Kafka Connect wrapper](https://github.com/conduitio/conduit-kafka-connect-wrapper) that allows you to run any Apache
 Kafka Connect connector as part of a Conduit pipeline.
 
 Conduit is also able to run standalone connectors. If you are interested in writing a connector yourself, have a look at our [Go Connector SDK](https://github.com/ConduitIO/conduit-connector-sdk). Since standalone connectors communicate with Conduit through gRPC they can be written in virtually any programming language, as long as the connector follows the [Conduit Connector Protocol](https://github.com/ConduitIO/conduit-connector-protocol).
+
+## Processors
+
+A processor is a component that operates on a single record that flows through a pipeline. It can either change the record
+(i.e. **transform** it) or **filter** it out based on some criteria.
+
+Conduit provides a number of built-in processors, which can be used to filter and replace fields, post payloads to HTTP endpoints etc.
+Conduit also provides the ability to write custom processors in JavaScript.
+
+More detailed information as well as examples can be found in the [Processors documentation](/docs/processors.md).
 
 ## Testing
 
@@ -118,7 +131,7 @@ learn more about the gRPC API please have a look at the
 
 The HTTP API is by default running on port 8080. You can define a custom address using the CLI flag `-http.address`. It
 is generated using [gRPC gateway](https://github.com/grpc-ecosystem/grpc-gateway) and is thus providing the same
-functionality as the gRPC API. To learn more about the HTTP API please have a look at the [API documentation](https://www.conduit.io/api), 
+functionality as the gRPC API. To learn more about the HTTP API please have a look at the [API documentation](https://www.conduit.io/api),
 [OpenAPI definition](https://github.com/ConduitIO/conduit/blob/main/pkg/web/openapi/swagger-ui/api/v1/api.swagger.json)
 or run Conduit and navigate to `http://localhost:8080/openapi/` to open a
 [Swagger UI](https://github.com/swagger-api/swagger-ui) which makes it easy to try it out.
