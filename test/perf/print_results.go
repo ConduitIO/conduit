@@ -29,31 +29,55 @@ import (
 
 const pipelineName = "perf-test"
 
-func main() {
-	interval := flag.Duration(
-		"interval",
-		10*time.Second,
-		"interval at which the current performance results will be printed.",
-	)
-	duration := flag.Duration(
-		"duration",
-		10*time.Minute,
-		"duration of the performance test",
-	)
-	until := time.Now().Add(*duration)
-	for {
-		printMetrics()
-		if time.Now().After(until) {
-			break
-		}
-		time.Sleep(*interval)
-	}
+type stats struct {
+	count uint64
+	bytes float64
+	time  time.Time
 }
 
-func printMetrics() {
+type metricsPrinter struct {
+	firstStats stats
+}
+
+func (mp *metricsPrinter) print() {
 	fmt.Println(time.Now())
 	fmt.Println("-------")
 
+	metricFamilies, err := mp.getMetrics()
+	if err != nil {
+		fmt.Printf("failed getting metrics: %v", err)
+		os.Exit(1)
+	}
+
+	count, totalTime, err := mp.getPipelineMetrics(metricFamilies)
+	if err != nil {
+		fmt.Printf("failed getting pipeline metrics: %v", err)
+		os.Exit(1)
+	}
+
+	fmt.Println("conduit only")
+	fmt.Printf("\ttotal records: %v\n", count)
+	fmt.Printf("\trecords/s: %v/s\n", float64(count)/totalTime)
+
+	totalSize := mp.getSourceByteMetrics(metricFamilies)
+	fmt.Printf("\tbytes/s: %v/s\n", units.HumanSize(totalSize/totalTime))
+
+	fmt.Println("overall pipeline:")
+	pipelineRate := (count - mp.firstStats.count) / uint64(time.Now().Sub(mp.firstStats.time).Seconds())
+	fmt.Printf("\trecords/s: %v/s\n", pipelineRate)
+
+	fmt.Println("---------------------")
+
+	if mp.firstStats == (stats{}) {
+		mp.firstStats = stats{
+			count: count,
+			bytes: totalSize,
+			time:  time.Now(),
+		}
+	}
+}
+
+func (mp *metricsPrinter) getMetrics() (map[string]*promclient.MetricFamily, error) {
 	metrics, err := http.Get("http://localhost:8080/metrics")
 	if err != nil {
 		fmt.Printf("failed getting metrics: %v", err)
@@ -62,28 +86,10 @@ func printMetrics() {
 	defer metrics.Body.Close()
 
 	var parser expfmt.TextParser
-	metricFamilies, err := parser.TextToMetricFamilies(metrics.Body)
-	if err != nil {
-		fmt.Printf("failed parsing metrics: %v", err)
-		os.Exit(1)
-	}
-
-	count, totalTime, err := getPipelineMetrics(metricFamilies)
-	if err != nil {
-		fmt.Printf("failed getting pipeline metrics: %v", err)
-		os.Exit(1)
-	}
-
-	fmt.Printf("records: %v\n", count)
-	fmt.Printf("records/s: %v/s\n", float64(count)/totalTime)
-
-	totalSize := getByteMetrics(metricFamilies)
-	fmt.Printf("bytes/s: %v/s\n", units.HumanSize(totalSize/totalTime))
-
-	fmt.Println("---------------------")
+	return parser.TextToMetricFamilies(metrics.Body)
 }
 
-func getPipelineMetrics(families map[string]*promclient.MetricFamily) (uint64, float64, error) {
+func (mp *metricsPrinter) getPipelineMetrics(families map[string]*promclient.MetricFamily) (uint64, float64, error) {
 	family, ok := families["conduit_pipeline_execution_duration_seconds"]
 	if !ok {
 		return 0, 0, cerrors.New("metric family conduit_pipeline_execution_duration_seconds not available")
@@ -98,7 +104,7 @@ func getPipelineMetrics(families map[string]*promclient.MetricFamily) (uint64, f
 	return 0, 0, cerrors.Errorf("metrics for pipeline %q not found", pipelineName)
 }
 
-func getByteMetrics(families map[string]*promclient.MetricFamily) float64 {
+func (mp *metricsPrinter) getSourceByteMetrics(families map[string]*promclient.MetricFamily) float64 {
 	for _, m := range families["conduit_connector_bytes"].Metric {
 		if hasLabel(m, "pipeline_name", pipelineName) && hasLabel(m, "type", "source") {
 			return *m.Histogram.SampleSum
@@ -115,4 +121,26 @@ func hasLabel(m *promclient.Metric, name string, value string) bool {
 		}
 	}
 	return false
+}
+
+func main() {
+	interval := flag.Duration(
+		"interval",
+		10*time.Second,
+		"interval at which the current performance results will be printed.",
+	)
+	duration := flag.Duration(
+		"duration",
+		10*time.Minute,
+		"duration of the performance test",
+	)
+	until := time.Now().Add(*duration)
+	mp := metricsPrinter{}
+	for {
+		mp.print()
+		if time.Now().After(until) {
+			break
+		}
+		time.Sleep(*interval)
+	}
 }
