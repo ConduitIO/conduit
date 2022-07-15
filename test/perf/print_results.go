@@ -63,7 +63,7 @@ func (mp *metricsPrinter) print() {
 	fmt.Printf("\tbytes/s: %v/s\n", units.HumanSize(totalSize/totalTime))
 
 	fmt.Println("overall pipeline:")
-	pipelineRate := (count - mp.firstStats.count) / uint64(time.Now().Sub(mp.firstStats.time).Seconds())
+	pipelineRate := (count - mp.firstStats.count) / uint64(time.Since(mp.firstStats.time).Seconds())
 	fmt.Printf("\trecords/s: %v/s\n", pipelineRate)
 
 	fmt.Println("---------------------")
