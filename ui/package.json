@@ -78,7 +78,7 @@
     "eslint-plugin-ember": "^10.6.1",
     "eslint-plugin-node": "^11.1.0",
     "eslint-plugin-prettier": "^4.2.1",
-    "eslint-plugin-qunit": "^7.3.0",
+    "eslint-plugin-qunit": "^7.3.1",
     "loader.js": "^4.7.0",
     "mx-ui-components": "https://github.com/conduitio/mx-ui-components.git#a1aa6edfa814734f51c5146162e4514cd6fc73c4",
     "npm-run-all": "^4.1.5",
@@ -86,7 +86,7 @@
     "prettier": "^2.7.1",
     "qunit": "^2.19.1",
     "qunit-dom": "^2.0.0",
-    "tailwindcss": "^3.1.4",
+    "tailwindcss": "^3.1.5",
     "webpack": "^5.73.0"
   },
   "engines": {
