@@ -77,6 +77,7 @@ func (mp *metricsPrinter) print() {
 	}
 }
 
+// getMetrics returns all the metrics which Conduit exposes
 func (mp *metricsPrinter) getMetrics() (map[string]*promclient.MetricFamily, error) {
 	metrics, err := http.Get("http://localhost:8080/metrics")
 	if err != nil {
@@ -89,6 +90,8 @@ func (mp *metricsPrinter) getMetrics() (map[string]*promclient.MetricFamily, err
 	return parser.TextToMetricFamilies(metrics.Body)
 }
 
+// getPipelineMetrics extract the test pipeline's metrics
+// (total number of records, time records spent in pipeline)
 func (mp *metricsPrinter) getPipelineMetrics(families map[string]*promclient.MetricFamily) (uint64, float64, error) {
 	family, ok := families["conduit_pipeline_execution_duration_seconds"]
 	if !ok {
@@ -104,6 +107,7 @@ func (mp *metricsPrinter) getPipelineMetrics(families map[string]*promclient.Met
 	return 0, 0, cerrors.Errorf("metrics for pipeline %q not found", pipelineName)
 }
 
+// getSourceByteMetrics returns the amount of bytes the sources in the test pipeline produced
 func (mp *metricsPrinter) getSourceByteMetrics(families map[string]*promclient.MetricFamily) float64 {
 	for _, m := range families["conduit_connector_bytes"].Metric {
 		if hasLabel(m, "pipeline_name", pipelineName) && hasLabel(m, "type", "source") {
