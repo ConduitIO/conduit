@@ -3,6 +3,7 @@ Description=Conduit daemon
 
 [Service]
 Type=forking
+WorkingDirectory=/var/lib/conduit
 ExecStart=/usr/bin/conduit
 
 [Install]
