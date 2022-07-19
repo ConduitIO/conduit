@@ -1,0 +1,9 @@
+[Unit]
+Description=Conduit daemon
+
+[Service]
+Type=forking
+ExecStart=/usr/bin/conduit
+
+[Install]
+WantedBy=multi-user.target
