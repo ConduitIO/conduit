@@ -2,7 +2,8 @@
 Description=Conduit daemon
 
 [Service]
-Type=forking
+Type=simple
+User=ec2-user
 WorkingDirectory=/var/lib/conduit
 ExecStart=/usr/bin/conduit
 
