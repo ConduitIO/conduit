@@ -16,9 +16,9 @@ export default Factory.extend({
       const config = {
         name: connector.config.name,
         settings: {
-          'titan:name': 'eren jaeger',
+          titanName: 'eren jaeger',
           'titan:height': 50,
-          'titan:type': 'attack',
+          'titan.type': 'attack',
         },
       };
 
