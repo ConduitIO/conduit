@@ -15,13 +15,13 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"net/http"
 	"os"
 	"time"
 
-	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/docker/go-units"
 	promclient "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/expfmt"
@@ -95,7 +95,7 @@ func (mp *metricsPrinter) getMetrics() (map[string]*promclient.MetricFamily, err
 func (mp *metricsPrinter) getPipelineMetrics(families map[string]*promclient.MetricFamily) (uint64, float64, error) {
 	family, ok := families["conduit_pipeline_execution_duration_seconds"]
 	if !ok {
-		return 0, 0, cerrors.New("metric family conduit_pipeline_execution_duration_seconds not available")
+		return 0, 0, errors.New("metric family conduit_pipeline_execution_duration_seconds not available")
 	}
 
 	for _, m := range family.Metric {
@@ -104,7 +104,7 @@ func (mp *metricsPrinter) getPipelineMetrics(families map[string]*promclient.Met
 		}
 	}
 
-	return 0, 0, cerrors.Errorf("metrics for pipeline %q not found", pipelineName)
+	return 0, 0, fmt.Errorf("metrics for pipeline %q not found", pipelineName)
 }
 
 // getSourceByteMetrics returns the amount of bytes the sources in the test pipeline produced
