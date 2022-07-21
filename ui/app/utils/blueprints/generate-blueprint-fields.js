@@ -52,7 +52,7 @@ export default function generateBlueprintFields(blueprint, configurable) {
 
     const fieldModel = {
       id: fieldName,
-      label: underscore(fieldName).replace('.', '_').split('_').join(' '),
+      label: underscore(fieldName).replace('@@', '_').split('_').join(' '),
       description: fieldOpts.description,
       type: fieldOpts.type,
       isRequired: !!fieldOpts.validations.findBy('type', 'TYPE_REQUIRED'),
