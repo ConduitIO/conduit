@@ -118,6 +118,7 @@ func (mp *metricsPrinter) getSourceByteMetrics(families map[string]*promclient.M
 	return 0
 }
 
+// hasLabel returns true, if the input metrics has a label with the given name and value
 func hasLabel(m *promclient.Metric, name string, value string) bool {
 	for _, labelPair := range m.GetLabel() {
 		if labelPair.GetName() == name && labelPair.GetValue() == value {
@@ -137,6 +138,11 @@ func main() {
 		"duration",
 		10*time.Minute,
 		"duration of the performance test",
+	)
+
+	fmt.Println(
+		"When interpreting test results, please take into account, " +
+			"that if built-in plugins are used, their resource usage is part of Conduit's usage too.",
 	)
 	until := time.Now().Add(*duration)
 	mp := metricsPrinter{}
