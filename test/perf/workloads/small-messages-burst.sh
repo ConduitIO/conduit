@@ -23,8 +23,8 @@ jq -n --arg pipeline_id "$PIPELINE_ID" '{
         "name": "normal-source",
         "settings":
         {
-            "fields": "id:int,name:string,company:string,trial:bool",
-            "format": "structured",
+            "format.type": "structured",
+            "format.options": "id:int,name:string,company:string,trial:bool",
             "readTime": "100ms",
             "recordCount": "-1"
         }
@@ -44,8 +44,8 @@ jq -n --arg pipeline_id "$PIPELINE_ID" '{
         "name": "burst-source",
         "settings":
         {
-            "fields": "id:int,name:string,company:string,trial:bool",
-            "format": "structured",
+            "format.type": "structured",
+            "format.options": "id:int,name:string,company:string,trial:bool",
             "readTime": "1ms",
             "burst.sleepTime": "30s",
             "burst.generateTime": "30s",

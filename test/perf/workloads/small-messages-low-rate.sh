@@ -23,8 +23,8 @@ jq -n --arg pipeline_id "$PIPELINE_ID" '{
         "name": "generator-source-1",
         "settings":
         {
-            "fields": "id:int,name:string,company:string,trial:bool",
-            "format": "structured",
+            "format.type": "structured",
+            "format.options": "id:int,name:string,company:string,trial:bool",
             "readTime": "1s",
             "recordCount": "100"
         }
