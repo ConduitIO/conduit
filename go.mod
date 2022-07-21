@@ -7,7 +7,7 @@ require (
 	github.com/antchfx/jsonquery v1.3.0
 	github.com/bufbuild/buf v1.6.0
 	github.com/conduitio/conduit-connector-file v0.1.0
-	github.com/conduitio/conduit-connector-generator v0.1.1-0.20220719131710-7b0eee1094cb
+	github.com/conduitio/conduit-connector-generator v0.1.1-0.20220721122142-a5b270fcf625
 	github.com/conduitio/conduit-connector-kafka v0.1.1
 	github.com/conduitio/conduit-connector-postgres v0.1.0
 	github.com/conduitio/conduit-connector-protocol v0.2.0
