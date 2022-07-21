@@ -183,3 +183,7 @@ We also value contributions in form of pull requests. When opening a PR please e
 - There is no other [pull request](https://github.com/ConduitIO/conduit/pulls) for the same update/change.
 - You have written unit tests.
 - You have made sure that the PR is of reasonable size and can be easily reviewed.
+
+| total records | rec/s (Conduit) | rec/s (pipeline) | bytes/s | time |
+|---------------|-----------------|------------------|---------|------|
+| %v            | %v              | %v               | %v      | %v   |

@@ -22,6 +22,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/charmbracelet/glamour"
 	"github.com/docker/go-units"
 	promclient "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/expfmt"
@@ -40,9 +41,6 @@ type metricsPrinter struct {
 }
 
 func (mp *metricsPrinter) print() {
-	fmt.Println(time.Now())
-	fmt.Println("-------")
-
 	metricFamilies, err := mp.getMetrics()
 	if err != nil {
 		fmt.Printf("failed getting metrics: %v", err)
@@ -54,19 +52,27 @@ func (mp *metricsPrinter) print() {
 		fmt.Printf("failed getting pipeline metrics: %v", err)
 		os.Exit(1)
 	}
-
-	fmt.Println("conduit only")
-	fmt.Printf("\ttotal records: %v\n", count)
-	fmt.Printf("\trecords/s: %v/s\n", float64(count)/totalTime)
-
+	recordsPerSec := float64(count) / totalTime
 	totalSize := mp.getSourceByteMetrics(metricFamilies)
-	fmt.Printf("\tbytes/s: %v/s\n", units.HumanSize(totalSize/totalTime))
-
-	fmt.Println("overall pipeline:")
+	bytesPerSec := units.HumanSize(totalSize / totalTime)
 	pipelineRate := (count - mp.firstStats.count) / uint64(time.Since(mp.firstStats.time).Seconds())
-	fmt.Printf("\trecords/s: %v/s\n", pipelineRate)
 
-	fmt.Println("---------------------")
+	in := `
+| total records | rec/s (Conduit) | rec/s (pipeline) | bytes/s | time |
+|---------------|-----------------|------------------|---------|------|
+| %v            | %v              | %v               | %v      | %v   |
+
+
+`
+	in = fmt.Sprintf(in, count, recordsPerSec, pipelineRate, bytesPerSec, time.Now().Format(time.RFC3339))
+	r, _ := glamour.NewTermRenderer(
+		// detect background color and pick either the default dark or light theme
+		glamour.WithAutoStyle(),
+		glamour.WithWordWrap(200),
+	)
+
+	out, err := r.Render(in)
+	fmt.Print(out)
 
 	if mp.firstStats == (stats{}) {
 		mp.firstStats = stats{
