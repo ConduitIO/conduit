@@ -31,7 +31,7 @@ jq -n --arg pipeline_id "$PIPELINE_ID" '{
     }
 }'
 )
-curl -Ss -X POST 'http://localhost:8080/v1/connectors' -d "NORMAL_SOURCE" > /dev/null
+curl -Ss -X POST 'http://localhost:8080/v1/connectors' -d "$NORMAL_SOURCE" > /dev/null
 
 echo "Creating a burst source..."
 BURST_REQ=$(
