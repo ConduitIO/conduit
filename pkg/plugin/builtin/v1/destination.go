@@ -16,8 +16,6 @@ package builtinv1
 
 import (
 	"context"
-	"io"
-	"sync"
 
 	"github.com/conduitio/conduit-connector-protocol/cpluginv1"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -31,9 +29,10 @@ import (
 
 // destinationPluginAdapter implements the destination plugin interface used
 // internally in Conduit and relays the calls to a destination plugin defined in
-// conduit-connector-protocol (cpluginv1). This adapter needs to make sure it behaves in the
-// same way as the standalone plugin adapter, which communicates with the plugin
-// through gRPC, so that the caller can use both of them interchangeably.
+// conduit-connector-protocol (cpluginv1). This adapter needs to make sure it
+// behaves in the same way as the standalone plugin adapter, which communicates
+// with the plugin through gRPC, so that the caller can use both of them
+// interchangeably.
 type destinationPluginAdapter struct {
 	impl cpluginv1.DestinationPlugin
 	// logger is used as the internal logger of destinationPluginAdapter.
@@ -41,7 +40,7 @@ type destinationPluginAdapter struct {
 	// ctxLogger is attached to the context of each call to the plugin.
 	ctxLogger zerolog.Logger
 
-	stream *destinationRunStream
+	stream *stream[cpluginv1.DestinationRunRequest, cpluginv1.DestinationRunResponse]
 }
 
 var _ plugin.DestinationPlugin = (*destinationPluginAdapter)(nil)
@@ -92,9 +91,11 @@ func (s *destinationPluginAdapter) Start(ctx context.Context) error {
 		s.logger.Trace(ctx).Msg("calling Run")
 		err := runSandboxNoResp(s.impl.Run, s.withLogger(ctx), cpluginv1.DestinationRunStream(s.stream))
 		if err != nil {
-			s.stream.stopAll(cerrors.Errorf("error in run: %w", err))
+			if !s.stream.stop(err) {
+				s.logger.Err(ctx, err).Msg("stream already stopped")
+			}
 		} else {
-			s.stream.stopAll(plugin.ErrStreamNotOpen)
+			s.stream.stop(plugin.ErrStreamNotOpen)
 		}
 		s.logger.Trace(ctx).Msg("Run stopped")
 	}()
@@ -140,15 +141,13 @@ func (s *destinationPluginAdapter) Ack(ctx context.Context) (record.Position, er
 	return position, nil
 }
 
-func (s *destinationPluginAdapter) Stop(ctx context.Context) error {
+func (s *destinationPluginAdapter) Stop(ctx context.Context, lastPosition record.Position) error {
 	if s.stream == nil {
 		return plugin.ErrStreamNotOpen
 	}
 
-	s.stream.stopSend()
-
-	s.logger.Trace(ctx).Msg("calling Stop")
-	resp, err := runSandbox(s.impl.Stop, s.withLogger(ctx), toplugin.DestinationStopRequest())
+	s.logger.Trace(ctx).Bytes(log.RecordPositionField, lastPosition).Msg("calling Stop")
+	resp, err := runSandbox(s.impl.Stop, s.withLogger(ctx), toplugin.DestinationStopRequest(lastPosition))
 	if err != nil {
 		return err
 	}
@@ -168,79 +167,11 @@ func (s *destinationPluginAdapter) Teardown(ctx context.Context) error {
 	return nil
 }
 
-func newDestinationRunStream(ctx context.Context) *destinationRunStream {
-	sendCtx, sendCancel := context.WithCancel(ctx)
-	recvCtx, recvCancel := context.WithCancel(ctx)
-	return &destinationRunStream{
-		sendCtx:   sendCtx,
-		recvCtx:   recvCtx,
-		closeSend: sendCancel,
-		closeRecv: recvCancel,
-		reqChan:   make(chan cpluginv1.DestinationRunRequest),
-		respChan:  make(chan cpluginv1.DestinationRunResponse),
+func newDestinationRunStream(ctx context.Context) *stream[cpluginv1.DestinationRunRequest, cpluginv1.DestinationRunResponse] {
+	return &stream[cpluginv1.DestinationRunRequest, cpluginv1.DestinationRunResponse]{
+		ctx:      ctx,
+		stopChan: make(chan struct{}),
+		reqChan:  make(chan cpluginv1.DestinationRunRequest),
+		respChan: make(chan cpluginv1.DestinationRunResponse),
 	}
-}
-
-type destinationRunStream struct {
-	sendCtx   context.Context
-	recvCtx   context.Context
-	closeSend context.CancelFunc
-	closeRecv context.CancelFunc
-	reqChan   chan cpluginv1.DestinationRunRequest
-	respChan  chan cpluginv1.DestinationRunResponse
-
-	reason error
-	m      sync.RWMutex
-}
-
-func (s *destinationRunStream) Send(resp cpluginv1.DestinationRunResponse) error {
-	select {
-	case <-s.sendCtx.Done():
-		return io.EOF
-	case s.respChan <- resp:
-		return nil
-	}
-}
-
-func (s *destinationRunStream) Recv() (cpluginv1.DestinationRunRequest, error) {
-	select {
-	case <-s.recvCtx.Done():
-		return cpluginv1.DestinationRunRequest{}, io.EOF
-	case req := <-s.reqChan:
-		return req, nil
-	}
-}
-
-func (s *destinationRunStream) recvInternal() (cpluginv1.DestinationRunResponse, error) {
-	// note that contexts are named from the perspective of the server, while
-	// this function is used from the perspective of the client
-	select {
-	case <-s.sendCtx.Done():
-		return cpluginv1.DestinationRunResponse{}, s.reason
-	case resp := <-s.respChan:
-		return resp, nil
-	}
-}
-
-func (s *destinationRunStream) sendInternal(req cpluginv1.DestinationRunRequest) error {
-	// note that contexts are named from the perspective of the server, while
-	// this function is used from the perspective of the client
-	select {
-	case <-s.recvCtx.Done():
-		return plugin.ErrStreamNotOpen
-	case s.reqChan <- req:
-		return nil
-	}
-}
-
-func (s *destinationRunStream) stopAll(reason error) {
-	s.reason = reason
-	s.closeSend()
-	s.closeRecv()
-}
-
-func (s *destinationRunStream) stopSend() {
-	// we want to stop the stream towards the server, so we close the receiving
-	// context from the servers perspective
-	s.closeRecv()
 }

@@ -19,7 +19,6 @@ import (
 	"io"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/foundation/multierror"
 	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/conduitio/conduit/pkg/plugin/standalone/v1/internal/fromproto"
 	"github.com/conduitio/conduit/pkg/plugin/standalone/v1/internal/toproto"
@@ -115,7 +114,6 @@ func (s *sourcePluginClient) Ack(ctx context.Context, p record.Position) error {
 
 	err = s.stream.Send(protoReq)
 	if err != nil {
-		err = s.ackErrorCause(err)
 		if err == io.EOF {
 			// stream was gracefully closed
 			return plugin.ErrStreamNotOpen
@@ -125,51 +123,30 @@ func (s *sourcePluginClient) Ack(ctx context.Context, p record.Position) error {
 	return nil
 }
 
-func (s *sourcePluginClient) ackErrorCause(err error) error {
-	if err != io.EOF {
-		// this is an actual error, return it
-		return err
-	}
-
-	// actual error can be discovered through Recv, let's do it
-	_, recvErr := s.stream.Recv()
-	if recvErr == nil {
-		// Recv did not return an error, we just read a record, that's a huge bug!
-		panic(cerrors.Errorf("tried to get error cause of Ack, read a record instead, this is a bug! original error: %w", err))
-	}
-	return recvErr
-}
-
-func (s *sourcePluginClient) Stop(ctx context.Context) error {
+func (s *sourcePluginClient) Stop(ctx context.Context) (record.Position, error) {
 	if s.stream == nil {
-		return plugin.ErrStreamNotOpen
+		return nil, plugin.ErrStreamNotOpen
 	}
 
 	protoReq := toproto.SourceStopRequest()
 	protoResp, err := s.grpcClient.Stop(ctx, protoReq)
 	if err != nil {
-		return unwrapGRPCError(err)
+		return nil, unwrapGRPCError(err)
 	}
-	_ = protoResp // response is empty
-	return nil
+	goResp, err := fromproto.SourceStopResponse(protoResp)
+	if err != nil {
+		return nil, err
+	}
+	return goResp, nil
 }
 
 func (s *sourcePluginClient) Teardown(ctx context.Context) error {
-	var errOut error
-
-	if s.stream != nil {
-		err := s.stream.CloseSend()
-		if err != nil {
-			errOut = multierror.Append(errOut, unwrapGRPCError(err))
-		}
-	}
-
 	protoReq := toproto.SourceTeardownRequest()
 	protoResp, err := s.grpcClient.Teardown(ctx, protoReq)
 	if err != nil {
-		errOut = multierror.Append(errOut, unwrapGRPCError(err))
+		return unwrapGRPCError(err)
 	}
 	_ = protoResp // response is empty
 
-	return errOut
+	return nil
 }

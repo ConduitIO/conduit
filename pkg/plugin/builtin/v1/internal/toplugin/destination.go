@@ -44,8 +44,10 @@ func DestinationRunRequest(in record.Record) (cpluginv1.DestinationRunRequest, e
 	return out, nil
 }
 
-func DestinationStopRequest() cpluginv1.DestinationStopRequest {
-	return cpluginv1.DestinationStopRequest{}
+func DestinationStopRequest(in record.Position) cpluginv1.DestinationStopRequest {
+	return cpluginv1.DestinationStopRequest{
+		LastPosition: in,
+	}
 }
 
 func DestinationTeardownRequest() cpluginv1.DestinationTeardownRequest {

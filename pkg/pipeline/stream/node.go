@@ -98,11 +98,11 @@ type StoppableNode interface {
 
 	// Stop signals a running StopNode that it should gracefully shutdown. It
 	// should stop producing new messages, wait to receive acks/nacks for any
-	// in-flight messages, close the outgoing channel and return nil from
-	// Node.Run. Stop should return right away, not waiting for the node to
-	// actually stop running. If the node is not running the function does not
-	// do anything. The reason supplied to Stop will be returned by Node.Run.
-	Stop(reason error)
+	// in-flight messages, close the outgoing channel and return from Node.Run.
+	// Stop should return right away, not waiting for the node to actually stop
+	// running. If the node is not running the function does not do anything.
+	// The reason supplied to Stop will be returned by Node.Run.
+	Stop(ctx context.Context, reason error) error
 }
 
 // LoggingNode is a node which expects a logger.

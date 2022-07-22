@@ -16,8 +16,6 @@ package builtinv1
 
 import (
 	"context"
-	"io"
-	"sync"
 
 	"github.com/conduitio/conduit-connector-protocol/cpluginv1"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -29,11 +27,12 @@ import (
 	"github.com/rs/zerolog"
 )
 
-// sourcePluginAdapter implements the source plugin interface used
-// internally in Conduit and relays the calls to a source plugin defined in
-// conduit-connector-protocol (cpluginv1). This adapter needs to make sure it behaves in the
-// same way as the standalone plugin adapter, which communicates with the plugin
-// through gRPC, so that the caller can use both of them interchangeably.
+// sourcePluginAdapter implements the source plugin interface used internally in
+// Conduit and relays the calls to a source plugin defined in
+// conduit-connector-protocol (cpluginv1). This adapter needs to make sure it
+// behaves in the same way as the standalone plugin adapter, which communicates
+// with the plugin through gRPC, so that the caller can use both of them
+// interchangeably.
 type sourcePluginAdapter struct {
 	impl cpluginv1.SourcePlugin
 	// logger is used as the internal logger of sourcePluginAdapter.
@@ -41,7 +40,7 @@ type sourcePluginAdapter struct {
 	// ctxLogger is attached to the context of each call to the plugin.
 	ctxLogger zerolog.Logger
 
-	stream *sourceRunStream
+	stream *stream[cpluginv1.SourceRunRequest, cpluginv1.SourceRunResponse]
 }
 
 var _ plugin.SourcePlugin = (*sourcePluginAdapter)(nil)
@@ -97,7 +96,9 @@ func (s *sourcePluginAdapter) Start(ctx context.Context, p record.Position) erro
 		s.logger.Trace(ctx).Msg("calling Run")
 		err := runSandboxNoResp(s.impl.Run, s.withLogger(ctx), cpluginv1.SourceRunStream(s.stream))
 		if err != nil {
-			s.stream.stop(cerrors.Errorf("error in run: %w", err))
+			if !s.stream.stop(err) {
+				s.logger.Err(ctx, err).Msg("stream already stopped")
+			}
 		} else {
 			s.stream.stop(plugin.ErrStreamNotOpen)
 		}
@@ -145,19 +146,22 @@ func (s *sourcePluginAdapter) Ack(ctx context.Context, p record.Position) error 
 	return nil
 }
 
-func (s *sourcePluginAdapter) Stop(ctx context.Context) error {
+func (s *sourcePluginAdapter) Stop(ctx context.Context) (record.Position, error) {
 	if s.stream == nil {
-		return plugin.ErrStreamNotOpen
+		return nil, plugin.ErrStreamNotOpen
 	}
 
 	s.logger.Trace(ctx).Msg("calling Stop")
 	resp, err := runSandbox(s.impl.Stop, s.withLogger(ctx), toplugin.SourceStopRequest())
 	if err != nil {
-		return err
+		return nil, err
 	}
-	_ = resp // empty response
+	out, err := fromplugin.SourceStopResponse(resp)
+	if err != nil {
+		return nil, err
+	}
 
-	return nil
+	return out, nil
 }
 
 func (s *sourcePluginAdapter) Teardown(ctx context.Context) error {
@@ -171,70 +175,11 @@ func (s *sourcePluginAdapter) Teardown(ctx context.Context) error {
 	return nil
 }
 
-func newSourceRunStream(ctx context.Context) *sourceRunStream {
-	return &sourceRunStream{
+func newSourceRunStream(ctx context.Context) *stream[cpluginv1.SourceRunRequest, cpluginv1.SourceRunResponse] {
+	return &stream[cpluginv1.SourceRunRequest, cpluginv1.SourceRunResponse]{
 		ctx:      ctx,
 		stopChan: make(chan struct{}),
 		reqChan:  make(chan cpluginv1.SourceRunRequest),
 		respChan: make(chan cpluginv1.SourceRunResponse),
 	}
-}
-
-type sourceRunStream struct {
-	ctx      context.Context
-	stopChan chan struct{}
-	reqChan  chan cpluginv1.SourceRunRequest
-	respChan chan cpluginv1.SourceRunResponse
-
-	reason error
-	m      sync.RWMutex
-}
-
-func (s *sourceRunStream) Send(resp cpluginv1.SourceRunResponse) error {
-	select {
-	case <-s.ctx.Done():
-		return s.ctx.Err()
-	case <-s.stopChan:
-		return io.EOF
-	case s.respChan <- resp:
-		return nil
-	}
-}
-
-func (s *sourceRunStream) Recv() (cpluginv1.SourceRunRequest, error) {
-	select {
-	case <-s.ctx.Done():
-		return cpluginv1.SourceRunRequest{}, s.ctx.Err()
-	case <-s.stopChan:
-		return cpluginv1.SourceRunRequest{}, io.EOF
-	case req := <-s.reqChan:
-		return req, nil
-	}
-}
-
-func (s *sourceRunStream) recvInternal() (cpluginv1.SourceRunResponse, error) {
-	select {
-	case <-s.ctx.Done():
-		return cpluginv1.SourceRunResponse{}, cerrors.New(s.ctx.Err().Error())
-	case <-s.stopChan:
-		return cpluginv1.SourceRunResponse{}, s.reason
-	case resp := <-s.respChan:
-		return resp, nil
-	}
-}
-
-func (s *sourceRunStream) sendInternal(req cpluginv1.SourceRunRequest) error {
-	select {
-	case <-s.ctx.Done():
-		return cerrors.New(s.ctx.Err().Error()) // TODO should this be s.ctx.Err()?
-	case <-s.stopChan:
-		return s.reason
-	case s.reqChan <- req:
-		return nil
-	}
-}
-
-func (s *sourceRunStream) stop(reason error) {
-	s.reason = reason
-	close(s.stopChan)
 }

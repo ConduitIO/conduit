@@ -26,3 +26,7 @@ func SourceRunResponse(in cpluginv1.SourceRunResponse) (record.Record, error) {
 	}
 	return out, nil
 }
+
+func SourceStopResponse(in cpluginv1.SourceStopResponse) (record.Position, error) {
+	return in.LastPosition, nil
+}

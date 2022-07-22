@@ -36,7 +36,6 @@ import (
 )
 
 func TestServiceLifecycle_PipelineSuccess(t *testing.T) {
-	t.Skip("TODO need to change test to keep source running forever")
 	ctx, killAll := context.WithCancel(context.Background())
 	defer killAll()
 
@@ -51,7 +50,7 @@ func TestServiceLifecycle_PipelineSuccess(t *testing.T) {
 
 	// create mocked connectors
 	ctrl := gomock.NewController(t)
-	source, wantRecords := generatorSource(ctrl, 10, ctx.Err(), false)
+	source, wantRecords := generatorSource(ctrl, 10, nil, false)
 	destination := asserterDestination(ctrl, t, wantRecords, false)
 
 	pl, err = ps.AddConnector(ctx, pl, source.ID())
@@ -197,6 +196,13 @@ func (tpf testProcessorFetcher) Get(ctx context.Context, id string) (*processor.
 func generatorSource(ctrl *gomock.Controller, recordCount int, wantErr error, teardown bool) (connector.Source, []record.Record) {
 	position := 0
 	records := make([]record.Record, recordCount)
+	for i := 0; i < recordCount; i++ {
+		records[i] = record.Record{
+			Key:      record.RawData{Raw: []byte(uuid.NewString())},
+			Payload:  record.RawData{Raw: []byte(uuid.NewString())},
+			Position: record.Position(strconv.Itoa(i)),
+		}
+	}
 
 	source := basicSourceMock(ctrl)
 	if teardown {
@@ -206,15 +212,13 @@ func generatorSource(ctrl *gomock.Controller, recordCount int, wantErr error, te
 	source.EXPECT().Ack(gomock.Any(), gomock.Any()).Return(nil).Times(recordCount)
 	source.EXPECT().Read(gomock.Any()).DoAndReturn(func(ctx context.Context) (record.Record, error) {
 		if position == recordCount {
-			return record.Record{}, wantErr
+			if wantErr != nil {
+				return record.Record{}, wantErr
+			}
+			<-ctx.Done()
+			return record.Record{}, ctx.Err()
 		}
-		r := record.Record{
-			Key:      record.RawData{Raw: []byte(uuid.NewString())},
-			Payload:  record.RawData{Raw: []byte(uuid.NewString())},
-			Position: record.Position(strconv.Itoa(position)),
-		}
-
-		records[position] = r
+		r := records[position]
 		position++
 		return r, nil
 	}).MinTimes(recordCount + 1)
@@ -236,7 +240,7 @@ func basicSourceMock(ctrl *gomock.Controller) *connmock.Source {
 // match the expected records. On teardown it also makes sure that it received
 // all expected records.
 func asserterDestination(ctrl *gomock.Controller, t *testing.T, want []record.Record, teardown bool) connector.Destination {
-	rchan := make(chan record.Record)
+	rchan := make(chan record.Record, 1)
 	recordCount := 0
 
 	destination := connmock.NewDestination(ctrl)
@@ -246,6 +250,7 @@ func asserterDestination(ctrl *gomock.Controller, t *testing.T, want []record.Re
 	destination.EXPECT().Open(gomock.Any()).Return(nil).Times(1)
 	destination.EXPECT().Errors().Return(make(chan error))
 	if teardown {
+		destination.EXPECT().Stop(gomock.Any(), want[len(want)-1].Position).Return(nil).Times(1)
 		destination.EXPECT().Teardown(gomock.Any()).DoAndReturn(func(ctx context.Context) error {
 			close(rchan)
 			return nil

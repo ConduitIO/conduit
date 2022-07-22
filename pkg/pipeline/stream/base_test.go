@@ -29,21 +29,21 @@ func TestPubSubNodeBase_TriggerWithoutPubOrSub(t *testing.T) {
 	logger := log.Nop()
 
 	n := &pubSubNodeBase{}
-	trigger, cleanup, err := n.Trigger(ctx, logger)
+	trigger, cleanup, err := n.Trigger(ctx, logger, nil)
 	assert.Nil(t, trigger)
 	assert.Nil(t, cleanup)
 	assert.Error(t, err)
 
 	n = &pubSubNodeBase{}
 	n.Pub()
-	trigger, cleanup, err = n.Trigger(ctx, logger)
+	trigger, cleanup, err = n.Trigger(ctx, logger, nil)
 	assert.Nil(t, trigger)
 	assert.Nil(t, cleanup)
 	assert.Error(t, err)
 
 	n = &pubSubNodeBase{}
 	n.Sub(make(chan *Message))
-	trigger, cleanup, err = n.Trigger(ctx, logger)
+	trigger, cleanup, err = n.Trigger(ctx, logger, nil)
 	assert.Nil(t, trigger)
 	assert.Nil(t, cleanup)
 	assert.Error(t, err)
@@ -76,12 +76,12 @@ func TestPubSubNodeBase_TriggerTwice(t *testing.T) {
 	n := &pubSubNodeBase{}
 	n.Pub()
 	n.Sub(make(chan *Message))
-	trigger, cleanup, err := n.Trigger(ctx, logger)
+	trigger, cleanup, err := n.Trigger(ctx, logger, nil)
 	assert.Ok(t, err)
 	assert.NotNil(t, trigger)
 	assert.NotNil(t, cleanup)
 
-	trigger, cleanup, err = n.Trigger(ctx, logger)
+	trigger, cleanup, err = n.Trigger(ctx, logger, nil)
 	assert.Nil(t, trigger)
 	assert.Nil(t, cleanup)
 	assert.Error(t, err)
@@ -96,7 +96,7 @@ func TestPubSubNodeBase_TriggerSuccess(t *testing.T) {
 	n.Sub(in)
 	n.Pub()
 
-	trigger, cleanup, err := n.Trigger(ctx, logger)
+	trigger, cleanup, err := n.Trigger(ctx, logger, nil)
 	assert.Ok(t, err)
 	assert.NotNil(t, trigger)
 	assert.NotNil(t, cleanup)
@@ -123,7 +123,7 @@ func TestPubSubNodeBase_TriggerClosedSubChannel(t *testing.T) {
 	n.Sub(in)
 	n.Pub()
 
-	trigger, cleanup, err := n.Trigger(ctx, logger)
+	trigger, cleanup, err := n.Trigger(ctx, logger, nil)
 	assert.Ok(t, err)
 	assert.NotNil(t, trigger)
 	assert.NotNil(t, cleanup)
@@ -147,7 +147,7 @@ func TestPubSubNodeBase_TriggerCancelledContext(t *testing.T) {
 	n.Sub(in)
 	n.Pub()
 
-	trigger, cleanup, err := n.Trigger(ctx, logger)
+	trigger, cleanup, err := n.Trigger(ctx, logger, nil)
 	assert.Ok(t, err)
 	assert.NotNil(t, trigger)
 	assert.NotNil(t, cleanup)
