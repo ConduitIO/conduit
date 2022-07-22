@@ -28,18 +28,15 @@ A message can have of these statuses:
             it's passed around between the nodes.
   Acked     Once a node successfully processes the message (e.g. it is sent to
             the destination or is filtered out by a processor) it is acked.
-  Nacked    If some node fails to process the message it can nack the message
-            and once it's successfully nacked (e.g. sent to a dead letter queue)
-            it becomes nacked.
-  Dropped   If a node experiences a non-recoverable error or has to stop running
-            without sending the message to the next node (e.g. force stop) it
-            can drop the message, then the message status changes to dropped.
+  Nacked    If some node fails to process the message it nacks the message. In
+            that case a handler can pick it up to send it to a dead letter
+            queue.
 
-In other words, once a node receives a message it has 4 options for how to
+In other words, once a node receives a message it has 3 options for how to
 handle it: it can either pass it to the next node (message stays open), ack the
-message and keep running, nack the message and keep running or drop the message
-and stop running. This means that no message will be left in an open status when
-the pipeline stops.
+message and keep running if ack is successful, nack the message and keep running
+if nack is successful. This means that no message will be left in an open status
+when the pipeline stops.
 
 Nodes can register functions on the message which will be called when the status
 of a message changes. For more information see StatusChangeHandler.

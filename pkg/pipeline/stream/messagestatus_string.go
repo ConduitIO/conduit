@@ -11,12 +11,11 @@ func _() {
 	_ = x[MessageStatusAcked-0]
 	_ = x[MessageStatusNacked-1]
 	_ = x[MessageStatusOpen-2]
-	_ = x[MessageStatusDropped-3]
 }
 
-const _MessageStatus_name = "AckedNackedOpenDropped"
+const _MessageStatus_name = "AckedNackedOpen"
 
-var _MessageStatus_index = [...]uint8{0, 5, 11, 15, 22}
+var _MessageStatus_index = [...]uint8{0, 5, 11, 15}
 
 func (i MessageStatus) String() string {
 	if i < 0 || i >= MessageStatus(len(_MessageStatus_index)-1) {
