@@ -1,0 +1,11 @@
+[Unit]
+Description=Conduit daemon
+
+[Service]
+Type=simple
+User=ec2-user
+WorkingDirectory=/var/lib/conduit
+ExecStart=/usr/bin/conduit
+
+[Install]
+WantedBy=multi-user.target
