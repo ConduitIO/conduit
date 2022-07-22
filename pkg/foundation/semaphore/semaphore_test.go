@@ -29,13 +29,10 @@ const maxSleep = 1 * time.Millisecond
 func HammerSimple(sem *semaphore.Simple, loops int) {
 	for i := 0; i < loops; i++ {
 		tkn := sem.Enqueue()
-		err := sem.Acquire(tkn)
-		if err != nil {
-			panic(err)
-		}
+		sem.Acquire(tkn)
 		//nolint:gosec // math/rand is good enough for a test
 		time.Sleep(time.Duration(rand.Int63n(int64(maxSleep/time.Nanosecond))) * time.Nanosecond)
-		err = sem.Release(tkn)
+		err := sem.Release(tkn)
 		if err != nil {
 			panic(err)
 		}
@@ -64,7 +61,8 @@ func TestSimpleReleaseUnacquired(t *testing.T) {
 	t.Parallel()
 
 	w := &semaphore.Simple{}
-	tkn := w.Enqueue()
+	_ = w.Enqueue()    // first ticket is automatically acquired
+	tkn := w.Enqueue() // next should be unacquired
 	err := w.Release(tkn)
 	if err == nil {
 		t.Errorf("release of an unacquired ticket did not return an error")
@@ -76,11 +74,8 @@ func TestSimpleReleaseTwice(t *testing.T) {
 
 	w := &semaphore.Simple{}
 	tkn := w.Enqueue()
-	err := w.Acquire(tkn)
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
-	err = w.Release(tkn)
+	w.Acquire(tkn)
+	err := w.Release(tkn)
 	if err != nil {
 		t.Errorf("release of an acquired ticket errored out: %v", err)
 	}
@@ -91,41 +86,19 @@ func TestSimpleReleaseTwice(t *testing.T) {
 	}
 }
 
-func TestSimpleAcquireTwice(t *testing.T) {
-	t.Parallel()
-
-	w := &semaphore.Simple{}
-	tkn := w.Enqueue()
-	err := w.Acquire(tkn)
-	if err != nil {
-		t.Errorf("acquire of a ticket errored out: %v", err)
-	}
-
-	err = w.Acquire(tkn)
-	if err == nil {
-		t.Errorf("acquire of an already acquired ticket did not return an error")
-	}
-}
-
 func TestSimpleAcquire(t *testing.T) {
 	t.Parallel()
 
 	sem := &semaphore.Simple{}
 
 	tkn1 := sem.Enqueue()
-	err := sem.Acquire(tkn1)
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
+	sem.Acquire(tkn1)
 
 	tkn2done := make(chan struct{})
 	go func() {
 		defer close(tkn2done)
 		tkn2 := sem.Enqueue()
-		err := sem.Acquire(tkn2)
-		if err != nil {
-			t.Errorf("unexpected error: %v", err)
-		}
+		sem.Acquire(tkn2)
 	}()
 
 	select {
@@ -135,7 +108,7 @@ func TestSimpleAcquire(t *testing.T) {
 		// tkn2 Acquire is blocking as expected
 	}
 
-	err = sem.Release(tkn1)
+	err := sem.Release(tkn1)
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
@@ -161,10 +134,7 @@ func TestLargeAcquireDoesntStarve(t *testing.T) {
 	wg.Add(int(n))
 	for i := n; i > 0; i-- {
 		tkn := sem.Enqueue()
-		err := sem.Acquire(tkn)
-		if err != nil {
-			t.Errorf("unexpected error: %v", err)
-		}
+		sem.Acquire(tkn)
 
 		go func() {
 			defer func() {
@@ -181,22 +151,16 @@ func TestLargeAcquireDoesntStarve(t *testing.T) {
 					t.Errorf("unexpected error: %v", err)
 				}
 				tkn = sem.Enqueue()
-				err = sem.Acquire(tkn)
-				if err != nil {
-					t.Errorf("unexpected error: %v", err)
-				}
+				sem.Acquire(tkn)
 			}
 		}()
 	}
 
 	tkn := sem.Enqueue()
-	err := sem.Acquire(tkn)
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
+	sem.Acquire(tkn)
 
 	running = false
-	err = sem.Release(tkn)
+	err := sem.Release(tkn)
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
