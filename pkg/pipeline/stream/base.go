@@ -175,18 +175,18 @@ func (n *pubNodeBase) Trigger(
 	return trigger, cleanup, nil
 }
 
-// InjectMessage can be used to inject a message into the message stream. This
-// is used to inject control messages like the last position message when
+// InjectControlMessage can be used to inject a message into the message stream.
+// This is used to inject control messages like the last position message when
 // stopping a source connector. It is a bit hacky, but it doesn't require us to
 // create a separate channel for signals which makes it performant and easiest
 // to implement.
-func (n *pubNodeBase) InjectMessage(ctx context.Context, message *Message) error {
+func (n *pubNodeBase) InjectControlMessage(ctx context.Context, msgType ControlMessageType) error {
 	n.lock.Lock()
 	defer n.lock.Unlock()
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case n.msgChan <- message:
+	case n.msgChan <- &Message{controlMessageType: msgType}:
 		return nil
 	}
 }

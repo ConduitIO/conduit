@@ -145,12 +145,10 @@ func (n *SourceNode) Run(ctx context.Context) (err error) {
 
 func (n *SourceNode) Stop(ctx context.Context, reason error) error {
 	n.stopReason = reason
-	// InjectMessage will inject a message into the stream of messages being
-	// processed by SourceNode to let it know when it should stop processing new
-	// messages.
-	return n.base.InjectMessage(ctx, &Message{
-		controlMessageType: ControlMessageStopSourceNode,
-	})
+	// InjectControlMessage will inject a message into the stream of messages
+	// being processed by SourceNode to let it know when it should stop
+	// processing new messages.
+	return n.base.InjectControlMessage(ctx, ControlMessageStopSourceNode)
 }
 
 func (n *SourceNode) Pub() <-chan *Message {
