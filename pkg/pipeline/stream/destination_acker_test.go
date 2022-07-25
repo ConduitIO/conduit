@@ -51,8 +51,16 @@ func TestDestinationAckerNode_Cache(t *testing.T) {
 
 	const count = 1000
 	currentPosition := 0
+
+	// create wait group that will be done once we send all messages to the node
+	var msgProducerWg sync.WaitGroup
+	msgProducerWg.Add(1)
+
 	dest.EXPECT().Ack(gomock.Any()).
 		DoAndReturn(func(ctx context.Context) (record.Position, error) {
+			// wait for all messages to be produced, this means the node should
+			// be caching them
+			msgProducerWg.Wait()
 			pos := fmt.Sprintf("test-position-%d", currentPosition)
 			currentPosition++
 			return record.Position(pos), nil
@@ -71,6 +79,7 @@ func TestDestinationAckerNode_Cache(t *testing.T) {
 		})
 		in <- msg
 	}
+	msgProducerWg.Done()
 
 	// note that there should be no calls to the destination at all if the node
 	// didn't receive any messages
