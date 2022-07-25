@@ -109,7 +109,6 @@ func (n *SourceNode) Run(ctx context.Context) (err error) {
 			n.logger.Err(ctx, n.stopReason).Msg("stopping source connector")
 			stopPosition, err = n.Source.Stop(ctx)
 			if err != nil {
-				// TODO think through if just exiting here makes sense
 				return cerrors.Errorf("failed to stop source connector: %w", err)
 			}
 
