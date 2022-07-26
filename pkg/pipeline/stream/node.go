@@ -32,7 +32,9 @@ type Node interface {
 	// as soon as the supplied context is done. If an error occurs while
 	// processing messages, the processing should stop and the error should be
 	// returned. If processing stopped because the context was canceled, the
-	// function should return ctx.Err().
+	// function should return ctx.Err(). All nodes that are part of the same
+	// pipeline will receive the same context in Run and as soon as one node
+	// returns an error the context will be canceled.
 	// Run has different responsibilities, depending on the node type:
 	//  * PubNode has to start producing new messages into the outgoing channel.
 	//    The context supplied to Run has to be attached to all messages. Each
