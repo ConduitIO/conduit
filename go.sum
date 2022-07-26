@@ -149,10 +149,6 @@ github.com/cockroachdb/apd v1.1.0/go.mod h1:8Sl8LxpKi29FqWXR16WEFZRNSz3SoPzUzeMe
 github.com/colinmarc/hdfs/v2 v2.1.1/go.mod h1:M3x+k8UKKmxtFu++uAZ0OtDU8jR3jnaZIAc6yK4Ue0c=
 github.com/conduitio/conduit-connector-file v0.1.0 h1:uHGqc9Oubpft9DJ22NCcc8ET5igJcfuB0LYUkAH6r6g=
 github.com/conduitio/conduit-connector-file v0.1.0/go.mod h1:3WQYIxyT+QtE13EiZ/Ti8S6Br37TFkRX2qEbHOo7PFs=
-github.com/conduitio/conduit-connector-generator v0.1.0 h1:r8RnjzJHQjjq0V83u0LvdbSOuAYjvpxak0gS1caYXSM=
-github.com/conduitio/conduit-connector-generator v0.1.0/go.mod h1:RWT1MHVe5FgfHRyR+SaJmWywfHdO4Ex3y1CYHcNiTTU=
-github.com/conduitio/conduit-connector-generator v0.1.1-0.20220719131710-7b0eee1094cb h1:c1aiUYjcqbzqlvm5rQPf48cfLI+x3cYsGlIgdiAlt70=
-github.com/conduitio/conduit-connector-generator v0.1.1-0.20220719131710-7b0eee1094cb/go.mod h1:SeSafHwQDmJi6RH3Y2ITeT2TdJtc9CLsvx/gxE9sXXE=
 github.com/conduitio/conduit-connector-generator v0.1.1-0.20220721122142-a5b270fcf625 h1:f1usUnD8TsCAiuYWXSV3sjMImSCzZkGmmqs8Bch7u0s=
 github.com/conduitio/conduit-connector-generator v0.1.1-0.20220721122142-a5b270fcf625/go.mod h1:5Lk18mRheMLzNWifIHyVqACynY171j3lpVk6oThRWB0=
 github.com/conduitio/conduit-connector-kafka v0.1.1 h1:RgN4nafEWjpA4VvXLdSQBNrEOIuDIuNuHfZ5DzzUL3A=
@@ -322,8 +318,8 @@ github.com/googleapis/gax-go/v2 v2.0.5/go.mod h1:DWXyrwAJ9X0FpwwEdw+IPEYBICEFu5m
 github.com/grpc-ecosystem/grpc-gateway v1.16.0/go.mod h1:BDjrQk3hbvj6Nolgz8mAMFbcEtjT1g+wF4CSlocrBnw=
 github.com/grpc-ecosystem/grpc-gateway/v2 v2.11.0 h1:Ghn7copILfeIg0y8sTGRppI1bd8I4l2VN3cob0Xeqwg=
 github.com/grpc-ecosystem/grpc-gateway/v2 v2.11.0/go.mod h1:dnjr4snxnhRSn5GWqJUva2AoMbeaxyAcepvc0Tg8lXk=
-github.com/hashicorp/go-hclog v1.2.1 h1:YQsLlGDJgwhXFpucSPyVbCBviQtjlHv3jLTlp8YmtEw=
-github.com/hashicorp/go-hclog v1.2.1/go.mod h1:W4Qnvbt70Wk/zYJryRzDRU/4r0kIg0PVHBcfoyhpF5M=
+github.com/hashicorp/go-hclog v1.2.2 h1:ihRI7YFwcZdiSD7SIenIhHfQH3OuDvWerAUBZbeQS3M=
+github.com/hashicorp/go-hclog v1.2.2/go.mod h1:W4Qnvbt70Wk/zYJryRzDRU/4r0kIg0PVHBcfoyhpF5M=
 github.com/hashicorp/go-plugin v1.4.4 h1:NVdrSdFRt3SkZtNckJ6tog7gbpRrcbOjQi/rgF7JYWQ=
 github.com/hashicorp/go-plugin v1.4.4/go.mod h1:viDMjcLJuDui6pXb8U4HVfb8AamCWhHGUjr2IrTF67s=
 github.com/hashicorp/go-uuid v0.0.0-20180228145832-27454136f036/go.mod h1:6SBZvOh/SIDV7/2o3Jml5SYk/TvGqwFJ/bN7x4byOro=
