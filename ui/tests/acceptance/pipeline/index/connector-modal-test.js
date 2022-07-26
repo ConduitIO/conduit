@@ -47,9 +47,9 @@ module('Acceptance | pipeline/index/connector-modal-test', function (hooks) {
       await click(page.connectorModalPluginSelect.sourceOption);
     });
     test('shows the connectors required fields', function (assert) {
-      assert.dom('[data-test-config-field="titan:name"]').exists();
+      assert.dom('[data-test-config-field="titanName"]').exists();
       assert
-        .dom('[data-test-config-field="titan:name"]')
+        .dom('[data-test-config-field="titanName"]')
         .hasAttribute('type', 'text');
 
       assert.dom('[data-test-config-field="titan:height"]').exists();
@@ -57,9 +57,9 @@ module('Acceptance | pipeline/index/connector-modal-test', function (hooks) {
         .dom('[data-test-config-field="titan:height"]')
         .hasAttribute('type', 'number');
 
-      assert.dom('[data-test-config-field="titan:type"]').exists();
+      assert.dom('[data-test-config-field="titan@@type"]').exists();
       assert
-        .dom('[data-test-config-field="titan:type"]')
+        .dom('[data-test-config-field="titan@@type"]')
         .hasAttribute('type', 'text');
     });
 
@@ -86,9 +86,9 @@ module('Acceptance | pipeline/index/connector-modal-test', function (hooks) {
               config: {
                 name: 'My Connector',
                 settings: {
-                  'titan:name': 'sleep',
+                  titanName: 'sleep',
                   'titan:height': '100',
-                  'titan:type': 'attack',
+                  'titan.type': 'attack',
                 },
               },
               pipeline_id: pipelineID,
@@ -139,9 +139,9 @@ module('Acceptance | pipeline/index/connector-modal-test', function (hooks) {
       await click(page.connectorModalPluginSelect.destinationOption);
     });
     test('shows the connectors required fields', function (assert) {
-      assert.dom('[data-test-config-field="titan:name"]').exists();
+      assert.dom('[data-test-config-field="titanName"]').exists();
       assert
-        .dom('[data-test-config-field="titan:name"]')
+        .dom('[data-test-config-field="titanName"]')
         .hasAttribute('type', 'text');
 
       assert.dom('[data-test-config-field="titan:height"]').exists();
@@ -149,9 +149,9 @@ module('Acceptance | pipeline/index/connector-modal-test', function (hooks) {
         .dom('[data-test-config-field="titan:height"]')
         .hasAttribute('type', 'number');
 
-      assert.dom('[data-test-config-field="titan:type"]').exists();
+      assert.dom('[data-test-config-field="titan@@type"]').exists();
       assert
-        .dom('[data-test-config-field="titan:type"]')
+        .dom('[data-test-config-field="titan@@type"]')
         .hasAttribute('type', 'text');
     });
 
@@ -178,9 +178,9 @@ module('Acceptance | pipeline/index/connector-modal-test', function (hooks) {
               config: {
                 name: 'My Connector',
                 settings: {
-                  'titan:name': 'sleep',
+                  titanName: 'sleep',
                   'titan:height': '100',
-                  'titan:type': 'attack',
+                  'titan.type': 'attack',
                 },
               },
               pipeline_id: pipelineID,

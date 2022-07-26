@@ -18,7 +18,7 @@ export default class ProcessorSerializer extends ApplicationSerializer {
     const serializedConfigSettings = Object.keys(
       serialized.config.settings
     ).reduce((acc, settingsKey) => {
-      acc[settingsKey.replace(':', '.')] =
+      acc[settingsKey.replace('@@', '.')] =
         serialized.config.settings[settingsKey];
       return acc;
     }, {});
@@ -32,7 +32,7 @@ export default class ProcessorSerializer extends ApplicationSerializer {
     if (hash.config?.settings) {
       hash.config.settings = Object.keys(hash.config.settings).reduce(
         (acc, settingsKey) => {
-          acc[settingsKey.replace('.', ':')] =
+          acc[settingsKey.replace('.', '@@')] =
             hash.config.settings[settingsKey];
           return acc;
         },

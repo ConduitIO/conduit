@@ -19,7 +19,6 @@ import (
 	"io"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/foundation/multierror"
 	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/conduitio/conduit/pkg/plugin/standalone/v1/internal/fromproto"
 	"github.com/conduitio/conduit/pkg/plugin/standalone/v1/internal/toproto"
@@ -123,25 +122,19 @@ func (s *destinationPluginClient) Ack(ctx context.Context) (record.Position, err
 	return position, nil
 }
 
-func (s *destinationPluginClient) Stop(ctx context.Context) error {
-	var errOut error
+func (s *destinationPluginClient) Stop(ctx context.Context, lastPosition record.Position) error {
 	if s.stream == nil {
 		return plugin.ErrStreamNotOpen
 	}
 
-	err := s.stream.CloseSend()
-	if err != nil {
-		errOut = multierror.Append(errOut, unwrapGRPCError(err))
-	}
-
-	protoReq := toproto.DestinationStopRequest()
+	protoReq := toproto.DestinationStopRequest(lastPosition)
 	protoResp, err := s.grpcClient.Stop(ctx, protoReq)
 	if err != nil {
-		errOut = multierror.Append(errOut, unwrapGRPCError(err))
+		return unwrapGRPCError(err)
 	}
 	_ = protoResp // response is empty
 
-	return errOut
+	return nil
 }
 
 func (s *destinationPluginClient) Teardown(ctx context.Context) error {

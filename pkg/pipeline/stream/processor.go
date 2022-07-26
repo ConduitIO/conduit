@@ -38,7 +38,7 @@ func (n *ProcessorNode) ID() string {
 }
 
 func (n *ProcessorNode) Run(ctx context.Context) error {
-	trigger, cleanup, err := n.base.Trigger(ctx, n.logger)
+	trigger, cleanup, err := n.base.Trigger(ctx, n.logger, nil)
 	if err != nil {
 		return err
 	}
@@ -55,28 +55,27 @@ func (n *ProcessorNode) Run(ctx context.Context) error {
 		n.ProcessorTimer.Update(time.Since(executeTime))
 		if err != nil {
 			// Check for Skipped records
-			if err == processor.ErrSkipRecord {
+			switch err {
+			case processor.ErrSkipRecord:
 				// NB: Ack skipped messages since they've been correctly handled
 				err := msg.Ack()
 				if err != nil {
 					return cerrors.Errorf("failed to ack skipped message: %w", err)
 				}
-				continue
+			default:
+				err = msg.Nack(err)
+				if err != nil {
+					return cerrors.Errorf("error executing processor: %w", err)
+				}
 			}
-			err = msg.Nack(err)
-			if err != nil {
-				msg.Drop()
-				return cerrors.Errorf("failed to execute processor: %w", err)
-			}
-			// nack was handled successfully, we recovered
+			// error was handled successfully, we recovered
 			continue
 		}
 		msg.Record = rec
 
 		err = n.base.Send(ctx, n.logger, msg)
 		if err != nil {
-			msg.Drop()
-			return err
+			return msg.Nack(err)
 		}
 	}
 }
