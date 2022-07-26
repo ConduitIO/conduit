@@ -86,15 +86,19 @@ func (s *Service) stopWithReason(ctx context.Context, pl *Instance, reason error
 	}
 
 	s.logger.Debug(ctx).Str(log.PipelineIDField, pl.ID).Msg("stopping pipeline")
+	var err error
 	for _, n := range pl.n {
 		if node, ok := n.(stream.StoppableNode); ok {
 			// stop all pub nodes
 			s.logger.Trace(ctx).Str(log.NodeIDField, n.ID()).Msg("stopping node")
-			node.Stop(reason)
+			stopErr := node.Stop(ctx, reason)
+			if stopErr != nil {
+				s.logger.Err(ctx, stopErr).Str(log.NodeIDField, n.ID()).Msg("stop failed")
+				err = multierror.Append(err, stopErr)
+			}
 		}
 	}
-
-	return nil
+	return err
 }
 
 // StopAll will ask all the pipelines to stop gracefully
@@ -336,10 +340,10 @@ func (s *Service) buildDestinationNodes(
 				instance.Config().Plugin,
 				strings.ToLower(instance.Type().String()),
 			),
-			AckerNode: ackerNode,
 		}
 		metricsNode := s.buildMetricsNode(pl, instance)
 		destinationNode.Sub(metricsNode.Pub())
+		ackerNode.Sub(destinationNode.Pub())
 
 		connNodes, err := s.buildProcessorNodes(ctx, procFetcher, pl, instance.Config().ProcessorIDs, prev, metricsNode)
 		if err != nil {

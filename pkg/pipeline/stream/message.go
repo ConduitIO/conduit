@@ -26,8 +26,13 @@ import (
 	"github.com/conduitio/conduit/pkg/record"
 )
 
-// MessageStatus represents the state of the message (acked, nacked or open).
-type MessageStatus int
+type (
+	// MessageStatus represents the state of the message (acked, nacked or open).
+	MessageStatus int
+
+	// ControlMessageType represents the type of a control message.
+	ControlMessageType string
+)
 
 const (
 	MessageStatusAcked MessageStatus = iota
@@ -48,6 +53,11 @@ type Message struct {
 	Ctx context.Context
 	// Record represents a single record attached to the message.
 	Record record.Record
+
+	// controlMessageType is only populated for control messages. Control
+	// messages are special messages injected into the message stream that can
+	// change the behavior of a node and don't need to be acked/nacked.
+	controlMessageType ControlMessageType
 
 	// acked and nacked and are channels used to capture acks and nacks. When a
 	// message is acked or nacked the corresponding channel is closed.
@@ -112,6 +122,10 @@ func (m *Message) init() {
 // only for logging purposes.
 func (m *Message) ID() string {
 	return fmt.Sprintf("%s/%s", m.Record.SourceID, m.Record.Position)
+}
+
+func (m *Message) ControlMessageType() ControlMessageType {
+	return m.controlMessageType
 }
 
 // RegisterStatusHandler is used to register a function that will be called on
@@ -246,4 +260,24 @@ func (m *Message) Status() MessageStatus {
 	default:
 		return MessageStatusOpen
 	}
+}
+
+// OpenMessagesTracker allows you to track messages until they reach the end of
+// the pipeline.
+type OpenMessagesTracker sync.WaitGroup
+
+// Add will increase the counter in the wait group and register a status handler
+// that will decrease the counter when the message is acked or nacked.
+func (t *OpenMessagesTracker) Add(msg *Message) {
+	(*sync.WaitGroup)(t).Add(1)
+	msg.RegisterStatusHandler(
+		func(msg *Message, change StatusChange) error {
+			(*sync.WaitGroup)(t).Done()
+			return nil
+		},
+	)
+}
+
+func (t *OpenMessagesTracker) Wait() {
+	(*sync.WaitGroup)(t).Wait()
 }

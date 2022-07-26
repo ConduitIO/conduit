@@ -16,26 +16,31 @@ package stream
 
 import (
 	"context"
+	"fmt"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/conduitio/conduit/pkg/connector/mock"
-	"github.com/conduitio/conduit/pkg/plugin"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/golang/mock/gomock"
 	"github.com/matryer/is"
 )
 
-func TestAckerNode_Run_StopAfterWait(t *testing.T) {
+func TestDestinationAckerNode_Cache(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	dest := mock.NewDestination(ctrl)
 
 	node := &DestinationAckerNode{
-		Name:        "acker-node",
+		Name:        "destination-acker-node",
 		Destination: dest,
 	}
+
+	in := make(chan *Message)
+	node.Sub(in)
 
 	nodeDone := make(chan struct{})
 	go func() {
@@ -44,32 +49,65 @@ func TestAckerNode_Run_StopAfterWait(t *testing.T) {
 		is.NoErr(err)
 	}()
 
-	// note that there should be no calls to the destination at all if we didn't
-	// receive any ExpectedAck call
+	const count = 1000
+	currentPosition := 0
 
-	// give the test 1 second to finish
-	waitCtx, cancel := context.WithTimeout(ctx, time.Second)
-	defer cancel()
-	node.Wait(waitCtx)
+	// create wait group that will be done once we send all messages to the node
+	var msgProducerWg sync.WaitGroup
+	msgProducerWg.Add(1)
+
+	dest.EXPECT().Ack(gomock.Any()).
+		DoAndReturn(func(ctx context.Context) (record.Position, error) {
+			// wait for all messages to be produced, this means the node should
+			// be caching them
+			msgProducerWg.Wait()
+			pos := fmt.Sprintf("test-position-%d", currentPosition)
+			currentPosition++
+			return record.Position(pos), nil
+		}).Times(count)
+
+	var ackHandlerWg sync.WaitGroup
+	ackHandlerWg.Add(count)
+	for i := 0; i < count; i++ {
+		pos := fmt.Sprintf("test-position-%d", i)
+		msg := &Message{
+			Record: record.Record{Position: record.Position(pos)},
+		}
+		msg.RegisterAckHandler(func(msg *Message) error {
+			ackHandlerWg.Done()
+			return nil
+		})
+		in <- msg
+	}
+	msgProducerWg.Done()
+
+	// note that there should be no calls to the destination at all if the node
+	// didn't receive any messages
+	close(in)
 
 	select {
-	case <-waitCtx.Done():
+	case <-time.After(time.Second):
 		is.Fail() // expected node to stop running
 	case <-nodeDone:
 		// all good
 	}
+
+	ackHandlerWg.Wait() // all ack handler should be called by now
 }
 
-func TestAckerNode_Run_StopAfterExpectAck(t *testing.T) {
+func TestDestinationAckerNode_ForwardAck(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	dest := mock.NewDestination(ctrl)
 
 	node := &DestinationAckerNode{
-		Name:        "acker-node",
+		Name:        "destination-acker-node",
 		Destination: dest,
 	}
+
+	in := make(chan *Message)
+	node.Sub(in)
 
 	nodeDone := make(chan struct{})
 	go func() {
@@ -79,32 +117,247 @@ func TestAckerNode_Run_StopAfterExpectAck(t *testing.T) {
 	}()
 
 	// up to this point there should have been no calls to the destination
-	// only after the call to ExpectAck should the node try to fetch any acks
+	// only after a received message should the node try to fetch the ack
 	msg := &Message{
 		Record: record.Record{Position: record.Position("test-position")},
 	}
-	// first return position
-	expectAck := make(chan struct{})
-	c1 := dest.EXPECT().Ack(gomock.Any()).
+	dest.EXPECT().Ack(gomock.Any()).
 		DoAndReturn(func(ctx context.Context) (record.Position, error) {
-			// wait until ExpectAck is called
-			<-expectAck
 			return msg.Record.Position, nil
 		})
-	// second return closed stream
-	dest.EXPECT().Ack(gomock.Any()).
-		Return(nil, plugin.ErrStreamNotOpen).After(c1)
-
-	err := node.ExpectAck(msg)
-	close(expectAck) // signal to mock that ExpectAck returned
-	is.NoErr(err)
-
-	// give the test 1 second to finish
-	waitCtx, cancel := context.WithTimeout(ctx, time.Second)
-	defer cancel()
+	ackHandlerDone := make(chan struct{})
+	msg.RegisterAckHandler(func(got *Message) error {
+		defer close(ackHandlerDone)
+		is.Equal(msg, got)
+		return nil
+	})
+	in <- msg // send message to incoming channel
 
 	select {
-	case <-waitCtx.Done():
+	case <-time.After(time.Second):
+		is.Fail() // expected ack handler to be called
+	case <-ackHandlerDone:
+		// all good
+	}
+
+	// note that there should be no calls to the destination at all if the node
+	// didn't receive any messages
+	close(in)
+
+	select {
+	case <-time.After(time.Second):
+		is.Fail() // expected node to stop running
+	case <-nodeDone:
+		// all good
+	}
+}
+
+func TestDestinationAckerNode_ForwardNack(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+	dest := mock.NewDestination(ctrl)
+
+	node := &DestinationAckerNode{
+		Name:        "destination-acker-node",
+		Destination: dest,
+	}
+
+	in := make(chan *Message)
+	node.Sub(in)
+
+	nodeDone := make(chan struct{})
+	go func() {
+		defer close(nodeDone)
+		err := node.Run(ctx)
+		is.NoErr(err)
+	}()
+
+	// up to this point there should have been no calls to the destination
+	// only after a received message should the node try to fetch the ack
+	msg := &Message{
+		Record: record.Record{Position: record.Position("test-position")},
+	}
+	wantErr := cerrors.New("test error")
+	dest.EXPECT().Ack(gomock.Any()).
+		DoAndReturn(func(ctx context.Context) (record.Position, error) {
+			return msg.Record.Position, wantErr // destination returns nack
+		})
+	nackHandlerDone := make(chan struct{})
+	msg.RegisterNackHandler(func(got *Message, reason error) error {
+		defer close(nackHandlerDone)
+		is.Equal(msg, got)
+		is.Equal(wantErr, reason)
+		return nil
+	})
+	in <- msg // send message to incoming channel
+
+	select {
+	case <-time.After(time.Second):
+		is.Fail() // expected nack handler to be called
+	case <-nackHandlerDone:
+		// all good
+	}
+
+	// note that there should be no calls to the destination at all if the node
+	// didn't receive any messages
+	close(in)
+
+	select {
+	case <-time.After(time.Second):
+		is.Fail() // expected node to stop running
+	case <-nodeDone:
+		// all good
+	}
+}
+
+func TestDestinationAckerNode_UnexpectedPosition(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+	dest := mock.NewDestination(ctrl)
+
+	node := &DestinationAckerNode{
+		Name:        "destination-acker-node",
+		Destination: dest,
+	}
+
+	in := make(chan *Message)
+	node.Sub(in)
+
+	nodeDone := make(chan struct{})
+	go func() {
+		defer close(nodeDone)
+		err := node.Run(ctx)
+		is.True(err != nil) // expected node to fail
+	}()
+
+	msg := &Message{
+		Record: record.Record{Position: record.Position("test-position")},
+	}
+	dest.EXPECT().Ack(gomock.Any()).
+		DoAndReturn(func(ctx context.Context) (record.Position, error) {
+			return record.Position("something-unexpected"), nil // destination returns unexpected position
+		})
+
+	// nack should be still called when node exits
+	nackHandlerDone := make(chan struct{})
+	msg.RegisterNackHandler(func(got *Message, reason error) error {
+		defer close(nackHandlerDone)
+		is.True(reason != nil)
+		return nil
+	})
+	in <- msg // send message to incoming channel
+
+	select {
+	case <-time.After(time.Second):
+		is.Fail() // expected nack handler to be called
+	case <-nackHandlerDone:
+		// all good
+	}
+
+	// note that we don't close the in channel this time and still expect the
+	// node to stop running
+
+	select {
+	case <-time.After(time.Second):
+		is.Fail() // expected node to stop running
+	case <-nodeDone:
+		// all good
+	}
+}
+
+func TestDestinationAckerNode_DestinationAckError(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+	dest := mock.NewDestination(ctrl)
+
+	node := &DestinationAckerNode{
+		Name:        "destination-acker-node",
+		Destination: dest,
+	}
+
+	in := make(chan *Message)
+	node.Sub(in)
+
+	wantErr := cerrors.New("test error")
+	nodeDone := make(chan struct{})
+	go func() {
+		defer close(nodeDone)
+		err := node.Run(ctx)
+		is.True(cerrors.Is(err, wantErr)) // expected node to fail with specific error
+	}()
+
+	dest.EXPECT().Ack(gomock.Any()).
+		DoAndReturn(func(ctx context.Context) (record.Position, error) {
+			return nil, wantErr // destination returns unexpected error
+		})
+
+	in <- &Message{
+		Record: record.Record{Position: record.Position("test-position")},
+	}
+
+	// note that we don't close the in channel this time and still expect the
+	// node to stop running
+
+	select {
+	case <-time.After(time.Second):
+		is.Fail() // expected node to stop running
+	case <-nodeDone:
+		// all good
+	}
+}
+
+func TestDestinationAckerNode_MessageAckError(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+	dest := mock.NewDestination(ctrl)
+
+	node := &DestinationAckerNode{
+		Name:        "destination-acker-node",
+		Destination: dest,
+	}
+
+	in := make(chan *Message)
+	node.Sub(in)
+
+	wantErr := cerrors.New("test error")
+	nodeDone := make(chan struct{})
+	go func() {
+		defer close(nodeDone)
+		err := node.Run(ctx)
+		is.True(cerrors.Is(err, wantErr)) // expected node to fail with specific error
+	}()
+
+	msg := &Message{
+		Record: record.Record{Position: record.Position("test-position")},
+	}
+	dest.EXPECT().Ack(gomock.Any()).
+		DoAndReturn(func(ctx context.Context) (record.Position, error) {
+			return msg.Record.Position, nil
+		})
+	ackHandlerDone := make(chan struct{})
+	msg.RegisterAckHandler(func(*Message) error {
+		defer close(ackHandlerDone)
+		return wantErr // ack handler fails
+	})
+
+	in <- msg
+
+	select {
+	case <-time.After(time.Second):
+		is.Fail() // expected ack handler to be called
+	case <-ackHandlerDone:
+		// all good
+	}
+
+	// note that we don't close the in channel this time and still expect the
+	// node to stop running
+
+	select {
+	case <-time.After(time.Second):
 		is.Fail() // expected node to stop running
 	case <-nodeDone:
 		// all good

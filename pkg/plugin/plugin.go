@@ -53,11 +53,14 @@ type SourcePlugin interface {
 
 	// Stop should be called to invoke a graceful shutdown of the stream. It
 	// will signal the plugin to stop retrieving new records and flush any
-	// records that might be cached. The stream will still remain open so
-	// Conduit can fetch the remaining records and send back any outstanding
-	// acks. After the stream is closed the Read method will return the
-	// appropriate error signaling the stream is closed.
-	Stop(context.Context) error
+	// records that might be cached. The response will contain the position of
+	// the last record in the stream. Conduit should keep reading records until
+	// it encounters the record with the last position. After it received all
+	// records and sent back acks for all successfully processed records it
+	// should call Teardown to close the stream. After the stream is closed the
+	// Read method will return the appropriate error signaling the stream is
+	// closed.
+	Stop(context.Context) (record.Position, error)
 
 	// Teardown is the last call that must be issued before discarding the
 	// plugin. It signals to the plugin it can release any open resources and
@@ -91,13 +94,20 @@ type DestinationPlugin interface {
 	// successfully processed the function returns the position and an error.
 	Ack(context.Context) (record.Position, error)
 
+	// Stop signals to the plugin that the record with the specified position is
+	// the last one and no more records will be written to the stream after it.
+	// Once the plugin receives the last record it should flush any records that
+	// might be cached and not yet written to the 3rd party resource.
+
 	// Stop should be called to invoke a graceful shutdown of the stream. It
-	// will signal the plugin that no more records will be written to the stream
-	// and that it should flush any records that might be cached. The stream
-	// will still remain open so Conduit can fetch the remaining acks. After the
+	// will signal the plugin that after receiving the record with the last
+	// position no more records will be written to the stream and that the
+	// plugin should flush any records that might be cached. The stream will
+	// still remain open so Conduit can fetch the remaining acks. After all acks
+	// are received Conduit should call Teardown to close the stream. After the
 	// stream is closed the Ack method will return the appropriate error
 	// signaling the stream is closed.
-	Stop(context.Context) error
+	Stop(context.Context, record.Position) error
 
 	// Teardown is the last call that must be issued before discarding the
 	// plugin. It signals to the plugin it can release any open resources and
