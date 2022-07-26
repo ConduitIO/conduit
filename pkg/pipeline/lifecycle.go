@@ -86,15 +86,19 @@ func (s *Service) stopWithReason(ctx context.Context, pl *Instance, reason error
 	}
 
 	s.logger.Debug(ctx).Str(log.PipelineIDField, pl.ID).Msg("stopping pipeline")
+	var err error
 	for _, n := range pl.n {
 		if node, ok := n.(stream.StoppableNode); ok {
 			// stop all pub nodes
 			s.logger.Trace(ctx).Str(log.NodeIDField, n.ID()).Msg("stopping node")
-			node.Stop(reason)
+			stopErr := node.Stop(ctx, reason)
+			if stopErr != nil {
+				s.logger.Err(ctx, stopErr).Str(log.NodeIDField, n.ID()).Msg("stop failed")
+				err = multierror.Append(err, stopErr)
+			}
 		}
 	}
-
-	return nil
+	return err
 }
 
 // StopAll will ask all the pipelines to stop gracefully
@@ -233,6 +237,15 @@ func (s *Service) buildProcessorNodes(
 	return nodes, nil
 }
 
+func (s *Service) buildSourceAckerNode(
+	src connector.Source,
+) *stream.SourceAckerNode {
+	return &stream.SourceAckerNode{
+		Name:   src.ID() + "-acker",
+		Source: src,
+	}
+}
+
 func (s *Service) buildSourceNodes(
 	ctx context.Context,
 	connFetcher ConnectorFetcher,
@@ -259,15 +272,17 @@ func (s *Service) buildSourceNodes(
 				pl.Config.Name,
 			),
 		}
+		ackerNode := s.buildSourceAckerNode(instance.(connector.Source))
+		ackerNode.Sub(sourceNode.Pub())
 		metricsNode := s.buildMetricsNode(pl, instance)
-		metricsNode.Sub(sourceNode.Pub())
+		metricsNode.Sub(ackerNode.Pub())
 
 		procNodes, err := s.buildProcessorNodes(ctx, procFetcher, pl, instance.Config().ProcessorIDs, metricsNode, next)
 		if err != nil {
 			return nil, cerrors.Errorf("could not build processor nodes for connector %s: %w", instance.ID(), err)
 		}
 
-		nodes = append(nodes, &sourceNode, metricsNode)
+		nodes = append(nodes, &sourceNode, ackerNode, metricsNode)
 		nodes = append(nodes, procNodes...)
 	}
 
@@ -288,10 +303,10 @@ func (s *Service) buildMetricsNode(
 	}
 }
 
-func (s *Service) buildAckerNode(
+func (s *Service) buildDestinationAckerNode(
 	dest connector.Destination,
-) *stream.AckerNode {
-	return &stream.AckerNode{
+) *stream.DestinationAckerNode {
+	return &stream.DestinationAckerNode{
 		Name:        dest.ID() + "-acker",
 		Destination: dest,
 	}
@@ -316,7 +331,7 @@ func (s *Service) buildDestinationNodes(
 			continue // skip any connector that's not a destination
 		}
 
-		ackerNode := s.buildAckerNode(instance.(connector.Destination))
+		ackerNode := s.buildDestinationAckerNode(instance.(connector.Destination))
 		destinationNode := stream.DestinationNode{
 			Name:        instance.ID(),
 			Destination: instance.(connector.Destination),
@@ -325,10 +340,10 @@ func (s *Service) buildDestinationNodes(
 				instance.Config().Plugin,
 				strings.ToLower(instance.Type().String()),
 			),
-			AckerNode: ackerNode,
 		}
 		metricsNode := s.buildMetricsNode(pl, instance)
 		destinationNode.Sub(metricsNode.Pub())
+		ackerNode.Sub(destinationNode.Pub())
 
 		connNodes, err := s.buildProcessorNodes(ctx, procFetcher, pl, instance.Config().ProcessorIDs, prev, metricsNode)
 		if err != nil {
@@ -358,7 +373,7 @@ func (s *Service) runPipeline(ctx context.Context, pl *Instance) error {
 			// If any of the nodes stops, the nodesTomb will be put into a dying state
 			// and ctx will be cancelled.
 			// This way, the other nodes will be notified that they need to stop too.
-			//nolint: staticcheck // nil used to use the default (parent provided via WithContext)
+			// nolint: staticcheck // nil used to use the default (parent provided via WithContext)
 			ctx := nodesTomb.Context(nil)
 			s.logger.Trace(ctx).Str(log.NodeIDField, node.ID()).Msg("running node")
 			defer func() {
@@ -406,7 +421,7 @@ func (s *Service) runPipeline(ctx context.Context, pl *Instance) error {
 	// before declaring the pipeline as stopped.
 	pl.t = &tomb.Tomb{}
 	pl.t.Go(func() error {
-		//nolint: staticcheck // nil used to use the default (parent provided via WithContext)
+		// nolint: staticcheck // nil used to use the default (parent provided via WithContext)
 		ctx := pl.t.Context(nil)
 		err := nodesTomb.Wait()
 

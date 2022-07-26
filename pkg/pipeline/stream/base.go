@@ -48,8 +48,9 @@ type pubSubNodeBase struct {
 func (n *pubSubNodeBase) Trigger(
 	ctx context.Context,
 	logger log.CtxLogger,
+	externalErrChan <-chan error,
 ) (triggerFunc, cleanupFunc, error) {
-	trigger, cleanup1, err := n.subNodeBase.Trigger(ctx, logger, nil)
+	trigger, cleanup1, err := n.subNodeBase.Trigger(ctx, logger, externalErrChan)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -95,6 +96,9 @@ type pubNodeBase struct {
 	running bool
 	// lock guards private fields from concurrent changes.
 	lock sync.Mutex
+
+	// msgChan is an internal channel where messages from msgFetcher are collected
+	msgChan chan *Message
 }
 
 // Trigger sets up 2 goroutines, one that listens to the external error channel
@@ -122,8 +126,8 @@ func (n *pubNodeBase) Trigger(
 	}
 
 	n.running = true
+	n.msgChan = make(chan *Message)
 	internalErrChan := make(chan error)
-	msgChan := make(chan *Message)
 
 	if externalErrChan != nil {
 		// spawn goroutine that forwards external errors into the internal error
@@ -147,16 +151,20 @@ func (n *pubNodeBase) Trigger(
 			for {
 				msg, err := msgFetcher(ctx)
 				if err != nil {
-					internalErrChan <- err
+					if !cerrors.Is(err, context.Canceled) {
+						// ignore context error because it is going to be caught
+						// by nodeBase.Receive anyway
+						internalErrChan <- err
+					}
 					return
 				}
-				msgChan <- msg
+				n.msgChan <- msg
 			}
 		}()
 	}
 
 	trigger := func() (*Message, error) {
-		return n.nodeBase.Receive(ctx, logger, msgChan, internalErrChan)
+		return n.nodeBase.Receive(ctx, logger, n.msgChan, internalErrChan)
 	}
 	cleanup := func() {
 		// TODO make sure spawned goroutines are stopped and internal channels
@@ -165,6 +173,22 @@ func (n *pubNodeBase) Trigger(
 	}
 
 	return trigger, cleanup, nil
+}
+
+// InjectControlMessage can be used to inject a message into the message stream.
+// This is used to inject control messages like the last position message when
+// stopping a source connector. It is a bit hacky, but it doesn't require us to
+// create a separate channel for signals which makes it performant and easiest
+// to implement.
+func (n *pubNodeBase) InjectControlMessage(ctx context.Context, msgType ControlMessageType) error {
+	n.lock.Lock()
+	defer n.lock.Unlock()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case n.msgChan <- &Message{controlMessageType: msgType}:
+		return nil
+	}
 }
 
 func (n *pubNodeBase) cleanup(ctx context.Context, logger log.CtxLogger) {
@@ -234,11 +258,6 @@ func (n *subNodeBase) Trigger(
 	}
 
 	n.running = true
-
-	if errChan == nil {
-		// create dummy channel
-		errChan = make(chan error)
-	}
 
 	trigger := func() (*Message, error) {
 		return n.nodeBase.Receive(ctx, logger, n.in, errChan)

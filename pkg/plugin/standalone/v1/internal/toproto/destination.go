@@ -41,8 +41,10 @@ func DestinationRunRequest(in record.Record) (*connectorv1.Destination_Run_Reque
 	return &out, nil
 }
 
-func DestinationStopRequest() *connectorv1.Destination_Stop_Request {
-	return &connectorv1.Destination_Stop_Request{}
+func DestinationStopRequest(in record.Position) *connectorv1.Destination_Stop_Request {
+	return &connectorv1.Destination_Stop_Request{
+		LastPosition: in,
+	}
 }
 
 func DestinationTeardownRequest() *connectorv1.Destination_Teardown_Request {
