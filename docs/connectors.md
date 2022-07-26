@@ -30,19 +30,19 @@ Source means the connector has the ability to get data from an upstream data sto
 | [Algolia](https://github.com/ConduitIO/conduit-connector-algolia) | |✅ | Conduit |
 | [Azure Storage](https://github.com/miquido/conduit-connector-azure-storage) |✅ | | Community |
 | [BigQuery](https://github.com/conduitio-labs/conduit-connector-bigquery) |✅ | | Community |
-| [Elastic Search](https://github.com/miquido/conduit-connector-elasticsearch) |✅ |✅ | Community |
+| [Elastic Search](https://github.com/conduitio-labs/conduit-connector-elasticsearch) |✅ |✅ | Community |
 | [File](https://github.com/ConduitIO/conduit-connector-file) |✅ |✅ | Conduit |
 | [Google Cloud Storage](https://github.com/conduitio-labs/conduit-connector-google-cloudstorage) |✅ |✅ | Community |
 | [Google Sheets](https://github.com/conduitio-labs/conduit-connector-google-sheets) |✅ | | Community |
 | [Kafka](https://github.com/ConduitIO/conduit-connector-kafka) |✅ |✅ | Conduit |
 | [Kafka Connect Wrapper](https://github.com/ConduitIO/conduit-kafka-connect-wrapper) | ✅ | ✅ | Legacy |
 | [Marketo](https://github.com/conduitio-labs/conduit-connector-marketo) |✅ | | Community |
-| [Materialize](https://github.com/ConduitIO/conduit-connector-materialize) | |✅ | Community |
+| [Materialize](https://github.com/conduitio-labs/conduit-connector-materialize) | |✅ | Community |
 | [Postgres](https://github.com/ConduitIO/conduit-connector-postgres)   |✅ |✅ | Conduit |
 | [Random Generator](https://github.com/ConduitIO/conduit-connector-generator) |✅ | | Conduit |
 | [Redis](https://github.com/conduitio-labs/conduit-connector-redis) ||✅ | Community |
 | [S3](https://github.com/ConduitIO/conduit-connector-s3) |✅ |✅ | Conduit |
-| [Salesforce](https://github.com/miquido/conduit-connector-salesforce) | ✅ | ✅ | Community |
-| [Snowflake](https://github.com/ConduitIO/conduit-connector-snowflake) |✅ | | Community |
-| [Stripe](https://github.com/ConduitIO/conduit-connector-stripe) |✅ | | Community |
+| [Salesforce](https://github.com/conduitio-labs/conduit-connector-salesforce) | ✅ | ✅ | Community |
+| [Snowflake](https://github.com/conduitio-labs/conduit-connector-snowflake) |✅ | | Community |
+| [Stripe](https://github.com/conduitio-labs/conduit-connector-stripe) |✅ | | Community |
 | [Zendesk](https://github.com/conduitio-labs/conduit-connector-zendesk) |✅ |✅| Community |
