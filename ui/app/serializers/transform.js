@@ -22,7 +22,7 @@ export default class TransformSerializer extends ApplicationSerializer {
 
   normalize(typeClass, hash) {
     hash.blueprint = Object.keys(hash.blueprint).reduce((acc, item) => {
-      const replaced = item.replace('.', ':');
+      const replaced = item.replace('.', '@@');
       acc[replaced] = hash.blueprint[item];
 
       return acc;

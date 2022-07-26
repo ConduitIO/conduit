@@ -4,10 +4,10 @@ go 1.18
 
 require (
 	github.com/NYTimes/gziphandler v1.1.1
-	github.com/antchfx/jsonquery v1.2.0
+	github.com/antchfx/jsonquery v1.3.0
 	github.com/bufbuild/buf v1.6.0
 	github.com/conduitio/conduit-connector-file v0.1.0
-	github.com/conduitio/conduit-connector-generator v0.1.0
+	github.com/conduitio/conduit-connector-generator v0.1.1
 	github.com/conduitio/conduit-connector-kafka v0.1.1
 	github.com/conduitio/conduit-connector-postgres v0.1.0
 	github.com/conduitio/conduit-connector-protocol v0.2.1-0.20220608133528-f466a956bd4d
@@ -15,11 +15,12 @@ require (
 	github.com/conduitio/conduit-connector-sdk v0.2.1-0.20220622151135-47f1a8905435
 	github.com/dgraph-io/badger/v3 v3.2103.2
 	github.com/dop251/goja v0.0.0-20210225094849-f3cfc97811c0
+	github.com/gammazero/deque v0.2.0
 	github.com/golang/mock v1.6.0
 	github.com/google/go-cmp v0.5.8
 	github.com/google/uuid v1.3.0
-	github.com/grpc-ecosystem/grpc-gateway/v2 v2.10.3
-	github.com/hashicorp/go-hclog v1.2.1
+	github.com/grpc-ecosystem/grpc-gateway/v2 v2.11.0
+	github.com/hashicorp/go-hclog v1.2.2
 	github.com/hashicorp/go-plugin v1.4.4
 	github.com/jackc/pgtype v1.11.0
 	github.com/jackc/pgx/v4 v4.16.1
@@ -28,13 +29,13 @@ require (
 	github.com/piotrkowalczuk/promgrpc/v4 v4.0.4
 	github.com/prometheus/client_golang v1.12.2
 	github.com/prometheus/client_model v0.2.0
-	github.com/prometheus/common v0.35.0
+	github.com/prometheus/common v0.37.0
 	github.com/rs/zerolog v1.27.0
 	go.buf.build/library/go-grpc/conduitio/conduit-connector-protocol v1.4.2
 	golang.org/x/tools v0.1.11
 	golang.org/x/xerrors v0.0.0-20220517211312-f3a8303e98df
-	google.golang.org/genproto v0.0.0-20220630150403-404d0664e509
-	google.golang.org/grpc v1.47.0
+	google.golang.org/genproto v0.0.0-20220719170305-83ca9fad585f
+	google.golang.org/grpc v1.48.0
 	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.2.0
 	google.golang.org/protobuf v1.28.0
 	gopkg.in/tomb.v2 v2.0.0-20161208151619-d5d1b5820637
@@ -73,7 +74,6 @@ require (
 	github.com/dustin/go-humanize v1.0.0 // indirect
 	github.com/fatih/color v1.13.0 // indirect
 	github.com/fsnotify/fsnotify v1.5.1 // indirect
-	github.com/gammazero/deque v0.2.0 // indirect
 	github.com/go-chi/chi/v5 v5.0.7 // indirect
 	github.com/go-sourcemap/sourcemap v2.1.3+incompatible // indirect
 	github.com/gofrs/flock v0.8.1 // indirect

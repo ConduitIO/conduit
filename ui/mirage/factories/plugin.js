@@ -53,7 +53,7 @@ export default Factory.extend({
     name: 'builtin:generic',
     blueprint() {
       const requiredText = generateBlueprint(
-        'titan:name',
+        'titanName',
         'Titan Name',
         'Enter Titan Name',
         'TYPE_STRING',
@@ -67,7 +67,7 @@ export default Factory.extend({
         { isRequired: true }
       );
       const requiredSelect = generateBlueprint(
-        'titan:type',
+        'titan.type',
         'Titan Type',
         'Enter Titan Type',
         'TYPE_STRING',
