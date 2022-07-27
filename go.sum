@@ -594,8 +594,8 @@ github.com/yuin/goldmark v1.1.32/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9de
 github.com/yuin/goldmark v1.2.1/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9decYSb74=
 github.com/yuin/goldmark v1.3.5/go.mod h1:mwnBkeHKe2W/ZEtQ+71ViKU8L12m81fl3OWwC1Zlc8k=
 github.com/zenazn/goji v0.9.0/go.mod h1:7S9M489iMyHBNxwZnk9/EHS098H4/F6TATF2mIxtB1Q=
-go.buf.build/library/go-grpc/conduitio/conduit-connector-protocol v1.4.2 h1:r7UZqQXoHpfLucOFKTSRiNLdZ0XG/AUupkr+Kkgth+A=
-go.buf.build/library/go-grpc/conduitio/conduit-connector-protocol v1.4.2/go.mod h1:iYPhlwHzhRoPYviJbA604qT6wYuQghfrebmXUXLKjk8=
+go.buf.build/library/go-grpc/conduitio/conduit-connector-protocol v1.4.3 h1:XDPfFAw4KQitbroSpnZ1HBU+RDfk1AwArFQ71ynUCvU=
+go.buf.build/library/go-grpc/conduitio/conduit-connector-protocol v1.4.3/go.mod h1:iYPhlwHzhRoPYviJbA604qT6wYuQghfrebmXUXLKjk8=
 go.opencensus.io v0.21.0/go.mod h1:mSImk1erAIZhrmZN+AvHh14ztQfjbGwt4TtuofqLduU=
 go.opencensus.io v0.22.0/go.mod h1:+kGneAE2xo2IficOXnaByMWTGM9T73dGwxeWcUqIpI8=
 go.opencensus.io v0.22.2/go.mod h1:yxeiOL68Rb0Xd1ddK5vPZ/oVn4vY4Ynel7k9FzqtOIw=
