@@ -20,4 +20,4 @@ run-latest-nightly: stop
 	sleep 1
 
 print-results:
-	go run print_results.go
+	go run main.go
