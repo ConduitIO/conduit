@@ -11,15 +11,15 @@ stop:
 	docker stop conduit-perf-test || true
 
 run-local: stop
-	docker run --rm  --name conduit-perf-test -v "$(PWD)"/plugins:/plugins  -p 8080:8080 -d conduit:local
+	docker run --rm  --name conduit-perf-test -v "$(PWD)"/plugins:/plugins -p 8080:8080 -d conduit:local
 	sleep 1
 
 run-latest: stop
-	docker run --rm  --name conduit-perf-test -p 8080:8080 -d ghcr.io/conduitio/conduit:latest
+	docker run --rm  --name conduit-perf-test -v "$(PWD)"/plugins:/plugins -p 8080:8080 -d ghcr.io/conduitio/conduit:latest
 	sleep 1
 
 run-latest-nightly: stop
-	docker run --rm  --name conduit-perf-test -p 8080:8080 -d ghcr.io/conduitio/conduit:latest-nightly
+	docker run --rm  --name conduit-perf-test -v "$(PWD)"/plugins:/plugins -p 8080:8080 -d ghcr.io/conduitio/conduit:latest-nightly
 	sleep 1
 
 print-results:
