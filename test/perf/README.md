@@ -53,8 +53,4 @@ The test result tool has the following configuration parameters:
 | --interval | interval at which metrics are periodically collected and printed | [Go duration string](https://pkg.go.dev/time#ParseDuration) | 10s     |
 | --duration | overall duration for which the metrics will be collected         | [Go duration string](https://pkg.go.dev/time#ParseDuration) | 10m     |
 | --print-to | specifies where the metrics will be printed                      | csv, console                                                | console |
-
-
-| total records | rec/s (Conduit) | ms/record (Conduit) | rec/s (pipeline) | bytes/s | measuredAt |
-|---------------|-----------------|---------------------|------------------|---------|------------|
-| %v            | %v              | %v                  | %v               | %v      | %v         |
+| --workload | workload description                                             | any string                                                  | none    |

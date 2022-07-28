@@ -53,13 +53,13 @@ type printer interface {
 	print(metrics) error
 }
 
-func newPrinter(printerType string) (printer, error) {
+func newPrinter(printerType string, workload string) (printer, error) {
 	var p printer
 	switch printerType {
 	case "console":
-		p = &consolePrinter{}
+		p = &consolePrinter{workload: workload}
 	case "csv":
-		p = &csvPrinter{}
+		p = &csvPrinter{workload: workload}
 	default:
 		return nil, fmt.Errorf("unknown printer type %q, possible values: %v", printerType, printerTypes)
 	}
@@ -71,7 +71,8 @@ func newPrinter(printerType string) (printer, error) {
 }
 
 type csvPrinter struct {
-	writer *csv.Writer
+	writer   *csv.Writer
+	workload string
 }
 
 func (c *csvPrinter) init() error {
@@ -83,12 +84,13 @@ func (c *csvPrinter) init() error {
 	}
 	c.writer = csv.NewWriter(file)
 	err = c.writer.Write([]string{
+		"workload",
 		"total records",
 		"rec/s (Conduit)",
 		"ms/record (Conduit)",
 		"rec/s (pipeline)",
 		"bytes/s",
-		"measuredAt",
+		"measured_at",
 	})
 	if err != nil {
 		return err
@@ -99,6 +101,7 @@ func (c *csvPrinter) init() error {
 
 func (c *csvPrinter) print(m metrics) error {
 	err := c.writer.Write([]string{
+		c.workload,
 		fmt.Sprintf("%v", m.count),
 		fmt.Sprintf("%v", m.recordsPerSec),
 		m.msPerRecStr(),
@@ -115,6 +118,7 @@ func (c *csvPrinter) print(m metrics) error {
 
 type consolePrinter struct {
 	renderer *glamour.TermRenderer
+	workload string
 }
 
 func (c *consolePrinter) init() error {
@@ -129,15 +133,15 @@ func (c *consolePrinter) init() error {
 
 func (c *consolePrinter) print(m metrics) error {
 	in := `
-
-| total records | rec/s (Conduit) | ms/record (Conduit) | rec/s (pipeline) | bytes/s | measuredAt |
-|---------------|-----------------|---------------------|------------------|---------|------------|
-| %v            | %v              | %v                  | %v               | %v      | %v         |
+| workload | total records | rec/s (Conduit) | ms/record (Conduit) | rec/s (pipeline) | bytes/s | measured at |
+|----------|---------------|-----------------|---------------------|------------------|---------|-------------|
+| %v       | %v            | %v              | %v                  | %v               | %v      | %v          |
 
 
 `
 	in = fmt.Sprintf(
 		in,
+		c.workload,
 		m.count,
 		m.recordsPerSec,
 		m.msPerRecStr(),
@@ -265,6 +269,11 @@ func main() {
 		"console",
 		"where the metrics will be printed ('csv' to print to a CSV file, or 'console' to print to console",
 	)
+	workload := flag.String(
+		"workload",
+		"",
+		"workload script",
+	)
 	flag.Parse()
 
 	fmt.Println(
@@ -278,7 +287,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	p, err := newPrinter(*printTo)
+	p, err := newPrinter(*printTo, *workload)
 	if err != nil {
 		fmt.Printf("couldn't create printer: %v", err)
 		os.Exit(1)
