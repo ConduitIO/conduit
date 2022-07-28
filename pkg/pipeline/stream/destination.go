@@ -22,6 +22,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics"
+	"github.com/conduitio/conduit/pkg/record"
 )
 
 // DestinationNode wraps a Destination connector and implements the Sub node interface
@@ -29,10 +30,8 @@ type DestinationNode struct {
 	Name           string
 	Destination    connector.Destination
 	ConnectorTimer metrics.Timer
-	// AckerNode is responsible for handling acks
-	AckerNode *AckerNode
 
-	base   subNodeBase
+	base   pubSubNodeBase
 	logger log.CtxLogger
 }
 
@@ -51,23 +50,30 @@ func (n *DestinationNode) Run(ctx context.Context) (err error) {
 	if err != nil {
 		return cerrors.Errorf("could not open destination connector: %w", err)
 	}
+
+	// lastPosition stores the position of the last successfully processed record
+	var lastPosition record.Position
+	// openMsgTracker tracks open messages until they are acked or nacked
+	var openMsgTracker OpenMessagesTracker
 	defer func() {
-		// wait for acker node to receive all outstanding acks, time out after
-		// 1 minute or right away if the context is already canceled.
-		waitCtx, cancel := context.WithTimeout(ctx, time.Minute)
-		defer cancel()
-		n.AckerNode.Wait(waitCtx)
+		stopErr := n.Destination.Stop(connectorCtx, lastPosition)
+		if stopErr != nil {
+			// log this error right away because we're not sure the connector
+			// will be able to stop right away, we might block for 1 minute
+			// waiting for acks and we don't want the log to be empty
+			n.logger.Err(ctx, err).Msg("could not stop destination connector")
+			if err == nil {
+				err = stopErr
+			}
+		}
+
+		openMsgTracker.Wait()
 
 		// teardown will kill the plugin process
 		tdErr := n.Destination.Teardown(connectorCtx)
-		if tdErr != nil {
-			if err == nil {
-				err = tdErr
-			} else {
-				// we are already returning an error, just log this error
-				n.logger.Err(ctx, err).Msg("could not tear down destination connector")
-			}
-		}
+		err = cerrors.LogOrReplace(err, tdErr, func() {
+			n.logger.Err(ctx, tdErr).Msg("could not tear down destination connector")
+		})
 	}()
 
 	trigger, cleanup, err := n.base.Trigger(ctx, n.logger, n.Destination.Errors())
@@ -84,26 +90,36 @@ func (n *DestinationNode) Run(ctx context.Context) (err error) {
 
 		n.logger.Trace(msg.Ctx).Msg("writing record to destination connector")
 
-		// first signal ack handler we might receive an ack, since this could
-		// already happen before write returns
-		err = n.AckerNode.ExpectAck(msg)
-		if err != nil {
-			return err
-		}
-
 		writeTime := time.Now()
 		err = n.Destination.Write(msg.Ctx, msg.Record)
 		if err != nil {
-			n.AckerNode.ForgetAndDrop(msg)
+			// An error in Write is a fatal error, we probably won't be able to
+			// process any further messages because there is a problem in the
+			// communication with the plugin. We need to nack the message to not
+			// leave it open and then return the error to stop the pipeline.
+			_ = msg.Nack(err)
 			return cerrors.Errorf("error writing to destination: %w", err)
 		}
 		n.ConnectorTimer.Update(time.Since(writeTime))
+
+		openMsgTracker.Add(msg)
+		lastPosition = msg.Record.Position
+
+		err = n.base.Send(ctx, n.logger, msg)
+		if err != nil {
+			return msg.Nack(err)
+		}
 	}
 }
 
 // Sub will subscribe this node to an incoming channel.
 func (n *DestinationNode) Sub(in <-chan *Message) {
 	n.base.Sub(in)
+}
+
+// Pub will return the outgoing channel.
+func (n *DestinationNode) Pub() <-chan *Message {
+	return n.base.Pub()
 }
 
 // SetLogger sets the logger.

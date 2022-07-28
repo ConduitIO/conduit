@@ -34,7 +34,7 @@ func (n *MetricsNode) ID() string {
 }
 
 func (n *MetricsNode) Run(ctx context.Context) error {
-	trigger, cleanup, err := n.base.Trigger(ctx, n.logger)
+	trigger, cleanup, err := n.base.Trigger(ctx, n.logger, nil)
 	if err != nil {
 		return err
 	}
@@ -46,7 +46,7 @@ func (n *MetricsNode) Run(ctx context.Context) error {
 			return err
 		}
 
-		msg.RegisterAckHandler(func(msg *Message, next AckHandler) error {
+		msg.RegisterAckHandler(func(msg *Message) error {
 			// TODO for now we call method Bytes() on key and payload to get the
 			//  bytes representation. In case of a structured payload or key it
 			//  is marshaled into JSON, which might not be the correct way to
@@ -60,13 +60,12 @@ func (n *MetricsNode) Run(ctx context.Context) error {
 				bytes += len(msg.Record.Payload.Bytes())
 			}
 			n.BytesHistogram.Observe(float64(bytes))
-			return next(msg)
+			return nil
 		})
 
 		err = n.base.Send(ctx, n.logger, msg)
 		if err != nil {
-			msg.Drop()
-			return err
+			return msg.Nack(err)
 		}
 	}
 }

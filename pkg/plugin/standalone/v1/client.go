@@ -15,6 +15,7 @@
 package standalonev1
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"os/exec"
@@ -138,11 +139,23 @@ func getFreePort() int {
 	return l.Addr().(*net.TCPAddr).Port
 }
 
-// unwrapGRPCError removes the gRPC wrapper from the error.
+// knownErrors contains known error messages that are mapped to internal error
+// types. gRPC does not retain error types, so we have to resort to relying on
+// the error message itself.
+var knownErrors = map[string]error{
+	"context canceled":          context.Canceled,
+	"context deadline exceeded": context.DeadlineExceeded,
+}
+
+// unwrapGRPCError removes the gRPC wrapper from the error and returns a known
+// error if possible, otherwise creates an internal error.
 func unwrapGRPCError(err error) error {
 	st, ok := status.FromError(err)
 	if !ok {
 		return err
+	}
+	if knownErr, ok := knownErrors[st.Message()]; ok {
+		return knownErr
 	}
 	return cerrors.New(st.Message())
 }
