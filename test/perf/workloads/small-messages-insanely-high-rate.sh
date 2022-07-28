@@ -25,7 +25,7 @@ jq -n --arg pipeline_id "$PIPELINE_ID" '{
         {
             "format.type": "structured",
             "format.options": "id:int,name:string,company:string,trial:bool",
-            "readTime": "1ms",
+            "readTime": "0ms",
             "recordCount": "-1"
         }
     }

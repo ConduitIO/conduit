@@ -11,6 +11,9 @@ curl -Ss -X POST 'http://localhost:8080/v1/pipelines' -d '
 }' | jq -r '.id'
 )
 
+FILE_SIZE=100MB
+echo "Generating a file of size ${FILE_SIZE}"
+docker exec conduit-perf-test /bin/sh -c "fallocate -l $FILE_SIZE /conduit-test-file"
 
 echo "Creating a generator source..."
 SOURCE_CONN_REQ_1=$(
@@ -23,9 +26,9 @@ jq -n --arg pipeline_id "$PIPELINE_ID" '{
         "name": "generator-source-1",
         "settings":
         {
-            "format.type": "structured",
-            "format.options": "id:int,name:string,company:string,trial:bool",
-            "readTime": "1ms",
+            "format.type": "file",
+            "format.options": "/conduit-test-file",
+            "readTime": "1s",
             "recordCount": "-1"
         }
     }

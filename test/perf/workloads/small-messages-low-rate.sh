@@ -33,19 +33,16 @@ jq -n --arg pipeline_id "$PIPELINE_ID" '{
 )
 CONNECTOR_ID=$(curl -Ss -X POST 'http://localhost:8080/v1/connectors' -d "$SOURCE_CONN_REQ_1" | jq -r '.id')
 
-echo "Creating a file destination..."
+echo "Creating a NoOp destination..."
 DEST_CONN_REQ=$(
 jq -n  --arg pipeline_id "$PIPELINE_ID" '{
      "type": "TYPE_DESTINATION",
-     "plugin": "builtin:file",
+     "plugin": "/plugins/conduit-connector-noop-dest",
      "pipeline_id": $pipeline_id,
      "config":
      {
-         "name": "my-file-destination",
-         "settings":
-         {
-             "path": "/file_destination.txt"
-         }
+         "name": "my-noop-destination",
+         "settings": {}
      }
  }'
 )
