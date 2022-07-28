@@ -9,5 +9,6 @@ for w in workloads/*.sh; do
 
   bash "$w" || break
 
+  # todo print all results from this run into the same file
   go run main.go --interval=5m --duration=5m --print-to=csv --workload="$w"
 done
