@@ -256,17 +256,17 @@ func (c *collector) hasLabel(m *promclient.Metric, name string, value string) bo
 func main() {
 	interval := flag.Duration(
 		"interval",
-		10*time.Second,
+		5*time.Minute,
 		"interval at which the current performance results will be collected and printed.",
 	)
 	duration := flag.Duration(
 		"duration",
-		10*time.Minute,
+		5*time.Minute,
 		"duration for which the metrics will be collected and printed",
 	)
 	printTo := flag.String(
 		"print-to",
-		"console",
+		"csv",
 		"where the metrics will be printed ('csv' to print to a CSV file, or 'console' to print to console",
 	)
 	workload := flag.String(

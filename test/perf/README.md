@@ -9,7 +9,7 @@ Our performance benchmarks is built upon the following principles:
 3. Benchmarks are run on-demand (automated benchmarks are planned for later).
 4. It's easy to manage workloads.
 
-### Running a benchmarks
+### Running benchmark
 
 The steps are:
 
@@ -19,38 +19,43 @@ If you want to run the performance benchmarks against changes which haven't been
 official Docker image), you can build a Docker image locally. You can do that by running `make build-local`. This will
 build an image called `conduit:local`.
 
-#### Run Conduit
+#### Run a benchmark
 
-Conduit can be run in any way. The only requirement is that the port 8080 is accessible. The preferred way is to run
-Conduit as a Docker image. That makes it easier to get one of the official or nightly builds, and it also makes it
-possible
-to assign resources to the container.
+Benchmarks are run using `make` targets which start with `run-`. Each of them:
+1. Starts Conduit (the version depends on the make target)
+2. Runa all workload
+3. Prints results
 
-Following `make` targets are provided out of the box:
-
+The available `make` targets for this purpose are:
 1. `run-local`: uses the `conduit:local` image, which was built from the code as it is.
 2. `run-latest`: uses the latest official image.
 3. `run-latest-nightly`: uses the latest nightly build
 
-#### Run a workload
+### Workloads
 
-Workloads are places in the [workloads](./workloads) directory and are currently in the form of bash scripts, which
-create a test pipeline using Conduit's HTTP API.
+Workloads are pipelines configured in specific ways and exercising different areas of Conduit. For example, one workload 
+can test how does Conduit behave when records with large payloads flow through it. Another one can test Conduit's with
+built-in vs. standalone plugins.
 
-#### Monitor results
+Workloads are specified through bash scripts, which create and configure pipelines using Conduit's HTTP API. They need 
+to be placed in the [workloads](./workloads) directory so that they are automatically run. By default, all workload 
+scripts found in the `workloads` directory will be run for each performance test run.
 
-This can be done using `make print-results` or [prom-graf](https://github.com/conduitio-labs/prom-graf). The differences
-between the two are:
+### Printing results
 
-1. `make print-results` prints metrics related to records while they are in Conduit only. The Grafana dashboard show
+The `make run-` targets use a [CLI app](main.go) to print results of a performance test. The tool can be used independently
+of the `make run-` targets and has the following configuration parameters:
+
+| parameter  | description                                                                                                       | possible values                                             | default |
+|------------|-------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------|---------|
+| --interval | Interval at which metrics are periodically collected and printed.                                                 | [Go duration string](https://pkg.go.dev/time#ParseDuration) | 5m      |
+| --duration | Overall duration for which the metrics will be collected.                                                         | [Go duration string](https://pkg.go.dev/time#ParseDuration) | 5m      |
+| --print-to | Specifies where the metrics will be printed. If 'csv'<br/> is selected, a CSV file will be automatically created. | csv, console                                                | csv     |
+| --workload | Workload description.                                                                                             | any string                                                  | none    |
+
+Another option to monitor Conduit's performance while running a performance test is [prom-graf](https://github.com/conduitio-labs/prom-graf). 
+The differences between the CLI tool and `prom-graf` are:
+
+1. The CLI tool prints metrics related to records while they are in Conduit only. The Grafana dashboard show
    overall pipeline metrics.
 2. The Grafana dashboard also shows Go runtime metrics, while the make target doesn't.
-
-The test result tool has the following configuration parameters:
-
-| parameter  | description                                                      | possible values                                             | default |
-|------------|------------------------------------------------------------------|-------------------------------------------------------------|---------|
-| --interval | interval at which metrics are periodically collected and printed | [Go duration string](https://pkg.go.dev/time#ParseDuration) | 10s     |
-| --duration | overall duration for which the metrics will be collected         | [Go duration string](https://pkg.go.dev/time#ParseDuration) | 10m     |
-| --print-to | specifies where the metrics will be printed                      | csv, console                                                | console |
-| --workload | workload description                                             | any string                                                  | none    |
