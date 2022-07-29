@@ -30,8 +30,8 @@ func main() {
 func Spec() sdk.Specification {
 	return sdk.Specification{
 		Name:              "NoOp destination",
-		Summary:           "A NoOp destination connector, simply ack-ing all records.",
-		Description:       "A NoOp destination connector, simply ack-ing all records.",
+		Summary:           "A NoOp destination connector.",
+		Description:       "A NoOp destination connector.",
 		Version:           "v0.1.0",
 		Author:            "Meroxa, Inc.",
 		DestinationParams: map[string]sdk.Parameter{},
