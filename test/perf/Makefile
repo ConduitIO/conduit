@@ -1,19 +1,19 @@
 .PHONY: build-local build-noop-dest run-local run-latest run-latest-nightly print-results
 
 # Builds a fresh Docker image, so we're not limited on the GA and nightly builds
-build-local: build-noop-dest
+build-local:
 	@cd ../.. && docker build -t conduit:local .
 
-build-noop-dest:
+plugins/conduit-connector-noop-dest:
 	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o plugins/conduit-connector-noop-dest noopdest/cmd/noopdest/main.go
 
-run-local:
+run-local: plugins/conduit-connector-noop-dest
 	./run.sh conduit:local
 
-run-latest:
+run-latest: plugins/conduit-connector-noop-dest
 	./run.sh ghcr.io/conduitio/conduit:latest
 
-run-latest-nightly:
+run-latest-nightly: plugins/conduit-connector-noop-dest
 	./run.sh ghcr.io/conduitio/conduit:latest-nightly
 
 print-results:
