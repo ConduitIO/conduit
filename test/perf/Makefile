@@ -11,9 +11,11 @@ run-local: plugins/conduit-connector-noop-dest
 	./run.sh conduit:local
 
 run-latest: plugins/conduit-connector-noop-dest
+	docker pull ghcr.io/conduitio/conduit:latest
 	./run.sh ghcr.io/conduitio/conduit:latest
 
 run-latest-nightly: plugins/conduit-connector-noop-dest
+	docker pull ghcr.io/conduitio/conduit:latest-nightly
 	./run.sh ghcr.io/conduitio/conduit:latest-nightly
 
 print-results:

@@ -276,10 +276,6 @@ func main() {
 	)
 	flag.Parse()
 
-	fmt.Println(
-		"When interpreting test results, please take into account, " +
-			"that if built-in plugins are used, their resource usage is part of Conduit's usage too.",
-	)
 	until := time.Now().Add(*duration)
 	c, err := newCollector()
 	if err != nil {
