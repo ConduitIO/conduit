@@ -5,7 +5,7 @@ build-local: build-noop-dest
 	@cd ../.. && docker build -t conduit:local .
 
 build-noop-dest:
-	CGO_ENABLED=0 go build -o plugins/conduit-connector-noop-dest noopdest/cmd/noopdest/main.go
+	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o plugins/conduit-connector-noop-dest noopdest/cmd/noopdest/main.go
 
 run-local:
 	./run.sh conduit:local
