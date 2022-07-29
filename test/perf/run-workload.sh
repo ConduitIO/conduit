@@ -2,8 +2,7 @@
 CONDUIT_IMAGE=$1
 WORKLOAD=$2
 
-echo "$CONDUIT_IMAGE"
-echo "$WORKLOAD"
+printf "\n-- Running %s with %s\n" "$WORKLOAD" "$CONDUIT_IMAGE"
 
 docker stop conduit-perf-test || true
 

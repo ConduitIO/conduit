@@ -12,12 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package noopdest
+package main
 
 import (
 	"context"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 )
+
+func main() {
+	sdk.Serve(
+		Spec,
+		nil,
+		NewDestination,
+	)
+}
 
 func Spec() sdk.Specification {
 	return sdk.Specification{
@@ -47,11 +55,7 @@ func (d destination) Open(ctx context.Context) error {
 	return nil
 }
 
-func (d destination) WriteAsync(_ context.Context, _ sdk.Record, ackFunc sdk.AckFunc) error {
-	return ackFunc(nil)
-}
-
-func (d destination) Flush(_ context.Context) error {
+func (d destination) Write(_ context.Context, _ sdk.Record) error {
 	return nil
 }
 

@@ -9,6 +9,11 @@ Our performance benchmarks is built upon the following principles:
 3. Benchmarks are run on-demand (automated benchmarks are planned for later).
 4. It's easy to manage workloads.
 
+Because of principle #1, our benchmarks usually use a [NoOp destination](/test/perf/noopdest). The time a record spends
+in Conduit is measured from when it's read from a source until it's ack-ed by all destinations. With a NoOp destination,
+the last part is almost 0ms (the NoOp destination is a standalone plugin, so there's a bit of gRPC overhead). This makes
+our measurement of how much time do records spend in Conduit pretty accurate.
+
 ### Running benchmark
 
 The steps are:
