@@ -193,7 +193,7 @@ func (c *collector) collect() (metrics, error) {
 	}
 	m.count = count
 	m.recordsPerSec = float64(count) / totalTime
-	m.msPerRec = (totalTime / float64(count)) / 1000
+	m.msPerRec = (totalTime / float64(count)) * 1000
 	m.bytes = c.getSourceByteMetrics(metricFamilies)
 	m.bytesPerSec = units.HumanSize(m.bytes / totalTime)
 	m.pipelineRate = (count - c.first.count) / uint64(time.Since(c.first.measuredAt).Seconds())
