@@ -28,14 +28,14 @@ func BenchmarkNewSem(b *testing.B) {
 }
 
 func BenchmarkEnqueueOneByOne(b *testing.B) {
-	for _, N := range []int{1, 2, 8, 64, 128, 1024} {
+	for _, N := range []int{1, 2, 8, 64, 128, 1024, 131072} {
 		b.Run(fmt.Sprintf("ticket-count-%d", N), func(b *testing.B) {
 			sem := &semaphore.Simple{}
 			for i := 0; i < b.N; i++ {
 				for j := 0; j < N; j++ {
 					t := sem.Enqueue()
-					sem.Acquire(t)
-					_ = sem.Release(t)
+					l := sem.Acquire(t)
+					sem.Release(l)
 				}
 			}
 		})
@@ -43,7 +43,7 @@ func BenchmarkEnqueueOneByOne(b *testing.B) {
 }
 
 func BenchmarkEnqueueAll(b *testing.B) {
-	for _, N := range []int{1, 2, 8, 64, 128, 1024} {
+	for _, N := range []int{1, 2, 8, 64, 128, 1024, 131072} {
 		b.Run(fmt.Sprintf("ticket-count-%d", N), func(b *testing.B) {
 			sem := &semaphore.Simple{}
 			tickets := make([]semaphore.Ticket, N)
@@ -53,8 +53,8 @@ func BenchmarkEnqueueAll(b *testing.B) {
 					tickets[j] = sem.Enqueue()
 				}
 				for j := 0; j < N; j++ {
-					sem.Acquire(tickets[j])
-					_ = sem.Release(tickets[j])
+					l := sem.Acquire(tickets[j])
+					sem.Release(l)
 				}
 			}
 		})
