@@ -111,5 +111,7 @@ func (s *Simple) Release(l Lock) {
 }
 
 func (s *Simple) panic() {
-	panic("semaphore: mismatched ticket index, tickets are not supposed to be acquired twice and should be discarded after they are released, this is an invalid use of this type")
+	panic("semaphore: mismatched ticket index, tickets are not supposed to" +
+		" be acquired twice and should be discarded after they are released," +
+		" this is an invalid use of this type")
 }
