@@ -119,6 +119,31 @@ func TestProcessorOrchestrator_CreateOnPipeline_PipelineRunning(t *testing.T) {
 	assert.Nil(t, got)
 }
 
+func TestProcessorOrchestrator_CreateOnPipeline_PipelineProvisionedByConfig(t *testing.T) {
+	ctx := context.Background()
+	db := &inmemory.DB{}
+	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
+
+	pl := &pipeline.Instance{
+		ID:            uuid.NewString(),
+		Status:        pipeline.StatusUserStopped,
+		ProvisionedBy: pipeline.ProvisionTypeConfig,
+	}
+	parent := processor.Parent{
+		ID:   pl.ID,
+		Type: processor.ParentTypePipeline,
+	}
+	plsMock.EXPECT().
+		Get(gomock.AssignableToTypeOf(ctxType), pl.ID).
+		Return(pl, nil)
+
+	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
+	got, err := orc.Processors.Create(ctx, "test-processor", parent, processor.Config{})
+	assert.Error(t, err)
+	assert.True(t, cerrors.Is(err, ErrImmutableProvisionedByConfig), "expected ErrImmutableProvisionedByConfig")
+	assert.Nil(t, got)
+}
+
 func TestProcessorOrchestrator_CreateOnPipeline_CreateProcessorError(t *testing.T) {
 	ctx := context.Background()
 	db := &inmemory.DB{}
@@ -397,6 +422,42 @@ func TestProcessorOrchestrator_UpdateOnPipeline_PipelineRunning(t *testing.T) {
 	got, err := orc.Processors.Update(ctx, before.ID, newConfig)
 	assert.Error(t, err)
 	assert.Equal(t, pipeline.ErrPipelineRunning, err)
+	assert.Nil(t, got)
+}
+
+func TestProcessorOrchestrator_UpdateOnPipeline_ProcessorProvisionedByConfig(t *testing.T) {
+	ctx := context.Background()
+	db := &inmemory.DB{}
+	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
+
+	pl := &pipeline.Instance{
+		ID:            uuid.NewString(),
+		Status:        pipeline.StatusRunning,
+		ProvisionedBy: pipeline.ProvisionTypeConfig,
+	}
+	before := &processor.Instance{
+		ID:   uuid.NewString(),
+		Name: "test-processor",
+		Parent: processor.Parent{
+			ID:   pl.ID,
+			Type: processor.ParentTypePipeline,
+		},
+		Config: processor.Config{
+			Settings: map[string]string{"foo": "bar"},
+		},
+		ProvisionedBy: processor.ProvisionTypeConfig,
+	}
+	newConfig := processor.Config{
+		Settings: map[string]string{"foo2": "bar2"},
+	}
+
+	procsMock.EXPECT().
+		Get(gomock.AssignableToTypeOf(ctxType), before.ID).
+		Return(before, nil)
+
+	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
+	got, err := orc.Processors.Update(ctx, before.ID, newConfig)
+	assert.True(t, cerrors.Is(err, ErrImmutableProvisionedByConfig), "expected ErrImmutableProvisionedByConfig")
 	assert.Nil(t, got)
 }
 

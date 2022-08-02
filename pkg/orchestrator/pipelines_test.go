@@ -164,6 +164,30 @@ func TestPipelineOrchestrator_Update_PipelineRunning(t *testing.T) {
 	assert.Equal(t, pipeline.ErrPipelineRunning, err)
 }
 
+func TestPipelineOrchestrator_Update_PipelineProvisionedByConfig(t *testing.T) {
+	ctx := context.Background()
+	db := &inmemory.DB{}
+	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
+
+	plBefore := &pipeline.Instance{
+		ID:            uuid.NewString(),
+		Status:        pipeline.StatusUserStopped,
+		Config:        pipeline.Config{Name: "old pipeline"},
+		ProvisionedBy: pipeline.ProvisionTypeConfig,
+	}
+	newConfig := pipeline.Config{Name: "new pipeline"}
+
+	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
+	plsMock.EXPECT().
+		Get(gomock.AssignableToTypeOf(ctxType), plBefore.ID).
+		Return(plBefore, nil)
+
+	got, err := orc.Pipelines.Update(ctx, plBefore.ID, newConfig)
+	assert.Nil(t, got)
+	assert.Error(t, err)
+	assert.True(t, cerrors.Is(err, ErrImmutableProvisionedByConfig), "expected ErrImmutableProvisionedByConfig")
+}
+
 func TestPipelineOrchestrator_Delete_Success(t *testing.T) {
 	ctx := context.Background()
 	db := &inmemory.DB{}
@@ -204,6 +228,27 @@ func TestPipelineOrchestrator_Delete_PipelineRunning(t *testing.T) {
 	err := orc.Pipelines.Delete(ctx, plBefore.ID)
 	assert.Error(t, err)
 	assert.Equal(t, pipeline.ErrPipelineRunning, err)
+}
+
+func TestPipelineOrchestrator_Delete_PipelineProvisionedByConfig(t *testing.T) {
+	ctx := context.Background()
+	db := &inmemory.DB{}
+	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
+
+	plBefore := &pipeline.Instance{
+		ID:            uuid.NewString(),
+		Status:        pipeline.StatusUserStopped,
+		ProvisionedBy: pipeline.ProvisionTypeConfig,
+	}
+
+	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
+	plsMock.EXPECT().
+		Get(gomock.AssignableToTypeOf(ctxType), plBefore.ID).
+		Return(plBefore, nil)
+
+	err := orc.Pipelines.Delete(ctx, plBefore.ID)
+	assert.Error(t, err)
+	assert.True(t, cerrors.Is(err, ErrImmutableProvisionedByConfig), "expected ErrImmutableProvisionedByConfig")
 }
 
 func TestPipelineOrchestrator_Delete_PipelineHasProcessorsAttached(t *testing.T) {

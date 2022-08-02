@@ -107,6 +107,28 @@ func TestConnectorOrchestrator_Create_PipelineRunning(t *testing.T) {
 	assert.Nil(t, got)
 }
 
+func TestConnectorOrchestrator_Create_PipelineProvisionByConfig(t *testing.T) {
+	ctx := context.Background()
+	db := &inmemory.DB{}
+	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
+
+	pl := &pipeline.Instance{
+		ID:            uuid.NewString(),
+		Status:        pipeline.StatusRunning,
+		ProvisionedBy: pipeline.ProvisionTypeConfig,
+	}
+
+	plsMock.EXPECT().
+		Get(gomock.AssignableToTypeOf(ctxType), pl.ID).
+		Return(pl, nil)
+
+	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
+	got, err := orc.Connectors.Create(ctx, connector.TypeSource, connector.Config{PipelineID: pl.ID})
+	assert.Error(t, err)
+	assert.True(t, cerrors.Is(err, ErrImmutableProvisionedByConfig), "expected ErrImmutableProvisionedByConfig")
+	assert.Nil(t, got)
+}
+
 func TestConnectorOrchestrator_Create_CreateConnectorError(t *testing.T) {
 	ctx := context.Background()
 	db := &inmemory.DB{}
@@ -506,6 +528,49 @@ func TestConnectorOrchestrator_Update_PipelineRunning(t *testing.T) {
 	assert.Error(t, err)
 	assert.Equal(t, pipeline.ErrPipelineRunning, err)
 }
+
+//func TestConnectorOrchestrator_Update_ProvisionedByConfig(t *testing.T) {
+//	ctx := context.Background()
+//	db := &inmemory.DB{}
+//	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
+//	connBuilder := connmock.Builder{Ctrl: gomock.NewController(t)}
+//
+//	pl := &pipeline.Instance{
+//		ID:     uuid.NewString(),
+//		Status: pipeline.StatusUserStopped,
+//	}
+//	oldConfig := connector.Config{
+//		Name:       "test-connector",
+//		Settings:   map[string]string{"foo": "bar"},
+//		Plugin:     "test-plugin",
+//		PipelineID: pl.ID,
+//	}
+//	newConfig := connector.Config{
+//		Name:       "updated-connector",
+//		Settings:   map[string]string{"foo": "bar"},
+//		Plugin:     "test-plugin",
+//		PipelineID: pl.ID,
+//	}
+//	conn := connBuilder.NewSourceMock(uuid.NewString(), oldConfig)
+//	conn.SetProvisionedBy(connector.ProvisionTypeConfig)
+//	fmt.Println(conn.ProvisionedBy())
+//
+//	consMock.EXPECT().
+//		Get(gomock.AssignableToTypeOf(ctxType), conn.ID()).
+//		Return(conn, nil)
+//	consMock.EXPECT().
+//		Pro(gomock.AssignableToTypeOf(ctxType), conn.ID()).
+//		Return(conn, nil)
+//	plsMock.EXPECT().
+//		Get(gomock.AssignableToTypeOf(ctxType), pl.ID).
+//		Return(pl, nil)
+//
+//	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
+//	got, err := orc.Connectors.Update(ctx, conn.ID(), newConfig)
+//	assert.Nil(t, got)
+//	assert.Error(t, err)
+//	assert.Equal(t, pipeline.ErrPipelineRunning, err)
+//}
 
 func TestConnectorOrchestrator_Update_Fail(t *testing.T) {
 	ctx := context.Background()
