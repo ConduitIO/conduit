@@ -21,8 +21,8 @@ import (
 // Simple provides a way to lock concurrent access to a resource. It only allows
 // one caller to gain access at a time.
 type Simple struct {
-	// lastTicket holds the last issued ticket.
-	lastTicket Ticket
+	// last holds the last issued lock.
+	last Lock
 
 	chanPool sync.Pool
 	init     sync.Once
@@ -59,18 +59,18 @@ func (s *Simple) Enqueue() Ticket {
 			return make(chan int, 1) // make it buffered to not block the release of a lock
 		}
 
-		s.lastTicket.next = s.chanPool.Get().(chan int)
-		s.lastTicket.next <- s.lastTicket.i + 1 // first lock can be acquired right away
+		s.last.next = s.chanPool.Get().(chan int)
+		s.last.next <- s.last.i + 1 // first lock can be acquired right away
 	})
 
 	t := Ticket{
 		Lock: Lock{
-			i:    s.lastTicket.i + 1,
+			i:    s.last.i + 1,
 			next: s.chanPool.Get().(chan int),
 		},
-		ready: s.lastTicket.next,
+		ready: s.last.next,
 	}
-	s.lastTicket = t
+	s.last = t.Lock
 	return t
 }
 
