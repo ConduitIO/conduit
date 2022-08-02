@@ -15,7 +15,7 @@ module(
         function (hooks) {
           hooks.beforeEach(async function () {
             const field = generateBlankBlueprintField(
-              'titan:name',
+              'titanName',
               'Titan Name',
               'Enter Titan Name',
               'TYPE_STRING'
@@ -40,7 +40,7 @@ module(
         function (hooks) {
           hooks.beforeEach(async function () {
             const field = generateBlankBlueprintField(
-              'titan:name',
+              'titanName',
               'Titan Name',
               'Enter Titan Name',
               'TYPE_STRING',
@@ -172,7 +172,7 @@ module(
         function (hooks) {
           hooks.beforeEach(async function () {
             const field = generateBlankBlueprintField(
-              'titan:type',
+              'titan.type',
               'Titan Type',
               'Pick titan type',
               'TYPE_STRING',

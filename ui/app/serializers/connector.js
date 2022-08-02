@@ -7,9 +7,9 @@ const CONNECTOR_TYPE_MAP = {
 
 export default class ConnectorSerializer extends ApplicationSerializer {
   serialize(snapshot) {
-    const configSettings = this._replaceKeys(
+    const configSettings = super._replaceKeys(
       snapshot.record.config.settings,
-      '_',
+      '@@',
       '.'
     );
 
@@ -38,7 +38,11 @@ export default class ConnectorSerializer extends ApplicationSerializer {
 
   normalize(typeClass, hash) {
     if (hash.config?.settings) {
-      const configSettings = this._replaceKeys(hash.config?.settings, '.', '_');
+      const configSettings = super._replaceKeys(
+        hash.config?.settings,
+        '.',
+        '@@'
+      );
       hash.config.settings = configSettings;
     }
 
@@ -46,14 +50,5 @@ export default class ConnectorSerializer extends ApplicationSerializer {
     normalized.data.attributes.type =
       CONNECTOR_TYPE_MAP[normalized.data.attributes.type];
     return normalized;
-  }
-
-  _replaceKeys(obj, replace, replaceWith) {
-    return Object.keys(obj).reduce((acc, key) => {
-      const replacedKey = key.replace(replace, replaceWith);
-      acc[replacedKey] = obj[key];
-
-      return acc;
-    }, {});
   }
 }

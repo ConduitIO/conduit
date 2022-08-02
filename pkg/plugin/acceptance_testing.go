@@ -18,7 +18,6 @@ package plugin
 import (
 	"context"
 	"fmt"
-	"io"
 	"reflect"
 	"runtime"
 	"strings"
@@ -74,7 +73,6 @@ func AcceptanceTestV1(t *testing.T, tdf testDispenserFunc) {
 	run(t, tdf, testDestination_Ack_WithoutStart)
 	run(t, tdf, testDestination_Run_Fail)
 	run(t, tdf, testDestination_Teardown_Success)
-	run(t, tdf, testDestination_Stop_CloseSend)
 }
 
 func run(t *testing.T, tdf testDispenserFunc, test func(*testing.T, testDispenserFunc)) {
@@ -90,6 +88,7 @@ type testDispenserFunc func(*testing.T) (Dispenser, *mock.SpecifierPlugin, *mock
 // ---------------
 
 func testSpecifier_Specify_Success(t *testing.T, tdf testDispenserFunc) {
+	is := is.New(t)
 	dispenser, mockSpecifier, _, _ := tdf(t)
 
 	want := Specification{
@@ -127,14 +126,10 @@ func testSpecifier_Specify_Success(t *testing.T, tdf testDispenserFunc) {
 		}, nil)
 
 	specifier, err := dispenser.DispenseSpecifier()
-	if err != nil {
-		t.Fatalf("error dispensing specifier: %+v", err)
-	}
+	is.NoErr(err)
 
 	got, err := specifier.Specify()
-	if err != nil {
-		t.Fatalf("error dispensing specifier: %+v", err)
-	}
+	is.NoErr(err)
 
 	if diff := cmp.Diff(got, want); diff != "" {
 		t.Errorf("expected specification: %s", diff)
@@ -142,6 +137,7 @@ func testSpecifier_Specify_Success(t *testing.T, tdf testDispenserFunc) {
 }
 
 func testSpecifier_Specify_Fail(t *testing.T, tdf testDispenserFunc) {
+	is := is.New(t)
 	dispenser, mockSpecifier, _, _ := tdf(t)
 
 	want := cerrors.New("specify error")
@@ -150,14 +146,10 @@ func testSpecifier_Specify_Fail(t *testing.T, tdf testDispenserFunc) {
 		Return(cpluginv1.SpecifierSpecifyResponse{}, want)
 
 	specifier, err := dispenser.DispenseSpecifier()
-	if err != nil {
-		t.Fatalf("error dispensing specifier: %+v", err)
-	}
+	is.NoErr(err)
 
 	_, got := specifier.Specify()
-	if got.Error() != want.Error() {
-		t.Fatalf("want: %+v, got: %+v", want, got)
-	}
+	is.Equal(got.Error(), want.Error())
 }
 
 // ------------
@@ -165,6 +157,7 @@ func testSpecifier_Specify_Fail(t *testing.T, tdf testDispenserFunc) {
 // ------------
 
 func testSource_Configure_Success(t *testing.T, tdf testDispenserFunc) {
+	is := is.New(t)
 	ctx := context.Background()
 	dispenser, _, mockSource, _ := tdf(t)
 
@@ -178,17 +171,14 @@ func testSource_Configure_Success(t *testing.T, tdf testDispenserFunc) {
 		Return(cpluginv1.SourceConfigureResponse{}, want)
 
 	source, err := dispenser.DispenseSource()
-	if err != nil {
-		t.Fatalf("error dispensing source: %+v", err)
-	}
+	is.NoErr(err)
 
 	got := source.Configure(ctx, cfg)
-	if got.Error() != want.Error() {
-		t.Fatalf("want: %+v, got: %+v", want, got)
-	}
+	is.Equal(got.Error(), want.Error())
 }
 
 func testSource_Configure_Fail(t *testing.T, tdf testDispenserFunc) {
+	is := is.New(t)
 	ctx := context.Background()
 	dispenser, _, mockSource, _ := tdf(t)
 
@@ -197,17 +187,14 @@ func testSource_Configure_Fail(t *testing.T, tdf testDispenserFunc) {
 		Return(cpluginv1.SourceConfigureResponse{}, nil)
 
 	source, err := dispenser.DispenseSource()
-	if err != nil {
-		t.Fatalf("error dispensing source: %+v", err)
-	}
+	is.NoErr(err)
 
 	got := source.Configure(ctx, map[string]string{})
-	if got != nil {
-		t.Fatalf("want: nil, got: %+v", got)
-	}
+	is.Equal(got, nil)
 }
 
 func testSource_Start_WithPosition(t *testing.T, tdf testDispenserFunc) {
+	is := is.New(t)
 	ctx := context.Background()
 	dispenser, _, mockSource, _ := tdf(t)
 
@@ -227,14 +214,10 @@ func testSource_Start_WithPosition(t *testing.T, tdf testDispenserFunc) {
 		})
 
 	source, err := dispenser.DispenseSource()
-	if err != nil {
-		t.Fatalf("error dispensing source: %+v", err)
-	}
+	is.NoErr(err)
 
 	err = source.Start(ctx, pos)
-	if err != nil {
-		t.Fatalf("unexpected error: %+v", err)
-	}
+	is.NoErr(err)
 
 	select {
 	case <-closeCh:
@@ -244,6 +227,7 @@ func testSource_Start_WithPosition(t *testing.T, tdf testDispenserFunc) {
 }
 
 func testSource_Start_EmptyPosition(t *testing.T, tdf testDispenserFunc) {
+	is := is.New(t)
 	ctx := context.Background()
 	dispenser, _, mockSource, _ := tdf(t)
 
@@ -261,14 +245,10 @@ func testSource_Start_EmptyPosition(t *testing.T, tdf testDispenserFunc) {
 		})
 
 	source, err := dispenser.DispenseSource()
-	if err != nil {
-		t.Fatalf("error dispensing source: %+v", err)
-	}
+	is.NoErr(err)
 
 	err = source.Start(ctx, nil)
-	if err != nil {
-		t.Fatalf("unexpected error: %+v", err)
-	}
+	is.NoErr(err)
 
 	select {
 	case <-closeCh:
@@ -278,6 +258,7 @@ func testSource_Start_EmptyPosition(t *testing.T, tdf testDispenserFunc) {
 }
 
 func testSource_Read_Success(t *testing.T, tdf testDispenserFunc) {
+	is := is.New(t)
 	ctx := context.Background()
 	dispenser, _, mockSource, _ := tdf(t)
 
@@ -323,21 +304,15 @@ func testSource_Read_Success(t *testing.T, tdf testDispenserFunc) {
 		})
 
 	source, err := dispenser.DispenseSource()
-	if err != nil {
-		t.Fatalf("error dispensing source: %+v", err)
-	}
+	is.NoErr(err)
 
 	err = source.Start(ctx, nil)
-	if err != nil {
-		t.Fatalf("unexpected error: %+v", err)
-	}
+	is.NoErr(err)
 
 	var got []record.Record
 	for i := 0; i < len(want); i++ {
 		rec, err := source.Read(ctx)
-		if err != nil {
-			t.Fatalf("unexpected error: %+v", err)
-		}
+		is.NoErr(err)
 		// read at is recorded when we receive the record, adjust in the expectation
 		want[i].ReadAt = rec.ReadAt
 		got = append(got, rec)
@@ -349,21 +324,19 @@ func testSource_Read_Success(t *testing.T, tdf testDispenserFunc) {
 }
 
 func testSource_Read_WithoutStart(t *testing.T, tdf testDispenserFunc) {
+	is := is.New(t)
 	ctx := context.Background()
 	dispenser, _, _, _ := tdf(t)
 
 	source, err := dispenser.DispenseSource()
-	if err != nil {
-		t.Fatalf("error dispensing source: %+v", err)
-	}
+	is.NoErr(err)
 
 	_, err = source.Read(ctx)
-	if !cerrors.Is(err, ErrStreamNotOpen) {
-		t.Fatalf("unexpected error: %+v", err)
-	}
+	is.True(cerrors.Is(err, ErrStreamNotOpen))
 }
 
 func testSource_Read_AfterStop(t *testing.T, tdf testDispenserFunc) {
+	is := is.New(t)
 	ctx := context.Background()
 	dispenser, _, mockSource, _ := tdf(t)
 
@@ -381,28 +354,23 @@ func testSource_Read_AfterStop(t *testing.T, tdf testDispenserFunc) {
 		Stop(gomock.Any(), cpluginv1.SourceStopRequest{}).
 		DoAndReturn(func(context.Context, cpluginv1.SourceStopRequest) (cpluginv1.SourceStopResponse, error) {
 			close(stopRunCh)
-			return cpluginv1.SourceStopResponse{}, nil
+			return cpluginv1.SourceStopResponse{
+				LastPosition: []byte("foo"),
+			}, nil
 		})
 
 	source, err := dispenser.DispenseSource()
-	if err != nil {
-		t.Fatalf("error dispensing source: %+v", err)
-	}
+	is.NoErr(err)
 
 	err = source.Start(ctx, nil)
-	if err != nil {
-		t.Fatalf("unexpected error: %+v", err)
-	}
+	is.NoErr(err)
 
-	err = source.Stop(ctx)
-	if err != nil {
-		t.Fatalf("unexpected error: %+v", err)
-	}
+	gotLastPosition, err := source.Stop(ctx)
+	is.NoErr(err)
+	is.Equal(gotLastPosition, record.Position("foo"))
 
 	_, err = source.Read(ctx)
-	if !cerrors.Is(err, ErrStreamNotOpen) {
-		t.Fatalf("unexpected error: %+v", err)
-	}
+	is.True(cerrors.Is(err, ErrStreamNotOpen))
 
 	select {
 	case <-stopRunCh:
@@ -428,15 +396,11 @@ func testSource_Read_CancelContext(t *testing.T, tdf testDispenserFunc) {
 		})
 
 	source, err := dispenser.DispenseSource()
-	if err != nil {
-		t.Fatalf("error dispensing source: %+v", err)
-	}
+	is.NoErr(err)
 
 	startCtx, startCancel := context.WithCancel(ctx)
 	err = source.Start(startCtx, nil)
-	if err != nil {
-		t.Fatalf("unexpected error: %+v", err)
-	}
+	is.NoErr(err)
 
 	// calling read when source didn't produce records should block until start
 	// ctx is cancelled
@@ -445,20 +409,13 @@ func testSource_Read_CancelContext(t *testing.T, tdf testDispenserFunc) {
 	})
 
 	_, err = source.Read(ctx)
-	is.True(err != nil)
-	// TODO see if we can change this error into context.Canceled, right now we
-	//  follow the default gRPC behavior
-	if cerrors.Is(err, context.Canceled) {
-		t.Fatalf("unexpected error: %+v", err)
-	}
-	if cerrors.Is(err, ErrStreamNotOpen) {
-		t.Fatalf("unexpected error: %+v", err)
-	}
+	is.True(cerrors.Is(err, context.Canceled))
 
 	close(stopRunCh) // stop run channel
 }
 
 func testSource_Ack_Success(t *testing.T, tdf testDispenserFunc) {
+	is := is.New(t)
 	ctx := context.Background()
 	dispenser, _, mockSource, _ := tdf(t)
 
@@ -475,9 +432,7 @@ func testSource_Ack_Success(t *testing.T, tdf testDispenserFunc) {
 		DoAndReturn(func(_ context.Context, stream cpluginv1.SourceRunStream) error {
 			defer close(closeCh)
 			got, err := stream.Recv()
-			if err != nil {
-				t.Fatalf("unexpected error: %+v", err)
-			}
+			is.NoErr(err)
 			if diff := cmp.Diff(got.AckPosition, want); diff != "" {
 				t.Errorf("expected ack: %s", diff)
 			}
@@ -485,19 +440,13 @@ func testSource_Ack_Success(t *testing.T, tdf testDispenserFunc) {
 		})
 
 	source, err := dispenser.DispenseSource()
-	if err != nil {
-		t.Fatalf("error dispensing source: %+v", err)
-	}
+	is.NoErr(err)
 
 	err = source.Start(ctx, nil)
-	if err != nil {
-		t.Fatalf("unexpected error: %+v", err)
-	}
+	is.NoErr(err)
 
 	err = source.Ack(ctx, record.Position("test-position"))
-	if err != nil {
-		t.Fatalf("unexpected error: %+v", err)
-	}
+	is.NoErr(err)
 
 	select {
 	case <-closeCh:
@@ -510,27 +459,23 @@ func testSource_Ack_Success(t *testing.T, tdf testDispenserFunc) {
 
 	// acking after the stream is closed should result in an error
 	err = source.Ack(ctx, record.Position("test-position"))
-	if !cerrors.Is(err, ErrStreamNotOpen) {
-		t.Fatalf("unexpected error: %+v", err)
-	}
+	is.True(cerrors.Is(err, ErrStreamNotOpen))
 }
 
 func testSource_Ack_WithoutStart(t *testing.T, tdf testDispenserFunc) {
+	is := is.New(t)
 	ctx := context.Background()
 	dispenser, _, _, _ := tdf(t)
 
 	source, err := dispenser.DispenseSource()
-	if err != nil {
-		t.Fatalf("error dispensing source: %+v", err)
-	}
+	is.NoErr(err)
 
 	err = source.Ack(ctx, []byte("test-position"))
-	if !cerrors.Is(err, ErrStreamNotOpen) {
-		t.Fatalf("unexpected error: %+v", err)
-	}
+	is.True(cerrors.Is(err, ErrStreamNotOpen))
 }
 
 func testSource_Run_Fail(t *testing.T, tdf testDispenserFunc) {
+	is := is.New(t)
 	ctx := context.Background()
 	dispenser, _, mockSource, _ := tdf(t)
 
@@ -551,19 +496,13 @@ func testSource_Run_Fail(t *testing.T, tdf testDispenserFunc) {
 		})
 
 	source, err := dispenser.DispenseSource()
-	if err != nil {
-		t.Fatalf("error dispensing source: %+v", err)
-	}
+	is.NoErr(err)
 
 	err = source.Start(ctx, nil)
-	if err != nil {
-		t.Fatalf("unexpected error: %+v", err)
-	}
+	is.NoErr(err)
 
 	err = source.Ack(ctx, record.Position("test-position"))
-	if err != nil {
-		t.Fatalf("unexpected error: %+v", err)
-	}
+	is.NoErr(err)
 
 	select {
 	case <-closeCh:
@@ -580,25 +519,15 @@ func testSource_Run_Fail(t *testing.T, tdf testDispenserFunc) {
 		unwrapped = cerrors.Unwrap(unwrapped)
 	}
 
-	if got.Error() != want.Error() {
-		t.Fatalf("want: %+v, got: %+v", want, got)
-	}
+	is.Equal(got.Error(), want.Error())
 
-	// Error is returned through the Ack function, that's the outgoing stream.
+	// Ack returns just a generic error
 	err = source.Ack(ctx, record.Position("test-position"))
-	// Unwrap inner-most error
-	got = nil
-	for unwrapped := err; unwrapped != nil; {
-		got = unwrapped
-		unwrapped = cerrors.Unwrap(unwrapped)
-	}
-
-	if got.Error() != want.Error() {
-		t.Fatalf("want: %+v, got: %+v", want, got)
-	}
+	is.True(cerrors.Is(err, ErrStreamNotOpen))
 }
 
 func testSource_Teardown_Success(t *testing.T, tdf testDispenserFunc) {
+	is := is.New(t)
 	ctx := context.Background()
 	dispenser, _, mockSource, _ := tdf(t)
 
@@ -620,19 +549,13 @@ func testSource_Teardown_Success(t *testing.T, tdf testDispenserFunc) {
 		Return(cpluginv1.SourceTeardownResponse{}, want)
 
 	source, err := dispenser.DispenseSource()
-	if err != nil {
-		t.Fatalf("error dispensing source: %+v", err)
-	}
+	is.NoErr(err)
 
 	err = source.Start(ctx, nil)
-	if err != nil {
-		t.Fatalf("unexpected error: %s", err)
-	}
+	is.NoErr(err)
 
 	got := source.Teardown(ctx)
-	if got.Error() != want.Error() {
-		t.Fatalf("want: %+v, got: %+v", want, got)
-	}
+	is.Equal(got.Error(), want.Error())
 
 	close(stopRunCh)
 	select {
@@ -647,6 +570,7 @@ func testSource_Teardown_Success(t *testing.T, tdf testDispenserFunc) {
 // -----------------
 
 func testDestination_Configure_Success(t *testing.T, tdf testDispenserFunc) {
+	is := is.New(t)
 	ctx := context.Background()
 	dispenser, _, _, mockDestination := tdf(t)
 
@@ -660,17 +584,14 @@ func testDestination_Configure_Success(t *testing.T, tdf testDispenserFunc) {
 		Return(cpluginv1.DestinationConfigureResponse{}, want)
 
 	destination, err := dispenser.DispenseDestination()
-	if err != nil {
-		t.Fatalf("error dispensing destination: %+v", err)
-	}
+	is.NoErr(err)
 
 	got := destination.Configure(ctx, cfg)
-	if got.Error() != want.Error() {
-		t.Fatalf("want: %+v, got: %+v", want, got)
-	}
+	is.Equal(got.Error(), want.Error())
 }
 
 func testDestination_Configure_Fail(t *testing.T, tdf testDispenserFunc) {
+	is := is.New(t)
 	ctx := context.Background()
 	dispenser, _, _, mockDestination := tdf(t)
 
@@ -679,17 +600,14 @@ func testDestination_Configure_Fail(t *testing.T, tdf testDispenserFunc) {
 		Return(cpluginv1.DestinationConfigureResponse{}, nil)
 
 	destination, err := dispenser.DispenseDestination()
-	if err != nil {
-		t.Fatalf("error dispensing destination: %+v", err)
-	}
+	is.NoErr(err)
 
 	err = destination.Configure(ctx, map[string]string{})
-	if err != nil {
-		t.Fatalf("want: nil, got: %+v", err)
-	}
+	is.NoErr(err)
 }
 
 func testDestination_Start_Success(t *testing.T, tdf testDispenserFunc) {
+	is := is.New(t)
 	ctx := context.Background()
 	dispenser, _, _, mockDestination := tdf(t)
 
@@ -707,14 +625,10 @@ func testDestination_Start_Success(t *testing.T, tdf testDispenserFunc) {
 		})
 
 	destination, err := dispenser.DispenseDestination()
-	if err != nil {
-		t.Fatalf("error dispensing destination: %+v", err)
-	}
+	is.NoErr(err)
 
 	err = destination.Start(ctx)
-	if err != nil {
-		t.Fatalf("want: nil, got: %+v", err)
-	}
+	is.NoErr(err)
 
 	select {
 	case <-closeCh:
@@ -724,6 +638,7 @@ func testDestination_Start_Success(t *testing.T, tdf testDispenserFunc) {
 }
 
 func testDestination_Start_Fail(t *testing.T, tdf testDispenserFunc) {
+	is := is.New(t)
 	ctx := context.Background()
 	dispenser, _, _, mockDestination := tdf(t)
 
@@ -734,17 +649,14 @@ func testDestination_Start_Fail(t *testing.T, tdf testDispenserFunc) {
 		Return(cpluginv1.DestinationStartResponse{}, want)
 
 	destination, err := dispenser.DispenseDestination()
-	if err != nil {
-		t.Fatalf("error dispensing destination: %+v", err)
-	}
+	is.NoErr(err)
 
 	got := destination.Start(ctx)
-	if got.Error() != want.Error() {
-		t.Fatalf("want: %+v, got: %+v", want, got)
-	}
+	is.Equal(got.Error(), want.Error())
 }
 
 func testDestination_Write_Success(t *testing.T, tdf testDispenserFunc) {
+	is := is.New(t)
 	ctx := context.Background()
 	dispenser, _, _, mockDestination := tdf(t)
 
@@ -767,9 +679,7 @@ func testDestination_Write_Success(t *testing.T, tdf testDispenserFunc) {
 		DoAndReturn(func(_ context.Context, stream cpluginv1.DestinationRunStream) error {
 			defer close(closeCh)
 			got, err := stream.Recv()
-			if err != nil {
-				t.Fatalf("unexpected error: %+v", err)
-			}
+			is.NoErr(err)
 			if diff := cmp.Diff(got.Record, want); diff != "" {
 				t.Errorf("expected ack: %s", diff)
 			}
@@ -777,14 +687,10 @@ func testDestination_Write_Success(t *testing.T, tdf testDispenserFunc) {
 		})
 
 	destination, err := dispenser.DispenseDestination()
-	if err != nil {
-		t.Fatalf("error dispensing destination: %+v", err)
-	}
+	is.NoErr(err)
 
 	err = destination.Start(ctx)
-	if err != nil {
-		t.Fatalf("unexpected error: %+v", err)
-	}
+	is.NoErr(err)
 
 	err = destination.Write(ctx, record.Record{
 		Position:  want.Position,
@@ -793,9 +699,7 @@ func testDestination_Write_Success(t *testing.T, tdf testDispenserFunc) {
 		Key:       record.RawData{Raw: want.Key.(cpluginv1.RawData)},
 		Payload:   record.StructuredData{"baz": "qux"},
 	})
-	if err != nil {
-		t.Fatalf("unexpected error: %+v", err)
-	}
+	is.NoErr(err)
 
 	select {
 	case <-closeCh:
@@ -807,27 +711,23 @@ func testDestination_Write_Success(t *testing.T, tdf testDispenserFunc) {
 	time.Sleep(time.Millisecond * 50)
 
 	err = destination.Write(ctx, record.Record{})
-	if !cerrors.Is(err, ErrStreamNotOpen) {
-		t.Fatalf("unexpected error: %+v", err)
-	}
+	is.True(cerrors.Is(err, ErrStreamNotOpen))
 }
 
 func testDestination_Write_WithoutStart(t *testing.T, tdf testDispenserFunc) {
+	is := is.New(t)
 	ctx := context.Background()
 	dispenser, _, _, _ := tdf(t)
 
 	destination, err := dispenser.DispenseDestination()
-	if err != nil {
-		t.Fatalf("error dispensing destination: %+v", err)
-	}
+	is.NoErr(err)
 
 	err = destination.Write(ctx, record.Record{})
-	if !cerrors.Is(err, ErrStreamNotOpen) {
-		t.Fatalf("unexpected error: %+v", err)
-	}
+	is.True(cerrors.Is(err, ErrStreamNotOpen))
 }
 
 func testDestination_Ack_Success(t *testing.T, tdf testDispenserFunc) {
+	is := is.New(t)
 	ctx := context.Background()
 	dispenser, _, _, mockDestination := tdf(t)
 
@@ -846,29 +746,21 @@ func testDestination_Ack_Success(t *testing.T, tdf testDispenserFunc) {
 				err := stream.Send(cpluginv1.DestinationRunResponse{
 					AckPosition: p,
 				})
-				if err != nil {
-					t.Fatalf("unexpected error: %+v", err)
-				}
+				is.NoErr(err)
 			}
 			return nil
 		})
 
 	destination, err := dispenser.DispenseDestination()
-	if err != nil {
-		t.Fatalf("error dispensing destination: %+v", err)
-	}
+	is.NoErr(err)
 
 	err = destination.Start(ctx)
-	if err != nil {
-		t.Fatalf("unexpected error: %+v", err)
-	}
+	is.NoErr(err)
 
 	var got []record.Position
 	for i := 0; i < len(want); i++ {
 		pos, err := destination.Ack(ctx)
-		if err != nil {
-			t.Fatalf("unexpected error: %+v", err)
-		}
+		is.NoErr(err)
 		got = append(got, pos)
 	}
 
@@ -878,6 +770,7 @@ func testDestination_Ack_Success(t *testing.T, tdf testDispenserFunc) {
 }
 
 func testDestination_Ack_WithError(t *testing.T, tdf testDispenserFunc) {
+	is := is.New(t)
 	ctx := context.Background()
 	dispenser, _, _, mockDestination := tdf(t)
 
@@ -894,44 +787,33 @@ func testDestination_Ack_WithError(t *testing.T, tdf testDispenserFunc) {
 				AckPosition: wantPos,
 				Error:       wantErr.Error(),
 			})
-			if err != nil {
-				t.Fatalf("unexpected error: %+v", err)
-			}
+			is.NoErr(err)
 			return nil
 		})
 
 	destination, err := dispenser.DispenseDestination()
-	if err != nil {
-		t.Fatalf("error dispensing destination: %+v", err)
-	}
+	is.NoErr(err)
 
 	err = destination.Start(ctx)
-	if err != nil {
-		t.Fatalf("unexpected error: %+v", err)
-	}
+	is.NoErr(err)
 
 	gotPos, gotErr := destination.Ack(ctx)
 	if diff := cmp.Diff(gotPos, wantPos); diff != "" {
 		t.Errorf("expected position: %s", diff)
 	}
-	if gotErr.Error() != wantErr.Error() {
-		t.Fatalf("want: %+v, got: %+v", wantErr, gotErr)
-	}
+	is.Equal(gotErr.Error(), wantErr.Error())
 }
 
 func testDestination_Ack_WithoutStart(t *testing.T, tdf testDispenserFunc) {
+	is := is.New(t)
 	ctx := context.Background()
 	dispenser, _, _, _ := tdf(t)
 
 	destination, err := dispenser.DispenseDestination()
-	if err != nil {
-		t.Fatalf("error dispensing destination: %+v", err)
-	}
+	is.NoErr(err)
 
 	_, err = destination.Ack(ctx)
-	if !cerrors.Is(err, ErrStreamNotOpen) {
-		t.Fatalf("unexpected error: %+v", err)
-	}
+	is.True(cerrors.Is(err, ErrStreamNotOpen))
 }
 
 func testDestination_Run_Fail(t *testing.T, tdf testDispenserFunc) {
@@ -956,19 +838,13 @@ func testDestination_Run_Fail(t *testing.T, tdf testDispenserFunc) {
 		})
 
 	destination, err := dispenser.DispenseDestination()
-	if err != nil {
-		t.Fatalf("error dispensing destination: %+v", err)
-	}
+	is.NoErr(err)
 
 	err = destination.Start(ctx)
-	if err != nil {
-		t.Fatalf("unexpected error: %+v", err)
-	}
+	is.NoErr(err)
 
 	err = destination.Write(ctx, record.Record{})
-	if err != nil {
-		t.Fatalf("unexpected error: %+v", err)
-	}
+	is.NoErr(err)
 
 	select {
 	case <-closeCh:
@@ -992,6 +868,7 @@ func testDestination_Run_Fail(t *testing.T, tdf testDispenserFunc) {
 }
 
 func testDestination_Teardown_Success(t *testing.T, tdf testDispenserFunc) {
+	is := is.New(t)
 	ctx := context.Background()
 	dispenser, _, _, mockDestination := tdf(t)
 
@@ -1016,23 +893,15 @@ func testDestination_Teardown_Success(t *testing.T, tdf testDispenserFunc) {
 		Return(cpluginv1.DestinationTeardownResponse{}, want)
 
 	destination, err := dispenser.DispenseDestination()
-	if err != nil {
-		t.Fatalf("error dispensing destination: %+v", err)
-	}
+	is.NoErr(err)
 
 	err = destination.Start(ctx)
-	if err != nil {
-		t.Fatalf("unexpected error: %s", err)
-	}
-	err = destination.Stop(ctx)
-	if err != nil {
-		t.Fatalf("unexpected error: %s", err)
-	}
+	is.NoErr(err)
+	err = destination.Stop(ctx, nil)
+	is.NoErr(err)
 
 	got := destination.Teardown(ctx)
-	if got.Error() != want.Error() {
-		t.Fatalf("want: %+v, got: %+v", want, got)
-	}
+	is.Equal(got.Error(), want.Error())
 
 	close(stopRunCh)
 	select {
@@ -1040,64 +909,4 @@ func testDestination_Teardown_Success(t *testing.T, tdf testDispenserFunc) {
 	case <-time.After(time.Second):
 		t.Fatal("should've received call to destination.Run")
 	}
-}
-
-func testDestination_Stop_CloseSend(t *testing.T, tdf testDispenserFunc) {
-	is := is.New(t)
-
-	ctx := context.Background()
-	dispenser, _, _, mockDestination := tdf(t)
-
-	closeCh := make(chan struct{})
-	mockDestination.EXPECT().
-		Start(gomock.Any(), cpluginv1.DestinationStartRequest{}).
-		Return(cpluginv1.DestinationStartResponse{}, nil)
-	mockDestination.EXPECT().
-		Stop(gomock.Any(), cpluginv1.DestinationStopRequest{}).
-		Return(cpluginv1.DestinationStopResponse{}, nil)
-	mockDestination.EXPECT().
-		Run(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(ctx context.Context, stream cpluginv1.DestinationRunStream) error {
-			_, recvErr := stream.Recv()
-			is.Equal(recvErr, io.EOF)
-			close(closeCh)
-
-			// we should still be able to send acks back even if incoming stream
-			// is closed
-			sendErr := stream.Send(cpluginv1.DestinationRunResponse{})
-			is.NoErr(sendErr)
-
-			return recvErr
-		})
-	mockDestination.EXPECT().
-		Teardown(gomock.Any(), cpluginv1.DestinationTeardownRequest{}).
-		Return(cpluginv1.DestinationTeardownResponse{}, nil)
-
-	destination, err := dispenser.DispenseDestination()
-	if err != nil {
-		t.Fatalf("error dispensing destination: %+v", err)
-	}
-
-	err = destination.Start(ctx)
-	if err != nil {
-		t.Fatalf("unexpected error: %s", err)
-	}
-	err = destination.Stop(ctx)
-	if err != nil {
-		t.Fatalf("unexpected error: %s", err)
-	}
-
-	select {
-	case <-closeCh:
-		// all good, outgoing stream was closed
-	case <-time.After(time.Second):
-		is.Fail() // expected outgoing stream to be closed
-	}
-
-	// fetching an ack should still work
-	_, err = destination.Ack(ctx)
-	is.NoErr(err)
-
-	err = destination.Teardown(ctx)
-	is.NoErr(err)
 }

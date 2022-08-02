@@ -63,3 +63,6 @@ conduit.db
 .DS_Store
 
 dist/
+
+# Examples
+examples/processors/file_destination.txt
