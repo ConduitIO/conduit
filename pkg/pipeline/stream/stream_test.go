@@ -323,11 +323,7 @@ func generatorSource(ctrl *gomock.Controller, logger log.CtxLogger, nodeID strin
 
 		position++
 		return record.Record{
-			// SourceID would normally be the source node ID, but since we need
-			// to add the node ID to the position to create unique positions we
-			// just use "p" here to create a nicer test output
-			SourceID: "p",
-			Position: record.Position(nodeID + "-" + strconv.Itoa(position)),
+			Position: record.Position(strconv.Itoa(position)),
 		}, nil
 	}).MinTimes(recordCount + 1)
 	source.EXPECT().Stop(gomock.Any()).DoAndReturn(func(context.Context) (record.Position, error) {

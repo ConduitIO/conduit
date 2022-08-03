@@ -16,7 +16,7 @@ package fromproto
 
 import (
 	"github.com/conduitio/conduit/pkg/record"
-	connectorv1 "go.buf.build/library/go-grpc/conduitio/conduit-connector-protocol/connector/v1"
+	connectorv1 "go.buf.build/grpc/go/conduitio/conduit-connector-protocol/connector/v1"
 )
 
 func DestinationRunResponse(in *connectorv1.Destination_Run_Response) (record.Position, string) {

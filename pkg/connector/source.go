@@ -234,7 +234,6 @@ func (s *source) Read(ctx context.Context) (record.Record, error) {
 		r.Payload = record.RawData{}
 	}
 	r.ReadAt = time.Now().UTC() // TODO now that records can be read asynchronously, should we move this to the plugin SDK?
-	r.SourceID = s.ID()
 
 	return r, nil
 }

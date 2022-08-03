@@ -82,7 +82,7 @@ func (n *SourceNode) Run(ctx context.Context) (err error) {
 				return nil, cerrors.Errorf("error reading from source: %w", err)
 			}
 
-			return &Message{Record: r}, nil
+			return &Message{Record: r, SourceID: n.Source.ID()}, nil
 		},
 	)
 	if err != nil {

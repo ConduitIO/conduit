@@ -54,6 +54,9 @@ type Message struct {
 	// Record represents a single record attached to the message.
 	Record record.Record
 
+	// SourceID contains the source connector ID.
+	SourceID string // TODO set
+
 	// controlMessageType is only populated for control messages. Control
 	// messages are special messages injected into the message stream that can
 	// change the behavior of a node and don't need to be acked/nacked.
@@ -121,7 +124,7 @@ func (m *Message) init() {
 // ID returns a string representing a unique ID of this message. This is meant
 // only for logging purposes.
 func (m *Message) ID() string {
-	return fmt.Sprintf("%s/%s", m.Record.SourceID, m.Record.Position)
+	return fmt.Sprintf("%s/%s", m.SourceID, m.Record.Position)
 }
 
 func (m *Message) ControlMessageType() ControlMessageType {
