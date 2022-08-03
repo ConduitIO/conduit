@@ -1,4 +1,4 @@
-.PHONY: build-local build-noop-dest run-local run-latest run-latest-nightly print-results
+.PHONY: build-local run-local run-latest run-latest-nightly print-results
 
 # Builds a fresh Docker image, so we're not limited on the GA and nightly builds
 build-local:

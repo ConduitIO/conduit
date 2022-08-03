@@ -23,6 +23,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/docker/go-units"
@@ -158,11 +159,18 @@ func (c *consolePrinter) print(m metrics) error {
 }
 
 type collector struct {
-	first metrics
+	first      metrics
+	metricsURL string
 }
 
-func newCollector() (collector, error) {
-	c := collector{}
+func newCollector(baseURL string) (collector, error) {
+	url := baseURL
+	if !strings.HasSuffix(url, "/") {
+		url += "/"
+	}
+	url += "metrics"
+
+	c := collector{metricsURL: url}
 	err := c.init()
 	if err != nil {
 		return collector{}, fmt.Errorf("failed initializing collector: %w", err)
@@ -204,7 +212,7 @@ func (c *collector) collect() (metrics, error) {
 
 // getMetrics returns all the metrics which Conduit exposes
 func (c *collector) getMetrics() (map[string]*promclient.MetricFamily, error) {
-	metrics, err := http.Get("http://localhost:8080/metrics")
+	metrics, err := http.Get(c.metricsURL)
 	if err != nil {
 		fmt.Printf("failed getting metrics: %v", err)
 		os.Exit(1)
@@ -274,10 +282,15 @@ func main() {
 		"",
 		"workload script",
 	)
+	baseURL := flag.String(
+		"base-url",
+		"http://localhost:8080",
+		"Base URL of a Conduit instance",
+	)
 	flag.Parse()
 
 	until := time.Now().Add(*duration)
-	c, err := newCollector()
+	c, err := newCollector(*baseURL)
 	if err != nil {
 		fmt.Printf("couldn't create collector: %v", err)
 		os.Exit(1)

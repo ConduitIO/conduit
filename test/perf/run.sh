@@ -11,5 +11,5 @@ that if built-in plugins are used, their resource usage is part of Conduit's usa
 EOF
 
 for w in workloads/*.sh; do
-  ./run-workload.sh $CONDUIT_IMAGE "$w"
+  ./run-conduit-workload.sh $CONDUIT_IMAGE "$w"
 done
