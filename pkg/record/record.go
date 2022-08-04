@@ -16,6 +16,7 @@ package record
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/record/schema"
@@ -52,6 +53,31 @@ type Record struct {
 	// Payload holds the payload change (data before and after the operation
 	// occurred).
 	Payload Change `json:"payload"`
+}
+
+// Bytes returns the JSON encoding of the Record.
+func (r Record) Bytes() []byte {
+	if r.Metadata == nil {
+		// since we are dealing with a Record value this will not be seen
+		// outside this function
+		r.Metadata = make(map[string]string)
+	}
+
+	// before encoding the record set the opencdc version metadata field
+	r.Metadata.SetOpenCDCVersion()
+	// we don't want to mutate the metadata permanently, so we revert it
+	// when we are done
+	defer func() {
+		delete(r.Metadata, MetadataOpenCDCVersion)
+	}()
+
+	b, err := json.Marshal(r)
+	if err != nil {
+		// Unlikely to happen, we receive content from a plugin through GRPC.
+		// If the content could be marshaled as protobuf it can be as JSON.
+		panic(fmt.Errorf("error while marshaling Entity as JSON: %w", err))
+	}
+	return b
 }
 
 type Metadata map[string]string

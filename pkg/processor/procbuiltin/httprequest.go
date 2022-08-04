@@ -89,7 +89,7 @@ func httpRequest(
 		req, err := http.NewRequest(
 			method,
 			rawURL,
-			bytes.NewReader(r.Payload.Bytes()),
+			bytes.NewReader(r.Payload.After.Bytes()),
 		)
 		if err != nil {
 			return record.Record{}, cerrors.Errorf("%s: error trying to create HTTP request: %w", processorName, err)
@@ -111,7 +111,7 @@ func httpRequest(
 			return record.Record{}, cerrors.Errorf("%s: invalid status code %v (body: %q)", processorName, resp.StatusCode, string(body))
 		}
 
-		r.Payload = record.RawData{Raw: body}
+		r.Payload.After = record.RawData{Raw: body}
 		return r, nil
 	}
 

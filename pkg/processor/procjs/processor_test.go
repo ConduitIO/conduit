@@ -90,26 +90,32 @@ func TestJSProcessor_Process(t *testing.T) {
 			args: args{
 				record: record.Record{
 					Position: []byte("2"),
-					Metadata: map[string]string{"existing": "val"},
+					Metadata: record.Metadata{"existing": "val"},
 					Key:      record.RawData{Raw: []byte("bar")},
-					Payload: record.StructuredData(
+					Payload: record.Change{
+						Before: nil,
+						After: record.StructuredData(
+							map[string]interface{}{
+								"aaa": 111,
+								"bbb": []string{"foo", "bar"},
+							},
+						),
+					},
+				},
+			},
+			want: record.Record{
+				Position: []byte("3"),
+				Metadata: record.Metadata{"existing": "val", "returned": "JS"},
+				Key:      record.RawData{Raw: []byte("baz")},
+				Payload: record.Change{
+					Before: nil,
+					After: record.StructuredData(
 						map[string]interface{}{
 							"aaa": 111,
 							"bbb": []string{"foo", "bar"},
 						},
 					),
 				},
-			},
-			want: record.Record{
-				Position: []byte("3"),
-				Metadata: map[string]string{"existing": "val", "returned": "JS"},
-				Key:      record.RawData{Raw: []byte("baz")},
-				Payload: record.StructuredData(
-					map[string]interface{}{
-						"aaa": 111,
-						"bbb": []string{"foo", "bar"},
-					},
-				),
 			},
 			wantErr: nil,
 		},
@@ -121,23 +127,29 @@ func TestJSProcessor_Process(t *testing.T) {
 					record.Position = "3";
 					record.Metadata["returned"] = "JS";
 					record.Key.Raw = "baz";
-					record.Payload.Raw = String.fromCharCode.apply(String, record.Payload.Raw) + "bar";
+					record.Payload.After.Raw = String.fromCharCode.apply(String, record.Payload.After.Raw) + "bar";
 					return record;
 				}`,
 			},
 			args: args{
 				record: record.Record{
 					Position: []byte("2"),
-					Metadata: map[string]string{"existing": "val"},
+					Metadata: record.Metadata{"existing": "val"},
 					Key:      record.RawData{Raw: []byte("bar")},
-					Payload:  record.RawData{Raw: []byte("foo")},
+					Payload: record.Change{
+						Before: nil,
+						After:  record.RawData{Raw: []byte("foo")},
+					},
 				},
 			},
 			want: record.Record{
 				Position: []byte("3"),
-				Metadata: map[string]string{"existing": "val", "returned": "JS"},
+				Metadata: record.Metadata{"existing": "val", "returned": "JS"},
 				Key:      record.RawData{Raw: []byte("baz")},
-				Payload:  record.RawData{Raw: []byte("foobar")},
+				Payload: record.Change{
+					Before: nil,
+					After:  record.RawData{Raw: []byte("foobar")},
+				},
 			},
 			wantErr: nil,
 		},
@@ -152,7 +164,7 @@ func TestJSProcessor_Process(t *testing.T) {
 					r.Key = new RawData();
 					r.Key.Raw = "baz";
 					r.Payload = new RawData();
-					r.Payload.Raw = "foobar"
+					r.Payload.After.Raw = "foobar"
 					return r;
 				}`,
 			},
@@ -161,9 +173,12 @@ func TestJSProcessor_Process(t *testing.T) {
 			},
 			want: record.Record{
 				Position: []byte("3"),
-				Metadata: map[string]string{"returned": "JS"},
+				Metadata: record.Metadata{"returned": "JS"},
 				Key:      record.RawData{Raw: []byte("baz")},
-				Payload:  record.RawData{Raw: []byte("foobar")},
+				Payload: record.Change{
+					Before: nil,
+					After:  record.RawData{Raw: []byte("foobar")},
+				},
 			},
 			wantErr: nil,
 		},
@@ -210,7 +225,7 @@ func TestJSProcessor_Filtering(t *testing.T) {
 				}
 				return null;
 			}`,
-			input:  record.Record{Metadata: map[string]string{"keepme": "yes"}},
+			input:  record.Record{Metadata: record.Metadata{"keepme": "yes"}},
 			filter: true,
 		},
 		{
@@ -221,7 +236,7 @@ func TestJSProcessor_Filtering(t *testing.T) {
 				}
 				return null;
 			}`,
-			input:  record.Record{Metadata: map[string]string{"foo": "bar"}},
+			input:  record.Record{Metadata: record.Metadata{"foo": "bar"}},
 			filter: false,
 		},
 		{
@@ -230,7 +245,7 @@ func TestJSProcessor_Filtering(t *testing.T) {
 				function process(record) {
 					logger.Debug("no return value");
 				}`,
-			input:  record.Record{Metadata: map[string]string{"foo": "bar"}},
+			input:  record.Record{Metadata: record.Metadata{"foo": "bar"}},
 			filter: false,
 		},
 	}
@@ -282,7 +297,10 @@ func TestJSProcessor_DataTypes(t *testing.T) {
 			}`,
 			input: record.Record{},
 			want: record.Record{
-				Payload: record.RawData{Raw: []byte("foobar")},
+				Payload: record.Change{
+					Before: nil,
+					After:  record.RawData{Raw: []byte("foobar")},
+				},
 			},
 		},
 		{
@@ -305,13 +323,13 @@ func TestJSProcessor_DataTypes(t *testing.T) {
 				return record;
 			}`,
 			input: record.Record{
-				Metadata: map[string]string{
+				Metadata: record.Metadata{
 					"old_key":   "old_value",
 					"remove_me": "remove_me",
 				},
 			},
 			want: record.Record{
-				Metadata: map[string]string{
+				Metadata: record.Metadata{
 					"old_key": "old_value",
 					"new_key": "new_value",
 				},
@@ -345,8 +363,11 @@ func TestJSProcessor_JavaScriptException(t *testing.T) {
 	is.NoErr(err) // expected no error when creating the JS processor
 
 	r := record.Record{
-		Key:     record.RawData{Raw: []byte("test key")},
-		Payload: record.RawData{Raw: []byte("test payload")},
+		Key: record.RawData{Raw: []byte("test key")},
+		Payload: record.Change{
+			Before: nil,
+			After:  record.RawData{Raw: []byte("test payload")},
+		},
 	}
 
 	got, err := underTest.Process(context.Background(), r)
@@ -383,7 +404,7 @@ func TestJSProcessor_ScriptWithMultipleFunctions(t *testing.T) {
 	is.NoErr(err) // expected no error when creating the JS processor
 
 	r := record.Record{
-		Metadata: map[string]string{
+		Metadata: record.Metadata{
 			"old_key": "old_value",
 		},
 	}
@@ -392,7 +413,7 @@ func TestJSProcessor_ScriptWithMultipleFunctions(t *testing.T) {
 	is.NoErr(err) // expected no error when processing record
 	is.Equal(
 		record.Record{
-			Metadata: map[string]string{
+			Metadata: record.Metadata{
 				"old_key":     "old_value",
 				"updated_key": "updated_value",
 			},

@@ -133,11 +133,18 @@ func (p *Processor) Process(_ context.Context, in record.Record) (record.Record,
 
 func (p *Processor) toJSRecord(r record.Record) goja.Value {
 	// convert content to pointers to make it mutable
-	switch v := r.Payload.(type) {
+	switch v := r.Payload.Before.(type) {
 	case record.RawData:
-		r.Payload = &v
+		r.Payload.Before = &v
 	case record.StructuredData:
-		r.Payload = &v
+		r.Payload.Before = &v
+	}
+
+	switch v := r.Payload.After.(type) {
+	case record.RawData:
+		r.Payload.After = &v
+	case record.StructuredData:
+		r.Payload.After = &v
 	}
 
 	switch v := r.Key.(type) {
@@ -166,11 +173,18 @@ func (p *Processor) toInternalRecord(v goja.Value) (*record.Record, error) {
 
 func (p *Processor) dereferenceContent(r *record.Record) *record.Record {
 	// dereference content pointers
-	switch v := r.Payload.(type) {
+	switch v := r.Payload.Before.(type) {
 	case *record.RawData:
-		r.Payload = *v
+		r.Payload.Before = *v
 	case *record.StructuredData:
-		r.Payload = *v
+		r.Payload.Before = *v
+	}
+
+	switch v := r.Payload.After.(type) {
+	case *record.RawData:
+		r.Payload.After = *v
+	case *record.StructuredData:
+		r.Payload.After = *v
 	}
 
 	switch v := r.Key.(type) {

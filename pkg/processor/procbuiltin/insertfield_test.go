@@ -327,16 +327,22 @@ func TestInsertFieldPayload_Process(t *testing.T) {
 			Settings: map[string]string{insertFieldConfigStaticField: "foo", insertFieldConfigStaticValue: "bar"},
 		},
 		args: args{r: record.Record{
-			Payload: record.StructuredData{
-				"bar": 123,
-				"baz": nil,
+			Payload: record.Change{
+				Before: nil,
+				After: record.StructuredData{
+					"bar": 123,
+					"baz": nil,
+				},
 			},
 		}},
 		want: record.Record{
-			Payload: record.StructuredData{
-				"bar": 123,
-				"baz": nil,
-				"foo": "bar",
+			Payload: record.Change{
+				Before: nil,
+				After: record.StructuredData{
+					"bar": 123,
+					"baz": nil,
+					"foo": "bar",
+				},
 			},
 		},
 		wantErr: false,
@@ -349,9 +355,12 @@ func TestInsertFieldPayload_Process(t *testing.T) {
 			},
 		},
 		args: args{r: record.Record{
-			Payload: record.RawData{
-				Raw:    []byte("raw data"),
-				Schema: nil,
+			Payload: record.Change{
+				Before: nil,
+				After: record.RawData{
+					Raw:    []byte("raw data"),
+					Schema: nil,
+				},
 			},
 		}},
 		wantErr: true, // not supported
@@ -364,9 +373,12 @@ func TestInsertFieldPayload_Process(t *testing.T) {
 			},
 		},
 		args: args{r: record.Record{
-			Payload: record.RawData{
-				Raw:    []byte("raw data"),
-				Schema: mock.NewSchema(nil),
+			Payload: record.Change{
+				Before: nil,
+				After: record.RawData{
+					Raw:    []byte("raw data"),
+					Schema: mock.NewSchema(nil),
+				},
 			},
 		}},
 		want:    record.Record{},
@@ -380,17 +392,23 @@ func TestInsertFieldPayload_Process(t *testing.T) {
 		},
 		args: args{r: record.Record{
 			Position: record.Position("3"),
-			Payload: record.StructuredData{
-				"bar": 123,
-				"baz": nil,
+			Payload: record.Change{
+				Before: nil,
+				After: record.StructuredData{
+					"bar": 123,
+					"baz": nil,
+				},
 			},
 		}},
 		want: record.Record{
 			Position: record.Position("3"),
-			Payload: record.StructuredData{
-				"bar": 123,
-				"baz": nil,
-				"foo": record.Position("3"),
+			Payload: record.Change{
+				Before: nil,
+				After: record.StructuredData{
+					"bar": 123,
+					"baz": nil,
+					"foo": record.Position("3"),
+				},
 			},
 		},
 		wantErr: false,
@@ -402,9 +420,12 @@ func TestInsertFieldPayload_Process(t *testing.T) {
 			},
 		},
 		args: args{r: record.Record{
-			Payload: record.RawData{
-				Raw:    []byte("raw data"),
-				Schema: nil,
+			Payload: record.Change{
+				Before: nil,
+				After: record.RawData{
+					Raw:    []byte("raw data"),
+					Schema: nil,
+				},
 			},
 		}},
 		wantErr: true, // not supported
@@ -416,9 +437,12 @@ func TestInsertFieldPayload_Process(t *testing.T) {
 			},
 		},
 		args: args{r: record.Record{
-			Payload: record.RawData{
-				Raw:    []byte("raw data"),
-				Schema: mock.NewSchema(nil),
+			Payload: record.Change{
+				Before: nil,
+				After: record.RawData{
+					Raw:    []byte("raw data"),
+					Schema: mock.NewSchema(nil),
+				},
 			},
 		}},
 		want:    record.Record{},
@@ -434,18 +458,24 @@ func TestInsertFieldPayload_Process(t *testing.T) {
 		},
 		args: args{r: record.Record{
 			Position: record.Position("321"),
-			Payload: record.StructuredData{
-				"bar": 123,
-				"baz": nil,
+			Payload: record.Change{
+				Before: nil,
+				After: record.StructuredData{
+					"bar": 123,
+					"baz": nil,
+				},
 			},
 		}},
 		want: record.Record{
 			Position: record.Position("321"),
-			Payload: record.StructuredData{
-				"bar":         123,
-				"baz":         nil,
-				"fooStatic":   "bar",
-				"fooPosition": record.Position("321"),
+			Payload: record.Change{
+				Before: nil,
+				After: record.StructuredData{
+					"bar":         123,
+					"baz":         nil,
+					"fooStatic":   "bar",
+					"fooPosition": record.Position("321"),
+				},
 			},
 		},
 		wantErr: false,
@@ -459,9 +489,12 @@ func TestInsertFieldPayload_Process(t *testing.T) {
 			},
 		},
 		args: args{r: record.Record{
-			Payload: record.RawData{
-				Raw:    []byte("raw data"),
-				Schema: mock.NewSchema(nil),
+			Payload: record.Change{
+				Before: nil,
+				After: record.RawData{
+					Raw:    []byte("raw data"),
+					Schema: mock.NewSchema(nil),
+				},
 			},
 		}},
 		want:    record.Record{},

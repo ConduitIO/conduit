@@ -53,7 +53,7 @@ func ValueToKey(config processor.Config) (processor.Interface, error) {
 			}
 		}()
 
-		switch d := r.Payload.(type) {
+		switch d := r.Payload.After.(type) {
 		case record.StructuredData:
 			key := record.StructuredData{}
 			for _, f := range fields {
