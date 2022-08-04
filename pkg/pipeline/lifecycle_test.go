@@ -198,8 +198,11 @@ func generatorSource(ctrl *gomock.Controller, recordCount int, wantErr error, te
 	records := make([]record.Record, recordCount)
 	for i := 0; i < recordCount; i++ {
 		records[i] = record.Record{
-			Key:      record.RawData{Raw: []byte(uuid.NewString())},
-			Payload:  record.RawData{Raw: []byte(uuid.NewString())},
+			Key: record.RawData{Raw: []byte(uuid.NewString())},
+			Payload: record.Change{
+				Before: nil,
+				After:  record.RawData{Raw: []byte(uuid.NewString())},
+			},
 			Position: record.Position(strconv.Itoa(i)),
 		}
 	}

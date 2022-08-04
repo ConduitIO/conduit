@@ -163,8 +163,8 @@ func TestJSProcessor_Process(t *testing.T) {
 					r.Metadata["returned"] = "JS";
 					r.Key = new RawData();
 					r.Key.Raw = "baz";
-					r.Payload = new RawData();
-					r.Payload.After.Raw = "foobar"
+					r.Payload.After = new RawData();
+					r.Payload.After.Raw = "foobar";
 					return r;
 				}`,
 			},
@@ -291,8 +291,8 @@ func TestJSProcessor_DataTypes(t *testing.T) {
 		{
 			name: "raw payload, data from string",
 			src: `function process(record) {
-				record.Payload = new RawData();
-				record.Payload.Raw = "foobar";
+				record.Payload.After = new RawData();
+				record.Payload.After.Raw = "foobar";
 				return record;
 			}`,
 			input: record.Record{},

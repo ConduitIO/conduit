@@ -28,6 +28,20 @@ const (
 	entrypoint = "process"
 )
 
+// jsRecord is an intermediary representation of record.Record that is passed to
+// the JavaScript transform. We use this because using record.Record would not
+// allow us to modify or access certain data (e.g. metadata or structured data).
+type jsRecord struct {
+	Position  []byte
+	Operation string
+	Metadata  map[string]string
+	Key       any
+	Payload   struct {
+		Before any
+		After  any
+	}
+}
+
 // Processor is able to run processors defined in JavaScript.
 type Processor struct {
 	runtime  *goja.Runtime
@@ -93,7 +107,7 @@ func (p *Processor) jsRecord(goja.ConstructorCall) *goja.Object {
 	// We return a record.Record struct, however because we are
 	// not changing call.This instanceof will not work as expected.
 
-	r := record.Record{
+	r := jsRecord{
 		Metadata: make(map[string]string),
 	}
 	// We need to return a pointer to make the returned object mutable.
@@ -111,88 +125,95 @@ func (p *Processor) jsContentRaw(goja.ConstructorCall) *goja.Object {
 }
 
 func (p *Processor) Process(_ context.Context, in record.Record) (record.Record, error) {
-	jsRecord := p.toJSRecord(in)
+	jsr := p.toJSRecord(in)
 
-	result, err := p.function(goja.Undefined(), jsRecord)
+	result, err := p.function(goja.Undefined(), jsr)
 	if err != nil {
 		return record.Record{}, cerrors.Errorf("failed to execute JS processor function: %w", err)
 	}
 
 	out, err := p.toInternalRecord(result)
+	if err == processor.ErrSkipRecord {
+		return record.Record{}, err
+	}
 	if err != nil {
 		return record.Record{}, cerrors.Errorf("failed to transform to internal record: %w", err)
 	}
 
-	// nil will be returned if the JS function has no return value at all
-	if out == nil {
-		return record.Record{}, processor.ErrSkipRecord
-	}
-
-	return *out, nil
+	return out, nil
 }
 
 func (p *Processor) toJSRecord(r record.Record) goja.Value {
-	// convert content to pointers to make it mutable
-	switch v := r.Payload.Before.(type) {
-	case record.RawData:
-		r.Payload.Before = &v
-	case record.StructuredData:
-		r.Payload.Before = &v
+	extractData := func(d record.Data) interface{} {
+		switch v := d.(type) {
+		case record.RawData:
+			return &v
+		case record.StructuredData:
+			return map[string]interface{}(v)
+		}
+		return nil
 	}
 
-	switch v := r.Payload.After.(type) {
-	case record.RawData:
-		r.Payload.After = &v
-	case record.StructuredData:
-		r.Payload.After = &v
-	}
-
-	switch v := r.Key.(type) {
-	case record.RawData:
-		r.Key = &v
-	case record.StructuredData:
-		r.Key = &v
+	jsr := jsRecord{
+		Position:  r.Position,
+		Operation: r.Operation.String(),
+		Metadata:  r.Metadata,
+		Key:       extractData(r.Key),
+		Payload: struct {
+			Before interface{}
+			After  interface{}
+		}{
+			Before: extractData(r.Payload.Before),
+			After:  extractData(r.Payload.After),
+		},
 	}
 
 	// we need to send in a pointer to let the user change the value and return it, if they choose to do so
-	return p.runtime.ToValue(&r)
+	return p.runtime.ToValue(&jsr)
 }
 
-func (p *Processor) toInternalRecord(v goja.Value) (*record.Record, error) {
-	r := v.Export()
-
-	switch v := r.(type) {
-	case *record.Record:
-		return p.dereferenceContent(v), nil
-	case nil:
-		return nil, nil
-	default:
-		return nil, cerrors.Errorf("js function expected to return a Record, but returned: %T", v)
-	}
-}
-
-func (p *Processor) dereferenceContent(r *record.Record) *record.Record {
-	// dereference content pointers
-	switch v := r.Payload.Before.(type) {
-	case *record.RawData:
-		r.Payload.Before = *v
-	case *record.StructuredData:
-		r.Payload.Before = *v
+func (p *Processor) toInternalRecord(v goja.Value) (record.Record, error) {
+	raw := v.Export()
+	if raw == nil {
+		return record.Record{}, processor.ErrSkipRecord
 	}
 
-	switch v := r.Payload.After.(type) {
-	case *record.RawData:
-		r.Payload.After = *v
-	case *record.StructuredData:
-		r.Payload.After = *v
+	jsr, ok := v.Export().(*jsRecord)
+	if !ok {
+		return record.Record{}, cerrors.Errorf("js function expected to return %T, but returned: %T", &jsRecord{}, v)
 	}
 
-	switch v := r.Key.(type) {
-	case *record.RawData:
-		r.Key = *v
-	case *record.StructuredData:
-		r.Key = *v
+	extractData := func(d interface{}) record.Data {
+		switch v := d.(type) {
+		case *record.RawData:
+			return *v
+		case map[string]interface{}:
+			return record.StructuredData(v)
+		}
+		return nil
+	}
+	extractOperation := func(op string) record.Operation {
+		switch op {
+		case record.OperationCreate.String():
+			return record.OperationCreate
+		case record.OperationUpdate.String():
+			return record.OperationUpdate
+		case record.OperationDelete.String():
+			return record.OperationDelete
+		case record.OperationSnapshot.String():
+			return record.OperationSnapshot
+		}
+		return 0
 	}
 
-	return r
+	return record.Record{
+		Position:  jsr.Position,
+		Operation: extractOperation(jsr.Operation),
+		Metadata:  jsr.Metadata,
+		Key:       extractData(jsr.Key),
+		Payload: record.Change{
+			Before: extractData(jsr.Payload.Before),
+			After:  extractData(jsr.Payload.After),
+		},
+	}, nil
 }
