@@ -18,7 +18,6 @@ import (
 	"context"
 	"reflect"
 	"testing"
-	"time"
 
 	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/processor"
@@ -198,84 +197,28 @@ func TestInsertFieldKey_Process(t *testing.T) {
 		want:    record.Record{},
 		wantErr: true, // TODO not implemented
 	}, {
-		name: "timestamp in structured data",
-		config: processor.Config{
-			Settings: map[string]string{
-				insertFieldConfigTimestampField: "foo",
-			},
-		},
-		args: args{r: record.Record{
-			CreatedAt: time.Unix(1234, 0),
-			Key: record.StructuredData{
-				"bar": 123,
-				"baz": nil,
-			},
-		}},
-		want: record.Record{
-			CreatedAt: time.Unix(1234, 0),
-			Key: record.StructuredData{
-				"bar": 123,
-				"baz": nil,
-				"foo": time.Unix(1234, 0),
-			},
-		},
-		wantErr: false,
-	}, {
-		name: "timestamp in raw data without schema",
-		config: processor.Config{
-			Settings: map[string]string{
-				insertFieldConfigTimestampField: "foo",
-			},
-		},
-		args: args{r: record.Record{
-			Key: record.RawData{
-				Raw:    []byte("raw data"),
-				Schema: nil,
-			},
-		}},
-		wantErr: true, // not supported
-	}, {
-		name: "timestamp in raw data with schema",
-		config: processor.Config{
-			Settings: map[string]string{
-				insertFieldConfigTimestampField: "foo",
-			},
-		},
-		args: args{r: record.Record{
-			Key: record.RawData{
-				Raw:    []byte("raw data"),
-				Schema: mock.NewSchema(nil),
-			},
-		}},
-		want:    record.Record{},
-		wantErr: true, // TODO not implemented
-	}, {
 		name: "all fields in structured data",
 		config: processor.Config{
 			Settings: map[string]string{
-				insertFieldConfigStaticField:    "fooStatic",
-				insertFieldConfigStaticValue:    "bar",
-				insertFieldConfigPositionField:  "fooPosition",
-				insertFieldConfigTimestampField: "fooTimestamp",
+				insertFieldConfigStaticField:   "fooStatic",
+				insertFieldConfigStaticValue:   "bar",
+				insertFieldConfigPositionField: "fooPosition",
 			},
 		},
 		args: args{r: record.Record{
-			Position:  record.Position("321"),
-			CreatedAt: time.Unix(321, 0),
+			Position: record.Position("321"),
 			Key: record.StructuredData{
 				"bar": 123,
 				"baz": nil,
 			},
 		}},
 		want: record.Record{
-			Position:  record.Position("321"),
-			CreatedAt: time.Unix(321, 0),
+			Position: record.Position("321"),
 			Key: record.StructuredData{
-				"bar":          123,
-				"baz":          nil,
-				"fooStatic":    "bar",
-				"fooPosition":  record.Position("321"),
-				"fooTimestamp": time.Unix(321, 0),
+				"bar":         123,
+				"baz":         nil,
+				"fooStatic":   "bar",
+				"fooPosition": record.Position("321"),
 			},
 		},
 		wantErr: false,
@@ -283,10 +226,9 @@ func TestInsertFieldKey_Process(t *testing.T) {
 		name: "all fields in raw data with schema",
 		config: processor.Config{
 			Settings: map[string]string{
-				insertFieldConfigStaticField:    "fooStatic",
-				insertFieldConfigStaticValue:    "bar",
-				insertFieldConfigPositionField:  "fooPosition",
-				insertFieldConfigTimestampField: "fooTimestamp",
+				insertFieldConfigStaticField:   "fooStatic",
+				insertFieldConfigStaticValue:   "bar",
+				insertFieldConfigPositionField: "fooPosition",
 			},
 		},
 		args: args{r: record.Record{
@@ -482,84 +424,28 @@ func TestInsertFieldPayload_Process(t *testing.T) {
 		want:    record.Record{},
 		wantErr: true, // TODO not implemented
 	}, {
-		name: "timestamp in structured data",
-		config: processor.Config{
-			Settings: map[string]string{
-				insertFieldConfigTimestampField: "foo",
-			},
-		},
-		args: args{r: record.Record{
-			CreatedAt: time.Unix(1234, 0),
-			Payload: record.StructuredData{
-				"bar": 123,
-				"baz": nil,
-			},
-		}},
-		want: record.Record{
-			CreatedAt: time.Unix(1234, 0),
-			Payload: record.StructuredData{
-				"bar": 123,
-				"baz": nil,
-				"foo": time.Unix(1234, 0),
-			},
-		},
-		wantErr: false,
-	}, {
-		name: "timestamp in raw data without schema",
-		config: processor.Config{
-			Settings: map[string]string{
-				insertFieldConfigTimestampField: "foo",
-			},
-		},
-		args: args{r: record.Record{
-			Payload: record.RawData{
-				Raw:    []byte("raw data"),
-				Schema: nil,
-			},
-		}},
-		wantErr: true, // not supported
-	}, {
-		name: "timestamp in raw data with schema",
-		config: processor.Config{
-			Settings: map[string]string{
-				insertFieldConfigTimestampField: "foo",
-			},
-		},
-		args: args{r: record.Record{
-			Payload: record.RawData{
-				Raw:    []byte("raw data"),
-				Schema: mock.NewSchema(nil),
-			},
-		}},
-		want:    record.Record{},
-		wantErr: true, // TODO not implemented
-	}, {
 		name: "all fields in structured data",
 		config: processor.Config{
 			Settings: map[string]string{
-				insertFieldConfigStaticField:    "fooStatic",
-				insertFieldConfigStaticValue:    "bar",
-				insertFieldConfigPositionField:  "fooPosition",
-				insertFieldConfigTimestampField: "fooTimestamp",
+				insertFieldConfigStaticField:   "fooStatic",
+				insertFieldConfigStaticValue:   "bar",
+				insertFieldConfigPositionField: "fooPosition",
 			},
 		},
 		args: args{r: record.Record{
-			Position:  record.Position("321"),
-			CreatedAt: time.Unix(321, 0),
+			Position: record.Position("321"),
 			Payload: record.StructuredData{
 				"bar": 123,
 				"baz": nil,
 			},
 		}},
 		want: record.Record{
-			Position:  record.Position("321"),
-			CreatedAt: time.Unix(321, 0),
+			Position: record.Position("321"),
 			Payload: record.StructuredData{
-				"bar":          123,
-				"baz":          nil,
-				"fooStatic":    "bar",
-				"fooPosition":  record.Position("321"),
-				"fooTimestamp": time.Unix(321, 0),
+				"bar":         123,
+				"baz":         nil,
+				"fooStatic":   "bar",
+				"fooPosition": record.Position("321"),
 			},
 		},
 		wantErr: false,
@@ -567,10 +453,9 @@ func TestInsertFieldPayload_Process(t *testing.T) {
 		name: "all fields in raw data with schema",
 		config: processor.Config{
 			Settings: map[string]string{
-				insertFieldConfigStaticField:    "fooStatic",
-				insertFieldConfigStaticValue:    "bar",
-				insertFieldConfigPositionField:  "fooPosition",
-				insertFieldConfigTimestampField: "fooTimestamp",
+				insertFieldConfigStaticField:   "fooStatic",
+				insertFieldConfigStaticValue:   "bar",
+				insertFieldConfigPositionField: "fooPosition",
 			},
 		},
 		args: args{r: record.Record{

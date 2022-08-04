@@ -121,13 +121,7 @@ func (n *SourceNode) Run(ctx context.Context) (err error) {
 
 		// track message until it reaches an end state
 		openMsgTracker.Add(msg)
-
-		msg.RegisterStatusHandler(
-			func(msg *Message, change StatusChange) error {
-				n.PipelineTimer.Update(time.Since(msg.Record.ReadAt))
-				return nil
-			},
-		)
+		n.registerMetricStatusHandler(msg)
 
 		lastPosition = msg.Record.Position
 		err = n.base.Send(ctx, n.logger, msg)
@@ -140,6 +134,21 @@ func (n *SourceNode) Run(ctx context.Context) (err error) {
 			return n.stopReason
 		}
 	}
+}
+
+func (n *SourceNode) registerMetricStatusHandler(msg *Message) {
+	readAt, err := msg.Record.Metadata.GetReadAt()
+	if err != nil {
+		// if the plugin did not set the field fallback to the time Conduit
+		// received the record (now)
+		readAt = time.Now()
+	}
+	msg.RegisterStatusHandler(
+		func(*Message, StatusChange) error {
+			n.PipelineTimer.Update(time.Since(readAt))
+			return nil
+		},
+	)
 }
 
 func (n *SourceNode) Stop(ctx context.Context, reason error) error {

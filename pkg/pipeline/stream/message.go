@@ -55,7 +55,7 @@ type Message struct {
 	Record record.Record
 
 	// SourceID contains the source connector ID.
-	SourceID string // TODO set
+	SourceID string
 
 	// controlMessageType is only populated for control messages. Control
 	// messages are special messages injected into the message stream that can

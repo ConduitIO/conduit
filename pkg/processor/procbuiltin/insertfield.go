@@ -26,10 +26,9 @@ const (
 	insertFieldKeyName     = "insertfieldkey"
 	insertFieldPayloadName = "insertfieldpayload"
 
-	insertFieldConfigStaticField    = "static.field"
-	insertFieldConfigStaticValue    = "static.value"
-	insertFieldConfigTimestampField = "timestamp.field"
-	insertFieldConfigPositionField  = "position.field"
+	insertFieldConfigStaticField   = "static.field"
+	insertFieldConfigStaticValue   = "static.value"
+	insertFieldConfigPositionField = "position.field"
 )
 
 func init() {
@@ -65,11 +64,9 @@ func insertField(
 
 		staticFieldName  string
 		staticFieldValue string
-		timestampField   string
 		positionField    string
 	)
 
-	timestampField = config.Settings[insertFieldConfigTimestampField]
 	positionField = config.Settings[insertFieldConfigPositionField]
 	staticFieldName, ok := config.Settings[insertFieldConfigStaticField]
 	if ok {
@@ -77,7 +74,7 @@ func insertField(
 			return nil, cerrors.Errorf("%s: %w", processorName, err)
 		}
 	}
-	if staticFieldName == "" && timestampField == "" && positionField == "" {
+	if staticFieldName == "" && positionField == "" {
 		return nil, cerrors.Errorf("%s: no fields configured to be inserted", processorName)
 	}
 
@@ -94,9 +91,6 @@ func insertField(
 			// TODO add support for nested fields
 			if staticFieldName != "" {
 				d[staticFieldName] = staticFieldValue
-			}
-			if timestampField != "" {
-				d[timestampField] = r.CreatedAt
 			}
 			if positionField != "" {
 				d[positionField] = r.Position

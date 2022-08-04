@@ -56,8 +56,11 @@ func (n *MetricsNode) Run(ctx context.Context) error {
 			if msg.Record.Key != nil {
 				bytes += len(msg.Record.Key.Bytes())
 			}
-			if msg.Record.Payload != nil {
-				bytes += len(msg.Record.Payload.Bytes())
+			if msg.Record.Payload.Before != nil {
+				bytes += len(msg.Record.Payload.Before.Bytes())
+			}
+			if msg.Record.Payload.After != nil {
+				bytes += len(msg.Record.Payload.After.Bytes())
 			}
 			n.BytesHistogram.Observe(float64(bytes))
 			return nil

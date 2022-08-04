@@ -44,7 +44,7 @@ type Record struct {
 	// after the change, or both (see field Payload).
 	Operation Operation `json:"operation"`
 	// Metadata contains additional information regarding the record.
-	Metadata map[string]string
+	Metadata Metadata
 
 	// Key represents a value that should identify the entity (e.g. database
 	// row).
@@ -53,6 +53,8 @@ type Record struct {
 	// occurred).
 	Payload Change `json:"payload"`
 }
+
+type Metadata map[string]string
 
 type Change struct {
 	// Before contains the data before the operation occurred. This field is

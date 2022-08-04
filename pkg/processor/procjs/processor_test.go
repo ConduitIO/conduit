@@ -19,7 +19,6 @@ import (
 	"context"
 	"reflect"
 	"testing"
-	"time"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/processor"
@@ -84,17 +83,15 @@ func TestJSProcessor_Process(t *testing.T) {
 				function process(record) {
 					record.Position = "3";
 					record.Metadata["returned"] = "JS";
-					record.CreatedAt = new Date(Date.UTC(2021, 0, 2, 3, 4, 5, 6)).toISOString();
 					record.Key.Raw = "baz";
 					return record;
 				}`,
 			},
 			args: args{
 				record: record.Record{
-					Position:  []byte("2"),
-					Metadata:  map[string]string{"existing": "val"},
-					CreatedAt: time.Now().UTC(),
-					Key:       record.RawData{Raw: []byte("bar")},
+					Position: []byte("2"),
+					Metadata: map[string]string{"existing": "val"},
+					Key:      record.RawData{Raw: []byte("bar")},
 					Payload: record.StructuredData(
 						map[string]interface{}{
 							"aaa": 111,
@@ -104,10 +101,9 @@ func TestJSProcessor_Process(t *testing.T) {
 				},
 			},
 			want: record.Record{
-				Position:  []byte("3"),
-				Metadata:  map[string]string{"existing": "val", "returned": "JS"},
-				CreatedAt: time.Date(2021, time.January, 2, 3, 4, 5, 6000000, time.UTC),
-				Key:       record.RawData{Raw: []byte("baz")},
+				Position: []byte("3"),
+				Metadata: map[string]string{"existing": "val", "returned": "JS"},
+				Key:      record.RawData{Raw: []byte("baz")},
 				Payload: record.StructuredData(
 					map[string]interface{}{
 						"aaa": 111,
@@ -124,7 +120,6 @@ func TestJSProcessor_Process(t *testing.T) {
 				function process(record) {
 					record.Position = "3";
 					record.Metadata["returned"] = "JS";
-					record.CreatedAt = new Date(Date.UTC(2021, 0, 2, 3, 4, 5, 6)).toISOString();
 					record.Key.Raw = "baz";
 					record.Payload.Raw = String.fromCharCode.apply(String, record.Payload.Raw) + "bar";
 					return record;
@@ -132,19 +127,17 @@ func TestJSProcessor_Process(t *testing.T) {
 			},
 			args: args{
 				record: record.Record{
-					Position:  []byte("2"),
-					Metadata:  map[string]string{"existing": "val"},
-					CreatedAt: time.Now().UTC(),
-					Key:       record.RawData{Raw: []byte("bar")},
-					Payload:   record.RawData{Raw: []byte("foo")},
+					Position: []byte("2"),
+					Metadata: map[string]string{"existing": "val"},
+					Key:      record.RawData{Raw: []byte("bar")},
+					Payload:  record.RawData{Raw: []byte("foo")},
 				},
 			},
 			want: record.Record{
-				Position:  []byte("3"),
-				Metadata:  map[string]string{"existing": "val", "returned": "JS"},
-				CreatedAt: time.Date(2021, time.January, 2, 3, 4, 5, 6000000, time.UTC),
-				Key:       record.RawData{Raw: []byte("baz")},
-				Payload:   record.RawData{Raw: []byte("foobar")},
+				Position: []byte("3"),
+				Metadata: map[string]string{"existing": "val", "returned": "JS"},
+				Key:      record.RawData{Raw: []byte("baz")},
+				Payload:  record.RawData{Raw: []byte("foobar")},
 			},
 			wantErr: nil,
 		},
@@ -156,7 +149,6 @@ func TestJSProcessor_Process(t *testing.T) {
 					r = new Record();
 					r.Position = "3";
 					r.Metadata["returned"] = "JS";
-					r.CreatedAt = new Date(Date.UTC(2021, 0, 2, 3, 4, 5, 6)).toISOString();
 					r.Key = new RawData();
 					r.Key.Raw = "baz";
 					r.Payload = new RawData();
@@ -168,11 +160,10 @@ func TestJSProcessor_Process(t *testing.T) {
 				record: record.Record{},
 			},
 			want: record.Record{
-				Position:  []byte("3"),
-				Metadata:  map[string]string{"returned": "JS"},
-				CreatedAt: time.Date(2021, time.January, 2, 3, 4, 5, 6000000, time.UTC),
-				Key:       record.RawData{Raw: []byte("baz")},
-				Payload:   record.RawData{Raw: []byte("foobar")},
+				Position: []byte("3"),
+				Metadata: map[string]string{"returned": "JS"},
+				Key:      record.RawData{Raw: []byte("baz")},
+				Payload:  record.RawData{Raw: []byte("foobar")},
 			},
 			wantErr: nil,
 		},
@@ -271,17 +262,6 @@ func TestJSProcessor_DataTypes(t *testing.T) {
 		input record.Record
 		want  record.Record
 	}{
-		{
-			name: "UTC date is used",
-			src: `function process(record) {
-        		record.CreatedAt = new Date(Date.UTC(2021, 0, 2, 3, 4, 5, 6)).toISOString();
-				return record;
-			}`,
-			input: record.Record{},
-			want: record.Record{
-				CreatedAt: time.Date(2021, time.January, 2, 3, 4, 5, 6000000, time.UTC),
-			},
-		},
 		{
 			name: "position from string",
 			src: `function process(record) {
