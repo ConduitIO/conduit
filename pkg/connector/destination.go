@@ -85,10 +85,6 @@ func (d *destination) ProvisionedBy() ProvisionType {
 	return d.XProvisionedBy
 }
 
-func (d *destination) SetProvisionedBy(p ProvisionType) {
-	d.XProvisionedBy = p
-}
-
 func (d *destination) CreatedAt() time.Time {
 	return d.XCreatedAt
 }

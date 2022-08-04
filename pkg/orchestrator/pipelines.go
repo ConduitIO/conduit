@@ -60,7 +60,7 @@ func (s *PipelineOrchestrator) Update(ctx context.Context, id string, cfg pipeli
 		return nil, err
 	}
 
-	if pl.ProvisionedBy == pipeline.ProvisionTypeConfig {
+	if pl.ProvisionedBy != pipeline.ProvisionTypeAPI {
 		return nil, cerrors.Errorf("pipeline %q cannot be updated: %w", pl.ID, ErrImmutableProvisionedByConfig)
 	}
 	// TODO lock pipeline
@@ -76,7 +76,7 @@ func (s *PipelineOrchestrator) Delete(ctx context.Context, id string) error {
 		return err
 	}
 
-	if pl.ProvisionedBy == pipeline.ProvisionTypeConfig {
+	if pl.ProvisionedBy != pipeline.ProvisionTypeAPI {
 		return cerrors.Errorf("pipeline %q cannot be deleted: %w", pl.ID, ErrImmutableProvisionedByConfig)
 	}
 	if pl.Status == pipeline.StatusRunning {

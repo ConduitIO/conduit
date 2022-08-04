@@ -27,7 +27,7 @@ import (
 // The main use of this interface is to be able to switch out the connector
 // implementations for mocks in tests.
 type Builder interface {
-	Build(t Type) (Connector, error)
+	Build(t Type, p ProvisionType) (Connector, error)
 
 	// Init initializes a connector and validates it to make sure it's ready for use.
 	Init(c Connector, id string, config Config) error
@@ -49,19 +49,21 @@ func NewDefaultBuilder(logger log.CtxLogger, persister *Persister, service *plug
 	}
 }
 
-func (b *DefaultBuilder) Build(t Type) (Connector, error) {
+func (b *DefaultBuilder) Build(t Type, p ProvisionType) (Connector, error) {
 	var c Connector
 	now := time.Now()
 	switch t {
 	case TypeSource:
 		c = &source{
-			XCreatedAt: now,
-			XUpdatedAt: now,
+			XCreatedAt:     now,
+			XUpdatedAt:     now,
+			XProvisionedBy: p,
 		}
 	case TypeDestination:
 		c = &destination{
-			XCreatedAt: now,
-			XUpdatedAt: now,
+			XCreatedAt:     now,
+			XUpdatedAt:     now,
+			XProvisionedBy: p,
 		}
 	default:
 		return nil, ErrInvalidConnectorType

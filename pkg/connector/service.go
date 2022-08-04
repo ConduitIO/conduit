@@ -92,7 +92,7 @@ func (s *Service) Create(ctx context.Context, id string, t Type, cfg Config, p P
 		return nil, cerrors.New("must provide a pipeline ID")
 	}
 
-	conn, err := s.connBuilder.Build(t)
+	conn, err := s.connBuilder.Build(t, p)
 	if err != nil {
 		return nil, cerrors.Errorf("could not create connector: %w", err)
 	}
@@ -102,7 +102,6 @@ func (s *Service) Create(ctx context.Context, id string, t Type, cfg Config, p P
 		return nil, cerrors.Errorf("could not init connector: %w", err)
 	}
 
-	conn.SetProvisionedBy(p)
 	// persist instance
 	err = s.store.Set(ctx, id, conn)
 	if err != nil {

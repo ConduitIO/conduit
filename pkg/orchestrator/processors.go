@@ -47,7 +47,7 @@ func (p *ProcessorOrchestrator) Create(
 	}
 
 	// check if pipeline was provisioned by config
-	if pl.ProvisionedBy == pipeline.ProvisionTypeConfig {
+	if pl.ProvisionedBy != pipeline.ProvisionTypeAPI {
 		return nil, cerrors.Errorf("cannot add a processor to the pipeline %q: %w", pl.ID, ErrImmutableProvisionedByConfig)
 	}
 
@@ -119,7 +119,7 @@ func (p *ProcessorOrchestrator) Update(ctx context.Context, id string, cfg proce
 	}
 
 	// check if processor was provisioned by config
-	if proc.ProvisionedBy == processor.ProvisionTypeConfig {
+	if proc.ProvisionedBy != processor.ProvisionTypeAPI {
 		return nil, cerrors.Errorf("processor %q cannot be updated: %w", proc.ID, ErrImmutableProvisionedByConfig)
 	}
 	// provisioned by API
@@ -169,7 +169,7 @@ func (p *ProcessorOrchestrator) Delete(ctx context.Context, id string) error {
 	}
 
 	// check if processor was provisioned by config
-	if proc.ProvisionedBy == processor.ProvisionTypeConfig {
+	if proc.ProvisionedBy != processor.ProvisionTypeAPI {
 		return cerrors.Errorf("processor %q cannot be deleted: %w", proc.ID, ErrImmutableProvisionedByConfig)
 	}
 

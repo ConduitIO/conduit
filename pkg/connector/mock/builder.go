@@ -26,7 +26,7 @@ type Builder struct {
 	SetupDestination func(source *Destination)
 }
 
-func (b Builder) Build(t connector.Type) (connector.Connector, error) {
+func (b Builder) Build(t connector.Type, p connector.ProvisionType) (connector.Connector, error) {
 	switch t {
 	case connector.TypeSource:
 		return NewSource(b.Ctrl), nil
@@ -44,8 +44,7 @@ func (b Builder) Init(c connector.Connector, id string, cfg connector.Config) er
 		m.EXPECT().Type().Return(connector.TypeSource).AnyTimes()
 		m.EXPECT().ID().Return(id).AnyTimes()
 		m.EXPECT().Config().Return(cfg).AnyTimes()
-		m.EXPECT().SetProvisionedBy(connector.ProvisionTypeAPI).AnyTimes()
-		m.EXPECT().ProvisionedBy().Return(connector.ProvisionTypeAPI).AnyTimes()
+		m.EXPECT().ProvisionedBy().AnyTimes()
 		if b.SetupSource != nil {
 			b.SetupSource(m)
 		}
@@ -55,8 +54,7 @@ func (b Builder) Init(c connector.Connector, id string, cfg connector.Config) er
 		m.EXPECT().Type().Return(connector.TypeDestination).AnyTimes()
 		m.EXPECT().ID().Return(id).AnyTimes()
 		m.EXPECT().Config().Return(cfg).AnyTimes()
-		m.EXPECT().SetProvisionedBy(connector.ProvisionTypeAPI).AnyTimes()
-		m.EXPECT().ProvisionedBy().Return(connector.ProvisionTypeAPI).AnyTimes()
+		m.EXPECT().ProvisionedBy().AnyTimes()
 		if b.SetupDestination != nil {
 			b.SetupDestination(m)
 		}

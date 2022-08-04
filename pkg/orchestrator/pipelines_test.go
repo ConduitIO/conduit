@@ -25,6 +25,7 @@ import (
 	"github.com/conduitio/conduit/pkg/pipeline"
 	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
+	"github.com/matryer/is"
 )
 
 func TestPipelineOrchestrator_Start_Success(t *testing.T) {
@@ -165,6 +166,7 @@ func TestPipelineOrchestrator_Update_PipelineRunning(t *testing.T) {
 }
 
 func TestPipelineOrchestrator_Update_PipelineProvisionedByConfig(t *testing.T) {
+	is := is.New(t)
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
@@ -183,9 +185,9 @@ func TestPipelineOrchestrator_Update_PipelineProvisionedByConfig(t *testing.T) {
 		Return(plBefore, nil)
 
 	got, err := orc.Pipelines.Update(ctx, plBefore.ID, newConfig)
-	assert.Nil(t, got)
-	assert.Error(t, err)
-	assert.True(t, cerrors.Is(err, ErrImmutableProvisionedByConfig), "expected ErrImmutableProvisionedByConfig")
+	is.Equal(got, nil)
+	is.True(err != nil)
+	is.True(cerrors.Is(err, ErrImmutableProvisionedByConfig)) // expected ErrImmutableProvisionedByConfig
 }
 
 func TestPipelineOrchestrator_Delete_Success(t *testing.T) {
@@ -231,6 +233,7 @@ func TestPipelineOrchestrator_Delete_PipelineRunning(t *testing.T) {
 }
 
 func TestPipelineOrchestrator_Delete_PipelineProvisionedByConfig(t *testing.T) {
+	is := is.New(t)
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
@@ -247,8 +250,8 @@ func TestPipelineOrchestrator_Delete_PipelineProvisionedByConfig(t *testing.T) {
 		Return(plBefore, nil)
 
 	err := orc.Pipelines.Delete(ctx, plBefore.ID)
-	assert.Error(t, err)
-	assert.True(t, cerrors.Is(err, ErrImmutableProvisionedByConfig), "expected ErrImmutableProvisionedByConfig")
+	is.True(err != nil)
+	is.True(cerrors.Is(err, ErrImmutableProvisionedByConfig)) // expected ErrImmutableProvisionedByConfig
 }
 
 func TestPipelineOrchestrator_Delete_PipelineHasProcessorsAttached(t *testing.T) {

@@ -27,6 +27,7 @@ import (
 	"github.com/conduitio/conduit/pkg/pipeline"
 	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
+	"github.com/matryer/is"
 )
 
 func TestConnectorOrchestrator_Create_Success(t *testing.T) {
@@ -108,6 +109,7 @@ func TestConnectorOrchestrator_Create_PipelineRunning(t *testing.T) {
 }
 
 func TestConnectorOrchestrator_Create_PipelineProvisionByConfig(t *testing.T) {
+	is := is.New(t)
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
@@ -124,9 +126,9 @@ func TestConnectorOrchestrator_Create_PipelineProvisionByConfig(t *testing.T) {
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
 	got, err := orc.Connectors.Create(ctx, connector.TypeSource, connector.Config{PipelineID: pl.ID})
-	assert.Error(t, err)
-	assert.True(t, cerrors.Is(err, ErrImmutableProvisionedByConfig), "expected ErrImmutableProvisionedByConfig")
-	assert.Nil(t, got)
+	is.Equal(got, nil)
+	is.True(err != nil)
+	is.True(cerrors.Is(err, ErrImmutableProvisionedByConfig)) // expected ErrImmutableProvisionedByConfig
 }
 
 func TestConnectorOrchestrator_Create_CreateConnectorError(t *testing.T) {

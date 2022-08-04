@@ -28,6 +28,7 @@ import (
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
+	"github.com/matryer/is"
 )
 
 func TestProcessorOrchestrator_CreateOnPipeline_Success(t *testing.T) {
@@ -120,6 +121,7 @@ func TestProcessorOrchestrator_CreateOnPipeline_PipelineRunning(t *testing.T) {
 }
 
 func TestProcessorOrchestrator_CreateOnPipeline_PipelineProvisionedByConfig(t *testing.T) {
+	is := is.New(t)
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
@@ -139,9 +141,9 @@ func TestProcessorOrchestrator_CreateOnPipeline_PipelineProvisionedByConfig(t *t
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
 	got, err := orc.Processors.Create(ctx, "test-processor", parent, processor.Config{})
-	assert.Error(t, err)
-	assert.True(t, cerrors.Is(err, ErrImmutableProvisionedByConfig), "expected ErrImmutableProvisionedByConfig")
-	assert.Nil(t, got)
+	is.Equal(got, nil)
+	is.True(err != nil)
+	is.True(cerrors.Is(err, ErrImmutableProvisionedByConfig)) // expected ErrImmutableProvisionedByConfig
 }
 
 func TestProcessorOrchestrator_CreateOnPipeline_CreateProcessorError(t *testing.T) {
@@ -426,6 +428,7 @@ func TestProcessorOrchestrator_UpdateOnPipeline_PipelineRunning(t *testing.T) {
 }
 
 func TestProcessorOrchestrator_UpdateOnPipeline_ProcessorProvisionedByConfig(t *testing.T) {
+	is := is.New(t)
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
@@ -457,8 +460,9 @@ func TestProcessorOrchestrator_UpdateOnPipeline_ProcessorProvisionedByConfig(t *
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
 	got, err := orc.Processors.Update(ctx, before.ID, newConfig)
-	assert.True(t, cerrors.Is(err, ErrImmutableProvisionedByConfig), "expected ErrImmutableProvisionedByConfig")
-	assert.Nil(t, got)
+	is.Equal(got, nil)
+	is.True(err != nil)
+	is.True(cerrors.Is(err, ErrImmutableProvisionedByConfig)) // expected ErrImmutableProvisionedByConfig
 }
 
 func TestProcessorOrchestrator_UpdateOnPipeline_UpdateFail(t *testing.T) {

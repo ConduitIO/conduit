@@ -37,8 +37,6 @@ const (
 type (
 	// Type defines the connector type.
 	Type int
-	// Status defines the running status of a connector.
-	Status int
 	// ProvisionType defines provisioning type
 	ProvisionType int
 )
@@ -51,7 +49,6 @@ type Connector interface {
 	SetConfig(Config)
 
 	ProvisionedBy() ProvisionType
-	SetProvisionedBy(ProvisionType)
 
 	CreatedAt() time.Time
 	UpdatedAt() time.Time
