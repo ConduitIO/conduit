@@ -6,12 +6,12 @@ require (
 	github.com/NYTimes/gziphandler v1.1.1
 	github.com/antchfx/jsonquery v1.3.0
 	github.com/bufbuild/buf v1.7.0
-	github.com/conduitio/conduit-connector-file v0.1.0
-	github.com/conduitio/conduit-connector-generator v0.1.1
-	github.com/conduitio/conduit-connector-kafka v0.1.1
-	github.com/conduitio/conduit-connector-postgres v0.1.0
+	github.com/conduitio/conduit-connector-file v0.1.1-0.20220805112349-e429b45a097c
+	github.com/conduitio/conduit-connector-generator v0.1.2-0.20220805112407-38ed3653c06f
+	github.com/conduitio/conduit-connector-kafka v0.1.2-0.20220805112354-ed28a67e55ea
+	github.com/conduitio/conduit-connector-postgres v0.1.1-0.20220805112359-d35314b63aec
 	github.com/conduitio/conduit-connector-protocol v0.2.1-0.20220802135043-4b89a6c94401
-	github.com/conduitio/conduit-connector-s3 v0.1.1
+	github.com/conduitio/conduit-connector-s3 v0.1.2-0.20220805112403-1955858b7a7c
 	github.com/conduitio/conduit-connector-sdk v0.2.1-0.20220803121801-c861a0fb207c
 	github.com/dgraph-io/badger/v3 v3.2103.2
 	github.com/dop251/goja v0.0.0-20210225094849-f3cfc97811c0
