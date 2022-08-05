@@ -75,15 +75,14 @@ func TestJSProcessor_Process(t *testing.T) {
 		wantErr error
 	}{
 		{
-			// todo Once https://github.com/ConduitIO/conduit/issues/468 is implemented
-			// write more tests which validate processors on structured records
-			name: "change non-payload fields of structured record",
+			name: "change fields of structured record",
 			fields: fields{
 				src: `
 				function process(record) {
 					record.Position = "3";
 					record.Metadata["returned"] = "JS";
 					record.Key.Raw = "baz";
+					record.Payload.After["ccc"] = "baz";
 					return record;
 				}`,
 			},
@@ -113,8 +112,46 @@ func TestJSProcessor_Process(t *testing.T) {
 						map[string]interface{}{
 							"aaa": 111,
 							"bbb": []string{"foo", "bar"},
+							"ccc": "baz",
 						},
 					),
+				},
+			},
+			wantErr: nil,
+		},
+		{
+			name: "complete change incoming record with structured data",
+			fields: fields{
+				src: `
+				function process(record) {
+					record.Position = "3";
+					record.Metadata["returned"] = "JS";
+					record.Key.Raw = "baz";
+					record.Payload.After = new StructuredData();
+					record.Payload.After["foo"] = "bar";
+					return record;
+				}`,
+			},
+			args: args{
+				record: record.Record{
+					Position: []byte("2"),
+					Metadata: record.Metadata{"existing": "val"},
+					Key:      record.RawData{Raw: []byte("bar")},
+					Payload: record.Change{
+						Before: nil,
+						After:  record.RawData{Raw: []byte("foo")},
+					},
+				},
+			},
+			want: record.Record{
+				Position: []byte("3"),
+				Metadata: record.Metadata{"existing": "val", "returned": "JS"},
+				Key:      record.RawData{Raw: []byte("baz")},
+				Payload: record.Change{
+					Before: nil,
+					After: record.StructuredData{
+						"foo": "bar",
+					},
 				},
 			},
 			wantErr: nil,

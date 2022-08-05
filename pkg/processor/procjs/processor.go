@@ -66,9 +66,10 @@ func New(src string, logger zerolog.Logger) (*Processor, error) {
 func (p *Processor) initJSRuntime(logger zerolog.Logger) error {
 	rt := goja.New()
 	runtimeHelpers := map[string]interface{}{
-		"logger":  &logger,
-		"Record":  p.jsRecord,
-		"RawData": p.jsContentRaw,
+		"logger":         &logger,
+		"Record":         p.jsRecord,
+		"RawData":        p.jsContentRaw,
+		"StructuredData": p.jsContentStructured,
 	}
 
 	for name, helper := range runtimeHelpers {
@@ -104,7 +105,7 @@ func (p *Processor) initFunction(src string) error {
 
 func (p *Processor) jsRecord(goja.ConstructorCall) *goja.Object {
 	// TODO accept arguments
-	// We return a record.Record struct, however because we are
+	// We return a jsRecord struct, however because we are
 	// not changing call.This instanceof will not work as expected.
 
 	r := jsRecord{
@@ -122,6 +123,15 @@ func (p *Processor) jsContentRaw(goja.ConstructorCall) *goja.Object {
 	r := record.RawData{}
 	// We need to return a pointer to make the returned object mutable.
 	return p.runtime.ToValue(&r).ToObject(p.runtime)
+}
+
+func (p *Processor) jsContentStructured(goja.ConstructorCall) *goja.Object {
+	// TODO accept arguments
+	// We return a map[string]interface{} struct, however because we are
+	// not changing call.This instanceof will not work as expected.
+
+	r := make(map[string]interface{})
+	return p.runtime.ToValue(r).ToObject(p.runtime)
 }
 
 func (p *Processor) Process(_ context.Context, in record.Record) (record.Record, error) {
