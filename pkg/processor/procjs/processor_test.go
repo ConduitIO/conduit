@@ -80,6 +80,7 @@ func TestJSProcessor_Process(t *testing.T) {
 				src: `
 				function process(record) {
 					record.Position = "3";
+					record.Operation = "update";
 					record.Metadata["returned"] = "JS";
 					record.Key.Raw = "baz";
 					record.Payload.After["ccc"] = "baz";
@@ -88,9 +89,10 @@ func TestJSProcessor_Process(t *testing.T) {
 			},
 			args: args{
 				record: record.Record{
-					Position: []byte("2"),
-					Metadata: record.Metadata{"existing": "val"},
-					Key:      record.RawData{Raw: []byte("bar")},
+					Position:  []byte("2"),
+					Operation: record.OperationCreate,
+					Metadata:  record.Metadata{"existing": "val"},
+					Key:       record.RawData{Raw: []byte("bar")},
 					Payload: record.Change{
 						Before: nil,
 						After: record.StructuredData(
@@ -103,9 +105,10 @@ func TestJSProcessor_Process(t *testing.T) {
 				},
 			},
 			want: record.Record{
-				Position: []byte("3"),
-				Metadata: record.Metadata{"existing": "val", "returned": "JS"},
-				Key:      record.RawData{Raw: []byte("baz")},
+				Position:  []byte("3"),
+				Operation: record.OperationUpdate,
+				Metadata:  record.Metadata{"existing": "val", "returned": "JS"},
+				Key:       record.RawData{Raw: []byte("baz")},
 				Payload: record.Change{
 					Before: nil,
 					After: record.StructuredData(

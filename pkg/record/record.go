@@ -12,13 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:generate stringer -type=Operation -trimprefix Operation
+//go:generate stringer -type=Operation -linecomment
 
 package record
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -26,17 +28,44 @@ import (
 )
 
 const (
-	OperationCreate Operation = iota + 1
-	OperationUpdate
-	OperationDelete
-	OperationSnapshot
+	OperationCreate   Operation = iota + 1 // create
+	OperationUpdate                        // update
+	OperationDelete                        // delete
+	OperationSnapshot                      // snapshot
 )
 
 // Operation defines what triggered the creation of a record.
 type Operation int
 
-func (i Operation) MarshalJSON() ([]byte, error) {
-	return []byte("\"" + strings.ToLower(i.String()) + "\""), nil
+func (i Operation) MarshalText() ([]byte, error) {
+	return []byte(i.String()), nil
+}
+
+func (i *Operation) UnmarshalText(b []byte) error {
+	if len(b) == 0 {
+		return nil // empty string, do nothing
+	}
+
+	switch string(b) {
+	case OperationCreate.String():
+		*i = OperationCreate
+	case OperationUpdate.String():
+		*i = OperationUpdate
+	case OperationDelete.String():
+		*i = OperationDelete
+	case OperationSnapshot.String():
+		*i = OperationSnapshot
+	default:
+		// it's not a known operation, but we also allow Operation(int)
+		valIntRaw := strings.TrimSuffix(strings.TrimPrefix(string(b), "Operation("), ")")
+		valInt, err := strconv.Atoi(valIntRaw)
+		if err != nil {
+			return cerrors.Errorf("unknown operation %q", b)
+		}
+		*i = Operation(valInt)
+	}
+
+	return nil
 }
 
 // Record represents a single data record produced by a source and/or consumed
@@ -52,7 +81,7 @@ type Record struct {
 	// after the change, or both (see field Payload).
 	Operation Operation `json:"operation"`
 	// Metadata contains additional information regarding the record.
-	Metadata Metadata
+	Metadata Metadata `json:"metadata"`
 
 	// Key represents a value that should identify the entity (e.g. database
 	// row).
@@ -123,8 +152,8 @@ type Data interface {
 // values.
 type StructuredData map[string]interface{}
 
-func (c StructuredData) Bytes() []byte {
-	b, err := json.Marshal(c)
+func (d StructuredData) Bytes() []byte {
+	b, err := json.Marshal(d)
 	if err != nil {
 		// Unlikely to happen, we receive content from a plugin through GRPC.
 		// If the content could be marshaled as protobuf it can be as JSON.
@@ -139,6 +168,16 @@ type RawData struct {
 	Schema schema.Schema
 }
 
-func (c RawData) Bytes() []byte {
-	return c.Raw
+func (d RawData) MarshalText() ([]byte, error) {
+	buf := make([]byte, base64.StdEncoding.EncodedLen(len(d.Raw)))
+	base64.StdEncoding.Encode(buf, d.Raw)
+	return buf, nil
+}
+
+func (d *RawData) UnmarshalText() ([]byte, error) {
+	return d.Raw, nil
+}
+
+func (d RawData) Bytes() []byte {
+	return d.Raw
 }

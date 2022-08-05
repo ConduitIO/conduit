@@ -193,6 +193,12 @@ func (p *Processor) toInternalRecord(v goja.Value) (record.Record, error) {
 		return record.Record{}, cerrors.Errorf("js function expected to return %T, but returned: %T", &jsRecord{}, v)
 	}
 
+	var op record.Operation
+	err := op.UnmarshalText([]byte(jsr.Operation))
+	if err != nil {
+		return record.Record{}, cerrors.Errorf("could not unmarshal operation: %q", err)
+	}
+
 	extractData := func(d interface{}) record.Data {
 		switch v := d.(type) {
 		case *record.RawData:
@@ -202,23 +208,10 @@ func (p *Processor) toInternalRecord(v goja.Value) (record.Record, error) {
 		}
 		return nil
 	}
-	extractOperation := func(op string) record.Operation {
-		switch op {
-		case record.OperationCreate.String():
-			return record.OperationCreate
-		case record.OperationUpdate.String():
-			return record.OperationUpdate
-		case record.OperationDelete.String():
-			return record.OperationDelete
-		case record.OperationSnapshot.String():
-			return record.OperationSnapshot
-		}
-		return 0
-	}
 
 	return record.Record{
 		Position:  jsr.Position,
-		Operation: extractOperation(jsr.Operation),
+		Operation: op,
 		Metadata:  jsr.Metadata,
 		Key:       extractData(jsr.Key),
 		Payload: record.Change{
