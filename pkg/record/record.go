@@ -19,6 +19,7 @@ package record
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/record/schema"
@@ -33,6 +34,10 @@ const (
 
 // Operation defines what triggered the creation of a record.
 type Operation int
+
+func (i Operation) MarshalJSON() ([]byte, error) {
+	return []byte("\"" + strings.ToLower(i.String()) + "\""), nil
+}
 
 // Record represents a single data record produced by a source and/or consumed
 // by a destination connector.
