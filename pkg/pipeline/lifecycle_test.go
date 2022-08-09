@@ -45,7 +45,7 @@ func TestServiceLifecycle_PipelineSuccess(t *testing.T) {
 	ps := NewService(logger, db)
 
 	// create a host pipeline
-	pl, err := ps.Create(ctx, uuid.NewString(), Config{Name: "test pipeline"})
+	pl, err := ps.Create(ctx, uuid.NewString(), Config{Name: "test pipeline"}, ProvisionTypeAPI)
 	assert.Ok(t, err)
 
 	// create mocked connectors
@@ -84,7 +84,7 @@ func TestServiceLifecycle_PipelineError(t *testing.T) {
 	ps := NewService(logger, db)
 
 	// create a host pipeline
-	pl, err := ps.Create(ctx, uuid.NewString(), Config{Name: "test pipeline"})
+	pl, err := ps.Create(ctx, uuid.NewString(), Config{Name: "test pipeline"}, ProvisionTypeAPI)
 	assert.Ok(t, err)
 
 	// create mocked connectors
@@ -136,7 +136,7 @@ func TestServiceLifecycle_PipelineStop(t *testing.T) {
 	ps := NewService(logger, db)
 
 	// create a host pipeline
-	pl, err := ps.Create(ctx, uuid.NewString(), Config{Name: "test pipeline"})
+	pl, err := ps.Create(ctx, uuid.NewString(), Config{Name: "test pipeline"}, ProvisionTypeAPI)
 	assert.Ok(t, err)
 
 	// create mocked connectors

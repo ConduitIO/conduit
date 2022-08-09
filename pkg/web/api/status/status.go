@@ -96,6 +96,8 @@ func codeFromError(err error) codes.Code {
 		return codes.FailedPrecondition
 	case cerrors.Is(err, orchestrator.ErrConnectorHasProcessorsAttached):
 		return codes.FailedPrecondition
+	case cerrors.Is(err, orchestrator.ErrImmutableProvisionedByConfig):
+		return codes.FailedPrecondition
 	default:
 		return codes.Internal
 	}

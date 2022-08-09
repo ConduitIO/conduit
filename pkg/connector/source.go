@@ -29,9 +29,10 @@ type source struct {
 	// exported fields are persisted in the store but must not collide with
 	// interface methods, so they are prefixed with X
 
-	XID     string
-	XConfig Config
-	XState  SourceState
+	XID            string
+	XConfig        Config
+	XState         SourceState
+	XProvisionedBy ProvisionType
 	// timestamps
 	XCreatedAt time.Time
 	XUpdatedAt time.Time
@@ -77,6 +78,10 @@ func (s *source) Config() Config {
 
 func (s *source) SetConfig(c Config) {
 	s.XConfig = c
+}
+
+func (s *source) ProvisionedBy() ProvisionType {
+	return s.XProvisionedBy
 }
 
 func (s *source) CreatedAt() time.Time {

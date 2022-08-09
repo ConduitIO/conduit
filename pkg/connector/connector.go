@@ -29,11 +29,16 @@ const (
 	TypeDestination
 )
 
+const (
+	ProvisionTypeAPI ProvisionType = iota
+	ProvisionTypeConfig
+)
+
 type (
 	// Type defines the connector type.
 	Type int
-	// Status defines the running status of a connector.
-	Status int
+	// ProvisionType defines provisioning type
+	ProvisionType int
 )
 
 type Connector interface {
@@ -42,6 +47,8 @@ type Connector interface {
 
 	Config() Config
 	SetConfig(Config)
+
+	ProvisionedBy() ProvisionType
 
 	CreatedAt() time.Time
 	UpdatedAt() time.Time
