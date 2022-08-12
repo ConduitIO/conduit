@@ -154,7 +154,7 @@ func (p *Processor) Process(_ context.Context, in record.Record) (record.Record,
 }
 
 func (p *Processor) toJSRecord(r record.Record) goja.Value {
-	extractData := func(d record.Data) interface{} {
+	convertData := func(d record.Data) interface{} {
 		switch v := d.(type) {
 		case record.RawData:
 			return &v
@@ -168,13 +168,13 @@ func (p *Processor) toJSRecord(r record.Record) goja.Value {
 		Position:  r.Position,
 		Operation: r.Operation.String(),
 		Metadata:  r.Metadata,
-		Key:       extractData(r.Key),
+		Key:       convertData(r.Key),
 		Payload: struct {
 			Before interface{}
 			After  interface{}
 		}{
-			Before: extractData(r.Payload.Before),
-			After:  extractData(r.Payload.After),
+			Before: convertData(r.Payload.Before),
+			After:  convertData(r.Payload.After),
 		},
 	}
 
@@ -196,10 +196,10 @@ func (p *Processor) toInternalRecord(v goja.Value) (record.Record, error) {
 	var op record.Operation
 	err := op.UnmarshalText([]byte(jsr.Operation))
 	if err != nil {
-		return record.Record{}, cerrors.Errorf("could not unmarshal operation: %q", err)
+		return record.Record{}, cerrors.Errorf("could not unmarshal operation: %w", err)
 	}
 
-	extractData := func(d interface{}) record.Data {
+	convertData := func(d interface{}) record.Data {
 		switch v := d.(type) {
 		case *record.RawData:
 			return *v
@@ -213,10 +213,10 @@ func (p *Processor) toInternalRecord(v goja.Value) (record.Record, error) {
 		Position:  jsr.Position,
 		Operation: op,
 		Metadata:  jsr.Metadata,
-		Key:       extractData(jsr.Key),
+		Key:       convertData(jsr.Key),
 		Payload: record.Change{
-			Before: extractData(jsr.Payload.Before),
-			After:  extractData(jsr.Payload.After),
+			Before: convertData(jsr.Payload.Before),
+			After:  convertData(jsr.Payload.After),
 		},
 	}, nil
 }
