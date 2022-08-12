@@ -88,26 +88,26 @@ func Example_simpleStream() {
 	}
 
 	// Output:
-	// DBG got record message_id=p/generator-1 node_id=printer
-	// DBG received ack message_id=p/generator-1 node_id=generator
-	// DBG got record message_id=p/generator-2 node_id=printer
-	// DBG received ack message_id=p/generator-2 node_id=generator
-	// DBG got record message_id=p/generator-3 node_id=printer
-	// DBG received ack message_id=p/generator-3 node_id=generator
-	// DBG got record message_id=p/generator-4 node_id=printer
-	// DBG received ack message_id=p/generator-4 node_id=generator
-	// DBG got record message_id=p/generator-5 node_id=printer
-	// DBG received ack message_id=p/generator-5 node_id=generator
-	// DBG got record message_id=p/generator-6 node_id=printer
-	// DBG received ack message_id=p/generator-6 node_id=generator
-	// DBG got record message_id=p/generator-7 node_id=printer
-	// DBG received ack message_id=p/generator-7 node_id=generator
-	// DBG got record message_id=p/generator-8 node_id=printer
-	// DBG received ack message_id=p/generator-8 node_id=generator
-	// DBG got record message_id=p/generator-9 node_id=printer
-	// DBG received ack message_id=p/generator-9 node_id=generator
-	// DBG got record message_id=p/generator-10 node_id=printer
-	// DBG received ack message_id=p/generator-10 node_id=generator
+	// DBG got record message_id=generator/1 node_id=printer
+	// DBG received ack message_id=generator/1 node_id=generator
+	// DBG got record message_id=generator/2 node_id=printer
+	// DBG received ack message_id=generator/2 node_id=generator
+	// DBG got record message_id=generator/3 node_id=printer
+	// DBG received ack message_id=generator/3 node_id=generator
+	// DBG got record message_id=generator/4 node_id=printer
+	// DBG received ack message_id=generator/4 node_id=generator
+	// DBG got record message_id=generator/5 node_id=printer
+	// DBG received ack message_id=generator/5 node_id=generator
+	// DBG got record message_id=generator/6 node_id=printer
+	// DBG received ack message_id=generator/6 node_id=generator
+	// DBG got record message_id=generator/7 node_id=printer
+	// DBG received ack message_id=generator/7 node_id=generator
+	// DBG got record message_id=generator/8 node_id=printer
+	// DBG received ack message_id=generator/8 node_id=generator
+	// DBG got record message_id=generator/9 node_id=printer
+	// DBG received ack message_id=generator/9 node_id=generator
+	// DBG got record message_id=generator/10 node_id=printer
+	// DBG received ack message_id=generator/10 node_id=generator
 	// INF stopping source connector component=SourceNode node_id=generator
 	// DBG incoming messages channel closed component=SourceAckerNode node_id=generator-acker
 	// DBG incoming messages channel closed component=DestinationNode node_id=printer
@@ -215,66 +215,66 @@ func Example_complexStream() {
 	}
 
 	// Unordered output:
-	// DBG got record message_id=p/generator2-1 node_id=printer2
-	// DBG got record message_id=p/generator2-1 node_id=printer1
-	// DBG received ack message_id=p/generator2-1 node_id=generator2
-	// DBG got record message_id=p/generator1-1 node_id=printer1
-	// DBG got record message_id=p/generator1-1 node_id=printer2
-	// DBG received ack message_id=p/generator1-1 node_id=generator1
-	// DBG got record message_id=p/generator2-2 node_id=printer2
-	// DBG got record message_id=p/generator2-2 node_id=printer1
-	// DBG received ack message_id=p/generator2-2 node_id=generator2
-	// DBG got record message_id=p/generator1-2 node_id=printer1
-	// DBG got record message_id=p/generator1-2 node_id=printer2
-	// DBG received ack message_id=p/generator1-2 node_id=generator1
-	// DBG got record message_id=p/generator2-3 node_id=printer2
-	// DBG got record message_id=p/generator2-3 node_id=printer1
-	// DBG received ack message_id=p/generator2-3 node_id=generator2
-	// DBG got record message_id=p/generator1-3 node_id=printer1
-	// DBG got record message_id=p/generator1-3 node_id=printer2
-	// DBG received ack message_id=p/generator1-3 node_id=generator1
-	// DBG got record message_id=p/generator2-4 node_id=printer2
-	// DBG got record message_id=p/generator2-4 node_id=printer1
-	// DBG received ack message_id=p/generator2-4 node_id=generator2
-	// DBG got record message_id=p/generator1-4 node_id=printer2
-	// DBG got record message_id=p/generator1-4 node_id=printer1
-	// DBG received ack message_id=p/generator1-4 node_id=generator1
-	// DBG got record message_id=p/generator2-5 node_id=printer2
-	// DBG got record message_id=p/generator2-5 node_id=printer1
-	// DBG received ack message_id=p/generator2-5 node_id=generator2
-	// DBG got record message_id=p/generator1-5 node_id=printer1
-	// DBG got record message_id=p/generator1-5 node_id=printer2
-	// DBG received ack message_id=p/generator1-5 node_id=generator1
-	// DBG got record message_id=p/generator2-6 node_id=printer2
-	// DBG got record message_id=p/generator2-6 node_id=printer1
-	// DBG received ack message_id=p/generator2-6 node_id=generator2
-	// DBG got record message_id=p/generator1-6 node_id=printer1
-	// DBG got record message_id=p/generator1-6 node_id=printer2
-	// DBG received ack message_id=p/generator1-6 node_id=generator1
-	// DBG got record message_id=p/generator2-7 node_id=printer2
-	// DBG got record message_id=p/generator2-7 node_id=printer1
-	// DBG received ack message_id=p/generator2-7 node_id=generator2
-	// DBG got record message_id=p/generator1-7 node_id=printer1
-	// DBG got record message_id=p/generator1-7 node_id=printer2
-	// DBG received ack message_id=p/generator1-7 node_id=generator1
-	// DBG got record message_id=p/generator2-8 node_id=printer2
-	// DBG got record message_id=p/generator2-8 node_id=printer1
-	// DBG received ack message_id=p/generator2-8 node_id=generator2
-	// DBG got record message_id=p/generator1-8 node_id=printer1
-	// DBG got record message_id=p/generator1-8 node_id=printer2
-	// DBG received ack message_id=p/generator1-8 node_id=generator1
-	// DBG got record message_id=p/generator2-9 node_id=printer1
-	// DBG got record message_id=p/generator2-9 node_id=printer2
-	// DBG received ack message_id=p/generator2-9 node_id=generator2
-	// DBG got record message_id=p/generator1-9 node_id=printer2
-	// DBG got record message_id=p/generator1-9 node_id=printer1
-	// DBG received ack message_id=p/generator1-9 node_id=generator1
-	// DBG got record message_id=p/generator2-10 node_id=printer1
-	// DBG got record message_id=p/generator2-10 node_id=printer2
-	// DBG received ack message_id=p/generator2-10 node_id=generator2
-	// DBG got record message_id=p/generator1-10 node_id=printer2
-	// DBG got record message_id=p/generator1-10 node_id=printer1
-	// DBG received ack message_id=p/generator1-10 node_id=generator1
+	// DBG got record message_id=generator2/1 node_id=printer2
+	// DBG got record message_id=generator2/1 node_id=printer1
+	// DBG received ack message_id=generator2/1 node_id=generator2
+	// DBG got record message_id=generator1/1 node_id=printer1
+	// DBG got record message_id=generator1/1 node_id=printer2
+	// DBG received ack message_id=generator1/1 node_id=generator1
+	// DBG got record message_id=generator2/2 node_id=printer2
+	// DBG got record message_id=generator2/2 node_id=printer1
+	// DBG received ack message_id=generator2/2 node_id=generator2
+	// DBG got record message_id=generator1/2 node_id=printer1
+	// DBG got record message_id=generator1/2 node_id=printer2
+	// DBG received ack message_id=generator1/2 node_id=generator1
+	// DBG got record message_id=generator2/3 node_id=printer2
+	// DBG got record message_id=generator2/3 node_id=printer1
+	// DBG received ack message_id=generator2/3 node_id=generator2
+	// DBG got record message_id=generator1/3 node_id=printer1
+	// DBG got record message_id=generator1/3 node_id=printer2
+	// DBG received ack message_id=generator1/3 node_id=generator1
+	// DBG got record message_id=generator2/4 node_id=printer2
+	// DBG got record message_id=generator2/4 node_id=printer1
+	// DBG received ack message_id=generator2/4 node_id=generator2
+	// DBG got record message_id=generator1/4 node_id=printer2
+	// DBG got record message_id=generator1/4 node_id=printer1
+	// DBG received ack message_id=generator1/4 node_id=generator1
+	// DBG got record message_id=generator2/5 node_id=printer2
+	// DBG got record message_id=generator2/5 node_id=printer1
+	// DBG received ack message_id=generator2/5 node_id=generator2
+	// DBG got record message_id=generator1/5 node_id=printer1
+	// DBG got record message_id=generator1/5 node_id=printer2
+	// DBG received ack message_id=generator1/5 node_id=generator1
+	// DBG got record message_id=generator2/6 node_id=printer2
+	// DBG got record message_id=generator2/6 node_id=printer1
+	// DBG received ack message_id=generator2/6 node_id=generator2
+	// DBG got record message_id=generator1/6 node_id=printer1
+	// DBG got record message_id=generator1/6 node_id=printer2
+	// DBG received ack message_id=generator1/6 node_id=generator1
+	// DBG got record message_id=generator2/7 node_id=printer2
+	// DBG got record message_id=generator2/7 node_id=printer1
+	// DBG received ack message_id=generator2/7 node_id=generator2
+	// DBG got record message_id=generator1/7 node_id=printer1
+	// DBG got record message_id=generator1/7 node_id=printer2
+	// DBG received ack message_id=generator1/7 node_id=generator1
+	// DBG got record message_id=generator2/8 node_id=printer2
+	// DBG got record message_id=generator2/8 node_id=printer1
+	// DBG received ack message_id=generator2/8 node_id=generator2
+	// DBG got record message_id=generator1/8 node_id=printer1
+	// DBG got record message_id=generator1/8 node_id=printer2
+	// DBG received ack message_id=generator1/8 node_id=generator1
+	// DBG got record message_id=generator2/9 node_id=printer1
+	// DBG got record message_id=generator2/9 node_id=printer2
+	// DBG received ack message_id=generator2/9 node_id=generator2
+	// DBG got record message_id=generator1/9 node_id=printer2
+	// DBG got record message_id=generator1/9 node_id=printer1
+	// DBG received ack message_id=generator1/9 node_id=generator1
+	// DBG got record message_id=generator2/10 node_id=printer1
+	// DBG got record message_id=generator2/10 node_id=printer2
+	// DBG received ack message_id=generator2/10 node_id=generator2
+	// DBG got record message_id=generator1/10 node_id=printer2
+	// DBG got record message_id=generator1/10 node_id=printer1
+	// DBG received ack message_id=generator1/10 node_id=generator1
 	// INF stopping source connector component=SourceNode node_id=generator1
 	// INF stopping source connector component=SourceNode node_id=generator2
 	// DBG incoming messages channel closed component=SourceAckerNode node_id=generator1-acker
@@ -306,6 +306,7 @@ func generatorSource(ctrl *gomock.Controller, logger log.CtxLogger, nodeID strin
 
 	stop := make(chan struct{})
 	source := connmock.NewSource(ctrl)
+	source.EXPECT().ID().Return(nodeID).AnyTimes()
 	source.EXPECT().Open(gomock.Any()).Return(nil).Times(1)
 	source.EXPECT().Teardown(gomock.Any()).Return(nil).Times(1)
 	source.EXPECT().Ack(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, p record.Position) error {
@@ -323,16 +324,12 @@ func generatorSource(ctrl *gomock.Controller, logger log.CtxLogger, nodeID strin
 
 		position++
 		return record.Record{
-			// SourceID would normally be the source node ID, but since we need
-			// to add the node ID to the position to create unique positions we
-			// just use "p" here to create a nicer test output
-			SourceID: "p",
-			Position: record.Position(nodeID + "-" + strconv.Itoa(position)),
+			Position: record.Position(strconv.Itoa(position)),
 		}, nil
 	}).MinTimes(recordCount + 1)
 	source.EXPECT().Stop(gomock.Any()).DoAndReturn(func(context.Context) (record.Position, error) {
 		close(stop)
-		return record.Position(nodeID + "-" + strconv.Itoa(position)), nil
+		return record.Position(strconv.Itoa(position)), nil
 	})
 	source.EXPECT().Errors().Return(make(chan error))
 

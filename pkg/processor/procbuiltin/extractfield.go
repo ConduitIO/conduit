@@ -45,12 +45,8 @@ func ExtractFieldKey(config processor.Config) (processor.Interface, error) {
 	return extractField(extractFieldKeyName, recordKeyGetSetter{}, config)
 }
 
-// ExtractFieldPayload builds the following processor:
-//  * If the payload is raw and has a schema attached, extract the field and use
-//    it to replace the entire payload.
-//  * If the payload is raw and has no schema, return an error (not supported).
-//  * If the payload is structured, extract the field and use it to replace the
-//    entire payload.
+// ExtractFieldPayload builds the same processor as ExtractFieldKey, except that
+// it operates on the field Record.Payload.After.
 func ExtractFieldPayload(config processor.Config) (processor.Interface, error) {
 	return extractField(extractFieldPayloadName, recordPayloadGetSetter{}, config)
 }

@@ -232,14 +232,16 @@ func (s *source) Read(ctx context.Context) (record.Record, error) {
 		return r, err
 	}
 
+	// TODO rethink if there's an actual benefit in setting these fields
 	if r.Key == nil {
 		r.Key = record.RawData{}
 	}
-	if r.Payload == nil {
-		r.Payload = record.RawData{}
+	if r.Payload.Before == nil {
+		r.Payload.Before = record.RawData{}
 	}
-	r.ReadAt = time.Now().UTC() // TODO now that records can be read asynchronously, should we move this to the plugin SDK?
-	r.SourceID = s.ID()
+	if r.Payload.After == nil {
+		r.Payload.After = record.RawData{}
+	}
 
 	return r, nil
 }

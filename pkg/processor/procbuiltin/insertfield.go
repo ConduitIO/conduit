@@ -26,10 +26,9 @@ const (
 	insertFieldKeyName     = "insertfieldkey"
 	insertFieldPayloadName = "insertfieldpayload"
 
-	insertFieldConfigStaticField    = "static.field"
-	insertFieldConfigStaticValue    = "static.value"
-	insertFieldConfigTimestampField = "timestamp.field"
-	insertFieldConfigPositionField  = "position.field"
+	insertFieldConfigStaticField   = "static.field"
+	insertFieldConfigStaticValue   = "static.value"
+	insertFieldConfigPositionField = "position.field"
 )
 
 func init() {
@@ -46,11 +45,8 @@ func InsertFieldKey(config processor.Config) (processor.Interface, error) {
 	return insertField(insertFieldKeyName, recordKeyGetSetter{}, config)
 }
 
-// InsertFieldPayload builds the following processor:
-//  * If the payload is raw and has a schema attached, insert the field(s) in
-//    the payload data.
-//  * If the payload is raw and has no schema, return an error (not supported).
-//  * If the payload is structured, set the field(s) in the payload data.
+// InsertFieldPayload builds the same processor as InsertFieldKey, except that
+// it operates on the field Record.Payload.After.
 func InsertFieldPayload(config processor.Config) (processor.Interface, error) {
 	return insertField(insertFieldPayloadName, recordPayloadGetSetter{}, config)
 }
@@ -65,11 +61,9 @@ func insertField(
 
 		staticFieldName  string
 		staticFieldValue string
-		timestampField   string
 		positionField    string
 	)
 
-	timestampField = config.Settings[insertFieldConfigTimestampField]
 	positionField = config.Settings[insertFieldConfigPositionField]
 	staticFieldName, ok := config.Settings[insertFieldConfigStaticField]
 	if ok {
@@ -77,7 +71,7 @@ func insertField(
 			return nil, cerrors.Errorf("%s: %w", processorName, err)
 		}
 	}
-	if staticFieldName == "" && timestampField == "" && positionField == "" {
+	if staticFieldName == "" && positionField == "" {
 		return nil, cerrors.Errorf("%s: no fields configured to be inserted", processorName)
 	}
 
@@ -94,9 +88,6 @@ func insertField(
 			// TODO add support for nested fields
 			if staticFieldName != "" {
 				d[staticFieldName] = staticFieldValue
-			}
-			if timestampField != "" {
-				d[timestampField] = r.CreatedAt
 			}
 			if positionField != "" {
 				d[positionField] = r.Position

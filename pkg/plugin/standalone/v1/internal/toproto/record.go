@@ -15,42 +15,70 @@
 package toproto
 
 import (
+	"fmt"
+
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/record"
-	connectorv1 "go.buf.build/library/go-grpc/conduitio/conduit-connector-protocol/connector/v1"
+	opencdcv1 "go.buf.build/grpc/go/conduitio/conduit-connector-protocol/opencdc/v1"
 	"google.golang.org/protobuf/types/known/structpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func Record(in record.Record) (*connectorv1.Record, error) {
+func _() {
+	// An "invalid array index" compiler error signifies that the constant values have changed.
+	var cTypes [1]struct{}
+	_ = cTypes[int(record.OperationCreate)-int(opencdcv1.Operation_OPERATION_CREATE)]
+	_ = cTypes[int(record.OperationUpdate)-int(opencdcv1.Operation_OPERATION_UPDATE)]
+	_ = cTypes[int(record.OperationDelete)-int(opencdcv1.Operation_OPERATION_DELETE)]
+	_ = cTypes[int(record.OperationSnapshot)-int(opencdcv1.Operation_OPERATION_SNAPSHOT)]
+}
+
+func Record(in record.Record) (*opencdcv1.Record, error) {
 	key, err := Data(in.Key)
 	if err != nil {
 		return nil, err
 	}
-	payload, err := Data(in.Payload)
+	payload, err := Change(in.Payload)
 	if err != nil {
 		return nil, err
 	}
 
-	out := &connectorv1.Record{
+	out := &opencdcv1.Record{
 		Position:  in.Position,
+		Operation: opencdcv1.Operation(in.Operation),
 		Metadata:  in.Metadata,
-		CreatedAt: timestamppb.New(in.CreatedAt),
 		Key:       key,
 		Payload:   payload,
 	}
 	return out, nil
 }
 
-func Data(in record.Data) (*connectorv1.Data, error) {
+func Change(in record.Change) (*opencdcv1.Change, error) {
+	before, err := Data(in.Before)
+	if err != nil {
+		return nil, fmt.Errorf("error converting before: %w", err)
+	}
+
+	after, err := Data(in.After)
+	if err != nil {
+		return nil, fmt.Errorf("error converting after: %w", err)
+	}
+
+	out := opencdcv1.Change{
+		Before: before,
+		After:  after,
+	}
+	return &out, nil
+}
+
+func Data(in record.Data) (*opencdcv1.Data, error) {
 	if in == nil {
 		return nil, nil
 	}
 
 	switch v := in.(type) {
 	case record.RawData:
-		return &connectorv1.Data{
-			Data: &connectorv1.Data_RawData{
+		return &opencdcv1.Data{
+			Data: &opencdcv1.Data_RawData{
 				RawData: v.Raw,
 			},
 		}, nil
@@ -59,8 +87,8 @@ func Data(in record.Data) (*connectorv1.Data, error) {
 		if err != nil {
 			return nil, err
 		}
-		return &connectorv1.Data{
-			Data: &connectorv1.Data_StructuredData{
+		return &opencdcv1.Data{
+			Data: &opencdcv1.Data_StructuredData{
 				StructuredData: data,
 			},
 		}, nil

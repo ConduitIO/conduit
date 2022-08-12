@@ -15,31 +15,56 @@
 package fromplugin
 
 import (
-	"time"
+	"fmt"
 
 	"github.com/conduitio/conduit-connector-protocol/cpluginv1"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/record"
 )
 
+func _() {
+	// An "invalid array index" compiler error signifies that the constant values have changed.
+	var cTypes [1]struct{}
+	_ = cTypes[int(record.OperationCreate)-int(cpluginv1.OperationCreate)]
+	_ = cTypes[int(record.OperationUpdate)-int(cpluginv1.OperationUpdate)]
+	_ = cTypes[int(record.OperationDelete)-int(cpluginv1.OperationDelete)]
+	_ = cTypes[int(record.OperationSnapshot)-int(cpluginv1.OperationSnapshot)]
+}
+
 func Record(in cpluginv1.Record) (record.Record, error) {
 	key, err := Data(in.Key)
 	if err != nil {
 		return record.Record{}, err
 	}
-	payload, err := Data(in.Payload)
+	payload, err := Change(in.Payload)
 	if err != nil {
 		return record.Record{}, err
 	}
 
 	out := record.Record{
 		Position:  in.Position,
+		Operation: record.Operation(in.Operation),
 		Metadata:  in.Metadata,
-		SourceID:  "",
-		CreatedAt: in.CreatedAt,
-		ReadAt:    time.Now().UTC(),
 		Key:       key,
 		Payload:   payload,
+	}
+	return out, nil
+}
+
+func Change(in cpluginv1.Change) (record.Change, error) {
+	before, err := Data(in.Before)
+	if err != nil {
+		return record.Change{}, fmt.Errorf("error converting before: %w", err)
+	}
+
+	after, err := Data(in.After)
+	if err != nil {
+		return record.Change{}, fmt.Errorf("error converting after: %w", err)
+	}
+
+	out := record.Change{
+		Before: before,
+		After:  after,
 	}
 	return out, nil
 }

@@ -231,15 +231,21 @@ func TestMaskFieldPayload_Process(t *testing.T) {
 			Settings: map[string]string{maskFieldConfigField: "foo"},
 		},
 		args: args{r: record.Record{
-			Payload: record.StructuredData{
-				"foo": 123,
-				"baz": nil,
+			Payload: record.Change{
+				Before: nil,
+				After: record.StructuredData{
+					"foo": 123,
+					"baz": nil,
+				},
 			},
 		}},
 		want: record.Record{
-			Payload: record.StructuredData{
-				"foo": 0,
-				"baz": nil,
+			Payload: record.Change{
+				Before: nil,
+				After: record.StructuredData{
+					"foo": 0,
+					"baz": nil,
+				},
 			},
 		},
 		wantErr: false,
@@ -249,15 +255,21 @@ func TestMaskFieldPayload_Process(t *testing.T) {
 			Settings: map[string]string{maskFieldConfigField: "foo"},
 		},
 		args: args{r: record.Record{
-			Payload: record.StructuredData{
-				"foo": "sensitive data",
-				"baz": nil,
+			Payload: record.Change{
+				Before: nil,
+				After: record.StructuredData{
+					"foo": "sensitive data",
+					"baz": nil,
+				},
 			},
 		}},
 		want: record.Record{
-			Payload: record.StructuredData{
-				"foo": "",
-				"baz": nil,
+			Payload: record.Change{
+				Before: nil,
+				After: record.StructuredData{
+					"foo": "",
+					"baz": nil,
+				},
 			},
 		},
 		wantErr: false,
@@ -267,15 +279,21 @@ func TestMaskFieldPayload_Process(t *testing.T) {
 			Settings: map[string]string{maskFieldConfigField: "foo"},
 		},
 		args: args{r: record.Record{
-			Payload: record.StructuredData{
-				"foo": map[string]interface{}{"bar": "buz"},
-				"baz": nil,
+			Payload: record.Change{
+				Before: nil,
+				After: record.StructuredData{
+					"foo": map[string]interface{}{"bar": "buz"},
+					"baz": nil,
+				},
 			},
 		}},
 		want: record.Record{
-			Payload: record.StructuredData{
-				"foo": map[string]interface{}(nil),
-				"baz": nil,
+			Payload: record.Change{
+				Before: nil,
+				After: record.StructuredData{
+					"foo": map[string]interface{}(nil),
+					"baz": nil,
+				},
 			},
 		},
 		wantErr: false,
@@ -285,9 +303,12 @@ func TestMaskFieldPayload_Process(t *testing.T) {
 			Settings: map[string]string{maskFieldConfigField: "foo"},
 		},
 		args: args{r: record.Record{
-			Payload: record.RawData{
-				Raw:    []byte("raw data"),
-				Schema: nil,
+			Payload: record.Change{
+				Before: nil,
+				After: record.RawData{
+					Raw:    []byte("raw data"),
+					Schema: nil,
+				},
 			},
 		}},
 		wantErr: true, // not supported
@@ -297,9 +318,12 @@ func TestMaskFieldPayload_Process(t *testing.T) {
 			Settings: map[string]string{maskFieldConfigField: "foo"},
 		},
 		args: args{r: record.Record{
-			Payload: record.RawData{
-				Raw:    []byte("raw data"),
-				Schema: mock.NewSchema(nil),
+			Payload: record.Change{
+				Before: nil,
+				After: record.RawData{
+					Raw:    []byte("raw data"),
+					Schema: mock.NewSchema(nil),
+				},
 			},
 		}},
 		want:    record.Record{},

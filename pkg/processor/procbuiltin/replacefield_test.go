@@ -404,15 +404,21 @@ func TestReplaceFieldPayload_Process(t *testing.T) {
 			Settings: map[string]string{replaceFieldConfigExclude: "foo,bar"},
 		},
 		args: args{r: record.Record{
-			Payload: record.StructuredData{
-				"foo": 123,
-				"bar": 1.2,
-				"baz": []byte("123"),
+			Payload: record.Change{
+				Before: nil,
+				After: record.StructuredData{
+					"foo": 123,
+					"bar": 1.2,
+					"baz": []byte("123"),
+				},
 			},
 		}},
 		want: record.Record{
-			Payload: record.StructuredData{
-				"baz": []byte("123"),
+			Payload: record.Change{
+				Before: nil,
+				After: record.StructuredData{
+					"baz": []byte("123"),
+				},
 			},
 		},
 		wantErr: false,
@@ -422,16 +428,22 @@ func TestReplaceFieldPayload_Process(t *testing.T) {
 			Settings: map[string]string{replaceFieldConfigInclude: "foo,baz"},
 		},
 		args: args{r: record.Record{
-			Payload: record.StructuredData{
-				"foo": 123,
-				"bar": 1.2,
-				"baz": []byte("123"),
+			Payload: record.Change{
+				Before: nil,
+				After: record.StructuredData{
+					"foo": 123,
+					"bar": 1.2,
+					"baz": []byte("123"),
+				},
 			},
 		}},
 		want: record.Record{
-			Payload: record.StructuredData{
-				"foo": 123,
-				"baz": []byte("123"),
+			Payload: record.Change{
+				Before: nil,
+				After: record.StructuredData{
+					"foo": 123,
+					"baz": []byte("123"),
+				},
 			},
 		},
 		wantErr: false,
@@ -441,17 +453,23 @@ func TestReplaceFieldPayload_Process(t *testing.T) {
 			Settings: map[string]string{replaceFieldConfigRename: "foo:c1,bar:c2"},
 		},
 		args: args{r: record.Record{
-			Payload: record.StructuredData{
-				"foo": 123,
-				"bar": 1.2,
-				"baz": []byte("123"),
+			Payload: record.Change{
+				Before: nil,
+				After: record.StructuredData{
+					"foo": 123,
+					"bar": 1.2,
+					"baz": []byte("123"),
+				},
 			},
 		}},
 		want: record.Record{
-			Payload: record.StructuredData{
-				"c1":  123,
-				"c2":  1.2,
-				"baz": []byte("123"),
+			Payload: record.Change{
+				Before: nil,
+				After: record.StructuredData{
+					"c1":  123,
+					"c2":  1.2,
+					"baz": []byte("123"),
+				},
 			},
 		},
 		wantErr: false,
@@ -464,15 +482,21 @@ func TestReplaceFieldPayload_Process(t *testing.T) {
 			},
 		},
 		args: args{r: record.Record{
-			Payload: record.StructuredData{
-				"foo": 123,
-				"bar": 1.2,
-				"baz": []byte("123"),
+			Payload: record.Change{
+				Before: nil,
+				After: record.StructuredData{
+					"foo": 123,
+					"bar": 1.2,
+					"baz": []byte("123"),
+				},
 			},
 		}},
 		want: record.Record{
-			Payload: record.StructuredData{
-				"c2": 1.2,
+			Payload: record.Change{
+				Before: nil,
+				After: record.StructuredData{
+					"c2": 1.2,
+				},
 			},
 		},
 		wantErr: false,
@@ -485,16 +509,22 @@ func TestReplaceFieldPayload_Process(t *testing.T) {
 			},
 		},
 		args: args{r: record.Record{
-			Payload: record.StructuredData{
-				"foo": 123,
-				"bar": 1.2,
-				"baz": []byte("123"),
+			Payload: record.Change{
+				Before: nil,
+				After: record.StructuredData{
+					"foo": 123,
+					"bar": 1.2,
+					"baz": []byte("123"),
+				},
 			},
 		}},
 		want: record.Record{
-			Payload: record.StructuredData{
-				"c1":  123,
-				"baz": []byte("123"),
+			Payload: record.Change{
+				Before: nil,
+				After: record.StructuredData{
+					"c1":  123,
+					"baz": []byte("123"),
+				},
 			},
 		},
 		wantErr: false,
@@ -507,16 +537,22 @@ func TestReplaceFieldPayload_Process(t *testing.T) {
 			},
 		},
 		args: args{r: record.Record{
-			Payload: record.StructuredData{
-				"foo":   123,
-				"bar":   1.2,
-				"baz":   []byte("123"),
-				"other": "something",
+			Payload: record.Change{
+				Before: nil,
+				After: record.StructuredData{
+					"foo":   123,
+					"bar":   1.2,
+					"baz":   []byte("123"),
+					"other": "something",
+				},
 			},
 		}},
 		want: record.Record{
-			Payload: record.StructuredData{
-				"bar": 1.2,
+			Payload: record.Change{
+				Before: nil,
+				After: record.StructuredData{
+					"bar": 1.2,
+				},
 			},
 		},
 		wantErr: false,
@@ -530,16 +566,22 @@ func TestReplaceFieldPayload_Process(t *testing.T) {
 			},
 		},
 		args: args{r: record.Record{
-			Payload: record.StructuredData{
-				"foo":   123,
-				"bar":   1.2,
-				"baz":   []byte("123"),
-				"other": "something",
+			Payload: record.Change{
+				Before: nil,
+				After: record.StructuredData{
+					"foo":   123,
+					"bar":   1.2,
+					"baz":   []byte("123"),
+					"other": "something",
+				},
 			},
 		}},
 		want: record.Record{
-			Payload: record.StructuredData{
-				"c2": 1.2,
+			Payload: record.Change{
+				Before: nil,
+				After: record.StructuredData{
+					"c2": 1.2,
+				},
 			},
 		},
 		wantErr: false,
@@ -549,9 +591,12 @@ func TestReplaceFieldPayload_Process(t *testing.T) {
 			Settings: map[string]string{replaceFieldConfigExclude: "foo"},
 		},
 		args: args{r: record.Record{
-			Payload: record.RawData{
-				Raw:    []byte("raw data"),
-				Schema: nil,
+			Payload: record.Change{
+				Before: nil,
+				After: record.RawData{
+					Raw:    []byte("raw data"),
+					Schema: nil,
+				},
 			},
 		}},
 		wantErr: true, // not supported
@@ -561,9 +606,12 @@ func TestReplaceFieldPayload_Process(t *testing.T) {
 			Settings: map[string]string{replaceFieldConfigExclude: "foo"},
 		},
 		args: args{r: record.Record{
-			Payload: record.RawData{
-				Raw:    []byte("raw data"),
-				Schema: mock.NewSchema(nil),
+			Payload: record.Change{
+				Before: nil,
+				After: record.RawData{
+					Raw:    []byte("raw data"),
+					Schema: mock.NewSchema(nil),
+				},
 			},
 		}},
 		want:    record.Record{},

@@ -19,12 +19,8 @@ import (
 	generator "github.com/conduitio/conduit-connector-generator"
 	kafka "github.com/conduitio/conduit-connector-kafka"
 	postgres "github.com/conduitio/conduit-connector-postgres"
-	pgdest "github.com/conduitio/conduit-connector-postgres/destination"
-	pgsource "github.com/conduitio/conduit-connector-postgres/source"
 	"github.com/conduitio/conduit-connector-protocol/cpluginv1"
 	s3 "github.com/conduitio/conduit-connector-s3"
-	s3destination "github.com/conduitio/conduit-connector-s3/destination"
-	s3source "github.com/conduitio/conduit-connector-s3/source"
 	"github.com/conduitio/conduit-connector-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -34,11 +30,11 @@ import (
 
 var (
 	DefaultDispenserFactories = []DispenserFactory{
-		sdkDispenserFactory(file.Specification, file.NewSource, file.NewDestination),
-		sdkDispenserFactory(kafka.Specification, kafka.NewSource, kafka.NewDestination),
-		sdkDispenserFactory(generator.Specification, generator.NewSource, nil),
-		sdkDispenserFactory(s3.Specification, s3source.NewSource, s3destination.NewDestination),
-		sdkDispenserFactory(postgres.Specification, pgsource.NewSource, pgdest.NewDestination),
+		sdkDispenserFactory(file.Connector),
+		sdkDispenserFactory(kafka.Connector),
+		sdkDispenserFactory(generator.Connector),
+		sdkDispenserFactory(s3.Connector),
+		sdkDispenserFactory(postgres.Connector),
 	}
 )
 
@@ -50,25 +46,21 @@ type Registry struct {
 
 type DispenserFactory func(name string, logger log.CtxLogger) plugin.Dispenser
 
-func sdkDispenserFactory(
-	specFactory func() sdk.Specification,
-	sourceFactory func() sdk.Source,
-	destinationFactory func() sdk.Destination,
-) DispenserFactory {
-	if sourceFactory == nil {
-		sourceFactory = func() sdk.Source { return nil }
+func sdkDispenserFactory(connector sdk.Connector) DispenserFactory {
+	if connector.NewSource == nil {
+		connector.NewSource = func() sdk.Source { return nil }
 	}
-	if destinationFactory == nil {
-		destinationFactory = func() sdk.Destination { return nil }
+	if connector.NewDestination == nil {
+		connector.NewDestination = func() sdk.Destination { return nil }
 	}
 
 	return func(name string, logger log.CtxLogger) plugin.Dispenser {
 		return builtinv1.NewDispenser(
 			name,
 			logger,
-			func() cpluginv1.SpecifierPlugin { return sdk.NewSpecifierPlugin(specFactory()) },
-			func() cpluginv1.SourcePlugin { return sdk.NewSourcePlugin(sourceFactory()) },
-			func() cpluginv1.DestinationPlugin { return sdk.NewDestinationPlugin(destinationFactory()) },
+			func() cpluginv1.SpecifierPlugin { return sdk.NewSpecifierPlugin(connector.NewSpecification()) },
+			func() cpluginv1.SourcePlugin { return sdk.NewSourcePlugin(connector.NewSource()) },
+			func() cpluginv1.DestinationPlugin { return sdk.NewDestinationPlugin(connector.NewDestination()) },
 		)
 	}
 }
