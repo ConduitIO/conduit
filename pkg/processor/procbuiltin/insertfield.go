@@ -45,11 +45,8 @@ func InsertFieldKey(config processor.Config) (processor.Interface, error) {
 	return insertField(insertFieldKeyName, recordKeyGetSetter{}, config)
 }
 
-// InsertFieldPayload builds the following processor:
-//  * If the payload is raw and has a schema attached, insert the field(s) in
-//    the payload data.
-//  * If the payload is raw and has no schema, return an error (not supported).
-//  * If the payload is structured, set the field(s) in the payload data.
+// InsertFieldPayload builds the same processor as InsertFieldKey, except that
+// it operates on the field Record.Payload.After.
 func InsertFieldPayload(config processor.Config) (processor.Interface, error) {
 	return insertField(insertFieldPayloadName, recordPayloadGetSetter{}, config)
 }

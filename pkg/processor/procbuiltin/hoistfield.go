@@ -44,13 +44,8 @@ func HoistFieldKey(config processor.Config) (processor.Interface, error) {
 	return hoistField(hoistFieldKeyName, recordKeyGetSetter{}, config)
 }
 
-// HoistFieldPayload builds the following processor:
-//  * If the payload is raw and has a schema attached, wrap it using the
-//    specified field name in a struct.
-//  * If the payload is raw and has no schema, transforms it into structured data
-//    by creating a map with the hoisted field and raw data as the value.
-//  * If the payload is structured, wrap it using the specified field name in a
-//    map.
+// HoistFieldPayload builds the same processor as HoistFieldKey, except that
+// it operates on the field Record.Payload.After.
 func HoistFieldPayload(config processor.Config) (processor.Interface, error) {
 	return hoistField(hoistFieldPayloadName, recordPayloadGetSetter{}, config)
 }

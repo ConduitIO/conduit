@@ -44,9 +44,8 @@ func init() {
 }
 
 // HTTPRequest builds a processor that sends an HTTP request to the specified
-// URL with the specified HTTP method (default is POST). The record payload is
-// used as the request body and the raw response body is put into the record
-// payload.
+// URL with the specified HTTP method (default is POST). Record.Payload.After is
+// used as the request body and the raw response body overwrites the field.
 func HTTPRequest(config processor.Config) (processor.Interface, error) {
 	return httpRequest(httpRequestName, config)
 }
