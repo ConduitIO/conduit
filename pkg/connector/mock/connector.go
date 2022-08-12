@@ -135,6 +135,20 @@ func (mr *SourceMockRecorder) Open(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Open", reflect.TypeOf((*Source)(nil).Open), arg0)
 }
 
+// ProvisionedBy mocks base method.
+func (m *Source) ProvisionedBy() connector.ProvisionType {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ProvisionedBy")
+	ret0, _ := ret[0].(connector.ProvisionType)
+	return ret0
+}
+
+// ProvisionedBy indicates an expected call of ProvisionedBy.
+func (mr *SourceMockRecorder) ProvisionedBy() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProvisionedBy", reflect.TypeOf((*Source)(nil).ProvisionedBy))
+}
+
 // Read mocks base method.
 func (m *Source) Read(arg0 context.Context) (record.Record, error) {
 	m.ctrl.T.Helper()
@@ -391,6 +405,20 @@ func (m *Destination) Open(arg0 context.Context) error {
 func (mr *DestinationMockRecorder) Open(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Open", reflect.TypeOf((*Destination)(nil).Open), arg0)
+}
+
+// ProvisionedBy mocks base method.
+func (m *Destination) ProvisionedBy() connector.ProvisionType {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ProvisionedBy")
+	ret0, _ := ret[0].(connector.ProvisionType)
+	return ret0
+}
+
+// ProvisionedBy indicates an expected call of ProvisionedBy.
+func (mr *DestinationMockRecorder) ProvisionedBy() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProvisionedBy", reflect.TypeOf((*Destination)(nil).ProvisionedBy))
 }
 
 // SetConfig mocks base method.
