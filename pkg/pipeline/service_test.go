@@ -68,7 +68,7 @@ func (s *serviceTestSetup) basicDestinationMock(ctrl *gomock.Controller) *connmo
 
 func (s *serviceTestSetup) createPipeline(ctx context.Context, service *Service, status Status) (*Instance, connector.Source, connector.Destination, error) {
 	plID := uuid.NewString()
-	pl, err := service.Create(ctx, plID, Config{Name: fmt.Sprintf("%v pipeline %v", status, plID)})
+	pl, err := service.Create(ctx, plID, Config{Name: fmt.Sprintf("%v pipeline %v", status, plID)}, ProvisionTypeAPI)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -98,7 +98,7 @@ func TestService_Init_Simple(t *testing.T) {
 	db := &inmemory.DB{}
 
 	service := NewService(logger, db)
-	_, err := service.Create(ctx, uuid.NewString(), Config{Name: "test-pipeline"})
+	_, err := service.Create(ctx, uuid.NewString(), Config{Name: "test-pipeline"}, ProvisionTypeAPI)
 	assert.Ok(t, err)
 
 	want := service.List(ctx)
@@ -231,7 +231,7 @@ func TestService_CreateSuccess(t *testing.T) {
 
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := service.Create(ctx, tt.id, tt.config)
+			got, err := service.Create(ctx, tt.id, tt.config, ProvisionTypeAPI)
 			assert.Ok(t, err)
 
 			tt.want.ID = got.ID
@@ -250,10 +250,10 @@ func TestService_Create_PipelineNameExists(t *testing.T) {
 	service := NewService(logger, db)
 
 	conf := Config{Name: "test-pipeline"}
-	got, err := service.Create(ctx, uuid.NewString(), conf)
+	got, err := service.Create(ctx, uuid.NewString(), conf, ProvisionTypeAPI)
 	assert.Ok(t, err)
 	assert.NotNil(t, got)
-	got, err = service.Create(ctx, uuid.NewString(), conf)
+	got, err = service.Create(ctx, uuid.NewString(), conf, ProvisionTypeAPI)
 	assert.Nil(t, got)
 	assert.Error(t, err)
 }
@@ -264,7 +264,7 @@ func TestService_CreateEmptyName(t *testing.T) {
 	db := &inmemory.DB{}
 
 	service := NewService(logger, db)
-	got, err := service.Create(ctx, uuid.NewString(), Config{Name: ""})
+	got, err := service.Create(ctx, uuid.NewString(), Config{Name: ""}, ProvisionTypeAPI)
 	assert.Error(t, err)
 	assert.Nil(t, got)
 }
@@ -275,7 +275,7 @@ func TestService_GetSuccess(t *testing.T) {
 	db := &inmemory.DB{}
 
 	service := NewService(logger, db)
-	want, err := service.Create(ctx, uuid.NewString(), Config{Name: "test-pipeline"})
+	want, err := service.Create(ctx, uuid.NewString(), Config{Name: "test-pipeline"}, ProvisionTypeAPI)
 	assert.Ok(t, err)
 
 	got, err := service.Get(ctx, want.ID)
@@ -303,7 +303,7 @@ func TestService_DeleteSuccess(t *testing.T) {
 	db := &inmemory.DB{}
 
 	service := NewService(logger, db)
-	instance, err := service.Create(ctx, uuid.NewString(), Config{Name: "test-pipeline"})
+	instance, err := service.Create(ctx, uuid.NewString(), Config{Name: "test-pipeline"}, ProvisionTypeAPI)
 	assert.Ok(t, err)
 
 	err = service.Delete(ctx, instance)
@@ -323,7 +323,7 @@ func TestService_List(t *testing.T) {
 
 	want := make(map[string]*Instance)
 	for i := 0; i < 10; i++ {
-		instance, err := service.Create(ctx, uuid.NewString(), Config{Name: fmt.Sprintf("test-pipeline-%d", i)})
+		instance, err := service.Create(ctx, uuid.NewString(), Config{Name: fmt.Sprintf("test-pipeline-%d", i)}, ProvisionTypeAPI)
 		assert.Ok(t, err)
 		want[instance.ID] = instance
 	}
@@ -338,7 +338,7 @@ func TestService_UpdateSuccess(t *testing.T) {
 	db := &inmemory.DB{}
 
 	service := NewService(logger, db)
-	instance, err := service.Create(ctx, uuid.NewString(), Config{Name: "test-pipeline"})
+	instance, err := service.Create(ctx, uuid.NewString(), Config{Name: "test-pipeline"}, ProvisionTypeAPI)
 	assert.Ok(t, err)
 
 	want := Config{
@@ -357,9 +357,9 @@ func TestService_Update_PipelineNameExists(t *testing.T) {
 	db := &inmemory.DB{}
 
 	service := NewService(logger, db)
-	_, err := service.Create(ctx, uuid.NewString(), Config{Name: "test-pipeline"})
+	_, err := service.Create(ctx, uuid.NewString(), Config{Name: "test-pipeline"}, ProvisionTypeAPI)
 	assert.Ok(t, err)
-	instance2, err2 := service.Create(ctx, uuid.NewString(), Config{Name: "test-pipeline2"})
+	instance2, err2 := service.Create(ctx, uuid.NewString(), Config{Name: "test-pipeline2"}, ProvisionTypeAPI)
 	assert.Ok(t, err2)
 
 	want := Config{
@@ -378,7 +378,7 @@ func TestService_UpdateInvalidConfig(t *testing.T) {
 	db := &inmemory.DB{}
 
 	service := NewService(logger, db)
-	instance, err := service.Create(ctx, uuid.NewString(), Config{Name: "test-pipeline"})
+	instance, err := service.Create(ctx, uuid.NewString(), Config{Name: "test-pipeline"}, ProvisionTypeAPI)
 	assert.Ok(t, err)
 
 	config := Config{Name: ""} // empty name is not allowed

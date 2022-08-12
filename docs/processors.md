@@ -61,6 +61,9 @@ Conduit also provides the ability to write custom processors in JavaScript.
 ### Built-in processors
 
 An up-to-date list of all built-in processors and detailed descriptions can be found [here](https://pkg.go.dev/github.com/conduitio/conduit/pkg/processor/procbuiltin).
+Note that all built-in processors that operate on the payload actually operate on `Record.Payload.After`. If you need to manipulate
+the field `Record.Payload.Before` you can use a [JavaScript processor](#javascript-processors).
+
 An example is available in [extract-field-transform.sh](/examples/processors/extract-field-transform.sh). The script will
 set up a pipeline with the built-in extract-field processors.
 
@@ -132,6 +135,7 @@ Conduit also provides a number of helper objects and methods which can be used i
 it in Go code, i.e. you can write this for example: `logger.Info().Msgf("hello, %v!", "world")`
 2. `Record()` - constructs a `record.Record`.
 3. `RawData()` - constructs `record.RawData`.
+4. `StructuredData()` - constructs `record.StructuredData`.
 
 Following is an example of a JavaScript processor, where we transform a record and utilize a number of tools mentioned 
 above:
@@ -152,8 +156,8 @@ function process(record) {
     logger.Info().Msgf("json: %v", json);
 
     // we're creating a new RawData object, using a helper
-    record.Payload = RawData();
-    record.Payload.Raw = JSON.stringify(json);
+    record.Payload.After = new RawData();
+    record.Payload.After.Raw = JSON.stringify(json);
 
     logger.Info().Msg("exiting process");
     return record;

@@ -87,10 +87,11 @@ type recordDataGetSetter interface {
 type recordPayloadGetSetter struct{}
 
 func (recordPayloadGetSetter) Get(r record.Record) record.Data {
-	return r.Payload
+	// TODO what do we do with Payload.Before in a transform?
+	return r.Payload.After
 }
 func (recordPayloadGetSetter) Set(r record.Record, d record.Data) record.Record {
-	r.Payload = d
+	r.Payload.After = d
 	return r
 }
 

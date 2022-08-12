@@ -15,48 +15,73 @@
 package fromproto
 
 import (
-	"time"
+	"fmt"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/record"
-	connectorv1 "go.buf.build/library/go-grpc/conduitio/conduit-connector-protocol/connector/v1"
+	opencdcv1 "go.buf.build/grpc/go/conduitio/conduit-connector-protocol/opencdc/v1"
 )
 
-func Record(in *connectorv1.Record) (record.Record, error) {
+func _() {
+	// An "invalid array index" compiler error signifies that the constant values have changed.
+	var cTypes [1]struct{}
+	_ = cTypes[int(record.OperationCreate)-int(opencdcv1.Operation_OPERATION_CREATE)]
+	_ = cTypes[int(record.OperationUpdate)-int(opencdcv1.Operation_OPERATION_UPDATE)]
+	_ = cTypes[int(record.OperationDelete)-int(opencdcv1.Operation_OPERATION_DELETE)]
+	_ = cTypes[int(record.OperationSnapshot)-int(opencdcv1.Operation_OPERATION_SNAPSHOT)]
+}
+
+func Record(in *opencdcv1.Record) (record.Record, error) {
 	key, err := Data(in.Key)
 	if err != nil {
 		return record.Record{}, err
 	}
-	payload, err := Data(in.Payload)
+	payload, err := Change(in.Payload)
 	if err != nil {
 		return record.Record{}, err
 	}
 
 	out := record.Record{
 		Position:  in.Position,
+		Operation: record.Operation(in.Operation),
 		Metadata:  in.Metadata,
-		SourceID:  "",
-		CreatedAt: in.CreatedAt.AsTime(),
-		ReadAt:    time.Now().UTC(),
 		Key:       key,
 		Payload:   payload,
 	}
 	return out, nil
 }
 
-func Data(in *connectorv1.Data) (record.Data, error) {
+func Change(in *opencdcv1.Change) (record.Change, error) {
+	before, err := Data(in.Before)
+	if err != nil {
+		return record.Change{}, fmt.Errorf("error converting before: %w", err)
+	}
+
+	after, err := Data(in.After)
+	if err != nil {
+		return record.Change{}, fmt.Errorf("error converting after: %w", err)
+	}
+
+	out := record.Change{
+		Before: before,
+		After:  after,
+	}
+	return out, nil
+}
+
+func Data(in *opencdcv1.Data) (record.Data, error) {
 	d := in.GetData()
 	if d == nil {
 		return nil, nil
 	}
 
 	switch v := d.(type) {
-	case *connectorv1.Data_RawData:
+	case *opencdcv1.Data_RawData:
 		return record.RawData{
 			Raw:    v.RawData,
 			Schema: nil,
 		}, nil
-	case *connectorv1.Data_StructuredData:
+	case *opencdcv1.Data_StructuredData:
 		return record.StructuredData(v.StructuredData.AsMap()), nil
 	default:
 		return nil, cerrors.Errorf("invalid Data type '%T'", d)

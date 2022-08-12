@@ -29,9 +29,10 @@ type source struct {
 	// exported fields are persisted in the store but must not collide with
 	// interface methods, so they are prefixed with X
 
-	XID     string
-	XConfig Config
-	XState  SourceState
+	XID            string
+	XConfig        Config
+	XState         SourceState
+	XProvisionedBy ProvisionType
 	// timestamps
 	XCreatedAt time.Time
 	XUpdatedAt time.Time
@@ -77,6 +78,10 @@ func (s *source) Config() Config {
 
 func (s *source) SetConfig(c Config) {
 	s.XConfig = c
+}
+
+func (s *source) ProvisionedBy() ProvisionType {
+	return s.XProvisionedBy
 }
 
 func (s *source) CreatedAt() time.Time {
@@ -227,14 +232,16 @@ func (s *source) Read(ctx context.Context) (record.Record, error) {
 		return r, err
 	}
 
+	// TODO rethink if there's an actual benefit in setting these fields
 	if r.Key == nil {
 		r.Key = record.RawData{}
 	}
-	if r.Payload == nil {
-		r.Payload = record.RawData{}
+	if r.Payload.Before == nil {
+		r.Payload.Before = record.RawData{}
 	}
-	r.ReadAt = time.Now().UTC() // TODO now that records can be read asynchronously, should we move this to the plugin SDK?
-	r.SourceID = s.ID()
+	if r.Payload.After == nil {
+		r.Payload.After = record.RawData{}
+	}
 
 	return r, nil
 }

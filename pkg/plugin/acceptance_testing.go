@@ -265,17 +265,20 @@ func testSource_Read_Success(t *testing.T, tdf testDispenserFunc) {
 	var want []record.Record
 	for i := 0; i < 10; i++ {
 		want = append(want, record.Record{
-			Position: record.Position(fmt.Sprintf("test-position-%d", i)),
+			Position:  record.Position(fmt.Sprintf("test-position-%d", i)),
+			Operation: record.OperationCreate,
 			Metadata: map[string]string{
 				"foo":   "bar",
 				"empty": "",
 			},
-			CreatedAt: time.Now().UTC(),
 			Key: record.RawData{
 				Raw: []byte("test-key"),
 			},
-			Payload: record.RawData{
-				Raw: []byte("test-payload"),
+			Payload: record.Change{
+				Before: nil,
+				After: record.RawData{
+					Raw: []byte("test-payload"),
+				},
 			},
 		})
 	}
@@ -289,10 +292,13 @@ func testSource_Read_Success(t *testing.T, tdf testDispenserFunc) {
 			for _, r := range want {
 				plugRec := cpluginv1.Record{
 					Position:  r.Position,
+					Operation: cpluginv1.Operation(r.Operation),
 					Metadata:  r.Metadata,
-					CreatedAt: r.CreatedAt,
 					Key:       cpluginv1.RawData(r.Key.(record.RawData).Raw),
-					Payload:   cpluginv1.RawData(r.Payload.(record.RawData).Raw),
+					Payload: cpluginv1.Change{
+						Before: nil,
+						After:  cpluginv1.RawData(r.Payload.After.(record.RawData).Raw),
+					},
 				}
 
 				err := stream.Send(cpluginv1.SourceRunResponse{Record: plugRec})
@@ -313,8 +319,6 @@ func testSource_Read_Success(t *testing.T, tdf testDispenserFunc) {
 	for i := 0; i < len(want); i++ {
 		rec, err := source.Read(ctx)
 		is.NoErr(err)
-		// read at is recorded when we receive the record, adjust in the expectation
-		want[i].ReadAt = rec.ReadAt
 		got = append(got, rec)
 	}
 
@@ -662,10 +666,13 @@ func testDestination_Write_Success(t *testing.T, tdf testDispenserFunc) {
 
 	want := cpluginv1.Record{
 		Position:  []byte("test-position"),
+		Operation: cpluginv1.OperationUpdate,
 		Metadata:  map[string]string{"foo": "bar"},
-		CreatedAt: time.Now().UTC(),
 		Key:       cpluginv1.RawData("raw-key"),
-		Payload:   cpluginv1.StructuredData{"baz": "qux"},
+		Payload: cpluginv1.Change{
+			Before: cpluginv1.StructuredData{"baz": "qux1"},
+			After:  cpluginv1.StructuredData{"baz": "qux2"},
+		},
 	}
 
 	// Function Destination.Run is called in a goroutine, we have to wait for it to
@@ -694,10 +701,13 @@ func testDestination_Write_Success(t *testing.T, tdf testDispenserFunc) {
 
 	err = destination.Write(ctx, record.Record{
 		Position:  want.Position,
+		Operation: record.Operation(want.Operation),
 		Metadata:  want.Metadata,
-		CreatedAt: want.CreatedAt,
 		Key:       record.RawData{Raw: want.Key.(cpluginv1.RawData)},
-		Payload:   record.StructuredData{"baz": "qux"},
+		Payload: record.Change{
+			Before: record.StructuredData(want.Payload.Before.(cpluginv1.StructuredData)),
+			After:  record.StructuredData(want.Payload.After.(cpluginv1.StructuredData)),
+		},
 	})
 	is.NoErr(err)
 

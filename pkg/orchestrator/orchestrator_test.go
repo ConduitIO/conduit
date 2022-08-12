@@ -32,6 +32,7 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin/builtin"
 	"github.com/conduitio/conduit/pkg/plugin/standalone"
 	"github.com/conduitio/conduit/pkg/processor"
+	"github.com/conduitio/conduit/pkg/record"
 	"github.com/golang/mock/gomock"
 	"github.com/google/go-cmp/cmp"
 	"github.com/rs/zerolog"
@@ -78,12 +79,23 @@ func TestPipelineSimple(t *testing.T) {
 		pluginService,
 	)
 
+	// add builtin processor for removing metadata
+	// TODO at the time of writing we don't have a processor for manipulating
+	//  metadata, once we have it we can use it instead of adding our own
+	processor.GlobalBuilderRegistry.MustRegister("removereadat", func(config processor.Config) (processor.Interface, error) {
+		return processor.InterfaceFunc(func(ctx context.Context, r record.Record) (record.Record, error) {
+			delete(r.Metadata, record.MetadataReadAt) // read at is different every time, remove it
+			return r, nil
+		}), nil
+	})
+
 	// create a host pipeline
 	pl, err := orc.Pipelines.Create(ctx, pipeline.Config{Name: "test pipeline"})
 	assert.Ok(t, err)
 
 	// create connectors
 	sourcePath := "./fixtures/file-source.txt"
+	wantPath := "./fixtures/file-dest.txt"
 	destinationPath := t.TempDir() + "/destination.txt"
 	_, err = orc.Connectors.Create(
 		ctx,
@@ -94,6 +106,17 @@ func TestPipelineSimple(t *testing.T) {
 			Plugin:     "builtin:file", // use builtin plugin
 			PipelineID: pl.ID,
 		},
+	)
+	assert.Ok(t, err)
+
+	_, err = orc.Processors.Create(
+		ctx,
+		"removereadat",
+		processor.Parent{
+			ID:   pl.ID,
+			Type: processor.ParentTypePipeline,
+		},
+		processor.Config{},
 	)
 	assert.Ok(t, err)
 
@@ -125,7 +148,7 @@ func TestPipelineSimple(t *testing.T) {
 	t.Log("successfully stopped pipeline")
 
 	// make sure destination file matches source file
-	want, err := os.ReadFile(sourcePath)
+	want, err := os.ReadFile(wantPath)
 	assert.Ok(t, err)
 	got, err := os.ReadFile(destinationPath)
 	assert.Ok(t, err)

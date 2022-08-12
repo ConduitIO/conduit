@@ -373,13 +373,19 @@ func TestTimestampConvertorPayload_Process(t *testing.T) {
 			},
 		},
 		args: args{r: record.Record{
-			Payload: record.StructuredData{
-				"date": int64(1621382400000000000),
+			Payload: record.Change{
+				Before: nil,
+				After: record.StructuredData{
+					"date": int64(1621382400000000000),
+				},
 			},
 		}},
 		want: record.Record{
-			Payload: record.StructuredData{
-				"date": "2021-05-19",
+			Payload: record.Change{
+				Before: nil,
+				After: record.StructuredData{
+					"date": "2021-05-19",
+				},
 			},
 		},
 		wantErr: false,
@@ -393,13 +399,19 @@ func TestTimestampConvertorPayload_Process(t *testing.T) {
 			},
 		},
 		args: args{r: record.Record{
-			Payload: record.StructuredData{
-				"date": time.Date(2021, time.May, 19, 0, 0, 0, 0, time.UTC),
+			Payload: record.Change{
+				Before: nil,
+				After: record.StructuredData{
+					"date": time.Date(2021, time.May, 19, 0, 0, 0, 0, time.UTC),
+				},
 			},
 		}},
 		want: record.Record{
-			Payload: record.StructuredData{
-				"date": "2021-05-19",
+			Payload: record.Change{
+				Before: nil,
+				After: record.StructuredData{
+					"date": "2021-05-19",
+				},
 			},
 		},
 		wantErr: false,
@@ -412,13 +424,19 @@ func TestTimestampConvertorPayload_Process(t *testing.T) {
 				timestampConvertorConfigFormat:     ""},
 		},
 		args: args{r: record.Record{
-			Payload: record.StructuredData{
-				"date": time.Date(2021, time.May, 19, 0, 0, 0, 0, time.UTC),
+			Payload: record.Change{
+				Before: nil,
+				After: record.StructuredData{
+					"date": time.Date(2021, time.May, 19, 0, 0, 0, 0, time.UTC),
+				},
 			},
 		}},
 		want: record.Record{
-			Payload: record.StructuredData{
-				"date": int64(1621382400000000000),
+			Payload: record.Change{
+				Before: nil,
+				After: record.StructuredData{
+					"date": int64(1621382400000000000),
+				},
 			},
 		},
 		wantErr: false,
@@ -432,13 +450,19 @@ func TestTimestampConvertorPayload_Process(t *testing.T) {
 			},
 		},
 		args: args{r: record.Record{
-			Payload: record.StructuredData{
-				"date": "2021-05-19",
+			Payload: record.Change{
+				Before: nil,
+				After: record.StructuredData{
+					"date": "2021-05-19",
+				},
 			},
 		}},
 		want: record.Record{
-			Payload: record.StructuredData{
-				"date": int64(1621382400000000000),
+			Payload: record.Change{
+				Before: nil,
+				After: record.StructuredData{
+					"date": int64(1621382400000000000),
+				},
 			},
 		},
 		wantErr: false,
@@ -452,13 +476,19 @@ func TestTimestampConvertorPayload_Process(t *testing.T) {
 			},
 		},
 		args: args{r: record.Record{
-			Payload: record.StructuredData{
-				"date": "2021-05-19",
+			Payload: record.Change{
+				Before: nil,
+				After: record.StructuredData{
+					"date": "2021-05-19",
+				},
 			},
 		}},
 		want: record.Record{
-			Payload: record.StructuredData{
-				"date": time.Date(2021, time.May, 19, 0, 0, 0, 0, time.UTC),
+			Payload: record.Change{
+				Before: nil,
+				After: record.StructuredData{
+					"date": time.Date(2021, time.May, 19, 0, 0, 0, 0, time.UTC),
+				},
 			},
 		},
 		wantErr: false,
@@ -472,8 +502,11 @@ func TestTimestampConvertorPayload_Process(t *testing.T) {
 			},
 		},
 		args: args{r: record.Record{
-			Payload: record.StructuredData{
-				"date": "2021-05-19",
+			Payload: record.Change{
+				Before: nil,
+				After: record.StructuredData{
+					"date": "2021-05-19",
+				},
 			},
 		}},
 		want:    record.Record{},
@@ -488,8 +521,11 @@ func TestTimestampConvertorPayload_Process(t *testing.T) {
 			},
 		},
 		args: args{r: record.Record{
-			Payload: record.StructuredData{
-				"date": "2021-05-19",
+			Payload: record.Change{
+				Before: nil,
+				After: record.StructuredData{
+					"date": "2021-05-19",
+				},
 			},
 		}},
 		want:    record.Record{},
@@ -504,13 +540,19 @@ func TestTimestampConvertorPayload_Process(t *testing.T) {
 			},
 		},
 		args: args{r: record.Record{
-			Payload: record.StructuredData{
-				"date": int64(1621382400000000000),
+			Payload: record.Change{
+				Before: nil,
+				After: record.StructuredData{
+					"date": int64(1621382400000000000),
+				},
 			},
 		}},
 		want: record.Record{
-			Payload: record.StructuredData{
-				"date": time.Date(2021, time.May, 19, 0, 0, 0, 0, time.UTC),
+			Payload: record.Change{
+				Before: nil,
+				After: record.StructuredData{
+					"date": time.Date(2021, time.May, 19, 0, 0, 0, 0, time.UTC),
+				},
 			},
 		},
 		wantErr: false,
@@ -523,9 +565,12 @@ func TestTimestampConvertorPayload_Process(t *testing.T) {
 				timestampConvertorConfigFormat:     "2006-01-02"},
 		},
 		args: args{r: record.Record{
-			Payload: record.RawData{
-				Raw:    []byte("raw data"),
-				Schema: nil,
+			Payload: record.Change{
+				Before: nil,
+				After: record.RawData{
+					Raw:    []byte("raw data"),
+					Schema: nil,
+				},
 			},
 		}},
 		wantErr: true, // not supported
@@ -538,9 +583,12 @@ func TestTimestampConvertorPayload_Process(t *testing.T) {
 			},
 		},
 		args: args{r: record.Record{
-			Payload: record.RawData{
-				Raw:    []byte("raw data"),
-				Schema: mock.NewSchema(nil),
+			Payload: record.Change{
+				Before: nil,
+				After: record.RawData{
+					Raw:    []byte("raw data"),
+					Schema: mock.NewSchema(nil),
+				},
 			},
 		}},
 		want:    record.Record{},

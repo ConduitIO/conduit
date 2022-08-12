@@ -86,6 +86,7 @@ func (s *Service) Create(
 	name string,
 	parent Parent,
 	cfg Config,
+	pt ProvisionType,
 ) (*Instance, error) {
 	builder, err := s.registry.Get(name)
 	if err != nil {
@@ -99,13 +100,14 @@ func (s *Service) Create(
 
 	now := time.Now()
 	instance := &Instance{
-		ID:        id,
-		UpdatedAt: now,
-		CreatedAt: now,
-		Name:      name,
-		Parent:    parent,
-		Config:    cfg,
-		Processor: p,
+		ID:            id,
+		UpdatedAt:     now,
+		CreatedAt:     now,
+		ProvisionedBy: pt,
+		Name:          name,
+		Parent:        parent,
+		Config:        cfg,
+		Processor:     p,
 	}
 
 	// persist instance

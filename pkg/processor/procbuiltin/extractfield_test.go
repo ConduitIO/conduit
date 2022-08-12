@@ -206,13 +206,19 @@ func TestExtractFieldPayload_Process(t *testing.T) {
 			Settings: map[string]string{extractFieldConfigField: "foo"},
 		},
 		args: args{r: record.Record{
-			Payload: record.StructuredData{
-				"foo": 123,
+			Payload: record.Change{
+				Before: nil,
+				After: record.StructuredData{
+					"foo": 123,
+				},
 			},
 		}},
 		want: record.Record{
-			Payload: record.RawData{
-				Raw: []byte("123"),
+			Payload: record.Change{
+				Before: nil,
+				After: record.RawData{
+					Raw: []byte("123"),
+				},
 			},
 		},
 		wantErr: false,
@@ -222,9 +228,12 @@ func TestExtractFieldPayload_Process(t *testing.T) {
 			Settings: map[string]string{extractFieldConfigField: "foo"},
 		},
 		args: args{r: record.Record{
-			Payload: record.StructuredData{
-				"bar": 123,
-				"baz": []byte("123"),
+			Payload: record.Change{
+				Before: nil,
+				After: record.StructuredData{
+					"bar": 123,
+					"baz": []byte("123"),
+				},
 			},
 		}},
 		wantErr: true,
@@ -234,9 +243,12 @@ func TestExtractFieldPayload_Process(t *testing.T) {
 			Settings: map[string]string{extractFieldConfigField: "foo"},
 		},
 		args: args{r: record.Record{
-			Payload: record.RawData{
-				Raw:    []byte("raw data"),
-				Schema: nil,
+			Payload: record.Change{
+				Before: nil,
+				After: record.RawData{
+					Raw:    []byte("raw data"),
+					Schema: nil,
+				},
 			},
 		}},
 		wantErr: true, // not supported
@@ -246,9 +258,12 @@ func TestExtractFieldPayload_Process(t *testing.T) {
 			Settings: map[string]string{extractFieldConfigField: "foo"},
 		},
 		args: args{r: record.Record{
-			Payload: record.RawData{
-				Raw:    []byte("raw data"),
-				Schema: mock.NewSchema(nil),
+			Payload: record.Change{
+				Before: nil,
+				After: record.RawData{
+					Raw:    []byte("raw data"),
+					Schema: mock.NewSchema(nil),
+				},
 			},
 		}},
 		want:    record.Record{},

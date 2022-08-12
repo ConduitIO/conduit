@@ -34,11 +34,11 @@ func init() {
 
 // ValueToKey builds a processor that replaces the record key with a new key
 // formed from a subset of fields in the record value.
-//  * If the payload is raw and has a schema attached, the created key will also
-//    have a schema with a subset of fields.
-//  * If the payload is structured, the created key will also be structured with
-//    a subset of fields.
-//  * If the payload is raw and has no schema, return an error.
+//  - If Payload.After is raw and has a schema attached, the created key will
+//    also have a schema with a subset of fields.
+//  - If Payload.After is structured, the created key will also be structured
+//    with a subset of fields.
+//  - If payload.After is raw and has no schema, return an error.
 func ValueToKey(config processor.Config) (processor.Interface, error) {
 	if config.Settings[valueToKeyConfigFields] == "" {
 		return nil, cerrors.Errorf("%s: unspecified field %q", valueToKeyName, valueToKeyConfigFields)
@@ -53,7 +53,7 @@ func ValueToKey(config processor.Config) (processor.Interface, error) {
 			}
 		}()
 
-		switch d := r.Payload.(type) {
+		switch d := r.Payload.After.(type) {
 		case record.StructuredData:
 			key := record.StructuredData{}
 			for _, f := range fields {

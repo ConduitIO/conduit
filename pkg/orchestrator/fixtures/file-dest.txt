@@ -1,0 +1,5 @@
+{"position":"Mg==","operation":"create","metadata":{"file.path":"./fixtures/file-source.txt","opencdc.version":"v1"},"key":"MQ==","payload":{"before":null,"after":"MQ=="}}
+{"position":"NA==","operation":"create","metadata":{"file.path":"./fixtures/file-source.txt","opencdc.version":"v1"},"key":"Mg==","payload":{"before":null,"after":"Mg=="}}
+{"position":"Ng==","operation":"create","metadata":{"file.path":"./fixtures/file-source.txt","opencdc.version":"v1"},"key":"Mw==","payload":{"before":null,"after":"Mw=="}}
+{"position":"OA==","operation":"create","metadata":{"file.path":"./fixtures/file-source.txt","opencdc.version":"v1"},"key":"NA==","payload":{"before":null,"after":"NA=="}}
+{"position":"MTA=","operation":"create","metadata":{"file.path":"./fixtures/file-source.txt","opencdc.version":"v1"},"key":"NQ==","payload":{"before":null,"after":"NQ=="}}

@@ -29,9 +29,10 @@ type destination struct {
 	// exported fields are persisted in the store but must not collide with
 	// interface methods, so they are prefixed with X
 
-	XID     string
-	XConfig Config
-	XState  DestinationState
+	XID            string
+	XConfig        Config
+	XState         DestinationState
+	XProvisionedBy ProvisionType
 
 	// logger is used for logging and is set when destination is created.
 	logger log.CtxLogger
@@ -78,6 +79,10 @@ func (d *destination) Config() Config {
 
 func (d *destination) SetConfig(c Config) {
 	d.XConfig = c
+}
+
+func (d *destination) ProvisionedBy() ProvisionType {
+	return d.XProvisionedBy
 }
 
 func (d *destination) CreatedAt() time.Time {

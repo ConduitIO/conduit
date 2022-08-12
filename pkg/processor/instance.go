@@ -29,8 +29,17 @@ const (
 	ParentTypePipeline
 )
 
-// ParentType defines the parent type of a processor.
-type ParentType int
+const (
+	ProvisionTypeAPI ProvisionType = iota
+	ProvisionTypeConfig
+)
+
+type (
+	// ParentType defines the parent type of a processor.
+	ParentType int
+	// ProvisionType defines provisioning type
+	ProvisionType int
+)
 
 // Interface is the interface that represents a single message processor that
 // can be executed on one record and manipulate it.
@@ -48,9 +57,10 @@ func (p InterfaceFunc) Process(ctx context.Context, record record.Record) (recor
 
 // Instance represents a processor instance.
 type Instance struct {
-	ID        string
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	ID            string
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+	ProvisionedBy ProvisionType
 	// Name is the name of the processor under which it is registered in the
 	// builder registry.
 	Name      string

@@ -12,14 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package orchestrator
+package record
 
 import "github.com/conduitio/conduit/pkg/foundation/cerrors"
 
 var (
-	ErrInvalidProcessorParentType     = cerrors.New("invalid processor parent type")
-	ErrPipelineHasProcessorsAttached  = cerrors.New("pipeline has processors attached")
-	ErrPipelineHasConnectorsAttached  = cerrors.New("pipeline has connectors attached")
-	ErrConnectorHasProcessorsAttached = cerrors.New("connector has processors attached")
-	ErrImmutableProvisionedByConfig   = cerrors.New("entity was provisioned by a config file and cannot be mutated through the API, please change the corresponding config file instead")
+	// ErrMetadataFieldNotFound is returned in metadata utility functions when a
+	// metadata field is not found.
+	ErrMetadataFieldNotFound = cerrors.New("metadata field not found")
 )

@@ -78,7 +78,7 @@ type PipelineService interface {
 
 	List(ctx context.Context) map[string]*pipeline.Instance
 	Get(ctx context.Context, id string) (*pipeline.Instance, error)
-	Create(ctx context.Context, id string, cfg pipeline.Config) (*pipeline.Instance, error)
+	Create(ctx context.Context, id string, cfg pipeline.Config, p pipeline.ProvisionType) (*pipeline.Instance, error)
 	Update(ctx context.Context, pl *pipeline.Instance, cfg pipeline.Config) (*pipeline.Instance, error)
 	Delete(ctx context.Context, pl *pipeline.Instance) error
 
@@ -91,7 +91,7 @@ type PipelineService interface {
 type ConnectorService interface {
 	List(ctx context.Context) map[string]connector.Connector
 	Get(ctx context.Context, id string) (connector.Connector, error)
-	Create(ctx context.Context, id string, t connector.Type, c connector.Config) (connector.Connector, error)
+	Create(ctx context.Context, id string, t connector.Type, c connector.Config, p connector.ProvisionType) (connector.Connector, error)
 	Delete(ctx context.Context, id string) error
 	Update(ctx context.Context, id string, c connector.Config) (connector.Connector, error)
 
@@ -102,7 +102,7 @@ type ConnectorService interface {
 type ProcessorService interface {
 	List(ctx context.Context) map[string]*processor.Instance
 	Get(ctx context.Context, id string) (*processor.Instance, error)
-	Create(ctx context.Context, id string, name string, parent processor.Parent, cfg processor.Config) (*processor.Instance, error)
+	Create(ctx context.Context, id string, name string, parent processor.Parent, cfg processor.Config, p processor.ProvisionType) (*processor.Instance, error)
 	Update(ctx context.Context, id string, cfg processor.Config) (*processor.Instance, error)
 	Delete(ctx context.Context, id string) error
 }

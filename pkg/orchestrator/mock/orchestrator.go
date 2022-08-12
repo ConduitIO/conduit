@@ -70,18 +70,18 @@ func (mr *PipelineServiceMockRecorder) AddProcessor(arg0, arg1, arg2 interface{}
 }
 
 // Create mocks base method.
-func (m *PipelineService) Create(arg0 context.Context, arg1 string, arg2 pipeline.Config) (*pipeline.Instance, error) {
+func (m *PipelineService) Create(arg0 context.Context, arg1 string, arg2 pipeline.Config, arg3 pipeline.ProvisionType) (*pipeline.Instance, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Create", arg0, arg1, arg2)
+	ret := m.ctrl.Call(m, "Create", arg0, arg1, arg2, arg3)
 	ret0, _ := ret[0].(*pipeline.Instance)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Create indicates an expected call of Create.
-func (mr *PipelineServiceMockRecorder) Create(arg0, arg1, arg2 interface{}) *gomock.Call {
+func (mr *PipelineServiceMockRecorder) Create(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*PipelineService)(nil).Create), arg0, arg1, arg2)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*PipelineService)(nil).Create), arg0, arg1, arg2, arg3)
 }
 
 // Delete mocks base method.
@@ -239,18 +239,18 @@ func (mr *ConnectorServiceMockRecorder) AddProcessor(arg0, arg1, arg2 interface{
 }
 
 // Create mocks base method.
-func (m *ConnectorService) Create(arg0 context.Context, arg1 string, arg2 connector.Type, arg3 connector.Config) (connector.Connector, error) {
+func (m *ConnectorService) Create(arg0 context.Context, arg1 string, arg2 connector.Type, arg3 connector.Config, arg4 connector.ProvisionType) (connector.Connector, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Create", arg0, arg1, arg2, arg3)
+	ret := m.ctrl.Call(m, "Create", arg0, arg1, arg2, arg3, arg4)
 	ret0, _ := ret[0].(connector.Connector)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Create indicates an expected call of Create.
-func (mr *ConnectorServiceMockRecorder) Create(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
+func (mr *ConnectorServiceMockRecorder) Create(arg0, arg1, arg2, arg3, arg4 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*ConnectorService)(nil).Create), arg0, arg1, arg2, arg3)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*ConnectorService)(nil).Create), arg0, arg1, arg2, arg3, arg4)
 }
 
 // Delete mocks base method.
@@ -350,18 +350,18 @@ func (m *ProcessorService) EXPECT() *ProcessorServiceMockRecorder {
 }
 
 // Create mocks base method.
-func (m *ProcessorService) Create(arg0 context.Context, arg1, arg2 string, arg3 processor.Parent, arg4 processor.Config) (*processor.Instance, error) {
+func (m *ProcessorService) Create(arg0 context.Context, arg1, arg2 string, arg3 processor.Parent, arg4 processor.Config, arg5 processor.ProvisionType) (*processor.Instance, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Create", arg0, arg1, arg2, arg3, arg4)
+	ret := m.ctrl.Call(m, "Create", arg0, arg1, arg2, arg3, arg4, arg5)
 	ret0, _ := ret[0].(*processor.Instance)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Create indicates an expected call of Create.
-func (mr *ProcessorServiceMockRecorder) Create(arg0, arg1, arg2, arg3, arg4 interface{}) *gomock.Call {
+func (mr *ProcessorServiceMockRecorder) Create(arg0, arg1, arg2, arg3, arg4, arg5 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*ProcessorService)(nil).Create), arg0, arg1, arg2, arg3, arg4)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*ProcessorService)(nil).Create), arg0, arg1, arg2, arg3, arg4, arg5)
 }
 
 // Delete mocks base method.

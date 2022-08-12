@@ -27,6 +27,7 @@ import (
 	"github.com/conduitio/conduit/pkg/pipeline"
 	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
+	"github.com/matryer/is"
 )
 
 func TestConnectorOrchestrator_Create_Success(t *testing.T) {
@@ -56,6 +57,7 @@ func TestConnectorOrchestrator_Create_Success(t *testing.T) {
 			gomock.AssignableToTypeOf(""),
 			connector.TypeSource,
 			config,
+			connector.ProvisionTypeAPI,
 		).Return(want, nil)
 	plsMock.EXPECT().
 		AddConnector(gomock.AssignableToTypeOf(ctxType), pl, want.ID()).
@@ -106,6 +108,29 @@ func TestConnectorOrchestrator_Create_PipelineRunning(t *testing.T) {
 	assert.Nil(t, got)
 }
 
+func TestConnectorOrchestrator_Create_PipelineProvisionByConfig(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	db := &inmemory.DB{}
+	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
+
+	pl := &pipeline.Instance{
+		ID:            uuid.NewString(),
+		Status:        pipeline.StatusRunning,
+		ProvisionedBy: pipeline.ProvisionTypeConfig,
+	}
+
+	plsMock.EXPECT().
+		Get(gomock.AssignableToTypeOf(ctxType), pl.ID).
+		Return(pl, nil)
+
+	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
+	got, err := orc.Connectors.Create(ctx, connector.TypeSource, connector.Config{PipelineID: pl.ID})
+	is.Equal(got, nil)
+	is.True(err != nil)
+	is.True(cerrors.Is(err, ErrImmutableProvisionedByConfig)) // expected ErrImmutableProvisionedByConfig
+}
+
 func TestConnectorOrchestrator_Create_CreateConnectorError(t *testing.T) {
 	ctx := context.Background()
 	db := &inmemory.DB{}
@@ -126,6 +151,7 @@ func TestConnectorOrchestrator_Create_CreateConnectorError(t *testing.T) {
 			gomock.AssignableToTypeOf(""),
 			connector.TypeSource,
 			config,
+			connector.ProvisionTypeAPI,
 		).
 		Return(nil, wantErr)
 
@@ -159,6 +185,7 @@ func TestConnectorOrchestrator_Create_AddConnectorError(t *testing.T) {
 			gomock.AssignableToTypeOf(""),
 			connector.TypeSource,
 			config,
+			connector.ProvisionTypeAPI,
 		).
 		Return(conn, nil)
 	plsMock.EXPECT().
@@ -371,6 +398,7 @@ func TestConnectorOrchestrator_Delete_RemoveConnectorFailed(t *testing.T) {
 			want.ID(),
 			want.Type(),
 			want.Config(),
+			connector.ProvisionTypeAPI,
 		).
 		Return(want, nil)
 

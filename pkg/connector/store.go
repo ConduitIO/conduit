@@ -173,12 +173,12 @@ func (s *Store) decode(raw []byte) (Connector, error) {
 	var conn Connector
 	switch typedConnector.Type {
 	case TypeSource.String():
-		conn, err = s.connBuilder.Build(TypeSource)
+		conn, err = s.connBuilder.Build(TypeSource, ProvisionTypeAPI)
 		if err != nil {
 			return nil, err
 		}
 	case TypeDestination.String():
-		conn, err = s.connBuilder.Build(TypeDestination)
+		conn, err = s.connBuilder.Build(TypeDestination, ProvisionTypeAPI) // ProvisionType will be overwritten
 		if err != nil {
 			return nil, err
 		}

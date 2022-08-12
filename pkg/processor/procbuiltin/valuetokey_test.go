@@ -83,18 +83,24 @@ func TestValueToKey_Process(t *testing.T) {
 			Settings: map[string]string{valueToKeyConfigFields: "foo"},
 		},
 		args: args{r: record.Record{
-			Payload: record.StructuredData{
-				"foo": 123,
-				"bar": nil,
+			Payload: record.Change{
+				Before: nil,
+				After: record.StructuredData{
+					"foo": 123,
+					"bar": nil,
+				},
 			},
 		}},
 		want: record.Record{
 			Key: record.StructuredData{
 				"foo": 123,
 			},
-			Payload: record.StructuredData{
-				"foo": 123,
-				"bar": nil,
+			Payload: record.Change{
+				Before: nil,
+				After: record.StructuredData{
+					"foo": 123,
+					"bar": nil,
+				},
 			},
 		},
 		wantErr: false,
@@ -104,9 +110,12 @@ func TestValueToKey_Process(t *testing.T) {
 			Settings: map[string]string{valueToKeyConfigFields: "foo"},
 		},
 		args: args{r: record.Record{
-			Payload: record.RawData{
-				Raw:    []byte("raw data"),
-				Schema: nil,
+			Payload: record.Change{
+				Before: nil,
+				After: record.RawData{
+					Raw:    []byte("raw data"),
+					Schema: nil,
+				},
 			},
 		}},
 		want:    record.Record{},
@@ -117,9 +126,12 @@ func TestValueToKey_Process(t *testing.T) {
 			Settings: map[string]string{valueToKeyConfigFields: "foo"},
 		},
 		args: args{r: record.Record{
-			Payload: record.RawData{
-				Raw:    []byte("raw data"),
-				Schema: mock.NewSchema(nil),
+			Payload: record.Change{
+				Before: nil,
+				After: record.RawData{
+					Raw:    []byte("raw data"),
+					Schema: mock.NewSchema(nil),
+				},
 			},
 		}},
 		want:    record.Record{},
