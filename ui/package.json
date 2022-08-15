@@ -72,7 +72,7 @@
     "ember-template-lint": "^4.10.1",
     "ember-test-selectors": "^6.0.0",
     "ember-tooltips": "^3.6.0",
-    "ember-truth-helpers": "^3.0.0",
+    "ember-truth-helpers": "^3.1.1",
     "eslint": "^7.32.0",
     "eslint-config-prettier": "^8.5.0",
     "eslint-plugin-ember": "^10.6.1",
