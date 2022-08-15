@@ -31,7 +31,7 @@ require (
 	github.com/prometheus/client_model v0.2.0
 	github.com/prometheus/common v0.37.0
 	github.com/rs/zerolog v1.27.0
-	go.buf.build/grpc/go/conduitio/conduit-connector-protocol v1.3.3
+	go.buf.build/grpc/go/conduitio/conduit-connector-protocol v1.4.3
 	golang.org/x/tools v0.1.12
 	golang.org/x/xerrors v0.0.0-20220517211312-f3a8303e98df
 	google.golang.org/genproto v0.0.0-20220805133916-01dd62135a58
