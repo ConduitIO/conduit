@@ -19,30 +19,32 @@ import (
 	"io/ioutil"
 
 	"github.com/conduitio/conduit/pkg/connector"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/database"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/foundation/multierror"
+	"github.com/conduitio/conduit/pkg/foundation/rollback"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	"github.com/conduitio/conduit/pkg/processor"
 )
 
-var update = false
-
 type Service struct {
-	ctx              *context.Context
+	db               database.DB
 	logger           log.CtxLogger
 	pipelineService  *pipeline.Service
 	connectorService *connector.Service
 	processorService *processor.Service
 }
 
-func GetService(
-	ctx *context.Context,
+func NewService(
+	db database.DB,
 	logger log.CtxLogger,
 	plService *pipeline.Service,
 	connService *connector.Service,
 	procService *processor.Service,
 ) *Service {
 	return &Service{
-		ctx:              ctx,
+		db:               db,
 		logger:           logger.WithComponent("provision"),
 		pipelineService:  plService,
 		connectorService: connService,
@@ -50,7 +52,7 @@ func GetService(
 	}
 }
 
-func (s *Service) ProvisionConfigFile(path string) error {
+func (s *Service) ProvisionConfigFile(ctx context.Context, path string) error {
 	data, err := ioutil.ReadFile(path)
 	if err != nil {
 		return err
@@ -63,91 +65,117 @@ func (s *Service) ProvisionConfigFile(path string) error {
 
 	got := EnrichPipelinesConfig(before)
 
+	var multi error
 	for k, v := range got {
-		// skip non valid? multierror?
 		err = ValidatePipelinesConfig(v)
 		if err != nil {
-			return err
+			multi = multierror.Append(multi, cerrors.Errorf("invalid pipeline config: %w", err))
+			continue
 		}
-		err = s.provisionPipeline(k, v)
+		err = s.provisionPipeline(ctx, k, v)
 		if err != nil {
+			// should we return, or add one to the multierror
 			return err
 		}
 	}
 
-	return nil
+	return multi
 }
 
-func (s *Service) provisionPipeline(id string, config PipelineConfig) error {
+func (s *Service) provisionPipeline(ctx context.Context, id string, config PipelineConfig) error {
+	var err error
 	var destMap map[string]connector.DestinationState
 	var srcMap map[string]connector.SourceState
-	var err error
-	oldPl, err := s.pipelineService.Get(*s.ctx, id)
-	if err == nil {
-		update = true
-		destMap, srcMap, err = s.copyStatesAndDeletePipeline(oldPl, config)
+
+	var r rollback.R
+	defer r.MustExecute()
+	txn, ctx, err := s.db.NewTransaction(ctx, true)
+	if err != nil {
+		return cerrors.Errorf("could not create db transaction: %w", err)
+	}
+	r.AppendPure(txn.Discard)
+
+	oldPl, err := s.pipelineService.Get(ctx, id)
+	if err != nil && !cerrors.Is(err, pipeline.ErrInstanceNotFound) {
+		return err
+	} else if err == nil {
+		destMap, srcMap, err = s.copyStatesAndDeletePipeline(ctx, oldPl, config)
 		if err != nil {
 			return err
 		}
-	} else {
-		update = false
+		// todo: create a pipeline copy in case of error, add to rollback
 	}
 
-	newPl, err := s.createPipeline(id, config)
+	newPl, err := s.createPipeline(ctx, id, config)
 	if err != nil {
-		return err
+		return cerrors.Errorf("could not create pipeline %q: %w", id, err)
 	}
+	r.Append(func() error {
+		err := s.pipelineService.Delete(ctx, newPl)
+		return err
+	})
 	for k, cfg := range config.Connectors {
-		err := s.createConnector(id, k, cfg, destMap, srcMap)
+		err := s.createConnector(ctx, id, k, cfg, destMap, srcMap)
 		if err != nil {
-			return err
+			return cerrors.Errorf("could not create connector %q: %w", k, err)
 		}
-		_, err = s.pipelineService.AddConnector(*s.ctx, newPl, k)
+		s.rollbackCreateConnector(ctx, &r, k)
+		_, err = s.pipelineService.AddConnector(ctx, newPl, k)
 		if err != nil {
-			return err
+			return cerrors.Errorf("could not add connector %q to the pipeline %q: %w", k, id, err)
 		}
+		s.rollbackAddConnector(ctx, &r, newPl, k)
 		for k1, cfg1 := range cfg.Processors {
-			err := s.createProcessor(id, processor.ParentTypeConnector, k1, cfg1)
+			err := s.createProcessor(ctx, id, processor.ParentTypeConnector, k1, cfg1)
 			if err != nil {
-				return err
+				return cerrors.Errorf("could not create processor %q: %w", k1, err)
 			}
-			_, err = s.connectorService.AddProcessor(*s.ctx, k, k1)
+			s.rollbackCreateConnectorProcessor(ctx, &r, k, k1)
+			_, err = s.connectorService.AddProcessor(ctx, k, k1)
 			if err != nil {
-				return err
+				return cerrors.Errorf("could not add processor %q to the connector %q: %w", k1, k, err)
 			}
+			s.rollbackAddConnectorProcessor(ctx, &r, k, k1)
 		}
 	}
 	for k, cfg := range config.Processors {
-		err := s.createProcessor(id, processor.ParentTypePipeline, k, cfg)
+		err := s.createProcessor(ctx, id, processor.ParentTypePipeline, k, cfg)
 		if err != nil {
-			return err
+			return cerrors.Errorf("could not create processor %q: %w", k, err)
 		}
-		_, err = s.pipelineService.AddProcessor(*s.ctx, newPl, k)
+		s.rollbackCreatePipelineProcessor(ctx, &r, newPl, k)
+		_, err = s.pipelineService.AddProcessor(ctx, newPl, k)
 		if err != nil {
-			return err
+			return cerrors.Errorf("could not add processor %q to the pipeline %q: %w", k, id, err)
+		}
+		s.rollbackAddPipelineProcessor(ctx, &r, newPl, k)
+	}
+
+	// check if pipeline is running
+	if config.Status == StatusRunning {
+		err := s.pipelineService.Start(ctx, s.connectorService, s.processorService, newPl)
+		if err != nil {
+			return cerrors.Errorf("could not start the pipeline %q: %w", err)
 		}
 	}
 
-	// set pipeline status
-	status := pipeline.StatusUserStopped
-	if config.Status == StatusRunning {
-		err := s.pipelineService.Start(*s.ctx, s.connectorService, s.processorService, newPl)
-		if err != nil {
-			return err
-		}
-		status = pipeline.StatusRunning
+	// commit db transaction and skip rollback
+	err = txn.Commit()
+	if err != nil {
+		return cerrors.Errorf("could not commit db transaction: %w", err)
 	}
-	newPl.Status = status
+
+	r.Skip() // skip rollback
 
 	return nil
 }
 
-func (s *Service) copyStatesAndDeletePipeline(pl *pipeline.Instance, config PipelineConfig) (map[string]connector.DestinationState, map[string]connector.SourceState, error) {
+func (s *Service) copyStatesAndDeletePipeline(ctx context.Context, pl *pipeline.Instance, config PipelineConfig) (map[string]connector.DestinationState, map[string]connector.SourceState, error) {
 	destMap := make(map[string]connector.DestinationState, 1)
 	srcMap := make(map[string]connector.SourceState, 1)
 
 	for k := range config.Connectors {
-		destState, srcState, err := s.getConnectorState(k)
+		destState, srcState, err := s.getConnectorState(ctx, k, config.Connectors[k].Plugin)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -155,7 +183,7 @@ func (s *Service) copyStatesAndDeletePipeline(pl *pipeline.Instance, config Pipe
 		srcMap[k] = srcState
 	}
 
-	err := s.pipelineService.Delete(*s.ctx, pl)
+	err := s.deletePipeline(ctx, pl, config)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -163,20 +191,53 @@ func (s *Service) copyStatesAndDeletePipeline(pl *pipeline.Instance, config Pipe
 	return destMap, srcMap, nil
 }
 
-func (s *Service) createPipeline(id string, config PipelineConfig) (*pipeline.Instance, error) {
+func (s *Service) deletePipeline(ctx context.Context, pl *pipeline.Instance, config PipelineConfig) error {
+	var err error
+	// remove pipeline processors
+	for k := range config.Processors {
+		_, err = s.pipelineService.RemoveProcessor(ctx, pl, k)
+		if err != nil {
+			return err
+		}
+	}
+	// remove connector processors
+	for k, cfg := range config.Connectors {
+		for k1 := range cfg.Processors {
+			_, err = s.connectorService.RemoveProcessor(ctx, k, k1)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	// remove connectors
+	for k := range config.Connectors {
+		_, err = s.pipelineService.RemoveConnector(ctx, pl, k)
+		if err != nil {
+			return err
+		}
+	}
+	err = s.pipelineService.Delete(ctx, pl)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (s *Service) createPipeline(ctx context.Context, id string, config PipelineConfig) (*pipeline.Instance, error) {
 	cfg := pipeline.Config{
 		Name:        config.Name,
 		Description: config.Description,
 	}
 
-	pl, err := s.pipelineService.Create(*s.ctx, id, cfg, pipeline.ProvisionTypeConfig)
+	pl, err := s.pipelineService.Create(ctx, id, cfg, pipeline.ProvisionTypeConfig)
 	if err != nil {
 		return nil, err
 	}
 	return pl, nil
 }
 
-func (s *Service) createConnector(pipelineID string, id string, config ConnectorConfig, destMap map[string]connector.DestinationState, srcMap map[string]connector.SourceState) error {
+func (s *Service) createConnector(ctx context.Context, pipelineID string, id string, config ConnectorConfig, destMap map[string]connector.DestinationState, srcMap map[string]connector.SourceState) error {
 	cfg := connector.Config{
 		Name:       config.Name,
 		Plugin:     config.Plugin,
@@ -189,12 +250,13 @@ func (s *Service) createConnector(pipelineID string, id string, config Connector
 		connType = connector.TypeDestination
 	}
 
-	conn, err := s.connectorService.Create(*s.ctx, id, connType, cfg, connector.ProvisionTypeConfig)
+	conn, err := s.connectorService.Create(ctx, id, connType, cfg, connector.ProvisionTypeConfig)
 	if err != nil {
 		return err
 	}
 
-	if update {
+	// check if states should be updated
+	if len(srcMap) != 0 || len(destMap) != 0 {
 		switch v := conn.(type) {
 		case connector.Destination:
 			v.SetState(destMap[id])
@@ -206,12 +268,17 @@ func (s *Service) createConnector(pipelineID string, id string, config Connector
 	return nil
 }
 
-func (s *Service) getConnectorState(id string) (connector.DestinationState, connector.SourceState, error) {
+func (s *Service) getConnectorState(ctx context.Context, id string, plugin string) (connector.DestinationState, connector.SourceState, error) {
 	var destState connector.DestinationState
 	var srcState connector.SourceState
-	conn, err := s.connectorService.Get(*s.ctx, id)
+	conn, err := s.connectorService.Get(ctx, id)
 	if err != nil {
-		return destState, srcState, err
+		return destState, srcState, cerrors.Errorf("could not get connector %q: connector id cannot be changed", id)
+	}
+	// check if plugin was changed, if it was, then we cannot copy states
+	if conn.Config().Plugin != plugin {
+		s.logger.Warn(ctx).Msg("a connector plugin was changed, try creating a new connector with that plugin instead")
+		return destState, srcState, cerrors.Errorf("connector %q: connectors plugin cannot be changed", id)
 	}
 	switch v := conn.(type) {
 	case connector.Destination:
@@ -223,7 +290,7 @@ func (s *Service) getConnectorState(id string) (connector.DestinationState, conn
 	return destState, srcState, nil
 }
 
-func (s *Service) createProcessor(parentID string, parentType processor.ParentType, id string, config ProcessorConfig) error {
+func (s *Service) createProcessor(ctx context.Context, parentID string, parentType processor.ParentType, id string, config ProcessorConfig) error {
 	cfg := processor.Config{
 		Settings: config.Settings,
 	}
@@ -232,9 +299,47 @@ func (s *Service) createProcessor(parentID string, parentType processor.ParentTy
 		Type: parentType,
 	}
 	// processor name will be renamed to type https://github.com/ConduitIO/conduit/issues/498
-	_, err := s.processorService.Create(*s.ctx, id, config.Type, parent, cfg, processor.ProvisionTypeConfig)
+	_, err := s.processorService.Create(ctx, id, config.Type, parent, cfg, processor.ProvisionTypeConfig)
 	if err != nil {
 		return err
 	}
 	return nil
+}
+
+// rollback functions
+func (s *Service) rollbackCreateConnector(ctx context.Context, r *rollback.R, connID string) {
+	r.Append(func() error {
+		err := s.connectorService.Delete(ctx, connID)
+		return err
+	})
+}
+func (s *Service) rollbackAddConnector(ctx context.Context, r *rollback.R, pl *pipeline.Instance, connID string) {
+	r.Append(func() error {
+		_, err := s.pipelineService.RemoveConnector(ctx, pl, connID)
+		return err
+	})
+}
+func (s *Service) rollbackCreateConnectorProcessor(ctx context.Context, r *rollback.R, connID string, processorID string) {
+	r.Append(func() error {
+		_, err := s.connectorService.RemoveProcessor(ctx, connID, processorID)
+		return err
+	})
+}
+func (s *Service) rollbackCreatePipelineProcessor(ctx context.Context, r *rollback.R, pl *pipeline.Instance, processorID string) {
+	r.Append(func() error {
+		_, err := s.pipelineService.RemoveProcessor(ctx, pl, processorID)
+		return err
+	})
+}
+func (s *Service) rollbackAddConnectorProcessor(ctx context.Context, r *rollback.R, connID string, processorID string) {
+	r.Append(func() error {
+		_, err := s.connectorService.RemoveProcessor(ctx, connID, processorID)
+		return err
+	})
+}
+func (s *Service) rollbackAddPipelineProcessor(ctx context.Context, r *rollback.R, pl *pipeline.Instance, processorID string) {
+	r.Append(func() error {
+		_, err := s.pipelineService.RemoveProcessor(ctx, pl, processorID)
+		return err
+	})
 }
