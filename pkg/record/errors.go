@@ -12,10 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package toproto
+package record
 
-import connectorv1 "go.buf.build/grpc/go/conduitio/conduit-connector-protocol/connector/v1"
+import "github.com/conduitio/conduit/pkg/foundation/cerrors"
 
-func SpecifierSpecifyRequest() *connectorv1.Specifier_Specify_Request {
-	return &connectorv1.Specifier_Specify_Request{}
-}
+var (
+	// ErrMetadataFieldNotFound is returned in metadata utility functions when a
+	// metadata field is not found.
+	ErrMetadataFieldNotFound = cerrors.New("metadata field not found")
+)

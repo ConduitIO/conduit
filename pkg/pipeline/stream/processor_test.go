@@ -18,7 +18,6 @@ import (
 	"context"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -35,9 +34,8 @@ func TestProcessorNode_Success(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
 	wantRec := record.Record{
-		Position:  []byte(uuid.NewString()),
-		Metadata:  map[string]string{"foo": "bar"},
-		CreatedAt: time.Now().UTC(),
+		Position: []byte(uuid.NewString()),
+		Metadata: map[string]string{"foo": "bar"},
 	}
 	newPosition := []byte(uuid.NewString())
 
@@ -182,7 +180,7 @@ func TestProcessorNode_Skip(t *testing.T) {
 	out := n.Pub()
 
 	// send a message on the pipeline that will be skipped
-	msg := &Message{Ctx: ctx, Record: record.Record{CreatedAt: time.Now()}}
+	msg := &Message{Ctx: ctx, Record: record.Record{}}
 
 	// register a dummy AckHandler and NackHandler for tests.
 	counter := 0

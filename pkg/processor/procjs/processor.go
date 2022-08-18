@@ -28,6 +28,20 @@ const (
 	entrypoint = "process"
 )
 
+// jsRecord is an intermediary representation of record.Record that is passed to
+// the JavaScript transform. We use this because using record.Record would not
+// allow us to modify or access certain data (e.g. metadata or structured data).
+type jsRecord struct {
+	Position  []byte
+	Operation string
+	Metadata  map[string]string
+	Key       any
+	Payload   struct {
+		Before any
+		After  any
+	}
+}
+
 // Processor is able to run processors defined in JavaScript.
 type Processor struct {
 	runtime  *goja.Runtime
@@ -52,9 +66,10 @@ func New(src string, logger zerolog.Logger) (*Processor, error) {
 func (p *Processor) initJSRuntime(logger zerolog.Logger) error {
 	rt := goja.New()
 	runtimeHelpers := map[string]interface{}{
-		"logger":  &logger,
-		"Record":  p.jsRecord,
-		"RawData": p.jsContentRaw,
+		"logger":         &logger,
+		"Record":         p.jsRecord,
+		"RawData":        p.jsContentRaw,
+		"StructuredData": p.jsContentStructured,
 	}
 
 	for name, helper := range runtimeHelpers {
@@ -90,10 +105,10 @@ func (p *Processor) initFunction(src string) error {
 
 func (p *Processor) jsRecord(goja.ConstructorCall) *goja.Object {
 	// TODO accept arguments
-	// We return a record.Record struct, however because we are
+	// We return a jsRecord struct, however because we are
 	// not changing call.This instanceof will not work as expected.
 
-	r := record.Record{
+	r := jsRecord{
 		Metadata: make(map[string]string),
 	}
 	// We need to return a pointer to make the returned object mutable.
@@ -110,75 +125,98 @@ func (p *Processor) jsContentRaw(goja.ConstructorCall) *goja.Object {
 	return p.runtime.ToValue(&r).ToObject(p.runtime)
 }
 
-func (p *Processor) Process(_ context.Context, in record.Record) (record.Record, error) {
-	jsRecord := p.toJSRecord(in)
+func (p *Processor) jsContentStructured(goja.ConstructorCall) *goja.Object {
+	// TODO accept arguments
+	// We return a map[string]interface{} struct, however because we are
+	// not changing call.This instanceof will not work as expected.
 
-	result, err := p.function(goja.Undefined(), jsRecord)
+	r := make(map[string]interface{})
+	return p.runtime.ToValue(r).ToObject(p.runtime)
+}
+
+func (p *Processor) Process(_ context.Context, in record.Record) (record.Record, error) {
+	jsr := p.toJSRecord(in)
+
+	result, err := p.function(goja.Undefined(), jsr)
 	if err != nil {
 		return record.Record{}, cerrors.Errorf("failed to execute JS processor function: %w", err)
 	}
 
 	out, err := p.toInternalRecord(result)
+	if err == processor.ErrSkipRecord {
+		return record.Record{}, err
+	}
 	if err != nil {
 		return record.Record{}, cerrors.Errorf("failed to transform to internal record: %w", err)
 	}
 
-	// nil will be returned if the JS function has no return value at all
-	if out == nil {
-		return record.Record{}, processor.ErrSkipRecord
-	}
-
-	return *out, nil
+	return out, nil
 }
 
 func (p *Processor) toJSRecord(r record.Record) goja.Value {
-	// convert content to pointers to make it mutable
-	switch v := r.Payload.(type) {
-	case record.RawData:
-		r.Payload = &v
-	case record.StructuredData:
-		r.Payload = &v
+	convertData := func(d record.Data) interface{} {
+		switch v := d.(type) {
+		case record.RawData:
+			return &v
+		case record.StructuredData:
+			return map[string]interface{}(v)
+		}
+		return nil
 	}
 
-	switch v := r.Key.(type) {
-	case record.RawData:
-		r.Key = &v
-	case record.StructuredData:
-		r.Key = &v
+	jsr := jsRecord{
+		Position:  r.Position,
+		Operation: r.Operation.String(),
+		Metadata:  r.Metadata,
+		Key:       convertData(r.Key),
+		Payload: struct {
+			Before interface{}
+			After  interface{}
+		}{
+			Before: convertData(r.Payload.Before),
+			After:  convertData(r.Payload.After),
+		},
 	}
 
 	// we need to send in a pointer to let the user change the value and return it, if they choose to do so
-	return p.runtime.ToValue(&r)
+	return p.runtime.ToValue(&jsr)
 }
 
-func (p *Processor) toInternalRecord(v goja.Value) (*record.Record, error) {
-	r := v.Export()
-
-	switch v := r.(type) {
-	case *record.Record:
-		return p.dereferenceContent(v), nil
-	case nil:
-		return nil, nil
-	default:
-		return nil, cerrors.Errorf("js function expected to return a Record, but returned: %T", v)
-	}
-}
-
-func (p *Processor) dereferenceContent(r *record.Record) *record.Record {
-	// dereference content pointers
-	switch v := r.Payload.(type) {
-	case *record.RawData:
-		r.Payload = *v
-	case *record.StructuredData:
-		r.Payload = *v
+func (p *Processor) toInternalRecord(v goja.Value) (record.Record, error) {
+	raw := v.Export()
+	if raw == nil {
+		return record.Record{}, processor.ErrSkipRecord
 	}
 
-	switch v := r.Key.(type) {
-	case *record.RawData:
-		r.Key = *v
-	case *record.StructuredData:
-		r.Key = *v
+	jsr, ok := v.Export().(*jsRecord)
+	if !ok {
+		return record.Record{}, cerrors.Errorf("js function expected to return %T, but returned: %T", &jsRecord{}, v)
 	}
 
-	return r
+	var op record.Operation
+	err := op.UnmarshalText([]byte(jsr.Operation))
+	if err != nil {
+		return record.Record{}, cerrors.Errorf("could not unmarshal operation: %w", err)
+	}
+
+	convertData := func(d interface{}) record.Data {
+		switch v := d.(type) {
+		case *record.RawData:
+			return *v
+		case map[string]interface{}:
+			return record.StructuredData(v)
+		}
+		return nil
+	}
+
+	return record.Record{
+		Position:  jsr.Position,
+		Operation: op,
+		Metadata:  jsr.Metadata,
+		Key:       convertData(jsr.Key),
+		Payload: record.Change{
+			Before: convertData(jsr.Payload.Before),
+			After:  convertData(jsr.Payload.After),
+		},
+	}, nil
 }

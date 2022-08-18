@@ -314,8 +314,11 @@ func TestFilterFieldPayload_Process(t *testing.T) {
 			name: "should forward record on condition",
 			args: args{
 				r: record.Record{
-					Payload: record.StructuredData{
-						"foo": "bar",
+					Payload: record.Change{
+						Before: nil,
+						After: record.StructuredData{
+							"foo": "bar",
+						},
 					},
 				},
 				config: processor.Config{
@@ -326,8 +329,11 @@ func TestFilterFieldPayload_Process(t *testing.T) {
 					},
 				}},
 			want: record.Record{
-				Payload: record.StructuredData{
-					"foo": "bar",
+				Payload: record.Change{
+					Before: nil,
+					After: record.StructuredData{
+						"foo": "bar",
+					},
 				},
 			},
 			wantErr: false,
@@ -336,8 +342,11 @@ func TestFilterFieldPayload_Process(t *testing.T) {
 			name: "should drop record on condition",
 			args: args{
 				r: record.Record{
-					Payload: record.StructuredData{
-						"foo": "5",
+					Payload: record.Change{
+						Before: nil,
+						After: record.StructuredData{
+							"foo": "5",
+						},
 					},
 				},
 				config: processor.Config{
@@ -354,8 +363,11 @@ func TestFilterFieldPayload_Process(t *testing.T) {
 			name: "should drop record on missing key",
 			args: args{
 				r: record.Record{
-					Payload: record.StructuredData{
-						"bar": "3",
+					Payload: record.Change{
+						Before: nil,
+						After: record.StructuredData{
+							"bar": "3",
+						},
 					},
 				},
 				config: processor.Config{

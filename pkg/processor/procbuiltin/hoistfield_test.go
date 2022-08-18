@@ -204,16 +204,22 @@ func TestHoistFieldPayload_Process(t *testing.T) {
 			Settings: map[string]string{hoistFieldConfigField: "foo"},
 		},
 		args: args{r: record.Record{
-			Payload: record.StructuredData{
-				"bar": 123,
-				"baz": nil,
+			Payload: record.Change{
+				Before: nil,
+				After: record.StructuredData{
+					"bar": 123,
+					"baz": nil,
+				},
 			},
 		}},
 		want: record.Record{
-			Payload: record.StructuredData{
-				"foo": map[string]interface{}{
-					"bar": 123,
-					"baz": nil,
+			Payload: record.Change{
+				Before: nil,
+				After: record.StructuredData{
+					"foo": map[string]interface{}{
+						"bar": 123,
+						"baz": nil,
+					},
 				},
 			},
 		},
@@ -224,14 +230,20 @@ func TestHoistFieldPayload_Process(t *testing.T) {
 			Settings: map[string]string{hoistFieldConfigField: "foo"},
 		},
 		args: args{r: record.Record{
-			Payload: record.RawData{
-				Raw:    []byte("raw data"),
-				Schema: nil,
+			Payload: record.Change{
+				Before: nil,
+				After: record.RawData{
+					Raw:    []byte("raw data"),
+					Schema: nil,
+				},
 			},
 		}},
 		want: record.Record{
-			Payload: record.StructuredData{
-				"foo": []byte("raw data"),
+			Payload: record.Change{
+				Before: nil,
+				After: record.StructuredData{
+					"foo": []byte("raw data"),
+				},
 			},
 		},
 		wantErr: false,
@@ -241,9 +253,12 @@ func TestHoistFieldPayload_Process(t *testing.T) {
 			Settings: map[string]string{hoistFieldConfigField: "foo"},
 		},
 		args: args{r: record.Record{
-			Payload: record.RawData{
-				Raw:    []byte("raw data"),
-				Schema: mock.NewSchema(nil),
+			Payload: record.Change{
+				Before: nil,
+				After: record.RawData{
+					Raw:    []byte("raw data"),
+					Schema: mock.NewSchema(nil),
+				},
 			},
 		}},
 		want:    record.Record{},

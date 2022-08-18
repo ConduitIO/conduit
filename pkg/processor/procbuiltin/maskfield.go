@@ -47,12 +47,8 @@ func MaskFieldKey(config processor.Config) (processor.Interface, error) {
 	return maskField(maskFieldKeyName, recordKeyGetSetter{}, config)
 }
 
-// MaskFieldPayload builds the following processor:
-//  * If the payload is raw and has a schema attached, replace the field with
-//    the zero value of the fields type.
-//  * If the payload is raw and has no schema, return an error (not supported).
-//  * If the payload is structured, replace the field with the zero value of the
-//    fields type.
+// MaskFieldPayload builds the same processor as MaskFieldKey, except that
+// it operates on the field Record.Payload.After.
 func MaskFieldPayload(config processor.Config) (processor.Interface, error) {
 	return maskField(maskFieldPayloadName, recordPayloadGetSetter{}, config)
 }

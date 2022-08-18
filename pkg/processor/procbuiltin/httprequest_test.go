@@ -170,13 +170,19 @@ func TestHTTPRequest_Success(t *testing.T) {
 			Settings: map[string]string{httpRequestConfigMethod: "GET"},
 		},
 		args: args{r: record.Record{
-			Payload: record.StructuredData{
-				"bar": 123,
-				"baz": nil,
+			Payload: record.Change{
+				Before: nil,
+				After: record.StructuredData{
+					"bar": 123,
+					"baz": nil,
+				},
 			},
 		}},
 		want: record.Record{
-			Payload: record.RawData{Raw: respBody},
+			Payload: record.Change{
+				Before: nil,
+				After:  record.RawData{Raw: respBody},
+			},
 		},
 	}, {
 		name: "raw data",
@@ -184,10 +190,16 @@ func TestHTTPRequest_Success(t *testing.T) {
 			Settings: map[string]string{},
 		},
 		args: args{r: record.Record{
-			Payload: record.RawData{Raw: []byte("random data")},
+			Payload: record.Change{
+				Before: nil,
+				After:  record.RawData{Raw: []byte("random data")},
+			},
 		}},
 		want: record.Record{
-			Payload: record.RawData{Raw: respBody},
+			Payload: record.Change{
+				Before: nil,
+				After:  record.RawData{Raw: respBody},
+			},
 		},
 	}}
 
@@ -199,7 +211,7 @@ func TestHTTPRequest_Success(t *testing.T) {
 			if wantMethod == "" {
 				wantMethod = "POST" // default
 			}
-			wantBody := tt.args.r.Payload.Bytes()
+			wantBody := tt.args.r.Payload.After.Bytes()
 
 			srv := httptest.NewServer(http.HandlerFunc(func(resp http.ResponseWriter, req *http.Request) {
 				is.Equal(wantMethod, req.Method)
@@ -219,7 +231,7 @@ func TestHTTPRequest_Success(t *testing.T) {
 
 			got, err := underTest.Process(context.Background(), tt.args.r)
 			is.NoErr(err)
-			is.Equal(got.Payload, record.RawData{Raw: respBody})
+			is.Equal(got.Payload.After, record.RawData{Raw: respBody})
 		})
 	}
 }
@@ -266,9 +278,9 @@ func TestHTTPRequest_RetrySuccess(t *testing.T) {
 	underTest, err := HTTPRequest(config)
 	is.NoErr(err)
 
-	got, err := underTest.Process(context.Background(), record.Record{Payload: record.RawData{Raw: wantBody}})
+	got, err := underTest.Process(context.Background(), record.Record{Payload: record.Change{After: record.RawData{Raw: wantBody}}})
 	is.NoErr(err)
-	is.Equal(got.Payload, record.RawData{Raw: respBody})
+	is.Equal(got.Payload.After, record.RawData{Raw: respBody})
 	is.Equal(srvHandlerCount, 5)
 }
 
@@ -297,7 +309,7 @@ func TestHTTPRequest_RetryFail(t *testing.T) {
 	underTest, err := HTTPRequest(config)
 	is.NoErr(err)
 
-	got, err := underTest.Process(context.Background(), record.Record{Payload: record.RawData{}})
+	got, err := underTest.Process(context.Background(), record.Record{Payload: record.Change{After: record.RawData{}}})
 	is.True(err != nil) // expected an error
 	is.Equal(got, record.Record{})
 	is.Equal(srvHandlerCount, 6) // expected 6 requests (1 regular and 5 retries)
