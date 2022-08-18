@@ -31,17 +31,17 @@ import (
 type Service struct {
 	db               database.DB
 	logger           log.CtxLogger
-	pipelineService  *pipeline.Service
-	connectorService *connector.Service
-	processorService *processor.Service
+	pipelineService  PipelineService
+	connectorService ConnectorService
+	processorService ProcessorService
 }
 
 func NewService(
 	db database.DB,
 	logger log.CtxLogger,
-	plService *pipeline.Service,
-	connService *connector.Service,
-	procService *processor.Service,
+	plService PipelineService,
+	connService ConnectorService,
+	procService ProcessorService,
 ) *Service {
 	return &Service{
 		db:               db,
