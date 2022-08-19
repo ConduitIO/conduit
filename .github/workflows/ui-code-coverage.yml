@@ -22,7 +22,7 @@ jobs:
         node-version: '14'
     - name: Install dependencies
       run: make ui-dependencies
-    - uses: mydea/ember-cli-code-coverage-action@4d49818fff56371e4fdacdfbb1c00573f4cdda01
+    - uses: mydea/ember-cli-code-coverage-action@63b38ca45ed6ad14ceb033a63642b8370093ed5a
       with:
         repo-token: "${{ secrets.GITHUB_TOKEN }}"
         working-directory: ./ui
