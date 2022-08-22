@@ -95,6 +95,7 @@ func (s *Service) provisionPipeline(ctx context.Context, id string, config Pipel
 	}
 	r.AppendPure(txn.Discard)
 
+	// check if pipeline already exists
 	oldPl, err := s.pipelineService.Get(ctx, id)
 	if err != nil && !cerrors.Is(err, pipeline.ErrInstanceNotFound) {
 		return cerrors.Errorf("could not get the pipeline %q: %w", id, err)
@@ -106,6 +107,7 @@ func (s *Service) provisionPipeline(ctx context.Context, id string, config Pipel
 		// todo: create a pipeline copy in case of error, add to rollback
 	}
 
+	// create new pipeline
 	newPl, err := s.createPipeline(ctx, id, config)
 	if err != nil {
 		return cerrors.Errorf("could not create pipeline %q: %w", id, err)
