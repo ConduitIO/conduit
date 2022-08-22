@@ -55,7 +55,7 @@ func NewService(
 func (s *Service) ProvisionConfigFile(ctx context.Context, path string) error {
 	data, err := ioutil.ReadFile(path)
 	if err != nil {
-		return err
+		return cerrors.Errorf("could not read the file %q: %w", path, err)
 	}
 
 	before, err := Parse(data)
@@ -75,7 +75,7 @@ func (s *Service) ProvisionConfigFile(ctx context.Context, path string) error {
 		err = s.provisionPipeline(ctx, k, v)
 		if err != nil {
 			// should we return, or add one to the multierror
-			return err
+			return cerrors.Errorf("error while provisioning the pipeline %q: %w", k, err)
 		}
 	}
 
@@ -97,11 +97,11 @@ func (s *Service) provisionPipeline(ctx context.Context, id string, config Pipel
 
 	oldPl, err := s.pipelineService.Get(ctx, id)
 	if err != nil && !cerrors.Is(err, pipeline.ErrInstanceNotFound) {
-		return err
+		return cerrors.Errorf("could not get the pipeline %q: %w", id, err)
 	} else if err == nil {
 		destMap, srcMap, err = s.copyStatesAndDeletePipeline(ctx, oldPl, config)
 		if err != nil {
-			return err
+			return cerrors.Errorf("could not copy states from the pipeline %q: %w", id, err)
 		}
 		// todo: create a pipeline copy in case of error, add to rollback
 	}
@@ -252,7 +252,7 @@ func (s *Service) createConnector(ctx context.Context, pipelineID string, id str
 
 	conn, err := s.connectorService.Create(ctx, id, connType, cfg, connector.ProvisionTypeConfig)
 	if err != nil {
-		return err
+		return cerrors.Errorf("could not create connector %q on pipeline %q: %w", id, pipelineID, err)
 	}
 
 	// check if states should be updated
@@ -301,7 +301,7 @@ func (s *Service) createProcessor(ctx context.Context, parentID string, parentTy
 	// processor name will be renamed to type https://github.com/ConduitIO/conduit/issues/498
 	_, err := s.processorService.Create(ctx, id, config.Type, parent, cfg, processor.ProvisionTypeConfig)
 	if err != nil {
-		return err
+		return cerrors.Errorf("could not create processor %q on parent %q: %w", id, parentID, err)
 	}
 	return nil
 }
