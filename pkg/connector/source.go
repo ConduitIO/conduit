@@ -260,9 +260,9 @@ func (s *source) Ack(ctx context.Context, p record.Position) error {
 
 	// lock to prevent race condition with connector persister
 	s.m.Lock()
-	defer s.m.Unlock()
-
 	s.XState.Position = p
+	s.m.Unlock()
+
 	s.persister.Persist(ctx, s, func(err error) {
 		if err != nil {
 			s.errs <- err
