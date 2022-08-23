@@ -128,7 +128,7 @@ func (s *Service) provisionPipeline(ctx context.Context, id string, config Pipel
 		}
 		s.rollbackAddConnector(ctx, &r, newPl, k)
 		for k1, cfg1 := range cfg.Processors {
-			err := s.createProcessor(ctx, id, processor.ParentTypeConnector, k1, cfg1)
+			err := s.createProcessor(ctx, k, processor.ParentTypeConnector, k1, cfg1)
 			if err != nil {
 				return cerrors.Errorf("could not create processor %q: %w", k1, err)
 			}
