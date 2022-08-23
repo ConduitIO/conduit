@@ -16,6 +16,10 @@ package connector
 
 import (
 	"context"
+	"sync"
+	"testing"
+	"time"
+
 	"github.com/conduitio/conduit/pkg/foundation/database/inmemory"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
@@ -24,9 +28,6 @@ import (
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/google/uuid"
 	"github.com/matryer/is"
-	"sync"
-	"testing"
-	"time"
 )
 
 func TestSource_Ack_Deadlock(t *testing.T) {
