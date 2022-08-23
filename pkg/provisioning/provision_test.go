@@ -205,7 +205,7 @@ func TestProvision_Rollback(t *testing.T) {
 	is.True(err != nil)
 }
 
-func TestProvision_CopyStates(t *testing.T) {
+func TestProvision_ExistingPipeline(t *testing.T) {
 	is := is.New(t)
 	logger := log.Nop()
 	db := &inmemory.DB{}
