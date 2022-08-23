@@ -132,7 +132,7 @@ func (s *Service) provisionPipeline(ctx context.Context, id string, config Pipel
 			if err != nil {
 				return cerrors.Errorf("could not create processor %q: %w", k1, err)
 			}
-			s.rollbackCreateConnectorProcessor(ctx, &r, k, k1)
+			s.rollbackCreateProcessor(ctx, &r, k1)
 			_, err = s.connectorService.AddProcessor(ctx, k, k1)
 			if err != nil {
 				return cerrors.Errorf("could not add processor %q to the connector %q: %w", k1, k, err)
@@ -145,7 +145,7 @@ func (s *Service) provisionPipeline(ctx context.Context, id string, config Pipel
 		if err != nil {
 			return cerrors.Errorf("could not create processor %q: %w", k, err)
 		}
-		s.rollbackCreatePipelineProcessor(ctx, &r, newPl, k)
+		s.rollbackCreateProcessor(ctx, &r, k)
 		_, err = s.pipelineService.AddProcessor(ctx, newPl, k)
 		if err != nil {
 			return cerrors.Errorf("could not add processor %q to the pipeline %q: %w", k, id, err)
@@ -157,7 +157,7 @@ func (s *Service) provisionPipeline(ctx context.Context, id string, config Pipel
 	if config.Status == StatusRunning {
 		err := s.pipelineService.Start(ctx, s.connectorService, s.processorService, newPl)
 		if err != nil {
-			return cerrors.Errorf("could not start the pipeline %q: %w", err)
+			return cerrors.Errorf("could not start the pipeline %q: %w", id, err)
 		}
 	}
 
@@ -321,15 +321,9 @@ func (s *Service) rollbackAddConnector(ctx context.Context, r *rollback.R, pl *p
 		return err
 	})
 }
-func (s *Service) rollbackCreateConnectorProcessor(ctx context.Context, r *rollback.R, connID string, processorID string) {
+func (s *Service) rollbackCreateProcessor(ctx context.Context, r *rollback.R, processorID string) {
 	r.Append(func() error {
-		_, err := s.connectorService.RemoveProcessor(ctx, connID, processorID)
-		return err
-	})
-}
-func (s *Service) rollbackCreatePipelineProcessor(ctx context.Context, r *rollback.R, pl *pipeline.Instance, processorID string) {
-	r.Append(func() error {
-		_, err := s.pipelineService.RemoveProcessor(ctx, pl, processorID)
+		err := s.processorService.Delete(ctx, processorID)
 		return err
 	})
 }

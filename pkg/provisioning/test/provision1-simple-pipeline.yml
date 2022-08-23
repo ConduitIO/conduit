@@ -17,3 +17,8 @@ pipelines:
         name: dest
         settings:
           path: my/path/file2.txt
+    processors:
+      proc1:
+        type: js
+        settings:
+          additionalProp1: string
