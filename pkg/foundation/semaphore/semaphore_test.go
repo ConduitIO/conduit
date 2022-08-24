@@ -15,6 +15,7 @@
 package semaphore_test
 
 import (
+	"fmt"
 	"math/rand"
 	"runtime"
 	"sync"
@@ -149,4 +150,40 @@ func TestLargeAcquireDoesntStarve(t *testing.T) {
 	sem.Release(lock)
 
 	wg.Wait()
+}
+
+// ExampleSimple demonstrates how different goroutines can be orchestrated to
+// acquire locks in the same order as the tickets enqueued in the semaphore.
+func ExampleSimple_Enqueue() {
+	var sem semaphore.Simple
+	var wg sync.WaitGroup
+
+	// t2 is enqueued after t1, it can be acquired only after t1
+	t1 := sem.Enqueue()
+	t2 := sem.Enqueue()
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		time.Sleep(time.Millisecond) // simulate delay in acquiring
+		fmt.Println("routine 1: try acquiring the lock")
+		lock := sem.Acquire(t1)
+		fmt.Println("routine 1: acquired the lock")
+		sem.Release(lock)
+	}()
+	go func() {
+		defer wg.Done()
+		fmt.Println("routine 2: try acquiring the lock")
+		lock := sem.Acquire(t2) // acquire will block because t1 needs to be acquired first
+		fmt.Println("routine 2: acquired the lock")
+		sem.Release(lock)
+	}()
+
+	wg.Wait()
+
+	// Output:
+	// routine 2: try acquiring the lock
+	// routine 1: try acquiring the lock
+	// routine 1: acquired the lock
+	// routine 2: acquired the lock
 }
