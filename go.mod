@@ -19,7 +19,7 @@ require (
 	github.com/golang/mock v1.6.0
 	github.com/google/go-cmp v0.5.8
 	github.com/google/uuid v1.3.0
-	github.com/grpc-ecosystem/grpc-gateway/v2 v2.11.2
+	github.com/grpc-ecosystem/grpc-gateway/v2 v2.11.3
 	github.com/hashicorp/go-hclog v1.2.2
 	github.com/hashicorp/go-plugin v1.4.5
 	github.com/jackc/pgtype v1.12.0
@@ -34,7 +34,7 @@ require (
 	go.buf.build/grpc/go/conduitio/conduit-connector-protocol v1.4.3
 	golang.org/x/tools v0.1.12
 	golang.org/x/xerrors v0.0.0-20220517211312-f3a8303e98df
-	google.golang.org/genproto v0.0.0-20220805133916-01dd62135a58
+	google.golang.org/genproto v0.0.0-20220822174746-9e6da59bd2fc
 	google.golang.org/grpc v1.49.0
 	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.2.0
 	google.golang.org/protobuf v1.28.1
