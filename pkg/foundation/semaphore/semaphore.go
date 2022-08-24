@@ -16,71 +16,102 @@ package semaphore
 
 import (
 	"sync"
-
-	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 )
 
-// Simple provides a way to bound concurrent access to a resource. It only
-// allows one caller to gain access at a time.
+// Simple provides a way to lock concurrent access to a resource. It only allows
+// one caller to gain access at a time.
 type Simple struct {
-	// lastTicket holds the last issued ticket.
-	lastTicket Ticket
-	// mu guards concurrent access to lastTicket.
-	mu sync.Mutex
+	// last holds the last issued lock.
+	last Lock
+
+	chanPool sync.Pool
+	init     sync.Once
 }
 
 // Ticket reserves a place in the queue and can be used to acquire access to a
-// resource.
+// Lock.
 type Ticket struct {
-	// ready is closed when the ticket acquired the semaphore.
-	ready chan struct{}
-	// next is closed when the ticket is released.
-	next chan struct{}
+	Lock
+	// ready is the same channel as Lock.next of the previous lock. Once the
+	// previous lock is released, the value i will be sent into ready, signaling
+	// this ticket that it can acquire a Lock.
+	ready chan int
+}
+
+// Lock represents a lock of the semaphore. After the lock is not needed any
+// more it should be released.
+type Lock struct {
+	// i is the index of the current lock.
+	i int
+	// next is the same channel as Ticket.ready of the next ticket. Once Lock is
+	// released, the value i+1 will be sent into next, signaling the next ticket
+	// that it can acquire a Lock.
+	next chan int
 }
 
 // Enqueue reserves the next place in the queue and returns a Ticket used to
-// acquire access to the resource when it's the callers turn. The Ticket has to
-// be supplied to Release before discarding.
+// acquire access to the Lock when it's the callers turn. The Ticket has to be
+// supplied to Acquire and discarded afterwards.
+// Enqueue is not safe for concurrent use.
 func (s *Simple) Enqueue() Ticket {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.init.Do(func() {
+		s.chanPool.New = func() any {
+			return make(chan int, 1) // make it buffered to not block the release of a lock
+		}
+
+		s.last.next = s.chanPool.Get().(chan int)
+		s.last.next <- s.last.i + 1 // first lock can be acquired right away
+	})
 
 	t := Ticket{
-		ready: s.lastTicket.next,
-		next:  make(chan struct{}),
+		Lock: Lock{
+			i:    s.last.i + 1,
+			next: s.chanPool.Get().(chan int),
+		},
+		ready: s.last.next,
 	}
-	if t.ready == nil {
-		// first time we create a ticket it will be already acquired
-		t.ready = make(chan struct{})
-		close(t.ready)
-	}
-	s.lastTicket = t
+	s.last = t.Lock
 	return t
 }
 
-// Acquire acquires the semaphore, blocking until resources are available.
-// Returns nil if acquire was successful or ctx.Err if the context was cancelled
-// in the meantime.
-func (s *Simple) Acquire(t Ticket) {
-	<-t.ready
+// Acquire acquires a Lock, blocking until the previous ticket is released.
+// Ticket needs to be discarded after the call to Acquire. The Lock has to be
+// supplied to Release after it is not needed anymore and discarded afterwards.
+// Acquire is safe for concurrent use.
+func (s *Simple) Acquire(t Ticket) Lock {
+	i := <-t.ready
+	if t.i != i {
+		// Multiple reasons this can happen. A ticket other than this one could
+		// have been successfully released twice. The other possibility is that
+		// this ticket is trying to be acquired after it was released. Both
+		// cases are invalid.
+		s.panic()
+	}
+	s.chanPool.Put(t.ready)
+	return t.Lock // return only the lock part of the ticket
 }
 
-// Release releases the semaphore and notifies the next in line if any.
-// If the ticket was already released the function returns an error. After the
-// ticket is released it should be discarded.
-func (s *Simple) Release(t Ticket) error {
+// Release releases the lock and allows the next ticket in line to acquire a
+// lock. After Lock is released it should be discarded.
+// Release is safe for concurrent use.
+func (s *Simple) Release(l Lock) {
 	select {
-	case <-t.ready:
+	case l.next <- l.i + 1:
+		// all good
 	default:
-		return cerrors.New("semaphore: can't release ticket that was not acquired")
+		// This can happen if the ticket was already released and the next
+		// ticket wasn't yet acquired.
+		// In case the next ticket was already acquired, the operation will
+		// succeed and the value will be pushed into the channel. Because the
+		// channel is moved back to the pool, it is only a matter of time when
+		// the channel is reused in another ticket that will see the wrong value
+		// in the channel and panic.
+		s.panic()
 	}
+}
 
-	select {
-	case <-t.next:
-		return cerrors.New("semaphore: ticket already released")
-	default:
-	}
-
-	close(t.next)
-	return nil
+func (s *Simple) panic() {
+	panic("semaphore: mismatched ticket index, tickets are not supposed to" +
+		" be acquired twice and should be discarded after they are released," +
+		" this is an invalid use of this type")
 }

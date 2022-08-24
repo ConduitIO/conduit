@@ -73,17 +73,14 @@ func (n *SourceAckerNode) Run(ctx context.Context) error {
 func (n *SourceAckerNode) registerAckHandler(msg *Message, ticket semaphore.Ticket) {
 	msg.RegisterAckHandler(
 		func(msg *Message) (err error) {
+			n.logger.Trace(msg.Ctx).Msg("acquiring semaphore for ack")
+			lock := n.sem.Acquire(ticket)
 			defer func() {
 				if err != nil {
 					n.fail = true
 				}
-				tmpErr := n.sem.Release(ticket)
-				err = cerrors.LogOrReplace(err, tmpErr, func() {
-					n.logger.Err(msg.Ctx, tmpErr).Msg("error releasing semaphore ticket for ack")
-				})
+				n.sem.Release(lock)
 			}()
-			n.logger.Trace(msg.Ctx).Msg("acquiring semaphore for ack")
-			n.sem.Acquire(ticket)
 
 			if n.fail {
 				n.logger.Trace(msg.Ctx).Msg("blocking forwarding of ack to source connector, because another message failed to be acked/nacked")
@@ -99,17 +96,14 @@ func (n *SourceAckerNode) registerAckHandler(msg *Message, ticket semaphore.Tick
 func (n *SourceAckerNode) registerNackHandler(msg *Message, ticket semaphore.Ticket) {
 	msg.RegisterNackHandler(
 		func(msg *Message, reason error) (err error) {
+			n.logger.Trace(msg.Ctx).Msg("acquiring semaphore for nack")
+			lock := n.sem.Acquire(ticket)
 			defer func() {
 				if err != nil {
 					n.fail = true
 				}
-				tmpErr := n.sem.Release(ticket)
-				err = cerrors.LogOrReplace(err, tmpErr, func() {
-					n.logger.Err(msg.Ctx, tmpErr).Msg("error releasing semaphore ticket for nack")
-				})
+				n.sem.Release(lock)
 			}()
-			n.logger.Trace(msg.Ctx).Msg("acquiring semaphore for nack")
-			n.sem.Acquire(ticket)
 
 			if n.fail {
 				n.logger.Trace(msg.Ctx).Msg("blocking forwarding of nack to DLQ handler, because another message failed to be acked/nacked")
