@@ -26,9 +26,9 @@ export default class PipelinesIndexController extends Controller {
       case 'starred':
         return savedModels.filterBy('favorite', true);
       case 'running':
-        return savedModels.filterBy('pipelineState', 'running');
+        return savedModels.filterBy('isRunning');
       case 'paused':
-        return savedModels.filterBy('pipelineState', 'paused');
+        return savedModels.filterBy('isPaused');
       default:
         return savedModels;
     }
