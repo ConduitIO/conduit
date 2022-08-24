@@ -201,6 +201,10 @@ func (s *Service) deletePipeline(ctx context.Context, pl *pipeline.Instance, con
 		if err != nil {
 			return err
 		}
+		err = s.processorService.Delete(ctx, k)
+		if err != nil {
+			return err
+		}
 	}
 	// remove connector processors
 	for k, cfg := range config.Connectors {
@@ -209,11 +213,19 @@ func (s *Service) deletePipeline(ctx context.Context, pl *pipeline.Instance, con
 			if err != nil {
 				return err
 			}
+			err = s.processorService.Delete(ctx, k1)
+			if err != nil {
+				return err
+			}
 		}
 	}
 	// remove connectors
 	for k := range config.Connectors {
 		_, err = s.pipelineService.RemoveConnector(ctx, pl, k)
+		if err != nil {
+			return err
+		}
+		err = s.connectorService.Delete(ctx, k)
 		if err != nil {
 			return err
 		}

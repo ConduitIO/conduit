@@ -70,7 +70,55 @@ var pipeline1 = PipelineConfig{
 	},
 }
 
-func TestProvision_SimpleRunningPipeline(t *testing.T) {
+var pipeline2 = PipelineConfig{
+	Status:      "running",
+	Name:        "pipeline2",
+	Description: "desc2",
+	Connectors: map[string]ConnectorConfig{
+		"con1": {
+			Type:   "source",
+			Plugin: "builtin:file",
+			Name:   "source",
+			Settings: map[string]string{
+				"path": "my/path/file1.txt",
+			},
+		},
+		"con2": {
+			Type:   "destination",
+			Plugin: "builtin:file",
+			Name:   "dest",
+			Settings: map[string]string{
+				"path": "my/path/file2.txt",
+			},
+		},
+	},
+}
+
+var pipeline3 = PipelineConfig{
+	Status:      "running",
+	Name:        "pipeline3",
+	Description: "desc3",
+	Connectors: map[string]ConnectorConfig{
+		"con1": {
+			Type:   "source",
+			Plugin: "builtin:file",
+			Name:   "source",
+			Settings: map[string]string{
+				"path": "my/path/file1.txt",
+			},
+		},
+		"con2": {
+			Type:   "destination",
+			Plugin: "builtin:file",
+			Name:   "dest",
+			Settings: map[string]string{
+				"path": "my/path/file2.txt",
+			},
+		},
+	},
+}
+
+func TestProvision_PipelineWithConnectorsAndProcessors(t *testing.T) {
 	is := is.New(t)
 	logger := log.Nop()
 	db := &inmemory.DB{}
@@ -130,7 +178,7 @@ func TestProvision_SimpleRunningPipeline(t *testing.T) {
 	pipelineService.EXPECT().Start(ctx, connService, procService, pl1)
 
 	service := NewService(db, logger, pipelineService, connService, procService)
-	err := service.ProvisionConfigFile(context.Background(), "./test/provision1-simple-pipeline.yml")
+	err := service.ProvisionConfigFile(context.Background(), "./test/provision1-pipeline-with-processors.yml")
 	is.NoErr(err)
 }
 
@@ -201,7 +249,7 @@ func TestProvision_Rollback(t *testing.T) {
 	pipelineService.EXPECT().Start(ctx, connService, procService, pl1).Return(cerrors.New("error"))
 
 	service := NewService(db, logger, pipelineService, connService, procService)
-	err := service.ProvisionConfigFile(context.Background(), "./test/provision1-simple-pipeline.yml")
+	err := service.ProvisionConfigFile(context.Background(), "./test/provision1-pipeline-with-processors.yml")
 	is.True(err != nil)
 }
 
@@ -276,9 +324,13 @@ func TestProvision_ExistingPipeline(t *testing.T) {
 	// delete old pipeline
 	pipelineService.EXPECT().Delete(ctx, pl1)
 	pipelineService.EXPECT().RemoveConnector(ctx, pl1, "con1")
+	connService.EXPECT().Delete(ctx, "con1")
 	pipelineService.EXPECT().RemoveConnector(ctx, pl1, "con2")
+	connService.EXPECT().Delete(ctx, "con2")
 	connService.EXPECT().RemoveProcessor(ctx, "con2", "proc1con")
+	procService.EXPECT().Delete(ctx, "proc1con")
 	pipelineService.EXPECT().RemoveProcessor(ctx, pl1, "proc1")
+	procService.EXPECT().Delete(ctx, "proc1")
 
 	// create new pipeline
 	pipelineService.
@@ -299,6 +351,161 @@ func TestProvision_ExistingPipeline(t *testing.T) {
 	pipelineService.EXPECT().Start(ctx, connService, procService, pl1)
 
 	service := NewService(db, logger, pipelineService, connService, procService)
-	err := service.ProvisionConfigFile(context.Background(), "./test/provision1-simple-pipeline.yml")
+	err := service.ProvisionConfigFile(context.Background(), "./test/provision1-pipeline-with-processors.yml")
+	is.NoErr(err)
+}
+
+func TestProvision_ExistingPipelineWithChangedPlugin(t *testing.T) {
+	is := is.New(t)
+	logger := log.Nop()
+	db := &inmemory.DB{}
+	_, ctx, _ := db.NewTransaction(context.Background(), true)
+	ctrl := gomock.NewController(t)
+	pipelineService := mock.NewPipelineService(ctrl)
+	connService := mock.NewConnectorService(ctrl)
+	procService := mock.NewProcessorService(ctrl)
+	connBuilder := connmock.Builder{Ctrl: ctrl}
+
+	pl2config := pipeline.Config{Name: pipeline2.Name, Description: pipeline2.Description}
+	pl2 := &pipeline.Instance{
+		ID:            "pipeline2",
+		Config:        pl2config,
+		Status:        pipeline.StatusRunning,
+		ProvisionedBy: pipeline.ProvisionTypeConfig,
+	}
+	modifiedSourceConfig := connector.Config{
+		Name:       "con1",
+		Settings:   map[string]string{"key": "my/key"},
+		Plugin:     "builtin:s3",
+		PipelineID: "pipeline2",
+	}
+
+	modifiedSource := connBuilder.NewSourceMock("con1", modifiedSourceConfig)
+
+	// pipeline already exists
+	pipelineService.EXPECT().Get(ctx, "pipeline2").Return(pl2, nil)
+
+	// the old source connector has a different Plugin
+	connService.EXPECT().Get(ctx, "con1").Return(modifiedSource, nil)
+	connService.EXPECT().Get(ctx, "con2").AnyTimes()
+
+	service := NewService(db, logger, pipelineService, connService, procService)
+	err := service.ProvisionConfigFile(context.Background(), "./test/provision2-simple-pipeline.yml")
+	is.True(err != nil)
+}
+
+func TestProvision_ExistingPipelineWithChangedConnectorID(t *testing.T) {
+	is := is.New(t)
+	logger := log.Nop()
+	db := &inmemory.DB{}
+	_, ctx, _ := db.NewTransaction(context.Background(), true)
+	ctrl := gomock.NewController(t)
+	pipelineService := mock.NewPipelineService(ctrl)
+	connService := mock.NewConnectorService(ctrl)
+	procService := mock.NewProcessorService(ctrl)
+	connBuilder := connmock.Builder{Ctrl: ctrl}
+
+	pl2config := pipeline.Config{Name: pipeline2.Name, Description: pipeline2.Description}
+	pl2 := &pipeline.Instance{
+		ID:            "pipeline2",
+		Config:        pl2config,
+		Status:        pipeline.StatusRunning,
+		ProvisionedBy: pipeline.ProvisionTypeConfig,
+	}
+	destConfig := connector.Config{
+		Name:       "con2",
+		Settings:   map[string]string{"path": "my/path/file2.txt"},
+		Plugin:     "builtin:file",
+		PipelineID: "pipeline1",
+	}
+
+	destination := connBuilder.NewDestinationMock("con2", destConfig)
+
+	// pipeline already exists
+	pipelineService.EXPECT().Get(ctx, "pipeline2").Return(pl2, nil)
+
+	// new connector ID does not exists
+	connService.EXPECT().Get(ctx, "con1").Return(nil, cerrors.New("error"))
+	connService.EXPECT().Get(ctx, "con2").Return(destination, nil).AnyTimes()
+
+	service := NewService(db, logger, pipelineService, connService, procService)
+	err := service.ProvisionConfigFile(context.Background(), "./test/provision2-simple-pipeline.yml")
+	is.True(err != nil)
+}
+
+func TestProvision_MultiplePipelines(t *testing.T) {
+	is := is.New(t)
+	logger := log.Nop()
+	db := &inmemory.DB{}
+	_, ctx, _ := db.NewTransaction(context.Background(), true)
+	ctrl := gomock.NewController(t)
+	pipelineService := mock.NewPipelineService(ctrl)
+	connService := mock.NewConnectorService(ctrl)
+	procService := mock.NewProcessorService(ctrl)
+
+	pl2config := pipeline.Config{Name: pipeline2.Name, Description: pipeline2.Description}
+	pl2 := &pipeline.Instance{
+		ID:            "pipeline2",
+		Config:        pl2config,
+		Status:        pipeline.StatusRunning,
+		ProvisionedBy: pipeline.ProvisionTypeConfig,
+	}
+	pl3config := pipeline.Config{Name: pipeline3.Name, Description: pipeline3.Description}
+	pl3 := &pipeline.Instance{
+		ID:            "pipeline3",
+		Config:        pl3config,
+		Status:        pipeline.StatusRunning,
+		ProvisionedBy: pipeline.ProvisionTypeConfig,
+	}
+	cfg2con1 := connector.Config{
+		Name:       pipeline2.Connectors["con1"].Name,
+		Plugin:     pipeline2.Connectors["con1"].Plugin,
+		PipelineID: pipeline2.Name,
+		Settings:   pipeline2.Connectors["con1"].Settings,
+	}
+	cfg2con2 := connector.Config{
+		Name:       pipeline2.Connectors["con2"].Name,
+		Plugin:     pipeline2.Connectors["con2"].Plugin,
+		PipelineID: pipeline2.Name,
+		Settings:   pipeline2.Connectors["con2"].Settings,
+	}
+	cfg3con1 := connector.Config{
+		Name:       pipeline3.Connectors["con1"].Name,
+		Plugin:     pipeline3.Connectors["con1"].Plugin,
+		PipelineID: pipeline3.Name,
+		Settings:   pipeline3.Connectors["con1"].Settings,
+	}
+	cfg3con2 := connector.Config{
+		Name:       pipeline3.Connectors["con2"].Name,
+		Plugin:     pipeline3.Connectors["con2"].Plugin,
+		PipelineID: pipeline3.Name,
+		Settings:   pipeline3.Connectors["con2"].Settings,
+	}
+
+	pipelineService.EXPECT().Get(ctx, "pipeline2").Return(nil, pipeline.ErrInstanceNotFound)
+	pipelineService.EXPECT().Get(ctx, "pipeline3").Return(nil, pipeline.ErrInstanceNotFound)
+	pipelineService.
+		EXPECT().
+		Create(ctx, "pipeline2", pl2config, pipeline.ProvisionTypeConfig).
+		Return(pl2, nil)
+	pipelineService.
+		EXPECT().
+		Create(ctx, "pipeline3", pl3config, pipeline.ProvisionTypeConfig).
+		Return(pl3, nil)
+
+	connService.EXPECT().Create(ctx, "con1", connector.TypeSource, cfg2con1, connector.ProvisionTypeConfig)
+	connService.EXPECT().Create(ctx, "con2", connector.TypeDestination, cfg2con2, connector.ProvisionTypeConfig)
+	pipelineService.EXPECT().AddConnector(ctx, pl2, "con1")
+	pipelineService.EXPECT().AddConnector(ctx, pl2, "con2")
+	connService.EXPECT().Create(ctx, "con1", connector.TypeSource, cfg3con1, connector.ProvisionTypeConfig)
+	connService.EXPECT().Create(ctx, "con2", connector.TypeDestination, cfg3con2, connector.ProvisionTypeConfig)
+	pipelineService.EXPECT().AddConnector(ctx, pl3, "con1")
+	pipelineService.EXPECT().AddConnector(ctx, pl3, "con2")
+
+	pipelineService.EXPECT().Start(ctx, connService, procService, pl2)
+	pipelineService.EXPECT().Start(ctx, connService, procService, pl3)
+
+	service := NewService(db, logger, pipelineService, connService, procService)
+	err := service.ProvisionConfigFile(context.Background(), "./test/provision3-multiple-pipelines.yml")
 	is.NoErr(err)
 }
