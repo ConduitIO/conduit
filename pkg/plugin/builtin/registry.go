@@ -15,6 +15,8 @@
 package builtin
 
 import (
+	"fmt"
+
 	file "github.com/conduitio/conduit-connector-file"
 	generator "github.com/conduitio/conduit-connector-generator"
 	kafka "github.com/conduitio/conduit-connector-kafka"
@@ -42,6 +44,7 @@ type Registry struct {
 	logger log.CtxLogger
 
 	builders map[string]DispenserFactory
+	specs    map[string]plugin.Specification
 }
 
 type DispenserFactory func(name string, logger log.CtxLogger) plugin.Dispenser
@@ -67,22 +70,31 @@ func sdkDispenserFactory(connector sdk.Connector) DispenserFactory {
 
 func NewRegistry(logger log.CtxLogger, factories ...DispenserFactory) *Registry {
 	builders := make(map[string]DispenserFactory, len(factories))
+	specs := make(map[string]plugin.Specification)
 	for _, builder := range factories {
 		p := builder("", log.CtxLogger{})
 		specPlugin, err := p.DispenseSpecifier()
 		if err != nil {
 			panic(cerrors.Errorf("could not dispense specifier for built in plugin: %w", err))
 		}
-		specs, err := specPlugin.Specify()
+		s, err := specPlugin.Specify()
 		if err != nil {
 			panic(cerrors.Errorf("could not get specs for built in plugin: %w", err))
 		}
-		if _, ok := builders[specs.Name]; ok {
-			panic(cerrors.Errorf("plugin with name %q already registered", specs.Name))
+
+		fullName := fmt.Sprintf("%v@%v", s.Name, s.Version)
+		if _, ok := builders[fullName]; ok {
+			panic(cerrors.Errorf("plugin with name %q already registered", fullName))
 		}
-		builders[specs.Name] = builder
+
+		builders[fullName] = builder
+		specs[fullName] = s
 	}
-	return &Registry{builders: builders, logger: logger.WithComponent("builtin.Registry")}
+	return &Registry{
+		logger:   logger.WithComponent("builtin.Registry"),
+		builders: builders,
+		specs:    specs,
+	}
 }
 
 func (r *Registry) NewDispenser(logger log.CtxLogger, name string) (plugin.Dispenser, error) {
@@ -94,18 +106,10 @@ func (r *Registry) NewDispenser(logger log.CtxLogger, name string) (plugin.Dispe
 }
 
 func (r *Registry) List() (map[string]plugin.Specification, error) {
-	specs := make(map[string]plugin.Specification)
-
-	for name, dispenser := range r.builders {
-		d := dispenser(name, r.logger)
-		spec, err := d.DispenseSpecifier()
-		if err != nil {
-			return nil, cerrors.Errorf("could not dispense specifier for built in plugin: %w", err)
-		}
-		specs[plugin.BuiltinPluginPrefix+name], err = spec.Specify()
-		if err != nil {
-			return nil, cerrors.Errorf("could not get specs for built in plugin: %w", err)
-		}
+	// copy specs map so it can be freely mutated by the caller
+	specs := make(map[string]plugin.Specification, len(r.specs))
+	for k, v := range r.specs {
+		specs[k] = v
 	}
 	return specs, nil
 }

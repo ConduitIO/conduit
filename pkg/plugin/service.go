@@ -22,7 +22,10 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/log"
 )
 
-const BuiltinPluginPrefix = "builtin:"
+const (
+	BuiltinPluginPrefix    = "builtin:"
+	StandalonePluginPrefix = "standalone:"
+)
 
 // registry is an object that can create new plugin dispensers. We need to use
 // an interface to prevent a cyclic dependency between the plugin package and
@@ -62,10 +65,21 @@ func (r *Service) NewDispenser(logger log.CtxLogger, name string) (Dispenser, er
 }
 
 func (r *Service) List(ctx context.Context) (map[string]Specification, error) {
-	// todo: attach standalone list
-	specs, err := r.builtin.List()
+	builtinSpecs, err := r.builtin.List()
 	if err != nil {
-		return nil, cerrors.Errorf("failed to list the builtin plugins: %w", err)
+		return nil, cerrors.Errorf("failed to list builtin plugins: %w", err)
+	}
+	standaloneSpecs, err := r.standalone.List()
+	if err != nil {
+		return nil, cerrors.Errorf("failed to list standalone plugins: %w", err)
+	}
+
+	specs := make(map[string]Specification, len(builtinSpecs)+len(standaloneSpecs))
+	for k, v := range builtinSpecs {
+		specs[BuiltinPluginPrefix+k] = v
+	}
+	for k, v := range standaloneSpecs {
+		specs[StandalonePluginPrefix+k] = v
 	}
 
 	return specs, nil
