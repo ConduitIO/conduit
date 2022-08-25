@@ -16,6 +16,7 @@ package provisioning
 
 import (
 	"context"
+	"fmt"
 	"io/ioutil"
 
 	"github.com/conduitio/conduit/pkg/connector"
@@ -83,10 +84,6 @@ func (s *Service) ProvisionConfigFile(ctx context.Context, path string) error {
 }
 
 func (s *Service) provisionPipeline(ctx context.Context, id string, config PipelineConfig) error {
-	var err error
-	var destMap map[string]connector.DestinationState
-	var srcMap map[string]connector.SourceState
-
 	var r rollback.R
 	defer r.MustExecute()
 	txn, ctx, err := s.db.NewTransaction(ctx, true)
@@ -96,11 +93,16 @@ func (s *Service) provisionPipeline(ctx context.Context, id string, config Pipel
 	r.AppendPure(txn.Discard)
 
 	// check if pipeline already exists
+	var connStates map[string]func(context.Context) error
 	oldPl, err := s.pipelineService.Get(ctx, id)
 	if err != nil && !cerrors.Is(err, pipeline.ErrInstanceNotFound) {
 		return cerrors.Errorf("could not get the pipeline %q: %w", id, err)
 	} else if err == nil {
-		destMap, srcMap, err = s.copyStatesAndDeletePipeline(ctx, oldPl, config)
+		connStates, err = s.collectConnectorStates(ctx, oldPl)
+		if err != nil {
+			return cerrors.Errorf("could not collect connector states from the pipeline %q: %w", id, err)
+		}
+		err = s.deletePipeline(ctx, oldPl, config)
 		if err != nil {
 			return cerrors.Errorf("could not copy states from the pipeline %q: %w", id, err)
 		}
@@ -117,7 +119,7 @@ func (s *Service) provisionPipeline(ctx context.Context, id string, config Pipel
 		return err
 	})
 	for k, cfg := range config.Connectors {
-		err := s.createConnector(ctx, id, k, cfg, destMap, srcMap)
+		err := s.createConnector(ctx, id, k, cfg)
 		if err != nil {
 			return cerrors.Errorf("could not create connector %q: %w", k, err)
 		}
@@ -153,6 +155,11 @@ func (s *Service) provisionPipeline(ctx context.Context, id string, config Pipel
 		s.rollbackAddPipelineProcessor(ctx, &r, newPl, k)
 	}
 
+	err = s.applyConnectorStates(ctx, newPl, connStates)
+	if err != nil {
+		return cerrors.Errorf("could not apply connector states on pipeline %q: %w", id, err)
+	}
+
 	// check if pipeline is running
 	if config.Status == StatusRunning {
 		err := s.pipelineService.Start(ctx, s.connectorService, s.processorService, newPl)
@@ -172,25 +179,59 @@ func (s *Service) provisionPipeline(ctx context.Context, id string, config Pipel
 	return nil
 }
 
-func (s *Service) copyStatesAndDeletePipeline(ctx context.Context, pl *pipeline.Instance, config PipelineConfig) (map[string]connector.DestinationState, map[string]connector.SourceState, error) {
-	destMap := make(map[string]connector.DestinationState, 1)
-	srcMap := make(map[string]connector.SourceState, 1)
+func (s *Service) collectConnectorStates(ctx context.Context, pl *pipeline.Instance) (map[string]func(context.Context) error, error) {
+	connStates := make(map[string]func(context.Context) error)
 
-	for k := range config.Connectors {
-		destState, srcState, err := s.getConnectorState(ctx, k, config.Connectors[k].Plugin)
+	for _, k := range pl.ConnectorIDs {
+		connID := k // store locally because k will get overwritten
+		oldConn, err := s.connectorService.Get(ctx, connID)
 		if err != nil {
-			return nil, nil, err
+			return nil, fmt.Errorf("could not get connector %q: %w", connID, err)
 		}
-		destMap[k] = destState
-		srcMap[k] = srcState
+
+		switch oldConn := oldConn.(type) {
+		case connector.Destination:
+			oldState := oldConn.State()
+			connStates[connID] = func(ctx context.Context) error {
+				_, err := s.connectorService.SetDestinationState(ctx, connID, oldState)
+				if cerrors.Is(err, connector.ErrInvalidConnectorType) {
+					s.logger.Warn(ctx).
+						Str(log.ConnectorIDField, connID).
+						Err(err).
+						Msg("could not apply old destination state, the connector will start from the beginning")
+					return nil
+				}
+				return err
+			}
+		case connector.Source:
+			oldState := oldConn.State()
+			_ = oldState             // TODO remove me
+			connStates[connID] = nil // TODO repeat for source
+		}
 	}
 
-	err := s.deletePipeline(ctx, pl, config)
-	if err != nil {
-		return nil, nil, err
+	return connStates, nil
+}
+
+func (s *Service) applyConnectorStates(ctx context.Context, pl *pipeline.Instance, connectorStates map[string]func(context.Context) error) error {
+	if connectorStates == nil {
+		return nil
 	}
 
-	return destMap, srcMap, nil
+	for _, connID := range pl.ConnectorIDs {
+		applyState, ok := connectorStates[connID]
+		if !ok {
+			// no state to apply
+			continue
+		}
+
+		err := applyState(ctx)
+		if err != nil {
+			return cerrors.Errorf("could not apply connector state: %w", err)
+		}
+	}
+
+	return nil
 }
 
 func (s *Service) deletePipeline(ctx context.Context, pl *pipeline.Instance, config PipelineConfig) error {
@@ -251,7 +292,7 @@ func (s *Service) createPipeline(ctx context.Context, id string, config Pipeline
 	return pl, nil
 }
 
-func (s *Service) createConnector(ctx context.Context, pipelineID string, id string, config ConnectorConfig, destMap map[string]connector.DestinationState, srcMap map[string]connector.SourceState) error {
+func (s *Service) createConnector(ctx context.Context, pipelineID string, id string, config ConnectorConfig) error {
 	cfg := connector.Config{
 		Name:       config.Name,
 		Plugin:     config.Plugin,
@@ -264,19 +305,9 @@ func (s *Service) createConnector(ctx context.Context, pipelineID string, id str
 		connType = connector.TypeDestination
 	}
 
-	conn, err := s.connectorService.Create(ctx, id, connType, cfg, connector.ProvisionTypeConfig)
+	_, err := s.connectorService.Create(ctx, id, connType, cfg, connector.ProvisionTypeConfig)
 	if err != nil {
 		return cerrors.Errorf("could not create connector %q on pipeline %q: %w", id, pipelineID, err)
-	}
-
-	// check if states should be updated
-	if len(srcMap) != 0 || len(destMap) != 0 {
-		switch v := conn.(type) {
-		case connector.Destination:
-			v.SetState(destMap[id])
-		case connector.Source:
-			v.SetState(srcMap[id])
-		}
 	}
 
 	return nil

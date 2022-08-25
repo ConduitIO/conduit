@@ -43,6 +43,8 @@ type ConnectorService interface {
 
 	AddProcessor(ctx context.Context, connectorID string, processorID string) (connector.Connector, error)
 	RemoveProcessor(ctx context.Context, connectorID string, processorID string) (connector.Connector, error)
+
+	SetDestinationState(ctx context.Context, id string, state connector.DestinationState) (connector.Destination, error)
 }
 
 type ProcessorService interface {
