@@ -66,8 +66,9 @@ func TestPipelineSimple(t *testing.T) {
 	})
 
 	pluginService := plugin.NewService(
+		logger,
 		builtin.NewRegistry(logger, builtin.DefaultDispenserFactories...),
-		standalone.NewRegistry(logger),
+		standalone.NewRegistry(logger, standalone.DefaultPluginDir),
 	)
 
 	orc := NewOrchestrator(

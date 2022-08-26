@@ -31,4 +31,5 @@ const (
 
 	PluginTypeField = "plugin_type"
 	PluginNameField = "plugin_name"
+	PluginPathField = "plugin_path"
 )

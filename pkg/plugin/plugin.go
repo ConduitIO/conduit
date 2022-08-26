@@ -16,7 +16,9 @@ package plugin
 
 import (
 	"context"
+	"strings"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/conduitio/conduit/pkg/record"
 )
 
@@ -146,7 +148,7 @@ type Specification struct {
 type Parameter struct {
 	// Default is the default value of the parameter, if any.
 	Default string
-	// Required is whether it must be provided in the Config or not.
+	// Type defines the parameter data type.
 	Type string
 	// Description holds a description of the field and how to configure it.
 	Description string
@@ -169,3 +171,89 @@ const (
 	ValidationTypeExclusion
 	ValidationTypeRegex
 )
+
+const (
+	PluginTypeBuiltin    = "builtin"
+	PluginTypeStandalone = "standalone"
+	PluginTypeAny        = "any"
+
+	PluginVersionLatest = "latest"
+)
+
+type FullName string
+
+func NewFullName(pluginType, pluginName, pluginVersion string) FullName {
+	if pluginType != "" {
+		pluginType = pluginType + ":"
+	}
+	if pluginVersion != "" {
+		pluginVersion = "@" + pluginVersion
+	}
+	return FullName(pluginType + pluginName + pluginVersion)
+}
+
+func (fn FullName) PluginType() string {
+	tokens := strings.SplitN(string(fn), ":", 2)
+	if len(tokens) > 1 {
+		return tokens[0]
+	}
+	return PluginTypeAny // default
+}
+
+func (fn FullName) PluginName() string {
+	name := string(fn)
+
+	tokens := strings.SplitN(name, ":", 2)
+	if len(tokens) > 1 {
+		name = tokens[1]
+	}
+
+	tokens = strings.SplitN(name, "@", 2)
+	if len(tokens) > 1 {
+		name = tokens[0]
+	}
+
+	return name
+}
+
+func (fn FullName) PluginVersion() string {
+	tokens := strings.SplitN(string(fn), "@", 2)
+	if len(tokens) > 1 {
+		return tokens[len(tokens)-1]
+	}
+	return PluginVersionLatest // default
+}
+
+func (fn FullName) SetPluginType(pt string) FullName {
+	name := string(fn)
+	if oldPt := fn.PluginType(); oldPt != "" {
+		// trim plugin type and separator
+		name = name[len(pt)+1:]
+	}
+	return FullName(pt + ":" + name)
+}
+
+func (fn FullName) SetPluginVersion(pv string) FullName {
+	name := string(fn)
+	if oldPv := fn.PluginVersion(); oldPv != "" {
+		// trim version and separator
+		name = name[:len(name)-len(oldPv)-1]
+	}
+	return FullName(name + "@" + pv)
+}
+
+func (fn FullName) PluginVersionGreaterThan(other FullName) bool {
+	leftVersion := fn.PluginVersion()
+	rightVersion := other.PluginVersion()
+
+	leftSemver, err := semver.NewVersion(leftVersion)
+	if err != nil {
+		return false // left is an invalid semver, right is greater either way
+	}
+	rightSemver, err := semver.NewVersion(rightVersion)
+	if err != nil {
+		return true // left is a valid semver, right is not, left is greater
+	}
+
+	return leftSemver.GreaterThan(rightSemver)
+}

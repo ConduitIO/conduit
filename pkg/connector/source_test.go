@@ -41,8 +41,9 @@ func TestSource_Ack_Deadlock(t *testing.T) {
 		1,
 	)
 	pluginService := plugin.NewService(
+		logger,
 		builtin.NewRegistry(logger, builtin.DefaultDispenserFactories...),
-		standalone.NewRegistry(logger),
+		standalone.NewRegistry(logger, standalone.DefaultPluginDir),
 	)
 	builder := NewDefaultBuilder(
 		logger,

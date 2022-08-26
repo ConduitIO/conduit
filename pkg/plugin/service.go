@@ -16,15 +16,9 @@ package plugin
 
 import (
 	"context"
-	"strings"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-)
-
-const (
-	BuiltinPluginPrefix    = "builtin:"
-	StandalonePluginPrefix = "standalone:"
 )
 
 // registry is an object that can create new plugin dispensers. We need to use
@@ -38,17 +32,20 @@ const (
 //   separate process and communicates with it via gRPC. These plugins are
 //   compiled independently of Conduit and can be included at runtime.
 type registry interface {
-	NewDispenser(logger log.CtxLogger, name string) (Dispenser, error)
-	List() (map[string]Specification, error)
+	NewDispenser(logger log.CtxLogger, name FullName) (Dispenser, error)
+	List() map[FullName]Specification
 }
 
 type Service struct {
+	logger log.CtxLogger
+
 	builtin    registry
 	standalone registry
 }
 
-func NewService(builtin registry, standalone registry) *Service {
+func NewService(logger log.CtxLogger, builtin registry, standalone registry) *Service {
 	return &Service{
+		logger:     logger.WithComponent("plugin.Service"),
 		builtin:    builtin,
 		standalone: standalone,
 	}
@@ -57,29 +54,34 @@ func NewService(builtin registry, standalone registry) *Service {
 func (r *Service) NewDispenser(logger log.CtxLogger, name string) (Dispenser, error) {
 	logger = logger.WithComponent("plugin")
 
-	if strings.HasPrefix(name, BuiltinPluginPrefix) {
-		return r.builtin.NewDispenser(logger, strings.TrimPrefix(name, BuiltinPluginPrefix))
+	fullName := FullName(name)
+	switch fullName.PluginType() {
+	case PluginTypeStandalone:
+		return r.standalone.NewDispenser(logger, fullName)
+	case PluginTypeBuiltin:
+		return r.builtin.NewDispenser(logger, fullName)
+	case PluginTypeAny:
+		d, err := r.standalone.NewDispenser(logger, fullName)
+		if err != nil {
+			r.logger.Debug(context.Background()).Err(err).Msg("could not find standalone plugin dispenser, falling back to builtin plugin")
+			d, err = r.builtin.NewDispenser(logger, fullName)
+		}
+		return d, err
+	default:
+		return nil, cerrors.Errorf("invalid plugin name prefix %q", fullName.PluginType())
 	}
-
-	return r.standalone.NewDispenser(logger, name)
 }
 
 func (r *Service) List(ctx context.Context) (map[string]Specification, error) {
-	builtinSpecs, err := r.builtin.List()
-	if err != nil {
-		return nil, cerrors.Errorf("failed to list builtin plugins: %w", err)
-	}
-	standaloneSpecs, err := r.standalone.List()
-	if err != nil {
-		return nil, cerrors.Errorf("failed to list standalone plugins: %w", err)
-	}
+	builtinSpecs := r.builtin.List()
+	standaloneSpecs := r.standalone.List()
 
 	specs := make(map[string]Specification, len(builtinSpecs)+len(standaloneSpecs))
 	for k, v := range builtinSpecs {
-		specs[BuiltinPluginPrefix+k] = v
+		specs[string(k)] = v
 	}
 	for k, v := range standaloneSpecs {
-		specs[StandalonePluginPrefix+k] = v
+		specs[string(k)] = v
 	}
 
 	return specs, nil

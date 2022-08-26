@@ -166,8 +166,9 @@ func newServices(
 ) (*pipeline.Service, *connector.Service, *processor.Service, *plugin.Service, error) {
 	pipelineService := pipeline.NewService(logger, db)
 	pluginService := plugin.NewService(
+		logger,
 		builtin.NewRegistry(logger, builtin.DefaultDispenserFactories...),
-		standalone.NewRegistry(logger),
+		standalone.NewRegistry(logger, standalone.DefaultPluginDir),
 	)
 	connectorService := connector.NewService(
 		logger,

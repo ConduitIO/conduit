@@ -15,7 +15,7 @@
 package builtin
 
 import (
-	"fmt"
+	"context"
 
 	file "github.com/conduitio/conduit-connector-file"
 	generator "github.com/conduitio/conduit-connector-generator"
@@ -41,10 +41,18 @@ var (
 )
 
 type Registry struct {
-	logger log.CtxLogger
+	logger    log.CtxLogger
+	factories []DispenserFactory
 
-	builders map[string]DispenserFactory
-	specs    map[string]plugin.Specification
+	// plugins stores plugin blueprints in a 2D map, first key is the plugin
+	// name, the second key is the plugin version
+	plugins map[string]map[string]blueprint
+}
+
+type blueprint struct {
+	fullName         plugin.FullName
+	specification    plugin.Specification
+	dispenserFactory DispenserFactory
 }
 
 type DispenserFactory func(name string, logger log.CtxLogger) plugin.Dispenser
@@ -69,47 +77,84 @@ func sdkDispenserFactory(connector sdk.Connector) DispenserFactory {
 }
 
 func NewRegistry(logger log.CtxLogger, factories ...DispenserFactory) *Registry {
-	builders := make(map[string]DispenserFactory, len(factories))
-	specs := make(map[string]plugin.Specification)
-	for _, builder := range factories {
-		p := builder("", log.CtxLogger{})
-		specPlugin, err := p.DispenseSpecifier()
+	r := &Registry{
+		logger:    logger.WithComponent("builtin.Registry"),
+		factories: factories,
+	}
+	r.plugins = r.loadPlugins(context.Background())
+	r.logger.Info(context.Background()).Int("count", len(r.List())).Msg("builtin plugins initialized")
+	return r
+}
+
+func (r *Registry) loadPlugins(ctx context.Context) map[string]map[string]blueprint {
+	plugins := make(map[string]map[string]blueprint, len(r.factories))
+	for _, factory := range r.factories {
+		dispenser := factory("", log.CtxLogger{})
+		specPlugin, err := dispenser.DispenseSpecifier()
 		if err != nil {
 			panic(cerrors.Errorf("could not dispense specifier for built in plugin: %w", err))
 		}
-		s, err := specPlugin.Specify()
+		specs, err := specPlugin.Specify()
 		if err != nil {
 			panic(cerrors.Errorf("could not get specs for built in plugin: %w", err))
 		}
 
-		fullName := fmt.Sprintf("%v@%v", s.Name, s.Version)
-		if _, ok := builders[fullName]; ok {
-			panic(cerrors.Errorf("plugin with name %q already registered", fullName))
+		versionMap := plugins[specs.Name]
+		if versionMap == nil {
+			versionMap = make(map[string]blueprint)
+			plugins[specs.Name] = versionMap
 		}
 
-		builders[fullName] = builder
-		specs[fullName] = s
+		fullName := newFullName(specs.Name, specs.Version)
+		if _, ok := versionMap[specs.Version]; ok {
+			panic(cerrors.Errorf("plugin %q already registered", fullName))
+		}
+
+		bp := blueprint{
+			fullName:         fullName,
+			dispenserFactory: factory,
+			specification:    specs,
+		}
+		versionMap[specs.Version] = bp
+
+		latestFullName := versionMap[plugin.PluginVersionLatest].fullName
+		if fullName.PluginVersionGreaterThan(latestFullName) {
+			versionMap[plugin.PluginVersionLatest] = bp
+		}
 	}
-	return &Registry{
-		logger:   logger.WithComponent("builtin.Registry"),
-		builders: builders,
-		specs:    specs,
-	}
+	return plugins
 }
 
-func (r *Registry) NewDispenser(logger log.CtxLogger, name string) (plugin.Dispenser, error) {
-	builder, ok := r.builders[name]
+func newFullName(pluginName, pluginVersion string) plugin.FullName {
+	return plugin.NewFullName(plugin.PluginTypeBuiltin, pluginName, pluginVersion)
+}
+
+func (r *Registry) NewDispenser(logger log.CtxLogger, fullName plugin.FullName) (plugin.Dispenser, error) {
+	versionMap, ok := r.plugins[fullName.PluginName()]
 	if !ok {
-		return nil, cerrors.Errorf("plugin %q not found", name)
+		return nil, plugin.ErrPluginNotFound
 	}
-	return builder(name, logger), nil
+	b, ok := versionMap[fullName.PluginVersion()]
+	if !ok {
+		availableVersions := make([]string, len(versionMap))
+		for k := range versionMap {
+			availableVersions = append(availableVersions, k)
+		}
+		return nil, cerrors.Errorf("could not find builtin plugin, only found versions %v: %w", availableVersions, plugin.ErrPluginNotFound)
+	}
+
+	return b.dispenserFactory(string(fullName), logger), nil
 }
 
-func (r *Registry) List() (map[string]plugin.Specification, error) {
-	// copy specs map so it can be freely mutated by the caller
-	specs := make(map[string]plugin.Specification, len(r.specs))
-	for k, v := range r.specs {
-		specs[k] = v
+func (r *Registry) List() map[plugin.FullName]plugin.Specification {
+	specs := make(map[plugin.FullName]plugin.Specification, len(r.plugins))
+	for _, versions := range r.plugins {
+		for version, bp := range versions {
+			if version == plugin.PluginVersionLatest {
+				continue // skip latest versions
+			}
+			specs[bp.fullName] = bp.specification
+		}
 	}
-	return specs, nil
+	return specs
 }
