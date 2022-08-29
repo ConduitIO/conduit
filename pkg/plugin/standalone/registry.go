@@ -188,7 +188,7 @@ func (r *Registry) NewDispenser(logger log.CtxLogger, fullName plugin.FullName) 
 	}
 	bp, ok := versionMap[fullName.PluginVersion()]
 	if !ok {
-		availableVersions := make([]string, len(versionMap))
+		availableVersions := make([]string, 0, len(versionMap))
 		for k := range versionMap {
 			availableVersions = append(availableVersions, k)
 		}

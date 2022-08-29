@@ -37,20 +37,16 @@ const (
 
 	testPluginSourceParam1            = "src.foo"
 	testPluginSourceParam1Default     = ""
-	testPluginSourceParam1Required    = true
 	testPluginSourceParam1Description = "Required parameter"
 	testPluginSourceParam2            = "src.bar"
 	testPluginSourceParam2Default     = "bar"
-	testPluginSourceParam2Required    = false
 	testPluginSourceParam2Description = "Optional parameter"
 
 	testPluginDestinationParam1            = "dest.foo"
 	testPluginDestinationParam1Default     = ""
-	testPluginDestinationParam1Required    = true
 	testPluginDestinationParam1Description = "Required parameter"
 	testPluginDestinationParam2            = "dest.bar"
 	testPluginDestinationParam2Default     = "bar"
-	testPluginDestinationParam2Required    = false
 	testPluginDestinationParam2Description = "Optional parameter"
 )
 

@@ -184,7 +184,7 @@ type FullName string
 
 func NewFullName(pluginType, pluginName, pluginVersion string) FullName {
 	if pluginType != "" {
-		pluginType = pluginType + ":"
+		pluginType += ":"
 	}
 	if pluginVersion != "" {
 		pluginVersion = "@" + pluginVersion
