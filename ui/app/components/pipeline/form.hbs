@@ -37,7 +37,7 @@
         id="pipeline-description"
         @value={{@pipeline.description}}
         placeholder="A description of the pipeline"
-        class="text-sm px-4 py-2 block w-full border border-gray-300 rounded resize-none focus:outline-none focus:border-purple-600"
+        class="text-sm px-4 py-2 block w-full border border-gray-300 rounded resize-none focus:outline-none focus:border-purple-600 disabled:bg-gray-100 disabled:border-gray-100 disabled:text-gray-500"
         rows="6"
         cols="80"
         disabled={{and (not @pipeline.isNew) @pipeline.isRunning}}

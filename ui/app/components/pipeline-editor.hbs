@@ -1,7 +1,7 @@
 <div class="flex bg-gray-300 absolute top-26 right-0 left-0 bottom-0">
   <div class="flex-auto" {{will-destroy this.unregister this.pipelineNodeManager}}>
     <div class="flex h-full relative">
-      <div class="bg-white w-76 flex-none shadow-md pl-9 pr-4">
+      <div class="bg-white w-76 flex-none shadow-md pl-9 pr-4 overflow-scroll">
         <div class="pt-4 pb-2 flex items-center justify-between font-semibold text-lg">
           Pipeline
           <div>
@@ -36,14 +36,14 @@
 
                 <dd.Content class="bg-white rounded-md border border-gray-200 shadow-md text-sm">
                   <ul>
-                    {{!-- template-lint-disable no-invalid-interactive --}}
+                    {{! template-lint-disable no-invalid-interactive }}
                     <li
                       class="py-4 pr-16 pl-4 cursor-pointer flex items-center font-medium hover:bg-gray-100"
                       data-test-pipeline-editor-add-node-source
                       {{on "click" (fn this.showCreateConnectorModal "source")}}
                       {{on "click" dd.actions.close}}
                     >
-                    {{!-- template-lint-enable no-invalid-interactive --}}
+                      {{! template-lint-enable no-invalid-interactive }}
                       <svg class="fill-current h-4 w-4 mr-2">
                         <use xlink:href="/ui/svg-defs.svg#source-16"></use>
                       </svg>
