@@ -29,6 +29,7 @@ type PipelineService interface {
 	Get(ctx context.Context, id string) (*pipeline.Instance, error)
 	Create(ctx context.Context, id string, cfg pipeline.Config, p pipeline.ProvisionType) (*pipeline.Instance, error)
 	Delete(ctx context.Context, pl *pipeline.Instance) error
+	Stop(ctx context.Context, pipeline *pipeline.Instance) error
 
 	AddConnector(ctx context.Context, pl *pipeline.Instance, connectorID string) (*pipeline.Instance, error)
 	RemoveConnector(ctx context.Context, pl *pipeline.Instance, connectorID string) (*pipeline.Instance, error)
@@ -45,6 +46,7 @@ type ConnectorService interface {
 	RemoveProcessor(ctx context.Context, connectorID string, processorID string) (connector.Connector, error)
 
 	SetDestinationState(ctx context.Context, id string, state connector.DestinationState) (connector.Destination, error)
+	SetSourceState(ctx context.Context, id string, state connector.SourceState) (connector.Source, error)
 }
 
 type ProcessorService interface {

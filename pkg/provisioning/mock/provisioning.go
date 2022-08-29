@@ -155,6 +155,20 @@ func (mr *PipelineServiceMockRecorder) Start(arg0, arg1, arg2, arg3 interface{})
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*PipelineService)(nil).Start), arg0, arg1, arg2, arg3)
 }
 
+// Stop mocks base method.
+func (m *PipelineService) Stop(arg0 context.Context, arg1 *pipeline.Instance) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Stop", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Stop indicates an expected call of Stop.
+func (mr *PipelineServiceMockRecorder) Stop(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*PipelineService)(nil).Stop), arg0, arg1)
+}
+
 // ConnectorService is a mock of ConnectorService interface.
 type ConnectorService struct {
 	ctrl     *gomock.Controller
@@ -250,6 +264,36 @@ func (m *ConnectorService) RemoveProcessor(arg0 context.Context, arg1, arg2 stri
 func (mr *ConnectorServiceMockRecorder) RemoveProcessor(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveProcessor", reflect.TypeOf((*ConnectorService)(nil).RemoveProcessor), arg0, arg1, arg2)
+}
+
+// SetDestinationState mocks base method.
+func (m *ConnectorService) SetDestinationState(arg0 context.Context, arg1 string, arg2 connector.DestinationState) (connector.Destination, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SetDestinationState", arg0, arg1, arg2)
+	ret0, _ := ret[0].(connector.Destination)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SetDestinationState indicates an expected call of SetDestinationState.
+func (mr *ConnectorServiceMockRecorder) SetDestinationState(arg0, arg1, arg2 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetDestinationState", reflect.TypeOf((*ConnectorService)(nil).SetDestinationState), arg0, arg1, arg2)
+}
+
+// SetSourceState mocks base method.
+func (m *ConnectorService) SetSourceState(arg0 context.Context, arg1 string, arg2 connector.SourceState) (connector.Source, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SetSourceState", arg0, arg1, arg2)
+	ret0, _ := ret[0].(connector.Source)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SetSourceState indicates an expected call of SetSourceState.
+func (mr *ConnectorServiceMockRecorder) SetSourceState(arg0, arg1, arg2 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetSourceState", reflect.TypeOf((*ConnectorService)(nil).SetSourceState), arg0, arg1, arg2)
 }
 
 // ProcessorService is a mock of ProcessorService interface.

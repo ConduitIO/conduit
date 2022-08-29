@@ -19,11 +19,6 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/multierror"
 )
 
-var (
-	ErrMandatoryField = cerrors.New("mandatory field not specified")
-	ErrInvalidField   = cerrors.New("invalid field value")
-)
-
 const (
 	StatusRunning   = "running"
 	StatusStopped   = "stopped"
