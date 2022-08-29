@@ -66,8 +66,10 @@ func parseConfig() conduit.Config {
 
 		version = flags.Bool("version", false, "prints current Conduit version")
 
-		level  = flags.String("log.level", "info", "sets logging level; accepts debug, info, warn, error, trace")
-		format = flags.String("log.format", "cli", "sets the format of the logging; accepts json, cli")
+		logLevel  = flags.String("log.level", "info", "sets logging level; accepts debug, info, warn, error, trace")
+		logFormat = flags.String("log.format", "cli", "sets the format of the logging; accepts json, cli")
+
+		pluginsDir = flags.String("plugins.path", "./plugins", "path to standalone plugins directory")
 	)
 
 	// flags is set up to exit on error, we can safely ignore the error
@@ -86,8 +88,9 @@ func parseConfig() conduit.Config {
 	cfg.DB.Postgres.Table = stringPtrToVal(dbPostgresTable)
 	cfg.GRPC.Address = stringPtrToVal(grpcAddress)
 	cfg.HTTP.Address = stringPtrToVal(httpAddress)
-	cfg.Log.Level = strings.ToLower(stringPtrToVal(level))
-	cfg.Log.Format = strings.ToLower(stringPtrToVal(format))
+	cfg.Log.Level = strings.ToLower(stringPtrToVal(logLevel))
+	cfg.Log.Format = strings.ToLower(stringPtrToVal(logFormat))
+	cfg.Plugins.Path = stringPtrToVal(pluginsDir)
 
 	return cfg
 }

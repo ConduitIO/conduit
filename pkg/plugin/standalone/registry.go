@@ -60,17 +60,17 @@ func NewRegistry(logger log.CtxLogger, pluginDir string) *Registry {
 		// extract absolute path to make it clearer in the logs what directory is used
 		absPluginDir, err := filepath.Abs(pluginDir)
 		if err != nil {
-			r.logger.Warn(context.Background()).Err(err).Msg("could not extract absolute plugin dir path, standalone plugins disabled")
+			r.logger.Warn(context.Background()).Err(err).Msg("could not extract absolute plugins path")
+		} else {
+			r.pluginDir = absPluginDir // store plugin dir for hot reloads
+			r.reloadPlugins()
 		}
-		r.pluginDir = absPluginDir
 	}
 
-	if r.pluginDir != "" {
-		r.reloadPlugins()
-		r.logger.Info(context.Background()).Int("count", len(r.List())).Msg("standalone plugins initialized")
-	} else {
-		r.logger.Info(context.Background()).Msg("no plugin directory defined, standalone plugins disabled")
-	}
+	r.logger.Info(context.Background()).
+		Str(log.PluginPathField, r.pluginDir).
+		Int("count", len(r.List())).
+		Msg("standalone plugins initialized")
 
 	return r
 }

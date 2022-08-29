@@ -118,7 +118,7 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 	)
 
 	// Create all necessary internal services
-	plService, connService, procService, pluginService, err := newServices(logger, db, connectorPersister)
+	plService, connService, procService, pluginService, err := newServices(logger, db, connectorPersister, cfg.Plugins.Path)
 	if err != nil {
 		return nil, cerrors.Errorf("failed to create services: %w", err)
 	}
@@ -163,12 +163,13 @@ func newServices(
 	logger log.CtxLogger,
 	db database.DB,
 	connPersister *connector.Persister,
+	pluginsPath string,
 ) (*pipeline.Service, *connector.Service, *processor.Service, *plugin.Service, error) {
 	pipelineService := pipeline.NewService(logger, db)
 	pluginService := plugin.NewService(
 		logger,
 		builtin.NewRegistry(logger, builtin.DefaultDispenserFactories...),
-		standalone.NewRegistry(logger, standalone.DefaultPluginDir),
+		standalone.NewRegistry(logger, pluginsPath),
 	)
 	connectorService := connector.NewService(
 		logger,
