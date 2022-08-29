@@ -81,12 +81,12 @@ func NewRegistry(logger log.CtxLogger, factories ...DispenserFactory) *Registry 
 		logger:    logger.WithComponent("builtin.Registry"),
 		factories: factories,
 	}
-	r.plugins = r.loadPlugins(context.Background())
+	r.plugins = r.loadPlugins()
 	r.logger.Info(context.Background()).Int("count", len(r.List())).Msg("builtin plugins initialized")
 	return r
 }
 
-func (r *Registry) loadPlugins(ctx context.Context) map[string]map[string]blueprint {
+func (r *Registry) loadPlugins() map[string]map[string]blueprint {
 	plugins := make(map[string]map[string]blueprint, len(r.factories))
 	for _, factory := range r.factories {
 		dispenser := factory("", log.CtxLogger{})

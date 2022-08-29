@@ -224,24 +224,6 @@ func (fn FullName) PluginVersion() string {
 	return PluginVersionLatest // default
 }
 
-func (fn FullName) SetPluginType(pt string) FullName {
-	name := string(fn)
-	if oldPt := fn.PluginType(); oldPt != "" {
-		// trim plugin type and separator
-		name = name[len(pt)+1:]
-	}
-	return FullName(pt + ":" + name)
-}
-
-func (fn FullName) SetPluginVersion(pv string) FullName {
-	name := string(fn)
-	if oldPv := fn.PluginVersion(); oldPv != "" {
-		// trim version and separator
-		name = name[:len(name)-len(oldPv)-1]
-	}
-	return FullName(name + "@" + pv)
-}
-
 func (fn FullName) PluginVersionGreaterThan(other FullName) bool {
 	leftVersion := fn.PluginVersion()
 	rightVersion := other.PluginVersion()

@@ -28,7 +28,9 @@ import (
 	"github.com/rs/zerolog"
 )
 
-const DefaultPluginDir = "./plugins"
+const (
+	DefaultPluginDir = "./plugins"
+)
 
 type Registry struct {
 	logger    log.CtxLogger
@@ -45,16 +47,31 @@ type blueprint struct {
 	fullName      plugin.FullName
 	specification plugin.Specification
 	path          string
-	// TODO store hash of plugin binary
+	// TODO store hash of plugin binary and compare before running the binary to
+	// ensure someone can't switch the plugin after we registered it
 }
 
 func NewRegistry(logger log.CtxLogger, pluginDir string) *Registry {
 	r := &Registry{
-		logger:    logger.WithComponent("standalone.Registry"),
-		pluginDir: pluginDir,
+		logger: logger.WithComponent("standalone.Registry"),
 	}
-	r.ReloadPlugins(context.Background())
-	r.logger.Info(context.Background()).Int("count", len(r.List())).Msg("standalone plugins initialized")
+
+	if pluginDir != "" {
+		// extract absolute path to make it clearer in the logs what directory is used
+		absPluginDir, err := filepath.Abs(pluginDir)
+		if err != nil {
+			r.logger.Warn(context.Background()).Err(err).Msg("could not extract absolute plugin dir path, standalone plugins disabled")
+		}
+		r.pluginDir = absPluginDir
+	}
+
+	if r.pluginDir != "" {
+		r.reloadPlugins()
+		r.logger.Info(context.Background()).Int("count", len(r.List())).Msg("standalone plugins initialized")
+	} else {
+		r.logger.Info(context.Background()).Msg("no plugin directory defined, standalone plugins disabled")
+	}
+
 	return r
 }
 
@@ -62,18 +79,18 @@ func newFullName(pluginName, pluginVersion string) plugin.FullName {
 	return plugin.NewFullName(plugin.PluginTypeStandalone, pluginName, pluginVersion)
 }
 
-func (r *Registry) ReloadPlugins(ctx context.Context) {
-	plugins := r.loadPlugins(ctx)
+func (r *Registry) reloadPlugins() {
+	plugins := r.loadPlugins(context.Background(), r.pluginDir)
 	r.m.Lock()
 	r.plugins = plugins
 	r.m.Unlock()
 }
 
-func (r *Registry) loadPlugins(ctx context.Context) map[string]map[string]blueprint {
-	r.logger.Debug(ctx).Msgf("loading plugins from directory %v", r.pluginDir)
+func (r *Registry) loadPlugins(ctx context.Context, pluginDir string) map[string]map[string]blueprint {
+	r.logger.Debug(ctx).Msgf("loading plugins from directory %v", pluginDir)
 	plugins := make(map[string]map[string]blueprint)
 
-	dirEntries, err := os.ReadDir(r.pluginDir)
+	dirEntries, err := os.ReadDir(pluginDir)
 	if err != nil {
 		r.logger.Warn(ctx).Err(err).Msg("could not read plugin directory")
 		return plugins // return empty map
@@ -90,11 +107,8 @@ func (r *Registry) loadPlugins(ctx context.Context) map[string]map[string]bluepr
 			// skip directories
 			continue
 		}
-		pluginPath, err := filepath.Abs(path.Join(r.pluginDir, dirEntry.Name()))
-		if err != nil {
-			r.logger.Warn(ctx).Err(err).Msg("failed to extract absolute plugin path")
-			continue
-		}
+
+		pluginPath := path.Join(pluginDir, dirEntry.Name())
 
 		// create dispenser without a logger to not spam logs on refresh
 		dispenser, err := standalonev1.NewDispenser(zerolog.Nop(), pluginPath)
@@ -126,7 +140,7 @@ func (r *Registry) loadPlugins(ctx context.Context) map[string]map[string]bluepr
 
 		fullName := newFullName(specs.Name, specs.Version)
 		if conflict, ok := versionMap[specs.Version]; ok {
-			err = cerrors.Errorf("plugin %q already registered, please remove either %v or %v, these plugins won't be usable until that happens", fullName, conflict.path, pluginPath)
+			err = cerrors.Errorf("conflict detected, plugin %v already registered, please remove either %v or %v, these plugins won't be usable until that happens", fullName, conflict.path, pluginPath)
 			warn(ctx, err, pluginPath)
 			// delete plugin from map at the end so that further duplicates can
 			// still be found
@@ -149,15 +163,16 @@ func (r *Registry) loadPlugins(ctx context.Context) map[string]map[string]bluepr
 		latestFullName := versionMap[plugin.PluginVersionLatest].fullName
 		if fullName.PluginVersionGreaterThan(latestFullName) {
 			versionMap[plugin.PluginVersionLatest] = bp
+			r.logger.Debug(ctx).
+				Str(log.PluginPathField, pluginPath).
+				Str(log.PluginNameField, string(bp.fullName)).
+				Msg("set plugin as latest")
 		}
 
-		// TODO store plugin hash
-		//  h := sha256.New()
-		//  if _, err := io.Copy(h, f); err != nil {
-		//    log.Fatal(err)
-		//  }
-		//
-		//  fmt.Printf("%x", h.Sum(nil))
+		r.logger.Debug(ctx).
+			Str(log.PluginPathField, pluginPath).
+			Str(log.PluginNameField, string(bp.fullName)).
+			Msg("loaded standalone plugin")
 	}
 
 	return plugins
