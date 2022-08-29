@@ -51,7 +51,7 @@ type Config struct {
 		Format string
 	}
 
-	Plugins struct {
+	Connectors struct {
 		Path string
 	}
 }

@@ -118,7 +118,7 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 	)
 
 	// Create all necessary internal services
-	plService, connService, procService, pluginService, err := newServices(logger, db, connectorPersister, cfg.Plugins.Path)
+	plService, connService, procService, pluginService, err := newServices(logger, db, connectorPersister, cfg.Connectors.Path)
 	if err != nil {
 		return nil, cerrors.Errorf("failed to create services: %w", err)
 	}

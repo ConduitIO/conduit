@@ -69,7 +69,7 @@ func parseConfig() conduit.Config {
 		logLevel  = flags.String("log.level", "info", "sets logging level; accepts debug, info, warn, error, trace")
 		logFormat = flags.String("log.format", "cli", "sets the format of the logging; accepts json, cli")
 
-		pluginsDir = flags.String("plugins.path", "./plugins", "path to standalone plugins directory")
+		connectorsDir = flags.String("connectors.path", "./connectors", "path to standalone connectors directory")
 	)
 
 	// flags is set up to exit on error, we can safely ignore the error
@@ -90,7 +90,7 @@ func parseConfig() conduit.Config {
 	cfg.HTTP.Address = stringPtrToVal(httpAddress)
 	cfg.Log.Level = strings.ToLower(stringPtrToVal(logLevel))
 	cfg.Log.Format = strings.ToLower(stringPtrToVal(logFormat))
-	cfg.Plugins.Path = stringPtrToVal(pluginsDir)
+	cfg.Connectors.Path = stringPtrToVal(connectorsDir)
 
 	return cfg
 }
