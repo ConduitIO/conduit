@@ -124,7 +124,7 @@ func TestService_CreateError(t *testing.T) {
 	builder := connector.NewDefaultBuilder(logger, nil, plugin.NewService(
 		logger,
 		builtin.NewRegistry(logger),
-		standalone.NewRegistry(logger, standalone.DefaultPluginDir),
+		standalone.NewRegistry(logger, ""),
 	))
 
 	service := connector.NewService(logger, db, builder)

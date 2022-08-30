@@ -28,10 +28,6 @@ import (
 	"github.com/rs/zerolog"
 )
 
-const (
-	DefaultPluginDir = "./plugins"
-)
-
 type Registry struct {
 	logger    log.CtxLogger
 	pluginDir string
