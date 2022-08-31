@@ -189,7 +189,7 @@
 {{/if}}
 {{#if this.isShowingEditConnectorModal}}
   <PipelineEditor::ConnectorModal
-    @newConnectorType={{this.newConnectorType}}
+    @newConnectorType={{this.selectedNode.type}}
     @connectorPlugins={{@connectorPlugins}}
     @onDismiss={{this.cancelEditConnectorModal}}
     @updateConnector={{this.updateConnector}}
