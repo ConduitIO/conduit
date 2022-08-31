@@ -13,18 +13,25 @@ jobs:
     name: Release
     runs-on: ubuntu-latest
     steps:
-      -
-        name: Checkout
+      - name: Checkout
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
-      -
-        name: Set up Go
+
+      - name: Set up Go
         uses: actions/setup-go@v3
         with:
           go-version: 1.18
-      -
-        name: Run GoReleaser
+
+      - name: Set GORELEASER_PREVIOUS_TAG in actual release
+        if: ${{ !contains(github.ref, '-nightly') }}
+        # find previous tag by filtering out nightly tags and choosing the
+        # second to last tag (last one is the current release)
+        run: |
+          prev_tag=$(git tag | grep -v "nightly" | sort -r --version-sort | head -n 2 | tail -n 1)
+          echo "GORELEASER_PREVIOUS_TAG=$prev_tag" >> $GITHUB_ENV
+
+      - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v3
         with:
           distribution: goreleaser
@@ -32,6 +39,7 @@ jobs:
           args: release --rm-dist
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   build-push-docker-image:
     name: Build and push Docker image
     runs-on: ubuntu-latest
