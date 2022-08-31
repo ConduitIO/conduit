@@ -15,6 +15,8 @@
 package builtin
 
 import (
+	"context"
+
 	file "github.com/conduitio/conduit-connector-file"
 	generator "github.com/conduitio/conduit-connector-generator"
 	kafka "github.com/conduitio/conduit-connector-kafka"
@@ -39,9 +41,18 @@ var (
 )
 
 type Registry struct {
-	logger log.CtxLogger
+	logger    log.CtxLogger
+	factories []DispenserFactory
 
-	builders map[string]DispenserFactory
+	// plugins stores plugin blueprints in a 2D map, first key is the plugin
+	// name, the second key is the plugin version
+	plugins map[string]map[string]blueprint
+}
+
+type blueprint struct {
+	fullName         plugin.FullName
+	specification    plugin.Specification
+	dispenserFactory DispenserFactory
 }
 
 type DispenserFactory func(name string, logger log.CtxLogger) plugin.Dispenser
@@ -66,10 +77,20 @@ func sdkDispenserFactory(connector sdk.Connector) DispenserFactory {
 }
 
 func NewRegistry(logger log.CtxLogger, factories ...DispenserFactory) *Registry {
-	builders := make(map[string]DispenserFactory, len(factories))
-	for _, builder := range factories {
-		p := builder("", log.CtxLogger{})
-		specPlugin, err := p.DispenseSpecifier()
+	r := &Registry{
+		logger:    logger.WithComponent("builtin.Registry"),
+		factories: factories,
+	}
+	r.plugins = r.loadPlugins()
+	r.logger.Info(context.Background()).Int("count", len(r.List())).Msg("builtin plugins initialized")
+	return r
+}
+
+func (r *Registry) loadPlugins() map[string]map[string]blueprint {
+	plugins := make(map[string]map[string]blueprint, len(r.factories))
+	for _, factory := range r.factories {
+		dispenser := factory("", log.CtxLogger{})
+		specPlugin, err := dispenser.DispenseSpecifier()
 		if err != nil {
 			panic(cerrors.Errorf("could not dispense specifier for built in plugin: %w", err))
 		}
@@ -77,35 +98,63 @@ func NewRegistry(logger log.CtxLogger, factories ...DispenserFactory) *Registry 
 		if err != nil {
 			panic(cerrors.Errorf("could not get specs for built in plugin: %w", err))
 		}
-		if _, ok := builders[specs.Name]; ok {
-			panic(cerrors.Errorf("plugin with name %q already registered", specs.Name))
+
+		versionMap := plugins[specs.Name]
+		if versionMap == nil {
+			versionMap = make(map[string]blueprint)
+			plugins[specs.Name] = versionMap
 		}
-		builders[specs.Name] = builder
+
+		fullName := newFullName(specs.Name, specs.Version)
+		if _, ok := versionMap[specs.Version]; ok {
+			panic(cerrors.Errorf("plugin %q already registered", fullName))
+		}
+
+		bp := blueprint{
+			fullName:         fullName,
+			dispenserFactory: factory,
+			specification:    specs,
+		}
+		versionMap[specs.Version] = bp
+
+		latestFullName := versionMap[plugin.PluginVersionLatest].fullName
+		if fullName.PluginVersionGreaterThan(latestFullName) {
+			versionMap[plugin.PluginVersionLatest] = bp
+		}
 	}
-	return &Registry{builders: builders, logger: logger.WithComponent("builtin.Registry")}
+	return plugins
 }
 
-func (r *Registry) NewDispenser(logger log.CtxLogger, name string) (plugin.Dispenser, error) {
-	builder, ok := r.builders[name]
+func newFullName(pluginName, pluginVersion string) plugin.FullName {
+	return plugin.NewFullName(plugin.PluginTypeBuiltin, pluginName, pluginVersion)
+}
+
+func (r *Registry) NewDispenser(logger log.CtxLogger, fullName plugin.FullName) (plugin.Dispenser, error) {
+	versionMap, ok := r.plugins[fullName.PluginName()]
 	if !ok {
-		return nil, cerrors.Errorf("plugin %q not found", name)
+		return nil, plugin.ErrPluginNotFound
 	}
-	return builder(name, logger), nil
+	b, ok := versionMap[fullName.PluginVersion()]
+	if !ok {
+		availableVersions := make([]string, 0, len(versionMap))
+		for k := range versionMap {
+			availableVersions = append(availableVersions, k)
+		}
+		return nil, cerrors.Errorf("could not find builtin plugin, only found versions %v: %w", availableVersions, plugin.ErrPluginNotFound)
+	}
+
+	return b.dispenserFactory(string(fullName), logger), nil
 }
 
-func (r *Registry) List() (map[string]plugin.Specification, error) {
-	specs := make(map[string]plugin.Specification)
-
-	for name, dispenser := range r.builders {
-		d := dispenser(name, r.logger)
-		spec, err := d.DispenseSpecifier()
-		if err != nil {
-			return nil, cerrors.Errorf("could not dispense specifier for built in plugin: %w", err)
-		}
-		specs[plugin.BuiltinPluginPrefix+name], err = spec.Specify()
-		if err != nil {
-			return nil, cerrors.Errorf("could not get specs for built in plugin: %w", err)
+func (r *Registry) List() map[plugin.FullName]plugin.Specification {
+	specs := make(map[plugin.FullName]plugin.Specification, len(r.plugins))
+	for _, versions := range r.plugins {
+		for version, bp := range versions {
+			if version == plugin.PluginVersionLatest {
+				continue // skip latest versions
+			}
+			specs[bp.fullName] = bp.specification
 		}
 	}
-	return specs, nil
+	return specs
 }

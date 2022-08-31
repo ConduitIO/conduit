@@ -22,6 +22,7 @@ import (
 
 var (
 	ErrStreamNotOpen    = cerrors.New("stream not open")
+	ErrPluginNotFound   = cerrors.New("plugin not found")
 	ErrPluginRunning    = cerrors.New("plugin is running")
 	ErrPluginNotRunning = cerrors.New("plugin is not running")
 )

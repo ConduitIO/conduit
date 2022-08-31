@@ -50,6 +50,10 @@ type Config struct {
 		Level  string
 		Format string
 	}
+
+	Connectors struct {
+		Path string
+	}
 }
 
 func (c Config) Validate() error {
