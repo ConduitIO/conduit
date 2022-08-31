@@ -16,19 +16,29 @@ package provisioning
 
 import (
 	"context"
+	"os"
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/conduitio/conduit/pkg/connector"
 	connmock "github.com/conduitio/conduit/pkg/connector/mock"
+	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/ctxutil"
+	"github.com/conduitio/conduit/pkg/foundation/database/badger"
 	"github.com/conduitio/conduit/pkg/foundation/database/inmemory"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/pipeline"
+	"github.com/conduitio/conduit/pkg/plugin"
+	"github.com/conduitio/conduit/pkg/plugin/builtin"
+	"github.com/conduitio/conduit/pkg/plugin/standalone"
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/provisioning/mock"
+	"github.com/conduitio/conduit/pkg/record"
 	"github.com/golang/mock/gomock"
 	"github.com/matryer/is"
+	"github.com/rs/zerolog"
 )
 
 var pipeline1 = PipelineConfig{
@@ -517,4 +527,180 @@ func TestProvision_MultiplePipelines(t *testing.T) {
 	// sort slice before comparing
 	sort.Strings(pls)
 	is.Equal(pls, []string{"pipeline2", "pipeline3"})
+}
+
+func TestProvision_IntegrationTestServices(t *testing.T) {
+	is := is.New(t)
+	ctx, killAll := context.WithCancel(context.Background())
+	defer killAll()
+
+	logger := log.InitLogger(zerolog.InfoLevel, log.FormatCLI)
+	logger = logger.CtxHook(ctxutil.MessageIDLogCtxHook{})
+
+	db, err := badger.New(logger.Logger, t.TempDir()+"/test.db")
+	assert.Ok(t, err)
+	t.Cleanup(func() {
+		err := db.Close()
+		assert.Ok(t, err)
+	})
+
+	pluginService := plugin.NewService(
+		builtin.NewRegistry(logger, builtin.DefaultDispenserFactories...),
+		standalone.NewRegistry(logger),
+	)
+
+	plService := pipeline.NewService(logger, db)
+	connService := connector.NewService(logger, db, connector.NewDefaultBuilder(logger, connector.NewPersister(logger, db, time.Second, 3), pluginService))
+	procService := processor.NewService(logger, db, processor.GlobalBuilderRegistry)
+
+	// add builtin processor for removing metadata
+	// TODO at the time of writing we don't have a processor for manipulating
+	//  metadata, once we have it we can use it instead of adding our own
+	processor.GlobalBuilderRegistry.MustRegister("removereadat", func(config processor.Config) (processor.Interface, error) {
+		return processor.InterfaceFunc(func(ctx context.Context, r record.Record) (record.Record, error) {
+			delete(r.Metadata, record.MetadataReadAt) // read at is different every time, remove it
+			return r, nil
+		}), nil
+	})
+
+	// create destination file
+	destFile := "./test/dest-file.txt"
+	_, err = os.Create(destFile)
+	is.NoErr(err)
+	defer func() {
+		err := os.Remove(destFile)
+		if err != nil {
+			return
+		}
+	}()
+
+	provService := NewService(db, logger, plService, connService, procService)
+	pls, err := provService.ProvisionConfigFile(ctx, "./test/provision4-valid-pipeline.yml")
+	is.NoErr(err)
+	sort.Strings(pls)
+	is.Equal(pls, []string{"pipeline1", "pipeline2", "pipeline3"})
+
+	// give the pipeline time to run through
+	time.Sleep(1 * time.Second)
+
+	// checking pipelines
+	pipelines := []*pipeline.Instance{
+		{
+			ID: "pipeline1",
+			Config: pipeline.Config{
+				Name:        "pipeline1",
+				Description: "desc1",
+			},
+			Status:        pipeline.StatusRunning,
+			ProvisionedBy: pipeline.ProvisionTypeConfig,
+			ConnectorIDs:  []string{"con1", "con2"},
+			ProcessorIDs:  []string{"proc1"},
+		},
+		{
+			ID: "pipeline2",
+			Config: pipeline.Config{
+				Name:        "pipeline2",
+				Description: "desc2",
+			},
+			Status:        pipeline.StatusUserStopped,
+			ProvisionedBy: pipeline.ProvisionTypeConfig,
+			ConnectorIDs:  []string{"con3"},
+		},
+		{
+			ID: "pipeline3",
+			Config: pipeline.Config{
+				Name:        "pipeline3",
+				Description: "empty",
+			},
+			Status:        pipeline.StatusUserStopped,
+			ProvisionedBy: pipeline.ProvisionTypeConfig,
+		},
+	}
+	for _, pl := range pipelines {
+		gotPl, err := plService.Get(ctx, pl.ID)
+		is.NoErr(err)
+		is.Equal(gotPl.Config, pl.Config)
+		is.Equal(gotPl.Status, pl.Status)
+		is.Equal(gotPl.ProvisionedBy, pl.ProvisionedBy)
+		is.Equal(gotPl.ConnectorIDs, pl.ConnectorIDs)
+		is.Equal(gotPl.ProcessorIDs, pl.ProcessorIDs)
+	}
+
+	// checking processors
+	processors := []*processor.Instance{
+		{
+			ID:            "proc1",
+			ProvisionedBy: processor.ProvisionTypeConfig,
+			Name:          "removereadat",
+			Parent: processor.Parent{
+				ID:   "pipeline1",
+				Type: processor.ParentTypePipeline,
+			},
+			Config: processor.Config{},
+		},
+		{
+			ID:            "con2proc1",
+			ProvisionedBy: processor.ProvisionTypeConfig,
+			Name:          "removereadat",
+			Parent: processor.Parent{
+				ID:   "con2",
+				Type: processor.ParentTypeConnector,
+			},
+			Config: processor.Config{},
+		},
+	}
+
+	for _, proc := range processors {
+		gotProc, err := procService.Get(ctx, proc.ID)
+		is.NoErr(err)
+		gotProc.CreatedAt = proc.CreatedAt
+		gotProc.UpdatedAt = proc.UpdatedAt
+		gotProc.Processor = proc.Processor
+		is.Equal(gotProc, proc)
+	}
+
+	// checking connectors
+	wantConn1 := connector.Config{
+		Name:   "file-src",
+		Plugin: "builtin:file",
+		Settings: map[string]string{
+			"path": "./test/source-file.txt",
+		},
+		PipelineID: "pipeline1",
+	}
+	wantConn2 := connector.Config{
+		Name:   "file-dest",
+		Plugin: "builtin:file",
+		Settings: map[string]string{
+			"path": destFile,
+		},
+		PipelineID:   "pipeline1",
+		ProcessorIDs: []string{"con2proc1"},
+	}
+	wantConn3 := connector.Config{
+		Name:   "file-dest",
+		Plugin: "builtin:file",
+		Settings: map[string]string{
+			"path": "./test/file3.txt",
+		},
+		PipelineID: "pipeline2",
+	}
+	// assert con1
+	gotConn1, err := connService.Get(ctx, "con1")
+	is.NoErr(err)
+	is.Equal(gotConn1.Config(), wantConn1)
+	is.Equal(gotConn1.Type(), connector.TypeSource)
+	// assert con2
+	gotConn2, err := connService.Get(ctx, "con2")
+	is.NoErr(err)
+	is.Equal(gotConn2.Config(), wantConn2)
+	is.Equal(gotConn2.Type(), connector.TypeDestination)
+	// assert con3
+	gotConn3, err := connService.Get(ctx, "con3")
+	is.NoErr(err)
+	is.Equal(gotConn3.Config(), wantConn3)
+	is.Equal(gotConn3.Type(), connector.TypeDestination)
+
+	data, err := os.ReadFile(destFile)
+	is.True(len(data) != 0) // destination file is empty
 }
