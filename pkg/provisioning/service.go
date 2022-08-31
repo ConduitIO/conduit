@@ -100,11 +100,13 @@ func (s *Service) provisionPipeline(ctx context.Context, id string, config Pipel
 	if err != nil && !cerrors.Is(err, pipeline.ErrInstanceNotFound) {
 		return cerrors.Errorf("could not get the pipeline %q: %w", id, err)
 	} else if err == nil {
-		if oldPl.Status == pipeline.StatusRunning {
+		oldStatus := oldPl.Status
+		if oldStatus == pipeline.StatusRunning {
 			err := s.stopPipeline(ctx, oldPl)
 			if err != nil {
 				return err
 			}
+			s.rollbackStopPipeline(ctx, &r, oldPl)
 		}
 		connStates, err = s.collectConnectorStates(ctx, oldPl)
 		if err != nil {
@@ -178,7 +180,7 @@ func (s *Service) collectConnectorStates(ctx context.Context, pl *pipeline.Insta
 				if newConn.Config().Plugin != oldConn.Config().Plugin {
 					s.logger.Warn(ctx).
 						Str(log.PluginNameField, newConn.Config().Plugin).
-						Msg("plugin name was changes, could not apply old destination state so connector will start from the beginning")
+						Msg("plugin name changed, could not apply old destination state, the connector will start from the beginning")
 					return nil
 				}
 				_, err = s.connectorService.SetDestinationState(ctx, connID, oldState)
@@ -202,7 +204,7 @@ func (s *Service) collectConnectorStates(ctx context.Context, pl *pipeline.Insta
 					s.logger.Warn(ctx).
 						Str(log.PluginNameField, newConn.Config().Plugin).
 						Str(log.ConnectorIDField, connID).
-						Msg("plugin name was changes, could not apply old source state so connector will start from the beginning")
+						Msg("plugin name changed, could not apply old source state, the connector will start from the beginning")
 					return nil
 				}
 				_, err = s.connectorService.SetSourceState(ctx, connID, oldState)
@@ -261,12 +263,6 @@ func (s *Service) deletePipeline(ctx context.Context, r *rollback.R, pl *pipelin
 
 	r.Append(func() error {
 		err := s.applyConnectorStates(ctx, pl, connStates)
-		if err != nil {
-			return err
-		}
-		if pl.Status == pipeline.StatusRunning {
-			err = s.pipelineService.Start(ctx, s.connectorService, s.processorService, pl)
-		}
 		return err
 	})
 
@@ -493,6 +489,12 @@ func (s *Service) rollbackCreatePipeline(ctx context.Context, r *rollback.R, pl 
 func (s *Service) rollbackDeletePipeline(ctx context.Context, r *rollback.R, id string, config PipelineConfig) {
 	r.Append(func() error {
 		_, err := s.createPipeline(ctx, id, config)
+		return err
+	})
+}
+func (s *Service) rollbackStopPipeline(ctx context.Context, r *rollback.R, pl *pipeline.Instance) {
+	r.Append(func() error {
+		err := s.pipelineService.Start(ctx, s.connectorService, s.processorService, pl)
 		return err
 	})
 }
