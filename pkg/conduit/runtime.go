@@ -401,12 +401,17 @@ func (r *Runtime) serveHTTPAPI(
 		return nil, cerrors.Errorf("failed to register metrics handler: %w", err)
 	}
 
-	return r.serveHTTP(ctx, t, &http.Server{
-		Addr: r.Config.HTTP.Address,
-		Handler: grpcutil.WithDefaultGatewayMiddleware(
-			r.logger, allowCORS(gwmux, "http://localhost:4200"),
-		),
-	})
+	return r.serveHTTP(
+		ctx,
+		t,
+		&http.Server{
+			Addr: r.Config.HTTP.Address,
+			Handler: grpcutil.WithDefaultGatewayMiddleware(
+				r.logger, allowCORS(gwmux, "http://localhost:4200"),
+			),
+			ReadHeaderTimeout: 10 * time.Second,
+		},
+	)
 }
 
 func preflightHandler(w http.ResponseWriter) {

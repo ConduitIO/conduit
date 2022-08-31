@@ -84,8 +84,9 @@ func httpRequest(
 		return nil, cerrors.Errorf("%s: error trying to create HTTP request: %w", processorName, err)
 	}
 
-	procFn := func(_ context.Context, r record.Record) (record.Record, error) {
-		req, err := http.NewRequest(
+	procFn := func(ctx context.Context, r record.Record) (record.Record, error) {
+		req, err := http.NewRequestWithContext(
+			ctx,
 			method,
 			rawURL,
 			bytes.NewReader(r.Payload.After.Bytes()),

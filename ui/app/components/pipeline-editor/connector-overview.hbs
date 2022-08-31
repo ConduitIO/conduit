@@ -1,6 +1,6 @@
 <ul data-test-connector-overview-list>
   {{#each @sourceConnectors as |connector|}}
-    {{!-- template-lint-disable no-invalid-interactive --}}
+    {{! template-lint-disable no-invalid-interactive }}
     <li
       class="mb-2 py-2 px-4 hover:bg-purple-100 cursor-pointer
         {{if
@@ -11,7 +11,7 @@
       data-test-connector-overview-list-item
       {{on "click" (fn @selectNode connector)}}
     >
-    {{!-- template-lint-enable no-invalid-interactive --}}
+      {{! template-lint-enable no-invalid-interactive }}
       <div class="flex items-center justify-between">
         <div class="text-xs font-medium">
           {{connector.name}}
@@ -33,7 +33,7 @@
     </li>
   {{/each}}
   {{#each @destinationConnectors as |connector|}}
-    {{!-- template-lint-disable no-invalid-interactive --}}
+    {{! template-lint-disable no-invalid-interactive }}
     <li
       class="mb-2 py-2 px-4 hover:bg-purple-100 cursor-pointer
         {{if
@@ -44,7 +44,7 @@
       data-test-connector-overview-list-item
       {{on "click" (fn @selectNode connector)}}
     >
-    {{!-- template-lint-enable no-invalid-interactive --}}
+      {{! template-lint-enable no-invalid-interactive }}
       <div class="flex items-center justify-between mb-1">
         <div class="text-xs font-medium">
           {{connector.name}}
