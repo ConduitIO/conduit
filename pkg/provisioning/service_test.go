@@ -702,5 +702,6 @@ func TestProvision_IntegrationTestServices(t *testing.T) {
 	is.Equal(gotConn3.Type(), connector.TypeDestination)
 
 	data, err := os.ReadFile(destFile)
+	is.NoErr(err)
 	is.True(len(data) != 0) // destination file is empty
 }
