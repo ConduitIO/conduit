@@ -311,6 +311,7 @@ func (s *Service) stopPipeline(ctx context.Context, pl *pipeline.Instance) error
 	if err != nil {
 		return cerrors.Errorf("could not stop pipeline %q: %w", pl.ID, err)
 	}
+	pl.Wait()
 	return nil
 }
 
