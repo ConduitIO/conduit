@@ -28,14 +28,14 @@ Source means the connector has the ability to get data from an upstream data sto
 | Connector | Source | Destination | Support |
 |-----------|-------|----|-------------|
 | [Algolia](https://github.com/ConduitIO/conduit-connector-algolia) | |✅ | Conduit |
-| [Airtable](https://github.com/conduitio-labs/conduit-connector-airtable) | | | Conduit |
+| [Airtable](https://github.com/conduitio-labs/conduit-connector-airtable) | | | Community |
 | [Azure Storage](https://github.com/miquido/conduit-connector-azure-storage) |✅ | | Community |
 | [BigQuery](https://github.com/conduitio-labs/conduit-connector-bigquery) |✅ | | Community |
 | [DB2](https://github.com/conduitio-labs/conduit-connector-db2) | | | Community |
 | [Elastic Search](https://github.com/conduitio-labs/conduit-connector-elasticsearch) |✅ |✅ | Community |
 | [File](https://github.com/ConduitIO/conduit-connector-file) |✅ |✅ | Conduit |
-| [Firebolt](https://github.com/conduitio-labs/conduit-connector-firebolt) | | | Conduit |
-| [GCP PubSub](https://github.com/conduitio-labs/conduit-connector-gcp-pubsub) | | | Conduit |
+| [Firebolt](https://github.com/conduitio-labs/conduit-connector-firebolt) | | | Community |
+| [GCP PubSub](https://github.com/conduitio-labs/conduit-connector-gcp-pubsub) | | | Community |
 | [Google Cloud Storage](https://github.com/conduitio-labs/conduit-connector-google-cloudstorage) |✅ |✅ | Community |
 | [Google Sheets](https://github.com/conduitio-labs/conduit-connector-google-sheets) |✅ | | Community |
 | [Kafka](https://github.com/ConduitIO/conduit-connector-kafka) |✅ |✅ | Conduit |
