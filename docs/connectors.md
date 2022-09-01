@@ -28,16 +28,22 @@ Source means the connector has the ability to get data from an upstream data sto
 | Connector | Source | Destination | Support |
 |-----------|-------|----|-------------|
 | [Algolia](https://github.com/ConduitIO/conduit-connector-algolia) | |✅ | Conduit |
+| [Airtable](https://github.com/conduitio-labs/conduit-connector-airtable) | | | Conduit |
 | [Azure Storage](https://github.com/miquido/conduit-connector-azure-storage) |✅ | | Community |
 | [BigQuery](https://github.com/conduitio-labs/conduit-connector-bigquery) |✅ | | Community |
+| [DB2](https://github.com/conduitio-labs/conduit-connector-db2) | | | Community |
 | [Elastic Search](https://github.com/conduitio-labs/conduit-connector-elasticsearch) |✅ |✅ | Community |
 | [File](https://github.com/ConduitIO/conduit-connector-file) |✅ |✅ | Conduit |
+| [Firebolt](https://github.com/conduitio-labs/conduit-connector-firebolt) | | | Conduit |
+| [GCP PubSub](https://github.com/conduitio-labs/conduit-connector-gcp-pubsub) | | | Conduit |
 | [Google Cloud Storage](https://github.com/conduitio-labs/conduit-connector-google-cloudstorage) |✅ |✅ | Community |
 | [Google Sheets](https://github.com/conduitio-labs/conduit-connector-google-sheets) |✅ | | Community |
 | [Kafka](https://github.com/ConduitIO/conduit-connector-kafka) |✅ |✅ | Conduit |
 | [Kafka Connect Wrapper](https://github.com/ConduitIO/conduit-kafka-connect-wrapper) | ✅ | ✅ | Legacy |
 | [Marketo](https://github.com/conduitio-labs/conduit-connector-marketo) |✅ | | Community |
 | [Materialize](https://github.com/conduitio-labs/conduit-connector-materialize) | |✅ | Community |
+| [Nats Jetstream](https://github.com/conduitio-labs/conduit-connector-nats-jetstream) |✅ |✅ | Community |
+| [Oracle DB](https://github.com/conduitio-labs/conduit-connector-oracle) | | | Community |
 | [Postgres](https://github.com/ConduitIO/conduit-connector-postgres)   |✅ |✅ | Conduit |
 | [Random Generator](https://github.com/ConduitIO/conduit-connector-generator) |✅ | | Conduit |
 | [Redis](https://github.com/conduitio-labs/conduit-connector-redis) ||✅ | Community |
@@ -45,4 +51,5 @@ Source means the connector has the ability to get data from an upstream data sto
 | [Salesforce](https://github.com/conduitio-labs/conduit-connector-salesforce) | ✅ | ✅ | Community |
 | [Snowflake](https://github.com/conduitio-labs/conduit-connector-snowflake) |✅ | | Community |
 | [Stripe](https://github.com/conduitio-labs/conduit-connector-stripe) |✅ | | Community |
+| [Vitess](https://github.com/conduitio-labs/conduit-connector-vitess) || | Community |
 | [Zendesk](https://github.com/conduitio-labs/conduit-connector-zendesk) |✅ |✅| Community |
