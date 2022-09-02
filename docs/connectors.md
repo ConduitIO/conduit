@@ -27,7 +27,7 @@ Source means the connector has the ability to get data from an upstream data sto
 
 | Connector | Source | Destination | Support |
 |-----------|-------|----|-------------|
-| [Algolia](https://github.com/ConduitIO/conduit-connector-algolia) | |✅ | Conduit |
+| [Algolia](https://github.com/conduitio-labs/conduit-connector-algolia) | |✅ | Conduit |
 | [Airtable](https://github.com/conduitio-labs/conduit-connector-airtable) | | | Community |
 | [Azure Storage](https://github.com/miquido/conduit-connector-azure-storage) |✅ | | Community |
 | [BigQuery](https://github.com/conduitio-labs/conduit-connector-bigquery) |✅ | | Community |
