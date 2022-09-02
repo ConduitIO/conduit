@@ -33,15 +33,13 @@ run:
 	go run ./cmd/conduit/main.go
 
 proto-api:
-	@echo Generate proto code
-	@buf generate
+	cd proto && buf generate
 
 proto-update:
-	@echo Download proto dependencies
-	@buf mod update
+	cd proto && buf mod update
 
 proto-lint:
-	@buf lint
+	cd proto && buf lint
 
 clean:
 	@rm -f conduit
