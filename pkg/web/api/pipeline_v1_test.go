@@ -22,9 +22,9 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	"github.com/conduitio/conduit/pkg/web/api/mock"
-	apiv1 "go.buf.build/conduitio/conduit/conduitio/conduit/api/v1"
 	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
+	apiv1 "go.buf.build/conduitio/conduit/conduitio/conduit/api/v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
