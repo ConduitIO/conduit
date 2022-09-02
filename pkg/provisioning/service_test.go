@@ -623,6 +623,7 @@ func TestProvision_IntegrationTestServices(t *testing.T) {
 		is.Equal(gotPl.Config, pl.Config)
 		is.Equal(gotPl.Status, pl.Status)
 		is.Equal(gotPl.ProvisionedBy, pl.ProvisionedBy)
+		sort.Strings(gotPl.ConnectorIDs)
 		is.Equal(gotPl.ConnectorIDs, pl.ConnectorIDs)
 		is.Equal(gotPl.ProcessorIDs, pl.ProcessorIDs)
 	}
