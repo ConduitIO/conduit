@@ -24,7 +24,7 @@ import (
 	"github.com/conduitio/conduit/pkg/processor"
 	procmock "github.com/conduitio/conduit/pkg/processor/mock"
 	apimock "github.com/conduitio/conduit/pkg/web/api/mock"
-	apiv1 "github.com/conduitio/conduit/proto/api/v1"
+	apiv1 "go.buf.build/conduitio/conduit/conduitio/conduit/api/v1"
 	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/timestamppb"
