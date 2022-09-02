@@ -16,7 +16,7 @@ package toproto
 
 import (
 	"github.com/conduitio/conduit/pkg/connector"
-	apiv1 "github.com/conduitio/conduit/proto/api/v1"
+	apiv1 "go.buf.build/conduitio/conduit/conduitio/conduit/api/v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
