@@ -1,22 +1,20 @@
-version: v1beta1
+version: v1
 plugins:
   - name: go
-    out: proto
+    out: gen
     opt:
       - paths=source_relative
   - name: go-grpc
-    out: proto
+    out: gen
     opt:
       - paths=source_relative
   - name: grpc-gateway
-    out: proto
+    out: gen
     opt:
       - paths=source_relative
       - logtostderr=true
-      - allow_repeated_fields_in_body=true
   - name: openapiv2
-    out: pkg/web/openapi/swagger-ui
+    out: gen
     opt:
       - logtostderr=true
-      - allow_repeated_fields_in_body=true
       - disable_default_errors=true

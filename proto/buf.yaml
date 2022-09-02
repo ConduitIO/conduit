@@ -1,8 +1,5 @@
-version: v1beta1
+version: v1
 name: buf.build/conduitio/conduit
-build:
-  roots:
-    - proto
 lint:
   use:
     - DEFAULT

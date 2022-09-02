@@ -26,9 +26,9 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/record"
 	apimock "github.com/conduitio/conduit/pkg/web/api/mock"
-	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
+	apiv1 "go.buf.build/conduitio/conduit/conduitio/conduit/api/v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 

@@ -32,10 +32,10 @@ require (
 	github.com/prometheus/client_model v0.2.0
 	github.com/prometheus/common v0.37.0
 	github.com/rs/zerolog v1.28.0
+	go.buf.build/conduitio/conduit/conduitio/conduit v1.1.1
 	go.buf.build/grpc/go/conduitio/conduit-connector-protocol v1.4.3
 	golang.org/x/tools v0.1.12
-	golang.org/x/xerrors v0.0.0-20220517211312-f3a8303e98df
-	google.golang.org/genproto v0.0.0-20220822174746-9e6da59bd2fc
+	golang.org/x/xerrors v0.0.0-20220609144429-65e65417b02f
 	google.golang.org/grpc v1.49.0
 	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.2.0
 	google.golang.org/protobuf v1.28.1
@@ -141,6 +141,7 @@ require (
 	github.com/xdg/stringprep v1.0.3 // indirect
 	github.com/xitongsys/parquet-go v1.6.2 // indirect
 	github.com/xitongsys/parquet-go-source v0.0.0-20220315005136-aec0fe3e777c // indirect
+	go.buf.build/conduitio/conduit/grpc-ecosystem/grpc-gateway v1.1.44 // indirect
 	go.opencensus.io v0.23.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.33.0 // indirect
 	go.opentelemetry.io/otel v1.8.0 // indirect
@@ -156,6 +157,7 @@ require (
 	golang.org/x/sys v0.0.0-20220727055044-e65921a090b8 // indirect
 	golang.org/x/term v0.0.0-20220722155259-a9ba230a4035 // indirect
 	golang.org/x/text v0.3.7 // indirect
+	google.golang.org/genproto v0.0.0-20220822174746-9e6da59bd2fc // indirect
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )

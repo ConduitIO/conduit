@@ -25,7 +25,7 @@ import (
 	"github.com/conduitio/conduit/pkg/web/api/fromproto"
 	"github.com/conduitio/conduit/pkg/web/api/status"
 	"github.com/conduitio/conduit/pkg/web/api/toproto"
-	apiv1 "github.com/conduitio/conduit/proto/api/v1"
+	apiv1 "go.buf.build/conduitio/conduit/conduitio/conduit/api/v1"
 	"google.golang.org/grpc"
 )
 

@@ -1,4 +1,4 @@
-.PHONY: test test-integration build run proto-api proto-lint clean download install-tools generate check-go-version
+.PHONY: test test-integration build run proto-update proto-lint clean download install-tools generate check-go-version
 
 # Version will extract the current version of Conduit based on
 # the latest git tag and commit. If the repository contains any
@@ -32,16 +32,11 @@ build-server: check-go-version
 run:
 	go run ./cmd/conduit/main.go
 
-proto-api:
-	@echo Generate proto code
-	@buf generate
-
 proto-update:
-	@echo Download proto dependencies
-	@buf mod update
+	cd proto && buf mod update
 
 proto-lint:
-	@buf lint
+	cd proto && buf lint
 
 clean:
 	@rm -f conduit
