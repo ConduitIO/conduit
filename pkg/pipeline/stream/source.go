@@ -17,6 +17,7 @@ package stream
 import (
 	"bytes"
 	"context"
+	"sync"
 	"time"
 
 	"github.com/conduitio/conduit/pkg/connector"
@@ -39,6 +40,9 @@ type SourceNode struct {
 	stopReason error
 	base       pubNodeBase
 	logger     log.CtxLogger
+
+	running  chan struct{} // running will be closed once SourceNode starts running
+	initOnce sync.Once
 }
 
 // ID returns a properly formatted SourceNode ID prefixed with `source/`
@@ -46,7 +50,24 @@ func (n *SourceNode) ID() string {
 	return n.Name
 }
 
+func (n *SourceNode) init() {
+	n.initOnce.Do(func() {
+		n.running = make(chan struct{})
+	})
+}
+
 func (n *SourceNode) Run(ctx context.Context) (err error) {
+	n.init()
+	defer func() {
+		select {
+		case <-n.running:
+			// n.running is closed, all good
+		default:
+			// close n.running if it's still open
+			close(n.running)
+		}
+	}()
+
 	// start a fresh connector context to make sure the connector is running
 	// until this method returns
 	connectorCtx, cancel := context.WithCancel(context.Background())
@@ -89,6 +110,8 @@ func (n *SourceNode) Run(ctx context.Context) (err error) {
 		return err
 	}
 	defer cleanup()
+
+	close(n.running) // node is ready to start running
 
 	var (
 		// when source node encounters the record with this position it needs to
@@ -152,6 +175,15 @@ func (n *SourceNode) registerMetricStatusHandler(msg *Message) {
 }
 
 func (n *SourceNode) Stop(ctx context.Context, reason error) error {
+	n.init()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-n.running:
+		// node is running now, continue injecting the stop message
+	}
+
 	n.stopReason = reason
 	// InjectControlMessage will inject a message into the stream of messages
 	// being processed by SourceNode to let it know when it should stop

@@ -25,8 +25,6 @@ import (
 
 const ParserVersion = "1.0"
 
-var ErrUnsupportedVersion = cerrors.New("unsupported parser version")
-
 type ProcessorConfig struct {
 	Type     string            `yaml:"type"`
 	Settings map[string]string `yaml:"settings"`
