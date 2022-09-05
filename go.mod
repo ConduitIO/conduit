@@ -24,7 +24,7 @@ require (
 	github.com/hashicorp/go-hclog v1.3.0
 	github.com/hashicorp/go-plugin v1.4.5
 	github.com/jackc/pgtype v1.12.0
-	github.com/jackc/pgx/v4 v4.17.1
+	github.com/jackc/pgx/v4 v4.17.2
 	github.com/jpillora/backoff v1.0.0
 	github.com/matryer/is v1.4.0
 	github.com/piotrkowalczuk/promgrpc/v4 v4.0.4
