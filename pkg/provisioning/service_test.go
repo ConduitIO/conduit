@@ -170,6 +170,7 @@ func TestProvision_PipelineWithConnectorsAndProcessors(t *testing.T) {
 		Type: processor.ParentTypeConnector,
 	}
 
+	pipelineService.EXPECT().List(gomock.Not(gomock.Nil()))
 	pipelineService.EXPECT().Get(gomock.Not(gomock.Nil()), "pipeline1").Return(nil, pipeline.ErrInstanceNotFound)
 	pipelineService.EXPECT().Get(gomock.Not(gomock.Nil()), "pipeline1").Return(pl1, nil)
 	pipelineService.
@@ -234,6 +235,7 @@ func TestProvision_Rollback(t *testing.T) {
 		Type: processor.ParentTypeConnector,
 	}
 
+	pipelineService.EXPECT().List(gomock.Not(gomock.Nil()))
 	pipelineService.EXPECT().Get(gomock.Not(gomock.Nil()), "pipeline1").Return(nil, pipeline.ErrInstanceNotFound)
 	pipelineService.EXPECT().Get(gomock.Not(gomock.Nil()), "pipeline1").Return(pl1, nil)
 	pipelineService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline1", pl1config, pipeline.ProvisionTypeConfig).Return(pl1, nil)
@@ -305,6 +307,7 @@ func TestProvision_RollbackDeletePipeline(t *testing.T) {
 		Type: processor.ParentTypeConnector,
 	}
 
+	pipelineService.EXPECT().List(gomock.Not(gomock.Nil()))
 	// pipeline exists
 	pipelineService.EXPECT().Get(gomock.Not(gomock.Nil()), "pipeline1").Return(pl1, nil)
 	pipelineService.EXPECT().Stop(gomock.Not(gomock.Nil()), pl1)
@@ -400,6 +403,7 @@ func TestProvision_ExistingPipeline(t *testing.T) {
 	source := connBuilder.NewSourceMock("con1", sourceConfig)
 	destination := connBuilder.NewDestinationMock("con2", destConfig)
 
+	pipelineService.EXPECT().List(gomock.Not(gomock.Nil()))
 	// pipeline already exists
 	pipelineService.EXPECT().Get(gomock.Not(gomock.Nil()), "pipeline1").Return(pl1, nil).Times(2)
 	pipelineService.EXPECT().Stop(gomock.Not(gomock.Nil()), pl1)
@@ -494,6 +498,7 @@ func TestProvision_MultiplePipelines(t *testing.T) {
 		Settings:   pipeline3.Connectors["con2"].Settings,
 	}
 
+	pipelineService.EXPECT().List(gomock.Not(gomock.Nil()))
 	pipelineService.EXPECT().Get(gomock.Not(gomock.Nil()), "pipeline2").Return(nil, pipeline.ErrInstanceNotFound)
 	pipelineService.EXPECT().Get(gomock.Not(gomock.Nil()), "pipeline3").Return(nil, pipeline.ErrInstanceNotFound)
 	pipelineService.
