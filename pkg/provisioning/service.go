@@ -17,7 +17,10 @@ package provisioning
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -27,6 +30,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/rollback"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	"github.com/conduitio/conduit/pkg/processor"
+	"golang.org/x/exp/slices"
 )
 
 type Service struct {
@@ -35,6 +39,7 @@ type Service struct {
 	pipelineService  PipelineService
 	connectorService ConnectorService
 	processorService ProcessorService
+	pipelinesPath    string
 }
 
 func NewService(
@@ -43,6 +48,7 @@ func NewService(
 	plService PipelineService,
 	connService ConnectorService,
 	procService ProcessorService,
+	pipelinesDir string,
 ) *Service {
 	return &Service{
 		db:               db,
@@ -50,10 +56,49 @@ func NewService(
 		pipelineService:  plService,
 		connectorService: connService,
 		processorService: procService,
+		pipelinesPath:    pipelinesDir,
 	}
 }
 
-func (s *Service) ProvisionConfigFile(ctx context.Context, path string) ([]string, error) {
+func (s *Service) Init(ctx context.Context) error {
+	s.logger.Debug(ctx).Msg("initializing the provisioning service")
+
+	var multierr error
+	var files []string
+	err := filepath.WalkDir(s.pipelinesPath, func(path string, fileInfo fs.DirEntry, err error) error {
+		files = append(files, path)
+		return nil
+	})
+	if err != nil {
+		multierr = multierror.Append(multierr, cerrors.Errorf("could not iterate through the pipelines folder %q: %w", s.pipelinesPath, err))
+		return multierr
+	}
+
+	if len(files) == 1 {
+		s.logger.Warn(ctx).Str("pipelinesDir", s.pipelinesPath).Msg("configuration folder is empty, no pipelines created")
+	}
+	// pop the folder name from the slice
+	files = files[1:]
+
+	var pipelines []string
+	for _, file := range files {
+		provPipelines, err := s.provisionConfigFile(ctx, file)
+		if err != nil {
+			multierr = multierror.Append(multierr, err)
+			continue
+		}
+		pipelines = append(pipelines, provPipelines...)
+	}
+	s.logger.Info(ctx).Int("count", len(pipelines)).Str("pipelines", strings.Join(pipelines, ", ")).Msg("pipelines successfully provisioned")
+
+	s.deleteOldPipelines(ctx, pipelines)
+
+	return multierr
+}
+
+func (s *Service) provisionConfigFile(ctx context.Context, path string) ([]string, error) {
+	var multierr error
+
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, cerrors.Errorf("could not read the file %q: %w", path, err)
@@ -61,22 +106,21 @@ func (s *Service) ProvisionConfigFile(ctx context.Context, path string) ([]strin
 
 	before, err := Parse(data)
 	if err != nil {
-		return nil, err
+		return nil, cerrors.Errorf("could not parse the file %q: %w", path, err)
 	}
 
 	got := EnrichPipelinesConfig(before)
 
 	var pls []string
-	var multierr error
 	for k, v := range got {
 		err = ValidatePipelinesConfig(v)
 		if err != nil {
-			multierr = multierror.Append(multierr, cerrors.Errorf("invalid pipeline config: %w", err))
+			multierr = multierror.Append(multierr, cerrors.Errorf("pipeline %q, invalid pipeline config: %w", k, err))
 			continue
 		}
 		err = s.provisionPipeline(ctx, k, v)
 		if err != nil {
-			multierr = multierror.Append(multierr, cerrors.Errorf("error while provisioning the pipeline %q: %w", k, err))
+			multierr = multierror.Append(multierr, cerrors.Errorf("pipeline %q, error while provisioning: %w", k, err))
 			continue
 		}
 		pls = append(pls, k)
@@ -413,6 +457,76 @@ func (s *Service) createProcessors(ctx context.Context, r *rollback.R, parentID 
 			}
 			s.rollbackAddConnectorProcessor(ctx, r, parentID, k)
 		}
+	}
+
+	return nil
+}
+
+func (s *Service) deleteOldPipelines(ctx context.Context, pipelines []string) {
+	var err error
+	plMp := s.pipelineService.List(ctx)
+	for id, pl := range plMp {
+		if !slices.Contains(pipelines, id) && pl.ProvisionedBy == pipeline.ProvisionTypeConfig {
+			err = s.deletePipelineWithoutRollback(ctx, pl)
+			if err != nil {
+				s.logger.Warn(ctx).Str("pipelineID", id).Msg("could not delete pipeline")
+			}
+		}
+	}
+}
+
+func (s *Service) deletePipelineWithoutRollback(ctx context.Context, pl *pipeline.Instance) error {
+	var err error
+
+	if pl.Status == pipeline.StatusRunning {
+		err := s.stopPipeline(ctx, pl)
+		if err != nil {
+			return err
+		}
+	}
+
+	// remove pipeline processors
+	for _, procID := range pl.ProcessorIDs {
+		_, err = s.pipelineService.RemoveProcessor(ctx, pl, procID)
+		if err != nil {
+			return err
+		}
+
+		err = s.processorService.Delete(ctx, procID)
+		if err != nil {
+			return err
+		}
+	}
+	// remove connector processors
+	for _, connID := range pl.ConnectorIDs {
+		for _, procID := range pl.ProcessorIDs {
+			_, err = s.connectorService.RemoveProcessor(ctx, connID, procID)
+			if err != nil {
+				return err
+			}
+
+			err = s.processorService.Delete(ctx, procID)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	// remove connectors
+	for _, connID := range pl.ConnectorIDs {
+		_, err = s.pipelineService.RemoveConnector(ctx, pl, connID)
+		if err != nil {
+			return err
+		}
+
+		err = s.connectorService.Delete(ctx, connID)
+		if err != nil {
+			return err
+		}
+	}
+	// delete pipeline
+	err = s.pipelineService.Delete(ctx, pl)
+	if err != nil {
+		return err
 	}
 
 	return nil

@@ -15,6 +15,8 @@
 package conduit
 
 import (
+	"os"
+
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/rs/zerolog"
@@ -52,6 +54,10 @@ type Config struct {
 	}
 
 	Connectors struct {
+		Path string
+	}
+
+	Pipelines struct {
 		Path string
 	}
 }
@@ -101,6 +107,15 @@ func (c Config) Validate() error {
 		return invalidConfigFieldErr("log.format")
 	}
 
+	if c.Pipelines.Path == "" {
+		return requiredConfigFieldErr("pipelines.path")
+	}
+	// check if folder exists
+	_, err = os.Stat(c.Pipelines.Path)
+	if c.Pipelines.Path != "./pipelines" && os.IsNotExist(err) {
+		return invalidConfigFieldErr("pipelines.path")
+	}
+
 	return nil
 }
 
@@ -109,5 +124,5 @@ func invalidConfigFieldErr(name string) error {
 }
 
 func requiredConfigFieldErr(name string) error {
-	return cerrors.Errorf("%q config value is invalid", name)
+	return cerrors.Errorf("%q config value is required", name)
 }

@@ -27,6 +27,7 @@ import (
 type PipelineService interface {
 	Start(ctx context.Context, connFetcher pipeline.ConnectorFetcher, procFetcher pipeline.ProcessorFetcher, pipeline *pipeline.Instance) error
 	Get(ctx context.Context, id string) (*pipeline.Instance, error)
+	List(ctx context.Context) map[string]*pipeline.Instance
 	Create(ctx context.Context, id string, cfg pipeline.Config, p pipeline.ProvisionType) (*pipeline.Instance, error)
 	Delete(ctx context.Context, pl *pipeline.Instance) error
 	Stop(ctx context.Context, pipeline *pipeline.Instance) error

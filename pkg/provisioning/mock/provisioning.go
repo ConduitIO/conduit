@@ -111,6 +111,20 @@ func (mr *PipelineServiceMockRecorder) Get(arg0, arg1 interface{}) *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*PipelineService)(nil).Get), arg0, arg1)
 }
 
+// List mocks base method.
+func (m *PipelineService) List(arg0 context.Context) map[string]*pipeline.Instance {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "List", arg0)
+	ret0, _ := ret[0].(map[string]*pipeline.Instance)
+	return ret0
+}
+
+// List indicates an expected call of List.
+func (mr *PipelineServiceMockRecorder) List(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "List", reflect.TypeOf((*PipelineService)(nil).List), arg0)
+}
+
 // RemoveConnector mocks base method.
 func (m *PipelineService) RemoveConnector(arg0 context.Context, arg1 *pipeline.Instance, arg2 string) (*pipeline.Instance, error) {
 	m.ctrl.T.Helper()

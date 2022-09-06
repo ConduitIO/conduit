@@ -70,6 +70,8 @@ func parseConfig() conduit.Config {
 		logFormat = flags.String("log.format", "cli", "sets the format of the logging; accepts json, cli")
 
 		connectorsDir = flags.String("connectors.path", "./connectors", "path to standalone connectors directory")
+
+		pipelinesDir = flags.String("pipelines.path", "./pipelines", "points at the directory that has the yaml pipelines' configurations")
 	)
 
 	// flags is set up to exit on error, we can safely ignore the error
@@ -91,6 +93,7 @@ func parseConfig() conduit.Config {
 	cfg.Log.Level = strings.ToLower(stringPtrToVal(logLevel))
 	cfg.Log.Format = strings.ToLower(stringPtrToVal(logFormat))
 	cfg.Connectors.Path = stringPtrToVal(connectorsDir)
+	cfg.Pipelines.Path = strings.ToLower(stringPtrToVal(pipelinesDir))
 
 	return cfg
 }

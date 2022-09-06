@@ -189,10 +189,9 @@ func TestProvision_PipelineWithConnectorsAndProcessors(t *testing.T) {
 
 	pipelineService.EXPECT().Start(gomock.Not(gomock.Nil()), connService, procService, pl1)
 
-	service := NewService(db, logger, pipelineService, connService, procService)
-	pls, err := service.ProvisionConfigFile(context.Background(), "./test/provision1-pipeline-with-processors.yml")
+	service := NewService(db, logger, pipelineService, connService, procService, "./test/pipelines1")
+	err := service.Init(context.Background())
 	is.NoErr(err)
-	is.Equal(pls, []string{"pipeline1"})
 }
 
 func TestProvision_Rollback(t *testing.T) {
@@ -261,10 +260,9 @@ func TestProvision_Rollback(t *testing.T) {
 	// returns an error, so rollback needed
 	pipelineService.EXPECT().Start(gomock.Not(gomock.Nil()), connService, procService, pl1).Return(cerrors.New("error"))
 
-	service := NewService(db, logger, pipelineService, connService, procService)
-	pls, err := service.ProvisionConfigFile(context.Background(), "./test/provision1-pipeline-with-processors.yml")
+	service := NewService(db, logger, pipelineService, connService, procService, "./test/pipelines1")
+	err := service.Init(context.Background())
 	is.True(err != nil)
-	is.Equal(pls, nil)
 }
 
 func TestProvision_RollbackDeletePipeline(t *testing.T) {
@@ -340,10 +338,9 @@ func TestProvision_RollbackDeletePipeline(t *testing.T) {
 
 	pipelineService.EXPECT().Start(gomock.Not(gomock.Nil()), connService, procService, pl1)
 
-	service := NewService(db, logger, pipelineService, connService, procService)
-	pls, err := service.ProvisionConfigFile(context.Background(), "./test/provision1-pipeline-with-processors.yml")
+	service := NewService(db, logger, pipelineService, connService, procService, "./test/pipelines1")
+	err := service.Init(context.Background())
 	is.True(err != nil)
-	is.Equal(pls, nil)
 }
 
 func TestProvision_ExistingPipeline(t *testing.T) {
@@ -444,10 +441,9 @@ func TestProvision_ExistingPipeline(t *testing.T) {
 
 	pipelineService.EXPECT().Start(gomock.Not(gomock.Nil()), connService, procService, pl1)
 
-	service := NewService(db, logger, pipelineService, connService, procService)
-	pls, err := service.ProvisionConfigFile(context.Background(), "./test/provision1-pipeline-with-processors.yml")
+	service := NewService(db, logger, pipelineService, connService, procService, "./test/pipelines1")
+	err := service.Init(context.Background())
 	is.NoErr(err)
-	is.Equal(pls, []string{"pipeline1"})
 }
 
 func TestProvision_MultiplePipelines(t *testing.T) {
@@ -521,12 +517,9 @@ func TestProvision_MultiplePipelines(t *testing.T) {
 	pipelineService.EXPECT().Start(gomock.Not(gomock.Nil()), connService, procService, pl2)
 	pipelineService.EXPECT().Start(gomock.Not(gomock.Nil()), connService, procService, pl3)
 
-	service := NewService(db, logger, pipelineService, connService, procService)
-	pls, err := service.ProvisionConfigFile(context.Background(), "./test/provision3-multiple-pipelines.yml")
+	service := NewService(db, logger, pipelineService, connService, procService, "./test/pipelines3")
+	err := service.Init(context.Background())
 	is.NoErr(err)
-	// sort slice before comparing
-	sort.Strings(pls)
-	is.Equal(pls, []string{"pipeline2", "pipeline3"})
 }
 
 func TestProvision_IntegrationTestServices(t *testing.T) {
@@ -575,11 +568,9 @@ func TestProvision_IntegrationTestServices(t *testing.T) {
 		}
 	}()
 
-	provService := NewService(db, logger, plService, connService, procService)
-	pls, err := provService.ProvisionConfigFile(ctx, "./test/provision4-valid-pipeline.yml")
+	service := NewService(db, logger, plService, connService, procService, "./test/pipelines4-integration-test")
+	err = service.Init(context.Background())
 	is.NoErr(err)
-	sort.Strings(pls)
-	is.Equal(pls, []string{"pipeline1", "pipeline2", "pipeline3"})
 
 	// give the pipeline time to run through
 	time.Sleep(1 * time.Second)
