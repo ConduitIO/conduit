@@ -1,3 +1,6 @@
+# This file defines a local generation template. It should match the remote
+# template that Conduit uses, if you want to generate the same code.
+# Remote template: https://buf.build/conduitio/templates/conduit
 version: v1
 plugins:
   - remote: buf.build/protocolbuffers/plugins/go:v1.28.1-1
