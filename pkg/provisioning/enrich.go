@@ -23,19 +23,35 @@ func EnrichPipelinesConfig(mp map[string]PipelineConfig) map[string]PipelineConf
 		if cfg.Status == "" {
 			cfg.Status = StatusRunning
 		}
-		cfg.Connectors = enrichConnectorsConfig(cfg.Connectors)
+		cfg.Connectors = enrichConnectorsConfig(cfg.Connectors, k)
+		cfg.Processors = enrichProcessorsConfig(cfg.Processors, k)
 		mp[k] = cfg
 	}
 	return mp
 }
 
 // enrichConnectorsConfig sets default values for connectors config fields
-func enrichConnectorsConfig(mp map[string]ConnectorConfig) map[string]ConnectorConfig {
+func enrichConnectorsConfig(mp map[string]ConnectorConfig, pipelineID string) map[string]ConnectorConfig {
 	for k, cfg := range mp {
 		if cfg.Name == "" {
 			cfg.Name = k
 		}
-		mp[k] = cfg
+		// attache the pipelineID to the connectorID
+		cfg.Name = pipelineID + ":" + cfg.Name
+		newID := pipelineID + ":" + k
+		cfg.Processors = enrichProcessorsConfig(cfg.Processors, newID)
+		delete(mp, k)
+		mp[newID] = cfg
+	}
+	return mp
+}
+
+// enrichProcessorsConfig sets default values for processors config fields
+func enrichProcessorsConfig(mp map[string]ProcessorConfig, parentID string) map[string]ProcessorConfig {
+	for k, cfg := range mp {
+		newID := parentID + ":" + k
+		delete(mp, k)
+		mp[newID] = cfg
 	}
 	return mp
 }
