@@ -85,9 +85,10 @@ func (s *Service) Init(ctx context.Context) error {
 		provPipelines, err := s.provisionConfigFile(ctx, file)
 		if err != nil {
 			multierr = multierror.Append(multierr, err)
-			continue
 		}
-		pipelines = append(pipelines, provPipelines...)
+		if len(provPipelines) != 0 {
+			pipelines = append(pipelines, provPipelines...)
+		}
 	}
 	s.logger.Info(ctx).Int("count", len(pipelines)).Str("pipelines", strings.Join(pipelines, ", ")).Msg("pipelines successfully provisioned")
 
@@ -412,11 +413,11 @@ func (s *Service) createProcessor(ctx context.Context, parentID string, parentTy
 func (s *Service) createConnectors(ctx context.Context, r *rollback.R, pl *pipeline.Instance, mp map[string]ConnectorConfig) error {
 	for k, cfg := range mp {
 		err := s.createConnector(ctx, pl.ID, k, cfg)
-
 		if err != nil {
 			return cerrors.Errorf("could not create connector %q: %w", k, err)
 		}
 		s.rollbackCreateConnector(ctx, r, k)
+
 		_, err = s.pipelineService.AddConnector(ctx, pl, k)
 		if err != nil {
 			return cerrors.Errorf("could not add connector %q to the pipeline %q: %w", k, pl.ID, err)
