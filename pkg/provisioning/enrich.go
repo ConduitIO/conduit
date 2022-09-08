@@ -36,7 +36,7 @@ func enrichConnectorsConfig(mp map[string]ConnectorConfig, pipelineID string) ma
 		if cfg.Name == "" {
 			cfg.Name = k
 		}
-		// attache the pipelineID to the connectorID
+		// attach the pipelineID to the connectorID
 		cfg.Name = pipelineID + ":" + cfg.Name
 		newID := pipelineID + ":" + k
 		cfg.Processors = enrichProcessorsConfig(cfg.Processors, newID)

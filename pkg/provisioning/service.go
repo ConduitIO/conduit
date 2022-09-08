@@ -66,7 +66,9 @@ func (s *Service) Init(ctx context.Context) error {
 	var multierr error
 	var files []string
 	err := filepath.WalkDir(s.pipelinesPath, func(path string, fileInfo fs.DirEntry, err error) error {
-		files = append(files, path)
+		if strings.HasSuffix(path, ".yml") {
+			files = append(files, path)
+		}
 		return nil
 	})
 	if err != nil {
@@ -74,11 +76,9 @@ func (s *Service) Init(ctx context.Context) error {
 		return multierr
 	}
 
-	if len(files) == 1 {
-		s.logger.Warn(ctx).Str("pipelinesDir", s.pipelinesPath).Msg("configuration folder is empty, no pipelines created")
+	if len(files) == 0 {
+		s.logger.Warn(ctx).Str("pipelinesDir", s.pipelinesPath).Msg("configuration folder has no YAML files, no pipelines created")
 	}
-	// pop the folder name from the slice
-	files = files[1:]
 
 	var pipelines []string
 	for _, file := range files {
