@@ -230,10 +230,10 @@ func (r *Runtime) Run(ctx context.Context) (err error) {
 		var multierr *multierror.Error
 		if cerrors.As(err, &multierr) {
 			for _, gotErr := range multierr.Errors() {
-				r.logger.Error(ctx).Str("err", gotErr.Error()).Msg("provisioning failed")
+				r.logger.Err(ctx, gotErr).Msg("provisioning failed")
 			}
 		} else {
-			r.logger.Error(ctx).Str("err", err.Error()).Msg("provisioning failed")
+			r.logger.Err(ctx, err).Msg("provisioning failed")
 		}
 	}
 

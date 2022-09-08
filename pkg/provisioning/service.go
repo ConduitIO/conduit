@@ -61,21 +61,19 @@ func NewService(
 }
 
 func (s *Service) Init(ctx context.Context) error {
-	s.logger.Debug(ctx).Str("pipelinesDir", s.pipelinesPath).Msg("initializing the provisioning service")
+	s.logger.Debug(ctx).
+		Str("pipelines_path", s.pipelinesPath).
+		Msg("initializing the provisioning service")
 
 	var files []string
 	err := filepath.WalkDir(s.pipelinesPath, func(path string, fileInfo fs.DirEntry, err error) error {
-		if strings.HasSuffix(path, ".yml") {
+		if strings.HasSuffix(path, ".yml") || strings.HasSuffix(path, ".yaml") {
 			files = append(files, path)
 		}
 		return nil
 	})
 	if err != nil {
 		return cerrors.Errorf("could not iterate through the pipelines folder %q: %w", s.pipelinesPath, err)
-	}
-
-	if len(files) == 0 {
-		s.logger.Warn(ctx).Str("pipelinesDir", s.pipelinesPath).Msg("configuration folder has no YAML files, no pipelines created")
 	}
 
 	var multierr error
@@ -89,9 +87,15 @@ func (s *Service) Init(ctx context.Context) error {
 			pipelines = append(pipelines, provPipelines...)
 		}
 	}
-	s.logger.Info(ctx).Int("count", len(pipelines)).Str("pipelinesDir", s.pipelinesPath).Str("pipelines", strings.Join(pipelines, ", ")).Msg("pipelines successfully provisioned")
 
-	s.deleteOldPipelines(ctx, pipelines)
+	deletedPls := s.deleteOldPipelines(ctx, pipelines)
+	s.logger.Info(ctx).
+		Int("created", len(pipelines)).
+		Int("deleted", len(deletedPls)).
+		Str("pipelines_path", s.pipelinesPath).
+		Strs("created_pipelines", pipelines).
+		Strs("deleted_pipelines", deletedPls).
+		Msg("pipeline configs provisioned")
 
 	return multierr
 }
@@ -157,7 +161,7 @@ func (s *Service) provisionPipeline(ctx context.Context, id string, config Pipel
 		}
 		err = s.deletePipeline(ctx, &r, oldPl, config, connStates)
 		if err != nil {
-			return cerrors.Errorf("could not copy states from the pipeline %q: %w", id, err)
+			return cerrors.Errorf("could not delete pipeline %q: %w", id, err)
 		}
 	}
 
@@ -461,17 +465,22 @@ func (s *Service) createProcessors(ctx context.Context, r *rollback.R, parentID 
 	return nil
 }
 
-func (s *Service) deleteOldPipelines(ctx context.Context, pipelines []string) {
-	var err error
+func (s *Service) deleteOldPipelines(ctx context.Context, pipelines []string) []string {
+	var pls []string
 	plMp := s.pipelineService.List(ctx)
 	for id, pl := range plMp {
 		if !slices.Contains(pipelines, id) && pl.ProvisionedBy == pipeline.ProvisionTypeConfig {
-			err = s.deletePipelineWithoutRollback(ctx, pl)
+			err := s.deletePipelineWithoutRollback(ctx, pl)
 			if err != nil {
-				s.logger.Warn(ctx).Str("pipelineID", id).Msg("could not delete pipeline")
+				s.logger.Warn(ctx).
+					Str(log.PipelineIDField, id).
+					Msg("failed to delete pipeline provisioned by a config file, the pipeline is probably in a broken state, Conduit will try to remove it again next time it runs")
+			} else {
+				pls = append(pls, id)
 			}
 		}
 	}
+	return pls
 }
 
 func (s *Service) deletePipelineWithoutRollback(ctx context.Context, pl *pipeline.Instance) error {

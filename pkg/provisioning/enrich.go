@@ -32,6 +32,7 @@ func EnrichPipelinesConfig(mp map[string]PipelineConfig) map[string]PipelineConf
 
 // enrichConnectorsConfig sets default values for connectors config fields
 func enrichConnectorsConfig(mp map[string]ConnectorConfig, pipelineID string) map[string]ConnectorConfig {
+	newMap := make(map[string]ConnectorConfig, len(mp))
 	for k, cfg := range mp {
 		if cfg.Name == "" {
 			cfg.Name = k
@@ -40,18 +41,17 @@ func enrichConnectorsConfig(mp map[string]ConnectorConfig, pipelineID string) ma
 		cfg.Name = pipelineID + ":" + cfg.Name
 		newID := pipelineID + ":" + k
 		cfg.Processors = enrichProcessorsConfig(cfg.Processors, newID)
-		delete(mp, k)
-		mp[newID] = cfg
+		newMap[newID] = cfg
 	}
-	return mp
+	return newMap
 }
 
 // enrichProcessorsConfig sets default values for processors config fields
 func enrichProcessorsConfig(mp map[string]ProcessorConfig, parentID string) map[string]ProcessorConfig {
+	newMap := make(map[string]ProcessorConfig, len(mp))
 	for k, cfg := range mp {
 		newID := parentID + ":" + k
-		delete(mp, k)
-		mp[newID] = cfg
+		newMap[newID] = cfg
 	}
-	return mp
+	return newMap
 }
