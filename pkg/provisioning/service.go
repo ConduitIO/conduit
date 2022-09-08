@@ -61,9 +61,8 @@ func NewService(
 }
 
 func (s *Service) Init(ctx context.Context) error {
-	s.logger.Debug(ctx).Msg("initializing the provisioning service")
+	s.logger.Debug(ctx).Str("pipelinesDir", s.pipelinesPath).Msg("initializing the provisioning service")
 
-	var multierr error
 	var files []string
 	err := filepath.WalkDir(s.pipelinesPath, func(path string, fileInfo fs.DirEntry, err error) error {
 		if strings.HasSuffix(path, ".yml") {
@@ -72,14 +71,14 @@ func (s *Service) Init(ctx context.Context) error {
 		return nil
 	})
 	if err != nil {
-		multierr = multierror.Append(multierr, cerrors.Errorf("could not iterate through the pipelines folder %q: %w", s.pipelinesPath, err))
-		return multierr
+		return cerrors.Errorf("could not iterate through the pipelines folder %q: %w", s.pipelinesPath, err)
 	}
 
 	if len(files) == 0 {
 		s.logger.Warn(ctx).Str("pipelinesDir", s.pipelinesPath).Msg("configuration folder has no YAML files, no pipelines created")
 	}
 
+	var multierr error
 	var pipelines []string
 	for _, file := range files {
 		provPipelines, err := s.provisionConfigFile(ctx, file)
@@ -90,7 +89,7 @@ func (s *Service) Init(ctx context.Context) error {
 			pipelines = append(pipelines, provPipelines...)
 		}
 	}
-	s.logger.Info(ctx).Int("count", len(pipelines)).Str("pipelines", strings.Join(pipelines, ", ")).Msg("pipelines successfully provisioned")
+	s.logger.Info(ctx).Int("count", len(pipelines)).Str("pipelinesDir", s.pipelinesPath).Str("pipelines", strings.Join(pipelines, ", ")).Msg("pipelines successfully provisioned")
 
 	s.deleteOldPipelines(ctx, pipelines)
 
@@ -98,8 +97,6 @@ func (s *Service) Init(ctx context.Context) error {
 }
 
 func (s *Service) provisionConfigFile(ctx context.Context, path string) ([]string, error) {
-	var multierr error
-
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, cerrors.Errorf("could not read the file %q: %w", path, err)
@@ -113,6 +110,7 @@ func (s *Service) provisionConfigFile(ctx context.Context, path string) ([]strin
 	got := EnrichPipelinesConfig(before)
 
 	var pls []string
+	var multierr error
 	for k, v := range got {
 		err = ValidatePipelinesConfig(v)
 		if err != nil {
