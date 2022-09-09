@@ -37,6 +37,7 @@ func TestRuntime(t *testing.T) {
 	cfg.HTTP.Address = ":0"
 	cfg.Log.Level = "info"
 	cfg.Log.Format = "cli"
+	cfg.Pipelines.Path = "./pipelines"
 
 	e, err := conduit.NewRuntime(cfg)
 	t.Cleanup(func() {

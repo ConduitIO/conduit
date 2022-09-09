@@ -111,6 +111,20 @@ func TestConfig_Validate(t *testing.T) {
 			return c
 		},
 		want: requiredConfigFieldErr("log.format"),
+	}, {
+		name: "required pipelines path",
+		setupConfig: func(c Config) Config {
+			c.Pipelines.Path = ""
+			return c
+		},
+		want: requiredConfigFieldErr("pipelines.path"),
+	}, {
+		name: "invalid pipelines path",
+		setupConfig: func(c Config) Config {
+			c.Pipelines.Path = "folder-does-not-exist"
+			return c
+		},
+		want: invalidConfigFieldErr("pipelines.path"),
 	}}
 
 	for _, tc := range testCases {
@@ -124,6 +138,7 @@ func TestConfig_Validate(t *testing.T) {
 			validConfig.GRPC.Address = ":8084"
 			validConfig.Log.Level = "info"
 			validConfig.Log.Format = "cli"
+			validConfig.Pipelines.Path = "./pipelines"
 
 			underTest := tc.setupConfig(validConfig)
 			got := underTest.Validate()

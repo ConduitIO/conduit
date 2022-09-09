@@ -33,6 +33,22 @@ func TestEnrich_DefaultValues(t *testing.T) {
 					Settings: map[string]string{
 						"aws.region": "us-east-1",
 					},
+					Processors: map[string]ProcessorConfig{
+						"proc2": {
+							Type: "js",
+							Settings: map[string]string{
+								"additionalProp1": "string",
+							},
+						},
+					},
+				},
+			},
+			Processors: map[string]ProcessorConfig{
+				"proc1": {
+					Type: "js",
+					Settings: map[string]string{
+						"additionalProp1": "string",
+					},
 				},
 			},
 		},
@@ -47,12 +63,28 @@ func TestEnrich_DefaultValues(t *testing.T) {
 			Name:        "pipeline1",
 			Description: "desc1",
 			Connectors: map[string]ConnectorConfig{
-				"con1": {
+				"pipeline1:con1": {
 					Type:   "source",
 					Plugin: "builtin:s3",
-					Name:   "con1",
+					Name:   "pipeline1:con1",
 					Settings: map[string]string{
 						"aws.region": "us-east-1",
+					},
+					Processors: map[string]ProcessorConfig{
+						"pipeline1:con1:proc2": {
+							Type: "js",
+							Settings: map[string]string{
+								"additionalProp1": "string",
+							},
+						},
+					},
+				},
+			},
+			Processors: map[string]ProcessorConfig{
+				"pipeline1:proc1": {
+					Type: "js",
+					Settings: map[string]string{
+						"additionalProp1": "string",
 					},
 				},
 			},
@@ -61,6 +93,8 @@ func TestEnrich_DefaultValues(t *testing.T) {
 			Status:      "stopped",
 			Name:        "pipeline3",
 			Description: "empty",
+			Connectors:  map[string]ConnectorConfig{},
+			Processors:  map[string]ProcessorConfig{},
 		},
 	}
 
