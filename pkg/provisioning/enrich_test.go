@@ -93,6 +93,8 @@ func TestEnrich_DefaultValues(t *testing.T) {
 			Status:      "stopped",
 			Name:        "pipeline3",
 			Description: "empty",
+			Connectors:  map[string]ConnectorConfig{},
+			Processors:  map[string]ProcessorConfig{},
 		},
 	}
 
