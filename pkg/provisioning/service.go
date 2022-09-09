@@ -93,11 +93,9 @@ func (s *Service) Init(ctx context.Context) error {
 	// pipelines that were provisioned by config but are not in the config files anymore
 	deletedPls := s.deleteOldPipelines(ctx, allPls)
 	s.logger.Info(ctx).
-		Int("created", len(successPls)).
-		Int("deleted", len(deletedPls)).
+		Strs("created", successPls).
+		Strs("deleted", deletedPls).
 		Str("pipelines_path", s.pipelinesPath).
-		Strs("created_pipelines", successPls).
-		Strs("deleted_pipelines", deletedPls).
 		Msg("pipeline configs provisioned")
 
 	return multierr
