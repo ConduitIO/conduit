@@ -19,15 +19,10 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/multierror"
 )
 
-var (
-	ErrMandatoryField = cerrors.New("mandatory field not specified")
-	ErrInvalidField   = cerrors.New("invalid field value")
-)
-
 const (
 	StatusRunning   = "running"
 	StatusStopped   = "stopped"
-	TypeConnector   = "source"
+	TypeSource      = "source"
 	TypeDestination = "destination"
 )
 
@@ -58,7 +53,7 @@ func validateConnectorsConfig(mp map[string]ConnectorConfig) error {
 		if cfg.Type == "" {
 			err = multierror.Append(err, cerrors.Errorf("connector %q: \"type\" is mandatory: %w", k, ErrMandatoryField))
 		}
-		if cfg.Type != "" && cfg.Type != TypeConnector && cfg.Type != TypeDestination {
+		if cfg.Type != "" && cfg.Type != TypeSource && cfg.Type != TypeDestination {
 			err = multierror.Append(err, cerrors.Errorf("connector %q: \"type\" is invalid: %w", k, ErrInvalidField))
 		}
 

@@ -176,6 +176,7 @@
       </div>
     </div>
   </div>
+  <div class="absolute bottom-0 right-2 text-sm text-black">{{app-version shaOnly=true}}</div>
 </div>
 {{#if this.isShowingNewConnectorModal}}
   <PipelineEditor::ConnectorModal
@@ -189,7 +190,7 @@
 {{/if}}
 {{#if this.isShowingEditConnectorModal}}
   <PipelineEditor::ConnectorModal
-    @newConnectorType={{this.newConnectorType}}
+    @newConnectorType={{this.selectedNode.type}}
     @connectorPlugins={{@connectorPlugins}}
     @onDismiss={{this.cancelEditConnectorModal}}
     @updateConnector={{this.updateConnector}}

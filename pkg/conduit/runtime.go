@@ -37,21 +37,23 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/metrics"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/measure"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/prometheus"
+	"github.com/conduitio/conduit/pkg/foundation/multierror"
 	"github.com/conduitio/conduit/pkg/orchestrator"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/conduitio/conduit/pkg/plugin/builtin"
 	"github.com/conduitio/conduit/pkg/plugin/standalone"
 	"github.com/conduitio/conduit/pkg/processor"
+	"github.com/conduitio/conduit/pkg/provisioning"
 	"github.com/conduitio/conduit/pkg/web/api"
 	"github.com/conduitio/conduit/pkg/web/openapi"
 	"github.com/conduitio/conduit/pkg/web/ui"
-	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	grpcruntime "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/piotrkowalczuk/promgrpc/v4"
 	promclient "github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/zerolog"
+	apiv1 "go.buf.build/conduitio/conduit/conduitio/conduit/api/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/health/grpc_health_v1"
@@ -77,6 +79,7 @@ type Runtime struct {
 	pipelineService  *pipeline.Service
 	connectorService *connector.Service
 	processorService *processor.Service
+	provisionService *provisioning.Service
 
 	connectorPersister *connector.Persister
 
@@ -123,6 +126,8 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 		return nil, cerrors.Errorf("failed to create services: %w", err)
 	}
 
+	provisionService := provisioning.NewService(db, logger, plService, connService, procService, cfg.Pipelines.Path)
+
 	orc := orchestrator.NewOrchestrator(db, logger, plService, connService, procService, pluginService)
 
 	r := &Runtime{
@@ -133,6 +138,7 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 		pipelineService:  plService,
 		connectorService: connService,
 		processorService: procService,
+		provisionService: provisionService,
 
 		connectorPersister: connectorPersister,
 
@@ -217,6 +223,18 @@ func (r *Runtime) Run(ctx context.Context) (err error) {
 	err = r.pipelineService.Init(ctx, r.connectorService, r.processorService)
 	if err != nil {
 		return cerrors.Errorf("failed to init pipeline service: %w", err)
+	}
+
+	err = r.provisionService.Init(ctx)
+	if err != nil {
+		var multierr *multierror.Error
+		if cerrors.As(err, &multierr) {
+			for _, gotErr := range multierr.Errors() {
+				r.logger.Err(ctx, gotErr).Msg("provisioning failed")
+			}
+		} else {
+			r.logger.Err(ctx, err).Msg("provisioning failed")
+		}
 	}
 
 	// Serve grpc and http API

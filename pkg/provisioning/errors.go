@@ -12,11 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:build tools
+package provisioning
 
-package main
+import "github.com/conduitio/conduit/pkg/foundation/cerrors"
 
-import (
-	_ "github.com/golang/mock/mockgen"
-	_ "golang.org/x/tools/cmd/stringer"
+var (
+	ErrUnsupportedVersion = cerrors.New("unsupported parser version")
+	ErrMandatoryField     = cerrors.New("mandatory field not specified")
+	ErrInvalidField       = cerrors.New("invalid field value")
 )

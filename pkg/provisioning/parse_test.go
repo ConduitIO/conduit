@@ -15,7 +15,6 @@
 package provisioning
 
 import (
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
@@ -96,7 +95,7 @@ func TestParser_Success(t *testing.T) {
 		},
 	}
 
-	data, err := ioutil.ReadFile(filename)
+	data, err := os.ReadFile(filename)
 	if err != nil {
 		t.Error(err)
 	}
@@ -113,7 +112,7 @@ func TestParser_DuplicatePipelineId(t *testing.T) {
 		t.Error(err)
 	}
 
-	data, err := ioutil.ReadFile(filename)
+	data, err := os.ReadFile(filename)
 	if err != nil {
 		t.Error(err)
 	}
@@ -130,7 +129,7 @@ func TestParser_UnsupportedVersion(t *testing.T) {
 		t.Error(err)
 	}
 
-	data, err := ioutil.ReadFile(filename)
+	data, err := os.ReadFile(filename)
 	if err != nil {
 		t.Error(err)
 	}
@@ -148,7 +147,7 @@ func TestParser_MissingVersion(t *testing.T) {
 		t.Error(err)
 	}
 
-	data, err := ioutil.ReadFile(filename)
+	data, err := os.ReadFile(filename)
 	if err != nil {
 		t.Error(err)
 	}
@@ -166,7 +165,7 @@ func TestParser_EmptyFile(t *testing.T) {
 		t.Error(err)
 	}
 
-	data, err := ioutil.ReadFile(filename)
+	data, err := os.ReadFile(filename)
 	if err != nil {
 		t.Error(err)
 	}
@@ -183,7 +182,7 @@ func TestParser_InvalidYaml(t *testing.T) {
 		t.Error(err)
 	}
 
-	data, err := ioutil.ReadFile(filename)
+	data, err := os.ReadFile(filename)
 	if err != nil {
 		t.Error(err)
 	}
@@ -235,7 +234,7 @@ func TestParser_EnvVars(t *testing.T) {
 		},
 	}
 
-	data, err := ioutil.ReadFile(filename)
+	data, err := os.ReadFile(filename)
 	if err != nil {
 		t.Error(err)
 	}

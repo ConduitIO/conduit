@@ -183,6 +183,10 @@ func (n *pubNodeBase) Trigger(
 func (n *pubNodeBase) InjectControlMessage(ctx context.Context, msgType ControlMessageType) error {
 	n.lock.Lock()
 	defer n.lock.Unlock()
+	if !n.running {
+		return cerrors.New("tried to inject control message but PubNode is not running")
+	}
+
 	select {
 	case <-ctx.Done():
 		return ctx.Err()

@@ -211,3 +211,43 @@ func (s *Service) RemoveProcessor(ctx context.Context, connectorID string, proce
 
 	return conn, err
 }
+
+func (s *Service) SetDestinationState(ctx context.Context, id string, state DestinationState) (Destination, error) {
+	conn, err := s.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	dest, ok := conn.(Destination)
+	if !ok {
+		return nil, cerrors.Errorf("expected connector to be a Destination (ID: %s): %w", id, ErrInvalidConnectorType)
+	}
+
+	dest.SetState(state)
+	err = s.store.Set(ctx, id, dest)
+	if err != nil {
+		return nil, err
+	}
+
+	return dest, err
+}
+
+func (s *Service) SetSourceState(ctx context.Context, id string, state SourceState) (Source, error) {
+	conn, err := s.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	src, ok := conn.(Source)
+	if !ok {
+		return nil, cerrors.Errorf("expected connector to be a Source (ID: %s): %w", id, ErrInvalidConnectorType)
+	}
+
+	src.SetState(state)
+	err = s.store.Set(ctx, id, src)
+	if err != nil {
+		return nil, err
+	}
+
+	return src, err
+}
