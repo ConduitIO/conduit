@@ -25,31 +25,32 @@ Source means the connector has the ability to get data from an upstream data sto
 
 ### The List
 
-| Connector | Source | Destination | Support |
-|-----------|-------|----|-------------|
-| [Airtable](https://github.com/conduitio-labs/conduit-connector-airtable) | | | Community |
-| [Algolia](https://github.com/conduitio-labs/conduit-connector-algolia) | |✅ | Conduit |
-| [Azure Storage](https://github.com/miquido/conduit-connector-azure-storage) |✅ | | Community |
+| Connector | Source | Destination | Support | Conduit version support |
+|-----------|-------|----|-------------|-------------|
+| [Airtable](https://github.com/conduitio-labs/conduit-connector-airtable) | TBD |TBD | Community | TBD |
+| [Algolia](https://github.com/conduitio-labs/conduit-connector-algolia) | |✅ | Conduit | v0.30 |
+| [Azure Storage](https://github.com/conduitio-labs/conduit-connector-azure-storage) |✅ | | Community |
 | [BigQuery](https://github.com/conduitio-labs/conduit-connector-bigquery) |✅ | | Community |
 | [DB2](https://github.com/conduitio-labs/conduit-connector-db2) | | | Community |
 | [Elastic Search](https://github.com/conduitio-labs/conduit-connector-elasticsearch) |✅ |✅ | Community |
-| [File](https://github.com/ConduitIO/conduit-connector-file) |✅ |✅ | Conduit |
+| [File](https://github.com/ConduitIO/conduit-connector-file) |✅ |✅ | Conduit |v0.3.0|
 | [Firebolt](https://github.com/conduitio-labs/conduit-connector-firebolt) | | | Community |
 | [GCP PubSub](https://github.com/conduitio-labs/conduit-connector-gcp-pubsub) | | | Community |
 | [Google Cloud Storage](https://github.com/conduitio-labs/conduit-connector-google-cloudstorage) |✅ |✅ | Community |
 | [Google Sheets](https://github.com/conduitio-labs/conduit-connector-google-sheets) |✅ | | Community |
-| [Kafka](https://github.com/ConduitIO/conduit-connector-kafka) |✅ |✅ | Conduit |
+| [Kafka](https://github.com/ConduitIO/conduit-connector-kafka) |✅ |✅ | Conduit |v0.3.0|
 | [Kafka Connect Wrapper](https://github.com/ConduitIO/conduit-kafka-connect-wrapper) | ✅ | ✅ | Legacy |
 | [Marketo](https://github.com/conduitio-labs/conduit-connector-marketo) |✅ | | Community |
 | [Materialize](https://github.com/conduitio-labs/conduit-connector-materialize) | |✅ | Community |
 | [Nats Jetstream](https://github.com/conduitio-labs/conduit-connector-nats-jetstream) |✅ |✅ | Community |
+| [Nats PubSub](https://github.com/conduitio-labs/conduit-connector-nats-pubsub) |✅|✅ | Community |
 | [Oracle DB](https://github.com/conduitio-labs/conduit-connector-oracle) | | | Community |
-| [Postgres](https://github.com/ConduitIO/conduit-connector-postgres)   |✅ |✅ | Conduit |
-| [Random Generator](https://github.com/ConduitIO/conduit-connector-generator) |✅ | | Conduit |
+| [Postgres](https://github.com/ConduitIO/conduit-connector-postgres)   |✅ |✅ | Conduit |v0.3.0|
+| [Random Generator](https://github.com/ConduitIO/conduit-connector-generator) |✅ | | Conduit |v0.3.0|
 | [Redis](https://github.com/conduitio-labs/conduit-connector-redis) ||✅ | Community |
-| [S3](https://github.com/ConduitIO/conduit-connector-s3) |✅ |✅ | Conduit |
+| [S3](https://github.com/ConduitIO/conduit-connector-s3) |✅ |✅ | Conduit | v0.3.0|
 | [Salesforce](https://github.com/conduitio-labs/conduit-connector-salesforce) | ✅ | ✅ | Community |
 | [Snowflake](https://github.com/conduitio-labs/conduit-connector-snowflake) |✅ | | Community |
 | [Stripe](https://github.com/conduitio-labs/conduit-connector-stripe) |✅ | | Community |
-| [Vitess](https://github.com/conduitio-labs/conduit-connector-vitess) || | Community |
+| [Vitess](https://github.com/conduitio-labs/conduit-connector-vitess) |TBD|TBD| Community |
 | [Zendesk](https://github.com/conduitio-labs/conduit-connector-zendesk) |✅ |✅| Community |
