@@ -60,12 +60,12 @@ func (c *ConnectorOrchestrator) Create(
 	}
 	r.Append(func() error { return c.connectors.Delete(ctx, conn.ID()) })
 
-	_, err = c.pipelines.AddConnector(ctx, pl, conn.ID())
+	_, err = c.pipelines.AddConnector(ctx, pl.ID, conn.ID())
 	if err != nil {
 		return nil, cerrors.Errorf("couldn't add connector %v to pipeline %v: %w", conn.ID(), pl.ID, err)
 	}
 	r.Append(func() error {
-		_, err := c.pipelines.RemoveConnector(ctx, pl, conn.ID())
+		_, err := c.pipelines.RemoveConnector(ctx, pl.ID, conn.ID())
 		return err
 	})
 
@@ -119,12 +119,12 @@ func (c *ConnectorOrchestrator) Delete(ctx context.Context, id string) error {
 		_, err = c.connectors.Create(ctx, id, conn.Type(), conn.Config(), connector.ProvisionTypeAPI)
 		return err
 	})
-	_, err = c.pipelines.RemoveConnector(ctx, pl, id)
+	_, err = c.pipelines.RemoveConnector(ctx, pl.ID, id)
 	if err != nil {
 		return err
 	}
 	r.Append(func() error {
-		_, err = c.pipelines.AddConnector(ctx, pl, id)
+		_, err = c.pipelines.AddConnector(ctx, pl.ID, id)
 		return err
 	})
 	err = txn.Commit()

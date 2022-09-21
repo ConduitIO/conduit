@@ -70,22 +70,22 @@ type base struct {
 }
 
 type PipelineService interface {
-	Start(ctx context.Context, connFetcher pipeline.ConnectorFetcher, procFetcher pipeline.ProcessorFetcher, pipeline *pipeline.Instance) error
+	Start(ctx context.Context, connFetcher pipeline.ConnectorFetcher, procFetcher pipeline.ProcessorFetcher, pipelineID string) error
 	// Stop initiates a graceful shutdown of the given pipeline and sets its status to the provided status.
 	// The method does not wait for the pipeline (and its nodes) to actually stop,
 	// because there still might be some in-flight messages.
-	Stop(ctx context.Context, pipeline *pipeline.Instance) error
+	Stop(ctx context.Context, pipelineID string) error
 
 	List(ctx context.Context) map[string]*pipeline.Instance
 	Get(ctx context.Context, id string) (*pipeline.Instance, error)
 	Create(ctx context.Context, id string, cfg pipeline.Config, p pipeline.ProvisionType) (*pipeline.Instance, error)
-	Update(ctx context.Context, pl *pipeline.Instance, cfg pipeline.Config) (*pipeline.Instance, error)
-	Delete(ctx context.Context, pl *pipeline.Instance) error
+	Update(ctx context.Context, pipelineID string, cfg pipeline.Config) (*pipeline.Instance, error)
+	Delete(ctx context.Context, pipelineID string) error
 
-	AddConnector(ctx context.Context, pl *pipeline.Instance, connectorID string) (*pipeline.Instance, error)
-	RemoveConnector(ctx context.Context, pl *pipeline.Instance, connectorID string) (*pipeline.Instance, error)
-	AddProcessor(ctx context.Context, pl *pipeline.Instance, processorID string) (*pipeline.Instance, error)
-	RemoveProcessor(ctx context.Context, pl *pipeline.Instance, processorID string) (*pipeline.Instance, error)
+	AddConnector(ctx context.Context, pipelineID string, connectorID string) (*pipeline.Instance, error)
+	RemoveConnector(ctx context.Context, pipelineID string, connectorID string) (*pipeline.Instance, error)
+	AddProcessor(ctx context.Context, pipelineID string, processorID string) (*pipeline.Instance, error)
+	RemoveProcessor(ctx context.Context, pipelineID string, processorID string) (*pipeline.Instance, error)
 }
 
 type ConnectorService interface {

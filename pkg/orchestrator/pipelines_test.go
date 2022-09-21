@@ -40,10 +40,7 @@ func TestPipelineOrchestrator_Start_Success(t *testing.T) {
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
 
 	plsMock.EXPECT().
-		Get(gomock.AssignableToTypeOf(ctxType), plBefore.ID).
-		Return(plBefore, nil)
-	plsMock.EXPECT().
-		Start(gomock.AssignableToTypeOf(ctxType), orc.Pipelines.connectors, orc.Pipelines.processors, plBefore).
+		Start(gomock.AssignableToTypeOf(ctxType), orc.Pipelines.connectors, orc.Pipelines.processors, plBefore.ID).
 		Return(nil)
 
 	err := orc.Pipelines.Start(ctx, plBefore.ID)
@@ -62,8 +59,8 @@ func TestPipelineOrchestrator_Start_Fail(t *testing.T) {
 
 	wantErr := cerrors.New("pipeline doesn't exist")
 	plsMock.EXPECT().
-		Get(gomock.AssignableToTypeOf(ctxType), gomock.AssignableToTypeOf("")).
-		Return(nil, wantErr)
+		Start(gomock.AssignableToTypeOf(ctxType), consMock, procsMock, gomock.AssignableToTypeOf("")).
+		Return(wantErr)
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
 	err := orc.Pipelines.Start(ctx, plBefore.ID)
@@ -82,10 +79,7 @@ func TestPipelineOrchestrator_Stop_Success(t *testing.T) {
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
 	plsMock.EXPECT().
-		Get(gomock.AssignableToTypeOf(ctxType), plBefore.ID).
-		Return(plBefore, nil)
-	plsMock.EXPECT().
-		Stop(gomock.AssignableToTypeOf(ctxType), plBefore).
+		Stop(gomock.AssignableToTypeOf(ctxType), plBefore.ID).
 		Return(nil)
 
 	err := orc.Pipelines.Stop(ctx, plBefore.ID)
@@ -104,8 +98,8 @@ func TestPipelineOrchestrator_Stop_Fail(t *testing.T) {
 
 	wantErr := cerrors.New("pipeline doesn't exist")
 	plsMock.EXPECT().
-		Get(gomock.AssignableToTypeOf(ctxType), gomock.AssignableToTypeOf("")).
-		Return(nil, wantErr)
+		Stop(gomock.AssignableToTypeOf(ctxType), gomock.AssignableToTypeOf("")).
+		Return(wantErr)
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
 	err := orc.Pipelines.Stop(ctx, plBefore.ID)
@@ -134,7 +128,7 @@ func TestPipelineOrchestrator_Update_Success(t *testing.T) {
 		Get(gomock.AssignableToTypeOf(ctxType), plBefore.ID).
 		Return(plBefore, nil)
 	plsMock.EXPECT().
-		Update(gomock.AssignableToTypeOf(ctxType), plBefore, newConfig).
+		Update(gomock.AssignableToTypeOf(ctxType), plBefore.ID, newConfig).
 		Return(want, nil)
 
 	got, err := orc.Pipelines.Update(ctx, plBefore.ID, newConfig)
@@ -205,7 +199,7 @@ func TestPipelineOrchestrator_Delete_Success(t *testing.T) {
 		Get(gomock.AssignableToTypeOf(ctxType), plBefore.ID).
 		Return(plBefore, nil)
 	plsMock.EXPECT().
-		Delete(gomock.AssignableToTypeOf(ctxType), plBefore).
+		Delete(gomock.AssignableToTypeOf(ctxType), plBefore.ID).
 		Return(nil)
 
 	err := orc.Pipelines.Delete(ctx, plBefore.ID)
