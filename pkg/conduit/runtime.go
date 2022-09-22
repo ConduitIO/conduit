@@ -379,6 +379,17 @@ func (r *Runtime) serveHTTPAPI(
 		return nil, cerrors.Errorf("failed to register openapi handler: %w", err)
 	}
 
+	err = gwmux.HandlePath(
+		"GET",
+		"/openapi",
+		func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+			http.Redirect(w, req, "/openapi/", http.StatusFound)
+		},
+	)
+	if err != nil {
+		return nil, cerrors.Errorf("failed to register openapi redirect handler: %w", err)
+	}
+
 	uiHandler, err := ui.Handler()
 	if err != nil {
 		return nil, cerrors.Errorf("failed to set up ui handler: %w", err)
@@ -404,7 +415,6 @@ func (r *Runtime) serveHTTPAPI(
 			http.Redirect(w, req, "/ui", http.StatusFound)
 		},
 	)
-
 	if err != nil {
 		return nil, cerrors.Errorf("failed to register redirect handler: %w", err)
 	}
