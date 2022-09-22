@@ -66,7 +66,7 @@ func TestProcessorOrchestrator_CreateOnPipeline_Success(t *testing.T) {
 		).
 		Return(want, nil)
 	plsMock.EXPECT().
-		AddProcessor(gomock.AssignableToTypeOf(ctxType), pl, want.ID).
+		AddProcessor(gomock.AssignableToTypeOf(ctxType), pl.ID, want.ID).
 		Return(pl, nil)
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
@@ -218,7 +218,7 @@ func TestProcessorOrchestrator_CreateOnPipeline_AddProcessorError(t *testing.T) 
 		).
 		Return(proc, nil)
 	plsMock.EXPECT().
-		AddProcessor(gomock.AssignableToTypeOf(ctxType), pl, proc.ID).
+		AddProcessor(gomock.AssignableToTypeOf(ctxType), pl.ID, proc.ID).
 		Return(nil, wantErr)
 	// this is called in rollback
 	procsMock.EXPECT().
@@ -590,7 +590,7 @@ func TestProcessorOrchestrator_DeleteOnPipeline_Success(t *testing.T) {
 		Delete(gomock.AssignableToTypeOf(ctxType), want.ID).
 		Return(nil)
 	plsMock.EXPECT().
-		RemoveProcessor(gomock.AssignableToTypeOf(ctxType), pl, want.ID).
+		RemoveProcessor(gomock.AssignableToTypeOf(ctxType), pl.ID, want.ID).
 		Return(pl, nil)
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
@@ -734,7 +734,7 @@ func TestProcessorOrchestrator_DeleteOnPipeline_RemoveProcessorFail(t *testing.T
 		Delete(gomock.AssignableToTypeOf(ctxType), want.ID).
 		Return(nil)
 	plsMock.EXPECT().
-		RemoveProcessor(gomock.AssignableToTypeOf(ctxType), pl, want.ID).
+		RemoveProcessor(gomock.AssignableToTypeOf(ctxType), pl.ID, want.ID).
 		Return(nil, wantErr)
 	// rollback
 	procsMock.EXPECT().

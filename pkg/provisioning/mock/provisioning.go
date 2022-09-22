@@ -38,7 +38,7 @@ func (m *PipelineService) EXPECT() *PipelineServiceMockRecorder {
 }
 
 // AddConnector mocks base method.
-func (m *PipelineService) AddConnector(arg0 context.Context, arg1 *pipeline.Instance, arg2 string) (*pipeline.Instance, error) {
+func (m *PipelineService) AddConnector(arg0 context.Context, arg1, arg2 string) (*pipeline.Instance, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddConnector", arg0, arg1, arg2)
 	ret0, _ := ret[0].(*pipeline.Instance)
@@ -53,7 +53,7 @@ func (mr *PipelineServiceMockRecorder) AddConnector(arg0, arg1, arg2 interface{}
 }
 
 // AddProcessor mocks base method.
-func (m *PipelineService) AddProcessor(arg0 context.Context, arg1 *pipeline.Instance, arg2 string) (*pipeline.Instance, error) {
+func (m *PipelineService) AddProcessor(arg0 context.Context, arg1, arg2 string) (*pipeline.Instance, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddProcessor", arg0, arg1, arg2)
 	ret0, _ := ret[0].(*pipeline.Instance)
@@ -83,7 +83,7 @@ func (mr *PipelineServiceMockRecorder) Create(arg0, arg1, arg2, arg3 interface{}
 }
 
 // Delete mocks base method.
-func (m *PipelineService) Delete(arg0 context.Context, arg1 *pipeline.Instance) error {
+func (m *PipelineService) Delete(arg0 context.Context, arg1 string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Delete", arg0, arg1)
 	ret0, _ := ret[0].(error)
@@ -126,7 +126,7 @@ func (mr *PipelineServiceMockRecorder) List(arg0 interface{}) *gomock.Call {
 }
 
 // RemoveConnector mocks base method.
-func (m *PipelineService) RemoveConnector(arg0 context.Context, arg1 *pipeline.Instance, arg2 string) (*pipeline.Instance, error) {
+func (m *PipelineService) RemoveConnector(arg0 context.Context, arg1, arg2 string) (*pipeline.Instance, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RemoveConnector", arg0, arg1, arg2)
 	ret0, _ := ret[0].(*pipeline.Instance)
@@ -141,7 +141,7 @@ func (mr *PipelineServiceMockRecorder) RemoveConnector(arg0, arg1, arg2 interfac
 }
 
 // RemoveProcessor mocks base method.
-func (m *PipelineService) RemoveProcessor(arg0 context.Context, arg1 *pipeline.Instance, arg2 string) (*pipeline.Instance, error) {
+func (m *PipelineService) RemoveProcessor(arg0 context.Context, arg1, arg2 string) (*pipeline.Instance, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RemoveProcessor", arg0, arg1, arg2)
 	ret0, _ := ret[0].(*pipeline.Instance)
@@ -156,7 +156,7 @@ func (mr *PipelineServiceMockRecorder) RemoveProcessor(arg0, arg1, arg2 interfac
 }
 
 // Start mocks base method.
-func (m *PipelineService) Start(arg0 context.Context, arg1 pipeline.ConnectorFetcher, arg2 pipeline.ProcessorFetcher, arg3 *pipeline.Instance) error {
+func (m *PipelineService) Start(arg0 context.Context, arg1 pipeline.ConnectorFetcher, arg2 pipeline.ProcessorFetcher, arg3 string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Start", arg0, arg1, arg2, arg3)
 	ret0, _ := ret[0].(error)
@@ -170,7 +170,7 @@ func (mr *PipelineServiceMockRecorder) Start(arg0, arg1, arg2, arg3 interface{})
 }
 
 // Stop mocks base method.
-func (m *PipelineService) Stop(arg0 context.Context, arg1 *pipeline.Instance) error {
+func (m *PipelineService) Stop(arg0 context.Context, arg1 string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Stop", arg0, arg1)
 	ret0, _ := ret[0].(error)

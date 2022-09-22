@@ -53,9 +53,9 @@ func TestServiceLifecycle_PipelineSuccess(t *testing.T) {
 	source, wantRecords := generatorSource(ctrl, 10, nil, false)
 	destination := asserterDestination(ctrl, t, wantRecords, false)
 
-	pl, err = ps.AddConnector(ctx, pl, source.ID())
+	pl, err = ps.AddConnector(ctx, pl.ID, source.ID())
 	assert.Ok(t, err)
-	pl, err = ps.AddConnector(ctx, pl, destination.ID())
+	pl, err = ps.AddConnector(ctx, pl.ID, destination.ID())
 	assert.Ok(t, err)
 
 	// start the pipeline now that everything is set up
@@ -63,7 +63,7 @@ func TestServiceLifecycle_PipelineSuccess(t *testing.T) {
 		ctx,
 		testConnectorFetcher{source.ID(): source, destination.ID(): destination},
 		testProcessorFetcher{},
-		pl,
+		pl.ID,
 	)
 	assert.Ok(t, err)
 
@@ -93,9 +93,9 @@ func TestServiceLifecycle_PipelineError(t *testing.T) {
 	source, wantRecords := generatorSource(ctrl, 10, wantErr, true)
 	destination := asserterDestination(ctrl, t, wantRecords, true)
 
-	pl, err = ps.AddConnector(ctx, pl, source.ID())
+	pl, err = ps.AddConnector(ctx, pl.ID, source.ID())
 	assert.Ok(t, err)
-	pl, err = ps.AddConnector(ctx, pl, destination.ID())
+	pl, err = ps.AddConnector(ctx, pl.ID, destination.ID())
 	assert.Ok(t, err)
 
 	// start the pipeline now that everything is set up
@@ -103,7 +103,7 @@ func TestServiceLifecycle_PipelineError(t *testing.T) {
 		ctx,
 		testConnectorFetcher{source.ID(): source, destination.ID(): destination},
 		testProcessorFetcher{},
-		pl,
+		pl.ID,
 	)
 	assert.Ok(t, err)
 
@@ -146,9 +146,9 @@ func TestServiceLifecycle_PipelineStop(t *testing.T) {
 	source, wantRecords := generatorSource(ctrl, 10, ErrGracefulShutdown, true)
 	destination := asserterDestination(ctrl, t, wantRecords, true)
 
-	pl, err = ps.AddConnector(ctx, pl, source.ID())
+	pl, err = ps.AddConnector(ctx, pl.ID, source.ID())
 	assert.Ok(t, err)
-	pl, err = ps.AddConnector(ctx, pl, destination.ID())
+	pl, err = ps.AddConnector(ctx, pl.ID, destination.ID())
 	assert.Ok(t, err)
 
 	// start the pipeline now that everything is set up
@@ -156,7 +156,7 @@ func TestServiceLifecycle_PipelineStop(t *testing.T) {
 		ctx,
 		testConnectorFetcher{source.ID(): source, destination.ID(): destination},
 		testProcessorFetcher{},
-		pl,
+		pl.ID,
 	)
 	assert.Ok(t, err)
 

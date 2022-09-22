@@ -64,12 +64,12 @@ func (p *ProcessorOrchestrator) Create(
 
 	switch parent.Type {
 	case processor.ParentTypePipeline:
-		_, err = p.pipelines.AddProcessor(ctx, pl, proc.ID)
+		_, err = p.pipelines.AddProcessor(ctx, pl.ID, proc.ID)
 		if err != nil {
 			return nil, cerrors.Errorf("could not add processor to pipeline: %w", err)
 		}
 		r.Append(func() error {
-			_, err := p.pipelines.RemoveProcessor(ctx, pl, proc.ID)
+			_, err := p.pipelines.RemoveProcessor(ctx, pl.ID, proc.ID)
 			return err
 		})
 	case processor.ParentTypeConnector:
@@ -193,12 +193,12 @@ func (p *ProcessorOrchestrator) Delete(ctx context.Context, id string) error {
 
 	switch proc.Parent.Type {
 	case processor.ParentTypePipeline:
-		_, err = p.pipelines.RemoveProcessor(ctx, pl, proc.ID)
+		_, err = p.pipelines.RemoveProcessor(ctx, pl.ID, proc.ID)
 		if err != nil {
 			return cerrors.Errorf("could not add processor to pipeline: %w", err)
 		}
 		r.Append(func() error {
-			_, err := p.pipelines.AddProcessor(ctx, pl, proc.ID)
+			_, err := p.pipelines.AddProcessor(ctx, pl.ID, proc.ID)
 			return err
 		})
 	case processor.ParentTypeConnector:

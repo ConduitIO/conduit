@@ -155,7 +155,7 @@ func (s *Service) provisionPipeline(ctx context.Context, id string, config Pipel
 			if err != nil {
 				return err
 			}
-			s.rollbackStopPipeline(ctx, &r, oldPl)
+			s.rollbackStopPipeline(ctx, &r, oldPl.ID)
 		}
 		connStates, err = s.collectConnectorStates(ctx, oldPl)
 		if err != nil {
@@ -172,9 +172,9 @@ func (s *Service) provisionPipeline(ctx context.Context, id string, config Pipel
 	if err != nil {
 		return cerrors.Errorf("could not create pipeline %q: %w", id, err)
 	}
-	s.rollbackCreatePipeline(ctx, &r, newPl)
+	s.rollbackCreatePipeline(ctx, &r, newPl.ID)
 
-	err = s.createConnectors(ctx, &r, newPl, config.Connectors)
+	err = s.createConnectors(ctx, &r, newPl.ID, config.Connectors)
 	if err != nil {
 		return cerrors.Errorf("error while creating connectors: %w", err)
 	}
@@ -191,7 +191,7 @@ func (s *Service) provisionPipeline(ctx context.Context, id string, config Pipel
 
 	// check if pipeline is running
 	if config.Status == StatusRunning {
-		err := s.pipelineService.Start(ctx, s.connectorService, s.processorService, newPl)
+		err := s.pipelineService.Start(ctx, s.connectorService, s.processorService, newPl.ID)
 		if err != nil {
 			return cerrors.Errorf("could not start the pipeline %q: %w", id, err)
 		}
@@ -302,11 +302,11 @@ func (s *Service) deletePipeline(ctx context.Context, r *rollback.R, pl *pipelin
 		}
 
 		if proc.Parent.Type == processor.ParentTypePipeline {
-			_, err = s.pipelineService.RemoveProcessor(ctx, pl, id)
+			_, err = s.pipelineService.RemoveProcessor(ctx, pl.ID, id)
 			if err != nil {
 				return err
 			}
-			s.rollbackRemoveProcessorFromPipeline(ctx, r, pl, id)
+			s.rollbackRemoveProcessorFromPipeline(ctx, r, pl.ID, id)
 		} else if proc.Parent.Type == processor.ParentTypeConnector {
 			_, err = s.connectorService.RemoveProcessor(ctx, proc.Parent.ID, id)
 			if err != nil {
@@ -319,7 +319,7 @@ func (s *Service) deletePipeline(ctx context.Context, r *rollback.R, pl *pipelin
 		if err != nil {
 			return err
 		}
-		s.rollbackDeleteProcessor(ctx, r, proc.Parent, id, proc)
+		s.rollbackDeleteProcessor(ctx, r, proc.Parent, proc)
 	}
 
 	r.Append(func() error {
@@ -333,11 +333,11 @@ func (s *Service) deletePipeline(ctx context.Context, r *rollback.R, pl *pipelin
 		if err != nil {
 			return err
 		}
-		_, err = s.pipelineService.RemoveConnector(ctx, pl, id)
+		_, err = s.pipelineService.RemoveConnector(ctx, pl.ID, id)
 		if err != nil {
 			return err
 		}
-		s.rollbackRemoveConnector(ctx, r, pl, id)
+		s.rollbackRemoveConnector(ctx, r, pl.ID, id)
 
 		err = s.connectorService.Delete(ctx, id)
 		if err != nil {
@@ -347,7 +347,7 @@ func (s *Service) deletePipeline(ctx context.Context, r *rollback.R, pl *pipelin
 	}
 
 	// delete pipeline
-	err := s.pipelineService.Delete(ctx, pl)
+	err := s.pipelineService.Delete(ctx, pl.ID)
 	if err != nil {
 		return err
 	}
@@ -357,7 +357,7 @@ func (s *Service) deletePipeline(ctx context.Context, r *rollback.R, pl *pipelin
 }
 
 func (s *Service) stopPipeline(ctx context.Context, pl *pipeline.Instance) error {
-	err := s.pipelineService.Stop(ctx, pl)
+	err := s.pipelineService.Stop(ctx, pl.ID)
 	if err != nil {
 		return cerrors.Errorf("could not stop pipeline %q: %w", pl.ID, err)
 	}
@@ -415,19 +415,19 @@ func (s *Service) createProcessor(ctx context.Context, parentID string, parentTy
 	return nil
 }
 
-func (s *Service) createConnectors(ctx context.Context, r *rollback.R, pl *pipeline.Instance, mp map[string]ConnectorConfig) error {
+func (s *Service) createConnectors(ctx context.Context, r *rollback.R, pipelineID string, mp map[string]ConnectorConfig) error {
 	for k, cfg := range mp {
-		err := s.createConnector(ctx, pl.ID, k, cfg)
+		err := s.createConnector(ctx, pipelineID, k, cfg)
 		if err != nil {
 			return cerrors.Errorf("could not create connector %q: %w", k, err)
 		}
 		s.rollbackCreateConnector(ctx, r, k)
 
-		_, err = s.pipelineService.AddConnector(ctx, pl, k)
+		_, err = s.pipelineService.AddConnector(ctx, pipelineID, k)
 		if err != nil {
-			return cerrors.Errorf("could not add connector %q to the pipeline %q: %w", k, pl.ID, err)
+			return cerrors.Errorf("could not add connector %q to the pipeline %q: %w", k, pipelineID, err)
 		}
-		s.rollbackAddConnector(ctx, r, pl, k)
+		s.rollbackAddConnector(ctx, r, pipelineID, k)
 
 		err = s.createProcessors(ctx, r, k, processor.ParentTypeConnector, cfg.Processors)
 		if err != nil {
@@ -451,11 +451,11 @@ func (s *Service) createProcessors(ctx context.Context, r *rollback.R, parentID 
 			if err != nil {
 				return cerrors.Errorf("could not get pipeline %q: %w", parentID, err)
 			}
-			_, err = s.pipelineService.AddProcessor(ctx, pl, k)
+			_, err = s.pipelineService.AddProcessor(ctx, pl.ID, k)
 			if err != nil {
 				return cerrors.Errorf("could not add processor %q to the pipeline %q: %w", k, pl.ID, err)
 			}
-			s.rollbackAddPipelineProcessor(ctx, r, pl, k)
+			s.rollbackAddPipelineProcessor(ctx, r, pl.ID, k)
 		case processor.ParentTypeConnector:
 			_, err = s.connectorService.AddProcessor(ctx, parentID, k)
 			if err != nil {
@@ -498,7 +498,7 @@ func (s *Service) deletePipelineWithoutRollback(ctx context.Context, pl *pipelin
 
 	// remove pipeline processors
 	for _, procID := range pl.ProcessorIDs {
-		_, err = s.pipelineService.RemoveProcessor(ctx, pl, procID)
+		_, err = s.pipelineService.RemoveProcessor(ctx, pl.ID, procID)
 		if err != nil {
 			return err
 		}
@@ -524,7 +524,7 @@ func (s *Service) deletePipelineWithoutRollback(ctx context.Context, pl *pipelin
 	}
 	// remove connectors
 	for _, connID := range pl.ConnectorIDs {
-		_, err = s.pipelineService.RemoveConnector(ctx, pl, connID)
+		_, err = s.pipelineService.RemoveConnector(ctx, pl.ID, connID)
 		if err != nil {
 			return err
 		}
@@ -535,7 +535,7 @@ func (s *Service) deletePipelineWithoutRollback(ctx context.Context, pl *pipelin
 		}
 	}
 	// delete pipeline
-	err = s.pipelineService.Delete(ctx, pl)
+	err = s.pipelineService.Delete(ctx, pl.ID)
 	if err != nil {
 		return err
 	}
@@ -562,15 +562,15 @@ func (s *Service) rollbackDeleteConnector(ctx context.Context, r *rollback.R, pi
 		return err
 	})
 }
-func (s *Service) rollbackAddConnector(ctx context.Context, r *rollback.R, pl *pipeline.Instance, connID string) {
+func (s *Service) rollbackAddConnector(ctx context.Context, r *rollback.R, pipelineID string, connID string) {
 	r.Append(func() error {
-		_, err := s.pipelineService.RemoveConnector(ctx, pl, connID)
+		_, err := s.pipelineService.RemoveConnector(ctx, pipelineID, connID)
 		return err
 	})
 }
-func (s *Service) rollbackRemoveConnector(ctx context.Context, r *rollback.R, pl *pipeline.Instance, connID string) {
+func (s *Service) rollbackRemoveConnector(ctx context.Context, r *rollback.R, pipelineID string, connID string) {
 	r.Append(func() error {
-		_, err := s.pipelineService.AddConnector(ctx, pl, connID)
+		_, err := s.pipelineService.AddConnector(ctx, pipelineID, connID)
 		return err
 	})
 }
@@ -580,13 +580,13 @@ func (s *Service) rollbackCreateProcessor(ctx context.Context, r *rollback.R, pr
 		return err
 	})
 }
-func (s *Service) rollbackDeleteProcessor(ctx context.Context, r *rollback.R, parent processor.Parent, processorID string, proc *processor.Instance) {
+func (s *Service) rollbackDeleteProcessor(ctx context.Context, r *rollback.R, parent processor.Parent, proc *processor.Instance) {
 	r.Append(func() error {
 		config := ProcessorConfig{
 			Type:     proc.Name,
 			Settings: proc.Config.Settings,
 		}
-		err := s.createProcessor(ctx, parent.ID, parent.Type, processorID, config)
+		err := s.createProcessor(ctx, parent.ID, parent.Type, proc.ID, config)
 		return err
 	})
 }
@@ -602,23 +602,23 @@ func (s *Service) rollbackRemoveProcessorFromConnector(ctx context.Context, r *r
 		return err
 	})
 }
-func (s *Service) rollbackAddPipelineProcessor(ctx context.Context, r *rollback.R, pl *pipeline.Instance, processorID string) {
+func (s *Service) rollbackAddPipelineProcessor(ctx context.Context, r *rollback.R, pipelineID string, processorID string) {
 	r.Append(func() error {
-		_, err := s.pipelineService.RemoveProcessor(ctx, pl, processorID)
+		_, err := s.pipelineService.RemoveProcessor(ctx, pipelineID, processorID)
 		return err
 	})
 }
 
-func (s *Service) rollbackRemoveProcessorFromPipeline(ctx context.Context, r *rollback.R, pl *pipeline.Instance, processorID string) {
+func (s *Service) rollbackRemoveProcessorFromPipeline(ctx context.Context, r *rollback.R, pipelineID string, processorID string) {
 	r.Append(func() error {
-		_, err := s.pipelineService.AddProcessor(ctx, pl, processorID)
+		_, err := s.pipelineService.AddProcessor(ctx, pipelineID, processorID)
 		return err
 	})
 }
 
-func (s *Service) rollbackCreatePipeline(ctx context.Context, r *rollback.R, pl *pipeline.Instance) {
+func (s *Service) rollbackCreatePipeline(ctx context.Context, r *rollback.R, pipelineID string) {
 	r.Append(func() error {
-		err := s.pipelineService.Delete(ctx, pl)
+		err := s.pipelineService.Delete(ctx, pipelineID)
 		return err
 	})
 }
@@ -628,9 +628,9 @@ func (s *Service) rollbackDeletePipeline(ctx context.Context, r *rollback.R, id 
 		return err
 	})
 }
-func (s *Service) rollbackStopPipeline(ctx context.Context, r *rollback.R, pl *pipeline.Instance) {
+func (s *Service) rollbackStopPipeline(ctx context.Context, r *rollback.R, pipelineID string) {
 	r.Append(func() error {
-		err := s.pipelineService.Start(ctx, s.connectorService, s.processorService, pl)
+		err := s.pipelineService.Start(ctx, s.connectorService, s.processorService, pipelineID)
 		return err
 	})
 }

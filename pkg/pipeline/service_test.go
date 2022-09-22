@@ -79,12 +79,12 @@ func (s *serviceTestSetup) createPipeline(ctx context.Context, service *Service,
 	source := s.basicSourceMock(ctrl)
 	destination := s.basicDestinationMock(ctrl)
 
-	pl, err = service.AddConnector(ctx, pl, source.ID())
+	pl, err = service.AddConnector(ctx, pl.ID, source.ID())
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
-	pl, err = service.AddConnector(ctx, pl, destination.ID())
+	pl, err = service.AddConnector(ctx, pl.ID, destination.ID())
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -306,7 +306,7 @@ func TestService_DeleteSuccess(t *testing.T) {
 	instance, err := service.Create(ctx, uuid.NewString(), Config{Name: "test-pipeline"}, ProvisionTypeAPI)
 	assert.Ok(t, err)
 
-	err = service.Delete(ctx, instance)
+	err = service.Delete(ctx, instance.ID)
 	assert.Ok(t, err)
 
 	got, err := service.Get(ctx, instance.ID)
@@ -346,7 +346,7 @@ func TestService_UpdateSuccess(t *testing.T) {
 		Description: "new description",
 	}
 
-	got, err := service.Update(ctx, instance, want)
+	got, err := service.Update(ctx, instance.ID, want)
 	assert.Ok(t, err)
 	assert.Equal(t, want, got.Config)
 }
@@ -367,7 +367,7 @@ func TestService_Update_PipelineNameExists(t *testing.T) {
 		Description: "new description",
 	}
 
-	got, err := service.Update(ctx, instance2, want)
+	got, err := service.Update(ctx, instance2.ID, want)
 	assert.Error(t, err)
 	assert.Nil(t, got)
 }
@@ -383,7 +383,7 @@ func TestService_UpdateInvalidConfig(t *testing.T) {
 
 	config := Config{Name: ""} // empty name is not allowed
 
-	got, err := service.Update(ctx, instance, config)
+	got, err := service.Update(ctx, instance.ID, config)
 	assert.Error(t, err)
 	assert.Nil(t, got)
 }

@@ -46,8 +46,12 @@ func (s *Service) Start(
 	ctx context.Context,
 	connFetcher ConnectorFetcher,
 	procFetcher ProcessorFetcher,
-	pl *Instance,
+	pipelineID string,
 ) error {
+	pl, err := s.Get(ctx, pipelineID)
+	if err != nil {
+		return err
+	}
 	if pl.Status == StatusRunning {
 		return cerrors.Errorf("can't start pipeline %s: %w", pl.ID, ErrPipelineRunning)
 	}
@@ -76,7 +80,11 @@ func (s *Service) Start(
 
 // Stop will attempt to gracefully stop a given pipeline by calling each node's
 // Stop function.
-func (s *Service) Stop(ctx context.Context, pl *Instance) error {
+func (s *Service) Stop(ctx context.Context, pipelineID string) error {
+	pl, err := s.Get(ctx, pipelineID)
+	if err != nil {
+		return err
+	}
 	return s.stopWithReason(ctx, pl, nil)
 }
 
