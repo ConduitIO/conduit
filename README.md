@@ -16,7 +16,7 @@ _Data Integration for Production Data Stores. :dizzy:_
 
 Conduit is a data streaming tool written in Go. It aims to provide the best user
 experience for building and running real-time data pipelines. Conduit comes with
-batteries included, it provides a UI, common connectors, transforms and
+batteries included, it provides a UI, common connectors, processors and
 observability data out of the box.
 
 Conduit pipelines are built out of simple building blocks which run in their own
@@ -32,15 +32,43 @@ they conform to the required interface.
 
 Conduit was created and open-sourced by [Meroxa](https://meroxa.io).
 
+- [Quick start](#quick-start)
 - [Installation guide](#installation-guide)
 - [Connectors](#connectors)
 - [Processors](#processors)
-- [Testing](#testing)
 - [API](#api)
 - [UI](#ui)
 - [Documentation](#documentation)
 - [Known limitations](#known-limitations)
 - [Contributing](#contributing)
+
+## Quick start
+
+1. Download and extract
+   the [latest release](https://github.com/conduitio/conduit/releases/latest).
+2. Download
+   the [example pipeline](https://github.com/ConduitIO/conduit/blob/main/examples/processors/extract-field-transform.sh)
+   and put it in the directory named `pipelines` in the same directory as the
+   Conduit binary.
+3. Run conduit (`./conduit`). The example pipeline will start automatically.
+4. Write something to file `example.in` in the same directory as the Conduit
+   binary.
+   ```
+   $ echo "hello conduit" >> example.in`
+   ```
+5. Read the contents of `example.out` and notice an OpenCDC record:
+   ```
+   $ cat example.out
+   {"position":"MTQ=","operation":"create","metadata":{"file.path":"./example.in","opencdc.readAt":"1663858188836816000","opencdc.version":"v1"},"key":"MQ==","payload":{"before":null,"after":"aGVsbG8gY29uZHVpdA=="}}
+   ```
+6. The string `hello conduit` is a base64 encoded string stored in the field
+   `payload.after`, let's decode it:
+   ```
+   $ cat example.out | jq ".payload.after | @base64d"
+   "hello conduit"
+   ```
+7. Explore the UI by opening `http://localhost:8080` and build your own
+   pipeline!
 
 ## Installation guide
 
@@ -55,9 +83,9 @@ simply run it!
 ```
 
 Once you see that the service is running you may access a user-friendly web
-interface at `http://localhost:8080/ui/`. You can also interact with
+interface at `http://localhost:8080`. You can also interact with
 the [Conduit API](#api) directly, we recommend navigating
-to `http://localhost:8080/openapi/` and exploring the HTTP API through Swagger
+to `http://localhost:8080/openapi` and exploring the HTTP API through Swagger
 UI.
 
 Conduit can be configured through command line parameters. To view the full list
@@ -95,7 +123,7 @@ docker run -p 8080:8080 ghcr.io/conduitio/conduit:latest
 ```
 
 The Docker image includes the [UI](#ui), you can access it by navigating
-to `http://localhost:8080/ui`.
+to `http://localhost:8080`.
 
 ## Connectors
 
@@ -104,6 +132,11 @@ the [Connector List](docs/connectors.md). If there's a connector that you're
 looking for that isn't available in Conduit, please file
 an [issue](https://github.com/ConduitIO/conduit/issues/new?assignees=&labels=triage&template=3-connector-request.yml&title=Connector%3A+%3Cresource%3E+%5BSource%2FDestination%5D)
 .
+
+Conduit loads standalone connectors at startup. The connector binaries need to
+be placed in the `connectors` directory relative to the Conduit binary so
+Conduit can find them. Alternatively, the path to the standalone connectors can
+be adjusted using the CLI flag `-connectors.path`.
 
 Conduit ships with a number of built-in connectors:
 
@@ -124,11 +157,10 @@ a [Kafka Connect wrapper](https://github.com/conduitio/conduit-kafka-connect-wra
 that allows you to run any Apache Kafka Connect connector as part of a Conduit
 pipeline.
 
-Conduit is also able to run standalone connectors. If you are interested in
-writing a connector yourself, have a look at
-our [Go Connector SDK](https://github.com/ConduitIO/conduit-connector-sdk).
-Since standalone connectors communicate with Conduit through gRPC they can be
-written in virtually any programming language, as long as the connector follows
+If you are interested in writing a connector yourself, have a look at our
+[Go Connector SDK](https://github.com/ConduitIO/conduit-connector-sdk). Since
+standalone connectors communicate with Conduit through gRPC they can be written
+in virtually any programming language, as long as the connector follows
 the [Conduit Connector Protocol](https://github.com/ConduitIO/conduit-connector-protocol)
 .
 
@@ -144,18 +176,6 @@ the ability to write custom processors in JavaScript.
 
 More detailed information as well as examples can be found in
 the [Processors documentation](/docs/processors.md).
-
-## Testing
-
-Conduit tests are split in two categories: unit tests and integration tests.
-Unit tests can be run without any additional setup while integration tests
-require additional services to be running (e.g. Kafka or Postgres).
-
-Unit tests can be run with `make test`.
-
-Integration tests require [Docker](https://www.docker.com/) to be installed and
-running, they can be run with `make test-integration`. This command will handle
-starting and stopping docker containers for you.
 
 ## API
 
@@ -173,14 +193,14 @@ using [gRPC gateway](https://github.com/grpc-ecosystem/grpc-gateway) and is thus
 providing the same functionality as the gRPC API. To learn more about the HTTP
 API please have a look at the [API documentation](https://www.conduit.io/api),
 [OpenAPI definition](https://github.com/ConduitIO/conduit/blob/main/pkg/web/openapi/swagger-ui/api/v1/api.swagger.json)
-or run Conduit and navigate to `http://localhost:8080/openapi/` to open
+or run Conduit and navigate to `http://localhost:8080/openapi` to open
 a [Swagger UI](https://github.com/swagger-api/swagger-ui) which makes it easy to
 try it out.
 
 ## UI
 
 Conduit comes with a web UI that makes building data pipelines a breeze, you can
-access it at `http://localhost:8080/ui/`. See
+access it at `http://localhost:8080`. See
 the [installation guide](#build-from-source) for instructions on how to build
 Conduit with the UI.
 
@@ -196,31 +216,23 @@ visit [docs.conduit.io](https://docs.conduit.io).
 If you are interested in internals of Conduit we have prepared some technical
 documentation:
 
-* [Conduit Architecture](https://github.com/ConduitIO/conduit/blob/main/docs/architecture.md)
+* [Pipeline Semantics](docs/pipeline_semantics.md) explains the internals of how
+  a Conduit pipeline works.
+* [Pipeline Configuration Files](docs/pipeline_configuration_files.md)
+  explains how you can define pipelines using YAML files.
+* [Processors](docs/processors.md) contains examples and more information about
+  Conduit processors.
+* [Conduit Architecture](docs/architecture.md)
   will give you a high-level overview of Conduit.
-* [Conduit Metrics](https://github.com/ConduitIO/conduit/blob/main/docs/metrics.md)
+* [Conduit Metrics](docs/metrics.md)
   provides more information about how Conduit exposes metrics.
 
 ## Known limitations
 
-Conduit is currently in a pre-1.0 state. While Conduit is built on strong
-foundations and experiences from running similar systems, it's not production
-ready at the moment. Following features are on the roadmap and yet to be
-implemented. These features will change the behavior of the systems:
-
-1. Standard record format - we plan to have the records implement a single
-   standard for CDC
-   events. [See PR](https://github.com/ConduitIO/conduit/pull/326).
-2. Delivery and ordering guarantees - from the experience we have so far,
-   messages created internally are reliably delivered through Conduit (from
-   source nodes, over processing nodes to destination nodes). However, we still
-   need good end-to-end, full-scale tests to actually prove that.
-3. Performance guarantees (for the core) - reasons are identical to reasons for
-   delivery guarantees.
-4. Dynamic loading of list of plugins - currently, the API cannot return the
-   list of all available plugins and the available configuration parameters.
-   Consequently, the UI has the plugin paths and configuration parameters
-   hard-coded.
+:warning: Conduit is currently in a pre-1.0 state. While Conduit is built on
+strong foundations and experiences from running similar systems, we don't
+recommend relying on it in a production environment. It may break and end up in
+an unexpected state, or in the worst case, result in lost data.
 
 ## Contributing
 

@@ -66,6 +66,8 @@ dist/
 
 # Examples
 examples/processors/file_destination.txt
+./example.in
+./example.out
 
 # Standalone connectors
 /connectors
