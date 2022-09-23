@@ -71,7 +71,7 @@ func parseConfig() conduit.Config {
 
 		connectorsDir = flags.String("connectors.path", "./connectors", "path to standalone connectors directory")
 
-		pipelinesDir = flags.String("pipelines.path", "./pipelines", "points at the directory that has the yaml pipelines' configurations")
+		pipelinesDir = flags.String("pipelines.path", "./pipelines", "path to the directory that has the yaml pipeline configuration files, or a single pipeline configuration file")
 	)
 
 	// flags is set up to exit on error, we can safely ignore the error
