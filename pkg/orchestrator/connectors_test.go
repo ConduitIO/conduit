@@ -60,7 +60,7 @@ func TestConnectorOrchestrator_Create_Success(t *testing.T) {
 			connector.ProvisionTypeAPI,
 		).Return(want, nil)
 	plsMock.EXPECT().
-		AddConnector(gomock.AssignableToTypeOf(ctxType), pl, want.ID()).
+		AddConnector(gomock.AssignableToTypeOf(ctxType), pl.ID, want.ID()).
 		Return(pl, nil)
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
@@ -189,7 +189,7 @@ func TestConnectorOrchestrator_Create_AddConnectorError(t *testing.T) {
 		).
 		Return(conn, nil)
 	plsMock.EXPECT().
-		AddConnector(gomock.AssignableToTypeOf(ctxType), pl, conn.ID()).
+		AddConnector(gomock.AssignableToTypeOf(ctxType), pl.ID, conn.ID()).
 		Return(nil, wantErr)
 	// this is called in rollback
 	consMock.EXPECT().
@@ -226,7 +226,7 @@ func TestConnectorOrchestrator_Delete_Success(t *testing.T) {
 		Delete(gomock.AssignableToTypeOf(ctxType), want.ID()).
 		Return(nil)
 	plsMock.EXPECT().
-		RemoveConnector(gomock.AssignableToTypeOf(ctxType), pl, want.ID()).
+		RemoveConnector(gomock.AssignableToTypeOf(ctxType), pl.ID, want.ID()).
 		Return(pl, nil)
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
@@ -389,7 +389,7 @@ func TestConnectorOrchestrator_Delete_RemoveConnectorFailed(t *testing.T) {
 		Delete(gomock.AssignableToTypeOf(ctxType), want.ID()).
 		Return(nil)
 	plsMock.EXPECT().
-		RemoveConnector(gomock.AssignableToTypeOf(ctxType), pl, want.ID()).
+		RemoveConnector(gomock.AssignableToTypeOf(ctxType), pl.ID, want.ID()).
 		Return(nil, wantErr)
 	// rollback
 	consMock.EXPECT().

@@ -25,21 +25,13 @@ import (
 type PipelineOrchestrator base
 
 func (s *PipelineOrchestrator) Start(ctx context.Context, id string) error {
-	pl, err := s.pipelines.Get(ctx, id)
-	if err != nil {
-		return err
-	}
 	// TODO lock pipeline
-	return s.pipelines.Start(ctx, s.connectors, s.processors, pl)
+	return s.pipelines.Start(ctx, s.connectors, s.processors, id)
 }
 
 func (s *PipelineOrchestrator) Stop(ctx context.Context, id string) error {
-	pl, err := s.pipelines.Get(ctx, id)
-	if err != nil {
-		return err
-	}
 	// TODO lock pipeline
-	return s.pipelines.Stop(ctx, pl)
+	return s.pipelines.Stop(ctx, id)
 }
 
 func (s *PipelineOrchestrator) List(ctx context.Context) map[string]*pipeline.Instance {
@@ -67,7 +59,7 @@ func (s *PipelineOrchestrator) Update(ctx context.Context, id string, cfg pipeli
 	if pl.Status == pipeline.StatusRunning {
 		return nil, pipeline.ErrPipelineRunning
 	}
-	return s.pipelines.Update(ctx, pl, cfg)
+	return s.pipelines.Update(ctx, pl.ID, cfg)
 }
 
 func (s *PipelineOrchestrator) Delete(ctx context.Context, id string) error {
@@ -88,5 +80,5 @@ func (s *PipelineOrchestrator) Delete(ctx context.Context, id string) error {
 	if len(pl.ProcessorIDs) != 0 {
 		return ErrPipelineHasProcessorsAttached
 	}
-	return s.pipelines.Delete(ctx, pl)
+	return s.pipelines.Delete(ctx, pl.ID)
 }

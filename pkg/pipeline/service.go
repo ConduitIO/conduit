@@ -72,7 +72,7 @@ func (s *Service) Init(
 		measure.PipelinesGauge.WithValues(strings.ToLower(instance.Status.String())).Inc()
 
 		if instance.Status == StatusSystemStopped {
-			startErr := s.Start(ctx, connFetcher, procFetcher, instance)
+			startErr := s.Start(ctx, connFetcher, procFetcher, instance.ID)
 			if startErr != nil {
 				// try to start remaining pipelines and gather errors
 				err = multierror.Append(err, startErr)
@@ -142,7 +142,11 @@ func (s *Service) Create(ctx context.Context, id string, cfg Config, p Provision
 }
 
 // Update will update a pipeline instance config.
-func (s *Service) Update(ctx context.Context, pl *Instance, cfg Config) (*Instance, error) {
+func (s *Service) Update(ctx context.Context, pipelineID string, cfg Config) (*Instance, error) {
+	pl, err := s.Get(ctx, pipelineID)
+	if err != nil {
+		return nil, err
+	}
 	if cfg.Name == "" {
 		return nil, ErrNameMissing
 	}
@@ -158,7 +162,7 @@ func (s *Service) Update(ctx context.Context, pl *Instance, cfg Config) (*Instan
 	pl.UpdatedAt = time.Now()
 	// update the name in the names set
 	s.instanceNames[cfg.Name] = true
-	err := s.store.Set(ctx, pl.ID, pl)
+	err = s.store.Set(ctx, pl.ID, pl)
 	if err != nil {
 		return nil, cerrors.Errorf("failed to save pipeline with ID %q: %w", pl.ID, err)
 	}
@@ -167,10 +171,14 @@ func (s *Service) Update(ctx context.Context, pl *Instance, cfg Config) (*Instan
 }
 
 // AddConnector adds a connector to a pipeline.
-func (s *Service) AddConnector(ctx context.Context, pl *Instance, connectorID string) (*Instance, error) {
+func (s *Service) AddConnector(ctx context.Context, pipelineID string, connectorID string) (*Instance, error) {
+	pl, err := s.Get(ctx, pipelineID)
+	if err != nil {
+		return nil, err
+	}
 	pl.ConnectorIDs = append(pl.ConnectorIDs, connectorID)
 	pl.UpdatedAt = time.Now()
-	err := s.store.Set(ctx, pl.ID, pl)
+	err = s.store.Set(ctx, pl.ID, pl)
 	if err != nil {
 		return nil, cerrors.Errorf("failed to save pipeline with ID %q: %w", pl.ID, err)
 	}
@@ -179,7 +187,11 @@ func (s *Service) AddConnector(ctx context.Context, pl *Instance, connectorID st
 }
 
 // RemoveConnector removes a connector from a pipeline.
-func (s *Service) RemoveConnector(ctx context.Context, pl *Instance, connectorID string) (*Instance, error) {
+func (s *Service) RemoveConnector(ctx context.Context, pipelineID string, connectorID string) (*Instance, error) {
+	pl, err := s.Get(ctx, pipelineID)
+	if err != nil {
+		return nil, err
+	}
 	connectorIndex := -1
 	for index, id := range pl.ConnectorIDs {
 		if id == connectorID {
@@ -194,7 +206,7 @@ func (s *Service) RemoveConnector(ctx context.Context, pl *Instance, connectorID
 	pl.ConnectorIDs = pl.ConnectorIDs[:connectorIndex+copy(pl.ConnectorIDs[connectorIndex:], pl.ConnectorIDs[connectorIndex+1:])]
 	pl.UpdatedAt = time.Now()
 
-	err := s.store.Set(ctx, pl.ID, pl)
+	err = s.store.Set(ctx, pl.ID, pl)
 	if err != nil {
 		return nil, cerrors.Errorf("failed to save pipeline with ID %q: %w", pl.ID, err)
 	}
@@ -203,10 +215,14 @@ func (s *Service) RemoveConnector(ctx context.Context, pl *Instance, connectorID
 }
 
 // AddProcessor adds a processor to a pipeline.
-func (s *Service) AddProcessor(ctx context.Context, pl *Instance, processorID string) (*Instance, error) {
+func (s *Service) AddProcessor(ctx context.Context, pipelineID string, processorID string) (*Instance, error) {
+	pl, err := s.Get(ctx, pipelineID)
+	if err != nil {
+		return nil, err
+	}
 	pl.ProcessorIDs = append(pl.ProcessorIDs, processorID)
 	pl.UpdatedAt = time.Now()
-	err := s.store.Set(ctx, pl.ID, pl)
+	err = s.store.Set(ctx, pl.ID, pl)
 	if err != nil {
 		return nil, cerrors.Errorf("failed to save pipeline with ID %q: %w", pl.ID, err)
 	}
@@ -215,7 +231,11 @@ func (s *Service) AddProcessor(ctx context.Context, pl *Instance, processorID st
 }
 
 // RemoveProcessor removes a processor from a pipeline.
-func (s *Service) RemoveProcessor(ctx context.Context, pl *Instance, processorID string) (*Instance, error) {
+func (s *Service) RemoveProcessor(ctx context.Context, pipelineID string, processorID string) (*Instance, error) {
+	pl, err := s.Get(ctx, pipelineID)
+	if err != nil {
+		return nil, err
+	}
 	processorIndex := -1
 	for index, id := range pl.ProcessorIDs {
 		if id == processorID {
@@ -230,7 +250,7 @@ func (s *Service) RemoveProcessor(ctx context.Context, pl *Instance, processorID
 	pl.ProcessorIDs = pl.ProcessorIDs[:processorIndex+copy(pl.ProcessorIDs[processorIndex:], pl.ProcessorIDs[processorIndex+1:])]
 	pl.UpdatedAt = time.Now()
 
-	err := s.store.Set(ctx, pl.ID, pl)
+	err = s.store.Set(ctx, pl.ID, pl)
 	if err != nil {
 		return nil, cerrors.Errorf("failed to save pipeline with ID %q: %w", pl.ID, err)
 	}
@@ -239,8 +259,12 @@ func (s *Service) RemoveProcessor(ctx context.Context, pl *Instance, processorID
 }
 
 // Delete removes a pipeline instance from the Service.
-func (s *Service) Delete(ctx context.Context, pl *Instance) error {
-	err := s.store.Delete(ctx, pl.ID)
+func (s *Service) Delete(ctx context.Context, pipelineID string) error {
+	pl, err := s.Get(ctx, pipelineID)
+	if err != nil {
+		return err
+	}
+	err = s.store.Delete(ctx, pl.ID)
 	if err != nil {
 		return cerrors.Errorf("could not delete pipeline instance from store: %w", err)
 	}

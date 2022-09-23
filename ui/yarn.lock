@@ -1615,9 +1615,9 @@
     tslib "^2.3.1"
     upath "^2.0.1"
 
-"@meroxa/ui-base@https://github.com/meroxa/ui-base.git#553298b082c15e03c9904dba1dcc7ec0b4f13ab4":
-  version "1.0.0"
-  resolved "https://github.com/meroxa/ui-base.git#553298b082c15e03c9904dba1dcc7ec0b4f13ab4"
+"@meroxa/ui-base@https://github.com/meroxa/ui-base.git#2.0.0":
+  version "2.0.0"
+  resolved "https://github.com/meroxa/ui-base.git#791c0f669c0b189e162b30350f9856dee4a0fdb0"
 
 "@miragejs/pretender-node-polyfill@^0.1.0":
   version "0.1.2"
@@ -4870,7 +4870,7 @@ ember-cli-babel-plugin-helpers@^1.0.0, ember-cli-babel-plugin-helpers@^1.1.1:
   resolved "https://registry.yarnpkg.com/ember-cli-babel-plugin-helpers/-/ember-cli-babel-plugin-helpers-1.1.1.tgz#5016b80cdef37036c4282eef2d863e1d73576879"
   integrity sha512-sKvOiPNHr5F/60NLd7SFzMpYPte/nnGkq/tMIfXejfKHIhaiIkYFqX8Z9UFTKWLLn+V7NOaby6niNPZUdvKCRw==
 
-ember-cli-babel@^7.0.0, ember-cli-babel@^7.10.0, ember-cli-babel@^7.13.0, ember-cli-babel@^7.13.2, ember-cli-babel@^7.19.0, ember-cli-babel@^7.21.0, ember-cli-babel@^7.22.1, ember-cli-babel@^7.23.0, ember-cli-babel@^7.23.1, ember-cli-babel@^7.26.11, ember-cli-babel@^7.26.2, ember-cli-babel@^7.26.3, ember-cli-babel@^7.26.4, ember-cli-babel@^7.26.5, ember-cli-babel@^7.26.6, ember-cli-babel@^7.7.3:
+ember-cli-babel@^7.0.0, ember-cli-babel@^7.10.0, ember-cli-babel@^7.13.0, ember-cli-babel@^7.13.2, ember-cli-babel@^7.19.0, ember-cli-babel@^7.21.0, ember-cli-babel@^7.22.1, ember-cli-babel@^7.23.0, ember-cli-babel@^7.23.1, ember-cli-babel@^7.26.10, ember-cli-babel@^7.26.11, ember-cli-babel@^7.26.2, ember-cli-babel@^7.26.3, ember-cli-babel@^7.26.4, ember-cli-babel@^7.26.5, ember-cli-babel@^7.26.6, ember-cli-babel@^7.7.3:
   version "7.26.11"
   resolved "https://registry.yarnpkg.com/ember-cli-babel/-/ember-cli-babel-7.26.11.tgz#50da0fe4dcd99aada499843940fec75076249a9f"
   integrity sha512-JJYeYjiz/JTn34q7F5DSOjkkZqy8qwFOOxXfE6pe9yEJqWGu4qErKxlz8I22JoVEQ/aBUO+OcKTpmctvykM9YA==
@@ -4960,6 +4960,28 @@ ember-cli-htmlbars@^5.0.0, ember-cli-htmlbars@^5.2.0, ember-cli-htmlbars@^5.3.1,
   version "5.7.1"
   resolved "https://registry.yarnpkg.com/ember-cli-htmlbars/-/ember-cli-htmlbars-5.7.1.tgz#eb5b88c7d9083bc27665fb5447a9b7503b32ce4f"
   integrity sha512-9laCgL4tSy48orNoQgQKEHp93MaqAs9ZOl7or5q+8iyGGJHW6sVXIYrVv5/5O9HfV6Ts8/pW1rSoaeKyLUE+oA==
+  dependencies:
+    "@ember/edition-utils" "^1.2.0"
+    babel-plugin-htmlbars-inline-precompile "^5.0.0"
+    broccoli-debug "^0.6.5"
+    broccoli-persistent-filter "^3.1.2"
+    broccoli-plugin "^4.0.3"
+    common-tags "^1.8.0"
+    ember-cli-babel-plugin-helpers "^1.1.1"
+    ember-cli-version-checker "^5.1.2"
+    fs-tree-diff "^2.0.1"
+    hash-for-dep "^1.5.1"
+    heimdalljs-logger "^0.1.10"
+    json-stable-stringify "^1.0.1"
+    semver "^7.3.4"
+    silent-error "^1.1.1"
+    strip-bom "^4.0.0"
+    walk-sync "^2.2.0"
+
+ember-cli-htmlbars@^5.7.2:
+  version "5.7.2"
+  resolved "https://registry.yarnpkg.com/ember-cli-htmlbars/-/ember-cli-htmlbars-5.7.2.tgz#e0cd2fb3c20d85fe4c3e228e6f0590ee1c645ba8"
+  integrity sha512-Uj6R+3TtBV5RZoJY14oZn/sNPnc+UgmC8nb5rI4P3fR/gYoyTFIZSXiIM7zl++IpMoIrocxOrgt+mhonKphgGg==
   dependencies:
     "@ember/edition-utils" "^1.2.0"
     babel-plugin-htmlbars-inline-precompile "^5.0.0"
@@ -5459,7 +5481,7 @@ ember-in-element-polyfill@^1.0.1:
   dependencies:
     ember-cli-babel "^7.26.5"
 
-ember-keyboard@^6.0.3:
+ember-keyboard@6.0.4:
   version "6.0.4"
   resolved "https://registry.yarnpkg.com/ember-keyboard/-/ember-keyboard-6.0.4.tgz#396e1be4c815b2972e2a6973dcc45acbc6701e4a"
   integrity sha512-Mkg5TG6KBTtxjOUBdyLADajyj/mJo3ua2mSHw20UtG2MxKxMyO+Bs4tttMlEmmrR3XMrQ9qVBLkq2dIuuQku3w==
@@ -5577,7 +5599,7 @@ ember-rfc176-data@^0.3.15, ember-rfc176-data@^0.3.17:
   resolved "https://registry.yarnpkg.com/ember-rfc176-data/-/ember-rfc176-data-0.3.17.tgz#d4fc6c33abd6ef7b3440c107a28e04417b49860a"
   integrity sha512-EVzTTKqxv9FZbEh6Ktw56YyWRAA0MijKvl7H8C06wVF+8f/cRRz3dXxa4nkwjzyVwx4rzKGuIGq77hxJAQhWWw==
 
-ember-root-url@^1.0.1:
+ember-root-url@^1.0.0, ember-root-url@^1.0.1:
   version "1.0.1"
   resolved "https://registry.yarnpkg.com/ember-root-url/-/ember-root-url-1.0.1.tgz#27e834370ea5b46d37b84fa697c46bf3a069135a"
   integrity sha512-e3aKAxY/EMhWEynfZnF0Gy6rZpQ9sJxNWm/GsDGj0cO7b5f4hmA6sSQGQh6puKe4jl2Q5a4w8DlnUyMaZoC/sA==
@@ -8918,9 +8940,9 @@ morgan@^1.10.0:
     on-headers "~1.0.2"
 
 mout@^1.0.0:
-  version "1.2.3"
-  resolved "https://registry.yarnpkg.com/mout/-/mout-1.2.3.tgz#bd1477d8c7f2db5fcf43c91de30b6cc746b78e10"
-  integrity sha512-vtE+eZcSj/sBkIp6gxB87MznryWP+gHIp0XX9SKrzA5TAkvz6y7VTuNruBjYdJozd8NY5i9XVIsn8cn3SwNjzg==
+  version "1.2.4"
+  resolved "https://registry.yarnpkg.com/mout/-/mout-1.2.4.tgz#9ffd261c4d6509e7ebcbf6b641a89b36ecdf8155"
+  integrity sha512-mZb9uOruMWgn/fw28DG4/yE3Kehfk1zKCLhuDU2O3vlKdnBBr4XaOCqVTflJ5aODavGUPqFHZgrFX3NJVuxGhQ==
 
 move-concurrently@^1.0.1:
   version "1.0.1"
@@ -8969,14 +8991,15 @@ mute-stream@0.0.8:
   resolved "https://registry.yarnpkg.com/mute-stream/-/mute-stream-0.0.8.tgz#1630c42b2251ff81e2a283de96a5497ea92e5e0d"
   integrity sha512-nnbWWOkoWyUsTjKrhgD0dcz22mdkSnpYqbEjIm2nhwhuxlSkpywJmBo8h0ZqJdkp73mb90SssHkN4rsRaBAfAA==
 
-"mx-ui-components@https://github.com/conduitio/mx-ui-components.git#a1aa6edfa814734f51c5146162e4514cd6fc73c4":
-  version "0.0.0"
-  resolved "https://github.com/conduitio/mx-ui-components.git#a1aa6edfa814734f51c5146162e4514cd6fc73c4"
+"mx-ui-components@https://github.com/ConduitIO/mx-ui-components.git#v1.9.1":
+  version "1.9.1"
+  resolved "https://github.com/ConduitIO/mx-ui-components.git#c014da956208b0197eb6cf4257f8ce86ca606d40"
   dependencies:
-    ember-cli-babel "^7.26.6"
-    ember-cli-htmlbars "^5.7.1"
-    ember-keyboard "^6.0.3"
+    ember-cli-babel "^7.26.10"
+    ember-cli-htmlbars "^5.7.2"
+    ember-keyboard "6.0.4"
     ember-named-blocks-polyfill "^0.2.4"
+    ember-root-url "^1.0.0"
 
 nan@^2.12.1:
   version "2.14.2"
