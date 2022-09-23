@@ -80,7 +80,7 @@ func (s *Service) Init(ctx context.Context) error {
 	var successPls []string
 	var allPls []string
 	for _, file := range files {
-		provPipelines, all, err := s.provisionConfigFile(ctx, file)
+		provPipelines, all, err := s.provisionConfigFile(ctx, file, successPls)
 		if err != nil {
 			multierr = multierror.Append(multierr, err)
 		}
@@ -101,7 +101,7 @@ func (s *Service) Init(ctx context.Context) error {
 	return multierr
 }
 
-func (s *Service) provisionConfigFile(ctx context.Context, path string) ([]string, []string, error) {
+func (s *Service) provisionConfigFile(ctx context.Context, path string, alreadyProvisioned []string) ([]string, []string, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, nil, cerrors.Errorf("could not read the file %q: %w", path, err)
@@ -124,7 +124,7 @@ func (s *Service) provisionConfigFile(ctx context.Context, path string) ([]strin
 			multierr = multierror.Append(multierr, cerrors.Errorf("pipeline %q, invalid pipeline config: %w", k, err))
 			continue
 		}
-		err = s.provisionPipeline(ctx, k, v)
+		err = s.provisionPipeline(ctx, k, v, alreadyProvisioned)
 		if err != nil {
 			multierr = multierror.Append(multierr, cerrors.Errorf("pipeline %q, error while provisioning: %w", k, err))
 			continue
@@ -135,7 +135,7 @@ func (s *Service) provisionConfigFile(ctx context.Context, path string) ([]strin
 	return successPls, allPls, multierr
 }
 
-func (s *Service) provisionPipeline(ctx context.Context, id string, config PipelineConfig) error {
+func (s *Service) provisionPipeline(ctx context.Context, id string, config PipelineConfig, alreadyProvisioned []string) error {
 	var r rollback.R
 	defer r.MustExecute()
 	txn, ctx, err := s.db.NewTransaction(ctx, true)
@@ -143,6 +143,11 @@ func (s *Service) provisionPipeline(ctx context.Context, id string, config Pipel
 		return cerrors.Errorf("could not create db transaction: %w", err)
 	}
 	r.AppendPure(txn.Discard)
+
+	// check if pipeline was already provisioned
+	if slices.Contains(alreadyProvisioned, id) {
+		return cerrors.Errorf("duplicated pipeline id %q, pipeline will be skipped: %s", id, config.Name)
+	}
 
 	// check if pipeline already exists
 	var connStates map[string]func(context.Context) error

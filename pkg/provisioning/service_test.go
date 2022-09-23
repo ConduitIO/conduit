@@ -577,7 +577,7 @@ func TestProvision_MultiplePipelines(t *testing.T) {
 
 	service := NewService(db, logger, pipelineService, connService, procService, "./test/pipelines3")
 	err := service.Init(context.Background())
-	is.NoErr(err)
+	is.True(err != nil) // duplicated pipeline id
 }
 
 func TestProvision_IntegrationTestServices(t *testing.T) {

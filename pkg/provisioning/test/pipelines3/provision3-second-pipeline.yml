@@ -17,3 +17,7 @@ pipelines:
         name: dest
         settings:
           path: my/path/file2.txt
+  pipeline3: # duplicated pipeline ID in the same folder
+    status: stopped
+    name: pipeline3
+    description: desc3
