@@ -25,7 +25,11 @@ export default class PipelinesController extends Controller {
 
   @action
   async destroyPipeline(pipeline) {
-    await pipeline.destroyRecord();
+    try {
+      await pipeline.destroyRecord();
+    } catch (e) {
+      pipeline.rollbackAttributes();
+    }
     this.setConfirmDeletePipeline(null);
     this.router.transitionTo('pipelines');
   }
