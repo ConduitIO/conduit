@@ -76,8 +76,11 @@ func (s *Service) Init(ctx context.Context) error {
 		return cerrors.Errorf("could not iterate through the pipelines folder %q: %w", s.pipelinesPath, err)
 	}
 
+	// contains all the errors occurred while provisioning configuration files.
 	var multierr error
+	// contains pipelineIDs of successfully provisioned pipelines.
 	var successPls []string
+	// contains pipelineIDs of all the pipelines in all the configuration files, either successfully provisioned or not.
 	var allPls []string
 	for _, file := range files {
 		provPipelines, all, err := s.provisionConfigFile(ctx, file, successPls)
@@ -101,6 +104,8 @@ func (s *Service) Init(ctx context.Context) error {
 	return multierr
 }
 
+// provisionConfigFile returns a list of all successfully provisioned pipelines, a list of all pipeline IDs from the
+// file, and an error if any failure happened while provisioning the file.
 func (s *Service) provisionConfigFile(ctx context.Context, path string, alreadyProvisioned []string) ([]string, []string, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -114,7 +119,9 @@ func (s *Service) provisionConfigFile(ctx context.Context, path string, alreadyP
 
 	got := EnrichPipelinesConfig(before)
 
+	// contains pipelineIDs of successfully provisioned pipelines for this file.
 	var successPls []string
+	// contains pipelineIDs of all the pipelines in this configuration files, either successfully provisioned or not.
 	var allPls []string
 	var multierr error
 	for k, v := range got {

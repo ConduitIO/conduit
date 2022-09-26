@@ -1,9 +1,9 @@
 version: 1.0
 pipelines:
-  pipeline2:
+  pipeline3:
     status: running
-    name: pipeline2
-    description: desc2
+    name: pipeline3
+    description: desc3
     connectors:
       con1:
         type: source

@@ -577,6 +577,83 @@ func TestProvision_MultiplePipelines(t *testing.T) {
 
 	service := NewService(db, logger, pipelineService, connService, procService, "./test/pipelines3")
 	err := service.Init(context.Background())
+	is.NoErr(err)
+}
+
+func TestProvision_MultiplePipelinesDuplicatedPipelineID(t *testing.T) {
+	is := is.New(t)
+	logger := log.Nop()
+	db := &inmemory.DB{}
+	ctrl := gomock.NewController(t)
+	pipelineService := mock.NewPipelineService(ctrl)
+	connService := mock.NewConnectorService(ctrl)
+	procService := mock.NewProcessorService(ctrl)
+
+	pl2config := pipeline.Config{Name: pipeline2.Name, Description: pipeline2.Description}
+	pl2 := &pipeline.Instance{
+		ID:            pipeline2.Name,
+		Config:        pl2config,
+		Status:        pipeline.StatusRunning,
+		ProvisionedBy: pipeline.ProvisionTypeConfig,
+	}
+	pl3config := pipeline.Config{Name: pipeline3.Name, Description: pipeline3.Description}
+	pl3 := &pipeline.Instance{
+		ID:            pipeline3.Name,
+		Config:        pl3config,
+		Status:        pipeline.StatusRunning,
+		ProvisionedBy: pipeline.ProvisionTypeConfig,
+	}
+	cfg2con1 := connector.Config{
+		Name:       pipeline2.Connectors["pipeline2:con1"].Name,
+		Plugin:     pipeline2.Connectors["pipeline2:con1"].Plugin,
+		PipelineID: pipeline2.Name,
+		Settings:   pipeline2.Connectors["pipeline2:con1"].Settings,
+	}
+	cfg2con2 := connector.Config{
+		Name:       pipeline2.Connectors["pipeline2:con2"].Name,
+		Plugin:     pipeline2.Connectors["pipeline2:con2"].Plugin,
+		PipelineID: pipeline2.Name,
+		Settings:   pipeline2.Connectors["pipeline2:con2"].Settings,
+	}
+	cfg3con1 := connector.Config{
+		Name:       pipeline3.Connectors["pipeline3:con1"].Name,
+		Plugin:     pipeline3.Connectors["pipeline3:con1"].Plugin,
+		PipelineID: pipeline3.Name,
+		Settings:   pipeline3.Connectors["pipeline3:con1"].Settings,
+	}
+	cfg3con2 := connector.Config{
+		Name:       pipeline3.Connectors["pipeline3:con2"].Name,
+		Plugin:     pipeline3.Connectors["pipeline3:con2"].Plugin,
+		PipelineID: pipeline3.Name,
+		Settings:   pipeline3.Connectors["pipeline3:con2"].Settings,
+	}
+
+	pipelineService.EXPECT().List(gomock.Not(gomock.Nil()))
+	pipelineService.EXPECT().Get(gomock.Not(gomock.Nil()), pipeline2.Name).Return(nil, pipeline.ErrInstanceNotFound)
+	pipelineService.EXPECT().Get(gomock.Not(gomock.Nil()), pipeline3.Name).Return(nil, pipeline.ErrInstanceNotFound)
+	pipelineService.
+		EXPECT().
+		Create(gomock.Not(gomock.Nil()), pipeline2.Name, pl2config, pipeline.ProvisionTypeConfig).
+		Return(pl2, nil)
+	pipelineService.
+		EXPECT().
+		Create(gomock.Not(gomock.Nil()), pipeline3.Name, pl3config, pipeline.ProvisionTypeConfig).
+		Return(pl3, nil)
+
+	connService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline2:con1", connector.TypeSource, cfg2con1, connector.ProvisionTypeConfig)
+	connService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline2:con2", connector.TypeDestination, cfg2con2, connector.ProvisionTypeConfig)
+	pipelineService.EXPECT().AddConnector(gomock.Not(gomock.Nil()), pipeline2.Name, "pipeline2:con1")
+	pipelineService.EXPECT().AddConnector(gomock.Not(gomock.Nil()), pipeline2.Name, "pipeline2:con2")
+	connService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline3:con1", connector.TypeSource, cfg3con1, connector.ProvisionTypeConfig)
+	connService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline3:con2", connector.TypeDestination, cfg3con2, connector.ProvisionTypeConfig)
+	pipelineService.EXPECT().AddConnector(gomock.Not(gomock.Nil()), pipeline3.Name, "pipeline3:con1")
+	pipelineService.EXPECT().AddConnector(gomock.Not(gomock.Nil()), pipeline3.Name, "pipeline3:con2")
+
+	pipelineService.EXPECT().Start(gomock.Not(gomock.Nil()), connService, procService, pipeline2.Name)
+	pipelineService.EXPECT().Start(gomock.Not(gomock.Nil()), connService, procService, pipeline3.Name)
+
+	service := NewService(db, logger, pipelineService, connService, procService, "./test/pipelines5")
+	err := service.Init(context.Background())
 	is.True(err != nil) // duplicated pipeline id
 }
 
