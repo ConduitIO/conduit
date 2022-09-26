@@ -29,6 +29,7 @@ export default class PipelineRoute extends Route {
       pipeline = await this.store.findRecord('pipeline', params.pipeline_id, {
         reload: true,
       });
+      await this.store.findAll('plugin');
       await pipeline.hasMany('connectors').reload();
 
       const connectorIDs = pipeline.connectors.mapBy('id');
