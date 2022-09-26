@@ -1,6 +1,6 @@
 ## Pipeline Configuration Files
-Creating pipelines in Conduit is a simple process with many steps to define the resources and their configurations, this
-could be done through API or Conduit's UI. But to make this process even simpler and to make it possible to load 
+Creating pipelines in Conduit consists of many steps to define the resources and their configurations, this
+could be done through API or Conduit's UI. But to make this process simpler and to make it possible to load 
 pre-defined pipelines, we introduce **_Pipeline Configuration Files_**.
 
 Using pipeline configuration files you can define pipelines that are provisioned by Conduit at startup.
@@ -28,7 +28,7 @@ The file in general has two root keys, the `version`, and the `pipelines` map. T
 To create connectors in that pipeline, simply add another map under the pipeline map, and call it `connectors`.
 
 To create processors, either add a `processors` map under a pipeline ID, or under a connector ID, depending on its parent.
-check this YAML file example with explanation for each field:
+Check this YAML file example with explanation for each field:
 
 ``` yaml
 version: 1.0                    # parser version, the only supported version for now is 1.0 [mandatory]
@@ -37,7 +37,7 @@ pipelines:                      # a map of pipelines IDs and their configuration
   pipeline1:                    # pipeline ID, has to be unique.
     status: running             # pipelines status at startup, either running or stopped. [mandatory]
     name: pipeline1             # pipeline name, if not specified, pipeline ID will be used as name. [optional]
-    describtion: desc           # pipeline describtion. [optional]
+    description: desc           # pipeline description. [optional]
     connectors:                 # a map of connectors IDs and their configurations.
       con1:                     # connector ID, has to be unique per pipeline.
         type: source            # connector type, either "source" or "destination". [mandatory]
@@ -83,14 +83,15 @@ done through the configuration file it was provisioned from. You can only contro
 through the UI or API.
 
 ### Updates and Deletes
-Updates and deletes for a provisioned pipeline can only be done through the configuration file that the pipeline was
-originally provisioned from. Updates should be done to the files, then Conduit has to be restarted to reload the changes.
+Updates and deletes for a pipeline provisioned by configuration files can only be done through the configuration files.
+Changes should be made to the files, then Conduit has to be restarted to reload the changes. Any updates or deletes done
+through the API or UI will be prohibited.
 
 * To delete a pipeline: simply delete it from the `pipelines` map from the configuration file, then run conduit again.
 * To update a pipeline: change any field value from the configuration file, and run conduit again to address these updates.
   
-Updates will preserve the status of the pipeline, and will continue working from where it stopped. However,
-the pipeline will not copy the old state and will start from the beginning of the source if one of these values was updated:
+Updates will preserve the status of the pipeline, and will continue working from where it stopped. However, the pipeline
+will start from the beginning of the source and will not continue from where it stopped, if one of these values were updated:
 {`pipeline ID`, `connector ID`, `connector plugin`, `connector type`}.
 
 
