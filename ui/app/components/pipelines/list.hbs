@@ -78,7 +78,7 @@
             <div class="flex items-center justify-center w-full space-x-4">
               <div>
                 <BasicDropdown @horizontalPosition="auto-right" as |dd|>
-                  <dd.Trigger>
+                  <dd.Trigger data-test-dropdown-trigger="pipeline-list-item">
                     <svg class="text-gray-500 fill-current h-5 w-5">
                       <use xlink:href="/ui/svg-defs.svg#action-menu-16"></use>
                     </svg>
@@ -108,16 +108,16 @@
                           <svg class="fill-current h-4 w-4 mr-2">
                             <use xlink:href="/ui/svg-defs.svg#settings-16"></use>
                           </svg>
-                          Settings
                         </LinkTo>
                       </li>
-                      {{!-- template-lint-disable no-invalid-interactive --}}
+                      {{! template-lint-disable no-invalid-interactive }}
                       <li
                         class="text-orange-700 font-medium pr-16 cursor-pointer flex items-center"
                         {{on "click" (fn @onDeletePipeline pipeline)}}
                         {{on "click" dd.actions.close}}
+                        data-test-dropdown-button="delete-pipeline"
                       >
-                      {{!-- template-lint-enable no-invalid-interactive --}}
+                        {{! template-lint-enable no-invalid-interactive }}
                         <svg class="fill-current text-orange-700 h-4 w-4 mr-2">
                           <use xlink:href="/ui/svg-defs.svg#delete-16"></use>
                         </svg>
