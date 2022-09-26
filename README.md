@@ -47,7 +47,7 @@ Conduit was created and open-sourced by [Meroxa](https://meroxa.io).
 1. Download and extract
    the [latest release](https://github.com/conduitio/conduit/releases/latest).
 2. Download
-   the [example pipeline](https://github.com/ConduitIO/conduit/blob/main/examples/processors/extract-field-transform.sh)
+   the [example pipeline](/examples/pipelines/file-to-file.yml)
    and put it in the directory named `pipelines` in the same directory as the
    Conduit binary.
 3. Run conduit (`./conduit`). The example pipeline will start automatically.
