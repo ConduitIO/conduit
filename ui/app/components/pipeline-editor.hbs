@@ -203,17 +203,22 @@
   <Mxa::ConfirmModal
     @onDismiss={{this.hideDeleteConnectorModal}}
     @confirmableActionName="Delete"
-    @entityName={{this.selectedNode.name}}
+    @entityName={{truncate this.selectedNode.name}}
     @confirmedAction={{fn this.destroyConnector this.selectedNode}}
-    @isTextInputRequired={{true}}
+    @isTextInputRequired={{not this.isLongConnectorName}}
     as |entityName|
   >
-    Deleting a connector cannot be undone. Please input your connector's name
-    <code>
-      (
-      {{entityName}}
-      )
-    </code>
-    below to confirm you would like to delete this connector
+
+    {{#if (not this.isLongConnectorName)}}
+      Deleting a connector cannot be undone. Please input your connector's name
+      <code>
+        (
+        {{entityName}}
+        )
+      </code>
+      below to confirm you would like to delete this connector
+    {{else}}
+      Deleting a connector cannot be undone. Confirm you would like to delete this connector.
+    {{/if}}
   </Mxa::ConfirmModal>
 {{/if}}

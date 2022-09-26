@@ -144,6 +144,10 @@ export default class PipelineEditorComponent extends Component {
     );
   }
 
+  get isLongConnectorName() {
+    return this.selectedNode?.name.length > 32;
+  }
+
   @action
   showCreateConnectorModal(connectorType) {
     this.newConnectorType = connectorType;
