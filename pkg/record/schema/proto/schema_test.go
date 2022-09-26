@@ -16,7 +16,7 @@ package proto
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
 	"math"
 	"os"
 	"strings"
@@ -38,7 +38,7 @@ func getFileDescriptorSet(t *testing.T, path string) *descriptorpb.FileDescripto
 	f, err := os.Open(path)
 	assert.Ok(t, err)
 
-	content, err := ioutil.ReadAll(f)
+	content, err := io.ReadAll(f)
 	assert.Ok(t, err)
 
 	var fds descriptorpb.FileDescriptorSet
