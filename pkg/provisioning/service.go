@@ -76,11 +76,14 @@ func (s *Service) Init(ctx context.Context) error {
 		return cerrors.Errorf("could not iterate through the pipelines folder %q: %w", s.pipelinesPath, err)
 	}
 
+	// contains all the errors occurred while provisioning configuration files.
 	var multierr error
+	// contains pipelineIDs of successfully provisioned pipelines.
 	var successPls []string
+	// contains pipelineIDs of all the pipelines in all the configuration files, either successfully provisioned or not.
 	var allPls []string
 	for _, file := range files {
-		provPipelines, all, err := s.provisionConfigFile(ctx, file)
+		provPipelines, all, err := s.provisionConfigFile(ctx, file, successPls)
 		if err != nil {
 			multierr = multierror.Append(multierr, err)
 		}
@@ -101,7 +104,9 @@ func (s *Service) Init(ctx context.Context) error {
 	return multierr
 }
 
-func (s *Service) provisionConfigFile(ctx context.Context, path string) ([]string, []string, error) {
+// provisionConfigFile returns a list of all successfully provisioned pipelines, a list of all pipeline IDs from the
+// file, and an error if any failure happened while provisioning the file.
+func (s *Service) provisionConfigFile(ctx context.Context, path string, alreadyProvisioned []string) ([]string, []string, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, nil, cerrors.Errorf("could not read the file %q: %w", path, err)
@@ -114,7 +119,9 @@ func (s *Service) provisionConfigFile(ctx context.Context, path string) ([]strin
 
 	got := EnrichPipelinesConfig(before)
 
+	// contains pipelineIDs of successfully provisioned pipelines for this file.
 	var successPls []string
+	// contains pipelineIDs of all the pipelines in this configuration files, either successfully provisioned or not.
 	var allPls []string
 	var multierr error
 	for k, v := range got {
@@ -124,7 +131,7 @@ func (s *Service) provisionConfigFile(ctx context.Context, path string) ([]strin
 			multierr = multierror.Append(multierr, cerrors.Errorf("pipeline %q, invalid pipeline config: %w", k, err))
 			continue
 		}
-		err = s.provisionPipeline(ctx, k, v)
+		err = s.provisionPipeline(ctx, k, v, alreadyProvisioned)
 		if err != nil {
 			multierr = multierror.Append(multierr, cerrors.Errorf("pipeline %q, error while provisioning: %w", k, err))
 			continue
@@ -135,7 +142,7 @@ func (s *Service) provisionConfigFile(ctx context.Context, path string) ([]strin
 	return successPls, allPls, multierr
 }
 
-func (s *Service) provisionPipeline(ctx context.Context, id string, config PipelineConfig) error {
+func (s *Service) provisionPipeline(ctx context.Context, id string, config PipelineConfig, alreadyProvisioned []string) error {
 	var r rollback.R
 	defer r.MustExecute()
 	txn, ctx, err := s.db.NewTransaction(ctx, true)
@@ -143,6 +150,11 @@ func (s *Service) provisionPipeline(ctx context.Context, id string, config Pipel
 		return cerrors.Errorf("could not create db transaction: %w", err)
 	}
 	r.AppendPure(txn.Discard)
+
+	// check if pipeline was already provisioned
+	if slices.Contains(alreadyProvisioned, id) {
+		return cerrors.Errorf("invalid pipeline ID %q, pipeline %s will be skipped: %w", id, config.Name, ErrDuplicatedPipelineID)
+	}
 
 	// check if pipeline already exists
 	var connStates map[string]func(context.Context) error
