@@ -17,7 +17,7 @@ package procbuiltin
 import (
 	"bytes"
 	"context"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/url"
 	"time"
@@ -101,7 +101,7 @@ func httpRequest(
 		}
 		defer resp.Body.Close()
 
-		body, err := ioutil.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return record.Record{}, cerrors.Errorf("%s: error trying to read response body: %w", processorName, err)
 		}

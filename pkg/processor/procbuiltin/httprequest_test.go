@@ -16,7 +16,7 @@ package procbuiltin
 
 import (
 	"context"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -216,7 +216,7 @@ func TestHTTPRequest_Success(t *testing.T) {
 			srv := httptest.NewServer(http.HandlerFunc(func(resp http.ResponseWriter, req *http.Request) {
 				is.Equal(wantMethod, req.Method)
 
-				gotBody, err := ioutil.ReadAll(req.Body)
+				gotBody, err := io.ReadAll(req.Body)
 				is.NoErr(err)
 				is.Equal(wantBody, gotBody)
 
@@ -251,7 +251,7 @@ func TestHTTPRequest_RetrySuccess(t *testing.T) {
 
 		is.Equal(wantMethod, req.Method)
 
-		gotBody, err := ioutil.ReadAll(req.Body)
+		gotBody, err := io.ReadAll(req.Body)
 		is.NoErr(err)
 		is.Equal(wantBody, gotBody)
 
