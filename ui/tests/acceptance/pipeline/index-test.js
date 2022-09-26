@@ -1,5 +1,5 @@
 import { assert, module, test } from 'qunit';
-import { find, visit, click, waitUntil } from '@ember/test-helpers';
+import { find, visit, click, waitUntil, fillIn } from '@ember/test-helpers';
 import { setupApplicationTest } from 'ember-qunit';
 import { setupMirage } from 'ember-cli-mirage/test-support';
 import { Response } from 'ember-cli-mirage';
@@ -33,6 +33,7 @@ const page = {
 
   pipelineSettingsSaveButton: '[data-test-button="create-pipeline"]',
   pipelineSettingsDisabledMessage: '[data-test-pipeline-settings-disabled]',
+  pipelineSettingsNameInput: '[data-test-pipeline-form-name-input]',
 
   connectorOverviewListItem: '[data-test-connector-overview-list-item]',
   connectorOverviewButton: '[data-test-connector-overview-button]',
@@ -109,6 +110,22 @@ module('Acceptance | pipeline/index', function (hooks) {
 
     test('it shows the pipeline zero state', function (assert) {
       assert.dom(page.pipelineEditorZeroState).exists();
+    });
+  });
+
+  module('updating a pipelines title or description', function (hooks) {
+    hooks.beforeEach(async function () {
+      const pipeline = this.server.create('pipeline');
+      await visit(`/pipelines/${pipeline.id}/settings`);
+    });
+
+    test('it shows the button as disabled when there are no changes', function (assert) {
+      assert.dom(page.pipelineSettingsSaveButton).isDisabled();
+    });
+
+    test('it shows the button as enabled when there are changes', async function (assert) {
+      await fillIn(page.pipelineSettingsNameInput, 'anewname');
+      assert.dom(page.pipelineSettingsSaveButton).isNotDisabled();
     });
   });
 
