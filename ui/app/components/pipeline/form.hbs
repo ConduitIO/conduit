@@ -12,6 +12,7 @@
         @isValid={{this.isPipelineNameValid}}
         @onInput={{fn this.setPipelineName @pipeline}}
         disabled={{and (not @pipeline.isNew) @pipeline.isRunning}}
+        maxlength="32"
         data-test-pipeline-form-name-input
       />
     </div>
