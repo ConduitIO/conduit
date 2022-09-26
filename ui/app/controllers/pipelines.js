@@ -13,6 +13,10 @@ export default class PipelinesController extends Controller {
   @tracked
   pipelineRunningError = null;
 
+  get isLongPipelineName() {
+    return this.confirmDeletePipeline?.name.length > 32;
+  }
+
   @action
   setConfirmDeletePipeline(value) {
     this.confirmDeletePipeline = value;

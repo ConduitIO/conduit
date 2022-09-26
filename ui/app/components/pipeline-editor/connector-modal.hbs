@@ -18,6 +18,7 @@
         @onInput={{fn this.setConnectorName this.connector}}
         class="mt-1 mb-2"
         data-test-connector-modal-input="name"
+        maxlength="32"
       />
       {{#if (not this.isConnectorNameValid)}}
         <div class="text-orange-700 text-xs">
@@ -59,7 +60,7 @@
     <div class="flex text-center mb-2 border-b border-gray-300">
 
       {{#if this.optionalFields}}
-        {{!-- template-lint-disable no-invalid-interactive --}}
+        {{! template-lint-disable no-invalid-interactive }}
         <div
           class="w-1/2 flex-auto pb-2
             {{if this.isShowingRequiredTab 'border-b-2'}}
@@ -75,18 +76,18 @@
           {{on "click" (fn (mut this.isShowingRequiredTab) false)}}
           data-test-connector-modal-optional-tab
         >
-        {{!-- template-lint-enable no-invalid-interactive --}}
+          {{! template-lint-enable no-invalid-interactive }}
           Optional
         </div>
       {{else}}
-        {{!-- template-lint-disable no-invalid-interactive --}}
+        {{! template-lint-disable no-invalid-interactive }}
         <div
           class="w-full flex-auto pb-2
             {{if this.isShowingRequiredTab 'border-b-2'}}
             border-teal-900 uppercase text-xs cursor-pointer"
           {{on "click" (fn (mut this.isShowingRequiredTab) true)}}
         >
-        {{!-- template-lint-enable no-invalid-interactive --}}
+          {{! template-lint-enable no-invalid-interactive }}
           Configure
         </div>
       {{/if}}

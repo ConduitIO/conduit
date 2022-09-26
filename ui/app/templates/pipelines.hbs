@@ -4,14 +4,18 @@
   <Mxa::ConfirmModal
     @onDismiss={{fn (mut this.confirmDeletePipeline) null}}
     @confirmableActionName="Delete"
-    @entityName={{this.confirmDeletePipeline.name}}
+    @entityName={{truncate this.confirmDeletePipeline.name}}
     @confirmedAction={{fn this.destroyPipeline this.confirmDeletePipeline}}
-    @isTextInputRequired={{true}}
+    @isTextInputRequired={{not this.isLongPipelineName}}
     as |entityName|
   >
-    Deleting a pipeline cannot be undone. Please input your pipelines's name
-    <code>({{entityName}})</code>
-    below to confirm you would like to delete this pipeline
+    {{#if (not this.isLongPipelineName)}}
+      Deleting a pipeline cannot be undone. Please input your pipelines's name
+      <code>({{entityName}})</code>
+      below to confirm you would like to delete this pipeline
+    {{else}}
+      Deleting a pipeline cannot be undone. Please confirm you would like to delete this pipeline.
+    {{/if}}
   </Mxa::ConfirmModal>
 {{/if}}
 
