@@ -1,9 +1,5 @@
 ## Pipeline Configuration Files
-Creating pipelines in Conduit consists of many steps to define the resources and their configurations, this
-could be done through API or Conduit's UI. But to make this process simpler and to make it possible to load 
-pre-defined pipelines, we introduce **_Pipeline Configuration Files_**.
-
-Using pipeline configuration files you can define pipelines that are provisioned by Conduit at startup.
+Pipeline configuration files give you the ability to define pipelines that are provisioned by Conduit at startup.
 It's as simple as creating a YAML file that defines pipelines, connectors, processors, and their corresponding configurations.
 
 ## Getting started
