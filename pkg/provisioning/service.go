@@ -153,7 +153,7 @@ func (s *Service) provisionPipeline(ctx context.Context, id string, config Pipel
 
 	// check if pipeline was already provisioned
 	if slices.Contains(alreadyProvisioned, id) {
-		return cerrors.Errorf("duplicated pipeline id %q, pipeline will be skipped: %s", id, config.Name)
+		return cerrors.Errorf("invalid pipeline ID %q, pipeline %s will be skipped: %w", id, config.Name, ErrDuplicatedPipelineID)
 	}
 
 	// check if pipeline already exists
