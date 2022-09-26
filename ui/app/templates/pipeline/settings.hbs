@@ -8,7 +8,7 @@
     <Mxa::Button
       {{on "click" (fn this.savePipeline pipeline)}}
       data-test-button="create-pipeline"
-      disabled={{or (not pipeline.isValid) (and (not pipeline.isNew) pipeline.isRunning)}}
+      disabled={{this.isPipelineUpdateDisabled}}
     >
       Save Changes
     </Mxa::Button>
