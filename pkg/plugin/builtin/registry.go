@@ -69,7 +69,9 @@ func sdkDispenserFactory(connector sdk.Connector) DispenserFactory {
 		return builtinv1.NewDispenser(
 			name,
 			logger,
-			func() cpluginv1.SpecifierPlugin { return sdk.NewSpecifierPlugin(connector.NewSpecification()) },
+			func() cpluginv1.SpecifierPlugin {
+				return sdk.NewSpecifierPlugin(connector.NewSpecification(), connector.NewSource(), connector.NewDestination())
+			},
 			func() cpluginv1.SourcePlugin { return sdk.NewSourcePlugin(connector.NewSource()) },
 			func() cpluginv1.DestinationPlugin { return sdk.NewDestinationPlugin(connector.NewDestination()) },
 		)
