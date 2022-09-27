@@ -13,7 +13,7 @@ export default class PipelineIndexRoute extends Route {
     } else {
       allPipelines = null;
 
-      connectorPlugins = await this.store.findAll('plugin');
+      connectorPlugins = this.store.peekAll('plugin');
 
       this.store.pushPayload('transform', Transforms);
       transforms = this.store.peekAll('transform');
