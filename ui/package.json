@@ -32,7 +32,7 @@
     "@glimmer/tracking": "^1.1.2",
     "@meroxa/ui-base": "https://github.com/meroxa/ui-base.git#2.0.0",
     "axios": "^0.27.2",
-    "autoprefixer": "^10.4.8",
+    "autoprefixer": "^10.4.12",
     "babel-eslint": "^10.1.0",
     "broccoli-asset-rev": "^3.0.0",
     "d3-selection": "^3.0.0",
