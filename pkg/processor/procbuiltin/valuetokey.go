@@ -24,12 +24,12 @@ import (
 )
 
 const (
-	valueToKeyName         = "valuetokey"
+	valueToKeyProcType     = "valuetokey"
 	valueToKeyConfigFields = "fields"
 )
 
 func init() {
-	processor.GlobalBuilderRegistry.MustRegister(valueToKeyName, ValueToKey)
+	processor.GlobalBuilderRegistry.MustRegister(valueToKeyProcType, ValueToKey)
 }
 
 // ValueToKey builds a processor that replaces the record key with a new key
@@ -41,7 +41,7 @@ func init() {
 //  - If payload.After is raw and has no schema, return an error.
 func ValueToKey(config processor.Config) (processor.Interface, error) {
 	if config.Settings[valueToKeyConfigFields] == "" {
-		return nil, cerrors.Errorf("%s: unspecified field %q", valueToKeyName, valueToKeyConfigFields)
+		return nil, cerrors.Errorf("%s: unspecified field %q", valueToKeyProcType, valueToKeyConfigFields)
 	}
 
 	fields := strings.Split(config.Settings[valueToKeyConfigFields], ",")
@@ -49,7 +49,7 @@ func ValueToKey(config processor.Config) (processor.Interface, error) {
 	return processor.InterfaceFunc(func(_ context.Context, r record.Record) (_ record.Record, err error) {
 		defer func() {
 			if err != nil {
-				err = cerrors.Errorf("%s: %w", valueToKeyName, err)
+				err = cerrors.Errorf("%s: %w", valueToKeyProcType, err)
 			}
 		}()
 

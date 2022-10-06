@@ -61,9 +61,8 @@ type Instance struct {
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
 	ProvisionedBy ProvisionType
-	// Name is the name of the processor under which it is registered in the
-	// builder registry.
-	Name      string
+
+	Type      string
 	Parent    Parent
 	Config    Config
 	Processor Interface

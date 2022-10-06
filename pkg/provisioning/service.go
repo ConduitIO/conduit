@@ -419,7 +419,6 @@ func (s *Service) createProcessor(ctx context.Context, parentID string, parentTy
 		ID:   parentID,
 		Type: parentType,
 	}
-	// processor name will be renamed to type https://github.com/ConduitIO/conduit/issues/498
 	_, err := s.processorService.Create(ctx, id, config.Type, parent, cfg, processor.ProvisionTypeConfig)
 	if err != nil {
 		return cerrors.Errorf("could not create processor %q on parent %q: %w", id, parentID, err)
@@ -595,7 +594,7 @@ func (s *Service) rollbackCreateProcessor(ctx context.Context, r *rollback.R, pr
 func (s *Service) rollbackDeleteProcessor(ctx context.Context, r *rollback.R, parent processor.Parent, proc *processor.Instance) {
 	r.Append(func() error {
 		config := ProcessorConfig{
-			Type:     proc.Name,
+			Type:     proc.Type,
 			Settings: proc.Config.Settings,
 		}
 		err := s.createProcessor(ctx, parent.ID, parent.Type, proc.ID, config)

@@ -25,16 +25,16 @@ import (
 )
 
 const (
-	maskFieldKeyName     = "maskfieldkey"
-	maskFieldPayloadName = "maskfieldpayload"
+	maskFieldKeyProcType     = "maskfieldkey"
+	maskFieldPayloadProcType = "maskfieldpayload"
 
 	maskFieldConfigField       = "field"
 	maskFieldConfigReplacement = "replacement"
 )
 
 func init() {
-	processor.GlobalBuilderRegistry.MustRegister(maskFieldKeyName, MaskFieldKey)
-	processor.GlobalBuilderRegistry.MustRegister(maskFieldPayloadName, MaskFieldPayload)
+	processor.GlobalBuilderRegistry.MustRegister(maskFieldKeyProcType, MaskFieldKey)
+	processor.GlobalBuilderRegistry.MustRegister(maskFieldPayloadProcType, MaskFieldPayload)
 }
 
 // MaskFieldKey builds the following processor:
@@ -44,17 +44,17 @@ func init() {
 //  * If the key is structured, replace the field with the zero value of the
 //    fields type.
 func MaskFieldKey(config processor.Config) (processor.Interface, error) {
-	return maskField(maskFieldKeyName, recordKeyGetSetter{}, config)
+	return maskField(maskFieldKeyProcType, recordKeyGetSetter{}, config)
 }
 
 // MaskFieldPayload builds the same processor as MaskFieldKey, except that
 // it operates on the field Record.Payload.After.
 func MaskFieldPayload(config processor.Config) (processor.Interface, error) {
-	return maskField(maskFieldPayloadName, recordPayloadGetSetter{}, config)
+	return maskField(maskFieldPayloadProcType, recordPayloadGetSetter{}, config)
 }
 
 func maskField(
-	processorName string,
+	processorType string,
 	getSetter recordDataGetSetter,
 	config processor.Config,
 ) (processor.Interface, error) {
@@ -65,7 +65,7 @@ func maskField(
 	)
 
 	if fieldName, err = getConfigFieldString(config, maskFieldConfigField); err != nil {
-		return nil, cerrors.Errorf("%s: %w", processorName, err)
+		return nil, cerrors.Errorf("%s: %w", processorType, err)
 	}
 	replacement = config.Settings[maskFieldConfigReplacement]
 
@@ -75,9 +75,9 @@ func maskField(
 		switch d := data.(type) {
 		case record.RawData:
 			if d.Schema == nil {
-				return record.Record{}, cerrors.Errorf("%s: schemaless raw data not supported", processorName)
+				return record.Record{}, cerrors.Errorf("%s: schemaless raw data not supported", processorType)
 			}
-			return record.Record{}, cerrors.Errorf("%s: data with schema not supported yet", processorName) // TODO
+			return record.Record{}, cerrors.Errorf("%s: data with schema not supported yet", processorType) // TODO
 		case record.StructuredData:
 			// TODO add support for nested fields
 			switch d[fieldName].(type) {
@@ -93,7 +93,7 @@ func maskField(
 				d[fieldName] = zeroValue
 			}
 		default:
-			return record.Record{}, cerrors.Errorf("%s: unexpected data type %T", processorName, data)
+			return record.Record{}, cerrors.Errorf("%s: unexpected data type %T", processorType, data)
 		}
 
 		r = getSetter.Set(r, data)

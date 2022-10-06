@@ -34,7 +34,7 @@ type ProcessorOrchestrator interface {
 	// Get will return a single Interface or an error if it doesn't exist.
 	Get(ctx context.Context, id string) (*processor.Instance, error)
 	// Create will make a new Interface.
-	Create(ctx context.Context, name string, parent processor.Parent, cfg processor.Config) (*processor.Instance, error)
+	Create(ctx context.Context, procType string, parent processor.Parent, cfg processor.Config) (*processor.Instance, error)
 	// Update will update a Interface's config.
 	Update(ctx context.Context, id string, cfg processor.Config) (*processor.Instance, error)
 	// Delete removes a processor
