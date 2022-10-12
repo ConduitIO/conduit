@@ -623,10 +623,10 @@ github.com/yuin/goldmark v1.1.32/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9de
 github.com/yuin/goldmark v1.2.1/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9decYSb74=
 github.com/yuin/goldmark v1.3.5/go.mod h1:mwnBkeHKe2W/ZEtQ+71ViKU8L12m81fl3OWwC1Zlc8k=
 github.com/zenazn/goji v0.9.0/go.mod h1:7S9M489iMyHBNxwZnk9/EHS098H4/F6TATF2mIxtB1Q=
-go.buf.build/conduitio/conduit/conduitio/conduit v1.1.1 h1:sbdXAb1/rvkPIMPI+ywVxkwnZvG0HKbH1+sdalLoPqo=
-go.buf.build/conduitio/conduit/conduitio/conduit v1.1.1/go.mod h1:yUgOQ01p5x3datltjgaOLP2Up+zq87d2yfD4ILLq9uo=
-go.buf.build/conduitio/conduit/grpc-ecosystem/grpc-gateway v1.1.44 h1:SJ6mWUc4hvRzB74mytsNKSyS5624o11m2XkMuy6O4RA=
-go.buf.build/conduitio/conduit/grpc-ecosystem/grpc-gateway v1.1.44/go.mod h1:tnSMjRFryUW1a4VsSD9t6mRsfUvTLrPONDVTlHHHJV4=
+go.buf.build/conduitio/conduit/conduitio/conduit v1.1.2 h1:NA+g6oUk77nDXDtwJ1rYiWkio7k0s0sTgRPR3seAkCE=
+go.buf.build/conduitio/conduit/conduitio/conduit v1.1.2/go.mod h1:ttn+ikX+/7BBbxm1wzW1o82vwC/eC4jB6OYw0VZSoLc=
+go.buf.build/conduitio/conduit/grpc-ecosystem/grpc-gateway v1.1.46 h1:z+PbmyLgVOUJRtiikFqTGHOabL9Qsf7v7PUHLLIffqI=
+go.buf.build/conduitio/conduit/grpc-ecosystem/grpc-gateway v1.1.46/go.mod h1:tnSMjRFryUW1a4VsSD9t6mRsfUvTLrPONDVTlHHHJV4=
 go.buf.build/grpc/go/conduitio/conduit-connector-protocol v1.4.3 h1:6xmHosBGMcHQFboRbi9rNoqrKtePhTxL239ZfftVWMY=
 go.buf.build/grpc/go/conduitio/conduit-connector-protocol v1.4.3/go.mod h1:+TaeSyc6KgrD/1fNhSQNQ6ckvEEbgmerpBqZ2szZMGs=
 go.opencensus.io v0.21.0/go.mod h1:mSImk1erAIZhrmZN+AvHh14ztQfjbGwt4TtuofqLduU=
@@ -1147,8 +1147,8 @@ google.golang.org/grpc v1.46.0/go.mod h1:vN9eftEi1UMyUsIF80+uQXhHjbXYbm0uXoFCACu
 google.golang.org/grpc v1.46.2/go.mod h1:vN9eftEi1UMyUsIF80+uQXhHjbXYbm0uXoFCACuMGWk=
 google.golang.org/grpc v1.47.0/go.mod h1:vN9eftEi1UMyUsIF80+uQXhHjbXYbm0uXoFCACuMGWk=
 google.golang.org/grpc v1.48.0/go.mod h1:vN9eftEi1UMyUsIF80+uQXhHjbXYbm0uXoFCACuMGWk=
-google.golang.org/grpc v1.49.0 h1:WTLtQzmQori5FUH25Pq4WT22oCsv8USpQ+F6rqtsmxw=
-google.golang.org/grpc v1.49.0/go.mod h1:ZgQEeidpAuNRZ8iRrlBKXZQP1ghovWIVhdJRyCDK+GI=
+google.golang.org/grpc v1.50.0 h1:fPVVDxY9w++VjTZsYvXWqEf9Rqar/e+9zYfxKK+W+YU=
+google.golang.org/grpc v1.50.0/go.mod h1:ZgQEeidpAuNRZ8iRrlBKXZQP1ghovWIVhdJRyCDK+GI=
 google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.1.0/go.mod h1:6Kw0yEErY5E/yWrBtf03jp27GLLJujG4z/JK95pnjjw=
 google.golang.org/protobuf v0.0.0-20200109180630-ec00e32a8dfd/go.mod h1:DFci5gLYBciE7Vtevhsrf46CRTquxDuWsQurQQe4oz8=
 google.golang.org/protobuf v0.0.0-20200221191635-4d8936d0db64/go.mod h1:kwYJMbMJ01Woi6D6+Kah6886xMZcty6N08ah7+eCXa0=
