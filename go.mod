@@ -31,7 +31,7 @@ require (
 	github.com/prometheus/client_model v0.2.0
 	github.com/prometheus/common v0.37.0
 	github.com/rs/zerolog v1.28.0
-	go.buf.build/conduitio/conduit/conduitio/conduit v1.1.1
+	go.buf.build/conduitio/conduit/conduitio/conduit v1.1.2
 	go.buf.build/grpc/go/conduitio/conduit-connector-protocol v1.4.3
 	golang.org/x/exp v0.0.0-20220827204233-334a2380cb91
 	golang.org/x/tools v0.1.12
@@ -109,7 +109,7 @@ require (
 	github.com/xdg/stringprep v1.0.3 // indirect
 	github.com/xitongsys/parquet-go v1.6.2 // indirect
 	github.com/xitongsys/parquet-go-source v0.0.0-20220723234337-052319f3f36b // indirect
-	go.buf.build/conduitio/conduit/grpc-ecosystem/grpc-gateway v1.1.44 // indirect
+	go.buf.build/conduitio/conduit/grpc-ecosystem/grpc-gateway v1.1.46 // indirect
 	go.opencensus.io v0.23.0 // indirect
 	go.uber.org/goleak v1.2.0 // indirect
 	golang.org/x/crypto v0.0.0-20220926161630-eccd6366d1be // indirect
