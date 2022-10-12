@@ -15,15 +15,16 @@ body:
     description: Steps to reproduce the behavior.
     placeholder: |
       1. In this environment...
-      2. With this config...
-      3. Run '...'
-      4. See error...
+      2. With this Conduit configuration...
+      3. And this pipeline configuration file...
+      4. Run '...'
+      5. See error...
   validations:
     required: true
 - type: input
   attributes:
     label: Version
     description: "Conduit version, OS, Arch (hint: get it with `conduit --version` or through the HTTP API `GET /info`)."
-    placeholder: v0.1.0 darwin/amd64
+    placeholder: v0.3.0 darwin/amd64
   validations:
     required: true
