@@ -111,7 +111,7 @@ message Processor {
 
   // -- immutable fields -------------------------------------------------------
 
-  string name = 4 [(google.api.field_behavior) = IMMUTABLE]; // rename?
+  string type = 4 [(google.api.field_behavior) = IMMUTABLE];
   Parent parent = 6 [(google.api.field_behavior) = IMMUTABLE];
 
   google.protobuf.Timestamp created_at = 7;
@@ -786,7 +786,7 @@ message ListProcessorsResponse {
 }
 
 message CreateProcessorRequest {
-  string name = 1; // rename?
+  string type = 1;
   Processor.Parent parent = 3;
   Processor.Config config = 4;
 }
