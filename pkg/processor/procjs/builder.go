@@ -21,26 +21,26 @@ import (
 )
 
 const (
-	processorName = "js"
+	processorType = "js"
 	configScript  = "script"
 )
 
 func init() {
-	processor.GlobalBuilderRegistry.MustRegister(processorName, Builder)
+	processor.GlobalBuilderRegistry.MustRegister(processorType, Builder)
 }
 
 // Builder parses the config and if valid returns a JS processor, an error
 // otherwise. It requires the config field "script".
 func Builder(config processor.Config) (processor.Interface, error) {
 	if config.Settings[configScript] == "" {
-		return nil, cerrors.Errorf("%s: unspecified field %q", processorName, configScript)
+		return nil, cerrors.Errorf("%s: unspecified field %q", processorType, configScript)
 	}
 
 	// TODO get logger from config or some other place
 	logger := zerolog.New(zerolog.NewConsoleWriter()).With().Timestamp().Logger()
 	p, err := New(config.Settings[configScript], logger)
 	if err != nil {
-		return nil, cerrors.Errorf("%s: %w", processorName, err)
+		return nil, cerrors.Errorf("%s: %w", processorType, err)
 	}
 
 	return p, nil

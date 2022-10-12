@@ -25,7 +25,7 @@ import (
 )
 
 const (
-	// Names for the Filter in global builder registry
+	// Types for the Filter in global builder registry
 	filterFieldKeyProcType     = "filterfieldkey"
 	filterFieldPayloadProcType = "filterfieldpayload"
 

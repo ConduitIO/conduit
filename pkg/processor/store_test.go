@@ -32,10 +32,10 @@ func TestConfigStore_SetGet(t *testing.T) {
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	ctrl := gomock.NewController(t)
-	processorName := "test-processor"
+	processorType := "test-processor"
 
 	registry := processor.NewBuilderRegistry()
-	registry.MustRegister(processorName, func(_ processor.Config) (processor.Interface, error) {
+	registry.MustRegister(processorType, func(_ processor.Config) (processor.Interface, error) {
 		p := mock.NewProcessor(ctrl)
 		return p, nil
 	})
@@ -53,7 +53,7 @@ func TestConfigStore_SetGet(t *testing.T) {
 	}
 
 	var err error
-	want.Processor, err = registry.MustGet(processorName)(want.Config)
+	want.Processor, err = registry.MustGet(processorType)(want.Config)
 	assert.Ok(t, err)
 
 	s := processor.NewStore(db, registry)
@@ -71,10 +71,10 @@ func TestConfigStore_GetAll(t *testing.T) {
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	ctrl := gomock.NewController(t)
-	processorName := "test-processor"
+	procType := "test-processor"
 
 	registry := processor.NewBuilderRegistry()
-	registry.MustRegister(processorName, func(_ processor.Config) (processor.Interface, error) {
+	registry.MustRegister(procType, func(_ processor.Config) (processor.Interface, error) {
 		p := mock.NewProcessor(ctrl)
 		return p, nil
 	})
@@ -99,7 +99,7 @@ func TestConfigStore_GetAll(t *testing.T) {
 			instance.Parent.Type = processor.ParentTypeConnector
 		}
 		var err error
-		instance.Processor, err = registry.MustGet(processorName)(instance.Config)
+		instance.Processor, err = registry.MustGet(procType)(instance.Config)
 		assert.Ok(t, err)
 
 		err = s.Set(ctx, instance.ID, instance)

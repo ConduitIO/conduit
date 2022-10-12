@@ -33,14 +33,14 @@ func TestService_Init_Success(t *testing.T) {
 	db := &inmemory.DB{}
 	ctrl := gomock.NewController(t)
 
-	name := "processor-name"
+	procType := "processor-type"
 	p := mock.NewProcessor(ctrl)
 
-	registry := newTestBuilderRegistry(t, map[string]processor.Interface{name: p})
+	registry := newTestBuilderRegistry(t, map[string]processor.Interface{procType: p})
 	service := processor.NewService(log.Nop(), db, registry)
 
 	// create a processor instance
-	_, err := service.Create(ctx, uuid.NewString(), name, processor.Parent{}, processor.Config{}, processor.ProvisionTypeAPI)
+	_, err := service.Create(ctx, uuid.NewString(), procType, processor.Parent{}, processor.Config{}, processor.ProvisionTypeAPI)
 	assert.Ok(t, err)
 
 	want := service.List(ctx)

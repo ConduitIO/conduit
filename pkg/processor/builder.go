@@ -50,14 +50,14 @@ func (r *BuilderRegistry) MustRegister(procType string, b Builder) {
 	}
 }
 
-// Register registers a processor builder under the specified name.
-// If a builder is already registered under that name it returns an error.
+// Register registers a processor builder under the specified type.
+// If a builder is already registered under that type it returns an error.
 func (r *BuilderRegistry) Register(procType string, b Builder) error {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
 	if _, ok := r.builders[procType]; ok {
-		return cerrors.Errorf("processor builder with name %q already registered", procType)
+		return cerrors.Errorf("processor builder with type %q already registered", procType)
 	}
 	r.builders[procType] = b
 
@@ -73,8 +73,8 @@ func (r *BuilderRegistry) MustGet(procType string) Builder {
 	return b
 }
 
-// Get returns the processor builder registered under the specified name.
-// If no builder is registered under that name it returns an error.
+// Get returns the processor builder registered under the specified type.
+// If no builder is registered under that type it returns an error.
 func (r *BuilderRegistry) Get(procType string) (Builder, error) {
 	r.lock.RLock()
 	defer r.lock.RUnlock()

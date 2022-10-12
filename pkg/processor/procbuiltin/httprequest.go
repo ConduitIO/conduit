@@ -119,7 +119,7 @@ func httpRequest(
 }
 
 func configureHTTPRequestBackoffRetry(
-	processorName string,
+	processorType string,
 	config processor.Config,
 	procFn func(context.Context, record.Record) (record.Record, error),
 ) (processor.Interface, error) {
@@ -128,7 +128,7 @@ func configureHTTPRequestBackoffRetry(
 
 	tmp, err := getConfigFieldInt64(config, httpRequestBackoffRetryCount)
 	if err != nil && !cerrors.Is(err, errEmptyConfigField) {
-		return nil, cerrors.Errorf("%s: %w", processorName, err)
+		return nil, cerrors.Errorf("%s: %w", processorType, err)
 	}
 	retryCount = float64(tmp)
 
@@ -146,21 +146,21 @@ func configureHTTPRequestBackoffRetry(
 
 	min, err := getConfigFieldDuration(config, httpRequestBackoffRetryMin)
 	if err != nil && !cerrors.Is(err, errEmptyConfigField) {
-		return nil, cerrors.Errorf("%s: %w", processorName, err)
+		return nil, cerrors.Errorf("%s: %w", processorType, err)
 	} else if err == nil {
 		b.Min = min
 	}
 
 	max, err := getConfigFieldDuration(config, httpRequestBackoffRetryMax)
 	if err != nil && !cerrors.Is(err, errEmptyConfigField) {
-		return nil, cerrors.Errorf("%s: %w", processorName, err)
+		return nil, cerrors.Errorf("%s: %w", processorType, err)
 	} else if err == nil {
 		b.Max = max
 	}
 
 	factor, err := getConfigFieldFloat64(config, httpRequestBackoffRetryFactor)
 	if err != nil && !cerrors.Is(err, errEmptyConfigField) {
-		return nil, cerrors.Errorf("%s: %w", processorName, err)
+		return nil, cerrors.Errorf("%s: %w", processorType, err)
 	} else if err == nil {
 		b.Factor = factor
 	}
