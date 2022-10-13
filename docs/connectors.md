@@ -32,11 +32,11 @@ Source means the connector has the ability to get data from an upstream data sto
 | [Azure Storage](https://github.com/conduitio-labs/conduit-connector-azure-storage) |✅ | | Community | v0.3.0|
 | [BigQuery](https://github.com/conduitio-labs/conduit-connector-bigquery) |✅ | | Community | v0.3.0|
 | [DB2](https://github.com/conduitio-labs/conduit-connector-db2) |WIP|WIP| Community |WIP|
-| [Elastic Search](https://github.com/conduitio-labs/conduit-connector-elasticsearch) |✅ |✅ | Community |WIP|
+| [Elasticsearch](https://github.com/conduitio-labs/conduit-connector-elasticsearch) |✅ |✅ | Community |v0.3.0|
 | [File](https://github.com/ConduitIO/conduit-connector-file) |✅ |✅ | Conduit |v0.3.0|
 | [Firebolt](https://github.com/conduitio-labs/conduit-connector-firebolt) |WIP |WIP| Community | WIP |
 | [GCP PubSub](https://github.com/conduitio-labs/conduit-connector-gcp-pubsub) |✅ |✅| Community |WIP |
-| [Google Cloud Storage](https://github.com/conduitio-labs/conduit-connector-google-cloudstorage) |✅ | | Community | WIP|
+| [Google Cloud Storage](https://github.com/conduitio-labs/conduit-connector-google-cloudstorage) |✅ | | Community | v0.3.0|
 | [Google Sheets](https://github.com/conduitio-labs/conduit-connector-google-sheets) |✅ | | Community | v0.3.0|
 | [Kafka](https://github.com/ConduitIO/conduit-connector-kafka) |✅ |✅ | Conduit |v0.3.0|
 | [Kafka Connect Wrapper](https://github.com/ConduitIO/conduit-kafka-connect-wrapper) | ✅ | ✅ | Legacy |v0.3.0|
@@ -49,7 +49,7 @@ Source means the connector has the ability to get data from an upstream data sto
 | [Random Generator](https://github.com/ConduitIO/conduit-connector-generator) |✅ | | Conduit |v0.3.0|
 | [Redis](https://github.com/conduitio-labs/conduit-connector-redis) |✅|✅ | Community |v0.3.0|
 | [S3](https://github.com/ConduitIO/conduit-connector-s3) |✅ |✅ | Conduit | v0.3.0|
-| [Salesforce](https://github.com/conduitio-labs/conduit-connector-salesforce) | ✅ | | Community | WIP|
+| [Salesforce](https://github.com/conduitio-labs/conduit-connector-salesforce) | ✅ | | Community | v0.3.0|
 | [Snowflake](https://github.com/conduitio-labs/conduit-connector-snowflake) |✅ | | Community |v0.3.0|
 | [Stripe](https://github.com/conduitio-labs/conduit-connector-stripe) |✅ | | Community |v0.3.0|
 | [Vitess](https://github.com/conduitio-labs/conduit-connector-vitess) |WIP|WIP| Community |WIP|
