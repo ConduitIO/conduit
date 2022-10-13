@@ -32,7 +32,7 @@ Source means the connector has the ability to get data from an upstream data sto
 | [Azure Storage](https://github.com/conduitio-labs/conduit-connector-azure-storage) |✅ | | Community | v0.3.0|
 | [BigQuery](https://github.com/conduitio-labs/conduit-connector-bigquery) |✅ | | Community | v0.3.0|
 | [DB2](https://github.com/conduitio-labs/conduit-connector-db2) |WIP|WIP| Community |WIP|
-| [Elastic Search](https://github.com/conduitio-labs/conduit-connector-elasticsearch) |✅ |✅ | Community |v0.3.0|
+| [Elasticsearch](https://github.com/conduitio-labs/conduit-connector-elasticsearch) |✅ |✅ | Community |v0.3.0|
 | [File](https://github.com/ConduitIO/conduit-connector-file) |✅ |✅ | Conduit |v0.3.0|
 | [Firebolt](https://github.com/conduitio-labs/conduit-connector-firebolt) |WIP |WIP| Community | WIP |
 | [GCP PubSub](https://github.com/conduitio-labs/conduit-connector-gcp-pubsub) |✅ |✅| Community |WIP |
