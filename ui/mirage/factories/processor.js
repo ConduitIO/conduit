@@ -1,7 +1,7 @@
 import { Factory } from 'ember-cli-mirage';
 
 export default Factory.extend({
-  name: 'maskfieldkey',
+  type: 'maskfieldkey',
 
   config() {
     return {
@@ -11,8 +11,6 @@ export default Factory.extend({
       },
     };
   },
-
-  type: 'TYPE_TRANSFORM',
 
   parent() {
     return {};

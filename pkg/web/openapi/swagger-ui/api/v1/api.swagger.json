@@ -1485,7 +1485,7 @@
     "v1CreateProcessorRequest": {
       "type": "object",
       "properties": {
-        "name": {
+        "type": {
           "type": "string"
         },
         "parent": {
@@ -1706,7 +1706,7 @@
         "config": {
           "$ref": "#/definitions/v1ProcessorConfig"
         },
-        "name": {
+        "type": {
           "type": "string"
         },
         "parent": {

@@ -100,7 +100,7 @@ func (p *ProcessorAPIv1) CreateProcessor(
 ) (*apiv1.CreateProcessorResponse, error) {
 	created, err := p.ps.Create(
 		ctx,
-		req.Name,
+		req.Type,
 		fromproto.ProcessorParent(req.Parent),
 		fromproto.ProcessorConfig(req.Config),
 	)
