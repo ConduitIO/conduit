@@ -242,12 +242,7 @@ func (d *destination) Ack(ctx context.Context) (record.Position, error) {
 		return nil, err
 	}
 
-	p, err := d.plugin.Ack(ctx)
-	if err != nil {
-		return nil, cerrors.Errorf("error receiving ack: %w", err)
-	}
-
-	return p, nil
+	return d.plugin.Ack(ctx)
 }
 
 // preparePluginCall makes sure the plugin is running and registers a new plugin

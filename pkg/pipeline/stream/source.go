@@ -43,6 +43,7 @@ type SourceNode struct {
 
 	running  chan struct{} // running will be closed once SourceNode starts running
 	initOnce sync.Once
+	stopOnce sync.Once
 }
 
 // ID returns a properly formatted SourceNode ID prefixed with `source/`
@@ -83,11 +84,9 @@ func (n *SourceNode) Run(ctx context.Context) (err error) {
 	var openMsgTracker OpenMessagesTracker
 	defer func() {
 		// wait for open messages before tearing down connector
-		n.logger.Trace(ctx).Msg("waiting for open messages to be processed")
+		n.logger.Trace(ctx).Msg("waiting for open messages")
 		openMsgTracker.Wait()
-		n.logger.Trace(ctx).Msg("all messages processed, tearing down source")
-		// TODO stop source connector here??? Then we need to make sure Stop is idempotent
-		// TODO or we could make sure Stop is executed once and run it here if it wasn't yet
+
 		tdErr := n.Source.Teardown(connectorCtx)
 		err = cerrors.LogOrReplace(err, tdErr, func() {
 			n.logger.Err(ctx, tdErr).Msg("could not tear down source connector")
@@ -175,6 +174,22 @@ func (n *SourceNode) registerMetricStatusHandler(msg *Message) {
 }
 
 func (n *SourceNode) Stop(ctx context.Context, reason error) error {
+	var err error
+	var stopExecuted bool
+	n.stopOnce.Do(func() {
+		// only execute stop once, more calls won't make a difference
+		err = n.stop(ctx, reason)
+		stopExecuted = true
+	})
+	if !stopExecuted {
+		n.logger.Warn(ctx).Msg("source connector stop already triggered, " +
+			"ignoring second stop request (if the pipeline is stuck, please " +
+			"report the issue to the Conduit team)")
+	}
+	return err
+}
+
+func (n *SourceNode) stop(ctx context.Context, reason error) error {
 	n.init()
 
 	select {

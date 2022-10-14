@@ -168,8 +168,7 @@ func (n *DestinationAckerNode) handleAck(msg *Message, err error) error {
 // teardown will nack all messages still in the cache and return an error in
 // case there were still unprocessed messages in the cache.
 func (n *DestinationAckerNode) teardown(reason error) error {
-	n.m.Lock()
-	defer n.m.Unlock()
+	// no need to lock, at this point the worker is not running anymore
 
 	var nacked int
 	var err error
@@ -179,12 +178,48 @@ func (n *DestinationAckerNode) teardown(reason error) error {
 		nacked++
 	}
 	if err != nil {
-		return cerrors.Errorf("nacked %d messages when stopping destination acker node, some nacks failed: %w", nacked, err)
+		err = cerrors.Errorf("nacked %d messages when stopping destination acker node, some nacks failed: %w", nacked, err)
+	} else if nacked > 0 {
+		err = cerrors.Errorf("nacked %d messages when stopping destination acker node", nacked)
 	}
-	if nacked > 0 {
-		return cerrors.Errorf("nacked %d messages when stopping destination acker node", nacked)
-	}
-	return nil
+
+	// Spin up goroutines that will keep fetching acks and messages.
+	// This is needed in case the destination plugin fails to write a record and
+	// returns a nack while the pipeline doesn't have a nack handler configured.
+	// In that case the destination will keep on processing new messages (it
+	// can't know that there is no nack handler so it needs to keep on going),
+	// while DestinationAckerNode will stop running and listening to new acks,
+	// which essentially deadlocks the destination. That's why we spin up
+	// goroutines that stop once DestinationNode closes the incoming channel and
+	// once the stream to the connector is closed.
+	go func() {
+		trigger, cleanup, err := n.base.Trigger(context.Background(), n.logger, nil)
+		if err != nil {
+			// this should never happen
+			panic(cerrors.Errorf("could not create trigger: %w", err))
+		}
+		defer cleanup()
+		for {
+			msg, err := trigger()
+			_ = err // ignore error
+			if msg == nil {
+				return // incoming node closed the channel, we can stop
+			}
+			err = msg.Nack(cerrors.New("destination acker node is already torn down"))
+			_ = err // ignore error
+		}
+	}()
+	go func() {
+		for {
+			pos, err := n.Destination.Ack(context.Background())
+			_ = err
+			if pos == nil {
+				return // stream was closed, we can stop
+			}
+		}
+	}()
+
+	return err
 }
 
 // Sub will subscribe this node to an incoming channel.

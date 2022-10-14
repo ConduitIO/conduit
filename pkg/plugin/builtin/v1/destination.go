@@ -53,7 +53,7 @@ func newDestinationPluginAdapter(impl cpluginv1.DestinationPlugin, logger log.Ct
 }
 
 func (s *destinationPluginAdapter) withLogger(ctx context.Context) context.Context {
-	return s.logger.WithContext(ctx)
+	return s.ctxLogger.WithContext(ctx)
 }
 
 func (s *destinationPluginAdapter) Configure(ctx context.Context, cfg map[string]string) error {
