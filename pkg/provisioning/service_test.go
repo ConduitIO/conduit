@@ -313,13 +313,13 @@ func TestProvision_RollbackDeletePipeline(t *testing.T) {
 		ID:     "pipeline1:proc1",
 		Parent: procParentPipeline,
 		Config: procCfg,
-		Name:   "js",
+		Type:   "js",
 	}
 	proc1conInstance := &processor.Instance{
 		ID:     "pipeline1:con2:proc1con",
 		Parent: procParentConn,
 		Config: procCfg,
-		Name:   "js",
+		Type:   "js",
 	}
 	sourceConfig := connector.Config{
 		Name:       pipeline1.Connectors["pipeline1:con1"].Name,
@@ -430,13 +430,13 @@ func TestProvision_ExistingPipeline(t *testing.T) {
 		ID:     "pipeline1:proc1",
 		Parent: procParentPipeline,
 		Config: procCfg,
-		Name:   "js",
+		Type:   "js",
 	}
 	proc1conInstance := &processor.Instance{
 		ID:     "pipeline1:con2:proc1con",
 		Parent: procParentConn,
 		Config: procCfg,
-		Name:   "js",
+		Type:   "js",
 	}
 	sourceConfig := connector.Config{
 		Name:       "pipeline1:con1",
@@ -759,7 +759,7 @@ func TestProvision_IntegrationTestServices(t *testing.T) {
 		{
 			ID:            "pipeline1:proc1",
 			ProvisionedBy: processor.ProvisionTypeConfig,
-			Name:          "removereadat",
+			Type:          "removereadat",
 			Parent: processor.Parent{
 				ID:   pipeline1.Name,
 				Type: processor.ParentTypePipeline,
@@ -769,7 +769,7 @@ func TestProvision_IntegrationTestServices(t *testing.T) {
 		{
 			ID:            "pipeline1:con2:con2proc1",
 			ProvisionedBy: processor.ProvisionTypeConfig,
-			Name:          "removereadat",
+			Type:          "removereadat",
 			Parent: processor.Parent{
 				ID:   "pipeline1:con2",
 				Type: processor.ParentTypeConnector,

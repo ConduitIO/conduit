@@ -45,7 +45,7 @@ func TestProcessorAPIv1_ListProcessors(t *testing.T) {
 	prs := []*processor.Instance{
 		{
 			ID:   uuid.NewString(),
-			Name: "Pants",
+			Type: "Pants",
 			Parent: processor.Parent{
 				ID:   uuid.NewString(),
 				Type: processor.ParentTypeConnector,
@@ -57,7 +57,7 @@ func TestProcessorAPIv1_ListProcessors(t *testing.T) {
 		},
 		{
 			ID:   uuid.NewString(),
-			Name: "Pants Too",
+			Type: "Pants Too",
 			Parent: processor.Parent{
 				ID:   uuid.NewString(),
 				Type: processor.ParentTypeConnector,
@@ -77,7 +77,7 @@ func TestProcessorAPIv1_ListProcessors(t *testing.T) {
 	want := &apiv1.ListProcessorsResponse{Processors: []*apiv1.Processor{
 		{
 			Id:   prs[0].ID,
-			Name: prs[0].Name,
+			Name: prs[0].Type,
 			Config: &apiv1.Processor_Config{
 				Settings: prs[0].Config.Settings,
 			},
@@ -91,7 +91,7 @@ func TestProcessorAPIv1_ListProcessors(t *testing.T) {
 
 		{
 			Id:   prs[1].ID,
-			Name: prs[1].Name,
+			Name: prs[1].Type,
 			Config: &apiv1.Processor_Config{
 				Settings: prs[1].Config.Settings,
 			},
@@ -129,7 +129,7 @@ func TestProcessorAPIv1_ListProcessorsByParents(t *testing.T) {
 	prs := []*processor.Instance{
 		{
 			ID:   uuid.NewString(),
-			Name: "Pants",
+			Type: "Pants",
 			Parent: processor.Parent{
 				ID:   sharedParent,
 				Type: processor.ParentTypeConnector,
@@ -141,7 +141,7 @@ func TestProcessorAPIv1_ListProcessorsByParents(t *testing.T) {
 		},
 		{
 			ID:   uuid.NewString(),
-			Name: "Pants Too",
+			Type: "Pants Too",
 			Parent: processor.Parent{
 				ID:   uuid.NewString(),
 				Type: processor.ParentTypeConnector,
@@ -153,7 +153,7 @@ func TestProcessorAPIv1_ListProcessorsByParents(t *testing.T) {
 		},
 		{
 			ID:   uuid.NewString(),
-			Name: "Pants Thrice",
+			Type: "Pants Thrice",
 			Parent: processor.Parent{
 				ID:   uuid.NewString(),
 				Type: processor.ParentTypePipeline,
@@ -165,7 +165,7 @@ func TestProcessorAPIv1_ListProcessorsByParents(t *testing.T) {
 		},
 		{
 			ID:   uuid.NewString(),
-			Name: "Shorts",
+			Type: "Shorts",
 			Parent: processor.Parent{
 				ID:   sharedParent,
 				Type: processor.ParentTypePipeline,
@@ -187,7 +187,7 @@ func TestProcessorAPIv1_ListProcessorsByParents(t *testing.T) {
 	want := &apiv1.ListProcessorsResponse{Processors: []*apiv1.Processor{
 		{
 			Id:   prs[0].ID,
-			Name: prs[0].Name,
+			Name: prs[0].Type,
 			Config: &apiv1.Processor_Config{
 				Settings: prs[0].Config.Settings,
 			},
@@ -201,7 +201,7 @@ func TestProcessorAPIv1_ListProcessorsByParents(t *testing.T) {
 
 		{
 			Id:   prs[2].ID,
-			Name: prs[2].Name,
+			Name: prs[2].Type,
 			Config: &apiv1.Processor_Config{
 				Settings: prs[2].Config.Settings,
 			},
@@ -214,7 +214,7 @@ func TestProcessorAPIv1_ListProcessorsByParents(t *testing.T) {
 		},
 		{
 			Id:   prs[3].ID,
-			Name: prs[3].Name,
+			Name: prs[3].Type,
 			Config: &apiv1.Processor_Config{
 				Settings: prs[3].Config.Settings,
 			},
@@ -250,7 +250,7 @@ func TestProcessorAPIv1_CreateProcessor(t *testing.T) {
 	now := time.Now()
 	pr := &processor.Instance{
 		ID:   uuid.NewString(),
-		Name: "Pants",
+		Type: "Pants",
 		Parent: processor.Parent{
 			ID:   uuid.NewString(),
 			Type: processor.ParentTypeConnector,
@@ -260,11 +260,11 @@ func TestProcessorAPIv1_CreateProcessor(t *testing.T) {
 		UpdatedAt: now,
 		CreatedAt: now,
 	}
-	psMock.EXPECT().Create(ctx, pr.Name, pr.Parent, config).Return(pr, nil).Times(1)
+	psMock.EXPECT().Create(ctx, pr.Type, pr.Parent, config).Return(pr, nil).Times(1)
 
 	want := &apiv1.CreateProcessorResponse{Processor: &apiv1.Processor{
 		Id:   pr.ID,
-		Name: pr.Name,
+		Name: pr.Type,
 		Config: &apiv1.Processor_Config{
 			Settings: pr.Config.Settings,
 		},
@@ -299,7 +299,7 @@ func TestProcessorAPIv1_GetProcessor(t *testing.T) {
 	now := time.Now()
 	pr := &processor.Instance{
 		ID:   uuid.NewString(),
-		Name: "Pants",
+		Type: "Pants",
 		Parent: processor.Parent{
 			ID:   uuid.NewString(),
 			Type: processor.ParentTypeConnector,
@@ -316,7 +316,7 @@ func TestProcessorAPIv1_GetProcessor(t *testing.T) {
 
 	want := &apiv1.GetProcessorResponse{Processor: &apiv1.Processor{
 		Id:   pr.ID,
-		Name: pr.Name,
+		Name: pr.Type,
 		Config: &apiv1.Processor_Config{
 			Settings: pr.Config.Settings,
 		},
@@ -353,7 +353,7 @@ func TestProcessorAPIv1_UpdateProcessor(t *testing.T) {
 	now := time.Now()
 	pr := &processor.Instance{
 		ID:   uuid.NewString(),
-		Name: "Pants",
+		Type: "Pants",
 		Parent: processor.Parent{
 			ID:   uuid.NewString(),
 			Type: processor.ParentTypeConnector,
@@ -367,7 +367,7 @@ func TestProcessorAPIv1_UpdateProcessor(t *testing.T) {
 
 	want := &apiv1.UpdateProcessorResponse{Processor: &apiv1.Processor{
 		Id:   pr.ID,
-		Name: pr.Name,
+		Name: pr.Type,
 		Config: &apiv1.Processor_Config{
 			Settings: pr.Config.Settings,
 		},

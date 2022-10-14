@@ -54,7 +54,7 @@ func (s *Service) Init(ctx context.Context) error {
 	s.logger.Info(ctx).Int("count", len(s.instances)).Msg("processors initialized")
 
 	for _, i := range instances {
-		measure.ProcessorsGauge.WithValues(i.Name).Inc()
+		measure.ProcessorsGauge.WithValues(i.Type).Inc()
 	}
 
 	return nil
@@ -83,12 +83,12 @@ func (s *Service) Get(ctx context.Context, id string) (*Instance, error) {
 func (s *Service) Create(
 	ctx context.Context,
 	id string,
-	name string,
+	procType string,
 	parent Parent,
 	cfg Config,
 	pt ProvisionType,
 ) (*Instance, error) {
-	builder, err := s.registry.Get(name)
+	builder, err := s.registry.Get(procType)
 	if err != nil {
 		return nil, err
 	}
@@ -104,7 +104,7 @@ func (s *Service) Create(
 		UpdatedAt:     now,
 		CreatedAt:     now,
 		ProvisionedBy: pt,
-		Name:          name,
+		Type:          procType,
 		Parent:        parent,
 		Config:        cfg,
 		Processor:     p,
@@ -117,7 +117,7 @@ func (s *Service) Create(
 	}
 
 	s.instances[instance.ID] = instance
-	measure.ProcessorsGauge.WithValues(name).Inc()
+	measure.ProcessorsGauge.WithValues(procType).Inc()
 
 	return instance, nil
 }
@@ -130,7 +130,7 @@ func (s *Service) Update(ctx context.Context, id string, cfg Config) (*Instance,
 	}
 
 	// this can't really fail, this call already passed when creating the instance
-	builder, _ := s.registry.Get(instance.Name)
+	builder, _ := s.registry.Get(instance.Type)
 
 	p, err := builder(cfg)
 	if err != nil {
@@ -163,7 +163,7 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 		return cerrors.Errorf("could not delete processor instance from store: %w", err)
 	}
 	delete(s.instances, id)
-	measure.ProcessorsGauge.WithValues(instance.Name).Dec()
+	measure.ProcessorsGauge.WithValues(instance.Type).Dec()
 
 	return nil
 }

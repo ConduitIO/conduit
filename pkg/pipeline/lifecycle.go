@@ -233,7 +233,7 @@ func (s *Service) buildProcessorNodes(
 		node := stream.ProcessorNode{
 			Name:           proc.ID,
 			Processor:      proc.Processor,
-			ProcessorTimer: measure.ProcessorExecutionDurationTimer.WithValues(pl.Config.Name, proc.Name),
+			ProcessorTimer: measure.ProcessorExecutionDurationTimer.WithValues(pl.Config.Name, proc.Type),
 		}
 		node.Sub(prev.Pub())
 		prev = &node

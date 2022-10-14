@@ -24,15 +24,15 @@ import (
 )
 
 const (
-	extractFieldKeyName     = "extractfieldkey"
-	extractFieldPayloadName = "extractfieldpayload"
+	extractFieldKeyProcType     = "extractfieldkey"
+	extractFieldPayloadProcType = "extractfieldpayload"
 
 	extractFieldConfigField = "field"
 )
 
 func init() {
-	processor.GlobalBuilderRegistry.MustRegister(extractFieldKeyName, ExtractFieldKey)
-	processor.GlobalBuilderRegistry.MustRegister(extractFieldPayloadName, ExtractFieldPayload)
+	processor.GlobalBuilderRegistry.MustRegister(extractFieldKeyProcType, ExtractFieldKey)
+	processor.GlobalBuilderRegistry.MustRegister(extractFieldPayloadProcType, ExtractFieldPayload)
 }
 
 // ExtractFieldKey builds the following processor:
@@ -42,17 +42,17 @@ func init() {
 //  * If the key is structured, extract the field and use it to replace the
 //    entire key.
 func ExtractFieldKey(config processor.Config) (processor.Interface, error) {
-	return extractField(extractFieldKeyName, recordKeyGetSetter{}, config)
+	return extractField(extractFieldKeyProcType, recordKeyGetSetter{}, config)
 }
 
 // ExtractFieldPayload builds the same processor as ExtractFieldKey, except that
 // it operates on the field Record.Payload.After.
 func ExtractFieldPayload(config processor.Config) (processor.Interface, error) {
-	return extractField(extractFieldPayloadName, recordPayloadGetSetter{}, config)
+	return extractField(extractFieldPayloadProcType, recordPayloadGetSetter{}, config)
 }
 
 func extractField(
-	processorName string,
+	processorType string,
 	getSetter recordDataGetSetter,
 	config processor.Config,
 ) (processor.Interface, error) {
@@ -62,7 +62,7 @@ func extractField(
 	)
 
 	if fieldName, err = getConfigFieldString(config, extractFieldConfigField); err != nil {
-		return nil, cerrors.Errorf("%s: %w", processorName, err)
+		return nil, cerrors.Errorf("%s: %w", processorType, err)
 	}
 
 	return processor.InterfaceFunc(func(_ context.Context, r record.Record) (record.Record, error) {
@@ -71,14 +71,14 @@ func extractField(
 		switch d := data.(type) {
 		case record.RawData:
 			if d.Schema == nil {
-				return record.Record{}, cerrors.Errorf("%s: schemaless raw data not supported", processorName)
+				return record.Record{}, cerrors.Errorf("%s: schemaless raw data not supported", processorType)
 			}
-			return record.Record{}, cerrors.Errorf("%s: data with schema not supported yet", processorName) // TODO
+			return record.Record{}, cerrors.Errorf("%s: data with schema not supported yet", processorType) // TODO
 		case record.StructuredData:
 			// TODO add support for nested fields
 			extractedField := d[fieldName]
 			if extractedField == nil {
-				return record.Record{}, cerrors.Errorf("%s: field %q not found", processorName, fieldName)
+				return record.Record{}, cerrors.Errorf("%s: field %q not found", processorType, fieldName)
 			}
 
 			switch v := extractedField.(type) {
@@ -91,7 +91,7 @@ func extractField(
 				data = record.RawData{Raw: []byte(fmt.Sprint(v))}
 			}
 		default:
-			return record.Record{}, cerrors.Errorf("%s: unexpected data type %T", processorName, data)
+			return record.Record{}, cerrors.Errorf("%s: unexpected data type %T", processorType, data)
 		}
 
 		r = getSetter.Set(r, data)

@@ -23,8 +23,8 @@ import (
 )
 
 const (
-	insertFieldKeyName     = "insertfieldkey"
-	insertFieldPayloadName = "insertfieldpayload"
+	insertFieldKeyProcType     = "insertfieldkey"
+	insertFieldPayloadProcType = "insertfieldpayload"
 
 	insertFieldConfigStaticField   = "static.field"
 	insertFieldConfigStaticValue   = "static.value"
@@ -32,8 +32,8 @@ const (
 )
 
 func init() {
-	processor.GlobalBuilderRegistry.MustRegister(insertFieldKeyName, InsertFieldKey)
-	processor.GlobalBuilderRegistry.MustRegister(insertFieldPayloadName, InsertFieldPayload)
+	processor.GlobalBuilderRegistry.MustRegister(insertFieldKeyProcType, InsertFieldKey)
+	processor.GlobalBuilderRegistry.MustRegister(insertFieldPayloadProcType, InsertFieldPayload)
 }
 
 // InsertFieldKey builds the following processor:
@@ -42,17 +42,17 @@ func init() {
 //  * If the key is raw and has no schema, return an error (not supported).
 //  * If the key is structured, set the field(s) in the key data.
 func InsertFieldKey(config processor.Config) (processor.Interface, error) {
-	return insertField(insertFieldKeyName, recordKeyGetSetter{}, config)
+	return insertField(insertFieldKeyProcType, recordKeyGetSetter{}, config)
 }
 
 // InsertFieldPayload builds the same processor as InsertFieldKey, except that
 // it operates on the field Record.Payload.After.
 func InsertFieldPayload(config processor.Config) (processor.Interface, error) {
-	return insertField(insertFieldPayloadName, recordPayloadGetSetter{}, config)
+	return insertField(insertFieldPayloadProcType, recordPayloadGetSetter{}, config)
 }
 
 func insertField(
-	processorName string,
+	processorType string,
 	getSetter recordDataGetSetter,
 	config processor.Config,
 ) (processor.Interface, error) {
@@ -68,11 +68,11 @@ func insertField(
 	staticFieldName, ok := config.Settings[insertFieldConfigStaticField]
 	if ok {
 		if staticFieldValue, err = getConfigFieldString(config, insertFieldConfigStaticValue); err != nil {
-			return nil, cerrors.Errorf("%s: %w", processorName, err)
+			return nil, cerrors.Errorf("%s: %w", processorType, err)
 		}
 	}
 	if staticFieldName == "" && positionField == "" {
-		return nil, cerrors.Errorf("%s: no fields configured to be inserted", processorName)
+		return nil, cerrors.Errorf("%s: no fields configured to be inserted", processorType)
 	}
 
 	return processor.InterfaceFunc(func(_ context.Context, r record.Record) (record.Record, error) {
@@ -81,9 +81,9 @@ func insertField(
 		switch d := data.(type) {
 		case record.RawData:
 			if d.Schema == nil {
-				return record.Record{}, cerrors.Errorf("%s: schemaless raw data not supported", processorName)
+				return record.Record{}, cerrors.Errorf("%s: schemaless raw data not supported", processorType)
 			}
-			return record.Record{}, cerrors.Errorf("%s: data with schema not supported yet", processorName) // TODO
+			return record.Record{}, cerrors.Errorf("%s: data with schema not supported yet", processorType) // TODO
 		case record.StructuredData:
 			// TODO add support for nested fields
 			if staticFieldName != "" {
@@ -93,7 +93,7 @@ func insertField(
 				d[positionField] = r.Position
 			}
 		default:
-			return record.Record{}, cerrors.Errorf("%s: unexpected data type %T", processorName, data)
+			return record.Record{}, cerrors.Errorf("%s: unexpected data type %T", processorType, data)
 		}
 
 		r = getSetter.Set(r, data)

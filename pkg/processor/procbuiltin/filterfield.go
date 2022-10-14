@@ -25,9 +25,9 @@ import (
 )
 
 const (
-	// Names for the Filter in global builder registry
-	filterFieldKeyName     = "filterfieldkey"
-	filterFieldPayloadName = "filterfieldpayload"
+	// Types for the Filter in global builder registry
+	filterFieldKeyProcType     = "filterfieldkey"
+	filterFieldPayloadProcType = "filterfieldpayload"
 
 	// Config Fields for each processor
 	filterFieldConfigType          = "type"
@@ -37,8 +37,8 @@ const (
 )
 
 func init() {
-	processor.GlobalBuilderRegistry.MustRegister(filterFieldKeyName, FilterFieldKey)
-	processor.GlobalBuilderRegistry.MustRegister(filterFieldPayloadName, FilterFieldPayload)
+	processor.GlobalBuilderRegistry.MustRegister(filterFieldKeyProcType, FilterFieldKey)
+	processor.GlobalBuilderRegistry.MustRegister(filterFieldPayloadProcType, FilterFieldPayload)
 }
 
 // FilterFieldKey builds a processor with the following config fields:
@@ -63,17 +63,17 @@ func init() {
 // 	   "missingornull": "fail" // [fail, include, exclude]
 //   }
 func FilterFieldKey(config processor.Config) (processor.Interface, error) {
-	return filterField(filterFieldKeyName, recordKeyGetSetter{}, config)
+	return filterField(filterFieldKeyProcType, recordKeyGetSetter{}, config)
 }
 
 // FilterFieldPayload builds the same processor as FilterFieldKey, except that
 // it operates on the field Record.Payload.After.
 func FilterFieldPayload(config processor.Config) (processor.Interface, error) {
-	return filterField(filterFieldPayloadName, recordPayloadGetSetter{}, config)
+	return filterField(filterFieldPayloadProcType, recordPayloadGetSetter{}, config)
 }
 
 func filterField(
-	processorName string,
+	processorType string,
 	getSetter recordDataGetSetter,
 	config processor.Config,
 ) (processor.Interface, error) {
@@ -109,9 +109,9 @@ func filterField(
 		switch d := data.(type) {
 		case record.RawData:
 			if d.Schema == nil {
-				return record.Record{}, cerrors.Errorf("%s: schemaless raw data not supported", processorName)
+				return record.Record{}, cerrors.Errorf("%s: schemaless raw data not supported", processorType)
 			}
-			return record.Record{}, cerrors.Errorf("%s: data with schema not supported yet", processorName) // TODO
+			return record.Record{}, cerrors.Errorf("%s: data with schema not supported yet", processorType) // TODO
 		case record.StructuredData:
 			doc, err := jsonquery.Parse(bytes.NewReader(d.Bytes()))
 			if err != nil {
@@ -150,7 +150,7 @@ func filterField(
 			}
 
 		default:
-			return record.Record{}, cerrors.Errorf("%s: unexpected data type %T", processorName, data)
+			return record.Record{}, cerrors.Errorf("%s: unexpected data type %T", processorType, data)
 		}
 	}), nil
 }

@@ -157,7 +157,7 @@ func (s *Store) decode(raw []byte) (*Instance, error) {
 		return nil, err
 	}
 
-	builder, err := s.registry.Get(i.Name)
+	builder, err := s.registry.Get(i.Type)
 	if err != nil {
 		return nil, cerrors.Errorf("could not get processor builder for instance %s: %w", i.ID, err)
 	}

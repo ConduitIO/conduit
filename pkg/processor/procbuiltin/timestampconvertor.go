@@ -24,8 +24,8 @@ import (
 )
 
 const (
-	timestampConvertorKeyName     = "timestampconvertorkey"
-	timestampConvertorPayloadName = "timestampconvertorpayload"
+	timestampConvertorKeyProcType     = "timestampconvertorkey"
+	timestampConvertorPayloadProcType = "timestampconvertorpayload"
 
 	timestampConvertorConfigTargetType = "target.type"
 	timestampConvertorConfigField      = "date"
@@ -33,22 +33,22 @@ const (
 )
 
 func init() {
-	processor.GlobalBuilderRegistry.MustRegister(timestampConvertorKeyName, TimestampConvertorKey)
-	processor.GlobalBuilderRegistry.MustRegister(timestampConvertorPayloadName, TimestampConvertorPayload)
+	processor.GlobalBuilderRegistry.MustRegister(timestampConvertorKeyProcType, TimestampConvertorKey)
+	processor.GlobalBuilderRegistry.MustRegister(timestampConvertorPayloadProcType, TimestampConvertorPayload)
 }
 
 // TimestampConvertorKey todo
 func TimestampConvertorKey(config processor.Config) (processor.Interface, error) {
-	return timestampConvertor(timestampConvertorKeyName, recordKeyGetSetter{}, config)
+	return timestampConvertor(timestampConvertorKeyProcType, recordKeyGetSetter{}, config)
 }
 
 // TimestampConvertorPayload todo
 func TimestampConvertorPayload(config processor.Config) (processor.Interface, error) {
-	return timestampConvertor(timestampConvertorPayloadName, recordPayloadGetSetter{}, config)
+	return timestampConvertor(timestampConvertorPayloadProcType, recordPayloadGetSetter{}, config)
 }
 
 func timestampConvertor(
-	processorName string,
+	processorType string,
 	getSetter recordDataGetSetter,
 	config processor.Config,
 ) (processor.Interface, error) {
@@ -67,17 +67,17 @@ func timestampConvertor(
 
 	// if field is empty then input is raw data
 	if field, err = getConfigFieldString(config, timestampConvertorConfigField); err != nil {
-		return nil, cerrors.Errorf("%s: %w", processorName, err)
+		return nil, cerrors.Errorf("%s: %w", processorType, err)
 	}
 	if targetType, err = getConfigFieldString(config, timestampConvertorConfigTargetType); err != nil {
-		return nil, cerrors.Errorf("%s: %w", processorName, err)
+		return nil, cerrors.Errorf("%s: %w", processorType, err)
 	}
 	if targetType != stringType && targetType != unixType && targetType != timeType {
-		return nil, cerrors.Errorf("%s: targetType (%s) is not supported", processorName, targetType)
+		return nil, cerrors.Errorf("%s: targetType (%s) is not supported", processorType, targetType)
 	}
 	format = config.Settings[timestampConvertorConfigFormat] // can be empty
 	if format == "" && targetType == stringType {
-		return nil, cerrors.Errorf("%s: format is needed to parse the output", processorName)
+		return nil, cerrors.Errorf("%s: format is needed to parse the output", processorType)
 	}
 
 	return processor.InterfaceFunc(func(_ context.Context, r record.Record) (record.Record, error) {
@@ -85,9 +85,9 @@ func timestampConvertor(
 		switch d := data.(type) {
 		case record.RawData:
 			if d.Schema == nil {
-				return record.Record{}, cerrors.Errorf("%s: schemaless raw data not supported", processorName)
+				return record.Record{}, cerrors.Errorf("%s: schemaless raw data not supported", processorType)
 			}
-			return record.Record{}, cerrors.Errorf("%s: data with schema not supported yet", processorName) // TODO
+			return record.Record{}, cerrors.Errorf("%s: data with schema not supported yet", processorType) // TODO
 		case record.StructuredData:
 			var tm time.Time
 			switch v := d[field].(type) {
@@ -95,16 +95,16 @@ func timestampConvertor(
 				tm = time.Unix(0, v)
 			case string:
 				if format == "" {
-					return record.Record{}, cerrors.Errorf("%s: no format to parse the date", processorName)
+					return record.Record{}, cerrors.Errorf("%s: no format to parse the date", processorType)
 				}
 				tm, err = time.Parse(format, v)
 				if err != nil {
-					return record.Record{}, cerrors.Errorf("%s: %w", processorName, err)
+					return record.Record{}, cerrors.Errorf("%s: %w", processorType, err)
 				}
 			case time.Time:
 				tm = v
 			default:
-				return record.Record{}, cerrors.Errorf("%s: unexpected data type %T", processorName, d[field])
+				return record.Record{}, cerrors.Errorf("%s: unexpected data type %T", processorType, d[field])
 			}
 			// TODO add support for nested fields
 			switch targetType {
@@ -115,10 +115,10 @@ func timestampConvertor(
 			case timeType:
 				d[field] = tm
 			default:
-				return record.Record{}, cerrors.Errorf("%s: unexpected output type %T", processorName, targetType)
+				return record.Record{}, cerrors.Errorf("%s: unexpected output type %T", processorType, targetType)
 			}
 		default:
-			return record.Record{}, cerrors.Errorf("%s: unexpected data type %T", processorName, data)
+			return record.Record{}, cerrors.Errorf("%s: unexpected data type %T", processorType, data)
 		}
 
 		r = getSetter.Set(r, data)

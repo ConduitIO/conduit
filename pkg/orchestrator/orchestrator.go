@@ -102,7 +102,7 @@ type ConnectorService interface {
 type ProcessorService interface {
 	List(ctx context.Context) map[string]*processor.Instance
 	Get(ctx context.Context, id string) (*processor.Instance, error)
-	Create(ctx context.Context, id string, name string, parent processor.Parent, cfg processor.Config, p processor.ProvisionType) (*processor.Instance, error)
+	Create(ctx context.Context, id string, procType string, parent processor.Parent, cfg processor.Config, p processor.ProvisionType) (*processor.Instance, error)
 	Update(ctx context.Context, id string, cfg processor.Config) (*processor.Instance, error)
 	Delete(ctx context.Context, id string) error
 }
