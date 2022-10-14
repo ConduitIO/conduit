@@ -77,7 +77,7 @@ func TestProcessorAPIv1_ListProcessors(t *testing.T) {
 	want := &apiv1.ListProcessorsResponse{Processors: []*apiv1.Processor{
 		{
 			Id:   prs[0].ID,
-			Name: prs[0].Type,
+			Type: prs[0].Type,
 			Config: &apiv1.Processor_Config{
 				Settings: prs[0].Config.Settings,
 			},
@@ -91,7 +91,7 @@ func TestProcessorAPIv1_ListProcessors(t *testing.T) {
 
 		{
 			Id:   prs[1].ID,
-			Name: prs[1].Type,
+			Type: prs[1].Type,
 			Config: &apiv1.Processor_Config{
 				Settings: prs[1].Config.Settings,
 			},
@@ -279,7 +279,7 @@ func TestProcessorAPIv1_CreateProcessor(t *testing.T) {
 	got, err := api.CreateProcessor(
 		ctx,
 		&apiv1.CreateProcessorRequest{
-			Name:   want.Processor.Name,
+			Type:   want.Processor.Type,
 			Parent: want.Processor.Parent,
 			Config: want.Processor.Config,
 		},
