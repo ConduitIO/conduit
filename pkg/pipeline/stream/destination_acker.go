@@ -192,32 +192,34 @@ func (n *DestinationAckerNode) teardown(reason error) error {
 	// which essentially deadlocks the destination. That's why we spin up
 	// goroutines that stop once DestinationNode closes the incoming channel and
 	// once the stream to the connector is closed.
-	go func() {
-		trigger, cleanup, err := n.base.Trigger(context.Background(), n.logger, nil)
-		if err != nil {
-			// this should never happen
-			panic(cerrors.Errorf("could not create trigger: %w", err))
-		}
-		defer cleanup()
-		for {
-			msg, err := trigger()
-			_ = err // ignore error
-			if msg == nil {
-				return // incoming node closed the channel, we can stop
+	if reason != nil {
+		go func() {
+			trigger, cleanup, err := n.base.Trigger(context.Background(), n.logger, nil)
+			if err != nil {
+				// this should never happen
+				panic(cerrors.Errorf("could not create trigger: %w", err))
 			}
-			err = msg.Nack(cerrors.New("destination acker node is already torn down"))
-			_ = err // ignore error
-		}
-	}()
-	go func() {
-		for {
-			pos, err := n.Destination.Ack(context.Background())
-			_ = err
-			if pos == nil {
-				return // stream was closed, we can stop
+			defer cleanup()
+			for {
+				msg, err := trigger()
+				_ = err // ignore error
+				if msg == nil {
+					return // incoming node closed the channel, we can stop
+				}
+				err = msg.Nack(cerrors.New("destination acker node is already torn down"))
+				_ = err // ignore error
 			}
-		}
-	}()
+		}()
+		go func() {
+			for {
+				pos, err := n.Destination.Ack(context.Background())
+				_ = err // ignore error
+				if pos == nil {
+					return // stream was closed, we can stop
+				}
+			}
+		}()
+	}
 
 	return err
 }

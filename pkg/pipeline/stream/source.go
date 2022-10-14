@@ -130,7 +130,9 @@ func (n *SourceNode) Run(ctx context.Context) (err error) {
 
 		if msg.ControlMessageType() == ControlMessageStopSourceNode {
 			// this is a control message telling us to stop
-			n.logger.Err(ctx, n.stopReason).Msg("stopping source node")
+			n.logger.Err(ctx, n.stopReason).
+				Str(log.RecordPositionField, msg.Record.Position.String()).
+				Msg("stopping source node")
 			stopPosition = msg.Record.Position
 
 			if bytes.Equal(stopPosition, lastPosition) {

@@ -109,6 +109,7 @@ func Example_simpleStream() {
 	// DBG got record message_id=generator/10 node_id=printer
 	// DBG received ack message_id=generator/10 node_id=generator
 	// INF stopping source connector component=SourceNode node_id=generator
+	// INF stopping source node component=SourceNode node_id=generator record_position=10
 	// DBG incoming messages channel closed component=SourceAckerNode node_id=generator-acker
 	// DBG incoming messages channel closed component=DestinationNode node_id=printer
 	// DBG incoming messages channel closed component=DestinationAckerNode node_id=printer-acker
@@ -277,6 +278,8 @@ func Example_complexStream() {
 	// DBG received ack message_id=generator1/10 node_id=generator1
 	// INF stopping source connector component=SourceNode node_id=generator1
 	// INF stopping source connector component=SourceNode node_id=generator2
+	// INF stopping source node component=SourceNode node_id=generator1 record_position=10
+	// INF stopping source node component=SourceNode node_id=generator2 record_position=10
 	// DBG incoming messages channel closed component=SourceAckerNode node_id=generator1-acker
 	// DBG incoming messages channel closed component=SourceAckerNode node_id=generator2-acker
 	// DBG incoming messages channel closed component=ProcessorNode node_id=counter
