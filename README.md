@@ -227,13 +227,6 @@ documentation:
 * [Conduit Metrics](docs/metrics.md)
   provides more information about how Conduit exposes metrics.
 
-## Known limitations
-
-:warning: Conduit is currently in a pre-1.0 state. While Conduit is built on
-strong foundations and experiences from running similar systems, we don't
-recommend relying on it in a production environment. It may break and end up in
-an unexpected state, or in the worst case, result in lost data.
-
 ## Contributing
 
 For a complete guide to contributing to Conduit, see
