@@ -13,7 +13,7 @@ require (
 	github.com/conduitio/conduit-connector-protocol v0.3.0
 	github.com/conduitio/conduit-connector-s3 v0.3.0
 	github.com/conduitio/conduit-connector-sdk v0.3.0
-	github.com/dgraph-io/badger/v3 v3.2103.2
+	github.com/dgraph-io/badger/v3 v3.2103.3
 	github.com/dop251/goja v0.0.0-20210225094849-f3cfc97811c0
 	github.com/gammazero/deque v0.2.0
 	github.com/golang/mock v1.6.0
@@ -69,7 +69,7 @@ require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash v1.1.0 // indirect
 	github.com/cespare/xxhash/v2 v2.1.2 // indirect
-	github.com/dgraph-io/ristretto v0.1.0 // indirect
+	github.com/dgraph-io/ristretto v0.1.1 // indirect
 	github.com/dlclark/regexp2 v1.4.0 // indirect
 	github.com/dustin/go-humanize v1.0.0 // indirect
 	github.com/fatih/color v1.13.0 // indirect
@@ -115,7 +115,7 @@ require (
 	golang.org/x/crypto v0.0.0-20220926161630-eccd6366d1be // indirect
 	golang.org/x/mod v0.6.0-dev.0.20220419223038-86c51ed26bb4 // indirect
 	golang.org/x/net v0.0.0-20220926192436-02166a98028e // indirect
-	golang.org/x/sys v0.0.0-20220926163933-8cfa568d3c25 // indirect
+	golang.org/x/sys v0.0.0-20221010170243-090e33056c14 // indirect
 	golang.org/x/text v0.3.7 // indirect
 	golang.org/x/time v0.0.0-20220922220347-f3bd1da661af // indirect
 	google.golang.org/genproto v0.0.0-20220926220553-6981cbe3cfce // indirect
