@@ -24,8 +24,8 @@ import (
 )
 
 const (
-	replaceFieldKeyName     = "replacefieldkey"
-	replaceFieldPayloadName = "replacefieldpayload"
+	replaceFieldKeyProcType     = "replacefieldkey"
+	replaceFieldPayloadProcType = "replacefieldpayload"
 
 	replaceFieldConfigExclude = "exclude"
 	replaceFieldConfigInclude = "include"
@@ -33,8 +33,8 @@ const (
 )
 
 func init() {
-	processor.GlobalBuilderRegistry.MustRegister(replaceFieldKeyName, ReplaceFieldKey)
-	processor.GlobalBuilderRegistry.MustRegister(replaceFieldPayloadName, ReplaceFieldKey)
+	processor.GlobalBuilderRegistry.MustRegister(replaceFieldKeyProcType, ReplaceFieldKey)
+	processor.GlobalBuilderRegistry.MustRegister(replaceFieldPayloadProcType, ReplaceFieldKey)
 }
 
 // ReplaceFieldKey builds a processor which replaces a field in the key in raw
@@ -51,17 +51,17 @@ func init() {
 // If "include" is not empty, then all fields are excluded by default and only
 // fields in "include" will be added to the processed record.
 func ReplaceFieldKey(config processor.Config) (processor.Interface, error) {
-	return replaceField(replaceFieldKeyName, recordKeyGetSetter{}, config)
+	return replaceField(replaceFieldKeyProcType, recordKeyGetSetter{}, config)
 }
 
 // ReplaceFieldPayload builds the same processor as ReplaceFieldKey, except that
 // it operates on the field Record.Payload.After.
 func ReplaceFieldPayload(config processor.Config) (processor.Interface, error) {
-	return replaceField(replaceFieldPayloadName, recordPayloadGetSetter{}, config)
+	return replaceField(replaceFieldPayloadProcType, recordPayloadGetSetter{}, config)
 }
 
 func replaceField(
-	processorName string,
+	processorType string,
 	getSetter recordDataGetSetter,
 	config processor.Config,
 ) (processor.Interface, error) {
@@ -82,7 +82,7 @@ func replaceField(
 	if exclude == "" && include == "" && rename == "" {
 		return nil, cerrors.Errorf(
 			"%s: config must include at least one of [%s %s %s]",
-			processorName,
+			processorType,
 			replaceFieldConfigExclude,
 			replaceFieldConfigInclude,
 			replaceFieldConfigRename,
@@ -96,7 +96,7 @@ func replaceField(
 			if len(tokens) != 2 {
 				return nil, cerrors.Errorf(
 					"%s: config field %q contains invalid value %q, expected format is \"foo:c1,bar:c2\"",
-					processorName,
+					processorType,
 					replaceFieldConfigRename,
 					rename,
 				)
@@ -123,9 +123,9 @@ func replaceField(
 		switch d := data.(type) {
 		case record.RawData:
 			if d.Schema == nil {
-				return record.Record{}, cerrors.Errorf("%s: schemaless raw data not supported", processorName)
+				return record.Record{}, cerrors.Errorf("%s: schemaless raw data not supported", processorType)
 			}
-			return record.Record{}, cerrors.Errorf("%s: data with schema not supported yet", processorName) // TODO
+			return record.Record{}, cerrors.Errorf("%s: data with schema not supported yet", processorType) // TODO
 		case record.StructuredData:
 			// TODO add support for nested fields
 			for field, value := range d {
@@ -139,7 +139,7 @@ func replaceField(
 				}
 			}
 		default:
-			return record.Record{}, cerrors.Errorf("%s: unexpected data type %T", processorName, data)
+			return record.Record{}, cerrors.Errorf("%s: unexpected data type %T", processorType, data)
 		}
 
 		r = getSetter.Set(r, data)

@@ -43,45 +43,45 @@ func NewBuilderRegistry() *BuilderRegistry {
 }
 
 // MustRegister tries to register a builder and panics on error.
-func (r *BuilderRegistry) MustRegister(name string, b Builder) {
-	err := r.Register(name, b)
+func (r *BuilderRegistry) MustRegister(procType string, b Builder) {
+	err := r.Register(procType, b)
 	if err != nil {
 		panic(cerrors.Errorf("register processor builder failed: %w", err))
 	}
 }
 
-// Register registers a processor builder under the specified name.
-// If a builder is already registered under that name it returns an error.
-func (r *BuilderRegistry) Register(name string, b Builder) error {
+// Register registers a processor builder under the specified type.
+// If a builder is already registered under that type it returns an error.
+func (r *BuilderRegistry) Register(procType string, b Builder) error {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
-	if _, ok := r.builders[name]; ok {
-		return cerrors.Errorf("processor builder with name %q already registered", name)
+	if _, ok := r.builders[procType]; ok {
+		return cerrors.Errorf("processor builder with type %q already registered", procType)
 	}
-	r.builders[name] = b
+	r.builders[procType] = b
 
 	return nil
 }
 
 // MustGet tries to get a builder and panics on error.
-func (r *BuilderRegistry) MustGet(name string) Builder {
-	b, err := r.Get(name)
+func (r *BuilderRegistry) MustGet(procType string) Builder {
+	b, err := r.Get(procType)
 	if err != nil {
 		panic(cerrors.Errorf("get processor builder failed: %w", err))
 	}
 	return b
 }
 
-// Get returns the processor builder registered under the specified name.
-// If no builder is registered under that name it returns an error.
-func (r *BuilderRegistry) Get(name string) (Builder, error) {
+// Get returns the processor builder registered under the specified type.
+// If no builder is registered under that type it returns an error.
+func (r *BuilderRegistry) Get(procType string) (Builder, error) {
 	r.lock.RLock()
 	defer r.lock.RUnlock()
 
-	b, ok := r.builders[name]
+	b, ok := r.builders[procType]
 	if !ok {
-		return nil, cerrors.Errorf("processor builder %q not found", name)
+		return nil, cerrors.Errorf("processor builder %q not found", procType)
 	}
 
 	return b, nil

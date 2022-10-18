@@ -45,7 +45,7 @@ export default class PipelineEditorConnectorSlidePanel extends Component {
         lookupValidator(ConnectorTransformValidations),
         ConnectorTransformValidations,
         {
-          changesetKeys: ['name', 'type', 'config', 'parent'],
+          changesetKeys: ['type', 'config', 'parent'],
         }
       );
     });
@@ -54,7 +54,7 @@ export default class PipelineEditorConnectorSlidePanel extends Component {
   @action
   showNewTransformPanel(transform) {
     const newConnectorTransform = this.store.createRecord('processor', {
-      name: `${transform.id}${transform.onOptions.firstObject}`,
+      type: `${transform.id}${transform.onOptions.firstObject}`,
       parent: {
         type: 'TYPE_CONNECTOR',
         id: this.args.selectedNode.id,
@@ -67,7 +67,7 @@ export default class PipelineEditorConnectorSlidePanel extends Component {
       lookupValidator(ConnectorTransformValidations),
       ConnectorTransformValidations,
       {
-        changesetKeys: ['name', 'type', 'config', 'parent', 'transform'],
+        changesetKeys: ['type', 'config', 'parent', 'transform'],
       }
     );
 
@@ -125,7 +125,7 @@ export default class PipelineEditorConnectorSlidePanel extends Component {
   @action
   duplicateTransform(connectorTransform) {
     const duplicated = this.store.createRecord('processor', {
-      name: connectorTransform.name,
+      type: connectorTransform.type,
       parent: connectorTransform.data.parent,
       config: connectorTransform.data.config,
     });
@@ -135,7 +135,7 @@ export default class PipelineEditorConnectorSlidePanel extends Component {
       lookupValidator(ConnectorTransformValidations),
       ConnectorTransformValidations,
       {
-        changesetKeys: ['name', 'type', 'config', 'parent', 'transform'],
+        changesetKeys: ['type', 'config', 'parent', 'transform'],
       }
     );
 

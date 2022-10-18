@@ -24,7 +24,7 @@ export default class PipelineEditorConnectorSlidePanelTransformPanel extends Com
 
     this.selectedTransformOnOption = this.transformOnOptions.findBy(
       'value',
-      this.connectorTransform.name
+      this.connectorTransform.type
     );
   }
 
@@ -49,7 +49,7 @@ export default class PipelineEditorConnectorSlidePanelTransformPanel extends Com
 
   @action
   setTransformOnOption(option) {
-    this.connectorTransform.name = option.value;
+    this.connectorTransform.type = option.value;
     this.selectedTransformOnOption = this.transformOnOptions.findBy(
       'value',
       option.value
