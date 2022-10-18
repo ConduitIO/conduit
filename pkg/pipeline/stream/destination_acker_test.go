@@ -317,26 +317,12 @@ func TestDestinationAckerNode_DestinationAckError(t *testing.T) {
 		// all good
 	}
 
-	// expect that messages can still be sent to in and that they are all nacked
-	for i := 0; i < 10; i++ {
-		msg := &Message{
-			Record: record.Record{Position: record.Position("test-position")},
-		}
-		nackHandlerDone := make(chan struct{})
-		msg.RegisterNackHandler(func(got *Message, reason error) error {
-			defer close(nackHandlerDone)
-			is.True(reason != nil)
-			return nil
-		})
-
-		in <- msg
-
-		select {
-		case <-time.After(time.Second):
-			is.Fail() // expected node to stop running
-		case <-nackHandlerDone:
-			// all good
-		}
+	// expect that messages can't be sent to in
+	select {
+	case <-time.After(time.Millisecond * 100):
+		// all good
+	case in <- &Message{}:
+		is.Fail() // expected node to stop receiving new messages
 	}
 }
 

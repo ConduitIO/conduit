@@ -183,33 +183,17 @@ func (n *DestinationAckerNode) teardown(reason error) error {
 		err = cerrors.Errorf("nacked %d messages when stopping destination acker node", nacked)
 	}
 
-	// Spin up goroutines that will keep fetching acks and messages.
+	// Spin up goroutine that will keep fetching acks.
 	// This is needed in case the destination plugin fails to write a record and
 	// returns a nack while the pipeline doesn't have a nack handler configured.
 	// In that case the destination will keep on processing new messages (it
 	// can't know that there is no nack handler so it needs to keep on going),
 	// while DestinationAckerNode will stop running and listening to new acks,
 	// which can cause a deadlock in the destination plugin. That's why we spin
-	// up goroutines that stop once DestinationNode closes the incoming channel
-	// and once the stream to the connector is closed.
+	// up a goroutine that stops once DestinationNode stops the plugin and
+	// closes the stream (which will happen soon because the acker node will
+	// stop running and return an error).
 	if reason != nil {
-		go func() {
-			trigger, cleanup, err := n.base.Trigger(context.Background(), n.logger, nil)
-			if err != nil {
-				// this should never happen, we already created the trigger once
-				panic(cerrors.Errorf("could not create trigger: %w", err))
-			}
-			defer cleanup()
-			for {
-				msg, err := trigger()
-				_ = err // ignore error
-				if msg == nil {
-					return // incoming node closed the channel, we can stop
-				}
-				err = msg.Nack(cerrors.New("destination acker node is already torn down"))
-				_ = err // ignore error
-			}
-		}()
 		go func() {
 			for {
 				pos, err := n.Destination.Ack(context.Background())
