@@ -189,14 +189,14 @@ func (n *DestinationAckerNode) teardown(reason error) error {
 	// In that case the destination will keep on processing new messages (it
 	// can't know that there is no nack handler so it needs to keep on going),
 	// while DestinationAckerNode will stop running and listening to new acks,
-	// which essentially deadlocks the destination. That's why we spin up
-	// goroutines that stop once DestinationNode closes the incoming channel and
-	// once the stream to the connector is closed.
+	// which can cause a deadlock in the destination plugin. That's why we spin
+	// up goroutines that stop once DestinationNode closes the incoming channel
+	// and once the stream to the connector is closed.
 	if reason != nil {
 		go func() {
 			trigger, cleanup, err := n.base.Trigger(context.Background(), n.logger, nil)
 			if err != nil {
-				// this should never happen
+				// this should never happen, we already created the trigger once
 				panic(cerrors.Errorf("could not create trigger: %w", err))
 			}
 			defer cleanup()

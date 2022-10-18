@@ -165,7 +165,6 @@ func (s *sourcePluginAdapter) Stop(ctx context.Context) (record.Position, error)
 }
 
 func (s *sourcePluginAdapter) Teardown(ctx context.Context) error {
-	// TODO force stop stream if it's running
 	s.logger.Trace(ctx).Msg("calling Teardown")
 	resp, err := runSandbox(s.impl.Teardown, s.withLogger(ctx), toplugin.SourceTeardownRequest())
 	if err != nil {

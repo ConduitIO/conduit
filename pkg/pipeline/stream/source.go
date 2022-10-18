@@ -149,7 +149,6 @@ func (n *SourceNode) Run(ctx context.Context) (err error) {
 		lastPosition = msg.Record.Position
 		err = n.base.Send(ctx, n.logger, msg)
 		if err != nil {
-			// TODO stop source connector???
 			return msg.Nack(err)
 		}
 
