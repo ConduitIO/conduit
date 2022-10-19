@@ -25,6 +25,7 @@ import (
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/connector/mock"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/csync"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/golang/mock/gomock"
 	"github.com/matryer/is"
@@ -92,7 +93,7 @@ func TestSourceAckerNode_AckOrder(t *testing.T) {
 	// gracefully stop node and give the test 1 second to finish
 	close(in)
 
-	err := helper.wait(ctx, &wg, time.Second)
+	err := (*csync.WaitGroup)(&wg).WaitTimeout(ctx, time.Second)
 	is.NoErr(err) // expected to receive acks in time
 }
 
@@ -138,7 +139,7 @@ func TestSourceAckerNode_FailedAck(t *testing.T) {
 	// gracefully stop node and give the test 1 second to finish
 	close(in)
 
-	err := helper.wait(ctx, &wg, time.Second)
+	err := (*csync.WaitGroup)(&wg).WaitTimeout(ctx, time.Second)
 	is.NoErr(err) // expected to receive acks in time
 }
 
@@ -177,7 +178,7 @@ func TestSourceAckerNode_FailedNack(t *testing.T) {
 	// gracefully stop node and give the test 1 second to finish
 	close(in)
 
-	err = helper.wait(ctx, &wg, time.Second)
+	err = (*csync.WaitGroup)(&wg).WaitTimeout(ctx, time.Second)
 	is.NoErr(err) // expected to receive acks in time
 }
 
@@ -263,23 +264,5 @@ func (sourceAckerNodeTestHelper) ackMessagesConcurrently(
 			err := msg.Ack()
 			assertAckErr(msg, err)
 		}(messages[i])
-	}
-}
-
-func (sourceAckerNodeTestHelper) wait(ctx context.Context, wg *sync.WaitGroup, timeout time.Duration) error {
-	wgDone := make(chan struct{})
-	go func() {
-		defer close(wgDone)
-		wg.Wait()
-	}()
-
-	waitCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-
-	select {
-	case <-waitCtx.Done():
-		return waitCtx.Err()
-	case <-wgDone:
-		return nil
 	}
 }

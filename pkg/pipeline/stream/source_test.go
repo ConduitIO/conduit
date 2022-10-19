@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/conduitio/conduit/pkg/connector/mock"
+	"github.com/conduitio/conduit/pkg/foundation/cchan"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/noop"
 	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/conduitio/conduit/pkg/record"
@@ -50,9 +51,12 @@ func TestSourceNode_Run(t *testing.T) {
 	}()
 
 	for _, wantRecord := range wantRecords {
-		gotMsg := <-out
+		gotMsg, ok, err := cchan.Chan[*Message](out).RecvTimeout(ctx, time.Second)
+		is.NoErr(err)
+		is.True(ok)
 		is.Equal(gotMsg.Record, wantRecord)
-		err := gotMsg.Ack()
+
+		err = gotMsg.Ack()
 		is.NoErr(err)
 	}
 
@@ -61,19 +65,13 @@ func TestSourceNode_Run(t *testing.T) {
 	err := node.Stop(ctx, nil)
 	is.NoErr(err)
 
-	select {
-	case <-time.After(time.Second):
-		is.Fail() // expected node to close outgoing channel
-	case _, ok := <-out:
-		is.True(!ok) // channel out should be closed
-	}
+	_, ok, err := cchan.Chan[*Message](out).RecvTimeout(ctx, time.Second)
+	is.NoErr(err) // expected node to close outgoing channel
+	is.True(!ok)  // expected node to close outgoing channel
 
-	select {
-	case <-time.After(time.Second):
-		is.Fail() // expected node to stop running
-	case <-nodeDone:
-		// all good
-	}
+	_, ok, err = cchan.Chan[struct{}](nodeDone).RecvTimeout(ctx, time.Second)
+	is.NoErr(err) // expected node to stop running
+	is.True(!ok)  // expected nodeDone to be closed
 }
 
 func TestSourceNode_StopWhileNextNodeIsStuck(t *testing.T) {
@@ -101,7 +99,7 @@ func TestSourceNode_StopWhileNextNodeIsStuck(t *testing.T) {
 		is.NoErr(err)
 	}()
 
-	// give the record a chance to read the record and start sending it to the
+	// give the source a chance to read the record and start sending it to the
 	// next node, we won't read the record from the channel though
 	time.Sleep(time.Millisecond * 100)
 
@@ -110,19 +108,13 @@ func TestSourceNode_StopWhileNextNodeIsStuck(t *testing.T) {
 	err := node.Stop(ctx, nil)
 	is.NoErr(err)
 
-	select {
-	case <-time.After(time.Second):
-		is.Fail() // expected node to stop running
-	case <-nodeDone:
-		// all good
-	}
+	_, ok, err := cchan.Chan[*Message](out).RecvTimeout(ctx, time.Second)
+	is.NoErr(err) // expected node to close outgoing channel
+	is.True(!ok)  // expected node to close outgoing channel
 
-	select {
-	case <-time.After(time.Second):
-		is.Fail() // expected node to close outgoing channel
-	case _, ok := <-out:
-		is.True(!ok) // channel out should be closed
-	}
+	_, ok, err = cchan.Chan[struct{}](nodeDone).RecvTimeout(ctx, time.Second)
+	is.NoErr(err) // expected node to stop running
+	is.True(!ok)  // expected nodeDone to be closed
 }
 
 // newMockSource creates a connector source and record that will be produced by
