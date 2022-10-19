@@ -28,7 +28,7 @@ require (
 	github.com/matryer/is v1.4.0
 	github.com/piotrkowalczuk/promgrpc/v4 v4.0.4
 	github.com/prometheus/client_golang v1.13.0
-	github.com/prometheus/client_model v0.2.0
+	github.com/prometheus/client_model v0.3.0
 	github.com/prometheus/common v0.37.0
 	github.com/rs/zerolog v1.28.0
 	go.buf.build/conduitio/conduit/conduitio/conduit v1.1.3
