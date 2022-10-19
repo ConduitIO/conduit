@@ -46,14 +46,9 @@ func NewService(logger log.CtxLogger, db database.DB) *Service {
 	}
 }
 
-// Init fetches instances from the store and starts pipelines that are supposed
-// to be running. Connectors and processors should be initialized before calling
-// this function.
-func (s *Service) Init(
-	ctx context.Context,
-	connFetcher ConnectorFetcher,
-	procFetcher ProcessorFetcher,
-) error {
+// Init fetches instances from the store without running any. Connectors and processors should be initialized
+// before calling this function.
+func (s *Service) Init(ctx context.Context) error {
 	s.logger.Debug(ctx).Msg("initializing pipelines")
 	instances, err := s.store.GetAll(ctx)
 	if err != nil {
@@ -62,15 +57,32 @@ func (s *Service) Init(
 
 	s.instances = instances
 
-	// some instances may be in a running state, try to run them
+	// some instances may be in a running state, put them in StatusSystemStopped state for now
 	for _, instance := range instances {
 		s.instanceNames[instance.Config.Name] = true
 		if instance.Status == StatusRunning {
-			// change status to "stopped" to allow pipeline to be started
+			// change status to "systemStopped" to mark which pipeline was running
 			instance.Status = StatusSystemStopped
 		}
 		measure.PipelinesGauge.WithValues(strings.ToLower(instance.Status.String())).Inc()
+	}
 
+	s.logger.Info(ctx).Int("count", len(s.instances)).Msg("pipelines initialized")
+
+	return err
+}
+
+// InitStatus run pipelines that had the running state in store.
+func (s *Service) InitStatus(
+	ctx context.Context,
+	connFetcher ConnectorFetcher,
+	procFetcher ProcessorFetcher,
+) error {
+	var err error
+	s.logger.Debug(ctx).Msg("initializing pipelines statuses")
+
+	// run pipelines that are in the StatusSystemStopped state
+	for _, instance := range s.instances {
 		if instance.Status == StatusSystemStopped {
 			startErr := s.Start(ctx, connFetcher, procFetcher, instance.ID)
 			if startErr != nil {
@@ -79,8 +91,6 @@ func (s *Service) Init(
 			}
 		}
 	}
-
-	s.logger.Info(ctx).Int("count", len(s.instances)).Msg("pipelines initialized")
 
 	return err
 }

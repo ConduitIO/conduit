@@ -105,7 +105,7 @@ func TestService_Init_Simple(t *testing.T) {
 
 	// create a new pipeline service and initialize it
 	service = NewService(logger, db)
-	err = service.Init(ctx, nil, nil)
+	err = service.Init(ctx)
 	assert.Ok(t, err)
 
 	got := service.List(ctx)
@@ -171,7 +171,9 @@ func testServiceInit(t *testing.T, status Status, expected Status) {
 
 	// create a new pipeline service and initialize it
 	service = NewService(logger, db)
-	err = service.Init(
+	err = service.Init(ctx)
+	is.NoErr(err)
+	err = service.InitStatus(
 		ctx,
 		testConnectorFetcher{
 			source.ID():      source,
