@@ -168,8 +168,7 @@ func (n *DestinationAckerNode) handleAck(msg *Message, err error) error {
 // teardown will nack all messages still in the cache and return an error in
 // case there were still unprocessed messages in the cache.
 func (n *DestinationAckerNode) teardown(reason error) error {
-	n.m.Lock()
-	defer n.m.Unlock()
+	// no need to lock, at this point the worker is not running anymore
 
 	var nacked int
 	var err error
@@ -179,12 +178,34 @@ func (n *DestinationAckerNode) teardown(reason error) error {
 		nacked++
 	}
 	if err != nil {
-		return cerrors.Errorf("nacked %d messages when stopping destination acker node, some nacks failed: %w", nacked, err)
+		err = cerrors.Errorf("nacked %d messages when stopping destination acker node, some nacks failed: %w", nacked, err)
+	} else if nacked > 0 {
+		err = cerrors.Errorf("nacked %d messages when stopping destination acker node", nacked)
 	}
-	if nacked > 0 {
-		return cerrors.Errorf("nacked %d messages when stopping destination acker node", nacked)
+
+	// Spin up goroutine that will keep fetching acks.
+	// This is needed in case the destination plugin fails to write a record and
+	// returns a nack while the pipeline doesn't have a nack handler configured.
+	// In that case the destination will keep on processing new messages (it
+	// can't know that there is no nack handler so it needs to keep on going),
+	// while DestinationAckerNode will stop running and listening to new acks,
+	// which can cause a deadlock in the destination plugin. That's why we spin
+	// up a goroutine that stops once DestinationNode stops the plugin and
+	// closes the stream (which will happen soon because the acker node will
+	// stop running and return an error).
+	if reason != nil {
+		go func() {
+			for {
+				pos, err := n.Destination.Ack(context.Background())
+				_ = err // ignore error
+				if pos == nil {
+					return // stream was closed, we can stop
+				}
+			}
+		}()
 	}
-	return nil
+
+	return err
 }
 
 // Sub will subscribe this node to an incoming channel.

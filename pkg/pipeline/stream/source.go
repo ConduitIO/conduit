@@ -43,6 +43,7 @@ type SourceNode struct {
 
 	running  chan struct{} // running will be closed once SourceNode starts running
 	initOnce sync.Once
+	stopOnce sync.Once
 }
 
 // ID returns a properly formatted SourceNode ID prefixed with `source/`
@@ -83,9 +84,9 @@ func (n *SourceNode) Run(ctx context.Context) (err error) {
 	var openMsgTracker OpenMessagesTracker
 	defer func() {
 		// wait for open messages before tearing down connector
-		n.logger.Trace(ctx).Msg("waiting for open messages to be processed")
+		n.logger.Trace(ctx).Msg("waiting for open messages")
 		openMsgTracker.Wait()
-		n.logger.Trace(ctx).Msg("all messages processed, tearing down source")
+
 		tdErr := n.Source.Teardown(connectorCtx)
 		err = cerrors.LogOrReplace(err, tdErr, func() {
 			n.logger.Err(ctx, tdErr).Msg("could not tear down source connector")
@@ -129,11 +130,10 @@ func (n *SourceNode) Run(ctx context.Context) (err error) {
 
 		if msg.ControlMessageType() == ControlMessageStopSourceNode {
 			// this is a control message telling us to stop
-			n.logger.Err(ctx, n.stopReason).Msg("stopping source connector")
-			stopPosition, err = n.Source.Stop(ctx)
-			if err != nil {
-				return cerrors.Errorf("failed to stop source connector: %w", err)
-			}
+			n.logger.Err(ctx, n.stopReason).
+				Str(log.RecordPositionField, msg.Record.Position.String()).
+				Msg("stopping source node")
+			stopPosition = msg.Record.Position
 
 			if bytes.Equal(stopPosition, lastPosition) {
 				// we already encountered the record with the last position
@@ -175,6 +175,22 @@ func (n *SourceNode) registerMetricStatusHandler(msg *Message) {
 }
 
 func (n *SourceNode) Stop(ctx context.Context, reason error) error {
+	var err error
+	var stopExecuted bool
+	n.stopOnce.Do(func() {
+		// only execute stop once, more calls won't make a difference
+		err = n.stop(ctx, reason)
+		stopExecuted = true
+	})
+	if !stopExecuted {
+		n.logger.Warn(ctx).Msg("source connector stop already triggered, " +
+			"ignoring second stop request (if the pipeline is stuck, please " +
+			"report the issue to the Conduit team)")
+	}
+	return err
+}
+
+func (n *SourceNode) stop(ctx context.Context, reason error) error {
 	n.init()
 
 	select {
@@ -185,10 +201,19 @@ func (n *SourceNode) Stop(ctx context.Context, reason error) error {
 	}
 
 	n.stopReason = reason
+
+	n.logger.Err(ctx, n.stopReason).Msg("stopping source connector")
+	stopPosition, err := n.Source.Stop(ctx)
+	if err != nil {
+		return cerrors.Errorf("failed to stop source connector: %w", err)
+	}
+
 	// InjectControlMessage will inject a message into the stream of messages
 	// being processed by SourceNode to let it know when it should stop
 	// processing new messages.
-	return n.base.InjectControlMessage(ctx, ControlMessageStopSourceNode)
+	return n.base.InjectControlMessage(ctx, ControlMessageStopSourceNode, record.Record{
+		Position: stopPosition,
+	})
 }
 
 func (n *SourceNode) Pub() <-chan *Message {

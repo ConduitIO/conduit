@@ -23,6 +23,7 @@ import (
 
 	"github.com/conduitio/conduit/pkg/connector"
 	connmock "github.com/conduitio/conduit/pkg/connector/mock"
+	"github.com/conduitio/conduit/pkg/foundation/csync"
 	"github.com/conduitio/conduit/pkg/foundation/ctxutil"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/noop"
@@ -81,7 +82,7 @@ func Example_simpleStream() {
 	// stop node after 150ms, which should be enough to process the 10 messages
 	time.AfterFunc(150*time.Millisecond, func() { _ = node1.Stop(ctx, nil) })
 	// give the node some time to process the records, plus a bit of time to stop
-	if waitTimeout(&wg, 1000*time.Millisecond) {
+	if (*csync.WaitGroup)(&wg).WaitTimeout(ctx, time.Second) != nil {
 		killAll()
 	} else {
 		logger.Info(ctx).Msg("finished successfully")
@@ -109,6 +110,7 @@ func Example_simpleStream() {
 	// DBG got record message_id=generator/10 node_id=printer
 	// DBG received ack message_id=generator/10 node_id=generator
 	// INF stopping source connector component=SourceNode node_id=generator
+	// INF stopping source node component=SourceNode node_id=generator record_position=10
 	// DBG incoming messages channel closed component=SourceAckerNode node_id=generator-acker
 	// DBG incoming messages channel closed component=DestinationNode node_id=printer
 	// DBG incoming messages channel closed component=DestinationAckerNode node_id=printer-acker
@@ -207,7 +209,7 @@ func Example_complexStream() {
 		},
 	)
 	// give the nodes some time to process the records, plus a bit of time to stop
-	if waitTimeout(&wg, 1000*time.Millisecond) {
+	if (*csync.WaitGroup)(&wg).WaitTimeout(ctx, time.Second) != nil {
 		killAll()
 	} else {
 		logger.Info(ctx).Msgf("counter node counted %d messages", count)
@@ -277,6 +279,8 @@ func Example_complexStream() {
 	// DBG received ack message_id=generator1/10 node_id=generator1
 	// INF stopping source connector component=SourceNode node_id=generator1
 	// INF stopping source connector component=SourceNode node_id=generator2
+	// INF stopping source node component=SourceNode node_id=generator1 record_position=10
+	// INF stopping source node component=SourceNode node_id=generator2 record_position=10
 	// DBG incoming messages channel closed component=SourceAckerNode node_id=generator1-acker
 	// DBG incoming messages channel closed component=SourceAckerNode node_id=generator2-acker
 	// DBG incoming messages channel closed component=ProcessorNode node_id=counter
@@ -397,20 +401,6 @@ func runNode(ctx context.Context, wg *sync.WaitGroup, n stream.Node) {
 	err := n.Run(ctx)
 	if err != nil {
 		fmt.Printf("%s error: %v\n", n.ID(), err)
-	}
-}
-
-func waitTimeout(wg *sync.WaitGroup, timeout time.Duration) bool {
-	c := make(chan struct{})
-	go func() {
-		defer close(c)
-		wg.Wait()
-	}()
-	select {
-	case <-c:
-		return false // completed normally
-	case <-time.After(timeout):
-		return true // timed out
 	}
 }
 

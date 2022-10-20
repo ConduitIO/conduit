@@ -21,6 +21,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/ctxutil"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/record"
 )
 
 // triggerFunc is returned from base nodes and should be called periodically to
@@ -180,7 +181,7 @@ func (n *pubNodeBase) Trigger(
 // stopping a source connector. It is a bit hacky, but it doesn't require us to
 // create a separate channel for signals which makes it performant and easiest
 // to implement.
-func (n *pubNodeBase) InjectControlMessage(ctx context.Context, msgType ControlMessageType) error {
+func (n *pubNodeBase) InjectControlMessage(ctx context.Context, msgType ControlMessageType, r record.Record) error {
 	n.lock.Lock()
 	defer n.lock.Unlock()
 	if !n.running {
@@ -190,7 +191,7 @@ func (n *pubNodeBase) InjectControlMessage(ctx context.Context, msgType ControlM
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case n.msgChan <- &Message{controlMessageType: msgType}:
+	case n.msgChan <- &Message{controlMessageType: msgType, Record: r}:
 		return nil
 	}
 }

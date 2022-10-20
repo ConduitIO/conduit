@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/conduitio/conduit/pkg/foundation/csync"
 	"github.com/conduitio/conduit/pkg/foundation/database/inmemory"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
@@ -32,6 +33,7 @@ import (
 
 func TestSource_Ack_Deadlock(t *testing.T) {
 	is := is.New(t)
+	ctx := context.Background()
 
 	logger := log.Nop()
 	persister := NewPersister(
@@ -71,7 +73,7 @@ func TestSource_Ack_Deadlock(t *testing.T) {
 	is.NoErr(err)
 	s := c.(Source)
 
-	err = s.Open(context.Background())
+	err = s.Open(ctx)
 	is.NoErr(err)
 
 	msgs := 5
@@ -79,28 +81,13 @@ func TestSource_Ack_Deadlock(t *testing.T) {
 	wg.Add(msgs)
 	for i := 0; i < msgs; i++ {
 		go func() {
-			err := s.Ack(context.Background(), record.Position("test-pos"))
+			err := s.Ack(ctx, record.Position("test-pos"))
 			wg.Done()
 			is.NoErr(err)
 		}()
 	}
 
-	if waitTimeout(&wg, 100*time.Millisecond) {
+	if (*csync.WaitGroup)(&wg).WaitTimeout(ctx, 100*time.Millisecond) != nil {
 		is.Fail() // timeout reached
-	}
-}
-
-// waitTimeout was copied from pkg/pipeline/stream/stream_test.go
-func waitTimeout(wg *sync.WaitGroup, timeout time.Duration) bool {
-	c := make(chan struct{})
-	go func() {
-		defer close(c)
-		wg.Wait()
-	}()
-	select {
-	case <-c:
-		return false // completed normally
-	case <-time.After(timeout):
-		return true // timed out
 	}
 }

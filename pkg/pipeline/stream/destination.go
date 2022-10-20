@@ -67,6 +67,7 @@ func (n *DestinationNode) Run(ctx context.Context) (err error) {
 			}
 		}
 
+		n.logger.Trace(ctx).Msg("waiting for open messages")
 		openMsgTracker.Wait()
 
 		// teardown will kill the plugin process

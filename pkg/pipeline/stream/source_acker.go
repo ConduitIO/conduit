@@ -115,7 +115,7 @@ func (n *SourceAckerNode) registerNackHandler(msg *Message, ticket semaphore.Tic
 			//  will just stop the pipeline because we don't support DLQs,
 			//  don't forget to forward ack to source if the DLQ call succeeds
 			//  https://github.com/ConduitIO/conduit/issues/306
-			return cerrors.New("no DLQ handler configured")
+			return cerrors.Errorf("no DLQ handler configured: %w", reason)
 		},
 	)
 }

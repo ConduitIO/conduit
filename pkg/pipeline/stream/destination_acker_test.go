@@ -235,10 +235,14 @@ func TestDestinationAckerNode_UnexpectedPosition(t *testing.T) {
 	msg := &Message{
 		Record: record.Record{Position: record.Position("test-position")},
 	}
-	dest.EXPECT().Ack(gomock.Any()).
+	ackCall := dest.EXPECT().Ack(gomock.Any()).
 		DoAndReturn(func(ctx context.Context) (record.Position, error) {
 			return record.Position("something-unexpected"), nil // destination returns unexpected position
 		})
+	dest.EXPECT().Ack(gomock.Any()).
+		DoAndReturn(func(ctx context.Context) (record.Position, error) {
+			return nil, cerrors.New("stream closed") // second Ack call is to drain outstanding acks
+		}).After(ackCall).AnyTimes()
 
 	// nack should be still called when node exits
 	nackHandlerDone := make(chan struct{})
@@ -292,7 +296,12 @@ func TestDestinationAckerNode_DestinationAckError(t *testing.T) {
 	dest.EXPECT().Ack(gomock.Any()).
 		DoAndReturn(func(ctx context.Context) (record.Position, error) {
 			return nil, wantErr // destination returns unexpected error
-		})
+		}).
+		// 1st call is from the message that stops the node, 2nd call is from
+		// the cleanup goroutine that is spawned to drain the acks, but that can
+		// happen even after the test is done so we use MinTimes(1) instead of
+		// Times(2)
+		MinTimes(1)
 
 	in <- &Message{
 		Record: record.Record{Position: record.Position("test-position")},
@@ -306,6 +315,14 @@ func TestDestinationAckerNode_DestinationAckError(t *testing.T) {
 		is.Fail() // expected node to stop running
 	case <-nodeDone:
 		// all good
+	}
+
+	// expect that messages can't be sent to in
+	select {
+	case <-time.After(time.Millisecond * 100):
+		// all good
+	case in <- &Message{}:
+		is.Fail() // expected node to stop receiving new messages
 	}
 }
 
@@ -334,10 +351,15 @@ func TestDestinationAckerNode_MessageAckError(t *testing.T) {
 	msg := &Message{
 		Record: record.Record{Position: record.Position("test-position")},
 	}
-	dest.EXPECT().Ack(gomock.Any()).
+	ackCall := dest.EXPECT().Ack(gomock.Any()).
 		DoAndReturn(func(ctx context.Context) (record.Position, error) {
 			return msg.Record.Position, nil
 		})
+	dest.EXPECT().Ack(gomock.Any()).
+		DoAndReturn(func(ctx context.Context) (record.Position, error) {
+			return nil, cerrors.New("stream closed") // second Ack call is to drain outstanding acks
+		}).After(ackCall).AnyTimes()
+
 	ackHandlerDone := make(chan struct{})
 	msg.RegisterAckHandler(func(*Message) error {
 		defer close(ackHandlerDone)

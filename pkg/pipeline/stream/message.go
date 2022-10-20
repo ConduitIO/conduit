@@ -214,11 +214,10 @@ func (m *Message) Ack() error {
 func (m *Message) Nack(reason error) error {
 	m.init()
 	m.ackNackOnce.Do(func() {
-		if !m.hasNackHandler {
+		m.ackNackReturnValue = m.notifyStatusHandlers(MessageStatusNacked, reason)
+		if !m.hasNackHandler && m.ackNackReturnValue == nil {
 			// we enforce at least one nack handler, otherwise nacks will go unnoticed
 			m.ackNackReturnValue = cerrors.Errorf("no nack handler on message %s: %w", m.ID(), reason)
-		} else {
-			m.ackNackReturnValue = m.notifyStatusHandlers(MessageStatusNacked, reason)
 		}
 		close(m.nacked)
 	})

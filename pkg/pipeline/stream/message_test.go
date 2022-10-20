@@ -151,7 +151,7 @@ func TestMessage_Nack_WithoutHandler(t *testing.T) {
 	assertMessageIsNacked(t, &msg)
 }
 
-func TestMessage_Nack_WithHandler(t *testing.T) {
+func TestMessage_Nack_WithNackHandler(t *testing.T) {
 	var (
 		msg     Message
 		wantErr = cerrors.New("test error")
@@ -184,6 +184,42 @@ func TestMessage_Nack_WithHandler(t *testing.T) {
 	assertMessageIsNacked(t, &msg)
 	if nackedMessageHandlerCallCount != 1 {
 		t.Fatalf("expected nacked message handler to be called once, got %d calls", nackedMessageHandlerCallCount)
+	}
+}
+
+func TestMessage_Nack_WithStatusHandler(t *testing.T) {
+	var (
+		msg                          Message
+		statusChangeHandlerCallCount int
+	)
+
+	msg.RegisterStatusHandler(func(msg *Message, change StatusChange) error {
+		statusChangeHandlerCallCount++
+		return nil
+	})
+
+	err1 := msg.Nack(cerrors.New("test error"))
+	if err1 == nil {
+		t.Fatal("expected error got nil")
+	}
+
+	assertMessageIsNacked(t, &msg)
+	if statusChangeHandlerCallCount != 1 {
+		t.Fatalf("expected statuc change handler to be called once, got %d calls", statusChangeHandlerCallCount)
+	}
+
+	// nacking again shouldn't call handlers again
+	err2 := msg.Nack(nil)
+	if err2 == nil {
+		t.Fatal("expected error got nil")
+	}
+	if err1 != err2 {
+		t.Fatalf("nack expected error %v, got %v", err1, err2)
+	}
+
+	assertMessageIsNacked(t, &msg)
+	if statusChangeHandlerCallCount != 1 {
+		t.Fatalf("expected statuc change handler to be called once, got %d calls", statusChangeHandlerCallCount)
 	}
 }
 
