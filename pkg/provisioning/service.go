@@ -60,6 +60,8 @@ func NewService(
 	}
 }
 
+// Init provision pipelines defined in pipelinePath directory. should initialize pipeline service
+// before calling this function, and all pipelines should be stopped.
 func (s *Service) Init(ctx context.Context) error {
 	s.logger.Debug(ctx).
 		Str("pipelines_path", s.pipelinesPath).
