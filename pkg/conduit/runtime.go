@@ -220,7 +220,7 @@ func (r *Runtime) Run(ctx context.Context) (err error) {
 	if err != nil {
 		return cerrors.Errorf("failed to init connector service: %w", err)
 	}
-	err = r.pipelineService.Init(ctx, r.connectorService, r.processorService)
+	err = r.pipelineService.Init(ctx)
 	if err != nil {
 		return cerrors.Errorf("failed to init pipeline service: %w", err)
 	}
@@ -235,6 +235,11 @@ func (r *Runtime) Run(ctx context.Context) (err error) {
 		} else {
 			r.logger.Err(ctx, err).Msg("provisioning failed")
 		}
+	}
+
+	err = r.pipelineService.Run(ctx, r.connectorService, r.processorService)
+	if err != nil {
+		return cerrors.Errorf("failed to init pipeline statuses: %w", err)
 	}
 
 	// Serve grpc and http API

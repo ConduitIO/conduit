@@ -31,11 +31,10 @@ import (
 // AcceptanceTest is the acceptance test that all implementations of DB should
 // pass. It should manually be called from a test case in each implementation:
 //
-//   func TestDB(t *testing.T) {
-//       db = NewDB()
-//       database.AcceptanceTest(t, db)
-//   }
-//
+//	func TestDB(t *testing.T) {
+//	    db = NewDB()
+//	    database.AcceptanceTest(t, db)
+//	}
 func AcceptanceTest(t *testing.T, db DB) {
 	testSetGet(t, db)
 	testUpdate(t, db)
@@ -166,7 +165,7 @@ func testTransactionVisibility(t *testing.T, db DB) {
 
 		err = txn.Commit()
 		assert.Ok(t, err)
-		defer db.Set(context.Background(), key, nil) // nolint:errcheck // cleanup
+		defer db.Set(context.Background(), key, nil) //nolint:errcheck // cleanup
 
 		// key should be visible now
 		got, err = db.Get(context.Background(), key)

@@ -24,13 +24,14 @@ next one. A SubNode is the last node in the pipeline and only receives messages
 without sending them to any other node.
 
 A message can have of these statuses:
-  Open      The message starts out in an open state and will stay open while
-            it's passed around between the nodes.
-  Acked     Once a node successfully processes the message (e.g. it is sent to
-            the destination or is filtered out by a processor) it is acked.
-  Nacked    If some node fails to process the message it nacks the message. In
-            that case a handler can pick it up to send it to a dead letter
-            queue.
+
+	Open      The message starts out in an open state and will stay open while
+	          it's passed around between the nodes.
+	Acked     Once a node successfully processes the message (e.g. it is sent to
+	          the destination or is filtered out by a processor) it is acked.
+	Nacked    If some node fails to process the message it nacks the message. In
+	          that case a handler can pick it up to send it to a dead letter
+	          queue.
 
 In other words, once a node receives a message it has 3 options for how to
 handle it: it can either pass it to the next node (message stays open), ack the
