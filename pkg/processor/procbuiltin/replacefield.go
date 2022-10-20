@@ -40,12 +40,13 @@ func init() {
 // ReplaceFieldKey builds a processor which replaces a field in the key in raw
 // data with a schema or in structured data. Raw data without a schema is not
 // supported. The processor can be controlled by 3 variables:
-//  * "exclude" - is a comma separated list of fields that should be excluded
-//    from the processed record ("exclude" takes precedence over "include").
-//  * "include" - is a comma separated list of fields that should be included
-//    in the processed record.
-//  * "rename" - is a comma separated list of pairs separated by colons, that
-//    controls the mapping of old field names to new field names.
+//   - "exclude" - is a comma separated list of fields that should be excluded
+//     from the processed record ("exclude" takes precedence over "include").
+//   - "include" - is a comma separated list of fields that should be included
+//     in the processed record.
+//   - "rename" - is a comma separated list of pairs separated by colons, that
+//     controls the mapping of old field names to new field names.
+//
 // If "include" is not configured or is empty then all fields in the record will
 // be included by default (except if they are configured in "exclude").
 // If "include" is not empty, then all fields are excluded by default and only

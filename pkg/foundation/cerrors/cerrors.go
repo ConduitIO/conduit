@@ -72,16 +72,16 @@ func GetStackTrace(err error) interface{} {
 //
 // Example how it's supposed to be used:
 //
-//  func() (err error) {
-//    defer func() {
-//      cleanupErr := cleanup()
-//      err = cerrors.LogOrReplace(err, cleanupErr, func() {
-//        fmt.Printf("cleanup error: %v", cleanupErr)
-//      })
-//    }
-//    // execute logic that can produce an error
-//    return err
-//  }
+//	func() (err error) {
+//	  defer func() {
+//	    cleanupErr := cleanup()
+//	    err = cerrors.LogOrReplace(err, cleanupErr, func() {
+//	      fmt.Printf("cleanup error: %v", cleanupErr)
+//	    })
+//	  }
+//	  // execute logic that can produce an error
+//	  return err
+//	}
 func LogOrReplace(oldErr, newErr error, log func()) error {
 	if oldErr == nil {
 		return newErr

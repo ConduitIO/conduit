@@ -37,11 +37,10 @@ import (
 // plugins should pass. It should manually be called from a test case in each
 // implementation:
 //
-//   func TestPlugin(t *testing.T) {
-//       testDispenser := func() {...}
-//       plugin.AcceptanceTestV1(t, testDispenser)
-//   }
-//
+//	func TestPlugin(t *testing.T) {
+//	    testDispenser := func() {...}
+//	    plugin.AcceptanceTestV1(t, testDispenser)
+//	}
 func AcceptanceTestV1(t *testing.T, tdf testDispenserFunc) {
 	// specifier tests
 	run(t, tdf, testSpecifier_Specify_Success)

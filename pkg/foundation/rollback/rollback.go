@@ -26,25 +26,24 @@ import "github.com/conduitio/conduit/pkg/foundation/cerrors"
 //
 // Example:
 //
-//   func foo() error {
-//     var r rollback.R
-//     defer r.MustExecute()
+//	func foo() error {
+//	  var r rollback.R
+//	  defer r.MustExecute()
 //
-//     // call action that mutates state and can fail
-//     err := mutableAction()
-//     if err != nil {
-//       return err
-//     }
-//     // append reversal of mutableAction1 to rollback
-//     r.Append(rollbackOfMutableAction)
+//	  // call action that mutates state and can fail
+//	  err := mutableAction()
+//	  if err != nil {
+//	    return err
+//	  }
+//	  // append reversal of mutableAction1 to rollback
+//	  r.Append(rollbackOfMutableAction)
 //
-//     // do more mutable actions and append rollbacks to r
-//     // ...
+//	  // do more mutable actions and append rollbacks to r
+//	  // ...
 //
-//     r.Skip() // all actions succeeded, skip rollbacks
-//     return nil
-//   }
-//
+//	  r.Skip() // all actions succeeded, skip rollbacks
+//	  return nil
+//	}
 type R struct {
 	f []func() error
 }

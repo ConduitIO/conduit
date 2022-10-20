@@ -36,11 +36,11 @@ func init() {
 }
 
 // ExtractFieldKey builds the following processor:
-//  * If the key is raw and has a schema attached, extract the field and use it
-//    to replace the entire key.
-//  * If the key is raw and has no schema, return an error (not supported).
-//  * If the key is structured, extract the field and use it to replace the
-//    entire key.
+//   - If the key is raw and has a schema attached, extract the field and use it
+//     to replace the entire key.
+//   - If the key is raw and has no schema, return an error (not supported).
+//   - If the key is structured, extract the field and use it to replace the
+//     entire key.
 func ExtractFieldKey(config processor.Config) (processor.Interface, error) {
 	return extractField(extractFieldKeyProcType, recordKeyGetSetter{}, config)
 }
