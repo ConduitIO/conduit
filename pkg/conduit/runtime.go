@@ -237,7 +237,7 @@ func (r *Runtime) Run(ctx context.Context) (err error) {
 		}
 	}
 
-	err = r.pipelineService.InitStatus(ctx, r.connectorService, r.processorService)
+	err = r.pipelineService.Run(ctx, r.connectorService, r.processorService)
 	if err != nil {
 		return cerrors.Errorf("failed to init pipeline statuses: %w", err)
 	}

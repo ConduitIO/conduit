@@ -72,8 +72,8 @@ func (s *Service) Init(ctx context.Context) error {
 	return err
 }
 
-// InitStatus run pipelines that had the running state in store.
-func (s *Service) InitStatus(
+// Run runs pipelines that had the running state in store.
+func (s *Service) Run(
 	ctx context.Context,
 	connFetcher ConnectorFetcher,
 	procFetcher ProcessorFetcher,

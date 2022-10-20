@@ -173,7 +173,7 @@ func testServiceInit(t *testing.T, status Status, expected Status) {
 	service = NewService(logger, db)
 	err = service.Init(ctx)
 	is.NoErr(err)
-	err = service.InitStatus(
+	err = service.Run(
 		ctx,
 		testConnectorFetcher{
 			source.ID():      source,
