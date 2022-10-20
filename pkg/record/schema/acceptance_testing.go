@@ -26,11 +26,10 @@ import (
 // should pass. It should manually be called from a test case in each
 // implementation:
 //
-//   func TestSchema(t *testing.T) {
-//       s = NewSchema()
-//       schema.AcceptanceTest(t, s)
-//   }
-//
+//	func TestSchema(t *testing.T) {
+//	    s = NewSchema()
+//	    schema.AcceptanceTest(t, s)
+//	}
 func AcceptanceTest(t *testing.T, schema Schema) {
 	testMutableSchemaSameAsSchema(t, schema)
 }

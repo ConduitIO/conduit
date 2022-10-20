@@ -381,7 +381,7 @@ func (s *Service) runPipeline(ctx context.Context, pl *Instance) error {
 			// If any of the nodes stops, the nodesTomb will be put into a dying state
 			// and ctx will be cancelled.
 			// This way, the other nodes will be notified that they need to stop too.
-			// nolint: staticcheck // nil used to use the default (parent provided via WithContext)
+			//nolint: staticcheck // nil used to use the default (parent provided via WithContext)
 			ctx := nodesTomb.Context(nil)
 			s.logger.Trace(ctx).Str(log.NodeIDField, node.ID()).Msg("running node")
 			defer func() {
@@ -429,7 +429,7 @@ func (s *Service) runPipeline(ctx context.Context, pl *Instance) error {
 	// before declaring the pipeline as stopped.
 	pl.t = &tomb.Tomb{}
 	pl.t.Go(func() error {
-		// nolint: staticcheck // nil used to use the default (parent provided via WithContext)
+		//nolint: staticcheck // nil used to use the default (parent provided via WithContext)
 		ctx := pl.t.Context(nil)
 		err := nodesTomb.Wait()
 

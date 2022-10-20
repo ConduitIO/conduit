@@ -38,11 +38,11 @@ func init() {
 }
 
 // MaskFieldKey builds the following processor:
-//  * If the key is raw and has a schema attached, replace the field with the
-//    zero value of the fields type.
-//  * If the key is raw and has no schema, return an error (not supported).
-//  * If the key is structured, replace the field with the zero value of the
-//    fields type.
+//   - If the key is raw and has a schema attached, replace the field with the
+//     zero value of the fields type.
+//   - If the key is raw and has no schema, return an error (not supported).
+//   - If the key is structured, replace the field with the zero value of the
+//     fields type.
 func MaskFieldKey(config processor.Config) (processor.Interface, error) {
 	return maskField(maskFieldKeyProcType, recordKeyGetSetter{}, config)
 }

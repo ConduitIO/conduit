@@ -58,12 +58,12 @@ type Schema interface {
 
 // Descriptor represents a Descriptor for a single type. Any Descriptor has to
 // implement at least one of the following interfaces:
-//  - StructDescriptor or MutableStructDescriptor
-//  - MapDescriptor or MutableMapDescriptor
-//  - ArrayDescriptor or MutableArrayDescriptor
-//  - PrimitiveDescriptor or MutablePrimitiveDescriptor
-//  - EnumDescriptor or MutableEnumDescriptor
-//  - EnumValueDescriptor or MutableEnumValueDescriptor
+//   - StructDescriptor or MutableStructDescriptor
+//   - MapDescriptor or MutableMapDescriptor
+//   - ArrayDescriptor or MutableArrayDescriptor
+//   - PrimitiveDescriptor or MutablePrimitiveDescriptor
+//   - EnumDescriptor or MutableEnumDescriptor
+//   - EnumValueDescriptor or MutableEnumValueDescriptor
 type Descriptor interface {
 	// Parameters returns additional settings specific for the schema type.
 	Parameters() map[string]interface{}
