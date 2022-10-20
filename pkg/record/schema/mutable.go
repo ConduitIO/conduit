@@ -40,12 +40,12 @@ type MutableSchema interface {
 
 // MutableDescriptor is a mutable instance of a Descriptor. Any
 // MutableDescriptor has to implement at least one of the following interfaces:
-//  - MutableStructDescriptor
-//  - MutableMapDescriptor
-//  - MutableArrayDescriptor
-//  - MutablePrimitiveDescriptor
-//  - MutableEnumDescriptor
-//  - MutableEnumValueDescriptor
+//   - MutableStructDescriptor
+//   - MutableMapDescriptor
+//   - MutableArrayDescriptor
+//   - MutablePrimitiveDescriptor
+//   - MutableEnumDescriptor
+//   - MutableEnumValueDescriptor
 type MutableDescriptor interface {
 	Descriptor
 	// SetParameters sets additional settings specific for the schema type.

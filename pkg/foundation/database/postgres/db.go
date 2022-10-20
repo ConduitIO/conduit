@@ -45,11 +45,11 @@ var _ database.DB = (*DB)(nil)
 //
 // Refer to pgxpool.ParseConfig for details about the connection string format.
 //
-//   # Example DSN
-//   user=jack password=secret host=pg.example.com port=5432 dbname=mydb sslmode=verify-ca pool_max_conns=10
+//	# Example DSN
+//	user=jack password=secret host=pg.example.com port=5432 dbname=mydb sslmode=verify-ca pool_max_conns=10
 //
-//   # Example URL
-//   postgres://jack:secret@pg.example.com:5432/mydb?sslmode=verify-ca&pool_max_conns=10
+//	# Example URL
+//	postgres://jack:secret@pg.example.com:5432/mydb?sslmode=verify-ca&pool_max_conns=10
 func New(
 	ctx context.Context,
 	l log.CtxLogger,

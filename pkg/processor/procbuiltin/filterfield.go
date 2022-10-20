@@ -42,26 +42,27 @@ func init() {
 }
 
 // FilterFieldKey builds a processor with the following config fields:
-// - `type` sets the behavior to "include" or "exclude" the record based on the
-//   result of the condition.
-// - `condition` is an XPath query expression that the user defines to forward
-//   or drop a record on its results.
-// - `missingornull` defines how to handle the record in the event the fields
-//   the query would use don't exist.
-// - `exists` field in the config gives the user a chance to define an existence
-//   query for a given filter.
+//   - `type` sets the behavior to "include" or "exclude" the record based on the
+//     result of the condition.
+//   - `condition` is an XPath query expression that the user defines to forward
+//     or drop a record on its results.
+//   - `missingornull` defines how to handle the record in the event the fields
+//     the query would use don't exist.
+//   - `exists` field in the config gives the user a chance to define an existence
+//     query for a given filter.
 //
 // If `condition` passes, then it will immediately handle the record as
 // `type` dictates. If `condition` doesn't match and `exists` matches nothing,
 // then it will handle the record as `missingornull` specifies.
 //
 // Example processor config with noted possible values:
-//   {
-// 	   "type": "include", // [include, exclude]
-// 	   "condition":"<xpath expression>",
-// 	   "exists": "<xpath expression>",
-// 	   "missingornull": "fail" // [fail, include, exclude]
-//   }
+//
+//	  {
+//		   "type": "include", // [include, exclude]
+//		   "condition":"<xpath expression>",
+//		   "exists": "<xpath expression>",
+//		   "missingornull": "fail" // [fail, include, exclude]
+//	  }
 func FilterFieldKey(config processor.Config) (processor.Interface, error) {
 	return filterField(filterFieldKeyProcType, recordKeyGetSetter{}, config)
 }
