@@ -11,15 +11,15 @@ Metrics are exposed at `/metrics`. For example, if you're running Conduit locall
 * **Conduit metrics**: We currently have a number of high level pipeline, processor and connector metrics, all of which are
   defined in [measure.go](https://github.com/ConduitIO/conduit/blob/main/pkg/foundation/metrics/measure/measure.go). Those are:
 
-  |Pipeline name|Type|Description|
-  |---|---|---|
-  |`conduit_pipelines`|Gauge|Number of pipelines by status.|
-  |`conduit_connectors`|Gauge|Number of connectors by type (source, destination).|
-  |`conduit_processors`|Gauge|Number of processors by name and type.|
-  |`conduit_connector_bytes`|Histogram| Number of bytes a connector processed by pipeline name, plugin and type (source, destination).|
-  |`conduit_pipeline_execution_duration_seconds`|Histogram| Amount of time records spent in a pipeline.|
-  |`conduit_connector_execution_duration_seconds`|Histogram| Amount of time spent reading or writing records per pipeline, plugin and connector type (source, destination).|
-  |`conduit_processor_execution_duration_seconds`|Histogram| Amount of time spent on processing records per pipeline and processor.|
+  | Pipeline name                                  | Type      | Description                                                                                                    |
+  |------------------------------------------------|-----------|----------------------------------------------------------------------------------------------------------------|
+  | `conduit_pipelines`                            | Gauge     | Number of pipelines by status.                                                                                 |
+  | `conduit_connectors`                           | Gauge     | Number of connectors by type (source, destination).                                                            |
+  | `conduit_processors`                           | Gauge     | Number of processors by name and type.                                                                         |
+  | `conduit_connector_bytes`                      | Histogram | Number of bytes a connector processed by pipeline name, plugin and type (source, destination).                 |
+  | `conduit_pipeline_execution_duration_seconds`  | Histogram | Amount of time records spent in a pipeline.                                                                    |
+  | `conduit_connector_execution_duration_seconds` | Histogram | Amount of time spent reading or writing records per pipeline, plugin and connector type (source, destination). |
+  | `conduit_processor_execution_duration_seconds` | Histogram | Amount of time spent on processing records per pipeline and processor.                                         |
 
 * **Go runtime metrics**: The default metrics exposed by Prometheus' official Go package, [client_golang](https://pkg.go.dev/github.com/prometheus/client_golang).
 * **gRPC metrics**: The gRPC instrumentation package we use is [promgrpc](https://github.com/piotrkowalczuk/promgrpc). 
