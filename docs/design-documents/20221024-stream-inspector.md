@@ -41,6 +41,26 @@ Implementations will generally use one of two approaches: pull based and push ba
   * Inspection data would come in almost real-time.
   * Inspecting the data may require additional tools (depends on the actual implementation)
 
+From what we know so far, the push based approach has more advantages and is easier to work with, so that's the 
+approach chosen here. Concrete implementation options are discussed below.
+
+For context: gRPC is the main API for Conduit. The HTTP API is generated using [grpc-gateway](https://github.com/grpc-ecosystem/grpc-gateway).
+
+### Implementation option 1: WebSockets
+Conduit provides a streaming endpoint. The stream is exposed using the WebSockets API.
+
+grpc-gateway doesn't support WebSockets (see [this](https://github.com/grpc-ecosystem/grpc-gateway/issues/168)). There's 
+an open-source proxy for it though, available [here](https://github.com/tmc/grpc-websocket-proxy/). 
+
+### Implementation option 2: Pure gRPC
+Conduit provides a streaming endpoint. The stream is consumed as such, i.e. a gRPC endpoint. A JavaScript implementation
+of gRPC for browser clients exists (called [grpc-web](https://github.com/grpc/grpc-web)). While that would mean no 
+changes in Conduit itself, it would require a lot of changes in the UI.
+
+### Chosen implementation
+[grpc-websocket-proxy](https://github.com/tmc/grpc-websocket-proxy/) mention in option 1 is relatively popular and is
+open-source, so using it is no risk. Overall
+
 ## Questions
 
 * Should we rename it to pipeline inspector instead? Pipeline is the term we use in the API, streams are used
