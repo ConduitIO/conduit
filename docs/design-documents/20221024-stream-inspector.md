@@ -81,6 +81,8 @@ open-source, so using it is no risk. The other option is much costlier.
   internally.
     * Cons: We cannot call it CSI (Conduit's Stream Inspector) anymore.
 * Is metadata needed (such as time the data was captured)?
+* Should there be a limit on how long a stream inspector can run?
+* Should there be a limit on how many records a stream inspector can receive?
 
 ## Future work
 
