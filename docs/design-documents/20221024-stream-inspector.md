@@ -83,6 +83,7 @@ open-source, so using it is no risk. The other option is much costlier.
 * Is metadata needed (such as time the data was captured)?
 * Should there be a limit on how long a stream inspector can run?
 * Should there be a limit on how many records a stream inspector can receive?
+* Are we interested in more than the records? Is there some other data we'd like to see (now or in future)?
 
 ## Future work
 
