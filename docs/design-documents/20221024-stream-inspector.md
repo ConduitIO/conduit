@@ -46,6 +46,15 @@ approach chosen here. Concrete implementation options are discussed below.
 
 For context: gRPC is the main API for Conduit. The HTTP API is generated using [grpc-gateway](https://github.com/grpc-ecosystem/grpc-gateway).
 
+### API
+For any given pipeline component, only one method is required, one which starts an inspection (i.e. sending of data to 
+the client). 
+
+Three methods are required in total:
+1. One to inspect a connector (there's a single endpoint for source and destination connectors)
+2. One to inspect records coming into a processor
+3. One to inspect records coming out of a processor
+
 ### Implementation option 1: WebSockets
 Conduit provides a streaming endpoint. The stream is exposed using the WebSockets API.
 
@@ -57,9 +66,14 @@ Conduit provides a streaming endpoint. The stream is consumed as such, i.e. a gR
 of gRPC for browser clients exists (called [grpc-web](https://github.com/grpc/grpc-web)). While that would mean no 
 changes in Conduit itself, it would require a lot of changes in the UI.
 
+### Implementation option 3: Server-sent events 
+TBD
+
 ### Chosen implementation
 [grpc-websocket-proxy](https://github.com/tmc/grpc-websocket-proxy/) mention in option 1 is relatively popular and is
-open-source, so using it is no risk. Overall
+open-source, so using it is no risk. The other option is much costlier.
+
+
 
 ## Questions
 
