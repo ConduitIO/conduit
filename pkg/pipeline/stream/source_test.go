@@ -137,29 +137,33 @@ func newMockSource(ctrl *gomock.Controller, recordCount int, wantErr error) (*mo
 
 	source := mock.NewSource(ctrl)
 
-	stop := make(chan struct{})
+	teardown := make(chan struct{})
 	source.EXPECT().ID().Return("source-connector").AnyTimes()
 	source.EXPECT().Open(gomock.Any()).Return(nil).Times(1)
-	source.EXPECT().Teardown(gomock.Any()).Return(nil).Times(1)
 	source.EXPECT().Errors().Return(make(chan error)).Times(1)
 	source.EXPECT().Read(gomock.Any()).DoAndReturn(func(ctx context.Context) (record.Record, error) {
 		if position == recordCount {
 			if wantErr != nil {
 				return record.Record{}, wantErr
 			}
-			<-stop
+			<-teardown
 			return record.Record{}, plugin.ErrStreamNotOpen
 		}
 		r := records[position]
 		position++
 		return r, nil
-	}).Times(recordCount + 1)
+	}).
+		MinTimes(recordCount).    // can be recordCount if the source receives stop before producing last record
+		MaxTimes(recordCount + 1) // can be recordCount+1 if the source checks for another record before the stop signal is received
 	source.EXPECT().Stop(gomock.Any()).DoAndReturn(func(ctx context.Context) (record.Position, error) {
-		close(stop)
 		if len(records) == 0 {
 			return nil, nil
 		}
 		return records[len(records)-1].Position, nil
+	}).Times(1)
+	source.EXPECT().Teardown(gomock.Any()).DoAndReturn(func(ctx context.Context) error {
+		close(teardown)
+		return nil
 	}).Times(1)
 
 	return source, records
