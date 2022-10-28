@@ -13,10 +13,10 @@ Make troubleshooting pipelines easier by making it possible to inspect the data 
 3. A destination inspector should show the records coming into the respective destination.
 4. A processor has two inspectors: one for the incoming data and one for the resulting data (i.e. the transformed
    records).
-5. The inspector should provide the data about the component being inspected, from the time the inspection started.
-   Historical data is not required.
+5. The inspector should provide the data (i.e. the relevant records) about the component being inspected, from the 
+   time the inspection started. Historical data is not required.
 6. The inspector should have a minimal footprint on the resource usage (CPU, memory etc.)
-7. It should be possible to specify which data is shown.
+7. The inspector should have an insignificant impact on a pipeline's performance (ideally, no impact at all).
 8. The inspector data should be available through:
     * the HTTP API,
     * the gRPC API and
@@ -67,13 +67,19 @@ of gRPC for browser clients exists (called [grpc-web](https://github.com/grpc/gr
 changes in Conduit itself, it would require a lot of changes in the UI.
 
 ### Implementation option 3: Server-sent events 
-TBD
+[Server-sent events](https://html.spec.whatwg.org/#server-sent-events) enable servers to push events to clients. Unlike
+WebSockets, the communication is unidirectional.
+
+While server-sent events generally match our requirements, the implementation would not be straightforward because 
+grpc-gateway doesn't support it, nor do they plan to support it (see [this](https://hackmd.io/@prysmaticlabs/eventstream-api) 
+and [this](https://github.com/grpc-ecosystem/grpc-gateway/issues/26)).
+
+Also, we want the inspector to be available through the UI, and using WebSockets is a much easier option than server-sent 
+events.
 
 ### Chosen implementation
 [grpc-websocket-proxy](https://github.com/tmc/grpc-websocket-proxy/) mention in option 1 is relatively popular and is
 open-source, so using it is no risk. The other option is much costlier.
-
-
 
 ## Questions
 
@@ -83,7 +89,9 @@ open-source, so using it is no risk. The other option is much costlier.
 * Is metadata needed (such as time the data was captured)?
 * Should there be a limit on how long a stream inspector can run?
 * Should there be a limit on how many records a stream inspector can receive?
-* Are we interested in more than the records? Is there some other data we'd like to see (now or in future)?
+* Are we interested in more than the records? Is there some other data we'd like to see (now or in future)? 
+* Should it be possible to specify which data is shown?
+  * Answer: No, out of scope. It's a matter of data representation on the client side.
 
 ## Future work
 
