@@ -47,6 +47,9 @@ approach chosen here. Concrete implementation options are discussed below.
 For context: gRPC is the main API for Conduit. The HTTP API is generated using [grpc-gateway](https://github.com/grpc-ecosystem/grpc-gateway).
 
 ### API
+Inspecting a pipeline component is triggered with a gRPC/HTTP API request. If the pipeline component cannot be inspected
+for any reason (e.g. inspection not supported), an error is returned.
+
 Inspectable pipeline components themselves should expose an `Inspect` method, for example
 ```go
 func(s Source) Inspect() chan Record 
