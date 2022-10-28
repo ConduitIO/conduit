@@ -48,7 +48,7 @@ For context: gRPC is the main API for Conduit. The HTTP API is generated using [
 
 ### API
 Inspecting a pipeline component is triggered with a gRPC/HTTP API request. If the pipeline component cannot be inspected
-for any reason (e.g. inspection not supported), an error is returned.
+for any reason (e.g. inspection not supported, component not found), an error is returned.
 
 Inspectable pipeline components themselves should expose an `Inspect` method, for example
 ```go
