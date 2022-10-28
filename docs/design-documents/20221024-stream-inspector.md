@@ -47,8 +47,15 @@ approach chosen here. Concrete implementation options are discussed below.
 For context: gRPC is the main API for Conduit. The HTTP API is generated using [grpc-gateway](https://github.com/grpc-ecosystem/grpc-gateway).
 
 ### API
-For any given pipeline component, only one method is required, one which starts an inspection (i.e. sending of data to 
-the client). 
+Pipeline components themselves should expose an `Inspect` method, for example
+```go
+func(s Source) Inspect() chan Record 
+```
+(As a return value, we may use a special `struct` instead of `chan Record` to more easily propagate events, such as 
+inspection done.)
+
+For any given pipeline component, only one gRPC/HTTP API method is required, one which starts an inspection (i.e. 
+sending of data to a client).
 
 Three methods are required in total:
 1. One to inspect a connector (there's a single endpoint for source and destination connectors)
