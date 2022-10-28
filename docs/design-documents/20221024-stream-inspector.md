@@ -41,8 +41,8 @@ Implementations will generally use one of two approaches: pull based and push ba
   * Inspection data would come in almost real-time.
   * Inspecting the data may require additional tools (depends on the actual implementation)
 
-From what we know so far, the push based approach has more advantages and is easier to work with, so that's the 
-approach chosen here. Concrete implementation options are discussed below.
+From what we know so far, **the push based approach has more advantages and is easier to work with, so that's the 
+approach chosen here**. Concrete implementation options are discussed below.
 
 For context: gRPC is the main API for Conduit. The HTTP API is generated using [grpc-gateway](https://github.com/grpc-ecosystem/grpc-gateway).
 
@@ -56,6 +56,8 @@ func(s Source) Inspect() chan Record
 ```
 (As a return value, we may use a special `struct` instead of `chan Record` to more easily propagate events, such as 
 inspection done.)
+
+The API layer will use this method to get the records it needs to stream to the client which requested an inspection.
 
 For any given pipeline component, only one gRPC/HTTP API method is required, one which starts an inspection (i.e. 
 sending of data to a client).
