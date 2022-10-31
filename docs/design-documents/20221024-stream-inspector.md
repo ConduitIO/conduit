@@ -116,6 +116,14 @@ open-source, so using it is no risk. The other option is much costlier.
     * ~~The source connector from which a record originated.~~ Can be found in OpenCDC metadata.
 * Should there be a limit on how long a stream inspector can run?
 * Should there be a limit on how many records a stream inspector can receive?
+  * Pros: 
+    * Users could mistakenly leave inspector open "forever".
+    * This would handle the case where an inspector crashes.
+  * Cons:
+    * Some users may want to run an inspection over a longer period of time.
+    * The inspector will be non-blocking, not accumulating any data in memory, so it running over a longer period of time
+    won't consume significant resources.
+  * **Answer**: For now, we'll have no limits.
 * Are we interested in more than the records? Is there some other data we'd like to see (now or in future)? 
   * **Answer**: We didn't find any data not related to records themselves which would be useful in the inspector.
 * Should it be possible to specify which data is shown?
