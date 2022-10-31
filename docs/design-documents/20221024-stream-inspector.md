@@ -108,7 +108,7 @@ open-source, so using it is no risk. The other option is much costlier.
 
 * Should we rename it to pipeline inspector instead? Pipeline is the term we use in the API, streams are used
   internally.
-    * Answer: Since the inspector is about inspecting data, and the term stream stands for data whereas pipeline
+    * **Answer**: Since the inspector is about inspecting data, and the term stream stands for data whereas pipeline
       stands for the setup/topology, keeping the term "stream inspector" makes sense.
 * Is metadata needed (such as time the data was captured)?
   * Examples: 
@@ -117,10 +117,19 @@ open-source, so using it is no risk. The other option is much costlier.
 * Should there be a limit on how long a stream inspector can run?
 * Should there be a limit on how many records a stream inspector can receive?
 * Are we interested in more than the records? Is there some other data we'd like to see (now or in future)? 
-  * Answer: We didn't find any data not related to records themselves which would be useful in the inspector.
+  * **Answer**: We didn't find any data not related to records themselves which would be useful in the inspector.
 * Should it be possible to specify which data is shown?
-  * Answer: No, out of scope. It's a matter of data representation on the client side.
+  * **Answer**: No, out of scope. It's a matter of data representation on the client side.
+* Should the inspector be blocking (if a client is consuming the inspected records slower that then pipeline rate,
+then the pipeline would be throttled) or non-blocking?
+  * Arguments for blocking: 
+    * the inspected data will be complete no matter what, making troubleshooting easier
+    * if we make it possible to insert records during inspection, it will make implementation easier
+  * Arguments against: 
+    * "inspection" is meant to be "view-only" and not a debugger
+    * for high-volume sources this will always result in pipeline being throttled 
+  * **Answer**: Based on above, the stream inspector should be non-blocking.
 
 ## Future work
 
-* Inspector REPL 
+* Inspector REPL: https://github.com/ConduitIO/conduit/issues/697
