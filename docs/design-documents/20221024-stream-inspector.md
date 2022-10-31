@@ -97,11 +97,16 @@ open-source, so using it is no risk. The other option is much costlier.
 
 * Should we rename it to pipeline inspector instead? Pipeline is the term we use in the API, streams are used
   internally.
-    * Cons: We cannot call it CSI (Conduit's Stream Inspector) anymore.
+    * Answer: Since the inspector is about inspecting data, and the term stream stands for data whereas pipeline
+      stands for the setup/topology, keeping the term "stream inspector" makes sense.
 * Is metadata needed (such as time the data was captured)?
+  * Examples: 
+    * The time at which a record entered/left a node.
+    * ~~The source connector from which a record originated.~~ Can be found in OpenCDC metadata.
 * Should there be a limit on how long a stream inspector can run?
 * Should there be a limit on how many records a stream inspector can receive?
 * Are we interested in more than the records? Is there some other data we'd like to see (now or in future)? 
+  * Answer: We didn't find any data not related to records themselves which would be useful in the inspector.
 * Should it be possible to specify which data is shown?
   * Answer: No, out of scope. It's a matter of data representation on the client side.
 
