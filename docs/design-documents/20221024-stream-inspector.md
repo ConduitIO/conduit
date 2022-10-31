@@ -47,18 +47,25 @@ approach chosen here**. Concrete implementation options are discussed below.
 
 For context: gRPC is the main API for Conduit. The HTTP API is generated using [grpc-gateway](https://github.com/grpc-ecosystem/grpc-gateway).
 
+### Exposing the inspection data
+Following options exist to expose the inspection data for node. How the data will be used by the API is discussed in
+below sections.
+
+#### Option 1: Inspectable nodes expose a method
+Inspectable pipeline components themselves should expose an `Inspect` method, for example:
+```go
+// Example for a source, can also be a processor or a destination
+func(s Source) Inspect(direction string) chan Record
+```
+(As a return value, we may use a special `struct` instead of `chan Record` to more easily propagate events, such as
+inspection done.)
+
+#### Option 2: Dedicated inspector nodes
+TBD
+
 ### API
 Inspecting a pipeline component is triggered with a gRPC/HTTP API request. If the pipeline component cannot be inspected
 for any reason (e.g. inspection not supported, component not found), an error is returned.
-
-Inspectable pipeline components themselves should expose an `Inspect` method, for example
-```go
-func(s Source) Inspect() chan Record 
-```
-(As a return value, we may use a special `struct` instead of `chan Record` to more easily propagate events, such as 
-inspection done.)
-
-The API layer will use this method to get the records it needs to stream to the client which requested an inspection.
 
 For any given pipeline component, only one gRPC/HTTP API method is required, one which starts an inspection (i.e. 
 sending of data to a client).
