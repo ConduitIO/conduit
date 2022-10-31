@@ -27,6 +27,7 @@ Make troubleshooting pipelines easier by making it possible to inspect the data 
 
 ## Implementation
 
+### Push based vs. pull based
 Implementations will generally use one of two approaches: pull based and push based.
 
 * In a **pull based** implementation, a client (HTTP client, gRPC client, UI) would be periodically checking for
@@ -67,18 +68,21 @@ Three methods are required in total:
 2. One to inspect records coming into a processor
 3. One to inspect records coming out of a processor
 
-### Implementation option 1: WebSockets
+### Delivery options
+Here we'll discuss options for delivering the stream of inspection data from the gRPC/HTTP API to a client.
+
+#### Option 1: WebSockets
 Conduit provides a streaming endpoint. The stream is exposed using the WebSockets API.
 
 grpc-gateway doesn't support WebSockets (see [this](https://github.com/grpc-ecosystem/grpc-gateway/issues/168)). There's 
 an open-source proxy for it though, available [here](https://github.com/tmc/grpc-websocket-proxy/). 
 
-### Implementation option 2: Pure gRPC
+#### Option 2: Pure gRPC
 Conduit provides a streaming endpoint. The stream is consumed as such, i.e. a gRPC endpoint. A JavaScript implementation
 of gRPC for browser clients exists (called [grpc-web](https://github.com/grpc/grpc-web)). While that would mean no 
 changes in Conduit itself, it would require a lot of changes in the UI.
 
-### Implementation option 3: Server-sent events 
+### Option 3: Server-sent events 
 [Server-sent events](https://html.spec.whatwg.org/#server-sent-events) enable servers to push events to clients. Unlike
 WebSockets, the communication is unidirectional.
 
@@ -89,7 +93,7 @@ and [this](https://github.com/grpc-ecosystem/grpc-gateway/issues/26)).
 Also, we want the inspector to be available through the UI, and using WebSockets is a much easier option than server-sent 
 events.
 
-### Chosen implementation
+#### Chosen delivery option
 [grpc-websocket-proxy](https://github.com/tmc/grpc-websocket-proxy/) mention in option 1 is relatively popular and is
 open-source, so using it is no risk. The other option is much costlier.
 
