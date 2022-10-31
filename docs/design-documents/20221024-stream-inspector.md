@@ -11,9 +11,8 @@ Make troubleshooting pipelines easier by making it possible to inspect the data 
     * For v1, it's enough that destinations are inspectable.
 2. A source inspector should show the records coming out of the respective source.
 3. A destination inspector should show the records coming into the respective destination.
-4. A processor has two inspectors: one for the incoming data and one for the resulting data (i.e. the transformed
-   records).
-5. The inspector should provide the data (i.e. the relevant records) about the component being inspected, from the 
+4. A processor has two inspectors: one for the incoming records and one for the transformed records).
+5. The inspector should provide the relevant records about the component being inspected, from the 
    time the inspection started. Historical data is not required.
 6. The inspector should have a minimal footprint on the resource usage (CPU, memory etc.)
 7. The inspector should have an insignificant impact on a pipeline's performance (ideally, no impact at all).
@@ -110,7 +109,7 @@ open-source, so using it is no risk. The other option is much costlier.
   internally.
     * **Answer**: Since the inspector is about inspecting data, and the term stream stands for data whereas pipeline
       stands for the setup/topology, keeping the term "stream inspector" makes sense.
-* Is metadata needed (such as time the data was captured)?
+* Is metadata needed (such as time the records were captured)?
   * Examples: 
     * The time at which a record entered/left a node.
     * ~~The source connector from which a record originated.~~ Can be found in OpenCDC metadata.
