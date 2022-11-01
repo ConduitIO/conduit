@@ -107,10 +107,13 @@ would be super helpful for developers and easier to use, and will continue addin
 
 ## Implementation
 
-Implementing this feature consists of three main steps:
-
-1. Give developers the ability to specify validations needed for each parameter. (manually)
-   Params should look something like:
+Implementing this feature consists of four main steps:
+1. Adjust the connector protocol by adding validations for parameters, this change should be done in a backwards 
+   compatible way, so the old `required` field needs to be parsed into a validation.
+ 
+2. Adjust the connector SDK to give developers the ability to specify validations needed for each parameter. (manually)
+   
+Params should look something like:
 
 ```go
 SourceParams: []sdk.Parameter{
@@ -118,20 +121,15 @@ SourceParams: []sdk.Parameter{
       Name: "param",
       Type: sdk.ParameterTypeNumber,
       Validations: []sdk.Validation{
-        sdk.Validation{
-          Type: sdk.ValidationRequired,
-        },
-        sdk.Validation{
-          Type: sdk.ValidationGreaterThan,
-          Value: 0,
-        },
+        sdk.ValidationRequired{},
+        sdk.ValidationLessThan{Val:8},
       }
     }
   }
 ```
 
-2. Provide a function that takes the parameters' validations and validates them in the config function.
-3. Generate connector configurations from a Go struct, which will give the ability to generate the connector's 
+3. Provide a function that takes the parameters' validations and validates them in the `Configure` function on the SDK.
+4. Generate connector configurations from a Go struct, which will give the ability to generate the connector's 
    configurations from a Go struct, the struct would have field tags that specify validations, default value, and if 
    a parameter is required.
 
