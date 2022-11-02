@@ -27,12 +27,13 @@ The design for the DLQ should support the following:
 - Ensure message order is preserved when messages are sent to the DLQ.
   In other words - the order in which messages were produced by the source
   connector should be preserved, even if messages are nacked in a different
-  order.
+  order (this is already assured using
+  a [semaphore](https://github.com/ConduitIO/conduit/blob/b6325584d51ec64bc9086faddcdaa2788a5dfa8f/pkg/pipeline/stream/source_acker.go#L35-L37)).
 - If a message failed to be sent to the DLQ the nack action should fail and
   stop the pipeline.
-- Allow the user to configure the window and percentage of messages that need
-  to be nacked before the pipeline is considered broken and stops. Example: if
-  90% of the last 30 messages are nacked stop the pipeline.
+- Allow the user to configure the window and number of messages that need to be
+  nacked to consider the pipeline broken and trigger a stop. Example: if 25 of
+  the last 30 messages are nacked stop the pipeline.
 - Messages pushed to the DLQ should contain metadata describing the error and
   the source connector.
 
@@ -62,75 +63,122 @@ an error. This should be all we need to write that record to the DLQ.
 
 ```go
 type DLQHandler struct {
-	func Write(ctx context.Context, r record.Record, reason error) error
+    func Write(ctx context.Context, r record.Record, reason error) error
 }
 ```
 
-The function `DLQ.Write` is expected to synchronously write the record to the
-DLQ and return `nil` if that action succeeded or an error otherwise.
+The function `DLQHandler.Write` is expected to synchronously write the record
+to the DLQ and return `nil` if that action succeeded or an error otherwise. The
+synchronous write is needed to ensure the DLQ message actually reached its
+destination, otherwise we need to consider the nack failed and need to stop the
+pipeline.
 
 ### DLQ Strategies
 
-We propose to implement 3 DLQ strategies:
+We propose to implement 2 DLQ strategies:
 
-- `stop`
+- `log` - This strategy would cause a nacked message to be logged to the
+  Conduit log. Unless a stop window and threshold are configured the pipeline
+  would keep running.
+- `plugin` - This strategy would reroute nacked messages to a destination
+  connector plugin. This strategy needs to be able to get additional
+  configuration options defining the plugin name and its settings.
 
-  Using this strategy would cause a nacked message to stop the pipeline
-  immediately without draining remaining messages to the destination. (this is
-  the current behavior and should stay the default).
+Regardless of the strategy the user can also configure a stop window and stop
+threshold.
 
-- `ignore`
+- `stop_window` defines how many last acks/nacks are monitored in the window
+  that controls if the pipeline should stop. 0 disables the window.
+- `stop_threshold` defines the number of nacks in the window that would cause
+  the pipeline to stop.
 
-  This strategy would cause nacked messages to be logged but wouldn't cause the
-  pipeline to stop. We can consider making it possible to configure the log
-  level used to log the nacked message.
-
-- `plugin`
-
-  This strategy would reroute nacked messages to a destination connector
-  plugin. This strategy needs to be able to get additional configuration
-  options defining the plugin name and its settings.
+The default strategy should be `log` with a `stop_window` of 1 and a
+`stop_threshold` of 1. This would result in the same behavior as before the
+introduction of DLQs - the first nacked message would stop the pipeline.
 
 ### API
 
 The DLQ should be defined as a property of
 the [`Pipeline.Config`](https://github.com/ConduitIO/conduit/blob/d19379efc04d20d12ab9c80df82a29fcef7e8afd/proto/api/v1/api.proto#L28)
-entity. It's is a config option that can be updated even after the pipeline is
+entity. It's a config option that can be updated even after the pipeline is
 created. We need to provide a way to choose a DLQ strategy and configure it if
 necessary.
 
 One option to achieve this is to provide these fields:
+
 ```protobuf
 message DLQ {
-  // strategy is one of [stop,ignore,plugin]
-  string strategy = 1;
-  // if strategy is plugin, this defines the plugin name
-  string plugin = 2;
-  // if strategy is plugin, this defines the plugin settings
-  map<string, string> settings = 3;
+  message LogStrategy {
+    // level controls the log level at which nacked records are logged
+    // should be one of [ERROR,WARN,INFO,DEBUG,TRACE,DISABLED]
+    // default = WARN
+    string level = 1;
+  }
+  message PluginStrategy {
+    // plugin is the connector plugin used for storing DLQ records
+    string plugin = 1;
+    // settings are the plugin settings
+    map<string, string> settings = 2;
+  }
+
+  // strategy defines the DLQ strategy
+  oneof strategy {
+    LogStrategy log = 1;
+    PluginStrategy plugin = 2;
+  }
+
+  // stop_window defines how many last acks/nacks are monitored in the window
+  // that controls if the pipeline should stop (0 disables the window)
+  // default = 1
+  uint64 stop_window = 3;
+  // stop_threshold defines the number of nacks in the window that would cause
+  // the pipeline to stop
+  // default = 1
+  uint64 stop_threshold = 4;
 }
 ```
 
 ### Pipeline config file
 
-The config file should mimic the API structure.
+Example of a DLQ config that logs records and never stops.
 
 ```yaml
-
 version: 1.0
 pipelines:
   dlq-example:
     connectors:
       [...]
     dlq:
-      # strategy is one of [fail,ignore,plugin]
-      strategy: plugin
-      # if strategy is plugin, this defines the plugin name
-      plugin: builtin:file
-      # if strategy is plugin, this defines the plugin settings
-      settings:
-        path: ./dlq-example.dlq
+      # disable stop window
+      stopWindow: 0
+      # use log strategy
+      strategy:
+        type: log
+        level: WARN
 ```
+
+Example of a DLQ config that writes nacked records to a file and stops if at
+least 30 of the last 100 records were nacked.
+
+```yaml
+version: 1.0
+pipelines:
+  dlq-example:
+    connectors:
+      [...]
+    dlq:
+      stopWindow: 100
+      stopThreshold: 30
+      strategy:
+        type: plugin
+        plugin: builtin:file
+        settings:
+          path: ./dlq-example.dlq
+```
+
+### UI
+
+?
 
 ## Future work
 
