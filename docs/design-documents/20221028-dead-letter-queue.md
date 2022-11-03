@@ -29,6 +29,8 @@ The design for the DLQ should support the following:
   connector should be preserved, even if messages are nacked in a different
   order (this is already assured using
   a [semaphore](https://github.com/ConduitIO/conduit/blob/b6325584d51ec64bc9086faddcdaa2788a5dfa8f/pkg/pipeline/stream/source_acker.go#L35-L37)).
+  Note that the order is only preserved for messages coming from the same
+  source.
 - If a message failed to be sent to the DLQ the nack action should fail and
   stop the pipeline.
 - Allow the user to configure the window and number of messages that need to be
