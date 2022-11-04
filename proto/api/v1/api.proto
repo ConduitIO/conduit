@@ -1,12 +1,14 @@
 syntax = "proto3";
 
 package api.v1;
-option go_package = "github.com/conduitio/conduit/proto/api/v1;api";
 
+import "opencdc/v1/opencdc.proto";
 import "google/api/field_behavior.proto";
 import "google/api/annotations.proto";
 import "protoc-gen-openapiv2/options/annotations.proto";
 import "google/protobuf/timestamp.proto";
+import "google/protobuf/descriptor.proto";
+import "google/protobuf/struct.proto";
 
 message Pipeline {
   // Status describes the pipeline status.
@@ -436,6 +438,12 @@ service ConnectorService {
     };
   };
 
+  rpc InspectConnector(InspectConnectorRequest) returns (stream opencdc.v1.Record) {
+    option (google.api.http) = {
+      get: "/v1/connectors/{id}/inspect"
+    };
+  }
+
   rpc GetConnector(GetConnectorRequest) returns (GetConnectorResponse) {
     option (google.api.http) = {
       get: "/v1/connectors/{id}"
@@ -624,6 +632,10 @@ message ListConnectorsRequest {
 
 message ListConnectorsResponse {
   repeated Connector connectors = 1;
+}
+
+message InspectConnectorRequest {
+  string id = 1;
 }
 
 message GetConnectorRequest {
@@ -939,4 +951,3 @@ message PluginSpecifications{
   map<string, Parameter> destination_params = 6;
   map<string, Parameter> source_params = 7;
 }
-
