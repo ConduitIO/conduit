@@ -35,8 +35,8 @@ Before you push your changes don't forget to revert the replaced dependency
 using `go mod edit -dropreplace go.buf.build/conduitio/conduit/conduitio/conduit`.
 
 Because Conduit depends on the remotely generated code you will normally have
-to create 2 separate PRs - the first changes the proto changes and uploads a
-new version of the shema to the schema registry once it's merged, the second
+to create 2 separate PRs - the first changes the proto files and uploads a
+new version of the schema to the schema registry once it's merged, the second
 updates the dependency to `go.buf.build/conduitio/conduit/conduitio/conduit`
 and includes any necessary Go code changes. The switch to locally generated
 code can help you prepare and test both parts at once.
