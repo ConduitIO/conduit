@@ -43,6 +43,8 @@ The design for the DLQ should support the following:
 
 - **Should we allow the user to attach custom metadata to messages pushed to
   the DLQ?**
+  - We decided to add this as future work in the form of allowing users to
+    attach processors to a DLQ.
 
 ### Background
 
@@ -182,3 +184,5 @@ pipelines:
   error. We could give our users the option to choose what happens then - do
   they really want to stop the pipeline or ignore the error and carry on? Maybe
   even provide a fallback DLQ.
+- Since a DLQ is "just a connector" we could add the possibility of attaching
+  processors to it.
