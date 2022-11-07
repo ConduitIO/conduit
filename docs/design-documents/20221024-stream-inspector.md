@@ -24,10 +24,54 @@ Make troubleshooting pipelines easier by making it possible to inspect the data 
    independent.
 10. The inspector should stop publishing the data to a client, if the client appears to be idle/crashed.
 
+**Important** :information_source:
+In case a stream inspection is slower than the pipeline being inspected, it's possible that some records will be dropped
+from the inspector. This is discussed more in the section "Blocking vs. non-blocking" below.
+
 ## Implementation
 Here we discuss two aspects of the implementation: internals (i.e. how to actually get the records from the inspectable
 pipeline components) and the API (i.e. how to deliver the inspected records to a client while providing a good user 
 experience).
+
+### Blocking vs. non-blocking
+It's possible that a stream inspector won't be able to catch up with a pipeline, e.g. in the case of high velocity sources.
+
+To handle this, we have two options:
+#### Option 1: Make the stream inspector blocking
+In this option, the stream inspector would slow down the pipeline until it catches up. The goal is make sure all records
+are inspected.
+
+**Advantages**
+1. Having complete data when troubleshooting.
+2. This would make it possible to inject messages into a pipeline in the future.
+
+**Disadvantages**
+1. Pipeline performance is affected.
+2. The implementation becomes more complex.
+
+#### Option 2: Make the stream inspector non-blocking
+In this option, the stream inspector would not slow the pipeline. Some records from the pipeline won't be shown in the
+stream inspector at all due to this.
+
+**Advantages**
+1. Pipeline performance is not affected.
+2. Simpler implementation.
+
+**Disadvantages**
+1. Not having complete data when troubleshooting.
+
+#### Chosen option
+The chosen option is a non-blocking stream inspector for following reasons:
+
+A blocking stream inspector would fall apart if we inspect a stream that's processing 10s of thousands of messages a
+second.
+
+Also, the concept of "stream surgery" (inserting messages into a pipeline or modifying existing ones) may feel
+intuitively valuable, in practice it might not be due to volume of messages.
+
+The pattern we're working towards is one where we enable the user to easily discover the cause of a breakage (e.g.
+bad data or bad transform) and allow them to easily write a processor that corrects the issue and re-introduces the
+data back into the stream.
 
 ### Push based vs. pull based
 Implementations will generally use one of two approaches: pull based and push based.
