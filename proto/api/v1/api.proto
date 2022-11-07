@@ -7,7 +7,6 @@ import "google/api/field_behavior.proto";
 import "google/api/annotations.proto";
 import "protoc-gen-openapiv2/options/annotations.proto";
 import "google/protobuf/timestamp.proto";
-import "google/protobuf/descriptor.proto";
 
 message Pipeline {
   // Status describes the pipeline status.
@@ -437,9 +436,10 @@ service ConnectorService {
     };
   };
 
-  rpc InspectConnector(InspectConnectorRequest) returns (stream opencdc.v1.Record) {
+  rpc InspectConnector(InspectConnectorRequest) returns (stream InspectConnectorResponse) {
     option (google.api.http) = {
       get: "/v1/connectors/{id}/inspect"
+      response_body: "record"
     };
   }
 
@@ -635,6 +635,9 @@ message ListConnectorsResponse {
 
 message InspectConnectorRequest {
   string id = 1;
+}
+message InspectConnectorResponse {
+  opencdc.v1.Record record = 1;
 }
 
 message GetConnectorRequest {
