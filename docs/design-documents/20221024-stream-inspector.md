@@ -25,6 +25,9 @@ Make troubleshooting pipelines easier by making it possible to inspect the data 
 10. The inspector should stop publishing the data to a client, if the client appears to be idle/crashed.
 
 ## Implementation
+Here we discuss two aspects of the implementation: internals (i.e. how to actually get the records from the inspectable
+pipeline components) and the API (i.e. how to deliver the inspected records to a client while providing a good user 
+experience).
 
 ### Push based vs. pull based
 Implementations will generally use one of two approaches: pull based and push based.
@@ -45,22 +48,6 @@ From what we know so far, **the push based approach has more advantages and is e
 approach chosen here**. Concrete implementation options are discussed below.
 
 For context: gRPC is the main API for Conduit. The HTTP API is generated using [grpc-gateway](https://github.com/grpc-ecosystem/grpc-gateway).
-
-### Exposing the inspection data
-Following options exist to expose the inspection data for node. How the data will be used by the API is discussed in
-below sections.
-
-#### Option 1: Inspectable nodes expose a method
-Inspectable pipeline components themselves should expose an `Inspect` method, for example:
-```go
-// Example for a source, can also be a processor or a destination
-func(s Source) Inspect(direction string) chan Record
-```
-(As a return value, we may use a special `struct` instead of `chan Record` to more easily propagate events, such as
-inspection done.)
-
-#### Option 2: Dedicated inspector nodes
-TBD
 
 ### API
 Inspecting a pipeline component is triggered with a gRPC/HTTP API request. If the pipeline component cannot be inspected
@@ -88,7 +75,7 @@ Conduit provides a streaming endpoint. The stream is consumed as such, i.e. a gR
 of gRPC for browser clients exists (called [grpc-web](https://github.com/grpc/grpc-web)). While that would mean no 
 changes in Conduit itself, it would require a lot of changes in the UI.
 
-### Option 3: Server-sent events 
+#### Option 3: Server-sent events 
 [Server-sent events](https://html.spec.whatwg.org/#server-sent-events) enable servers to push events to clients. Unlike
 WebSockets, the communication is unidirectional.
 
@@ -102,6 +89,62 @@ events.
 #### Chosen delivery option
 [grpc-websocket-proxy](https://github.com/tmc/grpc-websocket-proxy/) mention in option 1 is relatively popular and is
 open-source, so using it is no risk. The other option is much costlier.
+
+### Internals: Exposing the inspection data
+Following options exist to expose the inspection data for node. How the data will be used by the API is discussed in
+below sections.
+
+#### Option 1: Connectors and processors expose a method
+In this option, inspection would be performed at the connector or processor level.
+
+Inspectable pipeline components themselves would expose an `Inspect` method, for example:
+```go
+// Example for a source, can also be a processor or a destination
+func(s Source) Inspect(direction string) chan Record
+```
+(As a return value, we may use a special `struct` instead of `chan Record` to more easily propagate events, such as
+inspection done.)
+
+**Advantages**:
+1. The implementation would be relatively straightforward and not complex.
+
+**Disadvantages**:
+1. Minor changes in the sources, processors and destinations are needed.
+
+#### Option 2: Dedicated inspector nodes
+In this option, we'd have a node which would be dedicated for inspecting data coming in and out of a source, processor
+or destination node. To inspect a node we would dynamically add a node before or after a node being inspected.
+
+**Advantages**:
+1. All the code related to inspecting nodes would be "concentrated" in one or two node types.
+2. Existing nodes don't need to be changed.
+3. This makes it possible to inspect any node.
+4. Solving this problem would put us into a good position to solve https://github.com/ConduitIO/conduit/issues/201.
+
+**Disadvantages**
+1. Currently, it's not possible to dynamically add a node, which would mean that we need to restart a pipeline to do this,
+   and that's not a good user experience.
+2. On the other hand, changing the code so that a pipeline's topology can be dynamically changed is a relatively large
+   amount of work.
+
+#### Option 3: Add the inspection code to `PubNode`s and `SubNode`s.
+
+**Advantages**
+1. Solves the problem for all nodes. While we're not necessarily interested in all the nodes, solving the problem at
+   the `PubNode` level solves the problem for sources and output records for processors at the same time, and solving
+   the problem at the `SubNode` level solves the problem for destinations and input records for processors at the same
+   time.
+
+**Disadvantages**
+1. Adding inspection to pub and sub nodes is complex. This complexity is reflected in following:
+* Once we add a method to the `PubNode` and `SubNode` interfaces, we'll need to implement it in all current
+  implementations, even if that means only calling a method from an embedded type.
+* `PubNode` and `SubNode` rely on Go channels to publish/subscribe to messages. Automatically sending messages from
+  those channels to registered inspectors is non-trivial.
+
+#### Chosen implementation
+Option 1, i.e. connectors and processor exposing methods to inspect themselves, is the preferred option given that 
+options 2 and 3 are relatively complex, and we would risk delivering this feature in scope of the 0.4 release.
 
 ## Questions
 
