@@ -92,14 +92,14 @@ the plugin name and its settings.
 
 The user can also configure a stop window and stop threshold.
 
-- `stop_window` defines how many last acks/nacks are monitored in the window
+- `window_size` defines how many last acks/nacks are monitored in the window
   that controls if the pipeline should stop. 0 disables the window.
-- `stop_threshold` defines the number of nacks in the window that would cause
-  the pipeline to stop.
+- `window_nack_threshold` defines the number of nacks in the window that would
+  cause the pipeline to stop.
 
-The default DLQ plugin should be `builtin:log` with a `stop_window` of 1 and a
-`stop_threshold` of 1. This would result in the same behavior as before the
-introduction of DLQs - the first nacked message would stop the pipeline.
+The default DLQ plugin should be `builtin:log` with a `window_size` of 1 and a
+`window_nack_threshold` of 1. This would result in the same behavior as before
+the introduction of DLQs - the first nacked message would stop the pipeline.
 
 ### API
 
@@ -118,14 +118,14 @@ message DLQ {
   // settings are the plugin settings
   map<string, string> settings = 2;
 
-  // stop_window defines how many last acks/nacks are monitored in the window
+  // window_size defines how many last acks/nacks are monitored in the window
   // that controls if the pipeline should stop (0 disables the window)
   // default = 1
-  uint64 stop_window = 3;
-  // stop_threshold defines the number of nacks in the window that would cause
-  // the pipeline to stop
+  uint64 window_size = 3;
+  // window_nack_threshold defines the number of nacks in the window that would
+  // cause the pipeline to stop
   // default = 1
-  uint64 stop_threshold = 4;
+  uint64 window_nack_threshold = 4;
 }
 ```
 
@@ -141,7 +141,7 @@ pipelines:
       [...]
     dlq:
       # disable stop window
-      stopWindow: 0
+      windowSize: 0
 
       # the next 3 lines explicitly define the log plugin
       # removing this wouldn't change the behavior, it's the default DLQ config
@@ -161,18 +161,22 @@ pipelines:
       [...]
     dlq:
       # stop when 30 of the last 100 messages are nacked
-      stopWindow: 100
-      stopThreshold: 30
-      
+      windowSize: 100
+      windowNackThreshold: 30
+
       # define file plugin used for DLQ messages
       plugin: builtin:file
       settings:
         path: ./dlq-example.dlq
 ```
 
-### UI
+### Metrics
 
-?
+We need to add metrics for monitoring the DLQ. We intend to add similar metrics
+to the ones we have for connectors:
+
+- `conduit_dlq_bytes`
+- `conduit_dlq_execution_duration_seconds`
 
 ## Future work
 
@@ -184,5 +188,5 @@ pipelines:
   error. We could give our users the option to choose what happens then - do
   they really want to stop the pipeline or ignore the error and carry on? Maybe
   even provide a fallback DLQ.
-- Since a DLQ is "just a connector" we could add the possibility of attaching
-  processors to it.
+- The DLQ will currently only be configurable through the API or pipeline
+  config file, adding a UI for this feature will be done in the future.
