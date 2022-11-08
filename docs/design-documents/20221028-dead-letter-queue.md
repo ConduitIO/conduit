@@ -103,12 +103,10 @@ the introduction of DLQs - the first nacked message would stop the pipeline.
 
 ### API
 
-The DLQ should be defined as a property of
-the [`Pipeline.Config`](https://github.com/ConduitIO/conduit/blob/d19379efc04d20d12ab9c80df82a29fcef7e8afd/proto/api/v1/api.proto#L28)
-entity. It's a config option that can be updated even after the pipeline is
-created. We need to provide a way to choose a DLQ plugin and configure it.
+We need to provide a way to get the current DLQ configuration and to update it.
 
-One option to achieve this is to provide these fields:
+One option to achieve this is to add two methods to the `PipelineService` and
+map them to HTTP endpoints:
 
 ```protobuf
 message DLQ {
@@ -126,6 +124,40 @@ message DLQ {
   // cause the pipeline to stop
   // default = 1
   uint64 window_nack_threshold = 4;
+}
+
+service PipelineService {
+  rpc GetDLQ(GetDLQRequest) returns (GetDLQResponse) {
+    option (google.api.http) = {
+      get: "/v1/pipelines/{id}/dlq"
+      response_body: "dlq"
+    };
+  };
+
+  rpc UpdateDLQ(UpdateDLQRequest) returns (UpdateDLQResponse) {
+    option (google.api.http) = {
+      put: "/v1/pipelines/{id}/dlq"
+      body: "dlq"
+      response_body: "dlq"
+    };
+  };
+}
+
+message GetDLQRequest {
+  string id = 1;
+}
+
+message GetDLQResponse {
+  DLQ dlq = 1;
+}
+
+message UpdateDLQRequest {
+  string id = 1;
+  DLQ dlq = 2;
+}
+
+message UpdateDLQResponse {
+  DLQ dlq = 1;
 }
 ```
 
