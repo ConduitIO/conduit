@@ -13,7 +13,7 @@ require (
 	github.com/conduitio/conduit-connector-protocol v0.3.0
 	github.com/conduitio/conduit-connector-s3 v0.3.0
 	github.com/conduitio/conduit-connector-sdk v0.3.0
-	github.com/dgraph-io/badger/v3 v3.2103.3
+	github.com/dgraph-io/badger/v3 v3.2103.4
 	github.com/dop251/goja v0.0.0-20210225094849-f3cfc97811c0
 	github.com/gammazero/deque v0.2.1
 	github.com/golang/mock v1.6.0
@@ -27,7 +27,7 @@ require (
 	github.com/jpillora/backoff v1.0.0
 	github.com/matryer/is v1.4.0
 	github.com/piotrkowalczuk/promgrpc/v4 v4.0.4
-	github.com/prometheus/client_golang v1.13.1
+	github.com/prometheus/client_golang v1.14.0
 	github.com/prometheus/client_model v0.3.0
 	github.com/prometheus/common v0.37.0
 	github.com/rs/zerolog v1.28.0
