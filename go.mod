@@ -9,6 +9,7 @@ require (
 	github.com/conduitio/conduit-connector-file v0.3.0
 	github.com/conduitio/conduit-connector-generator v0.3.0
 	github.com/conduitio/conduit-connector-kafka v0.3.0
+	github.com/conduitio/conduit-connector-log v0.1.1
 	github.com/conduitio/conduit-connector-postgres v0.3.0
 	github.com/conduitio/conduit-connector-protocol v0.3.0
 	github.com/conduitio/conduit-connector-s3 v0.3.0
@@ -115,9 +116,9 @@ require (
 	golang.org/x/crypto v0.1.0 // indirect
 	golang.org/x/mod v0.6.0 // indirect
 	golang.org/x/net v0.1.0 // indirect
-	golang.org/x/sys v0.1.0 // indirect
+	golang.org/x/sys v0.2.0 // indirect
 	golang.org/x/text v0.4.0 // indirect
-	golang.org/x/time v0.0.0-20220922220347-f3bd1da661af // indirect
-	google.golang.org/genproto v0.0.0-20221027153422-115e99e71e1c // indirect
+	golang.org/x/time v0.2.0 // indirect
+	google.golang.org/genproto v0.0.0-20221107162902-2d387536bcdd // indirect
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
 )
