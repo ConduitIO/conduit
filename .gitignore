@@ -71,6 +71,3 @@ examples/processors/file_destination.txt
 
 # Standalone connectors
 /connectors
-
-# Ignore locally generated proto files
-/proto/gen/
