@@ -20,6 +20,7 @@ import (
 	file "github.com/conduitio/conduit-connector-file"
 	generator "github.com/conduitio/conduit-connector-generator"
 	kafka "github.com/conduitio/conduit-connector-kafka"
+	connLog "github.com/conduitio/conduit-connector-log"
 	postgres "github.com/conduitio/conduit-connector-postgres"
 	"github.com/conduitio/conduit-connector-protocol/cpluginv1"
 	s3 "github.com/conduitio/conduit-connector-s3"
@@ -37,6 +38,7 @@ var (
 		sdkDispenserFactory(generator.Connector),
 		sdkDispenserFactory(s3.Connector),
 		sdkDispenserFactory(postgres.Connector),
+		sdkDispenserFactory(connLog.Connector),
 	}
 )
 
