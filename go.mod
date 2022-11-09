@@ -33,7 +33,7 @@ require (
 	github.com/prometheus/common v0.37.0
 	github.com/rs/zerolog v1.28.0
 	go.buf.build/conduitio/conduit/conduitio/conduit v1.1.4
-	go.buf.build/grpc/go/conduitio/conduit-connector-protocol v1.4.3
+	go.buf.build/grpc/go/conduitio/conduit-connector-protocol v1.4.4
 	golang.org/x/exp v0.0.0-20220827204233-334a2380cb91
 	golang.org/x/tools v0.2.0
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2
@@ -110,7 +110,7 @@ require (
 	github.com/xdg/stringprep v1.0.3 // indirect
 	github.com/xitongsys/parquet-go v1.6.2 // indirect
 	github.com/xitongsys/parquet-go-source v0.0.0-20220723234337-052319f3f36b // indirect
-	go.buf.build/conduitio/conduit/grpc-ecosystem/grpc-gateway v1.1.46 // indirect
+	go.buf.build/conduitio/conduit/grpc-ecosystem/grpc-gateway v1.1.48 // indirect
 	go.opencensus.io v0.23.0 // indirect
 	go.uber.org/goleak v1.2.0 // indirect
 	golang.org/x/crypto v0.1.0 // indirect
@@ -119,6 +119,8 @@ require (
 	golang.org/x/sys v0.2.0 // indirect
 	golang.org/x/text v0.4.0 // indirect
 	golang.org/x/time v0.2.0 // indirect
-	google.golang.org/genproto v0.0.0-20221107162902-2d387536bcdd // indirect
+	google.golang.org/genproto v0.0.0-20221109142239-94d6d90a7d66 // indirect
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
 )
+
+replace go.buf.build/conduitio/conduit/conduitio/conduit => ./proto/gen
