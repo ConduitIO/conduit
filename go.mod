@@ -32,7 +32,7 @@ require (
 	github.com/prometheus/common v0.37.0
 	github.com/rs/zerolog v1.28.0
 	go.buf.build/conduitio/conduit/conduitio/conduit v1.1.4
-	go.buf.build/grpc/go/conduitio/conduit-connector-protocol v1.4.3
+	go.buf.build/grpc/go/conduitio/conduit-connector-protocol v1.4.4
 	golang.org/x/exp v0.0.0-20220827204233-334a2380cb91
 	golang.org/x/tools v0.2.0
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2
