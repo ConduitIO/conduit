@@ -392,6 +392,52 @@
         ]
       }
     },
+    "/v1/connectors/{id}/inspect": {
+      "get": {
+        "operationId": "ConnectorService_InspectConnector",
+        "responses": {
+          "200": {
+            "description": "(streaming responses)",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "result": {
+                  "$ref": "#/definitions/v1Record"
+                },
+                "error": {
+                  "$ref": "#/definitions/googlerpcStatus"
+                }
+              },
+              "title": "Stream result of v1InspectConnectorResponse"
+            }
+          },
+          "500": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            },
+            "examples": {
+              "application/json": {
+                "code": 13,
+                "message": "server error",
+                "details": []
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "ConnectorService"
+        ]
+      }
+    },
     "/v1/pipelines": {
       "get": {
         "operationId": "PipelineService_ListPipelines",
@@ -1364,6 +1410,18 @@
         }
       }
     },
+    "opencdcv1Operation": {
+      "type": "string",
+      "enum": [
+        "OPERATION_UNSPECIFIED",
+        "OPERATION_CREATE",
+        "OPERATION_UPDATE",
+        "OPERATION_DELETE",
+        "OPERATION_SNAPSHOT"
+      ],
+      "default": "OPERATION_UNSPECIFIED",
+      "description": "Operation defines what triggered the creation of a record.\n\n - OPERATION_CREATE: Records with operation create contain data of a newly created entity.\n - OPERATION_UPDATE: Records with operation update contain data of an updated entity.\n - OPERATION_DELETE: Records with operation delete contain data of a deleted entity.\n - OPERATION_SNAPSHOT: Records with operation snapshot contain data of a previously existing\nentity, fetched as part of a snapshot."
+    },
     "protobufAny": {
       "type": "object",
       "properties": {
@@ -1372,6 +1430,28 @@
         }
       },
       "additionalProperties": {}
+    },
+    "protobufNullValue": {
+      "type": "string",
+      "enum": [
+        "NULL_VALUE"
+      ],
+      "default": "NULL_VALUE",
+      "description": "`NullValue` is a singleton enumeration to represent the null value for the\n`Value` type union.\n\n The JSON representation for `NullValue` is JSON `null`.\n\n - NULL_VALUE: Null value."
+    },
+    "v1Change": {
+      "type": "object",
+      "properties": {
+        "before": {
+          "$ref": "#/definitions/v1Data",
+          "description": "Before contains the data before the operation occurred. This field is\noptional and should only be populated for operations \"update\" and \"delete\"\n(if the system supports fetching the data before the operation)."
+        },
+        "after": {
+          "$ref": "#/definitions/v1Data",
+          "description": "After contains the data after the operation occurred. This field should be\npopulated for all operations except \"delete\"."
+        }
+      },
+      "description": "Change represents the data before and after the operation occurred."
     },
     "v1Connector": {
       "type": "object",
@@ -1504,6 +1584,21 @@
         }
       }
     },
+    "v1Data": {
+      "type": "object",
+      "properties": {
+        "rawData": {
+          "type": "string",
+          "format": "byte",
+          "description": "Raw data contains unstructured data in form of a byte array."
+        },
+        "structuredData": {
+          "type": "object",
+          "description": "Structured data contains data in form of a struct with fields."
+        }
+      },
+      "description": "Data is used to represent the record key and payload. It can be either raw\ndata (byte array) or structured data (struct)."
+    },
     "v1DeleteConnectorResponse": {
       "type": "object"
     },
@@ -1558,6 +1653,14 @@
       "properties": {
         "pipeline": {
           "$ref": "#/definitions/v1Pipeline"
+        }
+      }
+    },
+    "v1InspectConnectorResponse": {
+      "type": "object",
+      "properties": {
+        "record": {
+          "$ref": "#/definitions/v1Record"
         }
       }
     },
@@ -1732,6 +1835,36 @@
           }
         }
       }
+    },
+    "v1Record": {
+      "type": "object",
+      "properties": {
+        "position": {
+          "type": "string",
+          "format": "byte",
+          "description": "Position uniquely identifies the record."
+        },
+        "operation": {
+          "$ref": "#/definitions/opencdcv1Operation",
+          "description": "Operation defines what triggered the creation of a record. There are four\npossibilities: create, update, delete or snapshot. The first three\noperations are encountered during normal CDC operation, while \"snapshot\" is\nmeant to represent records during an initial load. Depending on the\noperation, the record will contain either the payload before the change,\nafter the change, or both (see field payload)."
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Metadata contains optional information related to the record. Although the\nmap can contain arbitrary keys, the standard provides a set of standard\nmetadata fields (see options prefixed with metadata_*)."
+        },
+        "key": {
+          "$ref": "#/definitions/v1Data",
+          "description": "Key represents a value that should identify the entity (e.g. database row)."
+        },
+        "payload": {
+          "$ref": "#/definitions/v1Change",
+          "description": "Payload holds the payload change (data before and after the operation\noccurred)."
+        }
+      },
+      "description": "Record contains data about a single change event related to a single entity."
     },
     "v1StartPipelineResponse": {
       "type": "object"
