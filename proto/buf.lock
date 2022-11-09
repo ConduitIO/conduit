@@ -4,7 +4,7 @@ deps:
   - remote: buf.build
     owner: conduitio
     repository: conduit-connector-protocol
-    commit: ece81592b243465198a7778634f9c3c3
+    commit: 7728307fcb394f6f8564c6aeb2d17a9c
   - remote: buf.build
     owner: googleapis
     repository: googleapis
