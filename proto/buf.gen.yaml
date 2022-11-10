@@ -5,7 +5,7 @@ version: v1
 managed:
   enabled: true
   go_package_prefix:
-    default: "github.com/conduitio/conduit/proto/gen/api/v1"
+    default: "github.com/conduitio/conduit/proto"
     except:
       - buf.build/googleapis/googleapis
     override:
