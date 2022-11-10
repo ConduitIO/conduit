@@ -7,8 +7,8 @@
 package apiv1
 
 import (
-	_ "go.buf.build/conduitio/conduit/grpc-ecosystem/grpc-gateway/protoc-gen-openapiv2/options"
 	v1 "go.buf.build/grpc/go/conduitio/conduit-connector-protocol/opencdc/v1"
+	_ "go.buf.build/protocolbuffers/go/grpc-ecosystem/grpc-gateway/protoc-gen-openapiv2/options"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
