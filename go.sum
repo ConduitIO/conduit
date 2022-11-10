@@ -631,8 +631,6 @@ go.buf.build/conduitio/conduit/grpc-ecosystem/grpc-gateway v1.1.48 h1:nJnq4tu5lx
 go.buf.build/conduitio/conduit/grpc-ecosystem/grpc-gateway v1.1.48/go.mod h1:tnSMjRFryUW1a4VsSD9t6mRsfUvTLrPONDVTlHHHJV4=
 go.buf.build/grpc/go/conduitio/conduit-connector-protocol v1.4.3 h1:6xmHosBGMcHQFboRbi9rNoqrKtePhTxL239ZfftVWMY=
 go.buf.build/grpc/go/conduitio/conduit-connector-protocol v1.4.3/go.mod h1:+TaeSyc6KgrD/1fNhSQNQ6ckvEEbgmerpBqZ2szZMGs=
-go.buf.build/grpc/go/conduitio/conduit-connector-protocol v1.4.4 h1:Mh+/bcHqWlLkjpK23qcRa2U+IRJyUFGnNHYb26Fm6GU=
-go.buf.build/grpc/go/conduitio/conduit-connector-protocol v1.4.4/go.mod h1:+TaeSyc6KgrD/1fNhSQNQ6ckvEEbgmerpBqZ2szZMGs=
 go.opencensus.io v0.21.0/go.mod h1:mSImk1erAIZhrmZN+AvHh14ztQfjbGwt4TtuofqLduU=
 go.opencensus.io v0.22.0/go.mod h1:+kGneAE2xo2IficOXnaByMWTGM9T73dGwxeWcUqIpI8=
 go.opencensus.io v0.22.2/go.mod h1:yxeiOL68Rb0Xd1ddK5vPZ/oVn4vY4Ynel7k9FzqtOIw=
