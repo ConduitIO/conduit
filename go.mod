@@ -35,7 +35,7 @@ require (
 	go.buf.build/conduitio/conduit/conduitio/conduit v1.1.4
 	go.buf.build/grpc/go/conduitio/conduit-connector-protocol v1.4.3
 	golang.org/x/exp v0.0.0-20220827204233-334a2380cb91
-	golang.org/x/tools v0.2.0
+	golang.org/x/tools v0.3.0
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2
 	google.golang.org/grpc v1.50.1
 	google.golang.org/protobuf v1.28.1
@@ -114,8 +114,8 @@ require (
 	go.opencensus.io v0.23.0 // indirect
 	go.uber.org/goleak v1.2.0 // indirect
 	golang.org/x/crypto v0.1.0 // indirect
-	golang.org/x/mod v0.6.0 // indirect
-	golang.org/x/net v0.1.0 // indirect
+	golang.org/x/mod v0.7.0 // indirect
+	golang.org/x/net v0.2.0 // indirect
 	golang.org/x/sys v0.2.0 // indirect
 	golang.org/x/text v0.4.0 // indirect
 	golang.org/x/time v0.2.0 // indirect
