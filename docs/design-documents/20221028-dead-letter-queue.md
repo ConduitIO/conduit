@@ -94,11 +94,12 @@ The user can also configure a stop window and stop threshold.
 
 - `window-size` defines how many last acks/nacks are monitored in the window
   that controls if the pipeline should stop. 0 disables the window.
-- `window-nack-threshold` defines the number of nacks in the window that would
-  cause the pipeline to stop.
+- `window-nack-threshold` defines the number of nacks in the window that are
+  tolerated. Crossing the threshold stops the pipeline. The threshold has to be
+  lower than the window size unless window size is 0.
 
 The default DLQ plugin should be `builtin:log` with a `window-size` of 1 and a
-`window-nack-threshold` of 1. This would result in the same behavior as before
+`window-nack-threshold` of 0. This would result in the same behavior as before
 the introduction of DLQs - the first nacked message would stop the pipeline.
 
 ### API
@@ -120,9 +121,9 @@ message DLQ {
   // that controls if the pipeline should stop (0 disables the window)
   // default = 1
   uint64 window_size = 3;
-  // window_nack_threshold defines the number of nacks in the window that would
-  // cause the pipeline to stop
-  // default = 1
+  // window_nack_threshold defines the number of nacks in the window that are
+  // tolerated. Crossing the threshold stops the pipeline.
+  // default = 0
   uint64 window_nack_threshold = 4;
 }
 
@@ -192,7 +193,7 @@ pipelines:
     connectors:
       [...]
     dead-letter-queue:
-      # stop when 30 of the last 100 messages are nacked
+      # stop when more than 30 of the last 100 messages are nacked
       window-size: 100
       window-nack-threshold: 30
 
