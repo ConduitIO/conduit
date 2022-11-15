@@ -28,6 +28,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/multierror"
 	"github.com/conduitio/conduit/pkg/pipeline/stream"
 	"github.com/conduitio/conduit/pkg/processor"
+	"github.com/conduitio/conduit/pkg/record"
 	"gopkg.in/tomb.v2"
 )
 
@@ -245,15 +246,6 @@ func (s *Service) buildProcessorNodes(
 	return nodes, nil
 }
 
-func (s *Service) buildSourceAckerNode(
-	src connector.Source,
-) *stream.SourceAckerNode {
-	return &stream.SourceAckerNode{
-		Name:   src.ID() + "-acker",
-		Source: src,
-	}
-}
-
 func (s *Service) buildSourceNodes(
 	ctx context.Context,
 	connFetcher ConnectorFetcher,
@@ -262,6 +254,9 @@ func (s *Service) buildSourceNodes(
 	next stream.SubNode,
 ) ([]stream.Node, error) {
 	var nodes []stream.Node
+
+	dlqHandlerNode := s.buildDLQHandlerNode(ctx, pl)
+	nodes = append(nodes, dlqHandlerNode)
 
 	for _, connID := range pl.ConnectorIDs {
 		instance, err := connFetcher.Get(ctx, connID)
@@ -280,7 +275,8 @@ func (s *Service) buildSourceNodes(
 				pl.Config.Name,
 			),
 		}
-		ackerNode := s.buildSourceAckerNode(instance.(connector.Source))
+		dlqHandlerNode.Add(1)
+		ackerNode := s.buildSourceAckerNode(instance.(connector.Source), dlqHandlerNode)
 		ackerNode.Sub(sourceNode.Pub())
 		metricsNode := s.buildMetricsNode(pl, instance)
 		metricsNode.Sub(ackerNode.Pub())
@@ -295,6 +291,46 @@ func (s *Service) buildSourceNodes(
 	}
 
 	return nodes, nil
+}
+
+func (s *Service) buildSourceAckerNode(
+	src connector.Source,
+	dlqHandlerNode *stream.DLQHandlerNode,
+) *stream.SourceAckerNode {
+	return &stream.SourceAckerNode{
+		Name:           src.ID() + "-acker",
+		Source:         src,
+		DLQHandlerNode: dlqHandlerNode,
+	}
+}
+
+// TODO remove this once we have proper DLQ nodes
+type noopDLQHandler struct{}
+
+func (n noopDLQHandler) Open(ctx context.Context) error {
+	return nil
+}
+func (n noopDLQHandler) Write(ctx context.Context, record record.Record, err error) error {
+	return nil
+}
+func (n noopDLQHandler) Close() error {
+	return nil
+}
+
+func (s *Service) buildDLQHandlerNode(
+	ctx context.Context,
+	pl *Instance,
+) *stream.DLQHandlerNode {
+	// TODO let the connector service build a DestinationDLQHandler
+	dlqHandler := noopDLQHandler{}
+	node := &stream.DLQHandlerNode{
+		Name:    pl.ID + "-dlq",
+		Handler: dlqHandler,
+		// TODO make window size and nack threshold configurable
+		WindowSize:          1,
+		WindowNackThreshold: 0,
+	}
+	return node
 }
 
 func (s *Service) buildMetricsNode(
@@ -381,7 +417,7 @@ func (s *Service) runPipeline(ctx context.Context, pl *Instance) error {
 			// If any of the nodes stops, the nodesTomb will be put into a dying state
 			// and ctx will be cancelled.
 			// This way, the other nodes will be notified that they need to stop too.
-			//nolint: staticcheck // nil used to use the default (parent provided via WithContext)
+			//nolint:staticcheck // nil used to use the default (parent provided via WithContext)
 			ctx := nodesTomb.Context(nil)
 			s.logger.Trace(ctx).Str(log.NodeIDField, node.ID()).Msg("running node")
 			defer func() {
@@ -429,7 +465,7 @@ func (s *Service) runPipeline(ctx context.Context, pl *Instance) error {
 	// before declaring the pipeline as stopped.
 	pl.t = &tomb.Tomb{}
 	pl.t.Go(func() error {
-		//nolint: staticcheck // nil used to use the default (parent provided via WithContext)
+		//nolint:staticcheck // nil used to use the default (parent provided via WithContext)
 		ctx := pl.t.Context(nil)
 		err := nodesTomb.Wait()
 

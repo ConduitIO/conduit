@@ -123,13 +123,13 @@ func TestSourceAckerNode_FailedAck(t *testing.T) {
 	)
 	helper.ackMessagesConcurrently(&wg, messages[500:501],
 		func(msg *Message, err error) {
-			is.Equal(err, wantErr) // expected the middle message ack to fail with specific error
+			is.True(cerrors.Is(err, wantErr)) // expected the middle message ack to fail with specific error
 		},
 	)
 	helper.ackMessagesConcurrently(&wg, messages[501:],
 		func(msg *Message, err error) {
 			is.True(err != nil) // expected messages from the second half to be acked unsuccessfully
-			is.True(err != wantErr)
+			is.True(!cerrors.Is(err, wantErr))
 		},
 	)
 
