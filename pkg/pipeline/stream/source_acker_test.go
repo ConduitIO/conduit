@@ -24,8 +24,10 @@ import (
 
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/connector/mock"
+	"github.com/conduitio/conduit/pkg/foundation/cchan"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/csync"
+	streammock "github.com/conduitio/conduit/pkg/pipeline/stream/mock"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/golang/mock/gomock"
 	"github.com/matryer/is"
@@ -36,9 +38,9 @@ func TestSourceAckerNode_ForwardAck(t *testing.T) {
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	src := mock.NewSource(ctrl)
-	helper := sourceAckerNodeTestHelper{}
+	helper := sourceAckerNodeTestHelper{ctrl: ctrl}
 
-	_, in, out := helper.newSourceAckerNode(ctx, is, src)
+	_, in, out := helper.newSourceAckerNode(ctx, t, src)
 
 	want := &Message{Ctx: ctx, Record: record.Record{Position: []byte("foo")}}
 	// expect to receive an ack in the source after the message is acked
@@ -52,18 +54,13 @@ func TestSourceAckerNode_ForwardAck(t *testing.T) {
 	err := got.Ack()
 	is.NoErr(err)
 
-	// gracefully stop node and give the test 1 second to finish
+	// gracefully stop node
 	close(in)
 
-	waitCtx, cancel := context.WithTimeout(ctx, time.Second)
-	defer cancel()
-
-	select {
-	case <-waitCtx.Done():
-		is.Fail() // expected node to stop running
-	case <-out:
-		// all good
-	}
+	// make sure out channel is closed
+	_, ok, err := cchan.Chan[*Message](out).RecvTimeout(ctx, time.Second)
+	is.NoErr(err)
+	is.True(!ok)
 }
 
 func TestSourceAckerNode_AckOrder(t *testing.T) {
@@ -71,9 +68,9 @@ func TestSourceAckerNode_AckOrder(t *testing.T) {
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	src := mock.NewSource(ctrl)
-	helper := sourceAckerNodeTestHelper{}
+	helper := sourceAckerNodeTestHelper{ctrl: ctrl}
 
-	_, in, out := helper.newSourceAckerNode(ctx, is, src)
+	_, in, out := helper.newSourceAckerNode(ctx, t, src)
 	// send 1000 messages through the node
 	messages := helper.sendMessages(ctx, 1000, in, out)
 	// expect all messages to be acked
@@ -102,9 +99,9 @@ func TestSourceAckerNode_FailedAck(t *testing.T) {
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	src := mock.NewSource(ctrl)
-	helper := sourceAckerNodeTestHelper{}
+	helper := sourceAckerNodeTestHelper{ctrl: ctrl}
 
-	_, in, out := helper.newSourceAckerNode(ctx, is, src)
+	_, in, out := helper.newSourceAckerNode(ctx, t, src)
 	// send 1000 messages through the node
 	messages := helper.sendMessages(ctx, 1000, in, out)
 	// expect first 500 to be acked successfully
@@ -148,9 +145,9 @@ func TestSourceAckerNode_FailedNack(t *testing.T) {
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	src := mock.NewSource(ctrl)
-	helper := sourceAckerNodeTestHelper{}
+	helper := sourceAckerNodeTestHelper{ctrl: ctrl}
 
-	_, in, out := helper.newSourceAckerNode(ctx, is, src)
+	_, in, out := helper.newSourceAckerNode(ctx, t, src)
 	// send 1000 messages through the node
 	messages := helper.sendMessages(ctx, 1000, in, out)
 	// expect first 500 to be acked successfully
@@ -184,16 +181,20 @@ func TestSourceAckerNode_FailedNack(t *testing.T) {
 
 // sourceAckerNodeTestHelper groups together helper functions for tests related
 // to SourceAckerNode.
-type sourceAckerNodeTestHelper struct{}
+type sourceAckerNodeTestHelper struct {
+	ctrl *gomock.Controller
+}
 
-func (sourceAckerNodeTestHelper) newSourceAckerNode(
+func (h sourceAckerNodeTestHelper) newSourceAckerNode(
 	ctx context.Context,
-	is *is.I,
+	t *testing.T,
 	src connector.Source,
 ) (*SourceAckerNode, chan<- *Message, <-chan *Message) {
+	is := is.New(t)
 	node := &SourceAckerNode{
-		Name:   "acker-node",
-		Source: src,
+		Name:           "acker-node",
+		Source:         src,
+		DLQHandlerNode: h.newDLQHandlerNode(ctx, t),
 	}
 	in := make(chan *Message)
 	out := node.Pub()
@@ -205,6 +206,40 @@ func (sourceAckerNodeTestHelper) newSourceAckerNode(
 	}()
 
 	return node, in, out
+}
+
+func (h sourceAckerNodeTestHelper) newDLQHandlerNode(
+	ctx context.Context,
+	t *testing.T,
+) *DLQHandlerNode {
+	is := is.New(t)
+	handler := streammock.NewDLQHandler(h.ctrl)
+	handler.EXPECT().Open(gomock.Any()).Return(nil)
+	handler.EXPECT().Close()
+
+	var wg csync.WaitGroup
+	wg.Add(1)
+
+	node := &DLQHandlerNode{
+		Name:    "dlq-handler-node",
+		Handler: handler,
+		// window is configured so that no nacks are allowed
+		WindowSize:          1,
+		WindowNackThreshold: 0,
+	}
+	node.Add(1)
+
+	go func() {
+		defer wg.Done()
+		err := node.Run(ctx)
+		is.NoErr(err)
+	}()
+	t.Cleanup(func() {
+		err := wg.WaitTimeout(ctx, time.Second) // wait for node to finish running
+		is.NoErr(err)
+	})
+
+	return node
 }
 
 func (sourceAckerNodeTestHelper) sendMessages(
