@@ -95,8 +95,6 @@ func (n *SourceAckerNode) registerAckHandler(msg *Message, ticket semaphore.Tick
 			n.logger.Trace(msg.Ctx).Msg("forwarding ack to source connector")
 			err = n.Source.Ack(msg.Ctx, msg.Record.Position)
 			if err != nil {
-				return err
-				// TODO wrap
 				return cerrors.Errorf("failed to forward ack to source connector: %w", err)
 			}
 
