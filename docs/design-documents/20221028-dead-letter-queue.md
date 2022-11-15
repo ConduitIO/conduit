@@ -92,13 +92,14 @@ the plugin name and its settings.
 
 The user can also configure a stop window and stop threshold.
 
-- `window_size` defines how many last acks/nacks are monitored in the window
+- `window-size` defines how many last acks/nacks are monitored in the window
   that controls if the pipeline should stop. 0 disables the window.
-- `window_nack_threshold` defines the number of nacks in the window that would
-  cause the pipeline to stop.
+- `window-nack-threshold` defines the number of nacks in the window that are
+  tolerated. Crossing the threshold stops the pipeline. The threshold has to be
+  lower than the window size unless window size is 0.
 
-The default DLQ plugin should be `builtin:log` with a `window_size` of 1 and a
-`window_nack_threshold` of 1. This would result in the same behavior as before
+The default DLQ plugin should be `builtin:log` with a `window-size` of 1 and a
+`window-nack-threshold` of 0. This would result in the same behavior as before
 the introduction of DLQs - the first nacked message would stop the pipeline.
 
 ### API
@@ -120,23 +121,23 @@ message DLQ {
   // that controls if the pipeline should stop (0 disables the window)
   // default = 1
   uint64 window_size = 3;
-  // window_nack_threshold defines the number of nacks in the window that would
-  // cause the pipeline to stop
-  // default = 1
+  // window_nack_threshold defines the number of nacks in the window that are
+  // tolerated. Crossing the threshold stops the pipeline.
+  // default = 0
   uint64 window_nack_threshold = 4;
 }
 
 service PipelineService {
   rpc GetDLQ(GetDLQRequest) returns (GetDLQResponse) {
     option (google.api.http) = {
-      get: "/v1/pipelines/{id}/dlq"
+      get: "/v1/pipelines/{id}/dead-letter-queue"
       response_body: "dlq"
     };
   };
 
   rpc UpdateDLQ(UpdateDLQRequest) returns (UpdateDLQResponse) {
     option (google.api.http) = {
-      put: "/v1/pipelines/{id}/dlq"
+      put: "/v1/pipelines/{id}/dead-letter-queue"
       body: "dlq"
       response_body: "dlq"
     };
@@ -168,12 +169,12 @@ Example of a DLQ config that logs records and never stops.
 ```yaml
 version: 1.1
 pipelines:
-  dlq-example:
+  dlq-example-pipeline:
     connectors:
       [...]
-    dlq:
+    dead-letter-queue:
       # disable stop window
-      windowSize: 0
+      window-size: 0
 
       # the next 3 lines explicitly define the log plugin
       # removing this wouldn't change the behavior, it's the default DLQ config
@@ -188,13 +189,13 @@ least 30 of the last 100 records were nacked.
 ```yaml
 version: 1.1
 pipelines:
-  dlq-example:
+  dlq-example-pipeline:
     connectors:
       [...]
-    dlq:
-      # stop when 30 of the last 100 messages are nacked
-      windowSize: 100
-      windowNackThreshold: 30
+    dead-letter-queue:
+      # stop when more than 30 of the last 100 messages are nacked
+      window-size: 100
+      window-nack-threshold: 30
 
       # define file plugin used for DLQ messages
       plugin: builtin:file
