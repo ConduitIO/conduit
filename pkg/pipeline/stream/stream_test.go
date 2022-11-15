@@ -28,6 +28,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/noop"
 	"github.com/conduitio/conduit/pkg/pipeline/stream"
+	streammock "github.com/conduitio/conduit/pkg/pipeline/stream/mock"
 	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/conduitio/conduit/pkg/processor"
 	procmock "github.com/conduitio/conduit/pkg/processor/mock"
@@ -43,14 +44,22 @@ func Example_simpleStream() {
 	logger := newLogger()
 	ctrl := gomockCtrl(logger)
 
+	dlqNode := &stream.DLQHandlerNode{
+		Name:                "dlq",
+		Handler:             noopDLQHandler(ctrl),
+		WindowSize:          1,
+		WindowNackThreshold: 0,
+	}
+	dlqNode.Add(1) // 1 source
 	node1 := &stream.SourceNode{
 		Name:          "generator",
 		Source:        generatorSource(ctrl, logger, "generator", 10, time.Millisecond*10),
 		PipelineTimer: noop.Timer{},
 	}
 	node2 := &stream.SourceAckerNode{
-		Name:   "generator-acker",
-		Source: node1.Source,
+		Name:           "generator-acker",
+		Source:         node1.Source,
+		DLQHandlerNode: dlqNode,
 	}
 	node3 := &stream.DestinationNode{
 		Name:           "printer",
@@ -73,7 +82,8 @@ func Example_simpleStream() {
 	node4.Sub(node3.Pub())
 
 	var wg sync.WaitGroup
-	wg.Add(4)
+	wg.Add(5)
+	go runNode(ctx, &wg, dlqNode)
 	go runNode(ctx, &wg, node4)
 	go runNode(ctx, &wg, node3)
 	go runNode(ctx, &wg, node2)
@@ -126,14 +136,22 @@ func Example_complexStream() {
 
 	var count int
 
+	dlqNode := &stream.DLQHandlerNode{
+		Name:                "dlq",
+		Handler:             noopDLQHandler(ctrl),
+		WindowSize:          1,
+		WindowNackThreshold: 0,
+	}
+	dlqNode.Add(2) // 2 sources
 	node1 := &stream.SourceNode{
 		Name:          "generator1",
 		Source:        generatorSource(ctrl, logger, "generator1", 10, time.Millisecond*10),
 		PipelineTimer: noop.Timer{},
 	}
 	node2 := &stream.SourceAckerNode{
-		Name:   "generator1-acker",
-		Source: node1.Source,
+		Name:           "generator1-acker",
+		Source:         node1.Source,
+		DLQHandlerNode: dlqNode,
 	}
 	node3 := &stream.SourceNode{
 		Name:          "generator2",
@@ -141,8 +159,9 @@ func Example_complexStream() {
 		PipelineTimer: noop.Timer{},
 	}
 	node4 := &stream.SourceAckerNode{
-		Name:   "generator2-acker",
-		Source: node3.Source,
+		Name:           "generator2-acker",
+		Source:         node3.Source,
+		DLQHandlerNode: dlqNode,
 	}
 	node5 := &stream.FaninNode{Name: "fanin"}
 	node6 := &stream.ProcessorNode{
@@ -191,7 +210,7 @@ func Example_complexStream() {
 	node11.Sub(node10.Pub())
 
 	// run nodes
-	nodes := []stream.Node{node1, node2, node3, node4, node5, node6, node7, node8, node9, node10, node11}
+	nodes := []stream.Node{dlqNode, node1, node2, node3, node4, node5, node6, node7, node8, node9, node10, node11}
 
 	var wg sync.WaitGroup
 	wg.Add(len(nodes))
@@ -381,6 +400,13 @@ func counterProcessor(ctrl *gomock.Controller, count *int) processor.Interface {
 		return r, nil
 	}).AnyTimes()
 	return proc
+}
+
+func noopDLQHandler(ctrl *gomock.Controller) stream.DLQHandler {
+	handler := streammock.NewDLQHandler(ctrl)
+	handler.EXPECT().Open(gomock.Any()).Return(nil)
+	handler.EXPECT().Close()
+	return handler
 }
 
 func gomockCtrl(logger log.CtxLogger) *gomock.Controller {
