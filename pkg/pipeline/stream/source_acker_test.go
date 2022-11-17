@@ -215,7 +215,7 @@ func (h sourceAckerNodeTestHelper) newDLQHandlerNode(
 	is := is.New(t)
 	handler := streammock.NewDLQHandler(h.ctrl)
 	handler.EXPECT().Open(gomock.Any()).Return(nil)
-	handler.EXPECT().Close()
+	handler.EXPECT().Close(gomock.Any())
 
 	var wg csync.WaitGroup
 	wg.Add(1)

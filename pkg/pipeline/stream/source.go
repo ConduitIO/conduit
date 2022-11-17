@@ -42,7 +42,7 @@ type SourceNode struct {
 	base       pubNodeBase
 	logger     log.CtxLogger
 
-	initOnce csync.Init
+	state    csync.ValueWatcher[nodeState]
 	stopOnce sync.Once
 }
 
@@ -52,7 +52,7 @@ func (n *SourceNode) ID() string {
 }
 
 func (n *SourceNode) Run(ctx context.Context) (err error) {
-	defer n.initOnce.Done()
+	defer n.state.Set(nodeStateStopped)
 
 	// start a fresh connector context to make sure the connector is running
 	// until this method returns
@@ -97,7 +97,7 @@ func (n *SourceNode) Run(ctx context.Context) (err error) {
 	}
 	defer cleanup()
 
-	n.initOnce.Done()
+	n.state.Set(nodeStateRunning)
 
 	var (
 		// when source node encounters the record with this position it needs to
@@ -166,6 +166,10 @@ func (n *SourceNode) Stop(ctx context.Context, reason error) error {
 		// only execute stop once, more calls won't make a difference
 		err = n.stop(ctx, reason)
 		stopExecuted = true
+		if err != nil {
+			// an error happened, allow stop to be executed again
+			n.stopOnce = sync.Once{}
+		}
 	})
 	if !stopExecuted {
 		n.logger.Warn(ctx).Msg("source connector stop already triggered, " +
@@ -176,9 +180,12 @@ func (n *SourceNode) Stop(ctx context.Context, reason error) error {
 }
 
 func (n *SourceNode) stop(ctx context.Context, reason error) error {
-	err := n.initOnce.Wait(ctx)
+	state, err := n.state.Watch(ctx, csync.WatchValues(nodeStateRunning, nodeStateStopped))
 	if err != nil {
 		return err
+	}
+	if state != nodeStateRunning {
+		return cerrors.New("source node is not running")
 	}
 
 	n.stopReason = reason
