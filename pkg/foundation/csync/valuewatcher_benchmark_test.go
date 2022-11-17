@@ -19,6 +19,7 @@ import (
 	"testing"
 )
 
+var valSink int
 var errSink error
 
 func BenchmarkValueWatcher_Watch(b *testing.B) {
@@ -26,6 +27,15 @@ func BenchmarkValueWatcher_Watch(b *testing.B) {
 	ctx := context.Background()
 
 	for i := 0; i < b.N; i++ {
-		errSink = w.Watch(ctx, func(val int) bool { return val == 0 })
+		valSink, errSink = w.Watch(ctx, func(val int) bool { return val == 0 })
+	}
+}
+
+func BenchmarkValueWatcher_WatchValues(b *testing.B) {
+	var w ValueWatcher[int]
+	ctx := context.Background()
+
+	for i := 0; i < b.N; i++ {
+		valSink, errSink = w.Watch(ctx, WatchValues(0))
 	}
 }

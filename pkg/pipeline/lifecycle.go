@@ -307,13 +307,13 @@ func (s *Service) buildSourceAckerNode(
 // TODO remove this once we have proper DLQ nodes
 type noopDLQHandler struct{}
 
-func (n noopDLQHandler) Open(ctx context.Context) error {
+func (n noopDLQHandler) Open(context.Context) error {
 	return nil
 }
-func (n noopDLQHandler) Write(ctx context.Context, record record.Record, err error) error {
+func (n noopDLQHandler) Write(context.Context, record.Record, error) error {
 	return nil
 }
-func (n noopDLQHandler) Close() error {
+func (n noopDLQHandler) Close(context.Context) error {
 	return nil
 }
 

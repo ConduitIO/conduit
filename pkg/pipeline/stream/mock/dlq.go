@@ -36,17 +36,17 @@ func (m *DLQHandler) EXPECT() *DLQHandlerMockRecorder {
 }
 
 // Close mocks base method.
-func (m *DLQHandler) Close() error {
+func (m *DLQHandler) Close(arg0 context.Context) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Close")
+	ret := m.ctrl.Call(m, "Close", arg0)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Close indicates an expected call of Close.
-func (mr *DLQHandlerMockRecorder) Close() *gomock.Call {
+func (mr *DLQHandlerMockRecorder) Close(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*DLQHandler)(nil).Close))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*DLQHandler)(nil).Close), arg0)
 }
 
 // Open mocks base method.

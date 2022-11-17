@@ -28,8 +28,34 @@ import (
 // each time the value in ValueWatcher changes.
 type ValueWatcher[T any] struct {
 	val      T
-	m        sync.RWMutex
+	m        sync.Mutex
 	listener map[string]chan T
+}
+
+type ValueWatcherFunc[T any] func(val T) bool
+
+// WatchValues is a utility function for creating a simple ValueWatcherFunc that
+// waits for one of the supplied values.
+func WatchValues[T comparable](want ...T) ValueWatcherFunc[T] {
+	if len(want) == 0 {
+		// this would block forever, prevent misuse
+		panic("invalid use of WatchValues, need to supply at least one value")
+	}
+	if len(want) == 1 {
+		// optimize
+		wantVal := want[0]
+		return func(val T) bool {
+			return val == wantVal
+		}
+	}
+	return func(val T) bool {
+		for _, wantVal := range want {
+			if val == wantVal {
+				return true
+			}
+		}
+		return false
+	}
 }
 
 // Set stores val in ValueWatcher and notifies all goroutines that called Watch
@@ -58,10 +84,10 @@ func (h *ValueWatcher[T]) Get() T {
 // Watch can only be called by multiple goroutines. If the context gets
 // cancelled before foundVal returns true, the function will return the context
 // error.
-func (h *ValueWatcher[T]) Watch(ctx context.Context, foundVal func(val T) bool) error {
-	found, listener, unsubscribe := h.findOrSubscribe(foundVal)
+func (h *ValueWatcher[T]) Watch(ctx context.Context, f ValueWatcherFunc[T]) (T, error) {
+	val, found, listener, unsubscribe := h.findOrSubscribe(f)
 	if found {
-		return nil
+		return val, nil
 	}
 	defer unsubscribe()
 
@@ -69,26 +95,28 @@ func (h *ValueWatcher[T]) Watch(ctx context.Context, foundVal func(val T) bool) 
 	for {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
-		case val := <-listener:
-			if foundVal(val) {
-				return nil
+			var empty T
+			return empty, ctx.Err()
+		case val = <-listener:
+			if f(val) {
+				return val, nil
 			}
 		}
 	}
 }
 
-func (h *ValueWatcher[T]) findOrSubscribe(foundVal func(val T) bool) (bool, chan T, func()) {
+func (h *ValueWatcher[T]) findOrSubscribe(f ValueWatcherFunc[T]) (T, bool, chan T, func()) {
 	h.m.Lock()
 	defer h.m.Unlock()
 
-	if foundVal(h.val) {
-		// first call to foundVal is with the current value
-		return true, nil, nil
+	// first call to foundVal is with the current value
+	if f(h.val) {
+		return h.val, true, nil, nil
 	}
 
 	listener, unsubscribe := h.subscribe()
-	return false, listener, unsubscribe
+	var empty T
+	return empty, false, listener, unsubscribe
 }
 
 // subscribe creates a channel that will receive changes and returns it

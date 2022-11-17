@@ -29,7 +29,7 @@ import (
 type DLQHandler interface {
 	Open(context.Context) error
 	Write(context.Context, record.Record, error) error
-	Close() error
+	Close(context.Context) error
 }
 
 // DLQHandlerNode is called by each SourceAckerNode in a pipeline to store
@@ -41,11 +41,16 @@ type DLQHandlerNode struct {
 	WindowSize          int
 	WindowNackThreshold int
 
+	// window keeps track of the last N acks and nacks
 	window *dlqWindow
 
-	initOnce csync.Init
-	wg       sync.WaitGroup
-	logger   log.CtxLogger
+	logger log.CtxLogger
+	// initOnce waits until Run initializes the handler
+	state csync.ValueWatcher[nodeState]
+	// wg waits until all dependent components call Done
+	wg sync.WaitGroup
+	// m guards access to Handler and window
+	m sync.Mutex
 }
 
 func (n *DLQHandlerNode) ID() string {
@@ -53,24 +58,30 @@ func (n *DLQHandlerNode) ID() string {
 }
 
 func (n *DLQHandlerNode) Run(ctx context.Context) (err error) {
-	defer n.initOnce.Done()
+	defer n.state.Set(nodeStateStopped)
 	n.window = newDLQWindow(n.WindowSize, n.WindowNackThreshold)
 
-	err = n.Handler.Open(ctx) // TODO use separate context? Probably!
+	// start a fresh connector context to make sure the handler is running until
+	// this method returns
+	handlerCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	err = n.Handler.Open(handlerCtx)
 	if err != nil {
 		return cerrors.Errorf("could not open DLQ handler: %w", err)
 	}
 	defer func() {
-		closeErr := n.Handler.Close()
+		closeErr := n.Handler.Close(handlerCtx)
 		err = cerrors.LogOrReplace(err, closeErr, func() {
 			n.logger.Err(ctx, closeErr).Msg("could not close DLQ handler")
 		})
 	}()
 
-	n.initOnce.Done()
+	n.state.Set(nodeStateRunning)
 
-	// keep running until all nodes depending on this DLQHandlerNode call Done
-	return (*csync.WaitGroup)(&n.wg).Wait(ctx)
+	// keep running until all components depending on this node call Done
+	n.wg.Wait()
+	return nil
 }
 
 // Add should be called before Run to increase the counter of components
@@ -87,20 +98,36 @@ func (n *DLQHandlerNode) Done() {
 }
 
 func (n *DLQHandlerNode) Ack(msg *Message) {
-	err := n.initOnce.Wait(msg.Ctx)
+	state, err := n.state.Watch(msg.Ctx, csync.WatchValues(nodeStateRunning, nodeStateStopped))
 	if err != nil {
 		// message context is cancelled, the pipeline is shutting down
 		return
 	}
+	if state != nodeStateRunning {
+		// node is not running, this must mean that the DLQHandler node failed
+		// to be opened, the pipeline will soon stop because of that error
+		return
+	}
+
+	n.m.Lock()
+	defer n.m.Unlock()
 	n.window.Ack()
 }
 
 func (n *DLQHandlerNode) Nack(msg *Message, reason error) error {
-	err := n.initOnce.Wait(msg.Ctx)
+	state, err := n.state.Watch(msg.Ctx, csync.WatchValues(nodeStateRunning, nodeStateStopped))
 	if err != nil {
 		// message context is cancelled, the pipeline is shutting down
 		return err
 	}
+	if state != nodeStateRunning {
+		// node is not running, this must mean that the DLQHandler node failed
+		// to be opened, the pipeline will soon stop because of that error
+		return cerrors.New("DLQHandlerNode is not running")
+	}
+
+	n.m.Lock()
+	defer n.m.Unlock()
 
 	err = n.window.Nack()
 	if err != nil {

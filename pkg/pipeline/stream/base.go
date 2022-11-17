@@ -24,6 +24,14 @@ import (
 	"github.com/conduitio/conduit/pkg/record"
 )
 
+// nodeState is used to represent the state of a node (in nodes that need it).
+type nodeState string
+
+var (
+	nodeStateRunning nodeState = "running"
+	nodeStateStopped nodeState = "stopped"
+)
+
 // triggerFunc is returned from base nodes and should be called periodically to
 // fetch a new message. If the function returns nil or an error the caller
 // should stop calling the trigger and discard the trigger function.

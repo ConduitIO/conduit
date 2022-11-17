@@ -78,7 +78,7 @@ func TestValueWatcher_WatchSuccess(t *testing.T) {
 	defer cancel()
 
 	i := 0
-	err := h.Watch(ctx, func(val int) bool {
+	val, err := h.Watch(ctx, func(val int) bool {
 		i++
 		switch i {
 		case 1:
@@ -99,6 +99,7 @@ func TestValueWatcher_WatchSuccess(t *testing.T) {
 	})
 	is.NoErr(err)
 	is.Equal(3, i)
+	is.Equal(555, val)
 
 	got := h.Get()
 	is.Equal(555, got)
@@ -114,19 +115,21 @@ func TestValueWatcher_WatchContextCancel(t *testing.T) {
 	is := is.New(t)
 
 	var h ValueWatcher[int]
+	h.Set(1)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*10)
 	defer cancel()
 
 	i := 0
-	err := h.Watch(ctx, func(val int) bool {
+	val, err := h.Watch(ctx, func(val int) bool {
 		i++
-		is.Equal(0, val)
+		is.Equal(1, val)
 		return false
 	})
 
 	is.Equal(ctx.Err(), err)
 	is.Equal(1, i)
+	is.Equal(0, val)
 }
 
 func TestValueWatcher_WatchMultiple(t *testing.T) {
@@ -148,7 +151,7 @@ func TestValueWatcher_WatchMultiple(t *testing.T) {
 			defer wg2.Done()
 			var once sync.Once
 			old := -1 // first call to Watch will be with 0, pretend old value was -1
-			err := h.Watch(context.Background(), func(val int) bool {
+			val, err := h.Watch(context.Background(), func(val int) bool {
 				// first time the function is called with the current value in
 				// ValueWatcher, after that we know the watcher is successfully
 				// subscribed
@@ -160,6 +163,7 @@ func TestValueWatcher_WatchMultiple(t *testing.T) {
 				return val == i
 			})
 			is.NoErr(err)
+			is.Equal(val, i)
 		}(i)
 	}
 

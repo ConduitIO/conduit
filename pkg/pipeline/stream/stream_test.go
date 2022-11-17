@@ -405,7 +405,7 @@ func counterProcessor(ctrl *gomock.Controller, count *int) processor.Interface {
 func noopDLQHandler(ctrl *gomock.Controller) stream.DLQHandler {
 	handler := streammock.NewDLQHandler(ctrl)
 	handler.EXPECT().Open(gomock.Any()).Return(nil)
-	handler.EXPECT().Close()
+	handler.EXPECT().Close(gomock.Any())
 	return handler
 }
 
