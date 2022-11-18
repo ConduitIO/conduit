@@ -292,6 +292,7 @@ func (s *Service) buildProcessorNodes(
 			Name:           proc.ID,
 			Processor:      proc.Processor,
 			ProcessorTimer: measure.ProcessorExecutionDurationTimer.WithValues(pl.Config.Name, proc.Type),
+			Workers:        proc.Config.Workers,
 		}
 		node.Sub(prev.Pub())
 		prev = &node

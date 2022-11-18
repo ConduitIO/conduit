@@ -2071,6 +2071,10 @@
           "additionalProperties": {
             "type": "string"
           }
+        },
+        "workers": {
+          "type": "integer",
+          "format": "int32"
         }
       }
     },
