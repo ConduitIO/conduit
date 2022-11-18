@@ -180,3 +180,61 @@ func TestValueWatcher_WatchMultiple(t *testing.T) {
 	err = (*WaitGroup)(&wg2).WaitTimeout(context.Background(), time.Second)
 	is.NoErr(err)
 }
+
+func TestValueWatcher_Concurrency(t *testing.T) {
+	const watcherCount = 100
+	const setterCount = 100
+	const setCount = 100
+	
+	goleak.VerifyNone(t)
+	is := is.New(t)
+
+	var h ValueWatcher[int]
+
+	// wg1 waits until all watchers are subscribed to changes
+	var wg1 sync.WaitGroup
+	// wg2 waits until all watchers found the value they were looking for
+	var wg2 sync.WaitGroup
+
+	wg1.Add(watcherCount)
+	wg2.Add(watcherCount)
+	for i := 0; i < watcherCount; i++ {
+		go func(i int) {
+			defer wg2.Done()
+			var once sync.Once
+			var count int
+			_, err := h.Watch(context.Background(), func(val int) bool {
+				once.Do(wg1.Done)
+				count++
+				// +1 because of first call
+				return count == (setterCount*setCount)+1
+			})
+			is.NoErr(err)
+			is.Equal(count, (setterCount*setCount)+1)
+		}(i)
+	}
+
+	// wait for all watchers to be subscribed
+	err := (*WaitGroup)(&wg1).WaitTimeout(context.Background(), time.Second)
+	is.NoErr(err)
+
+	// wg3 waits for all setters to stop setting values
+	var wg3 sync.WaitGroup
+	wg3.Add(setterCount)
+	for i := 0; i < setterCount; i++ {
+		go func(i int) {
+			defer wg3.Done()
+			for j := 0; j < setCount; j++ {
+				h.Set(i)
+			}
+		}(i)
+	}
+
+	// wait for all setters to be done
+	err = (*WaitGroup)(&wg3).WaitTimeout(context.Background(), time.Second)
+	is.NoErr(err)
+
+	// wait for all watchers to be done
+	err = (*WaitGroup)(&wg2).WaitTimeout(context.Background(), time.Second)
+	is.NoErr(err)
+}
