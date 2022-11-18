@@ -182,8 +182,8 @@ func TestValueWatcher_WatchMultiple(t *testing.T) {
 }
 
 func TestValueWatcher_Concurrency(t *testing.T) {
-	const watcherCount = 100
-	const setterCount = 100
+	const watcherCount = 40
+	const setterCount = 40
 	const setCount = 20
 
 	goleak.VerifyNone(t)
