@@ -63,7 +63,9 @@ func (n *SourceAckerNode) Run(ctx context.Context) error {
 
 		// enqueue message in semaphore
 		ticket := n.sem.Enqueue()
+		// let the DLQ node know that a message entered the pipeline
 		n.DLQHandlerNode.Add(1)
+		// register ack and nack handlers
 		n.registerAckHandler(msg, ticket)
 		n.registerNackHandler(msg, ticket)
 
