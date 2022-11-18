@@ -15,19 +15,252 @@
 package stream
 
 import (
+	"context"
 	"fmt"
+	"sync"
 	"testing"
+	"time"
 
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/csync"
+	"github.com/conduitio/conduit/pkg/pipeline/stream/mock"
+	"github.com/conduitio/conduit/pkg/record"
+	"github.com/golang/mock/gomock"
+	"github.com/google/uuid"
 	"github.com/matryer/is"
 )
+
+func TestDLQHandlerNode_AddDone(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+
+	dlqHandler := mock.NewDLQHandler(ctrl)
+	dlqHandler.EXPECT().Open(gomock.Any()).Return(nil)
+
+	n := &DLQHandlerNode{
+		Name:    "dlq-test",
+		Handler: dlqHandler,
+	}
+	n.Add(1) // add 1 dependent component
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := n.Run(ctx)
+		is.NoErr(err)
+	}()
+
+	// add another dependent component (simulates a message)
+	n.Add(1)
+
+	err := (*csync.WaitGroup)(&wg).WaitTimeout(context.Background(), 10*time.Millisecond)
+	is.Equal(err, context.DeadlineExceeded) // expected the node to keep running
+
+	// remove a dependent component (simulates a message being acked/nacked)
+	n.Done()
+
+	err = (*csync.WaitGroup)(&wg).WaitTimeout(context.Background(), 10*time.Millisecond)
+	is.Equal(err, context.DeadlineExceeded) // expected the node to keep running
+
+	// remove a dependent component (simulates the source acker node to stop)
+	// after we remove the last dependent component we expect close to be called
+	dlqHandler.EXPECT().Close(gomock.Any()).Return(nil)
+	n.Done()
+
+	err = (*csync.WaitGroup)(&wg).WaitTimeout(context.Background(), 10*time.Millisecond)
+	is.NoErr(err) // expected the node to stop
+}
+
+func TestDLQHandlerNode_OpenError(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+
+	wantErr := cerrors.New("test error")
+
+	dlqHandler := mock.NewDLQHandler(ctrl)
+	dlqHandler.EXPECT().Open(gomock.Any()).Return(wantErr)
+
+	n := &DLQHandlerNode{
+		Name:    "dlq-test",
+		Handler: dlqHandler,
+	}
+	n.Add(1) // add 1 dependent component, should not matter
+
+	err := n.Run(ctx)
+	is.True(cerrors.Is(err, wantErr))
+}
+
+func TestDLQHandlerNode_Ack(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+
+	dlqHandler := mock.NewDLQHandler(ctrl)
+	dlqHandler.EXPECT().Open(gomock.Any()).Return(nil)
+	dlqHandler.EXPECT().Close(gomock.Any()).Return(nil)
+
+	n := &DLQHandlerNode{
+		Name:    "dlq-test",
+		Handler: dlqHandler,
+	}
+	n.Add(1) // add 1 dependent component, should not matter
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := n.Run(ctx)
+		is.NoErr(err)
+	}()
+
+	n.Ack(&Message{Ctx: ctx})
+
+	n.Done()
+	err := (*csync.WaitGroup)(&wg).WaitTimeout(context.Background(), 10*time.Millisecond)
+	is.NoErr(err) // expected the node to stop
+}
+
+func TestDLQHandlerNode_Nack_ThresholdExceeded(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+
+	dlqHandler := mock.NewDLQHandler(ctrl)
+	dlqHandler.EXPECT().Open(gomock.Any()).Return(nil)
+	dlqHandler.EXPECT().Close(gomock.Any()).Return(nil)
+
+	n := &DLQHandlerNode{
+		Name:                "dlq-test",
+		Handler:             dlqHandler,
+		WindowSize:          1,
+		WindowNackThreshold: 0, // nack threshold is 0, essentially the DLQ is disabled
+	}
+	n.Add(1) // add 1 dependent component, should not matter
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := n.Run(ctx)
+		is.NoErr(err)
+	}()
+
+	wantErr := cerrors.New("reason")
+	err := n.Nack(&Message{Ctx: ctx}, wantErr)
+	is.True(cerrors.Is(err, wantErr))
+
+	// node should still keep running though, there might be other acks/nacks coming in
+	err = (*csync.WaitGroup)(&wg).WaitTimeout(context.Background(), 10*time.Millisecond)
+	is.Equal(err, context.DeadlineExceeded) // expected the node to keep running
+
+	// we can still ack without a problem
+	n.Ack(&Message{Ctx: ctx})
+
+	// only after dependents are done the node should stop
+	n.Done()
+	err = (*csync.WaitGroup)(&wg).WaitTimeout(context.Background(), 10*time.Millisecond)
+	is.NoErr(err) // expected the node to stop
+}
+
+func TestDLQHandlerNode_Nack_ForwardToDLQ_Success(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+
+	dlqHandler := mock.NewDLQHandler(ctrl)
+	dlqHandler.EXPECT().Open(gomock.Any()).Return(nil)
+	dlqHandler.EXPECT().Close(gomock.Any()).Return(nil)
+
+	n := &DLQHandlerNode{
+		Name:    "dlq-test",
+		Handler: dlqHandler,
+		// allow 100 of the last 101 messages to be nacks
+		WindowSize:          101,
+		WindowNackThreshold: 100,
+	}
+	n.Add(1) // add 1 dependent component, should not matter
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := n.Run(ctx)
+		is.NoErr(err)
+	}()
+
+	for i := 0; i < n.WindowNackThreshold; i++ {
+		msg := &Message{
+			Ctx:    ctx,
+			Record: record.Record{Position: []byte(uuid.NewString())},
+		}
+		wantErr := cerrors.New("test error")
+		dlqHandler.EXPECT().Write(msg.Ctx, msg.Record, wantErr).Return(nil)
+
+		err := n.Nack(msg, wantErr)
+		is.NoErr(err)
+	}
+
+	// only after dependents are done the node should stop
+	n.Done()
+	err := (*csync.WaitGroup)(&wg).WaitTimeout(context.Background(), 10*time.Millisecond)
+	is.NoErr(err) // expected the node to stop
+}
+
+func TestDLQHandlerNode_Nack_ForwardToDLQ_Fail(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+
+	dlqHandler := mock.NewDLQHandler(ctrl)
+	dlqHandler.EXPECT().Open(gomock.Any()).Return(nil)
+	dlqHandler.EXPECT().Close(gomock.Any()).Return(nil)
+
+	n := &DLQHandlerNode{
+		Name:    "dlq-test",
+		Handler: dlqHandler,
+		// allow 100 of the last 101 messages to be nacks
+		WindowSize:          101,
+		WindowNackThreshold: 100,
+	}
+	n.Add(1) // add 1 dependent component, should not matter
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := n.Run(ctx)
+		is.NoErr(err)
+	}()
+
+	wantErr := cerrors.New("test error")
+	dlqHandler.EXPECT().
+		Write(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(wantErr)
+
+	err := n.Nack(&Message{Ctx: ctx}, cerrors.New("reason"))
+	is.True(cerrors.Is(err, wantErr))
+
+	// all further calls to Nack should fail, we can't guarantee order in the
+	// DLQ anymore
+	err = n.Nack(&Message{Ctx: ctx}, cerrors.New("reason"))
+	is.True(err != nil)
+
+	// only after dependents are done the node should stop
+	n.Done()
+	err = (*csync.WaitGroup)(&wg).WaitTimeout(context.Background(), 10*time.Millisecond)
+	is.NoErr(err) // expected the node to stop
+}
 
 func TestDLQWindow_WindowDisabled(t *testing.T) {
 	is := is.New(t)
 	w := newDLQWindow(0, 0)
 
 	w.Ack()
-	err := w.Nack()
-	is.NoErr(err)
+	ok := w.Nack()
+	is.True(ok)
 }
 
 func TestDLQWindow_NackThresholdExceeded(t *testing.T) {
@@ -51,8 +284,8 @@ func TestDLQWindow_NackThresholdExceeded(t *testing.T) {
 
 				// fill up window with nacks up to the threshold
 				for i := 0; i < tc.nackThreshold; i++ {
-					err := w.Nack()
-					is.NoErr(err)
+					ok := w.Nack()
+					is.True(ok)
 				}
 
 				// fill up window again with acks
@@ -63,21 +296,21 @@ func TestDLQWindow_NackThresholdExceeded(t *testing.T) {
 				// since window is full of acks we should be able to fill up
 				// the window with nacks again
 				for i := 0; i < tc.nackThreshold; i++ {
-					err := w.Nack()
-					is.NoErr(err)
+					ok := w.Nack()
+					is.True(ok)
 				}
 
 				// the next nack should push us over the threshold
-				err := w.Nack()
-				is.True(err != nil)
+				ok := w.Nack()
+				is.True(!ok)
 
 				// adding acks after that should make no difference, all nacks
 				// need to fail after the threshold is reached
 				for i := 0; i < tc.windowSize; i++ {
 					w.Ack()
 				}
-				err = w.Nack()
-				is.True(err != nil)
+				ok = w.Nack()
+				is.True(!ok)
 			},
 		)
 	}

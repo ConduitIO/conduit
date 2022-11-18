@@ -26,6 +26,8 @@ import (
 	"github.com/conduitio/conduit/pkg/record"
 )
 
+var dlqHandlerNodeStateBroken nodeState = "broken"
+
 type DLQHandler interface {
 	Open(context.Context) error
 	Write(context.Context, record.Record, error) error
@@ -45,7 +47,7 @@ type DLQHandlerNode struct {
 	window *dlqWindow
 
 	logger log.CtxLogger
-	// initOnce waits until Run initializes the handler
+	// state stores the current node state
 	state csync.ValueWatcher[nodeState]
 	// wg waits until all dependent components call Done
 	wg sync.WaitGroup
@@ -98,7 +100,7 @@ func (n *DLQHandlerNode) Done() {
 }
 
 func (n *DLQHandlerNode) Ack(msg *Message) {
-	state, err := n.state.Watch(msg.Ctx, csync.WatchValues(nodeStateRunning, nodeStateStopped))
+	state, err := n.state.Watch(msg.Ctx, csync.WatchValues(nodeStateRunning, nodeStateStopped, dlqHandlerNodeStateBroken))
 	if err != nil {
 		// message context is cancelled, the pipeline is shutting down
 		return
@@ -115,7 +117,8 @@ func (n *DLQHandlerNode) Ack(msg *Message) {
 }
 
 func (n *DLQHandlerNode) Nack(msg *Message, reason error) error {
-	state, err := n.state.Watch(msg.Ctx, csync.WatchValues(nodeStateRunning, nodeStateStopped))
+	state, err := n.state.Watch(msg.Ctx,
+		csync.WatchValues(nodeStateRunning, nodeStateStopped, dlqHandlerNodeStateBroken))
 	if err != nil {
 		// message context is cancelled, the pipeline is shutting down
 		return err
@@ -123,18 +126,29 @@ func (n *DLQHandlerNode) Nack(msg *Message, reason error) error {
 	if state != nodeStateRunning {
 		// node is not running, this must mean that the DLQHandler node failed
 		// to be opened, the pipeline will soon stop because of that error
-		return cerrors.New("DLQHandlerNode is not running")
+		return cerrors.New("DLQHandlerNode is not running or broken")
 	}
 
 	n.m.Lock()
 	defer n.m.Unlock()
 
-	err = n.window.Nack()
-	if err != nil {
-		return err // window threshold is exceeded
+	ok := n.window.Nack()
+	if !ok {
+		return cerrors.Errorf(
+			"DLQ nack threshold exceeded (%d/%d), original error: %w",
+			n.WindowSize, n.WindowNackThreshold, reason,
+		)
 	}
 
-	return n.Handler.Write(msg.Ctx, msg.Record, reason)
+	err = n.Handler.Write(msg.Ctx, msg.Record, reason)
+	if err != nil {
+		// write to the DLQ failed, this message is essentially lost
+		// we need to stop processing more nacks and stop the pipeline
+		n.state.Set(dlqHandlerNodeStateBroken)
+		return err
+	}
+
+	return nil
 }
 
 func (n *DLQHandlerNode) SetLogger(logger log.CtxLogger) {
@@ -179,17 +193,12 @@ func (w *dlqWindow) Ack() {
 	w.store(false)
 }
 
-// Nack stores a nack in the window. If the nack threshold gets exceeded the
-// window will be frozen and will return an error for all further calls to Nack.
-func (w *dlqWindow) Nack() error {
+// Nack stores a nack in the window and returns true (ok). If the nack threshold
+// gets exceeded the window will be frozen and will return false for all further
+// calls to Nack.
+func (w *dlqWindow) Nack() bool {
 	w.store(true)
-	if w.nackThreshold < w.nackCount {
-		return cerrors.Errorf(
-			"nack threshold exceeded (%d/%d)",
-			w.nackThreshold, len(w.window),
-		)
-	}
-	return nil
+	return w.nackThreshold >= w.nackCount
 }
 
 func (w *dlqWindow) store(nacked bool) {
