@@ -21,10 +21,20 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/rollback"
 	"github.com/conduitio/conduit/pkg/pipeline"
+	"github.com/conduitio/conduit/pkg/record"
 	"github.com/google/uuid"
 )
 
 type ConnectorOrchestrator base
+
+func (c *ConnectorOrchestrator) Inspect(ctx context.Context, id string) (chan record.Record, error) {
+	conn, err := c.Get(ctx, id)
+	if err != nil {
+		return nil, cerrors.Errorf("failed to get connector by ID %v: %w", id, err)
+	}
+
+	return conn.Inspect(ctx).C, nil
+}
 
 func (c *ConnectorOrchestrator) Create(
 	ctx context.Context,

@@ -13,13 +13,14 @@
 // limitations under the License.
 
 //go:generate mockgen -destination=mock/connector.go -package=mock -mock_names=ConnectorOrchestrator=ConnectorOrchestrator . ConnectorOrchestrator
+//go:generate mockgen -destination=mock/connector_service.go -package=mock -mock_names=ConnectorService_InspectConnectorServer=ConnectorService_InspectConnectorServer github.com/conduitio/conduit/proto/gen/api/v1 ConnectorService_InspectConnectorServer
 package api
 
 import (
 	"context"
-
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/record"
 	"github.com/conduitio/conduit/pkg/web/api/fromproto"
 	"github.com/conduitio/conduit/pkg/web/api/status"
 	"github.com/conduitio/conduit/pkg/web/api/toproto"
@@ -34,6 +35,7 @@ type ConnectorOrchestrator interface {
 	Delete(ctx context.Context, id string) error
 	Update(ctx context.Context, id string, config connector.Config) (connector.Connector, error)
 	Validate(ctx context.Context, t connector.Type, config connector.Config) error
+	Inspect(ctx context.Context, id string) (chan record.Record, error)
 }
 
 type ConnectorAPIv1 struct {
@@ -63,6 +65,33 @@ func (c *ConnectorAPIv1) ListConnectors(
 	}
 
 	return &apiv1.ListConnectorsResponse{Connectors: clist}, nil
+}
+
+func (c *ConnectorAPIv1) InspectConnector(req *apiv1.InspectConnectorRequest, server apiv1.ConnectorService_InspectConnectorServer) error {
+	if req.Id == "" {
+		return status.ConnectorError(cerrors.ErrEmptyID)
+	}
+
+	records, err := c.cs.Inspect(server.Context(), req.Id)
+	if err != nil {
+		return status.ConnectorError(cerrors.Errorf("failed to get connector by ID %v: %w", req.Id, err))
+	}
+
+	for rec := range records {
+		recProto, err2 := toproto.Record(rec)
+		if err2 != nil {
+			return cerrors.Errorf("failed converting record: %w", err2)
+		}
+
+		err2 = server.Send(&apiv1.InspectConnectorResponse{
+			Record: recProto,
+		})
+		if err2 != nil {
+			return cerrors.Errorf("failed sending record: %w", err2)
+		}
+	}
+
+	return cerrors.New("records channel closed")
 }
 
 // GetConnector returns a single Connector proto response or an error.

@@ -10,6 +10,7 @@ import (
 	time "time"
 
 	connector "github.com/conduitio/conduit/pkg/connector"
+	inspector "github.com/conduitio/conduit/pkg/inspector"
 	record "github.com/conduitio/conduit/pkg/record"
 	gomock "github.com/golang/mock/gomock"
 )
@@ -105,6 +106,20 @@ func (m *Source) ID() string {
 func (mr *SourceMockRecorder) ID() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ID", reflect.TypeOf((*Source)(nil).ID))
+}
+
+// Inspect mocks base method.
+func (m *Source) Inspect(arg0 context.Context) *inspector.Session {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Inspect", arg0)
+	ret0, _ := ret[0].(*inspector.Session)
+	return ret0
+}
+
+// Inspect indicates an expected call of Inspect.
+func (mr *SourceMockRecorder) Inspect(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Inspect", reflect.TypeOf((*Source)(nil).Inspect), arg0)
 }
 
 // IsRunning mocks base method.
@@ -377,6 +392,20 @@ func (m *Destination) ID() string {
 func (mr *DestinationMockRecorder) ID() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ID", reflect.TypeOf((*Destination)(nil).ID))
+}
+
+// Inspect mocks base method.
+func (m *Destination) Inspect(arg0 context.Context) *inspector.Session {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Inspect", arg0)
+	ret0, _ := ret[0].(*inspector.Session)
+	return ret0
+}
+
+// Inspect indicates an expected call of Inspect.
+func (mr *DestinationMockRecorder) Inspect(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Inspect", reflect.TypeOf((*Destination)(nil).Inspect), arg0)
 }
 
 // IsRunning mocks base method.
