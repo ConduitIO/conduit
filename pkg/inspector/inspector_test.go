@@ -90,7 +90,7 @@ func TestInspector_Send_SessionCtxCanceled(t *testing.T) {
 		Position: record.Position("test-pos"),
 	}
 	underTest.Send(context.Background(), r)
-	assertGotRecord(is.New(t), s, r)
+	assertGotRecord(is, s, r)
 
 	cancel()
 
