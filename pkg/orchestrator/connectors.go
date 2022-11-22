@@ -30,7 +30,7 @@ type ConnectorOrchestrator base
 func (c *ConnectorOrchestrator) Inspect(ctx context.Context, id string) (chan record.Record, error) {
 	conn, err := c.Get(ctx, id)
 	if err != nil {
-		return nil, cerrors.Errorf("failed to get connector by ID %v: %w", id, err)
+		return nil, err
 	}
 
 	return conn.Inspect(ctx).C, nil

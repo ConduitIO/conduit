@@ -70,7 +70,7 @@ func TestInspector_Send_SessionClosed(t *testing.T) {
 	underTest.Send(context.Background(), r)
 	assertGotRecord(is, s, r)
 
-	s.Close()
+	s.close()
 	underTest.Send(
 		context.Background(),
 		record.Record{

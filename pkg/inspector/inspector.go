@@ -29,16 +29,17 @@ import (
 type Session struct {
 	C chan record.Record
 
+	id      string
 	logger  log.CtxLogger
 	onClose func()
 }
 
-func (s *Session) Close() {
+func (s *Session) close() {
 	s.onClose()
 	close(s.C)
 }
 
-// send sends a record to the session's channel.
+// send a record to the session's channel.
 // If the channel has already reached its capacity,
 // the record will be ignored.
 func (s *Session) send(ctx context.Context, r record.Record) {
@@ -47,6 +48,7 @@ func (s *Session) send(ctx context.Context, r record.Record) {
 	default:
 		s.logger.
 			Warn(ctx).
+			Str(log.InspectorSessionID, s.id).
 			Msg("session buffer full, record will be dropped")
 	}
 }
@@ -73,7 +75,7 @@ func New(logger log.CtxLogger, bufferSize int) *Inspector {
 	}
 }
 
-// Send sends the given record to all registered sessions.
+// Send the given record to all registered sessions.
 // The method does not wait for consumers to get the records.
 func (i *Inspector) Send(ctx context.Context, r record.Record) {
 	// copy metadata, to prevent issues when concurrently accessing the metadata
@@ -105,6 +107,7 @@ func (i *Inspector) NewSession(ctx context.Context) *Session {
 	id := uuid.NewString()
 	s := &Session{
 		C:      make(chan record.Record, i.bufferSize),
+		id:     id,
 		logger: i.logger.WithComponent("inspector.Session"),
 		onClose: func() {
 			i.remove(id)
@@ -115,7 +118,7 @@ func (i *Inspector) NewSession(ctx context.Context) *Session {
 		s.logger.
 			Info(context.Background()).
 			Msgf("context canceled: %v", ctx.Err())
-		s.Close()
+		s.close()
 	}()
 
 	i.lock.Lock()
@@ -124,12 +127,12 @@ func (i *Inspector) NewSession(ctx context.Context) *Session {
 	i.sessions[id] = s
 	i.logger.
 		Info(context.Background()).
-		Str("session_id", id).
+		Str(log.InspectorSessionID, id).
 		Msg("session created")
 	return s
 }
 
-// remove removes a session with given ID from this Inspector.
+// remove a session with given ID from this Inspector.
 func (i *Inspector) remove(id string) {
 	i.lock.Lock()
 	defer i.lock.Unlock()
@@ -137,6 +140,6 @@ func (i *Inspector) remove(id string) {
 	delete(i.sessions, id)
 	i.logger.
 		Info(context.Background()).
-		Str("session_id", id).
+		Str(log.InspectorSessionID, id).
 		Msg("session removed")
 }
