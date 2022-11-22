@@ -258,13 +258,15 @@ func TestConnectorAPIv1_InspectConnector_SendErr(t *testing.T) {
 	errSend := cerrors.New("I'm sorry, but no.")
 	inspectServer.EXPECT().Send(gomock.Any()).Return(errSend)
 
+	errC := make(chan error)
 	go func() {
-		records <- generateTestRecord()
+		err := api.InspectConnector(
+			&apiv1.InspectConnectorRequest{Id: id},
+			inspectServer,
+		)
+		errC <- err
 	}()
-	err := api.InspectConnector(
-		&apiv1.InspectConnectorRequest{Id: id},
-		inspectServer,
-	)
+	records <- generateTestRecord()
 
 	err, b, err2 := cchan.Chan[error](errC).RecvTimeout(context.Background(), 100*time.Millisecond)
 	assert.Ok(t, err2)
