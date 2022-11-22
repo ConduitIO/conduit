@@ -63,7 +63,7 @@ func (n *ProcessorNode) Run(ctx context.Context) error {
 					return cerrors.Errorf("failed to ack skipped message: %w", err)
 				}
 			default:
-				err = msg.Nack(err)
+				err = msg.Nack(err, n.ID())
 				if err != nil {
 					return cerrors.Errorf("error executing processor: %w", err)
 				}
@@ -75,7 +75,7 @@ func (n *ProcessorNode) Run(ctx context.Context) error {
 
 		err = n.base.Send(ctx, n.logger, msg)
 		if err != nil {
-			return msg.Nack(err)
+			return msg.Nack(err, n.ID())
 		}
 	}
 }

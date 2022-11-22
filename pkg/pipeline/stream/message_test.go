@@ -76,7 +76,7 @@ func TestMessage_Ack_WithHandler(t *testing.T) {
 			t.Fatalf("expected msg.Nack to panic")
 		}
 	}()
-	_ = msg.Nack(nil) // nacking the message should panic
+	_ = msg.Nack(nil, "") // nacking the message should panic
 }
 
 func TestMessage_Ack_WithFailingHandler(t *testing.T) {
@@ -109,7 +109,7 @@ func TestMessage_Ack_WithFailingHandler(t *testing.T) {
 			return nil
 		})
 		// nack handler should not be called
-		msg.RegisterNackHandler(func(*Message, error) error {
+		msg.RegisterNackHandler(func(*Message, NackMetadata) error {
 			t.Fatalf("did not expect nack handler to be called")
 			return nil
 		})
@@ -137,14 +137,14 @@ func TestMessage_Nack_WithoutHandler(t *testing.T) {
 	assertMessageIsOpen(t, &msg)
 
 	// nack should fail because there is no handler for the nack
-	err1 := msg.Nack(cerrors.New("reason"))
+	err1 := msg.Nack(cerrors.New("reason"), "")
 	if err1 == nil {
 		t.Fatal("nack expected error, got nil")
 	}
 	assertMessageIsNacked(t, &msg)
 
 	// nacking again should return the same error
-	err2 := msg.Nack(cerrors.New("reason"))
+	err2 := msg.Nack(cerrors.New("reason"), "")
 	if err1 != err2 {
 		t.Fatalf("nack expected error %v, got %v", err1, err2)
 	}
@@ -153,21 +153,24 @@ func TestMessage_Nack_WithoutHandler(t *testing.T) {
 
 func TestMessage_Nack_WithNackHandler(t *testing.T) {
 	var (
-		msg     Message
-		wantErr = cerrors.New("test error")
+		msg              Message
+		wantNackMetadata = NackMetadata{
+			Reason: cerrors.New("test error"),
+			NodeID: "test-node",
+		}
 
 		nackedMessageHandlerCallCount int
 	)
 
-	msg.RegisterNackHandler(func(msg *Message, err error) error {
+	msg.RegisterNackHandler(func(msg *Message, nackMetadata NackMetadata) error {
 		nackedMessageHandlerCallCount++
-		if err != wantErr {
-			t.Fatalf("nacked message handler, expected err %v, got %v", wantErr, err)
+		if nackMetadata != wantNackMetadata {
+			t.Fatalf("nacked message handler, expected %v, got %v", wantNackMetadata, nackMetadata)
 		}
 		return nil
 	})
 
-	err := msg.Nack(wantErr)
+	err := msg.Nack(wantNackMetadata.Reason, wantNackMetadata.NodeID)
 	if err != nil {
 		t.Fatalf("nack did not expect error, got %v", err)
 	}
@@ -177,7 +180,7 @@ func TestMessage_Nack_WithNackHandler(t *testing.T) {
 	}
 
 	// nacking again shouldn't do anything
-	err = msg.Nack(nil)
+	err = msg.Nack(nil, "")
 	if err != nil {
 		t.Fatalf("nack did not expect error, got %v", err)
 	}
@@ -198,7 +201,7 @@ func TestMessage_Nack_WithStatusHandler(t *testing.T) {
 		return nil
 	})
 
-	err1 := msg.Nack(cerrors.New("test error"))
+	err1 := msg.Nack(cerrors.New("test error"), "")
 	if err1 == nil {
 		t.Fatal("expected error got nil")
 	}
@@ -209,7 +212,7 @@ func TestMessage_Nack_WithStatusHandler(t *testing.T) {
 	}
 
 	// nacking again shouldn't call handlers again
-	err2 := msg.Nack(nil)
+	err2 := msg.Nack(nil, "")
 	if err2 == nil {
 		t.Fatal("expected error got nil")
 	}
@@ -234,16 +237,16 @@ func TestMessage_Nack_WithFailingHandler(t *testing.T) {
 
 	{
 		// first handler should still be called
-		msg.RegisterNackHandler(func(*Message, error) error {
+		msg.RegisterNackHandler(func(*Message, NackMetadata) error {
 			nackedMessageHandlerCallCount++
 			return nil
 		})
 		// second handler fails
-		msg.RegisterNackHandler(func(*Message, error) error {
+		msg.RegisterNackHandler(func(*Message, NackMetadata) error {
 			return wantErr
 		})
 		// third handler should work as expected
-		msg.RegisterNackHandler(func(msg *Message, reason error) error {
+		msg.RegisterNackHandler(func(msg *Message, reason NackMetadata) error {
 			nackedMessageHandlerCallCount++
 			return nil
 		})
@@ -261,7 +264,7 @@ func TestMessage_Nack_WithFailingHandler(t *testing.T) {
 
 	// doing the same thing twice should have the same result
 	for i := 0; i < 2; i++ {
-		err := msg.Nack(nil)
+		err := msg.Nack(nil, "")
 		if err != wantErr {
 			t.Fatalf("nack expected error %v, got: %v", wantErr, err)
 		}
@@ -290,7 +293,7 @@ func TestMessage_StatusChangeTwice(t *testing.T) {
 				t.Fatalf("expected msg.Nack to panic")
 			}
 		}()
-		_ = msg.Nack(nil)
+		_ = msg.Nack(nil, "")
 	}
 
 	// nack after the message is acked should panic
@@ -307,8 +310,8 @@ func TestMessage_StatusChangeTwice(t *testing.T) {
 	t.Run("nacked message", func(t *testing.T) {
 		var msg Message
 		// need to register a nack handler for message to be nacked
-		msg.RegisterNackHandler(func(*Message, error) error { return nil })
-		err := msg.Nack(nil)
+		msg.RegisterNackHandler(func(*Message, NackMetadata) error { return nil })
+		err := msg.Nack(nil, "")
 		if err != nil {
 			t.Fatalf("ack did not expect error, got %v", err)
 		}
@@ -331,7 +334,7 @@ func TestMessage_RegisterHandlerFail(t *testing.T) {
 				t.Fatalf("expected msg.RegisterNackHandler to panic")
 			}
 		}()
-		msg.RegisterNackHandler(func(*Message, error) error { return nil })
+		msg.RegisterNackHandler(func(*Message, NackMetadata) error { return nil })
 	}
 
 	// registering a handler after the message is acked should panic
@@ -349,8 +352,8 @@ func TestMessage_RegisterHandlerFail(t *testing.T) {
 	t.Run("nacked message", func(t *testing.T) {
 		var msg Message
 		// need to register a nack handler for message to be nacked
-		msg.RegisterNackHandler(func(*Message, error) error { return nil })
-		err := msg.Nack(nil)
+		msg.RegisterNackHandler(func(*Message, NackMetadata) error { return nil })
+		err := msg.Nack(nil, "")
 		if err != nil {
 			t.Fatalf("ack did not expect error, got %v", err)
 		}

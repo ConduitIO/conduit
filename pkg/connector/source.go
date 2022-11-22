@@ -238,7 +238,6 @@ func (s *source) Read(ctx context.Context) (record.Record, error) {
 		return r, err
 	}
 
-	// TODO rethink if there's an actual benefit in setting these fields
 	if r.Key == nil {
 		r.Key = record.RawData{}
 	}
@@ -248,6 +247,11 @@ func (s *source) Read(ctx context.Context) (record.Record, error) {
 	if r.Payload.After == nil {
 		r.Payload.After = record.RawData{}
 	}
+	if r.Metadata == nil {
+		r.Metadata = record.Metadata{}
+	}
+	// source connector ID is added to all records
+	r.Metadata.SetConduitSourceConnectorID(s.XID)
 
 	return r, nil
 }

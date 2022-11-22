@@ -169,7 +169,7 @@ func TestSourceAckerNode_FailedNack(t *testing.T) {
 	)
 
 	wantErr := cerrors.New("test error")
-	err := messages[500].Nack(wantErr)
+	err := messages[500].Nack(wantErr, "test-node")
 	is.True(err != nil) // expected the 500th message nack to fail with specific error
 
 	// gracefully stop node and give the test 1 second to finish
