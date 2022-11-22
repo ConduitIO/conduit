@@ -64,15 +64,15 @@ func (mr *DLQHandlerMockRecorder) Open(arg0 interface{}) *gomock.Call {
 }
 
 // Write mocks base method.
-func (m *DLQHandler) Write(arg0 context.Context, arg1 record.Record, arg2 error) error {
+func (m *DLQHandler) Write(arg0 context.Context, arg1 record.Record) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Write", arg0, arg1, arg2)
+	ret := m.ctrl.Call(m, "Write", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Write indicates an expected call of Write.
-func (mr *DLQHandlerMockRecorder) Write(arg0, arg1, arg2 interface{}) *gomock.Call {
+func (mr *DLQHandlerMockRecorder) Write(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Write", reflect.TypeOf((*DLQHandler)(nil).Write), arg0, arg1, arg2)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Write", reflect.TypeOf((*DLQHandler)(nil).Write), arg0, arg1)
 }

@@ -30,7 +30,7 @@ var dlqHandlerNodeStateBroken nodeState = "broken"
 
 type DLQHandler interface {
 	Open(context.Context) error
-	Write(context.Context, record.Record, error) error
+	Write(context.Context, record.Record) error
 	Close(context.Context) error
 }
 
@@ -120,7 +120,7 @@ func (n *DLQHandlerNode) Ack(msg *Message) {
 	n.window.Ack()
 }
 
-func (n *DLQHandlerNode) Nack(msg *Message, reason error) error {
+func (n *DLQHandlerNode) Nack(msg *Message, nackMetadata NackMetadata) error {
 	state, err := n.state.Watch(msg.Ctx,
 		csync.WatchValues(nodeStateRunning, nodeStateStopped, dlqHandlerNodeStateBroken))
 	if err != nil {
@@ -140,11 +140,14 @@ func (n *DLQHandlerNode) Nack(msg *Message, reason error) error {
 	if !ok {
 		return cerrors.Errorf(
 			"DLQ nack threshold exceeded (%d/%d), original error: %w",
-			n.WindowSize, n.WindowNackThreshold, reason,
+			n.WindowSize, n.WindowNackThreshold, nackMetadata.Reason,
 		)
 	}
 
-	err = n.Handler.Write(msg.Ctx, msg.Record, reason)
+	// TODO create DLQ record that includes nack metadata
+	dlqRecord := msg.Record
+
+	err = n.Handler.Write(msg.Ctx, dlqRecord)
 	if err != nil {
 		// write to the DLQ failed, this message is essentially lost
 		// we need to stop processing more nacks and stop the pipeline

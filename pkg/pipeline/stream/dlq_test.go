@@ -149,7 +149,7 @@ func TestDLQHandlerNode_Nack_ThresholdExceeded(t *testing.T) {
 	}()
 
 	wantErr := cerrors.New("reason")
-	err := n.Nack(&Message{Ctx: ctx}, wantErr)
+	err := n.Nack(&Message{Ctx: ctx}, NackMetadata{Reason: wantErr})
 	is.True(cerrors.Is(err, wantErr))
 
 	// node should still keep running though, there might be other acks/nacks coming in
@@ -197,9 +197,13 @@ func TestDLQHandlerNode_Nack_ForwardToDLQ_Success(t *testing.T) {
 			Record: record.Record{Position: []byte(uuid.NewString())},
 		}
 		wantErr := cerrors.New("test error")
-		dlqHandler.EXPECT().Write(msg.Ctx, msg.Record, wantErr).Return(nil)
+		wantNackMetadata := NackMetadata{
+			Reason: wantErr,
+			NodeID: "test-node",
+		}
+		dlqHandler.EXPECT().Write(msg.Ctx, msg.Record).Return(nil)
 
-		err := n.Nack(msg, wantErr)
+		err := n.Nack(msg, wantNackMetadata)
 		is.NoErr(err)
 	}
 
@@ -237,15 +241,15 @@ func TestDLQHandlerNode_Nack_ForwardToDLQ_Fail(t *testing.T) {
 
 	wantErr := cerrors.New("test error")
 	dlqHandler.EXPECT().
-		Write(gomock.Any(), gomock.Any(), gomock.Any()).
+		Write(gomock.Any(), gomock.Any()).
 		Return(wantErr)
 
-	err := n.Nack(&Message{Ctx: ctx}, cerrors.New("reason"))
+	err := n.Nack(&Message{Ctx: ctx}, NackMetadata{Reason: cerrors.New("reason")})
 	is.True(cerrors.Is(err, wantErr))
 
 	// all further calls to Nack should fail, we can't guarantee order in the
 	// DLQ anymore
-	err = n.Nack(&Message{Ctx: ctx}, cerrors.New("reason"))
+	err = n.Nack(&Message{Ctx: ctx}, NackMetadata{Reason: cerrors.New("reason")})
 	is.True(err != nil)
 
 	// only after dependents are done the node should stop

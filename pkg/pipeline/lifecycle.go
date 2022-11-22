@@ -310,7 +310,7 @@ type noopDLQHandler struct{}
 func (n noopDLQHandler) Open(context.Context) error {
 	return nil
 }
-func (n noopDLQHandler) Write(context.Context, record.Record, error) error {
+func (n noopDLQHandler) Write(context.Context, record.Record) error {
 	return nil
 }
 func (n noopDLQHandler) Close(context.Context) error {

@@ -134,7 +134,7 @@ func (n *SourceNode) Run(ctx context.Context) (err error) {
 		lastPosition = msg.Record.Position
 		err = n.base.Send(ctx, n.logger, msg)
 		if err != nil {
-			return msg.Nack(err)
+			return msg.Nack(err, n.ID())
 		}
 
 		if bytes.Equal(stopPosition, lastPosition) {

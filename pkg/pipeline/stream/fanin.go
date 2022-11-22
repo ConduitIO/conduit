@@ -76,7 +76,7 @@ func (n *FaninNode) Run(ctx context.Context) error {
 
 		select {
 		case <-ctx.Done():
-			return msg.Nack(ctx.Err())
+			return msg.Nack(ctx.Err(), n.ID())
 		case n.out <- msg:
 		}
 	}

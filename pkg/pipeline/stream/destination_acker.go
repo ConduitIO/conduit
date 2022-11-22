@@ -151,7 +151,7 @@ func (n *DestinationAckerNode) handleAck(msg *Message, err error) error {
 	switch {
 	case err != nil:
 		n.logger.Trace(msg.Ctx).Err(err).Msg("nacking message")
-		err = msg.Nack(err)
+		err = msg.Nack(err, n.ID())
 		if err != nil {
 			return cerrors.Errorf("error while nacking message: %w", err)
 		}
@@ -174,7 +174,7 @@ func (n *DestinationAckerNode) teardown(reason error) error {
 	var err error
 	for n.queue.Len() > 0 {
 		msg := n.queue.PopFront()
-		err = multierror.Append(err, msg.Nack(reason))
+		err = multierror.Append(err, msg.Nack(reason, n.ID()))
 		nacked++
 	}
 	if err != nil {

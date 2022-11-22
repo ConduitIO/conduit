@@ -98,7 +98,7 @@ func (n *DestinationNode) Run(ctx context.Context) (err error) {
 			// process any further messages because there is a problem in the
 			// communication with the plugin. We need to nack the message to not
 			// leave it open and then return the error to stop the pipeline.
-			_ = msg.Nack(err)
+			_ = msg.Nack(err, n.ID())
 			return cerrors.Errorf("error writing to destination: %w", err)
 		}
 		n.ConnectorTimer.Update(time.Since(writeTime))
@@ -108,7 +108,7 @@ func (n *DestinationNode) Run(ctx context.Context) (err error) {
 
 		err = n.base.Send(ctx, n.logger, msg)
 		if err != nil {
-			return msg.Nack(err)
+			return msg.Nack(err, n.ID())
 		}
 	}
 }

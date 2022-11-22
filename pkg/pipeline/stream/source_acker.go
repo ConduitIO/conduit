@@ -71,7 +71,7 @@ func (n *SourceAckerNode) Run(ctx context.Context) error {
 
 		err = n.base.Send(ctx, n.logger, msg)
 		if err != nil {
-			return msg.Nack(err)
+			return msg.Nack(err, n.ID())
 		}
 	}
 }
@@ -108,7 +108,7 @@ func (n *SourceAckerNode) registerAckHandler(msg *Message, ticket semaphore.Tick
 
 func (n *SourceAckerNode) registerNackHandler(msg *Message, ticket semaphore.Ticket) {
 	msg.RegisterNackHandler(
-		func(msg *Message, reason error) (err error) {
+		func(msg *Message, nackMetadata NackMetadata) (err error) {
 			n.logger.Trace(msg.Ctx).Msg("acquiring semaphore for nack")
 			lock := n.sem.Acquire(ticket)
 			defer func() {
@@ -125,7 +125,7 @@ func (n *SourceAckerNode) registerNackHandler(msg *Message, ticket semaphore.Tic
 			}
 
 			n.logger.Trace(msg.Ctx).Msg("forwarding nack to DLQ handler")
-			err = n.DLQHandlerNode.Nack(msg, reason)
+			err = n.DLQHandlerNode.Nack(msg, nackMetadata)
 			if err != nil {
 				return cerrors.Errorf("failed to write message to DLQ: %w", err)
 			}

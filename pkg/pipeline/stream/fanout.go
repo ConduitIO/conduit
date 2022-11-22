@@ -98,8 +98,8 @@ func (n *FanoutNode) Run(ctx context.Context) error {
 					newMsg.RegisterNackHandler(
 						// wrap nack handler to make sure msg is not overwritten
 						// by the time nack handler is called
-						n.wrapNackHandler(msg, func(msg *Message, reason error) error {
-							return msg.Nack(reason)
+						n.wrapNackHandler(msg, func(msg *Message, nm NackMetadata) error {
+							return msg.Nack(nm.Reason, nm.NodeID)
 						}),
 					)
 
@@ -107,7 +107,7 @@ func (n *FanoutNode) Run(ctx context.Context) error {
 					case <-ctx.Done():
 						// we can ignore the error, it will show up in the
 						// original msg
-						_ = newMsg.Nack(ctx.Err())
+						_ = newMsg.Nack(ctx.Err(), n.ID())
 						return
 					case n.out[i] <- newMsg:
 					}
@@ -127,7 +127,7 @@ func (n *FanoutNode) Run(ctx context.Context) error {
 					// check if the message nack returned an error (Nack is
 					// idempotent and will return the same error as in the first
 					// call), return it if it returns an error
-					if err := msg.Nack(nil); err != nil {
+					if err := msg.Nack(nil, n.ID()); err != nil {
 						return err
 					}
 				}
@@ -154,8 +154,8 @@ func (n *FanoutNode) wrapAckHandler(origMsg *Message, f AckHandler) AckHandler {
 // message received by FanoutNode instead of the new message created by
 // FanoutNode.
 func (n *FanoutNode) wrapNackHandler(origMsg *Message, f NackHandler) NackHandler {
-	return func(_ *Message, reason error) error {
-		return f(origMsg, reason)
+	return func(_ *Message, nm NackMetadata) error {
+		return f(origMsg, nm)
 	}
 }
 
