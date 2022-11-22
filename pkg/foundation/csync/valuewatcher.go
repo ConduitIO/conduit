@@ -81,7 +81,7 @@ func (h *ValueWatcher[T]) Get() T {
 // Watch blocks and calls foundVal for every value that is put into the
 // ValueWatcher. Once foundVal returns true it stops blocking and returns nil.
 // First call to foundVal will be with the current value stored in ValueWatcher.
-// Watch can only be called by multiple goroutines. If the context gets
+// Watch can be safely called by multiple goroutines. If the context gets
 // cancelled before foundVal returns true, the function will return the context
 // error.
 func (h *ValueWatcher[T]) Watch(ctx context.Context, f ValueWatcherFunc[T]) (T, error) {

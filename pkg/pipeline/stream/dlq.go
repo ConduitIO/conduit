@@ -59,6 +59,8 @@ func (n *DLQHandlerNode) ID() string {
 	return n.Name
 }
 
+// Run runs the DLQ handler node until all components depending on this node
+// call Done. Dependents can be added or removed while the node is running.
 func (n *DLQHandlerNode) Run(ctx context.Context) (err error) {
 	defer n.state.Set(nodeStateStopped)
 	n.window = newDLQWindow(n.WindowSize, n.WindowNackThreshold)
@@ -89,6 +91,8 @@ func (n *DLQHandlerNode) Run(ctx context.Context) (err error) {
 // Add should be called before Run to increase the counter of components
 // depending on DLQHandlerNode. The node will keep running until the counter
 // reaches 0 (see Done).
+//
+// Note a call with positive delta to Add should happen before Run.
 func (n *DLQHandlerNode) Add(delta int) {
 	n.wg.Add(delta)
 }
