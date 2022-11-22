@@ -16,7 +16,6 @@ package api
 
 import (
 	"context"
-	"fmt"
 	"sort"
 	"testing"
 	"time"
@@ -299,10 +298,7 @@ func TestConnectorAPIv1_InspectConnector_Err(t *testing.T) {
 	assert.NotNil(t, errAPI)
 	assert.Equal(
 		t,
-		fmt.Sprintf(
-			"rpc error: code = Internal desc = failed to get connector by ID %v: not found, sorry",
-			id,
-		),
+		"rpc error: code = Internal desc = failed to get connector: not found, sorry",
 		errAPI.Error(),
 	)
 }
