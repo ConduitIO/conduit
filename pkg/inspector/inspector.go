@@ -29,14 +29,25 @@ import (
 type Session struct {
 	C chan record.Record
 
-	id      string
-	logger  log.CtxLogger
-	onClose func()
+	id          string
+	logger      log.CtxLogger
+	onClose     func()
+	closeReason error
+	lock        sync.Mutex
 }
 
-func (s *Session) close() {
+func (s *Session) close(reason error) {
 	s.onClose()
 	close(s.C)
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	s.closeReason = reason
+}
+
+func (s *Session) CloseReason() error {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	return s.closeReason
 }
 
 // send a record to the session's channel.
@@ -118,7 +129,7 @@ func (i *Inspector) NewSession(ctx context.Context) *Session {
 		s.logger.
 			Info(context.Background()).
 			Msgf("context canceled: %v", ctx.Err())
-		s.close()
+		s.close(ctx.Err())
 	}()
 
 	i.lock.Lock()

@@ -9,7 +9,7 @@ import (
 	reflect "reflect"
 
 	connector "github.com/conduitio/conduit/pkg/connector"
-	record "github.com/conduitio/conduit/pkg/record"
+	inspector "github.com/conduitio/conduit/pkg/inspector"
 	gomock "github.com/golang/mock/gomock"
 )
 
@@ -81,10 +81,10 @@ func (mr *ConnectorOrchestratorMockRecorder) Get(arg0, arg1 interface{}) *gomock
 }
 
 // Inspect mocks base method.
-func (m *ConnectorOrchestrator) Inspect(arg0 context.Context, arg1 string) (chan record.Record, error) {
+func (m *ConnectorOrchestrator) Inspect(arg0 context.Context, arg1 string) (*inspector.Session, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Inspect", arg0, arg1)
-	ret0, _ := ret[0].(chan record.Record)
+	ret0, _ := ret[0].(*inspector.Session)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

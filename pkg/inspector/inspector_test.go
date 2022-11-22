@@ -70,7 +70,7 @@ func TestInspector_Send_SessionClosed(t *testing.T) {
 	underTest.Send(context.Background(), r)
 	assertGotRecord(is, s, r)
 
-	s.close()
+	s.close(nil)
 	underTest.Send(
 		context.Background(),
 		record.Record{
@@ -95,7 +95,7 @@ func TestInspector_Send_SessionCtxCanceled(t *testing.T) {
 	cancel()
 
 	_, got, err := cchan.Chan[record.Record](s.C).RecvTimeout(context.Background(), 100*time.Millisecond)
-	is.NoError(err)
+	is.NoErr(err)
 	is.True(!got) // expected no record
 }
 

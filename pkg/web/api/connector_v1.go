@@ -21,7 +21,7 @@ import (
 
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/record"
+	"github.com/conduitio/conduit/pkg/inspector"
 	"github.com/conduitio/conduit/pkg/web/api/fromproto"
 	"github.com/conduitio/conduit/pkg/web/api/status"
 	"github.com/conduitio/conduit/pkg/web/api/toproto"
@@ -36,7 +36,7 @@ type ConnectorOrchestrator interface {
 	Delete(ctx context.Context, id string) error
 	Update(ctx context.Context, id string, config connector.Config) (connector.Connector, error)
 	Validate(ctx context.Context, t connector.Type, config connector.Config) error
-	Inspect(ctx context.Context, id string) (chan record.Record, error)
+	Inspect(ctx context.Context, id string) (*inspector.Session, error)
 }
 
 type ConnectorAPIv1 struct {
@@ -73,12 +73,12 @@ func (c *ConnectorAPIv1) InspectConnector(req *apiv1.InspectConnectorRequest, se
 		return status.ConnectorError(cerrors.ErrEmptyID)
 	}
 
-	records, err := c.cs.Inspect(server.Context(), req.Id)
+	session, err := c.cs.Inspect(server.Context(), req.Id)
 	if err != nil {
 		return status.ConnectorError(cerrors.Errorf("failed to get connector: %w", err))
 	}
 
-	for rec := range records {
+	for rec := range session.C {
 		recProto, err2 := toproto.Record(rec)
 		if err2 != nil {
 			return cerrors.Errorf("failed converting record: %w", err2)
@@ -92,7 +92,7 @@ func (c *ConnectorAPIv1) InspectConnector(req *apiv1.InspectConnectorRequest, se
 		}
 	}
 
-	return cerrors.New("records channel closed")
+	return cerrors.Errorf("inspector session closed: %w", session.CloseReason())
 }
 
 // GetConnector returns a single Connector proto response or an error.

@@ -25,6 +25,8 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/foundation/cchan"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/inspector"
 	"github.com/conduitio/conduit/pkg/record"
 	apimock "github.com/conduitio/conduit/pkg/web/api/mock"
 	"github.com/conduitio/conduit/pkg/web/api/toproto"
@@ -217,11 +219,12 @@ func TestConnectorAPIv1_InspectConnector_SendRecord(t *testing.T) {
 	recProto, err := toproto.Record(rec)
 	assert.Ok(t, err)
 
-	records := make(chan record.Record)
+	ins := inspector.New(log.Nop(), 10)
+	session := ins.NewSession(ctx)
 
 	csMock.EXPECT().
 		Inspect(ctx, id).
-		Return(records, nil).
+		Return(session, nil).
 		Times(1)
 
 	inspectServer := apimock.NewConnectorService_InspectConnectorServer(ctrl)
@@ -234,7 +237,7 @@ func TestConnectorAPIv1_InspectConnector_SendRecord(t *testing.T) {
 			inspectServer,
 		)
 	}()
-	records <- rec
+	ins.Send(ctx, rec)
 
 	time.Sleep(100 * time.Millisecond)
 }
@@ -246,11 +249,13 @@ func TestConnectorAPIv1_InspectConnector_SendErr(t *testing.T) {
 	csMock := apimock.NewConnectorOrchestrator(ctrl)
 	api := NewConnectorAPIv1(csMock)
 	id := uuid.NewString()
-	records := make(chan record.Record)
+
+	ins := inspector.New(log.Nop(), 10)
+	session := ins.NewSession(ctx)
 
 	csMock.EXPECT().
 		Inspect(ctx, id).
-		Return(records, nil).
+		Return(session, nil).
 		Times(1)
 
 	inspectServer := apimock.NewConnectorService_InspectConnectorServer(ctrl)
@@ -266,7 +271,7 @@ func TestConnectorAPIv1_InspectConnector_SendErr(t *testing.T) {
 		)
 		errC <- err
 	}()
-	records <- generateTestRecord()
+	ins.Send(ctx, generateTestRecord())
 
 	err, b, err2 := cchan.Chan[error](errC).RecvTimeout(context.Background(), 100*time.Millisecond)
 	assert.Ok(t, err2)
