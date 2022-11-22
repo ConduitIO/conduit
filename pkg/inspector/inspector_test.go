@@ -68,7 +68,7 @@ func TestInspector_Send_SessionClosed(t *testing.T) {
 		Position: record.Position("test-pos"),
 	}
 	underTest.Send(context.Background(), r)
-	assertGotRecord(is.New(t), s, r)
+	assertGotRecord(is, s, r)
 
 	s.Close()
 	underTest.Send(
