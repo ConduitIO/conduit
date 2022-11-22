@@ -94,7 +94,8 @@ func TestInspector_Send_SessionCtxCanceled(t *testing.T) {
 
 	cancel()
 
-	_, got, _ := cchan.Chan[record.Record](s.C).RecvTimeout(context.Background(), 100*time.Millisecond)
+	_, got, err := cchan.Chan[record.Record](s.C).RecvTimeout(context.Background(), 100*time.Millisecond)
+	is.NoError(err)
 	is.True(!got) // expected no record
 }
 
