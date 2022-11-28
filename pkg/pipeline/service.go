@@ -137,6 +137,12 @@ func (s *Service) Create(ctx context.Context, id string, cfg Config, p Provision
 		CreatedAt:     t,
 		UpdatedAt:     t,
 		ProvisionedBy: p,
+		DLQ: DLQ{
+			Plugin:              "builtin:log",
+			Settings:            map[string]string{"level": "warn"},
+			WindowSize:          1,
+			WindowNackThreshold: 0,
+		},
 	}
 
 	err := s.store.Set(ctx, pl.ID, pl)
