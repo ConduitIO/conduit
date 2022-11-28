@@ -108,6 +108,13 @@ the SDK wouldn't cover. So we decided on implementing validating from the SDK si
 **A**: We decided to add the generation as a subtask for now, and see how much time left we have for it. We agreed that this
 would be super helpful for developers and easier to use, and will continue adding to the feature in the future.
 
+**Q**: How should the UI execute the validations?
+
+**A**: The UI will execute the builtlin validations for each configuration while the user is typing (validations 
+are in the same struct that has the list of the fields). When the user submits the form, the UI will try and
+create the connector, which will execute both the builtin and the custom validation. Finally, the UI will show an
+error for the user if an error occurs while creating the connector.
+
 ## Implementation
 
 Implementing this feature consists of four main steps:
