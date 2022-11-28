@@ -88,6 +88,9 @@ validations for each parameter and Conduit will make sure to run the validations
 
 Validating the type of the parameter, we have 5 types supported in the proto design {string, number, bool, file, and duration}
 
+Validate that the config doesn't contain a parameter that is not defined in the specifications, which will help detect 
+a typo in a pipeline configuration file, or an extra configuration that does not exist.
+
 Providing a utility function to generate the config map for the `Parameters` function from a config struct. This is not 
 mandatory for the scope of this feature, but it would be a nice to have and would make the developing experience for connectors easier.
 
@@ -122,7 +125,7 @@ SourceParams: []sdk.Parameter{
       Type: sdk.ParameterTypeNumber,
       Validations: []sdk.Validation{
         sdk.ValidationRequired{},
-        sdk.ValidationLessThan{Val:8},
+        sdk.ValidationLessThan{Value:8},
       }
     }
   }
