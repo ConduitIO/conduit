@@ -61,7 +61,7 @@ func (n *DestinationNode) Run(ctx context.Context) (err error) {
 			// log this error right away because we're not sure the connector
 			// will be able to stop right away, we might block for 1 minute
 			// waiting for acks and we don't want the log to be empty
-			n.logger.Err(ctx, err).Msg("could not stop destination connector")
+			n.logger.Err(ctx, stopErr).Msg("could not stop destination connector")
 			if err == nil {
 				err = stopErr
 			}

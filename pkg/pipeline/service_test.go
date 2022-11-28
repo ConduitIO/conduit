@@ -66,7 +66,12 @@ func (s *serviceTestSetup) basicDestinationMock(ctrl *gomock.Controller) *connmo
 	return destination
 }
 
-func (s *serviceTestSetup) createPipeline(ctx context.Context, service *Service, status Status) (*Instance, connector.Source, connector.Destination, error) {
+func (s *serviceTestSetup) createPipeline(
+	ctx context.Context,
+	ctrl *gomock.Controller,
+	service *Service,
+	status Status,
+) (*Instance, connector.Source, connector.Destination, error) {
 	plID := uuid.NewString()
 	pl, err := service.Create(ctx, plID, Config{Name: fmt.Sprintf("%v pipeline %v", status, plID)}, ProvisionTypeAPI)
 	if err != nil {
@@ -75,7 +80,6 @@ func (s *serviceTestSetup) createPipeline(ctx context.Context, service *Service,
 	pl.Status = status
 
 	// create mocked connectors
-	ctrl := gomock.NewController(s.t)
 	source := s.basicSourceMock(ctrl)
 	destination := s.basicDestinationMock(ctrl)
 
@@ -158,16 +162,19 @@ func testServiceInit(t *testing.T, status Status, expected Status) {
 	ctx, killAll := context.WithCancel(context.Background())
 	defer killAll()
 	setup := serviceTestSetup{t: t}
+	ctrl := gomock.NewController(t)
 	logger := log.New(zerolog.Nop())
 	db := &inmemory.DB{}
 	store := NewStore(db)
 
 	service := NewService(logger, db)
 
-	pl, source, destination, err := setup.createPipeline(ctx, service, status)
+	pl, source, destination, err := setup.createPipeline(ctx, ctrl, service, status)
 	is.NoErr(err)
 	err = store.Set(ctx, pl.ID, pl)
 	is.NoErr(err)
+
+	dlq := setup.basicDestinationMock(ctrl)
 
 	// create a new pipeline service and initialize it
 	service = NewService(logger, db)
@@ -178,6 +185,7 @@ func testServiceInit(t *testing.T, status Status, expected Status) {
 		testConnectorFetcher{
 			source.ID():      source,
 			destination.ID(): destination,
+			testDLQID:        dlq,
 		},
 		testProcessorFetcher{},
 	)
@@ -213,6 +221,12 @@ func TestService_CreateSuccess(t *testing.T) {
 				Name:        "test-pipeline1",
 				Description: "pipeline description",
 			},
+			DLQ: DLQ{
+				Plugin:              "builtin:log",
+				Settings:            map[string]string{"level": "warn"},
+				WindowSize:          1,
+				WindowNackThreshold: 0,
+			},
 			Status: StatusUserStopped,
 		},
 	}, {
@@ -226,6 +240,12 @@ func TestService_CreateSuccess(t *testing.T) {
 			Config: Config{
 				Name:        "test-pipeline2",
 				Description: "",
+			},
+			DLQ: DLQ{
+				Plugin:              "builtin:log",
+				Settings:            map[string]string{"level": "warn"},
+				WindowSize:          1,
+				WindowNackThreshold: 0,
 			},
 			Status: StatusUserStopped,
 		},

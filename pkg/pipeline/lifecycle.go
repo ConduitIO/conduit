@@ -28,13 +28,13 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/multierror"
 	"github.com/conduitio/conduit/pkg/pipeline/stream"
 	"github.com/conduitio/conduit/pkg/processor"
-	"github.com/conduitio/conduit/pkg/record"
 	"gopkg.in/tomb.v2"
 )
 
 // ConnectorFetcher can fetch a connector instance.
 type ConnectorFetcher interface {
 	Get(ctx context.Context, id string) (connector.Connector, error)
+	Create(ctx context.Context, id string, t connector.Type, cfg connector.Config, p connector.ProvisionType) (connector.Connector, error)
 }
 
 // ProcessorFetcher can fetch a processor instance.
@@ -255,7 +255,10 @@ func (s *Service) buildSourceNodes(
 ) ([]stream.Node, error) {
 	var nodes []stream.Node
 
-	dlqHandlerNode := s.buildDLQHandlerNode(ctx, pl)
+	dlqHandlerNode, err := s.buildDLQHandlerNode(ctx, connFetcher, pl)
+	if err != nil {
+		return nil, err
+	}
 	nodes = append(nodes, dlqHandlerNode)
 
 	for _, connID := range pl.ConnectorIDs {
@@ -304,33 +307,35 @@ func (s *Service) buildSourceAckerNode(
 	}
 }
 
-// TODO remove this once we have proper DLQ nodes
-type noopDLQHandler struct{}
-
-func (n noopDLQHandler) Open(context.Context) error {
-	return nil
-}
-func (n noopDLQHandler) Write(context.Context, record.Record) error {
-	return nil
-}
-func (n noopDLQHandler) Close(context.Context) error {
-	return nil
-}
-
 func (s *Service) buildDLQHandlerNode(
 	ctx context.Context,
+	connFetcher ConnectorFetcher,
 	pl *Instance,
-) *stream.DLQHandlerNode {
-	// TODO let the connector service build a DestinationDLQHandler
-	dlqHandler := noopDLQHandler{}
-	node := &stream.DLQHandlerNode{
-		Name:    pl.ID + "-dlq",
-		Handler: dlqHandler,
-		// TODO make window size and nack threshold configurable
-		WindowSize:          1,
-		WindowNackThreshold: 0,
+) (*stream.DLQHandlerNode, error) {
+	dest, err := connFetcher.Create(
+		ctx,
+		pl.ID+"-dlq",
+		connector.TypeDestination,
+		connector.Config{
+			Name:         pl.ID + "-dlq",
+			Settings:     pl.DLQ.Settings,
+			Plugin:       pl.DLQ.Plugin,
+			PipelineID:   pl.ID,
+			ProcessorIDs: nil,
+		},
+		connector.ProvisionTypeDLQ, // the provision type ensures the connector won't be persisted
+	)
+	if err != nil {
+		return nil, cerrors.Errorf("failed to create DLQ destination: %w", err)
 	}
-	return node
+
+	return &stream.DLQHandlerNode{
+		Name:    dest.ID(),
+		Handler: &DLQDestination{Destination: dest.(connector.Destination)},
+
+		WindowSize:          pl.DLQ.WindowSize,
+		WindowNackThreshold: pl.DLQ.WindowNackThreshold,
+	}, nil
 }
 
 func (s *Service) buildMetricsNode(
