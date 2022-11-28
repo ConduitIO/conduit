@@ -52,8 +52,10 @@ message PluginSpecifications {
       TYPE_UNSPECIFIED = 0;
       // Parameter is a string.
       TYPE_STRING = 1;
-      // Parameter is a number.
-      TYPE_NUMBER = 2;
+       // Parameter is an integer.
+       TYPE_INT = 2;
+       // Parameter is a float.
+       TYPE_FLOAT = 3;
       // Parameter is a boolean.
       TYPE_BOOL = 3;
       // Parameter is a file.
@@ -86,7 +88,7 @@ are not exposed by the SDK.
 Implementing the validation options provided by the proto file. So, giving the developer the option to specify
 validations for each parameter and Conduit will make sure to run the validations.
 
-Validating the type of the parameter, we have 5 types supported in the proto design {string, number, bool, file, and duration}
+Validating the type of the parameter, we have 6 types supported in the proto design {string, int, float, bool, file, and duration}
 
 Validate that the config doesn't contain a parameter that is not defined in the specifications, which will help detect 
 a typo in a pipeline configuration file, or an extra configuration that does not exist.
@@ -129,7 +131,7 @@ Params should look something like:
 SourceParams: []sdk.Parameter{
     {
       Name: "param",
-      Type: sdk.ParameterTypeNumber,
+      Type: sdk.ParameterTypeInt,
       Validations: []sdk.Validation{
         sdk.ValidationRequired{},
         sdk.ValidationLessThan{Value:8},
