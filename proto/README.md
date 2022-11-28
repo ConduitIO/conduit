@@ -2,41 +2,44 @@
 
 This folder contains protobuf files that define the Conduit gRPC API and
 consequently also the HTTP API via
-the [grpc-gateway](https://github.com/grpc-ecosystem/grpc-gateway). The proto
-schema is uploaded to
-the [Buf schema registry](https://docs.buf.build/bsr/introduction) and can be
-found here: https://buf.build/conduitio/conduit
+the [grpc-gateway](https://github.com/grpc-ecosystem/grpc-gateway).
 
-Buf schema registry provides
-[remote code generation](https://docs.buf.build/bsr/remote-generation/go)
-which we use in Conduit to get the Go code for our gRPC server. We recommend
-you doing the same if you are trying to communicate with Conduit's gRPC API.
+## Client code
 
-To fetch the remote generated code for Go you can use:
+The client code for Conduit's API is available remotely generated via 
+[Buf's Remote Generation](https://docs.buf.build/bsr/remote-generation/overview). Remote code generation is triggered 
+via a GitHub workflow defined [here](/.github/workflows/buf.yml).
 
-```
-go get go.buf.build/conduitio/conduit/conduitio/conduit@latest
+To use the client code, firstly run:
+```shell
+go get go.buf.build/conduitio/conduit/conduitio/conduit
 ```
 
-## Local development
+Here's an example usage of Conduit's client code:
+```go
+package main
 
-Because we use remote code generation provided by the Buf schema registry there
-is no locally generated code. When developing locally we don't want to push a
-new version of the proto files every time we make a change, that's why in that
-case we can switch to locally generated protobuf code.
+import (
+	"context"
+	apiv1 "go.buf.build/conduitio/conduit/conduitio/conduit/api/v1"
+	"google.golang.org/grpc"
+)
 
-To switch to locally generated protobuf code follow the following steps:
-- run `cd proto && buf generate`
-- cd into the newly generated folder `proto/gen`
-- create a `go.mod` file by running `go mod init go.buf.build/conduitio/conduit/conduitio/conduit && go mod tidy`
-- cd into the root of the project and run `go mod edit -replace go.buf.build/conduitio/conduit/conduitio/conduit=./proto/gen && go mod tidy`
+func main() {
+	var cc grpc.ClientConnInterface = ...
+	ps := apiv1.NewPipelineServiceClient(cc)
+	pipeline, err := ps.GetPipeline(
+		context.Background(),
+		&apiv1.GetPipelineRequest{Id: "pipeline-id-here"},
+	)
+}
 
-Before you push your changes don't forget to revert the replaced dependency
-using `go mod edit -dropreplace go.buf.build/conduitio/conduit/conduitio/conduit`.
+```
 
-Because Conduit depends on the remotely generated code you will normally have
-to create 2 separate PRs - the first changes the proto changes and uploads a
-new version of the shema to the schema registry once it's merged, the second
-updates the dependency to `go.buf.build/conduitio/conduit/conduitio/conduit`
-and includes any necessary Go code changes. The switch to locally generated
-code can help you prepare and test both parts at once.
+## Development
+
+We use [Buf](https://buf.build/) to generate the Go code. The code is locally generated,
+and can be found in [gen](/proto/gen). The generated code needs to be committed.
+
+The code needs to be generated after changes to the `.proto` files have been made. To do
+so run `make proto-generate` from the root of this repository.

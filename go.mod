@@ -9,34 +9,36 @@ require (
 	github.com/conduitio/conduit-connector-file v0.3.0
 	github.com/conduitio/conduit-connector-generator v0.3.0
 	github.com/conduitio/conduit-connector-kafka v0.3.0
+	github.com/conduitio/conduit-connector-log v0.1.1
 	github.com/conduitio/conduit-connector-postgres v0.3.0
 	github.com/conduitio/conduit-connector-protocol v0.3.0
 	github.com/conduitio/conduit-connector-s3 v0.3.0
 	github.com/conduitio/conduit-connector-sdk v0.3.0
-	github.com/dgraph-io/badger/v3 v3.2103.3
+	github.com/dgraph-io/badger/v3 v3.2103.4
 	github.com/dop251/goja v0.0.0-20210225094849-f3cfc97811c0
 	github.com/gammazero/deque v0.2.1
 	github.com/golang/mock v1.6.0
 	github.com/google/go-cmp v0.5.9
 	github.com/google/uuid v1.3.0
-	github.com/grpc-ecosystem/grpc-gateway/v2 v2.12.0
+	github.com/grpc-ecosystem/grpc-gateway/v2 v2.14.0
 	github.com/hashicorp/go-hclog v1.3.1
-	github.com/hashicorp/go-plugin v1.4.5
+	github.com/hashicorp/go-plugin v1.4.6
 	github.com/jackc/pgtype v1.12.0
 	github.com/jackc/pgx/v4 v4.17.2
 	github.com/jpillora/backoff v1.0.0
 	github.com/matryer/is v1.4.0
 	github.com/piotrkowalczuk/promgrpc/v4 v4.0.4
-	github.com/prometheus/client_golang v1.13.0
+	github.com/prometheus/client_golang v1.14.0
 	github.com/prometheus/client_model v0.3.0
 	github.com/prometheus/common v0.37.0
 	github.com/rs/zerolog v1.28.0
-	go.buf.build/conduitio/conduit/conduitio/conduit v1.1.4
 	go.buf.build/grpc/go/conduitio/conduit-connector-protocol v1.4.3
+	go.buf.build/protocolbuffers/go/grpc-ecosystem/grpc-gateway v1.3.50
 	golang.org/x/exp v0.0.0-20220827204233-334a2380cb91
-	golang.org/x/tools v0.2.0
+	golang.org/x/tools v0.3.0
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2
-	google.golang.org/grpc v1.50.1
+	google.golang.org/genproto v0.0.0-20221114212237-e4508ebdbee1
+	google.golang.org/grpc v1.51.0
 	google.golang.org/protobuf v1.28.1
 	gopkg.in/tomb.v2 v2.0.0-20161208151619-d5d1b5820637
 	gopkg.in/yaml.v3 v3.0.1
@@ -109,15 +111,13 @@ require (
 	github.com/xdg/stringprep v1.0.3 // indirect
 	github.com/xitongsys/parquet-go v1.6.2 // indirect
 	github.com/xitongsys/parquet-go-source v0.0.0-20220723234337-052319f3f36b // indirect
-	go.buf.build/conduitio/conduit/grpc-ecosystem/grpc-gateway v1.1.46 // indirect
 	go.opencensus.io v0.23.0 // indirect
 	go.uber.org/goleak v1.2.0 // indirect
 	golang.org/x/crypto v0.1.0 // indirect
-	golang.org/x/mod v0.6.0 // indirect
-	golang.org/x/net v0.1.0 // indirect
-	golang.org/x/sys v0.1.0 // indirect
+	golang.org/x/mod v0.7.0 // indirect
+	golang.org/x/net v0.2.0 // indirect
+	golang.org/x/sys v0.2.0 // indirect
 	golang.org/x/text v0.4.0 // indirect
-	golang.org/x/time v0.0.0-20220922220347-f3bd1da661af // indirect
-	google.golang.org/genproto v0.0.0-20221014213838-99cd37c6964a // indirect
+	golang.org/x/time v0.2.0 // indirect
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
 )

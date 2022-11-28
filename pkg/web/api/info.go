@@ -18,7 +18,7 @@ import (
 	"context"
 	"runtime"
 
-	apiv1 "go.buf.build/conduitio/conduit/conduitio/conduit/api/v1"
+	apiv1 "github.com/conduitio/conduit/proto/gen/api/v1"
 	"google.golang.org/grpc"
 )
 

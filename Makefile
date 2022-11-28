@@ -32,6 +32,9 @@ build-server: check-go-version
 run:
 	go run ./cmd/conduit/main.go
 
+proto-generate:
+	rm -rf proto/gen && cd proto && buf generate
+
 proto-update:
 	cd proto && buf mod update
 
