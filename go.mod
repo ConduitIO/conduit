@@ -11,7 +11,7 @@ require (
 	github.com/conduitio/conduit-connector-kafka v0.3.0
 	github.com/conduitio/conduit-connector-log v0.1.1
 	github.com/conduitio/conduit-connector-postgres v0.3.0
-	github.com/conduitio/conduit-connector-protocol v0.3.0
+	github.com/conduitio/conduit-connector-protocol v0.3.1-0.20221122174508-e7ab80ea57a1
 	github.com/conduitio/conduit-connector-s3 v0.3.0
 	github.com/conduitio/conduit-connector-sdk v0.3.0
 	github.com/dgraph-io/badger/v3 v3.2103.4
@@ -32,9 +32,9 @@ require (
 	github.com/prometheus/client_model v0.3.0
 	github.com/prometheus/common v0.37.0
 	github.com/rs/zerolog v1.28.0
-	go.buf.build/grpc/go/conduitio/conduit-connector-protocol v1.4.3
+	go.buf.build/grpc/go/conduitio/conduit-connector-protocol v1.4.5
 	go.buf.build/protocolbuffers/go/grpc-ecosystem/grpc-gateway v1.3.49
-	golang.org/x/exp v0.0.0-20220827204233-334a2380cb91
+	golang.org/x/exp v0.0.0-20221114191408-850992195362
 	golang.org/x/tools v0.3.0
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2
 	google.golang.org/genproto v0.0.0-20221114212237-e4508ebdbee1
@@ -112,7 +112,9 @@ require (
 	github.com/xitongsys/parquet-go v1.6.2 // indirect
 	github.com/xitongsys/parquet-go-source v0.0.0-20220723234337-052319f3f36b // indirect
 	go.opencensus.io v0.23.0 // indirect
+	go.uber.org/atomic v1.7.0 // indirect
 	go.uber.org/goleak v1.2.0 // indirect
+	go.uber.org/multierr v1.8.0 // indirect
 	golang.org/x/crypto v0.1.0 // indirect
 	golang.org/x/mod v0.7.0 // indirect
 	golang.org/x/net v0.2.0 // indirect

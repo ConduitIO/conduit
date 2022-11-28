@@ -41,12 +41,14 @@ const (
 	// in nanoseconds.
 	MetadataReadAt = "opencdc.readAt"
 
-	// MetadataConduitPluginName is a Record.Metadata key for the name of the
-	// plugin that created this record.
-	MetadataConduitPluginName = "conduit.plugin.name"
-	// MetadataConduitPluginVersion is a Record.Metadata key for the version of
-	// the plugin that created this record.
-	MetadataConduitPluginVersion = "conduit.plugin.version"
+	// MetadataConduitSourcePluginName
+	MetadataConduitSourcePluginName = "conduit.source.plugin.name"
+	// MetadataConduitSourcePluginVersion
+	MetadataConduitSourcePluginVersion = "conduit.source.plugin.version"
+	// MetadataConduitDestinationPluginName
+	MetadataConduitDestinationPluginName = "conduit.destination.plugin.name"
+	// MetadataConduitDestinationPluginVersion
+	MetadataConduitDestinationPluginVersion = "conduit.destination.plugin.version"
 )
 
 // SetOpenCDCVersion sets the metadata value for key MetadataVersion to the
