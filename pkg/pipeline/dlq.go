@@ -45,6 +45,7 @@ func (d *DLQDestination) Write(ctx context.Context, rec record.Record) error {
 		pos    record.Position
 		ackErr error
 	)
+	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		pos, ackErr = d.Destination.Ack(ctx)

@@ -221,12 +221,7 @@ func TestService_CreateSuccess(t *testing.T) {
 				Name:        "test-pipeline1",
 				Description: "pipeline description",
 			},
-			DLQ: DLQ{
-				Plugin:              "builtin:log",
-				Settings:            map[string]string{"level": "warn"},
-				WindowSize:          1,
-				WindowNackThreshold: 0,
-			},
+			DLQ:    service.defaultDLQ(),
 			Status: StatusUserStopped,
 		},
 	}, {
@@ -241,12 +236,7 @@ func TestService_CreateSuccess(t *testing.T) {
 				Name:        "test-pipeline2",
 				Description: "",
 			},
-			DLQ: DLQ{
-				Plugin:              "builtin:log",
-				Settings:            map[string]string{"level": "warn"},
-				WindowSize:          1,
-				WindowNackThreshold: 0,
-			},
+			DLQ:    service.defaultDLQ(),
 			Status: StatusUserStopped,
 		},
 	}}
