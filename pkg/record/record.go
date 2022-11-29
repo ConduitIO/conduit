@@ -128,8 +128,8 @@ func (r Record) Map() map[string]interface{} {
 	return map[string]any{
 		"position":  []byte(r.Position),
 		"operation": r.Operation.String(),
-		"key":       r.mapData(r.Key),
 		"metadata":  genericMetadata,
+		"key":       r.mapData(r.Key),
 		"payload": map[string]interface{}{
 			"before": r.mapData(r.Payload.Before),
 			"after":  r.mapData(r.Payload.After),
