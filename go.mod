@@ -3,13 +3,13 @@ module github.com/conduitio/conduit
 go 1.18
 
 require (
-	github.com/Masterminds/semver/v3 v3.1.1
+	github.com/Masterminds/semver/v3 v3.2.0
 	github.com/NYTimes/gziphandler v1.1.1
 	github.com/antchfx/jsonquery v1.3.0
 	github.com/conduitio/conduit-connector-file v0.3.0
 	github.com/conduitio/conduit-connector-generator v0.3.0
 	github.com/conduitio/conduit-connector-kafka v0.3.0
-	github.com/conduitio/conduit-connector-log v0.1.1
+	github.com/conduitio/conduit-connector-log v0.1.2
 	github.com/conduitio/conduit-connector-postgres v0.3.0
 	github.com/conduitio/conduit-connector-protocol v0.3.0
 	github.com/conduitio/conduit-connector-s3 v0.3.0
@@ -33,12 +33,12 @@ require (
 	github.com/prometheus/common v0.37.0
 	github.com/rs/zerolog v1.28.0
 	go.buf.build/grpc/go/conduitio/conduit-connector-protocol v1.4.3
-	go.buf.build/protocolbuffers/go/grpc-ecosystem/grpc-gateway v1.3.49
+	go.buf.build/protocolbuffers/go/grpc-ecosystem/grpc-gateway v1.3.50
 	golang.org/x/exp v0.0.0-20220827204233-334a2380cb91
 	golang.org/x/tools v0.3.0
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2
 	google.golang.org/genproto v0.0.0-20221114212237-e4508ebdbee1
-	google.golang.org/grpc v1.50.1
+	google.golang.org/grpc v1.51.0
 	google.golang.org/protobuf v1.28.1
 	gopkg.in/tomb.v2 v2.0.0-20161208151619-d5d1b5820637
 	gopkg.in/yaml.v3 v3.0.1

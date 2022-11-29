@@ -43,8 +43,9 @@ github.com/AzureAD/microsoft-authentication-library-for-go v0.4.0/go.mod h1:Vt9s
 github.com/AzureAD/microsoft-authentication-library-for-go v0.5.1/go.mod h1:Vt9sXTKwMyGcOxSmLDMnGPgqsUg7m8pe215qMLrDXw4=
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
 github.com/BurntSushi/xgb v0.0.0-20160522181843-27f122750802/go.mod h1:IVnqGOEym/WlBOVXweHU+Q+/VP0lqqI8lqeDx9IjBqo=
-github.com/Masterminds/semver/v3 v3.1.1 h1:hLg3sBzpNErnxhQtUy/mmLR2I9foDujNK030IGemrRc=
 github.com/Masterminds/semver/v3 v3.1.1/go.mod h1:VPu/7SZ7ePZ3QOrcuXROw5FAcLl4a0cBrbBpGY/8hQs=
+github.com/Masterminds/semver/v3 v3.2.0 h1:3MEsd0SM6jqZojhjLWWeBY+Kcjy9i6MQAeY7YgDP83g=
+github.com/Masterminds/semver/v3 v3.2.0/go.mod h1:qvl/7zhW3nngYb5+80sSMF+FG2BjYrf8m9wsX0PNOMQ=
 github.com/Masterminds/squirrel v1.5.3 h1:YPpoceAcxuzIljlr5iWpNKaql7hLeG1KLSrhvdHpkZc=
 github.com/Masterminds/squirrel v1.5.3/go.mod h1:NNaOrjSoIDfDA40n7sr2tPNZRfjzjA400rg+riTZj10=
 github.com/NYTimes/gziphandler v1.1.1 h1:ZUDjpQae29j0ryrS0u/B8HZfJBtBQHjqw2rQ2cqUQ3I=
@@ -149,8 +150,8 @@ github.com/conduitio/conduit-connector-generator v0.3.0 h1:iMCFiMpih2R9hiN5/tfdg
 github.com/conduitio/conduit-connector-generator v0.3.0/go.mod h1:PrNHuhgpF0vm/mV3ZMj7RCqTb7epxEB1za4xYuCE1uE=
 github.com/conduitio/conduit-connector-kafka v0.3.0 h1:9/VUHPWEBUGYPS9OComPCygcW3FMj7EOOny5gsGyEbI=
 github.com/conduitio/conduit-connector-kafka v0.3.0/go.mod h1:SeTIz/x6K2HgunVDUMsaS6ZTpvAFe+45zwPKF09RIoM=
-github.com/conduitio/conduit-connector-log v0.1.1 h1:ko8o//O1aRrzYno3xct05F5lWIhGcJKS6mErjg7Jhnw=
-github.com/conduitio/conduit-connector-log v0.1.1/go.mod h1:mnox8F5YrwQpuX+Y/WJidgqi6882Id6i8MslW0ic+XA=
+github.com/conduitio/conduit-connector-log v0.1.2 h1:CPlsdgr1Ui6j3fNVYpp/qHVwXKbgfu/LFptu5OF+I7A=
+github.com/conduitio/conduit-connector-log v0.1.2/go.mod h1:mnox8F5YrwQpuX+Y/WJidgqi6882Id6i8MslW0ic+XA=
 github.com/conduitio/conduit-connector-postgres v0.3.0 h1:owlVIXeAWVAuHW0Hzr3+zxrAB9/LXIedINduFQM/HoM=
 github.com/conduitio/conduit-connector-postgres v0.3.0/go.mod h1:I8Yz4t90QbGZUObt+0+bWpDwJ2qZ5iv4bbFjRB19xGA=
 github.com/conduitio/conduit-connector-protocol v0.3.0 h1:Ix0C1jMQ23diRzfSfxWG9RJDHVc7Vu0yCVjKa25Y0SU=
@@ -575,8 +576,8 @@ github.com/yuin/goldmark v1.3.5/go.mod h1:mwnBkeHKe2W/ZEtQ+71ViKU8L12m81fl3OWwC1
 github.com/zenazn/goji v0.9.0/go.mod h1:7S9M489iMyHBNxwZnk9/EHS098H4/F6TATF2mIxtB1Q=
 go.buf.build/grpc/go/conduitio/conduit-connector-protocol v1.4.3 h1:6xmHosBGMcHQFboRbi9rNoqrKtePhTxL239ZfftVWMY=
 go.buf.build/grpc/go/conduitio/conduit-connector-protocol v1.4.3/go.mod h1:+TaeSyc6KgrD/1fNhSQNQ6ckvEEbgmerpBqZ2szZMGs=
-go.buf.build/protocolbuffers/go/grpc-ecosystem/grpc-gateway v1.3.49 h1:7UsOcviXcERaepau2gc73BEDOvaQ6fvb8iz/KQDakb0=
-go.buf.build/protocolbuffers/go/grpc-ecosystem/grpc-gateway v1.3.49/go.mod h1:6MdGHa1QvFJzNaFwRsJO+AZ/sPDxl3xx/jcrDLrKJys=
+go.buf.build/protocolbuffers/go/grpc-ecosystem/grpc-gateway v1.3.50 h1:jP9S/C5iEtQhxjvWlbfnSqUYC1T7mQFXsjdx9ko3DfQ=
+go.buf.build/protocolbuffers/go/grpc-ecosystem/grpc-gateway v1.3.50/go.mod h1:6MdGHa1QvFJzNaFwRsJO+AZ/sPDxl3xx/jcrDLrKJys=
 go.opencensus.io v0.21.0/go.mod h1:mSImk1erAIZhrmZN+AvHh14ztQfjbGwt4TtuofqLduU=
 go.opencensus.io v0.22.0/go.mod h1:+kGneAE2xo2IficOXnaByMWTGM9T73dGwxeWcUqIpI8=
 go.opencensus.io v0.22.2/go.mod h1:yxeiOL68Rb0Xd1ddK5vPZ/oVn4vY4Ynel7k9FzqtOIw=
@@ -949,8 +950,8 @@ google.golang.org/grpc v1.33.2/go.mod h1:JMHMWHQWaTccqQQlmk3MJZS+GWXOdAesneDmEnv
 google.golang.org/grpc v1.36.0/go.mod h1:qjiiYl8FncCW8feJPdyg3v6XW24KsRHe+dy9BAGRRjU=
 google.golang.org/grpc v1.38.0/go.mod h1:NREThFqKR1f3iQ6oBuvc5LadQuXVGo9rkm5ZGrQdJfM=
 google.golang.org/grpc v1.39.0/go.mod h1:PImNr+rS9TWYb2O4/emRugxiyHZ5JyHW5F+RPnDzfrE=
-google.golang.org/grpc v1.50.1 h1:DS/BukOZWp8s6p4Dt/tOaJaTQyPyOoCcrjroHuCeLzY=
-google.golang.org/grpc v1.50.1/go.mod h1:ZgQEeidpAuNRZ8iRrlBKXZQP1ghovWIVhdJRyCDK+GI=
+google.golang.org/grpc v1.51.0 h1:E1eGv1FTqoLIdnBCZufiSHgKjlqG6fKFf6pPWtMTh8U=
+google.golang.org/grpc v1.51.0/go.mod h1:wgNDFcnuBGmxLKI/qn4T+m5BtEBYXJPvibbUPsAIPww=
 google.golang.org/protobuf v0.0.0-20200109180630-ec00e32a8dfd/go.mod h1:DFci5gLYBciE7Vtevhsrf46CRTquxDuWsQurQQe4oz8=
 google.golang.org/protobuf v0.0.0-20200221191635-4d8936d0db64/go.mod h1:kwYJMbMJ01Woi6D6+Kah6886xMZcty6N08ah7+eCXa0=
 google.golang.org/protobuf v0.0.0-20200228230310-ab0ca4ff8a60/go.mod h1:cfTl7dwQJ+fmap5saPgwCLgHXTUD7jkjRqWcaiX5VyM=
