@@ -162,10 +162,6 @@ func (n *DLQHandlerNode) Nack(msg *Message, nackMetadata NackMetadata) (err erro
 }
 
 func (n *DLQHandlerNode) dlqRecord(msg *Message, nackMetadata NackMetadata) (record.Record, error) {
-	data, err := msg.Record.Map()
-	if err != nil {
-		return record.Record{}, cerrors.Errorf("failed to transform DLQ record to map: %w", err)
-	}
 	r := record.Record{
 		Position:  record.Position(msg.ID()),
 		Operation: record.OperationCreate,
@@ -173,7 +169,7 @@ func (n *DLQHandlerNode) dlqRecord(msg *Message, nackMetadata NackMetadata) (rec
 		Key:       nil,
 		Payload: record.Change{
 			Before: nil,
-			After:  record.StructuredData(data), // failed record is stored here
+			After:  record.StructuredData(msg.Record.Map()), // failed record is stored here
 		},
 	}
 	r.Metadata.SetCreatedAt(time.Now())
