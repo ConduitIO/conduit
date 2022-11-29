@@ -201,9 +201,20 @@ func TestDLQHandlerNode_Nack_ForwardToDLQ_Success(t *testing.T) {
 			Reason: wantErr,
 			NodeID: "test-node",
 		}
-		dlqHandler.EXPECT().Write(msg.Ctx, msg.Record).Return(nil)
 
-		err := n.Nack(msg, wantNackMetadata)
+		wantRec, err := n.dlqRecord(msg, wantNackMetadata)
+		is.NoErr(err)
+
+		dlqHandler.EXPECT().
+			Write(msg.Ctx, gomock.Any()).
+			Do(func(ctx context.Context, got record.Record) {
+				// ignore created at
+				at, _ := got.Metadata.GetCreatedAt()
+				wantRec.Metadata.SetCreatedAt(at)
+				is.Equal(wantRec, got)
+			}).Return(nil)
+
+		err = n.Nack(msg, wantNackMetadata)
 		is.NoErr(err)
 	}
 

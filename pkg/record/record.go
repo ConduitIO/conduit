@@ -25,6 +25,7 @@ import (
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/record/schema"
+	"github.com/mitchellh/mapstructure"
 )
 
 const (
@@ -72,23 +73,23 @@ func (i *Operation) UnmarshalText(b []byte) error {
 // by a destination connector.
 type Record struct {
 	// Position uniquely represents the record.
-	Position Position `json:"position"`
+	Position Position `json:"position" mapstructure:"position"`
 	// Operation defines what triggered the creation of a record. There are four
 	// possibilities: create, update, delete or snapshot. The first three
 	// operations are encountered during normal CDC operation, while "snapshot"
 	// is meant to represent records during an initial load. Depending on the
 	// operation, the record will contain either the payload before the change,
 	// after the change, or both (see field Payload).
-	Operation Operation `json:"operation"`
+	Operation Operation `json:"operation" mapstructure:"operation"`
 	// Metadata contains additional information regarding the record.
-	Metadata Metadata `json:"metadata"`
+	Metadata Metadata `json:"metadata" mapstructure:"metadata"`
 
 	// Key represents a value that should identify the entity (e.g. database
 	// row).
-	Key Data `json:"key"`
+	Key Data `json:"key" mapstructure:"key"`
 	// Payload holds the payload change (data before and after the operation
 	// occurred).
-	Payload Change `json:"payload"`
+	Payload Change `json:"payload" mapstructure:"payload"`
 }
 
 // Bytes returns the JSON encoding of the Record.
@@ -116,6 +117,15 @@ func (r Record) Bytes() []byte {
 	return b
 }
 
+func (r Record) Map() (map[string]interface{}, error) {
+	var out map[string]interface{}
+	err := mapstructure.Decode(r, &out)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 type Metadata map[string]string
 
 type Change struct {
@@ -123,10 +133,10 @@ type Change struct {
 	// optional and should only be populated for operations OperationUpdate
 	// OperationDelete (if the system supports fetching the data before the
 	// operation).
-	Before Data `json:"before"`
+	Before Data `json:"before" mapstructure:"before"`
 	// After contains the data after the operation occurred. This field should
 	// be populated for all operations except OperationDelete.
-	After Data `json:"after"`
+	After Data `json:"after" mapstructure:"after"`
 }
 
 // Position is a unique identifier for a record being process.
