@@ -67,10 +67,10 @@ func TestRecord_ToMap(t *testing.T) {
 	}
 
 	got := r.Map()
-	is.Equal(map[string]any{
+	want := map[string]interface{}{
 		"position":  []byte("foo"),
 		"operation": "create",
-		"metadata": map[string]string{
+		"metadata": map[string]interface{}{
 			MetadataConduitSourcePluginName: "example",
 		},
 		"key": []byte("bar"),
@@ -81,5 +81,6 @@ func TestRecord_ToMap(t *testing.T) {
 				"baz": "qux",
 			},
 		},
-	}, got)
+	}
+	is.Equal(want, got)
 }
