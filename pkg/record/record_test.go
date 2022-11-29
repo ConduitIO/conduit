@@ -66,16 +66,20 @@ func TestRecord_ToMap(t *testing.T) {
 		},
 	}
 
-	got, err := r.Map()
-	is.NoErr(err)
+	got := r.Map()
 	is.Equal(map[string]any{
-		"position":  r.Position,
-		"operation": r.Operation,
-		"key":       r.Key,
-		"metadata":  r.Metadata,
+		"position":  []byte("foo"),
+		"operation": "create",
+		"metadata": map[string]string{
+			MetadataConduitSourcePluginName: "example",
+		},
+		"key": []byte("bar"),
 		"payload": map[string]interface{}{
-			"before": r.Payload.Before,
-			"after":  r.Payload.After,
+			"before": nil,
+			"after": map[string]interface{}{
+				"foo": "bar",
+				"baz": "qux",
+			},
 		},
 	}, got)
 }
