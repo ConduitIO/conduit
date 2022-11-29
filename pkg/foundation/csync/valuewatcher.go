@@ -27,9 +27,9 @@ import (
 // It is similar to atomic.Value except the caller can call Watch to be notified
 // each time the value in ValueWatcher changes.
 type ValueWatcher[T any] struct {
-	val      T
-	m        sync.Mutex
-	listener map[string]chan T
+	val       T
+	m         sync.Mutex
+	listeners map[string]chan T
 }
 
 type ValueWatcherFunc[T any] func(val T) bool
@@ -60,32 +60,33 @@ func WatchValues[T comparable](want ...T) ValueWatcherFunc[T] {
 
 // Set stores val in ValueWatcher and notifies all goroutines that called Watch
 // about the new value, if such goroutines exists.
-func (h *ValueWatcher[T]) Set(val T) {
-	h.m.Lock()
-	defer h.m.Unlock()
+func (vw *ValueWatcher[T]) Set(val T) {
+	vw.m.Lock()
+	defer vw.m.Unlock()
 
-	h.val = val
-	for _, l := range h.listener {
+	vw.val = val
+	for _, l := range vw.listeners {
 		l <- val
 	}
 }
 
 // Get returns the current value stored in ValueWatcher.
-func (h *ValueWatcher[T]) Get() T {
-	h.m.Lock()
-	defer h.m.Unlock()
+func (vw *ValueWatcher[T]) Get() T {
+	vw.m.Lock()
+	defer vw.m.Unlock()
 
-	return h.val
+	return vw.val
 }
 
-// Watch blocks and calls foundVal for every value that is put into the
-// ValueWatcher. Once foundVal returns true it stops blocking and returns nil.
-// First call to foundVal will be with the current value stored in ValueWatcher.
+// Watch blocks and calls f for every value that is put into the ValueWatcher.
+// Once f returns true it stops blocking and returns nil. First call to f will
+// be with the current value stored in ValueWatcher. Note that if no value was
+// stored in ValueWatcher yet, the zero value of type T will be passed to f.
+//
 // Watch can be safely called by multiple goroutines. If the context gets
-// cancelled before foundVal returns true, the function will return the context
-// error.
-func (h *ValueWatcher[T]) Watch(ctx context.Context, f ValueWatcherFunc[T]) (T, error) {
-	val, found, listener, unsubscribe := h.findOrSubscribe(f)
+// cancelled before f returns true, the function will return the context error.
+func (vw *ValueWatcher[T]) Watch(ctx context.Context, f ValueWatcherFunc[T]) (T, error) {
+	val, found, listener, unsubscribe := vw.findOrSubscribe(f)
 	if found {
 		return val, nil
 	}
@@ -105,16 +106,16 @@ func (h *ValueWatcher[T]) Watch(ctx context.Context, f ValueWatcherFunc[T]) (T, 
 	}
 }
 
-func (h *ValueWatcher[T]) findOrSubscribe(f ValueWatcherFunc[T]) (T, bool, chan T, func()) {
-	h.m.Lock()
-	defer h.m.Unlock()
+func (vw *ValueWatcher[T]) findOrSubscribe(f ValueWatcherFunc[T]) (T, bool, chan T, func()) {
+	vw.m.Lock()
+	defer vw.m.Unlock()
 
-	// first call to foundVal is with the current value
-	if f(h.val) {
-		return h.val, true, nil, nil
+	// first call to f is with the current value
+	if f(vw.val) {
+		return vw.val, true, nil, nil
 	}
 
-	listener, unsubscribe := h.subscribe()
+	listener, unsubscribe := vw.subscribe()
 	var empty T
 	return empty, false, listener, unsubscribe
 }
@@ -122,31 +123,33 @@ func (h *ValueWatcher[T]) findOrSubscribe(f ValueWatcherFunc[T]) (T, bool, chan 
 // subscribe creates a channel that will receive changes and returns it
 // alongside a cleanup function that closes the channel and removes it from
 // ValueWatcher.
-func (h *ValueWatcher[T]) subscribe() (chan T, func()) {
-	if h.listener == nil {
-		h.listener = make(map[string]chan T)
+func (vw *ValueWatcher[T]) subscribe() (chan T, func()) {
+	if vw.listeners == nil {
+		vw.listeners = make(map[string]chan T)
 	}
 
 	id := uuid.NewString()
 	c := make(chan T)
 
-	h.listener[id] = c
+	vw.listeners[id] = c
 
-	return c, func() { h.unsubscribe(id, c) }
+	return c, func() { vw.unsubscribe(id, c) }
 }
 
-func (h *ValueWatcher[T]) unsubscribe(id string, c chan T) {
+func (vw *ValueWatcher[T]) unsubscribe(id string, c chan T) {
 	// drain channel and remove it
 	go func() {
 		for range c {
-			// do nothing, just drain channel in case new values come in
-			// while we try to unsubscribe
+			// Do nothing, just drain channel. In case another goroutine tries
+			// to store a new value by calling ValueWatcher.Set, this goroutine
+			// will unblock it until we successfully unsubscribe and remove the
+			// channel from listeners.
 		}
 	}()
 
-	h.m.Lock()
-	defer h.m.Unlock()
+	vw.m.Lock()
+	defer vw.m.Unlock()
 
 	close(c)
-	delete(h.listener, id)
+	delete(vw.listeners, id)
 }
