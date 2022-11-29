@@ -25,6 +25,8 @@ import (
 	"github.com/conduitio/conduit/pkg/record"
 )
 
+// DLQDestination is a DLQ handler that forwards DLQ records to a destination
+// connector.
 type DLQDestination struct {
 	Destination connector.Destination
 	Logger      log.CtxLogger

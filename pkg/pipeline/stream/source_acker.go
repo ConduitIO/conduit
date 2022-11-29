@@ -129,6 +129,14 @@ func (n *SourceAckerNode) registerNackHandler(msg *Message, ticket semaphore.Tic
 			if err != nil {
 				return cerrors.Errorf("failed to write message to DLQ: %w", err)
 			}
+
+			// The nacked record was successfully stored in the DLQ, we consider
+			// the record "processed" so we need to ack it in the source.
+			err = n.Source.Ack(msg.Ctx, msg.Record.Position)
+			if err != nil {
+				return cerrors.Errorf("failed to forward nack to source connector: %w", err)
+			}
+
 			return nil
 		},
 	)
