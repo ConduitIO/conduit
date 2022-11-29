@@ -46,3 +46,36 @@ func TestRecord_Bytes(t *testing.T) {
 
 	is.Equal(r.Metadata, Metadata{MetadataConduitSourcePluginName: "example"}) // expected metadata to stay unaltered
 }
+
+func TestRecord_ToMap(t *testing.T) {
+	is := is.New(t)
+
+	r := Record{
+		Position:  Position("foo"),
+		Operation: OperationCreate,
+		Metadata: Metadata{
+			MetadataConduitSourcePluginName: "example",
+		},
+		Key: RawData{Raw: []byte("bar")},
+		Payload: Change{
+			Before: nil,
+			After: StructuredData{
+				"foo": "bar",
+				"baz": "qux",
+			},
+		},
+	}
+
+	got, err := r.Map()
+	is.NoErr(err)
+	is.Equal(map[string]any{
+		"position":  r.Position,
+		"operation": r.Operation,
+		"key":       r.Key,
+		"metadata":  r.Metadata,
+		"payload": map[string]interface{}{
+			"before": r.Payload.Before,
+			"after":  r.Payload.After,
+		},
+	}, got)
+}

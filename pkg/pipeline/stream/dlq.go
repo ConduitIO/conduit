@@ -19,6 +19,7 @@ package stream
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/csync"
@@ -120,7 +121,7 @@ func (n *DLQHandlerNode) Ack(msg *Message) {
 	n.window.Ack()
 }
 
-func (n *DLQHandlerNode) Nack(msg *Message, nackMetadata NackMetadata) error {
+func (n *DLQHandlerNode) Nack(msg *Message, nackMetadata NackMetadata) (err error) {
 	state, err := n.state.Watch(msg.Ctx,
 		csync.WatchValues(nodeStateRunning, nodeStateStopped, dlqHandlerNodeStateBroken))
 	if err != nil {
@@ -144,18 +145,41 @@ func (n *DLQHandlerNode) Nack(msg *Message, nackMetadata NackMetadata) error {
 		)
 	}
 
-	// TODO create DLQ record that includes nack metadata
-	dlqRecord := msg.Record
+	defer func() {
+		if err != nil {
+			// write to the DLQ failed, this message is essentially lost
+			// we need to stop processing more nacks and stop the pipeline
+			n.state.Set(dlqHandlerNodeStateBroken)
+		}
+	}()
 
-	err = n.Handler.Write(msg.Ctx, dlqRecord)
+	dlqRecord, err := n.dlqRecord(msg, nackMetadata)
 	if err != nil {
-		// write to the DLQ failed, this message is essentially lost
-		// we need to stop processing more nacks and stop the pipeline
-		n.state.Set(dlqHandlerNodeStateBroken)
 		return err
 	}
 
-	return nil
+	return n.Handler.Write(msg.Ctx, dlqRecord)
+}
+
+func (n *DLQHandlerNode) dlqRecord(msg *Message, nackMetadata NackMetadata) (record.Record, error) {
+	data, err := msg.Record.Map()
+	if err != nil {
+		return record.Record{}, cerrors.Errorf("failed to transform DLQ record to map: %w", err)
+	}
+	r := record.Record{
+		Position:  record.Position(msg.ID()),
+		Operation: record.OperationCreate,
+		Metadata:  record.Metadata{},
+		Key:       nil,
+		Payload: record.Change{
+			Before: nil,
+			After:  record.StructuredData(data), // failed record is stored here
+		},
+	}
+	r.Metadata.SetCreatedAt(time.Now())
+	r.Metadata.SetConduitDLQNackError(nackMetadata.Reason.Error())
+	r.Metadata.SetConduitDLQNackNodeID(nackMetadata.NodeID)
+	return r, nil
 }
 
 func (n *DLQHandlerNode) SetLogger(logger log.CtxLogger) {
