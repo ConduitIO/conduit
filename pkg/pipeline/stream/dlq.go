@@ -141,7 +141,7 @@ func (n *DLQHandlerNode) Nack(msg *Message, nackMetadata NackMetadata) (err erro
 	if !ok {
 		return cerrors.Errorf(
 			"DLQ nack threshold exceeded (%d/%d), original error: %w",
-			n.WindowSize, n.WindowNackThreshold, nackMetadata.Reason,
+			n.WindowNackThreshold, n.WindowSize, nackMetadata.Reason,
 		)
 	}
 
