@@ -38,6 +38,10 @@ func (d *DLQDestination) Open(ctx context.Context) error {
 	return d.Destination.Open(ctx)
 }
 
+// Write writes the record synchronously to the destination, meaning that it
+// waits until an ack is received for the record before it returns. If the
+// record write fails or the destination returns a nack, the function returns an
+// error.
 func (d *DLQDestination) Write(ctx context.Context, rec record.Record) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -74,6 +78,7 @@ func (d *DLQDestination) Write(ctx context.Context, rec record.Record) error {
 	return nil
 }
 
+// Close stops the destination and tears it down.
 func (d *DLQDestination) Close(ctx context.Context) (err error) {
 	stopErr := d.Destination.Stop(ctx, d.lastPosition)
 	if stopErr != nil {
