@@ -124,7 +124,7 @@ func (p *wsProxy) proxy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if sErr := scanner.Err(); sErr != nil {
-		p.logger.Err(ctx, sErr).Msg("scanner err")
+		p.logger.Err(ctx, sErr).Msg("failed reading data from original response")
 		if err := conn.WriteMessage(websocket.TextMessage, []byte(sErr.Error())); err != nil {
 			p.logger.Warn(ctx).Err(err).Msg("[write] failed writing scanner error")
 		}
