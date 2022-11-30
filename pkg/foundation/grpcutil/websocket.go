@@ -27,7 +27,6 @@ import (
 type inMemoryResponseWriter struct {
 	io.Writer
 	header http.Header
-	code   int
 	closed chan bool
 }
 
@@ -45,8 +44,8 @@ func (w *inMemoryResponseWriter) Write(b []byte) (int, error) {
 func (w *inMemoryResponseWriter) Header() http.Header {
 	return w.header
 }
-func (w *inMemoryResponseWriter) WriteHeader(code int) {
-	w.code = code
+func (w *inMemoryResponseWriter) WriteHeader(int) {
+	// we don't have a use for the code
 }
 func (w *inMemoryResponseWriter) CloseNotify() <-chan bool {
 	return w.closed
@@ -93,8 +92,8 @@ func (p *wsProxy) proxy(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close()
 
-	// We use a pipe to read the data
-	// being written to the underlying http.Handler
+	// We use a pipe to read the data being written to the underlying http.Handler
+	// and then write it to the WebSocket connection.
 	responseR, responseW := io.Pipe()
 	response := newInMemoryResponseWriter(responseW)
 	go func() {
@@ -123,9 +122,11 @@ func (p *wsProxy) proxy(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	// todo properly communicate the error to the client
-	//   and close the connection
+
 	if sErr := scanner.Err(); sErr != nil {
 		p.logger.Err(ctx, sErr).Msg("scanner err")
+		if err := conn.WriteMessage(websocket.TextMessage, []byte(sErr.Error())); err != nil {
+			p.logger.Warn(ctx).Err(err).Msg("[write] failed writing scanner error")
+		}
 	}
 }
