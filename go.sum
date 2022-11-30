@@ -43,8 +43,9 @@ github.com/AzureAD/microsoft-authentication-library-for-go v0.4.0/go.mod h1:Vt9s
 github.com/AzureAD/microsoft-authentication-library-for-go v0.5.1/go.mod h1:Vt9sXTKwMyGcOxSmLDMnGPgqsUg7m8pe215qMLrDXw4=
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
 github.com/BurntSushi/xgb v0.0.0-20160522181843-27f122750802/go.mod h1:IVnqGOEym/WlBOVXweHU+Q+/VP0lqqI8lqeDx9IjBqo=
-github.com/Masterminds/semver/v3 v3.1.1 h1:hLg3sBzpNErnxhQtUy/mmLR2I9foDujNK030IGemrRc=
 github.com/Masterminds/semver/v3 v3.1.1/go.mod h1:VPu/7SZ7ePZ3QOrcuXROw5FAcLl4a0cBrbBpGY/8hQs=
+github.com/Masterminds/semver/v3 v3.2.0 h1:3MEsd0SM6jqZojhjLWWeBY+Kcjy9i6MQAeY7YgDP83g=
+github.com/Masterminds/semver/v3 v3.2.0/go.mod h1:qvl/7zhW3nngYb5+80sSMF+FG2BjYrf8m9wsX0PNOMQ=
 github.com/Masterminds/squirrel v1.5.3 h1:YPpoceAcxuzIljlr5iWpNKaql7hLeG1KLSrhvdHpkZc=
 github.com/Masterminds/squirrel v1.5.3/go.mod h1:NNaOrjSoIDfDA40n7sr2tPNZRfjzjA400rg+riTZj10=
 github.com/NYTimes/gziphandler v1.1.1 h1:ZUDjpQae29j0ryrS0u/B8HZfJBtBQHjqw2rQ2cqUQ3I=
@@ -149,8 +150,8 @@ github.com/conduitio/conduit-connector-generator v0.3.0 h1:iMCFiMpih2R9hiN5/tfdg
 github.com/conduitio/conduit-connector-generator v0.3.0/go.mod h1:PrNHuhgpF0vm/mV3ZMj7RCqTb7epxEB1za4xYuCE1uE=
 github.com/conduitio/conduit-connector-kafka v0.3.0 h1:9/VUHPWEBUGYPS9OComPCygcW3FMj7EOOny5gsGyEbI=
 github.com/conduitio/conduit-connector-kafka v0.3.0/go.mod h1:SeTIz/x6K2HgunVDUMsaS6ZTpvAFe+45zwPKF09RIoM=
-github.com/conduitio/conduit-connector-log v0.1.1 h1:ko8o//O1aRrzYno3xct05F5lWIhGcJKS6mErjg7Jhnw=
-github.com/conduitio/conduit-connector-log v0.1.1/go.mod h1:mnox8F5YrwQpuX+Y/WJidgqi6882Id6i8MslW0ic+XA=
+github.com/conduitio/conduit-connector-log v0.1.2 h1:CPlsdgr1Ui6j3fNVYpp/qHVwXKbgfu/LFptu5OF+I7A=
+github.com/conduitio/conduit-connector-log v0.1.2/go.mod h1:mnox8F5YrwQpuX+Y/WJidgqi6882Id6i8MslW0ic+XA=
 github.com/conduitio/conduit-connector-postgres v0.3.0 h1:owlVIXeAWVAuHW0Hzr3+zxrAB9/LXIedINduFQM/HoM=
 github.com/conduitio/conduit-connector-postgres v0.3.0/go.mod h1:I8Yz4t90QbGZUObt+0+bWpDwJ2qZ5iv4bbFjRB19xGA=
 github.com/conduitio/conduit-connector-protocol v0.3.1-0.20221122174508-e7ab80ea57a1 h1:4tW8vn1451s0J7RJvA9LVSHwabU4DAPwl7dp2vMW0V0=
