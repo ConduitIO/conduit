@@ -88,8 +88,8 @@ func SpecifierParameter(in *connectorv1.Specifier_Parameter) (plugin.Parameter, 
 		}
 	}
 	// making sure not to duplicate the required validation
-	if in.Required && !requiredExists {
-		validations = append(validations, plugin.Validation{
+	if in.Required && !requiredExists { //nolint: staticcheck // required is still supported for now
+		validations = append(validations, plugin.Validation{ //nolint: makezero // list is full so need to append
 			Type: plugin.ValidationTypeRequired,
 		})
 	}
