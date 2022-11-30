@@ -97,8 +97,16 @@ func SpecifierParameter(in *connectorv1.Specifier_Parameter) (plugin.Parameter, 
 	out := plugin.Parameter{
 		Default:     in.Default,
 		Description: in.Description,
-		Type:        plugin.ParameterType(in.Type),
+		Type:        connectorv1ParamTypeToPluginParamType(in.Type),
 		Validations: validations,
 	}
 	return out, nil
+}
+
+func connectorv1ParamTypeToPluginParamType(t connectorv1.Specifier_Parameter_Type) plugin.ParameterType {
+	// default type should be string
+	if t == connectorv1.Specifier_Parameter_TYPE_UNSPECIFIED {
+		return plugin.ParameterTypeString
+	}
+	return plugin.ParameterType(t)
 }

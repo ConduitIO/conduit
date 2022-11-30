@@ -73,7 +73,7 @@ func testPluginBlueprint() blueprint {
 					Default:     testPluginSourceParam2Default,
 					Type:        plugin.ParameterTypeString,
 					Description: testPluginSourceParam2Description,
-					Validations: nil,
+					Validations: []plugin.Validation{},
 				},
 			},
 			DestinationParams: map[string]plugin.Parameter{
@@ -89,7 +89,7 @@ func testPluginBlueprint() blueprint {
 					Default:     testPluginDestinationParam2Default,
 					Type:        plugin.ParameterTypeString,
 					Description: testPluginDestinationParam2Description,
-					Validations: nil,
+					Validations: []plugin.Validation{},
 				},
 			},
 		},
