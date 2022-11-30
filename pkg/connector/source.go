@@ -21,6 +21,7 @@ import (
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/inspector"
 	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/conduitio/conduit/pkg/record"
 )
@@ -112,6 +113,11 @@ func (s *source) IsRunning() bool {
 
 func (s *source) Errors() <-chan error {
 	return s.errs
+}
+
+func (s *source) Inspect(_ context.Context) *inspector.Session {
+	// TODO implement me
+	panic("implement me")
 }
 
 func (s *source) Validate(ctx context.Context, settings map[string]string) (err error) {

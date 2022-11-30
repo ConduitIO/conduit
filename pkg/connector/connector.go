@@ -21,6 +21,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/conduitio/conduit/pkg/inspector"
 	"github.com/conduitio/conduit/pkg/record"
 )
 
@@ -64,6 +65,10 @@ type Connector interface {
 	// connector experienced an error when it was processing something
 	// asynchronously (e.g. persisting state).
 	Errors() <-chan error
+
+	// Inspect returns an inspector.Session which exposes the records
+	// coming into or out of this connector (depending on the connector type).
+	Inspect(context.Context) *inspector.Session
 
 	// Open will start the plugin process and call the Open method on the
 	// plugin. After the connector has been successfully opened it is considered

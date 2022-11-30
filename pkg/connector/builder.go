@@ -20,8 +20,11 @@ import (
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/inspector"
 	"github.com/conduitio/conduit/pkg/plugin"
 )
+
+const inspectorBufferSize = 1000
 
 // Builder represents an object that can build a connector.
 // The main use of this interface is to be able to switch out the connector
@@ -99,6 +102,7 @@ func (b *DefaultBuilder) Init(c Connector, id string, config Config) error {
 		v.persister = b.persister
 		v.pluginDispenser = p
 		v.errs = make(chan error)
+		v.inspector = inspector.New(v.logger, inspectorBufferSize)
 	default:
 		return ErrInvalidConnectorType
 	}

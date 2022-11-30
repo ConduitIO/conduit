@@ -23,9 +23,13 @@ import (
 	"github.com/conduitio/conduit/pkg/connector"
 	connmock "github.com/conduitio/conduit/pkg/connector/mock"
 	"github.com/conduitio/conduit/pkg/foundation/assert"
+	"github.com/conduitio/conduit/pkg/foundation/cchan"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/inspector"
 	"github.com/conduitio/conduit/pkg/record"
 	apimock "github.com/conduitio/conduit/pkg/web/api/mock"
+	"github.com/conduitio/conduit/pkg/web/api/toproto"
 	apiv1 "github.com/conduitio/conduit/proto/gen/api/v1"
 	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
@@ -201,6 +205,119 @@ func TestConnectorAPIv1_CreateConnector(t *testing.T) {
 	got.Connector.UpdatedAt = want.Connector.UpdatedAt
 
 	assert.Equal(t, want, got)
+}
+
+func TestConnectorAPIv1_InspectConnector_SendRecord(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ctrl := gomock.NewController(t)
+	csMock := apimock.NewConnectorOrchestrator(ctrl)
+	api := NewConnectorAPIv1(csMock)
+
+	id := uuid.NewString()
+	rec := generateTestRecord()
+	recProto, err := toproto.Record(rec)
+	assert.Ok(t, err)
+
+	ins := inspector.New(log.Nop(), 10)
+	session := ins.NewSession(ctx)
+
+	csMock.EXPECT().
+		Inspect(ctx, id).
+		Return(session, nil).
+		Times(1)
+
+	inspectServer := apimock.NewConnectorService_InspectConnectorServer(ctrl)
+	inspectServer.EXPECT().Send(gomock.Eq(&apiv1.InspectConnectorResponse{Record: recProto}))
+	inspectServer.EXPECT().Context().Return(ctx).AnyTimes()
+
+	go func() {
+		_ = api.InspectConnector(
+			&apiv1.InspectConnectorRequest{Id: id},
+			inspectServer,
+		)
+	}()
+	ins.Send(ctx, rec)
+
+	time.Sleep(100 * time.Millisecond)
+}
+
+func TestConnectorAPIv1_InspectConnector_SendErr(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ctrl := gomock.NewController(t)
+	csMock := apimock.NewConnectorOrchestrator(ctrl)
+	api := NewConnectorAPIv1(csMock)
+	id := uuid.NewString()
+
+	ins := inspector.New(log.Nop(), 10)
+	session := ins.NewSession(ctx)
+
+	csMock.EXPECT().
+		Inspect(ctx, id).
+		Return(session, nil).
+		Times(1)
+
+	inspectServer := apimock.NewConnectorService_InspectConnectorServer(ctrl)
+	inspectServer.EXPECT().Context().Return(ctx).AnyTimes()
+	errSend := cerrors.New("I'm sorry, but no.")
+	inspectServer.EXPECT().Send(gomock.Any()).Return(errSend)
+
+	errC := make(chan error)
+	go func() {
+		err := api.InspectConnector(
+			&apiv1.InspectConnectorRequest{Id: id},
+			inspectServer,
+		)
+		errC <- err
+	}()
+	ins.Send(ctx, generateTestRecord())
+
+	err, b, err2 := cchan.Chan[error](errC).RecvTimeout(context.Background(), 100*time.Millisecond)
+	assert.Ok(t, err2)
+	assert.True(t, b, "expected to receive an error")
+	assert.True(t, cerrors.Is(err, errSend), "expected 'I'm sorry, but no.' error")
+}
+
+func TestConnectorAPIv1_InspectConnector_Err(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ctrl := gomock.NewController(t)
+	csMock := apimock.NewConnectorOrchestrator(ctrl)
+	api := NewConnectorAPIv1(csMock)
+	id := uuid.NewString()
+	err := cerrors.New("not found, sorry")
+
+	csMock.EXPECT().
+		Inspect(ctx, gomock.Any()).
+		Return(nil, err).
+		Times(1)
+
+	inspectServer := apimock.NewConnectorService_InspectConnectorServer(ctrl)
+	inspectServer.EXPECT().Context().Return(ctx).AnyTimes()
+
+	errAPI := api.InspectConnector(
+		&apiv1.InspectConnectorRequest{Id: id},
+		inspectServer,
+	)
+	assert.NotNil(t, errAPI)
+	assert.Equal(
+		t,
+		"rpc error: code = Internal desc = failed to get connector: not found, sorry",
+		errAPI.Error(),
+	)
+}
+
+func generateTestRecord() record.Record {
+	return record.Record{
+		Position:  record.Position("test-position"),
+		Operation: record.OperationCreate,
+		Metadata:  record.Metadata{"metadata-key": "metadata-value"},
+		Key:       record.RawData{Raw: []byte("test-key")},
+		Payload: record.Change{
+			After: record.RawData{Raw: []byte("test-payload")},
+		},
+	}
 }
 
 func TestConnectorAPIv1_GetConnector(t *testing.T) {
