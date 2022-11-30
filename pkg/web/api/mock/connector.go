@@ -9,6 +9,7 @@ import (
 	reflect "reflect"
 
 	connector "github.com/conduitio/conduit/pkg/connector"
+	inspector "github.com/conduitio/conduit/pkg/inspector"
 	gomock "github.com/golang/mock/gomock"
 )
 
@@ -77,6 +78,21 @@ func (m *ConnectorOrchestrator) Get(arg0 context.Context, arg1 string) (connecto
 func (mr *ConnectorOrchestratorMockRecorder) Get(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*ConnectorOrchestrator)(nil).Get), arg0, arg1)
+}
+
+// Inspect mocks base method.
+func (m *ConnectorOrchestrator) Inspect(arg0 context.Context, arg1 string) (*inspector.Session, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Inspect", arg0, arg1)
+	ret0, _ := ret[0].(*inspector.Session)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Inspect indicates an expected call of Inspect.
+func (mr *ConnectorOrchestratorMockRecorder) Inspect(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Inspect", reflect.TypeOf((*ConnectorOrchestrator)(nil).Inspect), arg0, arg1)
 }
 
 // List mocks base method.

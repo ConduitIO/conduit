@@ -13,6 +13,7 @@
 // limitations under the License.
 
 //go:generate mockgen -destination=mock/connector.go -package=mock -mock_names=ConnectorOrchestrator=ConnectorOrchestrator . ConnectorOrchestrator
+//go:generate mockgen -destination=mock/connector_service.go -package=mock -mock_names=ConnectorService_InspectConnectorServer=ConnectorService_InspectConnectorServer github.com/conduitio/conduit/proto/gen/api/v1 ConnectorService_InspectConnectorServer
 package api
 
 import (
@@ -20,6 +21,7 @@ import (
 
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/inspector"
 	"github.com/conduitio/conduit/pkg/web/api/fromproto"
 	"github.com/conduitio/conduit/pkg/web/api/status"
 	"github.com/conduitio/conduit/pkg/web/api/toproto"
@@ -34,6 +36,7 @@ type ConnectorOrchestrator interface {
 	Delete(ctx context.Context, id string) error
 	Update(ctx context.Context, id string, config connector.Config) (connector.Connector, error)
 	Validate(ctx context.Context, t connector.Type, config connector.Config) error
+	Inspect(ctx context.Context, id string) (*inspector.Session, error)
 }
 
 type ConnectorAPIv1 struct {
@@ -63,6 +66,33 @@ func (c *ConnectorAPIv1) ListConnectors(
 	}
 
 	return &apiv1.ListConnectorsResponse{Connectors: clist}, nil
+}
+
+func (c *ConnectorAPIv1) InspectConnector(req *apiv1.InspectConnectorRequest, server apiv1.ConnectorService_InspectConnectorServer) error {
+	if req.Id == "" {
+		return status.ConnectorError(cerrors.ErrEmptyID)
+	}
+
+	session, err := c.cs.Inspect(server.Context(), req.Id)
+	if err != nil {
+		return status.ConnectorError(cerrors.Errorf("failed to get connector: %w", err))
+	}
+
+	for rec := range session.C {
+		recProto, err2 := toproto.Record(rec)
+		if err2 != nil {
+			return cerrors.Errorf("failed converting record: %w", err2)
+		}
+
+		err2 = server.Send(&apiv1.InspectConnectorResponse{
+			Record: recProto,
+		})
+		if err2 != nil {
+			return cerrors.Errorf("failed sending record: %w", err2)
+		}
+	}
+
+	return cerrors.New("inspector session closed")
 }
 
 // GetConnector returns a single Connector proto response or an error.

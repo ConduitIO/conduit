@@ -20,11 +20,21 @@ import (
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/rollback"
+	"github.com/conduitio/conduit/pkg/inspector"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	"github.com/google/uuid"
 )
 
 type ConnectorOrchestrator base
+
+func (c *ConnectorOrchestrator) Inspect(ctx context.Context, id string) (*inspector.Session, error) {
+	conn, err := c.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	return conn.Inspect(ctx), nil
+}
 
 func (c *ConnectorOrchestrator) Create(
 	ctx context.Context,
