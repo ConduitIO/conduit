@@ -92,7 +92,7 @@ func (c *ConnectorAPIv1) InspectConnector(req *apiv1.InspectConnectorRequest, se
 		}
 	}
 
-	return cerrors.Errorf("inspector session closed: %w", session.CloseReason())
+	return cerrors.New("inspector session closed")
 }
 
 // GetConnector returns a single Connector proto response or an error.
