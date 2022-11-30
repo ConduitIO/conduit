@@ -63,31 +63,57 @@ func testPluginBlueprint() blueprint {
 			SourceParams: map[string]plugin.Parameter{
 				testPluginSourceParam1: {
 					Default:     testPluginSourceParam1Default,
-					Type:        plugin.ParameterTypeString,
+					Type:        plugin.ParameterTypeString, // default type
 					Description: testPluginSourceParam1Description,
 					Validations: []plugin.Validation{
-						{Type: plugin.ValidationTypeRequired, Value: ""},
+						{
+							Type:  plugin.ValidationTypeRequired,
+							Value: "",
+						},
+						{
+							Type:  plugin.ValidationTypeInclusion,
+							Value: "one,two",
+						},
 					},
 				},
 				testPluginSourceParam2: {
 					Default:     testPluginSourceParam2Default,
-					Type:        plugin.ParameterTypeString,
+					Type:        plugin.ParameterTypeInt,
 					Description: testPluginSourceParam2Description,
-					Validations: []plugin.Validation{},
+					Validations: []plugin.Validation{
+						{
+							Type:  plugin.ValidationTypeExclusion,
+							Value: "3,4",
+						},
+						{
+							Type:  plugin.ValidationTypeGreaterThan,
+							Value: "1",
+						},
+					},
 				},
 			},
 			DestinationParams: map[string]plugin.Parameter{
 				testPluginDestinationParam1: {
 					Default:     testPluginDestinationParam1Default,
-					Type:        plugin.ParameterTypeString,
+					Type:        plugin.ParameterTypeInt,
 					Description: testPluginDestinationParam1Description,
 					Validations: []plugin.Validation{
-						{Type: plugin.ValidationTypeRequired, Value: ""},
+						{
+							Type:  plugin.ValidationTypeLessThan,
+							Value: "10",
+						},
+						{
+							Type:  plugin.ValidationTypeRegex,
+							Value: "[1-9]",
+						},
+						{
+							Type: plugin.ValidationTypeRequired,
+						},
 					},
 				},
 				testPluginDestinationParam2: {
 					Default:     testPluginDestinationParam2Default,
-					Type:        plugin.ParameterTypeString,
+					Type:        plugin.ParameterTypeDuration,
 					Description: testPluginDestinationParam2Description,
 					Validations: []plugin.Validation{},
 				},
@@ -122,6 +148,5 @@ func TestRegistry_List(t *testing.T) {
 	want := map[plugin.FullName]plugin.Specification{
 		bp.fullName: bp.specification,
 	}
-
 	is.Equal(got, want)
 }

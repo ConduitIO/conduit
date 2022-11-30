@@ -79,8 +79,16 @@ func SpecifierParameter(in cpluginv1.SpecifierParameter) plugin.Parameter {
 
 	return plugin.Parameter{
 		Default:     in.Default,
-		Type:        plugin.ParameterType(in.Type),
+		Type:        cpluginv1ParamTypeToPluginParamType(in.Type),
 		Description: in.Description,
 		Validations: validations,
 	}
+}
+
+func cpluginv1ParamTypeToPluginParamType(t cpluginv1.ParameterType) plugin.ParameterType {
+	// default type should be string
+	if t == 0 {
+		return plugin.ParameterTypeString
+	}
+	return plugin.ParameterType(t)
 }

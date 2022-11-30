@@ -98,7 +98,7 @@ func testSpecifier_Specify_Success(t *testing.T, tdf testDispenserFunc) {
 		Author:      "Donald Duck",
 		SourceParams: map[string]Parameter{
 			"param1.1": {Default: "foo", Type: ParameterTypeString, Description: "Param 1.1 description", Validations: []Validation{}},
-			"param2.1": {Default: "bar", Type: ParameterTypeString, Description: "Param 2.1 description", Validations: []Validation{{Type: ValidationTypeRequired}}},
+			"param1.2": {Default: "bar", Type: ParameterTypeString, Description: "Param 1.2 description", Validations: []Validation{{Type: ValidationTypeRequired}}},
 		},
 		DestinationParams: map[string]Parameter{
 			"param2.1": {Default: "baz", Type: ParameterTypeString, Description: "Param 2.1 description", Validations: []Validation{}},
@@ -116,7 +116,7 @@ func testSpecifier_Specify_Success(t *testing.T, tdf testDispenserFunc) {
 			Author:      want.Author,
 			SourceParams: map[string]cpluginv1.SpecifierParameter{
 				"param1.1": {Default: "foo", Required: false, Type: cpluginv1.ParameterTypeString, Description: "Param 1.1 description"},
-				"param2.1": {Default: "bar", Required: true, Type: cpluginv1.ParameterTypeString, Description: "Param 2.1 description"},
+				"param1.2": {Default: "bar", Required: true, Type: cpluginv1.ParameterTypeString, Description: "Param 1.2 description"},
 			},
 			DestinationParams: map[string]cpluginv1.SpecifierParameter{
 				"param2.1": {Default: "baz", Required: false, Type: cpluginv1.ParameterTypeString, Description: "Param 2.1 description"},
