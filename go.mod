@@ -3,13 +3,13 @@ module github.com/conduitio/conduit
 go 1.18
 
 require (
-	github.com/Masterminds/semver/v3 v3.1.1
+	github.com/Masterminds/semver/v3 v3.2.0
 	github.com/NYTimes/gziphandler v1.1.1
 	github.com/antchfx/jsonquery v1.3.0
 	github.com/conduitio/conduit-connector-file v0.3.0
 	github.com/conduitio/conduit-connector-generator v0.3.0
 	github.com/conduitio/conduit-connector-kafka v0.3.0
-	github.com/conduitio/conduit-connector-log v0.1.1
+	github.com/conduitio/conduit-connector-log v0.1.2
 	github.com/conduitio/conduit-connector-postgres v0.3.0
 	github.com/conduitio/conduit-connector-protocol v0.3.0
 	github.com/conduitio/conduit-connector-s3 v0.3.0
