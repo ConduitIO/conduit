@@ -75,6 +75,36 @@ func (p *ProcessorAPIv1) ListProcessors(
 	return &apiv1.ListProcessorsResponse{Processors: plist}, nil
 }
 
+func (p *ProcessorAPIv1) InspectProcessor(
+	req *apiv1.InspectConnectorRequest,
+	server apiv1.ProcessorService_InspectProcessorServer,
+) error {
+	if req.Id == "" {
+		return status.ConnectorError(cerrors.ErrEmptyID)
+	}
+
+	session, err := p.ps.Inspect(server.Context(), req.Id, req.Id)
+	if err != nil {
+		return status.ConnectorError(cerrors.Errorf("failed to get connector: %w", err))
+	}
+
+	for rec := range session.C {
+		recProto, err2 := toproto.Record(rec)
+		if err2 != nil {
+			return cerrors.Errorf("failed converting record: %w", err2)
+		}
+
+		err2 = server.Send(&apiv1.InspectConnectorResponse{
+			Record: recProto,
+		})
+		if err2 != nil {
+			return cerrors.Errorf("failed sending record: %w", err2)
+		}
+	}
+
+	return cerrors.New("inspector session closed")
+}
+
 // GetProcessor returns a single Interface proto response or an error.
 func (p *ProcessorAPIv1) GetProcessor(
 	ctx context.Context,

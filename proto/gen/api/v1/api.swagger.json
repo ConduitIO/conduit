@@ -1264,7 +1264,7 @@
     },
     "/v1/processors/{id}/inspect": {
       "get": {
-        "operationId": "ProcessorService_InspectProcessors",
+        "operationId": "ProcessorService_InspectProcessor",
         "responses": {
           "200": {
             "description": "(streaming responses)",

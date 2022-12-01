@@ -16,6 +16,7 @@ package orchestrator
 
 import (
 	"context"
+	"github.com/conduitio/conduit/pkg/inspector"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/rollback"
@@ -97,6 +98,15 @@ func (p *ProcessorOrchestrator) Create(
 
 func (p *ProcessorOrchestrator) List(ctx context.Context) map[string]*processor.Instance {
 	return p.processors.List(ctx)
+}
+
+func (p *ProcessorOrchestrator) Inspect(ctx context.Context, id string, direction string) (*inspector.Session, error) {
+	proc, err := p.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	return proc.Processor.Inspect(ctx, direction), nil
 }
 
 func (p *ProcessorOrchestrator) Get(ctx context.Context, id string) (*processor.Instance, error) {

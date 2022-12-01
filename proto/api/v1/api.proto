@@ -669,7 +669,7 @@ service ProcessorService {
     };
   };
 
-  rpc InspectProcessors(InspectConnectorRequest) returns (stream InspectConnectorResponse) {
+  rpc InspectProcessor(InspectConnectorRequest) returns (stream InspectConnectorResponse) {
     option (google.api.http) = {
       get: "/v1/processors/{id}/inspect"
       response_body: "record"
