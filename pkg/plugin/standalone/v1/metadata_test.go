@@ -26,12 +26,14 @@ import (
 
 func TestMetadataConstants(t *testing.T) {
 	wantMapping := map[string]*protoimpl.ExtensionInfo{
-		record.OpenCDCVersion:               opencdcv1.E_OpencdcVersion,
-		record.MetadataOpenCDCVersion:       opencdcv1.E_MetadataVersion,
-		record.MetadataCreatedAt:            opencdcv1.E_MetadataCreatedAt,
-		record.MetadataReadAt:               opencdcv1.E_MetadataReadAt,
-		record.MetadataConduitPluginName:    connectorv1.E_MetadataConduitPluginName,
-		record.MetadataConduitPluginVersion: connectorv1.E_MetadataConduitPluginVersion,
+		record.OpenCDCVersion:                          opencdcv1.E_OpencdcVersion,
+		record.MetadataOpenCDCVersion:                  opencdcv1.E_MetadataVersion,
+		record.MetadataCreatedAt:                       opencdcv1.E_MetadataCreatedAt,
+		record.MetadataReadAt:                          opencdcv1.E_MetadataReadAt,
+		record.MetadataConduitSourcePluginName:         connectorv1.E_MetadataConduitSourcePluginName,
+		record.MetadataConduitSourcePluginVersion:      connectorv1.E_MetadataConduitSourcePluginVersion,
+		record.MetadataConduitDestinationPluginName:    connectorv1.E_MetadataConduitDestinationPluginName,
+		record.MetadataConduitDestinationPluginVersion: connectorv1.E_MetadataConduitDestinationPluginVersion,
 	}
 	for goConstant, extensionInfo := range wantMapping {
 		protoConstant := proto.GetExtension(extensionInfo.TypeDescriptor().ParentFile().Options(), extensionInfo)
