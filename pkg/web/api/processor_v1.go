@@ -18,6 +18,7 @@ package api
 
 import (
 	"context"
+	"github.com/conduitio/conduit/pkg/inspector"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/processor"
@@ -39,6 +40,8 @@ type ProcessorOrchestrator interface {
 	Update(ctx context.Context, id string, cfg processor.Config) (*processor.Instance, error)
 	// Delete removes a processor
 	Delete(ctx context.Context, id string) error
+	// Inspect starts an inspector session
+	Inspect(ctx context.Context, id string, direction string) (*inspector.Session, error)
 }
 
 type ProcessorAPIv1 struct {

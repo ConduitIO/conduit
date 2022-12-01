@@ -669,6 +669,13 @@ service ProcessorService {
     };
   };
 
+  rpc InspectProcessors(InspectConnectorRequest) returns (stream InspectConnectorResponse) {
+    option (google.api.http) = {
+      get: "/v1/processors/{id}/inspect"
+      response_body: "record"
+    };
+  }
+
   rpc GetProcessor(GetProcessorRequest) returns (GetProcessorResponse) {
     option (google.api.http) = {
       get: "/v1/processors/{id}"
@@ -794,10 +801,23 @@ service ProcessorService {
 message ListProcessorsRequest {
   repeated string parent_ids = 1;
 }
-
 message ListProcessorsResponse {
   repeated Processor processors = 1;
 }
+
+message InspectProcessorRequest {
+  enum Direction {
+    IN = 0;
+    OUT = 1;
+  }
+
+  string id = 1;
+  Direction direction = 2;
+}
+message InspectProcessorResponse {
+  opencdc.v1.Record record = 1;
+}
+
 
 message CreateProcessorRequest {
   string type = 1;
