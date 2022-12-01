@@ -70,6 +70,7 @@ func SpecifierParameter(in cpluginv1.SpecifierParameter) plugin.Parameter {
 			requiredExists = true
 		}
 	}
+	// needed for backward compatibility, in.Required is converted to a validation of type ValidationTypeRequired
 	// making sure not to duplicate the required validation
 	if in.Required && !requiredExists {
 		validations = append(validations, plugin.Validation{
