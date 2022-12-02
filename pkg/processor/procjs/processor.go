@@ -23,6 +23,7 @@ import (
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/dop251/goja"
 	"github.com/rs/zerolog"
+	"strings"
 )
 
 const (
@@ -141,7 +142,8 @@ func (p *Processor) jsContentStructured(goja.ConstructorCall) *goja.Object {
 	return p.runtime.ToValue(r).ToObject(p.runtime)
 }
 
-func (p *Processor) Process(_ context.Context, in record.Record) (record.Record, error) {
+func (p *Processor) Process(ctx context.Context, in record.Record) (record.Record, error) {
+	p.inInsp.Send(ctx, in)
 	jsr := p.toJSRecord(in)
 
 	result, err := p.function(goja.Undefined(), jsr)
@@ -157,11 +159,12 @@ func (p *Processor) Process(_ context.Context, in record.Record) (record.Record,
 		return record.Record{}, cerrors.Errorf("failed to transform to internal record: %w", err)
 	}
 
+	p.outInsp.Send(ctx, out)
 	return out, nil
 }
 
 func (p *Processor) Inspect(ctx context.Context, direction string) *inspector.Session {
-	switch direction {
+	switch strings.ToLower(direction) {
 	case "in":
 		return p.inInsp.NewSession(ctx)
 	case "out":

@@ -21,6 +21,7 @@ import (
 	"context"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/inspector"
+	"strings"
 	"time"
 
 	"github.com/conduitio/conduit/pkg/record"
@@ -77,7 +78,7 @@ func (f FuncWrapper) Process(ctx context.Context, inRec record.Record) (record.R
 }
 
 func (f FuncWrapper) Inspect(ctx context.Context, direction string) *inspector.Session {
-	switch direction {
+	switch strings.ToLower(direction) {
 	case "in":
 		return f.inInsp.NewSession(ctx)
 	case "out":
