@@ -21,6 +21,7 @@ import (
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/inspector"
 	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/conduitio/conduit/pkg/record"
 )
@@ -56,6 +57,8 @@ type destination struct {
 
 	// stopStream is a function that closes the context of the stream
 	stopStream context.CancelFunc
+
+	inspector *inspector.Inspector
 
 	// m can lock a destination from concurrent access (e.g. in connector persister).
 	m sync.Mutex
@@ -113,6 +116,10 @@ func (d *destination) IsRunning() bool {
 
 func (d *destination) Errors() <-chan error {
 	return d.errs
+}
+
+func (d *destination) Inspect(ctx context.Context) *inspector.Session {
+	return d.inspector.NewSession(ctx)
 }
 
 func (d *destination) Validate(ctx context.Context, settings map[string]string) (err error) {
@@ -227,6 +234,7 @@ func (d *destination) Write(ctx context.Context, r record.Record) error {
 		return err
 	}
 
+	d.inspector.Send(ctx, r)
 	err = d.plugin.Write(ctx, r)
 	if err != nil {
 		return cerrors.Errorf("error writing record: %w", err)

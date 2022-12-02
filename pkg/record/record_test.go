@@ -27,7 +27,7 @@ func TestRecord_Bytes(t *testing.T) {
 		Position:  Position("foo"),
 		Operation: OperationCreate,
 		Metadata: Metadata{
-			MetadataConduitPluginName: "example",
+			MetadataConduitSourcePluginName: "example",
 		},
 		Key: RawData{Raw: []byte("bar")},
 		Payload: Change{
@@ -39,10 +39,10 @@ func TestRecord_Bytes(t *testing.T) {
 		},
 	}
 
-	want := `{"position":"Zm9v","operation":"create","metadata":{"conduit.plugin.name":"example","opencdc.version":"v1"},"key":"YmFy","payload":{"before":null,"after":{"baz":"qux","foo":"bar"}}}`
+	want := `{"position":"Zm9v","operation":"create","metadata":{"conduit.source.plugin.name":"example","opencdc.version":"v1"},"key":"YmFy","payload":{"before":null,"after":{"baz":"qux","foo":"bar"}}}`
 
 	got := string(r.Bytes())
 	is.Equal(got, want)
 
-	is.Equal(r.Metadata, Metadata{MetadataConduitPluginName: "example"}) // expected metadata to stay unaltered
+	is.Equal(r.Metadata, Metadata{MetadataConduitSourcePluginName: "example"}) // expected metadata to stay unaltered
 }

@@ -21,6 +21,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/google/uuid"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"github.com/tmc/grpc-websocket-proxy/wsproxy"
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
@@ -107,6 +108,10 @@ func WithHTTPEndpointHeader(h http.Handler) http.Handler {
 		r.Header.Set(HTTPEndpointHeader, extractEndpoint(r))
 		h.ServeHTTP(w, r)
 	})
+}
+
+func WithWebsockets(h http.Handler) http.Handler {
+	return wsproxy.WebsocketProxy(h)
 }
 
 func extractEndpoint(r *http.Request) string {

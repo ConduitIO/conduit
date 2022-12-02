@@ -57,6 +57,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/reflection"
 	"google.golang.org/grpc/stats"
 	"gopkg.in/tomb.v2"
 
@@ -320,6 +321,10 @@ func (r *Runtime) serveGRPCAPI(ctx context.Context, t *tomb.Tomb) (net.Addr, err
 
 	info := api.NewInformation(Version(false))
 	info.Register(grpcServer)
+	// Makes it easier to use command line tools to interact
+	// with the gRPC API.
+	// https://github.com/grpc/grpc/blob/master/doc/server-reflection.md
+	reflection.Register(grpcServer)
 
 	healthService := api.NewHealthChecker()
 	grpc_health_v1.RegisterHealthServer(grpcServer, healthService)
@@ -436,14 +441,18 @@ func (r *Runtime) serveHTTPAPI(
 		return nil, cerrors.Errorf("failed to register metrics handler: %w", err)
 	}
 
+	handler := grpcutil.WithWebsockets(
+		grpcutil.WithDefaultGatewayMiddleware(
+			r.logger, allowCORS(gwmux, "http://localhost:4200"),
+		),
+	)
+
 	return r.serveHTTP(
 		ctx,
 		t,
 		&http.Server{
-			Addr: r.Config.HTTP.Address,
-			Handler: grpcutil.WithDefaultGatewayMiddleware(
-				r.logger, allowCORS(gwmux, "http://localhost:4200"),
-			),
+			Addr:              r.Config.HTTP.Address,
+			Handler:           handler,
 			ReadHeaderTimeout: 10 * time.Second,
 		},
 	)
