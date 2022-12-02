@@ -69,7 +69,7 @@ func maskField(
 	}
 	replacement = config.Settings[maskFieldConfigReplacement]
 
-	return processor.InterfaceFunc(func(_ context.Context, r record.Record) (record.Record, error) {
+	return processor.NewFuncWrapper(func(_ context.Context, r record.Record) (record.Record, error) {
 		data := getSetter.Get(r)
 
 		switch d := data.(type) {

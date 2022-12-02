@@ -76,14 +76,14 @@ func (p *ProcessorAPIv1) ListProcessors(
 }
 
 func (p *ProcessorAPIv1) InspectProcessor(
-	req *apiv1.InspectConnectorRequest,
+	req *apiv1.InspectProcessorRequest,
 	server apiv1.ProcessorService_InspectProcessorServer,
 ) error {
 	if req.Id == "" {
 		return status.ConnectorError(cerrors.ErrEmptyID)
 	}
 
-	session, err := p.ps.Inspect(server.Context(), req.Id, req.Id)
+	session, err := p.ps.Inspect(server.Context(), req.Id, req.Direction.String())
 	if err != nil {
 		return status.ConnectorError(cerrors.Errorf("failed to get connector: %w", err))
 	}
@@ -94,7 +94,7 @@ func (p *ProcessorAPIv1) InspectProcessor(
 			return cerrors.Errorf("failed converting record: %w", err2)
 		}
 
-		err2 = server.Send(&apiv1.InspectConnectorResponse{
+		err2 = server.Send(&apiv1.InspectProcessorResponse{
 			Record: recProto,
 		})
 		if err2 != nil {

@@ -65,7 +65,7 @@ func extractField(
 		return nil, cerrors.Errorf("%s: %w", processorType, err)
 	}
 
-	return processor.InterfaceFunc(func(_ context.Context, r record.Record) (record.Record, error) {
+	return processor.NewFuncWrapper(func(_ context.Context, r record.Record) (record.Record, error) {
 		data := getSetter.Get(r)
 
 		switch d := data.(type) {

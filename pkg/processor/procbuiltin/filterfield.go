@@ -105,7 +105,7 @@ func filterField(
 		filternull = "fail"
 	}
 
-	return processor.InterfaceFunc(func(_ context.Context, r record.Record) (record.Record, error) {
+	return processor.NewFuncWrapper(func(_ context.Context, r record.Record) (record.Record, error) {
 		data := getSetter.Get(r)
 		switch d := data.(type) {
 		case record.RawData:

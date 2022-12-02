@@ -1278,7 +1278,7 @@
                   "$ref": "#/definitions/googlerpcStatus"
                 }
               },
-              "title": "Stream result of v1InspectConnectorResponse"
+              "title": "Stream result of v1InspectProcessorResponse"
             }
           },
           "500": {
@@ -1301,6 +1301,17 @@
             "in": "path",
             "required": true,
             "type": "string"
+          },
+          {
+            "name": "direction",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "enum": [
+              "IN",
+              "OUT"
+            ],
+            "default": "IN"
           }
         ],
         "tags": [
@@ -1330,6 +1341,14 @@
           "format": "byte"
         }
       }
+    },
+    "InspectProcessorRequestDirection": {
+      "type": "string",
+      "enum": [
+        "IN",
+        "OUT"
+      ],
+      "default": "IN"
     },
     "ParameterValidation": {
       "type": "object",
@@ -1703,6 +1722,14 @@
       }
     },
     "v1InspectConnectorResponse": {
+      "type": "object",
+      "properties": {
+        "record": {
+          "$ref": "#/definitions/v1Record"
+        }
+      }
+    },
+    "v1InspectProcessorResponse": {
       "type": "object",
       "properties": {
         "record": {

@@ -686,7 +686,7 @@ func TestProvision_IntegrationTestServices(t *testing.T) {
 	// TODO at the time of writing we don't have a processor for manipulating
 	//  metadata, once we have it we can use it instead of adding our own
 	processor.GlobalBuilderRegistry.MustRegister("removereadat", func(config processor.Config) (processor.Interface, error) {
-		return processor.InterfaceFunc(func(ctx context.Context, r record.Record) (record.Record, error) {
+		return processor.NewFuncWrapper(func(ctx context.Context, r record.Record) (record.Record, error) {
 			delete(r.Metadata, record.MetadataReadAt) // read at is different every time, remove it
 			return r, nil
 		}), nil

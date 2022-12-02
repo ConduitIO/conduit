@@ -19,6 +19,8 @@ package processor
 
 import (
 	"context"
+	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/inspector"
 	"time"
 
 	"github.com/conduitio/conduit/pkg/record"
@@ -46,13 +48,43 @@ type (
 type Interface interface {
 	// Process runs the processor function on a record.
 	Process(ctx context.Context, record record.Record) (record.Record, error)
+
+	Inspect(ctx context.Context, direction string) *inspector.Session
 }
 
-// InterfaceFunc is an adapter allowing use of a function as an Interface.
-type InterfaceFunc func(context.Context, record.Record) (record.Record, error)
+// FuncWrapper is an adapter allowing use of a function as an Interface.
+type FuncWrapper struct {
+	f       func(context.Context, record.Record) (record.Record, error)
+	inInsp  *inspector.Inspector
+	outInsp *inspector.Inspector
+}
 
-func (p InterfaceFunc) Process(ctx context.Context, record record.Record) (record.Record, error) {
-	return p(ctx, record)
+func NewFuncWrapper(f func(context.Context, record.Record) (record.Record, error)) FuncWrapper {
+	// todo use real logger
+	return FuncWrapper{
+		f:       f,
+		inInsp:  inspector.New(log.Nop(), 1000),
+		outInsp: inspector.New(log.Nop(), 1000),
+	}
+}
+
+func (f FuncWrapper) Process(ctx context.Context, inRec record.Record) (record.Record, error) {
+	// todo same behavior as in procjs, probably can be enforced
+	f.inInsp.Send(ctx, inRec)
+	outRec, err := f.f(ctx, inRec)
+	f.outInsp.Send(ctx, outRec)
+	return outRec, err
+}
+
+func (f FuncWrapper) Inspect(ctx context.Context, direction string) *inspector.Session {
+	switch direction {
+	case "in":
+		return f.inInsp.NewSession(ctx)
+	case "out":
+		return f.outInsp.NewSession(ctx)
+	default:
+		panic("unknown direction: " + direction)
+	}
 }
 
 // Instance represents a processor instance.

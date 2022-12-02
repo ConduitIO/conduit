@@ -727,7 +727,7 @@ var ConnectorService_ServiceDesc = grpc.ServiceDesc{
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type ProcessorServiceClient interface {
 	ListProcessors(ctx context.Context, in *ListProcessorsRequest, opts ...grpc.CallOption) (*ListProcessorsResponse, error)
-	InspectProcessor(ctx context.Context, in *InspectConnectorRequest, opts ...grpc.CallOption) (ProcessorService_InspectProcessorClient, error)
+	InspectProcessor(ctx context.Context, in *InspectProcessorRequest, opts ...grpc.CallOption) (ProcessorService_InspectProcessorClient, error)
 	GetProcessor(ctx context.Context, in *GetProcessorRequest, opts ...grpc.CallOption) (*GetProcessorResponse, error)
 	CreateProcessor(ctx context.Context, in *CreateProcessorRequest, opts ...grpc.CallOption) (*CreateProcessorResponse, error)
 	UpdateProcessor(ctx context.Context, in *UpdateProcessorRequest, opts ...grpc.CallOption) (*UpdateProcessorResponse, error)
@@ -751,7 +751,7 @@ func (c *processorServiceClient) ListProcessors(ctx context.Context, in *ListPro
 	return out, nil
 }
 
-func (c *processorServiceClient) InspectProcessor(ctx context.Context, in *InspectConnectorRequest, opts ...grpc.CallOption) (ProcessorService_InspectProcessorClient, error) {
+func (c *processorServiceClient) InspectProcessor(ctx context.Context, in *InspectProcessorRequest, opts ...grpc.CallOption) (ProcessorService_InspectProcessorClient, error) {
 	stream, err := c.cc.NewStream(ctx, &ProcessorService_ServiceDesc.Streams[0], "/api.v1.ProcessorService/InspectProcessor", opts...)
 	if err != nil {
 		return nil, err
@@ -767,7 +767,7 @@ func (c *processorServiceClient) InspectProcessor(ctx context.Context, in *Inspe
 }
 
 type ProcessorService_InspectProcessorClient interface {
-	Recv() (*InspectConnectorResponse, error)
+	Recv() (*InspectProcessorResponse, error)
 	grpc.ClientStream
 }
 
@@ -775,8 +775,8 @@ type processorServiceInspectProcessorClient struct {
 	grpc.ClientStream
 }
 
-func (x *processorServiceInspectProcessorClient) Recv() (*InspectConnectorResponse, error) {
-	m := new(InspectConnectorResponse)
+func (x *processorServiceInspectProcessorClient) Recv() (*InspectProcessorResponse, error) {
+	m := new(InspectProcessorResponse)
 	if err := x.ClientStream.RecvMsg(m); err != nil {
 		return nil, err
 	}
@@ -824,7 +824,7 @@ func (c *processorServiceClient) DeleteProcessor(ctx context.Context, in *Delete
 // for forward compatibility
 type ProcessorServiceServer interface {
 	ListProcessors(context.Context, *ListProcessorsRequest) (*ListProcessorsResponse, error)
-	InspectProcessor(*InspectConnectorRequest, ProcessorService_InspectProcessorServer) error
+	InspectProcessor(*InspectProcessorRequest, ProcessorService_InspectProcessorServer) error
 	GetProcessor(context.Context, *GetProcessorRequest) (*GetProcessorResponse, error)
 	CreateProcessor(context.Context, *CreateProcessorRequest) (*CreateProcessorResponse, error)
 	UpdateProcessor(context.Context, *UpdateProcessorRequest) (*UpdateProcessorResponse, error)
@@ -839,7 +839,7 @@ type UnimplementedProcessorServiceServer struct {
 func (UnimplementedProcessorServiceServer) ListProcessors(context.Context, *ListProcessorsRequest) (*ListProcessorsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListProcessors not implemented")
 }
-func (UnimplementedProcessorServiceServer) InspectProcessor(*InspectConnectorRequest, ProcessorService_InspectProcessorServer) error {
+func (UnimplementedProcessorServiceServer) InspectProcessor(*InspectProcessorRequest, ProcessorService_InspectProcessorServer) error {
 	return status.Errorf(codes.Unimplemented, "method InspectProcessor not implemented")
 }
 func (UnimplementedProcessorServiceServer) GetProcessor(context.Context, *GetProcessorRequest) (*GetProcessorResponse, error) {
@@ -886,7 +886,7 @@ func _ProcessorService_ListProcessors_Handler(srv interface{}, ctx context.Conte
 }
 
 func _ProcessorService_InspectProcessor_Handler(srv interface{}, stream grpc.ServerStream) error {
-	m := new(InspectConnectorRequest)
+	m := new(InspectProcessorRequest)
 	if err := stream.RecvMsg(m); err != nil {
 		return err
 	}
@@ -894,7 +894,7 @@ func _ProcessorService_InspectProcessor_Handler(srv interface{}, stream grpc.Ser
 }
 
 type ProcessorService_InspectProcessorServer interface {
-	Send(*InspectConnectorResponse) error
+	Send(*InspectProcessorResponse) error
 	grpc.ServerStream
 }
 
@@ -902,7 +902,7 @@ type processorServiceInspectProcessorServer struct {
 	grpc.ServerStream
 }
 
-func (x *processorServiceInspectProcessorServer) Send(m *InspectConnectorResponse) error {
+func (x *processorServiceInspectProcessorServer) Send(m *InspectProcessorResponse) error {
 	return x.ServerStream.SendMsg(m)
 }
 

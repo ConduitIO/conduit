@@ -809,8 +809,12 @@ func local_request_ProcessorService_ListProcessors_0(ctx context.Context, marsha
 
 }
 
+var (
+	filter_ProcessorService_InspectProcessor_0 = &utilities.DoubleArray{Encoding: map[string]int{"id": 0}, Base: []int{1, 1, 0}, Check: []int{0, 1, 2}}
+)
+
 func request_ProcessorService_InspectProcessor_0(ctx context.Context, marshaler runtime.Marshaler, client ProcessorServiceClient, req *http.Request, pathParams map[string]string) (ProcessorService_InspectProcessorClient, runtime.ServerMetadata, error) {
-	var protoReq InspectConnectorRequest
+	var protoReq InspectProcessorRequest
 	var metadata runtime.ServerMetadata
 
 	var (
@@ -828,6 +832,13 @@ func request_ProcessorService_InspectProcessor_0(ctx context.Context, marshaler 
 	protoReq.Id, err = runtime.String(val)
 	if err != nil {
 		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "id", err)
+	}
+
+	if err := req.ParseForm(); err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	if err := runtime.PopulateQueryParameters(&protoReq, req.Form, filter_ProcessorService_InspectProcessor_0); err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
 	}
 
 	stream, err := client.InspectProcessor(ctx, &protoReq)
@@ -2510,7 +2521,7 @@ type response_ProcessorService_InspectProcessor_0 struct {
 }
 
 func (m response_ProcessorService_InspectProcessor_0) XXX_ResponseBody() interface{} {
-	response := m.Message.(*InspectConnectorResponse)
+	response := m.Message.(*InspectProcessorResponse)
 	return response.Record
 }
 

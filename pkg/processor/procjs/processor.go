@@ -16,8 +16,9 @@ package procjs
 
 import (
 	"context"
-
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/inspector"
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/dop251/goja"
@@ -46,10 +47,16 @@ type jsRecord struct {
 type Processor struct {
 	runtime  *goja.Runtime
 	function goja.Callable
+	inInsp   *inspector.Inspector
+	outInsp  *inspector.Inspector
 }
 
 func New(src string, logger zerolog.Logger) (*Processor, error) {
-	p := &Processor{}
+	// todo use real logger
+	p := &Processor{
+		inInsp:  inspector.New(log.New(logger), 1000),
+		outInsp: inspector.New(log.New(logger), 1000),
+	}
 	err := p.initJSRuntime(logger)
 	if err != nil {
 		return nil, cerrors.Errorf("failed initializing JS runtime: %w", err)
@@ -151,6 +158,17 @@ func (p *Processor) Process(_ context.Context, in record.Record) (record.Record,
 	}
 
 	return out, nil
+}
+
+func (p *Processor) Inspect(ctx context.Context, direction string) *inspector.Session {
+	switch direction {
+	case "in":
+		return p.inInsp.NewSession(ctx)
+	case "out":
+		return p.outInsp.NewSession(ctx)
+	default:
+		panic("unknown direction: " + direction)
+	}
 }
 
 func (p *Processor) toJSRecord(r record.Record) goja.Value {
