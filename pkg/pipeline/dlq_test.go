@@ -87,13 +87,16 @@ func TestDLQDestination_DestinationWriteError(t *testing.T) {
 	}
 	wantErr := cerrors.New("test write error")
 
+	connHelper := make(chan struct{})
 	dest.EXPECT().Ack(gomock.Any()).
 		DoAndReturn(func(ctx context.Context) (record.Position, error) {
+			<-connHelper // Write is happening same time as Ack
 			<-ctx.Done() // block until context is closed
 			return nil, ctx.Err()
 		})
 	dest.EXPECT().Write(gomock.Any(), rec).
 		DoAndReturn(func(context.Context, record.Record) error {
+			connHelper <- struct{}{} // signal to Ack that Write is happening
 			return wantErr
 		})
 
