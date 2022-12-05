@@ -55,6 +55,16 @@ const (
 	// version of the destination plugin that has written this record
 	// (only available in records once they are written by a destination).
 	MetadataConduitDestinationPluginVersion = "conduit.destination.plugin.version"
+
+	// MetadataConduitSourceConnectorID is a Record.Metadata key for the ID of
+	// the source connector that received this record.
+	MetadataConduitSourceConnectorID = "conduit.source.connector.id"
+	// MetadataConduitDLQNackError is a Record.Metadata key for the error that
+	// caused a record to be nacked and pushed to the dead-letter queue.
+	MetadataConduitDLQNackError = "conduit.dlq.nack.error"
+	// MetadataConduitDLQNackNodeID is a Record.Metadata key for the ID of the
+	// internal node that nacked the record.
+	MetadataConduitDLQNackNodeID = "conduit.dlq.nack.node.id"
 )
 
 // SetOpenCDCVersion sets the metadata value for key MetadataVersion to the
@@ -64,7 +74,7 @@ func (m Metadata) SetOpenCDCVersion() {
 }
 
 // GetOpenCDCVersion returns the value for key
-// MetadataOpenCDCVersion. If the value is does not exist or is empty the
+// MetadataOpenCDCVersion. If the value does not exist or is empty the
 // function returns ErrMetadataFieldNotFound.
 func (m Metadata) GetOpenCDCVersion() (string, error) {
 	return m.getValue(MetadataOpenCDCVersion)
@@ -170,8 +180,47 @@ func (m Metadata) SetConduitDestinationPluginVersion(version string) {
 	m[MetadataConduitDestinationPluginVersion] = version
 }
 
-// getValue returns the value for a specific key. If the value is does
-// not exist or is empty the function returns ErrMetadataFieldNotFound.
+// GetConduitSourceConnectorID returns the value for key
+// MetadataConduitSourceConnectorID. If the value does not exist or is empty the
+// function returns ErrMetadataFieldNotFound.
+func (m Metadata) GetConduitSourceConnectorID() (string, error) {
+	return m.getValue(MetadataConduitSourceConnectorID)
+}
+
+// SetConduitSourceConnectorID sets the metadata value for key
+// MetadataConduitSourceConnectorID.
+func (m Metadata) SetConduitSourceConnectorID(id string) {
+	m[MetadataConduitSourceConnectorID] = id
+}
+
+// GetConduitDLQNackError returns the value for key
+// MetadataConduitDLQNackError. If the value does not exist or is empty the
+// function returns ErrMetadataFieldNotFound.
+func (m Metadata) GetConduitDLQNackError() (string, error) {
+	return m.getValue(MetadataConduitDLQNackError)
+}
+
+// SetConduitDLQNackError sets the metadata value for key
+// MetadataConduitDLQNackError.
+func (m Metadata) SetConduitDLQNackError(err string) {
+	m[MetadataConduitDLQNackError] = err
+}
+
+// GetConduitDLQNackNodeID returns the value for key
+// MetadataConduitDLQNackNodeID. If the value does not exist or is empty the
+// function returns ErrMetadataFieldNotFound.
+func (m Metadata) GetConduitDLQNackNodeID() (string, error) {
+	return m.getValue(MetadataConduitDLQNackNodeID)
+}
+
+// SetConduitDLQNackNodeID sets the metadata value for key
+// MetadataConduitDLQNackNodeID.
+func (m Metadata) SetConduitDLQNackNodeID(id string) {
+	m[MetadataConduitDLQNackNodeID] = id
+}
+
+// getValue returns the value for a specific key. If the value does not exist or
+// is empty the function returns ErrMetadataFieldNotFound.
 func (m Metadata) getValue(key string) (string, error) {
 	str := m[key]
 	if str == "" {

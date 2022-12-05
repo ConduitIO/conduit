@@ -53,6 +53,7 @@ type Instance struct {
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
 	ProvisionedBy ProvisionType
+	DLQ           DLQ
 
 	ConnectorIDs []string
 	ProcessorIDs []string
@@ -65,6 +66,14 @@ type Instance struct {
 type Config struct {
 	Name        string
 	Description string
+}
+
+type DLQ struct {
+	Plugin   string
+	Settings map[string]string
+
+	WindowSize          int
+	WindowNackThreshold int
 }
 
 func (p *Instance) Wait() error {

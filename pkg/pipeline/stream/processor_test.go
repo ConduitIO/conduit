@@ -141,8 +141,8 @@ func TestProcessorNode_ErrorWithNackHandler(t *testing.T) {
 	out := n.Pub()
 
 	msg := &Message{Ctx: ctx}
-	msg.RegisterNackHandler(func(msg *Message, err error) error {
-		assert.True(t, cerrors.Is(err, wantErr), "expected underlying error to be the processor error")
+	msg.RegisterNackHandler(func(msg *Message, nackMetadata NackMetadata) error {
+		assert.True(t, cerrors.Is(nackMetadata.Reason, wantErr), "expected underlying error to be the processor error")
 		return nil // the error should be regarded as handled
 	})
 	go func() {
@@ -188,7 +188,7 @@ func TestProcessorNode_Skip(t *testing.T) {
 		counter++
 		return nil
 	})
-	msg.RegisterNackHandler(func(msg *Message, err error) error {
+	msg.RegisterNackHandler(func(msg *Message, nm NackMetadata) error {
 		// Our NackHandler shouldn't ever be hit if we're correctly skipping
 		// so fail the test if we get here at all.
 		t.Fail()

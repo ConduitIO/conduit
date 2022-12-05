@@ -35,6 +35,8 @@ import (
 	"github.com/rs/zerolog"
 )
 
+const testDLQID = "test-dlq"
+
 func TestServiceLifecycle_PipelineSuccess(t *testing.T) {
 	ctx, killAll := context.WithCancel(context.Background())
 	defer killAll()
@@ -52,6 +54,7 @@ func TestServiceLifecycle_PipelineSuccess(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	source, wantRecords := generatorSource(ctrl, 10, nil, false)
 	destination := asserterDestination(ctrl, t, wantRecords, false)
+	dlq := asserterDestination(ctrl, t, nil, false)
 
 	pl, err = ps.AddConnector(ctx, pl.ID, source.ID())
 	assert.Ok(t, err)
@@ -61,7 +64,11 @@ func TestServiceLifecycle_PipelineSuccess(t *testing.T) {
 	// start the pipeline now that everything is set up
 	err = ps.Start(
 		ctx,
-		testConnectorFetcher{source.ID(): source, destination.ID(): destination},
+		testConnectorFetcher{
+			source.ID():      source,
+			destination.ID(): destination,
+			testDLQID:        dlq,
+		},
 		testProcessorFetcher{},
 		pl.ID,
 	)
@@ -92,6 +99,7 @@ func TestServiceLifecycle_PipelineError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	source, wantRecords := generatorSource(ctrl, 10, wantErr, true)
 	destination := asserterDestination(ctrl, t, wantRecords, true)
+	dlq := asserterDestination(ctrl, t, nil, true)
 
 	pl, err = ps.AddConnector(ctx, pl.ID, source.ID())
 	assert.Ok(t, err)
@@ -101,7 +109,11 @@ func TestServiceLifecycle_PipelineError(t *testing.T) {
 	// start the pipeline now that everything is set up
 	err = ps.Start(
 		ctx,
-		testConnectorFetcher{source.ID(): source, destination.ID(): destination},
+		testConnectorFetcher{
+			source.ID():      source,
+			destination.ID(): destination,
+			testDLQID:        dlq,
+		},
 		testProcessorFetcher{},
 		pl.ID,
 	)
@@ -145,6 +157,7 @@ func TestServiceLifecycle_PipelineStop(t *testing.T) {
 	// service that everything went well and the pipeline was gracefully shutdown
 	source, wantRecords := generatorSource(ctrl, 10, ErrGracefulShutdown, true)
 	destination := asserterDestination(ctrl, t, wantRecords, true)
+	dlq := asserterDestination(ctrl, t, nil, true)
 
 	pl, err = ps.AddConnector(ctx, pl.ID, source.ID())
 	assert.Ok(t, err)
@@ -154,7 +167,11 @@ func TestServiceLifecycle_PipelineStop(t *testing.T) {
 	// start the pipeline now that everything is set up
 	err = ps.Start(
 		ctx,
-		testConnectorFetcher{source.ID(): source, destination.ID(): destination},
+		testConnectorFetcher{
+			source.ID():      source,
+			destination.ID(): destination,
+			testDLQID:        dlq,
+		},
 		testProcessorFetcher{},
 		pl.ID,
 	)
@@ -177,6 +194,10 @@ func (tcf testConnectorFetcher) Get(ctx context.Context, id string) (connector.C
 		return nil, connector.ErrInstanceNotFound
 	}
 	return conn, nil
+}
+
+func (tcf testConnectorFetcher) Create(ctx context.Context, id string, t connector.Type, cfg connector.Config, p connector.ProvisionType) (connector.Connector, error) {
+	return tcf[testDLQID], nil
 }
 
 // testProcessorFetcher fulfills the ProcessorFetcher interface.
@@ -251,9 +272,13 @@ func asserterDestination(ctrl *gomock.Controller, t *testing.T, want []record.Re
 	destination.EXPECT().Type().Return(connector.TypeDestination).AnyTimes()
 	destination.EXPECT().Config().Return(connector.Config{}).AnyTimes()
 	destination.EXPECT().Open(gomock.Any()).Return(nil).Times(1)
-	destination.EXPECT().Errors().Return(make(chan error))
+	destination.EXPECT().Errors().Return(make(chan error)).AnyTimes()
 	if teardown {
-		destination.EXPECT().Stop(gomock.Any(), want[len(want)-1].Position).Return(nil).Times(1)
+		var lastPosition record.Position
+		if len(want) > 0 {
+			lastPosition = want[len(want)-1].Position
+		}
+		destination.EXPECT().Stop(gomock.Any(), lastPosition).Return(nil).Times(1)
 		destination.EXPECT().Teardown(gomock.Any()).DoAndReturn(func(ctx context.Context) error {
 			close(rchan)
 			return nil
