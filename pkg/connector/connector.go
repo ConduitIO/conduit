@@ -33,6 +33,7 @@ const (
 const (
 	ProvisionTypeAPI ProvisionType = iota
 	ProvisionTypeConfig
+	ProvisionTypeDLQ // used for provisioning DLQ connectors which are not persisted
 )
 
 type (
