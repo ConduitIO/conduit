@@ -16,13 +16,13 @@ package orchestrator
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"reflect"
 	"testing"
 	"time"
 
 	"github.com/conduitio/conduit/pkg/connector"
-	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/foundation/ctxutil"
 	"github.com/conduitio/conduit/pkg/foundation/database/badger"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -35,6 +35,7 @@ import (
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/golang/mock/gomock"
 	"github.com/google/go-cmp/cmp"
+	"github.com/matryer/is"
 	"github.com/rs/zerolog"
 )
 
@@ -52,6 +53,7 @@ func newMockServices(t *testing.T) (*mock.PipelineService, *mock.ConnectorServic
 }
 
 func TestPipelineSimple(t *testing.T) {
+	is := is.New(t)
 	ctx, killAll := context.WithCancel(context.Background())
 	defer killAll()
 
@@ -59,10 +61,10 @@ func TestPipelineSimple(t *testing.T) {
 	logger = logger.CtxHook(ctxutil.MessageIDLogCtxHook{})
 
 	db, err := badger.New(logger.Logger, t.TempDir()+"/test.db")
-	assert.Ok(t, err)
+	is.NoErr(err)
 	t.Cleanup(func() {
 		err := db.Close()
-		assert.Ok(t, err)
+		is.NoErr(err)
 	})
 
 	pluginService := plugin.NewService(
@@ -92,13 +94,12 @@ func TestPipelineSimple(t *testing.T) {
 
 	// create a host pipeline
 	pl, err := orc.Pipelines.Create(ctx, pipeline.Config{Name: "test pipeline"})
-	assert.Ok(t, err)
+	is.NoErr(err)
 
 	// create connectors
 	sourcePath := "./fixtures/file-source.txt"
-	wantPath := "./fixtures/file-dest.txt"
 	destinationPath := t.TempDir() + "/destination.txt"
-	_, err = orc.Connectors.Create(
+	conn, err := orc.Connectors.Create(
 		ctx,
 		connector.TypeSource,
 		connector.Config{
@@ -108,7 +109,7 @@ func TestPipelineSimple(t *testing.T) {
 			PipelineID: pl.ID,
 		},
 	)
-	assert.Ok(t, err)
+	is.NoErr(err)
 
 	_, err = orc.Processors.Create(
 		ctx,
@@ -119,7 +120,7 @@ func TestPipelineSimple(t *testing.T) {
 		},
 		processor.Config{},
 	)
-	assert.Ok(t, err)
+	is.NoErr(err)
 
 	_, err = orc.Connectors.Create(
 		ctx,
@@ -131,29 +132,35 @@ func TestPipelineSimple(t *testing.T) {
 			PipelineID: pl.ID,
 		},
 	)
-	assert.Ok(t, err)
+	is.NoErr(err)
 
 	// start the pipeline now that everything is set up
 	err = orc.Pipelines.Start(ctx, pl.ID)
-	assert.Ok(t, err)
+	is.NoErr(err)
 
 	// give the pipeline time to run through
 	time.Sleep(time.Second)
 
 	t.Log("stopping pipeline")
 	err = orc.Pipelines.Stop(ctx, pl.ID)
-	assert.Ok(t, err)
+	is.NoErr(err)
 	t.Log("waiting")
 	err = pl.Wait()
-	assert.Ok(t, err)
+	is.NoErr(err)
 	t.Log("successfully stopped pipeline")
 
+	want := `{"position":"Mg==","operation":"create","metadata":{"conduit.source.connector.id":"%[1]v","file.path":"./fixtures/file-source.txt","opencdc.version":"v1"},"key":"MQ==","payload":{"before":null,"after":"MQ=="}}
+{"position":"NA==","operation":"create","metadata":{"conduit.source.connector.id":"%[1]v","file.path":"./fixtures/file-source.txt","opencdc.version":"v1"},"key":"Mg==","payload":{"before":null,"after":"Mg=="}}
+{"position":"Ng==","operation":"create","metadata":{"conduit.source.connector.id":"%[1]v","file.path":"./fixtures/file-source.txt","opencdc.version":"v1"},"key":"Mw==","payload":{"before":null,"after":"Mw=="}}
+{"position":"OA==","operation":"create","metadata":{"conduit.source.connector.id":"%[1]v","file.path":"./fixtures/file-source.txt","opencdc.version":"v1"},"key":"NA==","payload":{"before":null,"after":"NA=="}}
+{"position":"MTA=","operation":"create","metadata":{"conduit.source.connector.id":"%[1]v","file.path":"./fixtures/file-source.txt","opencdc.version":"v1"},"key":"NQ==","payload":{"before":null,"after":"NQ=="}}
+`
+	want = fmt.Sprintf(want, conn.ID())
+
 	// make sure destination file matches source file
-	want, err := os.ReadFile(wantPath)
-	assert.Ok(t, err)
 	got, err := os.ReadFile(destinationPath)
-	assert.Ok(t, err)
-	if diff := cmp.Diff(string(want), string(got)); diff != "" {
+	is.NoErr(err)
+	if diff := cmp.Diff(want, string(got)); diff != "" {
 		t.Fatal(diff)
 	}
 }

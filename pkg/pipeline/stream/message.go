@@ -81,6 +81,11 @@ type Message struct {
 	ackNackOnce sync.Once
 }
 
+type NackMetadata struct {
+	Reason error
+	NodeID string
+}
+
 type (
 	// StatusChangeHandler is executed when a message status changes. The
 	// handlers are triggered by a call to either of these functions:
@@ -98,7 +103,7 @@ type (
 
 	// NackHandler is a variation of the StatusChangeHandler that is only called
 	// when a message is nacked. For more info see StatusChangeHandler.
-	NackHandler func(*Message, error) error
+	NackHandler func(*Message, NackMetadata) error
 )
 
 // StatusChange is passed to StatusChangeHandler when the status of a message
@@ -108,7 +113,7 @@ type StatusChange struct {
 	New MessageStatus
 	// Reason contains the error that triggered the status change in case of a
 	// nack.
-	Reason error
+	NackMetadata NackMetadata
 }
 
 // init initializes internal message fields.
@@ -171,16 +176,16 @@ func (m *Message) RegisterNackHandler(h NackHandler) {
 		if change.New != MessageStatusNacked {
 			return nil // skip
 		}
-		return h(msg, change.Reason)
+		return h(msg, change.NackMetadata)
 	})
 	m.hasNackHandler = true
 }
 
-func (m *Message) notifyStatusHandlers(status MessageStatus, reason error) error {
+func (m *Message) notifyStatusHandlers(status MessageStatus, nackMetadata NackMetadata) error {
 	return m.handler(m, StatusChange{
-		Old:    m.Status(),
-		New:    status,
-		Reason: reason,
+		Old:          m.Status(),
+		New:          status,
+		NackMetadata: nackMetadata,
 	})
 }
 
@@ -194,7 +199,7 @@ func (m *Message) notifyStatusHandlers(status MessageStatus, reason error) error
 func (m *Message) Ack() error {
 	m.init()
 	m.ackNackOnce.Do(func() {
-		m.ackNackReturnValue = m.notifyStatusHandlers(MessageStatusAcked, nil)
+		m.ackNackReturnValue = m.notifyStatusHandlers(MessageStatusAcked, NackMetadata{})
 		close(m.acked)
 	})
 	if s := m.Status(); s != MessageStatusAcked {
@@ -211,10 +216,13 @@ func (m *Message) Ack() error {
 // Calling Nack after the message has already been acked will panic, while
 // subsequent calls to Nack on a nacked message are a noop and return the same
 // value.
-func (m *Message) Nack(reason error) error {
+func (m *Message) Nack(reason error, nodeID string) error {
 	m.init()
 	m.ackNackOnce.Do(func() {
-		m.ackNackReturnValue = m.notifyStatusHandlers(MessageStatusNacked, reason)
+		m.ackNackReturnValue = m.notifyStatusHandlers(MessageStatusNacked, NackMetadata{
+			Reason: reason,
+			NodeID: nodeID,
+		})
 		if !m.hasNackHandler && m.ackNackReturnValue == nil {
 			// we enforce at least one nack handler, otherwise nacks will go unnoticed
 			m.ackNackReturnValue = cerrors.Errorf("no nack handler on message %s: %w", m.ID(), reason)

@@ -34,6 +34,7 @@ import (
 // ConnectorFetcher can fetch a connector instance.
 type ConnectorFetcher interface {
 	Get(ctx context.Context, id string) (connector.Connector, error)
+	Create(ctx context.Context, id string, t connector.Type, cfg connector.Config, p connector.ProvisionType) (connector.Connector, error)
 }
 
 // ProcessorFetcher can fetch a processor instance.
@@ -245,15 +246,6 @@ func (s *Service) buildProcessorNodes(
 	return nodes, nil
 }
 
-func (s *Service) buildSourceAckerNode(
-	src connector.Source,
-) *stream.SourceAckerNode {
-	return &stream.SourceAckerNode{
-		Name:   src.ID() + "-acker",
-		Source: src,
-	}
-}
-
 func (s *Service) buildSourceNodes(
 	ctx context.Context,
 	connFetcher ConnectorFetcher,
@@ -262,6 +254,12 @@ func (s *Service) buildSourceNodes(
 	next stream.SubNode,
 ) ([]stream.Node, error) {
 	var nodes []stream.Node
+
+	dlqHandlerNode, err := s.buildDLQHandlerNode(ctx, connFetcher, pl)
+	if err != nil {
+		return nil, err
+	}
+	nodes = append(nodes, dlqHandlerNode)
 
 	for _, connID := range pl.ConnectorIDs {
 		instance, err := connFetcher.Get(ctx, connID)
@@ -280,7 +278,8 @@ func (s *Service) buildSourceNodes(
 				pl.Config.Name,
 			),
 		}
-		ackerNode := s.buildSourceAckerNode(instance.(connector.Source))
+		dlqHandlerNode.Add(1)
+		ackerNode := s.buildSourceAckerNode(instance.(connector.Source), dlqHandlerNode)
 		ackerNode.Sub(sourceNode.Pub())
 		metricsNode := s.buildMetricsNode(pl, instance)
 		metricsNode.Sub(ackerNode.Pub())
@@ -295,6 +294,48 @@ func (s *Service) buildSourceNodes(
 	}
 
 	return nodes, nil
+}
+
+func (s *Service) buildSourceAckerNode(
+	src connector.Source,
+	dlqHandlerNode *stream.DLQHandlerNode,
+) *stream.SourceAckerNode {
+	return &stream.SourceAckerNode{
+		Name:           src.ID() + "-acker",
+		Source:         src,
+		DLQHandlerNode: dlqHandlerNode,
+	}
+}
+
+func (s *Service) buildDLQHandlerNode(
+	ctx context.Context,
+	connFetcher ConnectorFetcher,
+	pl *Instance,
+) (*stream.DLQHandlerNode, error) {
+	dest, err := connFetcher.Create(
+		ctx,
+		pl.ID+"-dlq",
+		connector.TypeDestination,
+		connector.Config{
+			Name:         pl.ID + "-dlq",
+			Settings:     pl.DLQ.Settings,
+			Plugin:       pl.DLQ.Plugin,
+			PipelineID:   pl.ID,
+			ProcessorIDs: nil,
+		},
+		connector.ProvisionTypeDLQ, // the provision type ensures the connector won't be persisted
+	)
+	if err != nil {
+		return nil, cerrors.Errorf("failed to create DLQ destination: %w", err)
+	}
+
+	return &stream.DLQHandlerNode{
+		Name:    dest.ID(),
+		Handler: &DLQDestination{Destination: dest.(connector.Destination)},
+
+		WindowSize:          pl.DLQ.WindowSize,
+		WindowNackThreshold: pl.DLQ.WindowNackThreshold,
+	}, nil
 }
 
 func (s *Service) buildMetricsNode(
@@ -381,7 +422,7 @@ func (s *Service) runPipeline(ctx context.Context, pl *Instance) error {
 			// If any of the nodes stops, the nodesTomb will be put into a dying state
 			// and ctx will be cancelled.
 			// This way, the other nodes will be notified that they need to stop too.
-			//nolint: staticcheck // nil used to use the default (parent provided via WithContext)
+			//nolint:staticcheck // nil used to use the default (parent provided via WithContext)
 			ctx := nodesTomb.Context(nil)
 			s.logger.Trace(ctx).Str(log.NodeIDField, node.ID()).Msg("running node")
 			defer func() {
@@ -429,7 +470,7 @@ func (s *Service) runPipeline(ctx context.Context, pl *Instance) error {
 	// before declaring the pipeline as stopped.
 	pl.t = &tomb.Tomb{}
 	pl.t.Go(func() error {
-		//nolint: staticcheck // nil used to use the default (parent provided via WithContext)
+		//nolint:staticcheck // nil used to use the default (parent provided via WithContext)
 		ctx := pl.t.Context(nil)
 		err := nodesTomb.Wait()
 

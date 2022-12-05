@@ -22,7 +22,6 @@ import (
 
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/connector/mock"
-	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/database/inmemory"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -31,9 +30,11 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin/standalone"
 	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
+	"github.com/matryer/is"
 )
 
 func TestService_Init_Success(t *testing.T) {
+	is := is.New(t)
 	ctx := context.Background()
 	logger := log.Nop()
 	db := &inmemory.DB{}
@@ -53,21 +54,22 @@ func TestService_Init_Success(t *testing.T) {
 		},
 		connector.ProvisionTypeAPI,
 	)
-	assert.Ok(t, err)
+	is.NoErr(err)
 
 	want := service.List(ctx)
 
 	// create a new connector service and initialize it
 	service = connector.NewService(logger, db, connBuilder)
 	err = service.Init(ctx)
-	assert.Ok(t, err)
+	is.NoErr(err)
 
 	got := service.List(ctx)
-	assert.Equal(t, want, got)
-	assert.Equal(t, len(got), 1)
+	is.Equal(want, got)
+	is.Equal(len(got), 1)
 }
 
 func TestService_CreateSuccess(t *testing.T) {
+	is := is.New(t)
 	ctx := context.Background()
 	logger := log.Nop()
 	db := &inmemory.DB{}
@@ -111,13 +113,44 @@ func TestService_CreateSuccess(t *testing.T) {
 				tt.want.Config(),
 				connector.ProvisionTypeAPI,
 			)
-			assert.Ok(t, err)
-			assert.Equal(t, tt.want, got)
+			is.NoErr(err)
+			is.Equal(tt.want, got)
+
+			got2, err := service.Get(ctx, got.ID())
+			is.NoErr(err)
+			is.Equal(got, got2)
 		})
 	}
 }
 
+func TestService_CreateDLQ(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	logger := log.Nop()
+	db := &inmemory.DB{}
+	ctrl := gomock.NewController(t)
+	connBuilder := mock.Builder{Ctrl: ctrl}
+
+	service := connector.NewService(logger, db, connBuilder)
+	got, err := service.Create(
+		ctx,
+		uuid.NewString(),
+		connector.TypeDestination,
+		connector.Config{
+			Plugin:     "builtin:plugin",
+			PipelineID: uuid.NewString(),
+		},
+		connector.ProvisionTypeDLQ,
+	)
+	is.NoErr(err)
+
+	// DLQ connectors are not persisted
+	_, err = service.Get(ctx, got.ID())
+	is.True(cerrors.Is(err, connector.ErrInstanceNotFound))
+}
+
 func TestService_CreateError(t *testing.T) {
+	is := is.New(t)
 	ctx := context.Background()
 	logger := log.Nop()
 	db := &inmemory.DB{}
@@ -189,13 +222,14 @@ func TestService_CreateError(t *testing.T) {
 				tt.data,
 				connector.ProvisionTypeAPI,
 			)
-			assert.Error(t, err)
-			assert.Nil(t, got)
+			is.True(err != nil)
+			is.Equal(got, nil)
 		})
 	}
 }
 
 func TestService_GetSuccess(t *testing.T) {
+	is := is.New(t)
 	ctx := context.Background()
 	logger := log.Nop()
 	db := &inmemory.DB{}
@@ -215,14 +249,15 @@ func TestService_GetSuccess(t *testing.T) {
 		},
 		connector.ProvisionTypeAPI,
 	)
-	assert.Ok(t, err)
+	is.NoErr(err)
 
 	got, err := service.Get(ctx, want.ID())
-	assert.Ok(t, err)
-	assert.Equal(t, want, got)
+	is.NoErr(err)
+	is.Equal(want, got)
 }
 
 func TestService_GetInstanceNotFound(t *testing.T) {
+	is := is.New(t)
 	ctx := context.Background()
 	logger := log.Nop()
 	db := &inmemory.DB{}
@@ -231,12 +266,13 @@ func TestService_GetInstanceNotFound(t *testing.T) {
 
 	// get connector that does not exist
 	got, err := service.Get(ctx, uuid.NewString())
-	assert.Error(t, err)
-	assert.True(t, cerrors.Is(err, connector.ErrInstanceNotFound), "did not get expected error")
-	assert.Nil(t, got)
+	is.True(err != nil)
+	is.True(cerrors.Is(err, connector.ErrInstanceNotFound))
+	is.Equal(got, nil)
 }
 
 func TestService_DeleteSuccess(t *testing.T) {
+	is := is.New(t)
 	ctx := context.Background()
 	logger := log.Nop()
 	db := &inmemory.DB{}
@@ -262,17 +298,18 @@ func TestService_DeleteSuccess(t *testing.T) {
 		},
 		connector.ProvisionTypeAPI,
 	)
-	assert.Ok(t, err)
+	is.NoErr(err)
 
 	err = service.Delete(ctx, conn.ID())
-	assert.Ok(t, err)
+	is.NoErr(err)
 
 	got, err := service.Get(ctx, conn.ID())
-	assert.Error(t, err)
-	assert.Nil(t, got)
+	is.True(err != nil)
+	is.Equal(got, nil)
 }
 
 func TestService_DeleteInstanceNotFound(t *testing.T) {
+	is := is.New(t)
 	ctx := context.Background()
 	logger := log.Nop()
 	db := &inmemory.DB{}
@@ -280,11 +317,12 @@ func TestService_DeleteInstanceNotFound(t *testing.T) {
 	service := connector.NewService(logger, db, mock.Builder{})
 	// delete connector that does not exist
 	err := service.Delete(ctx, uuid.NewString())
-	assert.Error(t, err)
-	assert.True(t, cerrors.Is(err, connector.ErrInstanceNotFound), "did not get expected error")
+	is.True(err != nil)
+	is.True(cerrors.Is(err, connector.ErrInstanceNotFound))
 }
 
 func TestService_DeleteConnectorIsRunning(t *testing.T) {
+	is := is.New(t)
 	ctx := context.Background()
 	logger := log.Nop()
 	db := &inmemory.DB{}
@@ -310,14 +348,15 @@ func TestService_DeleteConnectorIsRunning(t *testing.T) {
 		},
 		connector.ProvisionTypeAPI,
 	)
-	assert.Ok(t, err)
+	is.NoErr(err)
 
 	// delete connector that is running
 	err = service.Delete(ctx, conn.ID())
-	assert.Error(t, err)
+	is.True(err != nil)
 }
 
 func TestService_List(t *testing.T) {
+	is := is.New(t)
 	ctx := context.Background()
 	logger := log.Nop()
 	db := &inmemory.DB{}
@@ -339,15 +378,16 @@ func TestService_List(t *testing.T) {
 			},
 			connector.ProvisionTypeAPI,
 		)
-		assert.Ok(t, err)
+		is.NoErr(err)
 		want[conn.ID()] = conn
 	}
 
 	got := service.List(ctx)
-	assert.Equal(t, want, got)
+	is.Equal(want, got)
 }
 
 func TestService_UpdateSuccess(t *testing.T) {
+	is := is.New(t)
 	ctx := context.Background()
 	logger := log.Nop()
 	db := &inmemory.DB{}
@@ -371,7 +411,7 @@ func TestService_UpdateSuccess(t *testing.T) {
 				EXPECT().
 				SetUpdatedAt(gomock.AssignableToTypeOf(time.Time{})).
 				Do(func(got time.Time) {
-					assert.Equal(t, got.After(beforeUpdate), true)
+					is.Equal(got.After(beforeUpdate), true)
 				})
 		},
 	}
@@ -389,13 +429,14 @@ func TestService_UpdateSuccess(t *testing.T) {
 		},
 		connector.ProvisionTypeAPI,
 	)
-	assert.Ok(t, err)
+	is.NoErr(err)
 
 	_, err = service.Update(ctx, conn.ID(), want)
-	assert.Ok(t, err)
+	is.NoErr(err)
 }
 
 func TestService_UpdateInstanceNotFound(t *testing.T) {
+	is := is.New(t)
 	ctx := context.Background()
 	logger := log.Nop()
 	db := &inmemory.DB{}
@@ -403,12 +444,13 @@ func TestService_UpdateInstanceNotFound(t *testing.T) {
 	service := connector.NewService(logger, db, mock.Builder{})
 	// update connector that does not exist
 	got, err := service.Update(ctx, uuid.NewString(), connector.Config{})
-	assert.Error(t, err)
-	assert.True(t, cerrors.Is(err, connector.ErrInstanceNotFound), "did not get expected error")
-	assert.Nil(t, got)
+	is.True(err != nil)
+	is.True(cerrors.Is(err, connector.ErrInstanceNotFound))
+	is.Equal(got, nil)
 }
 
 func TestService_UpdateInvalidConfig(t *testing.T) {
+	is := is.New(t)
 	ctx := context.Background()
 	logger := log.Nop()
 	db := &inmemory.DB{}
@@ -442,10 +484,10 @@ func TestService_UpdateInvalidConfig(t *testing.T) {
 		},
 		connector.ProvisionTypeAPI,
 	)
-	assert.Ok(t, err)
+	is.NoErr(err)
 
 	got, err := service.Update(ctx, conn.ID(), config)
-	assert.Error(t, err)
-	assert.True(t, cerrors.Is(err, wantErr), "did not get expected error")
-	assert.Nil(t, got)
+	is.True(err != nil)
+	is.True(cerrors.Is(err, wantErr))
+	is.Equal(got, nil)
 }

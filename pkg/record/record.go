@@ -116,6 +116,37 @@ func (r Record) Bytes() []byte {
 	return b
 }
 
+func (r Record) Map() map[string]interface{} {
+	var genericMetadata map[string]interface{}
+	if r.Metadata != nil {
+		genericMetadata = make(map[string]interface{}, len(r.Metadata))
+		for k, v := range r.Metadata {
+			genericMetadata[k] = v
+		}
+	}
+
+	return map[string]any{
+		"position":  []byte(r.Position),
+		"operation": r.Operation.String(),
+		"metadata":  genericMetadata,
+		"key":       r.mapData(r.Key),
+		"payload": map[string]interface{}{
+			"before": r.mapData(r.Payload.Before),
+			"after":  r.mapData(r.Payload.After),
+		},
+	}
+}
+
+func (r Record) mapData(d Data) interface{} {
+	switch d := d.(type) {
+	case StructuredData:
+		return map[string]interface{}(d)
+	case RawData:
+		return d.Raw
+	}
+	return nil
+}
+
 type Metadata map[string]string
 
 type Change struct {

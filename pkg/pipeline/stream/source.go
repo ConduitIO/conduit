@@ -22,6 +22,7 @@ import (
 
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/csync"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics"
 	"github.com/conduitio/conduit/pkg/record"
@@ -41,8 +42,7 @@ type SourceNode struct {
 	base       pubNodeBase
 	logger     log.CtxLogger
 
-	running  chan struct{} // running will be closed once SourceNode starts running
-	initOnce sync.Once
+	state    csync.ValueWatcher[nodeState]
 	stopOnce sync.Once
 }
 
@@ -51,23 +51,8 @@ func (n *SourceNode) ID() string {
 	return n.Name
 }
 
-func (n *SourceNode) init() {
-	n.initOnce.Do(func() {
-		n.running = make(chan struct{})
-	})
-}
-
 func (n *SourceNode) Run(ctx context.Context) (err error) {
-	n.init()
-	defer func() {
-		select {
-		case <-n.running:
-			// n.running is closed, all good
-		default:
-			// close n.running if it's still open
-			close(n.running)
-		}
-	}()
+	defer n.state.Set(nodeStateStopped)
 
 	// start a fresh connector context to make sure the connector is running
 	// until this method returns
@@ -112,7 +97,7 @@ func (n *SourceNode) Run(ctx context.Context) (err error) {
 	}
 	defer cleanup()
 
-	close(n.running) // node is ready to start running
+	n.state.Set(nodeStateRunning)
 
 	var (
 		// when source node encounters the record with this position it needs to
@@ -149,7 +134,7 @@ func (n *SourceNode) Run(ctx context.Context) (err error) {
 		lastPosition = msg.Record.Position
 		err = n.base.Send(ctx, n.logger, msg)
 		if err != nil {
-			return msg.Nack(err)
+			return msg.Nack(err, n.ID())
 		}
 
 		if bytes.Equal(stopPosition, lastPosition) {
@@ -181,6 +166,10 @@ func (n *SourceNode) Stop(ctx context.Context, reason error) error {
 		// only execute stop once, more calls won't make a difference
 		err = n.stop(ctx, reason)
 		stopExecuted = true
+		if err != nil {
+			// an error happened, allow stop to be executed again
+			n.stopOnce = sync.Once{}
+		}
 	})
 	if !stopExecuted {
 		n.logger.Warn(ctx).Msg("source connector stop already triggered, " +
@@ -191,13 +180,12 @@ func (n *SourceNode) Stop(ctx context.Context, reason error) error {
 }
 
 func (n *SourceNode) stop(ctx context.Context, reason error) error {
-	n.init()
-
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-n.running:
-		// node is running now, continue injecting the stop message
+	state, err := n.state.Watch(ctx, csync.WatchValues(nodeStateRunning, nodeStateStopped))
+	if err != nil {
+		return err
+	}
+	if state != nodeStateRunning {
+		return cerrors.New("source node is not running")
 	}
 
 	n.stopReason = reason
