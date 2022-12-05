@@ -1264,6 +1264,7 @@
     },
     "/v1/processors/{id}/inspect": {
       "get": {
+        "summary": "todo decide whether to use the direction as path param or query param",
         "operationId": "ProcessorService_InspectProcessor",
         "responses": {
           "200": {
@@ -1414,13 +1415,14 @@
       "enum": [
         "TYPE_UNSPECIFIED",
         "TYPE_STRING",
-        "TYPE_NUMBER",
+        "TYPE_INT",
+        "TYPE_FLOAT",
         "TYPE_BOOL",
         "TYPE_FILE",
         "TYPE_DURATION"
       ],
       "default": "TYPE_UNSPECIFIED",
-      "description": "Type shows the parameter type.\n\n - TYPE_STRING: Parameter is a string.\n - TYPE_NUMBER: Parameter is a number.\n - TYPE_BOOL: Parameter is a boolean.\n - TYPE_FILE: Parameter is a file.\n - TYPE_DURATION: Parameter is a duration."
+      "description": "Type shows the parameter type.\n\n - TYPE_STRING: Parameter is a string.\n - TYPE_INT: Parameter is an integer.\n - TYPE_FLOAT: Parameter is a float.\n - TYPE_BOOL: Parameter is a boolean.\n - TYPE_FILE: Parameter is a file.\n - TYPE_DURATION: Parameter is a duration."
     },
     "ProcessorParent": {
       "type": "object",
