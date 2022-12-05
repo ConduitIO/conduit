@@ -20,10 +20,10 @@ import (
 	"os"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"gopkg.in/yaml.v3"
+	"github.com/conduitio/yaml/v3"
 )
 
-const ParserVersion = "1.0"
+const ParserVersion = "1.1"
 
 type ProcessorConfig struct {
 	Type     string            `yaml:"type"`
@@ -44,6 +44,14 @@ type PipelineConfig struct {
 	Description string                     `yaml:"description"`
 	Connectors  map[string]ConnectorConfig `yaml:"connectors,omitempty"`
 	Processors  map[string]ProcessorConfig `yaml:"processors,omitempty"`
+	DLQ         DLQConfig                  `yaml:"dead-letter-queue"`
+}
+
+type DLQConfig struct {
+	Plugin              string            `yaml:"plugin"`
+	Settings            map[string]string `yaml:"settings"`
+	WindowSize          *int              `yaml:"window-size"`
+	WindowNackThreshold *int              `yaml:"window-nack-threshold"`
 }
 
 type PipelinesConfig struct {
@@ -64,14 +72,6 @@ func Parse(data []byte) (map[string]PipelineConfig, error) {
 			break
 		} else if err != nil {
 			return nil, cerrors.Errorf("parsing error: %w", err)
-		}
-		// check if version is empty
-		if doc.Version == "" {
-			return nil, cerrors.Errorf("version is empty: %w", ErrUnsupportedVersion)
-		}
-		// check if version is invalid
-		if doc.Version != "1" && doc.Version != ParserVersion {
-			return nil, cerrors.Errorf("version %s is not supported: %w", doc.Version, ErrUnsupportedVersion)
 		}
 		docs = append(docs, doc)
 	}

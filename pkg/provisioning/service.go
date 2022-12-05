@@ -389,6 +389,33 @@ func (s *Service) createPipeline(ctx context.Context, id string, config Pipeline
 	if err != nil {
 		return nil, err
 	}
+
+	dlq := pl.DLQ
+	var updateDLQ bool
+	if config.DLQ.Plugin != "" {
+		dlq.Plugin = config.DLQ.Plugin
+		updateDLQ = true
+	}
+	if config.DLQ.Settings != nil {
+		dlq.Settings = config.DLQ.Settings
+		updateDLQ = true
+	}
+	if config.DLQ.WindowSize != nil {
+		dlq.WindowSize = *config.DLQ.WindowSize
+		updateDLQ = true
+	}
+	if config.DLQ.WindowNackThreshold != nil {
+		dlq.WindowNackThreshold = *config.DLQ.WindowNackThreshold
+		updateDLQ = true
+	}
+
+	if updateDLQ {
+		pl, err = s.pipelineService.UpdateDLQ(ctx, id, dlq)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return pl, nil
 }
 
