@@ -14,23 +14,25 @@ const ConfigValidationMap = {
     return validatePresence(true);
   },
 
-  TYPE_GREATER_THAN: function (value) {
-    const options = { gt: value };
+  TYPE_GREATER_THAN: function (value, type) {
+    const parseFn = type === 'TYPE_INT' ? parseInt : parseFloat;
+    const options = { gt: parseFn(value) };
     return validateNumber(options);
   },
 
-  TYPE_LESS_THAN: function (value) {
-    const options = { lt: value };
+  TYPE_LESS_THAN: function (value, type) {
+    const parseFn = type === 'TYPE_INT' ? parseInt : parseFloat;
+    const options = { lt: parseFn(value) };
     return validateNumber(options);
   },
 
   TYPE_INCLUSION: function (value) {
-    const options = { list: value };
+    const options = { list: value.split(',') };
     return validateInclusion(options);
   },
 
   TYPE_EXCLUSION: function (value) {
-    const options = { list: value };
+    const options = { list: value.split(',') };
     return validateExclusion(options);
   },
 
@@ -48,7 +50,10 @@ export default function generateBlueprintFields(blueprint, configurable) {
     const currentConfig = configurable.get(`config.settings.${fieldName}`);
     const currentConfigValue = currentConfig ? currentConfig : null;
 
-    const validations = generateConfigValidations(fieldOpts.validations);
+    const validations = generateConfigValidations(
+      fieldOpts.validations,
+      fieldOpts.type
+    );
 
     const fieldModel = {
       id: fieldName,
