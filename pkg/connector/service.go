@@ -102,6 +102,11 @@ func (s *Service) Create(ctx context.Context, id string, t Type, cfg Config, p P
 		return nil, cerrors.Errorf("could not init connector: %w", err)
 	}
 
+	if p == ProvisionTypeDLQ {
+		// do not persist the instance, just return the connector
+		return conn, nil
+	}
+
 	// persist instance
 	err = s.store.Set(ctx, id, conn)
 	if err != nil {

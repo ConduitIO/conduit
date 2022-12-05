@@ -184,10 +184,13 @@ func TestDestinationAckerNode_ForwardNack(t *testing.T) {
 			return msg.Record.Position, wantErr // destination returns nack
 		})
 	nackHandlerDone := make(chan struct{})
-	msg.RegisterNackHandler(func(got *Message, reason error) error {
+	msg.RegisterNackHandler(func(got *Message, nackMetadata NackMetadata) error {
 		defer close(nackHandlerDone)
 		is.Equal(msg, got)
-		is.Equal(wantErr, reason)
+		is.Equal(NackMetadata{
+			Reason: wantErr,
+			NodeID: node.ID(),
+		}, nackMetadata)
 		return nil
 	})
 	in <- msg // send message to incoming channel
@@ -246,9 +249,9 @@ func TestDestinationAckerNode_UnexpectedPosition(t *testing.T) {
 
 	// nack should be still called when node exits
 	nackHandlerDone := make(chan struct{})
-	msg.RegisterNackHandler(func(got *Message, reason error) error {
+	msg.RegisterNackHandler(func(got *Message, nackMetadata NackMetadata) error {
 		defer close(nackHandlerDone)
-		is.True(reason != nil)
+		is.True(nackMetadata.Reason != nil)
 		return nil
 	})
 	in <- msg // send message to incoming channel

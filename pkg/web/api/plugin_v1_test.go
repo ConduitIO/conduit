@@ -46,7 +46,7 @@ func TestPluginAPIv1_ListPluginByName(t *testing.T) {
 			Author:      "Aaron",
 			SourceParams: map[string]plugin.Parameter{
 				"param": {
-					Type: "string",
+					Type: plugin.ParameterTypeString,
 					Validations: []plugin.Validation{{
 						Type: plugin.ValidationTypeRequired,
 					}},

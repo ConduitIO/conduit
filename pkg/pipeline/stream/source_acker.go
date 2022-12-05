@@ -26,8 +26,9 @@ import (
 // SourceAckerNode is responsible for handling acknowledgments for messages of
 // a specific source and forwarding them to the source in the correct order.
 type SourceAckerNode struct {
-	Name   string
-	Source connector.Source
+	Name           string
+	Source         connector.Source
+	DLQHandlerNode *DLQHandlerNode
 
 	base   pubSubNodeBase
 	logger log.CtxLogger
@@ -46,6 +47,8 @@ func (n *SourceAckerNode) ID() string {
 }
 
 func (n *SourceAckerNode) Run(ctx context.Context) error {
+	defer n.DLQHandlerNode.Done() // notify DLQHandlerNode that we are done
+
 	trigger, cleanup, err := n.base.Trigger(ctx, n.logger, nil)
 	if err != nil {
 		return err
@@ -60,12 +63,15 @@ func (n *SourceAckerNode) Run(ctx context.Context) error {
 
 		// enqueue message in semaphore
 		ticket := n.sem.Enqueue()
+		// let the DLQ node know that a message entered the pipeline
+		n.DLQHandlerNode.Add(1)
+		// register ack and nack handlers
 		n.registerAckHandler(msg, ticket)
 		n.registerNackHandler(msg, ticket)
 
 		err = n.base.Send(ctx, n.logger, msg)
 		if err != nil {
-			return msg.Nack(err)
+			return msg.Nack(err, n.ID())
 		}
 	}
 }
@@ -80,6 +86,7 @@ func (n *SourceAckerNode) registerAckHandler(msg *Message, ticket semaphore.Tick
 					n.fail = true
 				}
 				n.sem.Release(lock)
+				n.DLQHandlerNode.Done()
 			}()
 
 			if n.fail {
@@ -88,14 +95,20 @@ func (n *SourceAckerNode) registerAckHandler(msg *Message, ticket semaphore.Tick
 			}
 
 			n.logger.Trace(msg.Ctx).Msg("forwarding ack to source connector")
-			return n.Source.Ack(msg.Ctx, msg.Record.Position)
+			err = n.Source.Ack(msg.Ctx, msg.Record.Position)
+			if err != nil {
+				return cerrors.Errorf("failed to forward ack to source connector: %w", err)
+			}
+
+			n.DLQHandlerNode.Ack(msg)
+			return nil
 		},
 	)
 }
 
 func (n *SourceAckerNode) registerNackHandler(msg *Message, ticket semaphore.Ticket) {
 	msg.RegisterNackHandler(
-		func(msg *Message, reason error) (err error) {
+		func(msg *Message, nackMetadata NackMetadata) (err error) {
 			n.logger.Trace(msg.Ctx).Msg("acquiring semaphore for nack")
 			lock := n.sem.Acquire(ticket)
 			defer func() {
@@ -103,6 +116,7 @@ func (n *SourceAckerNode) registerNackHandler(msg *Message, ticket semaphore.Tic
 					n.fail = true
 				}
 				n.sem.Release(lock)
+				n.DLQHandlerNode.Done()
 			}()
 
 			if n.fail {
@@ -111,11 +125,19 @@ func (n *SourceAckerNode) registerNackHandler(msg *Message, ticket semaphore.Tic
 			}
 
 			n.logger.Trace(msg.Ctx).Msg("forwarding nack to DLQ handler")
-			// TODO implement DLQ and call it here, right now any nacked message
-			//  will just stop the pipeline because we don't support DLQs,
-			//  don't forget to forward ack to source if the DLQ call succeeds
-			//  https://github.com/ConduitIO/conduit/issues/306
-			return cerrors.Errorf("no DLQ handler configured: %w", reason)
+			err = n.DLQHandlerNode.Nack(msg, nackMetadata)
+			if err != nil {
+				return cerrors.Errorf("failed to write message to DLQ: %w", err)
+			}
+
+			// The nacked record was successfully stored in the DLQ, we consider
+			// the record "processed" so we need to ack it in the source.
+			err = n.Source.Ack(msg.Ctx, msg.Record.Position)
+			if err != nil {
+				return cerrors.Errorf("failed to forward nack to source connector: %w", err)
+			}
+
+			return nil
 		},
 	)
 }
