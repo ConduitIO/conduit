@@ -18,8 +18,6 @@ package api
 
 import (
 	"context"
-	"strings"
-
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/inspector"
 	"github.com/conduitio/conduit/pkg/processor"
@@ -112,11 +110,13 @@ func (p *ProcessorAPIv1) InspectProcessor(
 }
 
 func toInspType(direction apiv1.InspectProcessorRequest_Direction) (processor.InspectionType, error) {
-	switch strings.ToLower(direction.String()) {
-	case "in":
+	switch direction {
+	case apiv1.InspectProcessorRequest_DIRECTION_IN:
 		return processor.InspectionIn, nil
-	case "out":
+	case apiv1.InspectProcessorRequest_DIRECTION_OUT:
 		return processor.InspectionOut, nil
+	case apiv1.InspectProcessorRequest_DIRECTION_UNSPECIFIED:
+		return 0, cerrors.New("inspection type not specified")
 	default:
 		return 0, cerrors.Errorf("unknown inspection type: %v", direction)
 	}

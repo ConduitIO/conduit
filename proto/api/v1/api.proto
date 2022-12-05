@@ -808,8 +808,9 @@ message ListProcessorsResponse {
 
 message InspectProcessorRequest {
   enum Direction {
-    IN = 0;
-    OUT = 1;
+    DIRECTION_UNSPECIFIED = 0;
+    DIRECTION_IN = 1;
+    DIRECTION_OUT = 2;
   }
 
   string id = 1;

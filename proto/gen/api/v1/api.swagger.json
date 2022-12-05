@@ -1309,10 +1309,11 @@
             "required": false,
             "type": "string",
             "enum": [
-              "IN",
-              "OUT"
+              "DIRECTION_UNSPECIFIED",
+              "DIRECTION_IN",
+              "DIRECTION_OUT"
             ],
-            "default": "IN"
+            "default": "DIRECTION_UNSPECIFIED"
           }
         ],
         "tags": [
@@ -1346,10 +1347,11 @@
     "InspectProcessorRequestDirection": {
       "type": "string",
       "enum": [
-        "IN",
-        "OUT"
+        "DIRECTION_UNSPECIFIED",
+        "DIRECTION_IN",
+        "DIRECTION_OUT"
       ],
-      "default": "IN"
+      "default": "DIRECTION_UNSPECIFIED"
     },
     "ParameterValidation": {
       "type": "object",
