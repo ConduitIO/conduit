@@ -253,6 +253,7 @@ func (s *source) Read(ctx context.Context) (record.Record, error) {
 		r.Metadata = record.Metadata{}
 	}
 	// source connector ID is added to all records
+	r.Metadata.SetConduitSourceConnectorID(s.XID)
 
 	s.inspector.Send(ctx, r)
 	return r, nil
