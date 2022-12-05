@@ -8,6 +8,7 @@ import (
 	context "context"
 	reflect "reflect"
 
+	inspector "github.com/conduitio/conduit/pkg/inspector"
 	processor "github.com/conduitio/conduit/pkg/processor"
 	gomock "github.com/golang/mock/gomock"
 )
@@ -77,6 +78,21 @@ func (m *ProcessorOrchestrator) Get(arg0 context.Context, arg1 string) (*process
 func (mr *ProcessorOrchestratorMockRecorder) Get(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*ProcessorOrchestrator)(nil).Get), arg0, arg1)
+}
+
+// Inspect mocks base method.
+func (m *ProcessorOrchestrator) Inspect(arg0 context.Context, arg1 string, arg2 processor.InspectionType) (*inspector.Session, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Inspect", arg0, arg1, arg2)
+	ret0, _ := ret[0].(*inspector.Session)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Inspect indicates an expected call of Inspect.
+func (mr *ProcessorOrchestratorMockRecorder) Inspect(arg0, arg1, arg2 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Inspect", reflect.TypeOf((*ProcessorOrchestrator)(nil).Inspect), arg0, arg1, arg2)
 }
 
 // List mocks base method.

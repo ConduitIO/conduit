@@ -16,10 +16,10 @@ package orchestrator
 
 import (
 	"context"
-	"github.com/conduitio/conduit/pkg/inspector"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/rollback"
+	"github.com/conduitio/conduit/pkg/inspector"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/google/uuid"
@@ -100,13 +100,17 @@ func (p *ProcessorOrchestrator) List(ctx context.Context) map[string]*processor.
 	return p.processors.List(ctx)
 }
 
-func (p *ProcessorOrchestrator) Inspect(ctx context.Context, id string, direction string) (*inspector.Session, error) {
+func (p *ProcessorOrchestrator) Inspect(
+	ctx context.Context,
+	id string,
+	inspType processor.InspectionType,
+) (*inspector.Session, error) {
 	proc, err := p.Get(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 
-	return proc.Processor.Inspect(ctx, direction), nil
+	return proc.Processor.Inspect(ctx, inspType)
 }
 
 func (p *ProcessorOrchestrator) Get(ctx context.Context, id string) (*processor.Instance, error) {

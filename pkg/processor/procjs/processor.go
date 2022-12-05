@@ -16,6 +16,7 @@ package procjs
 
 import (
 	"context"
+
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/inspector"
@@ -23,7 +24,6 @@ import (
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/dop251/goja"
 	"github.com/rs/zerolog"
-	"strings"
 )
 
 const (
@@ -162,15 +162,14 @@ func (p *Processor) Process(ctx context.Context, in record.Record) (record.Recor
 	return out, nil
 }
 
-func (p *Processor) Inspect(ctx context.Context, direction string) *inspector.Session {
-	switch strings.ToLower(direction) {
-	// todo use "enums"
-	case "in":
-		return p.inInsp.NewSession(ctx)
-	case "out":
-		return p.outInsp.NewSession(ctx)
+func (p *Processor) Inspect(ctx context.Context, inspType processor.InspectionType) (*inspector.Session, error) {
+	switch inspType {
+	case processor.InspectionIn:
+		return p.inInsp.NewSession(ctx), nil
+	case processor.InspectionOut:
+		return p.outInsp.NewSession(ctx), nil
 	default:
-		panic("unknown direction: " + direction)
+		return nil, cerrors.Errorf("unsupported inspection type: %v", inspType)
 	}
 }
 

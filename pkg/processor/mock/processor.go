@@ -8,6 +8,8 @@ import (
 	context "context"
 	reflect "reflect"
 
+	inspector "github.com/conduitio/conduit/pkg/inspector"
+	processor "github.com/conduitio/conduit/pkg/processor"
 	record "github.com/conduitio/conduit/pkg/record"
 	gomock "github.com/golang/mock/gomock"
 )
@@ -33,6 +35,21 @@ func NewProcessor(ctrl *gomock.Controller) *Processor {
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *Processor) EXPECT() *ProcessorMockRecorder {
 	return m.recorder
+}
+
+// Inspect mocks base method.
+func (m *Processor) Inspect(arg0 context.Context, arg1 processor.InspectionType) (*inspector.Session, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Inspect", arg0, arg1)
+	ret0, _ := ret[0].(*inspector.Session)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Inspect indicates an expected call of Inspect.
+func (mr *ProcessorMockRecorder) Inspect(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Inspect", reflect.TypeOf((*Processor)(nil).Inspect), arg0, arg1)
 }
 
 // Process mocks base method.

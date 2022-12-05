@@ -18,9 +18,10 @@ package api
 
 import (
 	"context"
-	"github.com/conduitio/conduit/pkg/inspector"
+	"strings"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/inspector"
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/web/api/fromproto"
 	"github.com/conduitio/conduit/pkg/web/api/status"
@@ -41,7 +42,7 @@ type ProcessorOrchestrator interface {
 	// Delete removes a processor
 	Delete(ctx context.Context, id string) error
 	// Inspect starts an inspector session
-	Inspect(ctx context.Context, id string, direction string) (*inspector.Session, error)
+	Inspect(ctx context.Context, id string, inspType processor.InspectionType) (*inspector.Session, error)
 }
 
 type ProcessorAPIv1 struct {
@@ -80,12 +81,17 @@ func (p *ProcessorAPIv1) InspectProcessor(
 	server apiv1.ProcessorService_InspectProcessorServer,
 ) error {
 	if req.Id == "" {
-		return status.ConnectorError(cerrors.ErrEmptyID)
+		return status.ProcessorError(cerrors.ErrEmptyID)
 	}
 
-	session, err := p.ps.Inspect(server.Context(), req.Id, req.Direction.String())
+	inspType, err := toInspType(req.Direction)
 	if err != nil {
-		return status.ConnectorError(cerrors.Errorf("failed to get connector: %w", err))
+		return status.ProcessorError(err)
+	}
+
+	session, err := p.ps.Inspect(server.Context(), req.Id, inspType)
+	if err != nil {
+		return status.ProcessorError(cerrors.Errorf("failed to inspect processor: %w", err))
 	}
 
 	for rec := range session.C {
@@ -103,6 +109,17 @@ func (p *ProcessorAPIv1) InspectProcessor(
 	}
 
 	return cerrors.New("inspector session closed")
+}
+
+func toInspType(direction apiv1.InspectProcessorRequest_Direction) (processor.InspectionType, error) {
+	switch strings.ToLower(direction.String()) {
+	case "in":
+		return processor.InspectionIn, nil
+	case "out":
+		return processor.InspectionOut, nil
+	default:
+		return 0, cerrors.Errorf("unknown inspection type: %v", direction)
+	}
 }
 
 // GetProcessor returns a single Interface proto response or an error.

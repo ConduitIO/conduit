@@ -19,11 +19,11 @@ package processor
 
 import (
 	"context"
-	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/conduitio/conduit/pkg/inspector"
-	"strings"
 	"time"
 
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/inspector"
 	"github.com/conduitio/conduit/pkg/record"
 )
 
@@ -37,11 +37,18 @@ const (
 	ProvisionTypeConfig
 )
 
+const (
+	InspectionIn InspectionType = iota
+	InspectionOut
+)
+
 type (
 	// ParentType defines the parent type of a processor.
 	ParentType int
 	// ProvisionType defines provisioning type
 	ProvisionType int
+	// InspectorDirection defines the direction
+	InspectionType int
 )
 
 // Interface is the interface that represents a single message processor that
@@ -50,7 +57,7 @@ type Interface interface {
 	// Process runs the processor function on a record.
 	Process(ctx context.Context, record record.Record) (record.Record, error)
 
-	Inspect(ctx context.Context, direction string) *inspector.Session
+	Inspect(ctx context.Context, inspType InspectionType) (*inspector.Session, error)
 }
 
 // FuncWrapper is an adapter allowing use of a function as an Interface.
@@ -77,15 +84,14 @@ func (f FuncWrapper) Process(ctx context.Context, inRec record.Record) (record.R
 	return outRec, err
 }
 
-func (f FuncWrapper) Inspect(ctx context.Context, direction string) *inspector.Session {
-	switch strings.ToLower(direction) {
-	// todo replace with "enums"
-	case "in":
-		return f.inInsp.NewSession(ctx)
-	case "out":
-		return f.outInsp.NewSession(ctx)
+func (f FuncWrapper) Inspect(ctx context.Context, inspType InspectionType) (*inspector.Session, error) {
+	switch inspType {
+	case InspectionIn:
+		return f.inInsp.NewSession(ctx), nil
+	case InspectionOut:
+		return f.outInsp.NewSession(ctx), nil
 	default:
-		panic("unknown direction: " + direction)
+		return nil, cerrors.Errorf("unsupported inspection type: %v", inspType)
 	}
 }
 
