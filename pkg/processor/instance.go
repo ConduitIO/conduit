@@ -79,6 +79,7 @@ func (f FuncWrapper) Process(ctx context.Context, inRec record.Record) (record.R
 
 func (f FuncWrapper) Inspect(ctx context.Context, direction string) *inspector.Session {
 	switch strings.ToLower(direction) {
+	// todo replace with "enums"
 	case "in":
 		return f.inInsp.NewSession(ctx)
 	case "out":

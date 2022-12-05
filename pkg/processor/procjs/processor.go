@@ -53,7 +53,6 @@ type Processor struct {
 }
 
 func New(src string, logger zerolog.Logger) (*Processor, error) {
-	// todo use real logger
 	p := &Processor{
 		inInsp:  inspector.New(log.New(logger), 1000),
 		outInsp: inspector.New(log.New(logger), 1000),
@@ -165,6 +164,7 @@ func (p *Processor) Process(ctx context.Context, in record.Record) (record.Recor
 
 func (p *Processor) Inspect(ctx context.Context, direction string) *inspector.Session {
 	switch strings.ToLower(direction) {
+	// todo use "enums"
 	case "in":
 		return p.inInsp.NewSession(ctx)
 	case "out":
