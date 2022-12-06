@@ -20,6 +20,7 @@ import (
 	"os"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/yaml/v3"
 )
 
@@ -59,7 +60,17 @@ type PipelinesConfig struct {
 	Pipelines map[string]PipelineConfig `yaml:"pipelines"`
 }
 
-func Parse(data []byte) (map[string]PipelineConfig, error) {
+type Parser struct {
+	logger log.CtxLogger
+}
+
+func NewParser(logger log.CtxLogger) *Parser {
+	return &Parser{
+		logger: logger.WithComponent("provisioning.Parser"),
+	}
+}
+
+func (p *Parser) Parse(data []byte) (map[string]PipelineConfig, error) {
 	// replace environment variables with their values
 	data = []byte(os.ExpandEnv(string(data)))
 	dec := yaml.NewDecoder(bytes.NewReader(data))
@@ -81,7 +92,7 @@ func Parse(data []byte) (map[string]PipelineConfig, error) {
 		return nil, nil
 	}
 
-	merged, err := mergePipelinesConfigMaps(docs)
+	merged, err := p.mergePipelinesConfigMaps(docs)
 	if err != nil {
 		return nil, err
 	}
@@ -89,7 +100,7 @@ func Parse(data []byte) (map[string]PipelineConfig, error) {
 }
 
 // mergePipelinesConfigMaps takes an array of PipelinesConfig and merges them into one map
-func mergePipelinesConfigMaps(arr []PipelinesConfig) (map[string]PipelineConfig, error) {
+func (p *Parser) mergePipelinesConfigMaps(arr []PipelinesConfig) (map[string]PipelineConfig, error) {
 	pipelines := make(map[string]PipelineConfig, 0)
 
 	for _, config := range arr {

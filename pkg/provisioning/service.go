@@ -36,6 +36,7 @@ import (
 type Service struct {
 	db               database.DB
 	logger           log.CtxLogger
+	parser           *Parser
 	pipelineService  PipelineService
 	connectorService ConnectorService
 	processorService ProcessorService
@@ -53,6 +54,7 @@ func NewService(
 	return &Service{
 		db:               db,
 		logger:           logger.WithComponent("provisioning.Service"),
+		parser:           NewParser(logger),
 		pipelineService:  plService,
 		connectorService: connService,
 		processorService: procService,
@@ -114,7 +116,7 @@ func (s *Service) provisionConfigFile(ctx context.Context, path string, alreadyP
 		return nil, nil, cerrors.Errorf("could not read the file %q: %w", path, err)
 	}
 
-	before, err := Parse(data)
+	before, err := s.parser.Parse(data)
 	if err != nil {
 		return nil, nil, cerrors.Errorf("could not parse the file %q: %w", path, err)
 	}

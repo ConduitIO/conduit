@@ -19,11 +19,13 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/matryer/is"
 )
 
 func TestParser_Success(t *testing.T) {
 	is := is.New(t)
+	parser := NewParser(log.Nop())
 	filename, err := filepath.Abs("./test/pipelines1-success.yml")
 	if err != nil {
 		t.Error(err)
@@ -108,13 +110,14 @@ func TestParser_Success(t *testing.T) {
 		t.Error(err)
 	}
 
-	got, err := Parse(data)
+	got, err := parser.Parse(data)
 	is.NoErr(err)
 	is.Equal(want, got)
 }
 
 func TestParser_DuplicatePipelineId(t *testing.T) {
 	is := is.New(t)
+	parser := NewParser(log.Nop())
 	filename, err := filepath.Abs("./test/pipelines2-duplicate-pipeline-id.yml")
 	if err != nil {
 		t.Error(err)
@@ -125,13 +128,14 @@ func TestParser_DuplicatePipelineId(t *testing.T) {
 		t.Error(err)
 	}
 
-	p, err := Parse(data)
+	p, err := parser.Parse(data)
 	is.True(err != nil)
 	is.Equal(p, nil)
 }
 
 func TestParser_EmptyFile(t *testing.T) {
 	is := is.New(t)
+	parser := NewParser(log.Nop())
 	filename, err := filepath.Abs("./test/pipelines5-empty.yml")
 	if err != nil {
 		t.Error(err)
@@ -142,13 +146,14 @@ func TestParser_EmptyFile(t *testing.T) {
 		t.Error(err)
 	}
 
-	p, err := Parse(data)
+	p, err := parser.Parse(data)
 	is.NoErr(err)
 	is.Equal(p, nil)
 }
 
 func TestParser_InvalidYaml(t *testing.T) {
 	is := is.New(t)
+	parser := NewParser(log.Nop())
 	filename, err := filepath.Abs("./test/pipelines6-invalid-yaml.yml")
 	if err != nil {
 		t.Error(err)
@@ -159,13 +164,14 @@ func TestParser_InvalidYaml(t *testing.T) {
 		t.Error(err)
 	}
 
-	p, err := Parse(data)
+	p, err := parser.Parse(data)
 	is.True(err != nil)
 	is.Equal(p, nil)
 }
 
 func TestParser_EnvVars(t *testing.T) {
 	is := is.New(t)
+	parser := NewParser(log.Nop())
 	filename, err := filepath.Abs("./test/pipelines7-env-vars.yml")
 	if err != nil {
 		t.Error(err)
@@ -211,7 +217,7 @@ func TestParser_EnvVars(t *testing.T) {
 		t.Error(err)
 	}
 
-	got, err := Parse(data)
+	got, err := parser.Parse(data)
 	is.NoErr(err)
 	is.Equal(want, got)
 }
