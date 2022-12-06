@@ -12,7 +12,7 @@
       {{if this.isShowingNewTransformPanel '-translate-x-152'}}"
   >
     <div class="flex flex-col w-76">
-      <div class="flex justify-between items-center bg-white px-6 py-6">
+      <div class="flex justify-between items-center bg-white p-6">
         <span
           class="slide-panel-header font-semibold w-3/4 overflow-hidden text-ellipsis"
           data-test-connector-slide-panel-node-name
@@ -71,6 +71,13 @@
             </BasicDropdown>
           {{/if}}
         </div>
+      </div>
+      <div class="flex px-4 mb-12">
+        <Mxa::Button
+          @buttonType="secondary"
+          class="w-full text-teal-900 text-sm"
+          {{on "click" @showStreamInspector}}
+        >Inspect stream</Mxa::Button>
       </div>
       <div class="flex text-center mb-2 border-b border-gray-300">
         <div

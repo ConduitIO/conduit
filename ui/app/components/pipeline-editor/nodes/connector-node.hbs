@@ -5,8 +5,20 @@
 >
   <div
     class="rounded-md cursor-pointer p-4 bg-white shadow hover:shadow-md relative"
-    {{did-insert this.registerNode @connectorType this.pipelineNodeManager @connector}}
-    {{will-destroy this.unregisterNode @connectorType this.pipelineNodeManager}}
+    {{did-insert
+      this.registerNode
+      @connectorType
+      this.pipelineNodeManager
+      @connector
+      this.websockets
+    }}
+    {{will-destroy
+      this.unregisterNode
+      @connectorType
+      this.pipelineNodeManager
+      @connector
+      this.websockets
+    }}
     {{on "click" (fn @selectNode @connector)}}
     {{on-click-outside (fn @selectNode null) "#editor-container"}}
     role="button"

@@ -170,6 +170,7 @@
             @showEditConnectorModal={{fn this.showEditConnectorModal this.selectedNode}}
             @showDeleteConnectorModal={{this.showDeleteConnectorModal}}
             @hideDeleteConnectorModal={{this.hideDeleteConnectorModal}}
+            @showStreamInspector={{fn (mut this.isShowingStreamInspector) true}}
             @pipeline={{@pipeline}}
           />
         {{/if}}
@@ -221,4 +222,12 @@
       Deleting a connector cannot be undone. Confirm you would like to delete this connector.
     {{/if}}
   </Mxa::ConfirmModal>
+{{/if}}
+
+{{#if this.isShowingStreamInspector}}
+  <PipelineEditor::StreamInspectorModal
+    @onDismiss={{fn (mut this.isShowingStreamInspector) false}}
+    @pipeline={{@pipeline}}
+    @entityId={{this.selectedNode.id}}
+  />
 {{/if}}
