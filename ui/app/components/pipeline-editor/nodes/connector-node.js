@@ -15,8 +15,8 @@ export default class PipelineEditorNodesConnectorNodeComponent extends Component
 
     if (nodeType === 'destination') {
       pipelineNodeManager.registerDestinationNode(element, model);
-      websockets.connect(model.id, 'connectors');
     }
+    websockets.connect(model.id, 'connectors');
   }
 
   unregisterNode(element, [nodeType, pipelineNodeManager, model, websockets]) {
@@ -26,8 +26,8 @@ export default class PipelineEditorNodesConnectorNodeComponent extends Component
 
     if (nodeType === 'destination') {
       pipelineNodeManager.unregisterDestinationNode(element);
-      websockets.disconnect(model.id);
     }
+    websockets.disconnect(model.id);
   }
 
   get isSelected() {
