@@ -63,7 +63,7 @@ export default Factory.extend({
         'titan:height',
         'Titan Height',
         'Enter Titan Height',
-        'TYPE_NUMBER',
+        'TYPE_INT',
         { isRequired: true }
       );
       const requiredSelect = generateBlueprint(
