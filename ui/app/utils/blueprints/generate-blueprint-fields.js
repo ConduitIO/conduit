@@ -32,12 +32,18 @@ const ConfigValidationMap = {
   },
 
   TYPE_EXCLUSION: function (value) {
-    const options = { list: value.split(',') };
+    const options = {
+      list: value.split(','),
+      message: '{key} cannot be any of ({list})',
+    };
     return validateExclusion(options);
   },
 
   TYPE_REGEX: function (value) {
-    const options = { regex: new RegExp(value) };
+    const options = {
+      regex: new RegExp(value),
+      message: '{description} must match regex {regex}',
+    };
     return validateFormat(options);
   },
 };
