@@ -26,12 +26,12 @@ const ConfigValidationMap = {
     return validateNumber(options);
   },
 
-  TYPE_INCLUSION: function (value) {
+  TYPE_INCLUSION: function (value = '') {
     const options = { list: value.split(',') };
     return validateInclusion(options);
   },
 
-  TYPE_EXCLUSION: function (value) {
+  TYPE_EXCLUSION: function (value = '') {
     const options = {
       list: value.split(','),
       message: '{key} cannot be any of ({list})',

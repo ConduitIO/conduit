@@ -80,7 +80,7 @@ module(
             'titan:height',
             'Titan Height',
             'Enter Titan Height',
-            'TYPE_NUMBER'
+            'TYPE_INT'
           );
           this.field = field;
           this.setInputValue = () => {};
@@ -103,7 +103,7 @@ module(
               'titan:height',
               'Titan Height',
               'Enter Titan Height',
-              'TYPE_NUMBER',
+              'TYPE_INT',
               { isRequired: true }
             );
             this.field = field;
@@ -180,7 +180,7 @@ module(
                 validations: [
                   {
                     type: 'TYPE_INCLUSION',
-                    value: ['Attack', 'Founding', 'Warhammer'],
+                    value: 'Attack,Founding,Warhammer',
                   },
                 ],
               }
