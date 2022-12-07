@@ -15,21 +15,21 @@
 package provisioning
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/matryer/is"
+	"github.com/rs/zerolog"
 )
 
 func TestParser_Success(t *testing.T) {
 	is := is.New(t)
 	parser := NewParser(log.Nop())
 	filename, err := filepath.Abs("./test/pipelines1-success.yml")
-	if err != nil {
-		t.Error(err)
-	}
+	is.NoErr(err)
 	intPtr := func(i int) *int { return &i }
 	want := map[string]PipelineConfig{
 		"pipeline1": {
@@ -106,13 +106,34 @@ func TestParser_Success(t *testing.T) {
 	}
 
 	data, err := os.ReadFile(filename)
-	if err != nil {
-		t.Error(err)
-	}
+	is.NoErr(err)
 
 	got, err := parser.Parse(data)
 	is.NoErr(err)
 	is.Equal(want, got)
+}
+
+func TestParser_Warnings(t *testing.T) {
+	is := is.New(t)
+	var out bytes.Buffer
+	logger := log.New(zerolog.New(&out))
+	parser := NewParser(logger)
+
+	filename, err := filepath.Abs("./test/pipelines1-success.yml")
+	is.NoErr(err)
+	data, err := os.ReadFile(filename)
+	is.NoErr(err)
+	_, err = parser.Parse(data)
+	is.NoErr(err)
+
+	// check warnings
+	want := `{"level":"warn","component":"provisioning.Parser","line":5,"column":5,"message":"field unknownField not found in type provisioning.PipelineConfig"}
+{"level":"warn","component":"provisioning.Parser","line":31,"column":15,"field":"dead-letter-queue","value":"my-plugin","message":"field dead-letter-queue was introduced in version 1.1, please update the pipeline config version"}
+{"level":"warn","component":"provisioning.Parser","line":33,"column":14,"field":"dead-letter-queue","value":"bar","message":"field dead-letter-queue was introduced in version 1.1, please update the pipeline config version"}
+{"level":"warn","component":"provisioning.Parser","line":34,"column":20,"field":"dead-letter-queue","value":"4","message":"field dead-letter-queue was introduced in version 1.1, please update the pipeline config version"}
+{"level":"warn","component":"provisioning.Parser","line":35,"column":30,"field":"dead-letter-queue","value":"2","message":"field dead-letter-queue was introduced in version 1.1, please update the pipeline config version"}
+`
+	is.Equal(want, out.String())
 }
 
 func TestParser_DuplicatePipelineId(t *testing.T) {
