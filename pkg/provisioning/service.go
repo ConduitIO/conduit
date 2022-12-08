@@ -116,7 +116,7 @@ func (s *Service) provisionConfigFile(ctx context.Context, path string, alreadyP
 		return nil, nil, cerrors.Errorf("could not read the file %q: %w", path, err)
 	}
 
-	before, err := s.parser.Parse(data)
+	before, err := s.parser.Parse(ctx, path, data)
 	if err != nil {
 		return nil, nil, cerrors.Errorf("could not parse the file %q: %w", path, err)
 	}

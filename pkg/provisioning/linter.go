@@ -93,13 +93,16 @@ func (cl *configLinter) addWarning(field string, node *yaml.Node, message string
 	})
 }
 
-func (cl *configLinter) LogWarnings(ctx context.Context, logger log.CtxLogger) {
+func (cl *configLinter) LogWarnings(ctx context.Context, logger log.CtxLogger, path string) {
 	for _, w := range cl.warnings {
-		logger.Warn(ctx).
+		e := logger.Warn(ctx).
 			Int("line", w.line).
 			Int("column", w.column).
 			Str("field", w.field).
-			Str("value", w.value).
-			Msg(w.message)
+			Str("value", w.value)
+		if path != "" {
+			e.Str("path", path)
+		}
+		e.Msg(w.message)
 	}
 }

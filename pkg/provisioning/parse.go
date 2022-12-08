@@ -69,9 +69,7 @@ func NewParser(logger log.CtxLogger) *Parser {
 	}
 }
 
-func (p *Parser) Parse(data []byte) (map[string]PipelineConfig, error) {
-	ctx := context.TODO() // TODO get context from service
-
+func (p *Parser) Parse(ctx context.Context, path string, data []byte) (map[string]PipelineConfig, error) {
 	// replace environment variables with their values
 	data = []byte(os.ExpandEnv(string(data)))
 	dec := yaml.NewDecoder(bytes.NewReader(data))
@@ -91,14 +89,14 @@ func (p *Parser) Parse(data []byte) (map[string]PipelineConfig, error) {
 			// check if it's a type error (document was partially decoded)
 			var typeErr *yaml.TypeError
 			if cerrors.As(err, &typeErr) {
-				err = p.handleYamlTypeError(ctx, typeErr)
+				err = p.handleYamlTypeError(ctx, path, typeErr)
 			}
 			// check if we recovered from the error
 			if err != nil {
 				return nil, cerrors.Errorf("parsing error: %w", err)
 			}
 		}
-		linter.LogWarnings(ctx, p.logger)
+		linter.LogWarnings(ctx, p.logger, path)
 		docs = append(docs, doc)
 	}
 
@@ -114,7 +112,7 @@ func (p *Parser) Parse(data []byte) (map[string]PipelineConfig, error) {
 	return merged, nil
 }
 
-func (p *Parser) handleYamlTypeError(ctx context.Context, typeErr *yaml.TypeError) error {
+func (p *Parser) handleYamlTypeError(ctx context.Context, path string, typeErr *yaml.TypeError) error {
 	for _, uerr := range typeErr.Errors {
 		if _, ok := uerr.(*yaml.UnknownFieldError); !ok {
 			// we don't tolerate any other error except unknown field
@@ -123,10 +121,13 @@ func (p *Parser) handleYamlTypeError(ctx context.Context, typeErr *yaml.TypeErro
 	}
 	// only UnknownFieldErrors found, log them
 	for _, uerr := range typeErr.Errors {
-		p.logger.Warn(ctx).
+		e := p.logger.Warn(ctx).
 			Int("line", uerr.Line()).
-			Int("column", uerr.Column()).
-			Msg(uerr.Error())
+			Int("column", uerr.Column())
+		if path != "" {
+			e.Str("path", path)
+		}
+		e.Msg(uerr.Error())
 	}
 	return nil
 }

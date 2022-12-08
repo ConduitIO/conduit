@@ -16,8 +16,8 @@ package provisioning
 
 import (
 	"bytes"
+	"context"
 	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -28,8 +28,7 @@ import (
 func TestParser_Success(t *testing.T) {
 	is := is.New(t)
 	parser := NewParser(log.Nop())
-	filename, err := filepath.Abs("./test/pipelines1-success.yml")
-	is.NoErr(err)
+	filepath := "./test/pipelines1-success.yml"
 	intPtr := func(i int) *int { return &i }
 	want := map[string]PipelineConfig{
 		"pipeline1": {
@@ -105,10 +104,10 @@ func TestParser_Success(t *testing.T) {
 		},
 	}
 
-	data, err := os.ReadFile(filename)
+	data, err := os.ReadFile(filepath)
 	is.NoErr(err)
 
-	got, err := parser.Parse(data)
+	got, err := parser.Parse(context.Background(), filepath, data)
 	is.NoErr(err)
 	is.Equal(want, got)
 }
@@ -119,19 +118,18 @@ func TestParser_Warnings(t *testing.T) {
 	logger := log.New(zerolog.New(&out))
 	parser := NewParser(logger)
 
-	filename, err := filepath.Abs("./test/pipelines1-success.yml")
+	filepath := "./test/pipelines1-success.yml"
+	data, err := os.ReadFile(filepath)
 	is.NoErr(err)
-	data, err := os.ReadFile(filename)
-	is.NoErr(err)
-	_, err = parser.Parse(data)
+	_, err = parser.Parse(context.Background(), filepath, data)
 	is.NoErr(err)
 
 	// check warnings
-	want := `{"level":"warn","component":"provisioning.Parser","line":5,"column":5,"message":"field unknownField not found in type provisioning.PipelineConfig"}
-{"level":"warn","component":"provisioning.Parser","line":31,"column":15,"field":"dead-letter-queue","value":"my-plugin","message":"field dead-letter-queue was introduced in version 1.1, please update the pipeline config version"}
-{"level":"warn","component":"provisioning.Parser","line":33,"column":14,"field":"dead-letter-queue","value":"bar","message":"field dead-letter-queue was introduced in version 1.1, please update the pipeline config version"}
-{"level":"warn","component":"provisioning.Parser","line":34,"column":20,"field":"dead-letter-queue","value":"4","message":"field dead-letter-queue was introduced in version 1.1, please update the pipeline config version"}
-{"level":"warn","component":"provisioning.Parser","line":35,"column":30,"field":"dead-letter-queue","value":"2","message":"field dead-letter-queue was introduced in version 1.1, please update the pipeline config version"}
+	want := `{"level":"warn","component":"provisioning.Parser","line":5,"column":5,"path":"./test/pipelines1-success.yml","message":"field unknownField not found in type provisioning.PipelineConfig"}
+{"level":"warn","component":"provisioning.Parser","line":31,"column":15,"field":"dead-letter-queue","value":"my-plugin","path":"./test/pipelines1-success.yml","message":"field dead-letter-queue was introduced in version 1.1, please update the pipeline config version"}
+{"level":"warn","component":"provisioning.Parser","line":33,"column":14,"field":"dead-letter-queue","value":"bar","path":"./test/pipelines1-success.yml","message":"field dead-letter-queue was introduced in version 1.1, please update the pipeline config version"}
+{"level":"warn","component":"provisioning.Parser","line":34,"column":20,"field":"dead-letter-queue","value":"4","path":"./test/pipelines1-success.yml","message":"field dead-letter-queue was introduced in version 1.1, please update the pipeline config version"}
+{"level":"warn","component":"provisioning.Parser","line":35,"column":30,"field":"dead-letter-queue","value":"2","path":"./test/pipelines1-success.yml","message":"field dead-letter-queue was introduced in version 1.1, please update the pipeline config version"}
 `
 	is.Equal(want, out.String())
 }
@@ -139,17 +137,14 @@ func TestParser_Warnings(t *testing.T) {
 func TestParser_DuplicatePipelineId(t *testing.T) {
 	is := is.New(t)
 	parser := NewParser(log.Nop())
-	filename, err := filepath.Abs("./test/pipelines2-duplicate-pipeline-id.yml")
+	filepath := "./test/pipelines2-duplicate-pipeline-id.yml"
+
+	data, err := os.ReadFile(filepath)
 	if err != nil {
 		t.Error(err)
 	}
 
-	data, err := os.ReadFile(filename)
-	if err != nil {
-		t.Error(err)
-	}
-
-	p, err := parser.Parse(data)
+	p, err := parser.Parse(context.Background(), filepath, data)
 	is.True(err != nil)
 	is.Equal(p, nil)
 }
@@ -157,17 +152,14 @@ func TestParser_DuplicatePipelineId(t *testing.T) {
 func TestParser_EmptyFile(t *testing.T) {
 	is := is.New(t)
 	parser := NewParser(log.Nop())
-	filename, err := filepath.Abs("./test/pipelines5-empty.yml")
+	filepath := "./test/pipelines5-empty.yml"
+
+	data, err := os.ReadFile(filepath)
 	if err != nil {
 		t.Error(err)
 	}
 
-	data, err := os.ReadFile(filename)
-	if err != nil {
-		t.Error(err)
-	}
-
-	p, err := parser.Parse(data)
+	p, err := parser.Parse(context.Background(), filepath, data)
 	is.NoErr(err)
 	is.Equal(p, nil)
 }
@@ -175,17 +167,14 @@ func TestParser_EmptyFile(t *testing.T) {
 func TestParser_InvalidYaml(t *testing.T) {
 	is := is.New(t)
 	parser := NewParser(log.Nop())
-	filename, err := filepath.Abs("./test/pipelines6-invalid-yaml.yml")
+	filepath := "./test/pipelines6-invalid-yaml.yml"
+
+	data, err := os.ReadFile(filepath)
 	if err != nil {
 		t.Error(err)
 	}
 
-	data, err := os.ReadFile(filename)
-	if err != nil {
-		t.Error(err)
-	}
-
-	p, err := parser.Parse(data)
+	p, err := parser.Parse(context.Background(), filepath, data)
 	is.True(err != nil)
 	is.Equal(p, nil)
 }
@@ -193,13 +182,10 @@ func TestParser_InvalidYaml(t *testing.T) {
 func TestParser_EnvVars(t *testing.T) {
 	is := is.New(t)
 	parser := NewParser(log.Nop())
-	filename, err := filepath.Abs("./test/pipelines7-env-vars.yml")
-	if err != nil {
-		t.Error(err)
-	}
+	filepath := "./test/pipelines7-env-vars.yml"
 
 	// set env variables
-	err = os.Setenv("TEST_PARSER_AWS_SECRET", "my-aws-secret")
+	err := os.Setenv("TEST_PARSER_AWS_SECRET", "my-aws-secret")
 	if err != nil {
 		t.Fatalf("Failed to write env var: $TEST_PARSER_AWS_SECRET")
 	}
@@ -233,12 +219,12 @@ func TestParser_EnvVars(t *testing.T) {
 		},
 	}
 
-	data, err := os.ReadFile(filename)
+	data, err := os.ReadFile(filepath)
 	if err != nil {
 		t.Error(err)
 	}
 
-	got, err := parser.Parse(data)
+	got, err := parser.Parse(context.Background(), filepath, data)
 	is.NoErr(err)
 	is.Equal(want, got)
 }
