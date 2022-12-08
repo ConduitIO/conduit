@@ -43,6 +43,11 @@ func main() {
 	os.Exit(exitcode)
 }
 
+// checkPipeline returns an exit code depending on the pipeline runtime status.
+// error is returned when an unexpected error is encountered.
+// * missing or invalid flags
+// * gRPC connection failures
+// * operation takes too long to execute
 func checkPipeline(ctx context.Context) (int, error) {
 	flags := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 	var (
@@ -67,7 +72,7 @@ func checkPipeline(ctx context.Context) (int, error) {
 
 	c, err := grpc.DialContext(dialCtx, *grpcAddress, opts...)
 	if err != nil {
-		return exitCodeErr, fmt.Errorf("failed to connect to conduit grpc server: %v", err)
+		return exitCodeErr, fmt.Errorf("failed to connect to conduit grpc server: %w", err)
 	}
 	defer c.Close()
 
@@ -78,7 +83,7 @@ func checkPipeline(ctx context.Context) (int, error) {
 			Id: *pipelineName,
 		})
 	if err != nil {
-		return exitCodeErr, fmt.Errorf("failed to find pipeline %q: %v", *pipelineName, err)
+		return exitCodeErr, fmt.Errorf("failed to find pipeline %q: %w", *pipelineName, err)
 	}
 
 	switch p.Pipeline.State.Status {
