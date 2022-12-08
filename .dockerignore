@@ -1,0 +1,13 @@
+.git
+.github
+.gitignore
+.golangci.goheader.template
+.golangci.yml
+.goreleaser.yml
+CONTRIBUTING.md
+LICENSE.md
+README.md
+conduit.db
+docs
+examples
+githooks
