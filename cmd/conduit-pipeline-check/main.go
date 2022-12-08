@@ -28,39 +28,37 @@ import (
 )
 
 const (
-	exitCodeOk = iota
-	exitCodeErr
-	exitCodeInterrupt
+	exitCodeErr       = 1
+	exitCodeInterrupt = 2
 )
 
 func main() {
 	ctx := cancelOnInterrupt(context.Background())
 
-	exitcode, err := checkPipeline(ctx)
-	if err != nil {
+	if err := checkPipeline(ctx); err != nil {
 		fmt.Fprintln(os.Stderr, err)
+		os.Exit(exitCodeErr)
 	}
-	os.Exit(exitcode)
 }
 
-// checkPipeline returns an exit code depending on the pipeline runtime status.
+// checkPipeline checks the pipeline running status.
 // error is returned when an unexpected error is encountered.
 // * missing or invalid flags
 // * gRPC connection failures
 // * operation takes too long to execute
-func checkPipeline(ctx context.Context) (int, error) {
+func checkPipeline(ctx context.Context) error {
 	flags := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 	var (
 		grpcAddress  = flags.String("grpc.address", ":8084", "address of the Conduit server gRPC API")
 		pipelineName = flags.String("pipeline.name", "", "name of the target pipeline")
 		timeout      = flags.Duration("timeout", 10*time.Second, "timeout duration")
-		verbose      = flags.Bool("verbose", false, "return non-zero code on failure instead of logging")
+		verbose      = flags.Bool("verbose", false, "print additional information during execution")
 	)
 
 	_ = flags.Parse(os.Args[1:])
 
 	if pipelineName == nil || *pipelineName == "" {
-		return exitCodeErr, fmt.Errorf("pipeline.name is not set")
+		return fmt.Errorf("pipeline.name is not set")
 	}
 
 	opts := []grpc.DialOption{
@@ -72,7 +70,7 @@ func checkPipeline(ctx context.Context) (int, error) {
 
 	c, err := grpc.DialContext(dialCtx, *grpcAddress, opts...)
 	if err != nil {
-		return exitCodeErr, fmt.Errorf("failed to connect to conduit grpc server: %w", err)
+		return fmt.Errorf("failed to connect to conduit grpc server: %w", err)
 	}
 	defer c.Close()
 
@@ -83,7 +81,7 @@ func checkPipeline(ctx context.Context) (int, error) {
 			Id: *pipelineName,
 		})
 	if err != nil {
-		return exitCodeErr, fmt.Errorf("failed to find pipeline %q: %w", *pipelineName, err)
+		return fmt.Errorf("failed to find pipeline %q: %w", *pipelineName, err)
 	}
 
 	switch p.Pipeline.State.Status {
@@ -92,12 +90,12 @@ func checkPipeline(ctx context.Context) (int, error) {
 			fmt.Printf("pipeline %q is running", *pipelineName)
 		}
 		// success
-		return exitCodeOk, nil
+		return nil
 	default:
 		if *verbose {
 			fmt.Printf("pipeline %q is not running: %v", *pipelineName, p.Pipeline.State.Status)
 		}
-		return exitCodeErr, nil
+		return nil
 	}
 }
 
