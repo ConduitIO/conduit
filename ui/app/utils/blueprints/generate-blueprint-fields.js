@@ -34,7 +34,7 @@ const ConfigValidationMap = {
   TYPE_EXCLUSION: function (value = '') {
     const options = {
       list: value.split(','),
-      message: '{key} cannot be any of ({list})',
+      message: '{description} cannot be any of ({list})',
     };
     return validateExclusion(options);
   },
