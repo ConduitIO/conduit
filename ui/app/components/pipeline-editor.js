@@ -42,6 +42,9 @@ export default class PipelineEditorComponent extends Component {
   pipelineNodeManager;
 
   @service
+  websockets;
+
+  @service
   store;
 
   @tracked
@@ -61,11 +64,15 @@ export default class PipelineEditorComponent extends Component {
 
   @tracked
   isShowingDeleteConnectorModal = false;
+
   @tracked
   isShowingConfirmPlayModal = false;
 
   @tracked
   isShowingConfirmPauseModal = false;
+
+  @tracked
+  isShowingStreamInspector = false;
 
   @tracked
   wrappedConnectors = A([]);

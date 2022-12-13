@@ -26,4 +26,5 @@ EXPOSE 8080/tcp
 EXPOSE 8084/tcp
 WORKDIR /app
 COPY --from=base /app/conduit /app
+COPY --from=base /app/conduit-pipeline-check /app
 CMD ["/app/conduit"]
