@@ -141,6 +141,55 @@ module(
           });
         }
       );
+
+      module(
+        'with an int type, no inclusion validation, and both a greater than and less than validation',
+        function (hooks) {
+          hooks.beforeEach(async function () {
+            const field = generateBlankBlueprintField(
+              'titan:height',
+              'Titan Height',
+              'Enter Titan Height',
+              'TYPE_INT',
+              {
+                isRequired: true,
+                validations: [
+                  {
+                    type: 'TYPE_LESS_THAN',
+                    value: '10',
+                  },
+
+                  {
+                    type: 'TYPE_GREATER_THAN',
+                    value: '0',
+                  },
+                ],
+              }
+            );
+            this.field = field;
+            this.setInputValue = (changeset, event) => {
+              changeset.value = event.target.value;
+            };
+
+            await render(
+              hbs`<PipelineEditor::ConfigField @field={{this.field}} @setInputValue={{this.setInputValue}} />`
+            );
+          });
+
+          test('it consolidates the validation error', async function (assert) {
+            await fillIn('input', '20');
+            assert.dom('input').hasClass('bg-orange-100');
+            assert.dom('[data-test-config-field-error]').exists({ count: 1 });
+            assert
+              .dom('[data-test-config-field-error]')
+              .containsText('less than 10');
+
+            await fillIn('input', '');
+            assert.dom('input').hasClass('bg-orange-100');
+            assert.dom('[data-test-config-field-error]').exists({ count: 2 });
+          });
+        }
+      );
     });
 
     module('boolean input', function () {

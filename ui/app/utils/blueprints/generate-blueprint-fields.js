@@ -49,6 +49,16 @@ const ConfigValidationMap = {
 
     return validateFormat(options);
   },
+
+  TYPE_NUMBER: function (value, fieldType, isRequired) {
+    const parseFn = fieldType === 'TYPE_INT' ? parseInt : parseFloat;
+    const options = Object.assign(
+      { allowBlank: !isRequired },
+      { gt: parseFn(value.gt), lt: parseFn(value.lt) }
+    );
+
+    return validateNumber(options);
+  },
 };
 
 export default function generateBlueprintFields(blueprint, configurable) {
@@ -82,6 +92,20 @@ export default function generateBlueprintFields(blueprint, configurable) {
 }
 
 function generateConfigValidations(fieldValidations, fieldType, isRequired) {
+  const gt = fieldValidations.findBy('type', 'TYPE_GREATER_THAN');
+  const lt = fieldValidations.findBy('type', 'TYPE_LESS_THAN');
+
+  // Consolidate special case where both gt + lt are present into TYPE_NUMBER
+  if (!!gt && !!lt) {
+    fieldValidations = fieldValidations.reject((fv) => {
+      return fv.type === 'TYPE_GREATER_THAN' || fv.type === 'TYPE_LESS_THAN';
+    });
+
+    fieldValidations.pushObject({
+      type: 'TYPE_NUMBER',
+      value: { gt: gt.value, lt: lt.value },
+    });
+  }
   const validations = fieldValidations.map((validation) => {
     return ConfigValidationMap[validation.type](
       validation.value,
