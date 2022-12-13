@@ -11,8 +11,8 @@ pipelines:
         plugin: builtin:s3
         name: s3-source
         settings:
-            aws.region: us-east-1
-            aws.bucket: my-bucket
+          aws.region: us-east-1
+          aws.bucket: my-bucket
         processors:
           proc1:
             type: js
@@ -25,6 +25,12 @@ pipelines:
         settings:
           additionalProp1: string
           additionalProp2: string
+    dead-letter-queue:
+      plugin: my-plugin
+      settings:
+        foo: bar
+      window-size: 4
+      window-nack-threshold: 2
 
 ---
 version: 1.0

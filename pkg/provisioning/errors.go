@@ -17,7 +17,6 @@ package provisioning
 import "github.com/conduitio/conduit/pkg/foundation/cerrors"
 
 var (
-	ErrUnsupportedVersion   = cerrors.New("unsupported parser version")
 	ErrMandatoryField       = cerrors.New("mandatory field not specified")
 	ErrInvalidField         = cerrors.New("invalid field value")
 	ErrDuplicatedPipelineID = cerrors.New("duplicated pipeline ID")

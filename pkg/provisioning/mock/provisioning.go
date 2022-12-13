@@ -183,6 +183,21 @@ func (mr *PipelineServiceMockRecorder) Stop(arg0, arg1 interface{}) *gomock.Call
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*PipelineService)(nil).Stop), arg0, arg1)
 }
 
+// UpdateDLQ mocks base method.
+func (m *PipelineService) UpdateDLQ(arg0 context.Context, arg1 string, arg2 pipeline.DLQ) (*pipeline.Instance, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateDLQ", arg0, arg1, arg2)
+	ret0, _ := ret[0].(*pipeline.Instance)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateDLQ indicates an expected call of UpdateDLQ.
+func (mr *PipelineServiceMockRecorder) UpdateDLQ(arg0, arg1, arg2 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDLQ", reflect.TypeOf((*PipelineService)(nil).UpdateDLQ), arg0, arg1, arg2)
+}
+
 // ConnectorService is a mock of ConnectorService interface.
 type ConnectorService struct {
 	ctrl     *gomock.Controller
