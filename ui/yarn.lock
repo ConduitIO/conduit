@@ -9009,9 +9009,10 @@ mute-stream@0.0.8:
   resolved "https://registry.yarnpkg.com/mute-stream/-/mute-stream-0.0.8.tgz#1630c42b2251ff81e2a283de96a5497ea92e5e0d"
   integrity sha512-nnbWWOkoWyUsTjKrhgD0dcz22mdkSnpYqbEjIm2nhwhuxlSkpywJmBo8h0ZqJdkp73mb90SssHkN4rsRaBAfAA==
 
-"mx-ui-components@https://github.com/ConduitIO/mx-ui-components.git#v1.9.1":
-  version "1.9.1"
-  resolved "https://github.com/ConduitIO/mx-ui-components.git#c014da956208b0197eb6cf4257f8ce86ca606d40"
+"mx-ui-components@https://github.com/ConduitIO/mx-ui-components.git#v1.9.3":
+  version "1.9.3"
+  uid "4459065fa51d39ba75e87bac62be70fd0aab13c0"
+  resolved "https://github.com/ConduitIO/mx-ui-components.git#4459065fa51d39ba75e87bac62be70fd0aab13c0"
   dependencies:
     ember-cli-babel "^7.26.10"
     ember-cli-htmlbars "^5.7.2"
