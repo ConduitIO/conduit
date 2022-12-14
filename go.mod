@@ -31,7 +31,7 @@ require (
 	github.com/piotrkowalczuk/promgrpc/v4 v4.0.4
 	github.com/prometheus/client_golang v1.14.0
 	github.com/prometheus/client_model v0.3.0
-	github.com/prometheus/common v0.38.0
+	github.com/prometheus/common v0.39.0
 	github.com/rs/zerolog v1.28.0
 	github.com/tmc/grpc-websocket-proxy v0.0.0-20220101234140-673ab2c3ae75
 	go.buf.build/grpc/go/conduitio/conduit-connector-protocol v1.4.5
@@ -102,7 +102,7 @@ require (
 	github.com/lann/ps v0.0.0-20150810152359-62de8c46ede0 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.16 // indirect
-	github.com/matttproud/golang_protobuf_extensions v1.0.2 // indirect
+	github.com/matttproud/golang_protobuf_extensions v1.0.4 // indirect
 	github.com/mitchellh/go-testing-interface v1.14.1 // indirect
 	github.com/nxadm/tail v1.4.8 // indirect
 	github.com/oklog/run v1.1.0 // indirect
@@ -120,7 +120,7 @@ require (
 	go.uber.org/multierr v1.8.0 // indirect
 	golang.org/x/crypto v0.1.0 // indirect
 	golang.org/x/mod v0.7.0 // indirect
-	golang.org/x/net v0.3.0 // indirect
+	golang.org/x/net v0.4.0 // indirect
 	golang.org/x/sys v0.3.0 // indirect
 	golang.org/x/text v0.5.0 // indirect
 	golang.org/x/time v0.2.0 // indirect
