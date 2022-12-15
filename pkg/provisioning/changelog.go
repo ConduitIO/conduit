@@ -56,10 +56,10 @@ const (
 var expandedChangelog map[string]map[string]interface{}
 
 func init() {
-	expandedChangelog = expand(changelog)
+	expandedChangelog = expandChangelog(changelog)
 }
 
-func expand(changelog map[string][]change) map[string]map[string]interface{} {
+func expandChangelog(changelog map[string][]change) map[string]map[string]interface{} {
 	var versions semver.Collection
 	for k := range changelog {
 		versions = append(versions, semver.MustParse(k))
