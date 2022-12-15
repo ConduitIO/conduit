@@ -102,6 +102,11 @@ func (s *Service) Create(ctx context.Context, id string, t Type, cfg Config) (Co
 		return nil, cerrors.Errorf("could not init connector: %w", err)
 	}
 
+	err = conn.Validate(ctx, conn.Config().Settings)
+	if err != nil {
+		return nil, cerrors.Errorf("connector invalid: %w", err)
+	}
+
 	// persist instance
 	err = s.store.Set(ctx, id, conn)
 	if err != nil {

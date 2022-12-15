@@ -34,7 +34,7 @@ func TestConfigStore_SetGet(t *testing.T) {
 	logger := log.Nop()
 	db := &inmemory.DB{}
 	ctrl := gomock.NewController(t)
-	connBuilder := mock.Builder{Ctrl: ctrl}
+	connBuilder := mock.Builder{Ctrl: ctrl, SkipValidate: true}
 
 	s := connector.NewStore(db, logger, connBuilder)
 
@@ -53,7 +53,7 @@ func TestConfigStore_GetAll(t *testing.T) {
 	logger := log.Nop()
 	db := &inmemory.DB{}
 	ctrl := gomock.NewController(t)
-	connBuilder := mock.Builder{Ctrl: ctrl}
+	connBuilder := mock.Builder{Ctrl: ctrl, SkipValidate: true}
 
 	s := connector.NewStore(db, logger, connBuilder)
 

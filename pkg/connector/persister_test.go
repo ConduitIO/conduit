@@ -210,7 +210,7 @@ func initPersisterTest(
 ) (*connector.Persister, *connector.Store, mock.Builder) {
 	logger := log.New(zerolog.Nop())
 	db := &inmemory.DB{}
-	builder := mock.Builder{Ctrl: ctrl}
+	builder := mock.Builder{Ctrl: ctrl, SkipValidate: true}
 
 	persister := connector.NewPersister(logger, db, delayThreshold, bundleCountThreshold)
 	return persister, connector.NewStore(db, logger, builder), builder
