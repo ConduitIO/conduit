@@ -71,6 +71,12 @@ func expandChangelog(changelog map[string][]change) map[string]map[string]interf
 		knownChanges[v.Original()] = make(map[string]interface{})
 	}
 
+	// addChange stores change c in map m by splitting c.field into multiple
+	// tokens and storing it in m[token1][token2][...][tokenN]. If any map in
+	// that hierarchy does not exist it is created. If any value in that
+	// hierarchy exists and is _not_ a map it is _not_ replaced. This means that
+	// changes related to parent fields take precedence over changes related to
+	// child fields.
 	addChange := func(c change, m map[string]interface{}) {
 		tokens := strings.Split(c.field, ".")
 		curMap := m
@@ -99,12 +105,14 @@ func expandChangelog(changelog map[string][]change) map[string]map[string]interf
 		for _, v2 := range versions {
 			switch {
 			case !v.GreaterThan(v2):
+				// warn about deprecated fields in future versions
 				for _, c := range changes {
 					if c.changeType == fieldDeprecated {
 						addChange(c, knownChanges[v2.Original()])
 					}
 				}
 			case v.GreaterThan(v2):
+				// warn about introduced fields in older versions
 				for _, c := range changes {
 					if c.changeType == fieldIntroduced {
 						addChange(c, knownChanges[v2.Original()])
