@@ -46,6 +46,7 @@ proto-lint:
 
 clean:
 	@rm -f conduit
+	@rm -f conduit-pipeline-check
 	@rm -rf pkg/web/ui/dist
 
 download:
