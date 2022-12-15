@@ -24,6 +24,7 @@ type Builder struct {
 	Ctrl             *gomock.Controller
 	SetupSource      func(source *Source)
 	SetupDestination func(source *Destination)
+	SkipValidate     bool
 }
 
 func (b Builder) Build(t connector.Type) (connector.Connector, error) {
@@ -44,6 +45,9 @@ func (b Builder) Init(c connector.Connector, id string, cfg connector.Config) er
 		m.EXPECT().Type().Return(connector.TypeSource).AnyTimes()
 		m.EXPECT().ID().Return(id).AnyTimes()
 		m.EXPECT().Config().Return(cfg).AnyTimes()
+		if !b.SkipValidate {
+			m.EXPECT().Validate(gomock.Any(), cfg.Settings).Return(nil)
+		}
 		if b.SetupSource != nil {
 			b.SetupSource(m)
 		}
@@ -53,6 +57,9 @@ func (b Builder) Init(c connector.Connector, id string, cfg connector.Config) er
 		m.EXPECT().Type().Return(connector.TypeDestination).AnyTimes()
 		m.EXPECT().ID().Return(id).AnyTimes()
 		m.EXPECT().Config().Return(cfg).AnyTimes()
+		if !b.SkipValidate {
+			m.EXPECT().Validate(gomock.Any(), cfg.Settings).Return(nil)
+		}
 		if b.SetupDestination != nil {
 			b.SetupDestination(m)
 		}

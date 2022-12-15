@@ -56,6 +56,7 @@ func TestService_Init_Success(t *testing.T) {
 
 	want := service.List(ctx)
 
+	connBuilder.SkipValidate = true // in init we don't want the connector to be validated
 	// create a new connector service and initialize it
 	service = connector.NewService(logger, db, connBuilder)
 	err = service.Init(ctx)

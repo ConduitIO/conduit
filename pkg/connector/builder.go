@@ -15,7 +15,6 @@
 package connector
 
 import (
-	"context"
 	"time"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -101,5 +100,5 @@ func (b *DefaultBuilder) Init(c Connector, id string, config Config) error {
 		return ErrInvalidConnectorType
 	}
 
-	return c.Validate(context.Background(), c.Config().Settings)
+	return nil
 }
