@@ -52,19 +52,19 @@ func (w *inMemoryResponseWriter) CloseNotify() <-chan bool {
 }
 func (w *inMemoryResponseWriter) Flush() {}
 
-// wsProxy is a proxy around a http.Handler which
+// webSocketProxy is a proxy around a http.Handler which
 // redirects the response data from the http.Handler
 // to a WebSocket connection.
-type wsProxy struct {
+type webSocketProxy struct {
 	handler  http.Handler
 	logger   log.CtxLogger
 	upgrader websocket.Upgrader
 }
 
-func newWebSocketProxy(handler http.Handler, logger log.CtxLogger) *wsProxy {
-	return &wsProxy{
+func newWebSocketProxy(handler http.Handler, logger log.CtxLogger) *webSocketProxy {
+	return &webSocketProxy{
 		handler: handler,
-		logger:  logger.WithComponent("grpcutil.websocket"),
+		logger:  logger.WithComponent("grpcutil.webSocketProxy"),
 		upgrader: websocket.Upgrader{
 			ReadBufferSize:  1024,
 			WriteBufferSize: 1024,
@@ -72,7 +72,7 @@ func newWebSocketProxy(handler http.Handler, logger log.CtxLogger) *wsProxy {
 	}
 }
 
-func (p *wsProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (p *webSocketProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !websocket.IsWebSocketUpgrade(r) {
 		p.handler.ServeHTTP(w, r)
 		return
@@ -80,7 +80,7 @@ func (p *wsProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	p.proxy(w, r)
 }
 
-func (p *wsProxy) proxy(w http.ResponseWriter, r *http.Request) {
+func (p *webSocketProxy) proxy(w http.ResponseWriter, r *http.Request) {
 	ctx, cancelFn := context.WithCancel(r.Context())
 	defer cancelFn()
 
