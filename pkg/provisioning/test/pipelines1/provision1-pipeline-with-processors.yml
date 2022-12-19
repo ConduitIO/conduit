@@ -27,3 +27,6 @@ pipelines:
         type: js
         settings:
           additionalProp1: string
+    dead-letter-queue:
+      window-size: 20
+      window-nack-threshold: 10

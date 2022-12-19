@@ -33,6 +33,14 @@ var hclogZerologLevelMapping = map[hclog.Level]zerolog.Level{
 	hclog.Warn:    zerolog.WarnLevel,
 	hclog.Error:   zerolog.ErrorLevel,
 }
+var zerologHclogLevelMapping = func() map[zerolog.Level]hclog.Level {
+	// reverse hclog->zerolog level mapping
+	m := make(map[zerolog.Level]hclog.Level, len(hclogZerologLevelMapping))
+	for k, v := range hclogZerologLevelMapping {
+		m[v] = k
+	}
+	return m
+}()
 
 type hcLogger struct {
 	name   string
@@ -120,6 +128,11 @@ func (h *hcLogger) ResetNamed(name string) hclog.Logger {
 func (h *hcLogger) SetLevel(level hclog.Level) {
 	zlevel := hclogZerologLevelMapping[level]
 	h.logger = h.logger.Level(zlevel)
+}
+
+func (h *hcLogger) GetLevel() hclog.Level {
+	level := h.logger.GetLevel()
+	return zerologHclogLevelMapping[level]
 }
 
 func (h *hcLogger) StandardLogger(opts *hclog.StandardLoggerOptions) *stdlog.Logger {

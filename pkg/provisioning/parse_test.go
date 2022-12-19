@@ -19,7 +19,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/matryer/is"
 )
 
@@ -29,6 +28,7 @@ func TestParser_Success(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
+	intPtr := func(i int) *int { return &i }
 	want := map[string]PipelineConfig{
 		"pipeline1": {
 			Status:      "running",
@@ -62,6 +62,14 @@ func TestParser_Success(t *testing.T) {
 						},
 					},
 				},
+			},
+			DLQ: DLQConfig{
+				Plugin: "my-plugin",
+				Settings: map[string]string{
+					"foo": "bar",
+				},
+				WindowSize:          intPtr(4),
+				WindowNackThreshold: intPtr(2),
 			},
 		},
 		"pipeline2": {
@@ -119,42 +127,6 @@ func TestParser_DuplicatePipelineId(t *testing.T) {
 
 	p, err := Parse(data)
 	is.True(err != nil)
-	is.Equal(p, nil)
-}
-
-func TestParser_UnsupportedVersion(t *testing.T) {
-	is := is.New(t)
-	filename, err := filepath.Abs("./test/pipelines3-unsupported-version.yml")
-	if err != nil {
-		t.Error(err)
-	}
-
-	data, err := os.ReadFile(filename)
-	if err != nil {
-		t.Error(err)
-	}
-
-	p, err := Parse(data)
-	is.True(err != nil)
-	is.Equal(cerrors.Is(err, ErrUnsupportedVersion), true)
-	is.Equal(p, nil)
-}
-
-func TestParser_MissingVersion(t *testing.T) {
-	is := is.New(t)
-	filename, err := filepath.Abs("./test/pipelines4-missing-version.yml")
-	if err != nil {
-		t.Error(err)
-	}
-
-	data, err := os.ReadFile(filename)
-	if err != nil {
-		t.Error(err)
-	}
-
-	p, err := Parse(data)
-	is.True(err != nil)
-	is.Equal(cerrors.Is(err, ErrUnsupportedVersion), true)
 	is.Equal(p, nil)
 }
 
@@ -224,7 +196,7 @@ func TestParser_EnvVars(t *testing.T) {
 					Plugin: "builtin:s3",
 					Name:   "s3-source",
 					Settings: map[string]string{
-						// env variables should be replaces with their values
+						// env variables should be replaced with their values
 						"aws.secret": "my-aws-secret",
 						"aws.key":    "my-aws-key",
 						"aws.url":    "my/aws-url/url",

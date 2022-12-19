@@ -28,6 +28,13 @@ func _() {
 	_ = vTypes[int(plugin.ValidationTypeInclusion)-int(apiv1.PluginSpecifications_Parameter_Validation_TYPE_INCLUSION)]
 	_ = vTypes[int(plugin.ValidationTypeExclusion)-int(apiv1.PluginSpecifications_Parameter_Validation_TYPE_EXCLUSION)]
 	_ = vTypes[int(plugin.ValidationTypeRegex)-int(apiv1.PluginSpecifications_Parameter_Validation_TYPE_REGEX)]
+
+	_ = vTypes[int(plugin.ParameterTypeString)-int(apiv1.PluginSpecifications_Parameter_TYPE_STRING)]
+	_ = vTypes[int(plugin.ParameterTypeInt)-int(apiv1.PluginSpecifications_Parameter_TYPE_INT)]
+	_ = vTypes[int(plugin.ParameterTypeFloat)-int(apiv1.PluginSpecifications_Parameter_TYPE_FLOAT)]
+	_ = vTypes[int(plugin.ParameterTypeFile)-int(apiv1.PluginSpecifications_Parameter_TYPE_FILE)]
+	_ = vTypes[int(plugin.ParameterTypeBool)-int(apiv1.PluginSpecifications_Parameter_TYPE_BOOL)]
+	_ = vTypes[int(plugin.ParameterTypeDuration)-int(apiv1.PluginSpecifications_Parameter_TYPE_DURATION)]
 }
 
 func Plugin(name string, in plugin.Specification) *apiv1.PluginSpecifications {
@@ -48,7 +55,7 @@ func PluginParamsMap(in map[string]plugin.Parameter) map[string]*apiv1.PluginSpe
 		out[k] = &apiv1.PluginSpecifications_Parameter{
 			Description: v.Description,
 			Default:     v.Default,
-			Type:        apiv1.PluginSpecifications_Parameter_TYPE_STRING,
+			Type:        apiv1.PluginSpecifications_Parameter_Type(v.Type),
 			Validations: PluginParamValidations(v.Validations),
 		}
 	}

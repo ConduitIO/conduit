@@ -57,6 +57,8 @@ type source struct {
 	// stopStream is a function that closes the context of the stream
 	stopStream context.CancelFunc
 
+	inspector *inspector.Inspector
+
 	// m can lock a source from concurrent access (e.g. in connector persister).
 	m sync.Mutex
 	// wg tracks the number of in flight calls to the plugin.
@@ -115,9 +117,8 @@ func (s *source) Errors() <-chan error {
 	return s.errs
 }
 
-func (s *source) Inspect(_ context.Context) *inspector.Session {
-	// TODO implement me
-	panic("implement me")
+func (s *source) Inspect(ctx context.Context) *inspector.Session {
+	return s.inspector.NewSession(ctx)
 }
 
 func (s *source) Validate(ctx context.Context, settings map[string]string) (err error) {
@@ -238,7 +239,6 @@ func (s *source) Read(ctx context.Context) (record.Record, error) {
 		return r, err
 	}
 
-	// TODO rethink if there's an actual benefit in setting these fields
 	if r.Key == nil {
 		r.Key = record.RawData{}
 	}
@@ -249,6 +249,13 @@ func (s *source) Read(ctx context.Context) (record.Record, error) {
 		r.Payload.After = record.RawData{}
 	}
 
+	if r.Metadata == nil {
+		r.Metadata = record.Metadata{}
+	}
+	// source connector ID is added to all records
+	r.Metadata.SetConduitSourceConnectorID(s.XID)
+
+	s.inspector.Send(ctx, r)
 	return r, nil
 }
 

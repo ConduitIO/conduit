@@ -17,3 +17,34 @@
     @apply bg-gray-800;
   }
 }
+
+/*! pretty-print-json v1.3.1 ~~ https://pretty-print-json.js.org ~~ MIT License */
+
+/* Layout */
+.json-container           { font-family: menlo, consolas, monospace; font-style: normal; line-height: 1.4em; transition: background-color 400ms; }
+a.json-link               { text-decoration: none; border-bottom: 1px solid; outline: none; }
+a.json-link:hover         { background-color: transparent; outline: none; }
+ol.json-lines             { white-space: normal; padding-inline-start: 3em; margin: 0px; }
+ol.json-lines >li         { white-space: pre; text-indent: 0.7em; line-height: 1.5em; padding: 0px; }
+ol.json-lines >li::marker { font-family: system-ui, sans-serif; font-weight: normal; }
+.json-key, .json-string, .json-number, .json-boolean, .json-null, .json-mark, a.json-link, ol.json-lines >li { transition: all 400ms; }
+
+/* Dark Mode */
+.json-key                         { color: indianred; }
+.json-string                      { color: darkkhaki; }
+.json-number                      { color: deepskyblue; }
+.json-boolean                     { color: mediumseagreen; }
+.json-null                        { color: darkorange; }
+.json-mark                        { color: silver; }
+a.json-link                       { color: mediumorchid; }
+a.json-link:visited               { color: slategray; }
+a.json-link:hover                 { color: violet; }
+a.json-link:active                { color: slategray; }
+ol.json-lines >li::marker         { color: silver; }
+ol.json-lines >li:nth-child(odd)  { background-color: #222222; }
+ol.json-lines >li:nth-child(even) { background-color: #161616; }
+ol.json-lines >li:hover           { background-color: dimgray; }
+
+.color-scheme-dark {
+  color-scheme: only dark;
+}

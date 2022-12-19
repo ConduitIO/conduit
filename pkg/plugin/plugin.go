@@ -149,7 +149,7 @@ type Parameter struct {
 	// Default is the default value of the parameter, if any.
 	Default string
 	// Type defines the parameter data type.
-	Type string
+	Type ParameterType
 	// Description holds a description of the field and how to configure it.
 	Description string
 	// Validations list of validations to check for the parameter.
@@ -170,6 +170,17 @@ const (
 	ValidationTypeInclusion
 	ValidationTypeExclusion
 	ValidationTypeRegex
+)
+
+type ParameterType int
+
+const (
+	ParameterTypeString ParameterType = iota + 1
+	ParameterTypeInt
+	ParameterTypeFloat
+	ParameterTypeBool
+	ParameterTypeFile
+	ParameterTypeDuration
 )
 
 const (

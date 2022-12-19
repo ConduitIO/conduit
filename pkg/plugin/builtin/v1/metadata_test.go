@@ -23,12 +23,14 @@ import (
 
 func TestMetadataConstants(t *testing.T) {
 	wantMapping := map[string]string{
-		record.OpenCDCVersion:               cpluginv1.OpenCDCVersion,
-		record.MetadataOpenCDCVersion:       cpluginv1.MetadataOpenCDCVersion,
-		record.MetadataCreatedAt:            cpluginv1.MetadataCreatedAt,
-		record.MetadataReadAt:               cpluginv1.MetadataReadAt,
-		record.MetadataConduitPluginName:    cpluginv1.MetadataConduitPluginName,
-		record.MetadataConduitPluginVersion: cpluginv1.MetadataConduitPluginVersion,
+		record.OpenCDCVersion:                          cpluginv1.OpenCDCVersion,
+		record.MetadataOpenCDCVersion:                  cpluginv1.MetadataOpenCDCVersion,
+		record.MetadataCreatedAt:                       cpluginv1.MetadataCreatedAt,
+		record.MetadataReadAt:                          cpluginv1.MetadataReadAt,
+		record.MetadataConduitSourcePluginName:         cpluginv1.MetadataConduitSourcePluginName,
+		record.MetadataConduitSourcePluginVersion:      cpluginv1.MetadataConduitSourcePluginVersion,
+		record.MetadataConduitDestinationPluginName:    cpluginv1.MetadataConduitDestinationPluginName,
+		record.MetadataConduitDestinationPluginVersion: cpluginv1.MetadataConduitDestinationPluginVersion,
 	}
 	for conduitConstant, cpluginv1Constant := range wantMapping {
 		if conduitConstant != cpluginv1Constant {

@@ -33,7 +33,6 @@ const (
 
 	testPluginSourceParam1            = "src.foo"
 	testPluginSourceParam1Default     = ""
-	testPluginSourceParam1Required    = true
 	testPluginSourceParam1Description = "Required parameter"
 	testPluginSourceParam2            = "src.bar"
 	testPluginSourceParam2Default     = "bar"
@@ -48,6 +47,12 @@ const (
 	testPluginDestinationParam2Default     = "bar"
 	testPluginDestinationParam2Required    = false
 	testPluginDestinationParam2Description = "Optional parameter"
+
+	testPluginValidationInclusionValue   = "one,two"
+	testPluginValidationExclusionValue   = "3,4"
+	testPluginValidationRegexValue       = "[1-9]"
+	testPluginValidationLessThanValue    = "10"
+	testPluginValidationGreaterThanValue = "1"
 )
 
 func main() {
@@ -73,13 +78,32 @@ func (s specifierPlugin) Specify(ctx context.Context, request cpluginv1.Specifie
 		SourceParams: map[string]cpluginv1.SpecifierParameter{
 			testPluginSourceParam1: {
 				Default:     testPluginSourceParam1Default,
-				Required:    testPluginSourceParam1Required,
 				Description: testPluginSourceParam1Description,
+				Validations: []cpluginv1.ParameterValidation{
+					{
+						Type: cpluginv1.ValidationTypeRequired,
+					},
+					{
+						Type:  cpluginv1.ValidationTypeInclusion,
+						Value: testPluginValidationInclusionValue,
+					},
+				},
 			},
 			testPluginSourceParam2: {
 				Default:     testPluginSourceParam2Default,
 				Required:    testPluginSourceParam2Required,
 				Description: testPluginSourceParam2Description,
+				Type:        cpluginv1.ParameterTypeInt,
+				Validations: []cpluginv1.ParameterValidation{
+					{
+						Type:  cpluginv1.ValidationTypeExclusion,
+						Value: testPluginValidationExclusionValue,
+					},
+					{
+						Type:  cpluginv1.ValidationTypeGreaterThan,
+						Value: testPluginValidationGreaterThanValue,
+					},
+				},
 			},
 		},
 		DestinationParams: map[string]cpluginv1.SpecifierParameter{
@@ -87,11 +111,23 @@ func (s specifierPlugin) Specify(ctx context.Context, request cpluginv1.Specifie
 				Default:     testPluginDestinationParam1Default,
 				Required:    testPluginDestinationParam1Required,
 				Description: testPluginDestinationParam1Description,
+				Type:        cpluginv1.ParameterTypeInt,
+				Validations: []cpluginv1.ParameterValidation{
+					{
+						Type:  cpluginv1.ValidationTypeLessThan,
+						Value: testPluginValidationLessThanValue,
+					},
+					{
+						Type:  cpluginv1.ValidationTypeRegex,
+						Value: testPluginValidationRegexValue,
+					},
+				},
 			},
 			testPluginDestinationParam2: {
 				Default:     testPluginDestinationParam2Default,
 				Required:    testPluginDestinationParam2Required,
 				Description: testPluginDestinationParam2Description,
+				Type:        cpluginv1.ParameterTypeDuration,
 			},
 		},
 	}, nil

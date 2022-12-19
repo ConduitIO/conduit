@@ -9,7 +9,7 @@ VERSION=`git describe --tags --dirty`
 GO_VERSION_CHECK=`./scripts/check-go-version.sh`
 
 # The build target should stay at the top since we want it to be the default target.
-build: check-go-version pkg/web/ui/dist
+build: check-go-version pkg/web/ui/dist build-pipeline-check
 	go build -ldflags "-X 'github.com/conduitio/conduit/pkg/conduit.version=${VERSION}'" -o conduit -tags ui ./cmd/conduit/main.go
 	@echo "\nBuild complete. Enjoy using Conduit!"
 	@echo "Get started by running:"
@@ -29,6 +29,9 @@ build-server: check-go-version
 	go build -ldflags "-X 'github.com/conduitio/conduit/pkg/conduit.version=${VERSION}'" -o conduit ./cmd/conduit/main.go
 	@echo "build version: ${VERSION}"
 
+build-pipeline-check: check-go-version
+	go build -o conduit-pipeline-check ./cmd/conduit-pipeline-check/main.go
+
 run:
 	go run ./cmd/conduit/main.go
 
@@ -43,6 +46,7 @@ proto-lint:
 
 clean:
 	@rm -f conduit
+	@rm -f conduit-pipeline-check
 	@rm -rf pkg/web/ui/dist
 
 download:

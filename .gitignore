@@ -26,6 +26,7 @@ conduit.db
 
 # Binary, built with `make build`
 /conduit
+/conduit-pipeline-check
 
 ### Conduit UI ###
 

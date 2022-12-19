@@ -137,6 +137,7 @@ func (s *Service) Create(ctx context.Context, id string, cfg Config, p Provision
 		CreatedAt:     t,
 		UpdatedAt:     t,
 		ProvisionedBy: p,
+		DLQ:           s.defaultDLQ(),
 	}
 
 	err := s.store.Set(ctx, pl.ID, pl)
@@ -149,6 +150,18 @@ func (s *Service) Create(ctx context.Context, id string, cfg Config, p Provision
 	measure.PipelinesGauge.WithValues(strings.ToLower(pl.Status.String())).Inc()
 
 	return pl, nil
+}
+
+func (s *Service) defaultDLQ() DLQ {
+	return DLQ{
+		Plugin: "builtin:log",
+		Settings: map[string]string{
+			"level":   "warn",
+			"message": "record delivery failed",
+		},
+		WindowSize:          1,
+		WindowNackThreshold: 0,
+	}
 }
 
 // Update will update a pipeline instance config.
@@ -172,6 +185,36 @@ func (s *Service) Update(ctx context.Context, pipelineID string, cfg Config) (*I
 	pl.UpdatedAt = time.Now()
 	// update the name in the names set
 	s.instanceNames[cfg.Name] = true
+	err = s.store.Set(ctx, pl.ID, pl)
+	if err != nil {
+		return nil, cerrors.Errorf("failed to save pipeline with ID %q: %w", pl.ID, err)
+	}
+
+	return pl, err
+}
+
+// UpdateDLQ will update a pipeline DLQ config.
+func (s *Service) UpdateDLQ(ctx context.Context, pipelineID string, cfg DLQ) (*Instance, error) {
+	pl, err := s.Get(ctx, pipelineID)
+	if err != nil {
+		return nil, err
+	}
+
+	if cfg.Plugin == "" {
+		return nil, cerrors.New("DLQ plugin must be provided")
+	}
+	if cfg.WindowSize < 0 {
+		return nil, cerrors.New("DLQ window size must be non-negative")
+	}
+	if cfg.WindowNackThreshold < 0 {
+		return nil, cerrors.New("DLQ window nack threshold must be non-negative")
+	}
+	if cfg.WindowSize > 0 && cfg.WindowSize <= cfg.WindowNackThreshold {
+		return nil, cerrors.New("DLQ window nack threshold must be lower than window size")
+	}
+
+	pl.DLQ = cfg
+	pl.UpdatedAt = time.Now()
 	err = s.store.Set(ctx, pl.ID, pl)
 	if err != nil {
 		return nil, cerrors.Errorf("failed to save pipeline with ID %q: %w", pl.ID, err)

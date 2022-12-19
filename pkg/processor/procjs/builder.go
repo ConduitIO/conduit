@@ -37,7 +37,10 @@ func Builder(config processor.Config) (processor.Interface, error) {
 	}
 
 	// TODO get logger from config or some other place
-	logger := zerolog.New(zerolog.NewConsoleWriter()).With().Timestamp().Logger()
+	cw := zerolog.NewConsoleWriter()
+	cw.TimeFormat = "2006-01-02T15:04:05+00:00"
+	logger := zerolog.New(cw).With().Timestamp().Logger()
+
 	p, err := New(config.Settings[configScript], logger)
 	if err != nil {
 		return nil, cerrors.Errorf("%s: %w", processorType, err)

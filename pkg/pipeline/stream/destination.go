@@ -61,7 +61,7 @@ func (n *DestinationNode) Run(ctx context.Context) (err error) {
 			// log this error right away because we're not sure the connector
 			// will be able to stop right away, we might block for 1 minute
 			// waiting for acks and we don't want the log to be empty
-			n.logger.Err(ctx, err).Msg("could not stop destination connector")
+			n.logger.Err(ctx, stopErr).Msg("could not stop destination connector")
 			if err == nil {
 				err = stopErr
 			}
@@ -98,7 +98,7 @@ func (n *DestinationNode) Run(ctx context.Context) (err error) {
 			// process any further messages because there is a problem in the
 			// communication with the plugin. We need to nack the message to not
 			// leave it open and then return the error to stop the pipeline.
-			_ = msg.Nack(err)
+			_ = msg.Nack(err, n.ID())
 			return cerrors.Errorf("error writing to destination: %w", err)
 		}
 		n.ConnectorTimer.Update(time.Since(writeTime))
@@ -108,7 +108,7 @@ func (n *DestinationNode) Run(ctx context.Context) (err error) {
 
 		err = n.base.Send(ctx, n.logger, msg)
 		if err != nil {
-			return msg.Nack(err)
+			return msg.Nack(err, n.ID())
 		}
 	}
 }

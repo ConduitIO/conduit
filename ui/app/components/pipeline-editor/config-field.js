@@ -32,12 +32,15 @@ export default class PipelineEditorConfigFieldComponent extends Component {
 
     const isString = field.type === 'TYPE_STRING';
 
-    const isNumber = field.type === 'TYPE_NUMBER';
+    const isNumber = field.type === 'TYPE_INT' || field.type === 'TYPE_FLOAT';
+
+    const isDuration = field.type === 'TYPE_DURATION';
 
     // TODO clean this up, and also check for special case of number, but using inclusion validation
     // for numbers in a list?
     const isTextInput =
-      isString && !field.rawValidations.findBy('type', 'TYPE_INCLUSION');
+      (isString || isDuration) &&
+      !field.rawValidations.findBy('type', 'TYPE_INCLUSION');
     const isNumberInput =
       isNumber && !field.rawValidations.findBy('type', 'TYPE_INCLUSION');
     const isToggleInput = field.type == 'TYPE_BOOL';
@@ -67,7 +70,7 @@ export default class PipelineEditorConfigFieldComponent extends Component {
       'type',
       'TYPE_INCLUSION'
     );
-    return inclusionValidation.value.map((item) => {
+    return inclusionValidation.value.split(',').map((item) => {
       return {
         name: item,
         value: item,
