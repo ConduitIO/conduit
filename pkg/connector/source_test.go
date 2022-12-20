@@ -24,9 +24,9 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/database/inmemory"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
-	"github.com/conduitio/conduit/pkg/plugin/builtin"
-	"github.com/conduitio/conduit/pkg/plugin/standalone"
+	"github.com/conduitio/conduit/pkg/plugin/mock"
 	"github.com/conduitio/conduit/pkg/record"
+	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
 	"github.com/matryer/is"
 )
@@ -34,30 +34,28 @@ import (
 func TestSource_Ack_Deadlock(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
-
 	logger := log.Nop()
+	db := &inmemory.DB{}
+
 	persister := NewPersister(
 		logger,
-		&inmemory.DB{},
+		db,
 		DefaultPersisterDelayThreshold,
 		1,
 	)
-	pluginService := plugin.NewService(
-		logger,
-		builtin.NewRegistry(logger, builtin.DefaultDispenserFactories...),
-		standalone.NewRegistry(logger, ""),
-	)
-	builder := NewDefaultBuilder(
-		logger,
-		persister,
-		pluginService,
-	)
-	c, err := builder.Build(TypeSource, ProvisionTypeAPI)
-	is.NoErr(err)
 
-	err = builder.Init(
-		c,
-		"test-source-id",
+	ctrl := gomock.NewController(t)
+	pluginDispenser := mock.NewDispenser(ctrl)
+	pluginDispenser.EXPECT().FullName().Return(plugin.FullName("test-plugin")).AnyTimes()
+
+	connService := NewService(logger, db, persister)
+
+	instance, err := connService.Create(
+		ctx,
+		"test-source",
+		TypeSource,
+		pluginDispenser,
+		uuid.NewString(),
 		Config{
 			Name: "test-source",
 			Settings: map[string]string{
@@ -66,12 +64,21 @@ func TestSource_Ack_Deadlock(t *testing.T) {
 				"format.options": "id:int",
 				"format.type":    "raw",
 			},
-			Plugin:     "builtin:generator",
-			PipelineID: uuid.NewString(),
 		},
+		ProvisionTypeAPI,
 	)
 	is.NoErr(err)
-	s := c.(Source)
+
+	sourceMock := mock.NewSourcePlugin(ctrl)
+	sourceMock.EXPECT().Configure(gomock.Any(), instance.Config.Settings).Return(nil)
+	sourceMock.EXPECT().Start(gomock.Any(), nil).Return(nil)
+	sourceMock.EXPECT().Ack(gomock.Any(), record.Position("test-pos")).Return(nil).Times(5)
+	pluginDispenser.EXPECT().DispenseSource().Return(sourceMock, nil)
+
+	conn, err := instance.Connector(ctx)
+	is.NoErr(err)
+	s, ok := conn.(*Source)
+	is.True(ok)
 
 	err = s.Open(ctx)
 	is.NoErr(err)

@@ -107,7 +107,7 @@ func (r *Registry) loadPlugins(ctx context.Context, pluginDir string) map[string
 		pluginPath := path.Join(pluginDir, dirEntry.Name())
 
 		// create dispenser without a logger to not spam logs on refresh
-		dispenser, err := standalonev1.NewDispenser(zerolog.Nop(), pluginPath)
+		dispenser, err := standalonev1.NewDispenser("", zerolog.Nop(), pluginPath)
 		if err != nil {
 			err = cerrors.Errorf("failed to create dispenser: %w", err)
 			warn(ctx, err, pluginPath)
@@ -191,7 +191,7 @@ func (r *Registry) NewDispenser(logger log.CtxLogger, fullName plugin.FullName) 
 		return nil, cerrors.Errorf("could not find standalone plugin, only found versions %v: %w", availableVersions, plugin.ErrPluginNotFound)
 	}
 
-	return standalonev1.NewDispenser(logger.ZerologWithComponent(), bp.path)
+	return standalonev1.NewDispenser(fullName, logger.ZerologWithComponent(), bp.path)
 }
 
 func (r *Registry) List() map[plugin.FullName]plugin.Specification {

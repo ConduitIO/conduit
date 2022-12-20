@@ -12,16 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:generate mockgen -destination=mock/connector.go -package=mock -mock_names=Source=Source,Destination=Destination . Source,Destination
-//go:generate stringer -type=Type -trimprefix Type
+//go:generate stringer -type=Type -trimprefix=Type
 
 package connector
 
 import (
 	"context"
+	"fmt"
 	"time"
 
+	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/inspector"
+	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/conduitio/conduit/pkg/record"
 )
 
@@ -36,6 +38,8 @@ const (
 	ProvisionTypeDLQ // used for provisioning DLQ connectors which are not persisted
 )
 
+const inspectorBufferSize = 1000
+
 type (
 	// Type defines the connector type.
 	Type int
@@ -43,101 +47,29 @@ type (
 	ProvisionType int
 )
 
-type Connector interface {
-	ID() string
-	Type() Type
+type Instance struct {
+	ID         string
+	Type       Type
+	Config     Config
+	PipelineID string
+	Plugin     string
 
-	Config() Config
-	SetConfig(Config)
+	ProcessorIDs  []string
+	State         any
+	ProvisionedBy ProvisionType
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
 
-	ProvisionedBy() ProvisionType
-
-	CreatedAt() time.Time
-	UpdatedAt() time.Time
-	SetUpdatedAt(time.Time)
-
-	// IsRunning returns true if the connector is running and ready to accept
-	// calls to Read or Write (depending on the connector type).
-	IsRunning() bool
-	// Validate checks if the connector is set up correctly.
-	Validate(ctx context.Context, settings map[string]string) error
-
-	// Errors returns a channel that is used to signal the node that the
-	// connector experienced an error when it was processing something
-	// asynchronously (e.g. persisting state).
-	Errors() <-chan error
-
-	// Inspect returns an inspector.Session which exposes the records
-	// coming into or out of this connector (depending on the connector type).
-	Inspect(context.Context) *inspector.Session
-
-	// Open will start the plugin process and call the Open method on the
-	// plugin. After the connector has been successfully opened it is considered
-	// as running (IsRunning returns true) and can be stopped again with
-	// Teardown. Open will return an error if called on a running connector.
-	Open(context.Context) error
-
-	// Teardown will call the Teardown method on the plugin and stop the plugin
-	// process. After the connector has been successfully torn down it is
-	// considered as stopped (IsRunning returns false) and can be opened again
-	// with Open. Teardown will return an error if called on a stopped
-	// connector.
-	Teardown(context.Context) error
-}
-
-// Source is a connector that can read records from a source.
-type Source interface {
-	Connector
-
-	State() SourceState
-	SetState(state SourceState)
-
-	// Read reads data from a data source and returns the record for the
-	// requested position.
-	Read(context.Context) (record.Record, error)
-
-	// Ack signals to the source that the message has been successfully
-	// processed and can be acknowledged.
-	Ack(context.Context, record.Position) error
-
-	// Stop signals to the source to stop producing records. After this call
-	// Read will produce records until the record with the last position has
-	// been read (Conduit might have already received that record).
-	Stop(context.Context) (record.Position, error)
-}
-
-// Destination is a connector that can write records to a destination.
-type Destination interface {
-	Connector
-
-	State() DestinationState
-	SetState(state DestinationState)
-
-	// Write sends a record to the connector and returns nil if the record was
-	// successfully received. This does not necessarily mean that the record was
-	// successfully processed and written to the 3rd party system, it might have
-	// been cached and will be written at a later point in time. Acknowledgments
-	// can be received through Ack to figure out if a record was actually
-	// processed or if an error happened while processing it.
-	Write(context.Context, record.Record) error
-	// Ack blocks until an acknowledgment is received that a record was
-	// processed and returns the position of that record. If the record wasn't
-	// successfully processed the function returns the position and an error.
-	Ack(context.Context) (record.Position, error)
-
-	// Stop signals to the destination that no more records will be produced
-	// after record with the last position.
-	Stop(context.Context, record.Position) error
+	pluginDispenser plugin.Dispenser
+	logger          log.CtxLogger
+	persister       *Persister
+	// TODO make sure Connector can only be called if no connector is dispensed
 }
 
 // Config collects common data stored for a connector.
 type Config struct {
-	Name       string
-	Settings   map[string]string
-	Plugin     string
-	PipelineID string
-
-	ProcessorIDs []string
+	Name     string
+	Settings map[string]string
 }
 
 type SourceState struct {
@@ -146,4 +78,45 @@ type SourceState struct {
 
 type DestinationState struct {
 	Positions map[string]record.Position
+}
+
+type Connector interface {
+	// Inspect returns an inspector.Session which exposes the records
+	// coming into or out of this connector (depending on the connector type).
+	Inspect(context.Context) *inspector.Session
+}
+
+func (i *Instance) Connector(ctx context.Context) (Connector, error) {
+	if i.pluginDispenser == nil {
+		return nil, fmt.Errorf("connector has no plugin dispenser, make sure plugin %s exists", i.Plugin)
+	}
+
+	i.logger.Debug(ctx).Msg("starting connector plugin")
+
+	switch i.Type {
+	case TypeSource:
+		src, err := i.pluginDispenser.DispenseSource()
+		if err != nil {
+			return nil, err
+		}
+		return &Source{
+			instance:  i,
+			plugin:    src,
+			errs:      make(chan error),
+			inspector: inspector.New(i.logger, inspectorBufferSize),
+		}, nil
+	case TypeDestination:
+		dest, err := i.pluginDispenser.DispenseDestination()
+		if err != nil {
+			return nil, err
+		}
+		return &Destination{
+			instance:  i,
+			plugin:    dest,
+			errs:      make(chan error),
+			inspector: inspector.New(i.logger, inspectorBufferSize),
+		}, nil
+	default:
+		return nil, ErrInvalidConnectorType
+	}
 }

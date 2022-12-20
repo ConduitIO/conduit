@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//go:generate mockgen -destination=mock/plugin.go -package=mock -mock_names=Dispenser=Dispenser,SourcePlugin=SourcePlugin,DestinationPlugin=DestinationPlugin,SpecifierPlugin=SpecifierPlugin . Dispenser,DestinationPlugin,SourcePlugin,SpecifierPlugin
+
 package plugin
 
 import (
@@ -24,6 +26,7 @@ import (
 
 // Dispenser dispenses specifier, source and destination plugins.
 type Dispenser interface {
+	FullName() FullName
 	DispenseSpecifier() (SpecifierPlugin, error)
 	DispenseSource() (SourcePlugin, error)
 	DispenseDestination() (DestinationPlugin, error)

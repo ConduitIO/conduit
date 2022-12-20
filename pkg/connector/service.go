@@ -23,29 +23,30 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/database"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/measure"
+	"github.com/conduitio/conduit/pkg/plugin"
 )
 
 // Service manages connectors.
 type Service struct {
-	logger      log.CtxLogger
-	connBuilder Builder
+	logger log.CtxLogger
 
-	connectors map[string]Connector
+	connectors map[string]*Instance
 	store      *Store
+	persister  *Persister
 }
 
 // NewService creates a Store-backed implementation of Service.
-func NewService(logger log.CtxLogger, db database.DB, connBuilder Builder) *Service {
+func NewService(logger log.CtxLogger, db database.DB, persister *Persister) *Service {
 	return &Service{
-		logger:      logger.WithComponent("connector.Service"),
-		connBuilder: connBuilder,
-		store:       NewStore(db, logger, connBuilder),
-		connectors:  make(map[string]Connector),
+		logger:     logger.WithComponent("connector.Service"),
+		store:      NewStore(db, logger),
+		connectors: make(map[string]*Instance),
+		persister:  persister,
 	}
 }
 
 // Init fetches connectors from the store.
-func (s *Service) Init(ctx context.Context) error {
+func (s *Service) Init(ctx context.Context, pluginService *plugin.Service) error {
 	s.logger.Debug(ctx).Msg("initializing connectors")
 	connectors, err := s.store.GetAll(ctx)
 	if err != nil {
@@ -56,7 +57,21 @@ func (s *Service) Init(ctx context.Context) error {
 	s.logger.Info(ctx).Int("count", len(s.connectors)).Msg("connectors initialized")
 
 	for _, i := range connectors {
-		measure.ConnectorsGauge.WithValues(strings.ToLower(i.Type().String())).Inc()
+		measure.ConnectorsGauge.WithValues(strings.ToLower(i.Type.String())).Inc()
+		s.initInstance(i)
+
+		// try to get plugin dispenser, if that's not possible log a warning
+		// Conduit should not crash because a plugin does not exist, that
+		// pipeline just won't be able to start
+		i.pluginDispenser, err = pluginService.NewDispenser(i.logger, i.Plugin)
+		if err != nil {
+			s.logger.Warn(ctx).
+				Err(err).
+				Str(log.ConnectorIDField, i.ID).
+				Str(log.PipelineIDField, i.PipelineID).
+				Str(log.PluginNameField, i.Plugin).
+				Msgf("did not find plugin for connector, pipeline won't be able to start (tip: make sure plugin %v is available and restart Conduit)", i.Plugin)
+		}
 	}
 
 	return nil
@@ -64,9 +79,9 @@ func (s *Service) Init(ctx context.Context) error {
 
 // List returns a map of Instances keyed by their ID. Instances do not
 // necessarily have a running plugin associated with them.
-func (s *Service) List(ctx context.Context) map[string]Connector {
+func (s *Service) List(ctx context.Context) map[string]*Instance {
 	// make a copy of the map
-	tmp := make(map[string]Connector, len(s.connectors))
+	tmp := make(map[string]*Instance, len(s.connectors))
 	for k, v := range s.connectors {
 		tmp[k] = v
 	}
@@ -74,7 +89,7 @@ func (s *Service) List(ctx context.Context) map[string]Connector {
 }
 
 // Get retrieves a single connector instance by ID.
-func (s *Service) Get(ctx context.Context, id string) (Connector, error) {
+func (s *Service) Get(ctx context.Context, id string) (*Instance, error) {
 	ins, ok := s.connectors[id]
 	if !ok {
 		return nil, cerrors.Errorf("%w (ID: %s)", ErrInstanceNotFound, id)
@@ -83,24 +98,41 @@ func (s *Service) Get(ctx context.Context, id string) (Connector, error) {
 }
 
 // Create will create a connector instance, persist it and return it.
-func (s *Service) Create(ctx context.Context, id string, t Type, cfg Config, p ProvisionType) (Connector, error) {
+func (s *Service) Create(
+	ctx context.Context,
+	id string,
+	t Type,
+	pluginDispenser plugin.Dispenser,
+	pipelineID string,
+	cfg Config,
+	p ProvisionType,
+) (*Instance, error) {
 	// determine the path of the Connector binary
-	if cfg.Plugin == "" {
-		return nil, cerrors.New("must provide a path to plugin binary")
+	if pluginDispenser == nil {
+		return nil, cerrors.New("must provide a plugin")
 	}
-	if cfg.PipelineID == "" {
+	if pipelineID == "" {
 		return nil, cerrors.New("must provide a pipeline ID")
 	}
-
-	conn, err := s.connBuilder.Build(t, p)
-	if err != nil {
-		return nil, cerrors.Errorf("could not create connector: %w", err)
+	if t != TypeSource && t != TypeDestination {
+		return nil, ErrInvalidConnectorType
 	}
 
-	err = s.connBuilder.Init(conn, id, cfg)
-	if err != nil {
-		return nil, cerrors.Errorf("could not init connector: %w", err)
+	now := time.Now().UTC()
+	conn := &Instance{
+		ID:         id,
+		Type:       t,
+		Config:     cfg,
+		PipelineID: pipelineID,
+		Plugin:     string(pluginDispenser.FullName()),
+
+		ProvisionedBy: p,
+		CreatedAt:     now,
+		UpdatedAt:     now,
+
+		pluginDispenser: pluginDispenser,
 	}
+	s.initInstance(conn)
 
 	if p == ProvisionTypeDLQ {
 		// do not persist the instance, just return the connector
@@ -108,7 +140,7 @@ func (s *Service) Create(ctx context.Context, id string, t Type, cfg Config, p P
 	}
 
 	// persist instance
-	err = s.store.Set(ctx, id, conn)
+	err := s.store.Set(ctx, id, conn)
 	if err != nil {
 		return nil, err
 	}
@@ -126,34 +158,25 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 		return err
 	}
 
-	if instance.IsRunning() {
-		return ErrConnectorRunning
-	}
-
 	err = s.store.Delete(ctx, id)
 	if err != nil {
 		return cerrors.Errorf("could not delete connector instance %v from store: %w", id, err)
 	}
 	delete(s.connectors, id)
-	measure.ConnectorsGauge.WithValues(strings.ToLower(instance.Type().String())).Dec()
+	measure.ConnectorsGauge.WithValues(strings.ToLower(instance.Type.String())).Dec()
 
 	return nil
 }
 
 // Update updates the connector config.
-func (s *Service) Update(ctx context.Context, id string, data Config) (Connector, error) {
+func (s *Service) Update(ctx context.Context, id string, data Config) (*Instance, error) {
 	conn, err := s.Get(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 
-	err = conn.Validate(ctx, data.Settings)
-	if err != nil {
-		return nil, cerrors.Errorf("could not update connector settings: %w", err)
-	}
-
-	conn.SetConfig(data)
-	conn.SetUpdatedAt(time.Now())
+	conn.Config = data
+	conn.UpdatedAt = time.Now().UTC()
 
 	// persist conn
 	err = s.store.Set(ctx, id, conn)
@@ -165,16 +188,14 @@ func (s *Service) Update(ctx context.Context, id string, data Config) (Connector
 }
 
 // AddProcessor adds a processor to a connector.
-func (s *Service) AddProcessor(ctx context.Context, connectorID string, processorID string) (Connector, error) {
+func (s *Service) AddProcessor(ctx context.Context, connectorID string, processorID string) (*Instance, error) {
 	conn, err := s.Get(ctx, connectorID)
 	if err != nil {
 		return nil, err
 	}
 
-	d := conn.Config()
-	d.ProcessorIDs = append(d.ProcessorIDs, processorID)
-	conn.SetConfig(d)
-	conn.SetUpdatedAt(time.Now())
+	conn.ProcessorIDs = append(conn.ProcessorIDs, processorID)
+	conn.UpdatedAt = time.Now().UTC()
 
 	// persist conn
 	err = s.store.Set(ctx, connectorID, conn)
@@ -186,15 +207,14 @@ func (s *Service) AddProcessor(ctx context.Context, connectorID string, processo
 }
 
 // RemoveProcessor removes a processor from a connector.
-func (s *Service) RemoveProcessor(ctx context.Context, connectorID string, processorID string) (Connector, error) {
+func (s *Service) RemoveProcessor(ctx context.Context, connectorID string, processorID string) (*Instance, error) {
 	conn, err := s.Get(ctx, connectorID)
 	if err != nil {
 		return nil, err
 	}
 
-	d := conn.Config()
 	processorIndex := -1
-	for index, id := range d.ProcessorIDs {
+	for index, id := range conn.ProcessorIDs {
 		if id == processorID {
 			processorIndex = index
 			break
@@ -204,9 +224,8 @@ func (s *Service) RemoveProcessor(ctx context.Context, connectorID string, proce
 		return nil, cerrors.Errorf("%w (ID: %s)", ErrProcessorIDNotFound, processorID)
 	}
 
-	d.ProcessorIDs = d.ProcessorIDs[:processorIndex+copy(d.ProcessorIDs[processorIndex:], d.ProcessorIDs[processorIndex+1:])]
-	conn.SetConfig(d)
-	conn.SetUpdatedAt(time.Now())
+	conn.ProcessorIDs = conn.ProcessorIDs[:processorIndex+copy(conn.ProcessorIDs[processorIndex:], conn.ProcessorIDs[processorIndex+1:])]
+	conn.UpdatedAt = time.Now().UTC()
 
 	// persist conn
 	err = s.store.Set(ctx, connectorID, conn)
@@ -217,42 +236,13 @@ func (s *Service) RemoveProcessor(ctx context.Context, connectorID string, proce
 	return conn, err
 }
 
-func (s *Service) SetDestinationState(ctx context.Context, id string, state DestinationState) (Destination, error) {
-	conn, err := s.Get(ctx, id)
-	if err != nil {
-		return nil, err
-	}
+func (s *Service) initInstance(conn *Instance) {
+	connLogger := s.logger
+	connLogger.Logger = connLogger.Logger.With().
+		Str(log.ConnectorIDField, conn.ID).
+		Logger()
+	connLogger = connLogger.WithComponent("connector." + conn.Type.String())
 
-	dest, ok := conn.(Destination)
-	if !ok {
-		return nil, cerrors.Errorf("expected connector to be a Destination (ID: %s): %w", id, ErrInvalidConnectorType)
-	}
-
-	dest.SetState(state)
-	err = s.store.Set(ctx, id, dest)
-	if err != nil {
-		return nil, err
-	}
-
-	return dest, err
-}
-
-func (s *Service) SetSourceState(ctx context.Context, id string, state SourceState) (Source, error) {
-	conn, err := s.Get(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-
-	src, ok := conn.(Source)
-	if !ok {
-		return nil, cerrors.Errorf("expected connector to be a Source (ID: %s): %w", id, ErrInvalidConnectorType)
-	}
-
-	src.SetState(state)
-	err = s.store.Set(ctx, id, src)
-	if err != nil {
-		return nil, err
-	}
-
-	return src, err
+	conn.persister = s.persister
+	conn.logger = connLogger
 }

@@ -25,6 +25,7 @@ import (
 )
 
 type Dispenser struct {
+	name   plugin.FullName
 	logger zerolog.Logger
 	path   string
 	opts   []ClientOption
@@ -34,8 +35,9 @@ type Dispenser struct {
 	m         sync.Mutex
 }
 
-func NewDispenser(logger zerolog.Logger, path string, opts ...ClientOption) (*Dispenser, error) {
+func NewDispenser(fullName plugin.FullName, logger zerolog.Logger, path string, opts ...ClientOption) (*Dispenser, error) {
 	d := Dispenser{
+		name:   fullName,
 		logger: logger,
 		path:   path,
 		opts:   opts,
@@ -89,6 +91,10 @@ func (d *Dispenser) teardown() {
 	d.client.Kill()
 	d.client = nil
 	d.dispensed = false
+}
+
+func (d *Dispenser) FullName() plugin.FullName {
+	return d.name
 }
 
 func (d *Dispenser) DispenseSpecifier() (plugin.SpecifierPlugin, error) {

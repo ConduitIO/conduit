@@ -21,7 +21,7 @@ import (
 )
 
 type Dispenser struct {
-	name              string
+	name              plugin.FullName
 	logger            log.CtxLogger
 	specifierPlugin   func() cpluginv1.SpecifierPlugin
 	sourcePlugin      func() cpluginv1.SourcePlugin
@@ -29,7 +29,7 @@ type Dispenser struct {
 }
 
 func NewDispenser(
-	name string,
+	name plugin.FullName,
 	logger log.CtxLogger,
 	specifierPlugin func() cpluginv1.SpecifierPlugin,
 	sourcePlugin func() cpluginv1.SourcePlugin,
@@ -42,6 +42,10 @@ func NewDispenser(
 		sourcePlugin:      sourcePlugin,
 		destinationPlugin: destinationPlugin,
 	}
+}
+
+func (d *Dispenser) FullName() plugin.FullName {
+	return d.name
 }
 
 func (d *Dispenser) DispenseSpecifier() (plugin.SpecifierPlugin, error) {
@@ -60,6 +64,6 @@ func (d *Dispenser) pluginLogger(pluginType string) log.CtxLogger {
 	logger := d.logger
 	logger.Logger = logger.With().
 		Str(log.PluginTypeField, pluginType).
-		Str(log.PluginNameField, d.name).Logger()
+		Str(log.PluginNameField, string(d.name)).Logger()
 	return logger
 }

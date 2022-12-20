@@ -18,7 +18,6 @@ import (
 	"context"
 	"encoding/json"
 	"strings"
-	"sync"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/database"
@@ -29,27 +28,25 @@ const (
 	// storeKeyPrefix is added to all keys before storing them in store. Do not
 	// change unless you know what you're doing and you have a migration plan in
 	// place.
-	storeKeyPrefix = "connector:connector:"
+	storeKeyPrefix = "connector:instance:"
 )
 
 // Store handles the persistence and fetching of connectors.
 type Store struct {
-	db          database.DB
-	logger      log.CtxLogger
-	connBuilder Builder
+	db     database.DB
+	logger log.CtxLogger
 }
 
-func NewStore(db database.DB, logger log.CtxLogger, builder Builder) *Store {
+func NewStore(db database.DB, logger log.CtxLogger) *Store {
 	return &Store{
-		db:          db,
-		logger:      logger.WithComponent("connector.Store"),
-		connBuilder: builder,
+		db:     db,
+		logger: logger.WithComponent("connector.Store"),
 	}
 }
 
 // Set stores connector under the key id and returns nil on success, error
 // otherwise.
-func (s *Store) Set(ctx context.Context, id string, c Connector) error {
+func (s *Store) Set(ctx context.Context, id string, c *Instance) error {
 	if id == "" {
 		return cerrors.Errorf("can't store connector: %w", cerrors.ErrEmptyID)
 	}
@@ -86,7 +83,7 @@ func (s *Store) Delete(ctx context.Context, id string) error {
 }
 
 // Get will return the connector for a given id or an error.
-func (s *Store) Get(ctx context.Context, id string) (Connector, error) {
+func (s *Store) Get(ctx context.Context, id string) (*Instance, error) {
 	key := s.addKeyPrefix(id)
 
 	raw, err := s.db.Get(ctx, key)
@@ -101,13 +98,13 @@ func (s *Store) Get(ctx context.Context, id string) (Connector, error) {
 }
 
 // GetAll returns all connectors stored in the database.
-func (s *Store) GetAll(ctx context.Context) (map[string]Connector, error) {
+func (s *Store) GetAll(ctx context.Context) (map[string]*Instance, error) {
 	prefix := s.addKeyPrefix("")
 	keys, err := s.db.GetKeys(ctx, prefix)
 	if err != nil {
 		return nil, cerrors.Errorf("failed to retrieve keys: %w", err)
 	}
-	connectors := make(map[string]Connector)
+	connectors := make(map[string]*Instance)
 	for _, key := range keys {
 		raw, err := s.db.Get(ctx, key)
 		if err != nil {
@@ -134,26 +131,8 @@ func (*Store) trimKeyPrefix(key string) string {
 }
 
 // encode a connector from Connector to []byte.
-func (*Store) encode(c Connector) ([]byte, error) {
-	locker, ok := c.(sync.Locker)
-	if ok {
-		// a connector can choose to implement the locker interface, then the
-		// store will make sure to first acquire the lock before encoding it to
-		// prevent race conditions
-		locker.Lock()
-		defer locker.Unlock()
-	}
-
-	tempJSON, err := json.Marshal(c)
-	if err != nil {
-		return nil, err
-	}
-	typedConnector := typedJSON{
-		Data: tempJSON,
-		Type: c.Type().String(),
-	}
-
-	b, err := json.Marshal(typedConnector)
+func (*Store) encode(c *Instance) ([]byte, error) {
+	b, err := json.Marshal(c)
 	if err != nil {
 		return nil, err
 	}
@@ -163,43 +142,35 @@ func (*Store) encode(c Connector) ([]byte, error) {
 
 // decode a connector from []byte to Connector. It uses the Builder to
 // initialize the connector making it ready to be used.
-func (s *Store) decode(raw []byte) (Connector, error) {
-	var typedConnector typedJSON
-	err := json.Unmarshal(raw, &typedConnector)
+func (s *Store) decode(raw []byte) (*Instance, error) {
+	conn := &Instance{}
+	err := json.Unmarshal(raw, &conn)
 	if err != nil {
 		return nil, err
 	}
 
-	var conn Connector
-	switch typedConnector.Type {
-	case TypeSource.String():
-		conn, err = s.connBuilder.Build(TypeSource, ProvisionTypeAPI)
-		if err != nil {
-			return nil, err
+	if conn.State != nil {
+		switch conn.Type {
+		case TypeSource:
+			var state SourceState
+			stateJson, _ := json.Marshal(conn.State)
+			err := json.Unmarshal(stateJson, &state)
+			if err != nil {
+				return nil, err
+			}
+			conn.State = state
+		case TypeDestination:
+			var state DestinationState
+			stateJson, _ := json.Marshal(conn.State)
+			err := json.Unmarshal(stateJson, &state)
+			if err != nil {
+				return nil, err
+			}
+			conn.State = state
+		default:
+			return nil, ErrInvalidConnectorType
 		}
-	case TypeDestination.String():
-		conn, err = s.connBuilder.Build(TypeDestination, ProvisionTypeAPI) // ProvisionType will be overwritten
-		if err != nil {
-			return nil, err
-		}
-	default:
-		return nil, ErrInvalidConnectorType
 	}
 
-	err = json.Unmarshal(typedConnector.Data, &conn)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := s.connBuilder.Init(conn, conn.ID(), conn.Config()); err != nil {
-		return nil, err
-	}
 	return conn, nil
-}
-
-// typedJSON stores a connector type and the marshaled connector
-// will be used as an intermediate representation for the connectors, to help with marshaling and unmarshalling them
-type typedJSON struct {
-	Type string
-	Data json.RawMessage
 }

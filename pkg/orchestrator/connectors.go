@@ -209,3 +209,19 @@ func (c *ConnectorOrchestrator) Validate(
 
 	return nil
 }
+
+// func (s *Service) validateConfig(ctx context.Context, c Config, t Type, pluginDispenser plugin.Dispenser) error {
+// 	var err error
+// 	switch t {
+// 	case TypeSource:
+// 		err = s.pluginService.ValidateSourceConfig(ctx, pluginDispenser, c.Settings)
+// 	case TypeDestination:
+// 		err = s.pluginService.ValidateDestinationConfig(ctx, pluginDispenser, c.Settings)
+// 	default:
+// 		return ErrInvalidConnectorType
+// 	}
+// 	if err != nil {
+// 		return cerrors.Errorf("invalid connector config: %w", err)
+// 	}
+// 	return nil
+// }

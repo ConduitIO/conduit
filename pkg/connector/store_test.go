@@ -12,135 +12,100 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package connector_test
+package connector
 
 import (
 	"context"
 	"testing"
+	"time"
 
-	"github.com/conduitio/conduit/pkg/connector"
-	"github.com/conduitio/conduit/pkg/connector/mock"
-	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/database"
 	"github.com/conduitio/conduit/pkg/foundation/database/inmemory"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/golang/mock/gomock"
+	"github.com/conduitio/conduit/pkg/record"
 	"github.com/google/uuid"
+	"github.com/matryer/is"
 )
 
 func TestConfigStore_SetGet(t *testing.T) {
+	is := is.New(t)
 	ctx := context.Background()
 	logger := log.Nop()
 	db := &inmemory.DB{}
-	ctrl := gomock.NewController(t)
-	connBuilder := mock.Builder{Ctrl: ctrl}
 
-	s := connector.NewStore(db, logger, connBuilder)
+	s := NewStore(db, logger)
 
-	want := connBuilder.NewSourceMock(uuid.NewString(), connector.Config{})
+	want := &Instance{
+		ID:   uuid.NewString(),
+		Type: TypeSource,
+		State: SourceState{
+			Position: []byte(uuid.NewString()),
+		},
+		CreatedAt: time.Now().UTC(),
+	}
 
-	err := s.Set(ctx, want.ID(), want)
-	assert.Ok(t, err)
+	err := s.Set(ctx, want.ID, want)
+	is.NoErr(err)
 
-	got, err := s.Get(ctx, want.ID())
-	assert.Ok(t, err)
-	assert.Equal(t, want, got)
+	got, err := s.Get(ctx, want.ID)
+	is.NoErr(err)
+	is.Equal(want, got)
 }
 
 func TestConfigStore_GetAll(t *testing.T) {
+	is := is.New(t)
 	ctx := context.Background()
 	logger := log.Nop()
 	db := &inmemory.DB{}
-	ctrl := gomock.NewController(t)
-	connBuilder := mock.Builder{Ctrl: ctrl}
 
-	s := connector.NewStore(db, logger, connBuilder)
+	s := NewStore(db, logger)
 
-	want := make(map[string]connector.Connector)
+	want := make(map[string]*Instance)
 	for i := 0; i < 10; i++ {
-		conn := connBuilder.NewSourceMock(uuid.NewString(), connector.Config{})
-		err := s.Set(ctx, conn.ID(), conn)
-		assert.Ok(t, err)
-		want[conn.ID()] = conn
+		conn := &Instance{ID: uuid.NewString()}
+		switch i % 2 {
+		case 0:
+			conn.Type = TypeSource
+			conn.State = SourceState{
+				Position: []byte(uuid.NewString()),
+			}
+		case 1:
+			conn.Type = TypeDestination
+			conn.State = DestinationState{
+				Positions: map[string]record.Position{
+					uuid.NewString(): []byte(uuid.NewString()),
+				},
+			}
+		}
+		err := s.Set(ctx, conn.ID, conn)
+		is.NoErr(err)
+		want[conn.ID] = conn
 	}
 
 	got, err := s.GetAll(ctx)
-	assert.Ok(t, err)
-	assert.Equal(t, want, got)
+	is.NoErr(err)
+	is.Equal(want, got)
 }
 
 func TestConfigStore_Delete(t *testing.T) {
+	is := is.New(t)
 	ctx := context.Background()
 	logger := log.Nop()
 	db := &inmemory.DB{}
-	ctrl := gomock.NewController(t)
-	connBuilder := mock.Builder{Ctrl: ctrl}
 
-	s := connector.NewStore(db, logger, connBuilder)
+	s := NewStore(db, logger)
 
-	want := connBuilder.NewDestinationMock(uuid.NewString(), connector.Config{})
+	want := &Instance{ID: uuid.NewString(), Type: TypeSource}
 
-	err := s.Set(ctx, want.ID(), want)
-	assert.Ok(t, err)
+	err := s.Set(ctx, want.ID, want)
+	is.NoErr(err)
 
-	err = s.Delete(ctx, want.ID())
-	assert.Ok(t, err)
+	err = s.Delete(ctx, want.ID)
+	is.NoErr(err)
 
-	got, err := s.Get(ctx, want.ID())
-	assert.Error(t, err)
-	assert.True(t, cerrors.Is(err, database.ErrKeyNotExist), "expected error for non-existing key")
-	assert.Nil(t, got)
-}
-
-func TestConfigStore_SetLocker(t *testing.T) {
-	ctx := context.Background()
-	logger := log.Nop()
-	db := &inmemory.DB{}
-	ctrl := gomock.NewController(t)
-	connBuilder := mock.Builder{Ctrl: ctrl}
-
-	s := connector.NewStore(db, logger, connBuilder)
-
-	source := connBuilder.NewSourceMock(uuid.NewString(), connector.Config{})
-
-	var lockCalled bool
-	var unlockCalled bool
-
-	want := &lockerConnector{
-		Source: source,
-		onLock: func() {
-			if unlockCalled {
-				t.Fatal("Unlock was called before Lock")
-			}
-			lockCalled = true
-		},
-		onUnlock: func() {
-			if !lockCalled {
-				t.Fatal("Unlock was called without Lock")
-			}
-			unlockCalled = true
-		},
-	}
-
-	err := s.Set(ctx, want.ID(), want)
-	assert.Ok(t, err)
-
-	assert.True(t, lockCalled, "expected Lock to be called")
-	assert.True(t, unlockCalled, "expected Unlock to be called")
-}
-
-type lockerConnector struct {
-	*mock.Source
-
-	onLock   func()
-	onUnlock func()
-}
-
-func (lc *lockerConnector) Lock() {
-	lc.onLock()
-}
-
-func (lc *lockerConnector) Unlock() {
-	lc.onUnlock()
+	got, err := s.Get(ctx, want.ID)
+	is.True(err != nil)
+	is.True(cerrors.Is(err, database.ErrKeyNotExist)) // expected error for non-existing key
+	is.True(got == nil)
 }
