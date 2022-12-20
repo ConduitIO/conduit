@@ -20,15 +20,14 @@ import (
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/conduitio/conduit/pkg/inspector"
 	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/conduitio/conduit/pkg/record"
 )
 
 type Destination struct {
-	instance  *Instance
-	plugin    plugin.DestinationPlugin
-	inspector *inspector.Inspector
+	Instance *Instance
+
+	plugin plugin.DestinationPlugin
 
 	// errs is used to signal the node that the connector experienced an error
 	// when it was processing something asynchronously (e.g. persisting state).
@@ -37,49 +36,68 @@ type Destination struct {
 	// stopStream is a function that closes the context of the stream
 	stopStream context.CancelFunc
 
-	// m can lock a destination from concurrent access (e.g. in connector persister).
-	m sync.Mutex
 	// wg tracks the number of in flight calls to the plugin.
 	wg sync.WaitGroup
+}
+
+type DestinationState struct {
+	Positions map[string]record.Position
+}
+
+func (d *Destination) ID() string {
+	return d.Instance.ID
 }
 
 func (d *Destination) Errors() <-chan error {
 	return d.errs
 }
 
-func (d *Destination) Inspect(ctx context.Context) *inspector.Session {
-	return d.inspector.NewSession(ctx)
-}
-
-func (d *Destination) Open(ctx context.Context) (err error) {
-	if d.plugin == nil {
-		return plugin.ErrPluginNotRunning
+// init dispenses the plugin and configures it.
+func (d *Destination) initPlugin(ctx context.Context) (plugin.DestinationPlugin, error) {
+	d.Instance.logger.Debug(ctx).Msg("starting destination connector plugin")
+	dest, err := d.Instance.pluginDispenser.DispenseDestination()
+	if err != nil {
+		return nil, err
 	}
 
-	defer func() {
-		if err != nil {
-			_ = d.plugin.Teardown(ctx)
-			d.plugin = nil
-		}
-	}()
+	d.Instance.logger.Debug(ctx).Msg("configuring destination connector plugin")
+	err = dest.Configure(ctx, d.Instance.Config.Settings)
+	if err != nil {
+		_ = dest.Teardown(ctx)
+		return nil, err
+	}
 
-	d.instance.logger.Debug(ctx).Msg("configuring destination connector plugin")
-	err = d.plugin.Configure(ctx, d.instance.Config.Settings)
+	return dest, nil
+}
+
+func (d *Destination) Open(ctx context.Context) error {
+	d.Instance.Lock()
+	defer d.Instance.Unlock()
+	if d.Instance.connector != nil {
+		// this means another connector is running (this shouldn't actually happen)
+		return cerrors.New("another instance of the connector is already running")
+	}
+
+	dest, err := d.initPlugin(ctx)
 	if err != nil {
 		return err
 	}
 
 	streamCtx, cancelStreamCtx := context.WithCancel(ctx)
-	err = d.plugin.Start(streamCtx)
+	err = dest.Start(streamCtx)
 	if err != nil {
 		cancelStreamCtx()
+		_ = dest.Teardown(ctx)
 		return err
 	}
 
-	d.instance.logger.Info(ctx).Msg("destination connector plugin successfully started")
+	d.Instance.logger.Info(ctx).Msg("destination connector plugin successfully started")
 
+	d.plugin = dest
 	d.stopStream = cancelStreamCtx
-	d.instance.persister.ConnectorStarted()
+	d.Instance.connector = d
+	d.Instance.persister.ConnectorStarted()
+
 	return nil
 }
 
@@ -90,7 +108,7 @@ func (d *Destination) Stop(ctx context.Context, lastPosition record.Position) er
 		return err
 	}
 
-	d.instance.logger.Debug(ctx).
+	d.Instance.logger.Debug(ctx).
 		Bytes(log.RecordPositionField, lastPosition).
 		Msg("sending stop signal to destination connector plugin")
 	err = d.plugin.Stop(ctx, lastPosition)
@@ -98,14 +116,14 @@ func (d *Destination) Stop(ctx context.Context, lastPosition record.Position) er
 		return cerrors.Errorf("could not stop destination plugin: %w", err)
 	}
 
-	d.instance.logger.Debug(ctx).Msg("destination connector plugin successfully responded to stop signal")
+	d.Instance.logger.Debug(ctx).Msg("destination connector plugin successfully responded to stop signal")
 	return nil
 }
 
 func (d *Destination) Teardown(ctx context.Context) error {
-	// lock destination as we are about to mutate the plugin field
-	d.m.Lock()
-	defer d.m.Unlock()
+	// lock source as we are about to mutate the plugin field
+	d.Instance.Lock()
+	defer d.Instance.Unlock()
 	if d.plugin == nil {
 		return plugin.ErrPluginNotRunning
 	}
@@ -118,16 +136,18 @@ func (d *Destination) Teardown(ctx context.Context) error {
 	// wait for any calls to the plugin to stop running first (e.g. Stop, Ack or Write)
 	d.wg.Wait()
 
-	d.instance.logger.Debug(ctx).Msg("tearing down destination connector plugin")
+	d.Instance.logger.Debug(ctx).Msg("tearing down destination connector plugin")
 	err := d.plugin.Teardown(ctx)
+
 	d.plugin = nil
-	d.instance.persister.ConnectorStopped()
+	d.Instance.connector = nil
+	d.Instance.persister.ConnectorStopped()
 
 	if err != nil {
 		return cerrors.Errorf("could not tear down destination connector plugin: %w", err)
 	}
 
-	d.instance.logger.Info(ctx).Msg("destination connector plugin successfully torn down")
+	d.Instance.logger.Info(ctx).Msg("destination connector plugin successfully torn down")
 	return nil
 }
 
@@ -138,7 +158,7 @@ func (d *Destination) Write(ctx context.Context, r record.Record) error {
 		return err
 	}
 
-	d.inspector.Send(ctx, r)
+	d.Instance.inspector.Send(ctx, r)
 	err = d.plugin.Write(ctx, r)
 	if err != nil {
 		return cerrors.Errorf("error writing record: %w", err)
@@ -161,8 +181,8 @@ func (d *Destination) Ack(ctx context.Context) (record.Position, error) {
 // call in the wait group. The returned function should be called in a deferred
 // statement to signal the plugin call is over.
 func (d *Destination) preparePluginCall() (func(), error) {
-	d.m.Lock()
-	defer d.m.Unlock()
+	d.Instance.RLock()
+	defer d.Instance.RUnlock()
 	if d.plugin == nil {
 		return func() { /* do nothing */ }, plugin.ErrPluginNotRunning
 	}

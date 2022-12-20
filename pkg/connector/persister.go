@@ -169,12 +169,11 @@ func (p *Persister) flushNow(ctx context.Context, callbacks map[*Instance]Persis
 
 	defer tx.Discard()
 	for conn := range callbacks {
-		err = p.store.Set(ctx, conn.ID, conn)
+		err := p.flushSingle(ctx, conn)
 		if err != nil {
 			p.logger.Err(ctx, err).
 				Str(log.ConnectorIDField, conn.ID).
 				Msg("error while saving connector")
-			break
 		}
 	}
 	if err == nil {
@@ -190,4 +189,10 @@ func (p *Persister) flushNow(ctx context.Context, callbacks map[*Instance]Persis
 		Int("count", len(callbacks)).
 		Dur(log.DurationField, time.Since(start)).
 		Msg("persisted connectors")
+}
+
+func (p *Persister) flushSingle(ctx context.Context, conn *Instance) error {
+	conn.Lock()
+	defer conn.Unlock()
+	return p.store.Set(ctx, conn.ID, conn)
 }

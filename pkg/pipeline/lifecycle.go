@@ -27,14 +27,15 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/metrics/measure"
 	"github.com/conduitio/conduit/pkg/foundation/multierror"
 	"github.com/conduitio/conduit/pkg/pipeline/stream"
+	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/conduitio/conduit/pkg/processor"
 	"gopkg.in/tomb.v2"
 )
 
 // ConnectorFetcher can fetch a connector instance.
 type ConnectorFetcher interface {
-	Get(ctx context.Context, id string) (connector.Connector, error)
-	Create(ctx context.Context, id string, t connector.Type, cfg connector.Config, p connector.ProvisionType) (connector.Connector, error)
+	Get(ctx context.Context, id string) (*connector.Instance, error)
+	Create(ctx context.Context, id string, t connector.Type, pluginDispenser plugin.Dispenser, pipelineID string, cfg connector.Config, p connector.ProvisionType) (*connector.Instance, error)
 }
 
 // ProcessorFetcher can fetch a processor instance.
@@ -42,11 +43,17 @@ type ProcessorFetcher interface {
 	Get(ctx context.Context, id string) (*processor.Instance, error)
 }
 
+// PluginDispenserFetcher can fetch a plugin.
+type PluginDispenserFetcher interface {
+	NewDispenser(logger log.CtxLogger, name string) (plugin.Dispenser, error)
+}
+
 // Start builds and starts a pipeline instance.
 func (s *Service) Start(
 	ctx context.Context,
 	connFetcher ConnectorFetcher,
 	procFetcher ProcessorFetcher,
+	pluginFetcher PluginDispenserFetcher,
 	pipelineID string,
 ) error {
 	pl, err := s.Get(ctx, pipelineID)
@@ -60,7 +67,7 @@ func (s *Service) Start(
 	s.logger.Debug(ctx).Str(log.PipelineIDField, pl.ID).Msg("starting pipeline")
 
 	s.logger.Trace(ctx).Str(log.PipelineIDField, pl.ID).Msg("building nodes")
-	nodes, err := s.buildNodes(ctx, connFetcher, procFetcher, pl)
+	nodes, err := s.buildNodes(ctx, connFetcher, procFetcher, pluginFetcher, pl)
 	if err != nil {
 		return cerrors.Errorf("could not build nodes for pipeline %s: %w", pl.ID, err)
 	}
@@ -169,13 +176,14 @@ func (s *Service) buildNodes(
 	ctx context.Context,
 	connFetcher ConnectorFetcher,
 	procFetcher ProcessorFetcher,
+	pluginFetcher PluginDispenserFetcher,
 	pl *Instance,
 ) ([]stream.Node, error) {
 	// setup many to many channels
 	fanIn := stream.FaninNode{Name: "fanin"}
 	fanOut := stream.FanoutNode{Name: "fanout"}
 
-	sourceNodes, err := s.buildSourceNodes(ctx, connFetcher, procFetcher, pl, &fanIn)
+	sourceNodes, err := s.buildSourceNodes(ctx, connFetcher, procFetcher, pluginFetcher, pl, &fanIn)
 	if err != nil {
 		return nil, cerrors.Errorf("could not build source nodes: %w", err)
 	}
@@ -250,12 +258,13 @@ func (s *Service) buildSourceNodes(
 	ctx context.Context,
 	connFetcher ConnectorFetcher,
 	procFetcher ProcessorFetcher,
+	pluginFetcher PluginDispenserFetcher,
 	pl *Instance,
 	next stream.SubNode,
 ) ([]stream.Node, error) {
 	var nodes []stream.Node
 
-	dlqHandlerNode, err := s.buildDLQHandlerNode(ctx, connFetcher, pl)
+	dlqHandlerNode, err := s.buildDLQHandlerNode(ctx, connFetcher, pluginFetcher, pl)
 	if err != nil {
 		return nil, err
 	}
@@ -267,26 +276,31 @@ func (s *Service) buildSourceNodes(
 			return nil, cerrors.Errorf("could not fetch connector: %w", err)
 		}
 
-		if instance.Type() != connector.TypeSource {
+		if instance.Type != connector.TypeSource {
 			continue // skip any connector that's not a source
 		}
 
+		src, err := instance.Connector(ctx)
+		if err != nil {
+			return nil, err
+		}
+
 		sourceNode := stream.SourceNode{
-			Name:   instance.ID(),
-			Source: instance.(connector.Source),
+			Name:   instance.ID,
+			Source: src.(*connector.Source),
 			PipelineTimer: measure.PipelineExecutionDurationTimer.WithValues(
 				pl.Config.Name,
 			),
 		}
 		dlqHandlerNode.Add(1)
-		ackerNode := s.buildSourceAckerNode(instance.(connector.Source), dlqHandlerNode)
+		ackerNode := s.buildSourceAckerNode(src.(*connector.Source), dlqHandlerNode)
 		ackerNode.Sub(sourceNode.Pub())
 		metricsNode := s.buildMetricsNode(pl, instance)
 		metricsNode.Sub(ackerNode.Pub())
 
-		procNodes, err := s.buildProcessorNodes(ctx, procFetcher, pl, instance.Config().ProcessorIDs, metricsNode, next)
+		procNodes, err := s.buildProcessorNodes(ctx, procFetcher, pl, instance.ProcessorIDs, metricsNode, next)
 		if err != nil {
-			return nil, cerrors.Errorf("could not build processor nodes for connector %s: %w", instance.ID(), err)
+			return nil, cerrors.Errorf("could not build processor nodes for connector %s: %w", instance.ID, err)
 		}
 
 		nodes = append(nodes, &sourceNode, ackerNode, metricsNode)
@@ -297,11 +311,11 @@ func (s *Service) buildSourceNodes(
 }
 
 func (s *Service) buildSourceAckerNode(
-	src connector.Source,
+	src *connector.Source,
 	dlqHandlerNode *stream.DLQHandlerNode,
 ) *stream.SourceAckerNode {
 	return &stream.SourceAckerNode{
-		Name:           src.ID() + "-acker",
+		Name:           src.Instance.ID + "-acker",
 		Source:         src,
 		DLQHandlerNode: dlqHandlerNode,
 	}
@@ -310,18 +324,22 @@ func (s *Service) buildSourceAckerNode(
 func (s *Service) buildDLQHandlerNode(
 	ctx context.Context,
 	connFetcher ConnectorFetcher,
+	pluginFetcher PluginDispenserFetcher,
 	pl *Instance,
 ) (*stream.DLQHandlerNode, error) {
-	dest, err := connFetcher.Create(
+	pluginDispenser, err := pluginFetcher.NewDispenser(s.logger, pl.DLQ.Plugin)
+	if err != nil {
+		return nil, fmt.Errorf("could not fetch DLQ plugin: %w", err)
+	}
+	conn, err := connFetcher.Create(
 		ctx,
 		pl.ID+"-dlq",
 		connector.TypeDestination,
+		pluginDispenser,
+		pl.ID,
 		connector.Config{
-			Name:         pl.ID + "-dlq",
-			Settings:     pl.DLQ.Settings,
-			Plugin:       pl.DLQ.Plugin,
-			PipelineID:   pl.ID,
-			ProcessorIDs: nil,
+			Name:     pl.ID + "-dlq",
+			Settings: pl.DLQ.Settings,
 		},
 		connector.ProvisionTypeDLQ, // the provision type ensures the connector won't be persisted
 	)
@@ -329,9 +347,14 @@ func (s *Service) buildDLQHandlerNode(
 		return nil, cerrors.Errorf("failed to create DLQ destination: %w", err)
 	}
 
+	dest, err := conn.Connector(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	return &stream.DLQHandlerNode{
-		Name:    dest.ID(),
-		Handler: &DLQDestination{Destination: dest.(connector.Destination)},
+		Name:    conn.ID,
+		Handler: &DLQDestination{Destination: dest.(*connector.Destination)},
 
 		WindowSize:          pl.DLQ.WindowSize,
 		WindowNackThreshold: pl.DLQ.WindowNackThreshold,
@@ -340,23 +363,23 @@ func (s *Service) buildDLQHandlerNode(
 
 func (s *Service) buildMetricsNode(
 	pl *Instance,
-	conn connector.Connector,
+	conn *connector.Instance,
 ) *stream.MetricsNode {
 	return &stream.MetricsNode{
-		Name: conn.ID() + "-metrics",
+		Name: conn.ID + "-metrics",
 		BytesHistogram: measure.ConnectorBytesHistogram.WithValues(
 			pl.Config.Name,
-			conn.Config().Plugin,
-			strings.ToLower(conn.Type().String()),
+			conn.Plugin,
+			strings.ToLower(conn.Type.String()),
 		),
 	}
 }
 
 func (s *Service) buildDestinationAckerNode(
-	dest connector.Destination,
+	dest *connector.Destination,
 ) *stream.DestinationAckerNode {
 	return &stream.DestinationAckerNode{
-		Name:        dest.ID() + "-acker",
+		Name:        dest.Instance.ID + "-acker",
 		Destination: dest,
 	}
 }
@@ -376,27 +399,32 @@ func (s *Service) buildDestinationNodes(
 			return nil, cerrors.Errorf("could not fetch connector: %w", err)
 		}
 
-		if instance.Type() != connector.TypeDestination {
+		if instance.Type != connector.TypeDestination {
 			continue // skip any connector that's not a destination
 		}
 
-		ackerNode := s.buildDestinationAckerNode(instance.(connector.Destination))
+		dest, err := instance.Connector(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		ackerNode := s.buildDestinationAckerNode(dest.(*connector.Destination))
 		destinationNode := stream.DestinationNode{
-			Name:        instance.ID(),
-			Destination: instance.(connector.Destination),
+			Name:        instance.ID,
+			Destination: dest.(*connector.Destination),
 			ConnectorTimer: measure.ConnectorExecutionDurationTimer.WithValues(
 				pl.Config.Name,
-				instance.Config().Plugin,
-				strings.ToLower(instance.Type().String()),
+				instance.Plugin,
+				strings.ToLower(instance.Type.String()),
 			),
 		}
 		metricsNode := s.buildMetricsNode(pl, instance)
 		destinationNode.Sub(metricsNode.Pub())
 		ackerNode.Sub(destinationNode.Pub())
 
-		connNodes, err := s.buildProcessorNodes(ctx, procFetcher, pl, instance.Config().ProcessorIDs, prev, metricsNode)
+		connNodes, err := s.buildProcessorNodes(ctx, procFetcher, pl, instance.ProcessorIDs, prev, metricsNode)
 		if err != nil {
-			return nil, cerrors.Errorf("could not build processor nodes for connector %s: %w", instance.ID(), err)
+			return nil, cerrors.Errorf("could not build processor nodes for connector %s: %w", instance.ID, err)
 		}
 
 		nodes = append(nodes, connNodes...)

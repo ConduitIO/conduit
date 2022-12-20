@@ -22,11 +22,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/conduitio/conduit/pkg/connector"
-	"github.com/conduitio/conduit/pkg/connector/mock"
 	"github.com/conduitio/conduit/pkg/foundation/cchan"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/csync"
+	"github.com/conduitio/conduit/pkg/pipeline/stream/mock"
 	streammock "github.com/conduitio/conduit/pkg/pipeline/stream/mock"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/golang/mock/gomock"
@@ -188,7 +187,7 @@ type sourceAckerNodeTestHelper struct {
 func (h sourceAckerNodeTestHelper) newSourceAckerNode(
 	ctx context.Context,
 	t *testing.T,
-	src connector.Source,
+	src Source,
 ) (*SourceAckerNode, chan<- *Message, <-chan *Message) {
 	is := is.New(t)
 	node := &SourceAckerNode{

@@ -100,6 +100,7 @@ func TestService_CreateSuccess(t *testing.T) {
 			},
 			ProvisionedBy:   ProvisionTypeAPI,
 			pluginDispenser: pluginDispenser,
+			persister:       persister,
 		},
 	}, {
 		name: "create generator source connector",
@@ -113,6 +114,7 @@ func TestService_CreateSuccess(t *testing.T) {
 			},
 			ProvisionedBy:   ProvisionTypeConfig,
 			pluginDispenser: pluginDispenser,
+			persister:       persister,
 		},
 	}}
 
@@ -134,15 +136,13 @@ func TestService_CreateSuccess(t *testing.T) {
 			is.True(!got.UpdatedAt.IsZero())
 			is.Equal(got.UpdatedAt, got.CreatedAt)
 			is.Equal(got.logger.Component(), "connector."+tt.want.Type.String())
-			is.True(got.pluginDispenser != nil)
-			is.Equal(got.persister, persister)
+			is.True(got.inspector != nil)
 
 			// copy over fields populated by the service
 			tt.want.CreatedAt = got.CreatedAt
 			tt.want.UpdatedAt = got.UpdatedAt
 			tt.want.logger = got.logger
-			tt.want.pluginDispenser = got.pluginDispenser
-			tt.want.persister = got.persister
+			tt.want.inspector = got.inspector
 
 			is.Equal(tt.want, got)
 

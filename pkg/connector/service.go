@@ -56,21 +56,21 @@ func (s *Service) Init(ctx context.Context, pluginService *plugin.Service) error
 	s.connectors = connectors
 	s.logger.Info(ctx).Int("count", len(s.connectors)).Msg("connectors initialized")
 
-	for _, i := range connectors {
-		measure.ConnectorsGauge.WithValues(strings.ToLower(i.Type.String())).Inc()
-		s.initInstance(i)
+	for _, conn := range connectors {
+		measure.ConnectorsGauge.WithValues(strings.ToLower(conn.Type.String())).Inc()
+		conn.init(s.logger, s.persister)
 
 		// try to get plugin dispenser, if that's not possible log a warning
 		// Conduit should not crash because a plugin does not exist, that
 		// pipeline just won't be able to start
-		i.pluginDispenser, err = pluginService.NewDispenser(i.logger, i.Plugin)
+		conn.pluginDispenser, err = pluginService.NewDispenser(conn.logger, conn.Plugin)
 		if err != nil {
 			s.logger.Warn(ctx).
 				Err(err).
-				Str(log.ConnectorIDField, i.ID).
-				Str(log.PipelineIDField, i.PipelineID).
-				Str(log.PluginNameField, i.Plugin).
-				Msgf("did not find plugin for connector, pipeline won't be able to start (tip: make sure plugin %v is available and restart Conduit)", i.Plugin)
+				Str(log.ConnectorIDField, conn.ID).
+				Str(log.PipelineIDField, conn.PipelineID).
+				Str(log.PluginNameField, conn.Plugin).
+				Msgf("did not find plugin for connector, pipeline won't be able to start (tip: make sure plugin %v is available and restart Conduit)", conn.Plugin)
 		}
 	}
 
@@ -132,7 +132,7 @@ func (s *Service) Create(
 
 		pluginDispenser: pluginDispenser,
 	}
-	s.initInstance(conn)
+	conn.init(s.logger, s.persister)
 
 	if p == ProvisionTypeDLQ {
 		// do not persist the instance, just return the connector
@@ -234,15 +234,4 @@ func (s *Service) RemoveProcessor(ctx context.Context, connectorID string, proce
 	}
 
 	return conn, err
-}
-
-func (s *Service) initInstance(conn *Instance) {
-	connLogger := s.logger
-	connLogger.Logger = connLogger.Logger.With().
-		Str(log.ConnectorIDField, conn.ID).
-		Logger()
-	connLogger = connLogger.WithComponent("connector." + conn.Type.String())
-
-	conn.persister = s.persister
-	conn.logger = connLogger
 }

@@ -20,15 +20,14 @@ import (
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/conduitio/conduit/pkg/inspector"
 	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/conduitio/conduit/pkg/record"
 )
 
 type Source struct {
-	instance  *Instance
-	plugin    plugin.SourcePlugin
-	inspector *inspector.Inspector
+	Instance *Instance
+
+	plugin plugin.SourcePlugin
 
 	// errs is used to signal the node that the connector experienced an error
 	// when it was processing something asynchronously (e.g. persisting state).
@@ -37,54 +36,73 @@ type Source struct {
 	// stopStream is a function that closes the context of the stream
 	stopStream context.CancelFunc
 
-	// m can lock a source from concurrent access (e.g. in connector persister).
-	m sync.Mutex
 	// wg tracks the number of in flight calls to the plugin.
 	wg sync.WaitGroup
+}
+
+type SourceState struct {
+	Position record.Position
+}
+
+func (s *Source) ID() string {
+	return s.Instance.ID
 }
 
 func (s *Source) Errors() <-chan error {
 	return s.errs
 }
 
-func (s *Source) Inspect(ctx context.Context) *inspector.Session {
-	return s.inspector.NewSession(ctx)
+// init dispenses the plugin and configures it.
+func (s *Source) initPlugin(ctx context.Context) (plugin.SourcePlugin, error) {
+	s.Instance.logger.Debug(ctx).Msg("starting source connector plugin")
+	src, err := s.Instance.pluginDispenser.DispenseSource()
+	if err != nil {
+		return nil, err
+	}
+
+	s.Instance.logger.Debug(ctx).Msg("configuring source connector plugin")
+	err = src.Configure(ctx, s.Instance.Config.Settings)
+	if err != nil {
+		_ = src.Teardown(ctx)
+		return nil, err
+	}
+
+	return src, nil
 }
 
-func (s *Source) Open(ctx context.Context) (err error) {
-	if s.plugin == nil {
-		return plugin.ErrPluginNotRunning
+func (s *Source) Open(ctx context.Context) error {
+	s.Instance.Lock()
+	defer s.Instance.Unlock()
+	if s.Instance.connector != nil {
+		// this means another connector is running (this shouldn't actually happen)
+		return cerrors.New("another instance of the connector is already running")
 	}
 
-	defer func() {
-		if err != nil {
-			_ = s.plugin.Teardown(ctx)
-			s.plugin = nil
-		}
-	}()
-
-	var state SourceState
-	if s.instance.State != nil {
-		state = s.instance.State.(SourceState)
-	}
-
-	s.instance.logger.Debug(ctx).Msg("configuring source connector plugin")
-	err = s.plugin.Configure(ctx, s.instance.Config.Settings)
+	src, err := s.initPlugin(ctx)
 	if err != nil {
 		return err
+	}
+
+	var state SourceState
+	if s.Instance.State != nil {
+		state = s.Instance.State.(SourceState)
 	}
 
 	streamCtx, cancelStreamCtx := context.WithCancel(ctx)
-	err = s.plugin.Start(streamCtx, state.Position)
+	err = src.Start(streamCtx, state.Position)
 	if err != nil {
 		cancelStreamCtx()
+		_ = src.Teardown(ctx)
 		return err
 	}
 
-	s.instance.logger.Info(ctx).Msg("source connector plugin successfully started")
+	s.Instance.logger.Info(ctx).Msg("source connector plugin successfully started")
 
+	s.plugin = src
 	s.stopStream = cancelStreamCtx
-	s.instance.persister.ConnectorStarted()
+	s.Instance.connector = s
+	s.Instance.persister.ConnectorStarted()
+
 	return nil
 }
 
@@ -95,13 +113,13 @@ func (s *Source) Stop(ctx context.Context) (record.Position, error) {
 		return nil, err
 	}
 
-	s.instance.logger.Debug(ctx).Msg("sending stop signal to source connector plugin")
+	s.Instance.logger.Debug(ctx).Msg("sending stop signal to source connector plugin")
 	lastPosition, err := s.plugin.Stop(ctx)
 	if err != nil {
 		return nil, cerrors.Errorf("could not stop source plugin: %w", err)
 	}
 
-	s.instance.logger.Info(ctx).
+	s.Instance.logger.Info(ctx).
 		Bytes(log.RecordPositionField, lastPosition).
 		Msg("source connector plugin successfully responded to stop signal")
 	return lastPosition, nil
@@ -109,8 +127,8 @@ func (s *Source) Stop(ctx context.Context) (record.Position, error) {
 
 func (s *Source) Teardown(ctx context.Context) error {
 	// lock source as we are about to mutate the plugin field
-	s.m.Lock()
-	defer s.m.Unlock()
+	s.Instance.Lock()
+	defer s.Instance.Unlock()
 	if s.plugin == nil {
 		return plugin.ErrPluginNotRunning
 	}
@@ -123,17 +141,18 @@ func (s *Source) Teardown(ctx context.Context) error {
 	// wait for any calls to the plugin to stop running first (e.g. Stop, Ack or Read)
 	s.wg.Wait()
 
-	s.instance.logger.Debug(ctx).Msg("tearing down source connector plugin")
+	s.Instance.logger.Debug(ctx).Msg("tearing down source connector plugin")
 	err := s.plugin.Teardown(ctx)
 
 	s.plugin = nil
-	s.instance.persister.ConnectorStopped()
+	s.Instance.connector = nil
+	s.Instance.persister.ConnectorStopped()
 
 	if err != nil {
 		return cerrors.Errorf("could not tear down source connector plugin: %w", err)
 	}
 
-	s.instance.logger.Info(ctx).Msg("source connector plugin successfully torn down")
+	s.Instance.logger.Info(ctx).Msg("source connector plugin successfully torn down")
 	return nil
 }
 
@@ -163,9 +182,9 @@ func (s *Source) Read(ctx context.Context) (record.Record, error) {
 		r.Metadata = record.Metadata{}
 	}
 	// source connector ID is added to all records
-	r.Metadata.SetConduitSourceConnectorID(s.instance.ID)
+	r.Metadata.SetConduitSourceConnectorID(s.Instance.ID)
 
-	s.inspector.Send(ctx, r)
+	s.Instance.inspector.Send(ctx, r)
 	return r, nil
 }
 
@@ -182,9 +201,9 @@ func (s *Source) Ack(ctx context.Context, p record.Position) error {
 	}
 
 	// lock to prevent race condition with connector persister
-	s.instance.State = SourceState{Position: p}
+	s.Instance.State = SourceState{Position: p}
 
-	s.instance.persister.Persist(ctx, s.instance, func(err error) {
+	s.Instance.persister.Persist(ctx, s.Instance, func(err error) {
 		if err != nil {
 			s.errs <- err
 		}
@@ -196,8 +215,8 @@ func (s *Source) Ack(ctx context.Context, p record.Position) error {
 // call in the wait group. The returned function should be called in a deferred
 // statement to signal the plugin call is over.
 func (s *Source) preparePluginCall() (func(), error) {
-	s.m.Lock()
-	defer s.m.Unlock()
+	s.Instance.RLock()
+	defer s.Instance.RUnlock()
 	if s.plugin == nil {
 		return func() { /* do nothing */ }, plugin.ErrPluginNotRunning
 	}

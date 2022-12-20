@@ -77,6 +77,7 @@ func (s *Service) Run(
 	ctx context.Context,
 	connFetcher ConnectorFetcher,
 	procFetcher ProcessorFetcher,
+	pluginFetcher PluginDispenserFetcher,
 ) error {
 	var err error
 	s.logger.Debug(ctx).Msg("initializing pipelines statuses")
@@ -84,7 +85,7 @@ func (s *Service) Run(
 	// run pipelines that are in the StatusSystemStopped state
 	for _, instance := range s.instances {
 		if instance.Status == StatusSystemStopped {
-			startErr := s.Start(ctx, connFetcher, procFetcher, instance.ID)
+			startErr := s.Start(ctx, connFetcher, procFetcher, pluginFetcher, instance.ID)
 			if startErr != nil {
 				// try to start remaining pipelines and gather errors
 				err = multierror.Append(err, startErr)

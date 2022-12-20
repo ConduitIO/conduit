@@ -19,12 +19,12 @@ package connector
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/inspector"
 	"github.com/conduitio/conduit/pkg/plugin"
-	"github.com/conduitio/conduit/pkg/record"
 )
 
 const (
@@ -63,7 +63,13 @@ type Instance struct {
 	pluginDispenser plugin.Dispenser
 	logger          log.CtxLogger
 	persister       *Persister
-	// TODO make sure Connector can only be called if no connector is dispensed
+	inspector       *inspector.Inspector
+
+	// connector stores the reference to a running connector. If the field is
+	// nil the connector is not running.
+	connector Connector
+
+	sync.RWMutex
 }
 
 // Config collects common data stored for a connector.
@@ -72,49 +78,46 @@ type Config struct {
 	Settings map[string]string
 }
 
-type SourceState struct {
-	Position record.Position
+type Connector interface{}
+
+func (i *Instance) init(logger log.CtxLogger, persister *Persister) {
+	connLogger := logger
+	connLogger.Logger = connLogger.Logger.With().
+		Str(log.ConnectorIDField, i.ID).
+		Logger()
+	connLogger = connLogger.WithComponent("connector." + i.Type.String())
+
+	i.persister = persister
+	i.logger = connLogger
+	i.inspector = inspector.New(i.logger, inspectorBufferSize)
 }
 
-type DestinationState struct {
-	Positions map[string]record.Position
-}
-
-type Connector interface {
-	// Inspect returns an inspector.Session which exposes the records
-	// coming into or out of this connector (depending on the connector type).
-	Inspect(context.Context) *inspector.Session
+// Inspect returns an inspector.Session which exposes the records
+// coming into or out of this connector (depending on the connector type).
+func (i *Instance) Inspect(ctx context.Context) *inspector.Session {
+	return i.inspector.NewSession(ctx)
 }
 
 func (i *Instance) Connector(ctx context.Context) (Connector, error) {
 	if i.pluginDispenser == nil {
 		return nil, fmt.Errorf("connector has no plugin dispenser, make sure plugin %s exists", i.Plugin)
 	}
+	if i.connector != nil {
+		return nil, ErrConnectorRunning
+	}
 
 	i.logger.Debug(ctx).Msg("starting connector plugin")
 
 	switch i.Type {
 	case TypeSource:
-		src, err := i.pluginDispenser.DispenseSource()
-		if err != nil {
-			return nil, err
-		}
 		return &Source{
-			instance:  i,
-			plugin:    src,
-			errs:      make(chan error),
-			inspector: inspector.New(i.logger, inspectorBufferSize),
+			Instance: i,
+			errs:     make(chan error),
 		}, nil
 	case TypeDestination:
-		dest, err := i.pluginDispenser.DispenseDestination()
-		if err != nil {
-			return nil, err
-		}
 		return &Destination{
-			instance:  i,
-			plugin:    dest,
-			errs:      make(chan error),
-			inspector: inspector.New(i.logger, inspectorBufferSize),
+			Instance: i,
+			errs:     make(chan error),
 		}, nil
 	default:
 		return nil, ErrInvalidConnectorType

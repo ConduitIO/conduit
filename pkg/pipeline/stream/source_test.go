@@ -20,9 +20,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/conduitio/conduit/pkg/connector/mock"
 	"github.com/conduitio/conduit/pkg/foundation/cchan"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/noop"
+	"github.com/conduitio/conduit/pkg/pipeline/stream/mock"
 	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/golang/mock/gomock"
