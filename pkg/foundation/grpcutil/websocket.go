@@ -58,13 +58,17 @@ func (w *inMemoryResponseWriter) Flush() {}
 // redirects the response data from the http.Handler
 // to a WebSocket connection.
 type webSocketProxy struct {
-	handler      http.Handler
-	logger       log.CtxLogger
-	upgrader     websocket.Upgrader
-	conn         *websocket.Conn
+	handler  http.Handler
+	logger   log.CtxLogger
+	upgrader websocket.Upgrader
+	conn     *websocket.Conn
+
+	// pingInterval is the interval at which the proxy sends pings
 	pingInterval time.Duration
-	pongWait     time.Duration
-	pingWait     time.Duration
+	// pongWait is the maximum allowed wait for a pong response
+	pongWait time.Duration
+	// pingWait is the maximum allowed wait for writing a ping message
+	pingWait time.Duration
 }
 
 func newWebSocketProxy(handler http.Handler, logger log.CtxLogger) *webSocketProxy {
