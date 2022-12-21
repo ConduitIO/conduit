@@ -20,7 +20,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/gorilla/websocket"
@@ -62,13 +61,6 @@ type webSocketProxy struct {
 	logger   log.CtxLogger
 	upgrader websocket.Upgrader
 	conn     *websocket.Conn
-
-	// pingInterval is the interval at which the proxy sends pings
-	pingInterval time.Duration
-	// pongWait is the maximum allowed wait for a pong response
-	pongWait time.Duration
-	// pingWait is the maximum allowed wait for writing a ping message
-	pingWait time.Duration
 }
 
 func newWebSocketProxy(handler http.Handler, logger log.CtxLogger) *webSocketProxy {
@@ -80,9 +72,6 @@ func newWebSocketProxy(handler http.Handler, logger log.CtxLogger) *webSocketPro
 			WriteBufferSize: 1024,
 		},
 	}
-	proxy.pingInterval = 30 * time.Second
-	proxy.pongWait = (proxy.pingInterval * 10) / 9
-	proxy.pingWait = proxy.pongWait / 6
 
 	return proxy
 }
@@ -127,7 +116,6 @@ func (p *webSocketProxy) proxy(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	go p.startReadLoop(ctx, cancelFn)
-	go p.pingWriteLoop(cancelFn)
 	p.startWriteLoop(ctx, responseR)
 }
 
@@ -137,21 +125,6 @@ func (p *webSocketProxy) startReadLoop(ctx context.Context, cancelFn context.Can
 	// or if there's been an error reading a message.
 	// Because of the latter, we need to cancel the request context.
 	defer cancelFn()
-
-	p.conn.SetReadLimit(512)
-	err := p.conn.SetReadDeadline(time.Now().Add(p.pongWait))
-	if err != nil {
-		p.logger.Warn(ctx).Err(err).Msgf("couldn't set read deadline %v", p.pongWait)
-		return
-	}
-	p.conn.SetPongHandler(func(string) error {
-		err := p.conn.SetReadDeadline(time.Now().Add(p.pongWait))
-		if err != nil {
-			// todo return err?
-			p.logger.Warn(ctx).Err(err).Msgf("couldn't set read deadline %v", p.pongWait)
-		}
-		return nil
-	})
 
 	for {
 		select {
@@ -208,21 +181,6 @@ func (p *webSocketProxy) startWriteLoop(ctx context.Context, responseReader *io.
 		p.logger.Err(ctx, sErr).Msg("failed reading data from original response")
 		if err := p.conn.WriteMessage(websocket.TextMessage, []byte(sErr.Error())); err != nil {
 			p.logger.Warn(ctx).Err(err).Msg("[write] failed writing scanner error")
-		}
-	}
-}
-
-func (p *webSocketProxy) pingWriteLoop(cancelFn context.CancelFunc) {
-	ticker := time.NewTicker(p.pingInterval)
-	defer func() {
-		ticker.Stop()
-		cancelFn()
-	}()
-	for range ticker.C {
-		// todo check error
-		p.conn.SetWriteDeadline(time.Now().Add(p.pingWait)) //nolint:errcheck // gorilla/websocket always returns nil here
-		if err := p.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
-			return
 		}
 	}
 }
