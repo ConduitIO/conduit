@@ -129,20 +129,26 @@ func (p *webSocketProxy) proxy(w http.ResponseWriter, r *http.Request) {
 
 // startReadLoop starts a read loop on the proxy's WebSocket connection
 func (p *webSocketProxy) startReadLoop(ctx context.Context, cancelFn context.CancelFunc) {
-	p.conn.SetReadLimit(512)
-	// todo handle errors
-	p.conn.SetReadDeadline(time.Now().Add(p.pongWait))
-	p.conn.SetPongHandler(func(string) error {
-		p.conn.SetReadDeadline(time.Now().Add(p.pongWait))
-		return nil
-	})
-
 	// The read loop will stop only if the request context was cancelled,
 	// or if there's been an error reading a message.
 	// Because of the latter, we need to cancel the request context.
-	defer func() {
-		cancelFn()
-	}()
+	defer cancelFn()
+
+	p.conn.SetReadLimit(512)
+	err := p.conn.SetReadDeadline(time.Now().Add(p.pongWait))
+	if err != nil {
+		p.logger.Warn(ctx).Err(err).Msgf("couldn't set read deadline %v", p.pongWait)
+		return
+	}
+	p.conn.SetPongHandler(func(string) error {
+		err := p.conn.SetReadDeadline(time.Now().Add(p.pongWait))
+		if err != nil {
+			// todo return err?
+			p.logger.Warn(ctx).Err(err).Msgf("couldn't set read deadline %v", p.pongWait)
+		}
+		return nil
+	})
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -214,6 +220,7 @@ func (p *webSocketProxy) pingWriteLoop(ctx context.Context) {
 			p.logger.Debug(ctx).Msg("stopped pinging write loop because request context was cancelled")
 			return
 		case <-ticker.C:
+			// todo check error
 			p.conn.SetWriteDeadline(time.Now().Add(p.pingWait))
 			if err := p.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				return
