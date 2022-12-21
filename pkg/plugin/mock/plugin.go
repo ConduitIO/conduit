@@ -81,20 +81,6 @@ func (mr *DispenserMockRecorder) DispenseSpecifier() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DispenseSpecifier", reflect.TypeOf((*Dispenser)(nil).DispenseSpecifier))
 }
 
-// FullName mocks base method.
-func (m *Dispenser) FullName() plugin.FullName {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "FullName")
-	ret0, _ := ret[0].(plugin.FullName)
-	return ret0
-}
-
-// FullName indicates an expected call of FullName.
-func (mr *DispenserMockRecorder) FullName() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FullName", reflect.TypeOf((*Dispenser)(nil).FullName))
-}
-
 // DestinationPlugin is a mock of DestinationPlugin interface.
 type DestinationPlugin struct {
 	ctrl     *gomock.Controller
