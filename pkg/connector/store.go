@@ -249,16 +249,16 @@ func (s *Store) decode(raw []byte) (*Instance, error) {
 		switch conn.Type {
 		case TypeSource:
 			var state SourceState
-			stateJson, _ := json.Marshal(conn.State)
-			err := json.Unmarshal(stateJson, &state)
+			stateJSON, _ := json.Marshal(conn.State)
+			err := json.Unmarshal(stateJSON, &state)
 			if err != nil {
 				return nil, err
 			}
 			conn.State = state
 		case TypeDestination:
 			var state DestinationState
-			stateJson, _ := json.Marshal(conn.State)
-			err := json.Unmarshal(stateJson, &state)
+			stateJSON, _ := json.Marshal(conn.State)
+			err := json.Unmarshal(stateJSON, &state)
 			if err != nil {
 				return nil, err
 			}

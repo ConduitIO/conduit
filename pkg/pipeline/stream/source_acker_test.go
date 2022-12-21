@@ -26,7 +26,6 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/csync"
 	"github.com/conduitio/conduit/pkg/pipeline/stream/mock"
-	streammock "github.com/conduitio/conduit/pkg/pipeline/stream/mock"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/golang/mock/gomock"
 	"github.com/matryer/is"
@@ -212,7 +211,7 @@ func (h sourceAckerNodeTestHelper) newDLQHandlerNode(
 	t *testing.T,
 ) *DLQHandlerNode {
 	is := is.New(t)
-	handler := streammock.NewDLQHandler(h.ctrl)
+	handler := mock.NewDLQHandler(h.ctrl)
 	handler.EXPECT().Open(gomock.Any()).Return(nil)
 	handler.EXPECT().Close(gomock.Any())
 
