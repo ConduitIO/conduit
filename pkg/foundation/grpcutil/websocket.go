@@ -19,6 +19,8 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"strings"
+	"time"
 
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/gorilla/websocket"
@@ -56,13 +58,17 @@ func (w *inMemoryResponseWriter) Flush() {}
 // redirects the response data from the http.Handler
 // to a WebSocket connection.
 type webSocketProxy struct {
-	handler  http.Handler
-	logger   log.CtxLogger
-	upgrader websocket.Upgrader
+	handler      http.Handler
+	logger       log.CtxLogger
+	upgrader     websocket.Upgrader
+	conn         *websocket.Conn
+	pingInterval time.Duration
+	pongWait     time.Duration
+	pingWait     time.Duration
 }
 
 func newWebSocketProxy(handler http.Handler, logger log.CtxLogger) *webSocketProxy {
-	return &webSocketProxy{
+	proxy := &webSocketProxy{
 		handler: handler,
 		logger:  logger.WithComponent("grpcutil.webSocketProxy"),
 		upgrader: websocket.Upgrader{
@@ -70,6 +76,11 @@ func newWebSocketProxy(handler http.Handler, logger log.CtxLogger) *webSocketPro
 			WriteBufferSize: 1024,
 		},
 	}
+	proxy.pingInterval = 30 * time.Second
+	proxy.pongWait = (proxy.pingInterval * 10) / 9
+	proxy.pingWait = proxy.pongWait / 6
+
+	return proxy
 }
 
 func (p *webSocketProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -92,6 +103,8 @@ func (p *webSocketProxy) proxy(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close()
 
+	p.conn = conn
+
 	// We use a pipe to read the data being written to the underlying http.Handler
 	// and then write it to the WebSocket connection.
 	responseR, responseW := io.Pipe()
@@ -103,10 +116,13 @@ func (p *webSocketProxy) proxy(w http.ResponseWriter, r *http.Request) {
 		response.closed <- true
 	}()
 
+	// Start the "underlying" http.Handler
 	go func() {
 		defer cancelFn()
 		p.handler.ServeHTTP(response, r)
 	}()
+
+	go p.startReadLoop(ctx)
 
 	scanner := bufio.NewScanner(responseR)
 
@@ -117,7 +133,7 @@ func (p *webSocketProxy) proxy(w http.ResponseWriter, r *http.Request) {
 		}
 
 		p.logger.Trace(ctx).Msgf("[write] scanned %v", scanner.Text())
-		if err := conn.WriteMessage(websocket.TextMessage, scanner.Bytes()); err != nil {
+		if err := p.conn.WriteMessage(websocket.TextMessage, scanner.Bytes()); err != nil {
 			p.logger.Warn(ctx).Err(err).Msg("[write] error writing websocket message")
 			return
 		}
@@ -125,8 +141,47 @@ func (p *webSocketProxy) proxy(w http.ResponseWriter, r *http.Request) {
 
 	if sErr := scanner.Err(); sErr != nil {
 		p.logger.Err(ctx, sErr).Msg("failed reading data from original response")
-		if err := conn.WriteMessage(websocket.TextMessage, []byte(sErr.Error())); err != nil {
+		if err := p.conn.WriteMessage(websocket.TextMessage, []byte(sErr.Error())); err != nil {
 			p.logger.Warn(ctx).Err(err).Msg("[write] failed writing scanner error")
 		}
 	}
+}
+
+// startReadLoop starts a read loop on the proxy's WebSocket connection
+func (p *webSocketProxy) startReadLoop(ctx context.Context) {
+	p.conn.SetReadLimit(512)
+	// todo handle errors
+	p.conn.SetReadDeadline(time.Now().Add(p.pongWait))
+	p.conn.SetPongHandler(func(string) error {
+		p.conn.SetReadDeadline(time.Now().Add(p.pongWait))
+		return nil
+	})
+
+	for {
+		// The only use we have for reads right now
+		// is for ping, pong and close messages.
+		// https://pkg.go.dev/github.com/gorilla/websocket#hdr-Control_Messages
+		// Also, a read loop can detect client disconnects much quicker:
+		// https://groups.google.com/g/golang-nuts/c/FFzQO26jEoE/m/mYhcsK20EwAJ
+		_, _, err := p.conn.ReadMessage()
+		if err != nil {
+			if p.isClosedConnErr(err) {
+				p.logger.Warn(ctx).Err(err).Msg("read error")
+			}
+			break
+		}
+	}
+}
+
+func (p *webSocketProxy) isClosedConnErr(err error) bool {
+	str := err.Error()
+	if strings.Contains(str, "use of closed network connection") {
+		return true
+	}
+	return websocket.IsCloseError(
+		err,
+		websocket.CloseNormalClosure,
+		websocket.CloseGoingAway,
+		websocket.CloseAbnormalClosure,
+	)
 }
