@@ -214,14 +214,11 @@ func (p *webSocketProxy) pingWriteLoop(cancelFn context.CancelFunc) {
 		ticker.Stop()
 		cancelFn()
 	}()
-	for {
-		select {
-		case <-ticker.C:
-			// todo check error
-			p.conn.SetWriteDeadline(time.Now().Add(p.pingWait))
-			if err := p.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
-				return
-			}
+	for range ticker.C {
+		// todo check error
+		p.conn.SetWriteDeadline(time.Now().Add(p.pingWait)) //nolint:errcheck // gorilla/websocket always returns nil here
+		if err := p.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+			return
 		}
 	}
 }
