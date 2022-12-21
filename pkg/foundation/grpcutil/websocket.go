@@ -123,7 +123,7 @@ func (p *webSocketProxy) proxy(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	go p.startReadLoop(ctx, cancelFn)
-	go p.pingWriteLoop(ctx)
+	go p.pingWriteLoop(cancelFn)
 	p.startWriteLoop(ctx, responseR)
 }
 
@@ -208,17 +208,14 @@ func (p *webSocketProxy) startWriteLoop(ctx context.Context, responseReader *io.
 	}
 }
 
-func (p *webSocketProxy) pingWriteLoop(ctx context.Context) {
+func (p *webSocketProxy) pingWriteLoop(cancelFn context.CancelFunc) {
 	ticker := time.NewTicker(p.pingInterval)
 	defer func() {
 		ticker.Stop()
-		p.conn.Close()
+		cancelFn()
 	}()
 	for {
 		select {
-		case <-ctx.Done():
-			p.logger.Debug(ctx).Msg("stopped pinging write loop because request context was cancelled")
-			return
 		case <-ticker.C:
 			// todo check error
 			p.conn.SetWriteDeadline(time.Now().Add(p.pingWait))
