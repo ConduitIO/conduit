@@ -16,14 +16,14 @@ package provisioning
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"os"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/yaml/v3"
 )
-
-const ParserVersion = "1.1"
 
 type ProcessorConfig struct {
 	Type     string            `yaml:"type"`
@@ -59,20 +59,44 @@ type PipelinesConfig struct {
 	Pipelines map[string]PipelineConfig `yaml:"pipelines"`
 }
 
-func Parse(data []byte) (map[string]PipelineConfig, error) {
+type Parser struct {
+	logger log.CtxLogger
+}
+
+func NewParser(logger log.CtxLogger) *Parser {
+	return &Parser{
+		logger: logger.WithComponent("provisioning.Parser"),
+	}
+}
+
+func (p *Parser) Parse(ctx context.Context, path string, data []byte) (map[string]PipelineConfig, error) {
 	// replace environment variables with their values
 	data = []byte(os.ExpandEnv(string(data)))
 	dec := yaml.NewDecoder(bytes.NewReader(data))
+	dec.KnownFields(true)
 
 	var docs []PipelinesConfig
 	for {
 		var doc PipelinesConfig
+		linter := newConfigLinter()
+		dec.WithHook(linter.DecoderHook) // register fresh linter hook
 		err := dec.Decode(&doc)
-		if cerrors.Is(err, io.EOF) {
-			break
-		} else if err != nil {
-			return nil, cerrors.Errorf("parsing error: %w", err)
+		if err != nil {
+			// we reached the end of the document
+			if cerrors.Is(err, io.EOF) {
+				break
+			}
+			// check if it's a type error (document was partially decoded)
+			var typeErr *yaml.TypeError
+			if cerrors.As(err, &typeErr) {
+				err = p.handleYamlTypeError(ctx, path, typeErr)
+			}
+			// check if we recovered from the error
+			if err != nil {
+				return nil, cerrors.Errorf("parsing error: %w", err)
+			}
 		}
+		linter.LogWarnings(ctx, p.logger, path)
 		docs = append(docs, doc)
 	}
 
@@ -81,15 +105,35 @@ func Parse(data []byte) (map[string]PipelineConfig, error) {
 		return nil, nil
 	}
 
-	merged, err := mergePipelinesConfigMaps(docs)
+	merged, err := p.mergePipelinesConfigMaps(docs)
 	if err != nil {
 		return nil, err
 	}
 	return merged, nil
 }
 
+func (p *Parser) handleYamlTypeError(ctx context.Context, path string, typeErr *yaml.TypeError) error {
+	for _, uerr := range typeErr.Errors {
+		if _, ok := uerr.(*yaml.UnknownFieldError); !ok {
+			// we don't tolerate any other error except unknown field
+			return typeErr
+		}
+	}
+	// only UnknownFieldErrors found, log them
+	for _, uerr := range typeErr.Errors {
+		e := p.logger.Warn(ctx).
+			Int("line", uerr.Line()).
+			Int("column", uerr.Column())
+		if path != "" {
+			e.Str("path", path)
+		}
+		e.Msg(uerr.Error())
+	}
+	return nil
+}
+
 // mergePipelinesConfigMaps takes an array of PipelinesConfig and merges them into one map
-func mergePipelinesConfigMaps(arr []PipelinesConfig) (map[string]PipelineConfig, error) {
+func (p *Parser) mergePipelinesConfigMaps(arr []PipelinesConfig) (map[string]PipelineConfig, error) {
 	pipelines := make(map[string]PipelineConfig, 0)
 
 	for _, config := range arr {
