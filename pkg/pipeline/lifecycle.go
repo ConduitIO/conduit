@@ -35,7 +35,7 @@ import (
 // ConnectorFetcher can fetch a connector instance.
 type ConnectorFetcher interface {
 	Get(ctx context.Context, id string) (*connector.Instance, error)
-	Create(ctx context.Context, id string, t connector.Type, pluginDispenser plugin.Dispenser, pipelineID string, cfg connector.Config, p connector.ProvisionType) (*connector.Instance, error)
+	Create(ctx context.Context, id string, t connector.Type, plugin string, pipelineID string, cfg connector.Config, p connector.ProvisionType) (*connector.Instance, error)
 }
 
 // ProcessorFetcher can fetch a processor instance.
@@ -46,6 +46,30 @@ type ProcessorFetcher interface {
 // PluginDispenserFetcher can fetch a plugin.
 type PluginDispenserFetcher interface {
 	NewDispenser(logger log.CtxLogger, name string) (plugin.Dispenser, error)
+}
+
+// Run runs pipelines that had the running state in store.
+func (s *Service) Run(
+	ctx context.Context,
+	connFetcher ConnectorFetcher,
+	procFetcher ProcessorFetcher,
+	pluginFetcher PluginDispenserFetcher,
+) error {
+	var err error
+	s.logger.Debug(ctx).Msg("initializing pipelines statuses")
+
+	// run pipelines that are in the StatusSystemStopped state
+	for _, instance := range s.instances {
+		if instance.Status == StatusSystemStopped {
+			startErr := s.Start(ctx, connFetcher, procFetcher, pluginFetcher, instance.ID)
+			if startErr != nil {
+				// try to start remaining pipelines and gather errors
+				err = multierror.Append(err, startErr)
+			}
+		}
+	}
+
+	return err
 }
 
 // Start builds and starts a pipeline instance.
@@ -196,7 +220,7 @@ func (s *Service) buildNodes(
 		return nil, cerrors.Errorf("could not build processor nodes: %w", err)
 	}
 
-	destinationNodes, err := s.buildDestinationNodes(ctx, connFetcher, procFetcher, pl, &fanOut)
+	destinationNodes, err := s.buildDestinationNodes(ctx, connFetcher, procFetcher, pluginFetcher, pl, &fanOut)
 	if err != nil {
 		return nil, cerrors.Errorf("could not build destination nodes: %w", err)
 	}
@@ -280,7 +304,7 @@ func (s *Service) buildSourceNodes(
 			continue // skip any connector that's not a source
 		}
 
-		src, err := instance.Connector(ctx)
+		src, err := instance.Connector(ctx, pluginFetcher)
 		if err != nil {
 			return nil, err
 		}
@@ -327,15 +351,11 @@ func (s *Service) buildDLQHandlerNode(
 	pluginFetcher PluginDispenserFetcher,
 	pl *Instance,
 ) (*stream.DLQHandlerNode, error) {
-	pluginDispenser, err := pluginFetcher.NewDispenser(s.logger, pl.DLQ.Plugin)
-	if err != nil {
-		return nil, fmt.Errorf("could not fetch DLQ plugin: %w", err)
-	}
 	conn, err := connFetcher.Create(
 		ctx,
 		pl.ID+"-dlq",
 		connector.TypeDestination,
-		pluginDispenser,
+		pl.DLQ.Plugin,
 		pl.ID,
 		connector.Config{
 			Name:     pl.ID + "-dlq",
@@ -347,7 +367,7 @@ func (s *Service) buildDLQHandlerNode(
 		return nil, cerrors.Errorf("failed to create DLQ destination: %w", err)
 	}
 
-	dest, err := conn.Connector(ctx)
+	dest, err := conn.Connector(ctx, pluginFetcher)
 	if err != nil {
 		return nil, err
 	}
@@ -388,6 +408,7 @@ func (s *Service) buildDestinationNodes(
 	ctx context.Context,
 	connFetcher ConnectorFetcher,
 	procFetcher ProcessorFetcher,
+	pluginFetcher PluginDispenserFetcher,
 	pl *Instance,
 	prev stream.PubNode,
 ) ([]stream.Node, error) {
@@ -403,7 +424,7 @@ func (s *Service) buildDestinationNodes(
 			continue // skip any connector that's not a destination
 		}
 
-		dest, err := instance.Connector(ctx)
+		dest, err := instance.Connector(ctx, pluginFetcher)
 		if err != nil {
 			return nil, err
 		}

@@ -27,7 +27,8 @@ import (
 type Destination struct {
 	Instance *Instance
 
-	plugin plugin.DestinationPlugin
+	dispenser plugin.Dispenser
+	plugin    plugin.DestinationPlugin
 
 	// errs is used to signal the node that the connector experienced an error
 	// when it was processing something asynchronously (e.g. persisting state).
@@ -55,7 +56,7 @@ func (d *Destination) Errors() <-chan error {
 // init dispenses the plugin and configures it.
 func (d *Destination) initPlugin(ctx context.Context) (plugin.DestinationPlugin, error) {
 	d.Instance.logger.Debug(ctx).Msg("starting destination connector plugin")
-	dest, err := d.Instance.pluginDispenser.DispenseDestination()
+	dest, err := d.dispenser.DispenseDestination()
 	if err != nil {
 		return nil, err
 	}
@@ -96,7 +97,9 @@ func (d *Destination) Open(ctx context.Context) error {
 	d.plugin = dest
 	d.stopStream = cancelStreamCtx
 	d.Instance.connector = d
-	d.Instance.persister.ConnectorStarted()
+	if d.Instance.persister != nil {
+		d.Instance.persister.ConnectorStarted()
+	}
 
 	return nil
 }
@@ -141,7 +144,9 @@ func (d *Destination) Teardown(ctx context.Context) error {
 
 	d.plugin = nil
 	d.Instance.connector = nil
-	d.Instance.persister.ConnectorStopped()
+	if d.Instance.persister != nil {
+		d.Instance.persister.ConnectorStopped()
+	}
 
 	if err != nil {
 		return cerrors.Errorf("could not tear down destination connector plugin: %w", err)

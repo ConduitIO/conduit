@@ -23,7 +23,6 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/database"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/measure"
-	"github.com/conduitio/conduit/pkg/foundation/multierror"
 )
 
 // Service manages pipelines.
@@ -68,30 +67,6 @@ func (s *Service) Init(ctx context.Context) error {
 	}
 
 	s.logger.Info(ctx).Int("count", len(s.instances)).Msg("pipelines initialized")
-
-	return err
-}
-
-// Run runs pipelines that had the running state in store.
-func (s *Service) Run(
-	ctx context.Context,
-	connFetcher ConnectorFetcher,
-	procFetcher ProcessorFetcher,
-	pluginFetcher PluginDispenserFetcher,
-) error {
-	var err error
-	s.logger.Debug(ctx).Msg("initializing pipelines statuses")
-
-	// run pipelines that are in the StatusSystemStopped state
-	for _, instance := range s.instances {
-		if instance.Status == StatusSystemStopped {
-			startErr := s.Start(ctx, connFetcher, procFetcher, pluginFetcher, instance.ID)
-			if startErr != nil {
-				// try to start remaining pipelines and gather errors
-				err = multierror.Append(err, startErr)
-			}
-		}
-	}
 
 	return err
 }

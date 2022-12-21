@@ -27,7 +27,8 @@ import (
 type Source struct {
 	Instance *Instance
 
-	plugin plugin.SourcePlugin
+	dispenser plugin.Dispenser
+	plugin    plugin.SourcePlugin
 
 	// errs is used to signal the node that the connector experienced an error
 	// when it was processing something asynchronously (e.g. persisting state).
@@ -55,7 +56,7 @@ func (s *Source) Errors() <-chan error {
 // init dispenses the plugin and configures it.
 func (s *Source) initPlugin(ctx context.Context) (plugin.SourcePlugin, error) {
 	s.Instance.logger.Debug(ctx).Msg("starting source connector plugin")
-	src, err := s.Instance.pluginDispenser.DispenseSource()
+	src, err := s.dispenser.DispenseSource()
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +102,9 @@ func (s *Source) Open(ctx context.Context) error {
 	s.plugin = src
 	s.stopStream = cancelStreamCtx
 	s.Instance.connector = s
-	s.Instance.persister.ConnectorStarted()
+	if s.Instance.persister != nil {
+		s.Instance.persister.ConnectorStarted()
+	}
 
 	return nil
 }
@@ -146,7 +149,9 @@ func (s *Source) Teardown(ctx context.Context) error {
 
 	s.plugin = nil
 	s.Instance.connector = nil
-	s.Instance.persister.ConnectorStopped()
+	if s.Instance.persister != nil {
+		s.Instance.persister.ConnectorStopped()
+	}
 
 	if err != nil {
 		return cerrors.Errorf("could not tear down source connector plugin: %w", err)
@@ -201,13 +206,17 @@ func (s *Source) Ack(ctx context.Context, p record.Position) error {
 	}
 
 	// lock to prevent race condition with connector persister
+	s.Instance.Lock()
 	s.Instance.State = SourceState{Position: p}
+	s.Instance.Unlock()
 
-	s.Instance.persister.Persist(ctx, s.Instance, func(err error) {
-		if err != nil {
-			s.errs <- err
-		}
-	})
+	if s.Instance.persister != nil {
+		s.Instance.persister.Persist(ctx, s.Instance, func(err error) {
+			if err != nil {
+				s.errs <- err
+			}
+		})
+	}
 	return nil
 }
 

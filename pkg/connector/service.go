@@ -23,7 +23,6 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/database"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/measure"
-	"github.com/conduitio/conduit/pkg/plugin"
 )
 
 // Service manages connectors.
@@ -46,7 +45,7 @@ func NewService(logger log.CtxLogger, db database.DB, persister *Persister) *Ser
 }
 
 // Init fetches connectors from the store.
-func (s *Service) Init(ctx context.Context, pluginService *plugin.Service) error {
+func (s *Service) Init(ctx context.Context) error {
 	s.logger.Debug(ctx).Msg("initializing connectors")
 	connectors, err := s.store.GetAll(ctx)
 	if err != nil {
@@ -58,20 +57,7 @@ func (s *Service) Init(ctx context.Context, pluginService *plugin.Service) error
 
 	for _, conn := range connectors {
 		measure.ConnectorsGauge.WithValues(strings.ToLower(conn.Type.String())).Inc()
-		conn.init(s.logger, s.persister)
-
-		// try to get plugin dispenser, if that's not possible log a warning
-		// Conduit should not crash because a plugin does not exist, that
-		// pipeline just won't be able to start
-		conn.pluginDispenser, err = pluginService.NewDispenser(conn.logger, conn.Plugin)
-		if err != nil {
-			s.logger.Warn(ctx).
-				Err(err).
-				Str(log.ConnectorIDField, conn.ID).
-				Str(log.PipelineIDField, conn.PipelineID).
-				Str(log.PluginNameField, conn.Plugin).
-				Msgf("did not find plugin for connector, pipeline won't be able to start (tip: make sure plugin %v is available and restart Conduit)", conn.Plugin)
-		}
+		conn.Init(s.logger, s.persister)
 	}
 
 	return nil
@@ -102,13 +88,13 @@ func (s *Service) Create(
 	ctx context.Context,
 	id string,
 	t Type,
-	pluginDispenser plugin.Dispenser,
+	plugin string,
 	pipelineID string,
 	cfg Config,
 	p ProvisionType,
 ) (*Instance, error) {
 	// determine the path of the Connector binary
-	if pluginDispenser == nil {
+	if plugin == "" {
 		return nil, cerrors.New("must provide a plugin")
 	}
 	if pipelineID == "" {
@@ -124,15 +110,13 @@ func (s *Service) Create(
 		Type:       t,
 		Config:     cfg,
 		PipelineID: pipelineID,
-		Plugin:     string(pluginDispenser.FullName()),
+		Plugin:     plugin,
 
 		ProvisionedBy: p,
 		CreatedAt:     now,
 		UpdatedAt:     now,
-
-		pluginDispenser: pluginDispenser,
 	}
-	conn.init(s.logger, s.persister)
+	conn.Init(s.logger, s.persister)
 
 	if p == ProvisionTypeDLQ {
 		// do not persist the instance, just return the connector
@@ -229,6 +213,37 @@ func (s *Service) RemoveProcessor(ctx context.Context, connectorID string, proce
 
 	// persist conn
 	err = s.store.Set(ctx, connectorID, conn)
+	if err != nil {
+		return nil, err
+	}
+
+	return conn, err
+}
+
+func (s *Service) SetState(ctx context.Context, id string, state any) (*Instance, error) {
+	conn, err := s.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	switch state.(type) {
+	case SourceState:
+		if conn.Type != TypeSource {
+			return nil, cerrors.Errorf("expected connector to be a source (ID: %s): %w", id, ErrInvalidConnectorType)
+		}
+	case DestinationState:
+		if conn.Type != TypeDestination {
+			return nil, cerrors.Errorf("expected connector to be a destination (ID: %s): %w", id, ErrInvalidConnectorType)
+		}
+	case nil:
+		// all good
+	default:
+		return nil, cerrors.Errorf("invalid connector state type: %T", state)
+	}
+
+	conn.State = state
+
+	err = s.store.Set(ctx, id, conn)
 	if err != nil {
 		return nil, err
 	}

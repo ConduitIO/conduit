@@ -239,7 +239,7 @@ func (mr *ConnectorServiceMockRecorder) AddProcessor(arg0, arg1, arg2 interface{
 }
 
 // Create mocks base method.
-func (m *ConnectorService) Create(arg0 context.Context, arg1 string, arg2 connector.Type, arg3 plugin.Dispenser, arg4 string, arg5 connector.Config, arg6 connector.ProvisionType) (*connector.Instance, error) {
+func (m *ConnectorService) Create(arg0 context.Context, arg1 string, arg2 connector.Type, arg3, arg4 string, arg5 connector.Config, arg6 connector.ProvisionType) (*connector.Instance, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Create", arg0, arg1, arg2, arg3, arg4, arg5, arg6)
 	ret0, _ := ret[0].(*connector.Instance)

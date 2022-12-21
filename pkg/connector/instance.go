@@ -18,10 +18,10 @@ package connector
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
 
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/inspector"
 	"github.com/conduitio/conduit/pkg/plugin"
@@ -60,10 +60,9 @@ type Instance struct {
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
 
-	pluginDispenser plugin.Dispenser
-	logger          log.CtxLogger
-	persister       *Persister
-	inspector       *inspector.Inspector
+	logger    log.CtxLogger
+	persister *Persister
+	inspector *inspector.Inspector
 
 	// connector stores the reference to a running connector. If the field is
 	// nil the connector is not running.
@@ -80,15 +79,20 @@ type Config struct {
 
 type Connector interface{}
 
-func (i *Instance) init(logger log.CtxLogger, persister *Persister) {
+// PluginDispenserFetcher can fetch a plugin dispenser.
+type PluginDispenserFetcher interface {
+	NewDispenser(logger log.CtxLogger, name string) (plugin.Dispenser, error)
+}
+
+func (i *Instance) Init(logger log.CtxLogger, persister *Persister) {
 	connLogger := logger
 	connLogger.Logger = connLogger.Logger.With().
 		Str(log.ConnectorIDField, i.ID).
 		Logger()
 	connLogger = connLogger.WithComponent("connector." + i.Type.String())
 
-	i.persister = persister
 	i.logger = connLogger
+	i.persister = persister
 	i.inspector = inspector.New(i.logger, inspectorBufferSize)
 }
 
@@ -98,12 +102,15 @@ func (i *Instance) Inspect(ctx context.Context) *inspector.Session {
 	return i.inspector.NewSession(ctx)
 }
 
-func (i *Instance) Connector(ctx context.Context) (Connector, error) {
-	if i.pluginDispenser == nil {
-		return nil, fmt.Errorf("connector has no plugin dispenser, make sure plugin %s exists", i.Plugin)
-	}
+func (i *Instance) Connector(ctx context.Context, dispenserFetcher PluginDispenserFetcher) (Connector, error) {
 	if i.connector != nil {
+		// connector is already running, might be a bug where an old connector is stuck
 		return nil, ErrConnectorRunning
+	}
+
+	pluginDispenser, err := dispenserFetcher.NewDispenser(i.logger, i.Plugin)
+	if err != nil {
+		return nil, cerrors.Errorf("failed to get plugin dispenser: %w", err)
 	}
 
 	i.logger.Debug(ctx).Msg("starting connector plugin")
@@ -111,13 +118,15 @@ func (i *Instance) Connector(ctx context.Context) (Connector, error) {
 	switch i.Type {
 	case TypeSource:
 		return &Source{
-			Instance: i,
-			errs:     make(chan error),
+			Instance:  i,
+			dispenser: pluginDispenser,
+			errs:      make(chan error),
 		}, nil
 	case TypeDestination:
 		return &Destination{
-			Instance: i,
-			errs:     make(chan error),
+			Instance:  i,
+			dispenser: pluginDispenser,
+			errs:      make(chan error),
 		}, nil
 	default:
 		return nil, ErrInvalidConnectorType

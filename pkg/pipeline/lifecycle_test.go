@@ -17,30 +17,115 @@ package pipeline
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/conduitio/conduit/pkg/connector"
-	connmock "github.com/conduitio/conduit/pkg/connector/mock"
-	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/database/inmemory"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/pipeline/stream"
+	"github.com/conduitio/conduit/pkg/plugin"
+	pmock "github.com/conduitio/conduit/pkg/plugin/mock"
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
+	"github.com/matryer/is"
 	"github.com/rs/zerolog"
 )
 
 const testDLQID = "test-dlq"
 
-func TestServiceLifecycle_PipelineSuccess(t *testing.T) {
+func TestServiceLifecycle_buildNodes(t *testing.T) {
+	is := is.New(t)
 	ctx, killAll := context.WithCancel(context.Background())
 	defer killAll()
+	ctrl := gomock.NewController(t)
+	logger := log.New(zerolog.Nop())
+	db := &inmemory.DB{}
 
+	ps := NewService(logger, db)
+
+	source, sourceDispenser := dummySource(ctrl)
+	destination, destDispenser := dummyDestination(ctrl)
+	dlq, dlqDispenser := dummyDestination(ctrl)
+	pl := &Instance{
+		ID:     uuid.NewString(),
+		Config: Config{Name: "test-pipeline"},
+		Status: StatusUserStopped,
+		DLQ: DLQ{
+			Plugin:              dlq.Plugin,
+			Settings:            map[string]string{},
+			WindowSize:          3,
+			WindowNackThreshold: 2,
+		},
+		ConnectorIDs: []string{source.ID, destination.ID},
+	}
+
+	got, err := ps.buildNodes(
+		ctx,
+		testConnectorFetcher{
+			source.ID:      source,
+			destination.ID: destination,
+			testDLQID:      dlq,
+		},
+		testProcessorFetcher{},
+		testPluginFetcher{
+			source.Plugin:      sourceDispenser,
+			destination.Plugin: destDispenser,
+			dlq.Plugin:         dlqDispenser,
+		},
+		pl,
+	)
+	is.NoErr(err)
+
+	want := []stream.Node{
+		&stream.DLQHandlerNode{},
+		&stream.SourceNode{},
+		&stream.SourceAckerNode{},
+		&stream.MetricsNode{},
+		&stream.FaninNode{},
+		&stream.FanoutNode{},
+		&stream.MetricsNode{},
+		&stream.DestinationNode{},
+		&stream.DestinationAckerNode{},
+	}
+	is.Equal(len(want), len(got))
+	for i := range want {
+		want := want[i]
+		got := got[i]
+		is.Equal(reflect.TypeOf(want), reflect.TypeOf(got)) // unexpected node type
+
+		switch got := got.(type) {
+		case *stream.SourceNode:
+			gotSource, ok := got.Source.(*connector.Source)
+			is.True(ok)
+			is.Equal(gotSource.Instance, source)
+		case *stream.DestinationNode:
+			gotDestination, ok := got.Destination.(*connector.Destination)
+			is.True(ok)
+			is.Equal(gotDestination.Instance, destination)
+		case *stream.DLQHandlerNode:
+			is.Equal(got.WindowSize, pl.DLQ.WindowSize)
+			is.Equal(got.WindowNackThreshold, pl.DLQ.WindowNackThreshold)
+
+			gotHandler, ok := got.Handler.(*DLQDestination)
+			is.True(ok)
+			gotDestination, ok := gotHandler.Destination.(*connector.Destination)
+			is.True(ok)
+			is.Equal(gotDestination.Instance, dlq)
+		}
+	}
+}
+
+func TestServiceLifecycle_PipelineSuccess(t *testing.T) {
+	is := is.New(t)
+	ctx, killAll := context.WithCancel(context.Background())
+	defer killAll()
 	logger := log.New(zerolog.Nop())
 	db := &inmemory.DB{}
 
@@ -48,43 +133,50 @@ func TestServiceLifecycle_PipelineSuccess(t *testing.T) {
 
 	// create a host pipeline
 	pl, err := ps.Create(ctx, uuid.NewString(), Config{Name: "test pipeline"}, ProvisionTypeAPI)
-	assert.Ok(t, err)
+	is.NoErr(err)
 
 	// create mocked connectors
 	ctrl := gomock.NewController(t)
-	source, wantRecords := generatorSource(ctrl, 10, nil, false)
-	destination := asserterDestination(ctrl, t, wantRecords, false)
-	dlq := asserterDestination(ctrl, t, nil, false)
+	wantRecords := generateRecords(10)
+	source, sourceDispenser := generatorSource(ctrl, wantRecords, nil, false)
+	destination, destDispenser := asserterDestination(ctrl, t, wantRecords, false)
+	dlq, dlqDispenser := asserterDestination(ctrl, t, nil, false)
+	pl.DLQ.Plugin = dlq.Plugin
 
-	pl, err = ps.AddConnector(ctx, pl.ID, source.ID())
-	assert.Ok(t, err)
-	pl, err = ps.AddConnector(ctx, pl.ID, destination.ID())
-	assert.Ok(t, err)
+	pl, err = ps.AddConnector(ctx, pl.ID, source.ID)
+	is.NoErr(err)
+	pl, err = ps.AddConnector(ctx, pl.ID, destination.ID)
+	is.NoErr(err)
 
 	// start the pipeline now that everything is set up
 	err = ps.Start(
 		ctx,
 		testConnectorFetcher{
-			source.ID():      source,
-			destination.ID(): destination,
-			testDLQID:        dlq,
+			source.ID:      source,
+			destination.ID: destination,
+			testDLQID:      dlq,
 		},
 		testProcessorFetcher{},
+		testPluginFetcher{
+			source.Plugin:      sourceDispenser,
+			destination.Plugin: destDispenser,
+			dlq.Plugin:         dlqDispenser,
+		},
 		pl.ID,
 	)
-	assert.Ok(t, err)
+	is.NoErr(err)
 
 	// wait for pipeline to finish consuming records from the source
 	time.Sleep(100 * time.Millisecond)
 
-	assert.Equal(t, StatusRunning, pl.Status)
-	assert.Equal(t, "", pl.Error)
+	is.Equal(StatusRunning, pl.Status)
+	is.Equal("", pl.Error)
 }
 
 func TestServiceLifecycle_PipelineError(t *testing.T) {
+	is := is.New(t)
 	ctx, killAll := context.WithCancel(context.Background())
 	defer killAll()
-
 	logger := log.New(zerolog.Nop())
 	db := &inmemory.DB{}
 
@@ -92,56 +184,58 @@ func TestServiceLifecycle_PipelineError(t *testing.T) {
 
 	// create a host pipeline
 	pl, err := ps.Create(ctx, uuid.NewString(), Config{Name: "test pipeline"}, ProvisionTypeAPI)
-	assert.Ok(t, err)
+	is.NoErr(err)
 
 	// create mocked connectors
 	wantErr := cerrors.New("source connector error")
 	ctrl := gomock.NewController(t)
-	source, wantRecords := generatorSource(ctrl, 10, wantErr, true)
-	destination := asserterDestination(ctrl, t, wantRecords, true)
-	dlq := asserterDestination(ctrl, t, nil, true)
+	wantRecords := generateRecords(10)
+	source, sourceDispenser := generatorSource(ctrl, wantRecords, wantErr, true)
+	destination, destDispenser := asserterDestination(ctrl, t, wantRecords, true)
+	dlq, dlqDispenser := asserterDestination(ctrl, t, nil, true)
+	pl.DLQ.Plugin = dlq.Plugin
 
-	pl, err = ps.AddConnector(ctx, pl.ID, source.ID())
-	assert.Ok(t, err)
-	pl, err = ps.AddConnector(ctx, pl.ID, destination.ID())
-	assert.Ok(t, err)
+	pl, err = ps.AddConnector(ctx, pl.ID, source.ID)
+	is.NoErr(err)
+	pl, err = ps.AddConnector(ctx, pl.ID, destination.ID)
+	is.NoErr(err)
 
 	// start the pipeline now that everything is set up
 	err = ps.Start(
 		ctx,
 		testConnectorFetcher{
-			source.ID():      source,
-			destination.ID(): destination,
-			testDLQID:        dlq,
+			source.ID:      source,
+			destination.ID: destination,
+			testDLQID:      dlq,
 		},
 		testProcessorFetcher{},
+		testPluginFetcher{
+			source.Plugin:      sourceDispenser,
+			destination.Plugin: destDispenser,
+			dlq.Plugin:         dlqDispenser,
+		},
 		pl.ID,
 	)
-	assert.Ok(t, err)
+	is.NoErr(err)
 
 	// wait for pipeline to finish
 	err = pl.Wait()
-	assert.Error(t, err)
-	t.Log(err)
+	is.True(err != nil)
 
-	assert.Equal(t, StatusDegraded, pl.Status)
+	is.Equal(StatusDegraded, pl.Status)
 	// pipeline errors contain only string messages, so we can only compare the errors by the messages
-	assert.True(
-		t,
-		strings.Contains(pl.Error, fmt.Sprintf("node %s stopped with error:", source.ID())),
-		`expected error message to have "node <source id> stopped with error"`,
-	)
-	assert.True(
-		t,
+	is.True(
+		strings.Contains(pl.Error, fmt.Sprintf("node %s stopped with error:", source.ID)),
+	) // expected error message to have "node <source id> stopped with error"
+	is.True(
 		strings.Contains(pl.Error, wantErr.Error()),
-		"expected error message to have: "+wantErr.Error(),
-	)
+	) // expected error message to contain "source connector error"
 }
 
 func TestServiceLifecycle_PipelineStop(t *testing.T) {
+	is := is.New(t)
 	ctx, killAll := context.WithCancel(context.Background())
 	defer killAll()
-
 	logger := log.New(zerolog.Nop())
 	db := &inmemory.DB{}
 
@@ -149,46 +243,288 @@ func TestServiceLifecycle_PipelineStop(t *testing.T) {
 
 	// create a host pipeline
 	pl, err := ps.Create(ctx, uuid.NewString(), Config{Name: "test pipeline"}, ProvisionTypeAPI)
-	assert.Ok(t, err)
+	is.NoErr(err)
 
 	// create mocked connectors
-	ctrl := gomock.NewController(t)
-	// source will stop returning ErrGracefulShutdown which should signal to the
+	// source will stop and return ErrGracefulShutdown which should signal to the
 	// service that everything went well and the pipeline was gracefully shutdown
-	source, wantRecords := generatorSource(ctrl, 10, ErrGracefulShutdown, true)
-	destination := asserterDestination(ctrl, t, wantRecords, true)
-	dlq := asserterDestination(ctrl, t, nil, true)
+	ctrl := gomock.NewController(t)
+	wantRecords := generateRecords(10)
+	source, sourceDispenser := generatorSource(ctrl, wantRecords, ErrGracefulShutdown, true)
+	destination, destDispenser := asserterDestination(ctrl, t, wantRecords, true)
+	dlq, dlqDispenser := asserterDestination(ctrl, t, nil, true)
+	pl.DLQ.Plugin = dlq.Plugin
 
-	pl, err = ps.AddConnector(ctx, pl.ID, source.ID())
-	assert.Ok(t, err)
-	pl, err = ps.AddConnector(ctx, pl.ID, destination.ID())
-	assert.Ok(t, err)
+	pl, err = ps.AddConnector(ctx, pl.ID, source.ID)
+	is.NoErr(err)
+	pl, err = ps.AddConnector(ctx, pl.ID, destination.ID)
+	is.NoErr(err)
 
 	// start the pipeline now that everything is set up
 	err = ps.Start(
 		ctx,
 		testConnectorFetcher{
-			source.ID():      source,
-			destination.ID(): destination,
-			testDLQID:        dlq,
+			source.ID:      source,
+			destination.ID: destination,
+			testDLQID:      dlq,
 		},
 		testProcessorFetcher{},
+		testPluginFetcher{
+			source.Plugin:      sourceDispenser,
+			destination.Plugin: destDispenser,
+			dlq.Plugin:         dlqDispenser,
+		},
 		pl.ID,
 	)
-	assert.Ok(t, err)
+	is.NoErr(err)
 
 	// wait for pipeline to finish
 	err = pl.Wait()
-	assert.Ok(t, err)
+	is.NoErr(err)
 
-	assert.Equal(t, StatusSystemStopped, pl.Status)
-	assert.Equal(t, "", pl.Error)
+	is.Equal(StatusSystemStopped, pl.Status)
+	is.Equal("", pl.Error)
+}
+
+func TestService_Run_Rerun(t *testing.T) {
+	runTest := func(t *testing.T, status Status, expected Status) {
+		is := is.New(t)
+		ctx, killAll := context.WithCancel(context.Background())
+		defer killAll()
+		ctrl := gomock.NewController(t)
+		logger := log.New(zerolog.Nop())
+		db := &inmemory.DB{}
+
+		ps := NewService(logger, db)
+
+		// create a host pipeline
+		pl, err := ps.Create(ctx, uuid.NewString(), Config{Name: "test pipeline"}, ProvisionTypeAPI)
+		is.NoErr(err)
+
+		// create mocked connectors
+		var (
+			source          *connector.Instance
+			sourceDispenser *pmock.Dispenser
+			destination     *connector.Instance
+			destDispenser   *pmock.Dispenser
+			dlq             *connector.Instance
+			dlqDispenser    *pmock.Dispenser
+		)
+		if expected == StatusRunning {
+			// mocked connectors that are expected to be started
+			source, sourceDispenser = generatorSource(ctrl, nil, nil, false)
+			destination, destDispenser = asserterDestination(ctrl, t, nil, false)
+			dlq, dlqDispenser = asserterDestination(ctrl, t, nil, false)
+		} else {
+			// dummy connectors that are not expected to be started
+			source, sourceDispenser = dummySource(ctrl)
+			destination, destDispenser = dummyDestination(ctrl)
+			dlq, dlqDispenser = dummyDestination(ctrl)
+		}
+
+		// update internal fields, they will be stored when we add the connectors
+		pl.DLQ.Plugin = dlq.Plugin
+		pl.Status = status
+
+		pl, err = ps.AddConnector(ctx, pl.ID, source.ID)
+		is.NoErr(err)
+		pl, err = ps.AddConnector(ctx, pl.ID, destination.ID)
+		is.NoErr(err)
+
+		// create a new pipeline service and initialize it
+		ps = NewService(logger, db)
+		err = ps.Init(ctx)
+		is.NoErr(err)
+		err = ps.Run(
+			ctx,
+			testConnectorFetcher{
+				source.ID:      source,
+				destination.ID: destination,
+				testDLQID:      dlq,
+			},
+			testProcessorFetcher{},
+			testPluginFetcher{
+				source.Plugin:      sourceDispenser,
+				destination.Plugin: destDispenser,
+				dlq.Plugin:         dlqDispenser,
+			},
+		)
+		is.NoErr(err)
+
+		// give pipeline a chance to start if needed
+		time.Sleep(time.Millisecond * 100)
+
+		got := ps.List(ctx)
+		is.Equal(len(got), 1)
+		is.True(got[pl.ID] != nil)
+		is.Equal(got[pl.ID].Status, expected)
+	}
+
+	testCases := []struct {
+		have Status
+		want Status
+	}{
+		{have: StatusRunning, want: StatusRunning},
+		{have: StatusUserStopped, want: StatusUserStopped},
+		{have: StatusSystemStopped, want: StatusRunning},
+		{have: StatusDegraded, want: StatusDegraded},
+	}
+	for _, tt := range testCases {
+		t.Run(fmt.Sprintf("%s->%s", tt.have, tt.want), func(t *testing.T) {
+			runTest(t, tt.have, tt.want)
+		})
+	}
+}
+
+func generateRecords(count int) []record.Record {
+	records := make([]record.Record, count)
+	for i := 0; i < count; i++ {
+		records[i] = record.Record{
+			Key: record.RawData{Raw: []byte(uuid.NewString())},
+			Payload: record.Change{
+				Before: record.RawData{},
+				After:  record.RawData{Raw: []byte(uuid.NewString())},
+			},
+			Position: record.Position(strconv.Itoa(i)),
+		}
+	}
+	return records
+}
+
+// generatorSource creates a connector source that fills up the returned slice
+// with generated records as they are produced. After producing the requested
+// number of records it returns wantErr.
+func generatorSource(ctrl *gomock.Controller, records []record.Record, wantErr error, teardown bool) (*connector.Instance, *pmock.Dispenser) {
+	position := 0
+	recordCount := len(records)
+
+	sourcePlugin := pmock.NewSourcePlugin(ctrl)
+	sourcePlugin.EXPECT().Start(gomock.Any(), nil).Return(nil).Times(1)
+	sourcePlugin.EXPECT().Configure(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+
+	if teardown {
+		sourcePlugin.EXPECT().Teardown(gomock.Any()).Return(nil).Times(1)
+	}
+
+	sourcePlugin.EXPECT().Ack(gomock.Any(), gomock.Any()).Return(nil).Times(recordCount)
+	sourcePlugin.EXPECT().Read(gomock.Any()).DoAndReturn(func(ctx context.Context) (record.Record, error) {
+		if position == recordCount {
+			if wantErr != nil {
+				return record.Record{}, wantErr
+			}
+			<-ctx.Done()
+			return record.Record{}, ctx.Err()
+		}
+		r := records[position]
+		position++
+		return r, nil
+	}).MinTimes(recordCount + 1)
+
+	source, dispenser := dummySource(ctrl)
+	dispenser.EXPECT().DispenseSource().Return(sourcePlugin, nil)
+
+	return source, dispenser
+}
+
+// asserterDestination creates a connector destination that checks if the records it gets
+// match the expected records. On teardown it also makes sure that it received
+// all expected records.
+func asserterDestination(ctrl *gomock.Controller, t *testing.T, want []record.Record, teardown bool) (*connector.Instance, *pmock.Dispenser) {
+	is := is.New(t)
+	rchan := make(chan record.Record, 1)
+	recordCount := 0
+
+	destinationPlugin := pmock.NewDestinationPlugin(ctrl)
+	destinationPlugin.EXPECT().Start(gomock.Any()).Return(nil).Times(1)
+	destinationPlugin.EXPECT().Configure(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+
+	if teardown {
+		var lastPosition record.Position
+		if len(want) > 0 {
+			lastPosition = want[len(want)-1].Position
+		}
+		destinationPlugin.EXPECT().Stop(gomock.Any(), lastPosition).Return(nil).Times(1)
+		destinationPlugin.EXPECT().Teardown(gomock.Any()).DoAndReturn(func(ctx context.Context) error {
+			close(rchan)
+			return nil
+		}).Times(1)
+	}
+
+	destinationPlugin.EXPECT().Write(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, r record.Record) error {
+		position, err := strconv.Atoi(r.Position.String())
+		is.NoErr(err)
+		// Conduit enriches metadata, assert and copy it over into the expectation
+		is.Equal(len(r.Metadata), 1)
+		want[position].Metadata = r.Metadata
+
+		is.Equal(want[position], r)
+		recordCount++
+		rchan <- r
+		return nil
+	}).AnyTimes()
+	destinationPlugin.EXPECT().Ack(gomock.Any()).DoAndReturn(func(ctx context.Context) (record.Position, error) {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case r, ok := <-rchan:
+			if !ok {
+				return nil, nil
+			}
+			return r.Position, nil
+		}
+	}).AnyTimes()
+	t.Cleanup(func() {
+		is.Equal(len(want), recordCount)
+	})
+
+	dest, dispenser := dummyDestination(ctrl)
+	dispenser.EXPECT().DispenseDestination().Return(destinationPlugin, nil)
+
+	return dest, dispenser
+}
+
+// dummySource creates a dummy source connector.
+func dummySource(ctrl *gomock.Controller) (*connector.Instance, *pmock.Dispenser) {
+	// randomize plugin name in case of multiple sources
+	testPluginName := "test-source-plugin-" + uuid.NewString()
+
+	dispenser := pmock.NewDispenser(ctrl)
+	dispenser.EXPECT().FullName().Return(plugin.FullName(testPluginName)).AnyTimes()
+
+	source := &connector.Instance{
+		ID:         uuid.NewString(),
+		Type:       connector.TypeSource,
+		PipelineID: uuid.NewString(),
+		Plugin:     testPluginName,
+	}
+	source.Init(log.Nop(), nil)
+
+	return source, dispenser
+}
+
+// dummyDestination creates a dummy destination connector.
+func dummyDestination(ctrl *gomock.Controller) (*connector.Instance, *pmock.Dispenser) {
+	// randomize plugin name in case of multiple destinations
+	testPluginName := "test-destination-plugin-" + uuid.NewString()
+
+	dispenser := pmock.NewDispenser(ctrl)
+	dispenser.EXPECT().FullName().Return(plugin.FullName(testPluginName)).AnyTimes()
+
+	destination := &connector.Instance{
+		ID:         uuid.NewString(),
+		Type:       connector.TypeDestination,
+		PipelineID: uuid.NewString(),
+		Plugin:     testPluginName,
+	}
+	destination.Init(log.Nop(), nil)
+
+	return destination, dispenser
 }
 
 // testConnectorFetcher fulfills the ConnectorFetcher interface.
-type testConnectorFetcher map[string]connector.Connector
+type testConnectorFetcher map[string]*connector.Instance
 
-func (tcf testConnectorFetcher) Get(ctx context.Context, id string) (connector.Connector, error) {
+func (tcf testConnectorFetcher) Get(ctx context.Context, id string) (*connector.Instance, error) {
 	conn, ok := tcf[id]
 	if !ok {
 		return nil, connector.ErrInstanceNotFound
@@ -196,7 +532,7 @@ func (tcf testConnectorFetcher) Get(ctx context.Context, id string) (connector.C
 	return conn, nil
 }
 
-func (tcf testConnectorFetcher) Create(ctx context.Context, id string, t connector.Type, cfg connector.Config, p connector.ProvisionType) (connector.Connector, error) {
+func (tcf testConnectorFetcher) Create(context.Context, string, connector.Type, string, string, connector.Config, connector.ProvisionType) (*connector.Instance, error) {
 	return tcf[testDLQID], nil
 }
 
@@ -211,100 +547,13 @@ func (tpf testProcessorFetcher) Get(ctx context.Context, id string) (*processor.
 	return proc, nil
 }
 
-// generatorSource creates a connector source that fills up the returned slice
-// with generated records as they are produced. After producing the requested
-// number of records it returns wantErr.
-func generatorSource(ctrl *gomock.Controller, recordCount int, wantErr error, teardown bool) (connector.Source, []record.Record) {
-	position := 0
-	records := make([]record.Record, recordCount)
-	for i := 0; i < recordCount; i++ {
-		records[i] = record.Record{
-			Key: record.RawData{Raw: []byte(uuid.NewString())},
-			Payload: record.Change{
-				Before: nil,
-				After:  record.RawData{Raw: []byte(uuid.NewString())},
-			},
-			Position: record.Position(strconv.Itoa(i)),
-		}
+// testPluginFetcher fulfills the PluginFetcher interface.
+type testPluginFetcher map[string]plugin.Dispenser
+
+func (tpf testPluginFetcher) NewDispenser(logger log.CtxLogger, name string) (plugin.Dispenser, error) {
+	plug, ok := tpf[name]
+	if !ok {
+		return nil, plugin.ErrPluginNotFound
 	}
-
-	source := basicSourceMock(ctrl)
-	if teardown {
-		source.EXPECT().Teardown(gomock.Any()).Return(nil).Times(1)
-	}
-	source.EXPECT().Errors().Return(make(chan error))
-	source.EXPECT().Ack(gomock.Any(), gomock.Any()).Return(nil).Times(recordCount)
-	source.EXPECT().Read(gomock.Any()).DoAndReturn(func(ctx context.Context) (record.Record, error) {
-		if position == recordCount {
-			if wantErr != nil {
-				return record.Record{}, wantErr
-			}
-			<-ctx.Done()
-			return record.Record{}, ctx.Err()
-		}
-		r := records[position]
-		position++
-		return r, nil
-	}).MinTimes(recordCount + 1)
-
-	return source, records
-}
-
-func basicSourceMock(ctrl *gomock.Controller) *connmock.Source {
-	source := connmock.NewSource(ctrl)
-	source.EXPECT().ID().Return(uuid.NewString()).AnyTimes()
-	source.EXPECT().Type().Return(connector.TypeSource).AnyTimes()
-	source.EXPECT().Config().Return(connector.Config{}).AnyTimes()
-	source.EXPECT().Open(gomock.Any()).Return(nil).Times(1)
-
-	return source
-}
-
-// asserterDestination creates a connector destination that checks if the records it gets
-// match the expected records. On teardown it also makes sure that it received
-// all expected records.
-func asserterDestination(ctrl *gomock.Controller, t *testing.T, want []record.Record, teardown bool) connector.Destination {
-	rchan := make(chan record.Record, 1)
-	recordCount := 0
-
-	destination := connmock.NewDestination(ctrl)
-	destination.EXPECT().ID().Return(uuid.NewString()).AnyTimes()
-	destination.EXPECT().Type().Return(connector.TypeDestination).AnyTimes()
-	destination.EXPECT().Config().Return(connector.Config{}).AnyTimes()
-	destination.EXPECT().Open(gomock.Any()).Return(nil).Times(1)
-	destination.EXPECT().Errors().Return(make(chan error)).AnyTimes()
-	if teardown {
-		var lastPosition record.Position
-		if len(want) > 0 {
-			lastPosition = want[len(want)-1].Position
-		}
-		destination.EXPECT().Stop(gomock.Any(), lastPosition).Return(nil).Times(1)
-		destination.EXPECT().Teardown(gomock.Any()).DoAndReturn(func(ctx context.Context) error {
-			close(rchan)
-			return nil
-		}).Times(1)
-	}
-	destination.EXPECT().Write(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, r record.Record) error {
-		position, err := strconv.Atoi(r.Position.String())
-		assert.Ok(t, err)
-		assert.Equal(t, want[position], r)
-		recordCount++
-		rchan <- r
-		return nil
-	}).AnyTimes()
-	destination.EXPECT().Ack(gomock.Any()).DoAndReturn(func(ctx context.Context) (record.Position, error) {
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case r, ok := <-rchan:
-			if !ok {
-				return nil, nil
-			}
-			return r.Position, nil
-		}
-	}).AnyTimes()
-	t.Cleanup(func() {
-		assert.Equal(t, len(want), recordCount)
-	})
-	return destination
+	return plug, nil
 }

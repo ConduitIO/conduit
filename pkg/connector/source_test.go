@@ -36,6 +36,7 @@ func TestSource_Ack_Deadlock(t *testing.T) {
 	ctx := context.Background()
 	logger := log.Nop()
 	db := &inmemory.DB{}
+	ctrl := gomock.NewController(t)
 
 	persister := NewPersister(
 		logger,
@@ -44,17 +45,13 @@ func TestSource_Ack_Deadlock(t *testing.T) {
 		1,
 	)
 
-	ctrl := gomock.NewController(t)
-	pluginDispenser := mock.NewDispenser(ctrl)
-	pluginDispenser.EXPECT().FullName().Return(plugin.FullName("test-plugin")).AnyTimes()
-
 	connService := NewService(logger, db, persister)
 
 	instance, err := connService.Create(
 		ctx,
 		"test-source",
 		TypeSource,
-		pluginDispenser,
+		"test-plugin",
 		uuid.NewString(),
 		Config{
 			Name: "test-source",
@@ -73,9 +70,12 @@ func TestSource_Ack_Deadlock(t *testing.T) {
 	sourceMock.EXPECT().Configure(gomock.Any(), instance.Config.Settings).Return(nil)
 	sourceMock.EXPECT().Start(gomock.Any(), nil).Return(nil)
 	sourceMock.EXPECT().Ack(gomock.Any(), record.Position("test-pos")).Return(nil).Times(5)
+
+	pluginDispenser := mock.NewDispenser(ctrl)
+	pluginDispenser.EXPECT().FullName().Return(plugin.FullName("test-plugin")).AnyTimes()
 	pluginDispenser.EXPECT().DispenseSource().Return(sourceMock, nil)
 
-	conn, err := instance.Connector(ctx)
+	conn, err := instance.Connector(ctx, testPluginFetcher{string(pluginDispenser.FullName()): pluginDispenser})
 	is.NoErr(err)
 	s, ok := conn.(*Source)
 	is.True(ok)
@@ -97,4 +97,15 @@ func TestSource_Ack_Deadlock(t *testing.T) {
 	if (*csync.WaitGroup)(&wg).WaitTimeout(ctx, 100*time.Millisecond) != nil {
 		is.Fail() // timeout reached
 	}
+}
+
+// testPluginFetcher fulfills the PluginFetcher interface.
+type testPluginFetcher map[string]plugin.Dispenser
+
+func (tpf testPluginFetcher) NewDispenser(logger log.CtxLogger, name string) (plugin.Dispenser, error) {
+	plug, ok := tpf[name]
+	if !ok {
+		return nil, plugin.ErrPluginNotFound
+	}
+	return plug, nil
 }

@@ -39,6 +39,7 @@ type Service struct {
 	pipelineService  PipelineService
 	connectorService ConnectorService
 	processorService ProcessorService
+	pluginService    PluginService
 	pipelinesPath    string
 }
 
@@ -48,6 +49,7 @@ func NewService(
 	plService PipelineService,
 	connService ConnectorService,
 	procService ProcessorService,
+	pluginService PluginService,
 	pipelinesDir string,
 ) *Service {
 	return &Service{
@@ -56,6 +58,7 @@ func NewService(
 		pipelineService:  plService,
 		connectorService: connService,
 		processorService: procService,
+		pluginService:    pluginService,
 		pipelinesPath:    pipelinesDir,
 	}
 }
@@ -205,7 +208,7 @@ func (s *Service) provisionPipeline(ctx context.Context, id string, config Pipel
 
 	// check if pipeline is running
 	if config.Status == StatusRunning {
-		err := s.pipelineService.Start(ctx, s.connectorService, s.processorService, newPl.ID)
+		err := s.pipelineService.Start(ctx, s.connectorService, s.processorService, s.pluginService, newPl.ID)
 		if err != nil {
 			return cerrors.Errorf("could not start the pipeline %q: %w", id, err)
 		}
@@ -232,54 +235,30 @@ func (s *Service) collectConnectorStates(ctx context.Context, pl *pipeline.Insta
 			return nil, fmt.Errorf("could not get connector %q: %w", connID, err)
 		}
 
-		switch oldConn := oldConn.(type) {
-		case connector.Destination:
-			oldState := oldConn.State()
-			connStates[connID] = func(ctx context.Context) error {
-				newConn, err := s.connectorService.Get(ctx, connID)
-				if err != nil {
-					return fmt.Errorf("could not get connector %q: %w", connID, err)
-				}
-				if newConn.Config().Plugin != oldConn.Config().Plugin {
-					s.logger.Warn(ctx).
-						Str(log.PluginNameField, newConn.Config().Plugin).
-						Msg("plugin name changed, could not apply old destination state, the connector will start from the beginning")
-					return nil
-				}
-				_, err = s.connectorService.SetDestinationState(ctx, connID, oldState)
-				if cerrors.Is(err, connector.ErrInvalidConnectorType) {
-					s.logger.Warn(ctx).
-						Str(log.ConnectorIDField, connID).
-						Err(err).
-						Msg("could not apply old destination state, the connector will start from the beginning")
-					return nil
-				}
-				return err
+		oldState := oldConn.State
+		if oldState == nil {
+			continue // no need to copy state
+		}
+		connStates[connID] = func(ctx context.Context) error {
+			newConn, err := s.connectorService.Get(ctx, connID)
+			if err != nil {
+				return fmt.Errorf("could not get connector %q: %w", connID, err)
 			}
-		case connector.Source:
-			oldState := oldConn.State()
-			connStates[connID] = func(ctx context.Context) error {
-				newConn, err := s.connectorService.Get(ctx, connID)
-				if err != nil {
-					return fmt.Errorf("could not get connector %q: %w", connID, err)
-				}
-				if newConn.Config().Plugin != oldConn.Config().Plugin {
-					s.logger.Warn(ctx).
-						Str(log.PluginNameField, newConn.Config().Plugin).
-						Str(log.ConnectorIDField, connID).
-						Msg("plugin name changed, could not apply old source state, the connector will start from the beginning")
-					return nil
-				}
-				_, err = s.connectorService.SetSourceState(ctx, connID, oldState)
-				if cerrors.Is(err, connector.ErrInvalidConnectorType) {
-					s.logger.Warn(ctx).
-						Str(log.ConnectorIDField, connID).
-						Err(err).
-						Msg("could not apply old source state, the connector will start from the beginning")
-					return nil
-				}
-				return err
+			if newConn.Plugin != oldConn.Plugin {
+				s.logger.Warn(ctx).
+					Str(log.PluginNameField, newConn.Plugin).
+					Msg("plugin name changed, could not apply old destination state, the connector will start from the beginning")
+				return nil
 			}
+			_, err = s.connectorService.SetState(ctx, connID, oldState)
+			if cerrors.Is(err, connector.ErrInvalidConnectorType) {
+				s.logger.Warn(ctx).
+					Str(log.ConnectorIDField, connID).
+					Err(err).
+					Msg("could not apply old state, the connector will start from the beginning")
+				return nil
+			}
+			return err
 		}
 	}
 
@@ -421,10 +400,8 @@ func (s *Service) createPipeline(ctx context.Context, id string, config Pipeline
 
 func (s *Service) createConnector(ctx context.Context, pipelineID string, id string, config ConnectorConfig) error {
 	cfg := connector.Config{
-		Name:       config.Name,
-		Plugin:     config.Plugin,
-		PipelineID: pipelineID,
-		Settings:   config.Settings,
+		Name:     config.Name,
+		Settings: config.Settings,
 	}
 
 	connType := connector.TypeSource
@@ -432,7 +409,7 @@ func (s *Service) createConnector(ctx context.Context, pipelineID string, id str
 		connType = connector.TypeDestination
 	}
 
-	_, err := s.connectorService.Create(ctx, id, connType, cfg, connector.ProvisionTypeConfig)
+	_, err := s.connectorService.Create(ctx, id, connType, config.Plugin, pipelineID, cfg, connector.ProvisionTypeConfig)
 	if err != nil {
 		return cerrors.Errorf("could not create connector %q on pipeline %q: %w", id, pipelineID, err)
 	}
@@ -590,13 +567,13 @@ func (s *Service) rollbackCreateConnector(ctx context.Context, r *rollback.R, co
 		return err
 	})
 }
-func (s *Service) rollbackDeleteConnector(ctx context.Context, r *rollback.R, pipelineID string, connID string, conn connector.Connector) {
+func (s *Service) rollbackDeleteConnector(ctx context.Context, r *rollback.R, pipelineID string, connID string, conn *connector.Instance) {
 	r.Append(func() error {
 		config := ConnectorConfig{
-			Name:     conn.Config().Name,
-			Plugin:   conn.Config().Plugin,
-			Settings: conn.Config().Settings,
-			Type:     strings.ToLower(conn.Type().String()),
+			Name:     conn.Config.Name,
+			Plugin:   conn.Plugin,
+			Settings: conn.Config.Settings,
+			Type:     strings.ToLower(conn.Type.String()),
 		}
 		err := s.createConnector(ctx, pipelineID, connID, config)
 		return err
@@ -670,7 +647,7 @@ func (s *Service) rollbackDeletePipeline(ctx context.Context, r *rollback.R, id 
 }
 func (s *Service) rollbackStopPipeline(ctx context.Context, r *rollback.R, pipelineID string) {
 	r.Append(func() error {
-		err := s.pipelineService.Start(ctx, s.connectorService, s.processorService, pipelineID)
+		err := s.pipelineService.Start(ctx, s.connectorService, s.processorService, s.pluginService, pipelineID)
 		return err
 	})
 }

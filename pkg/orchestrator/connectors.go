@@ -70,10 +70,7 @@ func (c *ConnectorOrchestrator) Create(
 		return nil, err
 	}
 
-	d, err := c.plugins.NewDispenser(c.logger, plugin)
-	_ = err // ignore error, validate already made sure we can get a dispenser
-
-	conn, err := c.connectors.Create(ctx, uuid.NewString(), t, d, pl.ID, config, connector.ProvisionTypeAPI)
+	conn, err := c.connectors.Create(ctx, uuid.NewString(), t, plugin, pl.ID, config, connector.ProvisionTypeAPI)
 	if err != nil {
 		return nil, err
 	}
@@ -135,11 +132,7 @@ func (c *ConnectorOrchestrator) Delete(ctx context.Context, id string) error {
 		return err
 	}
 	r.Append(func() error {
-		d, err := c.plugins.NewDispenser(c.logger, conn.Plugin)
-		if err != nil {
-			return err
-		}
-		_, err = c.connectors.Create(ctx, id, conn.Type, d, conn.PipelineID, conn.Config, conn.ProvisionedBy)
+		_, err = c.connectors.Create(ctx, id, conn.Type, conn.Plugin, conn.PipelineID, conn.Config, conn.ProvisionedBy)
 		return err
 	})
 	_, err = c.pipelines.RemoveConnector(ctx, pl.ID, id)

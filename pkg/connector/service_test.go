@@ -23,10 +23,6 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/database/inmemory"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/conduitio/conduit/pkg/plugin"
-	"github.com/conduitio/conduit/pkg/plugin/mock"
-	"github.com/conduitio/conduit/pkg/plugin/standalone"
-	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
 	"github.com/matryer/is"
 )
@@ -36,17 +32,13 @@ func TestService_Init_Success(t *testing.T) {
 	ctx := context.Background()
 	logger := log.Nop()
 	db := &inmemory.DB{}
-	ctrl := gomock.NewController(t)
-
-	pluginDispenser := mock.NewDispenser(ctrl)
-	pluginDispenser.EXPECT().FullName().Return(plugin.FullName("test")).AnyTimes()
 
 	service := NewService(logger, db, nil)
 	_, err := service.Create(
 		ctx,
 		uuid.NewString(),
 		TypeSource,
-		pluginDispenser,
+		"test-plugin",
 		uuid.NewString(),
 		Config{
 			Name:     "test-connector",
@@ -58,13 +50,9 @@ func TestService_Init_Success(t *testing.T) {
 
 	want := service.List(ctx)
 
-	registry := mock.NewRegistry(ctrl)
-	registry.EXPECT().NewDispenser(gomock.Any(), pluginDispenser.FullName()).Return(pluginDispenser, nil)
-	pluginService := plugin.NewService(logger, registry, standalone.NewRegistry(logger, ""))
-
 	// create a new connector service and initialize it
 	service = NewService(logger, db, nil)
-	err = service.Init(ctx, pluginService)
+	err = service.Init(ctx)
 	is.NoErr(err)
 
 	got := service.List(ctx)
@@ -77,10 +65,6 @@ func TestService_CreateSuccess(t *testing.T) {
 	ctx := context.Background()
 	logger := log.Nop()
 	db := &inmemory.DB{}
-	ctrl := gomock.NewController(t)
-
-	pluginDispenser := mock.NewDispenser(ctrl)
-	pluginDispenser.EXPECT().FullName().Return(plugin.FullName("test")).AnyTimes()
 
 	persister := NewPersister(logger, db, DefaultPersisterDelayThreshold, 1)
 	service := NewService(logger, db, persister)
@@ -93,28 +77,26 @@ func TestService_CreateSuccess(t *testing.T) {
 		want: &Instance{
 			ID:         uuid.NewString(),
 			Type:       TypeDestination,
-			Plugin:     "test",
+			Plugin:     "test-plugin",
 			PipelineID: uuid.NewString(),
 			Config: Config{
 				Name: "my-destination",
 			},
-			ProvisionedBy:   ProvisionTypeAPI,
-			pluginDispenser: pluginDispenser,
-			persister:       persister,
+			ProvisionedBy: ProvisionTypeAPI,
+			persister:     persister,
 		},
 	}, {
 		name: "create generator source connector",
 		want: &Instance{
 			ID:         uuid.NewString(),
 			Type:       TypeSource,
-			Plugin:     "test",
+			Plugin:     "test-plugin",
 			PipelineID: uuid.NewString(),
 			Config: Config{
 				Name: "my-source",
 			},
-			ProvisionedBy:   ProvisionTypeConfig,
-			pluginDispenser: pluginDispenser,
-			persister:       persister,
+			ProvisionedBy: ProvisionTypeConfig,
+			persister:     persister,
 		},
 	}}
 
@@ -124,7 +106,7 @@ func TestService_CreateSuccess(t *testing.T) {
 				ctx,
 				tt.want.ID,
 				tt.want.Type,
-				tt.want.pluginDispenser,
+				tt.want.Plugin,
 				tt.want.PipelineID,
 				tt.want.Config,
 				tt.want.ProvisionedBy,
@@ -159,17 +141,13 @@ func TestService_CreateDLQ(t *testing.T) {
 	ctx := context.Background()
 	logger := log.Nop()
 	db := &inmemory.DB{}
-	ctrl := gomock.NewController(t)
-
-	pluginDispenser := mock.NewDispenser(ctrl)
-	pluginDispenser.EXPECT().FullName().Return(plugin.FullName("test")).AnyTimes()
 
 	service := NewService(logger, db, nil)
 	got, err := service.Create(
 		ctx,
 		uuid.NewString(),
 		TypeDestination,
-		pluginDispenser,
+		"test-plugin",
 		uuid.NewString(),
 		Config{},
 		ProvisionTypeDLQ,
@@ -186,42 +164,38 @@ func TestService_CreateError(t *testing.T) {
 	ctx := context.Background()
 	logger := log.Nop()
 	db := &inmemory.DB{}
-	ctrl := gomock.NewController(t)
-
-	pluginDispenser := mock.NewDispenser(ctrl)
-	pluginDispenser.EXPECT().FullName().Return(plugin.FullName("test")).AnyTimes()
 
 	service := NewService(logger, db, nil)
 
 	testCases := []struct {
-		name            string
-		connType        Type
-		pluginDispenser plugin.Dispenser
-		pipelineID      string
-		data            Config
+		name       string
+		connType   Type
+		plugin     string
+		pipelineID string
+		data       Config
 	}{{
-		name:            "invalid connector type",
-		connType:        0,
-		pluginDispenser: pluginDispenser,
-		pipelineID:      uuid.NewString(),
+		name:       "invalid connector type",
+		connType:   0,
+		plugin:     "test-plugin",
+		pipelineID: uuid.NewString(),
 		data: Config{
 			Name:     "test-connector",
 			Settings: map[string]string{"foo": "bar"},
 		},
 	}, {
-		name:            "empty plugin",
-		connType:        TypeSource,
-		pluginDispenser: nil,
-		pipelineID:      uuid.NewString(),
+		name:       "empty plugin",
+		connType:   TypeSource,
+		plugin:     "",
+		pipelineID: uuid.NewString(),
 		data: Config{
 			Name:     "test-connector",
 			Settings: map[string]string{"foo": "bar"},
 		},
 	}, {
-		name:            "empty pipeline ID",
-		connType:        TypeSource,
-		pluginDispenser: pluginDispenser,
-		pipelineID:      "",
+		name:       "empty pipeline ID",
+		connType:   TypeSource,
+		plugin:     "test-plugin",
+		pipelineID: "",
 		data: Config{
 			Name:     "test-connector",
 			Settings: map[string]string{"foo": "bar"},
@@ -234,7 +208,7 @@ func TestService_CreateError(t *testing.T) {
 				ctx,
 				uuid.NewString(),
 				tt.connType,
-				tt.pluginDispenser,
+				tt.plugin,
 				tt.pipelineID,
 				tt.data,
 				ProvisionTypeAPI,
@@ -265,17 +239,13 @@ func TestService_DeleteSuccess(t *testing.T) {
 	ctx := context.Background()
 	logger := log.Nop()
 	db := &inmemory.DB{}
-	ctrl := gomock.NewController(t)
-
-	pluginDispenser := mock.NewDispenser(ctrl)
-	pluginDispenser.EXPECT().FullName().Return(plugin.FullName("test")).AnyTimes()
 
 	service := NewService(logger, db, nil)
 	conn, err := service.Create(
 		ctx,
 		uuid.NewString(),
 		TypeSource,
-		pluginDispenser,
+		"test-plugin",
 		uuid.NewString(),
 		Config{
 			Name:     "test-connector",
@@ -311,10 +281,6 @@ func TestService_List(t *testing.T) {
 	ctx := context.Background()
 	logger := log.Nop()
 	db := &inmemory.DB{}
-	ctrl := gomock.NewController(t)
-
-	pluginDispenser := mock.NewDispenser(ctrl)
-	pluginDispenser.EXPECT().FullName().Return(plugin.FullName("test")).AnyTimes()
 
 	service := NewService(logger, db, nil)
 	want := make(map[string]*Instance)
@@ -323,7 +289,7 @@ func TestService_List(t *testing.T) {
 			ctx,
 			uuid.NewString(),
 			TypeSource,
-			pluginDispenser,
+			"test-plugin",
 			uuid.NewString(),
 			Config{
 				Name:     fmt.Sprintf("test-connector-%d", i),
@@ -344,10 +310,6 @@ func TestService_UpdateSuccess(t *testing.T) {
 	ctx := context.Background()
 	logger := log.Nop()
 	db := &inmemory.DB{}
-	ctrl := gomock.NewController(t)
-
-	pluginDispenser := mock.NewDispenser(ctrl)
-	pluginDispenser.EXPECT().FullName().Return(plugin.FullName("test")).AnyTimes()
 
 	service := NewService(logger, db, nil)
 
@@ -360,7 +322,7 @@ func TestService_UpdateSuccess(t *testing.T) {
 		ctx,
 		uuid.NewString(),
 		TypeSource,
-		pluginDispenser,
+		"test-plugin",
 		uuid.NewString(),
 		Config{
 			Name:     "test-connector",

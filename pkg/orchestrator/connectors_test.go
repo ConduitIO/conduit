@@ -64,8 +64,7 @@ func TestConnectorOrchestrator_Create_Success(t *testing.T) {
 		Return(pl, nil)
 	pluginMock.EXPECT().
 		NewDispenser(gomock.Any(), want.Plugin).
-		Return(pluginDispenser, nil).
-		Times(2) // once for validation, second time for connector itself
+		Return(pluginDispenser, nil)
 	pluginMock.EXPECT().
 		ValidateSourceConfig(
 			gomock.AssignableToTypeOf(ctxType),
@@ -77,7 +76,7 @@ func TestConnectorOrchestrator_Create_Success(t *testing.T) {
 			gomock.AssignableToTypeOf(ctxType),
 			gomock.AssignableToTypeOf(""),
 			connector.TypeSource,
-			pluginDispenser,
+			want.Plugin,
 			want.PipelineID,
 			want.Config,
 			connector.ProvisionTypeAPI,
@@ -176,8 +175,7 @@ func TestConnectorOrchestrator_Create_CreateConnectorError(t *testing.T) {
 		Return(pl, nil)
 	pluginMock.EXPECT().
 		NewDispenser(gomock.Any(), "test-plugin").
-		Return(pluginDispenser, nil).
-		Times(2) // once for validation, second time for connector itself
+		Return(pluginDispenser, nil)
 	pluginMock.EXPECT().
 		ValidateSourceConfig(
 			gomock.AssignableToTypeOf(ctxType),
@@ -189,7 +187,7 @@ func TestConnectorOrchestrator_Create_CreateConnectorError(t *testing.T) {
 			gomock.AssignableToTypeOf(ctxType),
 			gomock.AssignableToTypeOf(""),
 			connector.TypeSource,
-			pluginDispenser,
+			"test-plugin",
 			pl.ID,
 			config,
 			connector.ProvisionTypeAPI,
@@ -237,9 +235,8 @@ func TestConnectorOrchestrator_Create_AddConnectorError(t *testing.T) {
 		Get(gomock.AssignableToTypeOf(ctxType), pl.ID).
 		Return(pl, nil)
 	pluginMock.EXPECT().
-		NewDispenser(gomock.Any(), "test-plugin").
-		Return(pluginDispenser, nil).
-		Times(2) // once for validation, second time for connector itself
+		NewDispenser(gomock.Any(), conn.Plugin).
+		Return(pluginDispenser, nil)
 	pluginMock.EXPECT().
 		ValidateSourceConfig(
 			gomock.AssignableToTypeOf(ctxType),
@@ -251,7 +248,7 @@ func TestConnectorOrchestrator_Create_AddConnectorError(t *testing.T) {
 			gomock.AssignableToTypeOf(ctxType),
 			gomock.AssignableToTypeOf(""),
 			conn.Type,
-			pluginDispenser,
+			conn.Plugin,
 			conn.PipelineID,
 			conn.Config,
 			connector.ProvisionTypeAPI,
@@ -266,7 +263,7 @@ func TestConnectorOrchestrator_Create_AddConnectorError(t *testing.T) {
 		Return(nil)
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
-	got, err := orc.Connectors.Create(ctx, connector.TypeSource, "test-plugin", pl.ID, conn.Config)
+	got, err := orc.Connectors.Create(ctx, connector.TypeSource, conn.Plugin, pl.ID, conn.Config)
 	is.True(err != nil)
 	is.True(cerrors.Is(err, wantErr))
 	is.True(got == nil)
@@ -413,7 +410,6 @@ func TestConnectorOrchestrator_Delete_RemoveConnectorFailed(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
 	db := &inmemory.DB{}
-	ctrl := gomock.NewController(t)
 	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
 
 	pl := &pipeline.Instance{
@@ -426,8 +422,6 @@ func TestConnectorOrchestrator_Delete_RemoveConnectorFailed(t *testing.T) {
 		PipelineID: pl.ID,
 	}
 	wantErr := cerrors.New("couldn't remove the connector from the pipeline")
-
-	pluginDispenser := pmock.NewDispenser(ctrl)
 
 	consMock.EXPECT().
 		Get(gomock.AssignableToTypeOf(ctxType), conn.ID).
@@ -442,15 +436,12 @@ func TestConnectorOrchestrator_Delete_RemoveConnectorFailed(t *testing.T) {
 		RemoveConnector(gomock.AssignableToTypeOf(ctxType), pl.ID, conn.ID).
 		Return(nil, wantErr)
 	// rollback
-	pluginMock.EXPECT().
-		NewDispenser(gomock.Any(), conn.Plugin).
-		Return(pluginDispenser, nil)
 	consMock.EXPECT().
 		Create(
 			gomock.AssignableToTypeOf(ctxType),
 			conn.ID,
 			conn.Type,
-			pluginDispenser,
+			conn.Plugin,
 			pl.ID,
 			conn.Config,
 			connector.ProvisionTypeAPI,
