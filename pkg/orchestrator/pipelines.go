@@ -17,6 +17,7 @@ package orchestrator
 import (
 	"context"
 
+	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	"github.com/google/uuid"
@@ -24,30 +25,30 @@ import (
 
 type PipelineOrchestrator base
 
-func (s *PipelineOrchestrator) Start(ctx context.Context, id string) error {
+func (po *PipelineOrchestrator) Start(ctx context.Context, id string) error {
 	// TODO lock pipeline
-	return s.pipelines.Start(ctx, s.connectors, s.processors, s.plugins, id)
+	return po.pipelines.Start(ctx, po.connectors, po.processors, po.plugins, id)
 }
 
-func (s *PipelineOrchestrator) Stop(ctx context.Context, id string) error {
+func (po *PipelineOrchestrator) Stop(ctx context.Context, id string) error {
 	// TODO lock pipeline
-	return s.pipelines.Stop(ctx, id)
+	return po.pipelines.Stop(ctx, id)
 }
 
-func (s *PipelineOrchestrator) List(ctx context.Context) map[string]*pipeline.Instance {
-	return s.pipelines.List(ctx)
+func (po *PipelineOrchestrator) List(ctx context.Context) map[string]*pipeline.Instance {
+	return po.pipelines.List(ctx)
 }
 
-func (s *PipelineOrchestrator) Get(ctx context.Context, id string) (*pipeline.Instance, error) {
-	return s.pipelines.Get(ctx, id)
+func (po *PipelineOrchestrator) Get(ctx context.Context, id string) (*pipeline.Instance, error) {
+	return po.pipelines.Get(ctx, id)
 }
 
-func (s *PipelineOrchestrator) Create(ctx context.Context, cfg pipeline.Config) (*pipeline.Instance, error) {
-	return s.pipelines.Create(ctx, uuid.NewString(), cfg, pipeline.ProvisionTypeAPI)
+func (po *PipelineOrchestrator) Create(ctx context.Context, cfg pipeline.Config) (*pipeline.Instance, error) {
+	return po.pipelines.Create(ctx, uuid.NewString(), cfg, pipeline.ProvisionTypeAPI)
 }
 
-func (s *PipelineOrchestrator) Update(ctx context.Context, id string, cfg pipeline.Config) (*pipeline.Instance, error) {
-	pl, err := s.pipelines.Get(ctx, id)
+func (po *PipelineOrchestrator) Update(ctx context.Context, id string, cfg pipeline.Config) (*pipeline.Instance, error) {
+	pl, err := po.pipelines.Get(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -59,11 +60,11 @@ func (s *PipelineOrchestrator) Update(ctx context.Context, id string, cfg pipeli
 	if pl.Status == pipeline.StatusRunning {
 		return nil, pipeline.ErrPipelineRunning
 	}
-	return s.pipelines.Update(ctx, pl.ID, cfg)
+	return po.pipelines.Update(ctx, pl.ID, cfg)
 }
 
-func (s *PipelineOrchestrator) Delete(ctx context.Context, id string) error {
-	pl, err := s.pipelines.Get(ctx, id)
+func (po *PipelineOrchestrator) Delete(ctx context.Context, id string) error {
+	pl, err := po.pipelines.Get(ctx, id)
 	if err != nil {
 		return err
 	}
@@ -80,5 +81,37 @@ func (s *PipelineOrchestrator) Delete(ctx context.Context, id string) error {
 	if len(pl.ProcessorIDs) != 0 {
 		return ErrPipelineHasProcessorsAttached
 	}
-	return s.pipelines.Delete(ctx, pl.ID)
+	return po.pipelines.Delete(ctx, pl.ID)
+}
+
+func (po *PipelineOrchestrator) UpdateDLQ(ctx context.Context, id string, dlq pipeline.DLQ) (*pipeline.Instance, error) {
+	pl, err := po.pipelines.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	if pl.ProvisionedBy != pipeline.ProvisionTypeAPI {
+		return nil, cerrors.Errorf("pipeline %q cannot be updated: %w", pl.ID, ErrImmutableProvisionedByConfig)
+	}
+	// TODO lock pipeline
+	if pl.Status == pipeline.StatusRunning {
+		return nil, pipeline.ErrPipelineRunning
+	}
+
+	// cast orchestrator to a ConnectorOrchestrator to get access to the plugin
+	// config validate function
+	err = (*ConnectorOrchestrator)(po).Validate(
+		ctx,
+		connector.TypeDestination,
+		dlq.Plugin,
+		connector.Config{
+			Name:     "temporary-dlq",
+			Settings: dlq.Settings,
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return po.pipelines.UpdateDLQ(ctx, id, dlq)
 }

@@ -18,17 +18,18 @@ import (
 	"context"
 	"testing"
 
-	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/database/inmemory"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/pipeline"
+	pmock "github.com/conduitio/conduit/pkg/plugin/mock"
 	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
 	"github.com/matryer/is"
 )
 
 func TestPipelineOrchestrator_Start_Success(t *testing.T) {
+	is := is.New(t)
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
@@ -44,10 +45,11 @@ func TestPipelineOrchestrator_Start_Success(t *testing.T) {
 		Return(nil)
 
 	err := orc.Pipelines.Start(ctx, plBefore.ID)
-	assert.Ok(t, err)
+	is.NoErr(err)
 }
 
 func TestPipelineOrchestrator_Start_Fail(t *testing.T) {
+	is := is.New(t)
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
@@ -64,10 +66,11 @@ func TestPipelineOrchestrator_Start_Fail(t *testing.T) {
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
 	err := orc.Pipelines.Start(ctx, plBefore.ID)
-	assert.Error(t, err)
+	is.True(err != nil)
 }
 
 func TestPipelineOrchestrator_Stop_Success(t *testing.T) {
+	is := is.New(t)
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
@@ -83,10 +86,11 @@ func TestPipelineOrchestrator_Stop_Success(t *testing.T) {
 		Return(nil)
 
 	err := orc.Pipelines.Stop(ctx, plBefore.ID)
-	assert.Ok(t, err)
+	is.NoErr(err)
 }
 
 func TestPipelineOrchestrator_Stop_Fail(t *testing.T) {
+	is := is.New(t)
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
@@ -103,10 +107,11 @@ func TestPipelineOrchestrator_Stop_Fail(t *testing.T) {
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
 	err := orc.Pipelines.Stop(ctx, plBefore.ID)
-	assert.Error(t, err)
+	is.True(err != nil)
 }
 
 func TestPipelineOrchestrator_Update_Success(t *testing.T) {
+	is := is.New(t)
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
@@ -132,11 +137,12 @@ func TestPipelineOrchestrator_Update_Success(t *testing.T) {
 		Return(want, nil)
 
 	got, err := orc.Pipelines.Update(ctx, plBefore.ID, newConfig)
-	assert.Equal(t, got, want)
-	assert.Ok(t, err)
+	is.Equal(got, want)
+	is.NoErr(err)
 }
 
 func TestPipelineOrchestrator_Update_PipelineRunning(t *testing.T) {
+	is := is.New(t)
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
@@ -154,9 +160,9 @@ func TestPipelineOrchestrator_Update_PipelineRunning(t *testing.T) {
 		Return(plBefore, nil)
 
 	got, err := orc.Pipelines.Update(ctx, plBefore.ID, newConfig)
-	assert.Nil(t, got)
-	assert.Error(t, err)
-	assert.Equal(t, pipeline.ErrPipelineRunning, err)
+	is.Equal(got, nil)
+	is.True(err != nil)
+	is.Equal(pipeline.ErrPipelineRunning, err)
 }
 
 func TestPipelineOrchestrator_Update_PipelineProvisionedByConfig(t *testing.T) {
@@ -185,6 +191,7 @@ func TestPipelineOrchestrator_Update_PipelineProvisionedByConfig(t *testing.T) {
 }
 
 func TestPipelineOrchestrator_Delete_Success(t *testing.T) {
+	is := is.New(t)
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
@@ -203,10 +210,11 @@ func TestPipelineOrchestrator_Delete_Success(t *testing.T) {
 		Return(nil)
 
 	err := orc.Pipelines.Delete(ctx, plBefore.ID)
-	assert.Ok(t, err)
+	is.NoErr(err)
 }
 
 func TestPipelineOrchestrator_Delete_PipelineRunning(t *testing.T) {
+	is := is.New(t)
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
@@ -222,8 +230,8 @@ func TestPipelineOrchestrator_Delete_PipelineRunning(t *testing.T) {
 		Return(plBefore, nil)
 
 	err := orc.Pipelines.Delete(ctx, plBefore.ID)
-	assert.Error(t, err)
-	assert.Equal(t, pipeline.ErrPipelineRunning, err)
+	is.True(err != nil)
+	is.Equal(pipeline.ErrPipelineRunning, err)
 }
 
 func TestPipelineOrchestrator_Delete_PipelineProvisionedByConfig(t *testing.T) {
@@ -249,6 +257,7 @@ func TestPipelineOrchestrator_Delete_PipelineProvisionedByConfig(t *testing.T) {
 }
 
 func TestPipelineOrchestrator_Delete_PipelineHasProcessorsAttached(t *testing.T) {
+	is := is.New(t)
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
@@ -265,11 +274,12 @@ func TestPipelineOrchestrator_Delete_PipelineHasProcessorsAttached(t *testing.T)
 		Return(plBefore, nil)
 
 	err := orc.Pipelines.Delete(ctx, plBefore.ID)
-	assert.Error(t, err)
-	assert.Equal(t, ErrPipelineHasProcessorsAttached, err)
+	is.True(err != nil)
+	is.Equal(ErrPipelineHasProcessorsAttached, err)
 }
 
 func TestPipelineOrchestrator_Delete_PipelineHasConnectorsAttached(t *testing.T) {
+	is := is.New(t)
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
@@ -286,11 +296,12 @@ func TestPipelineOrchestrator_Delete_PipelineHasConnectorsAttached(t *testing.T)
 		Return(plBefore, nil)
 
 	err := orc.Pipelines.Delete(ctx, plBefore.ID)
-	assert.Error(t, err)
-	assert.Equal(t, ErrPipelineHasConnectorsAttached, err)
+	is.True(err != nil)
+	is.Equal(ErrPipelineHasConnectorsAttached, err)
 }
 
 func TestPipelineOrchestrator_Delete_PipelineDoesntExist(t *testing.T) {
+	is := is.New(t)
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
@@ -302,5 +313,140 @@ func TestPipelineOrchestrator_Delete_PipelineDoesntExist(t *testing.T) {
 		Return(nil, wantErr)
 
 	err := orc.Pipelines.Delete(ctx, uuid.NewString())
-	assert.Error(t, err)
+	is.True(err != nil)
+}
+
+func TestPipelineOrchestrator_UpdateDLQ_Success(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	db := &inmemory.DB{}
+	ctrl := gomock.NewController(t)
+	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
+
+	pluginDispenser := pmock.NewDispenser(ctrl)
+
+	plBefore := &pipeline.Instance{
+		ID:     uuid.NewString(),
+		Status: pipeline.StatusSystemStopped,
+		Config: pipeline.Config{Name: "test-pipeline"},
+		DLQ: pipeline.DLQ{
+			Plugin:              "old-plugin",
+			Settings:            map[string]string{"foo": "bar"},
+			WindowSize:          4,
+			WindowNackThreshold: 1,
+		},
+	}
+	newDLQ := pipeline.DLQ{
+		Plugin:              "new-plugin",
+		Settings:            map[string]string{"baz": "qux"},
+		WindowSize:          2,
+		WindowNackThreshold: 0,
+	}
+	want := &pipeline.Instance{
+		ID:     plBefore.ID,
+		Status: pipeline.StatusSystemStopped,
+		Config: pipeline.Config{Name: "test-pipeline"},
+		DLQ:    newDLQ,
+	}
+
+	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
+	plsMock.EXPECT().
+		Get(gomock.AssignableToTypeOf(ctxType), plBefore.ID).
+		Return(plBefore, nil)
+	pluginMock.EXPECT().
+		NewDispenser(gomock.Any(), newDLQ.Plugin).
+		Return(pluginDispenser, nil)
+	pluginMock.EXPECT().
+		ValidateDestinationConfig(gomock.Any(), pluginDispenser, newDLQ.Settings).
+		Return(nil)
+	plsMock.EXPECT().
+		UpdateDLQ(gomock.AssignableToTypeOf(ctxType), plBefore.ID, newDLQ).
+		Return(want, nil)
+
+	got, err := orc.Pipelines.UpdateDLQ(ctx, plBefore.ID, newDLQ)
+	is.Equal(got, want)
+	is.NoErr(err)
+}
+
+func TestPipelineOrchestrator_UpdateDLQ_PipelineRunning(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	db := &inmemory.DB{}
+	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
+
+	plBefore := &pipeline.Instance{
+		ID:     uuid.NewString(),
+		Status: pipeline.StatusRunning,
+	}
+
+	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
+	plsMock.EXPECT().
+		Get(gomock.AssignableToTypeOf(ctxType), plBefore.ID).
+		Return(plBefore, nil)
+
+	got, err := orc.Pipelines.UpdateDLQ(ctx, plBefore.ID, pipeline.DLQ{})
+	is.Equal(got, nil)
+	is.True(err != nil)
+	is.Equal(pipeline.ErrPipelineRunning, err)
+}
+
+func TestPipelineOrchestrator_UpdateDLQ_PipelineProvisionedByConfig(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	db := &inmemory.DB{}
+	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
+
+	plBefore := &pipeline.Instance{
+		ID:            uuid.NewString(),
+		Status:        pipeline.StatusUserStopped,
+		ProvisionedBy: pipeline.ProvisionTypeConfig,
+	}
+
+	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
+	plsMock.EXPECT().
+		Get(gomock.AssignableToTypeOf(ctxType), plBefore.ID).
+		Return(plBefore, nil)
+
+	got, err := orc.Pipelines.UpdateDLQ(ctx, plBefore.ID, pipeline.DLQ{})
+	is.Equal(got, nil)
+	is.True(err != nil)
+	is.True(cerrors.Is(err, ErrImmutableProvisionedByConfig)) // expected ErrImmutableProvisionedByConfig
+}
+
+func TestConnectorOrchestrator_UpdateDLQ_InvalidConfig(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	db := &inmemory.DB{}
+	ctrl := gomock.NewController(t)
+	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
+
+	pluginDispenser := pmock.NewDispenser(ctrl)
+
+	plBefore := &pipeline.Instance{
+		ID:     uuid.NewString(),
+		Status: pipeline.StatusSystemStopped,
+		Config: pipeline.Config{Name: "test-pipeline"},
+	}
+	newDLQ := pipeline.DLQ{
+		Plugin:              "new-plugin",
+		Settings:            map[string]string{"baz": "qux"},
+		WindowSize:          2,
+		WindowNackThreshold: 0,
+	}
+	wantErr := cerrors.New("invalid plugin config")
+
+	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
+	plsMock.EXPECT().
+		Get(gomock.AssignableToTypeOf(ctxType), plBefore.ID).
+		Return(plBefore, nil)
+	pluginMock.EXPECT().
+		NewDispenser(gomock.Any(), newDLQ.Plugin).
+		Return(pluginDispenser, nil)
+	pluginMock.EXPECT().
+		ValidateDestinationConfig(gomock.Any(), pluginDispenser, newDLQ.Settings).
+		Return(wantErr)
+
+	got, err := orc.Pipelines.UpdateDLQ(ctx, plBefore.ID, newDLQ)
+	is.Equal(got, nil)
+	is.True(cerrors.Is(err, wantErr))
 }

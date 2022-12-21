@@ -43,6 +43,8 @@ type PipelineOrchestrator interface {
 	Create(ctx context.Context, cfg pipeline.Config) (*pipeline.Instance, error)
 	// Update will update a Pipeline's config.
 	Update(ctx context.Context, id string, cfg pipeline.Config) (*pipeline.Instance, error)
+	// UpdateDLQ will update a Pipeline's dead-letter-queue.
+	UpdateDLQ(ctx context.Context, id string, dlq pipeline.DLQ) (*pipeline.Instance, error)
 	// Delete removes a pipeline and all associated connectors and plugins.
 	Delete(ctx context.Context, id string) error
 }
@@ -71,19 +73,17 @@ func (p *PipelineAPIv1) GetPipeline(
 		return nil, status.PipelineError(cerrors.ErrEmptyID)
 	}
 
-	// fetch the pipeline from the PipelineOrchestrator
 	pl, err := p.ps.Get(ctx, req.Id)
 	if err != nil {
 		return nil, status.PipelineError(cerrors.Errorf("failed to get pipeline by ID: %w", err))
 	}
 
-	// setup an empty pipeline to hydrate.
 	resp := toproto.Pipeline(pl)
 
 	return &apiv1.GetPipelineResponse{Pipeline: resp}, nil
 }
 
-// ListPipelines ...
+// ListPipelines returns a list of all pipelines.
 func (p *PipelineAPIv1) ListPipelines(
 	ctx context.Context,
 	req *apiv1.ListPipelinesRequest,
@@ -136,7 +136,7 @@ func (p *PipelineAPIv1) UpdatePipeline(
 	req *apiv1.UpdatePipelineRequest,
 ) (*apiv1.UpdatePipelineResponse, error) {
 	if req.Id == "" {
-		return nil, cerrors.ErrEmptyID
+		return nil, status.PipelineError(cerrors.ErrEmptyID)
 	}
 
 	cfg := fromproto.PipelineConfig(req.Config)
@@ -186,6 +186,44 @@ func (p *PipelineAPIv1) StopPipeline(
 	}
 
 	return &apiv1.StopPipelineResponse{}, nil
+}
+
+func (p *PipelineAPIv1) GetDLQ(
+	ctx context.Context,
+	req *apiv1.GetDLQRequest,
+) (*apiv1.GetDLQResponse, error) {
+	if req.Id == "" {
+		return nil, status.PipelineError(cerrors.ErrEmptyID)
+	}
+
+	pl, err := p.ps.Get(ctx, req.Id)
+	if err != nil {
+		return nil, status.PipelineError(cerrors.Errorf("failed to get pipeline by ID: %w", err))
+	}
+
+	resp := toproto.PipelineDLQ(pl.DLQ)
+
+	return &apiv1.GetDLQResponse{Dlq: resp}, nil
+}
+
+func (p *PipelineAPIv1) UpdateDLQ(
+	ctx context.Context,
+	req *apiv1.UpdateDLQRequest,
+) (*apiv1.UpdateDLQResponse, error) {
+	if req.Id == "" {
+		return nil, status.PipelineError(cerrors.ErrEmptyID)
+	}
+
+	cfg := fromproto.PipelineDLQ(req.Dlq)
+	updated, err := p.ps.UpdateDLQ(ctx, req.Id, cfg)
+
+	if err != nil {
+		return nil, status.PipelineError(cerrors.Errorf("failed to update pipeline dead-letter-queue: %w", err))
+	}
+
+	dlq := toproto.PipelineDLQ(updated.DLQ)
+
+	return &apiv1.UpdateDLQResponse{Dlq: dlq}, nil
 }
 
 func (p *PipelineAPIv1) ImportPipeline(

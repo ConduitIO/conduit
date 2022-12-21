@@ -25,3 +25,12 @@ func PipelineConfig(in *apiv1.Pipeline_Config) pipeline.Config {
 		Description: in.Description,
 	}
 }
+
+func PipelineDLQ(in *apiv1.Pipeline_DLQ) pipeline.DLQ {
+	return pipeline.DLQ{
+		Plugin:              in.Plugin,
+		Settings:            in.Settings,
+		WindowSize:          int(in.WindowSize),
+		WindowNackThreshold: int(in.WindowNackThreshold),
+	}
+}
