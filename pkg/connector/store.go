@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"strings"
+	"time"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/database"
@@ -38,9 +39,104 @@ type Store struct {
 }
 
 func NewStore(db database.DB, logger log.CtxLogger) *Store {
-	return &Store{
+	s := &Store{
 		db:     db,
 		logger: logger.WithComponent("connector.Store"),
+	}
+	s.migratePre041(context.Background())
+	return s
+}
+
+// Until (including) v0.4.0 the connector prefix was connector:connector:
+// we changed the prefix to be in line with the pipeline and processor entities,
+// we also changed the field names (no more X prefix), this function migrates
+// old connector to the new format and new prefix.
+func (s *Store) migratePre041(ctx context.Context) {
+	const pre041prefix = "connector:connector:"
+
+	pre041keys, err := s.db.GetKeys(ctx, pre041prefix)
+	if err != nil {
+		s.logger.Warn(ctx).Err(err).Msg("failed to migrate connectors, if you just upgraded to v0.4.x old connectors might not be loaded correctly")
+		return
+	}
+	if len(pre041keys) == 0 {
+		return
+	}
+
+	s.logger.Info(ctx).Msgf("found %d pre-v0.4.1 connectors in store, migrating them now...", len(pre041keys))
+
+	type connectorPre041 struct {
+		Type string
+		Data struct {
+			XID     string
+			XConfig struct {
+				Name         string
+				Settings     map[string]string
+				Plugin       string
+				PipelineID   string
+				ProcessorIDs []string
+			}
+			XState         json.RawMessage
+			XProvisionedBy int
+			XCreatedAt     time.Time
+			XUpdatedAt     time.Time
+		}
+	}
+
+	for _, key := range pre041keys {
+		s.logger.Debug(ctx).Msgf("migrating connector with ID %v", key)
+
+		// fetch old connector
+		raw, err := s.db.Get(ctx, key)
+		if err != nil {
+			s.logger.Warn(ctx).Err(cerrors.Errorf("failed to get old connector with ID %v: %w", key, err)).Send()
+			continue
+		}
+
+		// decode old connector into new connector
+		var old connectorPre041
+		err = json.Unmarshal(raw, &old)
+		if err != nil {
+			s.logger.Warn(ctx).Err(cerrors.Errorf("failed to unmarshal old connector with ID %v: %w", key, err)).Send()
+			continue
+		}
+		connType, ok := map[string]Type{
+			TypeSource.String():      TypeSource,
+			TypeDestination.String(): TypeDestination,
+		}[old.Type]
+		if !ok {
+			s.logger.Warn(ctx).Err(cerrors.Errorf("invalid type of old connector with ID %v: %v", key, old.Type)).Send()
+			continue
+		}
+		instance := &Instance{
+			ID:   old.Data.XID,
+			Type: connType,
+			Config: Config{
+				Name:     old.Data.XConfig.Name,
+				Settings: old.Data.XConfig.Settings,
+			},
+			PipelineID:    old.Data.XConfig.PipelineID,
+			Plugin:        old.Data.XConfig.Plugin,
+			ProcessorIDs:  old.Data.XConfig.ProcessorIDs,
+			ProvisionedBy: ProvisionType(old.Data.XProvisionedBy),
+			State:         old.Data.XState,
+			CreatedAt:     old.Data.XCreatedAt,
+			UpdatedAt:     old.Data.XUpdatedAt,
+		}
+
+		// store new connector in db
+		err = s.Set(ctx, instance.ID, instance)
+		if err != nil {
+			s.logger.Warn(ctx).Err(cerrors.Errorf("failed to store new connector with ID %v: %w", key, err)).Send()
+			continue
+		}
+
+		// delete old connector from db
+		err = s.db.Set(ctx, key, nil)
+		if err != nil {
+			s.logger.Warn(ctx).Err(cerrors.Errorf("failed to delete old connector with ID %v: %w", key, err)).Send()
+			continue
+		}
 	}
 }
 

@@ -109,3 +109,65 @@ func TestConfigStore_Delete(t *testing.T) {
 	is.True(cerrors.Is(err, database.ErrKeyNotExist)) // expected error for non-existing key
 	is.True(got == nil)
 }
+
+func TestStore_MigratePre041(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	logger := log.Nop()
+	db := &inmemory.DB{}
+
+	pre041connectors := map[string]string{
+		"file-to-file:example.in":  `{"Type":"Source","Data":{"XID":"file-to-file:example.in","XConfig":{"Name":"file-to-file:example.in","Settings":{"path":"./example.in"},"Plugin":"builtin:file","PipelineID":"file-to-file","ProcessorIDs":null},"XState":{"Position":null},"XProvisionedBy":1,"XCreatedAt":"2022-12-21T16:53:52.159532+01:00","XUpdatedAt":"2022-12-21T16:53:52.159532+01:00"}}`,
+		"file-to-file:example.out": `{"Type":"Destination","Data":{"XID":"file-to-file:example.out","XConfig":{"Name":"file-to-file:example.out","Settings":{"path":"./example.out"},"Plugin":"builtin:file","PipelineID":"file-to-file","ProcessorIDs":null},"XState":{"Positions":null},"XProvisionedBy":1,"XCreatedAt":"2022-12-21T16:53:52.159532+01:00","XUpdatedAt":"2022-12-21T16:53:52.159532+01:00"}}`,
+	}
+
+	timestamp, err := time.Parse(time.RFC3339, "2022-12-21T16:53:52.159532+01:00")
+	is.NoErr(err)
+	want := map[string]*Instance{
+		"file-to-file:example.in": {
+			ID:   "file-to-file:example.in",
+			Type: TypeSource,
+			Config: Config{
+				Name: "file-to-file:example.in",
+				Settings: map[string]string{
+					"path": "./example.in",
+				},
+			},
+			PipelineID:    "file-to-file",
+			Plugin:        "builtin:file",
+			ProcessorIDs:  nil,
+			State:         SourceState{Position: nil},
+			ProvisionedBy: ProvisionTypeConfig,
+			CreatedAt:     timestamp,
+			UpdatedAt:     timestamp,
+		},
+		"file-to-file:example.out": {
+			ID:   "file-to-file:example.out",
+			Type: TypeDestination,
+			Config: Config{
+				Name: "file-to-file:example.out",
+				Settings: map[string]string{
+					"path": "./example.out",
+				},
+			},
+			PipelineID:    "file-to-file",
+			Plugin:        "builtin:file",
+			ProcessorIDs:  nil,
+			State:         DestinationState{Positions: nil},
+			ProvisionedBy: ProvisionTypeConfig,
+			CreatedAt:     timestamp,
+			UpdatedAt:     timestamp,
+		},
+	}
+
+	for k, v := range pre041connectors {
+		err := db.Set(ctx, "connector:connector:"+k, []byte(v))
+		is.NoErr(err)
+	}
+
+	store := NewStore(db, logger)
+	got, err := store.GetAll(ctx)
+	is.NoErr(err)
+	is.Equal(len(got), 2)
+	is.Equal(want, got)
+}
