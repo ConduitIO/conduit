@@ -50,9 +50,9 @@ func TestServiceLifecycle_buildNodes(t *testing.T) {
 
 	ps := NewService(logger, db)
 
-	source, sourceDispenser := dummySource(ctrl)
-	destination, destDispenser := dummyDestination(ctrl)
-	dlq, dlqDispenser := dummyDestination(ctrl)
+	source := dummySource()
+	destination := dummyDestination()
+	dlq := dummyDestination()
 	pl := &Instance{
 		ID:     uuid.NewString(),
 		Config: Config{Name: "test-pipeline"},
@@ -75,9 +75,9 @@ func TestServiceLifecycle_buildNodes(t *testing.T) {
 		},
 		testProcessorFetcher{},
 		testPluginFetcher{
-			source.Plugin:      sourceDispenser,
-			destination.Plugin: destDispenser,
-			dlq.Plugin:         dlqDispenser,
+			source.Plugin:      pmock.NewDispenser(ctrl),
+			destination.Plugin: pmock.NewDispenser(ctrl),
+			dlq.Plugin:         pmock.NewDispenser(ctrl),
 		},
 		pl,
 	)
@@ -317,9 +317,9 @@ func TestService_Run_Rerun(t *testing.T) {
 			dlq, dlqDispenser = asserterDestination(ctrl, t, nil, false)
 		} else {
 			// dummy connectors that are not expected to be started
-			source, sourceDispenser = dummySource(ctrl)
-			destination, destDispenser = dummyDestination(ctrl)
-			dlq, dlqDispenser = dummyDestination(ctrl)
+			source = dummySource()
+			destination = dummyDestination()
+			dlq = dummyDestination()
 		}
 
 		// update internal fields, they will be stored when we add the connectors
@@ -420,7 +420,9 @@ func generatorSource(ctrl *gomock.Controller, records []record.Record, wantErr e
 		return r, nil
 	}).MinTimes(recordCount + 1)
 
-	source, dispenser := dummySource(ctrl)
+	source := dummySource()
+
+	dispenser := pmock.NewDispenser(ctrl)
 	dispenser.EXPECT().DispenseSource().Return(sourcePlugin, nil)
 
 	return source, dispenser
@@ -477,20 +479,18 @@ func asserterDestination(ctrl *gomock.Controller, t *testing.T, want []record.Re
 		is.Equal(len(want), recordCount)
 	})
 
-	dest, dispenser := dummyDestination(ctrl)
+	dest := dummyDestination()
+
+	dispenser := pmock.NewDispenser(ctrl)
 	dispenser.EXPECT().DispenseDestination().Return(destinationPlugin, nil)
 
 	return dest, dispenser
 }
 
 // dummySource creates a dummy source connector.
-func dummySource(ctrl *gomock.Controller) (*connector.Instance, *pmock.Dispenser) {
+func dummySource() *connector.Instance {
 	// randomize plugin name in case of multiple sources
 	testPluginName := "test-source-plugin-" + uuid.NewString()
-
-	dispenser := pmock.NewDispenser(ctrl)
-	dispenser.EXPECT().FullName().Return(plugin.FullName(testPluginName)).AnyTimes()
-
 	source := &connector.Instance{
 		ID:         uuid.NewString(),
 		Type:       connector.TypeSource,
@@ -499,16 +499,13 @@ func dummySource(ctrl *gomock.Controller) (*connector.Instance, *pmock.Dispenser
 	}
 	source.Init(log.Nop(), nil)
 
-	return source, dispenser
+	return source
 }
 
 // dummyDestination creates a dummy destination connector.
-func dummyDestination(ctrl *gomock.Controller) (*connector.Instance, *pmock.Dispenser) {
+func dummyDestination() *connector.Instance {
 	// randomize plugin name in case of multiple destinations
 	testPluginName := "test-destination-plugin-" + uuid.NewString()
-
-	dispenser := pmock.NewDispenser(ctrl)
-	dispenser.EXPECT().FullName().Return(plugin.FullName(testPluginName)).AnyTimes()
 
 	destination := &connector.Instance{
 		ID:         uuid.NewString(),
@@ -518,7 +515,7 @@ func dummyDestination(ctrl *gomock.Controller) (*connector.Instance, *pmock.Disp
 	}
 	destination.Init(log.Nop(), nil)
 
-	return destination, dispenser
+	return destination
 }
 
 // testConnectorFetcher fulfills the ConnectorFetcher interface.

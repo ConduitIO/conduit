@@ -72,10 +72,9 @@ func TestSource_Ack_Deadlock(t *testing.T) {
 	sourceMock.EXPECT().Ack(gomock.Any(), record.Position("test-pos")).Return(nil).Times(5)
 
 	pluginDispenser := mock.NewDispenser(ctrl)
-	pluginDispenser.EXPECT().FullName().Return(plugin.FullName("test-plugin")).AnyTimes()
 	pluginDispenser.EXPECT().DispenseSource().Return(sourceMock, nil)
 
-	conn, err := instance.Connector(ctx, testPluginFetcher{string(pluginDispenser.FullName()): pluginDispenser})
+	conn, err := instance.Connector(ctx, testPluginFetcher{instance.Plugin: pluginDispenser})
 	is.NoErr(err)
 	s, ok := conn.(*Source)
 	is.True(ok)
