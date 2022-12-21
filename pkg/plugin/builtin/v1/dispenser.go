@@ -44,10 +44,6 @@ func NewDispenser(
 	}
 }
 
-func (d *Dispenser) FullName() plugin.FullName {
-	return d.name
-}
-
 func (d *Dispenser) DispenseSpecifier() (plugin.SpecifierPlugin, error) {
 	return newSpecifierPluginAdapter(d.specifierPlugin()), nil
 }

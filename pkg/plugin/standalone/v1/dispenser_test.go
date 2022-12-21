@@ -73,7 +73,7 @@ func newTestDispenser(t *testing.T, logger zerolog.Logger) (
 	}
 
 	// Connect
-	dispenser, err := NewDispenser("test-plugin", logger, "", WithReattachConfig(config))
+	dispenser, err := NewDispenser(logger, "", WithReattachConfig(config))
 	if err != nil {
 		t.Fatal("could not create dispenser", err)
 	}

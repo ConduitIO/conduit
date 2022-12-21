@@ -26,7 +26,6 @@ import (
 
 // Dispenser dispenses specifier, source and destination plugins.
 type Dispenser interface {
-	FullName() FullName
 	DispenseSpecifier() (SpecifierPlugin, error)
 	DispenseSource() (SourcePlugin, error)
 	DispenseDestination() (DestinationPlugin, error)

@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:generate mockgen -destination=mock/registry.go -package=mock -mock_names=Registry=Registry . Registry
-
 package plugin
 
 import (
@@ -23,17 +21,17 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/log"
 )
 
-// Registry is an object that can create new plugin dispensers. We need to use
+// registry is an object that can create new plugin dispensers. We need to use
 // an interface to prevent a cyclic dependency between the plugin package and
 // builtin and standalone packages.
 // There are two registries that implement this interface:
 //   - The built-in registry creates a dispenser which dispenses a plugin adapter
 //     that communicates with the plugin directly as if it was a library. These
 //     plugins are baked into the Conduit binary and included at compile time.
-//   - The standalone Registry creates a dispenser which starts the plugin in a
+//   - The standalone registry creates a dispenser which starts the plugin in a
 //     separate process and communicates with it via gRPC. These plugins are
 //     compiled independently of Conduit and can be included at runtime.
-type Registry interface {
+type registry interface {
 	NewDispenser(logger log.CtxLogger, name FullName) (Dispenser, error)
 	List() map[FullName]Specification
 }
@@ -41,11 +39,11 @@ type Registry interface {
 type Service struct {
 	logger log.CtxLogger
 
-	builtin    Registry
-	standalone Registry
+	builtin    registry
+	standalone registry
 }
 
-func NewService(logger log.CtxLogger, builtin Registry, standalone Registry) *Service {
+func NewService(logger log.CtxLogger, builtin registry, standalone registry) *Service {
 	return &Service{
 		logger:     logger.WithComponent("plugin.Service"),
 		builtin:    builtin,
