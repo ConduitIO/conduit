@@ -335,6 +335,11 @@ func (s *Service) buildDLQHandlerNode(
 
 		WindowSize:          pl.DLQ.WindowSize,
 		WindowNackThreshold: pl.DLQ.WindowNackThreshold,
+
+		DLQTimer: measure.DLQExecutionDurationTimer.WithValues(
+			pl.Config.Name,
+			pl.DLQ.Plugin,
+		),
 	}, nil
 }
 

@@ -56,4 +56,9 @@ var (
 		[]string{"pipeline_name", "processor"},
 		prometheus.HistogramOpts{Buckets: []float64{.001, .0025, .005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5}},
 	)
+	DLQExecutionDurationTimer = metrics.NewLabeledTimer("conduit_dlq_execution_duration_seconds",
+		"Amount of time spent writing records to DLQ connector per pipeline and plugin.",
+		[]string{"pipeline_name", "plugin"},
+		prometheus.HistogramOpts{Buckets: []float64{.001, .0025, .005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5}},
+	)
 )

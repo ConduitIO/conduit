@@ -23,6 +23,7 @@ import (
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/csync"
+	"github.com/conduitio/conduit/pkg/foundation/metrics/noop"
 	"github.com/conduitio/conduit/pkg/pipeline/stream/mock"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/golang/mock/gomock"
@@ -180,6 +181,7 @@ func TestDLQHandlerNode_Nack_ForwardToDLQ_Success(t *testing.T) {
 		// allow 100 of the last 101 messages to be nacks
 		WindowSize:          101,
 		WindowNackThreshold: 100,
+		DLQTimer:            noop.Timer{},
 	}
 	n.Add(1) // add 1 dependent component, should not matter
 
