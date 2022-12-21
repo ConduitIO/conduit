@@ -122,33 +122,13 @@ func (p *webSocketProxy) proxy(w http.ResponseWriter, r *http.Request) {
 		p.handler.ServeHTTP(response, r)
 	}()
 
-	go p.startReadLoop(ctx)
-
-	scanner := bufio.NewScanner(responseR)
-
-	for scanner.Scan() {
-		if len(scanner.Bytes()) == 0 {
-			p.logger.Warn(ctx).Err(scanner.Err()).Msg("[write] empty scan")
-			continue
-		}
-
-		p.logger.Trace(ctx).Msgf("[write] scanned %v", scanner.Text())
-		if err := p.conn.WriteMessage(websocket.TextMessage, scanner.Bytes()); err != nil {
-			p.logger.Warn(ctx).Err(err).Msg("[write] error writing websocket message")
-			return
-		}
-	}
-
-	if sErr := scanner.Err(); sErr != nil {
-		p.logger.Err(ctx, sErr).Msg("failed reading data from original response")
-		if err := p.conn.WriteMessage(websocket.TextMessage, []byte(sErr.Error())); err != nil {
-			p.logger.Warn(ctx).Err(err).Msg("[write] failed writing scanner error")
-		}
-	}
+	go p.startReadLoop(ctx, cancelFn)
+	go p.pingWriteLoop(ctx)
+	p.startWriteLoop(ctx, responseR)
 }
 
 // startReadLoop starts a read loop on the proxy's WebSocket connection
-func (p *webSocketProxy) startReadLoop(ctx context.Context) {
+func (p *webSocketProxy) startReadLoop(ctx context.Context, cancelFn context.CancelFunc) {
 	p.conn.SetReadLimit(512)
 	// todo handle errors
 	p.conn.SetReadDeadline(time.Now().Add(p.pongWait))
@@ -157,7 +137,19 @@ func (p *webSocketProxy) startReadLoop(ctx context.Context) {
 		return nil
 	})
 
+	// The read loop will stop only if the request context was cancelled,
+	// or if there's been an error reading a message.
+	// Because of the latter, we need to cancel the request context.
+	defer func() {
+		cancelFn()
+	}()
 	for {
+		select {
+		case <-ctx.Done():
+			p.logger.Debug(ctx).Msg("read loop done because request context was cancelled")
+			return
+		default:
+		}
 		// The only use we have for reads right now
 		// is for ping, pong and close messages.
 		// https://pkg.go.dev/github.com/gorilla/websocket#hdr-Control_Messages
@@ -184,4 +176,48 @@ func (p *webSocketProxy) isClosedConnErr(err error) bool {
 		websocket.CloseGoingAway,
 		websocket.CloseAbnormalClosure,
 	)
+}
+
+func (p *webSocketProxy) startWriteLoop(ctx context.Context, responseReader *io.PipeReader) {
+	scanner := bufio.NewScanner(responseReader)
+
+	for scanner.Scan() {
+		if len(scanner.Bytes()) == 0 {
+			p.logger.Warn(ctx).Err(scanner.Err()).Msg("[write] empty scan")
+			continue
+		}
+
+		p.logger.Trace(ctx).Msgf("[write] scanned %v", scanner.Text())
+		if err := p.conn.WriteMessage(websocket.TextMessage, scanner.Bytes()); err != nil {
+			p.logger.Warn(ctx).Err(err).Msg("[write] error writing websocket message")
+			return
+		}
+	}
+
+	if sErr := scanner.Err(); sErr != nil {
+		p.logger.Err(ctx, sErr).Msg("failed reading data from original response")
+		if err := p.conn.WriteMessage(websocket.TextMessage, []byte(sErr.Error())); err != nil {
+			p.logger.Warn(ctx).Err(err).Msg("[write] failed writing scanner error")
+		}
+	}
+}
+
+func (p *webSocketProxy) pingWriteLoop(ctx context.Context) {
+	ticker := time.NewTicker(p.pingInterval)
+	defer func() {
+		ticker.Stop()
+		p.conn.Close()
+	}()
+	for {
+		select {
+		case <-ctx.Done():
+			p.logger.Debug(ctx).Msg("stopped pinging write loop because request context was cancelled")
+			return
+		case <-ticker.C:
+			p.conn.SetWriteDeadline(time.Now().Add(p.pingWait))
+			if err := p.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+				return
+			}
+		}
+	}
 }
