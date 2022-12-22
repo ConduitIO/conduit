@@ -55,6 +55,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/stats"
 	"gopkg.in/tomb.v2"
 
@@ -279,6 +280,10 @@ func (r *Runtime) serveGRPCAPI(ctx context.Context, t *tomb.Tomb) (net.Addr, err
 			grpcutil.LoggerUnaryServerInterceptor(r.logger),
 		),
 		grpc.StatsHandler(r.newGrpcStatsHandler()),
+		grpc.KeepaliveParams(keepalive.ServerParameters{
+			MaxConnectionAge:      time.Minute,
+			MaxConnectionAgeGrace: time.Second * 30,
+		}),
 	)
 
 	pipelineAPIv1 := api.NewPipelineAPIv1(r.Orchestrator.Pipelines)
