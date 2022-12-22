@@ -54,6 +54,11 @@ func (w *inMemoryResponseWriter) CloseNotify() <-chan bool {
 }
 func (w *inMemoryResponseWriter) Flush() {}
 
+var (
+	defaultWriteWait = 10 * time.Second
+	defaultPongWait  = 60 * time.Second
+)
+
 // webSocketProxy is a proxy around a http.Handler which
 // redirects the response data from the http.Handler
 // to a WebSocket connection.
@@ -78,10 +83,10 @@ func newWebSocketProxy(handler http.Handler, logger log.CtxLogger) *webSocketPro
 			ReadBufferSize:  1024,
 			WriteBufferSize: 1024,
 		},
+		writeWait:  defaultWriteWait,
+		pongWait:   defaultPongWait,
+		pingPeriod: (defaultPongWait * 9) / 10,
 	}
-	proxy.writeWait = 10 * time.Second
-	proxy.pongWait = 60 * time.Second
-	proxy.pingPeriod = (proxy.pongWait * 9) / 10
 
 	return proxy
 }
