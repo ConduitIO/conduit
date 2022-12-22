@@ -19,11 +19,9 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/gorilla/websocket"
 	"github.com/matryer/is"
 )
 
@@ -60,56 +58,4 @@ func TestWebSocket_NoUpgradeToWebSocket(t *testing.T) {
 	bytes, err := io.ReadAll(resp.Body)
 	is.NoErr(err)
 	is.Equal(h.response, string(bytes))
-}
-
-func TestWebSocket_UpgradeToWebSocket(t *testing.T) {
-	is := is.New(t)
-
-	h := &testHandler{
-		is:       is,
-		response: "hi there",
-	}
-	s := httptest.NewServer(newWebSocketProxy(h, log.Nop()))
-	defer s.Close()
-
-	// Convert http to ws
-	wsURL := "ws" + strings.TrimPrefix(s.URL, "http")
-
-	// Connect to the server
-	ws, resp, err := websocket.DefaultDialer.Dial(wsURL, nil)
-	is.NoErr(err)
-	defer ws.Close()
-	defer resp.Body.Close()
-
-	msgType, bytes, err := ws.ReadMessage()
-	is.NoErr(err)
-	is.Equal(h.response, string(bytes))
-	is.Equal(websocket.TextMessage, msgType)
-}
-
-func TestWebSocket_PingPong(t *testing.T) {
-	is := is.New(t)
-
-	h := &testHandler{
-		is:       is,
-		response: "hi there",
-	}
-	s := httptest.NewServer(newWebSocketProxy(h, log.Nop()))
-	defer s.Close()
-
-	// Convert http to ws
-	wsURL := "ws" + strings.TrimPrefix(s.URL, "http")
-
-	// Connect to the server
-	ws, resp, err := websocket.DefaultDialer.Dial(wsURL, nil)
-	is.NoErr(err)
-	defer ws.Close()
-	defer resp.Body.Close()
-
-	pinged := false
-	ws.SetPingHandler(func(appData string) error {
-		pinged = true
-		return nil
-	})
-	is.True(pinged)
 }
