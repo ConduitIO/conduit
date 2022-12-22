@@ -146,8 +146,8 @@ github.com/conduitio/conduit-connector-s3 v0.3.0 h1:Zy+TYRnZKw09mks4qsXW43qnp0Pu
 github.com/conduitio/conduit-connector-s3 v0.3.0/go.mod h1:ims2iWZJcOSjEPY1nal/DQrxiqG+xHPYFV5nN1ia/Pk=
 github.com/conduitio/conduit-connector-sdk v0.4.0 h1:kQBhk+cy9npo5NXTPyqdeXvs7e1pJeYdKcHa0lMRHjo=
 github.com/conduitio/conduit-connector-sdk v0.4.0/go.mod h1:SNz/Sn4zNuJNMELlr+HVe8Br8SpDea0EB4Gmh+Ha0+k=
-github.com/conduitio/yaml/v3 v3.1.1 h1:3I6/pNhnXVGS6v77riPCGasBwI0RrnK1UTAUOD2/Nxg=
-github.com/conduitio/yaml/v3 v3.1.1/go.mod h1:JNgFMOX1t8W4YJuRZOh6GggVtSMsgP9XgTw+7dIenpc=
+github.com/conduitio/yaml/v3 v3.2.0 h1:itolFiK0dzUYG6PdlOpmCi1fcMYFoaWdZ1wbNNTEnlI=
+github.com/conduitio/yaml/v3 v3.2.0/go.mod h1:JNgFMOX1t8W4YJuRZOh6GggVtSMsgP9XgTw+7dIenpc=
 github.com/coreos/etcd v3.3.10+incompatible/go.mod h1:uF7uidLiAD3TWHmW31ZFd/JWoc32PjwdhPthX9715RE=
 github.com/coreos/go-etcd v2.0.0+incompatible/go.mod h1:Jez6KQU2B/sWsbdaef3ED8NzMklzPG4d5KIOhIy30Tk=
 github.com/coreos/go-semver v0.2.0/go.mod h1:nnelYz7RCh+5ahJtPPxZlU+153eP4D4r3EedlOD2RNk=
@@ -287,8 +287,8 @@ github.com/googleapis/gax-go/v2 v2.0.5/go.mod h1:DWXyrwAJ9X0FpwwEdw+IPEYBICEFu5m
 github.com/gorilla/websocket v1.5.0 h1:PPwGk2jz7EePpoHN/+ClbZu8SPxiqlu12wZP/3sWmnc=
 github.com/gorilla/websocket v1.5.0/go.mod h1:YR8l580nyteQvAITg2hZ9XVh4b55+EU/adAjf1fMHhE=
 github.com/grpc-ecosystem/grpc-gateway v1.16.0/go.mod h1:BDjrQk3hbvj6Nolgz8mAMFbcEtjT1g+wF4CSlocrBnw=
-github.com/grpc-ecosystem/grpc-gateway/v2 v2.14.0 h1:t7uX3JBHdVwAi3G7sSSdbsk8NfgA+LnUS88V/2EKaA0=
-github.com/grpc-ecosystem/grpc-gateway/v2 v2.14.0/go.mod h1:4OGVnY4qf2+gw+ssiHbW+pq4mo2yko94YxxMmXZ7jCA=
+github.com/grpc-ecosystem/grpc-gateway/v2 v2.15.0 h1:1JYBfzqrWPcCclBwxFCPAou9n+q86mfnu7NAeHfte7A=
+github.com/grpc-ecosystem/grpc-gateway/v2 v2.15.0/go.mod h1:YDZoGHuwE+ov0c8smSH49WLF3F2LaWnYYuDVd+EWrc0=
 github.com/hashicorp/go-hclog v1.4.0 h1:ctuWFGrhFha8BnnzxqeRGidlEcQkDyL5u8J8t5eA11I=
 github.com/hashicorp/go-hclog v1.4.0/go.mod h1:W4Qnvbt70Wk/zYJryRzDRU/4r0kIg0PVHBcfoyhpF5M=
 github.com/hashicorp/go-plugin v1.4.8 h1:CHGwpxYDOttQOY7HOWgETU9dyVjOXzniXDqJcYJE1zM=

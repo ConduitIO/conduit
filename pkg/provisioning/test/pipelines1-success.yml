@@ -2,6 +2,7 @@
 version: 1.0
 pipelines:
   pipeline1:
+    unknownField: this triggers a warning
     status: running
     name: pipeline1
     description: desc1
@@ -25,6 +26,7 @@ pipelines:
         settings:
           additionalProp1: string
           additionalProp2: string
+    # dead letter queue is parsed even though version is 1.0, we warn the user
     dead-letter-queue:
       plugin: my-plugin
       settings:
