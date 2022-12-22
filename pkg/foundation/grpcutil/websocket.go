@@ -20,6 +20,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/gorilla/websocket"
@@ -60,7 +61,13 @@ type webSocketProxy struct {
 	handler  http.Handler
 	logger   log.CtxLogger
 	upgrader websocket.Upgrader
-	conn     *websocket.Conn
+
+	// Time allowed to write a message to the peer.
+	writeWait time.Duration
+	// Time allowed to read the next pong message from the peer.
+	pongWait time.Duration
+	// Send pings to peer with this period. Must be less than pongWait.
+	pingPeriod time.Duration
 }
 
 func newWebSocketProxy(handler http.Handler, logger log.CtxLogger) *webSocketProxy {
@@ -72,6 +79,9 @@ func newWebSocketProxy(handler http.Handler, logger log.CtxLogger) *webSocketPro
 			WriteBufferSize: 1024,
 		},
 	}
+	proxy.writeWait = 10 * time.Second
+	proxy.pongWait = 60 * time.Second
+	proxy.pingPeriod = (proxy.pongWait * 9) / 10
 
 	return proxy
 }
@@ -96,8 +106,6 @@ func (p *webSocketProxy) proxy(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close()
 
-	p.conn = conn
-
 	// We use a pipe to read the data being written to the underlying http.Handler
 	// and then write it to the WebSocket connection.
 	responseR, responseW := io.Pipe()
@@ -115,16 +123,33 @@ func (p *webSocketProxy) proxy(w http.ResponseWriter, r *http.Request) {
 		p.handler.ServeHTTP(response, r)
 	}()
 
-	go p.startReadLoop(ctx, cancelFn)
-	p.startWriteLoop(ctx, responseR)
+	go p.startWebSocketRead(ctx, conn, cancelFn)
+	messages := p.readFromHTTPResponse(ctx, responseR)
+	p.startWebSocketWrite(ctx, messages, conn, cancelFn)
 }
 
-// startReadLoop starts a read loop on the proxy's WebSocket connection
-func (p *webSocketProxy) startReadLoop(ctx context.Context, cancelFn context.CancelFunc) {
-	// The read loop will stop only if the request context was cancelled,
-	// or if there's been an error reading a message.
-	// Because of the latter, we need to cancel the request context.
-	defer cancelFn()
+// startWebSocketRead starts a read loop on the proxy's WebSocket connection
+// The read loop will stop:
+// 1. if the request context was cancelled, or
+// 2. if there's been an error reading a message.
+func (p *webSocketProxy) startWebSocketRead(ctx context.Context, conn *websocket.Conn, onDone func()) {
+	defer onDone()
+
+	conn.SetReadLimit(512)
+	err := conn.SetReadDeadline(time.Now().Add(p.pongWait))
+	if err != nil {
+		p.logger.Warn(ctx).Err(err).Msgf("couldn't set read deadline %v", p.pongWait)
+		return
+	}
+
+	conn.SetPongHandler(func(string) error {
+		err := conn.SetReadDeadline(time.Now().Add(p.pongWait))
+		if err != nil {
+			// todo return err?
+			p.logger.Warn(ctx).Err(err).Msgf("couldn't set read deadline %v", p.pongWait)
+		}
+		return nil
+	})
 
 	for {
 		select {
@@ -133,16 +158,19 @@ func (p *webSocketProxy) startReadLoop(ctx context.Context, cancelFn context.Can
 			return
 		default:
 		}
+
 		// The only use we have for reads right now
 		// is for ping, pong and close messages.
 		// https://pkg.go.dev/github.com/gorilla/websocket#hdr-Control_Messages
 		// Also, a read loop can detect client disconnects much quicker:
 		// https://groups.google.com/g/golang-nuts/c/FFzQO26jEoE/m/mYhcsK20EwAJ
-		_, _, err := p.conn.ReadMessage()
+		_, _, err := conn.ReadMessage()
 		if err != nil {
 			if p.isClosedConnErr(err) {
-				p.logger.Warn(ctx).Err(err).Msg("read error")
+				p.logger.Debug(ctx).Err(err).Msg("closed connection")
 			}
+
+			p.logger.Warn(ctx).Err(err).Msg("read error")
 			break
 		}
 	}
@@ -161,26 +189,65 @@ func (p *webSocketProxy) isClosedConnErr(err error) bool {
 	)
 }
 
-func (p *webSocketProxy) startWriteLoop(ctx context.Context, responseReader *io.PipeReader) {
-	scanner := bufio.NewScanner(responseReader)
+func (p *webSocketProxy) readFromHTTPResponse(ctx context.Context, responseReader *io.PipeReader) chan []byte {
+	c := make(chan []byte)
+	go func() {
+		scanner := bufio.NewScanner(responseReader)
 
-	for scanner.Scan() {
-		if len(scanner.Bytes()) == 0 {
-			p.logger.Warn(ctx).Err(scanner.Err()).Msg("[write] empty scan")
-			continue
+		for scanner.Scan() {
+			if len(scanner.Bytes()) == 0 {
+				p.logger.Warn(ctx).Err(scanner.Err()).Msg("[write] empty scan")
+				continue
+			}
+
+			p.logger.Trace(ctx).Msgf("[write] scanned %v", scanner.Text())
+			c <- scanner.Bytes()
 		}
 
-		p.logger.Trace(ctx).Msgf("[write] scanned %v", scanner.Text())
-		if err := p.conn.WriteMessage(websocket.TextMessage, scanner.Bytes()); err != nil {
-			p.logger.Warn(ctx).Err(err).Msg("[write] error writing websocket message")
+		if sErr := scanner.Err(); sErr != nil {
+			p.logger.Err(ctx, sErr).Msg("failed reading data from original response")
+			c <- []byte(sErr.Error())
+		}
+
+		p.logger.Debug(ctx).Msg("scanner reached end of input data")
+		close(c)
+	}()
+
+	return c
+}
+
+func (p *webSocketProxy) startWebSocketWrite(ctx context.Context, messages chan []byte, conn *websocket.Conn, onDone func()) {
+	ticker := time.NewTicker(p.pingPeriod)
+	defer func() {
+		ticker.Stop()
+		onDone()
+	}()
+
+	for {
+		select {
+		case <-ctx.Done():
+			p.logger.Debug(ctx).Msg("write loop done because request context was cancelled")
 			return
-		}
-	}
+		case message, ok := <-messages:
+			conn.SetWriteDeadline(time.Now().Add(p.writeWait)) //nolint:errcheck // always returns nil
+			if !ok {
+				// readFromHTTPResponse closed the channel.
+				err := conn.WriteMessage(websocket.CloseMessage, []byte{})
+				if err != nil {
+					p.logger.Warn(ctx).Err(err).Msg("[write] failed sending close message")
+				}
+				return
+			}
 
-	if sErr := scanner.Err(); sErr != nil {
-		p.logger.Err(ctx, sErr).Msg("failed reading data from original response")
-		if err := p.conn.WriteMessage(websocket.TextMessage, []byte(sErr.Error())); err != nil {
-			p.logger.Warn(ctx).Err(err).Msg("[write] failed writing scanner error")
+			if err := conn.WriteMessage(websocket.TextMessage, message); err != nil {
+				p.logger.Warn(ctx).Err(err).Msg("[write] error writing websocket message")
+				return
+			}
+		case <-ticker.C:
+			conn.SetWriteDeadline(time.Now().Add(p.writeWait)) //nolint:errcheck // always returns nil
+			if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+				return
+			}
 		}
 	}
 }
