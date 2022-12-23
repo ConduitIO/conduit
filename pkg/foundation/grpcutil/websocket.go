@@ -94,12 +94,26 @@ func (p *webSocketProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	p.proxy(w, r)
 }
 
+// proxy creates a "pipeline" from the underlying response
+// to a WebSocket connection. The pipeline is constructed in
+// the following way:
+//
+//	  underlying response
+//		  -> inMemoryResponseWrite
+//		   -> scanner
+//		     -> messages channel
+//		       -> connection writer
+//
+// In the case of an error due to which we need to abort the request
+// and close the WebSocket connection, we need to cancel the request context
+// and stop writing any data to the WebSocket connection. This will
+// automatically halt all the "pipeline nodes" after the underlying response.
 func (p *webSocketProxy) proxy(w http.ResponseWriter, r *http.Request) {
 	ctx, cancelFn := context.WithCancel(r.Context())
 	defer cancelFn()
 	r = r.WithContext(ctx)
 
-	// upgrade connection to WebSocket
+	// Upgrade connection to WebSocket
 	conn, err := p.upgrader.Upgrade(w, r, http.Header{})
 	if err != nil {
 		p.logger.Err(ctx, err).Msg("error upgrading websocket")
@@ -120,17 +134,17 @@ func (p *webSocketProxy) proxy(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	messages := make(chan []byte)
+	// startWebSocketRead and startWebSocketWrite need to cancel the context
+	// if they encounter an error reading from or writing to the WS connection
 	go p.startWebSocketRead(ctx, conn, cancelFn)
 	go p.readFromHTTPResponse(ctx, responseR, messages)
 	p.startWebSocketWrite(ctx, messages, conn, cancelFn)
 }
 
-// startWebSocketRead starts a read loop on the proxy's WebSocket connection
-// The read loop will stop:
-// 1. if the request context was cancelled, or
-// 2. if there's been an error reading a message.
-func (p *webSocketProxy) startWebSocketRead(ctx context.Context, conn *websocket.Conn, cancelFn func()) {
-	defer cancelFn()
+// startWebSocketRead starts a read loop on the proxy's WebSocket connection.
+// The read loop will stop if there's been an error reading a message.
+func (p *webSocketProxy) startWebSocketRead(ctx context.Context, conn *websocket.Conn, onDone func()) {
+	defer onDone()
 
 	conn.SetReadLimit(512)
 	err := conn.SetReadDeadline(time.Now().Add(p.pongWait))
