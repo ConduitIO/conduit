@@ -45,7 +45,8 @@ type DLQHandlerNode struct {
 	WindowSize          int
 	WindowNackThreshold int
 
-	DLQTimer metrics.Timer
+	Timer     metrics.Timer
+	Histogram metrics.RecordBytesHistogram
 
 	// window keeps track of the last N acks and nacks
 	window *dlqWindow
@@ -166,7 +167,8 @@ func (n *DLQHandlerNode) Nack(msg *Message, nackMetadata NackMetadata) (err erro
 	if err != nil {
 		return err
 	}
-	n.DLQTimer.Update(time.Since(writeTime))
+	n.Timer.Update(time.Since(writeTime))
+	n.Histogram.Observe(dlqRecord)
 	return nil
 }
 

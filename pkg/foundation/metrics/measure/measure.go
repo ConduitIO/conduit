@@ -41,6 +41,12 @@ var (
 		// buckets from 1KiB to 2MiB
 		prometheus.HistogramOpts{Buckets: []float64{1024, 1024 << 1, 1024 << 2, 1024 << 3, 1024 << 4, 1024 << 5, 1024 << 6, 1024 << 7, 1024 << 8, 1024 << 9, 1024 << 10, 1024 << 11}},
 	)
+	DLQBytesHistogram = metrics.NewLabeledHistogram("conduit_dlq_bytes",
+		"Number of bytes a DLQ connector processed per pipeline and plugin.",
+		[]string{"pipeline_name", "plugin"},
+		// buckets from 1KiB to 2MiB
+		prometheus.HistogramOpts{Buckets: []float64{1024, 1024 << 1, 1024 << 2, 1024 << 3, 1024 << 4, 1024 << 5, 1024 << 6, 1024 << 7, 1024 << 8, 1024 << 9, 1024 << 10, 1024 << 11}},
+	)
 	PipelineExecutionDurationTimer = metrics.NewLabeledTimer("conduit_pipeline_execution_duration_seconds",
 		"Amount of time records spent in a pipeline.",
 		[]string{"pipeline_name"},

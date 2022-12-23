@@ -16,7 +16,11 @@
 
 package metrics
 
-import "time"
+import (
+	"time"
+
+	"github.com/conduitio/conduit/pkg/record"
+)
 
 // Registry is an object that can create and collect metrics.
 type Registry interface {
@@ -385,4 +389,34 @@ func (mt *labeledHistogram) WithValues(vs ...string) Histogram {
 		t.metrics[i] = m.WithValues(vs...)
 	}
 	return t
+}
+
+// RecordBytesHistogram wraps a histrogram metric and allows to observe record
+// sizes in bytes.
+type RecordBytesHistogram struct {
+	h Histogram
+}
+
+func NewRecordBytesHistogram(h Histogram) RecordBytesHistogram {
+	return RecordBytesHistogram{h}
+}
+
+func (m RecordBytesHistogram) Observe(r record.Record) {
+	// TODO for now we call method Bytes() on key and payload to get the
+	//  bytes representation. In case of a structured payload or key it
+	//  is marshaled into JSON, which might not be the correct way to
+	//  determine bytes. Not sure how we could improve this part without
+	//  offloading the bytes calculation to the plugin.
+
+	var bytes int
+	if r.Key != nil {
+		bytes += len(r.Key.Bytes())
+	}
+	if r.Payload.Before != nil {
+		bytes += len(r.Payload.Before.Bytes())
+	}
+	if r.Payload.After != nil {
+		bytes += len(r.Payload.After.Bytes())
+	}
+	m.h.Observe(float64(bytes))
 }
