@@ -216,15 +216,14 @@ func (p *webSocketProxy) readFromHTTPResponse(ctx context.Context, responseReade
 }
 
 func (p *webSocketProxy) startWebSocketWrite(ctx context.Context, messages chan []byte, conn *websocket.Conn, cancelFn func()) {
+	ticker := time.NewTicker(p.pingPeriod)
 	defer func() {
+		ticker.Stop()
+		cancelFn()
 		for range messages {
 			// throw away
 		}
 	}()
-	defer cancelFn()
-
-	ticker := time.NewTicker(p.pingPeriod)
-	defer ticker.Stop()
 
 	for {
 		select {
