@@ -99,7 +99,7 @@ func (p *webSocketProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // the following way:
 //
 //	  underlying response
-//		  -> inMemoryResponseWrite
+//		 -> inMemoryResponseWriter
 //		   -> scanner
 //		     -> messages channel
 //		       -> connection writer
