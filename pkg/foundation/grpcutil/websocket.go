@@ -29,14 +29,12 @@ import (
 type inMemoryResponseWriter struct {
 	io.Writer
 	header http.Header
-	closed chan bool
 }
 
 func newInMemoryResponseWriter(writer io.Writer) *inMemoryResponseWriter {
 	return &inMemoryResponseWriter{
 		Writer: writer,
 		header: http.Header{},
-		closed: make(chan bool, 1),
 	}
 }
 
@@ -48,9 +46,6 @@ func (w *inMemoryResponseWriter) Header() http.Header {
 }
 func (w *inMemoryResponseWriter) WriteHeader(int) {
 	// we don't have a use for the code
-}
-func (w *inMemoryResponseWriter) CloseNotify() <-chan bool {
-	return w.closed
 }
 func (w *inMemoryResponseWriter) Flush() {}
 
@@ -102,6 +97,7 @@ func (p *webSocketProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (p *webSocketProxy) proxy(w http.ResponseWriter, r *http.Request) {
 	ctx, cancelFn := context.WithCancel(r.Context())
 	defer cancelFn()
+	r = r.WithContext(ctx)
 
 	// upgrade connection to WebSocket
 	conn, err := p.upgrader.Upgrade(w, r, http.Header{})
@@ -115,21 +111,17 @@ func (p *webSocketProxy) proxy(w http.ResponseWriter, r *http.Request) {
 	// and then write it to the WebSocket connection.
 	responseR, responseW := io.Pipe()
 	response := newInMemoryResponseWriter(responseW)
-	go func() {
-		<-ctx.Done()
-		p.logger.Debug(ctx).Err(ctx.Err()).Msg("closing pipes")
-		responseW.CloseWithError(io.EOF)
-		response.closed <- true
-	}()
 
 	// Start the "underlying" http.Handler
 	go func() {
-		defer cancelFn()
 		p.handler.ServeHTTP(response, r)
+		p.logger.Debug(ctx).Err(ctx.Err()).Msg("closing pipes")
+		responseW.CloseWithError(io.EOF)
 	}()
 
+	messages := make(chan []byte)
 	go p.startWebSocketRead(ctx, conn, cancelFn)
-	messages := p.readFromHTTPResponse(ctx, responseR)
+	go p.readFromHTTPResponse(ctx, responseR, messages)
 	p.startWebSocketWrite(ctx, messages, conn, cancelFn)
 }
 
@@ -137,8 +129,8 @@ func (p *webSocketProxy) proxy(w http.ResponseWriter, r *http.Request) {
 // The read loop will stop:
 // 1. if the request context was cancelled, or
 // 2. if there's been an error reading a message.
-func (p *webSocketProxy) startWebSocketRead(ctx context.Context, conn *websocket.Conn, onDone func()) {
-	defer onDone()
+func (p *webSocketProxy) startWebSocketRead(ctx context.Context, conn *websocket.Conn, cancelFn func()) {
+	defer cancelFn()
 
 	conn.SetReadLimit(512)
 	err := conn.SetReadDeadline(time.Now().Add(p.pongWait))
@@ -157,13 +149,6 @@ func (p *webSocketProxy) startWebSocketRead(ctx context.Context, conn *websocket
 	})
 
 	for {
-		select {
-		case <-ctx.Done():
-			p.logger.Debug(ctx).Msg("read loop done because request context was cancelled")
-			return
-		default:
-		}
-
 		// The only use we have for reads right now
 		// is for ping, pong and close messages.
 		// https://pkg.go.dev/github.com/gorilla/websocket#hdr-Control_Messages
@@ -194,45 +179,41 @@ func (p *webSocketProxy) isClosedConnErr(err error) bool {
 	)
 }
 
-func (p *webSocketProxy) readFromHTTPResponse(ctx context.Context, responseReader *io.PipeReader) chan []byte {
-	c := make(chan []byte)
-	go func() {
-		scanner := bufio.NewScanner(responseReader)
+func (p *webSocketProxy) readFromHTTPResponse(ctx context.Context, responseReader io.Reader, c chan []byte) {
+	defer close(c)
+	scanner := bufio.NewScanner(responseReader)
 
-		for scanner.Scan() {
-			if len(scanner.Bytes()) == 0 {
-				p.logger.Warn(ctx).Err(scanner.Err()).Msg("[write] empty scan")
-				continue
-			}
-
-			p.logger.Trace(ctx).Msgf("[write] scanned %v", scanner.Text())
-			c <- scanner.Bytes()
+	for scanner.Scan() {
+		if len(scanner.Bytes()) == 0 {
+			p.logger.Warn(ctx).Err(scanner.Err()).Msg("[write] empty scan")
+			continue
 		}
 
-		if sErr := scanner.Err(); sErr != nil {
-			p.logger.Err(ctx, sErr).Msg("failed reading data from original response")
-			c <- []byte(sErr.Error())
-		}
+		p.logger.Trace(ctx).Msgf("[write] scanned %v", scanner.Text())
+		c <- scanner.Bytes()
+	}
 
-		p.logger.Debug(ctx).Msg("scanner reached end of input data")
-		close(c)
-	}()
+	if sErr := scanner.Err(); sErr != nil {
+		p.logger.Err(ctx, sErr).Msg("failed reading data from original response")
+		c <- []byte(sErr.Error())
+	}
 
-	return c
+	p.logger.Debug(ctx).Msg("scanner reached end of input data")
 }
 
-func (p *webSocketProxy) startWebSocketWrite(ctx context.Context, messages chan []byte, conn *websocket.Conn, onDone func()) {
-	ticker := time.NewTicker(p.pingPeriod)
+func (p *webSocketProxy) startWebSocketWrite(ctx context.Context, messages chan []byte, conn *websocket.Conn, cancelFn func()) {
 	defer func() {
-		ticker.Stop()
-		onDone()
+		for range messages {
+			// throw away
+		}
 	}()
+	defer cancelFn()
+
+	ticker := time.NewTicker(p.pingPeriod)
+	defer ticker.Stop()
 
 	for {
 		select {
-		case <-ctx.Done():
-			p.logger.Debug(ctx).Msg("write loop done because request context was cancelled")
-			return
 		case message, ok := <-messages:
 			conn.SetWriteDeadline(time.Now().Add(p.writeWait)) //nolint:errcheck // always returns nil
 			if !ok {
