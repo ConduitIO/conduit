@@ -16,7 +16,6 @@ package grpcutil
 
 import (
 	"context"
-	"github.com/conduitio/conduit/pkg/foundation/cchan"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -24,6 +23,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/conduitio/conduit/pkg/foundation/cchan"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/gorilla/websocket"
 	"github.com/matryer/is"
