@@ -16,36 +16,29 @@ package grpcutil
 
 import (
 	"context"
+	"github.com/conduitio/conduit/pkg/foundation/cchan"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/gorilla/websocket"
 	"github.com/matryer/is"
 )
 
-type testHandler struct {
-	is       *is.I
-	response string
-}
-
-func (h *testHandler) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
-	_, err := w.Write([]byte(h.response))
-	h.is.NoErr(err)
-}
-
 func TestWebSocket_NoUpgradeToWebSocket(t *testing.T) {
 	is := is.New(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	h := &testHandler{
-		is:       is,
-		response: "hi there",
-	}
+	msg := "hi there"
+	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, err := w.Write([]byte(msg))
+		is.NoErr(err)
+	})
 	s := httptest.NewServer(newWebSocketProxy(h, log.Nop()))
 	defer s.Close()
 
@@ -59,19 +52,16 @@ func TestWebSocket_NoUpgradeToWebSocket(t *testing.T) {
 
 	bytes, err := io.ReadAll(resp.Body)
 	is.NoErr(err)
-	is.Equal(h.response, string(bytes))
+	is.Equal(msg, string(bytes))
 }
 
-func TestWebSocket_UpgradeToWebSocket(t *testing.T) {
+func TestWebSocket_Read(t *testing.T) {
 	is := is.New(t)
-	// ctx := context.Background()
 
-	// handlerDone := make(chan struct{})
 	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// defer close(handlerDone)
+		// Data written to a WebSocket is new-line delimited
 		_, err := w.Write([]byte("hi there\n"))
 		is.NoErr(err)
-		// <-r.Context().Done()
 	})
 	s := httptest.NewServer(newWebSocketProxy(h, log.Nop()))
 	defer s.Close()
@@ -90,17 +80,39 @@ func TestWebSocket_UpgradeToWebSocket(t *testing.T) {
 	is.Equal("hi there", string(bytes))
 	is.Equal(websocket.TextMessage, msgType)
 
-	// _, _, err = cchan.Chan[struct{}](handlerDone).RecvTimeout(ctx, time.Millisecond*10)
-	// is.Equal(err, context.DeadlineExceeded)
-
 	_, _, err = ws.ReadMessage()
 	is.True(err != nil)
-	t.Log(err)
 
-	// err = ws.Close()
-	// is.NoErr(err)
+	err = ws.Close()
+	is.NoErr(err)
+}
 
-	// _, ok, err := cchan.Chan[struct{}](handlerDone).RecvTimeout(ctx, time.Second)
-	// is.True(!ok) // expected channel to be closed
-	// is.NoErr(err)
+func TestWebSocket_Read_ClientClosed(t *testing.T) {
+	is := is.New(t)
+
+	handlerDone := make(chan struct{})
+	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer close(handlerDone)
+		// Data written to a WebSocket is new-line delimited
+		_, err := w.Write([]byte("hi there\n"))
+		is.NoErr(err)
+	})
+	s := httptest.NewServer(newWebSocketProxy(h, log.Nop()))
+	defer s.Close()
+
+	// Convert http to ws
+	wsURL := "ws" + strings.TrimPrefix(s.URL, "http")
+
+	// Connect to the server
+	ws, resp, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	is.NoErr(err)
+	defer ws.Close()
+	defer resp.Body.Close()
+
+	err = ws.Close()
+	is.NoErr(err)
+
+	_, ok, err := cchan.Chan[struct{}](handlerDone).RecvTimeout(context.Background(), time.Second)
+	is.True(!ok) // expected channel to be closed
+	is.NoErr(err)
 }
