@@ -14,7 +14,11 @@
 
 package multierror
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+)
 
 // Error is an error that contains multiple sub-errors.
 type Error struct {
@@ -52,6 +56,19 @@ func Append(err error, errs ...error) error {
 		e1 = appendInternal(e1, e2)
 	}
 	return e1
+}
+
+// ForEach takes err, extracts sub-errors and calls f with each sub-error.
+// If err does not contain multiple errors, f is called with err itself.
+func ForEach(err error, f func(err error)) {
+	var multierr *Error
+	if cerrors.As(err, &multierr) {
+		for _, gotErr := range multierr.Errors() {
+			f(gotErr)
+		}
+	} else {
+		f(err)
+	}
 }
 
 func appendInternal(e1 error, e2 error) error {

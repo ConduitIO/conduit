@@ -222,19 +222,16 @@ func (r *Runtime) Run(ctx context.Context) (err error) {
 
 	err = r.provisionService.Init(ctx)
 	if err != nil {
-		var multierr *multierror.Error
-		if cerrors.As(err, &multierr) {
-			for _, gotErr := range multierr.Errors() {
-				r.logger.Err(ctx, gotErr).Msg("provisioning failed")
-			}
-		} else {
+		multierror.ForEach(err, func(err error) {
 			r.logger.Err(ctx, err).Msg("provisioning failed")
-		}
+		})
 	}
 
 	err = r.pipelineService.Run(ctx, r.connectorService, r.processorService, r.pluginService)
 	if err != nil {
-		return cerrors.Errorf("failed to init pipeline statuses: %w", err)
+		multierror.ForEach(err, func(err error) {
+			r.logger.Err(ctx, err).Msg("pipeline failed to be started")
+		})
 	}
 
 	// Serve grpc and http API

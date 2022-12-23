@@ -47,6 +47,7 @@ type (
 	ProvisionType int
 )
 
+// Instance represents a connector instance.
 type Instance struct {
 	ID         string
 	Type       Type
