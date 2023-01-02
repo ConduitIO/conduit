@@ -2,6 +2,7 @@
 version: 1.0
 pipelines:
   pipeline1:
+    unknownField: this triggers a warning
     status: running
     name: pipeline1
     description: desc1
@@ -11,8 +12,8 @@ pipelines:
         plugin: builtin:s3
         name: s3-source
         settings:
-            aws.region: us-east-1
-            aws.bucket: my-bucket
+          aws.region: us-east-1
+          aws.bucket: my-bucket
         processors:
           proc1:
             type: js
@@ -25,6 +26,13 @@ pipelines:
         settings:
           additionalProp1: string
           additionalProp2: string
+    # dead letter queue is parsed even though version is 1.0, we warn the user
+    dead-letter-queue:
+      plugin: my-plugin
+      settings:
+        foo: bar
+      window-size: 4
+      window-nack-threshold: 2
 
 ---
 version: 1.0

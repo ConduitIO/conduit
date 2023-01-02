@@ -36,6 +36,7 @@ import (
 type Service struct {
 	db               database.DB
 	logger           log.CtxLogger
+	parser           *Parser
 	pipelineService  PipelineService
 	connectorService ConnectorService
 	processorService ProcessorService
@@ -53,6 +54,7 @@ func NewService(
 	return &Service{
 		db:               db,
 		logger:           logger.WithComponent("provisioning.Service"),
+		parser:           NewParser(logger),
 		pipelineService:  plService,
 		connectorService: connService,
 		processorService: procService,
@@ -114,7 +116,7 @@ func (s *Service) provisionConfigFile(ctx context.Context, path string, alreadyP
 		return nil, nil, cerrors.Errorf("could not read the file %q: %w", path, err)
 	}
 
-	before, err := Parse(data)
+	before, err := s.parser.Parse(ctx, path, data)
 	if err != nil {
 		return nil, nil, cerrors.Errorf("could not parse the file %q: %w", path, err)
 	}
@@ -389,6 +391,33 @@ func (s *Service) createPipeline(ctx context.Context, id string, config Pipeline
 	if err != nil {
 		return nil, err
 	}
+
+	dlq := pl.DLQ
+	var updateDLQ bool
+	if config.DLQ.Plugin != "" {
+		dlq.Plugin = config.DLQ.Plugin
+		updateDLQ = true
+	}
+	if config.DLQ.Settings != nil {
+		dlq.Settings = config.DLQ.Settings
+		updateDLQ = true
+	}
+	if config.DLQ.WindowSize != nil {
+		dlq.WindowSize = *config.DLQ.WindowSize
+		updateDLQ = true
+	}
+	if config.DLQ.WindowNackThreshold != nil {
+		dlq.WindowNackThreshold = *config.DLQ.WindowNackThreshold
+		updateDLQ = true
+	}
+
+	if updateDLQ {
+		pl, err = s.pipelineService.UpdateDLQ(ctx, id, dlq)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return pl, nil
 }
 

@@ -70,7 +70,9 @@
 {{/if}}
 
 {{#if (not this.isFieldValid)}}
-  <div class="text-orange-700 text-xs">
-    {{@field.error.value.validation}}
+  <div class="text-orange-700 text-xs mb-2">
+    {{#each @field.error.value.validation as |validation|}}
+      <div data-test-config-field-error>{{validation}}</div>
+    {{/each}}
   </div>
 {{/if}}

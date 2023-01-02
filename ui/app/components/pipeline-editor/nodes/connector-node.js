@@ -2,9 +2,13 @@ import Component from '@glimmer/component';
 import { inject as service } from '@ember/service';
 
 export default class PipelineEditorNodesConnectorNodeComponent extends Component {
-  @service pipelineNodeManager;
+  @service
+  pipelineNodeManager;
 
-  registerNode(element, [nodeType, pipelineNodeManager, model]) {
+  @service
+  websockets;
+
+  registerNode(element, [nodeType, pipelineNodeManager, model, websockets]) {
     if (nodeType === 'source') {
       pipelineNodeManager.registerSourceNode(element, model);
     }
@@ -12,9 +16,10 @@ export default class PipelineEditorNodesConnectorNodeComponent extends Component
     if (nodeType === 'destination') {
       pipelineNodeManager.registerDestinationNode(element, model);
     }
+    websockets.connect(model.id, 'connectors');
   }
 
-  unregisterNode(element, [nodeType, pipelineNodeManager]) {
+  unregisterNode(element, [nodeType, pipelineNodeManager, model, websockets]) {
     if (nodeType === 'source') {
       pipelineNodeManager.unregisterSourceNode(element);
     }
@@ -22,6 +27,7 @@ export default class PipelineEditorNodesConnectorNodeComponent extends Component
     if (nodeType === 'destination') {
       pipelineNodeManager.unregisterDestinationNode(element);
     }
+    websockets.disconnect(model.id);
   }
 
   get isSelected() {

@@ -94,6 +94,7 @@ func (b *DefaultBuilder) Init(c Connector, id string, config Config) error {
 		v.persister = b.persister
 		v.pluginDispenser = p
 		v.errs = make(chan error)
+		v.inspector = inspector.New(v.logger, inspectorBufferSize)
 	case *destination:
 		v.XID = id
 		v.XConfig = config
