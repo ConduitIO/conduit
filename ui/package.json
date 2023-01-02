@@ -75,7 +75,7 @@
     "ember-truth-helpers": "^3.1.1",
     "eslint": "^7.32.0",
     "eslint-config-prettier": "^8.5.0",
-    "eslint-plugin-ember": "^11.0.6",
+    "eslint-plugin-ember": "^11.4.0",
     "eslint-plugin-node": "^11.1.0",
     "eslint-plugin-prettier": "^4.2.1",
     "eslint-plugin-qunit": "^7.3.1",
