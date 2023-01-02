@@ -454,6 +454,7 @@ func (r *Runtime) serveHTTPAPI(
 		grpcutil.WithDefaultGatewayMiddleware(
 			r.logger, allowCORS(gwmux, "http://localhost:4200"),
 		),
+		r.logger,
 	)
 
 	return r.serveHTTP(
