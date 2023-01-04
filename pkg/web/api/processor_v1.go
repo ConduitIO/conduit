@@ -83,7 +83,7 @@ func (p *ProcessorAPIv1) InspectProcessor(
 		return status.ProcessorError(cerrors.ErrEmptyID)
 	}
 
-	inspType, err := toInspType(req.Direction)
+	inspType, err := toInspType(req.Type)
 	if err != nil {
 		return status.ProcessorError(err)
 	}
@@ -110,13 +110,13 @@ func (p *ProcessorAPIv1) InspectProcessor(
 	return cerrors.New("inspector session closed")
 }
 
-func toInspType(direction apiv1.InspectProcessorRequest_Direction) (processor.InspectionType, error) {
+func toInspType(direction apiv1.InspectProcessorRequest_Type) (processor.InspectionType, error) {
 	switch direction {
-	case apiv1.InspectProcessorRequest_DIRECTION_IN:
+	case apiv1.InspectProcessorRequest_TYPE_IN:
 		return processor.InspectionIn, nil
-	case apiv1.InspectProcessorRequest_DIRECTION_OUT:
+	case apiv1.InspectProcessorRequest_TYPE_OUT:
 		return processor.InspectionOut, nil
-	case apiv1.InspectProcessorRequest_DIRECTION_UNSPECIFIED:
+	case apiv1.InspectProcessorRequest_TYPE_UNSPECIFIED:
 		return 0, cerrors.New("inspection type not specified")
 	default:
 		return 0, cerrors.Errorf("unknown inspection type: %v", direction)

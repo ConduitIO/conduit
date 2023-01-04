@@ -1304,16 +1304,16 @@
             "type": "string"
           },
           {
-            "name": "direction",
+            "name": "type",
             "in": "query",
             "required": false,
             "type": "string",
             "enum": [
-              "DIRECTION_UNSPECIFIED",
-              "DIRECTION_IN",
-              "DIRECTION_OUT"
+              "TYPE_UNSPECIFIED",
+              "TYPE_IN",
+              "TYPE_OUT"
             ],
-            "default": "DIRECTION_UNSPECIFIED"
+            "default": "TYPE_UNSPECIFIED"
           }
         ],
         "tags": [
@@ -1343,15 +1343,6 @@
           "format": "byte"
         }
       }
-    },
-    "InspectProcessorRequestDirection": {
-      "type": "string",
-      "enum": [
-        "DIRECTION_UNSPECIFIED",
-        "DIRECTION_IN",
-        "DIRECTION_OUT"
-      ],
-      "default": "DIRECTION_UNSPECIFIED"
     },
     "ParameterValidation": {
       "type": "object",
@@ -1732,6 +1723,15 @@
           "$ref": "#/definitions/v1Record"
         }
       }
+    },
+    "v1InspectProcessorRequestType": {
+      "type": "string",
+      "enum": [
+        "TYPE_UNSPECIFIED",
+        "TYPE_IN",
+        "TYPE_OUT"
+      ],
+      "default": "TYPE_UNSPECIFIED"
     },
     "v1InspectProcessorResponse": {
       "type": "object",

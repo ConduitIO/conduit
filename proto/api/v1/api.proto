@@ -807,14 +807,14 @@ message ListProcessorsResponse {
 }
 
 message InspectProcessorRequest {
-  enum Direction {
-    DIRECTION_UNSPECIFIED = 0;
-    DIRECTION_IN = 1;
-    DIRECTION_OUT = 2;
+  enum Type {
+    TYPE_UNSPECIFIED = 0;
+    TYPE_IN = 1;
+    TYPE_OUT = 2;
   }
 
   string id = 1;
-  Direction direction = 2;
+  Type type = 2;
 }
 message InspectProcessorResponse {
   opencdc.v1.Record record = 1;
