@@ -40,8 +40,10 @@ type ProcessorOrchestrator interface {
 	Update(ctx context.Context, id string, cfg processor.Config) (*processor.Instance, error)
 	// Delete removes a processor
 	Delete(ctx context.Context, id string) error
-	// Inspect starts an inspector session
-	Inspect(ctx context.Context, id string, inspType processor.InspectionType) (*inspector.Session, error)
+	// InspectIn starts an inspector session for the records coming into the processor with given ID.
+	InspectIn(ctx context.Context, id string) (*inspector.Session, error)
+	// InspectOut starts an inspector session for the records going out of the processor with given ID.
+	InspectOut(ctx context.Context, id string) (*inspector.Session, error)
 }
 
 type ProcessorAPIv1 struct {
@@ -75,20 +77,15 @@ func (p *ProcessorAPIv1) ListProcessors(
 	return &apiv1.ListProcessorsResponse{Processors: plist}, nil
 }
 
-func (p *ProcessorAPIv1) InspectProcessor(
-	req *apiv1.InspectProcessorRequest,
-	server apiv1.ProcessorService_InspectProcessorServer,
+func (p *ProcessorAPIv1) InspectProcessorIn(
+	req *apiv1.InspectProcessorInRequest,
+	server apiv1.ProcessorService_InspectProcessorInServer,
 ) error {
 	if req.Id == "" {
 		return status.ProcessorError(cerrors.ErrEmptyID)
 	}
 
-	inspType, err := toInspType(req.Type)
-	if err != nil {
-		return status.ProcessorError(err)
-	}
-
-	session, err := p.ps.Inspect(server.Context(), req.Id, inspType)
+	session, err := p.ps.InspectIn(server.Context(), req.Id)
 	if err != nil {
 		return status.ProcessorError(cerrors.Errorf("failed to inspect processor: %w", err))
 	}
@@ -99,7 +96,7 @@ func (p *ProcessorAPIv1) InspectProcessor(
 			return cerrors.Errorf("failed converting record: %w", err2)
 		}
 
-		err2 = server.Send(&apiv1.InspectProcessorResponse{
+		err2 = server.Send(&apiv1.InspectProcessorInResponse{
 			Record: recProto,
 		})
 		if err2 != nil {
@@ -110,17 +107,34 @@ func (p *ProcessorAPIv1) InspectProcessor(
 	return cerrors.New("inspector session closed")
 }
 
-func toInspType(direction apiv1.InspectProcessorRequest_Type) (processor.InspectionType, error) {
-	switch direction {
-	case apiv1.InspectProcessorRequest_TYPE_IN:
-		return processor.InspectionIn, nil
-	case apiv1.InspectProcessorRequest_TYPE_OUT:
-		return processor.InspectionOut, nil
-	case apiv1.InspectProcessorRequest_TYPE_UNSPECIFIED:
-		return 0, cerrors.New("inspection type not specified")
-	default:
-		return 0, cerrors.Errorf("unknown inspection type: %v", direction)
+func (p *ProcessorAPIv1) InspectProcessorOut(
+	req *apiv1.InspectProcessorOutRequest,
+	server apiv1.ProcessorService_InspectProcessorOutServer,
+) error {
+	if req.Id == "" {
+		return status.ProcessorError(cerrors.ErrEmptyID)
 	}
+
+	session, err := p.ps.InspectOut(server.Context(), req.Id)
+	if err != nil {
+		return status.ProcessorError(cerrors.Errorf("failed to inspect processor: %w", err))
+	}
+
+	for rec := range session.C {
+		recProto, err2 := toproto.Record(rec)
+		if err2 != nil {
+			return cerrors.Errorf("failed converting record: %w", err2)
+		}
+
+		err2 = server.Send(&apiv1.InspectProcessorOutResponse{
+			Record: recProto,
+		})
+		if err2 != nil {
+			return cerrors.Errorf("failed sending record: %w", err2)
+		}
+	}
+
+	return cerrors.New("inspector session closed")
 }
 
 // GetProcessor returns a single Interface proto response or an error.

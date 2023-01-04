@@ -669,11 +669,16 @@ service ProcessorService {
     };
   };
 
-  // todo decide whether to use the direction as path param or query param
-  
-  rpc InspectProcessor(InspectProcessorRequest) returns (stream InspectProcessorResponse) {
+  rpc InspectProcessorIn(InspectProcessorInRequest) returns (stream InspectProcessorInResponse) {
     option (google.api.http) = {
-      get: "/v1/processors/{id}/inspect"
+      get: "/v1/processors/{id}/inspect-in"
+      response_body: "record"
+    };
+  }
+
+  rpc InspectProcessorOut(InspectProcessorOutRequest) returns (stream InspectProcessorOutResponse) {
+    option (google.api.http) = {
+      get: "/v1/processors/{id}/inspect-out"
       response_body: "record"
     };
   }
@@ -807,17 +812,17 @@ message ListProcessorsResponse {
   repeated Processor processors = 1;
 }
 
-message InspectProcessorRequest {
-  enum Type {
-    TYPE_UNSPECIFIED = 0;
-    TYPE_IN = 1;
-    TYPE_OUT = 2;
-  }
-
+message InspectProcessorInRequest {
   string id = 1;
-  Type type = 2;
 }
-message InspectProcessorResponse {
+message InspectProcessorInResponse {
+  opencdc.v1.Record record = 1;
+}
+
+message InspectProcessorOutRequest {
+  string id = 1;
+}
+message InspectProcessorOutResponse {
   opencdc.v1.Record record = 1;
 }
 

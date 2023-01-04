@@ -100,17 +100,28 @@ func (p *ProcessorOrchestrator) List(ctx context.Context) map[string]*processor.
 	return p.processors.List(ctx)
 }
 
-func (p *ProcessorOrchestrator) Inspect(
+func (p *ProcessorOrchestrator) InspectIn(
 	ctx context.Context,
 	id string,
-	inspType processor.InspectionType,
 ) (*inspector.Session, error) {
 	proc, err := p.Get(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 
-	return proc.Processor.Inspect(ctx, inspType)
+	return proc.Processor.InspectIn(ctx)
+}
+
+func (p *ProcessorOrchestrator) InspectOut(
+	ctx context.Context,
+	id string,
+) (*inspector.Session, error) {
+	proc, err := p.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	return proc.Processor.InspectOut(ctx)
 }
 
 func (p *ProcessorOrchestrator) Get(ctx context.Context, id string) (*processor.Instance, error) {

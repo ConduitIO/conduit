@@ -162,15 +162,14 @@ func (p *Processor) Process(ctx context.Context, in record.Record) (record.Recor
 	return out, nil
 }
 
-func (p *Processor) Inspect(ctx context.Context, inspType processor.InspectionType) (*inspector.Session, error) {
-	switch inspType {
-	case processor.InspectionIn:
-		return p.inInsp.NewSession(ctx), nil
-	case processor.InspectionOut:
-		return p.outInsp.NewSession(ctx), nil
-	default:
-		return nil, cerrors.Errorf("unsupported inspection type: %v", inspType)
-	}
+func (p *Processor) InspectIn(ctx context.Context) (*inspector.Session, error) {
+	// todo error always nil, remove from interface
+	return p.inInsp.NewSession(ctx), nil
+}
+
+func (p *Processor) InspectOut(ctx context.Context) (*inspector.Session, error) {
+	// todo error always nil, remove from interface
+	return p.outInsp.NewSession(ctx), nil
 }
 
 func (p *Processor) toJSRecord(r record.Record) goja.Value {

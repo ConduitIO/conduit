@@ -1262,10 +1262,9 @@
         ]
       }
     },
-    "/v1/processors/{id}/inspect": {
+    "/v1/processors/{id}/inspect-in": {
       "get": {
-        "summary": "todo decide whether to use the direction as path param or query param",
-        "operationId": "ProcessorService_InspectProcessor",
+        "operationId": "ProcessorService_InspectProcessorIn",
         "responses": {
           "200": {
             "description": "(streaming responses)",
@@ -1279,7 +1278,7 @@
                   "$ref": "#/definitions/googlerpcStatus"
                 }
               },
-              "title": "Stream result of v1InspectProcessorResponse"
+              "title": "Stream result of v1InspectProcessorInResponse"
             }
           },
           "500": {
@@ -1302,18 +1301,52 @@
             "in": "path",
             "required": true,
             "type": "string"
+          }
+        ],
+        "tags": [
+          "ProcessorService"
+        ]
+      }
+    },
+    "/v1/processors/{id}/inspect-out": {
+      "get": {
+        "operationId": "ProcessorService_InspectProcessorOut",
+        "responses": {
+          "200": {
+            "description": "(streaming responses)",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "result": {
+                  "$ref": "#/definitions/v1Record"
+                },
+                "error": {
+                  "$ref": "#/definitions/googlerpcStatus"
+                }
+              },
+              "title": "Stream result of v1InspectProcessorOutResponse"
+            }
           },
+          "500": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            },
+            "examples": {
+              "application/json": {
+                "code": 13,
+                "message": "server error",
+                "details": []
+              }
+            }
+          }
+        },
+        "parameters": [
           {
-            "name": "type",
-            "in": "query",
-            "required": false,
-            "type": "string",
-            "enum": [
-              "TYPE_UNSPECIFIED",
-              "TYPE_IN",
-              "TYPE_OUT"
-            ],
-            "default": "TYPE_UNSPECIFIED"
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string"
           }
         ],
         "tags": [
@@ -1724,16 +1757,15 @@
         }
       }
     },
-    "v1InspectProcessorRequestType": {
-      "type": "string",
-      "enum": [
-        "TYPE_UNSPECIFIED",
-        "TYPE_IN",
-        "TYPE_OUT"
-      ],
-      "default": "TYPE_UNSPECIFIED"
+    "v1InspectProcessorInResponse": {
+      "type": "object",
+      "properties": {
+        "record": {
+          "$ref": "#/definitions/v1Record"
+        }
+      }
     },
-    "v1InspectProcessorResponse": {
+    "v1InspectProcessorOutResponse": {
       "type": "object",
       "properties": {
         "record": {
