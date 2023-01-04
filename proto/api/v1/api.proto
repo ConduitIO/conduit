@@ -670,6 +670,7 @@ service ProcessorService {
   };
 
   // todo decide whether to use the direction as path param or query param
+  
   rpc InspectProcessor(InspectProcessorRequest) returns (stream InspectProcessorResponse) {
     option (google.api.http) = {
       get: "/v1/processors/{id}/inspect"

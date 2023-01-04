@@ -43,11 +43,11 @@ const (
 )
 
 type (
-	// ParentType defines the parent type of a processor.
+	// ParentType defines the parent type of processor.
 	ParentType int
 	// ProvisionType defines provisioning type
 	ProvisionType int
-	// InspectorDirection defines the direction
+	// InspectionType defines the type of the inspection (input or output records)
 	InspectionType int
 )
 
