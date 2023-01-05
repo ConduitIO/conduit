@@ -13,6 +13,8 @@
 // limitations under the License.
 
 //go:generate mockgen -destination=mock/processor.go -package=mock -mock_names=ProcessorOrchestrator=ProcessorOrchestrator . ProcessorOrchestrator
+//go:generate mockgen -destination=mock/processor_service_in.go -package=mock -mock_names=ProcessorService_InspectProcessorInServer=ProcessorService_InspectProcessorInServer github.com/conduitio/conduit/proto/gen/api/v1 ProcessorService_InspectProcessorInServer
+//go:generate mockgen -destination=mock/processor_service_out.go -package=mock -mock_names=ProcessorService_InspectProcessorOutServer=ProcessorService_InspectProcessorOutServer github.com/conduitio/conduit/proto/gen/api/v1 ProcessorService_InspectProcessorOutServer
 
 package api
 

@@ -16,6 +16,11 @@ package api
 
 import (
 	"context"
+	"github.com/conduitio/conduit/pkg/foundation/cchan"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/inspector"
+	"github.com/conduitio/conduit/pkg/web/api/toproto"
 	"sort"
 	"testing"
 	"time"
@@ -412,6 +417,107 @@ func TestProcessorAPIv1_DeleteProcessor(t *testing.T) {
 
 	assert.Ok(t, err)
 	assert.Equal(t, want, got)
+}
+
+func TestProcessorAPIv1_InspectIn_SendRecord(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ctrl := gomock.NewController(t)
+	orchestrator := apimock.NewProcessorOrchestrator(ctrl)
+	api := NewProcessorAPIv1(orchestrator)
+
+	id := uuid.NewString()
+	rec := generateTestRecord()
+	recProto, err := toproto.Record(rec)
+	assert.Ok(t, err)
+
+	ins := inspector.New(log.Nop(), 10)
+	session := ins.NewSession(ctx)
+
+	orchestrator.EXPECT().
+		InspectIn(ctx, id).
+		Return(session, nil).
+		Times(1)
+
+	inspectServer := apimock.NewProcessorService_InspectProcessorInServer(ctrl)
+	inspectServer.EXPECT().Send(gomock.Eq(&apiv1.InspectProcessorInResponse{Record: recProto}))
+	inspectServer.EXPECT().Context().Return(ctx).AnyTimes()
+
+	go func() {
+		_ = api.InspectProcessorIn(
+			&apiv1.InspectProcessorInRequest{Id: id},
+			inspectServer,
+		)
+	}()
+	ins.Send(ctx, rec)
+
+	time.Sleep(100 * time.Millisecond)
+}
+
+func TestProcessorAPIv1_InspectIn_SendErr(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ctrl := gomock.NewController(t)
+	orchestrator := apimock.NewProcessorOrchestrator(ctrl)
+	api := NewProcessorAPIv1(orchestrator)
+	id := uuid.NewString()
+
+	ins := inspector.New(log.Nop(), 10)
+	session := ins.NewSession(ctx)
+
+	orchestrator.EXPECT().
+		InspectIn(ctx, id).
+		Return(session, nil).
+		Times(1)
+
+	inspectServer := apimock.NewProcessorService_InspectProcessorInServer(ctrl)
+	inspectServer.EXPECT().Context().Return(ctx).AnyTimes()
+	errSend := cerrors.New("I'm sorry, but no.")
+	inspectServer.EXPECT().Send(gomock.Any()).Return(errSend)
+
+	errC := make(chan error)
+	go func() {
+		err := api.InspectProcessorIn(
+			&apiv1.InspectProcessorInRequest{Id: id},
+			inspectServer,
+		)
+		errC <- err
+	}()
+	ins.Send(ctx, generateTestRecord())
+
+	err, b, err2 := cchan.Chan[error](errC).RecvTimeout(context.Background(), 100*time.Millisecond)
+	assert.Ok(t, err2)
+	assert.True(t, b, "expected to receive an error")
+	assert.True(t, cerrors.Is(err, errSend), "expected 'I'm sorry, but no.' error")
+}
+
+func TestProcessorAPIv1_InspectIn_Err(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ctrl := gomock.NewController(t)
+	orchestrator := apimock.NewProcessorOrchestrator(ctrl)
+	api := NewProcessorAPIv1(orchestrator)
+	id := uuid.NewString()
+	err := cerrors.New("not found, sorry")
+
+	orchestrator.EXPECT().
+		InspectIn(ctx, gomock.Any()).
+		Return(nil, err).
+		Times(1)
+
+	inspectServer := apimock.NewProcessorService_InspectProcessorInServer(ctrl)
+	inspectServer.EXPECT().Context().Return(ctx).AnyTimes()
+
+	errAPI := api.InspectProcessorIn(
+		&apiv1.InspectProcessorInRequest{Id: id},
+		inspectServer,
+	)
+	assert.NotNil(t, errAPI)
+	assert.Equal(
+		t,
+		"rpc error: code = Internal desc = failed to inspect processor: not found, sorry",
+		errAPI.Error(),
+	)
 }
 
 func sortProcessors(c []*apiv1.Processor) {
