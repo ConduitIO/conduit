@@ -241,6 +241,7 @@ func (s *Service) collectConnectorStates(ctx context.Context, pl *pipeline.Insta
 		if oldState == nil {
 			continue // no need to copy state
 		}
+		// store function which copies the state for the connector
 		connStates[connID] = func(ctx context.Context) error {
 			newConn, err := s.connectorService.Get(ctx, connID)
 			if err != nil {
@@ -253,7 +254,7 @@ func (s *Service) collectConnectorStates(ctx context.Context, pl *pipeline.Insta
 				return nil
 			}
 			_, err = s.connectorService.SetState(ctx, connID, oldState)
-			if cerrors.Is(err, connector.ErrInvalidConnectorType) {
+			if cerrors.Is(err, connector.ErrInvalidConnectorStateType) {
 				s.logger.Warn(ctx).
 					Str(log.ConnectorIDField, connID).
 					Err(err).

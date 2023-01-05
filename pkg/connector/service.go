@@ -226,19 +226,19 @@ func (s *Service) SetState(ctx context.Context, id string, state any) (*Instance
 		return nil, err
 	}
 
-	switch state.(type) {
-	case SourceState:
-		if conn.Type != TypeSource {
-			return nil, cerrors.Errorf("expected connector to be a source (ID: %s): %w", id, ErrInvalidConnectorType)
+	if state != nil {
+		switch conn.Type {
+		case TypeSource:
+			if _, ok := state.(SourceState); ok {
+				return nil, cerrors.Errorf("expected source state (ID: %s): %w", id, ErrInvalidConnectorStateType)
+			}
+		case TypeDestination:
+			if _, ok := state.(DestinationState); ok {
+				return nil, cerrors.Errorf("expected destination state (ID: %s): %w", id, ErrInvalidConnectorStateType)
+			}
+		default:
+			return nil, ErrInvalidConnectorType
 		}
-	case DestinationState:
-		if conn.Type != TypeDestination {
-			return nil, cerrors.Errorf("expected connector to be a destination (ID: %s): %w", id, ErrInvalidConnectorType)
-		}
-	case nil:
-		// all good
-	default:
-		return nil, cerrors.Errorf("invalid connector state type: %T", state)
 	}
 
 	conn.State = state
