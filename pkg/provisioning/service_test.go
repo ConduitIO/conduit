@@ -16,7 +16,6 @@ package provisioning
 
 import (
 	"context"
-	"github.com/conduitio/conduit/pkg/processor/procbuiltin"
 	"os"
 	"sort"
 	"testing"
@@ -35,6 +34,7 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin/builtin"
 	"github.com/conduitio/conduit/pkg/plugin/standalone"
 	"github.com/conduitio/conduit/pkg/processor"
+	"github.com/conduitio/conduit/pkg/processor/procbuiltin"
 	"github.com/conduitio/conduit/pkg/provisioning/mock"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/golang/mock/gomock"

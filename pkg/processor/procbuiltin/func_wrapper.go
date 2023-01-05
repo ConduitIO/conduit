@@ -16,6 +16,7 @@ package procbuiltin
 
 import (
 	"context"
+
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/inspector"
 	"github.com/conduitio/conduit/pkg/record"
