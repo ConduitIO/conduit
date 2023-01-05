@@ -21,7 +21,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/inspector"
 	"github.com/conduitio/conduit/pkg/record"
 )
@@ -59,31 +58,6 @@ type FuncWrapper struct {
 	f       func(context.Context, record.Record) (record.Record, error)
 	inInsp  *inspector.Inspector
 	outInsp *inspector.Inspector
-}
-
-func NewFuncWrapper(f func(context.Context, record.Record) (record.Record, error)) FuncWrapper {
-	// todo use real logger
-	return FuncWrapper{
-		f:       f,
-		inInsp:  inspector.New(log.Nop(), 1000),
-		outInsp: inspector.New(log.Nop(), 1000),
-	}
-}
-
-func (f FuncWrapper) Process(ctx context.Context, inRec record.Record) (record.Record, error) {
-	// todo same behavior as in procjs, probably can be enforced
-	f.inInsp.Send(ctx, inRec)
-	outRec, err := f.f(ctx, inRec)
-	f.outInsp.Send(ctx, outRec)
-	return outRec, err
-}
-
-func (f FuncWrapper) InspectIn(ctx context.Context) (*inspector.Session, error) {
-	return f.inInsp.NewSession(ctx), nil
-}
-
-func (f FuncWrapper) InspectOut(ctx context.Context) (*inspector.Session, error) {
-	return f.outInsp.NewSession(ctx), nil
 }
 
 // Instance represents a processor instance.
