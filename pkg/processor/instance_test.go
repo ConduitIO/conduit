@@ -16,12 +16,13 @@ package processor
 
 import (
 	"context"
+	"testing"
+	"time"
+
 	"github.com/conduitio/conduit/pkg/foundation/cchan"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/matryer/is"
-	"testing"
-	"time"
 )
 
 func TestFuncWrapper_InspectIn(t *testing.T) {
@@ -57,13 +58,13 @@ func TestFuncWrapper_InspectIn(t *testing.T) {
 
 			session, err := underTest.InspectIn(ctx)
 			is.NoErr(err)
-			underTest.Process(ctx, wantIn)
+			_, err = underTest.Process(ctx, wantIn)
+			is.NoErr(err)
 
 			gotIn, got, err := cchan.Chan[record.Record](session.C).RecvTimeout(ctx, 100*time.Millisecond)
 			is.NoErr(err)
 			is.True(got)
 			is.Equal(wantIn, gotIn)
-
 		})
 	}
 }
@@ -101,13 +102,13 @@ func TestFuncWrapper_InspectOut(t *testing.T) {
 
 			session, err := underTest.InspectOut(ctx)
 			is.NoErr(err)
-			underTest.Process(ctx, record.Record{})
+			_, err = underTest.Process(ctx, record.Record{})
+			is.NoErr(err)
 
 			gotOut, got, err := cchan.Chan[record.Record](session.C).RecvTimeout(ctx, 100*time.Millisecond)
 			is.NoErr(err)
 			is.True(got)
 			is.Equal(wantOut, gotOut)
-
 		})
 	}
 }
