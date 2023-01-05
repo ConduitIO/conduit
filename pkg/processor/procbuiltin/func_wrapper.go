@@ -16,6 +16,7 @@ package procbuiltin
 
 import (
 	"context"
+	"github.com/rs/zerolog"
 
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/inspector"
@@ -30,11 +31,15 @@ type FuncWrapper struct {
 }
 
 func NewFuncWrapper(f func(context.Context, record.Record) (record.Record, error)) FuncWrapper {
-	// todo use real logger
+	// TODO get logger from config or some other place
+	cw := zerolog.NewConsoleWriter()
+	cw.TimeFormat = "2006-01-02T15:04:05+00:00"
+	zl := zerolog.New(cw).With().Timestamp().Logger()
+
 	return FuncWrapper{
 		f:       f,
-		inInsp:  inspector.New(log.Nop(), 1000),
-		outInsp: inspector.New(log.Nop(), 1000),
+		inInsp:  inspector.New(log.New(zl), 1000),
+		outInsp: inspector.New(log.New(zl), 1000),
 	}
 }
 
