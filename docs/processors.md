@@ -163,3 +163,6 @@ function process(record) {
     return record;
 }
 ```
+
+## Inspecting a processor
+TBD
