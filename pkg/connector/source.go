@@ -102,9 +102,7 @@ func (s *Source) Open(ctx context.Context) error {
 	s.plugin = src
 	s.stopStream = cancelStreamCtx
 	s.Instance.connector = s
-	if s.Instance.persister != nil {
-		s.Instance.persister.ConnectorStarted()
-	}
+	s.Instance.persister.ConnectorStarted()
 
 	return nil
 }
@@ -149,9 +147,7 @@ func (s *Source) Teardown(ctx context.Context) error {
 
 	s.plugin = nil
 	s.Instance.connector = nil
-	if s.Instance.persister != nil {
-		s.Instance.persister.ConnectorStopped()
-	}
+	s.Instance.persister.ConnectorStopped()
 
 	if err != nil {
 		return cerrors.Errorf("could not tear down source connector plugin: %w", err)
@@ -210,13 +206,11 @@ func (s *Source) Ack(ctx context.Context, p record.Position) error {
 	s.Instance.State = SourceState{Position: p}
 	s.Instance.Unlock()
 
-	if s.Instance.persister != nil {
-		s.Instance.persister.Persist(ctx, s.Instance, func(err error) {
-			if err != nil {
-				s.errs <- err
-			}
-		})
-	}
+	s.Instance.persister.Persist(ctx, s.Instance, func(err error) {
+		if err != nil {
+			s.errs <- err
+		}
+	})
 	return nil
 }
 
