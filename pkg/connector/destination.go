@@ -97,7 +97,8 @@ func (d *Destination) Open(ctx context.Context) error {
 	d.plugin = dest
 	d.stopStream = cancelStreamCtx
 	d.Instance.connector = d
-	if d.Instance.persister != nil {
+	if d.Instance.ProvisionedBy != ProvisionTypeDLQ {
+		// DLQ connectors are not persisted
 		d.Instance.persister.ConnectorStarted()
 	}
 
@@ -144,7 +145,8 @@ func (d *Destination) Teardown(ctx context.Context) error {
 
 	d.plugin = nil
 	d.Instance.connector = nil
-	if d.Instance.persister != nil {
+	if d.Instance.ProvisionedBy != ProvisionTypeDLQ {
+		// DLQ connectors are not persisted
 		d.Instance.persister.ConnectorStopped()
 	}
 
