@@ -16,11 +16,11 @@ package procbuiltin
 
 import (
 	"context"
-	"github.com/rs/zerolog"
 
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/inspector"
 	"github.com/conduitio/conduit/pkg/record"
+	"github.com/rs/zerolog"
 )
 
 // FuncWrapper is an adapter allowing use of a function as an Interface.
