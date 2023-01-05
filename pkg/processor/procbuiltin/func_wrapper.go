@@ -12,15 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package processor
+package procbuiltin
 
 import (
 	"context"
-
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/inspector"
 	"github.com/conduitio/conduit/pkg/record"
 )
+
+// FuncWrapper is an adapter allowing use of a function as an Interface.
+type FuncWrapper struct {
+	f       func(context.Context, record.Record) (record.Record, error)
+	inInsp  *inspector.Inspector
+	outInsp *inspector.Inspector
+}
 
 func NewFuncWrapper(f func(context.Context, record.Record) (record.Record, error)) FuncWrapper {
 	// todo use real logger

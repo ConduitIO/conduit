@@ -53,13 +53,6 @@ type Interface interface {
 	InspectOut(ctx context.Context) (*inspector.Session, error)
 }
 
-// FuncWrapper is an adapter allowing use of a function as an Interface.
-type FuncWrapper struct {
-	f       func(context.Context, record.Record) (record.Record, error)
-	inInsp  *inspector.Inspector
-	outInsp *inspector.Inspector
-}
-
 // Instance represents a processor instance.
 type Instance struct {
 	ID            string

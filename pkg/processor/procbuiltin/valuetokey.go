@@ -46,7 +46,7 @@ func ValueToKey(config processor.Config) (processor.Interface, error) {
 
 	fields := strings.Split(config.Settings[valueToKeyConfigFields], ",")
 
-	return processor.NewFuncWrapper(func(_ context.Context, r record.Record) (_ record.Record, err error) {
+	return NewFuncWrapper(func(_ context.Context, r record.Record) (_ record.Record, err error) {
 		defer func() {
 			if err != nil {
 				err = cerrors.Errorf("%s: %w", valueToKeyProcType, err)

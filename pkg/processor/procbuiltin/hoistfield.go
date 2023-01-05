@@ -64,7 +64,7 @@ func hoistField(
 		return nil, cerrors.Errorf("%s: %w", processorType, err)
 	}
 
-	return processor.NewFuncWrapper(func(_ context.Context, r record.Record) (record.Record, error) {
+	return NewFuncWrapper(func(_ context.Context, r record.Record) (record.Record, error) {
 		data := getSetter.Get(r)
 
 		switch d := data.(type) {
