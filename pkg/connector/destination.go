@@ -75,7 +75,7 @@ func (d *Destination) Open(ctx context.Context) error {
 	d.Instance.Lock()
 	defer d.Instance.Unlock()
 	if d.Instance.connector != nil {
-		// this means another connector is running (this shouldn't actually happen)
+		// this shouldn't actually happen, it indicates a problem elsewhere
 		return cerrors.New("another instance of the connector is already running")
 	}
 

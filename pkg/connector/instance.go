@@ -103,6 +103,13 @@ func (i *Instance) Inspect(ctx context.Context) *inspector.Session {
 	return i.inspector.NewSession(ctx)
 }
 
+// Connector fetches a new plugin dispenser and returns a connector that can be
+// used to interact with that plugin. If Instance.Type is TypeSource this method
+// returns *Source, if it's TypeDestination it returns *Destination, otherwise
+// it returns an error. The plugin is not started in this method, that happens
+// when Open is called in the returned connector.
+// If a connector is already running for this Instance this method returns an
+// error.
 func (i *Instance) Connector(ctx context.Context, dispenserFetcher PluginDispenserFetcher) (Connector, error) {
 	if i.connector != nil {
 		// connector is already running, might be a bug where an old connector is stuck
@@ -113,8 +120,6 @@ func (i *Instance) Connector(ctx context.Context, dispenserFetcher PluginDispens
 	if err != nil {
 		return nil, cerrors.Errorf("failed to get plugin dispenser: %w", err)
 	}
-
-	i.logger.Debug(ctx).Msg("starting connector plugin")
 
 	switch i.Type {
 	case TypeSource:

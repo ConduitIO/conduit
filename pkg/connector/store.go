@@ -246,6 +246,10 @@ func (s *Store) decode(raw []byte) (*Instance, error) {
 	}
 
 	if conn.State != nil {
+		// Instance.State is of type any, so unmarshalling a JSON populates it
+		// with a map[string]any. After we know the connector type we can
+		// convert it to the proper state struct. The simplest way is to marshal
+		// it back into JSON and then unmarshal into the proper state type.
 		switch conn.Type {
 		case TypeSource:
 			var state SourceState
