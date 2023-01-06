@@ -1264,6 +1264,7 @@
     },
     "/v1/processors/{id}/inspect-in": {
       "get": {
+        "summary": "InspectProcessorIn streams records coming into the specified processor",
         "operationId": "ProcessorService_InspectProcessorIn",
         "responses": {
           "200": {
@@ -1310,6 +1311,7 @@
     },
     "/v1/processors/{id}/inspect-out": {
       "get": {
+        "summary": "InspectProcessorOut streams the output records from the specified processor",
         "operationId": "ProcessorService_InspectProcessorOut",
         "responses": {
           "200": {

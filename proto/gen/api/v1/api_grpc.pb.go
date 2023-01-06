@@ -727,7 +727,9 @@ var ConnectorService_ServiceDesc = grpc.ServiceDesc{
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type ProcessorServiceClient interface {
 	ListProcessors(ctx context.Context, in *ListProcessorsRequest, opts ...grpc.CallOption) (*ListProcessorsResponse, error)
+	// InspectProcessorIn streams records coming into the specified processor
 	InspectProcessorIn(ctx context.Context, in *InspectProcessorInRequest, opts ...grpc.CallOption) (ProcessorService_InspectProcessorInClient, error)
+	// InspectProcessorOut streams the output records from the specified processor
 	InspectProcessorOut(ctx context.Context, in *InspectProcessorOutRequest, opts ...grpc.CallOption) (ProcessorService_InspectProcessorOutClient, error)
 	GetProcessor(ctx context.Context, in *GetProcessorRequest, opts ...grpc.CallOption) (*GetProcessorResponse, error)
 	CreateProcessor(ctx context.Context, in *CreateProcessorRequest, opts ...grpc.CallOption) (*CreateProcessorResponse, error)
@@ -857,7 +859,9 @@ func (c *processorServiceClient) DeleteProcessor(ctx context.Context, in *Delete
 // for forward compatibility
 type ProcessorServiceServer interface {
 	ListProcessors(context.Context, *ListProcessorsRequest) (*ListProcessorsResponse, error)
+	// InspectProcessorIn streams records coming into the specified processor
 	InspectProcessorIn(*InspectProcessorInRequest, ProcessorService_InspectProcessorInServer) error
+	// InspectProcessorOut streams the output records from the specified processor
 	InspectProcessorOut(*InspectProcessorOutRequest, ProcessorService_InspectProcessorOutServer) error
 	GetProcessor(context.Context, *GetProcessorRequest) (*GetProcessorResponse, error)
 	CreateProcessor(context.Context, *CreateProcessorRequest) (*CreateProcessorResponse, error)

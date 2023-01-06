@@ -669,6 +669,7 @@ service ProcessorService {
     };
   };
 
+  // InspectProcessorIn streams records coming into the specified processor
   rpc InspectProcessorIn(InspectProcessorInRequest) returns (stream InspectProcessorInResponse) {
     option (google.api.http) = {
       get: "/v1/processors/{id}/inspect-in"
@@ -676,6 +677,7 @@ service ProcessorService {
     };
   }
 
+  // InspectProcessorOut streams the output records from the specified processor
   rpc InspectProcessorOut(InspectProcessorOutRequest) returns (stream InspectProcessorOutResponse) {
     option (google.api.http) = {
       get: "/v1/processors/{id}/inspect-out"
