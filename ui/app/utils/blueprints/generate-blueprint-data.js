@@ -42,12 +42,13 @@ export function generateBlueprint(
   return blueprint;
 }
 
-export function generateBlankBlueprintField(
+export function generateBlueprintField(
   id,
   label,
   description,
   type,
-  validationOpts = {}
+  validationOpts = {},
+  populatedValue
 ) {
   const blueprint = generateBlueprint(
     id,
@@ -57,7 +58,14 @@ export function generateBlankBlueprintField(
     validationOpts
   );
 
-  const configurable = EmberObject.create();
+  let configurable;
+
+  if (populatedValue) {
+    configurable = EmberObject.create({ config: { settings: {} } });
+    configurable.set(`config.settings.${id}`, populatedValue);
+  } else {
+    configurable = EmberObject.create();
+  }
 
   const blueprintFields = generateBlueprintFields(blueprint, configurable);
 
