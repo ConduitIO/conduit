@@ -10,5 +10,10 @@ self.deprecationWorkflow.config = {
       handler: 'silence',
       matchId: 'ember.built-in-components.legacy-arguments',
     },
+
+    {
+      handler: 'silence',
+      matchId: 'ember-modifier.function-based-options',
+    },
   ],
 };
