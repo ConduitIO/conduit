@@ -17,6 +17,5 @@ self.deprecationWorkflow.config = {
       handler: 'silence',
       matchId: 'ember.built-in-components.legacy-arguments',
     },
-    { handler: 'silence', matchId: 'routing.transition-methods' },
   ],
 };
