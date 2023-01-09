@@ -11,10 +11,6 @@ self.deprecationWorkflow.config = {
     { handler: 'silence', matchId: 'ember-keyboard.old-propagation-model' },
     {
       handler: 'silence',
-      matchId: 'deprecated-run-loop-and-computed-dot-access',
-    },
-    {
-      handler: 'silence',
       matchId: 'ember.built-in-components.legacy-arguments',
     },
   ],
