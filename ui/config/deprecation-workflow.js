@@ -3,10 +3,7 @@ self.deprecationWorkflow = self.deprecationWorkflow || {};
 
 self.deprecationWorkflow.config = {
   workflow: [
-    { handler: 'silence', matchId: 'ember-global' },
-    { handler: 'silence', matchId: 'ember.component.reopen' },
     { handler: 'silence', matchId: 'ember-keyboard.first-responder-inputs' },
-    { handler: 'silence', matchId: 'implicit-injections' },
     { handler: 'silence', matchId: 'ember-test-waiters-legacy-module-name' },
     { handler: 'silence', matchId: 'ember-keyboard.old-propagation-model' },
     {
