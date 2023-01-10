@@ -1,7 +1,11 @@
 import Route from '@ember/routing/route';
 import Transforms from 'conduit-ui/utils/transforms/transforms';
+import { inject as service } from '@ember/service';
 
 export default class PipelineIndexRoute extends Route {
+  @service
+  store;
+
   async model() {
     let connectorPlugins, transforms;
 

@@ -186,7 +186,10 @@ export default class PipelineEditorComponent extends Component {
 
   @action
   cancelCreateConnectorModal() {
-    if (this.connectorModalModel) {
+    if (
+      this.connectorModalModel &&
+      !(this.store.isDestroying || this.store.isDestroyed)
+    ) {
       this.connectorModalModel.data.unloadRecord();
     }
     this.connectorModalModel = null;
