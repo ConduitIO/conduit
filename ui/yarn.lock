@@ -1505,6 +1505,13 @@
   dependencies:
     "@simple-dom/interface" "^1.4.0"
 
+"@glimmer/interfaces@0.84.2":
+  version "0.84.2"
+  resolved "https://registry.yarnpkg.com/@glimmer/interfaces/-/interfaces-0.84.2.tgz#764cf92c954adcd1a851e5dc68ec1f6b654dc3bd"
+  integrity sha512-tMZxQpOddUVmHEOuripkNqVR7ba0K4doiYnFd4WyswqoHPlxqpBujbIamQ+bWCWEF0U4yxsXKa31ekS/JHkiBQ==
+  dependencies:
+    "@simple-dom/interface" "^1.4.0"
+
 "@glimmer/reference@^0.83.1":
   version "0.83.1"
   resolved "https://registry.yarnpkg.com/@glimmer/reference/-/reference-0.83.1.tgz#0345b95431b5bb19843b308e6311d1ef81e36192"
@@ -1526,6 +1533,16 @@
     "@handlebars/parser" "~2.0.0"
     simple-html-tokenizer "^0.5.11"
 
+"@glimmer/syntax@^0.84.2":
+  version "0.84.2"
+  resolved "https://registry.yarnpkg.com/@glimmer/syntax/-/syntax-0.84.2.tgz#a3f65e51eec20f6adb79c6159d1ad1166fa5bccd"
+  integrity sha512-SPBd1tpIR9XeaXsXsMRCnKz63eLnIZ0d5G9QC4zIBFBC3pQdtG0F5kWeuRVCdfTIFuR+5WBMfk5jvg+3gbQhjg==
+  dependencies:
+    "@glimmer/interfaces" "0.84.2"
+    "@glimmer/util" "0.84.2"
+    "@handlebars/parser" "~2.0.0"
+    simple-html-tokenizer "^0.5.11"
+
 "@glimmer/tracking@^1.0.1", "@glimmer/tracking@^1.0.4", "@glimmer/tracking@^1.1.2":
   version "1.1.2"
   resolved "https://registry.yarnpkg.com/@glimmer/tracking/-/tracking-1.1.2.tgz#74e71be07b0a7066518d24044d2665d0cf8281eb"
@@ -1541,6 +1558,15 @@
   dependencies:
     "@glimmer/env" "0.1.7"
     "@glimmer/interfaces" "0.83.1"
+    "@simple-dom/interface" "^1.4.0"
+
+"@glimmer/util@0.84.2":
+  version "0.84.2"
+  resolved "https://registry.yarnpkg.com/@glimmer/util/-/util-0.84.2.tgz#2711ba40f25f44b2ea309cad49f5c2622c6211bc"
+  integrity sha512-VbhzE2s4rmU+qJF3gGBTL1IDjq+/G2Th51XErS8MQVMCmE4CU2pdwSzec8PyOowqCGUOrVIWuMzEI6VoPM4L4w==
+  dependencies:
+    "@glimmer/env" "0.1.7"
+    "@glimmer/interfaces" "0.84.2"
     "@simple-dom/interface" "^1.4.0"
 
 "@glimmer/util@^0.44.0":
@@ -1602,6 +1628,11 @@
   version "0.1.3"
   resolved "https://registry.yarnpkg.com/@istanbuljs/schema/-/schema-0.1.3.tgz#e45e384e4b8ec16bce2fd903af78450f6bf7ec98"
   integrity sha512-ZXRY4jNvVgSVQ8DL3LTcakaAtXwTVUxE81hslsyD2AtoXW/wVob10HkOJ1X/pAlcI7D+2YoZKg5do8G/w6RYgA==
+
+"@jridgewell/sourcemap-codec@^1.4.13":
+  version "1.4.14"
+  resolved "https://registry.yarnpkg.com/@jridgewell/sourcemap-codec/-/sourcemap-codec-1.4.14.tgz#add4c98d341472a289190b424efbdb096991bb24"
+  integrity sha512-XPSJHWmi394fuUuzDnGz1wiKqWfo1yXecHQMRf2l6hztTO+nPru658AyDngaBe7isIxEkRsPR3FZh+s7iVa4Uw==
 
 "@lint-todo/utils@^13.0.3":
   version "13.0.3"
@@ -5907,17 +5938,21 @@ eslint-config-prettier@^8.5.0:
   resolved "https://registry.yarnpkg.com/eslint-config-prettier/-/eslint-config-prettier-8.5.0.tgz#5a81680ec934beca02c7b1a61cf8ca34b66feab1"
   integrity sha512-obmWKLUNCnhtQRKc+tmnYuQl0pFU1ibYJQ5BGhTVB08bHe9wC8qUeG7c08dj9XX+AuPj1YSGSQIHl1pnDHZR0Q==
 
-eslint-plugin-ember@^11.0.6:
-  version "11.0.6"
-  resolved "https://registry.yarnpkg.com/eslint-plugin-ember/-/eslint-plugin-ember-11.0.6.tgz#95fc44639b9f8f3d5a0f7a20bd06903a32194798"
-  integrity sha512-iQzqn8/GdBbNv2T3YetpjEBemoH0v9e9ea8Bu6JLOX2TN+HMK2l52/QBRFgrnaxLXBjPO3iy2c3sCieYV27EvQ==
+eslint-plugin-ember@^11.4.3:
+  version "11.4.3"
+  resolved "https://registry.yarnpkg.com/eslint-plugin-ember/-/eslint-plugin-ember-11.4.3.tgz#357f54b9ef76a24e37d1b47ad73ffe07b6fcac7b"
+  integrity sha512-hkHtaDu6KY5IpI+WgS9eGlahezJBxSmXgHZMINSwf4Njh9nJj+nwRxpPNtTNscFmWmud6OGAnKYvQN99L7tzPw==
   dependencies:
     "@ember-data/rfc395-data" "^0.0.4"
+    "@glimmer/syntax" "^0.84.2"
     css-tree "^2.0.4"
     ember-rfc176-data "^0.3.15"
+    ember-template-imports "^3.1.1"
     eslint-utils "^3.0.0"
     estraverse "^5.2.0"
+    lodash.camelcase "^4.1.1"
     lodash.kebabcase "^4.1.1"
+    magic-string "^0.27.0"
     requireindex "^1.2.0"
     snake-case "^3.0.3"
 
@@ -8257,7 +8292,7 @@ lodash.assignin@^4.1.0:
   resolved "https://registry.yarnpkg.com/lodash.assignin/-/lodash.assignin-4.2.0.tgz#ba8df5fb841eb0a3e8044232b0e263a8dc6a28a2"
   integrity sha1-uo31+4QesKPoBEIysOJjqNxqKKI=
 
-lodash.camelcase@^4.3.0:
+lodash.camelcase@^4.1.1, lodash.camelcase@^4.3.0:
   version "4.3.0"
   resolved "https://registry.yarnpkg.com/lodash.camelcase/-/lodash.camelcase-4.3.0.tgz#b28aa6288a2b9fc651035c7711f65ab6190331a6"
   integrity sha1-soqmKIorn8ZRA1x3EfZathkDMaY=
@@ -8527,6 +8562,13 @@ magic-string@^0.25.7:
   integrity sha512-4CrMT5DOHTDk4HYDlzmwu4FVCcIYI8gauveasrdCu2IKIFOJ3f0v/8MDGJCDL9oD2ppz/Av1b0Nj345H9M+XIA==
   dependencies:
     sourcemap-codec "^1.4.4"
+
+magic-string@^0.27.0:
+  version "0.27.0"
+  resolved "https://registry.yarnpkg.com/magic-string/-/magic-string-0.27.0.tgz#e4a3413b4bab6d98d2becffd48b4a257effdbbf3"
+  integrity sha512-8UnnX2PeRAPZuN12svgR9j7M1uWMovg/CEnIwIG0LFkXSJJe4PdfUGiTGl8V9bsBHFUtfVINcSyYxd7q+kx9fA==
+  dependencies:
+    "@jridgewell/sourcemap-codec" "^1.4.13"
 
 make-dir@^2.0.0, make-dir@^2.1.0:
   version "2.1.0"
