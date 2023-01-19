@@ -24,7 +24,7 @@ import (
 	"github.com/matryer/is"
 )
 
-var Dbz = "{" +
+var dbz = "{" +
 	"\"payload\":" +
 	"{" +
 	"\"after\":{\"description\":\"test1\",\"id\":27}," +
@@ -99,10 +99,14 @@ func TestUnwrapRecord_Process(t *testing.T) {
 				Settings: map[string]string{"format": "debezium"},
 			},
 			args: args{r: record.Record{
+				Key: record.RawData{
+					Raw: []byte("id"),
+				},
+				Position: []byte("position"),
 				Payload: record.Change{
 					Before: nil,
 					After: record.RawData{
-						Raw: []byte(Dbz),
+						Raw: []byte(dbz),
 					},
 				},
 			},
@@ -115,6 +119,10 @@ func TestUnwrapRecord_Process(t *testing.T) {
 					"opencdc.version":             "v1",
 					"postgres.table":              "stuff",
 				},
+				Key: record.RawData{
+					Raw: []byte("id"),
+				},
+				Position: []byte("position"),
 				Payload: record.Change{
 					Before: record.StructuredData(nil),
 					After:  record.StructuredData{"description": "test1", "id": float64(27)},

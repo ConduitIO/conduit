@@ -95,6 +95,9 @@ func unwrapRecord(
 		r.Metadata = metadata
 		r.Operation = getRecordOp(payload[DebeziumFieldOp].(string))
 
+		r.Position = rec.Position
+		r.Key = rec.Key
+
 		return r, nil
 	}), nil
 }
