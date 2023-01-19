@@ -72,13 +72,13 @@ func unwrapRecord(
 			return record.Record{}, cerrors.Errorf("%s: unexpected data type %T", processorType, data)
 		}
 
-		payloadJson, ok := jsonData[DebeziumFieldPayload]
+		payloadJSON, ok := jsonData[DebeziumFieldPayload]
 		if !ok {
 			return record.Record{}, cerrors.Errorf("%s: the payload is missing from the record", processorType)
 		}
 
 		// cast payload into a map
-		payload := payloadJson.(map[string]any)
+		payload := payloadJSON.(map[string]any)
 		// validate all the debezium fields exist
 		err = checkDebeziumFieldsExist(payload)
 		if err != nil {
@@ -86,9 +86,9 @@ func unwrapRecord(
 		}
 
 		// convert json data into a record
-		before := convertJsonToStructuredData(payload[DebeziumFieldBefore])
-		after := convertJsonToStructuredData(payload[DebeziumFieldAfter])
-		metadata := convertJsonToMetadata(payload[DebeziumFieldSource])
+		before := convertJSONToStructuredData(payload[DebeziumFieldBefore])
+		after := convertJSONToStructuredData(payload[DebeziumFieldAfter])
+		metadata := convertJSONToMetadata(payload[DebeziumFieldSource])
 
 		r.Payload.Before = before
 		r.Payload.After = after
@@ -146,7 +146,7 @@ func checkDebeziumFieldsExist(data record.StructuredData) error {
 	return multiErr
 }
 
-func convertJsonToStructuredData(mp any) record.StructuredData {
+func convertJSONToStructuredData(mp any) record.StructuredData {
 	if mp == nil {
 		return nil
 	}
@@ -158,7 +158,7 @@ func convertJsonToStructuredData(mp any) record.StructuredData {
 	return structured
 }
 
-func convertJsonToMetadata(mp any) record.Metadata {
+func convertJSONToMetadata(mp any) record.Metadata {
 	if mp == nil {
 		return nil
 	}

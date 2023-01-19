@@ -63,7 +63,7 @@ func TestParseJsonKey_Process(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			underTest, err := ParseJsonKey(processor.Config{})
+			underTest, err := ParseJSONKey(processor.Config{})
 			is.NoErr(err)
 			got, err := underTest.Process(context.Background(), tt.args.r)
 			fmt.Println(err)
@@ -124,7 +124,7 @@ func TestParseJsonPayload_Process(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			underTest, err := ParseJsonPayload(processor.Config{})
+			underTest, err := ParseJSONPayload(processor.Config{})
 			is.NoErr(err)
 			got, err := underTest.Process(context.Background(), tt.args.r)
 			if (err != nil) != tt.wantErr {

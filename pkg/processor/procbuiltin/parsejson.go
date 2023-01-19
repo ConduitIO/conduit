@@ -24,31 +24,30 @@ import (
 )
 
 const (
-	parseJsonKeyProcType     = "parsejsonkey"
-	parseJsonPayloadProcType = "parsejsonpayload"
+	parseJSONKeyProcType     = "parsejsonkey"
+	parseJSONPayloadProcType = "parsejsonpayload"
 )
 
 func init() {
-	processor.GlobalBuilderRegistry.MustRegister(parseJsonKeyProcType, ParseJsonKey)
-	processor.GlobalBuilderRegistry.MustRegister(parseJsonPayloadProcType, ParseJsonPayload)
+	processor.GlobalBuilderRegistry.MustRegister(parseJSONKeyProcType, ParseJSONKey)
+	processor.GlobalBuilderRegistry.MustRegister(parseJSONPayloadProcType, ParseJSONPayload)
 }
 
-// ParseJsonKey parses the record key from raw to structured data
-func ParseJsonKey(config processor.Config) (processor.Interface, error) {
-	return parseJson(parseJsonKeyProcType, recordKeyGetSetter{}, config)
+// ParseJSONKey parses the record key from raw to structured data
+func ParseJSONKey(config processor.Config) (processor.Interface, error) {
+	return parseJSON(parseJSONKeyProcType, recordKeyGetSetter{}, config)
 }
 
-// ParseJsonPayload parses the record payload from raw to structured data
-func ParseJsonPayload(config processor.Config) (processor.Interface, error) {
-	return parseJson(parseJsonPayloadProcType, recordPayloadGetSetter{}, config)
+// ParseJSONPayload parses the record payload from raw to structured data
+func ParseJSONPayload(config processor.Config) (processor.Interface, error) {
+	return parseJSON(parseJSONPayloadProcType, recordPayloadGetSetter{}, config)
 }
 
-func parseJson(
+func parseJSON(
 	processorType string,
 	getSetter recordDataGetSetter,
 	config processor.Config,
 ) (processor.Interface, error) {
-
 	return processor.InterfaceFunc(func(_ context.Context, r record.Record) (record.Record, error) {
 		data := getSetter.Get(r)
 
