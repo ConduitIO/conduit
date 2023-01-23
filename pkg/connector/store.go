@@ -18,7 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"strings"
-	"sync"
+	"time"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/database"
@@ -29,27 +29,120 @@ const (
 	// storeKeyPrefix is added to all keys before storing them in store. Do not
 	// change unless you know what you're doing and you have a migration plan in
 	// place.
-	storeKeyPrefix = "connector:connector:"
+	storeKeyPrefix = "connector:instance:"
 )
 
 // Store handles the persistence and fetching of connectors.
 type Store struct {
-	db          database.DB
-	logger      log.CtxLogger
-	connBuilder Builder
+	db     database.DB
+	logger log.CtxLogger
 }
 
-func NewStore(db database.DB, logger log.CtxLogger, builder Builder) *Store {
-	return &Store{
-		db:          db,
-		logger:      logger.WithComponent("connector.Store"),
-		connBuilder: builder,
+func NewStore(db database.DB, logger log.CtxLogger) *Store {
+	s := &Store{
+		db:     db,
+		logger: logger.WithComponent("connector.Store"),
+	}
+	s.migratePre041(context.Background())
+	return s
+}
+
+// Until (including) v0.4.0 the connector prefix was connector:connector:
+// we changed the prefix to be in line with the pipeline and processor entities,
+// we also changed the field names (no more X prefix), this function migrates
+// old connector to the new format and new prefix.
+func (s *Store) migratePre041(ctx context.Context) {
+	const pre041prefix = "connector:connector:"
+
+	pre041keys, err := s.db.GetKeys(ctx, pre041prefix)
+	if err != nil {
+		s.logger.Warn(ctx).Err(err).Msg("failed to migrate connectors, if you just upgraded to v0.4.x old connectors might not be loaded correctly")
+		return
+	}
+	if len(pre041keys) == 0 {
+		return
+	}
+
+	s.logger.Info(ctx).Msgf("found %d pre-v0.4.1 connectors in store, migrating them now...", len(pre041keys))
+
+	type connectorPre041 struct {
+		Type string
+		Data struct {
+			XID     string
+			XConfig struct {
+				Name         string
+				Settings     map[string]string
+				Plugin       string
+				PipelineID   string
+				ProcessorIDs []string
+			}
+			XState         json.RawMessage
+			XProvisionedBy int
+			XCreatedAt     time.Time
+			XUpdatedAt     time.Time
+		}
+	}
+
+	for _, key := range pre041keys {
+		s.logger.Debug(ctx).Msgf("migrating connector with ID %v", key)
+
+		// fetch old connector
+		raw, err := s.db.Get(ctx, key)
+		if err != nil {
+			s.logger.Warn(ctx).Err(cerrors.Errorf("failed to get old connector with ID %v: %w", key, err)).Send()
+			continue
+		}
+
+		// decode old connector into new connector
+		var old connectorPre041
+		err = json.Unmarshal(raw, &old)
+		if err != nil {
+			s.logger.Warn(ctx).Err(cerrors.Errorf("failed to unmarshal old connector with ID %v: %w", key, err)).Send()
+			continue
+		}
+		connType, ok := map[string]Type{
+			TypeSource.String():      TypeSource,
+			TypeDestination.String(): TypeDestination,
+		}[old.Type]
+		if !ok {
+			s.logger.Warn(ctx).Err(cerrors.Errorf("invalid type of old connector with ID %v: %v", key, old.Type)).Send()
+			continue
+		}
+		instance := &Instance{
+			ID:   old.Data.XID,
+			Type: connType,
+			Config: Config{
+				Name:     old.Data.XConfig.Name,
+				Settings: old.Data.XConfig.Settings,
+			},
+			PipelineID:    old.Data.XConfig.PipelineID,
+			Plugin:        old.Data.XConfig.Plugin,
+			ProcessorIDs:  old.Data.XConfig.ProcessorIDs,
+			ProvisionedBy: ProvisionType(old.Data.XProvisionedBy),
+			State:         old.Data.XState,
+			CreatedAt:     old.Data.XCreatedAt,
+			UpdatedAt:     old.Data.XUpdatedAt,
+		}
+
+		// store new connector in db
+		err = s.Set(ctx, instance.ID, instance)
+		if err != nil {
+			s.logger.Warn(ctx).Err(cerrors.Errorf("failed to store new connector with ID %v: %w", key, err)).Send()
+			continue
+		}
+
+		// delete old connector from db
+		err = s.db.Set(ctx, key, nil)
+		if err != nil {
+			s.logger.Warn(ctx).Err(cerrors.Errorf("failed to delete old connector with ID %v: %w", key, err)).Send()
+			continue
+		}
 	}
 }
 
 // Set stores connector under the key id and returns nil on success, error
 // otherwise.
-func (s *Store) Set(ctx context.Context, id string, c Connector) error {
+func (s *Store) Set(ctx context.Context, id string, c *Instance) error {
 	if id == "" {
 		return cerrors.Errorf("can't store connector: %w", cerrors.ErrEmptyID)
 	}
@@ -86,7 +179,7 @@ func (s *Store) Delete(ctx context.Context, id string) error {
 }
 
 // Get will return the connector for a given id or an error.
-func (s *Store) Get(ctx context.Context, id string) (Connector, error) {
+func (s *Store) Get(ctx context.Context, id string) (*Instance, error) {
 	key := s.addKeyPrefix(id)
 
 	raw, err := s.db.Get(ctx, key)
@@ -101,13 +194,13 @@ func (s *Store) Get(ctx context.Context, id string) (Connector, error) {
 }
 
 // GetAll returns all connectors stored in the database.
-func (s *Store) GetAll(ctx context.Context) (map[string]Connector, error) {
+func (s *Store) GetAll(ctx context.Context) (map[string]*Instance, error) {
 	prefix := s.addKeyPrefix("")
 	keys, err := s.db.GetKeys(ctx, prefix)
 	if err != nil {
 		return nil, cerrors.Errorf("failed to retrieve keys: %w", err)
 	}
-	connectors := make(map[string]Connector)
+	connectors := make(map[string]*Instance)
 	for _, key := range keys {
 		raw, err := s.db.Get(ctx, key)
 		if err != nil {
@@ -134,26 +227,8 @@ func (*Store) trimKeyPrefix(key string) string {
 }
 
 // encode a connector from Connector to []byte.
-func (*Store) encode(c Connector) ([]byte, error) {
-	locker, ok := c.(sync.Locker)
-	if ok {
-		// a connector can choose to implement the locker interface, then the
-		// store will make sure to first acquire the lock before encoding it to
-		// prevent race conditions
-		locker.Lock()
-		defer locker.Unlock()
-	}
-
-	tempJSON, err := json.Marshal(c)
-	if err != nil {
-		return nil, err
-	}
-	typedConnector := typedJSON{
-		Data: tempJSON,
-		Type: c.Type().String(),
-	}
-
-	b, err := json.Marshal(typedConnector)
+func (*Store) encode(c *Instance) ([]byte, error) {
+	b, err := json.Marshal(c)
 	if err != nil {
 		return nil, err
 	}
@@ -163,43 +238,39 @@ func (*Store) encode(c Connector) ([]byte, error) {
 
 // decode a connector from []byte to Connector. It uses the Builder to
 // initialize the connector making it ready to be used.
-func (s *Store) decode(raw []byte) (Connector, error) {
-	var typedConnector typedJSON
-	err := json.Unmarshal(raw, &typedConnector)
+func (s *Store) decode(raw []byte) (*Instance, error) {
+	conn := &Instance{}
+	err := json.Unmarshal(raw, &conn)
 	if err != nil {
 		return nil, err
 	}
 
-	var conn Connector
-	switch typedConnector.Type {
-	case TypeSource.String():
-		conn, err = s.connBuilder.Build(TypeSource, ProvisionTypeAPI)
-		if err != nil {
-			return nil, err
+	if conn.State != nil {
+		// Instance.State is of type any, so unmarshalling a JSON populates it
+		// with a map[string]any. After we know the connector type we can
+		// convert it to the proper state struct. The simplest way is to marshal
+		// it back into JSON and then unmarshal into the proper state type.
+		switch conn.Type {
+		case TypeSource:
+			var state SourceState
+			stateJSON, _ := json.Marshal(conn.State)
+			err := json.Unmarshal(stateJSON, &state)
+			if err != nil {
+				return nil, err
+			}
+			conn.State = state
+		case TypeDestination:
+			var state DestinationState
+			stateJSON, _ := json.Marshal(conn.State)
+			err := json.Unmarshal(stateJSON, &state)
+			if err != nil {
+				return nil, err
+			}
+			conn.State = state
+		default:
+			return nil, ErrInvalidConnectorType
 		}
-	case TypeDestination.String():
-		conn, err = s.connBuilder.Build(TypeDestination, ProvisionTypeAPI) // ProvisionType will be overwritten
-		if err != nil {
-			return nil, err
-		}
-	default:
-		return nil, ErrInvalidConnectorType
 	}
 
-	err = json.Unmarshal(typedConnector.Data, &conn)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := s.connBuilder.Init(conn, conn.ID(), conn.Config()); err != nil {
-		return nil, err
-	}
 	return conn, nil
-}
-
-// typedJSON stores a connector type and the marshaled connector
-// will be used as an intermediate representation for the connectors, to help with marshaling and unmarshalling them
-type typedJSON struct {
-	Type string
-	Data json.RawMessage
 }

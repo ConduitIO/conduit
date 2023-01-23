@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//go:generate mockgen -destination=mock/source.go -package=mock -mock_names=Source=Source . Source
+
 package stream
 
 import (
@@ -20,7 +22,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/csync"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -35,7 +36,7 @@ const (
 // SourceNode wraps a Source connector and implements the Pub node interface
 type SourceNode struct {
 	Name          string
-	Source        connector.Source
+	Source        Source
 	PipelineTimer metrics.Timer
 
 	stopReason error
@@ -44,6 +45,16 @@ type SourceNode struct {
 
 	state    csync.ValueWatcher[nodeState]
 	stopOnce sync.Once
+}
+
+type Source interface {
+	ID() string
+	Open(context.Context) error
+	Read(context.Context) (record.Record, error)
+	Ack(context.Context, record.Position) error
+	Stop(context.Context) (record.Position, error)
+	Teardown(context.Context) error
+	Errors() <-chan error
 }
 
 // ID returns a properly formatted SourceNode ID prefixed with `source/`
