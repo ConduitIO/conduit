@@ -39,8 +39,10 @@ func (c *ConnectorOrchestrator) Inspect(ctx context.Context, id string) (*inspec
 func (c *ConnectorOrchestrator) Create(
 	ctx context.Context,
 	t connector.Type,
+	plugin string,
+	pipelineID string,
 	config connector.Config,
-) (connector.Connector, error) {
+) (*connector.Instance, error) {
 	var r rollback.R
 	defer r.MustExecute()
 
@@ -51,7 +53,7 @@ func (c *ConnectorOrchestrator) Create(
 	r.AppendPure(txn.Discard)
 
 	// TODO lock pipeline
-	pl, err := c.pipelines.Get(ctx, config.PipelineID)
+	pl, err := c.pipelines.Get(ctx, pipelineID)
 	if err != nil {
 		return nil, cerrors.Errorf("couldn't get pipeline: %w", err)
 	}
@@ -59,23 +61,27 @@ func (c *ConnectorOrchestrator) Create(
 	if pl.ProvisionedBy != pipeline.ProvisionTypeAPI {
 		return nil, cerrors.Errorf("cannot add a connector to the pipeline %q: %w", pl.ID, ErrImmutableProvisionedByConfig)
 	}
-
 	if pl.Status == pipeline.StatusRunning {
 		return nil, cerrors.Errorf("cannot create connector: %w", pipeline.ErrPipelineRunning)
 	}
 
-	conn, err := c.connectors.Create(ctx, uuid.NewString(), t, config, connector.ProvisionTypeAPI)
+	err = c.Validate(ctx, t, plugin, config)
 	if err != nil {
 		return nil, err
 	}
-	r.Append(func() error { return c.connectors.Delete(ctx, conn.ID()) })
 
-	_, err = c.pipelines.AddConnector(ctx, pl.ID, conn.ID())
+	conn, err := c.connectors.Create(ctx, uuid.NewString(), t, plugin, pl.ID, config, connector.ProvisionTypeAPI)
 	if err != nil {
-		return nil, cerrors.Errorf("couldn't add connector %v to pipeline %v: %w", conn.ID(), pl.ID, err)
+		return nil, err
+	}
+	r.Append(func() error { return c.connectors.Delete(ctx, conn.ID) })
+
+	_, err = c.pipelines.AddConnector(ctx, pl.ID, conn.ID)
+	if err != nil {
+		return nil, cerrors.Errorf("couldn't add connector %v to pipeline %v: %w", conn.ID, pl.ID, err)
 	}
 	r.Append(func() error {
-		_, err := c.pipelines.RemoveConnector(ctx, pl.ID, conn.ID())
+		_, err := c.pipelines.RemoveConnector(ctx, pl.ID, conn.ID)
 		return err
 	})
 
@@ -88,11 +94,11 @@ func (c *ConnectorOrchestrator) Create(
 	return conn, nil
 }
 
-func (c *ConnectorOrchestrator) List(ctx context.Context) map[string]connector.Connector {
+func (c *ConnectorOrchestrator) List(ctx context.Context) map[string]*connector.Instance {
 	return c.connectors.List(ctx)
 }
 
-func (c *ConnectorOrchestrator) Get(ctx context.Context, id string) (connector.Connector, error) {
+func (c *ConnectorOrchestrator) Get(ctx context.Context, id string) (*connector.Instance, error) {
 	return c.connectors.Get(ctx, id)
 }
 
@@ -108,13 +114,13 @@ func (c *ConnectorOrchestrator) Delete(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	if conn.ProvisionedBy() != connector.ProvisionTypeAPI {
-		return cerrors.Errorf("connector %q cannot be deleted: %w", conn.ID(), ErrImmutableProvisionedByConfig)
+	if conn.ProvisionedBy != connector.ProvisionTypeAPI {
+		return cerrors.Errorf("connector %q cannot be deleted: %w", conn.ID, ErrImmutableProvisionedByConfig)
 	}
-	if len(conn.Config().ProcessorIDs) != 0 {
+	if len(conn.ProcessorIDs) != 0 {
 		return ErrConnectorHasProcessorsAttached
 	}
-	pl, err := c.pipelines.Get(ctx, conn.Config().PipelineID)
+	pl, err := c.pipelines.Get(ctx, conn.PipelineID)
 	if err != nil {
 		return err
 	}
@@ -126,7 +132,7 @@ func (c *ConnectorOrchestrator) Delete(ctx context.Context, id string) error {
 		return err
 	}
 	r.Append(func() error {
-		_, err = c.connectors.Create(ctx, id, conn.Type(), conn.Config(), connector.ProvisionTypeAPI)
+		_, err = c.connectors.Create(ctx, id, conn.Type, conn.Plugin, conn.PipelineID, conn.Config, conn.ProvisionedBy)
 		return err
 	})
 	_, err = c.pipelines.RemoveConnector(ctx, pl.ID, id)
@@ -134,7 +140,7 @@ func (c *ConnectorOrchestrator) Delete(ctx context.Context, id string) error {
 		return err
 	}
 	r.Append(func() error {
-		_, err = c.pipelines.AddConnector(ctx, pl.ID, id)
+		_, err := c.pipelines.AddConnector(ctx, pl.ID, id)
 		return err
 	})
 	err = txn.Commit()
@@ -145,7 +151,7 @@ func (c *ConnectorOrchestrator) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-func (c *ConnectorOrchestrator) Update(ctx context.Context, id string, config connector.Config) (connector.Connector, error) {
+func (c *ConnectorOrchestrator) Update(ctx context.Context, id string, config connector.Config) (*connector.Instance, error) {
 	var r rollback.R
 	defer r.MustExecute()
 	txn, ctx, err := c.db.NewTransaction(ctx, true)
@@ -157,17 +163,24 @@ func (c *ConnectorOrchestrator) Update(ctx context.Context, id string, config co
 	if err != nil {
 		return nil, err
 	}
-	if conn.ProvisionedBy() != connector.ProvisionTypeAPI {
-		return nil, cerrors.Errorf("connector %q cannot be updated: %w", conn.ID(), ErrImmutableProvisionedByConfig)
+	if conn.ProvisionedBy != connector.ProvisionTypeAPI {
+		return nil, cerrors.Errorf("connector %q cannot be updated: %w", conn.ID, ErrImmutableProvisionedByConfig)
 	}
-	oldConfig := conn.Config()
-	pl, err := c.pipelines.Get(ctx, conn.Config().PipelineID)
+
+	pl, err := c.pipelines.Get(ctx, conn.PipelineID)
 	if err != nil {
 		return nil, err
 	}
 	if pl.Status == pipeline.StatusRunning {
 		return nil, pipeline.ErrPipelineRunning
 	}
+
+	err = c.Validate(ctx, conn.Type, conn.Plugin, config)
+	if err != nil {
+		return nil, err
+	}
+
+	oldConfig := conn.Config
 	conn, err = c.connectors.Update(ctx, id, config)
 	if err != nil {
 		return nil, err
@@ -187,9 +200,10 @@ func (c *ConnectorOrchestrator) Update(ctx context.Context, id string, config co
 func (c *ConnectorOrchestrator) Validate(
 	ctx context.Context,
 	t connector.Type,
+	plugin string,
 	config connector.Config,
 ) error {
-	d, err := c.plugins.NewDispenser(c.logger, config.Plugin)
+	d, err := c.plugins.NewDispenser(c.logger, plugin)
 	if err != nil {
 		return cerrors.Errorf("couldn't get dispenser: %w", err)
 	}
@@ -200,11 +214,11 @@ func (c *ConnectorOrchestrator) Validate(
 	case connector.TypeDestination:
 		err = c.plugins.ValidateDestinationConfig(ctx, d, config.Settings)
 	default:
-		return cerrors.Errorf("invalid connector type: %w", err)
+		return cerrors.New("invalid connector type")
 	}
 
 	if err != nil {
-		return err
+		return cerrors.Errorf("invalid connector config: %w", err)
 	}
 
 	return nil

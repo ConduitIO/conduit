@@ -12,13 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//go:generate mockgen -destination=mock/destination.go -package=mock -mock_names=Destination=Destination . Destination
+
 package stream
 
 import (
 	"context"
 	"time"
 
-	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics"
@@ -28,11 +29,21 @@ import (
 // DestinationNode wraps a Destination connector and implements the Sub node interface
 type DestinationNode struct {
 	Name           string
-	Destination    connector.Destination
+	Destination    Destination
 	ConnectorTimer metrics.Timer
 
 	base   pubSubNodeBase
 	logger log.CtxLogger
+}
+
+type Destination interface {
+	ID() string
+	Open(context.Context) error
+	Write(context.Context, record.Record) error
+	Ack(context.Context) (record.Position, error)
+	Stop(context.Context, record.Position) error
+	Teardown(context.Context) error
+	Errors() <-chan error
 }
 
 func (n *DestinationNode) ID() string {

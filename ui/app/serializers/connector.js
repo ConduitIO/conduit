@@ -1,4 +1,5 @@
 import ApplicationSerializer from './application';
+import { inject as service } from '@ember/service';
 
 const CONNECTOR_TYPE_MAP = {
   TYPE_SOURCE: 'source',
@@ -6,6 +7,9 @@ const CONNECTOR_TYPE_MAP = {
 };
 
 export default class ConnectorSerializer extends ApplicationSerializer {
+  @service
+  store;
+
   serialize(snapshot) {
     const configSettings = super._replaceKeys(
       snapshot.record.config.settings,

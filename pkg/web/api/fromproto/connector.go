@@ -30,12 +30,9 @@ func ConnectorType(in apiv1.Connector_Type) connector.Type {
 	return connector.Type(in)
 }
 
-func ConnectorConfig(in *apiv1.Connector_Config, plugin string, pipelineID string, processorIDs []string) connector.Config {
+func ConnectorConfig(in *apiv1.Connector_Config) connector.Config {
 	return connector.Config{
-		Name:         in.Name,
-		Settings:     in.Settings,
-		Plugin:       plugin,
-		PipelineID:   pipelineID,
-		ProcessorIDs: processorIDs,
+		Name:     in.Name,
+		Settings: in.Settings,
 	}
 }

@@ -9,6 +9,9 @@ export default class PipelineIndexController extends Controller {
   @service
   store;
 
+  @service
+  router;
+
   @action
   async createPipeline() {
     const pipeline = this.model.pipeline;
@@ -17,6 +20,6 @@ export default class PipelineIndexController extends Controller {
     } catch (error) {
       return;
     }
-    this.replaceRoute('pipeline', pipeline.id);
+    this.router.replaceWith('pipeline', pipeline.id);
   }
 }

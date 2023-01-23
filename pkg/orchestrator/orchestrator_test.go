@@ -77,7 +77,7 @@ func TestPipelineSimple(t *testing.T) {
 		db,
 		logger,
 		pipeline.NewService(logger, db),
-		connector.NewService(logger, db, connector.NewDefaultBuilder(logger, connector.NewPersister(logger, db, time.Second, 3), pluginService)),
+		connector.NewService(logger, db, connector.NewPersister(logger, db, time.Second, 3)),
 		processor.NewService(logger, db, processor.GlobalBuilderRegistry),
 		pluginService,
 	)
@@ -102,11 +102,11 @@ func TestPipelineSimple(t *testing.T) {
 	conn, err := orc.Connectors.Create(
 		ctx,
 		connector.TypeSource,
+		"builtin:file", // use builtin plugin
+		pl.ID,
 		connector.Config{
-			Name:       "test-source",
-			Settings:   map[string]string{"path": sourcePath},
-			Plugin:     "builtin:file", // use builtin plugin
-			PipelineID: pl.ID,
+			Name:     "test-source",
+			Settings: map[string]string{"path": sourcePath},
 		},
 	)
 	is.NoErr(err)
@@ -125,11 +125,11 @@ func TestPipelineSimple(t *testing.T) {
 	_, err = orc.Connectors.Create(
 		ctx,
 		connector.TypeDestination,
+		"builtin:file", // use builtin plugin
+		pl.ID,
 		connector.Config{
-			Name:       "test-destination",
-			Settings:   map[string]string{"path": destinationPath},
-			Plugin:     "builtin:file", // use builtin plugin
-			PipelineID: pl.ID,
+			Name:     "test-destination",
+			Settings: map[string]string{"path": destinationPath},
 		},
 	)
 	is.NoErr(err)
@@ -155,7 +155,7 @@ func TestPipelineSimple(t *testing.T) {
 {"position":"OA==","operation":"create","metadata":{"conduit.source.connector.id":"%[1]v","file.path":"./fixtures/file-source.txt","opencdc.version":"v1"},"key":"NA==","payload":{"before":null,"after":"NA=="}}
 {"position":"MTA=","operation":"create","metadata":{"conduit.source.connector.id":"%[1]v","file.path":"./fixtures/file-source.txt","opencdc.version":"v1"},"key":"NQ==","payload":{"before":null,"after":"NQ=="}}
 `
-	want = fmt.Sprintf(want, conn.ID())
+	want = fmt.Sprintf(want, conn.ID)
 
 	// make sure destination file matches source file
 	got, err := os.ReadFile(destinationPath)

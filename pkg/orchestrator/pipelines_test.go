@@ -40,7 +40,7 @@ func TestPipelineOrchestrator_Start_Success(t *testing.T) {
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
 
 	plsMock.EXPECT().
-		Start(gomock.AssignableToTypeOf(ctxType), orc.Pipelines.connectors, orc.Pipelines.processors, plBefore.ID).
+		Start(gomock.AssignableToTypeOf(ctxType), orc.Pipelines.connectors, orc.Pipelines.processors, orc.Pipelines.plugins, plBefore.ID).
 		Return(nil)
 
 	err := orc.Pipelines.Start(ctx, plBefore.ID)
@@ -59,7 +59,7 @@ func TestPipelineOrchestrator_Start_Fail(t *testing.T) {
 
 	wantErr := cerrors.New("pipeline doesn't exist")
 	plsMock.EXPECT().
-		Start(gomock.AssignableToTypeOf(ctxType), consMock, procsMock, gomock.AssignableToTypeOf("")).
+		Start(gomock.AssignableToTypeOf(ctxType), consMock, procsMock, pluginMock, gomock.AssignableToTypeOf("")).
 		Return(wantErr)
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
