@@ -24,6 +24,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/csync"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/foundation/metrics"
 	"github.com/conduitio/conduit/pkg/record"
 )
 
@@ -43,6 +44,9 @@ type DLQHandlerNode struct {
 
 	WindowSize          int
 	WindowNackThreshold int
+
+	Timer     metrics.Timer
+	Histogram metrics.RecordBytesHistogram
 
 	// window keeps track of the last N acks and nacks
 	window *dlqWindow
@@ -158,7 +162,14 @@ func (n *DLQHandlerNode) Nack(msg *Message, nackMetadata NackMetadata) (err erro
 		return err
 	}
 
-	return n.Handler.Write(msg.Ctx, dlqRecord)
+	writeTime := time.Now()
+	err = n.Handler.Write(msg.Ctx, dlqRecord)
+	if err != nil {
+		return err
+	}
+	n.Timer.Update(time.Since(writeTime))
+	n.Histogram.Observe(dlqRecord)
+	return nil
 }
 
 func (n *DLQHandlerNode) dlqRecord(msg *Message, nackMetadata NackMetadata) (record.Record, error) {

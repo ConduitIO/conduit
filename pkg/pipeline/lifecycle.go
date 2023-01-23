@@ -24,6 +24,7 @@ import (
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/foundation/metrics"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/measure"
 	"github.com/conduitio/conduit/pkg/foundation/multierror"
 	"github.com/conduitio/conduit/pkg/pipeline/stream"
@@ -378,6 +379,17 @@ func (s *Service) buildDLQHandlerNode(
 
 		WindowSize:          pl.DLQ.WindowSize,
 		WindowNackThreshold: pl.DLQ.WindowNackThreshold,
+
+		Timer: measure.DLQExecutionDurationTimer.WithValues(
+			pl.Config.Name,
+			pl.DLQ.Plugin,
+		),
+		Histogram: metrics.NewRecordBytesHistogram(
+			measure.DLQBytesHistogram.WithValues(
+				pl.Config.Name,
+				pl.DLQ.Plugin,
+			),
+		),
 	}, nil
 }
 
@@ -387,10 +399,12 @@ func (s *Service) buildMetricsNode(
 ) *stream.MetricsNode {
 	return &stream.MetricsNode{
 		Name: conn.ID + "-metrics",
-		BytesHistogram: measure.ConnectorBytesHistogram.WithValues(
-			pl.Config.Name,
-			conn.Plugin,
-			strings.ToLower(conn.Type.String()),
+		Histogram: metrics.NewRecordBytesHistogram(
+			measure.ConnectorBytesHistogram.WithValues(
+				pl.Config.Name,
+				conn.Plugin,
+				strings.ToLower(conn.Type.String()),
+			),
 		),
 	}
 }
