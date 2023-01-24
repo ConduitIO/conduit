@@ -24,10 +24,15 @@ locally, you can get metrics if you run `curl localhost:8080/metrics`.
   | `conduit_pipelines`                            | Gauge     | Number of pipelines by status.                                                                                 |
   | `conduit_connectors`                           | Gauge     | Number of connectors by type (source, destination).                                                            |
   | `conduit_processors`                           | Gauge     | Number of processors by name and type.                                                                         |
-  | `conduit_connector_bytes`                      | Histogram | Number of bytes a connector processed by pipeline name, plugin and type (source, destination).                 |
+  | `conduit_connector_bytes`                      | Histogram | Number of bytes* a connector processed by pipeline name, plugin and type (source, destination).                |
+  | `conduit_dlq_bytes`                            | Histogram | Number of bytes* a DLQ connector processed per pipeline and plugin.                                            |
   | `conduit_pipeline_execution_duration_seconds`  | Histogram | Amount of time records spent in a pipeline.                                                                    |
   | `conduit_connector_execution_duration_seconds` | Histogram | Amount of time spent reading or writing records per pipeline, plugin and connector type (source, destination). |
   | `conduit_processor_execution_duration_seconds` | Histogram | Amount of time spent on processing records per pipeline and processor.                                         |
+  | `conduit_dlq_execution_duration_seconds`       | Histogram | Amount of time spent writing records to DLQ connector per pipeline and plugin.                                 |
+
+  \*We calculate bytes based on the JSON representation of the record payload
+  and key.
 
 * **Go runtime metrics**: The default metrics exposed by Prometheus' official Go
   package, [client_golang](https://pkg.go.dev/github.com/prometheus/client_golang).
