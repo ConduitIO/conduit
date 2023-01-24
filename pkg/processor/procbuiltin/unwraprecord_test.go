@@ -56,14 +56,21 @@ func TestUnwrapRecord_Config(t *testing.T) {
 		{
 			name: "invalid config",
 			config: processor.Config{
-				Settings: map[string]string{"foo": "bar"},
+				Settings: map[string]string{"format": "bar"},
 			},
 			wantErr: true,
 		},
 		{
-			name: "invalid config",
+			name: "valid debezium config",
 			config: processor.Config{
 				Settings: map[string]string{"format": "debezium"},
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid kafka-connect config",
+			config: processor.Config{
+				Settings: map[string]string{"format": "kafka-connect"},
 			},
 			wantErr: false,
 		},
@@ -171,6 +178,32 @@ func TestUnwrapRecord_Process(t *testing.T) {
 				Payload: record.Change{
 					Before: record.StructuredData(nil),
 					After:  record.StructuredData{"description": "test1", "id": 27},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "structured payload kafka-connect",
+			config: processor.Config{
+				Settings: map[string]string{"format": "kafka-connect"},
+			},
+			args: args{r: record.Record{
+				Payload: record.Change{
+					Before: nil,
+					After: record.StructuredData{
+						"payload": map[string]interface{}{
+							"description": "test2",
+							"id":          27,
+						},
+						"schema": map[string]interface{}{},
+					},
+				},
+			},
+			},
+			want: record.Record{
+				Operation: record.OperationSnapshot,
+				Payload: record.Change{
+					After: record.StructuredData{"description": "test2", "id": 27},
 				},
 			},
 			wantErr: false,

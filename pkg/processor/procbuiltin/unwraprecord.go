@@ -29,6 +29,9 @@ const (
 
 	// todo: support openCDC format
 	unwrapRecordConfigFormat = "format" // only debezium for now
+
+	RecordFormatDebezium     = "debezium"
+	RecordFormatKafkaConnect = "kafka-connect"
 )
 
 func init() {
@@ -55,6 +58,9 @@ func unwrapRecord(
 	if format == "" {
 		return nil, cerrors.Errorf("%s: record format type not specified", processorType)
 	}
+	if format != RecordFormatDebezium && format != RecordFormatKafkaConnect {
+		return nil, cerrors.Errorf("%s: record format should be one of {%s, %s}", processorType, RecordFormatDebezium, RecordFormatKafkaConnect)
+	}
 
 	return processor.InterfaceFunc(func(_ context.Context, rec record.Record) (record.Record, error) {
 		data := getSetter.Get(rec) // record.payload.after
@@ -77,8 +83,18 @@ func unwrapRecord(
 			return record.Record{}, cerrors.Errorf("%s: the payload is missing from the record", processorType)
 		}
 
+		r.Position = rec.Position
+		r.Key = rec.Key
+
 		// cast payload into a map
 		payload := payloadJSON.(map[string]any)
+
+		if format == RecordFormatKafkaConnect {
+			r.Payload.After = convertJSONToStructuredData(payload)
+			r.Operation = record.OperationSnapshot
+			return r, nil
+		}
+
 		// validate all the debezium fields exist
 		err = checkDebeziumFieldsExist(payload)
 		if err != nil {
@@ -94,9 +110,6 @@ func unwrapRecord(
 		r.Payload.After = after
 		r.Metadata = metadata
 		r.Operation = getRecordOp(payload[DebeziumFieldOp].(string))
-
-		r.Position = rec.Position
-		r.Key = rec.Key
 
 		return r, nil
 	}), nil
@@ -114,8 +127,6 @@ const (
 	DebeziumFieldOp      = "op"
 	DebeziumFieldPayload = "payload"
 )
-
-type DebeziumOp string
 
 func getRecordOp(o string) record.Operation {
 	switch o {
