@@ -57,7 +57,7 @@ type blueprint struct {
 	dispenserFactory DispenserFactory
 }
 
-type DispenserFactory func(name string, logger log.CtxLogger) plugin.Dispenser
+type DispenserFactory func(name plugin.FullName, logger log.CtxLogger) plugin.Dispenser
 
 func sdkDispenserFactory(connector sdk.Connector) DispenserFactory {
 	if connector.NewSource == nil {
@@ -67,7 +67,7 @@ func sdkDispenserFactory(connector sdk.Connector) DispenserFactory {
 		connector.NewDestination = func() sdk.Destination { return nil }
 	}
 
-	return func(name string, logger log.CtxLogger) plugin.Dispenser {
+	return func(name plugin.FullName, logger log.CtxLogger) plugin.Dispenser {
 		return builtinv1.NewDispenser(
 			name,
 			logger,
@@ -147,7 +147,7 @@ func (r *Registry) NewDispenser(logger log.CtxLogger, fullName plugin.FullName) 
 		return nil, cerrors.Errorf("could not find builtin plugin, only found versions %v: %w", availableVersions, plugin.ErrPluginNotFound)
 	}
 
-	return b.dispenserFactory(string(fullName), logger), nil
+	return b.dispenserFactory(fullName, logger), nil
 }
 
 func (r *Registry) List() map[plugin.FullName]plugin.Specification {

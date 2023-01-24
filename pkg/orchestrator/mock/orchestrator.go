@@ -158,17 +158,17 @@ func (mr *PipelineServiceMockRecorder) RemoveProcessor(arg0, arg1, arg2 interfac
 }
 
 // Start mocks base method.
-func (m *PipelineService) Start(arg0 context.Context, arg1 pipeline.ConnectorFetcher, arg2 pipeline.ProcessorFetcher, arg3 string) error {
+func (m *PipelineService) Start(arg0 context.Context, arg1 pipeline.ConnectorFetcher, arg2 pipeline.ProcessorFetcher, arg3 pipeline.PluginDispenserFetcher, arg4 string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Start", arg0, arg1, arg2, arg3)
+	ret := m.ctrl.Call(m, "Start", arg0, arg1, arg2, arg3, arg4)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Start indicates an expected call of Start.
-func (mr *PipelineServiceMockRecorder) Start(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
+func (mr *PipelineServiceMockRecorder) Start(arg0, arg1, arg2, arg3, arg4 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*PipelineService)(nil).Start), arg0, arg1, arg2, arg3)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*PipelineService)(nil).Start), arg0, arg1, arg2, arg3, arg4)
 }
 
 // Stop mocks base method.
@@ -224,10 +224,10 @@ func (m *ConnectorService) EXPECT() *ConnectorServiceMockRecorder {
 }
 
 // AddProcessor mocks base method.
-func (m *ConnectorService) AddProcessor(arg0 context.Context, arg1, arg2 string) (connector.Connector, error) {
+func (m *ConnectorService) AddProcessor(arg0 context.Context, arg1, arg2 string) (*connector.Instance, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddProcessor", arg0, arg1, arg2)
-	ret0, _ := ret[0].(connector.Connector)
+	ret0, _ := ret[0].(*connector.Instance)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -239,18 +239,18 @@ func (mr *ConnectorServiceMockRecorder) AddProcessor(arg0, arg1, arg2 interface{
 }
 
 // Create mocks base method.
-func (m *ConnectorService) Create(arg0 context.Context, arg1 string, arg2 connector.Type, arg3 connector.Config, arg4 connector.ProvisionType) (connector.Connector, error) {
+func (m *ConnectorService) Create(arg0 context.Context, arg1 string, arg2 connector.Type, arg3, arg4 string, arg5 connector.Config, arg6 connector.ProvisionType) (*connector.Instance, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Create", arg0, arg1, arg2, arg3, arg4)
-	ret0, _ := ret[0].(connector.Connector)
+	ret := m.ctrl.Call(m, "Create", arg0, arg1, arg2, arg3, arg4, arg5, arg6)
+	ret0, _ := ret[0].(*connector.Instance)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Create indicates an expected call of Create.
-func (mr *ConnectorServiceMockRecorder) Create(arg0, arg1, arg2, arg3, arg4 interface{}) *gomock.Call {
+func (mr *ConnectorServiceMockRecorder) Create(arg0, arg1, arg2, arg3, arg4, arg5, arg6 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*ConnectorService)(nil).Create), arg0, arg1, arg2, arg3, arg4)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*ConnectorService)(nil).Create), arg0, arg1, arg2, arg3, arg4, arg5, arg6)
 }
 
 // Delete mocks base method.
@@ -268,10 +268,10 @@ func (mr *ConnectorServiceMockRecorder) Delete(arg0, arg1 interface{}) *gomock.C
 }
 
 // Get mocks base method.
-func (m *ConnectorService) Get(arg0 context.Context, arg1 string) (connector.Connector, error) {
+func (m *ConnectorService) Get(arg0 context.Context, arg1 string) (*connector.Instance, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Get", arg0, arg1)
-	ret0, _ := ret[0].(connector.Connector)
+	ret0, _ := ret[0].(*connector.Instance)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -283,10 +283,10 @@ func (mr *ConnectorServiceMockRecorder) Get(arg0, arg1 interface{}) *gomock.Call
 }
 
 // List mocks base method.
-func (m *ConnectorService) List(arg0 context.Context) map[string]connector.Connector {
+func (m *ConnectorService) List(arg0 context.Context) map[string]*connector.Instance {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "List", arg0)
-	ret0, _ := ret[0].(map[string]connector.Connector)
+	ret0, _ := ret[0].(map[string]*connector.Instance)
 	return ret0
 }
 
@@ -297,10 +297,10 @@ func (mr *ConnectorServiceMockRecorder) List(arg0 interface{}) *gomock.Call {
 }
 
 // RemoveProcessor mocks base method.
-func (m *ConnectorService) RemoveProcessor(arg0 context.Context, arg1, arg2 string) (connector.Connector, error) {
+func (m *ConnectorService) RemoveProcessor(arg0 context.Context, arg1, arg2 string) (*connector.Instance, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RemoveProcessor", arg0, arg1, arg2)
-	ret0, _ := ret[0].(connector.Connector)
+	ret0, _ := ret[0].(*connector.Instance)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -312,10 +312,10 @@ func (mr *ConnectorServiceMockRecorder) RemoveProcessor(arg0, arg1, arg2 interfa
 }
 
 // Update mocks base method.
-func (m *ConnectorService) Update(arg0 context.Context, arg1 string, arg2 connector.Config) (connector.Connector, error) {
+func (m *ConnectorService) Update(arg0 context.Context, arg1 string, arg2 connector.Config) (*connector.Instance, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Update", arg0, arg1, arg2)
-	ret0, _ := ret[0].(connector.Connector)
+	ret0, _ := ret[0].(*connector.Instance)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

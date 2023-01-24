@@ -27,23 +27,24 @@ func _() {
 	_ = cTypes[int(connector.TypeDestination)-int(apiv1.Connector_TYPE_DESTINATION)]
 }
 
-func Connector(in connector.Connector) *apiv1.Connector {
+func Connector(in *connector.Instance) *apiv1.Connector {
 	apiConnector := &apiv1.Connector{
-		Id:           in.ID(),
-		CreatedAt:    timestamppb.New(in.CreatedAt()),
-		UpdatedAt:    timestamppb.New(in.UpdatedAt()),
-		Config:       ConnectorConfig(in.Config()),
-		Plugin:       in.Config().Plugin,
-		PipelineId:   in.Config().PipelineID,
-		ProcessorIds: in.Config().ProcessorIDs,
-		Type:         ConnectorType(in.Type()),
+		Id:           in.ID,
+		CreatedAt:    timestamppb.New(in.CreatedAt),
+		UpdatedAt:    timestamppb.New(in.UpdatedAt),
+		Config:       ConnectorConfig(in.Config),
+		Plugin:       in.Plugin,
+		PipelineId:   in.PipelineID,
+		ProcessorIds: in.ProcessorIDs,
+		Type:         ConnectorType(in.Type),
 	}
-	switch v := in.(type) {
-	case connector.Destination:
-		apiConnector.State = ConnectorDestinationState(v.State())
-
-	case connector.Source:
-		apiConnector.State = ConnectorSourceState(v.State())
+	if in.State != nil {
+		switch in.Type {
+		case connector.TypeSource:
+			apiConnector.State = ConnectorSourceState(in.State.(connector.SourceState))
+		case connector.TypeDestination:
+			apiConnector.State = ConnectorDestinationState(in.State.(connector.DestinationState))
+		}
 	}
 	return apiConnector
 }

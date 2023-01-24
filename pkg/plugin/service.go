@@ -25,7 +25,7 @@ import (
 // an interface to prevent a cyclic dependency between the plugin package and
 // builtin and standalone packages.
 // There are two registries that implement this interface:
-//   - The builtin registry create a dispenser which dispenses a plugin adapter
+//   - The built-in registry creates a dispenser which dispenses a plugin adapter
 //     that communicates with the plugin directly as if it was a library. These
 //     plugins are baked into the Conduit binary and included at compile time.
 //   - The standalone registry creates a dispenser which starts the plugin in a

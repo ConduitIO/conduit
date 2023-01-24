@@ -70,10 +70,10 @@ type base struct {
 }
 
 type PipelineService interface {
-	Start(ctx context.Context, connFetcher pipeline.ConnectorFetcher, procFetcher pipeline.ProcessorFetcher, pipelineID string) error
-	// Stop initiates a graceful shutdown of the given pipeline and sets its status to the provided status.
-	// The method does not wait for the pipeline (and its nodes) to actually stop,
-	// because there still might be some in-flight messages.
+	Start(ctx context.Context, connFetcher pipeline.ConnectorFetcher, procFetcher pipeline.ProcessorFetcher, pluginFetcher pipeline.PluginDispenserFetcher, pipelineID string) error
+	// Stop initiates a graceful shutdown of the given pipeline.
+	// The method does not wait for the pipeline (and its nodes) to actually
+	// stop, because there still might be some in-flight messages.
 	Stop(ctx context.Context, pipelineID string) error
 
 	List(ctx context.Context) map[string]*pipeline.Instance
@@ -89,14 +89,14 @@ type PipelineService interface {
 }
 
 type ConnectorService interface {
-	List(ctx context.Context) map[string]connector.Connector
-	Get(ctx context.Context, id string) (connector.Connector, error)
-	Create(ctx context.Context, id string, t connector.Type, c connector.Config, p connector.ProvisionType) (connector.Connector, error)
+	List(ctx context.Context) map[string]*connector.Instance
+	Get(ctx context.Context, id string) (*connector.Instance, error)
+	Create(ctx context.Context, id string, t connector.Type, plugin string, pipelineID string, c connector.Config, p connector.ProvisionType) (*connector.Instance, error)
 	Delete(ctx context.Context, id string) error
-	Update(ctx context.Context, id string, c connector.Config) (connector.Connector, error)
+	Update(ctx context.Context, id string, c connector.Config) (*connector.Instance, error)
 
-	AddProcessor(ctx context.Context, connectorID string, processorID string) (connector.Connector, error)
-	RemoveProcessor(ctx context.Context, connectorID string, processorID string) (connector.Connector, error)
+	AddProcessor(ctx context.Context, connectorID string, processorID string) (*connector.Instance, error)
+	RemoveProcessor(ctx context.Context, connectorID string, processorID string) (*connector.Instance, error)
 }
 
 type ProcessorService interface {

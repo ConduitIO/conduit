@@ -18,17 +18,17 @@ import (
 	"bytes"
 	"context"
 
-	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/csync"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/pipeline/stream"
 	"github.com/conduitio/conduit/pkg/record"
 )
 
 // DLQDestination is a DLQ handler that forwards DLQ records to a destination
 // connector.
 type DLQDestination struct {
-	Destination connector.Destination
+	Destination stream.Destination
 	Logger      log.CtxLogger
 
 	lastPosition record.Position

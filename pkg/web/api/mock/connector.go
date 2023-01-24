@@ -37,18 +37,18 @@ func (m *ConnectorOrchestrator) EXPECT() *ConnectorOrchestratorMockRecorder {
 }
 
 // Create mocks base method.
-func (m *ConnectorOrchestrator) Create(arg0 context.Context, arg1 connector.Type, arg2 connector.Config) (connector.Connector, error) {
+func (m *ConnectorOrchestrator) Create(arg0 context.Context, arg1 connector.Type, arg2, arg3 string, arg4 connector.Config) (*connector.Instance, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Create", arg0, arg1, arg2)
-	ret0, _ := ret[0].(connector.Connector)
+	ret := m.ctrl.Call(m, "Create", arg0, arg1, arg2, arg3, arg4)
+	ret0, _ := ret[0].(*connector.Instance)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Create indicates an expected call of Create.
-func (mr *ConnectorOrchestratorMockRecorder) Create(arg0, arg1, arg2 interface{}) *gomock.Call {
+func (mr *ConnectorOrchestratorMockRecorder) Create(arg0, arg1, arg2, arg3, arg4 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*ConnectorOrchestrator)(nil).Create), arg0, arg1, arg2)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*ConnectorOrchestrator)(nil).Create), arg0, arg1, arg2, arg3, arg4)
 }
 
 // Delete mocks base method.
@@ -66,10 +66,10 @@ func (mr *ConnectorOrchestratorMockRecorder) Delete(arg0, arg1 interface{}) *gom
 }
 
 // Get mocks base method.
-func (m *ConnectorOrchestrator) Get(arg0 context.Context, arg1 string) (connector.Connector, error) {
+func (m *ConnectorOrchestrator) Get(arg0 context.Context, arg1 string) (*connector.Instance, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Get", arg0, arg1)
-	ret0, _ := ret[0].(connector.Connector)
+	ret0, _ := ret[0].(*connector.Instance)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -96,10 +96,10 @@ func (mr *ConnectorOrchestratorMockRecorder) Inspect(arg0, arg1 interface{}) *go
 }
 
 // List mocks base method.
-func (m *ConnectorOrchestrator) List(arg0 context.Context) map[string]connector.Connector {
+func (m *ConnectorOrchestrator) List(arg0 context.Context) map[string]*connector.Instance {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "List", arg0)
-	ret0, _ := ret[0].(map[string]connector.Connector)
+	ret0, _ := ret[0].(map[string]*connector.Instance)
 	return ret0
 }
 
@@ -110,10 +110,10 @@ func (mr *ConnectorOrchestratorMockRecorder) List(arg0 interface{}) *gomock.Call
 }
 
 // Update mocks base method.
-func (m *ConnectorOrchestrator) Update(arg0 context.Context, arg1 string, arg2 connector.Config) (connector.Connector, error) {
+func (m *ConnectorOrchestrator) Update(arg0 context.Context, arg1 string, arg2 connector.Config) (*connector.Instance, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Update", arg0, arg1, arg2)
-	ret0, _ := ret[0].(connector.Connector)
+	ret0, _ := ret[0].(*connector.Instance)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -125,15 +125,15 @@ func (mr *ConnectorOrchestratorMockRecorder) Update(arg0, arg1, arg2 interface{}
 }
 
 // Validate mocks base method.
-func (m *ConnectorOrchestrator) Validate(arg0 context.Context, arg1 connector.Type, arg2 connector.Config) error {
+func (m *ConnectorOrchestrator) Validate(arg0 context.Context, arg1 connector.Type, arg2 string, arg3 connector.Config) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Validate", arg0, arg1, arg2)
+	ret := m.ctrl.Call(m, "Validate", arg0, arg1, arg2, arg3)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Validate indicates an expected call of Validate.
-func (mr *ConnectorOrchestratorMockRecorder) Validate(arg0, arg1, arg2 interface{}) *gomock.Call {
+func (mr *ConnectorOrchestratorMockRecorder) Validate(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Validate", reflect.TypeOf((*ConnectorOrchestrator)(nil).Validate), arg0, arg1, arg2)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Validate", reflect.TypeOf((*ConnectorOrchestrator)(nil).Validate), arg0, arg1, arg2, arg3)
 }
