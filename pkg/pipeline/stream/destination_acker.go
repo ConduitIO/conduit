@@ -19,7 +19,6 @@ import (
 	"context"
 	"sync"
 
-	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/multierror"
@@ -30,7 +29,7 @@ import (
 // from the destination and forwarding them to the correct message.
 type DestinationAckerNode struct {
 	Name        string
-	Destination connector.Destination
+	Destination Destination
 
 	// queue is used to store messages
 	queue deque.Deque[*Message]

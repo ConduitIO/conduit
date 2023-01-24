@@ -19,7 +19,6 @@ import (
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/connector"
-	connmock "github.com/conduitio/conduit/pkg/connector/mock"
 	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/database/inmemory"
@@ -236,18 +235,20 @@ func TestProcessorOrchestrator_CreateOnConnector_Success(t *testing.T) {
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
-	connBuilder := connmock.Builder{Ctrl: gomock.NewController(t)}
 
 	pl := &pipeline.Instance{
 		ID:     uuid.NewString(),
 		Status: pipeline.StatusSystemStopped,
 	}
-	conn := connBuilder.NewSourceMock(uuid.NewString(), connector.Config{PipelineID: pl.ID})
+	conn := &connector.Instance{
+		ID:         uuid.NewString(),
+		PipelineID: pl.ID,
+	}
 	want := &processor.Instance{
 		ID:   uuid.NewString(),
 		Type: "test-processor",
 		Parent: processor.Parent{
-			ID:   conn.ID(),
+			ID:   conn.ID,
 			Type: processor.ParentTypeConnector,
 		},
 		Config: processor.Config{
@@ -256,7 +257,7 @@ func TestProcessorOrchestrator_CreateOnConnector_Success(t *testing.T) {
 	}
 
 	consMock.EXPECT().
-		Get(gomock.AssignableToTypeOf(ctxType), conn.ID()).
+		Get(gomock.AssignableToTypeOf(ctxType), conn.ID).
 		Return(conn, nil)
 	plsMock.EXPECT().
 		Get(gomock.AssignableToTypeOf(ctxType), pl.ID).
@@ -272,7 +273,7 @@ func TestProcessorOrchestrator_CreateOnConnector_Success(t *testing.T) {
 		).
 		Return(want, nil)
 	consMock.EXPECT().
-		AddProcessor(gomock.AssignableToTypeOf(ctxType), conn.ID(), want.ID).
+		AddProcessor(gomock.AssignableToTypeOf(ctxType), conn.ID, want.ID).
 		Return(conn, nil)
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
@@ -522,25 +523,14 @@ func TestProcessorOrchestrator_UpdateOnConnector_ConnectorNotExist(t *testing.T)
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
-	connBuilder := connmock.Builder{Ctrl: gomock.NewController(t)}
 
-	pl := &pipeline.Instance{
-		ID:     uuid.NewString(),
-		Status: pipeline.StatusSystemStopped,
-	}
-	newConfig := processor.Config{
-		Settings: map[string]string{"foo2": "bar2"},
-	}
-	conn := connBuilder.NewSourceMock(uuid.NewString(), connector.Config{PipelineID: pl.ID})
+	connID := uuid.NewString()
 	want := &processor.Instance{
 		ID:   uuid.NewString(),
 		Type: "test-processor",
 		Parent: processor.Parent{
-			ID:   conn.ID(),
+			ID:   connID,
 			Type: processor.ParentTypeConnector,
-		},
-		Config: processor.Config{
-			Settings: map[string]string{"foo": "bar"},
 		},
 	}
 	wantErr := cerrors.New("connector doesn't exist")
@@ -549,11 +539,11 @@ func TestProcessorOrchestrator_UpdateOnConnector_ConnectorNotExist(t *testing.T)
 		Get(gomock.AssignableToTypeOf(ctxType), want.ID).
 		Return(want, nil)
 	consMock.EXPECT().
-		Get(gomock.AssignableToTypeOf(ctxType), conn.ID()).
+		Get(gomock.AssignableToTypeOf(ctxType), connID).
 		Return(nil, wantErr)
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
-	got, err := orc.Processors.Update(ctx, want.ID, newConfig)
+	got, err := orc.Processors.Update(ctx, want.ID, processor.Config{})
 	assert.Error(t, err)
 	assert.True(t, cerrors.Is(err, wantErr), "errors did not match")
 	assert.Nil(t, got)
@@ -757,18 +747,20 @@ func TestProcessorOrchestrator_DeleteOnConnector_Fail(t *testing.T) {
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
-	connBuilder := connmock.Builder{Ctrl: gomock.NewController(t)}
 
 	pl := &pipeline.Instance{
 		ID:     uuid.NewString(),
 		Status: pipeline.StatusSystemStopped,
 	}
-	conn := connBuilder.NewSourceMock(uuid.NewString(), connector.Config{PipelineID: pl.ID})
+	conn := &connector.Instance{
+		ID:         uuid.NewString(),
+		PipelineID: pl.ID,
+	}
 	want := &processor.Instance{
 		ID:   uuid.NewString(),
 		Type: "test-processor",
 		Parent: processor.Parent{
-			ID:   conn.ID(),
+			ID:   conn.ID,
 			Type: processor.ParentTypeConnector,
 		},
 		Config: processor.Config{
@@ -781,7 +773,7 @@ func TestProcessorOrchestrator_DeleteOnConnector_Fail(t *testing.T) {
 		Get(gomock.AssignableToTypeOf(ctxType), want.ID).
 		Return(want, nil)
 	consMock.EXPECT().
-		Get(gomock.AssignableToTypeOf(ctxType), conn.ID()).
+		Get(gomock.AssignableToTypeOf(ctxType), conn.ID).
 		Return(conn, nil)
 	plsMock.EXPECT().
 		Get(gomock.AssignableToTypeOf(ctxType), pl.ID).

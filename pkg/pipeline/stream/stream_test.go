@@ -21,8 +21,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/conduitio/conduit/pkg/connector"
-	connmock "github.com/conduitio/conduit/pkg/connector/mock"
 	"github.com/conduitio/conduit/pkg/foundation/csync"
 	"github.com/conduitio/conduit/pkg/foundation/ctxutil"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -324,11 +322,11 @@ func newLogger() log.CtxLogger {
 	return logger
 }
 
-func generatorSource(ctrl *gomock.Controller, logger log.CtxLogger, nodeID string, recordCount int, delay time.Duration) connector.Source {
+func generatorSource(ctrl *gomock.Controller, logger log.CtxLogger, nodeID string, recordCount int, delay time.Duration) stream.Source {
 	position := 0
 
 	stop := make(chan struct{})
-	source := connmock.NewSource(ctrl)
+	source := streammock.NewSource(ctrl)
 	source.EXPECT().ID().Return(nodeID).AnyTimes()
 	source.EXPECT().Open(gomock.Any()).Return(nil).Times(1)
 	source.EXPECT().Teardown(gomock.Any()).Return(nil).Times(1)
@@ -359,10 +357,10 @@ func generatorSource(ctrl *gomock.Controller, logger log.CtxLogger, nodeID strin
 	return source
 }
 
-func printerDestination(ctrl *gomock.Controller, logger log.CtxLogger, nodeID string) connector.Destination {
+func printerDestination(ctrl *gomock.Controller, logger log.CtxLogger, nodeID string) stream.Destination {
 	var lastPosition record.Position
 	rchan := make(chan record.Record, 1)
-	destination := connmock.NewDestination(ctrl)
+	destination := streammock.NewDestination(ctrl)
 	destination.EXPECT().Open(gomock.Any()).Return(nil).Times(1)
 	destination.EXPECT().Write(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, r record.Record) error {
 		logger.Debug(ctx).

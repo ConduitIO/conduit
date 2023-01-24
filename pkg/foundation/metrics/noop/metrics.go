@@ -25,27 +25,35 @@ import (
 
 type Counter struct{}
 
-func (c Counter) Inc(vs ...float64) {}
+func (Counter) Inc(...float64) {}
 
 type LabeledCounter struct{}
 
-func (l LabeledCounter) WithValues(vs ...string) metrics.Counter { return Counter{} }
+func (LabeledCounter) WithValues(...string) metrics.Counter { return Counter{} }
 
 type Gauge struct{}
 
-func (g Gauge) Inc(vs ...float64) {}
-func (g Gauge) Dec(vs ...float64) {}
-func (g Gauge) Set(f float64)     {}
+func (Gauge) Inc(...float64) {}
+func (Gauge) Dec(...float64) {}
+func (Gauge) Set(float64)    {}
 
 type LabeledGauge struct{}
 
-func (l LabeledGauge) WithValues(labels ...string) metrics.Gauge { return Gauge{} }
+func (LabeledGauge) WithValues(...string) metrics.Gauge { return Gauge{} }
 
 type Timer struct{}
 
-func (t Timer) Update(duration time.Duration) {}
-func (t Timer) UpdateSince(time time.Time)    {}
+func (Timer) Update(time.Duration)  {}
+func (Timer) UpdateSince(time.Time) {}
 
 type LabeledTimer struct{}
 
-func (l LabeledTimer) WithValues(labels ...string) metrics.Timer { return Timer{} }
+func (LabeledTimer) WithValues(...string) metrics.Timer { return Timer{} }
+
+type Histogram struct{}
+
+func (Histogram) Observe(float64) {}
+
+type LabeledHistogram struct{}
+
+func (LabeledHistogram) WithValues(...string) metrics.Histogram { return Histogram{} }

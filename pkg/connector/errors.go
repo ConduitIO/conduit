@@ -17,8 +17,9 @@ package connector
 import "github.com/conduitio/conduit/pkg/foundation/cerrors"
 
 var (
-	ErrInstanceNotFound     = cerrors.New("connector instance not found")
-	ErrInvalidConnectorType = cerrors.New("invalid connector type")
-	ErrProcessorIDNotFound  = cerrors.New("processor ID not found")
-	ErrConnectorRunning     = cerrors.New("connector is running")
+	ErrInstanceNotFound          = cerrors.New("connector instance not found")
+	ErrInvalidConnectorType      = cerrors.New("invalid connector type")
+	ErrInvalidConnectorStateType = cerrors.New("invalid connector state type")
+	ErrProcessorIDNotFound       = cerrors.New("processor ID not found")
+	ErrConnectorRunning          = cerrors.New("connector is running")
 )

@@ -30,12 +30,12 @@ import (
 )
 
 type ConnectorOrchestrator interface {
-	Create(ctx context.Context, t connector.Type, config connector.Config) (connector.Connector, error)
-	List(ctx context.Context) map[string]connector.Connector
-	Get(ctx context.Context, id string) (connector.Connector, error)
+	Create(ctx context.Context, t connector.Type, plugin string, pipelineID string, config connector.Config) (*connector.Instance, error)
+	List(ctx context.Context) map[string]*connector.Instance
+	Get(ctx context.Context, id string) (*connector.Instance, error)
 	Delete(ctx context.Context, id string) error
-	Update(ctx context.Context, id string, config connector.Config) (connector.Connector, error)
-	Validate(ctx context.Context, t connector.Type, config connector.Config) error
+	Update(ctx context.Context, id string, config connector.Config) (*connector.Instance, error)
+	Validate(ctx context.Context, t connector.Type, plugin string, config connector.Config) error
 	Inspect(ctx context.Context, id string) (*inspector.Session, error)
 }
 
@@ -60,7 +60,7 @@ func (c *ConnectorAPIv1) ListConnectors(
 	list := c.cs.List(ctx)
 	var clist []*apiv1.Connector
 	for _, v := range list {
-		if req.PipelineId == "" || req.PipelineId == v.Config().PipelineID {
+		if req.PipelineId == "" || req.PipelineId == v.PipelineID {
 			clist = append(clist, toproto.Connector(v))
 		}
 	}
@@ -124,7 +124,9 @@ func (c *ConnectorAPIv1) CreateConnector(
 	created, err := c.cs.Create(
 		ctx,
 		fromproto.ConnectorType(req.Type),
-		fromproto.ConnectorConfig(req.Config, req.Plugin, req.PipelineId, nil),
+		req.Plugin,
+		req.PipelineId,
+		fromproto.ConnectorConfig(req.Config),
 	)
 
 	if err != nil {
@@ -144,19 +146,7 @@ func (c *ConnectorAPIv1) UpdateConnector(
 		return nil, cerrors.ErrEmptyID
 	}
 
-	old, err := c.cs.Get(ctx, req.Id)
-	if err != nil {
-		return nil, status.ConnectorError(cerrors.Errorf("failed to get connector by ID: %w", err))
-	}
-
-	config := fromproto.ConnectorConfig(
-		req.Config,
-		old.Config().Plugin,
-		old.Config().PipelineID,
-		old.Config().ProcessorIDs,
-	)
-
-	updated, err := c.cs.Update(ctx, req.Id, config)
+	updated, err := c.cs.Update(ctx, req.Id, fromproto.ConnectorConfig(req.Config))
 
 	if err != nil {
 		return nil, status.ConnectorError(cerrors.Errorf("failed to update connector: %w", err))
@@ -186,7 +176,8 @@ func (c *ConnectorAPIv1) ValidateConnector(
 	err := c.cs.Validate(
 		ctx,
 		fromproto.ConnectorType(req.Type),
-		fromproto.ConnectorConfig(req.Config, req.Plugin, "", nil),
+		req.Plugin,
+		fromproto.ConnectorConfig(req.Config),
 	)
 
 	if err != nil {

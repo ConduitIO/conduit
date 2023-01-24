@@ -26,7 +26,7 @@ type PipelineOrchestrator base
 
 func (s *PipelineOrchestrator) Start(ctx context.Context, id string) error {
 	// TODO lock pipeline
-	return s.pipelines.Start(ctx, s.connectors, s.processors, id)
+	return s.pipelines.Start(ctx, s.connectors, s.processors, s.plugins, id)
 }
 
 func (s *PipelineOrchestrator) Stop(ctx context.Context, id string) error {
