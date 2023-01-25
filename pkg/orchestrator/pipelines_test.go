@@ -66,7 +66,7 @@ func TestPipelineOrchestrator_Start_Fail(t *testing.T) {
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
 	err := orc.Pipelines.Start(ctx, plBefore.ID)
-	is.True(err != nil)
+	is.True(cerrors.Is(err, wantErr))
 }
 
 func TestPipelineOrchestrator_Stop_Success(t *testing.T) {
@@ -107,7 +107,7 @@ func TestPipelineOrchestrator_Stop_Fail(t *testing.T) {
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
 	err := orc.Pipelines.Stop(ctx, plBefore.ID)
-	is.True(err != nil)
+	is.True(cerrors.Is(err, wantErr))
 }
 
 func TestPipelineOrchestrator_Update_Success(t *testing.T) {
@@ -137,8 +137,8 @@ func TestPipelineOrchestrator_Update_Success(t *testing.T) {
 		Return(want, nil)
 
 	got, err := orc.Pipelines.Update(ctx, plBefore.ID, newConfig)
-	is.Equal(got, want)
 	is.NoErr(err)
+	is.Equal(got, want)
 }
 
 func TestPipelineOrchestrator_Update_PipelineRunning(t *testing.T) {
@@ -161,8 +161,7 @@ func TestPipelineOrchestrator_Update_PipelineRunning(t *testing.T) {
 
 	got, err := orc.Pipelines.Update(ctx, plBefore.ID, newConfig)
 	is.Equal(got, nil)
-	is.True(err != nil)
-	is.Equal(pipeline.ErrPipelineRunning, err)
+	is.Equal(err, pipeline.ErrPipelineRunning)
 }
 
 func TestPipelineOrchestrator_Update_PipelineProvisionedByConfig(t *testing.T) {
@@ -186,7 +185,6 @@ func TestPipelineOrchestrator_Update_PipelineProvisionedByConfig(t *testing.T) {
 
 	got, err := orc.Pipelines.Update(ctx, plBefore.ID, newConfig)
 	is.Equal(got, nil)
-	is.True(err != nil)
 	is.True(cerrors.Is(err, ErrImmutableProvisionedByConfig)) // expected ErrImmutableProvisionedByConfig
 }
 
@@ -230,7 +228,6 @@ func TestPipelineOrchestrator_Delete_PipelineRunning(t *testing.T) {
 		Return(plBefore, nil)
 
 	err := orc.Pipelines.Delete(ctx, plBefore.ID)
-	is.True(err != nil)
 	is.Equal(pipeline.ErrPipelineRunning, err)
 }
 
@@ -252,7 +249,6 @@ func TestPipelineOrchestrator_Delete_PipelineProvisionedByConfig(t *testing.T) {
 		Return(plBefore, nil)
 
 	err := orc.Pipelines.Delete(ctx, plBefore.ID)
-	is.True(err != nil)
 	is.True(cerrors.Is(err, ErrImmutableProvisionedByConfig)) // expected ErrImmutableProvisionedByConfig
 }
 
@@ -274,8 +270,7 @@ func TestPipelineOrchestrator_Delete_PipelineHasProcessorsAttached(t *testing.T)
 		Return(plBefore, nil)
 
 	err := orc.Pipelines.Delete(ctx, plBefore.ID)
-	is.True(err != nil)
-	is.Equal(ErrPipelineHasProcessorsAttached, err)
+	is.Equal(err, ErrPipelineHasProcessorsAttached)
 }
 
 func TestPipelineOrchestrator_Delete_PipelineHasConnectorsAttached(t *testing.T) {
@@ -296,8 +291,7 @@ func TestPipelineOrchestrator_Delete_PipelineHasConnectorsAttached(t *testing.T)
 		Return(plBefore, nil)
 
 	err := orc.Pipelines.Delete(ctx, plBefore.ID)
-	is.True(err != nil)
-	is.Equal(ErrPipelineHasConnectorsAttached, err)
+	is.Equal(err, ErrPipelineHasConnectorsAttached)
 }
 
 func TestPipelineOrchestrator_Delete_PipelineDoesntExist(t *testing.T) {
@@ -313,7 +307,7 @@ func TestPipelineOrchestrator_Delete_PipelineDoesntExist(t *testing.T) {
 		Return(nil, wantErr)
 
 	err := orc.Pipelines.Delete(ctx, uuid.NewString())
-	is.True(err != nil)
+	is.True(cerrors.Is(err, wantErr))
 }
 
 func TestPipelineOrchestrator_UpdateDLQ_Success(t *testing.T) {
@@ -344,8 +338,8 @@ func TestPipelineOrchestrator_UpdateDLQ_Success(t *testing.T) {
 	}
 	want := &pipeline.Instance{
 		ID:     plBefore.ID,
-		Status: pipeline.StatusSystemStopped,
-		Config: pipeline.Config{Name: "test-pipeline"},
+		Status: plBefore.Status,
+		Config: plBefore.Config,
 		DLQ:    newDLQ,
 	}
 
@@ -364,8 +358,8 @@ func TestPipelineOrchestrator_UpdateDLQ_Success(t *testing.T) {
 		Return(want, nil)
 
 	got, err := orc.Pipelines.UpdateDLQ(ctx, plBefore.ID, newDLQ)
-	is.Equal(got, want)
 	is.NoErr(err)
+	is.Equal(got, want)
 }
 
 func TestPipelineOrchestrator_UpdateDLQ_PipelineRunning(t *testing.T) {
@@ -385,9 +379,8 @@ func TestPipelineOrchestrator_UpdateDLQ_PipelineRunning(t *testing.T) {
 		Return(plBefore, nil)
 
 	got, err := orc.Pipelines.UpdateDLQ(ctx, plBefore.ID, pipeline.DLQ{})
+	is.Equal(err, pipeline.ErrPipelineRunning)
 	is.Equal(got, nil)
-	is.True(err != nil)
-	is.Equal(pipeline.ErrPipelineRunning, err)
 }
 
 func TestPipelineOrchestrator_UpdateDLQ_PipelineProvisionedByConfig(t *testing.T) {
@@ -408,9 +401,8 @@ func TestPipelineOrchestrator_UpdateDLQ_PipelineProvisionedByConfig(t *testing.T
 		Return(plBefore, nil)
 
 	got, err := orc.Pipelines.UpdateDLQ(ctx, plBefore.ID, pipeline.DLQ{})
-	is.Equal(got, nil)
-	is.True(err != nil)
 	is.True(cerrors.Is(err, ErrImmutableProvisionedByConfig)) // expected ErrImmutableProvisionedByConfig
+	is.Equal(got, nil)
 }
 
 func TestConnectorOrchestrator_UpdateDLQ_InvalidConfig(t *testing.T) {
@@ -447,6 +439,6 @@ func TestConnectorOrchestrator_UpdateDLQ_InvalidConfig(t *testing.T) {
 		Return(wantErr)
 
 	got, err := orc.Pipelines.UpdateDLQ(ctx, plBefore.ID, newDLQ)
-	is.Equal(got, nil)
 	is.True(cerrors.Is(err, wantErr))
+	is.Equal(got, nil)
 }

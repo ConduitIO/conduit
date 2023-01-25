@@ -105,6 +105,8 @@ func (po *PipelineOrchestrator) UpdateDLQ(ctx context.Context, id string, dlq pi
 		connector.TypeDestination,
 		dlq.Plugin,
 		connector.Config{
+			// the name of the DLQ connector doesn't matter, the connector is
+			// not actually created, and it's not visible to the user
 			Name:     "temporary-dlq",
 			Settings: dlq.Settings,
 		},
