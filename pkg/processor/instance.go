@@ -48,9 +48,9 @@ type Interface interface {
 	// Process runs the processor function on a record.
 	Process(ctx context.Context, record record.Record) (record.Record, error)
 
-	InspectIn(ctx context.Context) (*inspector.Session, error)
+	InspectIn(ctx context.Context) *inspector.Session
 
-	InspectOut(ctx context.Context) (*inspector.Session, error)
+	InspectOut(ctx context.Context) *inspector.Session
 }
 
 // Instance represents a processor instance.

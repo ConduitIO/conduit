@@ -37,12 +37,11 @@ func (m *Processor) EXPECT() *ProcessorMockRecorder {
 }
 
 // InspectIn mocks base method.
-func (m *Processor) InspectIn(arg0 context.Context) (*inspector.Session, error) {
+func (m *Processor) InspectIn(arg0 context.Context) *inspector.Session {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "InspectIn", arg0)
 	ret0, _ := ret[0].(*inspector.Session)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	return ret0
 }
 
 // InspectIn indicates an expected call of InspectIn.
@@ -52,12 +51,11 @@ func (mr *ProcessorMockRecorder) InspectIn(arg0 interface{}) *gomock.Call {
 }
 
 // InspectOut mocks base method.
-func (m *Processor) InspectOut(arg0 context.Context) (*inspector.Session, error) {
+func (m *Processor) InspectOut(arg0 context.Context) *inspector.Session {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "InspectOut", arg0)
 	ret0, _ := ret[0].(*inspector.Session)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	return ret0
 }
 
 // InspectOut indicates an expected call of InspectOut.

@@ -407,11 +407,8 @@ func TestJSProcessor_Inspect(t *testing.T) {
 	underTest, err := New(src, zerolog.Nop())
 	is.NoErr(err) // expected no error when creating the JS processor
 
-	in, err := underTest.InspectIn(ctx)
-	is.NoErr(err)
-
-	out, err := underTest.InspectOut(ctx)
-	is.NoErr(err)
+	in := underTest.InspectIn(ctx)
+	out := underTest.InspectOut(ctx)
 
 	recIn := record.Record{
 		Position:  record.Position("test-pos"),

@@ -162,14 +162,12 @@ func (p *Processor) Process(ctx context.Context, in record.Record) (record.Recor
 	return out, nil
 }
 
-func (p *Processor) InspectIn(ctx context.Context) (*inspector.Session, error) {
-	// todo error always nil, remove from interface
-	return p.inInsp.NewSession(ctx), nil
+func (p *Processor) InspectIn(ctx context.Context) *inspector.Session {
+	return p.inInsp.NewSession(ctx)
 }
 
-func (p *Processor) InspectOut(ctx context.Context) (*inspector.Session, error) {
-	// todo error always nil, remove from interface
-	return p.outInsp.NewSession(ctx), nil
+func (p *Processor) InspectOut(ctx context.Context) *inspector.Session {
+	return p.outInsp.NewSession(ctx)
 }
 
 func (p *Processor) toJSRecord(r record.Record) goja.Value {

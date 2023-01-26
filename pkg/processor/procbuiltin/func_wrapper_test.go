@@ -56,8 +56,7 @@ func TestFuncWrapper_InspectIn(t *testing.T) {
 				return record.Record{}, tc.err
 			})
 
-			session, err := underTest.InspectIn(ctx)
-			is.NoErr(err)
+			session := underTest.InspectIn(ctx)
 			_, _ = underTest.Process(ctx, wantIn)
 
 			gotIn, got, err := cchan.Chan[record.Record](session.C).RecvTimeout(ctx, 100*time.Millisecond)
@@ -99,8 +98,7 @@ func TestFuncWrapper_InspectOut(t *testing.T) {
 				return wantOut, tc.err
 			})
 
-			session, err := underTest.InspectOut(ctx)
-			is.NoErr(err)
+			session := underTest.InspectOut(ctx)
 			_, _ = underTest.Process(ctx, record.Record{})
 
 			gotOut, got, err := cchan.Chan[record.Record](session.C).RecvTimeout(ctx, 100*time.Millisecond)
