@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/foundation/csync"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics"
 	"github.com/conduitio/conduit/pkg/foundation/semaphore"
@@ -36,10 +35,7 @@ type ProcessorNode struct {
 	base   pubSubNodeBase
 	logger log.CtxLogger
 
-	sem         semaphore.Simple
-	workerCount csync.ValueWatcher[int]
-
-	hackyLock sync.Mutex
+	sem semaphore.Simple
 }
 
 func (n *ProcessorNode) ID() string {
@@ -56,11 +52,16 @@ func (n *ProcessorNode) Run(ctx context.Context) (err error) {
 	if err != nil {
 		return err
 	}
-
 	defer cleanup()
 
+	type job struct {
+		Msg    *Message
+		Ticket semaphore.Ticket
+	}
+	jobs := make(chan job)
 	var wg sync.WaitGroup
 	defer func() {
+		close(jobs)
 		wg.Wait()
 		for {
 			select {
@@ -74,65 +75,63 @@ func (n *ProcessorNode) Run(ctx context.Context) (err error) {
 		}
 	}()
 
+	wg.Add(n.Workers)
+	for i := 0; i < n.Workers; i++ {
+		go func() {
+			defer wg.Done()
+			for j := range jobs {
+				err := n.work(ctx, j.Msg, j.Ticket)
+				if err != nil {
+					errs <- err
+				}
+			}
+		}()
+	}
+
 	for {
 		msg, err := trigger()
 		if err != nil || msg == nil {
 			return err
 		}
 
-		_, err = n.workerCount.Watch(msg.Ctx, func(count int) bool {
-			return count < n.Workers
-		})
-		if err != nil {
-			return err
-		}
-
-		n.hackyLock.Lock()
-		n.workerCount.Set(n.workerCount.Get() + 1)
-		n.hackyLock.Unlock()
-
 		ticket := n.sem.Enqueue()
-		wg.Add(1)
-		go func(ticket semaphore.Ticket, msg *Message) {
-			defer func() {
-				n.hackyLock.Lock()
-				n.workerCount.Set(n.workerCount.Get() - 1)
-				n.hackyLock.Unlock()
-				wg.Done()
-			}()
-			executeTime := time.Now()
-			rec, err := n.Processor.Process(msg.Ctx, msg.Record)
-			n.ProcessorTimer.Update(time.Since(executeTime))
-
-			l := n.sem.Acquire(ticket)
-			defer n.sem.Release(l)
-
-			if err != nil {
-				// Check for Skipped records
-				switch err {
-				case processor.ErrSkipRecord:
-					// NB: Ack skipped messages since they've been correctly handled
-					err := msg.Ack()
-					if err != nil {
-						errs <- cerrors.Errorf("failed to ack skipped message: %w", err)
-					}
-				default:
-					err = msg.Nack(err, n.ID())
-					if err != nil {
-						errs <- cerrors.Errorf("error executing processor: %w", err)
-					}
-				}
-				// error was handled successfully, we recovered
-				return
-			}
-			msg.Record = rec
-
-			err = n.base.Send(ctx, n.logger, msg)
-			if err != nil {
-				errs <- msg.Nack(err, n.ID())
-			}
-		}(ticket, msg)
+		jobs <- job{Msg: msg, Ticket: ticket}
 	}
+}
+
+func (n *ProcessorNode) work(ctx context.Context, msg *Message, ticket semaphore.Ticket) error {
+	executeTime := time.Now()
+	rec, err := n.Processor.Process(msg.Ctx, msg.Record)
+	n.ProcessorTimer.Update(time.Since(executeTime))
+
+	l := n.sem.Acquire(ticket)
+	defer n.sem.Release(l)
+
+	if err != nil {
+		// Check for Skipped records
+		switch err {
+		case processor.ErrSkipRecord:
+			// NB: Ack skipped messages since they've been correctly handled
+			err := msg.Ack()
+			if err != nil {
+				return cerrors.Errorf("failed to ack skipped message: %w", err)
+			}
+		default:
+			err = msg.Nack(err, n.ID())
+			if err != nil {
+				return cerrors.Errorf("error executing processor: %w", err)
+			}
+		}
+		// error was handled successfully, we recovered
+		return nil
+	}
+	msg.Record = rec
+
+	err = n.base.Send(ctx, n.logger, msg)
+	if err != nil {
+		return msg.Nack(err, n.ID())
+	}
+	return nil
 }
 
 func (n *ProcessorNode) Sub(in <-chan *Message) {
