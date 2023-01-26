@@ -7,7 +7,7 @@ function version_lt() { test "$(echo "$@" | tr " " "\n" | sort -rV | head -n 1)"
 
 GO_VERSION=$(go version | { read -r _ _ v _; echo "${v#go}"; })
 # needs to be changed each time conduit Go version is upgraded
-REQUIRED_GO_VERSION="1.18"
+REQUIRED_GO_VERSION="1.19"
 
 if version_lt "$GO_VERSION" "$REQUIRED_GO_VERSION"; then
     echo "ERROR: min Go version required is go$REQUIRED_GO_VERSION, version installed is go$GO_VERSION"

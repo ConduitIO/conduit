@@ -1,5 +1,5 @@
 # Start with a golang base
-FROM golang:1.18 AS base
+FROM golang:1.19 AS base
 
 # Install core tools
 RUN apt-get update &&\
