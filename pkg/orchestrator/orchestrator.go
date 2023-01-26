@@ -81,6 +81,7 @@ type PipelineService interface {
 	Create(ctx context.Context, id string, cfg pipeline.Config, p pipeline.ProvisionType) (*pipeline.Instance, error)
 	Update(ctx context.Context, pipelineID string, cfg pipeline.Config) (*pipeline.Instance, error)
 	Delete(ctx context.Context, pipelineID string) error
+	UpdateDLQ(ctx context.Context, id string, dlq pipeline.DLQ) (*pipeline.Instance, error)
 
 	AddConnector(ctx context.Context, pipelineID string, connectorID string) (*pipeline.Instance, error)
 	RemoveConnector(ctx context.Context, pipelineID string, connectorID string) (*pipeline.Instance, error)
