@@ -54,8 +54,8 @@ type Processor struct {
 
 func New(src string, logger zerolog.Logger) (*Processor, error) {
 	p := &Processor{
-		inInsp:  inspector.New(log.New(logger), 1000),
-		outInsp: inspector.New(log.New(logger), 1000),
+		inInsp:  inspector.New(log.New(logger), inspector.DefaultBufferSize),
+		outInsp: inspector.New(log.New(logger), inspector.DefaultBufferSize),
 	}
 	err := p.initJSRuntime(logger)
 	if err != nil {

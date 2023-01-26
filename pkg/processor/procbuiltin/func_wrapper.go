@@ -38,8 +38,8 @@ func NewFuncWrapper(f func(context.Context, record.Record) (record.Record, error
 
 	return FuncWrapper{
 		f:       f,
-		inInsp:  inspector.New(log.New(zl), 1000),
-		outInsp: inspector.New(log.New(zl), 1000),
+		inInsp:  inspector.New(log.New(zl), inspector.DefaultBufferSize),
+		outInsp: inspector.New(log.New(zl), inspector.DefaultBufferSize),
 	}
 }
 

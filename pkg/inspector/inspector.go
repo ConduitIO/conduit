@@ -23,6 +23,8 @@ import (
 	"github.com/google/uuid"
 )
 
+const DefaultBufferSize = 1000
+
 // Session wraps a channel of records and provides:
 // 1. a way to send records to it asynchronously
 // 2. a way to know if it's closed or not
