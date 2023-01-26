@@ -23,7 +23,9 @@ export default class PipelineEditorConfigFieldComponent extends Component {
 
     if (this.fieldType === 'select') {
       this.selectOptions = this.generateSelectOptions();
-      this.selectSelected = this.selectOptions.firstObject;
+      this.selectSelected =
+        this.selectOptions.findBy('value', this.args.field.value) ||
+        this.selectOptions.firstObject;
     }
   }
 

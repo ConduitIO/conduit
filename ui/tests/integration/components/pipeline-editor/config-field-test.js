@@ -2,7 +2,7 @@ import { module, test } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
 import { render, fillIn } from '@ember/test-helpers';
 import { hbs } from 'ember-cli-htmlbars';
-import { generateBlankBlueprintField } from 'conduit-ui/utils/blueprints/generate-blueprint-data';
+import { generateBlueprintField } from 'conduit-ui/utils/blueprints/generate-blueprint-data';
 
 module(
   'Integration | Component | pipeline-editor/config-field',
@@ -14,7 +14,7 @@ module(
         'with a string type and no inclusion validation',
         function (hooks) {
           hooks.beforeEach(async function () {
-            const field = generateBlankBlueprintField(
+            const field = generateBlueprintField(
               'titanName',
               'Titan Name',
               'Enter Titan Name',
@@ -39,7 +39,7 @@ module(
         'with a string, no inclusion validation, and a required validation',
         function (hooks) {
           hooks.beforeEach(async function () {
-            const field = generateBlankBlueprintField(
+            const field = generateBlueprintField(
               'titanName',
               'Titan Name',
               'Enter Titan Name',
@@ -76,7 +76,7 @@ module(
     module('number input', function () {
       module('with an int type and no inclusion validation', function (hooks) {
         hooks.beforeEach(async function () {
-          const field = generateBlankBlueprintField(
+          const field = generateBlueprintField(
             'titan:height',
             'Titan Height',
             'Enter Titan Height',
@@ -99,7 +99,7 @@ module(
         'with an int type, no inclusion validation, and a required validation',
         function (hooks) {
           hooks.beforeEach(async function () {
-            const field = generateBlankBlueprintField(
+            const field = generateBlueprintField(
               'titan:height',
               'Titan Height',
               'Enter Titan Height',
@@ -146,7 +146,7 @@ module(
         'with an int type, no inclusion validation, and both a greater than and less than validation',
         function (hooks) {
           hooks.beforeEach(async function () {
-            const field = generateBlankBlueprintField(
+            const field = generateBlueprintField(
               'titan:height',
               'Titan Height',
               'Enter Titan Height',
@@ -195,7 +195,7 @@ module(
     module('boolean input', function () {
       module('with a boolean type', function (hooks) {
         hooks.beforeEach(async function () {
-          const field = generateBlankBlueprintField(
+          const field = generateBlueprintField(
             'titan:eatingyou',
             'Is eating you',
             '',
@@ -220,8 +220,8 @@ module(
         'with a string type and an inclusion validation',
         function (hooks) {
           hooks.beforeEach(async function () {
-            const field = generateBlankBlueprintField(
-              'titan.type',
+            const field = generateBlueprintField(
+              'titan:type',
               'Titan Type',
               'Pick titan type',
               'TYPE_STRING',
@@ -232,7 +232,8 @@ module(
                     value: 'Attack,Founding,Warhammer',
                   },
                 ],
-              }
+              },
+              'Warhammer'
             );
 
             this.field = field;
@@ -245,6 +246,12 @@ module(
 
           test('it renders', function (assert) {
             assert.dom('[data-test-select-button]').exists();
+          });
+
+          test('it retains and renders populated values', function (assert) {
+            assert
+              .dom('[data-test-select-display-selected]')
+              .containsText('Warhammer');
           });
         }
       );

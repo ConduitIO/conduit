@@ -779,6 +779,86 @@
         ]
       }
     },
+    "/v1/pipelines/{id}/dead-letter-queue": {
+      "get": {
+        "operationId": "PipelineService_GetDLQ",
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/PipelineDLQ"
+            }
+          },
+          "500": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            },
+            "examples": {
+              "application/json": {
+                "code": 13,
+                "message": "server error",
+                "details": []
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "PipelineService"
+        ]
+      },
+      "put": {
+        "operationId": "PipelineService_UpdateDLQ",
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/PipelineDLQ"
+            }
+          },
+          "500": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            },
+            "examples": {
+              "application/json": {
+                "code": 13,
+                "message": "server error",
+                "details": []
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "dlq",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/PipelineDLQ"
+            }
+          }
+        ],
+        "tags": [
+          "PipelineService"
+        ]
+      }
+    },
     "/v1/pipelines/{id}/export": {
       "post": {
         "operationId": "PipelineService_ExportPipeline",
@@ -1406,6 +1486,32 @@
       "default": "TYPE_UNSPECIFIED",
       "description": " - TYPE_REQUIRED: Parameter must be present.\n - TYPE_GREATER_THAN: Parameter must be greater than {value}.\n - TYPE_LESS_THAN: Parameter must be less than {value}.\n - TYPE_INCLUSION: Parameter must be included in the comma separated list {value}.\n - TYPE_EXCLUSION: Parameter must not be included in the comma separated list {value}.\n - TYPE_REGEX: Parameter must match the regex {value}."
     },
+    "PipelineDLQ": {
+      "type": "object",
+      "properties": {
+        "plugin": {
+          "type": "string",
+          "title": "plugin is the connector plugin used for storing DLQ records\ndefault = builtin:log, configured to log with level WARN"
+        },
+        "settings": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "settings are the plugin settings"
+        },
+        "windowSize": {
+          "type": "string",
+          "format": "uint64",
+          "title": "window_size defines how many last acks/nacks are monitored in the window\nthat controls if the pipeline should stop (0 disables the window)\ndefault = 1"
+        },
+        "windowNackThreshold": {
+          "type": "string",
+          "format": "uint64",
+          "title": "window_nack_threshold defines the number of nacks in the window that are\ntolerated. Crossing the threshold stops the pipeline.\ndefault = 0"
+        }
+      }
+    },
     "PipelineState": {
       "type": "object",
       "properties": {
@@ -1719,6 +1825,14 @@
         }
       }
     },
+    "v1GetDLQResponse": {
+      "type": "object",
+      "properties": {
+        "dlq": {
+          "$ref": "#/definitions/PipelineDLQ"
+        }
+      }
+    },
     "v1GetInfoResponse": {
       "type": "object",
       "properties": {
@@ -1988,6 +2102,14 @@
       "properties": {
         "connector": {
           "$ref": "#/definitions/v1Connector"
+        }
+      }
+    },
+    "v1UpdateDLQResponse": {
+      "type": "object",
+      "properties": {
+        "dlq": {
+          "$ref": "#/definitions/PipelineDLQ"
         }
       }
     },

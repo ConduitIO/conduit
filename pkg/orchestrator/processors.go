@@ -258,7 +258,7 @@ func (p *ProcessorOrchestrator) getProcessorsPipeline(ctx context.Context, paren
 		if err != nil {
 			return nil, err
 		}
-		return p.pipelines.Get(ctx, conn.Config().PipelineID)
+		return p.pipelines.Get(ctx, conn.PipelineID)
 	default:
 		return nil, cerrors.Errorf("%w: %s", ErrInvalidProcessorParentType, parent.Type)
 	}

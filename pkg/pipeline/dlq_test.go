@@ -18,10 +18,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/conduitio/conduit/pkg/connector"
-	connmock "github.com/conduitio/conduit/pkg/connector/mock"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	streammock "github.com/conduitio/conduit/pkg/pipeline/stream/mock"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/golang/mock/gomock"
 	"github.com/matryer/is"
@@ -32,9 +31,8 @@ func TestDLQDestination_Success(t *testing.T) {
 	ctx := context.Background()
 	logger := log.Nop()
 	ctrl := gomock.NewController(t)
-	connBuilder := connmock.Builder{Ctrl: ctrl}
+	dest := streammock.NewDestination(ctrl)
 
-	dest := connBuilder.NewDestinationMock("dlq-test", connector.Config{})
 	dlq := &DLQDestination{
 		Destination: dest,
 		Logger:      logger,
@@ -74,9 +72,8 @@ func TestDLQDestination_DestinationWriteError(t *testing.T) {
 	ctx := context.Background()
 	logger := log.Nop()
 	ctrl := gomock.NewController(t)
-	connBuilder := connmock.Builder{Ctrl: ctrl}
+	dest := streammock.NewDestination(ctrl)
 
-	dest := connBuilder.NewDestinationMock("dlq-test", connector.Config{})
 	dlq := &DLQDestination{
 		Destination: dest,
 		Logger:      logger,
@@ -110,9 +107,8 @@ func TestDLQDestination_DestinationNack(t *testing.T) {
 	ctx := context.Background()
 	logger := log.Nop()
 	ctrl := gomock.NewController(t)
-	connBuilder := connmock.Builder{Ctrl: ctrl}
+	dest := streammock.NewDestination(ctrl)
 
-	dest := connBuilder.NewDestinationMock("dlq-test", connector.Config{})
 	dlq := &DLQDestination{
 		Destination: dest,
 		Logger:      logger,

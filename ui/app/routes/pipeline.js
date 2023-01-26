@@ -5,6 +5,7 @@ import {
   validatePresence,
   validateLength,
 } from 'ember-changeset-validations/validators';
+import { inject as service } from '@ember/service';
 
 const PipelineValidations = {
   name: validatePresence({ presence: true }),
@@ -12,6 +13,9 @@ const PipelineValidations = {
 };
 
 export default class PipelineRoute extends Route {
+  @service
+  store;
+
   async model(params) {
     let pipeline;
     if (params.pipeline_id === 'new') {

@@ -80,6 +80,7 @@ type Runtime struct {
 	pipelineService  *pipeline.Service
 	connectorService *connector.Service
 	processorService *processor.Service
+	pluginService    *plugin.Service
 	provisionService *provisioning.Service
 
 	connectorPersister *connector.Persister
@@ -127,7 +128,7 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 		return nil, cerrors.Errorf("failed to create services: %w", err)
 	}
 
-	provisionService := provisioning.NewService(db, logger, plService, connService, procService, cfg.Pipelines.Path)
+	provisionService := provisioning.NewService(db, logger, plService, connService, procService, pluginService, cfg.Pipelines.Path)
 
 	orc := orchestrator.NewOrchestrator(db, logger, plService, connService, procService, pluginService)
 
@@ -139,6 +140,7 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 		pipelineService:  plService,
 		connectorService: connService,
 		processorService: procService,
+		pluginService:    pluginService,
 		provisionService: provisionService,
 
 		connectorPersister: connectorPersister,
@@ -173,21 +175,13 @@ func newServices(
 	pluginsPath string,
 ) (*pipeline.Service, *connector.Service, *processor.Service, *plugin.Service, error) {
 	pipelineService := pipeline.NewService(logger, db)
+	connectorService := connector.NewService(logger, db, connPersister)
+	processorService := processor.NewService(logger, db, processor.GlobalBuilderRegistry)
 	pluginService := plugin.NewService(
 		logger,
 		builtin.NewRegistry(logger, builtin.DefaultDispenserFactories...),
 		standalone.NewRegistry(logger, pluginsPath),
 	)
-	connectorService := connector.NewService(
-		logger,
-		db,
-		connector.NewDefaultBuilder(
-			logger,
-			connPersister,
-			pluginService,
-		),
-	)
-	processorService := processor.NewService(logger, db, processor.GlobalBuilderRegistry)
 
 	return pipelineService, connectorService, processorService, pluginService, nil
 }
@@ -228,19 +222,16 @@ func (r *Runtime) Run(ctx context.Context) (err error) {
 
 	err = r.provisionService.Init(ctx)
 	if err != nil {
-		var multierr *multierror.Error
-		if cerrors.As(err, &multierr) {
-			for _, gotErr := range multierr.Errors() {
-				r.logger.Err(ctx, gotErr).Msg("provisioning failed")
-			}
-		} else {
+		multierror.ForEach(err, func(err error) {
 			r.logger.Err(ctx, err).Msg("provisioning failed")
-		}
+		})
 	}
 
-	err = r.pipelineService.Run(ctx, r.connectorService, r.processorService)
+	err = r.pipelineService.Run(ctx, r.connectorService, r.processorService, r.pluginService)
 	if err != nil {
-		return cerrors.Errorf("failed to init pipeline statuses: %w", err)
+		multierror.ForEach(err, func(err error) {
+			r.logger.Err(ctx, err).Msg("pipeline failed to be started")
+		})
 	}
 
 	// Serve grpc and http API

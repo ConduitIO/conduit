@@ -135,3 +135,18 @@ func (mr *PipelineOrchestratorMockRecorder) Update(arg0, arg1, arg2 interface{})
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Update", reflect.TypeOf((*PipelineOrchestrator)(nil).Update), arg0, arg1, arg2)
 }
+
+// UpdateDLQ mocks base method.
+func (m *PipelineOrchestrator) UpdateDLQ(arg0 context.Context, arg1 string, arg2 pipeline.DLQ) (*pipeline.Instance, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateDLQ", arg0, arg1, arg2)
+	ret0, _ := ret[0].(*pipeline.Instance)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateDLQ indicates an expected call of UpdateDLQ.
+func (mr *PipelineOrchestratorMockRecorder) UpdateDLQ(arg0, arg1, arg2 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDLQ", reflect.TypeOf((*PipelineOrchestrator)(nil).UpdateDLQ), arg0, arg1, arg2)
+}
