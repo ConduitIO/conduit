@@ -142,7 +142,7 @@ func TestPipelineSimple(t *testing.T) {
 	time.Sleep(time.Second)
 
 	t.Log("stopping pipeline")
-	err = orc.Pipelines.Stop(ctx, pl.ID)
+	err = orc.Pipelines.Stop(ctx, pl.ID, false)
 	is.NoErr(err)
 	t.Log("waiting")
 	err = pl.Wait()

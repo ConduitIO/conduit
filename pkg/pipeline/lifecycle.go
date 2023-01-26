@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/conduitio/conduit/pkg/connector"
@@ -112,20 +113,29 @@ func (s *Service) Start(
 }
 
 // Stop will attempt to gracefully stop a given pipeline by calling each node's
-// Stop function.
-func (s *Service) Stop(ctx context.Context, pipelineID string) error {
+// Stop function. If force is set to true the pipeline won't stop gracefully,
+// instead the context for all nodes will be canceled which causes them to stop
+// running as soon as possible.
+func (s *Service) Stop(ctx context.Context, pipelineID string, force bool) error {
 	pl, err := s.Get(ctx, pipelineID)
 	if err != nil {
 		return err
 	}
-	return s.stopWithReason(ctx, pl, nil)
-}
 
-func (s *Service) stopWithReason(ctx context.Context, pl *Instance, reason error) error {
 	if pl.Status != StatusRunning {
 		return cerrors.Errorf("can't stop pipeline with status %q: %w", pl.Status, ErrPipelineNotRunning)
 	}
 
+	if force {
+		s.logger.Debug(ctx).Str(log.PipelineIDField, pl.ID).Msg("force stopping pipeline")
+		pl.t.Kill(cerrors.New("force stop"))
+		return nil
+	}
+
+	return s.stopWithReason(ctx, pl, nil)
+}
+
+func (s *Service) stopWithReason(ctx context.Context, pl *Instance, reason error) error {
 	s.logger.Debug(ctx).Str(log.PipelineIDField, pl.ID).Msg("stopping pipeline")
 	var err error
 	for _, n := range pl.n {
@@ -474,19 +484,21 @@ func (s *Service) runPipeline(ctx context.Context, pl *Instance) error {
 		return ErrPipelineRunning
 	}
 
-	// nodesTomb is responsible for running nodes only
-	nodesTomb := &tomb.Tomb{}
+	// the tomb is responsible for running goroutines related to the pipeline
+	pl.t = &tomb.Tomb{}
+	// nodesWg is done once all nodes stop running
 	var nodesWg sync.WaitGroup
+	var isGracefulShutdown atomic.Bool
 	for id := range pl.n {
 		nodesWg.Add(1)
 		node := pl.n[id]
 
-		nodesTomb.Go(func() (errOut error) {
-			// If any of the nodes stops, the nodesTomb will be put into a dying state
+		pl.t.Go(func() (errOut error) {
+			// If any of the nodes stops, the tomb will be put into a dying state
 			// and ctx will be cancelled.
 			// This way, the other nodes will be notified that they need to stop too.
 			//nolint:staticcheck // nil used to use the default (parent provided via WithContext)
-			ctx := nodesTomb.Context(nil)
+			ctx := pl.t.Context(nil)
 			s.logger.Trace(ctx).Str(log.NodeIDField, node.ID()).Msg("running node")
 			defer func() {
 				e := s.logger.Trace(ctx)
@@ -501,14 +513,10 @@ func (s *Service) runPipeline(ctx context.Context, pl *Instance) error {
 			if cerrors.Is(err, ErrGracefulShutdown) {
 				// This node was shutdown because of ErrGracefulShutdown, we
 				// need to stop this goroutine without returning an error to let
-				// other nodes stop gracefully. The tomb should still return the
-				// error to signal the reason to the cleanup function, that's
-				// why we start another goroutine that will take care of
-				// returning the error when all nodes are stopped.
-				nodesTomb.Go(func() error {
-					nodesWg.Wait()
-					return err
-				})
+				// other nodes stop gracefully. We set a boolean that lets the
+				// cleanup routine know this was a graceful shutdown in case no
+				// other error is returned.
+				isGracefulShutdown.Store(true)
 				return nil
 			}
 			if err != nil {
@@ -528,28 +536,32 @@ func (s *Service) runPipeline(ctx context.Context, pl *Instance) error {
 		return cerrors.Errorf("pipeline not updated: %w", err)
 	}
 
-	// We're using different tombs for the pipeline and the nodes,
-	// since we need to be sure that all nodes are stopped,
-	// before declaring the pipeline as stopped.
-	pl.t = &tomb.Tomb{}
+	// cleanup function updates the metrics and pipeline status once all nodes
+	// stop running
 	pl.t.Go(func() error {
-		//nolint:staticcheck // nil used to use the default (parent provided via WithContext)
-		ctx := pl.t.Context(nil)
-		err := nodesTomb.Wait()
+		// use fresh context for cleanup function, otherwise the updated status
+		// won't be stored
+		ctx := context.Background()
+
+		nodesWg.Wait()
+		err := pl.t.Err()
 
 		measure.PipelinesGauge.WithValues(strings.ToLower(pl.Status.String())).Dec()
 
-		switch {
-		case cerrors.Is(err, ErrGracefulShutdown):
-			// not an actual error, it was a graceful shutdown, that is expected
+		if err == tomb.ErrStillAlive {
+			// not an actual error, the pipeline stopped gracefully
 			err = nil
-			pl.Status = StatusSystemStopped
-		case err != nil:
+			if isGracefulShutdown.Load() {
+				// it was triggered by a graceful shutdown of Conduit
+				pl.Status = StatusSystemStopped
+			} else {
+				// it was manually triggered by a user
+				pl.Status = StatusUserStopped
+			}
+		} else {
 			pl.Status = StatusDegraded
 			// we use %+v to get the stack trace too
 			pl.Error = fmt.Sprintf("%+v", err)
-		default:
-			pl.Status = StatusUserStopped
 		}
 
 		s.logger.

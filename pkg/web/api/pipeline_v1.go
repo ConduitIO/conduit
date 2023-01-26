@@ -34,7 +34,7 @@ type PipelineOrchestrator interface {
 	// Start runs a pipeline.
 	Start(ctx context.Context, id string) error
 	// Stop stops a pipeline.
-	Stop(ctx context.Context, id string) error
+	Stop(ctx context.Context, id string, force bool) error
 	// List will return all pipelines stored in it.
 	List(ctx context.Context) map[string]*pipeline.Instance
 	// Get will return a single Pipeline or an error if it doesn't exist.
@@ -180,7 +180,7 @@ func (p *PipelineAPIv1) StopPipeline(
 	ctx context.Context,
 	req *apiv1.StopPipelineRequest,
 ) (*apiv1.StopPipelineResponse, error) {
-	err := p.ps.Stop(ctx, req.Id)
+	err := p.ps.Stop(ctx, req.Id, req.Force)
 	if err != nil {
 		return nil, status.PipelineError(cerrors.Errorf("failed to stop pipeline: %w", err))
 	}
