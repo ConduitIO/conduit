@@ -48,6 +48,14 @@ those entities get deleted. Entities that were provisioned through a
 configuration file also can't be mutated through the API, they need to be
 changed in the corresponding configuration file.
 
+Files that contain multiple pipelines with the same ID (duplicates) are treated
+as invalid and are skipped. If pipelines with the same ID are defined in
+multiple files, the first pipeline will be provisioned and all other will be
+skipped.
+
+Configuration files are treated separately, meaning that one invalid file won't
+cause other configuration files from being provisioned.
+
 ## Consequences
 
 This approach makes configuration files the single source of truth for pipelines
