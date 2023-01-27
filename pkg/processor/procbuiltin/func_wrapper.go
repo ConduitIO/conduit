@@ -47,7 +47,9 @@ func (f FuncWrapper) Process(ctx context.Context, inRec record.Record) (record.R
 	// todo same behavior as in procjs, probably can be enforced
 	f.inInsp.Send(ctx, inRec)
 	outRec, err := f.f(ctx, inRec)
-	f.outInsp.Send(ctx, outRec)
+	if err == nil {
+		f.outInsp.Send(ctx, outRec)
+	}
 	return outRec, err
 }
 

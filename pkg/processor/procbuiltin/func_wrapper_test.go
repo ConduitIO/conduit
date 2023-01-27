@@ -67,7 +67,7 @@ func TestFuncWrapper_InspectIn(t *testing.T) {
 	}
 }
 
-func TestFuncWrapper_InspectOut(t *testing.T) {
+func TestFuncWrapper_InspectOut_Ok(t *testing.T) {
 	ctx := context.Background()
 	wantOut := record.Record{
 		Position: record.Position("position-out"),
@@ -76,35 +76,39 @@ func TestFuncWrapper_InspectOut(t *testing.T) {
 		Payload:  record.Change{After: record.RawData{Raw: []byte("payload-out")}},
 	}
 
-	testCases := []struct {
-		name string
-		err  error
-	}{
-		{
-			name: "processing ok",
-			err:  nil,
-		},
-		{
-			name: "processing failed",
-			err:  cerrors.New("shouldn't happen"),
-		},
+	is := is.New(t)
+
+	underTest := NewFuncWrapper(func(_ context.Context, in record.Record) (record.Record, error) {
+		return wantOut, nil
+	})
+
+	session := underTest.InspectOut(ctx)
+	_, _ = underTest.Process(ctx, record.Record{})
+
+	gotOut, got, err := cchan.Chan[record.Record](session.C).RecvTimeout(ctx, 100*time.Millisecond)
+	is.NoErr(err)
+	is.True(got)
+	is.Equal(wantOut, gotOut)
+}
+
+func TestFuncWrapper_InspectOut_ProcessingFailed(t *testing.T) {
+	ctx := context.Background()
+	wantOut := record.Record{
+		Position: record.Position("position-out"),
+		Metadata: record.Metadata{"meta-key-out": "meta-value-out"},
+		Key:      record.RawData{Raw: []byte("key-out")},
+		Payload:  record.Change{After: record.RawData{Raw: []byte("payload-out")}},
 	}
-	for _, tc := range testCases {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			is := is.New(t)
 
-			underTest := NewFuncWrapper(func(_ context.Context, in record.Record) (record.Record, error) {
-				return wantOut, tc.err
-			})
+	is := is.New(t)
 
-			session := underTest.InspectOut(ctx)
-			_, _ = underTest.Process(ctx, record.Record{})
+	underTest := NewFuncWrapper(func(_ context.Context, in record.Record) (record.Record, error) {
+		return wantOut, cerrors.New("shouldn't happen")
+	})
 
-			gotOut, got, err := cchan.Chan[record.Record](session.C).RecvTimeout(ctx, 100*time.Millisecond)
-			is.NoErr(err)
-			is.True(got)
-			is.Equal(wantOut, gotOut)
-		})
-	}
+	session := underTest.InspectOut(ctx)
+	_, _ = underTest.Process(ctx, record.Record{})
+
+	_, _, err := cchan.Chan[record.Record](session.C).RecvTimeout(ctx, 100*time.Millisecond)
+	is.True(cerrors.Is(err, context.DeadlineExceeded))
 }
