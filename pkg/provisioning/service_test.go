@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"github.com/conduitio/conduit/pkg/connector"
-	connmock "github.com/conduitio/conduit/pkg/connector/mock"
 	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/ctxutil"
@@ -137,6 +136,7 @@ func TestProvision_PipelineWithConnectorsAndProcessors(t *testing.T) {
 	pipelineService := mock.NewPipelineService(ctrl)
 	connService := mock.NewConnectorService(ctrl)
 	procService := mock.NewProcessorService(ctrl)
+	plugService := mock.NewPluginService(ctrl)
 
 	pl1config := pipeline.Config{Name: pipeline1.Name, Description: pipeline1.Description}
 	pl1 := &pipeline.Instance{
@@ -146,17 +146,14 @@ func TestProvision_PipelineWithConnectorsAndProcessors(t *testing.T) {
 		ProvisionedBy: pipeline.ProvisionTypeConfig,
 		ConnectorIDs:  []string{"pipeline1:con1", "pipeline1:con2"},
 	}
+
 	cfg1 := connector.Config{
-		Name:       pipeline1.Connectors["pipeline1:con1"].Name,
-		Plugin:     pipeline1.Connectors["pipeline1:con1"].Plugin,
-		PipelineID: pipeline1.Name,
-		Settings:   pipeline1.Connectors["pipeline1:con1"].Settings,
+		Name:     pipeline1.Connectors["pipeline1:con1"].Name,
+		Settings: pipeline1.Connectors["pipeline1:con1"].Settings,
 	}
 	cfg2 := connector.Config{
-		Name:       pipeline1.Connectors["pipeline1:con2"].Name,
-		Plugin:     pipeline1.Connectors["pipeline1:con2"].Plugin,
-		PipelineID: pipeline1.Name,
-		Settings:   pipeline1.Connectors["pipeline1:con2"].Settings,
+		Name:     pipeline1.Connectors["pipeline1:con2"].Name,
+		Settings: pipeline1.Connectors["pipeline1:con2"].Settings,
 	}
 	procCfg := processor.Config{
 		Settings: pipeline1.Processors["pipeline1:proc1"].Settings,
@@ -176,9 +173,9 @@ func TestProvision_PipelineWithConnectorsAndProcessors(t *testing.T) {
 	pipelineService.EXPECT().Create(gomock.Not(gomock.Nil()), pipeline1.Name, pl1config, pipeline.ProvisionTypeConfig).Return(pl1, nil)
 	pipelineService.EXPECT().UpdateDLQ(gomock.Not(gomock.Nil()), pl1.ID, pipeline.DLQ{WindowSize: 20, WindowNackThreshold: 10}).Return(pl1, nil)
 
-	connService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline1:con1", connector.TypeSource, cfg1, connector.ProvisionTypeConfig)
+	connService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline1:con1", connector.TypeSource, pipeline1.Connectors["pipeline1:con1"].Plugin, pipeline1.Name, cfg1, connector.ProvisionTypeConfig)
 	pipelineService.EXPECT().AddConnector(gomock.Not(gomock.Nil()), pipeline1.Name, "pipeline1:con1")
-	connService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline1:con2", connector.TypeDestination, cfg2, connector.ProvisionTypeConfig)
+	connService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline1:con2", connector.TypeDestination, pipeline1.Connectors["pipeline1:con2"].Plugin, pipeline1.Name, cfg2, connector.ProvisionTypeConfig)
 	pipelineService.EXPECT().AddConnector(gomock.Not(gomock.Nil()), pipeline1.Name, "pipeline1:con2")
 
 	procService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline1:con2:proc1con", "js", procParentConn, procCfg, processor.ProvisionTypeConfig)
@@ -186,9 +183,9 @@ func TestProvision_PipelineWithConnectorsAndProcessors(t *testing.T) {
 	procService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline1:proc1", "js", procParentPipeline, procCfg, processor.ProvisionTypeConfig)
 	pipelineService.EXPECT().AddProcessor(gomock.Not(gomock.Nil()), pipeline1.Name, "pipeline1:proc1")
 
-	pipelineService.EXPECT().Start(gomock.Not(gomock.Nil()), connService, procService, pipeline1.Name)
+	pipelineService.EXPECT().Start(gomock.Not(gomock.Nil()), connService, procService, plugService, pipeline1.Name)
 
-	service := NewService(db, logger, pipelineService, connService, procService, "./test/pipelines1")
+	service := NewService(db, logger, pipelineService, connService, procService, plugService, "./test/pipelines1")
 	err := service.Init(context.Background())
 	is.NoErr(err)
 }
@@ -201,6 +198,7 @@ func TestProvision_Rollback(t *testing.T) {
 	pipelineService := mock.NewPipelineService(ctrl)
 	connService := mock.NewConnectorService(ctrl)
 	procService := mock.NewProcessorService(ctrl)
+	plugService := mock.NewPluginService(ctrl)
 
 	pl1config := pipeline.Config{Name: pipeline1.Name, Description: pipeline1.Description}
 	pl1 := &pipeline.Instance{
@@ -210,16 +208,12 @@ func TestProvision_Rollback(t *testing.T) {
 		ProvisionedBy: pipeline.ProvisionTypeConfig,
 	}
 	cfg1 := connector.Config{
-		Name:       pipeline1.Connectors["pipeline1:con1"].Name,
-		Plugin:     pipeline1.Connectors["pipeline1:con1"].Plugin,
-		PipelineID: pipeline1.Name,
-		Settings:   pipeline1.Connectors["pipeline1:con1"].Settings,
+		Name:     pipeline1.Connectors["pipeline1:con1"].Name,
+		Settings: pipeline1.Connectors["pipeline1:con1"].Settings,
 	}
 	cfg2 := connector.Config{
-		Name:       pipeline1.Connectors["pipeline1:con2"].Name,
-		Plugin:     pipeline1.Connectors["pipeline1:con2"].Plugin,
-		PipelineID: pipeline1.Name,
-		Settings:   pipeline1.Connectors["pipeline1:con2"].Settings,
+		Name:     pipeline1.Connectors["pipeline1:con2"].Name,
+		Settings: pipeline1.Connectors["pipeline1:con2"].Settings,
 	}
 	procCfg := processor.Config{
 		Settings: pipeline1.Processors["pipeline1:proc1"].Settings,
@@ -240,11 +234,11 @@ func TestProvision_Rollback(t *testing.T) {
 	pipelineService.EXPECT().UpdateDLQ(gomock.Not(gomock.Nil()), pl1.ID, pipeline.DLQ{WindowSize: 20, WindowNackThreshold: 10}).Return(pl1, nil)
 	pipelineService.EXPECT().Delete(gomock.Not(gomock.Nil()), pipeline1.Name)
 
-	connService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline1:con1", connector.TypeSource, cfg1, connector.ProvisionTypeConfig)
+	connService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline1:con1", connector.TypeSource, pipeline1.Connectors["pipeline1:con1"].Plugin, pipeline1.Name, cfg1, connector.ProvisionTypeConfig)
 	connService.EXPECT().Delete(gomock.Not(gomock.Nil()), "pipeline1:con1")
 	pipelineService.EXPECT().AddConnector(gomock.Not(gomock.Nil()), pipeline1.Name, "pipeline1:con1")
 	pipelineService.EXPECT().RemoveConnector(gomock.Not(gomock.Nil()), pipeline1.Name, "pipeline1:con1")
-	connService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline1:con2", connector.TypeDestination, cfg2, connector.ProvisionTypeConfig)
+	connService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline1:con2", connector.TypeDestination, pipeline1.Connectors["pipeline1:con2"].Plugin, pipeline1.Name, cfg2, connector.ProvisionTypeConfig)
 	connService.EXPECT().Delete(gomock.Not(gomock.Nil()), "pipeline1:con2")
 	pipelineService.EXPECT().AddConnector(gomock.Not(gomock.Nil()), pipeline1.Name, "pipeline1:con2")
 	pipelineService.EXPECT().RemoveConnector(gomock.Not(gomock.Nil()), pipeline1.Name, "pipeline1:con2")
@@ -259,9 +253,9 @@ func TestProvision_Rollback(t *testing.T) {
 	pipelineService.EXPECT().RemoveProcessor(gomock.Not(gomock.Nil()), pipeline1.Name, "pipeline1:proc1")
 
 	// returns an error, so rollback needed
-	pipelineService.EXPECT().Start(gomock.Not(gomock.Nil()), connService, procService, pipeline1.Name).Return(cerrors.New("error"))
+	pipelineService.EXPECT().Start(gomock.Not(gomock.Nil()), connService, procService, plugService, pipeline1.Name).Return(cerrors.New("error"))
 
-	service := NewService(db, logger, pipelineService, connService, procService, "./test/pipelines1")
+	service := NewService(db, logger, pipelineService, connService, procService, plugService, "./test/pipelines1")
 	err := service.Init(context.Background())
 	is.True(err != nil)
 }
@@ -274,7 +268,7 @@ func TestProvision_RollbackDeletePipeline(t *testing.T) {
 	pipelineService := mock.NewPipelineService(ctrl)
 	connService := mock.NewConnectorService(ctrl)
 	procService := mock.NewProcessorService(ctrl)
-	connBuilder := connmock.Builder{Ctrl: ctrl}
+	plugService := mock.NewPluginService(ctrl)
 
 	pl1config := pipeline.Config{Name: pipeline1.Name, Description: pipeline1.Description}
 	pl1 := &pipeline.Instance{
@@ -286,16 +280,12 @@ func TestProvision_RollbackDeletePipeline(t *testing.T) {
 		ProcessorIDs:  []string{"pipeline1:proc1", "pipeline1:con2:proc1con"},
 	}
 	cfg1 := connector.Config{
-		Name:       pipeline1.Connectors["pipeline1:con1"].Name,
-		Plugin:     pipeline1.Connectors["pipeline1:con1"].Plugin,
-		PipelineID: pipeline1.Name,
-		Settings:   pipeline1.Connectors["pipeline1:con1"].Settings,
+		Name:     pipeline1.Connectors["pipeline1:con1"].Name,
+		Settings: pipeline1.Connectors["pipeline1:con1"].Settings,
 	}
 	cfg2 := connector.Config{
-		Name:       pipeline1.Connectors["pipeline1:con2"].Name,
-		Plugin:     pipeline1.Connectors["pipeline1:con2"].Plugin,
-		PipelineID: pipeline1.Name,
-		Settings:   pipeline1.Connectors["pipeline1:con2"].Settings,
+		Name:     pipeline1.Connectors["pipeline1:con2"].Name,
+		Settings: pipeline1.Connectors["pipeline1:con2"].Settings,
 	}
 	procCfg := processor.Config{
 		Settings: pipeline1.Processors["pipeline1:proc1"].Settings,
@@ -320,21 +310,26 @@ func TestProvision_RollbackDeletePipeline(t *testing.T) {
 		Config: procCfg,
 		Type:   "js",
 	}
-	sourceConfig := connector.Config{
-		Name:       pipeline1.Connectors["pipeline1:con1"].Name,
-		Settings:   map[string]string{"path": "my/path/file1.txt"},
+	source := &connector.Instance{
+		ID:         "pipeline1:con1",
+		Type:       connector.TypeSource,
 		Plugin:     "builtin:file",
 		PipelineID: pipeline1.Name,
+		Config: connector.Config{
+			Name:     pipeline1.Connectors["pipeline1:con1"].Name,
+			Settings: map[string]string{"path": "my/path/file1.txt"},
+		},
 	}
-	destConfig := connector.Config{
-		Name:       pipeline1.Connectors["pipeline1:con2"].Name,
-		Settings:   map[string]string{"path": "my/path/file2.txt"},
+	destination := &connector.Instance{
+		ID:         "pipeline1:con2",
+		Type:       connector.TypeDestination,
 		Plugin:     "builtin:file",
 		PipelineID: pipeline1.Name,
+		Config: connector.Config{
+			Name:     pipeline1.Connectors["pipeline1:con2"].Name,
+			Settings: map[string]string{"path": "my/path/file2.txt"},
+		},
 	}
-
-	source := connBuilder.NewSourceMock("pipeline1:con1", sourceConfig)
-	destination := connBuilder.NewDestinationMock("pipeline1:con2", destConfig)
 
 	pipelineService.EXPECT().List(gomock.Not(gomock.Nil()))
 	// pipeline exists
@@ -363,23 +358,19 @@ func TestProvision_RollbackDeletePipeline(t *testing.T) {
 	pipelineService.EXPECT().Create(gomock.Not(gomock.Nil()), pipeline1.Name, pl1config, pipeline.ProvisionTypeConfig).Return(pl1, nil)
 	pipelineService.EXPECT().UpdateDLQ(gomock.Not(gomock.Nil()), pl1.ID, pipeline.DLQ{WindowSize: 20, WindowNackThreshold: 10}).Return(pl1, nil)
 
-	connService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline1:con1", connector.TypeSource, cfg1, connector.ProvisionTypeConfig)
+	connService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline1:con1", connector.TypeSource, pipeline1.Connectors["pipeline1:con1"].Plugin, pipeline1.Name, cfg1, connector.ProvisionTypeConfig)
 	pipelineService.EXPECT().AddConnector(gomock.Not(gomock.Nil()), pipeline1.Name, "pipeline1:con1")
-	connService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline1:con2", connector.TypeDestination, cfg2, connector.ProvisionTypeConfig)
+	connService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline1:con2", connector.TypeDestination, pipeline1.Connectors["pipeline1:con2"].Plugin, pipeline1.Name, cfg2, connector.ProvisionTypeConfig)
 	pipelineService.EXPECT().AddConnector(gomock.Not(gomock.Nil()), pipeline1.Name, "pipeline1:con2")
-	source.EXPECT().State()
-	connService.EXPECT().SetSourceState(gomock.Not(gomock.Nil()), "pipeline1:con1", connector.SourceState{})
-	destination.EXPECT().State()
-	connService.EXPECT().SetDestinationState(gomock.Not(gomock.Nil()), "pipeline1:con2", connector.DestinationState{})
 
 	procService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline1:con2:proc1con", "js", procParentConn, procCfg, processor.ProvisionTypeConfig)
 	connService.EXPECT().AddProcessor(gomock.Not(gomock.Nil()), "pipeline1:con2", "pipeline1:con2:proc1con")
 	procService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline1:proc1", "js", procParentPipeline, procCfg, processor.ProvisionTypeConfig)
 	pipelineService.EXPECT().AddProcessor(gomock.Not(gomock.Nil()), pipeline1.Name, "pipeline1:proc1")
 
-	pipelineService.EXPECT().Start(gomock.Not(gomock.Nil()), connService, procService, pipeline1.Name)
+	pipelineService.EXPECT().Start(gomock.Not(gomock.Nil()), connService, procService, plugService, pipeline1.Name)
 
-	service := NewService(db, logger, pipelineService, connService, procService, "./test/pipelines1")
+	service := NewService(db, logger, pipelineService, connService, procService, plugService, "./test/pipelines1")
 	err := service.Init(context.Background())
 	is.True(err != nil)
 }
@@ -392,7 +383,7 @@ func TestProvision_ExistingPipeline(t *testing.T) {
 	pipelineService := mock.NewPipelineService(ctrl)
 	connService := mock.NewConnectorService(ctrl)
 	procService := mock.NewProcessorService(ctrl)
-	connBuilder := connmock.Builder{Ctrl: ctrl}
+	plugService := mock.NewPluginService(ctrl)
 
 	pl1config := pipeline.Config{Name: pipeline1.Name, Description: pipeline1.Description}
 	pl1 := &pipeline.Instance{
@@ -404,16 +395,12 @@ func TestProvision_ExistingPipeline(t *testing.T) {
 		ProcessorIDs:  []string{"pipeline1:proc1", "pipeline1:con2:proc1con"},
 	}
 	cfg1 := connector.Config{
-		Name:       pipeline1.Connectors["pipeline1:con1"].Name,
-		Plugin:     pipeline1.Connectors["pipeline1:con1"].Plugin,
-		PipelineID: pipeline1.Name,
-		Settings:   pipeline1.Connectors["pipeline1:con1"].Settings,
+		Name:     pipeline1.Connectors["pipeline1:con1"].Name,
+		Settings: pipeline1.Connectors["pipeline1:con1"].Settings,
 	}
 	cfg2 := connector.Config{
-		Name:       pipeline1.Connectors["pipeline1:con2"].Name,
-		Plugin:     pipeline1.Connectors["pipeline1:con2"].Plugin,
-		PipelineID: pipeline1.Name,
-		Settings:   pipeline1.Connectors["pipeline1:con2"].Settings,
+		Name:     pipeline1.Connectors["pipeline1:con2"].Name,
+		Settings: pipeline1.Connectors["pipeline1:con2"].Settings,
 	}
 	procCfg := processor.Config{
 		Settings: pipeline1.Processors["pipeline1:proc1"].Settings,
@@ -438,21 +425,28 @@ func TestProvision_ExistingPipeline(t *testing.T) {
 		Config: procCfg,
 		Type:   "js",
 	}
-	sourceConfig := connector.Config{
-		Name:       "pipeline1:con1",
-		Settings:   map[string]string{"path": "my/path/file1.txt"},
+	source := &connector.Instance{
+		ID:         "pipeline1:con1",
+		Type:       connector.TypeSource,
 		Plugin:     "builtin:file",
 		PipelineID: pipeline1.Name,
+		Config: connector.Config{
+			Name:     pipeline1.Connectors["pipeline1:con1"].Name,
+			Settings: map[string]string{"path": "my/path/file1.txt"},
+		},
+		State: connector.SourceState{Position: record.Position("test-pos")},
 	}
-	destConfig := connector.Config{
-		Name:       "pipeline1:con2",
-		Settings:   map[string]string{"path": "my/path/file2.txt"},
+	destination := &connector.Instance{
+		ID:         "pipeline1:con2",
+		Type:       connector.TypeDestination,
 		Plugin:     "builtin:file",
 		PipelineID: pipeline1.Name,
+		Config: connector.Config{
+			Name:     pipeline1.Connectors["pipeline1:con2"].Name,
+			Settings: map[string]string{"path": "my/path/file2.txt"},
+		},
+		State: connector.DestinationState{Positions: map[string]record.Position{"pipeline1:con1": record.Position("test-pos")}},
 	}
-
-	source := connBuilder.NewSourceMock("pipeline1:con1", sourceConfig)
-	destination := connBuilder.NewDestinationMock("pipeline1:con2", destConfig)
 
 	pipelineService.EXPECT().List(gomock.Not(gomock.Nil()))
 	// pipeline already exists
@@ -461,11 +455,9 @@ func TestProvision_ExistingPipeline(t *testing.T) {
 
 	// copy over connectors states
 	connService.EXPECT().Get(gomock.Not(gomock.Nil()), "pipeline1:con1").Return(source, nil).AnyTimes()
-	source.EXPECT().State()
-	connService.EXPECT().SetSourceState(gomock.Not(gomock.Nil()), "pipeline1:con1", connector.SourceState{})
+	connService.EXPECT().SetState(gomock.Not(gomock.Nil()), "pipeline1:con1", source.State)
 	connService.EXPECT().Get(gomock.Not(gomock.Nil()), "pipeline1:con2").Return(destination, nil).AnyTimes()
-	destination.EXPECT().State()
-	connService.EXPECT().SetDestinationState(gomock.Not(gomock.Nil()), "pipeline1:con2", connector.DestinationState{})
+	connService.EXPECT().SetState(gomock.Not(gomock.Nil()), "pipeline1:con2", destination.State)
 
 	// delete old pipeline
 	pipelineService.EXPECT().Delete(gomock.Not(gomock.Nil()), pipeline1.Name)
@@ -484,9 +476,9 @@ func TestProvision_ExistingPipeline(t *testing.T) {
 	pipelineService.EXPECT().Create(gomock.Not(gomock.Nil()), pipeline1.Name, pl1config, pipeline.ProvisionTypeConfig).Return(pl1, nil)
 	pipelineService.EXPECT().UpdateDLQ(gomock.Not(gomock.Nil()), pl1.ID, pipeline.DLQ{WindowSize: 20, WindowNackThreshold: 10}).Return(pl1, nil)
 
-	connService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline1:con1", connector.TypeSource, cfg1, connector.ProvisionTypeConfig).Return(source, nil)
+	connService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline1:con1", connector.TypeSource, pipeline1.Connectors["pipeline1:con1"].Plugin, pipeline1.Name, cfg1, connector.ProvisionTypeConfig).Return(source, nil)
 	pipelineService.EXPECT().AddConnector(gomock.Not(gomock.Nil()), pipeline1.Name, "pipeline1:con1")
-	connService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline1:con2", connector.TypeDestination, cfg2, connector.ProvisionTypeConfig).Return(destination, nil)
+	connService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline1:con2", connector.TypeDestination, pipeline1.Connectors["pipeline1:con2"].Plugin, pipeline1.Name, cfg2, connector.ProvisionTypeConfig).Return(destination, nil)
 	pipelineService.EXPECT().AddConnector(gomock.Not(gomock.Nil()), pipeline1.Name, "pipeline1:con2")
 
 	procService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline1:con2:proc1con", "js", procParentConn, procCfg, processor.ProvisionTypeConfig)
@@ -494,9 +486,9 @@ func TestProvision_ExistingPipeline(t *testing.T) {
 	procService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline1:proc1", "js", procParentPipeline, procCfg, processor.ProvisionTypeConfig)
 	pipelineService.EXPECT().AddProcessor(gomock.Not(gomock.Nil()), pipeline1.Name, "pipeline1:proc1")
 
-	pipelineService.EXPECT().Start(gomock.Not(gomock.Nil()), connService, procService, pipeline1.Name)
+	pipelineService.EXPECT().Start(gomock.Not(gomock.Nil()), connService, procService, plugService, pipeline1.Name)
 
-	service := NewService(db, logger, pipelineService, connService, procService, "./test/pipelines1")
+	service := NewService(db, logger, pipelineService, connService, procService, plugService, "./test/pipelines1")
 	err := service.Init(context.Background())
 	is.NoErr(err)
 }
@@ -509,6 +501,7 @@ func TestProvision_MultiplePipelines(t *testing.T) {
 	pipelineService := mock.NewPipelineService(ctrl)
 	connService := mock.NewConnectorService(ctrl)
 	procService := mock.NewProcessorService(ctrl)
+	plugService := mock.NewPluginService(ctrl)
 
 	pl2config := pipeline.Config{Name: pipeline2.Name, Description: pipeline2.Description}
 	pl2 := &pipeline.Instance{
@@ -525,28 +518,20 @@ func TestProvision_MultiplePipelines(t *testing.T) {
 		ProvisionedBy: pipeline.ProvisionTypeConfig,
 	}
 	cfg2con1 := connector.Config{
-		Name:       pipeline2.Connectors["pipeline2:con1"].Name,
-		Plugin:     pipeline2.Connectors["pipeline2:con1"].Plugin,
-		PipelineID: pipeline2.Name,
-		Settings:   pipeline2.Connectors["pipeline2:con1"].Settings,
+		Name:     pipeline2.Connectors["pipeline2:con1"].Name,
+		Settings: pipeline2.Connectors["pipeline2:con1"].Settings,
 	}
 	cfg2con2 := connector.Config{
-		Name:       pipeline2.Connectors["pipeline2:con2"].Name,
-		Plugin:     pipeline2.Connectors["pipeline2:con2"].Plugin,
-		PipelineID: pipeline2.Name,
-		Settings:   pipeline2.Connectors["pipeline2:con2"].Settings,
+		Name:     pipeline2.Connectors["pipeline2:con2"].Name,
+		Settings: pipeline2.Connectors["pipeline2:con2"].Settings,
 	}
 	cfg3con1 := connector.Config{
-		Name:       pipeline3.Connectors["pipeline3:con1"].Name,
-		Plugin:     pipeline3.Connectors["pipeline3:con1"].Plugin,
-		PipelineID: pipeline3.Name,
-		Settings:   pipeline3.Connectors["pipeline3:con1"].Settings,
+		Name:     pipeline3.Connectors["pipeline3:con1"].Name,
+		Settings: pipeline3.Connectors["pipeline3:con1"].Settings,
 	}
 	cfg3con2 := connector.Config{
-		Name:       pipeline3.Connectors["pipeline3:con2"].Name,
-		Plugin:     pipeline3.Connectors["pipeline3:con2"].Plugin,
-		PipelineID: pipeline3.Name,
-		Settings:   pipeline3.Connectors["pipeline3:con2"].Settings,
+		Name:     pipeline3.Connectors["pipeline3:con2"].Name,
+		Settings: pipeline3.Connectors["pipeline3:con2"].Settings,
 	}
 
 	pipelineService.EXPECT().List(gomock.Not(gomock.Nil()))
@@ -561,19 +546,19 @@ func TestProvision_MultiplePipelines(t *testing.T) {
 		Create(gomock.Not(gomock.Nil()), pipeline3.Name, pl3config, pipeline.ProvisionTypeConfig).
 		Return(pl3, nil)
 
-	connService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline2:con1", connector.TypeSource, cfg2con1, connector.ProvisionTypeConfig)
-	connService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline2:con2", connector.TypeDestination, cfg2con2, connector.ProvisionTypeConfig)
+	connService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline2:con1", connector.TypeSource, pipeline2.Connectors["pipeline2:con1"].Plugin, pipeline2.Name, cfg2con1, connector.ProvisionTypeConfig)
+	connService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline2:con2", connector.TypeDestination, pipeline2.Connectors["pipeline2:con2"].Plugin, pipeline2.Name, cfg2con2, connector.ProvisionTypeConfig)
 	pipelineService.EXPECT().AddConnector(gomock.Not(gomock.Nil()), pipeline2.Name, "pipeline2:con1")
 	pipelineService.EXPECT().AddConnector(gomock.Not(gomock.Nil()), pipeline2.Name, "pipeline2:con2")
-	connService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline3:con1", connector.TypeSource, cfg3con1, connector.ProvisionTypeConfig)
-	connService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline3:con2", connector.TypeDestination, cfg3con2, connector.ProvisionTypeConfig)
+	connService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline3:con1", connector.TypeSource, pipeline3.Connectors["pipeline3:con1"].Plugin, pipeline3.Name, cfg3con1, connector.ProvisionTypeConfig)
+	connService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline3:con2", connector.TypeDestination, pipeline3.Connectors["pipeline3:con2"].Plugin, pipeline3.Name, cfg3con2, connector.ProvisionTypeConfig)
 	pipelineService.EXPECT().AddConnector(gomock.Not(gomock.Nil()), pipeline3.Name, "pipeline3:con1")
 	pipelineService.EXPECT().AddConnector(gomock.Not(gomock.Nil()), pipeline3.Name, "pipeline3:con2")
 
-	pipelineService.EXPECT().Start(gomock.Not(gomock.Nil()), connService, procService, pipeline2.Name)
-	pipelineService.EXPECT().Start(gomock.Not(gomock.Nil()), connService, procService, pipeline3.Name)
+	pipelineService.EXPECT().Start(gomock.Not(gomock.Nil()), connService, procService, plugService, pipeline2.Name)
+	pipelineService.EXPECT().Start(gomock.Not(gomock.Nil()), connService, procService, plugService, pipeline3.Name)
 
-	service := NewService(db, logger, pipelineService, connService, procService, "./test/pipelines3")
+	service := NewService(db, logger, pipelineService, connService, procService, plugService, "./test/pipelines3")
 	err := service.Init(context.Background())
 	is.NoErr(err)
 }
@@ -586,6 +571,7 @@ func TestProvision_MultiplePipelinesDuplicatedPipelineID(t *testing.T) {
 	pipelineService := mock.NewPipelineService(ctrl)
 	connService := mock.NewConnectorService(ctrl)
 	procService := mock.NewProcessorService(ctrl)
+	plugService := mock.NewPluginService(ctrl)
 
 	pl2config := pipeline.Config{Name: pipeline2.Name, Description: pipeline2.Description}
 	pl2 := &pipeline.Instance{
@@ -602,28 +588,20 @@ func TestProvision_MultiplePipelinesDuplicatedPipelineID(t *testing.T) {
 		ProvisionedBy: pipeline.ProvisionTypeConfig,
 	}
 	cfg2con1 := connector.Config{
-		Name:       pipeline2.Connectors["pipeline2:con1"].Name,
-		Plugin:     pipeline2.Connectors["pipeline2:con1"].Plugin,
-		PipelineID: pipeline2.Name,
-		Settings:   pipeline2.Connectors["pipeline2:con1"].Settings,
+		Name:     pipeline2.Connectors["pipeline2:con1"].Name,
+		Settings: pipeline2.Connectors["pipeline2:con1"].Settings,
 	}
 	cfg2con2 := connector.Config{
-		Name:       pipeline2.Connectors["pipeline2:con2"].Name,
-		Plugin:     pipeline2.Connectors["pipeline2:con2"].Plugin,
-		PipelineID: pipeline2.Name,
-		Settings:   pipeline2.Connectors["pipeline2:con2"].Settings,
+		Name:     pipeline2.Connectors["pipeline2:con2"].Name,
+		Settings: pipeline2.Connectors["pipeline2:con2"].Settings,
 	}
 	cfg3con1 := connector.Config{
-		Name:       pipeline3.Connectors["pipeline3:con1"].Name,
-		Plugin:     pipeline3.Connectors["pipeline3:con1"].Plugin,
-		PipelineID: pipeline3.Name,
-		Settings:   pipeline3.Connectors["pipeline3:con1"].Settings,
+		Name:     pipeline3.Connectors["pipeline3:con1"].Name,
+		Settings: pipeline3.Connectors["pipeline3:con1"].Settings,
 	}
 	cfg3con2 := connector.Config{
-		Name:       pipeline3.Connectors["pipeline3:con2"].Name,
-		Plugin:     pipeline3.Connectors["pipeline3:con2"].Plugin,
-		PipelineID: pipeline3.Name,
-		Settings:   pipeline3.Connectors["pipeline3:con2"].Settings,
+		Name:     pipeline3.Connectors["pipeline3:con2"].Name,
+		Settings: pipeline3.Connectors["pipeline3:con2"].Settings,
 	}
 
 	pipelineService.EXPECT().List(gomock.Not(gomock.Nil()))
@@ -638,19 +616,19 @@ func TestProvision_MultiplePipelinesDuplicatedPipelineID(t *testing.T) {
 		Create(gomock.Not(gomock.Nil()), pipeline3.Name, pl3config, pipeline.ProvisionTypeConfig).
 		Return(pl3, nil)
 
-	connService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline2:con1", connector.TypeSource, cfg2con1, connector.ProvisionTypeConfig)
-	connService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline2:con2", connector.TypeDestination, cfg2con2, connector.ProvisionTypeConfig)
+	connService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline2:con1", connector.TypeSource, pipeline2.Connectors["pipeline2:con1"].Plugin, pipeline2.Name, cfg2con1, connector.ProvisionTypeConfig)
+	connService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline2:con2", connector.TypeDestination, pipeline2.Connectors["pipeline2:con2"].Plugin, pipeline2.Name, cfg2con2, connector.ProvisionTypeConfig)
 	pipelineService.EXPECT().AddConnector(gomock.Not(gomock.Nil()), pipeline2.Name, "pipeline2:con1")
 	pipelineService.EXPECT().AddConnector(gomock.Not(gomock.Nil()), pipeline2.Name, "pipeline2:con2")
-	connService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline3:con1", connector.TypeSource, cfg3con1, connector.ProvisionTypeConfig)
-	connService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline3:con2", connector.TypeDestination, cfg3con2, connector.ProvisionTypeConfig)
+	connService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline3:con1", connector.TypeSource, pipeline3.Connectors["pipeline3:con1"].Plugin, pipeline3.Name, cfg3con1, connector.ProvisionTypeConfig)
+	connService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline3:con2", connector.TypeDestination, pipeline3.Connectors["pipeline3:con2"].Plugin, pipeline3.Name, cfg3con2, connector.ProvisionTypeConfig)
 	pipelineService.EXPECT().AddConnector(gomock.Not(gomock.Nil()), pipeline3.Name, "pipeline3:con1")
 	pipelineService.EXPECT().AddConnector(gomock.Not(gomock.Nil()), pipeline3.Name, "pipeline3:con2")
 
-	pipelineService.EXPECT().Start(gomock.Not(gomock.Nil()), connService, procService, pipeline2.Name)
-	pipelineService.EXPECT().Start(gomock.Not(gomock.Nil()), connService, procService, pipeline3.Name)
+	pipelineService.EXPECT().Start(gomock.Not(gomock.Nil()), connService, procService, plugService, pipeline2.Name)
+	pipelineService.EXPECT().Start(gomock.Not(gomock.Nil()), connService, procService, plugService, pipeline3.Name)
 
-	service := NewService(db, logger, pipelineService, connService, procService, "./test/pipelines5")
+	service := NewService(db, logger, pipelineService, connService, procService, plugService, "./test/pipelines5")
 	err := service.Init(context.Background())
 	is.True(cerrors.Is(err, ErrDuplicatedPipelineID)) // duplicated pipeline id
 }
@@ -677,7 +655,7 @@ func TestProvision_IntegrationTestServices(t *testing.T) {
 	)
 
 	plService := pipeline.NewService(logger, db)
-	connService := connector.NewService(logger, db, connector.NewDefaultBuilder(logger, connector.NewPersister(logger, db, time.Second, 3), pluginService))
+	connService := connector.NewService(logger, db, connector.NewPersister(logger, db, time.Second, 3))
 	procService := processor.NewService(logger, db, processor.GlobalBuilderRegistry)
 
 	// add builtin processor for removing metadata
@@ -701,7 +679,7 @@ func TestProvision_IntegrationTestServices(t *testing.T) {
 		}
 	}()
 
-	service := NewService(db, logger, plService, connService, procService, "./test/pipelines4-integration-test")
+	service := NewService(db, logger, plService, connService, procService, pluginService, "./test/pipelines4-integration-test")
 	err = service.Init(context.Background())
 	is.NoErr(err)
 
@@ -786,46 +764,67 @@ func TestProvision_IntegrationTestServices(t *testing.T) {
 	}
 
 	// checking connectors
-	wantConn1 := connector.Config{
-		Name:   "pipeline1:file-src",
-		Plugin: "builtin:file",
-		Settings: map[string]string{
-			"path": "./test/source-file.txt",
-		},
+	wantConn1 := &connector.Instance{
+		ID:         "pipeline1:con1",
+		Type:       connector.TypeSource,
+		Plugin:     "builtin:file",
 		PipelineID: pipeline1.Name,
-	}
-	wantConn2 := connector.Config{
-		Name:   "pipeline1:file-dest",
-		Plugin: "builtin:file",
-		Settings: map[string]string{
-			"path": destFile,
+		Config: connector.Config{
+			Name: "pipeline1:file-src",
+			Settings: map[string]string{
+				"path": "./test/source-file.txt",
+			},
 		},
-		PipelineID:   pipeline1.Name,
+	}
+	wantConn2 := &connector.Instance{
+		ID:         "pipeline1:con2",
+		Type:       connector.TypeDestination,
+		Plugin:     "builtin:file",
+		PipelineID: pipeline1.Name,
+		Config: connector.Config{
+			Name: "pipeline1:file-dest",
+			Settings: map[string]string{
+				"path": destFile,
+			},
+		},
 		ProcessorIDs: []string{"pipeline1:con2:con2proc1"},
 	}
-	wantConn3 := connector.Config{
-		Name:   "pipeline2:file-dest",
-		Plugin: "builtin:file",
-		Settings: map[string]string{
-			"path": "./test/file3.txt",
-		},
+	wantConn3 := &connector.Instance{
+		ID:         "pipeline2:con3",
+		Type:       connector.TypeDestination,
+		Plugin:     "builtin:file",
 		PipelineID: pipeline2.Name,
+		Config: connector.Config{
+			Name: "pipeline2:file-dest",
+			Settings: map[string]string{
+				"path": "./test/file3.txt",
+			},
+		},
 	}
 	// assert pipeline1:con1
 	gotConn1, err := connService.Get(ctx, "pipeline1:con1")
 	is.NoErr(err)
-	is.Equal(gotConn1.Config(), wantConn1)
-	is.Equal(gotConn1.Type(), connector.TypeSource)
+	is.Equal(gotConn1.ID, wantConn1.ID)
+	is.Equal(gotConn1.Type, wantConn1.Type)
+	is.Equal(gotConn1.Plugin, wantConn1.Plugin)
+	is.Equal(gotConn1.PipelineID, wantConn1.PipelineID)
+	is.Equal(gotConn1.Config, wantConn1.Config)
 	// assert pipeline1:con2
 	gotConn2, err := connService.Get(ctx, "pipeline1:con2")
 	is.NoErr(err)
-	is.Equal(gotConn2.Config(), wantConn2)
-	is.Equal(gotConn2.Type(), connector.TypeDestination)
+	is.Equal(gotConn2.ID, wantConn2.ID)
+	is.Equal(gotConn2.Type, wantConn2.Type)
+	is.Equal(gotConn2.Plugin, wantConn2.Plugin)
+	is.Equal(gotConn2.PipelineID, wantConn2.PipelineID)
+	is.Equal(gotConn2.Config, wantConn2.Config)
 	// assert con3
 	gotConn3, err := connService.Get(ctx, "pipeline2:con3")
 	is.NoErr(err)
-	is.Equal(gotConn3.Config(), wantConn3)
-	is.Equal(gotConn3.Type(), connector.TypeDestination)
+	is.Equal(gotConn3.ID, wantConn3.ID)
+	is.Equal(gotConn3.Type, wantConn3.Type)
+	is.Equal(gotConn3.Plugin, wantConn3.Plugin)
+	is.Equal(gotConn3.PipelineID, wantConn3.PipelineID)
+	is.Equal(gotConn3.Config, wantConn3.Config)
 
 	data, err := os.ReadFile(destFile)
 	is.NoErr(err)

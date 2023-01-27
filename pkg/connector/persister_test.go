@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package connector_test
+package connector
 
 import (
 	"context"
@@ -20,46 +20,37 @@ import (
 	"testing"
 	"time"
 
-	"github.com/conduitio/conduit/pkg/connector"
-	"github.com/conduitio/conduit/pkg/connector/mock"
-	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/foundation/database/inmemory"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
+	"github.com/matryer/is"
 	"github.com/rs/zerolog"
 )
 
 func TestPersister_EmptyFlushDoesNothing(t *testing.T) {
+	is := is.New(t)
 	ctx := context.Background()
-	persister, store, _ := initPersisterTest(
-		gomock.NewController(t),
-		time.Millisecond*100,
-		2,
-	)
+	persister, store := initPersisterTest(time.Millisecond*100, 2)
 
 	persister.Flush(ctx)
 	persister.Wait()
 
 	got, err := store.GetAll(ctx)
-	assert.Ok(t, err)
-	assert.Equal(t, 0, len(got))
+	is.NoErr(err)
+	is.Equal(0, len(got))
 }
 
 func TestPersister_PersistFlushesAfterDelayThreshold(t *testing.T) {
+	is := is.New(t)
 	ctx := context.Background()
 	delayThreshold := time.Millisecond * 100
 
-	persister, store, builder := initPersisterTest(
-		gomock.NewController(t),
-		delayThreshold,
-		2,
-	)
+	persister, store := initPersisterTest(delayThreshold, 2)
 
-	destination := builder.NewDestinationMock(uuid.NewString(), connector.Config{})
+	conn := &Instance{ID: uuid.NewString(), Type: TypeDestination}
 	callbackCalled := make(chan struct{})
 	persistAt := time.Now()
-	persister.Persist(ctx, destination, func(err error) {
+	persister.Persist(ctx, conn, func(err error) {
 		if err != nil {
 			t.Fatalf("expected nil error, got: %v", err)
 		}
@@ -77,20 +68,17 @@ func TestPersister_PersistFlushesAfterDelayThreshold(t *testing.T) {
 		t.Fatalf("expected callback to be called in a certain time frame")
 	}
 
-	conn, err := store.Get(ctx, destination.ID())
-	assert.Ok(t, err)
-	assert.Equal(t, destination, conn)
+	got, err := store.Get(ctx, conn.ID)
+	is.NoErr(err)
+	is.Equal(conn, got)
 }
 
 func TestPersister_PersistFlushesAfterBundleCountThreshold(t *testing.T) {
+	is := is.New(t)
 	ctx := context.Background()
 	bundleCountThreshold := 50
 
-	persister, store, builder := initPersisterTest(
-		gomock.NewController(t),
-		time.Second,
-		bundleCountThreshold,
-	)
+	persister, store := initPersisterTest(time.Second, bundleCountThreshold)
 
 	allCallbacksCalled := make(chan struct{})
 	var wgCallbacks sync.WaitGroup
@@ -101,12 +89,12 @@ func TestPersister_PersistFlushesAfterBundleCountThreshold(t *testing.T) {
 	}()
 
 	for i := 0; i < bundleCountThreshold/2; i++ {
-		destination := builder.NewDestinationMock(uuid.NewString(), connector.Config{})
-		persister.Persist(ctx, destination, func(err error) {
+		conn := &Instance{ID: uuid.NewString(), Type: TypeDestination}
+		persister.Persist(ctx, conn, func(err error) {
 			t.Fatal("expected callback to be overwritten!")
 		})
 		// second persist will overwrite first callback
-		persister.Persist(ctx, destination, func(err error) {
+		persister.Persist(ctx, conn, func(err error) {
 			if err != nil {
 				t.Fatalf("expected nil error, got: %v", err)
 			}
@@ -127,22 +115,19 @@ func TestPersister_PersistFlushesAfterBundleCountThreshold(t *testing.T) {
 	}
 
 	conns, err := store.GetAll(ctx)
-	assert.Ok(t, err)
-	assert.Equal(t, bundleCountThreshold/2, len(conns))
+	is.NoErr(err)
+	is.Equal(bundleCountThreshold/2, len(conns))
 }
 
 func TestPersister_FlushStoresRightAway(t *testing.T) {
+	is := is.New(t)
 	ctx := context.Background()
-	persister, store, builder := initPersisterTest(
-		gomock.NewController(t),
-		time.Millisecond*100,
-		2,
-	)
+	persister, store := initPersisterTest(time.Millisecond*100, 2)
 
-	destination := builder.NewDestinationMock(uuid.NewString(), connector.Config{})
+	conn := &Instance{ID: uuid.NewString(), Type: TypeDestination}
 	callbackCalled := make(chan struct{})
 	timeAtPersist := time.Now()
-	persister.Persist(ctx, destination, func(err error) {
+	persister.Persist(ctx, conn, func(err error) {
 		if err != nil {
 			t.Fatalf("expected nil error, got: %v", err)
 		}
@@ -164,20 +149,16 @@ func TestPersister_FlushStoresRightAway(t *testing.T) {
 		t.Fatalf("expected callback to be called in a certain time frame")
 	}
 
-	conn, err := store.Get(ctx, destination.ID())
-	assert.Ok(t, err)
-	assert.Equal(t, destination, conn)
+	got, err := store.Get(ctx, conn.ID)
+	is.NoErr(err)
+	is.Equal(conn, got)
 }
 
 func TestPersister_WaitsForOpenConnectorsAndFlush(t *testing.T) {
 	ctx := context.Background()
-	persister, _, builder := initPersisterTest(
-		gomock.NewController(t),
-		time.Millisecond*100,
-		2,
-	)
+	persister, _ := initPersisterTest(time.Millisecond*100, 2)
 
-	destination := builder.NewDestinationMock(uuid.NewString(), connector.Config{})
+	conn := &Instance{ID: uuid.NewString(), Type: TypeDestination}
 	persister.ConnectorStarted()
 	persister.ConnectorStarted()
 	persister.ConnectorStarted()
@@ -190,7 +171,7 @@ func TestPersister_WaitsForOpenConnectorsAndFlush(t *testing.T) {
 		persister.ConnectorStopped()
 		// before last stop we persist another change which should be flushed
 		// automatically when the connector is stopped
-		persister.Persist(ctx, destination, func(err error) {})
+		persister.Persist(ctx, conn, func(err error) {})
 		persister.ConnectorStopped()
 	}()
 
@@ -204,14 +185,12 @@ func TestPersister_WaitsForOpenConnectorsAndFlush(t *testing.T) {
 }
 
 func initPersisterTest(
-	ctrl *gomock.Controller,
 	delayThreshold time.Duration,
 	bundleCountThreshold int,
-) (*connector.Persister, *connector.Store, mock.Builder) {
+) (*Persister, *Store) {
 	logger := log.New(zerolog.Nop())
 	db := &inmemory.DB{}
-	builder := mock.Builder{Ctrl: ctrl}
 
-	persister := connector.NewPersister(logger, db, delayThreshold, bundleCountThreshold)
-	return persister, connector.NewStore(db, logger, builder), builder
+	persister := NewPersister(logger, db, delayThreshold, bundleCountThreshold)
+	return persister, NewStore(db, logger)
 }

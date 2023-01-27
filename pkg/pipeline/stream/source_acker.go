@@ -17,7 +17,6 @@ package stream
 import (
 	"context"
 
-	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/semaphore"
@@ -27,7 +26,7 @@ import (
 // a specific source and forwarding them to the source in the correct order.
 type SourceAckerNode struct {
 	Name           string
-	Source         connector.Source
+	Source         Source
 	DLQHandlerNode *DLQHandlerNode
 
 	base   pubSubNodeBase

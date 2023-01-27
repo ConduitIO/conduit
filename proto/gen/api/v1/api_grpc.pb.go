@@ -29,6 +29,8 @@ type PipelineServiceClient interface {
 	DeletePipeline(ctx context.Context, in *DeletePipelineRequest, opts ...grpc.CallOption) (*DeletePipelineResponse, error)
 	StartPipeline(ctx context.Context, in *StartPipelineRequest, opts ...grpc.CallOption) (*StartPipelineResponse, error)
 	StopPipeline(ctx context.Context, in *StopPipelineRequest, opts ...grpc.CallOption) (*StopPipelineResponse, error)
+	GetDLQ(ctx context.Context, in *GetDLQRequest, opts ...grpc.CallOption) (*GetDLQResponse, error)
+	UpdateDLQ(ctx context.Context, in *UpdateDLQRequest, opts ...grpc.CallOption) (*UpdateDLQResponse, error)
 	ExportPipeline(ctx context.Context, in *ExportPipelineRequest, opts ...grpc.CallOption) (*ExportPipelineResponse, error)
 	ImportPipeline(ctx context.Context, in *ImportPipelineRequest, opts ...grpc.CallOption) (*ImportPipelineResponse, error)
 }
@@ -104,6 +106,24 @@ func (c *pipelineServiceClient) StopPipeline(ctx context.Context, in *StopPipeli
 	return out, nil
 }
 
+func (c *pipelineServiceClient) GetDLQ(ctx context.Context, in *GetDLQRequest, opts ...grpc.CallOption) (*GetDLQResponse, error) {
+	out := new(GetDLQResponse)
+	err := c.cc.Invoke(ctx, "/api.v1.PipelineService/GetDLQ", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *pipelineServiceClient) UpdateDLQ(ctx context.Context, in *UpdateDLQRequest, opts ...grpc.CallOption) (*UpdateDLQResponse, error) {
+	out := new(UpdateDLQResponse)
+	err := c.cc.Invoke(ctx, "/api.v1.PipelineService/UpdateDLQ", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *pipelineServiceClient) ExportPipeline(ctx context.Context, in *ExportPipelineRequest, opts ...grpc.CallOption) (*ExportPipelineResponse, error) {
 	out := new(ExportPipelineResponse)
 	err := c.cc.Invoke(ctx, "/api.v1.PipelineService/ExportPipeline", in, out, opts...)
@@ -133,6 +153,8 @@ type PipelineServiceServer interface {
 	DeletePipeline(context.Context, *DeletePipelineRequest) (*DeletePipelineResponse, error)
 	StartPipeline(context.Context, *StartPipelineRequest) (*StartPipelineResponse, error)
 	StopPipeline(context.Context, *StopPipelineRequest) (*StopPipelineResponse, error)
+	GetDLQ(context.Context, *GetDLQRequest) (*GetDLQResponse, error)
+	UpdateDLQ(context.Context, *UpdateDLQRequest) (*UpdateDLQResponse, error)
 	ExportPipeline(context.Context, *ExportPipelineRequest) (*ExportPipelineResponse, error)
 	ImportPipeline(context.Context, *ImportPipelineRequest) (*ImportPipelineResponse, error)
 	mustEmbedUnimplementedPipelineServiceServer()
@@ -162,6 +184,12 @@ func (UnimplementedPipelineServiceServer) StartPipeline(context.Context, *StartP
 }
 func (UnimplementedPipelineServiceServer) StopPipeline(context.Context, *StopPipelineRequest) (*StopPipelineResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method StopPipeline not implemented")
+}
+func (UnimplementedPipelineServiceServer) GetDLQ(context.Context, *GetDLQRequest) (*GetDLQResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetDLQ not implemented")
+}
+func (UnimplementedPipelineServiceServer) UpdateDLQ(context.Context, *UpdateDLQRequest) (*UpdateDLQResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateDLQ not implemented")
 }
 func (UnimplementedPipelineServiceServer) ExportPipeline(context.Context, *ExportPipelineRequest) (*ExportPipelineResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ExportPipeline not implemented")
@@ -308,6 +336,42 @@ func _PipelineService_StopPipeline_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _PipelineService_GetDLQ_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetDLQRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PipelineServiceServer).GetDLQ(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/api.v1.PipelineService/GetDLQ",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PipelineServiceServer).GetDLQ(ctx, req.(*GetDLQRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PipelineService_UpdateDLQ_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateDLQRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PipelineServiceServer).UpdateDLQ(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/api.v1.PipelineService/UpdateDLQ",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PipelineServiceServer).UpdateDLQ(ctx, req.(*UpdateDLQRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _PipelineService_ExportPipeline_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ExportPipelineRequest)
 	if err := dec(in); err != nil {
@@ -378,6 +442,14 @@ var PipelineService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "StopPipeline",
 			Handler:    _PipelineService_StopPipeline_Handler,
+		},
+		{
+			MethodName: "GetDLQ",
+			Handler:    _PipelineService_GetDLQ_Handler,
+		},
+		{
+			MethodName: "UpdateDLQ",
+			Handler:    _PipelineService_UpdateDLQ_Handler,
 		},
 		{
 			MethodName: "ExportPipeline",

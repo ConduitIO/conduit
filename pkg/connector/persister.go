@@ -43,7 +43,7 @@ type Persister struct {
 	// m guards all private variables below it.
 	m           sync.Mutex
 	bundleCount int
-	callbacks   map[Connector]PersistCallback
+	callbacks   map[*Instance]PersistCallback
 	flushTimer  *time.Timer
 	flushWg     sync.WaitGroup
 }
@@ -63,7 +63,7 @@ func NewPersister(
 		logger: logger.WithComponent("connector.Persister"),
 		db:     db,
 		// persister should never retrieve data, the store does not need a builder
-		store: NewStore(db, logger, nil),
+		store: NewStore(db, logger),
 
 		delayThreshold:       delayThreshold,
 		bundleCountThreshold: bundleCountThreshold,
@@ -92,15 +92,15 @@ func (p *Persister) ConnectorStopped() {
 // connectors until either the number of detected changes reaches the configured
 // threshold or the configured delay is reached (whichever comes first), then
 // the connectors are flushed and a new batch starts to be collected.
-func (p *Persister) Persist(ctx context.Context, conn Connector, callback PersistCallback) {
+func (p *Persister) Persist(ctx context.Context, conn *Instance, callback PersistCallback) {
 	p.m.Lock()
 	defer p.m.Unlock()
 
 	p.logger.Trace(ctx).
-		Str(log.ConnectorIDField, conn.ID()).
+		Str(log.ConnectorIDField, conn.ID).
 		Msg("adding connector to next persist batch")
 	if p.callbacks == nil {
-		p.callbacks = make(map[Connector]PersistCallback)
+		p.callbacks = make(map[*Instance]PersistCallback)
 	}
 	p.callbacks[conn] = callback
 	p.bundleCount++
@@ -156,7 +156,7 @@ func (p *Persister) triggerFlush(ctx context.Context) {
 }
 
 // flushNow will flush the state to the store.
-func (p *Persister) flushNow(ctx context.Context, callbacks map[Connector]PersistCallback) {
+func (p *Persister) flushNow(ctx context.Context, callbacks map[*Instance]PersistCallback) {
 	defer p.flushWg.Done()
 	start := time.Now()
 
@@ -169,12 +169,11 @@ func (p *Persister) flushNow(ctx context.Context, callbacks map[Connector]Persis
 
 	defer tx.Discard()
 	for conn := range callbacks {
-		err = p.store.Set(ctx, conn.ID(), conn)
+		err := p.flushSingle(ctx, conn)
 		if err != nil {
 			p.logger.Err(ctx, err).
-				Str(log.ConnectorIDField, conn.ID()).
+				Str(log.ConnectorIDField, conn.ID).
 				Msg("error while saving connector")
-			break
 		}
 	}
 	if err == nil {
@@ -190,4 +189,10 @@ func (p *Persister) flushNow(ctx context.Context, callbacks map[Connector]Persis
 		Int("count", len(callbacks)).
 		Dur(log.DurationField, time.Since(start)).
 		Msg("persisted connectors")
+}
+
+func (p *Persister) flushSingle(ctx context.Context, conn *Instance) error {
+	conn.Lock()
+	defer conn.Unlock()
+	return p.store.Set(ctx, conn.ID, conn)
 }

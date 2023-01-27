@@ -22,8 +22,8 @@ import (
 )
 
 type MetricsNode struct {
-	Name           string
-	BytesHistogram metrics.Histogram
+	Name      string
+	Histogram metrics.RecordBytesHistogram
 
 	base   pubSubNodeBase
 	logger log.CtxLogger
@@ -47,22 +47,7 @@ func (n *MetricsNode) Run(ctx context.Context) error {
 		}
 
 		msg.RegisterAckHandler(func(msg *Message) error {
-			// TODO for now we call method Bytes() on key and payload to get the
-			//  bytes representation. In case of a structured payload or key it
-			//  is marshaled into JSON, which might not be the correct way to
-			//  determine bytes. Not sure how we could improve this part without
-			//  offloading the bytes calculation to the plugin.
-			var bytes int
-			if msg.Record.Key != nil {
-				bytes += len(msg.Record.Key.Bytes())
-			}
-			if msg.Record.Payload.Before != nil {
-				bytes += len(msg.Record.Payload.Before.Bytes())
-			}
-			if msg.Record.Payload.After != nil {
-				bytes += len(msg.Record.Payload.After.Bytes())
-			}
-			n.BytesHistogram.Observe(float64(bytes))
+			n.Histogram.Observe(msg.Record)
 			return nil
 		})
 
