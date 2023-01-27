@@ -163,3 +163,15 @@ function process(record) {
     return record;
 }
 ```
+
+## Inspecting a processor
+Records entering a processor and the resulting records can be inspected using 
+[Conduit's stream inspector](/docs/design-documents/20221024-stream-inspector.md). This makes it possible to "debug" a 
+processor.
+
+The records are made available via a WebSocket connection. To inspect input records, the following endpoint needs to be 
+used: `ws://host:port/v1/processors/{processor-id}/inspect-in`. Similarly, to inspect output records, the following 
+endpoint needs to be used: `ws://host:port/v1/processors/{processor-id}/inspect-out`.
+
+For example, if you're running Conduit locally with the default settings, and have a processor called `format-lines`, 
+then you would use the following endpoint: `ws://localhost:8080/v1/processors/format-lines/inspect-out`.

@@ -1341,6 +1341,100 @@
           "ProcessorService"
         ]
       }
+    },
+    "/v1/processors/{id}/inspect-in": {
+      "get": {
+        "summary": "InspectProcessorIn streams records coming into the specified processor",
+        "operationId": "ProcessorService_InspectProcessorIn",
+        "responses": {
+          "200": {
+            "description": "(streaming responses)",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "result": {
+                  "$ref": "#/definitions/v1Record"
+                },
+                "error": {
+                  "$ref": "#/definitions/googlerpcStatus"
+                }
+              },
+              "title": "Stream result of v1InspectProcessorInResponse"
+            }
+          },
+          "500": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            },
+            "examples": {
+              "application/json": {
+                "code": 13,
+                "message": "server error",
+                "details": []
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "ProcessorService"
+        ]
+      }
+    },
+    "/v1/processors/{id}/inspect-out": {
+      "get": {
+        "summary": "InspectProcessorOut streams the output records from the specified processor",
+        "operationId": "ProcessorService_InspectProcessorOut",
+        "responses": {
+          "200": {
+            "description": "(streaming responses)",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "result": {
+                  "$ref": "#/definitions/v1Record"
+                },
+                "error": {
+                  "$ref": "#/definitions/googlerpcStatus"
+                }
+              },
+              "title": "Stream result of v1InspectProcessorOutResponse"
+            }
+          },
+          "500": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            },
+            "examples": {
+              "application/json": {
+                "code": 13,
+                "message": "server error",
+                "details": []
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "ProcessorService"
+        ]
+      }
     }
   },
   "definitions": {
@@ -1772,6 +1866,22 @@
       }
     },
     "v1InspectConnectorResponse": {
+      "type": "object",
+      "properties": {
+        "record": {
+          "$ref": "#/definitions/v1Record"
+        }
+      }
+    },
+    "v1InspectProcessorInResponse": {
+      "type": "object",
+      "properties": {
+        "record": {
+          "$ref": "#/definitions/v1Record"
+        }
+      }
+    },
+    "v1InspectProcessorOutResponse": {
       "type": "object",
       "properties": {
         "record": {

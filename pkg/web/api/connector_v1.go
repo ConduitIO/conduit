@@ -75,7 +75,7 @@ func (c *ConnectorAPIv1) InspectConnector(req *apiv1.InspectConnectorRequest, se
 
 	session, err := c.cs.Inspect(server.Context(), req.Id)
 	if err != nil {
-		return status.ConnectorError(cerrors.Errorf("failed to get connector: %w", err))
+		return status.ConnectorError(cerrors.Errorf("failed to inspect connector: %w", err))
 	}
 
 	for rec := range session.C {

@@ -18,6 +18,8 @@ import (
 	"context"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/inspector"
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/dop251/goja"
@@ -46,10 +48,15 @@ type jsRecord struct {
 type Processor struct {
 	runtime  *goja.Runtime
 	function goja.Callable
+	inInsp   *inspector.Inspector
+	outInsp  *inspector.Inspector
 }
 
 func New(src string, logger zerolog.Logger) (*Processor, error) {
-	p := &Processor{}
+	p := &Processor{
+		inInsp:  inspector.New(log.New(logger), inspector.DefaultBufferSize),
+		outInsp: inspector.New(log.New(logger), inspector.DefaultBufferSize),
+	}
 	err := p.initJSRuntime(logger)
 	if err != nil {
 		return nil, cerrors.Errorf("failed initializing JS runtime: %w", err)
@@ -134,7 +141,8 @@ func (p *Processor) jsContentStructured(goja.ConstructorCall) *goja.Object {
 	return p.runtime.ToValue(r).ToObject(p.runtime)
 }
 
-func (p *Processor) Process(_ context.Context, in record.Record) (record.Record, error) {
+func (p *Processor) Process(ctx context.Context, in record.Record) (record.Record, error) {
+	p.inInsp.Send(ctx, in)
 	jsr := p.toJSRecord(in)
 
 	result, err := p.function(goja.Undefined(), jsr)
@@ -150,7 +158,16 @@ func (p *Processor) Process(_ context.Context, in record.Record) (record.Record,
 		return record.Record{}, cerrors.Errorf("failed to transform to internal record: %w", err)
 	}
 
+	p.outInsp.Send(ctx, out)
 	return out, nil
+}
+
+func (p *Processor) InspectIn(ctx context.Context) *inspector.Session {
+	return p.inInsp.NewSession(ctx)
+}
+
+func (p *Processor) InspectOut(ctx context.Context) *inspector.Session {
+	return p.outInsp.NewSession(ctx)
 }
 
 func (p *Processor) toJSRecord(r record.Record) goja.Value {

@@ -38,8 +38,6 @@ const (
 	ProvisionTypeDLQ // used for provisioning DLQ connectors which are not persisted
 )
 
-const inspectorBufferSize = 1000
-
 type (
 	// Type defines the connector type.
 	Type int
@@ -94,7 +92,7 @@ func (i *Instance) Init(logger log.CtxLogger, persister *Persister) {
 
 	i.logger = connLogger
 	i.persister = persister
-	i.inspector = inspector.New(i.logger, inspectorBufferSize)
+	i.inspector = inspector.New(i.logger, inspector.DefaultBufferSize)
 }
 
 // Inspect returns an inspector.Session which exposes the records

@@ -13,6 +13,8 @@
 // limitations under the License.
 
 //go:generate mockgen -destination=mock/processor.go -package=mock -mock_names=ProcessorOrchestrator=ProcessorOrchestrator . ProcessorOrchestrator
+//go:generate mockgen -destination=mock/processor_service_in.go -package=mock -mock_names=ProcessorService_InspectProcessorInServer=ProcessorService_InspectProcessorInServer github.com/conduitio/conduit/proto/gen/api/v1 ProcessorService_InspectProcessorInServer
+//go:generate mockgen -destination=mock/processor_service_out.go -package=mock -mock_names=ProcessorService_InspectProcessorOutServer=ProcessorService_InspectProcessorOutServer github.com/conduitio/conduit/proto/gen/api/v1 ProcessorService_InspectProcessorOutServer
 
 package api
 
@@ -20,6 +22,7 @@ import (
 	"context"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/inspector"
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/web/api/fromproto"
 	"github.com/conduitio/conduit/pkg/web/api/status"
@@ -39,6 +42,10 @@ type ProcessorOrchestrator interface {
 	Update(ctx context.Context, id string, cfg processor.Config) (*processor.Instance, error)
 	// Delete removes a processor
 	Delete(ctx context.Context, id string) error
+	// InspectIn starts an inspector session for the records coming into the processor with given ID.
+	InspectIn(ctx context.Context, id string) (*inspector.Session, error)
+	// InspectOut starts an inspector session for the records going out of the processor with given ID.
+	InspectOut(ctx context.Context, id string) (*inspector.Session, error)
 }
 
 type ProcessorAPIv1 struct {
@@ -70,6 +77,66 @@ func (p *ProcessorAPIv1) ListProcessors(
 	}
 
 	return &apiv1.ListProcessorsResponse{Processors: plist}, nil
+}
+
+func (p *ProcessorAPIv1) InspectProcessorIn(
+	req *apiv1.InspectProcessorInRequest,
+	server apiv1.ProcessorService_InspectProcessorInServer,
+) error {
+	if req.Id == "" {
+		return status.ProcessorError(cerrors.ErrEmptyID)
+	}
+
+	session, err := p.ps.InspectIn(server.Context(), req.Id)
+	if err != nil {
+		return status.ProcessorError(cerrors.Errorf("failed to inspect processor: %w", err))
+	}
+
+	for rec := range session.C {
+		recProto, err2 := toproto.Record(rec)
+		if err2 != nil {
+			return cerrors.Errorf("failed converting record: %w", err2)
+		}
+
+		err2 = server.Send(&apiv1.InspectProcessorInResponse{
+			Record: recProto,
+		})
+		if err2 != nil {
+			return cerrors.Errorf("failed sending record: %w", err2)
+		}
+	}
+
+	return cerrors.New("inspector session closed")
+}
+
+func (p *ProcessorAPIv1) InspectProcessorOut(
+	req *apiv1.InspectProcessorOutRequest,
+	server apiv1.ProcessorService_InspectProcessorOutServer,
+) error {
+	if req.Id == "" {
+		return status.ProcessorError(cerrors.ErrEmptyID)
+	}
+
+	session, err := p.ps.InspectOut(server.Context(), req.Id)
+	if err != nil {
+		return status.ProcessorError(cerrors.Errorf("failed to inspect processor: %w", err))
+	}
+
+	for rec := range session.C {
+		recProto, err2 := toproto.Record(rec)
+		if err2 != nil {
+			return cerrors.Errorf("failed converting record: %w", err2)
+		}
+
+		err2 = server.Send(&apiv1.InspectProcessorOutResponse{
+			Record: recProto,
+		})
+		if err2 != nil {
+			return cerrors.Errorf("failed sending record: %w", err2)
+		}
+	}
+
+	return cerrors.New("inspector session closed")
 }
 
 // GetProcessor returns a single Interface proto response or an error.
