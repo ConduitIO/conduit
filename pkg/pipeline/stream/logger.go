@@ -28,7 +28,13 @@ func SetLogger(n Node, logger log.CtxLogger) {
 		return
 	}
 
-	nt := reflect.TypeOf(ln)
+	logger = BuildLogger(n, logger)
+	ln.SetLogger(logger)
+}
+
+// BuildLogger builds the logger for a specific node by adding static metadata.
+func BuildLogger(n Node, logger log.CtxLogger) log.CtxLogger {
+	nt := reflect.TypeOf(n)
 	for nt.Kind() == reflect.Ptr {
 		nt = nt.Elem()
 	}
@@ -36,5 +42,5 @@ func SetLogger(n Node, logger log.CtxLogger) {
 	logger = logger.WithComponent(nt.Name())
 	logger.Logger = logger.With().Str(log.NodeIDField, n.ID()).Logger()
 
-	ln.SetLogger(logger)
+	return logger
 }

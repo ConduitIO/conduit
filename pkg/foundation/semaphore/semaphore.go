@@ -31,7 +31,7 @@ type Simple struct {
 // Ticket reserves a place in the queue and can be used to acquire access to a
 // Lock.
 type Ticket struct {
-	Lock
+	l Lock
 	// ready is the same channel as Lock.next of the previous lock. Once the
 	// previous lock is released, the value i will be sent into ready, signaling
 	// this ticket that it can acquire a Lock.
@@ -64,13 +64,13 @@ func (s *Simple) Enqueue() Ticket {
 	})
 
 	t := Ticket{
-		Lock: Lock{
+		l: Lock{
 			i:    s.last.i + 1,
 			next: s.chanPool.Get().(chan int),
 		},
 		ready: s.last.next,
 	}
-	s.last = t.Lock
+	s.last = t.l
 	return t
 }
 
@@ -80,7 +80,7 @@ func (s *Simple) Enqueue() Ticket {
 // Acquire is safe for concurrent use.
 func (s *Simple) Acquire(t Ticket) Lock {
 	i := <-t.ready
-	if t.i != i {
+	if t.l.i != i {
 		// Multiple reasons this can happen. A ticket other than this one could
 		// have been successfully released twice. The other possibility is that
 		// this ticket is trying to be acquired after it was released. Both
@@ -88,7 +88,7 @@ func (s *Simple) Acquire(t Ticket) Lock {
 		s.panic()
 	}
 	s.chanPool.Put(t.ready)
-	return t.Lock // return only the lock part of the ticket
+	return t.l // return only the lock part of the ticket
 }
 
 // Release releases the lock and allows the next ticket in line to acquire a
@@ -108,6 +108,14 @@ func (s *Simple) Release(l Lock) {
 		// in the channel and panic.
 		s.panic()
 	}
+}
+
+// Discard TODO
+func (s *Simple) Discard(t Ticket) {
+	go func() {
+		l := s.Acquire(t)
+		s.Release(l)
+	}()
 }
 
 func (s *Simple) panic() {

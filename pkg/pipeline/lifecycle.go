@@ -288,16 +288,31 @@ func (s *Service) buildProcessorNodes(
 			return nil, cerrors.Errorf("could not fetch processor: %w", err)
 		}
 
-		node := stream.ProcessorNode{
-			Name:           proc.ID,
-			Processor:      proc.Processor,
-			ProcessorTimer: measure.ProcessorExecutionDurationTimer.WithValues(pl.Config.Name, proc.Type),
-			Workers:        proc.Config.Workers,
+		var node stream.PubSubNode
+		if proc.Config.Workers > 1 {
+			node = &stream.ParallelNode{
+				Name: proc.ID + "-parallel",
+				NewNode: func(i int) stream.PubSubNode {
+					return &stream.ProcessorNode{
+						Name:           fmt.Sprintf("%s-%d", proc.ID, i),
+						Processor:      proc.Processor,
+						ProcessorTimer: measure.ProcessorExecutionDurationTimer.WithValues(pl.Config.Name, proc.Type),
+					}
+				},
+				Workers: proc.Config.Workers,
+			}
+		} else {
+			node = &stream.ProcessorNode{
+				Name:           proc.ID,
+				Processor:      proc.Processor,
+				ProcessorTimer: measure.ProcessorExecutionDurationTimer.WithValues(pl.Config.Name, proc.Type),
+			}
 		}
-		node.Sub(prev.Pub())
-		prev = &node
 
-		nodes = append(nodes, &node)
+		node.Sub(prev.Pub())
+		prev = node
+
+		nodes = append(nodes, node)
 	}
 
 	last.Sub(prev.Pub())

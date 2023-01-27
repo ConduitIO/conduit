@@ -348,13 +348,16 @@ func (n *nodeBase) Send(
 	if msg.Ctx == nil {
 		msg.Ctx = ctxutil.ContextWithMessageID(ctx, msg.ID())
 	}
+	// copy context into a local variable, we shouldn't access it anymore after
+	// we send the message to out
+	msgCtx := msg.Ctx
 
 	select {
 	case <-ctx.Done():
-		logger.Debug(msg.Ctx).Msg("context closed while sending message")
+		logger.Debug(msgCtx).Msg("context closed while sending message")
 		return ctx.Err()
 	case out <- msg:
-		logger.Trace(msg.Ctx).Msg("sent message to outgoing channel")
+		logger.Trace(msgCtx).Msg("sent message to outgoing channel")
 	}
 	return nil
 }
