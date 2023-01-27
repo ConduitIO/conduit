@@ -5,9 +5,9 @@ go 1.18
 require (
 	github.com/Masterminds/semver/v3 v3.2.0
 	github.com/NYTimes/gziphandler v1.1.1
-	github.com/antchfx/jsonquery v1.3.1
+	github.com/antchfx/jsonquery v1.3.2
 	github.com/conduitio/conduit-connector-file v0.3.0
-	github.com/conduitio/conduit-connector-generator v0.3.0
+	github.com/conduitio/conduit-connector-generator v0.3.1
 	github.com/conduitio/conduit-connector-kafka v0.3.0
 	github.com/conduitio/conduit-connector-log v0.1.2
 	github.com/conduitio/conduit-connector-postgres v0.3.0
@@ -33,7 +33,7 @@ require (
 	github.com/prometheus/client_golang v1.14.0
 	github.com/prometheus/client_model v0.3.0
 	github.com/prometheus/common v0.39.0
-	github.com/rs/zerolog v1.28.0
+	github.com/rs/zerolog v1.29.0
 	go.buf.build/grpc/go/conduitio/conduit-connector-protocol v1.4.5
 	go.buf.build/protocolbuffers/go/grpc-ecosystem/grpc-gateway v1.3.50
 	go.uber.org/goleak v1.2.0
@@ -48,7 +48,7 @@ require (
 
 require (
 	github.com/Masterminds/squirrel v1.5.3 // indirect
-	github.com/antchfx/xpath v1.2.2 // indirect
+	github.com/antchfx/xpath v1.2.3 // indirect
 	github.com/apache/arrow/go/arrow v0.0.0-20211112161151-bc219186db40 // indirect
 	github.com/apache/thrift v0.17.0 // indirect
 	github.com/avast/retry-go v3.0.0+incompatible // indirect
