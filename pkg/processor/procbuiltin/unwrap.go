@@ -190,19 +190,19 @@ func (d *DebeziumUnwrapper) Unwrap(rec record.Record) (record.Record, error) {
 
 	var before record.StructuredData
 	beforeData := structPayload[debeziumFieldBefore]
-	if b, ok := beforeData.(map[string]any); beforeData != nil && !ok {
+	b, ok := beforeData.(map[string]any)
+	if beforeData != nil && !ok {
 		return record.Record{}, cerrors.Errorf("%s field is not a map", debeziumFieldBefore)
-	} else {
-		before = b
 	}
+	before = b
 
 	var after record.StructuredData
 	afterData := structPayload[debeziumFieldAfter]
-	if a, ok := afterData.(map[string]any); afterData != nil && !ok {
+	a, ok := afterData.(map[string]any)
+	if afterData != nil && !ok {
 		return record.Record{}, cerrors.Errorf("%s field is not a map", debeziumFieldAfter)
-	} else {
-		after = a
 	}
+	after = a
 
 	op, ok := structPayload[debeziumFieldOp].(string)
 	if !ok {
