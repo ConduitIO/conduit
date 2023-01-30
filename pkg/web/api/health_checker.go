@@ -30,8 +30,11 @@ type HealthChecker struct {
 }
 
 func (s *HealthChecker) Check(ctx context.Context, req *grpc_health_v1.HealthCheckRequest) (*grpc_health_v1.HealthCheckResponse, error) {
+	// todo log error
+
 	var status grpc_health_v1.HealthCheckResponse_ServingStatus
 	switch req.Service {
+	// todo have checks in services
 	case "", "PipelineService", "ConnectorService", "ProcessorService":
 		// PipelineService, ConnectorService, ProcessorService require a DB to work
 		if err := s.db.Ping(ctx); err != nil {
