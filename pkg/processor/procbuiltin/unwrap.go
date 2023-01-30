@@ -19,13 +19,19 @@ import (
 	"encoding/json"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/multierror"
+	"github.com/conduitio/conduit/pkg/inspector"
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/record"
+	"github.com/rs/zerolog"
 )
 
 type unwrapProcessor struct {
 	unWrapper unWrapper
+
+	inInsp  *inspector.Inspector
+	outInsp *inspector.Inspector
 }
 
 // unWrapper unwraps the formatted record from the openCDC record
@@ -55,7 +61,14 @@ func UnwrapBuilder(config processor.Config) (processor.Interface, error) {
 	if format != FormatDebezium && format != FormatKafkaConnect {
 		return nil, cerrors.Errorf("%s: %q is not a valid format", unwrapPayloadProcType, format)
 	}
-	proc := unwrapProcessor{}
+
+	cw := zerolog.NewConsoleWriter()
+	cw.TimeFormat = "2006-01-02T15:04:05+00:00"
+	logger := zerolog.New(cw).With().Timestamp().Logger()
+	proc := &unwrapProcessor{
+		inInsp:  inspector.New(log.New(logger), inspector.DefaultBufferSize),
+		outInsp: inspector.New(log.New(logger), inspector.DefaultBufferSize),
+	}
 	switch format {
 	case FormatDebezium:
 		proc.unWrapper = &DebeziumUnWrapper{}
@@ -65,12 +78,22 @@ func UnwrapBuilder(config processor.Config) (processor.Interface, error) {
 	return proc, nil
 }
 
-func (p unwrapProcessor) Process(ctx context.Context, rec record.Record) (record.Record, error) {
-	r, err := p.unWrapper.Unwrap(rec)
+func (p *unwrapProcessor) Process(ctx context.Context, in record.Record) (record.Record, error) {
+	p.inInsp.Send(ctx, in)
+	out, err := p.unWrapper.Unwrap(in)
 	if err != nil {
 		return record.Record{}, cerrors.Errorf("%s: error unwrapping record: %w", unwrapPayloadProcType, err)
 	}
-	return r, nil
+	p.outInsp.Send(ctx, out)
+	return out, nil
+}
+
+func (p *unwrapProcessor) InspectIn(ctx context.Context) *inspector.Session {
+	return p.inInsp.NewSession(ctx)
+}
+
+func (p *unwrapProcessor) InspectOut(ctx context.Context) *inspector.Session {
+	return p.outInsp.NewSession(ctx)
 }
 
 /*

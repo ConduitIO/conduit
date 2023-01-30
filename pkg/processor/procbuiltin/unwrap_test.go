@@ -24,6 +24,24 @@ import (
 	"github.com/matryer/is"
 )
 
+const DebeziumRecord = "{" +
+	"\"payload\":" +
+	"{" +
+	"\"after\":{\"description\":\"test1\",\"id\":27}," +
+	"\"before\":null,\"op\":\"c\"," +
+	"\"source\":" +
+	"{" +
+	"\"conduit.source.connector.id\":\"pg-to-kafka:pg\"," +
+	"\"opencdc.readAt\":\"1674061777225877000\"," +
+	"\"opencdc.version\":\"v1\"," +
+	"\"postgres.table\":\"stuff\"" +
+	"}," +
+	"\"transaction\":null," +
+	"\"ts_ms\":1674061777225" +
+	"}," +
+	"\"schema\":{}" +
+	"}"
+
 func TestUnwrap_Config(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -92,7 +110,7 @@ func TestUnwrap_Process(t *testing.T) {
 				Payload: record.Change{
 					Before: nil,
 					After: record.RawData{
-						Raw: []byte(dbz),
+						Raw: []byte(DebeziumRecord),
 					},
 				},
 			},

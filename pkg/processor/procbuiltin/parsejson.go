@@ -48,7 +48,7 @@ func parseJSON(
 	getSetter recordDataGetSetter,
 	config processor.Config,
 ) (processor.Interface, error) {
-	return processor.InterfaceFunc(func(_ context.Context, r record.Record) (record.Record, error) {
+	return NewFuncWrapper(func(_ context.Context, r record.Record) (record.Record, error) {
 		data := getSetter.Get(r)
 
 		switch data.(type) {
