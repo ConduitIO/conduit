@@ -16,6 +16,7 @@ package badger
 
 import (
 	"context"
+	"github.com/google/uuid"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/ctxutil"
@@ -45,6 +46,13 @@ func New(l zerolog.Logger, path string) (*DB, error) {
 	return &DB{
 		db: db,
 	}, nil
+}
+
+func (d *DB) Ping(ctx context.Context) error {
+	key := "test-" + uuid.NewString()
+	defer d.Set(ctx, key, nil)
+
+	return d.Set(ctx, key, []byte{})
 }
 
 // NewTransaction starts a new transaction and returns a context that contains

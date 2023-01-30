@@ -35,6 +35,10 @@ type DB interface {
 	// store. After Close is called other methods should return an error.
 	Close() error
 
+	// Ping pings the database and returns an error
+	// if a connection to it is not possible.
+	Ping(context.Context) error
+
 	Set(ctx context.Context, key string, value []byte) error
 	Get(ctx context.Context, key string) ([]byte, error)
 	GetKeys(ctx context.Context, prefix string) ([]string, error)

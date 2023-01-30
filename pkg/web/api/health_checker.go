@@ -34,7 +34,7 @@ func (s *HealthChecker) Check(ctx context.Context, req *grpc_health_v1.HealthChe
 	switch req.Service {
 	case "", "PipelineService", "ConnectorService", "ProcessorService":
 		// PipelineService, ConnectorService, ProcessorService require a DB to work
-		if err := s.checkDB(ctx); err != nil {
+		if err := s.db.Ping(ctx); err != nil {
 			status = grpc_health_v1.HealthCheckResponse_NOT_SERVING
 		} else {
 			status = grpc_health_v1.HealthCheckResponse_SERVING
