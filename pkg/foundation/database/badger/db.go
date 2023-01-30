@@ -16,13 +16,13 @@ package badger
 
 import (
 	"context"
-	"github.com/google/uuid"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/ctxutil"
 	"github.com/conduitio/conduit/pkg/foundation/database"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/dgraph-io/badger/v3"
+	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 )
 

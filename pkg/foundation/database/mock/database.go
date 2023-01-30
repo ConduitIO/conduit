@@ -95,6 +95,20 @@ func (mr *DBMockRecorder) NewTransaction(arg0, arg1 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewTransaction", reflect.TypeOf((*DB)(nil).NewTransaction), arg0, arg1)
 }
 
+// Ping mocks base method.
+func (m *DB) Ping(arg0 context.Context) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Ping", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Ping indicates an expected call of Ping.
+func (mr *DBMockRecorder) Ping(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Ping", reflect.TypeOf((*DB)(nil).Ping), arg0)
+}
+
 // Set mocks base method.
 func (m *DB) Set(arg0 context.Context, arg1 string, arg2 []byte) error {
 	m.ctrl.T.Helper()
