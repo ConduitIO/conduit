@@ -17,25 +17,20 @@ package procbuiltin
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/multierror"
-	"github.com/conduitio/conduit/pkg/inspector"
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/record"
-	"github.com/rs/zerolog"
 )
 
 type unwrapProcessor struct {
-	unWrapper unWrapper
-
-	inInsp  *inspector.Inspector
-	outInsp *inspector.Inspector
+	unwrapper unwrapper
 }
 
-// unWrapper unwraps the formatted record from the openCDC record
-type unWrapper interface {
+// unwrapper unwraps the formatted record from the openCDC record
+type unwrapper interface {
 	// Unwrap gets the unwrapped record
 	Unwrap(record.Record) (record.Record, error)
 }
@@ -58,58 +53,21 @@ func UnwrapBuilder(config processor.Config) (processor.Interface, error) {
 		return nil, cerrors.Errorf("%s: %q config not specified", unwrapPayloadProcType, unwrapConfigFormat)
 	}
 	format := config.Settings[unwrapConfigFormat]
-	if format != FormatDebezium && format != FormatKafkaConnect {
+	proc := &unwrapProcessor{}
+	switch format {
+	case FormatDebezium:
+		proc.unwrapper = &DebeziumUnwrapper{}
+	case FormatKafkaConnect:
+		proc.unwrapper = &KafkaConnectUnwrapper{}
+	default:
 		return nil, cerrors.Errorf("%s: %q is not a valid format", unwrapPayloadProcType, format)
 	}
 
-	cw := zerolog.NewConsoleWriter()
-	cw.TimeFormat = "2006-01-02T15:04:05+00:00"
-	logger := zerolog.New(cw).With().Timestamp().Logger()
-	proc := &unwrapProcessor{
-		inInsp:  inspector.New(log.New(logger), inspector.DefaultBufferSize),
-		outInsp: inspector.New(log.New(logger), inspector.DefaultBufferSize),
-	}
-	switch format {
-	case FormatDebezium:
-		proc.unWrapper = &DebeziumUnWrapper{}
-	case FormatKafkaConnect:
-		proc.unWrapper = &KafkaConnectUnWrapper{}
-	}
-	return proc, nil
+	return NewFuncWrapper(proc.Process), nil
 }
 
 func (p *unwrapProcessor) Process(ctx context.Context, in record.Record) (record.Record, error) {
-	p.inInsp.Send(ctx, in)
-	out, err := p.unWrapper.Unwrap(in)
-	if err != nil {
-		return record.Record{}, cerrors.Errorf("%s: error unwrapping record: %w", unwrapPayloadProcType, err)
-	}
-	p.outInsp.Send(ctx, out)
-	return out, nil
-}
-
-func (p *unwrapProcessor) InspectIn(ctx context.Context) *inspector.Session {
-	return p.inInsp.NewSession(ctx)
-}
-
-func (p *unwrapProcessor) InspectOut(ctx context.Context) *inspector.Session {
-	return p.outInsp.NewSession(ctx)
-}
-
-/*
-	 example of kafka-connect record:
-		`{
-		 "payload": {
-		     "description": "desc",
-		     "id": 20
-		   },
-		 "schema": {} // will be ignored
-		}`
-*/
-type KafkaConnectUnWrapper struct{}
-
-func (kp *KafkaConnectUnWrapper) Unwrap(rec record.Record) (record.Record, error) {
-	data := rec.Payload.After
+	data := in.Payload.After
 	var structData record.StructuredData
 	switch d := data.(type) {
 	case record.RawData:
@@ -124,10 +82,38 @@ func (kp *KafkaConnectUnWrapper) Unwrap(rec record.Record) (record.Record, error
 	default:
 		return record.Record{}, cerrors.Errorf("unexpected data type %T", unwrapPayloadProcType, data)
 	}
+	// assign the structured data to payload.After
+	in.Payload.After = structData
+
+	out, err := p.unwrapper.Unwrap(in)
+	if err != nil {
+		return record.Record{}, cerrors.Errorf("%s: error unwrapping record: %w", unwrapPayloadProcType, err)
+	}
+	return out, nil
+}
+
+/*
+	 example of kafka-connect record:
+		`{
+		 "payload": {
+		     "description": "desc",
+		     "id": 20
+		   },
+		 "schema": {} // will be ignored
+		}`
+*/
+// KafkaConnectUnwrapper unwraps a kafka connect record from the payload, expects rec.Payload.After to be of type record.StructuredData
+type KafkaConnectUnwrapper struct{}
+
+func (kp *KafkaConnectUnwrapper) Unwrap(rec record.Record) (record.Record, error) {
+	// record must be structured
+	structPayload, ok := rec.Payload.After.(record.StructuredData)
+	if !ok {
+		return record.Record{}, cerrors.Errorf("record payload data must be structured data")
+	}
 
 	// get payload
-	var structPayload record.StructuredData
-	payload := structData["payload"]
+	payload := structPayload["payload"]
 	if p, ok := payload.(map[string]interface{}); ok {
 		structPayload = p
 	} else {
@@ -166,41 +152,30 @@ func (kp *KafkaConnectUnWrapper) Unwrap(rec record.Record) (record.Record, error
 		 "schema": {} // will be ignored
 		}`
 */
-type DebeziumUnWrapper struct{}
+// DebeziumUnwrapper unwraps a debezium record from the payload, expects rec.Payload.After to be of type record.StructuredData
+type DebeziumUnwrapper struct{}
 
 const (
-	DebeziumOpCreate = "c"
-	DebeziumOpUpdate = "u"
-	DebeziumOpDelete = "d"
-	DebeziumOpRead   = "r" // snapshot
+	debeziumOpCreate = "c"
+	debeziumOpUpdate = "u"
+	debeziumOpDelete = "d"
+	debeziumOpRead   = "r" // snapshot
 
-	DebeziumFieldBefore  = "before"
-	DebeziumFieldAfter   = "after"
-	DebeziumFieldSource  = "source"
-	DebeziumFieldOp      = "op"
-	DebeziumFieldPayload = "payload"
+	debeziumFieldBefore = "before"
+	debeziumFieldAfter  = "after"
+	debeziumFieldSource = "source"
+	debeziumFieldOp     = "op"
+	debeziumFieldTsMs   = "ts_ms"
 )
 
-func (d *DebeziumUnWrapper) Unwrap(rec record.Record) (record.Record, error) {
-	data := rec.Payload.After
-	var structData record.StructuredData
-	switch d := data.(type) {
-	case record.RawData:
-		// todo: take this section out, after platform team support ordering processors
-		// unmarshal raw data to structured
-		err := json.Unmarshal(data.Bytes(), &structData)
-		if err != nil {
-			return record.Record{}, cerrors.Errorf("failed to unmarshal raw data as JSON: %w", unwrapPayloadProcType, err)
-		}
-	case record.StructuredData:
-		structData = d
-	default:
-		return record.Record{}, cerrors.Errorf("unexpected data type %T", unwrapPayloadProcType, data)
+func (d *DebeziumUnwrapper) Unwrap(rec record.Record) (record.Record, error) {
+	// record must be structured
+	structPayload, ok := rec.Payload.After.(record.StructuredData)
+	if !ok {
+		return record.Record{}, cerrors.Errorf("record payload data must be structured data")
 	}
-
 	// get payload
-	var structPayload record.StructuredData
-	payload := structData["payload"] // the payload has the debezium record
+	payload := structPayload["payload"] // the payload has the debezium record
 	if p, ok := payload.(map[string]interface{}); ok {
 		structPayload = p
 	} else {
@@ -214,19 +189,23 @@ func (d *DebeziumUnWrapper) Unwrap(rec record.Record) (record.Record, error) {
 	}
 
 	var before record.StructuredData
-	if b, ok := structPayload[DebeziumFieldBefore].(map[string]any); ok {
+	beforeData := structPayload[debeziumFieldBefore]
+	if b, ok := beforeData.(map[string]any); beforeData != nil && !ok {
+		return record.Record{}, cerrors.Errorf("%s field is not a map", debeziumFieldBefore)
+	} else {
 		before = b
 	}
 
 	var after record.StructuredData
-	if a, ok := structPayload[DebeziumFieldAfter].(map[string]any); ok {
+	afterData := structPayload[debeziumFieldAfter]
+	if a, ok := afterData.(map[string]any); afterData != nil && !ok {
+		return record.Record{}, cerrors.Errorf("%s field is not a map", debeziumFieldAfter)
+	} else {
 		after = a
 	}
 
-	var op string
-	if str, ok := structPayload[DebeziumFieldOp].(string); ok {
-		op = str
-	} else {
+	op, ok := structPayload[debeziumFieldOp].(string)
+	if !ok {
 		return record.Record{}, cerrors.Errorf("%s operation is not a string", op)
 	}
 
@@ -235,7 +214,7 @@ func (d *DebeziumUnWrapper) Unwrap(rec record.Record) (record.Record, error) {
 		return record.Record{}, cerrors.Errorf("error unwrapping operation: %w", err)
 	}
 
-	metadata, err := d.unwrapMetadata(rec, structPayload)
+	metadata, err := d.unwrapMetadata(rec)
 	if err != nil {
 		return record.Record{}, cerrors.Errorf("error unwrapping metadata: %w", err)
 	}
@@ -252,58 +231,80 @@ func (d *DebeziumUnWrapper) Unwrap(rec record.Record) (record.Record, error) {
 	}, nil
 }
 
-func (d *DebeziumUnWrapper) validateRecord(data record.StructuredData) error {
+func (d *DebeziumUnwrapper) validateRecord(data record.StructuredData) error {
 	var multiErr error
-	if _, ok := data[DebeziumFieldBefore]; !ok {
-		multiErr = multierror.Append(multiErr, cerrors.Errorf("the %q field is missing from debezium payload", DebeziumFieldBefore))
+	if _, ok := data[debeziumFieldBefore]; !ok {
+		multiErr = multierror.Append(multiErr, cerrors.Errorf("the %q field is missing from debezium payload", debeziumFieldBefore))
 	}
-	if _, ok := data[DebeziumFieldAfter]; !ok {
-		multiErr = multierror.Append(multiErr, cerrors.Errorf("the %q field is missing from debezium payload", DebeziumFieldAfter))
+	if _, ok := data[debeziumFieldAfter]; !ok {
+		multiErr = multierror.Append(multiErr, cerrors.Errorf("the %q field is missing from debezium payload", debeziumFieldAfter))
 	}
-	if _, ok := data[DebeziumFieldSource]; !ok {
-		multiErr = multierror.Append(multiErr, cerrors.Errorf("the %q field is missing from debezium payload", DebeziumFieldSource))
+	if _, ok := data[debeziumFieldSource]; !ok {
+		multiErr = multierror.Append(multiErr, cerrors.Errorf("the %q field is missing from debezium payload", debeziumFieldSource))
 	}
-	if _, ok := data[DebeziumFieldOp]; !ok {
-		multiErr = multierror.Append(multiErr, cerrors.Errorf("the %q field is missing from debezium payload", DebeziumFieldOp))
+	if _, ok := data[debeziumFieldOp]; !ok {
+		multiErr = multierror.Append(multiErr, cerrors.Errorf("the %q field is missing from debezium payload", debeziumFieldOp))
 	}
 	// ts_ms and transaction can be empty
 	return multiErr
 }
 
-func (d *DebeziumUnWrapper) unwrapMetadata(rec record.Record, payload record.StructuredData) (record.Metadata, error) {
-	if payload[DebeziumFieldSource] == nil {
-		return nil, nil
-	}
+func (d *DebeziumUnwrapper) unwrapMetadata(rec record.Record) (record.Metadata, error) {
 	meta := record.Metadata{}
-	mp, ok := payload[DebeziumFieldSource].(map[string]interface{})
-	if !ok {
-		return nil, cerrors.Errorf("%q is not formatted as a map", DebeziumFieldSource)
-	}
-	for k, v := range mp {
-		if str, ok := v.(string); ok {
-			meta[k] = str
-		} else {
-			return nil, cerrors.Errorf("the value %q from the field %q is not a string", v, DebeziumFieldSource)
-		}
-	}
-	// append original record's metadata to meta
+	// add original record's metadata to meta
 	for k, v := range rec.Metadata {
 		meta[k] = v
 	}
 
+	var structPayload record.StructuredData
+	if p, ok := rec.Payload.After.(record.StructuredData)["payload"].(map[string]interface{}); ok {
+		structPayload = p
+	} else {
+		return nil, cerrors.Errorf("payload doesn't contain a record")
+	}
+
+	// set metadata readAt time
+	var t time.Time
+	tsMs := structPayload[debeziumFieldTsMs]
+	if tsMs != nil {
+		floatTime, ok := tsMs.(float64)
+		if !ok {
+			return nil, cerrors.Errorf("%s is not a float", debeziumFieldTsMs)
+		}
+		t = time.Unix(0, int64(floatTime)*int64(time.Millisecond))
+	}
+	meta.SetReadAt(t)
+
+	// return current metadata if "source" field doesn't exist
+	if structPayload[debeziumFieldSource] == nil {
+		return meta, nil
+	}
+
+	mp, ok := structPayload[debeziumFieldSource].(map[string]interface{})
+	if !ok {
+		return nil, cerrors.Errorf("%q is not formatted as a map", debeziumFieldSource)
+	}
+
+	for k, v := range mp {
+		if str, ok := v.(string); ok {
+			meta[k] = str
+		} else {
+			return nil, cerrors.Errorf("the value %q from the field %q is not a string", v, debeziumFieldSource)
+		}
+	}
 	return meta, nil
 }
 
 // convertOperation converts debezium operation to openCDC operation
-func (d *DebeziumUnWrapper) convertOperation(op string) (record.Operation, error) {
+func (d *DebeziumUnwrapper) convertOperation(op string) (record.Operation, error) {
 	switch op {
-	case DebeziumOpCreate:
+	case debeziumOpCreate:
 		return record.OperationCreate, nil
-	case DebeziumOpUpdate:
+	case debeziumOpUpdate:
 		return record.OperationUpdate, nil
-	case DebeziumOpDelete:
+	case debeziumOpDelete:
 		return record.OperationDelete, nil
-	case DebeziumOpRead:
+	case debeziumOpRead:
 		return record.OperationSnapshot, nil
 	}
 	return 0, cerrors.Errorf("%q is an invalid operation", op)

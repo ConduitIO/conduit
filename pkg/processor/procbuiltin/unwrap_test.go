@@ -152,7 +152,7 @@ func TestUnwrap_Process(t *testing.T) {
 								"opencdc.version": "v1",
 							},
 							"transaction": interface{}(nil),
-							"ts_ms":       1.674061777225e+12,
+							"ts_ms":       float64(1674061777225),
 						},
 						"schema": map[string]interface{}{},
 					},
