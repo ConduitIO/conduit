@@ -326,7 +326,7 @@ func (r *Runtime) serveGRPCAPI(ctx context.Context, t *tomb.Tomb) (net.Addr, err
 	// https://github.com/grpc/grpc/blob/master/doc/server-reflection.md
 	reflection.Register(grpcServer)
 
-	healthService := api.NewHealthChecker()
+	healthService := api.NewHealthChecker(r.DB)
 	grpc_health_v1.RegisterHealthServer(grpcServer, healthService)
 
 	// serve grpc server

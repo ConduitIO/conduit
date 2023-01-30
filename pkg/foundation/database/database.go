@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//go:generate mockgen -destination=mock/database.go -package=mock -mock_names=DB=DB . DB
+
 package database
 
 import (

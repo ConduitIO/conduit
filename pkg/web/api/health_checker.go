@@ -16,17 +16,18 @@ package api
 
 import (
 	"context"
-
+	"github.com/conduitio/conduit/pkg/foundation/database"
 	"google.golang.org/grpc/health/grpc_health_v1"
 )
 
 type HealthChecker struct {
 	grpc_health_v1.UnimplementedHealthServer
+	db database.DB
 }
 
 func (s *HealthChecker) Check(ctx context.Context, req *grpc_health_v1.HealthCheckRequest) (*grpc_health_v1.HealthCheckResponse, error) {
+	grpc
 	// this is intentionally a placeholder for checking Conduit health.
-	// todo: should be changed to check the connection to the storage layer.
 	return &grpc_health_v1.HealthCheckResponse{
 		Status: grpc_health_v1.HealthCheckResponse_SERVING,
 	}, nil
@@ -39,6 +40,6 @@ func (s *HealthChecker) Watch(req *grpc_health_v1.HealthCheckRequest, server grp
 	})
 }
 
-func NewHealthChecker() *HealthChecker {
-	return &HealthChecker{}
+func NewHealthChecker(db database.DB) *HealthChecker {
+	return &HealthChecker{db: db}
 }
