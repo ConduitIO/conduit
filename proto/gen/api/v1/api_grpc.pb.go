@@ -29,6 +29,8 @@ type PipelineServiceClient interface {
 	DeletePipeline(ctx context.Context, in *DeletePipelineRequest, opts ...grpc.CallOption) (*DeletePipelineResponse, error)
 	StartPipeline(ctx context.Context, in *StartPipelineRequest, opts ...grpc.CallOption) (*StartPipelineResponse, error)
 	StopPipeline(ctx context.Context, in *StopPipelineRequest, opts ...grpc.CallOption) (*StopPipelineResponse, error)
+	GetDLQ(ctx context.Context, in *GetDLQRequest, opts ...grpc.CallOption) (*GetDLQResponse, error)
+	UpdateDLQ(ctx context.Context, in *UpdateDLQRequest, opts ...grpc.CallOption) (*UpdateDLQResponse, error)
 	ExportPipeline(ctx context.Context, in *ExportPipelineRequest, opts ...grpc.CallOption) (*ExportPipelineResponse, error)
 	ImportPipeline(ctx context.Context, in *ImportPipelineRequest, opts ...grpc.CallOption) (*ImportPipelineResponse, error)
 }
@@ -104,6 +106,24 @@ func (c *pipelineServiceClient) StopPipeline(ctx context.Context, in *StopPipeli
 	return out, nil
 }
 
+func (c *pipelineServiceClient) GetDLQ(ctx context.Context, in *GetDLQRequest, opts ...grpc.CallOption) (*GetDLQResponse, error) {
+	out := new(GetDLQResponse)
+	err := c.cc.Invoke(ctx, "/api.v1.PipelineService/GetDLQ", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *pipelineServiceClient) UpdateDLQ(ctx context.Context, in *UpdateDLQRequest, opts ...grpc.CallOption) (*UpdateDLQResponse, error) {
+	out := new(UpdateDLQResponse)
+	err := c.cc.Invoke(ctx, "/api.v1.PipelineService/UpdateDLQ", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *pipelineServiceClient) ExportPipeline(ctx context.Context, in *ExportPipelineRequest, opts ...grpc.CallOption) (*ExportPipelineResponse, error) {
 	out := new(ExportPipelineResponse)
 	err := c.cc.Invoke(ctx, "/api.v1.PipelineService/ExportPipeline", in, out, opts...)
@@ -133,6 +153,8 @@ type PipelineServiceServer interface {
 	DeletePipeline(context.Context, *DeletePipelineRequest) (*DeletePipelineResponse, error)
 	StartPipeline(context.Context, *StartPipelineRequest) (*StartPipelineResponse, error)
 	StopPipeline(context.Context, *StopPipelineRequest) (*StopPipelineResponse, error)
+	GetDLQ(context.Context, *GetDLQRequest) (*GetDLQResponse, error)
+	UpdateDLQ(context.Context, *UpdateDLQRequest) (*UpdateDLQResponse, error)
 	ExportPipeline(context.Context, *ExportPipelineRequest) (*ExportPipelineResponse, error)
 	ImportPipeline(context.Context, *ImportPipelineRequest) (*ImportPipelineResponse, error)
 	mustEmbedUnimplementedPipelineServiceServer()
@@ -162,6 +184,12 @@ func (UnimplementedPipelineServiceServer) StartPipeline(context.Context, *StartP
 }
 func (UnimplementedPipelineServiceServer) StopPipeline(context.Context, *StopPipelineRequest) (*StopPipelineResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method StopPipeline not implemented")
+}
+func (UnimplementedPipelineServiceServer) GetDLQ(context.Context, *GetDLQRequest) (*GetDLQResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetDLQ not implemented")
+}
+func (UnimplementedPipelineServiceServer) UpdateDLQ(context.Context, *UpdateDLQRequest) (*UpdateDLQResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateDLQ not implemented")
 }
 func (UnimplementedPipelineServiceServer) ExportPipeline(context.Context, *ExportPipelineRequest) (*ExportPipelineResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ExportPipeline not implemented")
@@ -308,6 +336,42 @@ func _PipelineService_StopPipeline_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _PipelineService_GetDLQ_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetDLQRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PipelineServiceServer).GetDLQ(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/api.v1.PipelineService/GetDLQ",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PipelineServiceServer).GetDLQ(ctx, req.(*GetDLQRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PipelineService_UpdateDLQ_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateDLQRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PipelineServiceServer).UpdateDLQ(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/api.v1.PipelineService/UpdateDLQ",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PipelineServiceServer).UpdateDLQ(ctx, req.(*UpdateDLQRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _PipelineService_ExportPipeline_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ExportPipelineRequest)
 	if err := dec(in); err != nil {
@@ -378,6 +442,14 @@ var PipelineService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "StopPipeline",
 			Handler:    _PipelineService_StopPipeline_Handler,
+		},
+		{
+			MethodName: "GetDLQ",
+			Handler:    _PipelineService_GetDLQ_Handler,
+		},
+		{
+			MethodName: "UpdateDLQ",
+			Handler:    _PipelineService_UpdateDLQ_Handler,
 		},
 		{
 			MethodName: "ExportPipeline",
@@ -727,6 +799,10 @@ var ConnectorService_ServiceDesc = grpc.ServiceDesc{
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type ProcessorServiceClient interface {
 	ListProcessors(ctx context.Context, in *ListProcessorsRequest, opts ...grpc.CallOption) (*ListProcessorsResponse, error)
+	// InspectProcessorIn streams records coming into the specified processor
+	InspectProcessorIn(ctx context.Context, in *InspectProcessorInRequest, opts ...grpc.CallOption) (ProcessorService_InspectProcessorInClient, error)
+	// InspectProcessorOut streams the output records from the specified processor
+	InspectProcessorOut(ctx context.Context, in *InspectProcessorOutRequest, opts ...grpc.CallOption) (ProcessorService_InspectProcessorOutClient, error)
 	GetProcessor(ctx context.Context, in *GetProcessorRequest, opts ...grpc.CallOption) (*GetProcessorResponse, error)
 	CreateProcessor(ctx context.Context, in *CreateProcessorRequest, opts ...grpc.CallOption) (*CreateProcessorResponse, error)
 	UpdateProcessor(ctx context.Context, in *UpdateProcessorRequest, opts ...grpc.CallOption) (*UpdateProcessorResponse, error)
@@ -748,6 +824,70 @@ func (c *processorServiceClient) ListProcessors(ctx context.Context, in *ListPro
 		return nil, err
 	}
 	return out, nil
+}
+
+func (c *processorServiceClient) InspectProcessorIn(ctx context.Context, in *InspectProcessorInRequest, opts ...grpc.CallOption) (ProcessorService_InspectProcessorInClient, error) {
+	stream, err := c.cc.NewStream(ctx, &ProcessorService_ServiceDesc.Streams[0], "/api.v1.ProcessorService/InspectProcessorIn", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &processorServiceInspectProcessorInClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type ProcessorService_InspectProcessorInClient interface {
+	Recv() (*InspectProcessorInResponse, error)
+	grpc.ClientStream
+}
+
+type processorServiceInspectProcessorInClient struct {
+	grpc.ClientStream
+}
+
+func (x *processorServiceInspectProcessorInClient) Recv() (*InspectProcessorInResponse, error) {
+	m := new(InspectProcessorInResponse)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func (c *processorServiceClient) InspectProcessorOut(ctx context.Context, in *InspectProcessorOutRequest, opts ...grpc.CallOption) (ProcessorService_InspectProcessorOutClient, error) {
+	stream, err := c.cc.NewStream(ctx, &ProcessorService_ServiceDesc.Streams[1], "/api.v1.ProcessorService/InspectProcessorOut", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &processorServiceInspectProcessorOutClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type ProcessorService_InspectProcessorOutClient interface {
+	Recv() (*InspectProcessorOutResponse, error)
+	grpc.ClientStream
+}
+
+type processorServiceInspectProcessorOutClient struct {
+	grpc.ClientStream
+}
+
+func (x *processorServiceInspectProcessorOutClient) Recv() (*InspectProcessorOutResponse, error) {
+	m := new(InspectProcessorOutResponse)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
 }
 
 func (c *processorServiceClient) GetProcessor(ctx context.Context, in *GetProcessorRequest, opts ...grpc.CallOption) (*GetProcessorResponse, error) {
@@ -791,6 +931,10 @@ func (c *processorServiceClient) DeleteProcessor(ctx context.Context, in *Delete
 // for forward compatibility
 type ProcessorServiceServer interface {
 	ListProcessors(context.Context, *ListProcessorsRequest) (*ListProcessorsResponse, error)
+	// InspectProcessorIn streams records coming into the specified processor
+	InspectProcessorIn(*InspectProcessorInRequest, ProcessorService_InspectProcessorInServer) error
+	// InspectProcessorOut streams the output records from the specified processor
+	InspectProcessorOut(*InspectProcessorOutRequest, ProcessorService_InspectProcessorOutServer) error
 	GetProcessor(context.Context, *GetProcessorRequest) (*GetProcessorResponse, error)
 	CreateProcessor(context.Context, *CreateProcessorRequest) (*CreateProcessorResponse, error)
 	UpdateProcessor(context.Context, *UpdateProcessorRequest) (*UpdateProcessorResponse, error)
@@ -804,6 +948,12 @@ type UnimplementedProcessorServiceServer struct {
 
 func (UnimplementedProcessorServiceServer) ListProcessors(context.Context, *ListProcessorsRequest) (*ListProcessorsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListProcessors not implemented")
+}
+func (UnimplementedProcessorServiceServer) InspectProcessorIn(*InspectProcessorInRequest, ProcessorService_InspectProcessorInServer) error {
+	return status.Errorf(codes.Unimplemented, "method InspectProcessorIn not implemented")
+}
+func (UnimplementedProcessorServiceServer) InspectProcessorOut(*InspectProcessorOutRequest, ProcessorService_InspectProcessorOutServer) error {
+	return status.Errorf(codes.Unimplemented, "method InspectProcessorOut not implemented")
 }
 func (UnimplementedProcessorServiceServer) GetProcessor(context.Context, *GetProcessorRequest) (*GetProcessorResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetProcessor not implemented")
@@ -846,6 +996,48 @@ func _ProcessorService_ListProcessors_Handler(srv interface{}, ctx context.Conte
 		return srv.(ProcessorServiceServer).ListProcessors(ctx, req.(*ListProcessorsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
+}
+
+func _ProcessorService_InspectProcessorIn_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(InspectProcessorInRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(ProcessorServiceServer).InspectProcessorIn(m, &processorServiceInspectProcessorInServer{stream})
+}
+
+type ProcessorService_InspectProcessorInServer interface {
+	Send(*InspectProcessorInResponse) error
+	grpc.ServerStream
+}
+
+type processorServiceInspectProcessorInServer struct {
+	grpc.ServerStream
+}
+
+func (x *processorServiceInspectProcessorInServer) Send(m *InspectProcessorInResponse) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func _ProcessorService_InspectProcessorOut_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(InspectProcessorOutRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(ProcessorServiceServer).InspectProcessorOut(m, &processorServiceInspectProcessorOutServer{stream})
+}
+
+type ProcessorService_InspectProcessorOutServer interface {
+	Send(*InspectProcessorOutResponse) error
+	grpc.ServerStream
+}
+
+type processorServiceInspectProcessorOutServer struct {
+	grpc.ServerStream
+}
+
+func (x *processorServiceInspectProcessorOutServer) Send(m *InspectProcessorOutResponse) error {
+	return x.ServerStream.SendMsg(m)
 }
 
 func _ProcessorService_GetProcessor_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -948,7 +1140,18 @@ var ProcessorService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _ProcessorService_DeleteProcessor_Handler,
 		},
 	},
-	Streams:  []grpc.StreamDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "InspectProcessorIn",
+			Handler:       _ProcessorService_InspectProcessorIn_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "InspectProcessorOut",
+			Handler:       _ProcessorService_InspectProcessorOut_Handler,
+			ServerStreams: true,
+		},
+	},
 	Metadata: "api/v1/api.proto",
 }
 

@@ -80,7 +80,7 @@ func timestampConvertor(
 		return nil, cerrors.Errorf("%s: format is needed to parse the output", processorType)
 	}
 
-	return processor.InterfaceFunc(func(_ context.Context, r record.Record) (record.Record, error) {
+	return NewFuncWrapper(func(_ context.Context, r record.Record) (record.Record, error) {
 		data := getSetter.Get(r)
 		switch d := data.(type) {
 		case record.RawData:

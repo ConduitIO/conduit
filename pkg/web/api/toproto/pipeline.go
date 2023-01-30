@@ -55,3 +55,12 @@ func PipelineStatus(in pipeline.Status) apiv1.Pipeline_Status {
 	}
 	return apiv1.Pipeline_STATUS_UNSPECIFIED
 }
+
+func PipelineDLQ(in pipeline.DLQ) *apiv1.Pipeline_DLQ {
+	return &apiv1.Pipeline_DLQ{
+		Plugin:              in.Plugin,
+		Settings:            in.Settings,
+		WindowSize:          uint64(in.WindowSize),
+		WindowNackThreshold: uint64(in.WindowNackThreshold),
+	}
+}
