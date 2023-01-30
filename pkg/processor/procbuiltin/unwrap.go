@@ -103,7 +103,7 @@ func (p *unwrapProcessor) InspectOut(ctx context.Context) *inspector.Session {
 		     "description": "desc",
 		     "id": 20
 		   },
-		 "schema": {}, // will be ignored
+		 "schema": {} // will be ignored
 		}`
 */
 type KafkaConnectUnWrapper struct{}
@@ -163,7 +163,7 @@ func (kp *KafkaConnectUnWrapper) Unwrap(rec record.Record) (record.Record, error
 		   "transaction": null,
 		   "ts_ms": 1674061777225
 		 },
-		 "schema": {}, // will be ignored
+		 "schema": {} // will be ignored
 		}`
 */
 type DebeziumUnWrapper struct{}

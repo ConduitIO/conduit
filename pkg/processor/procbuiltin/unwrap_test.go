@@ -24,23 +24,23 @@ import (
 	"github.com/matryer/is"
 )
 
-const DebeziumRecord = "{" +
-	"\"payload\":" +
-	"{" +
-	"\"after\":{\"description\":\"test1\",\"id\":27}," +
-	"\"before\":null,\"op\":\"c\"," +
-	"\"source\":" +
-	"{" +
-	"\"conduit.source.connector.id\":\"pg-to-kafka:pg\"," +
-	"\"opencdc.readAt\":\"1674061777225877000\"," +
-	"\"opencdc.version\":\"v1\"," +
-	"\"postgres.table\":\"stuff\"" +
-	"}," +
-	"\"transaction\":null," +
-	"\"ts_ms\":1674061777225" +
-	"}," +
-	"\"schema\":{}" +
-	"}"
+const DebeziumRecord = `{
+		 "payload": {
+		   "after": {
+		     "description": "test1",
+		     "id": 27
+		   },
+		   "before": null,
+		   "op": "c",
+		   "source": {
+		     "opencdc.readAt": "1674061777225877000",
+		     "opencdc.version": "v1"
+		   },
+		   "transaction": null,
+		   "ts_ms": 1674061777225
+		 },
+		 "schema": {} 
+		}`
 
 func TestUnwrap_Config(t *testing.T) {
 	tests := []struct {
@@ -87,12 +87,9 @@ func TestUnwrap_Config(t *testing.T) {
 }
 
 func TestUnwrap_Process(t *testing.T) {
-	type args struct {
-		r record.Record
-	}
 	tests := []struct {
 		name    string
-		args    args
+		record  record.Record
 		want    record.Record
 		config  processor.Config
 		wantErr bool
@@ -102,7 +99,7 @@ func TestUnwrap_Process(t *testing.T) {
 			config: processor.Config{
 				Settings: map[string]string{"format": "debezium"},
 			},
-			args: args{r: record.Record{
+			record: record.Record{
 				Key: record.RawData{
 					Raw: []byte("id"),
 				},
@@ -114,14 +111,11 @@ func TestUnwrap_Process(t *testing.T) {
 					},
 				},
 			},
-			},
 			want: record.Record{
 				Operation: record.OperationCreate,
 				Metadata: map[string]string{
-					"conduit.source.connector.id": "pg-to-kafka:pg",
-					"opencdc.readAt":              "1674061777225877000",
-					"opencdc.version":             "v1",
-					"postgres.table":              "stuff",
+					"opencdc.readAt":  "1674061777225877000",
+					"opencdc.version": "v1",
 				},
 				Key: record.RawData{
 					Raw: []byte("id"),
@@ -139,7 +133,7 @@ func TestUnwrap_Process(t *testing.T) {
 			config: processor.Config{
 				Settings: map[string]string{"format": "debezium"},
 			},
-			args: args{r: record.Record{
+			record: record.Record{
 				Metadata: map[string]string{
 					"conduit.version": "v0.4.0",
 				},
@@ -164,7 +158,6 @@ func TestUnwrap_Process(t *testing.T) {
 					},
 				},
 			},
-			},
 			want: record.Record{
 				Operation: record.OperationUpdate,
 				Metadata: map[string]string{
@@ -184,7 +177,7 @@ func TestUnwrap_Process(t *testing.T) {
 			config: processor.Config{
 				Settings: map[string]string{"format": "kafka-connect"},
 			},
-			args: args{r: record.Record{
+			record: record.Record{
 				Payload: record.Change{
 					Before: record.StructuredData(nil),
 					After: record.StructuredData{
@@ -196,7 +189,6 @@ func TestUnwrap_Process(t *testing.T) {
 					},
 				},
 			},
-			},
 			want: record.Record{
 				Operation: record.OperationSnapshot,
 				Payload: record.Change{
@@ -205,6 +197,22 @@ func TestUnwrap_Process(t *testing.T) {
 			},
 			wantErr: false,
 		},
+		{
+			name: "payload is invalid JSON",
+			config: processor.Config{
+				Settings: map[string]string{"format": "kafka-connect"},
+			},
+			record: record.Record{
+				Payload: record.Change{
+					Before: nil,
+					After: record.RawData{
+						Raw:    []byte("\"invalid\":\"true\""),
+						Schema: nil,
+					},
+				},
+			},
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -212,8 +220,7 @@ func TestUnwrap_Process(t *testing.T) {
 			is := is.New(t)
 			underTest, err := UnwrapBuilder(tt.config)
 			is.NoErr(err)
-			got, err := underTest.Process(context.Background(), tt.args.r)
-
+			got, err := underTest.Process(context.Background(), tt.record)
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("process() error = %v, wantErr = %v", err, tt.wantErr)
 			}

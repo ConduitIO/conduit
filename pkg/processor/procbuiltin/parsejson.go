@@ -56,12 +56,12 @@ func parseJSON(
 			var jsonData record.StructuredData
 			err := json.Unmarshal(data.Bytes(), &jsonData)
 			if err != nil {
-				return record.Record{}, cerrors.Errorf("%s: %w", processorType, err)
+				return record.Record{}, cerrors.Errorf("%s: failed to unmarshal raw data as JSON: %w", processorType, err)
 			}
 			r = getSetter.Set(r, jsonData)
 
 		case record.StructuredData:
-			return record.Record{}, cerrors.Errorf("%s: the data is already structured", processorType)
+			// data is already structured
 
 		default:
 			return record.Record{}, cerrors.Errorf("%s: unexpected data type %T", processorType, data)

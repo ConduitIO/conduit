@@ -16,7 +16,6 @@ package procbuiltin
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/processor"
@@ -26,24 +25,19 @@ import (
 )
 
 func TestParseJSONKey_Process(t *testing.T) {
-	is := is.New(t)
-
-	type args struct {
-		r record.Record
-	}
 	tests := []struct {
 		name    string
-		args    args
+		record  record.Record
 		want    record.Record
 		wantErr bool
 	}{{
 		name: "raw key",
-		args: args{r: record.Record{
+		record: record.Record{
 			Key: record.RawData{
 				Raw:    []byte("{\"after\":{\"data\":4,\"id\":3}}"),
 				Schema: nil,
 			},
-		}},
+		},
 		want: record.Record{
 			Key: record.StructuredData{
 				"after": map[string]interface{}{"data": float64(4), "id": float64(3)},
@@ -51,25 +45,38 @@ func TestParseJSONKey_Process(t *testing.T) {
 		},
 		wantErr: false,
 	}, {
-		name: "structured key error",
-		args: args{r: record.Record{
+		name: "already structured key",
+		record: record.Record{
 			Key: record.StructuredData{
 				"after": map[string]interface{}{"data": float64(4), "id": float64(3)},
 			},
-		}},
+		},
+		want: record.Record{
+			Key: record.StructuredData{
+				"after": map[string]interface{}{"data": float64(4), "id": float64(3)},
+			},
+		},
+		wantErr: false,
+	}, {
+		name: "invalid JSON key",
+		record: record.Record{
+			Key: record.RawData{
+				Raw:    []byte("\"invalid\":\"json\""),
+				Schema: nil,
+			},
+		},
 		wantErr: true,
 	},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			is := is.New(t)
 			underTest, err := ParseJSONKey(processor.Config{})
 			is.NoErr(err)
-			got, err := underTest.Process(context.Background(), tt.args.r)
-			fmt.Println(err)
+			got, err := underTest.Process(context.Background(), tt.record)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("process() error = %v, wantErr = %v", err, tt.wantErr)
-				return
+				t.Fatalf("process() error = %v, wantErr = %v", err, tt.wantErr)
 			}
 			if diff := cmp.Diff(tt.want, got); diff != "" {
 				t.Errorf("process() diff = %s", diff)
@@ -79,19 +86,14 @@ func TestParseJSONKey_Process(t *testing.T) {
 }
 
 func TestParseJSONPayload_Process(t *testing.T) {
-	is := is.New(t)
-
-	type args struct {
-		r record.Record
-	}
 	tests := []struct {
 		name    string
-		args    args
+		record  record.Record
 		want    record.Record
 		wantErr bool
 	}{{
 		name: "raw payload",
-		args: args{r: record.Record{
+		record: record.Record{
 			Payload: record.Change{
 				Before: record.RawData{
 					Raw:    []byte("{\"ignored\":\"true\"}"),
@@ -101,8 +103,7 @@ func TestParseJSONPayload_Process(t *testing.T) {
 					Raw:    []byte("{\"after\":{\"data\":4,\"id\":3}}"),
 					Schema: nil,
 				},
-			},
-		}},
+			}},
 		want: record.Record{
 			Payload: record.Change{
 				Before: record.RawData{
@@ -116,27 +117,44 @@ func TestParseJSONPayload_Process(t *testing.T) {
 		},
 		wantErr: false,
 	}, {
-		name: "structured payload error",
-		args: args{r: record.Record{
+		name: "already structured payload",
+		record: record.Record{
+			Payload: record.Change{
+				Before: nil,
+				After: record.StructuredData{
+					"after": map[string]interface{}{"data": float64(4), "id": float64(3)},
+				},
+			}},
+		want: record.Record{
 			Payload: record.Change{
 				Before: nil,
 				After: record.StructuredData{
 					"after": map[string]interface{}{"data": float64(4), "id": float64(3)},
 				},
 			},
-		}},
+		},
+		wantErr: false,
+	}, {
+		name: "invalid JSON payload",
+		record: record.Record{
+			Payload: record.Change{
+				After: record.RawData{
+					Raw:    []byte("\"invalid\":\"true\""),
+					Schema: nil,
+				},
+			}},
 		wantErr: true,
 	},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			is := is.New(t)
 			underTest, err := ParseJSONPayload(processor.Config{})
 			is.NoErr(err)
-			got, err := underTest.Process(context.Background(), tt.args.r)
+			got, err := underTest.Process(context.Background(), tt.record)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("process() error = %v, wantErr = %v", err, tt.wantErr)
-				return
+				t.Fatalf("process() error = %v, wantErr = %v", err, tt.wantErr)
 			}
 			if diff := cmp.Diff(tt.want, got); diff != "" {
 				t.Errorf("process() diff = %s", diff)
