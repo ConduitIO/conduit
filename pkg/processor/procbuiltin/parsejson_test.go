@@ -25,7 +25,7 @@ import (
 	"github.com/matryer/is"
 )
 
-func TestParseJsonKey_Process(t *testing.T) {
+func TestParseJSONKey_Process(t *testing.T) {
 	is := is.New(t)
 
 	type args struct {
@@ -77,7 +77,8 @@ func TestParseJsonKey_Process(t *testing.T) {
 		})
 	}
 }
-func TestParseJsonPayload_Process(t *testing.T) {
+
+func TestParseJSONPayload_Process(t *testing.T) {
 	is := is.New(t)
 
 	type args struct {
@@ -92,7 +93,10 @@ func TestParseJsonPayload_Process(t *testing.T) {
 		name: "raw payload",
 		args: args{r: record.Record{
 			Payload: record.Change{
-				Before: nil,
+				Before: record.RawData{
+					Raw:    []byte("{\"ignored\":\"true\"}"),
+					Schema: nil,
+				},
 				After: record.RawData{
 					Raw:    []byte("{\"after\":{\"data\":4,\"id\":3}}"),
 					Schema: nil,
@@ -101,7 +105,10 @@ func TestParseJsonPayload_Process(t *testing.T) {
 		}},
 		want: record.Record{
 			Payload: record.Change{
-				Before: nil,
+				Before: record.RawData{
+					Raw:    []byte("{\"ignored\":\"true\"}"),
+					Schema: nil,
+				},
 				After: record.StructuredData{
 					"after": map[string]interface{}{"data": float64(4), "id": float64(3)},
 				},

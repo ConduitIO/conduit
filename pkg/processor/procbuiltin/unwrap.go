@@ -250,7 +250,6 @@ func (d *DebeziumUnWrapper) Unwrap(rec record.Record) (record.Record, error) {
 		},
 		Metadata: metadata,
 	}, nil
-
 }
 
 func (d *DebeziumUnWrapper) validateRecord(data record.StructuredData) error {
