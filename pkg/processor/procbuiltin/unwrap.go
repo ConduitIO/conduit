@@ -161,11 +161,11 @@ const (
 	debeziumOpDelete = "d"
 	debeziumOpRead   = "r" // snapshot
 
-	debeziumFieldBefore = "before"
-	debeziumFieldAfter  = "after"
-	debeziumFieldSource = "source"
-	debeziumFieldOp     = "op"
-	debeziumFieldTsMs   = "ts_ms"
+	debeziumFieldBefore    = "before"
+	debeziumFieldAfter     = "after"
+	debeziumFieldSource    = "source"
+	debeziumFieldOp        = "op"
+	debeziumFieldTimestamp = "ts_ms"
 )
 
 func (d *DebeziumUnwrapper) Unwrap(rec record.Record) (record.Record, error) {
@@ -265,11 +265,11 @@ func (d *DebeziumUnwrapper) unwrapMetadata(rec record.Record) (record.Metadata, 
 
 	// set metadata readAt time
 	var t time.Time
-	tsMs := structPayload[debeziumFieldTsMs]
+	tsMs := structPayload[debeziumFieldTimestamp]
 	if tsMs != nil {
 		floatTime, ok := tsMs.(float64)
 		if !ok {
-			return nil, cerrors.Errorf("%s is not a float", debeziumFieldTsMs)
+			return nil, cerrors.Errorf("%s is not a float", debeziumFieldTimestamp)
 		}
 		t = time.Unix(0, int64(floatTime)*int64(time.Millisecond))
 	}
