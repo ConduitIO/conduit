@@ -39,6 +39,7 @@ func TestHealthChecker_Check_UnknownService(t *testing.T) {
 	db := mock.NewDB(gomock.NewController(t))
 
 	underTest := NewHealthChecker(db)
-	resp, err := underTest.Check(context.Background(), &gh.HealthCheckRequest{Service: "foobar"})
-	is.NoErr(err)
+	_, err := underTest.Check(context.Background(), &gh.HealthCheckRequest{Service: "foobar"})
+	is.True(err != nil)
+	is.Equal("rpc error: code = NotFound desc = service \"foobar\" not found", err.Error())
 }
