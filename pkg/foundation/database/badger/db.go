@@ -50,8 +50,10 @@ func New(l zerolog.Logger, path string) (*DB, error) {
 
 func (d *DB) Ping(ctx context.Context) error {
 	key := "test-" + uuid.NewString()
-	defer d.Set(ctx, key, nil)
+	defer d.Set(ctx, key, nil) //nolint:errcheck // clean-up
 
+	// todo ideally, we find a way to test the connection
+	// without inserting data
 	return d.Set(ctx, key, []byte{})
 }
 

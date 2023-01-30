@@ -16,6 +16,7 @@ package api
 
 import (
 	"context"
+
 	"github.com/conduitio/conduit/pkg/foundation/database"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health/grpc_health_v1"
@@ -58,10 +59,6 @@ func (s *HealthChecker) Watch(req *grpc_health_v1.HealthCheckRequest, server grp
 	return server.Send(&grpc_health_v1.HealthCheckResponse{
 		Status: grpc_health_v1.HealthCheckResponse_SERVING,
 	})
-}
-
-func (s *HealthChecker) checkDB(ctx context.Context) error {
-	return nil
 }
 
 func NewHealthChecker(db database.DB) *HealthChecker {
