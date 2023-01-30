@@ -24,25 +24,7 @@ import (
 	"github.com/matryer/is"
 )
 
-var dbz = "{" +
-	"\"payload\":" +
-	"{" +
-	"\"after\":{\"description\":\"test1\",\"id\":27}," +
-	"\"before\":null,\"op\":\"c\"," +
-	"\"source\":" +
-	"{" +
-	"\"conduit.source.connector.id\":\"pg-to-kafka:pg\"," +
-	"\"opencdc.readAt\":\"1674061777225877000\"," +
-	"\"opencdc.version\":\"v1\"," +
-	"\"postgres.table\":\"stuff\"" +
-	"}," +
-	"\"transaction\":null," +
-	"\"ts_ms\":1674061777225" +
-	"}," +
-	"\"schema\":{}" +
-	"}"
-
-func TestUnwrapRecord_Config(t *testing.T) {
+func TestUnwrap_Config(t *testing.T) {
 	tests := []struct {
 		name    string
 		config  processor.Config
@@ -78,18 +60,15 @@ func TestUnwrapRecord_Config(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := UnwrapRecordPayload(tt.config)
+			_, err := UnwrapBuilder(tt.config)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("UnwrapRecordPayload() error = %v, wantErr = %v", err, tt.wantErr)
-				return
+				t.Fatalf("UnwrapBuilder() error = %v, wantErr = %v", err, tt.wantErr)
 			}
 		})
 	}
 }
 
-func TestUnwrapRecord_Process(t *testing.T) {
-	is := is.New(t)
-
+func TestUnwrap_Process(t *testing.T) {
 	type args struct {
 		r record.Record
 	}
@@ -143,6 +122,9 @@ func TestUnwrapRecord_Process(t *testing.T) {
 				Settings: map[string]string{"format": "debezium"},
 			},
 			args: args{r: record.Record{
+				Metadata: map[string]string{
+					"conduit.version": "v0.4.0",
+				},
 				Payload: record.Change{
 					Before: nil,
 					After: record.StructuredData{
@@ -154,10 +136,8 @@ func TestUnwrapRecord_Process(t *testing.T) {
 							"before": interface{}(nil),
 							"op":     "u",
 							"source": map[string]interface{}{
-								"conduit.source.connector.id": "pg-to-kafka:pg",
-								"opencdc.readAt":              "1674061777225877000",
-								"opencdc.version":             "v1",
-								"postgres.table":              "stuff",
+								"opencdc.readAt":  "1674061777225877000",
+								"opencdc.version": "v1",
 							},
 							"transaction": interface{}(nil),
 							"ts_ms":       1.674061777225e+12,
@@ -170,10 +150,9 @@ func TestUnwrapRecord_Process(t *testing.T) {
 			want: record.Record{
 				Operation: record.OperationUpdate,
 				Metadata: map[string]string{
-					"conduit.source.connector.id": "pg-to-kafka:pg",
-					"opencdc.readAt":              "1674061777225877000",
-					"opencdc.version":             "v1",
-					"postgres.table":              "stuff",
+					"opencdc.readAt":  "1674061777225877000",
+					"opencdc.version": "v1",
+					"conduit.version": "v0.4.0",
 				},
 				Payload: record.Change{
 					Before: record.StructuredData(nil),
@@ -189,7 +168,7 @@ func TestUnwrapRecord_Process(t *testing.T) {
 			},
 			args: args{r: record.Record{
 				Payload: record.Change{
-					Before: nil,
+					Before: record.StructuredData(nil),
 					After: record.StructuredData{
 						"payload": map[string]interface{}{
 							"description": "test2",
@@ -212,13 +191,13 @@ func TestUnwrapRecord_Process(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			underTest, err := UnwrapRecordPayload(tt.config)
+			is := is.New(t)
+			underTest, err := UnwrapBuilder(tt.config)
 			is.NoErr(err)
 			got, err := underTest.Process(context.Background(), tt.args.r)
 
 			if (err != nil) != tt.wantErr {
-				t.Errorf("process() error = %v, wantErr = %v", err, tt.wantErr)
-				return
+				t.Fatalf("process() error = %v, wantErr = %v", err, tt.wantErr)
 			}
 			if diff := cmp.Diff(tt.want, got); diff != "" {
 				t.Errorf("process() diff = %s", diff)
