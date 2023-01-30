@@ -27,6 +27,7 @@ import (
 func TestHealthChecker_Check_OK(t *testing.T) {
 	is := is.New(t)
 	db := mock.NewDB(gomock.NewController(t))
+	db.EXPECT().Ping(gomock.Any()).Return(nil)
 
 	underTest := NewHealthChecker(db)
 	resp, err := underTest.Check(context.Background(), &gh.HealthCheckRequest{})
