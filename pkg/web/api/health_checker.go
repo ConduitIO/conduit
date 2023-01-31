@@ -16,8 +16,8 @@ package api
 
 import (
 	"context"
-	"github.com/conduitio/conduit/pkg/foundation/multierror"
 
+	"github.com/conduitio/conduit/pkg/foundation/multierror"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health/grpc_health_v1"
 	grpcstatus "google.golang.org/grpc/status"

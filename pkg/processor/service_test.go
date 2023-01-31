@@ -16,9 +16,9 @@ package processor_test
 
 import (
 	"context"
-	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"testing"
 
+	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/database/inmemory"
 	dbmock "github.com/conduitio/conduit/pkg/foundation/database/mock"

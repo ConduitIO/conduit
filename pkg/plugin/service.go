@@ -55,20 +55,20 @@ func (s *Service) Check(_ context.Context) error {
 	return nil
 }
 
-func (r *Service) NewDispenser(logger log.CtxLogger, name string) (Dispenser, error) {
+func (s *Service) NewDispenser(logger log.CtxLogger, name string) (Dispenser, error) {
 	logger = logger.WithComponent("plugin")
 
 	fullName := FullName(name)
 	switch fullName.PluginType() {
 	case PluginTypeStandalone:
-		return r.standalone.NewDispenser(logger, fullName)
+		return s.standalone.NewDispenser(logger, fullName)
 	case PluginTypeBuiltin:
-		return r.builtin.NewDispenser(logger, fullName)
+		return s.builtin.NewDispenser(logger, fullName)
 	case PluginTypeAny:
-		d, err := r.standalone.NewDispenser(logger, fullName)
+		d, err := s.standalone.NewDispenser(logger, fullName)
 		if err != nil {
-			r.logger.Debug(context.Background()).Err(err).Msg("could not find standalone plugin dispenser, falling back to builtin plugin")
-			d, err = r.builtin.NewDispenser(logger, fullName)
+			s.logger.Debug(context.Background()).Err(err).Msg("could not find standalone plugin dispenser, falling back to builtin plugin")
+			d, err = s.builtin.NewDispenser(logger, fullName)
 		}
 		return d, err
 	default:
@@ -76,9 +76,9 @@ func (r *Service) NewDispenser(logger log.CtxLogger, name string) (Dispenser, er
 	}
 }
 
-func (r *Service) List(ctx context.Context) (map[string]Specification, error) {
-	builtinSpecs := r.builtin.List()
-	standaloneSpecs := r.standalone.List()
+func (s *Service) List(ctx context.Context) (map[string]Specification, error) {
+	builtinSpecs := s.builtin.List()
+	standaloneSpecs := s.standalone.List()
 
 	specs := make(map[string]Specification, len(builtinSpecs)+len(standaloneSpecs))
 	for k, v := range builtinSpecs {
@@ -91,7 +91,7 @@ func (r *Service) List(ctx context.Context) (map[string]Specification, error) {
 	return specs, nil
 }
 
-func (r *Service) ValidateSourceConfig(ctx context.Context, d Dispenser, settings map[string]string) (err error) {
+func (s *Service) ValidateSourceConfig(ctx context.Context, d Dispenser, settings map[string]string) (err error) {
 	src, err := d.DispenseSource()
 	if err != nil {
 		return cerrors.Errorf("could not dispense source: %w", err)
@@ -112,7 +112,7 @@ func (r *Service) ValidateSourceConfig(ctx context.Context, d Dispenser, setting
 	return nil
 }
 
-func (r *Service) ValidateDestinationConfig(ctx context.Context, d Dispenser, settings map[string]string) (err error) {
+func (s *Service) ValidateDestinationConfig(ctx context.Context, d Dispenser, settings map[string]string) (err error) {
 	dest, err := d.DispenseDestination()
 	if err != nil {
 		return cerrors.Errorf("could not dispense destination: %w", err)

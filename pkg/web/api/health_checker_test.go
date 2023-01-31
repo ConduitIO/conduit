@@ -16,9 +16,9 @@ package api
 
 import (
 	"context"
-	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"testing"
 
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/matryer/is"
 	gh "google.golang.org/grpc/health/grpc_health_v1"
 )
