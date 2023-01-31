@@ -19,7 +19,10 @@ import (
 	"context"
 	"reflect"
 	"testing"
+	"time"
 
+	sdk "github.com/conduitio/conduit-connector-sdk"
+	"github.com/conduitio/conduit/pkg/foundation/cchan"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/record"
@@ -392,6 +395,41 @@ func TestJSProcessor_DataTypes(t *testing.T) {
 	}
 }
 
+func TestJSProcessor_Inspect(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	src := `
+		function process(record) {
+			record.Key = new RawData();
+			record.Key.Raw = "foobar";
+			return record;
+		}`
+	underTest, err := New(src, zerolog.Nop())
+	is.NoErr(err) // expected no error when creating the JS processor
+
+	in := underTest.InspectIn(ctx)
+	out := underTest.InspectOut(ctx)
+
+	recIn := record.Record{
+		Position:  record.Position("test-pos"),
+		Operation: record.OperationUpdate,
+		Metadata:  record.Metadata{"test": "true"},
+		Key:       sdk.RawData("test-key"),
+		Payload:   record.Change{},
+	}
+	recOut, err := underTest.Process(ctx, recIn)
+	is.NoErr(err)
+
+	inspIn, got, err := cchan.Chan[record.Record](in.C).RecvTimeout(ctx, 100*time.Millisecond)
+	is.NoErr(err)
+	is.True(got)
+	is.Equal(recIn, inspIn)
+
+	inspOut, got, err := cchan.Chan[record.Record](out.C).RecvTimeout(ctx, 100*time.Millisecond)
+	is.NoErr(err)
+	is.True(got)
+	is.Equal(recOut, inspOut)
+}
 func TestJSProcessor_JavaScriptException(t *testing.T) {
 	is := is.New(t)
 

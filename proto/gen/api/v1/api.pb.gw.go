@@ -945,6 +945,74 @@ func local_request_ProcessorService_ListProcessors_0(ctx context.Context, marsha
 
 }
 
+func request_ProcessorService_InspectProcessorIn_0(ctx context.Context, marshaler runtime.Marshaler, client ProcessorServiceClient, req *http.Request, pathParams map[string]string) (ProcessorService_InspectProcessorInClient, runtime.ServerMetadata, error) {
+	var protoReq InspectProcessorInRequest
+	var metadata runtime.ServerMetadata
+
+	var (
+		val string
+		ok  bool
+		err error
+		_   = err
+	)
+
+	val, ok = pathParams["id"]
+	if !ok {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "id")
+	}
+
+	protoReq.Id, err = runtime.String(val)
+	if err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "id", err)
+	}
+
+	stream, err := client.InspectProcessorIn(ctx, &protoReq)
+	if err != nil {
+		return nil, metadata, err
+	}
+	header, err := stream.Header()
+	if err != nil {
+		return nil, metadata, err
+	}
+	metadata.HeaderMD = header
+	return stream, metadata, nil
+
+}
+
+func request_ProcessorService_InspectProcessorOut_0(ctx context.Context, marshaler runtime.Marshaler, client ProcessorServiceClient, req *http.Request, pathParams map[string]string) (ProcessorService_InspectProcessorOutClient, runtime.ServerMetadata, error) {
+	var protoReq InspectProcessorOutRequest
+	var metadata runtime.ServerMetadata
+
+	var (
+		val string
+		ok  bool
+		err error
+		_   = err
+	)
+
+	val, ok = pathParams["id"]
+	if !ok {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "id")
+	}
+
+	protoReq.Id, err = runtime.String(val)
+	if err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "id", err)
+	}
+
+	stream, err := client.InspectProcessorOut(ctx, &protoReq)
+	if err != nil {
+		return nil, metadata, err
+	}
+	header, err := stream.Header()
+	if err != nil {
+		return nil, metadata, err
+	}
+	metadata.HeaderMD = header
+	return stream, metadata, nil
+
+}
+
 func request_ProcessorService_GetProcessor_0(ctx context.Context, marshaler runtime.Marshaler, client ProcessorServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
 	var protoReq GetProcessorRequest
 	var metadata runtime.ServerMetadata
@@ -1684,6 +1752,20 @@ func RegisterProcessorServiceHandlerServer(ctx context.Context, mux *runtime.Ser
 
 		forward_ProcessorService_ListProcessors_0(annotatedContext, mux, outboundMarshaler, w, req, response_ProcessorService_ListProcessors_0{resp}, mux.GetForwardResponseOptions()...)
 
+	})
+
+	mux.Handle("GET", pattern_ProcessorService_InspectProcessorIn_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		err := status.Error(codes.Unimplemented, "streaming calls are not yet supported in the in-process transport")
+		_, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+		return
+	})
+
+	mux.Handle("GET", pattern_ProcessorService_InspectProcessorOut_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		err := status.Error(codes.Unimplemented, "streaming calls are not yet supported in the in-process transport")
+		_, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+		return
 	})
 
 	mux.Handle("GET", pattern_ProcessorService_GetProcessor_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
@@ -2595,6 +2677,56 @@ func RegisterProcessorServiceHandlerClient(ctx context.Context, mux *runtime.Ser
 
 	})
 
+	mux.Handle("GET", pattern_ProcessorService_InspectProcessorIn_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		var err error
+		var annotatedContext context.Context
+		annotatedContext, err = runtime.AnnotateContext(ctx, mux, req, "/api.v1.ProcessorService/InspectProcessorIn", runtime.WithHTTPPathPattern("/v1/processors/{id}/inspect-in"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := request_ProcessorService_InspectProcessorIn_0(annotatedContext, inboundMarshaler, client, req, pathParams)
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+
+		forward_ProcessorService_InspectProcessorIn_0(annotatedContext, mux, outboundMarshaler, w, req, func() (proto.Message, error) {
+			res, err := resp.Recv()
+			return response_ProcessorService_InspectProcessorIn_0{res}, err
+		}, mux.GetForwardResponseOptions()...)
+
+	})
+
+	mux.Handle("GET", pattern_ProcessorService_InspectProcessorOut_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		var err error
+		var annotatedContext context.Context
+		annotatedContext, err = runtime.AnnotateContext(ctx, mux, req, "/api.v1.ProcessorService/InspectProcessorOut", runtime.WithHTTPPathPattern("/v1/processors/{id}/inspect-out"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := request_ProcessorService_InspectProcessorOut_0(annotatedContext, inboundMarshaler, client, req, pathParams)
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+
+		forward_ProcessorService_InspectProcessorOut_0(annotatedContext, mux, outboundMarshaler, w, req, func() (proto.Message, error) {
+			res, err := resp.Recv()
+			return response_ProcessorService_InspectProcessorOut_0{res}, err
+		}, mux.GetForwardResponseOptions()...)
+
+	})
+
 	mux.Handle("GET", pattern_ProcessorService_GetProcessor_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
 		ctx, cancel := context.WithCancel(req.Context())
 		defer cancel()
@@ -2695,6 +2827,24 @@ func (m response_ProcessorService_ListProcessors_0) XXX_ResponseBody() interface
 	return response.Processors
 }
 
+type response_ProcessorService_InspectProcessorIn_0 struct {
+	proto.Message
+}
+
+func (m response_ProcessorService_InspectProcessorIn_0) XXX_ResponseBody() interface{} {
+	response := m.Message.(*InspectProcessorInResponse)
+	return response.Record
+}
+
+type response_ProcessorService_InspectProcessorOut_0 struct {
+	proto.Message
+}
+
+func (m response_ProcessorService_InspectProcessorOut_0) XXX_ResponseBody() interface{} {
+	response := m.Message.(*InspectProcessorOutResponse)
+	return response.Record
+}
+
 type response_ProcessorService_GetProcessor_0 struct {
 	proto.Message
 }
@@ -2725,6 +2875,10 @@ func (m response_ProcessorService_UpdateProcessor_0) XXX_ResponseBody() interfac
 var (
 	pattern_ProcessorService_ListProcessors_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "processors"}, ""))
 
+	pattern_ProcessorService_InspectProcessorIn_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2, 2, 3}, []string{"v1", "processors", "id", "inspect-in"}, ""))
+
+	pattern_ProcessorService_InspectProcessorOut_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2, 2, 3}, []string{"v1", "processors", "id", "inspect-out"}, ""))
+
 	pattern_ProcessorService_GetProcessor_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2}, []string{"v1", "processors", "id"}, ""))
 
 	pattern_ProcessorService_CreateProcessor_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "processors"}, ""))
@@ -2736,6 +2890,10 @@ var (
 
 var (
 	forward_ProcessorService_ListProcessors_0 = runtime.ForwardResponseMessage
+
+	forward_ProcessorService_InspectProcessorIn_0 = runtime.ForwardResponseStream
+
+	forward_ProcessorService_InspectProcessorOut_0 = runtime.ForwardResponseStream
 
 	forward_ProcessorService_GetProcessor_0 = runtime.ForwardResponseMessage
 

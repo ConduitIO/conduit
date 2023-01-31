@@ -249,7 +249,7 @@ func (x PluginSpecifications_Parameter_Type) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use PluginSpecifications_Parameter_Type.Descriptor instead.
 func (PluginSpecifications_Parameter_Type) EnumDescriptor() ([]byte, []int) {
-	return file_api_v1_api_proto_rawDescGZIP(), []int{54, 0, 0}
+	return file_api_v1_api_proto_rawDescGZIP(), []int{58, 0, 0}
 }
 
 type PluginSpecifications_Parameter_Validation_Type int32
@@ -316,7 +316,7 @@ func (x PluginSpecifications_Parameter_Validation_Type) Number() protoreflect.En
 
 // Deprecated: Use PluginSpecifications_Parameter_Validation_Type.Descriptor instead.
 func (PluginSpecifications_Parameter_Validation_Type) EnumDescriptor() ([]byte, []int) {
-	return file_api_v1_api_proto_rawDescGZIP(), []int{54, 0, 0, 0}
+	return file_api_v1_api_proto_rawDescGZIP(), []int{58, 0, 0, 0}
 }
 
 type Pipeline struct {
@@ -2463,6 +2463,194 @@ func (x *ListProcessorsResponse) GetProcessors() []*Processor {
 	return nil
 }
 
+type InspectProcessorInRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+}
+
+func (x *InspectProcessorInRequest) Reset() {
+	*x = InspectProcessorInRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_api_v1_api_proto_msgTypes[41]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *InspectProcessorInRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*InspectProcessorInRequest) ProtoMessage() {}
+
+func (x *InspectProcessorInRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_api_proto_msgTypes[41]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use InspectProcessorInRequest.ProtoReflect.Descriptor instead.
+func (*InspectProcessorInRequest) Descriptor() ([]byte, []int) {
+	return file_api_v1_api_proto_rawDescGZIP(), []int{41}
+}
+
+func (x *InspectProcessorInRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+type InspectProcessorInResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Record *v1.Record `protobuf:"bytes,1,opt,name=record,proto3" json:"record,omitempty"`
+}
+
+func (x *InspectProcessorInResponse) Reset() {
+	*x = InspectProcessorInResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_api_v1_api_proto_msgTypes[42]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *InspectProcessorInResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*InspectProcessorInResponse) ProtoMessage() {}
+
+func (x *InspectProcessorInResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_api_proto_msgTypes[42]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use InspectProcessorInResponse.ProtoReflect.Descriptor instead.
+func (*InspectProcessorInResponse) Descriptor() ([]byte, []int) {
+	return file_api_v1_api_proto_rawDescGZIP(), []int{42}
+}
+
+func (x *InspectProcessorInResponse) GetRecord() *v1.Record {
+	if x != nil {
+		return x.Record
+	}
+	return nil
+}
+
+type InspectProcessorOutRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+}
+
+func (x *InspectProcessorOutRequest) Reset() {
+	*x = InspectProcessorOutRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_api_v1_api_proto_msgTypes[43]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *InspectProcessorOutRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*InspectProcessorOutRequest) ProtoMessage() {}
+
+func (x *InspectProcessorOutRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_api_proto_msgTypes[43]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use InspectProcessorOutRequest.ProtoReflect.Descriptor instead.
+func (*InspectProcessorOutRequest) Descriptor() ([]byte, []int) {
+	return file_api_v1_api_proto_rawDescGZIP(), []int{43}
+}
+
+func (x *InspectProcessorOutRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+type InspectProcessorOutResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Record *v1.Record `protobuf:"bytes,1,opt,name=record,proto3" json:"record,omitempty"`
+}
+
+func (x *InspectProcessorOutResponse) Reset() {
+	*x = InspectProcessorOutResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_api_v1_api_proto_msgTypes[44]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *InspectProcessorOutResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*InspectProcessorOutResponse) ProtoMessage() {}
+
+func (x *InspectProcessorOutResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_api_proto_msgTypes[44]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use InspectProcessorOutResponse.ProtoReflect.Descriptor instead.
+func (*InspectProcessorOutResponse) Descriptor() ([]byte, []int) {
+	return file_api_v1_api_proto_rawDescGZIP(), []int{44}
+}
+
+func (x *InspectProcessorOutResponse) GetRecord() *v1.Record {
+	if x != nil {
+		return x.Record
+	}
+	return nil
+}
+
 type CreateProcessorRequest struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -2476,7 +2664,7 @@ type CreateProcessorRequest struct {
 func (x *CreateProcessorRequest) Reset() {
 	*x = CreateProcessorRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_api_v1_api_proto_msgTypes[41]
+		mi := &file_api_v1_api_proto_msgTypes[45]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2489,7 +2677,7 @@ func (x *CreateProcessorRequest) String() string {
 func (*CreateProcessorRequest) ProtoMessage() {}
 
 func (x *CreateProcessorRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_api_proto_msgTypes[41]
+	mi := &file_api_v1_api_proto_msgTypes[45]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2502,7 +2690,7 @@ func (x *CreateProcessorRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateProcessorRequest.ProtoReflect.Descriptor instead.
 func (*CreateProcessorRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_api_proto_rawDescGZIP(), []int{41}
+	return file_api_v1_api_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *CreateProcessorRequest) GetType() string {
@@ -2537,7 +2725,7 @@ type CreateProcessorResponse struct {
 func (x *CreateProcessorResponse) Reset() {
 	*x = CreateProcessorResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_api_v1_api_proto_msgTypes[42]
+		mi := &file_api_v1_api_proto_msgTypes[46]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2550,7 +2738,7 @@ func (x *CreateProcessorResponse) String() string {
 func (*CreateProcessorResponse) ProtoMessage() {}
 
 func (x *CreateProcessorResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_api_proto_msgTypes[42]
+	mi := &file_api_v1_api_proto_msgTypes[46]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2563,7 +2751,7 @@ func (x *CreateProcessorResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateProcessorResponse.ProtoReflect.Descriptor instead.
 func (*CreateProcessorResponse) Descriptor() ([]byte, []int) {
-	return file_api_v1_api_proto_rawDescGZIP(), []int{42}
+	return file_api_v1_api_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *CreateProcessorResponse) GetProcessor() *Processor {
@@ -2584,7 +2772,7 @@ type GetProcessorRequest struct {
 func (x *GetProcessorRequest) Reset() {
 	*x = GetProcessorRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_api_v1_api_proto_msgTypes[43]
+		mi := &file_api_v1_api_proto_msgTypes[47]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2597,7 +2785,7 @@ func (x *GetProcessorRequest) String() string {
 func (*GetProcessorRequest) ProtoMessage() {}
 
 func (x *GetProcessorRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_api_proto_msgTypes[43]
+	mi := &file_api_v1_api_proto_msgTypes[47]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2610,7 +2798,7 @@ func (x *GetProcessorRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetProcessorRequest.ProtoReflect.Descriptor instead.
 func (*GetProcessorRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_api_proto_rawDescGZIP(), []int{43}
+	return file_api_v1_api_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *GetProcessorRequest) GetId() string {
@@ -2631,7 +2819,7 @@ type GetProcessorResponse struct {
 func (x *GetProcessorResponse) Reset() {
 	*x = GetProcessorResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_api_v1_api_proto_msgTypes[44]
+		mi := &file_api_v1_api_proto_msgTypes[48]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2644,7 +2832,7 @@ func (x *GetProcessorResponse) String() string {
 func (*GetProcessorResponse) ProtoMessage() {}
 
 func (x *GetProcessorResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_api_proto_msgTypes[44]
+	mi := &file_api_v1_api_proto_msgTypes[48]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2657,7 +2845,7 @@ func (x *GetProcessorResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetProcessorResponse.ProtoReflect.Descriptor instead.
 func (*GetProcessorResponse) Descriptor() ([]byte, []int) {
-	return file_api_v1_api_proto_rawDescGZIP(), []int{44}
+	return file_api_v1_api_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *GetProcessorResponse) GetProcessor() *Processor {
@@ -2679,7 +2867,7 @@ type UpdateProcessorRequest struct {
 func (x *UpdateProcessorRequest) Reset() {
 	*x = UpdateProcessorRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_api_v1_api_proto_msgTypes[45]
+		mi := &file_api_v1_api_proto_msgTypes[49]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2692,7 +2880,7 @@ func (x *UpdateProcessorRequest) String() string {
 func (*UpdateProcessorRequest) ProtoMessage() {}
 
 func (x *UpdateProcessorRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_api_proto_msgTypes[45]
+	mi := &file_api_v1_api_proto_msgTypes[49]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2705,7 +2893,7 @@ func (x *UpdateProcessorRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateProcessorRequest.ProtoReflect.Descriptor instead.
 func (*UpdateProcessorRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_api_proto_rawDescGZIP(), []int{45}
+	return file_api_v1_api_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *UpdateProcessorRequest) GetId() string {
@@ -2733,7 +2921,7 @@ type UpdateProcessorResponse struct {
 func (x *UpdateProcessorResponse) Reset() {
 	*x = UpdateProcessorResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_api_v1_api_proto_msgTypes[46]
+		mi := &file_api_v1_api_proto_msgTypes[50]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2746,7 +2934,7 @@ func (x *UpdateProcessorResponse) String() string {
 func (*UpdateProcessorResponse) ProtoMessage() {}
 
 func (x *UpdateProcessorResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_api_proto_msgTypes[46]
+	mi := &file_api_v1_api_proto_msgTypes[50]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2759,7 +2947,7 @@ func (x *UpdateProcessorResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateProcessorResponse.ProtoReflect.Descriptor instead.
 func (*UpdateProcessorResponse) Descriptor() ([]byte, []int) {
-	return file_api_v1_api_proto_rawDescGZIP(), []int{46}
+	return file_api_v1_api_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *UpdateProcessorResponse) GetProcessor() *Processor {
@@ -2780,7 +2968,7 @@ type DeleteProcessorRequest struct {
 func (x *DeleteProcessorRequest) Reset() {
 	*x = DeleteProcessorRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_api_v1_api_proto_msgTypes[47]
+		mi := &file_api_v1_api_proto_msgTypes[51]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2793,7 +2981,7 @@ func (x *DeleteProcessorRequest) String() string {
 func (*DeleteProcessorRequest) ProtoMessage() {}
 
 func (x *DeleteProcessorRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_api_proto_msgTypes[47]
+	mi := &file_api_v1_api_proto_msgTypes[51]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2806,7 +2994,7 @@ func (x *DeleteProcessorRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteProcessorRequest.ProtoReflect.Descriptor instead.
 func (*DeleteProcessorRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_api_proto_rawDescGZIP(), []int{47}
+	return file_api_v1_api_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *DeleteProcessorRequest) GetId() string {
@@ -2825,7 +3013,7 @@ type DeleteProcessorResponse struct {
 func (x *DeleteProcessorResponse) Reset() {
 	*x = DeleteProcessorResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_api_v1_api_proto_msgTypes[48]
+		mi := &file_api_v1_api_proto_msgTypes[52]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2838,7 +3026,7 @@ func (x *DeleteProcessorResponse) String() string {
 func (*DeleteProcessorResponse) ProtoMessage() {}
 
 func (x *DeleteProcessorResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_api_proto_msgTypes[48]
+	mi := &file_api_v1_api_proto_msgTypes[52]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2851,7 +3039,7 @@ func (x *DeleteProcessorResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteProcessorResponse.ProtoReflect.Descriptor instead.
 func (*DeleteProcessorResponse) Descriptor() ([]byte, []int) {
-	return file_api_v1_api_proto_rawDescGZIP(), []int{48}
+	return file_api_v1_api_proto_rawDescGZIP(), []int{52}
 }
 
 type GetInfoRequest struct {
@@ -2863,7 +3051,7 @@ type GetInfoRequest struct {
 func (x *GetInfoRequest) Reset() {
 	*x = GetInfoRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_api_v1_api_proto_msgTypes[49]
+		mi := &file_api_v1_api_proto_msgTypes[53]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2876,7 +3064,7 @@ func (x *GetInfoRequest) String() string {
 func (*GetInfoRequest) ProtoMessage() {}
 
 func (x *GetInfoRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_api_proto_msgTypes[49]
+	mi := &file_api_v1_api_proto_msgTypes[53]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2889,7 +3077,7 @@ func (x *GetInfoRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetInfoRequest.ProtoReflect.Descriptor instead.
 func (*GetInfoRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_api_proto_rawDescGZIP(), []int{49}
+	return file_api_v1_api_proto_rawDescGZIP(), []int{53}
 }
 
 type GetInfoResponse struct {
@@ -2903,7 +3091,7 @@ type GetInfoResponse struct {
 func (x *GetInfoResponse) Reset() {
 	*x = GetInfoResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_api_v1_api_proto_msgTypes[50]
+		mi := &file_api_v1_api_proto_msgTypes[54]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2916,7 +3104,7 @@ func (x *GetInfoResponse) String() string {
 func (*GetInfoResponse) ProtoMessage() {}
 
 func (x *GetInfoResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_api_proto_msgTypes[50]
+	mi := &file_api_v1_api_proto_msgTypes[54]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2929,7 +3117,7 @@ func (x *GetInfoResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetInfoResponse.ProtoReflect.Descriptor instead.
 func (*GetInfoResponse) Descriptor() ([]byte, []int) {
-	return file_api_v1_api_proto_rawDescGZIP(), []int{50}
+	return file_api_v1_api_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *GetInfoResponse) GetInfo() *Info {
@@ -2952,7 +3140,7 @@ type Info struct {
 func (x *Info) Reset() {
 	*x = Info{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_api_v1_api_proto_msgTypes[51]
+		mi := &file_api_v1_api_proto_msgTypes[55]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2965,7 +3153,7 @@ func (x *Info) String() string {
 func (*Info) ProtoMessage() {}
 
 func (x *Info) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_api_proto_msgTypes[51]
+	mi := &file_api_v1_api_proto_msgTypes[55]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2978,7 +3166,7 @@ func (x *Info) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Info.ProtoReflect.Descriptor instead.
 func (*Info) Descriptor() ([]byte, []int) {
-	return file_api_v1_api_proto_rawDescGZIP(), []int{51}
+	return file_api_v1_api_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *Info) GetVersion() string {
@@ -3014,7 +3202,7 @@ type ListPluginsRequest struct {
 func (x *ListPluginsRequest) Reset() {
 	*x = ListPluginsRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_api_v1_api_proto_msgTypes[52]
+		mi := &file_api_v1_api_proto_msgTypes[56]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -3027,7 +3215,7 @@ func (x *ListPluginsRequest) String() string {
 func (*ListPluginsRequest) ProtoMessage() {}
 
 func (x *ListPluginsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_api_proto_msgTypes[52]
+	mi := &file_api_v1_api_proto_msgTypes[56]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3040,7 +3228,7 @@ func (x *ListPluginsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListPluginsRequest.ProtoReflect.Descriptor instead.
 func (*ListPluginsRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_api_proto_rawDescGZIP(), []int{52}
+	return file_api_v1_api_proto_rawDescGZIP(), []int{56}
 }
 
 func (x *ListPluginsRequest) GetName() string {
@@ -3061,7 +3249,7 @@ type ListPluginsResponse struct {
 func (x *ListPluginsResponse) Reset() {
 	*x = ListPluginsResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_api_v1_api_proto_msgTypes[53]
+		mi := &file_api_v1_api_proto_msgTypes[57]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -3074,7 +3262,7 @@ func (x *ListPluginsResponse) String() string {
 func (*ListPluginsResponse) ProtoMessage() {}
 
 func (x *ListPluginsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_api_proto_msgTypes[53]
+	mi := &file_api_v1_api_proto_msgTypes[57]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3087,7 +3275,7 @@ func (x *ListPluginsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListPluginsResponse.ProtoReflect.Descriptor instead.
 func (*ListPluginsResponse) Descriptor() ([]byte, []int) {
-	return file_api_v1_api_proto_rawDescGZIP(), []int{53}
+	return file_api_v1_api_proto_rawDescGZIP(), []int{57}
 }
 
 func (x *ListPluginsResponse) GetPlugins() []*PluginSpecifications {
@@ -3114,7 +3302,7 @@ type PluginSpecifications struct {
 func (x *PluginSpecifications) Reset() {
 	*x = PluginSpecifications{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_api_v1_api_proto_msgTypes[54]
+		mi := &file_api_v1_api_proto_msgTypes[58]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -3127,7 +3315,7 @@ func (x *PluginSpecifications) String() string {
 func (*PluginSpecifications) ProtoMessage() {}
 
 func (x *PluginSpecifications) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_api_proto_msgTypes[54]
+	mi := &file_api_v1_api_proto_msgTypes[58]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3140,7 +3328,7 @@ func (x *PluginSpecifications) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PluginSpecifications.ProtoReflect.Descriptor instead.
 func (*PluginSpecifications) Descriptor() ([]byte, []int) {
-	return file_api_v1_api_proto_rawDescGZIP(), []int{54}
+	return file_api_v1_api_proto_rawDescGZIP(), []int{58}
 }
 
 func (x *PluginSpecifications) GetName() string {
@@ -3205,7 +3393,7 @@ type Pipeline_State struct {
 func (x *Pipeline_State) Reset() {
 	*x = Pipeline_State{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_api_v1_api_proto_msgTypes[55]
+		mi := &file_api_v1_api_proto_msgTypes[59]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -3218,7 +3406,7 @@ func (x *Pipeline_State) String() string {
 func (*Pipeline_State) ProtoMessage() {}
 
 func (x *Pipeline_State) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_api_proto_msgTypes[55]
+	mi := &file_api_v1_api_proto_msgTypes[59]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3260,7 +3448,7 @@ type Pipeline_Config struct {
 func (x *Pipeline_Config) Reset() {
 	*x = Pipeline_Config{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_api_v1_api_proto_msgTypes[56]
+		mi := &file_api_v1_api_proto_msgTypes[60]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -3273,7 +3461,7 @@ func (x *Pipeline_Config) String() string {
 func (*Pipeline_Config) ProtoMessage() {}
 
 func (x *Pipeline_Config) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_api_proto_msgTypes[56]
+	mi := &file_api_v1_api_proto_msgTypes[60]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3326,7 +3514,7 @@ type Pipeline_DLQ struct {
 func (x *Pipeline_DLQ) Reset() {
 	*x = Pipeline_DLQ{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_api_v1_api_proto_msgTypes[57]
+		mi := &file_api_v1_api_proto_msgTypes[61]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -3339,7 +3527,7 @@ func (x *Pipeline_DLQ) String() string {
 func (*Pipeline_DLQ) ProtoMessage() {}
 
 func (x *Pipeline_DLQ) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_api_proto_msgTypes[57]
+	mi := &file_api_v1_api_proto_msgTypes[61]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3394,7 +3582,7 @@ type Connector_SourceState struct {
 func (x *Connector_SourceState) Reset() {
 	*x = Connector_SourceState{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_api_v1_api_proto_msgTypes[59]
+		mi := &file_api_v1_api_proto_msgTypes[63]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -3407,7 +3595,7 @@ func (x *Connector_SourceState) String() string {
 func (*Connector_SourceState) ProtoMessage() {}
 
 func (x *Connector_SourceState) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_api_proto_msgTypes[59]
+	mi := &file_api_v1_api_proto_msgTypes[63]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3441,7 +3629,7 @@ type Connector_DestinationState struct {
 func (x *Connector_DestinationState) Reset() {
 	*x = Connector_DestinationState{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_api_v1_api_proto_msgTypes[60]
+		mi := &file_api_v1_api_proto_msgTypes[64]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -3454,7 +3642,7 @@ func (x *Connector_DestinationState) String() string {
 func (*Connector_DestinationState) ProtoMessage() {}
 
 func (x *Connector_DestinationState) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_api_proto_msgTypes[60]
+	mi := &file_api_v1_api_proto_msgTypes[64]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3489,7 +3677,7 @@ type Connector_Config struct {
 func (x *Connector_Config) Reset() {
 	*x = Connector_Config{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_api_v1_api_proto_msgTypes[61]
+		mi := &file_api_v1_api_proto_msgTypes[65]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -3502,7 +3690,7 @@ func (x *Connector_Config) String() string {
 func (*Connector_Config) ProtoMessage() {}
 
 func (x *Connector_Config) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_api_proto_msgTypes[61]
+	mi := &file_api_v1_api_proto_msgTypes[65]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3544,7 +3732,7 @@ type Processor_Parent struct {
 func (x *Processor_Parent) Reset() {
 	*x = Processor_Parent{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_api_v1_api_proto_msgTypes[64]
+		mi := &file_api_v1_api_proto_msgTypes[68]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -3557,7 +3745,7 @@ func (x *Processor_Parent) String() string {
 func (*Processor_Parent) ProtoMessage() {}
 
 func (x *Processor_Parent) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_api_proto_msgTypes[64]
+	mi := &file_api_v1_api_proto_msgTypes[68]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3598,7 +3786,7 @@ type Processor_Config struct {
 func (x *Processor_Config) Reset() {
 	*x = Processor_Config{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_api_v1_api_proto_msgTypes[65]
+		mi := &file_api_v1_api_proto_msgTypes[69]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -3611,7 +3799,7 @@ func (x *Processor_Config) String() string {
 func (*Processor_Config) ProtoMessage() {}
 
 func (x *Processor_Config) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_api_proto_msgTypes[65]
+	mi := &file_api_v1_api_proto_msgTypes[69]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3648,7 +3836,7 @@ type PluginSpecifications_Parameter struct {
 func (x *PluginSpecifications_Parameter) Reset() {
 	*x = PluginSpecifications_Parameter{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_api_v1_api_proto_msgTypes[67]
+		mi := &file_api_v1_api_proto_msgTypes[71]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -3661,7 +3849,7 @@ func (x *PluginSpecifications_Parameter) String() string {
 func (*PluginSpecifications_Parameter) ProtoMessage() {}
 
 func (x *PluginSpecifications_Parameter) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_api_proto_msgTypes[67]
+	mi := &file_api_v1_api_proto_msgTypes[71]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3674,7 +3862,7 @@ func (x *PluginSpecifications_Parameter) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PluginSpecifications_Parameter.ProtoReflect.Descriptor instead.
 func (*PluginSpecifications_Parameter) Descriptor() ([]byte, []int) {
-	return file_api_v1_api_proto_rawDescGZIP(), []int{54, 0}
+	return file_api_v1_api_proto_rawDescGZIP(), []int{58, 0}
 }
 
 func (x *PluginSpecifications_Parameter) GetDescription() string {
@@ -3720,7 +3908,7 @@ type PluginSpecifications_Parameter_Validation struct {
 func (x *PluginSpecifications_Parameter_Validation) Reset() {
 	*x = PluginSpecifications_Parameter_Validation{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_api_v1_api_proto_msgTypes[70]
+		mi := &file_api_v1_api_proto_msgTypes[74]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -3733,7 +3921,7 @@ func (x *PluginSpecifications_Parameter_Validation) String() string {
 func (*PluginSpecifications_Parameter_Validation) ProtoMessage() {}
 
 func (x *PluginSpecifications_Parameter_Validation) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_api_proto_msgTypes[70]
+	mi := &file_api_v1_api_proto_msgTypes[74]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3746,7 +3934,7 @@ func (x *PluginSpecifications_Parameter_Validation) ProtoReflect() protoreflect.
 
 // Deprecated: Use PluginSpecifications_Parameter_Validation.ProtoReflect.Descriptor instead.
 func (*PluginSpecifications_Parameter_Validation) Descriptor() ([]byte, []int) {
-	return file_api_v1_api_proto_rawDescGZIP(), []int{54, 0, 0}
+	return file_api_v1_api_proto_rawDescGZIP(), []int{58, 0, 0}
 }
 
 func (x *PluginSpecifications_Parameter_Validation) GetType() PluginSpecifications_Parameter_Validation_Type {
@@ -4075,6 +4263,21 @@ var file_api_v1_api_proto_rawDesc = []byte{
 	0x70, 0x72, 0x6f, 0x63, 0x65, 0x73, 0x73, 0x6f, 0x72, 0x73, 0x18, 0x01, 0x20, 0x03, 0x28, 0x0b,
 	0x32, 0x11, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e, 0x50, 0x72, 0x6f, 0x63, 0x65, 0x73,
 	0x73, 0x6f, 0x72, 0x52, 0x0a, 0x70, 0x72, 0x6f, 0x63, 0x65, 0x73, 0x73, 0x6f, 0x72, 0x73, 0x22,
+	0x2b, 0x0a, 0x19, 0x49, 0x6e, 0x73, 0x70, 0x65, 0x63, 0x74, 0x50, 0x72, 0x6f, 0x63, 0x65, 0x73,
+	0x73, 0x6f, 0x72, 0x49, 0x6e, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x0e, 0x0a, 0x02,
+	0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x02, 0x69, 0x64, 0x22, 0x48, 0x0a, 0x1a,
+	0x49, 0x6e, 0x73, 0x70, 0x65, 0x63, 0x74, 0x50, 0x72, 0x6f, 0x63, 0x65, 0x73, 0x73, 0x6f, 0x72,
+	0x49, 0x6e, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x2a, 0x0a, 0x06, 0x72, 0x65,
+	0x63, 0x6f, 0x72, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x12, 0x2e, 0x6f, 0x70, 0x65,
+	0x6e, 0x63, 0x64, 0x63, 0x2e, 0x76, 0x31, 0x2e, 0x52, 0x65, 0x63, 0x6f, 0x72, 0x64, 0x52, 0x06,
+	0x72, 0x65, 0x63, 0x6f, 0x72, 0x64, 0x22, 0x2c, 0x0a, 0x1a, 0x49, 0x6e, 0x73, 0x70, 0x65, 0x63,
+	0x74, 0x50, 0x72, 0x6f, 0x63, 0x65, 0x73, 0x73, 0x6f, 0x72, 0x4f, 0x75, 0x74, 0x52, 0x65, 0x71,
+	0x75, 0x65, 0x73, 0x74, 0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09,
+	0x52, 0x02, 0x69, 0x64, 0x22, 0x49, 0x0a, 0x1b, 0x49, 0x6e, 0x73, 0x70, 0x65, 0x63, 0x74, 0x50,
+	0x72, 0x6f, 0x63, 0x65, 0x73, 0x73, 0x6f, 0x72, 0x4f, 0x75, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f,
+	0x6e, 0x73, 0x65, 0x12, 0x2a, 0x0a, 0x06, 0x72, 0x65, 0x63, 0x6f, 0x72, 0x64, 0x18, 0x01, 0x20,
+	0x01, 0x28, 0x0b, 0x32, 0x12, 0x2e, 0x6f, 0x70, 0x65, 0x6e, 0x63, 0x64, 0x63, 0x2e, 0x76, 0x31,
+	0x2e, 0x52, 0x65, 0x63, 0x6f, 0x72, 0x64, 0x52, 0x06, 0x72, 0x65, 0x63, 0x6f, 0x72, 0x64, 0x22,
 	0x90, 0x01, 0x0a, 0x16, 0x43, 0x72, 0x65, 0x61, 0x74, 0x65, 0x50, 0x72, 0x6f, 0x63, 0x65, 0x73,
 	0x73, 0x6f, 0x72, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x12, 0x0a, 0x04, 0x74, 0x79,
 	0x70, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x74, 0x79, 0x70, 0x65, 0x12, 0x30,
@@ -4494,7 +4697,7 @@ var file_api_v1_api_proto_rawDesc = []byte{
 	0x20, 0x6e, 0x6f, 0x74, 0x20, 0x66, 0x6f, 0x75, 0x6e, 0x64, 0x20, 0x65, 0x72, 0x72, 0x6f, 0x72,
 	0x22, 0x2c, 0x20, 0x22, 0x64, 0x65, 0x74, 0x61, 0x69, 0x6c, 0x73, 0x22, 0x3a, 0x20, 0x5b, 0x5d,
 	0x20, 0x7d, 0x82, 0xd3, 0xe4, 0x93, 0x02, 0x15, 0x2a, 0x13, 0x2f, 0x76, 0x31, 0x2f, 0x63, 0x6f,
-	0x6e, 0x6e, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x73, 0x2f, 0x7b, 0x69, 0x64, 0x7d, 0x32, 0xd5, 0x0a,
+	0x6e, 0x6e, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x73, 0x2f, 0x7b, 0x69, 0x64, 0x7d, 0x32, 0xf9, 0x0c,
 	0x0a, 0x10, 0x50, 0x72, 0x6f, 0x63, 0x65, 0x73, 0x73, 0x6f, 0x72, 0x53, 0x65, 0x72, 0x76, 0x69,
 	0x63, 0x65, 0x12, 0x73, 0x0a, 0x0e, 0x4c, 0x69, 0x73, 0x74, 0x50, 0x72, 0x6f, 0x63, 0x65, 0x73,
 	0x73, 0x6f, 0x72, 0x73, 0x12, 0x1d, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e, 0x4c, 0x69,
@@ -4503,125 +4706,143 @@ var file_api_v1_api_proto_rawDesc = []byte{
 	0x74, 0x50, 0x72, 0x6f, 0x63, 0x65, 0x73, 0x73, 0x6f, 0x72, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f,
 	0x6e, 0x73, 0x65, 0x22, 0x22, 0x82, 0xd3, 0xe4, 0x93, 0x02, 0x1c, 0x62, 0x0a, 0x70, 0x72, 0x6f,
 	0x63, 0x65, 0x73, 0x73, 0x6f, 0x72, 0x73, 0x12, 0x0e, 0x2f, 0x76, 0x31, 0x2f, 0x70, 0x72, 0x6f,
-	0x63, 0x65, 0x73, 0x73, 0x6f, 0x72, 0x73, 0x12, 0xef, 0x01, 0x0a, 0x0c, 0x47, 0x65, 0x74, 0x50,
-	0x72, 0x6f, 0x63, 0x65, 0x73, 0x73, 0x6f, 0x72, 0x12, 0x1b, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x76,
-	0x31, 0x2e, 0x47, 0x65, 0x74, 0x50, 0x72, 0x6f, 0x63, 0x65, 0x73, 0x73, 0x6f, 0x72, 0x52, 0x65,
-	0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x1c, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e, 0x47,
-	0x65, 0x74, 0x50, 0x72, 0x6f, 0x63, 0x65, 0x73, 0x73, 0x6f, 0x72, 0x52, 0x65, 0x73, 0x70, 0x6f,
-	0x6e, 0x73, 0x65, 0x22, 0xa3, 0x01, 0x92, 0x41, 0x7a, 0x4a, 0x78, 0x0a, 0x03, 0x34, 0x30, 0x34,
-	0x12, 0x71, 0x12, 0x16, 0x0a, 0x14, 0x1a, 0x12, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e,
-	0x72, 0x70, 0x63, 0x2e, 0x53, 0x74, 0x61, 0x74, 0x75, 0x73, 0x22, 0x57, 0x0a, 0x10, 0x61, 0x70,
-	0x70, 0x6c, 0x69, 0x63, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x2f, 0x6a, 0x73, 0x6f, 0x6e, 0x12, 0x43,
-	0x7b, 0x20, 0x22, 0x63, 0x6f, 0x64, 0x65, 0x22, 0x3a, 0x20, 0x35, 0x2c, 0x20, 0x22, 0x6d, 0x65,
-	0x73, 0x73, 0x61, 0x67, 0x65, 0x22, 0x3a, 0x20, 0x22, 0x72, 0x65, 0x73, 0x6f, 0x75, 0x72, 0x63,
-	0x65, 0x20, 0x6e, 0x6f, 0x74, 0x20, 0x66, 0x6f, 0x75, 0x6e, 0x64, 0x20, 0x65, 0x72, 0x72, 0x6f,
-	0x72, 0x22, 0x2c, 0x20, 0x22, 0x64, 0x65, 0x74, 0x61, 0x69, 0x6c, 0x73, 0x22, 0x3a, 0x20, 0x5b,
-	0x5d, 0x20, 0x7d, 0x82, 0xd3, 0xe4, 0x93, 0x02, 0x20, 0x62, 0x09, 0x70, 0x72, 0x6f, 0x63, 0x65,
-	0x73, 0x73, 0x6f, 0x72, 0x12, 0x13, 0x2f, 0x76, 0x31, 0x2f, 0x70, 0x72, 0x6f, 0x63, 0x65, 0x73,
-	0x73, 0x6f, 0x72, 0x73, 0x2f, 0x7b, 0x69, 0x64, 0x7d, 0x12, 0xf5, 0x01, 0x0a, 0x0f, 0x43, 0x72,
-	0x65, 0x61, 0x74, 0x65, 0x50, 0x72, 0x6f, 0x63, 0x65, 0x73, 0x73, 0x6f, 0x72, 0x12, 0x1e, 0x2e,
-	0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e, 0x43, 0x72, 0x65, 0x61, 0x74, 0x65, 0x50, 0x72, 0x6f,
-	0x63, 0x65, 0x73, 0x73, 0x6f, 0x72, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x1f, 0x2e,
-	0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e, 0x43, 0x72, 0x65, 0x61, 0x74, 0x65, 0x50, 0x72, 0x6f,
-	0x63, 0x65, 0x73, 0x73, 0x6f, 0x72, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0xa0,
-	0x01, 0x92, 0x41, 0x79, 0x4a, 0x77, 0x0a, 0x03, 0x34, 0x30, 0x30, 0x12, 0x70, 0x12, 0x16, 0x0a,
+	0x63, 0x65, 0x73, 0x73, 0x6f, 0x72, 0x73, 0x12, 0x8d, 0x01, 0x0a, 0x12, 0x49, 0x6e, 0x73, 0x70,
+	0x65, 0x63, 0x74, 0x50, 0x72, 0x6f, 0x63, 0x65, 0x73, 0x73, 0x6f, 0x72, 0x49, 0x6e, 0x12, 0x21,
+	0x2e, 0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e, 0x49, 0x6e, 0x73, 0x70, 0x65, 0x63, 0x74, 0x50,
+	0x72, 0x6f, 0x63, 0x65, 0x73, 0x73, 0x6f, 0x72, 0x49, 0x6e, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73,
+	0x74, 0x1a, 0x22, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e, 0x49, 0x6e, 0x73, 0x70, 0x65,
+	0x63, 0x74, 0x50, 0x72, 0x6f, 0x63, 0x65, 0x73, 0x73, 0x6f, 0x72, 0x49, 0x6e, 0x52, 0x65, 0x73,
+	0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x2e, 0x82, 0xd3, 0xe4, 0x93, 0x02, 0x28, 0x62, 0x06, 0x72,
+	0x65, 0x63, 0x6f, 0x72, 0x64, 0x12, 0x1e, 0x2f, 0x76, 0x31, 0x2f, 0x70, 0x72, 0x6f, 0x63, 0x65,
+	0x73, 0x73, 0x6f, 0x72, 0x73, 0x2f, 0x7b, 0x69, 0x64, 0x7d, 0x2f, 0x69, 0x6e, 0x73, 0x70, 0x65,
+	0x63, 0x74, 0x2d, 0x69, 0x6e, 0x30, 0x01, 0x12, 0x91, 0x01, 0x0a, 0x13, 0x49, 0x6e, 0x73, 0x70,
+	0x65, 0x63, 0x74, 0x50, 0x72, 0x6f, 0x63, 0x65, 0x73, 0x73, 0x6f, 0x72, 0x4f, 0x75, 0x74, 0x12,
+	0x22, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e, 0x49, 0x6e, 0x73, 0x70, 0x65, 0x63, 0x74,
+	0x50, 0x72, 0x6f, 0x63, 0x65, 0x73, 0x73, 0x6f, 0x72, 0x4f, 0x75, 0x74, 0x52, 0x65, 0x71, 0x75,
+	0x65, 0x73, 0x74, 0x1a, 0x23, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e, 0x49, 0x6e, 0x73,
+	0x70, 0x65, 0x63, 0x74, 0x50, 0x72, 0x6f, 0x63, 0x65, 0x73, 0x73, 0x6f, 0x72, 0x4f, 0x75, 0x74,
+	0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x2f, 0x82, 0xd3, 0xe4, 0x93, 0x02, 0x29,
+	0x62, 0x06, 0x72, 0x65, 0x63, 0x6f, 0x72, 0x64, 0x12, 0x1f, 0x2f, 0x76, 0x31, 0x2f, 0x70, 0x72,
+	0x6f, 0x63, 0x65, 0x73, 0x73, 0x6f, 0x72, 0x73, 0x2f, 0x7b, 0x69, 0x64, 0x7d, 0x2f, 0x69, 0x6e,
+	0x73, 0x70, 0x65, 0x63, 0x74, 0x2d, 0x6f, 0x75, 0x74, 0x30, 0x01, 0x12, 0xef, 0x01, 0x0a, 0x0c,
+	0x47, 0x65, 0x74, 0x50, 0x72, 0x6f, 0x63, 0x65, 0x73, 0x73, 0x6f, 0x72, 0x12, 0x1b, 0x2e, 0x61,
+	0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e, 0x47, 0x65, 0x74, 0x50, 0x72, 0x6f, 0x63, 0x65, 0x73, 0x73,
+	0x6f, 0x72, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x1c, 0x2e, 0x61, 0x70, 0x69, 0x2e,
+	0x76, 0x31, 0x2e, 0x47, 0x65, 0x74, 0x50, 0x72, 0x6f, 0x63, 0x65, 0x73, 0x73, 0x6f, 0x72, 0x52,
+	0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0xa3, 0x01, 0x92, 0x41, 0x7a, 0x4a, 0x78, 0x0a,
+	0x03, 0x34, 0x30, 0x34, 0x12, 0x71, 0x12, 0x16, 0x0a, 0x14, 0x1a, 0x12, 0x2e, 0x67, 0x6f, 0x6f,
+	0x67, 0x6c, 0x65, 0x2e, 0x72, 0x70, 0x63, 0x2e, 0x53, 0x74, 0x61, 0x74, 0x75, 0x73, 0x22, 0x57,
+	0x0a, 0x10, 0x61, 0x70, 0x70, 0x6c, 0x69, 0x63, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x2f, 0x6a, 0x73,
+	0x6f, 0x6e, 0x12, 0x43, 0x7b, 0x20, 0x22, 0x63, 0x6f, 0x64, 0x65, 0x22, 0x3a, 0x20, 0x35, 0x2c,
+	0x20, 0x22, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x22, 0x3a, 0x20, 0x22, 0x72, 0x65, 0x73,
+	0x6f, 0x75, 0x72, 0x63, 0x65, 0x20, 0x6e, 0x6f, 0x74, 0x20, 0x66, 0x6f, 0x75, 0x6e, 0x64, 0x20,
+	0x65, 0x72, 0x72, 0x6f, 0x72, 0x22, 0x2c, 0x20, 0x22, 0x64, 0x65, 0x74, 0x61, 0x69, 0x6c, 0x73,
+	0x22, 0x3a, 0x20, 0x5b, 0x5d, 0x20, 0x7d, 0x82, 0xd3, 0xe4, 0x93, 0x02, 0x20, 0x62, 0x09, 0x70,
+	0x72, 0x6f, 0x63, 0x65, 0x73, 0x73, 0x6f, 0x72, 0x12, 0x13, 0x2f, 0x76, 0x31, 0x2f, 0x70, 0x72,
+	0x6f, 0x63, 0x65, 0x73, 0x73, 0x6f, 0x72, 0x73, 0x2f, 0x7b, 0x69, 0x64, 0x7d, 0x12, 0xf5, 0x01,
+	0x0a, 0x0f, 0x43, 0x72, 0x65, 0x61, 0x74, 0x65, 0x50, 0x72, 0x6f, 0x63, 0x65, 0x73, 0x73, 0x6f,
+	0x72, 0x12, 0x1e, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e, 0x43, 0x72, 0x65, 0x61, 0x74,
+	0x65, 0x50, 0x72, 0x6f, 0x63, 0x65, 0x73, 0x73, 0x6f, 0x72, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73,
+	0x74, 0x1a, 0x1f, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e, 0x43, 0x72, 0x65, 0x61, 0x74,
+	0x65, 0x50, 0x72, 0x6f, 0x63, 0x65, 0x73, 0x73, 0x6f, 0x72, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e,
+	0x73, 0x65, 0x22, 0xa0, 0x01, 0x92, 0x41, 0x79, 0x4a, 0x77, 0x0a, 0x03, 0x34, 0x30, 0x30, 0x12,
+	0x70, 0x12, 0x16, 0x0a, 0x14, 0x1a, 0x12, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x72,
+	0x70, 0x63, 0x2e, 0x53, 0x74, 0x61, 0x74, 0x75, 0x73, 0x22, 0x56, 0x0a, 0x10, 0x61, 0x70, 0x70,
+	0x6c, 0x69, 0x63, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x2f, 0x6a, 0x73, 0x6f, 0x6e, 0x12, 0x42, 0x7b,
+	0x20, 0x22, 0x63, 0x6f, 0x64, 0x65, 0x22, 0x3a, 0x20, 0x33, 0x2c, 0x20, 0x22, 0x6d, 0x65, 0x73,
+	0x73, 0x61, 0x67, 0x65, 0x22, 0x3a, 0x20, 0x22, 0x69, 0x6e, 0x76, 0x61, 0x6c, 0x69, 0x64, 0x20,
+	0x61, 0x72, 0x67, 0x75, 0x6d, 0x65, 0x6e, 0x74, 0x73, 0x20, 0x65, 0x72, 0x72, 0x6f, 0x72, 0x22,
+	0x2c, 0x20, 0x22, 0x64, 0x65, 0x74, 0x61, 0x69, 0x6c, 0x73, 0x22, 0x3a, 0x20, 0x5b, 0x5d, 0x20,
+	0x7d, 0x82, 0xd3, 0xe4, 0x93, 0x02, 0x1e, 0x3a, 0x01, 0x2a, 0x62, 0x09, 0x70, 0x72, 0x6f, 0x63,
+	0x65, 0x73, 0x73, 0x6f, 0x72, 0x22, 0x0e, 0x2f, 0x76, 0x31, 0x2f, 0x70, 0x72, 0x6f, 0x63, 0x65,
+	0x73, 0x73, 0x6f, 0x72, 0x73, 0x12, 0xf5, 0x02, 0x0a, 0x0f, 0x55, 0x70, 0x64, 0x61, 0x74, 0x65,
+	0x50, 0x72, 0x6f, 0x63, 0x65, 0x73, 0x73, 0x6f, 0x72, 0x12, 0x1e, 0x2e, 0x61, 0x70, 0x69, 0x2e,
+	0x76, 0x31, 0x2e, 0x55, 0x70, 0x64, 0x61, 0x74, 0x65, 0x50, 0x72, 0x6f, 0x63, 0x65, 0x73, 0x73,
+	0x6f, 0x72, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x1f, 0x2e, 0x61, 0x70, 0x69, 0x2e,
+	0x76, 0x31, 0x2e, 0x55, 0x70, 0x64, 0x61, 0x74, 0x65, 0x50, 0x72, 0x6f, 0x63, 0x65, 0x73, 0x73,
+	0x6f, 0x72, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0xa0, 0x02, 0x92, 0x41, 0xf3,
+	0x01, 0x4a, 0x77, 0x0a, 0x03, 0x34, 0x30, 0x30, 0x12, 0x70, 0x12, 0x16, 0x0a, 0x14, 0x1a, 0x12,
+	0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x72, 0x70, 0x63, 0x2e, 0x53, 0x74, 0x61, 0x74,
+	0x75, 0x73, 0x22, 0x56, 0x0a, 0x10, 0x61, 0x70, 0x70, 0x6c, 0x69, 0x63, 0x61, 0x74, 0x69, 0x6f,
+	0x6e, 0x2f, 0x6a, 0x73, 0x6f, 0x6e, 0x12, 0x42, 0x7b, 0x20, 0x22, 0x63, 0x6f, 0x64, 0x65, 0x22,
+	0x3a, 0x20, 0x33, 0x2c, 0x20, 0x22, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x22, 0x3a, 0x20,
+	0x22, 0x69, 0x6e, 0x76, 0x61, 0x6c, 0x69, 0x64, 0x20, 0x61, 0x72, 0x67, 0x75, 0x6d, 0x65, 0x6e,
+	0x74, 0x73, 0x20, 0x65, 0x72, 0x72, 0x6f, 0x72, 0x22, 0x2c, 0x20, 0x22, 0x64, 0x65, 0x74, 0x61,
+	0x69, 0x6c, 0x73, 0x22, 0x3a, 0x20, 0x5b, 0x5d, 0x20, 0x7d, 0x4a, 0x78, 0x0a, 0x03, 0x34, 0x30,
+	0x34, 0x12, 0x71, 0x12, 0x16, 0x0a, 0x14, 0x1a, 0x12, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65,
+	0x2e, 0x72, 0x70, 0x63, 0x2e, 0x53, 0x74, 0x61, 0x74, 0x75, 0x73, 0x22, 0x57, 0x0a, 0x10, 0x61,
+	0x70, 0x70, 0x6c, 0x69, 0x63, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x2f, 0x6a, 0x73, 0x6f, 0x6e, 0x12,
+	0x43, 0x7b, 0x20, 0x22, 0x63, 0x6f, 0x64, 0x65, 0x22, 0x3a, 0x20, 0x35, 0x2c, 0x20, 0x22, 0x6d,
+	0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x22, 0x3a, 0x20, 0x22, 0x72, 0x65, 0x73, 0x6f, 0x75, 0x72,
+	0x63, 0x65, 0x20, 0x6e, 0x6f, 0x74, 0x20, 0x66, 0x6f, 0x75, 0x6e, 0x64, 0x20, 0x65, 0x72, 0x72,
+	0x6f, 0x72, 0x22, 0x2c, 0x20, 0x22, 0x64, 0x65, 0x74, 0x61, 0x69, 0x6c, 0x73, 0x22, 0x3a, 0x20,
+	0x5b, 0x5d, 0x20, 0x7d, 0x82, 0xd3, 0xe4, 0x93, 0x02, 0x23, 0x3a, 0x01, 0x2a, 0x62, 0x09, 0x70,
+	0x72, 0x6f, 0x63, 0x65, 0x73, 0x73, 0x6f, 0x72, 0x1a, 0x13, 0x2f, 0x76, 0x31, 0x2f, 0x70, 0x72,
+	0x6f, 0x63, 0x65, 0x73, 0x73, 0x6f, 0x72, 0x73, 0x2f, 0x7b, 0x69, 0x64, 0x7d, 0x12, 0xe9, 0x02,
+	0x0a, 0x0f, 0x44, 0x65, 0x6c, 0x65, 0x74, 0x65, 0x50, 0x72, 0x6f, 0x63, 0x65, 0x73, 0x73, 0x6f,
+	0x72, 0x12, 0x1e, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e, 0x44, 0x65, 0x6c, 0x65, 0x74,
+	0x65, 0x50, 0x72, 0x6f, 0x63, 0x65, 0x73, 0x73, 0x6f, 0x72, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73,
+	0x74, 0x1a, 0x1f, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e, 0x44, 0x65, 0x6c, 0x65, 0x74,
+	0x65, 0x50, 0x72, 0x6f, 0x63, 0x65, 0x73, 0x73, 0x6f, 0x72, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e,
+	0x73, 0x65, 0x22, 0x94, 0x02, 0x92, 0x41, 0xf5, 0x01, 0x4a, 0x79, 0x0a, 0x03, 0x34, 0x30, 0x30,
+	0x12, 0x72, 0x12, 0x16, 0x0a, 0x14, 0x1a, 0x12, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e,
+	0x72, 0x70, 0x63, 0x2e, 0x53, 0x74, 0x61, 0x74, 0x75, 0x73, 0x22, 0x58, 0x0a, 0x10, 0x61, 0x70,
+	0x70, 0x6c, 0x69, 0x63, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x2f, 0x6a, 0x73, 0x6f, 0x6e, 0x12, 0x44,
+	0x7b, 0x20, 0x22, 0x63, 0x6f, 0x64, 0x65, 0x22, 0x3a, 0x20, 0x39, 0x2c, 0x20, 0x22, 0x6d, 0x65,
+	0x73, 0x73, 0x61, 0x67, 0x65, 0x22, 0x3a, 0x20, 0x22, 0x66, 0x61, 0x69, 0x6c, 0x65, 0x64, 0x20,
+	0x70, 0x72, 0x65, 0x63, 0x6f, 0x6e, 0x64, 0x69, 0x74, 0x69, 0x6f, 0x6e, 0x20, 0x65, 0x72, 0x72,
+	0x6f, 0x72, 0x22, 0x2c, 0x20, 0x22, 0x64, 0x65, 0x74, 0x61, 0x69, 0x6c, 0x73, 0x22, 0x3a, 0x20,
+	0x5b, 0x5d, 0x20, 0x7d, 0x4a, 0x78, 0x0a, 0x03, 0x34, 0x30, 0x34, 0x12, 0x71, 0x12, 0x16, 0x0a,
 	0x14, 0x1a, 0x12, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x72, 0x70, 0x63, 0x2e, 0x53,
-	0x74, 0x61, 0x74, 0x75, 0x73, 0x22, 0x56, 0x0a, 0x10, 0x61, 0x70, 0x70, 0x6c, 0x69, 0x63, 0x61,
-	0x74, 0x69, 0x6f, 0x6e, 0x2f, 0x6a, 0x73, 0x6f, 0x6e, 0x12, 0x42, 0x7b, 0x20, 0x22, 0x63, 0x6f,
-	0x64, 0x65, 0x22, 0x3a, 0x20, 0x33, 0x2c, 0x20, 0x22, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65,
-	0x22, 0x3a, 0x20, 0x22, 0x69, 0x6e, 0x76, 0x61, 0x6c, 0x69, 0x64, 0x20, 0x61, 0x72, 0x67, 0x75,
-	0x6d, 0x65, 0x6e, 0x74, 0x73, 0x20, 0x65, 0x72, 0x72, 0x6f, 0x72, 0x22, 0x2c, 0x20, 0x22, 0x64,
-	0x65, 0x74, 0x61, 0x69, 0x6c, 0x73, 0x22, 0x3a, 0x20, 0x5b, 0x5d, 0x20, 0x7d, 0x82, 0xd3, 0xe4,
-	0x93, 0x02, 0x1e, 0x3a, 0x01, 0x2a, 0x62, 0x09, 0x70, 0x72, 0x6f, 0x63, 0x65, 0x73, 0x73, 0x6f,
-	0x72, 0x22, 0x0e, 0x2f, 0x76, 0x31, 0x2f, 0x70, 0x72, 0x6f, 0x63, 0x65, 0x73, 0x73, 0x6f, 0x72,
-	0x73, 0x12, 0xf5, 0x02, 0x0a, 0x0f, 0x55, 0x70, 0x64, 0x61, 0x74, 0x65, 0x50, 0x72, 0x6f, 0x63,
-	0x65, 0x73, 0x73, 0x6f, 0x72, 0x12, 0x1e, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e, 0x55,
-	0x70, 0x64, 0x61, 0x74, 0x65, 0x50, 0x72, 0x6f, 0x63, 0x65, 0x73, 0x73, 0x6f, 0x72, 0x52, 0x65,
-	0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x1f, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e, 0x55,
-	0x70, 0x64, 0x61, 0x74, 0x65, 0x50, 0x72, 0x6f, 0x63, 0x65, 0x73, 0x73, 0x6f, 0x72, 0x52, 0x65,
-	0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0xa0, 0x02, 0x92, 0x41, 0xf3, 0x01, 0x4a, 0x77, 0x0a,
-	0x03, 0x34, 0x30, 0x30, 0x12, 0x70, 0x12, 0x16, 0x0a, 0x14, 0x1a, 0x12, 0x2e, 0x67, 0x6f, 0x6f,
-	0x67, 0x6c, 0x65, 0x2e, 0x72, 0x70, 0x63, 0x2e, 0x53, 0x74, 0x61, 0x74, 0x75, 0x73, 0x22, 0x56,
-	0x0a, 0x10, 0x61, 0x70, 0x70, 0x6c, 0x69, 0x63, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x2f, 0x6a, 0x73,
-	0x6f, 0x6e, 0x12, 0x42, 0x7b, 0x20, 0x22, 0x63, 0x6f, 0x64, 0x65, 0x22, 0x3a, 0x20, 0x33, 0x2c,
-	0x20, 0x22, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x22, 0x3a, 0x20, 0x22, 0x69, 0x6e, 0x76,
-	0x61, 0x6c, 0x69, 0x64, 0x20, 0x61, 0x72, 0x67, 0x75, 0x6d, 0x65, 0x6e, 0x74, 0x73, 0x20, 0x65,
-	0x72, 0x72, 0x6f, 0x72, 0x22, 0x2c, 0x20, 0x22, 0x64, 0x65, 0x74, 0x61, 0x69, 0x6c, 0x73, 0x22,
-	0x3a, 0x20, 0x5b, 0x5d, 0x20, 0x7d, 0x4a, 0x78, 0x0a, 0x03, 0x34, 0x30, 0x34, 0x12, 0x71, 0x12,
-	0x16, 0x0a, 0x14, 0x1a, 0x12, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x72, 0x70, 0x63,
-	0x2e, 0x53, 0x74, 0x61, 0x74, 0x75, 0x73, 0x22, 0x57, 0x0a, 0x10, 0x61, 0x70, 0x70, 0x6c, 0x69,
-	0x63, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x2f, 0x6a, 0x73, 0x6f, 0x6e, 0x12, 0x43, 0x7b, 0x20, 0x22,
-	0x63, 0x6f, 0x64, 0x65, 0x22, 0x3a, 0x20, 0x35, 0x2c, 0x20, 0x22, 0x6d, 0x65, 0x73, 0x73, 0x61,
-	0x67, 0x65, 0x22, 0x3a, 0x20, 0x22, 0x72, 0x65, 0x73, 0x6f, 0x75, 0x72, 0x63, 0x65, 0x20, 0x6e,
-	0x6f, 0x74, 0x20, 0x66, 0x6f, 0x75, 0x6e, 0x64, 0x20, 0x65, 0x72, 0x72, 0x6f, 0x72, 0x22, 0x2c,
-	0x20, 0x22, 0x64, 0x65, 0x74, 0x61, 0x69, 0x6c, 0x73, 0x22, 0x3a, 0x20, 0x5b, 0x5d, 0x20, 0x7d,
-	0x82, 0xd3, 0xe4, 0x93, 0x02, 0x23, 0x3a, 0x01, 0x2a, 0x62, 0x09, 0x70, 0x72, 0x6f, 0x63, 0x65,
-	0x73, 0x73, 0x6f, 0x72, 0x1a, 0x13, 0x2f, 0x76, 0x31, 0x2f, 0x70, 0x72, 0x6f, 0x63, 0x65, 0x73,
-	0x73, 0x6f, 0x72, 0x73, 0x2f, 0x7b, 0x69, 0x64, 0x7d, 0x12, 0xe9, 0x02, 0x0a, 0x0f, 0x44, 0x65,
-	0x6c, 0x65, 0x74, 0x65, 0x50, 0x72, 0x6f, 0x63, 0x65, 0x73, 0x73, 0x6f, 0x72, 0x12, 0x1e, 0x2e,
-	0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e, 0x44, 0x65, 0x6c, 0x65, 0x74, 0x65, 0x50, 0x72, 0x6f,
-	0x63, 0x65, 0x73, 0x73, 0x6f, 0x72, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x1f, 0x2e,
-	0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e, 0x44, 0x65, 0x6c, 0x65, 0x74, 0x65, 0x50, 0x72, 0x6f,
-	0x63, 0x65, 0x73, 0x73, 0x6f, 0x72, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x94,
-	0x02, 0x92, 0x41, 0xf5, 0x01, 0x4a, 0x79, 0x0a, 0x03, 0x34, 0x30, 0x30, 0x12, 0x72, 0x12, 0x16,
-	0x0a, 0x14, 0x1a, 0x12, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x72, 0x70, 0x63, 0x2e,
-	0x53, 0x74, 0x61, 0x74, 0x75, 0x73, 0x22, 0x58, 0x0a, 0x10, 0x61, 0x70, 0x70, 0x6c, 0x69, 0x63,
-	0x61, 0x74, 0x69, 0x6f, 0x6e, 0x2f, 0x6a, 0x73, 0x6f, 0x6e, 0x12, 0x44, 0x7b, 0x20, 0x22, 0x63,
-	0x6f, 0x64, 0x65, 0x22, 0x3a, 0x20, 0x39, 0x2c, 0x20, 0x22, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67,
-	0x65, 0x22, 0x3a, 0x20, 0x22, 0x66, 0x61, 0x69, 0x6c, 0x65, 0x64, 0x20, 0x70, 0x72, 0x65, 0x63,
-	0x6f, 0x6e, 0x64, 0x69, 0x74, 0x69, 0x6f, 0x6e, 0x20, 0x65, 0x72, 0x72, 0x6f, 0x72, 0x22, 0x2c,
-	0x20, 0x22, 0x64, 0x65, 0x74, 0x61, 0x69, 0x6c, 0x73, 0x22, 0x3a, 0x20, 0x5b, 0x5d, 0x20, 0x7d,
-	0x4a, 0x78, 0x0a, 0x03, 0x34, 0x30, 0x34, 0x12, 0x71, 0x12, 0x16, 0x0a, 0x14, 0x1a, 0x12, 0x2e,
-	0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x72, 0x70, 0x63, 0x2e, 0x53, 0x74, 0x61, 0x74, 0x75,
-	0x73, 0x22, 0x57, 0x0a, 0x10, 0x61, 0x70, 0x70, 0x6c, 0x69, 0x63, 0x61, 0x74, 0x69, 0x6f, 0x6e,
-	0x2f, 0x6a, 0x73, 0x6f, 0x6e, 0x12, 0x43, 0x7b, 0x20, 0x22, 0x63, 0x6f, 0x64, 0x65, 0x22, 0x3a,
-	0x20, 0x35, 0x2c, 0x20, 0x22, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x22, 0x3a, 0x20, 0x22,
-	0x72, 0x65, 0x73, 0x6f, 0x75, 0x72, 0x63, 0x65, 0x20, 0x6e, 0x6f, 0x74, 0x20, 0x66, 0x6f, 0x75,
-	0x6e, 0x64, 0x20, 0x65, 0x72, 0x72, 0x6f, 0x72, 0x22, 0x2c, 0x20, 0x22, 0x64, 0x65, 0x74, 0x61,
-	0x69, 0x6c, 0x73, 0x22, 0x3a, 0x20, 0x5b, 0x5d, 0x20, 0x7d, 0x82, 0xd3, 0xe4, 0x93, 0x02, 0x15,
-	0x2a, 0x13, 0x2f, 0x76, 0x31, 0x2f, 0x70, 0x72, 0x6f, 0x63, 0x65, 0x73, 0x73, 0x6f, 0x72, 0x73,
-	0x2f, 0x7b, 0x69, 0x64, 0x7d, 0x32, 0x65, 0x0a, 0x12, 0x49, 0x6e, 0x66, 0x6f, 0x72, 0x6d, 0x61,
-	0x74, 0x69, 0x6f, 0x6e, 0x53, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x12, 0x4f, 0x0a, 0x07, 0x47,
-	0x65, 0x74, 0x49, 0x6e, 0x66, 0x6f, 0x12, 0x16, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e,
-	0x47, 0x65, 0x74, 0x49, 0x6e, 0x66, 0x6f, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x17,
-	0x2e, 0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e, 0x47, 0x65, 0x74, 0x49, 0x6e, 0x66, 0x6f, 0x52,
-	0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x13, 0x82, 0xd3, 0xe4, 0x93, 0x02, 0x0d, 0x62,
-	0x04, 0x69, 0x6e, 0x66, 0x6f, 0x12, 0x05, 0x2f, 0x69, 0x6e, 0x66, 0x6f, 0x32, 0x75, 0x0a, 0x0d,
-	0x50, 0x6c, 0x75, 0x67, 0x69, 0x6e, 0x53, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x12, 0x64, 0x0a,
-	0x0b, 0x4c, 0x69, 0x73, 0x74, 0x50, 0x6c, 0x75, 0x67, 0x69, 0x6e, 0x73, 0x12, 0x1a, 0x2e, 0x61,
+	0x74, 0x61, 0x74, 0x75, 0x73, 0x22, 0x57, 0x0a, 0x10, 0x61, 0x70, 0x70, 0x6c, 0x69, 0x63, 0x61,
+	0x74, 0x69, 0x6f, 0x6e, 0x2f, 0x6a, 0x73, 0x6f, 0x6e, 0x12, 0x43, 0x7b, 0x20, 0x22, 0x63, 0x6f,
+	0x64, 0x65, 0x22, 0x3a, 0x20, 0x35, 0x2c, 0x20, 0x22, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65,
+	0x22, 0x3a, 0x20, 0x22, 0x72, 0x65, 0x73, 0x6f, 0x75, 0x72, 0x63, 0x65, 0x20, 0x6e, 0x6f, 0x74,
+	0x20, 0x66, 0x6f, 0x75, 0x6e, 0x64, 0x20, 0x65, 0x72, 0x72, 0x6f, 0x72, 0x22, 0x2c, 0x20, 0x22,
+	0x64, 0x65, 0x74, 0x61, 0x69, 0x6c, 0x73, 0x22, 0x3a, 0x20, 0x5b, 0x5d, 0x20, 0x7d, 0x82, 0xd3,
+	0xe4, 0x93, 0x02, 0x15, 0x2a, 0x13, 0x2f, 0x76, 0x31, 0x2f, 0x70, 0x72, 0x6f, 0x63, 0x65, 0x73,
+	0x73, 0x6f, 0x72, 0x73, 0x2f, 0x7b, 0x69, 0x64, 0x7d, 0x32, 0x65, 0x0a, 0x12, 0x49, 0x6e, 0x66,
+	0x6f, 0x72, 0x6d, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x53, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x12,
+	0x4f, 0x0a, 0x07, 0x47, 0x65, 0x74, 0x49, 0x6e, 0x66, 0x6f, 0x12, 0x16, 0x2e, 0x61, 0x70, 0x69,
+	0x2e, 0x76, 0x31, 0x2e, 0x47, 0x65, 0x74, 0x49, 0x6e, 0x66, 0x6f, 0x52, 0x65, 0x71, 0x75, 0x65,
+	0x73, 0x74, 0x1a, 0x17, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e, 0x47, 0x65, 0x74, 0x49,
+	0x6e, 0x66, 0x6f, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x13, 0x82, 0xd3, 0xe4,
+	0x93, 0x02, 0x0d, 0x62, 0x04, 0x69, 0x6e, 0x66, 0x6f, 0x12, 0x05, 0x2f, 0x69, 0x6e, 0x66, 0x6f,
+	0x32, 0x75, 0x0a, 0x0d, 0x50, 0x6c, 0x75, 0x67, 0x69, 0x6e, 0x53, 0x65, 0x72, 0x76, 0x69, 0x63,
+	0x65, 0x12, 0x64, 0x0a, 0x0b, 0x4c, 0x69, 0x73, 0x74, 0x50, 0x6c, 0x75, 0x67, 0x69, 0x6e, 0x73,
+	0x12, 0x1a, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e, 0x4c, 0x69, 0x73, 0x74, 0x50, 0x6c,
+	0x75, 0x67, 0x69, 0x6e, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x1b, 0x2e, 0x61,
 	0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e, 0x4c, 0x69, 0x73, 0x74, 0x50, 0x6c, 0x75, 0x67, 0x69, 0x6e,
-	0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x1b, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x76,
-	0x31, 0x2e, 0x4c, 0x69, 0x73, 0x74, 0x50, 0x6c, 0x75, 0x67, 0x69, 0x6e, 0x73, 0x52, 0x65, 0x73,
-	0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x1c, 0x82, 0xd3, 0xe4, 0x93, 0x02, 0x16, 0x62, 0x07, 0x70,
-	0x6c, 0x75, 0x67, 0x69, 0x6e, 0x73, 0x12, 0x0b, 0x2f, 0x76, 0x31, 0x2f, 0x70, 0x6c, 0x75, 0x67,
-	0x69, 0x6e, 0x73, 0x42, 0xa6, 0x03, 0x0a, 0x0a, 0x63, 0x6f, 0x6d, 0x2e, 0x61, 0x70, 0x69, 0x2e,
-	0x76, 0x31, 0x42, 0x08, 0x41, 0x70, 0x69, 0x50, 0x72, 0x6f, 0x74, 0x6f, 0x50, 0x01, 0x5a, 0x33,
-	0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x63, 0x6f, 0x6e, 0x64, 0x75,
-	0x69, 0x74, 0x69, 0x6f, 0x2f, 0x63, 0x6f, 0x6e, 0x64, 0x75, 0x69, 0x74, 0x2f, 0x70, 0x72, 0x6f,
-	0x74, 0x6f, 0x2f, 0x67, 0x65, 0x6e, 0x2f, 0x61, 0x70, 0x69, 0x2f, 0x76, 0x31, 0x3b, 0x61, 0x70,
-	0x69, 0x76, 0x31, 0xa2, 0x02, 0x03, 0x41, 0x58, 0x58, 0xaa, 0x02, 0x06, 0x41, 0x70, 0x69, 0x2e,
-	0x56, 0x31, 0xca, 0x02, 0x06, 0x41, 0x70, 0x69, 0x5c, 0x56, 0x31, 0xe2, 0x02, 0x12, 0x41, 0x70,
-	0x69, 0x5c, 0x56, 0x31, 0x5c, 0x47, 0x50, 0x42, 0x4d, 0x65, 0x74, 0x61, 0x64, 0x61, 0x74, 0x61,
-	0xea, 0x02, 0x07, 0x41, 0x70, 0x69, 0x3a, 0x3a, 0x56, 0x31, 0x92, 0x41, 0x9e, 0x02, 0x12, 0xac,
-	0x01, 0x0a, 0x10, 0x43, 0x6f, 0x6e, 0x64, 0x75, 0x69, 0x74, 0x20, 0x52, 0x45, 0x53, 0x54, 0x20,
-	0x41, 0x50, 0x49, 0x22, 0x37, 0x0a, 0x0f, 0x43, 0x6f, 0x6e, 0x64, 0x75, 0x69, 0x74, 0x20, 0x70,
-	0x72, 0x6f, 0x6a, 0x65, 0x63, 0x74, 0x12, 0x24, 0x68, 0x74, 0x74, 0x70, 0x73, 0x3a, 0x2f, 0x2f,
-	0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x63, 0x6f, 0x6e, 0x64, 0x75,
-	0x69, 0x74, 0x69, 0x6f, 0x2f, 0x63, 0x6f, 0x6e, 0x64, 0x75, 0x69, 0x74, 0x2a, 0x57, 0x0a, 0x1a,
-	0x41, 0x70, 0x61, 0x63, 0x68, 0x65, 0x20, 0x4c, 0x69, 0x63, 0x65, 0x6e, 0x73, 0x65, 0x20, 0x56,
-	0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x20, 0x32, 0x2e, 0x30, 0x12, 0x39, 0x68, 0x74, 0x74, 0x70,
-	0x73, 0x3a, 0x2f, 0x2f, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x43,
-	0x6f, 0x6e, 0x64, 0x75, 0x69, 0x74, 0x49, 0x4f, 0x2f, 0x63, 0x6f, 0x6e, 0x64, 0x75, 0x69, 0x74,
-	0x2f, 0x62, 0x6c, 0x6f, 0x62, 0x2f, 0x6d, 0x61, 0x69, 0x6e, 0x2f, 0x4c, 0x49, 0x43, 0x45, 0x4e,
-	0x53, 0x45, 0x2e, 0x6d, 0x64, 0x32, 0x06, 0x76, 0x30, 0x2e, 0x31, 0x2e, 0x30, 0x52, 0x6d, 0x0a,
-	0x03, 0x35, 0x30, 0x30, 0x12, 0x66, 0x12, 0x16, 0x0a, 0x14, 0x1a, 0x12, 0x2e, 0x67, 0x6f, 0x6f,
-	0x67, 0x6c, 0x65, 0x2e, 0x72, 0x70, 0x63, 0x2e, 0x53, 0x74, 0x61, 0x74, 0x75, 0x73, 0x22, 0x4c,
-	0x0a, 0x10, 0x61, 0x70, 0x70, 0x6c, 0x69, 0x63, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x2f, 0x6a, 0x73,
-	0x6f, 0x6e, 0x12, 0x38, 0x7b, 0x20, 0x22, 0x63, 0x6f, 0x64, 0x65, 0x22, 0x3a, 0x20, 0x31, 0x33,
-	0x2c, 0x20, 0x22, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x22, 0x3a, 0x20, 0x22, 0x73, 0x65,
-	0x72, 0x76, 0x65, 0x72, 0x20, 0x65, 0x72, 0x72, 0x6f, 0x72, 0x22, 0x2c, 0x20, 0x22, 0x64, 0x65,
-	0x74, 0x61, 0x69, 0x6c, 0x73, 0x22, 0x3a, 0x20, 0x5b, 0x5d, 0x20, 0x7d, 0x62, 0x06, 0x70, 0x72,
-	0x6f, 0x74, 0x6f, 0x33,
+	0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x1c, 0x82, 0xd3, 0xe4, 0x93, 0x02,
+	0x16, 0x62, 0x07, 0x70, 0x6c, 0x75, 0x67, 0x69, 0x6e, 0x73, 0x12, 0x0b, 0x2f, 0x76, 0x31, 0x2f,
+	0x70, 0x6c, 0x75, 0x67, 0x69, 0x6e, 0x73, 0x42, 0xa6, 0x03, 0x0a, 0x0a, 0x63, 0x6f, 0x6d, 0x2e,
+	0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x42, 0x08, 0x41, 0x70, 0x69, 0x50, 0x72, 0x6f, 0x74, 0x6f,
+	0x50, 0x01, 0x5a, 0x33, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x63,
+	0x6f, 0x6e, 0x64, 0x75, 0x69, 0x74, 0x69, 0x6f, 0x2f, 0x63, 0x6f, 0x6e, 0x64, 0x75, 0x69, 0x74,
+	0x2f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2f, 0x67, 0x65, 0x6e, 0x2f, 0x61, 0x70, 0x69, 0x2f, 0x76,
+	0x31, 0x3b, 0x61, 0x70, 0x69, 0x76, 0x31, 0xa2, 0x02, 0x03, 0x41, 0x58, 0x58, 0xaa, 0x02, 0x06,
+	0x41, 0x70, 0x69, 0x2e, 0x56, 0x31, 0xca, 0x02, 0x06, 0x41, 0x70, 0x69, 0x5c, 0x56, 0x31, 0xe2,
+	0x02, 0x12, 0x41, 0x70, 0x69, 0x5c, 0x56, 0x31, 0x5c, 0x47, 0x50, 0x42, 0x4d, 0x65, 0x74, 0x61,
+	0x64, 0x61, 0x74, 0x61, 0xea, 0x02, 0x07, 0x41, 0x70, 0x69, 0x3a, 0x3a, 0x56, 0x31, 0x92, 0x41,
+	0x9e, 0x02, 0x12, 0xac, 0x01, 0x0a, 0x10, 0x43, 0x6f, 0x6e, 0x64, 0x75, 0x69, 0x74, 0x20, 0x52,
+	0x45, 0x53, 0x54, 0x20, 0x41, 0x50, 0x49, 0x22, 0x37, 0x0a, 0x0f, 0x43, 0x6f, 0x6e, 0x64, 0x75,
+	0x69, 0x74, 0x20, 0x70, 0x72, 0x6f, 0x6a, 0x65, 0x63, 0x74, 0x12, 0x24, 0x68, 0x74, 0x74, 0x70,
+	0x73, 0x3a, 0x2f, 0x2f, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x63,
+	0x6f, 0x6e, 0x64, 0x75, 0x69, 0x74, 0x69, 0x6f, 0x2f, 0x63, 0x6f, 0x6e, 0x64, 0x75, 0x69, 0x74,
+	0x2a, 0x57, 0x0a, 0x1a, 0x41, 0x70, 0x61, 0x63, 0x68, 0x65, 0x20, 0x4c, 0x69, 0x63, 0x65, 0x6e,
+	0x73, 0x65, 0x20, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x20, 0x32, 0x2e, 0x30, 0x12, 0x39,
+	0x68, 0x74, 0x74, 0x70, 0x73, 0x3a, 0x2f, 0x2f, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63,
+	0x6f, 0x6d, 0x2f, 0x43, 0x6f, 0x6e, 0x64, 0x75, 0x69, 0x74, 0x49, 0x4f, 0x2f, 0x63, 0x6f, 0x6e,
+	0x64, 0x75, 0x69, 0x74, 0x2f, 0x62, 0x6c, 0x6f, 0x62, 0x2f, 0x6d, 0x61, 0x69, 0x6e, 0x2f, 0x4c,
+	0x49, 0x43, 0x45, 0x4e, 0x53, 0x45, 0x2e, 0x6d, 0x64, 0x32, 0x06, 0x76, 0x30, 0x2e, 0x31, 0x2e,
+	0x30, 0x52, 0x6d, 0x0a, 0x03, 0x35, 0x30, 0x30, 0x12, 0x66, 0x12, 0x16, 0x0a, 0x14, 0x1a, 0x12,
+	0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x72, 0x70, 0x63, 0x2e, 0x53, 0x74, 0x61, 0x74,
+	0x75, 0x73, 0x22, 0x4c, 0x0a, 0x10, 0x61, 0x70, 0x70, 0x6c, 0x69, 0x63, 0x61, 0x74, 0x69, 0x6f,
+	0x6e, 0x2f, 0x6a, 0x73, 0x6f, 0x6e, 0x12, 0x38, 0x7b, 0x20, 0x22, 0x63, 0x6f, 0x64, 0x65, 0x22,
+	0x3a, 0x20, 0x31, 0x33, 0x2c, 0x20, 0x22, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x22, 0x3a,
+	0x20, 0x22, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x20, 0x65, 0x72, 0x72, 0x6f, 0x72, 0x22, 0x2c,
+	0x20, 0x22, 0x64, 0x65, 0x74, 0x61, 0x69, 0x6c, 0x73, 0x22, 0x3a, 0x20, 0x5b, 0x5d, 0x20, 0x7d,
+	0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -4637,7 +4858,7 @@ func file_api_v1_api_proto_rawDescGZIP() []byte {
 }
 
 var file_api_v1_api_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
-var file_api_v1_api_proto_msgTypes = make([]protoimpl.MessageInfo, 71)
+var file_api_v1_api_proto_msgTypes = make([]protoimpl.MessageInfo, 75)
 var file_api_v1_api_proto_goTypes = []interface{}{
 	(Pipeline_Status)(0),                                // 0: api.v1.Pipeline.Status
 	(Connector_Type)(0),                                 // 1: api.v1.Connector.Type
@@ -4685,153 +4906,163 @@ var file_api_v1_api_proto_goTypes = []interface{}{
 	(*DeleteConnectorResponse)(nil),                     // 43: api.v1.DeleteConnectorResponse
 	(*ListProcessorsRequest)(nil),                       // 44: api.v1.ListProcessorsRequest
 	(*ListProcessorsResponse)(nil),                      // 45: api.v1.ListProcessorsResponse
-	(*CreateProcessorRequest)(nil),                      // 46: api.v1.CreateProcessorRequest
-	(*CreateProcessorResponse)(nil),                     // 47: api.v1.CreateProcessorResponse
-	(*GetProcessorRequest)(nil),                         // 48: api.v1.GetProcessorRequest
-	(*GetProcessorResponse)(nil),                        // 49: api.v1.GetProcessorResponse
-	(*UpdateProcessorRequest)(nil),                      // 50: api.v1.UpdateProcessorRequest
-	(*UpdateProcessorResponse)(nil),                     // 51: api.v1.UpdateProcessorResponse
-	(*DeleteProcessorRequest)(nil),                      // 52: api.v1.DeleteProcessorRequest
-	(*DeleteProcessorResponse)(nil),                     // 53: api.v1.DeleteProcessorResponse
-	(*GetInfoRequest)(nil),                              // 54: api.v1.GetInfoRequest
-	(*GetInfoResponse)(nil),                             // 55: api.v1.GetInfoResponse
-	(*Info)(nil),                                        // 56: api.v1.Info
-	(*ListPluginsRequest)(nil),                          // 57: api.v1.ListPluginsRequest
-	(*ListPluginsResponse)(nil),                         // 58: api.v1.ListPluginsResponse
-	(*PluginSpecifications)(nil),                        // 59: api.v1.PluginSpecifications
-	(*Pipeline_State)(nil),                              // 60: api.v1.Pipeline.State
-	(*Pipeline_Config)(nil),                             // 61: api.v1.Pipeline.Config
-	(*Pipeline_DLQ)(nil),                                // 62: api.v1.Pipeline.DLQ
-	nil,                                                 // 63: api.v1.Pipeline.DLQ.SettingsEntry
-	(*Connector_SourceState)(nil),                       // 64: api.v1.Connector.SourceState
-	(*Connector_DestinationState)(nil),                  // 65: api.v1.Connector.DestinationState
-	(*Connector_Config)(nil),                            // 66: api.v1.Connector.Config
-	nil,                                                 // 67: api.v1.Connector.DestinationState.PositionsEntry
-	nil,                                                 // 68: api.v1.Connector.Config.SettingsEntry
-	(*Processor_Parent)(nil),                            // 69: api.v1.Processor.Parent
-	(*Processor_Config)(nil),                            // 70: api.v1.Processor.Config
-	nil,                                                 // 71: api.v1.Processor.Config.SettingsEntry
-	(*PluginSpecifications_Parameter)(nil),              // 72: api.v1.PluginSpecifications.Parameter
-	nil,                                                 // 73: api.v1.PluginSpecifications.DestinationParamsEntry
-	nil,                                                 // 74: api.v1.PluginSpecifications.SourceParamsEntry
-	(*PluginSpecifications_Parameter_Validation)(nil),   // 75: api.v1.PluginSpecifications.Parameter.Validation
-	(*timestamppb.Timestamp)(nil),                       // 76: google.protobuf.Timestamp
-	(*v1.Record)(nil),                                   // 77: opencdc.v1.Record
+	(*InspectProcessorInRequest)(nil),                   // 46: api.v1.InspectProcessorInRequest
+	(*InspectProcessorInResponse)(nil),                  // 47: api.v1.InspectProcessorInResponse
+	(*InspectProcessorOutRequest)(nil),                  // 48: api.v1.InspectProcessorOutRequest
+	(*InspectProcessorOutResponse)(nil),                 // 49: api.v1.InspectProcessorOutResponse
+	(*CreateProcessorRequest)(nil),                      // 50: api.v1.CreateProcessorRequest
+	(*CreateProcessorResponse)(nil),                     // 51: api.v1.CreateProcessorResponse
+	(*GetProcessorRequest)(nil),                         // 52: api.v1.GetProcessorRequest
+	(*GetProcessorResponse)(nil),                        // 53: api.v1.GetProcessorResponse
+	(*UpdateProcessorRequest)(nil),                      // 54: api.v1.UpdateProcessorRequest
+	(*UpdateProcessorResponse)(nil),                     // 55: api.v1.UpdateProcessorResponse
+	(*DeleteProcessorRequest)(nil),                      // 56: api.v1.DeleteProcessorRequest
+	(*DeleteProcessorResponse)(nil),                     // 57: api.v1.DeleteProcessorResponse
+	(*GetInfoRequest)(nil),                              // 58: api.v1.GetInfoRequest
+	(*GetInfoResponse)(nil),                             // 59: api.v1.GetInfoResponse
+	(*Info)(nil),                                        // 60: api.v1.Info
+	(*ListPluginsRequest)(nil),                          // 61: api.v1.ListPluginsRequest
+	(*ListPluginsResponse)(nil),                         // 62: api.v1.ListPluginsResponse
+	(*PluginSpecifications)(nil),                        // 63: api.v1.PluginSpecifications
+	(*Pipeline_State)(nil),                              // 64: api.v1.Pipeline.State
+	(*Pipeline_Config)(nil),                             // 65: api.v1.Pipeline.Config
+	(*Pipeline_DLQ)(nil),                                // 66: api.v1.Pipeline.DLQ
+	nil,                                                 // 67: api.v1.Pipeline.DLQ.SettingsEntry
+	(*Connector_SourceState)(nil),                       // 68: api.v1.Connector.SourceState
+	(*Connector_DestinationState)(nil),                  // 69: api.v1.Connector.DestinationState
+	(*Connector_Config)(nil),                            // 70: api.v1.Connector.Config
+	nil,                                                 // 71: api.v1.Connector.DestinationState.PositionsEntry
+	nil,                                                 // 72: api.v1.Connector.Config.SettingsEntry
+	(*Processor_Parent)(nil),                            // 73: api.v1.Processor.Parent
+	(*Processor_Config)(nil),                            // 74: api.v1.Processor.Config
+	nil,                                                 // 75: api.v1.Processor.Config.SettingsEntry
+	(*PluginSpecifications_Parameter)(nil),              // 76: api.v1.PluginSpecifications.Parameter
+	nil,                                                 // 77: api.v1.PluginSpecifications.DestinationParamsEntry
+	nil,                                                 // 78: api.v1.PluginSpecifications.SourceParamsEntry
+	(*PluginSpecifications_Parameter_Validation)(nil),   // 79: api.v1.PluginSpecifications.Parameter.Validation
+	(*timestamppb.Timestamp)(nil),                       // 80: google.protobuf.Timestamp
+	(*v1.Record)(nil),                                   // 81: opencdc.v1.Record
 }
 var file_api_v1_api_proto_depIdxs = []int32{
-	60, // 0: api.v1.Pipeline.state:type_name -> api.v1.Pipeline.State
-	61, // 1: api.v1.Pipeline.config:type_name -> api.v1.Pipeline.Config
-	76, // 2: api.v1.Pipeline.created_at:type_name -> google.protobuf.Timestamp
-	76, // 3: api.v1.Pipeline.updated_at:type_name -> google.protobuf.Timestamp
-	65, // 4: api.v1.Connector.destination_state:type_name -> api.v1.Connector.DestinationState
-	64, // 5: api.v1.Connector.source_state:type_name -> api.v1.Connector.SourceState
-	66, // 6: api.v1.Connector.config:type_name -> api.v1.Connector.Config
+	64, // 0: api.v1.Pipeline.state:type_name -> api.v1.Pipeline.State
+	65, // 1: api.v1.Pipeline.config:type_name -> api.v1.Pipeline.Config
+	80, // 2: api.v1.Pipeline.created_at:type_name -> google.protobuf.Timestamp
+	80, // 3: api.v1.Pipeline.updated_at:type_name -> google.protobuf.Timestamp
+	69, // 4: api.v1.Connector.destination_state:type_name -> api.v1.Connector.DestinationState
+	68, // 5: api.v1.Connector.source_state:type_name -> api.v1.Connector.SourceState
+	70, // 6: api.v1.Connector.config:type_name -> api.v1.Connector.Config
 	1,  // 7: api.v1.Connector.type:type_name -> api.v1.Connector.Type
-	76, // 8: api.v1.Connector.created_at:type_name -> google.protobuf.Timestamp
-	76, // 9: api.v1.Connector.updated_at:type_name -> google.protobuf.Timestamp
-	70, // 10: api.v1.Processor.config:type_name -> api.v1.Processor.Config
-	69, // 11: api.v1.Processor.parent:type_name -> api.v1.Processor.Parent
-	76, // 12: api.v1.Processor.created_at:type_name -> google.protobuf.Timestamp
-	76, // 13: api.v1.Processor.updated_at:type_name -> google.protobuf.Timestamp
+	80, // 8: api.v1.Connector.created_at:type_name -> google.protobuf.Timestamp
+	80, // 9: api.v1.Connector.updated_at:type_name -> google.protobuf.Timestamp
+	74, // 10: api.v1.Processor.config:type_name -> api.v1.Processor.Config
+	73, // 11: api.v1.Processor.parent:type_name -> api.v1.Processor.Parent
+	80, // 12: api.v1.Processor.created_at:type_name -> google.protobuf.Timestamp
+	80, // 13: api.v1.Processor.updated_at:type_name -> google.protobuf.Timestamp
 	5,  // 14: api.v1.ListPipelinesResponse.pipelines:type_name -> api.v1.Pipeline
-	61, // 15: api.v1.CreatePipelineRequest.config:type_name -> api.v1.Pipeline.Config
+	65, // 15: api.v1.CreatePipelineRequest.config:type_name -> api.v1.Pipeline.Config
 	5,  // 16: api.v1.CreatePipelineResponse.pipeline:type_name -> api.v1.Pipeline
 	5,  // 17: api.v1.GetPipelineResponse.pipeline:type_name -> api.v1.Pipeline
-	61, // 18: api.v1.UpdatePipelineRequest.config:type_name -> api.v1.Pipeline.Config
+	65, // 18: api.v1.UpdatePipelineRequest.config:type_name -> api.v1.Pipeline.Config
 	5,  // 19: api.v1.UpdatePipelineResponse.pipeline:type_name -> api.v1.Pipeline
-	62, // 20: api.v1.GetDLQResponse.dlq:type_name -> api.v1.Pipeline.DLQ
-	62, // 21: api.v1.UpdateDLQRequest.dlq:type_name -> api.v1.Pipeline.DLQ
-	62, // 22: api.v1.UpdateDLQResponse.dlq:type_name -> api.v1.Pipeline.DLQ
+	66, // 20: api.v1.GetDLQResponse.dlq:type_name -> api.v1.Pipeline.DLQ
+	66, // 21: api.v1.UpdateDLQRequest.dlq:type_name -> api.v1.Pipeline.DLQ
+	66, // 22: api.v1.UpdateDLQResponse.dlq:type_name -> api.v1.Pipeline.DLQ
 	5,  // 23: api.v1.ExportPipelineResponse.pipeline:type_name -> api.v1.Pipeline
 	5,  // 24: api.v1.ImportPipelineRequest.pipeline:type_name -> api.v1.Pipeline
 	5,  // 25: api.v1.ImportPipelineResponse.pipeline:type_name -> api.v1.Pipeline
 	1,  // 26: api.v1.CreateConnectorRequest.type:type_name -> api.v1.Connector.Type
-	66, // 27: api.v1.CreateConnectorRequest.config:type_name -> api.v1.Connector.Config
+	70, // 27: api.v1.CreateConnectorRequest.config:type_name -> api.v1.Connector.Config
 	6,  // 28: api.v1.CreateConnectorResponse.connector:type_name -> api.v1.Connector
 	1,  // 29: api.v1.ValidateConnectorRequest.type:type_name -> api.v1.Connector.Type
-	66, // 30: api.v1.ValidateConnectorRequest.config:type_name -> api.v1.Connector.Config
+	70, // 30: api.v1.ValidateConnectorRequest.config:type_name -> api.v1.Connector.Config
 	6,  // 31: api.v1.ListConnectorsResponse.connectors:type_name -> api.v1.Connector
-	77, // 32: api.v1.InspectConnectorResponse.record:type_name -> opencdc.v1.Record
+	81, // 32: api.v1.InspectConnectorResponse.record:type_name -> opencdc.v1.Record
 	6,  // 33: api.v1.GetConnectorResponse.connector:type_name -> api.v1.Connector
-	66, // 34: api.v1.UpdateConnectorRequest.config:type_name -> api.v1.Connector.Config
+	70, // 34: api.v1.UpdateConnectorRequest.config:type_name -> api.v1.Connector.Config
 	6,  // 35: api.v1.UpdateConnectorResponse.connector:type_name -> api.v1.Connector
 	7,  // 36: api.v1.ListProcessorsResponse.processors:type_name -> api.v1.Processor
-	69, // 37: api.v1.CreateProcessorRequest.parent:type_name -> api.v1.Processor.Parent
-	70, // 38: api.v1.CreateProcessorRequest.config:type_name -> api.v1.Processor.Config
-	7,  // 39: api.v1.CreateProcessorResponse.processor:type_name -> api.v1.Processor
-	7,  // 40: api.v1.GetProcessorResponse.processor:type_name -> api.v1.Processor
-	70, // 41: api.v1.UpdateProcessorRequest.config:type_name -> api.v1.Processor.Config
-	7,  // 42: api.v1.UpdateProcessorResponse.processor:type_name -> api.v1.Processor
-	56, // 43: api.v1.GetInfoResponse.info:type_name -> api.v1.Info
-	59, // 44: api.v1.ListPluginsResponse.plugins:type_name -> api.v1.PluginSpecifications
-	73, // 45: api.v1.PluginSpecifications.destination_params:type_name -> api.v1.PluginSpecifications.DestinationParamsEntry
-	74, // 46: api.v1.PluginSpecifications.source_params:type_name -> api.v1.PluginSpecifications.SourceParamsEntry
-	0,  // 47: api.v1.Pipeline.State.status:type_name -> api.v1.Pipeline.Status
-	63, // 48: api.v1.Pipeline.DLQ.settings:type_name -> api.v1.Pipeline.DLQ.SettingsEntry
-	67, // 49: api.v1.Connector.DestinationState.positions:type_name -> api.v1.Connector.DestinationState.PositionsEntry
-	68, // 50: api.v1.Connector.Config.settings:type_name -> api.v1.Connector.Config.SettingsEntry
-	2,  // 51: api.v1.Processor.Parent.type:type_name -> api.v1.Processor.Parent.Type
-	71, // 52: api.v1.Processor.Config.settings:type_name -> api.v1.Processor.Config.SettingsEntry
-	3,  // 53: api.v1.PluginSpecifications.Parameter.type:type_name -> api.v1.PluginSpecifications.Parameter.Type
-	75, // 54: api.v1.PluginSpecifications.Parameter.validations:type_name -> api.v1.PluginSpecifications.Parameter.Validation
-	72, // 55: api.v1.PluginSpecifications.DestinationParamsEntry.value:type_name -> api.v1.PluginSpecifications.Parameter
-	72, // 56: api.v1.PluginSpecifications.SourceParamsEntry.value:type_name -> api.v1.PluginSpecifications.Parameter
-	4,  // 57: api.v1.PluginSpecifications.Parameter.Validation.type:type_name -> api.v1.PluginSpecifications.Parameter.Validation.Type
-	8,  // 58: api.v1.PipelineService.ListPipelines:input_type -> api.v1.ListPipelinesRequest
-	10, // 59: api.v1.PipelineService.CreatePipeline:input_type -> api.v1.CreatePipelineRequest
-	12, // 60: api.v1.PipelineService.GetPipeline:input_type -> api.v1.GetPipelineRequest
-	14, // 61: api.v1.PipelineService.UpdatePipeline:input_type -> api.v1.UpdatePipelineRequest
-	16, // 62: api.v1.PipelineService.DeletePipeline:input_type -> api.v1.DeletePipelineRequest
-	18, // 63: api.v1.PipelineService.StartPipeline:input_type -> api.v1.StartPipelineRequest
-	20, // 64: api.v1.PipelineService.StopPipeline:input_type -> api.v1.StopPipelineRequest
-	22, // 65: api.v1.PipelineService.GetDLQ:input_type -> api.v1.GetDLQRequest
-	24, // 66: api.v1.PipelineService.UpdateDLQ:input_type -> api.v1.UpdateDLQRequest
-	26, // 67: api.v1.PipelineService.ExportPipeline:input_type -> api.v1.ExportPipelineRequest
-	28, // 68: api.v1.PipelineService.ImportPipeline:input_type -> api.v1.ImportPipelineRequest
-	34, // 69: api.v1.ConnectorService.ListConnectors:input_type -> api.v1.ListConnectorsRequest
-	36, // 70: api.v1.ConnectorService.InspectConnector:input_type -> api.v1.InspectConnectorRequest
-	38, // 71: api.v1.ConnectorService.GetConnector:input_type -> api.v1.GetConnectorRequest
-	30, // 72: api.v1.ConnectorService.CreateConnector:input_type -> api.v1.CreateConnectorRequest
-	32, // 73: api.v1.ConnectorService.ValidateConnector:input_type -> api.v1.ValidateConnectorRequest
-	40, // 74: api.v1.ConnectorService.UpdateConnector:input_type -> api.v1.UpdateConnectorRequest
-	42, // 75: api.v1.ConnectorService.DeleteConnector:input_type -> api.v1.DeleteConnectorRequest
-	44, // 76: api.v1.ProcessorService.ListProcessors:input_type -> api.v1.ListProcessorsRequest
-	48, // 77: api.v1.ProcessorService.GetProcessor:input_type -> api.v1.GetProcessorRequest
-	46, // 78: api.v1.ProcessorService.CreateProcessor:input_type -> api.v1.CreateProcessorRequest
-	50, // 79: api.v1.ProcessorService.UpdateProcessor:input_type -> api.v1.UpdateProcessorRequest
-	52, // 80: api.v1.ProcessorService.DeleteProcessor:input_type -> api.v1.DeleteProcessorRequest
-	54, // 81: api.v1.InformationService.GetInfo:input_type -> api.v1.GetInfoRequest
-	57, // 82: api.v1.PluginService.ListPlugins:input_type -> api.v1.ListPluginsRequest
-	9,  // 83: api.v1.PipelineService.ListPipelines:output_type -> api.v1.ListPipelinesResponse
-	11, // 84: api.v1.PipelineService.CreatePipeline:output_type -> api.v1.CreatePipelineResponse
-	13, // 85: api.v1.PipelineService.GetPipeline:output_type -> api.v1.GetPipelineResponse
-	15, // 86: api.v1.PipelineService.UpdatePipeline:output_type -> api.v1.UpdatePipelineResponse
-	17, // 87: api.v1.PipelineService.DeletePipeline:output_type -> api.v1.DeletePipelineResponse
-	19, // 88: api.v1.PipelineService.StartPipeline:output_type -> api.v1.StartPipelineResponse
-	21, // 89: api.v1.PipelineService.StopPipeline:output_type -> api.v1.StopPipelineResponse
-	23, // 90: api.v1.PipelineService.GetDLQ:output_type -> api.v1.GetDLQResponse
-	25, // 91: api.v1.PipelineService.UpdateDLQ:output_type -> api.v1.UpdateDLQResponse
-	27, // 92: api.v1.PipelineService.ExportPipeline:output_type -> api.v1.ExportPipelineResponse
-	29, // 93: api.v1.PipelineService.ImportPipeline:output_type -> api.v1.ImportPipelineResponse
-	35, // 94: api.v1.ConnectorService.ListConnectors:output_type -> api.v1.ListConnectorsResponse
-	37, // 95: api.v1.ConnectorService.InspectConnector:output_type -> api.v1.InspectConnectorResponse
-	39, // 96: api.v1.ConnectorService.GetConnector:output_type -> api.v1.GetConnectorResponse
-	31, // 97: api.v1.ConnectorService.CreateConnector:output_type -> api.v1.CreateConnectorResponse
-	33, // 98: api.v1.ConnectorService.ValidateConnector:output_type -> api.v1.ValidateConnectorResponse
-	41, // 99: api.v1.ConnectorService.UpdateConnector:output_type -> api.v1.UpdateConnectorResponse
-	43, // 100: api.v1.ConnectorService.DeleteConnector:output_type -> api.v1.DeleteConnectorResponse
-	45, // 101: api.v1.ProcessorService.ListProcessors:output_type -> api.v1.ListProcessorsResponse
-	49, // 102: api.v1.ProcessorService.GetProcessor:output_type -> api.v1.GetProcessorResponse
-	47, // 103: api.v1.ProcessorService.CreateProcessor:output_type -> api.v1.CreateProcessorResponse
-	51, // 104: api.v1.ProcessorService.UpdateProcessor:output_type -> api.v1.UpdateProcessorResponse
-	53, // 105: api.v1.ProcessorService.DeleteProcessor:output_type -> api.v1.DeleteProcessorResponse
-	55, // 106: api.v1.InformationService.GetInfo:output_type -> api.v1.GetInfoResponse
-	58, // 107: api.v1.PluginService.ListPlugins:output_type -> api.v1.ListPluginsResponse
-	83, // [83:108] is the sub-list for method output_type
-	58, // [58:83] is the sub-list for method input_type
-	58, // [58:58] is the sub-list for extension type_name
-	58, // [58:58] is the sub-list for extension extendee
-	0,  // [0:58] is the sub-list for field type_name
+	81, // 37: api.v1.InspectProcessorInResponse.record:type_name -> opencdc.v1.Record
+	81, // 38: api.v1.InspectProcessorOutResponse.record:type_name -> opencdc.v1.Record
+	73, // 39: api.v1.CreateProcessorRequest.parent:type_name -> api.v1.Processor.Parent
+	74, // 40: api.v1.CreateProcessorRequest.config:type_name -> api.v1.Processor.Config
+	7,  // 41: api.v1.CreateProcessorResponse.processor:type_name -> api.v1.Processor
+	7,  // 42: api.v1.GetProcessorResponse.processor:type_name -> api.v1.Processor
+	74, // 43: api.v1.UpdateProcessorRequest.config:type_name -> api.v1.Processor.Config
+	7,  // 44: api.v1.UpdateProcessorResponse.processor:type_name -> api.v1.Processor
+	60, // 45: api.v1.GetInfoResponse.info:type_name -> api.v1.Info
+	63, // 46: api.v1.ListPluginsResponse.plugins:type_name -> api.v1.PluginSpecifications
+	77, // 47: api.v1.PluginSpecifications.destination_params:type_name -> api.v1.PluginSpecifications.DestinationParamsEntry
+	78, // 48: api.v1.PluginSpecifications.source_params:type_name -> api.v1.PluginSpecifications.SourceParamsEntry
+	0,  // 49: api.v1.Pipeline.State.status:type_name -> api.v1.Pipeline.Status
+	67, // 50: api.v1.Pipeline.DLQ.settings:type_name -> api.v1.Pipeline.DLQ.SettingsEntry
+	71, // 51: api.v1.Connector.DestinationState.positions:type_name -> api.v1.Connector.DestinationState.PositionsEntry
+	72, // 52: api.v1.Connector.Config.settings:type_name -> api.v1.Connector.Config.SettingsEntry
+	2,  // 53: api.v1.Processor.Parent.type:type_name -> api.v1.Processor.Parent.Type
+	75, // 54: api.v1.Processor.Config.settings:type_name -> api.v1.Processor.Config.SettingsEntry
+	3,  // 55: api.v1.PluginSpecifications.Parameter.type:type_name -> api.v1.PluginSpecifications.Parameter.Type
+	79, // 56: api.v1.PluginSpecifications.Parameter.validations:type_name -> api.v1.PluginSpecifications.Parameter.Validation
+	76, // 57: api.v1.PluginSpecifications.DestinationParamsEntry.value:type_name -> api.v1.PluginSpecifications.Parameter
+	76, // 58: api.v1.PluginSpecifications.SourceParamsEntry.value:type_name -> api.v1.PluginSpecifications.Parameter
+	4,  // 59: api.v1.PluginSpecifications.Parameter.Validation.type:type_name -> api.v1.PluginSpecifications.Parameter.Validation.Type
+	8,  // 60: api.v1.PipelineService.ListPipelines:input_type -> api.v1.ListPipelinesRequest
+	10, // 61: api.v1.PipelineService.CreatePipeline:input_type -> api.v1.CreatePipelineRequest
+	12, // 62: api.v1.PipelineService.GetPipeline:input_type -> api.v1.GetPipelineRequest
+	14, // 63: api.v1.PipelineService.UpdatePipeline:input_type -> api.v1.UpdatePipelineRequest
+	16, // 64: api.v1.PipelineService.DeletePipeline:input_type -> api.v1.DeletePipelineRequest
+	18, // 65: api.v1.PipelineService.StartPipeline:input_type -> api.v1.StartPipelineRequest
+	20, // 66: api.v1.PipelineService.StopPipeline:input_type -> api.v1.StopPipelineRequest
+	22, // 67: api.v1.PipelineService.GetDLQ:input_type -> api.v1.GetDLQRequest
+	24, // 68: api.v1.PipelineService.UpdateDLQ:input_type -> api.v1.UpdateDLQRequest
+	26, // 69: api.v1.PipelineService.ExportPipeline:input_type -> api.v1.ExportPipelineRequest
+	28, // 70: api.v1.PipelineService.ImportPipeline:input_type -> api.v1.ImportPipelineRequest
+	34, // 71: api.v1.ConnectorService.ListConnectors:input_type -> api.v1.ListConnectorsRequest
+	36, // 72: api.v1.ConnectorService.InspectConnector:input_type -> api.v1.InspectConnectorRequest
+	38, // 73: api.v1.ConnectorService.GetConnector:input_type -> api.v1.GetConnectorRequest
+	30, // 74: api.v1.ConnectorService.CreateConnector:input_type -> api.v1.CreateConnectorRequest
+	32, // 75: api.v1.ConnectorService.ValidateConnector:input_type -> api.v1.ValidateConnectorRequest
+	40, // 76: api.v1.ConnectorService.UpdateConnector:input_type -> api.v1.UpdateConnectorRequest
+	42, // 77: api.v1.ConnectorService.DeleteConnector:input_type -> api.v1.DeleteConnectorRequest
+	44, // 78: api.v1.ProcessorService.ListProcessors:input_type -> api.v1.ListProcessorsRequest
+	46, // 79: api.v1.ProcessorService.InspectProcessorIn:input_type -> api.v1.InspectProcessorInRequest
+	48, // 80: api.v1.ProcessorService.InspectProcessorOut:input_type -> api.v1.InspectProcessorOutRequest
+	52, // 81: api.v1.ProcessorService.GetProcessor:input_type -> api.v1.GetProcessorRequest
+	50, // 82: api.v1.ProcessorService.CreateProcessor:input_type -> api.v1.CreateProcessorRequest
+	54, // 83: api.v1.ProcessorService.UpdateProcessor:input_type -> api.v1.UpdateProcessorRequest
+	56, // 84: api.v1.ProcessorService.DeleteProcessor:input_type -> api.v1.DeleteProcessorRequest
+	58, // 85: api.v1.InformationService.GetInfo:input_type -> api.v1.GetInfoRequest
+	61, // 86: api.v1.PluginService.ListPlugins:input_type -> api.v1.ListPluginsRequest
+	9,  // 87: api.v1.PipelineService.ListPipelines:output_type -> api.v1.ListPipelinesResponse
+	11, // 88: api.v1.PipelineService.CreatePipeline:output_type -> api.v1.CreatePipelineResponse
+	13, // 89: api.v1.PipelineService.GetPipeline:output_type -> api.v1.GetPipelineResponse
+	15, // 90: api.v1.PipelineService.UpdatePipeline:output_type -> api.v1.UpdatePipelineResponse
+	17, // 91: api.v1.PipelineService.DeletePipeline:output_type -> api.v1.DeletePipelineResponse
+	19, // 92: api.v1.PipelineService.StartPipeline:output_type -> api.v1.StartPipelineResponse
+	21, // 93: api.v1.PipelineService.StopPipeline:output_type -> api.v1.StopPipelineResponse
+	23, // 94: api.v1.PipelineService.GetDLQ:output_type -> api.v1.GetDLQResponse
+	25, // 95: api.v1.PipelineService.UpdateDLQ:output_type -> api.v1.UpdateDLQResponse
+	27, // 96: api.v1.PipelineService.ExportPipeline:output_type -> api.v1.ExportPipelineResponse
+	29, // 97: api.v1.PipelineService.ImportPipeline:output_type -> api.v1.ImportPipelineResponse
+	35, // 98: api.v1.ConnectorService.ListConnectors:output_type -> api.v1.ListConnectorsResponse
+	37, // 99: api.v1.ConnectorService.InspectConnector:output_type -> api.v1.InspectConnectorResponse
+	39, // 100: api.v1.ConnectorService.GetConnector:output_type -> api.v1.GetConnectorResponse
+	31, // 101: api.v1.ConnectorService.CreateConnector:output_type -> api.v1.CreateConnectorResponse
+	33, // 102: api.v1.ConnectorService.ValidateConnector:output_type -> api.v1.ValidateConnectorResponse
+	41, // 103: api.v1.ConnectorService.UpdateConnector:output_type -> api.v1.UpdateConnectorResponse
+	43, // 104: api.v1.ConnectorService.DeleteConnector:output_type -> api.v1.DeleteConnectorResponse
+	45, // 105: api.v1.ProcessorService.ListProcessors:output_type -> api.v1.ListProcessorsResponse
+	47, // 106: api.v1.ProcessorService.InspectProcessorIn:output_type -> api.v1.InspectProcessorInResponse
+	49, // 107: api.v1.ProcessorService.InspectProcessorOut:output_type -> api.v1.InspectProcessorOutResponse
+	53, // 108: api.v1.ProcessorService.GetProcessor:output_type -> api.v1.GetProcessorResponse
+	51, // 109: api.v1.ProcessorService.CreateProcessor:output_type -> api.v1.CreateProcessorResponse
+	55, // 110: api.v1.ProcessorService.UpdateProcessor:output_type -> api.v1.UpdateProcessorResponse
+	57, // 111: api.v1.ProcessorService.DeleteProcessor:output_type -> api.v1.DeleteProcessorResponse
+	59, // 112: api.v1.InformationService.GetInfo:output_type -> api.v1.GetInfoResponse
+	62, // 113: api.v1.PluginService.ListPlugins:output_type -> api.v1.ListPluginsResponse
+	87, // [87:114] is the sub-list for method output_type
+	60, // [60:87] is the sub-list for method input_type
+	60, // [60:60] is the sub-list for extension type_name
+	60, // [60:60] is the sub-list for extension extendee
+	0,  // [0:60] is the sub-list for field type_name
 }
 
 func init() { file_api_v1_api_proto_init() }
@@ -5333,7 +5564,7 @@ func file_api_v1_api_proto_init() {
 			}
 		}
 		file_api_v1_api_proto_msgTypes[41].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*CreateProcessorRequest); i {
+			switch v := v.(*InspectProcessorInRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -5345,7 +5576,7 @@ func file_api_v1_api_proto_init() {
 			}
 		}
 		file_api_v1_api_proto_msgTypes[42].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*CreateProcessorResponse); i {
+			switch v := v.(*InspectProcessorInResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -5357,7 +5588,7 @@ func file_api_v1_api_proto_init() {
 			}
 		}
 		file_api_v1_api_proto_msgTypes[43].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*GetProcessorRequest); i {
+			switch v := v.(*InspectProcessorOutRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -5369,7 +5600,7 @@ func file_api_v1_api_proto_init() {
 			}
 		}
 		file_api_v1_api_proto_msgTypes[44].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*GetProcessorResponse); i {
+			switch v := v.(*InspectProcessorOutResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -5381,7 +5612,7 @@ func file_api_v1_api_proto_init() {
 			}
 		}
 		file_api_v1_api_proto_msgTypes[45].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*UpdateProcessorRequest); i {
+			switch v := v.(*CreateProcessorRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -5393,7 +5624,7 @@ func file_api_v1_api_proto_init() {
 			}
 		}
 		file_api_v1_api_proto_msgTypes[46].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*UpdateProcessorResponse); i {
+			switch v := v.(*CreateProcessorResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -5405,7 +5636,7 @@ func file_api_v1_api_proto_init() {
 			}
 		}
 		file_api_v1_api_proto_msgTypes[47].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*DeleteProcessorRequest); i {
+			switch v := v.(*GetProcessorRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -5417,7 +5648,7 @@ func file_api_v1_api_proto_init() {
 			}
 		}
 		file_api_v1_api_proto_msgTypes[48].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*DeleteProcessorResponse); i {
+			switch v := v.(*GetProcessorResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -5429,7 +5660,7 @@ func file_api_v1_api_proto_init() {
 			}
 		}
 		file_api_v1_api_proto_msgTypes[49].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*GetInfoRequest); i {
+			switch v := v.(*UpdateProcessorRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -5441,7 +5672,7 @@ func file_api_v1_api_proto_init() {
 			}
 		}
 		file_api_v1_api_proto_msgTypes[50].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*GetInfoResponse); i {
+			switch v := v.(*UpdateProcessorResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -5453,7 +5684,7 @@ func file_api_v1_api_proto_init() {
 			}
 		}
 		file_api_v1_api_proto_msgTypes[51].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*Info); i {
+			switch v := v.(*DeleteProcessorRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -5465,7 +5696,7 @@ func file_api_v1_api_proto_init() {
 			}
 		}
 		file_api_v1_api_proto_msgTypes[52].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*ListPluginsRequest); i {
+			switch v := v.(*DeleteProcessorResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -5477,7 +5708,7 @@ func file_api_v1_api_proto_init() {
 			}
 		}
 		file_api_v1_api_proto_msgTypes[53].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*ListPluginsResponse); i {
+			switch v := v.(*GetInfoRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -5489,7 +5720,7 @@ func file_api_v1_api_proto_init() {
 			}
 		}
 		file_api_v1_api_proto_msgTypes[54].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*PluginSpecifications); i {
+			switch v := v.(*GetInfoResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -5501,7 +5732,7 @@ func file_api_v1_api_proto_init() {
 			}
 		}
 		file_api_v1_api_proto_msgTypes[55].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*Pipeline_State); i {
+			switch v := v.(*Info); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -5513,7 +5744,7 @@ func file_api_v1_api_proto_init() {
 			}
 		}
 		file_api_v1_api_proto_msgTypes[56].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*Pipeline_Config); i {
+			switch v := v.(*ListPluginsRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -5525,7 +5756,19 @@ func file_api_v1_api_proto_init() {
 			}
 		}
 		file_api_v1_api_proto_msgTypes[57].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*Pipeline_DLQ); i {
+			switch v := v.(*ListPluginsResponse); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_api_v1_api_proto_msgTypes[58].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*PluginSpecifications); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -5537,7 +5780,7 @@ func file_api_v1_api_proto_init() {
 			}
 		}
 		file_api_v1_api_proto_msgTypes[59].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*Connector_SourceState); i {
+			switch v := v.(*Pipeline_State); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -5549,7 +5792,7 @@ func file_api_v1_api_proto_init() {
 			}
 		}
 		file_api_v1_api_proto_msgTypes[60].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*Connector_DestinationState); i {
+			switch v := v.(*Pipeline_Config); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -5561,7 +5804,19 @@ func file_api_v1_api_proto_init() {
 			}
 		}
 		file_api_v1_api_proto_msgTypes[61].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*Connector_Config); i {
+			switch v := v.(*Pipeline_DLQ); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_api_v1_api_proto_msgTypes[63].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*Connector_SourceState); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -5573,7 +5828,7 @@ func file_api_v1_api_proto_init() {
 			}
 		}
 		file_api_v1_api_proto_msgTypes[64].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*Processor_Parent); i {
+			switch v := v.(*Connector_DestinationState); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -5585,6 +5840,30 @@ func file_api_v1_api_proto_init() {
 			}
 		}
 		file_api_v1_api_proto_msgTypes[65].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*Connector_Config); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_api_v1_api_proto_msgTypes[68].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*Processor_Parent); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_api_v1_api_proto_msgTypes[69].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*Processor_Config); i {
 			case 0:
 				return &v.state
@@ -5596,7 +5875,7 @@ func file_api_v1_api_proto_init() {
 				return nil
 			}
 		}
-		file_api_v1_api_proto_msgTypes[67].Exporter = func(v interface{}, i int) interface{} {
+		file_api_v1_api_proto_msgTypes[71].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*PluginSpecifications_Parameter); i {
 			case 0:
 				return &v.state
@@ -5608,7 +5887,7 @@ func file_api_v1_api_proto_init() {
 				return nil
 			}
 		}
-		file_api_v1_api_proto_msgTypes[70].Exporter = func(v interface{}, i int) interface{} {
+		file_api_v1_api_proto_msgTypes[74].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*PluginSpecifications_Parameter_Validation); i {
 			case 0:
 				return &v.state
@@ -5631,7 +5910,7 @@ func file_api_v1_api_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_api_v1_api_proto_rawDesc,
 			NumEnums:      5,
-			NumMessages:   71,
+			NumMessages:   75,
 			NumExtensions: 0,
 			NumServices:   5,
 		},

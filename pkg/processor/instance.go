@@ -21,6 +21,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/conduitio/conduit/pkg/inspector"
 	"github.com/conduitio/conduit/pkg/record"
 )
 
@@ -35,7 +36,7 @@ const (
 )
 
 type (
-	// ParentType defines the parent type of a processor.
+	// ParentType defines the parent type of processor.
 	ParentType int
 	// ProvisionType defines provisioning type
 	ProvisionType int
@@ -46,13 +47,10 @@ type (
 type Interface interface {
 	// Process runs the processor function on a record.
 	Process(ctx context.Context, record record.Record) (record.Record, error)
-}
 
-// InterfaceFunc is an adapter allowing use of a function as an Interface.
-type InterfaceFunc func(context.Context, record.Record) (record.Record, error)
+	InspectIn(ctx context.Context) *inspector.Session
 
-func (p InterfaceFunc) Process(ctx context.Context, record record.Record) (record.Record, error) {
-	return p(ctx, record)
+	InspectOut(ctx context.Context) *inspector.Session
 }
 
 // Instance represents a processor instance.

@@ -716,6 +716,22 @@ service ProcessorService {
     };
   };
 
+  // InspectProcessorIn streams records coming into the specified processor
+  rpc InspectProcessorIn(InspectProcessorInRequest) returns (stream InspectProcessorInResponse) {
+    option (google.api.http) = {
+      get: "/v1/processors/{id}/inspect-in"
+      response_body: "record"
+    };
+  }
+
+  // InspectProcessorOut streams the output records from the specified processor
+  rpc InspectProcessorOut(InspectProcessorOutRequest) returns (stream InspectProcessorOutResponse) {
+    option (google.api.http) = {
+      get: "/v1/processors/{id}/inspect-out"
+      response_body: "record"
+    };
+  }
+
   rpc GetProcessor(GetProcessorRequest) returns (GetProcessorResponse) {
     option (google.api.http) = {
       get: "/v1/processors/{id}"
@@ -841,10 +857,24 @@ service ProcessorService {
 message ListProcessorsRequest {
   repeated string parent_ids = 1;
 }
-
 message ListProcessorsResponse {
   repeated Processor processors = 1;
 }
+
+message InspectProcessorInRequest {
+  string id = 1;
+}
+message InspectProcessorInResponse {
+  opencdc.v1.Record record = 1;
+}
+
+message InspectProcessorOutRequest {
+  string id = 1;
+}
+message InspectProcessorOutResponse {
+  opencdc.v1.Record record = 1;
+}
+
 
 message CreateProcessorRequest {
   string type = 1;

@@ -32,6 +32,7 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin/builtin"
 	"github.com/conduitio/conduit/pkg/plugin/standalone"
 	"github.com/conduitio/conduit/pkg/processor"
+	"github.com/conduitio/conduit/pkg/processor/procbuiltin"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/golang/mock/gomock"
 	"github.com/google/go-cmp/cmp"
@@ -86,7 +87,7 @@ func TestPipelineSimple(t *testing.T) {
 	// TODO at the time of writing we don't have a processor for manipulating
 	//  metadata, once we have it we can use it instead of adding our own
 	processor.GlobalBuilderRegistry.MustRegister("removereadat", func(config processor.Config) (processor.Interface, error) {
-		return processor.InterfaceFunc(func(ctx context.Context, r record.Record) (record.Record, error) {
+		return procbuiltin.NewFuncWrapper(func(ctx context.Context, r record.Record) (record.Record, error) {
 			delete(r.Metadata, record.MetadataReadAt) // read at is different every time, remove it
 			return r, nil
 		}), nil

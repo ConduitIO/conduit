@@ -8,6 +8,7 @@ import (
 	context "context"
 	reflect "reflect"
 
+	inspector "github.com/conduitio/conduit/pkg/inspector"
 	record "github.com/conduitio/conduit/pkg/record"
 	gomock "github.com/golang/mock/gomock"
 )
@@ -33,6 +34,34 @@ func NewProcessor(ctrl *gomock.Controller) *Processor {
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *Processor) EXPECT() *ProcessorMockRecorder {
 	return m.recorder
+}
+
+// InspectIn mocks base method.
+func (m *Processor) InspectIn(arg0 context.Context) *inspector.Session {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "InspectIn", arg0)
+	ret0, _ := ret[0].(*inspector.Session)
+	return ret0
+}
+
+// InspectIn indicates an expected call of InspectIn.
+func (mr *ProcessorMockRecorder) InspectIn(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InspectIn", reflect.TypeOf((*Processor)(nil).InspectIn), arg0)
+}
+
+// InspectOut mocks base method.
+func (m *Processor) InspectOut(arg0 context.Context) *inspector.Session {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "InspectOut", arg0)
+	ret0, _ := ret[0].(*inspector.Session)
+	return ret0
+}
+
+// InspectOut indicates an expected call of InspectOut.
+func (mr *ProcessorMockRecorder) InspectOut(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InspectOut", reflect.TypeOf((*Processor)(nil).InspectOut), arg0)
 }
 
 // Process mocks base method.

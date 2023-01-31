@@ -75,7 +75,7 @@ func insertField(
 		return nil, cerrors.Errorf("%s: no fields configured to be inserted", processorType)
 	}
 
-	return processor.InterfaceFunc(func(_ context.Context, r record.Record) (record.Record, error) {
+	return NewFuncWrapper(func(_ context.Context, r record.Record) (record.Record, error) {
 		data := getSetter.Get(r)
 
 		switch d := data.(type) {
