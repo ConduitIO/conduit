@@ -17,14 +17,14 @@ package connector
 import (
 	"context"
 	"fmt"
-	"github.com/conduitio/conduit/pkg/foundation/database/mock"
-	"github.com/golang/mock/gomock"
 	"testing"
 	"time"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/database/inmemory"
+	"github.com/conduitio/conduit/pkg/foundation/database/mock"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
 	"github.com/matryer/is"
 )
