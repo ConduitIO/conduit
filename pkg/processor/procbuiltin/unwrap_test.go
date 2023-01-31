@@ -78,9 +78,9 @@ func TestUnwrap_Config(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := UnwrapBuilder(tt.config)
+			_, err := Unwrap(tt.config)
 			if (err != nil) != tt.wantErr {
-				t.Fatalf("UnwrapBuilder() error = %v, wantErr = %v", err, tt.wantErr)
+				t.Fatalf("Unwrap() error = %v, wantErr = %v", err, tt.wantErr)
 			}
 		})
 	}
@@ -148,7 +148,6 @@ func TestUnwrap_Process(t *testing.T) {
 							"before": interface{}(nil),
 							"op":     "u",
 							"source": map[string]interface{}{
-								"opencdc.readAt":  "1674061777225877000",
 								"opencdc.version": "v1",
 							},
 							"transaction": interface{}(nil),
@@ -165,7 +164,7 @@ func TestUnwrap_Process(t *testing.T) {
 			want: record.Record{
 				Operation: record.OperationUpdate,
 				Metadata: map[string]string{
-					"opencdc.readAt":  "1674061777225877000",
+					"opencdc.readAt":  "1674061777225000000",
 					"opencdc.version": "v1",
 					"conduit.version": "v0.4.0",
 				},
@@ -232,7 +231,7 @@ func TestUnwrap_Process(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			is := is.New(t)
-			underTest, err := UnwrapBuilder(tt.config)
+			underTest, err := Unwrap(tt.config)
 			is.NoErr(err)
 			got, err := underTest.Process(context.Background(), tt.record)
 			if (err != nil) != tt.wantErr {
