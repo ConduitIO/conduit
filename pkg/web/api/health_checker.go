@@ -16,9 +16,8 @@ package api
 
 import (
 	"context"
-	"github.com/conduitio/conduit/pkg/foundation/log"
 
-	"github.com/conduitio/conduit/pkg/foundation/multierror"
+	"github.com/conduitio/conduit/pkg/foundation/log"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health/grpc_health_v1"
 	grpcstatus "google.golang.org/grpc/status"
@@ -42,17 +41,17 @@ type HealthServer struct {
 func (h *HealthServer) Check(ctx context.Context, req *grpc_health_v1.HealthCheckRequest) (*grpc_health_v1.HealthCheckResponse, error) {
 	// Check all services
 	if req.Service == "" {
-		if err := h.checkAll(ctx); err != nil {
-			return &grpc_health_v1.HealthCheckResponse{Status: grpc_health_v1.HealthCheckResponse_NOT_SERVING}, nil
+		if h.checkAll(ctx) {
+			return &grpc_health_v1.HealthCheckResponse{Status: grpc_health_v1.HealthCheckResponse_SERVING}, nil
 		}
-		return &grpc_health_v1.HealthCheckResponse{Status: grpc_health_v1.HealthCheckResponse_SERVING}, nil
+		return &grpc_health_v1.HealthCheckResponse{Status: grpc_health_v1.HealthCheckResponse_NOT_SERVING}, nil
 	}
 
 	if _, ok := h.checkers[req.Service]; ok {
-		if err := h.checkers[req.Service].Check(ctx); err != nil {
-			return &grpc_health_v1.HealthCheckResponse{Status: grpc_health_v1.HealthCheckResponse_NOT_SERVING}, nil
+		if h.check(ctx, req.Service) {
+			return &grpc_health_v1.HealthCheckResponse{Status: grpc_health_v1.HealthCheckResponse_SERVING}, nil
 		}
-		return &grpc_health_v1.HealthCheckResponse{Status: grpc_health_v1.HealthCheckResponse_SERVING}, nil
+		return &grpc_health_v1.HealthCheckResponse{Status: grpc_health_v1.HealthCheckResponse_NOT_SERVING}, nil
 	}
 
 	return nil, grpcstatus.Errorf(codes.NotFound, "service '%v' not found", req.Service)
@@ -65,14 +64,29 @@ func (h *HealthServer) Watch(req *grpc_health_v1.HealthCheckRequest, server grpc
 	})
 }
 
-func (h *HealthServer) checkAll(ctx context.Context) error {
-	var merr error
-	for _, checker := range h.checkers {
-		merr = multierror.Append(merr, checker.Check(ctx))
+// checkAll checks returns `true` if all service are healthy,
+// returns `false` otherwise (one or more services are not healthy).
+func (h *HealthServer) checkAll(ctx context.Context) bool {
+	ok := true
+	for service, _ := range h.checkers {
+		ok = ok && h.check(ctx, service)
 	}
-	return merr
+	return ok
+}
+
+func (h *HealthServer) check(ctx context.Context, service string) bool {
+	err := h.checkers[service].Check(ctx)
+	if err != nil {
+		h.log.Warn(ctx).Err(err).
+			Str("service_name", service).
+			Msg("health check not OK")
+	}
+	return err == nil
 }
 
 func NewHealthServer(checkers map[string]Checker, log log.CtxLogger) *HealthServer {
-	return &HealthServer{checkers: checkers, log: log}
+	return &HealthServer{
+		checkers: checkers,
+		log:      log.WithComponent("api.HealthServer"),
+	}
 }
