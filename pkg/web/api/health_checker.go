@@ -16,6 +16,7 @@ package api
 
 import (
 	"context"
+	"github.com/conduitio/conduit/pkg/foundation/log"
 
 	"github.com/conduitio/conduit/pkg/foundation/multierror"
 	"google.golang.org/grpc/codes"
@@ -27,26 +28,28 @@ type Checker interface {
 	Check(ctx context.Context) error
 }
 
-// HealthChecker implements the gRPC health service.
+// HealthServer implements the gRPC health service.
+// Using the HealthServer, it's possible to check
+// the gRPC server's overall health, but also the
+// health of the individual gRPC services.
 // For more information, see: https://github.com/grpc/grpc/blob/master/doc/health-checking.md
-type HealthChecker struct {
+type HealthServer struct {
 	grpc_health_v1.UnimplementedHealthServer
 	checkers map[string]Checker
+	log      log.CtxLogger
 }
 
-func (c *HealthChecker) Check(ctx context.Context, req *grpc_health_v1.HealthCheckRequest) (*grpc_health_v1.HealthCheckResponse, error) {
-	// todo log error
-
+func (h *HealthServer) Check(ctx context.Context, req *grpc_health_v1.HealthCheckRequest) (*grpc_health_v1.HealthCheckResponse, error) {
 	// Check all services
 	if req.Service == "" {
-		if err := c.checkAll(ctx); err != nil {
+		if err := h.checkAll(ctx); err != nil {
 			return &grpc_health_v1.HealthCheckResponse{Status: grpc_health_v1.HealthCheckResponse_NOT_SERVING}, nil
 		}
 		return &grpc_health_v1.HealthCheckResponse{Status: grpc_health_v1.HealthCheckResponse_SERVING}, nil
 	}
 
-	if _, ok := c.checkers[req.Service]; ok {
-		if err := c.checkers[req.Service].Check(ctx); err != nil {
+	if _, ok := h.checkers[req.Service]; ok {
+		if err := h.checkers[req.Service].Check(ctx); err != nil {
 			return &grpc_health_v1.HealthCheckResponse{Status: grpc_health_v1.HealthCheckResponse_NOT_SERVING}, nil
 		}
 		return &grpc_health_v1.HealthCheckResponse{Status: grpc_health_v1.HealthCheckResponse_SERVING}, nil
@@ -55,21 +58,21 @@ func (c *HealthChecker) Check(ctx context.Context, req *grpc_health_v1.HealthChe
 	return nil, grpcstatus.Errorf(codes.NotFound, "service '%v' not found", req.Service)
 }
 
-func (c *HealthChecker) Watch(req *grpc_health_v1.HealthCheckRequest, server grpc_health_v1.Health_WatchServer) error {
+func (h *HealthServer) Watch(req *grpc_health_v1.HealthCheckRequest, server grpc_health_v1.Health_WatchServer) error {
 	// should be altered to subsequently send a new message whenever the service's serving status changes.
 	return server.Send(&grpc_health_v1.HealthCheckResponse{
 		Status: grpc_health_v1.HealthCheckResponse_SERVING,
 	})
 }
 
-func (c *HealthChecker) checkAll(ctx context.Context) error {
+func (h *HealthServer) checkAll(ctx context.Context) error {
 	var merr error
-	for _, checker := range c.checkers {
+	for _, checker := range h.checkers {
 		merr = multierror.Append(merr, checker.Check(ctx))
 	}
 	return merr
 }
 
-func NewHealthChecker(checkers map[string]Checker) *HealthChecker {
-	return &HealthChecker{checkers: checkers}
+func NewHealthServer(checkers map[string]Checker, log log.CtxLogger) *HealthServer {
+	return &HealthServer{checkers: checkers, log: log}
 }

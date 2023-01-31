@@ -16,6 +16,7 @@ package api
 
 import (
 	"context"
+	"github.com/conduitio/conduit/pkg/foundation/log"
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -34,20 +35,26 @@ func (t *testChecker) Check(ctx context.Context) error {
 func TestHealthChecker_Check_OK(t *testing.T) {
 	is := is.New(t)
 
-	underTest := NewHealthChecker(map[string]Checker{
-		"test-service": &testChecker{},
-	})
+	underTest := NewHealthServer(
+		map[string]Checker{
+			"test-service": &testChecker{},
+		},
+		log.Nop(),
+	)
 	resp, err := underTest.Check(context.Background(), &gh.HealthCheckRequest{})
 	is.NoErr(err)
 	is.Equal(gh.HealthCheckResponse_SERVING, resp.Status)
 }
 
-func TestHealthChecker_Check_Fail(t *testing.T) {
+func TestHealthChecker_CheckSingle_Fail(t *testing.T) {
 	is := is.New(t)
 
-	underTest := NewHealthChecker(map[string]Checker{
-		"test-service": &testChecker{err: cerrors.New("failed successfully")},
-	})
+	underTest := NewHealthServer(
+		map[string]Checker{
+			"test-service": &testChecker{err: cerrors.New("failed successfully")},
+		},
+		log.Nop(),
+	)
 	resp, err := underTest.Check(
 		context.Background(),
 		&gh.HealthCheckRequest{Service: "test-service"},
@@ -56,10 +63,28 @@ func TestHealthChecker_Check_Fail(t *testing.T) {
 	is.Equal(gh.HealthCheckResponse_NOT_SERVING, resp.Status)
 }
 
+func TestHealthChecker_CheckAll_Fail(t *testing.T) {
+	is := is.New(t)
+
+	underTest := NewHealthServer(
+		map[string]Checker{
+			"test-service-1": &testChecker{err: cerrors.New("failed successfully")},
+			"test-service-2": &testChecker{},
+		},
+		log.Nop(),
+	)
+	resp, err := underTest.Check(
+		context.Background(),
+		&gh.HealthCheckRequest{},
+	)
+	is.NoErr(err)
+	is.Equal(gh.HealthCheckResponse_NOT_SERVING, resp.Status)
+}
+
 func TestHealthChecker_Check_UnknownService(t *testing.T) {
 	is := is.New(t)
 
-	underTest := NewHealthChecker(map[string]Checker{})
+	underTest := NewHealthServer(map[string]Checker{}, log.Nop())
 	_, err := underTest.Check(context.Background(), &gh.HealthCheckRequest{Service: "foobar"})
 	is.True(err != nil)
 	is.Equal("rpc error: code = NotFound desc = service 'foobar' not found", err.Error())
