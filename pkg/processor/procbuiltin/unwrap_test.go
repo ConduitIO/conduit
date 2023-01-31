@@ -101,7 +101,7 @@ func TestUnwrap_Process(t *testing.T) {
 			},
 			record: record.Record{
 				Key: record.RawData{
-					Raw: []byte("id"),
+					Raw: []byte(`{"payload":"id"}`),
 				},
 				Position: []byte("position"),
 				Payload: record.Change{
@@ -157,6 +157,10 @@ func TestUnwrap_Process(t *testing.T) {
 						"schema": map[string]interface{}{},
 					},
 				},
+				Key: record.StructuredData{
+					"payload": 27,
+					"schema":  map[string]interface{}{},
+				},
 			},
 			want: record.Record{
 				Operation: record.OperationUpdate,
@@ -168,6 +172,9 @@ func TestUnwrap_Process(t *testing.T) {
 				Payload: record.Change{
 					Before: record.StructuredData(nil),
 					After:  record.StructuredData{"description": "test1", "id": 27},
+				},
+				Key: record.RawData{
+					Raw: []byte("27"),
 				},
 			},
 			wantErr: false,
@@ -188,12 +195,19 @@ func TestUnwrap_Process(t *testing.T) {
 						"schema": map[string]interface{}{},
 					},
 				},
+				Key: record.StructuredData{
+					"payload": map[string]interface{}{
+						"id": 27,
+					},
+					"schema": map[string]interface{}{},
+				},
 			},
 			want: record.Record{
 				Operation: record.OperationSnapshot,
 				Payload: record.Change{
 					After: record.StructuredData{"description": "test2", "id": 27},
 				},
+				Key: record.StructuredData{"id": 27},
 			},
 			wantErr: false,
 		},

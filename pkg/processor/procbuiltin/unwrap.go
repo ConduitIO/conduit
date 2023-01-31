@@ -17,6 +17,7 @@ package procbuiltin
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -105,7 +106,7 @@ func (p *unwrapProcessor) Process(ctx context.Context, in record.Record) (record
 // KafkaConnectUnwrapper unwraps a kafka connect record from the payload, expects rec.Payload.After to be of type record.StructuredData
 type KafkaConnectUnwrapper struct{}
 
-func (kp *KafkaConnectUnwrapper) Unwrap(rec record.Record) (record.Record, error) {
+func (k *KafkaConnectUnwrapper) Unwrap(rec record.Record) (record.Record, error) {
 	// record must be structured
 	structPayload, ok := rec.Payload.After.(record.StructuredData)
 	if !ok {
@@ -121,7 +122,7 @@ func (kp *KafkaConnectUnwrapper) Unwrap(rec record.Record) (record.Record, error
 	}
 
 	return record.Record{
-		Key:      rec.Key,
+		Key:      k.UnwrapKey(rec.Key),
 		Position: rec.Position,
 		Metadata: nil,
 		Payload: record.Change{
@@ -130,6 +131,40 @@ func (kp *KafkaConnectUnwrapper) Unwrap(rec record.Record) (record.Record, error
 		},
 		Operation: record.OperationSnapshot,
 	}, nil
+}
+
+// UnwrapKey unwraps key as a kafka connect formatted record, returns the key's payload content, or returns the
+// original key if payload doesn't exist.
+func (k *KafkaConnectUnwrapper) UnwrapKey(key record.Data) record.Data {
+	// convert the key to structured data
+	var structKey record.StructuredData
+	switch d := key.(type) {
+	case record.RawData:
+		// try unmarshalling raw key
+		err := json.Unmarshal(key.Bytes(), &structKey)
+		// if key is not json formatted, return the original key
+		if err != nil {
+			return key
+		}
+	case record.StructuredData:
+		structKey = d
+	}
+
+	payload, ok := structKey["payload"]
+	// return the original key if it doesn't contain a payload
+	if !ok {
+		return key
+	}
+
+	// if payload is a map, return the payload as structured data
+	if p, ok := payload.(map[string]any); ok {
+		return record.StructuredData(p)
+	}
+
+	// otherwise, convert the payload to string, then return it as raw data
+	raw := fmt.Sprint(payload)
+
+	return record.RawData{Raw: []byte(raw)}
 }
 
 /*
@@ -219,8 +254,12 @@ func (d *DebeziumUnwrapper) Unwrap(rec record.Record) (record.Record, error) {
 		return record.Record{}, cerrors.Errorf("error unwrapping metadata: %w", err)
 	}
 
+	// create a kafka connect unwrapper to unwrap the key
+	kafkaConnectUnwrapper := &KafkaConnectUnwrapper{}
+	key := kafkaConnectUnwrapper.UnwrapKey(rec.Key)
+
 	return record.Record{
-		Key:       rec.Key,
+		Key:       key,
 		Position:  rec.Position,
 		Operation: operation,
 		Payload: record.Change{
