@@ -35,6 +35,10 @@ type Service struct {
 	instanceNames map[string]bool
 }
 
+func (s *Service) Check(ctx context.Context) error {
+	return s.store.db.Ping(ctx)
+}
+
 // NewService initializes and returns a pipeline Service.
 func NewService(logger log.CtxLogger, db database.DB) *Service {
 	return &Service{

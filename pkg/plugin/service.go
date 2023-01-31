@@ -51,6 +51,10 @@ func NewService(logger log.CtxLogger, builtin registry, standalone registry) *Se
 	}
 }
 
+func (s *Service) Check(_ context.Context) error {
+	return nil
+}
+
 func (r *Service) NewDispenser(logger log.CtxLogger, name string) (Dispenser, error) {
 	logger = logger.WithComponent("plugin")
 

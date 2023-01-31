@@ -16,51 +16,60 @@ package api
 
 import (
 	"context"
+	"github.com/conduitio/conduit/pkg/foundation/multierror"
 
-	"github.com/conduitio/conduit/pkg/foundation/database"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health/grpc_health_v1"
 	grpcstatus "google.golang.org/grpc/status"
 )
 
+type Checker interface {
+	Check(ctx context.Context) error
+}
+
 // HealthChecker implements the gRPC health service.
 // For more information, see: https://github.com/grpc/grpc/blob/master/doc/health-checking.md
 type HealthChecker struct {
 	grpc_health_v1.UnimplementedHealthServer
-	db database.DB
+	checkers map[string]Checker
 }
 
-func (s *HealthChecker) Check(ctx context.Context, req *grpc_health_v1.HealthCheckRequest) (*grpc_health_v1.HealthCheckResponse, error) {
+func (c *HealthChecker) Check(ctx context.Context, req *grpc_health_v1.HealthCheckRequest) (*grpc_health_v1.HealthCheckResponse, error) {
 	// todo log error
 
-	var status grpc_health_v1.HealthCheckResponse_ServingStatus
-	switch req.Service {
-	// todo have checks in services
-	case "", "PipelineService", "ConnectorService", "ProcessorService":
-		// PipelineService, ConnectorService, ProcessorService require a DB to work
-		if err := s.db.Ping(ctx); err != nil {
-			status = grpc_health_v1.HealthCheckResponse_NOT_SERVING
-		} else {
-			status = grpc_health_v1.HealthCheckResponse_SERVING
+	// Check all services
+	if req.Service == "" {
+		if err := c.checkAll(ctx); err != nil {
+			return &grpc_health_v1.HealthCheckResponse{Status: grpc_health_v1.HealthCheckResponse_NOT_SERVING}, nil
 		}
-	case "InformationService", "PluginService":
-		// InformationService doesn't require anything to work
-		// PluginService requires the file system only
-		status = grpc_health_v1.HealthCheckResponse_SERVING
-	default:
-		return nil, grpcstatus.Errorf(codes.NotFound, "service %q not found", req.Service)
+		return &grpc_health_v1.HealthCheckResponse{Status: grpc_health_v1.HealthCheckResponse_SERVING}, nil
 	}
 
-	return &grpc_health_v1.HealthCheckResponse{Status: status}, nil
+	if _, ok := c.checkers[req.Service]; ok {
+		if err := c.checkers[req.Service].Check(ctx); err != nil {
+			return &grpc_health_v1.HealthCheckResponse{Status: grpc_health_v1.HealthCheckResponse_NOT_SERVING}, nil
+		}
+		return &grpc_health_v1.HealthCheckResponse{Status: grpc_health_v1.HealthCheckResponse_SERVING}, nil
+	}
+
+	return nil, grpcstatus.Errorf(codes.NotFound, "service %q not found", req.Service)
 }
 
-func (s *HealthChecker) Watch(req *grpc_health_v1.HealthCheckRequest, server grpc_health_v1.Health_WatchServer) error {
+func (c *HealthChecker) Watch(req *grpc_health_v1.HealthCheckRequest, server grpc_health_v1.Health_WatchServer) error {
 	// should be altered to subsequently send a new message whenever the service's serving status changes.
 	return server.Send(&grpc_health_v1.HealthCheckResponse{
 		Status: grpc_health_v1.HealthCheckResponse_SERVING,
 	})
 }
 
-func NewHealthChecker(db database.DB) *HealthChecker {
-	return &HealthChecker{db: db}
+func (c *HealthChecker) checkAll(ctx context.Context) error {
+	var merr error
+	for _, checker := range c.checkers {
+		merr = multierror.Append(merr, checker.Check(ctx))
+	}
+	return merr
+}
+
+func NewHealthChecker(checkers map[string]Checker) *HealthChecker {
+	return &HealthChecker{checkers: checkers}
 }
