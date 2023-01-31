@@ -68,7 +68,7 @@ func (h *HealthServer) Watch(req *grpc_health_v1.HealthCheckRequest, server grpc
 // returns `false` otherwise (one or more services are not healthy).
 func (h *HealthServer) checkAll(ctx context.Context) bool {
 	ok := true
-	for service, _ := range h.checkers {
+	for service := range h.checkers {
 		ok = ok && h.check(ctx, service)
 	}
 	return ok
