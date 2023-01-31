@@ -77,7 +77,7 @@ func (h *HealthServer) checkAll(ctx context.Context) bool {
 func (h *HealthServer) check(ctx context.Context, service string) bool {
 	err := h.checkers[service].Check(ctx)
 	if err != nil {
-		h.log.Warn(ctx).Err(err).
+		h.log.Err(ctx, err).
 			Str("service_name", service).
 			Msg("health check not OK")
 	}
