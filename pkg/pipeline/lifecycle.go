@@ -126,17 +126,17 @@ func (s *Service) Stop(ctx context.Context, pipelineID string, force bool) error
 		return cerrors.Errorf("can't stop pipeline with status %q: %w", pl.Status, ErrPipelineNotRunning)
 	}
 
-	if force {
-		s.logger.Debug(ctx).Str(log.PipelineIDField, pl.ID).Msg("force stopping pipeline")
-		pl.t.Kill(cerrors.New("force stop"))
-		return nil
+	switch force {
+	case false:
+		return s.stopGraceful(ctx, pl, nil)
+	case true:
+		return s.stopForceful(ctx, pl)
 	}
-
-	return s.stopWithReason(ctx, pl, nil)
+	panic("unreachable code")
 }
 
-func (s *Service) stopWithReason(ctx context.Context, pl *Instance, reason error) error {
-	s.logger.Debug(ctx).Str(log.PipelineIDField, pl.ID).Msg("stopping pipeline")
+func (s *Service) stopGraceful(ctx context.Context, pl *Instance, reason error) error {
+	s.logger.Debug(ctx).Str(log.PipelineIDField, pl.ID).Msg("gracefully stopping pipeline")
 	var err error
 	for _, n := range pl.n {
 		if node, ok := n.(stream.StoppableNode); ok {
@@ -152,6 +152,19 @@ func (s *Service) stopWithReason(ctx context.Context, pl *Instance, reason error
 	return err
 }
 
+func (s *Service) stopForceful(ctx context.Context, pl *Instance) error {
+	s.logger.Debug(ctx).Str(log.PipelineIDField, pl.ID).Msg("force stopping pipeline")
+	pl.t.Kill(cerrors.New("force stop"))
+	for _, n := range pl.n {
+		if node, ok := n.(stream.ForceStoppableNode); ok {
+			// stop all pub nodes
+			s.logger.Trace(ctx).Str(log.NodeIDField, n.ID()).Msg("force stopping node")
+			node.ForceStop(ctx)
+		}
+	}
+	return nil
+}
+
 // StopAll will ask all the pipelines to stop gracefully
 // (i.e. that existing messages get processed but not new messages get produced).
 func (s *Service) StopAll(ctx context.Context, reason error) {
@@ -159,7 +172,7 @@ func (s *Service) StopAll(ctx context.Context, reason error) {
 		if pl.Status != StatusRunning {
 			continue
 		}
-		err := s.stopWithReason(ctx, pl, reason)
+		err := s.stopGraceful(ctx, pl, reason)
 		if err != nil {
 			s.logger.Warn(ctx).
 				Err(err).
@@ -167,6 +180,7 @@ func (s *Service) StopAll(ctx context.Context, reason error) {
 				Msg("could not stop pipeline")
 		}
 	}
+	// TODO stop pipelines forcefully after timeout if they are still running
 }
 
 // Wait blocks until all pipelines are stopped or until the timeout is reached.

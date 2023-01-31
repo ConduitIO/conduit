@@ -87,6 +87,7 @@ func (d *Dispenser) teardown() {
 	d.logger.Debug().Msg("killing plugin client")
 	// kill the process
 	d.client.Kill()
+	d.logger.Debug().Msg("plugin client killed")
 	d.client = nil
 	d.dispensed = false
 }

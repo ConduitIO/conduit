@@ -34,6 +34,8 @@ type DestinationNode struct {
 
 	base   pubSubNodeBase
 	logger log.CtxLogger
+
+	connectorCtxCancel context.CancelFunc
 }
 
 type Destination interface {
@@ -53,8 +55,9 @@ func (n *DestinationNode) ID() string {
 func (n *DestinationNode) Run(ctx context.Context) (err error) {
 	// start a fresh connector context to make sure the connector is running
 	// until this method returns
-	connectorCtx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	var connectorCtx context.Context
+	connectorCtx, n.connectorCtxCancel = context.WithCancel(context.Background())
+	defer n.connectorCtxCancel()
 
 	// first open connector, this means we actually start the plugin process
 	err = n.Destination.Open(connectorCtx)
@@ -122,6 +125,11 @@ func (n *DestinationNode) Run(ctx context.Context) (err error) {
 			return msg.Nack(err, n.ID())
 		}
 	}
+}
+
+func (n *DestinationNode) ForceStop(ctx context.Context) {
+	n.logger.Warn(ctx).Msg("force stopping destination connector")
+	n.connectorCtxCancel()
 }
 
 // Sub will subscribe this node to an incoming channel.

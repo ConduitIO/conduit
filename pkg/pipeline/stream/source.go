@@ -43,8 +43,9 @@ type SourceNode struct {
 	base       pubNodeBase
 	logger     log.CtxLogger
 
-	state    csync.ValueWatcher[nodeState]
-	stopOnce sync.Once
+	state              csync.ValueWatcher[nodeState]
+	stopOnce           sync.Once
+	connectorCtxCancel context.CancelFunc
 }
 
 type Source interface {
@@ -67,8 +68,9 @@ func (n *SourceNode) Run(ctx context.Context) (err error) {
 
 	// start a fresh connector context to make sure the connector is running
 	// until this method returns
-	connectorCtx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	var connectorCtx context.Context
+	connectorCtx, n.connectorCtxCancel = context.WithCancel(context.Background())
+	defer n.connectorCtxCancel()
 
 	// first open connector, this means we actually start the plugin process
 	err = n.Source.Open(connectorCtx)
@@ -177,11 +179,11 @@ func (n *SourceNode) Stop(ctx context.Context, reason error) error {
 		// only execute stop once, more calls won't make a difference
 		err = n.stop(ctx, reason)
 		stopExecuted = true
-		if err != nil {
-			// an error happened, allow stop to be executed again
-			n.stopOnce = sync.Once{}
-		}
 	})
+	if err != nil {
+		// an error happened, allow stop to be executed again
+		n.stopOnce = sync.Once{}
+	}
 	if !stopExecuted {
 		n.logger.Warn(ctx).Msg("source connector stop already triggered, " +
 			"ignoring second stop request (if the pipeline is stuck, please " +
@@ -213,6 +215,11 @@ func (n *SourceNode) stop(ctx context.Context, reason error) error {
 	return n.base.InjectControlMessage(ctx, ControlMessageStopSourceNode, record.Record{
 		Position: stopPosition,
 	})
+}
+
+func (n *SourceNode) ForceStop(ctx context.Context) {
+	n.logger.Warn(ctx).Msg("force stopping source connector")
+	n.connectorCtxCancel()
 }
 
 func (n *SourceNode) Pub() <-chan *Message {
