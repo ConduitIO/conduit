@@ -16,31 +16,51 @@ package api
 
 import (
 	"context"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"testing"
 
-	"github.com/conduitio/conduit/pkg/foundation/database/mock"
-	"github.com/golang/mock/gomock"
 	"github.com/matryer/is"
 	gh "google.golang.org/grpc/health/grpc_health_v1"
 )
 
+type testChecker struct {
+	err error
+}
+
+func (t *testChecker) Check(ctx context.Context) error {
+	return t.err
+}
+
 func TestHealthChecker_Check_OK(t *testing.T) {
 	is := is.New(t)
-	db := mock.NewDB(gomock.NewController(t))
-	db.EXPECT().Ping(gomock.Any()).Return(nil)
 
-	underTest := NewHealthChecker(db)
+	underTest := NewHealthChecker(map[string]Checker{
+		"test-service": &testChecker{},
+	})
 	resp, err := underTest.Check(context.Background(), &gh.HealthCheckRequest{})
 	is.NoErr(err)
 	is.Equal(gh.HealthCheckResponse_SERVING, resp.Status)
 }
 
+func TestHealthChecker_Check_Fail(t *testing.T) {
+	is := is.New(t)
+
+	underTest := NewHealthChecker(map[string]Checker{
+		"test-service": &testChecker{err: cerrors.New("failed successfully")},
+	})
+	resp, err := underTest.Check(
+		context.Background(),
+		&gh.HealthCheckRequest{Service: "test-service"},
+	)
+	is.NoErr(err)
+	is.Equal(gh.HealthCheckResponse_NOT_SERVING, resp.Status)
+}
+
 func TestHealthChecker_Check_UnknownService(t *testing.T) {
 	is := is.New(t)
-	db := mock.NewDB(gomock.NewController(t))
 
-	underTest := NewHealthChecker(db)
+	underTest := NewHealthChecker(map[string]Checker{})
 	_, err := underTest.Check(context.Background(), &gh.HealthCheckRequest{Service: "foobar"})
 	is.True(err != nil)
-	is.Equal("rpc error: code = NotFound desc = service \"foobar\" not found", err.Error())
+	is.Equal("rpc error: code = NotFound desc = service 'foobar' not found", err.Error())
 }

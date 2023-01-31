@@ -52,7 +52,7 @@ func (c *HealthChecker) Check(ctx context.Context, req *grpc_health_v1.HealthChe
 		return &grpc_health_v1.HealthCheckResponse{Status: grpc_health_v1.HealthCheckResponse_SERVING}, nil
 	}
 
-	return nil, grpcstatus.Errorf(codes.NotFound, "service %q not found", req.Service)
+	return nil, grpcstatus.Errorf(codes.NotFound, "service '%v' not found", req.Service)
 }
 
 func (c *HealthChecker) Watch(req *grpc_health_v1.HealthCheckRequest, server grpc_health_v1.Health_WatchServer) error {
