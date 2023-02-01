@@ -16,6 +16,7 @@ package builtin
 
 import (
 	"context"
+	"runtime/debug"
 
 	file "github.com/conduitio/conduit-connector-file"
 	generator "github.com/conduitio/conduit-connector-generator"
@@ -24,7 +25,7 @@ import (
 	postgres "github.com/conduitio/conduit-connector-postgres"
 	"github.com/conduitio/conduit-connector-protocol/cpluginv1"
 	s3 "github.com/conduitio/conduit-connector-s3"
-	"github.com/conduitio/conduit-connector-sdk"
+	sdk "github.com/conduitio/conduit-connector-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
@@ -32,19 +33,21 @@ import (
 )
 
 var (
-	DefaultDispenserFactories = []DispenserFactory{
-		sdkDispenserFactory(file.Connector),
-		sdkDispenserFactory(kafka.Connector),
-		sdkDispenserFactory(generator.Connector),
-		sdkDispenserFactory(s3.Connector),
-		sdkDispenserFactory(postgres.Connector),
-		sdkDispenserFactory(connLog.Connector),
+	// DefaultDispenserFactories contains default dispenser factories for
+	// built-in plugins. The key of the map is the import path of the module
+	// containing the connector implementation.
+	DefaultDispenserFactories = map[string]DispenserFactory{
+		"github.com/conduitio/conduit-connector-file":      sdkDispenserFactory(file.Connector),
+		"github.com/conduitio/conduit-connector-kafka":     sdkDispenserFactory(kafka.Connector),
+		"github.com/conduitio/conduit-connector-generator": sdkDispenserFactory(generator.Connector),
+		"github.com/conduitio/conduit-connector-s3":        sdkDispenserFactory(s3.Connector),
+		"github.com/conduitio/conduit-connector-postgres":  sdkDispenserFactory(postgres.Connector),
+		"github.com/conduitio/conduit-connector-log":       sdkDispenserFactory(connLog.Connector),
 	}
 )
 
 type Registry struct {
-	logger    log.CtxLogger
-	factories []DispenserFactory
+	logger log.CtxLogger
 
 	// plugins stores plugin blueprints in a 2D map, first key is the plugin
 	// name, the second key is the plugin version
@@ -80,27 +83,30 @@ func sdkDispenserFactory(connector sdk.Connector) DispenserFactory {
 	}
 }
 
-func NewRegistry(logger log.CtxLogger, factories ...DispenserFactory) *Registry {
-	r := &Registry{
-		logger:    logger.WithComponent("builtin.Registry"),
-		factories: factories,
+func NewRegistry(logger log.CtxLogger, factories map[string]DispenserFactory) *Registry {
+	logger = logger.WithComponent("builtin.Registry")
+	buildInfo, ok := debug.ReadBuildInfo()
+	if !ok {
+		// we are using modules, build info should always be available, we are staying on the safe side
+		logger.Warn(context.Background()).Msg("build info not available, built-in plugin versions may not be read correctly")
+		buildInfo = &debug.BuildInfo{} // prevent nil pointer exceptions
 	}
-	r.plugins = r.loadPlugins()
-	r.logger.Info(context.Background()).Int("count", len(r.List())).Msg("builtin plugins initialized")
+
+	r := &Registry{
+		plugins: loadPlugins(buildInfo, factories),
+		logger:  logger,
+	}
+	logger.Info(context.Background()).Int("count", len(r.List())).Msg("builtin plugins initialized")
 	return r
 }
 
-func (r *Registry) loadPlugins() map[string]map[string]blueprint {
-	plugins := make(map[string]map[string]blueprint, len(r.factories))
-	for _, factory := range r.factories {
-		dispenser := factory("", log.CtxLogger{})
-		specPlugin, err := dispenser.DispenseSpecifier()
+func loadPlugins(buildInfo *debug.BuildInfo, factories map[string]DispenserFactory) map[string]map[string]blueprint {
+	plugins := make(map[string]map[string]blueprint, len(factories))
+	for moduleName, factory := range factories {
+		specs, err := getSpecification(moduleName, factory, buildInfo)
 		if err != nil {
-			panic(cerrors.Errorf("could not dispense specifier for built in plugin: %w", err))
-		}
-		specs, err := specPlugin.Specify()
-		if err != nil {
-			panic(cerrors.Errorf("could not get specs for built in plugin: %w", err))
+			// stop initialization if a built-in plugin is misbehaving
+			panic(err)
 		}
 
 		versionMap := plugins[specs.Name]
@@ -127,6 +133,37 @@ func (r *Registry) loadPlugins() map[string]map[string]blueprint {
 		}
 	}
 	return plugins
+}
+
+func getSpecification(moduleName string, factory DispenserFactory, buildInfo *debug.BuildInfo) (plugin.Specification, error) {
+	dispenser := factory("", log.CtxLogger{})
+	specPlugin, err := dispenser.DispenseSpecifier()
+	if err != nil {
+		return plugin.Specification{}, cerrors.Errorf("could not dispense specifier for built in plugin: %w", err)
+	}
+	specs, err := specPlugin.Specify()
+	if err != nil {
+		return plugin.Specification{}, cerrors.Errorf("could not get specs for built in plugin: %w", err)
+	}
+
+	if version := getModuleVersion(buildInfo.Deps, moduleName); version != "" {
+		// overwrite version with the import version
+		specs.Version = version
+	}
+
+	return specs, nil
+}
+
+func getModuleVersion(deps []*debug.Module, moduleName string) string {
+	for _, dep := range deps {
+		if dep.Path == moduleName {
+			if dep.Replace != nil {
+				return dep.Replace.Version
+			}
+			return dep.Version
+		}
+	}
+	return ""
 }
 
 func newFullName(pluginName, pluginVersion string) plugin.FullName {
