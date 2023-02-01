@@ -15,10 +15,84 @@
 package record
 
 import (
+	"github.com/google/go-cmp/cmp"
 	"testing"
 
 	"github.com/matryer/is"
 )
+
+func TestPosition_Clone(t *testing.T) {
+	is := is.New(t)
+
+	p := Position("position 123")
+	is.Equal(p, p.Clone())
+}
+
+func TestRawData_Clone(t *testing.T) {
+	is := is.New(t)
+
+	original := RawData{Raw: []byte("position 123")}
+	clone, ok := original.Clone().(RawData)
+
+	is.True(ok)
+	is.Equal(original, clone)
+}
+
+func TestStructuredData_Clone(t *testing.T) {
+	is := is.New(t)
+
+	original := StructuredData{
+		"name":  "conduit",
+		"tags":  []string{"go", "data-streaming"},
+		"stars": 123456,
+	}
+	clone, ok := original.Clone().(StructuredData)
+
+	is.True(ok) // expected StructuredData
+	is.Equal(original, clone)
+}
+
+func TestMetadata_Clone(t *testing.T) {
+	is := is.New(t)
+
+	original := Metadata{"created-by": "someone"}
+	is.Equal(original, original.Clone())
+}
+
+func TestRecord_Clone(t *testing.T) {
+	testCases := []struct {
+		name  string
+		input Record
+	}{
+		{
+			name:  "zero record",
+			input: Record{},
+		},
+		{
+			name: "full record",
+			input: Record{
+				Position:  Position("standing"),
+				Operation: OperationUpdate,
+				Metadata:  Metadata{"foo": "bar"},
+				Key:       RawData{Raw: []byte("padlock-key")},
+				Payload: Change{
+					Before: RawData{Raw: []byte("yellow")},
+					After:  StructuredData{"colour": "orange"},
+				},
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			if !cmp.Equal(tc.input, tc.input.Clone()) {
+				t.Logf("diff: %v\n", cmp.Diff(tc.input, tc.input.Clone()))
+				t.Fail() // clone not equal to original
+			}
+		})
+	}
+}
 
 func TestRecord_Bytes(t *testing.T) {
 	is := is.New(t)

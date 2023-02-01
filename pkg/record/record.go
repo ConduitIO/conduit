@@ -147,7 +147,34 @@ func (r Record) mapData(d Data) interface{} {
 	return nil
 }
 
+func (r Record) Clone() Record {
+	clone := Record{
+		Operation: r.Operation,
+		Metadata:  r.Metadata,
+		Payload:   r.Payload.Clone(),
+	}
+	if r.Position != nil {
+		clone.Position = r.Position.Clone()
+	}
+	if r.Key != nil {
+		clone.Key = r.Key.Clone()
+	}
+	if r.Metadata != nil {
+		r.Metadata.Clone()
+	}
+	return clone
+}
+
 type Metadata map[string]string
+
+func (m Metadata) Clone() Metadata {
+	clone := Metadata{}
+	for k, v := range m {
+		clone[k] = v
+	}
+
+	return clone
+}
 
 type Change struct {
 	// Before contains the data before the operation occurred. This field is
@@ -158,6 +185,17 @@ type Change struct {
 	// After contains the data after the operation occurred. This field should
 	// be populated for all operations except OperationDelete.
 	After Data `json:"after"`
+}
+
+func (c Change) Clone() Change {
+	clone := Change{}
+	if c.Before != nil {
+		clone.Before = c.Before.Clone()
+	}
+	if c.After != nil {
+		clone.After = c.After.Clone()
+	}
+	return clone
 }
 
 // Position is a unique identifier for a record being process.
@@ -173,15 +211,32 @@ func (p Position) String() string {
 	return "<nil>"
 }
 
+func (p Position) Clone() Position {
+	clone := make([]byte, len(p))
+	copy(clone, p)
+
+	return clone
+}
+
 // Data is a structure that contains some bytes. The only structs implementing
 // Data are RawData and StructuredData.
 type Data interface {
 	Bytes() []byte
+
+	Clone() Data
 }
 
 // StructuredData contains data in form of a map with string keys and arbitrary
 // values.
 type StructuredData map[string]interface{}
+
+func (d StructuredData) Clone() Data {
+	clone := StructuredData{}
+	for k, v := range d {
+		clone[k] = v
+	}
+	return clone
+}
 
 func (d StructuredData) Bytes() []byte {
 	b, err := json.Marshal(d)
@@ -197,6 +252,16 @@ func (d StructuredData) Bytes() []byte {
 type RawData struct {
 	Raw    []byte
 	Schema schema.Schema
+}
+
+func (d RawData) Clone() Data {
+	rawClone := make([]byte, len(d.Raw))
+	copy(rawClone, d.Raw)
+
+	return RawData{
+		Raw:    rawClone,
+		Schema: d.Schema,
+	}
 }
 
 func (d RawData) MarshalText() ([]byte, error) {
