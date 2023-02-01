@@ -34,27 +34,28 @@ func TestDestinationNode_ForceStop(t *testing.T) {
 
 	testCases := []struct {
 		name            string
-		mockDestination *mock.Destination
+		mockDestination func(chan struct{}) *mock.Destination
 		wantMsg         bool
 		wantErr         error
 	}{{
 		name: "Destination.Open blocks",
-		mockDestination: func() *mock.Destination {
+		mockDestination: func(onStuck chan struct{}) *mock.Destination {
 			src := mock.NewDestination(ctrl)
 			src.EXPECT().ID().Return("destination-connector").AnyTimes()
 			src.EXPECT().Errors().Return(make(chan error)).Times(1)
 			src.EXPECT().Teardown(gomock.Any()).Return(nil).Times(1)
 			src.EXPECT().Open(gomock.Any()).DoAndReturn(func(ctx context.Context) error {
+				close(onStuck)
 				<-ctx.Done() // block until context is done
 				return ctx.Err()
 			}).Times(1)
 			return src
-		}(),
+		},
 		wantMsg: false,
 		wantErr: context.Canceled,
 	}, {
 		name: "Destination.Write blocks",
-		mockDestination: func() *mock.Destination {
+		mockDestination: func(onStuck chan struct{}) *mock.Destination {
 			var connectorCtx context.Context
 			src := mock.NewDestination(ctrl)
 			src.EXPECT().ID().Return("destination-connector").AnyTimes()
@@ -67,12 +68,13 @@ func TestDestinationNode_ForceStop(t *testing.T) {
 				return nil
 			}).Times(1)
 			src.EXPECT().Write(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, r record.Record) error {
+				close(onStuck)
 				<-connectorCtx.Done() // block until connector stream is closed
 				return io.EOF         // io.EOF is returned when the stream is closed
 			}).Times(1)
 			src.EXPECT().Stop(gomock.Any(), gomock.Any()).Return(nil).Times(1)
 			return src
-		}(),
+		},
 		wantMsg: true,
 		wantErr: io.EOF,
 	}}
@@ -81,10 +83,13 @@ func TestDestinationNode_ForceStop(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			is := is.New(t)
 			ctx := context.Background()
+			// onStuck will be closed once the connector is stuck, needed to
+			// make race detector happy
+			onStuck := make(chan struct{})
 
 			node := &DestinationNode{
 				Name:           "destination-node",
-				Destination:    tc.mockDestination,
+				Destination:    tc.mockDestination(onStuck),
 				ConnectorTimer: noop.Timer{},
 			}
 			msgChan := make(chan *Message)
@@ -105,6 +110,11 @@ func TestDestinationNode_ForceStop(t *testing.T) {
 				is.True(cerrors.Is(err, context.DeadlineExceeded))
 			}
 
+			// wait for node to get stuck
+			_, ok, err := cchan.ChanOut[struct{}](onStuck).RecvTimeout(ctx, time.Millisecond*100)
+			is.True(!ok)
+			is.NoErr(err)
+
 			// a normal stop won't work because the node is stuck and can't receive the
 			// stop signal message
 			close(msgChan)
@@ -114,7 +124,7 @@ func TestDestinationNode_ForceStop(t *testing.T) {
 			// try force stopping the node
 			node.ForceStop(ctx)
 
-			_, ok, err := cchan.ChanOut[struct{}](nodeDone).RecvTimeout(ctx, time.Second)
+			_, ok, err = cchan.ChanOut[struct{}](nodeDone).RecvTimeout(ctx, time.Second)
 			is.NoErr(err) // expected node to stop running
 			is.True(!ok)  // expected nodeDone to be closed
 

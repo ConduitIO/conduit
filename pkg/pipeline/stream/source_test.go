@@ -126,25 +126,26 @@ func TestSourceNode_ForceStop(t *testing.T) {
 
 	testCases := []struct {
 		name       string
-		mockSource *mock.Source
+		mockSource func(chan struct{}) *mock.Source
 		wantErr    error
 	}{{
 		name: "Source.Open blocks",
-		mockSource: func() *mock.Source {
+		mockSource: func(onStuck chan struct{}) *mock.Source {
 			src := mock.NewSource(ctrl)
 			src.EXPECT().ID().Return("source-connector").AnyTimes()
 			src.EXPECT().Errors().Return(make(chan error)).Times(1)
 			src.EXPECT().Teardown(gomock.Any()).Return(nil).Times(1)
 			src.EXPECT().Open(gomock.Any()).DoAndReturn(func(ctx context.Context) error {
+				close(onStuck)
 				<-ctx.Done() // block until context is done
 				return ctx.Err()
 			}).Times(1)
 			return src
-		}(),
+		},
 		wantErr: context.Canceled,
 	}, {
 		name: "Source.Read and Source.Stop block",
-		mockSource: func() *mock.Source {
+		mockSource: func(onStuck chan struct{}) *mock.Source {
 			var connectorCtx context.Context
 			src := mock.NewSource(ctrl)
 			src.EXPECT().ID().Return("source-connector").AnyTimes()
@@ -157,6 +158,7 @@ func TestSourceNode_ForceStop(t *testing.T) {
 				return nil
 			}).Times(1)
 			src.EXPECT().Read(gomock.Any()).DoAndReturn(func(ctx context.Context) (record.Record, error) {
+				close(onStuck)
 				<-connectorCtx.Done()          // block until connector stream is closed
 				return record.Record{}, io.EOF // io.EOF is returned when the stream is closed
 			}).Times(1)
@@ -165,7 +167,7 @@ func TestSourceNode_ForceStop(t *testing.T) {
 				return nil, ctx.Err()
 			}).Times(1)
 			return src
-		}(),
+		},
 		wantErr: io.EOF,
 	}}
 
@@ -173,10 +175,13 @@ func TestSourceNode_ForceStop(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			is := is.New(t)
 			ctx := context.Background()
+			// onStuck will be closed once the connector is stuck, needed to
+			// make race detector happy
+			onStuck := make(chan struct{})
 
 			node := &SourceNode{
 				Name:          "source-node",
-				Source:        tc.mockSource,
+				Source:        tc.mockSource(onStuck),
 				PipelineTimer: noop.Timer{},
 			}
 			out := node.Pub()
@@ -188,21 +193,22 @@ func TestSourceNode_ForceStop(t *testing.T) {
 				is.True(cerrors.Is(err, tc.wantErr))
 			}()
 
-			// give the source a chance to read the record and start sending it to the
-			// next node, we won't read the record from the channel though
-			time.Sleep(time.Millisecond * 100)
+			// wait for node to get stuck
+			_, ok, err := cchan.ChanOut[struct{}](onStuck).RecvTimeout(ctx, time.Millisecond*100)
+			is.True(!ok)
+			is.NoErr(err)
 
 			// a normal stop won't work because the node is stuck and can't receive the
 			// stop signal message
 			stopCtx, cancelStopCtx := context.WithTimeout(ctx, time.Millisecond*100)
 			defer cancelStopCtx()
-			err := node.Stop(stopCtx, nil)
+			err = node.Stop(stopCtx, nil)
 			is.True(cerrors.Is(err, context.DeadlineExceeded))
 
 			// try force stopping the node
 			node.ForceStop(ctx)
 
-			_, ok, err := cchan.ChanOut[struct{}](nodeDone).RecvTimeout(ctx, time.Second)
+			_, ok, err = cchan.ChanOut[struct{}](nodeDone).RecvTimeout(ctx, time.Second)
 			is.NoErr(err) // expected node to stop running
 			is.True(!ok)  // expected nodeDone to be closed
 
