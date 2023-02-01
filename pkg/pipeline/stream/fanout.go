@@ -68,6 +68,7 @@ func (n *FanoutNode) Run(ctx context.Context) error {
 			// remainingAcks tracks how many acks we are still waiting for
 			// before the ack can be propagated upstream to the original message
 			remainingAcks := int32(len(n.out))
+			errC := make(chan error, 1)
 
 			wg.Add(len(n.out))
 			for i := range n.out {
@@ -77,6 +78,11 @@ func (n *FanoutNode) Run(ctx context.Context) error {
 					// we'll check cloneErr after a nack handler is registered
 					// so that we can nack the message if there was a clone error
 					newMsg, cloneErr := msg.Clone()
+					if cloneErr != nil {
+						errC <- cloneErr
+						return
+					}
+
 					newMsg.RegisterAckHandler(
 						// wrap ack handler to make sure msg is not overwritten
 						// by the time ack handler is called
@@ -104,12 +110,6 @@ func (n *FanoutNode) Run(ctx context.Context) error {
 							return msg.Nack(nm.Reason, nm.NodeID)
 						}),
 					)
-					if cloneErr != nil {
-						// we can ignore the error, it will show up in the
-						// original msg
-						_ = newMsg.Nack(cloneErr, n.ID())
-						return
-					}
 
 					select {
 					case <-ctx.Done():
@@ -127,6 +127,12 @@ func (n *FanoutNode) Run(ctx context.Context) error {
 			// the go routines are doing already
 			wg.Wait()
 
+			select {
+			case err := <-errC:
+				return err
+			default:
+
+			}
 			if msg.Status() == MessageStatusNacked {
 				// check if the message nack returned an error (Nack is
 				// idempotent and will return the same error as in the first
