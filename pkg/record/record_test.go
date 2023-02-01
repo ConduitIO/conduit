@@ -21,45 +21,11 @@ import (
 	"github.com/matryer/is"
 )
 
-func TestPosition_Clone(t *testing.T) {
-	is := is.New(t)
-
-	p := Position("position 123")
-	is.Equal(p, p.Clone())
-}
-
-func TestRawData_Clone(t *testing.T) {
-	is := is.New(t)
-
-	original := RawData{Raw: []byte("position 123")}
-	clone, ok := original.Clone().(RawData)
-
-	is.True(ok)
-	is.Equal(original, clone)
-}
-
-func TestStructuredData_Clone(t *testing.T) {
-	is := is.New(t)
-
-	original := StructuredData{
-		"name":  "conduit",
-		"tags":  []string{"go", "data-streaming"},
-		"stars": 123456,
-	}
-	clone, ok := original.Clone().(StructuredData)
-
-	is.True(ok) // expected StructuredData
-	is.Equal(original, clone)
-}
-
-func TestMetadata_Clone(t *testing.T) {
-	is := is.New(t)
-
-	original := Metadata{"created-by": "someone"}
-	is.Equal(original, original.Clone())
-}
-
 func TestRecord_Clone(t *testing.T) {
+	type user struct {
+		Name string
+	}
+
 	testCases := []struct {
 		name  string
 		input Record
@@ -77,7 +43,25 @@ func TestRecord_Clone(t *testing.T) {
 				Key:       RawData{Raw: []byte("padlock-key")},
 				Payload: Change{
 					Before: RawData{Raw: []byte("yellow")},
-					After:  StructuredData{"colour": "orange"},
+					After: StructuredData{
+						"bool": true,
+
+						"int":   1,
+						"int8":  int8(1),
+						"int16": int16(1),
+						"int32": int32(1),
+						"int64": int64(1),
+
+						"float32": float32(1.2),
+						"float64": 1.2,
+
+						"string": "orange",
+
+						"string-slice": []string{"a"},
+						"map":          map[string]string{"a": "A", "b": "B"},
+
+						"user": user{Name: "john"},
+					},
 				},
 			},
 		},
