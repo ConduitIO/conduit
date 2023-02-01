@@ -651,7 +651,7 @@ func TestProvision_IntegrationTestServices(t *testing.T) {
 
 	pluginService := plugin.NewService(
 		logger,
-		builtin.NewRegistry(logger, builtin.DefaultDispenserFactories...),
+		builtin.NewRegistry(logger, builtin.DefaultDispenserFactories),
 		standalone.NewRegistry(logger, ""),
 	)
 
