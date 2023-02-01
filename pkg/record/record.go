@@ -148,14 +148,14 @@ func (r Record) mapData(d Data) interface{} {
 	return nil
 }
 
-func (r Record) Clone() Record {
+func (r Record) Clone() (Record, error) {
 	clone := Record{}
-	copier.CopyWithOption(
+	err := copier.CopyWithOption(
 		&clone,
 		&r,
 		copier.Option{DeepCopy: true, IgnoreEmpty: true},
 	)
-	return clone
+	return clone, err
 }
 
 type Metadata map[string]string

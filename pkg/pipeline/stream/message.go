@@ -253,11 +253,13 @@ func (m *Message) Nacked() <-chan struct{} {
 
 // Clone returns a cloned message with the same content but separate ack and
 // nack handling.
-func (m *Message) Clone() *Message {
+func (m *Message) Clone() (*Message, error) {
+	rec, err := m.Record.Clone()
+	// we still need to return a message, so we can nack it
 	return &Message{
 		Ctx:    m.Ctx,
-		Record: m.Record.Clone(),
-	}
+		Record: rec,
+	}, err
 }
 
 // Status returns the current message status.
