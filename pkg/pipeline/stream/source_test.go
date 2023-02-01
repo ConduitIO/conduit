@@ -202,7 +202,7 @@ func TestSourceNode_ForceStop(t *testing.T) {
 			// try force stopping the node
 			node.ForceStop(ctx)
 
-			_, ok, err := cchan.Chan[struct{}](nodeDone).RecvTimeout(ctx, time.Second*300)
+			_, ok, err := cchan.Chan[struct{}](nodeDone).RecvTimeout(ctx, time.Second)
 			is.NoErr(err) // expected node to stop running
 			is.True(!ok)  // expected nodeDone to be closed
 

@@ -96,7 +96,7 @@ func (n *SourceNode) Run(ctx context.Context) (err error) {
 	// openMsgTracker tracks open messages until they are acked or nacked
 	var openMsgTracker OpenMessagesTracker
 
-	// first open connector, this means we actually start the plugin process
+	// open connector, this means we actually start the plugin process
 	err = n.Source.Open(connectorCtx)
 	defer func() {
 		// wait for open messages before tearing down connector
