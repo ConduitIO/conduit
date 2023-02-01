@@ -34,7 +34,7 @@ func (n *FanoutNode) ID() string {
 	return n.Name
 }
 
-func (n *FanoutNode) Run(runCtx context.Context) error {
+func (n *FanoutNode) Run(ctx context.Context) error {
 	if n.out == nil {
 		panic("tried to run FanoutNode without hooking the out channel up to another node")
 	}
@@ -45,7 +45,6 @@ func (n *FanoutNode) Run(runCtx context.Context) error {
 		panic("tried to run FanoutNode twice")
 	}
 
-	ctx, cancelCtx := context.WithCancel(runCtx)
 	n.running = true
 	defer func() {
 		for _, out := range n.out {
@@ -107,7 +106,6 @@ func (n *FanoutNode) Run(runCtx context.Context) error {
 						// we can ignore the error, it will show up in the
 						// original msg
 						_ = newMsg.Nack(cloneErr, n.ID())
-						cancelCtx()
 						return
 					}
 
@@ -127,18 +125,17 @@ func (n *FanoutNode) Run(runCtx context.Context) error {
 			// the go routines are doing already
 			wg.Wait()
 
+			if msg.Status() == MessageStatusNacked {
+				// check if the message nack returned an error (Nack is
+				// idempotent and will return the same error as in the first
+				// call), return it if it returns an error
+				if err := msg.Nack(nil, n.ID()); err != nil {
+					return err
+				}
+			}
+
 			// check if the context is still alive
 			if ctx.Err() != nil {
-				// context was closed - if the message was nacked there's a high
-				// chance it was nacked in this node by one of the goroutines
-				if msg.Status() == MessageStatusNacked {
-					// check if the message nack returned an error (Nack is
-					// idempotent and will return the same error as in the first
-					// call), return it if it returns an error
-					if err := msg.Nack(nil, n.ID()); err != nil {
-						return err
-					}
-				}
 				// the message is not nacked, it must have been sent to all
 				// downstream nodes just before the context got cancelled, we
 				// don't care about the message anymore, so we just return the
