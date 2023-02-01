@@ -20,12 +20,12 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"github.com/jinzhu/copier"
 	"strconv"
 	"strings"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/record/schema"
+	"github.com/jinzhu/copier"
 )
 
 const (
