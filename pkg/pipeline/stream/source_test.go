@@ -53,7 +53,7 @@ func TestSourceNode_Run(t *testing.T) {
 	}()
 
 	for _, wantRecord := range wantRecords {
-		gotMsg, ok, err := cchan.Chan[*Message](out).RecvTimeout(ctx, time.Second)
+		gotMsg, ok, err := cchan.ChanOut[*Message](out).RecvTimeout(ctx, time.Second)
 		is.NoErr(err)
 		is.True(ok)
 		is.Equal(gotMsg.Record, wantRecord)
@@ -67,11 +67,11 @@ func TestSourceNode_Run(t *testing.T) {
 	err := node.Stop(ctx, nil)
 	is.NoErr(err)
 
-	_, ok, err := cchan.Chan[*Message](out).RecvTimeout(ctx, time.Second)
+	_, ok, err := cchan.ChanOut[*Message](out).RecvTimeout(ctx, time.Second)
 	is.NoErr(err) // expected node to close outgoing channel
 	is.True(!ok)  // expected node to close outgoing channel
 
-	_, ok, err = cchan.Chan[struct{}](nodeDone).RecvTimeout(ctx, time.Second)
+	_, ok, err = cchan.ChanOut[struct{}](nodeDone).RecvTimeout(ctx, time.Second)
 	is.NoErr(err) // expected node to stop running
 	is.True(!ok)  // expected nodeDone to be closed
 }
@@ -112,11 +112,11 @@ func TestSourceNode_StopWhileNextNodeIsStuck(t *testing.T) {
 	// the node is stuck, cancel the context to stop node from running
 	cancelNodeCtx()
 
-	_, ok, err := cchan.Chan[struct{}](nodeDone).RecvTimeout(ctx, time.Second)
+	_, ok, err := cchan.ChanOut[struct{}](nodeDone).RecvTimeout(ctx, time.Second)
 	is.NoErr(err) // expected node to stop running
 	is.True(!ok)  // expected nodeDone to be closed
 
-	_, ok, err = cchan.Chan[*Message](out).RecvTimeout(ctx, time.Second)
+	_, ok, err = cchan.ChanOut[*Message](out).RecvTimeout(ctx, time.Second)
 	is.NoErr(err) // expected node to close outgoing channel
 	is.True(!ok)  // expected node to close outgoing channel
 }
@@ -202,11 +202,11 @@ func TestSourceNode_ForceStop(t *testing.T) {
 			// try force stopping the node
 			node.ForceStop(ctx)
 
-			_, ok, err := cchan.Chan[struct{}](nodeDone).RecvTimeout(ctx, time.Second)
+			_, ok, err := cchan.ChanOut[struct{}](nodeDone).RecvTimeout(ctx, time.Second)
 			is.NoErr(err) // expected node to stop running
 			is.True(!ok)  // expected nodeDone to be closed
 
-			_, ok, err = cchan.Chan[*Message](out).RecvTimeout(ctx, time.Second)
+			_, ok, err = cchan.ChanOut[*Message](out).RecvTimeout(ctx, time.Second)
 			is.NoErr(err) // expected node to close outgoing channel
 			is.True(!ok)  // expected node to close outgoing channel
 		})

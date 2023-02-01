@@ -19,12 +19,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/conduitio/conduit/pkg/record"
-
 	"github.com/conduitio/conduit/pkg/foundation/cchan"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/noop"
 	"github.com/conduitio/conduit/pkg/pipeline/stream/mock"
+	"github.com/conduitio/conduit/pkg/record"
 	"github.com/golang/mock/gomock"
 	"github.com/matryer/is"
 )
@@ -35,7 +34,7 @@ func TestDestinationNode_ForceStop(t *testing.T) {
 	testCases := []struct {
 		name            string
 		mockDestination *mock.Destination
-		writeMsg        bool
+		wantMsg         bool
 		wantErr         error
 	}{{
 		name: "Destination.Open blocks",
@@ -50,8 +49,8 @@ func TestDestinationNode_ForceStop(t *testing.T) {
 			}).Times(1)
 			return src
 		}(),
-		writeMsg: false,
-		wantErr:  context.Canceled,
+		wantMsg: false,
+		wantErr: context.Canceled,
 	}, {
 		name: "Destination.Write blocks",
 		mockDestination: func() *mock.Destination {
@@ -73,8 +72,8 @@ func TestDestinationNode_ForceStop(t *testing.T) {
 			src.EXPECT().Stop(gomock.Any(), gomock.Any()).Return(nil).Times(1)
 			return src
 		}(),
-		writeMsg: true,
-		wantErr:  io.EOF,
+		wantMsg: true,
+		wantErr: io.EOF,
 	}}
 
 	for _, tc := range testCases {
@@ -98,24 +97,27 @@ func TestDestinationNode_ForceStop(t *testing.T) {
 				is.True(cerrors.Is(err, tc.wantErr))
 			}()
 
-			if tc.writeMsg {
-				msgChan <- &Message{}
+			err := cchan.ChanIn[*Message](msgChan).SendTimeout(ctx, &Message{}, time.Millisecond*100)
+			if tc.wantMsg {
+				is.NoErr(err)
+			} else {
+				is.True(cerrors.Is(err, context.DeadlineExceeded))
 			}
 
 			// a normal stop won't work because the node is stuck and can't receive the
 			// stop signal message
 			close(msgChan)
-			_, _, err := cchan.Chan[struct{}](nodeDone).RecvTimeout(ctx, time.Millisecond*200)
+			_, _, err = cchan.ChanOut[struct{}](nodeDone).RecvTimeout(ctx, time.Millisecond*200)
 			is.True(cerrors.Is(err, context.DeadlineExceeded)) // expected node to keep running
 
 			// try force stopping the node
 			node.ForceStop(ctx)
 
-			_, ok, err := cchan.Chan[struct{}](nodeDone).RecvTimeout(ctx, time.Second)
+			_, ok, err := cchan.ChanOut[struct{}](nodeDone).RecvTimeout(ctx, time.Second)
 			is.NoErr(err) // expected node to stop running
 			is.True(!ok)  // expected nodeDone to be closed
 
-			_, ok, err = cchan.Chan[*Message](out).RecvTimeout(ctx, time.Second)
+			_, ok, err = cchan.ChanOut[*Message](out).RecvTimeout(ctx, time.Second)
 			is.NoErr(err) // expected node to close outgoing channel
 			is.True(!ok)  // expected node to close outgoing channel
 		})
