@@ -153,26 +153,30 @@ func (n *pubNodeBase) Trigger(
 		}()
 	}
 
-	if msgFetcher != nil {
-		// spawn goroutine that is fetching messages and either forwards an error
-		// into the internal error channel or a message into the message channel
-		go func() {
-			for {
-				msg, err := msgFetcher(ctx)
-				if err != nil {
-					if !cerrors.Is(err, context.Canceled) {
-						// ignore context error because it is going to be caught
-						// by nodeBase.Receive anyway
-						internalErrChan <- err
-					}
-					return
-				}
-				n.msgChan <- msg
-			}
-		}()
-	}
-
+	var firstTriggerCall sync.Once
 	trigger := func() (*Message, error) {
+		// first time the trigger is called spawn goroutine that is fetching
+		// messages and either forwards an error into the internal error channel
+		// or a message into the message channel
+		firstTriggerCall.Do(func() {
+			if msgFetcher == nil {
+				return
+			}
+			go func() {
+				for {
+					msg, err := msgFetcher(ctx)
+					if err != nil {
+						if !cerrors.Is(err, context.Canceled) {
+							// ignore context error because it is going to be caught
+							// by nodeBase.Receive anyway
+							internalErrChan <- err
+						}
+						return
+					}
+					n.msgChan <- msg
+				}
+			}()
+		})
 		return n.nodeBase.Receive(ctx, logger, n.msgChan, internalErrChan)
 	}
 	cleanup := func() {
