@@ -34,7 +34,7 @@ func (n *FanoutNode) ID() string {
 	return n.Name
 }
 
-func (n *FanoutNode) Run(ctx context.Context) error {
+func (n *FanoutNode) Run(runCtx context.Context) error {
 	if n.out == nil {
 		panic("tried to run FanoutNode without hooking the out channel up to another node")
 	}
@@ -45,6 +45,7 @@ func (n *FanoutNode) Run(ctx context.Context) error {
 		panic("tried to run FanoutNode twice")
 	}
 
+	ctx, cancelCtx := context.WithCancel(runCtx)
 	n.running = true
 	defer func() {
 		for _, out := range n.out {
@@ -105,7 +106,8 @@ func (n *FanoutNode) Run(ctx context.Context) error {
 					if cloneErr != nil {
 						// we can ignore the error, it will show up in the
 						// original msg
-						_ = newMsg.Nack(ctx.Err(), n.ID())
+						_ = newMsg.Nack(cloneErr, n.ID())
+						cancelCtx()
 						return
 					}
 

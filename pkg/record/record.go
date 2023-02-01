@@ -155,7 +155,7 @@ func (r Record) Clone() (Record, error) {
 		&r,
 		copier.Option{DeepCopy: true, IgnoreEmpty: true},
 	)
-	return clone, err
+	return clone, cerrors.Errorf("clone error: %w", err)
 }
 
 type Metadata map[string]string
