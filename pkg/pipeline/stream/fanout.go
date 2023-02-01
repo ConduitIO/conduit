@@ -77,6 +77,7 @@ func (n *FanoutNode) Run(ctx context.Context) error {
 					// we'll check cloneErr after a nack handler is registered
 					// so that we can nack the message if there was a clone error
 					newMsg, cloneErr := msg.Clone()
+
 					newMsg.RegisterAckHandler(
 						// wrap ack handler to make sure msg is not overwritten
 						// by the time ack handler is called
