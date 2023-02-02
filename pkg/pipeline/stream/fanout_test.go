@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/conduitio/conduit/pkg/foundation/cchan"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/matryer/is"
 )
@@ -36,8 +37,10 @@ func TestFanout_HappyPath(t *testing.T) {
 	for i := range outChannels {
 		outChannels[i] = underTest.Pub()
 	}
+
 	go func() {
-		is.NoErr(underTest.Run(ctx))
+		err := underTest.Run(ctx)
+		is.True(cerrors.Is(err, context.Canceled))
 	}()
 
 	want := &Message{
