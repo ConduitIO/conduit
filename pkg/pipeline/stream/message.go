@@ -255,11 +255,13 @@ func (m *Message) Nacked() <-chan struct{} {
 // nack handling.
 func (m *Message) Clone() (*Message, error) {
 	rec, err := m.Record.Clone()
-	// we still need to return a message, so we can nack it
+	if err != nil {
+		return nil, cerrors.Errorf("message %v, record not cloned: %w", m.ID(), err)
+	}
 	return &Message{
 		Ctx:    m.Ctx,
 		Record: rec,
-	}, err
+	}, nil
 }
 
 // Status returns the current message status.

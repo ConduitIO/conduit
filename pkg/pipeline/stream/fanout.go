@@ -74,10 +74,11 @@ func (n *FanoutNode) Run(ctx context.Context) error {
 				go func(i int) {
 					defer wg.Done()
 					// create new message and handle ack/nack
-					// we'll check cloneErr after a nack handler is registered
-					// so that we can nack the message if there was a clone error
 					newMsg, cloneErr := msg.Clone()
-
+					if cloneErr != nil {
+						_ = msg.Nack(cloneErr, n.ID())
+						return
+					}
 					newMsg.RegisterAckHandler(
 						// wrap ack handler to make sure msg is not overwritten
 						// by the time ack handler is called
@@ -105,12 +106,6 @@ func (n *FanoutNode) Run(ctx context.Context) error {
 							return msg.Nack(nm.Reason, nm.NodeID)
 						}),
 					)
-					if cloneErr != nil {
-						// we can ignore the error, it will show up in the
-						// original msg
-						_ = newMsg.Nack(cloneErr, n.ID())
-						return
-					}
 
 					select {
 					case <-ctx.Done():
@@ -128,6 +123,8 @@ func (n *FanoutNode) Run(ctx context.Context) error {
 			// the go routines are doing already
 			wg.Wait()
 
+			// a message can be nacked with the context still being alive
+			// one example are errors when cloning a mesage
 			if msg.Status() == MessageStatusNacked {
 				// check if the message nack returned an error (Nack is
 				// idempotent and will return the same error as in the first
