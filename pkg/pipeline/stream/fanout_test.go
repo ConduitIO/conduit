@@ -16,11 +16,11 @@ package stream
 
 import (
 	"context"
-	"github.com/conduitio/conduit/pkg/foundation/cchan"
-	"github.com/conduitio/conduit/pkg/record"
 	"testing"
 	"time"
 
+	"github.com/conduitio/conduit/pkg/foundation/cchan"
+	"github.com/conduitio/conduit/pkg/record"
 	"github.com/matryer/is"
 )
 
@@ -36,7 +36,9 @@ func TestFanout_HappyPath(t *testing.T) {
 	for i := range outChannels {
 		outChannels[i] = underTest.Pub()
 	}
-	go underTest.Run(ctx)
+	go func() {
+		is.NoErr(underTest.Run(ctx))
+	}()
 
 	want := &Message{
 		Record: record.Record{
