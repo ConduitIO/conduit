@@ -50,12 +50,13 @@ func TestPersister_PersistFlushesAfterDelayThreshold(t *testing.T) {
 	conn := &Instance{ID: uuid.NewString(), Type: TypeDestination}
 	callbackCalled := make(chan struct{})
 	persistAt := time.Now()
-	persister.Persist(ctx, conn, func(err error) {
+	err := persister.Persist(ctx, conn, func(err error) {
 		if err != nil {
 			t.Fatalf("expected nil error, got: %v", err)
 		}
 		close(callbackCalled)
 	})
+	is.NoErr(err)
 
 	// we are testing a delay which is not exact, this is the acceptable margin
 	maxDelay := delayThreshold + time.Millisecond*10
@@ -90,16 +91,18 @@ func TestPersister_PersistFlushesAfterBundleCountThreshold(t *testing.T) {
 
 	for i := 0; i < bundleCountThreshold/2; i++ {
 		conn := &Instance{ID: uuid.NewString(), Type: TypeDestination}
-		persister.Persist(ctx, conn, func(err error) {
+		err := persister.Persist(ctx, conn, func(err error) {
 			t.Fatal("expected callback to be overwritten!")
 		})
+		is.NoErr(err)
 		// second persist will overwrite first callback
-		persister.Persist(ctx, conn, func(err error) {
+		err = persister.Persist(ctx, conn, func(err error) {
 			if err != nil {
 				t.Fatalf("expected nil error, got: %v", err)
 			}
 			wgCallbacks.Done()
 		})
+		is.NoErr(err)
 	}
 	lastPersistAt := time.Now()
 
@@ -127,12 +130,13 @@ func TestPersister_FlushStoresRightAway(t *testing.T) {
 	conn := &Instance{ID: uuid.NewString(), Type: TypeDestination}
 	callbackCalled := make(chan struct{})
 	timeAtPersist := time.Now()
-	persister.Persist(ctx, conn, func(err error) {
+	err := persister.Persist(ctx, conn, func(err error) {
 		if err != nil {
 			t.Fatalf("expected nil error, got: %v", err)
 		}
 		close(callbackCalled)
 	})
+	is.NoErr(err)
 
 	// flush right away
 	persister.Flush(ctx)
@@ -155,6 +159,7 @@ func TestPersister_FlushStoresRightAway(t *testing.T) {
 }
 
 func TestPersister_WaitsForOpenConnectorsAndFlush(t *testing.T) {
+	is := is.New(t)
 	ctx := context.Background()
 	persister, _ := initPersisterTest(time.Millisecond*100, 2)
 
@@ -171,7 +176,8 @@ func TestPersister_WaitsForOpenConnectorsAndFlush(t *testing.T) {
 		persister.ConnectorStopped()
 		// before last stop we persist another change which should be flushed
 		// automatically when the connector is stopped
-		persister.Persist(ctx, conn, func(err error) {})
+		err := persister.Persist(ctx, conn, func(err error) {})
+		is.NoErr(err)
 		persister.ConnectorStopped()
 	}()
 

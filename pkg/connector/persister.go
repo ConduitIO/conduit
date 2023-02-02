@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/database"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 )
@@ -43,13 +44,18 @@ type Persister struct {
 	// m guards all private variables below it.
 	m           sync.Mutex
 	bundleCount int
-	callbacks   map[*Instance]PersistCallback
+	batch       map[string]persistData
 	flushTimer  *time.Timer
 	flushWg     sync.WaitGroup
 }
 
 // PersistCallback is a function that's called when a connector is persisted.
 type PersistCallback func(error)
+
+type persistData struct {
+	callback  PersistCallback
+	storeFunc func(context.Context) error
+}
 
 // NewPersister creates a new persister that stores data into the supplied
 // database when the thresholds are met.
@@ -92,23 +98,31 @@ func (p *Persister) ConnectorStopped() {
 // connectors until either the number of detected changes reaches the configured
 // threshold or the configured delay is reached (whichever comes first), then
 // the connectors are flushed and a new batch starts to be collected.
-func (p *Persister) Persist(ctx context.Context, conn *Instance, callback PersistCallback) {
+func (p *Persister) Persist(ctx context.Context, conn *Instance, callback PersistCallback) error {
 	p.m.Lock()
 	defer p.m.Unlock()
 
 	p.logger.Trace(ctx).
 		Str(log.ConnectorIDField, conn.ID).
 		Msg("adding connector to next persist batch")
-	if p.callbacks == nil {
-		p.callbacks = make(map[*Instance]PersistCallback)
+	if p.batch == nil {
+		p.batch = make(map[string]persistData)
 	}
-	p.callbacks[conn] = callback
+
+	storeFunc, err := p.store.PrepareSet(conn.ID, conn)
+	if err != nil {
+		return cerrors.Errorf("failed to prepare connector for persistance: %w", err)
+	}
+	p.batch[conn.ID] = persistData{
+		callback:  callback,
+		storeFunc: storeFunc,
+	}
 	p.bundleCount++
 
 	if p.bundleCount == p.bundleCountThreshold {
 		p.logger.Trace(ctx).Msg("reached bundle count threshold")
 		p.triggerFlush(context.Background()) // use a new context because action happens in background
-		return
+		return nil
 	}
 
 	if p.flushTimer == nil {
@@ -116,6 +130,7 @@ func (p *Persister) Persist(ctx context.Context, conn *Instance, callback Persis
 			p.Flush(context.Background()) // use a new context because action happens in background
 		})
 	}
+	return nil
 }
 
 // Wait waits for all connectors to stop running and for the last flush to be executed.
@@ -139,7 +154,7 @@ func (p *Persister) triggerFlush(ctx context.Context) {
 		p.flushTimer.Stop()
 		p.flushTimer = nil
 	}
-	if p.callbacks == nil {
+	if p.batch == nil {
 		return
 	}
 
@@ -147,16 +162,16 @@ func (p *Persister) triggerFlush(ctx context.Context) {
 	p.flushWg.Wait()
 
 	// reset callbacks and bundle count
-	callbacks := p.callbacks
-	p.callbacks = nil
+	batch := p.batch
+	p.batch = nil
 	p.bundleCount = 0
 
 	p.flushWg.Add(1)
-	go p.flushNow(ctx, callbacks)
+	go p.flushNow(ctx, batch)
 }
 
 // flushNow will flush the state to the store.
-func (p *Persister) flushNow(ctx context.Context, callbacks map[*Instance]PersistCallback) {
+func (p *Persister) flushNow(ctx context.Context, batch map[string]persistData) {
 	defer p.flushWg.Done()
 	start := time.Now()
 
@@ -168,31 +183,25 @@ func (p *Persister) flushNow(ctx context.Context, callbacks map[*Instance]Persis
 	}
 
 	defer tx.Discard()
-	for conn := range callbacks {
-		err := p.flushSingle(ctx, conn)
+	for id, data := range batch {
+		err := data.storeFunc(ctx)
 		if err != nil {
 			p.logger.Err(ctx, err).
-				Str(log.ConnectorIDField, conn.ID).
+				Str(log.ConnectorIDField, id).
 				Msg("error while saving connector")
 		}
 	}
 	if err == nil {
 		err = tx.Commit()
 	}
-	for _, c := range callbacks {
+	for _, data := range batch {
 		// execute callbacks in go routines to make sure they can't block this function
-		go c(err)
+		go data.callback(err)
 	}
 
 	p.logger.Debug(ctx).
 		Err(err).
-		Int("count", len(callbacks)).
+		Int("count", len(batch)).
 		Dur(log.DurationField, time.Since(start)).
 		Msg("persisted connectors")
-}
-
-func (p *Persister) flushSingle(ctx context.Context, conn *Instance) error {
-	conn.Lock()
-	defer conn.Unlock()
-	return p.store.Set(ctx, conn.ID, conn)
 }

@@ -201,16 +201,20 @@ func (s *Source) Ack(ctx context.Context, p record.Position) error {
 		return err
 	}
 
-	// lock to prevent race condition with connector persister
+	// lock as we are updating the state and leave it locked so the persister
+	// can safely prepare the connector before it stores it
 	s.Instance.Lock()
+	defer s.Instance.Unlock()
 	s.Instance.State = SourceState{Position: p}
-	s.Instance.Unlock()
-
-	s.Instance.persister.Persist(ctx, s.Instance, func(err error) {
+	err = s.Instance.persister.Persist(ctx, s.Instance, func(err error) {
 		if err != nil {
 			s.errs <- err
 		}
 	})
+	if err != nil {
+		return cerrors.Errorf("failed to persist source connector: %w", err)
+	}
+
 	return nil
 }
 
