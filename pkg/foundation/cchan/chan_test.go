@@ -22,7 +22,7 @@ import (
 	"github.com/matryer/is"
 )
 
-func TestChan_Recv_Success(t *testing.T) {
+func TestChanOut_Recv_Success(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
 
@@ -33,50 +33,107 @@ func TestChan_Recv_Success(t *testing.T) {
 	}
 
 	for i := range want {
-		got, ok, err := Chan[int](c).Recv(ctx)
+		got, ok, err := ChanOut[int](c).Recv(ctx)
 		is.NoErr(err)
 		is.True(ok)
 		is.Equal(want[i], got)
 	}
 }
 
-func TestChan_Recv_Closed(t *testing.T) {
+func TestChanOut_Recv_Closed(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
 	c := make(chan int)
 
 	close(c)
 
-	got, ok, err := Chan[int](c).Recv(ctx)
+	got, ok, err := ChanOut[int](c).Recv(ctx)
 	is.NoErr(err)
 	is.True(!ok)
 	is.Equal(got, 0)
 }
 
-func TestChan_Recv_Canceled(t *testing.T) {
+func TestChanOut_Recv_Canceled(t *testing.T) {
 	is := is.New(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
 	c := make(chan int)
-	got, ok, err := Chan[int](c).Recv(ctx)
+	got, ok, err := ChanOut[int](c).Recv(ctx)
 	is.Equal(err, context.Canceled)
 	is.True(!ok)
 	is.Equal(got, 0)
 }
 
-func TestChan_RecvTimeout_DeadlineExceeded(t *testing.T) {
+func TestChanOut_RecvTimeout_DeadlineExceeded(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
 
 	c := make(chan int)
 	start := time.Now()
-	got, ok, err := Chan[int](c).RecvTimeout(ctx, time.Millisecond*100)
+	got, ok, err := ChanOut[int](c).RecvTimeout(ctx, time.Millisecond*100)
 	since := time.Since(start)
 
 	is.Equal(err, context.DeadlineExceeded)
 	is.True(!ok)
 	is.Equal(got, 0)
 
+	is.True(since >= time.Millisecond*100)
+}
+
+func TestChanIn_Send_Success(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+
+	want := []int{1, 123, 1337}
+	c := make(chan int, len(want))
+
+	for _, w := range want {
+		err := ChanIn[int](c).Send(ctx, w)
+		is.NoErr(err)
+	}
+
+	for i := range want {
+		got, ok := <-c
+		is.True(ok)
+		is.Equal(got, want[i])
+	}
+}
+
+func TestChanIn_Send_Closed(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	c := make(chan int)
+
+	close(c)
+
+	defer func() {
+		r := recover()
+		is.True(r != nil)
+	}()
+	_ = ChanIn[int](c).Send(ctx, 1)
+	is.Fail() // unreachable
+}
+
+func TestChanIn_Send_Canceled(t *testing.T) {
+	is := is.New(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	c := make(chan int)
+	err := ChanIn[int](c).Send(ctx, 1)
+	is.Equal(err, context.Canceled)
+}
+
+func TestChanIn_SendTimeout_DeadlineExceeded(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+
+	c := make(chan int)
+	start := time.Now()
+	err := ChanIn[int](c).SendTimeout(ctx, 1, time.Millisecond*100)
+	since := time.Since(start)
+
+	is.Equal(err, context.DeadlineExceeded)
 	is.True(since >= time.Millisecond*100)
 }

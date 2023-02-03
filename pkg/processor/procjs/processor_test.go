@@ -420,12 +420,12 @@ func TestJSProcessor_Inspect(t *testing.T) {
 	recOut, err := underTest.Process(ctx, recIn)
 	is.NoErr(err)
 
-	inspIn, got, err := cchan.Chan[record.Record](in.C).RecvTimeout(ctx, 100*time.Millisecond)
+	inspIn, got, err := cchan.ChanOut[record.Record](in.C).RecvTimeout(ctx, 100*time.Millisecond)
 	is.NoErr(err)
 	is.True(got)
 	is.Equal(recIn, inspIn)
 
-	inspOut, got, err := cchan.Chan[record.Record](out.C).RecvTimeout(ctx, 100*time.Millisecond)
+	inspOut, got, err := cchan.ChanOut[record.Record](out.C).RecvTimeout(ctx, 100*time.Millisecond)
 	is.NoErr(err)
 	is.True(got)
 	is.Equal(recOut, inspOut)
