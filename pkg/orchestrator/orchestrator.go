@@ -74,7 +74,7 @@ type PipelineService interface {
 	// Stop initiates a graceful shutdown of the given pipeline.
 	// The method does not wait for the pipeline (and its nodes) to actually
 	// stop, because there still might be some in-flight messages.
-	Stop(ctx context.Context, pipelineID string) error
+	Stop(ctx context.Context, pipelineID string, force bool) error
 
 	List(ctx context.Context) map[string]*pipeline.Instance
 	Get(ctx context.Context, id string) (*pipeline.Instance, error)
