@@ -38,6 +38,8 @@ type DestinationAckerNode struct {
 
 	base   subNodeBase
 	logger log.CtxLogger
+
+	connectorCtxCancel context.CancelFunc
 }
 
 func (n *DestinationAckerNode) ID() string {
@@ -47,8 +49,9 @@ func (n *DestinationAckerNode) ID() string {
 func (n *DestinationAckerNode) Run(ctx context.Context) (err error) {
 	// start a fresh connector context to make sure the connector is running
 	// until this method returns
-	connectorCtx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	var connectorCtx context.Context
+	connectorCtx, n.connectorCtxCancel = context.WithCancel(context.Background())
+	defer n.connectorCtxCancel()
 
 	// signalChan is buffered to ensure signals don't get lost if worker is busy
 	signalChan := make(chan struct{}, 1)
@@ -60,7 +63,7 @@ func (n *DestinationAckerNode) Run(ctx context.Context) (err error) {
 		err = cerrors.LogOrReplace(err, workerErr, func() {
 			n.logger.Err(ctx, workerErr).Msg("destination acker node worker failed")
 		})
-		teardownErr := n.teardown(err)
+		teardownErr := n.teardown(connectorCtx, err)
 		err = cerrors.LogOrReplace(err, teardownErr, func() {
 			n.logger.Err(ctx, teardownErr).Msg("destination acker node stopped before processing all messages")
 		})
@@ -74,7 +77,7 @@ func (n *DestinationAckerNode) Run(ctx context.Context) (err error) {
 
 	// start worker that will fetch acks from the connector and forward them to
 	// internal messages
-	go n.worker(connectorCtx, signalChan, errChan)
+	go n.worker(ctx, signalChan, errChan)
 
 	defer cleanup()
 	for {
@@ -166,7 +169,7 @@ func (n *DestinationAckerNode) handleAck(msg *Message, err error) error {
 
 // teardown will nack all messages still in the cache and return an error in
 // case there were still unprocessed messages in the cache.
-func (n *DestinationAckerNode) teardown(reason error) error {
+func (n *DestinationAckerNode) teardown(connectorCtx context.Context, reason error) error {
 	// no need to lock, at this point the worker is not running anymore
 
 	var nacked int
@@ -189,13 +192,11 @@ func (n *DestinationAckerNode) teardown(reason error) error {
 	// can't know that there is no nack handler so it needs to keep on going),
 	// while DestinationAckerNode will stop running and listening to new acks,
 	// which can cause a deadlock in the destination plugin. That's why we spin
-	// up a goroutine that stops once DestinationNode stops the plugin and
-	// closes the stream (which will happen soon because the acker node will
-	// stop running and return an error).
-	if reason != nil {
+	// up a goroutine that stops once the remaining messages have been fetched.
+	if nacked > 0 {
 		go func() {
-			for {
-				pos, err := n.Destination.Ack(context.Background())
+			for i := 0; i < nacked; i++ {
+				pos, err := n.Destination.Ack(connectorCtx)
 				_ = err // ignore error
 				if pos == nil {
 					return // stream was closed, we can stop
@@ -215,4 +216,9 @@ func (n *DestinationAckerNode) Sub(in <-chan *Message) {
 // SetLogger sets the logger.
 func (n *DestinationAckerNode) SetLogger(logger log.CtxLogger) {
 	n.logger = logger
+}
+
+func (n *DestinationAckerNode) ForceStop(ctx context.Context) {
+	n.logger.Warn(ctx).Msg("force stopping destination acker node")
+	n.connectorCtxCancel()
 }
