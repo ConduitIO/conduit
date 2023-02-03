@@ -64,7 +64,10 @@ func (s *Source) initPlugin(ctx context.Context) (plugin.SourcePlugin, error) {
 	s.Instance.logger.Debug(ctx).Msg("configuring source connector plugin")
 	err = src.Configure(ctx, s.Instance.Config.Settings)
 	if err != nil {
-		_ = src.Teardown(ctx)
+		tdErr := src.Teardown(ctx)
+		err = cerrors.LogOrReplace(err, tdErr, func() {
+			s.Instance.logger.Err(ctx, tdErr).Msg("could not tear down source connector plugin")
+		})
 		return nil, err
 	}
 
@@ -93,7 +96,10 @@ func (s *Source) Open(ctx context.Context) error {
 	err = src.Start(streamCtx, state.Position)
 	if err != nil {
 		cancelStreamCtx()
-		_ = src.Teardown(ctx)
+		tdErr := src.Teardown(ctx)
+		err = cerrors.LogOrReplace(err, tdErr, func() {
+			s.Instance.logger.Err(ctx, tdErr).Msg("could not tear down source connector plugin")
+		})
 		return err
 	}
 

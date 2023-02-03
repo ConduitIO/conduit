@@ -76,7 +76,15 @@ func (n *DestinationNode) Run(ctx context.Context) (err error) {
 
 	// open connector, this means we actually start the plugin process
 	err = n.Destination.Open(connectorCtx)
+	if err != nil {
+		return cerrors.Errorf("could not open destination connector: %w", err)
+	}
 	defer func() {
+		stopErr := n.Destination.Stop(connectorCtx, lastPosition)
+		err = cerrors.LogOrReplace(err, stopErr, func() {
+			n.logger.Err(ctx, stopErr).Msg("could not stop destination connector")
+		})
+
 		n.logger.Trace(ctx).Msg("waiting for open messages")
 		openMsgTracker.Wait()
 
@@ -84,16 +92,6 @@ func (n *DestinationNode) Run(ctx context.Context) (err error) {
 		tdErr := n.Destination.Teardown(connectorCtx)
 		err = cerrors.LogOrReplace(err, tdErr, func() {
 			n.logger.Err(ctx, tdErr).Msg("could not tear down destination connector")
-		})
-	}()
-	if err != nil {
-		return cerrors.Errorf("could not open destination connector: %w", err)
-	}
-
-	defer func() {
-		stopErr := n.Destination.Stop(connectorCtx, lastPosition)
-		err = cerrors.LogOrReplace(err, stopErr, func() {
-			n.logger.Err(ctx, stopErr).Msg("could not stop destination connector")
 		})
 	}()
 

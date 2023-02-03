@@ -98,6 +98,9 @@ func (n *SourceNode) Run(ctx context.Context) (err error) {
 
 	// open connector, this means we actually start the plugin process
 	err = n.Source.Open(connectorCtx)
+	if err != nil {
+		return cerrors.Errorf("could not open source connector: %w", err)
+	}
 	defer func() {
 		// wait for open messages before tearing down connector
 		n.logger.Trace(ctx).Msg("waiting for open messages")
@@ -108,9 +111,6 @@ func (n *SourceNode) Run(ctx context.Context) (err error) {
 			n.logger.Err(ctx, tdErr).Msg("could not tear down source connector")
 		})
 	}()
-	if err != nil {
-		return cerrors.Errorf("could not open source connector: %w", err)
-	}
 
 	n.state.Set(nodeStateRunning)
 

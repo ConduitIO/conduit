@@ -43,7 +43,6 @@ func TestDestinationNode_ForceStop(t *testing.T) {
 			src := mock.NewDestination(ctrl)
 			src.EXPECT().ID().Return("destination-connector").AnyTimes()
 			src.EXPECT().Errors().Return(make(chan error)).Times(1)
-			src.EXPECT().Teardown(gomock.Any()).Return(nil).Times(1)
 			src.EXPECT().Open(gomock.Any()).DoAndReturn(func(ctx context.Context) error {
 				close(onStuck)
 				<-ctx.Done() // block until context is done
