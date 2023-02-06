@@ -110,6 +110,7 @@ func TestChanIn_Send_Closed(t *testing.T) {
 	defer func() {
 		r := recover()
 		is.True(r != nil)
+		is.Equal(r.(error).Error(), "send on closed channel")
 	}()
 	_ = ChanIn[int](c).Send(ctx, 1)
 	is.Fail() // unreachable
