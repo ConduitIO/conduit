@@ -150,7 +150,7 @@ func TestWebSocket_Read_ClientClosed(t *testing.T) {
 	err = ws.Close()
 	is.NoErr(err)
 
-	_, ok, err := cchan.Chan[struct{}](handlerDone).RecvTimeout(context.Background(), time.Second)
+	_, ok, err := cchan.ChanOut[struct{}](handlerDone).RecvTimeout(context.Background(), time.Second)
 	is.True(!ok) // expected channel to be closed
 	is.NoErr(err)
 }

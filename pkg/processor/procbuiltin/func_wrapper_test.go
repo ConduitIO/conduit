@@ -59,7 +59,7 @@ func TestFuncWrapper_InspectIn(t *testing.T) {
 			session := underTest.InspectIn(ctx)
 			_, _ = underTest.Process(ctx, wantIn)
 
-			gotIn, got, err := cchan.Chan[record.Record](session.C).RecvTimeout(ctx, 100*time.Millisecond)
+			gotIn, got, err := cchan.ChanOut[record.Record](session.C).RecvTimeout(ctx, 100*time.Millisecond)
 			is.NoErr(err)
 			is.True(got)
 			is.Equal(wantIn, gotIn)
@@ -85,7 +85,7 @@ func TestFuncWrapper_InspectOut_Ok(t *testing.T) {
 	session := underTest.InspectOut(ctx)
 	_, _ = underTest.Process(ctx, record.Record{})
 
-	gotOut, got, err := cchan.Chan[record.Record](session.C).RecvTimeout(ctx, 100*time.Millisecond)
+	gotOut, got, err := cchan.ChanOut[record.Record](session.C).RecvTimeout(ctx, 100*time.Millisecond)
 	is.NoErr(err)
 	is.True(got)
 	is.Equal(wantOut, gotOut)
@@ -109,6 +109,6 @@ func TestFuncWrapper_InspectOut_ProcessingFailed(t *testing.T) {
 	session := underTest.InspectOut(ctx)
 	_, _ = underTest.Process(ctx, record.Record{})
 
-	_, _, err := cchan.Chan[record.Record](session.C).RecvTimeout(ctx, 100*time.Millisecond)
+	_, _, err := cchan.ChanOut[record.Record](session.C).RecvTimeout(ctx, 100*time.Millisecond)
 	is.True(cerrors.Is(err, context.DeadlineExceeded))
 }
