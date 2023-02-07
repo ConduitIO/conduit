@@ -179,7 +179,7 @@ func newServices(
 	processorService := processor.NewService(logger, db, processor.GlobalBuilderRegistry)
 	pluginService := plugin.NewService(
 		logger,
-		builtin.NewRegistry(logger, builtin.DefaultDispenserFactories...),
+		builtin.NewRegistry(logger, builtin.DefaultDispenserFactories),
 		standalone.NewRegistry(logger, pluginsPath),
 	)
 
