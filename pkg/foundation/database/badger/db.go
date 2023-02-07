@@ -16,13 +16,13 @@ package badger
 
 import (
 	"context"
+	"os"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/ctxutil"
 	"github.com/conduitio/conduit/pkg/foundation/database"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/dgraph-io/badger/v3"
-	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 )
 
@@ -48,13 +48,26 @@ func New(l zerolog.Logger, path string) (*DB, error) {
 	}, nil
 }
 
-func (d *DB) Ping(ctx context.Context) error {
-	key := "test-" + uuid.NewString()
-	defer d.Set(ctx, key, nil) //nolint:errcheck // clean-up
+func (d *DB) Ping(context.Context) error {
+	// Writing or reading data through any of the BadgerDB APIs
+	// (transactions, batch writer etc.)
+	// doesn't trigger a complete flush to disk, until the DB
+	// is closed or keys are dropped.
+	// The latter can be done in this ping, but it's a "heavy" operation
+	// since it stops all writes, compacts the DB etc.
+	// Hence, for now, we'll only check if the directory backing BadgerDB
+	// is accessible.
+	_, err := os.ReadDir(d.db.Opts().Dir)
+	if err != nil {
+		return cerrors.Errorf("failed reading key data dir %s: %w", d.db.Opts().Dir)
+	}
 
-	// todo ideally, we find a way to test the connection
-	// without inserting data
-	return d.Set(ctx, key, []byte{})
+	_, err = os.ReadDir(d.db.Opts().ValueDir)
+	if err != nil {
+		return cerrors.Errorf("failed reading value data dir %s: %w", d.db.Opts().ValueDir)
+	}
+
+	return nil
 }
 
 // NewTransaction starts a new transaction and returns a context that contains
