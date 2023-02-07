@@ -35,7 +35,14 @@ type Checker interface {
 type HealthServer struct {
 	grpc_health_v1.UnimplementedHealthServer
 	checkers map[string]Checker
-	log      log.CtxLogger
+	logger   log.CtxLogger
+}
+
+func NewHealthServer(checkers map[string]Checker, log log.CtxLogger) *HealthServer {
+	return &HealthServer{
+		checkers: checkers,
+		logger:   log.WithComponent("api.HealthServer"),
+	}
 }
 
 func (h *HealthServer) Check(ctx context.Context, req *grpc_health_v1.HealthCheckRequest) (*grpc_health_v1.HealthCheckResponse, error) {
@@ -69,6 +76,9 @@ func (h *HealthServer) Watch(req *grpc_health_v1.HealthCheckRequest, server grpc
 func (h *HealthServer) checkAll(ctx context.Context) bool {
 	ok := true
 	for service := range h.checkers {
+		// we don't want to stop as soon as we find an unhealthy service
+		// so that we can log issues in all unhealthy services
+		// (which could help investigate an issue, correlate problems etc.)
 		ok = ok && h.check(ctx, service)
 	}
 	return ok
@@ -77,16 +87,9 @@ func (h *HealthServer) checkAll(ctx context.Context) bool {
 func (h *HealthServer) check(ctx context.Context, service string) bool {
 	err := h.checkers[service].Check(ctx)
 	if err != nil {
-		h.log.Err(ctx, err).
+		h.logger.Err(ctx, err).
 			Str("service_name", service).
 			Msg("health check not OK")
 	}
 	return err == nil
-}
-
-func NewHealthServer(checkers map[string]Checker, log log.CtxLogger) *HealthServer {
-	return &HealthServer{
-		checkers: checkers,
-		log:      log.WithComponent("api.HealthServer"),
-	}
 }

@@ -32,7 +32,7 @@ func (t *testChecker) Check(ctx context.Context) error {
 	return t.err
 }
 
-func TestHealthChecker_Check_OK(t *testing.T) {
+func TestHealthServer_Check_OK(t *testing.T) {
 	is := is.New(t)
 
 	underTest := NewHealthServer(
@@ -46,7 +46,7 @@ func TestHealthChecker_Check_OK(t *testing.T) {
 	is.Equal(gh.HealthCheckResponse_SERVING, resp.Status)
 }
 
-func TestHealthChecker_CheckSingle_Fail(t *testing.T) {
+func TestHealthServer_CheckSingle_Fail(t *testing.T) {
 	is := is.New(t)
 
 	underTest := NewHealthServer(
@@ -63,7 +63,7 @@ func TestHealthChecker_CheckSingle_Fail(t *testing.T) {
 	is.Equal(gh.HealthCheckResponse_NOT_SERVING, resp.Status)
 }
 
-func TestHealthChecker_CheckAll_Fail(t *testing.T) {
+func TestHealthServer_CheckAll_Fail(t *testing.T) {
 	is := is.New(t)
 
 	underTest := NewHealthServer(
@@ -81,7 +81,7 @@ func TestHealthChecker_CheckAll_Fail(t *testing.T) {
 	is.Equal(gh.HealthCheckResponse_NOT_SERVING, resp.Status)
 }
 
-func TestHealthChecker_Check_UnknownService(t *testing.T) {
+func TestHealthServer_Check_UnknownService(t *testing.T) {
 	is := is.New(t)
 
 	underTest := NewHealthServer(map[string]Checker{}, log.Nop())
