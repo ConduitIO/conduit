@@ -128,8 +128,8 @@ func newParallelNodeWorker(
 	logger log.CtxLogger,
 	send func(ctx context.Context, logger log.CtxLogger, msg *Message) error,
 ) *parallelNodeWorker {
-	// TODO logger id
-	SetLogger(node, logger)
+	logger.Logger = logger.With().Str(log.ParallelWorkerIDField, node.ID()).Logger()
+	SetLogger(node, logger, LoggerWithComponent)
 	node.Sub(jobs)
 	out := node.Pub()
 	return &parallelNodeWorker{
@@ -166,25 +166,30 @@ func (w *parallelNodeWorker) runWorker(ctx context.Context) {
 
 func (w *parallelNodeWorker) runForwarder(ctx context.Context) {
 	for msg := range w.out {
-		err := func() error {
-			t := msg.Ctx.Value(parallelNodeTicketCtxKey{}).(semaphore.Ticket)
-			w.logger.Trace(msg.Ctx).Msg("acquiring ticket")
-			l := w.sem.Acquire(t)
-			defer func() {
-				w.logger.Trace(msg.Ctx).Msg("releasing ticket")
-				w.sem.Release(l)
-			}()
-			w.logger.Trace(msg.Ctx).Msg("acquired ticket")
-			msg.Ctx = context.WithValue(msg.Ctx, parallelNodeTicketCtxKey{}, nil)
-			err := w.send(ctx, w.logger, msg)
-			if err != nil {
-				return msg.Nack(err, w.node.ID())
-			}
-			return nil
-		}()
+		err := w.forwardMessage(ctx, msg)
 		if err != nil {
 			w.errs <- err
 			break
 		}
 	}
+}
+
+func (w *parallelNodeWorker) forwardMessage(ctx context.Context, msg *Message) error {
+	t := msg.Ctx.Value(parallelNodeTicketCtxKey{}).(semaphore.Ticket)
+	w.logger.Trace(msg.Ctx).Msg("acquiring ticket")
+	l := w.sem.Acquire(t)
+	defer func() {
+		w.logger.Trace(msg.Ctx).Msg("releasing ticket")
+		w.sem.Release(l)
+	}()
+	w.logger.Trace(msg.Ctx).Msg("acquired ticket")
+
+	// "remove" ticket from context to prevent it from being discarded in the
+	// message status handler
+	msg.Ctx = context.WithValue(msg.Ctx, parallelNodeTicketCtxKey{}, nil)
+	err := w.send(ctx, w.logger, msg)
+	if err != nil {
+		return msg.Nack(err, w.node.ID())
+	}
+	return nil
 }

@@ -22,25 +22,34 @@ import (
 
 // SetLogger figures out if the node needs a logger, sets static metadata in the
 // logger and supplies it to the node.
-func SetLogger(n Node, logger log.CtxLogger) {
+func SetLogger(n Node, logger log.CtxLogger, customize ...func(log.CtxLogger, Node) log.CtxLogger) {
 	ln, ok := n.(LoggingNode)
 	if !ok {
 		return
 	}
 
-	logger = BuildLogger(n, logger)
+	if len(customize) == 0 {
+		logger = LoggerWithNodeID(logger, n)
+		logger = LoggerWithComponent(logger, n)
+	} else {
+		for _, c := range customize {
+			logger = c(logger, n)
+		}
+	}
 	ln.SetLogger(logger)
 }
 
-// BuildLogger builds the logger for a specific node by adding static metadata.
-func BuildLogger(n Node, logger log.CtxLogger) log.CtxLogger {
-	nt := reflect.TypeOf(n)
-	for nt.Kind() == reflect.Ptr {
-		nt = nt.Elem()
+func LoggerWithNodeID(logger log.CtxLogger, n Node) log.CtxLogger {
+	logger.Logger = logger.With().Str(log.NodeIDField, n.ID()).Logger()
+	return logger
+}
+
+func LoggerWithComponent(logger log.CtxLogger, v Node) log.CtxLogger {
+	t := reflect.TypeOf(v)
+	for t.Kind() == reflect.Ptr {
+		t = t.Elem()
 	}
 
-	logger = logger.WithComponent(nt.Name())
-	logger.Logger = logger.With().Str(log.NodeIDField, n.ID()).Logger()
-
+	logger = logger.WithComponent(t.Name())
 	return logger
 }
