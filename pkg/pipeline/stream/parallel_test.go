@@ -143,11 +143,11 @@ func TestParallel_ErrorAll(t *testing.T) {
 		n := &parallelTestNode{Name: fmt.Sprintf("test-node-%d", i)}
 		n.F = func(ctx context.Context) error {
 			defer close(n.pub)
-			_, ok, err := cchan.ChanOut[*Message](n.sub).Recv(ctx)
+			msg, ok, err := cchan.ChanOut[*Message](n.sub).Recv(ctx)
 			is.True(ok)
 			is.NoErr(err)
 			controlChan <- struct{}{}
-			return cerrors.Errorf("test-error")
+			return msg.Nack(cerrors.New("test error"), n.ID())
 		}
 		return n
 	}
@@ -210,7 +210,7 @@ func TestParallel_ErrorSingle(t *testing.T) {
 				controlChan <- struct{}{}
 				if msg.Record.Key.(record.StructuredData)["id"].(int) == 1 {
 					// only message with id 1 fails
-					return cerrors.New("test error")
+					return msg.Nack(cerrors.New("test error"), n.ID())
 				}
 				n.pub <- msg
 			}

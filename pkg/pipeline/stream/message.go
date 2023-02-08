@@ -272,6 +272,19 @@ func (m *Message) Status() MessageStatus {
 	}
 }
 
+// StatusError returns the error that was returned when the message was acked or
+// nacked. If the message was successfully acked/nacked or it is still open the
+// method returns nil.
+func (m *Message) StatusError() error {
+	switch m.Status() {
+	case MessageStatusAcked:
+		return m.Ack()
+	case MessageStatusNacked:
+		return m.Nack(nil, "")
+	}
+	return nil
+}
+
 // OpenMessagesTracker allows you to track messages until they reach the end of
 // the pipeline.
 type OpenMessagesTracker sync.WaitGroup

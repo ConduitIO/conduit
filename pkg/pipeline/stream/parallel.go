@@ -18,6 +18,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/conduitio/conduit/pkg/foundation/cchan"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/semaphore"
@@ -39,30 +40,47 @@ func (n *ParallelNode) ID() string {
 }
 
 func (n *ParallelNode) Run(ctx context.Context) error {
-	// each worker spawns 2 goroutines, allow each to store an error in the channel
-	errs := make(chan error, n.Workers*2)
+	// allow each worker to store an error in the channel
+	errs := make(chan error, n.Workers)
 	trigger, cleanup, err := n.base.Trigger(ctx, n.logger, errs)
 	if err != nil {
 		return err
 	}
 	defer cleanup()
 
-	jobs := make(chan *Message)
-	var wg sync.WaitGroup
+	workerJobs := make(chan parallelNodeJob)
+	var workerWg sync.WaitGroup
 	var sem semaphore.Simple
 
 	for i := 0; i < n.Workers; i++ {
 		node := n.NewNode(i)
-		worker := newParallelNodeWorker(node, jobs, errs, &sem, n.logger, n.base.Send)
-		wg.Add(1)
+		worker := newParallelNodeWorker(node, workerJobs, &sem, n.logger)
+		workerWg.Add(1)
 		go func() {
-			defer wg.Done()
+			defer workerWg.Done()
 			worker.Run(ctx)
 		}()
 	}
+	coordinatorJobs := make(chan parallelNodeJob, n.Workers)
+	var coordinatorWg sync.WaitGroup
+	coordinatorWg.Add(1)
+	coordinator := newParallelNodeCoordinator(n.ID(), coordinatorJobs, errs, n.logger, n.base.Send)
+	go func() {
+		defer coordinatorWg.Done()
+		coordinator.Run(ctx)
+	}()
+
+	workersDone := make(chan struct{})
+	go func() {
+		workerWg.Wait()
+		close(workersDone)
+	}()
+
 	defer func() {
-		close(jobs)
-		wg.Wait()
+		close(workerJobs)
+		close(coordinatorJobs)
+		workerWg.Wait()
+		coordinatorWg.Wait()
 		for {
 			select {
 			case workerErr := <-errs:
@@ -81,18 +99,22 @@ func (n *ParallelNode) Run(ctx context.Context) error {
 			return err
 		}
 
-		msg.RegisterStatusHandler(func(msg *Message, _ StatusChange) error {
-			if t := msg.Ctx.Value(parallelNodeTicketCtxKey{}); t != nil {
-				n.logger.Trace(ctx).Msg("discarding ticket")
-				sem.Discard(t.(semaphore.Ticket))
+		job := parallelNodeJob{
+			Message: msg,
+			Done:    make(chan struct{}), // TODO use channel pool
+		}
+
+		select {
+		case workerJobs <- job:
+			coordinatorJobs <- job
+		case <-workersDone:
+			noWorkerRunningErr := cerrors.New("no worker is running")
+			err = msg.Nack(noWorkerRunningErr, n.ID())
+			if err != nil {
+				return err
 			}
-			return nil
-		})
-
-		t := sem.Enqueue()
-		msg.Ctx = context.WithValue(msg.Ctx, parallelNodeTicketCtxKey{}, t)
-
-		jobs <- msg
+			return noWorkerRunningErr // stop here, no processing can be done if no workers are running anymore
+		}
 	}
 }
 
@@ -108,88 +130,168 @@ func (n *ParallelNode) SetLogger(logger log.CtxLogger) {
 	n.logger = logger
 }
 
-type parallelNodeTicketCtxKey struct{}
+type parallelNodeJob struct {
+	Message *Message
+	Done    chan struct{}
+}
 
-type parallelNodeWorker struct {
-	node   PubSubNode
+type parallelNodeCoordinator struct {
+	name   string
+	jobs   <-chan parallelNodeJob
 	errs   chan<- error
-	sem    *semaphore.Simple
 	logger log.CtxLogger
 	send   func(ctx context.Context, logger log.CtxLogger, msg *Message) error
-
-	out <-chan *Message
 }
 
-func newParallelNodeWorker(
-	node PubSubNode,
-	jobs <-chan *Message,
+func newParallelNodeCoordinator(
+	name string,
+	jobs <-chan parallelNodeJob,
 	errs chan<- error,
-	sem *semaphore.Simple,
 	logger log.CtxLogger,
 	send func(ctx context.Context, logger log.CtxLogger, msg *Message) error,
-) *parallelNodeWorker {
-	logger.Logger = logger.With().Str(log.ParallelWorkerIDField, node.ID()).Logger()
-	SetLogger(node, logger, LoggerWithComponent)
-	node.Sub(jobs)
-	out := node.Pub()
-	return &parallelNodeWorker{
-		node:   node,
+) *parallelNodeCoordinator {
+	logger.Logger = logger.With().Str(log.ParallelWorkerIDField, name+"-coordinator").Logger()
+	return &parallelNodeCoordinator{
+		name:   name,
+		jobs:   jobs,
 		errs:   errs,
-		sem:    sem,
 		logger: logger,
 		send:   send,
-
-		out: out,
 	}
 }
 
-func (w *parallelNodeWorker) Run(ctx context.Context) {
-	var wg sync.WaitGroup
-	wg.Add(2)
-	go func() {
-		defer wg.Done()
-		w.runWorker(ctx)
-	}()
-	go func() {
-		defer wg.Done()
-		w.runForwarder(ctx)
-	}()
-	wg.Wait()
-}
+func (c *parallelNodeCoordinator) Run(ctx context.Context) {
+	fail := false
+	for job := range c.jobs {
+		// wait for job to be done
+		<-job.Done
 
-func (w *parallelNodeWorker) runWorker(ctx context.Context) {
-	err := w.node.Run(ctx)
-	if err != nil {
-		w.errs <- err
-	}
-}
-
-func (w *parallelNodeWorker) runForwarder(ctx context.Context) {
-	for msg := range w.out {
-		err := w.forwardMessage(ctx, msg)
+		// check if the message was successfully processed or not
+		err := job.Message.StatusError()
 		if err != nil {
-			w.errs <- err
-			break
+			// propagate error to main node and trigger short circuit, all
+			// messages need to fail from here on out
+			c.errs <- err
+			fail = true
+			continue
+		}
+		if job.Message.Status() != MessageStatusOpen {
+			// message already acked or nacked
+			continue
+		}
+		if fail {
+			err = job.Message.Nack(cerrors.Errorf("another message failed to be processed successfully"), c.name)
+			if err != nil {
+				c.errs <- err
+			}
+			continue
+		}
+		err = c.send(ctx, c.logger, job.Message)
+		if err != nil {
+			err = job.Message.Nack(err, c.name)
+			if err != nil {
+				c.errs <- err
+				fail = true
+			}
 		}
 	}
 }
 
-func (w *parallelNodeWorker) forwardMessage(ctx context.Context, msg *Message) error {
-	t := msg.Ctx.Value(parallelNodeTicketCtxKey{}).(semaphore.Ticket)
-	w.logger.Trace(msg.Ctx).Msg("acquiring ticket")
-	l := w.sem.Acquire(t)
-	defer func() {
-		w.logger.Trace(msg.Ctx).Msg("releasing ticket")
-		w.sem.Release(l)
-	}()
-	w.logger.Trace(msg.Ctx).Msg("acquired ticket")
+type parallelNodeWorker struct {
+	node   PubSubNode
+	sem    *semaphore.Simple
+	logger log.CtxLogger
 
-	// "remove" ticket from context to prevent it from being discarded in the
-	// message status handler
-	msg.Ctx = context.WithValue(msg.Ctx, parallelNodeTicketCtxKey{}, nil)
-	err := w.send(ctx, w.logger, msg)
-	if err != nil {
-		return msg.Nack(err, w.node.ID())
+	jobs cchan.ChanOut[parallelNodeJob]
+}
+
+func newParallelNodeWorker(
+	node PubSubNode,
+	jobs <-chan parallelNodeJob,
+	sem *semaphore.Simple,
+	logger log.CtxLogger,
+) *parallelNodeWorker {
+	nodeLogger := logger
+	nodeLogger.Logger = logger.With().Str(log.ParallelWorkerIDField, node.ID()).Logger()
+	SetLogger(node, nodeLogger, LoggerWithComponent)
+
+	logger.Logger = logger.With().Str(log.ParallelWorkerIDField, node.ID()+"-worker").Logger()
+	return &parallelNodeWorker{
+		node:   node,
+		sem:    sem,
+		logger: logger,
+
+		jobs: jobs,
 	}
-	return nil
+}
+
+func (w *parallelNodeWorker) Run(ctx context.Context) {
+	in := make(chan *Message)
+	w.node.Sub(in)
+	out := w.node.Pub()
+
+	workerDone := make(chan struct{})
+	go func() {
+		defer close(workerDone)
+		w.runWorker(ctx)
+	}()
+
+	forwarderDone := make(chan struct{})
+	go func() {
+		defer func() {
+			<-workerDone
+			close(forwarderDone)
+		}()
+		w.runForwarder(ctx, in, out)
+	}()
+
+	<-forwarderDone
+}
+
+func (w *parallelNodeWorker) runWorker(ctx context.Context) {
+	// we can ignore errors, if an error happens they are propagated through
+	// a message nack/ack to the forwarder node and further to the coordinator
+	_ = w.node.Run(ctx)
+}
+
+func (w *parallelNodeWorker) runForwarder(ctx context.Context, in chan<- *Message, out <-chan *Message) {
+	defer close(in)
+	for job := range w.jobs {
+		select {
+		case _, ok := <-out:
+			if ok {
+				panic("worker node produced a message without receiving a message")
+			}
+			// out is closed, worker node stopped running (closed context?),
+			// nack in-flight message and ignore error, it will be picked up
+			// by the coordinator
+			_ = job.Message.Nack(cerrors.New("worker not running"), w.node.ID())
+			job.Done <- struct{}{}
+			return
+		case in <- job.Message:
+			// message submitted to worker node
+		}
+
+		select {
+		case <-job.Message.Acked():
+			// message was acked, i.e. filtered out
+		case <-job.Message.Nacked():
+			// message was nacked, i.e. sent to DLQ or dropped
+		case <-out:
+			// message was processed (if out returned a message it was
+			// successful, if out was closed it was unsuccessful and the
+			// worker stopped running)
+		}
+
+		// get error before we give the message to the coordinator
+		err := job.Message.StatusError()
+
+		// give message to coordinator
+		job.Done <- struct{}{}
+
+		if err != nil {
+			// message processing failed, worker stopped running, stop accepting new jobs
+			return
+		}
+	}
 }
