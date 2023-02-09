@@ -94,15 +94,16 @@ func (p *unwrapProcessor) Process(ctx context.Context, in record.Record) (record
 }
 
 /*
-	 example of kafka-connect record:
-		`{
-		 "payload": {
-		     "description": "desc",
-		     "id": 20
-		   },
-		 "schema": {} // will be ignored
-		}`
+Example of a kafka-connect record:
+  {
+    "payload": {
+    "description": "desc",
+      "id": 20
+    },
+    "schema": {} // will be ignored
+  }
 */
+
 // kafkaConnectUnwrapper unwraps a kafka connect record from the payload, expects rec.Payload.After to be of type record.StructuredData
 type kafkaConnectUnwrapper struct{}
 
@@ -166,26 +167,27 @@ func (k *kafkaConnectUnwrapper) UnwrapKey(key record.Data) record.Data {
 }
 
 /*
-	 example of debezium record:
-		`{
-		 "payload": {
-		   "after": {
-		     "description": "desc",
-		     "id": 20
-		   },
-		   "before": null,
-		   "op": "c",
-		   "source": {
-		     "opencdc.readAt": "1674061777225877000",
-		     "opencdc.version": "v1",
-		   },
-		   "transaction": null,
-		   "ts_ms": 1674061777225
-		 },
-		 "schema": {} // will be ignored
-		}`
+Example of a debezium record:
+  {
+    "payload": {
+      "after": {
+        "description": "desc",
+        "id": 20
+      },
+      "before": null,
+      "op": "c",
+      "source": {
+        "opencdc.readAt": "1674061777225877000",
+        "opencdc.version": "v1",
+      },
+      "transaction": null,
+      "ts_ms": 1674061777225
+    },
+    "schema": {} // will be ignored
+  }
 */
-// debeziumUnwrapper unwraps a debezium record from the payload, expects rec.Payload.After to be of type record.StructuredData
+
+// debeziumUnwrapper unwraps a debezium record from the payload.
 type debeziumUnwrapper struct {
 	kafkaConnectUnwrapper kafkaConnectUnwrapper
 }
@@ -194,7 +196,8 @@ const (
 	debeziumOpCreate = "c"
 	debeziumOpUpdate = "u"
 	debeziumOpDelete = "d"
-	debeziumOpRead   = "r" // snapshot
+	debeziumOpRead   = "r"      // snapshot
+	debeziumOpUnset  = "$unset" // mongoDB unset operation
 
 	debeziumFieldBefore    = "before"
 	debeziumFieldAfter     = "after"
@@ -205,37 +208,33 @@ const (
 
 func (d *debeziumUnwrapper) Unwrap(rec record.Record) (record.Record, error) {
 	// record must be structured
-	structPayload, ok := rec.Payload.After.(record.StructuredData)
+	debeziumRec, ok := rec.Payload.After.(record.StructuredData)
 	if !ok {
 		return record.Record{}, cerrors.Errorf("record payload data must be structured data")
 	}
 	// get payload
-	structPayload, ok = structPayload["payload"].(map[string]interface{}) // the payload has the debezium record
+	debeziumRec, ok = debeziumRec["payload"].(map[string]interface{}) // the payload has the debezium record
 	if !ok {
 		return record.Record{}, cerrors.Errorf("payload doesn't contain a record")
 	}
 
 	// check fields under payload
-	err := d.validateRecord(structPayload)
+	err := d.validateRecord(debeziumRec)
 	if err != nil {
 		return record.Record{}, err
 	}
 
-	var before record.StructuredData
-	beforeData := structPayload[debeziumFieldBefore]
-	before, ok = beforeData.(map[string]any)
-	if beforeData != nil && !ok {
-		return record.Record{}, cerrors.Errorf("%s field is not a map", debeziumFieldBefore)
+	before, err := d.valueToData(debeziumRec[debeziumFieldBefore])
+	if err != nil {
+		return record.Record{}, cerrors.Errorf("failed to parse field %s: %w", debeziumFieldBefore, err)
 	}
 
-	var after record.StructuredData
-	afterData := structPayload[debeziumFieldAfter]
-	after, ok = afterData.(map[string]any)
-	if afterData != nil && !ok {
-		return record.Record{}, cerrors.Errorf("%s field is not a map", debeziumFieldAfter)
+	after, err := d.valueToData(debeziumRec[debeziumFieldAfter])
+	if err != nil {
+		return record.Record{}, cerrors.Errorf("failed to parse field %s: %w", debeziumFieldAfter, err)
 	}
 
-	op, ok := structPayload[debeziumFieldOp].(string)
+	op, ok := debeziumRec[debeziumFieldOp].(string)
 	if !ok {
 		return record.Record{}, cerrors.Errorf("%s operation is not a string", op)
 	}
@@ -260,6 +259,20 @@ func (d *debeziumUnwrapper) Unwrap(rec record.Record) (record.Record, error) {
 		},
 		Metadata: metadata,
 	}, nil
+}
+
+func (d *debeziumUnwrapper) valueToData(val any) (record.Data, error) {
+	switch v := val.(type) {
+	case map[string]any:
+		return record.StructuredData(v), nil
+	case string:
+		return record.RawData{Raw: []byte(v)}, nil
+	case nil:
+		// nil is allowed
+		return nil, nil
+	default:
+		return nil, cerrors.Errorf("expected a map or a string, got %T", val)
+	}
 }
 
 func (d *debeziumUnwrapper) validateRecord(data record.StructuredData) error {
@@ -332,6 +345,8 @@ func (d *debeziumUnwrapper) convertOperation(op string) (record.Operation, error
 		return record.OperationDelete, nil
 	case debeziumOpRead:
 		return record.OperationSnapshot, nil
+	case debeziumOpUnset:
+		return record.OperationUpdate, nil
 	}
 	return 0, cerrors.Errorf("%q is an invalid operation", op)
 }

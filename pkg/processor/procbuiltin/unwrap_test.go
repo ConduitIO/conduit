@@ -122,7 +122,7 @@ func TestUnwrap_Process(t *testing.T) {
 				},
 				Position: []byte("position"),
 				Payload: record.Change{
-					Before: record.StructuredData(nil),
+					Before: nil,
 					After:  record.StructuredData{"description": "test1", "id": float64(27)},
 				},
 			},
@@ -145,12 +145,12 @@ func TestUnwrap_Process(t *testing.T) {
 								"description": "test1",
 								"id":          27,
 							},
-							"before": interface{}(nil),
+							"before": nil,
 							"op":     "u",
 							"source": map[string]interface{}{
 								"opencdc.version": "v1",
 							},
-							"transaction": interface{}(nil),
+							"transaction": nil,
 							"ts_ms":       float64(1674061777225),
 						},
 						"schema": map[string]interface{}{},
@@ -169,7 +169,7 @@ func TestUnwrap_Process(t *testing.T) {
 					"conduit.version": "v0.4.0",
 				},
 				Payload: record.Change{
-					Before: record.StructuredData(nil),
+					Before: nil,
 					After:  record.StructuredData{"description": "test1", "id": 27},
 				},
 				Key: record.RawData{
@@ -225,6 +225,44 @@ func TestUnwrap_Process(t *testing.T) {
 				},
 			},
 			wantErr: true,
+		},
+		{
+			name: "mongoDB debezium record",
+			config: processor.Config{
+				Settings: map[string]string{"format": "debezium"},
+			},
+			record: record.Record{
+				Key: record.RawData{Raw: []byte(`{ "payload": { "id": "{ \"$oid\" : \"63210f1a3bc50864fde46a84\"}" }, "schema": { "fields": [ { "field": "id", "optional": false, "type": "string" } ], "name": "resource_7_735174.demo.user.Key", "optional": false, "type": "struct" } }`)},
+				Payload: record.Change{
+					Before: nil,
+					After: record.StructuredData{
+						"payload": map[string]interface{}{
+							"after":  `{"_id": {"$oid": "63210f1a3bc50864fde46a84"},"name": "First Last","age": 205}`,
+							"before": nil,
+							"op":     "$unset",
+							"source": map[string]interface{}{
+								"opencdc.version": "v1",
+							},
+							"transaction": nil,
+							"ts_ms":       float64(1674061777225),
+						},
+						"schema": map[string]interface{}{},
+					},
+				},
+			},
+			want: record.Record{
+				Operation: record.OperationUpdate,
+				Metadata: map[string]string{
+					"opencdc.readAt":  "1674061777225000000",
+					"opencdc.version": "v1",
+				},
+				Payload: record.Change{
+					After:  record.RawData{Raw: []byte(`{"_id": {"$oid": "63210f1a3bc50864fde46a84"},"name": "First Last","age": 205}`)},
+					Before: nil,
+				},
+				Key: record.StructuredData{"id": `{ "$oid" : "63210f1a3bc50864fde46a84"}`},
+			},
+			wantErr: false,
 		},
 	}
 
