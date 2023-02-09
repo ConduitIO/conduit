@@ -47,9 +47,10 @@ func (n *ParallelNode) Run(ctx context.Context) error {
 	}
 	defer cleanup()
 
+	// workerJobs is the channel where workers take jobs from, it is not
+	// buffered, so it blocks when all workers are busy
 	workerJobs := make(chan parallelNodeJob)
 	var workerWg sync.WaitGroup
-
 	for i := 0; i < n.Workers; i++ {
 		node := n.NewNode(i)
 		worker := newParallelNodeWorker(node, workerJobs, n.logger)
@@ -59,6 +60,9 @@ func (n *ParallelNode) Run(ctx context.Context) error {
 			worker.Run(ctx)
 		}()
 	}
+
+	// coordinatorJobs is the channel where coordinator takes the jobs from,
+	// it has a buffer, so it can store one job for each worker
 	coordinatorJobs := make(chan parallelNodeJob, n.Workers)
 	var coordinatorWg sync.WaitGroup
 	coordinatorWg.Add(1)
@@ -68,6 +72,7 @@ func (n *ParallelNode) Run(ctx context.Context) error {
 		coordinator.Run(ctx)
 	}()
 
+	// workersDone is closed once all workers stop running (for whatever reason)
 	workersDone := make(chan struct{})
 	go func() {
 		workerWg.Wait()

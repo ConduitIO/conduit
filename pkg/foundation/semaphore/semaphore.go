@@ -110,14 +110,6 @@ func (s *Simple) Release(l Lock) {
 	}
 }
 
-// Discard TODO
-func (s *Simple) Discard(t Ticket) {
-	go func() {
-		l := s.Acquire(t)
-		s.Release(l)
-	}()
-}
-
 func (s *Simple) panic() {
 	panic("semaphore: mismatched ticket index, tickets are not supposed to" +
 		" be acquired twice and should be discarded after they are released," +

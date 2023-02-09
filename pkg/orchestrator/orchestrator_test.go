@@ -88,10 +88,7 @@ func TestPipelineSimple(t *testing.T) {
 	//  metadata, once we have it we can use it instead of adding our own
 	processor.GlobalBuilderRegistry.MustRegister("removereadat", func(config processor.Config) (processor.Interface, error) {
 		return procbuiltin.NewFuncWrapper(func(ctx context.Context, r record.Record) (record.Record, error) {
-			logger.Warn(ctx).Msgf("%v: removing metadata...", time.Now().Format("05.999"))
-			time.Sleep(time.Millisecond * 100)
 			delete(r.Metadata, record.MetadataReadAt) // read at is different every time, remove it
-			logger.Warn(ctx).Msgf("%v: removed metadata!", time.Now().Format("05.999"))
 			return r, nil
 		}), nil
 	})
@@ -122,9 +119,7 @@ func TestPipelineSimple(t *testing.T) {
 			ID:   pl.ID,
 			Type: processor.ParentTypePipeline,
 		},
-		processor.Config{
-			Workers: 1, // CHANGE ME and see how the processor is invoked in parallel
-		},
+		processor.Config{},
 	)
 	is.NoErr(err)
 
