@@ -21,7 +21,6 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cchan"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/conduitio/conduit/pkg/foundation/semaphore"
 )
 
 // ParallelNode wraps a PubSubNode and parallelizes it by running it in separate
@@ -50,11 +49,10 @@ func (n *ParallelNode) Run(ctx context.Context) error {
 
 	workerJobs := make(chan parallelNodeJob)
 	var workerWg sync.WaitGroup
-	var sem semaphore.Simple
 
 	for i := 0; i < n.Workers; i++ {
 		node := n.NewNode(i)
-		worker := newParallelNodeWorker(node, workerJobs, &sem, n.logger)
+		worker := newParallelNodeWorker(node, workerJobs, n.logger)
 		workerWg.Add(1)
 		go func() {
 			defer workerWg.Done()
@@ -104,16 +102,20 @@ func (n *ParallelNode) Run(ctx context.Context) error {
 			Done:    make(chan struct{}), // TODO use channel pool
 		}
 
+		// try sending the job to a worker
 		select {
 		case workerJobs <- job:
+			// we submitted the job to a worker, give it to the coordinator as well
 			coordinatorJobs <- job
 		case <-workersDone:
+			// no worker is running anymore, they must have all failed, nack the
+			// message and stop running
 			noWorkerRunningErr := cerrors.New("no worker is running")
 			err = msg.Nack(noWorkerRunningErr, n.ID())
 			if err != nil {
 				return err
 			}
-			return noWorkerRunningErr // stop here, no processing can be done if no workers are running anymore
+			return noWorkerRunningErr
 		}
 	}
 }
@@ -135,6 +137,8 @@ type parallelNodeJob struct {
 	Done    chan struct{}
 }
 
+// parallelNodeCoordinator coordinates the messages that are processed by
+// workers and ensures their order.
 type parallelNodeCoordinator struct {
 	name   string
 	jobs   <-chan parallelNodeJob
@@ -161,6 +165,7 @@ func newParallelNodeCoordinator(
 }
 
 func (c *parallelNodeCoordinator) Run(ctx context.Context) {
+	// fail toggles a short circuit that causes all future messages to be nacked
 	fail := false
 	for job := range c.jobs {
 		// wait for job to be done
@@ -188,6 +193,8 @@ func (c *parallelNodeCoordinator) Run(ctx context.Context) {
 		}
 		err = c.send(ctx, c.logger, job.Message)
 		if err != nil {
+			// could not send message to next node, this means the context is
+			// cancelled, nack the message and drain jobs channel
 			err = job.Message.Nack(err, c.name)
 			if err != nil {
 				c.errs <- err
@@ -197,18 +204,20 @@ func (c *parallelNodeCoordinator) Run(ctx context.Context) {
 	}
 }
 
+// parallelNodeWorker runs the two goroutines, one for the worker itself and one
+// for the forwarder. The worker is in charge of processing the node, the
+// forwarder accepts jobs, forwards them to the node and then waits for it to
+// either ack/nack the message or send it to its output channel. Once the
+// message has been processed it forwards it to the coordinator.
 type parallelNodeWorker struct {
 	node   PubSubNode
-	sem    *semaphore.Simple
+	jobs   cchan.ChanOut[parallelNodeJob]
 	logger log.CtxLogger
-
-	jobs cchan.ChanOut[parallelNodeJob]
 }
 
 func newParallelNodeWorker(
 	node PubSubNode,
 	jobs <-chan parallelNodeJob,
-	sem *semaphore.Simple,
 	logger log.CtxLogger,
 ) *parallelNodeWorker {
 	nodeLogger := logger
@@ -218,10 +227,8 @@ func newParallelNodeWorker(
 	logger.Logger = logger.With().Str(log.ParallelWorkerIDField, node.ID()+"-worker").Logger()
 	return &parallelNodeWorker{
 		node:   node,
-		sem:    sem,
+		jobs:   jobs,
 		logger: logger,
-
-		jobs: jobs,
 	}
 }
 
@@ -242,7 +249,7 @@ func (w *parallelNodeWorker) Run(ctx context.Context) {
 			<-workerDone
 			close(forwarderDone)
 		}()
-		w.runForwarder(ctx, in, out)
+		w.runForwarder(in, out)
 	}()
 
 	<-forwarderDone
@@ -254,9 +261,10 @@ func (w *parallelNodeWorker) runWorker(ctx context.Context) {
 	_ = w.node.Run(ctx)
 }
 
-func (w *parallelNodeWorker) runForwarder(ctx context.Context, in chan<- *Message, out <-chan *Message) {
+func (w *parallelNodeWorker) runForwarder(in chan<- *Message, out <-chan *Message) {
 	defer close(in)
 	for job := range w.jobs {
+		ctx := job.Message.Ctx
 		select {
 		case _, ok := <-out:
 			if ok {
@@ -270,17 +278,23 @@ func (w *parallelNodeWorker) runForwarder(ctx context.Context, in chan<- *Messag
 			return
 		case in <- job.Message:
 			// message submitted to worker node
+			w.logger.Trace(ctx).Msg("message sent to worker")
 		}
 
 		select {
 		case <-job.Message.Acked():
 			// message was acked, i.e. filtered out
+			w.logger.Trace(ctx).Msg("worker acked the message")
 		case <-job.Message.Nacked():
 			// message was nacked, i.e. sent to DLQ or dropped
-		case <-out:
-			// message was processed (if out returned a message it was
-			// successful, if out was closed it was unsuccessful and the
-			// worker stopped running)
+			w.logger.Trace(ctx).Msg("worker nacked the message")
+		case _, ok := <-out:
+			// message was processed
+			if ok {
+				w.logger.Trace(ctx).Msg("worker successfully processed the message")
+			} else {
+				w.logger.Trace(ctx).Msg("worker stopped running")
+			}
 		}
 
 		// get error before we give the message to the coordinator
@@ -290,7 +304,8 @@ func (w *parallelNodeWorker) runForwarder(ctx context.Context, in chan<- *Messag
 		job.Done <- struct{}{}
 
 		if err != nil {
-			// message processing failed, worker stopped running, stop accepting new jobs
+			// message processing failed, worker stopped running, stop accepting jobs
+			w.logger.Warn(ctx).Err(err).Msg("worker stopped running, stopping forwarder")
 			return
 		}
 	}

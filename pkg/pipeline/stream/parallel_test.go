@@ -35,7 +35,7 @@ import (
 
 type parallelTestNode struct {
 	Name string
-	F    func(ctx context.Context) error
+	F    func(ctx context.Context, sub <-chan *Message, pub chan<- *Message) error
 
 	pub chan *Message
 	sub <-chan *Message
@@ -50,10 +50,370 @@ func (n *parallelTestNode) Sub(in <-chan *Message) {
 	n.sub = in
 }
 func (n *parallelTestNode) Run(ctx context.Context) error {
-	return n.F(ctx)
+	return n.F(ctx, n.sub, n.pub)
 }
 
-func TestParallel_Success(t *testing.T) {
+func TestParallelNode_Worker(t *testing.T) {
+	logger := log.Nop()
+	ctx := context.Background()
+
+	testError := cerrors.New("test error")
+
+	testCases := []struct {
+		name            string
+		nodeFunc        func(ctx context.Context, sub <-chan *Message, pub chan<- *Message) error
+		wantStatus      MessageStatus
+		wantStatusError error
+	}{{
+		name: "open",
+		nodeFunc: func(ctx context.Context, sub <-chan *Message, pub chan<- *Message) error {
+			defer close(pub)
+			for {
+				msg, ok, err := cchan.ChanOut[*Message](sub).Recv(ctx)
+				if !ok {
+					return err
+				}
+				pub <- msg
+			}
+		},
+		wantStatus: MessageStatusOpen,
+	}, {
+		name: "ack",
+		nodeFunc: func(ctx context.Context, sub <-chan *Message, pub chan<- *Message) error {
+			defer close(pub)
+			for {
+				msg, ok, err := cchan.ChanOut[*Message](sub).Recv(ctx)
+				if !ok {
+					return err
+				}
+				err = msg.Ack()
+				if err != nil {
+					return err
+				}
+			}
+		},
+		wantStatus: MessageStatusAcked,
+	}, {
+		name: "nack",
+		nodeFunc: func(ctx context.Context, sub <-chan *Message, pub chan<- *Message) error {
+			defer close(pub)
+			for {
+				msg, ok, err := cchan.ChanOut[*Message](sub).Recv(ctx)
+				if !ok {
+					return err
+				}
+				msg.RegisterNackHandler(func(*Message, NackMetadata) error {
+					// register nack handler so nack can succeed
+					return nil
+				})
+				err = msg.Nack(testError, "test-node")
+				if err != nil {
+					return err
+				}
+			}
+		},
+		wantStatus:      MessageStatusNacked,
+		wantStatusError: nil,
+	}, {
+		name: "failed ack",
+		nodeFunc: func(ctx context.Context, sub <-chan *Message, pub chan<- *Message) error {
+			defer close(pub)
+			for {
+				msg, ok, err := cchan.ChanOut[*Message](sub).Recv(ctx)
+				if !ok {
+					return err
+				}
+				msg.RegisterAckHandler(func(*Message) error {
+					// register failing ack handler so ack fails
+					return testError
+				})
+				err = msg.Ack()
+				if err != nil {
+					return err
+				}
+			}
+		},
+		wantStatus:      MessageStatusAcked,
+		wantStatusError: testError,
+	}, {
+		name: "failed nack",
+		nodeFunc: func(ctx context.Context, sub <-chan *Message, pub chan<- *Message) error {
+			defer close(pub)
+			for {
+				msg, ok, err := cchan.ChanOut[*Message](sub).Recv(ctx)
+				if !ok {
+					return err
+				}
+				err = msg.Nack(testError, "test-node")
+				if err != nil {
+					return err
+				}
+			}
+		},
+		wantStatus:      MessageStatusNacked,
+		wantStatusError: testError,
+	}}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			is := is.New(t)
+			n := &parallelTestNode{
+				Name: "test-node",
+				F:    tc.nodeFunc,
+			}
+
+			jobs := make(chan parallelNodeJob)
+			worker := newParallelNodeWorker(n, jobs, logger)
+
+			var wg sync.WaitGroup
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				worker.Run(ctx)
+			}()
+
+			job := parallelNodeJob{
+				Message: &Message{},
+				Done:    make(chan struct{}),
+			}
+			jobs <- job
+
+			_, ok, err := cchan.ChanOut[struct{}](job.Done).RecvTimeout(ctx, time.Millisecond*100)
+			is.NoErr(err)
+			is.True(ok)
+
+			is.Equal(job.Message.Status(), tc.wantStatus)
+			is.True(cerrors.Is(job.Message.StatusError(), tc.wantStatusError))
+
+			close(jobs)
+
+			err = (*csync.WaitGroup)(&wg).WaitTimeout(ctx, time.Second)
+			is.NoErr(err)
+		})
+	}
+}
+
+func TestParallelNode_Coordinator(t *testing.T) {
+	logger := log.Nop()
+	ctx := context.Background()
+
+	testError := cerrors.New("test error")
+
+	testCases := []struct {
+		name           string
+		processMessage func(*Message)
+		wantMessage    bool
+		wantError      error
+	}{{
+		name:           "open",
+		processMessage: func(*Message) { /* do nothing */ },
+		wantMessage:    true,
+		wantError:      nil,
+	}, {
+		name: "ack",
+		processMessage: func(msg *Message) {
+			_ = msg.Ack()
+		},
+		wantMessage: false,
+		wantError:   nil,
+	}, {
+		name: "nack",
+		processMessage: func(msg *Message) {
+			msg.RegisterNackHandler(func(*Message, NackMetadata) error {
+				// register nack handler so nack can succeed
+				return nil
+			})
+			_ = msg.Nack(testError, "test-node")
+		},
+		wantMessage: false,
+		wantError:   nil,
+	}, {
+		name: "failed ack",
+		processMessage: func(msg *Message) {
+			msg.RegisterAckHandler(func(*Message) error {
+				// register failing ack handler so ack fails
+				return testError
+			})
+			_ = msg.Ack()
+		},
+		wantMessage: false,
+		wantError:   testError,
+	}, {
+		name: "failed nack",
+		processMessage: func(msg *Message) {
+			_ = msg.Nack(testError, "test-node")
+		},
+		wantMessage: false,
+		wantError:   testError,
+	}}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			is := is.New(t)
+
+			jobs := make(chan parallelNodeJob)
+			errs := make(chan error)
+			out := make(chan *Message)
+			send := func(ctx context.Context, _ log.CtxLogger, msg *Message) error {
+				return cchan.ChanIn[*Message](out).Send(ctx, msg)
+			}
+			coordinator := newParallelNodeCoordinator("test-node", jobs, errs, logger, send)
+
+			var wg sync.WaitGroup
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				coordinator.Run(ctx)
+			}()
+
+			job := parallelNodeJob{
+				Message: &Message{},
+				Done:    make(chan struct{}),
+			}
+			jobs <- job
+
+			tc.processMessage(job.Message)
+
+			job.Done <- struct{}{}
+
+			_, ok, err := cchan.ChanOut[*Message](out).RecvTimeout(ctx, time.Millisecond*100)
+			if tc.wantMessage {
+				is.NoErr(err)
+				is.True(ok)
+			} else {
+				is.True(cerrors.Is(err, context.DeadlineExceeded))
+			}
+
+			gotErr, ok, err := cchan.ChanOut[error](errs).RecvTimeout(ctx, time.Millisecond*100)
+			if tc.wantError != nil {
+				is.NoErr(err)
+				is.True(ok)
+				is.True(cerrors.Is(gotErr, tc.wantError))
+			} else {
+				is.True(cerrors.Is(err, context.DeadlineExceeded))
+			}
+
+			// regardless of what happened above we should be able to send another job in
+			job = parallelNodeJob{
+				Message: &Message{},
+				Done:    make(chan struct{}),
+			}
+			jobs <- job
+			job.Done <- struct{}{}
+
+			_, ok, err = cchan.ChanOut[*Message](out).RecvTimeout(ctx, time.Millisecond*100)
+			// if we did not expect an error in the previous message then this one should go through
+			if tc.wantError == nil {
+				is.NoErr(err)
+				is.True(ok)
+			} else {
+				is.True(cerrors.Is(err, context.DeadlineExceeded))
+			}
+
+			gotErr, ok, err = cchan.ChanOut[error](errs).RecvTimeout(ctx, time.Millisecond*100)
+			// if we expected an error above we expect one for all following messages
+			if tc.wantError != nil {
+				is.NoErr(err)
+				is.True(ok)
+				is.True(gotErr != nil)
+			} else {
+				is.True(cerrors.Is(err, context.DeadlineExceeded))
+			}
+
+			// closing jobs should stop the coordinator
+			close(jobs)
+
+			err = (*csync.WaitGroup)(&wg).WaitTimeout(ctx, time.Second)
+			is.NoErr(err)
+		})
+	}
+}
+
+func TestParallelNode_Coordinator_Ack(t *testing.T) {
+	is := is.New(t)
+	logger := log.Nop()
+	ctx := context.Background()
+
+	jobs := make(chan parallelNodeJob)
+	errs := make(chan error)
+	out := make(chan *Message)
+	send := func(ctx context.Context, _ log.CtxLogger, msg *Message) error {
+		return cchan.ChanIn[*Message](out).Send(ctx, msg)
+	}
+	coordinator := newParallelNodeCoordinator("test-node", jobs, errs, logger, send)
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		coordinator.Run(ctx)
+	}()
+
+	job := parallelNodeJob{
+		Message: &Message{},
+		Done:    make(chan struct{}),
+	}
+	jobs <- job
+
+	// ack message
+	err := job.Message.Ack()
+	is.NoErr(err)
+
+	job.Done <- struct{}{}
+
+	// acked messages should not be forwarded
+	_, _, err = cchan.ChanOut[*Message](out).RecvTimeout(ctx, time.Millisecond*100)
+	is.True(cerrors.Is(err, context.DeadlineExceeded))
+
+	close(jobs)
+
+	err = (*csync.WaitGroup)(&wg).WaitTimeout(ctx, time.Second)
+	is.NoErr(err)
+}
+
+func TestParallelNode_Coordinator_Nack(t *testing.T) {
+	is := is.New(t)
+	logger := log.Nop()
+	ctx := context.Background()
+
+	jobs := make(chan parallelNodeJob)
+	errs := make(chan error)
+	out := make(chan *Message)
+	send := func(ctx context.Context, _ log.CtxLogger, msg *Message) error {
+		return cchan.ChanIn[*Message](out).Send(ctx, msg)
+	}
+	coordinator := newParallelNodeCoordinator("test-node", jobs, errs, logger, send)
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		coordinator.Run(ctx)
+	}()
+
+	job := parallelNodeJob{
+		Message: &Message{},
+		Done:    make(chan struct{}),
+	}
+	jobs <- job
+
+	// ack message
+	err := job.Message.Ack()
+	is.NoErr(err)
+
+	job.Done <- struct{}{}
+
+	// acked messages should not be forwarded
+	_, _, err = cchan.ChanOut[*Message](out).RecvTimeout(ctx, time.Millisecond*100)
+	is.True(cerrors.Is(err, context.DeadlineExceeded))
+
+	close(jobs)
+
+	err = (*csync.WaitGroup)(&wg).WaitTimeout(ctx, time.Second)
+	is.NoErr(err)
+}
+
+func TestParallelNode_Success(t *testing.T) {
 	is := is.New(t)
 	logger := log.Nop()
 	ctx := context.Background()
@@ -62,19 +422,20 @@ func TestParallel_Success(t *testing.T) {
 	const workerCount = 10
 
 	newPubSubNode := func(i int) PubSubNode {
-		n := &parallelTestNode{Name: fmt.Sprintf("test-node-%d", i)}
-		n.F = func(ctx context.Context) error {
-			defer close(n.pub)
-			for {
-				msg, ok, err := cchan.ChanOut[*Message](n.sub).Recv(ctx)
-				if !ok {
-					return err
+		return &parallelTestNode{
+			Name: fmt.Sprintf("test-node-%d", i),
+			F: func(ctx context.Context, sub <-chan *Message, pub chan<- *Message) error {
+				defer close(pub)
+				for {
+					msg, ok, err := cchan.ChanOut[*Message](sub).Recv(ctx)
+					if !ok {
+						return err
+					}
+					controlChan <- struct{}{}
+					pub <- msg
 				}
-				controlChan <- struct{}{}
-				n.pub <- msg
-			}
+			},
 		}
-		return n
 	}
 
 	pn := &ParallelNode{
@@ -131,7 +492,7 @@ func TestParallel_Success(t *testing.T) {
 	is.NoErr(err)
 }
 
-func TestParallel_ErrorAll(t *testing.T) {
+func TestParallelNode_ErrorAll(t *testing.T) {
 	is := is.New(t)
 	logger := log.Nop()
 	ctx := context.Background()
@@ -140,16 +501,18 @@ func TestParallel_ErrorAll(t *testing.T) {
 	const workerCount = 10
 
 	newPubSubNode := func(i int) PubSubNode {
-		n := &parallelTestNode{Name: fmt.Sprintf("test-node-%d", i)}
-		n.F = func(ctx context.Context) error {
-			defer close(n.pub)
-			msg, ok, err := cchan.ChanOut[*Message](n.sub).Recv(ctx)
-			is.True(ok)
-			is.NoErr(err)
-			controlChan <- struct{}{}
-			return msg.Nack(cerrors.New("test error"), n.ID())
+		name := fmt.Sprintf("test-node-%d", i)
+		return &parallelTestNode{
+			Name: name,
+			F: func(ctx context.Context, sub <-chan *Message, pub chan<- *Message) error {
+				defer close(pub)
+				msg, ok, err := cchan.ChanOut[*Message](sub).Recv(ctx)
+				is.NoErr(err)
+				is.True(ok)
+				controlChan <- struct{}{}
+				return msg.Nack(cerrors.New("test error"), name)
+			},
 		}
-		return n
 	}
 
 	pn := &ParallelNode{
@@ -190,7 +553,7 @@ func TestParallel_ErrorAll(t *testing.T) {
 	is.NoErr(err)
 }
 
-func TestParallel_ErrorSingle(t *testing.T) {
+func TestParallelNode_ErrorSingle(t *testing.T) {
 	is := is.New(t)
 	logger := log.Nop()
 	ctx := context.Background()
@@ -199,23 +562,25 @@ func TestParallel_ErrorSingle(t *testing.T) {
 	const workerCount = 10
 
 	newPubSubNode := func(i int) PubSubNode {
-		n := &parallelTestNode{Name: fmt.Sprintf("test-node-%d", i)}
-		n.F = func(ctx context.Context) error {
-			defer close(n.pub)
-			for {
-				msg, ok, err := cchan.ChanOut[*Message](n.sub).Recv(ctx)
-				if !ok {
-					return err
+		name := fmt.Sprintf("test-node-%d", i)
+		return &parallelTestNode{
+			Name: name,
+			F: func(ctx context.Context, sub <-chan *Message, pub chan<- *Message) error {
+				defer close(pub)
+				for {
+					msg, ok, err := cchan.ChanOut[*Message](sub).Recv(ctx)
+					if !ok {
+						return err
+					}
+					controlChan <- struct{}{}
+					if msg.Record.Key.(record.StructuredData)["id"].(int) == 1 {
+						// only message with id 1 fails
+						return msg.Nack(cerrors.New("test error"), name)
+					}
+					pub <- msg
 				}
-				controlChan <- struct{}{}
-				if msg.Record.Key.(record.StructuredData)["id"].(int) == 1 {
-					// only message with id 1 fails
-					return msg.Nack(cerrors.New("test error"), n.ID())
-				}
-				n.pub <- msg
-			}
+			},
 		}
-		return n
 	}
 
 	pn := &ParallelNode{
@@ -262,7 +627,7 @@ func TestParallel_ErrorSingle(t *testing.T) {
 	is.NoErr(err)
 }
 
-func TestParallel_Processor(t *testing.T) {
+func TestParallelNode_Processor(t *testing.T) {
 	is := is.New(t)
 	logger := log.Nop()
 	ctx := context.Background()
