@@ -257,7 +257,10 @@ func TestParallelNode_Coordinator(t *testing.T) {
 			send := func(ctx context.Context, _ log.CtxLogger, msg *Message) error {
 				return cchan.ChanIn[*Message](out).Send(ctx, msg)
 			}
-			coordinator := newParallelNodeCoordinator("test-node", jobs, errs, logger, send)
+			donePool := &sync.Pool{
+				New: func() any { return make(chan struct{}) },
+			}
+			coordinator := newParallelNodeCoordinator("test-node", jobs, errs, logger, send, donePool)
 
 			var wg sync.WaitGroup
 			wg.Add(1)
@@ -268,7 +271,7 @@ func TestParallelNode_Coordinator(t *testing.T) {
 
 			job := parallelNodeJob{
 				Message: &Message{},
-				Done:    make(chan struct{}),
+				Done:    donePool.Get().(chan struct{}),
 			}
 			jobs <- job
 
@@ -276,7 +279,7 @@ func TestParallelNode_Coordinator(t *testing.T) {
 
 			job.Done <- struct{}{}
 
-			_, ok, err := cchan.ChanOut[*Message](out).RecvTimeout(ctx, time.Millisecond*100)
+			_, ok, err := cchan.ChanOut[*Message](out).RecvTimeout(ctx, time.Millisecond*10)
 			if tc.wantMessage {
 				is.NoErr(err)
 				is.True(ok)
@@ -284,7 +287,7 @@ func TestParallelNode_Coordinator(t *testing.T) {
 				is.True(cerrors.Is(err, context.DeadlineExceeded))
 			}
 
-			gotErr, ok, err := cchan.ChanOut[error](errs).RecvTimeout(ctx, time.Millisecond*100)
+			gotErr, ok, err := cchan.ChanOut[error](errs).RecvTimeout(ctx, time.Millisecond*10)
 			if tc.wantError != nil {
 				is.NoErr(err)
 				is.True(ok)
@@ -296,12 +299,12 @@ func TestParallelNode_Coordinator(t *testing.T) {
 			// regardless of what happened above we should be able to send another job in
 			job = parallelNodeJob{
 				Message: &Message{},
-				Done:    make(chan struct{}),
+				Done:    donePool.Get().(chan struct{}),
 			}
 			jobs <- job
 			job.Done <- struct{}{}
 
-			_, ok, err = cchan.ChanOut[*Message](out).RecvTimeout(ctx, time.Millisecond*100)
+			_, ok, err = cchan.ChanOut[*Message](out).RecvTimeout(ctx, time.Millisecond*10)
 			// if we did not expect an error in the previous message then this one should go through
 			if tc.wantError == nil {
 				is.NoErr(err)
@@ -310,7 +313,7 @@ func TestParallelNode_Coordinator(t *testing.T) {
 				is.True(cerrors.Is(err, context.DeadlineExceeded))
 			}
 
-			gotErr, ok, err = cchan.ChanOut[error](errs).RecvTimeout(ctx, time.Millisecond*100)
+			gotErr, ok, err = cchan.ChanOut[error](errs).RecvTimeout(ctx, time.Millisecond*10)
 			// if we expected an error above we expect one for all following messages
 			if tc.wantError != nil {
 				is.NoErr(err)
@@ -327,90 +330,6 @@ func TestParallelNode_Coordinator(t *testing.T) {
 			is.NoErr(err)
 		})
 	}
-}
-
-func TestParallelNode_Coordinator_Ack(t *testing.T) {
-	is := is.New(t)
-	logger := log.Nop()
-	ctx := context.Background()
-
-	jobs := make(chan parallelNodeJob)
-	errs := make(chan error)
-	out := make(chan *Message)
-	send := func(ctx context.Context, _ log.CtxLogger, msg *Message) error {
-		return cchan.ChanIn[*Message](out).Send(ctx, msg)
-	}
-	coordinator := newParallelNodeCoordinator("test-node", jobs, errs, logger, send)
-
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		coordinator.Run(ctx)
-	}()
-
-	job := parallelNodeJob{
-		Message: &Message{},
-		Done:    make(chan struct{}),
-	}
-	jobs <- job
-
-	// ack message
-	err := job.Message.Ack()
-	is.NoErr(err)
-
-	job.Done <- struct{}{}
-
-	// acked messages should not be forwarded
-	_, _, err = cchan.ChanOut[*Message](out).RecvTimeout(ctx, time.Millisecond*100)
-	is.True(cerrors.Is(err, context.DeadlineExceeded))
-
-	close(jobs)
-
-	err = (*csync.WaitGroup)(&wg).WaitTimeout(ctx, time.Second)
-	is.NoErr(err)
-}
-
-func TestParallelNode_Coordinator_Nack(t *testing.T) {
-	is := is.New(t)
-	logger := log.Nop()
-	ctx := context.Background()
-
-	jobs := make(chan parallelNodeJob)
-	errs := make(chan error)
-	out := make(chan *Message)
-	send := func(ctx context.Context, _ log.CtxLogger, msg *Message) error {
-		return cchan.ChanIn[*Message](out).Send(ctx, msg)
-	}
-	coordinator := newParallelNodeCoordinator("test-node", jobs, errs, logger, send)
-
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		coordinator.Run(ctx)
-	}()
-
-	job := parallelNodeJob{
-		Message: &Message{},
-		Done:    make(chan struct{}),
-	}
-	jobs <- job
-
-	// ack message
-	err := job.Message.Ack()
-	is.NoErr(err)
-
-	job.Done <- struct{}{}
-
-	// acked messages should not be forwarded
-	_, _, err = cchan.ChanOut[*Message](out).RecvTimeout(ctx, time.Millisecond*100)
-	is.True(cerrors.Is(err, context.DeadlineExceeded))
-
-	close(jobs)
-
-	err = (*csync.WaitGroup)(&wg).WaitTimeout(ctx, time.Second)
-	is.NoErr(err)
 }
 
 func TestParallelNode_Success(t *testing.T) {

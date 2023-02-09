@@ -47,6 +47,12 @@ func (n *ParallelNode) Run(ctx context.Context) error {
 	}
 	defer cleanup()
 
+	// donePool is a pool of reusable channels for parallelNodeJob.Done, this
+	// allows us to keep allocations low
+	donePool := &sync.Pool{
+		New: func() any { return make(chan struct{}) },
+	}
+
 	// workerJobs is the channel where workers take jobs from, it is not
 	// buffered, so it blocks when all workers are busy
 	workerJobs := make(chan parallelNodeJob)
@@ -66,7 +72,7 @@ func (n *ParallelNode) Run(ctx context.Context) error {
 	coordinatorJobs := make(chan parallelNodeJob, n.Workers)
 	var coordinatorWg sync.WaitGroup
 	coordinatorWg.Add(1)
-	coordinator := newParallelNodeCoordinator(n.ID(), coordinatorJobs, errs, n.logger, n.base.Send)
+	coordinator := newParallelNodeCoordinator(n.ID(), coordinatorJobs, errs, n.logger, n.base.Send, donePool)
 	go func() {
 		defer coordinatorWg.Done()
 		coordinator.Run(ctx)
@@ -104,7 +110,7 @@ func (n *ParallelNode) Run(ctx context.Context) error {
 
 		job := parallelNodeJob{
 			Message: msg,
-			Done:    make(chan struct{}), // TODO use channel pool
+			Done:    donePool.Get().(chan struct{}),
 		}
 
 		// try sending the job to a worker
@@ -145,11 +151,12 @@ type parallelNodeJob struct {
 // parallelNodeCoordinator coordinates the messages that are processed by
 // workers and ensures their order.
 type parallelNodeCoordinator struct {
-	name   string
-	jobs   <-chan parallelNodeJob
-	errs   chan<- error
-	logger log.CtxLogger
-	send   func(ctx context.Context, logger log.CtxLogger, msg *Message) error
+	name     string
+	jobs     <-chan parallelNodeJob
+	errs     chan<- error
+	logger   log.CtxLogger
+	send     func(ctx context.Context, logger log.CtxLogger, msg *Message) error
+	donePool *sync.Pool
 }
 
 func newParallelNodeCoordinator(
@@ -158,14 +165,16 @@ func newParallelNodeCoordinator(
 	errs chan<- error,
 	logger log.CtxLogger,
 	send func(ctx context.Context, logger log.CtxLogger, msg *Message) error,
+	donePool *sync.Pool,
 ) *parallelNodeCoordinator {
 	logger.Logger = logger.With().Str(log.ParallelWorkerIDField, name+"-coordinator").Logger()
 	return &parallelNodeCoordinator{
-		name:   name,
-		jobs:   jobs,
-		errs:   errs,
-		logger: logger,
-		send:   send,
+		name:     name,
+		jobs:     jobs,
+		errs:     errs,
+		logger:   logger,
+		send:     send,
+		donePool: donePool,
 	}
 }
 
@@ -175,6 +184,8 @@ func (c *parallelNodeCoordinator) Run(ctx context.Context) {
 	for job := range c.jobs {
 		// wait for job to be done
 		<-job.Done
+		// put the channel back into the pool
+		c.donePool.Put(job.Done)
 
 		// check if the message was successfully processed or not
 		err := job.Message.StatusError()
