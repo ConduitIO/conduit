@@ -47,7 +47,6 @@ type jsRecord struct {
 
 // Processor is able to run processors defined in JavaScript.
 type Processor struct {
-	src      string
 	gojaPool sync.Pool
 	inInsp   *inspector.Inspector
 	outInsp  *inspector.Inspector
@@ -80,7 +79,7 @@ func New(src string, logger zerolog.Logger) (*Processor, error) {
 		// create a new runtime for the function so it's executed in a separate goja context
 		rt, _ := p.newJSRuntime(logger)
 		f, _ := p.newFunction(rt, src)
-		return gojaContext{
+		return &gojaContext{
 			runtime:  rt,
 			function: f,
 		}
@@ -167,7 +166,7 @@ func (p *Processor) jsContentStructured(runtime *goja.Runtime) func(goja.Constru
 func (p *Processor) Process(ctx context.Context, in record.Record) (record.Record, error) {
 	p.inInsp.Send(ctx, in)
 
-	g := p.gojaPool.Get().(gojaContext)
+	g := p.gojaPool.Get().(*gojaContext)
 	defer p.gojaPool.Put(g)
 
 	jsr := p.toJSRecord(g.runtime, in)
