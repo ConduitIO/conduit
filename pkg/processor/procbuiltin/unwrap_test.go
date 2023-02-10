@@ -264,6 +264,85 @@ func TestUnwrap_Process(t *testing.T) {
 			},
 			wantErr: false,
 		},
+		{
+			name: "mongoDB debezium record delete",
+			config: processor.Config{
+				Settings: map[string]string{"format": "debezium"},
+			},
+			record: record.Record{
+				Key: record.RawData{Raw: []byte(`{ "payload": { "id": "{ \"$oid\" : \"63210f1a3bc50864fde46a84\"}" }, "schema": { "fields": [ { "field": "id", "optional": false, "type": "string" } ], "name": "resource_7_735174.demo.user.Key", "optional": false, "type": "struct" } }`)},
+				Payload: record.Change{
+					Before: nil,
+					After: record.StructuredData{
+						"payload": map[string]interface{}{
+							"after":  nil,
+							"before": nil,
+							"op":     "d",
+							"source": map[string]interface{}{
+								"opencdc.version": "v1",
+							},
+							"transaction": nil,
+							"ts_ms":       float64(1674061777225),
+						},
+						"schema": map[string]interface{}{},
+					},
+				},
+			},
+			want: record.Record{
+				Operation: record.OperationDelete,
+				Metadata: map[string]string{
+					"opencdc.readAt":  "1674061777225000000",
+					"opencdc.version": "v1",
+				},
+				Payload: record.Change{
+					After:  nil,
+					Before: nil,
+				},
+				Key: record.StructuredData{"id": `{ "$oid" : "63210f1a3bc50864fde46a84"}`},
+			},
+			wantErr: false,
+		},
+		{
+			name: "mongoDB debezium record update",
+			config: processor.Config{
+				Settings: map[string]string{"format": "debezium"},
+			},
+			record: record.Record{
+				Key: record.RawData{Raw: []byte(`{ "payload": { "id": "{ \"$oid\" : \"63210f1a3bc50864fde46a84\"}" }, "schema": { "fields": [ { "field": "id", "optional": false, "type": "string" } ], "name": "resource_7_735174.demo.user.Key", "optional": false, "type": "struct" } }`)},
+				Payload: record.Change{
+					Before: nil,
+					After: record.StructuredData{
+						"payload": map[string]interface{}{
+							"after":  nil,
+							"before": nil,
+							"op":     "u",
+							"patch":  "{\"$v\": 2,\"diff\": {\"d\": {\"age\": false}}}",
+							"source": map[string]interface{}{
+								"opencdc.version": "v1",
+							},
+							"transaction": nil,
+							"ts_ms":       float64(1674061777225),
+						},
+						"schema": map[string]interface{}{},
+					},
+				},
+			},
+			want: record.Record{
+				Operation: record.OperationUpdate,
+				Metadata: map[string]string{
+					"opencdc.readAt":  "1674061777225000000",
+					"opencdc.version": "v1",
+				},
+				Payload: record.Change{
+					After: record.RawData{
+						Raw: []byte("{\"patch\":{\"$v\": 2,\"diff\": {\"d\": {\"age\": false}}}}"),
+					},
+					Before: nil,
+				},
+				Key: record.StructuredData{"id": `{ "$oid" : "63210f1a3bc50864fde46a84"}`},
+			},
+			wantErr: false,
+		},
 	}
 
 	for _, tt := range tests {

@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"time"
 
+	sdk "github.com/conduitio/conduit-connector-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/multierror"
 	"github.com/conduitio/conduit/pkg/processor"
@@ -201,6 +202,7 @@ const (
 
 	debeziumFieldBefore    = "before"
 	debeziumFieldAfter     = "after"
+	debeziumFieldPatch     = "patch"
 	debeziumFieldSource    = "source"
 	debeziumFieldOp        = "op"
 	debeziumFieldTimestamp = "ts_ms"
@@ -232,6 +234,19 @@ func (d *debeziumUnwrapper) Unwrap(rec record.Record) (record.Record, error) {
 	after, err := d.valueToData(debeziumRec[debeziumFieldAfter])
 	if err != nil {
 		return record.Record{}, cerrors.Errorf("failed to parse field %s: %w", debeziumFieldAfter, err)
+	}
+
+	// if there is a patch field, place it within the after field.
+	if patch, err := d.valueToData(debeziumRec[debeziumFieldPatch]); err == nil && patch != nil {
+		switch a := after.(type) {
+		case sdk.StructuredData:
+			a[debeziumFieldPatch] = patch
+			after = a
+		case nil:
+			// set the patch as raw data
+			p := fmt.Sprintf(`{"patch":%s}`, string(patch.Bytes()))
+			after = record.RawData{Raw: []byte(p)}
+		}
 	}
 
 	op, ok := debeziumRec[debeziumFieldOp].(string)
@@ -277,9 +292,6 @@ func (d *debeziumUnwrapper) valueToData(val any) (record.Data, error) {
 
 func (d *debeziumUnwrapper) validateRecord(data record.StructuredData) error {
 	var multiErr error
-	if _, ok := data[debeziumFieldBefore]; !ok {
-		multiErr = multierror.Append(multiErr, cerrors.Errorf("the %q field is missing from debezium payload", debeziumFieldBefore))
-	}
 	if _, ok := data[debeziumFieldAfter]; !ok {
 		multiErr = multierror.Append(multiErr, cerrors.Errorf("the %q field is missing from debezium payload", debeziumFieldAfter))
 	}
@@ -325,10 +337,11 @@ func (d *debeziumUnwrapper) unwrapMetadata(rec record.Record) (record.Metadata, 
 	}
 
 	for k, v := range mp {
-		if str, ok := v.(string); ok {
-			meta[k] = str
-		} else {
-			return nil, cerrors.Errorf("the value %q from the field %q is not a string", v, debeziumFieldSource)
+		switch value := v.(type) {
+		case string:
+			meta[k] = value
+		default:
+			meta[k] = fmt.Sprint(value)
 		}
 	}
 	return meta, nil
