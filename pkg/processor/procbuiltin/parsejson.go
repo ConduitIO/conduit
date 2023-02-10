@@ -62,7 +62,9 @@ func parseJSON(
 
 		case record.StructuredData:
 			// data is already structured
-
+		case nil:
+			// if the "after" is nil, treat after as an empty field
+			r = getSetter.Set(r, nil)
 		default:
 			return record.Record{}, cerrors.Errorf("%s: unexpected data type %T", processorType, data)
 		}
