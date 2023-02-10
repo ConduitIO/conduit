@@ -275,14 +275,16 @@ func TestUnwrap_Process(t *testing.T) {
 			},
 			record: record.Record{
 				Metadata: map[string]string{},
-				Key:      record.RawData{Raw: []byte(`{ "payload": { "id": "{ \"$oid\" : \"63210f1a3bc50864fde46a84\"}" }, "schema": { "fields": [ { "field": "id", "optional": false, "type": "string" } ], "name": "resource_7_735174.demo.user.Key", "optional": false, "type": "struct" } }`)},
+				Key:      record.RawData{Raw: []byte(`{ "payload": { "id": "{ \"$oid\" : \"63e69d7f07908def1d0a2504\"}" }, "schema": { "fields": [ { "field": "id", "optional": false, "type": "string" } ], "name": "resource_7_390584.demo.user.Key", "optional": false, "type": "struct" } }`)},
 				Payload: record.Change{
 					Before: nil,
 					After: record.StructuredData{
 						"payload": map[string]interface{}{
 							"after":  nil,
 							"before": nil,
+							"filter": "{\"_id\": {\"$oid\": \"63e69d7f07908def1d0a2504\"}}",
 							"op":     "d",
+							"patch":  nil,
 							"source": map[string]interface{}{
 								"opencdc.version": "v1",
 							},
@@ -298,12 +300,13 @@ func TestUnwrap_Process(t *testing.T) {
 				Metadata: map[string]string{
 					"opencdc.readAt":  "1674061777225000000",
 					"opencdc.version": "v1",
+					"filter":          "{\"_id\": {\"$oid\": \"63e69d7f07908def1d0a2504\"}}",
 				},
 				Payload: record.Change{
 					After:  nil,
 					Before: nil,
 				},
-				Key: record.StructuredData{"id": `{ "$oid" : "63210f1a3bc50864fde46a84"}`},
+				Key: record.StructuredData{"id": `{ "$oid" : "63e69d7f07908def1d0a2504"}`},
 			},
 			wantErr: false,
 		},
@@ -314,7 +317,7 @@ func TestUnwrap_Process(t *testing.T) {
 			},
 			record: record.Record{
 				Metadata: map[string]string{},
-				Key:      record.RawData{Raw: []byte(`{ "payload": { "id": "{ \"$oid\" : \"63210f1a3bc50864fde46a84\"}" }, "schema": { "fields": [ { "field": "id", "optional": false, "type": "string" } ], "name": "resource_7_735174.demo.user.Key", "optional": false, "type": "struct" } }`)},
+				Key:      record.RawData{Raw: []byte(`{ "payload": { "id": "{ \"$oid\" : \"63e69d7f07908def1d0a2504\"}" }, "schema": { "fields": [ { "field": "id", "optional": false, "type": "string" } ], "name": "resource_7_390584.demo.user.Key", "optional": false, "type": "struct" } }`)},
 				Payload: record.Change{
 					Before: nil,
 					After: record.StructuredData{
@@ -322,7 +325,8 @@ func TestUnwrap_Process(t *testing.T) {
 							"after":  nil,
 							"before": nil,
 							"op":     "u",
-							"patch":  `{"$v": 2, "diff": { "d": { "age": false } } }`,
+							"filter": "{\"_id\": {\"$oid\": \"63e69d7f07908def1d0a2504\"}}",
+							"patch":  "{\"$v\": 2,\"diff\": {\"u\": {\"age\": {\"$numberLong\": \"80\"},\"name\": \"Some Person80\"}}}",
 							"source": map[string]interface{}{
 								"opencdc.version": "v1",
 							},
@@ -338,14 +342,14 @@ func TestUnwrap_Process(t *testing.T) {
 				Metadata: map[string]string{
 					"opencdc.readAt":  "1674061777225000000",
 					"opencdc.version": "v1",
+					"filter":          "{\"_id\": {\"$oid\": \"63e69d7f07908def1d0a2504\"}}",
+					"patch":           "{\"$v\": 2,\"diff\": {\"u\": {\"age\": {\"$numberLong\": \"80\"},\"name\": \"Some Person80\"}}}",
 				},
 				Payload: record.Change{
-					After: record.RawData{
-						Raw: []byte(`{"$v": 2, "diff": { "d": { "age": false } } }`),
-					},
+					After:  nil,
 					Before: nil,
 				},
-				Key: record.StructuredData{"id": `{ "$oid" : "63210f1a3bc50864fde46a84"}`},
+				Key: record.StructuredData{"id": `{ "$oid" : "63e69d7f07908def1d0a2504"}`},
 			},
 			wantErr: false,
 		},

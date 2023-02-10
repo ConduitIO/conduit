@@ -202,6 +202,7 @@ const (
 	debeziumFieldBefore    = "before"
 	debeziumFieldAfter     = "after"
 	debeziumFieldPatch     = "patch"
+	debeziumFieldFilter    = "filter"
 	debeziumFieldSource    = "source"
 	debeziumFieldOp        = "op"
 	debeziumFieldTimestamp = "ts_ms"
@@ -233,14 +234,6 @@ func (d *debeziumUnwrapper) Unwrap(rec record.Record) (record.Record, error) {
 	after, err := d.valueToData(debeziumRec[debeziumFieldAfter])
 	if err != nil {
 		return record.Record{}, cerrors.Errorf("failed to parse field %s: %w", debeziumFieldAfter, err)
-	}
-
-	// if after is nil and there is a patch field, replace after with patch
-	if patch, ok := debeziumRec[debeziumFieldPatch]; ok && after == nil {
-		after, err = d.valueToData(patch)
-		if err != nil {
-			return record.Record{}, cerrors.Errorf("failed to parse field %s: %w", debeziumFieldPatch, err)
-		}
 	}
 
 	op, ok := debeziumRec[debeziumFieldOp].(string)
@@ -324,6 +317,17 @@ func (d *debeziumUnwrapper) unwrapMetadata(rec record.Record) (record.Metadata, 
 	for k, v := range source {
 		rec.Metadata[k] = fmt.Sprint(v)
 	}
+
+	// if there is a patch string, place in metadata
+	if patch, ok := debeziumRec[debeziumFieldPatch].(string); ok {
+		rec.Metadata[debeziumFieldPatch] = patch
+	}
+
+	// if there is a filter string, place in metadata
+	if filter, ok := debeziumRec[debeziumFieldFilter].(string); ok {
+		rec.Metadata[debeziumFieldFilter] = filter
+	}
+
 	return rec.Metadata, nil
 }
 
