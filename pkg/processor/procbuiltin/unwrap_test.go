@@ -340,8 +340,8 @@ func TestUnwrap_Process(t *testing.T) {
 					"opencdc.version": "v1",
 				},
 				Payload: record.Change{
-					After: record.StructuredData{
-						"patch": `{"$v": 2, "diff": { "d": { "age": false } } }`,
+					After: record.RawData{
+						Raw: []byte(`{"$v": 2, "diff": { "d": { "age": false } } }`),
 					},
 					Before: nil,
 				},

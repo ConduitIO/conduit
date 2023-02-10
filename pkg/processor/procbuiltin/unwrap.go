@@ -235,13 +235,11 @@ func (d *debeziumUnwrapper) Unwrap(rec record.Record) (record.Record, error) {
 		return record.Record{}, cerrors.Errorf("failed to parse field %s: %w", debeziumFieldAfter, err)
 	}
 
-	// if there is a patch field, place it within the after field.
-	if patch, ok := debeziumRec[debeziumFieldPatch]; ok {
-		if after == nil {
-			after = record.StructuredData{}
-		}
-		if sd, ok := after.(record.StructuredData); ok && sd[debeziumFieldPatch] == nil {
-			sd[debeziumFieldPatch] = patch
+	// if after is nil and there is a patch field, replace after with patch
+	if patch, ok := debeziumRec[debeziumFieldPatch]; ok && after == nil {
+		after, err = d.valueToData(patch)
+		if err != nil {
+			return record.Record{}, cerrors.Errorf("failed to parse field %s: %w", debeziumFieldPatch, err)
 		}
 	}
 
