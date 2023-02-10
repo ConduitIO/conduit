@@ -100,6 +100,7 @@ func TestUnwrap_Process(t *testing.T) {
 				Settings: map[string]string{"format": "debezium"},
 			},
 			record: record.Record{
+				Metadata: map[string]string{},
 				Key: record.RawData{
 					Raw: []byte(`{"payload":"id"}`),
 				},
@@ -184,6 +185,7 @@ func TestUnwrap_Process(t *testing.T) {
 				Settings: map[string]string{"format": "kafka-connect"},
 			},
 			record: record.Record{
+				Metadata: map[string]string{},
 				Payload: record.Change{
 					Before: record.StructuredData(nil),
 					After: record.StructuredData{
@@ -216,6 +218,7 @@ func TestUnwrap_Process(t *testing.T) {
 				Settings: map[string]string{"format": "kafka-connect"},
 			},
 			record: record.Record{
+				Metadata: map[string]string{},
 				Payload: record.Change{
 					Before: nil,
 					After: record.RawData{
@@ -232,7 +235,8 @@ func TestUnwrap_Process(t *testing.T) {
 				Settings: map[string]string{"format": "debezium"},
 			},
 			record: record.Record{
-				Key: record.RawData{Raw: []byte(`{ "payload": { "id": "{ \"$oid\" : \"63210f1a3bc50864fde46a84\"}" }, "schema": { "fields": [ { "field": "id", "optional": false, "type": "string" } ], "name": "resource_7_735174.demo.user.Key", "optional": false, "type": "struct" } }`)},
+				Metadata: map[string]string{},
+				Key:      record.RawData{Raw: []byte(`{ "payload": { "id": "{ \"$oid\" : \"63210f1a3bc50864fde46a84\"}" }, "schema": { "fields": [ { "field": "id", "optional": false, "type": "string" } ], "name": "resource_7_735174.demo.user.Key", "optional": false, "type": "struct" } }`)},
 				Payload: record.Change{
 					Before: nil,
 					After: record.StructuredData{
@@ -270,7 +274,8 @@ func TestUnwrap_Process(t *testing.T) {
 				Settings: map[string]string{"format": "debezium"},
 			},
 			record: record.Record{
-				Key: record.RawData{Raw: []byte(`{ "payload": { "id": "{ \"$oid\" : \"63210f1a3bc50864fde46a84\"}" }, "schema": { "fields": [ { "field": "id", "optional": false, "type": "string" } ], "name": "resource_7_735174.demo.user.Key", "optional": false, "type": "struct" } }`)},
+				Metadata: map[string]string{},
+				Key:      record.RawData{Raw: []byte(`{ "payload": { "id": "{ \"$oid\" : \"63210f1a3bc50864fde46a84\"}" }, "schema": { "fields": [ { "field": "id", "optional": false, "type": "string" } ], "name": "resource_7_735174.demo.user.Key", "optional": false, "type": "struct" } }`)},
 				Payload: record.Change{
 					Before: nil,
 					After: record.StructuredData{
@@ -308,7 +313,8 @@ func TestUnwrap_Process(t *testing.T) {
 				Settings: map[string]string{"format": "debezium"},
 			},
 			record: record.Record{
-				Key: record.RawData{Raw: []byte(`{ "payload": { "id": "{ \"$oid\" : \"63210f1a3bc50864fde46a84\"}" }, "schema": { "fields": [ { "field": "id", "optional": false, "type": "string" } ], "name": "resource_7_735174.demo.user.Key", "optional": false, "type": "struct" } }`)},
+				Metadata: map[string]string{},
+				Key:      record.RawData{Raw: []byte(`{ "payload": { "id": "{ \"$oid\" : \"63210f1a3bc50864fde46a84\"}" }, "schema": { "fields": [ { "field": "id", "optional": false, "type": "string" } ], "name": "resource_7_735174.demo.user.Key", "optional": false, "type": "struct" } }`)},
 				Payload: record.Change{
 					Before: nil,
 					After: record.StructuredData{
@@ -316,7 +322,7 @@ func TestUnwrap_Process(t *testing.T) {
 							"after":  nil,
 							"before": nil,
 							"op":     "u",
-							"patch":  "{\"$v\": 2,\"diff\": {\"d\": {\"age\": false}}}",
+							"patch":  `{"$v": 2, "diff": { "d": { "age": false } } }`,
 							"source": map[string]interface{}{
 								"opencdc.version": "v1",
 							},
@@ -334,8 +340,8 @@ func TestUnwrap_Process(t *testing.T) {
 					"opencdc.version": "v1",
 				},
 				Payload: record.Change{
-					After: record.RawData{
-						Raw: []byte("{\"patch\":{\"$v\": 2,\"diff\": {\"d\": {\"age\": false}}}}"),
+					After: record.StructuredData{
+						"patch": `{"$v": 2, "diff": { "d": { "age": false } } }`,
 					},
 					Before: nil,
 				},

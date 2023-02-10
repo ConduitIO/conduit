@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"time"
 
-	sdk "github.com/conduitio/conduit-connector-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/multierror"
 	"github.com/conduitio/conduit/pkg/processor"
@@ -237,15 +236,12 @@ func (d *debeziumUnwrapper) Unwrap(rec record.Record) (record.Record, error) {
 	}
 
 	// if there is a patch field, place it within the after field.
-	if patch, err := d.valueToData(debeziumRec[debeziumFieldPatch]); err == nil && patch != nil {
-		switch a := after.(type) {
-		case sdk.StructuredData:
-			a[debeziumFieldPatch] = patch
-			after = a
-		case nil:
-			// set the patch as raw data
-			p := fmt.Sprintf(`{"patch":%s}`, string(patch.Bytes()))
-			after = record.RawData{Raw: []byte(p)}
+	if patch, ok := debeziumRec[debeziumFieldPatch]; ok {
+		if after == nil {
+			after = record.StructuredData{}
+		}
+		if sd, ok := after.(record.StructuredData); ok && sd[debeziumFieldPatch] == nil {
+			sd[debeziumFieldPatch] = patch
 		}
 	}
 
@@ -306,45 +302,31 @@ func (d *debeziumUnwrapper) validateRecord(data record.StructuredData) error {
 }
 
 func (d *debeziumUnwrapper) unwrapMetadata(rec record.Record) (record.Metadata, error) {
-	meta := record.Metadata{}
-	// add original record's metadata to meta
-	for k, v := range rec.Metadata {
-		meta[k] = v
+	debeziumRec := rec.Payload.After.(record.StructuredData)["payload"].(map[string]any)
+
+	var source map[string]any
+	if sourceRaw := debeziumRec[debeziumFieldSource]; sourceRaw != nil {
+		sourceMap, ok := sourceRaw.(map[string]any)
+		if !ok {
+			return nil, cerrors.Errorf("%q is not formatted as a map", debeziumFieldSource)
+		}
+		source = sourceMap
 	}
 
-	structPayload := rec.Payload.After.(record.StructuredData)["payload"].(map[string]interface{})
-
 	// set metadata readAt time
-	var t time.Time
-	tsMs := structPayload[debeziumFieldTimestamp]
-	if tsMs != nil {
+	if tsMs := debeziumRec[debeziumFieldTimestamp]; tsMs != nil {
 		floatTime, ok := tsMs.(float64)
 		if !ok {
 			return nil, cerrors.Errorf("%s is not a float", debeziumFieldTimestamp)
 		}
-		t = time.Unix(0, int64(floatTime)*int64(time.Millisecond))
-	}
-	meta.SetReadAt(t)
-
-	// return current metadata if "source" field doesn't exist
-	if structPayload[debeziumFieldSource] == nil {
-		return meta, nil
+		readAt := time.UnixMilli(int64(floatTime))
+		rec.Metadata.SetReadAt(readAt)
 	}
 
-	mp, ok := structPayload[debeziumFieldSource].(map[string]interface{})
-	if !ok {
-		return nil, cerrors.Errorf("%q is not formatted as a map", debeziumFieldSource)
+	for k, v := range source {
+		rec.Metadata[k] = fmt.Sprint(v)
 	}
-
-	for k, v := range mp {
-		switch value := v.(type) {
-		case string:
-			meta[k] = value
-		default:
-			meta[k] = fmt.Sprint(value)
-		}
-	}
-	return meta, nil
+	return rec.Metadata, nil
 }
 
 // convertOperation converts debezium operation to openCDC operation
