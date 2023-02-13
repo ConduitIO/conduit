@@ -115,7 +115,7 @@ func (k *kafkaConnectUnwrapper) Unwrap(rec record.Record) (record.Record, error)
 	}
 
 	// get payload
-	structPayload, ok = structPayload["payload"].(map[string]interface{})
+	structPayload, ok = structPayload["payload"].(map[string]any)
 	if !ok {
 		return record.Record{}, cerrors.Errorf("payload doesn't contain a record")
 	}
@@ -201,8 +201,6 @@ const (
 
 	debeziumFieldBefore    = "before"
 	debeziumFieldAfter     = "after"
-	debeziumFieldPatch     = "patch"
-	debeziumFieldFilter    = "filter"
 	debeziumFieldSource    = "source"
 	debeziumFieldOp        = "op"
 	debeziumFieldTimestamp = "ts_ms"
@@ -215,7 +213,7 @@ func (d *debeziumUnwrapper) Unwrap(rec record.Record) (record.Record, error) {
 		return record.Record{}, cerrors.Errorf("record payload data must be structured data")
 	}
 	// get payload
-	debeziumRec, ok = debeziumRec["payload"].(map[string]interface{}) // the payload has the debezium record
+	debeziumRec, ok = debeziumRec["payload"].(map[string]any) // the payload has the debezium record
 	if !ok {
 		return record.Record{}, cerrors.Errorf("payload doesn't contain a record")
 	}
@@ -295,40 +293,58 @@ func (d *debeziumUnwrapper) validateRecord(data record.StructuredData) error {
 func (d *debeziumUnwrapper) unwrapMetadata(rec record.Record) (record.Metadata, error) {
 	debeziumRec := rec.Payload.After.(record.StructuredData)["payload"].(map[string]any)
 
-	var source map[string]any
-	if sourceRaw := debeziumRec[debeziumFieldSource]; sourceRaw != nil {
-		sourceMap, ok := sourceRaw.(map[string]any)
-		if !ok {
-			return nil, cerrors.Errorf("%q is not formatted as a map", debeziumFieldSource)
+	var source map[string]string
+	for field, val := range debeziumRec {
+		switch field {
+		case debeziumFieldAfter, debeziumFieldBefore, debeziumFieldOp:
+			continue // ignore
+		case debeziumFieldTimestamp:
+			tsMs, ok := val.(float64)
+			if !ok {
+				return nil, cerrors.Errorf("%s is not a float", debeziumFieldTimestamp)
+			}
+			readAt := time.UnixMilli(int64(tsMs))
+			rec.Metadata.SetReadAt(readAt)
+		case debeziumFieldSource:
+			// don't add prefix for source fields
+			source = d.flatten("", val)
+		default:
+			flattened := d.flatten("debezium."+field, val)
+			for k, v := range flattened {
+				rec.Metadata[k] = v
+			}
 		}
-		source = sourceMap
 	}
 
-	// set metadata readAt time
-	if tsMs := debeziumRec[debeziumFieldTimestamp]; tsMs != nil {
-		floatTime, ok := tsMs.(float64)
-		if !ok {
-			return nil, cerrors.Errorf("%s is not a float", debeziumFieldTimestamp)
-		}
-		readAt := time.UnixMilli(int64(floatTime))
-		rec.Metadata.SetReadAt(readAt)
-	}
-
+	// source is added at the end to overwrite any other fields
 	for k, v := range source {
-		rec.Metadata[k] = fmt.Sprint(v)
-	}
-
-	// if there is a patch string, place in metadata
-	if patch, ok := debeziumRec[debeziumFieldPatch].(string); ok {
-		rec.Metadata[debeziumFieldPatch] = patch
-	}
-
-	// if there is a filter string, place in metadata
-	if filter, ok := debeziumRec[debeziumFieldFilter].(string); ok {
-		rec.Metadata[debeziumFieldFilter] = filter
+		rec.Metadata[k] = v
 	}
 
 	return rec.Metadata, nil
+}
+
+func (d *debeziumUnwrapper) flatten(key string, val any) map[string]string {
+	var prefix string
+	if len(key) > 0 {
+		prefix = key + "."
+	}
+	switch val := val.(type) {
+	case map[string]any:
+		out := make(map[string]string)
+		for k1, v1 := range val {
+			for k2, v2 := range d.flatten(prefix+k1, v1) {
+				out[k2] = v2
+			}
+		}
+		return out
+	case nil:
+		return nil
+	case string:
+		return map[string]string{key: val}
+	default:
+		return map[string]string{key: fmt.Sprint(val)}
+	}
 }
 
 // convertOperation converts debezium operation to openCDC operation
