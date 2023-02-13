@@ -39,7 +39,7 @@ require (
 	go.buf.build/protocolbuffers/go/grpc-ecosystem/grpc-gateway v1.3.50
 	go.uber.org/goleak v1.2.0
 	golang.org/x/exp v0.0.0-20230131160201-f062dba9d201
-	golang.org/x/tools v0.5.0
+	golang.org/x/tools v0.6.0
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2
 	google.golang.org/genproto v0.0.0-20230127162408-596548ed4efa
 	google.golang.org/grpc v1.53.0
@@ -163,7 +163,7 @@ require (
 	go.uber.org/multierr v1.9.0 // indirect
 	go.uber.org/zap v1.24.0 // indirect
 	golang.org/x/crypto v0.6.0 // indirect
-	golang.org/x/mod v0.7.0 // indirect
+	golang.org/x/mod v0.8.0 // indirect
 	golang.org/x/net v0.6.0 // indirect
 	golang.org/x/sync v0.1.0 // indirect
 	golang.org/x/sys v0.5.0 // indirect
