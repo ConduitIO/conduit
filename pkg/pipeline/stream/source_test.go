@@ -16,12 +16,12 @@ package stream
 
 import (
 	"context"
-	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"strconv"
 	"testing"
 	"time"
 
 	"github.com/conduitio/conduit/pkg/foundation/cchan"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/noop"
 	"github.com/conduitio/conduit/pkg/pipeline/stream/mock"
 	"github.com/conduitio/conduit/pkg/plugin"
