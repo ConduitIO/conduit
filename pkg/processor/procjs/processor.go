@@ -170,6 +170,11 @@ func (p *Processor) InspectOut(ctx context.Context) *inspector.Session {
 	return p.outInsp.NewSession(ctx)
 }
 
+func (p *Processor) Close() {
+	p.inInsp.Close()
+	p.inInsp.Close()
+}
+
 func (p *Processor) toJSRecord(r record.Record) goja.Value {
 	convertData := func(d record.Data) interface{} {
 		switch v := d.(type) {

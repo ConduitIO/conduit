@@ -51,6 +51,8 @@ type Interface interface {
 	InspectIn(ctx context.Context) *inspector.Session
 
 	InspectOut(ctx context.Context) *inspector.Session
+
+	Close()
 }
 
 // Instance represents a processor instance.

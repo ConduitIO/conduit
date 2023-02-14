@@ -134,6 +134,12 @@ func (i *Inspector) NewSession(ctx context.Context) *Session {
 	return s
 }
 
+func (i Inspector) Close() {
+	for _, s := range i.sessions {
+		s.close()
+	}
+}
+
 // remove a session with given ID from this Inspector.
 func (i *Inspector) remove(id string) {
 	i.lock.Lock()

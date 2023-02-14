@@ -16,7 +16,6 @@ package orchestrator
 
 import (
 	"context"
-
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/rollback"
 	"github.com/conduitio/conduit/pkg/inspector"
@@ -207,6 +206,7 @@ func (p *ProcessorOrchestrator) Delete(ctx context.Context, id string) error {
 		return pipeline.ErrPipelineRunning
 	}
 
+	proc.Processor.Close()
 	err = p.processors.Delete(ctx, id)
 	if err != nil {
 		return err
