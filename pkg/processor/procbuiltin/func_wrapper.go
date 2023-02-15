@@ -65,5 +65,5 @@ func (f FuncWrapper) InspectOut(ctx context.Context) *inspector.Session {
 
 func (f FuncWrapper) Close() {
 	f.inInsp.Close()
-	f.inInsp.Close()
+	f.outInsp.Close()
 }

@@ -34,11 +34,15 @@ type Session struct {
 	id      string
 	logger  log.CtxLogger
 	onClose func()
+	once    sync.Once
 }
 
 func (s *Session) close() {
-	s.onClose()
-	close(s.C)
+	// todo comment
+	s.once.Do(func() {
+		s.onClose()
+		close(s.C)
+	})
 }
 
 // send a record to the session's channel.
@@ -114,6 +118,7 @@ func (i *Inspector) NewSession(ctx context.Context) *Session {
 		onClose: func() {
 			i.remove(id)
 		},
+		once: sync.Once{},
 	}
 	go func() {
 		<-ctx.Done()
