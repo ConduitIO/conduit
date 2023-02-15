@@ -31,6 +31,8 @@ import (
 
 const (
 	ControlMessageStopSourceNode ControlMessageType = "stop-source-node"
+
+	stopHint = "If the pipeline is stuck try waiting a few minutes, existing records could need a while to be flushed. Otherwise try force stopping the pipeline."
 )
 
 // SourceNode wraps a Source connector and implements the Pub node interface
@@ -39,13 +41,19 @@ type SourceNode struct {
 	Source        Source
 	PipelineTimer metrics.Timer
 
-	stopReason error
-	base       pubNodeBase
-	logger     log.CtxLogger
+	base   pubNodeBase
+	logger log.CtxLogger
 
 	state              csync.ValueWatcher[nodeState]
-	stopOnce           sync.Once
 	connectorCtxCancel context.CancelFunc
+
+	stop struct {
+		lock            sync.Mutex
+		position        record.Position
+		reason          error
+		positionFetched bool
+		successful      bool
+	}
 }
 
 type Source interface {
@@ -130,14 +138,14 @@ func (n *SourceNode) Run(ctx context.Context) (err error) {
 
 		if msg.ControlMessageType() == ControlMessageStopSourceNode {
 			// this is a control message telling us to stop
-			n.logger.Err(ctx, n.stopReason).
+			n.logger.Err(ctx, n.stop.reason).
 				Str(log.RecordPositionField, msg.Record.Position.String()).
 				Msg("stopping source node")
 			stopPosition = msg.Record.Position
 
 			if bytes.Equal(stopPosition, lastPosition) {
 				// we already encountered the record with the last position
-				return n.stopReason
+				return n.stop.reason
 			}
 			continue
 		}
@@ -154,7 +162,7 @@ func (n *SourceNode) Run(ctx context.Context) (err error) {
 
 		if bytes.Equal(stopPosition, lastPosition) {
 			// it's the last record that we are supposed to process, stop here
-			return n.stopReason
+			return n.stop.reason
 		}
 	}
 }
@@ -175,26 +183,6 @@ func (n *SourceNode) registerMetricStatusHandler(msg *Message) {
 }
 
 func (n *SourceNode) Stop(ctx context.Context, reason error) error {
-	var err error
-	var stopExecuted bool
-	n.stopOnce.Do(func() {
-		// only execute stop once, more calls won't make a difference
-		err = n.stop(ctx, reason)
-		stopExecuted = true
-	})
-	if err != nil {
-		// an error happened, allow stop to be executed again
-		n.stopOnce = sync.Once{}
-	}
-	if !stopExecuted {
-		n.logger.Warn(ctx).Msg("source connector stop already triggered, " +
-			"ignoring second stop request (if the pipeline is stuck, please " +
-			"report the issue to the Conduit team)")
-	}
-	return err
-}
-
-func (n *SourceNode) stop(ctx context.Context, reason error) error {
 	state, err := n.state.Watch(ctx, csync.WatchValues(nodeStateRunning, nodeStateStopped))
 	if err != nil {
 		return err
@@ -203,19 +191,47 @@ func (n *SourceNode) stop(ctx context.Context, reason error) error {
 		return cerrors.New("source node is not running")
 	}
 
-	n.stopReason = reason
+	n.stop.lock.Lock()
+	defer n.stop.lock.Unlock()
 
-	n.logger.Err(ctx, n.stopReason).Msg("stopping source connector")
-	stopPosition, err := n.Source.Stop(ctx)
-	if err != nil {
-		return cerrors.Errorf("failed to stop source connector: %w", err)
+	if n.stop.successful {
+		if n.stop.reason != nil {
+			return cerrors.Errorf("stop already triggered (%s), caused by: %w", stopHint, n.stop.reason)
+		}
+		return cerrors.Errorf("stop already triggered (%s)", stopHint)
 	}
+
+	err = n.stopGraceful(ctx, reason)
+	if err != nil {
+		return err
+	}
+	n.stop.successful = true
+
+	return nil
+}
+
+func (n *SourceNode) stopGraceful(ctx context.Context, reason error) (err error) {
+	if !n.stop.positionFetched {
+		n.logger.Err(ctx, reason).Msg("stopping source connector")
+		stopPosition, err := n.Source.Stop(ctx)
+		if err != nil {
+			return cerrors.Errorf("failed to stop source connector: %w", err)
+		}
+
+		n.stop.positionFetched = true
+		n.stop.reason = reason
+		n.stop.position = stopPosition
+	}
+
+	n.logger.Trace(ctx).
+		Str(log.RecordPositionField, n.stop.position.String()).
+		Msg("injecting stop source node control message")
 
 	// InjectControlMessage will inject a message into the stream of messages
 	// being processed by SourceNode to let it know when it should stop
 	// processing new messages.
 	return n.base.InjectControlMessage(ctx, ControlMessageStopSourceNode, record.Record{
-		Position: stopPosition,
+		Position: n.stop.position,
 	})
 }
 
