@@ -159,6 +159,7 @@ func newLogger(level string, format string) log.CtxLogger {
 		ctxutil.MessageIDLogCtxHook{},
 		ctxutil.RequestIDLogCtxHook{},
 	)
+	zerolog.DefaultContextLogger = &logger.Logger
 	return logger
 }
 
@@ -326,8 +327,17 @@ func (r *Runtime) serveGRPCAPI(ctx context.Context, t *tomb.Tomb) (net.Addr, err
 	// https://github.com/grpc/grpc/blob/master/doc/server-reflection.md
 	reflection.Register(grpcServer)
 
-	healthService := api.NewHealthChecker()
-	grpc_health_v1.RegisterHealthServer(grpcServer, healthService)
+	// Names taken from api.proto
+	healthServer := api.NewHealthServer(
+		map[string]api.Checker{
+			"PipelineService":  r.pipelineService,
+			"ConnectorService": r.connectorService,
+			"ProcessorService": r.processorService,
+			"PluginService":    r.pluginService,
+		},
+		r.logger,
+	)
+	grpc_health_v1.RegisterHealthServer(grpcServer, healthServer)
 
 	// serve grpc server
 	return r.serveGRPC(ctx, t, grpcServer)

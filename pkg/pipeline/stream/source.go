@@ -177,11 +177,11 @@ func (n *SourceNode) Stop(ctx context.Context, reason error) error {
 		// only execute stop once, more calls won't make a difference
 		err = n.stop(ctx, reason)
 		stopExecuted = true
-		if err != nil {
-			// an error happened, allow stop to be executed again
-			n.stopOnce = sync.Once{}
-		}
 	})
+	if err != nil {
+		// an error happened, allow stop to be executed again
+		n.stopOnce = sync.Once{}
+	}
 	if !stopExecuted {
 		n.logger.Warn(ctx).Msg("source connector stop already triggered, " +
 			"ignoring second stop request (if the pipeline is stuck, please " +

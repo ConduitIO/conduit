@@ -63,6 +63,10 @@ func (s *Service) Init(ctx context.Context) error {
 	return nil
 }
 
+func (s *Service) Check(ctx context.Context) error {
+	return s.store.db.Ping(ctx)
+}
+
 // List returns a map of Instances keyed by their ID. Instances do not
 // necessarily have a running plugin associated with them.
 func (s *Service) List(ctx context.Context) map[string]*Instance {

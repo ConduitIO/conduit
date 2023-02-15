@@ -60,8 +60,12 @@ func (s *Service) Init(ctx context.Context) error {
 	return nil
 }
 
+func (s *Service) Check(ctx context.Context) error {
+	return s.store.db.Ping(ctx)
+}
+
 // List returns all processors in the Service.
-func (s *Service) List(ctx context.Context) map[string]*Instance {
+func (s *Service) List(_ context.Context) map[string]*Instance {
 	// make a copy of the map
 	tmp := make(map[string]*Instance, len(s.instances))
 	for k, v := range s.instances {

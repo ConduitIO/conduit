@@ -95,7 +95,7 @@ of available options, run `./conduit --help`.
 
 Requirements:
 
-* [Go](https://golang.org/) (1.18 or later)
+* [Go](https://golang.org/) (1.20 or later)
 * [Node.js](https://nodejs.org/) (16.x)
 * [Yarn](https://yarnpkg.com/) (latest 1.x)
 * [Ember CLI](https://ember-cli.com/)

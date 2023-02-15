@@ -21,11 +21,13 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/database/inmemory"
+	dbmock "github.com/conduitio/conduit/pkg/foundation/database/mock"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/processor/mock"
 	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
+	"github.com/matryer/is"
 )
 
 func TestService_Init_Success(t *testing.T) {
@@ -58,6 +60,38 @@ func TestService_Init_Success(t *testing.T) {
 	}
 	assert.Equal(t, want, got)
 	assert.Equal(t, len(got), 1)
+}
+
+func TestService_Check(t *testing.T) {
+	ctx := context.Background()
+	logger := log.Nop()
+	db := dbmock.NewDB(gomock.NewController(t))
+
+	testCases := []struct {
+		name    string
+		wantErr error
+	}{
+		{
+			name:    "db ok",
+			wantErr: nil,
+		},
+		{
+			name:    "db not ok",
+			wantErr: cerrors.New("db is under the weather today"),
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			is := is.New(t)
+			db.EXPECT().Ping(gomock.Any()).Return(tc.wantErr)
+			service := processor.NewService(logger, db, processor.NewBuilderRegistry())
+
+			gotErr := service.Check(ctx)
+			is.Equal(tc.wantErr, gotErr)
+		})
+	}
 }
 
 func TestService_Create_Success(t *testing.T) {

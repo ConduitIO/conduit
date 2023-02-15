@@ -55,7 +55,7 @@ func (wg *WaitGroup) Wait(ctx context.Context) error {
 		(*sync.WaitGroup)(wg).Wait()
 		close(done)
 	}()
-	_, _, err := cchan.Chan[struct{}](done).Recv(ctx)
+	_, _, err := cchan.ChanOut[struct{}](done).Recv(ctx)
 	return err
 }
 
