@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//go:generate mockgen -destination=mock/database.go -package=mock -mock_names=DB=DB . DB
+
 package database
 
 import (
@@ -32,6 +34,10 @@ type DB interface {
 	// Close should flush any cached writes, release all resources and close the
 	// store. After Close is called other methods should return an error.
 	Close() error
+
+	// Ping pings the database and returns an error
+	// if a connection to it is not possible.
+	Ping(context.Context) error
 
 	Set(ctx context.Context, key string, value []byte) error
 	Get(ctx context.Context, key string) ([]byte, error)

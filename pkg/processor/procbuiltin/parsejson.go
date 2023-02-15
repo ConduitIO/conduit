@@ -62,7 +62,8 @@ func parseJSON(
 
 		case record.StructuredData:
 			// data is already structured
-
+		case nil:
+			// if the field is nil leave it as it is
 		default:
 			return record.Record{}, cerrors.Errorf("%s: unexpected data type %T", processorType, data)
 		}
