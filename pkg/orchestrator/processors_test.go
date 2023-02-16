@@ -25,7 +25,6 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	"github.com/conduitio/conduit/pkg/processor"
-	"github.com/conduitio/conduit/pkg/processor/mock"
 	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
 	"github.com/matryer/is"
@@ -554,7 +553,6 @@ func TestProcessorOrchestrator_DeleteOnPipeline_Success(t *testing.T) {
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
-	proc := mock.NewProcessor(gomock.NewController(t))
 
 	pl := &pipeline.Instance{
 		ID:     uuid.NewString(),
@@ -570,7 +568,6 @@ func TestProcessorOrchestrator_DeleteOnPipeline_Success(t *testing.T) {
 		Config: processor.Config{
 			Settings: map[string]string{"foo": "bar"},
 		},
-		Processor: proc,
 	}
 
 	procsMock.EXPECT().
@@ -585,8 +582,6 @@ func TestProcessorOrchestrator_DeleteOnPipeline_Success(t *testing.T) {
 	plsMock.EXPECT().
 		RemoveProcessor(gomock.AssignableToTypeOf(ctxType), pl.ID, want.ID).
 		Return(pl, nil)
-	proc.EXPECT().
-		Close()
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
 	err := orc.Processors.Delete(ctx, want.ID)
@@ -663,7 +658,6 @@ func TestProcessorOrchestrator_DeleteOnPipeline_Fail(t *testing.T) {
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
-	proc := mock.NewProcessor(gomock.NewController(t))
 
 	pl := &pipeline.Instance{
 		ID:     uuid.NewString(),
@@ -679,7 +673,6 @@ func TestProcessorOrchestrator_DeleteOnPipeline_Fail(t *testing.T) {
 		Config: processor.Config{
 			Settings: map[string]string{"foo": "bar"},
 		},
-		Processor: proc,
 	}
 
 	wantErr := cerrors.New("couldn't delete the procesor")
@@ -692,8 +685,6 @@ func TestProcessorOrchestrator_DeleteOnPipeline_Fail(t *testing.T) {
 	procsMock.EXPECT().
 		Delete(gomock.AssignableToTypeOf(ctxType), want.ID).
 		Return(wantErr)
-	proc.EXPECT().
-		Close()
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
 	err := orc.Processors.Delete(ctx, want.ID)
@@ -705,7 +696,6 @@ func TestProcessorOrchestrator_DeleteOnPipeline_RemoveProcessorFail(t *testing.T
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
-	proc := mock.NewProcessor(gomock.NewController(t))
 
 	pl := &pipeline.Instance{
 		ID:     uuid.NewString(),
@@ -721,7 +711,6 @@ func TestProcessorOrchestrator_DeleteOnPipeline_RemoveProcessorFail(t *testing.T
 		Config: processor.Config{
 			Settings: map[string]string{"foo": "bar"},
 		},
-		Processor: proc,
 	}
 
 	wantErr := cerrors.New("couldn't remove the processor")
@@ -731,8 +720,6 @@ func TestProcessorOrchestrator_DeleteOnPipeline_RemoveProcessorFail(t *testing.T
 	plsMock.EXPECT().
 		Get(gomock.AssignableToTypeOf(ctxType), pl.ID).
 		Return(pl, nil)
-	proc.EXPECT().
-		Close()
 	procsMock.EXPECT().
 		Delete(gomock.AssignableToTypeOf(ctxType), want.ID).
 		Return(nil)
@@ -760,7 +747,6 @@ func TestProcessorOrchestrator_DeleteOnConnector_Fail(t *testing.T) {
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
-	proc := mock.NewProcessor(gomock.NewController(t))
 
 	pl := &pipeline.Instance{
 		ID:     uuid.NewString(),
@@ -780,7 +766,6 @@ func TestProcessorOrchestrator_DeleteOnConnector_Fail(t *testing.T) {
 		Config: processor.Config{
 			Settings: map[string]string{"foo": "bar"},
 		},
-		Processor: proc,
 	}
 
 	wantErr := cerrors.New("couldn't remove processor from connector")
@@ -793,8 +778,6 @@ func TestProcessorOrchestrator_DeleteOnConnector_Fail(t *testing.T) {
 	plsMock.EXPECT().
 		Get(gomock.AssignableToTypeOf(ctxType), pl.ID).
 		Return(pl, nil)
-	proc.EXPECT().
-		Close()
 	procsMock.EXPECT().
 		Delete(gomock.AssignableToTypeOf(ctxType), want.ID).
 		Return(nil)

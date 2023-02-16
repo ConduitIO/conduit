@@ -162,6 +162,7 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 		return err
 	}
 
+	instance.Processor.Close()
 	err = s.store.Delete(ctx, id)
 	if err != nil {
 		return cerrors.Errorf("could not delete processor instance from store: %w", err)

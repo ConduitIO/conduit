@@ -283,7 +283,6 @@ func TestConnectorOrchestrator_Delete_Success(t *testing.T) {
 		ID:         uuid.NewString(),
 		PipelineID: pl.ID,
 	}
-	conn.Init(log.Nop(), nil)
 
 	consMock.EXPECT().
 		Get(gomock.AssignableToTypeOf(ctxType), conn.ID).
@@ -389,7 +388,6 @@ func TestConnectorOrchestrator_Delete_Fail(t *testing.T) {
 		ID:         uuid.NewString(),
 		PipelineID: pl.ID,
 	}
-	conn.Init(log.Nop(), nil)
 
 	wantErr := cerrors.New("connector deletion failed")
 
@@ -424,7 +422,6 @@ func TestConnectorOrchestrator_Delete_RemoveConnectorFailed(t *testing.T) {
 		Plugin:     "test-plugin",
 		PipelineID: pl.ID,
 	}
-	conn.Init(log.Nop(), nil)
 
 	wantErr := cerrors.New("couldn't remove the connector from the pipeline")
 

@@ -131,7 +131,6 @@ func (c *ConnectorOrchestrator) Delete(ctx context.Context, id string) error {
 		return pipeline.ErrPipelineRunning
 	}
 
-	conn.Close()
 	err = c.connectors.Delete(ctx, id)
 	if err != nil {
 		return err

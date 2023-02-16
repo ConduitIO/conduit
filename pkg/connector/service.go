@@ -146,6 +146,7 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 		return err
 	}
 
+	instance.Close()
 	err = s.store.Delete(ctx, id)
 	if err != nil {
 		return cerrors.Errorf("could not delete connector instance %v from store: %w", id, err)

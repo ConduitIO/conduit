@@ -207,7 +207,6 @@ func (p *ProcessorOrchestrator) Delete(ctx context.Context, id string) error {
 		return pipeline.ErrPipelineRunning
 	}
 
-	proc.Processor.Close()
 	err = p.processors.Delete(ctx, id)
 	if err != nil {
 		return err
