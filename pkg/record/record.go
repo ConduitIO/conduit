@@ -150,6 +150,9 @@ func (r Record) mapData(d Data) interface{} {
 
 func (r Record) Clone() (Record, error) {
 	clone := Record{}
+	// todo copier uses reflection under the hood
+	// we should optimize it, because Clone() is on a hot path.
+	// https://github.com/ConduitIO/conduit/issues/885
 	err := copier.CopyWithOption(
 		&clone,
 		&r,
