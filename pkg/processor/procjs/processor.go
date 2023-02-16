@@ -172,7 +172,7 @@ func (p *Processor) InspectOut(ctx context.Context) *inspector.Session {
 
 func (p *Processor) Close() {
 	p.inInsp.Close()
-	p.inInsp.Close()
+	p.outInsp.Close()
 }
 
 func (p *Processor) toJSRecord(r record.Record) goja.Value {
