@@ -131,7 +131,7 @@ func TestDLQHandlerNode_ForceStop(t *testing.T) {
 	n.ForceStop(ctx)
 
 	// wait for node to stop running
-	_, ok, err = cchan.ChanOut[struct{}](openCalled).RecvTimeout(ctx, time.Second)
+	_, ok, err = cchan.ChanOut[struct{}](nodeDone).RecvTimeout(ctx, time.Second)
 	is.True(!ok)
 	is.NoErr(err)
 }

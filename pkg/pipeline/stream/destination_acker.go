@@ -77,6 +77,10 @@ func (n *DestinationAckerNode) Run(ctx context.Context) (err error) {
 
 	// start worker that will fetch acks from the connector and forward them to
 	// internal messages
+	// the worker uses the node context, so it can stop in case another node
+	// stops with an error and cancels the context, this way the worker stops as
+	// soon as possible and the outstanding acks/nacks will be fetched via the
+	// cleanup function
 	go n.worker(ctx, signalChan, errChan)
 
 	defer cleanup()
