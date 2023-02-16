@@ -43,8 +43,9 @@ type SourceNode struct {
 	base       pubNodeBase
 	logger     log.CtxLogger
 
-	state    csync.ValueWatcher[nodeState]
-	stopOnce sync.Once
+	state              csync.ValueWatcher[nodeState]
+	stopOnce           sync.Once
+	connectorCtxCancel context.CancelFunc
 }
 
 type Source interface {
@@ -65,30 +66,8 @@ func (n *SourceNode) ID() string {
 func (n *SourceNode) Run(ctx context.Context) (err error) {
 	defer n.state.Set(nodeStateStopped)
 
-	// start a fresh connector context to make sure the connector is running
-	// until this method returns
-	connectorCtx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	// first open connector, this means we actually start the plugin process
-	err = n.Source.Open(connectorCtx)
-	if err != nil {
-		return cerrors.Errorf("could not open source connector: %w", err)
-	}
-
-	// openMsgTracker tracks open messages until they are acked or nacked
-	var openMsgTracker OpenMessagesTracker
-	defer func() {
-		// wait for open messages before tearing down connector
-		n.logger.Trace(ctx).Msg("waiting for open messages")
-		openMsgTracker.Wait()
-
-		tdErr := n.Source.Teardown(connectorCtx)
-		err = cerrors.LogOrReplace(err, tdErr, func() {
-			n.logger.Err(ctx, tdErr).Msg("could not tear down source connector")
-		})
-	}()
-
+	// first prepare the trigger to get the cleanup function which will close
+	// the outgoing channel and stop downstream nodes
 	trigger, cleanup, err := n.base.Trigger(
 		ctx,
 		n.logger,
@@ -107,6 +86,31 @@ func (n *SourceNode) Run(ctx context.Context) (err error) {
 		return err
 	}
 	defer cleanup()
+
+	// start a fresh connector context to make sure the connector is running
+	// until this method returns
+	var connectorCtx context.Context
+	connectorCtx, n.connectorCtxCancel = context.WithCancel(context.Background())
+	defer n.connectorCtxCancel()
+
+	// openMsgTracker tracks open messages until they are acked or nacked
+	var openMsgTracker OpenMessagesTracker
+
+	// open connector, this means we actually start the plugin process
+	err = n.Source.Open(connectorCtx)
+	if err != nil {
+		return cerrors.Errorf("could not open source connector: %w", err)
+	}
+	defer func() {
+		// wait for open messages before tearing down connector
+		n.logger.Trace(ctx).Msg("waiting for open messages")
+		openMsgTracker.Wait()
+
+		tdErr := n.Source.Teardown(connectorCtx)
+		err = cerrors.LogOrReplace(err, tdErr, func() {
+			n.logger.Err(ctx, tdErr).Msg("could not tear down source connector")
+		})
+	}()
 
 	n.state.Set(nodeStateRunning)
 
@@ -213,6 +217,11 @@ func (n *SourceNode) stop(ctx context.Context, reason error) error {
 	return n.base.InjectControlMessage(ctx, ControlMessageStopSourceNode, record.Record{
 		Position: stopPosition,
 	})
+}
+
+func (n *SourceNode) ForceStop(ctx context.Context) {
+	n.logger.Warn(ctx).Msg("force stopping source connector")
+	n.connectorCtxCancel()
 }
 
 func (n *SourceNode) Pub() <-chan *Message {
