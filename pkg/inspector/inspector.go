@@ -38,7 +38,12 @@ type Session struct {
 }
 
 func (s *Session) close() {
-	// todo comment
+	// close() can be called multiple times on a session. One example is:
+	// There's an active inspector session on a component (processor or connector),
+	// during which the component is deleted.
+	// The session channel will be closed, which terminate the API request fetching
+	// record from this session.
+	// However, the API request termination also closes the session.
 	s.once.Do(func() {
 		s.onClose()
 		close(s.C)
