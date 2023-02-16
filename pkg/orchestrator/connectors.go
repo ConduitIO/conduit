@@ -110,10 +110,13 @@ func (c *ConnectorOrchestrator) Delete(ctx context.Context, id string) error {
 		return cerrors.Errorf("could not create db transaction: %w", err)
 	}
 	r.AppendPure(txn.Discard)
+
 	conn, err := c.connectors.Get(ctx, id)
 	if err != nil {
 		return err
 	}
+
+	// Check preconditions for deleting the connector
 	if conn.ProvisionedBy != connector.ProvisionTypeAPI {
 		return cerrors.Errorf("connector %q cannot be deleted: %w", conn.ID, ErrImmutableProvisionedByConfig)
 	}
@@ -127,6 +130,8 @@ func (c *ConnectorOrchestrator) Delete(ctx context.Context, id string) error {
 	if pl.Status == pipeline.StatusRunning {
 		return pipeline.ErrPipelineRunning
 	}
+
+	conn.Close()
 	err = c.connectors.Delete(ctx, id)
 	if err != nil {
 		return err
