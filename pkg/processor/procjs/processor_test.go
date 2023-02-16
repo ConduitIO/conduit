@@ -447,10 +447,12 @@ func TestJSProcessor_Close(t *testing.T) {
 	out := underTest.InspectOut(ctx)
 	underTest.Close()
 
+	// incoming records session should be closed
 	_, got, err := cchan.ChanOut[record.Record](in.C).RecvTimeout(ctx, 100*time.Millisecond)
 	is.NoErr(err)
 	is.True(!got)
 
+	// outgoing records session should be closed
 	_, got, err = cchan.ChanOut[record.Record](out.C).RecvTimeout(ctx, 100*time.Millisecond)
 	is.NoErr(err)
 	is.True(!got)
