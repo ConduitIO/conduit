@@ -34,7 +34,7 @@ type Session struct {
 	id      string
 	logger  log.CtxLogger
 	onClose func()
-	once    sync.Once
+	once    *sync.Once
 }
 
 func (s *Session) close() {
@@ -123,7 +123,7 @@ func (i *Inspector) NewSession(ctx context.Context) *Session {
 		onClose: func() {
 			i.remove(id)
 		},
-		once: sync.Once{},
+		once: &sync.Once{},
 	}
 	go func() {
 		<-ctx.Done()
