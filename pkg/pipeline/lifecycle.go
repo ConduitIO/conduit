@@ -136,7 +136,7 @@ func (s *Service) Stop(ctx context.Context, pipelineID string, force bool) error
 }
 
 func (s *Service) stopGraceful(ctx context.Context, pl *Instance, reason error) error {
-	s.logger.Debug(ctx).Str(log.PipelineIDField, pl.ID).Msg("gracefully stopping pipeline")
+	s.logger.Info(ctx).Str(log.PipelineIDField, pl.ID).Msg("gracefully stopping pipeline")
 	var err error
 	for _, n := range pl.n {
 		if node, ok := n.(stream.StoppableNode); ok {
@@ -153,7 +153,7 @@ func (s *Service) stopGraceful(ctx context.Context, pl *Instance, reason error) 
 }
 
 func (s *Service) stopForceful(ctx context.Context, pl *Instance) error {
-	s.logger.Debug(ctx).Str(log.PipelineIDField, pl.ID).Msg("force stopping pipeline")
+	s.logger.Info(ctx).Str(log.PipelineIDField, pl.ID).Msg("force stopping pipeline")
 	pl.t.Kill(cerrors.New("force stop"))
 	for _, n := range pl.n {
 		if node, ok := n.(stream.ForceStoppableNode); ok {
