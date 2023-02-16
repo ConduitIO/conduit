@@ -508,7 +508,7 @@ func (s *Service) runPipeline(ctx context.Context, pl *Instance) error {
 		node := pl.n[id]
 
 		pl.t.Go(func() (errOut error) {
-			// If any of the nodes stops, the tomb will be put into a dying state
+			// If any of the nodes stop, the tomb will be put into a dying state
 			// and ctx will be cancelled.
 			// This way, the other nodes will be notified that they need to stop too.
 			//nolint:staticcheck // nil used to use the default (parent provided via WithContext)
