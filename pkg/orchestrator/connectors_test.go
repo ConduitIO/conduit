@@ -388,7 +388,6 @@ func TestConnectorOrchestrator_Delete_Fail(t *testing.T) {
 		ID:         uuid.NewString(),
 		PipelineID: pl.ID,
 	}
-
 	wantErr := cerrors.New("connector deletion failed")
 
 	consMock.EXPECT().
@@ -422,7 +421,6 @@ func TestConnectorOrchestrator_Delete_RemoveConnectorFailed(t *testing.T) {
 		Plugin:     "test-plugin",
 		PipelineID: pl.ID,
 	}
-
 	wantErr := cerrors.New("couldn't remove the connector from the pipeline")
 
 	consMock.EXPECT().
