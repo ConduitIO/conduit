@@ -562,7 +562,8 @@ func (s *Service) runPipeline(ctx context.Context, pl *Instance) error {
 
 		measure.PipelinesGauge.WithValues(strings.ToLower(pl.Status.String())).Dec()
 
-		if err == tomb.ErrStillAlive {
+		switch err {
+		case tomb.ErrStillAlive:
 			// not an actual error, the pipeline stopped gracefully
 			err = nil
 			if isGracefulShutdown.Load() {
@@ -572,7 +573,7 @@ func (s *Service) runPipeline(ctx context.Context, pl *Instance) error {
 				// it was manually triggered by a user
 				pl.Status = StatusUserStopped
 			}
-		} else {
+		default:
 			pl.Status = StatusDegraded
 			// we use %+v to get the stack trace too
 			pl.Error = fmt.Sprintf("%+v", err)
