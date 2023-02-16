@@ -92,7 +92,7 @@ func timestampConvertor(
 			var tm time.Time
 			switch v := d[field].(type) {
 			case int64:
-				tm = time.Unix(0, v)
+				tm = time.Unix(0, v).UTC()
 			case string:
 				if format == "" {
 					return record.Record{}, cerrors.Errorf("%s: no format to parse the date", processorType)
