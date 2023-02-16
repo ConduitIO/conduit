@@ -144,7 +144,7 @@ func (i *Inspector) NewSession(ctx context.Context) *Session {
 	return s
 }
 
-func (i Inspector) Close() {
+func (i *Inspector) Close() {
 	for _, s := range i.sessions {
 		s.close()
 	}

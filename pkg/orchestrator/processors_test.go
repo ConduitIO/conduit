@@ -16,7 +16,6 @@ package orchestrator
 
 import (
 	"context"
-	"github.com/conduitio/conduit/pkg/processor/mock"
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/connector"
@@ -26,6 +25,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	"github.com/conduitio/conduit/pkg/processor"
+	"github.com/conduitio/conduit/pkg/processor/mock"
 	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
 	"github.com/matryer/is"
