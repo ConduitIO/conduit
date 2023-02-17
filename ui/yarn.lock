@@ -5349,10 +5349,10 @@ ember-compatibility-helpers@^1.1.2, ember-compatibility-helpers@^1.2.0, ember-co
     fs-extra "^9.1.0"
     semver "^5.4.1"
 
-ember-concurrency@^2.3.2:
-  version "2.3.2"
-  resolved "https://registry.yarnpkg.com/ember-concurrency/-/ember-concurrency-2.3.2.tgz#7a5623c0ca04b1ef189bcca899b0d3a813e0b728"
-  integrity sha512-ne+yvIVDjzI4EG4qlO1T/Wx07QUYyTaOAmpUGD1wy3sMnQYYbCpvwdkM3F15jY3c4zDtfB5L1IhM0kHCtabWxQ==
+ember-concurrency@^2.3.7:
+  version "2.3.7"
+  resolved "https://registry.yarnpkg.com/ember-concurrency/-/ember-concurrency-2.3.7.tgz#52d786e37704b9054da1952638797e23714ec0e1"
+  integrity sha512-sz6sTIXN/CuLb5wdpauFa+rWXuvXXSnSHS4kuNzU5GSMDX1pLBWSuovoUk61FUe6CYRqBmT1/UushObwBGickQ==
   dependencies:
     "@babel/helper-plugin-utils" "^7.12.13"
     "@babel/types" "^7.12.13"

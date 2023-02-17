@@ -256,7 +256,7 @@ func (m *Message) Nacked() <-chan struct{} {
 func (m *Message) Clone() *Message {
 	return &Message{
 		Ctx:    m.Ctx,
-		Record: m.Record,
+		Record: m.Record.Clone(),
 	}
 }
 
