@@ -135,6 +135,21 @@ func TestParseJSONPayload_Process(t *testing.T) {
 		},
 		wantErr: false,
 	}, {
+		name: "nil after",
+		record: record.Record{
+			Payload: record.Change{
+				Before: nil,
+				After:  nil,
+			},
+		},
+		want: record.Record{
+			Payload: record.Change{
+				Before: nil,
+				After:  nil,
+			},
+		},
+		wantErr: false,
+	}, {
 		name: "invalid JSON payload",
 		record: record.Record{
 			Payload: record.Change{

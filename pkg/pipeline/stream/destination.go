@@ -34,6 +34,8 @@ type DestinationNode struct {
 
 	base   pubSubNodeBase
 	logger log.CtxLogger
+
+	connectorCtxCancel context.CancelFunc
 }
 
 type Destination interface {
@@ -51,32 +53,37 @@ func (n *DestinationNode) ID() string {
 }
 
 func (n *DestinationNode) Run(ctx context.Context) (err error) {
+	// first prepare the trigger to get the cleanup function which will close
+	// the outgoing channel and stop downstream nodes
+	trigger, cleanup, err := n.base.Trigger(ctx, n.logger, n.Destination.Errors())
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+
 	// start a fresh connector context to make sure the connector is running
 	// until this method returns
-	connectorCtx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	var connectorCtx context.Context
+	connectorCtx, n.connectorCtxCancel = context.WithCancel(context.Background())
+	defer n.connectorCtxCancel()
 
-	// first open connector, this means we actually start the plugin process
+	var (
+		// lastPosition stores the position of the last successfully processed record
+		lastPosition record.Position
+		// openMsgTracker tracks open messages until they are acked or nacked
+		openMsgTracker OpenMessagesTracker
+	)
+
+	// open connector, this means we actually start the plugin process
 	err = n.Destination.Open(connectorCtx)
 	if err != nil {
 		return cerrors.Errorf("could not open destination connector: %w", err)
 	}
-
-	// lastPosition stores the position of the last successfully processed record
-	var lastPosition record.Position
-	// openMsgTracker tracks open messages until they are acked or nacked
-	var openMsgTracker OpenMessagesTracker
 	defer func() {
 		stopErr := n.Destination.Stop(connectorCtx, lastPosition)
-		if stopErr != nil {
-			// log this error right away because we're not sure the connector
-			// will be able to stop right away, we might block for 1 minute
-			// waiting for acks and we don't want the log to be empty
+		err = cerrors.LogOrReplace(err, stopErr, func() {
 			n.logger.Err(ctx, stopErr).Msg("could not stop destination connector")
-			if err == nil {
-				err = stopErr
-			}
-		}
+		})
 
 		n.logger.Trace(ctx).Msg("waiting for open messages")
 		openMsgTracker.Wait()
@@ -87,12 +94,6 @@ func (n *DestinationNode) Run(ctx context.Context) (err error) {
 			n.logger.Err(ctx, tdErr).Msg("could not tear down destination connector")
 		})
 	}()
-
-	trigger, cleanup, err := n.base.Trigger(ctx, n.logger, n.Destination.Errors())
-	if err != nil {
-		return err
-	}
-	defer cleanup()
 
 	for {
 		msg, err := trigger()
@@ -122,6 +123,11 @@ func (n *DestinationNode) Run(ctx context.Context) (err error) {
 			return msg.Nack(err, n.ID())
 		}
 	}
+}
+
+func (n *DestinationNode) ForceStop(ctx context.Context) {
+	n.logger.Warn(ctx).Msg("force stopping destination connector")
+	n.connectorCtxCancel()
 }
 
 // Sub will subscribe this node to an incoming channel.
