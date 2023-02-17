@@ -92,10 +92,7 @@ func checkPipeline(ctx context.Context) error {
 		// success
 		return nil
 	default:
-		if *verbose {
-			fmt.Printf("pipeline %q is not running: %v", *pipelineName, p.Pipeline.State.Status)
-		}
-		return nil
+		return fmt.Errorf("pipeline %q is not running: %v", *pipelineName, p.Pipeline.State.Status)
 	}
 }
 
