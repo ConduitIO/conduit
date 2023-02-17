@@ -51,7 +51,7 @@ func TestFanout_HappyPath(t *testing.T) {
 	in <- want
 
 	for _, out := range outChannels {
-		got, gotMsg, err := cchan.Chan[*Message](out).RecvTimeout(ctx, 100*time.Millisecond)
+		got, gotMsg, err := cchan.ChanOut[*Message](out).RecvTimeout(ctx, 100*time.Millisecond)
 		is.True(gotMsg)
 		is.NoErr(err)
 		is.Equal(want.Record, got.Record)
