@@ -74,11 +74,7 @@ func (n *FanoutNode) Run(ctx context.Context) error {
 				go func(i int) {
 					defer wg.Done()
 					// create new message and handle ack/nack
-					newMsg, cloneErr := msg.Clone()
-					if cloneErr != nil {
-						_ = msg.Nack(cloneErr, n.ID())
-						return
-					}
+					newMsg := msg.Clone()
 					newMsg.RegisterAckHandler(
 						// wrap ack handler to make sure msg is not overwritten
 						// by the time ack handler is called
@@ -123,19 +119,18 @@ func (n *FanoutNode) Run(ctx context.Context) error {
 			// the go routines are doing already
 			wg.Wait()
 
-			// a message can be nacked with the context still being alive
-			// one example are errors when cloning a mesage
-			if msg.Status() == MessageStatusNacked {
-				// check if the message nack returned an error (Nack is
-				// idempotent and will return the same error as in the first
-				// call), return it if it returns an error
-				if err := msg.Nack(nil, n.ID()); err != nil {
-					return err
-				}
-			}
-
 			// check if the context is still alive
 			if ctx.Err() != nil {
+				// context was closed - if the message was nacked there's a high
+				// chance it was nacked in this node by one of the goroutines
+				if msg.Status() == MessageStatusNacked {
+					// check if the message nack returned an error (Nack is
+					// idempotent and will return the same error as in the first
+					// call), return it if it returns an error
+					if err := msg.Nack(nil, n.ID()); err != nil {
+						return err
+					}
+				}
 				// the message is not nacked, it must have been sent to all
 				// downstream nodes just before the context got cancelled, we
 				// don't care about the message anymore, so we just return the

@@ -70,10 +70,7 @@ func TestRecord_Clone(t *testing.T) {
 	for _, tc := range testCases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			is := is.New(t)
-
-			got, err := tc.input.Clone()
-			is.NoErr(err)
+			got := tc.input.Clone()
 			if !cmp.Equal(tc.input, got) {
 				t.Logf("diff: %v\n", cmp.Diff(tc.input, got))
 				t.Fail() // clone not equal to original
