@@ -21,7 +21,9 @@ import (
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/database/inmemory"
+	"github.com/conduitio/conduit/pkg/foundation/database/mock"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
 	"github.com/matryer/is"
 )
@@ -52,6 +54,38 @@ func TestService_Init_Simple(t *testing.T) {
 	}
 	is.Equal(want, got)
 	is.Equal(len(got), 1)
+}
+
+func TestService_Check(t *testing.T) {
+	ctx := context.Background()
+	logger := log.Nop()
+	db := mock.NewDB(gomock.NewController(t))
+
+	testCases := []struct {
+		name    string
+		wantErr error
+	}{
+		{
+			name:    "db ok",
+			wantErr: nil,
+		},
+		{
+			name:    "db not ok",
+			wantErr: cerrors.New("db is under the weather today"),
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			is := is.New(t)
+			db.EXPECT().Ping(gomock.Any()).Return(tc.wantErr)
+			service := NewService(logger, db)
+
+			gotErr := service.Check(ctx)
+			is.Equal(tc.wantErr, gotErr)
+		})
+	}
 }
 
 func TestService_CreateSuccess(t *testing.T) {

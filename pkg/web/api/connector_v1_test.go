@@ -274,7 +274,7 @@ func TestConnectorAPIv1_InspectConnector_SendErr(t *testing.T) {
 	}()
 	ins.Send(ctx, generateTestRecord())
 
-	err, b, err2 := cchan.Chan[error](errC).RecvTimeout(context.Background(), 100*time.Millisecond)
+	err, b, err2 := cchan.ChanOut[error](errC).RecvTimeout(context.Background(), 100*time.Millisecond)
 	assert.Ok(t, err2)
 	assert.True(t, b, "expected to receive an error")
 	assert.True(t, cerrors.Is(err, errSend), "expected 'I'm sorry, but no.' error")

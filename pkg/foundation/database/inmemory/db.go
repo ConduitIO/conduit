@@ -33,10 +33,16 @@ type DB struct {
 	m        sync.Mutex
 }
 
+var _ database.DB = (*DB)(nil)
+
 type Txn struct {
 	db      *DB
 	old     map[string][]byte
 	changes map[string][]byte
+}
+
+func (d *DB) Ping(_ context.Context) error {
+	return nil
 }
 
 func (t *Txn) Commit() error {

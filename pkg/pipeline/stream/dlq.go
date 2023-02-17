@@ -58,6 +58,8 @@ type DLQHandlerNode struct {
 	wg sync.WaitGroup
 	// m guards access to Handler and window
 	m sync.Mutex
+
+	handlerCtxCancel context.CancelFunc
 }
 
 func (n *DLQHandlerNode) ID() string {
@@ -72,8 +74,9 @@ func (n *DLQHandlerNode) Run(ctx context.Context) (err error) {
 
 	// start a fresh connector context to make sure the handler is running until
 	// this method returns
-	handlerCtx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	var handlerCtx context.Context
+	handlerCtx, n.handlerCtxCancel = context.WithCancel(context.Background())
+	defer n.handlerCtxCancel()
 
 	err = n.Handler.Open(handlerCtx)
 	if err != nil {
@@ -88,9 +91,9 @@ func (n *DLQHandlerNode) Run(ctx context.Context) (err error) {
 
 	n.state.Set(nodeStateRunning)
 
-	// keep running until all components depending on this node call Done
-	n.wg.Wait()
-	return nil
+	// keep running until all components depending on this node call Done or a
+	// force stop is initiated
+	return (*csync.WaitGroup)(&n.wg).Wait(handlerCtx)
 }
 
 // Add should be called before Run to increase the counter of components
@@ -191,6 +194,11 @@ func (n *DLQHandlerNode) dlqRecord(msg *Message, nackMetadata NackMetadata) (rec
 
 func (n *DLQHandlerNode) SetLogger(logger log.CtxLogger) {
 	n.logger = logger
+}
+
+func (n *DLQHandlerNode) ForceStop(ctx context.Context) {
+	n.logger.Warn(ctx).Msg("force stopping DLQ handler node")
+	n.handlerCtxCancel()
 }
 
 // dlqWindow is responsible for tracking the last N nacks/acks and enforce a

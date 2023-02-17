@@ -56,7 +56,7 @@ func TestSourceAckerNode_ForwardAck(t *testing.T) {
 	close(in)
 
 	// make sure out channel is closed
-	_, ok, err := cchan.Chan[*Message](out).RecvTimeout(ctx, time.Second)
+	_, ok, err := cchan.ChanOut[*Message](out).RecvTimeout(ctx, time.Second)
 	is.NoErr(err)
 	is.True(!ok)
 }

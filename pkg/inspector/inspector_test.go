@@ -94,7 +94,7 @@ func TestInspector_Send_SessionCtxCanceled(t *testing.T) {
 
 	cancel()
 
-	_, got, err := cchan.Chan[record.Record](s.C).RecvTimeout(context.Background(), 100*time.Millisecond)
+	_, got, err := cchan.ChanOut[record.Record](s.C).RecvTimeout(context.Background(), 100*time.Millisecond)
 	is.NoErr(err)
 	is.True(!got) // expected no record
 }
@@ -130,13 +130,13 @@ func TestInspector_Send_SlowConsumer(t *testing.T) {
 		)
 	}
 
-	_, got, err := cchan.Chan[record.Record](s.C).RecvTimeout(context.Background(), 100*time.Millisecond)
+	_, got, err := cchan.ChanOut[record.Record](s.C).RecvTimeout(context.Background(), 100*time.Millisecond)
 	is.True(cerrors.Is(err, context.DeadlineExceeded))
 	is.True(!got)
 }
 
 func assertGotRecord(is *is.I, s *Session, recWant record.Record) {
-	recGot, got, err := cchan.Chan[record.Record](s.C).RecvTimeout(context.Background(), 100*time.Millisecond)
+	recGot, got, err := cchan.ChanOut[record.Record](s.C).RecvTimeout(context.Background(), 100*time.Millisecond)
 	is.NoErr(err)
 	is.True(got)
 	is.Equal(recWant, recGot)

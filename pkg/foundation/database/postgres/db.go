@@ -102,6 +102,10 @@ func (d *DB) init(ctx context.Context) error {
 	return nil
 }
 
+func (d *DB) Ping(ctx context.Context) error {
+	return d.pool.Ping(ctx)
+}
+
 // NewTransaction starts a new transaction. The `update` parameter controls the
 // access mode ("read only" or "read write"). It returns the transaction as well
 // as a context that contains the transaction. Passing the context in future
