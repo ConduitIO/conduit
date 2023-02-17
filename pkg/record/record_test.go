@@ -17,8 +17,67 @@ package record
 import (
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/matryer/is"
 )
+
+func TestRecord_Clone(t *testing.T) {
+	type user struct {
+		Name string
+	}
+
+	testCases := []struct {
+		name  string
+		input Record
+	}{
+		{
+			name:  "zero record",
+			input: Record{},
+		},
+		{
+			name: "full record",
+			input: Record{
+				Position:  Position("standing"),
+				Operation: OperationUpdate,
+				Metadata:  Metadata{"foo": "bar"},
+				Key:       RawData{Raw: []byte("padlock-key")},
+				Payload: Change{
+					Before: RawData{Raw: []byte("yellow")},
+					After: StructuredData{
+						"bool": true,
+
+						"int":   1,
+						"int8":  int8(1),
+						"int16": int16(1),
+						"int32": int32(1),
+						"int64": int64(1),
+
+						"float32": float32(1.2),
+						"float64": 1.2,
+
+						"string": "orange",
+
+						"string-slice": []string{"a"},
+						"map":          map[string]string{"a": "A", "b": "B"},
+
+						"user": user{Name: "john"},
+					},
+				},
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			got := tc.input.Clone()
+			if !cmp.Equal(tc.input, got) {
+				t.Logf("diff: %v\n", cmp.Diff(tc.input, got))
+				t.Fail() // clone not equal to original
+			}
+		})
+	}
+}
 
 func TestRecord_Bytes(t *testing.T) {
 	is := is.New(t)
