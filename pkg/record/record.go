@@ -25,6 +25,7 @@ import (
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/record/schema"
+	"github.com/jinzhu/copier"
 )
 
 const (
@@ -145,6 +146,32 @@ func (r Record) mapData(d Data) interface{} {
 		return d.Raw
 	}
 	return nil
+}
+
+func (r Record) Clone() Record {
+	clone := Record{}
+	// todo copier uses reflection under the hood
+	// we should optimize it, because Clone() is on a hot path.
+	// https://github.com/ConduitIO/conduit/issues/885
+	err := copier.CopyWithOption(
+		&clone,
+		&r,
+		copier.Option{DeepCopy: true, IgnoreEmpty: true},
+	)
+	if err != nil {
+		// At the moment, a clone error cannot happen because of the input data
+		// (i.e. the record itself).
+		// It can only happen if the clone destination is not addressable
+		// or if reflect.ValueOf(&r) is invalid.
+		// The first should never happen, because &Record{} is always addressable.
+		// The second, reflect.ValueOf(&r) is invalid if &r is nil, which in our case
+		// is also not possible.
+		// Hence, if the copier returns an error, it's a bug related to how we use copier
+		// which would cause all pipelines to fail anyway, so we panic here.
+		// This also makes the method signature simpler.
+		panic(cerrors.Errorf("record clone error: %w", err))
+	}
+	return clone
 }
 
 type Metadata map[string]string
