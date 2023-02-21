@@ -71,10 +71,14 @@ type base struct {
 
 type PipelineService interface {
 	Start(ctx context.Context, connFetcher pipeline.ConnectorFetcher, procFetcher pipeline.ProcessorFetcher, pluginFetcher pipeline.PluginDispenserFetcher, pipelineID string) error
-	// Stop initiates a graceful shutdown of the given pipeline.
-	// The method does not wait for the pipeline (and its nodes) to actually
-	// stop, because there still might be some in-flight messages.
-	Stop(ctx context.Context, pipelineID string) error
+	// Stop initiates a stop of the given pipeline. The method does not wait for
+	// the pipeline (and its nodes) to actually stop.
+	// When force is false the pipeline will try to stop gracefully and drain
+	// any in-flight messages that have not yet reached the destination. When
+	// force is true the pipeline will stop without draining in-flight messages.
+	// It is allowed to execute a force stop even after a graceful stop was
+	// requested.
+	Stop(ctx context.Context, pipelineID string, force bool) error
 
 	List(ctx context.Context) map[string]*pipeline.Instance
 	Get(ctx context.Context, id string) (*pipeline.Instance, error)
