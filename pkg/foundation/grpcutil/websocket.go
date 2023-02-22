@@ -58,10 +58,11 @@ var (
 // redirects the response data from the http.Handler
 // to a WebSocket connection.
 type webSocketProxy struct {
-	handler  http.Handler
-	logger   log.CtxLogger
-	upgrader websocket.Upgrader
+	done    chan struct{}
+	handler http.Handler
+	logger  log.CtxLogger
 
+	upgrader websocket.Upgrader
 	// Time allowed to write a message to the peer.
 	writeWait time.Duration
 	// Time allowed to read the next pong message from the peer.
@@ -70,9 +71,10 @@ type webSocketProxy struct {
 	pingPeriod time.Duration
 }
 
-func newWebSocketProxy(handler http.Handler, logger log.CtxLogger) *webSocketProxy {
+func newWebSocketProxy(ctx context.Context, handler http.Handler, logger log.CtxLogger) *webSocketProxy {
 	proxy := &webSocketProxy{
 		handler: handler,
+		done:    make(chan struct{}),
 		logger:  logger.WithComponent("grpcutil.webSocketProxy"),
 		upgrader: websocket.Upgrader{
 			ReadBufferSize:  1024,
@@ -82,7 +84,12 @@ func newWebSocketProxy(handler http.Handler, logger log.CtxLogger) *webSocketPro
 		pongWait:   defaultPongWait,
 		pingPeriod: (defaultPongWait * 9) / 10,
 	}
-
+	go func() {
+		select {
+		case <-ctx.Done():
+			proxy.done <- struct{}{}
+		}
+	}()
 	return proxy
 }
 
@@ -112,6 +119,12 @@ func (p *webSocketProxy) proxy(w http.ResponseWriter, r *http.Request) {
 	ctx, cancelFn := context.WithCancel(r.Context())
 	defer cancelFn()
 	r = r.WithContext(ctx)
+	go func() {
+		select {
+		case <-p.done:
+			cancelFn()
+		}
+	}()
 
 	// Upgrade connection to WebSocket
 	conn, err := p.upgrader.Upgrade(w, r, http.Header{})
