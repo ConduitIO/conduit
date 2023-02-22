@@ -1264,10 +1264,10 @@
     mkdirp "^1.0.4"
     silent-error "^1.1.1"
 
-"@ember/render-modifiers@^2.0.2", "@ember/render-modifiers@^2.0.4":
-  version "2.0.4"
-  resolved "https://registry.yarnpkg.com/@ember/render-modifiers/-/render-modifiers-2.0.4.tgz#0ac7af647cb736076dbfcd54ca71e090cd329d71"
-  integrity sha512-Zh/fo5VUmVzYHkHVvzWVjJ1RjFUxA2jH0zCp2+DQa80Bf3DUXauiEByxU22UkN4LFT55DBFttC0xCQSJG3WTsg==
+"@ember/render-modifiers@^2.0.2", "@ember/render-modifiers@^2.0.4", "@ember/render-modifiers@^2.0.5":
+  version "2.0.5"
+  resolved "https://registry.yarnpkg.com/@ember/render-modifiers/-/render-modifiers-2.0.5.tgz#4b1d9496a82ca471aeaa3ecddd94ef089450f415"
+  integrity sha512-5cJ1niIdOJC6k6KtIn9HGbr1DATJQp4ZqMv1vbi6LKQWbVCQ3byvKONtUEi3H0wcewlrcaWCqXOgm0nACzCOQA==
   dependencies:
     "@embroider/macros" "^1.0.0"
     ember-cli-babel "^7.26.11"
@@ -1322,7 +1322,7 @@
     "@embroider/shared-internals" "^1.8.0"
     semver "^7.3.5"
 
-"@embroider/macros@1.8.0", "@embroider/macros@^0.50.0 || ^1.0.0", "@embroider/macros@^1.0.0", "@embroider/macros@^1.2.0", "@embroider/macros@^1.8.0":
+"@embroider/macros@1.8.0":
   version "1.8.0"
   resolved "https://registry.yarnpkg.com/@embroider/macros/-/macros-1.8.0.tgz#9e947e6292f0d7768a0f743d883c3e794457eaec"
   integrity sha512-jeRoUMPbZ/ADBU0FsyBGS1UgV5vQmwIPnpbVUsJ0XcZFZq/8ZHV6Ts4yeubvH/lePnUpHaKogs4dDvGk5tpQKw==
@@ -1360,7 +1360,7 @@
     resolve "^1.20.0"
     semver "^7.3.2"
 
-"@embroider/macros@^1.10.0", "@embroider/macros@^1.9.0":
+"@embroider/macros@^0.50.0 || ^1.0.0", "@embroider/macros@^1.0.0", "@embroider/macros@^1.10.0", "@embroider/macros@^1.2.0", "@embroider/macros@^1.8.0", "@embroider/macros@^1.9.0":
   version "1.10.0"
   resolved "https://registry.yarnpkg.com/@embroider/macros/-/macros-1.10.0.tgz#af3844d5db48f001b85cfb096c76727c72ad6c1e"
   integrity sha512-LMbfQGk/a+f6xtvAv5fq/wf2LRxETnbgSCLUf/z6ebzmuskOUxrke+uP55chF/loWrARi9g6erFQ7RDOUoBMSg==
