@@ -85,10 +85,8 @@ func newWebSocketProxy(ctx context.Context, handler http.Handler, logger log.Ctx
 		pingPeriod: (defaultPongWait * 9) / 10,
 	}
 	go func() {
-		select {
-		case <-ctx.Done():
-			proxy.done <- struct{}{}
-		}
+		<-ctx.Done()
+		proxy.done <- struct{}{}
 	}()
 	return proxy
 }
@@ -120,10 +118,8 @@ func (p *webSocketProxy) proxy(w http.ResponseWriter, r *http.Request) {
 	defer cancelFn()
 	r = r.WithContext(ctx)
 	go func() {
-		select {
-		case <-p.done:
-			cancelFn()
-		}
+		<-p.done
+		cancelFn()
 	}()
 
 	// Upgrade connection to WebSocket
