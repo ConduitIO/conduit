@@ -14,7 +14,7 @@ require (
 	github.com/conduitio/conduit-connector-postgres v0.3.0
 	github.com/conduitio/conduit-connector-protocol v0.4.0
 	github.com/conduitio/conduit-connector-s3 v0.3.0
-	github.com/conduitio/conduit-connector-sdk v0.5.0
+	github.com/conduitio/conduit-connector-sdk v0.5.1
 	github.com/conduitio/yaml/v3 v3.2.0
 	github.com/dgraph-io/badger/v3 v3.2103.5
 	github.com/dop251/goja v0.0.0-20210225094849-f3cfc97811c0
@@ -34,7 +34,7 @@ require (
 	github.com/piotrkowalczuk/promgrpc/v4 v4.0.4
 	github.com/prometheus/client_golang v1.14.0
 	github.com/prometheus/client_model v0.3.0
-	github.com/prometheus/common v0.39.0
+	github.com/prometheus/common v0.40.0
 	github.com/rs/zerolog v1.29.0
 	go.buf.build/grpc/go/conduitio/conduit-connector-protocol v1.4.5
 	go.buf.build/protocolbuffers/go/grpc-ecosystem/grpc-gateway v1.3.50
@@ -121,6 +121,7 @@ require (
 	github.com/jackc/pgservicefile v0.0.0-20221227161230-091c0ba34f0a // indirect
 	github.com/jackc/puddle v1.3.0 // indirect
 	github.com/jdxcode/netrc v0.0.0-20221124155335-4616370d1a84 // indirect
+	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/compress v1.15.15 // indirect
 	github.com/klauspost/pgzip v1.2.5 // indirect
 	github.com/lann/builder v0.0.0-20180802200727-47ae307949d0 // indirect
@@ -134,6 +135,8 @@ require (
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect
 	github.com/moby/term v0.0.0-20221205130635-1aeaba878587 // indirect
+	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
+	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/morikuni/aec v1.0.0 // indirect
 	github.com/nxadm/tail v1.4.8 // indirect
 	github.com/oklog/run v1.1.0 // indirect
@@ -165,7 +168,7 @@ require (
 	go.uber.org/zap v1.24.0 // indirect
 	golang.org/x/crypto v0.6.0 // indirect
 	golang.org/x/mod v0.8.0 // indirect
-	golang.org/x/net v0.6.0 // indirect
+	golang.org/x/net v0.7.0 // indirect
 	golang.org/x/sync v0.1.0 // indirect
 	golang.org/x/sys v0.5.0 // indirect
 	golang.org/x/term v0.5.0 // indirect

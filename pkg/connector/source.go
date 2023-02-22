@@ -64,7 +64,10 @@ func (s *Source) initPlugin(ctx context.Context) (plugin.SourcePlugin, error) {
 	s.Instance.logger.Debug(ctx).Msg("configuring source connector plugin")
 	err = src.Configure(ctx, s.Instance.Config.Settings)
 	if err != nil {
-		_ = src.Teardown(ctx)
+		tdErr := src.Teardown(ctx)
+		err = cerrors.LogOrReplace(err, tdErr, func() {
+			s.Instance.logger.Err(ctx, tdErr).Msg("could not tear down source connector plugin")
+		})
 		return nil, err
 	}
 
@@ -93,7 +96,10 @@ func (s *Source) Open(ctx context.Context) error {
 	err = src.Start(streamCtx, state.Position)
 	if err != nil {
 		cancelStreamCtx()
-		_ = src.Teardown(ctx)
+		tdErr := src.Teardown(ctx)
+		err = cerrors.LogOrReplace(err, tdErr, func() {
+			s.Instance.logger.Err(ctx, tdErr).Msg("could not tear down source connector plugin")
+		})
 		return err
 	}
 
@@ -201,16 +207,20 @@ func (s *Source) Ack(ctx context.Context, p record.Position) error {
 		return err
 	}
 
-	// lock to prevent race condition with connector persister
+	// lock as we are updating the state and leave it locked so the persister
+	// can safely prepare the connector before it stores it
 	s.Instance.Lock()
+	defer s.Instance.Unlock()
 	s.Instance.State = SourceState{Position: p}
-	s.Instance.Unlock()
-
-	s.Instance.persister.Persist(ctx, s.Instance, func(err error) {
+	err = s.Instance.persister.Persist(ctx, s.Instance, func(err error) {
 		if err != nil {
 			s.errs <- err
 		}
 	})
+	if err != nil {
+		return cerrors.Errorf("failed to persist source connector: %w", err)
+	}
+
 	return nil
 }
 
