@@ -15,7 +15,7 @@ on [Discord](https://discord.meroxa.com)!
    [issues](https://github.com/ConduitIO/conduit/issues) to see if a
    similar one was already opened. If there is one already opened, feel free
    to comment on it.
-1. Otherwise, please [open an issue](https://github.com/ConduitIO/conduit/issues/new)
+2. Otherwise, please [open an issue](https://github.com/ConduitIO/conduit/issues/new)
    and let us know, and make sure to include the following:
    - If it's a bug, please include:
      - Steps to reproduce

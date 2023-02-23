@@ -39,7 +39,6 @@ Conduit was created and open-sourced by [Meroxa](https://meroxa.io).
 - [API](#api)
 - [UI](#ui)
 - [Documentation](#documentation)
-- [Known limitations](#known-limitations)
 - [Contributing](#contributing)
 
 ## Quick start
@@ -54,13 +53,13 @@ Conduit was created and open-sourced by [Meroxa](https://meroxa.io).
 4. Write something to file `example.in` in the same directory as the Conduit
    binary.
 
-   ```
+   ```sh
    echo "hello conduit" >> example.in`
    ```
 
 5. Read the contents of `example.out` and notice an OpenCDC record:
 
-   ```
+   ```sh
    $ cat example.out
    {"position":"MTQ=","operation":"create","metadata":{"file.path":"./example.in","opencdc.readAt":"1663858188836816000","opencdc.version":"v1"},"key":"MQ==","payload":{"before":null,"after":"aGVsbG8gY29uZHVpdA=="}}
    ```
@@ -68,7 +67,7 @@ Conduit was created and open-sourced by [Meroxa](https://meroxa.io).
 6. The string `hello conduit` is a base64 encoded string stored in the field
    `payload.after`, let's decode it:
 
-   ```
+   ```sh
    $ cat example.out | jq ".payload.after | @base64d"
    "hello conduit"
    ```
@@ -84,7 +83,7 @@ Download a pre-built binary from
 the [latest release](https://github.com/conduitio/conduit/releases/latest) and
 simply run it!
 
-```
+```sh
 ./conduit
 ```
 
@@ -124,7 +123,7 @@ running Conduit as a simple backend service.
 Our Docker images are hosted on GitHub's Container Registry. To run the latest
 Conduit version, you should run the following command:
 
-```
+```sh
 docker run -p 8080:8080 ghcr.io/conduitio/conduit:latest
 ```
 

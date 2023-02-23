@@ -45,12 +45,12 @@ To handle this, we have two options:
 In this option, the stream inspector would slow down the pipeline until it catches up. The goal is make sure all records
 are inspected.
 
-**Advantages**
+Advantages:
 
 1. Having complete data when troubleshooting.
 2. This would make it possible to inject messages into a pipeline in the future.
 
-**Disadvantages**
+Disadvantages:
 
 1. Pipeline performance is affected.
 2. The implementation becomes more complex.
@@ -60,12 +60,12 @@ are inspected.
 In this option, the stream inspector would not slow the pipeline. Some records from the pipeline won't be shown in the
 stream inspector at all due to this.
 
-**Advantages**
+Advantages:
 
 1. Pipeline performance is not affected.
 2. Simpler implementation.
 
-**Disadvantages**
+Disadvantages:
 
 1. Not having complete data when troubleshooting.
 
@@ -171,11 +171,11 @@ func(s Source) Inspect(direction string) chan Record
 (As a return value, we may use a special `struct` instead of `chan Record` to more easily propagate events, such as
 inspection done.)
 
-**Advantages**:
+Advantages:
 
 1. The implementation would be relatively straightforward and not complex.
 
-**Disadvantages**:
+Disadvantages:
 
 1. Minor changes in the sources, processors and destinations are needed.
 
@@ -184,14 +184,14 @@ inspection done.)
 In this option, we'd have a node which would be dedicated for inspecting data coming in and out of a source, processor
 or destination node. To inspect a node we would dynamically add a node before or after a node being inspected.
 
-**Advantages**:
+Advantages:
 
 1. All the code related to inspecting nodes would be "concentrated" in one or two node types.
 2. Existing nodes don't need to be changed.
 3. This makes it possible to inspect any node.
 4. Solving this problem would put us into a good position to solve <https://github.com/ConduitIO/conduit/issues/201>.
 
-**Disadvantages**
+Disadvantages:
 
 1. Currently, it's not possible to dynamically add a node, which would mean that we need to restart a pipeline to do this,
    and that's not a good user experience.
@@ -200,20 +200,20 @@ or destination node. To inspect a node we would dynamically add a node before or
 
 #### Option 3: Add the inspection code to `PubNode`s and `SubNode`s
 
-**Advantages**
+Advantages:
 
 1. Solves the problem for all nodes. While we're not necessarily interested in all the nodes, solving the problem at
    the `PubNode` level solves the problem for sources and output records for processors at the same time, and solving
    the problem at the `SubNode` level solves the problem for destinations and input records for processors at the same
    time.
 
-**Disadvantages**
+Disadvantages:
 
 1. Adding inspection to pub and sub nodes is complex. This complexity is reflected in following:
-- Once we add a method to the `PubNode` and `SubNode` interfaces, we'll need to implement it in all current
-  implementations, even if that means only calling a method from an embedded type.
-- `PubNode` and `SubNode` rely on Go channels to publish/subscribe to messages. Automatically sending messages from
-  those channels to registered inspectors is non-trivial.
+   - Once we add a method to the `PubNode` and `SubNode` interfaces, we'll need to implement it in all current
+     implementations, even if that means only calling a method from an embedded type.
+   - `PubNode` and `SubNode` rely on Go channels to publish/subscribe to messages. Automatically sending messages from
+     those channels to registered inspectors is non-trivial.
 
 #### Chosen implementation
 
