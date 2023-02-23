@@ -19,6 +19,7 @@ This document describes the Conduit architecture.
 ![Component diagram](data/component_diagram_full.svg)
 
 Conduit is split in the following layers:
+
 - **API layer** - exposes the public APIs used to communicate with Conduit. It exposes 2 types of APIs:
   - **gRPC** - this is the main API provided by Conduit. The gRPC API definition can be found in
     [api.proto](../proto/api/v1/api.proto), it can be used to generate code for the client.

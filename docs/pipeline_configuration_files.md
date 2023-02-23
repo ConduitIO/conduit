@@ -1,4 +1,4 @@
-## Pipeline Configuration Files
+# Pipeline Configuration Files
 
 Pipeline configuration files give you the ability to define pipelines that are provisioned by Conduit at startup.
 It's as simple as creating a YAML file that defines pipelines, connectors, processors, and their corresponding configurations.
@@ -8,7 +8,7 @@ It's as simple as creating a YAML file that defines pipelines, connectors, proce
 Create a folder called `pipelines` at the same level as your Conduit binary file, add all your YAML files
 there, then run Conduit using the command:
 
-```
+```sh
 ./conduit
 ```
 
@@ -17,7 +17,7 @@ Conduit will only search for files with `.yml` or `.yaml` extensions, recursivel
 If you have your YAML files in a different directory, or want to provision only one file, then simply run Conduit with
 the CLI flag `pipelines.path` and point to your file or directory:
 
-```
+```sh
 ./conduit -pipeline.path ../my-directory
 ```
 
@@ -33,7 +33,7 @@ To create connectors in that pipeline, simply add another map under the pipeline
 To create processors, either add a `processors` map under a pipeline ID, or under a connector ID, depending on its parent.
 Check this YAML file example with explanation for each field:
 
-``` yaml
+```yaml
 version: 1.0                    # parser version, the only supported version for now is 1.0 [mandatory]
 
 pipelines:                      # a map of pipelines IDs and their configurations.

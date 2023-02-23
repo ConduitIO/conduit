@@ -1,4 +1,4 @@
-## Processors
+# Processors
 
 A processor is a component that operates on a single record that flows through a pipeline. It can either change the record
 (i.e. **transform** it) or **filter** it out based on some criteria. Since they are part of pipelines, making yourself
@@ -30,7 +30,7 @@ create multiple processors (one for each source or destination) and configure th
 
 Processors are created through the `/processors` endpoint. Here's an example:
 
-```json lines
+```json
 POST /v1/processors
 {
     // name of the processor in Conduit
@@ -58,14 +58,14 @@ The request to create a processor is described in [api.swagger.json](/pkg/web/op
 
 ## Supported processors
 
-Conduit provides a number of built-in processors, such as filtering fields, replacing them, posting payloads to HTTP endpoints etc.
-Conduit also provides the ability to write custom processors in JavaScript.
+Conduit provides a number of built-in processors, such as filtering fields, replacing them, posting payloads to HTTP
+endpoints etc. Conduit also provides the ability to write custom processors in JavaScript.
 
 ### Built-in processors
 
 An up-to-date list of all built-in processors and detailed descriptions can be found [here](https://pkg.go.dev/github.com/conduitio/conduit/pkg/processor/procbuiltin).
-Note that all built-in processors that operate on the payload actually operate on `Record.Payload.After`. If you need to manipulate
-the field `Record.Payload.Before` you can use a [JavaScript processor](#javascript-processors).
+Note that all built-in processors that operate on the payload actually operate on `Record.Payload.After`. If you need to
+manipulate the field `Record.Payload.Before` you can use a [JavaScript processor](#javascript-processors).
 
 An example is available in [extract-field-transform.sh](/examples/processors/extract-field-transform.sh). The script will
 set up a pipeline with the built-in extract-field processors.
@@ -105,6 +105,7 @@ function process(record) {
 ```
 
 The script needs to define a function called `process`, which accepts an `sdk.Record`, and returns:
+
 - an `sdk.Record`, in case you want to transform the record,
 - `null`, in case you want to drop the record from the pipeline.
 

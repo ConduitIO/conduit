@@ -111,7 +111,7 @@ Assuming you have a pipeline running locally, you can execute
 `curl -Ss localhost:8080/metrics | grep conduit_pipeline_msg_counter` to check
 your newly created metrics. You will see something along the lines of:
 
-```
+```text
 # HELP conduit_pipeline_msg_counter Number of messages per pipeline.
 # TYPE conduit_pipeline_msg_counter counter
 conduit_pipeline_msg_counter{pipeline_name="my-new-pipeline"} 84

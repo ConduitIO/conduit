@@ -7,7 +7,7 @@ Unless specified otherwise, we should follow the guidelines outlined in
 Conduit is using [golangci-lint](https://golangci-lint.run/) to ensure the code conforms to our code guidelines. Part of
 the guidelines are outlined below.
 
-### General
+## General
 
 General pointers around writing code for Conduit:
 
@@ -23,7 +23,7 @@ General pointers around writing code for Conduit:
   stick with it throughout the codebase.
 - **Avoid global state**, rather pass things explicitly between structs and functions.
 
-### Packages
+## Packages
 
 We generally follow the [Style guideline for Go packages](https://rakyll.org/style-packages/). Here is a short summary
 of those guidelines:
@@ -38,7 +38,7 @@ of those guidelines:
 Additionally, we encourage the usage of the `internal` package to hide complex internal implementation details of a
 package and enforce a better separation of concerns between packages.
 
-### Logging
+## Logging
 
 We want to keep our logs as minimal as possible and reserve them for actionable messages like warnings and errors when
 something does not Go as expected. Info logs are fine when booting up the app, all other successful operations should be
@@ -55,7 +55,7 @@ takes care of enriching the log message using the supplied `context.Context`. Th
 Connector plugins are free to use any logger, as long as the output is routed to stdout. Conduit will capture those logs
 and display them alongside internal logs.
 
-### Error Handling
+## Error Handling
 
 - All errors need to be wrapped before they cross package boundaries. Wrapping is done using the `cerrors` Conduit library,
 i.e. `cerrors.Errorf("could not do X: %w", err)`. We are using the same library to unwrap and compare errors,
@@ -65,7 +65,7 @@ wrapping and returning it to the caller. We should never both log and return the
 - It's preferred to have a single file called `errors.go` per package which contains all the
 error variables from that package.
 
-### Testing
+## Testing
 
 We have 3 test suites:
 
@@ -78,7 +78,7 @@ We have 3 test suites:
 - End-to-end tests are tests that spin up an instance of Conduit and test its operation as a black-box through the
   exposed APIs. These tests are located in the `e2e` folder.
 
-### Documentation
+## Documentation
 
 We should write in-line documentation that can be read by `godoc`. This means that exported types, functions and
 variables need to have a preceding comment that starts with the name of the expression and end with a dot.
