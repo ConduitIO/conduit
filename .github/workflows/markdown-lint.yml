@@ -12,5 +12,10 @@ jobs:
       - uses: actions/checkout@v3
       - uses: DavidAnson/markdownlint-cli2-action@v9
         with:
-          globs: '**/*.md'
+          globs: |
+            '**/*.md'
+            '#ui/node_modules'
+            '#LICENSE.md'
+            '#pkg/web/openapi/**'
+            '#.github/*.md'
 
