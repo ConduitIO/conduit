@@ -13,9 +13,9 @@ jobs:
       - uses: DavidAnson/markdownlint-cli2-action@v9
         with:
           globs: |
-            '**/*.md'
-            '#ui/node_modules'
-            '#LICENSE.md'
-            '#pkg/web/openapi/**'
-            '#.github/*.md'
+            **/*.md
+            !ui/node_modules
+            !LICENSE.md
+            !pkg/web/openapi/**
+            !.github/*.md
 
