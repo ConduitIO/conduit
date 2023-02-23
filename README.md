@@ -50,23 +50,29 @@ Conduit was created and open-sourced by [Meroxa](https://meroxa.io).
    the [example pipeline](/examples/pipelines/file-to-file.yml)
    and put it in the directory named `pipelines` in the same directory as the
    Conduit binary.
-3. Run conduit (`./conduit`). The example pipeline will start automatically.
+3. Run Conduit (`./conduit`). The example pipeline will start automatically.
 4. Write something to file `example.in` in the same directory as the Conduit
    binary.
+
    ```
-   $ echo "hello conduit" >> example.in`
+   echo "hello conduit" >> example.in`
    ```
+
 5. Read the contents of `example.out` and notice an OpenCDC record:
+
    ```
    $ cat example.out
    {"position":"MTQ=","operation":"create","metadata":{"file.path":"./example.in","opencdc.readAt":"1663858188836816000","opencdc.version":"v1"},"key":"MQ==","payload":{"before":null,"after":"aGVsbG8gY29uZHVpdA=="}}
    ```
+
 6. The string `hello conduit` is a base64 encoded string stored in the field
    `payload.after`, let's decode it:
+
    ```
    $ cat example.out | jq ".payload.after | @base64d"
    "hello conduit"
    ```
+
 7. Explore the UI by opening `http://localhost:8080` and build your own
    pipeline!
 
@@ -95,11 +101,11 @@ of available options, run `./conduit --help`.
 
 Requirements:
 
-* [Go](https://golang.org/) (1.20 or later)
-* [Node.js](https://nodejs.org/) (16.x)
-* [Yarn](https://yarnpkg.com/) (latest 1.x)
-* [Ember CLI](https://ember-cli.com/)
-* [Make](https://www.gnu.org/software/make/)
+- [Go](https://golang.org/) (1.20 or later)
+- [Node.js](https://nodejs.org/) (16.x)
+- [Yarn](https://yarnpkg.com/) (latest 1.x)
+- [Ember CLI](https://ember-cli.com/)
+- [Make](https://www.gnu.org/software/make/)
 
 ```shell
 git clone git@github.com:ConduitIO/conduit.git
@@ -211,20 +217,20 @@ For more information about the UI refer to the [Readme](ui/README.md) in `/ui`.
 ## Documentation
 
 To learn more about how to use Conduit
-visit [docs.conduit.io](https://docs.conduit.io).
+visit [docs.Conduit.io](https://docs.conduit.io).
 
 If you are interested in internals of Conduit we have prepared some technical
 documentation:
 
-* [Pipeline Semantics](docs/pipeline_semantics.md) explains the internals of how
+- [Pipeline Semantics](docs/pipeline_semantics.md) explains the internals of how
   a Conduit pipeline works.
-* [Pipeline Configuration Files](docs/pipeline_configuration_files.md)
+- [Pipeline Configuration Files](docs/pipeline_configuration_files.md)
   explains how you can define pipelines using YAML files.
-* [Processors](docs/processors.md) contains examples and more information about
+- [Processors](docs/processors.md) contains examples and more information about
   Conduit processors.
-* [Conduit Architecture](docs/architecture.md)
+- [Conduit Architecture](docs/architecture.md)
   will give you a high-level overview of Conduit.
-* [Conduit Metrics](docs/metrics.md)
+- [Conduit Metrics](docs/metrics.md)
   provides more information about how Conduit exposes metrics.
 
 ## Contributing

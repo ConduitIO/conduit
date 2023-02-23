@@ -36,7 +36,7 @@ The decision can be broken up into 4 parts, these are explained in detail later 
 ### Conduit plugin interface (gRPC)
 
 The Conduit plugin interface is defined in gRPC, is standalone (does not depend on Conduit or the SDK) and lives
-in https://github.com/conduitio/connector-plugin. This repository is the only common thing between Conduit and a plugin,
+in <https://github.com/conduitio/connector-plugin>. This repository is the only common thing between Conduit and a plugin,
 meaning that Conduit uses the interface to interact with plugins and plugins implement the interface.
 
 The proto files define the messages and gRPC interface that needs to be implemented by the connector plugin. The
@@ -68,9 +68,9 @@ Functions will be called in the order in which they are defined.
 
 - `Configure` - the plugin needs to validate the configuration it receives and either store the configuration and return
   no error or discard it and return an error explaining why the configuration is invalid. This function serves two purposes:
-    - Config validation - Conduit calls `Configure` when the connector is first created or when the configuration is
+  - Config validation - Conduit calls `Configure` when the connector is first created or when the configuration is
       updated to validate the configuration. In this case the next call is `Teardown` and the plugin is stopped.
-    - Configuring the plugin - Conduit calls `Configure` when the pipeline is started to provide the plugin with its
+  - Configuring the plugin - Conduit calls `Configure` when the pipeline is started to provide the plugin with its
       config. The next call after a successful response is `Start`.
 - `Start` - with a call to this function Conduit signals to the plugin that it wants it to start running. The request
   will contain the position at which the plugin should start running (the position might be empty in case the pipeline
@@ -86,7 +86,7 @@ Functions will be called in the order in which they are defined.
   and* all remaining acknowledgments are received (this is handled by the SDK).
 - `Stop` - Conduit signals to the plugin it should stop fetching new records from the origin. The plugin is still
   allowed to produce records in the response stream of `Run` in case there are any cached records in memory, but it
-  should not go and fetch new ones from the origin.
+  should not Go and fetch new ones from the origin.
 - `Teardown` - this is the last function called before the plugin will be stopped completely. This is where the plugin
   should stop any open connections and make sure everything is cleaned up and ready for a graceful shutdown. This
   function will be called after `Run` stops running and the streams are closed.
@@ -113,7 +113,7 @@ Functions will be called in the order in which they are defined.
   independent and are able to transmit data concurrently. The plugin is expected to send an acknowledgment back to
   Conduit for every record it received, even if the record was not processed successfully (in that case the
   acknowledgment should contain the error). The stream should stay open until either an error occurs or the `Stop`
-  function is called *and* all remaining acknowledgments are sent (this is handled by the SDK).
+  function is called _and_ all remaining acknowledgments are sent (this is handled by the SDK).
 - `Stop` - Conduit signals to the plugin that there be no more records written to the request stream in `Run`. The
   plugin needs to flush any records that are cached in memory, send back the acknowledgments and stop the `Run`
   function.
@@ -166,10 +166,10 @@ things to point out
 - The bidirectional stream method `Run` is broken down into two separate methods, one for receiving messages from the
   stream and one to send messages. Those methods can only be called after a call to `Start` since that is the method in
   which the stream actually gets opened.
-    - In `SourcePlugin` we can read records from the stream by calling `Read`. This method will block until either an
+  - In `SourcePlugin` we can read records from the stream by calling `Read`. This method will block until either an
       error occurs or a new record is produced by the plugin. Successfully processed records can be acknowledged by
       calling `Ack` with the corresponding record position.
-    - In `DestinationPlugin` we can write records to the stream by calling `Write`. To receive acknowledgments we can
+  - In `DestinationPlugin` we can write records to the stream by calling `Write`. To receive acknowledgments we can
       call `Ack` which will block until either an error occurs or an acknowledgment is produced by the plugin.
 
 ### Plugin registries
@@ -177,7 +177,7 @@ things to point out
 ![Plugin Architecture - Registries](https://user-images.githubusercontent.com/8320753/153414135-83f3c196-5d1e-4b03-8172-0427c0a01c03.svg)
 
 We introduced a plugin dispenser interface with two implementations that allow us to interact with the plugin either
-through go-plugin (i.e. plugin runs in a standalone process) or directly through Go (i.e. plugin acts as a library).
+through Go-plugin (i.e. plugin runs in a standalone process) or directly through Go (i.e. plugin acts as a library).
 
 ```go
 type Dispenser interface {
@@ -196,7 +196,7 @@ implementations of a dispenser:
   having a separate binary for the plugin. The implementation behind the built-in plugin is using the thin layer defined
   in the connector-plugin repository (see previous chapter), meaning that it is irrelevant which SDK the plugin uses (if
   any), as long as it implements the interfaces defined in that thin layer.
-- The standalone dispenser will dispense plugins that communicate with the plugin via go-plugin and gRPC. It will start
+- The standalone dispenser will dispense plugins that communicate with the plugin via Go-plugin and gRPC. It will start
   the plugin in a separate process as soon as a call to dispense a plugin comes in. When the method `Teardown` gets
   called the dispenser regards the plugin as done and the plugin process will be stopped. If then a new plugin tries to
   be dispensed the process will be started again. Note that the specifier plugin does not contain a `Teardown` method so
