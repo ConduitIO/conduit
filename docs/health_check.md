@@ -1,4 +1,5 @@
-## Health check
+# Health check
+
 Conduit’s health check can be used to determine if Conduit is running correctly. What it does is to check if Conduit 
 can successfully connect to the database which it was configured with (which can be BadgerDB, PostgreSQL or the 
 in-memory one). The health check is available at the `/healthz` path. Here’s an example:
