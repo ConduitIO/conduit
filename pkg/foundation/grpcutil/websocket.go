@@ -22,6 +22,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/conduitio/conduit/pkg/foundation/cchan"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/gorilla/websocket"
 )
@@ -58,7 +59,9 @@ var (
 // redirects the response data from the http.Handler
 // to a WebSocket connection.
 type webSocketProxy struct {
-	done    chan struct{}
+	// done is closed to indicate that the proxy should stop working
+	done <-chan struct{}
+	// handler is the underlying handler actually handling requests
 	handler http.Handler
 	logger  log.CtxLogger
 
@@ -74,7 +77,7 @@ type webSocketProxy struct {
 func newWebSocketProxy(ctx context.Context, handler http.Handler, logger log.CtxLogger) *webSocketProxy {
 	proxy := &webSocketProxy{
 		handler: handler,
-		done:    make(chan struct{}),
+		done:    ctx.Done(),
 		logger:  logger.WithComponent("grpcutil.webSocketProxy"),
 		upgrader: websocket.Upgrader{
 			ReadBufferSize:  1024,
@@ -84,10 +87,6 @@ func newWebSocketProxy(ctx context.Context, handler http.Handler, logger log.Ctx
 		pongWait:   defaultPongWait,
 		pingPeriod: (defaultPongWait * 9) / 10,
 	}
-	go func() {
-		<-ctx.Done()
-		proxy.done <- struct{}{}
-	}()
 	return proxy
 }
 
@@ -114,12 +113,20 @@ func (p *webSocketProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // and stop writing any data to the WebSocket connection. This will
 // automatically halt all the "pipeline nodes" after the underlying response.
 func (p *webSocketProxy) proxy(w http.ResponseWriter, r *http.Request) {
-	ctx, cancelFn := context.WithCancel(r.Context())
-	defer cancelFn()
+	ctx, cancelCtx := context.WithCancel(r.Context())
+	defer cancelCtx()
 	r = r.WithContext(ctx)
 	go func() {
-		<-p.done
-		cancelFn()
+		// we're using ChanOut.Recv() so that the goroutine doesn't wait on
+		// the proxy to be done even when the request is done
+		_, ok, err := cchan.ChanOut[struct{}](p.done).Recv(ctx)
+		if err != nil {
+			p.logger.Warn(ctx).Msgf("request context returned an error: %w", err)
+		}
+		if ok {
+			p.logger.Info(ctx).Msg("shutting down")
+		}
+		cancelCtx()
 	}()
 
 	// Upgrade connection to WebSocket
@@ -145,9 +152,9 @@ func (p *webSocketProxy) proxy(w http.ResponseWriter, r *http.Request) {
 	messages := make(chan []byte)
 	// startWebSocketRead and startWebSocketWrite need to cancel the context
 	// if they encounter an error reading from or writing to the WS connection
-	go p.startWebSocketRead(ctx, conn, cancelFn)
+	go p.startWebSocketRead(ctx, conn, cancelCtx)
 	go p.readFromHTTPResponse(ctx, responseR, messages)
-	p.startWebSocketWrite(ctx, messages, conn, cancelFn)
+	p.startWebSocketWrite(ctx, messages, conn, cancelCtx)
 }
 
 // startWebSocketRead starts a read loop on the proxy's WebSocket connection.
