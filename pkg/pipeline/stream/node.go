@@ -107,6 +107,17 @@ type StoppableNode interface {
 	Stop(ctx context.Context, reason error) error
 }
 
+type ForceStoppableNode interface {
+	Node
+
+	// ForceStop signals a running ForceStoppableNode that it should stop
+	// running as soon as it can, even if that means that it doesn't properly
+	// clean up after itself. This method is a last resort in case something
+	// goes wrong and the pipeline gets stuck (e.g. a connector plugin is not
+	// responding).
+	ForceStop(ctx context.Context)
+}
+
 // LoggingNode is a node which expects a logger.
 type LoggingNode interface {
 	Node

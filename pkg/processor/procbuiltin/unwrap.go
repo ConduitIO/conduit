@@ -306,7 +306,9 @@ func (d *debeziumUnwrapper) unwrapMetadata(rec record.Record) (record.Metadata, 
 			readAt := time.UnixMilli(int64(tsMs))
 			rec.Metadata.SetReadAt(readAt)
 		case debeziumFieldSource:
-			// don't add prefix for source fields
+			// don't add prefix for source fields to be consistent with the
+			// behavior of the debezium converter in the SDK - it puts all
+			// metadata fields into the `source` field
 			source = d.flatten("", val)
 		default:
 			flattened := d.flatten("debezium."+field, val)

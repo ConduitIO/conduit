@@ -336,6 +336,7 @@ service PipelineService {
   rpc StopPipeline(StopPipelineRequest) returns (StopPipelineResponse) {
     option (google.api.http) = {
       post: "/v1/pipelines/{id}/stop"
+      body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       responses: {
@@ -442,6 +443,7 @@ message StartPipelineResponse {}
 
 message StopPipelineRequest {
   string id = 1;
+  bool force = 2;
 }
 message StopPipelineResponse {}
 

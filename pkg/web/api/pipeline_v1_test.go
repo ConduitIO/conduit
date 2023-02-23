@@ -19,16 +19,17 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	"github.com/conduitio/conduit/pkg/web/api/mock"
 	apiv1 "github.com/conduitio/conduit/proto/gen/api/v1"
 	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
+	"github.com/matryer/is"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func TestPipelineAPIv1_CreatePipeline(t *testing.T) {
+	is := is.New(t)
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	psMock := mock.NewPipelineOrchestrator(ctrl)
@@ -67,11 +68,29 @@ func TestPipelineAPIv1_CreatePipeline(t *testing.T) {
 		},
 	)
 
-	assert.Ok(t, err)
-	assert.Equal(t, want, got)
+	is.NoErr(err)
+	is.Equal(got, want)
+}
+
+func TestPipelineAPIv1_StopPipeline(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+	psMock := mock.NewPipelineOrchestrator(ctrl)
+	api := NewPipelineAPIv1(psMock)
+
+	id := uuid.NewString()
+	force := true
+	psMock.EXPECT().Stop(ctx, id, force).Return(nil).Times(1)
+
+	got, err := api.StopPipeline(ctx, &apiv1.StopPipelineRequest{Id: id, Force: force})
+
+	is.NoErr(err)
+	is.Equal(got, &apiv1.StopPipelineResponse{})
 }
 
 func TestPipelineAPIv1_ListPipelinesByName(t *testing.T) {
+	is := is.New(t)
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	psMock := mock.NewPipelineOrchestrator(ctrl)
@@ -119,11 +138,11 @@ func TestPipelineAPIv1_ListPipelinesByName(t *testing.T) {
 		ctx,
 		&apiv1.ListPipelinesRequest{Name: "want-.*"},
 	)
-	assert.Ok(t, err)
+	is.NoErr(err)
 
 	sortPipelines(want.Pipelines)
 	sortPipelines(got.Pipelines)
-	assert.Equal(t, want, got)
+	is.Equal(got, want)
 }
 
 func sortPipelines(p []*apiv1.Pipeline) {

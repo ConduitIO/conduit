@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/conduitio/conduit/pkg/foundation/cchan"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/csync"
 	"github.com/conduitio/conduit/pkg/foundation/metrics"
@@ -93,6 +94,46 @@ func TestDLQHandlerNode_OpenError(t *testing.T) {
 
 	err := n.Run(ctx)
 	is.True(cerrors.Is(err, wantErr))
+}
+
+func TestDLQHandlerNode_ForceStop(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+
+	openCalled := make(chan struct{})
+
+	dlqHandler := mock.NewDLQHandler(ctrl)
+	dlqHandler.EXPECT().Open(gomock.Any()).DoAndReturn(func(ctx context.Context) error {
+		close(openCalled)
+		<-ctx.Done()
+		return ctx.Err()
+	})
+
+	n := &DLQHandlerNode{
+		Name:    "dlq-test",
+		Handler: dlqHandler,
+	}
+	n.Add(1) // add 1 dependent component, should not matter
+
+	nodeDone := make(chan struct{})
+	go func() {
+		defer close(nodeDone)
+		err := n.Run(ctx)
+		is.True(cerrors.Is(err, context.Canceled))
+	}()
+
+	// wait for open to be called and openCalled to be closed
+	_, ok, err := cchan.ChanOut[struct{}](openCalled).RecvTimeout(ctx, time.Second)
+	is.True(!ok)
+	is.NoErr(err)
+
+	n.ForceStop(ctx)
+
+	// wait for node to stop running
+	_, ok, err = cchan.ChanOut[struct{}](nodeDone).RecvTimeout(ctx, time.Second)
+	is.True(!ok)
+	is.NoErr(err)
 }
 
 func TestDLQHandlerNode_Ack(t *testing.T) {

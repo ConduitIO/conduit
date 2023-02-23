@@ -82,10 +82,10 @@ func TestPipelineOrchestrator_Stop_Success(t *testing.T) {
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
 	plsMock.EXPECT().
-		Stop(gomock.AssignableToTypeOf(ctxType), plBefore.ID).
+		Stop(gomock.AssignableToTypeOf(ctxType), plBefore.ID, false).
 		Return(nil)
 
-	err := orc.Pipelines.Stop(ctx, plBefore.ID)
+	err := orc.Pipelines.Stop(ctx, plBefore.ID, false)
 	is.NoErr(err)
 }
 
@@ -102,11 +102,11 @@ func TestPipelineOrchestrator_Stop_Fail(t *testing.T) {
 
 	wantErr := cerrors.New("pipeline doesn't exist")
 	plsMock.EXPECT().
-		Stop(gomock.AssignableToTypeOf(ctxType), gomock.AssignableToTypeOf("")).
+		Stop(gomock.AssignableToTypeOf(ctxType), gomock.AssignableToTypeOf(""), true).
 		Return(wantErr)
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
-	err := orc.Pipelines.Stop(ctx, plBefore.ID)
+	err := orc.Pipelines.Stop(ctx, plBefore.ID, true)
 	is.True(cerrors.Is(err, wantErr))
 }
 

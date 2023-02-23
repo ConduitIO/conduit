@@ -64,7 +64,10 @@ func (d *Destination) initPlugin(ctx context.Context) (plugin.DestinationPlugin,
 	d.Instance.logger.Debug(ctx).Msg("configuring destination connector plugin")
 	err = dest.Configure(ctx, d.Instance.Config.Settings)
 	if err != nil {
-		_ = dest.Teardown(ctx)
+		tdErr := dest.Teardown(ctx)
+		err = cerrors.LogOrReplace(err, tdErr, func() {
+			d.Instance.logger.Err(ctx, tdErr).Msg("could not tear down destination connector plugin")
+		})
 		return nil, err
 	}
 
@@ -88,7 +91,10 @@ func (d *Destination) Open(ctx context.Context) error {
 	err = dest.Start(streamCtx)
 	if err != nil {
 		cancelStreamCtx()
-		_ = dest.Teardown(ctx)
+		tdErr := dest.Teardown(ctx)
+		err = cerrors.LogOrReplace(err, tdErr, func() {
+			d.Instance.logger.Err(ctx, tdErr).Msg("could not tear down destination connector plugin")
+		})
 		return err
 	}
 

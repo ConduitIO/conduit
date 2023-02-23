@@ -28,7 +28,43 @@ import (
 	"github.com/matryer/is"
 )
 
-func TestConfigStore_SetGet(t *testing.T) {
+func TestStore_PrepareSet(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	logger := log.Nop()
+	db := &inmemory.DB{}
+
+	s := NewStore(db, logger)
+
+	want := &Instance{
+		ID:   uuid.NewString(),
+		Type: TypeSource,
+		State: SourceState{
+			Position: []byte(uuid.NewString()),
+		},
+		CreatedAt: time.Now().UTC(),
+	}
+
+	// prepare only prepares the connector for storage, but doesn't store it yet
+	set, err := s.PrepareSet(want.ID, want)
+	is.NoErr(err)
+
+	// at this point the store should still be empty
+	got, err := s.Get(ctx, want.ID)
+	is.True(cerrors.Is(err, database.ErrKeyNotExist)) // expected error for non-existing key
+	is.True(got == nil)
+
+	// now we actually store the connector
+	err = set(ctx)
+	is.NoErr(err)
+
+	// get should return the connector now
+	got, err = s.Get(ctx, want.ID)
+	is.NoErr(err)
+	is.Equal(want, got)
+}
+
+func TestStore_SetGet(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
 	logger := log.Nop()
@@ -53,7 +89,7 @@ func TestConfigStore_SetGet(t *testing.T) {
 	is.Equal(want, got)
 }
 
-func TestConfigStore_GetAll(t *testing.T) {
+func TestStore_GetAll(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
 	logger := log.Nop()
@@ -88,7 +124,7 @@ func TestConfigStore_GetAll(t *testing.T) {
 	is.Equal(want, got)
 }
 
-func TestConfigStore_Delete(t *testing.T) {
+func TestStore_Delete(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
 	logger := log.Nop()
