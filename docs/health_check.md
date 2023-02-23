@@ -10,6 +10,7 @@ $ curl "http://localhost:8080/healthz"
 ```
 
 You can also check individual services within Conduit. The following example checks if the PipelineService is running:
+
 ```bash
 $ curl "http://localhost:8080/healthz?service=PipelineService"
 {"status":"SERVING"}
