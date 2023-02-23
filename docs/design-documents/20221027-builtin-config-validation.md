@@ -126,6 +126,7 @@ Implementing this feature consists of four main steps:
 1. Adjust the connector protocol by adding validations for parameters, this change should be done in a backwards
    compatible way, so the old `required` field needs to be parsed into a validation.
 2. Adjust the connector SDK to give developers the ability to specify validations needed for each parameter. (manually)
+
    Params should look something like:
 
    ```go
@@ -145,6 +146,7 @@ Implementing this feature consists of four main steps:
 4. Generate connector configurations from a Go struct, which will give the ability to generate the connector's
    configurations from a Go struct, the struct would have field tags that specify validations, default value, and if
    a parameter is required.
+
    Example:
 
    ```go
