@@ -69,9 +69,9 @@ Functions will be called in the order in which they are defined.
 - `Configure` - the plugin needs to validate the configuration it receives and either store the configuration and return
   no error or discard it and return an error explaining why the configuration is invalid. This function serves two purposes:
   - Config validation - Conduit calls `Configure` when the connector is first created or when the configuration is
-      updated to validate the configuration. In this case the next call is `Teardown` and the plugin is stopped.
+    updated to validate the configuration. In this case the next call is `Teardown` and the plugin is stopped.
   - Configuring the plugin - Conduit calls `Configure` when the pipeline is started to provide the plugin with its
-      config. The next call after a successful response is `Start`.
+    config. The next call after a successful response is `Start`.
 - `Start` - with a call to this function Conduit signals to the plugin that it wants it to start running. The request
   will contain the position at which the plugin should start running (the position might be empty in case the pipeline
   is started for the first time). The plugin is expected to open any connections needed to fetch records. In case of a
@@ -167,10 +167,10 @@ things to point out
   stream and one to send messages. Those methods can only be called after a call to `Start` since that is the method in
   which the stream actually gets opened.
   - In `SourcePlugin` we can read records from the stream by calling `Read`. This method will block until either an
-      error occurs or a new record is produced by the plugin. Successfully processed records can be acknowledged by
-      calling `Ack` with the corresponding record position.
+    error occurs or a new record is produced by the plugin. Successfully processed records can be acknowledged by
+    calling `Ack` with the corresponding record position.
   - In `DestinationPlugin` we can write records to the stream by calling `Write`. To receive acknowledgments we can
-      call `Ack` which will block until either an error occurs or an acknowledgment is produced by the plugin.
+    call `Ack` which will block until either an error occurs or an acknowledgment is produced by the plugin.
 
 ### Plugin registries
 
@@ -207,7 +207,7 @@ The plugin registry is the last missing piece that contains information about th
 ```protobuf
 type registry interface {
   New(logger log.CtxLogger, name string) (Dispenser, error)
-    }
+}
 ```
 
 Behind this interface, there are again two registries that contain either built-in or standalone dispensers. To

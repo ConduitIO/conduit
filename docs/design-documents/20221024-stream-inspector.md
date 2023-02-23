@@ -8,7 +8,7 @@ Make troubleshooting pipelines easier by making it possible to inspect the data 
 
 1. All pipeline components (accessible "from the outside", i.e. sources, processors and destinations) should be
    inspectable.
-    - For v1, it's enough that destinations are inspectable.
+   - For v1, it's enough that destinations are inspectable.
 2. A source inspector should show the records coming out of the respective source.
 3. A destination inspector should show the records coming into the respective destination.
 4. A processor has two inspectors: one for the incoming records and one for the transformed records).
@@ -17,9 +17,9 @@ Make troubleshooting pipelines easier by making it possible to inspect the data 
 6. The inspector should have a minimal footprint on the resource usage (CPU, memory etc.)
 7. The inspector should have an insignificant impact on a pipeline's performance (ideally, no impact at all).
 8. The inspector data should be available through:
-    - the HTTP API,
-    - the gRPC API and
-    - the UI.
+   - the HTTP API,
+   - the gRPC API and
+   - the UI.
 9. Multiple users should be able to inspect the same pipeline component at the same time. Every user's session is
    independent.
 10. The inspector should stop publishing the data to a client, if the client appears to be idle/crashed.
@@ -225,7 +225,7 @@ options 2 and 3 are relatively complex, and we would risk delivering this featur
 - Should we rename it to pipeline inspector instead? Pipeline is the term we use in the API, streams are used
   internally.
   - **Answer**: Since the inspector is about inspecting data, and the term stream stands for data whereas pipeline
-      stands for the setup/topology, keeping the term "stream inspector" makes sense.
+    stands for the setup/topology, keeping the term "stream inspector" makes sense.
 - Is metadata needed (such as time the records were captured)?
   - Examples:
     - The time at which a record entered/left a node.

@@ -38,9 +38,9 @@ and that all the tests still run successfully.
 
 - Unit tests can be run via `make test`.
 - Integration tests can be run via `make test-integration`, they require
-     [Docker](https://www.docker.com/) to be installed and running. The tests will
-     spin up required docker containers, run the integration tests and stop the
-     containers afterwards.
+  [Docker](https://www.docker.com/) to be installed and running. The tests will
+  spin up required docker containers, run the integration tests and stop the
+  containers afterwards.
 
 We would like to ask you to use the provided Git hooks (by running `git config core.hooksPath githooks`),
 which automatically run the tests and the linter when pushing code.
