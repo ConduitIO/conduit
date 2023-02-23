@@ -4,7 +4,8 @@ Conduit UI is the web front-end for Conduit built with [Ember](https://emberjs.c
 
 ## Architecture
 
-The UI application is a standard Ember application that is simply rooted in the `ui` directory of the Conduit project. The UI can then be built and embedded into Conduit's binary during a Conduit build.
+The UI application is a standard Ember application that is simply rooted in the `ui` directory of the Conduit project.
+The UI can then be built and embedded into Conduit's binary during a Conduit build.
 
 ## Prerequisites
 
@@ -21,7 +22,8 @@ You will need the following things properly installed on your computer.
 - `cd conduit`
 - `make ui-dependencies`
 
-_Note:_ Commands in this readme are run from the Conduit project root. Alternatively, you can change into the `ui/` directory to directly use Yarn, [Ember CLI](https://ember-cli.com/), or non-prefixed [UI Makefile](Makefile) commands
+_Note:_ Commands in this readme are run from the Conduit project root. Alternatively, you can change into the `ui/`
+directory to directly use Yarn, [Ember CLI](https://ember-cli.com/), or non-prefixed [UI Makefile](Makefile) commands.
 
 ## Running / Development
 
@@ -44,16 +46,19 @@ After confirming that Conduit server is running locally, you can now run the UI
 - `make ui-test`
 
 ### Linting
+
 - `make ui-lint`
 - `make ui-lint-fix`
 
 ### Building Conduit UI
 
-Conduit UI is built and embedded into the server's binary using [Go embed directives](https://pkg.go.dev/embed). To build the binary with the embedded UI
+Conduit UI is built and embedded into the server's binary using [Go embed directives](https://pkg.go.dev/embed). To
+build the binary with the embedded UI
 
 - `make build-with-ui`
 
-This will build the production UI asset bundle, output it to `pkg/web/ui/dist`, and build the server binary embedded with the bundle.
+This will build the production UI asset bundle, output it to `pkg/web/ui/dist`, and build the server binary embedded
+with the bundle.
 
 ## Further Reading / Useful Links
 
