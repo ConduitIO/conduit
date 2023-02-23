@@ -16,7 +16,7 @@ locally, you can get metrics if you run `curl localhost:8080/metrics`.
 
 - **Conduit metrics**: We currently have a number of high level pipeline,
   processor and connector metrics, all of which are defined
-  in [measure.Go](https://github.com/ConduitIO/conduit/blob/main/pkg/foundation/metrics/measure/measure.go).
+  in [`measure.go`](https://github.com/ConduitIO/conduit/blob/main/pkg/foundation/metrics/measure/measure.go).
   Those are:
 
   | Pipeline name                                  | Type      | Description                                                                                                    |
@@ -46,7 +46,7 @@ locally, you can get metrics if you run `curl localhost:8080/metrics`.
 ## Adding new metrics
 
 Currently, we have a number of metric types already defined
-in [metrics.Go](https://github.com/ConduitIO/conduit/blob/main/pkg/pipeline/stream/metrics.go).
+in [`metrics.go`](https://github.com/ConduitIO/conduit/blob/main/pkg/pipeline/stream/metrics.go).
 Those are: counter, gauge, timer and histogram and their "labeled" versions too.
 A labeled metric is one where labels must be set before usage. In many cases,
 the already present metric types should be sufficient.
@@ -58,7 +58,7 @@ counter and increase the counter in source nodes, each time a message is read.
 ### Create a new labeled counter
 
 To do so, add the following code
-to [measure.Go](https://github.com/ConduitIO/conduit/blob/main/pkg/foundation/metrics/measure/measure.go).
+to [`measure.go`](https://github.com/ConduitIO/conduit/blob/main/pkg/foundation/metrics/measure/measure.go).
 
 ```go
 PipelineMsgMetrics = metrics.NewLabeledCounter(
@@ -83,7 +83,7 @@ in our case).
 In other words, for each pipeline we will have a separate counter (for which the
 `pipeline_name` label is set to the pipeline name). To do so, when building a
 source node
-in [lifecycle.Go](https://github.com/ConduitIO/conduit/blob/main/pkg/pipeline/lifecycle.go),
+in [`lifecycle.go`](https://github.com/ConduitIO/conduit/blob/main/pkg/pipeline/lifecycle.go),
 we can add the following:
 
 ```go
