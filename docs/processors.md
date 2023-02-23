@@ -1,15 +1,16 @@
 ## Processors
 
 A processor is a component that operates on a single record that flows through a pipeline. It can either change the record
-(i.e. **transform** it) or **filter** it out based on some criteria. Since they are part of pipelines, making yourself 
+(i.e. **transform** it) or **filter** it out based on some criteria. Since they are part of pipelines, making yourself
 familiar with [pipeline semantics](/docs/pipeline_semantics.md) is highly recommended.
 
 ![Pipeline](data/pipeline_example.svg)
 
-Processors are **optional** components in a pipeline, i.e. a pipeline can be started without them. They are always attached 
-to a single parent, which can be either a connector or a pipeline. With that, we can say that we have the following types 
+Processors are **optional** components in a pipeline, i.e. a pipeline can be started without them. They are always attached
+to a single parent, which can be either a connector or a pipeline. With that, we can say that we have the following types
 of processors:
-1. **Source processors**: these processors only receive messages originating at a specific source connector. Source 
+
+1. **Source processors**: these processors only receive messages originating at a specific source connector. Source
    processors are created by specifying the corresponding source connector as the parent entity.
 2. **Pipeline processors**: these processors receive all messages that flow through the pipeline, regardless of the
    source or destination. Pipeline processors are created by specifying the pipeline as the parent entity.
@@ -17,11 +18,12 @@ of processors:
    destination connector. Destination processors are created by specifying the corresponding destination connector as the
    parent entity.
 
-Given that every processor can have one (and only one) parent, processors cannot be shared. In case the same processing 
+Given that every processor can have one (and only one) parent, processors cannot be shared. In case the same processing
 needs to happen for different sources or destinations, you have two options:
+
 1. If records from all sources (or all destinations) need to be processed in the same way, then you can create
 a pipeline processor
-2. If records from some, but not all, sources (or destinations) need to be processed in the same way, then you need to 
+2. If records from some, but not all, sources (or destinations) need to be processed in the same way, then you need to
 create multiple processors (one for each source or destination) and configure them in the same way.
 
 ## Adding and configuring a processor
@@ -51,6 +53,7 @@ POST /v1/processors
     }
 }
 ```
+
 The request to create a processor is described in [api.swagger.json](/pkg/web/openapi/swagger-ui/api/v1/api.swagger.json).
 
 ## Supported processors
@@ -69,9 +72,9 @@ set up a pipeline with the built-in extract-field processors.
 
 ### JavaScript processors
 
-JavaScript processors make it possible to write custom processors in JavaScript. The API name for JavaScript processors 
-(used in the request to create a processor) is `js`. There's only one configuration parameter, `script`, which is the 
-script itself. To find out what's possible with the JS processors, also refer to the documentation for [goja](https://github.com/dop251/goja), 
+JavaScript processors make it possible to write custom processors in JavaScript. The API name for JavaScript processors
+(used in the request to create a processor) is `js`. There's only one configuration parameter, `script`, which is the
+script itself. To find out what's possible with the JS processors, also refer to the documentation for [goja](https://github.com/dop251/goja),
 which is the JavaScript engine we use.
 
 Here's an example of a request payload to create a JavaScript processor:
@@ -90,8 +93,10 @@ Here's an example of a request payload to create a JavaScript processor:
   }
 }
 ```
-The above will create a JavaScript processor (`"name": "js"`), attached to a connector (for the parent, we have 
+
+The above will create a JavaScript processor (`"name": "js"`), attached to a connector (for the parent, we have
 `"type": "TYPE_CONNECTOR"`). The script used is:
+
 ```javascript
 function process(record) {
     record.Metadata["foo-key"] = "foo-value";
@@ -100,11 +105,12 @@ function process(record) {
 ```
 
 The script needs to define a function called `process`, which accepts an `sdk.Record`, and returns:
-* an `sdk.Record`, in case you want to transform the record,
-* `null`, in case you want to drop the record from the pipeline.
+- an `sdk.Record`, in case you want to transform the record,
+- `null`, in case you want to drop the record from the pipeline.
 
-The above example request transforms a record, by "enriching" its metadata (it adds a metadata key). Following is an 
+The above example request transforms a record, by "enriching" its metadata (it adds a metadata key). Following is an
 example where we also filter records:
+
 ```javascript
 function process(r) {
     // if the record metadata has a "keepme" key set
@@ -118,6 +124,7 @@ function process(r) {
 ```
 
 The script is not constrained to having only this function, i.e. you can have something like this:
+
 ```javascript
 function doSomething(record) {
     // do something with the record
@@ -131,14 +138,16 @@ function process(record) {
 ```
 
 Conduit also provides a number of helper objects and methods which can be used in the JS code. Those are, currently:
-1. `logger` - a `zerolog.Logger` which writes to the Conduit server logs. You can use it in the same way you would use 
+
+1. `logger` - a `zerolog.Logger` which writes to the Conduit server logs. You can use it in the same way you would use
 it in Go code, i.e. you can write this for example: `logger.Info().Msgf("hello, %v!", "world")`
 2. `Record()` - constructs a `record.Record`.
 3. `RawData()` - constructs `record.RawData`.
 4. `StructuredData()` - constructs `record.StructuredData`.
 
-Following is an example of a JavaScript processor, where we transform a record and utilize a number of tools mentioned 
+Following is an example of a JavaScript processor, where we transform a record and utilize a number of tools mentioned
 above:
+
 ```javascript
 // Parses the record payload as JSON
 function parseAsJSON(record) {
@@ -165,13 +174,14 @@ function process(record) {
 ```
 
 ## Inspecting a processor
-Records entering a processor and the resulting records can be inspected using 
-[Conduit's stream inspector](/docs/design-documents/20221024-stream-inspector.md). This makes it possible to "debug" a 
+
+Records entering a processor and the resulting records can be inspected using
+[Conduit's stream inspector](/docs/design-documents/20221024-stream-inspector.md). This makes it possible to "debug" a
 processor.
 
-The records are made available via a WebSocket connection. To inspect input records, the following endpoint needs to be 
-used: `ws://host:port/v1/processors/{processor-id}/inspect-in`. Similarly, to inspect output records, the following 
+The records are made available via a WebSocket connection. To inspect input records, the following endpoint needs to be
+used: `ws://host:port/v1/processors/{processor-id}/inspect-in`. Similarly, to inspect output records, the following
 endpoint needs to be used: `ws://host:port/v1/processors/{processor-id}/inspect-out`.
 
-For example, if you're running Conduit locally with the default settings, and have a processor called `format-lines`, 
+For example, if you're running Conduit locally with the default settings, and have a processor called `format-lines`,
 then you would use the following endpoint: `ws://localhost:8080/v1/processors/format-lines/inspect-out`.

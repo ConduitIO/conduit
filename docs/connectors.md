@@ -4,7 +4,6 @@ Connectors are an integral part of Conduit. Conduit ships with a couple of conne
 
 The difference between Conduit connectors and those you might find from other services is that Conduit connectors are Change Data Capture-first (CDC). CDC allows your pipeline to only get the changes that have happened over time instead of pulling down an entire upstream data store and then tracking diffs between some period of time. This is critical for building real-time event-driven pipelines and applications. But, we'll note where connectors don't have CDC capabilities.
 
-
 ## Roadmap & Feedback
 
 If you need support for a particular data store that doesn't exist on the connector list, check out the list of requested [source connectors](https://github.com/ConduitIO/conduit/issues?q=is%3Aissue+label%3Aconnector%3Asource+) and the list of requested [destination connectors](https://github.com/ConduitIO/conduit/issues?q=is%3Aissue+label%3Aconnector%3Adestination). Give the issue a `+1` if you really need that connector. The upvote will help the team understand demand for any particular connector. If you find that an issue hasn't been created for your data store, please create a new issue in the Conduit repo.
@@ -13,9 +12,9 @@ If you need support for a particular data store that doesn't exist on the connec
 
 ### Support Types
 
-* `Conduit` - These are connectors that are built by the Conduit. Any issues or problems filed on those repos will be respond to by the Conduit team.
-* `Community` - A community connector is one where a developer created a connector and they're the ones supporting it not the Conduit team.
-* `Legacy` - Some connectors are built using non-preferred methods. For example, Kafka Connect connectors can be used on Conduit. This is considered a stop gap measure until `conduit` or `community` connectors are built.
+- `Conduit` - These are connectors that are built by the Conduit. Any issues or problems filed on those repos will be respond to by the Conduit team.
+- `Community` - A community connector is one where a developer created a connector and they're the ones supporting it not the Conduit team.
+- `Legacy` - Some connectors are built using non-preferred methods. For example, Kafka Connect connectors can be used on Conduit. This is considered a stop gap measure until `conduit` or `community` connectors are built.
 
 At this time, Conduit does not have any commercially supported connectors.
 
