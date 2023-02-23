@@ -1,0 +1,46 @@
+code-block-style:
+  style: fenced
+
+code-fence-style:
+  style: backtick
+
+emphasis-style:
+  style: underscore
+
+strong-style:
+  style: asterisk
+
+fenced-code-language:
+  language_only: true
+
+heading-style:
+  style: atx
+
+hr-style:
+  style: "---"
+
+line-length:
+  line_length: 120
+  code_blocks: false
+
+no-duplicate-heading:
+  siblings_only: true
+
+ol-prefix:
+  style: ordered
+
+ul-style:
+  style: dash
+
+no-hard-tabs:
+  # allow hard tabs in Go code blocks
+  ignore_code_languages: [go]
+  spaces_per_tab: 2
+
+proper-names:
+  code_blocks: false
+  names:
+    - JavaScript
+    - Conduit
+    - Go
+
