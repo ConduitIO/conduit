@@ -140,25 +140,37 @@ func (s *Store) migratePre041(ctx context.Context) {
 	}
 }
 
-// Set stores connector under the key id and returns nil on success, error
-// otherwise.
-func (s *Store) Set(ctx context.Context, id string, c *Instance) error {
+// PrepareSet encodes the connector instance and returns a function that stores
+// the connector. This can be used to prepare everything needed to store an
+// instance without actually storing it yet.
+func (s *Store) PrepareSet(id string, instance *Instance) (func(context.Context) error, error) {
 	if id == "" {
-		return cerrors.Errorf("can't store connector: %w", cerrors.ErrEmptyID)
+		return nil, cerrors.Errorf("can't store connector: %w", cerrors.ErrEmptyID)
 	}
 
-	raw, err := s.encode(c)
+	raw, err := s.encode(instance)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	key := s.addKeyPrefix(id)
 
-	err = s.db.Set(ctx, key, raw)
-	if err != nil {
-		return cerrors.Errorf("failed to store connector with ID %q: %w", id, err)
-	}
+	return func(ctx context.Context) error {
+		err = s.db.Set(ctx, key, raw)
+		if err != nil {
+			return cerrors.Errorf("failed to store connector with ID %q: %w", id, err)
+		}
+		return nil
+	}, nil
+}
 
-	return nil
+// Set stores connector under the key id and returns nil on success, error
+// otherwise.
+func (s *Store) Set(ctx context.Context, id string, c *Instance) error {
+	prepared, err := s.PrepareSet(id, c)
+	if err != nil {
+		return err
+	}
+	return prepared(ctx)
 }
 
 // Delete deletes connector under the key id and returns nil on success, error

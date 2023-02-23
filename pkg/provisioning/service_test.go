@@ -335,7 +335,7 @@ func TestProvision_RollbackDeletePipeline(t *testing.T) {
 	pipelineService.EXPECT().List(gomock.Not(gomock.Nil()))
 	// pipeline exists
 	pipelineService.EXPECT().Get(gomock.Not(gomock.Nil()), pipeline1.Name).Return(pl1, nil)
-	pipelineService.EXPECT().Stop(gomock.Not(gomock.Nil()), pipeline1.Name)
+	pipelineService.EXPECT().Stop(gomock.Not(gomock.Nil()), pipeline1.Name, false)
 	pipelineService.EXPECT().Delete(gomock.Not(gomock.Nil()), pipeline1.Name)
 
 	connService.EXPECT().Get(gomock.Not(gomock.Nil()), "pipeline1:con1").Return(source, nil).AnyTimes()
@@ -452,7 +452,7 @@ func TestProvision_ExistingPipeline(t *testing.T) {
 	pipelineService.EXPECT().List(gomock.Not(gomock.Nil()))
 	// pipeline already exists
 	pipelineService.EXPECT().Get(gomock.Not(gomock.Nil()), pipeline1.Name).Return(pl1, nil).Times(2)
-	pipelineService.EXPECT().Stop(gomock.Not(gomock.Nil()), pipeline1.Name)
+	pipelineService.EXPECT().Stop(gomock.Not(gomock.Nil()), pipeline1.Name, false)
 
 	// copy over connectors states
 	connService.EXPECT().Get(gomock.Not(gomock.Nil()), "pipeline1:con1").Return(source, nil).AnyTimes()
