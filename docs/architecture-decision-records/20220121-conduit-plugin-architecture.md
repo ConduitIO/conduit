@@ -86,7 +86,7 @@ Functions will be called in the order in which they are defined.
   and* all remaining acknowledgments are received (this is handled by the SDK).
 - `Stop` - Conduit signals to the plugin it should stop fetching new records from the origin. The plugin is still
   allowed to produce records in the response stream of `Run` in case there are any cached records in memory, but it
-  should not Go and fetch new ones from the origin.
+  should not go and fetch new ones from the origin.
 - `Teardown` - this is the last function called before the plugin will be stopped completely. This is where the plugin
   should stop any open connections and make sure everything is cleaned up and ready for a graceful shutdown. This
   function will be called after `Run` stops running and the streams are closed.
@@ -177,7 +177,7 @@ things to point out
 ![Plugin Architecture - Registries](https://user-images.githubusercontent.com/8320753/153414135-83f3c196-5d1e-4b03-8172-0427c0a01c03.svg)
 
 We introduced a plugin dispenser interface with two implementations that allow us to interact with the plugin either
-through Go-plugin (i.e. plugin runs in a standalone process) or directly through Go (i.e. plugin acts as a library).
+through go-plugin (i.e. plugin runs in a standalone process) or directly through Go (i.e. plugin acts as a library).
 
 ```go
 type Dispenser interface {
@@ -196,7 +196,7 @@ implementations of a dispenser:
   having a separate binary for the plugin. The implementation behind the built-in plugin is using the thin layer defined
   in the connector-plugin repository (see previous chapter), meaning that it is irrelevant which SDK the plugin uses (if
   any), as long as it implements the interfaces defined in that thin layer.
-- The standalone dispenser will dispense plugins that communicate with the plugin via Go-plugin and gRPC. It will start
+- The standalone dispenser will dispense plugins that communicate with the plugin via go-plugin and gRPC. It will start
   the plugin in a separate process as soon as a call to dispense a plugin comes in. When the method `Teardown` gets
   called the dispenser regards the plugin as done and the plugin process will be stopped. If then a new plugin tries to
   be dispensed the process will be started again. Note that the specifier plugin does not contain a `Teardown` method so

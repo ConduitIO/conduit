@@ -41,7 +41,7 @@ package and enforce a better separation of concerns between packages.
 ## Logging
 
 We want to keep our logs as minimal as possible and reserve them for actionable messages like warnings and errors when
-something does not Go as expected. Info logs are fine when booting up the app, all other successful operations should be
+something does not go as expected. Info logs are fine when booting up the app, all other successful operations should be
 executed silently or logged with level debug. Do not use logs for signaling normal operation, rather use metrics for
 that.
 
