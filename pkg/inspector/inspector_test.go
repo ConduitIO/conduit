@@ -70,13 +70,17 @@ func TestInspector_Send_SessionClosed(t *testing.T) {
 	underTest.Send(context.Background(), r)
 	assertGotRecord(is, s, r)
 
-	s.close()
+	s.close(context.Background())
 	underTest.Send(
 		context.Background(),
 		record.Record{
 			Position: record.Position("test-pos-2"),
 		},
 	)
+
+	_, got, err := cchan.ChanOut[record.Record](s.C).RecvTimeout(context.Background(), 100*time.Millisecond)
+	is.NoErr(err)
+	is.True(!got) // expected no record
 }
 
 func TestInspector_Close(t *testing.T) {

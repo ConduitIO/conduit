@@ -18,6 +18,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/google/uuid"
@@ -31,36 +32,35 @@ const DefaultBufferSize = 1000
 type Session struct {
 	C chan record.Record
 
-	id      string
-	logger  log.CtxLogger
-	onClose func()
-	once    *sync.Once
+	closed bool
+	logger log.CtxLogger
 }
 
-func (s *Session) close() {
-	// close() can be called multiple times on a session. One example is:
-	// There's an active inspector session on a component (processor or connector),
-	// during which the component is deleted.
-	// The session channel will be closed, which terminate the API request fetching
-	// record from this session.
-	// However, the API request termination also closes the session.
-	s.once.Do(func() {
-		s.onClose()
+var errSessionClosed = cerrors.New("session closed")
+
+func (s *Session) close(ctx context.Context) bool {
+	if !s.closed {
+		s.closed = true
 		close(s.C)
-	})
+		s.logger.Info(ctx).Msg("session closed")
+	}
+	return false
 }
 
 // send a record to the session's channel.
 // If the channel has already reached its capacity,
 // the record will be ignored.
-func (s *Session) send(ctx context.Context, r record.Record) {
+func (s *Session) send(ctx context.Context, r record.Record) error {
+	if s.closed {
+		return errSessionClosed
+	}
+
 	select {
 	case s.C <- r:
+		return nil
 	default:
-		s.logger.
-			Warn(ctx).
-			Str(log.InspectorSessionID, s.id).
-			Msg("session buffer full, record will be dropped")
+		s.logger.Warn(ctx).Msg("session buffer full, record was dropped")
+		return nil
 	}
 }
 
@@ -69,10 +69,8 @@ func (s *Session) send(ctx context.Context, r record.Record) {
 // An Inspector is a "proxy" between the pipeline component being
 // inspected and the API, which broadcasts records to all clients.
 type Inspector struct {
-	// sessions is a map of sessions.
-	// keys are sessions IDs.
-	sessions map[string]*Session
-	// guards access to sessions
+	sessions chan *Session
+	// guards access to all Session objects in sessions channel
 	lock       sync.Mutex
 	logger     log.CtxLogger
 	bufferSize int
@@ -80,7 +78,7 @@ type Inspector struct {
 
 func New(logger log.CtxLogger, bufferSize int) *Inspector {
 	return &Inspector{
-		sessions:   make(map[string]*Session),
+		sessions:   make(chan *Session, 100), // TODO make session count configurable
 		logger:     logger.WithComponent("inspector.Inspector"),
 		bufferSize: bufferSize,
 	}
@@ -89,6 +87,11 @@ func New(logger log.CtxLogger, bufferSize int) *Inspector {
 // Send the given record to all registered sessions.
 // The method does not wait for consumers to get the records.
 func (i *Inspector) Send(ctx context.Context, r record.Record) {
+	sessionCount := len(i.sessions)
+	if sessionCount == 0 {
+		return // no open sessions
+	}
+
 	// copy metadata, to prevent issues when concurrently accessing the metadata
 	var meta record.Metadata
 	if len(r.Metadata) != 0 {
@@ -98,66 +101,65 @@ func (i *Inspector) Send(ctx context.Context, r record.Record) {
 		}
 	}
 
-	// todo optimize this, as we have locks for every record.
-	// locks are needed to make sure the `sessions` slice
-	// is not modified as we're iterating over it
+	// lock all sessions
 	i.lock.Lock()
 	defer i.lock.Unlock()
-	for _, s := range i.sessions {
-		s.send(ctx, record.Record{
-			Position:  r.Position,
-			Operation: r.Operation,
-			Metadata:  meta,
-			Key:       r.Key,
-			Payload:   r.Payload,
-		})
+	for s := range i.sessions {
+		sessionCount--
+		err := s.send(ctx, r)
+
+		if err == nil {
+			// we only put open sessions back into the queue, if there was an
+			// error the session is closed
+			i.sessions <- s
+		}
+		if sessionCount == 0 {
+			break
+		}
 	}
 }
 
 func (i *Inspector) NewSession(ctx context.Context) *Session {
 	id := uuid.NewString()
 	s := &Session{
-		C:      make(chan record.Record, i.bufferSize),
-		id:     id,
-		logger: i.logger.WithComponent("inspector.Session"),
-		onClose: func() {
-			i.remove(id)
-		},
-		once: &sync.Once{},
+		C: make(chan record.Record, i.bufferSize),
+		logger: func() log.CtxLogger {
+			logger := i.logger.WithComponent("inspector.Session")
+			logger.Logger = logger.With().Str(log.InspectorSessionID, id).Logger()
+			return logger
+		}(),
 	}
 	go func() {
 		<-ctx.Done()
-		s.logger.
-			Info(context.Background()).
-			Msgf("context canceled: %v", ctx.Err())
-		s.close()
+		// lock sessions
+		i.lock.Lock()
+		defer i.lock.Unlock()
+		s.close(ctx)
 	}()
 
 	i.lock.Lock()
 	defer i.lock.Unlock()
+	select {
+	case i.sessions <- s:
+		i.logger.Info(ctx).Str(log.InspectorSessionID, id).Msg("session created")
+	default:
+		panic("no space for more sessions") // TODO return error
+		// TODO we could also clean out any closed sessions in the queue before deciding there's no space
+	}
 
-	i.sessions[id] = s
-	i.logger.
-		Info(context.Background()).
-		Str(log.InspectorSessionID, id).
-		Msg("session created")
 	return s
 }
 
 func (i *Inspector) Close() {
-	for _, s := range i.sessions {
-		s.close()
-	}
-}
-
-// remove a session with given ID from this Inspector.
-func (i *Inspector) remove(id string) {
+	// lock sessions
 	i.lock.Lock()
 	defer i.lock.Unlock()
-
-	delete(i.sessions, id)
-	i.logger.
-		Info(context.Background()).
-		Str(log.InspectorSessionID, id).
-		Msg("session removed")
+	for {
+		select {
+		case s := <-i.sessions:
+			s.close(context.Background())
+		default:
+			return // no more sessions
+		}
+	}
 }
