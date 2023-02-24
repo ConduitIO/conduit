@@ -233,11 +233,11 @@ func (s *Service) SetState(ctx context.Context, id string, state any) (*Instance
 	if state != nil {
 		switch conn.Type {
 		case TypeSource:
-			if _, ok := state.(SourceState); ok {
+			if _, ok := state.(SourceState); !ok {
 				return nil, cerrors.Errorf("expected source state (ID: %s): %w", id, ErrInvalidConnectorStateType)
 			}
 		case TypeDestination:
-			if _, ok := state.(DestinationState); ok {
+			if _, ok := state.(DestinationState); !ok {
 				return nil, cerrors.Errorf("expected destination state (ID: %s): %w", id, ErrInvalidConnectorStateType)
 			}
 		default:
