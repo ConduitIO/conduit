@@ -404,10 +404,20 @@ func TestService_SetState(t *testing.T) {
 			wantErr:  nil,
 		},
 		{
-			name:     "correct state",
+			name:     "correct state (source)",
 			connType: TypeSource,
 			state:    SourceState{Position: record.Position("test position")},
 			wantErr:  nil,
+		},
+		{
+			name:     "correct state (destination)",
+			connType: TypeDestination,
+			state: DestinationState{
+				Positions: map[string]record.Position{
+					"test-connector": record.Position("test-position"),
+				},
+			},
+			wantErr: nil,
 		},
 		{
 			name:     "wrong state",
