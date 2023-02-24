@@ -254,6 +254,11 @@ func (p *webSocketProxy) startWebSocketWrite(ctx context.Context, messages chan 
 			}
 
 			if err := conn.WriteMessage(websocket.TextMessage, message); err != nil {
+				// NB: if this connection has been closed by the client
+				// then that will cancel the request context, which in turn
+				// makes the request return `{"code":1,"message":"context canceled","details":[]}`.
+				// This proxy will try to write that, but will fail,
+				// because the connection has already been closed.
 				p.logger.Warn(ctx).Err(err).Msg("failed writing websocket message")
 				return
 			}
