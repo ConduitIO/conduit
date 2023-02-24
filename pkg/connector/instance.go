@@ -136,3 +136,7 @@ func (i *Instance) Connector(ctx context.Context, dispenserFetcher PluginDispens
 		return nil, ErrInvalidConnectorType
 	}
 }
+
+func (i *Instance) Close() {
+	i.inspector.Close()
+}
