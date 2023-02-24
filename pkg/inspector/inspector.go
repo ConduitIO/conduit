@@ -92,21 +92,14 @@ func (i *Inspector) Send(ctx context.Context, r record.Record) {
 		return // no open sessions
 	}
 
-	// copy metadata, to prevent issues when concurrently accessing the metadata
-	var meta record.Metadata
-	if len(r.Metadata) != 0 {
-		meta = make(record.Metadata, len(r.Metadata))
-		for k, v := range r.Metadata {
-			meta[k] = v
-		}
-	}
+	clonedRecord := r.Clone()
 
 	// lock all sessions
 	i.lock.Lock()
 	defer i.lock.Unlock()
 	for s := range i.sessions {
 		sessionCount--
-		err := s.send(ctx, r)
+		err := s.send(ctx, clonedRecord)
 
 		if err == nil {
 			// we only put open sessions back into the queue, if there was an
