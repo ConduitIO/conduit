@@ -17,7 +17,6 @@ package connector
 import (
 	"context"
 	"fmt"
-	"github.com/conduitio/conduit/pkg/record"
 	"testing"
 	"time"
 
@@ -25,6 +24,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/database/inmemory"
 	"github.com/conduitio/conduit/pkg/foundation/database/mock"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/record"
 	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
 	"github.com/matryer/is"
@@ -412,8 +412,12 @@ func TestService_SetState(t *testing.T) {
 		{
 			name:     "wrong state",
 			connType: TypeSource,
-			state:    DestinationState{},
-			wantErr:  ErrInvalidConnectorStateType,
+			state: DestinationState{
+				Positions: map[string]record.Position{
+					"test-connector": record.Position("test-position"),
+				},
+			},
+			wantErr: ErrInvalidConnectorStateType,
 		},
 	}
 
