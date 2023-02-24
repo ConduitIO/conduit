@@ -391,12 +391,13 @@ func TestService_UpdateInstanceNotFound(t *testing.T) {
 }
 
 func TestService_SetState(t *testing.T) {
-	testCases := []struct {
+	type testCase struct {
 		name     string
 		connType Type
 		state    any
 		wantErr  error
-	}{
+	}
+	testCases := []testCase{
 		{
 			name:     "nil state",
 			connType: TypeSource,
@@ -428,6 +429,12 @@ func TestService_SetState(t *testing.T) {
 				},
 			},
 			wantErr: ErrInvalidConnectorStateType,
+		},
+		{
+			name:     "completely wrong state",
+			connType: TypeSource,
+			state:    testCase{name: "completely wrong state"},
+			wantErr:  ErrInvalidConnectorStateType,
 		},
 	}
 
