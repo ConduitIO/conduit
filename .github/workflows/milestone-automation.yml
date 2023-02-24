@@ -10,6 +10,6 @@ jobs:
     uses: ConduitIO/automation/.github/workflows/roadmap-milestones.yml@main
     with:
       org-repo: 'conduitio/conduit'
-      project: PN_kwDOBL3ZPs4AAigJ
+      project: PVT_kwDOBL3ZPs4AAigJ
     secrets:
       project-automation-token: ${{ secrets.PROJECT_AUTOMATION }}
