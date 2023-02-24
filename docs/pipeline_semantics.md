@@ -28,12 +28,12 @@ In the diagram above we see 7 sections:
   sends them into one output channel. The order of messages coming from different connectors is nondeterministic. A
   fan-in node is automatically created for all pipelines.
 - **Pipeline processors** - these processors receive all messages that flow through the pipeline, regardless of the
-  source or destination. Pipeline processors are created by specifying the pipeline as the parent entity. Pipeline processors 
+  source or destination. Pipeline processors are created by specifying the pipeline as the parent entity. Pipeline processors
   are not required for starting a pipeline.
 - **Fan-out node** - this node is the counterpart to the fan-in node and acts as a demultiplexer that sends messages
   coming from a single input to multiple downstream nodes (one for each destination). The fan-out node does not buffer
   messages, instead, it waits for a message to be sent to all downstream nodes before processing the next message (see
-  [backpressure](#Backpressure)). A fan-out node is automatically created for all pipelines.
+  [backpressure](#backpressure)). A fan-out node is automatically created for all pipelines.
 - **Destination processors** - these processors receive only messages that are meant to be sent to a specific
   destination connector. Destination processors are created by specifying the corresponding destination connector as the
   parent entity. Destination processors are not required for starting a pipeline.
@@ -54,7 +54,7 @@ are created in source nodes when they receive records from the source connector,
 between nodes until they are acked or nacked. Nodes are only allowed to hold a reference to a single message at a time,
 meaning that they need to pass the message to the next node before taking another message¹. This also means there is no
 explicit buffer in Conduit, a pipeline can only hold only as many messages as there are nodes in the pipeline (see
-[backpressure](#Backpressure) for more information).
+[backpressure](#backpressure) for more information).
 
 ¹This might change in the future if we decide to add support for multi-message transforms.
 
@@ -72,7 +72,7 @@ A message can be in one of 3 states:
 - **Nacked** - the processing of the message failed and resulted in an error, so the message was negatively
   acknowledged. This can be done either by a processor (e.g. a transform failed) or by a destination. If a pipeline
   contains multiple destinations, the message needs to be negatively acknowledged by at least one destination before it
-  is marked as nacked. When a message is nacked, the message is passed to the [DLQ](#Dead-letter-queue) handler, which
+  is marked as nacked. When a message is nacked, the message is passed to the [DLQ](#dead-letter-queue) handler, which
   essentially controls what happens after a message is nacked (stop pipeline, drop message and continue running or store
   message in DLQ and continue running).
 
@@ -119,7 +119,7 @@ multiple destinations that stopped because of a negatively acknowledged record, 
 negatively acknowledged a record and processed more messages after that. For this reason, we strongly recommend
 implementing the write operation of a destination connector in an idempotent way (if possible).
 
-The delivery guarantee can be changed to "at most once" by adding a [dead letter queue](#Dead-letter-queue) handler that
+The delivery guarantee can be changed to "at most once" by adding a [dead letter queue](#dead-letter-queue) handler that
 drops unsuccessfully processed messages.
 
 ### Acks are delivered in order

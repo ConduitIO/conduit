@@ -62,3 +62,8 @@ func (f FuncWrapper) InspectIn(ctx context.Context) *inspector.Session {
 func (f FuncWrapper) InspectOut(ctx context.Context) *inspector.Session {
 	return f.outInsp.NewSession(ctx)
 }
+
+func (f FuncWrapper) Close() {
+	f.inInsp.Close()
+	f.outInsp.Close()
+}

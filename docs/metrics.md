@@ -14,9 +14,9 @@ locally, you can get metrics if you run `curl localhost:8080/metrics`.
 
 ## Available metrics
 
-* **Conduit metrics**: We currently have a number of high level pipeline,
+- **Conduit metrics**: We currently have a number of high level pipeline,
   processor and connector metrics, all of which are defined
-  in [measure.go](https://github.com/ConduitIO/conduit/blob/main/pkg/foundation/metrics/measure/measure.go).
+  in [`measure.go`](https://github.com/ConduitIO/conduit/blob/main/pkg/foundation/metrics/measure/measure.go).
   Those are:
 
   | Pipeline name                                  | Type      | Description                                                                                                    |
@@ -34,19 +34,19 @@ locally, you can get metrics if you run `curl localhost:8080/metrics`.
   \*We calculate bytes based on the JSON representation of the record payload
   and key.
 
-* **Go runtime metrics**: The default metrics exposed by Prometheus' official Go
+- **Go runtime metrics**: The default metrics exposed by Prometheus' official Go
   package, [client_golang](https://pkg.go.dev/github.com/prometheus/client_golang).
-* **gRPC metrics**: The gRPC instrumentation package we use
+- **gRPC metrics**: The gRPC instrumentation package we use
   is [promgrpc](https://github.com/piotrkowalczuk/promgrpc). The metrics exposed
   are listed [here](https://github.com/piotrkowalczuk/promgrpc#metrics).
-* **HTTP API metrics**: We
+- **HTTP API metrics**: We
   use [promhttp](https://pkg.go.dev/github.com/prometheus/client_golang/prometheus/promhttp),
   Prometheus' official package for instrumentation of HTTP servers.
 
 ## Adding new metrics
 
 Currently, we have a number of metric types already defined
-in [metrics.go](https://github.com/ConduitIO/conduit/blob/main/pkg/pipeline/stream/metrics.go).
+in [`metrics.go`](https://github.com/ConduitIO/conduit/blob/main/pkg/pipeline/stream/metrics.go).
 Those are: counter, gauge, timer and histogram and their "labeled" versions too.
 A labeled metric is one where labels must be set before usage. In many cases,
 the already present metric types should be sufficient.
@@ -58,7 +58,7 @@ counter and increase the counter in source nodes, each time a message is read.
 ### Create a new labeled counter
 
 To do so, add the following code
-to [measure.go](https://github.com/ConduitIO/conduit/blob/main/pkg/foundation/metrics/measure/measure.go).
+to [`measure.go`](https://github.com/ConduitIO/conduit/blob/main/pkg/foundation/metrics/measure/measure.go).
 
 ```go
 PipelineMsgMetrics = metrics.NewLabeledCounter(
@@ -70,9 +70,9 @@ PipelineMsgMetrics = metrics.NewLabeledCounter(
 
 The labeled counter created here:
 
-* has the name `conduit_pipeline_msg_counter`,
-* has the description `Number of messages per pipeline.`,
-* accepts a `pipeline_name` label.
+- has the name `conduit_pipeline_msg_counter`,
+- has the description `Number of messages per pipeline.`,
+- accepts a `pipeline_name` label.
 
 ### Instantiate a counter with a label
 
@@ -83,7 +83,7 @@ in our case).
 In other words, for each pipeline we will have a separate counter (for which the
 `pipeline_name` label is set to the pipeline name). To do so, when building a
 source node
-in [lifecycle.go](https://github.com/ConduitIO/conduit/blob/main/pkg/pipeline/lifecycle.go),
+in [`lifecycle.go`](https://github.com/ConduitIO/conduit/blob/main/pkg/pipeline/lifecycle.go),
 we can add the following:
 
 ```go
@@ -111,7 +111,7 @@ Assuming you have a pipeline running locally, you can execute
 `curl -Ss localhost:8080/metrics | grep conduit_pipeline_msg_counter` to check
 your newly created metrics. You will see something along the lines of:
 
-```
+```text
 # HELP conduit_pipeline_msg_counter Number of messages per pipeline.
 # TYPE conduit_pipeline_msg_counter counter
 conduit_pipeline_msg_counter{pipeline_name="my-new-pipeline"} 84

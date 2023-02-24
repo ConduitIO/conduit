@@ -36,7 +36,7 @@ The decision can be broken up into 4 parts, these are explained in detail later 
 ### Conduit plugin interface (gRPC)
 
 The Conduit plugin interface is defined in gRPC, is standalone (does not depend on Conduit or the SDK) and lives
-in https://github.com/conduitio/connector-plugin. This repository is the only common thing between Conduit and a plugin,
+in <https://github.com/conduitio/connector-plugin>. This repository is the only common thing between Conduit and a plugin,
 meaning that Conduit uses the interface to interact with plugins and plugins implement the interface.
 
 The proto files define the messages and gRPC interface that needs to be implemented by the connector plugin. The
@@ -68,10 +68,10 @@ Functions will be called in the order in which they are defined.
 
 - `Configure` - the plugin needs to validate the configuration it receives and either store the configuration and return
   no error or discard it and return an error explaining why the configuration is invalid. This function serves two purposes:
-    - Config validation - Conduit calls `Configure` when the connector is first created or when the configuration is
-      updated to validate the configuration. In this case the next call is `Teardown` and the plugin is stopped.
-    - Configuring the plugin - Conduit calls `Configure` when the pipeline is started to provide the plugin with its
-      config. The next call after a successful response is `Start`.
+  - Config validation - Conduit calls `Configure` when the connector is first created or when the configuration is
+    updated to validate the configuration. In this case the next call is `Teardown` and the plugin is stopped.
+  - Configuring the plugin - Conduit calls `Configure` when the pipeline is started to provide the plugin with its
+    config. The next call after a successful response is `Start`.
 - `Start` - with a call to this function Conduit signals to the plugin that it wants it to start running. The request
   will contain the position at which the plugin should start running (the position might be empty in case the pipeline
   is started for the first time). The plugin is expected to open any connections needed to fetch records. In case of a
@@ -113,7 +113,7 @@ Functions will be called in the order in which they are defined.
   independent and are able to transmit data concurrently. The plugin is expected to send an acknowledgment back to
   Conduit for every record it received, even if the record was not processed successfully (in that case the
   acknowledgment should contain the error). The stream should stay open until either an error occurs or the `Stop`
-  function is called *and* all remaining acknowledgments are sent (this is handled by the SDK).
+  function is called _and_ all remaining acknowledgments are sent (this is handled by the SDK).
 - `Stop` - Conduit signals to the plugin that there be no more records written to the request stream in `Run`. The
   plugin needs to flush any records that are cached in memory, send back the acknowledgments and stop the `Run`
   function.
@@ -166,11 +166,11 @@ things to point out
 - The bidirectional stream method `Run` is broken down into two separate methods, one for receiving messages from the
   stream and one to send messages. Those methods can only be called after a call to `Start` since that is the method in
   which the stream actually gets opened.
-    - In `SourcePlugin` we can read records from the stream by calling `Read`. This method will block until either an
-      error occurs or a new record is produced by the plugin. Successfully processed records can be acknowledged by
-      calling `Ack` with the corresponding record position.
-    - In `DestinationPlugin` we can write records to the stream by calling `Write`. To receive acknowledgments we can
-      call `Ack` which will block until either an error occurs or an acknowledgment is produced by the plugin.
+  - In `SourcePlugin` we can read records from the stream by calling `Read`. This method will block until either an
+    error occurs or a new record is produced by the plugin. Successfully processed records can be acknowledged by
+    calling `Ack` with the corresponding record position.
+  - In `DestinationPlugin` we can write records to the stream by calling `Write`. To receive acknowledgments we can
+    call `Ack` which will block until either an error occurs or an acknowledgment is produced by the plugin.
 
 ### Plugin registries
 
@@ -207,7 +207,7 @@ The plugin registry is the last missing piece that contains information about th
 ```protobuf
 type registry interface {
   New(logger log.CtxLogger, name string) (Dispenser, error)
-    }
+}
 ```
 
 Behind this interface, there are again two registries that contain either built-in or standalone dispensers. To

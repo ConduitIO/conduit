@@ -75,7 +75,7 @@ func (s *Service) List(_ context.Context) map[string]*Instance {
 }
 
 // Get will return a single processor or an error.
-func (s *Service) Get(ctx context.Context, id string) (*Instance, error) {
+func (s *Service) Get(_ context.Context, id string) (*Instance, error) {
 	ins, ok := s.instances[id]
 	if !ok {
 		return nil, cerrors.Errorf("%w (ID: %s)", ErrInstanceNotFound, id)
@@ -167,6 +167,7 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 		return cerrors.Errorf("could not delete processor instance from store: %w", err)
 	}
 	delete(s.instances, id)
+	instance.Processor.Close()
 	measure.ProcessorsGauge.WithValues(instance.Type).Dec()
 
 	return nil
