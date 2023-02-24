@@ -17,6 +17,7 @@ package connector
 import (
 	"context"
 	"fmt"
+	"github.com/conduitio/conduit/pkg/record"
 	"testing"
 	"time"
 
@@ -387,4 +388,71 @@ func TestService_UpdateInstanceNotFound(t *testing.T) {
 	is.True(err != nil)
 	is.True(cerrors.Is(err, ErrInstanceNotFound))
 	is.Equal(got, nil)
+}
+
+func TestService_SetState(t *testing.T) {
+	testCases := []struct {
+		name     string
+		connType Type
+		state    any
+		wantErr  error
+	}{
+		{
+			name:     "nil state",
+			connType: TypeSource,
+			state:    nil,
+			wantErr:  nil,
+		},
+		{
+			name:     "correct state",
+			connType: TypeSource,
+			state:    SourceState{Position: record.Position("test position")},
+			wantErr:  nil,
+		},
+		{
+			name:     "wrong state",
+			connType: TypeSource,
+			state:    DestinationState{},
+			wantErr:  ErrInvalidConnectorStateType,
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+
+		t.Run(tc.name, func(t *testing.T) {
+			is := is.New(t)
+			ctx := context.Background()
+			logger := log.Nop()
+			db := &inmemory.DB{}
+
+			service := NewService(logger, db, nil)
+			conn, err := service.Create(
+				ctx,
+				uuid.NewString(),
+				tc.connType,
+				"test-plugin",
+				uuid.NewString(),
+				Config{
+					Name:     "test-connector",
+					Settings: map[string]string{"foo": "bar"},
+				},
+				ProvisionTypeAPI,
+			)
+			is.NoErr(err)
+
+			gotConn, err := service.SetState(
+				ctx,
+				conn.ID,
+				tc.state,
+			)
+			if tc.wantErr != nil {
+				is.True(cerrors.Is(err, tc.wantErr))
+				is.True(gotConn == nil)
+			} else {
+				is.NoErr(err)
+				is.Equal(conn, gotConn)
+			}
+		})
+	}
 }
