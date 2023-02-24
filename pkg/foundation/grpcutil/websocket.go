@@ -119,12 +119,9 @@ func (p *webSocketProxy) proxy(w http.ResponseWriter, r *http.Request) {
 	go func() {
 		// we're using ChanOut.Recv() so that the goroutine doesn't wait on
 		// the proxy to be done even when the request is done
-		_, ok, err := cchan.ChanOut[struct{}](p.done).Recv(ctx)
+		_, _, err := cchan.ChanOut[struct{}](p.done).Recv(ctx)
 		if err != nil {
 			p.logger.Warn(ctx).Msgf("request context returned an error: %v", err)
-		}
-		if ok {
-			p.logger.Info(ctx).Msg("shutting down")
 		}
 		cancelCtx()
 	}()
@@ -188,9 +185,10 @@ func (p *webSocketProxy) startWebSocketRead(ctx context.Context, conn *websocket
 		if err != nil {
 			if p.isClosedConnErr(err) {
 				p.logger.Debug(ctx).Err(err).Msg("closed connection")
+			} else {
+				p.logger.Warn(ctx).Err(err).Msg("read error")
 			}
 
-			p.logger.Warn(ctx).Err(err).Msg("read error")
 			break
 		}
 	}
