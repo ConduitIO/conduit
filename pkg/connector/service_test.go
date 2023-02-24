@@ -439,8 +439,6 @@ func TestService_SetState(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		tc := tc
-
 		t.Run(tc.name, func(t *testing.T) {
 			is := is.New(t)
 			ctx := context.Background()
