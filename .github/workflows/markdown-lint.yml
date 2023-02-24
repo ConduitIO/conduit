@@ -1,0 +1,21 @@
+name: markdown-lint
+
+on:
+  pull_request:
+    paths:
+      - '**.md'
+
+jobs:
+  markdownlint-cli2:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: DavidAnson/markdownlint-cli2-action@v9
+        with:
+          globs: |
+            **/*.md
+            !ui/node_modules
+            !LICENSE.md
+            !pkg/web/openapi/**
+            !.github/*.md
+

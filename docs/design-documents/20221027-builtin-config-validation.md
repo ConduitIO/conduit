@@ -88,21 +88,23 @@ are not exposed by the SDK.
 Implementing the validation options provided by the proto file. So, giving the developer the option to specify
 validations for each parameter and Conduit will make sure to run the validations.
 
-Validating the type of the parameter, we have 6 types supported in the proto design {string, int, float, bool, file, and duration}
+Validating the type of the parameter, we have 6 types supported in the proto design {string, int, float, bool, file, and
+duration}.
 
-Validate that the config doesn't contain a parameter that is not defined in the specifications, which will help detect 
+Validate that the config doesn't contain a parameter that is not defined in the specifications, which will help detect
 a typo in a pipeline configuration file, or an extra configuration that does not exist.
 
-Providing a utility function to generate the config map for the `Parameters` function from a config struct. This is not 
-mandatory for the scope of this feature, but it would be a nice to have and would make the developing experience for connectors easier.
+Providing a utility function to generate the config map for the `Parameters` function from a config struct. This is not
+mandatory for the scope of this feature, but it would be a nice to have and would make the developing experience for
+connectors easier.
 
-## Questions:
+## Questions
 
 **Q**: Should we implement the validations from the SDK or Conduit side?
 
 **A**: If we implement it from Conduit side, this means we can add more validations in the future without changing the SDK.
-However, implementing it from the SDK side means that all the validations will happen on the connector side, using the 
-Config function, and the developer will still have the ability to add custom validations for some specific cases that 
+However, implementing it from the SDK side means that all the validations will happen on the connector side, using the
+Config function, and the developer will still have the ability to add custom validations for some specific cases that
 the SDK wouldn't cover. So we decided on implementing validating from the SDK side.
 
 **Q**: Should generating the Configurations from a Go struct be in the scope of this feature?
@@ -112,7 +114,7 @@ would be super helpful for developers and easier to use, and will continue addin
 
 **Q**: How should the UI execute the validations?
 
-**A**: The UI will execute the builtlin validations for each configuration while the user is typing (validations 
+**A**: The UI will execute the builtlin validations for each configuration while the user is typing (validations
 are in the same struct that has the list of the fields). When the user submits the form, the UI will try and
 create the connector, which will execute both the builtin and the custom validation. Finally, the UI will show an
 error for the user if an error occurs while creating the connector.
@@ -120,35 +122,36 @@ error for the user if an error occurs while creating the connector.
 ## Implementation
 
 Implementing this feature consists of four main steps:
-1. Adjust the connector protocol by adding validations for parameters, this change should be done in a backwards 
-   compatible way, so the old `required` field needs to be parsed into a validation.
- 
-2. Adjust the connector SDK to give developers the ability to specify validations needed for each parameter. (manually)
-   
-Params should look something like:
 
-```go
-SourceParams: []sdk.Parameter{
-    {
-      Name: "param",
-      Type: sdk.ParameterTypeInt,
-      Validations: []sdk.Validation{
-        sdk.ValidationRequired{},
-        sdk.ValidationLessThan{Value:8},
-      }
-    }
-  }
-```
+1. Adjust the connector protocol by adding validations for parameters, this change should be done in a backwards
+   compatible way, so the old `required` field needs to be parsed into a validation.
+2. Adjust the connector SDK to give developers the ability to specify validations needed for each parameter. (manually)
+
+   Params should look something like:
+
+   ```go
+   sourceParams: []sdk.Parameter{
+   	{    
+   		Name: "param",
+   		Type: sdk.ParameterTypeInt,
+   		Validations: []sdk.Validation{
+   			sdk.ValidationRequired{},
+   			sdk.ValidationLessThan{Value:8},
+   		},
+   	}
+   }
+   ```
 
 3. Provide a function that takes the parameters' validations and validates them in the `Configure` function on the SDK.
-4. Generate connector configurations from a Go struct, which will give the ability to generate the connector's 
-   configurations from a Go struct, the struct would have field tags that specify validations, default value, and if 
+4. Generate connector configurations from a Go struct, which will give the ability to generate the connector's
+   configurations from a Go struct, the struct would have field tags that specify validations, default value, and if
    a parameter is required.
 
-   example:
-```go
-type Config struct {
-	param1 string `validate:"greater-than:0" required:"true"`
-	param2 string `validate:"less-than:100" default:"10"`
-}
-```
+   Example:
+
+   ```go
+   type Config struct {
+   	param1 string `validate:"greater-than:0" required:"true"`
+   	param2 string `validate:"less-than:100" default:"10"`
+   }
+   ```
