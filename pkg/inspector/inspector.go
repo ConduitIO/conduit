@@ -118,8 +118,8 @@ func (i *Inspector) NewSession(ctx context.Context) *Session {
 	go func() {
 		<-ctx.Done()
 		s.logger.
-			Info(context.Background()).
-			Msgf("context canceled: %v", ctx.Err())
+			Debug(context.Background()).
+			Msgf("context done: %v", ctx.Err())
 		s.close()
 	}()
 

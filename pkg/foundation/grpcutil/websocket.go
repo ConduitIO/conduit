@@ -121,7 +121,7 @@ func (p *webSocketProxy) proxy(w http.ResponseWriter, r *http.Request) {
 		// the proxy to be done even when the request is done
 		_, _, err := cchan.ChanOut[struct{}](p.done).Recv(ctx)
 		if err != nil {
-			p.logger.Warn(ctx).Msgf("request context returned an error: %v", err)
+			p.logger.Debug(ctx).Msgf("request context returned an error: %v", err)
 		}
 		cancelCtx()
 	}()
@@ -204,6 +204,7 @@ func (p *webSocketProxy) isClosedConnErr(err error) bool {
 		websocket.CloseNormalClosure,
 		websocket.CloseGoingAway,
 		websocket.CloseAbnormalClosure,
+		websocket.CloseNoStatusReceived,
 	)
 }
 
@@ -247,13 +248,13 @@ func (p *webSocketProxy) startWebSocketWrite(ctx context.Context, messages chan 
 				// readFromHTTPResponse closed the channel.
 				err := conn.WriteMessage(websocket.CloseMessage, []byte{})
 				if err != nil {
-					p.logger.Warn(ctx).Err(err).Msg("[write] failed sending close message")
+					p.logger.Warn(ctx).Err(err).Msg("failed sending close message")
 				}
 				return
 			}
 
 			if err := conn.WriteMessage(websocket.TextMessage, message); err != nil {
-				p.logger.Warn(ctx).Err(err).Msg("[write] error writing websocket message")
+				p.logger.Warn(ctx).Err(err).Msg("failed writing websocket message")
 				return
 			}
 		case <-ticker.C:
