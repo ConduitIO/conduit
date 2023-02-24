@@ -28,7 +28,7 @@ const (
 	// storeKeyPrefix is added to all keys before storing them in store. Do not
 	// change unless you know what you're doing and you have a migration plan in
 	// place.
-	storeKeyPrefix = "processor:instance:"
+	storeKeyPrefix = "processor:instance:" // sth
 )
 
 // Store handles the persistence and fetching of processor instances.
