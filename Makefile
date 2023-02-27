@@ -1,4 +1,4 @@
-.PHONY: test test-integration build run proto-update proto-lint clean download install-tools generate check-go-version
+.PHONY: test test-integration build run proto-update proto-lint clean download install-tools generate check-go-version markdown-lint
 
 # Version will extract the current version of Conduit based on
 # the latest git tag and commit. If the repository contains any
@@ -72,3 +72,6 @@ check-go-version:
 		echo "${GO_VERSION_CHECK}";\
 		exit 1;\
 	fi
+
+markdown-lint:
+	markdownlint-cli2 "**/*.md" "#ui/node_modules" "#LICENSE.md" "#pkg/web/openapi/**" "#.github/*.md"

@@ -24,6 +24,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/database/inmemory"
 	"github.com/conduitio/conduit/pkg/foundation/database/mock"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/record"
 	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
 	"github.com/matryer/is"
@@ -387,4 +388,90 @@ func TestService_UpdateInstanceNotFound(t *testing.T) {
 	is.True(err != nil)
 	is.True(cerrors.Is(err, ErrInstanceNotFound))
 	is.Equal(got, nil)
+}
+
+func TestService_SetState(t *testing.T) {
+	type testCase struct {
+		name     string
+		connType Type
+		state    any
+		wantErr  error
+	}
+	testCases := []testCase{
+		{
+			name:     "nil state",
+			connType: TypeSource,
+			state:    nil,
+			wantErr:  nil,
+		},
+		{
+			name:     "correct state (source)",
+			connType: TypeSource,
+			state:    SourceState{Position: record.Position("test position")},
+			wantErr:  nil,
+		},
+		{
+			name:     "correct state (destination)",
+			connType: TypeDestination,
+			state: DestinationState{
+				Positions: map[string]record.Position{
+					"test-connector": record.Position("test-position"),
+				},
+			},
+			wantErr: nil,
+		},
+		{
+			name:     "wrong state",
+			connType: TypeSource,
+			state: DestinationState{
+				Positions: map[string]record.Position{
+					"test-connector": record.Position("test-position"),
+				},
+			},
+			wantErr: ErrInvalidConnectorStateType,
+		},
+		{
+			name:     "completely wrong state",
+			connType: TypeSource,
+			state:    testCase{name: "completely wrong state"},
+			wantErr:  ErrInvalidConnectorStateType,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			is := is.New(t)
+			ctx := context.Background()
+			logger := log.Nop()
+			db := &inmemory.DB{}
+
+			service := NewService(logger, db, nil)
+			conn, err := service.Create(
+				ctx,
+				uuid.NewString(),
+				tc.connType,
+				"test-plugin",
+				uuid.NewString(),
+				Config{
+					Name:     "test-connector",
+					Settings: map[string]string{"foo": "bar"},
+				},
+				ProvisionTypeAPI,
+			)
+			is.NoErr(err)
+
+			gotConn, err := service.SetState(
+				ctx,
+				conn.ID,
+				tc.state,
+			)
+			if tc.wantErr != nil {
+				is.True(cerrors.Is(err, tc.wantErr))
+				is.True(gotConn == nil)
+			} else {
+				is.NoErr(err)
+				is.Equal(conn, gotConn)
+			}
+		})
+	}
 }

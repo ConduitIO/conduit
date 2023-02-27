@@ -151,6 +151,7 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 		return cerrors.Errorf("could not delete connector instance %v from store: %w", id, err)
 	}
 	delete(s.connectors, id)
+	instance.Close()
 	measure.ConnectorsGauge.WithValues(strings.ToLower(instance.Type.String())).Dec()
 
 	return nil
@@ -233,11 +234,11 @@ func (s *Service) SetState(ctx context.Context, id string, state any) (*Instance
 	if state != nil {
 		switch conn.Type {
 		case TypeSource:
-			if _, ok := state.(SourceState); ok {
+			if _, ok := state.(SourceState); !ok {
 				return nil, cerrors.Errorf("expected source state (ID: %s): %w", id, ErrInvalidConnectorStateType)
 			}
 		case TypeDestination:
-			if _, ok := state.(DestinationState); ok {
+			if _, ok := state.(DestinationState); !ok {
 				return nil, cerrors.Errorf("expected destination state (ID: %s): %w", id, ErrInvalidConnectorStateType)
 			}
 		default:
