@@ -16,7 +16,6 @@ package conduit_test
 
 import (
 	"context"
-	"os"
 	"testing"
 	"time"
 
@@ -26,13 +25,12 @@ import (
 )
 
 // path where tests store their data during runs.
-const testingDBPath = "./testing.app.db"
 const delay = 500 * time.Millisecond
 
 func TestRuntime(t *testing.T) {
 	var cfg conduit.Config
 	cfg.DB.Type = "badger"
-	cfg.DB.Badger.Path = testingDBPath
+	cfg.DB.Badger.Path = t.TempDir() + "/testing.app.db"
 	cfg.GRPC.Address = ":0"
 	cfg.HTTP.Address = ":0"
 	cfg.Log.Level = "info"
@@ -40,9 +38,6 @@ func TestRuntime(t *testing.T) {
 	cfg.Pipelines.Path = "./pipelines"
 
 	e, err := conduit.NewRuntime(cfg)
-	t.Cleanup(func() {
-		os.RemoveAll(testingDBPath)
-	})
 	assert.Ok(t, err)
 	assert.NotNil(t, e)
 
