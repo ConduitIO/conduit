@@ -20,14 +20,16 @@ import (
 	"time"
 
 	"github.com/conduitio/conduit/pkg/conduit"
-	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/matryer/is"
 )
 
 // path where tests store their data during runs.
 const delay = 500 * time.Millisecond
 
 func TestRuntime(t *testing.T) {
+	is := is.New(t)
+
 	var cfg conduit.Config
 	cfg.DB.Type = "badger"
 	cfg.DB.Badger.Path = t.TempDir() + "/testing.app.db"
@@ -37,9 +39,9 @@ func TestRuntime(t *testing.T) {
 	cfg.Log.Format = "cli"
 	cfg.Pipelines.Path = "./pipelines"
 
-	e, err := conduit.NewRuntime(cfg)
-	assert.Ok(t, err)
-	assert.NotNil(t, e)
+	r, err := conduit.NewRuntime(cfg)
+	is.NoErr(err)
+	is.True(r != nil)
 
 	// set a cancel on a trigger to kill the context after THRESHOLD duration.
 	ctx, cancel := context.WithCancel(context.TODO())
@@ -50,6 +52,6 @@ func TestRuntime(t *testing.T) {
 
 	// wait on Run and assert that the context was canceled and no other error
 	// occurred.
-	err = e.Run(ctx)
-	assert.True(t, cerrors.Is(err, context.Canceled), "expected error to be context.Cancelled")
+	err = r.Run(ctx)
+	is.True(cerrors.Is(err, context.Canceled)) // expected error to be context.Cancelled
 }
