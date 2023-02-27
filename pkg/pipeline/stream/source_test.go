@@ -18,6 +18,7 @@ import (
 	"context"
 	"io"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -67,6 +68,10 @@ func TestSourceNode_Run(t *testing.T) {
 	err := node.Stop(ctx, nil)
 	is.NoErr(err)
 
+	// stopping the node after a successful stop results in an error
+	err = node.Stop(ctx, nil)
+	is.True(err != nil)
+
 	_, ok, err := cchan.ChanOut[*Message](out).RecvTimeout(ctx, time.Second)
 	is.NoErr(err) // expected node to close outgoing channel
 	is.True(!ok)  // expected node to close outgoing channel
@@ -76,7 +81,7 @@ func TestSourceNode_Run(t *testing.T) {
 	is.True(!ok)  // expected nodeDone to be closed
 }
 
-func TestSourceNode_Stop_Fail(t *testing.T) {
+func TestSourceNode_Stop_ConcurrentFail(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
@@ -85,16 +90,27 @@ func TestSourceNode_Stop_Fail(t *testing.T) {
 
 	wantErr := cerrors.New("test error")
 	startRead := make(chan struct{})
-	stopRead := make(chan struct{})
+	unblockRead := make(chan struct{})
 	src.EXPECT().ID().Return("source-connector").AnyTimes()
 	src.EXPECT().Open(gomock.Any()).Return(nil).Times(1)
 	src.EXPECT().Errors().Return(make(chan error)).Times(1)
 	src.EXPECT().Read(gomock.Any()).DoAndReturn(func(ctx context.Context) (record.Record, error) {
 		close(startRead)
-		<-stopRead
+		<-unblockRead
 		return record.Record{}, plugin.ErrStreamNotOpen
 	}).Times(1)
-	src.EXPECT().Stop(gomock.Any()).Return(nil, wantErr).Times(2)
+	startStop := make(chan struct{})
+	unblockStop := make(chan struct{})
+	src.EXPECT().Stop(gomock.Any()).DoAndReturn(func(ctx context.Context) (record.Position, error) {
+		select {
+		case <-startStop:
+			// startStop already closed, ignore
+		default:
+			close(startStop)
+		}
+		<-unblockStop
+		return nil, wantErr
+	}).Times(3)
 	src.EXPECT().Teardown(gomock.Any()).Return(nil).Times(1)
 
 	node := &SourceNode{
@@ -115,16 +131,41 @@ func TestSourceNode_Stop_Fail(t *testing.T) {
 	is.NoErr(err) // expected read to start running
 	is.True(!ok)  // expected read to start running
 
-	// we stop the node now, the mock will simulate a failure
-	err = node.Stop(ctx, nil)
-	is.True(cerrors.Is(err, wantErr))
+	var wg sync.WaitGroup
+	wg.Add(2)
+	stopErrs := make(chan error, 2)
+	for i := 0; i < 2; i++ {
+		go func() {
+			// we stop the node now, the mock will simulate a failure
+			stopErrs <- node.Stop(ctx, nil)
+		}()
+	}
 
-	// we should be able to try stopping the node again
+	// wait for the stop function to start
+	_, ok, err = cchan.ChanOut[struct{}](startStop).RecvTimeout(ctx, time.Second)
+	is.NoErr(err) // expected stop to start running
+	is.True(!ok)  // expected stop to start running
+
+	// sleep for another millisecond to give the other stop call a chance to
+	// start blocking as well
+	time.Sleep(time.Millisecond)
+
+	// unblock stop
+	close(unblockStop)
+
+	// make sure we got the same error from both goroutines
+	for i := 0; i < 2; i++ {
+		gotErr, ok, _ := cchan.ChanOut[error](stopErrs).RecvTimeout(ctx, time.Second)
+		is.True(ok)
+		is.True(cerrors.Is(gotErr, wantErr))
+	}
+
+	// we should be able to try stopping the node again and get the same error
 	err = node.Stop(ctx, nil)
 	is.True(cerrors.Is(err, wantErr))
 
 	// simulate that read stops running
-	close(stopRead)
+	close(unblockRead)
 
 	_, ok, err = cchan.ChanOut[*Message](out).RecvTimeout(ctx, time.Second)
 	is.NoErr(err) // expected node to close outgoing channel
