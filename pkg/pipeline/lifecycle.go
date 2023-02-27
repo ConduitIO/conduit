@@ -516,6 +516,16 @@ func (s *Service) runPipeline(ctx context.Context, pl *Instance) error {
 
 	// the tomb is responsible for running goroutines related to the pipeline
 	pl.t = &tomb.Tomb{}
+
+	// keep tomb alive until the end of this function, this way we guarantee we
+	// can run the cleanup goroutine even if all nodes stop before we get to it
+	keepAlive := make(chan struct{})
+	pl.t.Go(func() error {
+		<-keepAlive
+		return nil
+	})
+	defer close(keepAlive)
+
 	// nodesWg is done once all nodes stop running
 	var nodesWg sync.WaitGroup
 	var isGracefulShutdown atomic.Bool
