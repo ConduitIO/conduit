@@ -430,6 +430,34 @@ func TestJSProcessor_Inspect(t *testing.T) {
 	is.True(got)
 	is.Equal(recOut, inspOut)
 }
+
+func TestJSProcessor_Close(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	src := `
+		function process(record) {
+			record.Key = new RawData();
+			record.Key.Raw = "foobar";
+			return record;
+		}`
+	underTest, err := New(src, zerolog.Nop())
+	is.NoErr(err) // expected no error when creating the JS processor
+
+	in := underTest.InspectIn(ctx)
+	out := underTest.InspectOut(ctx)
+	underTest.Close()
+
+	// incoming records session should be closed
+	_, got, err := cchan.ChanOut[record.Record](in.C).RecvTimeout(ctx, 100*time.Millisecond)
+	is.NoErr(err)
+	is.True(!got)
+
+	// outgoing records session should be closed
+	_, got, err = cchan.ChanOut[record.Record](out.C).RecvTimeout(ctx, 100*time.Millisecond)
+	is.NoErr(err)
+	is.True(!got)
+}
+
 func TestJSProcessor_JavaScriptException(t *testing.T) {
 	is := is.New(t)
 

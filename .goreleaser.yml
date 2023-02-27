@@ -50,3 +50,19 @@ release:
     ```
     docker pull ghcr.io/conduitio/conduit:{{ .Tag }}
     ```
+nfpms:
+  - license: Apache-2.0
+    maintainer: Conduit Developers <conduit-dev@meroxa.io>
+    homepage: https://conduit.io/
+    description: "Conduit streams data between data stores. Kafka Connect replacement. No JVM required."
+    section: utils
+    formats:
+      - rpm
+      - deb
+    file_name_template: >-
+      {{ .ProjectName }}_
+      {{- .Version }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}

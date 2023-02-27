@@ -34,11 +34,20 @@ type Session struct {
 	id      string
 	logger  log.CtxLogger
 	onClose func()
+	once    *sync.Once
 }
 
 func (s *Session) close() {
-	s.onClose()
-	close(s.C)
+	// close() can be called multiple times on a session. One example is:
+	// There's an active inspector session on a component (processor or connector),
+	// during which the component is deleted.
+	// The session channel will be closed, which terminate the API request fetching
+	// record from this session.
+	// However, the API request termination also closes the session.
+	s.once.Do(func() {
+		s.onClose()
+		close(s.C)
+	})
 }
 
 // send a record to the session's channel.
@@ -114,6 +123,7 @@ func (i *Inspector) NewSession(ctx context.Context) *Session {
 		onClose: func() {
 			i.remove(id)
 		},
+		once: &sync.Once{},
 	}
 	go func() {
 		<-ctx.Done()
@@ -132,6 +142,12 @@ func (i *Inspector) NewSession(ctx context.Context) *Session {
 		Str(log.InspectorSessionID, id).
 		Msg("session created")
 	return s
+}
+
+func (i *Inspector) Close() {
+	for _, s := range i.sessions {
+		s.close()
+	}
 }
 
 // remove a session with given ID from this Inspector.

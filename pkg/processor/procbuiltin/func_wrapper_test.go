@@ -112,3 +112,27 @@ func TestFuncWrapper_InspectOut_ProcessingFailed(t *testing.T) {
 	_, _, err := cchan.ChanOut[record.Record](session.C).RecvTimeout(ctx, 100*time.Millisecond)
 	is.True(cerrors.Is(err, context.DeadlineExceeded))
 }
+
+func TestFuncWrapper_Close(t *testing.T) {
+	ctx := context.Background()
+
+	is := is.New(t)
+
+	underTest := NewFuncWrapper(func(_ context.Context, in record.Record) (record.Record, error) {
+		return record.Record{}, nil
+	})
+
+	in := underTest.InspectIn(ctx)
+	out := underTest.InspectOut(ctx)
+	underTest.Close()
+
+	// incoming records session should be closed
+	_, got, err := cchan.ChanOut[record.Record](in.C).RecvTimeout(ctx, 100*time.Millisecond)
+	is.NoErr(err)
+	is.True(!got)
+
+	// outgoing records session should be closed
+	_, got, err = cchan.ChanOut[record.Record](out.C).RecvTimeout(ctx, 100*time.Millisecond)
+	is.NoErr(err)
+	is.True(!got)
+}

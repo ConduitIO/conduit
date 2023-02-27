@@ -79,6 +79,17 @@ func TestInspector_Send_SessionClosed(t *testing.T) {
 	)
 }
 
+func TestInspector_Close(t *testing.T) {
+	is := is.New(t)
+
+	underTest := New(log.Nop(), 10)
+	s := underTest.NewSession(context.Background())
+
+	underTest.Close()
+	_, ok := <-s.C
+	is.True(!ok)
+}
+
 func TestInspector_Send_SessionCtxCanceled(t *testing.T) {
 	is := is.New(t)
 

@@ -185,6 +185,7 @@ func TestService_Delete_Success(t *testing.T) {
 
 	procType := "processor-type"
 	p := mock.NewProcessor(ctrl)
+	p.EXPECT().Close()
 
 	registry := newTestBuilderRegistry(t, map[string]processor.Interface{procType: p})
 	service := processor.NewService(log.Nop(), db, registry)
