@@ -48,7 +48,7 @@ type SourceNode struct {
 	connectorCtxCancel context.CancelFunc
 
 	stop struct {
-		lock            sync.Mutex
+		sync.Mutex
 		position        record.Position
 		reason          error
 		positionFetched bool
@@ -191,8 +191,8 @@ func (n *SourceNode) Stop(ctx context.Context, reason error) error {
 		return cerrors.New("source node is not running")
 	}
 
-	n.stop.lock.Lock()
-	defer n.stop.lock.Unlock()
+	n.stop.Lock()
+	defer n.stop.Unlock()
 
 	if n.stop.successful {
 		if n.stop.reason != nil {
