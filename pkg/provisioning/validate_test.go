@@ -100,7 +100,7 @@ func TestValidator_InvalidFields(t *testing.T) {
 		name   string
 		config PipelineConfig
 	}{{
-		name: "processor type is invalid",
+		name: "connector type is invalid",
 		config: PipelineConfig{
 			Status:      "running",
 			Name:        "pipeline1",
@@ -134,6 +134,21 @@ func TestValidator_InvalidFields(t *testing.T) {
 						"aws.region": "us-east-1",
 						"aws.bucket": "my-bucket",
 					},
+				},
+			},
+		},
+	}, {
+		name: "processor workers is negative",
+		config: PipelineConfig{
+			Status:      "running",
+			Name:        "pipeline1",
+			Description: "desc1",
+			Processors: map[string]ProcessorConfig{
+				"proc1": {
+					// invalid field
+					Type:     "js",
+					Settings: map[string]string{},
+					Workers:  -1,
 				},
 			},
 		},

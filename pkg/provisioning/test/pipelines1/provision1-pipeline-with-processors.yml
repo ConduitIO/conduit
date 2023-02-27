@@ -20,6 +20,7 @@ pipelines:
         processors:
           proc1con:
             type: js
+            workers: 10
             settings:
               additionalProp1: string
     processors:
