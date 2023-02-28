@@ -22,6 +22,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/conduitio/conduit/pkg/foundation/cchan"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/gorilla/websocket"
 )
@@ -58,10 +59,13 @@ var (
 // redirects the response data from the http.Handler
 // to a WebSocket connection.
 type webSocketProxy struct {
-	handler  http.Handler
-	logger   log.CtxLogger
-	upgrader websocket.Upgrader
+	// done is closed to indicate that the proxy should stop working
+	done <-chan struct{}
+	// handler is the underlying handler actually handling requests
+	handler http.Handler
+	logger  log.CtxLogger
 
+	upgrader websocket.Upgrader
 	// Time allowed to write a message to the peer.
 	writeWait time.Duration
 	// Time allowed to read the next pong message from the peer.
@@ -70,9 +74,10 @@ type webSocketProxy struct {
 	pingPeriod time.Duration
 }
 
-func newWebSocketProxy(handler http.Handler, logger log.CtxLogger) *webSocketProxy {
+func newWebSocketProxy(ctx context.Context, handler http.Handler, logger log.CtxLogger) *webSocketProxy {
 	proxy := &webSocketProxy{
 		handler: handler,
+		done:    ctx.Done(),
 		logger:  logger.WithComponent("grpcutil.webSocketProxy"),
 		upgrader: websocket.Upgrader{
 			ReadBufferSize:  1024,
@@ -82,7 +87,6 @@ func newWebSocketProxy(handler http.Handler, logger log.CtxLogger) *webSocketPro
 		pongWait:   defaultPongWait,
 		pingPeriod: (defaultPongWait * 9) / 10,
 	}
-
 	return proxy
 }
 
@@ -109,9 +113,16 @@ func (p *webSocketProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // and stop writing any data to the WebSocket connection. This will
 // automatically halt all the "pipeline nodes" after the underlying response.
 func (p *webSocketProxy) proxy(w http.ResponseWriter, r *http.Request) {
-	ctx, cancelFn := context.WithCancel(r.Context())
-	defer cancelFn()
+	ctx, cancelCtx := context.WithCancel(r.Context())
+	defer cancelCtx()
 	r = r.WithContext(ctx)
+	go func() {
+		// we're using ChanOut.Recv() so that the goroutine doesn't wait on
+		// the proxy to be done even when the request is done
+		_, _, err := cchan.ChanOut[struct{}](p.done).Recv(ctx)
+		p.logger.Debug(ctx).Err(err).Msgf("websocket connection will be closed")
+		cancelCtx()
+	}()
 
 	// Upgrade connection to WebSocket
 	conn, err := p.upgrader.Upgrade(w, r, http.Header{})
@@ -136,9 +147,9 @@ func (p *webSocketProxy) proxy(w http.ResponseWriter, r *http.Request) {
 	messages := make(chan []byte)
 	// startWebSocketRead and startWebSocketWrite need to cancel the context
 	// if they encounter an error reading from or writing to the WS connection
-	go p.startWebSocketRead(ctx, conn, cancelFn)
+	go p.startWebSocketRead(ctx, conn, cancelCtx)
 	go p.readFromHTTPResponse(ctx, responseR, messages)
-	p.startWebSocketWrite(ctx, messages, conn, cancelFn)
+	p.startWebSocketWrite(ctx, messages, conn, cancelCtx)
 }
 
 // startWebSocketRead starts a read loop on the proxy's WebSocket connection.
@@ -172,9 +183,10 @@ func (p *webSocketProxy) startWebSocketRead(ctx context.Context, conn *websocket
 		if err != nil {
 			if p.isClosedConnErr(err) {
 				p.logger.Debug(ctx).Err(err).Msg("closed connection")
+			} else {
+				p.logger.Warn(ctx).Err(err).Msg("read error")
 			}
 
-			p.logger.Warn(ctx).Err(err).Msg("read error")
 			break
 		}
 	}
@@ -190,6 +202,7 @@ func (p *webSocketProxy) isClosedConnErr(err error) bool {
 		websocket.CloseNormalClosure,
 		websocket.CloseGoingAway,
 		websocket.CloseAbnormalClosure,
+		websocket.CloseNoStatusReceived,
 	)
 }
 
@@ -233,13 +246,22 @@ func (p *webSocketProxy) startWebSocketWrite(ctx context.Context, messages chan 
 				// readFromHTTPResponse closed the channel.
 				err := conn.WriteMessage(websocket.CloseMessage, []byte{})
 				if err != nil {
-					p.logger.Warn(ctx).Err(err).Msg("[write] failed sending close message")
+					p.logger.Warn(ctx).Err(err).Msg("failed sending close message")
 				}
 				return
 			}
 
 			if err := conn.WriteMessage(websocket.TextMessage, message); err != nil {
-				p.logger.Warn(ctx).Err(err).Msg("[write] error writing websocket message")
+				// NB: if this connection has been closed by the client
+				// then that will cancel the request context, which in turn
+				// makes the request return `{"code":1,"message":"context canceled","details":[]}`.
+				// This proxy will try to write that, but will fail,
+				// because the connection has already been closed.
+				e := p.logger.Warn(ctx)
+				if string(message) == `{"code":1,"message":"context canceled","details":[]}` {
+					e = p.logger.Trace(ctx)
+				}
+				e.Bytes("message", message).Err(err).Msg("failed writing websocket message")
 				return
 			}
 		case <-ticker.C:

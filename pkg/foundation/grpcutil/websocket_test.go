@@ -39,7 +39,7 @@ func TestWebSocket_NoUpgradeToWebSocket(t *testing.T) {
 		_, err := w.Write([]byte(msg))
 		is.NoErr(err)
 	})
-	s := httptest.NewServer(newWebSocketProxy(h, log.Nop()))
+	s := httptest.NewServer(newWebSocketProxy(ctx, h, log.Nop()))
 	defer s.Close()
 
 	req, err := http.NewRequestWithContext(ctx, "GET", s.URL, nil)
@@ -57,13 +57,14 @@ func TestWebSocket_NoUpgradeToWebSocket(t *testing.T) {
 
 func TestWebSocket_Read_Single(t *testing.T) {
 	is := is.New(t)
+	ctx := context.Background()
 
 	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Data written to a WebSocket is new-line delimited
 		_, err := w.Write([]byte("hi there\n"))
 		is.NoErr(err)
 	})
-	s := httptest.NewServer(newWebSocketProxy(h, log.Nop()))
+	s := httptest.NewServer(newWebSocketProxy(ctx, h, log.Nop()))
 	defer s.Close()
 
 	// Convert http to ws
@@ -89,6 +90,7 @@ func TestWebSocket_Read_Single(t *testing.T) {
 
 func TestWebSocket_Read_Multiple(t *testing.T) {
 	is := is.New(t)
+	ctx := context.Background()
 
 	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Data written to a WebSocket is new-line delimited
@@ -98,7 +100,7 @@ func TestWebSocket_Read_Multiple(t *testing.T) {
 		_, err = w.Write([]byte("second message\n"))
 		is.NoErr(err)
 	})
-	s := httptest.NewServer(newWebSocketProxy(h, log.Nop()))
+	s := httptest.NewServer(newWebSocketProxy(ctx, h, log.Nop()))
 	defer s.Close()
 
 	// Convert http to ws
@@ -129,13 +131,14 @@ func TestWebSocket_Read_Multiple(t *testing.T) {
 
 func TestWebSocket_Read_ClientClosed(t *testing.T) {
 	is := is.New(t)
+	ctx := context.Background()
 
 	handlerDone := make(chan struct{})
 	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer close(handlerDone)
 		<-r.Context().Done()
 	})
-	s := httptest.NewServer(newWebSocketProxy(h, log.Nop()))
+	s := httptest.NewServer(newWebSocketProxy(ctx, h, log.Nop()))
 	defer s.Close()
 
 	// Convert http to ws
@@ -149,6 +152,35 @@ func TestWebSocket_Read_ClientClosed(t *testing.T) {
 
 	err = ws.Close()
 	is.NoErr(err)
+
+	_, ok, err := cchan.ChanOut[struct{}](handlerDone).RecvTimeout(context.Background(), time.Second)
+	is.True(!ok) // expected channel to be closed
+	is.NoErr(err)
+}
+
+func TestWebSocket_ContextCancelled(t *testing.T) {
+	is := is.New(t)
+	ctx, cancelCtx := context.WithCancel(context.Background())
+	defer cancelCtx()
+
+	handlerDone := make(chan struct{})
+	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer close(handlerDone)
+		<-r.Context().Done()
+	})
+	s := httptest.NewServer(newWebSocketProxy(ctx, h, log.Nop()))
+	defer s.Close()
+
+	// Convert http to ws
+	wsURL := "ws" + strings.TrimPrefix(s.URL, "http")
+
+	// Connect to the server
+	ws, resp, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	is.NoErr(err)
+	defer ws.Close()
+	defer resp.Body.Close()
+
+	cancelCtx()
 
 	_, ok, err := cchan.ChanOut[struct{}](handlerDone).RecvTimeout(context.Background(), time.Second)
 	is.True(!ok) // expected channel to be closed
