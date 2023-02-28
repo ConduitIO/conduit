@@ -259,7 +259,11 @@ func (p *webSocketProxy) startWebSocketWrite(ctx context.Context, messages chan 
 				// makes the request return `{"code":1,"message":"context canceled","details":[]}`.
 				// This proxy will try to write that, but will fail,
 				// because the connection has already been closed.
-				p.logger.Warn(ctx).Err(err).Msg("failed writing websocket message")
+				e := p.logger.Warn(ctx)
+				if string(message) == `{"code":1,"message":"context canceled","details":[]}` {
+					e = p.logger.Trace(ctx)
+				}
+				e.Bytes("message", message).Err(err).Msg("failed writing websocket message")
 				return
 			}
 		case <-ticker.C:
