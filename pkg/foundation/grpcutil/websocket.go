@@ -121,7 +121,7 @@ func (p *webSocketProxy) proxy(w http.ResponseWriter, r *http.Request) {
 		// the proxy to be done even when the request is done
 		_, _, err := cchan.ChanOut[struct{}](p.done).Recv(ctx)
 		if err != nil {
-			p.logger.Debug(ctx).Msgf("request context returned an error: %v", err)
+			p.logger.Debug(ctx).Err(err).Msgf("websocket connection will be closed")
 		}
 		cancelCtx()
 	}()
