@@ -95,6 +95,6 @@
     "edition": "octane"
   },
   "dependencies": {
-    "pretty-print-json": "^1.3.1"
+    "pretty-print-json": "^1.4.0"
   }
 }
