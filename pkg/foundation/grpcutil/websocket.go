@@ -120,9 +120,7 @@ func (p *webSocketProxy) proxy(w http.ResponseWriter, r *http.Request) {
 		// we're using ChanOut.Recv() so that the goroutine doesn't wait on
 		// the proxy to be done even when the request is done
 		_, _, err := cchan.ChanOut[struct{}](p.done).Recv(ctx)
-		if err != nil {
-			p.logger.Debug(ctx).Err(err).Msgf("websocket connection will be closed")
-		}
+		p.logger.Debug(ctx).Err(err).Msgf("websocket connection will be closed")
 		cancelCtx()
 	}()
 
