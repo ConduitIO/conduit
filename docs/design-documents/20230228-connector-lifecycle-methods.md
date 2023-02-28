@@ -200,8 +200,8 @@ Consequently, there are some edge cases we need to look out for:
   the configuration passed to the creation lifecycle method should be the latest
   one (after the update).
 - If a connector is updated twice without being started between updates, the
-  update lifecycle method should be called with the last active configuration (
-  old) and with the latest configuration (new).
+  update lifecycle method should be called with the last active configuration
+  (old) and with the latest configuration (new).
 - If a connector is updated and deleted without being started in between, the
   deletion lifecycle method should receive the old configuration before the
   update.
