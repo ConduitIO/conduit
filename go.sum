@@ -149,8 +149,8 @@ github.com/conduitio/conduit-connector-file v0.4.0 h1:0zvcJ2LtKVVY0QDr9jNyZcgC/8
 github.com/conduitio/conduit-connector-file v0.4.0/go.mod h1:o6USrDXGKuUzdiF03PyRwaHTz2dmNscOfa+akIQskr8=
 github.com/conduitio/conduit-connector-generator v0.3.1 h1:lo0hhtLWzf38AdV8NK6WGygqhHaSkcWkucBt3Uujexk=
 github.com/conduitio/conduit-connector-generator v0.3.1/go.mod h1:WLcW/avVPFx2nhYurfnYC3LqRYW/L7+6106RPA0D+As=
-github.com/conduitio/conduit-connector-kafka v0.4.0 h1:8X6XeCKumeTfXPNWfAHWyvswWpTOWN80Of4nPG6YL8E=
-github.com/conduitio/conduit-connector-kafka v0.4.0/go.mod h1:KWBXfIUtN+CboJfuBVLstu8qoCqUHkrQ8qmAjzyo6Q8=
+github.com/conduitio/conduit-connector-kafka v0.4.1 h1:5AXrb9N9pv/S9PKEkKLtjsgSe1wi3GuIMEGsSh42BMA=
+github.com/conduitio/conduit-connector-kafka v0.4.1/go.mod h1:SBdq/v0ugTsu4eGpnMPMoJHjq4nwb9AIbPXcGZu86M8=
 github.com/conduitio/conduit-connector-log v0.1.2 h1:CPlsdgr1Ui6j3fNVYpp/qHVwXKbgfu/LFptu5OF+I7A=
 github.com/conduitio/conduit-connector-log v0.1.2/go.mod h1:mnox8F5YrwQpuX+Y/WJidgqi6882Id6i8MslW0ic+XA=
 github.com/conduitio/conduit-connector-postgres v0.3.0 h1:owlVIXeAWVAuHW0Hzr3+zxrAB9/LXIedINduFQM/HoM=
@@ -575,8 +575,8 @@ github.com/russross/blackfriday/v2 v2.1.0 h1:JIOH55/0cWyOuilr9/qlrm0BSXldqnqwMsf
 github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQDYRxCVz55jmeOWTM=
 github.com/ruudk/golang-pdf417 v0.0.0-20181029194003-1af4ab5afa58/go.mod h1:6lfFZQK844Gfx8o5WFuvpxWRwnSoipWe/p622j1v06w=
 github.com/satori/go.uuid v1.2.0/go.mod h1:dA0hQrYB0VpLJoorglMZABFdXlWrHn1NEOzdhQKdks0=
-github.com/segmentio/kafka-go v0.4.38 h1:iQdOBbUSdfuYlFpvjuALgj7N6DrdPA0HfB4AhREOdtg=
-github.com/segmentio/kafka-go v0.4.38/go.mod h1:ikyuGon/60MN/vXFgykf7Zm8P5Be49gJU6vezwjnnhU=
+github.com/segmentio/kafka-go v0.4.39 h1:75smaomhvkYRwtuOwqLsdhgCG30B82NsbdkdDfFbvrw=
+github.com/segmentio/kafka-go v0.4.39/go.mod h1:T0MLgygYvmqmBvC+s8aCcbVNfJN4znVne5j0Pzowp/Q=
 github.com/shopspring/decimal v0.0.0-20180709203117-cd690d0c9e24/go.mod h1:M+9NzErvs504Cn4c5DxATwIqPbtswREoFCre64PpcG4=
 github.com/shopspring/decimal v1.2.0/go.mod h1:DKyhrW/HYNuLGql+MJL6WCR6knT2jwCFRcu2hWCYk4o=
 github.com/shopspring/decimal v1.3.1 h1:2Usl1nmF/WZucqkFZhnfFYxxxu8LG21F6nPQBE5gKV8=
