@@ -35,14 +35,15 @@ func NewParser(logger log.CtxLogger) *Parser {
 }
 
 func (p *Parser) Parse(ctx context.Context, reader io.Reader) ([]config.Pipeline, error) {
-	config, err := p.ParseConfiguration(ctx, reader)
+	configs, err := p.ParseConfiguration(ctx, reader)
 	if err != nil {
 		return nil, err
 	}
-	return config.ToProvisioning(), nil
+
+	return p.configurationsToConfig(configs), nil
 }
 
-func (p *Parser) ParseConfiguration(ctx context.Context, reader io.Reader) (Configuration, error) {
+func (p *Parser) ParseConfiguration(ctx context.Context, reader io.Reader) ([]Configuration, error) {
 	dec := yaml.NewDecoder(reader)
 	dec.KnownFields(true)
 
@@ -67,14 +68,14 @@ func (p *Parser) ParseConfiguration(ctx context.Context, reader io.Reader) (Conf
 			}
 			// check if we recovered from the error
 			if err != nil {
-				return Configuration{}, cerrors.Errorf("parsing error: %w", err)
+				return nil, cerrors.Errorf("parsing error: %w", err)
 			}
 		}
 		linter.Warnings().Log(ctx, p.logger)
 		configs = append(configs, config)
 	}
 
-	return p.mergeConfigurations(configs)
+	return configs, nil
 }
 
 func (p *Parser) handleYamlTypeError(ctx context.Context, typeErr *yaml.TypeError) error {
@@ -94,23 +95,15 @@ func (p *Parser) handleYamlTypeError(ctx context.Context, typeErr *yaml.TypeErro
 	return nil
 }
 
-// mergePipelinesConfigMaps takes an array of PipelinesConfig and merges them into one map
-func (p *Parser) mergeConfigurations(in []Configuration) (Configuration, error) {
+// configurationsToConfig transforms all configurations to config.Pipeline types.
+func (p *Parser) configurationsToConfig(in []Configuration) []config.Pipeline {
 	if len(in) == 0 {
-		return Configuration{}, nil
+		return nil
 	}
 
-	out := Configuration{
-		Pipelines: make(map[string]Pipeline, 0),
+	out := make([]config.Pipeline, 0)
+	for _, cfg := range in {
+		out = append(out, cfg.ToConfig()...)
 	}
-
-	for _, config := range in {
-		for k, v := range config.Pipelines {
-			if _, ok := out.Pipelines[k]; ok {
-				return Configuration{}, cerrors.Errorf("found a duplicated pipeline id: %s", k)
-			}
-			out.Pipelines[k] = v
-		}
-	}
-	return out, nil
+	return out
 }

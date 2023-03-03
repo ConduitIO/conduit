@@ -50,86 +50,92 @@ type DLQ struct {
 	WindowNackThreshold *int              `yaml:"window-nack-threshold"`
 }
 
-func (c Configuration) ToProvisioning() []config.Pipeline {
+func (c Configuration) ToConfig() []config.Pipeline {
 	if len(c.Pipelines) == 0 {
 		return nil
 	}
 
 	out := make([]config.Pipeline, 0, len(c.Pipelines))
 	for id, pipeline := range c.Pipelines {
-		p := pipeline.ToProvisioning()
+		p := pipeline.ToConfig()
 		p.ID = id
 		out = append(out, p)
 	}
 	return out
 }
 
-func (p Pipeline) ToProvisioning() config.Pipeline {
+func (p Pipeline) ToConfig() config.Pipeline {
 	return config.Pipeline{
 		Status:      p.Status,
 		Name:        p.Name,
 		Description: p.Description,
-		Connectors:  p.connectorsToProvisioning(),
-		Processors:  p.processorsToProvisioning(),
-		DLQ:         p.DLQ.ToProvisioning(),
+		Connectors:  p.connectorsToConfig(),
+		Processors:  p.processorsToConfig(),
+		DLQ:         p.DLQ.ToConfig(),
 	}
 }
 
-func (p Pipeline) connectorsToProvisioning() []config.Connector {
+func (p Pipeline) connectorsToConfig() []config.Connector {
 	if len(p.Connectors) == 0 {
 		return nil
 	}
 	connectors := make([]config.Connector, 0, len(p.Connectors))
 	for id, connector := range p.Connectors {
-		c := connector.ToProvisioning()
+		c := connector.ToConfig()
 		c.ID = id
 		connectors = append(connectors, c)
 	}
 	return connectors
 }
-func (p Pipeline) processorsToProvisioning() []config.Processor {
+func (p Pipeline) processorsToConfig() []config.Processor {
 	if len(p.Processors) == 0 {
 		return nil
 	}
 	processors := make([]config.Processor, 0, len(p.Processors))
+
+	// Warning: this ordering is not deterministic, v2 of the pipeline config
+	// fixes this.
 	for id, processor := range p.Processors {
-		proc := processor.ToProvisioning()
+		proc := processor.ToConfig()
 		proc.ID = id
 		processors = append(processors, proc)
 	}
 	return processors
 }
 
-func (c Connector) ToProvisioning() config.Connector {
+func (c Connector) ToConfig() config.Connector {
 	return config.Connector{
 		Type:       c.Type,
 		Plugin:     c.Plugin,
 		Name:       c.Name,
 		Settings:   c.Settings,
-		Processors: c.processorsToProvisioning(),
+		Processors: c.processorsToConfig(),
 	}
 }
-func (c Connector) processorsToProvisioning() []config.Processor {
+func (c Connector) processorsToConfig() []config.Processor {
 	if len(c.Processors) == 0 {
 		return nil
 	}
 	processors := make([]config.Processor, 0, len(c.Processors))
+
+	// Warning: this ordering is not deterministic, v2 of the pipeline config
+	// fixes this.
 	for id, processor := range c.Processors {
-		proc := processor.ToProvisioning()
+		proc := processor.ToConfig()
 		proc.ID = id
 		processors = append(processors, proc)
 	}
 	return processors
 }
 
-func (p Processor) ToProvisioning() config.Processor {
+func (p Processor) ToConfig() config.Processor {
 	return config.Processor{
 		Type:     p.Type,
 		Settings: p.Settings,
 	}
 }
 
-func (p DLQ) ToProvisioning() config.DLQ {
+func (p DLQ) ToConfig() config.DLQ {
 	return config.DLQ{
 		Plugin:              p.Plugin,
 		Settings:            p.Settings,

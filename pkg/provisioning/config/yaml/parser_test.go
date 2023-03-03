@@ -30,79 +30,86 @@ func TestParser_Success(t *testing.T) {
 	parser := NewParser(log.Nop())
 	filepath := "./test/pipelines1-success.yml"
 	intPtr := func(i int) *int { return &i }
-	want := map[string]Pipeline{
-		"pipeline1": {
-			Status:      "running",
-			Name:        "pipeline1",
-			Description: "desc1",
-			Processors: map[string]Processor{
-				"pipeline1proc1": {
-					Type: "js",
-					Settings: map[string]string{
-						"additionalProp1": "string",
-						"additionalProp2": "string",
+	want := []Configuration{{
+		Version: "1.0",
+		Pipelines: map[string]Pipeline{
+			"pipeline1": {
+				Status:      "running",
+				Name:        "pipeline1",
+				Description: "desc1",
+				Processors: map[string]Processor{
+					"pipeline1proc1": {
+						Type: "js",
+						Settings: map[string]string{
+							"additionalProp1": "string",
+							"additionalProp2": "string",
+						},
 					},
 				},
-			},
-			Connectors: map[string]Connector{
-				"con1": {
-					Type:   "source",
-					Plugin: "builtin:s3",
-					Name:   "s3-source",
-					Settings: map[string]string{
-						"aws.region": "us-east-1",
-						"aws.bucket": "my-bucket",
+				Connectors: map[string]Connector{
+					"con1": {
+						Type:   "source",
+						Plugin: "builtin:s3",
+						Name:   "s3-source",
+						Settings: map[string]string{
+							"aws.region": "us-east-1",
+							"aws.bucket": "my-bucket",
+						},
+						Processors: map[string]Processor{
+							"proc1": {
+								Type: "js",
+								Settings: map[string]string{
+									"additionalProp1": "string",
+									"additionalProp2": "string",
+								},
+							},
+						},
 					},
-					Processors: map[string]Processor{
-						"proc1": {
-							Type: "js",
-							Settings: map[string]string{
-								"additionalProp1": "string",
-								"additionalProp2": "string",
+				},
+				DLQ: DLQ{
+					Plugin: "my-plugin",
+					Settings: map[string]string{
+						"foo": "bar",
+					},
+					WindowSize:          intPtr(4),
+					WindowNackThreshold: intPtr(2),
+				},
+			},
+		},
+	}, {
+		Version: "1.1",
+		Pipelines: map[string]Pipeline{
+			"pipeline2": {
+				Status:      "stopped",
+				Name:        "pipeline2",
+				Description: "desc2",
+				Connectors: map[string]Connector{
+					"con2": {
+						Type:   "destination",
+						Plugin: "builtin:file",
+						Name:   "file-dest",
+						Settings: map[string]string{
+							"path": "my/path",
+						},
+						Processors: map[string]Processor{
+							"con2proc1": {
+								Type: "hoistfield",
+								Settings: map[string]string{
+									"additionalProp1": "string",
+									"additionalProp2": "string",
+								},
 							},
 						},
 					},
 				},
 			},
-			DLQ: DLQ{
-				Plugin: "my-plugin",
-				Settings: map[string]string{
-					"foo": "bar",
-				},
-				WindowSize:          intPtr(4),
-				WindowNackThreshold: intPtr(2),
+			"pipeline3": {
+				Status:      "stopped",
+				Name:        "pipeline3",
+				Description: "empty",
 			},
 		},
-		"pipeline2": {
-			Status:      "stopped",
-			Name:        "pipeline2",
-			Description: "desc2",
-			Connectors: map[string]Connector{
-				"con2": {
-					Type:   "destination",
-					Plugin: "builtin:file",
-					Name:   "file-dest",
-					Settings: map[string]string{
-						"path": "my/path",
-					},
-					Processors: map[string]Processor{
-						"con2proc1": {
-							Type: "hoistfield",
-							Settings: map[string]string{
-								"additionalProp1": "string",
-								"additionalProp2": "string",
-							},
-						},
-					},
-				},
-			},
-		},
-		"pipeline3": {
-			Status:      "stopped",
-			Name:        "pipeline3",
-			Description: "empty",
-		},
-	}
+	}}
 
 	file, err := os.Open(filepath)
 	is.NoErr(err)
@@ -110,7 +117,7 @@ func TestParser_Success(t *testing.T) {
 
 	got, err := parser.ParseConfiguration(context.Background(), file)
 	is.NoErr(err)
-	is.Equal(want, got.Pipelines)
+	is.Equal(got, want)
 }
 
 func TestParser_Warnings(t *testing.T) {
@@ -147,7 +154,7 @@ func TestParser_DuplicatePipelineId(t *testing.T) {
 	defer file.Close()
 
 	_, err = parser.ParseConfiguration(context.Background(), file)
-	is.True(err != nil)
+	is.NoErr(err)
 }
 
 func TestParser_EmptyFile(t *testing.T) {
@@ -195,26 +202,29 @@ func TestParser_EnvVars(t *testing.T) {
 		t.Fatalf("Failed to write env var: $TEST_PARSER_AWS_URL")
 	}
 
-	want := map[string]Pipeline{
-		"pipeline1": {
-			Status:      "running",
-			Name:        "pipeline1",
-			Description: "desc1",
-			Connectors: map[string]Connector{
-				"con1": {
-					Type:   "source",
-					Plugin: "builtin:s3",
-					Name:   "s3-source",
-					Settings: map[string]string{
-						// env variables should be replaced with their values
-						"aws.secret": "my-aws-secret",
-						"aws.key":    "my-aws-key",
-						"aws.url":    "my/aws-url/url",
+	want := []Configuration{{
+		Version: "1.0",
+		Pipelines: map[string]Pipeline{
+			"pipeline1": {
+				Status:      "running",
+				Name:        "pipeline1",
+				Description: "desc1",
+				Connectors: map[string]Connector{
+					"con1": {
+						Type:   "source",
+						Plugin: "builtin:s3",
+						Name:   "s3-source",
+						Settings: map[string]string{
+							// env variables should be replaced with their values
+							"aws.secret": "my-aws-secret",
+							"aws.key":    "my-aws-key",
+							"aws.url":    "my/aws-url/url",
+						},
 					},
 				},
 			},
 		},
-	}
+	}}
 
 	file, err := os.Open(filepath)
 	is.NoErr(err)
@@ -222,5 +232,5 @@ func TestParser_EnvVars(t *testing.T) {
 
 	got, err := parser.ParseConfiguration(context.Background(), file)
 	is.NoErr(err)
-	is.Equal(want, got.Pipelines)
+	is.Equal(got, want)
 }
