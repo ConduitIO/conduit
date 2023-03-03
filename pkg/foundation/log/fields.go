@@ -33,5 +33,7 @@ const (
 	PluginNameField = "plugin_name"
 	PluginPathField = "plugin_path"
 
+	FilepathField = "filepath"
+
 	InspectorSessionID = "inspector_session_id"
 )

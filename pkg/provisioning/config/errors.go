@@ -1,4 +1,4 @@
-// Copyright © 2022 Meroxa, Inc.
+// Copyright © 2023 Meroxa, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,10 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package provisioning
+package config
 
 import "github.com/conduitio/conduit/pkg/foundation/cerrors"
 
 var (
-	ErrDuplicatedPipelineID = cerrors.New("duplicated pipeline ID")
+	ErrMandatoryField = cerrors.New("mandatory field not specified")
+	ErrInvalidField   = cerrors.New("invalid field value")
 )

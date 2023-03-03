@@ -1,4 +1,4 @@
-// Copyright © 2022 Meroxa, Inc.
+// Copyright © 2023 Meroxa, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package provisioning
+package yaml
 
 import (
 	"context"
@@ -26,15 +26,7 @@ import (
 
 type configLinter struct {
 	version  string
-	warnings []warning
-}
-
-type warning struct {
-	field   string
-	line    int
-	column  int
-	value   string
-	message string
+	warnings warnings
 }
 
 func newConfigLinter() *configLinter {
@@ -54,7 +46,7 @@ func (cl *configLinter) init() {
 	cl.version = versions[len(versions)-1].Original()
 }
 
-func (cl *configLinter) DecoderHook(path []string, node *yaml.Node) {
+func (cl *configLinter) InspectNode(path []string, node *yaml.Node) {
 	if len(path) == 1 && path[0] == "version" {
 		// version gets special treatment, it adjusts the warning we create
 		if _, ok := expandedChangelog[node.Value]; !ok {
@@ -93,16 +85,31 @@ func (cl *configLinter) addWarning(field string, node *yaml.Node, message string
 	})
 }
 
-func (cl *configLinter) LogWarnings(ctx context.Context, logger log.CtxLogger, path string) {
-	for _, w := range cl.warnings {
-		e := logger.Warn(ctx).
-			Int("line", w.line).
-			Int("column", w.column).
-			Str("field", w.field).
-			Str("value", w.value)
-		if path != "" {
-			e.Str("path", path)
-		}
-		e.Msg(w.message)
+func (cl *configLinter) Warnings() warnings {
+	return cl.warnings
+}
+
+type warnings []warning
+
+func (w warnings) Log(ctx context.Context, logger log.CtxLogger) {
+	for _, ww := range w {
+		ww.Log(ctx, logger)
 	}
+}
+
+type warning struct {
+	field   string
+	line    int
+	column  int
+	value   string
+	message string
+}
+
+func (w warning) Log(ctx context.Context, logger log.CtxLogger) {
+	e := logger.Warn(ctx).
+		Int("line", w.line).
+		Int("column", w.column).
+		Str("field", w.field).
+		Str("value", w.value)
+	e.Msg(w.message)
 }
