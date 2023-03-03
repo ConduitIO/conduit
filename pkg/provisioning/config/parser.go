@@ -53,6 +53,8 @@ type DLQ struct {
 	WindowNackThreshold *int
 }
 
+// Parser reads data from reader and parses all pipelines defined in the
+// configuration.
 type Parser interface {
 	Parse(ctx context.Context, reader io.Reader) ([]Pipeline, error)
 }
