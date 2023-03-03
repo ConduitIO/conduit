@@ -220,6 +220,17 @@ introduced methods in the connector protocol do not exist.
     configuration that we would need to pass to `Configure` is empty which
     _probably_ makes it invalid. This needs to be called out explicitly in the
     SDK documentation.
+- **It's expected that, if connections are needed, that they are opened in the
+  connector's `Open` method. Any setup will depend on something like that, so it
+  looks like we should call lifecycle methods after `Open`?**
+  - Not really. The lifecycle method should open its own connection if it needs
+    one and close it afterward. The reasoning is that the purpose of the
+    lifecycle method is to initialize something _before_ the connector starts
+    (e.g. creates the logical replication slot), so when `Open` is called things
+    are already in place and usable. If we call the lifecycle methods after
+    `Open`, we would see a different state in `Open` on the first run of the
+    pipeline (e.g. first time there's no logical replication slot, while the
+    second time we run the pipeline it's there).
 
 ### Recommendation
 
