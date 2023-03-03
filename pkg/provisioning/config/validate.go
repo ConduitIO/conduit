@@ -1,4 +1,4 @@
-// Copyright © 2022 Meroxa, Inc.
+// Copyright © 2023 Meroxa, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package provisioning
+package config
 
 import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -26,54 +26,55 @@ const (
 	TypeDestination = "destination"
 )
 
-// ValidatePipelinesConfig validates config field values for a pipeline
-func ValidatePipelinesConfig(cfg PipelineConfig) error {
+// Validate validates config field values for a pipeline
+func Validate(cfg Pipeline) error {
 	var err, tmpErr error
-	if cfg.Status != StatusRunning && cfg.Status != StatusStopped {
-		err = multierror.Append(err, cerrors.Errorf("\"status\" is invalid: %w", ErrInvalidField))
+	if cfg.ID == "" {
+		err = multierror.Append(err, cerrors.Errorf(`id is mandatory: %w`, ErrMandatoryField))
 	}
-	tmpErr = validateConnectorsConfig(cfg.Connectors)
+	if cfg.Status != StatusRunning && cfg.Status != StatusStopped {
+		err = multierror.Append(err, cerrors.Errorf(`"status" is invalid: %w`, ErrInvalidField))
+	}
+	tmpErr = validateConnectors(cfg.Connectors)
 	if tmpErr != nil {
 		err = multierror.Append(err, tmpErr)
 	}
-	tmpErr = validateProcessorsConfig(cfg.Processors)
+	tmpErr = validateProcessors(cfg.Processors)
 	if tmpErr != nil {
 		err = multierror.Append(err, tmpErr)
 	}
 	return err
 }
 
-// validateConnectorsConfig validates config field values for connectors
-func validateConnectorsConfig(mp map[string]ConnectorConfig) error {
+// validateConnectors validates config field values for connectors
+func validateConnectors(mp []Connector) error {
 	var err, pErr error
-	for k, cfg := range mp {
+	for _, cfg := range mp {
 		if cfg.Plugin == "" {
-			err = multierror.Append(err, cerrors.Errorf("connector %q: \"plugin\" is mandatory: %w", k, ErrMandatoryField))
+			err = multierror.Append(err, cerrors.Errorf("connector %q: \"plugin\" is mandatory: %w", cfg.ID, ErrMandatoryField))
 		}
 		if cfg.Type == "" {
-			err = multierror.Append(err, cerrors.Errorf("connector %q: \"type\" is mandatory: %w", k, ErrMandatoryField))
+			err = multierror.Append(err, cerrors.Errorf("connector %q: \"type\" is mandatory: %w", cfg.ID, ErrMandatoryField))
 		}
 		if cfg.Type != "" && cfg.Type != TypeSource && cfg.Type != TypeDestination {
-			err = multierror.Append(err, cerrors.Errorf("connector %q: \"type\" is invalid: %w", k, ErrInvalidField))
+			err = multierror.Append(err, cerrors.Errorf("connector %q: \"type\" is invalid: %w", cfg.ID, ErrInvalidField))
 		}
 
-		pErr = validateProcessorsConfig(cfg.Processors)
+		pErr = validateProcessors(cfg.Processors)
 		if pErr != nil {
-			err = multierror.Append(err, cerrors.Errorf("connector %q: %w", k, pErr))
+			err = multierror.Append(err, cerrors.Errorf("connector %q: %w", cfg.ID, pErr))
 		}
-		mp[k] = cfg
 	}
 	return err
 }
 
 // validateProcessorsConfig validates config field values for processors
-func validateProcessorsConfig(mp map[string]ProcessorConfig) error {
+func validateProcessors(mp []Processor) error {
 	var err error
-	for k, cfg := range mp {
+	for _, cfg := range mp {
 		if cfg.Type == "" {
-			err = multierror.Append(err, cerrors.Errorf("processors %q: \"type\" is mandatory: %w", k, ErrMandatoryField))
+			err = multierror.Append(err, cerrors.Errorf("processor %q: \"type\" is mandatory: %w", cfg.ID, ErrMandatoryField))
 		}
-		mp[k] = cfg
 	}
 	return err
 }

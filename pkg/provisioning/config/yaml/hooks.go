@@ -1,4 +1,4 @@
-// Copyright © 2022 Meroxa, Inc.
+// Copyright © 2023 Meroxa, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,10 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package provisioning
+package yaml
 
-import "github.com/conduitio/conduit/pkg/foundation/cerrors"
+import (
+	"os"
 
-var (
-	ErrDuplicatedPipelineID = cerrors.New("duplicated pipeline ID")
+	"github.com/conduitio/yaml/v3"
 )
+
+func envDecoderHook(path []string, node *yaml.Node) {
+	if node.Kind == yaml.ScalarNode && node.Tag == "!!str" {
+		node.SetString(os.ExpandEnv(node.Value))
+	}
+}
+
+func multiDecoderHook(hooks ...yaml.DecoderHook) yaml.DecoderHook {
+	return func(path []string, node *yaml.Node) {
+		for _, h := range hooks {
+			h(path, node)
+		}
+	}
+}

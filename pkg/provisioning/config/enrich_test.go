@@ -1,4 +1,4 @@
-// Copyright © 2022 Meroxa, Inc.
+// Copyright © 2023 Meroxa, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package provisioning
+package config
 
 import (
 	"testing"
@@ -23,18 +23,26 @@ import (
 func TestEnrich_DefaultValues(t *testing.T) {
 	is := is.New(t)
 
-	before := map[string]PipelineConfig{
-		"pipeline1": {
+	testCases := []struct {
+		name string
+		have Pipeline
+		want Pipeline
+	}{{
+		name: "pipeline1",
+		have: Pipeline{
+			ID:          "pipeline1",
 			Description: "desc1",
-			Connectors: map[string]ConnectorConfig{
-				"con1": {
+			Connectors: []Connector{
+				{
+					ID:     "con1",
 					Type:   "source",
 					Plugin: "builtin:s3",
 					Settings: map[string]string{
 						"aws.region": "us-east-1",
 					},
-					Processors: map[string]ProcessorConfig{
-						"proc2": {
+					Processors: []Processor{
+						{
+							ID:   "proc2",
 							Type: "js",
 							Settings: map[string]string{
 								"additionalProp1": "string",
@@ -43,8 +51,9 @@ func TestEnrich_DefaultValues(t *testing.T) {
 					},
 				},
 			},
-			Processors: map[string]ProcessorConfig{
-				"proc1": {
+			Processors: []Processor{
+				{
+					ID:   "proc1",
 					Type: "js",
 					Settings: map[string]string{
 						"additionalProp1": "string",
@@ -52,26 +61,23 @@ func TestEnrich_DefaultValues(t *testing.T) {
 				},
 			},
 		},
-		"pipeline3": {
-			Status:      "stopped",
-			Description: "empty",
-		},
-	}
-	after := map[string]PipelineConfig{
-		"pipeline1": {
+		want: Pipeline{
+			ID:          "pipeline1",
 			Status:      "running",
 			Name:        "pipeline1",
 			Description: "desc1",
-			Connectors: map[string]ConnectorConfig{
-				"pipeline1:con1": {
+			Connectors: []Connector{
+				{
+					ID:     "pipeline1:con1",
 					Type:   "source",
 					Plugin: "builtin:s3",
-					Name:   "pipeline1:con1",
+					Name:   "con1",
 					Settings: map[string]string{
 						"aws.region": "us-east-1",
 					},
-					Processors: map[string]ProcessorConfig{
-						"pipeline1:con1:proc2": {
+					Processors: []Processor{
+						{
+							ID:   "pipeline1:con1:proc2",
 							Type: "js",
 							Settings: map[string]string{
 								"additionalProp1": "string",
@@ -80,8 +86,9 @@ func TestEnrich_DefaultValues(t *testing.T) {
 					},
 				},
 			},
-			Processors: map[string]ProcessorConfig{
-				"pipeline1:proc1": {
+			Processors: []Processor{
+				{
+					ID:   "pipeline1:proc1",
 					Type: "js",
 					Settings: map[string]string{
 						"additionalProp1": "string",
@@ -89,15 +96,27 @@ func TestEnrich_DefaultValues(t *testing.T) {
 				},
 			},
 		},
-		"pipeline3": {
+	}, {
+		name: "pipeline2",
+		have: Pipeline{
+			ID:          "pipeline2",
 			Status:      "stopped",
-			Name:        "pipeline3",
 			Description: "empty",
-			Connectors:  map[string]ConnectorConfig{},
-			Processors:  map[string]ProcessorConfig{},
 		},
-	}
+		want: Pipeline{
+			ID:          "pipeline2",
+			Status:      "stopped",
+			Name:        "pipeline2",
+			Description: "empty",
+			Connectors:  []Connector{},
+			Processors:  []Processor{},
+		},
+	}}
 
-	got := EnrichPipelinesConfig(before)
-	is.Equal(after, got)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := Enrich(tc.have)
+			is.Equal(got, tc.want)
+		})
+	}
 }

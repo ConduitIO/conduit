@@ -1,4 +1,4 @@
-// Copyright © 2022 Meroxa, Inc.
+// Copyright © 2023 Meroxa, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package provisioning
+package config
 
 import (
 	"testing"
@@ -23,70 +23,78 @@ import (
 )
 
 func TestValidator_MandatoryFields(t *testing.T) {
-	is := is.New(t)
-
 	tests := []struct {
 		name   string
-		config PipelineConfig
+		config Pipeline
 	}{{
-		name: "processor type is mandatory",
-		config: PipelineConfig{
+		name: "pipeline ID is mandatory",
+		config: Pipeline{
+			// mandatory field
+			ID:          "",
 			Status:      "stopped",
 			Name:        "pipeline1",
 			Description: "desc1",
-			Processors: map[string]ProcessorConfig{
-				"pipeline1proc1": {
-					// mandatory field
-					Type: "",
-					Settings: map[string]string{
-						"additionalProp1": "string",
-						"additionalProp2": "string",
-					},
+		},
+	}, {
+		name: "processor type is mandatory",
+		config: Pipeline{
+			ID:          "pipeline1",
+			Status:      "stopped",
+			Name:        "pipeline1",
+			Description: "desc1",
+			Processors: []Processor{{
+				ID: "pipeline1proc1",
+				// mandatory field
+				Type: "",
+				Settings: map[string]string{
+					"additionalProp1": "string",
+					"additionalProp2": "string",
 				},
-			},
+			}},
 		},
 	}, {
 		name: "connector plugin is mandatory",
-		config: PipelineConfig{
+		config: Pipeline{
+			ID:          "pipeline1",
 			Status:      "running",
 			Name:        "pipeline1",
 			Description: "desc1",
-			Connectors: map[string]ConnectorConfig{
-				"con1": {
-					Type: "source",
-					// mandatory field
-					Plugin: "",
-					Name:   "",
-					Settings: map[string]string{
-						"aws.region": "us-east-1",
-						"aws.bucket": "my-bucket",
-					},
+			Connectors: []Connector{{
+				ID:   "con1",
+				Type: "source",
+				// mandatory field
+				Plugin: "",
+				Name:   "",
+				Settings: map[string]string{
+					"aws.region": "us-east-1",
+					"aws.bucket": "my-bucket",
 				},
-			},
+			}},
 		},
 	}, {
 		name: "connector type is mandatory",
-		config: PipelineConfig{
+		config: Pipeline{
+			ID:          "pipeline1",
 			Status:      "running",
 			Name:        "pipeline1",
 			Description: "desc1",
-			Connectors: map[string]ConnectorConfig{
-				"con1": {
-					// mandatory field
-					Type:   "",
-					Plugin: "builtin:s3",
-					Name:   "",
-					Settings: map[string]string{
-						"aws.region": "us-east-1",
-						"aws.bucket": "my-bucket",
-					},
+			Connectors: []Connector{{
+				ID: "con1",
+				// mandatory field
+				Type:   "",
+				Plugin: "builtin:s3",
+				Name:   "",
+				Settings: map[string]string{
+					"aws.region": "us-east-1",
+					"aws.bucket": "my-bucket",
 				},
-			},
+			}},
 		},
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := ValidatePipelinesConfig(tt.config)
+			is := is.New(t)
+			err := Validate(tt.config)
 			is.True(err != nil)
 			is.True(cerrors.Is(err, ErrMandatoryField))
 		})
@@ -94,53 +102,52 @@ func TestValidator_MandatoryFields(t *testing.T) {
 }
 
 func TestValidator_InvalidFields(t *testing.T) {
-	is := is.New(t)
-
 	tests := []struct {
 		name   string
-		config PipelineConfig
+		config Pipeline
 	}{{
 		name: "processor type is invalid",
-		config: PipelineConfig{
+		config: Pipeline{
+			ID:          "pipeline1",
 			Status:      "running",
 			Name:        "pipeline1",
 			Description: "desc1",
-			Connectors: map[string]ConnectorConfig{
-				"con1": {
-					// invalid field
-					Type:   "my-type",
-					Plugin: "builtin:s3",
-					Name:   "",
-					Settings: map[string]string{
-						"aws.region": "us-east-1",
-						"aws.bucket": "my-bucket",
-					},
+			Connectors: []Connector{{
+				ID: "con1",
+				// invalid field
+				Type:   "my-type",
+				Plugin: "builtin:s3",
+				Name:   "",
+				Settings: map[string]string{
+					"aws.region": "us-east-1",
+					"aws.bucket": "my-bucket",
 				},
-			},
+			}},
 		},
 	}, {
 		name: "pipeline status is invalid",
-		config: PipelineConfig{
+		config: Pipeline{
+			ID: "pipeline1",
 			// invalid field
 			Status:      "invalid-status",
 			Name:        "pipeline1",
 			Description: "desc1",
-			Connectors: map[string]ConnectorConfig{
-				"con1": {
-					Type:   "source",
-					Plugin: "builtin:s3",
-					Name:   "",
-					Settings: map[string]string{
-						"aws.region": "us-east-1",
-						"aws.bucket": "my-bucket",
-					},
+			Connectors: []Connector{{
+				ID:     "con1",
+				Type:   "source",
+				Plugin: "builtin:s3",
+				Name:   "",
+				Settings: map[string]string{
+					"aws.region": "us-east-1",
+					"aws.bucket": "my-bucket",
 				},
-			},
+			}},
 		},
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := ValidatePipelinesConfig(tt.config)
+			is := is.New(t)
+			err := Validate(tt.config)
 			is.True(err != nil)
 			is.True(cerrors.Is(err, ErrInvalidField))
 		})
@@ -150,46 +157,44 @@ func TestValidator_InvalidFields(t *testing.T) {
 func TestValidator_MultiErrors(t *testing.T) {
 	is := is.New(t)
 
-	before := PipelineConfig{
+	before := Pipeline{
+		ID:          "pipeline1",
 		Status:      "running",
 		Name:        "pipeline1",
 		Description: "desc1",
-		Connectors: map[string]ConnectorConfig{
-			"con1": {
-				// invalid field #1
-				Type: "my-type",
-				// mandatory field #1
-				Plugin: "",
-				Name:   "",
-				Settings: map[string]string{
-					"aws.region": "us-east-1",
-					"aws.bucket": "my-bucket",
-				},
-				Processors: map[string]ProcessorConfig{
-					"pipeline1proc1": {
-						// mandatory field #2
-						Type: "",
-						Settings: map[string]string{
-							"additionalProp1": "string",
-							"additionalProp2": "string",
-						},
-					},
-				},
+		Connectors: []Connector{{
+			ID: "con1",
+			// invalid field #1
+			Type: "my-type",
+			// mandatory field #1
+			Plugin: "",
+			Name:   "",
+			Settings: map[string]string{
+				"aws.region": "us-east-1",
+				"aws.bucket": "my-bucket",
 			},
-		},
-		Processors: map[string]ProcessorConfig{
-			"pipeline1proc1": {
-				// mandatory field #3
+			Processors: []Processor{{
+				ID: "pipeline1proc1",
+				// mandatory field #2
 				Type: "",
 				Settings: map[string]string{
 					"additionalProp1": "string",
 					"additionalProp2": "string",
 				},
+			}},
+		}},
+		Processors: []Processor{{
+			ID: "pipeline1proc1",
+			// mandatory field #3
+			Type: "",
+			Settings: map[string]string{
+				"additionalProp1": "string",
+				"additionalProp2": "string",
 			},
-		},
+		}},
 	}
 
-	err := ValidatePipelinesConfig(before)
+	err := Validate(before)
 
 	var invalid, mandatory int
 	var multierr *multierror.Error
