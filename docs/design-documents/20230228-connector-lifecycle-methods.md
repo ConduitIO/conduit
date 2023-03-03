@@ -6,37 +6,6 @@ Connector Lifecycle Methods are additional integration points that would let
 connectors execute certain operations when the connector is first created, when
 its configuration is updated or when it gets deleted.
 
-### Goals
-
-- Lifecycle methods should be optional to implement.
-- The introduction of lifecycle methods must be backwards compatible with
-  existing connectors.
-- The connector needs to be notified when it was first created*.
-- The connector needs to be notified when its configuration has changed*.
-- The connector needs to be notified when it gets deleted.
-
-\*Actually when the pipeline is first started after that happened.
-
-### Questions
-
-- **The connector method `Configure` is similar to lifecycle methods when the
-  connector is created or updated. Should we reuse that method?**
-  - Probably not, we need more information in lifecycle methods (e.g. old
-    configuration before update) but we don't want to break the existing
-    interface. Also, the purpose of `Configure` is different from the purpose of
-    lifecycle methods.
-- **Should the config be validated before passed to the lifecycle method?**
-  - This is probably not needed if lifecycle methods are triggered _after_
-    `Configure` is called (it will ensure the configuration is valid). In case
-    of an update event, we know the old configuration was valid because it was
-    already once used to successfully configure the connector.
-- **Should the connector method `Configure` be called before a deletion
-  lifecycle method?**
-  - It's a trick question - we can't really do that, because the "new"
-    configuration that we would need to pass to `Configure` is empty which
-    _probably_ makes it invalid. This needs to be called out explicitly in the
-    SDK documentation.
-
 ### Background
 
 We first saw a need for this in the Postgres connector, which can create and
@@ -53,6 +22,18 @@ connector gets deleted. Or more generally - lifecycle methods would allow a
 connector to execute initializations on creation and clean up after itself on
 deletion. Additionally, we need to take into account that the configuration can
 change between runs and we need to notify the connector about these changes.
+
+### Goals
+
+- Lifecycle methods should be optional to implement.
+- The introduction of lifecycle methods must be backwards compatible with
+  existing connectors.
+- The connector needs to be notified when it was first created*.
+- The connector needs to be notified when its configuration has changed*.
+- The connector needs to be notified when it gets deleted.
+
+\*Actually when the pipeline is first started after that happened. See
+[implementation options](#implementation-options) for more details.
 
 ## Implementation options
 
@@ -219,6 +200,26 @@ connector was active before).
 We need to make sure that Conduit stays backwards compatible with existing
 standalone connectors, which means we need to catch errors in case the newly
 introduced methods in the connector protocol do not exist.
+
+### Questions
+
+- **The connector method `Configure` is similar to lifecycle methods when the
+  connector is created or updated. Should we reuse that method?**
+  - Probably not, we need more information in lifecycle methods (e.g. old
+    configuration before update) but we don't want to break the existing
+    interface. Also, the purpose of `Configure` is different from the purpose of
+    lifecycle methods.
+- **Should the config be validated before passed to the lifecycle method?**
+  - This is probably not needed if lifecycle methods are triggered _after_
+    `Configure` is called (it will ensure the configuration is valid). In case
+    of an update event, we know the old configuration was valid because it was
+    already once used to successfully configure the connector.
+- **Should the connector method `Configure` be called before a deletion
+  lifecycle method?**
+  - It's a trick question - we can't really do that, because the "new"
+    configuration that we would need to pass to `Configure` is empty which
+    _probably_ makes it invalid. This needs to be called out explicitly in the
+    SDK documentation.
 
 ### Recommendation
 
