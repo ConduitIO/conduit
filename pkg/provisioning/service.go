@@ -469,10 +469,10 @@ func (s *Service) createConnector(ctx context.Context, pipelineID string, cfg co
 	return nil
 }
 
-func (s *Service) createProcessor(ctx context.Context, parentID string, parentType processor.ParentType, id string, cfg config.Processor) error {
+func (s *Service) createProcessor(ctx context.Context, parentID string, parentType processor.ParentType, cfg config.Processor) error {
 	_, err := s.processorService.Create(
 		ctx,
-		id,
+		cfg.ID,
 		cfg.Type,
 		processor.Parent{
 			ID:   parentID,
@@ -482,7 +482,7 @@ func (s *Service) createProcessor(ctx context.Context, parentID string, parentTy
 		processor.ProvisionTypeConfig,
 	)
 	if err != nil {
-		return cerrors.Errorf("could not create processor %q on parent %q: %w", id, parentID, err)
+		return cerrors.Errorf("could not create processor %q on parent %q: %w", cfg.ID, parentID, err)
 	}
 	return nil
 }
@@ -511,7 +511,7 @@ func (s *Service) createConnectors(ctx context.Context, r *rollback.R, pipelineI
 
 func (s *Service) createProcessors(ctx context.Context, r *rollback.R, parentID string, parentType processor.ParentType, list []config.Processor) error {
 	for _, cfg := range list {
-		err := s.createProcessor(ctx, parentID, parentType, cfg.ID, cfg)
+		err := s.createProcessor(ctx, parentID, parentType, cfg)
 		if err != nil {
 			return cerrors.Errorf("could not create processor %q: %w", cfg.ID, err)
 		}
@@ -631,8 +631,7 @@ func (s *Service) rollbackDeleteConnector(ctx context.Context, r *rollback.R, pi
 			Settings: conn.Config.Settings,
 			Type:     strings.ToLower(conn.Type.String()),
 		}
-		err := s.createConnector(ctx, pipelineID, cfg)
-		return err
+		return s.createConnector(ctx, pipelineID, cfg)
 	})
 }
 func (s *Service) rollbackAddConnector(ctx context.Context, r *rollback.R, pipelineID string, connID string) {
@@ -655,12 +654,12 @@ func (s *Service) rollbackCreateProcessor(ctx context.Context, r *rollback.R, pr
 }
 func (s *Service) rollbackDeleteProcessor(ctx context.Context, r *rollback.R, parent processor.Parent, proc *processor.Instance) {
 	r.Append(func() error {
-		config := config.Processor{
+		cfg := config.Processor{
+			ID:       proc.ID,
 			Type:     proc.Type,
 			Settings: proc.Config.Settings,
 		}
-		err := s.createProcessor(ctx, parent.ID, parent.Type, proc.ID, config)
-		return err
+		return s.createProcessor(ctx, parent.ID, parent.Type, cfg)
 	})
 }
 func (s *Service) rollbackAddConnectorProcessor(ctx context.Context, r *rollback.R, connID string, processorID string) {
