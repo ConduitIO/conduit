@@ -223,14 +223,14 @@ func (s *Service) provisionPipeline(ctx context.Context, cfg config.Pipeline) er
 		if err != nil {
 			return cerrors.Errorf("could not collect connector states from the pipeline %q: %w", cfg.ID, err)
 		}
-		err = s.deletePipeline(ctx, &r, oldPl, cfg, connStates)
+		err = s.deletePipeline(ctx, &r, oldPl, connStates)
 		if err != nil {
 			return cerrors.Errorf("could not delete pipeline %q: %w", cfg.ID, err)
 		}
 	}
 
 	// create new pipeline
-	newPl, err := s.createPipeline(ctx, cfg.ID, cfg)
+	newPl, err := s.createPipeline(ctx, cfg)
 	if err != nil {
 		return cerrors.Errorf("could not create pipeline %q: %w", cfg.ID, err)
 	}
@@ -332,7 +332,7 @@ func (s *Service) applyConnectorStates(ctx context.Context, pl *pipeline.Instanc
 	return nil
 }
 
-func (s *Service) deletePipeline(ctx context.Context, r *rollback.R, pl *pipeline.Instance, config config.Pipeline, connStates map[string]func(context.Context) error) error {
+func (s *Service) deletePipeline(ctx context.Context, r *rollback.R, pl *pipeline.Instance, connStates map[string]func(context.Context) error) error {
 	// remove and delete processors
 	for _, id := range pl.ProcessorIDs {
 		proc, err := s.processorService.Get(ctx, id)
@@ -390,7 +390,7 @@ func (s *Service) deletePipeline(ctx context.Context, r *rollback.R, pl *pipelin
 	if err != nil {
 		return err
 	}
-	s.rollbackDeletePipeline(ctx, r, pl.ID, config)
+	s.rollbackDeletePipeline(ctx, r, pl)
 
 	return nil
 }
@@ -404,38 +404,41 @@ func (s *Service) stopPipeline(ctx context.Context, pl *pipeline.Instance) error
 	return nil
 }
 
-func (s *Service) createPipeline(ctx context.Context, id string, config config.Pipeline) (*pipeline.Instance, error) {
-	cfg := pipeline.Config{
-		Name:        config.Name,
-		Description: config.Description,
-	}
-
-	pl, err := s.pipelineService.Create(ctx, id, cfg, pipeline.ProvisionTypeConfig)
+func (s *Service) createPipeline(ctx context.Context, cfg config.Pipeline) (*pipeline.Instance, error) {
+	pl, err := s.pipelineService.Create(
+		ctx,
+		cfg.ID,
+		pipeline.Config{
+			Name:        cfg.Name,
+			Description: cfg.Description,
+		},
+		pipeline.ProvisionTypeConfig,
+	)
 	if err != nil {
 		return nil, err
 	}
 
 	dlq := pl.DLQ
 	var updateDLQ bool
-	if config.DLQ.Plugin != "" {
-		dlq.Plugin = config.DLQ.Plugin
+	if cfg.DLQ.Plugin != "" {
+		dlq.Plugin = cfg.DLQ.Plugin
 		updateDLQ = true
 	}
-	if config.DLQ.Settings != nil {
-		dlq.Settings = config.DLQ.Settings
+	if cfg.DLQ.Settings != nil {
+		dlq.Settings = cfg.DLQ.Settings
 		updateDLQ = true
 	}
-	if config.DLQ.WindowSize != nil {
-		dlq.WindowSize = *config.DLQ.WindowSize
+	if cfg.DLQ.WindowSize != nil {
+		dlq.WindowSize = *cfg.DLQ.WindowSize
 		updateDLQ = true
 	}
-	if config.DLQ.WindowNackThreshold != nil {
-		dlq.WindowNackThreshold = *config.DLQ.WindowNackThreshold
+	if cfg.DLQ.WindowNackThreshold != nil {
+		dlq.WindowNackThreshold = *cfg.DLQ.WindowNackThreshold
 		updateDLQ = true
 	}
 
 	if updateDLQ {
-		pl, err = s.pipelineService.UpdateDLQ(ctx, id, dlq)
+		pl, err = s.pipelineService.UpdateDLQ(ctx, cfg.ID, dlq)
 		if err != nil {
 			return nil, err
 		}
@@ -694,9 +697,21 @@ func (s *Service) rollbackCreatePipeline(ctx context.Context, r *rollback.R, pip
 		return err
 	})
 }
-func (s *Service) rollbackDeletePipeline(ctx context.Context, r *rollback.R, id string, config config.Pipeline) {
+func (s *Service) rollbackDeletePipeline(ctx context.Context, r *rollback.R, p *pipeline.Instance) {
 	r.Append(func() error {
-		_, err := s.createPipeline(ctx, id, config)
+		cfg := config.Pipeline{
+			ID:          p.ID,
+			Status:      p.Status.String(),
+			Name:        p.Config.Name,
+			Description: p.Config.Description,
+			DLQ: config.DLQ{
+				Plugin:              p.DLQ.Plugin,
+				Settings:            p.DLQ.Settings,
+				WindowSize:          &p.DLQ.WindowSize,
+				WindowNackThreshold: &p.DLQ.WindowNackThreshold,
+			},
+		}
+		_, err := s.createPipeline(ctx, cfg)
 		return err
 	})
 }

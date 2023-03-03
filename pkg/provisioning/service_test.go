@@ -275,6 +275,12 @@ func TestProvision_RollbackDeletePipeline(t *testing.T) {
 		ProvisionedBy: pipeline.ProvisionTypeConfig,
 		ConnectorIDs:  []string{"pipeline1:con1", "pipeline1:con2"},
 		ProcessorIDs:  []string{"pipeline1:proc1", "pipeline1:con2:proc1con"},
+		DLQ: pipeline.DLQ{
+			Plugin:              "builtin:file",
+			Settings:            map[string]string{"path": "dlq.out"},
+			WindowSize:          2,
+			WindowNackThreshold: 1,
+		},
 	}
 	cfg1 := connector.Config{
 		Name:     pipeline1.Connectors[0].Name,
@@ -352,8 +358,8 @@ func TestProvision_RollbackDeletePipeline(t *testing.T) {
 	pipelineService.EXPECT().Create(gomock.Not(gomock.Nil()), pipeline1.Name, pl1config, pipeline.ProvisionTypeConfig).Return(nil, cerrors.New("err"))
 
 	// create old processor
-	pipelineService.EXPECT().Create(gomock.Not(gomock.Nil()), pipeline1.Name, pl1config, pipeline.ProvisionTypeConfig).Return(pl1, nil)
-	pipelineService.EXPECT().UpdateDLQ(gomock.Not(gomock.Nil()), pl1.ID, pipeline.DLQ{WindowSize: 20, WindowNackThreshold: 10}).Return(pl1, nil)
+	pipelineService.EXPECT().Create(gomock.Not(gomock.Nil()), pipeline1.Name, pl1.Config, pipeline.ProvisionTypeConfig).Return(pl1, nil)
+	pipelineService.EXPECT().UpdateDLQ(gomock.Not(gomock.Nil()), pl1.ID, pl1.DLQ).Return(pl1, nil)
 
 	connService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline1:con1", connector.TypeSource, pipeline1.Connectors[0].Plugin, pipeline1.Name, cfg1, connector.ProvisionTypeConfig)
 	pipelineService.EXPECT().AddConnector(gomock.Not(gomock.Nil()), pipeline1.Name, "pipeline1:con1")
