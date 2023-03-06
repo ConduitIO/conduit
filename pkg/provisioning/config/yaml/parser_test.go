@@ -20,9 +20,8 @@ import (
 	"os"
 	"testing"
 
-	v1 "github.com/conduitio/conduit/pkg/provisioning/config/yaml/v1"
-
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	v1 "github.com/conduitio/conduit/pkg/provisioning/config/yaml/v1"
 	"github.com/matryer/is"
 	"github.com/rs/zerolog"
 )

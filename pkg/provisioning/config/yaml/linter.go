@@ -19,10 +19,9 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/conduitio/conduit/pkg/provisioning/config/yaml/internal"
-
 	"github.com/Masterminds/semver/v3"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/provisioning/config/yaml/internal"
 	"github.com/conduitio/yaml/v3"
 )
 
