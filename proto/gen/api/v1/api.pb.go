@@ -421,6 +421,7 @@ type Connector struct {
 
 	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	// Types that are assignable to State:
+	//
 	//	*Connector_DestinationState_
 	//	*Connector_SourceState_
 	State        isConnector_State      `protobuf_oneof:"state"`

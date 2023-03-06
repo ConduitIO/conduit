@@ -74,6 +74,7 @@
             "schema": {
               "type": "array",
               "items": {
+                "type": "object",
                 "$ref": "#/definitions/v1Connector"
               }
             }
@@ -447,6 +448,7 @@
             "schema": {
               "type": "array",
               "items": {
+                "type": "object",
                 "$ref": "#/definitions/v1Pipeline"
               }
             }
@@ -1044,6 +1046,7 @@
             "schema": {
               "type": "array",
               "items": {
+                "type": "object",
                 "$ref": "#/definitions/v1PluginSpecifications"
               }
             }
@@ -1085,6 +1088,7 @@
             "schema": {
               "type": "array",
               "items": {
+                "type": "object",
                 "$ref": "#/definitions/v1Processor"
               }
             }
@@ -1552,6 +1556,7 @@
         "validations": {
           "type": "array",
           "items": {
+            "type": "object",
             "$ref": "#/definitions/ParameterValidation"
           }
         }
@@ -1619,6 +1624,7 @@
         "details": {
           "type": "array",
           "items": {
+            "type": "object",
             "$ref": "#/definitions/protobufAny"
           }
         }
@@ -1908,6 +1914,7 @@
         "connectors": {
           "type": "array",
           "items": {
+            "type": "object",
             "$ref": "#/definitions/v1Connector"
           }
         }
@@ -1919,6 +1926,7 @@
         "pipelines": {
           "type": "array",
           "items": {
+            "type": "object",
             "$ref": "#/definitions/v1Pipeline"
           }
         }
@@ -1930,6 +1938,7 @@
         "plugins": {
           "type": "array",
           "items": {
+            "type": "object",
             "$ref": "#/definitions/v1PluginSpecifications"
           }
         }
@@ -1941,6 +1950,7 @@
         "processors": {
           "type": "array",
           "items": {
+            "type": "object",
             "$ref": "#/definitions/v1Processor"
           }
         }
