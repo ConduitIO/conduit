@@ -26,7 +26,7 @@ import (
 	"github.com/rs/zerolog"
 )
 
-func TestParser_Success(t *testing.T) {
+func TestParser_V1_Success(t *testing.T) {
 	is := is.New(t)
 	parser := NewParser(log.Nop())
 	filepath := "./v1/testdata/pipelines1-success.yml"
@@ -124,7 +124,7 @@ func TestParser_Success(t *testing.T) {
 	is.Equal(got, want)
 }
 
-func TestParser_Warnings(t *testing.T) {
+func TestParser_V1_Warnings(t *testing.T) {
 	is := is.New(t)
 	var out bytes.Buffer
 	logger := log.New(zerolog.New(&out))
@@ -148,7 +148,7 @@ func TestParser_Warnings(t *testing.T) {
 	is.Equal(want, out.String())
 }
 
-func TestParser_DuplicatePipelineId(t *testing.T) {
+func TestParser_V1_DuplicatePipelineId(t *testing.T) {
 	is := is.New(t)
 	parser := NewParser(log.Nop())
 	filepath := "./v1/testdata/pipelines2-duplicate-pipeline-id.yml"
@@ -161,10 +161,10 @@ func TestParser_DuplicatePipelineId(t *testing.T) {
 	is.NoErr(err)
 }
 
-func TestParser_EmptyFile(t *testing.T) {
+func TestParser_V1_EmptyFile(t *testing.T) {
 	is := is.New(t)
 	parser := NewParser(log.Nop())
-	filepath := "./v1/testdata/pipelines5-empty.yml"
+	filepath := "./v1/testdata/pipelines3-empty.yml"
 
 	file, err := os.Open(filepath)
 	is.NoErr(err)
@@ -174,10 +174,10 @@ func TestParser_EmptyFile(t *testing.T) {
 	is.NoErr(err)
 }
 
-func TestParser_InvalidYaml(t *testing.T) {
+func TestParser_V1_InvalidYaml(t *testing.T) {
 	is := is.New(t)
 	parser := NewParser(log.Nop())
-	filepath := "./v1/testdata/pipelines6-invalid-yaml.yml"
+	filepath := "./v1/testdata/pipelines4-invalid-yaml.yml"
 
 	file, err := os.Open(filepath)
 	is.NoErr(err)
@@ -187,10 +187,10 @@ func TestParser_InvalidYaml(t *testing.T) {
 	is.True(err != nil)
 }
 
-func TestParser_EnvVars(t *testing.T) {
+func TestParser_V1_EnvVars(t *testing.T) {
 	is := is.New(t)
 	parser := NewParser(log.Nop())
-	filepath := "./v1/testdata/pipelines7-env-vars.yml"
+	filepath := "./v1/testdata/pipelines5-env-vars.yml"
 
 	// set env variables
 	err := os.Setenv("TEST_PARSER_AWS_SECRET", "my-aws-secret")
