@@ -21,11 +21,17 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/provisioning/config"
+	v1 "github.com/conduitio/conduit/pkg/provisioning/config/yaml/v1"
 	"github.com/conduitio/yaml/v3"
 )
 
 type Parser struct {
 	logger log.CtxLogger
+}
+
+// Configuration is parsed by a yaml Parser.
+type Configuration interface {
+	ToConfig() []config.Pipeline
 }
 
 func NewParser(logger log.CtxLogger) *Parser {
@@ -43,14 +49,14 @@ func (p *Parser) Parse(ctx context.Context, reader io.Reader) ([]config.Pipeline
 	return configs.ToConfig(), nil
 }
 
-func (p *Parser) ParseConfiguration(ctx context.Context, reader io.Reader) (Configurations, error) {
+func (p *Parser) ParseConfiguration(ctx context.Context, reader io.Reader) (Configuration, error) {
 	dec := yaml.NewDecoder(reader)
 	dec.KnownFields(true)
 
-	var configs Configurations
+	var configs v1.Configurations
 	for {
-		var cfg Configuration
-		linter := newConfigLinter()
+		var cfg v1.Configuration
+		linter := newConfigLinter(v1.Changelog)
 		dec.WithHook(multiDecoderHook(
 			envDecoderHook,     // replace environment variables with their values
 			linter.InspectNode, // register fresh linter hook

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package yaml
+package internal
 
 import (
 	"sort"
@@ -21,54 +21,41 @@ import (
 	"github.com/Masterminds/semver/v3"
 )
 
-// changelog should be adjusted every time we change the pipeline config and add
-// a new config version. Based on the changelog the parser will output warnings.
-var changelog = map[string][]change{
-	"1.0": {}, // no changes, initial version
-	"1.1": {{
-		field:      "pipelines.*.dead-letter-queue",
-		changeType: fieldIntroduced,
-		message:    "field dead-letter-queue was introduced in version 1.1, please update the pipeline config version",
-	}},
-}
+// Changelog contains a map of all changes introduced in each version. Based on
+// the changelog the parser can output warnings.
+type Changelog map[string][]Change
 
-// change is a single change that was introduced in a specific version.
-type change struct {
+// Change is a single change that was introduced in a specific version.
+type Change struct {
 	// field contains the path to the field that was changed. Nested fields can
 	// be represented with dots (e.g. nested.field)
-	field      string
-	changeType changeType
+	Field      string
+	ChangeType ChangeType
 	// message is the log message that will be printed if a file is detected
 	// that uses this field with an unsupported version.
-	message string
+	Message string
 }
 
-// changeType defines the type of the change introduced in a specific version.
-type changeType int
+// ChangeType defines the type of the change introduced in a specific version.
+type ChangeType int
 
 const (
-	fieldDeprecated changeType = iota
-	fieldIntroduced
+	FieldDeprecated ChangeType = iota
+	FieldIntroduced
 )
 
-// expandedChangelog is populated in init based on changelog. This map contains
-// the changelog in a structure that is useful for traversing in configLinter.
-var expandedChangelog map[string]map[string]interface{}
-
-func init() {
-	expandedChangelog = expandChangelog(changelog)
-}
-
-func expandChangelog(changelog map[string][]change) map[string]map[string]interface{} {
+// Expand expands a changelog map into a structure that is useful for traversing
+// in ConfigLinter.
+func (c Changelog) Expand() map[string]map[string]any {
 	var versions semver.Collection
-	for k := range changelog {
+	for k := range c {
 		versions = append(versions, semver.MustParse(k))
 	}
 	sort.Sort(versions)
 
-	knownChanges := make(map[string]map[string]interface{})
+	knownChanges := make(map[string]map[string]any)
 	for _, v := range versions {
-		knownChanges[v.Original()] = make(map[string]interface{})
+		knownChanges[v.Original()] = make(map[string]any)
 	}
 
 	// addChange stores change c in map m by splitting c.field into multiple
@@ -77,8 +64,8 @@ func expandChangelog(changelog map[string][]change) map[string]map[string]interf
 	// hierarchy exists and is _not_ a map it is _not_ replaced. This means that
 	// changes related to parent fields take precedence over changes related to
 	// child fields.
-	addChange := func(c change, m map[string]interface{}) {
-		tokens := strings.Split(c.field, ".")
+	addChange := func(c Change, m map[string]any) {
+		tokens := strings.Split(c.Field, ".")
 		curMap := m
 		for i, t := range tokens {
 			if i == len(tokens)-1 {
@@ -88,12 +75,12 @@ func expandChangelog(changelog map[string][]change) map[string]map[string]interf
 			}
 			raw, ok := curMap[t]
 			if !ok {
-				nextMap := make(map[string]interface{})
+				nextMap := make(map[string]any)
 				curMap[t] = nextMap
 				curMap = nextMap
 				continue
 			}
-			curMap, ok = raw.(map[string]interface{})
+			curMap, ok = raw.(map[string]any)
 			if !ok {
 				break
 			}
@@ -101,20 +88,20 @@ func expandChangelog(changelog map[string][]change) map[string]map[string]interf
 	}
 
 	for _, v := range versions {
-		changes := changelog[v.Original()]
+		changes := c[v.Original()]
 		for _, v2 := range versions {
 			switch {
 			case !v.GreaterThan(v2):
 				// warn about deprecated fields in future versions
 				for _, c := range changes {
-					if c.changeType == fieldDeprecated {
+					if c.ChangeType == FieldDeprecated {
 						addChange(c, knownChanges[v2.Original()])
 					}
 				}
 			case v.GreaterThan(v2):
 				// warn about introduced fields in older versions
 				for _, c := range changes {
-					if c.changeType == fieldIntroduced {
+					if c.ChangeType == FieldIntroduced {
 						addChange(c, knownChanges[v2.Original()])
 					}
 				}

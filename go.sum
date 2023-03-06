@@ -161,8 +161,8 @@ github.com/conduitio/conduit-connector-s3 v0.3.0 h1:Zy+TYRnZKw09mks4qsXW43qnp0Pu
 github.com/conduitio/conduit-connector-s3 v0.3.0/go.mod h1:ims2iWZJcOSjEPY1nal/DQrxiqG+xHPYFV5nN1ia/Pk=
 github.com/conduitio/conduit-connector-sdk v0.5.1 h1:mWPSjYNy5Eq1+irhxOHKdbPYQkNw010/j58olhjum2c=
 github.com/conduitio/conduit-connector-sdk v0.5.1/go.mod h1:fvgavA7aNgysmC4dPaozRnejOSq3lB3LeEgJPiRSe1Y=
-github.com/conduitio/yaml/v3 v3.2.0 h1:itolFiK0dzUYG6PdlOpmCi1fcMYFoaWdZ1wbNNTEnlI=
-github.com/conduitio/yaml/v3 v3.2.0/go.mod h1:JNgFMOX1t8W4YJuRZOh6GggVtSMsgP9XgTw+7dIenpc=
+github.com/conduitio/yaml/v3 v3.2.1-0.20230306160152-c42fb08ec7ff h1:jPbrIGJHwgUTjnn3FqQ5+xFbUiVHfianYkeaOqrfGRo=
+github.com/conduitio/yaml/v3 v3.2.1-0.20230306160152-c42fb08ec7ff/go.mod h1:JNgFMOX1t8W4YJuRZOh6GggVtSMsgP9XgTw+7dIenpc=
 github.com/containerd/stargz-snapshotter/estargz v0.12.1 h1:+7nYmHJb0tEkcRaAW+MHqoKaJYZmkikupxCqVtmPuY0=
 github.com/coreos/etcd v3.3.10+incompatible/go.mod h1:uF7uidLiAD3TWHmW31ZFd/JWoc32PjwdhPthX9715RE=
 github.com/coreos/go-etcd v2.0.0+incompatible/go.mod h1:Jez6KQU2B/sWsbdaef3ED8NzMklzPG4d5KIOhIy30Tk=
