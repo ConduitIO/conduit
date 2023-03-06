@@ -12,9 +12,31 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package yaml
+package v1
 
-import "github.com/conduitio/conduit/pkg/provisioning/config"
+import (
+	"github.com/conduitio/conduit/pkg/provisioning/config"
+	"github.com/conduitio/conduit/pkg/provisioning/config/yaml/internal"
+)
+
+// Changelog should be adjusted every time we change the pipeline config and add
+// a new config version. Based on the changelog the parser will output warnings.
+var Changelog = internal.Changelog{
+	"1.0": {{ // deprecate fields in version 1.0 so a warning is logged for all v1 pipeline configs
+		Field:      "pipelines.*.processors",
+		ChangeType: internal.FieldDeprecated,
+		Message:    "the order of processors is non-deterministic in configuration files with version 1.x, please upgrade to version 2.x",
+	}, {
+		Field:      "pipelines.*.connectors.*.processors",
+		ChangeType: internal.FieldDeprecated,
+		Message:    "the order of processors is non-deterministic in configuration files with version 1.x, please upgrade to version 2.x",
+	}},
+	"1.1": {{
+		Field:      "pipelines.*.dead-letter-queue",
+		ChangeType: internal.FieldIntroduced,
+		Message:    "field dead-letter-queue was introduced in version 1.1, please update the pipeline config version",
+	}},
+}
 
 type Configuration struct {
 	Version   string              `yaml:"version"`

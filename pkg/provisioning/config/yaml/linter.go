@@ -19,25 +19,34 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/conduitio/conduit/pkg/provisioning/config/yaml/internal"
+
 	"github.com/Masterminds/semver/v3"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/yaml/v3"
 )
 
 type configLinter struct {
-	version  string
-	warnings warnings
+	changelog internal.Changelog
+
+	expandedChangelog map[string]map[string]any
+	version           string
+	warnings          warnings
 }
 
-func newConfigLinter() *configLinter {
-	cl := &configLinter{}
+func newConfigLinter(changelog internal.Changelog) *configLinter {
+	cl := &configLinter{
+		changelog: changelog,
+	}
 	cl.init()
 	return cl
 }
 
 func (cl *configLinter) init() {
+	cl.expandedChangelog = cl.changelog.Expand()
+
 	var versions semver.Collection
-	for k := range changelog {
+	for k := range cl.changelog {
 		versions = append(versions, semver.MustParse(k))
 	}
 	sort.Sort(versions)
@@ -49,7 +58,7 @@ func (cl *configLinter) init() {
 func (cl *configLinter) InspectNode(path []string, node *yaml.Node) {
 	if len(path) == 1 && path[0] == "version" {
 		// version gets special treatment, it adjusts the warning we create
-		if _, ok := expandedChangelog[node.Value]; !ok {
+		if _, ok := cl.expandedChangelog[node.Value]; !ok {
 			cl.addWarning(path[0], node, fmt.Sprintf("unrecognized version, using parser version %v instead", cl.version))
 			return
 		}
@@ -57,8 +66,15 @@ func (cl *configLinter) InspectNode(path []string, node *yaml.Node) {
 		return
 	}
 
-	curMap := expandedChangelog[cl.version]
-	for _, field := range path {
+	if c, ok := cl.findChange(path); ok {
+		cl.addWarning(path[len(path)-1], node, c.Message)
+	}
+}
+
+func (cl *configLinter) findChange(path []string) (internal.Change, bool) {
+	curMap := cl.expandedChangelog[cl.version]
+	last := len(path) - 1
+	for i, field := range path {
 		nextMap, ok := curMap[field]
 		if !ok {
 			nextMap, ok = curMap["*"]
@@ -67,12 +83,17 @@ func (cl *configLinter) InspectNode(path []string, node *yaml.Node) {
 			}
 		}
 		switch v := nextMap.(type) {
-		case change:
-			cl.addWarning(field, node, v.message)
-		case map[string]interface{}:
+		case map[string]any:
 			curMap = v
+			continue
+		case internal.Change:
+			if i == last {
+				return v, true
+			}
 		}
+		break
 	}
+	return internal.Change{}, false
 }
 
 func (cl *configLinter) addWarning(field string, node *yaml.Node, message string) {
