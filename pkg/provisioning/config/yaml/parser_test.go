@@ -81,7 +81,7 @@ func TestParser_V1_Success(t *testing.T) {
 			},
 		},
 		v1.Configuration{
-			Version: "1.1",
+			Version: "1.12",
 			Pipelines: map[string]v1.Pipeline{
 				"pipeline2": {
 					Status:      "stopped",
@@ -144,6 +144,7 @@ func TestParser_V1_Warnings(t *testing.T) {
 {"level":"warn","component":"yaml.Parser","line":18,"column":11,"field":"processors","message":"the order of processors is non-deterministic in configuration files with version 1.x, please upgrade to version 2.x"}
 {"level":"warn","component":"yaml.Parser","line":24,"column":7,"field":"processors","message":"the order of processors is non-deterministic in configuration files with version 1.x, please upgrade to version 2.x"}
 {"level":"warn","component":"yaml.Parser","line":31,"column":7,"field":"dead-letter-queue","message":"field dead-letter-queue was introduced in version 1.1, please update the pipeline config version"}
+{"level":"warn","component":"yaml.Parser","line":38,"column":10,"field":"version","value":"1.12","message":"unrecognized version 1.12, falling back to parser version 1.1"}
 {"level":"warn","component":"yaml.Parser","line":52,"column":11,"field":"processors","message":"the order of processors is non-deterministic in configuration files with version 1.x, please upgrade to version 2.x"}
 `
 	is.Equal(out.String(), want)
