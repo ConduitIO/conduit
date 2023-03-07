@@ -15,6 +15,7 @@
 package yaml
 
 import (
+	"bytes"
 	"context"
 	"io"
 
@@ -22,10 +23,14 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/provisioning/config"
 	v1 "github.com/conduitio/conduit/pkg/provisioning/config/yaml/v1"
+	v2 "github.com/conduitio/conduit/pkg/provisioning/config/yaml/v2"
 	"github.com/conduitio/yaml/v3"
 )
 
+const VersionLatest = v2.VersionLatest
+
 type Parser struct {
+	linter *configLinter
 	logger log.CtxLogger
 }
 
@@ -36,12 +41,13 @@ type Configuration interface {
 
 func NewParser(logger log.CtxLogger) *Parser {
 	return &Parser{
+		linter: newConfigLinter(v1.Changelog, v2.Changelog),
 		logger: logger.WithComponent("yaml.Parser"),
 	}
 }
 
 func (p *Parser) Parse(ctx context.Context, reader io.Reader) ([]config.Pipeline, error) {
-	configs, err := p.ParseConfiguration(ctx, reader)
+	configs, err := p.ParseConfigurations(ctx, reader)
 	if err != nil {
 		return nil, err
 	}
@@ -49,56 +55,108 @@ func (p *Parser) Parse(ctx context.Context, reader io.Reader) ([]config.Pipeline
 	return p.configurationsToConfig(configs), nil
 }
 
-func (p *Parser) ParseConfiguration(ctx context.Context, reader io.Reader) ([]Configuration, error) {
-	dec := yaml.NewDecoder(reader)
-	dec.KnownFields(true)
+func (p *Parser) ParseConfigurations(ctx context.Context, reader io.Reader) ([]Configuration, error) {
+	// we redirect everything read from reader to buffer with TeeReader, so that
+	// we can first parse the version of the file and choose what type we
+	// actually need to parse the configuration
+	var buffer bytes.Buffer
+	reader = io.TeeReader(reader, &buffer)
+	versionDecoder := yaml.NewDecoder(reader)
+	configurationDecoder := yaml.NewDecoder(&buffer)
 
 	var configs []Configuration
+	var warn warnings
 	for {
-		var cfg v1.Configuration
-		linter := newConfigLinter(v1.Changelog)
-		dec.WithHook(multiDecoderHook(
-			envDecoderHook,     // replace environment variables with their values
-			linter.InspectNode, // register fresh linter hook
-		))
-		err := dec.Decode(&cfg)
+		version, err := p.parseVersion(versionDecoder)
 		if err != nil {
-			// we reached the end of the document
+			// we probably reached the end of the document
 			if cerrors.Is(err, io.EOF) {
 				break
 			}
+			return nil, cerrors.Errorf("parsing error: %w", err)
+		}
+
+		cfg, w, err := p.parseConfiguration(configurationDecoder, version)
+		warn = append(warn, w...)
+		if err != nil {
 			// check if it's a type error (document was partially decoded)
 			var typeErr *yaml.TypeError
 			if cerrors.As(err, &typeErr) {
-				err = p.handleYamlTypeError(ctx, typeErr)
+				w, err = p.yamlTypeErrorToWarnings(typeErr)
+				warn = append(warn, w...)
 			}
 			// check if we recovered from the error
 			if err != nil {
-				return nil, cerrors.Errorf("parsing error: %w", err)
+				return nil, cerrors.Errorf("decoding error: %w", err)
 			}
 		}
-		linter.Warnings().Log(ctx, p.logger)
+
 		configs = append(configs, cfg)
 	}
 
+	// sort warnings and log them
+	warn.Sort().Log(ctx, p.logger)
 	return configs, nil
 }
 
-func (p *Parser) handleYamlTypeError(ctx context.Context, typeErr *yaml.TypeError) error {
-	for _, uerr := range typeErr.Errors {
-		if _, ok := uerr.(*yaml.UnknownFieldError); !ok {
-			// we don't tolerate any other error except unknown field
-			return typeErr
+func (p *Parser) parseVersion(dec *yaml.Decoder) (string, error) {
+	var out struct {
+		Version string `yaml:"version"`
+	}
+	err := dec.Decode(&out)
+	if err != nil {
+		return "", err
+	}
+	return out.Version, nil
+}
+
+func (p *Parser) parseConfiguration(dec *yaml.Decoder, version string) (Configuration, warnings, error) {
+	if version == "" {
+		// if no version is set, default to latest
+		version = VersionLatest
+	}
+
+	// set up decoder hooks
+	var w warnings
+	dec.KnownFields(true)
+	dec.WithHook(multiDecoderHook(
+		envDecoderHook,                    // replace environment variables with their values
+		p.linter.DecoderHook(version, &w), // lint config as it's parsed
+	))
+
+	switch {
+	case v1.VersionRegex.MatchString(version):
+		var cfg v1.Configuration
+		return cfg, w, dec.Decode(&cfg)
+	case v2.VersionRegex.MatchString(version):
+		var cfg v2.Configuration
+		return cfg, w, dec.Decode(&cfg)
+	default:
+		return nil, nil, cerrors.Errorf("unrecognized config version %v", version)
+	}
+}
+
+// yamlTypeErrorToWarnings converts yaml.TypeError to warnings if it only
+// contains recoverable errors. If it contains at least one actual error it
+// returns nil and the error itself.
+func (p *Parser) yamlTypeErrorToWarnings(typeErr *yaml.TypeError) (warnings, error) {
+	warn := make(warnings, len(typeErr.Errors))
+	for i, uerr := range typeErr.Errors {
+		switch uerr := uerr.(type) {
+		case *yaml.UnknownFieldError:
+			warn[i] = warning{
+				field:   uerr.Field(),
+				line:    uerr.Line(),
+				column:  uerr.Column(),
+				value:   "", // no value in UnknownFieldError
+				message: uerr.Error(),
+			}
+		default:
+			// we don't tolerate any other errors
+			return nil, typeErr
 		}
 	}
-	// only UnknownFieldErrors found, log them
-	for _, uerr := range typeErr.Errors {
-		e := p.logger.Warn(ctx).
-			Int("line", uerr.Line()).
-			Int("column", uerr.Column())
-		e.Msg(uerr.Error())
-	}
-	return nil
+	return warn, nil
 }
 
 // configurationsToConfig transforms all configurations to config.Pipeline types.

@@ -16,62 +16,52 @@ package yaml
 
 import (
 	"context"
-	"fmt"
 	"sort"
 
-	"github.com/Masterminds/semver/v3"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/provisioning/config/yaml/internal"
 	"github.com/conduitio/yaml/v3"
 )
 
 type configLinter struct {
-	changelog internal.Changelog
-
 	expandedChangelog map[string]map[string]any
-	version           string
-	warnings          warnings
 }
 
-func newConfigLinter(changelog internal.Changelog) *configLinter {
-	cl := &configLinter{
-		changelog: changelog,
-	}
-	cl.init()
-	return cl
-}
-
-func (cl *configLinter) init() {
-	cl.expandedChangelog = cl.changelog.Expand()
-
-	var versions semver.Collection
-	for k := range cl.changelog {
-		versions = append(versions, semver.MustParse(k))
-	}
-	sort.Sort(versions)
-
-	// latest version is the default version
-	cl.version = versions[len(versions)-1].Original()
-}
-
-func (cl *configLinter) InspectNode(path []string, node *yaml.Node) {
-	if len(path) == 1 && path[0] == "version" {
-		// version gets special treatment, it adjusts the warning we create
-		if _, ok := cl.expandedChangelog[node.Value]; !ok {
-			cl.addWarning(path[0], node, fmt.Sprintf("unrecognized version, using parser version %v instead", cl.version))
-			return
+func newConfigLinter(changelogs ...internal.Changelog) *configLinter {
+	// expand changelogs
+	expandedChangelog := make(map[string]map[string]any)
+	for _, changelog := range changelogs {
+		for k, v := range changelog.Expand() {
+			if _, ok := expandedChangelog[k]; ok {
+				panic(cerrors.Errorf("changelog already contains version %v", k))
+			}
+			expandedChangelog[k] = v
 		}
-		cl.version = node.Value
-		return
 	}
 
-	if c, ok := cl.findChange(path); ok {
-		cl.addWarning(path[len(path)-1], node, c.Message)
+	return &configLinter{
+		expandedChangelog: expandedChangelog,
 	}
 }
 
-func (cl *configLinter) findChange(path []string) (internal.Change, bool) {
-	curMap := cl.expandedChangelog[cl.version]
+func (cl *configLinter) DecoderHook(version string, warn *warnings) yaml.DecoderHook {
+	return func(path []string, node *yaml.Node) {
+		if w, ok := cl.InspectNode(version, path, node); ok {
+			*warn = append(*warn, w)
+		}
+	}
+}
+
+func (cl *configLinter) InspectNode(version string, path []string, node *yaml.Node) (warning, bool) {
+	if c, ok := cl.findChange(version, path); ok {
+		return cl.newWarning(path[len(path)-1], node, c.Message), true
+	}
+	return warning{}, false
+}
+
+func (cl *configLinter) findChange(version string, path []string) (internal.Change, bool) {
+	curMap := cl.expandedChangelog[version]
 	last := len(path) - 1
 	for i, field := range path {
 		nextMap, ok := curMap[field]
@@ -95,22 +85,24 @@ func (cl *configLinter) findChange(path []string) (internal.Change, bool) {
 	return internal.Change{}, false
 }
 
-func (cl *configLinter) addWarning(field string, node *yaml.Node, message string) {
-	cl.warnings = append(cl.warnings, warning{
+func (cl *configLinter) newWarning(field string, node *yaml.Node, message string) warning {
+	return warning{
 		field:   field,
 		line:    node.Line,
 		column:  node.Column,
 		value:   node.Value,
 		message: message,
-	})
-}
-
-func (cl *configLinter) Warnings() warnings {
-	return cl.warnings
+	}
 }
 
 type warnings []warning
 
+func (w warnings) Sort() warnings {
+	sort.Slice(w, func(i, j int) bool {
+		return w[i].line < w[j].line
+	})
+	return w
+}
 func (w warnings) Log(ctx context.Context, logger log.CtxLogger) {
 	for _, ww := range w {
 		ww.Log(ctx, logger)
@@ -126,10 +118,18 @@ type warning struct {
 }
 
 func (w warning) Log(ctx context.Context, logger log.CtxLogger) {
-	e := logger.Warn(ctx).
-		Int("line", w.line).
-		Int("column", w.column).
-		Str("field", w.field).
-		Str("value", w.value)
+	e := logger.Warn(ctx)
+	if w.line != 0 {
+		e = e.Int("line", w.line)
+	}
+	if w.column != 0 {
+		e = e.Int("column", w.column)
+	}
+	if w.field != "" {
+		e = e.Str("field", w.field)
+	}
+	if w.value != "" {
+		e = e.Str("value", w.value)
+	}
 	e.Msg(w.message)
 }

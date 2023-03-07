@@ -15,9 +15,15 @@
 package v2
 
 import (
+	"regexp"
+
 	"github.com/conduitio/conduit/pkg/provisioning/config"
 	"github.com/conduitio/conduit/pkg/provisioning/config/yaml/internal"
 )
+
+const VersionLatest = "2.0"
+
+var VersionRegex = regexp.MustCompile(`^v?2(\.\d+)?$`)
 
 // Changelog should be adjusted every time we change the pipeline config and add
 // a new config version. Based on the changelog the parser will output warnings.
