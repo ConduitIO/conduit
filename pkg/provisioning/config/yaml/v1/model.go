@@ -15,9 +15,15 @@
 package v1
 
 import (
+	"regexp"
+
 	"github.com/conduitio/conduit/pkg/provisioning/config"
 	"github.com/conduitio/conduit/pkg/provisioning/config/yaml/internal"
 )
+
+const VersionLatest = "1.1"
+
+var VersionRegex = regexp.MustCompile(`^v?1(\.\d+)?$`)
 
 // Changelog should be adjusted every time we change the pipeline config and add
 // a new config version. Based on the changelog the parser will output warnings.
@@ -37,8 +43,6 @@ var Changelog = internal.Changelog{
 		Message:    "field dead-letter-queue was introduced in version 1.1, please update the pipeline config version",
 	}},
 }
-
-type Configurations []Configuration
 
 type Configuration struct {
 	Version   string              `yaml:"version"`
@@ -72,18 +76,6 @@ type DLQ struct {
 	Settings            map[string]string `yaml:"settings"`
 	WindowSize          *int              `yaml:"window-size"`
 	WindowNackThreshold *int              `yaml:"window-nack-threshold"`
-}
-
-func (c Configurations) ToConfig() []config.Pipeline {
-	if len(c) == 0 {
-		return nil
-	}
-
-	out := make([]config.Pipeline, 0, len(c))
-	for _, cfg := range c {
-		out = append(out, cfg.ToConfig()...)
-	}
-	return out
 }
 
 func (c Configuration) ToConfig() []config.Pipeline {
