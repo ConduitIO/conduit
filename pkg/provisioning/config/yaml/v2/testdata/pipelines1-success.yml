@@ -1,0 +1,61 @@
+---
+version: 2.0
+
+pipelines:
+  - id: pipeline1
+    unknownField: this triggers a warning
+    status: running
+    name: pipeline1
+    description: desc1
+    connectors:
+      - id: con1
+        type: source
+        plugin: builtin:s3
+        name: s3-source
+        settings:
+          aws.region: us-east-1
+          aws.bucket: my-bucket
+        processors:
+          - id: proc1
+            type: js
+            settings:
+              additionalProp1: string
+              additionalProp2: string
+    processors:
+      - id: pipeline1proc1
+        type: js
+        settings:
+          additionalProp1: string
+          additionalProp2: string
+    dead-letter-queue:
+      plugin: my-plugin
+      settings:
+        foo: bar
+      window-size: 4
+      window-nack-threshold: 2
+
+---
+version: 2.0
+pipelines:
+  - id: pipeline2
+    status: stopped
+    name: pipeline2
+    description: desc2
+    connectors:
+      - id: con2
+        type: destination
+        plugin: builtin:file
+        name: file-dest
+        settings:
+          path: my/path
+        processors:
+          - id: con2proc1
+            type: hoistfield
+            settings:
+              additionalProp1: string
+              additionalProp2: string
+
+  - id: pipeline3
+    status: stopped
+    name: pipeline3
+    description: empty
