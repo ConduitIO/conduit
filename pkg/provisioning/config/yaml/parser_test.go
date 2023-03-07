@@ -22,6 +22,7 @@ import (
 
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	v1 "github.com/conduitio/conduit/pkg/provisioning/config/yaml/v1"
+	v2 "github.com/conduitio/conduit/pkg/provisioning/config/yaml/v2"
 	"github.com/matryer/is"
 	"github.com/rs/zerolog"
 )
@@ -227,6 +228,112 @@ func TestParser_V1_EnvVars(t *testing.T) {
 							},
 						},
 					},
+				},
+			},
+		},
+	}
+
+	file, err := os.Open(filepath)
+	is.NoErr(err)
+	defer file.Close()
+
+	got, err := parser.ParseConfigurations(context.Background(), file)
+	is.NoErr(err)
+	is.Equal(got, want)
+}
+
+func TestParser_V2_Success(t *testing.T) {
+	is := is.New(t)
+	parser := NewParser(log.Nop())
+	filepath := "./v2/testdata/pipelines1-success.yml"
+	intPtr := func(i int) *int { return &i }
+	want := []Configuration{
+		v2.Configuration{
+			Version: "2.0",
+			Pipelines: []v2.Pipeline{
+				{
+					ID:          "pipeline1",
+					Status:      "running",
+					Name:        "pipeline1",
+					Description: "desc1",
+					Processors: []v2.Processor{
+						{
+							ID:   "pipeline1proc1",
+							Type: "js",
+							Settings: map[string]string{
+								"additionalProp1": "string",
+								"additionalProp2": "string",
+							},
+						},
+					},
+					Connectors: []v2.Connector{
+						{
+							ID:     "con1",
+							Type:   "source",
+							Plugin: "builtin:s3",
+							Name:   "s3-source",
+							Settings: map[string]string{
+								"aws.region": "us-east-1",
+								"aws.bucket": "my-bucket",
+							},
+							Processors: []v2.Processor{
+								{
+									ID:   "proc1",
+									Type: "js",
+									Settings: map[string]string{
+										"additionalProp1": "string",
+										"additionalProp2": "string",
+									},
+								},
+							},
+						},
+					},
+					DLQ: v2.DLQ{
+						Plugin: "my-plugin",
+						Settings: map[string]string{
+							"foo": "bar",
+						},
+						WindowSize:          intPtr(4),
+						WindowNackThreshold: intPtr(2),
+					},
+				},
+			},
+		},
+		v2.Configuration{
+			Version: "2.0",
+			Pipelines: []v2.Pipeline{
+				{
+					ID:          "pipeline2",
+					Status:      "stopped",
+					Name:        "pipeline2",
+					Description: "desc2",
+					Connectors: []v2.Connector{
+						{
+							ID:     "con2",
+							Type:   "destination",
+							Plugin: "builtin:file",
+							Name:   "file-dest",
+							Settings: map[string]string{
+								"path": "my/path",
+							},
+							Processors: []v2.Processor{
+								{
+									ID:   "con2proc1",
+									Type: "hoistfield",
+									Settings: map[string]string{
+										"additionalProp1": "string",
+										"additionalProp2": "string",
+									},
+								},
+							},
+						},
+					},
+				},
+				{
+					ID:          "pipeline3",
+					Status:      "stopped",
+					Name:        "pipeline3",
+					Description: "empty",
 				},
 			},
 		},
