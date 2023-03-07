@@ -17,17 +17,23 @@ package yaml
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
+	"strings"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/provisioning/config"
+	"github.com/conduitio/conduit/pkg/provisioning/config/yaml/internal"
 	v1 "github.com/conduitio/conduit/pkg/provisioning/config/yaml/v1"
 	v2 "github.com/conduitio/conduit/pkg/provisioning/config/yaml/v2"
 	"github.com/conduitio/yaml/v3"
 )
 
-const VersionLatest = v2.VersionLatest
+const LatestVersion = v2.LatestVersion
+
+// changelogs contains the changelogs from all versions
+var changelogs = []internal.Changelog{v1.Changelog, v2.Changelog}
 
 type Parser struct {
 	linter *configLinter
@@ -81,7 +87,8 @@ func (p *Parser) ParseConfigurations(ctx context.Context, reader io.Reader) (Con
 	var configs Configurations
 	var warn warnings
 	for {
-		version, err := p.parseVersion(versionDecoder)
+		version, w, err := p.parseVersion(versionDecoder)
+		warn = append(warn, w...)
 		if err != nil {
 			// we probably reached the end of the document
 			if cerrors.Is(err, io.EOF) {
@@ -113,23 +120,71 @@ func (p *Parser) ParseConfigurations(ctx context.Context, reader io.Reader) (Con
 	return configs, nil
 }
 
-func (p *Parser) parseVersion(dec *yaml.Decoder) (string, error) {
+// parseVersion will return the version that should be used to parse the
+// configuration and any warnings if we defaulted to a version that's compatible
+// with the requested one. If we could not recognize the version the function
+// returns an error.
+func (p *Parser) parseVersion(dec *yaml.Decoder) (string, warnings, error) {
 	var out struct {
 		Version string `yaml:"version"`
 	}
+
+	// versionNode will store the node that contains the version field (for warning)
+	var versionNode yaml.Node
+	dec.WithHook(func(path []string, node *yaml.Node) {
+		if len(path) == 1 && path[0] == "version" {
+			versionNode = *node
+		}
+	})
+
 	err := dec.Decode(&out)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
-	return out.Version, nil
+
+	// if version is empty we default to the latest version
+	if out.Version == "" {
+		return LatestVersion, warnings{warning{
+			field:   "version",
+			line:    versionNode.Line,
+			column:  versionNode.Column,
+			value:   versionNode.Value,
+			message: fmt.Sprintf("no version defined, falling back to parser version %v", LatestVersion),
+		}}, nil
+	}
+
+	// if we recognize the version (i.e. it's in our changelog) we use it
+	for _, cl := range changelogs {
+		if _, ok := cl[out.Version]; ok {
+			return out.Version, nil, nil // it's a recognized version
+		}
+	}
+
+	// we did not recognize the version, we check if we even know the major version
+	switch strings.Split(out.Version, ".")[0] {
+	case v1.MajorVersion:
+		return v1.LatestVersion, warnings{warning{
+			field:   "version",
+			line:    versionNode.Line,
+			column:  versionNode.Column,
+			value:   versionNode.Value,
+			message: fmt.Sprintf("unrecognized version %v, falling back to parser version %v", out.Version, v1.LatestVersion),
+		}}, nil
+	case v2.MajorVersion:
+		return v2.LatestVersion, warnings{warning{
+			field:   "version",
+			line:    versionNode.Line,
+			column:  versionNode.Column,
+			value:   versionNode.Value,
+			message: fmt.Sprintf("unrecognized version %v, falling back to parser version %v", out.Version, v2.LatestVersion),
+		}}, nil
+	}
+
+	// unrecognized version, we can't parse the configuration
+	return "", nil, cerrors.Errorf("unrecognized version %v", out.Version)
 }
 
 func (p *Parser) parseConfiguration(dec *yaml.Decoder, version string) (Configuration, warnings, error) {
-	if version == "" {
-		// if no version is set, default to latest
-		version = VersionLatest
-	}
-
 	// set up decoder hooks
 	var w warnings
 	dec.KnownFields(true)
@@ -138,11 +193,11 @@ func (p *Parser) parseConfiguration(dec *yaml.Decoder, version string) (Configur
 		p.linter.DecoderHook(version, &w), // lint config as it's parsed
 	))
 
-	switch {
-	case v1.VersionRegex.MatchString(version):
+	switch strings.Split(version, ".")[0] {
+	case v1.MajorVersion:
 		var cfg v1.Configuration
 		return cfg, w, dec.Decode(&cfg)
-	case v2.VersionRegex.MatchString(version):
+	case v2.MajorVersion:
 		var cfg v2.Configuration
 		return cfg, w, dec.Decode(&cfg)
 	default:
