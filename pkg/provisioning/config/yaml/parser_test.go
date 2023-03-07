@@ -31,7 +31,7 @@ func TestParser_V1_Success(t *testing.T) {
 	parser := NewParser(log.Nop())
 	filepath := "./v1/testdata/pipelines1-success.yml"
 	intPtr := func(i int) *int { return &i }
-	want := v1.Configurations{
+	want := Configurations{
 		v1.Configuration{
 			Version: "1.0",
 			Pipelines: map[string]v1.Pipeline{
@@ -119,7 +119,7 @@ func TestParser_V1_Success(t *testing.T) {
 	is.NoErr(err)
 	defer file.Close()
 
-	got, err := parser.ParseConfiguration(context.Background(), file)
+	got, err := parser.ParseConfigurations(context.Background(), file)
 	is.NoErr(err)
 	is.Equal(got, want)
 }
@@ -135,17 +135,17 @@ func TestParser_V1_Warnings(t *testing.T) {
 	is.NoErr(err)
 	defer file.Close()
 
-	_, err = parser.ParseConfiguration(context.Background(), file)
+	_, err = parser.ParseConfigurations(context.Background(), file)
 	is.NoErr(err)
 
 	// check warnings
-	want := `{"level":"warn","component":"yaml.Parser","line":5,"column":5,"message":"field unknownField not found in type v1.Pipeline"}
-{"level":"warn","component":"yaml.Parser","line":17,"column":9,"field":"processors","value":"","message":"the order of processors is non-deterministic in configuration files with version 1.x, please upgrade to version 2.x"}
-{"level":"warn","component":"yaml.Parser","line":23,"column":5,"field":"processors","value":"","message":"the order of processors is non-deterministic in configuration files with version 1.x, please upgrade to version 2.x"}
-{"level":"warn","component":"yaml.Parser","line":30,"column":5,"field":"dead-letter-queue","value":"","message":"field dead-letter-queue was introduced in version 1.1, please update the pipeline config version"}
-{"level":"warn","component":"yaml.Parser","line":51,"column":9,"field":"processors","value":"","message":"the order of processors is non-deterministic in configuration files with version 1.x, please upgrade to version 2.x"}
+	want := `{"level":"warn","component":"yaml.Parser","line":5,"column":5,"field":"unknownField","message":"field unknownField not found in type v1.Pipeline"}
+{"level":"warn","component":"yaml.Parser","line":17,"column":9,"field":"processors","message":"the order of processors is non-deterministic in configuration files with version 1.x, please upgrade to version 2.x"}
+{"level":"warn","component":"yaml.Parser","line":23,"column":5,"field":"processors","message":"the order of processors is non-deterministic in configuration files with version 1.x, please upgrade to version 2.x"}
+{"level":"warn","component":"yaml.Parser","line":30,"column":5,"field":"dead-letter-queue","message":"field dead-letter-queue was introduced in version 1.1, please update the pipeline config version"}
+{"level":"warn","component":"yaml.Parser","line":51,"column":9,"field":"processors","message":"the order of processors is non-deterministic in configuration files with version 1.x, please upgrade to version 2.x"}
 `
-	is.Equal(want, out.String())
+	is.Equal(out.String(), want)
 }
 
 func TestParser_V1_DuplicatePipelineId(t *testing.T) {
@@ -157,7 +157,7 @@ func TestParser_V1_DuplicatePipelineId(t *testing.T) {
 	is.NoErr(err)
 	defer file.Close()
 
-	_, err = parser.ParseConfiguration(context.Background(), file)
+	_, err = parser.ParseConfigurations(context.Background(), file)
 	is.NoErr(err)
 }
 
@@ -170,7 +170,7 @@ func TestParser_V1_EmptyFile(t *testing.T) {
 	is.NoErr(err)
 	defer file.Close()
 
-	_, err = parser.ParseConfiguration(context.Background(), file)
+	_, err = parser.ParseConfigurations(context.Background(), file)
 	is.NoErr(err)
 }
 
@@ -183,7 +183,7 @@ func TestParser_V1_InvalidYaml(t *testing.T) {
 	is.NoErr(err)
 	defer file.Close()
 
-	_, err = parser.ParseConfiguration(context.Background(), file)
+	_, err = parser.ParseConfigurations(context.Background(), file)
 	is.True(err != nil)
 }
 
@@ -206,7 +206,7 @@ func TestParser_V1_EnvVars(t *testing.T) {
 		t.Fatalf("Failed to write env var: $TEST_PARSER_AWS_URL")
 	}
 
-	want := v1.Configurations{
+	want := Configurations{
 		v1.Configuration{
 			Version: "1.0",
 			Pipelines: map[string]v1.Pipeline{
@@ -236,7 +236,7 @@ func TestParser_V1_EnvVars(t *testing.T) {
 	is.NoErr(err)
 	defer file.Close()
 
-	got, err := parser.ParseConfiguration(context.Background(), file)
+	got, err := parser.ParseConfigurations(context.Background(), file)
 	is.NoErr(err)
 	is.Equal(got, want)
 }
