@@ -3,6 +3,7 @@ module github.com/conduitio/conduit
 go 1.20
 
 require (
+	buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go v1.28.1-20221127060915-a1ecdc58eccd.4
 	github.com/Masterminds/semver/v3 v3.2.0
 	github.com/NYTimes/gziphandler v1.1.1
 	github.com/antchfx/jsonquery v1.3.2
@@ -36,8 +37,6 @@ require (
 	github.com/prometheus/client_model v0.3.0
 	github.com/prometheus/common v0.41.0
 	github.com/rs/zerolog v1.29.0
-	go.buf.build/grpc/go/conduitio/conduit-connector-protocol v1.4.5
-	go.buf.build/protocolbuffers/go/grpc-ecosystem/grpc-gateway v1.3.50
 	go.uber.org/goleak v1.2.1
 	golang.org/x/exp v0.0.0-20230213192124-5e25df0256eb
 	golang.org/x/tools v0.6.0
