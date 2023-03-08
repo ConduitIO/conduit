@@ -17,8 +17,8 @@ package standalonev1
 import (
 	"testing"
 
+	connectorv1 "github.com/conduitio/conduit-connector-protocol/proto/gen/connector/v1"
 	"github.com/conduitio/conduit/pkg/record"
-	connectorv1 "go.buf.build/grpc/go/conduitio/conduit-connector-protocol/connector/v1"
 	opencdcv1 "go.buf.build/grpc/go/conduitio/conduit-connector-protocol/opencdc/v1"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/runtime/protoimpl"

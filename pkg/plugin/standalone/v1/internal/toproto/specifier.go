@@ -14,7 +14,7 @@
 
 package toproto
 
-import connectorv1 "go.buf.build/grpc/go/conduitio/conduit-connector-protocol/connector/v1"
+import connectorv1 "github.com/conduitio/conduit-connector-protocol/proto/gen/connector/v1"
 
 func SpecifierSpecifyRequest() *connectorv1.Specifier_Specify_Request {
 	return &connectorv1.Specifier_Specify_Request{}
