@@ -301,7 +301,7 @@ func TestParser_V2_Success(t *testing.T) {
 			},
 		},
 		v2.Configuration{
-			Version: "2.0",
+			Version: "2.12",
 			Pipelines: []v2.Pipeline{
 				{
 					ID:          "pipeline2",
@@ -347,4 +347,25 @@ func TestParser_V2_Success(t *testing.T) {
 	got, err := parser.ParseConfigurations(context.Background(), file)
 	is.NoErr(err)
 	is.Equal(got, want)
+}
+
+func TestParser_V2_Warnings(t *testing.T) {
+	is := is.New(t)
+	var out bytes.Buffer
+	logger := log.New(zerolog.New(&out))
+	parser := NewParser(logger)
+
+	filepath := "./v2/testdata/pipelines1-success.yml"
+	file, err := os.Open(filepath)
+	is.NoErr(err)
+	defer file.Close()
+
+	_, err = parser.ParseConfigurations(context.Background(), file)
+	is.NoErr(err)
+
+	// check warnings
+	want := `{"level":"warn","component":"yaml.Parser","line":6,"column":5,"field":"unknownField","message":"field unknownField not found in type v2.Pipeline"}
+{"level":"warn","component":"yaml.Parser","line":38,"column":1,"field":"version","value":"2.12","message":"unrecognized version 2.12, falling back to parser version 2.0"}
+`
+	is.Equal(out.String(), want)
 }
