@@ -155,8 +155,6 @@ github.com/conduitio/conduit-connector-log v0.1.2 h1:CPlsdgr1Ui6j3fNVYpp/qHVwXKb
 github.com/conduitio/conduit-connector-log v0.1.2/go.mod h1:mnox8F5YrwQpuX+Y/WJidgqi6882Id6i8MslW0ic+XA=
 github.com/conduitio/conduit-connector-postgres v0.3.0 h1:owlVIXeAWVAuHW0Hzr3+zxrAB9/LXIedINduFQM/HoM=
 github.com/conduitio/conduit-connector-postgres v0.3.0/go.mod h1:I8Yz4t90QbGZUObt+0+bWpDwJ2qZ5iv4bbFjRB19xGA=
-github.com/conduitio/conduit-connector-protocol v0.4.0 h1:hO6mB4Ft34+PbF1G2pDGHzZmCA/y5jj5wsIrluw4qFY=
-github.com/conduitio/conduit-connector-protocol v0.4.0/go.mod h1:xU4dsoPPCiW+1rJFwxkMUjhYs+HMte+XB/aFL6x94iM=
 github.com/conduitio/conduit-connector-protocol v0.4.1-0.20230308125357-8952e50e20e7 h1:xiNvq3K6GsVs/XV1NOzeDGsQisiC/iSCZFZaCickgoU=
 github.com/conduitio/conduit-connector-protocol v0.4.1-0.20230308125357-8952e50e20e7/go.mod h1:rKyfRoKACvZmNfcQBbVrgVoQYN7Sa3psV8E1ylxVWn0=
 github.com/conduitio/conduit-connector-s3 v0.3.0 h1:Zy+TYRnZKw09mks4qsXW43qnp0PuO/SsgvYbbuMUhss=

@@ -18,8 +18,8 @@ import (
 	"testing"
 
 	connectorv1 "github.com/conduitio/conduit-connector-protocol/proto/gen/connector/v1"
+	opencdcv1 "github.com/conduitio/conduit-connector-protocol/proto/gen/opencdc/v1"
 	"github.com/conduitio/conduit/pkg/record"
-	opencdcv1 "go.buf.build/grpc/go/conduitio/conduit-connector-protocol/opencdc/v1"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/runtime/protoimpl"
 )
