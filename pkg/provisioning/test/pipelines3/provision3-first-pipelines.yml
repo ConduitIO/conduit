@@ -1,17 +1,17 @@
-version: 1.0
+version: 2.0
 pipelines:
-  pipeline3:
+  - id: pipeline3
     status: running
     name: pipeline3
     description: desc3
     connectors:
-      con1:
+      - id: con1
         type: source
         plugin: builtin:file
         name: source
         settings:
           path: my/path/file1.txt
-      con2:
+      - id: con2
         type: destination
         plugin: builtin:file
         name: dest
