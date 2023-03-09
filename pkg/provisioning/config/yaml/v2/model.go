@@ -113,6 +113,7 @@ func (p Pipeline) processorsToConfig() []config.Processor {
 
 func (c Connector) ToConfig() config.Connector {
 	return config.Connector{
+		ID:         c.ID,
 		Type:       c.Type,
 		Plugin:     c.Plugin,
 		Name:       c.Name,
