@@ -1,0 +1,35 @@
+---
+version: 2.0
+pipelines:
+  - id: pipeline1
+    status: running
+    name: pipeline1
+    description: desc1
+    connectors:
+      - id: con1
+        type: source
+        plugin: builtin:s3
+        name: s3-source
+        settings:
+          aws.region: us-east-1
+          aws.bucket: my-bucket
+    processors:
+      - id: pipeline1proc1
+        type: js
+        settings:
+          additionalProp1: string
+          additionalProp2: string
+
+---
+version: 2.0
+pipelines:
+  - id: pipeline2
+    status: stopped
+    name: pipeline2
+    description: nothing2
+
+# pipeline id already used
+  - id: pipeline1
+    status: stopped
+    name: pipeline3
+    description: empty
