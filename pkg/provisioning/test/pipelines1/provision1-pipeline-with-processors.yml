@@ -1,29 +1,29 @@
-version: 1.0
+version: 2.0
 pipelines:
-  pipeline1:
+  - id: pipeline1
     status: running
     name: pipeline1
     description: desc1
     connectors:
-      con1:
+      - id: con1
         type: source
         plugin: builtin:file
         name: source
         settings:
           path: my/path/file1.txt
-      con2:
+      - id: con2
         type: destination
         plugin: builtin:file
         name: dest
         settings:
           path: my/path/file2.txt
         processors:
-          proc1con:
+          - id: proc1con
             type: js
             settings:
               additionalProp1: string
     processors:
-      proc1:
+      - id: proc1
         type: js
         settings:
           additionalProp1: string
