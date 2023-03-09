@@ -187,7 +187,14 @@ func (c *parallelNodeCoordinator) Run(ctx context.Context) {
 		// put the channel back into the pool
 		c.donePool.Put(job.Done)
 
-		// check if the message was successfully processed or not
+		// Check if the message was successfully processed or not. There are two
+		// cases when the status error wouldn't be nil:
+		// - If the message is acknowledged by a processor (i.e. filtered out)
+		//   and we fail to deliver the acknowledgment to the connector.
+		// - If the processor failed to process the message and nacked it but
+		//   the nack failed (i.e. it wasn't stored in the DLQ).
+		// In both cases the processor node failed and returned an error, so we
+		// need to propagate the error and nack all following messages.
 		err := job.Message.StatusError()
 		if err != nil {
 			// propagate error to main node and trigger short circuit, all
@@ -314,6 +321,8 @@ func (w *parallelNodeWorker) runForwarder(in chan<- *Message, out <-chan *Messag
 		}
 
 		// get error before we give the message to the coordinator
+		// if the message status returns an error it means the worker stopped
+		// running and the error will be propagated by the coordinator
 		err := job.Message.StatusError()
 
 		// give message to coordinator
