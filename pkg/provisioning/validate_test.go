@@ -145,10 +145,10 @@ func TestValidator_InvalidFields(t *testing.T) {
 			Description: "desc1",
 			Processors: map[string]ProcessorConfig{
 				"proc1": {
-					// invalid field
 					Type:     "js",
 					Settings: map[string]string{},
-					Workers:  -1,
+					// invalid field
+					Workers: -1,
 				},
 			},
 		},
