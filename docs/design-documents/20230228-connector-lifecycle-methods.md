@@ -28,12 +28,9 @@ change between runs and we need to notify the connector about these changes.
 - Lifecycle methods should be optional to implement.
 - The introduction of lifecycle methods must be backwards compatible with
   existing connectors.
-- The connector needs to be notified when it was first created*.
-- The connector needs to be notified when its configuration has changed*.
+- The connector needs to be notified when it was first created.
+- The connector needs to be notified when its configuration has changed.
 - The connector needs to be notified when it gets deleted.
-
-\*Actually when the pipeline is first started after that happened. See
-[implementation options](#implementation-options) for more details.
 
 ## Implementation options
 
