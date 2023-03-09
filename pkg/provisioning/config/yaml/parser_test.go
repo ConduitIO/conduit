@@ -369,3 +369,98 @@ func TestParser_V2_Warnings(t *testing.T) {
 `
 	is.Equal(out.String(), want)
 }
+
+func TestParser_V2_DuplicatePipelineId(t *testing.T) {
+	is := is.New(t)
+	parser := NewParser(log.Nop())
+	filepath := "./v2/testdata/pipelines2-duplicate-pipeline-id.yml"
+
+	file, err := os.Open(filepath)
+	is.NoErr(err)
+	defer file.Close()
+
+	_, err = parser.ParseConfigurations(context.Background(), file)
+	is.NoErr(err)
+}
+
+func TestParser_V2_EmptyFile(t *testing.T) {
+	is := is.New(t)
+	parser := NewParser(log.Nop())
+	filepath := "./v2/testdata/pipelines3-empty.yml"
+
+	file, err := os.Open(filepath)
+	is.NoErr(err)
+	defer file.Close()
+
+	_, err = parser.ParseConfigurations(context.Background(), file)
+	is.NoErr(err)
+}
+
+func TestParser_V2_InvalidYaml(t *testing.T) {
+	is := is.New(t)
+	parser := NewParser(log.Nop())
+	filepath := "./v2/testdata/pipelines4-invalid-yaml.yml"
+
+	file, err := os.Open(filepath)
+	is.NoErr(err)
+	defer file.Close()
+
+	_, err = parser.ParseConfigurations(context.Background(), file)
+	is.True(err != nil)
+}
+
+func TestParser_V2_EnvVars(t *testing.T) {
+	is := is.New(t)
+	parser := NewParser(log.Nop())
+	filepath := "./v2/testdata/pipelines5-env-vars.yml"
+
+	// set env variables
+	err := os.Setenv("TEST_PARSER_AWS_SECRET", "my-aws-secret")
+	if err != nil {
+		t.Fatalf("Failed to write env var: $TEST_PARSER_AWS_SECRET")
+	}
+	err = os.Setenv("TEST_PARSER_AWS_KEY", "my-aws-key")
+	if err != nil {
+		t.Fatalf("Failed to write env var: $TEST_PARSER_AWS_KEY")
+	}
+	err = os.Setenv("TEST_PARSER_AWS_URL", "aws-url")
+	if err != nil {
+		t.Fatalf("Failed to write env var: $TEST_PARSER_AWS_URL")
+	}
+
+	want := []Configuration{
+		v2.Configuration{
+			Version: "2.0",
+			Pipelines: []v2.Pipeline{
+				{
+					ID:          "pipeline1",
+					Status:      "running",
+					Name:        "pipeline1",
+					Description: "desc1",
+					Connectors: []v2.Connector{
+						{
+							ID:     "con1",
+							Type:   "source",
+							Plugin: "builtin:s3",
+							Name:   "s3-source",
+							Settings: map[string]string{
+								// env variables should be replaced with their values
+								"aws.secret": "my-aws-secret",
+								"aws.key":    "my-aws-key",
+								"aws.url":    "my/aws-url/url",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	file, err := os.Open(filepath)
+	is.NoErr(err)
+	defer file.Close()
+
+	got, err := parser.ParseConfigurations(context.Background(), file)
+	is.NoErr(err)
+	is.Equal(got, want)
+}
