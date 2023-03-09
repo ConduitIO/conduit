@@ -17,12 +17,15 @@ package yaml
 import (
 	"bytes"
 	"context"
+	"io"
 	"os"
 	"testing"
 
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	v1 "github.com/conduitio/conduit/pkg/provisioning/config/yaml/v1"
 	v2 "github.com/conduitio/conduit/pkg/provisioning/config/yaml/v2"
+	"github.com/conduitio/yaml/v3"
 	"github.com/matryer/is"
 	"github.com/rs/zerolog"
 )
@@ -241,6 +244,29 @@ func TestParser_V1_EnvVars(t *testing.T) {
 	got, err := parser.ParseConfigurations(context.Background(), file)
 	is.NoErr(err)
 	is.Equal(got, want)
+}
+
+func TestParser_V1_ParseV2Config(t *testing.T) {
+	is := is.New(t)
+	parser := NewParser(log.Nop())
+	filepath := "./v2/testdata/pipelines1-success.yml"
+
+	file, err := os.Open(filepath)
+	is.NoErr(err)
+	defer file.Close()
+
+	// replace major version so that the v1 parser is chosen for a v2 config
+	r := replacingReader{
+		Reader: file,
+		Old:    []byte("version: 2"),
+		New:    []byte("version: 1"),
+	}
+
+	_, err = parser.ParseConfigurations(context.Background(), r)
+	is.True(err != nil)
+	// make sure it's an invalid type error
+	var iterr *yaml.InvalidTypeError
+	is.True(cerrors.As(err, &iterr))
 }
 
 func TestParser_V2_Success(t *testing.T) {
@@ -463,4 +489,47 @@ func TestParser_V2_EnvVars(t *testing.T) {
 	got, err := parser.ParseConfigurations(context.Background(), file)
 	is.NoErr(err)
 	is.Equal(got, want)
+}
+
+func TestParser_V2_ParseV1Config(t *testing.T) {
+	is := is.New(t)
+	parser := NewParser(log.Nop())
+	filepath := "./v1/testdata/pipelines1-success.yml"
+
+	file, err := os.Open(filepath)
+	is.NoErr(err)
+	defer file.Close()
+
+	// replace major version so that the v2 parser is chosen for a v1 config
+	r := replacingReader{
+		Reader: file,
+		Old:    []byte("version: 1"),
+		New:    []byte("version: 2"),
+	}
+
+	_, err = parser.ParseConfigurations(context.Background(), r)
+	is.True(err != nil)
+	// make sure it's an invalid type error
+	var iterr *yaml.InvalidTypeError
+	is.True(cerrors.As(err, &iterr))
+}
+
+// replacingReader wraps a reader and replaces Old with New while reading.
+type replacingReader struct {
+	io.Reader
+	Old []byte
+	New []byte
+}
+
+func (rr replacingReader) Read(p []byte) (int, error) {
+	i, err := rr.Reader.Read(p)
+	if err != nil {
+		return i, err
+	}
+	// that's very naive, Read reads up to len(p) bytes, so it could happen that
+	// the sequence we are looking for is split in two
+	// we don't care, it's good enough for our tests
+	tmp := bytes.ReplaceAll(p, rr.Old, rr.New)
+	copy(p, tmp)
+	return i, nil
 }
