@@ -17,6 +17,7 @@ package pipeline
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -290,23 +291,9 @@ func (s *Service) buildProcessorNodes(
 
 		var node stream.PubSubNode
 		if proc.Config.Workers > 1 {
-			node = &stream.ParallelNode{
-				Name: proc.ID + "-parallel",
-				NewNode: func(i int) stream.PubSubNode {
-					return &stream.ProcessorNode{
-						Name:           fmt.Sprintf("%s-%d", proc.ID, i),
-						Processor:      proc.Processor,
-						ProcessorTimer: measure.ProcessorExecutionDurationTimer.WithValues(pl.Config.Name, proc.Type),
-					}
-				},
-				Workers: proc.Config.Workers,
-			}
+			node = s.buildParallelProcessorNode(pl, proc)
 		} else {
-			node = &stream.ProcessorNode{
-				Name:           proc.ID,
-				Processor:      proc.Processor,
-				ProcessorTimer: measure.ProcessorExecutionDurationTimer.WithValues(pl.Config.Name, proc.Type),
-			}
+			node = s.buildProcessorNode(pl, proc)
 		}
 
 		node.Sub(prev.Pub())
@@ -317,6 +304,32 @@ func (s *Service) buildProcessorNodes(
 
 	last.Sub(prev.Pub())
 	return nodes, nil
+}
+
+func (s *Service) buildParallelProcessorNode(
+	pl *Instance,
+	proc *processor.Instance,
+) *stream.ParallelNode {
+	return &stream.ParallelNode{
+		Name: proc.ID + "-parallel",
+		NewNode: func(i int) stream.PubSubNode {
+			n := s.buildProcessorNode(pl, proc)
+			n.Name = n.Name + "-" + strconv.Itoa(i) // add suffix to name
+			return n
+		},
+		Workers: proc.Config.Workers,
+	}
+}
+
+func (s *Service) buildProcessorNode(
+	pl *Instance,
+	proc *processor.Instance,
+) *stream.ProcessorNode {
+	return &stream.ProcessorNode{
+		Name:           proc.ID,
+		Processor:      proc.Processor,
+		ProcessorTimer: measure.ProcessorExecutionDurationTimer.WithValues(pl.Config.Name, proc.Type),
+	}
 }
 
 func (s *Service) buildSourceNodes(

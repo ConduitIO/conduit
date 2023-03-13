@@ -23,10 +23,15 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/log"
 )
 
-// ParallelNode wraps a PubSubNode and parallelizes it by running it in separate
-// workers.
+// ParallelNode wraps a PubSubNode and parallelizes it by running multiple
+// instances of the node in separate worker goroutines. It also spawns a
+// coordinator goroutine that is responsible for collecting the results and
+// forwarding them to the next node down the line while maintaining the order of
+// messages.
 type ParallelNode struct {
-	Name    string
+	Name string
+	// NewNode is the constructor of the wrapped PubSubNode, it should create
+	// the i-th node (useful for distinguishing nodes in logs).
 	NewNode func(i int) PubSubNode
 	Workers int
 
@@ -38,6 +43,17 @@ func (n *ParallelNode) ID() string {
 	return n.Name
 }
 
+// Run is continuously fetching messages from the incoming channel (i.e. from
+// the previous node) and submitting jobs to the job channel shared by all
+// worker goroutines. Once a worker picks up the job, the same job is also sent
+// to the coordinator which starts waiting for the job to be done. The worker is
+// responsible for forwarding the message to the wrapped PubSubNode, waiting for
+// it to process the message and then mark the job as done. Once the jobs are
+// done the results are picked up by the coordinator which decides if the
+// message should be sent to the next node, if it was filtered out or if an
+// error happened and the node needs to stop running. The coordinator collects
+// job results in the same order as the order of the dispatched jobs, so the
+// order of messages is maintained.
 func (n *ParallelNode) Run(ctx context.Context) error {
 	// allow each worker to store an error in the channel
 	errs := make(chan error, n.Workers)
@@ -110,7 +126,7 @@ func (n *ParallelNode) Run(ctx context.Context) error {
 
 		job := parallelNodeJob{
 			Message: msg,
-			Done:    donePool.Get().(chan struct{}),
+			done:    donePool.Get().(chan struct{}),
 		}
 
 		// try sending the job to a worker
@@ -143,9 +159,23 @@ func (n *ParallelNode) SetLogger(logger log.CtxLogger) {
 	n.logger = logger
 }
 
+// parallelNodeJob is a single job processed by a worker. Once the job is
+// processed, the worker needs to call Done to signal that it has finished. The
+// coordinator calls Wait to wait for the job to be processed.
 type parallelNodeJob struct {
 	Message *Message
-	Done    chan struct{}
+	done    chan struct{}
+}
+
+// Wait blocks until Done is called.
+func (j parallelNodeJob) Wait() {
+	<-j.done
+}
+
+// Done signals that the job is done. It blocks until another goroutine calls
+// Wait (the coordinator goroutine).
+func (j parallelNodeJob) Done() {
+	j.done <- struct{}{}
 }
 
 // parallelNodeCoordinator coordinates the messages that are processed by
@@ -182,10 +212,10 @@ func (c *parallelNodeCoordinator) Run(ctx context.Context) {
 	// fail toggles a short circuit that causes all future messages to be nacked
 	fail := false
 	for job := range c.jobs {
-		// wait for job to be done
-		<-job.Done
+		// wait for job to be done, this ensures that the order is maintained
+		job.Wait()
 		// put the channel back into the pool
-		c.donePool.Put(job.Done)
+		c.donePool.Put(job.done)
 
 		// Check if the message was successfully processed or not. There are two
 		// cases when the status error wouldn't be nil:
@@ -297,7 +327,7 @@ func (w *parallelNodeWorker) runForwarder(in chan<- *Message, out <-chan *Messag
 			// nack in-flight message and ignore error, it will be picked up
 			// by the coordinator
 			_ = job.Message.Nack(cerrors.New("worker not running"), w.node.ID())
-			job.Done <- struct{}{}
+			job.Done()
 			return
 		case in <- job.Message:
 			// message submitted to worker node
@@ -326,7 +356,7 @@ func (w *parallelNodeWorker) runForwarder(in chan<- *Message, out <-chan *Messag
 		err := job.Message.StatusError()
 
 		// give message to coordinator
-		job.Done <- struct{}{}
+		job.Done()
 
 		if err != nil {
 			// message processing failed, worker stopped running, stop accepting jobs

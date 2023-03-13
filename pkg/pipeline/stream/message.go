@@ -44,7 +44,9 @@ var (
 	ErrUnexpectedMessageStatus = cerrors.New("unexpected message status")
 )
 
-// Message represents a single message flowing through a pipeline.
+// Message represents a single message flowing through a pipeline. Only a single
+// node is allowed to hold a message and access its fields at a specific point
+// in time, otherwise we could introduce race conditions.
 type Message struct {
 	// Ctx is the context in which the record was fetched. It should be used for
 	// any function calls when processing the message. If the context is done

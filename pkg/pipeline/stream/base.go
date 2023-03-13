@@ -349,7 +349,8 @@ func (n *nodeBase) Send(
 		msg.Ctx = ctxutil.ContextWithMessageID(ctx, msg.ID())
 	}
 	// copy context into a local variable, we shouldn't access it anymore after
-	// we send the message to out
+	// we send the message to out, this prevents race conditions in case the
+	// field gets changed
 	msgCtx := msg.Ctx
 
 	select {

@@ -174,11 +174,11 @@ func TestParallelNode_Worker(t *testing.T) {
 
 			job := parallelNodeJob{
 				Message: &Message{},
-				Done:    make(chan struct{}),
+				done:    make(chan struct{}),
 			}
 			jobs <- job
 
-			_, ok, err := cchan.ChanOut[struct{}](job.Done).RecvTimeout(ctx, time.Millisecond*100)
+			_, ok, err := cchan.ChanOut[struct{}](job.done).RecvTimeout(ctx, time.Millisecond*100)
 			is.NoErr(err)
 			is.True(ok)
 
@@ -271,13 +271,13 @@ func TestParallelNode_Coordinator(t *testing.T) {
 
 			job := parallelNodeJob{
 				Message: &Message{},
-				Done:    donePool.Get().(chan struct{}),
+				done:    donePool.Get().(chan struct{}),
 			}
 			jobs <- job
 
 			tc.processMessage(job.Message)
 
-			job.Done <- struct{}{}
+			job.Done()
 
 			_, ok, err := cchan.ChanOut[*Message](out).RecvTimeout(ctx, time.Millisecond*10)
 			if tc.wantMessage {
@@ -299,10 +299,10 @@ func TestParallelNode_Coordinator(t *testing.T) {
 			// regardless of what happened above we should be able to send another job in
 			job = parallelNodeJob{
 				Message: &Message{},
-				Done:    donePool.Get().(chan struct{}),
+				done:    donePool.Get().(chan struct{}),
 			}
 			jobs <- job
-			job.Done <- struct{}{}
+			job.Done()
 
 			_, ok, err = cchan.ChanOut[*Message](out).RecvTimeout(ctx, time.Millisecond*10)
 			// if we did not expect an error in the previous message then this one should go through
