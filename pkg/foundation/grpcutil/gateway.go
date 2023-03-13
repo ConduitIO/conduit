@@ -109,8 +109,8 @@ func WithHTTPEndpointHeader(h http.Handler) http.Handler {
 	})
 }
 
-func WithWebsockets(h http.Handler, l log.CtxLogger) http.Handler {
-	return newWebSocketProxy(h, l)
+func WithWebsockets(ctx context.Context, h http.Handler, l log.CtxLogger) http.Handler {
+	return newWebSocketProxy(ctx, h, l)
 }
 
 func extractEndpoint(r *http.Request) string {

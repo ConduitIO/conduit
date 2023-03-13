@@ -76,3 +76,5 @@ examples/processors/file_destination.txt
 
 # Standalone connectors
 /connectors
+
+/pipelines
