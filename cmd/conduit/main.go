@@ -55,23 +55,72 @@ func parseConfig() conduit.Config {
 	// TODO allow parsing config from a file or from env variables
 	flags := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 	var (
-		dbType                     = flags.String("db.type", "badger", "database type; accepts badger,postgres,inmemory")
-		dbBadgerPath               = flags.String("db.badger.path", "conduit.db", "path to badger DB")
-		dbPostgresConnectionString = flags.String("db.postgres.connection-string", "", "postgres connection string")
-		dbPostgresTable            = flags.String("db.postgres.table", "conduit_kv_store", "postgres table in which to store data (will be created if it does not exist)")
+		dbType = flags.String(
+			"db.type",
+			"badger",
+			"database type; accepts badger,postgres,inmemory",
+		)
+		dbBadgerPath = flags.String(
+			"db.badger.path",
+			"conduit.db",
+			"path to badger DB",
+		)
+		dbPostgresConnectionString = flags.String(
+			"db.postgres.connection-string",
+			"",
+			"postgres connection string",
+		)
+		dbPostgresTable = flags.String(
+			"db.postgres.table",
+			"conduit_kv_store",
+			"postgres table in which to store data (will be created if it does not exist)",
+		)
 
-		grpcAddress = flags.String("grpc.address", ":8084", "address for serving the GRPC API")
+		grpcAddress = flags.String(
+			"grpc.address",
+			":8084",
+			"address for serving the GRPC API",
+		)
 
-		httpAddress = flags.String("http.address", ":8080", "address for serving the HTTP API")
+		httpAddress = flags.String(
+			"http.address",
+			":8080",
+			"address for serving the HTTP API",
+		)
 
-		version = flags.Bool("version", false, "prints current Conduit version")
+		version = flags.Bool(
+			"version",
+			false,
+			"prints current Conduit version",
+		)
 
-		logLevel  = flags.String("log.level", "info", "sets logging level; accepts debug, info, warn, error, trace")
-		logFormat = flags.String("log.format", "cli", "sets the format of the logging; accepts json, cli")
+		logLevel = flags.String(
+			"log.level",
+			"info",
+			"sets logging level; accepts debug, info, warn, error, trace",
+		)
+		logFormat = flags.String(
+			"log.format",
+			"cli",
+			"sets the format of the logging; accepts json, cli",
+		)
 
-		connectorsDir = flags.String("connectors.path", "./connectors", "path to standalone connectors directory")
+		connectorsDir = flags.String(
+			"connectors.path",
+			"./connectors",
+			"path to standalone connectors directory",
+		)
 
-		pipelinesDir = flags.String("pipelines.path", "./pipelines", "path to the directory that has the yaml pipeline configuration files, or a single pipeline configuration file")
+		pipelinesDir = flags.String(
+			"pipelines.path",
+			"./pipelines",
+			"path to the directory that has the yaml pipeline configuration files, or a single pipeline configuration file",
+		)
+		pipelinesExitOnError = flags.Bool(
+			"pipelines.exitOnError",
+			false,
+			"exit Conduit if any file-provided pipeline fails to be provisioned",
+		)
 	)
 
 	// flags is set up to exit on error, we can safely ignore the error
@@ -94,6 +143,7 @@ func parseConfig() conduit.Config {
 	cfg.Log.Format = strings.ToLower(stringPtrToVal(logFormat))
 	cfg.Connectors.Path = stringPtrToVal(connectorsDir)
 	cfg.Pipelines.Path = strings.ToLower(stringPtrToVal(pipelinesDir))
+	cfg.Pipelines.ExitOnError = *pipelinesExitOnError
 
 	return cfg
 }

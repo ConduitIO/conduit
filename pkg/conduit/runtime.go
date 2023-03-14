@@ -128,7 +128,15 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 		return nil, cerrors.Errorf("failed to create services: %w", err)
 	}
 
-	provisionService := provisioning.NewService(db, logger, plService, connService, procService, pluginService, cfg.Pipelines.Path)
+	provisionService := provisioning.NewService(
+		db,
+		logger,
+		plService,
+		connService,
+		procService,
+		pluginService,
+		cfg.Pipelines.Path,
+	)
 
 	orc := orchestrator.NewOrchestrator(db, logger, plService, connService, procService, pluginService)
 
@@ -227,13 +235,19 @@ func (r *Runtime) Run(ctx context.Context) (err error) {
 		multierror.ForEach(err, func(err error) {
 			r.logger.Err(ctx, err).Msg("provisioning failed")
 		})
+		if r.Config.Pipelines.ExitOnError {
+			return cerrors.Errorf("provisioning failed, ExitOnError set to true: %w", err)
+		}
 	}
 
 	err = r.pipelineService.Run(ctx, r.connectorService, r.processorService, r.pluginService)
 	if err != nil {
 		multierror.ForEach(err, func(err error) {
-			r.logger.Err(ctx, err).Msg("pipeline failed to be started")
+			r.logger.Err(ctx, err).Msg("pipeline(s) failed to be started")
 		})
+		if r.Config.Pipelines.ExitOnError {
+			return cerrors.Errorf("pipeline(s) failed to be started, ExitOnError set to true: %w", err)
+		}
 	}
 
 	// Serve grpc and http API
