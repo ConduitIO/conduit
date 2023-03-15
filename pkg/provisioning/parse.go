@@ -28,6 +28,7 @@ import (
 type ProcessorConfig struct {
 	Type     string            `yaml:"type"`
 	Settings map[string]string `yaml:"settings"`
+	Workers  int               `yaml:"workers"`
 }
 
 type ConnectorConfig struct {

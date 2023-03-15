@@ -423,6 +423,7 @@ func (s *Service) createConnector(ctx context.Context, pipelineID string, id str
 func (s *Service) createProcessor(ctx context.Context, parentID string, parentType processor.ParentType, id string, config ProcessorConfig) error {
 	cfg := processor.Config{
 		Settings: config.Settings,
+		Workers:  config.Workers,
 	}
 	parent := processor.Parent{
 		ID:   parentID,

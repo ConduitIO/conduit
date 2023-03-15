@@ -44,7 +44,9 @@ var (
 	ErrUnexpectedMessageStatus = cerrors.New("unexpected message status")
 )
 
-// Message represents a single message flowing through a pipeline.
+// Message represents a single message flowing through a pipeline. Only a single
+// node is allowed to hold a message and access its fields at a specific point
+// in time, otherwise we could introduce race conditions.
 type Message struct {
 	// Ctx is the context in which the record was fetched. It should be used for
 	// any function calls when processing the message. If the context is done
@@ -270,6 +272,19 @@ func (m *Message) Status() MessageStatus {
 	default:
 		return MessageStatusOpen
 	}
+}
+
+// StatusError returns the error that was returned when the message was acked or
+// nacked. If the message was successfully acked/nacked or it is still open the
+// method returns nil.
+func (m *Message) StatusError() error {
+	switch m.Status() {
+	case MessageStatusAcked:
+		return m.Ack()
+	case MessageStatusNacked:
+		return m.Nack(nil, "")
+	}
+	return nil
 }
 
 // OpenMessagesTracker allows you to track messages until they reach the end of

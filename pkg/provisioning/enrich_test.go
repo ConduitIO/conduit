@@ -35,7 +35,8 @@ func TestEnrich_DefaultValues(t *testing.T) {
 					},
 					Processors: map[string]ProcessorConfig{
 						"proc2": {
-							Type: "js",
+							Type:    "js",
+							Workers: 2,
 							Settings: map[string]string{
 								"additionalProp1": "string",
 							},
@@ -72,7 +73,8 @@ func TestEnrich_DefaultValues(t *testing.T) {
 					},
 					Processors: map[string]ProcessorConfig{
 						"pipeline1:con1:proc2": {
-							Type: "js",
+							Type:    "js",
+							Workers: 2,
 							Settings: map[string]string{
 								"additionalProp1": "string",
 							},
@@ -82,7 +84,8 @@ func TestEnrich_DefaultValues(t *testing.T) {
 			},
 			Processors: map[string]ProcessorConfig{
 				"pipeline1:proc1": {
-					Type: "js",
+					Type:    "js",
+					Workers: 1,
 					Settings: map[string]string{
 						"additionalProp1": "string",
 					},

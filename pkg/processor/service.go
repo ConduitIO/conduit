@@ -92,6 +92,13 @@ func (s *Service) Create(
 	cfg Config,
 	pt ProvisionType,
 ) (*Instance, error) {
+	if cfg.Workers < 0 {
+		return nil, cerrors.New("processor workers can't be negative")
+	}
+	if cfg.Workers == 0 {
+		cfg.Workers = 1
+	}
+
 	builder, err := s.registry.Get(procType)
 	if err != nil {
 		return nil, err

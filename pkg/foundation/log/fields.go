@@ -15,15 +15,16 @@
 package log
 
 const (
-	ComponentField      = "component"
-	ConnectorIDField    = "connector_id"
-	DurationField       = "duration"
-	MessageIDField      = "message_id"
-	NodeIDField         = "node_id"
-	PipelineIDField     = "pipeline_id"
-	RecordPositionField = "record_position"
-	RequestIDField      = "request_id"
-	ServerAddressField  = "address"
+	ComponentField        = "component"
+	ConnectorIDField      = "connector_id"
+	DurationField         = "duration"
+	MessageIDField        = "message_id"
+	NodeIDField           = "node_id"
+	ParallelWorkerIDField = "parallel_worker_id"
+	PipelineIDField       = "pipeline_id"
+	RecordPositionField   = "record_position"
+	RequestIDField        = "request_id"
+	ServerAddressField    = "address"
 
 	GRPCMethodField     = "grpc_method"
 	GRPCStatusCodeField = "grpc_status_code"

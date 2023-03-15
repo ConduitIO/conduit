@@ -71,7 +71,10 @@ func validateProcessorsConfig(mp map[string]ProcessorConfig) error {
 	var err error
 	for k, cfg := range mp {
 		if cfg.Type == "" {
-			err = multierror.Append(err, cerrors.Errorf("processors %q: \"type\" is mandatory: %w", k, ErrMandatoryField))
+			err = multierror.Append(err, cerrors.Errorf("processor %q: \"type\" is mandatory: %w", k, ErrMandatoryField))
+		}
+		if cfg.Workers < 0 {
+			err = multierror.Append(err, cerrors.Errorf("processor %q: \"workers\" can't be negative: %w", k, ErrInvalidField))
 		}
 		mp[k] = cfg
 	}

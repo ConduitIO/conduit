@@ -50,6 +50,9 @@ func enrichConnectorsConfig(mp map[string]ConnectorConfig, pipelineID string) ma
 func enrichProcessorsConfig(mp map[string]ProcessorConfig, parentID string) map[string]ProcessorConfig {
 	newMap := make(map[string]ProcessorConfig, len(mp))
 	for k, cfg := range mp {
+		if cfg.Workers == 0 {
+			cfg.Workers = 1
+		}
 		newID := parentID + ":" + k
 		newMap[newID] = cfg
 	}
