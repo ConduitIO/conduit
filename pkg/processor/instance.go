@@ -50,7 +50,6 @@ type Interface interface {
 
 	// InspectIn starts an inspection session for input records for this processor.
 	InspectIn(ctx context.Context) *inspector.Session
-
 	// InspectOut starts an inspection session for output records for this processor.
 	InspectOut(ctx context.Context) *inspector.Session
 

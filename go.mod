@@ -17,7 +17,7 @@ require (
 	github.com/conduitio/conduit-connector-sdk v0.5.1
 	github.com/conduitio/yaml/v3 v3.2.0
 	github.com/dgraph-io/badger/v3 v3.2103.5
-	github.com/dop251/goja v0.0.0-20210225094849-f3cfc97811c0
+	github.com/dop251/goja v0.0.0-20230304130813-e2f543bf4b4c
 	github.com/gammazero/deque v0.2.1
 	github.com/golang/mock v1.6.0
 	github.com/google/go-cmp v0.5.9
@@ -83,7 +83,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.2 // indirect
 	github.com/dgraph-io/ristretto v0.1.1 // indirect
-	github.com/dlclark/regexp2 v1.4.0 // indirect
+	github.com/dlclark/regexp2 v1.8.0 // indirect
 	github.com/docker/cli v23.0.1+incompatible // indirect
 	github.com/docker/distribution v2.8.1+incompatible // indirect
 	github.com/docker/docker v23.0.1+incompatible // indirect
