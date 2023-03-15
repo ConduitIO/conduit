@@ -42,7 +42,7 @@ func main() {
 ## Development
 
 We use [Buf](https://buf.build/) to generate the Go code. The code is locally generated,
-and can be found in [proto](/proto). The generated code needs to be committed.
+and can be found in [/proto/api/v1](/proto/api/v1). The generated code needs to be committed.
 
 The code needs to be generated after changes to the `.proto` files have been made. To do
 so run `make proto-generate` from the root of this repository.
