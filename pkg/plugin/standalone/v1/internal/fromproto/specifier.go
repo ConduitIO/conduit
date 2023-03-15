@@ -17,7 +17,7 @@ package fromproto
 import (
 	"fmt"
 
-	connectorv1 "github.com/conduitio/conduit-connector-protocol/proto/gen/connector/v1"
+	connectorv1 "github.com/conduitio/conduit-connector-protocol/proto/connector/v1"
 	"github.com/conduitio/conduit/pkg/plugin"
 )
 

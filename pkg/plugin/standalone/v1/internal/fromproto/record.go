@@ -17,7 +17,7 @@ package fromproto
 import (
 	"fmt"
 
-	opencdcv1 "github.com/conduitio/conduit-connector-protocol/proto/gen/opencdc/v1"
+	opencdcv1 "github.com/conduitio/conduit-connector-protocol/proto/opencdc/v1"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/record"
 )
