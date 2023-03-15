@@ -63,7 +63,8 @@ var pipeline1 = PipelineConfig{
 			},
 			Processors: map[string]ProcessorConfig{
 				"pipeline1:con2:proc1con": {
-					Type: "js",
+					Type:    "js",
+					Workers: 10,
 					Settings: map[string]string{
 						"additionalProp1": "string",
 					},
@@ -73,7 +74,8 @@ var pipeline1 = PipelineConfig{
 	},
 	Processors: map[string]ProcessorConfig{
 		"pipeline1:proc1": {
-			Type: "js",
+			Type:    "js",
+			Workers: 1,
 			Settings: map[string]string{
 				"additionalProp1": "string",
 			},
@@ -156,8 +158,13 @@ func TestProvision_PipelineWithConnectorsAndProcessors(t *testing.T) {
 		Name:     pipeline1.Connectors["pipeline1:con2"].Name,
 		Settings: pipeline1.Connectors["pipeline1:con2"].Settings,
 	}
-	procCfg := processor.Config{
+	procCfg1 := processor.Config{
 		Settings: pipeline1.Processors["pipeline1:proc1"].Settings,
+		Workers:  pipeline1.Processors["pipeline1:proc1"].Workers,
+	}
+	procCfg2 := processor.Config{
+		Settings: pipeline1.Connectors["pipeline1:con2"].Processors["pipeline1:con2:proc1con"].Settings,
+		Workers:  pipeline1.Connectors["pipeline1:con2"].Processors["pipeline1:con2:proc1con"].Workers,
 	}
 	procParentPipeline := processor.Parent{
 		ID:   pipeline1.Name,
@@ -179,9 +186,9 @@ func TestProvision_PipelineWithConnectorsAndProcessors(t *testing.T) {
 	connService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline1:con2", connector.TypeDestination, pipeline1.Connectors["pipeline1:con2"].Plugin, pipeline1.Name, cfg2, connector.ProvisionTypeConfig)
 	pipelineService.EXPECT().AddConnector(gomock.Not(gomock.Nil()), pipeline1.Name, "pipeline1:con2")
 
-	procService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline1:con2:proc1con", "js", procParentConn, procCfg, processor.ProvisionTypeConfig)
+	procService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline1:con2:proc1con", "js", procParentConn, procCfg2, processor.ProvisionTypeConfig)
 	connService.EXPECT().AddProcessor(gomock.Not(gomock.Nil()), "pipeline1:con2", "pipeline1:con2:proc1con")
-	procService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline1:proc1", "js", procParentPipeline, procCfg, processor.ProvisionTypeConfig)
+	procService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline1:proc1", "js", procParentPipeline, procCfg1, processor.ProvisionTypeConfig)
 	pipelineService.EXPECT().AddProcessor(gomock.Not(gomock.Nil()), pipeline1.Name, "pipeline1:proc1")
 
 	pipelineService.EXPECT().Start(gomock.Not(gomock.Nil()), connService, procService, plugService, pipeline1.Name)
@@ -216,8 +223,13 @@ func TestProvision_Rollback(t *testing.T) {
 		Name:     pipeline1.Connectors["pipeline1:con2"].Name,
 		Settings: pipeline1.Connectors["pipeline1:con2"].Settings,
 	}
-	procCfg := processor.Config{
+	procCfg1 := processor.Config{
 		Settings: pipeline1.Processors["pipeline1:proc1"].Settings,
+		Workers:  pipeline1.Processors["pipeline1:proc1"].Workers,
+	}
+	procCfg2 := processor.Config{
+		Settings: pipeline1.Connectors["pipeline1:con2"].Processors["pipeline1:con2:proc1con"].Settings,
+		Workers:  pipeline1.Connectors["pipeline1:con2"].Processors["pipeline1:con2:proc1con"].Workers,
 	}
 	procParentPipeline := processor.Parent{
 		ID:   pipeline1.Name,
@@ -244,11 +256,11 @@ func TestProvision_Rollback(t *testing.T) {
 	pipelineService.EXPECT().AddConnector(gomock.Not(gomock.Nil()), pipeline1.Name, "pipeline1:con2")
 	pipelineService.EXPECT().RemoveConnector(gomock.Not(gomock.Nil()), pipeline1.Name, "pipeline1:con2")
 
-	procService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline1:con2:proc1con", "js", procParentConn, procCfg, processor.ProvisionTypeConfig)
+	procService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline1:con2:proc1con", "js", procParentConn, procCfg2, processor.ProvisionTypeConfig)
 	procService.EXPECT().Delete(gomock.Not(gomock.Nil()), "pipeline1:con2:proc1con")
 	connService.EXPECT().AddProcessor(gomock.Not(gomock.Nil()), "pipeline1:con2", "pipeline1:con2:proc1con")
 	connService.EXPECT().RemoveProcessor(gomock.Not(gomock.Nil()), "pipeline1:con2", "pipeline1:con2:proc1con")
-	procService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline1:proc1", "js", procParentPipeline, procCfg, processor.ProvisionTypeConfig)
+	procService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline1:proc1", "js", procParentPipeline, procCfg1, processor.ProvisionTypeConfig)
 	procService.EXPECT().Delete(gomock.Not(gomock.Nil()), "pipeline1:proc1")
 	pipelineService.EXPECT().AddProcessor(gomock.Not(gomock.Nil()), pipeline1.Name, "pipeline1:proc1")
 	pipelineService.EXPECT().RemoveProcessor(gomock.Not(gomock.Nil()), pipeline1.Name, "pipeline1:proc1")
@@ -403,8 +415,13 @@ func TestProvision_ExistingPipeline(t *testing.T) {
 		Name:     pipeline1.Connectors["pipeline1:con2"].Name,
 		Settings: pipeline1.Connectors["pipeline1:con2"].Settings,
 	}
-	procCfg := processor.Config{
+	procCfg1 := processor.Config{
 		Settings: pipeline1.Processors["pipeline1:proc1"].Settings,
+		Workers:  pipeline1.Processors["pipeline1:proc1"].Workers,
+	}
+	procCfg2 := processor.Config{
+		Settings: pipeline1.Connectors["pipeline1:con2"].Processors["pipeline1:con2:proc1con"].Settings,
+		Workers:  pipeline1.Connectors["pipeline1:con2"].Processors["pipeline1:con2:proc1con"].Workers,
 	}
 	procParentPipeline := processor.Parent{
 		ID:   pipeline1.Name,
@@ -417,13 +434,13 @@ func TestProvision_ExistingPipeline(t *testing.T) {
 	proc1Instance := &processor.Instance{
 		ID:     "pipeline1:proc1",
 		Parent: procParentPipeline,
-		Config: procCfg,
+		Config: procCfg1,
 		Type:   "js",
 	}
 	proc1conInstance := &processor.Instance{
 		ID:     "pipeline1:con2:proc1con",
 		Parent: procParentConn,
-		Config: procCfg,
+		Config: procCfg2,
 		Type:   "js",
 	}
 	source := &connector.Instance{
@@ -482,9 +499,9 @@ func TestProvision_ExistingPipeline(t *testing.T) {
 	connService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline1:con2", connector.TypeDestination, pipeline1.Connectors["pipeline1:con2"].Plugin, pipeline1.Name, cfg2, connector.ProvisionTypeConfig).Return(destination, nil)
 	pipelineService.EXPECT().AddConnector(gomock.Not(gomock.Nil()), pipeline1.Name, "pipeline1:con2")
 
-	procService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline1:con2:proc1con", "js", procParentConn, procCfg, processor.ProvisionTypeConfig)
+	procService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline1:con2:proc1con", "js", procParentConn, procCfg2, processor.ProvisionTypeConfig)
 	connService.EXPECT().AddProcessor(gomock.Not(gomock.Nil()), "pipeline1:con2", "pipeline1:con2:proc1con")
-	procService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline1:proc1", "js", procParentPipeline, procCfg, processor.ProvisionTypeConfig)
+	procService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline1:proc1", "js", procParentPipeline, procCfg1, processor.ProvisionTypeConfig)
 	pipelineService.EXPECT().AddProcessor(gomock.Not(gomock.Nil()), pipeline1.Name, "pipeline1:proc1")
 
 	pipelineService.EXPECT().Start(gomock.Not(gomock.Nil()), connService, procService, plugService, pipeline1.Name)
@@ -741,7 +758,9 @@ func TestProvision_IntegrationTestServices(t *testing.T) {
 				ID:   pipeline1.Name,
 				Type: processor.ParentTypePipeline,
 			},
-			Config: processor.Config{},
+			Config: processor.Config{
+				Workers: 1,
+			},
 		},
 		{
 			ID:            "pipeline1:con2:con2proc1",
@@ -751,7 +770,9 @@ func TestProvision_IntegrationTestServices(t *testing.T) {
 				ID:   "pipeline1:con2",
 				Type: processor.ParentTypeConnector,
 			},
-			Config: processor.Config{},
+			Config: processor.Config{
+				Workers: 1,
+			},
 		},
 	}
 

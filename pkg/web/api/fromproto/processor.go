@@ -29,6 +29,7 @@ func _() {
 func ProcessorConfig(in *apiv1.Processor_Config) processor.Config {
 	return processor.Config{
 		Settings: in.Settings,
+		Workers:  int(in.Workers),
 	}
 }
 
