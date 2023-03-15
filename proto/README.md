@@ -23,25 +23,26 @@ package main
 
 import (
 	"context"
-	apiv1 "go.buf.build/conduitio/conduit/conduitio/conduit/api/v1"
+
+	"buf.build/gen/go/conduitio/conduit/grpc/go/api/v1/apiv1grpc"
+	apiv1 "buf.build/gen/go/conduitio/conduit/protocolbuffers/go/api/v1"
 	"google.golang.org/grpc"
 )
 
 func main() {
 	var cc grpc.ClientConnInterface = ...
-	ps := apiv1.NewPipelineServiceClient(cc)
+	ps := apiv1grpc.NewPipelineServiceClient(cc)
 	pipeline, err := ps.GetPipeline(
 		context.Background(),
 		&apiv1.GetPipelineRequest{Id: "pipeline-id-here"},
 	)
 }
-
 ```
 
 ## Development
 
 We use [Buf](https://buf.build/) to generate the Go code. The code is locally generated,
-and can be found in [gen](/proto/gen). The generated code needs to be committed.
+and can be found in [proto](/proto). The generated code needs to be committed.
 
 The code needs to be generated after changes to the `.proto` files have been made. To do
 so run `make proto-generate` from the root of this repository.
