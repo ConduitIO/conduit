@@ -29,7 +29,7 @@ import (
 	"github.com/conduitio/conduit/pkg/record"
 	apimock "github.com/conduitio/conduit/pkg/web/api/mock"
 	"github.com/conduitio/conduit/pkg/web/api/toproto"
-	apiv1 "github.com/conduitio/conduit/proto/gen/api/v1"
+	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/timestamppb"

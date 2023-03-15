@@ -1,5 +1,5 @@
-buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go v1.28.1-20221127060915-a1ecdc58eccd.4 h1:z3Xc9n8yZ5k/Xr4ZTuff76TAYP20dWy7ZBV4cGIpbkM=
-buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go v1.28.1-20221127060915-a1ecdc58eccd.4/go.mod h1:92ejKVTiuvnKoAtRlpJpIxKfloI935DDqhs0NCRx+KM=
+buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go v1.29.1-20221127060915-a1ecdc58eccd.1 h1:DxfvwvlZjMtqxd4fTjQ4lIg0PpPOKZgor1KKxB88Ifg=
+buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go v1.29.1-20221127060915-a1ecdc58eccd.1/go.mod h1:hhON98gyTBA8hmdzw7bPux2Zerm5Sp2hesfc5t6jpoI=
 cloud.google.com/go v0.26.0/go.mod h1:aQUYkXzVsufM+DwF1aE+0xfcU+56JwCaLick0ClmMTw=
 cloud.google.com/go v0.34.0/go.mod h1:aQUYkXzVsufM+DwF1aE+0xfcU+56JwCaLick0ClmMTw=
 cloud.google.com/go v0.38.0/go.mod h1:990N+gfupTy94rShfmMCWGDn0LpTmnzTp2qbd1dvSRU=
@@ -160,20 +160,10 @@ github.com/conduitio/conduit-connector-log v0.1.2 h1:CPlsdgr1Ui6j3fNVYpp/qHVwXKb
 github.com/conduitio/conduit-connector-log v0.1.2/go.mod h1:mnox8F5YrwQpuX+Y/WJidgqi6882Id6i8MslW0ic+XA=
 github.com/conduitio/conduit-connector-postgres v0.3.0 h1:owlVIXeAWVAuHW0Hzr3+zxrAB9/LXIedINduFQM/HoM=
 github.com/conduitio/conduit-connector-postgres v0.3.0/go.mod h1:I8Yz4t90QbGZUObt+0+bWpDwJ2qZ5iv4bbFjRB19xGA=
-github.com/conduitio/conduit-connector-protocol v0.4.1-0.20230308125357-8952e50e20e7 h1:xiNvq3K6GsVs/XV1NOzeDGsQisiC/iSCZFZaCickgoU=
-github.com/conduitio/conduit-connector-protocol v0.4.1-0.20230308125357-8952e50e20e7/go.mod h1:rKyfRoKACvZmNfcQBbVrgVoQYN7Sa3psV8E1ylxVWn0=
-github.com/conduitio/conduit-connector-protocol v0.4.1-0.20230315131128-fad41adf84b9 h1:p0Ug4dksXI1lede02ncphWoqwAXn40Om/tfAeWkadXA=
-github.com/conduitio/conduit-connector-protocol v0.4.1-0.20230315131128-fad41adf84b9/go.mod h1:nO2Q1rcydM68ViSfNQ1CSU6Bh+ex+XbSG5fCGZ15Btk=
-github.com/conduitio/conduit-connector-protocol v0.4.1-0.20230315131936-bd3e598954d2 h1:lUe0SMc5j8avpRxBj2/YDUudeBtVery/K0A1PjiYnUI=
-github.com/conduitio/conduit-connector-protocol v0.4.1-0.20230315131936-bd3e598954d2/go.mod h1:nO2Q1rcydM68ViSfNQ1CSU6Bh+ex+XbSG5fCGZ15Btk=
 github.com/conduitio/conduit-connector-protocol v0.4.1 h1:QIqvkpfVVSxsBHltMKRpy4l5u1M3psAF0SePxhv+CTU=
 github.com/conduitio/conduit-connector-protocol v0.4.1/go.mod h1:UIhHWxq52hvwwbkvQDaRgZRHfbpDDmU7tZaw0mwLdd4=
 github.com/conduitio/conduit-connector-s3 v0.3.0 h1:Zy+TYRnZKw09mks4qsXW43qnp0PuO/SsgvYbbuMUhss=
 github.com/conduitio/conduit-connector-s3 v0.3.0/go.mod h1:ims2iWZJcOSjEPY1nal/DQrxiqG+xHPYFV5nN1ia/Pk=
-github.com/conduitio/conduit-connector-sdk v0.5.1 h1:mWPSjYNy5Eq1+irhxOHKdbPYQkNw010/j58olhjum2c=
-github.com/conduitio/conduit-connector-sdk v0.5.1/go.mod h1:fvgavA7aNgysmC4dPaozRnejOSq3lB3LeEgJPiRSe1Y=
-github.com/conduitio/conduit-connector-sdk v0.5.2-0.20230308125456-34109a107cc2 h1:s2FSJodrrZr18sh/XpjWj7zu5MRSAxTDPmbIs078Yy4=
-github.com/conduitio/conduit-connector-sdk v0.5.2-0.20230308125456-34109a107cc2/go.mod h1:O3eoEnT36hOmuWhq1nyzFB5iOgO14EVnZ3f0lF3Uw5o=
 github.com/conduitio/conduit-connector-sdk v0.5.2 h1:YOPWaG/+NrAzJNkuFbvN6pPk3SdQDErRtipiSH3XT2c=
 github.com/conduitio/conduit-connector-sdk v0.5.2/go.mod h1:Ih8mHJWX2+TvFj429hcrj361vJNULw7FWk4iz1W5l9s=
 github.com/conduitio/yaml/v3 v3.2.0 h1:itolFiK0dzUYG6PdlOpmCi1fcMYFoaWdZ1wbNNTEnlI=
@@ -1019,7 +1009,6 @@ google.golang.org/protobuf v1.25.0/go.mod h1:9JNX74DMeImyA3h4bdi1ymwjUzf21/xIlba
 google.golang.org/protobuf v1.26.0-rc.1/go.mod h1:jlhhOSvTdKEhbULTjvd4ARK9grFBp09yW+WbY/TyQbw=
 google.golang.org/protobuf v1.26.0/go.mod h1:9q0QmTI4eRPtz6boOQmLYwt+qCgq0jsYwAQnmE0givc=
 google.golang.org/protobuf v1.27.1/go.mod h1:9q0QmTI4eRPtz6boOQmLYwt+qCgq0jsYwAQnmE0givc=
-google.golang.org/protobuf v1.28.1/go.mod h1:HV8QOd/L58Z+nl8r43ehVNZIU/HEI6OcFqwMG9pJV4I=
 google.golang.org/protobuf v1.29.1 h1:7QBf+IK2gx70Ap/hDsOmam3GE0v9HicjfEdAxE62UoM=
 google.golang.org/protobuf v1.29.1/go.mod h1:HV8QOd/L58Z+nl8r43ehVNZIU/HEI6OcFqwMG9pJV4I=
 gopkg.in/alecthomas/kingpin.v2 v2.2.6/go.mod h1:FMv+mEhP44yOT+4EoQTLFTRgOQ1FBLkstjWtayDeSgw=

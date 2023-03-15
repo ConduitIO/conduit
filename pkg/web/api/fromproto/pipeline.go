@@ -16,7 +16,7 @@ package fromproto
 
 import (
 	"github.com/conduitio/conduit/pkg/pipeline"
-	apiv1 "github.com/conduitio/conduit/proto/gen/api/v1"
+	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 )
 
 func PipelineConfig(in *apiv1.Pipeline_Config) pipeline.Config {
