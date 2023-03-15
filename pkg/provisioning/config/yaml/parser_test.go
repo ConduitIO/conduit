@@ -140,10 +140,10 @@ func TestParser_Warnings(t *testing.T) {
 
 	// check warnings
 	want := `{"level":"warn","component":"yaml.Parser","line":5,"column":5,"message":"field unknownField not found in type v1.Pipeline"}
-{"level":"warn","component":"yaml.Parser","line":18,"column":11,"field":"processors","value":"","message":"the order of processors is non-deterministic in configuration files with version 1.x, please upgrade to version 2.x"}
-{"level":"warn","component":"yaml.Parser","line":24,"column":7,"field":"processors","value":"","message":"the order of processors is non-deterministic in configuration files with version 1.x, please upgrade to version 2.x"}
-{"level":"warn","component":"yaml.Parser","line":31,"column":7,"field":"dead-letter-queue","value":"","message":"field dead-letter-queue was introduced in version 1.1, please update the pipeline config version"}
-{"level":"warn","component":"yaml.Parser","line":52,"column":11,"field":"processors","value":"","message":"the order of processors is non-deterministic in configuration files with version 1.x, please upgrade to version 2.x"}
+{"level":"warn","component":"yaml.Parser","line":17,"column":9,"field":"processors","value":"","message":"the order of processors is non-deterministic in configuration files with version 1.x, please upgrade to version 2.x"}
+{"level":"warn","component":"yaml.Parser","line":23,"column":5,"field":"processors","value":"","message":"the order of processors is non-deterministic in configuration files with version 1.x, please upgrade to version 2.x"}
+{"level":"warn","component":"yaml.Parser","line":30,"column":5,"field":"dead-letter-queue","value":"","message":"field dead-letter-queue was introduced in version 1.1, please update the pipeline config version"}
+{"level":"warn","component":"yaml.Parser","line":51,"column":9,"field":"processors","value":"","message":"the order of processors is non-deterministic in configuration files with version 1.x, please upgrade to version 2.x"}
 `
 	is.Equal(want, out.String())
 }
