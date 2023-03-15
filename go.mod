@@ -3,6 +3,7 @@ module github.com/conduitio/conduit
 go 1.20
 
 require (
+	buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go v1.29.1-20221127060915-a1ecdc58eccd.1
 	github.com/Masterminds/semver/v3 v3.2.0
 	github.com/NYTimes/gziphandler v1.1.1
 	github.com/antchfx/jsonquery v1.3.2
@@ -12,9 +13,9 @@ require (
 	github.com/conduitio/conduit-connector-kafka v0.4.1
 	github.com/conduitio/conduit-connector-log v0.1.2
 	github.com/conduitio/conduit-connector-postgres v0.3.0
-	github.com/conduitio/conduit-connector-protocol v0.4.0
+	github.com/conduitio/conduit-connector-protocol v0.4.1
 	github.com/conduitio/conduit-connector-s3 v0.3.0
-	github.com/conduitio/conduit-connector-sdk v0.5.1
+	github.com/conduitio/conduit-connector-sdk v0.5.2
 	github.com/conduitio/yaml/v3 v3.2.0
 	github.com/dgraph-io/badger/v3 v3.2103.5
 	github.com/dop251/goja v0.0.0-20230304130813-e2f543bf4b4c
@@ -36,8 +37,6 @@ require (
 	github.com/prometheus/client_model v0.3.0
 	github.com/prometheus/common v0.42.0
 	github.com/rs/zerolog v1.29.0
-	go.buf.build/grpc/go/conduitio/conduit-connector-protocol v1.4.5
-	go.buf.build/protocolbuffers/go/grpc-ecosystem/grpc-gateway v1.3.50
 	go.uber.org/goleak v1.2.1
 	golang.org/x/exp v0.0.0-20230307190834-24139beb5833
 	golang.org/x/tools v0.7.0

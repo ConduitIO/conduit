@@ -16,7 +16,7 @@ package toproto
 
 import (
 	"github.com/conduitio/conduit/pkg/plugin"
-	apiv1 "github.com/conduitio/conduit/proto/gen/api/v1"
+	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 )
 
 func _() {

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 //go:generate mockgen -destination=mock/connector.go -package=mock -mock_names=ConnectorOrchestrator=ConnectorOrchestrator . ConnectorOrchestrator
-//go:generate mockgen -destination=mock/connector_service.go -package=mock -mock_names=ConnectorService_InspectConnectorServer=ConnectorService_InspectConnectorServer github.com/conduitio/conduit/proto/gen/api/v1 ConnectorService_InspectConnectorServer
+//go:generate mockgen -destination=mock/connector_service.go -package=mock -mock_names=ConnectorService_InspectConnectorServer=ConnectorService_InspectConnectorServer github.com/conduitio/conduit/proto/api/v1 ConnectorService_InspectConnectorServer
 package api
 
 import (
@@ -25,7 +25,7 @@ import (
 	"github.com/conduitio/conduit/pkg/web/api/fromproto"
 	"github.com/conduitio/conduit/pkg/web/api/status"
 	"github.com/conduitio/conduit/pkg/web/api/toproto"
-	apiv1 "github.com/conduitio/conduit/proto/gen/api/v1"
+	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	"google.golang.org/grpc"
 )
 

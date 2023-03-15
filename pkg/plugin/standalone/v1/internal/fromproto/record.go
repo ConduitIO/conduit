@@ -17,9 +17,9 @@ package fromproto
 import (
 	"fmt"
 
+	opencdcv1 "github.com/conduitio/conduit-connector-protocol/proto/opencdc/v1"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/record"
-	opencdcv1 "go.buf.build/grpc/go/conduitio/conduit-connector-protocol/opencdc/v1"
 )
 
 func _() {

@@ -13,7 +13,7 @@ via a GitHub workflow defined [here](/.github/workflows/buf.yml).
 To use the client code, firstly run:
 
 ```shell
-go get go.buf.build/conduitio/conduit/conduitio/conduit
+go get buf.build/gen/go/conduitio/conduit/grpc/go
 ```
 
 Here's an example usage of Conduit's client code:
