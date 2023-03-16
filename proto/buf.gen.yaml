@@ -9,7 +9,7 @@ managed:
       buf.build/grpc-ecosystem/grpc-gateway: buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go
       buf.build/conduitio/conduit-connector-protocol: github.com/conduitio/conduit-connector-protocol/proto
 plugins:
-  - plugin: buf.build/protocolbuffers/go:v1.29.1
+  - plugin: buf.build/protocolbuffers/go:v1.30.0
     out: .
     opt:
       - paths=source_relative
