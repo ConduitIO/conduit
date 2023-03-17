@@ -16,9 +16,13 @@ jobs:
         with:
           go-version: '1.20'
 
-      - uses: bufbuild/buf-setup-action@v1
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v1
 
-      - name: Generated files
+      - name: Set up Buf
+        uses: bufbuild/buf-setup-action@v1
+
+      - name: Check generated files
         run: |
           export PATH=$PATH:$(go env GOPATH)/bin
           make install-tools
