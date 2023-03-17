@@ -21,6 +21,7 @@ jobs:
           export PATH=$PATH:$(go env GOPATH)/bin
           make install-tools
           make generate
+          make proto-generate
           git diff --exit-code --numstat
 
       - name: Test
