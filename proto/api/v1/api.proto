@@ -14,7 +14,7 @@ message Pipeline {
     STATUS_UNSPECIFIED = 0;
     // Pipeline is running.
     STATUS_RUNNING = 1;
-    // Pipeline gracefully stopped.
+    // !!!!! Pipeline gracefully stopped.
     STATUS_STOPPED = 2;
     // Pipeline stopped with an error (see State.error).
     STATUS_DEGRADED = 3;
