@@ -70,6 +70,18 @@ type SourcePlugin interface {
 	// plugin. It signals to the plugin it can release any open resources and
 	// prepare for a graceful shutdown.
 	Teardown(context.Context) error
+
+	// LifecycleOnCreated should be called after Configure and before Start when
+	// the connector is run for the first time. This call should be skipped if
+	// the connector was already started before.
+	LifecycleOnCreated(ctx context.Context, cfg map[string]string) error
+	// LifecycleOnUpdated should be called after Configure and before Start when
+	// the connector configuration has changed since the last run. This call
+	// should be skipped if the connector configuration did not change.
+	LifecycleOnUpdated(ctx context.Context, cfgBefore, cfgAfter map[string]string) error
+	// LifecycleOnDeleted should be called when the connector was deleted. It
+	// should be the only method that is called in that case.
+	LifecycleOnDeleted(ctx context.Context, cfg map[string]string) error
 }
 
 type DestinationPlugin interface {
@@ -117,6 +129,18 @@ type DestinationPlugin interface {
 	// plugin. It signals to the plugin it can release any open resources and
 	// prepare for a graceful shutdown.
 	Teardown(context.Context) error
+
+	// LifecycleOnCreated should be called after Configure and before Start when
+	// the connector is run for the first time. This call should be skipped if
+	// the connector was already started before.
+	LifecycleOnCreated(ctx context.Context, cfg map[string]string) error
+	// LifecycleOnUpdated should be called after Configure and before Start when
+	// the connector configuration has changed since the last run. This call
+	// should be skipped if the connector configuration did not change.
+	LifecycleOnUpdated(ctx context.Context, cfgBefore, cfgAfter map[string]string) error
+	// LifecycleOnDeleted should be called when the connector was deleted. It
+	// should be the only method that is called in that case.
+	LifecycleOnDeleted(ctx context.Context, cfg map[string]string) error
 }
 
 type SpecifierPlugin interface {
