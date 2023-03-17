@@ -58,10 +58,7 @@ func (s *sourcePluginAdapter) withLogger(ctx context.Context) context.Context {
 }
 
 func (s *sourcePluginAdapter) Configure(ctx context.Context, cfg map[string]string) error {
-	req, err := toplugin.SourceConfigureRequest(cfg)
-	if err != nil {
-		return err
-	}
+	req := toplugin.SourceConfigureRequest(cfg)
 	s.logger.Trace(ctx).Msg("calling Configure")
 	resp, err := runSandbox(s.impl.Configure, s.withLogger(ctx), req)
 	if err != nil {
@@ -79,10 +76,7 @@ func (s *sourcePluginAdapter) Start(ctx context.Context, p record.Position) erro
 		return cerrors.New("plugin already running")
 	}
 
-	req, err := toplugin.SourceStartRequest(p)
-	if err != nil {
-		return err
-	}
+	req := toplugin.SourceStartRequest(p)
 
 	s.logger.Trace(ctx).Msg("calling Start")
 	resp, err := runSandbox(s.impl.Start, s.withLogger(ctx), req)
@@ -132,13 +126,10 @@ func (s *sourcePluginAdapter) Ack(ctx context.Context, p record.Position) error 
 		return plugin.ErrStreamNotOpen
 	}
 
-	req, err := toplugin.SourceRunRequest(p)
-	if err != nil {
-		return err
-	}
+	req := toplugin.SourceRunRequest(p)
 
 	s.logger.Trace(ctx).Msg("sending ack")
-	err = s.stream.sendInternal(req)
+	err := s.stream.sendInternal(req)
 	if err != nil {
 		return cerrors.Errorf("builtin plugin send failed: %w", err)
 	}
@@ -167,6 +158,39 @@ func (s *sourcePluginAdapter) Stop(ctx context.Context) (record.Position, error)
 func (s *sourcePluginAdapter) Teardown(ctx context.Context) error {
 	s.logger.Trace(ctx).Msg("calling Teardown")
 	resp, err := runSandbox(s.impl.Teardown, s.withLogger(ctx), toplugin.SourceTeardownRequest())
+	if err != nil {
+		return err
+	}
+	_ = resp // empty response
+
+	return nil
+}
+
+func (s *sourcePluginAdapter) LifecycleOnCreated(ctx context.Context, cfg map[string]string) error {
+	s.logger.Trace(ctx).Msg("calling LifecycleOnCreated")
+	resp, err := runSandbox(s.impl.LifecycleOnCreated, s.withLogger(ctx), toplugin.SourceLifecycleOnCreatedRequest(cfg))
+	if err != nil {
+		return err
+	}
+	_ = resp // empty response
+
+	return nil
+}
+
+func (s *sourcePluginAdapter) LifecycleOnUpdated(ctx context.Context, cfgBefore, cfgAfter map[string]string) error {
+	s.logger.Trace(ctx).Msg("calling LifecycleOnUpdated")
+	resp, err := runSandbox(s.impl.LifecycleOnUpdated, s.withLogger(ctx), toplugin.SourceLifecycleOnUpdatedRequest(cfgBefore, cfgAfter))
+	if err != nil {
+		return err
+	}
+	_ = resp // empty response
+
+	return nil
+}
+
+func (s *sourcePluginAdapter) LifecycleOnDeleted(ctx context.Context, cfg map[string]string) error {
+	s.logger.Trace(ctx).Msg("calling LifecycleOnDeleted")
+	resp, err := runSandbox(s.impl.LifecycleOnDeleted, s.withLogger(ctx), toplugin.SourceLifecycleOnDeletedRequest(cfg))
 	if err != nil {
 		return err
 	}
