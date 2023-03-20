@@ -25,6 +25,11 @@ import (
 )
 
 type configLinter struct {
+	// expandedChangelog contains a map of all changes in the changelog. The
+	// first key is the version, the second is a map of changes in that version.
+	// Changes are stored hierarchical in submaps. For example, if the field
+	// x.y.z changed in version 1.2.3 the map will contain
+	// { "1.2.3" : { "x" : { "y" : { "z" : internal.Change{} } } } }.
 	expandedChangelog map[string]map[string]any
 }
 
