@@ -16,6 +16,8 @@ package yaml
 
 import "github.com/conduitio/conduit/pkg/provisioning/config"
 
+type Configurations []Configuration
+
 type Configuration struct {
 	Version   string              `yaml:"version"`
 	Pipelines map[string]Pipeline `yaml:"pipelines"`
@@ -48,6 +50,18 @@ type DLQ struct {
 	Settings            map[string]string `yaml:"settings"`
 	WindowSize          *int              `yaml:"window-size"`
 	WindowNackThreshold *int              `yaml:"window-nack-threshold"`
+}
+
+func (c Configurations) ToConfig() []config.Pipeline {
+	if len(c) == 0 {
+		return nil
+	}
+
+	out := make([]config.Pipeline, 0, len(c))
+	for _, cfg := range c {
+		out = append(out, cfg.ToConfig()...)
+	}
+	return out
 }
 
 func (c Configuration) ToConfig() []config.Pipeline {
