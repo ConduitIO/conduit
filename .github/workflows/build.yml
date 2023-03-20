@@ -22,15 +22,6 @@ jobs:
       - name: Set up Buf
         uses: bufbuild/buf-setup-action@v1
 
-      - name: Cache Go dependencies
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
-
       - name: Check generated files
         run: |
           export PATH=$PATH:$(go env GOPATH)/bin
