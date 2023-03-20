@@ -1,5 +1,5 @@
-buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go v1.29.1-20221127060915-a1ecdc58eccd.1 h1:DxfvwvlZjMtqxd4fTjQ4lIg0PpPOKZgor1KKxB88Ifg=
-buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go v1.29.1-20221127060915-a1ecdc58eccd.1/go.mod h1:hhON98gyTBA8hmdzw7bPux2Zerm5Sp2hesfc5t6jpoI=
+buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go v1.30.0-20221127060915-a1ecdc58eccd.1 h1:xFm8TzpgYUce+XPyxegjYrayCaa0tDq1feaFkk+JMus=
+buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go v1.30.0-20221127060915-a1ecdc58eccd.1/go.mod h1:Qrlblw0NsKJR59I6uRNZpmLXEKxtCozASRfporNdmy4=
 cloud.google.com/go v0.26.0/go.mod h1:aQUYkXzVsufM+DwF1aE+0xfcU+56JwCaLick0ClmMTw=
 cloud.google.com/go v0.34.0/go.mod h1:aQUYkXzVsufM+DwF1aE+0xfcU+56JwCaLick0ClmMTw=
 cloud.google.com/go v0.38.0/go.mod h1:990N+gfupTy94rShfmMCWGDn0LpTmnzTp2qbd1dvSRU=
@@ -1009,7 +1009,6 @@ google.golang.org/protobuf v1.25.0/go.mod h1:9JNX74DMeImyA3h4bdi1ymwjUzf21/xIlba
 google.golang.org/protobuf v1.26.0-rc.1/go.mod h1:jlhhOSvTdKEhbULTjvd4ARK9grFBp09yW+WbY/TyQbw=
 google.golang.org/protobuf v1.26.0/go.mod h1:9q0QmTI4eRPtz6boOQmLYwt+qCgq0jsYwAQnmE0givc=
 google.golang.org/protobuf v1.27.1/go.mod h1:9q0QmTI4eRPtz6boOQmLYwt+qCgq0jsYwAQnmE0givc=
-google.golang.org/protobuf v1.29.1/go.mod h1:HV8QOd/L58Z+nl8r43ehVNZIU/HEI6OcFqwMG9pJV4I=
 google.golang.org/protobuf v1.30.0 h1:kPPoIgf3TsEvrm0PFe15JQ+570QVxYzEvvHqChK+cng=
 google.golang.org/protobuf v1.30.0/go.mod h1:HV8QOd/L58Z+nl8r43ehVNZIU/HEI6OcFqwMG9pJV4I=
 gopkg.in/alecthomas/kingpin.v2 v2.2.6/go.mod h1:FMv+mEhP44yOT+4EoQTLFTRgOQ1FBLkstjWtayDeSgw=
