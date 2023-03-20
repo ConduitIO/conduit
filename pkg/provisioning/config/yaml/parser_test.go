@@ -30,7 +30,7 @@ func TestParser_Success(t *testing.T) {
 	parser := NewParser(log.Nop())
 	filepath := "./test/pipelines1-success.yml"
 	intPtr := func(i int) *int { return &i }
-	want := []Configuration{{
+	want := Configurations{{
 		Version: "1.0",
 		Pipelines: map[string]Pipeline{
 			"pipeline1": {
@@ -202,7 +202,7 @@ func TestParser_EnvVars(t *testing.T) {
 		t.Fatalf("Failed to write env var: $TEST_PARSER_AWS_URL")
 	}
 
-	want := []Configuration{{
+	want := Configurations{{
 		Version: "1.0",
 		Pipelines: map[string]Pipeline{
 			"pipeline1": {

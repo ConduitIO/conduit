@@ -40,22 +40,22 @@ func (p *Parser) Parse(ctx context.Context, reader io.Reader) ([]config.Pipeline
 		return nil, err
 	}
 
-	return p.configurationsToConfig(configs), nil
+	return configs.ToConfig(), nil
 }
 
-func (p *Parser) ParseConfiguration(ctx context.Context, reader io.Reader) ([]Configuration, error) {
+func (p *Parser) ParseConfiguration(ctx context.Context, reader io.Reader) (Configurations, error) {
 	dec := yaml.NewDecoder(reader)
 	dec.KnownFields(true)
 
-	var configs []Configuration
+	var configs Configurations
 	for {
-		var config Configuration
+		var cfg Configuration
 		linter := newConfigLinter()
 		dec.WithHook(multiDecoderHook(
 			envDecoderHook,     // replace environment variables with their values
 			linter.InspectNode, // register fresh linter hook
 		))
-		err := dec.Decode(&config)
+		err := dec.Decode(&cfg)
 		if err != nil {
 			// we reached the end of the document
 			if cerrors.Is(err, io.EOF) {
@@ -72,7 +72,7 @@ func (p *Parser) ParseConfiguration(ctx context.Context, reader io.Reader) ([]Co
 			}
 		}
 		linter.Warnings().Log(ctx, p.logger)
-		configs = append(configs, config)
+		configs = append(configs, cfg)
 	}
 
 	return configs, nil
@@ -93,17 +93,4 @@ func (p *Parser) handleYamlTypeError(ctx context.Context, typeErr *yaml.TypeErro
 		e.Msg(uerr.Error())
 	}
 	return nil
-}
-
-// configurationsToConfig transforms all configurations to config.Pipeline types.
-func (p *Parser) configurationsToConfig(in []Configuration) []config.Pipeline {
-	if len(in) == 0 {
-		return nil
-	}
-
-	out := make([]config.Pipeline, 0)
-	for _, cfg := range in {
-		out = append(out, cfg.ToConfig()...)
-	}
-	return out
 }
