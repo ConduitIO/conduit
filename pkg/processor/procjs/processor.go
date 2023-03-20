@@ -16,6 +16,7 @@ package procjs
 
 import (
 	"context"
+	"sync"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -46,10 +47,15 @@ type jsRecord struct {
 
 // Processor is able to run processors defined in JavaScript.
 type Processor struct {
-	runtime  *goja.Runtime
-	function goja.Callable
+	gojaPool sync.Pool
 	inInsp   *inspector.Inspector
 	outInsp  *inspector.Inspector
+}
+
+// gojaContext represents one independent goja context.
+type gojaContext struct {
+	runtime  *goja.Runtime
+	function goja.Callable
 }
 
 func New(src string, logger zerolog.Logger) (*Processor, error) {
@@ -57,95 +63,115 @@ func New(src string, logger zerolog.Logger) (*Processor, error) {
 		inInsp:  inspector.New(log.New(logger), inspector.DefaultBufferSize),
 		outInsp: inspector.New(log.New(logger), inspector.DefaultBufferSize),
 	}
-	err := p.initJSRuntime(logger)
+
+	var err error
+	runtime, err := p.newJSRuntime(logger)
 	if err != nil {
 		return nil, cerrors.Errorf("failed initializing JS runtime: %w", err)
 	}
 
-	err = p.initFunction(src)
+	_, err = p.newFunction(runtime, src)
 	if err != nil {
 		return nil, cerrors.Errorf("failed initializing JS function: %w", err)
+	}
+
+	p.gojaPool.New = func() any {
+		// create a new runtime for the function so it's executed in a separate goja context
+		rt, _ := p.newJSRuntime(logger)
+		f, _ := p.newFunction(rt, src)
+		return &gojaContext{
+			runtime:  rt,
+			function: f,
+		}
 	}
 
 	return p, nil
 }
 
-func (p *Processor) initJSRuntime(logger zerolog.Logger) error {
+func (p *Processor) newJSRuntime(logger zerolog.Logger) (*goja.Runtime, error) {
 	rt := goja.New()
 	runtimeHelpers := map[string]interface{}{
 		"logger":         &logger,
-		"Record":         p.jsRecord,
-		"RawData":        p.jsContentRaw,
-		"StructuredData": p.jsContentStructured,
+		"Record":         p.jsRecord(rt),
+		"RawData":        p.jsContentRaw(rt),
+		"StructuredData": p.jsContentStructured(rt),
 	}
 
 	for name, helper := range runtimeHelpers {
 		if err := rt.Set(name, helper); err != nil {
-			return cerrors.Errorf("failed to set helper %q: %w", name, err)
+			return nil, cerrors.Errorf("failed to set helper %q: %w", name, err)
 		}
 	}
 
-	p.runtime = rt
-	return nil
+	return rt, nil
 }
 
-func (p *Processor) initFunction(src string) error {
+func (p *Processor) newFunction(runtime *goja.Runtime, src string) (goja.Callable, error) {
 	prg, err := goja.Compile("", src, false)
 	if err != nil {
-		return cerrors.Errorf("failed to compile script: %w", err)
+		return nil, cerrors.Errorf("failed to compile script: %w", err)
 	}
 
-	_, err = p.runtime.RunProgram(prg)
+	_, err = runtime.RunProgram(prg)
 	if err != nil {
-		return cerrors.Errorf("failed to run program: %w", err)
+		return nil, cerrors.Errorf("failed to run program: %w", err)
 	}
 
-	tmp := p.runtime.Get(entrypoint)
+	tmp := runtime.Get(entrypoint)
 	entrypointFunc, ok := goja.AssertFunction(tmp)
 	if !ok {
-		return cerrors.Errorf("failed to get entrypoint function %q", entrypoint)
+		return nil, cerrors.Errorf("failed to get entrypoint function %q", entrypoint)
 	}
 
-	p.function = entrypointFunc
-	return nil
+	return entrypointFunc, nil
 }
 
-func (p *Processor) jsRecord(goja.ConstructorCall) *goja.Object {
-	// TODO accept arguments
-	// We return a jsRecord struct, however because we are
-	// not changing call.This instanceof will not work as expected.
+func (p *Processor) jsRecord(runtime *goja.Runtime) func(goja.ConstructorCall) *goja.Object {
+	return func(call goja.ConstructorCall) *goja.Object {
+		// TODO accept arguments
+		// We return a jsRecord struct, however because we are
+		// not changing call.This instanceof will not work as expected.
 
-	r := jsRecord{
-		Metadata: make(map[string]string),
+		r := jsRecord{
+			Metadata: make(map[string]string),
+		}
+		// We need to return a pointer to make the returned object mutable.
+		return runtime.ToValue(&r).ToObject(runtime)
 	}
-	// We need to return a pointer to make the returned object mutable.
-	return p.runtime.ToValue(&r).ToObject(p.runtime)
 }
 
-func (p *Processor) jsContentRaw(goja.ConstructorCall) *goja.Object {
-	// TODO accept arguments
-	// We return a record.RawData struct, however because we are
-	// not changing call.This instanceof will not work as expected.
+func (p *Processor) jsContentRaw(runtime *goja.Runtime) func(goja.ConstructorCall) *goja.Object {
+	return func(call goja.ConstructorCall) *goja.Object {
+		// TODO accept arguments
+		// We return a record.RawData struct, however because we are
+		// not changing call.This instanceof will not work as expected.
 
-	r := record.RawData{}
-	// We need to return a pointer to make the returned object mutable.
-	return p.runtime.ToValue(&r).ToObject(p.runtime)
+		r := record.RawData{}
+		// We need to return a pointer to make the returned object mutable.
+		return runtime.ToValue(&r).ToObject(runtime)
+	}
 }
 
-func (p *Processor) jsContentStructured(goja.ConstructorCall) *goja.Object {
-	// TODO accept arguments
-	// We return a map[string]interface{} struct, however because we are
-	// not changing call.This instanceof will not work as expected.
+func (p *Processor) jsContentStructured(runtime *goja.Runtime) func(goja.ConstructorCall) *goja.Object {
+	return func(call goja.ConstructorCall) *goja.Object {
+		// TODO accept arguments
+		// We return a map[string]interface{} struct, however because we are
+		// not changing call.This instanceof will not work as expected.
 
-	r := make(map[string]interface{})
-	return p.runtime.ToValue(r).ToObject(p.runtime)
+		r := make(map[string]interface{})
+		return runtime.ToValue(r).ToObject(runtime)
+	}
 }
 
 func (p *Processor) Process(ctx context.Context, in record.Record) (record.Record, error) {
 	p.inInsp.Send(ctx, in)
-	jsr := p.toJSRecord(in)
 
-	result, err := p.function(goja.Undefined(), jsr)
+	g := p.gojaPool.Get().(*gojaContext)
+	defer p.gojaPool.Put(g)
+
+	jsr := p.toJSRecord(g.runtime, in)
+
+	result, err := g.function(goja.Undefined(), jsr)
 	if err != nil {
 		return record.Record{}, cerrors.Errorf("failed to execute JS processor function: %w", err)
 	}
@@ -175,7 +201,7 @@ func (p *Processor) Close() {
 	p.outInsp.Close()
 }
 
-func (p *Processor) toJSRecord(r record.Record) goja.Value {
+func (p *Processor) toJSRecord(runtime *goja.Runtime, r record.Record) goja.Value {
 	convertData := func(d record.Data) interface{} {
 		switch v := d.(type) {
 		case record.RawData:
@@ -201,7 +227,7 @@ func (p *Processor) toJSRecord(r record.Record) goja.Value {
 	}
 
 	// we need to send in a pointer to let the user change the value and return it, if they choose to do so
-	return p.runtime.ToValue(&jsr)
+	return runtime.ToValue(&jsr)
 }
 
 func (p *Processor) toInternalRecord(v goja.Value) (record.Record, error) {

@@ -44,6 +44,7 @@ type Processor struct {
 	ID       string
 	Type     string
 	Settings map[string]string
+	Workers  int
 }
 
 type DLQ struct {

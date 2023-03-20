@@ -481,7 +481,10 @@ func (s *Service) createProcessor(ctx context.Context, parentID string, parentTy
 			ID:   parentID,
 			Type: parentType,
 		},
-		processor.Config{Settings: cfg.Settings},
+		processor.Config{
+			Settings: cfg.Settings,
+			Workers:  cfg.Workers,
+		},
 		processor.ProvisionTypeConfig,
 	)
 	if err != nil {

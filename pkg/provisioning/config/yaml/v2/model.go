@@ -56,6 +56,7 @@ type Processor struct {
 	ID       string            `yaml:"id"`
 	Type     string            `yaml:"type"`
 	Settings map[string]string `yaml:"settings"`
+	Workers  int               `yaml:"workers"`
 }
 
 type DLQ struct {
@@ -138,6 +139,7 @@ func (p Processor) ToConfig() config.Processor {
 		ID:       p.ID,
 		Type:     p.Type,
 		Settings: p.Settings,
+		Workers:  p.Workers,
 	}
 }
 

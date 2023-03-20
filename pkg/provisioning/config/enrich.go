@@ -47,6 +47,9 @@ func enrichConnectors(mp []Connector, pipelineID string) []Connector {
 func enrichProcessors(mp []Processor, parentID string) []Processor {
 	out := make([]Processor, len(mp))
 	for i, cfg := range mp {
+		if cfg.Workers == 0 {
+			cfg.Workers = 1
+		}
 		cfg.ID = parentID + ":" + cfg.ID
 		out[i] = cfg
 	}

@@ -16,7 +16,7 @@ package toproto
 
 import (
 	"github.com/conduitio/conduit/pkg/processor"
-	apiv1 "github.com/conduitio/conduit/proto/gen/api/v1"
+	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -41,6 +41,7 @@ func Processor(in *processor.Instance) *apiv1.Processor {
 func ProcessorConfig(in processor.Config) *apiv1.Processor_Config {
 	return &apiv1.Processor_Config{
 		Settings: in.Settings,
+		Workers:  int32(in.Workers),
 	}
 }
 

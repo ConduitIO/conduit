@@ -16,7 +16,7 @@ package fromproto
 
 import (
 	"github.com/conduitio/conduit/pkg/processor"
-	apiv1 "github.com/conduitio/conduit/proto/gen/api/v1"
+	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 )
 
 func _() {
@@ -29,6 +29,7 @@ func _() {
 func ProcessorConfig(in *apiv1.Processor_Config) processor.Config {
 	return processor.Config{
 		Settings: in.Settings,
+		Workers:  int(in.Workers),
 	}
 }
 

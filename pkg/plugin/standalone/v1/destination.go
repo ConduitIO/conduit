@@ -18,13 +18,13 @@ import (
 	"context"
 	"io"
 
+	connectorv1 "github.com/conduitio/conduit-connector-protocol/proto/connector/v1"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/conduitio/conduit/pkg/plugin/standalone/v1/internal/fromproto"
 	"github.com/conduitio/conduit/pkg/plugin/standalone/v1/internal/toproto"
 	"github.com/conduitio/conduit/pkg/record"
 	goplugin "github.com/hashicorp/go-plugin"
-	connectorv1 "go.buf.build/grpc/go/conduitio/conduit-connector-protocol/connector/v1"
 	"google.golang.org/grpc"
 )
 

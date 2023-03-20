@@ -75,6 +75,9 @@ func validateProcessors(mp []Processor) error {
 		if cfg.Type == "" {
 			err = multierror.Append(err, cerrors.Errorf("processor %q: \"type\" is mandatory: %w", cfg.ID, ErrMandatoryField))
 		}
+		if cfg.Workers < 0 {
+			err = multierror.Append(err, cerrors.Errorf("processor %q: \"workers\" can't be negative: %w", cfg.ID, ErrInvalidField))
+		}
 	}
 	return err
 }

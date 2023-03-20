@@ -66,6 +66,7 @@ type Connector struct {
 type Processor struct {
 	Type     string            `yaml:"type"`
 	Settings map[string]string `yaml:"settings"`
+	Workers  int               `yaml:"workers"`
 }
 
 type DLQ struct {
@@ -157,6 +158,7 @@ func (p Processor) ToConfig() config.Processor {
 	return config.Processor{
 		Type:     p.Type,
 		Settings: p.Settings,
+		Workers:  p.Workers,
 	}
 }
 

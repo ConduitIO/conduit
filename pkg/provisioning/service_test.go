@@ -43,6 +43,7 @@ import (
 )
 
 var pipeline1 = config.Pipeline{
+	ID:          "pipeline1",
 	Status:      "running",
 	Name:        "pipeline1",
 	Description: "desc1",
@@ -63,16 +64,18 @@ var pipeline1 = config.Pipeline{
 			"path": "my/path/file2.txt",
 		},
 		Processors: []config.Processor{{
-			ID:   "pipeline1:con2:proc1con",
-			Type: "js",
+			ID:      "pipeline1:con2:proc1con",
+			Type:    "js",
+			Workers: 10,
 			Settings: map[string]string{
 				"additionalProp1": "string",
 			},
 		}},
 	}},
 	Processors: []config.Processor{{
-		ID:   "pipeline1:proc1",
-		Type: "js",
+		ID:      "pipeline1:proc1",
+		Type:    "js",
+		Workers: 1,
 		Settings: map[string]string{
 			"additionalProp1": "string",
 		},
@@ -80,6 +83,7 @@ var pipeline1 = config.Pipeline{
 }
 
 var pipeline2 = config.Pipeline{
+	ID:          "pipeline2",
 	Status:      "running",
 	Name:        "pipeline2",
 	Description: "desc2",
@@ -103,6 +107,7 @@ var pipeline2 = config.Pipeline{
 }
 
 var pipeline3 = config.Pipeline{
+	ID:          "pipeline3",
 	Status:      "running",
 	Name:        "pipeline3",
 	Description: "desc3",
@@ -137,7 +142,7 @@ func TestProvision_PipelineWithConnectorsAndProcessors(t *testing.T) {
 
 	pl1config := pipeline.Config{Name: pipeline1.Name, Description: pipeline1.Description}
 	pl1 := &pipeline.Instance{
-		ID:            pipeline1.Name,
+		ID:            pipeline1.ID,
 		Config:        pl1config,
 		Status:        pipeline.StatusRunning,
 		ProvisionedBy: pipeline.ProvisionTypeConfig,
@@ -152,15 +157,20 @@ func TestProvision_PipelineWithConnectorsAndProcessors(t *testing.T) {
 		Name:     pipeline1.Connectors[1].Name,
 		Settings: pipeline1.Connectors[1].Settings,
 	}
-	procCfg := processor.Config{
+	procCfg1 := processor.Config{
 		Settings: pipeline1.Processors[0].Settings,
+		Workers:  pipeline1.Processors[0].Workers,
+	}
+	procCfg2 := processor.Config{
+		Settings: pipeline1.Connectors[1].Processors[0].Settings,
+		Workers:  pipeline1.Connectors[1].Processors[0].Workers,
 	}
 	procParentPipeline := processor.Parent{
-		ID:   pipeline1.Name,
+		ID:   pipeline1.ID,
 		Type: processor.ParentTypePipeline,
 	}
 	procParentConn := processor.Parent{
-		ID:   "pipeline1:con2",
+		ID:   pipeline1.Connectors[1].ID,
 		Type: processor.ParentTypeConnector,
 	}
 
@@ -175,9 +185,9 @@ func TestProvision_PipelineWithConnectorsAndProcessors(t *testing.T) {
 	connService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline1:con2", connector.TypeDestination, pipeline1.Connectors[1].Plugin, pipeline1.Name, cfg2, connector.ProvisionTypeConfig)
 	pipelineService.EXPECT().AddConnector(gomock.Not(gomock.Nil()), pipeline1.Name, "pipeline1:con2")
 
-	procService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline1:con2:proc1con", "js", procParentConn, procCfg, processor.ProvisionTypeConfig)
+	procService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline1:con2:proc1con", "js", procParentConn, procCfg2, processor.ProvisionTypeConfig)
 	connService.EXPECT().AddProcessor(gomock.Not(gomock.Nil()), "pipeline1:con2", "pipeline1:con2:proc1con")
-	procService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline1:proc1", "js", procParentPipeline, procCfg, processor.ProvisionTypeConfig)
+	procService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline1:proc1", "js", procParentPipeline, procCfg1, processor.ProvisionTypeConfig)
 	pipelineService.EXPECT().AddProcessor(gomock.Not(gomock.Nil()), pipeline1.Name, "pipeline1:proc1")
 
 	pipelineService.EXPECT().Start(gomock.Not(gomock.Nil()), connService, procService, plugService, pipeline1.Name)
@@ -199,7 +209,7 @@ func TestProvision_Rollback(t *testing.T) {
 
 	pl1config := pipeline.Config{Name: pipeline1.Name, Description: pipeline1.Description}
 	pl1 := &pipeline.Instance{
-		ID:            pipeline1.Name,
+		ID:            pipeline1.ID,
 		Config:        pl1config,
 		Status:        pipeline.StatusRunning,
 		ProvisionedBy: pipeline.ProvisionTypeConfig,
@@ -212,15 +222,20 @@ func TestProvision_Rollback(t *testing.T) {
 		Name:     pipeline1.Connectors[1].Name,
 		Settings: pipeline1.Connectors[1].Settings,
 	}
-	procCfg := processor.Config{
+	procCfg1 := processor.Config{
 		Settings: pipeline1.Processors[0].Settings,
+		Workers:  pipeline1.Processors[0].Workers,
+	}
+	procCfg2 := processor.Config{
+		Settings: pipeline1.Connectors[1].Processors[0].Settings,
+		Workers:  pipeline1.Connectors[1].Processors[0].Workers,
 	}
 	procParentPipeline := processor.Parent{
-		ID:   pipeline1.Name,
+		ID:   pipeline1.ID,
 		Type: processor.ParentTypePipeline,
 	}
 	procParentConn := processor.Parent{
-		ID:   "pipeline1:con2",
+		ID:   pipeline1.Connectors[1].ID,
 		Type: processor.ParentTypeConnector,
 	}
 
@@ -240,11 +255,11 @@ func TestProvision_Rollback(t *testing.T) {
 	pipelineService.EXPECT().AddConnector(gomock.Not(gomock.Nil()), pipeline1.Name, "pipeline1:con2")
 	pipelineService.EXPECT().RemoveConnector(gomock.Not(gomock.Nil()), pipeline1.Name, "pipeline1:con2")
 
-	procService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline1:con2:proc1con", "js", procParentConn, procCfg, processor.ProvisionTypeConfig)
+	procService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline1:con2:proc1con", "js", procParentConn, procCfg2, processor.ProvisionTypeConfig)
 	procService.EXPECT().Delete(gomock.Not(gomock.Nil()), "pipeline1:con2:proc1con")
 	connService.EXPECT().AddProcessor(gomock.Not(gomock.Nil()), "pipeline1:con2", "pipeline1:con2:proc1con")
 	connService.EXPECT().RemoveProcessor(gomock.Not(gomock.Nil()), "pipeline1:con2", "pipeline1:con2:proc1con")
-	procService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline1:proc1", "js", procParentPipeline, procCfg, processor.ProvisionTypeConfig)
+	procService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline1:proc1", "js", procParentPipeline, procCfg1, processor.ProvisionTypeConfig)
 	procService.EXPECT().Delete(gomock.Not(gomock.Nil()), "pipeline1:proc1")
 	pipelineService.EXPECT().AddProcessor(gomock.Not(gomock.Nil()), pipeline1.Name, "pipeline1:proc1")
 	pipelineService.EXPECT().RemoveProcessor(gomock.Not(gomock.Nil()), pipeline1.Name, "pipeline1:proc1")
@@ -269,7 +284,7 @@ func TestProvision_RollbackDeletePipeline(t *testing.T) {
 
 	pl1config := pipeline.Config{Name: pipeline1.Name, Description: pipeline1.Description}
 	pl1 := &pipeline.Instance{
-		ID:            pipeline1.Name,
+		ID:            pipeline1.ID,
 		Config:        pl1config,
 		Status:        pipeline.StatusRunning,
 		ProvisionedBy: pipeline.ProvisionTypeConfig,
@@ -294,7 +309,7 @@ func TestProvision_RollbackDeletePipeline(t *testing.T) {
 		Settings: pipeline1.Processors[0].Settings,
 	}
 	procParentPipeline := processor.Parent{
-		ID:   pipeline1.Name,
+		ID:   pipeline1.ID,
 		Type: processor.ParentTypePipeline,
 	}
 	procParentConn := processor.Parent{
@@ -317,7 +332,7 @@ func TestProvision_RollbackDeletePipeline(t *testing.T) {
 		ID:         "pipeline1:con1",
 		Type:       connector.TypeSource,
 		Plugin:     "builtin:file",
-		PipelineID: pipeline1.Name,
+		PipelineID: pipeline1.ID,
 		Config: connector.Config{
 			Name:     pipeline1.Connectors[0].Name,
 			Settings: map[string]string{"path": "my/path/file1.txt"},
@@ -327,7 +342,7 @@ func TestProvision_RollbackDeletePipeline(t *testing.T) {
 		ID:         "pipeline1:con2",
 		Type:       connector.TypeDestination,
 		Plugin:     "builtin:file",
-		PipelineID: pipeline1.Name,
+		PipelineID: pipeline1.ID,
 		Config: connector.Config{
 			Name:     pipeline1.Connectors[1].Name,
 			Settings: map[string]string{"path": "my/path/file2.txt"},
@@ -390,7 +405,7 @@ func TestProvision_ExistingPipeline(t *testing.T) {
 
 	pl1config := pipeline.Config{Name: pipeline1.Name, Description: pipeline1.Description}
 	pl1 := &pipeline.Instance{
-		ID:            pipeline1.Name,
+		ID:            pipeline1.ID,
 		Config:        pl1config,
 		Status:        pipeline.StatusRunning,
 		ProvisionedBy: pipeline.ProvisionTypeConfig,
@@ -405,34 +420,39 @@ func TestProvision_ExistingPipeline(t *testing.T) {
 		Name:     pipeline1.Connectors[1].Name,
 		Settings: pipeline1.Connectors[1].Settings,
 	}
-	procCfg := processor.Config{
+	procCfg1 := processor.Config{
 		Settings: pipeline1.Processors[0].Settings,
+		Workers:  pipeline1.Processors[0].Workers,
+	}
+	procCfg2 := processor.Config{
+		Settings: pipeline1.Connectors[1].Processors[0].Settings,
+		Workers:  pipeline1.Connectors[1].Processors[0].Workers,
 	}
 	procParentPipeline := processor.Parent{
-		ID:   pipeline1.Name,
+		ID:   pipeline1.ID,
 		Type: processor.ParentTypePipeline,
 	}
 	procParentConn := processor.Parent{
-		ID:   "pipeline1:con2",
+		ID:   pipeline1.Connectors[1].ID,
 		Type: processor.ParentTypeConnector,
 	}
 	proc1Instance := &processor.Instance{
 		ID:     "pipeline1:proc1",
 		Parent: procParentPipeline,
-		Config: procCfg,
+		Config: procCfg1,
 		Type:   "js",
 	}
 	proc1conInstance := &processor.Instance{
 		ID:     "pipeline1:con2:proc1con",
 		Parent: procParentConn,
-		Config: procCfg,
+		Config: procCfg2,
 		Type:   "js",
 	}
 	source := &connector.Instance{
 		ID:         "pipeline1:con1",
 		Type:       connector.TypeSource,
 		Plugin:     "builtin:file",
-		PipelineID: pipeline1.Name,
+		PipelineID: pipeline1.ID,
 		Config: connector.Config{
 			Name:     pipeline1.Connectors[0].Name,
 			Settings: map[string]string{"path": "my/path/file1.txt"},
@@ -443,7 +463,7 @@ func TestProvision_ExistingPipeline(t *testing.T) {
 		ID:         "pipeline1:con2",
 		Type:       connector.TypeDestination,
 		Plugin:     "builtin:file",
-		PipelineID: pipeline1.Name,
+		PipelineID: pipeline1.ID,
 		Config: connector.Config{
 			Name:     pipeline1.Connectors[1].Name,
 			Settings: map[string]string{"path": "my/path/file2.txt"},
@@ -484,9 +504,9 @@ func TestProvision_ExistingPipeline(t *testing.T) {
 	connService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline1:con2", connector.TypeDestination, pipeline1.Connectors[1].Plugin, pipeline1.Name, cfg2, connector.ProvisionTypeConfig).Return(destination, nil)
 	pipelineService.EXPECT().AddConnector(gomock.Not(gomock.Nil()), pipeline1.Name, "pipeline1:con2")
 
-	procService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline1:con2:proc1con", "js", procParentConn, procCfg, processor.ProvisionTypeConfig)
+	procService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline1:con2:proc1con", "js", procParentConn, procCfg2, processor.ProvisionTypeConfig)
 	connService.EXPECT().AddProcessor(gomock.Not(gomock.Nil()), "pipeline1:con2", "pipeline1:con2:proc1con")
-	procService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline1:proc1", "js", procParentPipeline, procCfg, processor.ProvisionTypeConfig)
+	procService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline1:proc1", "js", procParentPipeline, procCfg1, processor.ProvisionTypeConfig)
 	pipelineService.EXPECT().AddProcessor(gomock.Not(gomock.Nil()), pipeline1.Name, "pipeline1:proc1")
 
 	pipelineService.EXPECT().Start(gomock.Not(gomock.Nil()), connService, procService, plugService, pipeline1.Name)
@@ -667,7 +687,7 @@ func TestProvision_IntegrationTestServices(t *testing.T) {
 	// checking pipelines
 	pipelines := []*pipeline.Instance{
 		{
-			ID: pipeline1.Name,
+			ID: pipeline1.ID,
 			Config: pipeline.Config{
 				Name:        pipeline1.Name,
 				Description: "desc1",
@@ -678,7 +698,7 @@ func TestProvision_IntegrationTestServices(t *testing.T) {
 			ProcessorIDs:  []string{"pipeline1:proc1"},
 		},
 		{
-			ID: pipeline2.Name,
+			ID: pipeline2.ID,
 			Config: pipeline.Config{
 				Name:        pipeline2.Name,
 				Description: "desc2",
@@ -688,7 +708,7 @@ func TestProvision_IntegrationTestServices(t *testing.T) {
 			ConnectorIDs:  []string{"pipeline2:con3"},
 		},
 		{
-			ID: pipeline3.Name,
+			ID: pipeline3.ID,
 			Config: pipeline.Config{
 				Name:        pipeline3.Name,
 				Description: "empty",
@@ -715,10 +735,12 @@ func TestProvision_IntegrationTestServices(t *testing.T) {
 			ProvisionedBy: processor.ProvisionTypeConfig,
 			Type:          "removereadat",
 			Parent: processor.Parent{
-				ID:   pipeline1.Name,
+				ID:   pipeline1.ID,
 				Type: processor.ParentTypePipeline,
 			},
-			Config: processor.Config{},
+			Config: processor.Config{
+				Workers: 1,
+			},
 		},
 		{
 			ID:            "pipeline1:con2:con2proc1",
@@ -728,7 +750,9 @@ func TestProvision_IntegrationTestServices(t *testing.T) {
 				ID:   "pipeline1:con2",
 				Type: processor.ParentTypeConnector,
 			},
-			Config: processor.Config{},
+			Config: processor.Config{
+				Workers: 1,
+			},
 		},
 	}
 
@@ -746,7 +770,7 @@ func TestProvision_IntegrationTestServices(t *testing.T) {
 		ID:         "pipeline1:con1",
 		Type:       connector.TypeSource,
 		Plugin:     "builtin:file",
-		PipelineID: pipeline1.Name,
+		PipelineID: pipeline1.ID,
 		Config: connector.Config{
 			Name: "file-src",
 			Settings: map[string]string{
@@ -758,7 +782,7 @@ func TestProvision_IntegrationTestServices(t *testing.T) {
 		ID:         "pipeline1:con2",
 		Type:       connector.TypeDestination,
 		Plugin:     "builtin:file",
-		PipelineID: pipeline1.Name,
+		PipelineID: pipeline1.ID,
 		Config: connector.Config{
 			Name: "file-dest",
 			Settings: map[string]string{
