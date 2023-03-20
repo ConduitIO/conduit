@@ -80,6 +80,9 @@ type PipelineService interface {
 	// requested.
 	Stop(ctx context.Context, pipelineID string, force bool) error
 
+	// OnFailure registers a handler for a pipeline.FailureEvent.
+	OnFailure(handler pipeline.FailureHandler)
+
 	List(ctx context.Context) map[string]*pipeline.Instance
 	Get(ctx context.Context, id string) (*pipeline.Instance, error)
 	Create(ctx context.Context, id string, cfg pipeline.Config, p pipeline.ProvisionType) (*pipeline.Instance, error)

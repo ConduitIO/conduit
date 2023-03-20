@@ -25,6 +25,13 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/metrics/measure"
 )
 
+type FailureEvent struct {
+	Pipeline *Instance
+	Cause    error
+}
+
+type FailureHandler func(FailureEvent)
+
 // Service manages pipelines.
 type Service struct {
 	logger log.CtxLogger
@@ -33,6 +40,7 @@ type Service struct {
 
 	instances     map[string]*Instance
 	instanceNames map[string]bool
+	handlers      []FailureHandler
 }
 
 func (s *Service) Check(ctx context.Context) error {
@@ -307,4 +315,18 @@ func (s *Service) Delete(ctx context.Context, pipelineID string) error {
 	measure.PipelinesGauge.WithValues(strings.ToLower(pl.Status.String())).Dec()
 
 	return nil
+}
+
+func (s *Service) OnFailure(handler FailureHandler) {
+	s.handlers = append(s.handlers, handler)
+}
+
+func (s *Service) notify(pipeline *Instance, err error) {
+	e := FailureEvent{
+		Pipeline: pipeline,
+		Cause:    err,
+	}
+	for _, handler := range s.handlers {
+		handler(e)
+	}
 }

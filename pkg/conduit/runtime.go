@@ -191,6 +191,7 @@ func newServices(
 // HTTP APIs. This function blocks until the supplied context is cancelled or
 // one of the services experiences a fatal error.
 func (r *Runtime) Run(ctx context.Context) (err error) {
+	ctx, cancel := context.WithCancel(ctx)
 	t, ctx := tomb.WithContext(ctx)
 	defer func() {
 		if err != nil {
@@ -228,6 +229,14 @@ func (r *Runtime) Run(ctx context.Context) (err error) {
 		})
 	}
 
+	if r.Config.Pipelines.StrictMode {
+		r.pipelineService.OnFailure(func(e pipeline.FailureEvent) {
+			r.logger.Err(ctx, e.Cause).
+				Str(log.PipelineIDField, e.Pipeline.ID).
+				Msg("Conduit will be shut down due to a pipeline failure and strict mode enabled")
+			cancel()
+		})
+	}
 	err = r.pipelineService.Run(ctx, r.connectorService, r.processorService, r.pluginService)
 	if err != nil {
 		multierror.ForEach(err, func(err error) {

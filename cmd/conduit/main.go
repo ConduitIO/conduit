@@ -71,7 +71,16 @@ func parseConfig() conduit.Config {
 
 		connectorsDir = flags.String("connectors.path", "./connectors", "path to standalone connectors directory")
 
-		pipelinesDir = flags.String("pipelines.path", "./pipelines", "path to the directory that has the yaml pipeline configuration files, or a single pipeline configuration file")
+		pipelinesDir = flags.String(
+			"pipelines.path",
+			"./pipelines",
+			"path to the directory that has the yaml pipeline configuration files, or a single pipeline configuration file",
+		)
+		pipelinesStrictMode = flags.Bool(
+			"pipelines.strictMode",
+			false,
+			"enable strict mode for pipelines",
+		)
 	)
 
 	// flags is set up to exit on error, we can safely ignore the error
@@ -94,7 +103,7 @@ func parseConfig() conduit.Config {
 	cfg.Log.Format = strings.ToLower(stringPtrToVal(logFormat))
 	cfg.Connectors.Path = stringPtrToVal(connectorsDir)
 	cfg.Pipelines.Path = strings.ToLower(stringPtrToVal(pipelinesDir))
-
+	cfg.Pipelines.StrictMode = *pipelinesStrictMode
 	return cfg
 }
 
