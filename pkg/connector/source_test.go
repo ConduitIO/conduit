@@ -68,6 +68,7 @@ func TestSource_Ack_Deadlock(t *testing.T) {
 
 	sourceMock := mock.NewSourcePlugin(ctrl)
 	sourceMock.EXPECT().Configure(gomock.Any(), instance.Config.Settings).Return(nil)
+	sourceMock.EXPECT().LifecycleOnCreated(gomock.Any(), instance.Config.Settings).Return(nil)
 	sourceMock.EXPECT().Start(gomock.Any(), nil).Return(nil)
 	sourceMock.EXPECT().Ack(gomock.Any(), record.Position("test-pos")).Return(nil).Times(5)
 

@@ -53,12 +53,6 @@ func (s *Source) Errors() <-chan error {
 	return s.errs
 }
 
-// init dispenses the plugin and configures it.
-func (s *Source) initPlugin(ctx context.Context) (src plugin.SourcePlugin, err error) {
-
-	return src, nil
-}
-
 func (s *Source) Open(ctx context.Context) (err error) {
 	s.Instance.Lock()
 	defer s.Instance.Unlock()
@@ -255,7 +249,27 @@ func (s *Source) configure(ctx context.Context) error {
 }
 
 func (s *Source) triggerLifecycleEvent(ctx context.Context) error {
-	return nil // TODO
+	if s.isEqual(s.Instance.Config.Settings, s.Instance.LastActiveConfig.Settings) {
+		return nil // nothing to do, last active config is the same as current one
+	}
+
+	if s.Instance.LastActiveConfig.Settings == nil {
+		// last active config is only nil on first run
+		err := s.plugin.LifecycleOnCreated(ctx, s.Instance.Config.Settings)
+		if err != nil {
+			return cerrors.Errorf("error while triggering lifecycle event onCreated: %w", err)
+		}
+	} else {
+		// we have an old active config, it's an update
+		err := s.plugin.LifecycleOnUpdated(ctx, s.Instance.LastActiveConfig.Settings, s.Instance.Config.Settings)
+		if err != nil {
+			return cerrors.Errorf("error while triggering lifecycle event onUpdated: %w", err)
+		}
+	}
+
+	// if lifecycle event is successfully triggered we consider the config active
+	s.Instance.LastActiveConfig = s.Instance.Config
+	return nil
 }
 
 func (s *Source) start(ctx context.Context) error {
@@ -268,4 +282,16 @@ func (s *Source) start(ctx context.Context) error {
 		return cerrors.Errorf("could not start source connector plugin: %w", err)
 	}
 	return nil
+}
+
+func (s *Source) isEqual(cfg1, cfg2 map[string]string) bool {
+	if len(cfg1) != len(cfg2) {
+		return false
+	}
+	for k, v := range cfg1 {
+		if w, ok := cfg2[k]; !ok || v != w {
+			return false
+		}
+	}
+	return true
 }
