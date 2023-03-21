@@ -79,7 +79,7 @@ type SourcePlugin interface {
 	// the connector configuration has changed since the last run. This call
 	// should be skipped if the connector configuration did not change.
 	LifecycleOnUpdated(ctx context.Context, cfgBefore, cfgAfter map[string]string) error
-	// LifecycleOnDeleted should be called when the connector was deleted. It
+	// LifecycleOnDeleted should be called when the connector is deleted. It
 	// should be the only method that is called in that case.
 	LifecycleOnDeleted(ctx context.Context, cfg map[string]string) error
 }
