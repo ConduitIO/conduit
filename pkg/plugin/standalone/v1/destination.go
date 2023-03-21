@@ -53,21 +53,19 @@ var _ plugin.DestinationPlugin = (*destinationPluginClient)(nil)
 
 func (s *destinationPluginClient) Configure(ctx context.Context, cfg map[string]string) error {
 	protoReq := toproto.DestinationConfigureRequest(cfg)
-	protoResp, err := s.grpcClient.Configure(ctx, protoReq)
+	_, err := s.grpcClient.Configure(ctx, protoReq)
 	if err != nil {
 		return unwrapGRPCError(err)
 	}
-	_ = protoResp // response is empty
 	return nil
 }
 
 func (s *destinationPluginClient) Start(ctx context.Context) error {
 	protoReq := toproto.DestinationStartRequest()
-	protoResp, err := s.grpcClient.Start(ctx, protoReq)
+	_, err := s.grpcClient.Start(ctx, protoReq)
 	if err != nil {
 		return unwrapGRPCError(err)
 	}
-	_ = protoResp // response is empty
 
 	s.stream, err = s.grpcClient.Run(ctx)
 	if err != nil {
@@ -125,53 +123,43 @@ func (s *destinationPluginClient) Stop(ctx context.Context, lastPosition record.
 	}
 
 	protoReq := toproto.DestinationStopRequest(lastPosition)
-	protoResp, err := s.grpcClient.Stop(ctx, protoReq)
+	_, err := s.grpcClient.Stop(ctx, protoReq)
 	if err != nil {
 		return unwrapGRPCError(err)
 	}
-	_ = protoResp // response is empty
-
 	return nil
 }
 
 func (s *destinationPluginClient) Teardown(ctx context.Context) error {
 	protoReq := toproto.DestinationTeardownRequest()
-	protoResp, err := s.grpcClient.Teardown(ctx, protoReq)
+	_, err := s.grpcClient.Teardown(ctx, protoReq)
 	if err != nil {
 		return unwrapGRPCError(err)
 	}
-	_ = protoResp // response is empty
-
 	return nil
 }
 
 func (s *destinationPluginClient) LifecycleOnCreated(ctx context.Context, cfg map[string]string) error {
 	protoReq := toproto.DestinationLifecycleOnCreatedRequest(cfg)
-	protoResp, err := s.grpcClient.LifecycleOnCreated(ctx, protoReq)
+	_, err := s.grpcClient.LifecycleOnCreated(ctx, protoReq)
 	if err != nil {
 		return unwrapGRPCError(err)
 	}
-	_ = protoResp // response is empty
-
 	return nil
 }
 func (s *destinationPluginClient) LifecycleOnUpdated(ctx context.Context, cfgBefore map[string]string, cfgAfter map[string]string) error {
 	protoReq := toproto.DestinationLifecycleOnUpdatedRequest(cfgBefore, cfgAfter)
-	protoResp, err := s.grpcClient.LifecycleOnUpdated(ctx, protoReq)
+	_, err := s.grpcClient.LifecycleOnUpdated(ctx, protoReq)
 	if err != nil {
 		return unwrapGRPCError(err)
 	}
-	_ = protoResp // response is empty
-
 	return nil
 }
 func (s *destinationPluginClient) LifecycleOnDeleted(ctx context.Context, cfg map[string]string) error {
 	protoReq := toproto.DestinationLifecycleOnDeletedRequest(cfg)
-	protoResp, err := s.grpcClient.LifecycleOnDeleted(ctx, protoReq)
+	_, err := s.grpcClient.LifecycleOnDeleted(ctx, protoReq)
 	if err != nil {
 		return unwrapGRPCError(err)
 	}
-	_ = protoResp // response is empty
-
 	return nil
 }

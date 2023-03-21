@@ -53,21 +53,19 @@ var _ plugin.SourcePlugin = (*sourcePluginClient)(nil)
 
 func (s *sourcePluginClient) Configure(ctx context.Context, cfg map[string]string) error {
 	protoReq := toproto.SourceConfigureRequest(cfg)
-	protoResp, err := s.grpcClient.Configure(ctx, protoReq)
+	_, err := s.grpcClient.Configure(ctx, protoReq)
 	if err != nil {
 		return unwrapGRPCError(err)
 	}
-	_ = protoResp // response is empty
 	return nil
 }
 
 func (s *sourcePluginClient) Start(ctx context.Context, p record.Position) error {
 	protoReq := toproto.SourceStartRequest(p)
-	protoResp, err := s.grpcClient.Start(ctx, protoReq)
+	_, err := s.grpcClient.Start(ctx, protoReq)
 	if err != nil {
 		return unwrapGRPCError(err)
 	}
-	_ = protoResp // response is empty
 
 	s.stream, err = s.grpcClient.Run(ctx)
 	if err != nil {
@@ -132,42 +130,34 @@ func (s *sourcePluginClient) Stop(ctx context.Context) (record.Position, error) 
 
 func (s *sourcePluginClient) Teardown(ctx context.Context) error {
 	protoReq := toproto.SourceTeardownRequest()
-	protoResp, err := s.grpcClient.Teardown(ctx, protoReq)
+	_, err := s.grpcClient.Teardown(ctx, protoReq)
 	if err != nil {
 		return unwrapGRPCError(err)
 	}
-	_ = protoResp // response is empty
-
 	return nil
 }
 
 func (s *sourcePluginClient) LifecycleOnCreated(ctx context.Context, cfg map[string]string) error {
 	protoReq := toproto.SourceLifecycleOnCreatedRequest(cfg)
-	protoResp, err := s.grpcClient.LifecycleOnCreated(ctx, protoReq)
+	_, err := s.grpcClient.LifecycleOnCreated(ctx, protoReq)
 	if err != nil {
 		return unwrapGRPCError(err)
 	}
-	_ = protoResp // response is empty
-
 	return nil
 }
 func (s *sourcePluginClient) LifecycleOnUpdated(ctx context.Context, cfgBefore map[string]string, cfgAfter map[string]string) error {
 	protoReq := toproto.SourceLifecycleOnUpdatedRequest(cfgBefore, cfgAfter)
-	protoResp, err := s.grpcClient.LifecycleOnUpdated(ctx, protoReq)
+	_, err := s.grpcClient.LifecycleOnUpdated(ctx, protoReq)
 	if err != nil {
 		return unwrapGRPCError(err)
 	}
-	_ = protoResp // response is empty
-
 	return nil
 }
 func (s *sourcePluginClient) LifecycleOnDeleted(ctx context.Context, cfg map[string]string) error {
 	protoReq := toproto.SourceLifecycleOnDeletedRequest(cfg)
-	protoResp, err := s.grpcClient.LifecycleOnDeleted(ctx, protoReq)
+	_, err := s.grpcClient.LifecycleOnDeleted(ctx, protoReq)
 	if err != nil {
 		return unwrapGRPCError(err)
 	}
-	_ = protoResp // response is empty
-
 	return nil
 }
