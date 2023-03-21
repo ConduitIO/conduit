@@ -53,11 +53,12 @@ type Instance struct {
 	PipelineID string
 	Plugin     string
 
-	ProcessorIDs  []string
-	State         any
-	ProvisionedBy ProvisionType
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
+	ProcessorIDs     []string
+	State            any
+	ProvisionedBy    ProvisionType
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+	LastActiveConfig Config
 
 	logger    log.CtxLogger
 	persister *Persister
