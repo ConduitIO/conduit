@@ -27,7 +27,7 @@ jobs:
           # A previous release was created using a lightweight tag
           # git describe by default includes only annotated tags
           # git describe --tags includes lightweight tags as well
-          DESCRIBE=`git describe --tags --match "v[0-9].[0-9].[0-9]" --abbrev=0`
+          DESCRIBE=`git tag -l --sort=-v:refname | grep -v nightly | head -n 1`
           MAJOR_VERSION=`echo $DESCRIBE | awk '{split($0,a,"."); print a[1]}'`
           MINOR_VERSION=`echo $DESCRIBE | awk '{split($0,a,"."); print a[2]}'`
           MINOR_VERSION="$((${MINOR_VERSION} + 1))"
