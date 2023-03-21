@@ -57,16 +57,8 @@ func (s *destinationPluginAdapter) withLogger(ctx context.Context) context.Conte
 }
 
 func (s *destinationPluginAdapter) Configure(ctx context.Context, cfg map[string]string) error {
-	req := toplugin.DestinationConfigureRequest(cfg)
 	s.logger.Trace(ctx).Msg("calling Configure")
-	resp, err := runSandbox(s.impl.Configure, s.withLogger(ctx), req)
-	if err != nil {
-		// TODO create new errors as strings, this happens when they are
-		//  transmitted through gRPC and we don't want to falsely rely on types
-		//  in built-in plugins
-		return err
-	}
-	_ = resp // empty response
+	_, err := runSandbox(s.impl.Configure, s.withLogger(ctx), toplugin.DestinationConfigureRequest(cfg))
 	return err
 }
 
@@ -77,11 +69,10 @@ func (s *destinationPluginAdapter) Start(ctx context.Context) error {
 
 	req := toplugin.DestinationStartRequest()
 	s.logger.Trace(ctx).Msg("calling Start")
-	resp, err := runSandbox(s.impl.Start, s.withLogger(ctx), req)
+	_, err := runSandbox(s.impl.Start, s.withLogger(ctx), req)
 	if err != nil {
 		return err
 	}
-	_ = resp // empty response
 
 	s.stream = newDestinationRunStream(ctx)
 	go func() {
@@ -97,10 +88,10 @@ func (s *destinationPluginAdapter) Start(ctx context.Context) error {
 		s.logger.Trace(ctx).Msg("Run stopped")
 	}()
 
-	return err
+	return nil
 }
 
-func (s *destinationPluginAdapter) Write(ctx context.Context, r record.Record) (err error) {
+func (s *destinationPluginAdapter) Write(ctx context.Context, r record.Record) error {
 	if s.stream == nil {
 		return plugin.ErrStreamNotOpen
 	}
@@ -144,57 +135,32 @@ func (s *destinationPluginAdapter) Stop(ctx context.Context, lastPosition record
 	}
 
 	s.logger.Trace(ctx).Bytes(log.RecordPositionField, lastPosition).Msg("calling Stop")
-	resp, err := runSandbox(s.impl.Stop, s.withLogger(ctx), toplugin.DestinationStopRequest(lastPosition))
-	if err != nil {
-		return err
-	}
-	_ = resp // empty response
-
-	return nil
+	_, err := runSandbox(s.impl.Stop, s.withLogger(ctx), toplugin.DestinationStopRequest(lastPosition))
+	return err
 }
 
 func (s *destinationPluginAdapter) Teardown(ctx context.Context) error {
 	s.logger.Trace(ctx).Msg("calling Teardown")
-	resp, err := runSandbox(s.impl.Teardown, s.withLogger(ctx), toplugin.DestinationTeardownRequest())
-	if err != nil {
-		return err
-	}
-	_ = resp // empty response
-
-	return nil
+	_, err := runSandbox(s.impl.Teardown, s.withLogger(ctx), toplugin.DestinationTeardownRequest())
+	return err
 }
 
 func (s *destinationPluginAdapter) LifecycleOnCreated(ctx context.Context, cfg map[string]string) error {
 	s.logger.Trace(ctx).Msg("calling LifecycleOnCreated")
-	resp, err := runSandbox(s.impl.LifecycleOnCreated, s.withLogger(ctx), toplugin.DestinationLifecycleOnCreatedRequest(cfg))
-	if err != nil {
-		return err
-	}
-	_ = resp // empty response
-
-	return nil
+	_, err := runSandbox(s.impl.LifecycleOnCreated, s.withLogger(ctx), toplugin.DestinationLifecycleOnCreatedRequest(cfg))
+	return err
 }
 
 func (s *destinationPluginAdapter) LifecycleOnUpdated(ctx context.Context, cfgBefore, cfgAfter map[string]string) error {
 	s.logger.Trace(ctx).Msg("calling LifecycleOnUpdated")
-	resp, err := runSandbox(s.impl.LifecycleOnUpdated, s.withLogger(ctx), toplugin.DestinationLifecycleOnUpdatedRequest(cfgBefore, cfgAfter))
-	if err != nil {
-		return err
-	}
-	_ = resp // empty response
-
-	return nil
+	_, err := runSandbox(s.impl.LifecycleOnUpdated, s.withLogger(ctx), toplugin.DestinationLifecycleOnUpdatedRequest(cfgBefore, cfgAfter))
+	return err
 }
 
 func (s *destinationPluginAdapter) LifecycleOnDeleted(ctx context.Context, cfg map[string]string) error {
 	s.logger.Trace(ctx).Msg("calling LifecycleOnDeleted")
-	resp, err := runSandbox(s.impl.LifecycleOnDeleted, s.withLogger(ctx), toplugin.DestinationLifecycleOnDeletedRequest(cfg))
-	if err != nil {
-		return err
-	}
-	_ = resp // empty response
-
-	return nil
+	_, err := runSandbox(s.impl.LifecycleOnDeleted, s.withLogger(ctx), toplugin.DestinationLifecycleOnDeletedRequest(cfg))
+	return err
 }
 
 func newDestinationRunStream(ctx context.Context) *stream[cpluginv1.DestinationRunRequest, cpluginv1.DestinationRunResponse] {
