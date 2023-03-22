@@ -1,4 +1,4 @@
-name: build
+name: validate-generated-files
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
   pull_request:
 
 jobs:
-  build:
+  validate-generated-files:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -29,6 +29,3 @@ jobs:
           make generate
           make proto-generate
           git diff --exit-code --numstat
-
-      - name: Test
-        run: make test-integration GOTEST_FLAGS="-v -count=1"
