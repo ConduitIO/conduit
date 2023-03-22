@@ -1,0 +1,31 @@
+name: validate-generated-files
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  validate-generated-files:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.20'
+
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v1
+
+      - name: Set up Buf
+        uses: bufbuild/buf-setup-action@v1
+
+      - name: Check generated files
+        run: |
+          export PATH=$PATH:$(go env GOPATH)/bin
+          make install-tools
+          make generate
+          make proto-generate
+          git diff --exit-code --numstat
