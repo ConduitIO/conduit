@@ -23,8 +23,8 @@ import (
 var (
 	ErrStreamNotOpen    = cerrors.New("stream not open")
 	ErrPluginNotFound   = cerrors.New("plugin not found")
-	ErrPluginRunning    = cerrors.New("plugin is running")
 	ErrPluginNotRunning = cerrors.New("plugin is not running")
+	ErrUnimplemented    = cerrors.New("method not implemented")
 )
 
 type ValidationError struct {
