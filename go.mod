@@ -13,9 +13,9 @@ require (
 	github.com/conduitio/conduit-connector-kafka v0.4.1
 	github.com/conduitio/conduit-connector-log v0.1.2
 	github.com/conduitio/conduit-connector-postgres v0.3.0
-	github.com/conduitio/conduit-connector-protocol v0.4.1
+	github.com/conduitio/conduit-connector-protocol v0.4.2-0.20230317135836-683b23ba5a0a
 	github.com/conduitio/conduit-connector-s3 v0.3.0
-	github.com/conduitio/conduit-connector-sdk v0.5.2
+	github.com/conduitio/conduit-connector-sdk v0.5.3-0.20230317175521-1ef859feda37
 	github.com/conduitio/yaml/v3 v3.3.0
 	github.com/dgraph-io/badger/v3 v3.2103.5
 	github.com/dop251/goja v0.0.0-20230304130813-e2f543bf4b4c
@@ -25,7 +25,7 @@ require (
 	github.com/google/uuid v1.3.0
 	github.com/gorilla/websocket v1.5.0
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.15.2
-	github.com/hashicorp/go-hclog v1.4.0
+	github.com/hashicorp/go-hclog v1.5.0
 	github.com/hashicorp/go-plugin v1.4.9
 	github.com/jackc/pgtype v1.14.0
 	github.com/jackc/pgx/v4 v4.18.1
@@ -42,7 +42,7 @@ require (
 	golang.org/x/tools v0.7.0
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2
 	google.golang.org/genproto v0.0.0-20230223222841-637eb2293923
-	google.golang.org/grpc v1.53.0
+	google.golang.org/grpc v1.54.0
 	google.golang.org/protobuf v1.30.0
 	gopkg.in/tomb.v2 v2.0.0-20161208151619-d5d1b5820637
 )
