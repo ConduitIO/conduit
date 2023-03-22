@@ -19,11 +19,10 @@ import (
 	"github.com/conduitio/conduit/pkg/record"
 )
 
-func DestinationConfigureRequest(in map[string]string) (*connectorv1.Destination_Configure_Request, error) {
-	out := connectorv1.Destination_Configure_Request{
+func DestinationConfigureRequest(in map[string]string) *connectorv1.Destination_Configure_Request {
+	return &connectorv1.Destination_Configure_Request{
 		Config: in,
 	}
-	return &out, nil
 }
 
 func DestinationStartRequest() *connectorv1.Destination_Start_Request {
@@ -49,4 +48,23 @@ func DestinationStopRequest(in record.Position) *connectorv1.Destination_Stop_Re
 
 func DestinationTeardownRequest() *connectorv1.Destination_Teardown_Request {
 	return &connectorv1.Destination_Teardown_Request{}
+}
+
+func DestinationLifecycleOnCreatedRequest(cfg map[string]string) *connectorv1.Destination_Lifecycle_OnCreated_Request {
+	return &connectorv1.Destination_Lifecycle_OnCreated_Request{
+		Config: cfg,
+	}
+}
+
+func DestinationLifecycleOnUpdatedRequest(cfgBefore, cfgAfter map[string]string) *connectorv1.Destination_Lifecycle_OnUpdated_Request {
+	return &connectorv1.Destination_Lifecycle_OnUpdated_Request{
+		ConfigBefore: cfgBefore,
+		ConfigAfter:  cfgAfter,
+	}
+}
+
+func DestinationLifecycleOnDeletedRequest(cfg map[string]string) *connectorv1.Destination_Lifecycle_OnDeleted_Request {
+	return &connectorv1.Destination_Lifecycle_OnDeleted_Request{
+		Config: cfg,
+	}
 }

@@ -21,8 +21,10 @@ import (
 	"os/exec"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	cplugin "github.com/conduitio/conduit/pkg/plugin"
 	"github.com/hashicorp/go-plugin"
 	"github.com/rs/zerolog"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
@@ -153,6 +155,9 @@ func unwrapGRPCError(err error) error {
 	st, ok := status.FromError(err)
 	if !ok {
 		return err
+	}
+	if st.Code() == codes.Unimplemented {
+		return cerrors.Errorf("%s: %w", st.Message(), cplugin.ErrUnimplemented)
 	}
 	if knownErr, ok := knownErrors[st.Message()]; ok {
 		return knownErr

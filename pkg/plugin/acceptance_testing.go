@@ -59,6 +59,9 @@ func AcceptanceTestV1(t *testing.T, tdf testDispenserFunc) {
 	run(t, tdf, testSource_Ack_WithoutStart)
 	run(t, tdf, testSource_Run_Fail)
 	run(t, tdf, testSource_Teardown_Success)
+	run(t, tdf, testSource_Lifecycle_OnCreated)
+	run(t, tdf, testSource_Lifecycle_OnUpdated)
+	run(t, tdf, testSource_Lifecycle_OnDeleted)
 
 	// destination tests
 	run(t, tdf, testDestination_Configure_Success)
@@ -72,6 +75,9 @@ func AcceptanceTestV1(t *testing.T, tdf testDispenserFunc) {
 	run(t, tdf, testDestination_Ack_WithoutStart)
 	run(t, tdf, testDestination_Run_Fail)
 	run(t, tdf, testDestination_Teardown_Success)
+	run(t, tdf, testDestination_Lifecycle_OnCreated)
+	run(t, tdf, testDestination_Lifecycle_OnUpdated)
+	run(t, tdf, testDestination_Lifecycle_OnDeleted)
 }
 
 func run(t *testing.T, tdf testDispenserFunc, test func(*testing.T, testDispenserFunc)) {
@@ -160,6 +166,22 @@ func testSource_Configure_Success(t *testing.T, tdf testDispenserFunc) {
 	ctx := context.Background()
 	dispenser, _, mockSource, _ := tdf(t)
 
+	mockSource.EXPECT().
+		Configure(gomock.Any(), cpluginv1.SourceConfigureRequest{Config: nil}).
+		Return(cpluginv1.SourceConfigureResponse{}, nil)
+
+	source, err := dispenser.DispenseSource()
+	is.NoErr(err)
+
+	got := source.Configure(ctx, map[string]string{})
+	is.Equal(got, nil)
+}
+
+func testSource_Configure_Fail(t *testing.T, tdf testDispenserFunc) {
+	is := is.New(t)
+	ctx := context.Background()
+	dispenser, _, mockSource, _ := tdf(t)
+
 	cfg := map[string]string{
 		"foo":   "bar",
 		"empty": "",
@@ -174,22 +196,6 @@ func testSource_Configure_Success(t *testing.T, tdf testDispenserFunc) {
 
 	got := source.Configure(ctx, cfg)
 	is.Equal(got.Error(), want.Error())
-}
-
-func testSource_Configure_Fail(t *testing.T, tdf testDispenserFunc) {
-	is := is.New(t)
-	ctx := context.Background()
-	dispenser, _, mockSource, _ := tdf(t)
-
-	mockSource.EXPECT().
-		Configure(gomock.Any(), cpluginv1.SourceConfigureRequest{Config: nil}).
-		Return(cpluginv1.SourceConfigureResponse{}, nil)
-
-	source, err := dispenser.DispenseSource()
-	is.NoErr(err)
-
-	got := source.Configure(ctx, map[string]string{})
-	is.Equal(got, nil)
 }
 
 func testSource_Start_WithPosition(t *testing.T, tdf testDispenserFunc) {
@@ -568,6 +574,68 @@ func testSource_Teardown_Success(t *testing.T, tdf testDispenserFunc) {
 	}
 }
 
+func testSource_Lifecycle_OnCreated(t *testing.T, tdf testDispenserFunc) {
+	is := is.New(t)
+	ctx := context.Background()
+	dispenser, _, mockSource, _ := tdf(t)
+
+	want := map[string]string{"foo": "bar"}
+
+	mockSource.EXPECT().
+		LifecycleOnCreated(gomock.Any(), cpluginv1.SourceLifecycleOnCreatedRequest{
+			Config: want,
+		}).
+		Return(cpluginv1.SourceLifecycleOnCreatedResponse{}, nil)
+
+	source, err := dispenser.DispenseSource()
+	is.NoErr(err)
+
+	err = source.LifecycleOnCreated(ctx, want)
+	is.NoErr(err)
+}
+
+func testSource_Lifecycle_OnUpdated(t *testing.T, tdf testDispenserFunc) {
+	is := is.New(t)
+	ctx := context.Background()
+	dispenser, _, mockSource, _ := tdf(t)
+
+	wantBefore := map[string]string{"foo": "bar"}
+	wantAfter := map[string]string{"foo": "baz"}
+
+	mockSource.EXPECT().
+		LifecycleOnUpdated(gomock.Any(), cpluginv1.SourceLifecycleOnUpdatedRequest{
+			ConfigBefore: wantBefore,
+			ConfigAfter:  wantAfter,
+		}).
+		Return(cpluginv1.SourceLifecycleOnUpdatedResponse{}, nil)
+
+	source, err := dispenser.DispenseSource()
+	is.NoErr(err)
+
+	err = source.LifecycleOnUpdated(ctx, wantBefore, wantAfter)
+	is.NoErr(err)
+}
+
+func testSource_Lifecycle_OnDeleted(t *testing.T, tdf testDispenserFunc) {
+	is := is.New(t)
+	ctx := context.Background()
+	dispenser, _, mockSource, _ := tdf(t)
+
+	want := map[string]string{"foo": "bar"}
+
+	mockSource.EXPECT().
+		LifecycleOnDeleted(gomock.Any(), cpluginv1.SourceLifecycleOnDeletedRequest{
+			Config: want,
+		}).
+		Return(cpluginv1.SourceLifecycleOnDeletedResponse{}, nil)
+
+	source, err := dispenser.DispenseSource()
+	is.NoErr(err)
+
+	err = source.LifecycleOnDeleted(ctx, want)
+	is.NoErr(err)
+}
+
 // -----------------
 // -- DESTINATION --
 // -----------------
@@ -918,4 +986,66 @@ func testDestination_Teardown_Success(t *testing.T, tdf testDispenserFunc) {
 	case <-time.After(time.Second):
 		t.Fatal("should've received call to destination.Run")
 	}
+}
+
+func testDestination_Lifecycle_OnCreated(t *testing.T, tdf testDispenserFunc) {
+	is := is.New(t)
+	ctx := context.Background()
+	dispenser, _, _, mockDestination := tdf(t)
+
+	want := map[string]string{"foo": "bar"}
+
+	mockDestination.EXPECT().
+		LifecycleOnCreated(gomock.Any(), cpluginv1.DestinationLifecycleOnCreatedRequest{
+			Config: want,
+		}).
+		Return(cpluginv1.DestinationLifecycleOnCreatedResponse{}, nil)
+
+	destination, err := dispenser.DispenseDestination()
+	is.NoErr(err)
+
+	err = destination.LifecycleOnCreated(ctx, want)
+	is.NoErr(err)
+}
+
+func testDestination_Lifecycle_OnUpdated(t *testing.T, tdf testDispenserFunc) {
+	is := is.New(t)
+	ctx := context.Background()
+	dispenser, _, _, mockDestination := tdf(t)
+
+	wantBefore := map[string]string{"foo": "bar"}
+	wantAfter := map[string]string{"foo": "baz"}
+
+	mockDestination.EXPECT().
+		LifecycleOnUpdated(gomock.Any(), cpluginv1.DestinationLifecycleOnUpdatedRequest{
+			ConfigBefore: wantBefore,
+			ConfigAfter:  wantAfter,
+		}).
+		Return(cpluginv1.DestinationLifecycleOnUpdatedResponse{}, nil)
+
+	destination, err := dispenser.DispenseDestination()
+	is.NoErr(err)
+
+	err = destination.LifecycleOnUpdated(ctx, wantBefore, wantAfter)
+	is.NoErr(err)
+}
+
+func testDestination_Lifecycle_OnDeleted(t *testing.T, tdf testDispenserFunc) {
+	is := is.New(t)
+	ctx := context.Background()
+	dispenser, _, _, mockDestination := tdf(t)
+
+	want := map[string]string{"foo": "bar"}
+
+	mockDestination.EXPECT().
+		LifecycleOnDeleted(gomock.Any(), cpluginv1.DestinationLifecycleOnDeletedRequest{
+			Config: want,
+		}).
+		Return(cpluginv1.DestinationLifecycleOnDeletedResponse{}, nil)
+
+	destination, err := dispenser.DispenseDestination()
+	is.NoErr(err)
+
+	err = destination.LifecycleOnDeleted(ctx, want)
+	is.NoErr(err)
 }
