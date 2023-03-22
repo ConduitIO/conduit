@@ -19,27 +19,25 @@ import (
 	"github.com/conduitio/conduit/pkg/record"
 )
 
-func SourceConfigureRequest(in map[string]string) (cpluginv1.SourceConfigureRequest, error) {
+func SourceConfigureRequest(in map[string]string) cpluginv1.SourceConfigureRequest {
 	out := cpluginv1.SourceConfigureRequest{}
 	if len(in) > 0 {
 		// gRPC sends `nil` if the map is empty, match behavior
 		out.Config = in
 	}
-	return out, nil
+	return out
 }
 
-func SourceStartRequest(in record.Position) (cpluginv1.SourceStartRequest, error) {
-	out := cpluginv1.SourceStartRequest{
+func SourceStartRequest(in record.Position) cpluginv1.SourceStartRequest {
+	return cpluginv1.SourceStartRequest{
 		Position: in,
 	}
-	return out, nil
 }
 
-func SourceRunRequest(in record.Position) (cpluginv1.SourceRunRequest, error) {
-	out := cpluginv1.SourceRunRequest{
+func SourceRunRequest(in record.Position) cpluginv1.SourceRunRequest {
+	return cpluginv1.SourceRunRequest{
 		AckPosition: in,
 	}
-	return out, nil
 }
 
 func SourceStopRequest() cpluginv1.SourceStopRequest {
@@ -48,4 +46,34 @@ func SourceStopRequest() cpluginv1.SourceStopRequest {
 
 func SourceTeardownRequest() cpluginv1.SourceTeardownRequest {
 	return cpluginv1.SourceTeardownRequest{}
+}
+
+func SourceLifecycleOnCreatedRequest(cfg map[string]string) cpluginv1.SourceLifecycleOnCreatedRequest {
+	out := cpluginv1.SourceLifecycleOnCreatedRequest{}
+	if len(cfg) > 0 {
+		// gRPC sends `nil` if the map is empty, match behavior
+		out.Config = cfg
+	}
+	return out
+}
+
+func SourceLifecycleOnUpdatedRequest(cfgBefore, cfgAfter map[string]string) cpluginv1.SourceLifecycleOnUpdatedRequest {
+	out := cpluginv1.SourceLifecycleOnUpdatedRequest{}
+	// gRPC sends `nil` if the map is empty, match behavior
+	if len(cfgBefore) > 0 {
+		out.ConfigBefore = cfgBefore
+	}
+	if len(cfgAfter) > 0 {
+		out.ConfigAfter = cfgAfter
+	}
+	return out
+}
+
+func SourceLifecycleOnDeletedRequest(cfg map[string]string) cpluginv1.SourceLifecycleOnDeletedRequest {
+	out := cpluginv1.SourceLifecycleOnDeletedRequest{}
+	if len(cfg) > 0 {
+		// gRPC sends `nil` if the map is empty, match behavior
+		out.Config = cfg
+	}
+	return out
 }
