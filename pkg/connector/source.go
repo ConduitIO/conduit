@@ -288,10 +288,17 @@ func (s *Source) configure(ctx context.Context) error {
 	return nil
 }
 
-func (s *Source) triggerLifecycleEvent(ctx context.Context, oldConfig, newConfig map[string]string) (bool, error) {
+func (s *Source) triggerLifecycleEvent(ctx context.Context, oldConfig, newConfig map[string]string) (ok bool, err error) {
 	if s.isEqual(oldConfig, newConfig) {
 		return false, nil // nothing to do, last active config is the same as current one
 	}
+
+	defer func() {
+		if cerrors.Is(err, plugin.ErrUnimplemented) {
+			s.Instance.logger.Trace(ctx).Msg("lifecycle events not implemented on source connector plugin (it's probably an older connector)")
+			err = nil // ignore error to stay backwards compatible
+		}
+	}()
 
 	switch {
 	// created

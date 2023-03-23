@@ -18,6 +18,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/conduitio/conduit/pkg/plugin"
+
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/database/inmemory"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -131,6 +133,24 @@ func TestDestination_LifecycleOnDeleted_Success(t *testing.T) {
 	dest.Instance.LastActiveConfig.Settings = map[string]string{"last-active": "yes"}
 
 	destinationMock.EXPECT().LifecycleOnDeleted(gomock.Any(), dest.Instance.LastActiveConfig.Settings).Return(nil)
+	destinationMock.EXPECT().Teardown(gomock.Any()).Return(nil)
+
+	err := dest.OnDelete(ctx)
+	is.NoErr(err)
+}
+
+func TestDestination_LifecycleOnDeleted_BackwardsCompatibility(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+
+	dest, destinationMock := newTestDestination(ctx, t, ctrl)
+
+	// assume that there was a config already active, but with different settings
+	dest.Instance.LastActiveConfig.Settings = map[string]string{"last-active": "yes"}
+
+	// we should ignore the error if the plugin does not implement lifecycle events
+	destinationMock.EXPECT().LifecycleOnDeleted(gomock.Any(), dest.Instance.LastActiveConfig.Settings).Return(plugin.ErrUnimplemented)
 	destinationMock.EXPECT().Teardown(gomock.Any()).Return(nil)
 
 	err := dest.OnDelete(ctx)
