@@ -190,6 +190,10 @@ func (d *Destination) Ack(ctx context.Context) (record.Position, error) {
 	return d.plugin.Ack(ctx)
 }
 
+func (d *Destination) OnDelete(ctx context.Context) error {
+	return nil // TODO
+}
+
 // preparePluginCall makes sure the plugin is running and registers a new plugin
 // call in the wait group. The returned function should be called in a deferred
 // statement to signal the plugin call is over.

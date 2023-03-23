@@ -77,7 +77,9 @@ type Config struct {
 	Settings map[string]string
 }
 
-type Connector interface{}
+type Connector interface {
+	OnDelete(ctx context.Context) error
+}
 
 // PluginDispenserFetcher can fetch a plugin dispenser.
 type PluginDispenserFetcher interface {
@@ -138,6 +140,16 @@ func (i *Instance) Connector(ctx context.Context, dispenserFetcher PluginDispens
 	}
 }
 
-func (i *Instance) Close() {
+func (i *Instance) Close(ctx context.Context, dispenserFetcher PluginDispenserFetcher) error {
 	i.inspector.Close()
+	conn, err := i.Connector(ctx, dispenserFetcher)
+	if err != nil {
+		return err
+	}
+	err = conn.OnDelete(ctx)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

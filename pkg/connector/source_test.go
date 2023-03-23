@@ -23,7 +23,6 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/csync"
 	"github.com/conduitio/conduit/pkg/foundation/database/inmemory"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/conduitio/conduit/pkg/plugin/mock"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/golang/mock/gomock"
@@ -75,7 +74,7 @@ func TestSource_Ack_Deadlock(t *testing.T) {
 	pluginDispenser := mock.NewDispenser(ctrl)
 	pluginDispenser.EXPECT().DispenseSource().Return(sourceMock, nil)
 
-	conn, err := instance.Connector(ctx, testPluginFetcher{instance.Plugin: pluginDispenser})
+	conn, err := instance.Connector(ctx, fakePluginFetcher{instance.Plugin: pluginDispenser})
 	is.NoErr(err)
 	s, ok := conn.(*Source)
 	is.True(ok)
@@ -97,15 +96,4 @@ func TestSource_Ack_Deadlock(t *testing.T) {
 	if (*csync.WaitGroup)(&wg).WaitTimeout(ctx, 100*time.Millisecond) != nil {
 		is.Fail() // timeout reached
 	}
-}
-
-// testPluginFetcher fulfills the PluginFetcher interface.
-type testPluginFetcher map[string]plugin.Dispenser
-
-func (tpf testPluginFetcher) NewDispenser(logger log.CtxLogger, name string) (plugin.Dispenser, error) {
-	plug, ok := tpf[name]
-	if !ok {
-		return nil, plugin.ErrPluginNotFound
-	}
-	return plug, nil
 }

@@ -83,9 +83,23 @@ func (s *Source) Open(ctx context.Context) (err error) {
 		return err
 	}
 
-	err = s.triggerLifecycleEvent(ctx)
+	lifecycleEventTriggered, err := s.triggerLifecycleEvent(ctx, s.Instance.LastActiveConfig.Settings, s.Instance.Config.Settings)
 	if err != nil {
 		return err
+	}
+
+	if lifecycleEventTriggered {
+		// if lifecycle event is successfully triggered we consider the config active
+		s.Instance.LastActiveConfig = s.Instance.Config
+		// persist connector in the next batch to store last active config
+		err := s.Instance.persister.Persist(ctx, s.Instance, func(err error) {
+			if err != nil {
+				s.errs <- err
+			}
+		})
+		if err != nil {
+			return err
+		}
 	}
 
 	err = s.start(ctx)
@@ -217,6 +231,37 @@ func (s *Source) Ack(ctx context.Context, p record.Position) error {
 	return nil
 }
 
+func (s *Source) OnDelete(ctx context.Context) (err error) {
+	if s.Instance.LastActiveConfig.Settings == nil {
+		return nil // the connector was never started, nothing to trigger
+	}
+
+	s.Instance.Lock()
+	defer s.Instance.Unlock()
+
+	s.Instance.logger.Debug(ctx).Msg("dispensing source connector plugin")
+	s.plugin, err = s.dispenser.DispenseSource()
+	if err != nil {
+		return err
+	}
+
+	_, err = s.triggerLifecycleEvent(ctx, s.Instance.LastActiveConfig.Settings, nil)
+
+	// call teardown to close plugin regardless of the error
+	tdErr := s.plugin.Teardown(ctx)
+
+	s.plugin = nil
+
+	err = cerrors.LogOrReplace(err, tdErr, func() {
+		s.Instance.logger.Err(ctx, tdErr).Msg("could not tear down source connector plugin")
+	})
+	if err != nil {
+		return cerrors.Errorf("could not trigger lifecycle event: %w", err)
+	}
+
+	return nil
+}
+
 // preparePluginCall makes sure the plugin is running and registers a new plugin
 // call in the wait group. The returned function should be called in a deferred
 // statement to signal the plugin call is over.
@@ -248,28 +293,49 @@ func (s *Source) configure(ctx context.Context) error {
 	return nil
 }
 
-func (s *Source) triggerLifecycleEvent(ctx context.Context) error {
-	if s.isEqual(s.Instance.Config.Settings, s.Instance.LastActiveConfig.Settings) {
-		return nil // nothing to do, last active config is the same as current one
+func (s *Source) triggerLifecycleEvent(ctx context.Context, oldConfig, newConfig map[string]string) (bool, error) {
+	if s.isEqual(oldConfig, newConfig) {
+		return false, nil // nothing to do, last active config is the same as current one
 	}
 
-	if s.Instance.LastActiveConfig.Settings == nil {
-		// last active config is only nil on first run
-		err := s.plugin.LifecycleOnCreated(ctx, s.Instance.Config.Settings)
+	switch {
+	// created
+	case oldConfig == nil && newConfig != nil:
+		s.Instance.logger.Trace(ctx).Msg("triggering lifecycle event \"created\" on source connector plugin")
+		err := s.plugin.LifecycleOnCreated(ctx, newConfig)
 		if err != nil {
-			return cerrors.Errorf("error while triggering lifecycle event onCreated: %w", err)
+			return false, cerrors.Errorf("error while triggering lifecycle event \"created\": %w", err)
 		}
-	} else {
-		// we have an old active config, it's an update
-		err := s.plugin.LifecycleOnUpdated(ctx, s.Instance.LastActiveConfig.Settings, s.Instance.Config.Settings)
-		if err != nil {
-			return cerrors.Errorf("error while triggering lifecycle event onUpdated: %w", err)
-		}
-	}
+		return true, nil
 
-	// if lifecycle event is successfully triggered we consider the config active
-	s.Instance.LastActiveConfig = s.Instance.Config
-	return nil
+	// updated
+	case oldConfig != nil && newConfig != nil:
+		s.Instance.logger.Trace(ctx).Msg("triggering lifecycle event \"updated\" on source connector plugin")
+		err := s.plugin.LifecycleOnUpdated(ctx, oldConfig, newConfig)
+		if err != nil {
+			return false, cerrors.Errorf("error while triggering lifecycle event \"updated\": %w", err)
+		}
+		return true, nil
+
+	// deleted
+	case oldConfig != nil && newConfig == nil:
+		s.Instance.logger.Trace(ctx).Msg("triggering lifecycle event \"deleted\" on source connector plugin")
+		err := s.plugin.LifecycleOnDeleted(ctx, oldConfig)
+		if err != nil {
+			return false, cerrors.Errorf("error while triggering lifecycle event \"deleted\": %w", err)
+		}
+		return true, nil
+
+	// default should never happen
+	default:
+		s.Instance.logger.Warn(ctx).
+			Any("oldConfig", oldConfig).
+			Any("newConfig", newConfig).
+			Msg("unexpected combination of old and new config")
+		// don't return an error when no event was triggered, strictly speaking
+		// the action did not fail
+		return false, nil
+	}
 }
 
 func (s *Source) start(ctx context.Context) error {
@@ -293,5 +359,5 @@ func (s *Source) isEqual(cfg1, cfg2 map[string]string) bool {
 			return false
 		}
 	}
-	return true
+	return (cfg1 != nil) == (cfg2 != nil)
 }
