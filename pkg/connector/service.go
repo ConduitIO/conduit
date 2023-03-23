@@ -138,7 +138,7 @@ func (s *Service) Create(
 	return conn, nil
 }
 
-// Delete removes.
+// Delete removes the connector.
 func (s *Service) Delete(ctx context.Context, id string, dispenserFetcher PluginDispenserFetcher) error {
 	// make sure instance exists
 	instance, err := s.Get(ctx, id)

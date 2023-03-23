@@ -335,7 +335,7 @@ func (s *Service) deletePipeline(ctx context.Context, r *rollback.R, pl *pipelin
 		}
 		s.rollbackRemoveConnector(ctx, r, pl.ID, id)
 
-		err = s.connectorService.Delete(ctx, id)
+		err = s.connectorService.Delete(ctx, id, s.pluginService)
 		if err != nil {
 			return err
 		}
@@ -550,7 +550,7 @@ func (s *Service) deletePipelineWithoutRollback(ctx context.Context, pl *pipelin
 			return err
 		}
 
-		err = s.connectorService.Delete(ctx, connID)
+		err = s.connectorService.Delete(ctx, connID, s.pluginService)
 		if err != nil {
 			return err
 		}
@@ -567,7 +567,7 @@ func (s *Service) deletePipelineWithoutRollback(ctx context.Context, pl *pipelin
 // rollback functions
 func (s *Service) rollbackCreateConnector(ctx context.Context, r *rollback.R, connID string) {
 	r.Append(func() error {
-		err := s.connectorService.Delete(ctx, connID)
+		err := s.connectorService.Delete(ctx, connID, s.pluginService)
 		return err
 	})
 }
