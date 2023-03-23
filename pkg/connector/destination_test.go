@@ -18,11 +18,10 @@ import (
 	"context"
 	"testing"
 
-	"github.com/conduitio/conduit/pkg/plugin"
-
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/database/inmemory"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/conduitio/conduit/pkg/plugin/mock"
 	"github.com/golang/mock/gomock"
 	"github.com/matryer/is"
