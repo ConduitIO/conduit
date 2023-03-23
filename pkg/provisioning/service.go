@@ -20,23 +20,27 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/ctxutil"
 	"github.com/conduitio/conduit/pkg/foundation/database"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/multierror"
 	"github.com/conduitio/conduit/pkg/foundation/rollback"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	"github.com/conduitio/conduit/pkg/processor"
+	"github.com/conduitio/conduit/pkg/provisioning/config"
+	"github.com/conduitio/conduit/pkg/provisioning/config/yaml"
 	"golang.org/x/exp/slices"
 )
 
 type Service struct {
 	db               database.DB
 	logger           log.CtxLogger
-	parser           *Parser
+	parser           config.Parser
 	pipelineService  PipelineService
 	connectorService ConnectorService
 	processorService ProcessorService
@@ -56,7 +60,7 @@ func NewService(
 	return &Service{
 		db:               db,
 		logger:           logger.WithComponent("provisioning.Service"),
-		parser:           NewParser(logger),
+		parser:           yaml.NewParser(logger),
 		pipelineService:  plService,
 		connectorService: connService,
 		processorService: procService,
@@ -72,32 +76,47 @@ func (s *Service) Init(ctx context.Context) error {
 		Str("pipelines_path", s.pipelinesPath).
 		Msg("initializing the provisioning service")
 
-	var files []string
-	err := filepath.WalkDir(s.pipelinesPath, func(path string, fileInfo fs.DirEntry, err error) error {
-		if strings.HasSuffix(path, ".yml") || strings.HasSuffix(path, ".yaml") {
-			files = append(files, path)
-		}
-		return nil
-	})
+	files, err := s.getYamlFiles(s.pipelinesPath)
 	if err != nil {
-		return cerrors.Errorf("could not iterate through the pipelines folder %q: %w", s.pipelinesPath, err)
+		return cerrors.Errorf("failed to read pipelines folder %q: %w", s.pipelinesPath, err)
 	}
 
 	// contains all the errors occurred while provisioning configuration files.
 	var multierr error
-	// contains pipelineIDs of successfully provisioned pipelines.
-	var successPls []string
+
+	// parse pipeline config files
+	configs := make([]config.Pipeline, 0, len(files))
+	for _, file := range files {
+		cfg, err := s.parsePipelineConfigFile(ctx, file)
+		if err != nil {
+			return multierror.Append(multierr, err)
+		}
+		configs = append(configs, cfg...)
+	}
+
 	// contains pipelineIDs of all the pipelines in all the configuration files, either successfully provisioned or not.
 	var allPls []string
-	for _, file := range files {
-		provPipelines, all, err := s.provisionConfigFile(ctx, file, successPls)
+
+	// delete duplicate pipelines (if any)
+	for duplicateID, duplicateIndexes := range s.findDuplicateIDs(configs) {
+		multierr = cerrors.Errorf("%d pipelines with ID %q will be skipped: %w", len(duplicateIndexes), duplicateID, ErrDuplicatedPipelineID)
+		configs = s.deleteIndexes(configs, duplicateIndexes)
+
+		// duplicated IDs should still count towards all encountered pipeline IDs
+		allPls = append(allPls, duplicateID)
+	}
+
+	// contains pipelineIDs of successfully provisioned pipelines.
+	var successPls []string
+	for _, cfg := range configs {
+		allPls = append(allPls, cfg.ID)
+
+		err = s.provisionPipeline(ctx, cfg)
 		if err != nil {
-			multierr = multierror.Append(multierr, err)
+			multierr = multierror.Append(multierr, cerrors.Errorf("pipeline %q, error while provisioning: %w", cfg.ID, err))
+			continue
 		}
-		allPls = append(allPls, all...)
-		if len(provPipelines) != 0 {
-			successPls = append(successPls, provPipelines...)
-		}
+		successPls = append(successPls, cfg.ID)
 	}
 
 	// pipelines that were provisioned by config but are not in the config files anymore
@@ -111,45 +130,67 @@ func (s *Service) Init(ctx context.Context) error {
 	return multierr
 }
 
-// provisionConfigFile returns a list of all successfully provisioned pipelines, a list of all pipeline IDs from the
-// file, and an error if any failure happened while provisioning the file.
-func (s *Service) provisionConfigFile(ctx context.Context, path string, alreadyProvisioned []string) ([]string, []string, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, nil, cerrors.Errorf("could not read the file %q: %w", path, err)
-	}
-
-	before, err := s.parser.Parse(ctx, path, data)
-	if err != nil {
-		return nil, nil, cerrors.Errorf("could not parse the file %q: %w", path, err)
-	}
-
-	got := EnrichPipelinesConfig(before)
-
-	// contains pipelineIDs of successfully provisioned pipelines for this file.
-	var successPls []string
-	// contains pipelineIDs of all the pipelines in this configuration files, either successfully provisioned or not.
-	var allPls []string
-	var multierr error
-	for k, v := range got {
-		allPls = append(allPls, k)
-		err = ValidatePipelinesConfig(v)
-		if err != nil {
-			multierr = multierror.Append(multierr, cerrors.Errorf("pipeline %q, invalid pipeline config: %w", k, err))
-			continue
+// getYamlFiles recursively reads folders in the path and collects paths to all
+// files that end with .yml or .yaml.
+func (s *Service) getYamlFiles(path string) ([]string, error) {
+	var files []string
+	err := filepath.WalkDir(path, func(path string, fileInfo fs.DirEntry, err error) error {
+		if strings.HasSuffix(path, ".yml") || strings.HasSuffix(path, ".yaml") {
+			files = append(files, path)
 		}
-		err = s.provisionPipeline(ctx, k, v, alreadyProvisioned)
-		if err != nil {
-			multierr = multierror.Append(multierr, cerrors.Errorf("pipeline %q, error while provisioning: %w", k, err))
-			continue
-		}
-		successPls = append(successPls, k)
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
-
-	return successPls, allPls, multierr
+	return files, nil
 }
 
-func (s *Service) provisionPipeline(ctx context.Context, id string, config PipelineConfig, alreadyProvisioned []string) error {
+func (s *Service) parsePipelineConfigFile(ctx context.Context, path string) ([]config.Pipeline, error) {
+	ctx = ctxutil.ContextWithFilepath(ctx, path) // attach path to context for logs
+
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, cerrors.Errorf("could not open file %q: %w", path, err)
+	}
+	defer file.Close()
+
+	configs, err := s.parser.Parse(ctx, file)
+	if err != nil {
+		return nil, cerrors.Errorf("could not parse file %q: %w", path, err)
+	}
+	return configs, nil
+}
+
+func (s *Service) findDuplicateIDs(configs []config.Pipeline) map[string][]int {
+	// build a map that contains a list of all indexes for each pipeline ID
+	pipelineIndexesByID := make(map[string][]int)
+	for i, cfg := range configs {
+		indexes := pipelineIndexesByID[cfg.ID]
+		pipelineIndexesByID[cfg.ID] = append(indexes, i)
+	}
+	// remove entries that have only one index
+	for id, indexes := range pipelineIndexesByID {
+		if len(indexes) == 1 {
+			delete(pipelineIndexesByID, id)
+		}
+	}
+	return pipelineIndexesByID
+}
+
+func (s *Service) deleteIndexes(configs []config.Pipeline, indexes []int) []config.Pipeline {
+	// sort indexes in reverse so we can safely remove them
+	sort.Sort(sort.Reverse(sort.IntSlice(indexes)))
+	for _, i := range indexes {
+		// slice trick: delete element at i and preserve order
+		configs = configs[:i+copy(configs[i:], configs[i+1:])]
+	}
+	return configs
+}
+
+// provisionPipeline provisions a single pipeline and returns an error if
+// any failure happened during provisioning.
+func (s *Service) provisionPipeline(ctx context.Context, cfg config.Pipeline) error {
 	var r rollback.R
 	defer r.MustExecute()
 	txn, ctx, err := s.db.NewTransaction(ctx, true)
@@ -158,16 +199,18 @@ func (s *Service) provisionPipeline(ctx context.Context, id string, config Pipel
 	}
 	r.AppendPure(txn.Discard)
 
-	// check if pipeline was already provisioned
-	if slices.Contains(alreadyProvisioned, id) {
-		return cerrors.Errorf("invalid pipeline ID %q, pipeline %s will be skipped: %w", id, config.Name, ErrDuplicatedPipelineID)
+	// enrich and validate config
+	cfg = config.Enrich(cfg)
+	err = config.Validate(cfg)
+	if err != nil {
+		return cerrors.Errorf("invalid pipeline config: %w", err)
 	}
 
 	// check if pipeline already exists
 	var connStates map[string]func(context.Context) error
-	oldPl, err := s.pipelineService.Get(ctx, id)
+	oldPl, err := s.pipelineService.Get(ctx, cfg.ID)
 	if err != nil && !cerrors.Is(err, pipeline.ErrInstanceNotFound) {
-		return cerrors.Errorf("could not get the pipeline %q: %w", id, err)
+		return cerrors.Errorf("could not get the pipeline %q: %w", cfg.ID, err)
 	} else if err == nil {
 		if oldPl.Status == pipeline.StatusRunning {
 			err := s.stopPipeline(ctx, oldPl)
@@ -178,41 +221,41 @@ func (s *Service) provisionPipeline(ctx context.Context, id string, config Pipel
 		}
 		connStates, err = s.collectConnectorStates(ctx, oldPl)
 		if err != nil {
-			return cerrors.Errorf("could not collect connector states from the pipeline %q: %w", id, err)
+			return cerrors.Errorf("could not collect connector states from the pipeline %q: %w", cfg.ID, err)
 		}
-		err = s.deletePipeline(ctx, &r, oldPl, config, connStates)
+		err = s.deletePipeline(ctx, &r, oldPl, connStates)
 		if err != nil {
-			return cerrors.Errorf("could not delete pipeline %q: %w", id, err)
+			return cerrors.Errorf("could not delete pipeline %q: %w", cfg.ID, err)
 		}
 	}
 
 	// create new pipeline
-	newPl, err := s.createPipeline(ctx, id, config)
+	newPl, err := s.createPipeline(ctx, cfg)
 	if err != nil {
-		return cerrors.Errorf("could not create pipeline %q: %w", id, err)
+		return cerrors.Errorf("could not create pipeline %q: %w", cfg.ID, err)
 	}
 	s.rollbackCreatePipeline(ctx, &r, newPl.ID)
 
-	err = s.createConnectors(ctx, &r, newPl.ID, config.Connectors)
+	err = s.createConnectors(ctx, &r, newPl.ID, cfg.Connectors)
 	if err != nil {
 		return cerrors.Errorf("error while creating connectors: %w", err)
 	}
 
-	err = s.createProcessors(ctx, &r, id, processor.ParentTypePipeline, config.Processors)
+	err = s.createProcessors(ctx, &r, cfg.ID, processor.ParentTypePipeline, cfg.Processors)
 	if err != nil {
 		return cerrors.Errorf("error while creating connectors: %w", err)
 	}
 
 	err = s.applyConnectorStates(ctx, newPl, connStates)
 	if err != nil {
-		return cerrors.Errorf("could not apply connector states on pipeline %q: %w", id, err)
+		return cerrors.Errorf("could not apply connector states on pipeline %q: %w", cfg.ID, err)
 	}
 
 	// check if pipeline is running
-	if config.Status == StatusRunning {
+	if cfg.Status == config.StatusRunning {
 		err := s.pipelineService.Start(ctx, s.connectorService, s.processorService, s.pluginService, newPl.ID)
 		if err != nil {
-			return cerrors.Errorf("could not start the pipeline %q: %w", id, err)
+			return cerrors.Errorf("could not start the pipeline %q: %w", cfg.ID, err)
 		}
 	}
 
@@ -289,7 +332,7 @@ func (s *Service) applyConnectorStates(ctx context.Context, pl *pipeline.Instanc
 	return nil
 }
 
-func (s *Service) deletePipeline(ctx context.Context, r *rollback.R, pl *pipeline.Instance, config PipelineConfig, connStates map[string]func(context.Context) error) error {
+func (s *Service) deletePipeline(ctx context.Context, r *rollback.R, pl *pipeline.Instance, connStates map[string]func(context.Context) error) error {
 	// remove and delete processors
 	for _, id := range pl.ProcessorIDs {
 		proc, err := s.processorService.Get(ctx, id)
@@ -347,7 +390,7 @@ func (s *Service) deletePipeline(ctx context.Context, r *rollback.R, pl *pipelin
 	if err != nil {
 		return err
 	}
-	s.rollbackDeletePipeline(ctx, r, pl.ID, config)
+	s.rollbackDeletePipeline(ctx, r, pl)
 
 	return nil
 }
@@ -361,38 +404,41 @@ func (s *Service) stopPipeline(ctx context.Context, pl *pipeline.Instance) error
 	return nil
 }
 
-func (s *Service) createPipeline(ctx context.Context, id string, config PipelineConfig) (*pipeline.Instance, error) {
-	cfg := pipeline.Config{
-		Name:        config.Name,
-		Description: config.Description,
-	}
-
-	pl, err := s.pipelineService.Create(ctx, id, cfg, pipeline.ProvisionTypeConfig)
+func (s *Service) createPipeline(ctx context.Context, cfg config.Pipeline) (*pipeline.Instance, error) {
+	pl, err := s.pipelineService.Create(
+		ctx,
+		cfg.ID,
+		pipeline.Config{
+			Name:        cfg.Name,
+			Description: cfg.Description,
+		},
+		pipeline.ProvisionTypeConfig,
+	)
 	if err != nil {
 		return nil, err
 	}
 
 	dlq := pl.DLQ
 	var updateDLQ bool
-	if config.DLQ.Plugin != "" {
-		dlq.Plugin = config.DLQ.Plugin
+	if cfg.DLQ.Plugin != "" {
+		dlq.Plugin = cfg.DLQ.Plugin
 		updateDLQ = true
 	}
-	if config.DLQ.Settings != nil {
-		dlq.Settings = config.DLQ.Settings
+	if cfg.DLQ.Settings != nil {
+		dlq.Settings = cfg.DLQ.Settings
 		updateDLQ = true
 	}
-	if config.DLQ.WindowSize != nil {
-		dlq.WindowSize = *config.DLQ.WindowSize
+	if cfg.DLQ.WindowSize != nil {
+		dlq.WindowSize = *cfg.DLQ.WindowSize
 		updateDLQ = true
 	}
-	if config.DLQ.WindowNackThreshold != nil {
-		dlq.WindowNackThreshold = *config.DLQ.WindowNackThreshold
+	if cfg.DLQ.WindowNackThreshold != nil {
+		dlq.WindowNackThreshold = *cfg.DLQ.WindowNackThreshold
 		updateDLQ = true
 	}
 
 	if updateDLQ {
-		pl, err = s.pipelineService.UpdateDLQ(ctx, id, dlq)
+		pl, err = s.pipelineService.UpdateDLQ(ctx, cfg.ID, dlq)
 		if err != nil {
 			return nil, err
 		}
@@ -401,70 +447,81 @@ func (s *Service) createPipeline(ctx context.Context, id string, config Pipeline
 	return pl, nil
 }
 
-func (s *Service) createConnector(ctx context.Context, pipelineID string, id string, config ConnectorConfig) error {
-	cfg := connector.Config{
-		Name:     config.Name,
-		Settings: config.Settings,
-	}
-
+func (s *Service) createConnector(ctx context.Context, pipelineID string, cfg config.Connector) error {
 	connType := connector.TypeSource
-	if config.Type == TypeDestination {
+	if cfg.Type == config.TypeDestination {
 		connType = connector.TypeDestination
 	}
 
-	_, err := s.connectorService.Create(ctx, id, connType, config.Plugin, pipelineID, cfg, connector.ProvisionTypeConfig)
+	_, err := s.connectorService.Create(
+		ctx,
+		cfg.ID,
+		connType,
+		cfg.Plugin,
+		pipelineID,
+		connector.Config{
+			Name:     cfg.Name,
+			Settings: cfg.Settings,
+		},
+		connector.ProvisionTypeConfig,
+	)
 	if err != nil {
-		return cerrors.Errorf("could not create connector %q on pipeline %q: %w", id, pipelineID, err)
+		return cerrors.Errorf("could not create connector %q on pipeline %q: %w", cfg.ID, pipelineID, err)
 	}
 
 	return nil
 }
 
-func (s *Service) createProcessor(ctx context.Context, parentID string, parentType processor.ParentType, id string, config ProcessorConfig) error {
-	cfg := processor.Config{
-		Settings: config.Settings,
-		Workers:  config.Workers,
-	}
-	parent := processor.Parent{
-		ID:   parentID,
-		Type: parentType,
-	}
-	_, err := s.processorService.Create(ctx, id, config.Type, parent, cfg, processor.ProvisionTypeConfig)
+func (s *Service) createProcessor(ctx context.Context, parentID string, parentType processor.ParentType, cfg config.Processor) error {
+	_, err := s.processorService.Create(
+		ctx,
+		cfg.ID,
+		cfg.Type,
+		processor.Parent{
+			ID:   parentID,
+			Type: parentType,
+		},
+		processor.Config{
+			Settings: cfg.Settings,
+			Workers:  cfg.Workers,
+		},
+		processor.ProvisionTypeConfig,
+	)
 	if err != nil {
-		return cerrors.Errorf("could not create processor %q on parent %q: %w", id, parentID, err)
+		return cerrors.Errorf("could not create processor %q on parent %q: %w", cfg.ID, parentID, err)
 	}
 	return nil
 }
 
-func (s *Service) createConnectors(ctx context.Context, r *rollback.R, pipelineID string, mp map[string]ConnectorConfig) error {
-	for k, cfg := range mp {
-		err := s.createConnector(ctx, pipelineID, k, cfg)
+func (s *Service) createConnectors(ctx context.Context, r *rollback.R, pipelineID string, list []config.Connector) error {
+	for _, cfg := range list {
+		err := s.createConnector(ctx, pipelineID, cfg)
 		if err != nil {
-			return cerrors.Errorf("could not create connector %q: %w", k, err)
+			return cerrors.Errorf("could not create connector %q: %w", cfg.ID, err)
 		}
-		s.rollbackCreateConnector(ctx, r, k)
+		s.rollbackCreateConnector(ctx, r, cfg.ID)
 
-		_, err = s.pipelineService.AddConnector(ctx, pipelineID, k)
+		_, err = s.pipelineService.AddConnector(ctx, pipelineID, cfg.ID)
 		if err != nil {
-			return cerrors.Errorf("could not add connector %q to the pipeline %q: %w", k, pipelineID, err)
+			return cerrors.Errorf("could not add connector %q to the pipeline %q: %w", cfg.ID, pipelineID, err)
 		}
-		s.rollbackAddConnector(ctx, r, pipelineID, k)
+		s.rollbackAddConnector(ctx, r, pipelineID, cfg.ID)
 
-		err = s.createProcessors(ctx, r, k, processor.ParentTypeConnector, cfg.Processors)
+		err = s.createProcessors(ctx, r, cfg.ID, processor.ParentTypeConnector, cfg.Processors)
 		if err != nil {
-			return cerrors.Errorf("could not create processors on connector %q: %w", k, err)
+			return cerrors.Errorf("could not create processors on connector %q: %w", cfg.ID, err)
 		}
 	}
 	return nil
 }
 
-func (s *Service) createProcessors(ctx context.Context, r *rollback.R, parentID string, parentType processor.ParentType, mp map[string]ProcessorConfig) error {
-	for k, cfg := range mp {
-		err := s.createProcessor(ctx, parentID, parentType, k, cfg)
+func (s *Service) createProcessors(ctx context.Context, r *rollback.R, parentID string, parentType processor.ParentType, list []config.Processor) error {
+	for _, cfg := range list {
+		err := s.createProcessor(ctx, parentID, parentType, cfg)
 		if err != nil {
-			return cerrors.Errorf("could not create processor %q: %w", k, err)
+			return cerrors.Errorf("could not create processor %q: %w", cfg.ID, err)
 		}
-		s.rollbackCreateProcessor(ctx, r, k)
+		s.rollbackCreateProcessor(ctx, r, cfg.ID)
 
 		switch parentType {
 		case processor.ParentTypePipeline:
@@ -472,17 +529,17 @@ func (s *Service) createProcessors(ctx context.Context, r *rollback.R, parentID 
 			if err != nil {
 				return cerrors.Errorf("could not get pipeline %q: %w", parentID, err)
 			}
-			_, err = s.pipelineService.AddProcessor(ctx, pl.ID, k)
+			_, err = s.pipelineService.AddProcessor(ctx, pl.ID, cfg.ID)
 			if err != nil {
-				return cerrors.Errorf("could not add processor %q to the pipeline %q: %w", k, pl.ID, err)
+				return cerrors.Errorf("could not add processor %q to the pipeline %q: %w", cfg.ID, pl.ID, err)
 			}
-			s.rollbackAddPipelineProcessor(ctx, r, pl.ID, k)
+			s.rollbackAddPipelineProcessor(ctx, r, pl.ID, cfg.ID)
 		case processor.ParentTypeConnector:
-			_, err = s.connectorService.AddProcessor(ctx, parentID, k)
+			_, err = s.connectorService.AddProcessor(ctx, parentID, cfg.ID)
 			if err != nil {
-				return cerrors.Errorf("could not add processor %q to the connector %q: %w", k, parentID, err)
+				return cerrors.Errorf("could not add processor %q to the connector %q: %w", cfg.ID, parentID, err)
 			}
-			s.rollbackAddConnectorProcessor(ctx, r, parentID, k)
+			s.rollbackAddConnectorProcessor(ctx, r, parentID, cfg.ID)
 		}
 	}
 
@@ -573,14 +630,14 @@ func (s *Service) rollbackCreateConnector(ctx context.Context, r *rollback.R, co
 }
 func (s *Service) rollbackDeleteConnector(ctx context.Context, r *rollback.R, pipelineID string, connID string, conn *connector.Instance) {
 	r.Append(func() error {
-		config := ConnectorConfig{
+		cfg := config.Connector{
+			ID:       connID,
 			Name:     conn.Config.Name,
 			Plugin:   conn.Plugin,
 			Settings: conn.Config.Settings,
 			Type:     strings.ToLower(conn.Type.String()),
 		}
-		err := s.createConnector(ctx, pipelineID, connID, config)
-		return err
+		return s.createConnector(ctx, pipelineID, cfg)
 	})
 }
 func (s *Service) rollbackAddConnector(ctx context.Context, r *rollback.R, pipelineID string, connID string) {
@@ -603,12 +660,12 @@ func (s *Service) rollbackCreateProcessor(ctx context.Context, r *rollback.R, pr
 }
 func (s *Service) rollbackDeleteProcessor(ctx context.Context, r *rollback.R, parent processor.Parent, proc *processor.Instance) {
 	r.Append(func() error {
-		config := ProcessorConfig{
+		cfg := config.Processor{
+			ID:       proc.ID,
 			Type:     proc.Type,
 			Settings: proc.Config.Settings,
 		}
-		err := s.createProcessor(ctx, parent.ID, parent.Type, proc.ID, config)
-		return err
+		return s.createProcessor(ctx, parent.ID, parent.Type, cfg)
 	})
 }
 func (s *Service) rollbackAddConnectorProcessor(ctx context.Context, r *rollback.R, connID string, processorID string) {
@@ -643,9 +700,21 @@ func (s *Service) rollbackCreatePipeline(ctx context.Context, r *rollback.R, pip
 		return err
 	})
 }
-func (s *Service) rollbackDeletePipeline(ctx context.Context, r *rollback.R, id string, config PipelineConfig) {
+func (s *Service) rollbackDeletePipeline(ctx context.Context, r *rollback.R, p *pipeline.Instance) {
 	r.Append(func() error {
-		_, err := s.createPipeline(ctx, id, config)
+		cfg := config.Pipeline{
+			ID:          p.ID,
+			Status:      p.Status.String(),
+			Name:        p.Config.Name,
+			Description: p.Config.Description,
+			DLQ: config.DLQ{
+				Plugin:              p.DLQ.Plugin,
+				Settings:            p.DLQ.Settings,
+				WindowSize:          &p.DLQ.WindowSize,
+				WindowNackThreshold: &p.DLQ.WindowNackThreshold,
+			},
+		}
+		_, err := s.createPipeline(ctx, cfg)
 		return err
 	})
 }

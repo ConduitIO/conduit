@@ -60,7 +60,6 @@ conduit.db
 /ui/package-lock.json.ember-try
 /ui/yarn.lock.ember-try
 
-
 # Local Netlify folder
 /ui/.netlify
 
@@ -70,9 +69,9 @@ conduit.db
 dist/
 
 # Examples
-examples/processors/file_destination.txt
-./example.in
-./example.out
+/examples/processors/file_destination.txt
+/example.in
+/example.out
 
 # Standalone connectors
 /connectors

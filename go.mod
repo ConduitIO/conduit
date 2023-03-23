@@ -16,7 +16,7 @@ require (
 	github.com/conduitio/conduit-connector-protocol v0.4.2-0.20230317135836-683b23ba5a0a
 	github.com/conduitio/conduit-connector-s3 v0.3.0
 	github.com/conduitio/conduit-connector-sdk v0.5.3-0.20230317175521-1ef859feda37
-	github.com/conduitio/yaml/v3 v3.2.0
+	github.com/conduitio/yaml/v3 v3.3.0
 	github.com/dgraph-io/badger/v3 v3.2103.5
 	github.com/dop251/goja v0.0.0-20230304130813-e2f543bf4b4c
 	github.com/gammazero/deque v0.2.1
