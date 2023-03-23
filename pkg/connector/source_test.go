@@ -124,6 +124,38 @@ func TestSource_LifecycleOnCreated_Error(t *testing.T) {
 	is.Equal(src.Instance.LastActiveConfig, Config{})
 }
 
+func TestSource_LifecycleOnDeleted_Success(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+
+	src, sourceMock := newTestSource(ctx, t, ctrl)
+
+	// assume that there was a config already active, but with different settings
+	src.Instance.LastActiveConfig.Settings = map[string]string{"last-active": "yes"}
+
+	sourceMock.EXPECT().LifecycleOnDeleted(gomock.Any(), src.Instance.LastActiveConfig.Settings).Return(nil)
+	sourceMock.EXPECT().Teardown(gomock.Any()).Return(nil)
+
+	err := src.OnDelete(ctx)
+	is.NoErr(err)
+}
+
+func TestSource_LifecycleOnDeleted_Skip(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+
+	src, _ := newTestSource(ctx, t, ctrl)
+
+	// assume that no config was active before, in that case deleted event
+	// should be skipped
+	src.Instance.LastActiveConfig = Config{}
+
+	err := src.OnDelete(ctx)
+	is.NoErr(err)
+}
+
 func TestSource_Ack_Deadlock(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
@@ -177,7 +209,7 @@ func newTestSource(ctx context.Context, t *testing.T, ctrl *gomock.Controller) (
 
 	sourceMock := mock.NewSourcePlugin(ctrl)
 	pluginDispenser := mock.NewDispenser(ctrl)
-	pluginDispenser.EXPECT().DispenseSource().Return(sourceMock, nil)
+	pluginDispenser.EXPECT().DispenseSource().Return(sourceMock, nil).AnyTimes()
 
 	conn, err := instance.Connector(ctx, fakePluginFetcher{instance.Plugin: pluginDispenser})
 	is.NoErr(err)

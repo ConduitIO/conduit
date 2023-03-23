@@ -89,7 +89,7 @@ func (s *Source) Open(ctx context.Context) (err error) {
 	}
 
 	if lifecycleEventTriggered {
-		// if lifecycle event is successfully triggered we consider the config active
+		// when a lifecycle event is successfully triggered we consider the config active
 		s.Instance.LastActiveConfig = s.Instance.Config
 		// persist connector in the next batch to store last active config
 		err := s.Instance.persister.Persist(ctx, s.Instance, func(err error) {
@@ -112,12 +112,7 @@ func (s *Source) Open(ctx context.Context) (err error) {
 	s.Instance.connector = s
 	s.Instance.persister.ConnectorStarted()
 
-	// persist connector right away in case a lifecycle event was triggered
-	return s.Instance.persister.Persist(ctx, s.Instance, func(err error) {
-		if err != nil {
-			s.errs <- err
-		}
-	})
+	return nil
 }
 
 func (s *Source) Stop(ctx context.Context) (record.Position, error) {
@@ -350,7 +345,7 @@ func (s *Source) start(ctx context.Context) error {
 	return nil
 }
 
-func (s *Source) isEqual(cfg1, cfg2 map[string]string) bool {
+func (*Source) isEqual(cfg1, cfg2 map[string]string) bool {
 	if len(cfg1) != len(cfg2) {
 		return false
 	}
