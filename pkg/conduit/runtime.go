@@ -232,7 +232,7 @@ func (r *Runtime) Run(ctx context.Context) (err error) {
 	if r.Config.Pipelines.StrictMode {
 		r.pipelineService.OnFailure(func(e pipeline.FailureEvent) {
 			r.logger.Err(ctx, e.Cause).
-				Str(log.PipelineIDField, e.Pipeline.ID).
+				Str(log.PipelineIDField, e.ID).
 				Msg("Conduit will be shut down due to a pipeline failure and strict mode enabled")
 			cancel()
 		})

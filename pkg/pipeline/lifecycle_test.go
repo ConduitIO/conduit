@@ -242,7 +242,7 @@ func TestServiceLifecycle_PipelineError(t *testing.T) {
 	e, valReceived, err := cchan.Chan[FailureEvent](events).RecvTimeout(ctx, 200*time.Millisecond)
 	is.NoErr(err)
 	is.True(valReceived)
-	is.Equal(pl, e.Pipeline)
+	is.Equal(pl.ID, e.ID)
 	is.True(cerrors.Is(e.Cause, wantErr))
 }
 
@@ -409,13 +409,14 @@ func TestService_FailureHandler_Create(t *testing.T) {
 	})
 
 	// create a host pipeline
-	_, err = ps.Create(ctx, uuid.NewString(), Config{}, ProvisionTypeAPI)
+	id := uuid.NewString()
+	_, err = ps.Create(ctx, id, Config{}, ProvisionTypeAPI)
 	is.True(err != nil)
 
 	e, got, err := cchan.Chan[FailureEvent](events).RecvTimeout(ctx, 200*time.Millisecond)
 	is.NoErr(err)
 	is.True(got)
-	is.True(e.Pipeline == nil)
+	is.Equal(id, e.ID)
 	is.True(cerrors.Is(e.Cause, ErrNameMissing))
 }
 
@@ -457,7 +458,7 @@ func TestService_FailureHandler_Start(t *testing.T) {
 	e, got, err := cchan.Chan[FailureEvent](events).RecvTimeout(ctx, 200*time.Millisecond)
 	is.NoErr(err)
 	is.True(got)
-	is.Equal(pl, e.Pipeline)
+	is.Equal(pl.ID, e.ID)
 	is.True(cerrors.Is(e.Cause, plugin.ErrPluginNotFound))
 }
 
