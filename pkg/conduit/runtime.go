@@ -217,6 +217,15 @@ func (r *Runtime) Run(ctx context.Context) (err error) {
 	if err != nil {
 		return cerrors.Errorf("failed to init connector service: %w", err)
 	}
+
+	if r.Config.Pipelines.StrictMode {
+		r.pipelineService.OnFailure(func(e pipeline.FailureEvent) {
+			r.logger.Err(ctx, e.Cause).
+				Str(log.PipelineIDField, e.ID).
+				Msg("Conduit will be shut down due to a pipeline failure and strict mode enabled")
+			cancel()
+		})
+	}
 	err = r.pipelineService.Init(ctx)
 	if err != nil {
 		return cerrors.Errorf("failed to init pipeline service: %w", err)
@@ -229,14 +238,6 @@ func (r *Runtime) Run(ctx context.Context) (err error) {
 		})
 	}
 
-	if r.Config.Pipelines.StrictMode {
-		r.pipelineService.OnFailure(func(e pipeline.FailureEvent) {
-			r.logger.Err(ctx, e.Cause).
-				Str(log.PipelineIDField, e.ID).
-				Msg("Conduit will be shut down due to a pipeline failure and strict mode enabled")
-			cancel()
-		})
-	}
 	err = r.pipelineService.Run(ctx, r.connectorService, r.processorService, r.pluginService)
 	if err != nil {
 		multierror.ForEach(err, func(err error) {
