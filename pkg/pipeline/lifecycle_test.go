@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/conduitio/conduit/pkg/connector"
+	"github.com/conduitio/conduit/pkg/foundation/cchan"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/database/inmemory"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -203,6 +204,10 @@ func TestServiceLifecycle_PipelineError(t *testing.T) {
 	pl, err = ps.AddConnector(ctx, pl.ID, destination.ID)
 	is.NoErr(err)
 
+	events := make(chan FailureEvent, 1)
+	ps.OnFailure(func(e FailureEvent) {
+		events <- e
+	})
 	// start the pipeline now that everything is set up
 	err = ps.Start(
 		ctx,
@@ -233,6 +238,12 @@ func TestServiceLifecycle_PipelineError(t *testing.T) {
 	is.True(
 		strings.Contains(pl.Error, wantErr.Error()),
 	) // expected error message to contain "source connector error"
+
+	e, valReceived, err := cchan.Chan[FailureEvent](events).RecvTimeout(ctx, 200*time.Millisecond)
+	is.NoErr(err)
+	is.True(valReceived)
+	is.Equal(pl, e.Pipeline)
+	is.True(cerrors.Is(e.Cause, wantErr))
 }
 
 func TestServiceLifecycle_PipelineStop(t *testing.T) {
@@ -379,6 +390,75 @@ func TestService_Run_Rerun(t *testing.T) {
 			runTest(t, tt.have, tt.want)
 		})
 	}
+}
+
+func TestService_FailureHandler_Create(t *testing.T) {
+	is := is.New(t)
+	ctx, killAll := context.WithCancel(context.Background())
+	defer killAll()
+	logger := log.New(zerolog.Nop())
+	db := &inmemory.DB{}
+
+	ps := NewService(logger, db)
+	err := ps.Init(ctx)
+	is.NoErr(err)
+
+	events := make(chan FailureEvent, 1)
+	ps.OnFailure(func(e FailureEvent) {
+		events <- e
+	})
+
+	// create a host pipeline
+	_, err = ps.Create(ctx, uuid.NewString(), Config{}, ProvisionTypeAPI)
+	is.True(err != nil)
+
+	e, got, err := cchan.Chan[FailureEvent](events).RecvTimeout(ctx, 200*time.Millisecond)
+	is.NoErr(err)
+	is.True(got)
+	is.True(e.Pipeline == nil)
+	is.True(cerrors.Is(e.Cause, ErrNameMissing))
+}
+
+func TestService_FailureHandler_Start(t *testing.T) {
+	is := is.New(t)
+	ctx, killAll := context.WithCancel(context.Background())
+	defer killAll()
+	logger := log.New(zerolog.Nop())
+	db := &inmemory.DB{}
+
+	ps := NewService(logger, db)
+	err := ps.Init(ctx)
+	is.NoErr(err)
+
+	events := make(chan FailureEvent, 1)
+	ps.OnFailure(func(e FailureEvent) {
+		events <- e
+	})
+
+	// create a host pipeline
+	pl, err := ps.Create(ctx, uuid.NewString(), Config{Name: "test pipeline"}, ProvisionTypeAPI)
+	is.NoErr(err)
+
+	persister := connector.NewPersister(logger, db, time.Second, 3)
+	dlq := dummyDestination(persister)
+
+	// cannot start because there's no plugin dispenser
+	err = ps.Start(
+		ctx,
+		testConnectorFetcher{
+			testDLQID: dlq,
+		},
+		testProcessorFetcher{},
+		testPluginFetcher{},
+		pl.ID,
+	)
+	is.True(err != nil)
+
+	e, got, err := cchan.Chan[FailureEvent](events).RecvTimeout(ctx, 200*time.Millisecond)
+	is.NoErr(err)
+	is.True(got)
+	is.Equal(pl, e.Pipeline)
+	is.True(cerrors.Is(e.Cause, plugin.ErrPluginNotFound))
 }
 
 func generateRecords(count int) []record.Record {

@@ -58,7 +58,8 @@ type Config struct {
 	}
 
 	Pipelines struct {
-		Path       string
+		Path string
+		// todo there's probably a better name
 		StrictMode bool
 	}
 }

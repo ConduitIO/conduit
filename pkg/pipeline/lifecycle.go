@@ -93,6 +93,20 @@ func (s *Service) Start(
 
 	s.logger.Debug(ctx).Str(log.PipelineIDField, pl.ID).Msg("starting pipeline")
 
+	err = s.startInternal(ctx, pl, connFetcher, procFetcher, pluginFetcher)
+	if err != nil {
+		s.notify(pl, err)
+	}
+	return err
+}
+
+func (s *Service) startInternal(
+	ctx context.Context,
+	pl *Instance,
+	connFetcher ConnectorFetcher,
+	procFetcher ProcessorFetcher,
+	pluginFetcher PluginDispenserFetcher,
+) error {
 	s.logger.Trace(ctx).Str(log.PipelineIDField, pl.ID).Msg("building nodes")
 	nodes, err := s.buildNodes(ctx, connFetcher, procFetcher, pluginFetcher, pl)
 	if err != nil {

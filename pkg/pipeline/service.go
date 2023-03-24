@@ -26,6 +26,8 @@ import (
 )
 
 type FailureEvent struct {
+	// Pipeline is the pipeline instance which failed.
+	// May be nil (if the pipeline could not be created)
 	Pipeline *Instance
 	Cause    error
 }
@@ -110,6 +112,15 @@ func (s *Service) Get(ctx context.Context, id string) (*Instance, error) {
 // Create will create a new pipeline instance with the given config and return
 // it if it was successfully saved to the database.
 func (s *Service) Create(ctx context.Context, id string, cfg Config, p ProvisionType) (*Instance, error) {
+	pl, err := s.createInternal(ctx, id, cfg, p)
+	if err != nil {
+		s.notify(pl, err)
+		return nil, err
+	}
+	return pl, nil
+}
+
+func (s *Service) createInternal(ctx context.Context, id string, cfg Config, p ProvisionType) (*Instance, error) {
 	if cfg.Name == "" {
 		return nil, ErrNameMissing
 	}
