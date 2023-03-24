@@ -236,6 +236,7 @@ func (r *Runtime) Run(ctx context.Context) (err error) {
 		multierror.ForEach(err, func(err error) {
 			r.logger.Err(ctx, err).Msg("provisioning failed")
 		})
+		cancel()
 	}
 
 	err = r.pipelineService.Run(ctx, r.connectorService, r.processorService, r.pluginService)
