@@ -1,45 +1,45 @@
 ---
-version: 1.0
+version: 2.0
 pipelines:
-  pipeline1:
+  - id: pipeline1
     status: running
     name: pipeline1
     description: desc1
     connectors:
-      con1:
+      - id: con1
         type: source
         plugin: builtin:file
         name: file-src
         settings:
           path: ./test/source-file.txt
-      con2:
+      - id: con2
         type: destination
         plugin: builtin:file
         name: file-dest
         settings:
           path: ./test/dest-file.txt
         processors:
-          con2proc1:
+          - id: con2proc1
             type: removereadat
     processors:
-      proc1:
+      - id: proc1
         type: removereadat
 ---
-version: 1.0
+version: 2.0
 pipelines:
-  pipeline2:
+  - id: pipeline2
     status: stopped
     name: pipeline2
     description: desc2
     connectors:
-      con3:
+      - id: con3
         type: destination
         plugin: builtin:file
         name: file-dest
         settings:
           path: ./test/file3.txt
 
-  pipeline3:
+  - id: pipeline3
     status: stopped
     name: pipeline3
     description: empty

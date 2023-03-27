@@ -19,25 +19,22 @@ import (
 	"github.com/conduitio/conduit/pkg/record"
 )
 
-func SourceConfigureRequest(in map[string]string) (*connectorv1.Source_Configure_Request, error) {
-	out := connectorv1.Source_Configure_Request{
+func SourceConfigureRequest(in map[string]string) *connectorv1.Source_Configure_Request {
+	return &connectorv1.Source_Configure_Request{
 		Config: in,
 	}
-	return &out, nil
 }
 
-func SourceStartRequest(in record.Position) (*connectorv1.Source_Start_Request, error) {
-	out := connectorv1.Source_Start_Request{
+func SourceStartRequest(in record.Position) *connectorv1.Source_Start_Request {
+	return &connectorv1.Source_Start_Request{
 		Position: in,
 	}
-	return &out, nil
 }
 
-func SourceRunRequest(in record.Position) (*connectorv1.Source_Run_Request, error) {
-	out := connectorv1.Source_Run_Request{
+func SourceRunRequest(in record.Position) *connectorv1.Source_Run_Request {
+	return &connectorv1.Source_Run_Request{
 		AckPosition: in,
 	}
-	return &out, nil
 }
 
 func SourceStopRequest() *connectorv1.Source_Stop_Request {
@@ -46,4 +43,23 @@ func SourceStopRequest() *connectorv1.Source_Stop_Request {
 
 func SourceTeardownRequest() *connectorv1.Source_Teardown_Request {
 	return &connectorv1.Source_Teardown_Request{}
+}
+
+func SourceLifecycleOnCreatedRequest(cfg map[string]string) *connectorv1.Source_Lifecycle_OnCreated_Request {
+	return &connectorv1.Source_Lifecycle_OnCreated_Request{
+		Config: cfg,
+	}
+}
+
+func SourceLifecycleOnUpdatedRequest(cfgBefore, cfgAfter map[string]string) *connectorv1.Source_Lifecycle_OnUpdated_Request {
+	return &connectorv1.Source_Lifecycle_OnUpdated_Request{
+		ConfigBefore: cfgBefore,
+		ConfigAfter:  cfgAfter,
+	}
+}
+
+func SourceLifecycleOnDeletedRequest(cfg map[string]string) *connectorv1.Source_Lifecycle_OnDeleted_Request {
+	return &connectorv1.Source_Lifecycle_OnDeleted_Request{
+		Config: cfg,
+	}
 }
