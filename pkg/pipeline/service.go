@@ -27,8 +27,9 @@ import (
 
 type FailureEvent struct {
 	// ID is the ID of the pipeline which failed.
-	ID    string
-	Cause error
+	ID            string
+	ProvisionType ProvisionType
+	Cause         error
 }
 
 type FailureHandler func(FailureEvent)
@@ -113,7 +114,7 @@ func (s *Service) Get(ctx context.Context, id string) (*Instance, error) {
 func (s *Service) Create(ctx context.Context, id string, cfg Config, p ProvisionType) (*Instance, error) {
 	pl, err := s.createInternal(ctx, id, cfg, p)
 	if err != nil {
-		s.notify(id, err)
+		s.notify(id, p, err)
 		return nil, err
 	}
 	return pl, nil
@@ -331,10 +332,11 @@ func (s *Service) OnFailure(handler FailureHandler) {
 	s.handlers = append(s.handlers, handler)
 }
 
-func (s *Service) notify(id string, err error) {
+func (s *Service) notify(id string, p ProvisionType, err error) {
 	e := FailureEvent{
-		ID:    id,
-		Cause: err,
+		ID:            id,
+		ProvisionType: p,
+		Cause:         err,
 	}
 	for _, handler := range s.handlers {
 		handler(e)

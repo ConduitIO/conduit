@@ -219,11 +219,13 @@ func (r *Runtime) Run(ctx context.Context, cancel context.CancelFunc) (err error
 
 	if r.Config.Pipelines.StrictMode {
 		r.pipelineService.OnFailure(func(e pipeline.FailureEvent) {
-			r.logger.Warn(ctx).
-				Err(e.Cause).
-				Str(log.PipelineIDField, e.ID).
-				Msg("Conduit will be shut down due to a pipeline failure and strict mode enabled")
-			cancel()
+			if e.ProvisionType == pipeline.ProvisionTypeConfig {
+				r.logger.Warn(ctx).
+					Err(e.Cause).
+					Str(log.PipelineIDField, e.ID).
+					Msg("Conduit will be shut down due to a pipeline failure and strict mode enabled")
+				cancel()
+			}
 		})
 	}
 	err = r.pipelineService.Init(ctx)

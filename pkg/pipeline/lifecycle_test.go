@@ -417,6 +417,7 @@ func TestService_FailureHandler_Create(t *testing.T) {
 	is.NoErr(err)
 	is.True(got)
 	is.Equal(id, e.ID)
+	is.Equal(ProvisionTypeAPI, e.ProvisionType)
 	is.True(cerrors.Is(e.Cause, ErrNameMissing))
 }
 
@@ -459,6 +460,7 @@ func TestService_FailureHandler_Start(t *testing.T) {
 	is.NoErr(err)
 	is.True(got)
 	is.Equal(pl.ID, e.ID)
+	is.Equal(pl.ProvisionedBy, e.ProvisionType)
 	is.True(cerrors.Is(e.Cause, plugin.ErrPluginNotFound))
 }
 

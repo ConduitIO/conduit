@@ -79,7 +79,7 @@ func parseConfig() conduit.Config {
 		pipelinesStrictMode = flags.Bool(
 			"pipelines.strictMode",
 			false,
-			"enable strict mode for pipelines",
+			"strict mode for pipelines (Conduit shuts down if a pipeline fails)",
 		)
 	)
 
