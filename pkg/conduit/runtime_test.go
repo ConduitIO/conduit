@@ -44,7 +44,7 @@ func TestRuntime(t *testing.T) {
 	is.True(r != nil)
 
 	// set a cancel on a trigger to kill the context after THRESHOLD duration.
-	ctx, cancel := context.WithCancel(context.TODO())
+	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
 		time.Sleep(delay)
 		cancel()
@@ -52,6 +52,6 @@ func TestRuntime(t *testing.T) {
 
 	// wait on Run and assert that the context was canceled and no other error
 	// occurred.
-	err = r.Run(ctx)
+	err = r.Run(ctx, cancel)
 	is.True(cerrors.Is(err, context.Canceled)) // expected error to be context.Cancelled
 }
