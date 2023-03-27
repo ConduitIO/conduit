@@ -190,8 +190,7 @@ func newServices(
 // Run initializes all of Conduit's underlying services and starts the GRPC and
 // HTTP APIs. This function blocks until the supplied context is cancelled or
 // one of the services experiences a fatal error.
-func (r *Runtime) Run(ctx context.Context) (err error) {
-	ctx, cancel := context.WithCancel(ctx)
+func (r *Runtime) Run(ctx context.Context, cancel context.CancelFunc) (err error) {
 	t, ctx := tomb.WithContext(ctx)
 	defer func() {
 		if err != nil {
