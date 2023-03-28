@@ -111,7 +111,16 @@ func (s *Service) Init(ctx context.Context) error {
 	for _, cfg := range configs {
 		allPls = append(allPls, cfg.ID)
 
-		err = s.provisionPipeline(ctx, cfg)
+		// enrich and validate config
+		cfg = config.Enrich(cfg)
+		err = config.Validate(cfg)
+		if err != nil {
+			multierr = multierror.Append(multierr, cerrors.Errorf("invalid pipeline config: %w", err))
+			continue
+		}
+
+		err = s.Import(ctx, cfg)
+		// err = s.provisionPipeline(ctx, cfg)
 		if err != nil {
 			multierr = multierror.Append(multierr, cerrors.Errorf("pipeline %q, error while provisioning: %w", cfg.ID, err))
 			continue
