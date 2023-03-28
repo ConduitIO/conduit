@@ -20,6 +20,7 @@ package api
 
 import (
 	"context"
+	"github.com/conduitio/conduit/pkg/foundation/metrics/measure"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/inspector"
@@ -92,6 +93,9 @@ func (p *ProcessorAPIv1) InspectProcessorIn(
 		return status.ProcessorError(cerrors.Errorf("failed to inspect processor: %w", err))
 	}
 
+	measure.ProcessorsInspectorsGauge.WithValues(req.GetId()).Inc()
+	defer measure.ProcessorsInspectorsGauge.WithValues(req.GetId()).Dec()
+
 	for rec := range session.C {
 		recProto, err2 := toproto.Record(rec)
 		if err2 != nil {
@@ -121,6 +125,9 @@ func (p *ProcessorAPIv1) InspectProcessorOut(
 	if err != nil {
 		return status.ProcessorError(cerrors.Errorf("failed to inspect processor: %w", err))
 	}
+
+	measure.ProcessorsInspectorsGauge.WithValues(req.GetId()).Inc()
+	defer measure.ProcessorsInspectorsGauge.WithValues(req.GetId()).Dec()
 
 	for rec := range session.C {
 		recProto, err2 := toproto.Record(rec)

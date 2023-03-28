@@ -18,6 +18,7 @@ package api
 
 import (
 	"context"
+	"github.com/conduitio/conduit/pkg/foundation/metrics/measure"
 
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -77,6 +78,8 @@ func (c *ConnectorAPIv1) InspectConnector(req *apiv1.InspectConnectorRequest, se
 	if err != nil {
 		return status.ConnectorError(cerrors.Errorf("failed to inspect connector: %w", err))
 	}
+	measure.ConnectorInspectorsGauge.WithValues(req.GetId()).Inc()
+	defer measure.ConnectorInspectorsGauge.WithValues(req.GetId()).Dec()
 
 	for rec := range session.C {
 		recProto, err2 := toproto.Record(rec)
