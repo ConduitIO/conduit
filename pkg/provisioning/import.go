@@ -37,13 +37,15 @@ func (s *Service) Import(ctx context.Context, newConfig config.Pipeline) error {
 	}
 
 	var actions []action
-	actions = append(actions, s.prepareActionsOldConfig(oldConfig, newConfig)...)
-	actions = append(actions, s.prepareActionsNewConfig(oldConfig, newConfig)...)
+	actions = append(actions, s.cascadingActionsDeleteOld(oldConfig, newConfig)...)
+	actions = append(actions, s.cascadingActionsUpsertNew(oldConfig, newConfig)...)
 
 	lastActionIndex, err := s.executeActions(ctx, actions)
 	if err != nil {
-		s.logger.Debug(ctx).Err(err).Msgf("rolling back %d import actions", lastActionIndex+1)
-		if ok := s.rollbackActions(ctx, actions[:lastActionIndex+1]); !ok {
+		rollbackActions := actions[:lastActionIndex+1]
+		s.logger.Debug(ctx).Err(err).Msgf("rolling back %d import actions", len(rollbackActions))
+		s.reverseActions(rollbackActions)
+		if ok := s.rollbackActions(ctx, rollbackActions); !ok {
 			s.logger.Warn(ctx).Msg("some actions failed to be rolled back, Conduit state might be corrupted; please report this issue to the Conduit team")
 		}
 		return err
@@ -54,7 +56,7 @@ func (s *Service) Import(ctx context.Context, newConfig config.Pipeline) error {
 
 // prepareActionsNewConfig prepares actions needed for the new config to be
 // provisioned. It either creates or updates existing entities.
-func (s *Service) prepareActionsNewConfig(oldConfig, newConfig config.Pipeline) []action {
+func (s *Service) cascadingActionsUpsertNew(oldConfig, newConfig config.Pipeline) []action {
 	var actions []action
 
 	actions = append(actions, s.preparePipelineActions(oldConfig, newConfig)...)
@@ -104,7 +106,7 @@ func (s *Service) prepareActionsNewConfig(oldConfig, newConfig config.Pipeline) 
 
 // prepareActionsOldConfig prepares actions needed to delete existing entities
 // from the old config that are not found in the new config.
-func (s *Service) prepareActionsOldConfig(oldConfig, newConfig config.Pipeline) []action {
+func (s *Service) cascadingActionsDeleteOld(oldConfig, newConfig config.Pipeline) []action {
 	var actions []action
 
 	if newConfig.ID == "" {
@@ -164,9 +166,7 @@ func (s *Service) prepareActionsOldConfig(oldConfig, newConfig config.Pipeline) 
 	}
 
 	// reverse actions so that we first delete the innermost entities
-	for i, j := 0, len(actions)-1; i < j; i, j = i+1, j-1 {
-		actions[i], actions[j] = actions[j], actions[i]
-	}
+	s.reverseActions(actions)
 	return actions
 }
 
@@ -175,7 +175,7 @@ func (s *Service) prepareActionsOldConfig(oldConfig, newConfig config.Pipeline) 
 // function returns immediately without executing any further actions.
 func (s *Service) executeActions(ctx context.Context, actions []action) (int, error) {
 	for i, a := range actions {
-		s.logger.Trace(ctx).Str("action", a.String()).Msg("executing import action")
+		s.logger.Trace(ctx).Str("action", a.String()).Msg("executing action")
 		err := a.Do(ctx)
 		if err != nil {
 			return i, cerrors.Errorf("error executing action %q: %w", a.String(), err)
@@ -190,7 +190,7 @@ func (s *Service) executeActions(ctx context.Context, actions []action) (int, er
 func (s *Service) rollbackActions(ctx context.Context, actions []action) bool {
 	ok := true
 	for _, a := range actions {
-		s.logger.Trace(ctx).Str("action", a.String()).Msg("rolling back import action")
+		s.logger.Trace(ctx).Str("action", a.String()).Msg("rolling back action")
 		err := a.Rollback(ctx)
 		if err != nil {
 			s.logger.Err(ctx, err).Str("action", a.String()).Msg("error rolling back action")
@@ -343,6 +343,12 @@ func (s *Service) prepareProcessorActions(oldConfig, newConfig config.Processor,
 			parent:           parent,
 			processorService: s.processorService,
 		},
+	}
+}
+
+func (*Service) reverseActions(actions []action) {
+	for i, j := 0, len(actions)-1; i < j; i, j = i+1, j-1 {
+		actions[i], actions[j] = actions[j], actions[i]
 	}
 }
 
