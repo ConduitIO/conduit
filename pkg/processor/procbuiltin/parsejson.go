@@ -54,6 +54,11 @@ func parseJSON(
 		switch data.(type) {
 		case record.RawData:
 			var jsonData record.StructuredData
+			if len(data.Bytes()) == 0 {
+				// change empty raw data to empty structured data
+				r = getSetter.Set(r, jsonData)
+				return r, nil
+			}
 			err := json.Unmarshal(data.Bytes(), &jsonData)
 			if err != nil {
 				return record.Record{}, cerrors.Errorf("%s: failed to unmarshal raw data as JSON: %w", processorType, err)
