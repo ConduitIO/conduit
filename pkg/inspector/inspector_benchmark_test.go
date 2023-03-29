@@ -24,7 +24,7 @@ import (
 
 func BenchmarkInspector_SingleSession_Send(b *testing.B) {
 	ins := New(log.Nop(), 10)
-	ins.NewSession(context.Background(), "test-id", "test")
+	ins.NewSession(context.Background(), "test-id")
 
 	for i := 0; i < b.N; i++ {
 		ins.Send(context.Background(), record.Record{Position: record.Position("test-pos")})

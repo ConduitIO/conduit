@@ -221,7 +221,7 @@ func TestConnectorAPIv1_InspectConnector_SendRecord(t *testing.T) {
 	assert.Ok(t, err)
 
 	ins := inspector.New(log.Nop(), 10)
-	session := ins.NewSession(ctx, "test-id", "test")
+	session := ins.NewSession(ctx, "test-id")
 
 	csMock.EXPECT().
 		Inspect(ctx, id).
@@ -252,7 +252,7 @@ func TestConnectorAPIv1_InspectConnector_SendErr(t *testing.T) {
 	id := uuid.NewString()
 
 	ins := inspector.New(log.Nop(), 10)
-	session := ins.NewSession(ctx, "test-id", "test")
+	session := ins.NewSession(ctx, "test-id")
 
 	csMock.EXPECT().
 		Inspect(ctx, id).

@@ -36,8 +36,8 @@ var (
 		[]string{"type"})
 	InspectorsGauge = metrics.NewLabeledGauge(
 		"conduit_inspector_sessions",
-		"Number of inspector sessions by component ID and type",
-		[]string{"component_id", "component_type"},
+		"Number of inspector sessions by ID of pipeline component (connector or processor)",
+		[]string{"component_id"},
 	)
 
 	ConnectorBytesHistogram = metrics.NewLabeledHistogram("conduit_connector_bytes",

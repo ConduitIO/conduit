@@ -189,11 +189,11 @@ func (p *Processor) Process(ctx context.Context, in record.Record) (record.Recor
 }
 
 func (p *Processor) InspectIn(ctx context.Context, id string) *inspector.Session {
-	return p.inInsp.NewSession(ctx, id, "processor")
+	return p.inInsp.NewSession(ctx, id)
 }
 
 func (p *Processor) InspectOut(ctx context.Context, id string) *inspector.Session {
-	return p.outInsp.NewSession(ctx, id, "processor")
+	return p.outInsp.NewSession(ctx, id)
 }
 
 func (p *Processor) Close() {
