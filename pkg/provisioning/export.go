@@ -58,7 +58,7 @@ func (s *Service) exportConnectors(ctx context.Context, ids []string) ([]config.
 		}
 
 		conConfig := s.connectorToConfig(conn)
-		conConfig.Processors, err = s.exportProcessors(ctx, ids)
+		conConfig.Processors, err = s.exportProcessors(ctx, conn.ProcessorIDs)
 		if err != nil {
 			return nil, cerrors.Errorf("could not extract processors for connector with ID %v: %w", connectorID, err)
 		}
