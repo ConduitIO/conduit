@@ -159,6 +159,21 @@ func TestParseJSONPayload_Process(t *testing.T) {
 				},
 			}},
 		wantErr: true,
+	}, {
+		name: "empty raw data parsed into empty structured data",
+		record: record.Record{
+			Payload: record.Change{
+				Before: nil,
+				After:  record.RawData{},
+			},
+		},
+		want: record.Record{
+			Payload: record.Change{
+				Before: nil,
+				After:  record.StructuredData(nil),
+			},
+		},
+		wantErr: false,
 	},
 	}
 
