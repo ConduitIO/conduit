@@ -432,7 +432,7 @@ func TestProcessorAPIv1_InspectIn_SendRecord(t *testing.T) {
 	assert.Ok(t, err)
 
 	ins := inspector.New(log.Nop(), 10)
-	session := ins.NewSession(ctx)
+	session := ins.NewSession(ctx, "test-id", "test")
 
 	orchestrator.EXPECT().
 		InspectIn(ctx, id).
@@ -463,7 +463,7 @@ func TestProcessorAPIv1_InspectIn_SendErr(t *testing.T) {
 	id := uuid.NewString()
 
 	ins := inspector.New(log.Nop(), 10)
-	session := ins.NewSession(ctx)
+	session := ins.NewSession(ctx, "test-id", "test")
 
 	orchestrator.EXPECT().
 		InspectIn(ctx, id).

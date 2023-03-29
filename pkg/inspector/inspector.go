@@ -16,6 +16,7 @@ package inspector
 
 import (
 	"context"
+	"github.com/conduitio/conduit/pkg/foundation/metrics/measure"
 	"sync"
 
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -31,10 +32,14 @@ const DefaultBufferSize = 1000
 type Session struct {
 	C chan record.Record
 
-	id      string
-	logger  log.CtxLogger
-	onClose func()
-	once    *sync.Once
+	// componentID is the ID of the component being inspected
+	componentID string
+	// componentType is the type of the component being inspected
+	componentType string
+	id            string
+	logger        log.CtxLogger
+	onClose       func()
+	once          *sync.Once
 }
 
 func (s *Session) close() {
@@ -47,6 +52,7 @@ func (s *Session) close() {
 	s.once.Do(func() {
 		s.onClose()
 		close(s.C)
+		measure.InspectorsGauge.WithValues(s.componentID, s.componentType).Dec()
 	})
 }
 
@@ -114,17 +120,21 @@ func (i *Inspector) Send(ctx context.Context, r record.Record) {
 	}
 }
 
-func (i *Inspector) NewSession(ctx context.Context) *Session {
+func (i *Inspector) NewSession(ctx context.Context, componentID, componentType string) *Session {
 	id := uuid.NewString()
 	s := &Session{
-		C:      make(chan record.Record, i.bufferSize),
-		id:     id,
-		logger: i.logger.WithComponent("inspector.Session"),
+		C:             make(chan record.Record, i.bufferSize),
+		id:            id,
+		componentID:   componentID,
+		componentType: componentType,
+		logger:        i.logger.WithComponent("inspector.Session"),
 		onClose: func() {
 			i.remove(id)
 		},
 		once: &sync.Once{},
 	}
+	measure.InspectorsGauge.WithValues(s.componentID, s.componentType).Inc()
+
 	go func() {
 		<-ctx.Done()
 		s.logger.

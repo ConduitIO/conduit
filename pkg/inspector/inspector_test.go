@@ -34,7 +34,7 @@ func TestInspector_Send_NoSessions(t *testing.T) {
 
 func TestInspector_Send_SingleSession(t *testing.T) {
 	underTest := New(log.Nop(), 10)
-	s := underTest.NewSession(context.Background())
+	s := underTest.NewSession(context.Background(), "test-id", "test")
 
 	r := record.Record{
 		Position: record.Position("test-pos"),
@@ -47,8 +47,8 @@ func TestInspector_Send_MultipleSessions(t *testing.T) {
 	is := is.New(t)
 
 	underTest := New(log.Nop(), 10)
-	s1 := underTest.NewSession(context.Background())
-	s2 := underTest.NewSession(context.Background())
+	s1 := underTest.NewSession(context.Background(), "test-id", "test")
+	s2 := underTest.NewSession(context.Background(), "test-id", "test")
 
 	r := record.Record{
 		Position: record.Position("test-pos"),
@@ -62,7 +62,7 @@ func TestInspector_Send_SessionClosed(t *testing.T) {
 	is := is.New(t)
 
 	underTest := New(log.Nop(), 10)
-	s := underTest.NewSession(context.Background())
+	s := underTest.NewSession(context.Background(), "test-id", "test")
 
 	r := record.Record{
 		Position: record.Position("test-pos"),
@@ -83,7 +83,7 @@ func TestInspector_Close(t *testing.T) {
 	is := is.New(t)
 
 	underTest := New(log.Nop(), 10)
-	s := underTest.NewSession(context.Background())
+	s := underTest.NewSession(context.Background(), "test-id", "test")
 
 	underTest.Close()
 	_, ok := <-s.C
@@ -95,7 +95,7 @@ func TestInspector_Send_SessionCtxCanceled(t *testing.T) {
 
 	underTest := New(log.Nop(), 10)
 	ctx, cancel := context.WithCancel(context.Background())
-	s := underTest.NewSession(ctx)
+	s := underTest.NewSession(ctx, "test-id", "test")
 
 	r := record.Record{
 		Position: record.Position("test-pos"),
@@ -120,7 +120,7 @@ func TestInspector_Send_SlowConsumer(t *testing.T) {
 
 	bufferSize := 10
 	underTest := New(log.Nop(), bufferSize)
-	s := underTest.NewSession(context.Background())
+	s := underTest.NewSession(context.Background(), "test-id", "test")
 
 	for i := 0; i < bufferSize+1; i++ {
 		s.send(

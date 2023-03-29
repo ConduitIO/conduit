@@ -98,7 +98,7 @@ func (i *Instance) Init(logger log.CtxLogger, persister *Persister) {
 // Inspect returns an inspector.Session which exposes the records
 // coming into or out of this connector (depending on the connector type).
 func (i *Instance) Inspect(ctx context.Context) *inspector.Session {
-	return i.inspector.NewSession(ctx)
+	return i.inspector.NewSession(ctx, i.ID, "connector")
 }
 
 // Connector fetches a new plugin dispenser and returns a connector that can be

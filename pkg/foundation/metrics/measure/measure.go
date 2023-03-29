@@ -34,15 +34,10 @@ var (
 	ProcessorsGauge = metrics.NewLabeledGauge("conduit_processors",
 		"Number of processors by type.",
 		[]string{"type"})
-	ConnectorInspectorsGauge = metrics.NewLabeledGauge(
-		"conduit_connectors_inspector_sessions",
-		"Number of inspector sessions by connector ID",
-		[]string{"connector_id"},
-	)
-	ProcessorsInspectorsGauge = metrics.NewLabeledGauge(
-		"conduit_processors_inspector_sessions",
-		"Number of inspector sessions by processor ID",
-		[]string{"processor_id"},
+	InspectorsGauge = metrics.NewLabeledGauge(
+		"conduit_inspector_sessions",
+		"Number of inspector sessions by component ID and type",
+		[]string{"component_id", "component_type"},
 	)
 
 	ConnectorBytesHistogram = metrics.NewLabeledHistogram("conduit_connector_bytes",
