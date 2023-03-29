@@ -188,12 +188,12 @@ func (p *Processor) Process(ctx context.Context, in record.Record) (record.Recor
 	return out, nil
 }
 
-func (p *Processor) InspectIn(ctx context.Context) *inspector.Session {
-	return p.inInsp.NewSession(ctx, "id", "processor")
+func (p *Processor) InspectIn(ctx context.Context, id string) *inspector.Session {
+	return p.inInsp.NewSession(ctx, id, "processor")
 }
 
-func (p *Processor) InspectOut(ctx context.Context) *inspector.Session {
-	return p.outInsp.NewSession(ctx, "id", "processor")
+func (p *Processor) InspectOut(ctx context.Context, id string) *inspector.Session {
+	return p.outInsp.NewSession(ctx, id, "processor")
 }
 
 func (p *Processor) Close() {
