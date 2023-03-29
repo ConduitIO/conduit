@@ -18,10 +18,9 @@ import (
 	"context"
 	"testing"
 
+	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/database/inmemory"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-
-	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/provisioning/config"
@@ -88,13 +87,37 @@ func TestService_PreparePipelineActions_NoAction(t *testing.T) {
 		oldConfig: config.Pipeline{ID: "config-id", Status: "stopped"},
 		newConfig: config.Pipeline{ID: "config-id", Status: "running"},
 	}, {
-		name:      "different Connectors.Name",
-		oldConfig: config.Pipeline{ID: "config-id", Connectors: []config.Connector{{Name: "old-name"}}},
-		newConfig: config.Pipeline{ID: "config-id", Connectors: []config.Connector{{Name: "new-name"}}},
+		name: "different Connectors (same ID)",
+		oldConfig: config.Pipeline{ID: "config-id", Connectors: []config.Connector{{
+			ID:         "conn-id", // only ID has to match
+			Type:       config.TypeSource,
+			Plugin:     "old-plugin",
+			Name:       "old-name",
+			Settings:   map[string]string{"foo": "bar"},
+			Processors: []config.Processor{{ID: "old-config-id"}},
+		}}},
+		newConfig: config.Pipeline{ID: "config-id", Connectors: []config.Connector{{
+			ID:         "conn-id", // only ID has to match
+			Type:       config.TypeDestination,
+			Plugin:     "new-plugin",
+			Name:       "new-name",
+			Settings:   map[string]string{"foo": "baz"},
+			Processors: []config.Processor{{ID: "new-config-id"}},
+		}}},
 	}, {
-		name:      "different Processors.Type",
-		oldConfig: config.Pipeline{ID: "config-id", Processors: []config.Processor{{Type: "old-type"}}},
-		newConfig: config.Pipeline{ID: "config-id", Processors: []config.Processor{{Type: "new-type"}}},
+		name: "different Processors (same ID)",
+		oldConfig: config.Pipeline{ID: "config-id", Processors: []config.Processor{{
+			ID:       "proc-id", // only ID has to match
+			Type:     "old-type",
+			Settings: map[string]string{"foo": "bar"},
+			Workers:  1,
+		}}},
+		newConfig: config.Pipeline{ID: "config-id", Processors: []config.Processor{{
+			ID:       "proc-id", // only ID has to match
+			Type:     "new-type",
+			Settings: map[string]string{"foo": "baz"},
+			Workers:  2,
+		}}},
 	}}
 
 	for _, tc := range testCases {
@@ -125,11 +148,11 @@ func TestService_PreparePipelineActions_Update(t *testing.T) {
 		oldConfig: config.Pipeline{ID: "config-id", Description: "old-description"},
 		newConfig: config.Pipeline{ID: "config-id", Description: "new-description"},
 	}, {
-		name:      "different Connectors",
+		name:      "different Connectors.ID",
 		oldConfig: config.Pipeline{ID: "config-id", Connectors: []config.Connector{{ID: "old-id"}}},
 		newConfig: config.Pipeline{ID: "config-id", Connectors: []config.Connector{{ID: "new-id"}}},
 	}, {
-		name:      "different Processors",
+		name:      "different Processors.ID",
 		oldConfig: config.Pipeline{ID: "config-id", Processors: []config.Processor{{ID: "old-id"}}},
 		newConfig: config.Pipeline{ID: "config-id", Processors: []config.Processor{{ID: "new-id"}}},
 	}, {
@@ -152,6 +175,168 @@ func TestService_PreparePipelineActions_Update(t *testing.T) {
 				pipelineService: pipSrv,
 			}}
 			got := srv.preparePipelineActions(tc.oldConfig, tc.newConfig)
+			is.Equal(got, want)
+		})
+	}
+}
+
+func TestService_PrepareConnectorActions_Create(t *testing.T) {
+	is := is.New(t)
+	logger := log.Nop()
+	ctrl := gomock.NewController(t)
+
+	srv, _, connSrv, _, plugSrv := newTestService(ctrl, logger)
+
+	oldConfig := config.Connector{}
+	newConfig := config.Connector{ID: "config-id"}
+	pipelineID := uuid.NewString()
+
+	want := []action{createConnectorAction{
+		cfg:              newConfig,
+		pipelineID:       pipelineID,
+		connectorService: connSrv,
+		pluginService:    plugSrv,
+	}}
+
+	got := srv.prepareConnectorActions(oldConfig, newConfig, pipelineID)
+	is.Equal(got, want)
+}
+
+func TestService_PrepareConnectorActions_Delete(t *testing.T) {
+	is := is.New(t)
+	logger := log.Nop()
+	ctrl := gomock.NewController(t)
+
+	srv, _, connSrv, _, plugSrv := newTestService(ctrl, logger)
+
+	oldConfig := config.Connector{ID: "config-id"}
+	newConfig := config.Connector{}
+	pipelineID := uuid.NewString()
+
+	want := []action{deleteConnectorAction{
+		cfg:              oldConfig,
+		pipelineID:       pipelineID,
+		connectorService: connSrv,
+		pluginService:    plugSrv,
+	}}
+
+	got := srv.prepareConnectorActions(oldConfig, newConfig, pipelineID)
+	is.Equal(got, want)
+}
+
+func TestService_PrepareConnectorActions_NoAction(t *testing.T) {
+	logger := log.Nop()
+	ctrl := gomock.NewController(t)
+
+	srv, _, _, _, _ := newTestService(ctrl, logger)
+
+	testCases := []struct {
+		name      string
+		oldConfig config.Connector
+		newConfig config.Connector
+	}{{
+		name:      "empty",
+		oldConfig: config.Connector{ID: "config-id"},
+		newConfig: config.Connector{ID: "config-id"},
+	}, {
+		name: "different Processors",
+		oldConfig: config.Connector{ID: "config-id", Processors: []config.Processor{{
+			ID:       "proc-id", // only ID has to match
+			Type:     "old-type",
+			Settings: map[string]string{"foo": "bar"},
+			Workers:  1,
+		}}},
+		newConfig: config.Connector{ID: "config-id", Processors: []config.Processor{{
+			ID:       "proc-id", // only ID has to match
+			Type:     "new-type",
+			Settings: map[string]string{"foo": "baz"},
+			Workers:  2,
+		}}},
+	}}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			is := is.New(t)
+			got := srv.prepareConnectorActions(tc.oldConfig, tc.newConfig, uuid.NewString())
+			is.Equal(got, nil) // did not expect any actions
+		})
+	}
+}
+
+func TestService_PrepareConnectorActions_Update(t *testing.T) {
+	logger := log.Nop()
+	ctrl := gomock.NewController(t)
+
+	srv, _, connSrv, _, _ := newTestService(ctrl, logger)
+
+	testCases := []struct {
+		name      string
+		oldConfig config.Connector
+		newConfig config.Connector
+	}{{
+		name:      "different Name",
+		oldConfig: config.Connector{ID: "config-id", Name: "old-name"},
+		newConfig: config.Connector{ID: "config-id", Name: "new-name"},
+	}, {
+		name:      "different Settings",
+		oldConfig: config.Connector{ID: "config-id", Settings: map[string]string{"foo": "bar"}},
+		newConfig: config.Connector{ID: "config-id", Settings: map[string]string{"foo": "baz"}},
+	}, {
+		name:      "different Processors.ID",
+		oldConfig: config.Connector{ID: "config-id", Processors: []config.Processor{{ID: "old-id"}}},
+		newConfig: config.Connector{ID: "config-id", Processors: []config.Processor{{ID: "new-id"}}},
+	}}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			is := is.New(t)
+			want := []action{updateConnectorAction{
+				oldConfig:        tc.oldConfig,
+				newConfig:        tc.newConfig,
+				connectorService: connSrv,
+			}}
+			got := srv.prepareConnectorActions(tc.oldConfig, tc.newConfig, uuid.NewString())
+			is.Equal(got, want)
+		})
+	}
+}
+
+func TestService_PrepareConnectorActions_Recreate(t *testing.T) {
+	logger := log.Nop()
+	ctrl := gomock.NewController(t)
+
+	srv, _, connSrv, _, plugSrv := newTestService(ctrl, logger)
+	pipelineID := uuid.NewString()
+
+	testCases := []struct {
+		name      string
+		oldConfig config.Connector
+		newConfig config.Connector
+	}{{
+		name:      "different Type",
+		oldConfig: config.Connector{ID: "config-id", Type: config.TypeSource},
+		newConfig: config.Connector{ID: "config-id", Type: config.TypeDestination},
+	}, {
+		name:      "different Plugin",
+		oldConfig: config.Connector{ID: "config-id", Plugin: "old-plugin"},
+		newConfig: config.Connector{ID: "config-id", Plugin: "new-plugin"},
+	}}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			is := is.New(t)
+			want := []action{deleteConnectorAction{
+				cfg:              tc.oldConfig,
+				pipelineID:       pipelineID,
+				connectorService: connSrv,
+				pluginService:    plugSrv,
+			}, createConnectorAction{
+				cfg:              tc.newConfig,
+				pipelineID:       pipelineID,
+				connectorService: connSrv,
+				pluginService:    plugSrv,
+			}}
+			got := srv.prepareConnectorActions(tc.oldConfig, tc.newConfig, pipelineID)
 			is.Equal(got, want)
 		})
 	}
