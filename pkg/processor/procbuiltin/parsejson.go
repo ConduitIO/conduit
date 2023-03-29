@@ -35,18 +35,17 @@ func init() {
 
 // ParseJSONKey parses the record key from raw to structured data
 func ParseJSONKey(config processor.Config) (processor.Interface, error) {
-	return parseJSON(parseJSONKeyProcType, recordKeyGetSetter{}, config)
+	return parseJSON(parseJSONKeyProcType, recordKeyGetSetter{})
 }
 
 // ParseJSONPayload parses the record payload from raw to structured data
 func ParseJSONPayload(config processor.Config) (processor.Interface, error) {
-	return parseJSON(parseJSONPayloadProcType, recordPayloadGetSetter{}, config)
+	return parseJSON(parseJSONPayloadProcType, recordPayloadGetSetter{})
 }
 
 func parseJSON(
 	processorType string,
 	getSetter recordDataGetSetter,
-	config processor.Config,
 ) (processor.Interface, error) {
 	return NewFuncWrapper(func(_ context.Context, r record.Record) (record.Record, error) {
 		data := getSetter.Get(r)
