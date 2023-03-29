@@ -549,30 +549,58 @@ func (a updatePipelineAction) update(ctx context.Context, cfg config.Pipeline) e
 	}
 
 	// update connector IDs
-	if !a.isEqual(p.ConnectorIDs, cfg.Connectors) {
+	if !a.isEqualConnectors(p.ConnectorIDs, cfg.Connectors) {
 		// recreate all connector IDs
 		for _, procID := range p.ConnectorIDs {
-			_, err = a.pipelineService.RemoveConnector(ctx, p.ID, procID)
+			_, err = a.pipelineService.RemoveConnector(ctx, cfg.ID, procID)
 			if err != nil {
 				return cerrors.Errorf("failed to remove connector %v: %w", procID, err)
 			}
 		}
 		for _, proc := range cfg.Connectors {
-			_, err = a.pipelineService.AddConnector(ctx, p.ID, proc.ID)
+			_, err = a.pipelineService.AddConnector(ctx, cfg.ID, proc.ID)
 			if err != nil {
 				return cerrors.Errorf("failed to add connector %v: %w", proc.ID, err)
 			}
 		}
 	}
 
+	// update processor IDs
+	if !a.isEqualProcessors(p.ProcessorIDs, cfg.Processors) {
+		// recreate all processor IDs
+		for _, procID := range p.ProcessorIDs {
+			_, err = a.pipelineService.RemoveProcessor(ctx, cfg.ID, procID)
+			if err != nil {
+				return cerrors.Errorf("failed to remove processor %v: %w", procID, err)
+			}
+		}
+		for _, proc := range cfg.Processors {
+			_, err = a.pipelineService.AddProcessor(ctx, cfg.ID, proc.ID)
+			if err != nil {
+				return cerrors.Errorf("failed to add processor %v: %w", proc.ID, err)
+			}
+		}
+	}
+
 	return nil
 }
-func (updatePipelineAction) isEqual(ids []string, connectors []config.Connector) bool {
+func (updatePipelineAction) isEqualConnectors(ids []string, connectors []config.Connector) bool {
 	if len(ids) != len(connectors) {
 		return false
 	}
 	for i := range ids {
 		if ids[i] != connectors[i].ID {
+			return false
+		}
+	}
+	return true
+}
+func (updatePipelineAction) isEqualProcessors(ids []string, processors []config.Processor) bool {
+	if len(ids) != len(processors) {
+		return false
+	}
+	for i := range ids {
+		if ids[i] != processors[i].ID {
 			return false
 		}
 	}
@@ -608,13 +636,13 @@ func (a updateConnectorAction) update(ctx context.Context, cfg config.Connector)
 	if !a.isEqual(c.ProcessorIDs, cfg.Processors) {
 		// recreate all processor IDs
 		for _, procID := range c.ProcessorIDs {
-			_, err = a.connectorService.RemoveProcessor(ctx, c.ID, procID)
+			_, err = a.connectorService.RemoveProcessor(ctx, cfg.ID, procID)
 			if err != nil {
 				return cerrors.Errorf("failed to remove processor %v: %w", procID, err)
 			}
 		}
 		for _, proc := range cfg.Processors {
-			_, err = a.connectorService.AddProcessor(ctx, c.ID, proc.ID)
+			_, err = a.connectorService.AddProcessor(ctx, cfg.ID, proc.ID)
 			if err != nil {
 				return cerrors.Errorf("failed to add processor %v: %w", proc.ID, err)
 			}

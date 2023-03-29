@@ -103,6 +103,87 @@ func TestCreatePipelineAction_Rollback(t *testing.T) {
 	is.NoErr(err)
 }
 
+func TestUpdatePipelineAction(t *testing.T) {
+	haveCfg := config.Pipeline{
+		ID:          uuid.NewString(),
+		Name:        "pipeline-name",
+		Description: "pipeline description",
+		Connectors:  []config.Connector{{ID: "conn1"}, {ID: "conn2"}},
+		Processors:  []config.Processor{{ID: "proc1"}, {ID: "proc2"}},
+		DLQ: config.DLQ{
+			Plugin:              "dlq-plugin",
+			Settings:            map[string]string{"foo": "bar"},
+			WindowSize:          intPtr(1),
+			WindowNackThreshold: intPtr(2),
+		},
+	}
+
+	testCases := []struct {
+		name      string
+		oldConfig config.Pipeline
+		newConfig config.Pipeline
+		execute   func(context.Context, updatePipelineAction) error
+	}{{
+		name:      "Do",
+		oldConfig: config.Pipeline{}, // not used in Do
+		newConfig: haveCfg,
+		execute: func(ctx context.Context, a updatePipelineAction) error {
+			return a.Do(ctx)
+		},
+	}, {
+		name:      "Rollback",
+		oldConfig: haveCfg,
+		newConfig: config.Pipeline{}, // not used in Rollback
+		execute: func(ctx context.Context, a updatePipelineAction) error {
+			return a.Rollback(ctx)
+		},
+	}}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			is := is.New(t)
+			ctx := context.Background()
+			ctrl := gomock.NewController(t)
+
+			instance := &pipeline.Instance{
+				ID:           haveCfg.ID,
+				ConnectorIDs: []string{"oldConn1", "oldConn2"},
+				ProcessorIDs: []string{"oldProc1", "oldProc2"},
+			}
+			wantCfg := pipeline.Config{
+				Name:        haveCfg.Name,
+				Description: haveCfg.Description,
+			}
+			wantDLQ := pipeline.DLQ{
+				Plugin:              haveCfg.DLQ.Plugin,
+				Settings:            haveCfg.DLQ.Settings,
+				WindowSize:          *haveCfg.DLQ.WindowSize,
+				WindowNackThreshold: *haveCfg.DLQ.WindowNackThreshold,
+			}
+
+			pipSrv := mock.NewPipelineService(ctrl)
+			pipSrv.EXPECT().Update(ctx, haveCfg.ID, wantCfg).Return(instance, nil)
+			pipSrv.EXPECT().UpdateDLQ(ctx, haveCfg.ID, wantDLQ)
+			pipSrv.EXPECT().RemoveConnector(ctx, haveCfg.ID, instance.ConnectorIDs[0])
+			pipSrv.EXPECT().RemoveConnector(ctx, haveCfg.ID, instance.ConnectorIDs[1])
+			pipSrv.EXPECT().RemoveProcessor(ctx, haveCfg.ID, instance.ProcessorIDs[0])
+			pipSrv.EXPECT().RemoveProcessor(ctx, haveCfg.ID, instance.ProcessorIDs[1])
+			pipSrv.EXPECT().AddConnector(ctx, haveCfg.ID, haveCfg.Connectors[0].ID)
+			pipSrv.EXPECT().AddConnector(ctx, haveCfg.ID, haveCfg.Connectors[1].ID)
+			pipSrv.EXPECT().AddProcessor(ctx, haveCfg.ID, haveCfg.Processors[0].ID)
+			pipSrv.EXPECT().AddProcessor(ctx, haveCfg.ID, haveCfg.Processors[1].ID)
+
+			a := updatePipelineAction{
+				oldConfig:       tc.oldConfig,
+				newConfig:       tc.newConfig,
+				pipelineService: pipSrv,
+			}
+			err := tc.execute(ctx, a)
+			is.NoErr(err)
+		})
+	}
+}
+
 func TestDeletePipelineAction_Do(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
@@ -253,6 +334,70 @@ func TestCreateConnectorAction_Rollback(t *testing.T) {
 	is.NoErr(err)
 }
 
+func TestUpdateConnectorAction(t *testing.T) {
+	haveCfg := config.Connector{
+		ID:         uuid.NewString(),
+		Name:       "connector-name",
+		Type:       config.TypeSource,
+		Plugin:     "my-plugin",
+		Settings:   map[string]string{"foo": "bar"},
+		Processors: []config.Processor{{ID: "proc1"}, {ID: "proc2"}},
+	}
+
+	testCases := []struct {
+		name      string
+		oldConfig config.Connector
+		newConfig config.Connector
+		execute   func(context.Context, updateConnectorAction) error
+	}{{
+		name:      "Do",
+		oldConfig: config.Connector{}, // not used in Do
+		newConfig: haveCfg,
+		execute: func(ctx context.Context, a updateConnectorAction) error {
+			return a.Do(ctx)
+		},
+	}, {
+		name:      "Rollback",
+		oldConfig: haveCfg,
+		newConfig: config.Connector{}, // not used in Rollback
+		execute: func(ctx context.Context, a updateConnectorAction) error {
+			return a.Rollback(ctx)
+		},
+	}}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			is := is.New(t)
+			ctx := context.Background()
+			ctrl := gomock.NewController(t)
+
+			instance := &connector.Instance{
+				ID:           haveCfg.ID,
+				ProcessorIDs: []string{"oldProc1", "oldProc2"},
+			}
+			wantCfg := connector.Config{
+				Name:     haveCfg.Name,
+				Settings: haveCfg.Settings,
+			}
+
+			connSrv := mock.NewConnectorService(ctrl)
+			connSrv.EXPECT().Update(ctx, haveCfg.ID, wantCfg).Return(instance, nil)
+			connSrv.EXPECT().RemoveProcessor(ctx, haveCfg.ID, instance.ProcessorIDs[0])
+			connSrv.EXPECT().RemoveProcessor(ctx, haveCfg.ID, instance.ProcessorIDs[1])
+			connSrv.EXPECT().AddProcessor(ctx, haveCfg.ID, haveCfg.Processors[0].ID)
+			connSrv.EXPECT().AddProcessor(ctx, haveCfg.ID, haveCfg.Processors[1].ID)
+
+			a := updateConnectorAction{
+				oldConfig:        tc.oldConfig,
+				newConfig:        tc.newConfig,
+				connectorService: connSrv,
+			}
+			err := tc.execute(ctx, a)
+			is.NoErr(err)
+		})
+	}
+}
+
 func TestDeleteConnectorAction_Do(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
@@ -382,6 +527,63 @@ func TestCreateProcessorAction_Rollback(t *testing.T) {
 	}
 	err := a.Rollback(ctx)
 	is.NoErr(err)
+}
+
+func TestUpdateProcessorAction(t *testing.T) {
+	haveCfg := config.Processor{
+		ID:       uuid.NewString(),
+		Type:     "processor-type",
+		Settings: map[string]string{"foo": "bar"},
+		Workers:  2,
+	}
+
+	testCases := []struct {
+		name      string
+		oldConfig config.Processor
+		newConfig config.Processor
+		execute   func(context.Context, updateProcessorAction) error
+	}{{
+		name:      "Do",
+		oldConfig: config.Processor{}, // not used in Do
+		newConfig: haveCfg,
+		execute: func(ctx context.Context, a updateProcessorAction) error {
+			return a.Do(ctx)
+		},
+	}, {
+		name:      "Rollback",
+		oldConfig: haveCfg,
+		newConfig: config.Processor{}, // not used in Rollback
+		execute: func(ctx context.Context, a updateProcessorAction) error {
+			return a.Rollback(ctx)
+		},
+	}}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			is := is.New(t)
+			ctx := context.Background()
+			ctrl := gomock.NewController(t)
+
+			instance := &processor.Instance{
+				ID: haveCfg.ID,
+			}
+			wantCfg := processor.Config{
+				Settings: haveCfg.Settings,
+				Workers:  haveCfg.Workers,
+			}
+
+			connSrv := mock.NewProcessorService(ctrl)
+			connSrv.EXPECT().Update(ctx, haveCfg.ID, wantCfg).Return(instance, nil)
+
+			a := updateProcessorAction{
+				oldConfig:        tc.oldConfig,
+				newConfig:        tc.newConfig,
+				processorService: connSrv,
+			}
+			err := tc.execute(ctx, a)
+			is.NoErr(err)
+		})
+	}
 }
 
 func TestDeleteProcessorAction_Do(t *testing.T) {
