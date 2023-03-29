@@ -342,6 +342,148 @@ func TestService_PrepareConnectorActions_Recreate(t *testing.T) {
 	}
 }
 
+func TestService_PrepareProcessorActions_Create(t *testing.T) {
+	is := is.New(t)
+	logger := log.Nop()
+	ctrl := gomock.NewController(t)
+
+	srv, _, _, procSrv, _ := newTestService(ctrl, logger)
+
+	oldConfig := config.Processor{}
+	newConfig := config.Processor{ID: "config-id"}
+	parent := processor.Parent{
+		ID:   uuid.NewString(),
+		Type: processor.ParentTypePipeline,
+	}
+
+	want := []action{createProcessorAction{
+		cfg:              newConfig,
+		parent:           parent,
+		processorService: procSrv,
+	}}
+
+	got := srv.prepareProcessorActions(oldConfig, newConfig, parent)
+	is.Equal(got, want)
+}
+
+func TestService_PrepareProcessorActions_Delete(t *testing.T) {
+	is := is.New(t)
+	logger := log.Nop()
+	ctrl := gomock.NewController(t)
+
+	srv, _, _, procSrv, _ := newTestService(ctrl, logger)
+
+	oldConfig := config.Processor{ID: "config-id"}
+	newConfig := config.Processor{}
+	parent := processor.Parent{
+		ID:   uuid.NewString(),
+		Type: processor.ParentTypePipeline,
+	}
+
+	want := []action{deleteProcessorAction{
+		cfg:              oldConfig,
+		parent:           parent,
+		processorService: procSrv,
+	}}
+
+	got := srv.prepareProcessorActions(oldConfig, newConfig, parent)
+	is.Equal(got, want)
+}
+
+func TestService_PrepareProcessorActions_NoAction(t *testing.T) {
+	is := is.New(t)
+	logger := log.Nop()
+	ctrl := gomock.NewController(t)
+
+	srv, _, _, _, _ := newTestService(ctrl, logger)
+
+	oldConfig := config.Processor{ID: "config-id"}
+	newConfig := config.Processor{ID: "config-id"}
+	parent := processor.Parent{
+		ID:   uuid.NewString(),
+		Type: processor.ParentTypeConnector,
+	}
+
+	got := srv.prepareProcessorActions(oldConfig, newConfig, parent)
+	is.Equal(got, nil) // did not expect any actions
+}
+
+func TestService_PrepareProcessorActions_Update(t *testing.T) {
+	logger := log.Nop()
+	ctrl := gomock.NewController(t)
+
+	srv, _, _, procSrv, _ := newTestService(ctrl, logger)
+	parent := processor.Parent{
+		ID:   uuid.NewString(),
+		Type: processor.ParentTypeConnector,
+	}
+
+	testCases := []struct {
+		name      string
+		oldConfig config.Processor
+		newConfig config.Processor
+	}{{
+		name:      "different Settings",
+		oldConfig: config.Processor{ID: "config-id", Settings: map[string]string{"foo": "bar"}},
+		newConfig: config.Processor{ID: "config-id", Settings: map[string]string{"foo": "baz"}},
+	}, {
+		name:      "different Workers",
+		oldConfig: config.Processor{ID: "config-id", Workers: 1},
+		newConfig: config.Processor{ID: "config-id", Workers: 2},
+	}}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			is := is.New(t)
+			want := []action{updateProcessorAction{
+				oldConfig:        tc.oldConfig,
+				newConfig:        tc.newConfig,
+				processorService: procSrv,
+			}}
+			got := srv.prepareProcessorActions(tc.oldConfig, tc.newConfig, parent)
+			is.Equal(got, want)
+		})
+	}
+}
+
+func TestService_PrepareProcessorActions_Recreate(t *testing.T) {
+	logger := log.Nop()
+	ctrl := gomock.NewController(t)
+
+	srv, _, _, procSrv, _ := newTestService(ctrl, logger)
+	parent := processor.Parent{
+		ID:   uuid.NewString(),
+		Type: processor.ParentTypePipeline,
+	}
+
+	testCases := []struct {
+		name      string
+		oldConfig config.Processor
+		newConfig config.Processor
+	}{{
+		name:      "different Type",
+		oldConfig: config.Processor{ID: "config-id", Type: "old-type"},
+		newConfig: config.Processor{ID: "config-id", Type: "new-type"},
+	}}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			is := is.New(t)
+			want := []action{deleteProcessorAction{
+				cfg:              tc.oldConfig,
+				parent:           parent,
+				processorService: procSrv,
+			}, createProcessorAction{
+				cfg:              tc.newConfig,
+				parent:           parent,
+				processorService: procSrv,
+			}}
+			got := srv.prepareProcessorActions(tc.oldConfig, tc.newConfig, parent)
+			is.Equal(got, want)
+		})
+	}
+}
+
 func TestCreatePipelineAction_Do(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
