@@ -18,6 +18,9 @@ import (
 	"context"
 	"testing"
 
+	"github.com/conduitio/conduit/pkg/foundation/database/inmemory"
+	"github.com/conduitio/conduit/pkg/foundation/log"
+
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	"github.com/conduitio/conduit/pkg/processor"
@@ -27,6 +30,132 @@ import (
 	"github.com/google/uuid"
 	"github.com/matryer/is"
 )
+
+func TestService_PreparePipelineActions_Create(t *testing.T) {
+	is := is.New(t)
+	logger := log.Nop()
+	ctrl := gomock.NewController(t)
+
+	srv, pipSrv, _, _, _ := newTestService(ctrl, logger)
+
+	oldConfig := config.Pipeline{}
+	newConfig := config.Pipeline{ID: "config-id"}
+
+	want := []action{createPipelineAction{
+		cfg:             newConfig,
+		pipelineService: pipSrv,
+	}}
+
+	got := srv.preparePipelineActions(oldConfig, newConfig)
+	is.Equal(got, want)
+}
+
+func TestService_PreparePipelineActions_Delete(t *testing.T) {
+	is := is.New(t)
+	logger := log.Nop()
+	ctrl := gomock.NewController(t)
+
+	srv, pipSrv, _, _, _ := newTestService(ctrl, logger)
+
+	oldConfig := config.Pipeline{ID: "config-id"}
+	newConfig := config.Pipeline{}
+
+	want := []action{deletePipelineAction{
+		cfg:             oldConfig,
+		pipelineService: pipSrv,
+	}}
+
+	got := srv.preparePipelineActions(oldConfig, newConfig)
+	is.Equal(got, want)
+}
+
+func TestService_PreparePipelineActions_NoAction(t *testing.T) {
+	logger := log.Nop()
+	ctrl := gomock.NewController(t)
+
+	srv, _, _, _, _ := newTestService(ctrl, logger)
+
+	testCases := []struct {
+		name      string
+		oldConfig config.Pipeline
+		newConfig config.Pipeline
+	}{{
+		name:      "empty",
+		oldConfig: config.Pipeline{ID: "config-id"},
+		newConfig: config.Pipeline{ID: "config-id"},
+	}, {
+		name:      "different Status",
+		oldConfig: config.Pipeline{ID: "config-id", Status: "stopped"},
+		newConfig: config.Pipeline{ID: "config-id", Status: "running"},
+	}, {
+		name:      "different Connectors.Name",
+		oldConfig: config.Pipeline{ID: "config-id", Connectors: []config.Connector{{Name: "old-name"}}},
+		newConfig: config.Pipeline{ID: "config-id", Connectors: []config.Connector{{Name: "new-name"}}},
+	}, {
+		name:      "different Processors.Type",
+		oldConfig: config.Pipeline{ID: "config-id", Processors: []config.Processor{{Type: "old-type"}}},
+		newConfig: config.Pipeline{ID: "config-id", Processors: []config.Processor{{Type: "new-type"}}},
+	}}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			is := is.New(t)
+			got := srv.preparePipelineActions(tc.oldConfig, tc.newConfig)
+			is.Equal(got, nil) // did not expect any actions
+		})
+	}
+}
+
+func TestService_PreparePipelineActions_Update(t *testing.T) {
+	logger := log.Nop()
+	ctrl := gomock.NewController(t)
+
+	srv, pipSrv, _, _, _ := newTestService(ctrl, logger)
+
+	testCases := []struct {
+		name      string
+		oldConfig config.Pipeline
+		newConfig config.Pipeline
+	}{{
+		name:      "different Name",
+		oldConfig: config.Pipeline{ID: "config-id", Name: "old-name"},
+		newConfig: config.Pipeline{ID: "config-id", Name: "new-name"},
+	}, {
+		name:      "different Description",
+		oldConfig: config.Pipeline{ID: "config-id", Description: "old-description"},
+		newConfig: config.Pipeline{ID: "config-id", Description: "new-description"},
+	}, {
+		name:      "different Connectors",
+		oldConfig: config.Pipeline{ID: "config-id", Connectors: []config.Connector{{ID: "old-id"}}},
+		newConfig: config.Pipeline{ID: "config-id", Connectors: []config.Connector{{ID: "new-id"}}},
+	}, {
+		name:      "different Processors",
+		oldConfig: config.Pipeline{ID: "config-id", Processors: []config.Processor{{ID: "old-id"}}},
+		newConfig: config.Pipeline{ID: "config-id", Processors: []config.Processor{{ID: "new-id"}}},
+	}, {
+		name:      "different DLQ.Plugin",
+		oldConfig: config.Pipeline{ID: "config-id", DLQ: config.DLQ{Plugin: "old-plugin"}},
+		newConfig: config.Pipeline{ID: "config-id", DLQ: config.DLQ{Plugin: "new-plugin"}},
+	}, {
+		name:      "different DLQ.Settings",
+		oldConfig: config.Pipeline{ID: "config-id", DLQ: config.DLQ{Settings: map[string]string{"foo": "bar"}}},
+		newConfig: config.Pipeline{ID: "config-id", DLQ: config.DLQ{Settings: map[string]string{"foo": "baz"}}},
+		// TODO different DLQ workers and threshold
+	}}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			is := is.New(t)
+			want := []action{updatePipelineAction{
+				oldConfig:       tc.oldConfig,
+				newConfig:       tc.newConfig,
+				pipelineService: pipSrv,
+			}}
+			got := srv.preparePipelineActions(tc.oldConfig, tc.newConfig)
+			is.Equal(got, want)
+		})
+	}
+}
 
 func TestCreatePipelineAction_Do(t *testing.T) {
 	is := is.New(t)
@@ -643,3 +772,15 @@ func TestDeleteProcessorAction_Rollback(t *testing.T) {
 }
 
 func intPtr(i int) *int { return &i }
+
+func newTestService(ctrl *gomock.Controller, logger log.CtxLogger) (*Service, *mock.PipelineService, *mock.ConnectorService, *mock.ProcessorService, *mock.PluginService) {
+	db := &inmemory.DB{}
+	pipSrv := mock.NewPipelineService(ctrl)
+	connSrv := mock.NewConnectorService(ctrl)
+	procSrv := mock.NewProcessorService(ctrl)
+	plugSrv := mock.NewPluginService(ctrl)
+
+	srv := NewService(db, logger, pipSrv, connSrv, procSrv, plugSrv, "")
+
+	return srv, pipSrv, connSrv, procSrv, plugSrv
+}
