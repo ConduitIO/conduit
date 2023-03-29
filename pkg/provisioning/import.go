@@ -44,7 +44,7 @@ func (s *Service) Import(ctx context.Context, newConfig config.Pipeline) error {
 	if err != nil {
 		rollbackActions := actions[:lastActionIndex+1]
 		s.logger.Debug(ctx).Err(err).Msgf("rolling back %d import actions", len(rollbackActions))
-		s.reverseActions(rollbackActions)
+		s.reverseActions(rollbackActions) // execute rollback actions in reversed order
 		if ok := s.rollbackActions(ctx, rollbackActions); !ok {
 			s.logger.Warn(ctx).Msg("some actions failed to be rolled back, Conduit state might be corrupted; please report this issue to the Conduit team")
 		}
@@ -62,13 +62,7 @@ func (s *Service) cascadingActionsUpsertNew(oldConfig, newConfig config.Pipeline
 	actions = append(actions, s.preparePipelineActions(oldConfig, newConfig)...)
 
 	for _, connNewConfig := range newConfig.Connectors {
-		var connOldConfig config.Connector
-		for _, conn := range oldConfig.Connectors {
-			if conn.ID == connNewConfig.ID {
-				connOldConfig = conn
-				break
-			}
-		}
+		connOldConfig, _ := s.findConnectorByID(oldConfig.Connectors, connNewConfig.ID)
 		actions = append(actions, s.prepareConnectorActions(connOldConfig, connNewConfig, newConfig.ID)...)
 
 		parent := processor.Parent{
@@ -76,13 +70,7 @@ func (s *Service) cascadingActionsUpsertNew(oldConfig, newConfig config.Pipeline
 			Type: processor.ParentTypeConnector,
 		}
 		for _, procNewConfig := range connNewConfig.Processors {
-			var procOldConfig config.Processor
-			for _, proc := range connOldConfig.Processors {
-				if proc.ID == procNewConfig.ID {
-					procOldConfig = proc
-					break
-				}
-			}
+			procOldConfig, _ := s.findProcessorByID(connOldConfig.Processors, procNewConfig.ID)
 			actions = append(actions, s.prepareProcessorActions(procOldConfig, procNewConfig, parent)...)
 		}
 	}
@@ -92,13 +80,7 @@ func (s *Service) cascadingActionsUpsertNew(oldConfig, newConfig config.Pipeline
 		Type: processor.ParentTypePipeline,
 	}
 	for _, procNewConfig := range newConfig.Processors {
-		var procOldConfig config.Processor
-		for _, proc := range oldConfig.Processors {
-			if proc.ID == procNewConfig.ID {
-				procOldConfig = proc
-				break
-			}
-		}
+		procOldConfig, _ := s.findProcessorByID(oldConfig.Processors, procNewConfig.ID)
 		actions = append(actions, s.prepareProcessorActions(procOldConfig, procNewConfig, parent)...)
 	}
 	return actions
@@ -115,15 +97,8 @@ func (s *Service) cascadingActionsDeleteOld(oldConfig, newConfig config.Pipeline
 	}
 
 	for _, connOldConfig := range oldConfig.Connectors {
-		var connNewConfig config.Connector
-		for _, conn := range newConfig.Connectors {
-			if connOldConfig.ID == conn.ID {
-				connNewConfig = conn
-				break
-			}
-		}
-
-		if connNewConfig.ID == "" {
+		connNewConfig, ok := s.findConnectorByID(newConfig.Connectors, connOldConfig.ID)
+		if !ok {
 			// connector doesn't exist anymore, prepare delete action
 			actions = append(actions, s.prepareConnectorActions(connOldConfig, config.Connector{}, oldConfig.ID)...)
 		}
@@ -133,14 +108,8 @@ func (s *Service) cascadingActionsDeleteOld(oldConfig, newConfig config.Pipeline
 			Type: processor.ParentTypeConnector,
 		}
 		for _, procOldConfig := range connOldConfig.Processors {
-			var procExists bool
-			for _, proc := range connNewConfig.Processors {
-				if proc.ID == procOldConfig.ID {
-					procExists = true
-					break
-				}
-			}
-			if !procExists {
+			_, ok := s.findProcessorByID(connNewConfig.Processors, procOldConfig.ID)
+			if !ok {
 				// processor doesn't exist anymore, prepare delete action
 				actions = append(actions, s.prepareProcessorActions(procOldConfig, config.Processor{}, parent)...)
 			}
@@ -152,14 +121,8 @@ func (s *Service) cascadingActionsDeleteOld(oldConfig, newConfig config.Pipeline
 		Type: processor.ParentTypePipeline,
 	}
 	for _, procOldConfig := range oldConfig.Processors {
-		var procExists bool
-		for _, proc := range newConfig.Processors {
-			if proc.ID == procOldConfig.ID {
-				procExists = true
-				break
-			}
-		}
-		if !procExists {
+		_, ok := s.findProcessorByID(newConfig.Processors, procOldConfig.ID)
+		if !ok {
 			// processor doesn't exist anymore, prepare delete action
 			actions = append(actions, s.prepareProcessorActions(procOldConfig, config.Processor{}, parent)...)
 		}
@@ -168,6 +131,24 @@ func (s *Service) cascadingActionsDeleteOld(oldConfig, newConfig config.Pipeline
 	// reverse actions so that we first delete the innermost entities
 	s.reverseActions(actions)
 	return actions
+}
+
+func (s *Service) findConnectorByID(connectors []config.Connector, id string) (config.Connector, bool) {
+	for _, conn := range connectors {
+		if conn.ID == id {
+			return conn, true
+		}
+	}
+	return config.Connector{}, false
+}
+
+func (s *Service) findProcessorByID(processors []config.Processor, id string) (config.Processor, bool) {
+	for _, proc := range processors {
+		if proc.ID == id {
+			return proc, true
+		}
+	}
+	return config.Processor{}, false
 }
 
 // executeActions executes the actions and returns the number of successfully

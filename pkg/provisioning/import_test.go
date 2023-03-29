@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/connector"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/database/inmemory"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/pipeline"
@@ -29,6 +30,316 @@ import (
 	"github.com/google/uuid"
 	"github.com/matryer/is"
 )
+
+func TestService_ExecuteActions_Success(t *testing.T) {
+	is := is.New(t)
+	logger := log.Nop()
+	ctrl := gomock.NewController(t)
+	ctx := context.Background()
+
+	srv, _, _, _, _ := newTestService(ctrl, logger)
+
+	var actionCount int
+	countingAction := fakeAction{do: func(ctx context.Context) error {
+		actionCount++
+		return nil
+	}}
+
+	actions := []action{countingAction, countingAction, countingAction}
+
+	got, err := srv.executeActions(ctx, actions)
+	is.NoErr(err)
+	is.Equal(actionCount, 3)
+	is.Equal(got, 3)
+}
+
+func TestService_ExecuteActions_Fail(t *testing.T) {
+	is := is.New(t)
+	logger := log.Nop()
+	ctrl := gomock.NewController(t)
+	ctx := context.Background()
+
+	srv, _, _, _, _ := newTestService(ctrl, logger)
+
+	var actionCount int
+	countingAction := fakeAction{do: func(ctx context.Context) error {
+		actionCount++
+		return nil
+	}}
+	wantErr := cerrors.New("test error")
+	failingAction := fakeAction{do: func(ctx context.Context) error {
+		actionCount++
+		return wantErr
+	}}
+
+	actions := []action{countingAction, countingAction, failingAction, countingAction}
+
+	// executeActions stops executing actions when one fails
+	got, err := srv.executeActions(ctx, actions)
+	is.True(cerrors.Is(err, wantErr))
+	is.Equal(actionCount, 3)
+	is.Equal(got, 2) // expected the number of successfully executed actions
+}
+
+func TestService_RollbackActions_Success(t *testing.T) {
+	is := is.New(t)
+	logger := log.Nop()
+	ctrl := gomock.NewController(t)
+	ctx := context.Background()
+
+	srv, _, _, _, _ := newTestService(ctrl, logger)
+
+	var actionCount int
+	countingAction := fakeAction{rollback: func(ctx context.Context) error {
+		actionCount++
+		return nil
+	}}
+
+	actions := []action{countingAction, countingAction, countingAction}
+
+	ok := srv.rollbackActions(ctx, actions)
+	is.True(ok)
+	is.Equal(actionCount, 3)
+}
+
+func TestService_RollbackActions_Fail(t *testing.T) {
+	is := is.New(t)
+	logger := log.Nop()
+	ctrl := gomock.NewController(t)
+	ctx := context.Background()
+
+	srv, _, _, _, _ := newTestService(ctrl, logger)
+
+	var actionCount int
+	countingAction := fakeAction{rollback: func(ctx context.Context) error {
+		actionCount++
+		return nil
+	}}
+	wantErr := cerrors.New("test error")
+	failingAction := fakeAction{rollback: func(ctx context.Context) error {
+		actionCount++
+		return wantErr
+	}}
+
+	actions := []action{countingAction, countingAction, failingAction, countingAction}
+
+	// rollbackActions executes all actions, regardless of the errors
+	ok := srv.rollbackActions(ctx, actions)
+	is.True(!ok)
+	is.Equal(actionCount, 4) // expected all rollback actions to be executed
+}
+
+func TestService_CascadingActions(t *testing.T) {
+	logger := log.Nop()
+	ctrl := gomock.NewController(t)
+
+	srv, pipSrv, connSrv, procSrv, plugSrv := newTestService(ctrl, logger)
+
+	oldConfig := config.Pipeline{
+		ID:   "config-id",
+		Name: "old-name",
+		Connectors: []config.Connector{{
+			// this connector does not change, it should be ignored
+			ID:   "conn-source-1",
+			Type: config.TypeSource,
+			Name: "conn-name-1",
+		}, {
+			// this connector contains an invalid change, it should be recreated
+			ID:     "conn-source-2",
+			Type:   config.TypeSource,
+			Name:   "conn-name-2",
+			Plugin: "old-plugin", // plugin was updated
+		}, {
+			// this connector gets a new name, it should be updated
+			ID:   "conn-destination",
+			Type: config.TypeDestination,
+			Name: "conn-old-name",
+		}, {
+			// this connector is deleted in the new config, it should be deleted
+			ID:   "conn-deleted-destination",
+			Type: config.TypeDestination,
+			Name: "conn-deleted-destination",
+			Processors: []config.Processor{{
+				// this processor is attached to a deleted connector, it should be deleted
+				ID: "conn-proc",
+			}},
+		}},
+		Processors: []config.Processor{{
+			// this processor does not change, it should be ignored
+			ID:   "proc-1",
+			Type: "proc-type",
+		}, {
+			// this processor contains an invalid change, it should be recreated
+			ID:   "proc-2",
+			Type: "old-proc-type", // type was updated
+		}, {
+			// this processor gets new settings, it should be updated
+			ID:       "proc-3",
+			Type:     "proc-type",
+			Settings: map[string]string{"foo": "bar"},
+		}, {
+			// this processor is deleted in the new config, it should be deleted
+			ID:   "proc-deleted",
+			Type: "proc-type",
+		}},
+	}
+	newConfig := config.Pipeline{
+		ID:   "config-id",
+		Name: "old-name",
+		Connectors: []config.Connector{{
+			// this connector does not change, it should be ignored
+			ID:   "conn-source-1",
+			Type: config.TypeSource,
+			Name: "conn-name-1",
+		}, {
+			// this connector contains an invalid change, it should be recreated
+			ID:     "conn-source-2",
+			Type:   config.TypeSource,
+			Name:   "conn-name-2",
+			Plugin: "new-plugin", // plugin was updated
+		}, {
+			// this connector gets a new name, it should be updated
+			ID:   "conn-destination",
+			Type: config.TypeDestination,
+			Name: "conn-new-name",
+		}, {
+			// this connector is new, it should be created
+			ID:   "conn-new-destination",
+			Type: config.TypeDestination,
+			Name: "conn-new-destination",
+			Processors: []config.Processor{{
+				// this processor is attached to a new connector, it should be created
+				ID: "conn-proc",
+			}},
+		}},
+		Processors: []config.Processor{{
+			// this processor does not change, it should be ignored
+			ID:   "proc-1",
+			Type: "proc-type",
+		}, {
+			// this processor contains an invalid change, it should be recreated
+			ID:   "proc-2",
+			Type: "new-proc-type", // type was updated
+		}, {
+			// this processor gets new settings, it should be updated
+			ID:       "proc-3",
+			Type:     "proc-type",
+			Settings: map[string]string{"foo": "baz"},
+		}, {
+			// this processor is new, it should be created
+			ID:   "proc-new",
+			Type: "proc-type",
+		}},
+	}
+
+	t.Run("UpsertNew", func(t *testing.T) {
+		is := is.New(t)
+		want := []action{
+			updatePipelineAction{
+				oldConfig:       oldConfig,
+				newConfig:       newConfig,
+				pipelineService: pipSrv,
+			},
+			deleteConnectorAction{
+				cfg:              oldConfig.Connectors[1],
+				pipelineID:       oldConfig.ID,
+				connectorService: connSrv,
+				pluginService:    plugSrv,
+			},
+			createConnectorAction{
+				cfg:              newConfig.Connectors[1],
+				pipelineID:       newConfig.ID,
+				connectorService: connSrv,
+				pluginService:    plugSrv,
+			},
+			updateConnectorAction{
+				oldConfig:        oldConfig.Connectors[2],
+				newConfig:        newConfig.Connectors[2],
+				connectorService: connSrv,
+			},
+			createConnectorAction{
+				cfg:              newConfig.Connectors[3],
+				pipelineID:       newConfig.ID,
+				connectorService: connSrv,
+				pluginService:    plugSrv,
+			},
+			createProcessorAction{
+				cfg: newConfig.Connectors[3].Processors[0],
+				parent: processor.Parent{
+					ID:   newConfig.Connectors[3].ID,
+					Type: processor.ParentTypeConnector,
+				},
+				processorService: procSrv,
+			},
+			deleteProcessorAction{
+				cfg: oldConfig.Processors[1],
+				parent: processor.Parent{
+					ID:   oldConfig.ID,
+					Type: processor.ParentTypePipeline,
+				},
+				processorService: procSrv,
+			},
+			createProcessorAction{
+				cfg: newConfig.Processors[1],
+				parent: processor.Parent{
+					ID:   newConfig.ID,
+					Type: processor.ParentTypePipeline,
+				},
+				processorService: procSrv,
+			},
+			updateProcessorAction{
+				oldConfig:        oldConfig.Processors[2],
+				newConfig:        newConfig.Processors[2],
+				processorService: procSrv,
+			},
+			createProcessorAction{
+				cfg: newConfig.Processors[3],
+				parent: processor.Parent{
+					ID:   newConfig.ID,
+					Type: processor.ParentTypePipeline,
+				},
+				processorService: procSrv,
+			},
+		}
+
+		got := srv.cascadingActionsUpsertNew(oldConfig, newConfig)
+		is.Equal(got, want)
+	})
+
+	t.Run("DeleteOld", func(t *testing.T) {
+		is := is.New(t)
+		want := []action{
+			deleteConnectorAction{
+				cfg:              oldConfig.Connectors[3],
+				pipelineID:       oldConfig.ID,
+				connectorService: connSrv,
+				pluginService:    plugSrv,
+			},
+			deleteProcessorAction{
+				cfg: oldConfig.Connectors[3].Processors[0],
+				parent: processor.Parent{
+					ID:   oldConfig.Connectors[3].ID,
+					Type: processor.ParentTypeConnector,
+				},
+				processorService: procSrv,
+			},
+			deleteProcessorAction{
+				cfg: oldConfig.Processors[3],
+				parent: processor.Parent{
+					ID:   oldConfig.ID,
+					Type: processor.ParentTypePipeline,
+				},
+				processorService: procSrv,
+			},
+		}
+		// we declare actions from top down to make it easier to read, expect
+		// the actions to be returned in the reverse order though
+		srv.reverseActions(want)
+
+		got := srv.cascadingActionsDeleteOld(oldConfig, newConfig)
+		is.Equal(got, want)
+	})
+}
 
 func TestService_PreparePipelineActions_Create(t *testing.T) {
 	is := is.New(t)
@@ -1098,6 +1409,10 @@ func TestDeleteProcessorAction_Rollback(t *testing.T) {
 	is.NoErr(err)
 }
 
+// -------------
+// -- HELPERS --
+// -------------
+
 func intPtr(i int) *int { return &i }
 
 func newTestService(ctrl *gomock.Controller, logger log.CtxLogger) (*Service, *mock.PipelineService, *mock.ConnectorService, *mock.ProcessorService, *mock.PluginService) {
@@ -1111,3 +1426,13 @@ func newTestService(ctrl *gomock.Controller, logger log.CtxLogger) (*Service, *m
 
 	return srv, pipSrv, connSrv, procSrv, plugSrv
 }
+
+type fakeAction struct {
+	string   string
+	do       func(context.Context) error
+	rollback func(context.Context) error
+}
+
+func (f fakeAction) String() string                     { return f.string }
+func (f fakeAction) Do(ctx context.Context) error       { return f.do(ctx) }
+func (f fakeAction) Rollback(ctx context.Context) error { return f.rollback(ctx) }
