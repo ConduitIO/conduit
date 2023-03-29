@@ -16,10 +16,10 @@ package inspector
 
 import (
 	"context"
-	"github.com/conduitio/conduit/pkg/foundation/metrics/measure"
 	"sync"
 
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/foundation/metrics/measure"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/google/uuid"
 )
