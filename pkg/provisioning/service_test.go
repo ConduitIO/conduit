@@ -148,6 +148,12 @@ func TestProvision_Create(t *testing.T) {
 		ProvisionedBy: pipeline.ProvisionTypeConfig,
 		ConnectorIDs:  []string{"pipeline1:con1", "pipeline1:con2"},
 	}
+	pl1dlq := pipeline.DLQ{
+		Plugin:              pipeline.DefaultDLQ.Plugin,
+		Settings:            pipeline.DefaultDLQ.Settings,
+		WindowSize:          20,
+		WindowNackThreshold: 10,
+	}
 
 	cfg1 := connector.Config{
 		Name:     pipeline1.Connectors[0].Name,
@@ -177,7 +183,7 @@ func TestProvision_Create(t *testing.T) {
 	pipelineService.EXPECT().List(gomock.Not(gomock.Nil()))
 	pipelineService.EXPECT().Get(gomock.Not(gomock.Nil()), pipeline1.Name).Return(nil, pipeline.ErrInstanceNotFound)
 	pipelineService.EXPECT().Create(gomock.Not(gomock.Nil()), pipeline1.Name, pl1config, pipeline.ProvisionTypeConfig).Return(pl1, nil)
-	pipelineService.EXPECT().UpdateDLQ(gomock.Not(gomock.Nil()), pl1.ID, pipeline.DLQ{WindowSize: 20, WindowNackThreshold: 10}).Return(pl1, nil)
+	pipelineService.EXPECT().UpdateDLQ(gomock.Not(gomock.Nil()), pl1.ID, pl1dlq).Return(pl1, nil)
 
 	connService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline1:con1", connector.TypeSource, pipeline1.Connectors[0].Plugin, pipeline1.Name, cfg1, connector.ProvisionTypeConfig)
 	pipelineService.EXPECT().AddConnector(gomock.Not(gomock.Nil()), pipeline1.Name, "pipeline1:con1")
@@ -213,6 +219,12 @@ func TestProvision_NoRollbackOnFailedStart(t *testing.T) {
 		Status:        pipeline.StatusRunning,
 		ProvisionedBy: pipeline.ProvisionTypeConfig,
 	}
+	pl1dlq := pipeline.DLQ{
+		Plugin:              pipeline.DefaultDLQ.Plugin,
+		Settings:            pipeline.DefaultDLQ.Settings,
+		WindowSize:          20,
+		WindowNackThreshold: 10,
+	}
 	cfg1 := connector.Config{
 		Name:     pipeline1.Connectors[0].Name,
 		Settings: pipeline1.Connectors[0].Settings,
@@ -241,7 +253,7 @@ func TestProvision_NoRollbackOnFailedStart(t *testing.T) {
 	pipelineService.EXPECT().List(gomock.Not(gomock.Nil()))
 	pipelineService.EXPECT().Get(gomock.Not(gomock.Nil()), pipeline1.Name).Return(nil, pipeline.ErrInstanceNotFound)
 	pipelineService.EXPECT().Create(gomock.Not(gomock.Nil()), pipeline1.Name, pl1config, pipeline.ProvisionTypeConfig).Return(pl1, nil)
-	pipelineService.EXPECT().UpdateDLQ(gomock.Not(gomock.Nil()), pl1.ID, pipeline.DLQ{WindowSize: 20, WindowNackThreshold: 10}).Return(pl1, nil)
+	pipelineService.EXPECT().UpdateDLQ(gomock.Not(gomock.Nil()), pl1.ID, pl1dlq).Return(pl1, nil)
 
 	connService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline1:con1", connector.TypeSource, pipeline1.Connectors[0].Plugin, pipeline1.Name, cfg1, connector.ProvisionTypeConfig)
 	pipelineService.EXPECT().AddConnector(gomock.Not(gomock.Nil()), pipeline1.Name, "pipeline1:con1")
@@ -278,6 +290,12 @@ func TestProvision_RollbackCreate(t *testing.T) {
 		Status:        pipeline.StatusRunning,
 		ProvisionedBy: pipeline.ProvisionTypeConfig,
 	}
+	pl1dlq := pipeline.DLQ{
+		Plugin:              pipeline.DefaultDLQ.Plugin,
+		Settings:            pipeline.DefaultDLQ.Settings,
+		WindowSize:          20,
+		WindowNackThreshold: 10,
+	}
 	cfg1 := connector.Config{
 		Name:     pipeline1.Connectors[0].Name,
 		Settings: pipeline1.Connectors[0].Settings,
@@ -306,7 +324,7 @@ func TestProvision_RollbackCreate(t *testing.T) {
 	pipelineService.EXPECT().List(gomock.Not(gomock.Nil()))
 	pipelineService.EXPECT().Get(gomock.Not(gomock.Nil()), pipeline1.Name).Return(nil, pipeline.ErrInstanceNotFound)
 	pipelineService.EXPECT().Create(gomock.Not(gomock.Nil()), pipeline1.Name, pl1config, pipeline.ProvisionTypeConfig).Return(pl1, nil)
-	pipelineService.EXPECT().UpdateDLQ(gomock.Not(gomock.Nil()), pl1.ID, pipeline.DLQ{WindowSize: 20, WindowNackThreshold: 10}).Return(pl1, nil)
+	pipelineService.EXPECT().UpdateDLQ(gomock.Not(gomock.Nil()), pl1.ID, pl1dlq).Return(pl1, nil)
 
 	connService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline1:con1", connector.TypeSource, pipeline1.Connectors[0].Plugin, pipeline1.Name, cfg1, connector.ProvisionTypeConfig)
 	pipelineService.EXPECT().AddConnector(gomock.Not(gomock.Nil()), pipeline1.Name, "pipeline1:con1")
@@ -354,6 +372,12 @@ func TestProvision_RollbackUpdate(t *testing.T) {
 			WindowSize:          2,
 			WindowNackThreshold: 1,
 		},
+	}
+	pl1dlq := pipeline.DLQ{
+		Plugin:              pipeline.DefaultDLQ.Plugin,
+		Settings:            pipeline.DefaultDLQ.Settings,
+		WindowSize:          20,
+		WindowNackThreshold: 10,
 	}
 	cfg1 := connector.Config{
 		Name:     pipeline1.Connectors[0].Name,
@@ -418,7 +442,7 @@ func TestProvision_RollbackUpdate(t *testing.T) {
 
 	// update pipeline
 	pipelineService.EXPECT().Update(gomock.Any(), pipeline1.ID, pl1config).Return(pl1, nil)
-	pipelineService.EXPECT().UpdateDLQ(gomock.Any(), pl1.ID, pipeline.DLQ{WindowSize: 20, WindowNackThreshold: 10})
+	pipelineService.EXPECT().UpdateDLQ(gomock.Any(), pl1.ID, pl1dlq)
 	connService.EXPECT().Update(gomock.Any(), source.ID, cfg1).Return(source, nil)
 	procService.EXPECT().Update(gomock.Any(), "pipeline1:con2:proc1con", processor.Config{
 		Settings: pipeline1.Connectors[1].Processors[0].Settings,
@@ -459,6 +483,12 @@ func TestProvision_Update(t *testing.T) {
 		ProvisionedBy: pipeline.ProvisionTypeConfig,
 		ConnectorIDs:  []string{"pipeline1:con1", "pipeline1:con2"},
 		ProcessorIDs:  []string{"pipeline1:proc1"},
+	}
+	pl1dlq := pipeline.DLQ{
+		Plugin:              pipeline.DefaultDLQ.Plugin,
+		Settings:            pipeline.DefaultDLQ.Settings,
+		WindowSize:          20,
+		WindowNackThreshold: 10,
 	}
 	cfg1 := connector.Config{
 		Name:     pipeline1.Connectors[0].Name,
@@ -528,7 +558,7 @@ func TestProvision_Update(t *testing.T) {
 
 	// update pipeline
 	pipelineService.EXPECT().Update(gomock.Any(), pipeline1.ID, pl1config).Return(pl1, nil)
-	pipelineService.EXPECT().UpdateDLQ(gomock.Any(), pl1.ID, pipeline.DLQ{WindowSize: 20, WindowNackThreshold: 10})
+	pipelineService.EXPECT().UpdateDLQ(gomock.Any(), pl1.ID, pl1dlq)
 	connService.EXPECT().Update(gomock.Any(), source.ID, cfg1).Return(source, nil)
 
 	// start pipeline
