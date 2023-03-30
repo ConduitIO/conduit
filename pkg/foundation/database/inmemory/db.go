@@ -71,7 +71,7 @@ func (t *Txn) Discard() {
 	// do nothing
 }
 
-func (d *DB) NewTransaction(ctx context.Context, update bool) (database.Transaction, context.Context, error) {
+func (d *DB) NewTransaction(ctx context.Context, _ bool) (database.Transaction, context.Context, error) {
 	d.m.Lock()
 	defer d.m.Unlock()
 

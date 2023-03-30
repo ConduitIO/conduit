@@ -27,7 +27,7 @@ type Information struct {
 	version string
 }
 
-func (i *Information) GetInfo(ctx context.Context, req *apiv1.GetInfoRequest) (*apiv1.GetInfoResponse, error) {
+func (i *Information) GetInfo(context.Context, *apiv1.GetInfoRequest) (*apiv1.GetInfoResponse, error) {
 	info := &apiv1.Info{
 		Version: i.version,
 		Os:      runtime.GOOS,
