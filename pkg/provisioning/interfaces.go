@@ -27,14 +27,15 @@ import (
 //go:generate mockgen -destination=mock/provisioning.go -package=mock -mock_names=PipelineService=PipelineService,ConnectorService=ConnectorService,ProcessorService=ProcessorService,PluginService=PluginService . PipelineService,ConnectorService,ProcessorService,PluginService
 
 type PipelineService interface {
-	Start(ctx context.Context, connFetcher pipeline.ConnectorFetcher, procFetcher pipeline.ProcessorFetcher, pluginFetcher pipeline.PluginDispenserFetcher, pipelineID string) error
 	Get(ctx context.Context, id string) (*pipeline.Instance, error)
 	List(ctx context.Context) map[string]*pipeline.Instance
 	Create(ctx context.Context, id string, cfg pipeline.Config, p pipeline.ProvisionType) (*pipeline.Instance, error)
 	Update(ctx context.Context, pipelineID string, cfg pipeline.Config) (*pipeline.Instance, error)
 	Delete(ctx context.Context, pipelineID string) error
-	Stop(ctx context.Context, pipelineID string, force bool) error
 	UpdateDLQ(ctx context.Context, pipelineID string, cfg pipeline.DLQ) (*pipeline.Instance, error)
+
+	Start(ctx context.Context, connFetcher pipeline.ConnectorFetcher, procFetcher pipeline.ProcessorFetcher, pluginFetcher pipeline.PluginDispenserFetcher, pipelineID string) error
+	Stop(ctx context.Context, pipelineID string, force bool) error
 
 	AddConnector(ctx context.Context, pipelineID string, connectorID string) (*pipeline.Instance, error)
 	RemoveConnector(ctx context.Context, pipelineID string, connectorID string) (*pipeline.Instance, error)
@@ -50,8 +51,6 @@ type ConnectorService interface {
 
 	AddProcessor(ctx context.Context, connectorID string, processorID string) (*connector.Instance, error)
 	RemoveProcessor(ctx context.Context, connectorID string, processorID string) (*connector.Instance, error)
-
-	SetState(ctx context.Context, id string, state any) (*connector.Instance, error)
 }
 
 type ProcessorService interface {

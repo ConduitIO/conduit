@@ -312,21 +312,6 @@ func (mr *ConnectorServiceMockRecorder) RemoveProcessor(arg0, arg1, arg2 interfa
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveProcessor", reflect.TypeOf((*ConnectorService)(nil).RemoveProcessor), arg0, arg1, arg2)
 }
 
-// SetState mocks base method.
-func (m *ConnectorService) SetState(arg0 context.Context, arg1 string, arg2 interface{}) (*connector.Instance, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SetState", arg0, arg1, arg2)
-	ret0, _ := ret[0].(*connector.Instance)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// SetState indicates an expected call of SetState.
-func (mr *ConnectorServiceMockRecorder) SetState(arg0, arg1, arg2 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetState", reflect.TypeOf((*ConnectorService)(nil).SetState), arg0, arg1, arg2)
-}
-
 // Update mocks base method.
 func (m *ConnectorService) Update(arg0 context.Context, arg1 string, arg2 connector.Config) (*connector.Instance, error) {
 	m.ctrl.T.Helper()
