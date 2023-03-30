@@ -2,7 +2,7 @@ version: 2.0
 pipelines:
   - id: pipeline2
     status: running
-    name: pipeline2
+    name: name2
     description: desc2
     connectors:
       - id: con1
@@ -17,7 +17,7 @@ pipelines:
         name: dest
         settings:
           path: my/path/file2.txt
-  - id: pipeline3 # duplicated pipeline ID in the same folder
+  - id: pipeline1 # duplicated pipeline ID in the same folder
     status: stopped
-    name: pipeline3
-    description: desc3
+    name: pipeline1
+    description: desc1

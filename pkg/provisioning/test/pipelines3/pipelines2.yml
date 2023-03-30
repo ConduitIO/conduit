@@ -2,7 +2,7 @@ version: 2.0
 pipelines:
   - id: pipeline2
     status: running
-    name: pipeline2
+    name: name2
     description: desc2
     connectors:
       - id: con1
