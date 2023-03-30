@@ -361,10 +361,10 @@ func (a createPipelineAction) Do(ctx context.Context) error {
 		return cerrors.Errorf("failed to create pipeline: %w", err)
 	}
 	_, err = a.pipelineService.UpdateDLQ(ctx, a.cfg.ID, pipeline.DLQ{
-		Plugin:              a.cfg.DLQ.Plugin,               // TODO default
-		Settings:            a.cfg.DLQ.Settings,             // TODO default
-		WindowSize:          *a.cfg.DLQ.WindowSize,          // TODO nil pointer
-		WindowNackThreshold: *a.cfg.DLQ.WindowNackThreshold, // TODO nil pointer
+		Plugin:              a.cfg.DLQ.Plugin,
+		Settings:            a.cfg.DLQ.Settings,
+		WindowSize:          *a.cfg.DLQ.WindowSize,
+		WindowNackThreshold: *a.cfg.DLQ.WindowNackThreshold,
 	})
 	if err != nil {
 		return cerrors.Errorf("failed to update pipeline DLQ: %w", err)
@@ -520,10 +520,10 @@ func (a updatePipelineAction) update(ctx context.Context, cfg config.Pipeline) e
 		return cerrors.Errorf("failed to update pipeline: %w", err)
 	}
 	_, err = a.pipelineService.UpdateDLQ(ctx, cfg.ID, pipeline.DLQ{
-		Plugin:              cfg.DLQ.Plugin,               // TODO default
-		Settings:            cfg.DLQ.Settings,             // TODO default
-		WindowSize:          *cfg.DLQ.WindowSize,          // TODO nil pointer
-		WindowNackThreshold: *cfg.DLQ.WindowNackThreshold, // TODO nil pointer
+		Plugin:              cfg.DLQ.Plugin,
+		Settings:            cfg.DLQ.Settings,
+		WindowSize:          *cfg.DLQ.WindowSize,
+		WindowNackThreshold: *cfg.DLQ.WindowNackThreshold,
 	})
 	if err != nil {
 		return cerrors.Errorf("failed to update pipeline DLQ: %w", err)

@@ -112,7 +112,7 @@ func TestService_CreateSuccess(t *testing.T) {
 				Name:        "test-pipeline1",
 				Description: "pipeline description",
 			},
-			DLQ:    service.defaultDLQ(),
+			DLQ:    DefaultDLQ,
 			Status: StatusUserStopped,
 		},
 	}, {
@@ -127,7 +127,7 @@ func TestService_CreateSuccess(t *testing.T) {
 				Name:        "test-pipeline2",
 				Description: "",
 			},
-			DLQ:    service.defaultDLQ(),
+			DLQ:    DefaultDLQ,
 			Status: StatusUserStopped,
 		},
 	}}

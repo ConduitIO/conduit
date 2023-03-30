@@ -205,7 +205,7 @@ func (s *Service) provisionPipeline(ctx context.Context, cfg config.Pipeline) er
 		return cerrors.Errorf("could not import pipeline: %w", err)
 	}
 
-	// check if pipeline should be
+	// check if pipeline should be running
 	if cfg.Status == config.StatusRunning {
 		// TODO set status and let the pipeline service start it
 		err := s.pipelineService.Start(ctx, s.connectorService, s.processorService, s.pluginService, cfg.ID)
