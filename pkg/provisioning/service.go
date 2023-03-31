@@ -233,7 +233,7 @@ func (s *Service) deleteOldPipelines(ctx context.Context, ids []string) []string
 				s.logger.Warn(ctx).
 					Err(err).
 					Str(log.PipelineIDField, id).
-					Msg("failed to delete pipeline provisioned by a config file, the pipeline is probably in a broken state, Conduit will try to remove it again next time it runs")
+					Msg("failed to delete a pipeline provisioned by a config file, the pipeline is probably in a broken state, Conduit will try to remove it again next time it runs")
 				continue
 			}
 			actions := s.cascadingActionsDeleteOld(oldConfig, config.Pipeline{})
@@ -242,7 +242,7 @@ func (s *Service) deleteOldPipelines(ctx context.Context, ids []string) []string
 				s.logger.Warn(ctx).
 					Err(err).
 					Str(log.PipelineIDField, id).
-					Msg("failed to delete pipeline provisioned by a config file, the pipeline is probably in a broken state, Conduit will try to remove it again next time it runs")
+					Msg("failed to delete a pipeline provisioned by a config file, the pipeline is probably in a broken state, Conduit will try to remove it again next time it runs")
 				continue
 			}
 
