@@ -95,11 +95,11 @@ func (s *Service) pipelineToConfig(p *pipeline.Instance) config.Pipeline {
 		Description: p.Config.Description,
 		Connectors:  nil, // extracted separately
 		Processors:  nil, // extracted separately
-		DLQ:         s.pipelineDLQToConfig(p.DLQ),
+		DLQ:         s.dlqToConfig(p.DLQ),
 	}
 }
 
-func (*Service) pipelineDLQToConfig(dlq pipeline.DLQ) config.DLQ {
+func (*Service) dlqToConfig(dlq pipeline.DLQ) config.DLQ {
 	return config.DLQ{
 		Plugin:              dlq.Plugin,
 		Settings:            dlq.Settings,
