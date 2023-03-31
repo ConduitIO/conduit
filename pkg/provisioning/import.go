@@ -38,9 +38,9 @@ func (s *Service) Import(ctx context.Context, newConfig config.Pipeline) error {
 	actions = append(actions, s.cascadingActionsDeleteOld(oldConfig, newConfig)...)
 	actions = append(actions, s.cascadingActionsUpsertNew(oldConfig, newConfig)...)
 
-	lastActionIndex, err := s.executeActions(ctx, actions)
+	failedActionIndex, err := s.executeActions(ctx, actions)
 	if err != nil {
-		rollbackActions := actions[:lastActionIndex+1]
+		rollbackActions := actions[:failedActionIndex+1]
 		s.logger.Debug(ctx).Err(err).Msgf("rolling back %d import actions", len(rollbackActions))
 		s.reverseActions(rollbackActions) // execute rollback actions in reversed order
 		if ok := s.rollbackActions(ctx, rollbackActions); !ok {
