@@ -161,7 +161,7 @@ func TestProvision_Update(t *testing.T) {
 	procService.EXPECT().Update(anyCtx, p1.P1P1.ID, p1.P1P1.Config)
 
 	// start pipeline
-	pipelineService.EXPECT().Start(gomock.Not(gomock.Nil()), connService, procService, plugService, p1.P1.ID)
+	pipelineService.EXPECT().Start(anyCtx, connService, procService, plugService, p1.P1.ID)
 
 	err := service.Init(context.Background())
 	is.NoErr(err)
