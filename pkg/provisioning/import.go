@@ -196,7 +196,7 @@ func (s *Service) preparePipelineActions(oldConfig, newConfig config.Pipeline) [
 
 	// compare configs but ignore nested configs and some fields
 	opts := []cmp.Option{
-		cmpopts.IgnoreFields(config.Pipeline{}, "Status"),
+		cmpopts.IgnoreFields(config.Pipeline{}, config.PipelineIgnoredFields...),
 		cmp.Comparer(func(c1, c2 config.Connector) bool { return c1.ID == c2.ID }),
 		cmp.Comparer(func(c1, c2 config.Processor) bool { return c1.ID == c2.ID }),
 	}
@@ -240,11 +240,11 @@ func (s *Service) prepareConnectorActions(oldConfig, newConfig config.Connector,
 		return nil
 	}
 
-	// compare them again but ignore fields that can be updated, if configs
-	// are still different an update is not possible, we have to entirely
-	// recreate the connector
+	// compare them again but ignore mutable fields, if configs are still
+	// different an update is not possible, we have to entirely recreate the
+	// connector
 	opts = []cmp.Option{
-		cmpopts.IgnoreFields(config.Connector{}, "Name", "Settings", "Processors"),
+		cmpopts.IgnoreFields(config.Connector{}, config.ConnectorMutableFields...),
 	}
 	if cmp.Equal(oldConfig, newConfig, opts...) {
 		// only updatable fields don't match, we can update the connector
@@ -295,11 +295,11 @@ func (s *Service) prepareProcessorActions(oldConfig, newConfig config.Processor,
 		return nil
 	}
 
-	// compare them again but ignore fields that can be updated, if configs
-	// are still different an update is not possible, we have to entirely
-	// recreate the processor
+	// compare them again but ignore mutable fields, if configs are still
+	// different an update is not possible, we have to entirely recreate the
+	// processor
 	opts := []cmp.Option{
-		cmpopts.IgnoreFields(config.Processor{}, "Settings", "Workers"),
+		cmpopts.IgnoreFields(config.Processor{}, config.ProcessorMutableFields...),
 	}
 	if cmp.Equal(oldConfig, newConfig, opts...) {
 		// only updatable fields don't match, we can update the processor
