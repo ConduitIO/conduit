@@ -20,52 +20,7 @@ import (
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	"github.com/conduitio/conduit/pkg/processor"
-	"github.com/conduitio/conduit/pkg/provisioning/config"
 )
-
-var P1Config = config.Pipeline{
-	ID:          "pipeline1",
-	Status:      "running",
-	Name:        "name1",
-	Description: "desc1",
-	DLQ: config.DLQ{
-		Plugin:              pipeline.DefaultDLQ.Plugin,
-		Settings:            pipeline.DefaultDLQ.Settings,
-		WindowSize:          ptr(20),
-		WindowNackThreshold: ptr(10),
-	},
-	Connectors: []config.Connector{
-		{
-			ID:       "pipeline1:con1",
-			Type:     "source",
-			Plugin:   "builtin:file",
-			Name:     "source",
-			Settings: map[string]string{"path": "my/path/file1.txt"},
-		}, {
-			ID:       "pipeline1:con2",
-			Type:     "destination",
-			Plugin:   "builtin:file",
-			Name:     "dest",
-			Settings: map[string]string{"path": "my/path/file2.txt"},
-			Processors: []config.Processor{
-				{
-					ID:       "pipeline1:con2:proc1con",
-					Type:     "js",
-					Workers:  10,
-					Settings: map[string]string{"additionalProp1": "string"},
-				},
-			},
-		},
-	},
-	Processors: []config.Processor{
-		{
-			ID:       "pipeline1:proc1",
-			Type:     "js",
-			Workers:  1,
-			Settings: map[string]string{"additionalProp1": "string"},
-		},
-	},
-}
 
 var P1 = &pipeline.Instance{
 	ID: "pipeline1",
@@ -156,5 +111,3 @@ var P1C2P1 = &processor.Instance{
 	CreatedAt:     time.Now(),
 	UpdatedAt:     time.Now(),
 }
-
-func ptr[T any](t T) *T { return &t }

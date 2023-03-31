@@ -1,3 +1,5 @@
+# This is a fixture used in tests. The Go objects, expected to be created by
+# this configuration file, can be found in the same folder.
 ---
 version: 2.0
 pipelines:

@@ -21,152 +21,11 @@ import (
 
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/pipeline"
-	"github.com/conduitio/conduit/pkg/provisioning/config"
 )
-
-// ---------------
-// -- pipeline2 --
-// ---------------
-
-var P2Config = config.Pipeline{
-	ID:          "pipeline2",
-	Status:      "stopped",
-	Name:        "name2",
-	Description: "desc2",
-	DLQ: config.DLQ{
-		Plugin:              pipeline.DefaultDLQ.Plugin,
-		Settings:            pipeline.DefaultDLQ.Settings,
-		WindowSize:          ptr(pipeline.DefaultDLQ.WindowSize),
-		WindowNackThreshold: ptr(pipeline.DefaultDLQ.WindowNackThreshold),
-	},
-	Connectors: []config.Connector{
-		{
-			ID:       "pipeline2:con1",
-			Type:     "source",
-			Plugin:   "builtin:file",
-			Name:     "source",
-			Settings: map[string]string{"path": "my/path/file1.txt"},
-		},
-	},
-	Processors: nil,
-}
-
-var P2 = &pipeline.Instance{
-	ID: "pipeline2",
-	Config: pipeline.Config{
-		Name:        "name2",
-		Description: "desc2",
-	},
-	Status:       pipeline.StatusUserStopped,
-	Error:        "",
-	DLQ:          pipeline.DefaultDLQ,
-	ConnectorIDs: []string{"pipeline2:con1"},
-	ProcessorIDs: nil,
-
-	ProvisionedBy: pipeline.ProvisionTypeConfig,
-	CreatedAt:     time.Now(),
-	UpdatedAt:     time.Now(),
-}
-
-var P2C1 = &connector.Instance{
-	ID:   "pipeline2:con1",
-	Type: connector.TypeDestination,
-	Config: connector.Config{
-		Name:     "file-dest",
-		Settings: map[string]string{"path": "./test/file3.txt"},
-	},
-	PipelineID:   "pipeline2",
-	Plugin:       "builtin:file",
-	ProcessorIDs: nil,
-
-	ProvisionedBy: connector.ProvisionTypeConfig,
-	CreatedAt:     time.Now(),
-	UpdatedAt:     time.Now(),
-}
-
-// ---------------
-// -- pipeline3 --
-// ---------------
-
-var P3Config = config.Pipeline{
-	ID:          "pipeline3",
-	Status:      "stopped",
-	Name:        "name3",
-	Description: "empty",
-	DLQ: config.DLQ{
-		Plugin:              pipeline.DefaultDLQ.Plugin,
-		Settings:            pipeline.DefaultDLQ.Settings,
-		WindowSize:          ptr(pipeline.DefaultDLQ.WindowSize),
-		WindowNackThreshold: ptr(pipeline.DefaultDLQ.WindowNackThreshold),
-	},
-	Connectors: nil,
-	Processors: nil,
-}
-
-var P3 = &pipeline.Instance{
-	ID: "pipeline3",
-	Config: pipeline.Config{
-		Name:        "name3",
-		Description: "empty",
-	},
-	Status:       pipeline.StatusUserStopped,
-	Error:        "",
-	DLQ:          pipeline.DefaultDLQ,
-	ConnectorIDs: nil,
-	ProcessorIDs: nil,
-
-	ProvisionedBy: pipeline.ProvisionTypeConfig,
-	CreatedAt:     time.Now(),
-	UpdatedAt:     time.Now(),
-}
 
 // ---------------
 // -- pipeline1 --
 // ---------------
-
-var P1Config = config.Pipeline{
-	ID:          "pipeline1",
-	Status:      "running",
-	Name:        "name1",
-	Description: "desc1",
-	DLQ: config.DLQ{
-		Plugin:              pipeline.DefaultDLQ.Plugin,
-		Settings:            pipeline.DefaultDLQ.Settings,
-		WindowSize:          ptr(pipeline.DefaultDLQ.WindowSize),
-		WindowNackThreshold: ptr(pipeline.DefaultDLQ.WindowNackThreshold),
-	},
-	Connectors: []config.Connector{
-		{
-			ID:       "pipeline1:con1",
-			Type:     "source",
-			Plugin:   "builtin:file",
-			Name:     "file-src",
-			Settings: map[string]string{"path": "./test/source-file.txt"},
-		}, {
-			ID:       "pipeline1:con2",
-			Type:     "destination",
-			Plugin:   "builtin:file",
-			Name:     "file-dest",
-			Settings: map[string]string{"path": "./test/dest-file.txt"},
-			Processors: []config.Processor{
-				{
-					ID:       "pipeline1:con2:con2proc1",
-					Type:     "removereadat",
-					Settings: nil,
-					Workers:  1,
-				},
-			},
-		},
-	},
-	Processors: []config.Processor{
-		{
-			ID:       "pipeline1:proc1",
-			Type:     "removereadat",
-			Settings: nil,
-			Workers:  1,
-		},
-	},
-}
 
 var P1 = &pipeline.Instance{
 	ID: "pipeline1",
@@ -253,4 +112,60 @@ var P1C2P1 = &processor.Instance{
 	UpdatedAt:     time.Now(),
 }
 
-func ptr[T any](t T) *T { return &t }
+// ---------------
+// -- pipeline2 --
+// ---------------
+
+var P2 = &pipeline.Instance{
+	ID: "pipeline2",
+	Config: pipeline.Config{
+		Name:        "name2",
+		Description: "desc2",
+	},
+	Status:       pipeline.StatusUserStopped,
+	Error:        "",
+	DLQ:          pipeline.DefaultDLQ,
+	ConnectorIDs: []string{"pipeline2:con1"},
+	ProcessorIDs: nil,
+
+	ProvisionedBy: pipeline.ProvisionTypeConfig,
+	CreatedAt:     time.Now(),
+	UpdatedAt:     time.Now(),
+}
+
+var P2C1 = &connector.Instance{
+	ID:   "pipeline2:con1",
+	Type: connector.TypeDestination,
+	Config: connector.Config{
+		Name:     "file-dest",
+		Settings: map[string]string{"path": "./test/file3.txt"},
+	},
+	PipelineID:   "pipeline2",
+	Plugin:       "builtin:file",
+	ProcessorIDs: nil,
+
+	ProvisionedBy: connector.ProvisionTypeConfig,
+	CreatedAt:     time.Now(),
+	UpdatedAt:     time.Now(),
+}
+
+// ---------------
+// -- pipeline3 --
+// ---------------
+
+var P3 = &pipeline.Instance{
+	ID: "pipeline3",
+	Config: pipeline.Config{
+		Name:        "name3",
+		Description: "empty",
+	},
+	Status:       pipeline.StatusUserStopped,
+	Error:        "",
+	DLQ:          pipeline.DefaultDLQ,
+	ConnectorIDs: nil,
+	ProcessorIDs: nil,
+
+	ProvisionedBy: pipeline.ProvisionTypeConfig,
+	CreatedAt:     time.Now(),
+	UpdatedAt:     time.Now(),
+}

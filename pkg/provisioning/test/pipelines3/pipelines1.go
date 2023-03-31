@@ -19,37 +19,7 @@ import (
 
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/pipeline"
-	"github.com/conduitio/conduit/pkg/provisioning/config"
 )
-
-var P1Config = config.Pipeline{
-	ID:          "pipeline1",
-	Status:      "running",
-	Name:        "name1",
-	Description: "desc1",
-	DLQ: config.DLQ{
-		Plugin:              pipeline.DefaultDLQ.Plugin,
-		Settings:            pipeline.DefaultDLQ.Settings,
-		WindowSize:          ptr(pipeline.DefaultDLQ.WindowSize),
-		WindowNackThreshold: ptr(pipeline.DefaultDLQ.WindowNackThreshold),
-	},
-	Connectors: []config.Connector{
-		{
-			ID:       "pipeline1:con1",
-			Type:     "source",
-			Plugin:   "builtin:file",
-			Name:     "source",
-			Settings: map[string]string{"path": "my/path/file1.txt"},
-		}, {
-			ID:       "pipeline1:con2",
-			Type:     "destination",
-			Plugin:   "builtin:file",
-			Name:     "dest",
-			Settings: map[string]string{"path": "my/path/file2.txt"},
-		},
-	},
-	Processors: nil,
-}
 
 var P1 = &pipeline.Instance{
 	ID: "pipeline1",
@@ -99,5 +69,3 @@ var P1C2 = &connector.Instance{
 	CreatedAt:     time.Now(),
 	UpdatedAt:     time.Now(),
 }
-
-func ptr[T any](t T) *T { return &t }
