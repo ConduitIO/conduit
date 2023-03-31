@@ -33,7 +33,7 @@ func TestPipelineFields(t *testing.T) {
 	sort.Strings(wantFields)
 	sort.Strings(haveFields)
 
-	is.Equal(wantFields, haveFields) // fields don't match, if you added a field to Pipeline please add it to PipelineImmutableFields, PipelineMutableFields or PipelineIgnoredFields
+	is.Equal(wantFields, haveFields) // fields don't match, if you added a field to Pipeline please add it to PipelineMutableFields or PipelineIgnoredFields
 }
 
 func TestConnectorFields(t *testing.T) {
