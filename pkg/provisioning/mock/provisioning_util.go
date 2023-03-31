@@ -21,20 +21,20 @@ import (
 	"github.com/golang/mock/gomock"
 )
 
-// ICreate is a utility function that lets you declare an expected call to
+// CreateWithInstance is a utility function that lets you declare an expected call to
 // Create with arguments taken from the supplied instance.
-func (mr *PipelineServiceMockRecorder) ICreate(ctx interface{}, instance *pipeline.Instance) *gomock.Call {
+func (mr *PipelineServiceMockRecorder) CreateWithInstance(ctx interface{}, instance *pipeline.Instance) *gomock.Call {
 	return mr.Create(ctx, instance.ID, instance.Config, instance.ProvisionedBy)
 }
 
-// ICreate is a utility function that lets you declare an expected call to
+// CreateWithInstance is a utility function that lets you declare an expected call to
 // Create with arguments taken from the supplied instance.
-func (mr *ConnectorServiceMockRecorder) ICreate(ctx interface{}, instance *connector.Instance) *gomock.Call {
-	return mr.Create(gomock.Any(), instance.ID, instance.Type, instance.Plugin, instance.PipelineID, instance.Config, instance.ProvisionedBy)
+func (mr *ConnectorServiceMockRecorder) CreateWithInstance(ctx interface{}, instance *connector.Instance) *gomock.Call {
+	return mr.Create(ctx, instance.ID, instance.Type, instance.Plugin, instance.PipelineID, instance.Config, instance.ProvisionedBy)
 }
 
-// ICreate is a utility function that lets you declare an expected call to
+// CreateWithInstance is a utility function that lets you declare an expected call to
 // Create with arguments taken from the supplied instance.
-func (mr *ProcessorServiceMockRecorder) ICreate(ctx interface{}, instance *processor.Instance) *gomock.Call {
-	return mr.Create(gomock.Any(), instance.ID, instance.Type, instance.Parent, instance.Config, instance.ProvisionedBy)
+func (mr *ProcessorServiceMockRecorder) CreateWithInstance(ctx interface{}, instance *processor.Instance) *gomock.Call {
+	return mr.Create(ctx, instance.ID, instance.Type, instance.Parent, instance.Config, instance.ProvisionedBy)
 }

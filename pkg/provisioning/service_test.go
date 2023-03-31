@@ -115,18 +115,18 @@ func TestProvision_Create(t *testing.T) {
 	pipelineService.EXPECT().Get(anyCtx, p1.P1.ID).Return(nil, pipeline.ErrInstanceNotFound)
 
 	// create pipeline
-	pipelineService.EXPECT().ICreate(anyCtx, p1.P1)
+	pipelineService.EXPECT().CreateWithInstance(anyCtx, p1.P1)
 	pipelineService.EXPECT().UpdateDLQ(anyCtx, p1.P1.ID, p1.P1.DLQ)
 	pipelineService.EXPECT().AddConnector(anyCtx, p1.P1.ID, p1.P1.ConnectorIDs[0])
 	pipelineService.EXPECT().AddConnector(anyCtx, p1.P1.ID, p1.P1.ConnectorIDs[1])
 	pipelineService.EXPECT().AddProcessor(anyCtx, p1.P1.ID, p1.P1.ProcessorIDs[0])
 
-	connService.EXPECT().ICreate(anyCtx, p1.P1C1)
-	connService.EXPECT().ICreate(anyCtx, p1.P1C2)
+	connService.EXPECT().CreateWithInstance(anyCtx, p1.P1C1)
+	connService.EXPECT().CreateWithInstance(anyCtx, p1.P1C2)
 	connService.EXPECT().AddProcessor(anyCtx, p1.P1C2.ID, p1.P1C2.ProcessorIDs[0])
 
-	procService.EXPECT().ICreate(anyCtx, p1.P1C2P1)
-	procService.EXPECT().ICreate(anyCtx, p1.P1P1)
+	procService.EXPECT().CreateWithInstance(anyCtx, p1.P1C2P1)
+	procService.EXPECT().CreateWithInstance(anyCtx, p1.P1P1)
 
 	// start pipeline
 	pipelineService.EXPECT().Start(anyCtx, connService, procService, plugService, p1.P1.ID)
@@ -179,18 +179,18 @@ func TestProvision_NoRollbackOnFailedStart(t *testing.T) {
 	pipelineService.EXPECT().Get(anyCtx, p1.P1.ID).Return(nil, pipeline.ErrInstanceNotFound)
 
 	// create pipeline
-	pipelineService.EXPECT().ICreate(anyCtx, p1.P1)
+	pipelineService.EXPECT().CreateWithInstance(anyCtx, p1.P1)
 	pipelineService.EXPECT().UpdateDLQ(anyCtx, p1.P1.ID, p1.P1.DLQ)
 	pipelineService.EXPECT().AddConnector(anyCtx, p1.P1.ID, p1.P1.ConnectorIDs[0])
 	pipelineService.EXPECT().AddConnector(anyCtx, p1.P1.ID, p1.P1.ConnectorIDs[1])
 	pipelineService.EXPECT().AddProcessor(anyCtx, p1.P1.ID, p1.P1.ProcessorIDs[0])
 
-	connService.EXPECT().ICreate(anyCtx, p1.P1C1)
-	connService.EXPECT().ICreate(anyCtx, p1.P1C2)
+	connService.EXPECT().CreateWithInstance(anyCtx, p1.P1C1)
+	connService.EXPECT().CreateWithInstance(anyCtx, p1.P1C2)
 	connService.EXPECT().AddProcessor(anyCtx, p1.P1C2.ID, p1.P1C2.ProcessorIDs[0])
 
-	procService.EXPECT().ICreate(anyCtx, p1.P1C2P1)
-	procService.EXPECT().ICreate(anyCtx, p1.P1P1)
+	procService.EXPECT().CreateWithInstance(anyCtx, p1.P1C2P1)
+	procService.EXPECT().CreateWithInstance(anyCtx, p1.P1P1)
 
 	// returns an error, no rollback needed
 	wantErr := cerrors.New("error")
@@ -211,19 +211,19 @@ func TestProvision_RollbackCreate(t *testing.T) {
 	pipelineService.EXPECT().List(anyCtx)
 	pipelineService.EXPECT().Get(anyCtx, p1.P1.ID).Return(nil, pipeline.ErrInstanceNotFound)
 
-	pipelineService.EXPECT().ICreate(anyCtx, p1.P1)
+	pipelineService.EXPECT().CreateWithInstance(anyCtx, p1.P1)
 	pipelineService.EXPECT().UpdateDLQ(anyCtx, p1.P1.ID, p1.P1.DLQ)
 	pipelineService.EXPECT().AddConnector(anyCtx, p1.P1.ID, p1.P1.ConnectorIDs[0])
 	pipelineService.EXPECT().AddConnector(anyCtx, p1.P1.ID, p1.P1.ConnectorIDs[1])
 	pipelineService.EXPECT().AddProcessor(anyCtx, p1.P1.ID, p1.P1.ProcessorIDs[0])
 
-	connService.EXPECT().ICreate(anyCtx, p1.P1C1)
-	connService.EXPECT().ICreate(anyCtx, p1.P1C2)
+	connService.EXPECT().CreateWithInstance(anyCtx, p1.P1C1)
+	connService.EXPECT().CreateWithInstance(anyCtx, p1.P1C2)
 	connService.EXPECT().AddProcessor(anyCtx, p1.P1C2.ID, p1.P1C2.ProcessorIDs[0])
 
-	procService.EXPECT().ICreate(anyCtx, p1.P1C2P1)
+	procService.EXPECT().CreateWithInstance(anyCtx, p1.P1C2P1)
 	wantErr := cerrors.New("error")
-	procService.EXPECT().ICreate(anyCtx, p1.P1P1).Return(nil, wantErr)
+	procService.EXPECT().CreateWithInstance(anyCtx, p1.P1P1).Return(nil, wantErr)
 
 	// rollback the creation of all entities
 	procService.EXPECT().Delete(anyCtx, p1.P1P1.ID)
@@ -285,13 +285,13 @@ func TestProvision_MultiplePipelinesDuplicatedPipelineID(t *testing.T) {
 	pipelineService.EXPECT().Get(anyCtx, p2.P2.ID).Return(nil, pipeline.ErrInstanceNotFound)
 
 	// one pipeline is not duplicated, it still gets provisioned
-	pipelineService.EXPECT().ICreate(anyCtx, p2.P2)
+	pipelineService.EXPECT().CreateWithInstance(anyCtx, p2.P2)
 	pipelineService.EXPECT().UpdateDLQ(anyCtx, p2.P2.ID, p2.P2.DLQ)
 	pipelineService.EXPECT().AddConnector(anyCtx, p2.P2.ID, p2.P2.ConnectorIDs[0])
 	pipelineService.EXPECT().AddConnector(anyCtx, p2.P2.ID, p2.P2.ConnectorIDs[1])
 
-	connService.EXPECT().ICreate(anyCtx, p2.P2C1)
-	connService.EXPECT().ICreate(anyCtx, p2.P2C2)
+	connService.EXPECT().CreateWithInstance(anyCtx, p2.P2C1)
+	connService.EXPECT().CreateWithInstance(anyCtx, p2.P2C2)
 
 	pipelineService.EXPECT().Start(anyCtx, connService, procService, plugService, p2.P2.ID)
 
@@ -312,24 +312,24 @@ func TestProvision_MultiplePipelines(t *testing.T) {
 	pipelineService.EXPECT().Get(anyCtx, p3.P2.ID).Return(nil, pipeline.ErrInstanceNotFound)
 
 	// create pipeline1
-	pipelineService.EXPECT().ICreate(anyCtx, p3.P1)
+	pipelineService.EXPECT().CreateWithInstance(anyCtx, p3.P1)
 	pipelineService.EXPECT().UpdateDLQ(anyCtx, p3.P1.ID, p3.P1.DLQ)
 	pipelineService.EXPECT().AddConnector(anyCtx, p3.P1.ID, p3.P1.ConnectorIDs[0])
 	pipelineService.EXPECT().AddConnector(anyCtx, p3.P1.ID, p3.P1.ConnectorIDs[1])
 
-	connService.EXPECT().ICreate(anyCtx, p3.P1C1)
-	connService.EXPECT().ICreate(anyCtx, p3.P1C2)
+	connService.EXPECT().CreateWithInstance(anyCtx, p3.P1C1)
+	connService.EXPECT().CreateWithInstance(anyCtx, p3.P1C2)
 
 	pipelineService.EXPECT().Start(anyCtx, connService, procService, plugService, p3.P1.ID)
 
 	// create pipeline2
-	pipelineService.EXPECT().ICreate(anyCtx, p3.P2)
+	pipelineService.EXPECT().CreateWithInstance(anyCtx, p3.P2)
 	pipelineService.EXPECT().UpdateDLQ(anyCtx, p3.P2.ID, p3.P2.DLQ)
 	pipelineService.EXPECT().AddConnector(anyCtx, p3.P2.ID, p3.P2.ConnectorIDs[0])
 	pipelineService.EXPECT().AddConnector(anyCtx, p3.P2.ID, p3.P2.ConnectorIDs[1])
 
-	connService.EXPECT().ICreate(anyCtx, p3.P2C1)
-	connService.EXPECT().ICreate(anyCtx, p3.P2C2)
+	connService.EXPECT().CreateWithInstance(anyCtx, p3.P2C1)
+	connService.EXPECT().CreateWithInstance(anyCtx, p3.P2C2)
 
 	pipelineService.EXPECT().Start(anyCtx, connService, procService, plugService, p3.P2.ID)
 
