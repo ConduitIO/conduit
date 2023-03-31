@@ -84,12 +84,12 @@ func (a createPipelineAction) Do(ctx context.Context) error {
 }
 func (a createPipelineAction) Rollback(ctx context.Context) error {
 	err := a.pipelineService.Delete(ctx, a.cfg.ID)
-	if !cerrors.Is(err, pipeline.ErrInstanceNotFound) {
-		// ignore instance not found errors, this means the action failed to
-		// create the pipeline in the first place
-		return err
+	// ignore instance not found errors, this means the action failed to
+	// create the pipeline in the first place
+	if cerrors.Is(err, pipeline.ErrInstanceNotFound) {
+		return nil
 	}
-	return nil
+	return err
 }
 
 type createConnectorAction struct {
@@ -132,12 +132,12 @@ func (a createConnectorAction) Do(ctx context.Context) error {
 }
 func (a createConnectorAction) Rollback(ctx context.Context) error {
 	err := a.connectorService.Delete(ctx, a.cfg.ID, a.pluginService)
-	if !cerrors.Is(err, connector.ErrInstanceNotFound) {
-		// ignore instance not found errors, this means the action failed to
-		// create the connector in the first place
-		return err
+	// ignore instance not found errors, this means the action failed to
+	// create the connector in the first place
+	if cerrors.Is(err, connector.ErrInstanceNotFound) {
+		return nil
 	}
-	return nil
+	return err
 }
 func (createConnectorAction) connectorType(t string) connector.Type {
 	switch t {
@@ -178,12 +178,12 @@ func (a createProcessorAction) Do(ctx context.Context) error {
 }
 func (a createProcessorAction) Rollback(ctx context.Context) error {
 	err := a.processorService.Delete(ctx, a.cfg.ID)
-	if !cerrors.Is(err, processor.ErrInstanceNotFound) {
-		// ignore instance not found errors, this means the action failed to
-		// create the processor in the first place
-		return err
+	// ignore instance not found errors, this means the action failed to
+	// create the processor in the first place
+	if cerrors.Is(err, processor.ErrInstanceNotFound) {
+		return nil
 	}
-	return nil
+	return err
 }
 
 // --------------------
