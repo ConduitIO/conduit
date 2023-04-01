@@ -9849,10 +9849,10 @@ pretty-ms@^3.1.0:
   dependencies:
     parse-ms "^1.0.0"
 
-pretty-print-json@^1.4.0:
-  version "1.4.0"
-  resolved "https://registry.yarnpkg.com/pretty-print-json/-/pretty-print-json-1.4.0.tgz#911e95fd30f2f6fc723bb890276f9a5d484b098b"
-  integrity sha512-PKrcZ/9ErDN5WfRdWhZtbs5izhSTZoQNLsNPdZtpbt0Ex6eu/e6Akf44gGEdCYEMUnIKg+TeYEeF9wunri1/vw==
+pretty-print-json@^1.4.1:
+  version "1.4.1"
+  resolved "https://registry.yarnpkg.com/pretty-print-json/-/pretty-print-json-1.4.1.tgz#32ad244264d304d94d66b3389d8ceed5c5fbcb99"
+  integrity sha512-t86WZtFApCJ56qtkXqZDt1T0ngUxpF0bR+DD7oXOuzteFjJE4dgJz2xPNvRilLHu7xs/Cz2HREw9Zt7dsAGy4A==
 
 printf@^0.5.1:
   version "0.5.3"
