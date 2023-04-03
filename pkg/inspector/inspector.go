@@ -32,12 +32,10 @@ const DefaultBufferSize = 1000
 type Session struct {
 	C chan record.Record
 
-	// componentID is the ID of the component being inspected
-	componentID string
-	id          string
-	logger      log.CtxLogger
-	onClose     func()
-	once        *sync.Once
+	id      string
+	logger  log.CtxLogger
+	onClose func()
+	once    *sync.Once
 }
 
 func (s *Session) close() {
@@ -50,7 +48,6 @@ func (s *Session) close() {
 	s.once.Do(func() {
 		s.onClose()
 		close(s.C)
-		measure.InspectorsGauge.WithValues(s.componentID).Dec()
 	})
 }
 
@@ -118,19 +115,21 @@ func (i *Inspector) Send(ctx context.Context, r record.Record) {
 	}
 }
 
+// NewSession creates a new session in given inspector.
+// componentID is the ID of the component being inspected (connector or processor).
 func (i *Inspector) NewSession(ctx context.Context, componentID string) *Session {
 	id := uuid.NewString()
 	s := &Session{
-		C:           make(chan record.Record, i.bufferSize),
-		id:          id,
-		componentID: componentID,
-		logger:      i.logger.WithComponent("inspector.Session"),
+		C:      make(chan record.Record, i.bufferSize),
+		id:     id,
+		logger: i.logger.WithComponent("inspector.Session"),
 		onClose: func() {
 			i.remove(id)
+			measure.InspectorsGauge.WithValues(componentID).Dec()
 		},
 		once: &sync.Once{},
 	}
-	measure.InspectorsGauge.WithValues(s.componentID).Inc()
+	measure.InspectorsGauge.WithValues(componentID).Inc()
 
 	go func() {
 		<-ctx.Done()
