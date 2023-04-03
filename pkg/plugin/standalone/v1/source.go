@@ -40,7 +40,7 @@ func (p *GRPCSourcePlugin) GRPCClient(_ context.Context, _ *goplugin.GRPCBroker,
 
 // GRPCServer always returns an error; we're only implementing the client half
 // of the interface.
-func (p *GRPCSourcePlugin) GRPCServer(broker *goplugin.GRPCBroker, s *grpc.Server) error {
+func (p *GRPCSourcePlugin) GRPCServer(*goplugin.GRPCBroker, *grpc.Server) error {
 	return cerrors.New("this package only implements gRPC clients")
 }
 
@@ -75,7 +75,7 @@ func (s *sourcePluginClient) Start(ctx context.Context, p record.Position) error
 	return nil
 }
 
-func (s *sourcePluginClient) Read(ctx context.Context) (record.Record, error) {
+func (s *sourcePluginClient) Read(context.Context) (record.Record, error) {
 	if s.stream == nil {
 		return record.Record{}, plugin.ErrStreamNotOpen
 	}
@@ -94,7 +94,7 @@ func (s *sourcePluginClient) Read(ctx context.Context) (record.Record, error) {
 	return goResp, nil
 }
 
-func (s *sourcePluginClient) Ack(ctx context.Context, p record.Position) error {
+func (s *sourcePluginClient) Ack(_ context.Context, p record.Position) error {
 	if s.stream == nil {
 		return plugin.ErrStreamNotOpen
 	}

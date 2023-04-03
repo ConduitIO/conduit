@@ -1,4 +1,4 @@
-// Copyright © 2022 Meroxa, Inc.
+// Copyright © 2023 Meroxa, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,22 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package log
+package connector
 
 import (
-	"context"
-
-	"github.com/rs/zerolog"
+	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/plugin"
 )
 
-// componentHook adds the component name to the log output.
-type componentHook struct {
-	name string
-}
+// fakePluginFetcher fulfills the PluginFetcher interface.
+type fakePluginFetcher map[string]plugin.Dispenser
 
-// Run executes the componentHook.
-func (ch componentHook) Run(_ context.Context, e *zerolog.Event, _ zerolog.Level) {
-	if ch.name != "" {
-		e.Str(ComponentField, ch.name)
+func (fpf fakePluginFetcher) NewDispenser(_ log.CtxLogger, name string) (plugin.Dispenser, error) {
+	plug, ok := fpf[name]
+	if !ok {
+		return nil, plugin.ErrPluginNotFound
 	}
+	return plug, nil
 }

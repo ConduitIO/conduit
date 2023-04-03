@@ -64,7 +64,7 @@ func (h *HealthServer) Check(ctx context.Context, req *grpc_health_v1.HealthChec
 	return nil, grpcstatus.Errorf(codes.NotFound, "service '%v' not found", req.Service)
 }
 
-func (h *HealthServer) Watch(req *grpc_health_v1.HealthCheckRequest, server grpc_health_v1.Health_WatchServer) error {
+func (h *HealthServer) Watch(_ *grpc_health_v1.HealthCheckRequest, server grpc_health_v1.Health_WatchServer) error {
 	// should be altered to subsequently send a new message whenever the service's serving status changes.
 	return server.Send(&grpc_health_v1.HealthCheckResponse{
 		Status: grpc_health_v1.HealthCheckResponse_SERVING,

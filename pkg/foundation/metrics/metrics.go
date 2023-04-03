@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:generate mockgen -destination=mock/metrics.go -package=mock -mock_names=Counter=Counter,LabeledCounter=LabeledCounter,Gauge=Gauge,LabeledGauge=LabeledGauge,Timer=Timer,LabeledTimer=LabeledTimer . Counter,LabeledCounter,Gauge,LabeledGauge,Timer,LabeledTimer
-
 package metrics
 
 import (

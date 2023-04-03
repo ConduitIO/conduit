@@ -27,7 +27,7 @@ import (
 	"github.com/matryer/is"
 )
 
-func TestInspector_Send_NoSessions(t *testing.T) {
+func TestInspector_Send_NoSessions(*testing.T) {
 	underTest := New(log.Nop(), 10)
 	underTest.Send(context.Background(), record.Record{})
 }

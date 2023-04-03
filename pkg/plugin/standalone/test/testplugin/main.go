@@ -68,7 +68,7 @@ func main() {
 
 type specifierPlugin struct{}
 
-func (s specifierPlugin) Specify(ctx context.Context, request cpluginv1.SpecifierSpecifyRequest) (cpluginv1.SpecifierSpecifyResponse, error) {
+func (s specifierPlugin) Specify(context.Context, cpluginv1.SpecifierSpecifyRequest) (cpluginv1.SpecifierSpecifyResponse, error) {
 	return cpluginv1.SpecifierSpecifyResponse{
 		Name:        testPluginName,
 		Summary:     testPluginSummary,

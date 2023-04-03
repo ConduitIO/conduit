@@ -233,6 +233,7 @@ func (p *webSocketProxy) startWebSocketWrite(ctx context.Context, messages chan 
 	defer func() {
 		ticker.Stop()
 		cancelFn()
+		//nolint:revive // draining the channel
 		for range messages {
 			// throw away
 		}

@@ -323,7 +323,7 @@ func (d *MutableStructDescriptor) SetName(s2 string) {
 	*d.descriptor.Name = s2
 	// TODO update references to this struct descriptor
 }
-func (d *MutableStructDescriptor) SetParameters(params map[string]interface{}) {
+func (d *MutableStructDescriptor) SetParameters(_ map[string]interface{}) {
 	d.schema.changed = true
 	// TODO parse parameters
 }
@@ -468,7 +468,7 @@ func (d *MutableMapDescriptor) Parameters() map[string]interface{} {
 		// TODO add parameters
 	}
 }
-func (d *MutableMapDescriptor) SetParameters(params map[string]interface{}) {
+func (d *MutableMapDescriptor) SetParameters(_ map[string]interface{}) {
 	d.schema.changed = true
 	// TODO parse parameters
 }
@@ -549,7 +549,7 @@ func (d *MutableArrayDescriptor) Parameters() map[string]interface{} {
 		// TODO add parameters
 	}
 }
-func (d *MutableArrayDescriptor) SetParameters(params map[string]interface{}) {
+func (d *MutableArrayDescriptor) SetParameters(_ map[string]interface{}) {
 	d.schema.changed = true
 	// TODO parse parameters
 }
@@ -597,7 +597,7 @@ func (d *MutableEnumDescriptor) Parameters() map[string]interface{} {
 		// TODO add parameters
 	}
 }
-func (d *MutableEnumDescriptor) SetParameters(params map[string]interface{}) {
+func (d *MutableEnumDescriptor) SetParameters(_ map[string]interface{}) {
 	d.schema.changed = true
 	// TODO parse parameters
 }
@@ -668,7 +668,7 @@ func (d *MutableEnumValueDescriptor) Parameters() map[string]interface{} {
 		// TODO add parameters
 	}
 }
-func (d *MutableEnumValueDescriptor) SetParameters(params map[string]interface{}) {
+func (d *MutableEnumValueDescriptor) SetParameters(_ map[string]interface{}) {
 	d.schema.changed = true
 	// TODO parse parameters
 }
@@ -719,7 +719,7 @@ func (d *MutablePrimitiveDescriptor) Parameters() map[string]interface{} {
 		// TODO add parameters
 	}
 }
-func (d *MutablePrimitiveDescriptor) SetParameters(params map[string]interface{}) {
+func (d *MutablePrimitiveDescriptor) SetParameters(_ map[string]interface{}) {
 	d.schema.changed = true
 	// TODO parse parameters
 }

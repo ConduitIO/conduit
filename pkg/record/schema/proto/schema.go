@@ -221,7 +221,7 @@ type EnumDescriptor struct {
 	descriptor protoreflect.EnumDescriptor
 }
 
-func (d EnumDescriptor) DescriptorType(descriptor schema.EnumDescriptor) {}
+func (d EnumDescriptor) DescriptorType(schema.EnumDescriptor) {}
 func (d EnumDescriptor) Name() string {
 	return string(d.descriptor.Name())
 }
@@ -242,7 +242,7 @@ type EnumValueDescriptor struct {
 	descriptor protoreflect.EnumValueDescriptor
 }
 
-func (d EnumValueDescriptor) DescriptorType(descriptor schema.EnumValueDescriptor) {}
+func (d EnumValueDescriptor) DescriptorType(schema.EnumValueDescriptor) {}
 func (d EnumValueDescriptor) Parameters() map[string]interface{} {
 	return map[string]interface{}{
 		// TODO add parameters

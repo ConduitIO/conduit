@@ -34,12 +34,12 @@ func init() {
 }
 
 // ParseJSONKey parses the record key from raw to structured data
-func ParseJSONKey(config processor.Config) (processor.Interface, error) {
+func ParseJSONKey(_ processor.Config) (processor.Interface, error) {
 	return parseJSON(parseJSONKeyProcType, recordKeyGetSetter{})
 }
 
 // ParseJSONPayload parses the record payload from raw to structured data
-func ParseJSONPayload(config processor.Config) (processor.Interface, error) {
+func ParseJSONPayload(_ processor.Config) (processor.Interface, error) {
 	return parseJSON(parseJSONPayloadProcType, recordPayloadGetSetter{})
 }
 
