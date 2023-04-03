@@ -22,8 +22,8 @@ import (
 // fakePluginFetcher fulfills the PluginFetcher interface.
 type fakePluginFetcher map[string]plugin.Dispenser
 
-func (tpf fakePluginFetcher) NewDispenser(logger log.CtxLogger, name string) (plugin.Dispenser, error) {
-	plug, ok := tpf[name]
+func (fpf fakePluginFetcher) NewDispenser(_ log.CtxLogger, name string) (plugin.Dispenser, error) {
+	plug, ok := fpf[name]
 	if !ok {
 		return nil, plugin.ErrPluginNotFound
 	}
