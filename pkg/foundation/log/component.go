@@ -26,7 +26,7 @@ type componentHook struct {
 }
 
 // Run executes the componentHook.
-func (ch componentHook) Run(ctx context.Context, e *zerolog.Event, l zerolog.Level) {
+func (ch componentHook) Run(_ context.Context, e *zerolog.Event, _ zerolog.Level) {
 	if ch.name != "" {
 		e.Str(ComponentField, ch.name)
 	}

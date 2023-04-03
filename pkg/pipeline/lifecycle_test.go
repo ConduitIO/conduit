@@ -538,7 +538,7 @@ func dummyDestination(persister *connector.Persister) *connector.Instance {
 // testConnectorFetcher fulfills the ConnectorFetcher interface.
 type testConnectorFetcher map[string]*connector.Instance
 
-func (tcf testConnectorFetcher) Get(ctx context.Context, id string) (*connector.Instance, error) {
+func (tcf testConnectorFetcher) Get(_ context.Context, id string) (*connector.Instance, error) {
 	conn, ok := tcf[id]
 	if !ok {
 		return nil, connector.ErrInstanceNotFound
@@ -553,7 +553,7 @@ func (tcf testConnectorFetcher) Create(context.Context, string, connector.Type, 
 // testProcessorFetcher fulfills the ProcessorFetcher interface.
 type testProcessorFetcher map[string]*processor.Instance
 
-func (tpf testProcessorFetcher) Get(ctx context.Context, id string) (*processor.Instance, error) {
+func (tpf testProcessorFetcher) Get(_ context.Context, id string) (*processor.Instance, error) {
 	proc, ok := tpf[id]
 	if !ok {
 		return nil, processor.ErrInstanceNotFound
@@ -564,7 +564,7 @@ func (tpf testProcessorFetcher) Get(ctx context.Context, id string) (*processor.
 // testPluginFetcher fulfills the PluginFetcher interface.
 type testPluginFetcher map[string]plugin.Dispenser
 
-func (tpf testPluginFetcher) NewDispenser(logger log.CtxLogger, name string) (plugin.Dispenser, error) {
+func (tpf testPluginFetcher) NewDispenser(_ log.CtxLogger, name string) (plugin.Dispenser, error) {
 	plug, ok := tpf[name]
 	if !ok {
 		return nil, plugin.ErrPluginNotFound

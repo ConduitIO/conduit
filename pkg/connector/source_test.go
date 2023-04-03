@@ -101,7 +101,7 @@ func TestSource_Ack_Deadlock(t *testing.T) {
 // testPluginFetcher fulfills the PluginFetcher interface.
 type testPluginFetcher map[string]plugin.Dispenser
 
-func (tpf testPluginFetcher) NewDispenser(logger log.CtxLogger, name string) (plugin.Dispenser, error) {
+func (tpf testPluginFetcher) NewDispenser(_ log.CtxLogger, name string) (plugin.Dispenser, error) {
 	plug, ok := tpf[name]
 	if !ok {
 		return nil, plugin.ErrPluginNotFound
