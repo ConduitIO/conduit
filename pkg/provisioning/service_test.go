@@ -67,7 +67,7 @@ var (
 		Plugin:     "builtin:file",
 		PipelineID: oldPipelineInstance.ID,
 		Config: connector.Config{
-			Name:     "source",
+			Name:     "source-new",
 			Settings: map[string]string{"path": "my/path/file1.txt"},
 		},
 	}

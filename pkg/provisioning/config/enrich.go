@@ -54,6 +54,9 @@ func enrichDLQ(dlq DLQ) DLQ {
 
 // enrichConnectors sets default values for connectors config fields
 func enrichConnectors(mp []Connector, pipelineID string) []Connector {
+	if mp == nil {
+		return nil
+	}
 	out := make([]Connector, len(mp))
 	for i, cfg := range mp {
 		if cfg.Name == "" {
@@ -69,6 +72,9 @@ func enrichConnectors(mp []Connector, pipelineID string) []Connector {
 
 // enrichProcessorsConfig sets default values for processors config fields
 func enrichProcessors(mp []Processor, parentID string) []Processor {
+	if mp == nil {
+		return nil
+	}
 	out := make([]Processor, len(mp))
 	for i, cfg := range mp {
 		if cfg.Workers == 0 {

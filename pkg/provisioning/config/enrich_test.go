@@ -124,8 +124,8 @@ func TestEnrich_DefaultValues(t *testing.T) {
 				WindowSize:          &pipeline.DefaultDLQ.WindowSize,
 				WindowNackThreshold: &pipeline.DefaultDLQ.WindowNackThreshold,
 			},
-			Connectors: []Connector{},
-			Processors: []Processor{},
+			Connectors: nil,
+			Processors: nil,
 		},
 	}}
 
