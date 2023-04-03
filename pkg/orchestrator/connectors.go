@@ -74,7 +74,7 @@ func (c *ConnectorOrchestrator) Create(
 	if err != nil {
 		return nil, err
 	}
-	r.Append(func() error { return c.connectors.Delete(ctx, conn.ID) })
+	r.Append(func() error { return c.connectors.Delete(ctx, conn.ID, c.plugins) })
 
 	_, err = c.pipelines.AddConnector(ctx, pl.ID, conn.ID)
 	if err != nil {
@@ -127,7 +127,7 @@ func (c *ConnectorOrchestrator) Delete(ctx context.Context, id string) error {
 	if pl.Status == pipeline.StatusRunning {
 		return pipeline.ErrPipelineRunning
 	}
-	err = c.connectors.Delete(ctx, id)
+	err = c.connectors.Delete(ctx, id, c.plugins)
 	if err != nil {
 		return err
 	}

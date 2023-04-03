@@ -138,8 +138,8 @@ func (s *Service) Create(
 	return conn, nil
 }
 
-// Delete removes.
-func (s *Service) Delete(ctx context.Context, id string) error {
+// Delete removes the connector.
+func (s *Service) Delete(ctx context.Context, id string, dispenserFetcher PluginDispenserFetcher) error {
 	// make sure instance exists
 	instance, err := s.Get(ctx, id)
 	if err != nil {
@@ -151,7 +151,13 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 		return cerrors.Errorf("could not delete connector instance %v from store: %w", id, err)
 	}
 	delete(s.connectors, id)
-	instance.Close()
+
+	err = instance.Close(ctx, dispenserFetcher)
+	if err != nil {
+		// connector is already deleted, only log the error coming from the
+		// cleanup function, use the instance logger to attach connector ID
+		instance.logger.Err(ctx, err).Msg("could not close connector instance")
+	}
 	measure.ConnectorsGauge.WithValues(strings.ToLower(instance.Type.String())).Dec()
 
 	return nil

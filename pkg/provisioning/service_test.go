@@ -247,11 +247,11 @@ func TestProvision_Rollback(t *testing.T) {
 	pipelineService.EXPECT().Delete(gomock.Not(gomock.Nil()), pipeline1.Name)
 
 	connService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline1:con1", connector.TypeSource, pipeline1.Connectors[0].Plugin, pipeline1.Name, cfg1, connector.ProvisionTypeConfig)
-	connService.EXPECT().Delete(gomock.Not(gomock.Nil()), "pipeline1:con1")
+	connService.EXPECT().Delete(gomock.Not(gomock.Nil()), "pipeline1:con1", plugService)
 	pipelineService.EXPECT().AddConnector(gomock.Not(gomock.Nil()), pipeline1.Name, "pipeline1:con1")
 	pipelineService.EXPECT().RemoveConnector(gomock.Not(gomock.Nil()), pipeline1.Name, "pipeline1:con1")
 	connService.EXPECT().Create(gomock.Not(gomock.Nil()), "pipeline1:con2", connector.TypeDestination, pipeline1.Connectors[1].Plugin, pipeline1.Name, cfg2, connector.ProvisionTypeConfig)
-	connService.EXPECT().Delete(gomock.Not(gomock.Nil()), "pipeline1:con2")
+	connService.EXPECT().Delete(gomock.Not(gomock.Nil()), "pipeline1:con2", plugService)
 	pipelineService.EXPECT().AddConnector(gomock.Not(gomock.Nil()), pipeline1.Name, "pipeline1:con2")
 	pipelineService.EXPECT().RemoveConnector(gomock.Not(gomock.Nil()), pipeline1.Name, "pipeline1:con2")
 
@@ -356,10 +356,10 @@ func TestProvision_RollbackDeletePipeline(t *testing.T) {
 	pipelineService.EXPECT().Delete(gomock.Not(gomock.Nil()), pipeline1.Name)
 
 	connService.EXPECT().Get(gomock.Not(gomock.Nil()), "pipeline1:con1").Return(source, nil).AnyTimes()
-	connService.EXPECT().Delete(gomock.Not(gomock.Nil()), "pipeline1:con1")
+	connService.EXPECT().Delete(gomock.Not(gomock.Nil()), "pipeline1:con1", plugService)
 	pipelineService.EXPECT().RemoveConnector(gomock.Not(gomock.Nil()), pipeline1.Name, "pipeline1:con1")
 	connService.EXPECT().Get(gomock.Not(gomock.Nil()), "pipeline1:con2").Return(destination, nil).AnyTimes()
-	connService.EXPECT().Delete(gomock.Not(gomock.Nil()), "pipeline1:con2")
+	connService.EXPECT().Delete(gomock.Not(gomock.Nil()), "pipeline1:con2", plugService)
 	pipelineService.EXPECT().RemoveConnector(gomock.Not(gomock.Nil()), pipeline1.Name, "pipeline1:con2")
 
 	procService.EXPECT().Get(gomock.Not(gomock.Nil()), "pipeline1:con2:proc1con").Return(proc1conInstance, nil)
@@ -485,9 +485,9 @@ func TestProvision_ExistingPipeline(t *testing.T) {
 	// delete old pipeline
 	pipelineService.EXPECT().Delete(gomock.Not(gomock.Nil()), pipeline1.Name)
 	pipelineService.EXPECT().RemoveConnector(gomock.Not(gomock.Nil()), pipeline1.Name, "pipeline1:con1")
-	connService.EXPECT().Delete(gomock.Not(gomock.Nil()), "pipeline1:con1")
+	connService.EXPECT().Delete(gomock.Not(gomock.Nil()), "pipeline1:con1", plugService)
 	pipelineService.EXPECT().RemoveConnector(gomock.Not(gomock.Nil()), pipeline1.Name, "pipeline1:con2")
-	connService.EXPECT().Delete(gomock.Not(gomock.Nil()), "pipeline1:con2")
+	connService.EXPECT().Delete(gomock.Not(gomock.Nil()), "pipeline1:con2", plugService)
 	connService.EXPECT().RemoveProcessor(gomock.Not(gomock.Nil()), "pipeline1:con2", "pipeline1:con2:proc1con")
 	procService.EXPECT().Get(gomock.Not(gomock.Nil()), "pipeline1:con2:proc1con").Return(proc1conInstance, nil)
 	procService.EXPECT().Delete(gomock.Not(gomock.Nil()), "pipeline1:con2:proc1con")

@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/csync"
 	"github.com/conduitio/conduit/pkg/foundation/database/inmemory"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -27,84 +28,211 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin/mock"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/golang/mock/gomock"
-	"github.com/google/uuid"
 	"github.com/matryer/is"
 )
+
+func TestSource_NoLifecycleEvent(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+
+	src, sourceMock := newTestSource(ctx, t, ctrl)
+
+	// assume that the same config was already active last time
+	src.Instance.LastActiveConfig = src.Instance.Config
+
+	sourceMock.EXPECT().Configure(gomock.Any(), src.Instance.Config.Settings).Return(nil)
+	sourceMock.EXPECT().Start(gomock.Any(), nil).Return(nil)
+
+	// source should not trigger any lifecycle event, because the config did not change
+
+	err := src.Open(ctx)
+	is.NoErr(err)
+
+	// after plugin is started the last active config is still the same
+	is.Equal(src.Instance.LastActiveConfig, src.Instance.Config)
+}
+
+func TestSource_LifecycleOnCreated_Success(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+
+	src, sourceMock := newTestSource(ctx, t, ctrl)
+
+	// before plugin is started we expect LastActiveConfig to be empty
+	is.Equal(src.Instance.LastActiveConfig, Config{})
+
+	sourceMock.EXPECT().Configure(gomock.Any(), src.Instance.Config.Settings).Return(nil)
+	sourceMock.EXPECT().Start(gomock.Any(), nil).Return(nil)
+
+	// source should know it's the first run and trigger LifecycleOnCreated
+	sourceMock.EXPECT().LifecycleOnCreated(gomock.Any(), src.Instance.Config.Settings).Return(nil)
+
+	err := src.Open(ctx)
+	is.NoErr(err)
+
+	// after plugin is started we expect LastActiveConfig to be set to Config
+	is.Equal(src.Instance.LastActiveConfig, src.Instance.Config)
+}
+
+func TestSource_LifecycleOnUpdated_Success(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+
+	src, sourceMock := newTestSource(ctx, t, ctrl)
+
+	// assume that there was a config already active, but with different settings
+	src.Instance.LastActiveConfig.Settings = map[string]string{"last-active": "yes"}
+
+	sourceMock.EXPECT().Configure(gomock.Any(), src.Instance.Config.Settings).Return(nil)
+	sourceMock.EXPECT().Start(gomock.Any(), nil).Return(nil)
+
+	// source should know it was already run once with a different config and trigger LifecycleOnUpdated
+	sourceMock.EXPECT().LifecycleOnUpdated(gomock.Any(), src.Instance.LastActiveConfig.Settings, src.Instance.Config.Settings).Return(nil)
+
+	err := src.Open(ctx)
+	is.NoErr(err)
+
+	// after plugin is started we expect LastActiveConfig to be set to Config
+	is.Equal(src.Instance.LastActiveConfig, src.Instance.Config)
+}
+
+func TestSource_LifecycleOnCreated_Error(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+
+	src, sourceMock := newTestSource(ctx, t, ctrl)
+
+	// before plugin is started we expect LastActiveConfig to be empty
+	is.Equal(src.Instance.LastActiveConfig, Config{})
+
+	sourceMock.EXPECT().Configure(gomock.Any(), src.Instance.Config.Settings).Return(nil)
+
+	// source should know it's the first run and trigger LifecycleOnCreated, but it fails
+	want := cerrors.New("whoops")
+	sourceMock.EXPECT().LifecycleOnCreated(gomock.Any(), src.Instance.Config.Settings).Return(want)
+
+	// source should terminate plugin in case of an error
+	sourceMock.EXPECT().Teardown(gomock.Any()).Return(nil)
+
+	err := src.Open(ctx)
+	is.True(cerrors.Is(err, want))
+
+	// after plugin is started we expect LastActiveConfig to be left unchanged
+	is.Equal(src.Instance.LastActiveConfig, Config{})
+}
+
+func TestSource_LifecycleOnDeleted_Success(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+
+	src, sourceMock := newTestSource(ctx, t, ctrl)
+
+	// assume that there was a config already active, but with different settings
+	src.Instance.LastActiveConfig.Settings = map[string]string{"last-active": "yes"}
+
+	sourceMock.EXPECT().LifecycleOnDeleted(gomock.Any(), src.Instance.LastActiveConfig.Settings).Return(nil)
+	sourceMock.EXPECT().Teardown(gomock.Any()).Return(nil)
+
+	err := src.OnDelete(ctx)
+	is.NoErr(err)
+}
+
+func TestSource_LifecycleOnDeleted_BackwardsCompatibility(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+
+	src, sourceMock := newTestSource(ctx, t, ctrl)
+
+	// assume that there was a config already active, but with different settings
+	src.Instance.LastActiveConfig.Settings = map[string]string{"last-active": "yes"}
+
+	// we should ignore the error if the plugin does not implement lifecycle events
+	sourceMock.EXPECT().LifecycleOnDeleted(gomock.Any(), src.Instance.LastActiveConfig.Settings).Return(plugin.ErrUnimplemented)
+	sourceMock.EXPECT().Teardown(gomock.Any()).Return(nil)
+
+	err := src.OnDelete(ctx)
+	is.NoErr(err)
+}
+
+func TestSource_LifecycleOnDeleted_Skip(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+
+	src, _ := newTestSource(ctx, t, ctrl)
+
+	// assume that no config was active before, in that case deleted event
+	// should be skipped
+	src.Instance.LastActiveConfig = Config{}
+
+	err := src.OnDelete(ctx)
+	is.NoErr(err)
+}
 
 func TestSource_Ack_Deadlock(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
-	logger := log.Nop()
-	db := &inmemory.DB{}
 	ctrl := gomock.NewController(t)
 
-	persister := NewPersister(
-		logger,
-		db,
-		DefaultPersisterDelayThreshold,
-		1,
-	)
+	src, sourceMock := newTestSource(ctx, t, ctrl)
 
-	connService := NewService(logger, db, persister)
-
-	instance, err := connService.Create(
-		ctx,
-		"test-source",
-		TypeSource,
-		"test-plugin",
-		uuid.NewString(),
-		Config{
-			Name: "test-source",
-			Settings: map[string]string{
-				"recordCount":    "-1",
-				"readTime":       "0ms",
-				"format.options": "id:int",
-				"format.type":    "raw",
-			},
-		},
-		ProvisionTypeAPI,
-	)
-	is.NoErr(err)
-
-	sourceMock := mock.NewSourcePlugin(ctrl)
-	sourceMock.EXPECT().Configure(gomock.Any(), instance.Config.Settings).Return(nil)
+	sourceMock.EXPECT().Configure(gomock.Any(), src.Instance.Config.Settings).Return(nil)
+	sourceMock.EXPECT().LifecycleOnCreated(gomock.Any(), src.Instance.Config.Settings).Return(nil)
 	sourceMock.EXPECT().Start(gomock.Any(), nil).Return(nil)
 	sourceMock.EXPECT().Ack(gomock.Any(), record.Position("test-pos")).Return(nil).Times(5)
 
-	pluginDispenser := mock.NewDispenser(ctrl)
-	pluginDispenser.EXPECT().DispenseSource().Return(sourceMock, nil)
-
-	conn, err := instance.Connector(ctx, testPluginFetcher{instance.Plugin: pluginDispenser})
-	is.NoErr(err)
-	s, ok := conn.(*Source)
-	is.True(ok)
-
-	err = s.Open(ctx)
+	err := src.Open(ctx)
 	is.NoErr(err)
 
-	msgs := 5
+	const msgs = 5
 	var wg sync.WaitGroup
 	wg.Add(msgs)
 	for i := 0; i < msgs; i++ {
 		go func() {
-			err := s.Ack(ctx, record.Position("test-pos"))
+			err := src.Ack(ctx, record.Position("test-pos"))
 			wg.Done()
 			is.NoErr(err)
 		}()
 	}
 
-	if (*csync.WaitGroup)(&wg).WaitTimeout(ctx, 100*time.Millisecond) != nil {
-		is.Fail() // timeout reached
-	}
+	err = (*csync.WaitGroup)(&wg).WaitTimeout(ctx, 100*time.Millisecond)
+	is.NoErr(err)
 }
 
-// testPluginFetcher fulfills the PluginFetcher interface.
-type testPluginFetcher map[string]plugin.Dispenser
+func newTestSource(ctx context.Context, t *testing.T, ctrl *gomock.Controller) (*Source, *mock.SourcePlugin) {
+	is := is.New(t)
+	logger := log.Nop()
+	db := &inmemory.DB{}
+	persister := NewPersister(logger, db, DefaultPersisterDelayThreshold, 1)
 
-func (tpf testPluginFetcher) NewDispenser(_ log.CtxLogger, name string) (plugin.Dispenser, error) {
-	plug, ok := tpf[name]
-	if !ok {
-		return nil, plugin.ErrPluginNotFound
+	instance := &Instance{
+		ID:   "test-connector-id",
+		Type: TypeSource,
+		Config: Config{
+			Name: "test-name",
+			Settings: map[string]string{
+				"foo": "bar",
+			},
+		},
+		PipelineID:    "test-pipeline-id",
+		Plugin:        "test-plugin",
+		ProvisionedBy: ProvisionTypeAPI,
 	}
-	return plug, nil
+	instance.Init(logger, persister)
+
+	sourceMock := mock.NewSourcePlugin(ctrl)
+	pluginDispenser := mock.NewDispenser(ctrl)
+	pluginDispenser.EXPECT().DispenseSource().Return(sourceMock, nil).AnyTimes()
+
+	conn, err := instance.Connector(ctx, fakePluginFetcher{instance.Plugin: pluginDispenser})
+	is.NoErr(err)
+	src, ok := conn.(*Source)
+	is.True(ok)
+	return src, sourceMock
 }
