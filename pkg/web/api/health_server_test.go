@@ -28,7 +28,7 @@ type testChecker struct {
 	err error
 }
 
-func (t *testChecker) Check(ctx context.Context) error {
+func (t *testChecker) Check(context.Context) error {
 	return t.err
 }
 

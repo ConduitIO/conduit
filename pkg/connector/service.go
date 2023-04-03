@@ -69,7 +69,7 @@ func (s *Service) Check(ctx context.Context) error {
 
 // List returns a map of Instances keyed by their ID. Instances do not
 // necessarily have a running plugin associated with them.
-func (s *Service) List(ctx context.Context) map[string]*Instance {
+func (s *Service) List(context.Context) map[string]*Instance {
 	// make a copy of the map
 	tmp := make(map[string]*Instance, len(s.connectors))
 	for k, v := range s.connectors {
@@ -79,7 +79,7 @@ func (s *Service) List(ctx context.Context) map[string]*Instance {
 }
 
 // Get retrieves a single connector instance by ID.
-func (s *Service) Get(ctx context.Context, id string) (*Instance, error) {
+func (s *Service) Get(_ context.Context, id string) (*Instance, error) {
 	ins, ok := s.connectors[id]
 	if !ok {
 		return nil, cerrors.Errorf("%w (ID: %s)", ErrInstanceNotFound, id)

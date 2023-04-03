@@ -226,16 +226,10 @@ func (p *PipelineAPIv1) UpdateDLQ(
 	return &apiv1.UpdateDLQResponse{Dlq: dlq}, nil
 }
 
-func (p *PipelineAPIv1) ImportPipeline(
-	ctx context.Context,
-	req *apiv1.ImportPipelineRequest,
-) (*apiv1.ImportPipelineResponse, error) {
+func (p *PipelineAPIv1) ImportPipeline(context.Context, *apiv1.ImportPipelineRequest) (*apiv1.ImportPipelineResponse, error) {
 	return &apiv1.ImportPipelineResponse{}, cerrors.ErrNotImpl
 }
 
-func (p *PipelineAPIv1) ExportPipeline(
-	ctx context.Context,
-	req *apiv1.ExportPipelineRequest,
-) (*apiv1.ExportPipelineResponse, error) {
+func (p *PipelineAPIv1) ExportPipeline(context.Context, *apiv1.ExportPipelineRequest) (*apiv1.ExportPipelineResponse, error) {
 	return &apiv1.ExportPipelineResponse{}, cerrors.ErrNotImpl
 }

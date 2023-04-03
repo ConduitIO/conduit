@@ -139,6 +139,7 @@ func (vw *ValueWatcher[T]) subscribe() (chan T, func()) {
 func (vw *ValueWatcher[T]) unsubscribe(id string, c chan T) {
 	// drain channel and remove it
 	go func() {
+		//nolint:revive // see comment below
 		for range c {
 			// Do nothing, just drain channel. In case another goroutine tries
 			// to store a new value by calling ValueWatcher.Set, this goroutine

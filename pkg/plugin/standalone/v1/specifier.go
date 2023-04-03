@@ -38,7 +38,7 @@ func (p *GRPCSpecifierPlugin) GRPCClient(_ context.Context, _ *goplugin.GRPCBrok
 
 // GRPCServer always returns an error; we're only implementing the client half
 // of the interface.
-func (p *GRPCSpecifierPlugin) GRPCServer(broker *goplugin.GRPCBroker, s *grpc.Server) error {
+func (p *GRPCSpecifierPlugin) GRPCServer(*goplugin.GRPCBroker, *grpc.Server) error {
 	return cerrors.New("this package only implements gRPC clients")
 }
 

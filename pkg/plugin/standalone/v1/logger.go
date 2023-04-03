@@ -144,7 +144,7 @@ func (h *hcLogger) StandardLogger(opts *hclog.StandardLoggerOptions) *stdlog.Log
 	return stdlog.New(h.StandardWriter(opts), prefix, 0)
 }
 
-func (h *hcLogger) StandardWriter(opts *hclog.StandardLoggerOptions) io.Writer {
+func (h *hcLogger) StandardWriter(*hclog.StandardLoggerOptions) io.Writer {
 	return h.logger
 }
 

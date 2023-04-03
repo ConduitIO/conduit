@@ -34,19 +34,18 @@ func init() {
 }
 
 // ParseJSONKey parses the record key from raw to structured data
-func ParseJSONKey(config processor.Config) (processor.Interface, error) {
-	return parseJSON(parseJSONKeyProcType, recordKeyGetSetter{}, config)
+func ParseJSONKey(_ processor.Config) (processor.Interface, error) {
+	return parseJSON(parseJSONKeyProcType, recordKeyGetSetter{})
 }
 
 // ParseJSONPayload parses the record payload from raw to structured data
-func ParseJSONPayload(config processor.Config) (processor.Interface, error) {
-	return parseJSON(parseJSONPayloadProcType, recordPayloadGetSetter{}, config)
+func ParseJSONPayload(_ processor.Config) (processor.Interface, error) {
+	return parseJSON(parseJSONPayloadProcType, recordPayloadGetSetter{})
 }
 
 func parseJSON(
 	processorType string,
 	getSetter recordDataGetSetter,
-	config processor.Config,
 ) (processor.Interface, error) {
 	return NewFuncWrapper(func(_ context.Context, r record.Record) (record.Record, error) {
 		data := getSetter.Get(r)
@@ -54,6 +53,11 @@ func parseJSON(
 		switch data.(type) {
 		case record.RawData:
 			var jsonData record.StructuredData
+			if len(data.Bytes()) == 0 {
+				// change empty raw data to empty structured data
+				r = getSetter.Set(r, jsonData)
+				return r, nil
+			}
 			err := json.Unmarshal(data.Bytes(), &jsonData)
 			if err != nil {
 				return record.Record{}, cerrors.Errorf("%s: failed to unmarshal raw data as JSON: %w", processorType, err)

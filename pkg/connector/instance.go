@@ -114,7 +114,7 @@ func (i *Instance) Inspect(ctx context.Context) *inspector.Session {
 // when Open is called in the returned connector.
 // If a connector is already running for this Instance this method returns an
 // error.
-func (i *Instance) Connector(ctx context.Context, dispenserFetcher PluginDispenserFetcher) (Connector, error) {
+func (i *Instance) Connector(_ context.Context, dispenserFetcher PluginDispenserFetcher) (Connector, error) {
 	if i.connector != nil {
 		// connector is already running, might be a bug where an old connector is stuck
 		return nil, ErrConnectorRunning

@@ -44,7 +44,7 @@ func FilepathFromContext(ctx context.Context) string {
 type FilepathLogCtxHook struct{}
 
 // Run executes the log hook.
-func (h FilepathLogCtxHook) Run(ctx context.Context, e *zerolog.Event, lvl zerolog.Level) {
+func (h FilepathLogCtxHook) Run(ctx context.Context, e *zerolog.Event, _ zerolog.Level) {
 	p := FilepathFromContext(ctx)
 	if p != "" {
 		e.Str(log.FilepathField, p)
