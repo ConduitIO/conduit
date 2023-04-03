@@ -53,11 +53,14 @@ type Instance struct {
 	PipelineID string
 	Plugin     string
 
-	ProcessorIDs     []string
-	State            any
-	ProvisionedBy    ProvisionType
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
+	ProcessorIDs  []string
+	State         any
+	ProvisionedBy ProvisionType
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+	// LastActiveConfig is the last config that was used to successfully start
+	// the connector. If Config and LastActiveConfig are not the same, the
+	// connector will trigger a connector lifecycle event.
 	LastActiveConfig Config
 
 	logger    log.CtxLogger
