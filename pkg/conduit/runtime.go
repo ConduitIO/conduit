@@ -218,7 +218,7 @@ func (r *Runtime) Run(ctx context.Context, cancel context.CancelFunc) (err error
 		return cerrors.Errorf("failed to init connector service: %w", err)
 	}
 
-	if r.Config.Pipelines.StrictMode {
+	if r.Config.Pipelines.ExitOnError {
 		r.pipelineService.OnFailure(func(e pipeline.FailureEvent) {
 			if e.ProvisionType == pipeline.ProvisionTypeConfig {
 				r.logger.Warn(ctx).
