@@ -224,7 +224,7 @@ func (r *Runtime) Run(ctx context.Context, cancel context.CancelFunc) (err error
 				r.logger.Warn(ctx).
 					Err(e.Cause).
 					Str(log.PipelineIDField, e.ID).
-					Msg("Conduit will be shut down due to a pipeline failure and strict mode enabled")
+					Msg("Conduit will shut down due to a pipeline failure and strict mode enabled")
 				cancel()
 			}
 		})
