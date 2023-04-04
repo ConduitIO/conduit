@@ -328,6 +328,7 @@ func (s *Service) Delete(ctx context.Context, pipelineID string) error {
 	return nil
 }
 
+// OnFailure registers a handler for a pipeline.FailureEvent.
 func (s *Service) OnFailure(handler FailureHandler) {
 	s.handlers = append(s.handlers, handler)
 }

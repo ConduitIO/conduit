@@ -127,18 +127,6 @@ func (mr *PipelineServiceMockRecorder) List(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "List", reflect.TypeOf((*PipelineService)(nil).List), arg0)
 }
 
-// OnFailure mocks base method.
-func (m *PipelineService) OnFailure(arg0 pipeline.FailureHandler) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "OnFailure", arg0)
-}
-
-// OnFailure indicates an expected call of OnFailure.
-func (mr *PipelineServiceMockRecorder) OnFailure(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnFailure", reflect.TypeOf((*PipelineService)(nil).OnFailure), arg0)
-}
-
 // RemoveConnector mocks base method.
 func (m *PipelineService) RemoveConnector(arg0 context.Context, arg1, arg2 string) (*pipeline.Instance, error) {
 	m.ctrl.T.Helper()
