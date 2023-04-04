@@ -95,9 +95,7 @@ func (s *Service) Start(
 	s.logger.Debug(ctx).Str(log.PipelineIDField, pl.ID).Msg("starting pipeline")
 
 	err = s.startInternal(ctx, pl, connFetcher, procFetcher, pluginFetcher)
-	if err != nil {
-		s.notify(pl.ID, pl.ProvisionedBy, err)
-	}
+	s.notify(pl.ID, pl.ProvisionedBy, err)
 	return err
 }
 

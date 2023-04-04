@@ -334,6 +334,9 @@ func (s *Service) OnFailure(handler FailureHandler) {
 }
 
 func (s *Service) notify(id string, p ProvisionType, err error) {
+	if err == nil {
+		return
+	}
 	e := FailureEvent{
 		ID:            id,
 		ProvisionType: p,
