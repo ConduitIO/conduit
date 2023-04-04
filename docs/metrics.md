@@ -30,7 +30,6 @@ locally, you can get metrics if you run `curl localhost:8080/metrics`.
     | `conduit_connector_execution_duration_seconds` | Histogram | Amount of time spent reading or writing records per pipeline, plugin and connector type (source, destination). |
     | `conduit_processor_execution_duration_seconds` | Histogram | Amount of time spent on processing records per pipeline and processor.                                         |
     | `conduit_dlq_execution_duration_seconds`       | Histogram | Amount of time spent writing records to DLQ connector per pipeline and plugin.                                 |
-    | `conduit_dlq_execution_duration_seconds`       | Histogram | Amount of time spent writing records to DLQ connector per pipeline and plugin.                                 |
     | `conduit_inspector_sessions`                   | Gauge     | Number of inspector sessions by ID of pipeline component (connector or processor)                              |
 
   *We calculate bytes based on the JSON representation of the record payload
