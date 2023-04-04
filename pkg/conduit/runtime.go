@@ -224,7 +224,7 @@ func (r *Runtime) Run(ctx context.Context, cancel context.CancelFunc) (err error
 				r.logger.Warn(ctx).
 					Err(e.Cause).
 					Str(log.PipelineIDField, e.ID).
-					Msg("Conduit will shut down due to a pipeline failure and strict mode enabled")
+					Msg("Conduit will shut down due to a pipeline failure and 'exit on error' enabled")
 				cancel()
 			}
 		})
@@ -239,9 +239,12 @@ func (r *Runtime) Run(ctx context.Context, cancel context.CancelFunc) (err error
 		multierror.ForEach(err, func(err error) {
 			r.logger.Err(ctx, err).Msg("provisioning failed")
 		})
-		r.logger.Warn(ctx).
-			Msg("Conduit will be shut down due to a pipeline failure and strict mode enabled")
-		cancel()
+		if r.Config.Pipelines.ExitOnError {
+			r.logger.Warn(ctx).
+				Err(err).
+				Msg("Conduit will shut down due to a pipeline provisioning failure and 'exit on error' enabled")
+			cancel()
+		}
 	}
 
 	err = r.pipelineService.Run(ctx, r.connectorService, r.processorService, r.pluginService)
