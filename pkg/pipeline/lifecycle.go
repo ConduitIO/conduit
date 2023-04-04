@@ -75,7 +75,8 @@ func (s *Service) Run(
 	return err
 }
 
-// Start builds and starts a pipeline instance.
+// Start builds and starts a pipeline with the given ID.
+// If the pipeline is already running, Start returns ErrPipelineRunning.
 func (s *Service) Start(
 	ctx context.Context,
 	connFetcher ConnectorFetcher,
@@ -100,6 +101,8 @@ func (s *Service) Start(
 	return err
 }
 
+// startInternal builds the nodes for the given pipeline instance,
+// and then starts it.
 func (s *Service) startInternal(
 	ctx context.Context,
 	pl *Instance,
