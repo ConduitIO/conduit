@@ -56,7 +56,7 @@ func TestFuncWrapper_InspectIn(t *testing.T) {
 				return record.Record{}, tc.err
 			})
 
-			session := underTest.InspectIn(ctx)
+			session := underTest.InspectIn(ctx, "test-id")
 			_, _ = underTest.Process(ctx, wantIn)
 
 			gotIn, got, err := cchan.ChanOut[record.Record](session.C).RecvTimeout(ctx, 100*time.Millisecond)
@@ -82,7 +82,7 @@ func TestFuncWrapper_InspectOut_Ok(t *testing.T) {
 		return wantOut, nil
 	})
 
-	session := underTest.InspectOut(ctx)
+	session := underTest.InspectOut(ctx, "test-id")
 	_, _ = underTest.Process(ctx, record.Record{})
 
 	gotOut, got, err := cchan.ChanOut[record.Record](session.C).RecvTimeout(ctx, 100*time.Millisecond)
@@ -106,7 +106,7 @@ func TestFuncWrapper_InspectOut_ProcessingFailed(t *testing.T) {
 		return wantOut, cerrors.New("shouldn't happen")
 	})
 
-	session := underTest.InspectOut(ctx)
+	session := underTest.InspectOut(ctx, "test-id")
 	_, _ = underTest.Process(ctx, record.Record{})
 
 	_, _, err := cchan.ChanOut[record.Record](session.C).RecvTimeout(ctx, 100*time.Millisecond)
@@ -122,8 +122,8 @@ func TestFuncWrapper_Close(t *testing.T) {
 		return record.Record{}, nil
 	})
 
-	in := underTest.InspectIn(ctx)
-	out := underTest.InspectOut(ctx)
+	in := underTest.InspectIn(ctx, "test-id")
+	out := underTest.InspectOut(ctx, "test-id")
 	underTest.Close()
 
 	// incoming records session should be closed

@@ -407,8 +407,8 @@ func TestJSProcessor_Inspect(t *testing.T) {
 	underTest, err := New(src, zerolog.Nop())
 	is.NoErr(err) // expected no error when creating the JS processor
 
-	in := underTest.InspectIn(ctx)
-	out := underTest.InspectOut(ctx)
+	in := underTest.InspectIn(ctx, "test-id")
+	out := underTest.InspectOut(ctx, "test-id")
 
 	recIn := record.Record{
 		Position:  record.Position("test-pos"),
@@ -443,8 +443,8 @@ func TestJSProcessor_Close(t *testing.T) {
 	underTest, err := New(src, zerolog.Nop())
 	is.NoErr(err) // expected no error when creating the JS processor
 
-	in := underTest.InspectIn(ctx)
-	out := underTest.InspectOut(ctx)
+	in := underTest.InspectIn(ctx, "test-id")
+	out := underTest.InspectOut(ctx, "test-id")
 	underTest.Close()
 
 	// incoming records session should be closed
