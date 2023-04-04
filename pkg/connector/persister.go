@@ -111,7 +111,7 @@ func (p *Persister) Persist(ctx context.Context, conn *Instance, callback Persis
 
 	storeFunc, err := p.store.PrepareSet(conn.ID, conn)
 	if err != nil {
-		return cerrors.Errorf("failed to prepare connector for persistance: %w", err)
+		return cerrors.Errorf("failed to prepare connector for persistence: %w", err)
 	}
 	p.batch[conn.ID] = persistData{
 		callback:  callback,

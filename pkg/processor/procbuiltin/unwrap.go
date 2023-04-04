@@ -67,7 +67,7 @@ func Unwrap(config processor.Config) (processor.Interface, error) {
 	return NewFuncWrapper(proc.Process), nil
 }
 
-func (p *unwrapProcessor) Process(ctx context.Context, in record.Record) (record.Record, error) {
+func (p *unwrapProcessor) Process(_ context.Context, in record.Record) (record.Record, error) {
 	data := in.Payload.After
 	var structData record.StructuredData
 	switch d := data.(type) {

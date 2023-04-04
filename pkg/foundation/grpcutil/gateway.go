@@ -76,7 +76,7 @@ func WithErrorHandler(logger log.CtxLogger) runtime.ServeMuxOption {
 
 // WithDefaultGatewayMiddleware wraps the handler with the default GRPC Gateway
 // middleware.
-func WithDefaultGatewayMiddleware(logger log.CtxLogger, h http.Handler) http.Handler {
+func WithDefaultGatewayMiddleware(h http.Handler) http.Handler {
 	middleware := []func(http.Handler) http.Handler{
 		WithPrettyJSONHeader,
 		WithHTTPEndpointHeader,

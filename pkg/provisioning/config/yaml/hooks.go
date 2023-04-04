@@ -20,7 +20,7 @@ import (
 	"github.com/conduitio/yaml/v3"
 )
 
-func envDecoderHook(path []string, node *yaml.Node) {
+func envDecoderHook(_ []string, node *yaml.Node) {
 	if node.Kind == yaml.ScalarNode && node.Tag == "!!str" {
 		node.SetString(os.ExpandEnv(node.Value))
 	}

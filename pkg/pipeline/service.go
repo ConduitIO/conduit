@@ -86,7 +86,7 @@ func (s *Service) Init(ctx context.Context) error {
 }
 
 // List returns all pipeline instances in the Service.
-func (s *Service) List(ctx context.Context) map[string]*Instance {
+func (s *Service) List(context.Context) map[string]*Instance {
 	if len(s.instances) == 0 {
 		return nil
 	}
@@ -101,7 +101,7 @@ func (s *Service) List(ctx context.Context) map[string]*Instance {
 }
 
 // Get will return a single pipeline instance or an error.
-func (s *Service) Get(ctx context.Context, id string) (*Instance, error) {
+func (s *Service) Get(_ context.Context, id string) (*Instance, error) {
 	p, ok := s.instances[id]
 	if !ok {
 		return nil, cerrors.Errorf("%w (ID: %s)", ErrInstanceNotFound, id)

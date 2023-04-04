@@ -24,6 +24,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/database/inmemory"
 	"github.com/conduitio/conduit/pkg/foundation/database/mock"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	pmock "github.com/conduitio/conduit/pkg/plugin/mock"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
@@ -274,6 +275,7 @@ func TestService_DeleteSuccess(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
 	logger := log.Nop()
+	ctrl := gomock.NewController(t)
 	db := &inmemory.DB{}
 
 	service := NewService(logger, db, nil)
@@ -291,7 +293,10 @@ func TestService_DeleteSuccess(t *testing.T) {
 	)
 	is.NoErr(err)
 
-	err = service.Delete(ctx, conn.ID)
+	pluginDispenser := pmock.NewDispenser(ctrl)
+	pluginFetcher := fakePluginFetcher{conn.Plugin: pluginDispenser}
+
+	err = service.Delete(ctx, conn.ID, pluginFetcher)
 	is.NoErr(err)
 
 	got, err := service.Get(ctx, conn.ID)
@@ -307,7 +312,7 @@ func TestService_DeleteInstanceNotFound(t *testing.T) {
 
 	service := NewService(logger, db, nil)
 	// delete connector that does not exist
-	err := service.Delete(ctx, uuid.NewString())
+	err := service.Delete(ctx, uuid.NewString(), nil)
 	is.True(err != nil)
 	is.True(cerrors.Is(err, ErrInstanceNotFound))
 }

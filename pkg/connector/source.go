@@ -53,28 +53,7 @@ func (s *Source) Errors() <-chan error {
 	return s.errs
 }
 
-// init dispenses the plugin and configures it.
-func (s *Source) initPlugin(ctx context.Context) (plugin.SourcePlugin, error) {
-	s.Instance.logger.Debug(ctx).Msg("starting source connector plugin")
-	src, err := s.dispenser.DispenseSource()
-	if err != nil {
-		return nil, err
-	}
-
-	s.Instance.logger.Debug(ctx).Msg("configuring source connector plugin")
-	err = src.Configure(ctx, s.Instance.Config.Settings)
-	if err != nil {
-		tdErr := src.Teardown(ctx)
-		err = cerrors.LogOrReplace(err, tdErr, func() {
-			s.Instance.logger.Err(ctx, tdErr).Msg("could not tear down source connector plugin")
-		})
-		return nil, err
-	}
-
-	return src, nil
-}
-
-func (s *Source) Open(ctx context.Context) error {
+func (s *Source) Open(ctx context.Context) (err error) {
 	s.Instance.Lock()
 	defer s.Instance.Unlock()
 	if s.Instance.connector != nil {
@@ -82,31 +61,54 @@ func (s *Source) Open(ctx context.Context) error {
 		return cerrors.New("another instance of the connector is already running")
 	}
 
-	src, err := s.initPlugin(ctx)
+	s.Instance.logger.Debug(ctx).Msg("dispensing source connector plugin")
+	s.plugin, err = s.dispenser.DispenseSource()
 	if err != nil {
 		return err
 	}
 
-	var state SourceState
-	if s.Instance.State != nil {
-		state = s.Instance.State.(SourceState)
+	defer func() {
+		// ensure the plugin gets torn down if something bad happens
+		if err != nil {
+			tdErr := s.plugin.Teardown(ctx)
+			if tdErr != nil {
+				s.Instance.logger.Err(ctx, tdErr).Msg("could not tear down source connector plugin")
+			}
+			s.plugin = nil
+		}
+	}()
+
+	err = s.configure(ctx)
+	if err != nil {
+		return err
 	}
 
-	streamCtx, cancelStreamCtx := context.WithCancel(ctx)
-	err = src.Start(streamCtx, state.Position)
+	lifecycleEventTriggered, err := s.triggerLifecycleEvent(ctx, s.Instance.LastActiveConfig.Settings, s.Instance.Config.Settings)
 	if err != nil {
-		cancelStreamCtx()
-		tdErr := src.Teardown(ctx)
-		err = cerrors.LogOrReplace(err, tdErr, func() {
-			s.Instance.logger.Err(ctx, tdErr).Msg("could not tear down source connector plugin")
+		return err
+	}
+
+	if lifecycleEventTriggered {
+		// when a lifecycle event is successfully triggered we consider the config active
+		s.Instance.LastActiveConfig = s.Instance.Config
+		// persist connector in the next batch to store last active config
+		err := s.Instance.persister.Persist(ctx, s.Instance, func(err error) {
+			if err != nil {
+				s.errs <- err
+			}
 		})
+		if err != nil {
+			return err
+		}
+	}
+
+	err = s.start(ctx)
+	if err != nil {
 		return err
 	}
 
 	s.Instance.logger.Info(ctx).Msg("source connector plugin successfully started")
 
-	s.plugin = src
-	s.stopStream = cancelStreamCtx
 	s.Instance.connector = s
 	s.Instance.persister.ConnectorStarted()
 
@@ -224,6 +226,37 @@ func (s *Source) Ack(ctx context.Context, p record.Position) error {
 	return nil
 }
 
+func (s *Source) OnDelete(ctx context.Context) (err error) {
+	if s.Instance.LastActiveConfig.Settings == nil {
+		return nil // the connector was never started, nothing to trigger
+	}
+
+	s.Instance.Lock()
+	defer s.Instance.Unlock()
+
+	s.Instance.logger.Debug(ctx).Msg("dispensing source connector plugin")
+	s.plugin, err = s.dispenser.DispenseSource()
+	if err != nil {
+		return err
+	}
+
+	_, err = s.triggerLifecycleEvent(ctx, s.Instance.LastActiveConfig.Settings, nil)
+
+	// call teardown to close plugin regardless of the error
+	tdErr := s.plugin.Teardown(ctx)
+
+	s.plugin = nil
+
+	err = cerrors.LogOrReplace(err, tdErr, func() {
+		s.Instance.logger.Err(ctx, tdErr).Msg("could not tear down source connector plugin")
+	})
+	if err != nil {
+		return cerrors.Errorf("could not trigger lifecycle event: %w", err)
+	}
+
+	return nil
+}
+
 // preparePluginCall makes sure the plugin is running and registers a new plugin
 // call in the wait group. The returned function should be called in a deferred
 // statement to signal the plugin call is over.
@@ -236,4 +269,97 @@ func (s *Source) preparePluginCall() (func(), error) {
 	// increase wait group so Teardown knows a call to the plugin is running
 	s.wg.Add(1)
 	return s.wg.Done, nil
+}
+
+// state returns the SourceState for this connector.
+func (s *Source) state() SourceState {
+	if s.Instance.State != nil {
+		return s.Instance.State.(SourceState)
+	}
+	return SourceState{}
+}
+
+func (s *Source) configure(ctx context.Context) error {
+	s.Instance.logger.Trace(ctx).Msg("configuring source connector plugin")
+	err := s.plugin.Configure(ctx, s.Instance.Config.Settings)
+	if err != nil {
+		return cerrors.Errorf("could not configure source connector plugin: %w", err)
+	}
+	return nil
+}
+
+func (s *Source) triggerLifecycleEvent(ctx context.Context, oldConfig, newConfig map[string]string) (ok bool, err error) {
+	if s.isEqual(oldConfig, newConfig) {
+		return false, nil // nothing to do, last active config is the same as current one
+	}
+
+	defer func() {
+		if cerrors.Is(err, plugin.ErrUnimplemented) {
+			s.Instance.logger.Trace(ctx).Msg("lifecycle events not implemented on source connector plugin (it's probably an older connector)")
+			err = nil // ignore error to stay backwards compatible
+		}
+	}()
+
+	switch {
+	// created
+	case oldConfig == nil && newConfig != nil:
+		s.Instance.logger.Trace(ctx).Msg("triggering lifecycle event \"created\" on source connector plugin")
+		err := s.plugin.LifecycleOnCreated(ctx, newConfig)
+		if err != nil {
+			return false, cerrors.Errorf("error while triggering lifecycle event \"created\": %w", err)
+		}
+		return true, nil
+
+	// updated
+	case oldConfig != nil && newConfig != nil:
+		s.Instance.logger.Trace(ctx).Msg("triggering lifecycle event \"updated\" on source connector plugin")
+		err := s.plugin.LifecycleOnUpdated(ctx, oldConfig, newConfig)
+		if err != nil {
+			return false, cerrors.Errorf("error while triggering lifecycle event \"updated\": %w", err)
+		}
+		return true, nil
+
+	// deleted
+	case oldConfig != nil && newConfig == nil:
+		s.Instance.logger.Trace(ctx).Msg("triggering lifecycle event \"deleted\" on source connector plugin")
+		err := s.plugin.LifecycleOnDeleted(ctx, oldConfig)
+		if err != nil {
+			return false, cerrors.Errorf("error while triggering lifecycle event \"deleted\": %w", err)
+		}
+		return true, nil
+
+	// default should never happen
+	default:
+		s.Instance.logger.Warn(ctx).
+			Any("oldConfig", oldConfig).
+			Any("newConfig", newConfig).
+			Msg("unexpected combination of old and new config")
+		// don't return an error when no event was triggered, strictly speaking
+		// the action did not fail
+		return false, nil
+	}
+}
+
+func (s *Source) start(ctx context.Context) error {
+	s.Instance.logger.Trace(ctx).Msg("starting source connector plugin")
+	ctx, s.stopStream = context.WithCancel(ctx)
+	err := s.plugin.Start(ctx, s.state().Position)
+	if err != nil {
+		s.stopStream()
+		s.stopStream = nil
+		return cerrors.Errorf("could not start source connector plugin: %w", err)
+	}
+	return nil
+}
+
+func (*Source) isEqual(cfg1, cfg2 map[string]string) bool {
+	if len(cfg1) != len(cfg2) {
+		return false
+	}
+	for k, v := range cfg1 {
+		if w, ok := cfg2[k]; !ok || v != w {
+			return false
+		}
+	}
+	return (cfg1 != nil) == (cfg2 != nil)
 }

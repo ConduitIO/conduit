@@ -69,7 +69,7 @@ func (s *Service) Check(ctx context.Context) error {
 
 // List returns a map of Instances keyed by their ID. Instances do not
 // necessarily have a running plugin associated with them.
-func (s *Service) List(ctx context.Context) map[string]*Instance {
+func (s *Service) List(context.Context) map[string]*Instance {
 	// make a copy of the map
 	tmp := make(map[string]*Instance, len(s.connectors))
 	for k, v := range s.connectors {
@@ -79,7 +79,7 @@ func (s *Service) List(ctx context.Context) map[string]*Instance {
 }
 
 // Get retrieves a single connector instance by ID.
-func (s *Service) Get(ctx context.Context, id string) (*Instance, error) {
+func (s *Service) Get(_ context.Context, id string) (*Instance, error) {
 	ins, ok := s.connectors[id]
 	if !ok {
 		return nil, cerrors.Errorf("%w (ID: %s)", ErrInstanceNotFound, id)
@@ -138,8 +138,8 @@ func (s *Service) Create(
 	return conn, nil
 }
 
-// Delete removes.
-func (s *Service) Delete(ctx context.Context, id string) error {
+// Delete removes the connector.
+func (s *Service) Delete(ctx context.Context, id string, dispenserFetcher PluginDispenserFetcher) error {
 	// make sure instance exists
 	instance, err := s.Get(ctx, id)
 	if err != nil {
@@ -151,7 +151,13 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 		return cerrors.Errorf("could not delete connector instance %v from store: %w", id, err)
 	}
 	delete(s.connectors, id)
-	instance.Close()
+
+	err = instance.Close(ctx, dispenserFetcher)
+	if err != nil {
+		// connector is already deleted, only log the error coming from the
+		// cleanup function, use the instance logger to attach connector ID
+		instance.logger.Err(ctx, err).Msg("could not close connector instance")
+	}
 	measure.ConnectorsGauge.WithValues(strings.ToLower(instance.Type.String())).Dec()
 
 	return nil

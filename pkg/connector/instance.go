@@ -58,6 +58,10 @@ type Instance struct {
 	ProvisionedBy ProvisionType
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
+	// LastActiveConfig is the last config that was used to successfully start
+	// the connector. If Config and LastActiveConfig are not the same, the
+	// connector will trigger a connector lifecycle event.
+	LastActiveConfig Config
 
 	logger    log.CtxLogger
 	persister *Persister
@@ -76,7 +80,9 @@ type Config struct {
 	Settings map[string]string
 }
 
-type Connector interface{}
+type Connector interface {
+	OnDelete(ctx context.Context) error
+}
 
 // PluginDispenserFetcher can fetch a plugin dispenser.
 type PluginDispenserFetcher interface {
@@ -108,7 +114,7 @@ func (i *Instance) Inspect(ctx context.Context) *inspector.Session {
 // when Open is called in the returned connector.
 // If a connector is already running for this Instance this method returns an
 // error.
-func (i *Instance) Connector(ctx context.Context, dispenserFetcher PluginDispenserFetcher) (Connector, error) {
+func (i *Instance) Connector(_ context.Context, dispenserFetcher PluginDispenserFetcher) (Connector, error) {
 	if i.connector != nil {
 		// connector is already running, might be a bug where an old connector is stuck
 		return nil, ErrConnectorRunning
@@ -137,6 +143,16 @@ func (i *Instance) Connector(ctx context.Context, dispenserFetcher PluginDispens
 	}
 }
 
-func (i *Instance) Close() {
+func (i *Instance) Close(ctx context.Context, dispenserFetcher PluginDispenserFetcher) error {
 	i.inspector.Close()
+	conn, err := i.Connector(ctx, dispenserFetcher)
+	if err != nil {
+		return err
+	}
+	err = conn.OnDelete(ctx)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

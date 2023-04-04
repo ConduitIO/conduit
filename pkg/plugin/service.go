@@ -76,7 +76,7 @@ func (s *Service) NewDispenser(logger log.CtxLogger, name string) (Dispenser, er
 	}
 }
 
-func (s *Service) List(ctx context.Context) (map[string]Specification, error) {
+func (s *Service) List(context.Context) (map[string]Specification, error) {
 	builtinSpecs := s.builtin.List()
 	standaloneSpecs := s.standalone.List()
 
