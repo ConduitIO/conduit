@@ -19,6 +19,7 @@ import (
 	"sync"
 
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/foundation/metrics/measure"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/google/uuid"
 )
@@ -114,7 +115,9 @@ func (i *Inspector) Send(ctx context.Context, r record.Record) {
 	}
 }
 
-func (i *Inspector) NewSession(ctx context.Context) *Session {
+// NewSession creates a new session in given inspector.
+// componentID is the ID of the component being inspected (connector or processor).
+func (i *Inspector) NewSession(ctx context.Context, componentID string) *Session {
 	id := uuid.NewString()
 	s := &Session{
 		C:      make(chan record.Record, i.bufferSize),
@@ -122,9 +125,12 @@ func (i *Inspector) NewSession(ctx context.Context) *Session {
 		logger: i.logger.WithComponent("inspector.Session"),
 		onClose: func() {
 			i.remove(id)
+			measure.InspectorsGauge.WithValues(componentID).Dec()
 		},
 		once: &sync.Once{},
 	}
+	measure.InspectorsGauge.WithValues(componentID).Inc()
+
 	go func() {
 		<-ctx.Done()
 		s.logger.

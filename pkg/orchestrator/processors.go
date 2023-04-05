@@ -109,7 +109,7 @@ func (p *ProcessorOrchestrator) InspectIn(
 		return nil, err
 	}
 
-	return proc.Processor.InspectIn(ctx), nil
+	return proc.Processor.InspectIn(ctx, proc.ID), nil
 }
 
 func (p *ProcessorOrchestrator) InspectOut(
@@ -121,7 +121,7 @@ func (p *ProcessorOrchestrator) InspectOut(
 		return nil, err
 	}
 
-	return proc.Processor.InspectOut(ctx), nil
+	return proc.Processor.InspectOut(ctx, proc.ID), nil
 }
 
 func (p *ProcessorOrchestrator) Get(ctx context.Context, id string) (*processor.Instance, error) {

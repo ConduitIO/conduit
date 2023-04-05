@@ -55,12 +55,12 @@ func (f FuncWrapper) Process(ctx context.Context, inRec record.Record) (record.R
 	return outRec, nil
 }
 
-func (f FuncWrapper) InspectIn(ctx context.Context) *inspector.Session {
-	return f.inInsp.NewSession(ctx)
+func (f FuncWrapper) InspectIn(ctx context.Context, id string) *inspector.Session {
+	return f.inInsp.NewSession(ctx, id)
 }
 
-func (f FuncWrapper) InspectOut(ctx context.Context) *inspector.Session {
-	return f.outInsp.NewSession(ctx)
+func (f FuncWrapper) InspectOut(ctx context.Context, id string) *inspector.Session {
+	return f.outInsp.NewSession(ctx, id)
 }
 
 func (f FuncWrapper) Close() {
