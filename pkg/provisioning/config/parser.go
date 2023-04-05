@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:generate mockgen -destination=mock/parser.go -package=mock -mock_names=Parser=Parser . Parser
-
 package config
 
 import (

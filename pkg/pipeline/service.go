@@ -29,7 +29,7 @@ type FailureEvent struct {
 	// ID is the ID of the pipeline which failed.
 	ID            string
 	ProvisionType ProvisionType
-	Cause         error
+	Error         error
 }
 
 type FailureHandler func(FailureEvent)
@@ -340,7 +340,7 @@ func (s *Service) notify(id string, p ProvisionType, err error) {
 	e := FailureEvent{
 		ID:            id,
 		ProvisionType: p,
-		Cause:         err,
+		Error:         err,
 	}
 	for _, handler := range s.handlers {
 		handler(e)

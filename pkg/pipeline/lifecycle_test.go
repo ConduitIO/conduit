@@ -243,7 +243,7 @@ func TestServiceLifecycle_PipelineError(t *testing.T) {
 	is.NoErr(err)
 	is.True(valReceived)
 	is.Equal(pl.ID, e.ID)
-	is.True(cerrors.Is(e.Cause, wantErr))
+	is.True(cerrors.Is(e.Error, wantErr))
 }
 
 func TestServiceLifecycle_PipelineStop(t *testing.T) {
@@ -418,7 +418,7 @@ func TestService_FailureHandler_Create(t *testing.T) {
 	is.True(got)
 	is.Equal(id, e.ID)
 	is.Equal(ProvisionTypeAPI, e.ProvisionType)
-	is.True(cerrors.Is(e.Cause, ErrNameMissing))
+	is.True(cerrors.Is(e.Error, ErrNameMissing))
 }
 
 func TestService_FailureHandler_Start(t *testing.T) {
@@ -461,7 +461,7 @@ func TestService_FailureHandler_Start(t *testing.T) {
 	is.True(got)
 	is.Equal(pl.ID, e.ID)
 	is.Equal(pl.ProvisionedBy, e.ProvisionType)
-	is.True(cerrors.Is(e.Cause, plugin.ErrPluginNotFound))
+	is.True(cerrors.Is(e.Error, plugin.ErrPluginNotFound))
 }
 
 func generateRecords(count int) []record.Record {

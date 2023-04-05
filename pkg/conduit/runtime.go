@@ -222,7 +222,7 @@ func (r *Runtime) Run(ctx context.Context, cancel context.CancelFunc) (err error
 		r.pipelineService.OnFailure(func(e pipeline.FailureEvent) {
 			if e.ProvisionType == pipeline.ProvisionTypeConfig {
 				r.logger.Warn(ctx).
-					Err(e.Cause).
+					Err(e.Error).
 					Str(log.PipelineIDField, e.ID).
 					Msg("Conduit will shut down due to a pipeline failure and 'exit on error' enabled")
 				cancel()
