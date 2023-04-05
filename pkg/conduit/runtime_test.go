@@ -16,11 +16,11 @@ package conduit_test
 
 import (
 	"context"
-	"github.com/conduitio/conduit/pkg/foundation/cchan"
 	"testing"
 	"time"
 
 	"github.com/conduitio/conduit/pkg/conduit"
+	"github.com/conduitio/conduit/pkg/foundation/cchan"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/matryer/is"
 )
