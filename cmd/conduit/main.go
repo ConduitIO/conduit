@@ -43,8 +43,8 @@ func main() {
 	}
 
 	// As per the docs, the signals SIGKILL and SIGSTOP may not be caught by a program
-	ctx, cancel := cancelOnInterrupt(context.Background())
-	err = runtime.Run(ctx, cancel)
+	ctx := cancelOnInterrupt(context.Background())
+	err = runtime.Run(ctx)
 	if err != nil && !cerrors.Is(err, context.Canceled) {
 		exitWithError(cerrors.Errorf("conduit runtime error: %w", err))
 	}
@@ -112,7 +112,7 @@ func parseConfig() conduit.Config {
 // * After the first signal the function will continue to listen
 // * On the second signal executes a hard exit, without waiting for a graceful
 // shutdown.
-func cancelOnInterrupt(ctx context.Context) (context.Context, context.CancelFunc) {
+func cancelOnInterrupt(ctx context.Context) context.Context {
 	ctx, cancel := context.WithCancel(ctx)
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, os.Interrupt)
@@ -126,7 +126,7 @@ func cancelOnInterrupt(ctx context.Context) (context.Context, context.CancelFunc
 		os.Exit(exitCodeInterrupt)
 	}()
 
-	return ctx, cancel
+	return ctx
 }
 
 func exitWithError(err error) {

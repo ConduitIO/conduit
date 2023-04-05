@@ -191,7 +191,7 @@ func newServices(
 // Run initializes all of Conduit's underlying services and starts the GRPC and
 // HTTP APIs. This function blocks until the supplied context is cancelled or
 // one of the services experiences a fatal error.
-func (r *Runtime) Run(ctx context.Context, cancel context.CancelFunc) (err error) {
+func (r *Runtime) Run(ctx context.Context) (err error) {
 	t, ctx := tomb.WithContext(ctx)
 	defer func() {
 		if err != nil {
@@ -225,7 +225,7 @@ func (r *Runtime) Run(ctx context.Context, cancel context.CancelFunc) (err error
 					Err(e.Error).
 					Str(log.PipelineIDField, e.ID).
 					Msg("Conduit will shut down due to a pipeline failure and 'exit on error' enabled")
-				cancel()
+				t.Kill(cerrors.Errorf("shut down due to 'exit on error' enabled: %w", err))
 			}
 		})
 	}
@@ -243,7 +243,7 @@ func (r *Runtime) Run(ctx context.Context, cancel context.CancelFunc) (err error
 			r.logger.Warn(ctx).
 				Err(err).
 				Msg("Conduit will shut down due to a pipeline provisioning failure and 'exit on error' enabled")
-			cancel()
+			t.Kill(cerrors.Errorf("shut down due to 'exit on error' enabled: %w", err))
 		}
 	}
 
