@@ -77,7 +77,7 @@ Conduit was created and open-sourced by [Meroxa](https://meroxa.io).
 
 ## Installation guide
 
-### Download and run release
+### Download binary and run
 
 Download a pre-built binary from
 the [latest release](https://github.com/conduitio/conduit/releases/latest) and
@@ -95,6 +95,30 @@ UI.
 
 Conduit can be configured through command line parameters. To view the full list
 of available options, run `./conduit --help`.
+
+### Homebrew
+Make sure you have [homebrew](https://brew.sh/) installed on your machine, then run:
+```sh
+brew install conduit
+brew upgrade conduit
+```
+
+### Debian
+Download the right `.deb` file for your machine architecture from the 
+[latest release](https://github.com/conduitio/conduit/releases/latest), then run:
+```sh
+apt-get install dpkg
+dpkg -i package_name.deb # replace with the downloaded package name
+apt-get update
+apt-get install conduit
+```
+
+### RPM 
+Download the right `.rpm` file for your machine architecture from the
+[latest release](https://github.com/conduitio/conduit/releases/latest), then run:
+```sh
+sudo rpm -i package_name.rpm # replace with the downloaded package name
+```
 
 ### Build from source
 
