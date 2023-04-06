@@ -49,9 +49,9 @@ type Interface interface {
 	Process(ctx context.Context, record record.Record) (record.Record, error)
 
 	// InspectIn starts an inspection session for input records for this processor.
-	InspectIn(ctx context.Context) *inspector.Session
+	InspectIn(ctx context.Context, id string) *inspector.Session
 	// InspectOut starts an inspection session for output records for this processor.
-	InspectOut(ctx context.Context) *inspector.Session
+	InspectOut(ctx context.Context, id string) *inspector.Session
 
 	// Close closes this processor and releases any resources
 	// which may have been used by it.

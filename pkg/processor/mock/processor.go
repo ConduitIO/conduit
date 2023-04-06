@@ -49,31 +49,31 @@ func (mr *ProcessorMockRecorder) Close() *gomock.Call {
 }
 
 // InspectIn mocks base method.
-func (m *Processor) InspectIn(arg0 context.Context) *inspector.Session {
+func (m *Processor) InspectIn(arg0 context.Context, arg1 string) *inspector.Session {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "InspectIn", arg0)
+	ret := m.ctrl.Call(m, "InspectIn", arg0, arg1)
 	ret0, _ := ret[0].(*inspector.Session)
 	return ret0
 }
 
 // InspectIn indicates an expected call of InspectIn.
-func (mr *ProcessorMockRecorder) InspectIn(arg0 interface{}) *gomock.Call {
+func (mr *ProcessorMockRecorder) InspectIn(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InspectIn", reflect.TypeOf((*Processor)(nil).InspectIn), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InspectIn", reflect.TypeOf((*Processor)(nil).InspectIn), arg0, arg1)
 }
 
 // InspectOut mocks base method.
-func (m *Processor) InspectOut(arg0 context.Context) *inspector.Session {
+func (m *Processor) InspectOut(arg0 context.Context, arg1 string) *inspector.Session {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "InspectOut", arg0)
+	ret := m.ctrl.Call(m, "InspectOut", arg0, arg1)
 	ret0, _ := ret[0].(*inspector.Session)
 	return ret0
 }
 
 // InspectOut indicates an expected call of InspectOut.
-func (mr *ProcessorMockRecorder) InspectOut(arg0 interface{}) *gomock.Call {
+func (mr *ProcessorMockRecorder) InspectOut(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InspectOut", reflect.TypeOf((*Processor)(nil).InspectOut), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InspectOut", reflect.TypeOf((*Processor)(nil).InspectOut), arg0, arg1)
 }
 
 // Process mocks base method.
