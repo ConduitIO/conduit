@@ -225,7 +225,7 @@ func (r *Runtime) Run(ctx context.Context) (err error) {
 					Err(e.Error).
 					Str(log.PipelineIDField, e.ID).
 					Msg("Conduit will shut down due to a pipeline failure and 'exit on error' enabled")
-				t.Kill(cerrors.Errorf("shut down due to 'exit on error' enabled: %w", err))
+				t.Kill(cerrors.Errorf("shut down due to 'exit on error' enabled: %w", e.Error))
 			}
 		})
 	}
