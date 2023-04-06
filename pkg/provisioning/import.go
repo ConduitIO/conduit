@@ -29,9 +29,7 @@ import (
 func (s *Service) Import(ctx context.Context, newConfig config.Pipeline) error {
 	oldConfig, err := s.Export(ctx, newConfig.ID)
 	if err != nil && !cerrors.Is(err, pipeline.ErrInstanceNotFound) {
-		s.logger.Warn(ctx).Err(err).Msgf("could not export pipeline with ID %v, trying to provision new pipeline despite the error", newConfig.ID)
-		// TODO does this behavior make sense? Should we rather return the error
-		//  and skip provisioning?
+		return cerrors.Errorf("could not export pipeline with ID %v, this could mean the Conduit state is corrupted: %w", err)
 	}
 
 	actions := s.newActionsBuilder().Build(oldConfig, newConfig)
