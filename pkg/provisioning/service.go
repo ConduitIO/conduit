@@ -236,7 +236,7 @@ func (s *Service) deleteOldPipelines(ctx context.Context, ids []string) []string
 					Msg("failed to delete a pipeline provisioned by a config file, the pipeline is probably in a broken state, Conduit will try to remove it again next time it runs")
 				continue
 			}
-			actions := s.cascadingActionsDeleteOld(oldConfig, config.Pipeline{})
+			actions := s.newActionsBuilder().Build(oldConfig, config.Pipeline{})
 			_, err = s.executeActions(ctx, actions)
 			if err != nil {
 				s.logger.Warn(ctx).

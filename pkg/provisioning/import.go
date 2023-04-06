@@ -34,15 +34,13 @@ func (s *Service) Import(ctx context.Context, newConfig config.Pipeline) error {
 		//  and skip provisioning?
 	}
 
-	var actions []action
-	actions = append(actions, s.cascadingActionsDeleteOld(oldConfig, newConfig)...)
-	actions = append(actions, s.cascadingActionsUpsertNew(oldConfig, newConfig)...)
+	actions := s.newActionsBuilder().Build(oldConfig, newConfig)
 
 	failedActionIndex, err := s.executeActions(ctx, actions)
 	if err != nil {
 		rollbackActions := actions[:failedActionIndex+1]
 		s.logger.Debug(ctx).Err(err).Msgf("rolling back %d import actions", len(rollbackActions))
-		s.reverseActions(rollbackActions) // execute rollback actions in reversed order
+		reverseActions(rollbackActions) // execute rollback actions in reversed order
 		if ok := s.rollbackActions(ctx, rollbackActions); !ok {
 			s.logger.Warn(ctx).Msg("some actions failed to be rolled back, Conduit state might be corrupted; please report this issue to the Conduit team")
 		}
@@ -50,103 +48,6 @@ func (s *Service) Import(ctx context.Context, newConfig config.Pipeline) error {
 	}
 
 	return nil
-}
-
-// cascadingActionsUpsertNew prepares actions needed for the new config to be
-// provisioned. It either creates or updates existing entities.
-func (s *Service) cascadingActionsUpsertNew(oldConfig, newConfig config.Pipeline) []action {
-	var actions []action
-
-	actions = append(actions, s.preparePipelineActions(oldConfig, newConfig)...)
-
-	for _, connNewConfig := range newConfig.Connectors {
-		connOldConfig, _ := s.findConnectorByID(oldConfig.Connectors, connNewConfig.ID)
-		actions = append(actions, s.prepareConnectorActions(connOldConfig, connNewConfig, newConfig.ID)...)
-
-		parent := processor.Parent{
-			ID:   connNewConfig.ID,
-			Type: processor.ParentTypeConnector,
-		}
-		for _, procNewConfig := range connNewConfig.Processors {
-			procOldConfig, _ := s.findProcessorByID(connOldConfig.Processors, procNewConfig.ID)
-			actions = append(actions, s.prepareProcessorActions(procOldConfig, procNewConfig, parent)...)
-		}
-	}
-
-	parent := processor.Parent{
-		ID:   newConfig.ID,
-		Type: processor.ParentTypePipeline,
-	}
-	for _, procNewConfig := range newConfig.Processors {
-		procOldConfig, _ := s.findProcessorByID(oldConfig.Processors, procNewConfig.ID)
-		actions = append(actions, s.prepareProcessorActions(procOldConfig, procNewConfig, parent)...)
-	}
-	return actions
-}
-
-// cascadingActionsDeleteOld prepares actions needed to delete existing entities
-// from the old config that are not found in the new config.
-func (s *Service) cascadingActionsDeleteOld(oldConfig, newConfig config.Pipeline) []action {
-	var actions []action
-
-	if newConfig.ID == "" {
-		// pipeline doesn't exist anymore, prepare delete action
-		actions = append(actions, s.preparePipelineActions(oldConfig, config.Pipeline{})...)
-	}
-
-	for _, connOldConfig := range oldConfig.Connectors {
-		connNewConfig, ok := s.findConnectorByID(newConfig.Connectors, connOldConfig.ID)
-		if !ok {
-			// connector doesn't exist anymore, prepare delete action
-			actions = append(actions, s.prepareConnectorActions(connOldConfig, config.Connector{}, oldConfig.ID)...)
-		}
-
-		parent := processor.Parent{
-			ID:   connOldConfig.ID,
-			Type: processor.ParentTypeConnector,
-		}
-		for _, procOldConfig := range connOldConfig.Processors {
-			_, ok := s.findProcessorByID(connNewConfig.Processors, procOldConfig.ID)
-			if !ok {
-				// processor doesn't exist anymore, prepare delete action
-				actions = append(actions, s.prepareProcessorActions(procOldConfig, config.Processor{}, parent)...)
-			}
-		}
-	}
-
-	parent := processor.Parent{
-		ID:   oldConfig.ID,
-		Type: processor.ParentTypePipeline,
-	}
-	for _, procOldConfig := range oldConfig.Processors {
-		_, ok := s.findProcessorByID(newConfig.Processors, procOldConfig.ID)
-		if !ok {
-			// processor doesn't exist anymore, prepare delete action
-			actions = append(actions, s.prepareProcessorActions(procOldConfig, config.Processor{}, parent)...)
-		}
-	}
-
-	// reverse actions so that we first delete the innermost entities
-	s.reverseActions(actions)
-	return actions
-}
-
-func (s *Service) findConnectorByID(connectors []config.Connector, id string) (config.Connector, bool) {
-	for _, conn := range connectors {
-		if conn.ID == id {
-			return conn, true
-		}
-	}
-	return config.Connector{}, false
-}
-
-func (s *Service) findProcessorByID(processors []config.Processor, id string) (config.Processor, bool) {
-	for _, proc := range processors {
-		if proc.ID == id {
-			return proc, true
-		}
-	}
-	return config.Processor{}, false
 }
 
 // executeActions executes the actions and returns the number of successfully
@@ -179,18 +80,135 @@ func (s *Service) rollbackActions(ctx context.Context, actions []action) bool {
 	return ok
 }
 
-func (s *Service) preparePipelineActions(oldConfig, newConfig config.Pipeline) []action {
+func (s *Service) newActionsBuilder() actionsBuilder {
+	return actionsBuilder{
+		pipelineService:  s.pipelineService,
+		connectorService: s.connectorService,
+		processorService: s.processorService,
+		pluginService:    s.pluginService,
+	}
+}
+
+type actionsBuilder struct {
+	pipelineService  PipelineService
+	connectorService ConnectorService
+	processorService ProcessorService
+	pluginService    PluginService
+}
+
+func (ab actionsBuilder) Build(oldConfig, newConfig config.Pipeline) []action {
+	var actions []action
+	actions = append(actions, ab.buildForOldConfig(oldConfig, newConfig)...)
+	actions = append(actions, ab.buildForNewConfig(oldConfig, newConfig)...)
+	return actions
+}
+
+// buildForNewConfig builds actions needed for the new config to be provisioned.
+// It either creates or updates existing entities.
+func (ab actionsBuilder) buildForNewConfig(oldConfig, newConfig config.Pipeline) []action {
+	var actions []action
+
+	actions = append(actions, ab.preparePipelineActions(oldConfig, newConfig)...)
+
+	for _, connNewConfig := range newConfig.Connectors {
+		connOldConfig, _ := ab.findConnectorByID(oldConfig.Connectors, connNewConfig.ID)
+		actions = append(actions, ab.prepareConnectorActions(connOldConfig, connNewConfig, newConfig.ID)...)
+
+		parent := processor.Parent{
+			ID:   connNewConfig.ID,
+			Type: processor.ParentTypeConnector,
+		}
+		for _, procNewConfig := range connNewConfig.Processors {
+			procOldConfig, _ := ab.findProcessorByID(connOldConfig.Processors, procNewConfig.ID)
+			actions = append(actions, ab.prepareProcessorActions(procOldConfig, procNewConfig, parent)...)
+		}
+	}
+
+	parent := processor.Parent{
+		ID:   newConfig.ID,
+		Type: processor.ParentTypePipeline,
+	}
+	for _, procNewConfig := range newConfig.Processors {
+		procOldConfig, _ := ab.findProcessorByID(oldConfig.Processors, procNewConfig.ID)
+		actions = append(actions, ab.prepareProcessorActions(procOldConfig, procNewConfig, parent)...)
+	}
+	return actions
+}
+
+// buildForOldConfig builds actions needed to delete existing entities from the
+// old config that are not found in the new config.
+func (ab actionsBuilder) buildForOldConfig(oldConfig, newConfig config.Pipeline) []action {
+	var actions []action
+
+	// skip creating pipeline actions, they are always prepared in buildForNewConfig
+
+	for _, connOldConfig := range oldConfig.Connectors {
+		connNewConfig, ok := ab.findConnectorByID(newConfig.Connectors, connOldConfig.ID)
+		if !ok {
+			// connector doesn't exist anymore, prepare delete action
+			actions = append(actions, ab.prepareConnectorActions(connOldConfig, config.Connector{}, oldConfig.ID)...)
+		}
+
+		parent := processor.Parent{
+			ID:   connOldConfig.ID,
+			Type: processor.ParentTypeConnector,
+		}
+		for _, procOldConfig := range connOldConfig.Processors {
+			_, ok := ab.findProcessorByID(connNewConfig.Processors, procOldConfig.ID)
+			if !ok {
+				// processor doesn't exist anymore, prepare delete action
+				actions = append(actions, ab.prepareProcessorActions(procOldConfig, config.Processor{}, parent)...)
+			}
+		}
+	}
+
+	parent := processor.Parent{
+		ID:   oldConfig.ID,
+		Type: processor.ParentTypePipeline,
+	}
+	for _, procOldConfig := range oldConfig.Processors {
+		_, ok := ab.findProcessorByID(newConfig.Processors, procOldConfig.ID)
+		if !ok {
+			// processor doesn't exist anymore, prepare delete action
+			actions = append(actions, ab.prepareProcessorActions(procOldConfig, config.Processor{}, parent)...)
+		}
+	}
+
+	// reverse actions so that we first delete the innermost entities
+	reverseActions(actions)
+	return actions
+}
+
+func (ab actionsBuilder) findConnectorByID(connectors []config.Connector, id string) (config.Connector, bool) {
+	for _, conn := range connectors {
+		if conn.ID == id {
+			return conn, true
+		}
+	}
+	return config.Connector{}, false
+}
+
+func (ab actionsBuilder) findProcessorByID(processors []config.Processor, id string) (config.Processor, bool) {
+	for _, proc := range processors {
+		if proc.ID == id {
+			return proc, true
+		}
+	}
+	return config.Processor{}, false
+}
+
+func (ab actionsBuilder) preparePipelineActions(oldConfig, newConfig config.Pipeline) []action {
 	if oldConfig.ID == "" {
 		// no old config, it's a brand new pipeline
 		return []action{createPipelineAction{
 			cfg:             newConfig,
-			pipelineService: s.pipelineService,
+			pipelineService: ab.pipelineService,
 		}}
 	} else if newConfig.ID == "" {
 		// no new config, it's an old pipeline that needs to be deleted
 		return []action{deletePipelineAction{
 			cfg:             oldConfig,
-			pipelineService: s.pipelineService,
+			pipelineService: ab.pipelineService,
 		}}
 	}
 
@@ -205,29 +223,29 @@ func (s *Service) preparePipelineActions(oldConfig, newConfig config.Pipeline) [
 		return []action{updatePipelineAction{
 			oldConfig:       oldConfig,
 			newConfig:       newConfig,
-			pipelineService: s.pipelineService,
+			pipelineService: ab.pipelineService,
 		}}
 	}
 
 	return nil
 }
 
-func (s *Service) prepareConnectorActions(oldConfig, newConfig config.Connector, pipelineID string) []action {
+func (ab actionsBuilder) prepareConnectorActions(oldConfig, newConfig config.Connector, pipelineID string) []action {
 	if oldConfig.ID == "" {
 		// no old config, it's a brand new connector
 		return []action{createConnectorAction{
 			cfg:              newConfig,
 			pipelineID:       pipelineID,
-			connectorService: s.connectorService,
-			pluginService:    s.pluginService,
+			connectorService: ab.connectorService,
+			pluginService:    ab.pluginService,
 		}}
 	} else if newConfig.ID == "" {
 		// no new config, it's an old connector that needs to be deleted
 		return []action{deleteConnectorAction{
 			cfg:              oldConfig,
 			pipelineID:       pipelineID,
-			connectorService: s.connectorService,
-			pluginService:    s.pluginService,
+			connectorService: ab.connectorService,
+			pluginService:    ab.pluginService,
 		}}
 	}
 
@@ -251,7 +269,7 @@ func (s *Service) prepareConnectorActions(oldConfig, newConfig config.Connector,
 		return []action{updateConnectorAction{
 			oldConfig:        oldConfig,
 			newConfig:        newConfig,
-			connectorService: s.connectorService,
+			connectorService: ab.connectorService,
 		}}
 	}
 
@@ -260,32 +278,32 @@ func (s *Service) prepareConnectorActions(oldConfig, newConfig config.Connector,
 		deleteConnectorAction{
 			cfg:              oldConfig,
 			pipelineID:       pipelineID,
-			connectorService: s.connectorService,
-			pluginService:    s.pluginService,
+			connectorService: ab.connectorService,
+			pluginService:    ab.pluginService,
 		},
 		createConnectorAction{
 			cfg:              newConfig,
 			pipelineID:       pipelineID,
-			connectorService: s.connectorService,
-			pluginService:    s.pluginService,
+			connectorService: ab.connectorService,
+			pluginService:    ab.pluginService,
 		},
 	}
 }
 
-func (s *Service) prepareProcessorActions(oldConfig, newConfig config.Processor, parent processor.Parent) []action {
+func (ab actionsBuilder) prepareProcessorActions(oldConfig, newConfig config.Processor, parent processor.Parent) []action {
 	if oldConfig.ID == "" {
 		// no old config, it's a brand new processor
 		return []action{createProcessorAction{
 			cfg:              newConfig,
 			parent:           parent,
-			processorService: s.processorService,
+			processorService: ab.processorService,
 		}}
 	} else if newConfig.ID == "" {
 		// no new config, it's an old processor that needs to be deleted
 		return []action{deleteProcessorAction{
 			cfg:              oldConfig,
 			parent:           parent,
-			processorService: s.processorService,
+			processorService: ab.processorService,
 		}}
 	}
 
@@ -306,7 +324,7 @@ func (s *Service) prepareProcessorActions(oldConfig, newConfig config.Processor,
 		return []action{updateProcessorAction{
 			oldConfig:        oldConfig,
 			newConfig:        newConfig,
-			processorService: s.processorService,
+			processorService: ab.processorService,
 		}}
 	}
 
@@ -315,17 +333,17 @@ func (s *Service) prepareProcessorActions(oldConfig, newConfig config.Processor,
 		deleteProcessorAction{
 			cfg:              oldConfig,
 			parent:           parent,
-			processorService: s.processorService,
+			processorService: ab.processorService,
 		},
 		createProcessorAction{
 			cfg:              newConfig,
 			parent:           parent,
-			processorService: s.processorService,
+			processorService: ab.processorService,
 		},
 	}
 }
 
-func (*Service) reverseActions(actions []action) {
+func reverseActions(actions []action) {
 	for i, j := 0, len(actions)-1; i < j; i, j = i+1, j-1 {
 		actions[i], actions[j] = actions[j], actions[i]
 	}
