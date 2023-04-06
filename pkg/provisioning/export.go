@@ -25,7 +25,9 @@ import (
 	"github.com/conduitio/conduit/pkg/provisioning/config"
 )
 
-// Export takes a pipeline ID and exports its configuration.
+// Export takes a pipeline ID and exports its configuration. It either returns
+// the exported configuration or pipeline.ErrInstanceNotFound, any other error
+// points towards a corrupted state.
 func (s *Service) Export(ctx context.Context, pipelineID string) (config.Pipeline, error) {
 	p, err := s.pipelineService.Get(ctx, pipelineID)
 	if err != nil {
