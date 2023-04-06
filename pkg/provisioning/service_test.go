@@ -167,6 +167,35 @@ func TestProvision_Update(t *testing.T) {
 	is.NoErr(err)
 }
 
+func TestProvision_Delete(t *testing.T) {
+	is := is.New(t)
+	logger := log.Nop()
+	ctrl := gomock.NewController(t)
+
+	service, pipelineService, connService, procService, plugService := newTestService(ctrl, logger)
+	service.pipelinesPath = "" // don't init any pipelines, delete existing ones
+
+	// old pipeline exists
+	pipelineService.EXPECT().List(anyCtx).Return(map[string]*pipeline.Instance{oldPipelineInstance.ID: oldPipelineInstance})
+
+	// export pipeline
+	pipelineService.EXPECT().Get(anyCtx, oldPipelineInstance.ID).Return(oldPipelineInstance, nil)
+	connService.EXPECT().Get(anyCtx, oldConnector1Instance.ID).Return(oldConnector1Instance, nil)
+	connService.EXPECT().Get(anyCtx, oldConnector2Instance.ID).Return(oldConnector2Instance, nil)
+	procService.EXPECT().Get(anyCtx, oldConnectorProcessorInstance.ID).Return(oldConnectorProcessorInstance, nil)
+	procService.EXPECT().Get(anyCtx, oldPipelineProcessorInstance.ID).Return(oldPipelineProcessorInstance, nil)
+
+	// delete pipeline
+	pipelineService.EXPECT().Delete(anyCtx, oldPipelineInstance.ID).Return(nil)
+	connService.EXPECT().Delete(anyCtx, oldConnector1Instance.ID, plugService).Return(nil)
+	connService.EXPECT().Delete(anyCtx, oldConnector2Instance.ID, plugService).Return(nil)
+	procService.EXPECT().Delete(anyCtx, oldConnectorProcessorInstance.ID).Return(nil)
+	procService.EXPECT().Delete(anyCtx, oldPipelineProcessorInstance.ID).Return(nil)
+
+	err := service.Init(context.Background())
+	is.NoErr(err)
+}
+
 func TestProvision_NoRollbackOnFailedStart(t *testing.T) {
 	is := is.New(t)
 	logger := log.Nop()
