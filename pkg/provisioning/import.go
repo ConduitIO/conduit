@@ -53,7 +53,7 @@ func (s *Service) Import(ctx context.Context, newConfig config.Pipeline) error {
 // function returns immediately without executing any further actions.
 func (s *Service) executeActions(ctx context.Context, actions []action) (int, error) {
 	for i, a := range actions {
-		s.logger.Trace(ctx).Str("action", a.String()).Msg("executing action")
+		s.logger.Debug(ctx).Str("action", a.String()).Msg("executing action")
 		err := a.Do(ctx)
 		if err != nil {
 			return i, cerrors.Errorf("error executing action %q: %w", a.String(), err)
@@ -68,7 +68,7 @@ func (s *Service) executeActions(ctx context.Context, actions []action) (int, er
 func (s *Service) rollbackActions(ctx context.Context, actions []action) bool {
 	ok := true
 	for _, a := range actions {
-		s.logger.Trace(ctx).Str("action", a.String()).Msg("rolling back action")
+		s.logger.Debug(ctx).Str("action", a.String()).Msg("rolling back action")
 		err := a.Rollback(ctx)
 		if err != nil {
 			s.logger.Err(ctx, err).Str("action", a.String()).Msg("error rolling back action")
