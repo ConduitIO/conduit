@@ -112,15 +112,6 @@ func (s *Service) Get(_ context.Context, id string) (*Instance, error) {
 // Create will create a new pipeline instance with the given config and return
 // it if it was successfully saved to the database.
 func (s *Service) Create(ctx context.Context, id string, cfg Config, p ProvisionType) (*Instance, error) {
-	pl, err := s.createInternal(ctx, id, cfg, p)
-	if err != nil {
-		s.notify(id, p, err)
-		return nil, err
-	}
-	return pl, nil
-}
-
-func (s *Service) createInternal(ctx context.Context, id string, cfg Config, p ProvisionType) (*Instance, error) {
 	if cfg.Name == "" {
 		return nil, ErrNameMissing
 	}
@@ -329,16 +320,19 @@ func (s *Service) Delete(ctx context.Context, pipelineID string) error {
 }
 
 // OnFailure registers a handler for a pipeline.FailureEvent.
+// Only errors which happen after a pipeline has been started
+// are being sent.
 func (s *Service) OnFailure(handler FailureHandler) {
 	s.handlers = append(s.handlers, handler)
 }
 
-func (s *Service) notify(id string, p ProvisionType, err error) {
+// notify notifies all registered FailureHandlers about an error.
+func (s *Service) notify(pipelineID string, p ProvisionType, err error) {
 	if err == nil {
 		return
 	}
 	e := FailureEvent{
-		ID:            id,
+		ID:            pipelineID,
 		ProvisionType: p,
 		Error:         err,
 	}

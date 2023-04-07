@@ -94,20 +94,6 @@ func (s *Service) Start(
 
 	s.logger.Debug(ctx).Str(log.PipelineIDField, pl.ID).Msg("starting pipeline")
 
-	err = s.startInternal(ctx, pl, connFetcher, procFetcher, pluginFetcher)
-	s.notify(pl.ID, pl.ProvisionedBy, err)
-	return err
-}
-
-// startInternal builds the nodes for the given pipeline instance,
-// and then starts it.
-func (s *Service) startInternal(
-	ctx context.Context,
-	pl *Instance,
-	connFetcher ConnectorFetcher,
-	procFetcher ProcessorFetcher,
-	pluginFetcher PluginDispenserFetcher,
-) error {
 	s.logger.Trace(ctx).Str(log.PipelineIDField, pl.ID).Msg("building nodes")
 	nodes, err := s.buildNodes(ctx, connFetcher, procFetcher, pluginFetcher, pl)
 	if err != nil {
