@@ -239,11 +239,11 @@ func TestServiceLifecycle_PipelineError(t *testing.T) {
 		strings.Contains(pl.Error, wantErr.Error()),
 	) // expected error message to contain "source connector error"
 
-	e, valReceived, err := cchan.Chan[FailureEvent](events).RecvTimeout(ctx, 200*time.Millisecond)
+	event, eventReceived, err := cchan.Chan[FailureEvent](events).RecvTimeout(ctx, 200*time.Millisecond)
 	is.NoErr(err)
-	is.True(valReceived)
-	is.Equal(pl.ID, e.ID)
-	is.True(cerrors.Is(e.Error, wantErr))
+	is.True(eventReceived)
+	is.Equal(pl.ID, event.ID)
+	is.True(cerrors.Is(event.Error, wantErr))
 }
 
 func TestServiceLifecycle_PipelineStop(t *testing.T) {

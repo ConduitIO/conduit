@@ -79,7 +79,7 @@ func parseConfig() conduit.Config {
 		pipelinesExitOnError = flags.Bool(
 			"pipelines.exit-on-error",
 			false,
-			"exit Conduit if a file-provisioned pipeline fails",
+			"Exit Conduit if any pipeline provisioned through a file experiences an error while running.",
 		)
 	)
 
