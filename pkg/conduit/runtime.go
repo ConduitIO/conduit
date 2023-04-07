@@ -220,13 +220,11 @@ func (r *Runtime) Run(ctx context.Context) (err error) {
 
 	if r.Config.Pipelines.ExitOnError {
 		r.pipelineService.OnFailure(func(e pipeline.FailureEvent) {
-			if e.ProvisionType == pipeline.ProvisionTypeConfig {
-				r.logger.Warn(ctx).
-					Err(e.Error).
-					Str(log.PipelineIDField, e.ID).
-					Msg("Conduit will shut down due to a pipeline failure and 'exit on error' enabled")
-				t.Kill(cerrors.Errorf("shut down due to 'exit on error' enabled: %w", e.Error))
-			}
+			r.logger.Warn(ctx).
+				Err(e.Error).
+				Str(log.PipelineIDField, e.ID).
+				Msg("Conduit will shut down due to a pipeline failure and 'exit on error' enabled")
+			t.Kill(cerrors.Errorf("shut down due to 'exit on error' enabled: %w", e.Error))
 		})
 	}
 	err = r.pipelineService.Init(ctx)
