@@ -26,7 +26,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
-func TestTimestampConvertorKey_Build(t *testing.T) {
+func TestTimestampConverterKey_Build(t *testing.T) {
 	type args struct {
 		config processor.Config
 	}
@@ -47,23 +47,23 @@ func TestTimestampConvertorKey_Build(t *testing.T) {
 	}, {
 		name: "empty field returns error",
 		args: args{config: processor.Config{
-			Settings: map[string]string{timestampConvertorConfigField: ""},
+			Settings: map[string]string{timestampConverterConfigField: ""},
 		}},
 		wantErr: true,
 	}, {
 		name: "empty format returns error when targetType is string",
 		args: args{config: processor.Config{
 			Settings: map[string]string{
-				timestampConvertorConfigField:      "foo",
-				timestampConvertorConfigTargetType: "string"},
+				timestampConverterConfigField:      "foo",
+				timestampConverterConfigTargetType: "string"},
 		}},
 		wantErr: true,
 	}, {
 		name: "unix target type doesn't require a format",
 		args: args{config: processor.Config{
 			Settings: map[string]string{
-				timestampConvertorConfigField:      "foo",
-				timestampConvertorConfigTargetType: "unix",
+				timestampConverterConfigField:      "foo",
+				timestampConverterConfigTargetType: "unix",
 			},
 		}},
 		wantErr: false,
@@ -71,9 +71,9 @@ func TestTimestampConvertorKey_Build(t *testing.T) {
 		name: "time.Time target type doesn't require a format, unless input type is string",
 		args: args{config: processor.Config{
 			Settings: map[string]string{
-				timestampConvertorConfigField:      "foo",
-				timestampConvertorConfigTargetType: "time.Time",
-				timestampConvertorConfigFormat:     "2016-01-02",
+				timestampConverterConfigField:      "foo",
+				timestampConverterConfigTargetType: "time.Time",
+				timestampConverterConfigFormat:     "2016-01-02",
 			},
 		}},
 		wantErr: false,
@@ -81,9 +81,9 @@ func TestTimestampConvertorKey_Build(t *testing.T) {
 		name: "string targetType needs a format",
 		args: args{config: processor.Config{
 			Settings: map[string]string{
-				timestampConvertorConfigField:      "foo",
-				timestampConvertorConfigTargetType: "string",
-				timestampConvertorConfigFormat:     "2016-01-02",
+				timestampConverterConfigField:      "foo",
+				timestampConverterConfigTargetType: "string",
+				timestampConverterConfigFormat:     "2016-01-02",
 			},
 		}},
 		wantErr: false,
@@ -91,16 +91,16 @@ func TestTimestampConvertorKey_Build(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := TimestampConvertorKey(tt.args.config)
+			_, err := TimestampConverterKey(tt.args.config)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("TimestampConvertorKey() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("TimestampConverterKey() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 		})
 	}
 }
 
-func TestTimestampConvertorKey_Process(t *testing.T) {
+func TestTimestampConverterKey_Process(t *testing.T) {
 	type args struct {
 		r record.Record
 	}
@@ -114,9 +114,9 @@ func TestTimestampConvertorKey_Process(t *testing.T) {
 		name: "from unix to string",
 		config: processor.Config{
 			Settings: map[string]string{
-				timestampConvertorConfigField:      "date",
-				timestampConvertorConfigTargetType: "string",
-				timestampConvertorConfigFormat:     "2006-01-02",
+				timestampConverterConfigField:      "date",
+				timestampConverterConfigTargetType: "string",
+				timestampConverterConfigFormat:     "2006-01-02",
 			},
 		},
 		args: args{r: record.Record{
@@ -134,9 +134,9 @@ func TestTimestampConvertorKey_Process(t *testing.T) {
 		name: "from time.Time to string",
 		config: processor.Config{
 			Settings: map[string]string{
-				timestampConvertorConfigField:      "date",
-				timestampConvertorConfigTargetType: "string",
-				timestampConvertorConfigFormat:     "2006-01-02",
+				timestampConverterConfigField:      "date",
+				timestampConverterConfigTargetType: "string",
+				timestampConverterConfigFormat:     "2006-01-02",
 			},
 		},
 		args: args{r: record.Record{
@@ -154,9 +154,9 @@ func TestTimestampConvertorKey_Process(t *testing.T) {
 		name: "from time.Time to unix",
 		config: processor.Config{
 			Settings: map[string]string{
-				timestampConvertorConfigField:      "date",
-				timestampConvertorConfigTargetType: "unix",
-				timestampConvertorConfigFormat:     "",
+				timestampConverterConfigField:      "date",
+				timestampConverterConfigTargetType: "unix",
+				timestampConverterConfigFormat:     "",
 			},
 		},
 		args: args{r: record.Record{
@@ -174,9 +174,9 @@ func TestTimestampConvertorKey_Process(t *testing.T) {
 		name: "from string to unix",
 		config: processor.Config{
 			Settings: map[string]string{
-				timestampConvertorConfigField:      "date",
-				timestampConvertorConfigTargetType: "unix",
-				timestampConvertorConfigFormat:     "2006-01-02",
+				timestampConverterConfigField:      "date",
+				timestampConverterConfigTargetType: "unix",
+				timestampConverterConfigFormat:     "2006-01-02",
 			},
 		},
 		args: args{r: record.Record{
@@ -194,9 +194,9 @@ func TestTimestampConvertorKey_Process(t *testing.T) {
 		name: "from string to time.Time",
 		config: processor.Config{
 			Settings: map[string]string{
-				timestampConvertorConfigField:      "date",
-				timestampConvertorConfigTargetType: "time.Time",
-				timestampConvertorConfigFormat:     "2006-01-02",
+				timestampConverterConfigField:      "date",
+				timestampConverterConfigTargetType: "time.Time",
+				timestampConverterConfigFormat:     "2006-01-02",
 			},
 		},
 		args: args{r: record.Record{
@@ -214,9 +214,9 @@ func TestTimestampConvertorKey_Process(t *testing.T) {
 		name: "from string to time.Time with empty format should throw error",
 		config: processor.Config{
 			Settings: map[string]string{
-				timestampConvertorConfigField:      "date",
-				timestampConvertorConfigTargetType: "time.Time",
-				timestampConvertorConfigFormat:     "",
+				timestampConverterConfigField:      "date",
+				timestampConverterConfigTargetType: "time.Time",
+				timestampConverterConfigFormat:     "",
 			},
 		},
 		args: args{r: record.Record{
@@ -230,9 +230,9 @@ func TestTimestampConvertorKey_Process(t *testing.T) {
 		name: "from string to unix with empty format should throw error",
 		config: processor.Config{
 			Settings: map[string]string{
-				timestampConvertorConfigField:      "date",
-				timestampConvertorConfigTargetType: "unix",
-				timestampConvertorConfigFormat:     "",
+				timestampConverterConfigField:      "date",
+				timestampConverterConfigTargetType: "unix",
+				timestampConverterConfigFormat:     "",
 			},
 		},
 		args: args{r: record.Record{
@@ -246,9 +246,9 @@ func TestTimestampConvertorKey_Process(t *testing.T) {
 		name: "from unix to time.Time",
 		config: processor.Config{
 			Settings: map[string]string{
-				timestampConvertorConfigField:      "date",
-				timestampConvertorConfigTargetType: "time.Time",
-				timestampConvertorConfigFormat:     "",
+				timestampConverterConfigField:      "date",
+				timestampConverterConfigTargetType: "time.Time",
+				timestampConverterConfigFormat:     "",
 			},
 		},
 		args: args{r: record.Record{
@@ -266,9 +266,9 @@ func TestTimestampConvertorKey_Process(t *testing.T) {
 		name: "raw data without schema",
 		config: processor.Config{
 			Settings: map[string]string{
-				timestampConvertorConfigField:      "date",
-				timestampConvertorConfigTargetType: "string",
-				timestampConvertorConfigFormat:     "2006-01-02",
+				timestampConverterConfigField:      "date",
+				timestampConverterConfigTargetType: "string",
+				timestampConverterConfigFormat:     "2006-01-02",
 			},
 		},
 		args: args{r: record.Record{
@@ -282,8 +282,8 @@ func TestTimestampConvertorKey_Process(t *testing.T) {
 		name: "raw data with schema",
 		config: processor.Config{
 			Settings: map[string]string{
-				timestampConvertorConfigField:      "foo",
-				timestampConvertorConfigTargetType: "unix",
+				timestampConverterConfigField:      "foo",
+				timestampConverterConfigTargetType: "unix",
 			},
 		},
 		args: args{r: record.Record{
@@ -297,7 +297,7 @@ func TestTimestampConvertorKey_Process(t *testing.T) {
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			underTest, err := TimestampConvertorKey(tt.config)
+			underTest, err := TimestampConverterKey(tt.config)
 			assert.Ok(t, err)
 			got, err := underTest.Process(context.Background(), tt.args.r)
 			if (err != nil) != tt.wantErr {
@@ -311,7 +311,7 @@ func TestTimestampConvertorKey_Process(t *testing.T) {
 	}
 }
 
-func TestTimestampConvertorPayload_Build(t *testing.T) {
+func TestTimestampConverterPayload_Build(t *testing.T) {
 	type args struct {
 		config processor.Config
 	}
@@ -332,31 +332,31 @@ func TestTimestampConvertorPayload_Build(t *testing.T) {
 	}, {
 		name: "empty field returns error",
 		args: args{config: processor.Config{
-			Settings: map[string]string{timestampConvertorConfigField: ""},
+			Settings: map[string]string{timestampConverterConfigField: ""},
 		}},
 		wantErr: true,
 	}, {
 		name: "empty format returns error when targetType is string",
 		args: args{config: processor.Config{
 			Settings: map[string]string{
-				timestampConvertorConfigField:      "foo",
-				timestampConvertorConfigTargetType: "string",
+				timestampConverterConfigField:      "foo",
+				timestampConverterConfigTargetType: "string",
 			},
 		}},
 		wantErr: true,
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := TimestampConvertorPayload(tt.args.config)
+			_, err := TimestampConverterPayload(tt.args.config)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("TimestampConvertorPayload() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("TimestampConverterPayload() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 		})
 	}
 }
 
-func TestTimestampConvertorPayload_Process(t *testing.T) {
+func TestTimestampConverterPayload_Process(t *testing.T) {
 	type args struct {
 		r record.Record
 	}
@@ -370,9 +370,9 @@ func TestTimestampConvertorPayload_Process(t *testing.T) {
 		name: "from unix to string",
 		config: processor.Config{
 			Settings: map[string]string{
-				timestampConvertorConfigField:      "date",
-				timestampConvertorConfigTargetType: "string",
-				timestampConvertorConfigFormat:     "2006-01-02",
+				timestampConverterConfigField:      "date",
+				timestampConverterConfigTargetType: "string",
+				timestampConverterConfigFormat:     "2006-01-02",
 			},
 		},
 		args: args{r: record.Record{
@@ -396,9 +396,9 @@ func TestTimestampConvertorPayload_Process(t *testing.T) {
 		name: "from time.Time to string",
 		config: processor.Config{
 			Settings: map[string]string{
-				timestampConvertorConfigField:      "date",
-				timestampConvertorConfigTargetType: "string",
-				timestampConvertorConfigFormat:     "2006-01-02",
+				timestampConverterConfigField:      "date",
+				timestampConverterConfigTargetType: "string",
+				timestampConverterConfigFormat:     "2006-01-02",
 			},
 		},
 		args: args{r: record.Record{
@@ -422,9 +422,9 @@ func TestTimestampConvertorPayload_Process(t *testing.T) {
 		name: "from time.Time to unix",
 		config: processor.Config{
 			Settings: map[string]string{
-				timestampConvertorConfigField:      "date",
-				timestampConvertorConfigTargetType: "unix",
-				timestampConvertorConfigFormat:     "",
+				timestampConverterConfigField:      "date",
+				timestampConverterConfigTargetType: "unix",
+				timestampConverterConfigFormat:     "",
 			},
 		},
 		args: args{r: record.Record{
@@ -448,9 +448,9 @@ func TestTimestampConvertorPayload_Process(t *testing.T) {
 		name: "from string to unix",
 		config: processor.Config{
 			Settings: map[string]string{
-				timestampConvertorConfigField:      "date",
-				timestampConvertorConfigTargetType: "unix",
-				timestampConvertorConfigFormat:     "2006-01-02",
+				timestampConverterConfigField:      "date",
+				timestampConverterConfigTargetType: "unix",
+				timestampConverterConfigFormat:     "2006-01-02",
 			},
 		},
 		args: args{r: record.Record{
@@ -474,9 +474,9 @@ func TestTimestampConvertorPayload_Process(t *testing.T) {
 		name: "from string to time.Time",
 		config: processor.Config{
 			Settings: map[string]string{
-				timestampConvertorConfigField:      "date",
-				timestampConvertorConfigTargetType: "time.Time",
-				timestampConvertorConfigFormat:     "2006-01-02",
+				timestampConverterConfigField:      "date",
+				timestampConverterConfigTargetType: "time.Time",
+				timestampConverterConfigFormat:     "2006-01-02",
 			},
 		},
 		args: args{r: record.Record{
@@ -500,9 +500,9 @@ func TestTimestampConvertorPayload_Process(t *testing.T) {
 		name: "from string to time.Time with empty format should throw error",
 		config: processor.Config{
 			Settings: map[string]string{
-				timestampConvertorConfigField:      "date",
-				timestampConvertorConfigTargetType: "time.Time",
-				timestampConvertorConfigFormat:     "",
+				timestampConverterConfigField:      "date",
+				timestampConverterConfigTargetType: "time.Time",
+				timestampConverterConfigFormat:     "",
 			},
 		},
 		args: args{r: record.Record{
@@ -519,9 +519,9 @@ func TestTimestampConvertorPayload_Process(t *testing.T) {
 		name: "from string to unix with empty format should throw error",
 		config: processor.Config{
 			Settings: map[string]string{
-				timestampConvertorConfigField:      "date",
-				timestampConvertorConfigTargetType: "unix",
-				timestampConvertorConfigFormat:     "",
+				timestampConverterConfigField:      "date",
+				timestampConverterConfigTargetType: "unix",
+				timestampConverterConfigFormat:     "",
 			},
 		},
 		args: args{r: record.Record{
@@ -538,9 +538,9 @@ func TestTimestampConvertorPayload_Process(t *testing.T) {
 		name: "from unix to time.Time",
 		config: processor.Config{
 			Settings: map[string]string{
-				timestampConvertorConfigField:      "date",
-				timestampConvertorConfigTargetType: "time.Time",
-				timestampConvertorConfigFormat:     "",
+				timestampConverterConfigField:      "date",
+				timestampConverterConfigTargetType: "time.Time",
+				timestampConverterConfigFormat:     "",
 			},
 		},
 		args: args{r: record.Record{
@@ -564,9 +564,9 @@ func TestTimestampConvertorPayload_Process(t *testing.T) {
 		name: "raw data without schema",
 		config: processor.Config{
 			Settings: map[string]string{
-				timestampConvertorConfigField:      "date",
-				timestampConvertorConfigTargetType: "string",
-				timestampConvertorConfigFormat:     "2006-01-02"},
+				timestampConverterConfigField:      "date",
+				timestampConverterConfigTargetType: "string",
+				timestampConverterConfigFormat:     "2006-01-02"},
 		},
 		args: args{r: record.Record{
 			Payload: record.Change{
@@ -582,8 +582,8 @@ func TestTimestampConvertorPayload_Process(t *testing.T) {
 		name: "raw data with schema",
 		config: processor.Config{
 			Settings: map[string]string{
-				timestampConvertorConfigField:      "foo",
-				timestampConvertorConfigTargetType: "unix",
+				timestampConverterConfigField:      "foo",
+				timestampConverterConfigTargetType: "unix",
 			},
 		},
 		args: args{r: record.Record{
@@ -600,7 +600,7 @@ func TestTimestampConvertorPayload_Process(t *testing.T) {
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			underTest, err := TimestampConvertorPayload(tt.config)
+			underTest, err := TimestampConverterPayload(tt.config)
 			assert.Ok(t, err)
 			got, err := underTest.Process(context.Background(), tt.args.r)
 			if (err != nil) != tt.wantErr {
