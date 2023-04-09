@@ -35,8 +35,7 @@ func init() {
 }
 
 // HoistFieldKey builds the following processor:
-//   - If the key is raw and has a schema attached, wrap it using the specified
-//     field name in a struct.
+//   - If the key is raw and has a schema attached, return an error (not supported yet).
 //   - If the key is raw and has no schema, transforms it into structured data by
 //     creating a map with the hoisted field and raw data as the value.
 //   - If the key is structured, wrap it using the specified field name in a map.

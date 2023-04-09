@@ -118,8 +118,6 @@ func filterField(
 			if err != nil {
 				return record.Record{}, cerrors.Errorf("filterfield failed to parse path: %w", err)
 			}
-			// todo panicking might be too much
-			// FindOne panics if the expression cannot be parsed.
 			matches, err := jsonquery.Query(doc, filtercondition)
 			if err != nil {
 				return record.Record{}, cerrors.Errorf("invalid XPath expression in 'condition': %w", err)
