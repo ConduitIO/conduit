@@ -196,7 +196,8 @@ func TestTimestampConvertorKey_Process(t *testing.T) {
 			Settings: map[string]string{
 				timestampConvertorConfigField:      "date",
 				timestampConvertorConfigTargetType: "time.Time",
-				timestampConvertorConfigFormat:     "2006-01-02"},
+				timestampConvertorConfigFormat:     "2006-01-02",
+			},
 		},
 		args: args{r: record.Record{
 			Key: record.StructuredData{
@@ -215,7 +216,8 @@ func TestTimestampConvertorKey_Process(t *testing.T) {
 			Settings: map[string]string{
 				timestampConvertorConfigField:      "date",
 				timestampConvertorConfigTargetType: "time.Time",
-				timestampConvertorConfigFormat:     ""},
+				timestampConvertorConfigFormat:     "",
+			},
 		},
 		args: args{r: record.Record{
 			Key: record.StructuredData{
@@ -230,7 +232,8 @@ func TestTimestampConvertorKey_Process(t *testing.T) {
 			Settings: map[string]string{
 				timestampConvertorConfigField:      "date",
 				timestampConvertorConfigTargetType: "unix",
-				timestampConvertorConfigFormat:     ""},
+				timestampConvertorConfigFormat:     "",
+			},
 		},
 		args: args{r: record.Record{
 			Key: record.StructuredData{
@@ -421,7 +424,8 @@ func TestTimestampConvertorPayload_Process(t *testing.T) {
 			Settings: map[string]string{
 				timestampConvertorConfigField:      "date",
 				timestampConvertorConfigTargetType: "unix",
-				timestampConvertorConfigFormat:     ""},
+				timestampConvertorConfigFormat:     "",
+			},
 		},
 		args: args{r: record.Record{
 			Payload: record.Change{
