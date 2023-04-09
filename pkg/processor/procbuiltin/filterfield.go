@@ -142,6 +142,7 @@ func filterField(
 				return record.Record{}, processor.ErrSkipRecord
 			}
 
+			// filtercondition passed
 			// handle matches based on filtertype as normal
 			switch filtertype {
 			case "include":
