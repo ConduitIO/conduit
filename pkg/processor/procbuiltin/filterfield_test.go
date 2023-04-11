@@ -113,6 +113,23 @@ func TestFilterFieldKey_Process(t *testing.T) {
 		err     error
 	}{
 		{
+			name: "should return error on invalid condition",
+			config: processor.Config{
+				Settings: map[string]string{
+					"type":      "include",
+					"condition": "////",
+					"fail":      "include",
+				},
+			},
+			args: args{r: record.Record{
+				Key: record.StructuredData{
+					"id": "foo",
+				},
+			}},
+			want:    record.Record{},
+			wantErr: true,
+		},
+		{
 			name: "should forward record on condition",
 			config: processor.Config{
 				Settings: map[string]string{
@@ -304,12 +321,33 @@ func TestFilterFieldPayload_Process(t *testing.T) {
 		r      record.Record
 	}
 	tests := []struct {
-		name    string
-		args    args
-		want    record.Record
-		wantErr bool
-		err     error
+		name string
+		args args
+		want record.Record
+		err  error
 	}{
+		{
+			name: "should return error on invalid condition",
+			args: args{
+				r: record.Record{
+					Payload: record.Change{
+						Before: nil,
+						After: record.StructuredData{
+							"foo": "bar",
+						},
+					},
+				},
+				config: processor.Config{
+					Settings: map[string]string{
+						"type":          "include",
+						"condition":     "////",
+						"missingornull": "fail",
+					},
+				},
+			},
+			want: record.Record{},
+			err:  cerrors.New("invalid XPath expression in 'condition': expression must evaluate to a node-set"),
+		},
 		{
 			name: "should forward record on condition",
 			args: args{
@@ -336,7 +374,6 @@ func TestFilterFieldPayload_Process(t *testing.T) {
 					},
 				},
 			},
-			wantErr: false,
 		},
 		{
 			name: "should drop record on condition",
@@ -355,9 +392,8 @@ func TestFilterFieldPayload_Process(t *testing.T) {
 						"condition": "foo > 1",
 					},
 				}},
-			want:    record.Record{},
-			wantErr: true,
-			err:     processor.ErrSkipRecord,
+			want: record.Record{},
+			err:  processor.ErrSkipRecord,
 		},
 		{
 			name: "should drop record on missing key",
@@ -378,9 +414,8 @@ func TestFilterFieldPayload_Process(t *testing.T) {
 						"missingornull": "exclude",
 					},
 				}},
-			want:    record.Record{},
-			wantErr: true,
-			err:     processor.ErrSkipRecord,
+			want: record.Record{},
+			err:  processor.ErrSkipRecord,
 		},
 	}
 	for _, tt := range tests {
@@ -388,11 +423,11 @@ func TestFilterFieldPayload_Process(t *testing.T) {
 			underTest, err := FilterFieldPayload(tt.args.config)
 			assert.Ok(t, err)
 			got, err := underTest.Process(context.Background(), tt.args.r)
-			if (err != nil) != tt.wantErr {
+			if (err != nil) != (tt.err != nil) {
 				t.Errorf("FilterFieldPayload Error: %s - wanted: %s", err, tt.err)
 				return
 			}
-			if tt.wantErr {
+			if tt.err != nil {
 				if diff := cmp.Diff(tt.err.Error(), err.Error()); diff != "" {
 					t.Errorf("FilterFieldPayload() failed: [DIFF] %s", diff)
 				}
