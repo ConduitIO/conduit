@@ -24,30 +24,41 @@ import (
 )
 
 const (
-	timestampConvertorKeyProcType     = "timestampconvertorkey"
-	timestampConvertorPayloadProcType = "timestampconvertorpayload"
+	timestampConverterKeyProcType     = "timestampconverterkey"
+	timestampConverterPayloadProcType = "timestampconverterpayload"
 
-	timestampConvertorConfigTargetType = "target.type"
-	timestampConvertorConfigField      = "date"
-	timestampConvertorConfigFormat     = "format"
+	timestampConverterConfigTargetType = "target.type"
+	timestampConverterConfigField      = "date"
+	timestampConverterConfigFormat     = "format"
 )
 
 func init() {
-	processor.GlobalBuilderRegistry.MustRegister(timestampConvertorKeyProcType, TimestampConvertorKey)
-	processor.GlobalBuilderRegistry.MustRegister(timestampConvertorPayloadProcType, TimestampConvertorPayload)
+	processor.GlobalBuilderRegistry.MustRegister(timestampConverterKeyProcType, TimestampConverterKey)
+	processor.GlobalBuilderRegistry.MustRegister(timestampConverterPayloadProcType, TimestampConverterPayload)
 }
 
-// TimestampConvertorKey todo
-func TimestampConvertorKey(config processor.Config) (processor.Interface, error) {
-	return timestampConvertor(timestampConvertorKeyProcType, recordKeyGetSetter{}, config)
+// TimestampConverterKey builds a processor which converts a timestamp in a field in the key
+// into a different type. The supported types are:
+//   - "string"
+//   - "unix"
+//   - "time.Time".
+//
+// Any combination of the supported types is possible. For example, it's possible
+// to convert from a Unix timestamp to Go's time.Time or to convert from a string
+// to a Unix timestamp.
+//
+// The processor supports only structured data.
+func TimestampConverterKey(config processor.Config) (processor.Interface, error) {
+	return timestampConverter(timestampConverterKeyProcType, recordKeyGetSetter{}, config)
 }
 
-// TimestampConvertorPayload todo
-func TimestampConvertorPayload(config processor.Config) (processor.Interface, error) {
-	return timestampConvertor(timestampConvertorPayloadProcType, recordPayloadGetSetter{}, config)
+// TimestampConverterPayload builds the same processor as TimestampConverterKey, except that
+// it operates on the field Record.Payload.After.
+func TimestampConverterPayload(config processor.Config) (processor.Interface, error) {
+	return timestampConverter(timestampConverterPayloadProcType, recordPayloadGetSetter{}, config)
 }
 
-func timestampConvertor(
+func timestampConverter(
 	processorType string,
 	getSetter recordDataGetSetter,
 	config processor.Config,
@@ -66,16 +77,16 @@ func timestampConvertor(
 	)
 
 	// if field is empty then input is raw data
-	if field, err = getConfigFieldString(config, timestampConvertorConfigField); err != nil {
+	if field, err = getConfigFieldString(config, timestampConverterConfigField); err != nil {
 		return nil, cerrors.Errorf("%s: %w", processorType, err)
 	}
-	if targetType, err = getConfigFieldString(config, timestampConvertorConfigTargetType); err != nil {
+	if targetType, err = getConfigFieldString(config, timestampConverterConfigTargetType); err != nil {
 		return nil, cerrors.Errorf("%s: %w", processorType, err)
 	}
 	if targetType != stringType && targetType != unixType && targetType != timeType {
 		return nil, cerrors.Errorf("%s: targetType (%s) is not supported", processorType, targetType)
 	}
-	format = config.Settings[timestampConvertorConfigFormat] // can be empty
+	format = config.Settings[timestampConverterConfigFormat] // can be empty
 	if format == "" && targetType == stringType {
 		return nil, cerrors.Errorf("%s: format is needed to parse the output", processorType)
 	}

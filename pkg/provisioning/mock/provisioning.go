@@ -185,6 +185,21 @@ func (mr *PipelineServiceMockRecorder) Stop(arg0, arg1, arg2 interface{}) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*PipelineService)(nil).Stop), arg0, arg1, arg2)
 }
 
+// Update mocks base method.
+func (m *PipelineService) Update(arg0 context.Context, arg1 string, arg2 pipeline.Config) (*pipeline.Instance, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Update", arg0, arg1, arg2)
+	ret0, _ := ret[0].(*pipeline.Instance)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Update indicates an expected call of Update.
+func (mr *PipelineServiceMockRecorder) Update(arg0, arg1, arg2 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Update", reflect.TypeOf((*PipelineService)(nil).Update), arg0, arg1, arg2)
+}
+
 // UpdateDLQ mocks base method.
 func (m *PipelineService) UpdateDLQ(arg0 context.Context, arg1 string, arg2 pipeline.DLQ) (*pipeline.Instance, error) {
 	m.ctrl.T.Helper()
@@ -297,19 +312,19 @@ func (mr *ConnectorServiceMockRecorder) RemoveProcessor(arg0, arg1, arg2 interfa
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveProcessor", reflect.TypeOf((*ConnectorService)(nil).RemoveProcessor), arg0, arg1, arg2)
 }
 
-// SetState mocks base method.
-func (m *ConnectorService) SetState(arg0 context.Context, arg1 string, arg2 interface{}) (*connector.Instance, error) {
+// Update mocks base method.
+func (m *ConnectorService) Update(arg0 context.Context, arg1 string, arg2 connector.Config) (*connector.Instance, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SetState", arg0, arg1, arg2)
+	ret := m.ctrl.Call(m, "Update", arg0, arg1, arg2)
 	ret0, _ := ret[0].(*connector.Instance)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// SetState indicates an expected call of SetState.
-func (mr *ConnectorServiceMockRecorder) SetState(arg0, arg1, arg2 interface{}) *gomock.Call {
+// Update indicates an expected call of Update.
+func (mr *ConnectorServiceMockRecorder) Update(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetState", reflect.TypeOf((*ConnectorService)(nil).SetState), arg0, arg1, arg2)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Update", reflect.TypeOf((*ConnectorService)(nil).Update), arg0, arg1, arg2)
 }
 
 // ProcessorService is a mock of ProcessorService interface.
@@ -377,6 +392,21 @@ func (m *ProcessorService) Get(arg0 context.Context, arg1 string) (*processor.In
 func (mr *ProcessorServiceMockRecorder) Get(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*ProcessorService)(nil).Get), arg0, arg1)
+}
+
+// Update mocks base method.
+func (m *ProcessorService) Update(arg0 context.Context, arg1 string, arg2 processor.Config) (*processor.Instance, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Update", arg0, arg1, arg2)
+	ret0, _ := ret[0].(*processor.Instance)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Update indicates an expected call of Update.
+func (mr *ProcessorServiceMockRecorder) Update(arg0, arg1, arg2 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Update", reflect.TypeOf((*ProcessorService)(nil).Update), arg0, arg1, arg2)
 }
 
 // PluginService is a mock of PluginService interface.

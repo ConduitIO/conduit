@@ -37,9 +37,8 @@ func init() {
 	processor.GlobalBuilderRegistry.MustRegister(replaceFieldPayloadProcType, ReplaceFieldKey)
 }
 
-// ReplaceFieldKey builds a processor which replaces a field in the key in raw
-// data with a schema or in structured data. Raw data without a schema is not
-// supported. The processor can be controlled by 3 variables:
+// ReplaceFieldKey builds a processor which replaces a field in a structured key.
+// Raw data is not supported. The processor can be controlled by 3 variables:
 //   - "exclude" - is a comma separated list of fields that should be excluded
 //     from the processed record ("exclude" takes precedence over "include").
 //   - "include" - is a comma separated list of fields that should be included

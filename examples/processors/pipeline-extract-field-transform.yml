@@ -1,23 +1,23 @@
-version: 1.0
+version: 2.0
 pipelines:
-  test-pipeline-builtin-processor:
+  - id: test-pipeline-builtin-processor
     status: running
     description: Test pipeline with built-in processor
     connectors:
-      generator-source:
+      - id: generator-source
         type: source
         plugin: builtin:generator
         settings:
           format.type: "structured"
           format.options: "id:int,name:string,company:string,trial:bool"
           recordCount: "3"
-      file-destination:
+      - id: file-destination
         type: destination
         plugin: builtin:file
         settings:
           path: /file_destination.txt
     processors:
-      extract-name:
+      - id: extract-name
         type: extractfieldpayload
         settings:
           field: name

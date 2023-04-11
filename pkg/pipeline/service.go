@@ -44,10 +44,6 @@ type Service struct {
 	handlers      []FailureHandler
 }
 
-func (s *Service) Check(ctx context.Context) error {
-	return s.store.db.Ping(ctx)
-}
-
 // NewService initializes and returns a pipeline Service.
 func NewService(logger log.CtxLogger, db database.DB) *Service {
 	return &Service{
@@ -56,6 +52,10 @@ func NewService(logger log.CtxLogger, db database.DB) *Service {
 		instances:     make(map[string]*Instance),
 		instanceNames: make(map[string]bool),
 	}
+}
+
+func (s *Service) Check(ctx context.Context) error {
+	return s.store.db.Ping(ctx)
 }
 
 // Init fetches instances from the store without running any. Connectors and processors should be initialized
@@ -126,7 +126,7 @@ func (s *Service) Create(ctx context.Context, id string, cfg Config, p Provision
 		CreatedAt:     t,
 		UpdatedAt:     t,
 		ProvisionedBy: p,
-		DLQ:           s.defaultDLQ(),
+		DLQ:           DefaultDLQ,
 	}
 
 	err := s.store.Set(ctx, pl.ID, pl)
@@ -139,18 +139,6 @@ func (s *Service) Create(ctx context.Context, id string, cfg Config, p Provision
 	measure.PipelinesGauge.WithValues(strings.ToLower(pl.Status.String())).Inc()
 
 	return pl, nil
-}
-
-func (s *Service) defaultDLQ() DLQ {
-	return DLQ{
-		Plugin: "builtin:log",
-		Settings: map[string]string{
-			"level":   "warn",
-			"message": "record delivery failed",
-		},
-		WindowSize:          1,
-		WindowNackThreshold: 0,
-	}
 }
 
 // Update will update a pipeline instance config.
