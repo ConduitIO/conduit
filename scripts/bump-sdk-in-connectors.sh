@@ -2,7 +2,7 @@
 # Bumps the SDK version in the built-in connectors.
 # The script assumes that the Conduit repo and the repos
 # for all built-in connectors are in the same directory.
-
+# Requires GitHub CLI.
 if [ $# -eq 0 ]
 then
   echo "No arguments supplied"

@@ -1,5 +1,6 @@
 #!/bin/bash
-# Bumps the versions of built-in connectors
+# Bumps the versions of built-in connectors.
+# Requires GitHub CLI.
 
 git checkout main
 git pull origin main
