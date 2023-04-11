@@ -76,6 +76,16 @@ type DLQ struct {
 	WindowNackThreshold int
 }
 
+var DefaultDLQ = DLQ{
+	Plugin: "builtin:log",
+	Settings: map[string]string{
+		"level":   "warn",
+		"message": "record delivery failed",
+	},
+	WindowSize:          1,
+	WindowNackThreshold: 0,
+}
+
 func (p *Instance) Wait() error {
 	if p.t == nil {
 		return nil

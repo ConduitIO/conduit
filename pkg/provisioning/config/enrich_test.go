@@ -17,6 +17,7 @@ package config
 import (
 	"testing"
 
+	"github.com/conduitio/conduit/pkg/pipeline"
 	"github.com/matryer/is"
 )
 
@@ -67,6 +68,12 @@ func TestEnrich_DefaultValues(t *testing.T) {
 			Status:      "running",
 			Name:        "pipeline1",
 			Description: "desc1",
+			DLQ: DLQ{
+				Plugin:              pipeline.DefaultDLQ.Plugin,
+				Settings:            pipeline.DefaultDLQ.Settings,
+				WindowSize:          &pipeline.DefaultDLQ.WindowSize,
+				WindowNackThreshold: &pipeline.DefaultDLQ.WindowNackThreshold,
+			},
 			Connectors: []Connector{
 				{
 					ID:     "pipeline1:con1",
@@ -111,8 +118,14 @@ func TestEnrich_DefaultValues(t *testing.T) {
 			Status:      "stopped",
 			Name:        "pipeline2",
 			Description: "empty",
-			Connectors:  []Connector{},
-			Processors:  []Processor{},
+			DLQ: DLQ{
+				Plugin:              pipeline.DefaultDLQ.Plugin,
+				Settings:            pipeline.DefaultDLQ.Settings,
+				WindowSize:          &pipeline.DefaultDLQ.WindowSize,
+				WindowNackThreshold: &pipeline.DefaultDLQ.WindowNackThreshold,
+			},
+			Connectors: nil,
+			Processors: nil,
 		},
 	}}
 

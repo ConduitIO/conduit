@@ -1,6 +1,6 @@
-version: 1.0
+version: 2.0
 pipelines:
-  file-to-file:
+  - id: file-to-file
     status: running
     description: >
       Example pipeline reading from file "example.in" and writing into file
@@ -8,12 +8,12 @@ pipelines:
       record, the field "payload.after" will contain the base64 encoded line
       written in "example.in".
     connectors:
-      example.in:
+      - id: example.in
         type: source
         plugin: builtin:file
         settings:
           path: ./example.in
-      example.out:
+      - id: example.out
         type: destination
         plugin: builtin:file
         settings:
