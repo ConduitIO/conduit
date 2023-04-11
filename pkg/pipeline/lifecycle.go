@@ -624,7 +624,7 @@ func (s *Service) runPipeline(ctx context.Context, pl *Instance) error {
 			Str(log.PipelineIDField, pl.ID).
 			Msg("pipeline stopped")
 
-		s.notify(pl.ID, pl.ProvisionedBy, err)
+		s.notify(pl.ID, err)
 		// It's important to update the metrics before we handle the error from s.Store.Set() (if any),
 		// since the source of the truth is the actual pipeline (stored in memory).
 		measure.PipelinesGauge.WithValues(strings.ToLower(pl.Status.String())).Inc()

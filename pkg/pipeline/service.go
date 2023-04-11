@@ -314,7 +314,7 @@ func (s *Service) OnFailure(handler FailureHandler) {
 }
 
 // notify notifies all registered FailureHandlers about an error.
-func (s *Service) notify(pipelineID string, p ProvisionType, err error) {
+func (s *Service) notify(pipelineID string, err error) {
 	if err == nil {
 		return
 	}
