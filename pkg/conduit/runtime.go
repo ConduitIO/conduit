@@ -241,7 +241,9 @@ func (r *Runtime) Run(ctx context.Context) (err error) {
 			r.logger.Warn(ctx).
 				Err(err).
 				Msg("Conduit will shut down due to a pipeline provisioning failure and 'exit on error' enabled")
-			t.Kill(cerrors.Errorf("shut down due to 'exit on error' enabled: %w", err))
+			err = cerrors.Errorf("shut down due to 'exit on error' enabled: %w", err)
+			t.Kill(err)
+			return err
 		}
 	}
 
