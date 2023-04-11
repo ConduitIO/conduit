@@ -38,7 +38,10 @@ issues:
       linters:
         - stylecheck
       text: "ST1003: should not use underscores in Go names"
-
+    # Exclude some linters from running on tests files.
+    - path: _test\.go
+      linters:
+        - dogsled
 
 linters:
   # please, do not use `enable-all`: it's deprecated and will be removed soon.

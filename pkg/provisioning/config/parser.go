@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:generate mockgen -destination=mock/parser.go -package=mock -mock_names=Parser=Parser . Parser
-
 package config
 
 import (
@@ -53,6 +51,21 @@ type DLQ struct {
 	WindowSize          *int
 	WindowNackThreshold *int
 }
+
+// Classify fields as immutable, mutable or ignored. This is used by the
+// provisioning logic to identify if an entity needs to be updated, recreated or
+// if no action needs to be taken in case a certain field is updated. All fields
+// except "ID" need to be added to exactly one slice.
+var (
+	PipelineMutableFields = []string{"Name", "Description", "Connectors", "Processors", "DLQ"}
+	PipelineIgnoredFields = []string{"Status"}
+
+	ConnectorImmutableFields = []string{"Type", "Plugin"}
+	ConnectorMutableFields   = []string{"Name", "Settings", "Processors"}
+
+	ProcessorImmutableFields = []string{"Type"}
+	ProcessorMutableFields   = []string{"Settings", "Workers"}
+)
 
 // Parser reads data from reader and parses all pipelines defined in the
 // configuration.
