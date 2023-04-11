@@ -118,13 +118,20 @@ func filterField(
 			if err != nil {
 				return record.Record{}, cerrors.Errorf("filterfield failed to parse path: %w", err)
 			}
-			match := jsonquery.FindOne(doc, filtercondition)
-			if match == nil {
+			matches, err := jsonquery.Query(doc, filtercondition)
+			if err != nil {
+				return record.Record{}, cerrors.Errorf("invalid XPath expression in 'condition': %w", err)
+			}
+
+			if matches == nil {
 				// check the filterexists query if one is set.
 				if filterexists != "" {
-					exists := jsonquery.Find(doc, filterexists)
+					exists, err := jsonquery.QueryAll(doc, filterexists)
+					if err != nil {
+						return record.Record{}, cerrors.Errorf("invalid XPath expression in 'exists': %w", err)
+					}
 					// if it matches, handle normal drop record behavior.
-					if exists == nil {
+					if len(exists) == 0 {
 						// if it doesn't match, defer to filternull behavior
 						switch filternull {
 						case "include":
@@ -140,6 +147,7 @@ func filterField(
 				return record.Record{}, processor.ErrSkipRecord
 			}
 
+			// filtercondition passed
 			// handle matches based on filtertype as normal
 			switch filtertype {
 			case "include":

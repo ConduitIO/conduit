@@ -276,3 +276,7 @@ func (fn FullName) PluginVersionGreaterThan(other FullName) bool {
 
 	return leftSemver.GreaterThan(rightSemver)
 }
+
+func (fn FullName) String() string {
+	return fn.PluginType() + ":" + fn.PluginName() + "@" + fn.PluginVersion()
+}

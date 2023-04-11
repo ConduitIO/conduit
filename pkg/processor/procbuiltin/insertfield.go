@@ -37,9 +37,7 @@ func init() {
 }
 
 // InsertFieldKey builds the following processor:
-//   - If the key is raw and has a schema attached, insert the field(s) in the
-//     key data.
-//   - If the key is raw and has no schema, return an error (not supported).
+//   - If the key is raw, return an error (not supported yet).
 //   - If the key is structured, set the field(s) in the key data.
 func InsertFieldKey(config processor.Config) (processor.Interface, error) {
 	return insertField(insertFieldKeyProcType, recordKeyGetSetter{}, config)

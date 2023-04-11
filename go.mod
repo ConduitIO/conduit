@@ -8,14 +8,14 @@ require (
 	github.com/NYTimes/gziphandler v1.1.1
 	github.com/antchfx/jsonquery v1.3.2
 	github.com/bufbuild/buf v1.17.0
-	github.com/conduitio/conduit-connector-file v0.4.0
-	github.com/conduitio/conduit-connector-generator v0.3.1
-	github.com/conduitio/conduit-connector-kafka v0.4.1
-	github.com/conduitio/conduit-connector-log v0.1.2
-	github.com/conduitio/conduit-connector-postgres v0.3.0
-	github.com/conduitio/conduit-connector-protocol v0.4.2-0.20230317135836-683b23ba5a0a
-	github.com/conduitio/conduit-connector-s3 v0.3.0
-	github.com/conduitio/conduit-connector-sdk v0.5.3-0.20230317175521-1ef859feda37
+	github.com/conduitio/conduit-connector-file v0.5.0
+	github.com/conduitio/conduit-connector-generator v0.4.0
+	github.com/conduitio/conduit-connector-kafka v0.5.0
+	github.com/conduitio/conduit-connector-log v0.2.0
+	github.com/conduitio/conduit-connector-postgres v0.4.0
+	github.com/conduitio/conduit-connector-protocol v0.5.0
+	github.com/conduitio/conduit-connector-s3 v0.4.0
+	github.com/conduitio/conduit-connector-sdk v0.6.0
 	github.com/conduitio/yaml/v3 v3.3.0
 	github.com/dgraph-io/badger/v3 v3.2103.5
 	github.com/dop251/goja v0.0.0-20230304130813-e2f543bf4b4c
@@ -51,30 +51,30 @@ require (
 	github.com/Azure/go-ansiterm v0.0.0-20230124172434-306776ec8161 // indirect
 	github.com/Masterminds/goutils v1.1.1 // indirect
 	github.com/Masterminds/sprig/v3 v3.2.3 // indirect
-	github.com/Masterminds/squirrel v1.5.3 // indirect
+	github.com/Masterminds/squirrel v1.5.4 // indirect
 	github.com/Microsoft/go-winio v0.6.0 // indirect
 	github.com/antchfx/xpath v1.2.3 // indirect
 	github.com/apache/arrow/go/arrow v0.0.0-20211112161151-bc219186db40 // indirect
 	github.com/apache/thrift v0.17.0 // indirect
 	github.com/avast/retry-go v3.0.0+incompatible // indirect
-	github.com/aws/aws-sdk-go-v2 v1.16.16 // indirect
-	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.4.8 // indirect
-	github.com/aws/aws-sdk-go-v2/config v1.17.7 // indirect
-	github.com/aws/aws-sdk-go-v2/credentials v1.12.20 // indirect
-	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.12.17 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/configsources v1.1.23 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.4.17 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/ini v1.3.24 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/v4a v1.0.14 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.9.9 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.1.18 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.9.17 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.13.17 // indirect
-	github.com/aws/aws-sdk-go-v2/service/s3 v1.27.11 // indirect
-	github.com/aws/aws-sdk-go-v2/service/sso v1.11.23 // indirect
-	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.13.5 // indirect
-	github.com/aws/aws-sdk-go-v2/service/sts v1.16.19 // indirect
-	github.com/aws/smithy-go v1.13.3 // indirect
+	github.com/aws/aws-sdk-go-v2 v1.17.8 // indirect
+	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.4.10 // indirect
+	github.com/aws/aws-sdk-go-v2/config v1.18.21 // indirect
+	github.com/aws/aws-sdk-go-v2/credentials v1.13.20 // indirect
+	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.13.2 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/configsources v1.1.32 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.4.26 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/ini v1.3.33 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/v4a v1.0.24 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.9.11 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.1.27 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.9.26 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.14.1 // indirect
+	github.com/aws/aws-sdk-go-v2/service/s3 v1.31.3 // indirect
+	github.com/aws/aws-sdk-go-v2/service/sso v1.12.8 // indirect
+	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.14.8 // indirect
+	github.com/aws/aws-sdk-go-v2/service/sts v1.18.9 // indirect
+	github.com/aws/smithy-go v1.13.5 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bufbuild/connect-go v1.6.0 // indirect
 	github.com/bufbuild/protocompile v0.5.1 // indirect
