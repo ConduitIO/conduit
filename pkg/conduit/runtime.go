@@ -217,6 +217,16 @@ func (r *Runtime) Run(ctx context.Context) (err error) {
 	if err != nil {
 		return cerrors.Errorf("failed to init connector service: %w", err)
 	}
+
+	if r.Config.Pipelines.ExitOnError {
+		r.pipelineService.OnFailure(func(e pipeline.FailureEvent) {
+			r.logger.Warn(ctx).
+				Err(e.Error).
+				Str(log.PipelineIDField, e.ID).
+				Msg("Conduit will shut down due to a pipeline failure and 'exit on error' enabled")
+			t.Kill(cerrors.Errorf("shut down due to 'exit on error' enabled: %w", e.Error))
+		})
+	}
 	err = r.pipelineService.Init(ctx)
 	if err != nil {
 		return cerrors.Errorf("failed to init pipeline service: %w", err)
@@ -227,6 +237,13 @@ func (r *Runtime) Run(ctx context.Context) (err error) {
 		multierror.ForEach(err, func(err error) {
 			r.logger.Err(ctx, err).Msg("provisioning failed")
 		})
+		if r.Config.Pipelines.ExitOnError {
+			r.logger.Warn(ctx).
+				Err(err).
+				Msg("Conduit will shut down due to a pipeline provisioning failure and 'exit on error' enabled")
+			err = cerrors.Errorf("shut down due to 'exit on error' enabled: %w", err)
+			return err
+		}
 	}
 
 	err = r.pipelineService.Run(ctx, r.connectorService, r.processorService, r.pluginService)

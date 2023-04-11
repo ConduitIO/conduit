@@ -75,7 +75,8 @@ func (s *Service) Run(
 	return err
 }
 
-// Start builds and starts a pipeline instance.
+// Start builds and starts a pipeline with the given ID.
+// If the pipeline is already running, Start returns ErrPipelineRunning.
 func (s *Service) Start(
 	ctx context.Context,
 	connFetcher ConnectorFetcher,
@@ -623,6 +624,7 @@ func (s *Service) runPipeline(ctx context.Context, pl *Instance) error {
 			Str(log.PipelineIDField, pl.ID).
 			Msg("pipeline stopped")
 
+		s.notify(pl.ID, err)
 		// It's important to update the metrics before we handle the error from s.Store.Set() (if any),
 		// since the source of the truth is the actual pipeline (stored in memory).
 		measure.PipelinesGauge.WithValues(strings.ToLower(pl.Status.String())).Inc()
