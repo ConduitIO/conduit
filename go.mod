@@ -10,9 +10,9 @@ require (
 	github.com/bufbuild/buf v1.17.0
 	github.com/conduitio/conduit-connector-file v0.5.0
 	github.com/conduitio/conduit-connector-generator v0.4.0
-	github.com/conduitio/conduit-connector-kafka v0.4.1
-	github.com/conduitio/conduit-connector-log v0.1.2
-	github.com/conduitio/conduit-connector-postgres v0.3.0
+	github.com/conduitio/conduit-connector-kafka v0.5.0
+	github.com/conduitio/conduit-connector-log v0.2.0
+	github.com/conduitio/conduit-connector-postgres v0.4.0
 	github.com/conduitio/conduit-connector-protocol v0.5.0
 	github.com/conduitio/conduit-connector-s3 v0.4.0
 	github.com/conduitio/conduit-connector-sdk v0.6.0
@@ -51,7 +51,7 @@ require (
 	github.com/Azure/go-ansiterm v0.0.0-20230124172434-306776ec8161 // indirect
 	github.com/Masterminds/goutils v1.1.1 // indirect
 	github.com/Masterminds/sprig/v3 v3.2.3 // indirect
-	github.com/Masterminds/squirrel v1.5.3 // indirect
+	github.com/Masterminds/squirrel v1.5.4 // indirect
 	github.com/Microsoft/go-winio v0.6.0 // indirect
 	github.com/antchfx/xpath v1.2.3 // indirect
 	github.com/apache/arrow/go/arrow v0.0.0-20211112161151-bc219186db40 // indirect
