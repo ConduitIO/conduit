@@ -20,12 +20,10 @@ import (
 	"time"
 
 	"github.com/conduitio/conduit/pkg/conduit"
+	"github.com/conduitio/conduit/pkg/foundation/cchan"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/matryer/is"
 )
-
-// path where tests store their data during runs.
-const delay = 500 * time.Millisecond
 
 func TestRuntime(t *testing.T) {
 	is := is.New(t)
@@ -44,14 +42,18 @@ func TestRuntime(t *testing.T) {
 	is.True(r != nil)
 
 	// set a cancel on a trigger to kill the context after THRESHOLD duration.
-	ctx, cancel := context.WithCancel(context.TODO())
+	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
-		time.Sleep(delay)
+		time.Sleep(500 * time.Millisecond)
 		cancel()
 	}()
 
-	// wait on Run and assert that the context was canceled and no other error
-	// occurred.
-	err = r.Run(ctx)
+	errC := make(chan error)
+	go func() {
+		errC <- r.Run(ctx)
+	}()
+	err, got, recvErr := cchan.ChanOut[error](errC).RecvTimeout(context.Background(), time.Second)
+	is.NoErr(recvErr)
+	is.True(got)
 	is.True(cerrors.Is(err, context.Canceled)) // expected error to be context.Cancelled
 }

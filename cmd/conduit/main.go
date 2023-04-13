@@ -71,7 +71,16 @@ func parseConfig() conduit.Config {
 
 		connectorsDir = flags.String("connectors.path", "./connectors", "path to standalone connectors directory")
 
-		pipelinesDir = flags.String("pipelines.path", "./pipelines", "path to the directory that has the yaml pipeline configuration files, or a single pipeline configuration file")
+		pipelinesDir = flags.String(
+			"pipelines.path",
+			"./pipelines",
+			"path to the directory that has the yaml pipeline configuration files, or a single pipeline configuration file",
+		)
+		pipelinesExitOnError = flags.Bool(
+			"pipelines.exit-on-error",
+			false,
+			"exit Conduit if a pipeline experiences an error while running",
+		)
 	)
 
 	// flags is set up to exit on error, we can safely ignore the error
@@ -94,7 +103,7 @@ func parseConfig() conduit.Config {
 	cfg.Log.Format = strings.ToLower(stringPtrToVal(logFormat))
 	cfg.Connectors.Path = stringPtrToVal(connectorsDir)
 	cfg.Pipelines.Path = strings.ToLower(stringPtrToVal(pipelinesDir))
-
+	cfg.Pipelines.ExitOnError = *pipelinesExitOnError
 	return cfg
 }
 
@@ -116,6 +125,7 @@ func cancelOnInterrupt(ctx context.Context) context.Context {
 		<-signalChan // second interrupt signal
 		os.Exit(exitCodeInterrupt)
 	}()
+
 	return ctx
 }
 

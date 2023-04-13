@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/conduitio/conduit/pkg/connector"
+	"github.com/conduitio/conduit/pkg/foundation/cchan"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/database/inmemory"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -203,6 +204,10 @@ func TestServiceLifecycle_PipelineError(t *testing.T) {
 	pl, err = ps.AddConnector(ctx, pl.ID, destination.ID)
 	is.NoErr(err)
 
+	events := make(chan FailureEvent, 1)
+	ps.OnFailure(func(e FailureEvent) {
+		events <- e
+	})
 	// start the pipeline now that everything is set up
 	err = ps.Start(
 		ctx,
@@ -233,6 +238,12 @@ func TestServiceLifecycle_PipelineError(t *testing.T) {
 	is.True(
 		strings.Contains(pl.Error, wantErr.Error()),
 	) // expected error message to contain "source connector error"
+
+	event, eventReceived, err := cchan.Chan[FailureEvent](events).RecvTimeout(ctx, 200*time.Millisecond)
+	is.NoErr(err)
+	is.True(eventReceived)
+	is.Equal(pl.ID, event.ID)
+	is.True(cerrors.Is(event.Error, wantErr))
 }
 
 func TestServiceLifecycle_PipelineStop(t *testing.T) {

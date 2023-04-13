@@ -127,8 +127,8 @@ func loadPlugins(buildInfo *debug.BuildInfo, factories map[string]DispenserFacto
 		}
 		versionMap[specs.Version] = bp
 
-		latestFullName := versionMap[plugin.PluginVersionLatest].fullName
-		if fullName.PluginVersionGreaterThan(latestFullName) {
+		latestBp, ok := versionMap[plugin.PluginVersionLatest]
+		if !ok || fullName.PluginVersionGreaterThan(latestBp.fullName) {
 			versionMap[plugin.PluginVersionLatest] = bp
 		}
 	}
@@ -181,7 +181,7 @@ func (r *Registry) NewDispenser(logger log.CtxLogger, fullName plugin.FullName) 
 		for k := range versionMap {
 			availableVersions = append(availableVersions, k)
 		}
-		return nil, cerrors.Errorf("could not find builtin plugin, only found versions %v: %w", availableVersions, plugin.ErrPluginNotFound)
+		return nil, cerrors.Errorf("could not find builtin plugin %q, only found versions %v: %w", fullName, availableVersions, plugin.ErrPluginNotFound)
 	}
 
 	return b.dispenserFactory(fullName, logger), nil
