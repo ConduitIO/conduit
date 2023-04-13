@@ -6,12 +6,10 @@ git checkout main
 git pull origin main
 git checkout -b bump-builtin-connectors
 
-go get github.com/conduitio/conduit-connector-file@latest
-go get github.com/conduitio/conduit-connector-generator@latest
-go get github.com/conduitio/conduit-connector-kafka@latest
-go get github.com/conduitio/conduit-connector-log@latest
-go get github.com/conduitio/conduit-connector-postgres@latest
-go get github.com/conduitio/conduit-connector-s3@latest
+for conn in 'file' 'kafka' 'generator' 's3' 'postgres' 'log'
+do
+  go get github.com/conduitio/conduit-connector-$conn@latest
+done
 
 go mod tidy
 
