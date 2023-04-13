@@ -17,7 +17,7 @@ require (
 	github.com/conduitio/conduit-connector-s3 v0.4.0
 	github.com/conduitio/conduit-connector-sdk v0.6.0
 	github.com/conduitio/yaml/v3 v3.3.0
-	github.com/dgraph-io/badger/v3 v3.2103.5
+	github.com/dgraph-io/badger/v4 v4.1.0
 	github.com/dop251/goja v0.0.0-20230304130813-e2f543bf4b4c
 	github.com/gammazero/deque v0.2.1
 	github.com/golang/mock v1.6.0
@@ -78,7 +78,6 @@ require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bufbuild/connect-go v1.6.0 // indirect
 	github.com/bufbuild/protocompile v0.5.1 // indirect
-	github.com/cespare/xxhash v1.1.0 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.2 // indirect
 	github.com/dgraph-io/ristretto v0.1.1 // indirect
