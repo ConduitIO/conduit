@@ -27,8 +27,7 @@ require (
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.15.2
 	github.com/hashicorp/go-hclog v1.5.0
 	github.com/hashicorp/go-plugin v1.4.9
-	github.com/jackc/pgtype v1.14.0
-	github.com/jackc/pgx/v4 v4.18.1
+	github.com/jackc/pgx/v5 v5.3.1
 	github.com/jinzhu/copier v0.3.5
 	github.com/jpillora/backoff v1.0.0
 	github.com/matryer/is v1.4.1
@@ -118,7 +117,9 @@ require (
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgproto3/v2 v2.3.2 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20221227161230-091c0ba34f0a // indirect
-	github.com/jackc/puddle v1.3.0 // indirect
+	github.com/jackc/pgtype v1.14.0 // indirect
+	github.com/jackc/pgx/v4 v4.18.1 // indirect
+	github.com/jackc/puddle/v2 v2.2.0 // indirect
 	github.com/jdxcode/netrc v0.0.0-20221124155335-4616370d1a84 // indirect
 	github.com/klauspost/compress v1.16.3 // indirect
 	github.com/klauspost/pgzip v1.2.5 // indirect

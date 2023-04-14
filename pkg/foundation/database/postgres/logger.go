@@ -18,22 +18,22 @@ import (
 	"context"
 
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v5/tracelog"
 	"github.com/rs/zerolog"
 )
 
-var pgxLogLevelMapping = map[pgx.LogLevel]zerolog.Level{
-	pgx.LogLevelNone:  zerolog.NoLevel,
-	pgx.LogLevelError: zerolog.ErrorLevel,
-	pgx.LogLevelWarn:  zerolog.WarnLevel,
-	pgx.LogLevelInfo:  zerolog.DebugLevel, // all queries are logged with level Info, lower it to Debug
-	pgx.LogLevelDebug: zerolog.DebugLevel,
-	pgx.LogLevelTrace: zerolog.TraceLevel,
+var pgxLogLevelMapping = map[tracelog.LogLevel]zerolog.Level{
+	tracelog.LogLevelNone:  zerolog.NoLevel,
+	tracelog.LogLevelError: zerolog.ErrorLevel,
+	tracelog.LogLevelWarn:  zerolog.WarnLevel,
+	tracelog.LogLevelInfo:  zerolog.DebugLevel, // all queries are logged with level Info, lower it to Debug
+	tracelog.LogLevelDebug: zerolog.DebugLevel,
+	tracelog.LogLevelTrace: zerolog.TraceLevel,
 }
 
 type logger log.CtxLogger
 
-func (l logger) Log(ctx context.Context, level pgx.LogLevel, msg string, data map[string]interface{}) {
+func (l logger) Log(ctx context.Context, level tracelog.LogLevel, msg string, data map[string]interface{}) {
 	zlevel := pgxLogLevelMapping[level] // default is 0, debug level
 	(log.CtxLogger)(l).WithLevel(ctx, zlevel).Fields(data).Msg(msg)
 }

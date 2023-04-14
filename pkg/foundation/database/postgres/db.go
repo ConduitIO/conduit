@@ -23,9 +23,10 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/ctxutil"
 	"github.com/conduitio/conduit/pkg/foundation/database"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/jackc/pgtype/pgxtype"
-	"github.com/jackc/pgx/v4"
-	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/tracelog"
 )
 
 // DB implements the database.DB interface by storing data in Postgres. All the
@@ -66,10 +67,12 @@ func New(
 	}
 
 	l = l.WithComponent("postgres.DB")
-	cfg.ConnConfig.Logger = logger(l)
-	cfg.ConnConfig.LogLevel = pgx.LogLevelTrace // we control the log level with our own logger
+	cfg.ConnConfig.Tracer = &tracelog.TraceLog{
+		Logger:   logger(l),
+		LogLevel: tracelog.LogLevelTrace, // we control the log level with our own logger
+	}
 
-	pool, err := pgxpool.ConnectConfig(ctx, cfg)
+	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		return nil, cerrors.Errorf("could not connect to postgres: %w", err)
 	}
@@ -218,7 +221,7 @@ func (d *DB) GetKeys(ctx context.Context, prefix string) ([]string, error) {
 
 // getQuerier tries to take the transaction out of the context, if it does not
 // find a transaction it falls back directly to the postgres connection.
-func (d *DB) getQuerier(ctx context.Context) pgxtype.Querier {
+func (d *DB) getQuerier(ctx context.Context) querier {
 	txn := d.getTxn(ctx)
 	if txn != nil {
 		return txn
@@ -234,4 +237,10 @@ func (d *DB) getTxn(ctx context.Context) pgx.Tx {
 		return nil
 	}
 	return txn.(*Txn).tx
+}
+
+type querier interface {
+	Exec(ctx context.Context, sql string, arguments ...interface{}) (pgconn.CommandTag, error)
+	Query(ctx context.Context, sql string, optionsAndArgs ...interface{}) (pgx.Rows, error)
+	QueryRow(ctx context.Context, sql string, optionsAndArgs ...interface{}) pgx.Row
 }
