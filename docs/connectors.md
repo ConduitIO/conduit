@@ -12,8 +12,8 @@ building real-time event-driven pipelines and applications. But, we'll note wher
 ## Roadmap & Feedback
 
 If you need support for a particular data store that doesn't exist on the connector list, check out the list of
-requested [source connectors](https://github.com/ConduitIO/conduit/issues?q=is%3Aissue+label%3Aconnector%3Asource+is%3Aopen) and
-the list of requested [destination connectors](https://github.com/ConduitIO/conduit/issues?q=is%3Aissue+label%3Aconnector%3Adestination+is%3Aopen).
+requested [source connectors](https://github.com/ConduitIO/conduit/issues?q=is%3Aissue+label%3Aconnector%3Asource+is%3Aopen)
+and the list of requested [destination connectors](https://github.com/ConduitIO/conduit/issues?q=is%3Aissue+label%3Aconnector%3Adestination+is%3Aopen).
 Give the issue a `+1` if you really need that connector. The upvote will help the team understand demand for any
 particular connector. If you find that an issue hasn't been created for your data store, please create a new issue in
 the Conduit repo.
