@@ -65,7 +65,7 @@ it can find in the hierarchy (processor > pipeline > global).
 
 - Connectors don't have to work with schemas.
 - The `Record` type does not need to change.
-- The record can be decoded/encoded at any point in the pipeline, the use can
+- The record can be decoded/encoded at any point in the pipeline, the user can
   put the processor anywhere.
 - We do not have to track changes done to a record by processors.
 
