@@ -9,17 +9,13 @@ module.exports = function (environment) {
     modulePrefix: 'conduit-ui',
     environment,
     rootURL: '/ui/',
-    locationType: 'auto',
+    locationType: 'history',
     conduitAPIURL,
     isDevMirageEnabled: process.env.ENABLE_DEV_MIRAGE === 'true' || false,
     EmberENV: {
       FEATURES: {
         // Here you can enable experimental features on an ember canary build
         // e.g. EMBER_NATIVE_DECORATOR_SUPPORT: true
-      },
-      EXTEND_PROTOTYPES: {
-        // Prevent Ember Data from overriding Date.parse.
-        Date: false,
       },
     },
 
