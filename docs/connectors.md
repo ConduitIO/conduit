@@ -44,7 +44,7 @@ Alternatively, you can also create your own
 
 Once you have chosen a connector to be built-in, you can:
 
-- Import the Github repository defining the connector
+- Import the Go module defining the connector
 into the [builtin registry](https://github.com/ConduitIO/conduit/blob/main/pkg/plugin/builtin/registry.go)
 and add a new key to the `DispenserFactory`:
 
