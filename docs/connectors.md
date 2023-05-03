@@ -71,7 +71,7 @@ var (
 ```
 
 - Download the new package and its dependencies: `go get "github.com/foo/conduit-connector-new"`
-- Re-run `make`
+- Run `make`
 - You now have a binary with your own, custom set of built-in connectors! 🎉
 
 ### Standalone connectors
