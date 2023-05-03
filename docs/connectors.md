@@ -44,18 +44,19 @@ Alternatively, you can also create your own
 
 Once you have chosen a connector to be built-in, you can:
 
+- Download the new package and its dependencies: `go get "github.com/foo/conduit-connector-new"`
 - Import the Go module defining the connector
 into the [builtin registry](https://github.com/ConduitIO/conduit/blob/main/pkg/plugin/builtin/registry.go)
-and add a new key to `DefaultDispenserFactories `:
+and add a new key to `DefaultDispenserFactories`:
 
-```go
+```diff
 package builtin
 
 import (
   // ...
   file "github.com/conduitio/conduit-connector-file"
   // ...
-  myNewConnector "github.com/foo/conduit-connector-new"
++ myNewConnector "github.com/foo/conduit-connector-new"
 )
 
 var (
@@ -65,12 +66,11 @@ var (
   DefaultDispenserFactories = map[string]DispenserFactory{
     "github.com/conduitio/conduit-connector-file":    sdkDispenserFactory(file.Connector),
     // ...
-    "github.com/foo/conduit-connector-new":           sdkDispenserFactory(myNewConnector.Connector),
++   "github.com/foo/conduit-connector-new":           sdkDispenserFactory(myNewConnector.Connector),
   }
 )
 ```
 
-- Download the new package and its dependencies: `go get "github.com/foo/conduit-connector-new"`
 - Run `make`
 - You now have a binary with your own, custom set of built-in connectors! 🎉
 
