@@ -34,7 +34,7 @@ require (
 	github.com/piotrkowalczuk/promgrpc/v4 v4.1.0
 	github.com/prometheus/client_golang v1.15.1
 	github.com/prometheus/client_model v0.4.0
-	github.com/prometheus/common v0.42.0
+	github.com/prometheus/common v0.43.0
 	github.com/rs/zerolog v1.29.1
 	go.uber.org/goleak v1.2.1
 	golang.org/x/exp v0.0.0-20230321023759-10a507213a29
