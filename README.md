@@ -54,7 +54,7 @@ Conduit was created and open-sourced by [Meroxa](https://meroxa.io).
    binary.
 
    ```sh
-   echo "hello conduit" >> example.in`
+   echo "hello conduit" >> example.in
    ```
 
 5. Read the contents of `example.out` and notice an OpenCDC record:
