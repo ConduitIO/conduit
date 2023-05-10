@@ -18,6 +18,8 @@ import (
 	"context"
 	"database/sql"
 
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+
 	"github.com/conduitio/conduit/pkg/foundation/log"
 )
 
@@ -33,7 +35,7 @@ func (t *Txn) Commit() error {
 
 func (t *Txn) Discard() {
 	err := t.tx.Rollback()
-	if err != nil {
+	if err != nil && !cerrors.Is(err, sql.ErrTxDone) {
 		t.logger.Err(t.ctx, err).Msg("could not rollback transaction")
 	}
 }
