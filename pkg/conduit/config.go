@@ -71,6 +71,7 @@ type Config struct {
 	}
 }
 
+//nolint:gocyclo // this will be reworked with struct tags at some points
 func (c Config) Validate() error {
 	// TODO simplify validation with struct tags
 
@@ -88,16 +89,28 @@ func (c Config) Validate() error {
 		}
 	case DBTypeInMemory:
 		// all good
+	case DBTypePocketbase:
+		// all good
+		if c.DB.PocketBase.PocketBase == nil {
+			return requiredConfigFieldErr("db.pocketbase.pocketbase")
+		}
+		if c.DB.PocketBase.Table == "" {
+			return requiredConfigFieldErr("db.pocketbase.table")
+		}
 	default:
 		return invalidConfigFieldErr("db.type")
 	}
 
-	if c.GRPC.Address == "" {
-		return requiredConfigFieldErr("grpc.address")
+	if !c.GRPC.Disabled {
+		if c.GRPC.Address == "" {
+			return requiredConfigFieldErr("grpc.address")
+		}
 	}
 
-	if c.HTTP.Address == "" {
-		return requiredConfigFieldErr("http.address")
+	if !c.GRPC.Disabled && !c.HTTP.Disabled {
+		if c.HTTP.Address == "" {
+			return requiredConfigFieldErr("http.address")
+		}
 	}
 
 	if c.Log.Level == "" {
