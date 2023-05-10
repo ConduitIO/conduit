@@ -31,6 +31,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/database"
 	"github.com/conduitio/conduit/pkg/foundation/database/badger"
 	"github.com/conduitio/conduit/pkg/foundation/database/inmemory"
+	"github.com/conduitio/conduit/pkg/foundation/database/pocketbase"
 	"github.com/conduitio/conduit/pkg/foundation/database/postgres"
 	"github.com/conduitio/conduit/pkg/foundation/grpcutil"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -81,7 +82,7 @@ type Runtime struct {
 	connectorService *connector.Service
 	processorService *processor.Service
 	pluginService    *plugin.Service
-	provisionService *provisioning.Service
+	ProvisionService *provisioning.Service
 
 	connectorPersister *connector.Persister
 
@@ -106,6 +107,8 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 	case DBTypeInMemory:
 		db = &inmemory.DB{}
 		logger.Warn(context.Background()).Msg("Using in-memory store, all pipeline configurations will be lost when Conduit stops.")
+	case DBTypePocketbase:
+		db, err = pocketbase.NewFromPocketBase(context.Background(), logger, cfg.DB.PocketBase.Table, cfg.DB.PocketBase.PocketBase)
 	default:
 		err = cerrors.Errorf("invalid DB type %q", cfg.DB.Type)
 	}
@@ -141,7 +144,7 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 		connectorService: connService,
 		processorService: procService,
 		pluginService:    pluginService,
-		provisionService: provisionService,
+		ProvisionService: provisionService,
 
 		connectorPersister: connectorPersister,
 
@@ -232,7 +235,7 @@ func (r *Runtime) Run(ctx context.Context) (err error) {
 		return cerrors.Errorf("failed to init pipeline service: %w", err)
 	}
 
-	err = r.provisionService.Init(ctx)
+	err = r.ProvisionService.Init(ctx)
 	if err != nil {
 		multierror.ForEach(err, func(err error) {
 			r.logger.Err(ctx, err).Msg("provisioning failed")
@@ -254,23 +257,29 @@ func (r *Runtime) Run(ctx context.Context) (err error) {
 	}
 
 	// Serve grpc and http API
-	grpcAddr, err := r.serveGRPCAPI(ctx, t)
-	if err != nil {
-		return cerrors.Errorf("failed to serve grpc api: %w", err)
-	}
-	httpAddr, err := r.serveHTTPAPI(ctx, t, grpcAddr)
-	if err != nil {
-		return cerrors.Errorf("failed to serve http api: %w", err)
-	}
+	if !r.Config.GRPC.Disabled {
+		grpcAddr, err := r.serveGRPCAPI(ctx, t)
+		if err != nil {
+			return cerrors.Errorf("failed to serve grpc api: %w", err)
+		}
 
-	port := 8080 // default
-	if tcpAddr, ok := httpAddr.(*net.TCPAddr); ok {
-		port = tcpAddr.Port
+		if !r.Config.HTTP.Disabled {
+			httpAddr, err := r.serveHTTPAPI(ctx, t, grpcAddr)
+			if err != nil {
+				return cerrors.Errorf("failed to serve http api: %w", err)
+			}
+
+			port := 8080 // default
+			if tcpAddr, ok := httpAddr.(*net.TCPAddr); ok {
+				port = tcpAddr.Port
+			}
+
+			r.logger.Info(ctx).Send()
+			r.logger.Info(ctx).Msgf("click here to navigate to Conduit UI: http://localhost:%d/ui", port)
+			r.logger.Info(ctx).Msgf("click here to navigate to explore the HTTP API: http://localhost:%d/openapi", port)
+			r.logger.Info(ctx).Send()
+		}
 	}
-	r.logger.Info(ctx).Send()
-	r.logger.Info(ctx).Msgf("click here to navigate to Conduit UI: http://localhost:%d/ui", port)
-	r.logger.Info(ctx).Msgf("click here to navigate to explore the HTTP API: http://localhost:%d/openapi", port)
-	r.logger.Info(ctx).Send()
 
 	return nil
 }

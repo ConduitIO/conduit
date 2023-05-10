@@ -19,13 +19,15 @@ import (
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/pocketbase/pocketbase"
 	"github.com/rs/zerolog"
 )
 
 const (
-	DBTypeBadger   = "badger"
-	DBTypePostgres = "postgres"
-	DBTypeInMemory = "inmemory"
+	DBTypeBadger     = "badger"
+	DBTypePostgres   = "postgres"
+	DBTypeInMemory   = "inmemory"
+	DBTypePocketbase = "pocketbase"
 )
 
 // Config holds all configurable values for Conduit.
@@ -39,13 +41,19 @@ type Config struct {
 			ConnectionString string
 			Table            string
 		}
+		PocketBase struct {
+			PocketBase *pocketbase.PocketBase
+			Table      string
+		}
 	}
 
 	HTTP struct {
-		Address string
+		Address  string
+		Disabled bool
 	}
 	GRPC struct {
-		Address string
+		Address  string
+		Disabled bool
 	}
 
 	Log struct {
