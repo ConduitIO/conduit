@@ -80,7 +80,7 @@ func (d *DB) init(ctx context.Context) error {
 func (d *DB) NewTransaction(ctx context.Context, update bool) (database.Transaction, context.Context, error) {
 	tx, err := d.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: !update})
 	if err != nil {
-		return nil, nil, cerrors.Errorf("could not begin transaction: %w", err)
+		return nil, ctx, cerrors.Errorf("could not begin transaction: %w", err)
 	}
 
 	txn := &Txn{
