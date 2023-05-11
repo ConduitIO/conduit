@@ -121,7 +121,7 @@ func (d *DB) NewTransaction(ctx context.Context, update bool) (database.Transact
 
 	pgxTx, err := d.pool.BeginTx(ctx, pgx.TxOptions{AccessMode: accessMode})
 	if err != nil {
-		return nil, nil, cerrors.Errorf("could not begin transaction: %w", err)
+		return nil, ctx, cerrors.Errorf("could not begin transaction: %w", err)
 	}
 
 	txn := &Txn{
