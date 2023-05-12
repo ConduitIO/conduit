@@ -1,4 +1,3 @@
-.git
 .github
 .gitignore
 .golangci.goheader.template
@@ -11,3 +10,5 @@ conduit.db
 docs
 examples
 githooks
+scripts
+test
