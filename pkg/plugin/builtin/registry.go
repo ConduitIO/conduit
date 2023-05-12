@@ -18,6 +18,7 @@ import (
 	"context"
 	"runtime/debug"
 
+	nats "github.com/conduitio-labs/conduit-connector-nats-jetstream"
 	file "github.com/conduitio/conduit-connector-file"
 	generator "github.com/conduitio/conduit-connector-generator"
 	kafka "github.com/conduitio/conduit-connector-kafka"
@@ -37,12 +38,13 @@ var (
 	// built-in plugins. The key of the map is the import path of the module
 	// containing the connector implementation.
 	DefaultDispenserFactories = map[string]DispenserFactory{
-		"github.com/conduitio/conduit-connector-file":      sdkDispenserFactory(file.Connector),
-		"github.com/conduitio/conduit-connector-kafka":     sdkDispenserFactory(kafka.Connector),
-		"github.com/conduitio/conduit-connector-generator": sdkDispenserFactory(generator.Connector),
-		"github.com/conduitio/conduit-connector-s3":        sdkDispenserFactory(s3.Connector),
-		"github.com/conduitio/conduit-connector-postgres":  sdkDispenserFactory(postgres.Connector),
-		"github.com/conduitio/conduit-connector-log":       sdkDispenserFactory(connLog.Connector),
+		"github.com/conduitio/conduit-connector-file":                sdkDispenserFactory(file.Connector),
+		"github.com/conduitio/conduit-connector-kafka":               sdkDispenserFactory(kafka.Connector),
+		"github.com/conduitio/conduit-connector-generator":           sdkDispenserFactory(generator.Connector),
+		"github.com/conduitio/conduit-connector-s3":                  sdkDispenserFactory(s3.Connector),
+		"github.com/conduitio/conduit-connector-postgres":            sdkDispenserFactory(postgres.Connector),
+		"github.com/conduitio/conduit-connector-log":                 sdkDispenserFactory(connLog.Connector),
+		"github.com/conduitio-labs/conduit-connector-nats-jetstream": sdkDispenserFactory(nats.Connector),
 	}
 )
 
