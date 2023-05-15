@@ -22,6 +22,10 @@ export default class StreamInspectorModal extends Component {
     return this.inspector.hasRecords && this.args.pipeline.isRunning;
   }
 
+  get lastRecord() {
+    return this.inspector.records.at(-1);
+  }
+
   @action
   pauseStream() {
     this.inspector.trackRecords(false);
