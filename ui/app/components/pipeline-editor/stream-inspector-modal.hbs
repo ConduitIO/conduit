@@ -20,7 +20,7 @@
           {{if this.isShowingSingleRecord 'border-b-2'}}
           border-teal-900 uppercase text-sm cursor-pointer"
         {{on "click" (fn (mut this.isShowingSingleRecord) true)}}
-        data-test-connector-modal-optional-tab
+        data-test-stream-inspector-show-single-record
       >
         {{! template-lint-enable no-invalid-interactive }}
         Single record
@@ -32,9 +32,9 @@
         class="max-h-96 overflow-scroll bg-slate-100 rounded-md mb-2 color-scheme-dark"
         {{scroll-bottom}}
       >
-        <pre class="json-container whitespace-pre-wrap text-white text-sm p-4"><div>{{if
-              this.inspector.records.lastObject
-              this.inspector.records.lastObject
+        <pre class="json-container whitespace-pre-wrap text-white text-sm p-4" data-test-stream-inspector-single-record><div>{{if
+              this.lastRecord
+              this.lastRecord
               "Waiting for data..."
             }}</div></pre>
       </div>

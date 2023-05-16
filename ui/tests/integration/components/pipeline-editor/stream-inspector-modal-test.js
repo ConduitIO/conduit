@@ -31,6 +31,20 @@ module(
 
         assert.dom('[data-test-stream-inspector="empty-record"]').exists();
       });
+
+      test('it shows an info message when inspecting a single record', async function (assert) {
+        await render(
+          hbs`<PipelineEditor::StreamInspectorModal
+                @onDismiss={{this.dummyDismiss}}
+                @pipeline={{this.pipeline}}
+                @entityId="123"/>`
+        );
+
+        await click('[data-test-stream-inspector-show-single-record]');
+        assert
+          .dom('[data-test-stream-inspector-single-record]')
+          .includesText('Waiting for data');
+      });
     });
 
     module('when websocket data is triggered', function () {
@@ -73,6 +87,24 @@ module(
         assert
           .dom('[data-test-stream-inspector="json-record"]')
           .exists({ count: 10 });
+      });
+
+      test('it shows the last record when inspecting a single record', async function (assert) {
+        await render(
+          hbs`<PipelineEditor::StreamInspectorModal
+                @onDismiss={{this.dummyDismiss}}
+                @pipeline={{this.pipeline}}
+                @entityId="123"/>`
+        );
+
+        this.socket.triggerRecords(10);
+
+        await click('[data-test-stream-inspector-show-single-record]');
+        assert
+          .dom('[data-test-stream-inspector-single-record]')
+          .includesText(
+            '{ position: "", operation: "", metadata: {}, key: {}, payload: {} }'
+          );
       });
     });
 
