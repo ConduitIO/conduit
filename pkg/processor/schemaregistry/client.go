@@ -18,9 +18,7 @@ import (
 	"context"
 
 	"github.com/conduitio/conduit/pkg/foundation/log"
-
 	"github.com/conduitio/conduit/pkg/processor/schemaregistry/internal"
-
 	"github.com/twmb/franz-go/pkg/sr"
 )
 
