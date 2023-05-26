@@ -325,6 +325,7 @@ func assertResponseStatus(code int) roundTripRecordAsserter {
 }
 func assertError(err error) roundTripRecordAsserter {
 	return func(is *is.I, rec roundTripRecord) {
+		is.Helper()
 		is.Equal(err, rec.Error) // unexpected error
 	}
 }
