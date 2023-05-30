@@ -10,7 +10,7 @@ require (
 	github.com/bufbuild/buf v1.17.0
 	github.com/conduitio/conduit-connector-file v0.5.0
 	github.com/conduitio/conduit-connector-generator v0.4.0
-	github.com/conduitio/conduit-connector-kafka v0.5.0
+	github.com/conduitio/conduit-connector-kafka v0.5.1
 	github.com/conduitio/conduit-connector-log v0.2.0
 	github.com/conduitio/conduit-connector-postgres v0.4.0
 	github.com/conduitio/conduit-connector-protocol v0.5.0
@@ -146,13 +146,16 @@ require (
 	github.com/prometheus/procfs v0.8.0 // indirect
 	github.com/rs/cors v1.8.3 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
-	github.com/segmentio/kafka-go v0.4.39 // indirect
+	github.com/segmentio/kafka-go v0.4.40 // indirect
 	github.com/shopspring/decimal v1.3.1 // indirect
 	github.com/sirupsen/logrus v1.9.0 // indirect
 	github.com/spf13/cast v1.5.0 // indirect
 	github.com/spf13/cobra v1.6.1 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/tetratelabs/wazero v1.0.1 // indirect
+	github.com/xdg-go/pbkdf2 v1.0.0 // indirect
+	github.com/xdg-go/scram v1.1.2 // indirect
+	github.com/xdg-go/stringprep v1.0.4 // indirect
 	github.com/xdg/scram v1.0.5 // indirect
 	github.com/xdg/stringprep v1.0.3 // indirect
 	github.com/xitongsys/parquet-go v1.6.2 // indirect

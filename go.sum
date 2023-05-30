@@ -160,6 +160,8 @@ github.com/conduitio/conduit-connector-generator v0.4.0 h1:MImFr+LtA8iWUELfGm9M+
 github.com/conduitio/conduit-connector-generator v0.4.0/go.mod h1:G86OQwAvXV7+78Frdj5Nr19Avnea9RJZWvGBn8V2Kzc=
 github.com/conduitio/conduit-connector-kafka v0.5.0 h1:Z/kCx7L8L3Ca870zQOCwzAsUaU3Fzk2o2FhZhg9n6rE=
 github.com/conduitio/conduit-connector-kafka v0.5.0/go.mod h1:0EbiDJn/XWmZLcxwoYpn/2KsCzZIcAEW4uwGF4V2vtk=
+github.com/conduitio/conduit-connector-kafka v0.5.1 h1:fv2seRDZUcjyvAoxiD9gche9DpvH8jWxPb1uxuJ7U3o=
+github.com/conduitio/conduit-connector-kafka v0.5.1/go.mod h1:TLHes/AZU9EWCIOub71i0UDkj/UEw1yFJpobqy3Fs7Y=
 github.com/conduitio/conduit-connector-log v0.2.0 h1:lttMsIeBYslpK4WC9zLiWynBYL1Wo47d/3XpuZWnMtI=
 github.com/conduitio/conduit-connector-log v0.2.0/go.mod h1:UQ2MCx3s/PivGiunvXxP1Hp/w5PMjexcRd4lTkeFPvI=
 github.com/conduitio/conduit-connector-postgres v0.4.0 h1:ILOg/NwHQWNf0UXQqkFWYHiWn099uIln2jEtZ25dbCE=
@@ -605,6 +607,8 @@ github.com/ruudk/golang-pdf417 v0.0.0-20181029194003-1af4ab5afa58/go.mod h1:6lfF
 github.com/satori/go.uuid v1.2.0/go.mod h1:dA0hQrYB0VpLJoorglMZABFdXlWrHn1NEOzdhQKdks0=
 github.com/segmentio/kafka-go v0.4.39 h1:75smaomhvkYRwtuOwqLsdhgCG30B82NsbdkdDfFbvrw=
 github.com/segmentio/kafka-go v0.4.39/go.mod h1:T0MLgygYvmqmBvC+s8aCcbVNfJN4znVne5j0Pzowp/Q=
+github.com/segmentio/kafka-go v0.4.40 h1:sszW7c0/uyv7+VcTW5trx2ZC7kMWDTxuR/6Zn8U1bm8=
+github.com/segmentio/kafka-go v0.4.40/go.mod h1:naFEZc5MQKdeL3W6NkZIAn48Y6AazqjRFDhnXeg3h94=
 github.com/shopspring/decimal v0.0.0-20180709203117-cd690d0c9e24/go.mod h1:M+9NzErvs504Cn4c5DxATwIqPbtswREoFCre64PpcG4=
 github.com/shopspring/decimal v1.2.0/go.mod h1:DKyhrW/HYNuLGql+MJL6WCR6knT2jwCFRcu2hWCYk4o=
 github.com/shopspring/decimal v1.3.1 h1:2Usl1nmF/WZucqkFZhnfFYxxxu8LG21F6nPQBE5gKV8=
@@ -652,6 +656,12 @@ github.com/tetratelabs/wazero v1.0.1 h1:xyWBoGyMjYekG3mEQ/W7xm9E05S89kJ/at696d/9
 github.com/tetratelabs/wazero v1.0.1/go.mod h1:wYx2gNRg8/WihJfSDxA1TIL8H+GkfLYm+bIfbblu9VQ=
 github.com/ugorji/go/codec v0.0.0-20181204163529-d75b2dcb6bc8/go.mod h1:VFNgLljTbGfSG7qAOspJ7OScBnGdDN/yBr0sguwnwf0=
 github.com/vbatts/tar-split v0.11.2 h1:Via6XqJr0hceW4wff3QRzD5gAk/tatMw/4ZA7cTlIME=
+github.com/xdg-go/pbkdf2 v1.0.0 h1:Su7DPu48wXMwC3bs7MCNG+z4FhcyEuz5dlvchbq0B0c=
+github.com/xdg-go/pbkdf2 v1.0.0/go.mod h1:jrpuAogTd400dnrH08LKmI/xc1MbPOebTwRqcT5RDeI=
+github.com/xdg-go/scram v1.1.2 h1:FHX5I5B4i4hKRVRBCFRxq1iQRej7WO3hhBuJf+UUySY=
+github.com/xdg-go/scram v1.1.2/go.mod h1:RT/sEzTbU5y00aCK8UOx6R7YryM0iF1N2MOmC3kKLN4=
+github.com/xdg-go/stringprep v1.0.4 h1:XLI/Ng3O1Atzq0oBs3TWm+5ZVgkq2aqdlvP9JtoZ6c8=
+github.com/xdg-go/stringprep v1.0.4/go.mod h1:mPGuuIYwz7CmR2bT9j4GbQqutWS1zV24gijq1dTyGkM=
 github.com/xdg/scram v1.0.5 h1:TuS0RFmt5Is5qm9Tm2SoD89OPqe4IRiFtyFY4iwWXsw=
 github.com/xdg/scram v1.0.5/go.mod h1:lB8K/P019DLNhemzwFU4jHLhdvlE6uDZjXFejJXr49I=
 github.com/xdg/stringprep v1.0.3 h1:cmL5Enob4W83ti/ZHuZLuKD/xqJfus4fVPwE+/BDm+4=
