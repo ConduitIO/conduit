@@ -4986,7 +4986,7 @@ ember-auto-import@^1.11.3, ember-auto-import@^1.12.0:
     walk-sync "^0.3.3"
     webpack "^4.43.0"
 
-ember-auto-import@^2.4.1, ember-auto-import@^2.4.3, ember-auto-import@^2.5.0, ember-auto-import@^2.6.0, ember-auto-import@^2.6.3:
+ember-auto-import@^2.4.1, ember-auto-import@^2.4.3, ember-auto-import@^2.6.0, ember-auto-import@^2.6.3:
   version "2.6.3"
   resolved "https://registry.yarnpkg.com/ember-auto-import/-/ember-auto-import-2.6.3.tgz#f18d1b93dd10b08ba5496518436f9d56dd4e000a"
   integrity sha512-uLhrRDJYWCRvQ4JQ1e64XlSrqAKSd6PXaJ9ZsZI6Tlms9T4DtQFxNXasqji2ZRJBVrxEoLCRYX3RTldsQ0vNGQ==
@@ -5727,7 +5727,7 @@ ember-modifier-manager-polyfill@^1.2.0:
     ember-cli-version-checker "^2.1.2"
     ember-compatibility-helpers "^1.2.0"
 
-"ember-modifier@^2.1.2 || ^3.1.0 || ^4.0.0", ember-modifier@^3.2.0, ember-modifier@^3.2.7:
+"ember-modifier@^2.1.2 || ^3.1.0 || ^4.0.0", ember-modifier@^3.2.0, ember-modifier@^3.2.7, ember-modifier@^4.1.0:
   version "3.2.7"
   resolved "https://registry.yarnpkg.com/ember-modifier/-/ember-modifier-3.2.7.tgz#f2d35b7c867cbfc549e1acd8d8903c5ecd02ea4b"
   integrity sha512-ezcPQhH8jUfcJQbbHji4/ZG/h0yyj1jRDknfYue/ypQS8fM8LrGcCMo0rjDZLzL1Vd11InjNs3BD7BdxFlzGoA==
@@ -5738,10 +5738,10 @@ ember-modifier-manager-polyfill@^1.2.0:
     ember-cli-typescript "^5.0.0"
     ember-compatibility-helpers "^1.2.5"
 
-ember-named-blocks-polyfill@^0.2.4:
-  version "0.2.4"
-  resolved "https://registry.yarnpkg.com/ember-named-blocks-polyfill/-/ember-named-blocks-polyfill-0.2.4.tgz#f5f30711ee89244927b55aae7fa9630edaadc974"
-  integrity sha512-PsohC7ejjS7V++6i/JSy0pl1hXLV3IS3Qs+O7SrjIPYcg1UEmUwqgPiDmXqNgy0p2dc5TK5bIJTtX8wofCI63Q==
+ember-named-blocks-polyfill@^0.2.5:
+  version "0.2.5"
+  resolved "https://registry.yarnpkg.com/ember-named-blocks-polyfill/-/ember-named-blocks-polyfill-0.2.5.tgz#d5841406277026a221f479c815cfbac6cdcaeecb"
+  integrity sha512-OVMxzkfqJrEvmiky7gFzmuTaImCGm7DOudHWTdMBPO7E+dQSunrcRsJMgO9ZZ56suqBIz/yXbEURrmGS+avHxA==
   dependencies:
     ember-cli-babel "^7.19.0"
     ember-cli-version-checker "^5.1.1"
@@ -5785,7 +5785,7 @@ ember-rfc176-data@^0.3.15, ember-rfc176-data@^0.3.17:
   resolved "https://registry.yarnpkg.com/ember-rfc176-data/-/ember-rfc176-data-0.3.17.tgz#d4fc6c33abd6ef7b3440c107a28e04417b49860a"
   integrity sha512-EVzTTKqxv9FZbEh6Ktw56YyWRAA0MijKvl7H8C06wVF+8f/cRRz3dXxa4nkwjzyVwx4rzKGuIGq77hxJAQhWWw==
 
-ember-root-url@^1.0.0, ember-root-url@^1.0.1:
+ember-root-url@^1.0.1:
   version "1.0.1"
   resolved "https://registry.yarnpkg.com/ember-root-url/-/ember-root-url-1.0.1.tgz#27e834370ea5b46d37b84fa697c46bf3a069135a"
   integrity sha512-e3aKAxY/EMhWEynfZnF0Gy6rZpQ9sJxNWm/GsDGj0cO7b5f4hmA6sSQGQh6puKe4jl2Q5a4w8DlnUyMaZoC/sA==
@@ -9233,16 +9233,17 @@ mute-stream@0.0.8:
   resolved "https://registry.yarnpkg.com/mute-stream/-/mute-stream-0.0.8.tgz#1630c42b2251ff81e2a283de96a5497ea92e5e0d"
   integrity sha512-nnbWWOkoWyUsTjKrhgD0dcz22mdkSnpYqbEjIm2nhwhuxlSkpywJmBo8h0ZqJdkp73mb90SssHkN4rsRaBAfAA==
 
-"mx-ui-components@https://github.com/ConduitIO/mx-ui-components.git#v2.1.0":
-  version "2.1.0"
-  resolved "https://github.com/ConduitIO/mx-ui-components.git#ac804b0702b48f28cabacc297eb93cc3bed8c19c"
+"mx-ui-components@https://github.com/ConduitIO/mx-ui-components.git#v2.3.0":
+  version "2.3.0"
+  resolved "https://github.com/ConduitIO/mx-ui-components.git#089d35c47acd76a88d2dd4ec01322b0747888cfa"
   dependencies:
-    ember-auto-import "^2.5.0"
+    ember-auto-import "^2.6.3"
     ember-cli-babel "^7.26.11"
-    ember-cli-htmlbars "^6.1.1"
+    ember-cli-htmlbars "^6.2.0"
     ember-keyboard "8.2.0"
-    ember-named-blocks-polyfill "^0.2.4"
-    ember-root-url "^1.0.0"
+    ember-modifier "^4.1.0"
+    ember-named-blocks-polyfill "^0.2.5"
+    ember-root-url "^1.0.1"
 
 mz@^2.7.0:
   version "2.7.0"
