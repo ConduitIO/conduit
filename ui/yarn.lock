@@ -1524,13 +1524,14 @@
     ember-cli-version-checker "^5.1.2"
     semver "^7.3.5"
 
-"@embroider/addon-shim@^1.5.0":
-  version "1.8.0"
-  resolved "https://registry.yarnpkg.com/@embroider/addon-shim/-/addon-shim-1.8.0.tgz#a545d85991f033a7bac147fe720ff2a7a870731f"
-  integrity sha512-iMD9Yzx24WY0/K42if2piWzkw+BFCpqxwbPaNWFqlTbNGzzd1UnNiFhtdjXT5vTyYSQRgbQwuFcr/04Rh8qF8A==
+"@embroider/addon-shim@^1.5.0", "@embroider/addon-shim@^1.8.4":
+  version "1.8.5"
+  resolved "https://registry.yarnpkg.com/@embroider/addon-shim/-/addon-shim-1.8.5.tgz#c0aae417f9583058f40550f206fc53444e325f11"
+  integrity sha512-pDgpdTsC9i/+5hHziygK5VIZc64OG8bupiqL0OxJp+bnINURalHMbu5B3Gikq/a0QIvMPzDFWzKxIZCBpeiHkg==
   dependencies:
-    "@embroider/shared-internals" "^1.8.0"
-    semver "^7.3.5"
+    "@embroider/shared-internals" "^2.1.0"
+    broccoli-funnel "^3.0.8"
+    semver "^7.3.8"
 
 "@embroider/macros@^0.41.0", "@embroider/macros@^0.42.3", "@embroider/macros@^0.50.0 || ^1.0.0", "@embroider/macros@^1.0.0", "@embroider/macros@^1.10.0", "@embroider/macros@^1.2.0", "@embroider/macros@^1.8.0", "@embroider/macros@^1.8.3", "@embroider/macros@^1.9.0":
   version "1.10.0"
@@ -1560,10 +1561,24 @@
     semver "^7.3.5"
     typescript-memoize "^1.0.1"
 
-"@embroider/shared-internals@^1.0.0", "@embroider/shared-internals@^1.8.0":
+"@embroider/shared-internals@^1.0.0":
   version "1.8.0"
   resolved "https://registry.yarnpkg.com/@embroider/shared-internals/-/shared-internals-1.8.0.tgz#4c9b563e5f155410d982a30667b027a227be7312"
   integrity sha512-TsjApG80SDVZ+dxkshO4FtzwzZYupmyl1w3Bnehfbk1429dsv30K+/DhcxDFIlKXPtsvCF9mdQY3mYUs+hoLOg==
+  dependencies:
+    babel-import-util "^1.1.0"
+    ember-rfc176-data "^0.3.17"
+    fs-extra "^9.1.0"
+    js-string-escape "^1.0.1"
+    lodash "^4.17.21"
+    resolve-package-path "^4.0.1"
+    semver "^7.3.5"
+    typescript-memoize "^1.0.1"
+
+"@embroider/shared-internals@^2.1.0":
+  version "2.1.0"
+  resolved "https://registry.yarnpkg.com/@embroider/shared-internals/-/shared-internals-2.1.0.tgz#4da79fe8b26e4b94819b8313c51b5b24a68c617b"
+  integrity sha512-9hKbMxW7wDWt1BqdpnLZ5W6ETrmAg9HnfBwf1IDkT+8he5nOdTD0PNtruMjm7V0Tb9p9hI7O+UXSa8ZnX1BQXg==
   dependencies:
     babel-import-util "^1.1.0"
     ember-rfc176-data "^0.3.17"
@@ -5545,17 +5560,7 @@ ember-cli@~4.8.0:
     workerpool "^6.2.1"
     yam "^1.0.0"
 
-ember-compatibility-helpers@^1.1.2, ember-compatibility-helpers@^1.2.0, ember-compatibility-helpers@^1.2.1, ember-compatibility-helpers@^1.2.5:
-  version "1.2.5"
-  resolved "https://registry.yarnpkg.com/ember-compatibility-helpers/-/ember-compatibility-helpers-1.2.5.tgz#b8363b1d5b8725afa9a4fe2b2986ac28626c6f23"
-  integrity sha512-7cddkQQp8Rs2Mqrj0xqZ0uO7eC9tBCKyZNcP2iE1RxQqOGPv8fiPkj1TUeidUB/Qe80lstoVXWMEuqqhW7Yy9A==
-  dependencies:
-    babel-plugin-debug-macros "^0.2.0"
-    ember-cli-version-checker "^5.1.1"
-    fs-extra "^9.1.0"
-    semver "^5.4.1"
-
-ember-compatibility-helpers@^1.2.6:
+ember-compatibility-helpers@^1.1.2, ember-compatibility-helpers@^1.2.0, ember-compatibility-helpers@^1.2.1, ember-compatibility-helpers@^1.2.5, ember-compatibility-helpers@^1.2.6:
   version "1.2.6"
   resolved "https://registry.yarnpkg.com/ember-compatibility-helpers/-/ember-compatibility-helpers-1.2.6.tgz#603579ab2fb14be567ef944da3fc2d355f779cd8"
   integrity sha512-2UBUa5SAuPg8/kRVaiOfTwlXdeVweal1zdNPibwItrhR0IvPrXpaqwJDlEZnWKEoB+h33V0JIfiWleSG6hGkkA==
