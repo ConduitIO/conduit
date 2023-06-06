@@ -63,7 +63,7 @@
     "ember-modifier": "^4.1.0",
     "ember-page-title": "^7.0.0",
     "ember-qunit": "^6.2.0",
-    "ember-resolver": "^8.1.0",
+    "ember-resolver": "^9.0.1",
     "ember-root-url": "^1.0.1",
     "ember-sortable": "^5.0.0",
     "ember-source": "~4.8.0",
