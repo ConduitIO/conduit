@@ -17,6 +17,8 @@ package conduit
 import (
 	"os"
 
+	"github.com/conduitio/conduit/pkg/plugin/builtin"
+
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/rs/zerolog"
@@ -61,6 +63,8 @@ type Config struct {
 		Path        string
 		ExitOnError bool
 	}
+
+	AdditionalBuiltinPlugins map[string]builtin.DispenserFactory
 }
 
 func (c Config) Validate() error {

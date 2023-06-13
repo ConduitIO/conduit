@@ -22,8 +22,15 @@ import (
 	"os/signal"
 	"strings"
 
+	"github.com/conduitio/conduit-connector-protocol/cpluginv1"
+	sdk "github.com/conduitio/conduit-connector-sdk"
 	"github.com/conduitio/conduit/pkg/conduit"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/plugin"
+	"github.com/conduitio/conduit/pkg/plugin/builtin"
+	builtinv1 "github.com/conduitio/conduit/pkg/plugin/builtin/v1"
+	ais "github.com/meroxa/conduit-connector-spire-ais"
 )
 
 const (
@@ -36,6 +43,9 @@ func main() {
 	if cfg.Log.Format == "cli" {
 		_, _ = fmt.Fprintf(os.Stdout, "%s\n", conduit.Splash())
 	}
+	cfg.AdditionalBuiltinPlugins = map[string]builtin.DispenserFactory{
+		"github.com/meroxa/conduit-connector-spire-ais": sdkDispenserFactory(ais.Connector),
+	}
 
 	runtime, err := conduit.NewRuntime(cfg)
 	if err != nil {
@@ -47,6 +57,27 @@ func main() {
 	err = runtime.Run(ctx)
 	if err != nil && !cerrors.Is(err, context.Canceled) {
 		exitWithError(cerrors.Errorf("conduit runtime error: %w", err))
+	}
+}
+
+func sdkDispenserFactory(connector sdk.Connector) builtin.DispenserFactory {
+	if connector.NewSource == nil {
+		connector.NewSource = func() sdk.Source { return nil }
+	}
+	if connector.NewDestination == nil {
+		connector.NewDestination = func() sdk.Destination { return nil }
+	}
+
+	return func(name plugin.FullName, logger log.CtxLogger) plugin.Dispenser {
+		return builtinv1.NewDispenser(
+			name,
+			logger,
+			func() cpluginv1.SpecifierPlugin {
+				return sdk.NewSpecifierPlugin(connector.NewSpecification(), connector.NewSource(), connector.NewDestination())
+			},
+			func() cpluginv1.SourcePlugin { return sdk.NewSourcePlugin(connector.NewSource()) },
+			func() cpluginv1.DestinationPlugin { return sdk.NewDestinationPlugin(connector.NewDestination()) },
+		)
 	}
 }
 
