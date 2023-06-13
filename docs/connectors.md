@@ -117,7 +117,7 @@ to write to a downstream data store.
 | [Kafka Connect Wrapper](https://github.com/ConduitIO/conduit-kafka-connect-wrapper) | ✅ | ✅ | Legacy |v0.3.0|
 | [Marketo](https://github.com/conduitio-labs/conduit-connector-marketo) |✅ | | Community |v0.3.0|
 | [Materialize](https://github.com/conduitio-labs/conduit-connector-materialize) | |✅ | Community |v0.3.0|
-| [MongoDB](https://github.com/conduitio-labs/conduit-connector-mongo) | |✅ | Conduit |v0.6.0|
+| [MongoDB](https://github.com/conduitio-labs/conduit-connector-mongo) | |✅ | Community |v0.6.0|
 | [Nats Jetstream](https://github.com/conduitio-labs/conduit-connector-nats-jetstream) |✅ |✅ | Community |v0.3.0|
 | [Nats PubSub](https://github.com/conduitio-labs/conduit-connector-nats-pubsub) |✅|✅ | Community |v0.3.0|
 | [Oracle DB](https://github.com/conduitio-labs/conduit-connector-oracle) |WIP|WIP| Community |WIP|
