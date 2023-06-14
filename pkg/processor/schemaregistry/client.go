@@ -17,6 +17,7 @@ package schemaregistry
 import (
 	"context"
 
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/processor/schemaregistry/internal"
 	"github.com/lovromazgon/franz-go/pkg/sr"
@@ -61,8 +62,11 @@ func (c *Client) CreateSchema(ctx context.Context, subject string, schema sr.Sch
 		logEvent = nil // disable output for hit
 		return c.client.CreateSchema(ctx, subject, schema)
 	})
+	if err != nil {
+		return sr.SubjectSchema{}, cerrors.Errorf("failed to create schema with subject %q: %w", subject, err)
+	}
 	logEvent.Msg("schema cache hit")
-	return ss, err
+	return ss, nil
 }
 
 // SchemaByID checks if the schema is already registered in the cache and
@@ -77,8 +81,11 @@ func (c *Client) SchemaByID(ctx context.Context, id int) (sr.Schema, error) {
 		logEvent = nil // disable output for hit
 		return c.client.SchemaByID(ctx, id)
 	})
+	if err != nil {
+		return sr.Schema{}, cerrors.Errorf("failed to get schema with ID %q: %w", id, err)
+	}
 	logEvent.Msg("schema cache hit")
-	return s, err
+	return s, nil
 }
 
 // SchemaBySubjectVersion checks if the schema is already registered in the
@@ -93,5 +100,9 @@ func (c *Client) SchemaBySubjectVersion(ctx context.Context, subject string, ver
 		logEvent = nil // disable output for hit
 		return c.client.SchemaByVersion(ctx, subject, version, sr.HideDeleted)
 	})
-	return ss, err
+	if err != nil {
+		return sr.SubjectSchema{}, cerrors.Errorf("failed to get schema with subject %q and version %q: %w", subject, version, err)
+	}
+	logEvent.Msg("schema cache hit")
+	return ss, nil
 }
