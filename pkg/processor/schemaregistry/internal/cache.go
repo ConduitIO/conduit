@@ -15,100 +15,77 @@
 package internal
 
 import (
+	"fmt"
 	"sync"
 
-	"github.com/twmb/franz-go/pkg/sr"
+	"github.com/lovromazgon/franz-go/pkg/sr"
+	"github.com/twmb/go-cache/cache"
 )
 
 type (
-	subject     string
-	version     int
-	fingerprint uint64
+	subjectVersion     string
+	subjectFingerprint string
 )
+
+func newSubjectVersion(subject string, version int) subjectVersion {
+	return subjectVersion(fmt.Sprintf("%s:%d", subject, version))
+}
+
+func newSubjectFingerprint(subject string, text string) subjectFingerprint {
+	fingerprint := Rabin([]byte(text))
+	return subjectFingerprint(fmt.Sprintf("%s:%d", subject, fingerprint))
+}
 
 // SchemaCache caches schemas by ID, their subject/fingerprint and
 // subject/version. Fingerprints are calculated using the Rabin algorithm.
 type SchemaCache struct {
 	initOnce sync.Once
 
-	idCache                 map[int]sr.Schema
-	subjectFingerprintCache map[subject]map[fingerprint]sr.SubjectSchema
-	subjectVersionCache     map[subject]map[version]sr.SubjectSchema
-
-	m sync.RWMutex
+	idCache                 *cache.Cache[int, sr.Schema]
+	subjectFingerprintCache *cache.Cache[subjectFingerprint, sr.SubjectSchema]
+	subjectVersionCache     *cache.Cache[subjectVersion, sr.SubjectSchema]
 }
 
 func (c *SchemaCache) init() {
 	c.initOnce.Do(func() {
-		c.idCache = make(map[int]sr.Schema)
-		c.subjectFingerprintCache = make(map[subject]map[fingerprint]sr.SubjectSchema)
-		c.subjectVersionCache = make(map[subject]map[version]sr.SubjectSchema)
+		c.idCache = cache.New[int, sr.Schema]()
+		c.subjectFingerprintCache = cache.New[subjectFingerprint, sr.SubjectSchema]()
+		c.subjectVersionCache = cache.New[subjectVersion, sr.SubjectSchema]()
 	})
 }
 
-func (c *SchemaCache) AddSubjectSchema(ss sr.SubjectSchema) {
+func (c *SchemaCache) GetByID(id int, miss func() (sr.Schema, error)) (sr.Schema, error) {
 	c.init()
-	c.m.Lock()
-	defer c.m.Unlock()
-
-	c.idCache[ss.ID] = ss.Schema
-
-	versionCache, ok := c.subjectVersionCache[subject(ss.Subject)]
-	if !ok {
-		versionCache = make(map[version]sr.SubjectSchema)
-		c.subjectVersionCache[subject(ss.Subject)] = versionCache
-	}
-	versionCache[version(ss.Version)] = ss
-
-	fingerprintCache, ok := c.subjectFingerprintCache[subject(ss.Subject)]
-	if !ok {
-		fingerprintCache = make(map[fingerprint]sr.SubjectSchema)
-		c.subjectFingerprintCache[subject(ss.Subject)] = fingerprintCache
-	}
-	fp := Rabin([]byte(ss.Schema.Schema))
-	fingerprintCache[fingerprint(fp)] = ss
+	s, err, _ := c.idCache.Get(id, miss)
+	return s, err
 }
 
-func (c *SchemaCache) AddSchema(id int, s sr.Schema) {
+func (c *SchemaCache) GetBySubjectText(subject string, text string, miss func() (sr.SubjectSchema, error)) (sr.SubjectSchema, error) {
 	c.init()
-	c.m.Lock()
-	defer c.m.Unlock()
-
-	c.idCache[id] = s
+	sfp := newSubjectFingerprint(subject, text)
+	ss, err, _ := c.subjectFingerprintCache.Get(sfp, func() (sr.SubjectSchema, error) {
+		ss, err := miss()
+		if err != nil {
+			return ss, err
+		}
+		c.idCache.Set(ss.ID, ss.Schema)
+		c.subjectVersionCache.Set(newSubjectVersion(ss.Subject, ss.Version), ss)
+		return ss, nil
+	})
+	return ss, err
 }
 
-func (c *SchemaCache) GetByID(id int) (sr.Schema, bool) {
+func (c *SchemaCache) GetBySubjectVersion(subject string, version int, miss func() (sr.SubjectSchema, error)) (sr.SubjectSchema, error) {
 	c.init()
-	c.m.RLock()
-	defer c.m.RUnlock()
-
-	s, ok := c.idCache[id]
-	return s, ok
-}
-
-func (c *SchemaCache) GetBySubjectText(s string, text string) (sr.SubjectSchema, bool) {
-	c.init()
-	c.m.RLock()
-	defer c.m.RUnlock()
-
-	fingerprintCache, ok := c.subjectFingerprintCache[subject(s)]
-	if !ok {
-		return sr.SubjectSchema{}, false
-	}
-	fp := Rabin([]byte(text))
-	ss, ok := fingerprintCache[fingerprint(fp)]
-	return ss, ok
-}
-
-func (c *SchemaCache) GetBySubjectVersion(s string, v int) (sr.SubjectSchema, bool) {
-	c.init()
-	c.m.RLock()
-	defer c.m.RUnlock()
-
-	versionCache, ok := c.subjectVersionCache[subject(s)]
-	if !ok {
-		return sr.SubjectSchema{}, false
-	}
-	ss, ok := versionCache[version(v)]
-	return ss, ok
+	sv := newSubjectVersion(subject, version)
+	ss, err, _ := c.subjectVersionCache.Get(sv, func() (sr.SubjectSchema, error) {
+		ss, err := miss()
+		if err != nil {
+			return ss, err
+		}
+		c.idCache.Set(ss.ID, ss.Schema)
+		c.subjectFingerprintCache.Set(newSubjectFingerprint(ss.Subject, ss.Schema.Schema), ss)
+		return ss, nil
+	})
+	return ss, err
 }

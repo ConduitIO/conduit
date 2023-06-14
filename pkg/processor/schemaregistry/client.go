@@ -19,7 +19,7 @@ import (
 
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/processor/schemaregistry/internal"
-	"github.com/twmb/franz-go/pkg/sr"
+	"github.com/lovromazgon/franz-go/pkg/sr"
 )
 
 // Client is a schema registry client that caches schemas. It is safe for
@@ -55,21 +55,14 @@ func NewClient(logger log.CtxLogger, opts ...sr.Opt) (*Client, error) {
 // is sent to the schema registry and stored in the cache, if the registration
 // was successful.
 func (c *Client) CreateSchema(ctx context.Context, subject string, schema sr.Schema) (sr.SubjectSchema, error) {
-	ss, ok := c.cache.GetBySubjectText(subject, schema.Schema)
-	logEvent := c.logger.Trace(ctx).Str("subject", subject)
-	if ok {
-		logEvent.Msg("schema cache hit")
-		return ss, nil
-	}
-	logEvent.Msg("schema cache miss")
-
-	ss, err := c.client.CreateSchema(ctx, subject, schema)
-	if err != nil {
-		return sr.SubjectSchema{}, err
-	}
-
-	c.cache.AddSubjectSchema(ss)
-	return ss, nil
+	logEvent := c.logger.Trace(ctx).Str("operation", "CreateSchema").Str("subject", subject)
+	ss, err := c.cache.GetBySubjectText(subject, schema.Schema, func() (sr.SubjectSchema, error) {
+		logEvent.Msg("schema cache miss")
+		logEvent = nil // disable output for hit
+		return c.client.CreateSchema(ctx, subject, schema)
+	})
+	logEvent.Msg("schema cache hit")
+	return ss, err
 }
 
 // SchemaByID checks if the schema is already registered in the cache and
@@ -78,21 +71,14 @@ func (c *Client) CreateSchema(ctx context.Context, subject string, schema sr.Sch
 // Note that the returned schema does not contain a subject and version, so the
 // cache will not have an effect on methods that return a sr.SubjectSchema.
 func (c *Client) SchemaByID(ctx context.Context, id int) (sr.Schema, error) {
-	s, ok := c.cache.GetByID(id)
-	logEvent := c.logger.Trace(ctx).Int("id", id)
-	if ok {
-		logEvent.Msg("schema cache hit")
-		return s, nil
-	}
-	logEvent.Msg("schema cache miss")
-
-	s, err := c.client.SchemaByID(ctx, id)
-	if err != nil {
-		return sr.Schema{}, err
-	}
-
-	c.cache.AddSchema(id, s)
-	return s, nil
+	logEvent := c.logger.Trace(ctx).Str("operation", "SchemaByID").Int("id", id)
+	s, err := c.cache.GetByID(id, func() (sr.Schema, error) {
+		logEvent.Msg("schema cache miss")
+		logEvent = nil // disable output for hit
+		return c.client.SchemaByID(ctx, id)
+	})
+	logEvent.Msg("schema cache hit")
+	return s, err
 }
 
 // SchemaBySubjectVersion checks if the schema is already registered in the
@@ -101,19 +87,11 @@ func (c *Client) SchemaByID(ctx context.Context, id int) (sr.Schema, error) {
 func (c *Client) SchemaBySubjectVersion(ctx context.Context, subject string, version int) (sr.SubjectSchema, error) {
 	// TODO handle latest version separately, let caller define timeout after
 	//  which the latest cached version should be downloaded again from upstream
-	ss, ok := c.cache.GetBySubjectVersion(subject, version)
-	logEvent := c.logger.Trace(ctx).Str("subject", subject).Int("version", version)
-	if ok {
-		logEvent.Msg("schema cache hit")
-		return ss, nil
-	}
-	logEvent.Msg("schema cache miss")
-
-	ss, err := c.client.SchemaByVersion(ctx, subject, version, sr.HideDeleted)
-	if err != nil {
-		return sr.SubjectSchema{}, err
-	}
-
-	c.cache.AddSubjectSchema(ss)
-	return ss, nil
+	logEvent := c.logger.Trace(ctx).Str("operation", "SchemaBySubjectVersion").Str("subject", subject).Int("version", version)
+	ss, err := c.cache.GetBySubjectVersion(subject, version, func() (sr.SubjectSchema, error) {
+		logEvent.Msg("schema cache miss")
+		logEvent = nil // disable output for hit
+		return c.client.SchemaByVersion(ctx, subject, version, sr.HideDeleted)
+	})
+	return ss, err
 }

@@ -15,13 +15,46 @@
 package internal
 
 import (
+	"sync/atomic"
 	"testing"
 
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/lovromazgon/franz-go/pkg/sr"
 	"github.com/matryer/is"
-	"github.com/twmb/franz-go/pkg/sr"
 )
 
-func TestSchemaCache_AddSubjectSchema(t *testing.T) {
+func TestSchemaCache_GetByID(t *testing.T) {
+	is := is.New(t)
+	cache := &SchemaCache{}
+
+	id := 1
+	want := sr.Schema{
+		Schema:     `"string"`,
+		Type:       sr.TypeAvro,
+		References: nil,
+	}
+	var missCount atomic.Int32
+	got, err := cache.GetByID(id, func() (sr.Schema, error) {
+		missCount.Add(1)
+		return want, nil
+	})
+
+	is.NoErr(err)
+	is.Equal(want, got)
+	is.Equal(missCount.Load(), int32(1))
+
+	t.Run("GetByID is cached", func(t *testing.T) {
+		is := is.New(t)
+		got, err := cache.GetByID(id, nil)
+		is.NoErr(err)
+		is.Equal(want, got)
+		is.Equal(missCount.Load(), int32(1))
+	})
+
+	// other methods can't be cached, as the subject and version are unknown
+}
+
+func TestSchemaCache_GetBySubjectText(t *testing.T) {
 	cache := &SchemaCache{}
 
 	want := sr.SubjectSchema{
@@ -34,69 +67,120 @@ func TestSchemaCache_AddSubjectSchema(t *testing.T) {
 			References: nil,
 		},
 	}
-	cache.AddSubjectSchema(want)
 
-	t.Run("GetByID", func(t *testing.T) {
+	is := is.New(t)
+	var missCount atomic.Int32
+	got, err := cache.GetBySubjectText(want.Subject, want.Schema.Schema, func() (sr.SubjectSchema, error) {
+		missCount.Add(1)
+		return want, nil
+	})
+	is.NoErr(err)
+	is.Equal(got, want)
+	is.Equal(missCount.Load(), int32(1))
+
+	t.Run("GetByID is cached", func(t *testing.T) {
 		is := is.New(t)
-		got, ok := cache.GetByID(want.ID)
-		is.True(ok)
+		got, err := cache.GetByID(want.ID, nil)
+		is.NoErr(err)
 		is.Equal(want.Schema, got)
+		is.Equal(missCount.Load(), int32(1))
 	})
 
-	t.Run("GetBySubjectVersion", func(t *testing.T) {
+	t.Run("GetBySubjectText is cached", func(t *testing.T) {
 		is := is.New(t)
-		got, ok := cache.GetBySubjectVersion(want.Subject, want.Version)
-		is.True(ok)
+		got, err := cache.GetBySubjectText(want.Subject, want.Schema.Schema, nil)
+		is.NoErr(err)
 		is.Equal(want, got)
+		is.Equal(missCount.Load(), int32(1))
 	})
 
-	t.Run("GetBySubjectText", func(t *testing.T) {
+	t.Run("GetBySubjectVersion is cached", func(t *testing.T) {
 		is := is.New(t)
-		got, ok := cache.GetBySubjectText(want.Subject, want.Schema.Schema)
-		is.True(ok)
+		got, err := cache.GetBySubjectVersion(want.Subject, want.Version, nil)
+		is.NoErr(err)
 		is.Equal(want, got)
+		is.Equal(missCount.Load(), int32(1))
 	})
 }
 
-func TestSchemaCache_AddSchema(t *testing.T) {
+func TestSchemaCache_GetBySubjectVersion(t *testing.T) {
 	cache := &SchemaCache{}
 
-	id := 1
-	want := sr.Schema{
-		Schema:     `"string"`,
-		Type:       sr.TypeAvro,
-		References: nil,
+	want := sr.SubjectSchema{
+		Subject: "test",
+		Version: 1,
+		ID:      2,
+		Schema: sr.Schema{
+			Schema:     `"string"`,
+			Type:       sr.TypeAvro,
+			References: nil,
+		},
 	}
-	cache.AddSchema(id, want)
 
 	is := is.New(t)
-	got, ok := cache.GetByID(id)
-	is.True(ok)
-	is.Equal(want, got)
+	var missCount atomic.Int32
+	got, err := cache.GetBySubjectVersion(want.Subject, want.Version, func() (sr.SubjectSchema, error) {
+		missCount.Add(1)
+		return want, nil
+	})
+	is.NoErr(err)
+	is.Equal(got, want)
+	is.Equal(missCount.Load(), int32(1))
+
+	t.Run("GetByID is cached", func(t *testing.T) {
+		is := is.New(t)
+		got, err := cache.GetByID(want.ID, nil)
+		is.NoErr(err)
+		is.Equal(want.Schema, got)
+		is.Equal(missCount.Load(), int32(1))
+	})
+
+	t.Run("GetBySubjectText is cached", func(t *testing.T) {
+		is := is.New(t)
+		got, err := cache.GetBySubjectText(want.Subject, want.Schema.Schema, nil)
+		is.NoErr(err)
+		is.Equal(want, got)
+		is.Equal(missCount.Load(), int32(1))
+	})
+
+	t.Run("GetBySubjectVersion is cached", func(t *testing.T) {
+		is := is.New(t)
+		got, err := cache.GetBySubjectVersion(want.Subject, want.Version, nil)
+		is.NoErr(err)
+		is.Equal(want, got)
+		is.Equal(missCount.Load(), int32(1))
+	})
 }
 
 func TestSchemaCache_Miss(t *testing.T) {
 	cache := &SchemaCache{}
 	var want sr.SubjectSchema
+	wantErr := cerrors.New("test error")
 
 	t.Run("GetByID", func(t *testing.T) {
 		is := is.New(t)
-		got, ok := cache.GetByID(1)
-		is.True(!ok)
+		got, err := cache.GetByID(1, func() (sr.Schema, error) {
+			return sr.Schema{}, wantErr
+		})
+		is.Equal(err, wantErr)
 		is.Equal(want.Schema, got)
 	})
 
 	t.Run("GetBySubjectVersion", func(t *testing.T) {
 		is := is.New(t)
-		got, ok := cache.GetBySubjectVersion("test", 1)
-		is.True(!ok)
+		got, err := cache.GetBySubjectVersion("test", 1, func() (sr.SubjectSchema, error) {
+			return sr.SubjectSchema{}, wantErr
+		})
+		is.Equal(err, wantErr)
 		is.Equal(want, got)
 	})
 
 	t.Run("GetBySubjectText", func(t *testing.T) {
 		is := is.New(t)
-		got, ok := cache.GetBySubjectText("foo", `"string"`)
-		is.True(!ok)
+		got, err := cache.GetBySubjectText("foo", `"string"`, func() (sr.SubjectSchema, error) {
+			return sr.SubjectSchema{}, wantErr
+		})
+		is.Equal(err, wantErr)
 		is.Equal(want, got)
 	})
 }
