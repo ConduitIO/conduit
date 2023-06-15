@@ -62,7 +62,7 @@ jobs:
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
-        uses: docker/metadata-action@v4.5.0
+        uses: docker/metadata-action@v4.6.0
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           # Makes no sense to have an image with tag v0, hence the check in the last line.
@@ -78,7 +78,7 @@ jobs:
             org.opencontainers.image.vendor=ConduitIO
 
       - name: Build and push Docker image
-        uses: docker/build-push-action@v4.1.0
+        uses: docker/build-push-action@v4.1.1
         with:
           context: .
           push: true
