@@ -27,23 +27,23 @@ require (
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.16.0
 	github.com/hashicorp/go-hclog v1.5.0
 	github.com/hashicorp/go-plugin v1.4.10
-	github.com/jackc/pgx/v5 v5.3.1
+	github.com/jackc/pgx/v5 v5.4.0
 	github.com/jinzhu/copier v0.3.5
 	github.com/jpillora/backoff v1.0.0
 	github.com/lovromazgon/franz-go/pkg/sr v0.0.0-20230605121418-82e53767f0ac
 	github.com/matryer/is v1.4.1
 	github.com/piotrkowalczuk/promgrpc/v4 v4.1.0
-	github.com/prometheus/client_golang v1.15.1
+	github.com/prometheus/client_golang v1.16.0
 	github.com/prometheus/client_model v0.4.0
 	github.com/prometheus/common v0.44.0
 	github.com/rs/zerolog v1.29.1
 	github.com/twmb/go-cache v1.0.0
 	go.uber.org/goleak v1.2.1
 	golang.org/x/exp v0.0.0-20230522175609-2e198f4a06a1
-	golang.org/x/tools v0.9.3
+	golang.org/x/tools v0.10.0
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2
 	google.golang.org/genproto/googleapis/api v0.0.0-20230530153820-e85fd2cbaebc
-	google.golang.org/grpc v1.55.0
+	google.golang.org/grpc v1.56.0
 	google.golang.org/protobuf v1.30.0
 	gopkg.in/tomb.v2 v2.0.0-20161208151619-d5d1b5820637
 )
@@ -145,7 +145,7 @@ require (
 	github.com/pkg/browser v0.0.0-20210911075715-681adbf594b8 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pkg/profile v1.7.0 // indirect
-	github.com/prometheus/procfs v0.9.0 // indirect
+	github.com/prometheus/procfs v0.10.1 // indirect
 	github.com/rs/cors v1.9.0 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/segmentio/kafka-go v0.4.40 // indirect
@@ -169,13 +169,13 @@ require (
 	go.uber.org/atomic v1.11.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.24.0 // indirect
-	golang.org/x/crypto v0.9.0 // indirect
-	golang.org/x/mod v0.10.0 // indirect
-	golang.org/x/net v0.10.0 // indirect
-	golang.org/x/sync v0.2.0 // indirect
-	golang.org/x/sys v0.8.0 // indirect
-	golang.org/x/term v0.8.0 // indirect
-	golang.org/x/text v0.9.0 // indirect
+	golang.org/x/crypto v0.10.0 // indirect
+	golang.org/x/mod v0.11.0 // indirect
+	golang.org/x/net v0.11.0 // indirect
+	golang.org/x/sync v0.3.0 // indirect
+	golang.org/x/sys v0.9.0 // indirect
+	golang.org/x/term v0.9.0 // indirect
+	golang.org/x/text v0.10.0 // indirect
 	golang.org/x/time v0.3.0 // indirect
 	google.golang.org/genproto v0.0.0-20230526203410-71b5a4ffd15e // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20230530153820-e85fd2cbaebc // indirect
