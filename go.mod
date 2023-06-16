@@ -30,12 +30,14 @@ require (
 	github.com/jackc/pgx/v5 v5.4.0
 	github.com/jinzhu/copier v0.3.5
 	github.com/jpillora/backoff v1.0.0
+	github.com/lovromazgon/franz-go/pkg/sr v0.0.0-20230605121418-82e53767f0ac
 	github.com/matryer/is v1.4.1
 	github.com/piotrkowalczuk/promgrpc/v4 v4.1.0
 	github.com/prometheus/client_golang v1.16.0
 	github.com/prometheus/client_model v0.4.0
 	github.com/prometheus/common v0.44.0
 	github.com/rs/zerolog v1.29.1
+	github.com/twmb/go-cache v1.0.0
 	go.uber.org/goleak v1.2.1
 	golang.org/x/exp v0.0.0-20230522175609-2e198f4a06a1
 	golang.org/x/tools v0.10.0
