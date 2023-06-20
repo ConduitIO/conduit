@@ -20,40 +20,79 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/conduitio/conduit/pkg/record"
+
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/hamba/avro/v2"
+	"github.com/lovromazgon/franz-go/pkg/sr"
 )
 
-// ExtractSchema uses reflection to extract an Avro schema from v.
-func ExtractSchema(v any) (avro.Schema, error) {
-	return reflectInternal([]string{"record"}, reflect.ValueOf(v), reflect.TypeOf(v))
+const Type = sr.TypeAvro
+
+type Schema struct {
+	schema avro.Schema
 }
 
-// SortFields is a utility for tests to ensure the schemas can be compared.
-func SortFields(s avro.Schema) {
-	rs, ok := s.(*avro.RecordSchema)
-	if !ok {
-		return
-	}
-	fields := rs.Fields()
-	sort.Slice(fields, func(i, j int) bool {
-		return fields[i].Name() < fields[j].Name()
-	})
-	for i := range fields {
-		SortFields(fields[i].Type())
-	}
+// Marshal returns the Avro encoding of v.
+// Limitations:
+// - Map keys need to be of type string
+// - Array values need to be of type uint8 (byte)
+func (s *Schema) Marshal(v any) ([]byte, error) {
+	return avro.Marshal(s.schema, v)
 }
+
+// Unmarshal parses the Avro encoded data and stores the result in the value
+// pointed to by v. If v is nil or not a pointer, Unmarshal returns an error.
+func (s *Schema) Unmarshal(b []byte, v any) error {
+	return avro.Unmarshal(s.schema, b, v)
+}
+
+// String returns the canonical form of the schema.
+func (s *Schema) String() string {
+	return s.schema.String()
+}
+
+// Sort fields in the schema. It can be used in tests to ensure the schemas can
+// be compared.
+func (s *Schema) Sort() {
+	sortFields(s.schema)
+}
+
+// Parse parses a schema string.
+func Parse(text string) (*Schema, error) {
+	s, err := avro.Parse(text)
+	if err != nil {
+		return nil, cerrors.Errorf("could not parse avro schema: %w", err)
+	}
+	return &Schema{schema: s}, nil
+}
+
+// SchemaForType uses reflection to extract an Avro schema from v. Maps are
+// regarded as structs.
+func SchemaForType(v any) (*Schema, error) {
+	schema, err := reflectInternal([]string{"record"}, reflect.ValueOf(v), reflect.TypeOf(v))
+	if err != nil {
+		return nil, err
+	}
+	return &Schema{schema: schema}, nil
+}
+
+var (
+	structuredDataType = reflect.TypeOf(record.StructuredData{})
+	byteType           = reflect.TypeOf(byte(0))
+)
 
 //nolint:gocyclo // reflection requires a huge switch, it's fine
 func reflectInternal(path []string, v reflect.Value, t reflect.Type) (avro.Schema, error) {
 	if t == nil {
-		return nil, nil // untyped nil
+		return &avro.NullSchema{}, nil // untyped nil
 	}
 	switch t.Kind() {
 	case reflect.Bool:
 		return avro.NewPrimitiveSchema(avro.Boolean, nil), nil
-	case reflect.Int, reflect.Int64, reflect.Uint32:
+	case reflect.Int64, reflect.Uint32:
 		return avro.NewPrimitiveSchema(avro.Long, nil), nil
-	case reflect.Int32, reflect.Int16, reflect.Uint16, reflect.Int8, reflect.Uint8:
+	case reflect.Int, reflect.Int32, reflect.Int16, reflect.Uint16, reflect.Int8, reflect.Uint8:
 		return avro.NewPrimitiveSchema(avro.Int, nil), nil
 	case reflect.Float32:
 		return avro.NewPrimitiveSchema(avro.Float, nil), nil
@@ -87,10 +126,15 @@ func reflectInternal(path []string, v reflect.Value, t reflect.Type) (avro.Schem
 		return s, nil
 	case reflect.Interface:
 		if !v.IsValid() || v.IsNil() {
-			return nil, nil // can't get a schema for this
+			return &avro.NullSchema{}, nil
 		}
 		return reflectInternal(path, v.Elem(), v.Elem().Type())
-	case reflect.Array, reflect.Slice:
+	case reflect.Array:
+		if t.Elem() != byteType {
+			return nil, cerrors.Errorf("arrays with value type %v not supported, avro only supports bytes as values", t.Elem().String())
+		}
+		return avro.NewFixedSchema(strings.Join(path, "."), "", t.Len(), nil)
+	case reflect.Slice:
 		if t.Elem().Kind() == reflect.Uint8 {
 			return avro.NewPrimitiveSchema(avro.Bytes, nil), nil
 		}
@@ -103,40 +147,16 @@ func reflectInternal(path []string, v reflect.Value, t reflect.Type) (avro.Schem
 		if err != nil {
 			return nil, err
 		}
-		if items == nil {
-			// we fall back to a simple nullable string schema, items are either
-			// of an unknown type or nil
-			var err error
-			items, err = avro.NewUnionSchema([]avro.Schema{
-				avro.NewPrimitiveSchema(avro.String, nil),
-				avro.NewPrimitiveSchema(avro.Null, nil),
-			})
-			if err != nil {
-				return nil, err
-			}
-		}
 		return avro.NewArraySchema(items), nil
 	case reflect.Map:
-		if t.Key().Kind() == reflect.String {
-			// special case - we treat the map like a struct
+		if t == structuredDataType {
+			// special case - we treat StructuredData like a struct
 			var fields []*avro.Field
 			valType := t.Elem()
 			for _, keyValue := range v.MapKeys() {
 				fs, err := reflectInternal(append(path, keyValue.String()), v.MapIndex(keyValue), valType)
 				if err != nil {
 					return nil, err
-				}
-				if fs == nil {
-					// we fall back to a simple nullable string schema, item is
-					// either of an unknown type or nil
-					var err error
-					fs, err = avro.NewUnionSchema([]avro.Schema{
-						avro.NewPrimitiveSchema(avro.String, nil),
-						avro.NewPrimitiveSchema(avro.Null, nil),
-					})
-					if err != nil {
-						return nil, err
-					}
 				}
 				field, err := avro.NewField(keyValue.String(), fs)
 				if err != nil {
@@ -150,17 +170,19 @@ func reflectInternal(path []string, v reflect.Value, t reflect.Type) (avro.Schem
 			}
 			return rs, nil
 		}
-
+		if t.Key().Kind() != reflect.String {
+			return nil, cerrors.Errorf("maps with key type %v not supported, avro only supports strings as keys", t.Key().Kind())
+		}
 		var valValue reflect.Value
 		for _, kv := range v.MapKeys() {
 			valValue = v.MapIndex(kv)
 			break
 		}
-		ks, err := reflectInternal(append(path, "key"), valValue, t.Elem())
+		vs, err := reflectInternal(append(path, "value"), valValue, t.Elem())
 		if err != nil {
 			return nil, err
 		}
-		return avro.NewMapSchema(ks), nil
+		return avro.NewMapSchema(vs), nil
 	case reflect.Struct:
 		var fields []*avro.Field
 		for i := 0; i < t.NumField(); i++ {
@@ -187,7 +209,7 @@ func reflectInternal(path []string, v reflect.Value, t reflect.Type) (avro.Schem
 		return rs, nil
 	}
 	// Invalid, Uintptr, UnsafePointer, Uint64, Uint, Complex64, Complex128, Chan, Func
-	panic(fmt.Errorf("unsupported type: %v", t))
+	return nil, fmt.Errorf("unsupported type: %v", t)
 }
 
 func getStructFieldJSONName(sf reflect.StructField) (string, bool) {
@@ -199,4 +221,19 @@ func getStructFieldJSONName(sf reflect.StructField) (string, bool) {
 		return jsonTag, true
 	}
 	return sf.Name, true
+}
+
+// sortFields is a utility for tests to ensure the schemas can be compared.
+func sortFields(s avro.Schema) {
+	rs, ok := s.(*avro.RecordSchema)
+	if !ok {
+		return
+	}
+	fields := rs.Fields()
+	sort.Slice(fields, func(i, j int) bool {
+		return fields[i].Name() < fields[j].Name()
+	})
+	for i := range fields {
+		sortFields(fields[i].Type())
+	}
 }
