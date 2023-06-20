@@ -143,7 +143,7 @@ func reflectInternal(path []string, v reflect.Value, t reflect.Type) (avro.Schem
 		if v.Len() > 0 {
 			elemValue = v.Index(0)
 		}
-		items, err := reflectInternal(path, elemValue, t.Elem())
+		items, err := reflectInternal(append(path, "item"), elemValue, t.Elem())
 		if err != nil {
 			return nil, err
 		}
@@ -191,7 +191,11 @@ func reflectInternal(path []string, v reflect.Value, t reflect.Type) (avro.Schem
 			if !ok {
 				continue // skip this field
 			}
-			fs, err := reflectInternal(append(path, name), v.Field(i), t.Field(i).Type)
+			var vfi reflect.Value
+			if v.IsValid() {
+				vfi = v.Field(i)
+			}
+			fs, err := reflectInternal(append(path, name), vfi, t.Field(i).Type)
 			if err != nil {
 				return nil, err
 			}
