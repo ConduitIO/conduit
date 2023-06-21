@@ -20,9 +20,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/conduitio/conduit/pkg/record"
-
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/record"
 	"github.com/hamba/avro/v2"
 	"github.com/lovromazgon/franz-go/pkg/sr"
 )
