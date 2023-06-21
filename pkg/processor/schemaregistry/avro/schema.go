@@ -54,7 +54,7 @@ func (s *Schema) String() string {
 // Sort fields in the schema. It can be used in tests to ensure the schemas can
 // be compared.
 func (s *Schema) Sort() {
-	sortFields(s.schema)
+	sortSchema(s.schema)
 }
 
 // Parse parses a schema string.
@@ -84,7 +84,7 @@ var (
 //nolint:gocyclo // reflection requires a huge switch, it's fine
 func reflectInternal(path []string, v reflect.Value, t reflect.Type) (avro.Schema, error) {
 	if t == nil {
-		return &avro.NullSchema{}, nil // untyped nil
+		return nil, cerrors.New("can't get schema for untyped nil") // untyped nil
 	}
 	switch t.Kind() {
 	case reflect.Bool:
@@ -100,7 +100,11 @@ func reflectInternal(path []string, v reflect.Value, t reflect.Type) (avro.Schem
 	case reflect.String:
 		return avro.NewPrimitiveSchema(avro.String, nil), nil
 	case reflect.Pointer:
-		s, err := reflectInternal(path, v.Elem(), t.Elem())
+		var vElem reflect.Value
+		if v.IsValid() {
+			vElem = v.Elem()
+		}
+		s, err := reflectInternal(path, vElem, t.Elem())
 		if err != nil {
 			return nil, err
 		}
@@ -174,16 +178,47 @@ func reflectInternal(path []string, v reflect.Value, t reflect.Type) (avro.Schem
 			return rs, nil
 		}
 		if t.Key().Kind() != reflect.String {
-			return nil, cerrors.Errorf("maps with key type %v not supported, avro only supports strings as keys", t.Key().Kind())
+			return nil, cerrors.Errorf("%s: maps with key type %v not supported, avro only supports strings as keys", strings.Join(path, "."), t.Key().Kind())
 		}
+		// try getting value type based on the map type
+		if t.Elem().Kind() != reflect.Interface {
+			vs, err := reflectInternal(append(path, "value"), reflect.Value{}, t.Elem())
+			if err != nil {
+				return nil, err
+			}
+			return avro.NewMapSchema(vs), nil
+		}
+
+		// this is map[string]any, loop through all values and extracting their
+		// types into a union schema, null is included by default
+		types := []avro.Schema{&avro.NullSchema{}}
+		typesSet := make(map[[32]byte]struct{})
 		var valValue reflect.Value
 		for _, kv := range v.MapKeys() {
 			valValue = v.MapIndex(kv)
-			break
+			vs, err := reflectInternal(append(path, "value"), valValue, t.Elem())
+			if err != nil {
+				return nil, err
+			}
+			if _, ok := typesSet[vs.Fingerprint()]; ok {
+				continue
+			}
+			types = combineSchemaTypes(types, func(schema avro.Schema) bool {
+				fp := vs.Fingerprint()
+				if _, ok := typesSet[fp]; ok {
+					return true
+				}
+				typesSet[fp] = struct{}{}
+				return false
+			}, vs)
 		}
-		vs, err := reflectInternal(append(path, "value"), valValue, t.Elem())
+		if len(v.MapKeys()) == 0 {
+			// it's an empty map, add string to types to have a valid schema
+			types = append(types, avro.NewPrimitiveSchema(avro.String, nil))
+		}
+		vs, err := avro.NewUnionSchema(types)
 		if err != nil {
-			return nil, err
+			return nil, cerrors.Errorf("%s: %w", strings.Join(path, "."), err)
 		}
 		return avro.NewMapSchema(vs), nil
 	case reflect.Struct:
@@ -219,6 +254,23 @@ func reflectInternal(path []string, v reflect.Value, t reflect.Type) (avro.Schem
 	return nil, fmt.Errorf("unsupported type: %v", t)
 }
 
+func combineSchemaTypes(schemas []avro.Schema, exists func(avro.Schema) bool, additionalSchemas ...avro.Schema) []avro.Schema {
+	if len(additionalSchemas) == 1 {
+		schema := additionalSchemas[0]
+		if us, ok := schema.(*avro.UnionSchema); ok {
+			return combineSchemaTypes(schemas, exists, us.Types()...)
+		}
+		if !exists(schema) {
+			schemas = append(schemas, schema)
+		}
+		return schemas
+	}
+	for _, schema := range additionalSchemas {
+		schemas = combineSchemaTypes(schemas, exists, schema)
+	}
+	return schemas
+}
+
 func getStructFieldJSONName(sf reflect.StructField) (string, bool) {
 	jsonTag := strings.Split(sf.Tag.Get("json"), ",")[0] // ignore tag options (omitempty)
 	if jsonTag == "-" {
@@ -230,17 +282,44 @@ func getStructFieldJSONName(sf reflect.StructField) (string, bool) {
 	return sf.Name, true
 }
 
-// sortFields is a utility for tests to ensure the schemas can be compared.
-func sortFields(s avro.Schema) {
-	rs, ok := s.(*avro.RecordSchema)
-	if !ok {
-		return
+// sort is a utility for tests to ensure the schemas can be compared.
+func sortSchema(s avro.Schema) {
+	switch s.Type() {
+	case avro.Record:
+		sortRecordSchema(s.(*avro.RecordSchema))
+	case avro.Map:
+		sortMapSchema(s.(*avro.MapSchema))
+	case avro.Union:
+		sortUnionSchema(s.(*avro.UnionSchema))
+	case avro.Array:
+		sortArraySchema(s.(*avro.ArraySchema))
 	}
-	fields := rs.Fields()
+}
+
+func sortRecordSchema(s *avro.RecordSchema) {
+	fields := s.Fields()
 	sort.Slice(fields, func(i, j int) bool {
 		return fields[i].Name() < fields[j].Name()
 	})
 	for i := range fields {
-		sortFields(fields[i].Type())
+		sortSchema(fields[i].Type())
+	}
+}
+
+func sortMapSchema(s *avro.MapSchema) {
+	sortSchema(s.Values())
+}
+
+func sortArraySchema(s *avro.ArraySchema) {
+	sortSchema(s.Items())
+}
+
+func sortUnionSchema(s *avro.UnionSchema) {
+	schemas := s.Types()
+	sort.Slice(schemas, func(i, j int) bool {
+		return schemas[i].String() < schemas[j].String()
+	})
+	for i := range schemas {
+		sortSchema(schemas[i])
 	}
 }

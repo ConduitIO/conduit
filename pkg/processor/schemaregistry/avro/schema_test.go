@@ -46,13 +46,13 @@ func TestSchemaForType_Types(t *testing.T) {
 		MyFloat32 float32
 		MyFloat64 float64
 
-		MyString     string
-		MyBytesSlice []byte
-		MyBytesArray [4]byte
-		MyNil        any
-		MyMap        map[string]float32
-		MySlice      []bool
-		MyStruct     struct{ Foo int }
+		MyString         string
+		MyBytesSlice     []byte
+		MyBytesArray     [4]byte
+		MyMap            map[string]any
+		MyStructuredData record.StructuredData
+		MySlice          []bool
+		MyStruct         struct{ Foo int }
 	}{
 		MyBool:       true,
 		MyBoolPtr:    nil,
@@ -74,10 +74,16 @@ func TestSchemaForType_Types(t *testing.T) {
 		MyString:     "foo",
 		MyBytesSlice: []byte{26, 28},
 		MyBytesArray: [4]byte{30, 32, 34, 36},
-		MyNil:        nil,
-		MyMap: map[string]float32{
-			"one": 38.40,
-			"two": 42.44,
+		MyMap: map[string]any{
+			"one":   38.40,
+			"two":   true,
+			"three": false, // ignored when extracting schema
+			"nil":   nil,
+		},
+		MyStructuredData: record.StructuredData{
+			"foo": 42.44,
+			"bar": true,
+			"nil": nil,
 		},
 		MySlice:  []bool{true, false, true},
 		MyStruct: struct{ Foo int }{Foo: 46},
@@ -110,11 +116,29 @@ func TestSchemaForType_Types(t *testing.T) {
 			must(avro.NewField("MyBytesArray", must(
 				avro.NewFixedSchema("record.MyBytesArray", "", 4, nil),
 			))),
-			must(avro.NewField("MyNil", must(
-				avro.NewUnionSchema(avro.Schemas{avro.NewPrimitiveSchema(avro.String, nil), &avro.NullSchema{}}),
-			))),
 			must(avro.NewField("MyMap",
-				avro.NewMapSchema(avro.NewPrimitiveSchema(avro.Float, nil)),
+				avro.NewMapSchema(must(avro.NewUnionSchema([]avro.Schema{
+					&avro.NullSchema{},
+					avro.NewPrimitiveSchema(avro.Double, nil),
+					avro.NewPrimitiveSchema(avro.Boolean, nil),
+					avro.NewPrimitiveSchema(avro.String, nil),
+				}))),
+			)),
+			must(avro.NewField("MyStructuredData",
+				must(avro.NewRecordSchema(
+					"record.MyStructuredData",
+					"",
+					[]*avro.Field{
+						must(avro.NewField("foo", avro.NewPrimitiveSchema(avro.Double, nil))),
+						must(avro.NewField("bar", avro.NewPrimitiveSchema(avro.Boolean, nil))),
+						must(avro.NewField("nil",
+							must(avro.NewUnionSchema([]avro.Schema{
+								&avro.NullSchema{},
+								avro.NewPrimitiveSchema(avro.String, nil),
+							})),
+						)),
+					},
+				)),
 			)),
 			must(avro.NewField("MySlice",
 				avro.NewArraySchema(avro.NewPrimitiveSchema(avro.Boolean, nil)),
@@ -133,6 +157,9 @@ func TestSchemaForType_Types(t *testing.T) {
 
 	got, err := SchemaForType(have)
 	is.NoErr(err)
+
+	want.Sort()
+	got.Sort()
 	is.Equal(want.String(), got.String())
 
 	bytes, err := got.Marshal(have)
@@ -147,7 +174,7 @@ func TestSchemaForType_MapVsStructuredData(t *testing.T) {
 	is := is.New(t)
 
 	have := struct {
-		MapData        map[string]any
+		MapData        map[string]*int
 		StructuredData record.StructuredData
 	}{}
 
@@ -157,7 +184,7 @@ func TestSchemaForType_MapVsStructuredData(t *testing.T) {
 		[]*avro.Field{
 			must(avro.NewField("MapData",
 				avro.NewMapSchema(must(
-					avro.NewUnionSchema(avro.Schemas{avro.NewPrimitiveSchema(avro.String, nil), &avro.NullSchema{}}),
+					avro.NewUnionSchema(avro.Schemas{avro.NewPrimitiveSchema(avro.Int, nil), &avro.NullSchema{}}),
 				)),
 			)),
 			must(avro.NewField("StructuredData",
