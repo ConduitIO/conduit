@@ -125,7 +125,11 @@ func reflectInternal(path []string, v reflect.Value, t reflect.Type) (avro.Schem
 		return s, nil
 	case reflect.Interface:
 		if !v.IsValid() || v.IsNil() {
-			return &avro.NullSchema{}, nil
+			// unknown type, fall back to nullable string
+			return avro.NewUnionSchema([]avro.Schema{
+				avro.NewPrimitiveSchema(avro.String, nil),
+				&avro.NullSchema{},
+			})
 		}
 		return reflectInternal(path, v.Elem(), v.Elem().Type())
 	case reflect.Array:

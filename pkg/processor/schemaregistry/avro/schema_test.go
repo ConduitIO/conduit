@@ -49,10 +49,39 @@ func TestSchemaForType_Types(t *testing.T) {
 		MyString     string
 		MyBytesSlice []byte
 		MyBytesArray [4]byte
+		MyNil        any
 		MyMap        map[string]float32
 		MySlice      []bool
 		MyStruct     struct{ Foo int }
-	}{}
+	}{
+		MyBool:       true,
+		MyBoolPtr:    nil,
+		MyCustomBool: customBool(true),
+
+		MyInt:   2,
+		MyInt64: 4,
+		MyInt32: 6,
+		MyInt16: 8,
+		MyInt8:  10,
+
+		MyUint32: 12,
+		MyUint16: 14,
+		MyUint8:  16,
+
+		MyFloat32: 18.20,
+		MyFloat64: 22.24,
+
+		MyString:     "foo",
+		MyBytesSlice: []byte{26, 28},
+		MyBytesArray: [4]byte{30, 32, 34, 36},
+		MyNil:        nil,
+		MyMap: map[string]float32{
+			"one": 38.40,
+			"two": 42.44,
+		},
+		MySlice:  []bool{true, false, true},
+		MyStruct: struct{ Foo int }{Foo: 46},
+	}
 
 	want := &Schema{schema: must(avro.NewRecordSchema(
 		"record",
@@ -81,6 +110,9 @@ func TestSchemaForType_Types(t *testing.T) {
 			must(avro.NewField("MyBytesArray", must(
 				avro.NewFixedSchema("record.MyBytesArray", "", 4, nil),
 			))),
+			must(avro.NewField("MyNil", must(
+				avro.NewUnionSchema(avro.Schemas{avro.NewPrimitiveSchema(avro.String, nil), &avro.NullSchema{}}),
+			))),
 			must(avro.NewField("MyMap",
 				avro.NewMapSchema(avro.NewPrimitiveSchema(avro.Float, nil)),
 			)),
@@ -103,8 +135,12 @@ func TestSchemaForType_Types(t *testing.T) {
 	is.NoErr(err)
 	is.Equal(want.String(), got.String())
 
-	_, err = got.Marshal(have)
+	bytes, err := got.Marshal(have)
 	is.NoErr(err)
+	unmarshalled := empty(have) // create empty value of same type as have
+	err = got.Unmarshal(bytes, &unmarshalled)
+	is.NoErr(err)
+	is.Equal(unmarshalled, have)
 }
 
 func TestSchemaForType_MapVsStructuredData(t *testing.T) {
@@ -120,7 +156,9 @@ func TestSchemaForType_MapVsStructuredData(t *testing.T) {
 		"",
 		[]*avro.Field{
 			must(avro.NewField("MapData",
-				avro.NewMapSchema(&avro.NullSchema{}),
+				avro.NewMapSchema(must(
+					avro.NewUnionSchema(avro.Schemas{avro.NewPrimitiveSchema(avro.String, nil), &avro.NullSchema{}}),
+				)),
 			)),
 			must(avro.NewField("StructuredData",
 				must(avro.NewRecordSchema("record.StructuredData", "", nil)),
@@ -132,7 +170,11 @@ func TestSchemaForType_MapVsStructuredData(t *testing.T) {
 	is.NoErr(err)
 	is.Equal(want.String(), got.String())
 
-	_, err = got.Marshal(have)
+	bytes, err := got.Marshal(have)
+	is.NoErr(err)
+	// types don't necessarily match when decoding into a map, only try to
+	// unmarshal to ensure there's no error
+	err = got.Unmarshal(bytes, &have)
 	is.NoErr(err)
 }
 
@@ -195,7 +237,9 @@ func TestSchemaForType_StructuredData(t *testing.T) {
 			must(avro.NewField("MyBytesArray", must(
 				avro.NewFixedSchema("record.MyBytesArray", "", 4, nil),
 			))),
-			must(avro.NewField("MyNil", &avro.NullSchema{})),
+			must(avro.NewField("MyNil", must(
+				avro.NewUnionSchema(avro.Schemas{avro.NewPrimitiveSchema(avro.String, nil), &avro.NullSchema{}}),
+			))),
 			must(avro.NewField("MyMap",
 				avro.NewMapSchema(avro.NewPrimitiveSchema(avro.Float, nil)),
 			)),
@@ -222,7 +266,11 @@ func TestSchemaForType_StructuredData(t *testing.T) {
 
 	is.Equal(want.String(), got.String())
 
-	_, err = got.Marshal(have)
+	bytes, err := got.Marshal(have)
+	is.NoErr(err)
+	// types don't necessarily match when decoding into a map, only try to
+	// unmarshal to ensure there's no error
+	err = got.Unmarshal(bytes, &have)
 	is.NoErr(err)
 }
 
@@ -285,7 +333,11 @@ func TestSchemaForType_NestedStructuredData(t *testing.T) {
 
 	is.Equal(want.String(), got.String())
 
-	_, err = got.Marshal(have)
+	bytes, err := got.Marshal(have)
+	is.NoErr(err)
+	// types don't necessarily match when decoding into a map, only try to
+	// unmarshal to ensure there's no error
+	err = got.Unmarshal(bytes, &have)
 	is.NoErr(err)
 }
 
@@ -305,6 +357,11 @@ func TestSchemaForType_UnsupportedTypes(t *testing.T) {
 			is.True(err != nil)
 		})
 	}
+}
+
+func empty[T any](_ T) T {
+	var t T
+	return t
 }
 
 func must[T any](f T, err error) T {
