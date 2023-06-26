@@ -17,17 +17,20 @@ package avro
 import (
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
+
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/matryer/is"
 )
 
-func TestMapUnionResolver(t *testing.T) {
+func TestUnionResolver(t *testing.T) {
 	is := is.New(t)
 
 	testCases := []struct {
-		name string
-		have any
-		want any
+		name            string
+		have            any
+		want            any
+		skipNestedArray bool
 	}{{
 		name: "string",
 		have: "foo",
@@ -61,13 +64,15 @@ func TestMapUnionResolver(t *testing.T) {
 		have: nil,
 		want: nil,
 	}, {
-		name: "int array",
-		have: []int{1, 2, 3, 4},
-		want: map[string]any{"array": []int{1, 2, 3, 4}},
+		name:            "int array",
+		have:            []int{1, 2, 3, 4},
+		want:            map[string]any{"array": []int{1, 2, 3, 4}},
+		skipNestedArray: true, // nested arrays don't work yet, see TODO in reflect.go
 	}, {
-		name: "nil bool array",
-		have: []bool(nil),
-		want: map[string]any{"array": []bool(nil)},
+		name:            "nil bool array",
+		have:            []bool(nil),
+		want:            map[string]any{"array": []bool(nil)},
+		skipNestedArray: true, // nested arrays don't work yet, see TODO in reflect.go
 	}}
 
 	for _, tc := range testCases {
@@ -75,42 +80,59 @@ func TestMapUnionResolver(t *testing.T) {
 			is := is.New(t)
 
 			newRecord := func() record.StructuredData {
-				return record.StructuredData{
+				sd := record.StructuredData{
 					"foo1": tc.have,
-					"level1": map[string]any{
+					"map1": map[string]any{
 						"foo2": tc.have,
-						"level2": map[string]any{
+						"map2": map[string]any{
 							"foo3": tc.have,
 						},
 					},
+					"arr1": []any{
+						tc.have,
+						[]any{tc.have},
+					},
 				}
+				if tc.skipNestedArray {
+					sd["arr1"] = sd["arr1"].([]any)[:1] // remove nested array
+				}
+				return sd
 			}
 			want := record.StructuredData{
 				"foo1": tc.have, // normal field shouldn't change
-				"level1": map[string]any{
+				"map1": map[string]any{
 					"foo2": tc.want,
-					"level2": map[string]any{
+					"map2": map[string]any{
 						"map": map[string]any{
 							"foo3": tc.want,
 						},
 					},
 				},
+				"arr1": []any{
+					tc.want,
+					map[string]any{
+						"array": []any{tc.want},
+					},
+				},
+			}
+			if tc.skipNestedArray {
+				want["arr1"] = want["arr1"].([]any)[:1] // remove nested array
 			}
 			have := newRecord()
 
 			schema, err := SchemaForType(have)
 			is.NoErr(err)
-			mur := NewMapUnionResolver(schema.schema)
+			mur := NewUnionResolver(schema.schema)
 
 			// before marshal we should change the nested map
 			err = mur.BeforeMarshal(have)
 			is.NoErr(err)
-			is.Equal(have, want)
+			is.Equal(cmp.Diff(want, have), "")
 
 			// after unmarshal we should have the same record as at the start
 			err = mur.AfterUnmarshal(have)
 			is.NoErr(err)
-			is.Equal(have, newRecord())
+			is.Equal(newRecord(), have)
 		})
 	}
 }

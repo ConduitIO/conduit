@@ -94,15 +94,38 @@ func reflectInternal(path []string, v reflect.Value, t reflect.Type) (avro.Schem
 			return avro.NewPrimitiveSchema(avro.Bytes, nil), nil
 		}
 
-		var elemValue reflect.Value
-		if v.Len() > 0 {
-			elemValue = v.Index(0)
+		// try getting value type based on the slice type
+		if t.Elem().Kind() != reflect.Interface {
+			vs, err := reflectInternal(append(path, "item"), reflect.Value{}, t.Elem())
+			if err != nil {
+				return nil, err
+			}
+			return avro.NewArraySchema(vs), nil
 		}
-		items, err := reflectInternal(append(path, "item"), elemValue, t.Elem())
+
+		// this is []any, loop through all values and extracting their types
+		// into a union schema, null is included by default
+		types := []avro.Schema{&avro.NullSchema{}}
+		for i := 0; i < v.Len(); i++ {
+			itemSchema, err := reflectInternal(
+				append(path, fmt.Sprintf("item%d", i)),
+				v.Index(i), t.Elem(),
+			)
+			if err != nil {
+				return nil, err
+			}
+			types = appendSchema(types, itemSchema)
+		}
+		if v.Len() == 0 {
+			// it's an empty slice, add string to types to have a valid schema
+			types = append(types, avro.NewPrimitiveSchema(avro.String, nil))
+		}
+
+		itemsSchema, err := avro.NewUnionSchema(types)
 		if err != nil {
-			return nil, err
+			return nil, cerrors.Errorf("%s: %w", strings.Join(path, "."), err)
 		}
-		return avro.NewArraySchema(items), nil
+		return avro.NewArraySchema(itemsSchema), nil
 	case reflect.Map:
 		if t == structuredDataType {
 			// special case - we treat StructuredData like a struct
@@ -141,9 +164,8 @@ func reflectInternal(path []string, v reflect.Value, t reflect.Type) (avro.Schem
 		// types into a union schema, null is included by default
 		types := []avro.Schema{&avro.NullSchema{}}
 		typesSet := make(map[[32]byte]struct{})
-		var valValue reflect.Value
 		for _, kv := range v.MapKeys() {
-			valValue = v.MapIndex(kv)
+			valValue := v.MapIndex(kv)
 			vs, err := reflectInternal(append(path, "value"), valValue, t.Elem())
 			if err != nil {
 				return nil, err
@@ -151,14 +173,8 @@ func reflectInternal(path []string, v reflect.Value, t reflect.Type) (avro.Schem
 			if _, ok := typesSet[vs.Fingerprint()]; ok {
 				continue
 			}
-			types = combineSchemaTypes(types, func(schema avro.Schema) bool {
-				fp := vs.Fingerprint()
-				if _, ok := typesSet[fp]; ok {
-					return true
-				}
-				typesSet[fp] = struct{}{}
-				return false
-			}, vs)
+			typesSet[vs.Fingerprint()] = struct{}{}
+			types = appendSchema(types, vs)
 		}
 		if len(v.MapKeys()) == 0 {
 			// it's an empty map, add string to types to have a valid schema
@@ -202,19 +218,26 @@ func reflectInternal(path []string, v reflect.Value, t reflect.Type) (avro.Schem
 	return nil, fmt.Errorf("unsupported type: %v", t)
 }
 
-func combineSchemaTypes(schemas []avro.Schema, exists func(avro.Schema) bool, additionalSchemas ...avro.Schema) []avro.Schema {
+func appendSchema(schemas []avro.Schema, additionalSchemas ...avro.Schema) []avro.Schema {
 	if len(additionalSchemas) == 1 {
 		schema := additionalSchemas[0]
 		if us, ok := schema.(*avro.UnionSchema); ok {
-			return combineSchemaTypes(schemas, exists, us.Types()...)
+			return appendSchema(schemas, us.Types()...)
 		}
-		if !exists(schema) {
-			schemas = append(schemas, schema)
+		for _, s := range schemas {
+			if s.Type() == schema.Type() {
+				// TODO we should be smarter about combining the schemas if the
+				//  type matches, it could be that the type is map or array and
+				//  we need to combine the underlying types
+				return schemas // schema exists, don't add it
+			}
 		}
+		// schema does not exist yet
+		schemas = append(schemas, schema)
 		return schemas
 	}
 	for _, schema := range additionalSchemas {
-		schemas = combineSchemaTypes(schemas, exists, schema)
+		schemas = appendSchema(schemas, schema)
 	}
 	return schemas
 }

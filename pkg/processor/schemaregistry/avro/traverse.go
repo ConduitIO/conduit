@@ -83,14 +83,15 @@ func sortFn(p path) {
 }
 
 // traverseValue is a utility to traverse val down to the path and call fn with
-// all values found at the end of the path. If hasMapUnion is set to true, any
-// map with a union type is expected to contain a map[string]any with a single
-// key representing the name of the type it contains (e.g. {"int": 1}).
+// all values found at the end of the path. If hasEncodedUnions is set to true,
+// any map and array with a union type is expected to contain a map[string]any
+// with a single key representing the name of the type it contains
+// (e.g. {"int": 1}).
 // If the value structure does not match the path p, traverseValue returns an
 // error.
 //
 //nolint:gocyclo // need to switch on avro type and have a case for each type
-func traverseValue(val any, p path, hasMapUnion bool, fn func(v any)) error {
+func traverseValue(val any, p path, hasEncodedUnions bool, fn func(v any)) error {
 	var traverse func(any, int) error
 	traverse = func(val any, index int) error {
 		if index == len(p)-1 {
@@ -138,8 +139,9 @@ func traverseValue(val any, p path, hasMapUnion bool, fn func(v any)) error {
 			// ignore ref and go deeper
 			return traverse(val, index+1)
 		case avro.Union:
-			if hasMapUnion && index > 0 && p[index-1].schema.Type() == avro.Map {
-				// it's a map union with values encoded as maps, traverse them
+			if hasEncodedUnions && index > 0 &&
+				(p[index-1].schema.Type() == avro.Map || p[index-1].schema.Type() == avro.Array) {
+				// it's a union value encoded as a map, traverse it
 				val, ok := val.(map[string]any)
 				if !ok {
 					return unexpectedTypeError(avro.Record, map[string]any{}, val)

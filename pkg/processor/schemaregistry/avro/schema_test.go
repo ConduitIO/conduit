@@ -133,6 +133,32 @@ func TestSchema_MarshalUnmarshal(t *testing.T) {
 			},
 		)),
 	}, {
+		name:       "[]int",
+		haveValue:  []int{1, 2, 3},
+		wantValue:  []any{1, 2, 3},
+		wantSchema: avro.NewArraySchema(avro.NewPrimitiveSchema(avro.Int, nil)),
+	}, {
+		name:      "[]any (with data)",
+		haveValue: []any{1, "foo"},
+		wantValue: []any{1, "foo"},
+		wantSchema: avro.NewArraySchema(must(avro.NewUnionSchema(
+			[]avro.Schema{
+				avro.NewPrimitiveSchema(avro.String, nil),
+				avro.NewPrimitiveSchema(avro.Int, nil),
+				avro.NewPrimitiveSchema(avro.Null, nil),
+			},
+		))),
+	}, {
+		name:      "[]any (no data)",
+		haveValue: []any{},
+		wantValue: []any{},
+		wantSchema: avro.NewArraySchema(must(avro.NewUnionSchema( // empty slice values default to nullable strings
+			[]avro.Schema{
+				avro.NewPrimitiveSchema(avro.String, nil),
+				avro.NewPrimitiveSchema(avro.Null, nil),
+			},
+		))),
+	}, {
 		name: "map[string]int",
 		haveValue: map[string]int{
 			"foo": 1,

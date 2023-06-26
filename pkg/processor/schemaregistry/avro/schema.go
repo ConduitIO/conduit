@@ -27,8 +27,8 @@ const Type = sr.TypeAvro
 // Schema represents an Avro schema. It exposes methods for marshaling and
 // unmarshaling data.
 type Schema struct {
-	schema avro.Schema
-	mur    MapUnionResolver
+	schema        avro.Schema
+	unionResolver UnionResolver
 }
 
 // Marshal returns the Avro encoding of v. Note that this function may mutate v.
@@ -36,7 +36,7 @@ type Schema struct {
 // - Map keys need to be of type string
 // - Array values need to be of type uint8 (byte)
 func (s *Schema) Marshal(v any) ([]byte, error) {
-	err := s.mur.BeforeMarshal(v)
+	err := s.unionResolver.BeforeMarshal(v)
 	if err != nil {
 		return nil, err
 	}
@@ -54,7 +54,7 @@ func (s *Schema) Unmarshal(b []byte, v any) error {
 	if err != nil {
 		return err
 	}
-	err = s.mur.AfterUnmarshal(v)
+	err = s.unionResolver.AfterUnmarshal(v)
 	if err != nil {
 		return err
 	}
@@ -79,8 +79,8 @@ func Parse(text string) (*Schema, error) {
 		return nil, cerrors.Errorf("could not parse avro schema: %w", err)
 	}
 	return &Schema{
-		schema: schema,
-		mur:    NewMapUnionResolver(schema),
+		schema:        schema,
+		unionResolver: NewUnionResolver(schema),
 	}, nil
 }
 
@@ -93,7 +93,7 @@ func SchemaForType(v any) (*Schema, error) {
 	}
 	traverseSchema(schema, sortFn)
 	return &Schema{
-		schema: schema,
-		mur:    NewMapUnionResolver(schema),
+		schema:        schema,
+		unionResolver: NewUnionResolver(schema),
 	}, nil
 }
