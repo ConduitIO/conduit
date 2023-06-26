@@ -17,8 +17,6 @@ package avro
 import (
 	"testing"
 
-	"github.com/google/go-cmp/cmp"
-
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/matryer/is"
 )
@@ -127,7 +125,7 @@ func TestUnionResolver(t *testing.T) {
 			// before marshal we should change the nested map
 			err = mur.BeforeMarshal(have)
 			is.NoErr(err)
-			is.Equal(cmp.Diff(want, have), "")
+			is.Equal(want, have)
 
 			// after unmarshal we should have the same record as at the start
 			err = mur.AfterUnmarshal(have)
