@@ -213,9 +213,9 @@ func newFakeServer(logf func(format string, args ...any)) *fakeServer {
 	fs.mux.Handle("/schemas/ids/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tokens := strings.Split(r.URL.EscapedPath(), "/")
 		switch {
-		case len(tokens) == 4:
+		case len(tokens) == 4 && r.Method == http.MethodGet:
 			fs.schemaByID(w, r)
-		case len(tokens) == 5 && tokens[4] == "versions":
+		case len(tokens) == 5 && tokens[4] == "versions" && r.Method == http.MethodGet:
 			fs.subjectVersionsByID(w, r)
 		default:
 			http.NotFound(w, r)
@@ -224,10 +224,19 @@ func newFakeServer(logf func(format string, args ...any)) *fakeServer {
 	fs.mux.Handle("/subjects/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tokens := strings.Split(r.URL.EscapedPath(), "/")
 		switch {
-		case len(tokens) == 4 && tokens[3] == "versions":
+		case len(tokens) == 4 && tokens[3] == "versions" && r.Method == http.MethodPost:
 			fs.createSchema(w, r)
-		case len(tokens) == 5 && tokens[3] == "versions":
+		case len(tokens) == 5 && tokens[3] == "versions" && r.Method == http.MethodGet:
 			fs.schemaBySubjectVersion(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	fs.mux.Handle("/config/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		tokens := strings.Split(r.URL.EscapedPath(), "/")
+		switch {
+		case len(tokens) == 3 && r.Method == http.MethodPut:
+			fs.updateConfig(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -242,11 +251,6 @@ func (fs *fakeServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (fs *fakeServer) createSchema(w http.ResponseWriter, r *http.Request) {
 	// POST /subjects/{subject}/versions => returns ID
-	if r.Method != http.MethodPost {
-		http.NotFound(w, r)
-		return
-	}
-
 	defer r.Body.Close()
 	var s sr.Schema
 	err := json.NewDecoder(r.Body).Decode(&s)
@@ -262,11 +266,6 @@ func (fs *fakeServer) createSchema(w http.ResponseWriter, r *http.Request) {
 
 func (fs *fakeServer) schemaBySubjectVersion(w http.ResponseWriter, r *http.Request) {
 	// GET /subjects/{subject}/versions/{version}
-	if r.Method != http.MethodGet {
-		http.NotFound(w, r)
-		return
-	}
-
 	tokens := strings.Split(r.URL.EscapedPath(), "/")
 	version, err := strconv.Atoi(tokens[4])
 	if err != nil {
@@ -284,11 +283,6 @@ func (fs *fakeServer) schemaBySubjectVersion(w http.ResponseWriter, r *http.Requ
 
 func (fs *fakeServer) schemaByID(w http.ResponseWriter, r *http.Request) {
 	// GET /schemas/ids/{id}
-	if r.Method != http.MethodGet {
-		http.NotFound(w, r)
-		return
-	}
-
 	tokens := strings.Split(r.URL.EscapedPath(), "/")
 	id, err := strconv.Atoi(tokens[3])
 	if err != nil {
@@ -306,11 +300,6 @@ func (fs *fakeServer) schemaByID(w http.ResponseWriter, r *http.Request) {
 
 func (fs *fakeServer) subjectVersionsByID(w http.ResponseWriter, r *http.Request) {
 	// GET /schemas/ids/{id}/versions
-	if r.Method != http.MethodGet {
-		http.NotFound(w, r)
-		return
-	}
-
 	tokens := strings.Split(r.URL.EscapedPath(), "/")
 	id, err := strconv.Atoi(tokens[3])
 	if err != nil {
@@ -320,6 +309,34 @@ func (fs *fakeServer) subjectVersionsByID(w http.ResponseWriter, r *http.Request
 
 	sss := fs.fr.SubjectVersionsByID(id)
 	fs.json(w, sss)
+}
+
+func (fs *fakeServer) updateConfig(w http.ResponseWriter, r *http.Request) {
+	// POST /subjects/{subject}/versions => returns ID
+	defer r.Body.Close()
+	var c struct {
+		Compatibility string `json:"compatibility"`
+	}
+	err := json.NewDecoder(r.Body).Decode(&c)
+	if err != nil {
+		fs.error(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	valid := map[string]bool{
+		"BACKWARD":            true,
+		"BACKWARD_TRANSITIVE": true,
+		"FORWARD":             true,
+		"FORWARD_TRANSITIVE":  true,
+		"FULL":                true,
+		"FULL_TRANSITIVE":     true,
+		"NONE":                true,
+	}[c.Compatibility]
+	if !valid {
+		fs.errorWithCode(w, 42203, http.StatusUnprocessableEntity, cerrors.New("invalid compatibility level"))
+		return
+	}
+	fs.json(w, c)
 }
 
 func (fs *fakeServer) json(w http.ResponseWriter, v any) {

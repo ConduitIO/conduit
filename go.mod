@@ -32,7 +32,7 @@ require (
 	github.com/jackc/pgx/v5 v5.4.2
 	github.com/jinzhu/copier v0.3.5
 	github.com/jpillora/backoff v1.0.0
-	github.com/lovromazgon/franz-go/pkg/sr v0.0.0-20230605121418-82e53767f0ac
+	github.com/lovromazgon/franz-go/pkg/sr v0.0.0-20230630140346-bb9ce3f90f4a
 	github.com/matryer/is v1.4.1
 	github.com/modern-go/reflect2 v1.0.2
 	github.com/piotrkowalczuk/promgrpc/v4 v4.1.0
