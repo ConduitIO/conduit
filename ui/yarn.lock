@@ -1514,15 +1514,7 @@
     ember-cli-version-checker "^5.1.2"
     semver "^7.3.5"
 
-"@embroider/addon-shim@^1.5.0":
-  version "1.8.0"
-  resolved "https://registry.yarnpkg.com/@embroider/addon-shim/-/addon-shim-1.8.0.tgz#a545d85991f033a7bac147fe720ff2a7a870731f"
-  integrity sha512-iMD9Yzx24WY0/K42if2piWzkw+BFCpqxwbPaNWFqlTbNGzzd1UnNiFhtdjXT5vTyYSQRgbQwuFcr/04Rh8qF8A==
-  dependencies:
-    "@embroider/shared-internals" "^1.8.0"
-    semver "^7.3.5"
-
-"@embroider/addon-shim@^1.8.4":
+"@embroider/addon-shim@^1.5.0", "@embroider/addon-shim@^1.8.3", "@embroider/addon-shim@^1.8.4":
   version "1.8.5"
   resolved "https://registry.yarnpkg.com/@embroider/addon-shim/-/addon-shim-1.8.5.tgz#c0aae417f9583058f40550f206fc53444e325f11"
   integrity sha512-pDgpdTsC9i/+5hHziygK5VIZc64OG8bupiqL0OxJp+bnINURalHMbu5B3Gikq/a0QIvMPzDFWzKxIZCBpeiHkg==
@@ -1559,7 +1551,7 @@
     semver "^7.3.5"
     typescript-memoize "^1.0.1"
 
-"@embroider/shared-internals@^1.0.0", "@embroider/shared-internals@^1.8.0":
+"@embroider/shared-internals@^1.0.0":
   version "1.8.0"
   resolved "https://registry.yarnpkg.com/@embroider/shared-internals/-/shared-internals-1.8.0.tgz#4c9b563e5f155410d982a30667b027a227be7312"
   integrity sha512-TsjApG80SDVZ+dxkshO4FtzwzZYupmyl1w3Bnehfbk1429dsv30K+/DhcxDFIlKXPtsvCF9mdQY3mYUs+hoLOg==
@@ -5594,12 +5586,13 @@ ember-concurrency@^2.3.7:
     ember-compatibility-helpers "^1.2.0"
     ember-destroyable-polyfill "^2.0.2"
 
-ember-css-transitions@^4.2.0:
-  version "4.2.0"
-  resolved "https://registry.yarnpkg.com/ember-css-transitions/-/ember-css-transitions-4.2.0.tgz#f1e21bef3438fd74997363a94404b077b5b8a3a5"
-  integrity sha512-qvpTyP3BjfFhxWuIhIy/rBOZ2Wb/UOzCf5CWZ6turkR7qq1ouR5KyA2FyaetQdCssb2JqnovLvHmWI6K0AbF9g==
+ember-css-transitions@^4.3.2:
+  version "4.3.2"
+  resolved "https://registry.yarnpkg.com/ember-css-transitions/-/ember-css-transitions-4.3.2.tgz#191addddd7eb691ff5a4f2a08df97210bf835654"
+  integrity sha512-2VsGZEM00rhko3VYaHaFs82kvCkBMDF7rv4Z4Wplef/O0PSe0ezPFbD9cveR+9R+7PXw5BI25sbNqyrinkhw4A==
   dependencies:
-    "@embroider/addon-shim" "^1.5.0"
+    "@ember/test-waiters" "^3.0.0"
+    "@embroider/addon-shim" "^1.8.3"
     ember-modifier "^2.1.2 || ^3.1.0 || ^4.0.0"
 
 ember-data@~4.9.1:
