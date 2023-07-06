@@ -325,11 +325,14 @@ func newLogger() log.CtxLogger {
 func generatorSource(ctrl *gomock.Controller, logger log.CtxLogger, nodeID string, recordCount int, delay time.Duration) stream.Source {
 	position := 0
 
-	stop := make(chan struct{})
+	teardown := make(chan struct{})
 	source := streammock.NewSource(ctrl)
 	source.EXPECT().ID().Return(nodeID).AnyTimes()
 	source.EXPECT().Open(gomock.Any()).Return(nil).Times(1)
-	source.EXPECT().Teardown(gomock.Any()).Return(nil).Times(1)
+	source.EXPECT().Teardown(gomock.Any()).DoAndReturn(func(context.Context) error {
+		close(teardown)
+		return nil
+	}).Times(1)
 	source.EXPECT().Ack(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, p record.Position) error {
 		logger.Debug(ctx).Str("node_id", nodeID).Msg("received ack")
 		return nil
@@ -338,8 +341,8 @@ func generatorSource(ctrl *gomock.Controller, logger log.CtxLogger, nodeID strin
 		time.Sleep(delay)
 
 		if position == recordCount {
-			// block until Stop is called
-			<-stop
+			// block until Teardown is called
+			<-teardown
 			return record.Record{}, plugin.ErrStreamNotOpen
 		}
 
@@ -349,7 +352,6 @@ func generatorSource(ctrl *gomock.Controller, logger log.CtxLogger, nodeID strin
 		}, nil
 	}).MinTimes(recordCount + 1)
 	source.EXPECT().Stop(gomock.Any()).DoAndReturn(func(context.Context) (record.Position, error) {
-		close(stop)
 		return record.Position(strconv.Itoa(position)), nil
 	})
 	source.EXPECT().Errors().Return(make(chan error))
