@@ -51,7 +51,7 @@ func TestClient_NotFound(t *testing.T) {
 		// check that error is expected
 		var respErr *sr.ResponseError
 		is.True(cerrors.As(err, &respErr))
-		is.Equal(errorCodeSchemaNotFound, respErr.ErrorCode)
+		is.Equal(40403, respErr.ErrorCode)
 
 		// check requests made by the client
 		is.Equal(len(rtr.Records()), 1)
@@ -74,7 +74,7 @@ func TestClient_NotFound(t *testing.T) {
 		// check that error is expected
 		var respErr *sr.ResponseError
 		is.True(cerrors.As(err, &respErr))
-		is.Equal(errorCodeSubjectNotFound, respErr.ErrorCode)
+		is.Equal(40401, respErr.ErrorCode)
 
 		// check requests made by the client
 		is.Equal(len(rtr.Records()), 1)
