@@ -42,6 +42,7 @@ func TestClient_NotFound(t *testing.T) {
 
 	t.Run("SchemaByID", func(t *testing.T) {
 		is := is.New(t)
+		defer rtr.Clear() // clear requests after test
 
 		schema, err := c.SchemaByID(ctx, 12345)
 		is.True(err != nil)
@@ -50,7 +51,7 @@ func TestClient_NotFound(t *testing.T) {
 		// check that error is expected
 		var respErr *sr.ResponseError
 		is.True(cerrors.As(err, &respErr))
-		is.Equal(40403, respErr.ErrorCode)
+		is.Equal(errorCodeSchemaNotFound, respErr.ErrorCode)
 
 		// check requests made by the client
 		is.Equal(len(rtr.Records()), 1)
@@ -62,10 +63,9 @@ func TestClient_NotFound(t *testing.T) {
 		)
 	})
 
-	rtr.Clear() // clear requests between subtests
-
 	t.Run("SchemaBySubjectVersion", func(t *testing.T) {
 		is := is.New(t)
+		defer rtr.Clear() // clear requests after test
 
 		schema, err := c.SchemaBySubjectVersion(ctx, "not-found", 1)
 		is.True(err != nil)
@@ -74,7 +74,7 @@ func TestClient_NotFound(t *testing.T) {
 		// check that error is expected
 		var respErr *sr.ResponseError
 		is.True(cerrors.As(err, &respErr))
-		is.Equal(40401, respErr.ErrorCode)
+		is.Equal(errorCodeSubjectNotFound, respErr.ErrorCode)
 
 		// check requests made by the client
 		is.Equal(len(rtr.Records()), 1)
@@ -115,6 +115,7 @@ func TestClient_CacheMiss(t *testing.T) {
 
 	t.Run("SchemaByID", func(t *testing.T) {
 		is := is.New(t)
+		defer rtr.Clear() // clear requests after test
 
 		got, err := c.SchemaByID(ctx, want.ID)
 		is.NoErr(err)
@@ -137,14 +138,13 @@ func TestClient_CacheMiss(t *testing.T) {
 		is.Equal(len(rtr.Records()), 0)
 	})
 
-	rtr.Clear() // clear requests between subtests
-
 	// SchemaBySubjectVersion should also report a cache miss, because
 	// SchemaByID only returns a sr.Schema so the cache does not contain the
 	// full info
 
 	t.Run("SchemaBySubjectVersion", func(t *testing.T) {
 		is := is.New(t)
+		defer rtr.Clear() // clear requests after test
 
 		got, err := c.SchemaBySubjectVersion(ctx, want.Subject, want.Version)
 		is.NoErr(err)
@@ -210,10 +210,11 @@ func TestClient_CacheHit(t *testing.T) {
 		assertError(nil),
 	)
 
-	rtr.Clear() // clear requests between subtests
+	rtr.Clear() // clear requests before subtests
 
 	t.Run("SchemaByID", func(t *testing.T) {
 		is := is.New(t)
+		defer rtr.Clear() // clear requests after test
 
 		got, err := c.SchemaByID(ctx, want.ID)
 		is.NoErr(err)
@@ -223,10 +224,9 @@ func TestClient_CacheHit(t *testing.T) {
 		is.Equal(len(rtr.Records()), 0)
 	})
 
-	rtr.Clear() // clear requests between subtests
-
 	t.Run("SchemaBySubjectVersion", func(t *testing.T) {
 		is := is.New(t)
+		defer rtr.Clear() // clear requests after test
 
 		got, err := c.SchemaBySubjectVersion(ctx, want.Subject, want.Version)
 		is.NoErr(err)
