@@ -24,7 +24,14 @@ import (
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/dop251/goja"
+	"github.com/dop251/goja_nodejs/require"
 	"github.com/rs/zerolog"
+
+	// register nodejs modules
+	_ "github.com/dop251/goja_nodejs/buffer"
+	_ "github.com/dop251/goja_nodejs/console"
+	_ "github.com/dop251/goja_nodejs/url"
+	_ "github.com/dop251/goja_nodejs/util"
 )
 
 const (
@@ -90,6 +97,8 @@ func New(src string, logger zerolog.Logger) (*Processor, error) {
 
 func (p *Processor) newJSRuntime(logger zerolog.Logger) (*goja.Runtime, error) {
 	rt := goja.New()
+	require.NewRegistry().Enable(rt)
+
 	runtimeHelpers := map[string]interface{}{
 		"logger":         &logger,
 		"Record":         p.jsRecord(rt),
