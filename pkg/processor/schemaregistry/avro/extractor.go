@@ -120,7 +120,7 @@ func (e extractor) extractInternal(path []string, v reflect.Value, t reflect.Typ
 			if err != nil {
 				return nil, err
 			}
-			types = e.appendSchema(types, itemSchema)
+			types = e.appendSchemas(types, itemSchema)
 		}
 		if v.Len() == 0 {
 			// it's an empty slice, add string to types to have a valid schema
@@ -180,7 +180,7 @@ func (e extractor) extractInternal(path []string, v reflect.Value, t reflect.Typ
 				continue
 			}
 			typesSet[vs.Fingerprint()] = struct{}{}
-			types = e.appendSchema(types, vs)
+			types = e.appendSchemas(types, vs)
 		}
 		if len(v.MapKeys()) == 0 {
 			// it's an empty map, add string to types to have a valid schema
@@ -224,11 +224,11 @@ func (e extractor) extractInternal(path []string, v reflect.Value, t reflect.Typ
 	return nil, fmt.Errorf("unsupported type: %v", t)
 }
 
-func (e extractor) appendSchema(schemas []avro.Schema, additionalSchemas ...avro.Schema) []avro.Schema {
+func (e extractor) appendSchemas(schemas []avro.Schema, additionalSchemas ...avro.Schema) []avro.Schema {
 	if len(additionalSchemas) == 1 {
 		schema := additionalSchemas[0]
 		if us, ok := schema.(*avro.UnionSchema); ok {
-			return e.appendSchema(schemas, us.Types()...)
+			return e.appendSchemas(schemas, us.Types()...)
 		}
 		for _, s := range schemas {
 			if s.Type() == schema.Type() {
@@ -243,7 +243,7 @@ func (e extractor) appendSchema(schemas []avro.Schema, additionalSchemas ...avro
 		return schemas
 	}
 	for _, schema := range additionalSchemas {
-		schemas = e.appendSchema(schemas, schema)
+		schemas = e.appendSchemas(schemas, schema)
 	}
 	return schemas
 }
