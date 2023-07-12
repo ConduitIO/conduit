@@ -57,7 +57,7 @@ func (e extractor) Extract(v any) (avro.Schema, error) {
 
 func (e extractor) extract(path []string, v reflect.Value, t reflect.Type) (avro.Schema, error) {
 	if t == nil {
-		return nil, cerrors.New("can't get schema for untyped nil") // untyped nil
+		return nil, cerrors.Errorf("%s: can't get schema for untyped nil", strings.Join(path, ".")) // untyped nil
 	}
 	switch t.Kind() {
 	case reflect.Bool:
@@ -78,7 +78,7 @@ func (e extractor) extract(path []string, v reflect.Value, t reflect.Type) (avro
 		return e.extractInterface(path, v, t)
 	case reflect.Array:
 		if t.Elem() != byteType {
-			return nil, cerrors.Errorf("arrays with value type %v not supported, avro only supports bytes as values", t.Elem().String())
+			return nil, cerrors.Errorf("%s: arrays with value type %v not supported, avro only supports bytes as values", strings.Join(path, "."), t.Elem().String())
 		}
 		return avro.NewFixedSchema(strings.Join(path, "."), "", t.Len(), nil)
 	case reflect.Slice:
@@ -89,7 +89,7 @@ func (e extractor) extract(path []string, v reflect.Value, t reflect.Type) (avro
 		return e.extractStruct(path, v, t)
 	}
 	// Invalid, Uintptr, UnsafePointer, Uint64, Uint, Complex64, Complex128, Chan, Func
-	return nil, fmt.Errorf("unsupported type: %v", t)
+	return nil, cerrors.Errorf("%s: unsupported type: %v", strings.Join(path, "."), t)
 }
 
 // extractPointer extracts the schema behind the pointer and makes it nullable

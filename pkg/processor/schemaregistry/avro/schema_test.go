@@ -18,8 +18,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/google/go-cmp/cmp"
-
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/hamba/avro/v2"
 	"github.com/matryer/is"
@@ -278,7 +277,7 @@ func TestSchema_MarshalUnmarshal(t *testing.T) {
 			}
 			wantSchema.Sort()
 			gotSchema.Sort()
-			is.Equal(cmp.Diff(wantSchema.String(), gotSchema.String()), "")
+			is.Equal(wantSchema.String(), gotSchema.String())
 
 			// now try to marshal the value with the schema
 			bytes, err := gotSchema.Marshal(haveValue)
@@ -361,22 +360,26 @@ func TestSchemaForType_NestedStructuredData(t *testing.T) {
 }
 
 func TestSchemaForType_UnsupportedTypes(t *testing.T) {
-	testCases := []any{
+	testCases := []struct {
+		val     any
+		wantErr error
+	}{
 		// avro only supports fixed byte arrays
-		[4]int{},
-		[4]bool{},
+		{val: [4]int{}, wantErr: cerrors.New("record: arrays with value type int not supported, avro only supports bytes as values")},
+		{val: [4]bool{}, wantErr: cerrors.New("record: arrays with value type bool not supported, avro only supports bytes as values")},
 		// avro only supports maps with string keys
-		map[int]string{},
-		map[bool]string{},
+		{val: map[int]string{}, wantErr: cerrors.New("record: maps with key type int not supported, avro only supports strings as keys")},
+		{val: map[bool]string{}, wantErr: cerrors.New("record: maps with key type bool not supported, avro only supports strings as keys")},
 		// avro only supports signed integers
-		uint64(1),
-		uint(1),
+		{val: uint64(1), wantErr: cerrors.New("record: unsupported type: uint64")},
+		{val: uint(1), wantErr: cerrors.New("record: unsupported type: uint")},
 	}
 	for _, tc := range testCases {
-		t.Run(fmt.Sprintf("%T", tc), func(t *testing.T) {
+		t.Run(fmt.Sprintf("%T", tc.val), func(t *testing.T) {
 			is := is.New(t)
-			_, err := SchemaForType(tc)
+			_, err := SchemaForType(tc.val)
 			is.True(err != nil)
+			is.Equal(err.Error(), tc.wantErr.Error())
 		})
 	}
 }
