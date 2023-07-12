@@ -87,7 +87,7 @@ func Parse(text string) (*Schema, error) {
 // SchemaForType uses reflection to extract an Avro schema from v. Maps are
 // regarded as structs.
 func SchemaForType(v any) (*Schema, error) {
-	schema, err := reflectInternal([]string{"record"}, reflect.ValueOf(v), reflect.TypeOf(v))
+	schema, err := extractor{}.Extract(reflect.ValueOf(v), reflect.TypeOf(v))
 	if err != nil {
 		return nil, err
 	}

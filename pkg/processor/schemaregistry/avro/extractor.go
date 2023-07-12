@@ -29,8 +29,14 @@ var (
 	byteType           = reflect.TypeOf(byte(0))
 )
 
-//nolint:gocyclo // reflection requires a huge switch, it's fine
-func reflectInternal(path []string, v reflect.Value, t reflect.Type) (avro.Schema, error) {
+// extractor exposes a way to extract an Avro schema from a Go value.
+type extractor struct{}
+
+func (e extractor) Extract(v reflect.Value, t reflect.Type) (avro.Schema, error) {
+	return e.extractInternal([]string{"record"}, v, t)
+}
+
+func (e extractor) extractInternal(path []string, v reflect.Value, t reflect.Type) (avro.Schema, error) {
 	if t == nil {
 		return nil, cerrors.New("can't get schema for untyped nil") // untyped nil
 	}
@@ -52,7 +58,7 @@ func reflectInternal(path []string, v reflect.Value, t reflect.Type) (avro.Schem
 		if v.IsValid() {
 			vElem = v.Elem()
 		}
-		s, err := reflectInternal(path, vElem, t.Elem())
+		s, err := e.extractInternal(path, vElem, t.Elem())
 		if err != nil {
 			return nil, err
 		}
@@ -83,7 +89,7 @@ func reflectInternal(path []string, v reflect.Value, t reflect.Type) (avro.Schem
 				&avro.NullSchema{},
 			})
 		}
-		return reflectInternal(path, v.Elem(), v.Elem().Type())
+		return e.extractInternal(path, v.Elem(), v.Elem().Type())
 	case reflect.Array:
 		if t.Elem() != byteType {
 			return nil, cerrors.Errorf("arrays with value type %v not supported, avro only supports bytes as values", t.Elem().String())
@@ -96,7 +102,7 @@ func reflectInternal(path []string, v reflect.Value, t reflect.Type) (avro.Schem
 
 		// try getting value type based on the slice type
 		if t.Elem().Kind() != reflect.Interface {
-			vs, err := reflectInternal(append(path, "item"), reflect.Value{}, t.Elem())
+			vs, err := e.extractInternal(append(path, "item"), reflect.Value{}, t.Elem())
 			if err != nil {
 				return nil, err
 			}
@@ -107,14 +113,14 @@ func reflectInternal(path []string, v reflect.Value, t reflect.Type) (avro.Schem
 		// into a union schema, null is included by default
 		types := []avro.Schema{&avro.NullSchema{}}
 		for i := 0; i < v.Len(); i++ {
-			itemSchema, err := reflectInternal(
+			itemSchema, err := e.extractInternal(
 				append(path, fmt.Sprintf("item%d", i)),
 				v.Index(i), t.Elem(),
 			)
 			if err != nil {
 				return nil, err
 			}
-			types = appendSchema(types, itemSchema)
+			types = e.appendSchema(types, itemSchema)
 		}
 		if v.Len() == 0 {
 			// it's an empty slice, add string to types to have a valid schema
@@ -132,7 +138,7 @@ func reflectInternal(path []string, v reflect.Value, t reflect.Type) (avro.Schem
 			var fields []*avro.Field
 			valType := t.Elem()
 			for _, keyValue := range v.MapKeys() {
-				fs, err := reflectInternal(append(path, keyValue.String()), v.MapIndex(keyValue), valType)
+				fs, err := e.extractInternal(append(path, keyValue.String()), v.MapIndex(keyValue), valType)
 				if err != nil {
 					return nil, err
 				}
@@ -153,7 +159,7 @@ func reflectInternal(path []string, v reflect.Value, t reflect.Type) (avro.Schem
 		}
 		// try getting value type based on the map type
 		if t.Elem().Kind() != reflect.Interface {
-			vs, err := reflectInternal(append(path, "value"), reflect.Value{}, t.Elem())
+			vs, err := e.extractInternal(append(path, "value"), reflect.Value{}, t.Elem())
 			if err != nil {
 				return nil, err
 			}
@@ -166,7 +172,7 @@ func reflectInternal(path []string, v reflect.Value, t reflect.Type) (avro.Schem
 		typesSet := make(map[[32]byte]struct{})
 		for _, kv := range v.MapKeys() {
 			valValue := v.MapIndex(kv)
-			vs, err := reflectInternal(append(path, "value"), valValue, t.Elem())
+			vs, err := e.extractInternal(append(path, "value"), valValue, t.Elem())
 			if err != nil {
 				return nil, err
 			}
@@ -174,7 +180,7 @@ func reflectInternal(path []string, v reflect.Value, t reflect.Type) (avro.Schem
 				continue
 			}
 			typesSet[vs.Fingerprint()] = struct{}{}
-			types = appendSchema(types, vs)
+			types = e.appendSchema(types, vs)
 		}
 		if len(v.MapKeys()) == 0 {
 			// it's an empty map, add string to types to have a valid schema
@@ -189,7 +195,7 @@ func reflectInternal(path []string, v reflect.Value, t reflect.Type) (avro.Schem
 		var fields []*avro.Field
 		for i := 0; i < t.NumField(); i++ {
 			sf := t.Field(i)
-			name, ok := getStructFieldJSONName(sf)
+			name, ok := e.getStructFieldJSONName(sf)
 			if !ok {
 				continue // skip this field
 			}
@@ -197,7 +203,7 @@ func reflectInternal(path []string, v reflect.Value, t reflect.Type) (avro.Schem
 			if v.IsValid() {
 				vfi = v.Field(i)
 			}
-			fs, err := reflectInternal(append(path, name), vfi, t.Field(i).Type)
+			fs, err := e.extractInternal(append(path, name), vfi, t.Field(i).Type)
 			if err != nil {
 				return nil, err
 			}
@@ -218,11 +224,11 @@ func reflectInternal(path []string, v reflect.Value, t reflect.Type) (avro.Schem
 	return nil, fmt.Errorf("unsupported type: %v", t)
 }
 
-func appendSchema(schemas []avro.Schema, additionalSchemas ...avro.Schema) []avro.Schema {
+func (e extractor) appendSchema(schemas []avro.Schema, additionalSchemas ...avro.Schema) []avro.Schema {
 	if len(additionalSchemas) == 1 {
 		schema := additionalSchemas[0]
 		if us, ok := schema.(*avro.UnionSchema); ok {
-			return appendSchema(schemas, us.Types()...)
+			return e.appendSchema(schemas, us.Types()...)
 		}
 		for _, s := range schemas {
 			if s.Type() == schema.Type() {
@@ -237,12 +243,12 @@ func appendSchema(schemas []avro.Schema, additionalSchemas ...avro.Schema) []avr
 		return schemas
 	}
 	for _, schema := range additionalSchemas {
-		schemas = appendSchema(schemas, schema)
+		schemas = e.appendSchema(schemas, schema)
 	}
 	return schemas
 }
 
-func getStructFieldJSONName(sf reflect.StructField) (string, bool) {
+func (extractor) getStructFieldJSONName(sf reflect.StructField) (string, bool) {
 	jsonTag := strings.Split(sf.Tag.Get("json"), ",")[0] // ignore tag options (omitempty)
 	if jsonTag == "-" {
 		return "", false
