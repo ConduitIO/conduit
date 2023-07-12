@@ -168,8 +168,14 @@ func (e extractor) extractSlice(path []string, v reflect.Value, t reflect.Type) 
 		if err != nil {
 			return nil, err
 		}
-		types = e.appendSchemas(types, itemSchema)
+		types = append(types, itemSchema)
 	}
+	// we could have duplicate schemas, deduplicate them
+	types, err := e.deduplicate(types)
+	if err != nil {
+		return nil, err
+	}
+
 	if v.Len() == 0 {
 		// it's an empty slice, add string to types to have a valid schema
 		types = append(types, avro.NewPrimitiveSchema(avro.String, nil))
@@ -226,19 +232,20 @@ func (e extractor) extractMap(path []string, v reflect.Value, t reflect.Type) (a
 	// this is map[string]any, loop through all values and extracting their
 	// types into a union schema, null is included by default
 	types := []avro.Schema{&avro.NullSchema{}}
-	typesSet := make(map[[32]byte]struct{})
 	for _, kv := range v.MapKeys() {
 		valValue := v.MapIndex(kv)
 		vs, err := e.extract(append(path, "value"), valValue, t.Elem())
 		if err != nil {
 			return nil, err
 		}
-		if _, ok := typesSet[vs.Fingerprint()]; ok {
-			continue
-		}
-		typesSet[vs.Fingerprint()] = struct{}{}
-		types = e.appendSchemas(types, vs)
+		types = append(types, vs)
 	}
+	// we could have duplicate schemas, deduplicate them
+	types, err := e.deduplicate(types)
+	if err != nil {
+		return nil, err
+	}
+
 	if len(v.MapKeys()) == 0 {
 		// it's an empty map, add string to types to have a valid schema
 		types = append(types, avro.NewPrimitiveSchema(avro.String, nil))
@@ -285,28 +292,77 @@ func (e extractor) extractStruct(path []string, v reflect.Value, t reflect.Type)
 	return rs, nil
 }
 
-func (e extractor) appendSchemas(schemas []avro.Schema, additionalSchemas ...avro.Schema) []avro.Schema {
-	if len(additionalSchemas) == 1 {
-		schema := additionalSchemas[0]
-		if us, ok := schema.(*avro.UnionSchema); ok {
-			return e.appendSchemas(schemas, us.Types()...)
+func (e extractor) deduplicate(schemas []avro.Schema) ([]avro.Schema, error) {
+	out := make([]avro.Schema, 0, len(schemas))
+	typesSet := make(map[[32]byte]struct{})
+
+	var appendSchema func(schema avro.Schema) error
+	appendSchema = func(schema avro.Schema) error {
+		if _, ok := typesSet[schema.Fingerprint()]; ok {
+			return nil
 		}
-		for _, s := range schemas {
+		if us, ok := schema.(*avro.UnionSchema); ok {
+			for _, st := range us.Types() {
+				if err := appendSchema(st); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+		for _, s := range out {
 			if s.Type() == schema.Type() {
-				// TODO we should be smarter about combining the schemas if the
-				//  type matches, it could be that the type is map or array and
-				//  we need to combine the underlying types
-				return schemas // schema exists, don't add it
+				switch s := s.(type) {
+				case *avro.ArraySchema:
+					// we are combining two array schemas with different item
+					// schemas, combine them and create a new array schema
+					schema := schema.(*avro.ArraySchema)
+					itemsSchema, err := e.deduplicate([]avro.Schema{s.Items(), schema.Items()})
+					if err != nil {
+						return err
+					}
+					if len(itemsSchema) == 1 {
+						*s = *avro.NewArraySchema(itemsSchema[0])
+					} else {
+						itemsUnionSchema, err := avro.NewUnionSchema(itemsSchema)
+						if err != nil {
+							return err
+						}
+						*s = *avro.NewArraySchema(itemsUnionSchema)
+					}
+				case *avro.MapSchema:
+					schema := schema.(*avro.MapSchema)
+					valuesSchema, err := e.deduplicate([]avro.Schema{s.Values(), schema.Values()})
+					if err != nil {
+						return err
+					}
+					if len(valuesSchema) == 1 {
+						*s = *avro.NewMapSchema(valuesSchema[0])
+					} else {
+						valuesUnionSchema, err := avro.NewUnionSchema(valuesSchema)
+						if err != nil {
+							return err
+						}
+						*s = *avro.NewMapSchema(valuesUnionSchema)
+					}
+				default:
+					return cerrors.Errorf("can't combine schemas of type %T", s)
+				}
+				return nil
 			}
 		}
+
 		// schema does not exist yet
-		schemas = append(schemas, schema)
-		return schemas
+		out = append(out, schema)
+		typesSet[schema.Fingerprint()] = struct{}{}
+		return nil
 	}
-	for _, schema := range additionalSchemas {
-		schemas = e.appendSchemas(schemas, schema)
+
+	for _, schema := range schemas {
+		if err := appendSchema(schema); err != nil {
+			return nil, err
+		}
 	}
-	return schemas
+	return out, nil
 }
 
 func (extractor) getStructFieldJSONName(sf reflect.StructField) (string, bool) {

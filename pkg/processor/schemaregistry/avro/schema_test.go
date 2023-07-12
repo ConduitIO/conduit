@@ -179,20 +179,29 @@ func TestSchema_MarshalUnmarshal(t *testing.T) {
 	}, {
 		name: "map[string]any (with data)",
 		haveValue: map[string]any{
-			"foo": "bar",
-			"bar": 1,
-			"baz": []int{1, 2, 3},
+			"foo":  "bar",
+			"foo2": "bar2",
+			"bar":  1,
+			"baz":  []int{1, 2, 3},
+			"baz2": []any{"foo", true},
 		},
 		wantValue: map[string]any{
-			"foo": "bar",
-			"bar": 1,
-			"baz": []any{1, 2, 3},
+			"foo":  "bar",
+			"foo2": "bar2",
+			"bar":  1,
+			"baz":  []any{1, 2, 3},
+			"baz2": []any{"foo", true},
 		},
 		wantSchema: avro.NewMapSchema(must(avro.NewUnionSchema([]avro.Schema{
 			&avro.NullSchema{},
 			avro.NewPrimitiveSchema(avro.Int, nil),
 			avro.NewPrimitiveSchema(avro.String, nil),
-			avro.NewArraySchema(avro.NewPrimitiveSchema(avro.Int, nil)),
+			avro.NewArraySchema(must(avro.NewUnionSchema([]avro.Schema{
+				&avro.NullSchema{},
+				avro.NewPrimitiveSchema(avro.Int, nil),
+				avro.NewPrimitiveSchema(avro.String, nil),
+				avro.NewPrimitiveSchema(avro.Boolean, nil),
+			}))),
 		}))),
 	}, {
 		name:      "map[string]any (no data)",
