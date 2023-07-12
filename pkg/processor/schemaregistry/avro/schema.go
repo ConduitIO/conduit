@@ -15,8 +15,6 @@
 package avro
 
 import (
-	"reflect"
-
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/hamba/avro/v2"
 	"github.com/lovromazgon/franz-go/pkg/sr"
@@ -87,7 +85,7 @@ func Parse(text string) (*Schema, error) {
 // SchemaForType uses reflection to extract an Avro schema from v. Maps are
 // regarded as structs.
 func SchemaForType(v any) (*Schema, error) {
-	schema, err := extractor{}.Extract(reflect.ValueOf(v), reflect.TypeOf(v))
+	schema, err := extractor{}.Extract(v)
 	if err != nil {
 		return nil, err
 	}

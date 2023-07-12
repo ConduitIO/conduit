@@ -22,6 +22,11 @@ import (
 	"github.com/modern-go/reflect2"
 )
 
+// UnionResolver provides hooks before marshaling and after unmarshaling a value
+// with an Avro schema, which make sure that values under the schema type Union
+// are in the correct shape (see https://github.com/hamba/avro#unions).
+// NB: It currently supports union types nested in maps, but not nested in
+// slices. For example, hooks will not work for values like []any{[]any{"foo"}}.
 type UnionResolver struct {
 	mapUnionPaths   []path
 	arrayUnionPaths []path
@@ -53,6 +58,11 @@ func NewUnionResolver(schema avro.Schema) UnionResolver {
 	}
 }
 
+// AfterUnmarshal traverses the value using the schema and finds all values that
+// have the Avro type Union. Those values are unmarshaled into a map with a
+// single key that contains the name of the type
+// (e.g. map[string]any{"string":"foo"}). This function takes that map and
+// extracts the actual value from it (e.g. "foo").
 func (r UnionResolver) AfterUnmarshal(val any) error {
 	if len(r.mapUnionPaths) == 0 && len(r.arrayUnionPaths) == 0 {
 		return nil // shortcut
@@ -170,6 +180,10 @@ func (r UnionResolver) afterUnmarshalArraySubstitutions(val any, substitutions [
 	return substitutions, nil
 }
 
+// BeforeMarshal traverses the value using the schema and finds all values that
+// have the Avro type Union. Those values need to be changed to a map with a
+// single key that contains the name of the type. This function takes that value
+// (e.g. "foo") and hoists it into a map (e.g. map[string]any{"string":"foo"}).
 func (r UnionResolver) BeforeMarshal(val any) error {
 	if len(r.mapUnionPaths) == 0 && len(r.arrayUnionPaths) == 0 {
 		return nil // shortcut

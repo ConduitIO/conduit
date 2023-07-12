@@ -32,11 +32,30 @@ var (
 // extractor exposes a way to extract an Avro schema from a Go value.
 type extractor struct{}
 
-func (e extractor) Extract(v reflect.Value, t reflect.Type) (avro.Schema, error) {
-	return e.extractInternal([]string{"record"}, v, t)
+// Extract uses reflection to traverse the value and type of v and extract an
+// Avro schema from it. There are some limitations that will cause this function
+// to return an error, here are all known cases:
+//   - A fixed array of a type other than byte (e.g. [4]int).
+//   - A map with a key type other than string (e.g. map[int]any).
+//
+// The function does its best to infer the schema, but it's working with limited
+// information and has to make some assumptions:
+//   - If a map does not specify the type of its values (e.g. map[string]any),
+//     Extract will traverse all values in the map, extract their types and
+//     combine them in a union type. If the map is empty, the extracted value
+//     type will default to a nullable string (union type of string and null).
+//   - If a slice does not specify the type of its values (e.g. []any), Extract
+//     will traverse all values in the slice, extract their types and combine
+//     them in a union type. If the slice is empty, the extracted value type
+//     will default to a nullable string (union type of string and null).
+//   - If Extract encounters a value with the type of record.StructuredData it
+//     will treat it as a record and extract a record schema, where each key in
+//     the structured data is extracted into its own record field.
+func (e extractor) Extract(v any) (avro.Schema, error) {
+	return e.extract([]string{"record"}, reflect.ValueOf(v), reflect.TypeOf(v))
 }
 
-func (e extractor) extractInternal(path []string, v reflect.Value, t reflect.Type) (avro.Schema, error) {
+func (e extractor) extract(path []string, v reflect.Value, t reflect.Type) (avro.Schema, error) {
 	if t == nil {
 		return nil, cerrors.New("can't get schema for untyped nil") // untyped nil
 	}
@@ -73,12 +92,14 @@ func (e extractor) extractInternal(path []string, v reflect.Value, t reflect.Typ
 	return nil, fmt.Errorf("unsupported type: %v", t)
 }
 
+// extractPointer extracts the schema behind the pointer and makes it nullable
+// (if it's not already nullable).
 func (e extractor) extractPointer(path []string, v reflect.Value, t reflect.Type) (avro.Schema, error) {
 	var vElem reflect.Value
 	if v.IsValid() {
 		vElem = v.Elem()
 	}
-	s, err := e.extractInternal(path, vElem, t.Elem())
+	s, err := e.extract(path, vElem, t.Elem())
 	if err != nil {
 		return nil, err
 	}
@@ -103,6 +124,11 @@ func (e extractor) extractPointer(path []string, v reflect.Value, t reflect.Type
 	return s, nil
 }
 
+// extractInterface ignores the type, since an interface doesn't say anything
+// about the concrete type behind it. Instead, it looks at the value behind the
+// interface and tries to extract the schema based on its actual type.
+// If the value is nil we have no way of knowing the actual type, but since we
+// need to be able to encode untyped nil values, we default to a nullable string.
 func (e extractor) extractInterface(path []string, v reflect.Value, _ reflect.Type) (avro.Schema, error) {
 	if !v.IsValid() || v.IsNil() {
 		// unknown type, fall back to nullable string
@@ -111,9 +137,12 @@ func (e extractor) extractInterface(path []string, v reflect.Value, _ reflect.Ty
 			&avro.NullSchema{},
 		})
 	}
-	return e.extractInternal(path, v.Elem(), v.Elem().Type())
+	return e.extract(path, v.Elem(), v.Elem().Type())
 }
 
+// extractSlice tries to extract the schema based on the slice value type. If
+// that type is an interface it falls back to looping through all values,
+// extracting their types and combining them into a nullable union schema.
 func (e extractor) extractSlice(path []string, v reflect.Value, t reflect.Type) (avro.Schema, error) {
 	if t.Elem().Kind() == reflect.Uint8 {
 		return avro.NewPrimitiveSchema(avro.Bytes, nil), nil
@@ -121,7 +150,7 @@ func (e extractor) extractSlice(path []string, v reflect.Value, t reflect.Type) 
 
 	// try getting value type based on the slice type
 	if t.Elem().Kind() != reflect.Interface {
-		vs, err := e.extractInternal(append(path, "item"), reflect.Value{}, t.Elem())
+		vs, err := e.extract(append(path, "item"), reflect.Value{}, t.Elem())
 		if err != nil {
 			return nil, err
 		}
@@ -132,7 +161,7 @@ func (e extractor) extractSlice(path []string, v reflect.Value, t reflect.Type) 
 	// into a union schema, null is included by default
 	types := []avro.Schema{&avro.NullSchema{}}
 	for i := 0; i < v.Len(); i++ {
-		itemSchema, err := e.extractInternal(
+		itemSchema, err := e.extract(
 			append(path, fmt.Sprintf("item%d", i)),
 			v.Index(i), t.Elem(),
 		)
@@ -153,13 +182,20 @@ func (e extractor) extractSlice(path []string, v reflect.Value, t reflect.Type) 
 	return avro.NewArraySchema(itemsSchema), nil
 }
 
+// extractMap tries to extract the schema based on the map value type. If that
+// type is an interface it falls back to looping through all values, extracting
+// their types and combining them into a nullable union schema.
+// If the key of the map is not a string, this function returns an error. If the
+// type of the map is record.StructuredData it will treat it as a record and
+// extract a record schema, where each key in the structured data is extracted
+// into its own record field.
 func (e extractor) extractMap(path []string, v reflect.Value, t reflect.Type) (avro.Schema, error) {
 	if t == structuredDataType {
 		// special case - we treat StructuredData like a struct
 		var fields []*avro.Field
 		valType := t.Elem()
 		for _, keyValue := range v.MapKeys() {
-			fs, err := e.extractInternal(append(path, keyValue.String()), v.MapIndex(keyValue), valType)
+			fs, err := e.extract(append(path, keyValue.String()), v.MapIndex(keyValue), valType)
 			if err != nil {
 				return nil, err
 			}
@@ -180,7 +216,7 @@ func (e extractor) extractMap(path []string, v reflect.Value, t reflect.Type) (a
 	}
 	// try getting value type based on the map type
 	if t.Elem().Kind() != reflect.Interface {
-		vs, err := e.extractInternal(append(path, "value"), reflect.Value{}, t.Elem())
+		vs, err := e.extract(append(path, "value"), reflect.Value{}, t.Elem())
 		if err != nil {
 			return nil, err
 		}
@@ -193,7 +229,7 @@ func (e extractor) extractMap(path []string, v reflect.Value, t reflect.Type) (a
 	typesSet := make(map[[32]byte]struct{})
 	for _, kv := range v.MapKeys() {
 		valValue := v.MapIndex(kv)
-		vs, err := e.extractInternal(append(path, "value"), valValue, t.Elem())
+		vs, err := e.extract(append(path, "value"), valValue, t.Elem())
 		if err != nil {
 			return nil, err
 		}
@@ -214,6 +250,11 @@ func (e extractor) extractMap(path []string, v reflect.Value, t reflect.Type) (a
 	return avro.NewMapSchema(vs), nil
 }
 
+// extractStruct traverses the struct fields, extracts the schema for each field
+// and combines them into a record schema. If the field contains a json tag,
+// that tag is used for the extracted name of the field, otherwise it is the
+// name of the Go struct field. If the json tag of a field contains "-" (i.e.
+// ignored field), then the field is skipped.
 func (e extractor) extractStruct(path []string, v reflect.Value, t reflect.Type) (avro.Schema, error) {
 	var fields []*avro.Field
 	for i := 0; i < t.NumField(); i++ {
@@ -226,7 +267,7 @@ func (e extractor) extractStruct(path []string, v reflect.Value, t reflect.Type)
 		if v.IsValid() {
 			vfi = v.Field(i)
 		}
-		fs, err := e.extractInternal(append(path, name), vfi, t.Field(i).Type)
+		fs, err := e.extract(append(path, name), vfi, t.Field(i).Type)
 		if err != nil {
 			return nil, err
 		}

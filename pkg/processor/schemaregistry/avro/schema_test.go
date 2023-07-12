@@ -18,6 +18,8 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
+
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/hamba/avro/v2"
 	"github.com/matryer/is"
@@ -159,6 +161,11 @@ func TestSchema_MarshalUnmarshal(t *testing.T) {
 			},
 		))),
 	}, {
+		name:       "[][]int",
+		haveValue:  [][]int{{1}, {2, 3}},
+		wantValue:  []any{[]any{1}, []any{2, 3}},
+		wantSchema: avro.NewArraySchema(avro.NewArraySchema(avro.NewPrimitiveSchema(avro.Int, nil))),
+	}, {
 		name: "map[string]int",
 		haveValue: map[string]int{
 			"foo": 1,
@@ -174,15 +181,18 @@ func TestSchema_MarshalUnmarshal(t *testing.T) {
 		haveValue: map[string]any{
 			"foo": "bar",
 			"bar": 1,
+			"baz": []int{1, 2, 3},
 		},
 		wantValue: map[string]any{
 			"foo": "bar",
 			"bar": 1,
+			"baz": []any{1, 2, 3},
 		},
 		wantSchema: avro.NewMapSchema(must(avro.NewUnionSchema([]avro.Schema{
 			&avro.NullSchema{},
 			avro.NewPrimitiveSchema(avro.Int, nil),
 			avro.NewPrimitiveSchema(avro.String, nil),
+			avro.NewArraySchema(avro.NewPrimitiveSchema(avro.Int, nil)),
 		}))),
 	}, {
 		name:      "map[string]any (no data)",
@@ -219,10 +229,12 @@ func TestSchema_MarshalUnmarshal(t *testing.T) {
 		haveValue: record.StructuredData{
 			"foo": "bar",
 			"bar": 1,
+			"baz": []int{1, 2, 3},
 		},
 		wantValue: map[string]any{ // structured data is unmarshaled into a map
 			"foo": "bar",
 			"bar": 1,
+			"baz": []any{1, 2, 3},
 		},
 		wantSchema: must(avro.NewRecordSchema(
 			"record.foo",
@@ -230,6 +242,7 @@ func TestSchema_MarshalUnmarshal(t *testing.T) {
 			[]*avro.Field{
 				must(avro.NewField("foo", avro.NewPrimitiveSchema(avro.String, nil))),
 				must(avro.NewField("bar", avro.NewPrimitiveSchema(avro.Int, nil))),
+				must(avro.NewField("baz", avro.NewArraySchema(avro.NewPrimitiveSchema(avro.Int, nil)))),
 			},
 		)),
 	}}
@@ -256,7 +269,7 @@ func TestSchema_MarshalUnmarshal(t *testing.T) {
 			}
 			wantSchema.Sort()
 			gotSchema.Sort()
-			is.Equal(wantSchema.String(), gotSchema.String())
+			is.Equal(cmp.Diff(wantSchema.String(), gotSchema.String()), "")
 
 			// now try to marshal the value with the schema
 			bytes, err := gotSchema.Marshal(haveValue)
