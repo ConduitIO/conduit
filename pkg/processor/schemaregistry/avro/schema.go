@@ -47,6 +47,9 @@ func (s *Schema) Marshal(v any) ([]byte, error) {
 
 // Unmarshal parses the Avro encoded data and stores the result in the value
 // pointed to by v. If v is nil or not a pointer, Unmarshal returns an error.
+// Note that arrays and maps are unmarshaled into slices and maps with untyped
+// values (i.e. []any and map[string]any). This is a limitation of the Avro
+// library used for encoding/decoding the payload.
 func (s *Schema) Unmarshal(b []byte, v any) error {
 	err := avro.Unmarshal(s.schema, b, v)
 	if err != nil {
