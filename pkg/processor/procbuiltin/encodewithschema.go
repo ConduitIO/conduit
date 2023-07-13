@@ -30,14 +30,14 @@ const (
 	encodeWithSchemaKeyProcType     = "encodewithschemakey"
 	encodeWithSchemaPayloadProcType = "encodewithschemapayload"
 
-	encodeWithSchemaStrategy            = "schema.strategy"
-	encodeWithSchemaRegistrySubject     = "schema.registry.subject"
-	encodeWithSchemaRegistryVersion     = "schema.registry.version"
-	encodeWithSchemaAutoRegisterSubject = "schema.autoRegister.subject"
-	encodeWithSchemaAutoRegisterFormat  = "schema.autoRegister.format"
+	encodeWithSchemaStrategy             = "schema.strategy"
+	encodeWithSchemaPreRegisteredSubject = "schema.preRegistered.subject"
+	encodeWithSchemaPreRegisteredVersion = "schema.preRegistered.version"
+	encodeWithSchemaAutoRegisterSubject  = "schema.autoRegister.subject"
+	encodeWithSchemaAutoRegisterFormat   = "schema.autoRegister.format"
 
-	encodeWithSchemaStrategyRegistry     = "registry"
-	encodeWithSchemaStrategyAutoRegister = "autoRegister"
+	encodeWithSchemaStrategyPreRegistered = "preRegistered"
+	encodeWithSchemaStrategyAutoRegister  = "autoRegister"
 )
 
 func init() {
@@ -47,19 +47,19 @@ func init() {
 
 // EncodeWithSchemaKey builds a processor with the following config fields:
 //   - `url` (Required) - URL of the schema registry (e.g. http://localhost:8085)
-//   - `schema.strategy` (Required, Enum: `registry`,`autoRegister`) - Specifies
+//   - `schema.strategy` (Required, Enum: `preRegistered`,`autoRegister`) - Specifies
 //     which strategy to use to determine the schema for the record. Available
 //     strategies:
-//   - `registry` (recommended) - Download an existing schema from the schema
+//   - `preRegistered` (recommended) - Download an existing schema from the schema
 //     registry. This strategy is further configured with options starting
-//     with `schema.registry.*`.
+//     with `schema.preRegistered.*`.
 //   - `autoRegister` (for development purposes) - Infer the schema from the
 //     record and register it in the schema registry. This strategy is further
 //     configured with options starting with `schema.autoRegister.*`.
-//   - `schema.registry.subject` (Required if `schema.strategy` = `registry`) -
+//   - `schema.preRegistered.subject` (Required if `schema.strategy` = `preRegistered`) -
 //     Specifies the subject of the schema in the schema registry used to encode
 //     the record.
-//   - `schema.registry.version` (Required if `schema.strategy` = `registry`) -
+//   - `schema.preRegistered.version` (Required if `schema.strategy` = `preRegistered`) -
 //     Specifies the version of the schema in the schema registry used to encode
 //     the record.
 //   - `schema.autoRegister.subject` (Required if `schema.strategy` = `autoRegister`) -
@@ -90,7 +90,7 @@ func init() {
 // Confluent wire format. It provides two strategies for determining the
 // schema:
 //
-//   - `registry` (recommended)
+//   - `preRegistered` (recommended)
 //
 //     This strategy downloads an existing schema from the schema registry and
 //     uses it to encode the record. This requires the schema to already be
@@ -100,7 +100,7 @@ func init() {
 //   - `autoRegister` (for development purposes)
 //     This strategy infers the schema by inspecting the structured data and
 //     registers it in the schema registry. If the record schema is known in
-//     advance it's recommended to use the `registry` strategy and manually
+//     advance it's recommended to use the `preRegistered` strategy and manually
 //     register the schema, as this strategy comes with limitations.
 //
 //     The strategy uses reflection to traverse the structured data of each
@@ -148,8 +148,8 @@ func (c *encodeWithSchemaConfig) parseSchemaStrategy(cfg processor.Config) error
 	}
 
 	switch strategy {
-	case encodeWithSchemaStrategyRegistry:
-		return c.parseSchemaStrategyRegistry(cfg)
+	case encodeWithSchemaStrategyPreRegistered:
+		return c.parseSchemaStrategyPreRegistered(cfg)
 	case encodeWithSchemaStrategyAutoRegister:
 		return c.parseSchemaStrategyAutoRegister(cfg)
 	default:
@@ -157,13 +157,13 @@ func (c *encodeWithSchemaConfig) parseSchemaStrategy(cfg processor.Config) error
 	}
 }
 
-func (c *encodeWithSchemaConfig) parseSchemaStrategyRegistry(cfg processor.Config) error {
-	subject, err := getConfigFieldString(cfg, encodeWithSchemaRegistrySubject)
+func (c *encodeWithSchemaConfig) parseSchemaStrategyPreRegistered(cfg processor.Config) error {
+	subject, err := getConfigFieldString(cfg, encodeWithSchemaPreRegisteredSubject)
 	if err != nil {
 		return err
 	}
 	// TODO allow version to be set to "latest"
-	version, err := getConfigFieldInt64(cfg, encodeWithSchemaRegistryVersion)
+	version, err := getConfigFieldInt64(cfg, encodeWithSchemaPreRegisteredVersion)
 	if err != nil {
 		return err
 	}
