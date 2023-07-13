@@ -1514,15 +1514,7 @@
     ember-cli-version-checker "^5.1.2"
     semver "^7.3.5"
 
-"@embroider/addon-shim@^1.5.0":
-  version "1.8.0"
-  resolved "https://registry.yarnpkg.com/@embroider/addon-shim/-/addon-shim-1.8.0.tgz#a545d85991f033a7bac147fe720ff2a7a870731f"
-  integrity sha512-iMD9Yzx24WY0/K42if2piWzkw+BFCpqxwbPaNWFqlTbNGzzd1UnNiFhtdjXT5vTyYSQRgbQwuFcr/04Rh8qF8A==
-  dependencies:
-    "@embroider/shared-internals" "^1.8.0"
-    semver "^7.3.5"
-
-"@embroider/addon-shim@^1.8.4":
+"@embroider/addon-shim@^1.5.0", "@embroider/addon-shim@^1.8.3", "@embroider/addon-shim@^1.8.4":
   version "1.8.5"
   resolved "https://registry.yarnpkg.com/@embroider/addon-shim/-/addon-shim-1.8.5.tgz#c0aae417f9583058f40550f206fc53444e325f11"
   integrity sha512-pDgpdTsC9i/+5hHziygK5VIZc64OG8bupiqL0OxJp+bnINURalHMbu5B3Gikq/a0QIvMPzDFWzKxIZCBpeiHkg==
@@ -1531,7 +1523,7 @@
     broccoli-funnel "^3.0.8"
     semver "^7.3.8"
 
-"@embroider/macros@^0.41.0", "@embroider/macros@^0.42.3", "@embroider/macros@^0.50.0 || ^1.0.0", "@embroider/macros@^1.0.0", "@embroider/macros@^1.10.0", "@embroider/macros@^1.8.0", "@embroider/macros@^1.8.3":
+"@embroider/macros@^0.41.0", "@embroider/macros@^0.42.3", "@embroider/macros@^0.50.0 || ^1.0.0", "@embroider/macros@^1.0.0", "@embroider/macros@^1.10.0", "@embroider/macros@^1.12.0", "@embroider/macros@^1.8.0", "@embroider/macros@^1.8.3":
   version "1.10.0"
   resolved "https://registry.yarnpkg.com/@embroider/macros/-/macros-1.10.0.tgz#af3844d5db48f001b85cfb096c76727c72ad6c1e"
   integrity sha512-LMbfQGk/a+f6xtvAv5fq/wf2LRxETnbgSCLUf/z6ebzmuskOUxrke+uP55chF/loWrARi9g6erFQ7RDOUoBMSg==
@@ -1559,7 +1551,7 @@
     semver "^7.3.5"
     typescript-memoize "^1.0.1"
 
-"@embroider/shared-internals@^1.0.0", "@embroider/shared-internals@^1.8.0":
+"@embroider/shared-internals@^1.0.0":
   version "1.8.0"
   resolved "https://registry.yarnpkg.com/@embroider/shared-internals/-/shared-internals-1.8.0.tgz#4c9b563e5f155410d982a30667b027a227be7312"
   integrity sha512-TsjApG80SDVZ+dxkshO4FtzwzZYupmyl1w3Bnehfbk1429dsv30K+/DhcxDFIlKXPtsvCF9mdQY3mYUs+hoLOg==
@@ -1587,7 +1579,7 @@
     semver "^7.3.5"
     typescript-memoize "^1.0.1"
 
-"@embroider/util@^0.39.1 || ^0.40.0 || ^0.41.0 || ^1.0.0", "@embroider/util@^1.10.0", "@embroider/util@^1.9.0":
+"@embroider/util@^0.39.1 || ^0.40.0 || ^0.41.0 || ^1.0.0", "@embroider/util@^1.10.0", "@embroider/util@^1.11.0", "@embroider/util@^1.9.0":
   version "1.10.0"
   resolved "https://registry.yarnpkg.com/@embroider/util/-/util-1.10.0.tgz#8320d73651e7f5d48dac1b71fb9e6d21cac7c803"
   integrity sha512-utAFKoq6ajI27jyqjvX3PiGL4m+ZyGVlVNbSbE/nOqi2llRyAkh5ltH1WkIK7jhdwQFJouo1NpOSj9J3/HDa3A==
@@ -5036,14 +5028,14 @@ ember-auto-import@^2.4.1, ember-auto-import@^2.4.3, ember-auto-import@^2.5.0, em
     typescript-memoize "^1.0.0-alpha.3"
     walk-sync "^3.0.0"
 
-ember-basic-dropdown@^7.1.0:
-  version "7.1.0"
-  resolved "https://registry.yarnpkg.com/ember-basic-dropdown/-/ember-basic-dropdown-7.1.0.tgz#93ad819b3a13418aa2cca0ded62783ae77e57f4d"
-  integrity sha512-ZXFsX81WdF8WXjJb3VQjbZHqql+ozyQxh2YH44FODRd4K6xSLJt5Cvnl1CFcXawF/2+bI4u3b6Z3fIaJnGakGg==
+ember-basic-dropdown@^7.2.1:
+  version "7.2.1"
+  resolved "https://registry.yarnpkg.com/ember-basic-dropdown/-/ember-basic-dropdown-7.2.1.tgz#897d1f6f04090233fa0b978f07293d20f3167592"
+  integrity sha512-9LS+OHNlLu/dr5QutpL+q9YKT97SBqCfDm6PzFuw9DKqs80/auil2JWe0bSRVL6BuQpBUhXDK6DtyA4a4JNK7A==
   dependencies:
     "@ember/render-modifiers" "^2.0.5"
-    "@embroider/macros" "^1.10.0"
-    "@embroider/util" "^1.10.0"
+    "@embroider/macros" "^1.12.0"
+    "@embroider/util" "^1.11.0"
     "@glimmer/component" "^1.1.2"
     "@glimmer/tracking" "^1.1.2"
     ember-auto-import "^2.6.3"
@@ -5594,12 +5586,13 @@ ember-concurrency@^2.3.7:
     ember-compatibility-helpers "^1.2.0"
     ember-destroyable-polyfill "^2.0.2"
 
-ember-css-transitions@^4.2.0:
-  version "4.2.0"
-  resolved "https://registry.yarnpkg.com/ember-css-transitions/-/ember-css-transitions-4.2.0.tgz#f1e21bef3438fd74997363a94404b077b5b8a3a5"
-  integrity sha512-qvpTyP3BjfFhxWuIhIy/rBOZ2Wb/UOzCf5CWZ6turkR7qq1ouR5KyA2FyaetQdCssb2JqnovLvHmWI6K0AbF9g==
+ember-css-transitions@^4.3.2:
+  version "4.3.2"
+  resolved "https://registry.yarnpkg.com/ember-css-transitions/-/ember-css-transitions-4.3.2.tgz#191addddd7eb691ff5a4f2a08df97210bf835654"
+  integrity sha512-2VsGZEM00rhko3VYaHaFs82kvCkBMDF7rv4Z4Wplef/O0PSe0ezPFbD9cveR+9R+7PXw5BI25sbNqyrinkhw4A==
   dependencies:
-    "@embroider/addon-shim" "^1.5.0"
+    "@ember/test-waiters" "^3.0.0"
+    "@embroider/addon-shim" "^1.8.3"
     ember-modifier "^2.1.2 || ^3.1.0 || ^4.0.0"
 
 ember-data@~4.9.1:
@@ -10893,9 +10886,9 @@ schema-utils@^4.0.0:
     ajv-keywords "^5.0.0"
 
 "semver@2 || 3 || 4 || 5", semver@^5.3.0, semver@^5.4.1, semver@^5.5.0, semver@^5.6.0:
-  version "5.7.1"
-  resolved "https://registry.yarnpkg.com/semver/-/semver-5.7.1.tgz#a954f931aeba508d307bbf069eff0c01c96116f7"
-  integrity sha512-sauaDf/PZdVgrLTNYHRtpXa1iRiKcaebiKQ1BJdpQlWH2lCvexQdX55snPFyK7QzpudqbCI0qXFfOasHdyNDGQ==
+  version "5.7.2"
+  resolved "https://registry.yarnpkg.com/semver/-/semver-5.7.2.tgz#48d55db737c3287cd4835e17fa13feace1c41ef8"
+  integrity sha512-cBznnQ9KjJqU67B52RMC65CMarK2600WFnbkcaiwWq3xy/5haFJlshgnpjovMVJ+Hff49d8GEn0b87C5pDQ10g==
 
 semver@7.0.0:
   version "7.0.0"
@@ -10903,14 +10896,14 @@ semver@7.0.0:
   integrity sha512-+GB6zVA9LWh6zovYQLALHwv5rb2PHGlJi3lfiqIHxR0uuwCgefcOJc59v9fv1w8GbStwxuuqqAjI9NMAOOgq1A==
 
 semver@^6.0.0, semver@^6.1.0, semver@^6.1.1, semver@^6.1.2, semver@^6.3.0:
-  version "6.3.0"
-  resolved "https://registry.yarnpkg.com/semver/-/semver-6.3.0.tgz#ee0a64c8af5e8ceea67687b133761e1becbd1d3d"
-  integrity sha512-b39TBaTSfV6yBrapU89p5fKekE2m/NwnDocOVruQFS1/veMgdzuPcnOM34M6CwxW8jH/lxEa5rBoDeUwu5HHTw==
+  version "6.3.1"
+  resolved "https://registry.yarnpkg.com/semver/-/semver-6.3.1.tgz#556d2ef8689146e46dcea4bfdd095f3434dffcb4"
+  integrity sha512-BR7VvDCVHO+q2xBEWskxS6DJE1qRnb7DxzUrogb71CWoSficBxYsiAGd+Kl0mmq/MprG9yArRkyrQxTO6XjMzA==
 
 semver@^7.0.0, semver@^7.2.1, semver@^7.3.2, semver@^7.3.4, semver@^7.3.5, semver@^7.3.7, semver@^7.3.8:
-  version "7.5.0"
-  resolved "https://registry.yarnpkg.com/semver/-/semver-7.5.0.tgz#ed8c5dc8efb6c629c88b23d41dc9bf40c1d96cd0"
-  integrity sha512-+XC0AD/R7Q2mPSRuy2Id0+CGTZ98+8f+KvwirxOKIEyid+XSx6HbC63p+O4IndTHuX5Z+JxQ0TghCkO5Cg/2HA==
+  version "7.5.4"
+  resolved "https://registry.yarnpkg.com/semver/-/semver-7.5.4.tgz#483986ec4ed38e1c6c48c34894a9182dbff68a6e"
+  integrity sha512-1bCSESV6Pv+i21Hvpxp3Dx+pSD8lIPt8uVjRrxAUt/nbswYc+tK6Y2btiULjd4+fnq15PX+nqQDC7Oft7WkwcA==
   dependencies:
     lru-cache "^6.0.0"
 
