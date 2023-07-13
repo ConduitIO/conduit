@@ -37,6 +37,9 @@ type extractor struct{}
 // to return an error, here are all known cases:
 //   - A fixed array of a type other than byte (e.g. [4]int).
 //   - A map with a key type other than string (e.g. map[int]any).
+//   - We only support built-in Avro types, which means that the following Go
+//     types are NOT supported:
+//     uint, uint64, complex64, complex128, chan, func, uintptr
 //
 // The function does its best to infer the schema, but it's working with limited
 // information and has to make some assumptions:
