@@ -15,6 +15,8 @@
 package avro
 
 import (
+	"fmt"
+	"reflect"
 	"sort"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -114,23 +116,23 @@ func traverseValue(val any, p path, hasEncodedUnions bool, fn func(v any)) error
 			case *record.StructuredData:
 				return traverse(*val, index) // traverse value
 			}
-			return unexpectedTypeError(avro.Record, map[string]any{}, val)
+			return newUnexpectedTypeError(avro.Record, map[string]any{}, val)
 		case avro.Array:
-			val, ok := val.([]any)
+			valArr, ok := val.([]any)
 			if !ok {
-				return unexpectedTypeError(avro.Record, []any{}, val)
+				return newUnexpectedTypeError(avro.Array, []any{}, val)
 			}
-			for _, item := range val {
+			for _, item := range valArr {
 				if err := traverse(item, index+1); err != nil {
 					return err
 				}
 			}
 		case avro.Map:
-			val, ok := val.(map[string]any)
+			valMap, ok := val.(map[string]any)
 			if !ok {
-				return unexpectedTypeError(avro.Record, map[string]any{}, val)
+				return newUnexpectedTypeError(avro.Map, map[string]any{}, val)
 			}
-			for _, v := range val {
+			for _, v := range valMap {
 				if err := traverse(v, index+1); err != nil {
 					return err
 				}
@@ -142,19 +144,28 @@ func traverseValue(val any, p path, hasEncodedUnions bool, fn func(v any)) error
 			if hasEncodedUnions && index > 0 &&
 				(p[index-1].schema.Type() == avro.Map || p[index-1].schema.Type() == avro.Array) {
 				// it's a union value encoded as a map, traverse it
-				val, ok := val.(map[string]any)
+				valMap, ok := val.(map[string]any)
 				if !ok {
-					return unexpectedTypeError(avro.Record, map[string]any{}, val)
+					return newUnexpectedTypeError(avro.Union, map[string]any{}, val)
 				}
-				if len(val) != 1 {
-					return cerrors.Errorf("expected single value encoded as a map, got %d elements", len(val))
+				if len(valMap) != 1 {
+					return cerrors.Errorf("expected single value encoded as a map, got %d elements", len(valMap))
 				}
-				for _, v := range val {
+				for _, v := range valMap {
 					return traverse(v, index+1) // there's only one value, return
 				}
 			}
+
 			// values are encoded normally, skip union
-			return traverse(val, index+1)
+			err := traverse(val, index+1)
+			var uterr *unexpectedTypeError
+			if cerrors.As(err, &uterr) {
+				// We allow unexpected type errors, we could be traversing a
+				// different branch in the union type that does not have the
+				// same structure.
+				return nil
+			}
+			return err
 		default:
 			return cerrors.Errorf("unexpected avro type %s, can not traverse deeper", l.schema.Type())
 		}
@@ -163,6 +174,20 @@ func traverseValue(val any, p path, hasEncodedUnions bool, fn func(v any)) error
 	return traverse(val, 0)
 }
 
-func unexpectedTypeError(avroType avro.Type, expected any, actual any) error {
-	return cerrors.Errorf("expected Go type %T for avro type %s, got %T", expected, avroType, actual)
+type unexpectedTypeError struct {
+	avroType       avro.Type
+	expectedGoType string
+	actualGoType   string
+}
+
+func newUnexpectedTypeError(avroType avro.Type, expected any, actual any) *unexpectedTypeError {
+	return &unexpectedTypeError{
+		avroType:       avroType,
+		expectedGoType: reflect.TypeOf(expected).String(),
+		actualGoType:   reflect.TypeOf(actual).String(),
+	}
+}
+
+func (e *unexpectedTypeError) Error() string {
+	return fmt.Sprintf("expected Go type %s for avro type %s, got %s", e.expectedGoType, e.avroType, e.actualGoType)
 }

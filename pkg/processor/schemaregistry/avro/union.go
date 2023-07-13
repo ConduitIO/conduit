@@ -33,6 +33,10 @@ type UnionResolver struct {
 	resolver        *avro.TypeResolver
 }
 
+// NewUnionResolver takes a schema and extracts the paths to all maps and arrays
+// with union types. With this information the resolver can traverse the values
+// in BeforeMarshal and AfterUnmarshal directly to the value that needs to be
+// substituted.
 func NewUnionResolver(schema avro.Schema) UnionResolver {
 	var mapUnionPaths []path
 	var arrayUnionPaths []path

@@ -25,10 +25,9 @@ func TestUnionResolver(t *testing.T) {
 	is := is.New(t)
 
 	testCases := []struct {
-		name            string
-		have            any
-		want            any
-		skipNestedArray bool
+		name string
+		have any
+		want any
 	}{{
 		name: "string",
 		have: "foo",
@@ -62,15 +61,13 @@ func TestUnionResolver(t *testing.T) {
 		have: nil,
 		want: nil,
 	}, {
-		name:            "int array",
-		have:            []int{1, 2, 3, 4},
-		want:            map[string]any{"array": []int{1, 2, 3, 4}},
-		skipNestedArray: true, // nested arrays don't work yet, see TODO in reflect.go
+		name: "int array",
+		have: []int{1, 2, 3, 4},
+		want: map[string]any{"array": []int{1, 2, 3, 4}},
 	}, {
-		name:            "nil bool array",
-		have:            []bool(nil),
-		want:            map[string]any{"array": []bool(nil)},
-		skipNestedArray: true, // nested arrays don't work yet, see TODO in reflect.go
+		name: "nil bool array",
+		have: []bool(nil),
+		want: map[string]any{"array": []bool(nil)},
 	}}
 
 	for _, tc := range testCases {
@@ -91,9 +88,6 @@ func TestUnionResolver(t *testing.T) {
 						[]any{tc.have},
 					},
 				}
-				if tc.skipNestedArray {
-					sd["arr1"] = sd["arr1"].([]any)[:1] // remove nested array
-				}
 				return sd
 			}
 			want := record.StructuredData{
@@ -112,9 +106,6 @@ func TestUnionResolver(t *testing.T) {
 						"array": []any{tc.want},
 					},
 				},
-			}
-			if tc.skipNestedArray {
-				want["arr1"] = want["arr1"].([]any)[:1] // remove nested array
 			}
 			have := newRecord()
 
