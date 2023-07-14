@@ -60,7 +60,22 @@ func (c *Client) CreateSchema(ctx context.Context, subject string, schema sr.Sch
 	ss, err := c.cache.GetBySubjectText(subject, schema.Schema, func() (sr.SubjectSchema, error) {
 		logEvent.Msg("schema cache miss")
 		logEvent = nil // disable output for hit
-		return c.client.CreateSchema(ctx, subject, schema)
+
+		// Check if the subject exists. Ignore the error as this is not critical
+		// for creating a schema, we assume the subject exists in case of an error.
+		versions, _ := c.client.SubjectVersions(ctx, subject, sr.ShowDeleted)
+		subjectExists := len(versions) > 0
+
+		ss, err := c.client.CreateSchema(ctx, subject, schema)
+		if err != nil {
+			return ss, err
+		}
+
+		if !subjectExists {
+			// if we are created the schema we need to disable compatibility checks
+			c.client.SetCompatibilityLevel(ctx, sr.CompatNone, subject)
+		}
+		return ss, nil
 	})
 	if err != nil {
 		return sr.SubjectSchema{}, cerrors.Errorf("failed to create schema with subject %q: %w", subject, err)

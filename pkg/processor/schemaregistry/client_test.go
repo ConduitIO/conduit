@@ -190,22 +190,34 @@ func TestClient_CacheHit(t *testing.T) {
 	})
 	is.NoErr(err)
 
-	is.Equal(len(rtr.Records()), 3)
+	is.Equal(len(rtr.Records()), 5)
 	rtr.AssertRecord(is, 0,
+		assertMethod("GET"),
+		assertRequestURI("/subjects/test-cache-hit/versions?deleted=true"),
+		assertResponseStatus(404),
+		assertError(nil),
+	)
+	rtr.AssertRecord(is, 1,
 		assertMethod("POST"),
 		assertRequestURI("/subjects/test-cache-hit/versions"),
 		assertResponseStatus(200),
 		assertError(nil),
 	)
-	rtr.AssertRecord(is, 1,
+	rtr.AssertRecord(is, 2,
 		assertMethod("GET"),
 		assertRequestURI(fmt.Sprintf("/schemas/ids/%d/versions", want.ID)),
 		assertResponseStatus(200),
 		assertError(nil),
 	)
-	rtr.AssertRecord(is, 2,
+	rtr.AssertRecord(is, 3,
 		assertMethod("GET"),
 		assertRequestURI("/subjects/test-cache-hit/versions/1"),
+		assertResponseStatus(200),
+		assertError(nil),
+	)
+	rtr.AssertRecord(is, 4,
+		assertMethod("PUT"),
+		assertRequestURI("/config/test-cache-hit?defaultToGlobal=true"),
 		assertResponseStatus(200),
 		assertError(nil),
 	)
