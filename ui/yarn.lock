@@ -1483,10 +1483,10 @@
     ember-cli-babel "^7.26.11"
     ember-modifier-manager-polyfill "^1.2.0"
 
-"@ember/string@^3.0.0":
-  version "3.0.0"
-  resolved "https://registry.yarnpkg.com/@ember/string/-/string-3.0.0.tgz#e3a3cc7874c9f64eadfdac644d8b1238721ce289"
-  integrity sha512-T+7QYDp8ItlQseNveK2lL6OsOO5wg7aNQ/M2RpO8cGwM80oZOnr/Y35HmMfu4ejFEc+F1LPegvu7LGfeJOicWA==
+"@ember/string@^3.0.0", "@ember/string@^3.1.1":
+  version "3.1.1"
+  resolved "https://registry.yarnpkg.com/@ember/string/-/string-3.1.1.tgz#0a5ac0d1e4925259e41d5c8d55ef616117d47ff0"
+  integrity sha512-UbXJ+k3QOrYN4SRPHgXCqYIJ+yWWUg1+vr0H4DhdQPTy8LJfyqwZ2tc5uqpSSnEXE+/1KopHBE5J8GDagAg5cg==
   dependencies:
     ember-cli-babel "^7.26.6"
 
@@ -9230,10 +9230,12 @@ mute-stream@0.0.8:
   resolved "https://registry.yarnpkg.com/mute-stream/-/mute-stream-0.0.8.tgz#1630c42b2251ff81e2a283de96a5497ea92e5e0d"
   integrity sha512-nnbWWOkoWyUsTjKrhgD0dcz22mdkSnpYqbEjIm2nhwhuxlSkpywJmBo8h0ZqJdkp73mb90SssHkN4rsRaBAfAA==
 
-"mx-ui-components@https://github.com/ConduitIO/mx-ui-components.git#v2.3.0":
-  version "2.3.0"
-  resolved "https://github.com/ConduitIO/mx-ui-components.git#089d35c47acd76a88d2dd4ec01322b0747888cfa"
+"mx-ui-components@https://github.com/ConduitIO/mx-ui-components.git#v2.6.0":
+  version "2.6.0"
+  uid "018edf0613c4e0aa68e5bf9600c469b7d1dca6de"
+  resolved "https://github.com/ConduitIO/mx-ui-components.git#018edf0613c4e0aa68e5bf9600c469b7d1dca6de"
   dependencies:
+    "@ember/string" "^3.1.1"
     ember-auto-import "^2.6.3"
     ember-cli-babel "^7.26.11"
     ember-cli-htmlbars "^6.2.0"
