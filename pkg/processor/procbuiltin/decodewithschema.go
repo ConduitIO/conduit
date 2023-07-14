@@ -48,8 +48,35 @@ func init() {
 	processor.GlobalBuilderRegistry.MustRegister(decodeWithSchemaPayloadProcType, DecodeWithSchemaPayload)
 }
 
-// DecodeWithSchemaKey builds the following processor:
-// TODO
+// DecodeWithSchemaKey builds a processor with the following config fields:
+//   - `url` (Required) - URL of the schema registry (e.g. http://localhost:8085)
+//   - `auth.basic.username` (Optional) - Configures the username to use with
+//     basic authentication. This option is required if `auth.basic.password`
+//     contains a value. If both `auth.basic.username` and `auth.basic.password`
+//     are empty basic authentication is disabled.
+//   - `auth.basic.password` (Optional) - Configures the password to use with
+//     basic authentication. This option is required if `auth.basic.username`
+//     contains a value. If both `auth.basic.username` and `auth.basic.password`
+//     are empty basic authentication is disabled.
+//   - `tls.ca.cert` (Optional) - Path to a file containing PEM encoded CA
+//     certificates. If this option is empty, Conduit falls back to using the
+//     host's root CA set.
+//   - `tls.client.cert` (Optional) - Path to a file containing a PEM encoded
+//     certificate. This option is required if `tls.client.key` contains a value.
+//     If both `tls.client.cert` and `tls.client.key` are empty TLS is disabled.
+//   - `tls.client.key` (Optional) - Path to a file containing a PEM encoded
+//     private key. This option is required if `tls.client.cert` contains a value.
+//     If both `tls.client.cert` and `tls.client.key` are empty TLS is disabled.
+//
+// The processor takes raw data (bytes) and decodes it from the Confluent wire
+// format into structured data. It extracts the schema ID from the data,
+// downloads the associated schema from the schema registry and decodes the
+// payload. The schema is cached locally after it's first downloaded. Currently,
+// the processor only supports the Avro format. If the processor encounters
+// structured data or the data can't be decoded it returns an error.
+//
+// More info about the Confluent wire format: https://docs.confluent.io/platform/current/schema-registry/fundamentals/serdes-develop/index.html#wire-format
+// More info about the Confluent schema registry: https://docs.confluent.io/platform/current/schema-registry/index.html
 func DecodeWithSchemaKey(config processor.Config) (processor.Interface, error) {
 	return decodeWithSchema(decodeWithSchemaKeyProcType, recordKeyGetSetter{}, config)
 }
