@@ -99,7 +99,7 @@ func (str ExtractAndUploadSchemaStrategy) GetSchema(ctx context.Context, client 
 
 type DownloadSchemaStrategy struct {
 	Subject string
-	// TODO add support for specifying "latest"
+	// TODO add support for specifying "latest" - https://github.com/ConduitIO/conduit/issues/1095
 	Version int
 }
 

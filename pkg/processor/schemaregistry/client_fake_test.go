@@ -198,7 +198,6 @@ func (fr *fakeRegistry) findBySubjectVersion(subject string, version int) (sr.Su
 
 // fakeServer is a fake schema registry server.
 type fakeServer struct {
-	mux  http.ServeMux
 	fr   fakeRegistry
 	logf func(format string, args ...any)
 }
@@ -210,46 +209,74 @@ func newFakeServer(logf func(format string, args ...any)) *fakeServer {
 	if logf != nil {
 		fs.logf = logf
 	}
-	fs.mux.Handle("/schemas/ids/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tokens := strings.Split(r.URL.EscapedPath(), "/")
-		switch {
-		case len(tokens) == 4 && r.Method == http.MethodGet:
-			fs.schemaByID(w, r)
-		case len(tokens) == 5 && tokens[4] == "versions" && r.Method == http.MethodGet:
-			fs.subjectVersionsByID(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	fs.mux.Handle("/subjects/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tokens := strings.Split(r.URL.EscapedPath(), "/")
-		switch {
-		case len(tokens) == 4 && tokens[3] == "versions" && r.Method == http.MethodPost:
-			fs.createSchema(w, r)
-		case len(tokens) == 5 && tokens[3] == "versions" && r.Method == http.MethodGet:
-			fs.schemaBySubjectVersion(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	fs.mux.Handle("/config/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tokens := strings.Split(r.URL.EscapedPath(), "/")
-		switch {
-		case len(tokens) == 3 && r.Method == http.MethodPut:
-			fs.updateConfig(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	}))
 	return fs
 }
 
 func (fs *fakeServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	fs.logf("%s %s", r.Method, r.RequestURI)
-	fs.mux.ServeHTTP(w, r)
+
+	var (
+		id      int
+		subject string
+		version int
+	)
+	p := r.URL.Path
+	switch {
+	case fs.match(p, "/schemas/ids/+", &id) && r.Method == http.MethodGet:
+		fs.schemaByID(w, r, id)
+	case fs.match(p, "/schemas/ids/+/versions", &id) && r.Method == http.MethodGet:
+		fs.subjectVersionsByID(w, r, id)
+	case fs.match(p, "/subjects/+/versions", &subject) && r.Method == http.MethodPost:
+		fs.createSchema(w, r, subject)
+	case fs.match(p, "/subjects/+/versions/+", &subject, &version) && r.Method == http.MethodGet:
+		fs.schemaBySubjectVersion(w, r, subject, version)
+	case fs.match(p, "/config/+", &subject) && r.Method == http.MethodPut:
+		fs.updateConfig(w, r)
+	default:
+		http.NotFound(w, r)
+	}
 }
 
-func (fs *fakeServer) createSchema(w http.ResponseWriter, r *http.Request) {
+// match reports whether path matches the given pattern, which is a
+// path with '+' wildcards wherever you want to use a parameter. Path
+// parameters are assigned to the pointers in vars (len(vars) must be
+// the number of wildcards), which must be of type *string or *int.
+// Source: https://github.com/benhoyt/go-routing/blob/master/match/route.go
+func (*fakeServer) match(path, pattern string, vars ...interface{}) bool {
+	for ; pattern != "" && path != ""; pattern = pattern[1:] {
+		switch pattern[0] {
+		case '+':
+			// '+' matches till next slash in path
+			slash := strings.IndexByte(path, '/')
+			if slash < 0 {
+				slash = len(path)
+			}
+			segment := path[:slash]
+			path = path[slash:]
+			switch p := vars[0].(type) {
+			case *string:
+				*p = segment
+			case *int:
+				n, err := strconv.Atoi(segment)
+				if err != nil || n < 0 {
+					return false
+				}
+				*p = n
+			default:
+				panic("vars must be *string or *int")
+			}
+			vars = vars[1:]
+		case path[0]:
+			// non-'+' pattern byte must match path byte
+			path = path[1:]
+		default:
+			return false
+		}
+	}
+	return path == "" && pattern == ""
+}
+
+func (fs *fakeServer) createSchema(w http.ResponseWriter, r *http.Request, subject string) {
 	// POST /subjects/{subject}/versions => returns ID
 	defer r.Body.Close()
 	var s sr.Schema
@@ -259,21 +286,13 @@ func (fs *fakeServer) createSchema(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tokens := strings.Split(r.URL.EscapedPath(), "/")
-	ss := fs.fr.CreateSchema(tokens[2], s)
+	ss := fs.fr.CreateSchema(subject, s)
 	fs.json(w, map[string]any{"id": ss.ID})
 }
 
-func (fs *fakeServer) schemaBySubjectVersion(w http.ResponseWriter, r *http.Request) {
+func (fs *fakeServer) schemaBySubjectVersion(w http.ResponseWriter, _ *http.Request, subject string, version int) {
 	// GET /subjects/{subject}/versions/{version}
-	tokens := strings.Split(r.URL.EscapedPath(), "/")
-	version, err := strconv.Atoi(tokens[4])
-	if err != nil {
-		fs.error(w, http.StatusInternalServerError, cerrors.Errorf("invalid schema version: %w", err))
-		return
-	}
-
-	ss, ok := fs.fr.SchemaBySubjectVersion(tokens[2], version)
+	ss, ok := fs.fr.SchemaBySubjectVersion(subject, version)
 	if !ok {
 		fs.errorWithCode(w, http.StatusNotFound, errorCodeSubjectNotFound, cerrors.New("subject not found"))
 		return
@@ -281,15 +300,8 @@ func (fs *fakeServer) schemaBySubjectVersion(w http.ResponseWriter, r *http.Requ
 	fs.json(w, ss)
 }
 
-func (fs *fakeServer) schemaByID(w http.ResponseWriter, r *http.Request) {
+func (fs *fakeServer) schemaByID(w http.ResponseWriter, _ *http.Request, id int) {
 	// GET /schemas/ids/{id}
-	tokens := strings.Split(r.URL.EscapedPath(), "/")
-	id, err := strconv.Atoi(tokens[3])
-	if err != nil {
-		fs.error(w, http.StatusInternalServerError, cerrors.Errorf("invalid schema ID: %w", err))
-		return
-	}
-
 	s, ok := fs.fr.SchemaByID(id)
 	if !ok {
 		fs.errorWithCode(w, http.StatusNotFound, errorCodeSchemaNotFound, cerrors.New("schema not found"))
@@ -298,21 +310,14 @@ func (fs *fakeServer) schemaByID(w http.ResponseWriter, r *http.Request) {
 	fs.json(w, s)
 }
 
-func (fs *fakeServer) subjectVersionsByID(w http.ResponseWriter, r *http.Request) {
+func (fs *fakeServer) subjectVersionsByID(w http.ResponseWriter, _ *http.Request, id int) {
 	// GET /schemas/ids/{id}/versions
-	tokens := strings.Split(r.URL.EscapedPath(), "/")
-	id, err := strconv.Atoi(tokens[3])
-	if err != nil {
-		fs.error(w, http.StatusInternalServerError, cerrors.Errorf("invalid schema ID: %w", err))
-		return
-	}
-
 	sss := fs.fr.SubjectVersionsByID(id)
 	fs.json(w, sss)
 }
 
 func (fs *fakeServer) updateConfig(w http.ResponseWriter, r *http.Request) {
-	// POST /subjects/{subject}/versions => returns ID
+	// PUT /config/{subject}
 	defer r.Body.Close()
 	var c struct {
 		Compatibility string `json:"compatibility"`
