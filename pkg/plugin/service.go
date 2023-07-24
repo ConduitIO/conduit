@@ -16,7 +16,6 @@ package plugin
 
 import (
 	"context"
-	"github.com/pkg/errors"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -95,7 +94,7 @@ func (s *Service) List(context.Context) (map[string]Specification, error) {
 func (s *Service) ValidateSourceConfig(ctx context.Context, d Dispenser, settings map[string]string) (err error) {
 	src, err := d.DispenseSource()
 	if err != nil {
-		return errors.Errorf("could not dispense source: %w", err)
+		return cerrors.Errorf("could not dispense source: %w", err)
 	}
 
 	defer func() {
