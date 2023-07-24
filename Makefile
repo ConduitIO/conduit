@@ -7,6 +7,8 @@
 # the correct version.
 VERSION=`git describe --tags --dirty`
 GO_VERSION_CHECK=`./scripts/check-go-version.sh`
+# Needs to match with what's in .github/workflows/lint.yml
+GOLANG_CI_LINT_VER	:= v1.52.2
 
 # The build target should stay at the top since we want it to be the default target.
 build: check-go-version pkg/web/ui/dist build-pipeline-check
@@ -24,6 +26,14 @@ test-integration:
 	go test $(GOTEST_FLAGS) -race --tags=integration ./...; ret=$$?; \
 		docker compose -f test/docker-compose-postgres.yml -f test/docker-compose-schemaregistry.yml down; \
 		exit $$ret
+
+.PHONY: golangci-lint-install
+golangci-lint-install:
+	go install github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANG_CI_LINT_VER)
+
+.PHONY: lint
+lint: golangci-lint-install
+	golangci-lint run -v
 
 build-server: check-go-version
 	go build -ldflags "-X 'github.com/conduitio/conduit/pkg/conduit.version=${VERSION}'" -o conduit ./cmd/conduit/main.go
