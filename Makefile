@@ -33,7 +33,7 @@ golangci-lint-install:
 
 .PHONY: lint
 lint: golangci-lint-install
-	golangci-lint run -v --go $(shell awk '/^go/ {print $$2}' go.mod)
+	golangci-lint run -v
 
 build-server: check-go-version
 	go build -ldflags "-X 'github.com/conduitio/conduit/pkg/conduit.version=${VERSION}'" -o conduit ./cmd/conduit/main.go
