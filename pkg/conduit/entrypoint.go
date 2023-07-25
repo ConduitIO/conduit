@@ -61,7 +61,6 @@ const (
 
 func parseConfig(cfg Config) Config {
 	// TODO extract flags from config struct rather than defining flags manually
-	// TODO allow parsing config from a file or from env variables
 	flags := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 
 	flags.StringVar(&cfg.DB.Type, "db.type", cfg.DB.Type, "database type; accepts badger,postgres,inmemory")
