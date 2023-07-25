@@ -19,6 +19,8 @@ import (
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/plugin/builtin"
+	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/rs/zerolog"
 )
 
@@ -61,6 +63,9 @@ type Config struct {
 		Path        string
 		ExitOnError bool
 	}
+
+	PluginDispenserFactories map[string]builtin.DispenserFactory
+	ProcessorBuilderRegistry *processor.BuilderRegistry
 }
 
 func DefaultConfig() Config {
@@ -74,6 +79,9 @@ func DefaultConfig() Config {
 	cfg.Log.Format = "cli"
 	cfg.Connectors.Path = "./connectors"
 	cfg.Pipelines.Path = "./pipelines"
+
+	cfg.PluginDispenserFactories = builtin.DefaultDispenserFactories
+	cfg.ProcessorBuilderRegistry = processor.GlobalBuilderRegistry
 	return cfg
 }
 
