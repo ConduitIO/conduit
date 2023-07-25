@@ -63,6 +63,20 @@ type Config struct {
 	}
 }
 
+func DefaultConfig() Config {
+	var cfg Config
+	cfg.DB.Type = "badger"
+	cfg.DB.Badger.Path = "conduit.db"
+	cfg.DB.Postgres.Table = "conduit_kv_store"
+	cfg.HTTP.Address = ":8080"
+	cfg.GRPC.Address = ":8084"
+	cfg.Log.Level = "info"
+	cfg.Log.Format = "cli"
+	cfg.Connectors.Path = "./connectors"
+	cfg.Pipelines.Path = "./pipelines"
+	return cfg
+}
+
 func (c Config) Validate() error {
 	// TODO simplify validation with struct tags
 
