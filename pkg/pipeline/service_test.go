@@ -186,10 +186,10 @@ func TestService_AddConnector_ConnectorIDExists(t *testing.T) {
 	pipelineID := uuid.NewString()
 
 	conf := Config{Name: "test-pipeline"}
-	got, err := service.Create(ctx, pipelineID, conf, ProvisionTypeAPI)
+	_, _ = service.Create(ctx, pipelineID, conf, ProvisionTypeAPI)
 
 	// add a connector to the pipeline
-	got, err = service.AddConnector(ctx, pipelineID, connectorID)
+	got, err := service.AddConnector(ctx, pipelineID, connectorID)
 	is.NoErr(err)
 	is.True(got != nil)
 
