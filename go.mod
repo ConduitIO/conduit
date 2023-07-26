@@ -6,7 +6,7 @@ require (
 	buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go v1.31.0-20230607214310-11c9972ea0fd.1
 	github.com/Masterminds/semver/v3 v3.2.1
 	github.com/NYTimes/gziphandler v1.1.1
-	github.com/antchfx/jsonquery v1.3.2
+	github.com/antchfx/jsonquery v1.3.3
 	github.com/bufbuild/buf v1.25.0
 	github.com/conduitio/conduit-connector-file v0.6.0
 	github.com/conduitio/conduit-connector-generator v0.5.0
