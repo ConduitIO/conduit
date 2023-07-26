@@ -206,11 +206,6 @@ func (s *Service) AddConnector(ctx context.Context, pipelineID string, connector
 	if err != nil {
 		return nil, err
 	}
-	for _, id := range pl.ConnectorIDs {
-		if id == connectorID {
-			return nil, cerrors.Errorf("failed to add connector with ID %q as a connector with the same ID already exists", connectorID)
-		}
-	}
 	pl.ConnectorIDs = append(pl.ConnectorIDs, connectorID)
 	pl.UpdatedAt = time.Now()
 	err = s.store.Set(ctx, pl.ID, pl)

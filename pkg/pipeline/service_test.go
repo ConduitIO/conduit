@@ -175,35 +175,6 @@ func TestService_CreateEmptyName(t *testing.T) {
 	is.Equal(got, nil)
 }
 
-func TestService_AddConnector_ConnectorIDExists(t *testing.T) {
-	is := is.New(t)
-	ctx := context.Background()
-	logger := log.Nop()
-	db := &inmemory.DB{}
-
-	service := NewService(logger, db)
-	connectorID := uuid.NewString()
-	pipelineID := uuid.NewString()
-
-	conf := Config{Name: "test-pipeline"}
-	_, _ = service.Create(ctx, pipelineID, conf, ProvisionTypeAPI)
-
-	// add a connector to the pipeline
-	got, err := service.AddConnector(ctx, pipelineID, connectorID)
-	is.NoErr(err)
-	is.True(got != nil)
-
-	// try to add new connector to the same pipeline with the same ID
-	got, err = service.AddConnector(ctx, pipelineID, connectorID)
-	is.Equal(got, nil)
-	is.True(err != nil)
-
-	// add a new connector to the same pipeline with a different ID
-	got, err = service.AddConnector(ctx, pipelineID, uuid.NewString())
-	is.NoErr(err)
-	is.True(got != nil)
-}
-
 func TestService_GetSuccess(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
