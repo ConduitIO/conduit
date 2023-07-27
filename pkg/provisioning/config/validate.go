@@ -65,7 +65,7 @@ func validateConnectors(mp []Connector) error {
 			err = multierror.Append(err, cerrors.Errorf("connector %q: %w", cfg.ID, pErr))
 		}
 		if ids[cfg.ID] {
-			err = multierror.Append(err, cerrors.Errorf("connector %q: a connector with the same ID already exists in the pipeline", cfg.ID, ErrDuplicateID))
+			err = multierror.Append(err, cerrors.Errorf("connector %q: \"id\" must be unique: %w", cfg.ID, ErrDuplicateID))
 		}
 		ids[cfg.ID] = true
 	}
@@ -84,7 +84,7 @@ func validateProcessors(mp []Processor) error {
 			err = multierror.Append(err, cerrors.Errorf("processor %q: \"workers\" can't be negative: %w", cfg.ID, ErrInvalidField))
 		}
 		if ids[cfg.ID] {
-			err = multierror.Append(err, cerrors.Errorf("processor %q: a processor with the same ID already exists in the pipeline", cfg.ID, ErrDuplicateID))
+			err = multierror.Append(err, cerrors.Errorf("processor %q: \"id\" must be unique: %w", cfg.ID, ErrDuplicateID))
 		}
 		ids[cfg.ID] = true
 	}
