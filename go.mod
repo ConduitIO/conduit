@@ -46,7 +46,7 @@ require (
 	golang.org/x/tools v0.11.0
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2
 	google.golang.org/genproto/googleapis/api v0.0.0-20230724170836-66ad5b6ff146
-	google.golang.org/grpc v1.56.2
+	google.golang.org/grpc v1.57.0
 	google.golang.org/protobuf v1.31.0
 	gopkg.in/tomb.v2 v2.0.0-20161208151619-d5d1b5820637
 )
