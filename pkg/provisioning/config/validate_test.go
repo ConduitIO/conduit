@@ -292,5 +292,4 @@ func TestValidator_DuplicateID(t *testing.T) {
 	err := Validate(test)
 	is.True(err != nil)
 	is.True(cerrors.Is(err, ErrDuplicateID))
-
 }
