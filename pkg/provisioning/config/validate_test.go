@@ -226,3 +226,70 @@ func TestValidator_MultiErrors(t *testing.T) {
 	is.Equal(invalid, 1)
 	is.Equal(mandatory, 3)
 }
+
+func TestValidator_DuplicateID(t *testing.T) {
+	is := is.New(t)
+
+	test := Pipeline{
+		ID:          "pipeline1",
+		Status:      "running",
+		Name:        "pipeline1",
+		Description: "desc1",
+		Connectors: []Connector{
+			{
+				ID:     "con1",
+				Type:   "source",
+				Plugin: "builtin:s3",
+				Name:   "",
+				Settings: map[string]string{
+					"aws.region": "us-east-1",
+					"aws.bucket": "my-bucket",
+				},
+				Processors: []Processor{
+					{
+						ID:   "pipeline1proc1",
+						Type: "js",
+						Settings: map[string]string{
+							"additionalProp1": "string",
+							"additionalProp2": "string",
+						},
+					},
+				},
+			},
+			{
+				ID:     "con1",
+				Type:   "destination",
+				Plugin: "builtin:s3",
+				Name:   "",
+				Settings: map[string]string{
+					"aws.region": "us-east-1",
+					"aws.bucket": "my-bucket",
+				},
+				Processors: []Processor{
+					{
+						ID:   "pipeline1proc1",
+						Type: "js",
+						Settings: map[string]string{
+							"additionalProp1": "string",
+							"additionalProp2": "string",
+						},
+					},
+				},
+			},
+		},
+		Processors: []Processor{
+			{
+				ID:   "pipeline1proc1",
+				Type: "js",
+				Settings: map[string]string{
+					"additionalProp1": "string",
+					"additionalProp2": "string",
+				},
+			},
+		},
+	}
+
+	err := Validate(test)
+	is.True(err != nil)
+	is.True(cerrors.Is(err, ErrDuplicateID))
+}
