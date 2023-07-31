@@ -37,12 +37,12 @@ var (
 	// built-in plugins. The key of the map is the import path of the module
 	// containing the connector implementation.
 	DefaultDispenserFactories = map[string]DispenserFactory{
-		"github.com/conduitio/conduit-connector-file":      sdkDispenserFactory(file.Connector),
-		"github.com/conduitio/conduit-connector-kafka":     sdkDispenserFactory(kafka.Connector),
-		"github.com/conduitio/conduit-connector-generator": sdkDispenserFactory(generator.Connector),
-		"github.com/conduitio/conduit-connector-s3":        sdkDispenserFactory(s3.Connector),
-		"github.com/conduitio/conduit-connector-postgres":  sdkDispenserFactory(postgres.Connector),
-		"github.com/conduitio/conduit-connector-log":       sdkDispenserFactory(connLog.Connector),
+		"github.com/conduitio/conduit-connector-file":      NewDispenserFactory(file.Connector),
+		"github.com/conduitio/conduit-connector-kafka":     NewDispenserFactory(kafka.Connector),
+		"github.com/conduitio/conduit-connector-generator": NewDispenserFactory(generator.Connector),
+		"github.com/conduitio/conduit-connector-s3":        NewDispenserFactory(s3.Connector),
+		"github.com/conduitio/conduit-connector-postgres":  NewDispenserFactory(postgres.Connector),
+		"github.com/conduitio/conduit-connector-log":       NewDispenserFactory(connLog.Connector),
 	}
 )
 
@@ -62,7 +62,7 @@ type blueprint struct {
 
 type DispenserFactory func(name plugin.FullName, logger log.CtxLogger) plugin.Dispenser
 
-func sdkDispenserFactory(connector sdk.Connector) DispenserFactory {
+func NewDispenserFactory(connector sdk.Connector) DispenserFactory {
 	if connector.NewSource == nil {
 		connector.NewSource = func() sdk.Source { return nil }
 	}

@@ -77,3 +77,6 @@ dist/
 /connectors
 
 /pipelines
+
+# Conduit local config
+/conduit.yaml

@@ -34,6 +34,7 @@ Conduit was created and open-sourced by [Meroxa](https://meroxa.io).
 
 - [Quick start](#quick-start)
 - [Installation guide](#installation-guide)
+- [Configuring Conduit](#configuring-conduit)
 - [Connectors](#connectors)
 - [Processors](#processors)
 - [API](#api)
@@ -94,7 +95,8 @@ to `http://localhost:8080/openapi` and exploring the HTTP API through Swagger
 UI.
 
 Conduit can be configured through command line parameters. To view the full list
-of available options, run `./conduit --help`.
+of available options, run `./conduit --help` or see
+[configuring Conduit](#configuring-conduit).
 
 ### Homebrew
 
@@ -156,6 +158,35 @@ docker run -p 8080:8080 ghcr.io/conduitio/conduit:latest
 
 The Docker image includes the [UI](#ui), you can access it by navigating
 to `http://localhost:8080`.
+
+## Configuring Conduit
+
+Conduit accepts CLI flags, environment variables and a configuration file to
+configure its behavior. Each CLI flag has a corresponding environment variable
+and a corresponding field in the configuration file. Conduit uses the value for
+each configuration option based on the following priorities:
+
+- CLI flags (highest priority) - if a CLI flag is provided it will always be
+  respected, regardless of the environment variable or configuration file. To
+  see a full list of available flags run `conduit --help`.
+- Environment variables (lower priority) - an environment variable is only used
+  if no CLI flag is provided for the same option. Environment variables have
+  the prefix `CONDUIT` and contain underscores instead of dots and hyphens (e.g.
+  the flag `-db.postgres.connection-string` corresponds to
+  `CONDUIT_DB_POSTGRES_CONNECTION_STRING`).
+- Configuration file (lowest priority) - Conduit by default loads the file
+  `conduit.yaml` placed in the same folder as Conduit. The path to the file can
+  be customized using the CLI flag `-config`. It is not required to provide a
+  configuration file and any value in the configuration file can be overridden
+  by an environment variable or a flag. The file content should be a YAML
+  document where keys can be hierarchically split on `.`. For example:
+
+  ```yaml
+  db:
+    type: postgres # corresponds to flag -db.type and env variable CONDUIT_DB_TYPE
+    postgres:
+      connection-string: postgres://localhost:5432/conduitdb # -db.postgres.connection-string or CONDUIT_DB_POSTGRES_CONNECTION_STRING
+  ```
 
 ## Connectors
 

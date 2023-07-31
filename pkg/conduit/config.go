@@ -19,6 +19,8 @@ import (
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/plugin/builtin"
+	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/rs/zerolog"
 )
 
@@ -61,6 +63,26 @@ type Config struct {
 		Path        string
 		ExitOnError bool
 	}
+
+	PluginDispenserFactories map[string]builtin.DispenserFactory
+	ProcessorBuilderRegistry *processor.BuilderRegistry
+}
+
+func DefaultConfig() Config {
+	var cfg Config
+	cfg.DB.Type = "badger"
+	cfg.DB.Badger.Path = "conduit.db"
+	cfg.DB.Postgres.Table = "conduit_kv_store"
+	cfg.HTTP.Address = ":8080"
+	cfg.GRPC.Address = ":8084"
+	cfg.Log.Level = "info"
+	cfg.Log.Format = "cli"
+	cfg.Connectors.Path = "./connectors"
+	cfg.Pipelines.Path = "./pipelines"
+
+	cfg.PluginDispenserFactories = builtin.DefaultDispenserFactories
+	cfg.ProcessorBuilderRegistry = processor.GlobalBuilderRegistry
+	return cfg
 }
 
 func (c Config) Validate() error {
