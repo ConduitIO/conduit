@@ -64,6 +64,40 @@ func TestService_Init_Success(t *testing.T) {
 	is.Equal(want, got)
 }
 
+func TestService_Init_DeleteDLQConnector(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	logger := log.Nop()
+	db := &inmemory.DB{}
+
+	service := NewService(logger, db, nil)
+	dlqConn := &Instance{
+		ID:            uuid.NewString(),
+		Type:          TypeDestination,
+		ProvisionedBy: ProvisionTypeDLQ,
+		CreatedAt:     time.Now(),
+		UpdatedAt:     time.Now(),
+	}
+	err := service.store.Set(ctx, dlqConn.ID, dlqConn)
+	is.NoErr(err)
+
+	gotAll, err := service.store.GetAll(ctx)
+	is.NoErr(err)
+	is.Equal(len(gotAll), 1)
+
+	// initialize a new service and ensure it deleted the DLQ connector
+	service = NewService(logger, db, nil)
+	err = service.Init(ctx)
+	is.NoErr(err)
+
+	got := service.List(ctx)
+	is.Equal(len(got), 0)
+
+	gotAll, err = service.store.GetAll(ctx)
+	is.NoErr(err)
+	is.Equal(len(gotAll), 0)
+}
+
 func TestService_Check(t *testing.T) {
 	ctx := context.Background()
 	logger := log.Nop()
