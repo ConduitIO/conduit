@@ -19,4 +19,5 @@ import "github.com/conduitio/conduit/pkg/foundation/cerrors"
 var (
 	ErrMandatoryField = cerrors.New("mandatory field not specified")
 	ErrInvalidField   = cerrors.New("invalid field value")
+	ErrDuplicateID    = cerrors.New("id already exists")
 )

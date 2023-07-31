@@ -49,6 +49,7 @@ func Validate(cfg Pipeline) error {
 // validateConnectors validates config field values for connectors
 func validateConnectors(mp []Connector) error {
 	var err, pErr error
+	ids := make(map[string]bool)
 	for _, cfg := range mp {
 		if cfg.Plugin == "" {
 			err = multierror.Append(err, cerrors.Errorf("connector %q: \"plugin\" is mandatory: %w", cfg.ID, ErrMandatoryField))
@@ -59,11 +60,14 @@ func validateConnectors(mp []Connector) error {
 		if cfg.Type != "" && cfg.Type != TypeSource && cfg.Type != TypeDestination {
 			err = multierror.Append(err, cerrors.Errorf("connector %q: \"type\" is invalid: %w", cfg.ID, ErrInvalidField))
 		}
-
 		pErr = validateProcessors(cfg.Processors)
 		if pErr != nil {
 			err = multierror.Append(err, cerrors.Errorf("connector %q: %w", cfg.ID, pErr))
 		}
+		if ids[cfg.ID] {
+			err = multierror.Append(err, cerrors.Errorf("connector %q: \"id\" must be unique: %w", cfg.ID, ErrDuplicateID))
+		}
+		ids[cfg.ID] = true
 	}
 	return err
 }
@@ -71,6 +75,7 @@ func validateConnectors(mp []Connector) error {
 // validateProcessorsConfig validates config field values for processors
 func validateProcessors(mp []Processor) error {
 	var err error
+	ids := make(map[string]bool)
 	for _, cfg := range mp {
 		if cfg.Type == "" {
 			err = multierror.Append(err, cerrors.Errorf("processor %q: \"type\" is mandatory: %w", cfg.ID, ErrMandatoryField))
@@ -78,6 +83,10 @@ func validateProcessors(mp []Processor) error {
 		if cfg.Workers < 0 {
 			err = multierror.Append(err, cerrors.Errorf("processor %q: \"workers\" can't be negative: %w", cfg.ID, ErrInvalidField))
 		}
+		if ids[cfg.ID] {
+			err = multierror.Append(err, cerrors.Errorf("processor %q: \"id\" must be unique: %w", cfg.ID, ErrDuplicateID))
+		}
+		ids[cfg.ID] = true
 	}
 	return err
 }

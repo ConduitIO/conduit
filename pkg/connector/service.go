@@ -52,6 +52,20 @@ func (s *Service) Init(ctx context.Context) error {
 		return cerrors.Errorf("could not retrieve connectors from store: %w", err)
 	}
 
+	for id, c := range connectors {
+		if c.ProvisionedBy == ProvisionTypeDLQ {
+			// Older versions of Conduit erroneously persisted DLQ connectors,
+			// which caused them to be retrieved from the DB after a restart.
+			// We clean it up now. More info: https://github.com/ConduitIO/conduit/issues/1016
+			s.logger.Warn(ctx).Str(log.ConnectorIDField, c.ID).Msg("found a persisted DLQ connector, ignoring it and deleting it from the store, for more info see issue #1016")
+			delete(connectors, id)
+			err := s.store.Delete(ctx, c.ID)
+			if err != nil {
+				s.logger.Err(ctx, err).Str(log.ConnectorIDField, c.ID).Msg("deletion of DLQ connector failed")
+			}
+		}
+	}
+
 	s.connectors = connectors
 	s.logger.Info(ctx).Int("count", len(s.connectors)).Msg("connectors initialized")
 
