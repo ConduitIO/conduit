@@ -5,15 +5,13 @@ run:
 
 linters-settings:
   depguard:
-    list-type: blacklist
-    include-go-root: true
-    packages:
-      - errors
-      - golang.org/x/xerrors
-    packages-with-error-message:
-      # specify an error message to output when a blacklisted package is used
-      - errors: "To accommodate for custom error creation and handling use Conduit's 'cerrors' package instead."
-      - golang.org/x/xerrors: "To accommodate for custom error creation and handling use Conduit's 'cerrors' package instead."
+    rules:
+      Main:
+        deny:
+          - pkg: errors
+            desc: To accommodate for custom error creation and handling use Conduit's 'cerrors' package instead.
+          - pkg: golang.org/x/xerrors
+            desc: To accommodate for custom error creation and handling use Conduit's 'cerrors' package instead.
   gofmt:
     simplify: false
   govet:
