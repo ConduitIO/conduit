@@ -55,7 +55,7 @@
     "ember-cli-postcss": "^8.2.0",
     "ember-cli-sri": "^2.1.1",
     "ember-cli-terser": "^4.0.2",
-    "ember-concurrency": "^2.3.7",
+    "ember-concurrency": "^3.1.0",
     "ember-css-transitions": "^4.3.2",
     "ember-data": "~4.9.1",
     "ember-fetch": "^8.1.2",
