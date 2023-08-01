@@ -155,11 +155,9 @@ func newLogger(level string, format string) log.CtxLogger {
 	l, _ := zerolog.ParseLevel(level)
 	f, _ := log.ParseFormat(format)
 	logger := log.InitLogger(l, f)
-	logger = logger.CtxHook(
-		ctxutil.MessageIDLogCtxHook{},
-		ctxutil.RequestIDLogCtxHook{},
-		ctxutil.FilepathLogCtxHook{},
-	)
+	logger.Logger = logger.Hook(ctxutil.MessageIDLogCtxHook{})
+	logger.Logger = logger.Hook(ctxutil.RequestIDLogCtxHook{})
+	logger.Logger = logger.Hook(ctxutil.FilepathLogCtxHook{})
 	zerolog.DefaultContextLogger = &logger.Logger
 	return logger
 }

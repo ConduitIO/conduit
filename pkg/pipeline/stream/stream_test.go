@@ -317,7 +317,7 @@ func newLogger() log.CtxLogger {
 	zlogger := zerolog.New(w)
 	zlogger = zlogger.Level(zerolog.DebugLevel)
 	logger := log.New(zlogger)
-	logger = logger.CtxHook(ctxutil.MessageIDLogCtxHook{})
+	logger.Logger = logger.Hook(ctxutil.MessageIDLogCtxHook{})
 
 	return logger
 }

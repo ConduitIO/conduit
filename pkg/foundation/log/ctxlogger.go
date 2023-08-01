@@ -32,10 +32,8 @@ func init() {
 // entry.
 type CtxLogger struct {
 	zerolog.Logger
-	hooks []CtxHook
-	// component hook is saved separately from other hooks, so we can replace it
-	// when requested
-	ch componentHook
+	// component is attached to all messages and can be replaced
+	component string
 }
 
 // New creates a new CtxLogger with the supplied zerolog.Logger.
@@ -61,36 +59,16 @@ func InitLogger(level zerolog.Level, f Format) CtxLogger {
 	return New(logger)
 }
 
-// CtxHook defines an interface for a log context hook.
-type CtxHook interface {
-	// Run runs the hook with the logger context.
-	Run(ctx context.Context, e *zerolog.Event, l zerolog.Level)
-}
-
-// CtxHookFunc is an adaptor to allow the use of an ordinary function as a Hook.
-type CtxHookFunc func(ctx context.Context, e *zerolog.Event, l zerolog.Level)
-
-// Run implements the CtxHook interface.
-func (h CtxHookFunc) Run(ctx context.Context, e *zerolog.Event, l zerolog.Level) {
-	h(ctx, e, l)
-}
-
-// CtxHook returns a logger with the h CtxHook.
-func (l CtxLogger) CtxHook(h ...CtxHook) CtxLogger {
-	l.hooks = append(l.hooks, h...)
-	return l
-}
-
 // WithComponent adds the component to the output. This function can be called
 // multiple times with the same value and it will produce the same result. If
 // component is an empty string then nothing will be added to the output.
 func (l CtxLogger) WithComponent(component string) CtxLogger {
-	l.ch.name = component
+	l.component = component
 	return l
 }
 
 func (l CtxLogger) Component() string {
-	return l.ch.name
+	return l.component
 }
 
 // ZerologWithComponent returns a zerolog.Logger that adds the component field
@@ -107,35 +85,35 @@ func (l CtxLogger) ZerologWithComponent() zerolog.Logger {
 //
 // You must call Msg on the returned event in order to send the event.
 func (l CtxLogger) Trace(ctx context.Context) *zerolog.Event {
-	return l.runCtxHooks(ctx, l.Logger.Trace(), zerolog.TraceLevel)
+	return l.attachComponent(l.Logger.Trace().Ctx(ctx))
 }
 
 // Debug starts a new message with debug level and context ctx.
 //
 // You must call Msg on the returned event in order to send the event.
 func (l CtxLogger) Debug(ctx context.Context) *zerolog.Event {
-	return l.runCtxHooks(ctx, l.Logger.Debug(), zerolog.DebugLevel)
+	return l.attachComponent(l.Logger.Debug().Ctx(ctx))
 }
 
 // Info starts a new message with info level and context ctx.
 //
 // You must call Msg on the returned event in order to send the event.
 func (l CtxLogger) Info(ctx context.Context) *zerolog.Event {
-	return l.runCtxHooks(ctx, l.Logger.Info(), zerolog.InfoLevel)
+	return l.attachComponent(l.Logger.Info().Ctx(ctx))
 }
 
 // Warn starts a new message with warn level and context ctx.
 //
 // You must call Msg on the returned event in order to send the event.
 func (l CtxLogger) Warn(ctx context.Context) *zerolog.Event {
-	return l.runCtxHooks(ctx, l.Logger.Warn(), zerolog.WarnLevel)
+	return l.attachComponent(l.Logger.Warn().Ctx(ctx))
 }
 
 // Error starts a new message with error level and context ctx.
 //
 // You must call Msg on the returned event in order to send the event.
 func (l CtxLogger) Error(ctx context.Context) *zerolog.Event {
-	return l.runCtxHooks(ctx, l.Logger.Error(), zerolog.ErrorLevel)
+	return l.attachComponent(l.Logger.Error().Ctx(ctx))
 }
 
 // Err starts a new message with context ctx and error level with err as a field
@@ -143,10 +121,7 @@ func (l CtxLogger) Error(ctx context.Context) *zerolog.Event {
 //
 // You must call Msg on the returned event in order to send the event.
 func (l CtxLogger) Err(ctx context.Context, err error) *zerolog.Event {
-	if err != nil {
-		return l.Error(ctx).Err(err)
-	}
-	return l.Info(ctx)
+	return l.attachComponent(l.Logger.Err(err).Ctx(ctx))
 }
 
 // Fatal starts a new message with fatal level and context ctx. The os.Exit(1)
@@ -155,7 +130,7 @@ func (l CtxLogger) Err(ctx context.Context, err error) *zerolog.Event {
 //
 // You must call Msg on the returned event in order to send the event.
 func (l CtxLogger) Fatal(ctx context.Context) *zerolog.Event {
-	return l.runCtxHooks(ctx, l.Logger.Fatal(), zerolog.FatalLevel)
+	return l.attachComponent(l.Logger.Fatal().Ctx(ctx))
 }
 
 // Panic starts a new message with panic level and context ctx. The panic()
@@ -164,7 +139,7 @@ func (l CtxLogger) Fatal(ctx context.Context) *zerolog.Event {
 //
 // You must call Msg on the returned event in order to send the event.
 func (l CtxLogger) Panic(ctx context.Context) *zerolog.Event {
-	return l.runCtxHooks(ctx, l.Logger.Panic(), zerolog.PanicLevel)
+	return l.attachComponent(l.Logger.Panic().Ctx(ctx))
 }
 
 // WithLevel starts a new message with level and context ctx. Unlike Fatal and
@@ -173,7 +148,7 @@ func (l CtxLogger) Panic(ctx context.Context) *zerolog.Event {
 //
 // You must call Msg on the returned event in order to send the event.
 func (l CtxLogger) WithLevel(ctx context.Context, level zerolog.Level) *zerolog.Event {
-	return l.runCtxHooks(ctx, l.Logger.WithLevel(level), level)
+	return l.attachComponent(l.Logger.WithLevel(level).Ctx(ctx))
 }
 
 // Log starts a new message with no level and context ctx. Setting GlobalLevel
@@ -181,19 +156,12 @@ func (l CtxLogger) WithLevel(ctx context.Context, level zerolog.Level) *zerolog.
 //
 // You must call Msg on the returned event in order to send the event.
 func (l CtxLogger) Log(ctx context.Context) *zerolog.Event {
-	return l.runCtxHooks(ctx, l.Logger.Log(), zerolog.NoLevel)
+	return l.attachComponent(l.Logger.Log().Ctx(ctx))
 }
 
-// runCtxHooks runs all context hooks on the supplied event. If the event is
-// disabled the hooks are skipped.
-func (l CtxLogger) runCtxHooks(ctx context.Context, e *zerolog.Event, level zerolog.Level) *zerolog.Event {
-	if e == nil || !e.Enabled() {
-		return e
-	}
-
-	l.ch.Run(ctx, e, level)
-	for _, h := range l.hooks {
-		h.Run(ctx, e, level)
+func (l CtxLogger) attachComponent(e *zerolog.Event) *zerolog.Event {
+	if l.component != "" {
+		e.Str(ComponentField, l.component)
 	}
 	return e
 }

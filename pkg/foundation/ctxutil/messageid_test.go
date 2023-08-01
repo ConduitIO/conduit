@@ -62,8 +62,8 @@ func TestMessageIDLogCtxHook_Success(t *testing.T) {
 
 	var logOutput bytes.Buffer
 	logger := zerolog.New(&logOutput)
-	e := logger.Info()
-	MessageIDLogCtxHook{}.Run(ctx, e, zerolog.InfoLevel)
+	e := logger.Info().Ctx(ctx)
+	MessageIDLogCtxHook{}.Run(e, zerolog.InfoLevel, "")
 	e.Send()
 
 	assert.Equal(t, fmt.Sprintf(`{"level":"info","%s":"%s"}`, log.MessageIDField, messageID)+"\n", logOutput.String())
@@ -74,8 +74,8 @@ func TestMessageIDLogCtxHook_EmptyCtx(t *testing.T) {
 
 	var logOutput bytes.Buffer
 	logger := zerolog.New(&logOutput)
-	e := logger.Info()
-	MessageIDLogCtxHook{}.Run(ctx, e, zerolog.InfoLevel)
+	e := logger.Info().Ctx(ctx)
+	MessageIDLogCtxHook{}.Run(e, zerolog.InfoLevel, "")
 	e.Send()
 
 	assert.Equal(t, `{"level":"info"}`+"\n", logOutput.String())

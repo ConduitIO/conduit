@@ -86,7 +86,7 @@ func TestRequestIDUnaryServerInterceptor_GenerateRequestID(t *testing.T) {
 func TestLoggerUnaryServerInterceptor(t *testing.T) {
 	var logOutput bytes.Buffer
 	logger := log.New(zerolog.New(&logOutput))
-	logger = logger.CtxHook(ctxutil.RequestIDLogCtxHook{})
+	logger.Logger = logger.Hook(ctxutil.RequestIDLogCtxHook{})
 
 	requestID := uuid.NewString()
 	fullMethod := "/test/method"
