@@ -1474,10 +1474,10 @@
     mkdirp "^1.0.4"
     silent-error "^1.1.1"
 
-"@ember/render-modifiers@^2.0.2", "@ember/render-modifiers@^2.0.5":
-  version "2.0.5"
-  resolved "https://registry.yarnpkg.com/@ember/render-modifiers/-/render-modifiers-2.0.5.tgz#4b1d9496a82ca471aeaa3ecddd94ef089450f415"
-  integrity sha512-5cJ1niIdOJC6k6KtIn9HGbr1DATJQp4ZqMv1vbi6LKQWbVCQ3byvKONtUEi3H0wcewlrcaWCqXOgm0nACzCOQA==
+"@ember/render-modifiers@^2.0.2", "@ember/render-modifiers@^2.0.5", "@ember/render-modifiers@^2.1.0":
+  version "2.1.0"
+  resolved "https://registry.yarnpkg.com/@ember/render-modifiers/-/render-modifiers-2.1.0.tgz#f4fff95a8b5cfbe947ec46644732d511711c5bf9"
+  integrity sha512-LruhfoDv2itpk0fA0IC76Sxjcnq/7BC6txpQo40hOko8Dn6OxwQfxkPIbZGV0Cz7df+iX+VJrcYzNIvlc3w2EQ==
   dependencies:
     "@embroider/macros" "^1.0.0"
     ember-cli-babel "^7.26.11"
@@ -10297,10 +10297,10 @@ qunit-dom@^2.0.0:
     ember-cli-babel "^7.23.0"
     ember-cli-version-checker "^5.1.1"
 
-qunit@^2.19.3:
-  version "2.19.3"
-  resolved "https://registry.yarnpkg.com/qunit/-/qunit-2.19.3.tgz#bcf81a2e8d176dc19fe8dd358c4cbd08619af03a"
-  integrity sha512-vEnspSZ37u2oR01OA/IZ1Td5V7BvQYFECdKPv86JaBplDNa5IHg0v7jFSPoP5L5o78Dbi8sl7/ATtpRDAKlSdw==
+qunit@^2.19.4:
+  version "2.19.4"
+  resolved "https://registry.yarnpkg.com/qunit/-/qunit-2.19.4.tgz#2d689bb1165edd4b812e3ed2ee06ff907e9f2ece"
+  integrity sha512-aqUzzUeCqlleWYKlpgfdHHw9C6KxkB9H3wNfiBg5yHqQMzy0xw/pbCRHYFkjl8MsP/t8qkTQE+JTYL71azgiew==
   dependencies:
     commander "7.2.0"
     node-watch "0.7.3"
