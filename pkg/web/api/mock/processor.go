@@ -10,7 +10,7 @@ import (
 
 	inspector "github.com/conduitio/conduit/pkg/inspector"
 	processor "github.com/conduitio/conduit/pkg/processor"
-	gomock "github.com/golang/mock/gomock"
+	gomock "go.uber.org/mock/gomock"
 )
 
 // ProcessorOrchestrator is a mock of ProcessorOrchestrator interface.

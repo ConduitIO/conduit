@@ -34,10 +34,10 @@ import (
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/processor/procbuiltin"
 	"github.com/conduitio/conduit/pkg/record"
-	"github.com/golang/mock/gomock"
 	"github.com/google/go-cmp/cmp"
 	"github.com/matryer/is"
 	"github.com/rs/zerolog"
+	"go.uber.org/mock/gomock"
 )
 
 // ctxType can be used in tests in call to gomock.AssignableToTypeOf to assert

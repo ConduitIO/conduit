@@ -18,5 +18,5 @@ jobs:
         uses: golangci/golangci-lint-action@v3
         with:
           # The version here also needs to be used as GOLANG_CI_LINT_VER in Makefile
-          version: v1.52.2
+          version: v1.53.3
 

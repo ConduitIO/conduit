@@ -9,7 +9,7 @@ import (
 	reflect "reflect"
 
 	database "github.com/conduitio/conduit/pkg/foundation/database"
-	gomock "github.com/golang/mock/gomock"
+	gomock "go.uber.org/mock/gomock"
 )
 
 // DB is a mock of DB interface.

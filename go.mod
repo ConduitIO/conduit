@@ -7,7 +7,7 @@ require (
 	github.com/Masterminds/semver/v3 v3.2.1
 	github.com/NYTimes/gziphandler v1.1.1
 	github.com/antchfx/jsonquery v1.3.3
-	github.com/bufbuild/buf v1.25.0
+	github.com/bufbuild/buf v1.25.1
 	github.com/conduitio/conduit-connector-file v0.6.0
 	github.com/conduitio/conduit-connector-generator v0.5.0
 	github.com/conduitio/conduit-connector-kafka v0.6.0
@@ -17,7 +17,7 @@ require (
 	github.com/conduitio/conduit-connector-s3 v0.5.0
 	github.com/conduitio/conduit-connector-sdk v0.7.2
 	github.com/conduitio/yaml/v3 v3.3.0
-	github.com/dgraph-io/badger/v4 v4.1.0
+	github.com/dgraph-io/badger/v4 v4.2.0
 	github.com/dop251/goja v0.0.0-20230531210528-d7324b2d74f7
 	github.com/dop251/goja_nodejs v0.0.0-20230602164024-804a84515562
 	github.com/gammazero/deque v0.2.1
@@ -26,10 +26,10 @@ require (
 	github.com/google/uuid v1.3.0
 	github.com/gorilla/websocket v1.5.0
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.16.2
-	github.com/hamba/avro/v2 v2.13.0
+	github.com/hamba/avro/v2 v2.14.0
 	github.com/hashicorp/go-hclog v1.5.0
 	github.com/hashicorp/go-plugin v1.4.10
-	github.com/jackc/pgx/v5 v5.4.2
+	github.com/jackc/pgx/v5 v5.4.3
 	github.com/jinzhu/copier v0.3.5
 	github.com/jpillora/backoff v1.0.0
 	github.com/lovromazgon/franz-go/pkg/sr v0.0.0-20230630140346-bb9ce3f90f4a
@@ -43,6 +43,7 @@ require (
 	github.com/rs/zerolog v1.30.0
 	github.com/twmb/go-cache v1.2.0
 	go.uber.org/goleak v1.2.1
+	go.uber.org/mock v0.2.0
 	golang.org/x/exp v0.0.0-20230713183714-613f0c0eb8a1
 	golang.org/x/tools v0.11.1
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2
@@ -83,7 +84,7 @@ require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bufbuild/connect-go v1.9.0 // indirect
 	github.com/bufbuild/connect-opentelemetry-go v0.4.0 // indirect
-	github.com/bufbuild/protocompile v0.5.1 // indirect
+	github.com/bufbuild/protocompile v0.6.0 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/containerd/stargz-snapshotter/estargz v0.14.3 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.2 // indirect
@@ -126,7 +127,7 @@ require (
 	github.com/jackc/pgservicefile v0.0.0-20221227161230-091c0ba34f0a // indirect
 	github.com/jackc/pgtype v1.14.0 // indirect
 	github.com/jackc/pgx/v4 v4.18.1 // indirect
-	github.com/jackc/puddle/v2 v2.2.0 // indirect
+	github.com/jackc/puddle/v2 v2.2.1 // indirect
 	github.com/jdxcode/netrc v0.0.0-20221124155335-4616370d1a84 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/compress v1.16.7 // indirect
@@ -161,7 +162,7 @@ require (
 	github.com/spf13/cast v1.5.0 // indirect
 	github.com/spf13/cobra v1.7.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
-	github.com/tetratelabs/wazero v1.3.0 // indirect
+	github.com/tetratelabs/wazero v1.3.1 // indirect
 	github.com/vbatts/tar-split v0.11.3 // indirect
 	github.com/xdg-go/pbkdf2 v1.0.0 // indirect
 	github.com/xdg-go/scram v1.1.2 // indirect

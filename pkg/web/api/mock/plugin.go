@@ -9,7 +9,7 @@ import (
 	reflect "reflect"
 
 	plugin "github.com/conduitio/conduit/pkg/plugin"
-	gomock "github.com/golang/mock/gomock"
+	gomock "go.uber.org/mock/gomock"
 )
 
 // PluginOrchestrator is a mock of PluginOrchestrator interface.

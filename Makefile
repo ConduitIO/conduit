@@ -8,7 +8,7 @@
 VERSION=`git describe --tags --dirty`
 GO_VERSION_CHECK=`./scripts/check-go-version.sh`
 # Needs to match with what's in .github/workflows/lint.yml
-GOLANG_CI_LINT_VER	:= v1.52.2
+GOLANG_CI_LINT_VER	:= v1.53.3
 
 # The build target should stay at the top since we want it to be the default target.
 build: check-go-version pkg/web/ui/dist build-pipeline-check

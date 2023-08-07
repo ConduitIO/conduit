@@ -9,7 +9,7 @@ import (
 	reflect "reflect"
 
 	record "github.com/conduitio/conduit/pkg/record"
-	gomock "github.com/golang/mock/gomock"
+	gomock "go.uber.org/mock/gomock"
 )
 
 // DLQHandler is a mock of DLQHandler interface.

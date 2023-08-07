@@ -10,7 +10,7 @@ import (
 
 	plugin "github.com/conduitio/conduit/pkg/plugin"
 	record "github.com/conduitio/conduit/pkg/record"
-	gomock "github.com/golang/mock/gomock"
+	gomock "go.uber.org/mock/gomock"
 )
 
 // Dispenser is a mock of Dispenser interface.
