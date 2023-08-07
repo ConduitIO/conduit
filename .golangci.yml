@@ -12,6 +12,8 @@ linters-settings:
             desc: To accommodate for custom error creation and handling use Conduit's 'cerrors' package instead.
           - pkg: golang.org/x/xerrors
             desc: To accommodate for custom error creation and handling use Conduit's 'cerrors' package instead.
+          - pkg: github.com/golang/mock
+            desc: github.com/golang/mock is deprecated, use go.uber.org/mock instead
   gofmt:
     simplify: false
   govet:

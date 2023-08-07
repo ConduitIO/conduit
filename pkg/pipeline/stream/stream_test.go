@@ -31,8 +31,8 @@ import (
 	"github.com/conduitio/conduit/pkg/processor"
 	procmock "github.com/conduitio/conduit/pkg/processor/mock"
 	"github.com/conduitio/conduit/pkg/record"
-	"github.com/golang/mock/gomock"
 	"github.com/rs/zerolog"
+	"go.uber.org/mock/gomock"
 )
 
 func Example_simpleStream() {
