@@ -10,7 +10,7 @@ import (
 
 	connector "github.com/conduitio/conduit/pkg/connector"
 	inspector "github.com/conduitio/conduit/pkg/inspector"
-	gomock "github.com/golang/mock/gomock"
+	gomock "go.uber.org/mock/gomock"
 )
 
 // ConnectorOrchestrator is a mock of ConnectorOrchestrator interface.

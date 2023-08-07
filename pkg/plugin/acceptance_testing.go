@@ -28,9 +28,9 @@ import (
 	"github.com/conduitio/conduit-connector-protocol/cpluginv1/mock"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/record"
-	"github.com/golang/mock/gomock"
 	"github.com/google/go-cmp/cmp"
 	"github.com/matryer/is"
+	"go.uber.org/mock/gomock"
 )
 
 // AcceptanceTestV1 is the acceptance test that all implementations of v1

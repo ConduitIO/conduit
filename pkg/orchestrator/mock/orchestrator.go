@@ -13,7 +13,7 @@ import (
 	pipeline "github.com/conduitio/conduit/pkg/pipeline"
 	plugin "github.com/conduitio/conduit/pkg/plugin"
 	processor "github.com/conduitio/conduit/pkg/processor"
-	gomock "github.com/golang/mock/gomock"
+	gomock "go.uber.org/mock/gomock"
 )
 
 // PipelineService is a mock of PipelineService interface.

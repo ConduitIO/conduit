@@ -9,7 +9,7 @@ import (
 	reflect "reflect"
 
 	pipeline "github.com/conduitio/conduit/pkg/pipeline"
-	gomock "github.com/golang/mock/gomock"
+	gomock "go.uber.org/mock/gomock"
 )
 
 // PipelineOrchestrator is a mock of PipelineOrchestrator interface.
