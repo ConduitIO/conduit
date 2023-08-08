@@ -17,9 +17,8 @@ package conduit
 import (
 	"testing"
 
-	"github.com/conduitio/conduit/pkg/foundation/database/inmemory"
-
 	"github.com/conduitio/conduit/pkg/foundation/assert"
+	"github.com/conduitio/conduit/pkg/foundation/database/inmemory"
 )
 
 func TestConfig_Validate(t *testing.T) {
