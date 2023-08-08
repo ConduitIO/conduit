@@ -17,6 +17,8 @@ package conduit
 import (
 	"testing"
 
+	"github.com/conduitio/conduit/pkg/foundation/database/inmemory"
+
 	"github.com/conduitio/conduit/pkg/foundation/assert"
 )
 
@@ -70,19 +72,36 @@ func TestConfig_Validate(t *testing.T) {
 		},
 		want: requiredConfigFieldErr("db.postgres.table"),
 	}, {
-		name: "required HTTP address",
+		name: "custom DB driver",
 		setupConfig: func(c Config) Config {
-			c.HTTP.Address = ""
+			c.DB.Type = ""
+			c.DB.Driver = &inmemory.DB{} // db driver explicitly defined
 			return c
 		},
-		want: requiredConfigFieldErr("http.address"),
+		want: nil,
+	}, {
+		name: "required HTTP address",
+		setupConfig: func(c Config) Config {
+			c.API.HTTP.Address = ""
+			return c
+		},
+		want: requiredConfigFieldErr("api.http.address"),
 	}, {
 		name: "required GRPC address",
 		setupConfig: func(c Config) Config {
-			c.GRPC.Address = ""
+			c.API.GRPC.Address = ""
 			return c
 		},
-		want: requiredConfigFieldErr("grpc.address"),
+		want: requiredConfigFieldErr("api.grpc.address"),
+	}, {
+		name: "disabled API valid",
+		setupConfig: func(c Config) Config {
+			c.API.Disabled = true
+			c.API.HTTP.Address = ""
+			c.API.GRPC.Address = ""
+			return c
+		},
+		want: nil,
 	}, {
 		name: "invalid Log level (invalid)",
 		setupConfig: func(c Config) Config {
@@ -134,8 +153,8 @@ func TestConfig_Validate(t *testing.T) {
 			validConfig.DB.Badger.Path = "conduit.app"
 			validConfig.DB.Postgres.Table = "conduit_kv_store"
 			validConfig.DB.Postgres.ConnectionString = "postgres://user:pass@localhost:5432/mydb?sslmode=disable"
-			validConfig.HTTP.Address = ":8080"
-			validConfig.GRPC.Address = ":8084"
+			validConfig.API.HTTP.Address = ":8080"
+			validConfig.API.GRPC.Address = ":8084"
 			validConfig.Log.Level = "info"
 			validConfig.Log.Format = "cli"
 			validConfig.Pipelines.Path = "./pipelines"

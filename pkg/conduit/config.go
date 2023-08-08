@@ -17,6 +17,8 @@ package conduit
 import (
 	"os"
 
+	"github.com/conduitio/conduit/pkg/foundation/database"
+
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin/builtin"
@@ -33,6 +35,10 @@ const (
 // Config holds all configurable values for Conduit.
 type Config struct {
 	DB struct {
+		// When Driver is specified it takes precedence over other DB related
+		// fields.
+		Driver database.DB
+
 		Type   string
 		Badger struct {
 			Path string
@@ -43,11 +49,15 @@ type Config struct {
 		}
 	}
 
-	HTTP struct {
-		Address string
-	}
-	GRPC struct {
-		Address string
+	API struct {
+		Disabled bool
+
+		HTTP struct {
+			Address string
+		}
+		GRPC struct {
+			Address string
+		}
 	}
 
 	Log struct {
@@ -73,8 +83,8 @@ func DefaultConfig() Config {
 	cfg.DB.Type = "badger"
 	cfg.DB.Badger.Path = "conduit.db"
 	cfg.DB.Postgres.Table = "conduit_kv_store"
-	cfg.HTTP.Address = ":8080"
-	cfg.GRPC.Address = ":8084"
+	cfg.API.HTTP.Address = ":8080"
+	cfg.API.GRPC.Address = ":8084"
 	cfg.Log.Level = "info"
 	cfg.Log.Format = "cli"
 	cfg.Connectors.Path = "./connectors"
@@ -88,30 +98,33 @@ func DefaultConfig() Config {
 func (c Config) Validate() error {
 	// TODO simplify validation with struct tags
 
-	switch c.DB.Type {
-	case DBTypeBadger:
-		if c.DB.Badger.Path == "" {
-			return requiredConfigFieldErr("db.badger.path")
+	if c.DB.Driver == nil {
+		switch c.DB.Type {
+		case DBTypeBadger:
+			if c.DB.Badger.Path == "" {
+				return requiredConfigFieldErr("db.badger.path")
+			}
+		case DBTypePostgres:
+			if c.DB.Postgres.ConnectionString == "" {
+				return requiredConfigFieldErr("db.postgres.connection-string")
+			}
+			if c.DB.Postgres.Table == "" {
+				return requiredConfigFieldErr("db.postgres.table")
+			}
+		case DBTypeInMemory:
+			// all good
+		default:
+			return invalidConfigFieldErr("db.type")
 		}
-	case DBTypePostgres:
-		if c.DB.Postgres.ConnectionString == "" {
-			return requiredConfigFieldErr("db.postgres.connection-string")
-		}
-		if c.DB.Postgres.Table == "" {
-			return requiredConfigFieldErr("db.postgres.table")
-		}
-	case DBTypeInMemory:
-		// all good
-	default:
-		return invalidConfigFieldErr("db.type")
 	}
 
-	if c.GRPC.Address == "" {
-		return requiredConfigFieldErr("grpc.address")
-	}
-
-	if c.HTTP.Address == "" {
-		return requiredConfigFieldErr("http.address")
+	if !c.API.Disabled {
+		if c.API.GRPC.Address == "" {
+			return requiredConfigFieldErr("api.grpc.address")
+		}
+		if c.API.HTTP.Address == "" {
+			return requiredConfigFieldErr("api.http.address")
+		}
 	}
 
 	if c.Log.Level == "" {

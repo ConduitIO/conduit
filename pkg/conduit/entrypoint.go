@@ -26,6 +26,21 @@ import (
 	"github.com/peterbourgon/ff/v3/ffyaml"
 )
 
+// Serve is a shortcut for Entrypoint.Serve.
+func Serve(cfg Config) {
+	e := &Entrypoint{}
+	e.Serve(cfg)
+}
+
+const (
+	exitCodeErr       = 1
+	exitCodeInterrupt = 2
+)
+
+// Entrypoint provides methods related to the Conduit entrypoint (parsing
+// config, managing interrupt signals etc.).
+type Entrypoint struct{}
+
 // Serve is the entrypoint for Conduit. It is a convenience function if you want
 // to tweak the Conduit CLI and inject different default values or built-in
 // plugins while retaining the same flags and exit behavior.
@@ -35,31 +50,29 @@ import (
 //   - command line flags (highest priority)
 //   - environment variables
 //   - config file (lowest priority)
-func Serve(cfg Config) {
-	cfg = parseConfig(cfg)
+func (e *Entrypoint) Serve(cfg Config) {
+	flags := e.Flags(&cfg)
+	e.ParseConfig(flags)
 	if cfg.Log.Format == "cli" {
-		_, _ = fmt.Fprintf(os.Stdout, "%s\n", Splash())
+		_, _ = fmt.Fprintf(os.Stdout, "%s\n", e.Splash())
 	}
 
 	runtime, err := NewRuntime(cfg)
 	if err != nil {
-		exitWithError(cerrors.Errorf("failed to set up conduit runtime: %w", err))
+		e.exitWithError(cerrors.Errorf("failed to set up conduit runtime: %w", err))
 	}
 
 	// As per the docs, the signals SIGKILL and SIGSTOP may not be caught by a program
-	ctx := cancelOnInterrupt(context.Background())
+	ctx := e.CancelOnInterrupt(context.Background())
 	err = runtime.Run(ctx)
 	if err != nil && !cerrors.Is(err, context.Canceled) {
-		exitWithError(cerrors.Errorf("conduit runtime error: %w", err))
+		e.exitWithError(cerrors.Errorf("conduit runtime error: %w", err))
 	}
 }
 
-const (
-	exitCodeErr       = 1
-	exitCodeInterrupt = 2
-)
-
-func parseConfig(cfg Config) Config {
+// Flags returns a flag set that, when parsed, stores the values in the provided
+// config struct.
+func (*Entrypoint) Flags(cfg *Config) *flag.FlagSet {
 	// TODO extract flags from config struct rather than defining flags manually
 	flags := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 
@@ -68,9 +81,9 @@ func parseConfig(cfg Config) Config {
 	flags.StringVar(&cfg.DB.Postgres.ConnectionString, "db.postgres.connection-string", cfg.DB.Postgres.ConnectionString, "postgres connection string")
 	flags.StringVar(&cfg.DB.Postgres.Table, "db.postgres.table", cfg.DB.Postgres.Table, "postgres table in which to store data (will be created if it does not exist)")
 
-	flags.StringVar(&cfg.HTTP.Address, "http.address", cfg.HTTP.Address, "address for serving the HTTP API")
-
-	flags.StringVar(&cfg.GRPC.Address, "grpc.address", cfg.GRPC.Address, "address for serving the GRPC API")
+	flags.BoolVar(&cfg.API.Disabled, "api.disabled", cfg.API.Disabled, "disable HTTP and gRPC API")
+	flags.StringVar(&cfg.API.HTTP.Address, "http.address", cfg.API.HTTP.Address, "address for serving the HTTP API")
+	flags.StringVar(&cfg.API.GRPC.Address, "grpc.address", cfg.API.GRPC.Address, "address for serving the gRPC API")
 
 	flags.StringVar(&cfg.Log.Level, "log.level", cfg.Log.Level, "sets logging level; accepts debug, info, warn, error, trace")
 	flags.StringVar(&cfg.Log.Format, "log.format", cfg.Log.Format, "sets the format of the logging; accepts json, cli")
@@ -80,6 +93,10 @@ func parseConfig(cfg Config) Config {
 	flags.StringVar(&cfg.Pipelines.Path, "pipelines.path", cfg.Pipelines.Path, "path to the directory that has the yaml pipeline configuration files, or a single pipeline configuration file")
 	flags.BoolVar(&cfg.Pipelines.ExitOnError, "pipelines.exit-on-error", cfg.Pipelines.ExitOnError, "exit Conduit if a pipeline experiences an error while running")
 
+	return flags
+}
+
+func (e *Entrypoint) ParseConfig(flags *flag.FlagSet) {
 	_ = flags.String("config", "conduit.yaml", "global config file")
 	version := flags.Bool("version", false, "prints current Conduit version")
 
@@ -91,7 +108,7 @@ func parseConfig(cfg Config) Config {
 		ff.WithAllowMissingConfigFile(true),
 	)
 	if err != nil {
-		exitWithError(err)
+		e.exitWithError(err)
 	}
 
 	// check if the -version flag is set
@@ -99,16 +116,14 @@ func parseConfig(cfg Config) Config {
 		_, _ = fmt.Fprintf(os.Stdout, "%s\n", Version(true))
 		os.Exit(0)
 	}
-
-	return cfg
 }
 
-// cancelOnInterrupt returns a context that is canceled when the interrupt
+// CancelOnInterrupt returns a context that is canceled when the interrupt
 // signal is received.
 // * After the first signal the function will continue to listen
 // * On the second signal executes a hard exit, without waiting for a graceful
 // shutdown.
-func cancelOnInterrupt(ctx context.Context) context.Context {
+func (*Entrypoint) CancelOnInterrupt(ctx context.Context) context.Context {
 	ctx, cancel := context.WithCancel(ctx)
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, os.Interrupt)
@@ -125,7 +140,22 @@ func cancelOnInterrupt(ctx context.Context) context.Context {
 	return ctx
 }
 
-func exitWithError(err error) {
+func (*Entrypoint) exitWithError(err error) {
 	_, _ = fmt.Fprintf(os.Stderr, "error: %+v\n", err)
 	os.Exit(exitCodeErr)
+}
+
+func (*Entrypoint) Splash() string {
+	const splash = "" +
+		"             ....            \n" +
+		"         .::::::::::.        \n" +
+		"       .:::::‘‘‘‘:::::.      \n" +
+		"      .::::        ::::.     \n" +
+		" .::::::::          ::::::::.\n" +
+		" `::::::::          ::::::::‘\n" +
+		"      `::::        ::::‘     \n" +
+		"       `:::::....:::::‘      \n" +
+		"         `::::::::::‘        Conduit %s\n" +
+		"             ‘‘‘‘            "
+	return fmt.Sprintf(splash, Version(true))
 }
