@@ -95,7 +95,7 @@ func TestConfig_Validate(t *testing.T) {
 	}, {
 		name: "disabled API valid",
 		setupConfig: func(c Config) Config {
-			c.API.Disabled = true
+			c.API.Enabled = false
 			c.API.HTTP.Address = ""
 			c.API.GRPC.Address = ""
 			return c
@@ -152,6 +152,7 @@ func TestConfig_Validate(t *testing.T) {
 			validConfig.DB.Badger.Path = "conduit.app"
 			validConfig.DB.Postgres.Table = "conduit_kv_store"
 			validConfig.DB.Postgres.ConnectionString = "postgres://user:pass@localhost:5432/mydb?sslmode=disable"
+			validConfig.API.Enabled = true
 			validConfig.API.HTTP.Address = ":8080"
 			validConfig.API.GRPC.Address = ":8084"
 			validConfig.Log.Level = "info"

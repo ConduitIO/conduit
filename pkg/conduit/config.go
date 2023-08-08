@@ -49,7 +49,7 @@ type Config struct {
 	}
 
 	API struct {
-		Disabled bool
+		Enabled bool
 
 		HTTP struct {
 			Address string
@@ -82,6 +82,7 @@ func DefaultConfig() Config {
 	cfg.DB.Type = "badger"
 	cfg.DB.Badger.Path = "conduit.db"
 	cfg.DB.Postgres.Table = "conduit_kv_store"
+	cfg.API.Enabled = true
 	cfg.API.HTTP.Address = ":8080"
 	cfg.API.GRPC.Address = ":8084"
 	cfg.Log.Level = "info"
@@ -117,7 +118,7 @@ func (c Config) Validate() error {
 		}
 	}
 
-	if !c.API.Disabled {
+	if c.API.Enabled {
 		if c.API.GRPC.Address == "" {
 			return requiredConfigFieldErr("grpc.address")
 		}

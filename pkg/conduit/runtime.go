@@ -257,24 +257,26 @@ func (r *Runtime) Run(ctx context.Context) (err error) {
 		})
 	}
 
-	// Serve grpc and http API
-	grpcAddr, err := r.serveGRPCAPI(ctx, t)
-	if err != nil {
-		return cerrors.Errorf("failed to serve grpc api: %w", err)
-	}
-	httpAddr, err := r.serveHTTPAPI(ctx, t, grpcAddr)
-	if err != nil {
-		return cerrors.Errorf("failed to serve http api: %w", err)
-	}
+	if r.Config.API.Enabled {
+		// Serve grpc and http API
+		grpcAddr, err := r.serveGRPCAPI(ctx, t)
+		if err != nil {
+			return cerrors.Errorf("failed to serve grpc api: %w", err)
+		}
+		httpAddr, err := r.serveHTTPAPI(ctx, t, grpcAddr)
+		if err != nil {
+			return cerrors.Errorf("failed to serve http api: %w", err)
+		}
 
-	port := 8080 // default
-	if tcpAddr, ok := httpAddr.(*net.TCPAddr); ok {
-		port = tcpAddr.Port
+		port := 8080 // default
+		if tcpAddr, ok := httpAddr.(*net.TCPAddr); ok {
+			port = tcpAddr.Port
+		}
+		r.logger.Info(ctx).Send()
+		r.logger.Info(ctx).Msgf("click here to navigate to Conduit UI: http://localhost:%d/ui", port)
+		r.logger.Info(ctx).Msgf("click here to navigate to explore the HTTP API: http://localhost:%d/openapi", port)
+		r.logger.Info(ctx).Send()
 	}
-	r.logger.Info(ctx).Send()
-	r.logger.Info(ctx).Msgf("click here to navigate to Conduit UI: http://localhost:%d/ui", port)
-	r.logger.Info(ctx).Msgf("click here to navigate to explore the HTTP API: http://localhost:%d/openapi", port)
-	r.logger.Info(ctx).Send()
 
 	return nil
 }

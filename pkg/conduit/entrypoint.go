@@ -81,7 +81,7 @@ func (*Entrypoint) Flags(cfg *Config) *flag.FlagSet {
 	flags.StringVar(&cfg.DB.Postgres.ConnectionString, "db.postgres.connection-string", cfg.DB.Postgres.ConnectionString, "postgres connection string")
 	flags.StringVar(&cfg.DB.Postgres.Table, "db.postgres.table", cfg.DB.Postgres.Table, "postgres table in which to store data (will be created if it does not exist)")
 
-	flags.BoolVar(&cfg.API.Disabled, "api.disabled", cfg.API.Disabled, "disable HTTP and gRPC API")
+	flags.BoolVar(&cfg.API.Enabled, "api.enabled", cfg.API.Enabled, "enable HTTP and gRPC API")
 	flags.StringVar(&cfg.API.HTTP.Address, "http.address", cfg.API.HTTP.Address, "address for serving the HTTP API")
 	flags.StringVar(&cfg.API.GRPC.Address, "grpc.address", cfg.API.GRPC.Address, "address for serving the gRPC API")
 
