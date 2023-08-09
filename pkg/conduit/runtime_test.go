@@ -31,8 +31,8 @@ func TestRuntime(t *testing.T) {
 	var cfg conduit.Config
 	cfg.DB.Type = "badger"
 	cfg.DB.Badger.Path = t.TempDir() + "/testing.app.db"
-	cfg.GRPC.Address = ":0"
-	cfg.HTTP.Address = ":0"
+	cfg.API.GRPC.Address = ":0"
+	cfg.API.HTTP.Address = ":0"
 	cfg.Log.Level = "info"
 	cfg.Log.Format = "cli"
 	cfg.Pipelines.Path = "./pipelines"
