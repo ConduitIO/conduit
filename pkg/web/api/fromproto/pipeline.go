@@ -20,10 +20,13 @@ import (
 )
 
 func PipelineConfig(in *apiv1.Pipeline_Config) pipeline.Config {
-	return pipeline.Config{
-		Name:        in.Name,
-		Description: in.Description,
+	if in != nil {
+		return pipeline.Config{
+			Name:        in.Name,
+			Description: in.Description,
+		}
 	}
+	return pipeline.Config{}
 }
 
 func PipelineDLQ(in *apiv1.Pipeline_DLQ) pipeline.DLQ {

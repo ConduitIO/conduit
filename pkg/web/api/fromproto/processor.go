@@ -27,15 +27,21 @@ func _() {
 }
 
 func ProcessorConfig(in *apiv1.Processor_Config) processor.Config {
-	return processor.Config{
-		Settings: in.Settings,
-		Workers:  int(in.Workers),
+	if in != nil {
+		return processor.Config{
+			Settings: in.Settings,
+			Workers:  int(in.Workers),
+		}
 	}
+	return processor.Config{}
 }
 
 func ProcessorParent(in *apiv1.Processor_Parent) processor.Parent {
-	return processor.Parent{
-		ID:   in.Id,
-		Type: processor.ParentType(in.Type),
+	if in != nil {
+		return processor.Parent{
+			ID:   in.Id,
+			Type: processor.ParentType(in.Type),
+		}
 	}
+	return processor.Parent{}
 }
