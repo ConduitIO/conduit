@@ -20,16 +20,19 @@ import (
 )
 
 func PipelineConfig(in *apiv1.Pipeline_Config) pipeline.Config {
-	if in != nil {
-		return pipeline.Config{
-			Name:        in.Name,
-			Description: in.Description,
-		}
+	if in == nil {
+		return pipeline.Config{}
 	}
-	return pipeline.Config{}
+	return pipeline.Config{
+		Name:        in.Name,
+		Description: in.Description,
+	}
 }
 
 func PipelineDLQ(in *apiv1.Pipeline_DLQ) pipeline.DLQ {
+	if in == nil {
+		return pipeline.DefaultDLQ
+	}
 	return pipeline.DLQ{
 		Plugin:              in.Plugin,
 		Settings:            in.Settings,

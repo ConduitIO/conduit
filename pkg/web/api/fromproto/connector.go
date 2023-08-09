@@ -31,11 +31,11 @@ func ConnectorType(in apiv1.Connector_Type) connector.Type {
 }
 
 func ConnectorConfig(in *apiv1.Connector_Config) connector.Config {
-	if in != nil {
-		return connector.Config{
-			Name:     in.Name,
-			Settings: in.Settings,
-		}
+	if in == nil {
+		return connector.Config{}
 	}
-	return connector.Config{}
+	return connector.Config{
+		Name:     in.Name,
+		Settings: in.Settings,
+	}
 }
