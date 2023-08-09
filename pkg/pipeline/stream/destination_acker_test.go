@@ -24,8 +24,8 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/pipeline/stream/mock"
 	"github.com/conduitio/conduit/pkg/record"
-	"github.com/golang/mock/gomock"
 	"github.com/matryer/is"
+	"go.uber.org/mock/gomock"
 )
 
 func TestDestinationAckerNode_Cache(t *testing.T) {

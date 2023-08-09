@@ -22,8 +22,8 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	streammock "github.com/conduitio/conduit/pkg/pipeline/stream/mock"
 	"github.com/conduitio/conduit/pkg/record"
-	"github.com/golang/mock/gomock"
 	"github.com/matryer/is"
+	"go.uber.org/mock/gomock"
 )
 
 func TestDLQDestination_Success(t *testing.T) {
