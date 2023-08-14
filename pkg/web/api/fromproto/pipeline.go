@@ -31,7 +31,7 @@ func PipelineConfig(in *apiv1.Pipeline_Config) pipeline.Config {
 
 func PipelineDLQ(in *apiv1.Pipeline_DLQ) pipeline.DLQ {
 	if in == nil {
-		return pipeline.DefaultDLQ
+		return pipeline.DLQ{}
 	}
 	return pipeline.DLQ{
 		Plugin:              in.Plugin,
