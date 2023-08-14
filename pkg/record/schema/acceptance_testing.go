@@ -15,11 +15,10 @@
 package schema
 
 import (
+	"github.com/matryer/is"
 	"runtime"
 	"strings"
 	"testing"
-
-	"github.com/conduitio/conduit/pkg/foundation/assert"
 )
 
 // AcceptanceTest is the acceptance test that all implementations of Schema
@@ -36,14 +35,16 @@ func AcceptanceTest(t *testing.T, schema Schema) {
 
 // Tests that converting Schema to MutableSchema preserves the descriptors.
 func testMutableSchemaSameAsSchema(t *testing.T, s Schema) {
+	is := is.New(t)
+
 	t.Run(testName(), func(t *testing.T) {
 		ms := s.ToMutable()
-		assert.Equal(t, s.Type(), ms.Type())
-		assert.Equal(t, s.Version(), ms.Version())
+		is.Equal(s.Type(), ms.Type())
+		is.Equal(s.Version(), ms.Version())
 
 		d1 := s.Descriptors()
 		d2 := ms.Descriptors()
-		assert.Equal(t, len(d1), len(d2))
+		is.Equal(len(d1), len(d2))
 		for i := 0; i < len(d1); i++ {
 			assertDescriptorsEqual(t, d1[i], d2[i])
 		}
@@ -51,56 +52,60 @@ func testMutableSchemaSameAsSchema(t *testing.T, s Schema) {
 }
 
 func assertDescriptorsEqual(tb testing.TB, d1 Descriptor, d2 Descriptor) {
-	assert.Equal(tb, d1.Parameters(), d2.Parameters())
+	is := is.New(tb)
+
+	is.Equal(d1.Parameters(), d2.Parameters())
 
 	switch v1 := d1.(type) {
 	case StructDescriptor:
 		v2, ok := d2.(StructDescriptor)
-		assert.True(tb, ok, "expected %T, got %T", d1, d2)
+		is.True(ok)
 
-		assert.Equal(tb, v1.Name(), v2.Name())
+		is.Equal(v1.Name(), v2.Name())
 
 		f1 := v1.Fields()
 		f2 := v2.Fields()
-		assert.Equal(tb, len(f1), len(f2))
+		is.Equal(len(f1), len(f2))
 		for i := 0; i < len(f1); i++ {
 			assertFieldsEqual(tb, f1[i], f2[i])
 		}
 	case EnumDescriptor:
 		v2, ok := d2.(EnumDescriptor)
-		assert.True(tb, ok, "expected %T, got %T", d1, d2)
+		is.True(ok)
 
-		assert.Equal(tb, v1.Name(), v2.Name())
+		is.Equal(v1.Name(), v2.Name())
 
 		vd1 := v1.ValueDescriptors()
 		vd2 := v2.ValueDescriptors()
-		assert.Equal(tb, len(vd1), len(vd2))
+		is.Equal(len(vd1), len(vd2))
 		for i := 0; i < len(vd1); i++ {
 			assertDescriptorsEqual(tb, vd1[i], vd2[i])
 		}
 	case EnumValueDescriptor:
 		v2, ok := d2.(EnumValueDescriptor)
-		assert.True(tb, ok, "expected %T, got %T", d1, d2)
+		is.True(ok)
 
-		assert.Equal(tb, v1.Name(), v2.Name())
-		assert.Equal(tb, v1.Value(), v2.Value())
+		is.Equal(v1.Name(), v2.Name())
+		is.Equal(v1.Value(), v2.Value())
 	case MapDescriptor:
 		v2, ok := d2.(MapDescriptor)
-		assert.True(tb, ok, "expected %T, got %T", d1, d2)
+		is.True(ok)
 
 		assertDescriptorsEqual(tb, v1.KeyDescriptor(), v2.KeyDescriptor())
 		assertDescriptorsEqual(tb, v1.ValueDescriptor(), v2.ValueDescriptor())
 	case ArrayDescriptor:
 		v2, ok := d2.(ArrayDescriptor)
-		assert.True(tb, ok, "expected %T, got %T", d1, d2)
+		is.True(ok)
 
 		assertDescriptorsEqual(tb, v1.ValueDescriptor(), v2.ValueDescriptor())
 	}
 }
 
 func assertFieldsEqual(tb testing.TB, f1 Field, f2 Field) {
-	assert.Equal(tb, f1.Name(), f2.Name())
-	assert.Equal(tb, f1.Index(), f2.Index())
+	is := is.New(tb)
+
+	is.Equal(f1.Name(), f2.Name())
+	is.Equal(f1.Index(), f2.Index())
 	assertDescriptorsEqual(tb, f1.Descriptor(), f2.Descriptor())
 }
 
