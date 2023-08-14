@@ -16,13 +16,12 @@ package proto
 
 import (
 	"fmt"
+	"github.com/matryer/is"
 	"io"
 	"math"
 	"os"
-	"strings"
 	"testing"
 
-	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/record/schema"
 	"google.golang.org/protobuf/proto"
@@ -35,20 +34,24 @@ const (
 )
 
 func getFileDescriptorSet(t *testing.T, path string) *descriptorpb.FileDescriptorSet {
+	is := is.New(t)
+
 	f, err := os.Open(path)
-	assert.Ok(t, err)
+	is.NoErr(err)
 
 	content, err := io.ReadAll(f)
-	assert.Ok(t, err)
+	is.NoErr(err)
 
 	var fds descriptorpb.FileDescriptorSet
 	err = proto.Unmarshal(content, &fds)
-	assert.Ok(t, err)
+	is.NoErr(err)
 
 	return &fds
 }
 
 func TestNewSchema(t *testing.T) {
+	is := is.New(t)
+
 	testCases := []struct {
 		path           string
 		mainDescriptor string
@@ -81,13 +84,15 @@ func TestNewSchema(t *testing.T) {
 			fds := getFileDescriptorSet(t, tc.path)
 
 			_, err := NewSchema(fds, tc.mainDescriptor, 1)
-			assertError(t, tc.wantErr, err)
+			is.Equal(tc.wantErr, err)
 		})
 	}
 }
 
 // TestSchema runs the generic acceptance test.
 func TestSchema(t *testing.T) {
+	is := is.New(t)
+
 	testCases := []struct {
 		path           string
 		mainDescriptor string
@@ -107,21 +112,25 @@ func TestSchema(t *testing.T) {
 			fds := getFileDescriptorSet(t, tc.path)
 
 			s, err := NewSchema(fds, tc.mainDescriptor, 1)
-			assert.Ok(t, err)
+			is.NoErr(err)
 			schema.AcceptanceTest(t, s)
 		})
 	}
 }
 
 func TestSchema_Type(t *testing.T) {
+	is := is.New(t)
+
 	fds := getFileDescriptorSet(t, standaloneDescriptorSetPath)
 
 	s, err := NewSchema(fds, "", 1)
-	assert.Ok(t, err)
-	assert.Equal(t, SchemaType, s.Type())
+	is.NoErr(err)
+	is.Equal(SchemaType, s.Type())
 }
 
 func TestSchema_Version(t *testing.T) {
+	is := is.New(t)
+
 	testCases := []struct {
 		version int
 		wantErr error
@@ -139,13 +148,15 @@ func TestSchema_Version(t *testing.T) {
 			fds := getFileDescriptorSet(t, standaloneDescriptorSetPath)
 
 			s, err := NewSchema(fds, "", tc.version)
-			assertError(t, tc.wantErr, err)
-			assert.Equal(t, tc.version, s.Version())
+			is.True(err == nil)
+			is.Equal(tc.version, s.Version())
 		})
 	}
 }
 
 func TestSchema_Descriptors(t *testing.T) {
+	is := is.New(t)
+
 	testCases := []struct {
 		path              string
 		mainDescriptor    string
@@ -154,41 +165,41 @@ func TestSchema_Descriptors(t *testing.T) {
 		path:           standaloneDescriptorSetPath,
 		mainDescriptor: "",
 		assertDescriptors: func(t *testing.T, descriptors []schema.Descriptor) {
-			assert.Equal(t, 1, len(descriptors))
+			is.Equal(1, len(descriptors))
 
 			sd, ok := descriptors[0].(StructDescriptor)
-			assert.Equal(t, true, ok)
-			assert.Equal(t, "Foo", sd.Name())
+			is.Equal(true, ok)
+			is.Equal("Foo", sd.Name())
 		},
 	}, {
 		path:           test1DescriptorSetPath,
 		mainDescriptor: "",
 		assertDescriptors: func(t *testing.T, descriptors []schema.Descriptor) {
-			assert.Equal(t, 6, len(descriptors))
+			is.Equal(6, len(descriptors))
 
 			d1, ok := descriptors[0].(StructDescriptor)
-			assert.True(t, ok, "expected %T, got %T", StructDescriptor{}, descriptors[0])
-			assert.Equal(t, "Foo", d1.Name())
+			is.True(ok)
+			is.Equal("Foo", d1.Name())
 
 			d2, ok := descriptors[1].(StructDescriptor)
-			assert.True(t, ok, "expected %T, got %T", StructDescriptor{}, descriptors[1])
-			assert.Equal(t, "AllTypes", d2.Name())
+			is.True(ok)
+			is.Equal("AllTypes", d2.Name())
 
 			d3, ok := descriptors[2].(StructDescriptor)
-			assert.True(t, ok, "expected %T, got %T", StructDescriptor{}, descriptors[2])
-			assert.Equal(t, "Empty", d3.Name())
+			is.True(ok)
+			is.Equal("Empty", d3.Name())
 
 			d4, ok := descriptors[3].(StructDescriptor)
-			assert.True(t, ok, "expected %T, got %T", StructDescriptor{}, descriptors[3])
-			assert.Equal(t, "Nested", d4.Name())
+			is.True(ok)
+			is.Equal("Nested", d4.Name())
 
 			d5, ok := descriptors[4].(EnumDescriptor)
-			assert.True(t, ok, "expected %T, got %T", EnumDescriptor{}, descriptors[4])
-			assert.Equal(t, "MyEnum", d5.Name())
+			is.True(ok)
+			is.Equal("MyEnum", d5.Name())
 
 			d6, ok := descriptors[5].(EnumDescriptor)
-			assert.True(t, ok, "expected %T, got %T", EnumDescriptor{}, descriptors[5])
-			assert.Equal(t, "UnusedEnum", d6.Name())
+			is.True(ok)
+			is.Equal("UnusedEnum", d6.Name())
 		},
 	}}
 
@@ -196,7 +207,7 @@ func TestSchema_Descriptors(t *testing.T) {
 		t.Run(fmt.Sprintf("test case %d", i), func(t *testing.T) {
 			fds := getFileDescriptorSet(t, tc.path)
 			s, err := NewSchema(fds, tc.mainDescriptor, 1)
-			assert.Ok(t, err)
+			is.NoErr(err)
 
 			tc.assertDescriptors(t, s.Descriptors())
 		})
@@ -204,6 +215,8 @@ func TestSchema_Descriptors(t *testing.T) {
 }
 
 func TestStructDescriptor_Fields(t *testing.T) {
+	is := is.New(t)
+
 	testCases := []struct {
 		path             string
 		mainDescriptor   string
@@ -214,41 +227,41 @@ func TestStructDescriptor_Fields(t *testing.T) {
 		mainDescriptor: "",
 		getDescriptor: func(t *testing.T, s schema.Schema) StructDescriptor {
 			d, ok := s.Descriptors()[1].(StructDescriptor)
-			assert.True(t, ok, "expected %T, got %T", StructDescriptor{}, s.Descriptors()[1])
-			assert.Equal(t, "AllTypes", d.Name())
+			is.True(ok)
+			is.Equal("AllTypes", d.Name())
 			return d
 		},
 		assertDescriptor: func(t *testing.T, descriptor StructDescriptor) {
 			fields := descriptor.Fields()
 
-			assert.Equal(t, 19, len(fields))
+			is.Equal(19, len(fields))
 			for i, f := range fields {
-				assert.Equal(t, fmt.Sprintf("f%d", i+1), f.Name())
+				is.Equal(fmt.Sprintf("f%d", i+1), f.Name())
 
 				if i < 19 {
-					assert.Equal(t, i+1, f.Index())
+					is.Equal(i+1, f.Index())
 				} else {
-					assert.Equal(t, (i+1)*10, f.Index())
+					is.Equal((i+1)*10, f.Index())
 				}
 
 				switch i {
 				case 15:
 					_, ok := f.Descriptor().(StructDescriptor)
-					assert.True(t, ok, "expected %T, got %T", StructDescriptor{}, f.Descriptor())
+					is.True(ok)
 				case 16:
 					_, ok := f.Descriptor().(ArrayDescriptor)
-					assert.True(t, ok, "expected %T, got %T", ArrayDescriptor{}, f.Descriptor())
+					is.True(ok)
 				case 17:
 					_, ok := f.Descriptor().(MapDescriptor)
-					assert.True(t, ok, "expected %T, got %T", MapDescriptor{}, f.Descriptor())
+					is.True(ok)
 				case 18:
 					_, ok := f.Descriptor().(EnumDescriptor)
-					assert.True(t, ok, "expected %T, got %T", EnumDescriptor{}, f.Descriptor())
+					is.True(ok)
 
 				default:
 					// first 15 fields should be primitive types
 					_, ok := f.Descriptor().(PrimitiveDescriptor)
-					assert.True(t, ok, "expected %T, got %T", PrimitiveDescriptor{}, f.Descriptor())
+					is.True(ok)
 				}
 			}
 		},
@@ -257,26 +270,26 @@ func TestStructDescriptor_Fields(t *testing.T) {
 		mainDescriptor: "",
 		getDescriptor: func(t *testing.T, s schema.Schema) StructDescriptor {
 			d, ok := s.Descriptors()[0].(StructDescriptor)
-			assert.True(t, ok, "expected %T, got %T", StructDescriptor{}, s.Descriptors()[0])
-			assert.Equal(t, "Foo", d.Name())
+			is.True(ok)
+			is.Equal("Foo", d.Name())
 			return d
 		},
 		assertDescriptor: func(t *testing.T, descriptor StructDescriptor) {
 			fields := descriptor.Fields()
 
-			assert.Equal(t, 2, len(fields))
+			is.Equal(2, len(fields))
 
-			assert.Equal(t, "key", fields[0].Name())
-			assert.Equal(t, 1, fields[0].Index())
+			is.Equal("key", fields[0].Name())
+			is.Equal(1, fields[0].Index())
 			d1, ok := fields[0].Descriptor().(PrimitiveDescriptor)
-			assert.Equal(t, true, ok)
-			assert.Equal(t, schema.String, d1.Type())
+			is.Equal(true, ok)
+			is.Equal(schema.String, d1.Type())
 
-			assert.Equal(t, "value", fields[1].Name())
-			assert.Equal(t, 2, fields[1].Index())
+			is.Equal("value", fields[1].Name())
+			is.Equal(2, fields[1].Index())
 			d2, ok := fields[1].Descriptor().(PrimitiveDescriptor)
-			assert.Equal(t, true, ok)
-			assert.Equal(t, schema.String, d2.Type())
+			is.Equal(true, ok)
+			is.Equal(schema.String, d2.Type())
 		},
 	}}
 
@@ -284,7 +297,7 @@ func TestStructDescriptor_Fields(t *testing.T) {
 		t.Run(fmt.Sprintf("test case %d", i), func(t *testing.T) {
 			fds := getFileDescriptorSet(t, tc.path)
 			s, err := NewSchema(fds, tc.mainDescriptor, 1)
-			assert.Ok(t, err)
+			is.NoErr(err)
 
 			sd := tc.getDescriptor(t, s)
 			tc.assertDescriptor(t, sd)
@@ -293,6 +306,8 @@ func TestStructDescriptor_Fields(t *testing.T) {
 }
 
 func TestArrayDescriptor(t *testing.T) {
+	is := is.New(t)
+
 	testCases := []struct {
 		path             string
 		mainDescriptor   string
@@ -304,13 +319,13 @@ func TestArrayDescriptor(t *testing.T) {
 		getDescriptor: func(t *testing.T, s schema.Schema) ArrayDescriptor {
 			// get descriptor for AllTypes.f17, it is an array
 			d, ok := s.Descriptors()[1].(StructDescriptor).Fields()[16].Descriptor().(ArrayDescriptor)
-			assert.True(t, ok, "expected %T, got %T", ArrayDescriptor{}, s.Descriptors()[1].(StructDescriptor).Fields()[16].Descriptor())
+			is.True(ok)
 			return d
 		},
 		assertDescriptor: func(t *testing.T, descriptor ArrayDescriptor) {
 			d, ok := descriptor.ValueDescriptor().(StructDescriptor)
-			assert.True(t, ok, "expected %T, got %T", StructDescriptor{}, descriptor.ValueDescriptor())
-			assert.Equal(t, "Foo", d.Name())
+			is.True(ok)
+			is.Equal("Foo", d.Name())
 		},
 	}}
 
@@ -318,7 +333,7 @@ func TestArrayDescriptor(t *testing.T) {
 		t.Run(fmt.Sprintf("test case %d", i), func(t *testing.T) {
 			fds := getFileDescriptorSet(t, tc.path)
 			s, err := NewSchema(fds, tc.mainDescriptor, 1)
-			assert.Ok(t, err)
+			is.NoErr(err)
 
 			sd := tc.getDescriptor(t, s)
 			tc.assertDescriptor(t, sd)
@@ -327,6 +342,8 @@ func TestArrayDescriptor(t *testing.T) {
 }
 
 func TestMapDescriptor(t *testing.T) {
+	is := is.New(t)
+
 	testCases := []struct {
 		path             string
 		mainDescriptor   string
@@ -338,17 +355,17 @@ func TestMapDescriptor(t *testing.T) {
 		getDescriptor: func(t *testing.T, s schema.Schema) MapDescriptor {
 			// get descriptor for AllTypes.f18, it is a map
 			d, ok := s.Descriptors()[1].(StructDescriptor).Fields()[17].Descriptor().(MapDescriptor)
-			assert.True(t, ok, "expected %T, got %T", MapDescriptor{}, s.Descriptors()[1].(StructDescriptor).Fields()[17].Descriptor())
+			is.True(ok)
 			return d
 		},
 		assertDescriptor: func(t *testing.T, descriptor MapDescriptor) {
 			d1, ok := descriptor.KeyDescriptor().(PrimitiveDescriptor)
-			assert.True(t, ok, "expected %T, got %T", PrimitiveDescriptor{}, descriptor.KeyDescriptor())
-			assert.Equal(t, schema.String, d1.Type())
+			is.True(ok)
+			is.Equal(schema.String, d1.Type())
 
 			d2, ok := descriptor.ValueDescriptor().(StructDescriptor)
-			assert.True(t, ok, "expected %T, got %T", StructDescriptor{}, descriptor.ValueDescriptor())
-			assert.Equal(t, "Foo", d2.Name())
+			is.True(ok)
+			is.Equal("Foo", d2.Name())
 		},
 	}}
 
@@ -356,7 +373,7 @@ func TestMapDescriptor(t *testing.T) {
 		t.Run(fmt.Sprintf("test case %d", i), func(t *testing.T) {
 			fds := getFileDescriptorSet(t, tc.path)
 			s, err := NewSchema(fds, tc.mainDescriptor, 1)
-			assert.Ok(t, err)
+			is.NoErr(err)
 
 			sd := tc.getDescriptor(t, s)
 			tc.assertDescriptor(t, sd)
@@ -365,6 +382,8 @@ func TestMapDescriptor(t *testing.T) {
 }
 
 func TestEnumDescriptor(t *testing.T) {
+	is := is.New(t)
+
 	testCases := []struct {
 		path             string
 		mainDescriptor   string
@@ -376,24 +395,24 @@ func TestEnumDescriptor(t *testing.T) {
 		getDescriptor: func(t *testing.T, s schema.Schema) EnumDescriptor {
 			// get descriptor for AllTypes.f19, it is an enum
 			d, ok := s.Descriptors()[1].(StructDescriptor).Fields()[18].Descriptor().(EnumDescriptor)
-			assert.True(t, ok, "expected %T, got %T", EnumDescriptor{}, s.Descriptors()[1].(StructDescriptor).Fields()[18].Descriptor())
+			is.True(ok)
 			return d
 		},
 		assertDescriptor: func(t *testing.T, descriptor EnumDescriptor) {
-			assert.Equal(t, "MyEnum", descriptor.Name())
-			assert.Equal(t, 3, len(descriptor.ValueDescriptors()))
+			is.Equal("MyEnum", descriptor.Name())
+			is.Equal(3, len(descriptor.ValueDescriptors()))
 
 			vd1 := descriptor.ValueDescriptors()[0]
-			assert.Equal(t, "Val0", vd1.Name())
-			assert.Equal(t, "0", vd1.Value())
+			is.Equal("Val0", vd1.Name())
+			is.Equal("0", vd1.Value())
 
 			vd2 := descriptor.ValueDescriptors()[1]
-			assert.Equal(t, "Val1", vd2.Name())
-			assert.Equal(t, "1", vd2.Value())
+			is.Equal("Val1", vd2.Name())
+			is.Equal("1", vd2.Value())
 
 			vd3 := descriptor.ValueDescriptors()[2]
-			assert.Equal(t, "Val5", vd3.Name())
-			assert.Equal(t, "5", vd3.Value())
+			is.Equal("Val5", vd3.Name())
+			is.Equal("5", vd3.Value())
 		},
 	}}
 
@@ -401,7 +420,7 @@ func TestEnumDescriptor(t *testing.T) {
 		t.Run(fmt.Sprintf("test case %d", i), func(t *testing.T) {
 			fds := getFileDescriptorSet(t, tc.path)
 			s, err := NewSchema(fds, tc.mainDescriptor, 1)
-			assert.Ok(t, err)
+			is.NoErr(err)
 
 			sd := tc.getDescriptor(t, s)
 			tc.assertDescriptor(t, sd)
@@ -410,6 +429,8 @@ func TestEnumDescriptor(t *testing.T) {
 }
 
 func TestReusedDescriptors(t *testing.T) {
+	is := is.New(t)
+
 	testCases := []struct {
 		path           string
 		mainDescriptor string
@@ -443,25 +464,11 @@ func TestReusedDescriptors(t *testing.T) {
 		t.Run(fmt.Sprintf("test case %d", i), func(t *testing.T) {
 			fds := getFileDescriptorSet(t, tc.path)
 			s, err := NewSchema(fds, tc.mainDescriptor, 1)
-			assert.Ok(t, err)
+			is.NoErr(err)
 
 			d1 := tc.getDescriptor1(t, s)
 			d2 := tc.getDescriptor2(t, s)
-			assert.Equal(t, d1, d2)
+			is.Equal(d1, d2)
 		})
-	}
-}
-
-// assertError fails if the errors do not match.
-func assertError(tb testing.TB, want error, got error) {
-	//nolint:gocritic // no single value to have a switch on
-	if want == nil {
-		assert.Ok(tb, got)
-	} else if got == nil {
-		assert.Equal(tb, want.Error(), got)
-	} else {
-		// sanitize error string, protobuf randomly adds a non-breaking space
-		errStr := strings.ReplaceAll(got.Error(), "\u00a0", " ")
-		assert.Equal(tb, want.Error(), errStr)
 	}
 }

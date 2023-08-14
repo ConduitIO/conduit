@@ -16,6 +16,7 @@ package proto
 
 import (
 	"fmt"
+	"github.com/matryer/is"
 	"math"
 	"testing"
 
@@ -37,6 +38,8 @@ func TestMutableSchema_Type(t *testing.T) {
 }
 
 func TestMutableSchema_SetVersion(t *testing.T) {
+	is := is.New(t)
+
 	testCases := []struct {
 		version int
 		wantErr error
@@ -58,13 +61,15 @@ func TestMutableSchema_SetVersion(t *testing.T) {
 			assert.Equal(t, tc.version, ms.Version())
 
 			newSchema, err := ms.Build()
-			assertError(t, tc.wantErr, err)
+			is.Equal(tc.wantErr, err)
 			assert.Equal(t, tc.version, newSchema.Version())
 		})
 	}
 }
 
 func TestMutableSchema_SetDescriptors_Panics(t *testing.T) {
+	is := is.New(t)
+
 	testCases := []struct {
 		descriptors []schema.MutableDescriptor
 		wantPanic   error
@@ -100,7 +105,7 @@ func TestMutableSchema_SetDescriptors_Panics(t *testing.T) {
 		t.Run(fmt.Sprintf("test case %d", i), func(t *testing.T) {
 			defer func() {
 				if r := recover(); r != nil {
-					assertError(t, tc.wantPanic, r.(error))
+					is.Equal(tc.wantPanic, r.(error))
 				}
 			}()
 
@@ -175,6 +180,8 @@ func TestMutableStructDescriptor_SetName_Success(t *testing.T) {
 // will produce an error. This can be improved in the future, we can search for
 // all references and rename them.
 func TestMutableStructDescriptor_SetName_CannotResolveType(t *testing.T) {
+	is := is.New(t)
+
 	ms := fileDescriptorSetToMutalbeSchema(t, getFileDescriptorSet(t, test1DescriptorSetPath))
 
 	fooDesc := ms.Descriptors()[0].(*MutableStructDescriptor)
@@ -182,7 +189,7 @@ func TestMutableStructDescriptor_SetName_CannotResolveType(t *testing.T) {
 	assert.Equal(t, "FooNew", fooDesc.Name())
 
 	newSchema, err := ms.Build()
-	assertError(t, cerrors.New(`could not create proto registry: proto: message field "proto.AllTypes.f16" cannot resolve type: "proto.Foo" not found`), err)
+	is.Equal(cerrors.New(`could not create proto registry: proto: message field "proto.AllTypes.f16" cannot resolve type: "proto.Foo" not found`), err)
 	assert.Equal(t, nil, newSchema)
 }
 
@@ -213,6 +220,8 @@ func TestMutableStructDescriptor_SetFields_NewFieldSuccess(t *testing.T) {
 }
 
 func TestMutableStructDescriptor_SetFields_NewFieldConflict(t *testing.T) {
+	is := is.New(t)
+
 	ms := fileDescriptorSetToMutalbeSchema(t, getFileDescriptorSet(t, test1DescriptorSetPath))
 
 	fooDesc := ms.Descriptors()[0].(*MutableStructDescriptor)
@@ -230,10 +239,11 @@ func TestMutableStructDescriptor_SetFields_NewFieldConflict(t *testing.T) {
 	fooDesc.SetFields(mutableFields)
 
 	_, err := ms.Build()
-	assertError(t, cerrors.New(`could not create proto registry: proto: message "proto.Foo" has conflicting fields: "fieldWithIndex2" with "value"`), err)
+	is.Equal(cerrors.New(`could not create proto registry: proto: message "proto.Foo" has conflicting fields: "fieldWithIndex2" with "value"`), err)
 }
 
 func TestMutableField_SetName(t *testing.T) {
+
 	ms := fileDescriptorSetToMutalbeSchema(t, getFileDescriptorSet(t, test1DescriptorSetPath))
 
 	f1Desc := ms.Descriptors()[0].(*MutableStructDescriptor).Fields()[0].(*MutableField)
@@ -378,6 +388,8 @@ func TestMutableMapDescriptor_SetKeyDescriptor_Success(t *testing.T) {
 }
 
 func TestMutableMapDescriptor_SetKeyDescriptor_InvalidKeyKind(t *testing.T) {
+	is := is.New(t)
+
 	testCases := []struct {
 		descriptorType schema.PrimitiveDescriptorType
 		wantErr        error
@@ -408,7 +420,7 @@ func TestMutableMapDescriptor_SetKeyDescriptor_InvalidKeyKind(t *testing.T) {
 			assert.Equal(t, keyDesc, mapDesc.KeyDescriptor())
 
 			_, err := ms.Build()
-			assertError(t, tc.wantErr, err)
+			is.Equal(tc.wantErr, err)
 		})
 	}
 }
@@ -612,6 +624,8 @@ func TestMutableEnumDescriptor_SetValueDescriptors_NewValueSuccess(t *testing.T)
 }
 
 func TestMutableEnumDescriptor_SetValues_NewValueConflict(t *testing.T) {
+	is := is.New(t)
+
 	ms := fileDescriptorSetToMutalbeSchema(t, getFileDescriptorSet(t, test1DescriptorSetPath))
 
 	enumDesc := ms.Descriptors()[5].(*MutableEnumDescriptor)
@@ -629,7 +643,7 @@ func TestMutableEnumDescriptor_SetValues_NewValueConflict(t *testing.T) {
 	enumDesc.SetValueDescriptors(mutableValues)
 
 	_, err := ms.Build()
-	assertError(t, cerrors.New(`could not create proto registry: proto: enum "proto.UnusedEnum" has conflicting non-aliased values on number 0: "value0" with "V1"`), err)
+	is.Equal(cerrors.New(`could not create proto registry: proto: enum "proto.UnusedEnum" has conflicting non-aliased values on number 0: "value0" with "V1"`), err)
 }
 
 func TestMutableEnumValueDescriptor_SetName_Success(t *testing.T) {
@@ -661,6 +675,8 @@ func TestMutableEnumValueDescriptor_SetValue_Success(t *testing.T) {
 }
 
 func TestMutableEnumValueDescriptor_SetValue_MissingZeroNumber(t *testing.T) {
+	is := is.New(t)
+
 	ms := fileDescriptorSetToMutalbeSchema(t, getFileDescriptorSet(t, test1DescriptorSetPath))
 
 	enumDesc := ms.Descriptors()[5].(*MutableEnumDescriptor).ValueDescriptors()[0].(*MutableEnumValueDescriptor)
@@ -669,7 +685,7 @@ func TestMutableEnumValueDescriptor_SetValue_MissingZeroNumber(t *testing.T) {
 	assert.Equal(t, "1", enumDesc.Value())
 
 	_, err := ms.Build()
-	assertError(t, cerrors.New(`could not create proto registry: proto: enum "proto.V1" using proto3 semantics must have zero number for the first value`), err)
+	is.Equal(cerrors.New(`could not create proto registry: proto: enum "proto.V1" using proto3 semantics must have zero number for the first value`), err)
 }
 
 func TestMutablePrimitiveDescriptor_Type(t *testing.T) {
