@@ -74,14 +74,14 @@ const (
 type Runtime struct {
 	Config Config
 
-	DB           database.DB
-	Orchestrator *orchestrator.Orchestrator
+	DB               database.DB
+	Orchestrator     *orchestrator.Orchestrator
+	ProvisionService *provisioning.Service
 
 	pipelineService  *pipeline.Service
 	connectorService *connector.Service
 	processorService *processor.Service
 	pluginService    *plugin.Service
-	provisionService *provisioning.Service
 
 	connectorPersister *connector.Persister
 
@@ -97,20 +97,24 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 	logger := newLogger(cfg.Log.Level, cfg.Log.Format)
 
 	var db database.DB
-	var err error
-	switch cfg.DB.Type {
-	case DBTypeBadger:
-		db, err = badger.New(logger.Logger, cfg.DB.Badger.Path)
-	case DBTypePostgres:
-		db, err = postgres.New(context.Background(), logger, cfg.DB.Postgres.ConnectionString, cfg.DB.Postgres.Table)
-	case DBTypeInMemory:
-		db = &inmemory.DB{}
-		logger.Warn(context.Background()).Msg("Using in-memory store, all pipeline configurations will be lost when Conduit stops.")
-	default:
-		err = cerrors.Errorf("invalid DB type %q", cfg.DB.Type)
-	}
-	if err != nil {
-		return nil, cerrors.Errorf("failed to create a DB instance: %w", err)
+	db = cfg.DB.Driver
+
+	if db == nil {
+		var err error
+		switch cfg.DB.Type {
+		case DBTypeBadger:
+			db, err = badger.New(logger.Logger, cfg.DB.Badger.Path)
+		case DBTypePostgres:
+			db, err = postgres.New(context.Background(), logger, cfg.DB.Postgres.ConnectionString, cfg.DB.Postgres.Table)
+		case DBTypeInMemory:
+			db = &inmemory.DB{}
+			logger.Warn(context.Background()).Msg("Using in-memory store, all pipeline configurations will be lost when Conduit stops.")
+		default:
+			err = cerrors.Errorf("invalid DB type %q", cfg.DB.Type)
+		}
+		if err != nil {
+			return nil, cerrors.Errorf("failed to create a DB instance: %w", err)
+		}
 	}
 
 	configurePrometheus()
@@ -133,15 +137,15 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 	orc := orchestrator.NewOrchestrator(db, logger, plService, connService, procService, pluginService)
 
 	r := &Runtime{
-		Config:       cfg,
-		DB:           db,
-		Orchestrator: orc,
+		Config:           cfg,
+		DB:               db,
+		Orchestrator:     orc,
+		ProvisionService: provisionService,
 
 		pipelineService:  plService,
 		connectorService: connService,
 		processorService: procService,
 		pluginService:    pluginService,
-		provisionService: provisionService,
 
 		connectorPersister: connectorPersister,
 
@@ -232,7 +236,7 @@ func (r *Runtime) Run(ctx context.Context) (err error) {
 		return cerrors.Errorf("failed to init pipeline service: %w", err)
 	}
 
-	err = r.provisionService.Init(ctx)
+	err = r.ProvisionService.Init(ctx)
 	if err != nil {
 		multierror.ForEach(err, func(err error) {
 			r.logger.Err(ctx, err).Msg("provisioning failed")
@@ -253,24 +257,26 @@ func (r *Runtime) Run(ctx context.Context) (err error) {
 		})
 	}
 
-	// Serve grpc and http API
-	grpcAddr, err := r.serveGRPCAPI(ctx, t)
-	if err != nil {
-		return cerrors.Errorf("failed to serve grpc api: %w", err)
-	}
-	httpAddr, err := r.serveHTTPAPI(ctx, t, grpcAddr)
-	if err != nil {
-		return cerrors.Errorf("failed to serve http api: %w", err)
-	}
+	if r.Config.API.Enabled {
+		// Serve grpc and http API
+		grpcAddr, err := r.serveGRPCAPI(ctx, t)
+		if err != nil {
+			return cerrors.Errorf("failed to serve grpc api: %w", err)
+		}
+		httpAddr, err := r.serveHTTPAPI(ctx, t, grpcAddr)
+		if err != nil {
+			return cerrors.Errorf("failed to serve http api: %w", err)
+		}
 
-	port := 8080 // default
-	if tcpAddr, ok := httpAddr.(*net.TCPAddr); ok {
-		port = tcpAddr.Port
+		port := 8080 // default
+		if tcpAddr, ok := httpAddr.(*net.TCPAddr); ok {
+			port = tcpAddr.Port
+		}
+		r.logger.Info(ctx).Send()
+		r.logger.Info(ctx).Msgf("click here to navigate to Conduit UI: http://localhost:%d/ui", port)
+		r.logger.Info(ctx).Msgf("click here to navigate to explore the HTTP API: http://localhost:%d/openapi", port)
+		r.logger.Info(ctx).Send()
 	}
-	r.logger.Info(ctx).Send()
-	r.logger.Info(ctx).Msgf("click here to navigate to Conduit UI: http://localhost:%d/ui", port)
-	r.logger.Info(ctx).Msgf("click here to navigate to explore the HTTP API: http://localhost:%d/openapi", port)
-	r.logger.Info(ctx).Send()
 
 	return nil
 }
@@ -479,7 +485,7 @@ func (r *Runtime) serveHTTPAPI(
 		ctx,
 		t,
 		&http.Server{
-			Addr:              r.Config.HTTP.Address,
+			Addr:              r.Config.API.HTTP.Address,
 			Handler:           handler,
 			ReadHeaderTimeout: 10 * time.Second,
 		},
@@ -513,9 +519,9 @@ func (r *Runtime) serveGRPC(
 	t *tomb.Tomb,
 	srv *grpc.Server,
 ) (net.Addr, error) {
-	ln, err := net.Listen("tcp", r.Config.GRPC.Address)
+	ln, err := net.Listen("tcp", r.Config.API.GRPC.Address)
 	if err != nil {
-		return nil, cerrors.Errorf("failed to listen on address %q: %w", r.Config.GRPC.Address, err)
+		return nil, cerrors.Errorf("failed to listen on address %q: %w", r.Config.API.GRPC.Address, err)
 	}
 
 	t.Go(func() error {
@@ -548,7 +554,7 @@ func (r *Runtime) serveHTTP(
 ) (net.Addr, error) {
 	ln, err := net.Listen("tcp", srv.Addr)
 	if err != nil {
-		return nil, cerrors.Errorf("failed to listen on address %q: %w", r.Config.GRPC.Address, err)
+		return nil, cerrors.Errorf("failed to listen on address %q: %w", r.Config.API.GRPC.Address, err)
 	}
 
 	t.Go(func() error {

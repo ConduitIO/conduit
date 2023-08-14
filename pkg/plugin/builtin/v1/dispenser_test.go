@@ -21,7 +21,7 @@ import (
 	"github.com/conduitio/conduit-connector-protocol/cpluginv1/mock"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
-	"github.com/golang/mock/gomock"
+	"github.com/golang/mock/gomock" //nolint:depguard // the protocol is using the old mock package, this will be changed when we update conduit-connector-protocol
 	"github.com/rs/zerolog"
 )
 

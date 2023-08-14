@@ -9,7 +9,7 @@ import (
 	reflect "reflect"
 
 	record "github.com/conduitio/conduit/pkg/record"
-	gomock "github.com/golang/mock/gomock"
+	gomock "go.uber.org/mock/gomock"
 )
 
 // Source is a mock of Source interface.

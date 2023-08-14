@@ -9,7 +9,7 @@ import (
 	reflect "reflect"
 
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
-	gomock "github.com/golang/mock/gomock"
+	gomock "go.uber.org/mock/gomock"
 	metadata "google.golang.org/grpc/metadata"
 )
 

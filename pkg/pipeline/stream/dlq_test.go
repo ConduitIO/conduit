@@ -28,9 +28,9 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/metrics/noop"
 	"github.com/conduitio/conduit/pkg/pipeline/stream/mock"
 	"github.com/conduitio/conduit/pkg/record"
-	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
 	"github.com/matryer/is"
+	"go.uber.org/mock/gomock"
 )
 
 func TestDLQHandlerNode_AddDone(t *testing.T) {

@@ -23,9 +23,9 @@ import (
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/provisioning/config"
 	"github.com/conduitio/conduit/pkg/provisioning/mock"
-	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
 	"github.com/matryer/is"
+	"go.uber.org/mock/gomock"
 )
 
 func TestCreatePipelineAction_Do(t *testing.T) {
