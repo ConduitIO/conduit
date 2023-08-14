@@ -16,12 +16,12 @@ package api
 
 import (
 	"context"
+	"github.com/matryer/is"
 	"sort"
 	"testing"
 	"time"
 
 	"github.com/conduitio/conduit/pkg/connector"
-	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/foundation/cchan"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -36,6 +36,8 @@ import (
 )
 
 func TestConnectorAPIv1_ListConnectors(t *testing.T) {
+	is := is.New(t)
+
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	csMock := apimock.NewConnectorOrchestrator(ctrl)
@@ -97,7 +99,7 @@ func TestConnectorAPIv1_ListConnectors(t *testing.T) {
 		ctx,
 		&apiv1.ListConnectorsRequest{},
 	)
-	assert.Ok(t, err)
+	is.NoErr(err)
 
 	// copy expected times
 	for i, conn := range got.Connectors {
@@ -107,10 +109,12 @@ func TestConnectorAPIv1_ListConnectors(t *testing.T) {
 
 	sortConnectors(want.Connectors)
 	sortConnectors(got.Connectors)
-	assert.Equal(t, want, got)
+	is.Equal(want, got)
 }
 
 func TestConnectorAPIv1_ListConnectorsByPipeline(t *testing.T) {
+	is := is.New(t)
+
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	csMock := apimock.NewConnectorOrchestrator(ctrl)
@@ -150,7 +154,7 @@ func TestConnectorAPIv1_ListConnectorsByPipeline(t *testing.T) {
 		ctx,
 		&apiv1.ListConnectorsRequest{PipelineId: source.PipelineID},
 	)
-	assert.Ok(t, err)
+	is.NoErr(err)
 
 	// copy expected time
 	for i, conn := range got.Connectors {
@@ -158,10 +162,12 @@ func TestConnectorAPIv1_ListConnectorsByPipeline(t *testing.T) {
 		conn.UpdatedAt = want.Connectors[i].UpdatedAt
 	}
 
-	assert.Equal(t, want, got)
+	is.Equal(want, got)
 }
 
 func TestConnectorAPIv1_CreateConnector(t *testing.T) {
+	is := is.New(t)
+
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	csMock := apimock.NewConnectorOrchestrator(ctrl)
@@ -199,16 +205,18 @@ func TestConnectorAPIv1_CreateConnector(t *testing.T) {
 		},
 	)
 
-	assert.Ok(t, err)
+	is.NoErr(err)
 
 	// copy expected time
 	got.Connector.CreatedAt = want.Connector.CreatedAt
 	got.Connector.UpdatedAt = want.Connector.UpdatedAt
 
-	assert.Equal(t, want, got)
+	is.Equal(want, got)
 }
 
 func TestConnectorAPIv1_InspectConnector_SendRecord(t *testing.T) {
+	is := is.New(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	ctrl := gomock.NewController(t)
@@ -218,7 +226,7 @@ func TestConnectorAPIv1_InspectConnector_SendRecord(t *testing.T) {
 	id := uuid.NewString()
 	rec := generateTestRecord()
 	recProto, err := toproto.Record(rec)
-	assert.Ok(t, err)
+	is.NoErr(err)
 
 	ins := inspector.New(log.Nop(), 10)
 	session := ins.NewSession(ctx, "test-id")
@@ -244,6 +252,8 @@ func TestConnectorAPIv1_InspectConnector_SendRecord(t *testing.T) {
 }
 
 func TestConnectorAPIv1_InspectConnector_SendErr(t *testing.T) {
+	is := is.New(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	ctrl := gomock.NewController(t)
@@ -275,12 +285,14 @@ func TestConnectorAPIv1_InspectConnector_SendErr(t *testing.T) {
 	ins.Send(ctx, generateTestRecord())
 
 	err, b, err2 := cchan.ChanOut[error](errC).RecvTimeout(context.Background(), 100*time.Millisecond)
-	assert.Ok(t, err2)
-	assert.True(t, b, "expected to receive an error")
-	assert.True(t, cerrors.Is(err, errSend), "expected 'I'm sorry, but no.' error")
+	is.NoErr(err2)
+	is.True(b)
+	is.True(cerrors.Is(err, errSend))
 }
 
 func TestConnectorAPIv1_InspectConnector_Err(t *testing.T) {
+	is := is.New(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	ctrl := gomock.NewController(t)
@@ -301,9 +313,8 @@ func TestConnectorAPIv1_InspectConnector_Err(t *testing.T) {
 		&apiv1.InspectConnectorRequest{Id: id},
 		inspectServer,
 	)
-	assert.NotNil(t, errAPI)
-	assert.Equal(
-		t,
+	is.True(errAPI != nil)
+	is.Equal(
 		"rpc error: code = Internal desc = failed to inspect connector: not found, sorry",
 		errAPI.Error(),
 	)
@@ -322,6 +333,8 @@ func generateTestRecord() record.Record {
 }
 
 func TestConnectorAPIv1_GetConnector(t *testing.T) {
+	is := is.New(t)
+
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	csMock := apimock.NewConnectorOrchestrator(ctrl)
@@ -356,16 +369,18 @@ func TestConnectorAPIv1_GetConnector(t *testing.T) {
 		},
 	)
 
-	assert.Ok(t, err)
+	is.NoErr(err)
 
 	// copy expected time
 	got.Connector.CreatedAt = want.Connector.CreatedAt
 	got.Connector.UpdatedAt = want.Connector.UpdatedAt
 
-	assert.Equal(t, want, got)
+	is.Equal(want, got)
 }
 
 func TestConnectorAPIv1_UpdateConnector(t *testing.T) {
+	is := is.New(t)
+
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	csMock := apimock.NewConnectorOrchestrator(ctrl)
@@ -407,16 +422,18 @@ func TestConnectorAPIv1_UpdateConnector(t *testing.T) {
 			Config: want.Connector.Config,
 		},
 	)
-	assert.Ok(t, err)
+	is.NoErr(err)
 
 	// copy expected time
 	got.Connector.CreatedAt = want.Connector.CreatedAt
 	got.Connector.UpdatedAt = want.Connector.UpdatedAt
 
-	assert.Equal(t, want, got)
+	is.Equal(want, got)
 }
 
 func TestConnectorAPIv1_DeleteConnector(t *testing.T) {
+	is := is.New(t)
+
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	csMock := apimock.NewConnectorOrchestrator(ctrl)
@@ -435,11 +452,13 @@ func TestConnectorAPIv1_DeleteConnector(t *testing.T) {
 		},
 	)
 
-	assert.Ok(t, err)
-	assert.Equal(t, want, got)
+	is.NoErr(err)
+	is.Equal(want, got)
 }
 
 func TestConnectorAPIv1_ValidateConnector(t *testing.T) {
+	is := is.New(t)
+
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	csMock := apimock.NewConnectorOrchestrator(ctrl)
@@ -467,11 +486,13 @@ func TestConnectorAPIv1_ValidateConnector(t *testing.T) {
 		},
 	)
 
-	assert.Ok(t, err)
-	assert.Equal(t, want, got)
+	is.NoErr(err)
+	is.Equal(want, got)
 }
 
 func TestConnectorAPIv1_ValidateConnectorError(t *testing.T) {
+	is := is.New(t)
+
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	csMock := apimock.NewConnectorOrchestrator(ctrl)
@@ -498,7 +519,7 @@ func TestConnectorAPIv1_ValidateConnectorError(t *testing.T) {
 		},
 	)
 
-	assert.Error(t, err)
+	is.True(err != nil)
 }
 
 func sortConnectors(c []*apiv1.Connector) {
