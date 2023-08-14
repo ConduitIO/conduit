@@ -20,6 +20,7 @@ import (
 	"io"
 	"math"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -50,7 +51,6 @@ func getFileDescriptorSet(t *testing.T, path string) *descriptorpb.FileDescripto
 }
 
 func TestNewSchema(t *testing.T) {
-	is := is.New(t)
 
 	testCases := []struct {
 		path           string
@@ -84,7 +84,7 @@ func TestNewSchema(t *testing.T) {
 			fds := getFileDescriptorSet(t, tc.path)
 
 			_, err := NewSchema(fds, tc.mainDescriptor, 1)
-			is.Equal(tc.wantErr, err)
+			assertError(t, tc.wantErr, err)
 		})
 	}
 }
@@ -148,7 +148,7 @@ func TestSchema_Version(t *testing.T) {
 			fds := getFileDescriptorSet(t, standaloneDescriptorSetPath)
 
 			s, err := NewSchema(fds, "", tc.version)
-			is.True(err == nil)
+			assertError(t, tc.wantErr, err)
 			is.Equal(tc.version, s.Version())
 		})
 	}
@@ -470,5 +470,21 @@ func TestReusedDescriptors(t *testing.T) {
 			d2 := tc.getDescriptor2(t, s)
 			is.Equal(d1, d2)
 		})
+	}
+}
+
+// assertError fails if the errors do not match.
+func assertError(tb testing.TB, want error, got error) {
+	//nolint:gocritic // no single value to have a switch on
+	is := is.New(tb)
+
+	if want == nil {
+		is.NoErr(got)
+	} else if got == nil {
+		is.Equal(want.Error(), got)
+	} else {
+		// sanitize error string, protobuf randomly adds a non-breaking space
+		errStr := strings.ReplaceAll(got.Error(), "\u00a0", " ")
+		is.Equal(want.Error(), errStr)
 	}
 }
