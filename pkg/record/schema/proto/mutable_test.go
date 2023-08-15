@@ -114,7 +114,7 @@ func TestMutableSchema_SetDescriptors_Panics(t *testing.T) {
 
 			ms := fileDescriptorSetToMutalbeSchema(t, getFileDescriptorSet(t, standaloneDescriptorSetPath))
 			ms.SetDescriptors(tc.descriptors)
-			is.True(false)
+			is.True(false) //expected panic
 		})
 	}
 }
