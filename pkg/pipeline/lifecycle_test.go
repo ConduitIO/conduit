@@ -33,10 +33,10 @@ import (
 	pmock "github.com/conduitio/conduit/pkg/plugin/mock"
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/record"
-	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
 	"github.com/matryer/is"
 	"github.com/rs/zerolog"
+	"go.uber.org/mock/gomock"
 )
 
 const testDLQID = "test-dlq"

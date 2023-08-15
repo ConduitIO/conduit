@@ -8,7 +8,7 @@ import (
 	reflect "reflect"
 
 	schema "github.com/conduitio/conduit/pkg/record/schema"
-	gomock "github.com/golang/mock/gomock"
+	gomock "go.uber.org/mock/gomock"
 )
 
 // MutableSchema is a mock of MutableSchema interface.

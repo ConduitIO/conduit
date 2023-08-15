@@ -25,9 +25,9 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	"github.com/conduitio/conduit/pkg/processor"
-	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
 	"github.com/matryer/is"
+	"go.uber.org/mock/gomock"
 )
 
 func TestProcessorOrchestrator_CreateOnPipeline_Success(t *testing.T) {

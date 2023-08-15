@@ -25,8 +25,8 @@ import (
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/processor/mock"
 	"github.com/conduitio/conduit/pkg/record"
-	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
+	"go.uber.org/mock/gomock"
 )
 
 func TestProcessorNode_Success(t *testing.T) {

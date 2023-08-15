@@ -26,9 +26,9 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	pmock "github.com/conduitio/conduit/pkg/plugin/mock"
 	"github.com/conduitio/conduit/pkg/record"
-	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
 	"github.com/matryer/is"
+	"go.uber.org/mock/gomock"
 )
 
 func TestService_Init_Success(t *testing.T) {

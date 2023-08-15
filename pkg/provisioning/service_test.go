@@ -36,9 +36,9 @@ import (
 	p3 "github.com/conduitio/conduit/pkg/provisioning/test/pipelines3"
 	p4 "github.com/conduitio/conduit/pkg/provisioning/test/pipelines4-integration-test"
 	"github.com/conduitio/conduit/pkg/record"
-	"github.com/golang/mock/gomock"
 	"github.com/matryer/is"
 	"github.com/rs/zerolog"
+	"go.uber.org/mock/gomock"
 )
 
 var (

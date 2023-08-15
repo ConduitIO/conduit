@@ -29,8 +29,8 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/metrics/noop"
 	pmock "github.com/conduitio/conduit/pkg/processor/mock"
 	"github.com/conduitio/conduit/pkg/record"
-	"github.com/golang/mock/gomock"
 	"github.com/matryer/is"
+	"go.uber.org/mock/gomock"
 )
 
 type parallelTestNode struct {

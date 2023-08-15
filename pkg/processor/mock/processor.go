@@ -10,7 +10,7 @@ import (
 
 	inspector "github.com/conduitio/conduit/pkg/inspector"
 	record "github.com/conduitio/conduit/pkg/record"
-	gomock "github.com/golang/mock/gomock"
+	gomock "go.uber.org/mock/gomock"
 )
 
 // Processor is a mock of Interface interface.
