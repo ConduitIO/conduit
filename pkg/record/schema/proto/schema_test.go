@@ -51,7 +51,6 @@ func getFileDescriptorSet(t *testing.T, path string) *descriptorpb.FileDescripto
 }
 
 func TestNewSchema(t *testing.T) {
-
 	testCases := []struct {
 		path           string
 		mainDescriptor string
@@ -477,7 +476,6 @@ func TestReusedDescriptors(t *testing.T) {
 func assertError(tb testing.TB, want error, got error) {
 	//nolint:gocritic // no single value to have a switch on
 	is := is.New(tb)
-
 	if want == nil {
 		is.NoErr(got)
 	} else if got == nil {

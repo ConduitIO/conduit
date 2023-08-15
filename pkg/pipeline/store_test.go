@@ -87,7 +87,6 @@ func testConfigStoreSetGet(t *testing.T, e error) {
 	got, err := s.Get(ctx, want.ID)
 	is.NoErr(err)
 	is.Equal(want, got)
-
 }
 
 func TestConfigStore_GetAll(t *testing.T) {

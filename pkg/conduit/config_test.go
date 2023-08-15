@@ -18,7 +18,6 @@ import (
 	"github.com/matryer/is"
 	"testing"
 
-	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/foundation/database/inmemory"
 )
 

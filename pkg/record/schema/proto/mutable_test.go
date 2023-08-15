@@ -654,7 +654,6 @@ func TestMutableEnumDescriptor_SetValueDescriptors_NewValueSuccess(t *testing.T)
 }
 
 func TestMutableEnumDescriptor_SetValues_NewValueConflict(t *testing.T) {
-
 	ms := fileDescriptorSetToMutalbeSchema(t, getFileDescriptorSet(t, test1DescriptorSetPath))
 
 	enumDesc := ms.Descriptors()[5].(*MutableEnumDescriptor)
