@@ -310,7 +310,7 @@ func TestMutableField_SetDescriptor_Primitive(t *testing.T) {
 
 			got := newSchema.Descriptors()[0].(StructDescriptor).Fields()[0].Descriptor()
 			d, ok := got.(PrimitiveDescriptor)
-			is.True(ok)
+			is.True(ok) // expected d and got to be of the same Type PrimitiveDescriptor
 			is.Equal(tc, d.Type())
 		})
 	}
@@ -328,7 +328,7 @@ func TestMutableField_SetDescriptor_Reference(t *testing.T) {
 		},
 		assertDescriptor: func(t *testing.T, descriptor schema.Descriptor) {
 			d, ok := descriptor.(StructDescriptor)
-			is.True(ok)
+			is.True(ok) // expected d and got to be of the same Type StructDescriptor
 			is.Equal("Foo", d.Name())
 		},
 	}, {
@@ -337,7 +337,7 @@ func TestMutableField_SetDescriptor_Reference(t *testing.T) {
 		},
 		assertDescriptor: func(t *testing.T, descriptor schema.Descriptor) {
 			d, ok := descriptor.(EnumDescriptor)
-			is.True(ok)
+			is.True(ok) // expected d and got to be of the same Type MutableDescriptor
 			is.Equal("MyEnum", d.Name())
 		},
 	}, {
@@ -346,9 +346,9 @@ func TestMutableField_SetDescriptor_Reference(t *testing.T) {
 		},
 		assertDescriptor: func(t *testing.T, descriptor schema.Descriptor) {
 			d, ok := descriptor.(ArrayDescriptor)
-			is.True(ok)
+			is.True(ok) // expected d and got to be of the same Type ArrayDescriptor
 			pd, ok := d.ValueDescriptor().(PrimitiveDescriptor)
-			is.True(ok)
+			is.True(ok) // expected d and got to be of the same Type PrimitiveDescriptor
 			is.Equal(schema.String, pd.Type())
 		},
 		// TODO add test for maps once we support creating one out of thin air
@@ -492,7 +492,7 @@ func TestMutableMapDescriptor_SetValueDescriptor_Reference(t *testing.T) {
 		},
 		assertDescriptor: func(t *testing.T, descriptor schema.Descriptor) {
 			d, ok := descriptor.(StructDescriptor)
-			is.True(ok)
+			is.True(ok) // expected d and got to be of the same Type StructDescriptor
 			is.Equal("Foo", d.Name())
 		},
 	}, {
@@ -501,7 +501,7 @@ func TestMutableMapDescriptor_SetValueDescriptor_Reference(t *testing.T) {
 		},
 		assertDescriptor: func(t *testing.T, descriptor schema.Descriptor) {
 			d, ok := descriptor.(EnumDescriptor)
-			is.True(ok)
+			is.True(ok) // expected d and got to be of the same Type EnumDescriptor
 			is.Equal("MyEnum", d.Name())
 		},
 	}}
@@ -747,7 +747,7 @@ func TestMutablePrimitiveDescriptor_Type(t *testing.T) {
 	for index, wantType := range wantTypes {
 		t.Run(fmt.Sprintf("f%d", index+1), func(t *testing.T) {
 			pd, ok := allTypesDesc.Fields()[index].Descriptor().(*MutablePrimitiveDescriptor)
-			is.True(ok)
+			is.True(ok) // expected d and got to be of the same Type MutablePrimitiveDescriptor
 			is.Equal(wantType, pd.Type())
 		})
 	}

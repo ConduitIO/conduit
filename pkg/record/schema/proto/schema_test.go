@@ -177,27 +177,27 @@ func TestSchema_Descriptors(t *testing.T) {
 			is.Equal(6, len(descriptors))
 
 			d1, ok := descriptors[0].(StructDescriptor)
-			is.True(ok)
+			is.True(ok) // expected element 0 in descriptors to be of Type StructDescriptor
 			is.Equal("Foo", d1.Name())
 
 			d2, ok := descriptors[1].(StructDescriptor)
-			is.True(ok)
+			is.True(ok) // expected element 2 in descriptors to be of Type StructDescriptor
 			is.Equal("AllTypes", d2.Name())
 
 			d3, ok := descriptors[2].(StructDescriptor)
-			is.True(ok)
+			is.True(ok) // expected element 2 in descriptors to be of Type StructDescriptor
 			is.Equal("Empty", d3.Name())
 
 			d4, ok := descriptors[3].(StructDescriptor)
-			is.True(ok)
+			is.True(ok) // expected element 3 in descriptors to be of Type StructDescriptor
 			is.Equal("Nested", d4.Name())
 
 			d5, ok := descriptors[4].(EnumDescriptor)
-			is.True(ok)
+			is.True(ok) // expected element 4 in descriptors to be of Type EnumDescriptor
 			is.Equal("MyEnum", d5.Name())
 
 			d6, ok := descriptors[5].(EnumDescriptor)
-			is.True(ok)
+			is.True(ok) // expected element 5 in descriptors to be of Type EnumDescriptor
 			is.Equal("UnusedEnum", d6.Name())
 		},
 	}}
@@ -226,7 +226,7 @@ func TestStructDescriptor_Fields(t *testing.T) {
 		mainDescriptor: "",
 		getDescriptor: func(t *testing.T, s schema.Schema) StructDescriptor {
 			d, ok := s.Descriptors()[1].(StructDescriptor)
-			is.True(ok)
+			is.True(ok) // expected to be of Type StructDescriptor
 			is.Equal("AllTypes", d.Name())
 			return d
 		},
@@ -246,21 +246,21 @@ func TestStructDescriptor_Fields(t *testing.T) {
 				switch i {
 				case 15:
 					_, ok := f.Descriptor().(StructDescriptor)
-					is.True(ok)
+					is.True(ok) // expected to be of Type StructDescriptor
 				case 16:
 					_, ok := f.Descriptor().(ArrayDescriptor)
-					is.True(ok)
+					is.True(ok) // expected to be of Type ArrayDescriptor
 				case 17:
 					_, ok := f.Descriptor().(MapDescriptor)
-					is.True(ok)
+					is.True(ok) // expected to be of Type MapDescriptor
 				case 18:
 					_, ok := f.Descriptor().(EnumDescriptor)
-					is.True(ok)
+					is.True(ok) // expected to be of Type EnumDescriptor
 
 				default:
 					// first 15 fields should be primitive types
 					_, ok := f.Descriptor().(PrimitiveDescriptor)
-					is.True(ok)
+					is.True(ok) // expected to be of Type PrimitiveDescriptor
 				}
 			}
 		},
@@ -269,7 +269,7 @@ func TestStructDescriptor_Fields(t *testing.T) {
 		mainDescriptor: "",
 		getDescriptor: func(t *testing.T, s schema.Schema) StructDescriptor {
 			d, ok := s.Descriptors()[0].(StructDescriptor)
-			is.True(ok)
+			is.True(ok) // expected to be of Type StructDescriptor
 			is.Equal("Foo", d.Name())
 			return d
 		},
@@ -318,12 +318,12 @@ func TestArrayDescriptor(t *testing.T) {
 		getDescriptor: func(t *testing.T, s schema.Schema) ArrayDescriptor {
 			// get descriptor for AllTypes.f17, it is an array
 			d, ok := s.Descriptors()[1].(StructDescriptor).Fields()[16].Descriptor().(ArrayDescriptor)
-			is.True(ok)
+			is.True(ok) // expected to be of Type ArrayDescriptor
 			return d
 		},
 		assertDescriptor: func(t *testing.T, descriptor ArrayDescriptor) {
 			d, ok := descriptor.ValueDescriptor().(StructDescriptor)
-			is.True(ok)
+			is.True(ok) // expected to be of Type StructDescriptor
 			is.Equal("Foo", d.Name())
 		},
 	}}
@@ -354,16 +354,16 @@ func TestMapDescriptor(t *testing.T) {
 		getDescriptor: func(t *testing.T, s schema.Schema) MapDescriptor {
 			// get descriptor for AllTypes.f18, it is a map
 			d, ok := s.Descriptors()[1].(StructDescriptor).Fields()[17].Descriptor().(MapDescriptor)
-			is.True(ok)
+			is.True(ok) // expected to be of Type MapDescriptor
 			return d
 		},
 		assertDescriptor: func(t *testing.T, descriptor MapDescriptor) {
 			d1, ok := descriptor.KeyDescriptor().(PrimitiveDescriptor)
-			is.True(ok)
+			is.True(ok) // expected to be of Type PrimitiveDescriptor
 			is.Equal(schema.String, d1.Type())
 
 			d2, ok := descriptor.ValueDescriptor().(StructDescriptor)
-			is.True(ok)
+			is.True(ok) // expected to be of Type StructDescriptor
 			is.Equal("Foo", d2.Name())
 		},
 	}}
@@ -394,7 +394,7 @@ func TestEnumDescriptor(t *testing.T) {
 		getDescriptor: func(t *testing.T, s schema.Schema) EnumDescriptor {
 			// get descriptor for AllTypes.f19, it is an enum
 			d, ok := s.Descriptors()[1].(StructDescriptor).Fields()[18].Descriptor().(EnumDescriptor)
-			is.True(ok)
+			is.True(ok) // expected to be of Type EnumDescriptor
 			return d
 		},
 		assertDescriptor: func(t *testing.T, descriptor EnumDescriptor) {

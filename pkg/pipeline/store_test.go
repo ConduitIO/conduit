@@ -134,6 +134,6 @@ func TestConfigStore_Delete(t *testing.T) {
 
 	got, err := s.Get(ctx, want.ID)
 	is.True(err != nil)
-	is.True(cerrors.Is(err, database.ErrKeyNotExist)) //expected error for non-existing key
+	is.True(cerrors.Is(err, database.ErrKeyNotExist)) // expected error for non-existing key
 	is.True(got == nil)
 }

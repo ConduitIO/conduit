@@ -145,7 +145,7 @@ func TestProcessorNode_ErrorWithNackHandler(t *testing.T) {
 
 	msg := &Message{Ctx: ctx}
 	msg.RegisterNackHandler(func(msg *Message, nackMetadata NackMetadata) error {
-		is.True(cerrors.Is(nackMetadata.Reason, wantErr)) //expected underlying error to be the processor error
+		is.True(cerrors.Is(nackMetadata.Reason, wantErr)) // expected underlying error to be the processor error
 		return nil                                        // the error should be regarded as handled
 	})
 	go func() {
