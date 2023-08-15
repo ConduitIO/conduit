@@ -57,7 +57,6 @@ func TestPubSubNodeBase_PubTwice(t *testing.T) {
 
 	defer func() {
 		is.True(recover() != nil)
-		is.True(recover() == nil)
 	}()
 	n.Pub() // second one should panic
 }
