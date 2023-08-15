@@ -59,7 +59,7 @@ func assertDescriptorsEqual(tb testing.TB, d1 Descriptor, d2 Descriptor) {
 	switch v1 := d1.(type) {
 	case StructDescriptor:
 		v2, ok := d2.(StructDescriptor)
-		is.True(ok)
+		is.True(ok) //expected d1, got d2
 
 		is.Equal(v1.Name(), v2.Name())
 
@@ -71,7 +71,7 @@ func assertDescriptorsEqual(tb testing.TB, d1 Descriptor, d2 Descriptor) {
 		}
 	case EnumDescriptor:
 		v2, ok := d2.(EnumDescriptor)
-		is.True(ok)
+		is.True(ok) //expected d1, got d2
 
 		is.Equal(v1.Name(), v2.Name())
 
@@ -83,19 +83,19 @@ func assertDescriptorsEqual(tb testing.TB, d1 Descriptor, d2 Descriptor) {
 		}
 	case EnumValueDescriptor:
 		v2, ok := d2.(EnumValueDescriptor)
-		is.True(ok)
+		is.True(ok) //expected d1, got d2
 
 		is.Equal(v1.Name(), v2.Name())
 		is.Equal(v1.Value(), v2.Value())
 	case MapDescriptor:
 		v2, ok := d2.(MapDescriptor)
-		is.True(ok)
+		is.True(ok) //expected d1, got d2
 
 		assertDescriptorsEqual(tb, v1.KeyDescriptor(), v2.KeyDescriptor())
 		assertDescriptorsEqual(tb, v1.ValueDescriptor(), v2.ValueDescriptor())
 	case ArrayDescriptor:
 		v2, ok := d2.(ArrayDescriptor)
-		is.True(ok)
+		is.True(ok) //expected d1, got d2
 
 		assertDescriptorsEqual(tb, v1.ValueDescriptor(), v2.ValueDescriptor())
 	}

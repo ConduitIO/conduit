@@ -286,8 +286,8 @@ func TestConnectorAPIv1_InspectConnector_SendErr(t *testing.T) {
 
 	err, b, err2 := cchan.ChanOut[error](errC).RecvTimeout(context.Background(), 100*time.Millisecond)
 	is.NoErr(err2)
-	is.True(b)
-	is.True(cerrors.Is(err, errSend))
+	is.True(b)                        //expected to receive an error
+	is.True(cerrors.Is(err, errSend)) //expected 'I'm sorry, but no.' error"
 }
 
 func TestConnectorAPIv1_InspectConnector_Err(t *testing.T) {

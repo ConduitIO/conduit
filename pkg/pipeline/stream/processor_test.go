@@ -117,7 +117,7 @@ func TestProcessorNode_ErrorWithoutNackHandler(t *testing.T) {
 	}()
 
 	err := n.Run(ctx)
-	is.True(cerrors.Is(err, wantErr))
+	is.True(cerrors.Is(err, wantErr)) //expected underlying error to be the processor error
 
 	// after the node stops the out channel should be closed
 	_, ok := <-out
@@ -145,8 +145,8 @@ func TestProcessorNode_ErrorWithNackHandler(t *testing.T) {
 
 	msg := &Message{Ctx: ctx}
 	msg.RegisterNackHandler(func(msg *Message, nackMetadata NackMetadata) error {
-		is.True(cerrors.Is(nackMetadata.Reason, wantErr))
-		return nil // the error should be regarded as handled
+		is.True(cerrors.Is(nackMetadata.Reason, wantErr)) //expected underlying error to be the processor error
+		return nil                                        // the error should be regarded as handled
 	})
 	go func() {
 		// publisher
