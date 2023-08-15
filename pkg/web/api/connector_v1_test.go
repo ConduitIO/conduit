@@ -16,7 +16,6 @@ package api
 
 import (
 	"context"
-	"github.com/matryer/is"
 	"sort"
 	"testing"
 	"time"
@@ -31,6 +30,7 @@ import (
 	"github.com/conduitio/conduit/pkg/web/api/toproto"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	"github.com/google/uuid"
+	"github.com/matryer/is"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )

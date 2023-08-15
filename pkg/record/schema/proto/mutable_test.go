@@ -16,12 +16,12 @@ package proto
 
 import (
 	"fmt"
-	"github.com/matryer/is"
 	"math"
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/record/schema"
+	"github.com/matryer/is"
 	"google.golang.org/protobuf/types/descriptorpb"
 )
 
@@ -114,7 +114,7 @@ func TestMutableSchema_SetDescriptors_Panics(t *testing.T) {
 
 			ms := fileDescriptorSetToMutalbeSchema(t, getFileDescriptorSet(t, standaloneDescriptorSetPath))
 			ms.SetDescriptors(tc.descriptors)
-			is.True(false) //expected panic
+			is.True(false) // expected panic
 		})
 	}
 }

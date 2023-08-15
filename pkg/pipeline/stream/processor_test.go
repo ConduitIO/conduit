@@ -16,7 +16,6 @@ package stream
 
 import (
 	"context"
-	"github.com/matryer/is"
 	"sync"
 	"testing"
 
@@ -26,6 +25,7 @@ import (
 	"github.com/conduitio/conduit/pkg/processor/mock"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/google/uuid"
+	"github.com/matryer/is"
 	"go.uber.org/mock/gomock"
 )
 
@@ -117,7 +117,7 @@ func TestProcessorNode_ErrorWithoutNackHandler(t *testing.T) {
 	}()
 
 	err := n.Run(ctx)
-	is.True(cerrors.Is(err, wantErr)) //expected underlying error to be the processor error
+	is.True(cerrors.Is(err, wantErr)) // expected underlying error to be the processor error
 
 	// after the node stops the out channel should be closed
 	_, ok := <-out

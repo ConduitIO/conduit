@@ -16,7 +16,6 @@ package proto
 
 import (
 	"fmt"
-	"github.com/matryer/is"
 	"io"
 	"math"
 	"os"
@@ -25,6 +24,7 @@ import (
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/record/schema"
+	"github.com/matryer/is"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/descriptorpb"
 )
@@ -474,8 +474,8 @@ func TestReusedDescriptors(t *testing.T) {
 
 // assertError fails if the errors do not match.
 func assertError(tb testing.TB, want error, got error) {
-	//nolint:gocritic // no single value to have a switch on
 	is := is.New(tb)
+	//nolint:gocritic // no single value to have a switch on
 	if want == nil {
 		is.NoErr(got)
 	} else if got == nil {

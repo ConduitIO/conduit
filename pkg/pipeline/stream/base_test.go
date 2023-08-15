@@ -16,12 +16,12 @@ package stream
 
 import (
 	"context"
-	"github.com/matryer/is"
 	"testing"
 	"time"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/matryer/is"
 )
 
 func TestPubSubNodeBase_TriggerWithoutPubOrSub(t *testing.T) {

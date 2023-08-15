@@ -15,10 +15,11 @@
 package schema
 
 import (
-	"github.com/matryer/is"
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/matryer/is"
 )
 
 // AcceptanceTest is the acceptance test that all implementations of Schema
