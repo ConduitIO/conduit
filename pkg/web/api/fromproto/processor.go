@@ -27,6 +27,9 @@ func _() {
 }
 
 func ProcessorConfig(in *apiv1.Processor_Config) processor.Config {
+	if in == nil {
+		return processor.Config{}
+	}
 	return processor.Config{
 		Settings: in.Settings,
 		Workers:  int(in.Workers),
@@ -34,6 +37,9 @@ func ProcessorConfig(in *apiv1.Processor_Config) processor.Config {
 }
 
 func ProcessorParent(in *apiv1.Processor_Parent) processor.Parent {
+	if in == nil {
+		return processor.Parent{}
+	}
 	return processor.Parent{
 		ID:   in.Id,
 		Type: processor.ParentType(in.Type),
