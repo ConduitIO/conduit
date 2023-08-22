@@ -62,8 +62,8 @@ func TestFilepathLogCtxHook_Success(t *testing.T) {
 
 	var logOutput bytes.Buffer
 	logger := zerolog.New(&logOutput)
-	e := logger.Info()
-	FilepathLogCtxHook{}.Run(ctx, e, zerolog.InfoLevel)
+	e := logger.Info().Ctx(ctx)
+	FilepathLogCtxHook{}.Run(e, zerolog.InfoLevel, "")
 	e.Send()
 
 	assert.Equal(t, fmt.Sprintf(`{"level":"info","%s":"%s"}`, log.FilepathField, filepath)+"\n", logOutput.String())
@@ -74,8 +74,8 @@ func TestFilepathLogCtxHook_EmptyCtx(t *testing.T) {
 
 	var logOutput bytes.Buffer
 	logger := zerolog.New(&logOutput)
-	e := logger.Info()
-	FilepathLogCtxHook{}.Run(ctx, e, zerolog.InfoLevel)
+	e := logger.Info().Ctx(ctx)
+	FilepathLogCtxHook{}.Run(e, zerolog.InfoLevel, "")
 	e.Send()
 
 	assert.Equal(t, `{"level":"info"}`+"\n", logOutput.String())
