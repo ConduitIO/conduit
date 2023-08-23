@@ -19,6 +19,7 @@ import (
 	"io"
 	"math"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -245,22 +246,22 @@ func TestStructDescriptor_Fields(t *testing.T) {
 
 				switch i {
 				case 15:
-					_, ok := f.Descriptor().(StructDescriptor)
-					is.True(ok) // expected to be of Type StructDescriptor
+					// expected to be of Type StructDescriptor
+					is.Equal(reflect.TypeOf(StructDescriptor{}), reflect.TypeOf(f.Descriptor()))
 				case 16:
-					_, ok := f.Descriptor().(ArrayDescriptor)
-					is.True(ok) // expected to be of Type ArrayDescriptor
+					// expected to be of Type ArrayDescriptor
+					is.Equal(reflect.TypeOf(ArrayDescriptor{}), reflect.TypeOf(f.Descriptor()))
 				case 17:
-					_, ok := f.Descriptor().(MapDescriptor)
-					is.True(ok) // expected to be of Type MapDescriptor
+					// expected to be of Type MapDescriptor
+					is.Equal(reflect.TypeOf(MapDescriptor{}), reflect.TypeOf(f.Descriptor()))
 				case 18:
-					_, ok := f.Descriptor().(EnumDescriptor)
-					is.True(ok) // expected to be of Type EnumDescriptor
+					// expected to be of Type EnumDescriptor
+					is.Equal(reflect.TypeOf(EnumDescriptor{}), reflect.TypeOf(f.Descriptor()))
 
 				default:
 					// first 15 fields should be primitive types
-					_, ok := f.Descriptor().(PrimitiveDescriptor)
-					is.True(ok) // expected to be of Type PrimitiveDescriptor
+					// expected to be of Type PrimitiveDescriptor
+					is.Equal(reflect.TypeOf(PrimitiveDescriptor{}), reflect.TypeOf(f.Descriptor()))
 				}
 			}
 		},

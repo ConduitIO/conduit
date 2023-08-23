@@ -114,7 +114,7 @@ func TestMutableSchema_SetDescriptors_Panics(t *testing.T) {
 
 			ms := fileDescriptorSetToMutalbeSchema(t, getFileDescriptorSet(t, standaloneDescriptorSetPath))
 			ms.SetDescriptors(tc.descriptors)
-			is.True(false) // expected panic
+			is.Fail() // expected panic
 		})
 	}
 }
@@ -312,6 +312,7 @@ func TestMutableField_SetDescriptor_Primitive(t *testing.T) {
 			d, ok := got.(PrimitiveDescriptor)
 			is.True(ok) // expected d and got to be of the same Type PrimitiveDescriptor
 			is.Equal(tc, d.Type())
+
 		})
 	}
 }
