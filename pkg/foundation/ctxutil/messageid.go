@@ -44,8 +44,8 @@ func MessageIDFromContext(ctx context.Context) string {
 type MessageIDLogCtxHook struct{}
 
 // Run executes the log hook.
-func (h MessageIDLogCtxHook) Run(ctx context.Context, e *zerolog.Event, _ zerolog.Level) {
-	p := MessageIDFromContext(ctx)
+func (h MessageIDLogCtxHook) Run(e *zerolog.Event, _ zerolog.Level, _ string) {
+	p := MessageIDFromContext(e.GetCtx())
 	if p != "" {
 		e.Str(log.MessageIDField, p)
 	}

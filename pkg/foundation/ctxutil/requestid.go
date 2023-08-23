@@ -44,8 +44,8 @@ func RequestIDFromContext(ctx context.Context) string {
 type RequestIDLogCtxHook struct{}
 
 // Run executes the log hook.
-func (h RequestIDLogCtxHook) Run(ctx context.Context, e *zerolog.Event, _ zerolog.Level) {
-	p := RequestIDFromContext(ctx)
+func (h RequestIDLogCtxHook) Run(e *zerolog.Event, _ zerolog.Level, _ string) {
+	p := RequestIDFromContext(e.GetCtx())
 	if p != "" {
 		e.Str(log.RequestIDField, p)
 	}

@@ -23,8 +23,23 @@ import (
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/matryer/is"
 	"github.com/rs/zerolog"
 )
+
+func TestCtxLoggerComponent(t *testing.T) {
+	is := is.New(t)
+	var out bytes.Buffer
+
+	logger := New(zerolog.New(&out).With().Stack().Logger())
+	logger = logger.WithComponent("test")
+
+	is.Equal("test", logger.Component())
+
+	logger.Info(context.Background()).Msg("testing component")
+	got := out.String()
+	is.Equal(`{"level":"info","component":"test","message":"testing component"}`+"\n", got)
+}
 
 func TestCtxLoggerWithoutHooks(t *testing.T) {
 	ctx := context.Background()
@@ -245,10 +260,10 @@ func TestCtxLoggerWithHooks(t *testing.T) {
 	ctx = context.WithValue(ctx, strVal{}, "bar")
 	ctx = context.WithValue(ctx, intVal{}, 123)
 
-	strValCtxHook := func(ctx context.Context, e *zerolog.Event, l zerolog.Level) {
+	strValCtxHook := func(e *zerolog.Event, l zerolog.Level, msg string) {
 		e.Interface("strval", ctx.Value(strVal{}))
 	}
-	intValCtxHook := func(ctx context.Context, e *zerolog.Event, l zerolog.Level) {
+	intValCtxHook := func(e *zerolog.Event, l zerolog.Level, msg string) {
 		e.Interface("intval", ctx.Value(intVal{}))
 	}
 
@@ -267,7 +282,7 @@ func TestCtxLoggerWithHooks(t *testing.T) {
 		logfunc: func(logger CtxLogger) {
 			logger.Log(ctx).Str("foo", "bar").Msg("")
 		},
-		want: `{"strval":"bar","intval":123,"foo":"bar"}` + "\n",
+		want: `{"foo":"bar","strval":"bar","intval":123}` + "\n",
 	}, {
 		name: "log two-field",
 		logfunc: func(logger CtxLogger) {
@@ -276,7 +291,7 @@ func TestCtxLoggerWithHooks(t *testing.T) {
 				Int("n", 123).
 				Msg("")
 		},
-		want: `{"strval":"bar","intval":123,"foo":"bar","n":123}` + "\n",
+		want: `{"foo":"bar","n":123,"strval":"bar","intval":123}` + "\n",
 	}, {
 		name: "trace empty",
 		logfunc: func(logger CtxLogger) {
@@ -288,7 +303,7 @@ func TestCtxLoggerWithHooks(t *testing.T) {
 		logfunc: func(logger CtxLogger) {
 			logger.Trace(ctx).Str("foo", "bar").Msg("")
 		},
-		want: `{"level":"trace","strval":"bar","intval":123,"foo":"bar"}` + "\n",
+		want: `{"level":"trace","foo":"bar","strval":"bar","intval":123}` + "\n",
 	}, {
 		name: "trace two-field",
 		logfunc: func(logger CtxLogger) {
@@ -297,7 +312,7 @@ func TestCtxLoggerWithHooks(t *testing.T) {
 				Int("n", 123).
 				Msg("")
 		},
-		want: `{"level":"trace","strval":"bar","intval":123,"foo":"bar","n":123}` + "\n",
+		want: `{"level":"trace","foo":"bar","n":123,"strval":"bar","intval":123}` + "\n",
 	}, {
 		name: "debug empty",
 		logfunc: func(logger CtxLogger) {
@@ -309,7 +324,7 @@ func TestCtxLoggerWithHooks(t *testing.T) {
 		logfunc: func(logger CtxLogger) {
 			logger.Debug(ctx).Str("foo", "bar").Msg("")
 		},
-		want: `{"level":"debug","strval":"bar","intval":123,"foo":"bar"}` + "\n",
+		want: `{"level":"debug","foo":"bar","strval":"bar","intval":123}` + "\n",
 	}, {
 		name: "debug two-field",
 		logfunc: func(logger CtxLogger) {
@@ -318,7 +333,7 @@ func TestCtxLoggerWithHooks(t *testing.T) {
 				Int("n", 123).
 				Msg("")
 		},
-		want: `{"level":"debug","strval":"bar","intval":123,"foo":"bar","n":123}` + "\n",
+		want: `{"level":"debug","foo":"bar","n":123,"strval":"bar","intval":123}` + "\n",
 	}, {
 		name: "info empty",
 		logfunc: func(logger CtxLogger) {
@@ -330,7 +345,7 @@ func TestCtxLoggerWithHooks(t *testing.T) {
 		logfunc: func(logger CtxLogger) {
 			logger.Info(ctx).Str("foo", "bar").Msg("")
 		},
-		want: `{"level":"info","strval":"bar","intval":123,"foo":"bar"}` + "\n",
+		want: `{"level":"info","foo":"bar","strval":"bar","intval":123}` + "\n",
 	}, {
 		name: "info two-field",
 		logfunc: func(logger CtxLogger) {
@@ -339,7 +354,7 @@ func TestCtxLoggerWithHooks(t *testing.T) {
 				Int("n", 123).
 				Msg("")
 		},
-		want: `{"level":"info","strval":"bar","intval":123,"foo":"bar","n":123}` + "\n",
+		want: `{"level":"info","foo":"bar","n":123,"strval":"bar","intval":123}` + "\n",
 	}, {
 		name: "warn empty",
 		logfunc: func(logger CtxLogger) {
@@ -351,7 +366,7 @@ func TestCtxLoggerWithHooks(t *testing.T) {
 		logfunc: func(logger CtxLogger) {
 			logger.Warn(ctx).Str("foo", "bar").Msg("")
 		},
-		want: `{"level":"warn","strval":"bar","intval":123,"foo":"bar"}` + "\n",
+		want: `{"level":"warn","foo":"bar","strval":"bar","intval":123}` + "\n",
 	}, {
 		name: "warn two-field",
 		logfunc: func(logger CtxLogger) {
@@ -360,7 +375,7 @@ func TestCtxLoggerWithHooks(t *testing.T) {
 				Int("n", 123).
 				Msg("")
 		},
-		want: `{"level":"warn","strval":"bar","intval":123,"foo":"bar","n":123}` + "\n",
+		want: `{"level":"warn","foo":"bar","n":123,"strval":"bar","intval":123}` + "\n",
 	}, {
 		name: "error empty",
 		logfunc: func(logger CtxLogger) {
@@ -372,7 +387,7 @@ func TestCtxLoggerWithHooks(t *testing.T) {
 		logfunc: func(logger CtxLogger) {
 			logger.Error(ctx).Str("foo", "bar").Msg("")
 		},
-		want: `{"level":"error","strval":"bar","intval":123,"foo":"bar"}` + "\n",
+		want: `{"level":"error","foo":"bar","strval":"bar","intval":123}` + "\n",
 	}, {
 		name: "error two-field",
 		logfunc: func(logger CtxLogger) {
@@ -381,19 +396,19 @@ func TestCtxLoggerWithHooks(t *testing.T) {
 				Int("n", 123).
 				Msg("")
 		},
-		want: `{"level":"error","strval":"bar","intval":123,"foo":"bar","n":123}` + "\n",
+		want: `{"level":"error","foo":"bar","n":123,"strval":"bar","intval":123}` + "\n",
 	}, {
 		name: "err empty with error",
 		logfunc: func(logger CtxLogger) {
 			logger.Err(ctx, cerrors.New("foo")).Msg("")
 		},
-		want: `{"level":"error","strval":"bar","intval":123,"stack":\[{"func":"github.com/conduitio/conduit/pkg/foundation/log.TestCtxLoggerWithHooks.func\d*","file":".*/conduit/pkg/foundation/log/ctxlogger_test.go","line":\d*}\],"error":"foo"}\n`,
+		want: `{"level":"error","stack":\[{"func":"github.com/conduitio/conduit/pkg/foundation/log.TestCtxLoggerWithHooks.func\d*","file":".*/conduit/pkg/foundation/log/ctxlogger_test.go","line":\d*}\],"error":"foo","strval":"bar","intval":123}\n`,
 	}, {
 		name: "err one-field with error",
 		logfunc: func(logger CtxLogger) {
 			logger.Err(ctx, cerrors.New("foo")).Str("foo", "bar").Msg("")
 		},
-		want: `{"level":"error","strval":"bar","intval":123,"stack":\[{"func":"github.com/conduitio/conduit/pkg/foundation/log.TestCtxLoggerWithHooks.func\d*","file":".*/conduit/pkg/foundation/log/ctxlogger_test.go","line":\d*}],"error":"foo","foo":"bar"}\n`,
+		want: `{"level":"error","stack":\[{"func":"github.com/conduitio/conduit/pkg/foundation/log.TestCtxLoggerWithHooks.func\d*","file":".*/conduit/pkg/foundation/log/ctxlogger_test.go","line":\d*}],"error":"foo","foo":"bar","strval":"bar","intval":123}\n`,
 	}, {
 		name: "err two-field with error",
 		logfunc: func(logger CtxLogger) {
@@ -402,7 +417,7 @@ func TestCtxLoggerWithHooks(t *testing.T) {
 				Int("n", 123).
 				Msg("")
 		},
-		want: `{"level":"error","strval":"bar","intval":123,"stack":\[{"func":"github.com/conduitio/conduit/pkg/foundation/log.TestCtxLoggerWithHooks.func\d*","file":".*/conduit/pkg/foundation/log/ctxlogger_test.go","line":\d*}\],"error":"foo","foo":"bar","n":123}\n`,
+		want: `{"level":"error","stack":\[{"func":"github.com/conduitio/conduit/pkg/foundation/log.TestCtxLoggerWithHooks.func\d*","file":".*/conduit/pkg/foundation/log/ctxlogger_test.go","line":\d*}\],"error":"foo","foo":"bar","n":123,"strval":"bar","intval":123}\n`,
 	}, {
 		name: "err empty without error",
 		logfunc: func(logger CtxLogger) {
@@ -414,7 +429,7 @@ func TestCtxLoggerWithHooks(t *testing.T) {
 		logfunc: func(logger CtxLogger) {
 			logger.Err(ctx, nil).Str("foo", "bar").Msg("")
 		},
-		want: `{"level":"info","strval":"bar","intval":123,"foo":"bar"}` + "\n",
+		want: `{"level":"info","foo":"bar","strval":"bar","intval":123}` + "\n",
 	}, {
 		name: "err two-field without error",
 		logfunc: func(logger CtxLogger) {
@@ -423,7 +438,7 @@ func TestCtxLoggerWithHooks(t *testing.T) {
 				Int("n", 123).
 				Msg("")
 		},
-		want: `{"level":"info","strval":"bar","intval":123,"foo":"bar","n":123}` + "\n",
+		want: `{"level":"info","foo":"bar","n":123,"strval":"bar","intval":123}` + "\n",
 	}, {
 		name: "with level empty",
 		logfunc: func(logger CtxLogger) {
@@ -435,7 +450,7 @@ func TestCtxLoggerWithHooks(t *testing.T) {
 		logfunc: func(logger CtxLogger) {
 			logger.WithLevel(ctx, zerolog.InfoLevel).Str("foo", "bar").Msg("")
 		},
-		want: `{"level":"info","strval":"bar","intval":123,"foo":"bar"}` + "\n",
+		want: `{"level":"info","foo":"bar","strval":"bar","intval":123}` + "\n",
 	}, {
 		name: "with level two-field",
 		logfunc: func(logger CtxLogger) {
@@ -444,15 +459,15 @@ func TestCtxLoggerWithHooks(t *testing.T) {
 				Int("n", 123).
 				Msg("")
 		},
-		want: `{"level":"warn","strval":"bar","intval":123,"foo":"bar","n":123}` + "\n",
+		want: `{"level":"warn","foo":"bar","n":123,"strval":"bar","intval":123}` + "\n",
 	}}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			var out bytes.Buffer
 			logger := New(zerolog.New(&out).With().Stack().Logger())
-			logger = logger.CtxHook(CtxHookFunc(strValCtxHook))
-			logger = logger.CtxHook(CtxHookFunc(intValCtxHook))
+			logger.Logger = logger.Hook(zerolog.HookFunc(strValCtxHook))
+			logger.Logger = logger.Hook(zerolog.HookFunc(intValCtxHook))
 			tc.logfunc(logger)
 			got := out.String()
 			matched, err := regexp.Match(tc.want, []byte(got))
@@ -501,7 +516,7 @@ func TestCtxLoggerPanic(t *testing.T) {
 func TestDisabledEvent(t *testing.T) {
 	var out bytes.Buffer
 	logger := New(zerolog.New(&out).Level(zerolog.WarnLevel))
-	logger.CtxHook(CtxHookFunc(func(ctx context.Context, e *zerolog.Event, l zerolog.Level) {
+	logger.Logger = logger.Hook(zerolog.HookFunc(func(e *zerolog.Event, l zerolog.Level, msg string) {
 		t.Fatal("did not expect ctx hook to be called")
 	}))
 	logger.Info(context.Background()).Msg("this log should not be written")
