@@ -272,7 +272,6 @@ func TestPubNodeBase_TriggerSuccess(t *testing.T) {
 		logger,
 		nil,
 		func(context.Context) (*Message, error) {
-			is = is.New(t)
 			return want, nil
 		},
 	)

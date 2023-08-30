@@ -312,7 +312,6 @@ func TestMutableField_SetDescriptor_Primitive(t *testing.T) {
 			d, ok := got.(PrimitiveDescriptor)
 			is.True(ok) // expected d and got to be of the same Type PrimitiveDescriptor
 			is.Equal(tc, d.Type())
-
 		})
 	}
 }
