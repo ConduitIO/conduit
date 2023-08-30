@@ -16,7 +16,6 @@ package api
 
 import (
 	"context"
-	"github.com/matryer/is"
 	"sort"
 	"testing"
 
@@ -24,6 +23,7 @@ import (
 	"github.com/conduitio/conduit/pkg/web/api/mock"
 	"github.com/conduitio/conduit/pkg/web/api/toproto"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
+	"github.com/matryer/is"
 	"go.uber.org/mock/gomock"
 )
 

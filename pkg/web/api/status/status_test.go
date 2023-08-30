@@ -15,7 +15,6 @@
 package status
 
 import (
-	"github.com/matryer/is"
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/connector"
@@ -23,6 +22,7 @@ import (
 	"github.com/conduitio/conduit/pkg/orchestrator"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	"github.com/conduitio/conduit/pkg/processor"
+	"github.com/matryer/is"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
 )

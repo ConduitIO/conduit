@@ -15,10 +15,10 @@
 package stream
 
 import (
-	"github.com/matryer/is"
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/matryer/is"
 )
 
 func TestMessage_Ack_WithoutHandler(t *testing.T) {
