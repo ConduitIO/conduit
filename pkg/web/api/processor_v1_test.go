@@ -20,7 +20,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/foundation/cchan"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -31,11 +30,14 @@ import (
 	"github.com/conduitio/conduit/pkg/web/api/toproto"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	"github.com/google/uuid"
+	"github.com/matryer/is"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func TestProcessorAPIv1_ListProcessors(t *testing.T) {
+	is := is.New(t)
+
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	psMock := apimock.NewProcessorOrchestrator(ctrl)
@@ -112,13 +114,15 @@ func TestProcessorAPIv1_ListProcessors(t *testing.T) {
 
 	got, err := api.ListProcessors(ctx, &apiv1.ListProcessorsRequest{})
 
-	assert.Ok(t, err)
+	is.NoErr(err)
 	sortProcessors(want.Processors)
 	sortProcessors(got.Processors)
-	assert.Equal(t, want, got)
+	is.Equal(want, got)
 }
 
 func TestProcessorAPIv1_ListProcessorsByParents(t *testing.T) {
+	is := is.New(t)
+
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	psMock := apimock.NewProcessorOrchestrator(ctrl)
@@ -235,13 +239,15 @@ func TestProcessorAPIv1_ListProcessorsByParents(t *testing.T) {
 
 	got, err := api.ListProcessors(ctx, &apiv1.ListProcessorsRequest{ParentIds: []string{sharedParent, prs[2].Parent.ID}})
 
-	assert.Ok(t, err)
+	is.NoErr(err)
 	sortProcessors(want.Processors)
 	sortProcessors(got.Processors)
-	assert.Equal(t, want, got)
+	is.Equal(want, got)
 }
 
 func TestProcessorAPIv1_CreateProcessor(t *testing.T) {
+	is := is.New(t)
+
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	psMock := apimock.NewProcessorOrchestrator(ctrl)
@@ -290,11 +296,13 @@ func TestProcessorAPIv1_CreateProcessor(t *testing.T) {
 		},
 	)
 
-	assert.Ok(t, err)
-	assert.Equal(t, want, got)
+	is.NoErr(err)
+	is.Equal(want, got)
 }
 
 func TestProcessorAPIv1_GetProcessor(t *testing.T) {
+	is := is.New(t)
+
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	psMock := apimock.NewProcessorOrchestrator(ctrl)
@@ -340,11 +348,13 @@ func TestProcessorAPIv1_GetProcessor(t *testing.T) {
 		},
 	)
 
-	assert.Ok(t, err)
-	assert.Equal(t, want, got)
+	is.NoErr(err)
+	is.Equal(want, got)
 }
 
 func TestProcessorAPIv1_UpdateProcessor(t *testing.T) {
+	is := is.New(t)
+
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	psMock := apimock.NewProcessorOrchestrator(ctrl)
@@ -392,11 +402,13 @@ func TestProcessorAPIv1_UpdateProcessor(t *testing.T) {
 		},
 	)
 
-	assert.Ok(t, err)
-	assert.Equal(t, want, got)
+	is.NoErr(err)
+	is.Equal(want, got)
 }
 
 func TestProcessorAPIv1_DeleteProcessor(t *testing.T) {
+	is := is.New(t)
+
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	psMock := apimock.NewProcessorOrchestrator(ctrl)
@@ -415,11 +427,13 @@ func TestProcessorAPIv1_DeleteProcessor(t *testing.T) {
 		},
 	)
 
-	assert.Ok(t, err)
-	assert.Equal(t, want, got)
+	is.NoErr(err)
+	is.Equal(want, got)
 }
 
 func TestProcessorAPIv1_InspectIn_SendRecord(t *testing.T) {
+	is := is.New(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	ctrl := gomock.NewController(t)
@@ -429,7 +443,7 @@ func TestProcessorAPIv1_InspectIn_SendRecord(t *testing.T) {
 	id := uuid.NewString()
 	rec := generateTestRecord()
 	recProto, err := toproto.Record(rec)
-	assert.Ok(t, err)
+	is.NoErr(err)
 
 	ins := inspector.New(log.Nop(), 10)
 	session := ins.NewSession(ctx, "test-id")
@@ -455,6 +469,8 @@ func TestProcessorAPIv1_InspectIn_SendRecord(t *testing.T) {
 }
 
 func TestProcessorAPIv1_InspectIn_SendErr(t *testing.T) {
+	is := is.New(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	ctrl := gomock.NewController(t)
@@ -486,12 +502,14 @@ func TestProcessorAPIv1_InspectIn_SendErr(t *testing.T) {
 	ins.Send(ctx, generateTestRecord())
 
 	err, b, err2 := cchan.ChanOut[error](errC).RecvTimeout(context.Background(), 100*time.Millisecond)
-	assert.Ok(t, err2)
-	assert.True(t, b, "expected to receive an error")
-	assert.True(t, cerrors.Is(err, errSend), "expected 'I'm sorry, but no.' error")
+	is.NoErr(err2)
+	is.True(b)                        // expected to receive an error
+	is.True(cerrors.Is(err, errSend)) // expected 'I'm sorry, but no.' error"
 }
 
 func TestProcessorAPIv1_InspectIn_Err(t *testing.T) {
+	is := is.New(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	ctrl := gomock.NewController(t)
@@ -512,9 +530,8 @@ func TestProcessorAPIv1_InspectIn_Err(t *testing.T) {
 		&apiv1.InspectProcessorInRequest{Id: id},
 		inspectServer,
 	)
-	assert.NotNil(t, errAPI)
-	assert.Equal(
-		t,
+	is.True(errAPI != nil)
+	is.Equal(
 		"rpc error: code = Internal desc = failed to inspect processor: not found, sorry",
 		errAPI.Error(),
 	)

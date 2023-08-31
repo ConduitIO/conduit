@@ -19,17 +19,18 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/noop"
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/processor/mock"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/google/uuid"
+	"github.com/matryer/is"
 	"go.uber.org/mock/gomock"
 )
 
 func TestProcessorNode_Success(t *testing.T) {
+	is := is.New(t)
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 
@@ -71,7 +72,7 @@ func TestProcessorNode_Success(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		err := n.Run(ctx)
-		assert.Ok(t, err)
+		is.NoErr(err)
 	}()
 
 	got := <-out
@@ -80,16 +81,17 @@ func TestProcessorNode_Success(t *testing.T) {
 		Record: wantRec,
 	}
 	wantMsg.Record.Position = newPosition // position was transformed
-	assert.Equal(t, wantMsg, got)
+	is.Equal(wantMsg, got)
 
 	wg.Wait() // wait for node to stop running
 
 	// after the node stops the out channel should be closed
 	_, ok := <-out
-	assert.Equal(t, false, ok)
+	is.Equal(false, ok)
 }
 
 func TestProcessorNode_ErrorWithoutNackHandler(t *testing.T) {
+	is := is.New(t)
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 
@@ -115,14 +117,15 @@ func TestProcessorNode_ErrorWithoutNackHandler(t *testing.T) {
 	}()
 
 	err := n.Run(ctx)
-	assert.True(t, cerrors.Is(err, wantErr), "expected underlying error to be the processor error")
+	is.True(cerrors.Is(err, wantErr)) // expected underlying error to be the processor error
 
 	// after the node stops the out channel should be closed
 	_, ok := <-out
-	assert.Equal(t, false, ok)
+	is.Equal(false, ok)
 }
 
 func TestProcessorNode_ErrorWithNackHandler(t *testing.T) {
+	is := is.New(t)
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 
@@ -142,8 +145,8 @@ func TestProcessorNode_ErrorWithNackHandler(t *testing.T) {
 
 	msg := &Message{Ctx: ctx}
 	msg.RegisterNackHandler(func(msg *Message, nackMetadata NackMetadata) error {
-		assert.True(t, cerrors.Is(nackMetadata.Reason, wantErr), "expected underlying error to be the processor error")
-		return nil // the error should be regarded as handled
+		is.True(cerrors.Is(nackMetadata.Reason, wantErr)) // expected underlying error to be the processor error
+		return nil                                        // the error should be regarded as handled
 	})
 	go func() {
 		// publisher
@@ -152,15 +155,16 @@ func TestProcessorNode_ErrorWithNackHandler(t *testing.T) {
 	}()
 
 	err := n.Run(ctx)
-	assert.Ok(t, err)
-	assert.Equal(t, MessageStatusNacked, msg.Status())
+	is.NoErr(err)
+	is.Equal(MessageStatusNacked, msg.Status())
 
 	// after the node stops the out channel should be closed
 	_, ok := <-out
-	assert.Equal(t, false, ok)
+	is.Equal(false, ok)
 }
 
 func TestProcessorNode_Skip(t *testing.T) {
+	is := is.New(t)
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 
@@ -203,10 +207,10 @@ func TestProcessorNode_Skip(t *testing.T) {
 
 	// run the pipeline and assert that there are no underlying pipeline errors
 	err := n.Run(ctx)
-	assert.Equal(t, err, nil)
-	assert.Equal(t, counter, 1)
+	is.Equal(err, nil)
+	is.Equal(counter, 1)
 
 	// after the node stops the out channel should be closed
 	_, ok := <-out
-	assert.Equal(t, false, ok)
+	is.Equal(false, ok)
 }

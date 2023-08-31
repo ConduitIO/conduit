@@ -18,16 +18,18 @@ import (
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/connector"
-	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/orchestrator"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	"github.com/conduitio/conduit/pkg/processor"
+	"github.com/matryer/is"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
 )
 
 func TestPipelineError(t *testing.T) {
+	is := is.New(t)
+
 	type args struct {
 		err error
 	}
@@ -53,12 +55,14 @@ func TestPipelineError(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, PipelineError(tt.args.err))
+			is.Equal(tt.want, PipelineError(tt.args.err))
 		})
 	}
 }
 
 func TestConnectorError(t *testing.T) {
+	is := is.New(t)
+
 	type args struct {
 		err error
 	}
@@ -84,12 +88,14 @@ func TestConnectorError(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, ConnectorError(tt.args.err))
+			is.Equal(tt.want, ConnectorError(tt.args.err))
 		})
 	}
 }
 
 func TestProcessorError(t *testing.T) {
+	is := is.New(t)
+
 	type args struct {
 		err error
 	}
@@ -115,12 +121,14 @@ func TestProcessorError(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, ProcessorError(tt.args.err))
+			is.Equal(tt.want, ProcessorError(tt.args.err))
 		})
 	}
 }
 
 func TestCodeFromError(t *testing.T) {
+	is := is.New(t)
+
 	type args struct {
 		err error
 	}
@@ -202,7 +210,7 @@ func TestCodeFromError(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, codeFromError(tt.args.err))
+			is.Equal(tt.want, codeFromError(tt.args.err))
 		})
 	}
 }

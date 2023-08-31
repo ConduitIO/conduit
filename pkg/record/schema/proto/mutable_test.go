@@ -19,24 +19,30 @@ import (
 	"math"
 	"testing"
 
-	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/record/schema"
+	"github.com/matryer/is"
 	"google.golang.org/protobuf/types/descriptorpb"
 )
 
 func fileDescriptorSetToMutalbeSchema(t *testing.T, fds *descriptorpb.FileDescriptorSet) *MutableSchema {
+	is := is.New(t)
+
 	s, err := NewSchema(fds, "", 1)
-	assert.Ok(t, err)
+	is.NoErr(err)
 	return s.ToMutable().(*MutableSchema)
 }
 
 func TestMutableSchema_Type(t *testing.T) {
+	is := is.New(t)
+
 	ms := fileDescriptorSetToMutalbeSchema(t, getFileDescriptorSet(t, standaloneDescriptorSetPath))
-	assert.Equal(t, SchemaType, ms.Type())
+	is.Equal(SchemaType, ms.Type())
 }
 
 func TestMutableSchema_SetVersion(t *testing.T) {
+	is := is.New(t)
+
 	testCases := []struct {
 		version int
 		wantErr error
@@ -52,19 +58,21 @@ func TestMutableSchema_SetVersion(t *testing.T) {
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("test case %d", i), func(t *testing.T) {
 			ms := fileDescriptorSetToMutalbeSchema(t, getFileDescriptorSet(t, standaloneDescriptorSetPath))
-			assert.Equal(t, 1, ms.Version())
+			is.Equal(1, ms.Version())
 
 			ms.SetVersion(tc.version)
-			assert.Equal(t, tc.version, ms.Version())
+			is.Equal(tc.version, ms.Version())
 
 			newSchema, err := ms.Build()
 			assertError(t, tc.wantErr, err)
-			assert.Equal(t, tc.version, newSchema.Version())
+			is.Equal(tc.version, newSchema.Version())
 		})
 	}
 }
 
 func TestMutableSchema_SetDescriptors_Panics(t *testing.T) {
+	is := is.New(t)
+
 	testCases := []struct {
 		descriptors []schema.MutableDescriptor
 		wantPanic   error
@@ -106,23 +114,27 @@ func TestMutableSchema_SetDescriptors_Panics(t *testing.T) {
 
 			ms := fileDescriptorSetToMutalbeSchema(t, getFileDescriptorSet(t, standaloneDescriptorSetPath))
 			ms.SetDescriptors(tc.descriptors)
-			assert.True(t, false, "expected panic")
+			is.Fail() // expected panic
 		})
 	}
 }
 
 func TestMutableSchema_SetDescriptors_Empty(t *testing.T) {
+	is := is.New(t)
+
 	ms := fileDescriptorSetToMutalbeSchema(t, getFileDescriptorSet(t, standaloneDescriptorSetPath))
 
 	ms.SetDescriptors(nil)
-	assert.Equal(t, 0, len(ms.Descriptors()))
+	is.Equal(0, len(ms.Descriptors()))
 
 	newSchema, err := ms.Build()
-	assert.Ok(t, err)
-	assert.Equal(t, 0, len(newSchema.Descriptors()))
+	is.NoErr(err)
+	is.Equal(0, len(newSchema.Descriptors()))
 }
 
 func TestMutableSchema_SetDescriptors_Success(t *testing.T) {
+	is := is.New(t)
+
 	ms := fileDescriptorSetToMutalbeSchema(t, getFileDescriptorSet(t, test1DescriptorSetPath))
 
 	// only retain Foo, AllTypes and MyEnum
@@ -134,59 +146,65 @@ func TestMutableSchema_SetDescriptors_Success(t *testing.T) {
 	ms.SetDescriptors([]schema.MutableDescriptor{fooDesc, allTypesDesc, myEnumDesc})
 
 	got := ms.Descriptors()
-	assert.Equal(t, 3, len(got))
-	assert.Equal(t, fooDesc, got[0])
-	assert.Equal(t, allTypesDesc, got[1])
-	assert.Equal(t, myEnumDesc, got[2])
+	is.Equal(3, len(got))
+	is.Equal(fooDesc, got[0])
+	is.Equal(allTypesDesc, got[1])
+	is.Equal(myEnumDesc, got[2])
 
 	newSchema, err := ms.Build()
-	assert.Ok(t, err)
+	is.NoErr(err)
 
 	got = newSchema.Descriptors()
-	assert.Equal(t, 3, len(got))
-	assert.Equal(t, fooDesc.Name(), got[0].(StructDescriptor).Name())
-	assert.Equal(t, fooDesc.Parameters(), got[0].(StructDescriptor).Parameters())
-	assert.Equal(t, len(fooDesc.Fields()), len(got[0].(StructDescriptor).Fields()))
+	is.Equal(3, len(got))
+	is.Equal(fooDesc.Name(), got[0].(StructDescriptor).Name())
+	is.Equal(fooDesc.Parameters(), got[0].(StructDescriptor).Parameters())
+	is.Equal(len(fooDesc.Fields()), len(got[0].(StructDescriptor).Fields()))
 
-	assert.Equal(t, allTypesDesc.Name(), got[1].(StructDescriptor).Name())
-	assert.Equal(t, allTypesDesc.Parameters(), got[1].(StructDescriptor).Parameters())
-	assert.Equal(t, len(allTypesDesc.Fields()), len(got[1].(StructDescriptor).Fields()))
+	is.Equal(allTypesDesc.Name(), got[1].(StructDescriptor).Name())
+	is.Equal(allTypesDesc.Parameters(), got[1].(StructDescriptor).Parameters())
+	is.Equal(len(allTypesDesc.Fields()), len(got[1].(StructDescriptor).Fields()))
 
-	assert.Equal(t, myEnumDesc.Name(), got[2].(EnumDescriptor).Name())
-	assert.Equal(t, myEnumDesc.Parameters(), got[2].(EnumDescriptor).Parameters())
-	assert.Equal(t, len(myEnumDesc.ValueDescriptors()), len(got[2].(EnumDescriptor).ValueDescriptors()))
+	is.Equal(myEnumDesc.Name(), got[2].(EnumDescriptor).Name())
+	is.Equal(myEnumDesc.Parameters(), got[2].(EnumDescriptor).Parameters())
+	is.Equal(len(myEnumDesc.ValueDescriptors()), len(got[2].(EnumDescriptor).ValueDescriptors()))
 }
 
 func TestMutableStructDescriptor_SetName_Success(t *testing.T) {
+	is := is.New(t)
+
 	ms := fileDescriptorSetToMutalbeSchema(t, getFileDescriptorSet(t, test1DescriptorSetPath))
 
 	emptyDesc := ms.Descriptors()[2].(*MutableStructDescriptor)
 	emptyDesc.SetName("EmptyNew")
 
-	assert.Equal(t, "EmptyNew", emptyDesc.Name())
+	is.Equal("EmptyNew", emptyDesc.Name())
 
 	newSchema, err := ms.Build()
-	assert.Ok(t, err)
+	is.NoErr(err)
 	got := newSchema.Descriptors()[2].(StructDescriptor)
-	assert.Equal(t, "EmptyNew", got.Name())
+	is.Equal("EmptyNew", got.Name())
 }
 
 // Test that changing the name of a type that is referenced by other fields
 // will produce an error. This can be improved in the future, we can search for
 // all references and rename them.
 func TestMutableStructDescriptor_SetName_CannotResolveType(t *testing.T) {
+	is := is.New(t)
+
 	ms := fileDescriptorSetToMutalbeSchema(t, getFileDescriptorSet(t, test1DescriptorSetPath))
 
 	fooDesc := ms.Descriptors()[0].(*MutableStructDescriptor)
 	fooDesc.SetName("FooNew")
-	assert.Equal(t, "FooNew", fooDesc.Name())
+	is.Equal("FooNew", fooDesc.Name())
 
 	newSchema, err := ms.Build()
 	assertError(t, cerrors.New(`could not create proto registry: proto: message field "proto.AllTypes.f16" cannot resolve type: "proto.Foo" not found`), err)
-	assert.Equal(t, nil, newSchema)
+	is.Equal(nil, newSchema)
 }
 
 func TestMutableStructDescriptor_SetFields_NewFieldSuccess(t *testing.T) {
+	is := is.New(t)
+
 	ms := fileDescriptorSetToMutalbeSchema(t, getFileDescriptorSet(t, test1DescriptorSetPath))
 
 	fooDesc := ms.Descriptors()[0].(*MutableStructDescriptor)
@@ -204,12 +222,12 @@ func TestMutableStructDescriptor_SetFields_NewFieldSuccess(t *testing.T) {
 	fooDesc.SetFields(mutableFields)
 
 	newSchema, err := ms.Build()
-	assert.Ok(t, err)
+	is.NoErr(err)
 	gotFields := newSchema.Descriptors()[0].(StructDescriptor).Fields()
-	assert.Equal(t, 3, len(gotFields))
+	is.Equal(3, len(gotFields))
 	gotField := gotFields[2]
-	assert.Equal(t, "myField", gotField.Name())
-	assert.Equal(t, 3, gotField.Index())
+	is.Equal("myField", gotField.Name())
+	is.Equal(3, gotField.Index())
 }
 
 func TestMutableStructDescriptor_SetFields_NewFieldConflict(t *testing.T) {
@@ -234,34 +252,40 @@ func TestMutableStructDescriptor_SetFields_NewFieldConflict(t *testing.T) {
 }
 
 func TestMutableField_SetName(t *testing.T) {
+	is := is.New(t)
+
 	ms := fileDescriptorSetToMutalbeSchema(t, getFileDescriptorSet(t, test1DescriptorSetPath))
 
 	f1Desc := ms.Descriptors()[0].(*MutableStructDescriptor).Fields()[0].(*MutableField)
 	f1Desc.SetName("renamedField")
 
-	assert.Equal(t, "renamedField", f1Desc.Name())
+	is.Equal("renamedField", f1Desc.Name())
 
 	newSchema, err := ms.Build()
-	assert.Ok(t, err)
+	is.NoErr(err)
 	got := newSchema.Descriptors()[0].(StructDescriptor).Fields()[0]
-	assert.Equal(t, "renamedField", got.Name())
+	is.Equal("renamedField", got.Name())
 }
 
 func TestMutableField_SetIndex(t *testing.T) {
+	is := is.New(t)
+
 	ms := fileDescriptorSetToMutalbeSchema(t, getFileDescriptorSet(t, test1DescriptorSetPath))
 
 	f1Desc := ms.Descriptors()[0].(*MutableStructDescriptor).Fields()[0].(*MutableField)
 	f1Desc.SetIndex(1234)
 
-	assert.Equal(t, 1234, f1Desc.Index())
+	is.Equal(1234, f1Desc.Index())
 
 	newSchema, err := ms.Build()
-	assert.Ok(t, err)
+	is.NoErr(err)
 	got := newSchema.Descriptors()[0].(StructDescriptor).Fields()[0]
-	assert.Equal(t, 1234, got.Index())
+	is.Equal(1234, got.Index())
 }
 
 func TestMutableField_SetDescriptor_Primitive(t *testing.T) {
+	is := is.New(t)
+
 	testCases := []schema.PrimitiveDescriptorType{
 		schema.Boolean,
 		schema.Bytes,
@@ -282,17 +306,19 @@ func TestMutableField_SetDescriptor_Primitive(t *testing.T) {
 			f1Desc.SetDescriptor(NewMutablePrimitiveDescriptor(ms, tc))
 
 			newSchema, err := ms.Build()
-			assert.Ok(t, err)
+			is.NoErr(err)
 
 			got := newSchema.Descriptors()[0].(StructDescriptor).Fields()[0].Descriptor()
 			d, ok := got.(PrimitiveDescriptor)
-			assert.True(t, ok, "expected %T, got %T", d, got)
-			assert.Equal(t, tc, d.Type())
+			is.True(ok) // expected d and got to be of the same Type PrimitiveDescriptor
+			is.Equal(tc, d.Type())
 		})
 	}
 }
 
 func TestMutableField_SetDescriptor_Reference(t *testing.T) {
+	is := is.New(t)
+
 	testCases := []struct {
 		mutableDescriptor func(*MutableSchema) schema.MutableDescriptor
 		assertDescriptor  func(*testing.T, schema.Descriptor)
@@ -302,8 +328,8 @@ func TestMutableField_SetDescriptor_Reference(t *testing.T) {
 		},
 		assertDescriptor: func(t *testing.T, descriptor schema.Descriptor) {
 			d, ok := descriptor.(StructDescriptor)
-			assert.True(t, ok, "expected %T, got %T", d, descriptor)
-			assert.Equal(t, "Foo", d.Name())
+			is.True(ok) // expected d and got to be of the same Type StructDescriptor
+			is.Equal("Foo", d.Name())
 		},
 	}, {
 		mutableDescriptor: func(s *MutableSchema) schema.MutableDescriptor {
@@ -311,8 +337,8 @@ func TestMutableField_SetDescriptor_Reference(t *testing.T) {
 		},
 		assertDescriptor: func(t *testing.T, descriptor schema.Descriptor) {
 			d, ok := descriptor.(EnumDescriptor)
-			assert.True(t, ok, "expected %T, got %T", d, descriptor)
-			assert.Equal(t, "MyEnum", d.Name())
+			is.True(ok) // expected d and got to be of the same Type MutableDescriptor
+			is.Equal("MyEnum", d.Name())
 		},
 	}, {
 		mutableDescriptor: func(s *MutableSchema) schema.MutableDescriptor {
@@ -320,10 +346,10 @@ func TestMutableField_SetDescriptor_Reference(t *testing.T) {
 		},
 		assertDescriptor: func(t *testing.T, descriptor schema.Descriptor) {
 			d, ok := descriptor.(ArrayDescriptor)
-			assert.True(t, ok, "expected %T, got %T", d, descriptor)
+			is.True(ok) // expected d and got to be of the same Type ArrayDescriptor
 			pd, ok := d.ValueDescriptor().(PrimitiveDescriptor)
-			assert.True(t, ok, "expected %T, got %T", pd, d.ValueDescriptor())
-			assert.Equal(t, schema.String, pd.Type())
+			is.True(ok) // expected d and got to be of the same Type PrimitiveDescriptor
+			is.Equal(schema.String, pd.Type())
 		},
 		// TODO add test for maps once we support creating one out of thin air
 	}}
@@ -337,7 +363,7 @@ func TestMutableField_SetDescriptor_Reference(t *testing.T) {
 			f1Desc.SetDescriptor(d)
 
 			newSchema, err := ms.Build()
-			assert.Ok(t, err)
+			is.NoErr(err)
 
 			got := newSchema.Descriptors()[0].(StructDescriptor).Fields()[0]
 			tc.assertDescriptor(t, got.Descriptor())
@@ -346,6 +372,8 @@ func TestMutableField_SetDescriptor_Reference(t *testing.T) {
 }
 
 func TestMutableMapDescriptor_SetKeyDescriptor_Success(t *testing.T) {
+	is := is.New(t)
+
 	testCases := []schema.PrimitiveDescriptorType{
 		schema.Boolean,
 		schema.String,
@@ -365,19 +393,21 @@ func TestMutableMapDescriptor_SetKeyDescriptor_Success(t *testing.T) {
 			keyDesc := NewMutablePrimitiveDescriptor(ms, tc)
 			mapDesc.SetKeyDescriptor(keyDesc)
 
-			assert.Equal(t, keyDesc, mapDesc.keyDescriptor)
+			is.Equal(keyDesc, mapDesc.keyDescriptor)
 
 			newSchema, err := ms.Build()
-			assert.Ok(t, err)
+			is.NoErr(err)
 			gotMapDesc := newSchema.Descriptors()[1].(StructDescriptor).Fields()[17].Descriptor().(MapDescriptor)
 			gotKeyDesc := gotMapDesc.KeyDescriptor().(PrimitiveDescriptor)
 
-			assert.Equal(t, tc, gotKeyDesc.Type())
+			is.Equal(tc, gotKeyDesc.Type())
 		})
 	}
 }
 
 func TestMutableMapDescriptor_SetKeyDescriptor_InvalidKeyKind(t *testing.T) {
+	is := is.New(t)
+
 	testCases := []struct {
 		descriptorType schema.PrimitiveDescriptorType
 		wantErr        error
@@ -405,7 +435,7 @@ func TestMutableMapDescriptor_SetKeyDescriptor_InvalidKeyKind(t *testing.T) {
 			keyDesc := NewMutablePrimitiveDescriptor(ms, tc.descriptorType)
 			mapDesc.SetKeyDescriptor(keyDesc)
 
-			assert.Equal(t, keyDesc, mapDesc.KeyDescriptor())
+			is.Equal(keyDesc, mapDesc.KeyDescriptor())
 
 			_, err := ms.Build()
 			assertError(t, tc.wantErr, err)
@@ -414,6 +444,8 @@ func TestMutableMapDescriptor_SetKeyDescriptor_InvalidKeyKind(t *testing.T) {
 }
 
 func TestMutableMapDescriptor_SetValueDescriptor_Primitive(t *testing.T) {
+	is := is.New(t)
+
 	testCases := []schema.PrimitiveDescriptorType{
 		schema.Boolean,
 		schema.Bytes,
@@ -436,19 +468,21 @@ func TestMutableMapDescriptor_SetValueDescriptor_Primitive(t *testing.T) {
 			valDesc := NewMutablePrimitiveDescriptor(ms, tc)
 			mapDesc.SetValueDescriptor(valDesc)
 
-			assert.Equal(t, valDesc, mapDesc.ValueDescriptor())
+			is.Equal(valDesc, mapDesc.ValueDescriptor())
 
 			newSchema, err := ms.Build()
-			assert.Ok(t, err)
+			is.NoErr(err)
 			gotMapDesc := newSchema.Descriptors()[1].(StructDescriptor).Fields()[17].Descriptor().(MapDescriptor)
 			gotValDesc := gotMapDesc.ValueDescriptor().(PrimitiveDescriptor)
 
-			assert.Equal(t, tc, gotValDesc.Type())
+			is.Equal(tc, gotValDesc.Type())
 		})
 	}
 }
 
 func TestMutableMapDescriptor_SetValueDescriptor_Reference(t *testing.T) {
+	is := is.New(t)
+
 	testCases := []struct {
 		mutableDescriptor func(*MutableSchema) schema.MutableDescriptor
 		assertDescriptor  func(*testing.T, schema.Descriptor)
@@ -458,8 +492,8 @@ func TestMutableMapDescriptor_SetValueDescriptor_Reference(t *testing.T) {
 		},
 		assertDescriptor: func(t *testing.T, descriptor schema.Descriptor) {
 			d, ok := descriptor.(StructDescriptor)
-			assert.True(t, ok, "expected %T, got %T", d, descriptor)
-			assert.Equal(t, "Foo", d.Name())
+			is.True(ok) // expected d and got to be of the same Type StructDescriptor
+			is.Equal("Foo", d.Name())
 		},
 	}, {
 		mutableDescriptor: func(s *MutableSchema) schema.MutableDescriptor {
@@ -467,8 +501,8 @@ func TestMutableMapDescriptor_SetValueDescriptor_Reference(t *testing.T) {
 		},
 		assertDescriptor: func(t *testing.T, descriptor schema.Descriptor) {
 			d, ok := descriptor.(EnumDescriptor)
-			assert.True(t, ok, "expected %T, got %T", d, descriptor)
-			assert.Equal(t, "MyEnum", d.Name())
+			is.True(ok) // expected d and got to be of the same Type EnumDescriptor
+			is.Equal("MyEnum", d.Name())
 		},
 	}}
 
@@ -482,10 +516,10 @@ func TestMutableMapDescriptor_SetValueDescriptor_Reference(t *testing.T) {
 			valDesc := tc.mutableDescriptor(ms)
 			mapDesc.SetValueDescriptor(valDesc)
 
-			assert.Equal(t, valDesc, mapDesc.ValueDescriptor())
+			is.Equal(valDesc, mapDesc.ValueDescriptor())
 
 			newSchema, err := ms.Build()
-			assert.Ok(t, err)
+			is.NoErr(err)
 			gotDesc := newSchema.Descriptors()[1].(StructDescriptor).Fields()[17].Descriptor().(MapDescriptor).valueDescriptor
 			tc.assertDescriptor(t, gotDesc)
 		})
@@ -493,6 +527,8 @@ func TestMutableMapDescriptor_SetValueDescriptor_Reference(t *testing.T) {
 }
 
 func TestMutableArrayDescriptor_SetValueDescriptor_Primitive(t *testing.T) {
+	is := is.New(t)
+
 	testCases := []schema.PrimitiveDescriptorType{
 		schema.Boolean,
 		schema.Bytes,
@@ -515,19 +551,21 @@ func TestMutableArrayDescriptor_SetValueDescriptor_Primitive(t *testing.T) {
 			valDesc := NewMutablePrimitiveDescriptor(ms, tc)
 			arrayDesc.SetValueDescriptor(valDesc)
 
-			assert.Equal(t, valDesc, arrayDesc.ValueDescriptor())
+			is.Equal(valDesc, arrayDesc.ValueDescriptor())
 
 			newSchema, err := ms.Build()
-			assert.Ok(t, err)
+			is.NoErr(err)
 			gotArrayDesc := newSchema.Descriptors()[1].(StructDescriptor).Fields()[16].Descriptor().(ArrayDescriptor)
 			gotValDesc := gotArrayDesc.ValueDescriptor().(PrimitiveDescriptor)
 
-			assert.Equal(t, tc, gotValDesc.Type())
+			is.Equal(tc, gotValDesc.Type())
 		})
 	}
 }
 
 func TestMutableArrayDescriptor_SetValueDescriptor_Reference(t *testing.T) {
+	is := is.New(t)
+
 	testCases := []struct {
 		mutableDescriptor func(*MutableSchema) schema.MutableDescriptor
 		assertDescriptor  func(*testing.T, schema.Descriptor)
@@ -537,8 +575,8 @@ func TestMutableArrayDescriptor_SetValueDescriptor_Reference(t *testing.T) {
 		},
 		assertDescriptor: func(t *testing.T, descriptor schema.Descriptor) {
 			d, ok := descriptor.(StructDescriptor)
-			assert.True(t, ok, "expected %T, got %T", d, descriptor)
-			assert.Equal(t, "Foo", d.Name())
+			is.True(ok)
+			is.Equal("Foo", d.Name())
 		},
 	}, {
 		mutableDescriptor: func(s *MutableSchema) schema.MutableDescriptor {
@@ -546,8 +584,8 @@ func TestMutableArrayDescriptor_SetValueDescriptor_Reference(t *testing.T) {
 		},
 		assertDescriptor: func(t *testing.T, descriptor schema.Descriptor) {
 			d, ok := descriptor.(EnumDescriptor)
-			assert.True(t, ok, "expected %T, got %T", d, descriptor)
-			assert.Equal(t, "MyEnum", d.Name())
+			is.True(ok)
+			is.Equal("MyEnum", d.Name())
 		},
 	}}
 
@@ -561,10 +599,10 @@ func TestMutableArrayDescriptor_SetValueDescriptor_Reference(t *testing.T) {
 			valDesc := tc.mutableDescriptor(ms)
 			arrayDesc.SetValueDescriptor(valDesc)
 
-			assert.Equal(t, valDesc, arrayDesc.ValueDescriptor())
+			is.Equal(valDesc, arrayDesc.ValueDescriptor())
 
 			newSchema, err := ms.Build()
-			assert.Ok(t, err)
+			is.NoErr(err)
 			gotDesc := newSchema.Descriptors()[1].(StructDescriptor).Fields()[16].Descriptor().(ArrayDescriptor).valueDescriptor
 			tc.assertDescriptor(t, gotDesc)
 		})
@@ -572,20 +610,24 @@ func TestMutableArrayDescriptor_SetValueDescriptor_Reference(t *testing.T) {
 }
 
 func TestMutableEnumDescriptor_SetName_Success(t *testing.T) {
+	is := is.New(t)
+
 	ms := fileDescriptorSetToMutalbeSchema(t, getFileDescriptorSet(t, test1DescriptorSetPath))
 
 	enumDesc := ms.Descriptors()[5].(*MutableEnumDescriptor)
 	enumDesc.SetName("UnusedEnumNew")
 
-	assert.Equal(t, "UnusedEnumNew", enumDesc.Name())
+	is.Equal("UnusedEnumNew", enumDesc.Name())
 
 	newSchema, err := ms.Build()
-	assert.Ok(t, err)
+	is.NoErr(err)
 	got := newSchema.Descriptors()[5].(EnumDescriptor)
-	assert.Equal(t, "UnusedEnumNew", got.Name())
+	is.Equal("UnusedEnumNew", got.Name())
 }
 
 func TestMutableEnumDescriptor_SetValueDescriptors_NewValueSuccess(t *testing.T) {
+	is := is.New(t)
+
 	ms := fileDescriptorSetToMutalbeSchema(t, getFileDescriptorSet(t, test1DescriptorSetPath))
 
 	enumDesc := ms.Descriptors()[5].(*MutableEnumDescriptor)
@@ -603,12 +645,12 @@ func TestMutableEnumDescriptor_SetValueDescriptors_NewValueSuccess(t *testing.T)
 	enumDesc.SetValueDescriptors(mutableValues)
 
 	newSchema, err := ms.Build()
-	assert.Ok(t, err)
+	is.NoErr(err)
 	gotValues := newSchema.Descriptors()[5].(EnumDescriptor).ValueDescriptors()
-	assert.Equal(t, 3, len(gotValues))
+	is.Equal(3, len(gotValues))
 	gotValue := gotValues[2]
-	assert.Equal(t, "myValue", gotValue.Name())
-	assert.Equal(t, "3", gotValue.Value())
+	is.Equal("myValue", gotValue.Name())
+	is.Equal("3", gotValue.Value())
 }
 
 func TestMutableEnumDescriptor_SetValues_NewValueConflict(t *testing.T) {
@@ -633,46 +675,54 @@ func TestMutableEnumDescriptor_SetValues_NewValueConflict(t *testing.T) {
 }
 
 func TestMutableEnumValueDescriptor_SetName_Success(t *testing.T) {
+	is := is.New(t)
+
 	ms := fileDescriptorSetToMutalbeSchema(t, getFileDescriptorSet(t, test1DescriptorSetPath))
 
 	enumDesc := ms.Descriptors()[5].(*MutableEnumDescriptor).ValueDescriptors()[0].(*MutableEnumValueDescriptor)
 	enumDesc.SetName("V0New")
 
-	assert.Equal(t, "V0New", enumDesc.Name())
+	is.Equal("V0New", enumDesc.Name())
 
 	newSchema, err := ms.Build()
-	assert.Ok(t, err)
+	is.NoErr(err)
 	got := newSchema.Descriptors()[5].(EnumDescriptor).ValueDescriptors()[0]
-	assert.Equal(t, "V0New", got.Name())
+	is.Equal("V0New", got.Name())
 }
 
 func TestMutableEnumValueDescriptor_SetValue_Success(t *testing.T) {
+	is := is.New(t)
+
 	ms := fileDescriptorSetToMutalbeSchema(t, getFileDescriptorSet(t, test1DescriptorSetPath))
 
 	enumDesc := ms.Descriptors()[5].(*MutableEnumDescriptor).ValueDescriptors()[1].(*MutableEnumValueDescriptor)
 	enumDesc.SetValue("1")
 
-	assert.Equal(t, "1", enumDesc.Value())
+	is.Equal("1", enumDesc.Value())
 
 	newSchema, err := ms.Build()
-	assert.Ok(t, err)
+	is.NoErr(err)
 	got := newSchema.Descriptors()[5].(EnumDescriptor).ValueDescriptors()[1]
-	assert.Equal(t, "1", got.Value())
+	is.Equal("1", got.Value())
 }
 
 func TestMutableEnumValueDescriptor_SetValue_MissingZeroNumber(t *testing.T) {
+	is := is.New(t)
+
 	ms := fileDescriptorSetToMutalbeSchema(t, getFileDescriptorSet(t, test1DescriptorSetPath))
 
 	enumDesc := ms.Descriptors()[5].(*MutableEnumDescriptor).ValueDescriptors()[0].(*MutableEnumValueDescriptor)
 	enumDesc.SetValue("1")
 
-	assert.Equal(t, "1", enumDesc.Value())
+	is.Equal("1", enumDesc.Value())
 
 	_, err := ms.Build()
 	assertError(t, cerrors.New(`could not create proto registry: proto: enum "proto.V1" using proto3 semantics must have zero number for the first value`), err)
 }
 
 func TestMutablePrimitiveDescriptor_Type(t *testing.T) {
+	is := is.New(t)
+
 	ms := fileDescriptorSetToMutalbeSchema(t, getFileDescriptorSet(t, test1DescriptorSetPath))
 
 	allTypesDesc := ms.Descriptors()[1].(*MutableStructDescriptor)
@@ -697,13 +747,15 @@ func TestMutablePrimitiveDescriptor_Type(t *testing.T) {
 	for index, wantType := range wantTypes {
 		t.Run(fmt.Sprintf("f%d", index+1), func(t *testing.T) {
 			pd, ok := allTypesDesc.Fields()[index].Descriptor().(*MutablePrimitiveDescriptor)
-			assert.True(t, ok, fmt.Sprintf("expected %T, got %T", pd, allTypesDesc.Fields()[index].Descriptor()))
-			assert.Equal(t, wantType, pd.Type())
+			is.True(ok) // expected d and got to be of the same Type MutablePrimitiveDescriptor
+			is.Equal(wantType, pd.Type())
 		})
 	}
 }
 
 func TestMutablePrimitiveDescriptor_SetType(t *testing.T) {
+	is := is.New(t)
+
 	testCases := []schema.PrimitiveDescriptorType{
 		schema.Boolean,
 		schema.Bytes,
@@ -729,18 +781,18 @@ func TestMutablePrimitiveDescriptor_SetType(t *testing.T) {
 				d := f.Descriptor().(*MutablePrimitiveDescriptor)
 				d.SetType(tc)
 
-				assert.Equal(t, tc, d.Type())
+				is.Equal(tc, d.Type())
 			}
 
 			newSchema, err := ms.Build()
-			assert.Ok(t, err)
+			is.NoErr(err)
 			gotAllTypesDesc := newSchema.Descriptors()[1].(StructDescriptor)
 			for i, f := range gotAllTypesDesc.Fields() {
 				if i == 15 {
 					// only first 15 fields are primitive types
 					break
 				}
-				assert.Equal(t, tc, f.Descriptor().(PrimitiveDescriptor).Type())
+				is.Equal(tc, f.Descriptor().(PrimitiveDescriptor).Type())
 			}
 		})
 	}

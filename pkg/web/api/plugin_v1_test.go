@@ -19,15 +19,17 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/conduitio/conduit/pkg/web/api/mock"
 	"github.com/conduitio/conduit/pkg/web/api/toproto"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
+	"github.com/matryer/is"
 	"go.uber.org/mock/gomock"
 )
 
 func TestPluginAPIv1_ListPluginByName(t *testing.T) {
+	is := is.New(t)
+
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	psMock := mock.NewPluginOrchestrator(ctrl)
@@ -91,11 +93,11 @@ func TestPluginAPIv1_ListPluginByName(t *testing.T) {
 		&apiv1.ListPluginsRequest{Name: "want-.*"},
 	)
 
-	assert.Ok(t, err)
+	is.NoErr(err)
 
 	sortPlugins(want.Plugins)
 	sortPlugins(got.Plugins)
-	assert.Equal(t, want, got)
+	is.Equal(want, got)
 }
 
 func sortPlugins(p []*apiv1.PluginSpecifications) {

@@ -17,8 +17,8 @@ package stream
 import (
 	"testing"
 
-	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/matryer/is"
 )
 
 func TestMessage_Ack_WithoutHandler(t *testing.T) {
@@ -363,13 +363,16 @@ func TestMessage_RegisterHandlerFail(t *testing.T) {
 }
 
 func assertMessageIsAcked(t *testing.T, msg *Message) {
-	assert.Equal(t, MessageStatusAcked, msg.Status())
+	is := is.New(t)
+	is.Equal(MessageStatusAcked, msg.Status())
 }
 
 func assertMessageIsNacked(t *testing.T, msg *Message) {
-	assert.Equal(t, MessageStatusNacked, msg.Status())
+	is := is.New(t)
+	is.Equal(MessageStatusNacked, msg.Status())
 }
 
 func assertMessageIsOpen(t *testing.T, msg *Message) {
-	assert.Equal(t, MessageStatusOpen, msg.Status())
+	is := is.New(t)
+	is.Equal(MessageStatusOpen, msg.Status())
 }

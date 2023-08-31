@@ -17,11 +17,13 @@ package conduit
 import (
 	"testing"
 
-	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/foundation/database/inmemory"
+	"github.com/matryer/is"
 )
 
 func TestConfig_Validate(t *testing.T) {
+	is := is.New(t)
+
 	testCases := []struct {
 		name        string
 		setupConfig func(Config) Config
@@ -162,9 +164,9 @@ func TestConfig_Validate(t *testing.T) {
 			underTest := tc.setupConfig(validConfig)
 			got := underTest.Validate()
 			if got == nil {
-				assert.Nil(t, tc.want)
+				is.True(tc.want == nil)
 			} else {
-				assert.Equal(t, tc.want.Error(), got.Error())
+				is.Equal(tc.want.Error(), got.Error())
 			}
 		})
 	}

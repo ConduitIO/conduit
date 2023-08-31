@@ -19,57 +19,61 @@ import (
 	"testing"
 	"time"
 
-	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/matryer/is"
 )
 
 func TestPubSubNodeBase_TriggerWithoutPubOrSub(t *testing.T) {
+	is := is.New(t)
 	ctx := context.Background()
 	logger := log.Nop()
 
 	n := &pubSubNodeBase{}
 	trigger, cleanup, err := n.Trigger(ctx, logger, nil)
-	assert.Nil(t, trigger)
-	assert.Nil(t, cleanup)
-	assert.Error(t, err)
+	is.True(trigger == nil)
+	is.True(cleanup == nil)
+	is.True(err != nil)
 
 	n = &pubSubNodeBase{}
 	n.Pub()
 	trigger, cleanup, err = n.Trigger(ctx, logger, nil)
-	assert.Nil(t, trigger)
-	assert.Nil(t, cleanup)
-	assert.Error(t, err)
+	is.True(trigger == nil)
+	is.True(cleanup == nil)
+	is.True(err != nil)
 
 	n = &pubSubNodeBase{}
 	n.Sub(make(chan *Message))
 	trigger, cleanup, err = n.Trigger(ctx, logger, nil)
-	assert.Nil(t, trigger)
-	assert.Nil(t, cleanup)
-	assert.Error(t, err)
+	is.True(trigger == nil)
+	is.True(cleanup == nil)
+	is.True(err != nil)
 }
 
 func TestPubSubNodeBase_PubTwice(t *testing.T) {
+	is := is.New(t)
 	n := &pubSubNodeBase{}
 	n.Pub() // first one succeeds
 
 	defer func() {
-		assert.NotNil(t, recover())
+		is.True(recover() != nil)
 	}()
 	n.Pub() // second one should panic
 }
 
 func TestPubSubNodeBase_SubTwice(t *testing.T) {
+	is := is.New(t)
 	n := &pubSubNodeBase{}
 	n.Sub(make(chan *Message)) // first one succeeds
 
 	defer func() {
-		assert.NotNil(t, recover())
+		is.True(recover() != nil)
 	}()
 	n.Sub(make(chan *Message)) // second one should panic
 }
 
 func TestPubSubNodeBase_TriggerTwice(t *testing.T) {
+	is := is.New(t)
 	ctx := context.Background()
 	logger := log.Nop()
 
@@ -77,17 +81,18 @@ func TestPubSubNodeBase_TriggerTwice(t *testing.T) {
 	n.Pub()
 	n.Sub(make(chan *Message))
 	trigger, cleanup, err := n.Trigger(ctx, logger, nil)
-	assert.Ok(t, err)
-	assert.NotNil(t, trigger)
-	assert.NotNil(t, cleanup)
+	is.NoErr(err)
+	is.True(trigger != nil)
+	is.True(cleanup != nil)
 
 	trigger, cleanup, err = n.Trigger(ctx, logger, nil)
-	assert.Nil(t, trigger)
-	assert.Nil(t, cleanup)
-	assert.Error(t, err)
+	is.True(trigger == nil)
+	is.True(cleanup == nil)
+	is.True(err != nil)
 }
 
 func TestPubSubNodeBase_TriggerSuccess(t *testing.T) {
+	is := is.New(t)
 	ctx := context.Background()
 	logger := log.Nop()
 
@@ -97,9 +102,9 @@ func TestPubSubNodeBase_TriggerSuccess(t *testing.T) {
 	n.Pub()
 
 	trigger, cleanup, err := n.Trigger(ctx, logger, nil)
-	assert.Ok(t, err)
-	assert.NotNil(t, trigger)
-	assert.NotNil(t, cleanup)
+	is.NoErr(err)
+	is.True(trigger != nil)
+	is.True(cleanup != nil)
 
 	defer cleanup()
 
@@ -110,11 +115,12 @@ func TestPubSubNodeBase_TriggerSuccess(t *testing.T) {
 	}()
 
 	got, err := trigger()
-	assert.Ok(t, err)
-	assert.Equal(t, want, got)
+	is.NoErr(err)
+	is.Equal(want, got)
 }
 
 func TestPubSubNodeBase_TriggerClosedSubChannel(t *testing.T) {
+	is := is.New(t)
 	ctx := context.Background()
 	logger := log.Nop()
 
@@ -124,9 +130,9 @@ func TestPubSubNodeBase_TriggerClosedSubChannel(t *testing.T) {
 	n.Pub()
 
 	trigger, cleanup, err := n.Trigger(ctx, logger, nil)
-	assert.Ok(t, err)
-	assert.NotNil(t, trigger)
-	assert.NotNil(t, cleanup)
+	is.NoErr(err)
+	is.True(trigger != nil)
+	is.True(cleanup != nil)
 
 	defer cleanup()
 
@@ -134,11 +140,12 @@ func TestPubSubNodeBase_TriggerClosedSubChannel(t *testing.T) {
 	close(in)
 
 	got, err := trigger()
-	assert.Ok(t, err)
-	assert.Nil(t, got)
+	is.NoErr(err)
+	is.True(got == nil)
 }
 
 func TestPubSubNodeBase_TriggerCancelledContext(t *testing.T) {
+	is := is.New(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	logger := log.Nop()
 
@@ -148,9 +155,9 @@ func TestPubSubNodeBase_TriggerCancelledContext(t *testing.T) {
 	n.Pub()
 
 	trigger, cleanup, err := n.Trigger(ctx, logger, nil)
-	assert.Ok(t, err)
-	assert.NotNil(t, trigger)
-	assert.NotNil(t, cleanup)
+	is.NoErr(err)
+	is.True(trigger != nil)
+	is.True(cleanup != nil)
 
 	defer cleanup()
 
@@ -158,11 +165,12 @@ func TestPubSubNodeBase_TriggerCancelledContext(t *testing.T) {
 	cancel()
 
 	got, err := trigger()
-	assert.Error(t, err)
-	assert.Nil(t, got)
+	is.True(err != nil)
+	is.True(got == nil)
 }
 
 func TestPubSubNodeBase_Send(t *testing.T) {
+	is := is.New(t)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*100)
 	defer cancel()
 	logger := log.Nop()
@@ -173,18 +181,19 @@ func TestPubSubNodeBase_Send(t *testing.T) {
 	want := &Message{}
 	go func() {
 		err := n.Send(ctx, logger, want)
-		assert.Ok(t, err)
+		is.NoErr(err)
 	}()
 
 	select {
 	case <-ctx.Done():
 		t.Fatal("did not expect context to get canceled before receiving message")
 	case got := <-out:
-		assert.Equal(t, want, got)
+		is.Equal(want, got)
 	}
 }
 
 func TestPubSubNodeBase_SendCancelledContext(t *testing.T) {
+	is := is.New(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	logger := log.Nop()
 
@@ -195,7 +204,7 @@ func TestPubSubNodeBase_SendCancelledContext(t *testing.T) {
 	cancel() // context is cancelled before sending the message
 	go func() {
 		err := n.Send(ctx, logger, msg)
-		assert.Error(t, err)
+		is.True(err != nil)
 	}()
 
 	time.Sleep(1 * time.Millisecond) // give runtime the ability to run the go routine
@@ -209,44 +218,48 @@ func TestPubSubNodeBase_SendCancelledContext(t *testing.T) {
 }
 
 func TestPubNodeBase_TriggerWithoutPub(t *testing.T) {
+	is := is.New(t)
 	ctx := context.Background()
 	logger := log.Nop()
 
 	n := &pubNodeBase{}
 	trigger, cleanup, err := n.Trigger(ctx, logger, nil, nil)
-	assert.Nil(t, trigger)
-	assert.Nil(t, cleanup)
-	assert.Error(t, err)
+	is.True(trigger == nil)
+	is.True(cleanup == nil)
+	is.True(err != nil)
 }
 
 func TestPubNodeBase_TriggerTwice(t *testing.T) {
+	is := is.New(t)
 	ctx := context.Background()
 	logger := log.Nop()
 
 	n := &pubNodeBase{}
 	n.Pub()
 	trigger, cleanup, err := n.Trigger(ctx, logger, nil, nil)
-	assert.Ok(t, err)
-	assert.NotNil(t, trigger)
-	assert.NotNil(t, cleanup)
+	is.NoErr(err)
+	is.True(trigger != nil)
+	is.True(cleanup != nil)
 
 	trigger, cleanup, err = n.Trigger(ctx, logger, nil, nil)
-	assert.Nil(t, trigger)
-	assert.Nil(t, cleanup)
-	assert.Error(t, err)
+	is.True(trigger == nil)
+	is.True(cleanup == nil)
+	is.True(err != nil)
 }
 
 func TestPubNodeBase_PubTwice(t *testing.T) {
+	is := is.New(t)
 	n := &pubNodeBase{}
 	n.Pub() // first one succeeds
 
 	defer func() {
-		assert.NotNil(t, recover())
+		is.True(recover() != nil)
 	}()
 	n.Pub() // second one should panic
 }
 
 func TestPubNodeBase_TriggerSuccess(t *testing.T) {
+	is := is.New(t)
 	ctx := context.Background()
 	logger := log.Nop()
 
@@ -262,18 +275,19 @@ func TestPubNodeBase_TriggerSuccess(t *testing.T) {
 			return want, nil
 		},
 	)
-	assert.Ok(t, err)
-	assert.NotNil(t, trigger)
-	assert.NotNil(t, cleanup)
+	is.NoErr(err)
+	is.True(trigger != nil)
+	is.True(cleanup != nil)
 
 	defer cleanup()
 
 	got, err := trigger()
-	assert.Ok(t, err)
-	assert.Equal(t, want, got)
+	is.NoErr(err)
+	is.Equal(want, got)
 }
 
 func TestPubNodeBase_TriggerWithErrorChan(t *testing.T) {
+	is := is.New(t)
 	ctx := context.Background()
 	logger := log.Nop()
 
@@ -282,9 +296,9 @@ func TestPubNodeBase_TriggerWithErrorChan(t *testing.T) {
 
 	errChan := make(chan error, 1) // buffered channel to prevent locking
 	trigger, cleanup, err := n.Trigger(ctx, logger, errChan, nil)
-	assert.Ok(t, err)
-	assert.NotNil(t, trigger)
-	assert.NotNil(t, cleanup)
+	is.NoErr(err)
+	is.True(trigger != nil)
+	is.True(cleanup != nil)
 
 	defer cleanup()
 
@@ -293,11 +307,12 @@ func TestPubNodeBase_TriggerWithErrorChan(t *testing.T) {
 	errChan <- wantErr
 
 	got, err := trigger()
-	assert.Nil(t, got)
-	assert.Equal(t, wantErr, err)
+	is.True(got == nil)
+	is.Equal(wantErr, err)
 }
 
 func TestPubNodeBase_TriggerCancelledContext(t *testing.T) {
+	is := is.New(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	logger := log.Nop()
 
@@ -305,9 +320,9 @@ func TestPubNodeBase_TriggerCancelledContext(t *testing.T) {
 	n.Pub()
 
 	trigger, cleanup, err := n.Trigger(ctx, logger, nil, nil)
-	assert.Ok(t, err)
-	assert.NotNil(t, trigger)
-	assert.NotNil(t, cleanup)
+	is.NoErr(err)
+	is.True(trigger != nil)
+	is.True(cleanup != nil)
 
 	defer cleanup()
 
@@ -315,11 +330,12 @@ func TestPubNodeBase_TriggerCancelledContext(t *testing.T) {
 	cancel()
 
 	got, err := trigger()
-	assert.Error(t, err)
-	assert.Nil(t, got)
+	is.True(err != nil)
+	is.True(got == nil)
 }
 
 func TestPubNodeBase_Send(t *testing.T) {
+	is := is.New(t)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*100)
 	defer cancel()
 	logger := log.Nop()
@@ -330,18 +346,19 @@ func TestPubNodeBase_Send(t *testing.T) {
 	want := &Message{}
 	go func() {
 		err := n.Send(ctx, logger, want)
-		assert.Ok(t, err)
+		is.NoErr(err)
 	}()
 
 	select {
 	case <-ctx.Done():
 		t.Fatal("did not expect context to get cancelled before receiving message")
 	case got := <-out:
-		assert.Equal(t, want, got)
+		is.Equal(want, got)
 	}
 }
 
 func TestPubNodeBase_SendCancelledContext(t *testing.T) {
+	is := is.New(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	logger := log.Nop()
 
@@ -352,7 +369,7 @@ func TestPubNodeBase_SendCancelledContext(t *testing.T) {
 	cancel() // context is cancelled before sending the message
 	go func() {
 		err := n.Send(ctx, logger, msg)
-		assert.Error(t, err)
+		is.True(err != nil)
 	}()
 
 	time.Sleep(1 * time.Millisecond) // give runtime the ability to run the go routine
@@ -366,44 +383,48 @@ func TestPubNodeBase_SendCancelledContext(t *testing.T) {
 }
 
 func TestSubNodeBase_TriggerWithoutSub(t *testing.T) {
+	is := is.New(t)
 	ctx := context.Background()
 	logger := log.Nop()
 
 	n := &subNodeBase{}
 	trigger, cleanup, err := n.Trigger(ctx, logger, nil)
-	assert.Nil(t, trigger)
-	assert.Nil(t, cleanup)
-	assert.Error(t, err)
+	is.True(trigger == nil)
+	is.True(cleanup == nil)
+	is.True(err != nil)
 }
 
 func TestSubNodeBase_TriggerTwice(t *testing.T) {
+	is := is.New(t)
 	ctx := context.Background()
 	logger := log.Nop()
 
 	n := &subNodeBase{}
 	n.Sub(make(chan *Message))
 	trigger, cleanup, err := n.Trigger(ctx, logger, nil)
-	assert.Ok(t, err)
-	assert.NotNil(t, trigger)
-	assert.NotNil(t, cleanup)
+	is.NoErr(err)
+	is.True(trigger != nil)
+	is.True(cleanup != nil)
 
 	trigger, cleanup, err = n.Trigger(ctx, logger, nil)
-	assert.Nil(t, trigger)
-	assert.Nil(t, cleanup)
-	assert.Error(t, err)
+	is.True(trigger == nil)
+	is.True(cleanup == nil)
+	is.True(err != nil)
 }
 
 func TestSubNodeBase_SubTwice(t *testing.T) {
+	is := is.New(t)
 	n := &subNodeBase{}
 	n.Sub(make(chan *Message)) // first one succeeds
 
 	defer func() {
-		assert.NotNil(t, recover())
+		is.True(recover() != nil)
 	}()
 	n.Sub(make(chan *Message)) // second one should panic
 }
 
 func TestSubNodeBase_TriggerSuccess(t *testing.T) {
+	is := is.New(t)
 	ctx := context.Background()
 	logger := log.Nop()
 
@@ -412,9 +433,9 @@ func TestSubNodeBase_TriggerSuccess(t *testing.T) {
 	n.Sub(in)
 
 	trigger, cleanup, err := n.Trigger(ctx, logger, nil)
-	assert.Ok(t, err)
-	assert.NotNil(t, trigger)
-	assert.NotNil(t, cleanup)
+	is.NoErr(err)
+	is.True(trigger != nil)
+	is.True(cleanup != nil)
 
 	defer cleanup()
 
@@ -425,11 +446,12 @@ func TestSubNodeBase_TriggerSuccess(t *testing.T) {
 	}()
 
 	got, err := trigger()
-	assert.Ok(t, err)
-	assert.Equal(t, want, got)
+	is.NoErr(err)
+	is.Equal(want, got)
 }
 
 func TestSubNodeBase_TriggerClosedSubChannel(t *testing.T) {
+	is := is.New(t)
 	ctx := context.Background()
 	logger := log.Nop()
 
@@ -438,9 +460,9 @@ func TestSubNodeBase_TriggerClosedSubChannel(t *testing.T) {
 	n.Sub(in)
 
 	trigger, cleanup, err := n.Trigger(ctx, logger, nil)
-	assert.Ok(t, err)
-	assert.NotNil(t, trigger)
-	assert.NotNil(t, cleanup)
+	is.NoErr(err)
+	is.True(trigger != nil)
+	is.True(cleanup != nil)
 
 	defer cleanup()
 
@@ -448,11 +470,12 @@ func TestSubNodeBase_TriggerClosedSubChannel(t *testing.T) {
 	close(in)
 
 	got, err := trigger()
-	assert.Ok(t, err)
-	assert.Nil(t, got)
+	is.NoErr(err)
+	is.True(got == nil)
 }
 
 func TestSubNodeBase_TriggerWithErrorChan(t *testing.T) {
+	is := is.New(t)
 	ctx := context.Background()
 	logger := log.Nop()
 
@@ -462,9 +485,9 @@ func TestSubNodeBase_TriggerWithErrorChan(t *testing.T) {
 
 	errChan := make(chan error, 1) // buffered channel to prevent locking
 	trigger, cleanup, err := n.Trigger(ctx, logger, errChan)
-	assert.Ok(t, err)
-	assert.NotNil(t, trigger)
-	assert.NotNil(t, cleanup)
+	is.NoErr(err)
+	is.True(trigger != nil)
+	is.True(cleanup != nil)
 
 	defer cleanup()
 
@@ -473,11 +496,12 @@ func TestSubNodeBase_TriggerWithErrorChan(t *testing.T) {
 	errChan <- wantErr
 
 	got, err := trigger()
-	assert.Nil(t, got)
-	assert.Equal(t, wantErr, err)
+	is.True(got == nil)
+	is.Equal(wantErr, err)
 }
 
 func TestSubNodeBase_TriggerCancelledContext(t *testing.T) {
+	is := is.New(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	logger := log.Nop()
 
@@ -486,9 +510,9 @@ func TestSubNodeBase_TriggerCancelledContext(t *testing.T) {
 	n.Sub(in)
 
 	trigger, cleanup, err := n.Trigger(ctx, logger, nil)
-	assert.Ok(t, err)
-	assert.NotNil(t, trigger)
-	assert.NotNil(t, cleanup)
+	is.NoErr(err)
+	is.True(trigger != nil)
+	is.True(cleanup != nil)
 
 	defer cleanup()
 
@@ -496,6 +520,6 @@ func TestSubNodeBase_TriggerCancelledContext(t *testing.T) {
 	cancel()
 
 	got, err := trigger()
-	assert.Error(t, err)
-	assert.Nil(t, got)
+	is.True(err != nil)
+	is.True(got == nil)
 }
