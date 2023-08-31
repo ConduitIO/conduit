@@ -121,7 +121,7 @@ func TestSchema_MarshalUnmarshal(t *testing.T) {
 	}, {
 		name:       "[4]byte",
 		haveValue:  [4]byte{1, 2, 3, 4},
-		wantValue:  []byte{1, 2, 3, 4}, // fixed is unmarshaled into slice
+		wantValue:  [4]byte{1, 2, 3, 4},
 		wantSchema: must(avro.NewFixedSchema("record.foo", "", 4, nil)),
 	}, {
 		name:      "nil",
