@@ -28,7 +28,7 @@ require (
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.17.1
 	github.com/hamba/avro/v2 v2.15.1
 	github.com/hashicorp/go-hclog v1.5.0
-	github.com/hashicorp/go-plugin v1.5.0
+	github.com/hashicorp/go-plugin v1.5.1
 	github.com/jackc/pgx/v5 v5.4.3
 	github.com/jinzhu/copier v0.4.0
 	github.com/jpillora/backoff v1.0.0
