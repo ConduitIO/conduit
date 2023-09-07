@@ -16,6 +16,7 @@ package procbuiltin
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -139,6 +140,7 @@ func TestHTTPRequest_Build(t *testing.T) {
 				httpRequestBackoffRetryMin:    "10ms",
 				httpRequestBackoffRetryMax:    "1s",
 				httpRequestBackoffRetryFactor: "1.3",
+				httpRequestConfigContentType:  "application/json",
 			},
 		}},
 		wantErr: false,
@@ -211,7 +213,9 @@ func TestHTTPRequest_Success(t *testing.T) {
 			if wantMethod == "" {
 				wantMethod = "POST" // default
 			}
-			wantBody := tt.args.r.Payload.After.Bytes()
+
+			wantBody, err := json.Marshal(tt.args.r)
+			is.NoErr(err)
 
 			srv := httptest.NewServer(http.HandlerFunc(func(resp http.ResponseWriter, req *http.Request) {
 				is.Equal(wantMethod, req.Method)
@@ -242,7 +246,9 @@ func TestHTTPRequest_RetrySuccess(t *testing.T) {
 	respBody := []byte("foo-bar/response")
 
 	wantMethod := "POST"
-	wantBody := []byte("random data")
+	rec := record.Record{Payload: record.Change{After: record.RawData{Raw: []byte("random data")}}}
+	wantBody, err := json.Marshal(rec)
+	is.NoErr(err)
 
 	srvHandlerCount := 0
 
@@ -278,7 +284,7 @@ func TestHTTPRequest_RetrySuccess(t *testing.T) {
 	underTest, err := HTTPRequest(config)
 	is.NoErr(err)
 
-	got, err := underTest.Process(context.Background(), record.Record{Payload: record.Change{After: record.RawData{Raw: wantBody}}})
+	got, err := underTest.Process(context.Background(), rec)
 	is.NoErr(err)
 	is.Equal(got.Payload.After, record.RawData{Raw: respBody})
 	is.Equal(srvHandlerCount, 5)
@@ -313,4 +319,37 @@ func TestHTTPRequest_RetryFail(t *testing.T) {
 	is.True(err != nil) // expected an error
 	is.Equal(got, record.Record{})
 	is.Equal(srvHandlerCount, 6) // expected 6 requests (1 regular and 5 retries)
+}
+
+func TestHTTPRequest_FilterRecord(t *testing.T) {
+	is := is.New(t)
+
+	wantMethod := "POST"
+	rec := record.Record{Payload: record.Change{After: record.RawData{Raw: []byte("random data")}}}
+	wantBody, err := json.Marshal(rec)
+	is.NoErr(err)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(resp http.ResponseWriter, req *http.Request) {
+		is.Equal(wantMethod, req.Method)
+
+		gotBody, err := io.ReadAll(req.Body)
+		is.NoErr(err)
+		is.Equal(wantBody, gotBody)
+
+		resp.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+
+	config := processor.Config{
+		Settings: map[string]string{
+			httpRequestConfigURL: srv.URL,
+		},
+	}
+
+	underTest, err := HTTPRequest(config)
+	is.NoErr(err)
+
+	got, err := underTest.Process(context.Background(), rec)
+	is.Equal(err, processor.ErrSkipRecord)
+	is.Equal(got, record.Record{})
 }
