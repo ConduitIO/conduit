@@ -17,6 +17,7 @@ package procbuiltin
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/url"
@@ -33,6 +34,8 @@ const (
 
 	httpRequestConfigURL          = "url"
 	httpRequestConfigMethod       = "method"
+	httpRequestConfigContentType  = "contentType"
+	httpRequestContentTypeDefault = "application/json"
 	httpRequestBackoffRetryCount  = "backoffRetry.count"
 	httpRequestBackoffRetryMin    = "backoffRetry.min"
 	httpRequestBackoffRetryMax    = "backoffRetry.max"
@@ -43,9 +46,10 @@ func init() {
 	processor.GlobalBuilderRegistry.MustRegister(httpRequestProcType, HTTPRequest)
 }
 
-// HTTPRequest builds a processor that sends an HTTP request to the specified
-// URL with the specified HTTP method (default is POST). Record.Payload.After is
-// used as the request body and the raw response body overwrites the field.
+// HTTPRequest builds a processor that sends an HTTP request to the specified URL with the specified HTTP method
+// (default is POST) with a content-type header as the specified value (default is application/json). the whole
+// record as json will be used as the request body and the raw response body will be set under Record.Payload.After.
+// if the response code is (204 No Content) then the record will be filtered out.
 func HTTPRequest(config processor.Config) (processor.Interface, error) {
 	return httpRequest(httpRequestProcType, config)
 }
@@ -73,6 +77,10 @@ func httpRequest(
 	if method == "" {
 		method = http.MethodPost
 	}
+	contentType := config.Settings[httpRequestConfigContentType]
+	if contentType == "" {
+		contentType = httpRequestContentTypeDefault
+	}
 
 	// preflight check
 	_, err = http.NewRequest(
@@ -85,15 +93,22 @@ func httpRequest(
 	}
 
 	procFn := func(ctx context.Context, r record.Record) (record.Record, error) {
+		jsonRec, err := json.Marshal(r)
+		if err != nil {
+			return record.Record{}, cerrors.Errorf("%s: error creating json record: %w", processorType, err)
+		}
+
 		req, err := http.NewRequestWithContext(
 			ctx,
 			method,
 			rawURL,
-			bytes.NewReader(r.Payload.After.Bytes()),
+			bytes.NewReader(jsonRec),
 		)
 		if err != nil {
 			return record.Record{}, cerrors.Errorf("%s: error trying to create HTTP request: %w", processorType, err)
 		}
+
+		req.Header.Set("Content-Type", contentType)
 
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
@@ -109,6 +124,10 @@ func httpRequest(
 		if resp.StatusCode > 299 {
 			// regard status codes over 299 as errors
 			return record.Record{}, cerrors.Errorf("%s: invalid status code %v (body: %q)", processorType, resp.StatusCode, string(body))
+		}
+		// skip if body has no content
+		if resp.StatusCode == http.StatusNoContent {
+			return record.Record{}, processor.ErrSkipRecord
 		}
 
 		r.Payload.After = record.RawData{Raw: body}
