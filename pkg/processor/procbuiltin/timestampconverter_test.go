@@ -19,11 +19,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/conduitio/conduit/pkg/record/schema/mock"
 	"github.com/google/go-cmp/cmp"
+	"github.com/matryer/is"
 )
 
 func TestTimestampConverterKey_Build(t *testing.T) {
@@ -101,6 +101,8 @@ func TestTimestampConverterKey_Build(t *testing.T) {
 }
 
 func TestTimestampConverterKey_Process(t *testing.T) {
+	is := is.New(t)
+
 	type args struct {
 		r record.Record
 	}
@@ -298,7 +300,7 @@ func TestTimestampConverterKey_Process(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			underTest, err := TimestampConverterKey(tt.config)
-			assert.Ok(t, err)
+			is.NoErr(err)
 			got, err := underTest.Process(context.Background(), tt.args.r)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("process() error = %v, wantErr = %v", err, tt.wantErr)
@@ -357,6 +359,8 @@ func TestTimestampConverterPayload_Build(t *testing.T) {
 }
 
 func TestTimestampConverterPayload_Process(t *testing.T) {
+	is := is.New(t)
+
 	type args struct {
 		r record.Record
 	}
@@ -601,7 +605,7 @@ func TestTimestampConverterPayload_Process(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			underTest, err := TimestampConverterPayload(tt.config)
-			assert.Ok(t, err)
+			is.NoErr(err)
 			got, err := underTest.Process(context.Background(), tt.args.r)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("process() error = %v, wantErr = %v", err, tt.wantErr)

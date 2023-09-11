@@ -18,11 +18,11 @@ import (
 	"context"
 	"testing"
 
-	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/google/go-cmp/cmp"
+	"github.com/matryer/is"
 )
 
 func TestFilterFieldKey_Build(t *testing.T) {
@@ -101,6 +101,8 @@ func TestFilterFieldKey_Build(t *testing.T) {
 }
 
 func TestFilterFieldKey_Process(t *testing.T) {
+	is := is.New(t)
+
 	type args struct {
 		r record.Record
 	}
@@ -231,7 +233,7 @@ func TestFilterFieldKey_Process(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			underTest, err := FilterFieldKey(tt.config)
-			assert.Ok(t, err)
+			is.NoErr(err)
 			got, err := underTest.Process(context.Background(), tt.args.r)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("FilterFieldKey() error = %v, wantErr %v", err, tt.wantErr)
@@ -316,6 +318,8 @@ func TestFilterFieldPayload_Build(t *testing.T) {
 }
 
 func TestFilterFieldPayload_Process(t *testing.T) {
+	is := is.New(t)
+
 	type args struct {
 		config processor.Config
 		r      record.Record
@@ -421,7 +425,7 @@ func TestFilterFieldPayload_Process(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			underTest, err := FilterFieldPayload(tt.args.config)
-			assert.Ok(t, err)
+			is.NoErr(err)
 			got, err := underTest.Process(context.Background(), tt.args.r)
 			if (err != nil) != (tt.err != nil) {
 				t.Errorf("FilterFieldPayload Error: %s - wanted: %s", err, tt.err)

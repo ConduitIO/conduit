@@ -19,10 +19,10 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/conduitio/conduit/pkg/record/schema/mock"
+	"github.com/matryer/is"
 )
 
 func TestHoistFieldKey_Build(t *testing.T) {
@@ -69,6 +69,8 @@ func TestHoistFieldKey_Build(t *testing.T) {
 }
 
 func TestHoistFieldKey_Process(t *testing.T) {
+	is := is.New(t)
+
 	type args struct {
 		r record.Record
 	}
@@ -132,7 +134,7 @@ func TestHoistFieldKey_Process(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			underTest, err := HoistFieldKey(tt.config)
-			assert.Ok(t, err)
+			is.NoErr(err)
 			got, err := underTest.Process(context.Background(), tt.args.r)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("process() error = %v, wantErr = %v", err, tt.wantErr)
@@ -189,6 +191,8 @@ func TestHoistFieldPayload_Build(t *testing.T) {
 }
 
 func TestHoistFieldPayload_Process(t *testing.T) {
+	is := is.New(t)
+
 	type args struct {
 		r record.Record
 	}
@@ -267,7 +271,7 @@ func TestHoistFieldPayload_Process(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			underTest, err := HoistFieldPayload(tt.config)
-			assert.Ok(t, err)
+			is.NoErr(err)
 			got, err := underTest.Process(context.Background(), tt.args.r)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("process() error = %v, wantErr = %v", err, tt.wantErr)
