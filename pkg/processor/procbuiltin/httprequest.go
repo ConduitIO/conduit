@@ -35,7 +35,7 @@ const (
 	httpRequestConfigURL          = "url"
 	httpRequestConfigMethod       = "method"
 	httpRequestConfigContentType  = "contentType"
-	httpRequestContentType        = "Content-Type"
+	httpRequestContentTypeDefault = "application/json"
 	httpRequestBackoffRetryCount  = "backoffRetry.count"
 	httpRequestBackoffRetryMin    = "backoffRetry.min"
 	httpRequestBackoffRetryMax    = "backoffRetry.max"
@@ -79,7 +79,7 @@ func httpRequest(
 	}
 	contentType := config.Settings[httpRequestConfigContentType]
 	if contentType == "" {
-		contentType = "application/json"
+		contentType = httpRequestContentTypeDefault
 	}
 
 	// preflight check
@@ -108,7 +108,7 @@ func httpRequest(
 			return record.Record{}, cerrors.Errorf("%s: error trying to create HTTP request: %w", processorType, err)
 		}
 
-		req.Header.Set(httpRequestContentType, contentType)
+		req.Header.Set("Content-Type", contentType)
 
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
