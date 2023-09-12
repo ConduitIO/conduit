@@ -29,41 +29,41 @@ var Changelog = internal.Changelog{
 }
 
 type Configuration struct {
-	Version   string     `yaml:"version"`
-	Pipelines []Pipeline `yaml:"pipelines"`
+	Version   string     `yaml:"version" json:"version"`
+	Pipelines []Pipeline `yaml:"pipelines" json:"pipelines"`
 }
 
 type Pipeline struct {
-	ID          string      `yaml:"id"`
-	Status      string      `yaml:"status"`
-	Name        string      `yaml:"name"`
-	Description string      `yaml:"description"`
-	Connectors  []Connector `yaml:"connectors"`
-	Processors  []Processor `yaml:"processors"`
-	DLQ         DLQ         `yaml:"dead-letter-queue"`
+	ID          string      `yaml:"id" json:"id"`
+	Status      string      `yaml:"status" json:"status"`
+	Name        string      `yaml:"name" json:"name"`
+	Description string      `yaml:"description" json:"description"`
+	Connectors  []Connector `yaml:"connectors" json:"connectors"`
+	Processors  []Processor `yaml:"processors" json:"processors"`
+	DLQ         DLQ         `yaml:"dead-letter-queue" json:"dead-letter-queue"`
 }
 
 type Connector struct {
-	ID         string            `yaml:"id"`
-	Type       string            `yaml:"type"`
-	Plugin     string            `yaml:"plugin"`
-	Name       string            `yaml:"name"`
-	Settings   map[string]string `yaml:"settings"`
-	Processors []Processor       `yaml:"processors"`
+	ID         string            `yaml:"id" json:"id"`
+	Type       string            `yaml:"type" json:"type"`
+	Plugin     string            `yaml:"plugin" json:"plugin"`
+	Name       string            `yaml:"name" json:"name"`
+	Settings   map[string]string `yaml:"settings" json:"settings"`
+	Processors []Processor       `yaml:"processors" json:"processors"`
 }
 
 type Processor struct {
-	ID       string            `yaml:"id"`
-	Type     string            `yaml:"type"`
-	Settings map[string]string `yaml:"settings"`
-	Workers  int               `yaml:"workers"`
+	ID       string            `yaml:"id" json:"id"`
+	Type     string            `yaml:"type" json:"type"`
+	Settings map[string]string `yaml:"settings" json:"settings"`
+	Workers  int               `yaml:"workers" json:"workers"`
 }
 
 type DLQ struct {
-	Plugin              string            `yaml:"plugin"`
-	Settings            map[string]string `yaml:"settings"`
-	WindowSize          *int              `yaml:"window-size"`
-	WindowNackThreshold *int              `yaml:"window-nack-threshold"`
+	Plugin              string            `yaml:"plugin" json:"plugin"`
+	Settings            map[string]string `yaml:"settings" json:"settings"`
+	WindowSize          *int              `yaml:"window-size" json:"window-size"`
+	WindowNackThreshold *int              `yaml:"window-nack-threshold" json:"window-nack-threshold"`
 }
 
 func (c Configuration) ToConfig() []config.Pipeline {
