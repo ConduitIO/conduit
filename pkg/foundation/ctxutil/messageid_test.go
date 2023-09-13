@@ -20,23 +20,27 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/google/uuid"
+	"github.com/matryer/is"
 	"github.com/rs/zerolog"
 )
 
 func TestContextWithMessageID_Success(t *testing.T) {
+	is := is.New(t)
+
 	ctx := context.Background()
 	messageID := uuid.NewString()
 
 	ctx = ContextWithMessageID(ctx, messageID)
 	got := MessageIDFromContext(ctx)
 
-	assert.Equal(t, messageID, got)
+	is.Equal(messageID, got)
 }
 
 func TestContextWithMessageID_Twice(t *testing.T) {
+	is := is.New(t)
+
 	ctx := context.Background()
 	messageID := uuid.NewString()
 
@@ -44,17 +48,21 @@ func TestContextWithMessageID_Twice(t *testing.T) {
 	ctx = ContextWithMessageID(ctx, messageID)
 	got := MessageIDFromContext(ctx)
 
-	assert.Equal(t, messageID, got)
+	is.Equal(messageID, got)
 }
 
 func TestMessageIDFromContext_Empty(t *testing.T) {
+	is := is.New(t)
+
 	ctx := context.Background()
 	got := MessageIDFromContext(ctx)
 
-	assert.Equal(t, "", got)
+	is.Equal("", got)
 }
 
 func TestMessageIDLogCtxHook_Success(t *testing.T) {
+	is := is.New(t)
+
 	ctx := context.Background()
 	messageID := uuid.NewString()
 
@@ -66,10 +74,12 @@ func TestMessageIDLogCtxHook_Success(t *testing.T) {
 	MessageIDLogCtxHook{}.Run(e, zerolog.InfoLevel, "")
 	e.Send()
 
-	assert.Equal(t, fmt.Sprintf(`{"level":"info","%s":"%s"}`, log.MessageIDField, messageID)+"\n", logOutput.String())
+	is.Equal(fmt.Sprintf(`{"level":"info","%s":"%s"}`, log.MessageIDField, messageID)+"\n", logOutput.String())
 }
 
 func TestMessageIDLogCtxHook_EmptyCtx(t *testing.T) {
+	is := is.New(t)
+
 	ctx := context.Background()
 
 	var logOutput bytes.Buffer
@@ -78,5 +88,5 @@ func TestMessageIDLogCtxHook_EmptyCtx(t *testing.T) {
 	MessageIDLogCtxHook{}.Run(e, zerolog.InfoLevel, "")
 	e.Send()
 
-	assert.Equal(t, `{"level":"info"}`+"\n", logOutput.String())
+	is.Equal(`{"level":"info"}`+"\n", logOutput.String())
 }

@@ -20,14 +20,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/foundation/metrics"
+	"github.com/matryer/is"
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
 	"google.golang.org/protobuf/proto"
 )
 
 func TestTimer(t *testing.T) {
+	is := is.New(t)
+
 	testCases := []struct {
 		name       string
 		observe    func(m metrics.Timer)
@@ -88,16 +90,18 @@ func TestTimer(t *testing.T) {
 
 			promRegistry := prometheus.NewRegistry()
 			err := promRegistry.Register(reg)
-			assert.Ok(t, err)
+			is.NoErr(err)
 
 			got, err := promRegistry.Gather()
-			assert.Ok(t, err)
-			assert.Equal(t, want, got)
+			is.NoErr(err)
+			is.Equal(want, got)
 		})
 	}
 }
 
 func TestTimer_Since(t *testing.T) {
+	is := is.New(t)
+
 	reg := NewRegistry(nil)
 
 	m := reg.NewTimer("my_timer", "test timer")
@@ -120,10 +124,10 @@ func TestTimer_Since(t *testing.T) {
 
 	promRegistry := prometheus.NewRegistry()
 	err := promRegistry.Register(reg)
-	assert.Ok(t, err)
+	is.NoErr(err)
 
 	got, err := promRegistry.Gather()
-	assert.Ok(t, err)
+	is.NoErr(err)
 
 	// first manually check the difference, we can't know the actual sum
 	diff := *got[0].Metric[0].Histogram.SampleSum - *want[0].Metric[0].Histogram.SampleSum
@@ -133,10 +137,12 @@ func TestTimer_Since(t *testing.T) {
 
 	// add difference to our estimate and make sure everything else matches
 	*want[0].Metric[0].Histogram.SampleSum += diff
-	assert.Equal(t, want, got)
+	is.Equal(want, got)
 }
 
 func TestLabeledTimer(t *testing.T) {
+	is := is.New(t)
+
 	testCases := []struct {
 		name        string
 		observe     func(m metrics.LabeledTimer)
@@ -228,11 +234,11 @@ func TestLabeledTimer(t *testing.T) {
 
 			promRegistry := prometheus.NewRegistry()
 			err := promRegistry.Register(reg)
-			assert.Ok(t, err)
+			is.NoErr(err)
 
 			got, err := promRegistry.Gather()
-			assert.Ok(t, err)
-			assert.Equal(t, want, got)
+			is.NoErr(err)
+			is.Equal(want, got)
 		})
 	}
 }

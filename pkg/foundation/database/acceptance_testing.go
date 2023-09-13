@@ -23,9 +23,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/google/uuid"
+	"github.com/matryer/is"
 )
 
 // AcceptanceTest is the acceptance test that all implementations of DB should
@@ -44,70 +44,78 @@ func AcceptanceTest(t *testing.T, db DB) {
 }
 
 func testSetGet(t *testing.T, db DB) {
+	is := is.New(t)
+
 	t.Run(testName(), func(t *testing.T) {
 		txn, ctx, err := db.NewTransaction(context.Background(), true)
-		assert.Ok(t, err)
+		is.NoErr(err)
 		defer txn.Discard()
 
 		//nolint:goconst // we can turn off this check for test files
 		key := "my-key"
 		want := []byte(uuid.NewString())
 		err = db.Set(ctx, key, want)
-		assert.Ok(t, err)
+		is.NoErr(err)
 
 		got, err := db.Get(ctx, key)
-		assert.Ok(t, err)
-		assert.Equal(t, want, got)
+		is.NoErr(err)
+		is.Equal(want, got)
 	})
 }
 
 func testUpdate(t *testing.T, db DB) {
+	is := is.New(t)
+
 	t.Run(testName(), func(t *testing.T) {
 		txn, ctx, err := db.NewTransaction(context.Background(), true)
-		assert.Ok(t, err)
+		is.NoErr(err)
 		defer txn.Discard()
 
 		key := "my-key"
 		want := []byte(uuid.NewString())
 
 		err = db.Set(ctx, key, []byte("do not want this"))
-		assert.Ok(t, err)
+		is.NoErr(err)
 
 		err = db.Set(ctx, key, want)
-		assert.Ok(t, err)
+		is.NoErr(err)
 
 		got, err := db.Get(ctx, key)
-		assert.Ok(t, err)
-		assert.Equal(t, want, got)
+		is.NoErr(err)
+		is.Equal(want, got)
 	})
 }
 
 func testDelete(t *testing.T, db DB) {
+	is := is.New(t)
+
 	t.Run(testName(), func(t *testing.T) {
 		txn, ctx, err := db.NewTransaction(context.Background(), true)
-		assert.Ok(t, err)
+		is.NoErr(err)
 		defer txn.Discard()
 
 		key := "my-key"
 		value := []byte(uuid.NewString())
 
 		err = db.Set(ctx, key, value)
-		assert.Ok(t, err)
+		is.NoErr(err)
 
 		err = db.Set(ctx, key, nil)
-		assert.Ok(t, err)
+		is.NoErr(err)
 
 		got, err := db.Get(ctx, key)
-		assert.Nil(t, got)
-		assert.True(t, cerrors.Is(err, ErrKeyNotExist), "expected error for non-existing key")
+		is.True(got == nil)
+		is.True(cerrors.Is(err, ErrKeyNotExist)) // expected error for non-existing key
 	})
 }
 
 func testGetKeys(t *testing.T, db DB) {
+	is := is.New(t)
+
 	const valuesSize = 100
 	t.Run(testName(), func(t *testing.T) {
 		txn, ctx, err := db.NewTransaction(context.Background(), true)
-		assert.Ok(t, err)
+		is.NoErr(err)
 		defer txn.Discard()
 
 		keyPrefix := "key"
@@ -116,61 +124,63 @@ func testGetKeys(t *testing.T, db DB) {
 			key := fmt.Sprintf("key%2d", i)
 			wantKeys = append(wantKeys, key)
 			err := db.Set(ctx, key, []byte(strconv.Itoa(i)))
-			assert.Ok(t, err)
+			is.NoErr(err)
 		}
 		err = db.Set(ctx, "different prefix", []byte("should not be returned"))
-		assert.Ok(t, err)
+		is.NoErr(err)
 
 		t.Run("withKeyPrefix", func(t *testing.T) {
 			gotKeys, err := db.GetKeys(ctx, keyPrefix)
-			assert.Ok(t, err)
-			assert.True(t, len(gotKeys) == valuesSize, "expected %d keys, got %d", valuesSize, len(gotKeys))
+			is.NoErr(err)
+			is.True(len(gotKeys) == valuesSize) // expects 100 keys when calling .GetKeys
 
 			sort.Strings(gotKeys) // sort so we can compare them
-			assert.Equal(t, wantKeys, gotKeys)
+			is.Equal(wantKeys, gotKeys)
 		})
 
 		t.Run("emptyKeyPrefix", func(t *testing.T) {
 			gotKeys, err := db.GetKeys(ctx, "")
-			assert.Ok(t, err)
-			assert.True(t, len(gotKeys) == valuesSize+1, "expected %d keys, got %d", valuesSize+1, len(gotKeys))
+			is.NoErr(err)
+			is.True(len(gotKeys) == valuesSize+1) // expects 101 keys when calling .GetKeys
 
 			sort.Strings(gotKeys) // sort so we can compare them
-			assert.Equal(t, append([]string{"different prefix"}, wantKeys...), gotKeys)
+			is.Equal(append([]string{"different prefix"}, wantKeys...), gotKeys)
 		})
 
 		t.Run("nonExistingPrefix", func(t *testing.T) {
 			gotKeys, err := db.GetKeys(ctx, "non-existing-prefix")
-			assert.Ok(t, err)
-			assert.Equal(t, []string(nil), gotKeys)
+			is.NoErr(err)
+			is.Equal([]string(nil), gotKeys)
 		})
 	})
 }
 
 func testTransactionVisibility(t *testing.T, db DB) {
+	is := is.New(t)
+
 	t.Run(testName(), func(t *testing.T) {
 		txn, ctx, err := db.NewTransaction(context.Background(), true)
-		assert.Ok(t, err)
+		is.NoErr(err)
 		defer txn.Discard()
 
 		key := "my-key"
 		want := []byte("my-value")
 		err = db.Set(ctx, key, want)
-		assert.Ok(t, err)
+		is.NoErr(err)
 
 		// get the key outside of the transaction
 		got, err := db.Get(context.Background(), key)
-		assert.Nil(t, got)
-		assert.True(t, cerrors.Is(err, ErrKeyNotExist), "expected error for non-existing key")
+		is.True(got == nil)
+		is.True(cerrors.Is(err, ErrKeyNotExist)) // expected error for non-existing key
 
 		err = txn.Commit()
-		assert.Ok(t, err)
+		is.NoErr(err)
 		defer db.Set(context.Background(), key, nil) //nolint:errcheck // cleanup
 
 		// key should be visible now
 		got, err = db.Get(context.Background(), key)
-		assert.Ok(t, err)
-		assert.Equal(t, want, got)
+		is.NoErr(err)
+		is.Equal(want, got)
 	})
 }
 

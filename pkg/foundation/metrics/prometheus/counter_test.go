@@ -19,14 +19,16 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/foundation/metrics"
+	"github.com/matryer/is"
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
 	"google.golang.org/protobuf/proto"
 )
 
 func TestCounter(t *testing.T) {
+	is := is.New(t)
+
 	testCases := []struct {
 		name      string
 		observe   func(m metrics.Counter)
@@ -78,11 +80,11 @@ func TestCounter(t *testing.T) {
 
 			promRegistry := prometheus.NewRegistry()
 			err := promRegistry.Register(reg)
-			assert.Ok(t, err)
+			is.NoErr(err)
 
 			got, err := promRegistry.Gather()
-			assert.Ok(t, err)
-			assert.Equal(t, want, got)
+			is.NoErr(err)
+			is.Equal(want, got)
 		})
 	}
 }
@@ -100,6 +102,8 @@ func TestCounter_IncNegative(t *testing.T) {
 }
 
 func TestLabeledCounter(t *testing.T) {
+	is := is.New(t)
+
 	testCases := []struct {
 		name       string
 		observe    func(m metrics.LabeledCounter)
@@ -171,11 +175,11 @@ func TestLabeledCounter(t *testing.T) {
 
 			promRegistry := prometheus.NewRegistry()
 			err := promRegistry.Register(reg)
-			assert.Ok(t, err)
+			is.NoErr(err)
 
 			got, err := promRegistry.Gather()
-			assert.Ok(t, err)
-			assert.Equal(t, want, got)
+			is.NoErr(err)
+			is.Equal(want, got)
 		})
 	}
 }

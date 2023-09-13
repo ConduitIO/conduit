@@ -20,23 +20,27 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/google/uuid"
+	"github.com/matryer/is"
 	"github.com/rs/zerolog"
 )
 
 func TestContextWithFilepath_Success(t *testing.T) {
+	is := is.New(t)
+
 	ctx := context.Background()
 	filepath := uuid.NewString()
 
 	ctx = ContextWithFilepath(ctx, filepath)
 	got := FilepathFromContext(ctx)
 
-	assert.Equal(t, filepath, got)
+	is.Equal(filepath, got)
 }
 
 func TestContextWithFilepath_Twice(t *testing.T) {
+	is := is.New(t)
+
 	ctx := context.Background()
 	filepath := uuid.NewString()
 
@@ -44,17 +48,21 @@ func TestContextWithFilepath_Twice(t *testing.T) {
 	ctx = ContextWithFilepath(ctx, filepath)
 	got := FilepathFromContext(ctx)
 
-	assert.Equal(t, filepath, got)
+	is.Equal(filepath, got)
 }
 
 func TestFilepathFromContext_Empty(t *testing.T) {
+	is := is.New(t)
+
 	ctx := context.Background()
 	got := FilepathFromContext(ctx)
 
-	assert.Equal(t, "", got)
+	is.Equal("", got)
 }
 
 func TestFilepathLogCtxHook_Success(t *testing.T) {
+	is := is.New(t)
+
 	ctx := context.Background()
 	filepath := uuid.NewString()
 
@@ -66,10 +74,12 @@ func TestFilepathLogCtxHook_Success(t *testing.T) {
 	FilepathLogCtxHook{}.Run(e, zerolog.InfoLevel, "")
 	e.Send()
 
-	assert.Equal(t, fmt.Sprintf(`{"level":"info","%s":"%s"}`, log.FilepathField, filepath)+"\n", logOutput.String())
+	is.Equal(fmt.Sprintf(`{"level":"info","%s":"%s"}`, log.FilepathField, filepath)+"\n", logOutput.String())
 }
 
 func TestFilepathLogCtxHook_EmptyCtx(t *testing.T) {
+	is := is.New(t)
+
 	ctx := context.Background()
 
 	var logOutput bytes.Buffer
@@ -78,5 +88,5 @@ func TestFilepathLogCtxHook_EmptyCtx(t *testing.T) {
 	FilepathLogCtxHook{}.Run(e, zerolog.InfoLevel, "")
 	e.Send()
 
-	assert.Equal(t, `{"level":"info"}`+"\n", logOutput.String())
+	is.Equal(`{"level":"info"}`+"\n", logOutput.String())
 }

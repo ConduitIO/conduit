@@ -20,10 +20,10 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/foundation/ctxutil"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/google/uuid"
+	"github.com/matryer/is"
 	"github.com/rs/zerolog"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -31,6 +31,8 @@ import (
 )
 
 func TestRequestIDUnaryServerInterceptor_WithRequestIDHeader(t *testing.T) {
+	is := is.New(t)
+
 	requestID := uuid.NewString()
 	ctx := metadata.NewIncomingContext(context.Background(), metadata.MD{
 		RequestIDHeader: []string{requestID},
@@ -48,18 +50,20 @@ func TestRequestIDUnaryServerInterceptor_WithRequestIDHeader(t *testing.T) {
 			handlerIsCalled = true
 			// supplied context should contain request ID
 			gotRequestID := ctxutil.RequestIDFromContext(ctx)
-			assert.Equal(t, requestID, gotRequestID)
-			assert.Equal(t, nil, req)
+			is.Equal(requestID, gotRequestID)
+			is.Equal(nil, req)
 			return want, nil
 		},
 	)
 
-	assert.Ok(t, err)
-	assert.Equal(t, want, got)
-	assert.True(t, handlerIsCalled, "expected handler to be called")
+	is.NoErr(err)
+	is.Equal(want, got)
+	is.True(handlerIsCalled) // expected handler to be called
 }
 
 func TestRequestIDUnaryServerInterceptor_GenerateRequestID(t *testing.T) {
+	is := is.New(t)
+
 	var handlerIsCalled bool
 	want := "response"
 
@@ -72,18 +76,20 @@ func TestRequestIDUnaryServerInterceptor_GenerateRequestID(t *testing.T) {
 			handlerIsCalled = true
 			// supplied context should contain request ID
 			gotRequestID := ctxutil.RequestIDFromContext(ctx)
-			assert.True(t, gotRequestID != "", "request id should not be empty")
-			assert.Equal(t, nil, req)
+			is.True(gotRequestID != "") // request id should not be empty
+			is.Equal(nil, req)
 			return want, nil
 		},
 	)
 
-	assert.Ok(t, err)
-	assert.Equal(t, want, got)
-	assert.True(t, handlerIsCalled, "expected handler to be called")
+	is.NoErr(err)
+	is.Equal(want, got)
+	is.True(handlerIsCalled) // expected handler to be called
 }
 
 func TestLoggerUnaryServerInterceptor(t *testing.T) {
+	is := is.New(t)
+
 	var logOutput bytes.Buffer
 	logger := log.New(zerolog.New(&logOutput))
 	logger.Logger = logger.Hook(ctxutil.RequestIDLogCtxHook{})
@@ -110,19 +116,19 @@ func TestLoggerUnaryServerInterceptor(t *testing.T) {
 		},
 		func(ctx context.Context, req interface{}) (interface{}, error) {
 			handlerIsCalled = true
-			assert.Equal(t, incomingCtx, ctx)
-			assert.Equal(t, nil, req)
+			is.Equal(incomingCtx, ctx)
+			is.Equal(nil, req)
 			return want, nil
 		},
 	)
 
-	assert.Ok(t, err)
-	assert.Equal(t, want, got)
-	assert.True(t, handlerIsCalled, "expected handler to be called")
+	is.NoErr(err)
+	is.Equal(want, got)
+	is.True(handlerIsCalled) // expected handler to be called
 
 	var gotLog map[string]interface{}
 	err = json.Unmarshal(logOutput.Bytes(), &gotLog)
-	assert.Ok(t, err)
+	is.NoErr(err)
 
 	wantLog := map[string]interface{}{
 		"level":                 "info",
@@ -134,5 +140,5 @@ func TestLoggerUnaryServerInterceptor(t *testing.T) {
 		log.HTTPEndpointField:   httpEndpoint,
 	}
 
-	assert.Equal(t, wantLog, gotLog)
+	is.Equal(wantLog, gotLog)
 }

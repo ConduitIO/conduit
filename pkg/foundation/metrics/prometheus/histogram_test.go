@@ -19,14 +19,16 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/foundation/metrics"
+	"github.com/matryer/is"
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
 	"google.golang.org/protobuf/proto"
 )
 
 func TestHistogram(t *testing.T) {
+	is := is.New(t)
+
 	testCases := []struct {
 		name       string
 		observe    func(m metrics.Histogram)
@@ -87,16 +89,18 @@ func TestHistogram(t *testing.T) {
 
 			promRegistry := prometheus.NewRegistry()
 			err := promRegistry.Register(reg)
-			assert.Ok(t, err)
+			is.NoErr(err)
 
 			got, err := promRegistry.Gather()
-			assert.Ok(t, err)
-			assert.Equal(t, want, got)
+			is.NoErr(err)
+			is.Equal(want, got)
 		})
 	}
 }
 
 func TestLabeledHistogram(t *testing.T) {
+	is := is.New(t)
+
 	testCases := []struct {
 		name        string
 		observe     func(m metrics.LabeledHistogram)
@@ -188,11 +192,11 @@ func TestLabeledHistogram(t *testing.T) {
 
 			promRegistry := prometheus.NewRegistry()
 			err := promRegistry.Register(reg)
-			assert.Ok(t, err)
+			is.NoErr(err)
 
 			got, err := promRegistry.Gather()
-			assert.Ok(t, err)
-			assert.Equal(t, want, got)
+			is.NoErr(err)
+			is.Equal(want, got)
 		})
 	}
 }
