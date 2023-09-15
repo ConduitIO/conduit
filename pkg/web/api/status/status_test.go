@@ -28,8 +28,6 @@ import (
 )
 
 func TestPipelineError(t *testing.T) {
-	is := is.New(t)
-
 	type args struct {
 		err error
 	}
@@ -55,14 +53,14 @@ func TestPipelineError(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			is := is.New(t)
+
 			is.Equal(tt.want, PipelineError(tt.args.err))
 		})
 	}
 }
 
 func TestConnectorError(t *testing.T) {
-	is := is.New(t)
-
 	type args struct {
 		err error
 	}
@@ -88,14 +86,14 @@ func TestConnectorError(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			is := is.New(t)
+
 			is.Equal(tt.want, ConnectorError(tt.args.err))
 		})
 	}
 }
 
 func TestProcessorError(t *testing.T) {
-	is := is.New(t)
-
 	type args struct {
 		err error
 	}
@@ -121,14 +119,14 @@ func TestProcessorError(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			is := is.New(t)
+
 			is.Equal(tt.want, ProcessorError(tt.args.err))
 		})
 	}
 }
 
 func TestCodeFromError(t *testing.T) {
-	is := is.New(t)
-
 	type args struct {
 		err error
 	}
@@ -210,6 +208,8 @@ func TestCodeFromError(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			is := is.New(t)
+
 			is.Equal(tt.want, codeFromError(tt.args.err))
 		})
 	}

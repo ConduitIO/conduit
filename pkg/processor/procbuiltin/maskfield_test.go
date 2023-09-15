@@ -68,8 +68,6 @@ func TestMaskFieldKey_Build(t *testing.T) {
 }
 
 func TestMaskFieldKey_Process(t *testing.T) {
-	is := is.New(t)
-
 	type args struct {
 		r record.Record
 	}
@@ -161,6 +159,8 @@ func TestMaskFieldKey_Process(t *testing.T) {
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			is := is.New(t)
+
 			underTest, err := MaskFieldKey(tt.config)
 			is.NoErr(err)
 			got, err := underTest.Process(context.Background(), tt.args.r)
@@ -218,8 +218,6 @@ func TestMaskFieldPayload_Build(t *testing.T) {
 }
 
 func TestMaskFieldPayload_Process(t *testing.T) {
-	is := is.New(t)
-
 	type args struct {
 		r record.Record
 	}
@@ -335,6 +333,8 @@ func TestMaskFieldPayload_Process(t *testing.T) {
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			is := is.New(t)
+
 			underTest, err := MaskFieldPayload(tt.config)
 			is.NoErr(err)
 			got, err := underTest.Process(context.Background(), tt.args.r)

@@ -94,6 +94,7 @@ func TestValidator_MandatoryFields(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			is := is.New(t)
+
 			err := Validate(tt.config)
 			is.True(err != nil)
 			is.True(cerrors.Is(err, ErrMandatoryField))
@@ -162,6 +163,7 @@ func TestValidator_InvalidFields(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			is := is.New(t)
+
 			err := Validate(tt.config)
 			is.True(err != nil)
 			is.True(cerrors.Is(err, ErrInvalidField))

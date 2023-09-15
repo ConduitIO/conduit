@@ -101,8 +101,6 @@ func TestTimestampConverterKey_Build(t *testing.T) {
 }
 
 func TestTimestampConverterKey_Process(t *testing.T) {
-	is := is.New(t)
-
 	type args struct {
 		r record.Record
 	}
@@ -299,6 +297,8 @@ func TestTimestampConverterKey_Process(t *testing.T) {
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			is := is.New(t)
+
 			underTest, err := TimestampConverterKey(tt.config)
 			is.NoErr(err)
 			got, err := underTest.Process(context.Background(), tt.args.r)
@@ -359,8 +359,6 @@ func TestTimestampConverterPayload_Build(t *testing.T) {
 }
 
 func TestTimestampConverterPayload_Process(t *testing.T) {
-	is := is.New(t)
-
 	type args struct {
 		r record.Record
 	}
@@ -604,6 +602,8 @@ func TestTimestampConverterPayload_Process(t *testing.T) {
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			is := is.New(t)
+
 			underTest, err := TimestampConverterPayload(tt.config)
 			is.NoErr(err)
 			got, err := underTest.Process(context.Background(), tt.args.r)

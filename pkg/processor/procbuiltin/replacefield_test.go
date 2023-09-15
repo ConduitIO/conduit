@@ -108,8 +108,6 @@ func TestReplaceFieldKey_Build(t *testing.T) {
 }
 
 func TestReplaceFieldKey_Process(t *testing.T) {
-	is := is.New(t)
-
 	type args struct {
 		r record.Record
 	}
@@ -293,6 +291,8 @@ func TestReplaceFieldKey_Process(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			is := is.New(t)
+
 			underTest, err := ReplaceFieldKey(tt.config)
 			is.NoErr(err)
 			got, err := underTest.Process(context.Background(), tt.args.r)
@@ -391,8 +391,6 @@ func TestReplaceFieldPayload_Build(t *testing.T) {
 }
 
 func TestReplaceFieldPayload_Process(t *testing.T) {
-	is := is.New(t)
-
 	type args struct {
 		r record.Record
 	}
@@ -624,6 +622,8 @@ func TestReplaceFieldPayload_Process(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			is := is.New(t)
+
 			underTest, err := ReplaceFieldPayload(tt.config)
 			is.NoErr(err)
 			got, err := underTest.Process(context.Background(), tt.args.r)

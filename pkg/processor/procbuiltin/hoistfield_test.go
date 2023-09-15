@@ -69,8 +69,6 @@ func TestHoistFieldKey_Build(t *testing.T) {
 }
 
 func TestHoistFieldKey_Process(t *testing.T) {
-	is := is.New(t)
-
 	type args struct {
 		r record.Record
 	}
@@ -133,6 +131,8 @@ func TestHoistFieldKey_Process(t *testing.T) {
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			is := is.New(t)
+
 			underTest, err := HoistFieldKey(tt.config)
 			is.NoErr(err)
 			got, err := underTest.Process(context.Background(), tt.args.r)
@@ -191,8 +191,6 @@ func TestHoistFieldPayload_Build(t *testing.T) {
 }
 
 func TestHoistFieldPayload_Process(t *testing.T) {
-	is := is.New(t)
-
 	type args struct {
 		r record.Record
 	}
@@ -270,6 +268,8 @@ func TestHoistFieldPayload_Process(t *testing.T) {
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			is := is.New(t)
+
 			underTest, err := HoistFieldPayload(tt.config)
 			is.NoErr(err)
 			got, err := underTest.Process(context.Background(), tt.args.r)

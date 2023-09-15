@@ -19,7 +19,6 @@ import (
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/connector"
-	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/database/inmemory"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -31,6 +30,8 @@ import (
 )
 
 func TestProcessorOrchestrator_CreateOnPipeline_Success(t *testing.T) {
+	is := is.New(t)
+
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
@@ -70,11 +71,13 @@ func TestProcessorOrchestrator_CreateOnPipeline_Success(t *testing.T) {
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
 	got, err := orc.Processors.Create(ctx, want.Type, want.Parent, want.Config)
-	assert.Ok(t, err)
-	assert.Equal(t, want, got)
+	is.NoErr(err)
+	is.Equal(want, got)
 }
 
 func TestProcessorOrchestrator_CreateOnPipeline_PipelineNotExist(t *testing.T) {
+	is := is.New(t)
+
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
@@ -90,12 +93,14 @@ func TestProcessorOrchestrator_CreateOnPipeline_PipelineNotExist(t *testing.T) {
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
 	got, err := orc.Processors.Create(ctx, "test-processor", parent, processor.Config{})
-	assert.Error(t, err)
-	assert.True(t, cerrors.Is(err, wantErr), "errors did not match")
-	assert.Nil(t, got)
+	is.True(err != nil)
+	is.True(cerrors.Is(err, wantErr)) // errors did not match
+	is.True(got == nil)
 }
 
 func TestProcessorOrchestrator_CreateOnPipeline_PipelineRunning(t *testing.T) {
+	is := is.New(t)
+
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
@@ -114,13 +119,14 @@ func TestProcessorOrchestrator_CreateOnPipeline_PipelineRunning(t *testing.T) {
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
 	got, err := orc.Processors.Create(ctx, "test-processor", parent, processor.Config{})
-	assert.Error(t, err)
-	assert.Equal(t, pipeline.ErrPipelineRunning, err)
-	assert.Nil(t, got)
+	is.True(err != nil)
+	is.Equal(pipeline.ErrPipelineRunning, err)
+	is.True(got == nil)
 }
 
 func TestProcessorOrchestrator_CreateOnPipeline_PipelineProvisionedByConfig(t *testing.T) {
 	is := is.New(t)
+
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
@@ -146,6 +152,8 @@ func TestProcessorOrchestrator_CreateOnPipeline_PipelineProvisionedByConfig(t *t
 }
 
 func TestProcessorOrchestrator_CreateOnPipeline_CreateProcessorError(t *testing.T) {
+	is := is.New(t)
+
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
@@ -176,12 +184,14 @@ func TestProcessorOrchestrator_CreateOnPipeline_CreateProcessorError(t *testing.
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
 	got, err := orc.Processors.Create(ctx, "test-processor", parent, processor.Config{})
-	assert.Error(t, err)
-	assert.True(t, cerrors.Is(err, wantErr), "errors did not match")
-	assert.Nil(t, got)
+	is.True(err != nil)
+	is.True(cerrors.Is(err, wantErr)) // errors did not match
+	is.True(got == nil)
 }
 
 func TestProcessorOrchestrator_CreateOnPipeline_AddProcessorError(t *testing.T) {
+	is := is.New(t)
+
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
@@ -226,12 +236,14 @@ func TestProcessorOrchestrator_CreateOnPipeline_AddProcessorError(t *testing.T) 
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
 	got, err := orc.Processors.Create(ctx, proc.Type, proc.Parent, proc.Config)
-	assert.Error(t, err)
-	assert.True(t, cerrors.Is(err, wantErr), "errors did not match")
-	assert.Nil(t, got)
+	is.True(err != nil)
+	is.True(cerrors.Is(err, wantErr)) // errors did not match
+	is.True(got == nil)
 }
 
 func TestProcessorOrchestrator_CreateOnConnector_Success(t *testing.T) {
+	is := is.New(t)
+
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
@@ -278,11 +290,13 @@ func TestProcessorOrchestrator_CreateOnConnector_Success(t *testing.T) {
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
 	got, err := orc.Processors.Create(ctx, want.Type, want.Parent, want.Config)
-	assert.Ok(t, err)
-	assert.Equal(t, want, got)
+	is.NoErr(err)
+	is.Equal(want, got)
 }
 
 func TestProcessorOrchestrator_CreateOnConnector_ConnectorNotExist(t *testing.T) {
+	is := is.New(t)
+
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
@@ -298,12 +312,14 @@ func TestProcessorOrchestrator_CreateOnConnector_ConnectorNotExist(t *testing.T)
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
 	got, err := orc.Processors.Create(ctx, "test-processor", parent, processor.Config{})
-	assert.Error(t, err)
-	assert.True(t, cerrors.Is(err, wantErr), "errors did not match")
-	assert.Nil(t, got)
+	is.True(err != nil)
+	is.True(cerrors.Is(err, wantErr)) // errors did not match
+	is.True(got == nil)
 }
 
 func TestProcessorOrchestrator_UpdateOnPipeline_Success(t *testing.T) {
+	is := is.New(t)
+
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
@@ -350,11 +366,13 @@ func TestProcessorOrchestrator_UpdateOnPipeline_Success(t *testing.T) {
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
 	got, err := orc.Processors.Update(ctx, before.ID, newConfig)
-	assert.Ok(t, err)
-	assert.Equal(t, want, got)
+	is.NoErr(err)
+	is.Equal(want, got)
 }
 
 func TestProcessorOrchestrator_UpdateOnPipeline_ProcessorNotExist(t *testing.T) {
+	is := is.New(t)
+
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
@@ -385,12 +403,14 @@ func TestProcessorOrchestrator_UpdateOnPipeline_ProcessorNotExist(t *testing.T) 
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
 	got, err := orc.Processors.Update(ctx, before.ID, newConfig)
-	assert.Error(t, err)
-	assert.True(t, cerrors.Is(err, wantErr), "errors did not match")
-	assert.Nil(t, got)
+	is.True(err != nil)
+	is.True(cerrors.Is(err, wantErr)) // errors did not match")
+	is.True(got == nil)
 }
 
 func TestProcessorOrchestrator_UpdateOnPipeline_PipelineRunning(t *testing.T) {
+	is := is.New(t)
+
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
@@ -423,13 +443,14 @@ func TestProcessorOrchestrator_UpdateOnPipeline_PipelineRunning(t *testing.T) {
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
 	got, err := orc.Processors.Update(ctx, before.ID, newConfig)
-	assert.Error(t, err)
-	assert.Equal(t, pipeline.ErrPipelineRunning, err)
-	assert.Nil(t, got)
+	is.True(err != nil)
+	is.Equal(pipeline.ErrPipelineRunning, err)
+	is.True(got == nil)
 }
 
 func TestProcessorOrchestrator_UpdateOnPipeline_ProcessorProvisionedByConfig(t *testing.T) {
 	is := is.New(t)
+
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
@@ -467,6 +488,8 @@ func TestProcessorOrchestrator_UpdateOnPipeline_ProcessorProvisionedByConfig(t *
 }
 
 func TestProcessorOrchestrator_UpdateOnPipeline_UpdateFail(t *testing.T) {
+	is := is.New(t)
+
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
@@ -514,12 +537,14 @@ func TestProcessorOrchestrator_UpdateOnPipeline_UpdateFail(t *testing.T) {
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
 	got, err := orc.Processors.Update(ctx, before.ID, newConfig)
-	assert.Error(t, err)
-	assert.Equal(t, wantErr, err)
-	assert.Nil(t, got)
+	is.True(err != nil)
+	is.Equal(wantErr, err)
+	is.True(got == nil)
 }
 
 func TestProcessorOrchestrator_UpdateOnConnector_ConnectorNotExist(t *testing.T) {
+	is := is.New(t)
+
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
@@ -544,12 +569,14 @@ func TestProcessorOrchestrator_UpdateOnConnector_ConnectorNotExist(t *testing.T)
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
 	got, err := orc.Processors.Update(ctx, want.ID, processor.Config{})
-	assert.Error(t, err)
-	assert.True(t, cerrors.Is(err, wantErr), "errors did not match")
-	assert.Nil(t, got)
+	is.True(err != nil)
+	is.True(cerrors.Is(err, wantErr)) // errors did not match
+	is.True(got == nil)
 }
 
 func TestProcessorOrchestrator_DeleteOnPipeline_Success(t *testing.T) {
+	is := is.New(t)
+
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
@@ -585,10 +612,12 @@ func TestProcessorOrchestrator_DeleteOnPipeline_Success(t *testing.T) {
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
 	err := orc.Processors.Delete(ctx, want.ID)
-	assert.Ok(t, err)
+	is.NoErr(err)
 }
 
 func TestProcessorOrchestrator_DeleteOnPipeline_ProcessorNotExist(t *testing.T) {
+	is := is.New(t)
+
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
@@ -616,11 +645,13 @@ func TestProcessorOrchestrator_DeleteOnPipeline_ProcessorNotExist(t *testing.T) 
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
 	err := orc.Processors.Delete(ctx, want.ID)
-	assert.Error(t, err)
-	assert.True(t, cerrors.Is(err, wantErr), "errors did not match")
+	is.True(err != nil)
+	is.True(cerrors.Is(err, wantErr)) // errors did not match
 }
 
 func TestProcessorOrchestrator_DeleteOnPipeline_PipelineRunning(t *testing.T) {
+	is := is.New(t)
+
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
@@ -650,11 +681,13 @@ func TestProcessorOrchestrator_DeleteOnPipeline_PipelineRunning(t *testing.T) {
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
 	err := orc.Processors.Delete(ctx, want.ID)
-	assert.Error(t, err)
-	assert.Equal(t, pipeline.ErrPipelineRunning, err)
+	is.True(err != nil)
+	is.Equal(pipeline.ErrPipelineRunning, err)
 }
 
 func TestProcessorOrchestrator_DeleteOnPipeline_Fail(t *testing.T) {
+	is := is.New(t)
+
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
@@ -688,11 +721,13 @@ func TestProcessorOrchestrator_DeleteOnPipeline_Fail(t *testing.T) {
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
 	err := orc.Processors.Delete(ctx, want.ID)
-	assert.Error(t, err)
-	assert.True(t, cerrors.Is(err, wantErr), "errors did not match")
+	is.True(err != nil)
+	is.True(cerrors.Is(err, wantErr)) // errors did not match
 }
 
 func TestProcessorOrchestrator_DeleteOnPipeline_RemoveProcessorFail(t *testing.T) {
+	is := is.New(t)
+
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
@@ -740,10 +775,12 @@ func TestProcessorOrchestrator_DeleteOnPipeline_RemoveProcessorFail(t *testing.T
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
 	err := orc.Processors.Delete(ctx, want.ID)
-	assert.Error(t, err)
+	is.True(err != nil)
 }
 
 func TestProcessorOrchestrator_DeleteOnConnector_Fail(t *testing.T) {
+	is := is.New(t)
+
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
@@ -798,5 +835,5 @@ func TestProcessorOrchestrator_DeleteOnConnector_Fail(t *testing.T) {
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
 	err := orc.Processors.Delete(ctx, want.ID)
-	assert.Error(t, err)
+	is.True(err != nil)
 }

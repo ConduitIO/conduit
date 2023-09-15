@@ -101,8 +101,6 @@ func TestFilterFieldKey_Build(t *testing.T) {
 }
 
 func TestFilterFieldKey_Process(t *testing.T) {
-	is := is.New(t)
-
 	type args struct {
 		r record.Record
 	}
@@ -232,6 +230,8 @@ func TestFilterFieldKey_Process(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			is := is.New(t)
+
 			underTest, err := FilterFieldKey(tt.config)
 			is.NoErr(err)
 			got, err := underTest.Process(context.Background(), tt.args.r)
@@ -318,8 +318,6 @@ func TestFilterFieldPayload_Build(t *testing.T) {
 }
 
 func TestFilterFieldPayload_Process(t *testing.T) {
-	is := is.New(t)
-
 	type args struct {
 		config processor.Config
 		r      record.Record
@@ -424,6 +422,8 @@ func TestFilterFieldPayload_Process(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			is := is.New(t)
+
 			underTest, err := FilterFieldPayload(tt.args.config)
 			is.NoErr(err)
 			got, err := underTest.Process(context.Background(), tt.args.r)

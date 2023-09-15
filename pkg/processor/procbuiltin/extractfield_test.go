@@ -68,8 +68,6 @@ func TestExtractFieldKey_Build(t *testing.T) {
 }
 
 func TestExtractFieldKey_Process(t *testing.T) {
-	is := is.New(t)
-
 	type args struct {
 		r record.Record
 	}
@@ -136,6 +134,8 @@ func TestExtractFieldKey_Process(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			is := is.New(t)
+
 			underTest, err := ExtractFieldKey(tt.config)
 			is.NoErr(err)
 			got, err := underTest.Process(context.Background(), tt.args.r)
@@ -193,8 +193,6 @@ func TestExtractFieldPayload_Build(t *testing.T) {
 }
 
 func TestExtractFieldPayload_Process(t *testing.T) {
-	is := is.New(t)
-
 	type args struct {
 		r record.Record
 	}
@@ -276,6 +274,8 @@ func TestExtractFieldPayload_Process(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			is := is.New(t)
+
 			underTest, err := ExtractFieldPayload(tt.config)
 			is.NoErr(err)
 			got, err := underTest.Process(context.Background(), tt.args.r)

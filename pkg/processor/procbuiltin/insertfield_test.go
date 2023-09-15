@@ -82,8 +82,6 @@ func TestInsertFieldKey_Build(t *testing.T) {
 }
 
 func TestInsertFieldKey_Process(t *testing.T) {
-	is := is.New(t)
-
 	type args struct {
 		r record.Record
 	}
@@ -245,6 +243,8 @@ func TestInsertFieldKey_Process(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			is := is.New(t)
+
 			underTest, err := InsertFieldKey(tt.config)
 			is.NoErr(err)
 			got, err := underTest.Process(context.Background(), tt.args.r)
@@ -314,8 +314,6 @@ func TestInsertFieldPayload_Build(t *testing.T) {
 }
 
 func TestInsertFieldPayload_Process(t *testing.T) {
-	is := is.New(t)
-
 	type args struct {
 		r record.Record
 	}
@@ -506,6 +504,8 @@ func TestInsertFieldPayload_Process(t *testing.T) {
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			is := is.New(t)
+
 			underTest, err := InsertFieldPayload(tt.config)
 			is.NoErr(err)
 			got, err := underTest.Process(context.Background(), tt.args.r)

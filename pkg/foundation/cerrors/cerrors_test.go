@@ -19,7 +19,6 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/matryer/is"
 )
@@ -45,22 +44,24 @@ func (w *unwrapPanicError) Unwrap() error {
 }
 
 func TestNew(t *testing.T) {
+	is := is.New(t)
+
 	err := newError()
 	s := fmt.Sprintf("%+v", err)
-	assert.Equal(
-		t,
+	is.Equal(
 		"foobar:\n    github.com/conduitio/conduit/pkg/foundation/cerrors_test.newError\n        "+helperFilePath+":26",
 		s,
 	)
 }
 
 func TestErrorf(t *testing.T) {
+	is := is.New(t)
+
 	err := cerrors.Errorf("caused by: %w", newError())
 	s := fmt.Sprintf("%+v", err)
-	assert.Equal(
-		t,
+	is.Equal(
 		"caused by:\n    github.com/conduitio/conduit/pkg/foundation/cerrors_test.TestErrorf\n        "+
-			testFileLocation+":58\n  - "+
+			testFileLocation+":60\n  - "+
 			"foobar:\n    github.com/conduitio/conduit/pkg/foundation/cerrors_test.newError\n        "+
 			helperFilePath+":26",
 		s,
@@ -90,7 +91,7 @@ func TestGetStackTrace(t *testing.T) {
 				{
 					Func: "github.com/conduitio/conduit/pkg/foundation/cerrors_test.TestGetStackTrace",
 					File: testFileLocation,
-					Line: 88,
+					Line: 89,
 				},
 			},
 		},
@@ -135,14 +136,17 @@ func TestGetStackTrace(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
+			is := is.New(t)
+
 			res := cerrors.GetStackTrace(tc.err)
 			if tc.expected == nil {
-				assert.Nil(t, res)
+				is.True(res == nil)
 				return
 			}
 			act, ok := res.([]cerrors.Frame)
-			assert.True(t, ok, "expected []cerrors.Frame")
-			assert.Equal(t, tc.expected, act)
+			is.True(ok) // expected []cerrors.Frame
+			is.Equal(tc.expected, act)
+
 		})
 	}
 }
