@@ -146,7 +146,6 @@ func TestGetStackTrace(t *testing.T) {
 			act, ok := res.([]cerrors.Frame)
 			is.True(ok) // expected []cerrors.Frame
 			is.Equal(tc.expected, act)
-
 		})
 	}
 }
