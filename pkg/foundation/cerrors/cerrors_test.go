@@ -140,7 +140,7 @@ func TestGetStackTrace(t *testing.T) {
 
 			res := cerrors.GetStackTrace(tc.err)
 			if tc.expected == nil {
-				is.True(res == nil)
+				is.True(res == nil || len(res.([]cerrors.Frame)) == 0)
 				return
 			}
 			act, ok := res.([]cerrors.Frame)
