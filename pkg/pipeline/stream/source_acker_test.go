@@ -305,5 +305,5 @@ func inOrder(calls []*gomock.Call) {
 	for k, v := range calls {
 		callsRepacked[k] = v
 	}
-	gomock.InOrder(callsRepacked)
+	gomock.InOrder(callsRepacked...)
 }
