@@ -42,6 +42,7 @@ issues:
     - path: _test\.go
       linters:
         - dogsled
+        - gosec
 
 linters:
   # please, do not use `enable-all`: it's deprecated and will be removed soon.
