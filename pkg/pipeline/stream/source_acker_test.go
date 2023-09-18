@@ -73,7 +73,7 @@ func TestSourceAckerNode_AckOrder(t *testing.T) {
 	messages := helper.sendMessages(ctx, 1000, in, out)
 	// expect all messages to be acked
 	expectedCalls := helper.expectAcks(ctx, messages, src)
-	gomock.InOrder(expectedCalls...) // enforce order of acks
+	inOrder(expectedCalls) // enforce order of acks
 
 	// ack messages concurrently in random order, expect no errors
 	var wg sync.WaitGroup
@@ -104,7 +104,7 @@ func TestSourceAckerNode_FailedAck(t *testing.T) {
 	messages := helper.sendMessages(ctx, 1000, in, out)
 	// expect first 500 to be acked successfully
 	expectedCalls := helper.expectAcks(ctx, messages[:500], src)
-	gomock.InOrder(expectedCalls...) // enforce order of acks
+	inOrder(expectedCalls) // enforce order of acks
 	// the 500th message should be acked unsuccessfully
 	wantErr := cerrors.New("test error")
 	src.EXPECT().
@@ -150,7 +150,7 @@ func TestSourceAckerNode_FailedNack(t *testing.T) {
 	messages := helper.sendMessages(ctx, 1000, in, out)
 	// expect first 500 to be acked successfully
 	expectedCalls := helper.expectAcks(ctx, messages[:500], src)
-	gomock.InOrder(expectedCalls...) // enforce order of acks
+	inOrder(expectedCalls) // enforce order of acks
 	// the 500th message will be nacked unsuccessfully, no more acks should be received after that
 
 	// ack messages concurrently in random order
@@ -292,10 +292,18 @@ func (sourceAckerNodeTestHelper) ackMessagesConcurrently(
 		go func(msg *Message) {
 			defer wg.Done()
 			// sleep for a random amount of time and ack the message
-			//nolint:gosec // math/rand is good enough for a test
 			time.Sleep(time.Duration(rand.Int63n(int64(maxSleep/time.Nanosecond))) * time.Nanosecond)
 			err := msg.Ack()
 			assertAckErr(msg, err)
 		}(messages[i])
 	}
+}
+
+// inOrder is a utility method that passes []*gomock.Call to gomock.InOrder as []any.
+func inOrder(calls []*gomock.Call) {
+	callsRepacked := make([]any, len(calls))
+	for k, v := range calls {
+		callsRepacked[k] = v
+	}
+	gomock.InOrder(callsRepacked)
 }
