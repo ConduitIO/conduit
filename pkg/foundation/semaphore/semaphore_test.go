@@ -33,7 +33,6 @@ func HammerSimple(sem *semaphore.Simple, loops int, mu *sync.Mutex) {
 		tkn := sem.Enqueue()
 		mu.Unlock()
 		lock := sem.Acquire(tkn)
-		//nolint:gosec // math/rand is good enough for a test
 		time.Sleep(time.Duration(rand.Int63n(int64(maxSleep/time.Nanosecond))) * time.Nanosecond)
 		sem.Release(lock)
 	}
