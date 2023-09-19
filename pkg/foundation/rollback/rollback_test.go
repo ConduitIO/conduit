@@ -17,8 +17,8 @@ package rollback
 import (
 	"testing"
 
-	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/matryer/is"
 )
 
 type callRecorder struct {
@@ -35,27 +35,33 @@ func (cr *callRecorder) f() error {
 }
 
 func TestRollback_ExecuteEmpty(t *testing.T) {
+	is := is.New(t)
+
 	var r R
 	err := r.Execute()
-	assert.Ok(t, err)
+	is.NoErr(err)
 }
 
 func TestRollback_ExecuteTwice(t *testing.T) {
+	is := is.New(t)
+
 	var r R
 	var cr callRecorder
 
 	r.Append(cr.f)
 	err := r.Execute()
 
-	assert.Ok(t, err)
-	assert.Equal(t, 1, cr.calls)
+	is.NoErr(err)
+	is.Equal(1, cr.calls)
 
 	err = r.Execute()
-	assert.Ok(t, err)
-	assert.Equal(t, 1, cr.calls) // still only 1 call
+	is.NoErr(err)
+	is.Equal(1, cr.calls) // still only 1 call
 }
 
 func TestRollback_ExecuteMany(t *testing.T) {
+	is := is.New(t)
+
 	var r R
 	var cr callRecorder
 	const wantCalls = 100
@@ -65,11 +71,13 @@ func TestRollback_ExecuteMany(t *testing.T) {
 	}
 	err := r.Execute()
 
-	assert.Ok(t, err)
-	assert.Equal(t, wantCalls, cr.calls)
+	is.NoErr(err)
+	is.Equal(wantCalls, cr.calls)
 }
 
 func TestRollback_ExecuteError(t *testing.T) {
+	is := is.New(t)
+
 	var r R
 	var cr callRecorder
 	cr.returnError = true // rollback will return an error
@@ -77,18 +85,20 @@ func TestRollback_ExecuteError(t *testing.T) {
 	r.Append(cr.f)
 	err := r.Execute()
 
-	assert.Error(t, err)
-	assert.Equal(t, 1, cr.calls)
+	is.True(err != nil)
+	is.Equal(1, cr.calls)
 
 	// calling Execute again should try the same rollback again
 	cr.returnError = false // let's succeed this time
 	err = r.Execute()
 
-	assert.Ok(t, err)
-	assert.Equal(t, 2, cr.calls)
+	is.NoErr(err)
+	is.Equal(2, cr.calls)
 }
 
 func TestRollback_MustExecuteSuccess(t *testing.T) {
+	is := is.New(t)
+
 	var r R
 	var cr callRecorder
 
@@ -96,7 +106,7 @@ func TestRollback_MustExecuteSuccess(t *testing.T) {
 		if recover() != nil {
 			t.Fatal("Execute should not have panicked")
 		}
-		assert.Equal(t, 1, cr.calls)
+		is.Equal(1, cr.calls)
 	}()
 
 	r.Append(cr.f)
@@ -104,6 +114,8 @@ func TestRollback_MustExecuteSuccess(t *testing.T) {
 }
 
 func TestRollback_MustExecutePanic(t *testing.T) {
+	is := is.New(t)
+
 	var r R
 	var cr callRecorder
 	cr.returnError = true // rollback will return an error
@@ -112,7 +124,7 @@ func TestRollback_MustExecutePanic(t *testing.T) {
 		if recover() == nil {
 			t.Fatal("Execute should have panicked")
 		}
-		assert.Equal(t, 1, cr.calls)
+		is.Equal(1, cr.calls)
 	}()
 
 	r.Append(cr.f)
@@ -120,17 +132,21 @@ func TestRollback_MustExecutePanic(t *testing.T) {
 }
 
 func TestRollback_ExecutePure(t *testing.T) {
+	is := is.New(t)
+
 	var r R
 	var called bool
 	r.AppendPure(func() {
 		called = true
 	})
 	err := r.Execute()
-	assert.Ok(t, err)
-	assert.True(t, called, "rollback func was not called")
+	is.NoErr(err)
+	is.True(called) // rollback func was not called
 }
 
 func TestRollback_Skip(t *testing.T) {
+	is := is.New(t)
+
 	var r R
 	var cr callRecorder
 
@@ -138,6 +154,6 @@ func TestRollback_Skip(t *testing.T) {
 	r.Skip()           // skip should remove all rollback calls
 	err := r.Execute() // execute does nothing
 
-	assert.Ok(t, err)
-	assert.Equal(t, 0, cr.calls)
+	is.NoErr(err)
+	is.Equal(0, cr.calls)
 }

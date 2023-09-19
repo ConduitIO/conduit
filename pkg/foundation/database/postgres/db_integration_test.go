@@ -19,25 +19,26 @@ package postgres
 import (
 	"context"
 	"fmt"
+	"github.com/matryer/is"
 	"testing"
 
-	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/foundation/database"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 )
 
 func TestDB(t *testing.T) {
+	is := is.New(t)
 	const testTable = "conduit_store_test"
 
 	ctx := context.Background()
 	logger := log.Nop()
 	db, err := New(ctx, logger, "postgres://meroxauser:meroxapass@localhost:5432/meroxadb?sslmode=disable", testTable)
-	assert.Ok(t, err)
+	is.NoErr(err)
 	t.Cleanup(func() {
 		_, err := db.pool.Exec(ctx, fmt.Sprintf("DROP TABLE %q", testTable))
-		assert.Ok(t, err)
+		is.NoErr(err)
 		err = db.Close()
-		assert.Ok(t, err)
+		is.NoErr(err)
 	})
 	database.AcceptanceTest(t, db)
 }

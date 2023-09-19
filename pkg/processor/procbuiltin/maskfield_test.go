@@ -18,11 +18,11 @@ import (
 	"context"
 	"testing"
 
-	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/conduitio/conduit/pkg/record/schema/mock"
 	"github.com/google/go-cmp/cmp"
+	"github.com/matryer/is"
 )
 
 func TestMaskFieldKey_Build(t *testing.T) {
@@ -159,8 +159,10 @@ func TestMaskFieldKey_Process(t *testing.T) {
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			is := is.New(t)
+
 			underTest, err := MaskFieldKey(tt.config)
-			assert.Ok(t, err)
+			is.NoErr(err)
 			got, err := underTest.Process(context.Background(), tt.args.r)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("process() error = %v, wantErr = %v", err, tt.wantErr)
@@ -331,8 +333,10 @@ func TestMaskFieldPayload_Process(t *testing.T) {
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			is := is.New(t)
+
 			underTest, err := MaskFieldPayload(tt.config)
-			assert.Ok(t, err)
+			is.NoErr(err)
 			got, err := underTest.Process(context.Background(), tt.args.r)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("process() error = %v, wantErr = %v", err, tt.wantErr)

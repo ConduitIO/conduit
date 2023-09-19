@@ -19,14 +19,16 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/foundation/metrics"
+	"github.com/matryer/is"
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
 	"google.golang.org/protobuf/proto"
 )
 
 func TestGauge(t *testing.T) {
+	is := is.New(t)
+
 	testCases := []struct {
 		name      string
 		observe   func(m metrics.Gauge)
@@ -121,16 +123,18 @@ func TestGauge(t *testing.T) {
 
 			promRegistry := prometheus.NewRegistry()
 			err := promRegistry.Register(reg)
-			assert.Ok(t, err)
+			is.NoErr(err)
 
 			got, err := promRegistry.Gather()
-			assert.Ok(t, err)
-			assert.Equal(t, want, got)
+			is.NoErr(err)
+			is.Equal(want, got)
 		})
 	}
 }
 
 func TestLabeledGauge(t *testing.T) {
+	is := is.New(t)
+
 	testCases := []struct {
 		name       string
 		observe    func(m metrics.LabeledGauge)
@@ -202,11 +206,11 @@ func TestLabeledGauge(t *testing.T) {
 
 			promRegistry := prometheus.NewRegistry()
 			err := promRegistry.Register(reg)
-			assert.Ok(t, err)
+			is.NoErr(err)
 
 			got, err := promRegistry.Gather()
-			assert.Ok(t, err)
-			assert.Equal(t, want, got)
+			is.NoErr(err)
+			is.Equal(want, got)
 		})
 	}
 }

@@ -18,17 +18,19 @@ import (
 	"context"
 	"testing"
 
-	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/database"
 	"github.com/conduitio/conduit/pkg/foundation/database/inmemory"
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/processor/mock"
 	"github.com/google/uuid"
+	"github.com/matryer/is"
 	"go.uber.org/mock/gomock"
 )
 
 func TestConfigStore_SetGet(t *testing.T) {
+	is := is.New(t)
+
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	ctrl := gomock.NewController(t)
@@ -54,20 +56,22 @@ func TestConfigStore_SetGet(t *testing.T) {
 
 	var err error
 	want.Processor, err = registry.MustGet(processorType)(want.Config)
-	assert.Ok(t, err)
+	is.NoErr(err)
 
 	s := processor.NewStore(db, registry)
 
 	err = s.Set(ctx, want.ID, want)
-	assert.Ok(t, err)
-	assert.NotNil(t, want.Processor) // make sure processor is left untouched
+	is.NoErr(err)
+	is.True(want.Processor != nil) // make sure processor is left untouched
 
 	got, err := s.Get(ctx, want.ID)
-	assert.Ok(t, err)
-	assert.Equal(t, want, got)
+	is.NoErr(err)
+	is.Equal(want, got)
 }
 
 func TestConfigStore_GetAll(t *testing.T) {
+	is := is.New(t)
+
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	ctrl := gomock.NewController(t)
@@ -100,19 +104,21 @@ func TestConfigStore_GetAll(t *testing.T) {
 		}
 		var err error
 		instance.Processor, err = registry.MustGet(procType)(instance.Config)
-		assert.Ok(t, err)
+		is.NoErr(err)
 
 		err = s.Set(ctx, instance.ID, instance)
-		assert.Ok(t, err)
+		is.NoErr(err)
 		want[instance.ID] = instance
 	}
 
 	got, err := s.GetAll(ctx)
-	assert.Ok(t, err)
-	assert.Equal(t, want, got)
+	is.NoErr(err)
+	is.Equal(want, got)
 }
 
 func TestConfigStore_Delete(t *testing.T) {
+	is := is.New(t)
+
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	registry := processor.NewBuilderRegistry()
@@ -125,13 +131,13 @@ func TestConfigStore_Delete(t *testing.T) {
 	s := processor.NewStore(db, registry)
 
 	err := s.Set(ctx, want.ID, want)
-	assert.Ok(t, err)
+	is.NoErr(err)
 
 	err = s.Delete(ctx, want.ID)
-	assert.Ok(t, err)
+	is.NoErr(err)
 
 	got, err := s.Get(ctx, want.ID)
-	assert.Error(t, err)
-	assert.True(t, cerrors.Is(err, database.ErrKeyNotExist), "expected error for non-existing key")
-	assert.Nil(t, got)
+	is.True(err != nil)
+	is.True(cerrors.Is(err, database.ErrKeyNotExist)) // expected error for non-existing key
+	is.True(got == nil)
 }
