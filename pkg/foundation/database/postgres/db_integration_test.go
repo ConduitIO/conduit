@@ -19,6 +19,7 @@ package postgres
 import (
 	"context"
 	"fmt"
+	"github.com/matryer/is"
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/foundation/database"
@@ -26,6 +27,7 @@ import (
 )
 
 func TestDB(t *testing.T) {
+	is := is.New(t)
 	const testTable = "conduit_store_test"
 
 	ctx := context.Background()
