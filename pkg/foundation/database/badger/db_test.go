@@ -18,18 +18,20 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/conduitio/conduit/pkg/foundation/assert"
 	"github.com/conduitio/conduit/pkg/foundation/database"
+	"github.com/matryer/is"
 	"github.com/rs/zerolog"
 )
 
 func TestDB(t *testing.T) {
+	is := is.New(t)
+
 	path := filepath.Join(t.TempDir(), "badger.db")
 	badger, err := New(zerolog.Nop(), path)
-	assert.Ok(t, err)
+	is.NoErr(err)
 	t.Cleanup(func() {
 		err := badger.Close()
-		assert.Ok(t, err)
+		is.NoErr(err)
 	})
 	database.AcceptanceTest(t, badger)
 }
