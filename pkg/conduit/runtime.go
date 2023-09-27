@@ -143,6 +143,7 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 		DB:               db,
 		Orchestrator:     orc,
 		ProvisionService: provisionService,
+		Ready:            make(chan struct{}),
 
 		pipelineService:  plService,
 		connectorService: connService,
