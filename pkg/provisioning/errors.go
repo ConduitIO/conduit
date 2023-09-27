@@ -17,5 +17,6 @@ package provisioning
 import "github.com/conduitio/conduit/pkg/foundation/cerrors"
 
 var (
-	ErrDuplicatedPipelineID = cerrors.New("duplicated pipeline ID")
+	ErrDuplicatedPipelineID    = cerrors.New("duplicated pipeline ID")
+	ErrDuplicatedAPIPipelineID = cerrors.New("duplicated pipeline ID already exists from API")
 )
