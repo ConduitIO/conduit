@@ -16,7 +16,6 @@ package provisioning
 
 import (
 	"context"
-	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -106,7 +105,6 @@ func (s *Service) Init(ctx context.Context) error {
 	// remove pipelines with duplicate IDs from API pipelines
 	var existingAPIpipeline []int
 	for i, pl := range configs {
-		fmt.Printf("------------------------------%v", pl.ID)
 		_, err := s.pipelineService.Get(ctx, pl.ID)
 		if err != nil {
 			multierr = cerrors.Errorf("pipelines with ID %q will be skipped: %w", pl.ID, ErrDuplicatedAPIPipelineID)
