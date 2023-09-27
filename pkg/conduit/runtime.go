@@ -77,15 +77,17 @@ type Runtime struct {
 	DB               database.DB
 	Orchestrator     *orchestrator.Orchestrator
 	ProvisionService *provisioning.Service
+	// Ready will be closed when Runtime has successfully started
+	Ready chan struct{}
 
 	pipelineService  *pipeline.Service
 	connectorService *connector.Service
 	processorService *processor.Service
-	pluginService    *plugin.Service
+
+	pluginService *plugin.Service
 
 	connectorPersister *connector.Persister
-
-	logger log.CtxLogger
+	logger             log.CtxLogger
 }
 
 // NewRuntime sets up a Runtime instance and primes it for start.
@@ -277,6 +279,7 @@ func (r *Runtime) Run(ctx context.Context) (err error) {
 		r.logger.Info(ctx).Send()
 	}
 
+	close(r.Ready)
 	return nil
 }
 
