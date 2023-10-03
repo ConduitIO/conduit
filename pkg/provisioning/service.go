@@ -106,6 +106,7 @@ func (s *Service) Init(ctx context.Context) error {
 	var existingAPIpipeline []int
 	for i, pl := range configs {
 		_, err := s.pipelineService.Get(ctx, pl.ID)
+		// if err is nil then a pipeline exists already, so we add towards duplicate ID list
 		if err == nil {
 			multierr = cerrors.Errorf("pipelines with ID %q will be skipped: %w", pl.ID, ErrDuplicatedAPIPipelineID)
 			existingAPIpipeline = append(existingAPIpipeline, i)
