@@ -106,12 +106,12 @@ func (s *Service) Init(ctx context.Context) error {
 	var existingAPIpipeline []int
 	for i, pl := range configs {
 		_, err := s.pipelineService.Get(ctx, pl.ID)
-		if err != nil {
+		if err == nil {
 			multierr = cerrors.Errorf("pipelines with ID %q will be skipped: %w", pl.ID, ErrDuplicatedAPIPipelineID)
 			existingAPIpipeline = append(existingAPIpipeline, i)
 		}
 	}
-	s.deleteIndexes(configs, existingAPIpipeline)
+	configs = s.deleteIndexes(configs, existingAPIpipeline)
 
 	// contains pipelineIDs of successfully provisioned pipelines.
 	var successPls []string
