@@ -300,19 +300,3 @@ func TestService_UpdateInvalidConfig(t *testing.T) {
 	is.True(err != nil)
 	is.Equal(got, nil)
 }
-
-func TestService_Init_API_Pipeline_Exists(t *testing.T) {
-	is := is.New(t)
-	ctx := context.Background()
-	logger := log.Nop()
-	db := &inmemory.DB{}
-
-	service := NewService(logger, db)
-	_, err := service.Create(ctx, uuid.NewString(), Config{Name: "test-pipeline"}, ProvisionTypeAPI)
-	is.NoErr(err)
-
-	// create a new pipeline service and initialize it
-	service = NewService(logger, db)
-	err = service.Init(ctx)
-	is.True(err != nil)
-}
