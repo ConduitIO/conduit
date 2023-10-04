@@ -110,10 +110,12 @@ func TestProvision_Create(t *testing.T) {
 	service, pipelineService, connService, procService, plugService := newTestService(ctrl, logger)
 	service.pipelinesPath = "./test/pipelines1"
 
+	// no duplicate pipeline from API
+	pipelineService.EXPECT().Get(anyCtx, p1.P1.ID).Return(nil, pipeline.ErrInstanceNotFound)
+
 	pipelineService.EXPECT().List(anyCtx)
 	// pipeline doesn't exist
 	pipelineService.EXPECT().Get(anyCtx, p1.P1.ID).Return(nil, pipeline.ErrInstanceNotFound)
-
 	// create pipeline
 	pipelineService.EXPECT().CreateWithInstance(anyCtx, p1.P1)
 	pipelineService.EXPECT().UpdateDLQ(anyCtx, p1.P1.ID, p1.P1.DLQ)
@@ -144,6 +146,9 @@ func TestProvision_Update(t *testing.T) {
 	service.pipelinesPath = "./test/pipelines1"
 
 	pipelineService.EXPECT().List(anyCtx)
+	// no duplicate pipeline from API
+	pipelineService.EXPECT().Get(anyCtx, p1.P1.ID).Return(nil, pipeline.ErrInstanceNotFound)
+
 	// pipeline exists
 	pipelineService.EXPECT().Get(anyCtx, p1.P1.ID).Return(oldPipelineInstance, nil)
 
@@ -204,6 +209,9 @@ func TestProvision_NoRollbackOnFailedStart(t *testing.T) {
 	service, pipelineService, connService, procService, plugService := newTestService(ctrl, logger)
 	service.pipelinesPath = "./test/pipelines1"
 
+	// no duplicate pipeline from API
+	pipelineService.EXPECT().Get(anyCtx, p1.P1.ID).Return(nil, pipeline.ErrInstanceNotFound)
+
 	pipelineService.EXPECT().List(anyCtx)
 	pipelineService.EXPECT().Get(anyCtx, p1.P1.ID).Return(nil, pipeline.ErrInstanceNotFound)
 
@@ -236,6 +244,9 @@ func TestProvision_RollbackCreate(t *testing.T) {
 
 	service, pipelineService, connService, procService, plugService := newTestService(ctrl, logger)
 	service.pipelinesPath = "./test/pipelines1"
+
+	// no duplicate pipeline from API
+	pipelineService.EXPECT().Get(anyCtx, p1.P1.ID).Return(nil, pipeline.ErrInstanceNotFound)
 
 	pipelineService.EXPECT().List(anyCtx)
 	pipelineService.EXPECT().Get(anyCtx, p1.P1.ID).Return(nil, pipeline.ErrInstanceNotFound)
@@ -272,6 +283,9 @@ func TestProvision_RollbackUpdate(t *testing.T) {
 
 	service, pipelineService, connService, procService, _ := newTestService(ctrl, logger)
 	service.pipelinesPath = "./test/pipelines1"
+
+	// no duplicate pipeline from API
+	pipelineService.EXPECT().Get(anyCtx, p1.P1.ID).Return(nil, pipeline.ErrInstanceNotFound)
 
 	pipelineService.EXPECT().List(anyCtx)
 	// pipeline exists
@@ -310,6 +324,9 @@ func TestProvision_MultiplePipelinesDuplicatedPipelineID(t *testing.T) {
 	service, pipelineService, connService, procService, plugService := newTestService(ctrl, logger)
 	service.pipelinesPath = "./test/pipelines2"
 
+	// no duplicate pipeline from API
+	pipelineService.EXPECT().Get(anyCtx, p2.P2.ID).Return(nil, pipeline.ErrInstanceNotFound)
+
 	pipelineService.EXPECT().List(anyCtx)
 	pipelineService.EXPECT().Get(anyCtx, p2.P2.ID).Return(nil, pipeline.ErrInstanceNotFound)
 
@@ -335,6 +352,10 @@ func TestProvision_MultiplePipelines(t *testing.T) {
 
 	service, pipelineService, connService, procService, plugService := newTestService(ctrl, logger)
 	service.pipelinesPath = "./test/pipelines3"
+
+	// no duplicate pipeline from API
+	pipelineService.EXPECT().Get(anyCtx, p3.P1.ID).Return(nil, pipeline.ErrInstanceNotFound)
+	pipelineService.EXPECT().Get(anyCtx, p3.P2.ID).Return(nil, pipeline.ErrInstanceNotFound)
 
 	pipelineService.EXPECT().List(anyCtx)
 	pipelineService.EXPECT().Get(anyCtx, p3.P1.ID).Return(nil, pipeline.ErrInstanceNotFound)
@@ -364,6 +385,40 @@ func TestProvision_MultiplePipelines(t *testing.T) {
 
 	err := service.Init(context.Background())
 	is.NoErr(err)
+}
+
+func TestProvision_DuplicatePipelineFromAPI(t *testing.T) {
+	is := is.New(t)
+	logger := log.Nop()
+	ctrl := gomock.NewController(t)
+
+	service, pipelineService, _, _, _ := newTestService(ctrl, logger)
+	service.pipelinesPath = "./test/pipelines1"
+
+	// duplicate pipeline found from API
+	pipelineService.EXPECT().Get(anyCtx, p1.P1.ID).Return(oldPipelineInstance, nil)
+
+	pipelineService.EXPECT().List(anyCtx)
+
+	err := service.Init(context.Background())
+	is.True(cerrors.Is(err, ErrDuplicatedAPIPipelineID))
+}
+
+func TestProvision_DuplicatePipelineFromAPI_Error(t *testing.T) {
+	is := is.New(t)
+	logger := log.Nop()
+	ctrl := gomock.NewController(t)
+
+	service, pipelineService, _, _, _ := newTestService(ctrl, logger)
+	service.pipelinesPath = "./test/pipelines1"
+
+	// duplicate pipeline found from API
+	pipelineService.EXPECT().Get(anyCtx, p1.P1.ID).Return(nil, nil)
+
+	pipelineService.EXPECT().List(anyCtx)
+
+	err := service.Init(context.Background())
+	is.True(cerrors.Is(err, ErrDuplicatedAPIPipelineID))
 }
 
 func TestProvision_IntegrationTestServices(t *testing.T) {

@@ -103,16 +103,16 @@ func (s *Service) Init(ctx context.Context) error {
 	}
 
 	// remove pipelines with duplicate IDs from API pipelines
-	var existingAPIpipeline []int
+	var existingPipelinesFromAPI []int
 	for i, pl := range configs {
 		_, err := s.pipelineService.Get(ctx, pl.ID)
 		// if err is nil then a pipeline exists already, so we add towards duplicate ID list
 		if err == nil {
 			multierr = cerrors.Errorf("pipelines with ID %q will be skipped: %w", pl.ID, ErrDuplicatedAPIPipelineID)
-			existingAPIpipeline = append(existingAPIpipeline, i)
+			existingPipelinesFromAPI = append(existingPipelinesFromAPI, i)
 		}
 	}
-	configs = s.deleteIndexes(configs, existingAPIpipeline)
+	configs = s.deleteIndexes(configs, existingPipelinesFromAPI)
 
 	// contains pipelineIDs of successfully provisioned pipelines.
 	var successPls []string
