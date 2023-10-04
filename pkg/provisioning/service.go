@@ -110,7 +110,7 @@ func (s *Service) Init(ctx context.Context) error {
 		if err == nil {
 			multierr = cerrors.Errorf("pipelines with ID %q will be skipped: %w", pl.ID, ErrDuplicatedAPIPipelineID)
 			existingPipelinesFromAPI = append(existingPipelinesFromAPI, i)
-		} else {
+		} else if err != pipeline.ErrInstanceNotFound {
 			multierr = cerrors.Errorf("could not get pipeline with ID %v: %w", pl.ID, err)
 		}
 	}
