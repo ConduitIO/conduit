@@ -408,17 +408,36 @@ func TestProvision_DuplicatePipelineFromAPI_Error(t *testing.T) {
 	is := is.New(t)
 	logger := log.Nop()
 	ctrl := gomock.NewController(t)
+	otherErr := cerrors.New("error1")
 
-	service, pipelineService, _, _, _ := newTestService(ctrl, logger)
+	service, pipelineService, connService, procService, plugService := newTestService(ctrl, logger)
 	service.pipelinesPath = "./test/pipelines1"
 
 	// duplicate pipeline found from API
-	pipelineService.EXPECT().Get(anyCtx, p1.P1.ID).Return(nil, nil)
+	pipelineService.EXPECT().Get(anyCtx, p1.P1.ID).Return(nil, otherErr)
 
 	pipelineService.EXPECT().List(anyCtx)
+	// pipeline doesn't exist
+	pipelineService.EXPECT().Get(anyCtx, p1.P1.ID).Return(nil, pipeline.ErrInstanceNotFound)
+	// create pipeline
+	pipelineService.EXPECT().CreateWithInstance(anyCtx, p1.P1)
+	pipelineService.EXPECT().UpdateDLQ(anyCtx, p1.P1.ID, p1.P1.DLQ)
+	pipelineService.EXPECT().AddConnector(anyCtx, p1.P1.ID, p1.P1.ConnectorIDs[0])
+	pipelineService.EXPECT().AddConnector(anyCtx, p1.P1.ID, p1.P1.ConnectorIDs[1])
+	pipelineService.EXPECT().AddProcessor(anyCtx, p1.P1.ID, p1.P1.ProcessorIDs[0])
+
+	connService.EXPECT().CreateWithInstance(anyCtx, p1.P1C1)
+	connService.EXPECT().CreateWithInstance(anyCtx, p1.P1C2)
+	connService.EXPECT().AddProcessor(anyCtx, p1.P1C2.ID, p1.P1C2.ProcessorIDs[0])
+
+	procService.EXPECT().CreateWithInstance(anyCtx, p1.P1C2P1)
+	procService.EXPECT().CreateWithInstance(anyCtx, p1.P1P1)
+
+	// start pipeline
+	pipelineService.EXPECT().Start(anyCtx, connService, procService, plugService, p1.P1.ID)
 
 	err := service.Init(context.Background())
-	is.True(cerrors.Is(err, ErrDuplicatedAPIPipelineID))
+	is.True(cerrors.Is(err, otherErr))
 }
 
 func TestProvision_IntegrationTestServices(t *testing.T) {
