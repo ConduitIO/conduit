@@ -102,7 +102,7 @@ var (
 	}
 )
 
-func TestProvision_Create(t *testing.T) {
+func TestService_Init_Create(t *testing.T) {
 	is := is.New(t)
 	logger := log.Nop()
 	ctrl := gomock.NewController(t)
@@ -137,7 +137,7 @@ func TestProvision_Create(t *testing.T) {
 	is.NoErr(err)
 }
 
-func TestProvision_Update(t *testing.T) {
+func TestService_Init_Update(t *testing.T) {
 	is := is.New(t)
 	logger := log.Nop()
 	ctrl := gomock.NewController(t)
@@ -172,7 +172,7 @@ func TestProvision_Update(t *testing.T) {
 	is.NoErr(err)
 }
 
-func TestProvision_Delete(t *testing.T) {
+func TestService_Init_Delete(t *testing.T) {
 	is := is.New(t)
 	logger := log.Nop()
 	ctrl := gomock.NewController(t)
@@ -184,7 +184,7 @@ func TestProvision_Delete(t *testing.T) {
 	pipelineService.EXPECT().List(anyCtx).Return(map[string]*pipeline.Instance{oldPipelineInstance.ID: oldPipelineInstance})
 
 	// export pipeline
-	pipelineService.EXPECT().Get(anyCtx, oldPipelineInstance.ID).Return(oldPipelineInstance, nil)
+	pipelineService.EXPECT().Get(anyCtx, oldPipelineInstance.ID).Return(oldPipelineInstance, nil).Times(2)
 	connService.EXPECT().Get(anyCtx, oldConnector1Instance.ID).Return(oldConnector1Instance, nil)
 	connService.EXPECT().Get(anyCtx, oldConnector2Instance.ID).Return(oldConnector2Instance, nil)
 	procService.EXPECT().Get(anyCtx, oldConnectorProcessorInstance.ID).Return(oldConnectorProcessorInstance, nil)
@@ -201,7 +201,7 @@ func TestProvision_Delete(t *testing.T) {
 	is.NoErr(err)
 }
 
-func TestProvision_NoRollbackOnFailedStart(t *testing.T) {
+func TestService_Init_NoRollbackOnFailedStart(t *testing.T) {
 	is := is.New(t)
 	logger := log.Nop()
 	ctrl := gomock.NewController(t)
@@ -237,7 +237,7 @@ func TestProvision_NoRollbackOnFailedStart(t *testing.T) {
 	is.True(cerrors.Is(err, wantErr))
 }
 
-func TestProvision_RollbackCreate(t *testing.T) {
+func TestService_Init_RollbackCreate(t *testing.T) {
 	is := is.New(t)
 	logger := log.Nop()
 	ctrl := gomock.NewController(t)
@@ -276,7 +276,7 @@ func TestProvision_RollbackCreate(t *testing.T) {
 	is.True(cerrors.Is(err, wantErr))
 }
 
-func TestProvision_RollbackUpdate(t *testing.T) {
+func TestService_Init_RollbackUpdate(t *testing.T) {
 	is := is.New(t)
 	logger := log.Nop()
 	ctrl := gomock.NewController(t)
@@ -316,7 +316,7 @@ func TestProvision_RollbackUpdate(t *testing.T) {
 	is.True(cerrors.Is(err, wantErr))
 }
 
-func TestProvision_MultiplePipelinesDuplicatedPipelineID(t *testing.T) {
+func TestService_Init_MultiplePipelinesDuplicatedPipelineID(t *testing.T) {
 	is := is.New(t)
 	logger := log.Nop()
 	ctrl := gomock.NewController(t)
@@ -345,7 +345,7 @@ func TestProvision_MultiplePipelinesDuplicatedPipelineID(t *testing.T) {
 	is.True(cerrors.Is(err, ErrDuplicatedPipelineID)) // duplicated pipeline id
 }
 
-func TestProvision_MultiplePipelines(t *testing.T) {
+func TestService_Init_MultiplePipelines(t *testing.T) {
 	is := is.New(t)
 	logger := log.Nop()
 	ctrl := gomock.NewController(t)
@@ -387,7 +387,7 @@ func TestProvision_MultiplePipelines(t *testing.T) {
 	is.NoErr(err)
 }
 
-func TestProvision_PipelineProvisionedFromAPI(t *testing.T) {
+func TestService_Init_PipelineProvisionedFromAPI(t *testing.T) {
 	is := is.New(t)
 	logger := log.Nop()
 	ctrl := gomock.NewController(t)
@@ -405,7 +405,7 @@ func TestProvision_PipelineProvisionedFromAPI(t *testing.T) {
 	is.True(cerrors.Is(err, ErrImmutableProvisionedByAPI))
 }
 
-func TestProvision_PipelineProvisionedFromAPI_Error(t *testing.T) {
+func TestService_Init_PipelineProvisionedFromAPI_Error(t *testing.T) {
 	is := is.New(t)
 	logger := log.Nop()
 	ctrl := gomock.NewController(t)
@@ -441,7 +441,32 @@ func TestProvision_PipelineProvisionedFromAPI_Error(t *testing.T) {
 	is.True(cerrors.Is(err, otherErr))
 }
 
-func TestProvision_IntegrationTestServices(t *testing.T) {
+func TestService_Delete(t *testing.T) {
+	is := is.New(t)
+	logger := log.Nop()
+	ctrl := gomock.NewController(t)
+
+	service, pipelineService, connService, procService, plugService := newTestService(ctrl, logger)
+
+	// export pipeline
+	pipelineService.EXPECT().Get(anyCtx, oldPipelineInstance.ID).Return(oldPipelineInstance, nil).Times(2)
+	connService.EXPECT().Get(anyCtx, oldConnector1Instance.ID).Return(oldConnector1Instance, nil)
+	connService.EXPECT().Get(anyCtx, oldConnector2Instance.ID).Return(oldConnector2Instance, nil)
+	procService.EXPECT().Get(anyCtx, oldConnectorProcessorInstance.ID).Return(oldConnectorProcessorInstance, nil)
+	procService.EXPECT().Get(anyCtx, oldPipelineProcessorInstance.ID).Return(oldPipelineProcessorInstance, nil)
+
+	// delete pipeline
+	pipelineService.EXPECT().Delete(anyCtx, oldPipelineInstance.ID).Return(nil)
+	connService.EXPECT().Delete(anyCtx, oldConnector1Instance.ID, plugService).Return(nil)
+	connService.EXPECT().Delete(anyCtx, oldConnector2Instance.ID, plugService).Return(nil)
+	procService.EXPECT().Delete(anyCtx, oldConnectorProcessorInstance.ID).Return(nil)
+	procService.EXPECT().Delete(anyCtx, oldPipelineProcessorInstance.ID).Return(nil)
+
+	err := service.Delete(context.Background(), oldPipelineInstance.ID)
+	is.NoErr(err)
+}
+
+func TestService_IntegrationTestServices(t *testing.T) {
 	is := is.New(t)
 	ctx, killAll := context.WithCancel(context.Background())
 	defer killAll()
