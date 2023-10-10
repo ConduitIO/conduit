@@ -17,6 +17,6 @@ package provisioning
 import "github.com/conduitio/conduit/pkg/foundation/cerrors"
 
 var (
-	ErrDuplicatedPipelineID    = cerrors.New("duplicated pipeline ID")
-	ErrDuplicatedAPIPipelineID = cerrors.New("duplicated pipeline ID already exists from API")
+	ErrDuplicatedPipelineID      = cerrors.New("duplicated pipeline ID")
+	ErrImmutableProvisionedByAPI = cerrors.New("entity was provisioned by through API and cannot be mutated by a config file, please mutate through the API")
 )

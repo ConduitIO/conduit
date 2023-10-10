@@ -103,18 +103,22 @@ func (s *Service) Init(ctx context.Context) error {
 	}
 
 	// remove pipelines with duplicate IDs from API pipelines
-	var existingPipelinesFromAPI []int
+	var apiProvisioned []int
 	for i, pl := range configs {
-		_, err := s.pipelineService.Get(ctx, pl.ID)
-		// if err is nil then a pipeline exists already, so we add towards duplicate ID list
-		if err == nil {
-			multierr = cerrors.Errorf("pipelines with ID %q will be skipped: %w", pl.ID, ErrDuplicatedAPIPipelineID)
-			existingPipelinesFromAPI = append(existingPipelinesFromAPI, i)
-		} else if !cerrors.Is(err, pipeline.ErrInstanceNotFound) {
-			multierr = cerrors.Errorf("could not get pipeline with ID %v: %w", pl.ID, err)
+		pipelineInstance, err := s.pipelineService.Get(ctx, pl.ID)
+		if err != nil {
+			if !cerrors.Is(err, pipeline.ErrInstanceNotFound) {
+				multierr = multierror.Append(multierr, cerrors.Errorf("error getting pipeline instance with ID %q: %w", pl.ID, err))
+			}
+			continue
+		}
+
+		if pipelineInstance.ProvisionedBy != pipeline.ProvisionTypeConfig {
+			multierr = multierror.Append(multierr, cerrors.Errorf("pipelines with ID %q will be skipped: %w", pl.ID, ErrImmutableProvisionedByAPI))
+			apiProvisioned = append(apiProvisioned, i)
 		}
 	}
-	configs = s.deleteIndexes(configs, existingPipelinesFromAPI)
+	configs = s.deleteIndexes(configs, apiProvisioned)
 
 	// contains pipelineIDs of successfully provisioned pipelines.
 	var successPls []string
