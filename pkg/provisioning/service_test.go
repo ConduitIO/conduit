@@ -392,7 +392,8 @@ func TestService_Init_PipelineProvisionedFromAPI(t *testing.T) {
 	logger := log.Nop()
 	ctrl := gomock.NewController(t)
 
-	APIPipelineInstance := oldPipelineInstance
+	tmp := *oldPipelineInstance
+	APIPipelineInstance := &tmp
 	APIPipelineInstance.ProvisionedBy = pipeline.ProvisionTypeAPI // change the test pipeline to be API provisioned
 
 	service, pipelineService, _, _, _ := newTestService(ctrl, logger)
@@ -411,12 +412,12 @@ func TestService_Init_PipelineProvisionedFromAPI_Error(t *testing.T) {
 	is := is.New(t)
 	logger := log.Nop()
 	ctrl := gomock.NewController(t)
-	otherErr := cerrors.New("error1")
+	otherErr := cerrors.New("GetError")
 
 	service, pipelineService, connService, procService, plugService := newTestService(ctrl, logger)
 	service.pipelinesPath = "./test/pipelines1"
 
-	// pipeline provisioned by API
+	// error from calling Get
 	pipelineService.EXPECT().Get(anyCtx, p1.P1.ID).Return(nil, otherErr)
 
 	pipelineService.EXPECT().List(anyCtx)
