@@ -402,7 +402,7 @@ func TestService_Init_PipelineProvisionedFromAPI(t *testing.T) {
 	pipelineService.EXPECT().List(anyCtx)
 
 	err := service.Init(context.Background())
-	is.True(cerrors.Is(err, ErrImmutableProvisionedByAPI))
+	is.True(cerrors.Is(err, ErrNotProvisionedByConfig))
 }
 
 func TestService_Init_PipelineProvisionedFromAPI_Error(t *testing.T) {

@@ -114,7 +114,7 @@ func (s *Service) Init(ctx context.Context) error {
 		}
 
 		if pipelineInstance.ProvisionedBy != pipeline.ProvisionTypeConfig {
-			multierr = multierror.Append(multierr, cerrors.Errorf("pipelines with ID %q will be skipped: %w", pl.ID, ErrImmutableProvisionedByAPI))
+			multierr = multierror.Append(multierr, cerrors.Errorf("pipelines with ID %q will be skipped: %w", pl.ID, ErrNotProvisionedByConfig))
 			apiProvisioned = append(apiProvisioned, i)
 		}
 	}
