@@ -110,7 +110,7 @@ func TestService_Init_Create(t *testing.T) {
 	service, pipelineService, connService, procService, plugService := newTestService(ctrl, logger)
 	service.pipelinesPath = "./test/pipelines1"
 
-	// pipeline not provisioned by API
+	// return a pipeline not provisioned by API
 	pipelineService.EXPECT().Get(anyCtx, p1.P1.ID).Return(nil, pipeline.ErrInstanceNotFound)
 
 	pipelineService.EXPECT().List(anyCtx)
@@ -146,7 +146,7 @@ func TestService_Init_Update(t *testing.T) {
 	service.pipelinesPath = "./test/pipelines1"
 
 	pipelineService.EXPECT().List(anyCtx)
-	// pipeline not provisioned by API
+	// return a pipeline not provisioned by API
 	pipelineService.EXPECT().Get(anyCtx, p1.P1.ID).Return(nil, pipeline.ErrInstanceNotFound)
 
 	// pipeline exists
@@ -209,7 +209,7 @@ func TestService_Init_NoRollbackOnFailedStart(t *testing.T) {
 	service, pipelineService, connService, procService, plugService := newTestService(ctrl, logger)
 	service.pipelinesPath = "./test/pipelines1"
 
-	// pipeline not provisioned by API
+	// return a pipeline not provisioned by API
 	pipelineService.EXPECT().Get(anyCtx, p1.P1.ID).Return(nil, pipeline.ErrInstanceNotFound)
 
 	pipelineService.EXPECT().List(anyCtx)
@@ -245,7 +245,7 @@ func TestService_Init_RollbackCreate(t *testing.T) {
 	service, pipelineService, connService, procService, plugService := newTestService(ctrl, logger)
 	service.pipelinesPath = "./test/pipelines1"
 
-	// pipeline not provisioned by API
+	// return a pipeline not provisioned by API
 	pipelineService.EXPECT().Get(anyCtx, p1.P1.ID).Return(nil, pipeline.ErrInstanceNotFound)
 
 	pipelineService.EXPECT().List(anyCtx)
@@ -284,7 +284,7 @@ func TestService_Init_RollbackUpdate(t *testing.T) {
 	service, pipelineService, connService, procService, _ := newTestService(ctrl, logger)
 	service.pipelinesPath = "./test/pipelines1"
 
-	// pipeline not provisioned by API
+	// return a pipeline not provisioned by API
 	pipelineService.EXPECT().Get(anyCtx, p1.P1.ID).Return(nil, pipeline.ErrInstanceNotFound)
 
 	pipelineService.EXPECT().List(anyCtx)
@@ -324,7 +324,7 @@ func TestService_Init_MultiplePipelinesDuplicatedPipelineID(t *testing.T) {
 	service, pipelineService, connService, procService, plugService := newTestService(ctrl, logger)
 	service.pipelinesPath = "./test/pipelines2"
 
-	// pipeline not provisioned by API
+	// return a pipeline not provisioned by API
 	pipelineService.EXPECT().Get(anyCtx, p2.P2.ID).Return(nil, pipeline.ErrInstanceNotFound)
 
 	pipelineService.EXPECT().List(anyCtx)
@@ -353,7 +353,7 @@ func TestService_Init_MultiplePipelines(t *testing.T) {
 	service, pipelineService, connService, procService, plugService := newTestService(ctrl, logger)
 	service.pipelinesPath = "./test/pipelines3"
 
-	// pipeline not provisioned by API
+	// return a pipeline not provisioned by API
 	pipelineService.EXPECT().Get(anyCtx, p3.P1.ID).Return(nil, pipeline.ErrInstanceNotFound)
 	pipelineService.EXPECT().Get(anyCtx, p3.P2.ID).Return(nil, pipeline.ErrInstanceNotFound)
 
@@ -391,13 +391,15 @@ func TestService_Init_PipelineProvisionedFromAPI(t *testing.T) {
 	is := is.New(t)
 	logger := log.Nop()
 	ctrl := gomock.NewController(t)
-	oldPipelineInstance.ProvisionedBy = pipeline.ProvisionTypeAPI // change the test pipeline to be API provisioned
+
+	APIPipelineInstance := oldPipelineInstance
+	APIPipelineInstance.ProvisionedBy = pipeline.ProvisionTypeAPI // change the test pipeline to be API provisioned
 
 	service, pipelineService, _, _, _ := newTestService(ctrl, logger)
 	service.pipelinesPath = "./test/pipelines1"
 
 	// pipeline provisioned by API
-	pipelineService.EXPECT().Get(anyCtx, p1.P1.ID).Return(oldPipelineInstance, nil)
+	pipelineService.EXPECT().Get(anyCtx, p1.P1.ID).Return(APIPipelineInstance, nil)
 
 	pipelineService.EXPECT().List(anyCtx)
 
@@ -454,7 +456,6 @@ func TestService_Delete(t *testing.T) {
 	connService.EXPECT().Get(anyCtx, oldConnector2Instance.ID).Return(oldConnector2Instance, nil)
 	procService.EXPECT().Get(anyCtx, oldConnectorProcessorInstance.ID).Return(oldConnectorProcessorInstance, nil)
 	procService.EXPECT().Get(anyCtx, oldPipelineProcessorInstance.ID).Return(oldPipelineProcessorInstance, nil)
-
 	// delete pipeline
 	pipelineService.EXPECT().Delete(anyCtx, oldPipelineInstance.ID).Return(nil)
 	connService.EXPECT().Delete(anyCtx, oldConnector1Instance.ID, plugService).Return(nil)
