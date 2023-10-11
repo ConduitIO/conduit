@@ -22,7 +22,7 @@ require (
 	github.com/dop251/goja_nodejs v0.0.0-20230602164024-804a84515562
 	github.com/gammazero/deque v0.2.1
 	github.com/golang/mock v1.6.0
-	github.com/google/go-cmp v0.5.9
+	github.com/google/go-cmp v0.6.0
 	github.com/google/uuid v1.3.1
 	github.com/gorilla/websocket v1.5.0
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.18.0
