@@ -102,6 +102,23 @@ func (s *Service) Init(ctx context.Context) error {
 		allPls = append(allPls, duplicateID)
 	}
 
+	// remove pipelines with duplicate IDs from API pipelines
+	var apiProvisioned []int
+	for i, pl := range configs {
+		pipelineInstance, err := s.pipelineService.Get(ctx, pl.ID)
+		if err != nil {
+			if !cerrors.Is(err, pipeline.ErrInstanceNotFound) {
+				multierr = multierror.Append(multierr, cerrors.Errorf("error getting pipeline instance with ID %q: %w", pl.ID, err))
+			}
+			continue
+		}
+		if pipelineInstance.ProvisionedBy != pipeline.ProvisionTypeConfig {
+			multierr = multierror.Append(multierr, cerrors.Errorf("pipelines with ID %q will be skipped: %w", pl.ID, ErrNotProvisionedByConfig))
+			apiProvisioned = append(apiProvisioned, i)
+		}
+	}
+	configs = s.deleteIndexes(configs, apiProvisioned)
+
 	// contains pipelineIDs of successfully provisioned pipelines.
 	var successPls []string
 	for _, cfg := range configs {
