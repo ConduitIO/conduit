@@ -102,6 +102,23 @@ func (s *Service) Init(ctx context.Context) error {
 		allPls = append(allPls, duplicateID)
 	}
 
+	// remove pipelines with duplicate IDs from API pipelines
+	var apiProvisioned []int
+	for i, pl := range configs {
+		pipelineInstance, err := s.pipelineService.Get(ctx, pl.ID)
+		if err != nil {
+			if !cerrors.Is(err, pipeline.ErrInstanceNotFound) {
+				multierr = multierror.Append(multierr, cerrors.Errorf("error getting pipeline instance with ID %q: %w", pl.ID, err))
+			}
+			continue
+		}
+		if pipelineInstance.ProvisionedBy != pipeline.ProvisionTypeConfig {
+			multierr = multierror.Append(multierr, cerrors.Errorf("pipelines with ID %q will be skipped: %w", pl.ID, ErrNotProvisionedByConfig))
+			apiProvisioned = append(apiProvisioned, i)
+		}
+	}
+	configs = s.deleteIndexes(configs, apiProvisioned)
+
 	// contains pipelineIDs of successfully provisioned pipelines.
 	var successPls []string
 	for _, cfg := range configs {
@@ -124,6 +141,28 @@ func (s *Service) Init(ctx context.Context) error {
 		Msg("pipeline configs provisioned")
 
 	return multierr
+}
+
+// Delete exposes a way to delete pipelines provisioned using the provisioning
+// service.
+func (s *Service) Delete(ctx context.Context, id string) error {
+	pl, err := s.pipelineService.Get(ctx, id)
+	if err != nil {
+		return cerrors.Errorf("could not get pipeline %q: %w", id, err)
+	}
+	if pl.ProvisionedBy != pipeline.ProvisionTypeConfig {
+		return ErrNotProvisionedByConfig
+	}
+	oldConfig, err := s.Export(ctx, id)
+	if err != nil {
+		return cerrors.Errorf("failed to export pipeline: %w", err)
+	}
+	actions := s.newActionsBuilder().Build(oldConfig, config.Pipeline{})
+	_, err = s.executeActions(ctx, actions)
+	if err != nil {
+		return cerrors.Errorf("failed to delete pipeline: %w", err)
+	}
+	return nil
 }
 
 // getYamlFiles recursively reads folders in the path and collects paths to all
@@ -223,31 +262,22 @@ func (s *Service) provisionPipeline(ctx context.Context, cfg config.Pipeline) er
 	return nil
 }
 
-func (s *Service) deleteOldPipelines(ctx context.Context, ids []string) []string {
+func (s *Service) deleteOldPipelines(ctx context.Context, keepIDs []string) []string {
 	var deletedIDs []string
 	pipelines := s.pipelineService.List(ctx)
 	for id, pl := range pipelines {
-		if !slices.Contains(ids, id) && pl.ProvisionedBy == pipeline.ProvisionTypeConfig {
-			oldConfig, err := s.Export(ctx, id)
-			if err != nil {
-				s.logger.Warn(ctx).
-					Err(err).
-					Str(log.PipelineIDField, id).
-					Msg("failed to delete a pipeline provisioned by a config file, the pipeline is probably in a broken state, Conduit will try to remove it again next time it runs")
-				continue
-			}
-			actions := s.newActionsBuilder().Build(oldConfig, config.Pipeline{})
-			_, err = s.executeActions(ctx, actions)
-			if err != nil {
-				s.logger.Warn(ctx).
-					Err(err).
-					Str(log.PipelineIDField, id).
-					Msg("failed to delete a pipeline provisioned by a config file, the pipeline is probably in a broken state, Conduit will try to remove it again next time it runs")
-				continue
-			}
-
-			deletedIDs = append(deletedIDs, id)
+		if slices.Contains(keepIDs, id) || pl.ProvisionedBy != pipeline.ProvisionTypeConfig {
+			continue
 		}
+		err := s.Delete(ctx, id)
+		if err != nil {
+			s.logger.Warn(ctx).
+				Err(err).
+				Str(log.PipelineIDField, id).
+				Msg("failed to delete a pipeline provisioned by a config file, the pipeline is probably in a broken state, Conduit will try to remove it again next time it runs")
+			continue
+		}
+		deletedIDs = append(deletedIDs, id)
 	}
 	return deletedIDs
 }
