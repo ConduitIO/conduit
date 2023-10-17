@@ -132,7 +132,7 @@ func (c *ConnectorAPIv1) CreateConnector(
 		return nil, status.ConnectorError(cerrors.Errorf("failed to create connector: %w", err))
 	}
 	if created.Config.Name == "" {
-		return nil, status.ConnectorError(cerrors.Errorf("failed to create connector: name must not be empty"))
+		return nil, status.ConnectorError(cerrors.Errorf("failed to create connector: connector name must not be empty"))
 	}
 
 	co := toproto.Connector(created)
