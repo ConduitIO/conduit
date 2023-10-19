@@ -80,3 +80,6 @@ dist/
 
 # Conduit local config
 /conduit.yaml
+
+# Escape Analysis Report
+escape_analysis.txt

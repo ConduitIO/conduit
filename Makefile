@@ -20,6 +20,12 @@ build: check-go-version pkg/web/ui/dist build-pipeline-check
 test:
 	go test $(GOTEST_FLAGS) -race ./...
 
+.PHONY: escape-analysis
+escape-analysis:
+	go test -gcflags "-m -m"  $(GOTEST_FLAGS) ./... 2> escape_analysis_full.txt
+	grep -vwE "(.*_test\.go|.*\/mock/.*\.go)" escape_analysis_full.txt > escape_analysis.txt
+	rm escape_analysis_full.txt
+
 test-integration:
 	# run required docker containers, execute integration tests, stop containers after tests
 	docker compose -f test/docker-compose-postgres.yml -f test/docker-compose-schemaregistry.yml up --quiet-pull -d --wait
