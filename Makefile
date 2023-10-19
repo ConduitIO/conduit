@@ -22,7 +22,9 @@ test:
 
 .PHONY: escape-analysis
 escape-analysis:
-	go test -gcflags "-m -m"  $(GOTEST_FLAGS) ./... 2> escape_analysis.txt
+	go test -gcflags "-m -m"  $(GOTEST_FLAGS) ./... 2> escape_analysis_full.txt
+	grep -vwE "(.*_test\.go|.*\/mock/.*\.go)" escape_analysis_full.txt > escape_analysis.txt
+	rm escape_analysis_full.txt
 
 test-integration:
 	# run required docker containers, execute integration tests, stop containers after tests
