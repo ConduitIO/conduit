@@ -18,7 +18,6 @@ package stream
 
 import (
 	"context"
-	"fmt"
 	"sync"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -131,7 +130,7 @@ func (m *Message) init() {
 // ID returns a string representing a unique ID of this message. This is meant
 // only for logging purposes.
 func (m *Message) ID() string {
-	return fmt.Sprintf("%s/%s", m.SourceID, m.Record.Position)
+	return m.SourceID + "/" + string(m.Record.Position)
 }
 
 func (m *Message) ControlMessageType() ControlMessageType {
