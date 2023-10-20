@@ -22,6 +22,9 @@ import (
 	"context"
 	"net"
 	"net/http"
+	"os"
+	"runtime"
+	"runtime/pprof"
 	"strings"
 	"time"
 
@@ -199,6 +202,33 @@ func newServices(
 // one of the services experiences a fatal error.
 func (r *Runtime) Run(ctx context.Context) (err error) {
 	t, ctx := tomb.WithContext(ctx)
+
+	if r.Config.dev.cpuprofile != "" {
+		f, err := os.Create(r.Config.dev.cpuprofile)
+		if err != nil {
+			return cerrors.Errorf("could not create CPU profile: %w", err)
+		}
+		defer f.Close()
+		if err := pprof.StartCPUProfile(f); err != nil {
+			return cerrors.Errorf("could not start CPU profile: %w", err)
+		}
+		defer pprof.StopCPUProfile()
+	}
+	if r.Config.dev.memprofile != "" {
+		defer func() {
+			f, err := os.Create(r.Config.dev.memprofile)
+			if err != nil {
+				r.logger.Err(ctx, err).Msg("could not create memory profile")
+				return
+			}
+			defer f.Close()
+			runtime.GC() // get up-to-date statistics
+			if err := pprof.WriteHeapProfile(f); err != nil {
+				r.logger.Err(ctx, err).Msg("could not write memory profile")
+			}
+		}()
+	}
+
 	defer func() {
 		if err != nil {
 			// This means run failed, we kill the tomb to stop any goroutines
