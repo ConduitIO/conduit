@@ -17,6 +17,7 @@
 package record
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -25,7 +26,6 @@ import (
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/record/schema"
-	"github.com/jinzhu/copier"
 )
 
 const (
@@ -149,27 +149,39 @@ func (r Record) mapData(d Data) interface{} {
 }
 
 func (r Record) Clone() Record {
-	clone := Record{}
-	// todo copier uses reflection under the hood
-	// we should optimize it, because Clone() is on a hot path.
-	// https://github.com/ConduitIO/conduit/issues/885
-	err := copier.CopyWithOption(
-		&clone,
-		&r,
-		copier.Option{DeepCopy: true, IgnoreEmpty: true},
+	var (
+		metadata      map[string]string
+		key           Data
+		payloadBefore Data
+		payloadAfter  Data
 	)
-	if err != nil {
-		// At the moment, a clone error cannot happen because of the input data
-		// (i.e. the record itself).
-		// It can only happen if the clone destination is not addressable
-		// or if reflect.ValueOf(&r) is invalid.
-		// The first should never happen, because &Record{} is always addressable.
-		// The second, reflect.ValueOf(&r) is invalid if &r is nil, which in our case
-		// is also not possible.
-		// Hence, if the copier returns an error, it's a bug related to how we use copier
-		// which would cause all pipelines to fail anyway, so we panic here.
-		// This also makes the method signature simpler.
-		panic(cerrors.Errorf("record clone error: %w", err))
+
+	if r.Metadata != nil {
+		metadata = make(map[string]string, len(r.Metadata))
+		for k, v := range r.Metadata {
+			metadata[k] = v
+		}
+	}
+
+	if r.Key != nil {
+		key = r.Key.Clone()
+	}
+	if r.Payload.Before != nil {
+		payloadBefore = r.Payload.Before.Clone()
+	}
+	if r.Payload.After != nil {
+		payloadAfter = r.Payload.After.Clone()
+	}
+
+	clone := Record{
+		Position:  bytes.Clone(r.Position),
+		Operation: r.Operation,
+		Metadata:  metadata,
+		Key:       key,
+		Payload: Change{
+			Before: payloadBefore,
+			After:  payloadAfter,
+		},
 	}
 	return clone
 }
@@ -204,6 +216,7 @@ func (p Position) String() string {
 // Data are RawData and StructuredData.
 type Data interface {
 	Bytes() []byte
+	Clone() Data
 }
 
 // StructuredData contains data in form of a map with string keys and arbitrary
@@ -218,6 +231,18 @@ func (d StructuredData) Bytes() []byte {
 		panic(cerrors.Errorf("StructuredData error while marshaling as JSON: %w", err))
 	}
 	return b
+}
+
+func (d StructuredData) Clone() Data {
+	cloned := make(map[string]any, len(d))
+	for k, v := range d {
+		if vmap, ok := v.(map[string]any); ok {
+			cloned[k] = StructuredData(vmap).Clone()
+		} else {
+			cloned[k] = v
+		}
+	}
+	return StructuredData(cloned)
 }
 
 // RawData contains unstructured data in form of a byte slice.
@@ -238,4 +263,11 @@ func (d *RawData) UnmarshalText() ([]byte, error) {
 
 func (d RawData) Bytes() []byte {
 	return d.Raw
+}
+
+func (d RawData) Clone() Data {
+	return RawData{
+		Raw:    bytes.Clone(d.Raw),
+		Schema: d.Schema, // this field is currently unused, we don't care about cloning it atm
+	}
 }
