@@ -27,29 +27,14 @@ import (
 
 const DefaultBufferSize = 1000
 
-// Session wraps a channel of records and provides:
-// 1. a way to send records to it asynchronously
-// 2. a way to know if it's closed or not
+// Session represents a single inspector session. Records are continuously sent
+// into channel C. If the buffer of C is full, records will be dropped. C will
+// be closed once the session is removed from the inspector.
 type Session struct {
 	C chan record.Record
 
 	id          string
 	componentID string
-	logger      log.CtxLogger
-}
-
-// send a record to the session's channel.
-// If the channel has already reached its capacity,
-// the record will be ignored.
-func (s *Session) send(ctx context.Context, r record.Record) {
-	select {
-	case s.C <- r:
-	default:
-		s.logger.
-			Warn(ctx).
-			Str(log.InspectorSessionID, s.id).
-			Msg("session buffer full, record will be dropped")
-	}
 }
 
 // Inspector is attached to an inspectable pipeline component
@@ -81,12 +66,13 @@ func New(logger log.CtxLogger, bufferSize int) *Inspector {
 
 // NewSession creates a new session in given inspector.
 // componentID is the ID of the component being inspected (connector or processor).
+// The session will be closed and removed from the inspector when the context is
+// closed.
 func (i *Inspector) NewSession(ctx context.Context, componentID string) *Session {
 	s := &Session{
 		C:           make(chan record.Record, i.bufferSize),
 		id:          uuid.NewString(),
 		componentID: componentID,
-		logger:      i.logger.WithComponent("inspector.Session"),
 	}
 
 	i.add(s)
@@ -115,7 +101,14 @@ func (i *Inspector) Send(ctx context.Context, r record.Record) {
 	i.lock.Lock()
 	defer i.lock.Unlock()
 	for _, s := range i.sessions {
-		s.send(ctx, rClone)
+		select {
+		case s.C <- rClone:
+		default:
+			i.logger.
+				Warn(ctx).
+				Str(log.InspectorSessionID, s.id).
+				Msg("session buffer full, record will be dropped")
+		}
 	}
 }
 
