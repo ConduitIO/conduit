@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/peterbourgon/ff/v3"
@@ -74,7 +75,7 @@ func (e *Entrypoint) Serve(cfg Config) {
 // config struct.
 func (*Entrypoint) Flags(cfg *Config) *flag.FlagSet {
 	// TODO extract flags from config struct rather than defining flags manually
-	flags := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
+	flags := flag.NewFlagSet("conduit", flag.ExitOnError)
 
 	flags.StringVar(&cfg.DB.Type, "db.type", cfg.DB.Type, "database type; accepts badger,postgres,inmemory")
 	flags.StringVar(&cfg.DB.Badger.Path, "db.badger.path", cfg.DB.Badger.Path, "path to badger DB")
@@ -92,6 +93,25 @@ func (*Entrypoint) Flags(cfg *Config) *flag.FlagSet {
 
 	flags.StringVar(&cfg.Pipelines.Path, "pipelines.path", cfg.Pipelines.Path, "path to the directory that has the yaml pipeline configuration files, or a single pipeline configuration file")
 	flags.BoolVar(&cfg.Pipelines.ExitOnError, "pipelines.exit-on-error", cfg.Pipelines.ExitOnError, "exit Conduit if a pipeline experiences an error while running")
+
+	// NB: flags with prefix dev.* are hidden from help output by default, they only show up using '-dev -help'
+	showDevHelp := flags.Bool("dev", false, "used together with the dev flag it shows dev flags")
+	flags.StringVar(&cfg.dev.cpuprofile, "dev.cpuprofile", "", "write cpu profile to file")
+	flags.StringVar(&cfg.dev.memprofile, "dev.memprofile", "", "write memory profile to file")
+
+	// show user or dev flags
+	flags.Usage = func() {
+		tmpFlags := flag.NewFlagSet("conduit", flag.ExitOnError)
+		flags.VisitAll(func(f *flag.Flag) {
+			if f.Name == "dev" || strings.HasPrefix(f.Name, "dev.") != *showDevHelp {
+				return // hide flag from output
+			}
+			// reset value to its default, to ensure default is shown correctly
+			_ = f.Value.Set(f.DefValue)
+			tmpFlags.Var(f.Value, f.Name, f.Usage)
+		})
+		tmpFlags.Usage()
+	}
 
 	return flags
 }

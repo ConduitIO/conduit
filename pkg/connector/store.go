@@ -16,13 +16,13 @@ package connector
 
 import (
 	"context"
-	"encoding/json"
 	"strings"
 	"time"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/database"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/goccy/go-json"
 )
 
 const (
@@ -148,13 +148,30 @@ func (s *Store) PrepareSet(id string, instance *Instance) (func(context.Context)
 		return nil, cerrors.Errorf("can't store connector: %w", cerrors.ErrEmptyID)
 	}
 
-	raw, err := s.encode(instance)
-	if err != nil {
-		return nil, err
+	icopy := Instance{
+		ID:   instance.ID,
+		Type: instance.Type,
+		Config: Config{
+			Name:     instance.Config.Name,
+			Settings: instance.Config.Settings,
+		},
+		PipelineID:       instance.PipelineID,
+		Plugin:           instance.Plugin,
+		ProcessorIDs:     instance.ProcessorIDs,
+		ProvisionedBy:    instance.ProvisionedBy,
+		State:            instance.State,
+		CreatedAt:        instance.CreatedAt,
+		UpdatedAt:        instance.UpdatedAt,
+		LastActiveConfig: instance.LastActiveConfig,
 	}
-	key := s.addKeyPrefix(id)
 
 	return func(ctx context.Context) error {
+		raw, err := s.encode(&icopy)
+		if err != nil {
+			return err
+		}
+		key := s.addKeyPrefix(id)
+
 		err = s.db.Set(ctx, key, raw)
 		if err != nil {
 			return cerrors.Errorf("failed to store connector with ID %q: %w", id, err)
