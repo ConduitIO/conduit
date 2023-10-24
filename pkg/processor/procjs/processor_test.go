@@ -21,7 +21,6 @@ import (
 	"testing"
 	"time"
 
-	sdk "github.com/conduitio/conduit-connector-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cchan"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/processor"
@@ -414,7 +413,7 @@ func TestJSProcessor_Inspect(t *testing.T) {
 		Position:  record.Position("test-pos"),
 		Operation: record.OperationUpdate,
 		Metadata:  record.Metadata{"test": "true"},
-		Key:       sdk.RawData("test-key"),
+		Key:       record.RawData{Raw: []byte("test-key")},
 		Payload:   record.Change{},
 	}
 	recOut, err := underTest.Process(ctx, recIn)
