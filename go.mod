@@ -21,6 +21,7 @@ require (
 	github.com/dop251/goja v0.0.0-20230531210528-d7324b2d74f7
 	github.com/dop251/goja_nodejs v0.0.0-20230602164024-804a84515562
 	github.com/gammazero/deque v0.2.1
+	github.com/goccy/go-json v0.10.2
 	github.com/golang/mock v1.6.0
 	github.com/google/go-cmp v0.6.0
 	github.com/google/uuid v1.3.1

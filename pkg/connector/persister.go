@@ -26,7 +26,7 @@ import (
 
 const (
 	DefaultPersisterDelayThreshold       = time.Second
-	DefaultPersisterBundleCountThreshold = 100
+	DefaultPersisterBundleCountThreshold = 10000
 )
 
 // Persister is responsible for persisting connectors and their state when
