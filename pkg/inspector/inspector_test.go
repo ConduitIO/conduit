@@ -70,7 +70,7 @@ func TestInspector_Send_SessionClosed(t *testing.T) {
 	underTest.Send(context.Background(), r)
 	assertGotRecord(is, s, r)
 
-	s.close()
+	underTest.remove(s.id)
 	underTest.Send(
 		context.Background(),
 		record.Record{
@@ -123,7 +123,7 @@ func TestInspector_Send_SlowConsumer(t *testing.T) {
 	s := underTest.NewSession(context.Background(), "test-id")
 
 	for i := 0; i < bufferSize+1; i++ {
-		s.send(
+		underTest.Send(
 			context.Background(),
 			record.Record{
 				Position: record.Position(fmt.Sprintf("test-pos-%v", i)),
