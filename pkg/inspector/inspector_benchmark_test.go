@@ -25,6 +25,7 @@ import (
 func BenchmarkInspector_NoSession_Send(b *testing.B) {
 	ins := New(log.Nop(), 10)
 
+	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		ins.Send(context.Background(), record.Record{Position: record.Position("test-pos")})
 	}
@@ -34,6 +35,7 @@ func BenchmarkInspector_SingleSession_Send(b *testing.B) {
 	ins := New(log.Nop(), 10)
 	ins.NewSession(context.Background(), "test-id")
 
+	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		ins.Send(context.Background(), record.Record{Position: record.Position("test-pos")})
 	}
@@ -45,6 +47,7 @@ func BenchmarkInspector_10Sessions_Send(b *testing.B) {
 		ins.NewSession(context.Background(), "test-id")
 	}
 
+	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		ins.Send(context.Background(), record.Record{Position: record.Position("test-pos")})
 	}
