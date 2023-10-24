@@ -16,7 +16,6 @@ package stream
 
 import (
 	"context"
-	"reflect"
 )
 
 type FaninNode struct {
@@ -49,35 +48,48 @@ func (n *FaninNode) Run(ctx context.Context) error {
 		n.running = false
 	}()
 
-	cases := make([]reflect.SelectCase, len(n.in)+1)
-	cases[0] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(ctx.Done())}
-	for i, ch := range n.in {
-		cases[i+1] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(ch)}
-	}
+	trigger := n.trigger(ctx)
 
 	for {
-		chosen, value, ok := reflect.Select(cases)
-		// ok will be true if the channel has not been closed.
-		if !ok {
-			if chosen == 0 {
-				// context is done
-				return ctx.Err()
-			}
-			// one of the in channels is closed, remove it from select case
-			cases = append(cases[:chosen], cases[chosen+1:]...)
-			if len(cases) == 1 {
-				// only context is left, we're done
-				return nil
-			}
-			continue
+		msg, err := trigger()
+		if err != nil || msg == nil {
+			return err
 		}
-
-		msg := value.Interface().(*Message)
 
 		select {
 		case <-ctx.Done():
 			return msg.Nack(ctx.Err(), n.ID())
 		case n.out <- msg:
+		}
+	}
+}
+
+func (n *FaninNode) trigger(ctx context.Context) func() (*Message, error) {
+	in := make([]<-chan *Message, len(n.in))
+	copy(in, n.in)
+
+	f := n.chooseSelectFunc(ctx, in)
+
+	return func() (*Message, error) {
+		for {
+			chosen, msg, ok := f()
+			// ok will be true if the channel has not been closed.
+			if !ok {
+				if chosen == 0 {
+					// context is done
+					return nil, ctx.Err()
+				}
+				// one of the in channels is closed, remove it from select case
+				in = append(in[:chosen-1], in[chosen:]...)
+				if len(in) == 0 {
+					// only context is left, we're done
+					return nil, nil
+				}
+
+				f = n.chooseSelectFunc(ctx, in)
+				continue // keep selecting with new select func
+			}
+			return msg, nil
 		}
 	}
 }
