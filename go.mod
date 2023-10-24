@@ -26,7 +26,7 @@ require (
 	github.com/google/uuid v1.3.1
 	github.com/gorilla/websocket v1.5.0
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.18.0
-	github.com/hamba/avro/v2 v2.16.0
+	github.com/hamba/avro/v2 v2.17.1
 	github.com/hashicorp/go-hclog v1.5.0
 	github.com/hashicorp/go-plugin v1.5.2
 	github.com/jackc/pgx/v5 v5.4.3
