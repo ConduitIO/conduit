@@ -16,6 +16,7 @@ package pipeline
 
 import (
 	"context"
+	"regexp"
 	"strings"
 	"time"
 
@@ -111,11 +112,10 @@ func (s *Service) Get(_ context.Context, id string) (*Instance, error) {
 // Create will create a new pipeline instance with the given config and return
 // it if it was successfully saved to the database.
 func (s *Service) Create(ctx context.Context, id string, cfg Config, p ProvisionType) (*Instance, error) {
-	if cfg.Name == "" {
-		return nil, ErrNameMissing
-	}
-	if s.instanceNames[cfg.Name] {
-		return nil, ErrNameAlreadyExists
+
+	err := s.ValidatePipeline(cfg, id)
+	if err != nil {
+		return nil, cerrors.Errorf("pipeline could not be validated: %w", err)
 	}
 
 	t := time.Now()
@@ -129,7 +129,7 @@ func (s *Service) Create(ctx context.Context, id string, cfg Config, p Provision
 		DLQ:           DefaultDLQ,
 	}
 
-	err := s.store.Set(ctx, pl.ID, pl)
+	err = s.store.Set(ctx, pl.ID, pl)
 	if err != nil {
 		return nil, cerrors.Errorf("failed to save pipeline with ID %q: %w", pl.ID, err)
 	}
@@ -325,4 +325,30 @@ func (s *Service) notify(pipelineID string, err error) {
 	for _, handler := range s.handlers {
 		handler(e)
 	}
+}
+func (s *Service) ValidatePipeline(cfg Config, id string) (err error) {
+	pattern := "^[A-Za-z0-9\\-_]+$"
+
+	if cfg.Name == "" {
+		return ErrNameMissing
+	}
+	if s.instanceNames[cfg.Name] {
+		return ErrNameAlreadyExists
+	}
+	if len(cfg.Name) > 1<<6 { // 64 characters
+		return ErrNameOverLimit
+	}
+	if len(cfg.Description) > 1<<13 { // 8192 characters
+		return ErrDescriptionOverLimit
+	}
+
+	matched, err := regexp.MatchString(pattern, id)
+	if err != nil {
+		return cerrors.Errorf("failed to match string: %w", err)
+	}
+	if matched {
+		return ErrNameInvalidChars
+	}
+
+	return nil
 }

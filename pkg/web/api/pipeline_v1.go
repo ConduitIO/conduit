@@ -124,9 +124,6 @@ func (p *PipelineAPIv1) CreatePipeline(
 	if err != nil {
 		return nil, status.PipelineError(cerrors.Errorf("failed to create pipeline: %w", err))
 	}
-	if len(created.Config.Description) > 250 {
-		return nil, status.PipelineError(cerrors.Errorf("failed to create pipeline: pipeline description character limit is 250"))
-	}
 
 	// translate persisted config to proto response
 	pl := toproto.Pipeline(created)
