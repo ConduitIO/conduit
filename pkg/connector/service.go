@@ -123,7 +123,7 @@ func (s *Service) Create(
 		return nil, ErrInvalidConnectorType
 	}
 
-	pattern := "[A-Za-z0-9\\-\\_]"
+	pattern := `[A-Za-z0-9\\-\\_]`
 
 	if len(cfg.Name) > 1<<6 { // 64 characters
 		return nil, ErrNameOverLimit
