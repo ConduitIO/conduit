@@ -112,7 +112,6 @@ func (s *Service) Get(_ context.Context, id string) (*Instance, error) {
 // Create will create a new pipeline instance with the given config and return
 // it if it was successfully saved to the database.
 func (s *Service) Create(ctx context.Context, id string, cfg Config, p ProvisionType) (*Instance, error) {
-
 	err := s.ValidatePipeline(cfg, id)
 	if err != nil {
 		return nil, cerrors.Errorf("pipeline could not be validated: %w", err)
