@@ -326,7 +326,7 @@ func (s *Service) notify(pipelineID string, err error) {
 	}
 }
 func (s *Service) ValidatePipeline(cfg Config, id string) (err error) {
-	pattern := "^[A-Za-z0-9\\-_]+$"
+	pattern := "[A-Za-z0-9\\-\\_]"
 
 	if cfg.Name == "" {
 		return ErrNameMissing
