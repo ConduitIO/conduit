@@ -16,6 +16,7 @@ package connector
 
 import (
 	"context"
+	"regexp"
 	"strings"
 	"time"
 
@@ -122,6 +123,20 @@ func (s *Service) Create(
 		return nil, ErrInvalidConnectorType
 	}
 
+	pattern := "^[A-Za-z0-9\\-_]+$"
+
+	if len(cfg.Name) > 1<<6 { // 64 characters
+		return nil, ErrNameOverLimit
+	}
+
+	matched, err := regexp.MatchString(pattern, id)
+	if err != nil {
+		return nil, cerrors.Errorf("failed to match string: %w", err)
+	}
+	if !matched {
+		return nil, ErrInvalidCharacters
+	}
+
 	now := time.Now().UTC()
 	conn := &Instance{
 		ID:         id,
@@ -142,7 +157,7 @@ func (s *Service) Create(
 	}
 
 	// persist instance
-	err := s.store.Set(ctx, id, conn)
+	err = s.store.Set(ctx, id, conn)
 	if err != nil {
 		return nil, err
 	}

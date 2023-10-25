@@ -346,8 +346,8 @@ func (s *Service) ValidatePipeline(cfg Config, id string) (err error) {
 	if err != nil {
 		return cerrors.Errorf("failed to match string: %w", err)
 	}
-	if matched {
-		return ErrNameInvalidChars
+	if !matched {
+		return ErrInvalidCharacters
 	}
 
 	return nil

@@ -22,4 +22,6 @@ var (
 	ErrInvalidConnectorStateType = cerrors.New("invalid connector state type")
 	ErrProcessorIDNotFound       = cerrors.New("processor ID not found")
 	ErrConnectorRunning          = cerrors.New("connector is running")
+	ErrInvalidCharacters         = cerrors.New("connector ID contains invalid characters")
+	ErrNameOverLimit             = cerrors.New("connector name is over the character limit (64)")
 )
