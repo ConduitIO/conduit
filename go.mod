@@ -42,7 +42,7 @@ require (
 	github.com/prometheus/common v0.44.0
 	github.com/rs/zerolog v1.31.0
 	github.com/twmb/go-cache v1.2.0
-	go.uber.org/goleak v1.2.1
+	go.uber.org/goleak v1.3.0
 	go.uber.org/mock v0.3.0
 	golang.org/x/exp v0.0.0-20231006140011-7918f672742d
 	golang.org/x/tools v0.14.0
