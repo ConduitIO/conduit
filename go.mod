@@ -7,7 +7,7 @@ require (
 	github.com/Masterminds/semver/v3 v3.2.1
 	github.com/NYTimes/gziphandler v1.1.1
 	github.com/antchfx/jsonquery v1.3.3
-	github.com/bufbuild/buf v1.27.1
+	github.com/bufbuild/buf v1.27.2
 	github.com/conduitio/conduit-connector-file v0.6.0
 	github.com/conduitio/conduit-connector-generator v0.5.0
 	github.com/conduitio/conduit-connector-kafka v0.6.0
@@ -131,7 +131,7 @@ require (
 	github.com/jackc/puddle/v2 v2.2.1 // indirect
 	github.com/jdx/go-netrc v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
-	github.com/klauspost/compress v1.17.1 // indirect
+	github.com/klauspost/compress v1.17.2 // indirect
 	github.com/klauspost/pgzip v1.2.6 // indirect
 	github.com/lann/builder v0.0.0-20180802200727-47ae307949d0 // indirect
 	github.com/lann/ps v0.0.0-20150810152359-62de8c46ede0 // indirect
