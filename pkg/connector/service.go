@@ -26,6 +26,8 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/metrics/measure"
 )
 
+var myRegex = regexp.MustCompile(`[A-Za-z0-9-_.]`)
+
 // Service manages connectors.
 type Service struct {
 	logger log.CtxLogger
@@ -123,16 +125,11 @@ func (s *Service) Create(
 		return nil, ErrInvalidConnectorType
 	}
 
-	pattern := `[A-Za-z0-9\\-\\_]`
-
-	if len(cfg.Name) > 1<<6 { // 64 characters
+	if len(cfg.Name) > 64 {
 		return nil, ErrNameOverLimit
 	}
 
-	matched, err := regexp.MatchString(pattern, id)
-	if err != nil {
-		return nil, cerrors.Errorf("failed to match string: %w", err)
-	}
+	matched := myRegex.MatchString(id)
 	if !matched {
 		return nil, ErrInvalidCharacters
 	}
@@ -157,7 +154,7 @@ func (s *Service) Create(
 	}
 
 	// persist instance
-	err = s.store.Set(ctx, id, conn)
+	err := s.store.Set(ctx, id, conn)
 	if err != nil {
 		return nil, err
 	}

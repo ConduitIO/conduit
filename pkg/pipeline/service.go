@@ -16,6 +16,7 @@ package pipeline
 
 import (
 	"context"
+
 	"regexp"
 	"strings"
 	"time"
@@ -24,7 +25,10 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/database"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/measure"
+	"github.com/conduitio/conduit/pkg/foundation/multierror"
 )
+
+var myRegex = regexp.MustCompile(`[A-Za-z0-9-_.]`)
 
 type FailureEvent struct {
 	// ID is the ID of the pipeline which failed.
@@ -112,9 +116,9 @@ func (s *Service) Get(_ context.Context, id string) (*Instance, error) {
 // Create will create a new pipeline instance with the given config and return
 // it if it was successfully saved to the database.
 func (s *Service) Create(ctx context.Context, id string, cfg Config, p ProvisionType) (*Instance, error) {
-	err := s.ValidatePipeline(cfg, id)
+	err := s.validatePipeline(cfg, id)
 	if err != nil {
-		return nil, cerrors.Errorf("pipeline could not be validated: %w", err)
+		return nil, cerrors.Errorf("pipeline is invalid: %w", err)
 	}
 
 	t := time.Now()
@@ -325,29 +329,26 @@ func (s *Service) notify(pipelineID string, err error) {
 		handler(e)
 	}
 }
-func (s *Service) ValidatePipeline(cfg Config, id string) (err error) {
-	pattern := `[A-Za-z0-9\-\_]`
+func (s *Service) validatePipeline(cfg Config, id string) error {
+	// contains all the errors occurred while provisioning configuration files.
+	var multierr error
 
 	if cfg.Name == "" {
-		return ErrNameMissing
+		multierr = multierror.Append(multierr, ErrNameMissing)
 	}
 	if s.instanceNames[cfg.Name] {
-		return ErrNameAlreadyExists
+		multierr = multierror.Append(multierr, ErrNameAlreadyExists)
 	}
-	if len(cfg.Name) > 1<<6 { // 64 characters
-		return ErrNameOverLimit
+	if len(cfg.Name) > 64 {
+		multierr = multierror.Append(multierr, ErrNameOverLimit)
 	}
-	if len(cfg.Description) > 1<<13 { // 8192 characters
-		return ErrDescriptionOverLimit
+	if len(cfg.Description) > 8192 {
+		multierr = multierror.Append(multierr, ErrDescriptionOverLimit)
 	}
-
-	matched, err := regexp.MatchString(pattern, id)
-	if err != nil {
-		return cerrors.Errorf("failed to match string: %w", err)
-	}
+	matched := myRegex.MatchString(id)
 	if !matched {
-		return ErrInvalidCharacters
+		multierr = multierror.Append(multierr, ErrInvalidCharacters)
 	}
 
-	return nil
+	return multierr
 }
