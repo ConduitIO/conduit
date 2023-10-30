@@ -1,5 +1,5 @@
-buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go v1.31.0-20230926202251-048ae6ff94ca.2 h1:QxkP04rU78eHYzVVq4JvYtmJUv/gm+6kHwuKAWUQ9aI=
-buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go v1.31.0-20230926202251-048ae6ff94ca.2/go.mod h1:/j/LOrpev/FdyGhdj/sOc0peUf2KR0y4nMmLp4t1g14=
+buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go v1.31.0-20231027202514-3f42134f4c56.2 h1:T9+gjBdghph1l7yd0mhcGfmAEitvtdzYx9bBk+NDV9c=
+buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go v1.31.0-20231027202514-3f42134f4c56.2/go.mod h1:/j/LOrpev/FdyGhdj/sOc0peUf2KR0y4nMmLp4t1g14=
 cloud.google.com/go v0.26.0/go.mod h1:aQUYkXzVsufM+DwF1aE+0xfcU+56JwCaLick0ClmMTw=
 cloud.google.com/go v0.34.0/go.mod h1:aQUYkXzVsufM+DwF1aE+0xfcU+56JwCaLick0ClmMTw=
 cloud.google.com/go v0.38.0/go.mod h1:990N+gfupTy94rShfmMCWGDn0LpTmnzTp2qbd1dvSRU=

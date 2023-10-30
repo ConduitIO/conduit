@@ -3,7 +3,7 @@ module github.com/conduitio/conduit
 go 1.20
 
 require (
-	buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go v1.31.0-20230926202251-048ae6ff94ca.2
+	buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go v1.31.0-20231027202514-3f42134f4c56.2
 	github.com/Masterminds/semver/v3 v3.2.1
 	github.com/NYTimes/gziphandler v1.1.1
 	github.com/antchfx/jsonquery v1.3.3
