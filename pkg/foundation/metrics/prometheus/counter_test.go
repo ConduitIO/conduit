@@ -16,6 +16,8 @@ package prometheus
 
 import (
 	"fmt"
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"sort"
 	"testing"
 
@@ -84,7 +86,11 @@ func TestCounter(t *testing.T) {
 
 			got, err := promRegistry.Gather()
 			is.NoErr(err)
-			is.Equal(want, got)
+			opts := []cmp.Option{
+				cmpopts.IgnoreUnexported(dto.Counter{}, dto.MetricFamily{}, dto.Metric{}, dto.LabelPair{}),
+				cmpopts.IgnoreFields(dto.Counter{}, "CreatedTimestamp"),
+			}
+			is.True(cmp.Equal(want, got, opts...))
 		})
 	}
 }
@@ -179,7 +185,11 @@ func TestLabeledCounter(t *testing.T) {
 
 			got, err := promRegistry.Gather()
 			is.NoErr(err)
-			is.Equal(want, got)
+			opts := []cmp.Option{
+				cmpopts.IgnoreUnexported(dto.Counter{}, dto.MetricFamily{}, dto.Metric{}, dto.LabelPair{}),
+				cmpopts.IgnoreFields(dto.Counter{}, "CreatedTimestamp"),
+			}
+			is.True(cmp.Equal(want, got, opts...))
 		})
 	}
 }
