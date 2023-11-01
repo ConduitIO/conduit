@@ -16,6 +16,8 @@ package prometheus
 
 import (
 	"fmt"
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"sort"
 	"testing"
 
@@ -93,7 +95,14 @@ func TestHistogram(t *testing.T) {
 
 			got, err := promRegistry.Gather()
 			is.NoErr(err)
-			is.Equal(want, got)
+			opts := []cmp.Option{
+				cmpopts.IgnoreUnexported(dto.MetricFamily{}, dto.Metric{}, dto.Histogram{}, dto.Bucket{}, dto.LabelPair{}),
+				cmpopts.IgnoreFields(dto.Histogram{}, "CreatedTimestamp"),
+			}
+			diff := cmp.Diff(want, got, opts...)
+			if diff != "" {
+				t.Errorf("Expected and actual metrics are different:\n%s", diff)
+			}
 		})
 	}
 }
@@ -196,7 +205,14 @@ func TestLabeledHistogram(t *testing.T) {
 
 			got, err := promRegistry.Gather()
 			is.NoErr(err)
-			is.Equal(want, got)
+			opts := []cmp.Option{
+				cmpopts.IgnoreUnexported(dto.MetricFamily{}, dto.Metric{}, dto.Histogram{}, dto.Bucket{}, dto.LabelPair{}),
+				cmpopts.IgnoreFields(dto.Histogram{}, "CreatedTimestamp"),
+			}
+			diff := cmp.Diff(want, got, opts...)
+			if diff != "" {
+				t.Errorf("Expected and actual metrics are different:\n%s", diff)
+			}
 		})
 	}
 }

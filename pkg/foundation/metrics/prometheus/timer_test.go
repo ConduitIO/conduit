@@ -16,6 +16,8 @@ package prometheus
 
 import (
 	"fmt"
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"sort"
 	"testing"
 	"time"
@@ -94,7 +96,14 @@ func TestTimer(t *testing.T) {
 
 			got, err := promRegistry.Gather()
 			is.NoErr(err)
-			is.Equal(want, got)
+			opts := []cmp.Option{
+				cmpopts.IgnoreUnexported(dto.MetricFamily{}, dto.Metric{}, dto.Histogram{}, dto.Bucket{}),
+				cmpopts.IgnoreFields(dto.Histogram{}, "CreatedTimestamp"),
+			}
+			diff := cmp.Diff(want, got, opts...)
+			if diff != "" {
+				t.Errorf("Expected and actual metrics are different:\n%s", diff)
+			}
 		})
 	}
 }
@@ -130,14 +139,22 @@ func TestTimer_Since(t *testing.T) {
 	is.NoErr(err)
 
 	// first manually check the difference, we can't know the actual sum
-	diff := *got[0].Metric[0].Histogram.SampleSum - *want[0].Metric[0].Histogram.SampleSum
-	if diff > 0.01 { // we leave room for 10 milliseconds
-		t.Errorf("sample sum diff was greater than expected: %v", diff)
+	sumDiff := *got[0].Metric[0].Histogram.SampleSum - *want[0].Metric[0].Histogram.SampleSum
+	if sumDiff > 0.01 { // we leave room for 10 milliseconds
+		t.Errorf("sample sum diff was greater than expected: %v", sumDiff)
 	}
 
 	// add difference to our estimate and make sure everything else matches
-	*want[0].Metric[0].Histogram.SampleSum += diff
-	is.Equal(want, got)
+	*want[0].Metric[0].Histogram.SampleSum += sumDiff
+
+	opts := []cmp.Option{
+		cmpopts.IgnoreUnexported(dto.MetricFamily{}, dto.Metric{}, dto.Histogram{}, dto.Bucket{}),
+		cmpopts.IgnoreFields(dto.Histogram{}, "CreatedTimestamp"),
+	}
+	diff := cmp.Diff(want, got, opts...)
+	if diff != "" {
+		t.Errorf("Expected and actual metrics are different:\n%s", diff)
+	}
 }
 
 func TestLabeledTimer(t *testing.T) {
@@ -238,7 +255,17 @@ func TestLabeledTimer(t *testing.T) {
 
 			got, err := promRegistry.Gather()
 			is.NoErr(err)
-			is.Equal(want, got)
+			opts := []cmp.Option{
+				cmpopts.IgnoreUnexported(
+					dto.MetricFamily{},
+					dto.Metric{},
+					dto.Histogram{},
+					dto.Bucket{},
+					dto.LabelPair{},
+				),
+				cmpopts.IgnoreFields(dto.Histogram{}, "CreatedTimestamp"),
+			}
+			is.True(cmp.Equal(want, got, opts...))
 		})
 	}
 }
