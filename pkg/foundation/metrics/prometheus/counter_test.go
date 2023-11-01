@@ -20,6 +20,8 @@ import (
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/foundation/metrics"
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/matryer/is"
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
@@ -84,7 +86,11 @@ func TestCounter(t *testing.T) {
 
 			got, err := promRegistry.Gather()
 			is.NoErr(err)
-			is.Equal(want, got)
+			opts := []cmp.Option{
+				cmpopts.IgnoreUnexported(dto.Counter{}, dto.MetricFamily{}, dto.Metric{}, dto.LabelPair{}),
+				cmpopts.IgnoreFields(dto.Counter{}, "CreatedTimestamp"),
+			}
+			is.True(cmp.Equal(want, got, opts...))
 		})
 	}
 }
@@ -179,7 +185,11 @@ func TestLabeledCounter(t *testing.T) {
 
 			got, err := promRegistry.Gather()
 			is.NoErr(err)
-			is.Equal(want, got)
+			opts := []cmp.Option{
+				cmpopts.IgnoreUnexported(dto.Counter{}, dto.MetricFamily{}, dto.Metric{}, dto.LabelPair{}),
+				cmpopts.IgnoreFields(dto.Counter{}, "CreatedTimestamp"),
+			}
+			is.True(cmp.Equal(want, got, opts...))
 		})
 	}
 }
