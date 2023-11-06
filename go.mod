@@ -25,7 +25,7 @@ require (
 	github.com/golang/mock v1.6.0
 	github.com/google/go-cmp v0.6.0
 	github.com/google/uuid v1.4.0
-	github.com/gorilla/websocket v1.5.0
+	github.com/gorilla/websocket v1.5.1
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.18.0
 	github.com/hamba/avro/v2 v2.17.1
 	github.com/hashicorp/go-hclog v1.5.0
