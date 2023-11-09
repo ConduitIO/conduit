@@ -1,5 +1,5 @@
 # Start with a golang base
-FROM golang:1.20-bullseye AS base
+FROM golang:1.21-bullseye AS base
 
 # Install core tools
 RUN apt-get update &&\
