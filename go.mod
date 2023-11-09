@@ -1,6 +1,8 @@
 module github.com/conduitio/conduit
 
-go 1.20
+go 1.21
+
+toolchain go1.21.1
 
 require (
 	buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go v1.31.0-20231027202514-3f42134f4c56.2
@@ -15,7 +17,7 @@ require (
 	github.com/conduitio/conduit-connector-postgres v0.5.0
 	github.com/conduitio/conduit-connector-protocol v0.5.0
 	github.com/conduitio/conduit-connector-s3 v0.5.0
-	github.com/conduitio/conduit-connector-sdk v0.7.2
+	github.com/conduitio/conduit-connector-sdk v0.8.0
 	github.com/conduitio/yaml/v3 v3.3.0
 	github.com/dgraph-io/badger/v4 v4.2.0
 	github.com/dop251/goja v0.0.0-20230531210528-d7324b2d74f7
@@ -185,7 +187,7 @@ require (
 	golang.org/x/sys v0.14.0 // indirect
 	golang.org/x/term v0.14.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
-	golang.org/x/time v0.3.0 // indirect
+	golang.org/x/time v0.4.0 // indirect
 	google.golang.org/genproto v0.0.0-20231030173426-d783a09b4405 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20231030173426-d783a09b4405 // indirect
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
