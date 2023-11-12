@@ -75,6 +75,11 @@ type Config struct {
 
 	PluginDispenserFactories map[string]builtin.DispenserFactory
 	ProcessorBuilderRegistry *processor.BuilderRegistry
+
+	dev struct {
+		cpuprofile string
+		memprofile string
+	}
 }
 
 func DefaultConfig() Config {
