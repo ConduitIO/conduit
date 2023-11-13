@@ -8,7 +8,7 @@
 VERSION=`git describe --tags --dirty`
 GO_VERSION_CHECK=`./scripts/check-go-version.sh`
 # Needs to match with what's in .github/workflows/lint.yml
-GOLANG_CI_LINT_VER	:= v1.53.3
+GOLANG_CI_LINT_VER	:= v1.55.2
 
 # The build target should stay at the top since we want it to be the default target.
 build: check-go-version pkg/web/ui/dist build-pipeline-check
@@ -19,6 +19,12 @@ build: check-go-version pkg/web/ui/dist build-pipeline-check
 
 test:
 	go test $(GOTEST_FLAGS) -race ./...
+
+.PHONY: escape-analysis
+escape-analysis:
+	go test -gcflags "-m -m"  $(GOTEST_FLAGS) ./... 2> escape_analysis_full.txt
+	grep -vwE "(.*_test\.go|.*\/mock/.*\.go)" escape_analysis_full.txt > escape_analysis.txt
+	rm escape_analysis_full.txt
 
 test-integration:
 	# run required docker containers, execute integration tests, stop containers after tests

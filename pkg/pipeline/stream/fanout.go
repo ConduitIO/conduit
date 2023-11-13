@@ -54,6 +54,11 @@ func (n *FanoutNode) Run(ctx context.Context) error {
 		n.running = false
 	}()
 
+	if len(n.out) == 1 {
+		// shortcut if there's only 1 destination
+		return n.select1(ctx)
+	}
+
 	var wg sync.WaitGroup
 	for {
 		select {
@@ -136,6 +141,26 @@ func (n *FanoutNode) Run(ctx context.Context) error {
 				// don't care about the message anymore, so we just return the
 				// context error
 				return ctx.Err()
+			}
+		}
+	}
+}
+
+func (n *FanoutNode) select1(ctx context.Context) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case msg, ok := <-n.in:
+			if !ok {
+				// pipeline closed
+				return nil
+			}
+			select {
+			case <-ctx.Done():
+				return msg.Nack(ctx.Err(), n.ID())
+			case n.out[0] <- msg:
+				// all good
 			}
 		}
 	}
