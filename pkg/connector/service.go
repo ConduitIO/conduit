@@ -16,6 +16,7 @@ package connector
 
 import (
 	"context"
+	"github.com/conduitio/conduit/pkg/foundation/multierror"
 	"regexp"
 	"strings"
 	"time"
@@ -26,7 +27,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/metrics/measure"
 )
 
-var myRegex = regexp.MustCompile(`[A-Za-z0-9-_.]`)
+var idRegex = regexp.MustCompile(`^[A-Za-z0-9-_]+$`)
 
 // Service manages connectors.
 type Service struct {
@@ -114,6 +115,11 @@ func (s *Service) Create(
 	cfg Config,
 	p ProvisionType,
 ) (*Instance, error) {
+	err := s.validateConnector(cfg, id)
+	if err != nil {
+		return nil, cerrors.Errorf("connector is invalid: %w", err)
+	}
+
 	// determine the path of the Connector binary
 	if plugin == "" {
 		return nil, cerrors.New("must provide a plugin")
@@ -123,15 +129,6 @@ func (s *Service) Create(
 	}
 	if t != TypeSource && t != TypeDestination {
 		return nil, ErrInvalidConnectorType
-	}
-
-	if len(cfg.Name) > 64 {
-		return nil, ErrNameOverLimit
-	}
-
-	matched := myRegex.MatchString(id)
-	if !matched {
-		return nil, ErrInvalidCharacters
 	}
 
 	now := time.Now().UTC()
@@ -154,7 +151,7 @@ func (s *Service) Create(
 	}
 
 	// persist instance
-	err := s.store.Set(ctx, id, conn)
+	err = s.store.Set(ctx, id, conn)
 	if err != nil {
 		return nil, err
 	}
@@ -286,4 +283,28 @@ func (s *Service) SetState(ctx context.Context, id string, state any) (*Instance
 	}
 
 	return conn, err
+}
+func (s *Service) validateConnector(cfg Config, id string) error {
+	// contains all the errors occurred while provisioning configuration files.
+	var multierr error
+
+	if cfg.Name == "" {
+		multierr = multierror.Append(multierr, ErrNameMissing)
+	}
+	if len(cfg.Name) > 64 {
+		multierr = multierror.Append(multierr, ErrNameOverLimit)
+	}
+	if id == "" {
+		multierr = multierror.Append(multierr, ErrIDMissing)
+	} else {
+		if len(id) > 64 {
+			multierr = multierror.Append(multierr, ErrIDOverLimit)
+		}
+		matched := idRegex.MatchString(id)
+		if !matched {
+			multierr = multierror.Append(multierr, ErrInvalidCharacters)
+		}
+	}
+
+	return multierr
 }

@@ -26,6 +26,7 @@ var (
 	ErrNameAlreadyExists    = cerrors.New("pipeline name already exists")
 	ErrInvalidCharacters    = cerrors.New("pipeline ID contains invalid characters")
 	ErrNameOverLimit        = cerrors.New("pipeline name is over the character limit (64)")
+	ErrIDOverLimit          = cerrors.New("pipeline ID is over the character limit (64)")
 	ErrDescriptionOverLimit = cerrors.New("pipeline description is over the character limit (8192)")
 	ErrConnectorIDNotFound  = cerrors.New("connector ID not found")
 	ErrProcessorIDNotFound  = cerrors.New("processor ID not found")
