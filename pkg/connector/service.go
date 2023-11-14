@@ -16,7 +16,6 @@ package connector
 
 import (
 	"context"
-	"github.com/conduitio/conduit/pkg/foundation/multierror"
 	"regexp"
 	"strings"
 	"time"
@@ -25,6 +24,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/database"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/measure"
+	"github.com/conduitio/conduit/pkg/foundation/multierror"
 )
 
 var idRegex = regexp.MustCompile(`^[A-Za-z0-9-_:]+$`)
