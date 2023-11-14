@@ -146,6 +146,109 @@ func TestService_CreateSuccess(t *testing.T) {
 	}
 }
 
+func TestService_Create_ValidateSuccess(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	logger := log.Nop()
+	db := &inmemory.DB{}
+
+	service := NewService(logger, db)
+
+	testCases := []struct {
+		name   string
+		connID string
+		data   Config
+	}{{
+		name:   "valid config name",
+		connID: uuid.NewString(),
+		data: Config{
+			Name:        "Name#@-/_0%$",
+			Description: "",
+		},
+	}, {
+		name:   "valid connector ID",
+		connID: "Aa0-_",
+		data: Config{
+			Name:        "test-connector",
+			Description: "",
+		},
+	}}
+
+	for _, tt := range testCases {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := service.Create(
+				ctx,
+				tt.connID,
+				tt.data,
+				ProvisionTypeAPI,
+			)
+			is.True(got != nil)
+			is.Equal(err, nil)
+		})
+	}
+}
+
+func TestService_Create_ValidateError(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	logger := log.Nop()
+	db := &inmemory.DB{}
+
+	service := NewService(logger, db)
+
+	testCases := []struct {
+		name    string
+		connID  string
+		errType error
+		data    Config
+	}{{
+		name:    "empty config name",
+		connID:  uuid.NewString(),
+		errType: ErrNameMissing,
+		data: Config{
+			Name:        "",
+			Description: "",
+		},
+	}, {
+		name:    "pipeline name over 64 characters",
+		connID:  uuid.NewString(),
+		errType: ErrNameOverLimit,
+		data: Config{
+			Name:        "aaaaaaaaa1bbbbbbbbb2ccccccccc3ddddddddd4eeeeeeeee5fffffffff6ggggg",
+			Description: "",
+		},
+	}, {
+		name:    "pipeline ID over 64 characters",
+		connID:  "aaaaaaaaa1bbbbbbbbb2ccccccccc3ddddddddd4eeeeeeeee5fffffffff6ggggg",
+		errType: ErrIDOverLimit,
+		data: Config{
+			Name:        "test-connector",
+			Description: "",
+		},
+	}, {
+		name:    "invalid characters in connector ID",
+		connID:  "a%bc",
+		errType: ErrInvalidCharacters,
+		data: Config{
+			Name:        "test-connector",
+			Description: "",
+		},
+	}}
+
+	for _, tt := range testCases {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := service.Create(
+				ctx,
+				tt.connID,
+				tt.data,
+				ProvisionTypeAPI,
+			)
+			is.True(cerrors.Is(err, tt.errType))
+			is.Equal(got, nil)
+		})
+	}
+}
+
 func TestService_Create_PipelineNameExists(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()

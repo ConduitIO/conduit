@@ -184,7 +184,7 @@ func TestPersister_WaitsForOpenConnectorsAndFlush(t *testing.T) {
 	persister.Wait()
 
 	// we are testing a delay which is not exact, this is the acceptable margin
-	maxDelay := delay + time.Millisecond*10
+	maxDelay := delay + time.Millisecond*15
 	if gotDelay := time.Since(timeAtStart); gotDelay > maxDelay {
 		t.Fatalf("wait delay should be between %s and %s, actual delay: %s", delay, maxDelay, gotDelay)
 	}

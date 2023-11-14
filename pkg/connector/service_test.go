@@ -405,7 +405,6 @@ func TestService_Create_ValidateError(t *testing.T) {
 				tt.data,
 				ProvisionTypeAPI,
 			)
-			is.True(err != nil)
 			is.True(cerrors.Is(err, tt.errType))
 			is.Equal(got, nil)
 		})
