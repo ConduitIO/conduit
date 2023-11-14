@@ -27,7 +27,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/multierror"
 )
 
-var idRegex = regexp.MustCompile(`^[A-Za-z0-9-_]+$`)
+var idRegex = regexp.MustCompile(`^[A-Za-z0-9-_:]+$`)
 
 type FailureEvent struct {
 	// ID is the ID of the pipeline which failed.
@@ -341,15 +341,19 @@ func (s *Service) validatePipeline(cfg Config, id string) error {
 	if len(cfg.Name) > 64 {
 		multierr = multierror.Append(multierr, ErrNameOverLimit)
 	}
-	if len(id) > 64 {
-		multierr = multierror.Append(multierr, ErrIDOverLimit)
-	}
 	if len(cfg.Description) > 8192 {
 		multierr = multierror.Append(multierr, ErrDescriptionOverLimit)
 	}
-	matched := idRegex.MatchString(id)
-	if !matched {
-		multierr = multierror.Append(multierr, ErrInvalidCharacters)
+	if id == "" {
+		multierr = multierror.Append(multierr, ErrIDMissing)
+	} else {
+		matched := idRegex.MatchString(id)
+		if !matched {
+			multierr = multierror.Append(multierr, ErrInvalidCharacters)
+		}
+	}
+	if len(id) > 64 {
+		multierr = multierror.Append(multierr, ErrIDOverLimit)
 	}
 
 	return multierr

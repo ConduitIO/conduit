@@ -27,7 +27,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/metrics/measure"
 )
 
-var idRegex = regexp.MustCompile(`^[A-Za-z0-9-_]+$`)
+var idRegex = regexp.MustCompile(`^[A-Za-z0-9-_:]+$`)
 
 // Service manages connectors.
 type Service struct {
@@ -297,13 +297,13 @@ func (s *Service) validateConnector(cfg Config, id string) error {
 	if id == "" {
 		multierr = multierror.Append(multierr, ErrIDMissing)
 	} else {
-		if len(id) > 64 {
-			multierr = multierror.Append(multierr, ErrIDOverLimit)
-		}
 		matched := idRegex.MatchString(id)
 		if !matched {
 			multierr = multierror.Append(multierr, ErrInvalidCharacters)
 		}
+	}
+	if len(id) > 64 {
+		multierr = multierror.Append(multierr, ErrIDOverLimit)
 	}
 
 	return multierr
