@@ -22,18 +22,18 @@ around processors.
 
 ### Goals
 
-* Keep existing processors to preserve backward compatibility.
-  * Old processors should only be deprecated but continue to work.
-* Add the ability to run a processor only on records that match a certain condition.
-* Generate documentation for processors from code.
-  * Ensure the generated documentation includes an example usage of each processor.
-* Prepare a processor interface that won't have to change if/when we introduce merging
+- Keep existing processors to preserve backward compatibility.
+  - Old processors should only be deprecated but continue to work.
+- Add the ability to run a processor only on records that match a certain condition.
+- Generate documentation for processors from code.
+  - Ensure the generated documentation includes an example usage of each processor.
+- Prepare a processor interface that won't have to change if/when we introduce merging
   and splitting of records and micro-batching.
-* Create generic processors that can work on any field of the OpenCDC record (or a subset
+- Create generic processors that can work on any field of the OpenCDC record (or a subset
   of fields, when applicable) instead of separate processors working on different fields.
-* Restructure existing processors (group similar processors, split some processors) and
+- Restructure existing processors (group similar processors, split some processors) and
   choose naming that will make them easier to understand for users.
-* Be able to list available processors in the HTTP/gRPC API.
+- Be able to list available processors in the HTTP/gRPC API.
 
 ### Questions
 
@@ -102,22 +102,22 @@ type Processor interface {
 Notice that the processor returns its own specification in the first method. This
 is required so that Conduit can build a registry of all available processors
 and give the user more information about them (see
-[Listing processor plugins](#Listing-processor-plugins)).
+[Listing processor plugins](#listing-processor-plugins)).
 
 A few notes about the `Process` method:
 
-* Even though we are not adding support for processing multiple records at the
+- Even though we are not adding support for processing multiple records at the
   same time, we propose to design the interface in a way that will let us add
   that functionality in the future without breaking changes. This means that the
   function will for now be called only with a single record.
-* Notice that the return value is a slice of type `ProcessedRecord`. The purpose
+- Notice that the return value is a slice of type `ProcessedRecord`. The purpose
   behind this is to be able to figure out what happened to each input record. This
   way we can associate each input record to an output record and know what happened
   to it (was it filtered out, split, merged, or only transformed). This distinction
   is important because of acknowledgments (e.g. if a record is split into multiple
   records, Conduit will acknowledge the original record only once all split records
   are acknowledged).
-* If an error happens in `Process` it should be stored in the `ProcessedRecord` that
+- If an error happens in `Process` it should be stored in the `ProcessedRecord` that
   was being processed when the error occurred. In that case the processor has two
   options on how to continue processing the remaining records in the slice.
   1. If the processor has no side effects and cheap it can process the remaining
@@ -254,9 +254,9 @@ record [output format](https://conduit.io/docs/connectors/output-formats).
 
 Here are a few examples of addressing record fields:
 
-* `.` - references the whole record
-* `.Payload.After` - references the field that normally carries the payload
-* `{{ eq .Key.foo "123" }}` - evaluates to `true` if the key contains the value
+- `.` - references the whole record
+- `.Payload.After` - references the field that normally carries the payload
+- `{{ eq .Key.foo "123" }}` - evaluates to `true` if the key contains the value
   "123" in field `foo`
 
 Note that referencing a field does not require the expression to be nested inside of
@@ -294,23 +294,23 @@ recommendation separately.
 
 Here is an overview of the recommended set of processors:
 
-* `field.set` - set a field in the record
-* `field.subset.exclude` - remove fields from the record if they are on the list
-* `field.subset.include` - remove fields from the record if they _are not_ on the list
-* `field.rename` - rename fields
-* `field.flatten`* - recursively flatten a structured field
-* `field.convert` - convert one type into another in a structured payload
-* `filter` - ack record and remove it from the pipeline
-* `decode.avro` - decode Avro data into structured data
-* `decode.json` - decode a JSON string into structured data
-* `encode.avro` - encode structured data into Avro data
-* `encode.json` - encode structured data into a JSON string
-* `unwrap.opencdc`* - unwrap an OpenCDC payload into the current record
-* `unwrap.kafkaconnect` - unwrap a Kafka Connect payload into the current record
-* `unwrap.debezium` - unwrap a Debezium payload into the current record
-* `webhook.http` - send a HTTP request for each record
-* `webhook.grpc`* - send a gRPC request for each record
-* `custom.javascript` - execute JavaScript code for each record
+- `field.set` - set a field in the record
+- `field.subset.exclude` - remove fields from the record if they are on the list
+- `field.subset.include` - remove fields from the record if they _are not_ on the list
+- `field.rename` - rename fields
+- `field.flatten`* - recursively flatten a structured field
+- `field.convert` - convert one type into another in a structured payload
+- `filter` - ack record and remove it from the pipeline
+- `decode.avro` - decode Avro data into structured data
+- `decode.json` - decode a JSON string into structured data
+- `encode.avro` - encode structured data into Avro data
+- `encode.json` - encode structured data into a JSON string
+- `unwrap.opencdc`* - unwrap an OpenCDC payload into the current record
+- `unwrap.kafkaconnect` - unwrap a Kafka Connect payload into the current record
+- `unwrap.debezium` - unwrap a Debezium payload into the current record
+- `webhook.http` - send a HTTP request for each record
+- `webhook.grpc`* - send a gRPC request for each record
+- `custom.javascript` - execute JavaScript code for each record
 
 \*Processors marked with a star are planned in the future and not part of the
 "Better Processors" work.
@@ -337,12 +337,12 @@ string, therefore we don't have to do any conversion.
 
 #### Configuration
 
-* `field` (required) - is the target field, as it would be addressed in a Go template.
-* `value` (required) - is a Go template expression which will be evaluated and stored in `field`.
+- `field` (required) - is the target field, as it would be addressed in a Go template.
+- `value` (required) - is a Go template expression which will be evaluated and stored in `field`.
 
 #### Example
 
-* copy field "foo" from the key to the payload
+- copy field "foo" from the key to the payload
 
 In this case `.Payloa.After` needs to contain structured data, otherwise the
 processor returns an error.
@@ -356,7 +356,7 @@ processors:
     value: "{{ .Key.foo }}"
 ```
 
-* set field "bar" in the key to the static value "hidden"
+- set field "bar" in the key to the static value "hidden"
 
 ```yaml
 processors:
@@ -367,7 +367,7 @@ processors:
     value: "hidden"
 ```
 
-* hoist the payload into field "hoisted"
+- hoist the payload into field "hoisted"
 
 This example is a bit more complicated. The result of evaluating the value is a
 JSON object with a single field named "hoisted" and the value set to the contents
@@ -391,7 +391,7 @@ It is not allowed to exclude `.Position` or `.Operation`.
 
 #### Configuration
 
-* `fields` (required) - comma separated fields that should be excluded from the record.
+- `fields` (required) - comma separated fields that should be excluded from the record.
 
 #### Example
 
@@ -419,7 +419,7 @@ metadata fields will be removed, the remaining record fields won't be changed
 
 #### Configuration
 
-* `fields` (required) - comma separated fields that should be included in the record.
+- `fields` (required) - comma separated fields that should be included in the record.
 
 #### Example
 
@@ -451,7 +451,7 @@ that are nested.
 
 #### Configuration
 
-* `mapping` (required) - comma separated key:value pairs, where the key is the target
+- `mapping` (required) - comma separated key:value pairs, where the key is the target
   field reference and value is the name of the new field (only name, not the full path).
 
 #### Example
@@ -475,8 +475,8 @@ it only runs on structured data.
 
 #### Configuration
 
-* `field` (required) - is the target field, as it would be addressed in a Go template.
-* `separator` (default=`.`) - is the separator used when concatenating nested field keys.
+- `field` (required) - is the target field, as it would be addressed in a Go template.
+- `separator` (default=`.`) - is the separator used when concatenating nested field keys.
 
 #### Example
 
@@ -515,8 +515,8 @@ it only runs on fields nested in structured data.
 
 #### Configuration
 
-* `field` (required) - is the target field, as it would be addressed in a Go template.
-* `type` (required) - is the target field type after conversion.
+- `field` (required) - is the target field, as it would be addressed in a Go template.
+- `type` (required) - is the target field type after conversion.
 
 #### Example
 
@@ -566,7 +566,7 @@ we can still reuse the same code for most of the processor.
 
 Taken from [existing docs](https://conduit.io/docs/processors/builtin/#configuration).
 
-- `url` (required) - URL of the schema registry (e.g. http://localhost:8085).
+- `url` (required) - URL of the schema registry (e.g. `http://localhost:8085`).
 - `auth.basic.username` (optional) - Configures the username to use with basic
   authentication. This option is required if auth.basic.password contains a value.
   If both `auth.basic.username` and `auth.basic.password` are empty basic authentication
@@ -614,7 +614,7 @@ it only runs on structured data.
 
 #### Configuration
 
-* `field` (required) - is the target field, as it would be addressed in a Go template.
+- `field` (required) - is the target field, as it would be addressed in a Go template.
 
 #### Example
 
@@ -644,7 +644,7 @@ Differences compared to the old processor:
 
 Taken from [existing docs](https://conduit.io/docs/processors/builtin/#configuration-1).
 
-- `url` (required) - URL of the schema registry (e.g. http://localhost:8085).
+- `url` (required) - URL of the schema registry (e.g. `http://localhost:8085`).
 - `schema.strategy` (required, Enum: `preRegistered`,`autoRegister`) - Specifies which
   strategy to use to determine the schema for the record. Available strategies:
   - `preRegistered` (recommended) - Download an existing schema from the schema registry.
@@ -655,7 +655,7 @@ Taken from [existing docs](https://conduit.io/docs/processors/builtin/#configura
     starting with `schema.autoRegister.*`.
 - `schema.preRegistered.subject` (required if `schema.strategy` = `preRegistered`) -
   Specifies the subject of the schema in the schema registry used to encode the record.
-- `schema.preRegistered.version` (required if `schema.strategy` = `preRegistered`) - 
+- `schema.preRegistered.version` (required if `schema.strategy` = `preRegistered`) -
   Specifies the version of the schema in the schema registry used to encode the record.
 - `schema.autoRegister.subject` (required if `schema.strategy` = `autoRegister`) -
   Specifies the subject name under which the inferred schema will be registered in
@@ -707,7 +707,7 @@ it only runs on structured data.
 
 #### Configuration
 
-* `field` (required) - is the target field, as it would be addressed in a Go template.
+- `field` (required) - is the target field, as it would be addressed in a Go template.
 
 #### Example
 
@@ -737,7 +737,7 @@ running this processor.
 
 #### Configuration
 
-* `field` (required) - is the target field, as it would be addressed in a Go template.
+- `field` (required) - is the target field, as it would be addressed in a Go template.
 
 #### Example
 
@@ -762,7 +762,7 @@ running this processor.
 
 #### Configuration
 
-* `field` (required) - is the target field, as it would be addressed in a Go template.
+- `field` (required) - is the target field, as it would be addressed in a Go template.
 
 #### Example
 
