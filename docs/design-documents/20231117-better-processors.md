@@ -34,6 +34,9 @@ around processors.
 - Restructure existing processors (group similar processors, split some processors) and
   choose naming that will make them easier to understand for users.
 - Be able to list available processors in the HTTP/gRPC API.
+- Allow users to plug in their own processor without recompiling Conduit.
+- Expand the processor lifecycle to enable implementing more complex processors that
+  require an initialization and shutdown.
 
 ### Questions
 
@@ -280,6 +283,32 @@ need to manually implement a compatible evaluator, which should be able to take
 shortcuts and reach better performance, since we know that we are always evaluating
 the expressions on an OpenCDC record (no need for reflection if we are not diving into
 the key or payload).
+
+### Documenting processors
+
+Having the best processors doesn't help our users if they don't know how to use them.
+Therefore, it is important to define how we are going to document them and maintain the
+documentation up to date.
+
+The processor documentation will be written by developers implementing the processors,
+so it would make sense to keep the documentation close to the code. Our recommendation
+is to use Go comments for this purpose. We want to take a similar approach like
+[paramgen](https://github.com/ConduitIO/conduit-connector-sdk/tree/main/cmd/paramgen)
+in the connector SDK. The developer should be able to write the documentation once in
+a Go idiomatic way and use a tool to extract it into a format that can be used on the
+[documentation website](https://conduit.io/docs/introduction/getting-started/).
+
+We can use the same tool to extract the documentation into the connector specification
+(see [processor lifecycle](#processor-lifecycle)). This way the same documentation can
+be retrieved programmatically and returned in API responses, which in turn makes it
+possible to display it to users in the UI without the need to leave the page.
+Additionally, it allows us to ship the documentation for custom pluggable processors
+that might not be documented on the official Conduit website.
+
+Ideally, each processor would also provide an example of its usage and a comparison
+of the record before and after the execution. The tool for extracting documentation
+should be able to extract the example separately so that it can be displayed separate
+from the processor description.
 
 ## Processors
 
