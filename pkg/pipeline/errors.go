@@ -23,7 +23,7 @@ var (
 	ErrPipelineNotRunning   = cerrors.New("pipeline not running")
 	ErrInstanceNotFound     = cerrors.New("pipeline instance not found")
 	ErrNameMissing          = cerrors.New("must provide a pipeline name")
-	ErrIDMissing            = cerrors.New("must provide a connector ID")
+	ErrIDMissing            = cerrors.New("must provide a pipeline ID")
 	ErrNameAlreadyExists    = cerrors.New("pipeline name already exists")
 	ErrInvalidCharacters    = cerrors.New("pipeline ID contains invalid characters")
 	ErrNameOverLimit        = cerrors.New("pipeline name is over the character limit (64)")
