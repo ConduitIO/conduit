@@ -128,7 +128,6 @@ func (c *ConnectorAPIv1) CreateConnector(
 		req.PipelineId,
 		fromproto.ConnectorConfig(req.Config),
 	)
-
 	if err != nil {
 		return nil, status.ConnectorError(cerrors.Errorf("failed to create connector: %w", err))
 	}
