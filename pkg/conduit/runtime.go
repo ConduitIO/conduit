@@ -228,6 +228,20 @@ func (r *Runtime) Run(ctx context.Context) (err error) {
 			}
 		}()
 	}
+	if r.Config.dev.blockprofile != "" {
+		runtime.SetBlockProfileRate(1)
+		defer func() {
+			f, err := os.Create(r.Config.dev.blockprofile)
+			if err != nil {
+				r.logger.Err(ctx, err).Msg("could not create block profile")
+				return
+			}
+			defer f.Close()
+			if err := pprof.Lookup("block").WriteTo(f, 0); err != nil {
+				r.logger.Err(ctx, err).Msg("could not write block profile")
+			}
+		}()
+	}
 
 	defer func() {
 		if err != nil {
