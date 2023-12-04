@@ -19,7 +19,7 @@ import (
 	"regexp"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/plugin"
+	connectorPlugin "github.com/conduitio/conduit/pkg/plugin/connector"
 	"github.com/conduitio/conduit/pkg/web/api/status"
 	"github.com/conduitio/conduit/pkg/web/api/toproto"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
@@ -30,8 +30,8 @@ import (
 
 // PluginOrchestrator defines a CRUD interface that manages the Plugin resource.
 type PluginOrchestrator interface {
-	// List will return all plugins' specs.
-	List(ctx context.Context) (map[string]plugin.Specification, error)
+	// ListConnectors will return all connector plugins' specs.
+	ListConnectors(ctx context.Context) (map[string]connectorPlugin.Specification, error)
 }
 
 type PluginAPIv1 struct {
@@ -60,7 +60,7 @@ func (p *PluginAPIv1) ListPlugins(
 		}
 	}
 
-	mp, err := p.ps.List(ctx)
+	mp, err := p.ps.ListConnectors(ctx)
 	if err != nil {
 		return nil, status.PluginError(err)
 	}

@@ -29,7 +29,8 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
-	builtinv1 "github.com/conduitio/conduit/pkg/plugin/builtin/v1"
+	"github.com/conduitio/conduit/pkg/plugin/connector"
+	builtinv1 "github.com/conduitio/conduit/pkg/plugin/connector/builtin/v1"
 )
 
 var (
@@ -56,29 +57,29 @@ type Registry struct {
 
 type blueprint struct {
 	fullName         plugin.FullName
-	specification    plugin.Specification
+	specification    connector.Specification
 	dispenserFactory DispenserFactory
 }
 
-type DispenserFactory func(name plugin.FullName, logger log.CtxLogger) plugin.Dispenser
+type DispenserFactory func(name plugin.FullName, logger log.CtxLogger) connector.Dispenser
 
-func NewDispenserFactory(connector sdk.Connector) DispenserFactory {
-	if connector.NewSource == nil {
-		connector.NewSource = func() sdk.Source { return nil }
+func NewDispenserFactory(conn sdk.Connector) DispenserFactory {
+	if conn.NewSource == nil {
+		conn.NewSource = func() sdk.Source { return nil }
 	}
-	if connector.NewDestination == nil {
-		connector.NewDestination = func() sdk.Destination { return nil }
+	if conn.NewDestination == nil {
+		conn.NewDestination = func() sdk.Destination { return nil }
 	}
 
-	return func(name plugin.FullName, logger log.CtxLogger) plugin.Dispenser {
+	return func(name plugin.FullName, logger log.CtxLogger) connector.Dispenser {
 		return builtinv1.NewDispenser(
 			name,
 			logger,
 			func() cpluginv1.SpecifierPlugin {
-				return sdk.NewSpecifierPlugin(connector.NewSpecification(), connector.NewSource(), connector.NewDestination())
+				return sdk.NewSpecifierPlugin(conn.NewSpecification(), conn.NewSource(), conn.NewDestination())
 			},
-			func() cpluginv1.SourcePlugin { return sdk.NewSourcePlugin(connector.NewSource()) },
-			func() cpluginv1.DestinationPlugin { return sdk.NewDestinationPlugin(connector.NewDestination()) },
+			func() cpluginv1.SourcePlugin { return sdk.NewSourcePlugin(conn.NewSource()) },
+			func() cpluginv1.DestinationPlugin { return sdk.NewDestinationPlugin(conn.NewDestination()) },
 		)
 	}
 }
@@ -135,15 +136,15 @@ func loadPlugins(buildInfo *debug.BuildInfo, factories map[string]DispenserFacto
 	return plugins
 }
 
-func getSpecification(moduleName string, factory DispenserFactory, buildInfo *debug.BuildInfo) (plugin.Specification, error) {
+func getSpecification(moduleName string, factory DispenserFactory, buildInfo *debug.BuildInfo) (connector.Specification, error) {
 	dispenser := factory("", log.CtxLogger{})
 	specPlugin, err := dispenser.DispenseSpecifier()
 	if err != nil {
-		return plugin.Specification{}, cerrors.Errorf("could not dispense specifier for built in plugin: %w", err)
+		return connector.Specification{}, cerrors.Errorf("could not dispense specifier for built in plugin: %w", err)
 	}
 	specs, err := specPlugin.Specify()
 	if err != nil {
-		return plugin.Specification{}, cerrors.Errorf("could not get specs for built in plugin: %w", err)
+		return connector.Specification{}, cerrors.Errorf("could not get specs for built in plugin: %w", err)
 	}
 
 	if version := getModuleVersion(buildInfo.Deps, moduleName); version != "" {
@@ -170,7 +171,7 @@ func newFullName(pluginName, pluginVersion string) plugin.FullName {
 	return plugin.NewFullName(plugin.PluginTypeBuiltin, pluginName, pluginVersion)
 }
 
-func (r *Registry) NewDispenser(logger log.CtxLogger, fullName plugin.FullName) (plugin.Dispenser, error) {
+func (r *Registry) NewDispenser(logger log.CtxLogger, fullName plugin.FullName) (connector.Dispenser, error) {
 	versionMap, ok := r.plugins[fullName.PluginName()]
 	if !ok {
 		return nil, plugin.ErrPluginNotFound
@@ -187,8 +188,8 @@ func (r *Registry) NewDispenser(logger log.CtxLogger, fullName plugin.FullName) 
 	return b.dispenserFactory(fullName, logger), nil
 }
 
-func (r *Registry) List() map[plugin.FullName]plugin.Specification {
-	specs := make(map[plugin.FullName]plugin.Specification, len(r.plugins))
+func (r *Registry) List() map[plugin.FullName]connector.Specification {
+	specs := make(map[plugin.FullName]connector.Specification, len(r.plugins))
 	for _, versions := range r.plugins {
 		for version, bp := range versions {
 			if version == plugin.PluginVersionLatest {

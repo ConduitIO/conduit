@@ -20,12 +20,12 @@ import (
 	"github.com/conduitio/conduit-connector-protocol/cpluginv1"
 	"github.com/conduitio/conduit-connector-protocol/cpluginv1/mock"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/conduitio/conduit/pkg/plugin"
+	"github.com/conduitio/conduit/pkg/plugin/connector"
 	"github.com/golang/mock/gomock" //nolint:depguard // the protocol is using the old mock package, this will be changed when we update conduit-connector-protocol
 	"github.com/rs/zerolog"
 )
 
-func newTestDispenser(t *testing.T) (plugin.Dispenser, *mock.SpecifierPlugin, *mock.SourcePlugin, *mock.DestinationPlugin) {
+func newTestDispenser(t *testing.T) (connector.Dispenser, *mock.SpecifierPlugin, *mock.SourcePlugin, *mock.DestinationPlugin) {
 	logger := log.InitLogger(zerolog.InfoLevel, log.FormatCLI)
 	ctrl := gomock.NewController(t)
 

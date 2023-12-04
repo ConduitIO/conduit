@@ -20,9 +20,9 @@ import (
 	"github.com/conduitio/conduit-connector-protocol/cpluginv1"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/conduitio/conduit/pkg/plugin"
-	"github.com/conduitio/conduit/pkg/plugin/builtin/v1/internal/fromplugin"
-	"github.com/conduitio/conduit/pkg/plugin/builtin/v1/internal/toplugin"
+	"github.com/conduitio/conduit/pkg/plugin/connector"
+	"github.com/conduitio/conduit/pkg/plugin/connector/builtin/v1/internal/fromplugin"
+	"github.com/conduitio/conduit/pkg/plugin/connector/builtin/v1/internal/toplugin"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/rs/zerolog"
 )
@@ -43,7 +43,7 @@ type destinationPluginAdapter struct {
 	stream *stream[cpluginv1.DestinationRunRequest, cpluginv1.DestinationRunResponse]
 }
 
-var _ plugin.DestinationPlugin = (*destinationPluginAdapter)(nil)
+var _ connector.DestinationPlugin = (*destinationPluginAdapter)(nil)
 
 func newDestinationPluginAdapter(impl cpluginv1.DestinationPlugin, logger log.CtxLogger) *destinationPluginAdapter {
 	return &destinationPluginAdapter{
@@ -83,7 +83,7 @@ func (s *destinationPluginAdapter) Start(ctx context.Context) error {
 				s.logger.Err(ctx, err).Msg("stream already stopped")
 			}
 		} else {
-			s.stream.stop(plugin.ErrStreamNotOpen)
+			s.stream.stop(connector.ErrStreamNotOpen)
 		}
 		s.logger.Trace(ctx).Msg("Run stopped")
 	}()
@@ -93,7 +93,7 @@ func (s *destinationPluginAdapter) Start(ctx context.Context) error {
 
 func (s *destinationPluginAdapter) Write(ctx context.Context, r record.Record) error {
 	if s.stream == nil {
-		return plugin.ErrStreamNotOpen
+		return connector.ErrStreamNotOpen
 	}
 
 	req, err := toplugin.DestinationRunRequest(r)
@@ -112,7 +112,7 @@ func (s *destinationPluginAdapter) Write(ctx context.Context, r record.Record) e
 
 func (s *destinationPluginAdapter) Ack(ctx context.Context) (record.Position, error) {
 	if s.stream == nil {
-		return nil, plugin.ErrStreamNotOpen
+		return nil, connector.ErrStreamNotOpen
 	}
 
 	s.logger.Trace(ctx).Msg("receiving ack")
@@ -131,7 +131,7 @@ func (s *destinationPluginAdapter) Ack(ctx context.Context) (record.Position, er
 
 func (s *destinationPluginAdapter) Stop(ctx context.Context, lastPosition record.Position) error {
 	if s.stream == nil {
-		return plugin.ErrStreamNotOpen
+		return connector.ErrStreamNotOpen
 	}
 
 	s.logger.Trace(ctx).Bytes(log.RecordPositionField, lastPosition).Msg("calling Stop")

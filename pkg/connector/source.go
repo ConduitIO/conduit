@@ -21,14 +21,15 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
+	connectorPlugin "github.com/conduitio/conduit/pkg/plugin/connector"
 	"github.com/conduitio/conduit/pkg/record"
 )
 
 type Source struct {
 	Instance *Instance
 
-	dispenser plugin.Dispenser
-	plugin    plugin.SourcePlugin
+	dispenser connectorPlugin.Dispenser
+	plugin    connectorPlugin.SourcePlugin
 
 	// errs is used to signal the node that the connector experienced an error
 	// when it was processing something asynchronously (e.g. persisting state).
@@ -37,7 +38,7 @@ type Source struct {
 	// stopStream is a function that closes the context of the stream
 	stopStream context.CancelFunc
 
-	// wg tracks the number of in flight calls to the plugin.
+	// wg tracks the number of in flight calls to the connectorPlugin.
 	wg sync.WaitGroup
 }
 

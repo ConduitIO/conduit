@@ -19,7 +19,7 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/conduitio/conduit/pkg/plugin"
+	connectorPlugin "github.com/conduitio/conduit/pkg/plugin/connector"
 	"github.com/conduitio/conduit/pkg/web/api/mock"
 	"github.com/conduitio/conduit/pkg/web/api/toproto"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
@@ -37,31 +37,31 @@ func TestPluginAPIv1_ListPluginByName(t *testing.T) {
 
 	names := []string{"do-not-want-this-plugin", "want-p1", "want-p2", "skip", "another-skipped"}
 
-	plsMap := make(map[string]plugin.Specification)
-	pls := make([]plugin.Specification, 0)
+	plsMap := make(map[string]connectorPlugin.Specification)
+	pls := make([]connectorPlugin.Specification, 0)
 
 	for _, name := range names {
-		ps := plugin.Specification{
+		ps := connectorPlugin.Specification{
 			Name:        name,
 			Description: "desc",
 			Version:     "v1.0",
 			Author:      "Aaron",
-			SourceParams: map[string]plugin.Parameter{
+			SourceParams: map[string]connectorPlugin.Parameter{
 				"param": {
-					Type: plugin.ParameterTypeString,
-					Validations: []plugin.Validation{{
-						Type: plugin.ValidationTypeRequired,
+					Type: connectorPlugin.ParameterTypeString,
+					Validations: []connectorPlugin.Validation{{
+						Type: connectorPlugin.ValidationTypeRequired,
 					}},
 				},
 			},
-			DestinationParams: map[string]plugin.Parameter{},
+			DestinationParams: map[string]connectorPlugin.Parameter{},
 		}
 		pls = append(pls, ps)
 		plsMap[name] = ps
 	}
 
 	psMock.EXPECT().
-		List(ctx).
+		ListConnectors(ctx).
 		Return(plsMap, nil).
 		Times(1)
 

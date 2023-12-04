@@ -12,7 +12,7 @@ import (
 	context "context"
 	reflect "reflect"
 
-	plugin "github.com/conduitio/conduit/pkg/plugin"
+	connector "github.com/conduitio/conduit/pkg/plugin/connector"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -39,17 +39,17 @@ func (m *PluginOrchestrator) EXPECT() *PluginOrchestratorMockRecorder {
 	return m.recorder
 }
 
-// List mocks base method.
-func (m *PluginOrchestrator) List(arg0 context.Context) (map[string]plugin.Specification, error) {
+// ListConnectors mocks base method.
+func (m *PluginOrchestrator) ListConnectors(arg0 context.Context) (map[string]connector.Specification, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "List", arg0)
-	ret0, _ := ret[0].(map[string]plugin.Specification)
+	ret := m.ctrl.Call(m, "ListConnectors", arg0)
+	ret0, _ := ret[0].(map[string]connector.Specification)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// List indicates an expected call of List.
-func (mr *PluginOrchestratorMockRecorder) List(arg0 any) *gomock.Call {
+// ListConnectors indicates an expected call of ListConnectors.
+func (mr *PluginOrchestratorMockRecorder) ListConnectors(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "List", reflect.TypeOf((*PluginOrchestrator)(nil).List), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListConnectors", reflect.TypeOf((*PluginOrchestrator)(nil).ListConnectors), arg0)
 }

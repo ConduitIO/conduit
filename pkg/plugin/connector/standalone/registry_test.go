@@ -22,6 +22,7 @@ import (
 
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
+	"github.com/conduitio/conduit/pkg/plugin/connector"
 	"github.com/matryer/is"
 )
 
@@ -54,68 +55,68 @@ func testPluginBlueprint() blueprint {
 	return blueprint{
 		fullName: plugin.FullName(fmt.Sprintf("standalone:%v@%v", testPluginName, testPluginVersion)),
 		path:     path.Join(testPluginDir, "testplugin.sh"),
-		specification: plugin.Specification{
+		specification: connector.Specification{
 			Name:        testPluginName,
 			Summary:     testPluginSummary,
 			Description: testPluginDescription,
 			Version:     testPluginVersion,
 			Author:      testPluginAuthor,
-			SourceParams: map[string]plugin.Parameter{
+			SourceParams: map[string]connector.Parameter{
 				testPluginSourceParam1: {
 					Default:     testPluginSourceParam1Default,
-					Type:        plugin.ParameterTypeString, // default type
+					Type:        connector.ParameterTypeString, // default type
 					Description: testPluginSourceParam1Description,
-					Validations: []plugin.Validation{
+					Validations: []connector.Validation{
 						{
-							Type:  plugin.ValidationTypeRequired,
+							Type:  connector.ValidationTypeRequired,
 							Value: "",
 						},
 						{
-							Type:  plugin.ValidationTypeInclusion,
+							Type:  connector.ValidationTypeInclusion,
 							Value: "one,two",
 						},
 					},
 				},
 				testPluginSourceParam2: {
 					Default:     testPluginSourceParam2Default,
-					Type:        plugin.ParameterTypeInt,
+					Type:        connector.ParameterTypeInt,
 					Description: testPluginSourceParam2Description,
-					Validations: []plugin.Validation{
+					Validations: []connector.Validation{
 						{
-							Type:  plugin.ValidationTypeExclusion,
+							Type:  connector.ValidationTypeExclusion,
 							Value: "3,4",
 						},
 						{
-							Type:  plugin.ValidationTypeGreaterThan,
+							Type:  connector.ValidationTypeGreaterThan,
 							Value: "1",
 						},
 					},
 				},
 			},
-			DestinationParams: map[string]plugin.Parameter{
+			DestinationParams: map[string]connector.Parameter{
 				testPluginDestinationParam1: {
 					Default:     testPluginDestinationParam1Default,
-					Type:        plugin.ParameterTypeInt,
+					Type:        connector.ParameterTypeInt,
 					Description: testPluginDestinationParam1Description,
-					Validations: []plugin.Validation{
+					Validations: []connector.Validation{
 						{
-							Type:  plugin.ValidationTypeLessThan,
+							Type:  connector.ValidationTypeLessThan,
 							Value: "10",
 						},
 						{
-							Type:  plugin.ValidationTypeRegex,
+							Type:  connector.ValidationTypeRegex,
 							Value: "[1-9]",
 						},
 						{
-							Type: plugin.ValidationTypeRequired,
+							Type: connector.ValidationTypeRequired,
 						},
 					},
 				},
 				testPluginDestinationParam2: {
 					Default:     testPluginDestinationParam2Default,
-					Type:        plugin.ParameterTypeDuration,
+					Type:        connector.ParameterTypeDuration,
 					Description: testPluginDestinationParam2Description,
-					Validations: []plugin.Validation{},
+					Validations: []connector.Validation{},
 				},
 			},
 		},
@@ -145,7 +146,7 @@ func TestRegistry_List(t *testing.T) {
 
 	got := r.List()
 	bp := testPluginBlueprint()
-	want := map[plugin.FullName]plugin.Specification{
+	want := map[plugin.FullName]connector.Specification{
 		bp.fullName: bp.specification,
 	}
 	is.Equal(got, want)

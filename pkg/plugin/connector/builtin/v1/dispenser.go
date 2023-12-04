@@ -18,6 +18,7 @@ import (
 	"github.com/conduitio/conduit-connector-protocol/cpluginv1"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
+	"github.com/conduitio/conduit/pkg/plugin/connector"
 )
 
 type Dispenser struct {
@@ -44,15 +45,15 @@ func NewDispenser(
 	}
 }
 
-func (d *Dispenser) DispenseSpecifier() (plugin.SpecifierPlugin, error) {
+func (d *Dispenser) DispenseSpecifier() (connector.SpecifierPlugin, error) {
 	return newSpecifierPluginAdapter(d.specifierPlugin()), nil
 }
 
-func (d *Dispenser) DispenseSource() (plugin.SourcePlugin, error) {
+func (d *Dispenser) DispenseSource() (connector.SourcePlugin, error) {
 	return newSourcePluginAdapter(d.sourcePlugin(), d.pluginLogger("source")), nil
 }
 
-func (d *Dispenser) DispenseDestination() (plugin.DestinationPlugin, error) {
+func (d *Dispenser) DispenseDestination() (connector.DestinationPlugin, error) {
 	return newDestinationPluginAdapter(d.destinationPlugin(), d.pluginLogger("destination")), nil
 }
 

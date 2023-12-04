@@ -15,29 +15,29 @@
 package toproto
 
 import (
-	"github.com/conduitio/conduit/pkg/plugin"
+	"github.com/conduitio/conduit/pkg/plugin/connector"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 )
 
 func _() {
 	// An "invalid array index" compiler error signifies that the constant values have changed.
 	var vTypes [1]struct{}
-	_ = vTypes[int(plugin.ValidationTypeRequired)-int(apiv1.PluginSpecifications_Parameter_Validation_TYPE_REQUIRED)]
-	_ = vTypes[int(plugin.ValidationTypeGreaterThan)-int(apiv1.PluginSpecifications_Parameter_Validation_TYPE_GREATER_THAN)]
-	_ = vTypes[int(plugin.ValidationTypeLessThan)-int(apiv1.PluginSpecifications_Parameter_Validation_TYPE_LESS_THAN)]
-	_ = vTypes[int(plugin.ValidationTypeInclusion)-int(apiv1.PluginSpecifications_Parameter_Validation_TYPE_INCLUSION)]
-	_ = vTypes[int(plugin.ValidationTypeExclusion)-int(apiv1.PluginSpecifications_Parameter_Validation_TYPE_EXCLUSION)]
-	_ = vTypes[int(plugin.ValidationTypeRegex)-int(apiv1.PluginSpecifications_Parameter_Validation_TYPE_REGEX)]
+	_ = vTypes[int(connector.ValidationTypeRequired)-int(apiv1.PluginSpecifications_Parameter_Validation_TYPE_REQUIRED)]
+	_ = vTypes[int(connector.ValidationTypeGreaterThan)-int(apiv1.PluginSpecifications_Parameter_Validation_TYPE_GREATER_THAN)]
+	_ = vTypes[int(connector.ValidationTypeLessThan)-int(apiv1.PluginSpecifications_Parameter_Validation_TYPE_LESS_THAN)]
+	_ = vTypes[int(connector.ValidationTypeInclusion)-int(apiv1.PluginSpecifications_Parameter_Validation_TYPE_INCLUSION)]
+	_ = vTypes[int(connector.ValidationTypeExclusion)-int(apiv1.PluginSpecifications_Parameter_Validation_TYPE_EXCLUSION)]
+	_ = vTypes[int(connector.ValidationTypeRegex)-int(apiv1.PluginSpecifications_Parameter_Validation_TYPE_REGEX)]
 
-	_ = vTypes[int(plugin.ParameterTypeString)-int(apiv1.PluginSpecifications_Parameter_TYPE_STRING)]
-	_ = vTypes[int(plugin.ParameterTypeInt)-int(apiv1.PluginSpecifications_Parameter_TYPE_INT)]
-	_ = vTypes[int(plugin.ParameterTypeFloat)-int(apiv1.PluginSpecifications_Parameter_TYPE_FLOAT)]
-	_ = vTypes[int(plugin.ParameterTypeFile)-int(apiv1.PluginSpecifications_Parameter_TYPE_FILE)]
-	_ = vTypes[int(plugin.ParameterTypeBool)-int(apiv1.PluginSpecifications_Parameter_TYPE_BOOL)]
-	_ = vTypes[int(plugin.ParameterTypeDuration)-int(apiv1.PluginSpecifications_Parameter_TYPE_DURATION)]
+	_ = vTypes[int(connector.ParameterTypeString)-int(apiv1.PluginSpecifications_Parameter_TYPE_STRING)]
+	_ = vTypes[int(connector.ParameterTypeInt)-int(apiv1.PluginSpecifications_Parameter_TYPE_INT)]
+	_ = vTypes[int(connector.ParameterTypeFloat)-int(apiv1.PluginSpecifications_Parameter_TYPE_FLOAT)]
+	_ = vTypes[int(connector.ParameterTypeFile)-int(apiv1.PluginSpecifications_Parameter_TYPE_FILE)]
+	_ = vTypes[int(connector.ParameterTypeBool)-int(apiv1.PluginSpecifications_Parameter_TYPE_BOOL)]
+	_ = vTypes[int(connector.ParameterTypeDuration)-int(apiv1.PluginSpecifications_Parameter_TYPE_DURATION)]
 }
 
-func Plugin(name string, in plugin.Specification) *apiv1.PluginSpecifications {
+func Plugin(name string, in connector.Specification) *apiv1.PluginSpecifications {
 	return &apiv1.PluginSpecifications{
 		Name:              name,
 		Summary:           in.Summary,
@@ -49,7 +49,7 @@ func Plugin(name string, in plugin.Specification) *apiv1.PluginSpecifications {
 	}
 }
 
-func PluginParamsMap(in map[string]plugin.Parameter) map[string]*apiv1.PluginSpecifications_Parameter {
+func PluginParamsMap(in map[string]connector.Parameter) map[string]*apiv1.PluginSpecifications_Parameter {
 	out := make(map[string]*apiv1.PluginSpecifications_Parameter)
 	for k, v := range in {
 		out[k] = &apiv1.PluginSpecifications_Parameter{
@@ -62,7 +62,7 @@ func PluginParamsMap(in map[string]plugin.Parameter) map[string]*apiv1.PluginSpe
 	return out
 }
 
-func PluginParamValidations(in []plugin.Validation) []*apiv1.PluginSpecifications_Parameter_Validation {
+func PluginParamValidations(in []connector.Validation) []*apiv1.PluginSpecifications_Parameter_Validation {
 	// we need an empty slice here so that the returned JSON would be "validations":[] instead of "validations":null
 	out := make([]*apiv1.PluginSpecifications_Parameter_Validation, 0)
 	for _, v := range in {
@@ -74,6 +74,6 @@ func PluginParamValidations(in []plugin.Validation) []*apiv1.PluginSpecification
 	return out
 }
 
-func ValidationType(in plugin.ValidationType) apiv1.PluginSpecifications_Parameter_Validation_Type {
+func ValidationType(in connector.ValidationType) apiv1.PluginSpecifications_Parameter_Validation_Type {
 	return apiv1.PluginSpecifications_Parameter_Validation_Type(in)
 }

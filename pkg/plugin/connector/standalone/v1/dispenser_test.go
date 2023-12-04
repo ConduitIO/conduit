@@ -22,14 +22,14 @@ import (
 	"github.com/conduitio/conduit-connector-protocol/cpluginv1"
 	"github.com/conduitio/conduit-connector-protocol/cpluginv1/mock"
 	"github.com/conduitio/conduit-connector-protocol/cpluginv1/server"
-	"github.com/conduitio/conduit/pkg/plugin"
+	"github.com/conduitio/conduit/pkg/plugin/connector"
 	"github.com/golang/mock/gomock" //nolint:depguard // the protocol is using the old mock package, this will be changed when we update conduit-connector-protocol
 	goplugin "github.com/hashicorp/go-plugin"
 	"github.com/rs/zerolog"
 )
 
 func newTestDispenser(t *testing.T, logger zerolog.Logger) (
-	plugin.Dispenser,
+	connector.Dispenser,
 	*mock.SpecifierPlugin,
 	*mock.SourcePlugin,
 	*mock.DestinationPlugin,

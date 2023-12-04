@@ -24,7 +24,8 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
-	standalonev1 "github.com/conduitio/conduit/pkg/plugin/standalone/v1"
+	"github.com/conduitio/conduit/pkg/plugin/connector"
+	standalonev1 "github.com/conduitio/conduit/pkg/plugin/connector/standalone/v1"
 	"github.com/rs/zerolog"
 )
 
@@ -41,7 +42,7 @@ type Registry struct {
 
 type blueprint struct {
 	fullName      plugin.FullName
-	specification plugin.Specification
+	specification connector.Specification
 	path          string
 	// TODO store hash of plugin binary and compare before running the binary to
 	// ensure someone can't switch the plugin after we registered it
@@ -174,7 +175,7 @@ func (r *Registry) loadPlugins(ctx context.Context, pluginDir string) map[string
 	return plugins
 }
 
-func (r *Registry) NewDispenser(logger log.CtxLogger, fullName plugin.FullName) (plugin.Dispenser, error) {
+func (r *Registry) NewDispenser(logger log.CtxLogger, fullName plugin.FullName) (connector.Dispenser, error) {
 	r.m.RLock()
 	defer r.m.RUnlock()
 
@@ -194,11 +195,11 @@ func (r *Registry) NewDispenser(logger log.CtxLogger, fullName plugin.FullName) 
 	return standalonev1.NewDispenser(logger.ZerologWithComponent(), bp.path)
 }
 
-func (r *Registry) List() map[plugin.FullName]plugin.Specification {
+func (r *Registry) List() map[plugin.FullName]connector.Specification {
 	r.m.RLock()
 	defer r.m.RUnlock()
 
-	specs := make(map[plugin.FullName]plugin.Specification, len(r.plugins))
+	specs := make(map[plugin.FullName]connector.Specification, len(r.plugins))
 	for _, versions := range r.plugins {
 		for version, bp := range versions {
 			if version == plugin.PluginVersionLatest {

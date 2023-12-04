@@ -19,7 +19,7 @@ import (
 	"io"
 	"sync"
 
-	"github.com/conduitio/conduit/pkg/plugin"
+	"github.com/conduitio/conduit/pkg/plugin/connector"
 )
 
 // stream mimics the behavior of a gRPC stream using channels.
@@ -73,7 +73,7 @@ func (s *stream[REQ, RES]) sendInternal(req REQ) error {
 	case <-s.ctx.Done():
 		return s.ctx.Err()
 	case <-s.stopChan:
-		return plugin.ErrStreamNotOpen
+		return connector.ErrStreamNotOpen
 	case s.reqChan <- req:
 		return nil
 	}

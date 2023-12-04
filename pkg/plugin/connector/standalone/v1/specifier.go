@@ -19,9 +19,9 @@ import (
 
 	connectorv1 "github.com/conduitio/conduit-connector-protocol/proto/connector/v1"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/plugin"
-	"github.com/conduitio/conduit/pkg/plugin/standalone/v1/internal/fromproto"
-	"github.com/conduitio/conduit/pkg/plugin/standalone/v1/internal/toproto"
+	"github.com/conduitio/conduit/pkg/plugin/connector"
+	"github.com/conduitio/conduit/pkg/plugin/connector/standalone/v1/internal/fromproto"
+	"github.com/conduitio/conduit/pkg/plugin/connector/standalone/v1/internal/toproto"
 	goplugin "github.com/hashicorp/go-plugin"
 	"google.golang.org/grpc"
 )
@@ -46,17 +46,17 @@ type specifierPluginClient struct {
 	grpcClient connectorv1.SpecifierPluginClient
 }
 
-var _ plugin.SpecifierPlugin = (*specifierPluginClient)(nil)
+var _ connector.SpecifierPlugin = (*specifierPluginClient)(nil)
 
-func (s *specifierPluginClient) Specify() (plugin.Specification, error) {
+func (s *specifierPluginClient) Specify() (connector.Specification, error) {
 	protoReq := toproto.SpecifierSpecifyRequest()
 	protoResp, err := s.grpcClient.Specify(context.Background(), protoReq)
 	if err != nil {
-		return plugin.Specification{}, unwrapGRPCError(err)
+		return connector.Specification{}, unwrapGRPCError(err)
 	}
 	specs, err := fromproto.SpecifierSpecifyResponse(protoResp)
 	if err != nil {
-		return plugin.Specification{}, err
+		return connector.Specification{}, err
 	}
 	return specs, nil
 }

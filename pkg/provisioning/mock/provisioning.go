@@ -15,7 +15,7 @@ import (
 	connector "github.com/conduitio/conduit/pkg/connector"
 	log "github.com/conduitio/conduit/pkg/foundation/log"
 	pipeline "github.com/conduitio/conduit/pkg/pipeline"
-	plugin "github.com/conduitio/conduit/pkg/plugin"
+	connector0 "github.com/conduitio/conduit/pkg/plugin/connector"
 	processor "github.com/conduitio/conduit/pkg/processor"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -437,10 +437,10 @@ func (m *PluginService) EXPECT() *PluginServiceMockRecorder {
 }
 
 // NewDispenser mocks base method.
-func (m *PluginService) NewDispenser(arg0 log.CtxLogger, arg1 string) (plugin.Dispenser, error) {
+func (m *PluginService) NewDispenser(arg0 log.CtxLogger, arg1 string) (connector0.Dispenser, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "NewDispenser", arg0, arg1)
-	ret0, _ := ret[0].(plugin.Dispenser)
+	ret0, _ := ret[0].(connector0.Dispenser)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

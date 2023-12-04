@@ -20,9 +20,9 @@ import (
 	"github.com/conduitio/conduit-connector-protocol/cpluginv1"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/conduitio/conduit/pkg/plugin"
-	"github.com/conduitio/conduit/pkg/plugin/builtin/v1/internal/fromplugin"
-	"github.com/conduitio/conduit/pkg/plugin/builtin/v1/internal/toplugin"
+	"github.com/conduitio/conduit/pkg/plugin/connector"
+	"github.com/conduitio/conduit/pkg/plugin/connector/builtin/v1/internal/fromplugin"
+	"github.com/conduitio/conduit/pkg/plugin/connector/builtin/v1/internal/toplugin"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/rs/zerolog"
 )
@@ -43,7 +43,7 @@ type sourcePluginAdapter struct {
 	stream *stream[cpluginv1.SourceRunRequest, cpluginv1.SourceRunResponse]
 }
 
-var _ plugin.SourcePlugin = (*sourcePluginAdapter)(nil)
+var _ connector.SourcePlugin = (*sourcePluginAdapter)(nil)
 
 func newSourcePluginAdapter(impl cpluginv1.SourcePlugin, logger log.CtxLogger) *sourcePluginAdapter {
 	return &sourcePluginAdapter{
@@ -86,7 +86,7 @@ func (s *sourcePluginAdapter) Start(ctx context.Context, p record.Position) erro
 				s.logger.Err(ctx, err).Msg("stream already stopped")
 			}
 		} else {
-			s.stream.stop(plugin.ErrStreamNotOpen)
+			s.stream.stop(connector.ErrStreamNotOpen)
 		}
 		s.logger.Trace(ctx).Msg("Run stopped")
 	}()
@@ -96,7 +96,7 @@ func (s *sourcePluginAdapter) Start(ctx context.Context, p record.Position) erro
 
 func (s *sourcePluginAdapter) Read(ctx context.Context) (record.Record, error) {
 	if s.stream == nil {
-		return record.Record{}, plugin.ErrStreamNotOpen
+		return record.Record{}, connector.ErrStreamNotOpen
 	}
 
 	s.logger.Trace(ctx).Msg("receiving record")
@@ -115,7 +115,7 @@ func (s *sourcePluginAdapter) Read(ctx context.Context) (record.Record, error) {
 
 func (s *sourcePluginAdapter) Ack(ctx context.Context, p record.Position) error {
 	if s.stream == nil {
-		return plugin.ErrStreamNotOpen
+		return connector.ErrStreamNotOpen
 	}
 
 	req := toplugin.SourceRunRequest(p)
@@ -131,7 +131,7 @@ func (s *sourcePluginAdapter) Ack(ctx context.Context, p record.Position) error 
 
 func (s *sourcePluginAdapter) Stop(ctx context.Context) (record.Position, error) {
 	if s.stream == nil {
-		return nil, plugin.ErrStreamNotOpen
+		return nil, connector.ErrStreamNotOpen
 	}
 
 	s.logger.Trace(ctx).Msg("calling Stop")

@@ -18,9 +18,9 @@ import (
 	"context"
 
 	"github.com/conduitio/conduit-connector-protocol/cpluginv1"
-	"github.com/conduitio/conduit/pkg/plugin"
-	"github.com/conduitio/conduit/pkg/plugin/builtin/v1/internal/fromplugin"
-	"github.com/conduitio/conduit/pkg/plugin/builtin/v1/internal/toplugin"
+	"github.com/conduitio/conduit/pkg/plugin/connector"
+	"github.com/conduitio/conduit/pkg/plugin/connector/builtin/v1/internal/fromplugin"
+	"github.com/conduitio/conduit/pkg/plugin/connector/builtin/v1/internal/toplugin"
 )
 
 // TODO make sure a panic in a plugin doesn't crash Conduit
@@ -28,7 +28,7 @@ type specifierPluginAdapter struct {
 	impl cpluginv1.SpecifierPlugin
 }
 
-var _ plugin.SpecifierPlugin = (*specifierPluginAdapter)(nil)
+var _ connector.SpecifierPlugin = (*specifierPluginAdapter)(nil)
 
 func newSpecifierPluginAdapter(impl cpluginv1.SpecifierPlugin) *specifierPluginAdapter {
 	return &specifierPluginAdapter{
@@ -36,15 +36,15 @@ func newSpecifierPluginAdapter(impl cpluginv1.SpecifierPlugin) *specifierPluginA
 	}
 }
 
-func (s *specifierPluginAdapter) Specify() (plugin.Specification, error) {
+func (s *specifierPluginAdapter) Specify() (connector.Specification, error) {
 	req := toplugin.SpecifierSpecifyRequest()
 	resp, err := runSandbox(s.impl.Specify, context.Background(), req)
 	if err != nil {
-		return plugin.Specification{}, err
+		return connector.Specification{}, err
 	}
 	out, err := fromplugin.SpecifierSpecifyResponse(resp)
 	if err != nil {
-		return plugin.Specification{}, err
+		return connector.Specification{}, err
 	}
 	return out, nil
 }

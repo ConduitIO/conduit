@@ -12,19 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package standalonev1
+package builtinv1
 
 import (
 	"testing"
 
-	"github.com/conduitio/conduit-connector-protocol/cpluginv1/mock"
-	"github.com/conduitio/conduit/pkg/plugin"
-	"github.com/rs/zerolog"
+	"github.com/conduitio/conduit/pkg/plugin/connector"
 )
 
 func TestAcceptance(t *testing.T) {
-	logger := zerolog.Nop()
-	plugin.AcceptanceTestV1(t, func(t *testing.T) (plugin.Dispenser, *mock.SpecifierPlugin, *mock.SourcePlugin, *mock.DestinationPlugin) {
-		return newTestDispenser(t, logger)
-	})
+	connector.AcceptanceTestV1(t, newTestDispenser)
 }

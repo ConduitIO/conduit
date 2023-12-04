@@ -23,7 +23,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/database"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/pipeline"
-	"github.com/conduitio/conduit/pkg/plugin"
+	connectorPlugin "github.com/conduitio/conduit/pkg/plugin/connector"
 	"github.com/conduitio/conduit/pkg/processor"
 )
 
@@ -113,8 +113,8 @@ type ProcessorService interface {
 }
 
 type PluginService interface {
-	List(ctx context.Context) (map[string]plugin.Specification, error)
-	NewDispenser(logger log.CtxLogger, name string) (plugin.Dispenser, error)
-	ValidateSourceConfig(ctx context.Context, d plugin.Dispenser, settings map[string]string) error
-	ValidateDestinationConfig(ctx context.Context, d plugin.Dispenser, settings map[string]string) error
+	ListConnectors(ctx context.Context) (map[string]connectorPlugin.Specification, error)
+	NewDispenser(logger log.CtxLogger, name string) (connectorPlugin.Dispenser, error)
+	ValidateSourceConfig(ctx context.Context, name string, settings map[string]string) error
+	ValidateDestinationConfig(ctx context.Context, name string, settings map[string]string) error
 }

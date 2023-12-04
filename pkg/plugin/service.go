@@ -19,6 +19,7 @@ import (
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/plugin/connector"
 )
 
 // registry is an object that can create new plugin dispensers. We need to use
@@ -32,8 +33,8 @@ import (
 //     separate process and communicates with it via gRPC. These plugins are
 //     compiled independently of Conduit and can be included at runtime.
 type registry interface {
-	NewDispenser(logger log.CtxLogger, name FullName) (Dispenser, error)
-	List() map[FullName]Specification
+	NewDispenser(logger log.CtxLogger, name FullName) (connector.Dispenser, error)
+	List() map[FullName]connector.Specification
 }
 
 type Service struct {
@@ -55,7 +56,7 @@ func (s *Service) Check(_ context.Context) error {
 	return nil
 }
 
-func (s *Service) NewDispenser(logger log.CtxLogger, name string) (Dispenser, error) {
+func (s *Service) NewDispenser(logger log.CtxLogger, name string) (connector.Dispenser, error) {
 	logger = logger.WithComponent("plugin")
 
 	fullName := FullName(name)
@@ -76,11 +77,11 @@ func (s *Service) NewDispenser(logger log.CtxLogger, name string) (Dispenser, er
 	}
 }
 
-func (s *Service) List(context.Context) (map[string]Specification, error) {
+func (s *Service) ListConnectors(context.Context) (map[string]connector.Specification, error) {
 	builtinSpecs := s.builtin.List()
 	standaloneSpecs := s.standalone.List()
 
-	specs := make(map[string]Specification, len(builtinSpecs)+len(standaloneSpecs))
+	specs := make(map[string]connector.Specification, len(builtinSpecs)+len(standaloneSpecs))
 	for k, v := range builtinSpecs {
 		specs[string(k)] = v
 	}
@@ -91,7 +92,12 @@ func (s *Service) List(context.Context) (map[string]Specification, error) {
 	return specs, nil
 }
 
-func (s *Service) ValidateSourceConfig(ctx context.Context, d Dispenser, settings map[string]string) (err error) {
+func (s *Service) ValidateSourceConfig(ctx context.Context, name string, settings map[string]string) (err error) {
+	d, err := s.NewDispenser(s.logger, name)
+	if err != nil {
+		return cerrors.Errorf("couldn't get dispenser: %w", err)
+	}
+
 	src, err := d.DispenseSource()
 	if err != nil {
 		return cerrors.Errorf("could not dispense source: %w", err)
@@ -112,7 +118,12 @@ func (s *Service) ValidateSourceConfig(ctx context.Context, d Dispenser, setting
 	return nil
 }
 
-func (s *Service) ValidateDestinationConfig(ctx context.Context, d Dispenser, settings map[string]string) (err error) {
+func (s *Service) ValidateDestinationConfig(ctx context.Context, name string, settings map[string]string) (err error) {
+	d, err := s.NewDispenser(s.logger, name)
+	if err != nil {
+		return cerrors.Errorf("couldn't get dispenser: %w", err)
+	}
+
 	dest, err := d.DispenseDestination()
 	if err != nil {
 		return cerrors.Errorf("could not dispense destination: %w", err)

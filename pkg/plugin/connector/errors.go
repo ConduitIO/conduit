@@ -1,4 +1,4 @@
-// Copyright © 2022 Meroxa, Inc.
+// Copyright © 2023 Meroxa, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,16 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package orchestrator
+package connector
 
-import (
-	"context"
+import "github.com/conduitio/conduit/pkg/foundation/cerrors"
 
-	"github.com/conduitio/conduit/pkg/plugin/connector"
-)
-
-type PluginOrchestrator base
-
-func (ps *PluginOrchestrator) ListConnectors(ctx context.Context) (map[string]connector.Specification, error) {
-	return ps.plugins.ListConnectors(ctx)
-}
+var ErrStreamNotOpen = cerrors.New("stream not open")

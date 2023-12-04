@@ -19,7 +19,7 @@ import (
 	"sync"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/plugin"
+	"github.com/conduitio/conduit/pkg/plugin/connector"
 	goplugin "github.com/hashicorp/go-plugin"
 	"github.com/rs/zerolog"
 )
@@ -91,7 +91,7 @@ func (d *Dispenser) teardown() {
 	d.dispensed = false
 }
 
-func (d *Dispenser) DispenseSpecifier() (plugin.SpecifierPlugin, error) {
+func (d *Dispenser) DispenseSpecifier() (connector.SpecifierPlugin, error) {
 	err := d.dispense()
 	if err != nil {
 		return nil, err
@@ -106,7 +106,7 @@ func (d *Dispenser) DispenseSpecifier() (plugin.SpecifierPlugin, error) {
 		return nil, err
 	}
 
-	specifier, ok := raw.(plugin.SpecifierPlugin)
+	specifier, ok := raw.(connector.SpecifierPlugin)
 	if !ok {
 		return nil, cerrors.Errorf("plugin did not dispense specifier, got type: %T", raw)
 	}
@@ -114,7 +114,7 @@ func (d *Dispenser) DispenseSpecifier() (plugin.SpecifierPlugin, error) {
 	return specifierPluginDispenserSignaller{specifier, d}, nil
 }
 
-func (d *Dispenser) DispenseSource() (plugin.SourcePlugin, error) {
+func (d *Dispenser) DispenseSource() (connector.SourcePlugin, error) {
 	err := d.dispense()
 	if err != nil {
 		return nil, err
@@ -129,7 +129,7 @@ func (d *Dispenser) DispenseSource() (plugin.SourcePlugin, error) {
 		return nil, err
 	}
 
-	source, ok := raw.(plugin.SourcePlugin)
+	source, ok := raw.(connector.SourcePlugin)
 	if !ok {
 		return nil, cerrors.Errorf("plugin did not dispense source, got type: %T", raw)
 	}
@@ -137,7 +137,7 @@ func (d *Dispenser) DispenseSource() (plugin.SourcePlugin, error) {
 	return sourcePluginDispenserSignaller{source, d}, nil
 }
 
-func (d *Dispenser) DispenseDestination() (plugin.DestinationPlugin, error) {
+func (d *Dispenser) DispenseDestination() (connector.DestinationPlugin, error) {
 	err := d.dispense()
 	if err != nil {
 		return nil, err
@@ -152,7 +152,7 @@ func (d *Dispenser) DispenseDestination() (plugin.DestinationPlugin, error) {
 		return nil, err
 	}
 
-	destination, ok := raw.(plugin.DestinationPlugin)
+	destination, ok := raw.(connector.DestinationPlugin)
 	if !ok {
 		return nil, cerrors.Errorf("plugin did not dispense destination, got type: %T", raw)
 	}
@@ -161,17 +161,17 @@ func (d *Dispenser) DispenseDestination() (plugin.DestinationPlugin, error) {
 }
 
 type specifierPluginDispenserSignaller struct {
-	plugin.SpecifierPlugin
+	connector.SpecifierPlugin
 	d *Dispenser
 }
 
-func (s specifierPluginDispenserSignaller) Specify() (plugin.Specification, error) {
+func (s specifierPluginDispenserSignaller) Specify() (connector.Specification, error) {
 	defer s.d.teardown()
 	return s.SpecifierPlugin.Specify()
 }
 
 type sourcePluginDispenserSignaller struct {
-	plugin.SourcePlugin
+	connector.SourcePlugin
 	d *Dispenser
 }
 
@@ -181,7 +181,7 @@ func (s sourcePluginDispenserSignaller) Teardown(ctx context.Context) error {
 }
 
 type destinationPluginDispenserSignaller struct {
-	plugin.DestinationPlugin
+	connector.DestinationPlugin
 	d *Dispenser
 }
 

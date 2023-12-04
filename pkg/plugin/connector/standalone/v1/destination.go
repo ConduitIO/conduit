@@ -20,9 +20,9 @@ import (
 
 	connectorv1 "github.com/conduitio/conduit-connector-protocol/proto/connector/v1"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/plugin"
-	"github.com/conduitio/conduit/pkg/plugin/standalone/v1/internal/fromproto"
-	"github.com/conduitio/conduit/pkg/plugin/standalone/v1/internal/toproto"
+	"github.com/conduitio/conduit/pkg/plugin/connector"
+	"github.com/conduitio/conduit/pkg/plugin/connector/standalone/v1/internal/fromproto"
+	"github.com/conduitio/conduit/pkg/plugin/connector/standalone/v1/internal/toproto"
 	"github.com/conduitio/conduit/pkg/record"
 	goplugin "github.com/hashicorp/go-plugin"
 	"google.golang.org/grpc"
@@ -49,7 +49,7 @@ type destinationPluginClient struct {
 	stream     connectorv1.DestinationPlugin_RunClient
 }
 
-var _ plugin.DestinationPlugin = (*destinationPluginClient)(nil)
+var _ connector.DestinationPlugin = (*destinationPluginClient)(nil)
 
 func (s *destinationPluginClient) Configure(ctx context.Context, cfg map[string]string) error {
 	protoReq := toproto.DestinationConfigureRequest(cfg)
@@ -77,7 +77,7 @@ func (s *destinationPluginClient) Start(ctx context.Context) error {
 
 func (s *destinationPluginClient) Write(_ context.Context, r record.Record) error {
 	if s.stream == nil {
-		return plugin.ErrStreamNotOpen
+		return connector.ErrStreamNotOpen
 	}
 
 	protoReq, err := toproto.DestinationRunRequest(r)
@@ -89,7 +89,7 @@ func (s *destinationPluginClient) Write(_ context.Context, r record.Record) erro
 	if err != nil {
 		if err == io.EOF {
 			// stream was gracefully closed
-			return plugin.ErrStreamNotOpen
+			return connector.ErrStreamNotOpen
 		}
 		return unwrapGRPCError(err)
 	}
@@ -98,13 +98,13 @@ func (s *destinationPluginClient) Write(_ context.Context, r record.Record) erro
 
 func (s *destinationPluginClient) Ack(_ context.Context) (record.Position, error) {
 	if s.stream == nil {
-		return nil, plugin.ErrStreamNotOpen
+		return nil, connector.ErrStreamNotOpen
 	}
 
 	resp, err := s.stream.Recv()
 	if err != nil {
 		if err == io.EOF {
-			return nil, plugin.ErrStreamNotOpen
+			return nil, connector.ErrStreamNotOpen
 		}
 		return nil, unwrapGRPCError(err)
 	}
@@ -119,7 +119,7 @@ func (s *destinationPluginClient) Ack(_ context.Context) (record.Position, error
 
 func (s *destinationPluginClient) Stop(ctx context.Context, lastPosition record.Position) error {
 	if s.stream == nil {
-		return plugin.ErrStreamNotOpen
+		return connector.ErrStreamNotOpen
 	}
 
 	protoReq := toproto.DestinationStopRequest(lastPosition)
