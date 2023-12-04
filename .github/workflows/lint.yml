@@ -14,9 +14,17 @@ jobs:
         with:
           go-version-file: 'go.mod'
 
+      # This step sets up the variable steps.golangci-lint-version.outputs.v
+      # to contain the version of golangci-lint (e.g. v1.54.2).
+      # The version is taken from go.mod.
+      - name: Golangci-lint version
+        id: golangci-lint-version
+        run: |
+          GOLANGCI_LINT_VERSION=$( go list -m -f '{{.Version}}' github.com/golangci/golangci-lint )
+          echo "v=$GOLANGCI_LINT_VERSION" >> "$GITHUB_OUTPUT"
+
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v3
         with:
-          # The version here also needs to be used as GOLANG_CI_LINT_VER in Makefile
-          version: v1.55.2
-
+          version: ${{ steps.golangci-lint-version.outputs.v }}
+          skip-pkg-cache: true
