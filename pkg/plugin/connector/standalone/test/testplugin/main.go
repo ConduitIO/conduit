@@ -23,7 +23,7 @@ import (
 	"github.com/conduitio/conduit-connector-protocol/cpluginv1/server"
 )
 
-// These constants need to match the constants in pkg/plugin/standalone/registry_test.go
+// These constants need to match the constants in pkg/plugin/connector/standalone/registry_test.go
 const (
 	testPluginName        = "test-plugin"
 	testPluginSummary     = "My test plugin summary"

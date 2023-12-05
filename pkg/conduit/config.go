@@ -20,7 +20,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/database"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/conduitio/conduit/pkg/plugin/builtin"
+	"github.com/conduitio/conduit/pkg/plugin/connector/builtin"
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/rs/zerolog"
 )

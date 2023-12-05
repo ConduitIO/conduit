@@ -26,7 +26,7 @@ import (
 	"github.com/matryer/is"
 )
 
-// These constants need to match the constants in pkg/plugin/standalone/test/testplugin/main.go
+// These constants need to match the constants in pkg/plugin/connector/standalone/test/testplugin/main.go
 const (
 	testPluginDir = "./test"
 

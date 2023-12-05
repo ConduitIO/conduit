@@ -25,7 +25,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/database/inmemory"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
-	"github.com/conduitio/conduit/pkg/plugin/mock"
+	"github.com/conduitio/conduit/pkg/plugin/connector/mock"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/matryer/is"
 	"go.uber.org/mock/gomock"
