@@ -22,7 +22,6 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/database/inmemory"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/pipeline"
-	pmock "github.com/conduitio/conduit/pkg/plugin/connector/mock"
 	"github.com/google/uuid"
 	"github.com/matryer/is"
 	"go.uber.org/mock/gomock"
@@ -314,10 +313,7 @@ func TestPipelineOrchestrator_UpdateDLQ_Success(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
 	db := &inmemory.DB{}
-	ctrl := gomock.NewController(t)
 	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
-
-	pluginDispenser := pmock.NewDispenser(ctrl)
 
 	plBefore := &pipeline.Instance{
 		ID:     uuid.NewString(),
@@ -348,10 +344,7 @@ func TestPipelineOrchestrator_UpdateDLQ_Success(t *testing.T) {
 		Get(gomock.AssignableToTypeOf(ctxType), plBefore.ID).
 		Return(plBefore, nil)
 	pluginMock.EXPECT().
-		NewDispenser(gomock.Any(), newDLQ.Plugin).
-		Return(pluginDispenser, nil)
-	pluginMock.EXPECT().
-		ValidateDestinationConfig(gomock.Any(), pluginDispenser, newDLQ.Settings).
+		ValidateDestinationConfig(gomock.Any(), newDLQ.Plugin, newDLQ.Settings).
 		Return(nil)
 	plsMock.EXPECT().
 		UpdateDLQ(gomock.AssignableToTypeOf(ctxType), plBefore.ID, newDLQ).
@@ -409,10 +402,7 @@ func TestConnectorOrchestrator_UpdateDLQ_InvalidConfig(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
 	db := &inmemory.DB{}
-	ctrl := gomock.NewController(t)
 	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
-
-	pluginDispenser := pmock.NewDispenser(ctrl)
 
 	plBefore := &pipeline.Instance{
 		ID:     uuid.NewString(),
@@ -432,10 +422,7 @@ func TestConnectorOrchestrator_UpdateDLQ_InvalidConfig(t *testing.T) {
 		Get(gomock.AssignableToTypeOf(ctxType), plBefore.ID).
 		Return(plBefore, nil)
 	pluginMock.EXPECT().
-		NewDispenser(gomock.Any(), newDLQ.Plugin).
-		Return(pluginDispenser, nil)
-	pluginMock.EXPECT().
-		ValidateDestinationConfig(gomock.Any(), pluginDispenser, newDLQ.Settings).
+		ValidateDestinationConfig(gomock.Any(), newDLQ.Plugin, newDLQ.Settings).
 		Return(wantErr)
 
 	got, err := orc.Pipelines.UpdateDLQ(ctx, plBefore.ID, newDLQ)

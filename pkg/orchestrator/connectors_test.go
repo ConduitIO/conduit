@@ -24,7 +24,6 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/database/inmemory"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/pipeline"
-	pmock "github.com/conduitio/conduit/pkg/plugin/connector/mock"
 	"github.com/google/uuid"
 	"github.com/matryer/is"
 	"go.uber.org/mock/gomock"
@@ -34,7 +33,6 @@ func TestConnectorOrchestrator_Create_Success(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
 	db := &inmemory.DB{}
-	ctrl := gomock.NewController(t)
 	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
 
 	pl := &pipeline.Instance{
@@ -57,18 +55,13 @@ func TestConnectorOrchestrator_Create_Success(t *testing.T) {
 		UpdatedAt:     time.Now().UTC(),
 	}
 
-	pluginDispenser := pmock.NewDispenser(ctrl)
-
 	plsMock.EXPECT().
 		Get(gomock.AssignableToTypeOf(ctxType), pl.ID).
 		Return(pl, nil)
 	pluginMock.EXPECT().
-		NewDispenser(gomock.Any(), want.Plugin).
-		Return(pluginDispenser, nil)
-	pluginMock.EXPECT().
 		ValidateSourceConfig(
 			gomock.AssignableToTypeOf(ctxType),
-			pluginDispenser,
+			want.Plugin,
 			want.Config.Settings,
 		).Return(nil)
 	consMock.EXPECT().
@@ -159,10 +152,7 @@ func TestConnectorOrchestrator_Create_CreateConnectorError(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
 	db := &inmemory.DB{}
-	ctrl := gomock.NewController(t)
 	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
-
-	pluginDispenser := pmock.NewDispenser(ctrl)
 
 	pl := &pipeline.Instance{
 		ID:     uuid.NewString(),
@@ -174,12 +164,9 @@ func TestConnectorOrchestrator_Create_CreateConnectorError(t *testing.T) {
 		Get(gomock.AssignableToTypeOf(ctxType), pl.ID).
 		Return(pl, nil)
 	pluginMock.EXPECT().
-		NewDispenser(gomock.Any(), "test-plugin").
-		Return(pluginDispenser, nil)
-	pluginMock.EXPECT().
 		ValidateSourceConfig(
 			gomock.AssignableToTypeOf(ctxType),
-			pluginDispenser,
+			"test-plugin",
 			config.Settings,
 		).Return(nil)
 	consMock.EXPECT().
@@ -205,10 +192,7 @@ func TestConnectorOrchestrator_Create_AddConnectorError(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
 	db := &inmemory.DB{}
-	ctrl := gomock.NewController(t)
 	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
-
-	pluginDispenser := pmock.NewDispenser(ctrl)
 
 	pl := &pipeline.Instance{
 		ID:     uuid.NewString(),
@@ -235,12 +219,9 @@ func TestConnectorOrchestrator_Create_AddConnectorError(t *testing.T) {
 		Get(gomock.AssignableToTypeOf(ctxType), pl.ID).
 		Return(pl, nil)
 	pluginMock.EXPECT().
-		NewDispenser(gomock.Any(), conn.Plugin).
-		Return(pluginDispenser, nil)
-	pluginMock.EXPECT().
 		ValidateSourceConfig(
 			gomock.AssignableToTypeOf(ctxType),
-			pluginDispenser,
+			conn.Plugin,
 			conn.Config.Settings,
 		).Return(nil)
 	consMock.EXPECT().
@@ -458,10 +439,7 @@ func TestConnectorOrchestrator_Update_Success(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
 	db := &inmemory.DB{}
-	ctrl := gomock.NewController(t)
 	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
-
-	pluginDispenser := pmock.NewDispenser(ctrl)
 
 	pl := &pipeline.Instance{
 		ID:     uuid.NewString(),
@@ -495,10 +473,7 @@ func TestConnectorOrchestrator_Update_Success(t *testing.T) {
 		Get(gomock.AssignableToTypeOf(ctxType), pl.ID).
 		Return(pl, nil)
 	pluginMock.EXPECT().
-		NewDispenser(gomock.Any(), conn.Plugin).
-		Return(pluginDispenser, nil)
-	pluginMock.EXPECT().
-		ValidateSourceConfig(gomock.Any(), pluginDispenser, newConfig.Settings).
+		ValidateSourceConfig(gomock.Any(), conn.Plugin, newConfig.Settings).
 		Return(nil)
 	consMock.EXPECT().
 		Update(gomock.AssignableToTypeOf(ctxType), conn.ID, newConfig).
@@ -562,10 +537,7 @@ func TestConnectorOrchestrator_Update_Fail(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
 	db := &inmemory.DB{}
-	ctrl := gomock.NewController(t)
 	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
-
-	pluginDispenser := pmock.NewDispenser(ctrl)
 
 	pl := &pipeline.Instance{
 		ID:     uuid.NewString(),
@@ -585,10 +557,7 @@ func TestConnectorOrchestrator_Update_Fail(t *testing.T) {
 		Get(gomock.AssignableToTypeOf(ctxType), pl.ID).
 		Return(pl, nil)
 	pluginMock.EXPECT().
-		NewDispenser(gomock.Any(), conn.Plugin).
-		Return(pluginDispenser, nil)
-	pluginMock.EXPECT().
-		ValidateDestinationConfig(gomock.Any(), pluginDispenser, conn.Config.Settings).
+		ValidateDestinationConfig(gomock.Any(), conn.Plugin, conn.Config.Settings).
 		Return(nil)
 	consMock.EXPECT().
 		Update(gomock.AssignableToTypeOf(ctxType), conn.ID, connector.Config{}).
