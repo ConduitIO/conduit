@@ -121,16 +121,10 @@ A few notes about the `Process` method:
   records, Conduit will acknowledge the original record only once all split records
   are acknowledged).
 - If an error happens in `Process` it should be stored in the `ProcessedRecord` that
-  was being processed when the error occurred. In that case the processor has two
-  options on how to continue processing the remaining records in the slice.
-  1. If the processor has no side effects and cheap it can process the remaining
-     records and return them normally in the slice. Conduit will figure out what to
-     do with the remaining ones based on the dead-letter queue configuration.
-  2. If the processor has side effects or requires a larger amount of time to process
-     a record, we would like to avoid processing records after an error. The remaining
-     records can be filled with a specific `ProcessedRecord` that marks them as not
-     processed. In that case Conduit will determine if it's required to process those
-     records and pass them to the processor in the next call to `Process`.
+  was being processed when the error occurred. In that case the remaining records
+  can be filled with a specific `ProcessedRecord` that marks them as not processed.
+  In that case Conduit will determine if it's required to process those records and
+  pass them to the processor in the next call to `Process`.
 
 ### Listing processor plugins
 
@@ -274,15 +268,14 @@ conditions need to evaluate to a boolean value. We propose to simply use the pac
 `strconv`, specifically the function
 [`strconv.ParseBool`](https://pkg.go.dev/strconv#ParseBool) to convert the result to
 a boolean value. This means that values 1, t, T, TRUE, true, True are converted to
-`true`. In addition, any value that is not 0, f, F, FALSE, false, False will return
-an error, which we should also regard as `false`, but additionally log a warning.
+`true`, while 0, f, F, FALSE, false and False are converted to `false`. Any value
+that can not be converted to `true` or `false` will return an error which means the
+record gets passed to the DLQ handler.
 
-Note that we still need to evaluate if `text/template` is actually the implementation
-we want to use to evaluate these expressions. If the performance is too slow we might
-need to manually implement a compatible evaluator, which should be able to take
-shortcuts and reach better performance, since we know that we are always evaluating
-the expressions on an OpenCDC record (no need for reflection if we are not diving into
-the key or payload).
+In our evaluations of template engines `text/template` seems to be performant enough
+for our use case. Evaluating a simple template is currently faster than the measured
+maximum throughput of Conduit itself, to be precise, it is 10x faster, so we don't
+expect it to be a bottleneck.
 
 ### Documenting processors
 
@@ -490,7 +483,7 @@ processors:
   id:   example
   type: field.rename
   settings:
-    fields: ".Key.foo:bar,.Payload.Before.id:key,.Metadata.topic:subject"
+    mapping: ".Key.foo:bar,.Payload.Before.id:key,.Metadata.topic:subject"
 ```
 
 ### `field.flatten`
