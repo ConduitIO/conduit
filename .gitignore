@@ -83,3 +83,6 @@ dist/
 
 # Escape Analysis Report
 escape_analysis.txt
+
+# Profiles
+*.prof
