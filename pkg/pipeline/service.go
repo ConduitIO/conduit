@@ -16,6 +16,7 @@ package pipeline
 
 import (
 	"context"
+	"regexp"
 	"strings"
 	"time"
 
@@ -23,7 +24,10 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/database"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/measure"
+	"github.com/conduitio/conduit/pkg/foundation/multierror"
 )
+
+var idRegex = regexp.MustCompile(`^[A-Za-z0-9-_:]*$`)
 
 type FailureEvent struct {
 	// ID is the ID of the pipeline which failed.
@@ -111,11 +115,9 @@ func (s *Service) Get(_ context.Context, id string) (*Instance, error) {
 // Create will create a new pipeline instance with the given config and return
 // it if it was successfully saved to the database.
 func (s *Service) Create(ctx context.Context, id string, cfg Config, p ProvisionType) (*Instance, error) {
-	if cfg.Name == "" {
-		return nil, ErrNameMissing
-	}
-	if s.instanceNames[cfg.Name] {
-		return nil, ErrNameAlreadyExists
+	err := s.validatePipeline(cfg, id)
+	if err != nil {
+		return nil, cerrors.Errorf("pipeline is invalid: %w", err)
 	}
 
 	t := time.Now()
@@ -129,7 +131,7 @@ func (s *Service) Create(ctx context.Context, id string, cfg Config, p Provision
 		DLQ:           DefaultDLQ,
 	}
 
-	err := s.store.Set(ctx, pl.ID, pl)
+	err = s.store.Set(ctx, pl.ID, pl)
 	if err != nil {
 		return nil, cerrors.Errorf("failed to save pipeline with ID %q: %w", pl.ID, err)
 	}
@@ -325,4 +327,33 @@ func (s *Service) notify(pipelineID string, err error) {
 	for _, handler := range s.handlers {
 		handler(e)
 	}
+}
+func (s *Service) validatePipeline(cfg Config, id string) error {
+	// contains all the errors occurred while provisioning configuration files.
+	var multierr error
+
+	if cfg.Name == "" {
+		multierr = multierror.Append(multierr, ErrNameMissing)
+	}
+	if s.instanceNames[cfg.Name] {
+		multierr = multierror.Append(multierr, ErrNameAlreadyExists)
+	}
+	if len(cfg.Name) > 64 {
+		multierr = multierror.Append(multierr, ErrNameOverLimit)
+	}
+	if len(cfg.Description) > 8192 {
+		multierr = multierror.Append(multierr, ErrDescriptionOverLimit)
+	}
+	if id == "" {
+		multierr = multierror.Append(multierr, ErrIDMissing)
+	}
+	matched := idRegex.MatchString(id)
+	if !matched {
+		multierr = multierror.Append(multierr, ErrInvalidCharacters)
+	}
+	if len(id) > 64 {
+		multierr = multierror.Append(multierr, ErrIDOverLimit)
+	}
+
+	return multierr
 }

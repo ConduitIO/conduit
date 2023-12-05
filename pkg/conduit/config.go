@@ -77,8 +77,9 @@ type Config struct {
 	ProcessorBuilderRegistry *processor.BuilderRegistry
 
 	dev struct {
-		cpuprofile string
-		memprofile string
+		cpuprofile   string
+		memprofile   string
+		blockprofile string
 	}
 }
 

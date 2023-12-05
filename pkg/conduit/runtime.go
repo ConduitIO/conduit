@@ -201,33 +201,13 @@ func newServices(
 // HTTP APIs. This function blocks until the supplied context is cancelled or
 // one of the services experiences a fatal error.
 func (r *Runtime) Run(ctx context.Context) (err error) {
-	t, ctx := tomb.WithContext(ctx)
+	cleanup, err := r.initProfiling(ctx)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
 
-	if r.Config.dev.cpuprofile != "" {
-		f, err := os.Create(r.Config.dev.cpuprofile)
-		if err != nil {
-			return cerrors.Errorf("could not create CPU profile: %w", err)
-		}
-		defer f.Close()
-		if err := pprof.StartCPUProfile(f); err != nil {
-			return cerrors.Errorf("could not start CPU profile: %w", err)
-		}
-		defer pprof.StopCPUProfile()
-	}
-	if r.Config.dev.memprofile != "" {
-		defer func() {
-			f, err := os.Create(r.Config.dev.memprofile)
-			if err != nil {
-				r.logger.Err(ctx, err).Msg("could not create memory profile")
-				return
-			}
-			defer f.Close()
-			runtime.GC() // get up-to-date statistics
-			if err := pprof.WriteHeapProfile(f); err != nil {
-				r.logger.Err(ctx, err).Msg("could not write memory profile")
-			}
-		}()
-	}
+	t, ctx := tomb.WithContext(ctx)
 
 	defer func() {
 		if err != nil {
@@ -312,6 +292,75 @@ func (r *Runtime) Run(ctx context.Context) (err error) {
 
 	close(r.Ready)
 	return nil
+}
+
+func (r *Runtime) initProfiling(ctx context.Context) (deferred func(), err error) {
+	deferred = func() {}
+
+	// deferFunc adds the func into deferred so it can be executed by the caller
+	// in a defer statement
+	deferFunc := func(f func()) {
+		oldDeferred := deferred
+		deferred = func() {
+			oldDeferred()
+			f()
+		}
+	}
+	// ignoreErr returns a function that executes f and ignores the returned error
+	ignoreErr := func(f func() error) func() {
+		return func() {
+			_ = f() // ignore error
+		}
+	}
+	defer func() {
+		if err != nil {
+			// on error we make sure deferred functions are executed and return
+			// an empty function as deferred instead
+			deferred()
+			deferred = func() {}
+		}
+	}()
+
+	if r.Config.dev.cpuprofile != "" {
+		f, err := os.Create(r.Config.dev.cpuprofile)
+		if err != nil {
+			return deferred, cerrors.Errorf("could not create CPU profile: %w", err)
+		}
+		deferFunc(ignoreErr(f.Close))
+		if err := pprof.StartCPUProfile(f); err != nil {
+			return deferred, cerrors.Errorf("could not start CPU profile: %w", err)
+		}
+		deferFunc(pprof.StopCPUProfile)
+	}
+	if r.Config.dev.memprofile != "" {
+		deferFunc(func() {
+			f, err := os.Create(r.Config.dev.memprofile)
+			if err != nil {
+				r.logger.Err(ctx, err).Msg("could not create memory profile")
+				return
+			}
+			defer f.Close()
+			runtime.GC() // get up-to-date statistics
+			if err := pprof.WriteHeapProfile(f); err != nil {
+				r.logger.Err(ctx, err).Msg("could not write memory profile")
+			}
+		})
+	}
+	if r.Config.dev.blockprofile != "" {
+		runtime.SetBlockProfileRate(1)
+		deferFunc(func() {
+			f, err := os.Create(r.Config.dev.blockprofile)
+			if err != nil {
+				r.logger.Err(ctx, err).Msg("could not create block profile")
+				return
+			}
+			defer f.Close()
+			if err := pprof.Lookup("block").WriteTo(f, 0); err != nil {
+				r.logger.Err(ctx, err).Msg("could not write block profile")
+			}
+		})
+	}
+	return
 }
 
 func (r *Runtime) registerCleanup(t *tomb.Tomb) {
