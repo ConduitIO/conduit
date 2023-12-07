@@ -166,10 +166,10 @@ func TestService_Create_ValidateSuccess(t *testing.T) {
 			Description: "",
 		},
 	}, {
-		name:   "valid connector ID",
-		connID: "Aa0-_:",
+		name:   "valid pipeline ID",
+		connID: "Aa0-_:.",
 		data: Config{
-			Name:        "test-connector",
+			Name:        "test-pipeline",
 			Description: "",
 		},
 	}}

@@ -636,7 +636,7 @@ func (r *Runtime) serveHTTP(
 ) (net.Addr, error) {
 	ln, err := net.Listen("tcp", srv.Addr)
 	if err != nil {
-		return nil, cerrors.Errorf("failed to listen on address %q: %w", r.Config.API.GRPC.Address, err)
+		return nil, cerrors.Errorf("failed to listen on address %q: %w", r.Config.API.HTTP.Address, err)
 	}
 
 	t.Go(func() error {
