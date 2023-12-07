@@ -315,7 +315,7 @@ func TestService_Create_ValidateSuccess(t *testing.T) {
 		},
 	}, {
 		name:   "valid connector ID",
-		connID: "Aa0-_",
+		connID: "Aa0-_.",
 		data: Config{
 			Name:     "test-connector",
 			Settings: map[string]string{"foo": "bar"},
