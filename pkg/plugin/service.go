@@ -52,7 +52,7 @@ func NewService(logger log.CtxLogger, builtin registry, standalone registry) *Se
 	}
 }
 
-func (s *Service) Check(_ context.Context) error {
+func (s *Service) Check(context.Context) error {
 	return nil
 }
 

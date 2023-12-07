@@ -1,8 +1,6 @@
 module github.com/conduitio/conduit
 
-go 1.21
-
-toolchain go1.21.1
+go 1.21.1
 
 require (
 	buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go v1.31.0-20231027202514-3f42134f4c56.2
@@ -10,6 +8,7 @@ require (
 	github.com/NYTimes/gziphandler v1.1.1
 	github.com/antchfx/jsonquery v1.3.3
 	github.com/bufbuild/buf v1.28.1
+	github.com/conduitio/conduit-commons v0.0.0-20231205181721-bef91d55116c
 	github.com/conduitio/conduit-connector-file v0.6.0
 	github.com/conduitio/conduit-connector-generator v0.5.0
 	github.com/conduitio/conduit-connector-kafka v0.7.0
