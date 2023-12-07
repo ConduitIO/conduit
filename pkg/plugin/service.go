@@ -58,7 +58,7 @@ func NewService(
 	}
 }
 
-func (s *Service) Check(_ context.Context) error {
+func (s *Service) Check(context.Context) error {
 	return nil
 }
 
