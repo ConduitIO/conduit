@@ -27,7 +27,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/multierror"
 )
 
-var idRegex = regexp.MustCompile(`^[A-Za-z0-9-_:]*$`)
+var idRegex = regexp.MustCompile(`^[A-Za-z0-9-_:.]*$`)
 
 type FailureEvent struct {
 	// ID is the ID of the pipeline which failed.
