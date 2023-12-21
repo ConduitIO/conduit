@@ -5,6 +5,7 @@
 //
 //	mockgen -destination=mock/connector_service.go -package=mock -mock_names=ConnectorService_InspectConnectorServer=ConnectorService_InspectConnectorServer github.com/conduitio/conduit/proto/api/v1 ConnectorService_InspectConnectorServer
 //
+
 // Package mock is a generated GoMock package.
 package mock
 

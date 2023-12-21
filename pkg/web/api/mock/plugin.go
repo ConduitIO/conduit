@@ -5,6 +5,7 @@
 //
 //	mockgen -destination=mock/plugin.go -package=mock -mock_names=PluginOrchestrator=PluginOrchestrator . PluginOrchestrator
 //
+
 // Package mock is a generated GoMock package.
 package mock
 

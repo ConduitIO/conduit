@@ -46,7 +46,7 @@ require (
 	github.com/rs/zerolog v1.31.0
 	github.com/twmb/go-cache v1.2.0
 	go.uber.org/goleak v1.3.0
-	go.uber.org/mock v0.3.0
+	go.uber.org/mock v0.4.0
 	golang.org/x/exp v0.0.0-20231214170342-aacd6d4b4611
 	golang.org/x/tools v0.16.1
 	golang.org/x/xerrors v0.0.0-20231012003039-104605ab7028

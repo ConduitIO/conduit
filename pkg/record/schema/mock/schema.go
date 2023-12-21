@@ -5,6 +5,7 @@
 //
 //	mockgen -destination=mock/schema.go -package=mock -mock_names=Schema=Schema,StructDescriptor=StructDescriptor,Field=Field,MapDescriptor=MapDescriptor,ArrayDescriptor=ArrayDescriptor,PrimitiveDescriptor=PrimitiveDescriptor,EnumDescriptor=EnumDescriptor,EnumValueDescriptor=EnumValueDescriptor . Schema,StructDescriptor,Field,MapDescriptor,ArrayDescriptor,PrimitiveDescriptor,EnumDescriptor,EnumValueDescriptor
 //
+
 // Package mock is a generated GoMock package.
 package mock
 
