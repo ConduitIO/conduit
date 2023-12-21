@@ -5,6 +5,7 @@
 //
 //	mockgen -destination=mock/connector.go -package=mock -mock_names=ConnectorOrchestrator=ConnectorOrchestrator . ConnectorOrchestrator
 //
+
 // Package mock is a generated GoMock package.
 package mock
 

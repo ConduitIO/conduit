@@ -5,6 +5,7 @@
 //
 //	mockgen -destination=mock/destination.go -package=mock -mock_names=Destination=Destination . Destination
 //
+
 // Package mock is a generated GoMock package.
 package mock
 
