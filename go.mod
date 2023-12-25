@@ -5,7 +5,7 @@ go 1.21
 toolchain go1.21.1
 
 require (
-	buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go v1.31.0-20231027202514-3f42134f4c56.2
+	buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go v1.32.0-20231027202514-3f42134f4c56.1
 	github.com/Masterminds/semver/v3 v3.2.1
 	github.com/NYTimes/gziphandler v1.1.1
 	github.com/antchfx/jsonquery v1.3.3
@@ -52,7 +52,7 @@ require (
 	golang.org/x/xerrors v0.0.0-20231012003039-104605ab7028
 	google.golang.org/genproto/googleapis/api v0.0.0-20231120223509-83a465c0220f
 	google.golang.org/grpc v1.60.1
-	google.golang.org/protobuf v1.31.1-0.20231027082548-f4a6c1f6e5c1
+	google.golang.org/protobuf v1.32.0
 	gopkg.in/tomb.v2 v2.0.0-20161208151619-d5d1b5820637
 )
 
