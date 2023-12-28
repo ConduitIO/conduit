@@ -114,9 +114,7 @@ func (p *wasmProcessor) nextCommand(ctx context.Context, m api.Module, ptr, allo
 		return sdk.ErrCodeFailedGettingCommand
 	}
 
-	p.write(ctx, m, ptr, allocSize, bytes)
-
-	return uint32(len(bytes))
+	return p.write(ctx, m, ptr, allocSize, bytes)
 }
 
 func (p *wasmProcessor) write(_ context.Context, mod api.Module, ptr uint32, sizeAllocated uint32, bytes []byte) uint32 {
@@ -167,10 +165,6 @@ func (p *wasmProcessor) reply(_ context.Context, m api.Module, ptr, size uint32)
 	cr, err := serde.UnmarshalCommandResponse(bytes)
 	if err != nil {
 		p.replyErr <- fmt.Errorf("failed deserializing command response: %w", err)
-		return
-	}
-	if cr.Error() != nil {
-		p.replyErr <- cr.Error()
 		return
 	}
 
@@ -232,7 +226,7 @@ func (p *wasmProcessor) Specification() (sdk.Specification, error) {
 			return sdk.Specification{}, fmt.Errorf("unexpected response type: %T", cr)
 		}
 
-		return resp.Specification, nil
+		return resp.Specification, resp.Error()
 	case err := <-p.replyErr:
 		return sdk.Specification{}, fmt.Errorf("reply error: %w", err)
 	}
