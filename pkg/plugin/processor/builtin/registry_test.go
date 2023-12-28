@@ -17,10 +17,10 @@ package builtin
 import (
 	"testing"
 
+	sdk "github.com/conduitio/conduit-processor-sdk"
+	"github.com/conduitio/conduit-processor-sdk/mock"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
-	"github.com/conduitio/conduit/pkg/plugin/processor"
-	"github.com/conduitio/conduit/pkg/plugin/processor/mock"
 	"github.com/matryer/is"
 	"go.uber.org/mock/gomock"
 )
@@ -30,16 +30,16 @@ func TestRegistry_List(t *testing.T) {
 	logger := log.Nop()
 
 	ctrl := gomock.NewController(t)
-	procPlugin := mock.NewProcessorPlugin(ctrl)
+	procPlugin := mock.NewProcessor(ctrl)
 
-	procSpec := processor.Specification{
+	procSpec := sdk.Specification{
 		Name:    "test-processor",
 		Version: "v0.1.2",
 	}
-	procPlugin.EXPECT().Specification().Return(procSpec)
-	procConstructor := func(log.CtxLogger) processor.ProcessorPlugin { return procPlugin }
+	procPlugin.EXPECT().Specification().Return(procSpec, nil)
+	procConstructor := func(log.CtxLogger) sdk.Processor { return procPlugin }
 
-	wantList := map[plugin.FullName]processor.Specification{
+	wantList := map[plugin.FullName]sdk.Specification{
 		"builtin:test-processor@v0.1.2": procSpec,
 	}
 

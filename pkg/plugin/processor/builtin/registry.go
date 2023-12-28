@@ -19,10 +19,10 @@ import (
 	"reflect"
 	"runtime/debug"
 
+	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
-	"github.com/conduitio/conduit/pkg/plugin/processor"
 )
 
 type Registry struct {
@@ -35,11 +35,11 @@ type Registry struct {
 
 type blueprint struct {
 	fullName      plugin.FullName
-	specification processor.Specification
+	specification sdk.Specification
 	constructor   ProcessorPluginConstructor
 }
 
-type ProcessorPluginConstructor func(log.CtxLogger) processor.ProcessorPlugin
+type ProcessorPluginConstructor func(log.CtxLogger) sdk.Processor
 
 func NewRegistry(logger log.CtxLogger, constructors map[string]ProcessorPluginConstructor) *Registry {
 	logger = logger.WithComponent("builtin.Registry")
@@ -58,17 +58,17 @@ func NewRegistry(logger log.CtxLogger, constructors map[string]ProcessorPluginCo
 	return r
 }
 
-func NewProcessorPluginConstructor(processorPlugin processor.ProcessorPlugin) ProcessorPluginConstructor {
+func NewProcessorPluginConstructor(processorPlugin sdk.Processor) ProcessorPluginConstructor {
 	procType := reflect.TypeOf(processorPlugin)
 	for procType.Kind() != reflect.Struct {
 		procType.Elem()
 	}
 
-	f := func(logger log.CtxLogger) processor.ProcessorPlugin {
+	f := func(logger log.CtxLogger) sdk.Processor {
 		// TODO create processor plugin wrapper that injects logger into context
 		//  before forwarding the call to the plugin
 		newProcValue := reflect.New(procType)
-		return newProcValue.Interface().(processor.ProcessorPlugin)
+		return newProcValue.Interface().(sdk.Processor)
 	}
 
 	// try out f, to catch any panic early
@@ -112,9 +112,12 @@ func loadPlugins(buildInfo *debug.BuildInfo, constructors map[string]ProcessorPl
 	return plugins
 }
 
-func getSpecification(moduleName string, constructor ProcessorPluginConstructor, buildInfo *debug.BuildInfo) (processor.Specification, error) {
+func getSpecification(moduleName string, constructor ProcessorPluginConstructor, buildInfo *debug.BuildInfo) (sdk.Specification, error) {
 	procPlugin := constructor(log.CtxLogger{})
-	specs := procPlugin.Specification()
+	specs, err := procPlugin.Specification()
+	if err != nil {
+		return sdk.Specification{}, err
+	}
 
 	if version := getModuleVersion(buildInfo.Deps, moduleName); version != "" {
 		// overwrite version with the import version
@@ -140,7 +143,7 @@ func newFullName(pluginName, pluginVersion string) plugin.FullName {
 	return plugin.NewFullName(plugin.PluginTypeBuiltin, pluginName, pluginVersion)
 }
 
-func (r *Registry) NewProcessorPlugin(logger log.CtxLogger, fullName plugin.FullName) (processor.ProcessorPlugin, error) {
+func (r *Registry) NewProcessorPlugin(logger log.CtxLogger, fullName plugin.FullName) (sdk.Processor, error) {
 	versionMap, ok := r.plugins[fullName.PluginName()]
 	if !ok {
 		return nil, plugin.ErrPluginNotFound
@@ -157,8 +160,8 @@ func (r *Registry) NewProcessorPlugin(logger log.CtxLogger, fullName plugin.Full
 	return b.constructor(logger), nil
 }
 
-func (r *Registry) List() map[plugin.FullName]processor.Specification {
-	specs := make(map[plugin.FullName]processor.Specification, len(r.plugins))
+func (r *Registry) List() map[plugin.FullName]sdk.Specification {
+	specs := make(map[plugin.FullName]sdk.Specification, len(r.plugins))
 	for _, versions := range r.plugins {
 		for version, bp := range versions {
 			if version == plugin.PluginVersionLatest {
