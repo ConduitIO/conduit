@@ -149,7 +149,7 @@ func (p *wasmProcessor) write(_ context.Context, mod api.Module, ptr uint32, siz
 			Msg("WASM module memory write is out of range")
 
 		p.replyErr <- cerrors.New("WASM module memory write is out of range")
-		return sdk.ErrMemoryOutOfRange
+		return sdk.ErrCodeMemoryOutOfRange
 	}
 
 	p.logger.Trace().Msgf("bytes written: %v", bytesWritten)
