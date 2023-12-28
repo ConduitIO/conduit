@@ -16,6 +16,7 @@ package standalone
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	sdk "github.com/conduitio/conduit-processor-sdk"
@@ -40,8 +41,7 @@ func TestWASMProcessor_SpecifyError(t *testing.T) {
 	is.NoErr(err)
 
 	_, err = underTest.Specification()
-	is.True(err != nil)
-	is.Equal(err.Error(), "reply error: boom")
+	is.Equal(err, errors.New("boom"))
 }
 
 func TestWASMProcessor_Specify(t *testing.T) {
