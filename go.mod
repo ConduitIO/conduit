@@ -40,7 +40,7 @@ require (
 	github.com/modern-go/reflect2 v1.0.2
 	github.com/peterbourgon/ff/v3 v3.4.0
 	github.com/piotrkowalczuk/promgrpc/v4 v4.1.2
-	github.com/prometheus/client_golang v1.17.0
+	github.com/prometheus/client_golang v1.18.0
 	github.com/prometheus/client_model v0.5.0
 	github.com/prometheus/common v0.45.0
 	github.com/rs/zerolog v1.31.0
