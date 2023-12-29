@@ -16,10 +16,11 @@ package standalone
 
 import (
 	"context"
+	//nolint:depguard // testing external error
 	"errors"
-	"github.com/conduitio/conduit-commons/opencdc"
 	"testing"
 
+	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/matryer/is"
 	"github.com/rs/zerolog"
@@ -71,9 +72,9 @@ func TestWASMProcessor_Specify(t *testing.T) {
 		},
 	}
 	wantSpec := sdk.Specification{
-		Name:        "full-processor",
-		Summary:     "full processor summary",
-		Description: "full processor description",
+		Name:        "chaos-processor",
+		Summary:     "chaos processor summary",
+		Description: "chaos processor description",
 		Version:     "v1.3.5",
 		Author:      "Meroxa, Inc.",
 		Parameters: map[string]sdk.Parameter{

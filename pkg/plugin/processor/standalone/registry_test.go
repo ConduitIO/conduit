@@ -29,36 +29,49 @@ var testPluginDir = "./test/wasm_processors/"
 func TestRegistry_List(t *testing.T) {
 	is := is.New(t)
 
-	underTest := NewRegistry(log.Nop(), testPluginDir+"simple_processor/")
+	underTest := NewRegistry(log.Nop(), testPluginDir+"chaos_processor/")
 	list := underTest.List()
 	is.Equal(1, len(list))
-	got, ok := list["standalone:test-processor@v1.3.5"]
+	got, ok := list["standalone:chaos-processor@v1.3.5"]
 	is.True(ok) // expected spec for standalone:test-processor@v1.3.5
 
-	is.Equal(
-		got,
-		&spec{
-			Specification: sdk.Specification{
-				Name:        "test-processor",
-				Summary:     "test processor's summary",
-				Description: "test processor's description",
-				Version:     "v1.3.5",
-				Author:      "Meroxa, Inc.",
-				Parameters: map[string]sdk.Parameter{
-					"path": {
-						Default:     "/",
-						Type:        sdk.ParameterTypeString,
-						Description: "path to something",
-						Validations: []sdk.Validation{
-							{
-								Type:  sdk.ValidationTypeRegex,
-								Value: "abc.*",
-							},
-						},
+	param := sdk.Parameter{
+		Default:     "success",
+		Type:        sdk.ParameterTypeString,
+		Description: "prefix",
+		Validations: []sdk.Validation{
+			{
+				Type:  sdk.ValidationTypeInclusion,
+				Value: "success,error,panic",
+			},
+		},
+	}
+	wantSpec := sdk.Specification{
+		Name:        "chaos-processor",
+		Summary:     "chaos processor summary",
+		Description: "chaos processor description",
+		Version:     "v1.3.5",
+		Author:      "Meroxa, Inc.",
+		Parameters: map[string]sdk.Parameter{
+			"configure": param,
+			"open":      param,
+			"process.prefix": {
+				Default:     "",
+				Type:        sdk.ParameterTypeString,
+				Description: "prefix to be added to the payload's after",
+				Validations: []sdk.Validation{
+					{
+						Type: sdk.ValidationTypeRequired,
 					},
 				},
 			},
+			"process":  param,
+			"teardown": param,
 		},
+	}
+	is.Equal(
+		got,
+		&spec{Specification: wantSpec},
 	)
 }
 

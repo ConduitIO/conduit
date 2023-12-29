@@ -16,21 +16,22 @@ package main
 
 import (
 	"context"
-	"errors"
+
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit-processor-sdk/run"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 )
 
 func main() {
-	run.Run(&testProcessor{})
+	run.Run(&chaosProcessor{})
 }
 
-type testProcessor struct {
+type chaosProcessor struct {
 	cfg map[string]string
 }
 
-func (t *testProcessor) Specification() (sdk.Specification, error) {
+func (p *chaosProcessor) Specification() (sdk.Specification, error) {
 	param := sdk.Parameter{
 		Default:     "success",
 		Type:        sdk.ParameterTypeString,
@@ -43,9 +44,9 @@ func (t *testProcessor) Specification() (sdk.Specification, error) {
 		},
 	}
 	return sdk.Specification{
-		Name:        "full-processor",
-		Summary:     "full processor summary",
-		Description: "full processor description",
+		Name:        "chaos-processor",
+		Summary:     "chaos processor summary",
+		Description: "chaos processor description",
 		Version:     "v1.3.5",
 		Author:      "Meroxa, Inc.",
 		Parameters: map[string]sdk.Parameter{
@@ -67,50 +68,50 @@ func (t *testProcessor) Specification() (sdk.Specification, error) {
 	}, nil
 }
 
-func (t *testProcessor) Configure(_ context.Context, cfg map[string]string) error {
-	t.cfg = cfg
+func (p *chaosProcessor) Configure(_ context.Context, cfg map[string]string) error {
+	p.cfg = cfg
 
-	err := t.methodBehavior("configure")
+	err := p.methodBehavior("configure")
 	if err != nil {
 		return err
 	}
 
 	_, ok := cfg["process.prefix"]
 	if !ok {
-		return errors.New("missing prefix")
+		return cerrors.New("missing prefix")
 	}
 
 	return nil
 }
 
-func (t *testProcessor) Open(ctx context.Context) error {
-	return t.methodBehavior("open")
+func (p *chaosProcessor) Open(context.Context) error {
+	return p.methodBehavior("open")
 }
 
-func (t *testProcessor) methodBehavior(name string) error {
-	switch t.cfg[name] {
+func (p *chaosProcessor) methodBehavior(name string) error {
+	switch p.cfg[name] {
 	case "error":
-		return errors.New(name + " error")
+		return cerrors.New(name + " error")
 	case "panic":
 		panic(name + " panic")
 	case "", "success":
 		return nil
 	default:
-		panic("unknown mode: " + t.cfg[name])
+		panic("unknown mode: " + p.cfg[name])
 	}
 }
 
-func (t *testProcessor) Process(ctx context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
-	err := t.methodBehavior("process")
+func (p *chaosProcessor) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
+	err := p.methodBehavior("process")
 	if err != nil {
-		return t.makeErrorRecords(len(records), err)
+		return p.makeErrorRecords(len(records), err)
 	}
 
 	out := make([]sdk.ProcessedRecord, len(records))
 	for i, record := range records {
 		outRec := record.Clone()
 		original := outRec.Payload.After.(opencdc.RawData)
-		outRec.Payload.After = opencdc.RawData(t.cfg["process.prefix"] + string(original.Bytes()))
+		outRec.Payload.After = opencdc.RawData(p.cfg["process.prefix"] + string(original.Bytes()))
 
 		out[i] = sdk.SingleRecord(outRec)
 	}
@@ -118,7 +119,7 @@ func (t *testProcessor) Process(ctx context.Context, records []opencdc.Record) [
 	return out
 }
 
-func (p *testProcessor) makeErrorRecords(num int, err error) []sdk.ProcessedRecord {
+func (p *chaosProcessor) makeErrorRecords(num int, err error) []sdk.ProcessedRecord {
 	out := make([]sdk.ProcessedRecord, num)
 	for i := 0; i < num; i++ {
 		out[i] = sdk.ErrorRecord{Err: err}
@@ -127,6 +128,6 @@ func (p *testProcessor) makeErrorRecords(num int, err error) []sdk.ProcessedReco
 	return out
 }
 
-func (t *testProcessor) Teardown(ctx context.Context) error {
-	return nil
+func (p *chaosProcessor) Teardown(context.Context) error {
+	return p.methodBehavior("teardown")
 }
