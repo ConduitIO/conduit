@@ -59,7 +59,7 @@ func (p *testProcessor) Configure(context.Context, map[string]string) error {
 
 func (p *testProcessor) Open(context.Context) error {
 	// TODO implement me
-	panic("implement me")
+	panic("implement me again")
 }
 
 func (p *testProcessor) Process(context.Context, []opencdc.Record) []sdk.ProcessedRecord {
