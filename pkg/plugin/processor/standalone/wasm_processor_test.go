@@ -16,6 +16,7 @@ package standalone
 
 import (
 	"context"
+	//nolint:depguard // needed to test external error
 	"errors"
 	"testing"
 
