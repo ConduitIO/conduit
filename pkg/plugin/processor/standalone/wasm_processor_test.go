@@ -17,6 +17,7 @@ package standalone
 import (
 	"context"
 	"errors"
+	"github.com/conduitio/conduit-commons/opencdc"
 	"testing"
 
 	sdk "github.com/conduitio/conduit-processor-sdk"
@@ -28,7 +29,7 @@ func TestWASMProcessor_MalformedProcessor(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
 
-	_, err := NewWASMProcessor(ctx, zerolog.Nop(), testPluginDir+"malformed_processor/processor.txt")
+	_, err := NewWASMProcessor(ctx, zerolog.Nop(), "./wasm_processor_test.go")
 	is.True(err != nil)
 	is.Equal(err.Error(), "failed running WASM module: failed compiling WASM module: invalid magic number")
 }
@@ -51,36 +52,92 @@ func TestWASMProcessor_Specify(t *testing.T) {
 	underTest, err := NewWASMProcessor(
 		ctx,
 		zerolog.New(zerolog.NewTestWriter(t)),
-		testPluginDir+"simple_processor/processor.wasm",
+		testPluginDir+"chaos_processor/processor.wasm",
 	)
 	is.NoErr(err)
 
 	gotSpec, err := underTest.Specification()
 	is.NoErr(err)
 
-	is.Equal(
-		gotSpec,
-		sdk.Specification{
-			Name:        "test-processor",
-			Summary:     "test processor's summary",
-			Description: "test processor's description",
-			Version:     "v1.3.5",
-			Author:      "Meroxa, Inc.",
-			Parameters: map[string]sdk.Parameter{
-				"path": {
-					Default:     "/",
-					Type:        sdk.ParameterTypeString,
-					Description: "path to something",
-					Validations: []sdk.Validation{
-						{
-							Type:  sdk.ValidationTypeRegex,
-							Value: "abc.*",
-						},
+	param := sdk.Parameter{
+		Default:     "success",
+		Type:        sdk.ParameterTypeString,
+		Description: "prefix",
+		Validations: []sdk.Validation{
+			{
+				Type:  sdk.ValidationTypeInclusion,
+				Value: "success,error,panic",
+			},
+		},
+	}
+	wantSpec := sdk.Specification{
+		Name:        "full-processor",
+		Summary:     "full processor summary",
+		Description: "full processor description",
+		Version:     "v1.3.5",
+		Author:      "Meroxa, Inc.",
+		Parameters: map[string]sdk.Parameter{
+			"configure": param,
+			"open":      param,
+			"process.prefix": {
+				Default:     "",
+				Type:        sdk.ParameterTypeString,
+				Description: "prefix to be added to the payload's after",
+				Validations: []sdk.Validation{
+					{
+						Type: sdk.ValidationTypeRequired,
 					},
 				},
 			},
+			"process":  param,
+			"teardown": param,
 		},
+	}
+	is.Equal(
+		gotSpec,
+		wantSpec,
 	)
+
+	is.NoErr(underTest.Teardown(ctx))
+}
+
+func TestWASMProcessor_Process(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+
+	underTest, err := NewWASMProcessor(
+		ctx,
+		zerolog.New(zerolog.NewTestWriter(t)),
+		testPluginDir+"chaos_processor/processor.wasm",
+	)
+	is.NoErr(err)
+
+	is.NoErr(underTest.Configure(ctx, map[string]string{"process.prefix": "hello!\n\n"}))
+
+	is.NoErr(underTest.Open(ctx))
+
+	processed := underTest.Process(ctx, nil)
+	is.Equal(0, len(processed))
+
+	processed = underTest.Process(ctx, []opencdc.Record{})
+	is.Equal(0, len(processed))
+
+	input := opencdc.Record{
+		Position:  opencdc.Position("first left then right"),
+		Operation: opencdc.OperationCreate,
+		Metadata: map[string]string{
+			"street": "23rd",
+		},
+		Key: opencdc.RawData("broken"),
+		Payload: opencdc.Change{
+			After: opencdc.RawData("oranges"),
+		},
+	}
+	want := sdk.SingleRecord(input.Clone())
+	want.Payload.After = opencdc.RawData("hello!\n\n" + string(want.Payload.After.Bytes()))
+	processed = underTest.Process(ctx, []opencdc.Record{input})
+	is.Equal(1, len(processed))
+	is.Equal(want, processed[0])
 
 	is.NoErr(underTest.Teardown(ctx))
 }

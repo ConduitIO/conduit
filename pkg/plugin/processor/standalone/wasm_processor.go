@@ -232,19 +232,59 @@ func (p *wasmProcessor) Specification() (sdk.Specification, error) {
 	}
 }
 
-func (p *wasmProcessor) Configure(context.Context, map[string]string) error {
-	// TODO implement me
-	panic("implement me")
+func (p *wasmProcessor) Configure(_ context.Context, cfg map[string]string) error {
+	p.commandCh <- &sdk.ConfigureCmd{
+		ConfigMap: cfg,
+	}
+
+	select {
+	case cr := <-p.replyCh:
+		resp, ok := cr.(*sdk.ConfigureResponse)
+		if !ok {
+			return fmt.Errorf("unexpected response type: %T", cr)
+		}
+
+		return resp.Error()
+	case err := <-p.replyErr:
+		return fmt.Errorf("reply error: %w", err)
+	}
 }
 
 func (p *wasmProcessor) Open(context.Context) error {
-	// TODO implement me
-	panic("implement me")
+	p.commandCh <- &sdk.OpenCmd{}
+
+	select {
+	case cr := <-p.replyCh:
+		resp, ok := cr.(*sdk.OpenResponse)
+		if !ok {
+			return fmt.Errorf("unexpected response type: %T", cr)
+		}
+
+		return resp.Error()
+	case err := <-p.replyErr:
+		return fmt.Errorf("reply error: %w", err)
+	}
 }
 
-func (p *wasmProcessor) Process(context.Context, []opencdc.Record) []sdk.ProcessedRecord {
-	// TODO implement me
-	panic("implement me")
+func (p *wasmProcessor) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
+	p.commandCh <- &sdk.ProcessCmd{
+		Records: records,
+	}
+
+	select {
+	case cr := <-p.replyCh:
+		resp, ok := cr.(*sdk.ProcessResponse)
+		if !ok {
+			return p.makeErrorRecords(len(records), fmt.Errorf("unexpected response type: %T", cr))
+		}
+		if resp.Error() != nil {
+			return p.makeErrorRecords(len(records), resp.Error())
+		}
+
+		return resp.Records
+	case err := <-p.replyErr:
+		return p.makeErrorRecords(len(records), fmt.Errorf("reply error: %w", err))
+	}
 }
 
 func (p *wasmProcessor) Teardown(context.Context) error {
@@ -255,4 +295,13 @@ func (p *wasmProcessor) Teardown(context.Context) error {
 	<-p.runModStopped
 	p.runtimeCancel()
 	return nil
+}
+
+func (p *wasmProcessor) makeErrorRecords(num int, err error) []sdk.ProcessedRecord {
+	out := make([]sdk.ProcessedRecord, num)
+	for i := 0; i < num; i++ {
+		out[i] = sdk.ErrorRecord{Err: err}
+	}
+
+	return out
 }
