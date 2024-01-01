@@ -83,3 +83,5 @@ dist/
 
 # Escape Analysis Report
 escape_analysis.txt
+
+pkg/plugin/processor/standalone/test/wasm_processors/*/processor.wasm

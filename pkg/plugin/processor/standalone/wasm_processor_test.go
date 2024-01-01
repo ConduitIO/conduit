@@ -16,7 +16,10 @@ package standalone
 
 import (
 	"context"
-	//nolint:depguard // testing external error
+	"fmt"
+	"os"
+	"os/exec"
+	//nolint:depguard // needed to test external error
 	"errors"
 	"testing"
 
@@ -25,6 +28,21 @@ import (
 	"github.com/matryer/is"
 	"github.com/rs/zerolog"
 )
+
+func TestMain(m *testing.M) {
+	cmd := exec.Command("bash", "./test/build-test-processors.sh")
+
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	// Run the command
+	err := cmd.Run()
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "error executing bash script: %v", err)
+		os.Exit(1)
+	}
+
+	os.Exit(m.Run())
+}
 
 func TestWASMProcessor_MalformedProcessor(t *testing.T) {
 	is := is.New(t)
