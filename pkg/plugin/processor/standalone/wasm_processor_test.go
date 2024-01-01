@@ -16,11 +16,10 @@ package standalone
 
 import (
 	"context"
+	"errors" //nolint:depguard // needed to test external error
 	"fmt"
 	"os"
 	"os/exec"
-	//nolint:depguard // needed to test external error
-	"errors"
 	"testing"
 
 	"github.com/conduitio/conduit-commons/opencdc"
