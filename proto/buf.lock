@@ -7,11 +7,6 @@ deps:
     commit: de2e1a18c9e042119dedd69b852efc21
     digest: shake256:1275ac9a7d437cc6b48bd6ff2e9edc59f0450a8f9ab6050f49fb9949e231b7f4d91debfd42b09fc29d9e4aed1b9904266a46a46f7a5676218b53aafb7efe211d
   - remote: buf.build
-    owner: conduitio
-    repository: conduit-connector-protocol
-    commit: cef1af8b407f4dfdbb5d52630c4e6727
-    digest: shake256:37893bb98bc1b654be3f58211b65151701004dca90429ce70e01758818044fa217e4cd168f9bcd92a28f40ef2109ee25552fa8030f9dd92eb4e3c75764540a32
-  - remote: buf.build
     owner: googleapis
     repository: googleapis
     commit: a86849a25cc04f4dbe9b15ddddfbc488
