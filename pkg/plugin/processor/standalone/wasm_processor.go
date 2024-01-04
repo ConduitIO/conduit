@@ -55,7 +55,11 @@ func NewWASMProcessor(ctx context.Context, logger zerolog.Logger, wasmPath strin
 		runtimeCtx,
 		wazero.NewRuntimeConfig().WithCloseOnContextDone(true),
 	)
-	wasi_snapshot_preview1.MustInstantiate(ctx, r)
+	_, err := wasi_snapshot_preview1.Instantiate(ctx, r)
+	if err != nil {
+		runtimeCancel()
+		return nil, cerrors.Errorf("failed instantiating wasi_snapshot_preview1: %w", err)
+	}
 
 	p := &wasmProcessor{
 		logger:        logger,
@@ -67,13 +71,15 @@ func NewWASMProcessor(ctx context.Context, logger zerolog.Logger, wasmPath strin
 		runModStopped: make(chan struct{}),
 	}
 
-	err := p.exportFunctions(ctx)
+	err = p.exportFunctions(ctx)
 	if err != nil {
+		runtimeCancel()
 		return nil, fmt.Errorf("failed exporting processor functions: %w", err)
 	}
 
 	err = p.run(ctx, wasmPath)
 	if err != nil {
+		runtimeCancel()
 		return nil, fmt.Errorf("failed running WASM module: %w", err)
 	}
 
@@ -121,12 +127,14 @@ func (p *wasmProcessor) write(_ context.Context, mod api.Module, ptr uint32, siz
 	p.logger.Trace().
 		Int("total_bytes", len(bytes)).
 		Uint32("allocated_size", sizeAllocated).
+		Str("module_name", mod.Name()).
 		Msgf("writing command to module memory")
 
 	if sizeAllocated < uint32(len(bytes)) {
 		p.logger.Error().
 			Int("total_bytes", len(bytes)).
 			Uint32("allocated_size", sizeAllocated).
+			Str("module_name", mod.Name()).
 			Msgf("insufficient memory")
 
 		p.replyErr <- fmt.Errorf(

@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:generate ./test/build-test-processors.sh
-
 package standalone
 
 import (
@@ -23,8 +21,6 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/matryer/is"
 )
-
-var testPluginDir = "./test/wasm_processors/"
 
 func TestRegistry_List(t *testing.T) {
 	is := is.New(t)
