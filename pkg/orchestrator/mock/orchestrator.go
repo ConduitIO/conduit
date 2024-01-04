@@ -5,6 +5,7 @@
 //
 //	mockgen -destination=mock/orchestrator.go -package=mock -mock_names=PipelineService=PipelineService,ConnectorService=ConnectorService,ProcessorService=ProcessorService,PluginService=PluginService . PipelineService,ConnectorService,ProcessorService,PluginService
 //
+
 // Package mock is a generated GoMock package.
 package mock
 

@@ -5,6 +5,7 @@
 //
 //	mockgen -destination=mock/plugin.go -package=mock -mock_names=Dispenser=Dispenser,SourcePlugin=SourcePlugin,DestinationPlugin=DestinationPlugin,SpecifierPlugin=SpecifierPlugin . Dispenser,DestinationPlugin,SourcePlugin,SpecifierPlugin
 //
+
 // Package mock is a generated GoMock package.
 package mock
 

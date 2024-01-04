@@ -5,6 +5,7 @@
 //
 //	mockgen -destination=mock/processor_service_out.go -package=mock -mock_names=ProcessorService_InspectProcessorOutServer=ProcessorService_InspectProcessorOutServer github.com/conduitio/conduit/proto/api/v1 ProcessorService_InspectProcessorOutServer
 //
+
 // Package mock is a generated GoMock package.
 package mock
 

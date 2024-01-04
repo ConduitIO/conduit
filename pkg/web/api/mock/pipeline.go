@@ -5,6 +5,7 @@
 //
 //	mockgen -destination=mock/pipeline.go -package=mock -mock_names=PipelineOrchestrator=PipelineOrchestrator . PipelineOrchestrator
 //
+
 // Package mock is a generated GoMock package.
 package mock
 

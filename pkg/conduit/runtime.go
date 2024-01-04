@@ -302,8 +302,8 @@ func (r *Runtime) initProfiling(ctx context.Context) (deferred func(), err error
 	deferFunc := func(f func()) {
 		oldDeferred := deferred
 		deferred = func() {
-			oldDeferred()
 			f()
+			oldDeferred()
 		}
 	}
 	// ignoreErr returns a function that executes f and ignores the returned error
