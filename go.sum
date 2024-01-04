@@ -1103,6 +1103,8 @@ github.com/conduitio/conduit-connector-sdk v0.8.0 h1:gvchqoj5d3AQsBoIosx4i32L8Ex
 github.com/conduitio/conduit-connector-sdk v0.8.0/go.mod h1:nOz4K3X6fD8YMe5CPbULwSEE18Eu02ZrpT6o6KwQfxs=
 github.com/conduitio/conduit-processor-sdk v0.0.0-20231228195815-5a4e9b618cc8 h1:JaaDBQWmB/APPuJ3OQvvN8c8UHaNYCPvUXDs+w1NfUw=
 github.com/conduitio/conduit-processor-sdk v0.0.0-20231228195815-5a4e9b618cc8/go.mod h1:vzR6okyqvGBHlnFvBMkeZ1oMj8VaGSPk7mE3eJnndKE=
+github.com/conduitio/conduit-processor-sdk v0.0.0-20240104183915-5c16e18bda99 h1:ojEurdMpd7qmPda3tF3GdkCl8PE+UwXKBkQSJXTHMGA=
+github.com/conduitio/conduit-processor-sdk v0.0.0-20240104183915-5c16e18bda99/go.mod h1:1ckqfqVvCYVF4rt6n2ymIzsmPYfzBYQS5kuTIFORuKg=
 github.com/conduitio/yaml/v3 v3.3.0 h1:kbbaOSHcuH39gP4+rgbJGl6DSbLZcJgEaBvkEXJlCsI=
 github.com/conduitio/yaml/v3 v3.3.0/go.mod h1:JNgFMOX1t8W4YJuRZOh6GggVtSMsgP9XgTw+7dIenpc=
 github.com/containerd/stargz-snapshotter/estargz v0.15.1 h1:eXJjw9RbkLFgioVaTG+G/ZW/0kEe2oEKCdS/ZxIyoCU=
