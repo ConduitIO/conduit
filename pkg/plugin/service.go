@@ -32,23 +32,29 @@ import (
 //   - The standalone registry creates a dispenser which starts the plugin in a
 //     separate process and communicates with it via gRPC. These plugins are
 //     compiled independently of Conduit and can be included at runtime.
-type registry interface {
-	NewDispenser(logger log.CtxLogger, name FullName) (connector.Dispenser, error)
-	List() map[FullName]connector.Specification
+type registry[Dispenser, Specification any] interface {
+	NewDispenser(logger log.CtxLogger, name FullName) (Dispenser, error)
+	List() map[FullName]Specification
 }
+
+type connectorRegistry registry[connector.Dispenser, connector.Specification]
 
 type Service struct {
 	logger log.CtxLogger
 
-	builtin    registry
-	standalone registry
+	builtinConnectorReg    connectorRegistry
+	standaloneConnectorReg connectorRegistry
 }
 
-func NewService(logger log.CtxLogger, builtin registry, standalone registry) *Service {
+func NewService(
+	logger log.CtxLogger,
+	builtin connectorRegistry,
+	standalone connectorRegistry,
+) *Service {
 	return &Service{
-		logger:     logger.WithComponent("plugin.Service"),
-		builtin:    builtin,
-		standalone: standalone,
+		logger:                 logger.WithComponent("plugin.Service"),
+		builtinConnectorReg:    builtin,
+		standaloneConnectorReg: standalone,
 	}
 }
 
@@ -62,14 +68,14 @@ func (s *Service) NewDispenser(logger log.CtxLogger, name string) (connector.Dis
 	fullName := FullName(name)
 	switch fullName.PluginType() {
 	case PluginTypeStandalone:
-		return s.standalone.NewDispenser(logger, fullName)
+		return s.standaloneConnectorReg.NewDispenser(logger, fullName)
 	case PluginTypeBuiltin:
-		return s.builtin.NewDispenser(logger, fullName)
+		return s.builtinConnectorReg.NewDispenser(logger, fullName)
 	case PluginTypeAny:
-		d, err := s.standalone.NewDispenser(logger, fullName)
+		d, err := s.standaloneConnectorReg.NewDispenser(logger, fullName)
 		if err != nil {
 			s.logger.Debug(context.Background()).Err(err).Msg("could not find standalone plugin dispenser, falling back to builtin plugin")
-			d, err = s.builtin.NewDispenser(logger, fullName)
+			d, err = s.builtinConnectorReg.NewDispenser(logger, fullName)
 		}
 		return d, err
 	default:
@@ -78,8 +84,8 @@ func (s *Service) NewDispenser(logger log.CtxLogger, name string) (connector.Dis
 }
 
 func (s *Service) ListConnectors(context.Context) (map[string]connector.Specification, error) {
-	builtinSpecs := s.builtin.List()
-	standaloneSpecs := s.standalone.List()
+	builtinSpecs := s.builtinConnectorReg.List()
+	standaloneSpecs := s.standaloneConnectorReg.List()
 
 	specs := make(map[string]connector.Specification, len(builtinSpecs)+len(standaloneSpecs))
 	for k, v := range builtinSpecs {
