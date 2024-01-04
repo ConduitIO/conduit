@@ -17,7 +17,7 @@ require (
 	github.com/conduitio/conduit-connector-protocol v0.5.1-0.20240104160905-e9e61586fb8d
 	github.com/conduitio/conduit-connector-s3 v0.5.1
 	github.com/conduitio/conduit-connector-sdk v0.8.0
-	github.com/conduitio/conduit-processor-sdk v0.0.0-20240104183915-5c16e18bda99
+	github.com/conduitio/conduit-processor-sdk v0.0.0-20240104184508-4f61ece4b1c9
 	github.com/conduitio/yaml/v3 v3.3.0
 	github.com/dgraph-io/badger/v4 v4.2.0
 	github.com/dop251/goja v0.0.0-20230531210528-d7324b2d74f7
