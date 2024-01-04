@@ -3,13 +3,21 @@ version: v1
 deps:
   - remote: buf.build
     owner: conduitio
+    repository: conduit-commons
+    commit: de2e1a18c9e042119dedd69b852efc21
+    digest: shake256:1275ac9a7d437cc6b48bd6ff2e9edc59f0450a8f9ab6050f49fb9949e231b7f4d91debfd42b09fc29d9e4aed1b9904266a46a46f7a5676218b53aafb7efe211d
+  - remote: buf.build
+    owner: conduitio
     repository: conduit-connector-protocol
-    commit: 68f3642f66c04db8ba18360a6b7b3c15
+    commit: cef1af8b407f4dfdbb5d52630c4e6727
+    digest: shake256:37893bb98bc1b654be3f58211b65151701004dca90429ce70e01758818044fa217e4cd168f9bcd92a28f40ef2109ee25552fa8030f9dd92eb4e3c75764540a32
   - remote: buf.build
     owner: googleapis
     repository: googleapis
-    commit: c0ec788bbbb747fca594a1e2347edd4e
+    commit: a86849a25cc04f4dbe9b15ddddfbc488
+    digest: shake256:e19143328f8cbfe13fc226aeee5e63773ca494693a72740a7560664270039a380d94a1344234b88c7691311460df9a9b1c2982190d0a2612eae80368718e1943
   - remote: buf.build
     owner: grpc-ecosystem
     repository: grpc-gateway
-    commit: a1ecdc58eccd49aa8bea2a7a9022dc27
+    commit: 3f42134f4c564983838425bc43c7a65f
+    digest: shake256:3d11d4c0fe5e05fda0131afefbce233940e27f0c31c5d4e385686aea58ccd30f72053f61af432fa83f1fc11cda57f5f18ca3da26a29064f73c5a0d076bba8d92
