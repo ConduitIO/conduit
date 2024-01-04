@@ -1,8 +1,6 @@
 module github.com/conduitio/conduit
 
-go 1.21
-
-toolchain go1.21.1
+go 1.21.1
 
 require (
 	buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go v1.32.0-20231027202514-3f42134f4c56.1
@@ -10,12 +8,13 @@ require (
 	github.com/NYTimes/gziphandler v1.1.1
 	github.com/antchfx/jsonquery v1.3.3
 	github.com/bufbuild/buf v1.28.1
+	github.com/conduitio/conduit-commons v0.0.0-20240103200651-5a5746611a8e
 	github.com/conduitio/conduit-connector-file v0.6.0
 	github.com/conduitio/conduit-connector-generator v0.5.0
 	github.com/conduitio/conduit-connector-kafka v0.7.0
 	github.com/conduitio/conduit-connector-log v0.3.0
 	github.com/conduitio/conduit-connector-postgres v0.5.0
-	github.com/conduitio/conduit-connector-protocol v0.5.0
+	github.com/conduitio/conduit-connector-protocol v0.5.1-0.20240104160905-e9e61586fb8d
 	github.com/conduitio/conduit-connector-s3 v0.5.1
 	github.com/conduitio/conduit-connector-sdk v0.8.0
 	github.com/conduitio/yaml/v3 v3.3.0
@@ -24,7 +23,6 @@ require (
 	github.com/dop251/goja_nodejs v0.0.0-20230602164024-804a84515562
 	github.com/gammazero/deque v0.2.1
 	github.com/goccy/go-json v0.10.2
-	github.com/golang/mock v1.6.0
 	github.com/golangci/golangci-lint v1.55.2
 	github.com/google/go-cmp v0.6.0
 	github.com/google/uuid v1.5.0

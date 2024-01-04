@@ -17,7 +17,7 @@ package toproto
 import (
 	"fmt"
 
-	opencdcv1 "github.com/conduitio/conduit-connector-protocol/proto/opencdc/v1"
+	opencdcv1 "github.com/conduitio/conduit-commons/proto/opencdc/v1"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/record"
 	"google.golang.org/protobuf/types/known/structpb"

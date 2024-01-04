@@ -404,9 +404,6 @@
               "properties": {
                 "result": {
                   "$ref": "#/definitions/v1Record"
-                },
-                "error": {
-                  "$ref": "#/definitions/googlerpcStatus"
                 }
               },
               "title": "Stream result of v1InspectConnectorResponse"
@@ -1371,9 +1368,6 @@
               "properties": {
                 "result": {
                   "$ref": "#/definitions/v1Record"
-                },
-                "error": {
-                  "$ref": "#/definitions/googlerpcStatus"
                 }
               },
               "title": "Stream result of v1InspectProcessorInResponse"
@@ -1418,9 +1412,6 @@
               "properties": {
                 "result": {
                   "$ref": "#/definitions/v1Record"
-                },
-                "error": {
-                  "$ref": "#/definitions/googlerpcStatus"
                 }
               },
               "title": "Stream result of v1InspectProcessorOutResponse"
