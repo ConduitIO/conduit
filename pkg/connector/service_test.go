@@ -17,6 +17,7 @@ package connector
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -308,16 +309,16 @@ func TestService_Create_ValidateSuccess(t *testing.T) {
 		data   Config
 	}{{
 		name:   "valid config name",
-		connID: uuid.NewString(),
+		connID: strings.Repeat("a", 128),
 		data: Config{
-			Name:     "Name#@-/_0%$",
+			Name:     strings.Repeat("a", 128),
 			Settings: map[string]string{"foo": "bar"},
 		},
 	}, {
 		name:   "valid connector ID",
 		connID: "Aa0-_.",
 		data: Config{
-			Name:     "test-connector",
+			Name:     "Name#@-/_0%$",
 			Settings: map[string]string{"foo": "bar"},
 		},
 	}}
@@ -361,16 +362,16 @@ func TestService_Create_ValidateError(t *testing.T) {
 			Settings: map[string]string{"foo": "bar"},
 		},
 	}, {
-		name:    "connector name over 64 characters",
+		name:    "connector name over 128 characters",
 		connID:  uuid.NewString(),
 		errType: ErrNameOverLimit,
 		data: Config{
-			Name:     "aaaaaaaaa1bbbbbbbbb2ccccccccc3ddddddddd4eeeeeeeee5fffffffff6ggggg",
+			Name:     strings.Repeat("a", 129),
 			Settings: map[string]string{"foo": "bar"},
 		},
 	}, {
-		name:    "connector ID over 64 characters",
-		connID:  "aaaaaaaaa1bbbbbbbbb2ccccccccc3ddddddddd4eeeeeeeee5fffffffff6ggggg",
+		name:    "connector ID over 128 characters",
+		connID:  strings.Repeat("a", 129),
 		errType: ErrIDOverLimit,
 		data: Config{
 			Name:     "test-connector",

@@ -29,6 +29,11 @@ import (
 
 var idRegex = regexp.MustCompile(`^[A-Za-z0-9-_:.]*$`)
 
+const (
+	idLengthLimit   = 128
+	nameLengthLimit = 128
+)
+
 // Service manages connectors.
 type Service struct {
 	logger log.CtxLogger
@@ -291,7 +296,7 @@ func (s *Service) validateConnector(cfg Config, id string) error {
 	if cfg.Name == "" {
 		multierr = multierror.Append(multierr, ErrNameMissing)
 	}
-	if len(cfg.Name) > 64 {
+	if len(cfg.Name) > nameLengthLimit {
 		multierr = multierror.Append(multierr, ErrNameOverLimit)
 	}
 	if id == "" {
@@ -301,7 +306,7 @@ func (s *Service) validateConnector(cfg Config, id string) error {
 	if !matched {
 		multierr = multierror.Append(multierr, ErrInvalidCharacters)
 	}
-	if len(id) > 64 {
+	if len(id) > idLengthLimit {
 		multierr = multierror.Append(multierr, ErrIDOverLimit)
 	}
 
