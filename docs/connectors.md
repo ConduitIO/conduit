@@ -82,17 +82,6 @@ The Conduit team and other community developers create and maintain standalone c
 
 Learn more about how you can install [standalone connectors to Conduit here](https://conduit.io/docs/connectors/installing).
 
-### Support Types
-
-- `Conduit` - These are connectors that are built by the Conduit. Any issues or problems filed on those repos will be
-  responded to by the Conduit team.
-- `Community` - A community connector is one where a developer created a connector and they're the ones supporting it
-  not the Conduit team.
-- `Legacy` - Some connectors are built using non-preferred methods. For example, Kafka Connect connectors can be used
-  on Conduit. This is considered a stop gap measure until `conduit` or `community` connectors are built.
-
-At this time, Conduit does not have any commercially supported connectors.
-
 ### Source & Destination
 
 Source means the connector has the ability to get data from an upstream data store. Destination means the connector can
@@ -100,33 +89,4 @@ to write to a downstream data store.
 
 ### The List
 
-| Connector | Source | Destination | Support | Conduit version support |
-|-----------|-------|----|-------------|-------------|
-| [Airtable](https://github.com/conduitio-labs/conduit-connector-airtable) |WIP| | Community | WIP |
-| [Algolia](https://github.com/conduitio-labs/conduit-connector-algolia) | |✅ | Conduit | v0.3.0 |
-| [Azure Storage](https://github.com/conduitio-labs/conduit-connector-azure-storage) |✅ | | Community | v0.3.0|
-| [BigQuery](https://github.com/conduitio-labs/conduit-connector-bigquery) |✅ | | Community | v0.3.0|
-| [DB2](https://github.com/conduitio-labs/conduit-connector-db2) |WIP|WIP| Community |WIP|
-| [Elasticsearch](https://github.com/conduitio-labs/conduit-connector-elasticsearch) |✅ |✅ | Community |v0.3.0|
-| [File](https://github.com/ConduitIO/conduit-connector-file) |✅ |✅ | Conduit |v0.3.0|
-| [Firebolt](https://github.com/conduitio-labs/conduit-connector-firebolt) |WIP |WIP| Community | WIP |
-| [GCP PubSub](https://github.com/conduitio-labs/conduit-connector-gcp-pubsub) |✅ |✅| Community |WIP |
-| [Google Cloud Storage](https://github.com/conduitio-labs/conduit-connector-google-cloudstorage) |✅ | | Community | v0.3.0|
-| [Google Sheets](https://github.com/conduitio-labs/conduit-connector-google-sheets) |✅ | | Community | v0.3.0|
-| [Kafka](https://github.com/ConduitIO/conduit-connector-kafka) |✅ |✅ | Conduit |v0.3.0|
-| [Kafka Connect Wrapper](https://github.com/ConduitIO/conduit-kafka-connect-wrapper) | ✅ | ✅ | Legacy |v0.3.0|
-| [Marketo](https://github.com/conduitio-labs/conduit-connector-marketo) |✅ | | Community |v0.3.0|
-| [Materialize](https://github.com/conduitio-labs/conduit-connector-materialize) | |✅ | Community |v0.3.0|
-| [MongoDB](https://github.com/conduitio-labs/conduit-connector-mongo) |✅ |✅ | Community |v0.6.0|
-| [Nats Jetstream](https://github.com/conduitio-labs/conduit-connector-nats-jetstream) |✅ |✅ | Community |v0.3.0|
-| [Nats PubSub](https://github.com/conduitio-labs/conduit-connector-nats-pubsub) |✅|✅ | Community |v0.3.0|
-| [Oracle DB](https://github.com/conduitio-labs/conduit-connector-oracle) |WIP|WIP| Community |WIP|
-| [Postgres](https://github.com/ConduitIO/conduit-connector-postgres)   |✅ |✅ | Conduit |v0.3.0|
-| [Random Generator](https://github.com/ConduitIO/conduit-connector-generator) |✅ | | Conduit |v0.3.0|
-| [Redis](https://github.com/conduitio-labs/conduit-connector-redis) |✅|✅ | Community |v0.3.0|
-| [S3](https://github.com/ConduitIO/conduit-connector-s3) |✅ |✅ | Conduit | v0.3.0|
-| [Salesforce](https://github.com/conduitio-labs/conduit-connector-salesforce) | ✅ | | Community | v0.3.0|
-| [Snowflake](https://github.com/conduitio-labs/conduit-connector-snowflake) |✅ | | Community |v0.3.0|
-| [Stripe](https://github.com/conduitio-labs/conduit-connector-stripe) |✅ | | Community |v0.3.0|
-| [Vitess](https://github.com/conduitio-labs/conduit-connector-vitess) |WIP|WIP| Community |WIP|
-| [Zendesk](https://github.com/conduitio-labs/conduit-connector-zendesk) |✅ |✅| Community |v0.3.0|
+A full list of connectors is hosted here: https://conduit.io/docs/connectors/connector-list/.
