@@ -30,8 +30,8 @@ import (
 var idRegex = regexp.MustCompile(`^[A-Za-z0-9-_:.]*$`)
 
 const (
-	idLengthLimit   = 128
-	nameLengthLimit = 128
+	IDLengthLimit   = 256
+	NameLengthLimit = 256
 )
 
 // Service manages connectors.
@@ -296,7 +296,7 @@ func (s *Service) validateConnector(cfg Config, id string) error {
 	if cfg.Name == "" {
 		multierr = multierror.Append(multierr, ErrNameMissing)
 	}
-	if len(cfg.Name) > nameLengthLimit {
+	if len(cfg.Name) > NameLengthLimit {
 		multierr = multierror.Append(multierr, ErrNameOverLimit)
 	}
 	if id == "" {
@@ -306,7 +306,7 @@ func (s *Service) validateConnector(cfg Config, id string) error {
 	if !matched {
 		multierr = multierror.Append(multierr, ErrInvalidCharacters)
 	}
-	if len(id) > idLengthLimit {
+	if len(id) > IDLengthLimit {
 		multierr = multierror.Append(multierr, ErrIDOverLimit)
 	}
 

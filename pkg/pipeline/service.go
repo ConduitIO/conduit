@@ -30,9 +30,9 @@ import (
 var idRegex = regexp.MustCompile(`^[A-Za-z0-9-_:.]*$`)
 
 const (
-	idLengthLimit          = 128
-	nameLengthLimit        = 128
-	descriptionLengthLimit = 8192
+	IDLengthLimit          = 128
+	NameLengthLimit        = 128
+	DescriptionLengthLimit = 8192
 )
 
 type FailureEvent struct {
@@ -344,10 +344,10 @@ func (s *Service) validatePipeline(cfg Config, id string) error {
 	if s.instanceNames[cfg.Name] {
 		multierr = multierror.Append(multierr, ErrNameAlreadyExists)
 	}
-	if len(cfg.Name) > nameLengthLimit {
+	if len(cfg.Name) > NameLengthLimit {
 		multierr = multierror.Append(multierr, ErrNameOverLimit)
 	}
-	if len(cfg.Description) > descriptionLengthLimit {
+	if len(cfg.Description) > DescriptionLengthLimit {
 		multierr = multierror.Append(multierr, ErrDescriptionOverLimit)
 	}
 	if id == "" {
@@ -357,7 +357,7 @@ func (s *Service) validatePipeline(cfg Config, id string) error {
 	if !matched {
 		multierr = multierror.Append(multierr, ErrInvalidCharacters)
 	}
-	if len(id) > idLengthLimit {
+	if len(id) > IDLengthLimit {
 		multierr = multierror.Append(multierr, ErrIDOverLimit)
 	}
 

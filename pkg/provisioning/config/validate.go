@@ -17,6 +17,9 @@ package config
 import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/multierror"
+
+	"github.com/conduitio/conduit/pkg/connector"
+	"github.com/conduitio/conduit/pkg/pipeline"
 )
 
 const (
@@ -31,6 +34,15 @@ func Validate(cfg Pipeline) error {
 	var err, tmpErr error
 	if cfg.ID == "" {
 		err = multierror.Append(err, cerrors.Errorf(`id is mandatory: %w`, ErrMandatoryField))
+	}
+	if len(cfg.ID) > pipeline.IDLengthLimit {
+		err = multierror.Append(err, pipeline.ErrIDOverLimit)
+	}
+	if len(cfg.Name) > pipeline.NameLengthLimit {
+		err = multierror.Append(err, pipeline.ErrNameOverLimit)
+	}
+	if len(cfg.Description) > pipeline.DescriptionLengthLimit {
+		err = multierror.Append(err, pipeline.ErrDescriptionOverLimit)
 	}
 	if cfg.Status != StatusRunning && cfg.Status != StatusStopped {
 		err = multierror.Append(err, cerrors.Errorf(`"status" is invalid: %w`, ErrInvalidField))
@@ -51,6 +63,15 @@ func validateConnectors(mp []Connector) error {
 	var err, pErr error
 	ids := make(map[string]bool)
 	for _, cfg := range mp {
+		if cfg.ID == "" {
+			err = multierror.Append(err, cerrors.Errorf(`id is mandatory: %w`, ErrMandatoryField))
+		}
+		if len(cfg.ID) > connector.IDLengthLimit {
+			err = multierror.Append(err, connector.ErrIDOverLimit)
+		}
+		if len(cfg.Name) > connector.NameLengthLimit {
+			err = multierror.Append(err, connector.ErrNameOverLimit)
+		}
 		if cfg.Plugin == "" {
 			err = multierror.Append(err, cerrors.Errorf("connector %q: \"plugin\" is mandatory: %w", cfg.ID, ErrMandatoryField))
 		}

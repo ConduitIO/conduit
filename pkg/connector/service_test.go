@@ -362,16 +362,16 @@ func TestService_Create_ValidateError(t *testing.T) {
 			Settings: map[string]string{"foo": "bar"},
 		},
 	}, {
-		name:    "connector name over 128 characters",
+		name:    "connector name over 256 characters",
 		connID:  uuid.NewString(),
 		errType: ErrNameOverLimit,
 		data: Config{
-			Name:     strings.Repeat("a", 129),
+			Name:     strings.Repeat("a", 257),
 			Settings: map[string]string{"foo": "bar"},
 		},
 	}, {
-		name:    "connector ID over 128 characters",
-		connID:  strings.Repeat("a", 129),
+		name:    "connector ID over 256 characters",
+		connID:  strings.Repeat("a", 257),
 		errType: ErrIDOverLimit,
 		data: Config{
 			Name:     "test-connector",
