@@ -15,10 +15,13 @@
 package config
 
 import (
+	"strings"
 	"testing"
 
+	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/multierror"
+	"github.com/conduitio/conduit/pkg/pipeline"
 	"github.com/matryer/is"
 )
 
@@ -104,8 +107,9 @@ func TestValidator_MandatoryFields(t *testing.T) {
 
 func TestValidator_InvalidFields(t *testing.T) {
 	tests := []struct {
-		name   string
-		config Pipeline
+		name    string
+		config  Pipeline
+		wantErr error
 	}{{
 		name: "connector type is invalid",
 		config: Pipeline{
@@ -125,6 +129,67 @@ func TestValidator_InvalidFields(t *testing.T) {
 				},
 			}},
 		},
+		wantErr: ErrInvalidField,
+	}, {
+		name: "connector id is too long",
+		config: Pipeline{
+			ID:          "pipeline1",
+			Status:      "running",
+			Name:        "pipeline1",
+			Description: "desc1",
+			Connectors: []Connector{{
+				ID:     strings.Repeat("x", 257),
+				Type:   "source",
+				Plugin: "builtin:s3",
+				Name:   "",
+			}},
+		},
+		wantErr: connector.ErrIDOverLimit,
+	}, {
+		name: "connector name is too long",
+		config: Pipeline{
+			ID:          "pipeline1",
+			Status:      "running",
+			Name:        "pipeline1",
+			Description: "desc1",
+			Connectors: []Connector{{
+				ID:     "x",
+				Name:   strings.Repeat("x", 257),
+				Type:   "source",
+				Plugin: "builtin:s3",
+			}},
+		},
+		wantErr: connector.ErrNameOverLimit,
+	}, {
+		name: "pipeline id is too long",
+		config: Pipeline{
+			ID:          strings.Repeat("x", 257),
+			Status:      "running",
+			Name:        "pipeline1",
+			Description: "desc1",
+			Connectors:  []Connector{},
+		},
+		wantErr: pipeline.ErrIDOverLimit,
+	}, {
+		name: "pipeline name is too long",
+		config: Pipeline{
+			ID:          "pipeline1",
+			Name:        strings.Repeat("x", 257),
+			Status:      "running",
+			Description: "desc1",
+			Connectors:  []Connector{},
+		},
+		wantErr: pipeline.ErrNameOverLimit,
+	}, {
+		name: "pipeline desc is too long",
+		config: Pipeline{
+			ID:          "pipeline1",
+			Name:        "pipeline1",
+			Status:      "running",
+			Description: strings.Repeat("x", 9000),
+			Connectors:  []Connector{},
+		},
+		wantErr: pipeline.ErrDescriptionOverLimit,
 	}, {
 		name: "pipeline status is invalid",
 		config: Pipeline{
@@ -144,6 +209,7 @@ func TestValidator_InvalidFields(t *testing.T) {
 				},
 			}},
 		},
+		wantErr: ErrInvalidField,
 	}, {
 		name: "processor workers is negative",
 		config: Pipeline{
@@ -159,6 +225,7 @@ func TestValidator_InvalidFields(t *testing.T) {
 				Workers: -1,
 			}},
 		},
+		wantErr: ErrInvalidField,
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -166,7 +233,7 @@ func TestValidator_InvalidFields(t *testing.T) {
 
 			err := Validate(tt.config)
 			is.True(err != nil)
-			is.True(cerrors.Is(err, ErrInvalidField))
+			is.True(cerrors.Is(err, tt.wantErr))
 		})
 	}
 }
