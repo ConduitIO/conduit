@@ -89,4 +89,4 @@ to write to a downstream data store.
 
 ### The List
 
-A full list of connectors is hosted here: https://conduit.io/docs/connectors/connector-list/.
+A full list of connectors is hosted here: <https://conduit.io/docs/connectors/connector-list/>.
