@@ -29,6 +29,12 @@ import (
 
 var idRegex = regexp.MustCompile(`^[A-Za-z0-9-_:.]*$`)
 
+const (
+	IDLengthLimit          = 128
+	NameLengthLimit        = 128
+	DescriptionLengthLimit = 8192
+)
+
 type FailureEvent struct {
 	// ID is the ID of the pipeline which failed.
 	ID    string
@@ -338,10 +344,10 @@ func (s *Service) validatePipeline(cfg Config, id string) error {
 	if s.instanceNames[cfg.Name] {
 		multierr = multierror.Append(multierr, ErrNameAlreadyExists)
 	}
-	if len(cfg.Name) > 64 {
+	if len(cfg.Name) > NameLengthLimit {
 		multierr = multierror.Append(multierr, ErrNameOverLimit)
 	}
-	if len(cfg.Description) > 8192 {
+	if len(cfg.Description) > DescriptionLengthLimit {
 		multierr = multierror.Append(multierr, ErrDescriptionOverLimit)
 	}
 	if id == "" {
@@ -351,7 +357,7 @@ func (s *Service) validatePipeline(cfg Config, id string) error {
 	if !matched {
 		multierr = multierror.Append(multierr, ErrInvalidCharacters)
 	}
-	if len(id) > 64 {
+	if len(id) > IDLengthLimit {
 		multierr = multierror.Append(multierr, ErrIDOverLimit)
 	}
 
