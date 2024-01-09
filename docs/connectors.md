@@ -46,7 +46,7 @@ Once you have chosen a connector to be built-in, you can:
 
 - Download the new package and its dependencies: `go get "github.com/foo/conduit-connector-new"`
 - Import the Go module defining the connector
-into the [builtin registry](https://github.com/ConduitIO/conduit/blob/main/pkg/plugin/builtin/registry.go)
+into the [builtin registry](https://github.com/ConduitIO/conduit/blob/main/pkg/plugin/connector/builtin/registry.go)
 and add a new key to `DefaultDispenserFactories`:
 
 ```diff

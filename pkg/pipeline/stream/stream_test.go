@@ -27,7 +27,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/metrics/noop"
 	"github.com/conduitio/conduit/pkg/pipeline/stream"
 	streammock "github.com/conduitio/conduit/pkg/pipeline/stream/mock"
-	"github.com/conduitio/conduit/pkg/plugin"
+	connectorPlugin "github.com/conduitio/conduit/pkg/plugin/connector"
 	"github.com/conduitio/conduit/pkg/processor"
 	procmock "github.com/conduitio/conduit/pkg/processor/mock"
 	"github.com/conduitio/conduit/pkg/record"
@@ -343,7 +343,7 @@ func generatorSource(ctrl *gomock.Controller, logger log.CtxLogger, nodeID strin
 		if position == recordCount {
 			// block until Teardown is called
 			<-teardown
-			return record.Record{}, plugin.ErrStreamNotOpen
+			return record.Record{}, connectorPlugin.ErrStreamNotOpen
 		}
 
 		position++

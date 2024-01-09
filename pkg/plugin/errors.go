@@ -21,7 +21,6 @@ import (
 )
 
 var (
-	ErrStreamNotOpen    = cerrors.New("stream not open")
 	ErrPluginNotFound   = cerrors.New("plugin not found")
 	ErrPluginNotRunning = cerrors.New("plugin is not running")
 	ErrUnimplemented    = cerrors.New("method not implemented")

@@ -203,16 +203,12 @@ func (c *ConnectorOrchestrator) Validate(
 	plugin string,
 	config connector.Config,
 ) error {
-	d, err := c.plugins.NewDispenser(c.logger, plugin)
-	if err != nil {
-		return cerrors.Errorf("couldn't get dispenser: %w", err)
-	}
-
+	var err error
 	switch t {
 	case connector.TypeSource:
-		err = c.plugins.ValidateSourceConfig(ctx, d, config.Settings)
+		err = c.plugins.ValidateSourceConfig(ctx, plugin, config.Settings)
 	case connector.TypeDestination:
-		err = c.plugins.ValidateDestinationConfig(ctx, d, config.Settings)
+		err = c.plugins.ValidateDestinationConfig(ctx, plugin, config.Settings)
 	default:
 		return cerrors.New("invalid connector type")
 	}

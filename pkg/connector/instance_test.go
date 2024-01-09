@@ -17,12 +17,13 @@ package connector
 import (
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
+	connectorPlugin "github.com/conduitio/conduit/pkg/plugin/connector"
 )
 
 // fakePluginFetcher fulfills the PluginFetcher interface.
-type fakePluginFetcher map[string]plugin.Dispenser
+type fakePluginFetcher map[string]connectorPlugin.Dispenser
 
-func (fpf fakePluginFetcher) NewDispenser(_ log.CtxLogger, name string) (plugin.Dispenser, error) {
+func (fpf fakePluginFetcher) NewDispenser(_ log.CtxLogger, name string) (connectorPlugin.Dispenser, error) {
 	plug, ok := fpf[name]
 	if !ok {
 		return nil, plugin.ErrPluginNotFound

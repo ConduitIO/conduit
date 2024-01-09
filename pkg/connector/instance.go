@@ -24,7 +24,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/inspector"
-	"github.com/conduitio/conduit/pkg/plugin"
+	connectorPlugin "github.com/conduitio/conduit/pkg/plugin/connector"
 )
 
 const (
@@ -86,7 +86,7 @@ type Connector interface {
 
 // PluginDispenserFetcher can fetch a plugin dispenser.
 type PluginDispenserFetcher interface {
-	NewDispenser(logger log.CtxLogger, name string) (plugin.Dispenser, error)
+	NewDispenser(logger log.CtxLogger, name string) (connectorPlugin.Dispenser, error)
 }
 
 func (i *Instance) Init(logger log.CtxLogger, persister *Persister) {

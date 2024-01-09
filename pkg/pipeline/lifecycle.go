@@ -30,7 +30,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/metrics/measure"
 	"github.com/conduitio/conduit/pkg/foundation/multierror"
 	"github.com/conduitio/conduit/pkg/pipeline/stream"
-	"github.com/conduitio/conduit/pkg/plugin"
+	connectorPlugin "github.com/conduitio/conduit/pkg/plugin/connector"
 	"github.com/conduitio/conduit/pkg/processor"
 	"gopkg.in/tomb.v2"
 )
@@ -48,7 +48,7 @@ type ProcessorFetcher interface {
 
 // PluginDispenserFetcher can fetch a plugin.
 type PluginDispenserFetcher interface {
-	NewDispenser(logger log.CtxLogger, name string) (plugin.Dispenser, error)
+	NewDispenser(logger log.CtxLogger, name string) (connectorPlugin.Dispenser, error)
 }
 
 // Run runs pipelines that had the running state in store.

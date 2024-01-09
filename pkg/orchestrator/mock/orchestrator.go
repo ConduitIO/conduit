@@ -16,7 +16,7 @@ import (
 	connector "github.com/conduitio/conduit/pkg/connector"
 	log "github.com/conduitio/conduit/pkg/foundation/log"
 	pipeline "github.com/conduitio/conduit/pkg/pipeline"
-	plugin "github.com/conduitio/conduit/pkg/plugin"
+	connector0 "github.com/conduitio/conduit/pkg/plugin/connector"
 	processor "github.com/conduitio/conduit/pkg/processor"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -465,26 +465,26 @@ func (m *PluginService) EXPECT() *PluginServiceMockRecorder {
 	return m.recorder
 }
 
-// List mocks base method.
-func (m *PluginService) List(arg0 context.Context) (map[string]plugin.Specification, error) {
+// ListConnectors mocks base method.
+func (m *PluginService) ListConnectors(arg0 context.Context) (map[string]connector0.Specification, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "List", arg0)
-	ret0, _ := ret[0].(map[string]plugin.Specification)
+	ret := m.ctrl.Call(m, "ListConnectors", arg0)
+	ret0, _ := ret[0].(map[string]connector0.Specification)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// List indicates an expected call of List.
-func (mr *PluginServiceMockRecorder) List(arg0 any) *gomock.Call {
+// ListConnectors indicates an expected call of ListConnectors.
+func (mr *PluginServiceMockRecorder) ListConnectors(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "List", reflect.TypeOf((*PluginService)(nil).List), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListConnectors", reflect.TypeOf((*PluginService)(nil).ListConnectors), arg0)
 }
 
 // NewDispenser mocks base method.
-func (m *PluginService) NewDispenser(arg0 log.CtxLogger, arg1 string) (plugin.Dispenser, error) {
+func (m *PluginService) NewDispenser(arg0 log.CtxLogger, arg1 string) (connector0.Dispenser, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "NewDispenser", arg0, arg1)
-	ret0, _ := ret[0].(plugin.Dispenser)
+	ret0, _ := ret[0].(connector0.Dispenser)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -496,7 +496,7 @@ func (mr *PluginServiceMockRecorder) NewDispenser(arg0, arg1 any) *gomock.Call {
 }
 
 // ValidateDestinationConfig mocks base method.
-func (m *PluginService) ValidateDestinationConfig(arg0 context.Context, arg1 plugin.Dispenser, arg2 map[string]string) error {
+func (m *PluginService) ValidateDestinationConfig(arg0 context.Context, arg1 string, arg2 map[string]string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ValidateDestinationConfig", arg0, arg1, arg2)
 	ret0, _ := ret[0].(error)
@@ -510,7 +510,7 @@ func (mr *PluginServiceMockRecorder) ValidateDestinationConfig(arg0, arg1, arg2 
 }
 
 // ValidateSourceConfig mocks base method.
-func (m *PluginService) ValidateSourceConfig(arg0 context.Context, arg1 plugin.Dispenser, arg2 map[string]string) error {
+func (m *PluginService) ValidateSourceConfig(arg0 context.Context, arg1 string, arg2 map[string]string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ValidateSourceConfig", arg0, arg1, arg2)
 	ret0, _ := ret[0].(error)
