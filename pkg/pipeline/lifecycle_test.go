@@ -30,7 +30,8 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/pipeline/stream"
 	"github.com/conduitio/conduit/pkg/plugin"
-	pmock "github.com/conduitio/conduit/pkg/plugin/mock"
+	connectorPlugin "github.com/conduitio/conduit/pkg/plugin/connector"
+	pmock "github.com/conduitio/conduit/pkg/plugin/connector/mock"
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/google/uuid"
@@ -573,9 +574,9 @@ func (tpf testProcessorFetcher) Get(_ context.Context, id string) (*processor.In
 }
 
 // testPluginFetcher fulfills the PluginFetcher interface.
-type testPluginFetcher map[string]plugin.Dispenser
+type testPluginFetcher map[string]connectorPlugin.Dispenser
 
-func (tpf testPluginFetcher) NewDispenser(_ log.CtxLogger, name string) (plugin.Dispenser, error) {
+func (tpf testPluginFetcher) NewDispenser(_ log.CtxLogger, name string) (connectorPlugin.Dispenser, error) {
 	plug, ok := tpf[name]
 	if !ok {
 		return nil, plugin.ErrPluginNotFound

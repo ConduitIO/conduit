@@ -17,11 +17,11 @@ package orchestrator
 import (
 	"context"
 
-	"github.com/conduitio/conduit/pkg/plugin"
+	"github.com/conduitio/conduit/pkg/plugin/connector"
 )
 
 type PluginOrchestrator base
 
-func (ps *PluginOrchestrator) List(ctx context.Context) (map[string]plugin.Specification, error) {
-	return ps.plugins.List(ctx)
+func (ps *PluginOrchestrator) ListConnectors(ctx context.Context) (map[string]connector.Specification, error) {
+	return ps.plugins.ListConnectors(ctx)
 }
