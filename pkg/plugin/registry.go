@@ -23,7 +23,6 @@ import (
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/rs/zerolog"
 )
 
 type Spec interface {
@@ -31,7 +30,7 @@ type Spec interface {
 	GetVersion() string
 }
 
-type GetSpecFn func(ctx context.Context, logger zerolog.Logger, path string) (Spec, error)
+type GetSpecFn func(ctx context.Context, logger log.CtxLogger, path string) (Spec, error)
 
 // Registry is a generic directory registry of plugins,
 // organized by plugin type, name and version.
@@ -124,7 +123,7 @@ func (r *Registry) loadPlugins(ctx context.Context, pluginDir string) map[string
 		pluginPath := path.Join(pluginDir, dirEntry.Name())
 
 		// create dispenser without a logger to not spam logs on refresh
-		specs, err := r.getSpecs(ctx, zerolog.Nop(), pluginPath)
+		specs, err := r.getSpecs(ctx, r.logger, pluginPath)
 		if err != nil {
 			err = cerrors.Errorf("failed to get specs: %w", err)
 			warn(ctx, err, pluginPath)

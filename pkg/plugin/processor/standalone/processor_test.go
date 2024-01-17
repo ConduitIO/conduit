@@ -16,44 +16,41 @@ package standalone
 
 import (
 	"context"
-	//nolint:depguard // needed to test external error
-	"errors"
 	"testing"
 
 	sdk "github.com/conduitio/conduit-processor-sdk"
+	"github.com/conduitio/conduit-processor-sdk/wasm"
+	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/matryer/is"
 	"github.com/rs/zerolog"
 )
 
-func TestWASMProcessor_MalformedProcessor(t *testing.T) {
-	is := is.New(t)
-	ctx := context.Background()
-
-	_, err := NewWASMProcessor(ctx, zerolog.Nop(), testPluginDir+"malformed_processor/processor.txt")
-	is.True(err != nil)
-	is.Equal(err.Error(), "failed running WASM module: failed compiling WASM module: invalid magic number")
-}
-
 func TestWASMProcessor_SpecifyError(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
+	logger := log.New(zerolog.New(zerolog.NewTestWriter(t)))
 
-	underTest, err := NewWASMProcessor(ctx, zerolog.Nop(), testPluginDir+"specify_error/processor.wasm")
+	r, hostModule := NewTestWazeroRuntime(ctx, t)
+	procModule, err := r.CompileModule(ctx, SpecifyError)
+	is.NoErr(err)
+
+	underTest, err := newWASMProcessor(ctx, r, procModule, hostModule, "test-processor", logger)
 	is.NoErr(err)
 
 	_, err = underTest.Specification()
-	is.Equal(err, errors.New("boom"))
+	is.Equal(err, wasm.NewError(0, "boom"))
 }
 
 func TestWASMProcessor_Specify(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
+	logger := log.New(zerolog.New(zerolog.NewTestWriter(t)))
 
-	underTest, err := NewWASMProcessor(
-		ctx,
-		zerolog.New(zerolog.NewTestWriter(t)),
-		testPluginDir+"simple_processor/processor.wasm",
-	)
+	r, hostModule := NewTestWazeroRuntime(ctx, t)
+	procModule, err := r.CompileModule(ctx, SimpleProcessor)
+	is.NoErr(err)
+
+	underTest, err := newWASMProcessor(ctx, r, procModule, hostModule, "test-processor", logger)
 	is.NoErr(err)
 
 	gotSpec, err := underTest.Specification()
@@ -82,6 +79,24 @@ func TestWASMProcessor_Specify(t *testing.T) {
 			},
 		},
 	)
+
+	is.NoErr(underTest.Teardown(ctx))
+}
+
+func TestWASMProcessor_Configure(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	logger := log.New(zerolog.New(zerolog.NewTestWriter(t)))
+
+	r, hostModule := NewTestWazeroRuntime(ctx, t)
+	procModule, err := r.CompileModule(ctx, SimpleProcessor)
+	is.NoErr(err)
+
+	underTest, err := newWASMProcessor(ctx, r, procModule, hostModule, "test-processor", logger)
+	is.NoErr(err)
+
+	err = underTest.Configure(ctx, nil)
+	is.NoErr(err)
 
 	is.NoErr(underTest.Teardown(ctx))
 }

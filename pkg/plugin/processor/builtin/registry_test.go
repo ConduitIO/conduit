@@ -18,9 +18,9 @@ import (
 	"testing"
 
 	sdk "github.com/conduitio/conduit-processor-sdk"
-	"github.com/conduitio/conduit-processor-sdk/mock"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
+	"github.com/conduitio/conduit/pkg/plugin/processor/mock"
 	"github.com/matryer/is"
 	"go.uber.org/mock/gomock"
 )

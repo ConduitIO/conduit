@@ -15,25 +15,67 @@
 package standalone
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"testing"
+
+	"github.com/matryer/is"
+	"github.com/stealthrocket/wazergo"
+	"github.com/tetratelabs/wazero"
+	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 )
 
-var testPluginDir = "./test/wasm_processors/"
+const (
+	testPluginDir = "./test/wasm_processors/"
+)
+
+var (
+	MalformedProcessor = []byte("foobar")
+	SimpleProcessor    []byte // contents of ./test/wasm_processors/simple_processor/processor.wasm
+	SpecifyError       []byte // contents of ./test/wasm_processors/specify_error/processor.wasm
+)
 
 func TestMain(m *testing.M) {
+	exitOnError := func(err error, msg string) {
+		if err != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "%v: %v", msg, err)
+			os.Exit(1)
+		}
+	}
+
 	cmd := exec.Command("bash", "./test/build-test-processors.sh")
 
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	// Run the command
+
 	err := cmd.Run()
-	if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "error executing bash script: %v", err)
-		os.Exit(1)
-	}
+	exitOnError(err, "error executing bash script")
+
+	SimpleProcessor, err = os.ReadFile("./test/wasm_processors/simple_processor/processor.wasm")
+	exitOnError(err, "error reading file ./test/wasm_processors/simple_processor/processor.wasm")
+
+	SpecifyError, err = os.ReadFile("./test/wasm_processors/specify_error/processor.wasm")
+	exitOnError(err, "error reading file ./test/wasm_processors/specify_error/processor.wasm")
 
 	os.Exit(m.Run())
+}
+
+func NewTestWazeroRuntime(ctx context.Context, t *testing.T) (wazero.Runtime, *wazergo.CompiledModule[*hostModuleInstance]) {
+	is := is.New(t)
+
+	r := wazero.NewRuntime(ctx)
+	t.Cleanup(func() {
+		err := r.Close(ctx)
+		is.NoErr(err)
+	})
+
+	_, err := wasi_snapshot_preview1.Instantiate(ctx, r)
+	is.NoErr(err)
+
+	m, err := wazergo.Compile(ctx, r, hostModule)
+	is.NoErr(err)
+
+	return r, m
 }

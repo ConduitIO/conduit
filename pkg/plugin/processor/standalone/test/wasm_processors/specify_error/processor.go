@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//go:build wasm
+
 package main
 
 import (
@@ -19,15 +21,15 @@ import (
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
-	"github.com/conduitio/conduit-processor-sdk/run"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 )
 
 func main() {
-	run.Run(&testProcessor{})
+	sdk.Run(&testProcessor{})
 }
 
 type testProcessor struct {
+	sdk.UnimplementedProcessor
 }
 
 func (p *testProcessor) Specification() (sdk.Specification, error) {

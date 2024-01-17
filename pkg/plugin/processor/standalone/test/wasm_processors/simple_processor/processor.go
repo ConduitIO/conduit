@@ -12,21 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//go:build wasm
+
 package main
 
 import (
 	"context"
+	"fmt"
+	"time"
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
-	"github.com/conduitio/conduit-processor-sdk/run"
 )
 
 func main() {
-	run.Run(&testProcessor{})
+	sdk.Run(&testProcessor{})
 }
 
 type testProcessor struct {
+	sdk.UnimplementedProcessor
 }
 
 func (p *testProcessor) Specification() (sdk.Specification, error) {
@@ -52,9 +56,11 @@ func (p *testProcessor) Specification() (sdk.Specification, error) {
 	}, nil
 }
 
-func (p *testProcessor) Configure(context.Context, map[string]string) error {
-	// TODO implement me
-	panic("implement me")
+func (p *testProcessor) Configure(ctx context.Context, _ map[string]string) error {
+	fmt.Println("calling log!")
+	time.Sleep(time.Second)
+	sdk.Logger(ctx).Warn().Str("foo", "bar").Msg("hello world")
+	return nil
 }
 
 func (p *testProcessor) Open(context.Context) error {

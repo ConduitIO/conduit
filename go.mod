@@ -17,7 +17,7 @@ require (
 	github.com/conduitio/conduit-connector-protocol v0.5.1-0.20240104160905-e9e61586fb8d
 	github.com/conduitio/conduit-connector-s3 v0.5.1
 	github.com/conduitio/conduit-connector-sdk v0.8.0
-	github.com/conduitio/conduit-processor-sdk v0.0.0-20240104184508-4f61ece4b1c9
+	github.com/conduitio/conduit-processor-sdk v0.0.0-20240116154859-538779da04d6
 	github.com/conduitio/yaml/v3 v3.3.0
 	github.com/dgraph-io/badger/v4 v4.2.0
 	github.com/dop251/goja v0.0.0-20230531210528-d7324b2d74f7
@@ -43,6 +43,7 @@ require (
 	github.com/prometheus/client_model v0.5.0
 	github.com/prometheus/common v0.45.0
 	github.com/rs/zerolog v1.31.0
+	github.com/stealthrocket/wazergo v0.19.1
 	github.com/tetratelabs/wazero v1.5.0
 	github.com/twmb/go-cache v1.2.0
 	go.uber.org/goleak v1.3.0
