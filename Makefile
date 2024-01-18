@@ -65,7 +65,7 @@ install-tools: download
 	@go mod tidy
 
 generate:
-	go generate ./...
+	go generate -x ./...
 
 pkg/web/ui/dist:
 	make ui-dist

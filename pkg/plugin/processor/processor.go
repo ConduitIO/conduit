@@ -15,6 +15,7 @@
 // This generates a mock processor and adds UnimplementedProcessor to it to
 // satisfy the sdk.Processor interface.
 //go:generate mockgen -destination=mock/processor.go -package=mock -mock_names=Processor=Processor github.com/conduitio/conduit-processor-sdk Processor
-//go:generate sed -i "" -e "/type Processor struct {/a\\\n	sdk.UnimplementedProcessor" ./mock/processor.go
+//go:generate sed -i.bak -e "/type Processor struct {/a\\\n	sdk.UnimplementedProcessor" ./mock/processor.go
+//go:generate rm ./mock/processor.go.bak
 
 package processor
