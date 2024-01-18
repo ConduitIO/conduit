@@ -42,5 +42,3 @@ Examples:
   - will use the **latest** **builtin** **postgres** plugin
 - `standalone:postgres@v0.3.0`
   - will use the **standalone** **postgres** plugin with version **v0.3.0** (no fallback to builtin)
-
-Test change to trigger markdown lint action
