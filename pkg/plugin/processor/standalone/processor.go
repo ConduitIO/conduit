@@ -166,6 +166,7 @@ func (p *wasmProcessor) run(ctx context.Context) {
 		}
 	}
 
+	p.moduleError = err
 	p.logger.Err(ctx, err).Msg("WASM module stopped")
 }
 
@@ -276,7 +277,7 @@ func (p *wasmProcessor) Teardown(ctx context.Context) error {
 	// close module regardless of teardown error
 	stopErr := p.closeModule(ctx)
 
-	return cerrors.Join(teardownErr, stopErr)
+	return cerrors.Join(teardownErr, stopErr, p.moduleError)
 }
 
 func (p *wasmProcessor) executeTeardownCommand(ctx context.Context) error {

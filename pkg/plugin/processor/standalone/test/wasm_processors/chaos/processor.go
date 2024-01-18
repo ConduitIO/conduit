@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:builda wasm
+//go:build wasm
 
 package main
 
