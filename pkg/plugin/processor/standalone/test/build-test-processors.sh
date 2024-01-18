@@ -9,7 +9,7 @@ for dir in "$WASM_PROCESSORS_DIR"/*/; do
     if [ -e "${dir}processor.go" ]; then
         cd "$dir" || exit
 
-        GOOS=wasip1 GOARCH=wasm go build -tags wasm -o processor.wasm processor.go
+        GOOS=wasip1 GOARCH=wasm go build -o processor.wasm processor.go
 
         cd "$WASM_PROCESSORS_DIR" || exit
     fi

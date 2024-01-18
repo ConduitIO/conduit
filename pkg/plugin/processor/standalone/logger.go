@@ -87,7 +87,8 @@ func (l wasmLogWriter) emitJSONEvent(p []byte) error {
 		}
 	}
 
-	delete(raw, zerolog.TimestampFieldName) // don't duplicate timestamp, it's added by zerolog
+	// don't duplicate timestamp, it's added by zerolog
+	delete(raw, zerolog.TimestampFieldName)
 
 	// parse unknown fields
 	for k, v := range raw {

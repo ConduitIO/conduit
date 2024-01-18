@@ -17,20 +17,16 @@ package standalone
 import (
 	"context"
 	"fmt"
-	"time"
-
-	"github.com/tetratelabs/wazero/api"
-
-	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/tetratelabs/wazero/sys"
-
-	"github.com/conduitio/conduit/pkg/foundation/log"
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	processorv1 "github.com/conduitio/conduit-processor-sdk/proto/processor/v1"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/stealthrocket/wazergo"
 	"github.com/tetratelabs/wazero"
+	"github.com/tetratelabs/wazero/api"
+	"github.com/tetratelabs/wazero/sys"
 )
 
 const (
@@ -61,8 +57,11 @@ type wasmProcessor struct {
 	// commandResponses is used to communicate replies between the actual
 	// processor (the WASM module) and wasmProcessor
 	commandResponses chan tuple[*processorv1.CommandResponse, error]
+
 	// moduleStopped is used to know when the module stopped running
 	moduleStopped chan struct{}
+	// moduleError contains the error returned by the module after it stopped
+	moduleError error
 }
 
 type tuple[T1, T2 any] struct {
@@ -88,8 +87,8 @@ func newWASMProcessor(
 	commandResponses := make(chan tuple[*processorv1.CommandResponse, error])
 	moduleStopped := make(chan struct{})
 
-	// instantiate the host module and inject it into the context
-	logger.Debug(ctx).Msg("instantiating host module")
+	// instantiate conduit host module and inject it into the context
+	logger.Debug(ctx).Msg("instantiating conduit host module")
 	ins, err := hostModule.Instantiate(
 		ctx,
 		hostModuleOptions(
@@ -99,7 +98,7 @@ func newWASMProcessor(
 		),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to instantiate host module: %w", err)
+		return nil, fmt.Errorf("failed to instantiate conduit host module: %w", err)
 	}
 	ctx = wazergo.WithModuleInstance(ctx, ins)
 
@@ -128,39 +127,45 @@ func newWASMProcessor(
 			WithStartFunctions(),
 	)
 	if err != nil {
-		_ = ins.Close(ctx)
 		return nil, fmt.Errorf("failed to instantiate processor module: %w", err)
 	}
 
-	// Needs to run in a goroutine because the WASM module is blocking as long
-	// as the "main" function is running
-	go func() {
-		defer close(moduleStopped)
-
-		_, err := mod.ExportedFunction("_start").Call(ctx)
-
-		// main function returned, close the module right away
-		_ = mod.Close(ctx)
-
-		if err != nil {
-			var exitErr *sys.ExitError
-			if cerrors.As(err, &exitErr) {
-				if exitErr.ExitCode() == 0 { // All good
-					err = nil
-				}
-			}
-		}
-		logger.Err(ctx, err).Msg("WASM module stopped")
-	}()
-
-	return &wasmProcessor{
+	p := &wasmProcessor{
 		id:               id,
 		logger:           logger,
 		module:           mod,
 		commandRequests:  commandRequests,
 		commandResponses: commandResponses,
 		moduleStopped:    moduleStopped,
-	}, nil
+	}
+
+	// Needs to run in a goroutine because the WASM module is blocking as long
+	// as the "main" function is running
+	go p.run(ctx)
+
+	return p, nil
+}
+
+// run is the main loop of the WASM module. It runs in a goroutine and blocks
+// until the module is closed.
+func (p *wasmProcessor) run(ctx context.Context) {
+	defer close(p.moduleStopped)
+
+	_, err := p.module.ExportedFunction("_start").Call(ctx)
+
+	// main function returned, close the module right away
+	_ = p.module.Close(ctx)
+
+	if err != nil {
+		var exitErr *sys.ExitError
+		if cerrors.As(err, &exitErr) {
+			if exitErr.ExitCode() == 0 { // All good
+				err = nil
+			}
+		}
+	}
+
+	p.logger.Err(ctx, err).Msg("WASM module stopped")
 }
 
 func (p *wasmProcessor) Specification() (sdk.Specification, error) {
@@ -171,8 +176,9 @@ func (p *wasmProcessor) Specification() (sdk.Specification, error) {
 	}
 
 	// the function has no context parameter, so we need to set a timeout
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
-	defer cancel()
+	ctx := context.Background() // TODO remove
+	// ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	// defer cancel()
 
 	resp, err := p.executeCommand(ctx, req)
 	if err != nil {

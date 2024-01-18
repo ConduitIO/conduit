@@ -25,7 +25,8 @@ import (
 func TestRegistry_List(t *testing.T) {
 	is := is.New(t)
 
-	underTest := NewRegistry(log.Nop(), testPluginDir+"simple_processor/")
+	underTest, err := NewRegistry(log.Test(t), testPluginSimpleDir)
+	is.NoErr(err)
 	list := underTest.List()
 	is.Equal(1, len(list))
 	got, ok := list["standalone:test-processor@v1.3.5"]
@@ -33,23 +34,21 @@ func TestRegistry_List(t *testing.T) {
 
 	is.Equal(
 		got,
-		&spec{
-			Specification: sdk.Specification{
-				Name:        "test-processor",
-				Summary:     "test processor's summary",
-				Description: "test processor's description",
-				Version:     "v1.3.5",
-				Author:      "Meroxa, Inc.",
-				Parameters: map[string]sdk.Parameter{
-					"path": {
-						Default:     "/",
-						Type:        sdk.ParameterTypeString,
-						Description: "path to something",
-						Validations: []sdk.Validation{
-							{
-								Type:  sdk.ValidationTypeRegex,
-								Value: "abc.*",
-							},
+		sdk.Specification{
+			Name:        "test-processor",
+			Summary:     "test processor's summary",
+			Description: "test processor's description",
+			Version:     "v1.3.5",
+			Author:      "Meroxa, Inc.",
+			Parameters: map[string]sdk.Parameter{
+				"path": {
+					Default:     "/",
+					Type:        sdk.ParameterTypeString,
+					Description: "path to something",
+					Validations: []sdk.Validation{
+						{
+							Type:  sdk.ValidationTypeRegex,
+							Value: "abc.*",
 						},
 					},
 				},
@@ -61,7 +60,8 @@ func TestRegistry_List(t *testing.T) {
 func TestRegistry_MalformedProcessor(t *testing.T) {
 	is := is.New(t)
 
-	underTest := NewRegistry(log.Nop(), testPluginDir+"malformed_processor/")
+	underTest, err := NewRegistry(log.Test(t), testPluginMalformedDir)
+	is.NoErr(err)
 	list := underTest.List()
 	is.Equal(0, len(list))
 }
@@ -69,7 +69,8 @@ func TestRegistry_MalformedProcessor(t *testing.T) {
 func TestRegistry_SpecifyError(t *testing.T) {
 	is := is.New(t)
 
-	underTest := NewRegistry(log.Nop(), testPluginDir+"specify_error/")
+	underTest, err := NewRegistry(log.Test(t), testPluginSpecifyErrorDir)
+	is.NoErr(err)
 	list := underTest.List()
 	is.Equal(0, len(list))
 }

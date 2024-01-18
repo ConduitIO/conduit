@@ -21,20 +21,35 @@ import (
 	"os/exec"
 	"testing"
 
+	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
+
 	"github.com/matryer/is"
 	"github.com/stealthrocket/wazergo"
 	"github.com/tetratelabs/wazero"
-	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
+	//	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 )
 
 const (
 	testPluginDir = "./test/wasm_processors/"
+
+	testPluginChaosDir        = testPluginDir + "chaos/"
+	testPluginMalformedDir    = testPluginDir + "malformed/"
+	testPluginSimpleDir       = testPluginDir + "simple/"
+	testPluginSpecifyErrorDir = testPluginDir + "specify_error/"
 )
 
 var (
-	MalformedProcessor = []byte("foobar")
-	SimpleProcessor    []byte // contents of ./test/wasm_processors/simple_processor/processor.wasm
-	SpecifyError       []byte // contents of ./test/wasm_processors/specify_error/processor.wasm
+	ChaosProcessor     []byte
+	MalformedProcessor []byte
+	SimpleProcessor    []byte
+	SpecifyError       []byte
+
+	testProcessorPaths = map[string]*[]byte{
+		testPluginChaosDir + "processor.wasm":        &ChaosProcessor,
+		testPluginMalformedDir + "processor.txt":     &MalformedProcessor,
+		testPluginSimpleDir + "processor.wasm":       &SimpleProcessor,
+		testPluginSpecifyErrorDir + "processor.wasm": &SpecifyError,
+	}
 )
 
 func TestMain(m *testing.M) {
@@ -53,11 +68,11 @@ func TestMain(m *testing.M) {
 	err := cmd.Run()
 	exitOnError(err, "error executing bash script")
 
-	SimpleProcessor, err = os.ReadFile("./test/wasm_processors/simple_processor/processor.wasm")
-	exitOnError(err, "error reading file ./test/wasm_processors/simple_processor/processor.wasm")
-
-	SpecifyError, err = os.ReadFile("./test/wasm_processors/specify_error/processor.wasm")
-	exitOnError(err, "error reading file ./test/wasm_processors/specify_error/processor.wasm")
+	// load test processors
+	for path, target := range testProcessorPaths {
+		*target, err = os.ReadFile(path)
+		exitOnError(err, "error reading file "+path)
+	}
 
 	os.Exit(m.Run())
 }

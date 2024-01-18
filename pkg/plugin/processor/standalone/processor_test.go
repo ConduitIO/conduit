@@ -22,13 +22,12 @@ import (
 	"github.com/conduitio/conduit-processor-sdk/wasm"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/matryer/is"
-	"github.com/rs/zerolog"
 )
 
 func TestWASMProcessor_SpecifyError(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
-	logger := log.New(zerolog.New(zerolog.NewTestWriter(t)))
+	logger := log.Test(t)
 
 	r, hostModule := NewTestWazeroRuntime(ctx, t)
 	procModule, err := r.CompileModule(ctx, SpecifyError)
@@ -44,7 +43,7 @@ func TestWASMProcessor_SpecifyError(t *testing.T) {
 func TestWASMProcessor_Specify(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
-	logger := log.New(zerolog.New(zerolog.NewTestWriter(t)))
+	logger := log.Test(t)
 
 	r, hostModule := NewTestWazeroRuntime(ctx, t)
 	procModule, err := r.CompileModule(ctx, SimpleProcessor)
@@ -86,7 +85,7 @@ func TestWASMProcessor_Specify(t *testing.T) {
 func TestWASMProcessor_Configure(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
-	logger := log.New(zerolog.New(zerolog.NewTestWriter(t)))
+	logger := log.Test(t)
 
 	r, hostModule := NewTestWazeroRuntime(ctx, t)
 	procModule, err := r.CompileModule(ctx, SimpleProcessor)

@@ -93,7 +93,7 @@ func (*hostModuleInstance) Close(context.Context) error { return nil }
 // request message and parks the command request. The next call to this function
 // will return the same command request.
 func (m *hostModuleInstance) commandRequest(ctx context.Context, buf types.Bytes) types.Uint32 {
-	m.logger.Trace(ctx).Msg("getting next command")
+	m.logger.Trace(ctx).Msg("executing command_request")
 
 	if m.parkedCommandRequest == nil {
 		// No parked command, so we need to wait for the next one. If the command
@@ -111,7 +111,7 @@ func (m *hostModuleInstance) commandRequest(ctx context.Context, buf types.Bytes
 		m.logger.Warn(ctx).
 			Int("command_bytes", size).
 			Int("allocated_bytes", len(buf)).
-			Msgf("insufficient memory, command will be parked until next call to nextCommand")
+			Msgf("insufficient memory, command will be parked until next call to command_request")
 		return types.Uint32(size)
 	}
 
@@ -132,6 +132,8 @@ func (m *hostModuleInstance) commandRequest(ctx context.Context, buf types.Bytes
 // commandResponse is the exported function that is called by the WASM module to
 // send a command response. It returns 0 on success, or an error code on error.
 func (m *hostModuleInstance) commandResponse(ctx context.Context, buf types.Bytes) types.Uint32 {
+	m.logger.Trace(ctx).Msg("executing command_response")
+
 	var resp processorv1.CommandResponse
 	err := proto.Unmarshal(buf, &resp)
 	if err != nil {
