@@ -5,6 +5,7 @@
 //
 //	mockgen -destination=mock/dlq.go -package=mock -mock_names=DLQHandler=DLQHandler . DLQHandler
 //
+
 // Package mock is a generated GoMock package.
 package mock
 

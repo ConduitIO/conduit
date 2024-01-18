@@ -5,6 +5,7 @@
 //
 //	mockgen -destination=mock/mutable.go -package=mock -mock_names=MutableSchema=MutableSchema,MutableStructDescriptor=MutableStructDescriptor,MutableField=MutableField,MutableMapDescriptor=MutableMapDescriptor,MutableArrayDescriptor=MutableArrayDescriptor,MutablePrimitiveDescriptor=MutablePrimitiveDescriptor,MutableEnumDescriptor=MutableEnumDescriptor,MutableEnumValueDescriptor=MutableEnumValueDescriptor . MutableSchema,MutableStructDescriptor,MutableField,MutableMapDescriptor,MutableArrayDescriptor,MutablePrimitiveDescriptor,MutableEnumDescriptor,MutableEnumValueDescriptor
 //
+
 // Package mock is a generated GoMock package.
 package mock
 

@@ -191,9 +191,9 @@ each configuration option based on the following priorities:
 ## Connectors
 
 For the full list of available connectors, see
-the [Connector List](docs/connectors.md). If there's a connector that you're
-looking for that isn't available in Conduit, please file
-an [issue](https://github.com/ConduitIO/conduit/issues/new?assignees=&labels=triage&template=3-connector-request.yml&title=Connector%3A+%3Cresource%3E+%5BSource%2FDestination%5D)
+the [Connector List](https://conduit.io/docs/connectors/connector-list). If
+there's a connector that you're looking for that isn't available in Conduit,
+please file an [issue](https://github.com/ConduitIO/conduit/issues/new?assignees=&labels=triage&template=3-connector-request.yml&title=Connector%3A+%3Cresource%3E+%5BSource%2FDestination%5D)
 .
 
 Conduit loads standalone connectors at startup. The connector binaries need to
