@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:build wasm
+//go:builda wasm
 
 package main
 
@@ -78,11 +78,6 @@ func (p *chaosProcessor) Configure(_ context.Context, cfg map[string]string) err
 		return err
 	}
 
-	_, ok := cfg["process.prefix"]
-	if !ok {
-		return cerrors.New("missing prefix")
-	}
-
 	return nil
 }
 
@@ -106,25 +101,21 @@ func (p *chaosProcessor) methodBehavior(name string) error {
 func (p *chaosProcessor) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 	err := p.methodBehavior("process")
 	if err != nil {
-		return p.makeErrorRecords(len(records), err)
+		// on error we return a single record with the error
+		return []sdk.ProcessedRecord{sdk.ErrorRecord{Error: err}}
+	}
+
+	_, ok := p.cfg["process.prefix"]
+	if !ok {
+		return []sdk.ProcessedRecord{sdk.ErrorRecord{Error: cerrors.New("missing prefix")}}
 	}
 
 	out := make([]sdk.ProcessedRecord, len(records))
 	for i, record := range records {
-		outRec := record.Clone()
-		original := outRec.Payload.After.(opencdc.RawData)
-		outRec.Payload.After = opencdc.RawData(p.cfg["process.prefix"] + string(original.Bytes()))
+		original := record.Payload.After.(opencdc.RawData)
+		record.Payload.After = opencdc.RawData(p.cfg["process.prefix"] + string(original.Bytes()))
 
-		out[i] = sdk.SingleRecord(outRec)
-	}
-
-	return out
-}
-
-func (p *chaosProcessor) makeErrorRecords(num int, err error) []sdk.ProcessedRecord {
-	out := make([]sdk.ProcessedRecord, num)
-	for i := 0; i < num; i++ {
-		out[i] = sdk.ErrorRecord{Error: err}
+		out[i] = sdk.SingleRecord(record)
 	}
 
 	return out

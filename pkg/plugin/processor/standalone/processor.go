@@ -17,6 +17,7 @@ package standalone
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
@@ -176,9 +177,8 @@ func (p *wasmProcessor) Specification() (sdk.Specification, error) {
 	}
 
 	// the function has no context parameter, so we need to set a timeout
-	ctx := context.Background() // TODO remove
-	// ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
-	// defer cancel()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
 
 	resp, err := p.executeCommand(ctx, req)
 	if err != nil {

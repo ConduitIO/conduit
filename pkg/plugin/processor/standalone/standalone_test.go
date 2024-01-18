@@ -21,6 +21,8 @@ import (
 	"os/exec"
 	"testing"
 
+	sdk "github.com/conduitio/conduit-processor-sdk"
+
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 
 	"github.com/matryer/is"
@@ -34,20 +36,17 @@ const (
 
 	testPluginChaosDir        = testPluginDir + "chaos/"
 	testPluginMalformedDir    = testPluginDir + "malformed/"
-	testPluginSimpleDir       = testPluginDir + "simple/"
 	testPluginSpecifyErrorDir = testPluginDir + "specify_error/"
 )
 
 var (
 	ChaosProcessor     []byte
 	MalformedProcessor []byte
-	SimpleProcessor    []byte
 	SpecifyError       []byte
 
 	testProcessorPaths = map[string]*[]byte{
 		testPluginChaosDir + "processor.wasm":        &ChaosProcessor,
 		testPluginMalformedDir + "processor.txt":     &MalformedProcessor,
-		testPluginSimpleDir + "processor.wasm":       &SimpleProcessor,
 		testPluginSpecifyErrorDir + "processor.wasm": &SpecifyError,
 	}
 )
@@ -93,4 +92,41 @@ func NewTestWazeroRuntime(ctx context.Context, t *testing.T) (wazero.Runtime, *w
 	is.NoErr(err)
 
 	return r, m
+}
+
+func ChaosProcessorSpecifications() sdk.Specification {
+	param := sdk.Parameter{
+		Default:     "success",
+		Type:        sdk.ParameterTypeString,
+		Description: "prefix",
+		Validations: []sdk.Validation{
+			{
+				Type:  sdk.ValidationTypeInclusion,
+				Value: "success,error,panic",
+			},
+		},
+	}
+	return sdk.Specification{
+		Name:        "chaos-processor",
+		Summary:     "chaos processor summary",
+		Description: "chaos processor description",
+		Version:     "v1.3.5",
+		Author:      "Meroxa, Inc.",
+		Parameters: map[string]sdk.Parameter{
+			"configure": param,
+			"open":      param,
+			"process.prefix": {
+				Default:     "",
+				Type:        sdk.ParameterTypeString,
+				Description: "prefix to be added to the payload's after",
+				Validations: []sdk.Validation{
+					{
+						Type: sdk.ValidationTypeRequired,
+					},
+				},
+			},
+			"process":  param,
+			"teardown": param,
+		},
+	}
 }

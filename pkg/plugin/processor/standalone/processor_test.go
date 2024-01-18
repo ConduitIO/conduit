@@ -18,6 +18,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/conduitio/conduit-commons/opencdc"
+
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit-processor-sdk/wasm"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -40,13 +42,13 @@ func TestWASMProcessor_SpecifyError(t *testing.T) {
 	is.Equal(err, wasm.NewError(0, "boom"))
 }
 
-func TestWASMProcessor_Specify(t *testing.T) {
+func TestWASMProcessor_Specification(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
 	logger := log.Test(t)
 
 	r, hostModule := NewTestWazeroRuntime(ctx, t)
-	procModule, err := r.CompileModule(ctx, SimpleProcessor)
+	procModule, err := r.CompileModule(ctx, ChaosProcessor)
 	is.NoErr(err)
 
 	underTest, err := newWASMProcessor(ctx, r, procModule, hostModule, "test-processor", logger)
@@ -55,29 +57,8 @@ func TestWASMProcessor_Specify(t *testing.T) {
 	gotSpec, err := underTest.Specification()
 	is.NoErr(err)
 
-	is.Equal(
-		gotSpec,
-		sdk.Specification{
-			Name:        "test-processor",
-			Summary:     "test processor's summary",
-			Description: "test processor's description",
-			Version:     "v1.3.5",
-			Author:      "Meroxa, Inc.",
-			Parameters: map[string]sdk.Parameter{
-				"path": {
-					Default:     "/",
-					Type:        sdk.ParameterTypeString,
-					Description: "path to something",
-					Validations: []sdk.Validation{
-						{
-							Type:  sdk.ValidationTypeRegex,
-							Value: "abc.*",
-						},
-					},
-				},
-			},
-		},
-	)
+	wantSpec := ChaosProcessorSpecifications()
+	is.Equal(gotSpec, wantSpec)
 
 	is.NoErr(underTest.Teardown(ctx))
 }
@@ -88,7 +69,7 @@ func TestWASMProcessor_Configure(t *testing.T) {
 	logger := log.Test(t)
 
 	r, hostModule := NewTestWazeroRuntime(ctx, t)
-	procModule, err := r.CompileModule(ctx, SimpleProcessor)
+	procModule, err := r.CompileModule(ctx, ChaosProcessor)
 	is.NoErr(err)
 
 	underTest, err := newWASMProcessor(ctx, r, procModule, hostModule, "test-processor", logger)
@@ -96,6 +77,49 @@ func TestWASMProcessor_Configure(t *testing.T) {
 
 	err = underTest.Configure(ctx, nil)
 	is.NoErr(err)
+
+	is.NoErr(underTest.Teardown(ctx))
+}
+
+func TestWASMProcessor_Process(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	logger := log.Test(t)
+
+	r, hostModule := NewTestWazeroRuntime(ctx, t)
+	procModule, err := r.CompileModule(ctx, ChaosProcessor)
+	is.NoErr(err)
+
+	underTest, err := newWASMProcessor(ctx, r, procModule, hostModule, "test-processor", logger)
+	is.NoErr(err)
+
+	is.NoErr(underTest.Configure(ctx, map[string]string{"process.prefix": "hello!\n\n"}))
+
+	is.NoErr(underTest.Open(ctx))
+
+	processed := underTest.Process(ctx, nil)
+	is.Equal(0, len(processed))
+
+	processed = underTest.Process(ctx, []opencdc.Record{})
+	is.Equal(0, len(processed))
+
+	input := opencdc.Record{
+		Position:  opencdc.Position("first left then right"),
+		Operation: opencdc.OperationCreate,
+		Metadata: map[string]string{
+			"street": "23rd",
+		},
+		Key: opencdc.RawData("broken"),
+		Payload: opencdc.Change{
+			After: opencdc.RawData("oranges"),
+		},
+	}
+	want := sdk.SingleRecord(input.Clone())
+	want.Payload.After = opencdc.RawData("hello!\n\n" + string(want.Payload.After.Bytes()))
+
+	processed = underTest.Process(ctx, []opencdc.Record{input})
+	is.Equal(1, len(processed))
+	is.Equal(want, processed[0])
 
 	is.NoErr(underTest.Teardown(ctx))
 }

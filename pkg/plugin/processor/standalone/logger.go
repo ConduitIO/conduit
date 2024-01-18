@@ -25,6 +25,9 @@ import (
 )
 
 // wasmLogWriter is a logger adapter for the WASM stderr and stdout streams.
+// It parses the JSON log events and emits them as structured logs. It expects
+// the log events to be in the default format produced by zerolog. If the
+// parsing fails, it falls back to writing the raw bytes as-is.
 type wasmLogWriter struct {
 	logger zerolog.Logger
 }

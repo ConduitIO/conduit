@@ -17,7 +17,6 @@ package standalone
 import (
 	"testing"
 
-	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/matryer/is"
 )
@@ -25,36 +24,16 @@ import (
 func TestRegistry_List(t *testing.T) {
 	is := is.New(t)
 
-	underTest, err := NewRegistry(log.Test(t), testPluginSimpleDir)
+	underTest, err := NewRegistry(log.Test(t), testPluginChaosDir)
 	is.NoErr(err)
 	list := underTest.List()
 	is.Equal(1, len(list))
-	got, ok := list["standalone:test-processor@v1.3.5"]
-	is.True(ok) // expected spec for standalone:test-processor@v1.3.5
+	got, ok := list["standalone:chaos-processor@v1.3.5"]
+	is.True(ok) // expected spec for standalone:chaos-processor@v1.3.5
 
-	is.Equal(
-		got,
-		sdk.Specification{
-			Name:        "test-processor",
-			Summary:     "test processor's summary",
-			Description: "test processor's description",
-			Version:     "v1.3.5",
-			Author:      "Meroxa, Inc.",
-			Parameters: map[string]sdk.Parameter{
-				"path": {
-					Default:     "/",
-					Type:        sdk.ParameterTypeString,
-					Description: "path to something",
-					Validations: []sdk.Validation{
-						{
-							Type:  sdk.ValidationTypeRegex,
-							Value: "abc.*",
-						},
-					},
-				},
-			},
-		},
-	)
+	want := ChaosProcessorSpecifications()
+
+	is.Equal(got, want)
 }
 
 func TestRegistry_MalformedProcessor(t *testing.T) {
