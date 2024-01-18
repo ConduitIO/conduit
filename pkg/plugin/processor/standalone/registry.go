@@ -34,12 +34,10 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin"
 )
 
-// Registry is a generic directory registry of plugins,
-// organized by plugin type, name and version.
+// Registry is a directory registry of processor plugins, organized by plugin
+// type, name and version.
 // Every file in the specified directory is considered a plugin
 // (directories are skipped).
-// A registry is instantiated with a function, which can
-// get specifications from a plugin, given its path on the file system.
 type Registry struct {
 	logger    log.CtxLogger
 	pluginDir string
@@ -113,6 +111,31 @@ func NewRegistry(logger log.CtxLogger, pluginDir string) (*Registry, error) {
 		Msg("standalone processor plugins initialized")
 
 	return r, nil
+}
+
+func (r *Registry) NewProcessor(ctx context.Context, fullName plugin.FullName, id string) (sdk.Processor, error) {
+	r.m.RLock()
+	defer r.m.RUnlock()
+
+	versions, ok := r.plugins[fullName.PluginName()]
+	if !ok {
+		return nil, plugin.ErrPluginNotFound
+	}
+	bp, ok := versions[fullName.PluginVersion()]
+	if !ok {
+		availableVersions := make([]string, 0, len(versions))
+		for k := range versions {
+			availableVersions = append(availableVersions, k)
+		}
+		return nil, cerrors.Errorf("could not find standalone processor plugin, only found versions %v: %w", availableVersions, plugin.ErrPluginNotFound)
+	}
+
+	p, err := newWASMProcessor(ctx, r.runtime, bp.module, r.hostModule, id, r.logger)
+	if err != nil {
+		return nil, cerrors.Errorf("failed to create a new WASM processor: %w", err)
+	}
+
+	return p, nil
 }
 
 func (r *Registry) reloadPlugins() {
