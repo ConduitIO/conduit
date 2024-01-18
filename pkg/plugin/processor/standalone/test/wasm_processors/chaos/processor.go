@@ -18,10 +18,10 @@ package main
 
 import (
 	"context"
+	"errors"
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
-	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 )
 
 func main() {
@@ -88,7 +88,7 @@ func (p *chaosProcessor) Open(context.Context) error {
 func (p *chaosProcessor) methodBehavior(name string) error {
 	switch p.cfg[name] {
 	case "error":
-		return cerrors.New(name + " error")
+		return errors.New("boom")
 	case "panic":
 		panic(name + " panic")
 	case "", "success":
@@ -107,7 +107,7 @@ func (p *chaosProcessor) Process(_ context.Context, records []opencdc.Record) []
 
 	_, ok := p.cfg["process.prefix"]
 	if !ok {
-		return []sdk.ProcessedRecord{sdk.ErrorRecord{Error: cerrors.New("missing prefix")}}
+		return []sdk.ProcessedRecord{sdk.ErrorRecord{Error: errors.New("missing prefix")}}
 	}
 
 	out := make([]sdk.ProcessedRecord, len(records))

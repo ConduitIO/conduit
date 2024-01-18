@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/conduitio/conduit/pkg/plugin"
+
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	processorv1 "github.com/conduitio/conduit-processor-sdk/proto/processor/v1"
@@ -326,6 +328,8 @@ func (p *wasmProcessor) executeCommand(ctx context.Context, req *processorv1.Com
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
+	case <-p.moduleStopped:
+		return nil, cerrors.Errorf("processor plugin stopped while trying to send command %T: %w", req.Request, plugin.ErrPluginNotRunning)
 	case p.commandRequests <- req:
 	}
 
@@ -337,6 +341,8 @@ func (p *wasmProcessor) executeCommand(ctx context.Context, req *processorv1.Com
 		// TODO if this happens we should probably kill the plugin, as it's
 		//  probably stuck
 		return nil, ctx.Err()
+	case <-p.moduleStopped:
+		return nil, cerrors.Errorf("processor plugin stopped while waiting for response to command %T: %w", req.Request, plugin.ErrPluginNotRunning)
 	case crTuple := <-p.commandResponses:
 		resp, err = crTuple.V1, crTuple.V2
 	}

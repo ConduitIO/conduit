@@ -20,12 +20,14 @@ import (
 	"os"
 	"os/exec"
 	"testing"
+	"time"
+
+	"github.com/conduitio/conduit/pkg/foundation/csync"
 
 	sdk "github.com/conduitio/conduit-processor-sdk"
 
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 
-	"github.com/matryer/is"
 	"github.com/stealthrocket/wazergo"
 	"github.com/tetratelabs/wazero"
 	//	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
@@ -40,14 +42,21 @@ const (
 )
 
 var (
-	ChaosProcessor     []byte
-	MalformedProcessor []byte
-	SpecifyError       []byte
+	// TestRuntime can be reused in tests to avoid recompiling the test modules
+	TestRuntime        wazero.Runtime
+	CompiledHostModule *wazergo.CompiledModule[*hostModuleInstance]
 
-	testProcessorPaths = map[string]*[]byte{
-		testPluginChaosDir + "processor.wasm":        &ChaosProcessor,
-		testPluginMalformedDir + "processor.txt":     &MalformedProcessor,
-		testPluginSpecifyErrorDir + "processor.wasm": &SpecifyError,
+	ChaosProcessorBinary     []byte
+	MalformedProcessorBinary []byte
+	SpecifyErrorBinary       []byte
+
+	ChaosProcessorModule wazero.CompiledModule
+	SpecifyErrorModule   wazero.CompiledModule
+
+	testProcessorPaths = map[string]tuple[*[]byte, *wazero.CompiledModule]{
+		testPluginChaosDir + "processor.wasm":        {&ChaosProcessorBinary, &ChaosProcessorModule},
+		testPluginMalformedDir + "processor.txt":     {&MalformedProcessorBinary, nil},
+		testPluginSpecifyErrorDir + "processor.wasm": {&SpecifyErrorBinary, &SpecifyErrorModule},
 	}
 )
 
@@ -67,31 +76,43 @@ func TestMain(m *testing.M) {
 	err := cmd.Run()
 	exitOnError(err, "error executing bash script")
 
+	// instantiate shared test runtime
+	ctx := context.Background()
+	TestRuntime = wazero.NewRuntime(ctx)
+
+	_, err = wasi_snapshot_preview1.Instantiate(ctx, TestRuntime)
+	exitOnError(err, "error instantiating WASI")
+
+	CompiledHostModule, err = wazergo.Compile(ctx, TestRuntime, hostModule)
+
 	// load test processors
-	for path, target := range testProcessorPaths {
-		*target, err = os.ReadFile(path)
+	var wg csync.WaitGroup
+	for path, t := range testProcessorPaths {
+		*t.V1, err = os.ReadFile(path)
 		exitOnError(err, "error reading file "+path)
+
+		if t.V2 == nil {
+			continue
+		}
+
+		// compile modules in parallel
+		wg.Add(1)
+		go func(binary []byte, target *wazero.CompiledModule, path string) {
+			defer wg.Done()
+			*target, err = TestRuntime.CompileModule(ctx, binary)
+			exitOnError(err, "error compiling module "+path)
+		}(*t.V1, t.V2, path)
 	}
+	err = wg.WaitTimeout(ctx, time.Minute)
+	exitOnError(err, "timed out waiting on modules to compile")
 
-	os.Exit(m.Run())
-}
+	// run tests
+	code := m.Run()
 
-func NewTestWazeroRuntime(ctx context.Context, t *testing.T) (wazero.Runtime, *wazergo.CompiledModule[*hostModuleInstance]) {
-	is := is.New(t)
+	err = TestRuntime.Close(ctx)
+	exitOnError(err, "error closing wasm runtime")
 
-	r := wazero.NewRuntime(ctx)
-	t.Cleanup(func() {
-		err := r.Close(ctx)
-		is.NoErr(err)
-	})
-
-	_, err := wasi_snapshot_preview1.Instantiate(ctx, r)
-	is.NoErr(err)
-
-	m, err := wazergo.Compile(ctx, r, hostModule)
-	is.NoErr(err)
-
-	return r, m
+	os.Exit(code)
 }
 
 func ChaosProcessorSpecifications() sdk.Specification {

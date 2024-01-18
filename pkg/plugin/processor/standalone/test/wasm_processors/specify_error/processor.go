@@ -18,10 +18,10 @@ package main
 
 import (
 	"context"
+	"errors"
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
-	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 )
 
 func main() {
@@ -33,7 +33,7 @@ type testProcessor struct {
 }
 
 func (p *testProcessor) Specification() (sdk.Specification, error) {
-	return sdk.Specification{}, cerrors.New("boom")
+	return sdk.Specification{}, errors.New("boom")
 }
 
 func (p *testProcessor) Configure(context.Context, map[string]string) error {
