@@ -24,7 +24,7 @@ import (
 	"github.com/matryer/is"
 )
 
-const DebeziumRecord = `{
+const DebeziumRecordPayload = `{
 		 "payload": {
 		   "after": {
 		     "description": "test1",
@@ -41,6 +41,26 @@ const DebeziumRecord = `{
 		 },
 		 "schema": {} 
 		}`
+
+const OpenCDCRecordPayload = `{
+        "position": "NzgyNjJmODUtODNmMS00ZGQwLWEyZDAtNTRmNjA1ZjkyYTg0",
+        "operation": "create",
+        "metadata": {
+          "conduit.source.connector.id": "source-generator-78lpnchx7tzpyqz:source",
+          "opencdc.readAt": "1706028953595546000",
+          "opencdc.version": "v1"
+        },
+        "key": "MTc3NzQ5NDEtNTdhMi00MmZhLWI0MzAtODkxMmE5NDI0YjNh",
+        "payload": {
+          "after": {
+            "event_id": 1747353650,
+            "msg": "string 0e8955b3-7fb5-4dda-8064-e10dc007f00d",
+            "pg_generator": false,
+            "sensor_id": 1250383582,
+            "triggered": false
+          }
+        }
+      }`
 
 func TestUnwrap_Config(t *testing.T) {
 	tests := []struct {
@@ -108,7 +128,7 @@ func TestUnwrap_Process(t *testing.T) {
 				Payload: record.Change{
 					Before: nil,
 					After: record.RawData{
-						Raw: []byte(DebeziumRecord),
+						Raw: []byte(DebeziumRecordPayload),
 					},
 				},
 			},
@@ -401,6 +421,115 @@ func TestUnwrap_Process(t *testing.T) {
 			},
 			wantErr: false,
 		},
+		{
+			name: "opencdc with structured data",
+			config: processor.Config{
+				Settings: map[string]string{"format": "opencdc"},
+			},
+			record: record.Record{
+				Key:       record.RawData{Raw: []byte("one-key")},
+				Operation: record.OperationCreate,
+				Metadata: map[string]string{
+					"conduit.source.connector.id": "dest-log-78lpnchx7tzpyqz:source-kafka",
+					"kafka.topic":                 "stream-78lpnchx7tzpyqz-generator",
+					"opencdc.createdAt":           "1706028953595000000",
+					"opencdc.readAt":              "1706028953606997000",
+					"opencdc.version":             "v1",
+				},
+				Payload: record.Change{
+					Before: nil,
+					After: record.StructuredData{
+						"position":  []byte("NzgyNjJmODUtODNmMS00ZGQwLWEyZDAtNTRmNjA1ZjkyYTg0"),
+						"operation": record.OperationCreate,
+						"metadata": record.Metadata{
+							"conduit.source.connector.id": "source-generator-78lpnchx7tzpyqz:source",
+							"opencdc.readAt":              "1706028953595546000",
+							"opencdc.version":             "v1",
+						},
+						"key": record.RawData{
+							Raw: []byte("MTc3NzQ5NDEtNTdhMi00MmZhLWI0MzAtODkxMmE5NDI0YjNh"),
+						},
+						"payload": record.Change{
+							Before: nil,
+							After: record.StructuredData{
+								"event_id":     1747353650,
+								"msg":          "string 0e8955b3-7fb5-4dda-8064-e10dc007f00d",
+								"pg_generator": false,
+								"sensor_id":    1250383582,
+								"triggered":    false,
+							},
+						},
+					},
+				},
+				Position: []byte("eyJHcm91cElEIjoiNGQ2ZTBhMjktNzAwZi00Yjk4LWEzY2MtZWUyNzZhZTc4MjVjIiwiVG9waWMiOiJzdHJlYW0tNzhscG5jaHg3dHpweXF6LWdlbmVyYXRvciIsIlBhcnRpdGlvbiI6MCwiT2Zmc2V0IjoyMjF9"),
+			},
+			want: record.Record{
+				Operation: record.OperationCreate,
+				Metadata: record.Metadata{
+					"conduit.source.connector.id": "source-generator-78lpnchx7tzpyqz:source",
+					"opencdc.readAt":              "1706028953595546000",
+					"opencdc.version":             "v1",
+				},
+				Payload: record.Change{
+					Before: nil,
+					After: record.StructuredData{
+						"event_id":     1747353650,
+						"msg":          "string 0e8955b3-7fb5-4dda-8064-e10dc007f00d",
+						"pg_generator": false,
+						"sensor_id":    1250383582,
+						"triggered":    false,
+					},
+				},
+				Key:      record.RawData{Raw: []byte("MTc3NzQ5NDEtNTdhMi00MmZhLWI0MzAtODkxMmE5NDI0YjNh")},
+				Position: []byte("eyJHcm91cElEIjoiNGQ2ZTBhMjktNzAwZi00Yjk4LWEzY2MtZWUyNzZhZTc4MjVjIiwiVG9waWMiOiJzdHJlYW0tNzhscG5jaHg3dHpweXF6LWdlbmVyYXRvciIsIlBhcnRpdGlvbiI6MCwiT2Zmc2V0IjoyMjF9"),
+			},
+			wantErr: false,
+		},
+		{
+			name: "opencdc with raw data",
+			config: processor.Config{
+				Settings: map[string]string{"format": "opencdc"},
+			},
+			record: record.Record{
+				Key:       record.RawData{Raw: []byte("one-key-raw-data")},
+				Operation: record.OperationCreate,
+				Metadata: map[string]string{
+					"conduit.source.connector.id": "dest-log-78lpnchx7tzpyqz:source-kafka",
+					"kafka.topic":                 "stream-78lpnchx7tzpyqz-generator",
+					"opencdc.createdAt":           "1706028953595000000",
+					"opencdc.readAt":              "1706028953606997000",
+					"opencdc.version":             "v1",
+				},
+				Payload: record.Change{
+					Before: nil,
+					After: record.RawData{
+						Raw: []byte(OpenCDCRecordPayload),
+					},
+				},
+				Position: []byte("eyJHcm91cElEIjoiNGQ2ZTBhMjktNzAwZi00Yjk4LWEzY2MtZWUyNzZhZTc4MjVjIiwiVG9waWMiOiJzdHJlYW0tNzhscG5jaHg3dHpweXF6LWdlbmVyYXRvciIsIlBhcnRpdGlvbiI6MCwiT2Zmc2V0IjoyMjF9"),
+			},
+			want: record.Record{
+				Operation: record.OperationCreate,
+				Metadata: record.Metadata{
+					"conduit.source.connector.id": "source-generator-78lpnchx7tzpyqz:source",
+					"opencdc.readAt":              "1706028953595546000",
+					"opencdc.version":             "v1",
+				},
+				Payload: record.Change{
+					Before: nil,
+					After: record.StructuredData{
+						"event_id":     float64(1747353650),
+						"msg":          "string 0e8955b3-7fb5-4dda-8064-e10dc007f00d",
+						"pg_generator": false,
+						"sensor_id":    float64(1250383582),
+						"triggered":    false,
+					},
+				},
+				Key:      record.RawData{Raw: []byte("MTc3NzQ5NDEtNTdhMi00MmZhLWI0MzAtODkxMmE5NDI0YjNh")},
+				Position: []byte("eyJHcm91cElEIjoiNGQ2ZTBhMjktNzAwZi00Yjk4LWEzY2MtZWUyNzZhZTc4MjVjIiwiVG9waWMiOiJzdHJlYW0tNzhscG5jaHg3dHpweXF6LWdlbmVyYXRvciIsIlBhcnRpdGlvbiI6MCwiT2Zmc2V0IjoyMjF9"),
+			},
+			wantErr: false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -413,6 +542,7 @@ func TestUnwrap_Process(t *testing.T) {
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("process() error = %v, wantErr = %v", err, tt.wantErr)
 			}
+
 			if diff := cmp.Diff(tt.want, got); diff != "" {
 				t.Errorf("process() diff = %s", diff)
 			}
