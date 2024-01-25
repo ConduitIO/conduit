@@ -66,6 +66,7 @@ type Instance struct {
 	ProvisionedBy ProvisionType
 
 	Type      string
+	Condition string
 	Parent    Parent
 	Config    Config
 	Processor Interface

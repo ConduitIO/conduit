@@ -31,8 +31,9 @@ func TestConfiguration_JSON(t *testing.T) {
 		Description: "desc1",
 		Processors: []Processor{
 			{
-				ID:   "pipeline1proc1",
-				Type: "js",
+				ID:        "pipeline1proc1",
+				Type:      "js",
+				Condition: "{{ true }}",
 				Settings: map[string]string{
 					"additionalProp1": "string",
 					"additionalProp2": "string",
@@ -90,6 +91,7 @@ func TestConfiguration_JSON(t *testing.T) {
         {
           "id": "proc1",
           "type": "js",
+          "condition": "",
           "settings": {
             "additionalProp1": "string",
             "additionalProp2": "string"
@@ -103,6 +105,7 @@ func TestConfiguration_JSON(t *testing.T) {
     {
       "id": "pipeline1proc1",
       "type": "js",
+      "condition": "{{ true }}",
       "settings": {
         "additionalProp1": "string",
         "additionalProp2": "string"

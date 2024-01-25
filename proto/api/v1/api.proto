@@ -130,6 +130,7 @@ message Processor {
 
   string type = 4 [(google.api.field_behavior) = IMMUTABLE];
   Parent parent = 6 [(google.api.field_behavior) = IMMUTABLE];
+  string condition = 9;
 
   google.protobuf.Timestamp created_at = 7;
   google.protobuf.Timestamp updated_at = 8;
@@ -881,6 +882,7 @@ message CreateProcessorRequest {
   string type = 1;
   Processor.Parent parent = 3;
   Processor.Config config = 4;
+  string condition = 5;
 }
 message CreateProcessorResponse {
   Processor processor = 1;
