@@ -130,6 +130,9 @@ message Processor {
 
   string type = 4 [(google.api.field_behavior) = IMMUTABLE];
   Parent parent = 6 [(google.api.field_behavior) = IMMUTABLE];
+  // Condition is a goTemplate formatted string, the value provided to the template is a sdk.Record, it should evaluate
+  // to a boolean value, indicating a condition to run the processor for a specific record or not. (template functions
+  // provided by `sprig` are injected)
   string condition = 9;
 
   google.protobuf.Timestamp created_at = 7;

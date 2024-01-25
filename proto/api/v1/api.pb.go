@@ -564,10 +564,12 @@ type Processor struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	Id        string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Config    *Processor_Config      `protobuf:"bytes,3,opt,name=config,proto3" json:"config,omitempty"`
-	Type      string                 `protobuf:"bytes,4,opt,name=type,proto3" json:"type,omitempty"`
-	Parent    *Processor_Parent      `protobuf:"bytes,6,opt,name=parent,proto3" json:"parent,omitempty"`
+	Id     string            `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Config *Processor_Config `protobuf:"bytes,3,opt,name=config,proto3" json:"config,omitempty"`
+	Type   string            `protobuf:"bytes,4,opt,name=type,proto3" json:"type,omitempty"`
+	Parent *Processor_Parent `protobuf:"bytes,6,opt,name=parent,proto3" json:"parent,omitempty"`
+	// goTemplate string that will be applied for each record, it evaluates to a boolean value, indicating a condition
+	// to run the processor for a specific record or not.
 	Condition string                 `protobuf:"bytes,9,opt,name=condition,proto3" json:"condition,omitempty"`
 	CreatedAt *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	UpdatedAt *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
