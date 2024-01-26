@@ -22,6 +22,7 @@ const (
 	NodeIDField           = "node_id"
 	ParallelWorkerIDField = "parallel_worker_id"
 	PipelineIDField       = "pipeline_id"
+	ProcessorIDField      = "processor_id"
 	RecordPositionField   = "record_position"
 	RequestIDField        = "request_id"
 	ServerAddressField    = "address"

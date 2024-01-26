@@ -41,6 +41,20 @@ func TestCtxLoggerComponent(t *testing.T) {
 	is.Equal(`{"level":"info","component":"test","message":"testing component"}`+"\n", got)
 }
 
+type testComponent struct{}
+
+func TestCtxLoggerComponentFromType(t *testing.T) {
+	is := is.New(t)
+
+	logger := New(zerolog.New(zerolog.NewTestWriter(t)))
+
+	logger = logger.WithComponentFromType(testComponent{})
+	is.Equal("foundation.log.testComponent", logger.Component())
+
+	logger = logger.WithComponentFromType(&testComponent{})
+	is.Equal("foundation.log.testComponent", logger.Component())
+}
+
 func TestCtxLoggerWithoutHooks(t *testing.T) {
 	ctx := context.Background()
 

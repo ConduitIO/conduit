@@ -50,14 +50,14 @@ type blueprint struct {
 
 func NewRegistry(logger log.CtxLogger, pluginDir string) *Registry {
 	r := &Registry{
-		logger: logger.WithComponent("standalone.Registry"),
+		logger: logger.WithComponentFromType(Registry{}),
 	}
 
 	if pluginDir != "" {
 		// extract absolute path to make it clearer in the logs what directory is used
 		absPluginDir, err := filepath.Abs(pluginDir)
 		if err != nil {
-			r.logger.Warn(context.Background()).Err(err).Msg("could not extract absolute plugins path")
+			r.logger.Warn(context.Background()).Err(err).Msg("could not extract absolute connector plugins path")
 		} else {
 			r.pluginDir = absPluginDir // store plugin dir for hot reloads
 			r.reloadPlugins()
@@ -67,13 +67,9 @@ func NewRegistry(logger log.CtxLogger, pluginDir string) *Registry {
 	r.logger.Info(context.Background()).
 		Str(log.PluginPathField, r.pluginDir).
 		Int("count", len(r.List())).
-		Msg("standalone plugins initialized")
+		Msg("standalone connector plugins initialized")
 
 	return r
-}
-
-func newFullName(pluginName, pluginVersion string) plugin.FullName {
-	return plugin.NewFullName(plugin.PluginTypeStandalone, pluginName, pluginVersion)
 }
 
 func (r *Registry) reloadPlugins() {
@@ -84,19 +80,19 @@ func (r *Registry) reloadPlugins() {
 }
 
 func (r *Registry) loadPlugins(ctx context.Context, pluginDir string) map[string]map[string]blueprint {
-	r.logger.Debug(ctx).Msgf("loading plugins from directory %v", pluginDir)
+	r.logger.Debug(ctx).Msgf("loading connector plugins from directory %v", pluginDir)
 	plugins := make(map[string]map[string]blueprint)
 
 	dirEntries, err := os.ReadDir(pluginDir)
 	if err != nil {
-		r.logger.Warn(ctx).Err(err).Msg("could not read plugin directory")
+		r.logger.Warn(ctx).Err(err).Msg("could not read connector plugin directory")
 		return plugins // return empty map
 	}
 	warn := func(ctx context.Context, err error, pluginPath string) {
 		r.logger.Warn(ctx).
 			Err(err).
 			Str(log.PluginPathField, pluginPath).
-			Msgf("could not load standalone plugin")
+			Msgf("could not load standalone connector plugin")
 	}
 
 	for _, dirEntry := range dirEntries {
@@ -107,24 +103,8 @@ func (r *Registry) loadPlugins(ctx context.Context, pluginDir string) map[string
 
 		pluginPath := path.Join(pluginDir, dirEntry.Name())
 
-		// create dispenser without a logger to not spam logs on refresh
-		dispenser, err := standalonev1.NewDispenser(zerolog.Nop(), pluginPath)
+		specs, err := r.loadSpecifications(pluginPath)
 		if err != nil {
-			err = cerrors.Errorf("failed to create dispenser: %w", err)
-			warn(ctx, err, pluginPath)
-			continue
-		}
-
-		specPlugin, err := dispenser.DispenseSpecifier()
-		if err != nil {
-			err = cerrors.Errorf("failed to dispense specifier (tip: check if the file is a valid plugin binary and if you have permissions for running it): %w", err)
-			warn(ctx, err, pluginPath)
-			continue
-		}
-
-		specs, err := specPlugin.Specify()
-		if err != nil {
-			err = cerrors.Errorf("failed to get specs: %w", err)
 			warn(ctx, err, pluginPath)
 			continue
 		}
@@ -135,9 +115,9 @@ func (r *Registry) loadPlugins(ctx context.Context, pluginDir string) map[string
 			plugins[specs.Name] = versionMap
 		}
 
-		fullName := newFullName(specs.Name, specs.Version)
+		fullName := plugin.NewFullName(plugin.PluginTypeStandalone, specs.Name, specs.Version)
 		if conflict, ok := versionMap[specs.Version]; ok {
-			err = cerrors.Errorf("conflict detected, plugin %v already registered, please remove either %v or %v, these plugins won't be usable until that happens", fullName, conflict.path, pluginPath)
+			err = cerrors.Errorf("conflict detected, connector plugin %v already registered, please remove either %v or %v, these plugins won't be usable until that happens", fullName, conflict.path, pluginPath)
 			warn(ctx, err, pluginPath)
 			// delete plugin from map at the end so that further duplicates can
 			// still be found
@@ -163,16 +143,36 @@ func (r *Registry) loadPlugins(ctx context.Context, pluginDir string) map[string
 			r.logger.Debug(ctx).
 				Str(log.PluginPathField, pluginPath).
 				Str(log.PluginNameField, string(bp.fullName)).
-				Msg("set plugin as latest")
+				Msg("set connector plugin as latest")
 		}
 
 		r.logger.Debug(ctx).
 			Str(log.PluginPathField, pluginPath).
 			Str(log.PluginNameField, string(bp.fullName)).
-			Msg("loaded standalone plugin")
+			Msg("loaded standalone connector plugin")
 	}
 
 	return plugins
+}
+
+func (r *Registry) loadSpecifications(pluginPath string) (connector.Specification, error) {
+	// create dispenser without a logger to not spam logs on refresh
+	dispenser, err := standalonev1.NewDispenser(zerolog.Nop(), pluginPath)
+	if err != nil {
+		return connector.Specification{}, cerrors.Errorf("failed to create connector dispenser: %w", err)
+	}
+
+	specPlugin, err := dispenser.DispenseSpecifier()
+	if err != nil {
+		return connector.Specification{}, cerrors.Errorf("failed to dispense connector specifier (tip: check if the file is a valid connector plugin binary and if you have permissions for running it): %w", err)
+	}
+
+	specs, err := specPlugin.Specify()
+	if err != nil {
+		return connector.Specification{}, cerrors.Errorf("failed to get connector specs: %w", err)
+	}
+
+	return specs, nil
 }
 
 func (r *Registry) NewDispenser(logger log.CtxLogger, fullName plugin.FullName) (connector.Dispenser, error) {
@@ -189,7 +189,7 @@ func (r *Registry) NewDispenser(logger log.CtxLogger, fullName plugin.FullName) 
 		for k := range versionMap {
 			availableVersions = append(availableVersions, k)
 		}
-		return nil, cerrors.Errorf("could not find standalone plugin, only found versions %v: %w", availableVersions, plugin.ErrPluginNotFound)
+		return nil, cerrors.Errorf("could not find standalone connector plugin, only found versions %v: %w", availableVersions, plugin.ErrPluginNotFound)
 	}
 
 	return standalonev1.NewDispenser(logger.ZerologWithComponent(), bp.path)

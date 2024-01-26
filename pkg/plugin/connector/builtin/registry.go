@@ -85,7 +85,7 @@ func NewDispenserFactory(conn sdk.Connector) DispenserFactory {
 }
 
 func NewRegistry(logger log.CtxLogger, factories map[string]DispenserFactory) *Registry {
-	logger = logger.WithComponent("builtin.Registry")
+	logger = logger.WithComponentFromType(Registry{})
 	buildInfo, ok := debug.ReadBuildInfo()
 	if !ok {
 		// we are using modules, build info should always be available, we are staying on the safe side
