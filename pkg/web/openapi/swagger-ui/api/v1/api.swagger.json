@@ -2058,7 +2058,8 @@
           "$ref": "#/definitions/ProcessorParent"
         },
         "condition": {
-          "type": "string"
+          "type": "string",
+          "description": "goTemplate string that will be applied for each record, it evaluates to a boolean value, indicating a condition\nto run the processor for a specific record or not."
         },
         "createdAt": {
           "type": "string",

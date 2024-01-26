@@ -568,8 +568,9 @@ type Processor struct {
 	Config *Processor_Config `protobuf:"bytes,3,opt,name=config,proto3" json:"config,omitempty"`
 	Type   string            `protobuf:"bytes,4,opt,name=type,proto3" json:"type,omitempty"`
 	Parent *Processor_Parent `protobuf:"bytes,6,opt,name=parent,proto3" json:"parent,omitempty"`
-	// goTemplate string that will be applied for each record, it evaluates to a boolean value, indicating a condition
-	// to run the processor for a specific record or not.
+	// Condition is a goTemplate formatted string, the value provided to the template is a sdk.Record, it should evaluate
+	// to a boolean value, indicating a condition to run the processor for a specific record or not. (template functions
+	// provided by `sprig` are injected)
 	Condition string                 `protobuf:"bytes,9,opt,name=condition,proto3" json:"condition,omitempty"`
 	CreatedAt *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	UpdatedAt *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
