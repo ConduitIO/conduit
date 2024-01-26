@@ -120,6 +120,7 @@ func TestPipelineSimple(t *testing.T) {
 			Type: processor.ParentTypePipeline,
 		},
 		processor.Config{},
+		"",
 	)
 	is.NoErr(err)
 

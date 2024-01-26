@@ -479,10 +479,11 @@ func TestCreateProcessorAction_Do(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
 	haveCfg := config.Processor{
-		ID:       uuid.NewString(),
-		Type:     "processor-type",
-		Settings: map[string]string{"foo": "bar"},
-		Workers:  2,
+		ID:        uuid.NewString(),
+		Type:      "processor-type",
+		Settings:  map[string]string{"foo": "bar"},
+		Workers:   2,
+		Condition: "{{ eq .Metadata.opencdc.version \"v1\" }}",
 	}
 	wantCfg := processor.Config{
 		Settings: haveCfg.Settings,
@@ -494,7 +495,7 @@ func TestCreateProcessorAction_Do(t *testing.T) {
 	}
 
 	procSrv := mock.NewProcessorService(ctrl)
-	procSrv.EXPECT().Create(ctx, haveCfg.ID, haveCfg.Type, parent, wantCfg, processor.ProvisionTypeConfig)
+	procSrv.EXPECT().Create(ctx, haveCfg.ID, haveCfg.Type, parent, wantCfg, processor.ProvisionTypeConfig, haveCfg.Condition)
 
 	a := createProcessorAction{
 		cfg:              haveCfg,
@@ -616,10 +617,11 @@ func TestDeleteProcessorAction_Rollback(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
 	haveCfg := config.Processor{
-		ID:       uuid.NewString(),
-		Type:     "processor-type",
-		Settings: map[string]string{"foo": "bar"},
-		Workers:  2,
+		ID:        uuid.NewString(),
+		Type:      "processor-type",
+		Settings:  map[string]string{"foo": "bar"},
+		Workers:   2,
+		Condition: "{{ eq .Metadata.opencdc.version \"v1\" }}",
 	}
 	wantCfg := processor.Config{
 		Settings: haveCfg.Settings,
@@ -631,7 +633,7 @@ func TestDeleteProcessorAction_Rollback(t *testing.T) {
 	}
 
 	procSrv := mock.NewProcessorService(ctrl)
-	procSrv.EXPECT().Create(ctx, haveCfg.ID, haveCfg.Type, parent, wantCfg, processor.ProvisionTypeConfig)
+	procSrv.EXPECT().Create(ctx, haveCfg.ID, haveCfg.Type, parent, wantCfg, processor.ProvisionTypeConfig, haveCfg.Condition)
 
 	a := deleteProcessorAction{
 		cfg:              haveCfg,

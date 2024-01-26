@@ -36,5 +36,5 @@ func (mr *ConnectorServiceMockRecorder) CreateWithInstance(ctx interface{}, inst
 // CreateWithInstance is a utility function that lets you declare an expected call to
 // Create with arguments taken from the supplied instance.
 func (mr *ProcessorServiceMockRecorder) CreateWithInstance(ctx interface{}, instance *processor.Instance) *gomock.Call {
-	return mr.Create(ctx, instance.ID, instance.Type, instance.Parent, instance.Config, instance.ProvisionedBy)
+	return mr.Create(ctx, instance.ID, instance.Type, instance.Parent, instance.Config, instance.ProvisionedBy, instance.Condition)
 }

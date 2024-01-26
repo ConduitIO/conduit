@@ -170,6 +170,7 @@ func (a createProcessorAction) Do(ctx context.Context) error {
 			Workers:  a.cfg.Workers,
 		},
 		processor.ProvisionTypeConfig,
+		a.cfg.Condition,
 	)
 	if err != nil {
 		return cerrors.Errorf("failed to create processor: %w", err)

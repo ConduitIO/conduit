@@ -42,7 +42,7 @@ func TestService_Init_Success(t *testing.T) {
 	service := processor.NewService(log.Nop(), db, registry)
 
 	// create a processor instance
-	_, err := service.Create(ctx, uuid.NewString(), procType, processor.Parent{}, processor.Config{}, processor.ProvisionTypeAPI)
+	_, err := service.Create(ctx, uuid.NewString(), procType, processor.Parent{}, processor.Config{}, processor.ProvisionTypeAPI, "")
 	is.NoErr(err)
 
 	want := service.List(ctx)
@@ -116,7 +116,7 @@ func TestService_Create_Success(t *testing.T) {
 	registry := newTestBuilderRegistry(is, map[string]processor.Interface{want.Type: p})
 	service := processor.NewService(log.Nop(), db, registry)
 
-	got, err := service.Create(ctx, want.ID, want.Type, want.Parent, want.Config, processor.ProvisionTypeAPI)
+	got, err := service.Create(ctx, want.ID, want.Type, want.Parent, want.Config, processor.ProvisionTypeAPI, "")
 	is.NoErr(err)
 	want.ID = got.ID // uuid is random
 	want.CreatedAt = got.CreatedAt
@@ -139,6 +139,7 @@ func TestService_Create_BuilderNotFound(t *testing.T) {
 		processor.Parent{},
 		processor.Config{},
 		processor.ProvisionTypeAPI,
+		"{{true}}",
 	)
 
 	is.True(err != nil)
@@ -171,6 +172,7 @@ func TestService_Create_BuilderFail(t *testing.T) {
 		processor.Parent{},
 		processor.Config{},
 		processor.ProvisionTypeAPI,
+		"{{true}}",
 	)
 	is.True(cerrors.Is(err, wantErr)) // expected builder error
 	is.Equal(got, nil)
@@ -191,6 +193,7 @@ func TestService_Create_WorkersNegative(t *testing.T) {
 		processor.Parent{},
 		processor.Config{},
 		processor.ProvisionTypeAPI,
+		"{{true}}",
 	)
 	is.True(err != nil) // expected workers error
 	is.Equal(got, nil)
@@ -210,7 +213,7 @@ func TestService_Delete_Success(t *testing.T) {
 	service := processor.NewService(log.Nop(), db, registry)
 
 	// create a processor instance
-	i, err := service.Create(ctx, uuid.NewString(), procType, processor.Parent{}, processor.Config{}, processor.ProvisionTypeAPI)
+	i, err := service.Create(ctx, uuid.NewString(), procType, processor.Parent{}, processor.Config{}, processor.ProvisionTypeAPI, "cond")
 	is.NoErr(err)
 
 	err = service.Delete(ctx, i.ID)
@@ -244,7 +247,7 @@ func TestService_Get_Success(t *testing.T) {
 	service := processor.NewService(log.Nop(), db, registry)
 
 	// create a processor instance
-	want, err := service.Create(ctx, uuid.NewString(), procType, processor.Parent{}, processor.Config{}, processor.ProvisionTypeAPI)
+	want, err := service.Create(ctx, uuid.NewString(), procType, processor.Parent{}, processor.Config{}, processor.ProvisionTypeAPI, "cond")
 	is.NoErr(err)
 
 	got, err := service.Get(ctx, want.ID)
@@ -287,11 +290,11 @@ func TestService_List_Some(t *testing.T) {
 	service := processor.NewService(log.Nop(), db, registry)
 
 	// create a couple of processor instances
-	i1, err := service.Create(ctx, uuid.NewString(), procType, processor.Parent{}, processor.Config{}, processor.ProvisionTypeAPI)
+	i1, err := service.Create(ctx, uuid.NewString(), procType, processor.Parent{}, processor.Config{}, processor.ProvisionTypeAPI, "")
 	is.NoErr(err)
-	i2, err := service.Create(ctx, uuid.NewString(), procType, processor.Parent{}, processor.Config{}, processor.ProvisionTypeAPI)
+	i2, err := service.Create(ctx, uuid.NewString(), procType, processor.Parent{}, processor.Config{}, processor.ProvisionTypeAPI, "")
 	is.NoErr(err)
-	i3, err := service.Create(ctx, uuid.NewString(), procType, processor.Parent{}, processor.Config{}, processor.ProvisionTypeAPI)
+	i3, err := service.Create(ctx, uuid.NewString(), procType, processor.Parent{}, processor.Config{}, processor.ProvisionTypeAPI, "")
 	is.NoErr(err)
 
 	instances := service.List(ctx)
@@ -311,7 +314,7 @@ func TestService_Update_Success(t *testing.T) {
 	service := processor.NewService(log.Nop(), db, registry)
 
 	// create a processor instance
-	want, err := service.Create(ctx, uuid.NewString(), procType, processor.Parent{}, processor.Config{}, processor.ProvisionTypeAPI)
+	want, err := service.Create(ctx, uuid.NewString(), procType, processor.Parent{}, processor.Config{}, processor.ProvisionTypeAPI, "")
 	is.NoErr(err)
 
 	newConfig := processor.Config{
