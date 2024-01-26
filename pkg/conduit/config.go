@@ -68,6 +68,10 @@ type Config struct {
 		Path string
 	}
 
+	Processors struct {
+		Path string
+	}
+
 	Pipelines struct {
 		Path        string
 		ExitOnError bool
