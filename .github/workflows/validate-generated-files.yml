@@ -28,4 +28,5 @@ jobs:
           make install-tools
           make generate
           make proto-generate
+          git diff
           git diff --exit-code --numstat
