@@ -55,6 +55,7 @@ type Connector struct {
 type Processor struct {
 	ID       string            `yaml:"id" json:"id"`
 	Type     string            `yaml:"type" json:"type"`
+	Plugin   string            `yaml:"plugin" json:"plugin"`
 	Settings map[string]string `yaml:"settings" json:"settings"`
 	Workers  int               `yaml:"workers" json:"workers"`
 }

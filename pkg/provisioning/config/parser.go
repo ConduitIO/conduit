@@ -41,6 +41,7 @@ type Connector struct {
 type Processor struct {
 	ID       string
 	Type     string
+	Plugin   string
 	Settings map[string]string
 	Workers  int
 }
