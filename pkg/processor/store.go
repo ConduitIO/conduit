@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/conduitio/conduit/pkg/plugin/processor"
 	"strings"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -34,10 +35,10 @@ const (
 // Store handles the persistence and fetching of processor instances.
 type Store struct {
 	db       database.DB
-	registry *BuilderRegistry
+	registry *processor.Registry
 }
 
-func NewStore(db database.DB, registry *BuilderRegistry) *Store {
+func NewStore(db database.DB, registry *processor.Registry) *Store {
 	return &Store{
 		db:       db,
 		registry: registry,
