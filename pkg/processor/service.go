@@ -16,6 +16,7 @@ package processor
 
 import (
 	"context"
+	"github.com/conduitio/conduit/pkg/plugin/processor"
 	"time"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -27,13 +28,13 @@ import (
 type Service struct {
 	logger log.CtxLogger
 
-	registry  *BuilderRegistry
+	registry  *processor.Registry
 	instances map[string]*Instance
 	store     *Store
 }
 
 // NewService creates a new processor service.
-func NewService(logger log.CtxLogger, db database.DB, registry *BuilderRegistry) *Service {
+func NewService(logger log.CtxLogger, db database.DB, registry *processor.Registry) *Service {
 	return &Service{
 		logger:    logger.WithComponent("processor.Service"),
 		registry:  registry,
@@ -147,7 +148,7 @@ func (s *Service) Update(ctx context.Context, id string, cfg Config) (*Instance,
 
 	p, err := builder(cfg)
 	if err != nil {
-		return nil, cerrors.Errorf("could not build processor: %w", err)
+		return nil, cerrors.Errorf("could not get processor: %w", err)
 	}
 
 	instance.Processor = p
