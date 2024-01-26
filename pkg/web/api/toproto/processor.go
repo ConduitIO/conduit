@@ -35,6 +35,7 @@ func Processor(in *processor.Instance) *apiv1.Processor {
 		UpdatedAt: timestamppb.New(in.UpdatedAt),
 		Config:    ProcessorConfig(in.Config),
 		Parent:    ProcessorParent(in.Parent),
+		Condition: in.Condition,
 	}
 }
 

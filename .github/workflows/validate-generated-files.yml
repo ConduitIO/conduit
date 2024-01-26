@@ -20,7 +20,7 @@ jobs:
         uses: arduino/setup-protoc@v2
 
       - name: Set up Buf
-        uses: bufbuild/buf-setup-action@v1
+        uses: bufbuild/buf-setup-action@v1.29.0
 
       - name: Check generated files
         run: |
@@ -28,4 +28,5 @@ jobs:
           make install-tools
           make generate
           make proto-generate
+          git diff
           git diff --exit-code --numstat

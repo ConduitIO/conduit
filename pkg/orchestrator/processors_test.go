@@ -50,6 +50,7 @@ func TestProcessorOrchestrator_CreateOnPipeline_Success(t *testing.T) {
 		Config: processor.Config{
 			Settings: map[string]string{"foo": "bar"},
 		},
+		Condition: "{{ true }}",
 	}
 
 	plsMock.EXPECT().
@@ -63,6 +64,7 @@ func TestProcessorOrchestrator_CreateOnPipeline_Success(t *testing.T) {
 			want.Parent,
 			want.Config,
 			processor.ProvisionTypeAPI,
+			want.Condition,
 		).
 		Return(want, nil)
 	plsMock.EXPECT().
@@ -70,7 +72,7 @@ func TestProcessorOrchestrator_CreateOnPipeline_Success(t *testing.T) {
 		Return(pl, nil)
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
-	got, err := orc.Processors.Create(ctx, want.Type, want.Parent, want.Config)
+	got, err := orc.Processors.Create(ctx, want.Type, want.Parent, want.Config, want.Condition)
 	is.NoErr(err)
 	is.Equal(want, got)
 }
@@ -92,7 +94,7 @@ func TestProcessorOrchestrator_CreateOnPipeline_PipelineNotExist(t *testing.T) {
 		Return(nil, wantErr)
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
-	got, err := orc.Processors.Create(ctx, "test-processor", parent, processor.Config{})
+	got, err := orc.Processors.Create(ctx, "test-processor", parent, processor.Config{}, "")
 	is.True(err != nil)
 	is.True(cerrors.Is(err, wantErr)) // errors did not match
 	is.True(got == nil)
@@ -118,7 +120,7 @@ func TestProcessorOrchestrator_CreateOnPipeline_PipelineRunning(t *testing.T) {
 		Return(pl, nil)
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
-	got, err := orc.Processors.Create(ctx, "test-processor", parent, processor.Config{})
+	got, err := orc.Processors.Create(ctx, "test-processor", parent, processor.Config{}, "")
 	is.True(err != nil)
 	is.Equal(pipeline.ErrPipelineRunning, err)
 	is.True(got == nil)
@@ -145,7 +147,7 @@ func TestProcessorOrchestrator_CreateOnPipeline_PipelineProvisionedByConfig(t *t
 		Return(pl, nil)
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
-	got, err := orc.Processors.Create(ctx, "test-processor", parent, processor.Config{})
+	got, err := orc.Processors.Create(ctx, "test-processor", parent, processor.Config{}, "")
 	is.Equal(got, nil)
 	is.True(err != nil)
 	is.True(cerrors.Is(err, ErrImmutableProvisionedByConfig)) // expected ErrImmutableProvisionedByConfig
@@ -179,11 +181,12 @@ func TestProcessorOrchestrator_CreateOnPipeline_CreateProcessorError(t *testing.
 			parent,
 			processor.Config{},
 			processor.ProvisionTypeAPI,
+			"",
 		).
 		Return(nil, wantErr)
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
-	got, err := orc.Processors.Create(ctx, "test-processor", parent, processor.Config{})
+	got, err := orc.Processors.Create(ctx, "test-processor", parent, processor.Config{}, "")
 	is.True(err != nil)
 	is.True(cerrors.Is(err, wantErr)) // errors did not match
 	is.True(got == nil)
@@ -210,6 +213,7 @@ func TestProcessorOrchestrator_CreateOnPipeline_AddProcessorError(t *testing.T) 
 		Config: processor.Config{
 			Settings: map[string]string{"foo": "bar"},
 		},
+		Condition: "{{ true }}",
 	}
 	wantErr := cerrors.New("test error")
 
@@ -224,6 +228,7 @@ func TestProcessorOrchestrator_CreateOnPipeline_AddProcessorError(t *testing.T) 
 			proc.Parent,
 			proc.Config,
 			processor.ProvisionTypeAPI,
+			proc.Condition,
 		).
 		Return(proc, nil)
 	plsMock.EXPECT().
@@ -235,7 +240,7 @@ func TestProcessorOrchestrator_CreateOnPipeline_AddProcessorError(t *testing.T) 
 		Return(nil)
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
-	got, err := orc.Processors.Create(ctx, proc.Type, proc.Parent, proc.Config)
+	got, err := orc.Processors.Create(ctx, proc.Type, proc.Parent, proc.Config, proc.Condition)
 	is.True(err != nil)
 	is.True(cerrors.Is(err, wantErr)) // errors did not match
 	is.True(got == nil)
@@ -266,6 +271,7 @@ func TestProcessorOrchestrator_CreateOnConnector_Success(t *testing.T) {
 		Config: processor.Config{
 			Settings: map[string]string{"foo": "bar"},
 		},
+		Condition: "{{ true }}",
 	}
 
 	consMock.EXPECT().
@@ -282,6 +288,7 @@ func TestProcessorOrchestrator_CreateOnConnector_Success(t *testing.T) {
 			want.Parent,
 			want.Config,
 			processor.ProvisionTypeAPI,
+			want.Condition,
 		).
 		Return(want, nil)
 	consMock.EXPECT().
@@ -289,7 +296,7 @@ func TestProcessorOrchestrator_CreateOnConnector_Success(t *testing.T) {
 		Return(conn, nil)
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
-	got, err := orc.Processors.Create(ctx, want.Type, want.Parent, want.Config)
+	got, err := orc.Processors.Create(ctx, want.Type, want.Parent, want.Config, want.Condition)
 	is.NoErr(err)
 	is.Equal(want, got)
 }
@@ -311,7 +318,7 @@ func TestProcessorOrchestrator_CreateOnConnector_ConnectorNotExist(t *testing.T)
 		Return(nil, wantErr)
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
-	got, err := orc.Processors.Create(ctx, "test-processor", parent, processor.Config{})
+	got, err := orc.Processors.Create(ctx, "test-processor", parent, processor.Config{}, "")
 	is.True(err != nil)
 	is.True(cerrors.Is(err, wantErr)) // errors did not match
 	is.True(got == nil)
@@ -746,6 +753,7 @@ func TestProcessorOrchestrator_DeleteOnPipeline_RemoveProcessorFail(t *testing.T
 		Config: processor.Config{
 			Settings: map[string]string{"foo": "bar"},
 		},
+		Condition: "{{ true }}",
 	}
 
 	wantErr := cerrors.New("couldn't remove the processor")
@@ -770,6 +778,7 @@ func TestProcessorOrchestrator_DeleteOnPipeline_RemoveProcessorFail(t *testing.T
 			want.Parent,
 			want.Config,
 			processor.ProvisionTypeAPI,
+			want.Condition,
 		).
 		Return(want, nil)
 
@@ -803,6 +812,7 @@ func TestProcessorOrchestrator_DeleteOnConnector_Fail(t *testing.T) {
 		Config: processor.Config{
 			Settings: map[string]string{"foo": "bar"},
 		},
+		Condition: "{{ true }}",
 	}
 
 	wantErr := cerrors.New("couldn't remove processor from connector")
@@ -830,6 +840,7 @@ func TestProcessorOrchestrator_DeleteOnConnector_Fail(t *testing.T) {
 			want.Parent,
 			want.Config,
 			processor.ProvisionTypeAPI,
+			want.Condition,
 		).
 		Return(want, nil)
 
