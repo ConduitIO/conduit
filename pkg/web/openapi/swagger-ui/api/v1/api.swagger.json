@@ -1787,6 +1787,9 @@
         },
         "condition": {
           "type": "string"
+        },
+        "plugin": {
+          "type": "string"
         }
       }
     },

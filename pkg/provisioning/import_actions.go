@@ -17,7 +17,6 @@ package provisioning
 import (
 	"context"
 	"fmt"
-
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/pipeline"
@@ -160,10 +159,19 @@ func (a createProcessorAction) String() string {
 	return fmt.Sprintf("create processor with ID %v", a.cfg.ID)
 }
 func (a createProcessorAction) Do(ctx context.Context) error {
+	if a.cfg.Type != "" && a.cfg.Plugin != "" {
+		// todo same error in processor_v1.go
+		return cerrors.New("only one of [type, plugin] can be specified")
+	}
+	plugin := a.cfg.Plugin
+	if plugin == "" {
+		plugin = a.cfg.Type
+	}
+
 	_, err := a.processorService.Create(
 		ctx,
 		a.cfg.ID,
-		a.cfg.Type,
+		plugin,
 		a.parent,
 		processor.Config{
 			Settings: a.cfg.Settings,

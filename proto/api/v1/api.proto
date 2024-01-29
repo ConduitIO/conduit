@@ -882,10 +882,11 @@ message InspectProcessorOutResponse {
 
 
 message CreateProcessorRequest {
-  string type = 1;
+  string type = 1 [deprecated = true];
   Processor.Parent parent = 3;
   Processor.Config config = 4;
   string condition = 5;
+  string plugin = 6;
 }
 message CreateProcessorResponse {
   Processor processor = 1;

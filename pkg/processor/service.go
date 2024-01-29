@@ -88,7 +88,7 @@ func (s *Service) Get(_ context.Context, id string) (*Instance, error) {
 func (s *Service) Create(
 	ctx context.Context,
 	id string,
-	procType string,
+	plugin string,
 	parent Parent,
 	cfg Config,
 	pt ProvisionType,
@@ -101,14 +101,9 @@ func (s *Service) Create(
 		cfg.Workers = 1
 	}
 
-	builder, err := s.registry.Get(procType)
+	p, err := s.registry.Get(ctx, plugin, id)
 	if err != nil {
 		return nil, err
-	}
-
-	p, err := builder(cfg)
-	if err != nil {
-		return nil, cerrors.Errorf("could not build processor: %w", err)
 	}
 
 	now := time.Now()
@@ -117,7 +112,7 @@ func (s *Service) Create(
 		UpdatedAt:     now,
 		CreatedAt:     now,
 		ProvisionedBy: pt,
-		Type:          procType,
+		Type:          plugin,
 		Parent:        parent,
 		Config:        cfg,
 		Processor:     p,
@@ -131,7 +126,7 @@ func (s *Service) Create(
 	}
 
 	s.instances[instance.ID] = instance
-	measure.ProcessorsGauge.WithValues(procType).Inc()
+	measure.ProcessorsGauge.WithValues(plugin).Inc()
 
 	return instance, nil
 }
@@ -144,9 +139,7 @@ func (s *Service) Update(ctx context.Context, id string, cfg Config) (*Instance,
 	}
 
 	// this can't really fail, this call already passed when creating the instance
-	builder, _ := s.registry.Get(instance.Type)
-
-	p, err := builder(cfg)
+	p, err := s.registry.Get(ctx, instance.Type, instance.ID)
 	if err != nil {
 		return nil, cerrors.Errorf("could not get processor: %w", err)
 	}
