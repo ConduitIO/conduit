@@ -26,15 +26,40 @@ const MajorVersion = "2"
 // a new config version. Based on the changelog the parser will output warnings.
 var Changelog = internal.Changelog{
 	"2.0": {}, // initial version
-	"2.1": {{
-		Field:      "pipelines.*.processors.*.condition",
-		ChangeType: internal.FieldIntroduced,
-		Message:    "field condition was introduced in version 2.1, please update the pipeline config version",
-	}, {
-		Field:      "pipelines.*.connectors.*.processors.*.condition",
-		ChangeType: internal.FieldIntroduced,
-		Message:    "field condition was introduced in version 2.1, please update the pipeline config version",
-	}},
+	"2.1": {
+		{
+			Field:      "pipelines.*.processors.*.condition",
+			ChangeType: internal.FieldIntroduced,
+			Message:    "field condition was introduced in version 2.1, please update the pipeline config version",
+		},
+		{
+			Field:      "pipelines.*.connectors.*.processors.*.condition",
+			ChangeType: internal.FieldIntroduced,
+			Message:    "field condition was introduced in version 2.1, please update the pipeline config version",
+		},
+	},
+	"2.2": {
+		{
+			Field:      "pipelines.*.processors.*.plugin",
+			ChangeType: internal.FieldIntroduced,
+			Message:    "field plugin was introduced in version 2.2, please update the pipeline config version",
+		},
+		{
+			Field:      "pipelines.*.connectors.*.processors.*.plugin",
+			ChangeType: internal.FieldIntroduced,
+			Message:    "field plugin was introduced in version 2.2, please update the pipeline config version",
+		},
+		{
+			Field:      "pipelines.*.processors.*.type",
+			ChangeType: internal.FieldDeprecated,
+			Message:    "please use field 'plugin' (introduced in version 2.2)",
+		},
+		{
+			Field:      "pipelines.*.connectors.*.processors.*.type",
+			ChangeType: internal.FieldDeprecated,
+			Message:    "please use field 'plugin' (introduced in version 2.2)",
+		},
+	},
 }
 
 type Configuration struct {

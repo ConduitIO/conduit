@@ -75,6 +75,7 @@ func fromProcessorsConfig(procs []config.Processor) []Processor {
 		processors[i] = Processor{
 			ID:       proc.ID,
 			Type:     proc.Type,
+			Plugin:   proc.Plugin,
 			Settings: proc.Settings,
 			Workers:  proc.Workers,
 		}

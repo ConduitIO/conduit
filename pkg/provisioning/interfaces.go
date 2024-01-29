@@ -55,7 +55,15 @@ type ConnectorService interface {
 
 type ProcessorService interface {
 	Get(ctx context.Context, id string) (*processor.Instance, error)
-	Create(ctx context.Context, id string, procType string, parent processor.Parent, cfg processor.Config, p processor.ProvisionType, condition string) (*processor.Instance, error)
+	Create(
+		ctx context.Context,
+		id string,
+		plugin string,
+		parent processor.Parent,
+		cfg processor.Config,
+		p processor.ProvisionType,
+		condition string,
+	) (*processor.Instance, error)
 	Update(ctx context.Context, id string, cfg processor.Config) (*processor.Instance, error)
 	Delete(ctx context.Context, id string) error
 }
