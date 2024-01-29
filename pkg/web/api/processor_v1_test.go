@@ -268,10 +268,11 @@ func TestProcessorAPIv1_CreateProcessor(t *testing.T) {
 		},
 		Config:    config,
 		Processor: p,
+		Condition: "{{ true }}",
 		UpdatedAt: now,
 		CreatedAt: now,
 	}
-	psMock.EXPECT().Create(ctx, pr.Type, pr.Parent, config).Return(pr, nil).Times(1)
+	psMock.EXPECT().Create(ctx, pr.Type, pr.Parent, config, pr.Condition).Return(pr, nil).Times(1)
 
 	want := &apiv1.CreateProcessorResponse{Processor: &apiv1.Processor{
 		Id:   pr.ID,
@@ -285,14 +286,16 @@ func TestProcessorAPIv1_CreateProcessor(t *testing.T) {
 		},
 		CreatedAt: timestamppb.New(pr.CreatedAt),
 		UpdatedAt: timestamppb.New(pr.UpdatedAt),
+		Condition: pr.Condition,
 	}}
 
 	got, err := api.CreateProcessor(
 		ctx,
 		&apiv1.CreateProcessorRequest{
-			Type:   want.Processor.Type,
-			Parent: want.Processor.Parent,
-			Config: want.Processor.Config,
+			Type:      want.Processor.Type,
+			Parent:    want.Processor.Parent,
+			Config:    want.Processor.Config,
+			Condition: want.Processor.Condition,
 		},
 	)
 

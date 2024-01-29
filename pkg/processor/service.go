@@ -92,6 +92,7 @@ func (s *Service) Create(
 	parent Parent,
 	cfg Config,
 	pt ProvisionType,
+	cond string,
 ) (*Instance, error) {
 	if cfg.Workers < 0 {
 		return nil, cerrors.New("processor workers can't be negative")
@@ -120,6 +121,7 @@ func (s *Service) Create(
 		Parent:        parent,
 		Config:        cfg,
 		Processor:     p,
+		Condition:     cond,
 	}
 
 	// persist instance
