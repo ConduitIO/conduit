@@ -16,6 +16,9 @@ package stream
 
 import (
 	"context"
+	"github.com/conduitio/conduit-commons/opencdc"
+	sdk "github.com/conduitio/conduit-processor-sdk"
+	"github.com/conduitio/conduit/pkg/record"
 	"time"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -51,31 +54,29 @@ func (n *ProcessorNode) Run(ctx context.Context) error {
 		}
 
 		executeTime := time.Now()
-		rec, err := n.Processor.Process(msg.Ctx, msg.Record)
+		// todo needs to be filled out
+		recs := n.Processor.Process(msg.Ctx, []opencdc.Record{{}})
 		n.ProcessorTimer.Update(time.Since(executeTime))
-		if err != nil {
-			// Check for Skipped records
-			switch err {
-			case processor.ErrSkipRecord:
-				// NB: Ack skipped messages since they've been correctly handled
-				err := msg.Ack()
-				if err != nil {
-					return cerrors.Errorf("failed to ack skipped message: %w", err)
-				}
-			default:
-				err = msg.Nack(err, n.ID())
-				if err != nil {
-					return cerrors.Errorf("error executing processor: %w", err)
-				}
-			}
-			// error was handled successfully, we recovered
-			continue
-		}
-		msg.Record = rec
 
-		err = n.base.Send(ctx, n.logger, msg)
-		if err != nil {
-			return msg.Nack(err, n.ID())
+		switch v := recs[0].(type) {
+		case sdk.SingleRecord:
+			// todo fill out
+			msg.Record = record.Record{}
+			err = n.base.Send(ctx, n.logger, msg)
+			if err != nil {
+				return msg.Nack(err, n.ID())
+			}
+		case sdk.FilterRecord:
+			// NB: Ack skipped messages since they've been correctly handled
+			err := msg.Ack()
+			if err != nil {
+				return cerrors.Errorf("failed to ack skipped message: %w", err)
+			}
+		case sdk.ErrorRecord:
+			err = msg.Nack(v.Error, n.ID())
+			if err != nil {
+				return cerrors.Errorf("error executing processor: %w", err)
+			}
 		}
 	}
 }

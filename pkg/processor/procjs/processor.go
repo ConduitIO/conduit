@@ -16,6 +16,8 @@ package procjs
 
 import (
 	"context"
+	"github.com/conduitio/conduit-commons/opencdc"
+	sdk "github.com/conduitio/conduit-processor-sdk"
 	"sync"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -52,17 +54,19 @@ type jsRecord struct {
 	}
 }
 
-// Processor is able to run processors defined in JavaScript.
-type Processor struct {
-	gojaPool sync.Pool
-	inInsp   *inspector.Inspector
-	outInsp  *inspector.Inspector
-}
-
 // gojaContext represents one independent goja context.
 type gojaContext struct {
 	runtime  *goja.Runtime
 	function goja.Callable
+}
+
+// Processor is able to run processors defined in JavaScript.
+type Processor struct {
+	sdk.UnimplementedProcessor
+
+	gojaPool sync.Pool
+	inInsp   *inspector.Inspector
+	outInsp  *inspector.Inspector
 }
 
 func New(src string, logger zerolog.Logger) (*Processor, error) {
@@ -172,31 +176,6 @@ func (p *Processor) jsContentStructured(runtime *goja.Runtime) func(goja.Constru
 	}
 }
 
-func (p *Processor) Process(ctx context.Context, in record.Record) (record.Record, error) {
-	p.inInsp.Send(ctx, in)
-
-	g := p.gojaPool.Get().(*gojaContext)
-	defer p.gojaPool.Put(g)
-
-	jsr := p.toJSRecord(g.runtime, in)
-
-	result, err := g.function(goja.Undefined(), jsr)
-	if err != nil {
-		return record.Record{}, cerrors.Errorf("failed to execute JS processor function: %w", err)
-	}
-
-	out, err := p.toInternalRecord(result)
-	if err == processor.ErrSkipRecord {
-		return record.Record{}, err
-	}
-	if err != nil {
-		return record.Record{}, cerrors.Errorf("failed to transform to internal record: %w", err)
-	}
-
-	p.outInsp.Send(ctx, out)
-	return out, nil
-}
-
 func (p *Processor) InspectIn(ctx context.Context, id string) *inspector.Session {
 	return p.inInsp.NewSession(ctx, id)
 }
@@ -276,4 +255,74 @@ func (p *Processor) toInternalRecord(v goja.Value) (record.Record, error) {
 			After:  convertData(jsr.Payload.After),
 		},
 	}, nil
+}
+
+func (p *Processor) Specification() (sdk.Specification, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (p *Processor) Configure(ctx context.Context, m map[string]string) error {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (p *Processor) Open(ctx context.Context) error {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (p *Processor) Process(ctx context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
+	outRecs := make([]sdk.ProcessedRecord, len(records))
+	for i, in := range records {
+		outRec, err := p.processSingle(ctx, in)
+		if cerrors.Is(err, processor.ErrSkipRecord) {
+			outRecs[i] = sdk.FilterRecord{}
+		} else if err != nil {
+			outRecs[i] = sdk.ErrorRecord{Error: err}
+		} else {
+			outRecs[i] = p.toSingleRecord(outRec)
+		}
+	}
+
+	return outRecs
+}
+
+func (p *Processor) Teardown(ctx context.Context) error {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (p *Processor) processSingle(ctx context.Context, in opencdc.Record) (record.Record, error) {
+	inRec := p.toConduitRecord(in)
+	p.inInsp.Send(ctx, inRec)
+
+	g := p.gojaPool.Get().(*gojaContext)
+	defer p.gojaPool.Put(g)
+
+	jsr := p.toJSRecord(g.runtime, inRec)
+
+	result, err := g.function(goja.Undefined(), jsr)
+	if err != nil {
+		return record.Record{}, cerrors.Errorf("failed to execute JS processor function: %w", err)
+	}
+
+	out, err := p.toInternalRecord(result)
+	if cerrors.Is(err, processor.ErrSkipRecord) {
+		return record.Record{}, err
+	}
+	if err != nil {
+		return record.Record{}, cerrors.Errorf("failed to transform to internal record: %w", err)
+	}
+
+	p.outInsp.Send(ctx, out)
+	return out, nil
+}
+
+func (p *Processor) toSingleRecord(rec record.Record) sdk.ProcessedRecord {
+	return sdk.SingleRecord{}
+}
+
+func (p *Processor) toConduitRecord(rec opencdc.Record) record.Record {
+	return record.Record{}
 }

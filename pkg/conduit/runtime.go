@@ -20,6 +20,7 @@ package conduit
 
 import (
 	"context"
+	proc_plugin "github.com/conduitio/conduit/pkg/plugin/processor"
 	"net"
 	"net/http"
 	"os"
@@ -187,7 +188,11 @@ func newServices(
 ) (*pipeline.Service, *connector.Service, *processor.Service, *plugin.Service, error) {
 	pipelineService := pipeline.NewService(logger, db)
 	connectorService := connector.NewService(logger, db, connPersister)
-	processorService := processor.NewService(logger, db, cfg.ProcessorBuilderRegistry)
+	processorService := processor.NewService(
+		logger,
+		db,
+		proc_plugin.NewRegistry(logger, cfg.Processors.Path),
+	)
 	pluginService := plugin.NewService(
 		logger,
 		builtin.NewRegistry(logger, cfg.PluginDispenserFactories),

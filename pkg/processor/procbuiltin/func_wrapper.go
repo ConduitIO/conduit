@@ -16,54 +16,76 @@ package procbuiltin
 
 import (
 	"context"
-
-	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit-commons/opencdc"
+	sdk "github.com/conduitio/conduit-processor-sdk"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/inspector"
+	"github.com/conduitio/conduit/pkg/processor"
+
 	"github.com/conduitio/conduit/pkg/record"
-	"github.com/rs/zerolog"
 )
 
-// FuncWrapper is an adapter allowing use of a function as an Interface.
+// FuncWrapper is an adapter allowing use of a function as a processor.Interface.
 type FuncWrapper struct {
-	f       func(context.Context, record.Record) (record.Record, error)
-	inInsp  *inspector.Inspector
-	outInsp *inspector.Inspector
+	sdk.UnimplementedProcessor
+
+	f func(context.Context, record.Record) (record.Record, error)
 }
 
 func NewFuncWrapper(f func(context.Context, record.Record) (record.Record, error)) FuncWrapper {
-	// TODO get logger from config or some other place
-	cw := zerolog.NewConsoleWriter()
-	cw.TimeFormat = "2006-01-02T15:04:05+00:00"
-	zl := zerolog.New(cw).With().Timestamp().Logger()
-
-	return FuncWrapper{
-		f:       f,
-		inInsp:  inspector.New(log.New(zl), inspector.DefaultBufferSize),
-		outInsp: inspector.New(log.New(zl), inspector.DefaultBufferSize),
-	}
+	return FuncWrapper{f: f}
 }
 
-func (f FuncWrapper) Process(ctx context.Context, inRec record.Record) (record.Record, error) {
-	// todo same behavior as in procjs, probably can be enforced
-	f.inInsp.Send(ctx, inRec)
-	outRec, err := f.f(ctx, inRec)
-	if err != nil {
-		return record.Record{}, err
+func (f FuncWrapper) Specification() (sdk.Specification, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (f FuncWrapper) Configure(ctx context.Context, m map[string]string) error {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (f FuncWrapper) Open(ctx context.Context) error {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (f FuncWrapper) Process(ctx context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
+	outRecs := make([]sdk.ProcessedRecord, len(records))
+	for i, inRec := range records {
+		outRec, err := f.f(ctx, f.toConduitRecord(inRec))
+		if cerrors.Is(err, processor.ErrSkipRecord) {
+			outRecs[i] = sdk.FilterRecord{}
+		} else if err != nil {
+			outRecs[i] = sdk.ErrorRecord{Error: err}
+		} else {
+			outRecs[i] = f.toSingleRecord(outRec)
+		}
 	}
 
-	f.outInsp.Send(ctx, outRec)
-	return outRec, nil
+	return outRecs
+}
+
+func (f FuncWrapper) Teardown(ctx context.Context) error {
+	//TODO implement me
+	panic("implement me")
 }
 
 func (f FuncWrapper) InspectIn(ctx context.Context, id string) *inspector.Session {
-	return f.inInsp.NewSession(ctx, id)
+	//TODO implement me
+	panic("implement me")
 }
 
 func (f FuncWrapper) InspectOut(ctx context.Context, id string) *inspector.Session {
-	return f.outInsp.NewSession(ctx, id)
+	//TODO implement me
+	panic("implement me")
 }
 
-func (f FuncWrapper) Close() {
-	f.inInsp.Close()
-	f.outInsp.Close()
+func (f FuncWrapper) toSingleRecord(rec record.Record) sdk.ProcessedRecord {
+	return sdk.SingleRecord{}
+}
+
+func (f FuncWrapper) toConduitRecord(rec opencdc.Record) record.Record {
+	return record.Record{}
 }

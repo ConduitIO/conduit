@@ -19,10 +19,10 @@ package processor
 
 import (
 	"context"
+	sdk "github.com/conduitio/conduit-processor-sdk"
 	"time"
 
 	"github.com/conduitio/conduit/pkg/inspector"
-	"github.com/conduitio/conduit/pkg/record"
 )
 
 const (
@@ -45,17 +45,12 @@ type (
 // Interface is the interface that represents a single message processor that
 // can be executed on one record and manipulate it.
 type Interface interface {
-	// Process runs the processor function on a record.
-	Process(ctx context.Context, record record.Record) (record.Record, error)
+	sdk.Processor
 
 	// InspectIn starts an inspection session for input records for this processor.
 	InspectIn(ctx context.Context, id string) *inspector.Session
 	// InspectOut starts an inspection session for output records for this processor.
 	InspectOut(ctx context.Context, id string) *inspector.Session
-
-	// Close closes this processor and releases any resources
-	// which may have been used by it.
-	Close()
 }
 
 // Instance represents a processor instance.
