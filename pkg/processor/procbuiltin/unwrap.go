@@ -135,8 +135,7 @@ func (o *openCDCUnwrapper) UnwrapOperation(structData record.StructuredData) (re
 	case record.Operation:
 		operation = o
 	case string:
-		err := operation.UnmarshalText([]byte(o))
-		if err != nil {
+		if err := operation.UnmarshalText([]byte(o)); err != nil {
 			return operation, cerrors.Errorf("couldn't unmarshal record operation")
 		}
 	}
@@ -176,6 +175,8 @@ func (o *openCDCUnwrapper) UnwrapKey(structData record.StructuredData) (record.D
 		key = k
 	case string:
 		key = record.RawData{Raw: []byte(k)}
+	default:
+		return key, cerrors.Errorf("expected a record.Data or a string, got %T", k)
 	}
 
 	return key, nil
@@ -212,6 +213,8 @@ func (o *openCDCUnwrapper) UnwrapPayload(structData record.StructuredData) (reco
 			Before: nil,
 			After:  convertedData,
 		}
+	default:
+		return payload, cerrors.Errorf("expected a record.Change or a map[string]interface{}, got %T", p)
 	}
 	return payload, nil
 }
@@ -223,8 +226,7 @@ func (o *openCDCUnwrapper) Unwrap(rec record.Record) (record.Record, error) {
 	switch d := data.(type) {
 	case record.RawData:
 		// unmarshal raw data to structured
-		err := json.Unmarshal(data.Bytes(), &structData)
-		if err != nil {
+		if err := json.Unmarshal(data.Bytes(), &structData); err != nil {
 			return record.Record{}, cerrors.Errorf("failed to unmarshal raw data as JSON: %w", unwrapProcType, err)
 		}
 	case record.StructuredData:
