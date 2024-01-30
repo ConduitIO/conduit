@@ -1,6 +1,6 @@
 module github.com/conduitio/conduit
 
-go 1.21.1
+go 1.21.5
 
 require (
 	buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go v1.32.0-20231027202514-3f42134f4c56.1
@@ -17,6 +17,7 @@ require (
 	github.com/conduitio/conduit-connector-protocol v0.5.1-0.20240104160905-e9e61586fb8d
 	github.com/conduitio/conduit-connector-s3 v0.5.1
 	github.com/conduitio/conduit-connector-sdk v0.8.0
+	github.com/conduitio/conduit-processor-sdk v0.0.0-20240118151737-a75ea9e86bb8
 	github.com/conduitio/yaml/v3 v3.3.0
 	github.com/dgraph-io/badger/v4 v4.2.0
 	github.com/dop251/goja v0.0.0-20230531210528-d7324b2d74f7
@@ -42,6 +43,8 @@ require (
 	github.com/prometheus/client_model v0.5.0
 	github.com/prometheus/common v0.46.0
 	github.com/rs/zerolog v1.31.0
+	github.com/stealthrocket/wazergo v0.19.1
+	github.com/tetratelabs/wazero v1.6.0
 	github.com/twmb/go-cache v1.2.0
 	go.uber.org/goleak v1.3.0
 	go.uber.org/mock v0.4.0
@@ -297,7 +300,6 @@ require (
 	github.com/t-yuki/gocover-cobertura v0.0.0-20180217150009-aaee18c8195c // indirect
 	github.com/tdakkota/asciicheck v0.2.0 // indirect
 	github.com/tetafro/godot v1.4.15 // indirect
-	github.com/tetratelabs/wazero v1.6.0 // indirect
 	github.com/timakin/bodyclose v0.0.0-20230421092635-574207250966 // indirect
 	github.com/timonwong/loggercheck v0.9.4 // indirect
 	github.com/tomarrell/wrapcheck/v2 v2.8.1 // indirect

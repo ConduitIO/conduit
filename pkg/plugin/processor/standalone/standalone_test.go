@@ -1,0 +1,152 @@
+// Copyright © 2023 Meroxa, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package standalone
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"os/exec"
+	"testing"
+	"time"
+
+	"github.com/conduitio/conduit/pkg/foundation/csync"
+
+	sdk "github.com/conduitio/conduit-processor-sdk"
+
+	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
+
+	"github.com/stealthrocket/wazergo"
+	"github.com/tetratelabs/wazero"
+)
+
+const (
+	testPluginDir = "./test/wasm_processors/"
+
+	testPluginChaosDir        = testPluginDir + "chaos/"
+	testPluginMalformedDir    = testPluginDir + "malformed/"
+	testPluginSpecifyErrorDir = testPluginDir + "specify_error/"
+)
+
+var (
+	// TestRuntime can be reused in tests to avoid recompiling the test modules
+	TestRuntime        wazero.Runtime
+	CompiledHostModule *wazergo.CompiledModule[*hostModuleInstance]
+
+	ChaosProcessorBinary     []byte
+	MalformedProcessorBinary []byte
+	SpecifyErrorBinary       []byte
+
+	ChaosProcessorModule wazero.CompiledModule
+	SpecifyErrorModule   wazero.CompiledModule
+
+	testProcessorPaths = map[string]tuple[*[]byte, *wazero.CompiledModule]{
+		testPluginChaosDir + "processor.wasm":        {&ChaosProcessorBinary, &ChaosProcessorModule},
+		testPluginMalformedDir + "processor.txt":     {&MalformedProcessorBinary, nil},
+		testPluginSpecifyErrorDir + "processor.wasm": {&SpecifyErrorBinary, &SpecifyErrorModule},
+	}
+)
+
+func TestMain(m *testing.M) {
+	exitOnError := func(err error, msg string) {
+		if err != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "%v: %v", msg, err)
+			os.Exit(1)
+		}
+	}
+
+	cmd := exec.Command("bash", "./test/build-test-processors.sh")
+
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	err := cmd.Run()
+	exitOnError(err, "error executing bash script")
+
+	// instantiate shared test runtime
+	ctx := context.Background()
+	TestRuntime = wazero.NewRuntime(ctx)
+
+	_, err = wasi_snapshot_preview1.Instantiate(ctx, TestRuntime)
+	exitOnError(err, "error instantiating WASI")
+
+	CompiledHostModule, err = wazergo.Compile(ctx, TestRuntime, hostModule)
+
+	// load test processors
+	var wg csync.WaitGroup
+	for path, t := range testProcessorPaths {
+		*t.V1, err = os.ReadFile(path)
+		exitOnError(err, "error reading file "+path)
+
+		if t.V2 == nil {
+			continue
+		}
+
+		// compile modules in parallel
+		wg.Add(1)
+		go func(binary []byte, target *wazero.CompiledModule, path string) {
+			defer wg.Done()
+			*target, err = TestRuntime.CompileModule(ctx, binary)
+			exitOnError(err, "error compiling module "+path)
+		}(*t.V1, t.V2, path)
+	}
+	err = wg.WaitTimeout(ctx, time.Minute)
+	exitOnError(err, "timed out waiting on modules to compile")
+
+	// run tests
+	code := m.Run()
+
+	err = TestRuntime.Close(ctx)
+	exitOnError(err, "error closing wasm runtime")
+
+	os.Exit(code)
+}
+
+func ChaosProcessorSpecifications() sdk.Specification {
+	param := sdk.Parameter{
+		Default:     "success",
+		Type:        sdk.ParameterTypeString,
+		Description: "prefix",
+		Validations: []sdk.Validation{
+			{
+				Type:  sdk.ValidationTypeInclusion,
+				Value: "success,error,panic",
+			},
+		},
+	}
+	return sdk.Specification{
+		Name:        "chaos-processor",
+		Summary:     "chaos processor summary",
+		Description: "chaos processor description",
+		Version:     "v1.3.5",
+		Author:      "Meroxa, Inc.",
+		Parameters: map[string]sdk.Parameter{
+			"configure": param,
+			"open":      param,
+			"process.prefix": {
+				Default:     "",
+				Type:        sdk.ParameterTypeString,
+				Description: "prefix to be added to the payload's after",
+				Validations: []sdk.Validation{
+					{
+						Type: sdk.ValidationTypeRequired,
+					},
+				},
+			},
+			"process":  param,
+			"teardown": param,
+		},
+	}
+}

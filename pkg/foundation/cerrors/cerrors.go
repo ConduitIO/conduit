@@ -37,6 +37,7 @@ var (
 	Is     = errors.Is
 	As     = errors.As
 	Unwrap = errors.Unwrap
+	Join   = errors.Join
 )
 
 type Frame struct {
