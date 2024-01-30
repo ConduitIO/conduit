@@ -259,6 +259,8 @@ func (o *openCDCUnwrapper) Unwrap(rec record.Record) (record.Record, error) {
 		return record.Record{}, err
 	}
 
+	// Position is the only key we preserve from the original record to maintain the reference respect other messages
+	// that will be coming from in the event of chaining pipelines (e.g.: source -> kafka, kafka -> destination)
 	return record.Record{
 		Key:       key,
 		Position:  rec.Position,
