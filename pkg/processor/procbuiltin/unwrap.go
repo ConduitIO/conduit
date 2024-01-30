@@ -131,13 +131,15 @@ func (o *openCDCUnwrapper) UnwrapOperation(structData record.StructuredData) (re
 		return operation, cerrors.Errorf("record payload after doesn't contain operation")
 	}
 
-	switch o := op.(type) {
+	switch opType := op.(type) {
 	case record.Operation:
-		operation = o
+		operation = opType
 	case string:
-		if err := operation.UnmarshalText([]byte(o)); err != nil {
+		if err := operation.UnmarshalText([]byte(opType)); err != nil {
 			return operation, cerrors.Errorf("couldn't unmarshal record operation")
 		}
+	default:
+		return operation, cerrors.Errorf("expected a record.Operation or a string, got %T", opType)
 	}
 	return operation, nil
 }
@@ -158,6 +160,8 @@ func (o *openCDCUnwrapper) UnwrapMetadata(structData record.StructuredData) (rec
 		for k, v := range m {
 			metadata[k] = fmt.Sprint(v)
 		}
+	default:
+		return metadata, cerrors.Errorf("expected a record.Metadata or a map[string]interface{}, got %T", m)
 	}
 	return metadata, nil
 }
