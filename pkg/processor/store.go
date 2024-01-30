@@ -160,6 +160,8 @@ func (s *Store) decode(raw []byte) (*Instance, error) {
 		return nil, err
 	}
 
+	// todo don't instantiate processor until the pipeline starts running
+
 	// todo proper context
 	proc, err := s.registry.Get(context.TODO(), i.Type, i.ID)
 	if err != nil {
