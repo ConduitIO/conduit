@@ -173,6 +173,9 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 	}
 	delete(s.instances, id)
 	// todo handle error
+	// NOT CORRECT!
+	// need a correct way to close the inspector
+	// teardown is for pipeline stop only
 	instance.Processor.Teardown(ctx)
 	measure.ProcessorsGauge.WithValues(instance.Type).Dec()
 

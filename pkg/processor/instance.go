@@ -54,6 +54,7 @@ type Interface interface {
 }
 
 // Instance represents a processor instance.
+// todo move inspectin and inspectout into instance
 type Instance struct {
 	ID            string
 	CreatedAt     time.Time
