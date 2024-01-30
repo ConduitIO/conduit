@@ -101,6 +101,8 @@ func (s *Service) Create(
 		cfg.Workers = 1
 	}
 
+	// todo make registru return a processor.Interface
+	// (add inspector there automatically)
 	p, err := s.registry.Get(ctx, plugin, id)
 	if err != nil {
 		return nil, err
@@ -115,7 +117,7 @@ func (s *Service) Create(
 		Type:          plugin,
 		Parent:        parent,
 		Config:        cfg,
-		Processor:     p,
+		Processor:     newInspectableProcessor(p, s.logger),
 		Condition:     cond,
 	}
 
@@ -144,7 +146,7 @@ func (s *Service) Update(ctx context.Context, id string, cfg Config) (*Instance,
 		return nil, cerrors.Errorf("could not get processor: %w", err)
 	}
 
-	instance.Processor = p
+	instance.Processor = newInspectableProcessor(p, s.logger)
 	instance.Config = cfg
 	instance.UpdatedAt = time.Now()
 
@@ -170,7 +172,8 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 		return cerrors.Errorf("could not delete processor instance from store: %w", err)
 	}
 	delete(s.instances, id)
-	instance.Processor.Close()
+	// todo handle error
+	instance.Processor.Teardown(ctx)
 	measure.ProcessorsGauge.WithValues(instance.Type).Dec()
 
 	return nil

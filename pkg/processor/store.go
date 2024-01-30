@@ -18,7 +18,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin/processor"
+	"github.com/rs/zerolog"
 	"strings"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -158,16 +160,13 @@ func (s *Store) decode(raw []byte) (*Instance, error) {
 		return nil, err
 	}
 
-	builder, err := s.registry.Get(i.Type)
+	// todo proper context
+	proc, err := s.registry.Get(context.TODO(), i.Type, i.ID)
 	if err != nil {
-		return nil, cerrors.Errorf("could not get processor builder for instance %s: %w", i.ID, err)
+		return nil, cerrors.Errorf("could not get processor for instance %s: %w", i.ID, err)
 	}
 
-	proc, err := builder(i.Config)
-	if err != nil {
-		return nil, cerrors.Errorf("could not create processor: %w", err)
-	}
-
-	i.Processor = proc
+	// todo proper logger needed
+	i.Processor = newInspectableProcessor(proc, log.New(zerolog.Nop()))
 	return &i, nil
 }

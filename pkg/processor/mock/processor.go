@@ -13,8 +13,9 @@ import (
 	context "context"
 	reflect "reflect"
 
+	opencdc "github.com/conduitio/conduit-commons/opencdc"
+	sdk "github.com/conduitio/conduit-processor-sdk"
 	inspector "github.com/conduitio/conduit/pkg/inspector"
-	record "github.com/conduitio/conduit/pkg/record"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -41,16 +42,18 @@ func (m *Processor) EXPECT() *ProcessorMockRecorder {
 	return m.recorder
 }
 
-// Close mocks base method.
-func (m *Processor) Close() {
+// Configure mocks base method.
+func (m *Processor) Configure(arg0 context.Context, arg1 map[string]string) error {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Close")
+	ret := m.ctrl.Call(m, "Configure", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
-// Close indicates an expected call of Close.
-func (mr *ProcessorMockRecorder) Close() *gomock.Call {
+// Configure indicates an expected call of Configure.
+func (mr *ProcessorMockRecorder) Configure(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*Processor)(nil).Close))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Configure", reflect.TypeOf((*Processor)(nil).Configure), arg0, arg1)
 }
 
 // InspectIn mocks base method.
@@ -81,17 +84,71 @@ func (mr *ProcessorMockRecorder) InspectOut(arg0, arg1 any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InspectOut", reflect.TypeOf((*Processor)(nil).InspectOut), arg0, arg1)
 }
 
+// Open mocks base method.
+func (m *Processor) Open(arg0 context.Context) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Open", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Open indicates an expected call of Open.
+func (mr *ProcessorMockRecorder) Open(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Open", reflect.TypeOf((*Processor)(nil).Open), arg0)
+}
+
 // Process mocks base method.
-func (m *Processor) Process(arg0 context.Context, arg1 record.Record) (record.Record, error) {
+func (m *Processor) Process(arg0 context.Context, arg1 []opencdc.Record) []sdk.ProcessedRecord {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Process", arg0, arg1)
-	ret0, _ := ret[0].(record.Record)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret0, _ := ret[0].([]sdk.ProcessedRecord)
+	return ret0
 }
 
 // Process indicates an expected call of Process.
 func (mr *ProcessorMockRecorder) Process(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Process", reflect.TypeOf((*Processor)(nil).Process), arg0, arg1)
+}
+
+// Specification mocks base method.
+func (m *Processor) Specification() (sdk.Specification, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Specification")
+	ret0, _ := ret[0].(sdk.Specification)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Specification indicates an expected call of Specification.
+func (mr *ProcessorMockRecorder) Specification() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Specification", reflect.TypeOf((*Processor)(nil).Specification))
+}
+
+// Teardown mocks base method.
+func (m *Processor) Teardown(arg0 context.Context) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Teardown", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Teardown indicates an expected call of Teardown.
+func (mr *ProcessorMockRecorder) Teardown(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Teardown", reflect.TypeOf((*Processor)(nil).Teardown), arg0)
+}
+
+// mustEmbedUnimplementedProcessor mocks base method.
+func (m *Processor) mustEmbedUnimplementedProcessor() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "mustEmbedUnimplementedProcessor")
+}
+
+// mustEmbedUnimplementedProcessor indicates an expected call of mustEmbedUnimplementedProcessor.
+func (mr *ProcessorMockRecorder) mustEmbedUnimplementedProcessor() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "mustEmbedUnimplementedProcessor", reflect.TypeOf((*Processor)(nil).mustEmbedUnimplementedProcessor))
 }
