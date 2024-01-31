@@ -16,15 +16,15 @@ package stream
 
 import (
 	"context"
-	"github.com/conduitio/conduit-commons/opencdc"
-	sdk "github.com/conduitio/conduit-processor-sdk"
-	"github.com/conduitio/conduit/pkg/record"
 	"time"
 
+	"github.com/conduitio/conduit-commons/opencdc"
+	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics"
 	"github.com/conduitio/conduit/pkg/processor"
+	"github.com/conduitio/conduit/pkg/record"
 )
 
 type ProcessorNode struct {

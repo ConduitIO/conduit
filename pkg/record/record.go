@@ -22,7 +22,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/conduitio/conduit-commons/opencdc"
-	sdk "github.com/conduitio/conduit-processor-sdk"
 	"strconv"
 	"strings"
 
@@ -301,7 +300,7 @@ func (d RawData) Clone() Data {
 	}
 }
 
-func FromOpenCDC(in sdk.SingleRecord) Record {
+func FromOpenCDC(in opencdc.Record) Record {
 	return Record{
 		Position:  Position(in.Position),
 		Operation: Operation(in.Operation),

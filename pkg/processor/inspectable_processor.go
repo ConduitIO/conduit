@@ -23,6 +23,7 @@ import (
 	"github.com/conduitio/conduit/pkg/record"
 )
 
+// inspectableProcessor decorates a sdk.Processor with inspection methods.
 type inspectableProcessor struct {
 	sdk.UnimplementedProcessor
 
@@ -53,14 +54,14 @@ func (p *inspectableProcessor) Open(ctx context.Context) error {
 
 func (p *inspectableProcessor) Process(ctx context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 	for _, inRec := range records {
-		p.inInsp.Send(ctx, p.toConduitRecord(inRec))
+		p.inInsp.Send(ctx, record.FromOpenCDC(inRec))
 	}
 
 	outRecs := p.proc.Process(ctx, records)
 	for _, outRec := range outRecs {
 		singleRec, ok := outRec.(sdk.SingleRecord)
 		if ok {
-			p.outInsp.Send(ctx, p.toConduitRecord(opencdc.Record(singleRec)))
+			p.outInsp.Send(ctx, record.FromOpenCDC(opencdc.Record(singleRec)))
 		}
 	}
 
@@ -79,9 +80,4 @@ func (p *inspectableProcessor) InspectIn(ctx context.Context, id string) *inspec
 
 func (p *inspectableProcessor) InspectOut(ctx context.Context, id string) *inspector.Session {
 	return p.outInsp.NewSession(ctx, id)
-}
-
-func (p *inspectableProcessor) toConduitRecord(rec opencdc.Record) record.Record {
-	// todo fill out
-	return record.Record{}
 }

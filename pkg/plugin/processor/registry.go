@@ -16,6 +16,7 @@ package processor
 
 import (
 	"context"
+
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -27,7 +28,7 @@ import (
 type Registry struct {
 	logger log.CtxLogger
 
-	builtinReg    builtin.Registry
+	builtinReg    *builtin.Registry
 	standaloneReg *standalone.Registry
 }
 
@@ -38,12 +39,13 @@ func NewRegistry(logger log.CtxLogger, path string) (*Registry, error) {
 	}
 	return &Registry{
 		logger:        logger,
-		builtinReg:    builtin.Registry{},
+		builtinReg:    builtin.NewRegistry(logger, nil),
 		standaloneReg: standaloneReg,
 	}, nil
 }
 
 func (r *Registry) Get(ctx context.Context, pluginName string, id string) (sdk.Processor, error) {
+	// todo use legacy processors here as well
 	fullName := plugin.FullName(pluginName)
 	switch fullName.PluginType() {
 	case plugin.PluginTypeStandalone:
