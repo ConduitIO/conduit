@@ -58,7 +58,7 @@ func TestConfigStore_SetGet(t *testing.T) {
 	want.Processor, err = registry.MustGet(processorType)(want.Config)
 	is.NoErr(err)
 
-	s := processor.NewStore(db, registry)
+	s := processor.NewStore(db)
 
 	err = s.Set(ctx, want.ID, want)
 	is.NoErr(err)
@@ -83,7 +83,7 @@ func TestConfigStore_GetAll(t *testing.T) {
 		return p, nil
 	})
 
-	s := processor.NewStore(db, registry)
+	s := processor.NewStore(db)
 
 	want := make(map[string]*processor.Instance)
 	for i := 0; i < 10; i++ {
@@ -121,14 +121,13 @@ func TestConfigStore_Delete(t *testing.T) {
 
 	ctx := context.Background()
 	db := &inmemory.DB{}
-	registry := processor.NewBuilderRegistry()
 
 	want := &processor.Instance{
 		ID:     uuid.NewString(),
 		Plugin: "test-processor",
 	}
 
-	s := processor.NewStore(db, registry)
+	s := processor.NewStore(db)
 
 	err := s.Set(ctx, want.ID, want)
 	is.NoErr(err)

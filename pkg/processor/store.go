@@ -18,9 +18,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/conduitio/conduit/pkg/plugin/processor"
-	"github.com/rs/zerolog"
 	"strings"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -36,14 +33,12 @@ const (
 
 // Store handles the persistence and fetching of processor instances.
 type Store struct {
-	db       database.DB
-	registry *processor.Registry
+	db database.DB
 }
 
-func NewStore(db database.DB, registry *processor.Registry) *Store {
+func NewStore(db database.DB) *Store {
 	return &Store{
-		db:       db,
-		registry: registry,
+		db: db,
 	}
 }
 
@@ -159,16 +154,5 @@ func (s *Store) decode(raw []byte) (*Instance, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	// todo don't instantiate processor until the pipeline starts running
-
-	// todo proper context
-	proc, err := s.registry.Get(context.TODO(), i.Plugin, i.ID)
-	if err != nil {
-		return nil, cerrors.Errorf("could not get processor for instance %s: %w", i.ID, err)
-	}
-
-	// todo proper logger needed
-	i.Processor = newInspectableProcessor(proc, log.New(zerolog.Nop()))
 	return &i, nil
 }

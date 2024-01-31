@@ -39,7 +39,7 @@ func NewService(logger log.CtxLogger, db database.DB, registry *processor.Regist
 		logger:    logger.WithComponent("processor.Service"),
 		registry:  registry,
 		instances: make(map[string]*Instance),
-		store:     NewStore(db, registry),
+		store:     NewStore(db),
 	}
 }
 
