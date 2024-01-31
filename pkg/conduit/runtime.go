@@ -20,7 +20,6 @@ package conduit
 
 import (
 	"context"
-	proc_plugin "github.com/conduitio/conduit/pkg/plugin/processor"
 	"net"
 	"net/http"
 	"os"
@@ -47,6 +46,7 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/conduitio/conduit/pkg/plugin/connector/builtin"
 	"github.com/conduitio/conduit/pkg/plugin/connector/standalone"
+	proc_plugin "github.com/conduitio/conduit/pkg/plugin/processor"
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/provisioning"
 	"github.com/conduitio/conduit/pkg/web/api"
@@ -188,10 +188,14 @@ func newServices(
 ) (*pipeline.Service, *connector.Service, *processor.Service, *plugin.Service, error) {
 	pipelineService := pipeline.NewService(logger, db)
 	connectorService := connector.NewService(logger, db, connPersister)
+	procReg, err := proc_plugin.NewRegistry(logger, cfg.Processors.Path)
+	if err != nil {
+		return nil, nil, nil, nil, cerrors.Errorf("failed creating processor registry: %w", err)
+	}
 	processorService := processor.NewService(
 		logger,
 		db,
-		proc_plugin.NewRegistry(logger, cfg.Processors.Path),
+		procReg,
 	)
 	pluginService := plugin.NewService(
 		logger,

@@ -31,14 +31,16 @@ type Registry struct {
 	standaloneReg *standalone.Registry
 }
 
-func NewRegistry(logger log.CtxLogger, path string) *Registry {
-	// todo handle error
-	standaloneReg, _ := standalone.NewRegistry(logger, path)
+func NewRegistry(logger log.CtxLogger, path string) (*Registry, error) {
+	standaloneReg, err := standalone.NewRegistry(logger, path)
+	if err != nil {
+		return nil, cerrors.Errorf("failed creating standalone registry for path %v: %w", path, err)
+	}
 	return &Registry{
 		logger:        logger,
 		builtinReg:    builtin.Registry{},
 		standaloneReg: standaloneReg,
-	}
+	}, nil
 }
 
 func (r *Registry) Get(ctx context.Context, pluginName string, id string) (sdk.Processor, error) {
