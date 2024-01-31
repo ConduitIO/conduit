@@ -163,7 +163,7 @@ func (s *Store) decode(raw []byte) (*Instance, error) {
 	// todo don't instantiate processor until the pipeline starts running
 
 	// todo proper context
-	proc, err := s.registry.Get(context.TODO(), i.Type, i.ID)
+	proc, err := s.registry.Get(context.TODO(), i.Plugin, i.ID)
 	if err != nil {
 		return nil, cerrors.Errorf("could not get processor for instance %s: %w", i.ID, err)
 	}

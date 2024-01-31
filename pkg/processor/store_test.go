@@ -43,8 +43,8 @@ func TestConfigStore_SetGet(t *testing.T) {
 	})
 
 	want := &processor.Instance{
-		ID:   uuid.NewString(),
-		Type: "test-processor",
+		ID:     uuid.NewString(),
+		Plugin: "test-processor",
 		Parent: processor.Parent{
 			ID:   uuid.NewString(),
 			Type: processor.ParentTypePipeline,
@@ -88,8 +88,8 @@ func TestConfigStore_GetAll(t *testing.T) {
 	want := make(map[string]*processor.Instance)
 	for i := 0; i < 10; i++ {
 		instance := &processor.Instance{
-			ID:   uuid.NewString(),
-			Type: "test-processor",
+			ID:     uuid.NewString(),
+			Plugin: "test-processor",
 			Parent: processor.Parent{
 				ID:   uuid.NewString(),
 				Type: processor.ParentTypePipeline,
@@ -124,8 +124,8 @@ func TestConfigStore_Delete(t *testing.T) {
 	registry := processor.NewBuilderRegistry()
 
 	want := &processor.Instance{
-		ID:   uuid.NewString(),
-		Type: "test-processor",
+		ID:     uuid.NewString(),
+		Plugin: "test-processor",
 	}
 
 	s := processor.NewStore(db, registry)

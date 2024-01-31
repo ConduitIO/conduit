@@ -77,8 +77,8 @@ var P1C2 = &connector.Instance{
 }
 
 var P1P1 = &processor.Instance{
-	ID:   "pipeline1:proc1",
-	Type: "js",
+	ID:     "pipeline1:proc1",
+	Plugin: "js",
 	Parent: processor.Parent{
 		ID:   "pipeline1",
 		Type: processor.ParentTypePipeline,
@@ -95,8 +95,8 @@ var P1P1 = &processor.Instance{
 }
 
 var P1C2P1 = &processor.Instance{
-	ID:   "pipeline1:con2:proc1con",
-	Type: "js",
+	ID:     "pipeline1:con2:proc1con",
+	Plugin: "js",
 	Parent: processor.Parent{
 		ID:   "pipeline1:con2",
 		Type: processor.ParentTypeConnector,

@@ -97,8 +97,8 @@ func TestService_Create_Success(t *testing.T) {
 	p := mock.NewProcessor(ctrl)
 
 	want := &processor.Instance{
-		ID:   "uuid will be taken from the result",
-		Type: "processor-type",
+		ID:     "uuid will be taken from the result",
+		Plugin: "processor-type",
 		Parent: processor.Parent{
 			ID:   uuid.NewString(),
 			Type: processor.ParentTypeConnector,
@@ -113,10 +113,10 @@ func TestService_Create_Success(t *testing.T) {
 		Processor: p,
 	}
 
-	registry := newTestBuilderRegistry(is, map[string]processor.Interface{want.Type: p})
+	registry := newTestBuilderRegistry(is, map[string]processor.Interface{want.Plugin: p})
 	service := processor.NewService(log.Nop(), db, registry)
 
-	got, err := service.Create(ctx, want.ID, want.Type, want.Parent, want.Config, processor.ProvisionTypeAPI, "")
+	got, err := service.Create(ctx, want.ID, want.Plugin, want.Parent, want.Config, processor.ProvisionTypeAPI, "")
 	is.NoErr(err)
 	want.ID = got.ID // uuid is random
 	want.CreatedAt = got.CreatedAt

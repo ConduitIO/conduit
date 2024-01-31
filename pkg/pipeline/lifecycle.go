@@ -329,7 +329,7 @@ func (s *Service) buildProcessorNode(
 	return &stream.ProcessorNode{
 		Name:           proc.ID,
 		Processor:      proc.Processor,
-		ProcessorTimer: measure.ProcessorExecutionDurationTimer.WithValues(pl.Config.Name, proc.Type),
+		ProcessorTimer: measure.ProcessorExecutionDurationTimer.WithValues(pl.Config.Name, proc.Plugin),
 	}
 }
 

@@ -65,7 +65,7 @@ var (
 	ConnectorImmutableFields = []string{"Type", "Plugin"}
 	ConnectorMutableFields   = []string{"Name", "Settings", "Processors"}
 
-	ProcessorImmutableFields = []string{"Type"}
+	ProcessorImmutableFields = []string{"Plugin"}
 	ProcessorMutableFields   = []string{"Settings", "Workers", "Condition"}
 )
 

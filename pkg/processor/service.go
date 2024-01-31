@@ -55,7 +55,7 @@ func (s *Service) Init(ctx context.Context) error {
 	s.logger.Info(ctx).Int("count", len(s.instances)).Msg("processors initialized")
 
 	for _, i := range instances {
-		measure.ProcessorsGauge.WithValues(i.Type).Inc()
+		measure.ProcessorsGauge.WithValues(i.Plugin).Inc()
 	}
 
 	return nil
@@ -114,7 +114,7 @@ func (s *Service) Create(
 		UpdatedAt:     now,
 		CreatedAt:     now,
 		ProvisionedBy: pt,
-		Type:          plugin,
+		Plugin:        plugin,
 		Parent:        parent,
 		Config:        cfg,
 		Processor:     newInspectableProcessor(p, s.logger),
@@ -141,7 +141,7 @@ func (s *Service) Update(ctx context.Context, id string, cfg Config) (*Instance,
 	}
 
 	// this can't really fail, this call already passed when creating the instance
-	p, err := s.registry.Get(ctx, instance.Type, instance.ID)
+	p, err := s.registry.Get(ctx, instance.Plugin, instance.ID)
 	if err != nil {
 		return nil, cerrors.Errorf("could not get processor: %w", err)
 	}
@@ -173,7 +173,7 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 	}
 	delete(s.instances, id)
 	instance.Processor.Close()
-	measure.ProcessorsGauge.WithValues(instance.Type).Dec()
+	measure.ProcessorsGauge.WithValues(instance.Plugin).Dec()
 
 	return nil
 }

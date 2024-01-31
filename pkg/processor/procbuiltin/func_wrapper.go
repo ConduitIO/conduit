@@ -55,13 +55,13 @@ func (f FuncWrapper) Open(ctx context.Context) error {
 func (f FuncWrapper) Process(ctx context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 	outRecs := make([]sdk.ProcessedRecord, len(records))
 	for i, inRec := range records {
-		outRec, err := f.f(ctx, f.toConduitRecord(inRec))
+		outRec, err := f.f(ctx, record.FromOpenCDC(inRec))
 		if cerrors.Is(err, processor.ErrSkipRecord) {
 			outRecs[i] = sdk.FilterRecord{}
 		} else if err != nil {
 			outRecs[i] = sdk.ErrorRecord{Error: err}
 		} else {
-			outRecs[i] = f.toSingleRecord(outRec)
+			outRecs[i] = sdk.SingleRecord(outRec.ToOpenCDC())
 		}
 	}
 
@@ -83,10 +83,6 @@ func (f FuncWrapper) InspectOut(ctx context.Context, id string) *inspector.Sessi
 	panic("implement me")
 }
 
-func (f FuncWrapper) toSingleRecord(rec record.Record) sdk.ProcessedRecord {
-	return sdk.SingleRecord{}
-}
+func (f FuncWrapper) Close() {
 
-func (f FuncWrapper) toConduitRecord(rec opencdc.Record) record.Record {
-	return record.Record{}
 }

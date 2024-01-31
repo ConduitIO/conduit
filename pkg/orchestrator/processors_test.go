@@ -41,8 +41,8 @@ func TestProcessorOrchestrator_CreateOnPipeline_Success(t *testing.T) {
 		Status: pipeline.StatusSystemStopped,
 	}
 	want := &processor.Instance{
-		ID:   uuid.NewString(),
-		Type: "test-processor",
+		ID:     uuid.NewString(),
+		Plugin: "test-processor",
 		Parent: processor.Parent{
 			ID:   pl.ID,
 			Type: processor.ParentTypePipeline,
@@ -60,7 +60,7 @@ func TestProcessorOrchestrator_CreateOnPipeline_Success(t *testing.T) {
 		Create(
 			gomock.AssignableToTypeOf(ctxType),
 			gomock.AssignableToTypeOf(""),
-			want.Type,
+			want.Plugin,
 			want.Parent,
 			want.Config,
 			processor.ProvisionTypeAPI,
@@ -72,7 +72,7 @@ func TestProcessorOrchestrator_CreateOnPipeline_Success(t *testing.T) {
 		Return(pl, nil)
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
-	got, err := orc.Processors.Create(ctx, want.Type, want.Parent, want.Config, want.Condition)
+	got, err := orc.Processors.Create(ctx, want.Plugin, want.Parent, want.Config, want.Condition)
 	is.NoErr(err)
 	is.Equal(want, got)
 }
@@ -204,8 +204,8 @@ func TestProcessorOrchestrator_CreateOnPipeline_AddProcessorError(t *testing.T) 
 		Status: pipeline.StatusSystemStopped,
 	}
 	proc := &processor.Instance{
-		ID:   uuid.NewString(),
-		Type: "test-processor",
+		ID:     uuid.NewString(),
+		Plugin: "test-processor",
 		Parent: processor.Parent{
 			ID:   pl.ID,
 			Type: processor.ParentTypePipeline,
@@ -224,7 +224,7 @@ func TestProcessorOrchestrator_CreateOnPipeline_AddProcessorError(t *testing.T) 
 		Create(
 			gomock.AssignableToTypeOf(ctxType),
 			gomock.AssignableToTypeOf(""),
-			proc.Type,
+			proc.Plugin,
 			proc.Parent,
 			proc.Config,
 			processor.ProvisionTypeAPI,
@@ -240,7 +240,7 @@ func TestProcessorOrchestrator_CreateOnPipeline_AddProcessorError(t *testing.T) 
 		Return(nil)
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
-	got, err := orc.Processors.Create(ctx, proc.Type, proc.Parent, proc.Config, proc.Condition)
+	got, err := orc.Processors.Create(ctx, proc.Plugin, proc.Parent, proc.Config, proc.Condition)
 	is.True(err != nil)
 	is.True(cerrors.Is(err, wantErr)) // errors did not match
 	is.True(got == nil)
@@ -262,8 +262,8 @@ func TestProcessorOrchestrator_CreateOnConnector_Success(t *testing.T) {
 		PipelineID: pl.ID,
 	}
 	want := &processor.Instance{
-		ID:   uuid.NewString(),
-		Type: "test-processor",
+		ID:     uuid.NewString(),
+		Plugin: "test-processor",
 		Parent: processor.Parent{
 			ID:   conn.ID,
 			Type: processor.ParentTypeConnector,
@@ -284,7 +284,7 @@ func TestProcessorOrchestrator_CreateOnConnector_Success(t *testing.T) {
 		Create(
 			gomock.AssignableToTypeOf(ctxType),
 			gomock.AssignableToTypeOf(""),
-			want.Type,
+			want.Plugin,
 			want.Parent,
 			want.Config,
 			processor.ProvisionTypeAPI,
@@ -296,7 +296,7 @@ func TestProcessorOrchestrator_CreateOnConnector_Success(t *testing.T) {
 		Return(conn, nil)
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
-	got, err := orc.Processors.Create(ctx, want.Type, want.Parent, want.Config, want.Condition)
+	got, err := orc.Processors.Create(ctx, want.Plugin, want.Parent, want.Config, want.Condition)
 	is.NoErr(err)
 	is.Equal(want, got)
 }
@@ -336,8 +336,8 @@ func TestProcessorOrchestrator_UpdateOnPipeline_Success(t *testing.T) {
 		Status: pipeline.StatusSystemStopped,
 	}
 	before := &processor.Instance{
-		ID:   uuid.NewString(),
-		Type: "test-processor",
+		ID:     uuid.NewString(),
+		Plugin: "test-processor",
 		Parent: processor.Parent{
 			ID:   pl.ID,
 			Type: processor.ParentTypePipeline,
@@ -350,8 +350,8 @@ func TestProcessorOrchestrator_UpdateOnPipeline_Success(t *testing.T) {
 		Settings: map[string]string{"foo2": "bar2"},
 	}
 	want := &processor.Instance{
-		ID:   before.ID,
-		Type: "test-processor",
+		ID:     before.ID,
+		Plugin: "test-processor",
 		Parent: processor.Parent{
 			ID:   pl.ID,
 			Type: processor.ParentTypePipeline,
@@ -389,8 +389,8 @@ func TestProcessorOrchestrator_UpdateOnPipeline_ProcessorNotExist(t *testing.T) 
 		Status: pipeline.StatusSystemStopped,
 	}
 	before := &processor.Instance{
-		ID:   uuid.NewString(),
-		Type: "test-processor",
+		ID:     uuid.NewString(),
+		Plugin: "test-processor",
 		Parent: processor.Parent{
 			ID:   pl.ID,
 			Type: processor.ParentTypePipeline,
@@ -427,8 +427,8 @@ func TestProcessorOrchestrator_UpdateOnPipeline_PipelineRunning(t *testing.T) {
 		Status: pipeline.StatusRunning,
 	}
 	before := &processor.Instance{
-		ID:   uuid.NewString(),
-		Type: "test-processor",
+		ID:     uuid.NewString(),
+		Plugin: "test-processor",
 		Parent: processor.Parent{
 			ID:   pl.ID,
 			Type: processor.ParentTypePipeline,
@@ -468,8 +468,8 @@ func TestProcessorOrchestrator_UpdateOnPipeline_ProcessorProvisionedByConfig(t *
 		ProvisionedBy: pipeline.ProvisionTypeConfig,
 	}
 	before := &processor.Instance{
-		ID:   uuid.NewString(),
-		Type: "test-processor",
+		ID:     uuid.NewString(),
+		Plugin: "test-processor",
 		Parent: processor.Parent{
 			ID:   pl.ID,
 			Type: processor.ParentTypePipeline,
@@ -506,8 +506,8 @@ func TestProcessorOrchestrator_UpdateOnPipeline_UpdateFail(t *testing.T) {
 		Status: pipeline.StatusSystemStopped,
 	}
 	before := &processor.Instance{
-		ID:   uuid.NewString(),
-		Type: "test-processor",
+		ID:     uuid.NewString(),
+		Plugin: "test-processor",
 		Parent: processor.Parent{
 			ID:   pl.ID,
 			Type: processor.ParentTypePipeline,
@@ -520,8 +520,8 @@ func TestProcessorOrchestrator_UpdateOnPipeline_UpdateFail(t *testing.T) {
 		Settings: map[string]string{"foo2": "bar2"},
 	}
 	want := &processor.Instance{
-		ID:   before.ID,
-		Type: "test-processor",
+		ID:     before.ID,
+		Plugin: "test-processor",
 		Parent: processor.Parent{
 			ID:   pl.ID,
 			Type: processor.ParentTypePipeline,
@@ -558,8 +558,8 @@ func TestProcessorOrchestrator_UpdateOnConnector_ConnectorNotExist(t *testing.T)
 
 	connID := uuid.NewString()
 	want := &processor.Instance{
-		ID:   uuid.NewString(),
-		Type: "test-processor",
+		ID:     uuid.NewString(),
+		Plugin: "test-processor",
 		Parent: processor.Parent{
 			ID:   connID,
 			Type: processor.ParentTypeConnector,
@@ -593,8 +593,8 @@ func TestProcessorOrchestrator_DeleteOnPipeline_Success(t *testing.T) {
 		Status: pipeline.StatusSystemStopped,
 	}
 	want := &processor.Instance{
-		ID:   uuid.NewString(),
-		Type: "test-processor",
+		ID:     uuid.NewString(),
+		Plugin: "test-processor",
 		Parent: processor.Parent{
 			ID:   pl.ID,
 			Type: processor.ParentTypePipeline,
@@ -634,8 +634,8 @@ func TestProcessorOrchestrator_DeleteOnPipeline_ProcessorNotExist(t *testing.T) 
 		Status: pipeline.StatusSystemStopped,
 	}
 	want := &processor.Instance{
-		ID:   uuid.NewString(),
-		Type: "test-processor",
+		ID:     uuid.NewString(),
+		Plugin: "test-processor",
 		Parent: processor.Parent{
 			ID:   pl.ID,
 			Type: processor.ParentTypePipeline,
@@ -668,8 +668,8 @@ func TestProcessorOrchestrator_DeleteOnPipeline_PipelineRunning(t *testing.T) {
 		Status: pipeline.StatusRunning,
 	}
 	want := &processor.Instance{
-		ID:   uuid.NewString(),
-		Type: "test-processor",
+		ID:     uuid.NewString(),
+		Plugin: "test-processor",
 		Parent: processor.Parent{
 			ID:   pl.ID,
 			Type: processor.ParentTypePipeline,
@@ -704,8 +704,8 @@ func TestProcessorOrchestrator_DeleteOnPipeline_Fail(t *testing.T) {
 		Status: pipeline.StatusSystemStopped,
 	}
 	want := &processor.Instance{
-		ID:   uuid.NewString(),
-		Type: "test-processor",
+		ID:     uuid.NewString(),
+		Plugin: "test-processor",
 		Parent: processor.Parent{
 			ID:   pl.ID,
 			Type: processor.ParentTypePipeline,
@@ -744,8 +744,8 @@ func TestProcessorOrchestrator_DeleteOnPipeline_RemoveProcessorFail(t *testing.T
 		Status: pipeline.StatusSystemStopped,
 	}
 	want := &processor.Instance{
-		ID:   uuid.NewString(),
-		Type: "test-processor",
+		ID:     uuid.NewString(),
+		Plugin: "test-processor",
 		Parent: processor.Parent{
 			ID:   pl.ID,
 			Type: processor.ParentTypePipeline,
@@ -774,7 +774,7 @@ func TestProcessorOrchestrator_DeleteOnPipeline_RemoveProcessorFail(t *testing.T
 		Create(
 			gomock.AssignableToTypeOf(ctxType),
 			want.ID,
-			want.Type,
+			want.Plugin,
 			want.Parent,
 			want.Config,
 			processor.ProvisionTypeAPI,
@@ -803,8 +803,8 @@ func TestProcessorOrchestrator_DeleteOnConnector_Fail(t *testing.T) {
 		PipelineID: pl.ID,
 	}
 	want := &processor.Instance{
-		ID:   uuid.NewString(),
-		Type: "test-processor",
+		ID:     uuid.NewString(),
+		Plugin: "test-processor",
 		Parent: processor.Parent{
 			ID:   conn.ID,
 			Type: processor.ParentTypeConnector,
@@ -836,7 +836,7 @@ func TestProcessorOrchestrator_DeleteOnConnector_Fail(t *testing.T) {
 		Create(
 			gomock.AssignableToTypeOf(ctxType),
 			want.ID,
-			want.Type,
+			want.Plugin,
 			want.Parent,
 			want.Config,
 			processor.ProvisionTypeAPI,

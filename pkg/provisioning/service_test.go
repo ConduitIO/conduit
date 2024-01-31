@@ -89,7 +89,7 @@ var (
 			Type: processor.ParentTypePipeline,
 		},
 		Config: processor.Config{Settings: map[string]string{}},
-		Type:   "js",
+		Plugin: "js",
 	}
 	oldConnectorProcessorInstance = &processor.Instance{
 		ID: "pipeline1:con2:proc1con",
@@ -98,7 +98,7 @@ var (
 			Type: processor.ParentTypeConnector,
 		},
 		Config: processor.Config{Settings: map[string]string{}},
-		Type:   "js",
+		Plugin: "js",
 	}
 )
 
