@@ -16,6 +16,7 @@ package procbuiltin
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -173,16 +174,23 @@ func (o *openCDCUnwrapper) UnwrapKey(structData record.StructuredData) (record.D
 	if !ok {
 		return key, cerrors.Errorf("record payload after doesn't contain key")
 	}
-
 	switch k := ky.(type) {
-	case record.Data:
-		key = k
+	case map[string]interface{}:
+		convertedData := make(record.StructuredData, len(k))
+		for kk, v := range k {
+			convertedData[kk] = v
+		}
+		key = convertedData
 	case string:
-		key = record.RawData{Raw: []byte(k)}
+		decoded := make([]byte, base64.StdEncoding.DecodedLen(len(k)))
+		n, err := base64.StdEncoding.Decode(decoded, []byte(k))
+		if err != nil {
+			return key, cerrors.Errorf("couldn't decode key: %w", err)
+		}
+		key = record.RawData{Raw: decoded[:n]}
 	default:
 		return key, cerrors.Errorf("expected a record.Data or a string, got %T", k)
 	}
-
 	return key, nil
 }
 
@@ -200,25 +208,35 @@ func (o *openCDCUnwrapper) UnwrapPayload(structData record.StructuredData) (reco
 	case map[string]interface{}:
 		afterData, ok := p["after"]
 		if !ok {
-			return payload, cerrors.Errorf("record payload after doesn't contain payload.after")
+			return record.Change{}, cerrors.Errorf("record payload after doesn't contain payload after")
 		}
+		switch data := afterData.(type) {
+		case map[string]interface{}:
+			convertedData := make(record.StructuredData, len(data))
+			for k, v := range data {
+				convertedData[k] = v
+			}
+			payload = record.Change{
+				Before: nil,
+				After:  convertedData,
+			}
+		case string:
+			decoded := make([]byte, base64.StdEncoding.DecodedLen(len(data)))
+			n, err := base64.StdEncoding.Decode(decoded, []byte(data))
+			if err != nil {
+				return payload, cerrors.Errorf("couldn't decode payload after: %w", err)
+			}
+			convertedData := record.RawData{Raw: decoded[:n]}
 
-		data, ok := afterData.(map[string]interface{})
-		if !ok {
-			return payload, cerrors.Errorf("record payload after payload.after is not a map")
-		}
-
-		convertedData := make(record.StructuredData, len(data))
-		for k, v := range data {
-			convertedData[k] = v
-		}
-
-		payload = record.Change{
-			Before: nil,
-			After:  convertedData,
+			payload = record.Change{
+				Before: nil,
+				After:  convertedData,
+			}
+		default:
+			return record.Change{}, cerrors.Errorf("unexpected data type %T", unwrapProcType, data)
 		}
 	default:
-		return payload, cerrors.Errorf("expected a record.Change or a map[string]interface{}, got %T", p)
+		return record.Change{}, cerrors.Errorf("expected a record.Change or a map[string]interface{}, got %T", p)
 	}
 	return payload, nil
 }
