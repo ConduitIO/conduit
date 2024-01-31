@@ -21,6 +21,8 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"github.com/conduitio/conduit-commons/opencdc"
+	sdk "github.com/conduitio/conduit-processor-sdk"
 	"strconv"
 	"strings"
 
@@ -186,6 +188,33 @@ func (r Record) Clone() Record {
 	return clone
 }
 
+func (r Record) ToOpenCDC() opencdc.Record {
+	return opencdc.Record{
+		Position:  opencdc.Position(r.Position),
+		Operation: opencdc.Operation(r.Operation),
+		Metadata:  opencdc.Metadata(r.Metadata),
+		Key:       toOpenCDCData(r.Key),
+		Payload: opencdc.Change{
+			Before: toOpenCDCData(r.Payload.Before),
+			After:  toOpenCDCData(r.Payload.After),
+		},
+	}
+}
+
+func toOpenCDCData(data Data) opencdc.Data {
+	switch v := data.(type) {
+	case nil:
+		return nil
+	case RawData:
+		return opencdc.RawData(v.Bytes())
+	case StructuredData:
+		return opencdc.StructuredData(v)
+	default:
+		// this shouldn't happen, we hope
+		panic(cerrors.Errorf("unrecognized data type: %T", v))
+	}
+}
+
 type Metadata map[string]string
 
 type Change struct {
@@ -269,5 +298,32 @@ func (d RawData) Clone() Data {
 	return RawData{
 		Raw:    bytes.Clone(d.Raw),
 		Schema: d.Schema, // this field is currently unused, we don't care about cloning it atm
+	}
+}
+
+func FromOpenCDC(in sdk.SingleRecord) Record {
+	return Record{
+		Position:  Position(in.Position),
+		Operation: Operation(in.Operation),
+		Metadata:  Metadata(in.Metadata),
+		Key:       fromOpenCDCData(in.Key),
+		Payload: Change{
+			Before: nil,
+			After:  nil,
+		},
+	}
+}
+
+func fromOpenCDCData(data opencdc.Data) Data {
+	switch v := data.(type) {
+	case nil:
+		return nil
+	case opencdc.RawData:
+		return RawData{Raw: v.Bytes()}
+	case opencdc.StructuredData:
+		return StructuredData(v)
+	default:
+		// this shouldn't happen, we hope
+		panic(cerrors.Errorf("unrecognized data type: %T", v))
 	}
 }

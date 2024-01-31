@@ -61,6 +61,7 @@ type Instance struct {
 	UpdatedAt     time.Time
 	ProvisionedBy ProvisionType
 
+	// todo rename to plugin
 	Type string
 	// Condition is a goTemplate formatted string, the value provided to the template is a sdk.Record, it should evaluate
 	// to a boolean value, indicating a condition to run the processor for a specific record or not. (template functions

@@ -55,13 +55,13 @@ func (n *ProcessorNode) Run(ctx context.Context) error {
 
 		executeTime := time.Now()
 		// todo needs to be filled out
-		recs := n.Processor.Process(msg.Ctx, []opencdc.Record{{}})
+		recs := n.Processor.Process(msg.Ctx, []opencdc.Record{msg.Record.ToOpenCDC()})
 		n.ProcessorTimer.Update(time.Since(executeTime))
 
+		// todo a "bad" processor might have not returned any records
 		switch v := recs[0].(type) {
 		case sdk.SingleRecord:
-			// todo fill out
-			msg.Record = record.Record{}
+			msg.Record = record.FromOpenCDC(v)
 			err = n.base.Send(ctx, n.logger, msg)
 			if err != nil {
 				return msg.Nack(err, n.ID())
