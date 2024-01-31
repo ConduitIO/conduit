@@ -16,13 +16,13 @@ package processor
 
 import (
 	"context"
-	"github.com/conduitio/conduit/pkg/plugin/processor"
 	"time"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/database"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/measure"
+	"github.com/conduitio/conduit/pkg/plugin/processor"
 )
 
 type Service struct {
@@ -172,11 +172,7 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 		return cerrors.Errorf("could not delete processor instance from store: %w", err)
 	}
 	delete(s.instances, id)
-	// todo handle error
-	// NOT CORRECT!
-	// need a correct way to close the inspector
-	// teardown is for pipeline stop only
-	instance.Processor.Teardown(ctx)
+	instance.Processor.Close()
 	measure.ProcessorsGauge.WithValues(instance.Type).Dec()
 
 	return nil

@@ -69,8 +69,6 @@ func (p *inspectableProcessor) Process(ctx context.Context, records []opencdc.Re
 }
 
 func (p *inspectableProcessor) Teardown(ctx context.Context) error {
-	p.inInsp.Close()
-	p.outInsp.Close()
 	return p.proc.Teardown(ctx)
 }
 
@@ -80,4 +78,9 @@ func (p *inspectableProcessor) InspectIn(ctx context.Context, id string) *inspec
 
 func (p *inspectableProcessor) InspectOut(ctx context.Context, id string) *inspector.Session {
 	return p.outInsp.NewSession(ctx, id)
+}
+
+func (p *inspectableProcessor) Close() {
+	p.inInsp.Close()
+	p.outInsp.Close()
 }

@@ -51,6 +51,9 @@ type Interface interface {
 	InspectIn(ctx context.Context, id string) *inspector.Session
 	// InspectOut starts an inspection session for output records for this processor.
 	InspectOut(ctx context.Context, id string) *inspector.Session
+	// Close closes this processor and releases any resources
+	// which may have been used by it.
+	Close()
 }
 
 // Instance represents a processor instance.
