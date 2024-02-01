@@ -631,8 +631,8 @@ func TestUnwrap_Process(t *testing.T) {
 							"opencdc.readAt":              "1706028953595546000",
 							"opencdc.version":             "v1",
 						},
-						"key": record.RawData{
-							Raw: []byte("MTc3NzQ5NDEtNTdhMi00MmZhLWI0MzAtODkxMmE5NDI0YjNh"),
+						"key": map[string]interface{}{
+							"id": "MTc3NzQ5NDEtNTdhMi00MmZhLWI0MzAtODkxMmE5NDI0YjNh",
 						},
 						"payload": record.Change{
 							Before: nil,
@@ -665,7 +665,7 @@ func TestUnwrap_Process(t *testing.T) {
 						"triggered":    false,
 					},
 				},
-				Key:      record.RawData{Raw: []byte("MTc3NzQ5NDEtNTdhMi00MmZhLWI0MzAtODkxMmE5NDI0YjNh")},
+				Key:      record.StructuredData{"id": "MTc3NzQ5NDEtNTdhMi00MmZhLWI0MzAtODkxMmE5NDI0YjNh"},
 				Position: []byte("eyJHcm91cElEIjoiNGQ2ZTBhMjktNzAwZi00Yjk4LWEzY2MtZWUyNzZhZTc4MjVjIiwiVG9waWMiOiJzdHJlYW0tNzhscG5jaHg3dHpweXF6LWdlbmVyYXRvciIsIlBhcnRpdGlvbiI6MCwiT2Zmc2V0IjoyMjF9"),
 			},
 			wantErr: false,
@@ -710,7 +710,7 @@ func TestUnwrap_Process(t *testing.T) {
 						"triggered":    false,
 					},
 				},
-				Key:      record.RawData{Raw: []byte("MTc3NzQ5NDEtNTdhMi00MmZhLWI0MzAtODkxMmE5NDI0YjNh")},
+				Key:      record.RawData{Raw: []byte("17774941-57a2-42fa-b430-8912a9424b3a")},
 				Position: []byte("eyJHcm91cElEIjoiNGQ2ZTBhMjktNzAwZi00Yjk4LWEzY2MtZWUyNzZhZTc4MjVjIiwiVG9waWMiOiJzdHJlYW0tNzhscG5jaHg3dHpweXF6LWdlbmVyYXRvciIsIlBhcnRpdGlvbiI6MCwiT2Zmc2V0IjoyMjF9"),
 			},
 			wantErr: false,
