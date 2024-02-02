@@ -17,6 +17,8 @@ package stream
 import (
 	"context"
 	"fmt"
+	"github.com/conduitio/conduit-commons/opencdc"
+	sdk "github.com/conduitio/conduit-processor-sdk"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -560,13 +562,27 @@ func TestParallelNode_Processor(t *testing.T) {
 
 	// create a dummy processor
 	proc := pmock.NewProcessor(ctrl)
-	proc.EXPECT().Process(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, r record.Record) (record.Record, error) {
-		current := atomic.AddInt32(&workersCurrent, 1)
-		atomic.CompareAndSwapInt32(&workersHighWatermark, current-1, current)
-		time.Sleep(time.Millisecond) // sleep to let other workers catch up
-		atomic.AddInt32(&workersCurrent, -1)
-		return r, nil
-	}).Times(msgCount)
+	proc.EXPECT().
+		Open(gomock.Any()).
+		Times(workerCount)
+	proc.EXPECT().
+		Process(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(ctx context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
+			current := atomic.AddInt32(&workersCurrent, 1)
+			atomic.CompareAndSwapInt32(&workersHighWatermark, current-1, current)
+			time.Sleep(time.Millisecond) // sleep to let other workers catch up
+			atomic.AddInt32(&workersCurrent, -1)
+
+			out := make([]sdk.ProcessedRecord, len(records))
+			for i, r := range records {
+				out[i] = sdk.SingleRecord(r)
+			}
+
+			return out
+		}).Times(msgCount)
+	proc.EXPECT().
+		Teardown(gomock.Any()).
+		Times(workerCount)
 
 	newProcNode := func(i int) PubSubNode {
 		return &ProcessorNode{
