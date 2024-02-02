@@ -27,10 +27,16 @@ import (
 
 // FuncWrapper is an adapter allowing use of a function as a processor.Interface.
 // todo think about moving to the processor sdk for very simple processors
+// todo implement methods
 type FuncWrapper struct {
 	sdk.UnimplementedProcessor
 
-	f func(context.Context, record.Record) (record.Record, error)
+	name string
+	f    func(context.Context, record.Record) (record.Record, error)
+}
+
+func NewFuncWrapperWithName(name string, f func(context.Context, record.Record) (record.Record, error)) FuncWrapper {
+	return FuncWrapper{name: name, f: f}
 }
 
 func NewFuncWrapper(f func(context.Context, record.Record) (record.Record, error)) FuncWrapper {
@@ -38,18 +44,22 @@ func NewFuncWrapper(f func(context.Context, record.Record) (record.Record, error
 }
 
 func (f FuncWrapper) Specification() (sdk.Specification, error) {
-	//TODO implement me
-	panic("implement me")
+	return sdk.Specification{
+		Name:        f.name,
+		Summary:     "",
+		Description: "",
+		Version:     "",
+		Author:      "",
+		Parameters:  nil,
+	}, nil
 }
 
 func (f FuncWrapper) Configure(ctx context.Context, m map[string]string) error {
-	//TODO implement me
-	panic("implement me")
+	return nil
 }
 
 func (f FuncWrapper) Open(ctx context.Context) error {
-	//TODO implement me
-	panic("implement me")
+	return nil
 }
 
 func (f FuncWrapper) Process(ctx context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
@@ -69,8 +79,7 @@ func (f FuncWrapper) Process(ctx context.Context, records []opencdc.Record) []sd
 }
 
 func (f FuncWrapper) Teardown(ctx context.Context) error {
-	//TODO implement me
-	panic("implement me")
+	return nil
 }
 
 func (f FuncWrapper) InspectIn(ctx context.Context, id string) *inspector.Session {

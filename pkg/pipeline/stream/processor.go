@@ -23,17 +23,26 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics"
-	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/record"
 )
 
 type ProcessorNode struct {
 	Name           string
-	Processor      processor.Interface
+	Processor      Processor
 	ProcessorTimer metrics.Timer
 
 	base   pubSubNodeBase
 	logger log.CtxLogger
+}
+
+type Processor interface {
+	// Open configures and opens a processor plugin
+	Open(ctx context.Context) error
+	// todo accept record.Record
+	Process(context.Context, []opencdc.Record) []sdk.ProcessedRecord
+	// Teardown tears down a processor plugin.
+	// In case of standalone plugins, that means stopping the WASM module.
+	Teardown(context.Context) error
 }
 
 func (n *ProcessorNode) ID() string {
@@ -45,8 +54,20 @@ func (n *ProcessorNode) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-
 	defer cleanup()
+
+	err = n.Processor.Open(ctx)
+	if err != nil {
+		return cerrors.Errorf("couldn't open processor: %w", err)
+	}
+	defer func() {
+		// teardown will kill the plugin process
+		tdErr := n.Processor.Teardown(ctx)
+		err = cerrors.LogOrReplace(err, tdErr, func() {
+			n.logger.Err(ctx, tdErr).Msg("could not tear down processor")
+		})
+	}()
+
 	for {
 		msg, err := trigger()
 		if err != nil || msg == nil {

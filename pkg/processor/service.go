@@ -101,13 +101,6 @@ func (s *Service) Create(
 		cfg.Workers = 1
 	}
 
-	// todo make registru return a processor.Interface
-	// (add inspector there automatically)
-	p, err := s.registry.Get(ctx, plugin, id)
-	if err != nil {
-		return nil, err
-	}
-
 	now := time.Now()
 	instance := &Instance{
 		ID:            id,
@@ -117,12 +110,13 @@ func (s *Service) Create(
 		Plugin:        plugin,
 		Parent:        parent,
 		Config:        cfg,
-		Processor:     newInspectableProcessor(p, s.logger),
 		Condition:     cond,
+		// todo the dependency doesn't feel right
+		Registry: s.registry,
 	}
 
 	// persist instance
-	err = s.store.Set(ctx, instance.ID, instance)
+	err := s.store.Set(ctx, instance.ID, instance)
 	if err != nil {
 		return nil, err
 	}

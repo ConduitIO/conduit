@@ -285,16 +285,21 @@ func (s *Service) buildProcessorNodes(
 
 	prev := first
 	for _, procID := range processorIDs {
-		proc, err := procFetcher.Get(ctx, procID)
+		instance, err := procFetcher.Get(ctx, procID)
 		if err != nil {
 			return nil, cerrors.Errorf("could not fetch processor: %w", err)
 		}
 
+		err = instance.Init(ctx, s.logger)
+		if err != nil {
+			return nil, err
+		}
+
 		var node stream.PubSubNode
-		if proc.Config.Workers > 1 {
-			node = s.buildParallelProcessorNode(pl, proc)
+		if instance.Config.Workers > 1 {
+			node = s.buildParallelProcessorNode(pl, instance)
 		} else {
-			node = s.buildProcessorNode(pl, proc)
+			node = s.buildProcessorNode(pl, instance)
 		}
 
 		node.Sub(prev.Pub())
@@ -328,7 +333,7 @@ func (s *Service) buildProcessorNode(
 ) *stream.ProcessorNode {
 	return &stream.ProcessorNode{
 		Name:           proc.ID,
-		Processor:      proc.Processor,
+		Processor:      proc,
 		ProcessorTimer: measure.ProcessorExecutionDurationTimer.WithValues(pl.Config.Name, proc.Plugin),
 	}
 }

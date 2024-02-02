@@ -17,6 +17,10 @@ package orchestrator
 import (
 	"context"
 	"fmt"
+	sdk "github.com/conduitio/conduit-processor-sdk"
+	proc_plugin "github.com/conduitio/conduit/pkg/plugin/processor"
+	proc_builtin "github.com/conduitio/conduit/pkg/plugin/processor/builtin"
+	proc_standalone "github.com/conduitio/conduit/pkg/plugin/processor/standalone"
 	"os"
 	"reflect"
 	"testing"
@@ -74,12 +78,19 @@ func TestPipelineSimple(t *testing.T) {
 		standalone.NewRegistry(logger, ""),
 	)
 
+	procRegistry := newTestBuilderRegistry(is, map[string]func(context.Context, record.Record) (record.Record, error){
+		"removereadat": func(ctx context.Context, r record.Record) (record.Record, error) {
+			delete(r.Metadata, record.MetadataReadAt)
+			return r, nil
+		},
+	})
+
 	orc := NewOrchestrator(
 		db,
 		logger,
 		pipeline.NewService(logger, db),
 		connector.NewService(logger, db, connector.NewPersister(logger, db, time.Second, 3)),
-		processor.NewService(logger, db, processor.GlobalBuilderRegistry),
+		processor.NewService(logger, db, procRegistry),
 		pluginService,
 	)
 
@@ -164,5 +175,23 @@ func TestPipelineSimple(t *testing.T) {
 	is.NoErr(err)
 	if diff := cmp.Diff(want, string(got)); diff != "" {
 		t.Fatal(diff)
+	}
+}
+
+// todo maybe create a function for this in the processor package, used a few times already
+func newTestBuilderRegistry(is *is.I, processors map[string]func(context.Context, record.Record) (record.Record, error)) *proc_plugin.Registry {
+	ctors := make(map[string]proc_builtin.ProcessorPluginConstructor, len(processors))
+	for name, procFunc := range processors {
+		ctors[name] = func(log.CtxLogger) sdk.Processor {
+			return procbuiltin.NewFuncWrapperWithName(name, procFunc)
+		}
+	}
+
+	registry, err := proc_standalone.NewRegistry(log.Nop(), ".")
+	is.NoErr(err)
+
+	return &proc_plugin.Registry{
+		BuiltinReg:    proc_builtin.NewRegistry(log.Nop(), ctors),
+		StandaloneReg: registry,
 	}
 }

@@ -174,6 +174,7 @@ func (p Processor) ToConfig() config.Processor {
 	return config.Processor{
 		ID:        p.ID,
 		Type:      p.Type,
+		Plugin:    p.Plugin,
 		Settings:  p.Settings,
 		Workers:   p.Workers,
 		Condition: p.Condition,

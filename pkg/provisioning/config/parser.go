@@ -39,7 +39,8 @@ type Connector struct {
 }
 
 type Processor struct {
-	ID        string
+	ID string
+	// Type is deprecated. Plugin should be used.
 	Type      string
 	Plugin    string
 	Settings  map[string]string
@@ -65,7 +66,7 @@ var (
 	ConnectorImmutableFields = []string{"Type", "Plugin"}
 	ConnectorMutableFields   = []string{"Name", "Settings", "Processors"}
 
-	ProcessorImmutableFields = []string{"Plugin"}
+	ProcessorImmutableFields = []string{"Type", "Plugin"}
 	ProcessorMutableFields   = []string{"Settings", "Workers", "Condition"}
 )
 

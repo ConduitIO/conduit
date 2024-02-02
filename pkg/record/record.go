@@ -307,8 +307,8 @@ func FromOpenCDC(in opencdc.Record) Record {
 		Metadata:  Metadata(in.Metadata),
 		Key:       fromOpenCDCData(in.Key),
 		Payload: Change{
-			Before: nil,
-			After:  nil,
+			Before: fromOpenCDCData(in.Payload.Before),
+			After:  fromOpenCDCData(in.Payload.After),
 		},
 	}
 }

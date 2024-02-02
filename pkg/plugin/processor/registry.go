@@ -28,35 +28,24 @@ import (
 type Registry struct {
 	logger log.CtxLogger
 
-	builtinReg    *builtin.Registry
-	standaloneReg *standalone.Registry
-}
-
-func NewRegistry(logger log.CtxLogger, path string) (*Registry, error) {
-	standaloneReg, err := standalone.NewRegistry(logger, path)
-	if err != nil {
-		return nil, cerrors.Errorf("failed creating standalone registry for path %v: %w", path, err)
-	}
-	return &Registry{
-		logger:        logger,
-		builtinReg:    builtin.NewRegistry(logger, nil),
-		standaloneReg: standaloneReg,
-	}, nil
+	BuiltinReg    *builtin.Registry
+	StandaloneReg *standalone.Registry
 }
 
 func (r *Registry) Get(ctx context.Context, pluginName string, id string) (sdk.Processor, error) {
 	// todo use legacy processors here as well
+	// todo check if registries are nil
 	fullName := plugin.FullName(pluginName)
 	switch fullName.PluginType() {
 	case plugin.PluginTypeStandalone:
-		return r.standaloneReg.NewProcessor(ctx, fullName, id)
+		return r.StandaloneReg.NewProcessor(ctx, fullName, id)
 	case plugin.PluginTypeBuiltin:
-		return r.builtinReg.NewProcessorPlugin(r.logger, fullName)
+		return r.BuiltinReg.NewProcessorPlugin(r.logger, fullName)
 	case plugin.PluginTypeAny:
-		d, err := r.standaloneReg.NewProcessor(ctx, fullName, id)
+		d, err := r.StandaloneReg.NewProcessor(ctx, fullName, id)
 		if err != nil {
 			r.logger.Debug(context.Background()).Err(err).Msg("could not find standalone plugin dispenser, falling back to builtin plugin")
-			d, err = r.builtinReg.NewProcessorPlugin(r.logger, fullName)
+			d, err = r.BuiltinReg.NewProcessorPlugin(r.logger, fullName)
 		}
 		return d, err
 	default:

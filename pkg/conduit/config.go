@@ -98,6 +98,7 @@ func DefaultConfig() Config {
 	cfg.Log.Level = "info"
 	cfg.Log.Format = "cli"
 	cfg.Connectors.Path = "./connectors"
+	cfg.Processors.Path = "./processors"
 	cfg.Pipelines.Path = "./pipelines"
 
 	cfg.PluginDispenserFactories = builtin.DefaultDispenserFactories

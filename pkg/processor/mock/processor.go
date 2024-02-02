@@ -21,6 +21,7 @@ import (
 
 // Processor is a mock of Interface interface.
 type Processor struct {
+	sdk.UnimplementedProcessor
 	ctrl     *gomock.Controller
 	recorder *ProcessorMockRecorder
 }
@@ -40,6 +41,18 @@ func NewProcessor(ctrl *gomock.Controller) *Processor {
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *Processor) EXPECT() *ProcessorMockRecorder {
 	return m.recorder
+}
+
+// Close mocks base method.
+func (m *Processor) Close() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Close")
+}
+
+// Close indicates an expected call of Close.
+func (mr *ProcessorMockRecorder) Close() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*Processor)(nil).Close))
 }
 
 // Configure mocks base method.

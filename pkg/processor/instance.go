@@ -13,13 +13,19 @@
 // limitations under the License.
 
 //go:generate mockgen -destination=mock/processor.go -package=mock -mock_names=Interface=Processor . Interface
+//go:generate sed -i.bak -e "/type Processor struct {/a\\\n	sdk.UnimplementedProcessor" ./mock/processor.go
+//go:generate rm ./mock/processor.go.bak
 //go:generate stringer -type=ParentType -trimprefix ParentType
 
 package processor
 
 import (
 	"context"
+	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/plugin/processor"
 	"time"
 
 	"github.com/conduitio/conduit/pkg/inspector"
@@ -64,7 +70,6 @@ type Instance struct {
 	UpdatedAt     time.Time
 	ProvisionedBy ProvisionType
 
-	// todo rename to plugin
 	Plugin string
 	// Condition is a goTemplate formatted string, the value provided to the template is a sdk.Record, it should evaluate
 	// to a boolean value, indicating a condition to run the processor for a specific record or not. (template functions
@@ -73,6 +78,53 @@ type Instance struct {
 	Parent    Parent
 	Config    Config
 	Processor Interface
+	Registry  *processor.Registry
+}
+
+func (i *Instance) Open(ctx context.Context) error {
+	if i.Processor == nil {
+		return ErrProcessorNotInitialized
+	}
+
+	err := i.Processor.Configure(ctx, i.Config.Settings)
+	if err != nil {
+		return cerrors.Errorf("failed configuring processor: %w", err)
+	}
+
+	err = i.Processor.Open(ctx)
+	if err != nil {
+		return cerrors.Errorf("failed opening processors: %w", err)
+	}
+
+	return nil
+}
+
+func (i *Instance) Process(ctx context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
+	return i.Processor.Process(ctx, records)
+}
+
+func (i *Instance) Teardown(ctx context.Context) error {
+	if i.Processor == nil {
+		return ErrProcessorNotInitialized
+	}
+
+	return i.Processor.Teardown(ctx)
+}
+
+func (i *Instance) Init(ctx context.Context, logger log.CtxLogger) error {
+	if i.Processor != nil {
+		return ErrProcessorRunning
+	}
+
+	// todo make registru return a processor.Interface
+	// (add inspector there automatically)
+	p, err := i.Registry.Get(ctx, i.Plugin, i.ID)
+	if err != nil {
+		return err
+	}
+	i.Processor = newInspectableProcessor(p, logger)
+
+	return nil
 }
 
 // Parent represents the connection to the entity a processor is connected to.

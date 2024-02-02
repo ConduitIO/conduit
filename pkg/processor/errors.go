@@ -20,6 +20,8 @@ var (
 	// ErrSkipRecord is passed by a processor when it should Ack and skip a Record.
 	// It must be separate from a plain error so that we continue instead of marking
 	// the Pipeline status as degraded.
-	ErrSkipRecord       = cerrors.New("record skipped")
-	ErrInstanceNotFound = cerrors.New("processor instance not found")
+	ErrSkipRecord              = cerrors.New("record skipped")
+	ErrInstanceNotFound        = cerrors.New("processor instance not found")
+	ErrProcessorNotInitialized = cerrors.New("processor not initialized")
+	ErrProcessorRunning        = cerrors.New("processor already running")
 )
