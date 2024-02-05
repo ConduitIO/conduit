@@ -16,6 +16,7 @@ package procbuiltin
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -43,6 +44,7 @@ const (
 
 	FormatDebezium     = "debezium"
 	FormatKafkaConnect = "kafka-connect"
+	FormatOpenCDC      = "opencdc"
 )
 
 func init() {
@@ -60,6 +62,8 @@ func Unwrap(config processor.Config) (processor.Interface, error) {
 		proc.unwrapper = &debeziumUnwrapper{}
 	case FormatKafkaConnect:
 		proc.unwrapper = &kafkaConnectUnwrapper{}
+	case FormatOpenCDC:
+		proc.unwrapper = &openCDCUnwrapper{}
 	default:
 		return nil, cerrors.Errorf("%s: %q is not a valid format", unwrapProcType, format)
 	}
@@ -91,6 +95,207 @@ func (p *unwrapProcessor) Process(_ context.Context, in record.Record) (record.R
 		return record.Record{}, cerrors.Errorf("%s: error unwrapping record: %w", unwrapProcType, err)
 	}
 	return out, nil
+}
+
+/*
+Example of an OpenCDC record:
+{
+  "key": "NWQ0N2UwZGQtNTkxYi00MGEyLTk3YzMtYzc1MDY0MWU3NTc1",
+  "metadata": {
+    "conduit.source.connector.id": "source-generator-78lpnchx7tzpyqz:source",
+    "opencdc.readAt": "1706028881541916000",
+    "opencdc.version": "v1"
+  },
+  "operation": "create",
+  "payload": {
+    "after": {
+      "event_id": 2041181862,
+      "msg": "string 4c88f20f-aa77-4f4b-9354-e4fdb1989a52",
+      "pg_generator": false,
+      "sensor_id": 54434691,
+      "triggered": false
+    },
+    "before": null
+  },
+  "position": "ZWIwNmJiMmMtNWNhMS00YjUyLWE2ZmMtYzc0OTFlZDQ3OTYz"
+}
+*/
+
+// openCDCUnwrapper unwraps an OpenCDC record from the payload, by unmarhsalling rec.Payload.After into type Record.
+type openCDCUnwrapper struct{}
+
+// UnwrapOperation extracts operation from a structuredData record.
+func (o *openCDCUnwrapper) UnwrapOperation(structData record.StructuredData) (record.Operation, error) {
+	var operation record.Operation
+	op, ok := structData["operation"]
+	if !ok {
+		return operation, cerrors.Errorf("record payload after doesn't contain operation")
+	}
+
+	switch opType := op.(type) {
+	case record.Operation:
+		operation = opType
+	case string:
+		if err := operation.UnmarshalText([]byte(opType)); err != nil {
+			return operation, cerrors.Errorf("couldn't unmarshal record operation")
+		}
+	default:
+		return operation, cerrors.Errorf("expected a record.Operation or a string, got %T", opType)
+	}
+	return operation, nil
+}
+
+// UnwrapMetadata extracts metadata from a structuredData record.
+func (o *openCDCUnwrapper) UnwrapMetadata(structData record.StructuredData) (record.Metadata, error) {
+	var metadata record.Metadata
+	meta, ok := structData["metadata"]
+	if !ok {
+		return metadata, cerrors.Errorf("record payload after doesn't contain metadata")
+	}
+
+	switch m := meta.(type) {
+	case record.Metadata:
+		metadata = m
+	case map[string]interface{}:
+		metadata = make(record.Metadata, len(m))
+		for k, v := range m {
+			metadata[k] = fmt.Sprint(v)
+		}
+	default:
+		return metadata, cerrors.Errorf("expected a record.Metadata or a map[string]interface{}, got %T", m)
+	}
+	return metadata, nil
+}
+
+// UnwrapKey extracts key from a structuredData record.
+func (o *openCDCUnwrapper) UnwrapKey(structData record.StructuredData) (record.Data, error) {
+	var key record.Data
+	ky, ok := structData["key"]
+	if !ok {
+		return key, cerrors.Errorf("record payload after doesn't contain key")
+	}
+	switch k := ky.(type) {
+	case map[string]interface{}:
+		convertedData := make(record.StructuredData, len(k))
+		for kk, v := range k {
+			convertedData[kk] = v
+		}
+		key = convertedData
+	case string:
+		decoded := make([]byte, base64.StdEncoding.DecodedLen(len(k)))
+		n, err := base64.StdEncoding.Decode(decoded, []byte(k))
+		if err != nil {
+			return key, cerrors.Errorf("couldn't decode key: %w", err)
+		}
+		key = record.RawData{Raw: decoded[:n]}
+	default:
+		return key, cerrors.Errorf("expected a record.Data or a string, got %T", k)
+	}
+	return key, nil
+}
+
+func (o *openCDCUnwrapper) convertPayloadData(payload map[string]interface{}, key string) (record.Data, error) {
+	payloadData, ok := payload[key]
+	if !ok {
+		return nil, nil
+	}
+
+	switch data := payloadData.(type) {
+	case map[string]interface{}:
+		convertedData := make(record.StructuredData, len(data))
+		for k, v := range data {
+			convertedData[k] = v
+		}
+		return convertedData, nil
+	case string:
+		decoded := make([]byte, base64.StdEncoding.DecodedLen(len(data)))
+		n, err := base64.StdEncoding.Decode(decoded, []byte(data))
+		if err != nil {
+			return nil, cerrors.Errorf("couldn't decode payload %s: %w", err, key)
+		}
+		return record.RawData{Raw: decoded[:n]}, nil
+	default:
+		return nil, nil
+	}
+}
+
+// UnwrapPayload extracts payload from a structuredData record.
+func (o *openCDCUnwrapper) UnwrapPayload(structData record.StructuredData) (record.Change, error) {
+	var payload record.Change
+	pl, ok := structData["payload"]
+	if !ok {
+		return payload, cerrors.Errorf("record payload doesn't contain payload")
+	}
+
+	switch p := pl.(type) {
+	case record.Change:
+		payload = p
+	case map[string]interface{}:
+		before, err := o.convertPayloadData(p, "before")
+		if err != nil {
+			return record.Change{}, err
+		}
+
+		after, err := o.convertPayloadData(p, "after")
+		if err != nil {
+			return record.Change{}, err
+		}
+
+		payload = record.Change{
+			Before: before,
+			After:  after,
+		}
+	default:
+		return record.Change{}, cerrors.Errorf("expected a record.Change or a map[string]interface{}, got %T", p)
+	}
+	return payload, nil
+}
+
+// Unwrap replaces the whole record.payload with record.payload.after.payload except position.
+func (o *openCDCUnwrapper) Unwrap(rec record.Record) (record.Record, error) {
+	var structData record.StructuredData
+	data := rec.Payload.After
+	switch d := data.(type) {
+	case record.RawData:
+		// unmarshal raw data to structured
+		if err := json.Unmarshal(data.Bytes(), &structData); err != nil {
+			return record.Record{}, cerrors.Errorf("failed to unmarshal raw data as JSON: %w", unwrapProcType, err)
+		}
+	case record.StructuredData:
+		structData = d
+	default:
+		return record.Record{}, cerrors.Errorf("unexpected data type %T", unwrapProcType, data)
+	}
+
+	operation, err := o.UnwrapOperation(structData)
+	if err != nil {
+		return record.Record{}, err
+	}
+
+	metadata, err := o.UnwrapMetadata(structData)
+	if err != nil {
+		return record.Record{}, err
+	}
+
+	key, err := o.UnwrapKey(structData)
+	if err != nil {
+		return record.Record{}, err
+	}
+
+	payload, err := o.UnwrapPayload(structData)
+	if err != nil {
+		return record.Record{}, err
+	}
+
+	// Position is the only key we preserve from the original record to maintain the reference respect other messages
+	// that will be coming from in the event of chaining pipelines (e.g.: source -> kafka, kafka -> destination)
+	return record.Record{
+		Key:       key,
+		Position:  rec.Position,
+		Metadata:  metadata,
+		Payload:   payload,
+		Operation: operation,
+	}, nil
 }
 
 /*
@@ -186,7 +391,6 @@ Example of a debezium record:
     "schema": {} // will be ignored
   }
 */
-
 // debeziumUnwrapper unwraps a debezium record from the payload.
 type debeziumUnwrapper struct {
 	kafkaConnectUnwrapper kafkaConnectUnwrapper

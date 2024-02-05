@@ -24,7 +24,7 @@ import (
 	"github.com/matryer/is"
 )
 
-const DebeziumRecord = `{
+const DebeziumRecordPayload = `{
 		 "payload": {
 		   "after": {
 		     "description": "test1",
@@ -41,6 +41,65 @@ const DebeziumRecord = `{
 		 },
 		 "schema": {} 
 		}`
+
+const OpenCDCRecordCreatePayload = `{
+        "position": "NzgyNjJmODUtODNmMS00ZGQwLWEyZDAtNTRmNjA1ZjkyYTg0",
+        "operation": "create",
+        "metadata": {
+          "conduit.source.connector.id": "source-generator-78lpnchx7tzpyqz:source",
+          "opencdc.readAt": "1706028953595546000",
+          "opencdc.version": "v1"
+        },
+        "key": "MTc3NzQ5NDEtNTdhMi00MmZhLWI0MzAtODkxMmE5NDI0YjNh",
+        "payload": {
+          "after": {
+            "event_id": 1747353650,
+            "msg": "string 0e8955b3-7fb5-4dda-8064-e10dc007f00d",
+            "pg_generator": false,
+            "sensor_id": 1250383582,
+            "triggered": false
+          }
+        }
+      }`
+
+const OpenCDCRecordDeletePayload = `{
+		  "position": "Qy9ENDAwMjNCMA==",
+		  "operation": "delete",
+		  "metadata": {
+			"conduit.source.connector.id": "source-pg-source-to7iktk7mnnhhml:source",
+			"opencdc.readAt": "1707134319088931000",
+			"opencdc.version": "v1",
+			"postgres.table": "user_activity"
+		  },
+		  "key": {
+			"key": 3
+		  },
+		  "payload": {
+			"before": null,
+			"after": null
+		  }
+		}`
+
+const OpenCDCRecordUpdatePayload = `{
+        "position": "NzgyNjJmODUtODNmMS00ZGQwLWEyZDAtNTRmNjA1ZjkyYTg0",
+        "operation": "update",
+        "metadata": {
+          "conduit.source.connector.id": "source-generator-78lpnchx7tzpyqz:source",
+          "opencdc.readAt": "1706028953595546000",
+          "opencdc.version": "v1"
+        },
+        "key": "MTc3NzQ5NDEtNTdhMi00MmZhLWI0MzAtODkxMmE5NDI0YjNh",
+        "payload": {
+          "before": {
+            "event_id": 1747353650,
+            "msg": "string 0e8955b3-7fb5-4dda-8064-e10dc007f00d",
+            "pg_generator": false,
+            "sensor_id": 1250383582,
+            "triggered": false
+          },
+		  "after": null
+        }
+      }`
 
 func TestUnwrap_Config(t *testing.T) {
 	tests := []struct {
@@ -108,7 +167,7 @@ func TestUnwrap_Process(t *testing.T) {
 				Payload: record.Change{
 					Before: nil,
 					After: record.RawData{
-						Raw: []byte(DebeziumRecord),
+						Raw: []byte(DebeziumRecordPayload),
 					},
 				},
 			},
@@ -401,6 +460,385 @@ func TestUnwrap_Process(t *testing.T) {
 			},
 			wantErr: false,
 		},
+		{
+			name: "opencdc record create with structured data and no payload after",
+			config: processor.Config{
+				Settings: map[string]string{"format": "opencdc"},
+			},
+			record: record.Record{
+				Key:       record.RawData{Raw: []byte("one-key")},
+				Operation: record.OperationCreate,
+				Metadata:  map[string]string{},
+				Payload: record.Change{
+					Before: nil,
+					After:  nil,
+				},
+				Position: []byte("eyJHcm91cElEIjoiNGQ2ZTBhMjktNzAwZi00Yjk4LWEzY2MtZWUyNzZhZTc4MjVjIiwiVG9waWMiOiJzdHJlYW0tNzhscG5jaHg3dHpweXF6LWdlbmVyYXRvciIsIlBhcnRpdGlvbiI6MCwiT2Zmc2V0IjoyMjF9"),
+			},
+			want:    record.Record{},
+			wantErr: true,
+		},
+		{
+			name: "opencdc record create with an invalid operation",
+			config: processor.Config{
+				Settings: map[string]string{"format": "opencdc"},
+			},
+			record: record.Record{
+				Key:       record.RawData{Raw: []byte("one-key-raw-data")},
+				Operation: record.OperationCreate,
+				Metadata: map[string]string{
+					"conduit.source.connector.id": "dest-log-78lpnchx7tzpyqz:source-kafka",
+					"kafka.topic":                 "stream-78lpnchx7tzpyqz-generator",
+					"opencdc.createdAt":           "1706028953595000000",
+					"opencdc.readAt":              "1706028953606997000",
+					"opencdc.version":             "v1",
+				},
+				Payload: record.Change{
+					Before: nil,
+					After: record.RawData{
+						Raw: []byte(`{
+							"position": "NzgyNjJmODUtODNmMS00ZGQwLWEyZDAtNTRmNjA1ZjkyYTg0",
+							"operation": "invalid",
+							"metadata": {
+							  "conduit.source.connector.id": "source-generator-78lpnchx7tzpyqz:source",
+							  "opencdc.readAt": "1706028953595546000",
+							  "opencdc.version": "v1"
+							},
+							"key": "MTc3NzQ5NDEtNTdhMi00MmZhLWI0MzAtODkxMmE5NDI0YjNh",
+							"payload": {
+							  "after": {
+								"event_id": 1747353650,
+								"msg": "string 0e8955b3-7fb5-4dda-8064-e10dc007f00d",
+								"pg_generator": false,
+								"sensor_id": 1250383582,
+								"triggered": false
+							  }
+							}
+						  }`,
+						),
+					},
+				},
+				Position: []byte("eyJHcm91cElEIjoiNGQ2ZTBhMjktNzAwZi00Yjk4LWEzY2MtZWUyNzZhZTc4MjVjIiwiVG9waWMiOiJzdHJlYW0tNzhscG5jaHg3dHpweXF6LWdlbmVyYXRvciIsIlBhcnRpdGlvbiI6MCwiT2Zmc2V0IjoyMjF9"),
+			},
+			want:    record.Record{},
+			wantErr: true,
+		},
+		{
+			name: "opencdc record create with an invalid metadata",
+			config: processor.Config{
+				Settings: map[string]string{"format": "opencdc"},
+			},
+			record: record.Record{
+				Key:       record.RawData{Raw: []byte("one-key-raw-data")},
+				Operation: record.OperationCreate,
+				Metadata: map[string]string{
+					"conduit.source.connector.id": "dest-log-78lpnchx7tzpyqz:source-kafka",
+					"kafka.topic":                 "stream-78lpnchx7tzpyqz-generator",
+					"opencdc.createdAt":           "1706028953595000000",
+					"opencdc.readAt":              "1706028953606997000",
+					"opencdc.version":             "v1",
+				},
+				Payload: record.Change{
+					Before: nil,
+					After: record.RawData{
+						Raw: []byte(`{
+							"position": "NzgyNjJmODUtODNmMS00ZGQwLWEyZDAtNTRmNjA1ZjkyYTg0",
+							"operation": "create",
+							"metadata": "invalid",
+							"key": "MTc3NzQ5NDEtNTdhMi00MmZhLWI0MzAtODkxMmE5NDI0YjNh",
+							"payload": {
+							  "after": {
+								"event_id": 1747353650,
+								"msg": "string 0e8955b3-7fb5-4dda-8064-e10dc007f00d",
+								"pg_generator": false,
+								"sensor_id": 1250383582,
+								"triggered": false
+							  }
+							}
+						  }`,
+						),
+					},
+				},
+				Position: []byte("eyJHcm91cElEIjoiNGQ2ZTBhMjktNzAwZi00Yjk4LWEzY2MtZWUyNzZhZTc4MjVjIiwiVG9waWMiOiJzdHJlYW0tNzhscG5jaHg3dHpweXF6LWdlbmVyYXRvciIsIlBhcnRpdGlvbiI6MCwiT2Zmc2V0IjoyMjF9"),
+			},
+			want:    record.Record{},
+			wantErr: true,
+		},
+		{
+			name: "opencdc record create with an invalid key",
+			config: processor.Config{
+				Settings: map[string]string{"format": "opencdc"},
+			},
+			record: record.Record{
+				Key:       record.RawData{Raw: []byte("one-key-raw-data")},
+				Operation: record.OperationCreate,
+				Metadata: map[string]string{
+					"conduit.source.connector.id": "dest-log-78lpnchx7tzpyqz:source-kafka",
+					"kafka.topic":                 "stream-78lpnchx7tzpyqz-generator",
+					"opencdc.createdAt":           "1706028953595000000",
+					"opencdc.readAt":              "1706028953606997000",
+					"opencdc.version":             "v1",
+				},
+				Payload: record.Change{
+					Before: nil,
+					After: record.RawData{
+						Raw: []byte(`{
+							"position": "NzgyNjJmODUtODNmMS00ZGQwLWEyZDAtNTRmNjA1ZjkyYTg0",
+							"operation": "create",
+							"metadata": {
+							  "conduit.source.connector.id": "source-generator-78lpnchx7tzpyqz:source",
+							  "opencdc.readAt": "1706028953595546000",
+							  "opencdc.version": "v1"
+							},
+							"key": 1,
+							"payload": {
+							  "after": {
+								"event_id": 1747353650,
+								"msg": "string 0e8955b3-7fb5-4dda-8064-e10dc007f00d",
+								"pg_generator": false,
+								"sensor_id": 1250383582,
+								"triggered": false
+							  }
+							}
+						  }`,
+						),
+					},
+				},
+				Position: []byte("eyJHcm91cElEIjoiNGQ2ZTBhMjktNzAwZi00Yjk4LWEzY2MtZWUyNzZhZTc4MjVjIiwiVG9waWMiOiJzdHJlYW0tNzhscG5jaHg3dHpweXF6LWdlbmVyYXRvciIsIlBhcnRpdGlvbiI6MCwiT2Zmc2V0IjoyMjF9"),
+			},
+			want:    record.Record{},
+			wantErr: true,
+		},
+		{
+			name: "opencdc record create with an invalid payload",
+			config: processor.Config{
+				Settings: map[string]string{"format": "opencdc"},
+			},
+			record: record.Record{
+				Key:       record.RawData{Raw: []byte("one-key-raw-data")},
+				Operation: record.OperationCreate,
+				Metadata: map[string]string{
+					"conduit.source.connector.id": "dest-log-78lpnchx7tzpyqz:source-kafka",
+					"kafka.topic":                 "stream-78lpnchx7tzpyqz-generator",
+					"opencdc.createdAt":           "1706028953595000000",
+					"opencdc.readAt":              "1706028953606997000",
+					"opencdc.version":             "v1",
+				},
+				Payload: record.Change{
+					Before: nil,
+					After: record.RawData{
+						Raw: []byte(`{
+							"position": "NzgyNjJmODUtODNmMS00ZGQwLWEyZDAtNTRmNjA1ZjkyYTg0",
+							"operation": "create",
+							"metadata": {
+							  "conduit.source.connector.id": "source-generator-78lpnchx7tzpyqz:source",
+							  "opencdc.readAt": "1706028953595546000",
+							  "opencdc.version": "v1"
+							},
+							"key": "MTc3NzQ5NDEtNTdhMi00MmZhLWI0MzAtODkxMmE5NDI0YjNh",
+						  }`,
+						),
+					},
+				},
+				Position: []byte("eyJHcm91cElEIjoiNGQ2ZTBhMjktNzAwZi00Yjk4LWEzY2MtZWUyNzZhZTc4MjVjIiwiVG9waWMiOiJzdHJlYW0tNzhscG5jaHg3dHpweXF6LWdlbmVyYXRvciIsIlBhcnRpdGlvbiI6MCwiT2Zmc2V0IjoyMjF9"),
+			},
+			want:    record.Record{},
+			wantErr: true,
+		},
+		{
+			name: "opencdc record create with structured data",
+			config: processor.Config{
+				Settings: map[string]string{"format": "opencdc"},
+			},
+			record: record.Record{
+				Key:       record.RawData{Raw: []byte("one-key")},
+				Operation: record.OperationCreate,
+				Metadata: map[string]string{
+					"conduit.source.connector.id": "dest-log-78lpnchx7tzpyqz:source-kafka",
+					"kafka.topic":                 "stream-78lpnchx7tzpyqz-generator",
+					"opencdc.createdAt":           "1706028953595000000",
+					"opencdc.readAt":              "1706028953606997000",
+					"opencdc.version":             "v1",
+				},
+				Payload: record.Change{
+					Before: nil,
+					After: record.StructuredData{
+						"position":  []byte("NzgyNjJmODUtODNmMS00ZGQwLWEyZDAtNTRmNjA1ZjkyYTg0"),
+						"operation": record.OperationCreate,
+						"metadata": record.Metadata{
+							"conduit.source.connector.id": "source-generator-78lpnchx7tzpyqz:source",
+							"opencdc.readAt":              "1706028953595546000",
+							"opencdc.version":             "v1",
+						},
+						"key": map[string]interface{}{
+							"id": "MTc3NzQ5NDEtNTdhMi00MmZhLWI0MzAtODkxMmE5NDI0YjNh",
+						},
+						"payload": record.Change{
+							Before: nil,
+							After: record.StructuredData{
+								"event_id":     1747353650,
+								"msg":          "string 0e8955b3-7fb5-4dda-8064-e10dc007f00d",
+								"pg_generator": false,
+								"sensor_id":    1250383582,
+								"triggered":    false,
+							},
+						},
+					},
+				},
+				Position: []byte("eyJHcm91cElEIjoiNGQ2ZTBhMjktNzAwZi00Yjk4LWEzY2MtZWUyNzZhZTc4MjVjIiwiVG9waWMiOiJzdHJlYW0tNzhscG5jaHg3dHpweXF6LWdlbmVyYXRvciIsIlBhcnRpdGlvbiI6MCwiT2Zmc2V0IjoyMjF9"),
+			},
+			want: record.Record{
+				Operation: record.OperationCreate,
+				Metadata: record.Metadata{
+					"conduit.source.connector.id": "source-generator-78lpnchx7tzpyqz:source",
+					"opencdc.readAt":              "1706028953595546000",
+					"opencdc.version":             "v1",
+				},
+				Payload: record.Change{
+					Before: nil,
+					After: record.StructuredData{
+						"event_id":     1747353650,
+						"msg":          "string 0e8955b3-7fb5-4dda-8064-e10dc007f00d",
+						"pg_generator": false,
+						"sensor_id":    1250383582,
+						"triggered":    false,
+					},
+				},
+				Key:      record.StructuredData{"id": "MTc3NzQ5NDEtNTdhMi00MmZhLWI0MzAtODkxMmE5NDI0YjNh"},
+				Position: []byte("eyJHcm91cElEIjoiNGQ2ZTBhMjktNzAwZi00Yjk4LWEzY2MtZWUyNzZhZTc4MjVjIiwiVG9waWMiOiJzdHJlYW0tNzhscG5jaHg3dHpweXF6LWdlbmVyYXRvciIsIlBhcnRpdGlvbiI6MCwiT2Zmc2V0IjoyMjF9"),
+			},
+			wantErr: false,
+		},
+		{
+			name: "opencdc record create with raw data",
+			config: processor.Config{
+				Settings: map[string]string{"format": "opencdc"},
+			},
+			record: record.Record{
+				Key:       record.RawData{Raw: []byte("one-key-raw-data")},
+				Operation: record.OperationCreate,
+				Metadata: map[string]string{
+					"conduit.source.connector.id": "dest-log-78lpnchx7tzpyqz:source-kafka",
+					"kafka.topic":                 "stream-78lpnchx7tzpyqz-generator",
+					"opencdc.createdAt":           "1706028953595000000",
+					"opencdc.readAt":              "1706028953606997000",
+					"opencdc.version":             "v1",
+				},
+				Payload: record.Change{
+					Before: nil,
+					After: record.RawData{
+						Raw: []byte(OpenCDCRecordCreatePayload),
+					},
+				},
+				Position: []byte("eyJHcm91cElEIjoiNGQ2ZTBhMjktNzAwZi00Yjk4LWEzY2MtZWUyNzZhZTc4MjVjIiwiVG9waWMiOiJzdHJlYW0tNzhscG5jaHg3dHpweXF6LWdlbmVyYXRvciIsIlBhcnRpdGlvbiI6MCwiT2Zmc2V0IjoyMjF9"),
+			},
+			want: record.Record{
+				Operation: record.OperationCreate,
+				Metadata: record.Metadata{
+					"conduit.source.connector.id": "source-generator-78lpnchx7tzpyqz:source",
+					"opencdc.readAt":              "1706028953595546000",
+					"opencdc.version":             "v1",
+				},
+				Payload: record.Change{
+					Before: nil,
+					After: record.StructuredData{
+						"event_id":     float64(1747353650),
+						"msg":          "string 0e8955b3-7fb5-4dda-8064-e10dc007f00d",
+						"pg_generator": false,
+						"sensor_id":    float64(1250383582),
+						"triggered":    false,
+					},
+				},
+				Key:      record.RawData{Raw: []byte("17774941-57a2-42fa-b430-8912a9424b3a")},
+				Position: []byte("eyJHcm91cElEIjoiNGQ2ZTBhMjktNzAwZi00Yjk4LWEzY2MtZWUyNzZhZTc4MjVjIiwiVG9waWMiOiJzdHJlYW0tNzhscG5jaHg3dHpweXF6LWdlbmVyYXRvciIsIlBhcnRpdGlvbiI6MCwiT2Zmc2V0IjoyMjF9"),
+			},
+			wantErr: false,
+		},
+		{
+			name: "opencdc record delete with raw data",
+			config: processor.Config{
+				Settings: map[string]string{"format": "opencdc"},
+			},
+			record: record.Record{
+				Key:       record.RawData{Raw: []byte("one-key-raw-data")},
+				Operation: record.OperationCreate,
+				Metadata: map[string]string{
+					"conduit.source.connector.id": "dest-log-78lpnchx7tzpyqz:source-kafka",
+					"kafka.topic":                 "stream-78lpnchx7tzpyqz-generator",
+					"opencdc.createdAt":           "1706028953595000000",
+					"opencdc.readAt":              "1706028953606997000",
+					"opencdc.version":             "v1",
+				},
+				Payload: record.Change{
+					Before: nil,
+					After: record.RawData{
+						Raw: []byte(OpenCDCRecordDeletePayload),
+					},
+				},
+				Position: []byte("eyJHcm91cElEIjoiNGQ2ZTBhMjktNzAwZi00Yjk4LWEzY2MtZWUyNzZhZTc4MjVjIiwiVG9waWMiOiJzdHJlYW0tNzhscG5jaHg3dHpweXF6LWdlbmVyYXRvciIsIlBhcnRpdGlvbiI6MCwiT2Zmc2V0IjoyMjF9"),
+			},
+			want: record.Record{
+				Operation: record.OperationDelete,
+				Metadata: record.Metadata{
+					"conduit.source.connector.id": "source-pg-source-to7iktk7mnnhhml:source",
+					"opencdc.readAt":              "1707134319088931000",
+					"opencdc.version":             "v1",
+					"postgres.table":              "user_activity",
+				},
+				Payload: record.Change{
+					Before: nil,
+					After:  nil,
+				},
+				Key:      record.StructuredData{"key": float64(3)},
+				Position: []byte("eyJHcm91cElEIjoiNGQ2ZTBhMjktNzAwZi00Yjk4LWEzY2MtZWUyNzZhZTc4MjVjIiwiVG9waWMiOiJzdHJlYW0tNzhscG5jaHg3dHpweXF6LWdlbmVyYXRvciIsIlBhcnRpdGlvbiI6MCwiT2Zmc2V0IjoyMjF9"),
+			},
+			wantErr: false,
+		},
+		{
+			name: "opencdc record update with raw data",
+			config: processor.Config{
+				Settings: map[string]string{"format": "opencdc"},
+			},
+			record: record.Record{
+				Key:       record.RawData{Raw: []byte("one-key-raw-data")},
+				Operation: record.OperationCreate,
+				Metadata: map[string]string{
+					"conduit.source.connector.id": "dest-log-78lpnchx7tzpyqz:source-kafka",
+					"kafka.topic":                 "stream-78lpnchx7tzpyqz-generator",
+					"opencdc.createdAt":           "1706028953595000000",
+					"opencdc.readAt":              "1706028953606997000",
+					"opencdc.version":             "v1",
+				},
+				Payload: record.Change{
+					Before: nil,
+					After: record.RawData{
+						Raw: []byte(OpenCDCRecordUpdatePayload),
+					},
+				},
+				Position: []byte("eyJHcm91cElEIjoiNGQ2ZTBhMjktNzAwZi00Yjk4LWEzY2MtZWUyNzZhZTc4MjVjIiwiVG9waWMiOiJzdHJlYW0tNzhscG5jaHg3dHpweXF6LWdlbmVyYXRvciIsIlBhcnRpdGlvbiI6MCwiT2Zmc2V0IjoyMjF9"),
+			},
+			want: record.Record{
+				Operation: record.OperationUpdate,
+				Metadata: record.Metadata{
+					"conduit.source.connector.id": "source-generator-78lpnchx7tzpyqz:source",
+					"opencdc.readAt":              "1706028953595546000",
+					"opencdc.version":             "v1",
+				},
+				Payload: record.Change{
+					Before: record.StructuredData{
+						"event_id":     float64(1747353650),
+						"msg":          "string 0e8955b3-7fb5-4dda-8064-e10dc007f00d",
+						"pg_generator": false,
+						"sensor_id":    float64(1250383582),
+						"triggered":    false,
+					},
+					After: nil,
+				},
+				Key:      record.RawData{Raw: []byte("17774941-57a2-42fa-b430-8912a9424b3a")},
+				Position: []byte("eyJHcm91cElEIjoiNGQ2ZTBhMjktNzAwZi00Yjk4LWEzY2MtZWUyNzZhZTc4MjVjIiwiVG9waWMiOiJzdHJlYW0tNzhscG5jaHg3dHpweXF6LWdlbmVyYXRvciIsIlBhcnRpdGlvbiI6MCwiT2Zmc2V0IjoyMjF9"),
+			},
+			wantErr: false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -413,6 +851,7 @@ func TestUnwrap_Process(t *testing.T) {
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("process() error = %v, wantErr = %v", err, tt.wantErr)
 			}
+
 			if diff := cmp.Diff(tt.want, got); diff != "" {
 				t.Errorf("process() diff = %s", diff)
 			}
