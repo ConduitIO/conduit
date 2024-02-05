@@ -21,6 +21,7 @@ import (
 	proc_plugin "github.com/conduitio/conduit/pkg/plugin/processor"
 	proc_builtin "github.com/conduitio/conduit/pkg/plugin/processor/builtin"
 	proc_standalone "github.com/conduitio/conduit/pkg/plugin/processor/standalone"
+	builtin2 "github.com/conduitio/conduit/pkg/processor/procbuiltin"
 	"os"
 	"reflect"
 	"testing"
@@ -36,7 +37,6 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin/connector/builtin"
 	"github.com/conduitio/conduit/pkg/plugin/connector/standalone"
 	"github.com/conduitio/conduit/pkg/processor"
-	"github.com/conduitio/conduit/pkg/processor/procbuiltin"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/google/go-cmp/cmp"
 	"github.com/matryer/is"
@@ -78,12 +78,13 @@ func TestPipelineSimple(t *testing.T) {
 		standalone.NewRegistry(logger, ""),
 	)
 
-	procRegistry := newTestBuilderRegistry(is, map[string]func(context.Context, record.Record) (record.Record, error){
+	procRegistry, err := NewTestBuilderRegistry(map[string]func(context.Context, record.Record) (record.Record, error){
 		"removereadat": func(ctx context.Context, r record.Record) (record.Record, error) {
 			delete(r.Metadata, record.MetadataReadAt)
 			return r, nil
 		},
 	})
+	is.NoErr(err)
 
 	orc := NewOrchestrator(
 		db,
@@ -98,7 +99,7 @@ func TestPipelineSimple(t *testing.T) {
 	// TODO at the time of writing we don't have a processor for manipulating
 	//  metadata, once we have it we can use it instead of adding our own
 	processor.GlobalBuilderRegistry.MustRegister("removereadat", func(config processor.Config) (processor.Interface, error) {
-		return procbuiltin.NewFuncWrapper(func(ctx context.Context, r record.Record) (record.Record, error) {
+		return builtin2.NewFuncWrapper(func(ctx context.Context, r record.Record) (record.Record, error) {
 			delete(r.Metadata, record.MetadataReadAt) // read at is different every time, remove it
 			return r, nil
 		}), nil
@@ -178,20 +179,21 @@ func TestPipelineSimple(t *testing.T) {
 	}
 }
 
-// todo maybe create a function for this in the processor package, used a few times already
-func newTestBuilderRegistry(is *is.I, processors map[string]func(context.Context, record.Record) (record.Record, error)) *proc_plugin.Registry {
+func NewTestBuilderRegistry(processors map[string]func(context.Context, record.Record) (record.Record, error)) (*proc_plugin.Registry, error) {
 	ctors := make(map[string]proc_builtin.ProcessorPluginConstructor, len(processors))
 	for name, procFunc := range processors {
 		ctors[name] = func(log.CtxLogger) sdk.Processor {
-			return procbuiltin.NewFuncWrapperWithName(name, procFunc)
+			return builtin2.NewFuncWrapperWithName(name, procFunc)
 		}
 	}
 
 	registry, err := proc_standalone.NewRegistry(log.Nop(), ".")
-	is.NoErr(err)
+	if err != nil {
+		return nil, err
+	}
 
 	return &proc_plugin.Registry{
 		BuiltinReg:    proc_builtin.NewRegistry(log.Nop(), ctors),
 		StandaloneReg: registry,
-	}
+	}, nil
 }

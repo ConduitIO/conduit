@@ -12,10 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package procbuiltin
+package builtin
 
 import (
 	"context"
+	"github.com/conduitio/conduit-commons/opencdc"
 	"testing"
 	"time"
 
@@ -27,11 +28,13 @@ import (
 
 func TestFuncWrapper_InspectIn(t *testing.T) {
 	ctx := context.Background()
-	wantIn := record.Record{
-		Position: record.Position("position-in"),
-		Metadata: record.Metadata{"meta-key-in": "meta-value-in"},
-		Key:      record.RawData{Raw: []byte("key-in")},
-		Payload:  record.Change{After: record.RawData{Raw: []byte("payload-in")}},
+	wantIn := []opencdc.Record{
+		{
+			Position: opencdc.Position("position-in"),
+			Metadata: opencdc.Metadata{"meta-key-in": "meta-value-in"},
+			Key:      opencdc.RawData("key-in"),
+			Payload:  opencdc.Change{After: opencdc.RawData("payload-in")},
+		},
 	}
 
 	testCases := []struct {
@@ -57,7 +60,7 @@ func TestFuncWrapper_InspectIn(t *testing.T) {
 			})
 
 			session := underTest.InspectIn(ctx, "test-id")
-			_, _ = underTest.Process(ctx, wantIn)
+			_ = underTest.Process(ctx, wantIn)
 
 			gotIn, got, err := cchan.ChanOut[record.Record](session.C).RecvTimeout(ctx, 100*time.Millisecond)
 			is.NoErr(err)
@@ -83,7 +86,7 @@ func TestFuncWrapper_InspectOut_Ok(t *testing.T) {
 	})
 
 	session := underTest.InspectOut(ctx, "test-id")
-	_, _ = underTest.Process(ctx, record.Record{})
+	_ = underTest.Process(ctx, []opencdc.Record{})
 
 	gotOut, got, err := cchan.ChanOut[record.Record](session.C).RecvTimeout(ctx, 100*time.Millisecond)
 	is.NoErr(err)
@@ -107,7 +110,7 @@ func TestFuncWrapper_InspectOut_ProcessingFailed(t *testing.T) {
 	})
 
 	session := underTest.InspectOut(ctx, "test-id")
-	_, _ = underTest.Process(ctx, record.Record{})
+	_ = underTest.Process(ctx, []opencdc.Record{})
 
 	_, _, err := cchan.ChanOut[record.Record](session.C).RecvTimeout(ctx, 100*time.Millisecond)
 	is.True(cerrors.Is(err, context.DeadlineExceeded))

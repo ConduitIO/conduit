@@ -12,20 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package procbuiltin
+package builtin
 
 import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	"github.com/conduitio/conduit/pkg/processor/procbuiltin/schemaregistry"
 	"os"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/multierror"
 	"github.com/conduitio/conduit/pkg/processor"
-	"github.com/conduitio/conduit/pkg/processor/schemaregistry"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/lovromazgon/franz-go/pkg/sr"
 	"github.com/rs/zerolog"

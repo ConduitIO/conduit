@@ -15,7 +15,7 @@
 package schemaregistry
 
 import (
-	"github.com/conduitio/conduit/pkg/processor/schemaregistry/avro"
+	"github.com/conduitio/conduit/pkg/processor/procbuiltin/schemaregistry/avro"
 	"github.com/lovromazgon/franz-go/pkg/sr"
 )
 
