@@ -232,6 +232,11 @@ func (o *openCDCUnwrapper) UnwrapPayload(structData record.StructuredData) (reco
 				Before: nil,
 				After:  convertedData,
 			}
+		case nil: // This can take place in operations such as `delete`
+			payload = record.Change{
+				Before: nil,
+				After:  nil,
+			}
 		default:
 			return record.Change{}, cerrors.Errorf("unexpected data type %T", unwrapProcType, data)
 		}
