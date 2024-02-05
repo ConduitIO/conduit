@@ -80,6 +80,27 @@ const OpenCDCRecordDeletePayload = `{
 		  }
 		}`
 
+const OpenCDCRecordUpdatePayload = `{
+        "position": "NzgyNjJmODUtODNmMS00ZGQwLWEyZDAtNTRmNjA1ZjkyYTg0",
+        "operation": "update",
+        "metadata": {
+          "conduit.source.connector.id": "source-generator-78lpnchx7tzpyqz:source",
+          "opencdc.readAt": "1706028953595546000",
+          "opencdc.version": "v1"
+        },
+        "key": "MTc3NzQ5NDEtNTdhMi00MmZhLWI0MzAtODkxMmE5NDI0YjNh",
+        "payload": {
+          "before": {
+            "event_id": 1747353650,
+            "msg": "string 0e8955b3-7fb5-4dda-8064-e10dc007f00d",
+            "pg_generator": false,
+            "sensor_id": 1250383582,
+            "triggered": false
+          },
+		  "after": null
+        }
+      }`
+
 func TestUnwrap_Config(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -769,6 +790,51 @@ func TestUnwrap_Process(t *testing.T) {
 					After:  nil,
 				},
 				Key:      record.StructuredData{"key": float64(3)},
+				Position: []byte("eyJHcm91cElEIjoiNGQ2ZTBhMjktNzAwZi00Yjk4LWEzY2MtZWUyNzZhZTc4MjVjIiwiVG9waWMiOiJzdHJlYW0tNzhscG5jaHg3dHpweXF6LWdlbmVyYXRvciIsIlBhcnRpdGlvbiI6MCwiT2Zmc2V0IjoyMjF9"),
+			},
+			wantErr: false,
+		},
+		{
+			name: "opencdc record update with raw data",
+			config: processor.Config{
+				Settings: map[string]string{"format": "opencdc"},
+			},
+			record: record.Record{
+				Key:       record.RawData{Raw: []byte("one-key-raw-data")},
+				Operation: record.OperationCreate,
+				Metadata: map[string]string{
+					"conduit.source.connector.id": "dest-log-78lpnchx7tzpyqz:source-kafka",
+					"kafka.topic":                 "stream-78lpnchx7tzpyqz-generator",
+					"opencdc.createdAt":           "1706028953595000000",
+					"opencdc.readAt":              "1706028953606997000",
+					"opencdc.version":             "v1",
+				},
+				Payload: record.Change{
+					Before: nil,
+					After: record.RawData{
+						Raw: []byte(OpenCDCRecordUpdatePayload),
+					},
+				},
+				Position: []byte("eyJHcm91cElEIjoiNGQ2ZTBhMjktNzAwZi00Yjk4LWEzY2MtZWUyNzZhZTc4MjVjIiwiVG9waWMiOiJzdHJlYW0tNzhscG5jaHg3dHpweXF6LWdlbmVyYXRvciIsIlBhcnRpdGlvbiI6MCwiT2Zmc2V0IjoyMjF9"),
+			},
+			want: record.Record{
+				Operation: record.OperationUpdate,
+				Metadata: record.Metadata{
+					"conduit.source.connector.id": "source-generator-78lpnchx7tzpyqz:source",
+					"opencdc.readAt":              "1706028953595546000",
+					"opencdc.version":             "v1",
+				},
+				Payload: record.Change{
+					Before: record.StructuredData{
+						"event_id":     float64(1747353650),
+						"msg":          "string 0e8955b3-7fb5-4dda-8064-e10dc007f00d",
+						"pg_generator": false,
+						"sensor_id":    float64(1250383582),
+						"triggered":    false,
+					},
+					After: nil,
+				},
+				Key:      record.RawData{Raw: []byte("17774941-57a2-42fa-b430-8912a9424b3a")},
 				Position: []byte("eyJHcm91cElEIjoiNGQ2ZTBhMjktNzAwZi00Yjk4LWEzY2MtZWUyNzZhZTc4MjVjIiwiVG9waWMiOiJzdHJlYW0tNzhscG5jaHg3dHpweXF6LWdlbmVyYXRvciIsIlBhcnRpdGlvbiI6MCwiT2Zmc2V0IjoyMjF9"),
 			},
 			wantErr: false,

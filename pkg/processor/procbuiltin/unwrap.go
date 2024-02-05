@@ -194,6 +194,31 @@ func (o *openCDCUnwrapper) UnwrapKey(structData record.StructuredData) (record.D
 	return key, nil
 }
 
+func (o *openCDCUnwrapper) convertPayloadData(payload map[string]interface{}, key string) (record.Data, error) {
+	payloadData, ok := payload[key]
+	if !ok {
+		return nil, nil
+	}
+
+	switch data := payloadData.(type) {
+	case map[string]interface{}:
+		convertedData := make(record.StructuredData, len(data))
+		for k, v := range data {
+			convertedData[k] = v
+		}
+		return convertedData, nil
+	case string:
+		decoded := make([]byte, base64.StdEncoding.DecodedLen(len(data)))
+		n, err := base64.StdEncoding.Decode(decoded, []byte(data))
+		if err != nil {
+			return nil, cerrors.Errorf("couldn't decode payload %s: %w", err, key)
+		}
+		return record.RawData{Raw: decoded[:n]}, nil
+	default:
+		return nil, nil
+	}
+}
+
 // UnwrapPayload extracts payload from a structuredData record.
 func (o *openCDCUnwrapper) UnwrapPayload(structData record.StructuredData) (record.Change, error) {
 	var payload record.Change
@@ -206,39 +231,19 @@ func (o *openCDCUnwrapper) UnwrapPayload(structData record.StructuredData) (reco
 	case record.Change:
 		payload = p
 	case map[string]interface{}:
-		afterData, ok := p["after"]
-		if !ok {
-			return record.Change{}, cerrors.Errorf("record payload after doesn't contain payload after")
+		before, err := o.convertPayloadData(p, "before")
+		if err != nil {
+			return record.Change{}, err
 		}
-		switch data := afterData.(type) {
-		case map[string]interface{}:
-			convertedData := make(record.StructuredData, len(data))
-			for k, v := range data {
-				convertedData[k] = v
-			}
-			payload = record.Change{
-				Before: nil,
-				After:  convertedData,
-			}
-		case string:
-			decoded := make([]byte, base64.StdEncoding.DecodedLen(len(data)))
-			n, err := base64.StdEncoding.Decode(decoded, []byte(data))
-			if err != nil {
-				return payload, cerrors.Errorf("couldn't decode payload after: %w", err)
-			}
-			convertedData := record.RawData{Raw: decoded[:n]}
 
-			payload = record.Change{
-				Before: nil,
-				After:  convertedData,
-			}
-		case nil: // This can take place in operations such as `delete`
-			payload = record.Change{
-				Before: nil,
-				After:  nil,
-			}
-		default:
-			return record.Change{}, cerrors.Errorf("unexpected data type %T", unwrapProcType, data)
+		after, err := o.convertPayloadData(p, "after")
+		if err != nil {
+			return record.Change{}, err
+		}
+
+		payload = record.Change{
+			Before: before,
+			After:  after,
 		}
 	default:
 		return record.Change{}, cerrors.Errorf("expected a record.Change or a map[string]interface{}, got %T", p)
