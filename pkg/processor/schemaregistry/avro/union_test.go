@@ -15,6 +15,7 @@
 package avro
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/record"
@@ -70,6 +71,15 @@ func TestUnionResolver(t *testing.T) {
 		want: map[string]any{"array": []bool(nil)},
 	}}
 
+	isSlice := func(a any) bool {
+		if a == nil {
+			return false
+		}
+		// returns true if the type is a slice and not a byte slice
+		t := reflect.TypeOf(a)
+		return t.Kind() == reflect.Slice && !t.Elem().AssignableTo(byteType)
+	}
+
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			is := is.New(t)
@@ -96,14 +106,32 @@ func TestUnionResolver(t *testing.T) {
 					"foo2": tc.want,
 					"map2": map[string]any{
 						"map": map[string]any{
-							"foo3": tc.want,
+							"foo3": func() any {
+								// if the original value is a slice, we consider
+								// the type a union and wrap it in a map, otherwise
+								// we keep the original value
+								if isSlice(tc.have) {
+									return tc.want
+								}
+								return tc.have
+							}(),
 						},
 					},
 				},
 				"arr1": []any{
 					tc.want,
 					map[string]any{
-						"array": []any{tc.want},
+						"array": []any{
+							func() any {
+								// if the original value is a slice, we consider
+								// the type a union and wrap it in a map, otherwise
+								// we keep the original value
+								if isSlice(tc.have) {
+									return tc.want
+								}
+								return tc.have
+							}(),
+						},
 					},
 				},
 			}
