@@ -21,44 +21,52 @@ import (
 	"github.com/matryer/is"
 )
 
-func Test_TemplateUtils_ExecuteTrue(t *testing.T) {
+func Test_ProcessorCondition_InvalidTemplate(t *testing.T) {
 	is := is.New(t)
-	condition := "{{ eq .Metadata.key \"val\" }}"
+	condition := `{{ Im not a valid template }}`
+	tmpl, err := NewProcessorCondition(condition)
+	is.True(err != nil)
+	is.Equal(tmpl, nil)
+}
+
+func Test_ProcessorCondition_EvaluateTrue(t *testing.T) {
+	is := is.New(t)
+	condition := `{{ eq .Metadata.key "val" }}`
 	rec := record.Record{
 		Position: record.Position("position-out"),
 		Metadata: record.Metadata{"key": "val"},
 	}
-	tmpl := NewTemplateUtils(condition, rec)
-	is.NoErr(tmpl.parse())
-	res, err := tmpl.execute()
+	tmpl, err := NewProcessorCondition(condition)
+	is.NoErr(err)
+	res, err := tmpl.Evaluate(rec)
 	is.NoErr(err)
 	is.True(res)
 }
 
-func Test_TemplateUtils_ExecuteFalse(t *testing.T) {
+func Test_ProcessorCondition_EvaluateFalse(t *testing.T) {
 	is := is.New(t)
-	condition := "{{ eq .Metadata.key \"wrongVal\" }}"
+	condition := `{{ eq .Metadata.key "wrongVal" }}`
 	rec := record.Record{
 		Position: record.Position("position-out"),
 		Metadata: record.Metadata{"key": "val"},
 	}
-	tmpl := NewTemplateUtils(condition, rec)
-	is.NoErr(tmpl.parse())
-	res, err := tmpl.execute()
+	tmpl, err := NewProcessorCondition(condition)
+	is.NoErr(err)
+	res, err := tmpl.Evaluate(rec)
 	is.NoErr(err)
 	is.True(res == false)
 }
 
-func Test_TemplateUtils_NonBooleanValue(t *testing.T) {
+func Test_ProcessorCondition_NonBooleanOutput(t *testing.T) {
 	is := is.New(t)
-	condition := "{{ printf \"hi\" }}"
+	condition := `{{ printf "hi" }}`
 	rec := record.Record{
 		Position: record.Position("position-out"),
 		Metadata: record.Metadata{"key": "val"},
 	}
-	tmpl := NewTemplateUtils(condition, rec)
-	is.NoErr(tmpl.parse())
-	res, err := tmpl.execute()
+	tmpl, err := NewProcessorCondition(condition)
+	is.NoErr(err)
+	res, err := tmpl.Evaluate(rec)
 	is.True(err != nil)
 	is.True(res == false)
 }
