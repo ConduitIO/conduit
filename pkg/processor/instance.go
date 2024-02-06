@@ -16,7 +16,7 @@
 //go:generate sed -i.bak -e "/type Processor struct {/a\\\n	sdk.UnimplementedProcessor" ./mock/processor.go
 //go:generate rm ./mock/processor.go.bak
 //go:generate stringer -type=ParentType -trimprefix ParentType
-//go:generate mockgen -destination=mock/processor_getter.go -package=mock -mock_names=ProcessorGetter=ProcessorGetter . ProcessorGetter
+//go:generate mockgen -destination=mock/processor_registry.go -package=mock -mock_names=Registry=Registry . Registry
 
 package processor
 
@@ -61,7 +61,7 @@ type Interface interface {
 	Close()
 }
 
-type ProcessorGetter interface {
+type Registry interface {
 	Get(ctx context.Context, pluginName string, id string) (sdk.Processor, error)
 }
 

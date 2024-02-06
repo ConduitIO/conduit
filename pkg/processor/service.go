@@ -27,13 +27,13 @@ import (
 type Service struct {
 	logger log.CtxLogger
 
-	registry  ProcessorGetter
+	registry  Registry
 	instances map[string]*Instance
 	store     *Store
 }
 
 // NewService creates a new processor service.
-func NewService(logger log.CtxLogger, db database.DB, registry ProcessorGetter) *Service {
+func NewService(logger log.CtxLogger, db database.DB, registry Registry) *Service {
 	return &Service{
 		logger:    logger.WithComponent("processor.Service"),
 		registry:  registry,

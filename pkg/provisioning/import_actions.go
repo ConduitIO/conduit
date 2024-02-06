@@ -17,6 +17,7 @@ package provisioning
 import (
 	"context"
 	"fmt"
+
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/pipeline"

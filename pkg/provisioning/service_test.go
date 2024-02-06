@@ -16,11 +16,6 @@ package provisioning
 
 import (
 	"context"
-	sdk "github.com/conduitio/conduit-processor-sdk"
-	proc_plugin "github.com/conduitio/conduit/pkg/plugin/processor"
-	proc_builtin "github.com/conduitio/conduit/pkg/plugin/processor/builtin"
-	proc_standalone "github.com/conduitio/conduit/pkg/plugin/processor/standalone"
-	builtin2 "github.com/conduitio/conduit/pkg/processor/procbuiltin"
 	"os"
 	"testing"
 	"time"
@@ -35,6 +30,8 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin/connector/builtin"
 	"github.com/conduitio/conduit/pkg/plugin/connector/standalone"
 	"github.com/conduitio/conduit/pkg/processor"
+	proc_mock "github.com/conduitio/conduit/pkg/processor/mock"
+	proc_builtin "github.com/conduitio/conduit/pkg/processor/procbuiltin"
 	p1 "github.com/conduitio/conduit/pkg/provisioning/test/pipelines1"
 	p2 "github.com/conduitio/conduit/pkg/provisioning/test/pipelines2"
 	p3 "github.com/conduitio/conduit/pkg/provisioning/test/pipelines3"
@@ -496,13 +493,16 @@ func TestService_IntegrationTestServices(t *testing.T) {
 	plService := pipeline.NewService(logger, db)
 	connService := connector.NewService(logger, db, connector.NewPersister(logger, db, time.Second, 3))
 
-	procRegistry, err := NewTestBuilderRegistry(map[string]func(context.Context, record.Record) (record.Record, error){
-		"removereadat": func(ctx context.Context, r record.Record) (record.Record, error) {
-			delete(r.Metadata, record.MetadataReadAt)
-			return r, nil
-		},
-	})
-	is.NoErr(err)
+	procRegistry := proc_mock.NewRegistry(gomock.NewController(t))
+	procRegistry.EXPECT().
+		Get(gomock.Any(), "removereadat", gomock.Any()).
+		Return(
+			proc_builtin.NewFuncWrapper(func(ctx context.Context, r record.Record) (record.Record, error) {
+				delete(r.Metadata, record.MetadataReadAt) // read at is different every time, remove it
+				return r, nil
+			}),
+			nil,
+		).AnyTimes()
 	procService := processor.NewService(logger, db, procRegistry)
 
 	// create destination file
@@ -562,23 +562,4 @@ func TestService_IntegrationTestServices(t *testing.T) {
 	data, err := os.ReadFile(destFile)
 	is.NoErr(err)
 	is.True(len(data) != 0) // destination file is empty
-}
-
-func NewTestBuilderRegistry(processors map[string]func(context.Context, record.Record) (record.Record, error)) (*proc_plugin.Registry, error) {
-	ctors := make(map[string]proc_builtin.ProcessorPluginConstructor, len(processors))
-	for name, procFunc := range processors {
-		ctors[name] = func(log.CtxLogger) sdk.Processor {
-			return builtin2.NewFuncWrapperWithName(name, procFunc)
-		}
-	}
-
-	registry, err := proc_standalone.NewRegistry(log.Nop(), ".")
-	if err != nil {
-		return nil, err
-	}
-
-	return &proc_plugin.Registry{
-		BuiltinReg:    proc_builtin.NewRegistry(log.Nop(), ctors),
-		StandaloneReg: registry,
-	}, nil
 }

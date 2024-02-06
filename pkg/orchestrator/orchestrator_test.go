@@ -75,7 +75,7 @@ func TestPipelineSimple(t *testing.T) {
 		standalone.NewRegistry(logger, ""),
 	)
 
-	procRegistry := proc_mock.NewProcessorGetter(gomock.NewController(t))
+	procRegistry := proc_mock.NewRegistry(gomock.NewController(t))
 	procRegistry.EXPECT().
 		Get(gomock.Any(), "removereadat", gomock.Any()).
 		Return(
