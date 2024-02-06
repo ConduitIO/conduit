@@ -1738,7 +1738,7 @@
         },
         "plugin": {
           "type": "string",
-          "description": "Plugin name is the name of the builtin plugin, or the absolute path of a standalone plugin."
+          "title": "Used to reference a plugin. Its format is as follows:\n[PLUGIN-TYPE:]PLUGIN-NAME[@VERSION]\nPLUGIN-TYPE: One of: builtin, standalone or any (default).\nPLUGIN-NAME: The name of the plugin as specified in the plugin specifications.\nVERSION: The plugin version as specified in the plugin specifications or latest (default).\nFor more information, see: https://conduit.io/docs/connectors/referencing/"
         },
         "pipelineId": {
           "type": "string",
@@ -2054,15 +2054,15 @@
         "config": {
           "$ref": "#/definitions/v1ProcessorConfig"
         },
-        "type": {
+        "condition": {
+          "type": "string",
+          "title": "Condition is a goTemplate formatted string, the value provided to the template is a sdk.Record, it should evaluate\nto a boolean value, indicating a condition to run the processor for a specific record or not. (template functions\nprovided by `sprig` are injected)"
+        },
+        "plugin": {
           "type": "string"
         },
         "parent": {
           "$ref": "#/definitions/ProcessorParent"
-        },
-        "condition": {
-          "type": "string",
-          "title": "Condition is a goTemplate formatted string, the value provided to the template is a sdk.Record, it should evaluate\nto a boolean value, indicating a condition to run the processor for a specific record or not. (template functions\nprovided by `sprig` are injected)"
         },
         "createdAt": {
           "type": "string",
