@@ -24,8 +24,6 @@ import (
 	"github.com/conduitio/conduit/pkg/record"
 )
 
-// todo move tests from func_wrapper_test
-
 // inspectableProcessor decorates a sdk.Processor with inspection methods.
 type inspectableProcessor struct {
 	sdk.UnimplementedProcessor
@@ -36,11 +34,10 @@ type inspectableProcessor struct {
 }
 
 func newInspectableProcessor(proc sdk.Processor, logger log.CtxLogger) *inspectableProcessor {
-	l := logger.WithComponent("processor.inspectableProcessor")
 	return &inspectableProcessor{
 		proc:    proc,
-		inInsp:  inspector.New(l, inspector.DefaultBufferSize),
-		outInsp: inspector.New(l, inspector.DefaultBufferSize),
+		inInsp:  inspector.New(logger, inspector.DefaultBufferSize),
+		outInsp: inspector.New(logger, inspector.DefaultBufferSize),
 	}
 }
 
