@@ -70,7 +70,7 @@ type base struct {
 }
 
 type PipelineService interface {
-	Start(ctx context.Context, connFetcher pipeline.ConnectorFetcher, procFetcher pipeline.ProcessorService, pluginFetcher pipeline.PluginDispenserFetcher, pipelineID string) error
+	Start(ctx context.Context, connFetcher pipeline.ConnectorFetcher, procService pipeline.ProcessorService, pluginFetcher pipeline.PluginDispenserFetcher, pipelineID string) error
 	// Stop initiates a stop of the given pipeline. The method does not wait for
 	// the pipeline (and its nodes) to actually stop.
 	// When force is false the pipeline will try to stop gracefully and drain

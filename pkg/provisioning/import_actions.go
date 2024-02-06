@@ -161,7 +161,6 @@ func (a createProcessorAction) String() string {
 }
 func (a createProcessorAction) Do(ctx context.Context) error {
 	if a.cfg.Type != "" && a.cfg.Plugin != "" {
-		// todo same error in processor_v1.go
 		return cerrors.New("only one of [type, plugin] can be specified")
 	}
 	plugin := a.cfg.Plugin

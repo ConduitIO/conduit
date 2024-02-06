@@ -221,7 +221,6 @@ func (p *ProcessorOrchestrator) Delete(ctx context.Context, id string) error {
 		return err
 	}
 	r.Append(func() error {
-		// todo proc.Plugin
 		_, err = p.processors.Create(ctx, id, proc.Plugin, proc.Parent, proc.Config, processor.ProvisionTypeAPI, proc.Condition)
 		return err
 	})
