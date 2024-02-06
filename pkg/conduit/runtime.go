@@ -192,10 +192,11 @@ func newServices(
 		return nil, nil, nil, nil, cerrors.Errorf("failed creating processor registry: %w", err)
 	}
 
-	procReg := &proc_plugin.Registry{
-		BuiltinReg:    proc_builtin.NewRegistry(logger, nil),
-		StandaloneReg: standaloneReg,
-	}
+	procReg := proc_plugin.NewRegistry(
+		logger,
+		proc_builtin.NewRegistry(logger, nil),
+		standaloneReg,
+	)
 
 	processorService := processor.NewService(logger, db, procReg)
 	pluginService := plugin.NewService(

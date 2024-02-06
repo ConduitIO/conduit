@@ -143,7 +143,7 @@ func newFullName(pluginName, pluginVersion string) plugin.FullName {
 	return plugin.NewFullName(plugin.PluginTypeBuiltin, pluginName, pluginVersion)
 }
 
-func (r *Registry) NewProcessorPlugin(logger log.CtxLogger, fullName plugin.FullName) (sdk.Processor, error) {
+func (r *Registry) NewProcessor(ctx context.Context, fullName plugin.FullName, _ string) (sdk.Processor, error) {
 	versionMap, ok := r.plugins[fullName.PluginName()]
 	if !ok {
 		return nil, plugin.ErrPluginNotFound
@@ -157,7 +157,8 @@ func (r *Registry) NewProcessorPlugin(logger log.CtxLogger, fullName plugin.Full
 		return nil, cerrors.Errorf("could not find builtin plugin %q, only found versions %v: %w", fullName, availableVersions, plugin.ErrPluginNotFound)
 	}
 
-	return b.constructor(logger), nil
+	// todo check logger usage
+	return b.constructor(r.logger), nil
 }
 
 func (r *Registry) List() map[plugin.FullName]sdk.Specification {
