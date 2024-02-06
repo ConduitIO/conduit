@@ -17,6 +17,8 @@ package stream_test
 import (
 	"context"
 	"fmt"
+	"github.com/conduitio/conduit-commons/opencdc"
+	sdk "github.com/conduitio/conduit-processor-sdk"
 	"strconv"
 	"sync"
 	"time"
@@ -395,10 +397,21 @@ func printerDestination(ctrl *gomock.Controller, logger log.CtxLogger, nodeID st
 
 func counterProcessor(ctrl *gomock.Controller, count *int) processor.Interface {
 	proc := procmock.NewProcessor(ctrl)
-	proc.EXPECT().Process(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, r record.Record) (record.Record, error) {
-		*count++
-		return r, nil
-	}).AnyTimes()
+	proc.EXPECT().Open(gomock.Any())
+	proc.EXPECT().Configure(gomock.Any(), gomock.Any())
+	proc.EXPECT().
+		Process(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(ctx context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
+			*count++
+
+			out := make([]sdk.ProcessedRecord, len(records))
+			for i, r := range records {
+				out[i] = sdk.SingleRecord(r)
+			}
+
+			return out
+		}).AnyTimes()
+	proc.EXPECT().Teardown(gomock.Any())
 	return proc
 }
 
