@@ -17,11 +17,6 @@ package orchestrator
 import (
 	"context"
 	"fmt"
-	sdk "github.com/conduitio/conduit-processor-sdk"
-	proc_plugin "github.com/conduitio/conduit/pkg/plugin/processor"
-	proc_builtin "github.com/conduitio/conduit/pkg/plugin/processor/builtin"
-	proc_standalone "github.com/conduitio/conduit/pkg/plugin/processor/standalone"
-	builtin2 "github.com/conduitio/conduit/pkg/processor/procbuiltin"
 	"os"
 	"reflect"
 	"testing"
@@ -37,6 +32,8 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin/connector/builtin"
 	"github.com/conduitio/conduit/pkg/plugin/connector/standalone"
 	"github.com/conduitio/conduit/pkg/processor"
+	proc_mock "github.com/conduitio/conduit/pkg/processor/mock"
+	proc_builtin "github.com/conduitio/conduit/pkg/processor/procbuiltin"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/google/go-cmp/cmp"
 	"github.com/matryer/is"
@@ -78,13 +75,16 @@ func TestPipelineSimple(t *testing.T) {
 		standalone.NewRegistry(logger, ""),
 	)
 
-	procRegistry, err := NewTestBuilderRegistry(map[string]func(context.Context, record.Record) (record.Record, error){
-		"removereadat": func(ctx context.Context, r record.Record) (record.Record, error) {
-			delete(r.Metadata, record.MetadataReadAt)
-			return r, nil
-		},
-	})
-	is.NoErr(err)
+	procRegistry := proc_mock.NewProcessorGetter(gomock.NewController(t))
+	procRegistry.EXPECT().
+		Get(gomock.Any(), "removereadat", gomock.Any()).
+		Return(
+			proc_builtin.NewFuncWrapper(func(ctx context.Context, r record.Record) (record.Record, error) {
+				delete(r.Metadata, record.MetadataReadAt) // read at is different every time, remove it
+				return r, nil
+			}),
+			nil,
+		)
 
 	orc := NewOrchestrator(
 		db,
@@ -94,16 +94,6 @@ func TestPipelineSimple(t *testing.T) {
 		processor.NewService(logger, db, procRegistry),
 		pluginService,
 	)
-
-	// add builtin processor for removing metadata
-	// TODO at the time of writing we don't have a processor for manipulating
-	//  metadata, once we have it we can use it instead of adding our own
-	processor.GlobalBuilderRegistry.MustRegister("removereadat", func(config processor.Config) (processor.Interface, error) {
-		return builtin2.NewFuncWrapper(func(ctx context.Context, r record.Record) (record.Record, error) {
-			delete(r.Metadata, record.MetadataReadAt) // read at is different every time, remove it
-			return r, nil
-		}), nil
-	})
 
 	// create a host pipeline
 	pl, err := orc.Pipelines.Create(ctx, pipeline.Config{Name: "test pipeline"})
@@ -177,23 +167,4 @@ func TestPipelineSimple(t *testing.T) {
 	if diff := cmp.Diff(want, string(got)); diff != "" {
 		t.Fatal(diff)
 	}
-}
-
-func NewTestBuilderRegistry(processors map[string]func(context.Context, record.Record) (record.Record, error)) (*proc_plugin.Registry, error) {
-	ctors := make(map[string]proc_builtin.ProcessorPluginConstructor, len(processors))
-	for name, procFunc := range processors {
-		ctors[name] = func(log.CtxLogger) sdk.Processor {
-			return builtin2.NewFuncWrapperWithName(name, procFunc)
-		}
-	}
-
-	registry, err := proc_standalone.NewRegistry(log.Nop(), ".")
-	if err != nil {
-		return nil, err
-	}
-
-	return &proc_plugin.Registry{
-		BuiltinReg:    proc_builtin.NewRegistry(log.Nop(), ctors),
-		StandaloneReg: registry,
-	}, nil
 }
