@@ -22,10 +22,8 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/database"
 	"github.com/conduitio/conduit/pkg/foundation/database/inmemory"
 	"github.com/conduitio/conduit/pkg/processor"
-	"github.com/conduitio/conduit/pkg/processor/mock"
 	"github.com/google/uuid"
 	"github.com/matryer/is"
-	"go.uber.org/mock/gomock"
 )
 
 func TestConfigStore_SetGet(t *testing.T) {
@@ -33,14 +31,6 @@ func TestConfigStore_SetGet(t *testing.T) {
 
 	ctx := context.Background()
 	db := &inmemory.DB{}
-	ctrl := gomock.NewController(t)
-	processorType := "test-processor"
-
-	registry := processor.NewBuilderRegistry()
-	registry.MustRegister(processorType, func(_ processor.Config) (processor.Interface, error) {
-		p := mock.NewProcessor(ctrl)
-		return p, nil
-	})
 
 	want := &processor.Instance{
 		ID:     uuid.NewString(),
@@ -54,15 +44,10 @@ func TestConfigStore_SetGet(t *testing.T) {
 		},
 	}
 
-	var err error
-	want.Processor, err = registry.MustGet(processorType)(want.Config)
-	is.NoErr(err)
-
 	s := processor.NewStore(db)
 
-	err = s.Set(ctx, want.ID, want)
+	err := s.Set(ctx, want.ID, want)
 	is.NoErr(err)
-	is.True(want.Processor != nil) // make sure processor is left untouched
 
 	got, err := s.Get(ctx, want.ID)
 	is.NoErr(err)
@@ -71,17 +56,8 @@ func TestConfigStore_SetGet(t *testing.T) {
 
 func TestConfigStore_GetAll(t *testing.T) {
 	is := is.New(t)
-
 	ctx := context.Background()
 	db := &inmemory.DB{}
-	ctrl := gomock.NewController(t)
-	procType := "test-processor"
-
-	registry := processor.NewBuilderRegistry()
-	registry.MustRegister(procType, func(_ processor.Config) (processor.Interface, error) {
-		p := mock.NewProcessor(ctrl)
-		return p, nil
-	})
 
 	s := processor.NewStore(db)
 
@@ -102,11 +78,8 @@ func TestConfigStore_GetAll(t *testing.T) {
 			// switch up parent types a bit
 			instance.Parent.Type = processor.ParentTypeConnector
 		}
-		var err error
-		instance.Processor, err = registry.MustGet(procType)(instance.Config)
-		is.NoErr(err)
 
-		err = s.Set(ctx, instance.ID, instance)
+		err := s.Set(ctx, instance.ID, instance)
 		is.NoErr(err)
 		want[instance.ID] = instance
 	}
