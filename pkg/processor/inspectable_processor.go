@@ -36,11 +36,11 @@ type inspectableProcessor struct {
 }
 
 func newInspectableProcessor(proc sdk.Processor, logger log.CtxLogger) *inspectableProcessor {
-	// todo change component on logger
+	l := logger.WithComponent("processor.inspectableProcessor")
 	return &inspectableProcessor{
 		proc:    proc,
-		inInsp:  inspector.New(logger, inspector.DefaultBufferSize),
-		outInsp: inspector.New(logger, inspector.DefaultBufferSize),
+		inInsp:  inspector.New(l, inspector.DefaultBufferSize),
+		outInsp: inspector.New(l, inspector.DefaultBufferSize),
 	}
 }
 
