@@ -276,7 +276,7 @@ func TestParser_V2_Success(t *testing.T) {
 	intPtr := func(i int) *int { return &i }
 	want := Configurations{
 		v2.Configuration{
-			Version: "2.0",
+			Version: "2.2",
 			Pipelines: []v2.Pipeline{
 				{
 					ID:          "pipeline1",
@@ -391,7 +391,7 @@ func TestParser_V2_Warnings(t *testing.T) {
 
 	// check warnings
 	want := `{"level":"warn","component":"yaml.Parser","line":6,"column":5,"field":"unknownField","message":"field unknownField not found in type v2.Pipeline"}
-{"level":"warn","component":"yaml.Parser","line":38,"column":1,"field":"version","value":"2.12","message":"unrecognized version 2.12, falling back to parser version 2.0"}
+{"level":"warn","component":"yaml.Parser","line":38,"column":1,"field":"version","value":"2.12","message":"unrecognized version 2.12, falling back to parser version 2.2"}
 `
 	is.Equal(out.String(), want)
 }
