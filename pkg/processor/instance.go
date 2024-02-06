@@ -22,11 +22,11 @@ package processor
 
 import (
 	"context"
+	"time"
+
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"time"
-
 	"github.com/conduitio/conduit/pkg/inspector"
 )
 

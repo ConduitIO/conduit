@@ -16,13 +16,13 @@ package processor_test
 
 import (
 	"context"
-	"github.com/conduitio/conduit/pkg/plugin"
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/database/inmemory"
 	dbmock "github.com/conduitio/conduit/pkg/foundation/database/mock"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/plugin"
 	proc_plugin "github.com/conduitio/conduit/pkg/plugin/processor"
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/processor/mock"

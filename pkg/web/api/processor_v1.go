@@ -165,6 +165,7 @@ func (p *ProcessorAPIv1) CreateProcessor(
 	ctx context.Context,
 	req *apiv1.CreateProcessorRequest,
 ) (*apiv1.CreateProcessorResponse, error) {
+	//nolint:staticcheck // we're fine with allowing Type for some time more
 	if req.Type != "" && req.Plugin != "" {
 		return nil, status.ProcessorError(cerrors.New("only one of [type, plugin] can be specified"))
 	}
@@ -175,7 +176,7 @@ func (p *ProcessorAPIv1) CreateProcessor(
 
 	created, err := p.ps.Create(
 		ctx,
-		req.Type,
+		req.Type, //nolint:staticcheck // we're fine with allowing Type for some time more
 		fromproto.ProcessorParent(req.Parent),
 		fromproto.ProcessorConfig(req.Config),
 		req.Condition,

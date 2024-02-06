@@ -16,11 +16,11 @@ package stream
 
 import (
 	"context"
-	"github.com/conduitio/conduit-commons/opencdc"
-	sdk "github.com/conduitio/conduit-processor-sdk"
 	"sync"
 	"testing"
 
+	"github.com/conduitio/conduit-commons/opencdc"
+	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/noop"
 	"github.com/conduitio/conduit/pkg/processor/mock"
@@ -140,7 +140,7 @@ func TestProcessorNode_ErrorWithNackHandler(t *testing.T) {
 	processor.EXPECT().Open(gomock.Any())
 	processor.EXPECT().
 		Process(ctx, gomock.Any()).
-		Return([]sdk.ProcessedRecord{sdk.ErrorRecord{wantErr}})
+		Return([]sdk.ProcessedRecord{sdk.ErrorRecord{Error: wantErr}})
 	processor.EXPECT().Teardown(gomock.Any())
 
 	n := ProcessorNode{

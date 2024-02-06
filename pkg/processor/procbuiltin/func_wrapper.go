@@ -66,11 +66,12 @@ func (f FuncWrapper) Process(ctx context.Context, records []opencdc.Record) []sd
 	outRecs := make([]sdk.ProcessedRecord, len(records))
 	for i, inRec := range records {
 		outRec, err := f.f(ctx, record.FromOpenCDC(inRec))
-		if cerrors.Is(err, processor.ErrSkipRecord) {
+		switch {
+		case cerrors.Is(err, processor.ErrSkipRecord):
 			outRecs[i] = sdk.FilterRecord{}
-		} else if err != nil {
+		case err != nil:
 			outRecs[i] = sdk.ErrorRecord{Error: err}
-		} else {
+		default:
 			outRecs[i] = sdk.SingleRecord(outRec.ToOpenCDC())
 		}
 	}
