@@ -20,8 +20,6 @@ package conduit
 
 import (
 	"context"
-	proc_builtin "github.com/conduitio/conduit/pkg/plugin/processor/builtin"
-	proc_standalone "github.com/conduitio/conduit/pkg/plugin/processor/standalone"
 	"net"
 	"net/http"
 	"os"
@@ -49,6 +47,8 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin/connector/builtin"
 	"github.com/conduitio/conduit/pkg/plugin/connector/standalone"
 	proc_plugin "github.com/conduitio/conduit/pkg/plugin/processor"
+	proc_builtin "github.com/conduitio/conduit/pkg/plugin/processor/builtin"
+	proc_standalone "github.com/conduitio/conduit/pkg/plugin/processor/standalone"
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/provisioning"
 	"github.com/conduitio/conduit/pkg/web/api"
