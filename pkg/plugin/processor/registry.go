@@ -33,8 +33,6 @@ type Registry struct {
 }
 
 func (r *Registry) Get(ctx context.Context, pluginName string, id string) (sdk.Processor, error) {
-	// todo use legacy processors here as well
-	// todo check if registries are nil
 	fullName := plugin.FullName(pluginName)
 	switch fullName.PluginType() {
 	case plugin.PluginTypeStandalone:

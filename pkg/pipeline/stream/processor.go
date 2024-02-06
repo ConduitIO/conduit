@@ -75,11 +75,15 @@ func (n *ProcessorNode) Run(ctx context.Context) error {
 		}
 
 		executeTime := time.Now()
-		recs := n.Processor.Process(msg.Ctx, []opencdc.Record{msg.Record.ToOpenCDC()})
+		recsIn := []opencdc.Record{msg.Record.ToOpenCDC()}
+		recsOut := n.Processor.Process(msg.Ctx, recsIn)
 		n.ProcessorTimer.Update(time.Since(executeTime))
 
-		// todo a "bad" processor might have not returned any records
-		switch v := recs[0].(type) {
+		if len(recsIn) != len(recsOut) {
+			return cerrors.Errorf("processor was given %v records, but returned %v", len(recsIn), len(recsOut))
+		}
+
+		switch v := recsOut[0].(type) {
 		case sdk.SingleRecord:
 			msg.Record = record.FromOpenCDC(opencdc.Record(v))
 			err = n.base.Send(ctx, n.logger, msg)
