@@ -16,6 +16,7 @@ package processor_test
 
 import (
 	"context"
+	"github.com/conduitio/conduit/pkg/plugin"
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -139,14 +140,18 @@ func TestService_Create_Success(t *testing.T) {
 	is.Equal(want, got)
 }
 
-func TestService_Create_BuilderNotFound(t *testing.T) {
+func TestService_Init_PluginNotFound(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
 	db := &inmemory.DB{}
 
-	service := processor.NewService(log.Nop(), db, &proc_plugin.Registry{})
+	procGetter := mock.NewProcessorGetter(gomock.NewController(t))
+	procGetter.EXPECT().
+		Get(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil, plugin.ErrPluginNotFound)
+	service := processor.NewService(log.Nop(), db, procGetter)
 
-	got, err := service.Create(
+	i, err := service.Create(
 		ctx,
 		uuid.NewString(),
 		"non-existent processor",
@@ -155,9 +160,10 @@ func TestService_Create_BuilderNotFound(t *testing.T) {
 		processor.ProvisionTypeAPI,
 		"{{true}}",
 	)
+	is.NoErr(err)
 
-	is.True(err != nil)
-	is.Equal(got, nil)
+	err = service.InitInstance(ctx, i)
+	is.True(cerrors.Is(err, plugin.ErrPluginNotFound))
 }
 
 func TestService_Create_BuilderFail(t *testing.T) {
@@ -165,21 +171,27 @@ func TestService_Create_BuilderFail(t *testing.T) {
 	ctx := context.Background()
 	db := &inmemory.DB{}
 
-	procType := "foo:processor-type"
 	wantErr := cerrors.New("builder failed")
-	service := processor.NewService(log.Nop(), db, &proc_plugin.Registry{})
 
-	got, err := service.Create(
+	procGetter := mock.NewProcessorGetter(gomock.NewController(t))
+	procGetter.EXPECT().
+		Get(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil, wantErr)
+	service := processor.NewService(log.Nop(), db, procGetter)
+
+	i, err := service.Create(
 		ctx,
 		uuid.NewString(),
-		procType,
+		"processor-type",
 		processor.Parent{},
 		processor.Config{},
 		processor.ProvisionTypeAPI,
 		"{{true}}",
 	)
+	is.NoErr(err)
+
+	err = service.InitInstance(ctx, i)
 	is.True(cerrors.Is(err, wantErr)) // expected builder error
-	is.Equal(got, nil)
 }
 
 func TestService_Create_WorkersNegative(t *testing.T) {
@@ -224,7 +236,7 @@ func TestService_Delete_Success(t *testing.T) {
 	)
 	is.NoErr(err)
 
-	err = i.Init(ctx, log.Nop(), registry)
+	err = service.InitInstance(ctx, i)
 	is.NoErr(err)
 
 	err = service.Delete(ctx, i.ID)

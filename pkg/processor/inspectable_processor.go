@@ -23,6 +23,8 @@ import (
 	"github.com/conduitio/conduit/pkg/record"
 )
 
+// todo move tests from func_wrapper_test
+
 // inspectableProcessor decorates a sdk.Processor with inspection methods.
 type inspectableProcessor struct {
 	sdk.UnimplementedProcessor

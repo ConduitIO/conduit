@@ -32,7 +32,7 @@ func TestConfiguration_JSON(t *testing.T) {
 		Processors: []Processor{
 			{
 				ID:        "pipeline1proc1",
-				Type:      "js",
+				Plugin:    "alpha",
 				Condition: "{{ true }}",
 				Settings: map[string]string{
 					"additionalProp1": "string",
@@ -91,6 +91,7 @@ func TestConfiguration_JSON(t *testing.T) {
         {
           "id": "proc1",
           "type": "js",
+          "plugin": "",
           "condition": "",
           "settings": {
             "additionalProp1": "string",
@@ -104,7 +105,8 @@ func TestConfiguration_JSON(t *testing.T) {
   "processors": [
     {
       "id": "pipeline1proc1",
-      "type": "js",
+      "type": "",
+      "plugin": "alpha",
       "condition": "{{ true }}",
       "settings": {
         "additionalProp1": "string",
