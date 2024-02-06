@@ -127,7 +127,7 @@ func expectedModelConfiguration() Configuration {
 	intPtr := func(i int) *int { return &i }
 
 	return Configuration{
-		Version: "2.0",
+		Version: "2.2",
 		Pipelines: []Pipeline{
 			{
 				ID:          "pipeline1",
