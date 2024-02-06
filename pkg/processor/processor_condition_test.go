@@ -24,7 +24,7 @@ import (
 func Test_ProcessorCondition_InvalidTemplate(t *testing.T) {
 	is := is.New(t)
 	condition := `{{ Im not a valid template }}`
-	tmpl, err := NewProcessorCondition(condition)
+	tmpl, err := newProcessorCondition(condition)
 	is.True(err != nil)
 	is.Equal(tmpl, nil)
 }
@@ -36,7 +36,7 @@ func Test_ProcessorCondition_EvaluateTrue(t *testing.T) {
 		Position: record.Position("position-out"),
 		Metadata: record.Metadata{"key": "val"},
 	}
-	tmpl, err := NewProcessorCondition(condition)
+	tmpl, err := newProcessorCondition(condition)
 	is.NoErr(err)
 	res, err := tmpl.Evaluate(rec)
 	is.NoErr(err)
@@ -50,7 +50,7 @@ func Test_ProcessorCondition_EvaluateFalse(t *testing.T) {
 		Position: record.Position("position-out"),
 		Metadata: record.Metadata{"key": "val"},
 	}
-	tmpl, err := NewProcessorCondition(condition)
+	tmpl, err := newProcessorCondition(condition)
 	is.NoErr(err)
 	res, err := tmpl.Evaluate(rec)
 	is.NoErr(err)
@@ -64,7 +64,7 @@ func Test_ProcessorCondition_NonBooleanOutput(t *testing.T) {
 		Position: record.Position("position-out"),
 		Metadata: record.Metadata{"key": "val"},
 	}
-	tmpl, err := NewProcessorCondition(condition)
+	tmpl, err := newProcessorCondition(condition)
 	is.NoErr(err)
 	res, err := tmpl.Evaluate(rec)
 	is.True(err != nil)

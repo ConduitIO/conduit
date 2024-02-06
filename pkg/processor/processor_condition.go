@@ -30,8 +30,8 @@ type processorCondition struct {
 	tmpl      *template.Template
 }
 
-// NewProcessorCondition parses and returns the template, returns an error if template parsing failed.
-func NewProcessorCondition(condition string) (*processorCondition, error) {
+// newProcessorCondition parses and returns the template, returns an error if template parsing failed.
+func newProcessorCondition(condition string) (*processorCondition, error) {
 	// parse template
 	tmpl, err := template.New("").Funcs(sprig.FuncMap()).Parse(condition)
 	if err != nil {
