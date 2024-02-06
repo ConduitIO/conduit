@@ -176,7 +176,47 @@ func TestSchema_MarshalUnmarshal(t *testing.T) {
 		},
 		wantSchema: avro.NewMapSchema(avro.NewPrimitiveSchema(avro.Int, nil)),
 	}, {
-		name: "map[string]any (with data)",
+		name: "map[string]any (with primitive data)",
+		haveValue: map[string]any{
+			"foo":  "bar",
+			"foo2": "bar2",
+			"bar":  1,
+			"baz":  true,
+		},
+		wantValue: map[string]any{
+			"foo":  "bar",
+			"foo2": "bar2",
+			"bar":  1,
+			"baz":  true,
+		},
+		wantSchema: avro.NewMapSchema(must(avro.NewUnionSchema([]avro.Schema{
+			&avro.NullSchema{},
+			avro.NewPrimitiveSchema(avro.Int, nil),
+			avro.NewPrimitiveSchema(avro.String, nil),
+			avro.NewPrimitiveSchema(avro.Boolean, nil),
+		}))),
+	}, {
+		name: "map[string]any (with primitive array)",
+		haveValue: map[string]any{
+			"foo":  "bar",
+			"foo2": "bar2",
+			"bar":  1,
+			"baz":  []int{1, 2, 3},
+		},
+		wantValue: map[string]any{
+			"foo":  "bar",
+			"foo2": "bar2",
+			"bar":  1,
+			"baz":  []any{1, 2, 3},
+		},
+		wantSchema: avro.NewMapSchema(must(avro.NewUnionSchema([]avro.Schema{
+			&avro.NullSchema{},
+			avro.NewPrimitiveSchema(avro.Int, nil),
+			avro.NewPrimitiveSchema(avro.String, nil),
+			avro.NewArraySchema(avro.NewPrimitiveSchema(avro.Int, nil)),
+		}))),
+	}, {
+		name: "map[string]any (with union array)",
 		haveValue: map[string]any{
 			"foo":  "bar",
 			"foo2": "bar2",
