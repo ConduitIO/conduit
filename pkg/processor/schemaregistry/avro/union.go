@@ -337,12 +337,40 @@ func (r UnionResolver) resolveNameForType(v any, us *avro.UnionSchema) (string, 
 
 func isMapUnion(schema avro.Schema) bool {
 	s, ok := schema.(*avro.MapSchema)
-	return ok && s.Values().Type() == avro.Union
+	if !ok {
+		return false
+	}
+	us, ok := s.Values().(*avro.UnionSchema)
+	if !ok {
+		return false
+	}
+	for _, s := range us.Types() {
+		// at least one of the types in the union must be a map or array for this
+		// to count as a map with a union type
+		if s.Type() == avro.Array || s.Type() == avro.Map {
+			return true
+		}
+	}
+	return false
 }
 
 func isArrayUnion(schema avro.Schema) bool {
 	s, ok := schema.(*avro.ArraySchema)
-	return ok && s.Items().Type() == avro.Union
+	if !ok {
+		return false
+	}
+	us, ok := s.Items().(*avro.UnionSchema)
+	if !ok {
+		return false
+	}
+	for _, s := range us.Types() {
+		// at least one of the types in the union must be a map or array for this
+		// to count as a map with a union type
+		if s.Type() == avro.Array || s.Type() == avro.Map {
+			return true
+		}
+	}
+	return false
 }
 
 type substitution interface {
