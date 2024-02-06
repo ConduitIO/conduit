@@ -206,11 +206,12 @@ func TestService_Create_WorkersNegative(t *testing.T) {
 		uuid.NewString(),
 		"processor-type",
 		processor.Parent{},
-		processor.Config{},
+		processor.Config{Workers: -1},
 		processor.ProvisionTypeAPI,
 		"{{true}}",
 	)
 	is.True(err != nil) // expected workers error
+	is.Equal("processor workers can't be negative", err.Error())
 	is.Equal(got, nil)
 }
 
