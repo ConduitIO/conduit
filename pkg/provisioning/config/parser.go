@@ -40,7 +40,7 @@ type Connector struct {
 
 type Processor struct {
 	ID string
-	// Type is deprecated. Plugin should be used.
+	// Deprecated: Field Plugin should be used.
 	Type      string
 	Plugin    string
 	Settings  map[string]string

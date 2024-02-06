@@ -19,7 +19,7 @@ import (
 	"github.com/conduitio/conduit/pkg/provisioning/config/yaml/internal"
 )
 
-const LatestVersion = "2.0"
+const LatestVersion = "2.2"
 const MajorVersion = "2"
 
 // Changelog should be adjusted every time we change the pipeline config and add

@@ -124,7 +124,7 @@ func (*Service) connectorToConfig(c *connector.Instance) config.Connector {
 func (*Service) processorToConfig(p *processor.Instance) config.Processor {
 	return config.Processor{
 		ID:       p.ID,
-		Type:     p.Plugin,
+		Plugin:   p.Plugin,
 		Settings: p.Config.Settings,
 		Workers:  p.Config.Workers,
 	}

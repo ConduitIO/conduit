@@ -44,8 +44,8 @@ import (
 	"github.com/conduitio/conduit/pkg/orchestrator"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	"github.com/conduitio/conduit/pkg/plugin"
-	"github.com/conduitio/conduit/pkg/plugin/connector/builtin"
-	"github.com/conduitio/conduit/pkg/plugin/connector/standalone"
+	conn_builtin "github.com/conduitio/conduit/pkg/plugin/connector/builtin"
+	conn_standalone "github.com/conduitio/conduit/pkg/plugin/connector/standalone"
 	proc_plugin "github.com/conduitio/conduit/pkg/plugin/processor"
 	proc_builtin "github.com/conduitio/conduit/pkg/plugin/processor/builtin"
 	proc_standalone "github.com/conduitio/conduit/pkg/plugin/processor/standalone"
@@ -201,8 +201,8 @@ func newServices(
 	processorService := processor.NewService(logger, db, procReg)
 	pluginService := plugin.NewService(
 		logger,
-		builtin.NewRegistry(logger, cfg.PluginDispenserFactories),
-		standalone.NewRegistry(logger, cfg.Connectors.Path),
+		conn_builtin.NewRegistry(logger, cfg.PluginDispenserFactories),
+		conn_standalone.NewRegistry(logger, cfg.Connectors.Path),
 	)
 
 	return pipelineService, connectorService, processorService, pluginService, nil

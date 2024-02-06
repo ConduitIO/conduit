@@ -176,7 +176,7 @@ func (p *ProcessorAPIv1) CreateProcessor(
 
 	created, err := p.ps.Create(
 		ctx,
-		req.Type, //nolint:staticcheck // we're fine with allowing Type for some time more
+		plugin, //nolint:staticcheck // we're fine with allowing Type for some time more
 		fromproto.ProcessorParent(req.Parent),
 		fromproto.ProcessorConfig(req.Config),
 		req.Condition,

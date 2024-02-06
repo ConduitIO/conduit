@@ -102,7 +102,7 @@ func validateProcessors(mp []Processor) error {
 			err = multierror.Append(
 				err,
 				cerrors.Errorf(
-					"processor %q: \"type\" or \"plugin\" need to be provided: %w",
+					"processor %q: \"plugin\" needs to be provided: %w",
 					cfg.ID,
 					ErrMandatoryField,
 				),
