@@ -16,12 +16,13 @@ package stream
 
 import (
 	"context"
+	"github.com/conduitio/conduit-commons/opencdc"
+	sdk "github.com/conduitio/conduit-processor-sdk"
 	"sync"
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/noop"
-	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/processor/mock"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/google/uuid"
@@ -41,13 +42,14 @@ func TestProcessorNode_Success(t *testing.T) {
 	newPosition := []byte(uuid.NewString())
 
 	processor := mock.NewProcessor(ctrl)
-	processor.
-		EXPECT().
-		Process(ctx, wantRec).
-		DoAndReturn(func(_ context.Context, got record.Record) (record.Record, error) {
-			got.Position = newPosition
-			return got, nil
+	processor.EXPECT().Open(gomock.Any())
+	processor.EXPECT().
+		Process(ctx, []opencdc.Record{wantRec.ToOpenCDC()}).
+		DoAndReturn(func(_ context.Context, got []opencdc.Record) []sdk.ProcessedRecord {
+			got[0].Position = newPosition
+			return []sdk.ProcessedRecord{sdk.SingleRecord(got[0])}
 		})
+	processor.EXPECT().Teardown(gomock.Any())
 
 	n := ProcessorNode{
 		Name:           "test",
@@ -97,7 +99,11 @@ func TestProcessorNode_ErrorWithoutNackHandler(t *testing.T) {
 
 	wantErr := cerrors.New("something bad happened")
 	processor := mock.NewProcessor(ctrl)
-	processor.EXPECT().Process(ctx, gomock.Any()).Return(record.Record{}, wantErr)
+	processor.EXPECT().Open(gomock.Any())
+	processor.EXPECT().
+		Process(ctx, gomock.Any()).
+		Return([]sdk.ProcessedRecord{sdk.ErrorRecord{Error: wantErr}})
+	processor.EXPECT().Teardown(gomock.Any())
 
 	n := ProcessorNode{
 		Name:           "test",
@@ -131,7 +137,11 @@ func TestProcessorNode_ErrorWithNackHandler(t *testing.T) {
 
 	wantErr := cerrors.New("something bad happened")
 	processor := mock.NewProcessor(ctrl)
-	processor.EXPECT().Process(ctx, gomock.Any()).Return(record.Record{}, wantErr)
+	processor.EXPECT().Open(gomock.Any())
+	processor.EXPECT().
+		Process(ctx, gomock.Any()).
+		Return([]sdk.ProcessedRecord{sdk.ErrorRecord{wantErr}})
+	processor.EXPECT().Teardown(gomock.Any())
 
 	n := ProcessorNode{
 		Name:           "test",
@@ -170,7 +180,11 @@ func TestProcessorNode_Skip(t *testing.T) {
 
 	// create a dummy processor
 	proc := mock.NewProcessor(ctrl)
-	proc.EXPECT().Process(ctx, gomock.Any()).Return(record.Record{}, processor.ErrSkipRecord)
+	proc.EXPECT().Open(gomock.Any())
+	proc.EXPECT().
+		Process(ctx, gomock.Any()).
+		Return([]sdk.ProcessedRecord{sdk.FilterRecord{}})
+	proc.EXPECT().Teardown(gomock.Any())
 
 	n := ProcessorNode{
 		Name:           "test",

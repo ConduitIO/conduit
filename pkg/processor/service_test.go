@@ -16,8 +16,6 @@ package processor_test
 
 import (
 	"context"
-	sdk "github.com/conduitio/conduit-processor-sdk"
-	"github.com/conduitio/conduit/pkg/plugin/processor/builtin"
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -38,9 +36,9 @@ func TestService_Init_Success(t *testing.T) {
 	db := &inmemory.DB{}
 
 	procType := "processor-type"
-	p := newMockProcessor(t)
+	p := mock.NewProcessor(gomock.NewController(t))
 
-	registry := newTestBuilderRegistry(map[string]processor.Interface{procType: p})
+	registry := newProcessorRegistry(t, map[string]processor.Interface{procType: p})
 	service := processor.NewService(log.Nop(), db, registry)
 
 	// create a processor instance
@@ -70,20 +68,6 @@ func TestService_Init_Success(t *testing.T) {
 	}
 	is.Equal(want, got)
 	is.Equal(len(got), 1)
-}
-
-func newMockProcessor(t *testing.T) *mock.Processor {
-	p := mock.NewProcessor(gomock.NewController(t))
-	p.EXPECT().Specification().Return(sdk.Specification{
-		Name:        "test-processor",
-		Summary:     "test-processor",
-		Description: "test-processor",
-		Version:     "v0.1.2",
-		Author:      "Conduit",
-		Parameters:  nil,
-	}, nil)
-
-	return p
 }
 
 func TestService_Check(t *testing.T) {
@@ -116,7 +100,7 @@ func TestService_Create_Success(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
 	db := &inmemory.DB{}
-	p := newMockProcessor(t)
+	p := mock.NewProcessor(gomock.NewController(t))
 
 	want := &processor.Instance{
 		ID:     "uuid will be taken from the result",
@@ -135,14 +119,23 @@ func TestService_Create_Success(t *testing.T) {
 		Processor: p,
 	}
 
-	registry := newTestBuilderRegistry(map[string]processor.Interface{want.Plugin: p})
+	registry := newProcessorRegistry(t, map[string]processor.Interface{want.Plugin: p})
 	service := processor.NewService(log.Nop(), db, registry)
 
-	got, err := service.Create(ctx, want.ID, want.Plugin, want.Parent, want.Config, processor.ProvisionTypeAPI, "")
+	got, err := service.Create(
+		ctx,
+		want.ID,
+		want.Plugin,
+		want.Parent,
+		want.Config,
+		processor.ProvisionTypeAPI,
+		"",
+	)
 	is.NoErr(err)
 	want.ID = got.ID // uuid is random
 	want.CreatedAt = got.CreatedAt
 	want.UpdatedAt = got.UpdatedAt
+	want.Processor = got.Processor
 	is.Equal(want, got)
 }
 
@@ -215,14 +208,23 @@ func TestService_Delete_Success(t *testing.T) {
 	db := &inmemory.DB{}
 
 	procType := "processor-type"
-	p := newMockProcessor(t)
-	p.EXPECT().Close()
-
-	registry := newTestBuilderRegistry(map[string]processor.Interface{procType: p})
+	p := mock.NewProcessor(gomock.NewController(t))
+	registry := newProcessorRegistry(t, map[string]processor.Interface{procType: p})
 	service := processor.NewService(log.Nop(), db, registry)
 
 	// create a processor instance
-	i, err := service.Create(ctx, uuid.NewString(), procType, processor.Parent{}, processor.Config{}, processor.ProvisionTypeAPI, "cond")
+	i, err := service.Create(
+		ctx,
+		uuid.NewString(),
+		procType,
+		processor.Parent{},
+		processor.Config{},
+		processor.ProvisionTypeAPI,
+		"cond",
+	)
+	is.NoErr(err)
+
+	err = i.Init(ctx, log.Nop(), registry)
 	is.NoErr(err)
 
 	err = service.Delete(ctx, i.ID)
@@ -249,9 +251,9 @@ func TestService_Get_Success(t *testing.T) {
 	db := &inmemory.DB{}
 
 	procType := "processor-type"
-	p := newMockProcessor(t)
+	p := mock.NewProcessor(gomock.NewController(t))
 
-	registry := newTestBuilderRegistry(map[string]processor.Interface{procType: p})
+	registry := newProcessorRegistry(t, map[string]processor.Interface{procType: p})
 	service := processor.NewService(log.Nop(), db, registry)
 
 	// create a processor instance
@@ -291,9 +293,9 @@ func TestService_List_Some(t *testing.T) {
 	db := &inmemory.DB{}
 
 	procType := "processor-type"
-	p := newMockProcessor(t)
+	p := mock.NewProcessor(gomock.NewController(t))
 
-	registry := newTestBuilderRegistry(map[string]processor.Interface{procType: p})
+	registry := newProcessorRegistry(t, map[string]processor.Interface{procType: p})
 	service := processor.NewService(log.Nop(), db, registry)
 
 	// create a couple of processor instances
@@ -314,9 +316,9 @@ func TestService_Update_Success(t *testing.T) {
 	db := &inmemory.DB{}
 
 	procType := "processor-type"
-	p := newMockProcessor(t)
+	p := mock.NewProcessor(gomock.NewController(t))
 
-	registry := newTestBuilderRegistry(map[string]processor.Interface{procType: p})
+	registry := newProcessorRegistry(t, map[string]processor.Interface{procType: p})
 	service := processor.NewService(log.Nop(), db, registry)
 
 	// create a processor instance
@@ -351,18 +353,15 @@ func TestService_Update_Fail(t *testing.T) {
 	is.Equal(got, nil)
 }
 
-// newTestBuilderRegistry creates a registry with builders for the supplied
+// newProcessorRegistry creates a registry with builders for the supplied
 // processors map keyed by processor type. If a value in the map is nil then a
 // builder will be registered that returns an error.
-func newTestBuilderRegistry(processors map[string]processor.Interface) *proc_plugin.Registry {
-	ctors := make(map[string]builtin.ProcessorPluginConstructor, len(processors))
+func newProcessorRegistry(t *testing.T, processors map[string]processor.Interface) *mock.ProcessorGetter {
+	pg := mock.NewProcessorGetter(gomock.NewController(t))
 	for name, proc := range processors {
-		ctors[name] = func(log.CtxLogger) sdk.Processor {
-			return proc
-		}
+		pg.EXPECT().
+			Get(gomock.Any(), name, gomock.Any()).AnyTimes().
+			Return(proc, nil)
 	}
-
-	return &proc_plugin.Registry{
-		BuiltinReg: builtin.NewRegistry(log.Nop(), ctors),
-	}
+	return pg
 }

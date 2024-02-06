@@ -6,7 +6,6 @@ require (
 	buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go v1.32.0-20231027202514-3f42134f4c56.1
 	github.com/Masterminds/semver/v3 v3.2.1
 	github.com/NYTimes/gziphandler v1.1.1
-	github.com/antchfx/jsonquery v1.3.3
 	github.com/bufbuild/buf v1.29.0
 	github.com/conduitio/conduit-commons v0.0.0-20240112191423-58fcb3055cf2
 	github.com/conduitio/conduit-connector-file v0.6.0
@@ -20,8 +19,6 @@ require (
 	github.com/conduitio/conduit-processor-sdk v0.0.0-20240118151737-a75ea9e86bb8
 	github.com/conduitio/yaml/v3 v3.3.0
 	github.com/dgraph-io/badger/v4 v4.2.0
-	github.com/dop251/goja v0.0.0-20230531210528-d7324b2d74f7
-	github.com/dop251/goja_nodejs v0.0.0-20230602164024-804a84515562
 	github.com/gammazero/deque v0.2.1
 	github.com/goccy/go-json v0.10.2
 	github.com/golangci/golangci-lint v1.55.2
@@ -33,7 +30,6 @@ require (
 	github.com/hashicorp/go-hclog v1.6.2
 	github.com/hashicorp/go-plugin v1.6.0
 	github.com/jackc/pgx/v5 v5.5.2
-	github.com/jpillora/backoff v1.0.0
 	github.com/lovromazgon/franz-go/pkg/sr v0.0.0-20230630140346-bb9ce3f90f4a
 	github.com/matryer/is v1.4.1
 	github.com/modern-go/reflect2 v1.0.2
@@ -82,7 +78,6 @@ require (
 	github.com/alexkohler/nakedret/v2 v2.0.2 // indirect
 	github.com/alexkohler/prealloc v1.0.0 // indirect
 	github.com/alingse/asasalint v0.0.11 // indirect
-	github.com/antchfx/xpath v1.2.3 // indirect
 	github.com/antlr4-go/antlr/v4 v4.13.0 // indirect
 	github.com/apache/arrow/go/arrow v0.0.0-20211112161151-bc219186db40 // indirect
 	github.com/apache/thrift v0.19.0 // indirect
@@ -131,7 +126,6 @@ require (
 	github.com/denis-tingaikin/go-header v0.4.3 // indirect
 	github.com/dgraph-io/ristretto v0.1.1 // indirect
 	github.com/distribution/reference v0.5.0 // indirect
-	github.com/dlclark/regexp2 v1.8.0 // indirect
 	github.com/docker/cli v24.0.7+incompatible // indirect
 	github.com/docker/distribution v2.8.3+incompatible // indirect
 	github.com/docker/docker v25.0.0+incompatible // indirect
@@ -153,7 +147,6 @@ require (
 	github.com/go-critic/go-critic v0.9.0 // indirect
 	github.com/go-logr/logr v1.4.1 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
-	github.com/go-sourcemap/sourcemap v2.1.3+incompatible // indirect
 	github.com/go-toolsmith/astcast v1.1.0 // indirect
 	github.com/go-toolsmith/astcopy v1.1.0 // indirect
 	github.com/go-toolsmith/astequal v1.1.0 // indirect
@@ -212,6 +205,7 @@ require (
 	github.com/jgautheron/goconst v1.6.0 // indirect
 	github.com/jingyugao/rowserrcheck v1.1.1 // indirect
 	github.com/jirfag/go-printf-func-name v0.0.0-20200119135958-7558a9eaa5af // indirect
+	github.com/jpillora/backoff v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/julz/importas v0.1.0 // indirect
 	github.com/kisielk/errcheck v1.6.3 // indirect

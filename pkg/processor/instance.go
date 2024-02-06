@@ -16,6 +16,7 @@
 //go:generate sed -i.bak -e "/type Processor struct {/a\\\n	sdk.UnimplementedProcessor" ./mock/processor.go
 //go:generate rm ./mock/processor.go.bak
 //go:generate stringer -type=ParentType -trimprefix ParentType
+//go:generate mockgen -destination=mock/processor_getter.go -package=mock -mock_names=ProcessorGetter=ProcessorGetter . ProcessorGetter
 
 package processor
 
@@ -24,8 +25,6 @@ import (
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/conduitio/conduit/pkg/plugin/processor"
 	"time"
 
 	"github.com/conduitio/conduit/pkg/inspector"
@@ -62,6 +61,10 @@ type Interface interface {
 	Close()
 }
 
+type ProcessorGetter interface {
+	Get(ctx context.Context, pluginName string, id string) (sdk.Processor, error)
+}
+
 // Instance represents a processor instance.
 // todo move inspectin and inspectout into instance
 type Instance struct {
@@ -78,7 +81,6 @@ type Instance struct {
 	Parent    Parent
 	Config    Config
 	Processor Interface
-	Registry  *processor.Registry
 }
 
 func (i *Instance) Open(ctx context.Context) error {
@@ -109,22 +111,6 @@ func (i *Instance) Teardown(ctx context.Context) error {
 	}
 
 	return i.Processor.Teardown(ctx)
-}
-
-func (i *Instance) Init(ctx context.Context, logger log.CtxLogger) error {
-	if i.Processor != nil {
-		return ErrProcessorRunning
-	}
-
-	// todo make registru return a processor.Interface
-	// (add inspector there automatically)
-	p, err := i.Registry.Get(ctx, i.Plugin, i.ID)
-	if err != nil {
-		return err
-	}
-	i.Processor = newInspectableProcessor(p, logger)
-
-	return nil
 }
 
 // Parent represents the connection to the entity a processor is connected to.

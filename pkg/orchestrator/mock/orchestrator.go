@@ -163,7 +163,7 @@ func (mr *PipelineServiceMockRecorder) RemoveProcessor(arg0, arg1, arg2 any) *go
 }
 
 // Start mocks base method.
-func (m *PipelineService) Start(arg0 context.Context, arg1 pipeline.ConnectorFetcher, arg2 pipeline.ProcessorFetcher, arg3 pipeline.PluginDispenserFetcher, arg4 string) error {
+func (m *PipelineService) Start(arg0 context.Context, arg1 pipeline.ConnectorFetcher, arg2 pipeline.ProcessorService, arg3 pipeline.PluginDispenserFetcher, arg4 string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Start", arg0, arg1, arg2, arg3, arg4)
 	ret0, _ := ret[0].(error)
@@ -411,6 +411,20 @@ func (m *ProcessorService) Get(arg0 context.Context, arg1 string) (*processor.In
 func (mr *ProcessorServiceMockRecorder) Get(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*ProcessorService)(nil).Get), arg0, arg1)
+}
+
+// InitInstance mocks base method.
+func (m *ProcessorService) InitInstance(arg0 context.Context, arg1 *processor.Instance) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "InitInstance", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// InitInstance indicates an expected call of InitInstance.
+func (mr *ProcessorServiceMockRecorder) InitInstance(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InitInstance", reflect.TypeOf((*ProcessorService)(nil).InitInstance), arg0, arg1)
 }
 
 // List mocks base method.

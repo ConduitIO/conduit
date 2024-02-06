@@ -22,19 +22,18 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/database"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/measure"
-	"github.com/conduitio/conduit/pkg/plugin/processor"
 )
 
 type Service struct {
 	logger log.CtxLogger
 
-	registry  *processor.Registry
+	registry  ProcessorGetter
 	instances map[string]*Instance
 	store     *Store
 }
 
 // NewService creates a new processor service.
-func NewService(logger log.CtxLogger, db database.DB, registry *processor.Registry) *Service {
+func NewService(logger log.CtxLogger, db database.DB, registry ProcessorGetter) *Service {
 	return &Service{
 		logger:    logger.WithComponent("processor.Service"),
 		registry:  registry,
@@ -84,6 +83,22 @@ func (s *Service) Get(_ context.Context, id string) (*Instance, error) {
 	return ins, nil
 }
 
+func (s *Service) InitInstance(ctx context.Context, i *Instance) error {
+	if i.Processor != nil {
+		return ErrProcessorRunning
+	}
+
+	// todo make registru return a processor.Interface
+	// (add inspector there automatically)
+	p, err := s.registry.Get(ctx, i.Plugin, i.ID)
+	if err != nil {
+		return err
+	}
+	i.Processor = newInspectableProcessor(p, s.logger)
+
+	return nil
+}
+
 // Create will create a new processor instance.
 func (s *Service) Create(
 	ctx context.Context,
@@ -111,8 +126,6 @@ func (s *Service) Create(
 		Parent:        parent,
 		Config:        cfg,
 		Condition:     cond,
-		// todo the dependency doesn't feel right
-		Registry: s.registry,
 	}
 
 	// persist instance

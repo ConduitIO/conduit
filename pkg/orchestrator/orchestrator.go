@@ -70,7 +70,7 @@ type base struct {
 }
 
 type PipelineService interface {
-	Start(ctx context.Context, connFetcher pipeline.ConnectorFetcher, procFetcher pipeline.ProcessorFetcher, pluginFetcher pipeline.PluginDispenserFetcher, pipelineID string) error
+	Start(ctx context.Context, connFetcher pipeline.ConnectorFetcher, procFetcher pipeline.ProcessorService, pluginFetcher pipeline.PluginDispenserFetcher, pipelineID string) error
 	// Stop initiates a stop of the given pipeline. The method does not wait for
 	// the pipeline (and its nodes) to actually stop.
 	// When force is false the pipeline will try to stop gracefully and drain
@@ -108,6 +108,7 @@ type ProcessorService interface {
 	List(ctx context.Context) map[string]*processor.Instance
 	Get(ctx context.Context, id string) (*processor.Instance, error)
 	Create(ctx context.Context, id string, plugin string, parent processor.Parent, cfg processor.Config, p processor.ProvisionType, condition string) (*processor.Instance, error)
+	InitInstance(ctx context.Context, i *processor.Instance) error
 	Update(ctx context.Context, id string, cfg processor.Config) (*processor.Instance, error)
 	Delete(ctx context.Context, id string) error
 }

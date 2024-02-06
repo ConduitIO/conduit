@@ -33,6 +33,7 @@ type inspectableProcessor struct {
 }
 
 func newInspectableProcessor(proc sdk.Processor, logger log.CtxLogger) *inspectableProcessor {
+	// todo change component on logger
 	return &inspectableProcessor{
 		proc:    proc,
 		inInsp:  inspector.New(logger, inspector.DefaultBufferSize),

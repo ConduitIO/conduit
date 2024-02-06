@@ -34,7 +34,7 @@ type PipelineService interface {
 	Delete(ctx context.Context, pipelineID string) error
 	UpdateDLQ(ctx context.Context, pipelineID string, cfg pipeline.DLQ) (*pipeline.Instance, error)
 
-	Start(ctx context.Context, connFetcher pipeline.ConnectorFetcher, procFetcher pipeline.ProcessorFetcher, pluginFetcher pipeline.PluginDispenserFetcher, pipelineID string) error
+	Start(ctx context.Context, connFetcher pipeline.ConnectorFetcher, procFetcher pipeline.ProcessorService, pluginFetcher pipeline.PluginDispenserFetcher, pipelineID string) error
 	Stop(ctx context.Context, pipelineID string, force bool) error
 
 	AddConnector(ctx context.Context, pipelineID string, connectorID string) (*pipeline.Instance, error)
@@ -64,6 +64,7 @@ type ProcessorService interface {
 		p processor.ProvisionType,
 		condition string,
 	) (*processor.Instance, error)
+	InitInstance(ctx context.Context, i *processor.Instance) error
 	Update(ctx context.Context, id string, cfg processor.Config) (*processor.Instance, error)
 	Delete(ctx context.Context, id string) error
 }
