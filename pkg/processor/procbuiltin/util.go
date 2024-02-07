@@ -16,7 +16,6 @@ package builtin
 
 import (
 	"strconv"
-	"time"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/processor"
@@ -33,20 +32,6 @@ func getConfigFieldString(c processor.Config, field string) (string, error) {
 	return val, nil
 }
 
-func getConfigFieldFloat64(c processor.Config, field string) (float64, error) {
-	raw, err := getConfigFieldString(c, field)
-	if err != nil {
-		return 0, err
-	}
-
-	parsed, err := strconv.ParseFloat(raw, 64)
-	if err != nil {
-		return 0, cerrors.Errorf("failed to parse %q as float64: %w", field, err)
-	}
-
-	return parsed, nil
-}
-
 func getConfigFieldInt64(c processor.Config, field string) (int64, error) {
 	raw, err := getConfigFieldString(c, field)
 	if err != nil {
@@ -56,20 +41,6 @@ func getConfigFieldInt64(c processor.Config, field string) (int64, error) {
 	parsed, err := strconv.ParseInt(raw, 10, 64)
 	if err != nil {
 		return 0, cerrors.Errorf("failed to parse %q as int64: %w", field, err)
-	}
-
-	return parsed, nil
-}
-
-func getConfigFieldDuration(c processor.Config, field string) (time.Duration, error) {
-	raw, err := getConfigFieldString(c, field)
-	if err != nil {
-		return 0, err
-	}
-
-	parsed, err := time.ParseDuration(raw)
-	if err != nil {
-		return 0, cerrors.Errorf("failed to parse %q as time.Duration: %w", field, err)
 	}
 
 	return parsed, nil

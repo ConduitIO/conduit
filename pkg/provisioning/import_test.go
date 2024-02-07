@@ -164,21 +164,21 @@ func TestActionBuilder_Build(t *testing.T) {
 		}},
 		Processors: []config.Processor{{
 			// this processor does not change, it should be ignored
-			ID:   "proc-1",
-			Type: "proc-type",
+			ID:     "proc-1",
+			Plugin: "proc-type",
 		}, {
 			// this processor contains an invalid change, it should be recreated
-			ID:   "proc-2",
-			Type: "old-proc-type", // type was updated
+			ID:     "proc-2",
+			Plugin: "old-proc-type", // type was updated
 		}, {
 			// this processor gets new settings, it should be updated
 			ID:       "proc-3",
-			Type:     "proc-type",
+			Plugin:   "proc-type",
 			Settings: map[string]string{"foo": "bar"},
 		}, {
 			// this processor is deleted in the new config, it should be deleted
-			ID:   "proc-deleted",
-			Type: "proc-type",
+			ID:     "proc-deleted",
+			Plugin: "proc-type",
 		}},
 	}
 	newConfig := config.Pipeline{
@@ -212,21 +212,21 @@ func TestActionBuilder_Build(t *testing.T) {
 		}},
 		Processors: []config.Processor{{
 			// this processor does not change, it should be ignored
-			ID:   "proc-1",
-			Type: "proc-type",
+			ID:     "proc-1",
+			Plugin: "proc-type",
 		}, {
 			// this processor contains an invalid change, it should be recreated
-			ID:   "proc-2",
-			Type: "new-proc-type", // type was updated
+			ID:     "proc-2",
+			Plugin: "new-proc-type", // type was updated
 		}, {
 			// this processor gets new settings, it should be updated
 			ID:       "proc-3",
-			Type:     "proc-type",
+			Plugin:   "proc-type",
 			Settings: map[string]string{"foo": "baz"},
 		}, {
 			// this processor is new, it should be created
-			ID:   "proc-new",
-			Type: "proc-type",
+			ID:     "proc-new",
+			Plugin: "proc-type",
 		}},
 	}
 
@@ -426,13 +426,13 @@ func TestActionsBuilder_PreparePipelineActions_NoAction(t *testing.T) {
 		name: "different Processors (same ID)",
 		oldConfig: config.Pipeline{ID: "config-id", Processors: []config.Processor{{
 			ID:       "proc-id", // only ID has to match
-			Type:     "old-type",
+			Plugin:   "old-type",
 			Settings: map[string]string{"foo": "bar"},
 			Workers:  1,
 		}}},
 		newConfig: config.Pipeline{ID: "config-id", Processors: []config.Processor{{
 			ID:       "proc-id", // only ID has to match
-			Type:     "new-type",
+			Plugin:   "new-type",
 			Settings: map[string]string{"foo": "baz"},
 			Workers:  2,
 		}}},
@@ -560,13 +560,13 @@ func TestActionsBuilder_PrepareConnectorActions_NoAction(t *testing.T) {
 		name: "different Processors",
 		oldConfig: config.Connector{ID: "config-id", Processors: []config.Processor{{
 			ID:       "proc-id", // only ID has to match
-			Type:     "old-type",
+			Plugin:   "old-type",
 			Settings: map[string]string{"foo": "bar"},
 			Workers:  1,
 		}}},
 		newConfig: config.Connector{ID: "config-id", Processors: []config.Processor{{
 			ID:       "proc-id", // only ID has to match
-			Type:     "new-type",
+			Plugin:   "new-type",
 			Settings: map[string]string{"foo": "baz"},
 			Workers:  2,
 		}}},
@@ -780,8 +780,8 @@ func TestActionsBuilder_PrepareProcessorActions_Recreate(t *testing.T) {
 		newConfig config.Processor
 	}{{
 		name:      "different Type",
-		oldConfig: config.Processor{ID: "config-id", Type: "old-type"},
-		newConfig: config.Processor{ID: "config-id", Type: "new-type"},
+		oldConfig: config.Processor{ID: "config-id", Plugin: "old-type"},
+		newConfig: config.Processor{ID: "config-id", Plugin: "new-type"},
 	}}
 
 	for _, tc := range testCases {

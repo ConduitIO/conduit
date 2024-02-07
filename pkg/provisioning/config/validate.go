@@ -98,14 +98,10 @@ func validateProcessors(mp []Processor) error {
 	var err error
 	ids := make(map[string]bool)
 	for _, cfg := range mp {
-		if cfg.Type == "" && cfg.Plugin == "" {
+		if cfg.Plugin == "" {
 			err = multierror.Append(
 				err,
-				cerrors.Errorf(
-					"processor %q: \"plugin\" needs to be provided: %w",
-					cfg.ID,
-					ErrMandatoryField,
-				),
+				cerrors.Errorf("processor %q: \"plugin\" needs to be provided: %w", cfg.ID, ErrMandatoryField),
 			)
 		}
 		if cfg.Workers < 0 {

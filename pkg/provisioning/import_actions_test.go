@@ -480,7 +480,7 @@ func TestCreateProcessorAction_Do(t *testing.T) {
 
 	haveCfg := config.Processor{
 		ID:        uuid.NewString(),
-		Type:      "processor-type",
+		Plugin:    "processor-type",
 		Settings:  map[string]string{"foo": "bar"},
 		Workers:   2,
 		Condition: "{{ eq .Metadata.opencdc.version \"v1\" }}",
@@ -495,8 +495,7 @@ func TestCreateProcessorAction_Do(t *testing.T) {
 	}
 
 	procSrv := mock.NewProcessorService(ctrl)
-	//nolint:staticcheck // we're fine with allowing Type for some time more
-	procSrv.EXPECT().Create(ctx, haveCfg.ID, haveCfg.Type, parent, wantCfg, processor.ProvisionTypeConfig, haveCfg.Condition)
+	procSrv.EXPECT().Create(ctx, haveCfg.ID, haveCfg.Plugin, parent, wantCfg, processor.ProvisionTypeConfig, haveCfg.Condition)
 
 	a := createProcessorAction{
 		cfg:              haveCfg,
@@ -514,7 +513,7 @@ func TestCreateProcessorAction_Rollback(t *testing.T) {
 
 	haveCfg := config.Processor{
 		ID:       uuid.NewString(),
-		Type:     "processor-type",
+		Plugin:   "processor-type",
 		Settings: map[string]string{"foo": "bar"},
 		Workers:  2,
 	}
@@ -534,7 +533,7 @@ func TestCreateProcessorAction_Rollback(t *testing.T) {
 func TestUpdateProcessorAction(t *testing.T) {
 	haveCfg := config.Processor{
 		ID:       uuid.NewString(),
-		Type:     "processor-type",
+		Plugin:   "processor-type",
 		Settings: map[string]string{"foo": "bar"},
 		Workers:  2,
 	}
@@ -595,7 +594,7 @@ func TestDeleteProcessorAction_Do(t *testing.T) {
 
 	haveCfg := config.Processor{
 		ID:       uuid.NewString(),
-		Type:     "processor-type",
+		Plugin:   "processor-type",
 		Settings: map[string]string{"foo": "bar"},
 		Workers:  2,
 	}
@@ -619,7 +618,7 @@ func TestDeleteProcessorAction_Rollback(t *testing.T) {
 
 	haveCfg := config.Processor{
 		ID:        uuid.NewString(),
-		Type:      "processor-type",
+		Plugin:    "processor-type",
 		Settings:  map[string]string{"foo": "bar"},
 		Workers:   2,
 		Condition: "{{ eq .Metadata.opencdc.version \"v1\" }}",
@@ -634,8 +633,7 @@ func TestDeleteProcessorAction_Rollback(t *testing.T) {
 	}
 
 	procSrv := mock.NewProcessorService(ctrl)
-	//nolint:staticcheck // we're fine with allowing Type for some time more
-	procSrv.EXPECT().Create(ctx, haveCfg.ID, haveCfg.Type, parent, wantCfg, processor.ProvisionTypeConfig, haveCfg.Condition)
+	procSrv.EXPECT().Create(ctx, haveCfg.ID, haveCfg.Plugin, parent, wantCfg, processor.ProvisionTypeConfig, haveCfg.Condition)
 
 	a := deleteProcessorAction{
 		cfg:              haveCfg,

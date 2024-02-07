@@ -73,9 +73,7 @@ func fromProcessorsConfig(procs []config.Processor) []Processor {
 
 	for i, proc := range procs {
 		processors[i] = Processor{
-			ID: proc.ID,
-			//nolint:staticcheck // we're fine with allowing Type for some time more
-			Type:     proc.Type,
+			ID:       proc.ID,
 			Plugin:   proc.Plugin,
 			Settings: proc.Settings,
 			Workers:  proc.Workers,

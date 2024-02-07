@@ -171,10 +171,14 @@ func (c Connector) processorsToConfig() []config.Processor {
 }
 
 func (p Processor) ToConfig() config.Processor {
+	plugin := p.Plugin
+	if plugin == "" {
+		plugin = p.Type
+	}
+
 	return config.Processor{
 		ID:        p.ID,
-		Type:      p.Type,
-		Plugin:    p.Plugin,
+		Plugin:    plugin,
 		Settings:  p.Settings,
 		Workers:   p.Workers,
 		Condition: p.Condition,

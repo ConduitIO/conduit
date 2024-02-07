@@ -54,8 +54,8 @@ func testPipelineConfigs() []config.Pipeline {
 					},
 					Processors: []config.Processor{
 						{
-							ID:   "proc1",
-							Type: "js",
+							ID:     "proc1",
+							Plugin: "js",
 							Settings: map[string]string{
 								"additionalProp1": "string",
 								"additionalProp2": "string",
@@ -73,8 +73,8 @@ func testPipelineConfigs() []config.Pipeline {
 			},
 			Processors: []config.Processor{
 				{
-					ID:   "pipeline1proc1",
-					Type: "js",
+					ID:     "pipeline1proc1",
+					Plugin: "js",
 					Settings: map[string]string{
 						"additionalProp1": "string",
 						"additionalProp2": "string",
@@ -108,8 +108,8 @@ func testPipelineConfigs() []config.Pipeline {
 					},
 					Processors: []config.Processor{
 						{
-							ID:   "con2proc1",
-							Type: "hoistfield",
+							ID:     "con2proc1",
+							Plugin: "hoistfield",
 							Settings: map[string]string{
 								"additionalProp1": "string",
 								"additionalProp2": "string",
@@ -146,8 +146,8 @@ func expectedModelConfiguration() Configuration {
 						},
 						Processors: []Processor{
 							{
-								ID:   "proc1",
-								Type: "js",
+								ID:     "proc1",
+								Plugin: "js",
 								Settings: map[string]string{
 									"additionalProp1": "string",
 									"additionalProp2": "string",
@@ -166,8 +166,8 @@ func expectedModelConfiguration() Configuration {
 				},
 				Processors: []Processor{
 					{
-						ID:   "pipeline1proc1",
-						Type: "js",
+						ID:     "pipeline1proc1",
+						Plugin: "js",
 						Settings: map[string]string{
 							"additionalProp1": "string",
 							"additionalProp2": "string",
@@ -201,8 +201,8 @@ func expectedModelConfiguration() Configuration {
 						},
 						Processors: []Processor{
 							{
-								ID:   "con2proc1",
-								Type: "hoistfield",
+								ID:     "con2proc1",
+								Plugin: "hoistfield",
 								Settings: map[string]string{
 									"additionalProp1": "string",
 									"additionalProp2": "string",
