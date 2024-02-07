@@ -62,7 +62,6 @@ func (n *ProcessorNode) Run(ctx context.Context) error {
 		return cerrors.Errorf("couldn't open processor: %w", err)
 	}
 	defer func() {
-		// teardown will kill the plugin process
 		tdErr := n.Processor.Teardown(ctx)
 		err = cerrors.LogOrReplace(err, tdErr, func() {
 			n.logger.Err(ctx, tdErr).Msg("could not tear down processor")

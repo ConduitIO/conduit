@@ -20,7 +20,6 @@ import (
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/inspector"
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/record"
 )
@@ -31,8 +30,7 @@ import (
 type FuncWrapper struct {
 	sdk.UnimplementedProcessor
 
-	name string
-	f    func(context.Context, record.Record) (record.Record, error)
+	f func(context.Context, record.Record) (record.Record, error)
 }
 
 func NewFuncWrapper(f func(context.Context, record.Record) (record.Record, error)) FuncWrapper {
@@ -41,7 +39,7 @@ func NewFuncWrapper(f func(context.Context, record.Record) (record.Record, error
 
 func (f FuncWrapper) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
-		Name:        f.name,
+		Name:        "",
 		Summary:     "",
 		Description: "",
 		Version:     "",
@@ -77,18 +75,4 @@ func (f FuncWrapper) Process(ctx context.Context, records []opencdc.Record) []sd
 
 func (f FuncWrapper) Teardown(context.Context) error {
 	return nil
-}
-
-func (f FuncWrapper) InspectIn(context.Context, string) *inspector.Session {
-	// TODO implement me
-	panic("implement me")
-}
-
-func (f FuncWrapper) InspectOut(context.Context, string) *inspector.Session {
-	// TODO implement me
-	panic("implement me")
-}
-
-func (f FuncWrapper) Close() {
-
 }

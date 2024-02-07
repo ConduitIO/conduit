@@ -41,7 +41,7 @@ type ConnectorFetcher interface {
 	Create(ctx context.Context, id string, t connector.Type, plugin string, pipelineID string, cfg connector.Config, p connector.ProvisionType) (*connector.Instance, error)
 }
 
-// ProcessorService can fetch a processor instance.
+// ProcessorService can fetch a processor instance and make a runnable processor from it.
 type ProcessorService interface {
 	Get(ctx context.Context, id string) (*processor.Instance, error)
 	MakeRunnableProcessor(ctx context.Context, i *processor.Instance) (*processor.RunnableProcessor, error)
