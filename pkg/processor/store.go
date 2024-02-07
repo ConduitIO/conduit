@@ -130,13 +130,10 @@ func (*Store) trimKeyPrefix(key string) string {
 
 // encode encodes a instance from *Instance to []byte. It uses storeInstance in
 // the background to encode the instance including the processor type.
-func (*Store) encode(instance *Instance) ([]byte, error) {
-	i := *instance    // create copy of instance as to not modify it
-	i.Processor = nil // do not persist processor
-
+func (*Store) encode(i *Instance) ([]byte, error) {
 	var b bytes.Buffer
 	enc := json.NewEncoder(&b)
-	err := enc.Encode(i)
+	err := enc.Encode(*i)
 	if err != nil {
 		return nil, err
 	}

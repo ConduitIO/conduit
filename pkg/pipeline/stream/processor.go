@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//go:generate mockgen -destination=mock/processor.go -package=mock -mock_names=Processor=Processor . Processor
+
 package stream
 
 import (
@@ -38,7 +40,6 @@ type ProcessorNode struct {
 type Processor interface {
 	// Open configures and opens a processor plugin
 	Open(ctx context.Context) error
-	// todo accept record.Record
 	Process(context.Context, []opencdc.Record) []sdk.ProcessedRecord
 	// Teardown tears down a processor plugin.
 	// In case of standalone plugins, that means stopping the WASM module.
