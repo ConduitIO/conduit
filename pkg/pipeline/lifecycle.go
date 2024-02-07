@@ -44,7 +44,7 @@ type ConnectorFetcher interface {
 // ProcessorService can fetch a processor instance.
 type ProcessorService interface {
 	Get(ctx context.Context, id string) (*processor.Instance, error)
-	InitInstance(ctx context.Context, i *processor.Instance) error
+	MakeRunnableProcessor(ctx context.Context, i *processor.Instance) (*processor.RunnableProcessor, error)
 }
 
 // PluginDispenserFetcher can fetch a plugin.
@@ -291,16 +291,16 @@ func (s *Service) buildProcessorNodes(
 			return nil, cerrors.Errorf("could not fetch processor: %w", err)
 		}
 
-		err = procService.InitInstance(ctx, instance)
+		runnableProc, err := procService.MakeRunnableProcessor(ctx, instance)
 		if err != nil {
 			return nil, err
 		}
 
 		var node stream.PubSubNode
 		if instance.Config.Workers > 1 {
-			node = s.buildParallelProcessorNode(pl, instance)
+			node = s.buildParallelProcessorNode(pl, runnableProc)
 		} else {
-			node = s.buildProcessorNode(pl, instance)
+			node = s.buildProcessorNode(pl, runnableProc)
 		}
 
 		node.Sub(prev.Pub())
@@ -315,7 +315,7 @@ func (s *Service) buildProcessorNodes(
 
 func (s *Service) buildParallelProcessorNode(
 	pl *Instance,
-	proc *processor.Instance,
+	proc *processor.RunnableProcessor,
 ) *stream.ParallelNode {
 	return &stream.ParallelNode{
 		Name: proc.ID + "-parallel",
@@ -330,7 +330,7 @@ func (s *Service) buildParallelProcessorNode(
 
 func (s *Service) buildProcessorNode(
 	pl *Instance,
-	proc *processor.Instance,
+	proc *processor.RunnableProcessor,
 ) *stream.ProcessorNode {
 	return &stream.ProcessorNode{
 		Name:           proc.ID,

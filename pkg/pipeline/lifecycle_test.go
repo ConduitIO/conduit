@@ -565,8 +565,8 @@ func (tcf testConnectorFetcher) Create(context.Context, string, connector.Type, 
 // testProcessorFetcher fulfills the ProcessorService interface.
 type testProcessorFetcher map[string]*processor.Instance
 
-func (tpf testProcessorFetcher) InitInstance(context.Context, *processor.Instance) error {
-	return nil
+func (tpf testProcessorFetcher) MakeRunnableProcessor(context.Context, *processor.Instance) (*processor.RunnableProcessor, error) {
+	return nil, cerrors.New("not implemented")
 }
 
 func (tpf testProcessorFetcher) Get(_ context.Context, id string) (*processor.Instance, error) {
