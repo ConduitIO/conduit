@@ -274,6 +274,7 @@ func TestService_Delete_ProcessorIsRunning(t *testing.T) {
 
 	// make a runnable processor
 	proc, err := service.MakeRunnableProcessor(ctx, i)
+	is.NoErr(err)
 
 	err = service.Delete(ctx, i.ID)
 	is.True(cerrors.Is(err, ErrProcessorRunning))

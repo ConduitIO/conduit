@@ -37,6 +37,8 @@ import (
 	p3 "github.com/conduitio/conduit/pkg/provisioning/test/pipelines3"
 	p4 "github.com/conduitio/conduit/pkg/provisioning/test/pipelines4-integration-test"
 	"github.com/conduitio/conduit/pkg/record"
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/matryer/is"
 	"github.com/rs/zerolog"
 	"go.uber.org/mock/gomock"
@@ -541,7 +543,10 @@ func TestService_IntegrationTestServices(t *testing.T) {
 		is.NoErr(err)
 		want.CreatedAt = got.CreatedAt
 		want.UpdatedAt = got.UpdatedAt
-		is.Equal(got, want)
+		diff := cmp.Diff(got, want, cmpopts.IgnoreUnexported(processor.Instance{}))
+		if diff != "" {
+			t.Errorf("mismatch (-want +got): %s", diff)
+		}
 	}
 
 	// checking connectors

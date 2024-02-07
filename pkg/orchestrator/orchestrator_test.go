@@ -17,7 +17,6 @@ package orchestrator
 import (
 	"context"
 	"fmt"
-	proc_builtin "github.com/conduitio/conduit/pkg/processor/procbuiltin"
 	"os"
 	"reflect"
 	"testing"
@@ -30,10 +29,11 @@ import (
 	"github.com/conduitio/conduit/pkg/orchestrator/mock"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	"github.com/conduitio/conduit/pkg/plugin"
-	"github.com/conduitio/conduit/pkg/plugin/connector/builtin"
-	"github.com/conduitio/conduit/pkg/plugin/connector/standalone"
+	conn_builtin "github.com/conduitio/conduit/pkg/plugin/connector/builtin"
+	conn_standalone "github.com/conduitio/conduit/pkg/plugin/connector/standalone"
 	"github.com/conduitio/conduit/pkg/processor"
 	proc_mock "github.com/conduitio/conduit/pkg/processor/mock"
+	proc_builtin "github.com/conduitio/conduit/pkg/processor/procbuiltin"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/google/go-cmp/cmp"
 	"github.com/matryer/is"
@@ -71,8 +71,8 @@ func TestPipelineSimple(t *testing.T) {
 
 	pluginService := plugin.NewService(
 		logger,
-		builtin.NewRegistry(logger, builtin.DefaultDispenserFactories),
-		standalone.NewRegistry(logger, ""),
+		conn_builtin.NewRegistry(logger, conn_builtin.DefaultDispenserFactories),
+		conn_standalone.NewRegistry(logger, ""),
 	)
 
 	procRegistry := proc_mock.NewRegistry(gomock.NewController(t))
@@ -84,7 +84,10 @@ func TestPipelineSimple(t *testing.T) {
 				return r, nil
 			}),
 			nil,
-		)
+		).
+		// once when creating a processor instance (to verify the plugin exists)
+		// and once when building the pipeline nodes (to make a runnable processor)
+		Times(2)
 
 	orc := NewOrchestrator(
 		db,
