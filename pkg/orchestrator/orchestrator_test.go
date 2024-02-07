@@ -17,6 +17,7 @@ package orchestrator
 import (
 	"context"
 	"fmt"
+	proc_builtin "github.com/conduitio/conduit/pkg/processor/procbuiltin"
 	"os"
 	"reflect"
 	"testing"
@@ -33,7 +34,6 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin/connector/standalone"
 	"github.com/conduitio/conduit/pkg/processor"
 	proc_mock "github.com/conduitio/conduit/pkg/processor/mock"
-	proc_builtin "github.com/conduitio/conduit/pkg/processor/procbuiltin"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/google/go-cmp/cmp"
 	"github.com/matryer/is"

@@ -541,7 +541,6 @@ func TestService_IntegrationTestServices(t *testing.T) {
 		is.NoErr(err)
 		want.CreatedAt = got.CreatedAt
 		want.UpdatedAt = got.UpdatedAt
-		want.Processor = got.Processor
 		is.Equal(got, want)
 	}
 

@@ -87,7 +87,6 @@ var P1P1 = &processor.Instance{
 		Settings: nil,
 		Workers:  1,
 	},
-	Processor: nil,
 
 	ProvisionedBy: processor.ProvisionTypeConfig,
 	CreatedAt:     time.Now(),
