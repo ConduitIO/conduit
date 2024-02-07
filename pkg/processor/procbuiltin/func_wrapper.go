@@ -35,10 +35,6 @@ type FuncWrapper struct {
 	f    func(context.Context, record.Record) (record.Record, error)
 }
 
-func NewFuncWrapperWithName(name string, f func(context.Context, record.Record) (record.Record, error)) FuncWrapper {
-	return FuncWrapper{name: name, f: f}
-}
-
 func NewFuncWrapper(f func(context.Context, record.Record) (record.Record, error)) FuncWrapper {
 	return FuncWrapper{f: f}
 }
@@ -54,11 +50,11 @@ func (f FuncWrapper) Specification() (sdk.Specification, error) {
 	}, nil
 }
 
-func (f FuncWrapper) Configure(ctx context.Context, m map[string]string) error {
+func (f FuncWrapper) Configure(context.Context, map[string]string) error {
 	return nil
 }
 
-func (f FuncWrapper) Open(ctx context.Context) error {
+func (f FuncWrapper) Open(context.Context) error {
 	return nil
 }
 
@@ -79,17 +75,17 @@ func (f FuncWrapper) Process(ctx context.Context, records []opencdc.Record) []sd
 	return outRecs
 }
 
-func (f FuncWrapper) Teardown(ctx context.Context) error {
+func (f FuncWrapper) Teardown(context.Context) error {
 	return nil
 }
 
-func (f FuncWrapper) InspectIn(ctx context.Context, id string) *inspector.Session {
-	//TODO implement me
+func (f FuncWrapper) InspectIn(context.Context, string) *inspector.Session {
+	// TODO implement me
 	panic("implement me")
 }
 
-func (f FuncWrapper) InspectOut(ctx context.Context, id string) *inspector.Session {
-	//TODO implement me
+func (f FuncWrapper) InspectOut(context.Context, string) *inspector.Session {
+	// TODO implement me
 	panic("implement me")
 }
 

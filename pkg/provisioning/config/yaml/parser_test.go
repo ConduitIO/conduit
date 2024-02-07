@@ -17,7 +17,6 @@ package yaml
 import (
 	"bytes"
 	"context"
-	"github.com/google/go-cmp/cmp"
 	"io"
 	"os"
 	"testing"
@@ -27,6 +26,7 @@ import (
 	v1 "github.com/conduitio/conduit/pkg/provisioning/config/yaml/v1"
 	v2 "github.com/conduitio/conduit/pkg/provisioning/config/yaml/v2"
 	"github.com/conduitio/yaml/v3"
+	"github.com/google/go-cmp/cmp"
 	"github.com/matryer/is"
 	"github.com/rs/zerolog"
 )

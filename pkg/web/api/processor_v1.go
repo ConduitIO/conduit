@@ -171,12 +171,13 @@ func (p *ProcessorAPIv1) CreateProcessor(
 	}
 	plugin := req.Plugin
 	if plugin == "" {
+		//nolint:staticcheck // we're fine with allowing Type for some time more
 		plugin = req.Type
 	}
 
 	created, err := p.ps.Create(
 		ctx,
-		plugin, //nolint:staticcheck // we're fine with allowing Type for some time more
+		plugin,
 		fromproto.ProcessorParent(req.Parent),
 		fromproto.ProcessorConfig(req.Config),
 		req.Condition,

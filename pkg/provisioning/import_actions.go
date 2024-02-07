@@ -160,11 +160,13 @@ func (a createProcessorAction) String() string {
 	return fmt.Sprintf("create processor with ID %v", a.cfg.ID)
 }
 func (a createProcessorAction) Do(ctx context.Context) error {
+	//nolint:staticcheck // we're fine with allowing Type for some time more
 	if a.cfg.Type != "" && a.cfg.Plugin != "" {
 		return cerrors.New("only one of [type, plugin] can be specified")
 	}
 	plugin := a.cfg.Plugin
 	if plugin == "" {
+		//nolint:staticcheck // we're fine with allowing Type for some time more
 		plugin = a.cfg.Type
 	}
 

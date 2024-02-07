@@ -495,6 +495,7 @@ func TestCreateProcessorAction_Do(t *testing.T) {
 	}
 
 	procSrv := mock.NewProcessorService(ctrl)
+	//nolint:staticcheck // we're fine with allowing Type for some time more
 	procSrv.EXPECT().Create(ctx, haveCfg.ID, haveCfg.Type, parent, wantCfg, processor.ProvisionTypeConfig, haveCfg.Condition)
 
 	a := createProcessorAction{
@@ -633,6 +634,7 @@ func TestDeleteProcessorAction_Rollback(t *testing.T) {
 	}
 
 	procSrv := mock.NewProcessorService(ctrl)
+	//nolint:staticcheck // we're fine with allowing Type for some time more
 	procSrv.EXPECT().Create(ctx, haveCfg.ID, haveCfg.Type, parent, wantCfg, processor.ProvisionTypeConfig, haveCfg.Condition)
 
 	a := deleteProcessorAction{

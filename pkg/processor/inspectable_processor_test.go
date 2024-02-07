@@ -16,18 +16,18 @@ package processor
 
 import (
 	"context"
-	"github.com/conduitio/conduit-commons/opencdc"
-	sdk "github.com/conduitio/conduit-processor-sdk"
-	"github.com/conduitio/conduit/pkg/processor/mock"
-	"go.uber.org/mock/gomock"
 	"testing"
 	"time"
 
 	"github.com/conduitio/conduit-commons/cchan"
+	"github.com/conduitio/conduit-commons/opencdc"
+	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/processor/mock"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/matryer/is"
+	"go.uber.org/mock/gomock"
 )
 
 func TestInspectableProcessor_Decorate_Open(t *testing.T) {
