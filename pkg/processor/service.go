@@ -85,10 +85,9 @@ func (s *Service) Get(_ context.Context, id string) (*Instance, error) {
 }
 
 func (s *Service) MakeRunnableProcessor(ctx context.Context, i *Instance) (*RunnableProcessor, error) {
-	// TODO maybe store a flag in the instance to indicate if it's been initialized
-	// if i.Processor != nil {
-	// 	return ErrProcessorRunning
-	// }
+	if i.running {
+		return nil, ErrProcessorRunning
+	}
 
 	p, err := s.registry.Get(ctx, i.Plugin, i.ID)
 	if err != nil {
