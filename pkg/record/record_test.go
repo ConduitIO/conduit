@@ -15,7 +15,6 @@
 package record
 
 import (
-	"github.com/conduitio/conduit-commons/opencdc"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -143,41 +142,4 @@ func TestRecord_ToMap(t *testing.T) {
 		},
 	}
 	is.Equal(want, got)
-}
-
-func TestRecord_ToOpenCDC(t *testing.T) {
-	runTest := func(t *testing.T) {}
-	data := []struct {
-		in  Data
-		out opencdc.Data
-	}{
-		{
-			in:  nil,
-			out: nil,
-		},
-		{
-			in:  RawData{Raw: []byte("some raw, uncooked data")},
-			out: opencdc.RawData("some raw, uncooked data"),
-		},
-		{
-			in: StructuredData{
-				"letters": "a,b,c",
-				"number":  1,
-				"numbers": []int{11, 22, 33},
-			},
-			out: opencdc.StructuredData{
-				"letters": "a,b,c",
-				"number":  1,
-				"numbers": []int{11, 22, 33},
-			},
-		},
-	}
-
-	for _, key := range data {
-		for _, before := range data {
-			for _, after := range data {
-				t.Run("something", runTest(key, before, after))
-			}
-		}
-	}
 }
