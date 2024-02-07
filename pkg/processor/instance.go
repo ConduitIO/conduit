@@ -47,7 +47,9 @@ type Registry interface {
 	Get(ctx context.Context, pluginName string, id string) (sdk.Processor, error)
 }
 
-// Instance represents a processor instance.
+// Instance represents a processor persisted in a database.
+// An Instance is used to create a RunnableProcessor which represents
+// a processor which can be used in a pipeline.
 type Instance struct {
 	ID            string
 	CreatedAt     time.Time
@@ -62,6 +64,8 @@ type Instance struct {
 	Parent    Parent
 	Config    Config
 
+	// Needed because a user can start inspecting a processor
+	// before the processor is actually running.
 	inInsp  *inspector.Inspector
 	outInsp *inspector.Inspector
 	running bool

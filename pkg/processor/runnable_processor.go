@@ -23,6 +23,8 @@ import (
 	"github.com/conduitio/conduit/pkg/record"
 )
 
+// RunnableProcessor is a stream.Processor which has been
+// initialized and is ready to be used in a pipeline.
 type RunnableProcessor struct {
 	*Instance
 	proc sdk.Processor
