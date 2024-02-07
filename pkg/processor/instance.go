@@ -21,11 +21,9 @@ import (
 	"context"
 	"time"
 
-	"github.com/conduitio/conduit/pkg/foundation/log"
-
-	"github.com/conduitio/conduit/pkg/inspector"
-
 	sdk "github.com/conduitio/conduit-processor-sdk"
+	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/inspector"
 )
 
 const (
