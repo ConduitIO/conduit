@@ -105,7 +105,6 @@ var P1C2P1 = &processor.Instance{
 		Settings: nil,
 		Workers:  1,
 	},
-	Processor: nil,
 
 	ProvisionedBy: processor.ProvisionTypeConfig,
 	CreatedAt:     time.Now(),

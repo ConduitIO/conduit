@@ -108,7 +108,7 @@ type ProcessorService interface {
 	List(ctx context.Context) map[string]*processor.Instance
 	Get(ctx context.Context, id string) (*processor.Instance, error)
 	Create(ctx context.Context, id string, plugin string, parent processor.Parent, cfg processor.Config, p processor.ProvisionType, condition string) (*processor.Instance, error)
-	InitInstance(ctx context.Context, i *processor.Instance) error
+	MakeRunnableProcessor(ctx context.Context, i *processor.Instance) (*processor.RunnableProcessor, error)
 	Update(ctx context.Context, id string, cfg processor.Config) (*processor.Instance, error)
 	Delete(ctx context.Context, id string) error
 }
