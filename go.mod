@@ -43,7 +43,7 @@ require (
 	github.com/prometheus/client_model v0.5.0
 	github.com/prometheus/common v0.46.0
 	github.com/rs/zerolog v1.32.0
-	github.com/twmb/go-cache v1.2.0
+	github.com/twmb/go-cache v1.2.1
 	go.uber.org/goleak v1.3.0
 	go.uber.org/mock v0.4.0
 	golang.org/x/exp v0.0.0-20240119083558-1b970713d09a
