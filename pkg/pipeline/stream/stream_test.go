@@ -234,6 +234,7 @@ func Example_complexStream() {
 	}
 
 	// Unordered output:
+	// DBG opening processor component=ProcessorNode node_id=counter
 	// DBG got record message_id=generator2/1 node_id=printer2
 	// DBG got record message_id=generator2/1 node_id=printer1
 	// DBG received ack message_id=generator2/1 node_id=generator2
@@ -301,6 +302,7 @@ func Example_complexStream() {
 	// DBG incoming messages channel closed component=SourceAckerNode node_id=generator1-acker
 	// DBG incoming messages channel closed component=SourceAckerNode node_id=generator2-acker
 	// DBG incoming messages channel closed component=ProcessorNode node_id=counter
+	// DBG tearing down processor component=ProcessorNode node_id=counter
 	// DBG incoming messages channel closed component=DestinationNode node_id=printer1
 	// DBG incoming messages channel closed component=DestinationNode node_id=printer2
 	// DBG incoming messages channel closed component=DestinationAckerNode node_id=printer1-acker
