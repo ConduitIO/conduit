@@ -22,10 +22,10 @@ import (
 	"github.com/matryer/is"
 )
 
-type dataTestCase struct {
+type testCase[C, O any] struct {
 	name        string
-	conduitType Data
-	opencdcType opencdc.Data
+	conduitType C
+	opencdcType O
 }
 
 func TestRecord_ToOpenCDC_Keys(t *testing.T) {
@@ -75,137 +75,44 @@ func TestRecord_ToOpenCDC_PayloadAfter(t *testing.T) {
 }
 
 func TestRecord_ToOpenCDC_Position(t *testing.T) {
-	testCases := []struct {
-		name string
-		in   Position
-		want opencdc.Position
-	}{
-		{
-			name: "nil",
-		},
-		{
-			name: "raw",
-			in:   Position("raw, uncooked data"),
-			want: opencdc.Position("raw, uncooked data"),
-		},
-	}
+	testCases := positionTestCases()
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			is := is.New(t)
 
-			underTest := Record{Position: tc.in}
+			underTest := Record{Position: tc.conduitType}
 			got := underTest.ToOpenCDC()
-			is.Equal(tc.want, got.Position)
+			is.Equal(tc.opencdcType, got.Position)
 		})
 	}
 }
 
 func TestRecord_ToOpenCDC_Metadata(t *testing.T) {
-	testCases := []struct {
-		name string
-		in   Metadata
-		want opencdc.Metadata
-	}{
-		{
-			name: "nil",
-		},
-		{
-			name: "empty",
-			in:   Metadata{},
-			want: opencdc.Metadata{},
-		},
-		{
-			name: "non-empty",
-			in: Metadata{
-				"k":                             "v",
-				MetadataOpenCDCVersion:          OpenCDCVersion,
-				MetadataConduitSourcePluginName: "file",
-			},
-			want: opencdc.Metadata{
-				"k":                                     "v",
-				opencdc.MetadataOpenCDCVersion:          opencdc.OpenCDCVersion,
-				opencdc.MetadataConduitSourcePluginName: "file",
-			},
-		},
-	}
+	testCases := metadataTestCases()
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			is := is.New(t)
 
-			underTest := Record{Metadata: tc.in}
+			underTest := Record{Metadata: tc.conduitType}
 			got := underTest.ToOpenCDC()
-			is.Equal(tc.want, got.Metadata)
+			is.Equal(tc.opencdcType, got.Metadata)
 		})
 	}
 }
 
 func TestRecord_ToOpenCDC_Operation(t *testing.T) {
-	testCases := []struct {
-		in   Operation
-		want opencdc.Operation
-	}{
-		{
-			in:   OperationCreate,
-			want: opencdc.OperationCreate,
-		},
-		{
-			in:   OperationSnapshot,
-			want: opencdc.OperationSnapshot,
-		},
-		{
-			in:   OperationUpdate,
-			want: opencdc.OperationUpdate,
-		},
-		{
-			in:   OperationDelete,
-			want: opencdc.OperationDelete,
-		},
-	}
+	testCases := operationTestCases()
 
 	for _, tc := range testCases {
-		t.Run(fmt.Sprintf("%v", tc.in), func(t *testing.T) {
+		t.Run(fmt.Sprintf("%v", tc.conduitType), func(t *testing.T) {
 			is := is.New(t)
 
-			underTest := Record{Operation: tc.in}
+			underTest := Record{Operation: tc.conduitType}
 			got := underTest.ToOpenCDC()
-			is.Equal(tc.want, got.Operation)
+			is.Equal(tc.opencdcType, got.Operation)
 		})
-	}
-}
-
-func dataTestCases() []dataTestCase {
-	return []dataTestCase{
-		{
-			name:        "nil",
-			conduitType: nil,
-			opencdcType: nil,
-		},
-		{
-			name:        "raw",
-			conduitType: RawData{Raw: []byte("raw, uncooked data")},
-			opencdcType: opencdc.RawData("raw, uncooked data"),
-		},
-		{
-			name: "structured",
-			conduitType: StructuredData{
-				"key1": "string-value",
-				"key2": 123,
-				"key3": []int{4, 5, 6},
-				"key4": map[string]interface{}{
-					"letters": "abc",
-				},
-			},
-			opencdcType: opencdc.StructuredData{
-				"key1": "string-value",
-				"key2": 123,
-				"key3": []int{4, 5, 6},
-				"key4": map[string]interface{}{
-					"letters": "abc",
-				},
-			},
-		},
 	}
 }
 
@@ -257,29 +164,137 @@ func TestRecord_FromOpenCDC_PayloadAfter(t *testing.T) {
 }
 
 func TestRecord_FromOpenCDC_Position(t *testing.T) {
-	testCases := []struct {
-		name string
-		want Position
-		in   opencdc.Position
-	}{
-		{
-			name: "nil",
-		},
-		{
-			name: "raw",
-			in:   opencdc.Position("raw, uncooked data"),
-			want: Position("raw, uncooked data"),
-		},
-	}
+	testCases := positionTestCases()
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			is := is.New(t)
 
 			got := FromOpenCDC(opencdc.Record{
-				Position: tc.in,
+				Position: tc.opencdcType,
 			})
-			is.Equal(tc.want, got.Position)
+			is.Equal(tc.conduitType, got.Position)
 		})
+	}
+}
+
+func TestRecord_FromOpenCDC_Metadata(t *testing.T) {
+	testCases := metadataTestCases()
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			is := is.New(t)
+
+			got := FromOpenCDC(opencdc.Record{Metadata: tc.opencdcType})
+			is.Equal(tc.conduitType, got.Metadata)
+		})
+	}
+}
+
+func TestRecord_FromOpenCDC_Operation(t *testing.T) {
+	testCases := operationTestCases()
+
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf("%v", tc.conduitType), func(t *testing.T) {
+			is := is.New(t)
+
+			underTest := Record{Operation: tc.conduitType}
+			got := underTest.ToOpenCDC()
+			is.Equal(tc.opencdcType, got.Operation)
+		})
+	}
+}
+
+func positionTestCases() []testCase[Position, opencdc.Position] {
+	return []testCase[Position, opencdc.Position]{
+		{
+			name: "nil",
+		},
+		{
+			name:        "raw",
+			opencdcType: opencdc.Position("raw, uncooked data"),
+			conduitType: Position("raw, uncooked data"),
+		},
+	}
+}
+
+func dataTestCases() []testCase[Data, opencdc.Data] {
+	return []testCase[Data, opencdc.Data]{
+		{
+			name:        "nil",
+			conduitType: nil,
+			opencdcType: nil,
+		},
+		{
+			name:        "raw",
+			conduitType: RawData{Raw: []byte("raw, uncooked data")},
+			opencdcType: opencdc.RawData("raw, uncooked data"),
+		},
+		{
+			name: "structured",
+			conduitType: StructuredData{
+				"key1": "string-value",
+				"key2": 123,
+				"key3": []int{4, 5, 6},
+				"key4": map[string]interface{}{
+					"letters": "abc",
+				},
+			},
+			opencdcType: opencdc.StructuredData{
+				"key1": "string-value",
+				"key2": 123,
+				"key3": []int{4, 5, 6},
+				"key4": map[string]interface{}{
+					"letters": "abc",
+				},
+			},
+		},
+	}
+}
+
+func operationTestCases() []testCase[Operation, opencdc.Operation] {
+	return []testCase[Operation, opencdc.Operation]{
+		{
+			conduitType: OperationCreate,
+			opencdcType: opencdc.OperationCreate,
+		},
+		{
+			conduitType: OperationSnapshot,
+			opencdcType: opencdc.OperationSnapshot,
+		},
+		{
+			conduitType: OperationUpdate,
+			opencdcType: opencdc.OperationUpdate,
+		},
+		{
+			conduitType: OperationDelete,
+			opencdcType: opencdc.OperationDelete,
+		},
+	}
+}
+
+func metadataTestCases() []testCase[Metadata, opencdc.Metadata] {
+	return []testCase[Metadata, opencdc.Metadata]{
+		{
+			name: "nil",
+		},
+		{
+			name:        "empty",
+			conduitType: Metadata{},
+			opencdcType: opencdc.Metadata{},
+		},
+		{
+			name: "non-empty",
+			conduitType: Metadata{
+				"k":                             "v",
+				MetadataOpenCDCVersion:          OpenCDCVersion,
+				MetadataConduitSourcePluginName: "file",
+			},
+			opencdcType: opencdc.Metadata{
+				"k":                                     "v",
+				opencdc.MetadataOpenCDCVersion:          opencdc.OpenCDCVersion,
+				opencdc.MetadataConduitSourcePluginName: "file",
+			},
+		},
 	}
 }
