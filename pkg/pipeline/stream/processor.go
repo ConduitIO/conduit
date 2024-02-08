@@ -57,11 +57,15 @@ func (n *ProcessorNode) Run(ctx context.Context) error {
 	}
 	defer cleanup()
 
+	n.logger.Debug(ctx).Msg("opening processor")
 	err = n.Processor.Open(ctx)
 	if err != nil {
+		n.logger.Err(ctx, err).Msg("failed opening processor")
 		return cerrors.Errorf("couldn't open processor: %w", err)
 	}
+
 	defer func() {
+		n.logger.Debug(ctx).Msg("tearing down processor")
 		tdErr := n.Processor.Teardown(ctx)
 		err = cerrors.LogOrReplace(err, tdErr, func() {
 			n.logger.Err(ctx, tdErr).Msg("could not tear down processor")
@@ -80,7 +84,10 @@ func (n *ProcessorNode) Run(ctx context.Context) error {
 		n.ProcessorTimer.Update(time.Since(executeTime))
 
 		if len(recsIn) != len(recsOut) {
-			return cerrors.Errorf("processor was given %v records, but returned %v", len(recsIn), len(recsOut))
+			return msg.Nack(
+				cerrors.Errorf("processor was given %v record(s), but returned %v", len(recsIn), len(recsOut)),
+				n.ID(),
+			)
 		}
 
 		switch v := recsOut[0].(type) {

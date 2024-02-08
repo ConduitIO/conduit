@@ -131,17 +131,49 @@ func TestProcessorNode_ErrorWithoutNackHandler(t *testing.T) {
 }
 
 func TestProcessorNode_ErrorWithNackHandler(t *testing.T) {
-	is := is.New(t)
 	ctx := context.Background()
-	ctrl := gomock.NewController(t)
-
 	wantErr := cerrors.New("something bad happened")
-	processor := mock.NewProcessor(ctrl)
+	processor := mock.NewProcessor(gomock.NewController(t))
 	processor.EXPECT().Open(gomock.Any())
 	processor.EXPECT().
 		Process(ctx, gomock.Any()).
 		Return([]sdk.ProcessedRecord{sdk.ErrorRecord{Error: wantErr}})
 	processor.EXPECT().Teardown(gomock.Any())
+
+	testErrorWithNackHandler(
+		t,
+		processor,
+		func(msg *Message, nackMetadata NackMetadata) error {
+			is.New(t).True(cerrors.Is(nackMetadata.Reason, wantErr)) // expected underlying error to be the processor error
+			return nil                                               // the error should be regarded as handled
+		},
+	)
+}
+
+func TestProcessorNode_BadProcessor_ReturnsMoreRecords(t *testing.T) {
+	ctx := context.Background()
+	processor := mock.NewProcessor(gomock.NewController(t))
+	processor.EXPECT().Open(gomock.Any())
+	processor.EXPECT().
+		Process(ctx, gomock.Any()).
+		// processor returns 2 records instead of one
+		Return([]sdk.ProcessedRecord{sdk.SingleRecord{}, sdk.SingleRecord{}})
+	processor.EXPECT().Teardown(gomock.Any())
+
+	testErrorWithNackHandler(
+		t,
+		processor,
+		func(msg *Message, nackMetadata NackMetadata) error {
+			// expected underlying error to be the processor error
+			is.New(t).Equal("processor was given 1 record(s), but returned 2", nackMetadata.Reason.Error())
+			return nil // the error should be regarded as handled
+		},
+	)
+}
+
+func testErrorWithNackHandler(t *testing.T, processor *mock.Processor, nackHandler NackHandler) {
+	is := is.New(t)
+	ctx := context.Background()
 
 	n := ProcessorNode{
 		Name:           "test",
@@ -154,10 +186,7 @@ func TestProcessorNode_ErrorWithNackHandler(t *testing.T) {
 	out := n.Pub()
 
 	msg := &Message{Ctx: ctx}
-	msg.RegisterNackHandler(func(msg *Message, nackMetadata NackMetadata) error {
-		is.True(cerrors.Is(nackMetadata.Reason, wantErr)) // expected underlying error to be the processor error
-		return nil                                        // the error should be regarded as handled
-	})
+	msg.RegisterNackHandler(nackHandler)
 	go func() {
 		// publisher
 		in <- msg
