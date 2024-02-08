@@ -56,7 +56,7 @@ func (r *Registry) Get(ctx context.Context, pluginName string, id string) (sdk.P
 	case plugin.PluginTypeAny:
 		d, err := r.standaloneReg.NewProcessor(ctx, fullName, id)
 		if err != nil {
-			r.logger.Debug(context.Background()).Err(err).Msg("could not find standalone plugin dispenser, falling back to builtin plugin")
+			r.logger.Debug(ctx).Err(err).Msg("could not find standalone plugin dispenser, falling back to builtin plugin")
 			d, err = r.builtinReg.NewProcessor(ctx, fullName, id)
 		}
 		return d, err

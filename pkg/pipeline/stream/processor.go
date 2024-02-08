@@ -17,6 +17,7 @@
 package stream
 
 import (
+	"bytes"
 	"context"
 	"time"
 
@@ -56,14 +57,8 @@ func (n *ProcessorNode) Run(ctx context.Context) error {
 		return err
 	}
 	defer cleanup()
-
-	n.logger.Debug(ctx).Msg("opening processor")
-	err = n.Processor.Open(ctx)
-	if err != nil {
-		n.logger.Err(ctx, err).Msg("failed opening processor")
-		return cerrors.Errorf("couldn't open processor: %w", err)
-	}
-
+	// Teardown needs to be called even if Open() fails
+	// (to mark the processor as not running)
 	defer func() {
 		n.logger.Debug(ctx).Msg("tearing down processor")
 		tdErr := n.Processor.Teardown(ctx)
@@ -71,6 +66,13 @@ func (n *ProcessorNode) Run(ctx context.Context) error {
 			n.logger.Err(ctx, tdErr).Msg("could not tear down processor")
 		})
 	}()
+
+	n.logger.Debug(ctx).Msg("opening processor")
+	err = n.Processor.Open(ctx)
+	if err != nil {
+		n.logger.Err(ctx, err).Msg("failed opening processor")
+		return cerrors.Errorf("couldn't open processor: %w", err)
+	}
 
 	for {
 		msg, err := trigger()
@@ -84,19 +86,20 @@ func (n *ProcessorNode) Run(ctx context.Context) error {
 		n.ProcessorTimer.Update(time.Since(executeTime))
 
 		if len(recsIn) != len(recsOut) {
-			return msg.Nack(
-				cerrors.Errorf("processor was given %v record(s), but returned %v", len(recsIn), len(recsOut)),
-				n.ID(),
-			)
+			err := cerrors.Errorf("processor was given %v record(s), but returned %v", len(recsIn), len(recsOut))
+			// todo when processors can accept multiple records
+			// make sure that we ack as many records as possible
+			// (here we simply nack all of them, which is always only one)
+			if nackErr := msg.Nack(err, n.ID()); nackErr != nil {
+				return nackErr
+			}
+			return err
 		}
 
 		switch v := recsOut[0].(type) {
 		case sdk.SingleRecord:
-			msg.Record = record.FromOpenCDC(opencdc.Record(v))
-			err = n.base.Send(ctx, n.logger, msg)
-			if err != nil {
-				return msg.Nack(err, n.ID())
-			}
+			// todo write a test for this
+			return n.handleSingleRecord(ctx, msg, v)
 		case sdk.FilterRecord:
 			// NB: Ack skipped messages since they've been correctly handled
 			err := msg.Ack()
@@ -122,4 +125,31 @@ func (n *ProcessorNode) Pub() <-chan *Message {
 
 func (n *ProcessorNode) SetLogger(logger log.CtxLogger) {
 	n.logger = logger
+}
+
+func (n *ProcessorNode) handleSingleRecord(ctx context.Context, msg *Message, v sdk.SingleRecord) error {
+	recOut := record.FromOpenCDC(opencdc.Record(v))
+	if !bytes.Equal(recOut.Position, msg.Record.Position) {
+		err := cerrors.Errorf(
+			"processor changed position from %v to %v "+
+				"(not allowed because source connector cannot correctly acknowledge messages)",
+			msg.Record.Position,
+			recOut.Position,
+		)
+
+		if nackErr := msg.Nack(err, n.ID()); nackErr != nil {
+			return nackErr
+		}
+		// correctly nacked (sent to the DLQ)
+		// so we return the "original" error here
+		return err
+	}
+
+	msg.Record = recOut
+	err := n.base.Send(ctx, n.logger, msg)
+	if err != nil {
+		return msg.Nack(err, n.ID())
+	}
+
+	return nil
 }

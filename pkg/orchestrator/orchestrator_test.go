@@ -17,6 +17,8 @@ package orchestrator
 import (
 	"context"
 	"fmt"
+	"github.com/conduitio/conduit-commons/opencdc"
+	sdk "github.com/conduitio/conduit-processor-sdk"
 	"os"
 	"reflect"
 	"testing"
@@ -33,7 +35,6 @@ import (
 	conn_standalone "github.com/conduitio/conduit/pkg/plugin/connector/standalone"
 	"github.com/conduitio/conduit/pkg/processor"
 	proc_mock "github.com/conduitio/conduit/pkg/processor/mock"
-	proc_builtin "github.com/conduitio/conduit/pkg/processor/procbuiltin"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/google/go-cmp/cmp"
 	"github.com/matryer/is"
@@ -79,7 +80,7 @@ func TestPipelineSimple(t *testing.T) {
 	procRegistry.EXPECT().
 		Get(gomock.Any(), "removereadat", gomock.Any()).
 		Return(
-			proc_builtin.NewFuncWrapper(func(ctx context.Context, r record.Record) (record.Record, error) {
+			sdk.NewProcessorFunc(sdk.Specification{Name: "removereadat"}, func(ctx context.Context, r opencdc.Record) (opencdc.Record, error) {
 				delete(r.Metadata, record.MetadataReadAt) // read at is different every time, remove it
 				return r, nil
 			}),

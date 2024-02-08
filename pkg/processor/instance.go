@@ -13,7 +13,6 @@
 // limitations under the License.
 
 //go:generate stringer -type=ParentType -trimprefix ParentType
-//go:generate mockgen -destination=mock/processor_registry.go -package=mock -mock_names=Registry=Registry . Registry
 
 package processor
 
@@ -21,7 +20,6 @@ import (
 	"context"
 	"time"
 
-	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/inspector"
 )
@@ -42,10 +40,6 @@ type (
 	// ProvisionType defines provisioning type
 	ProvisionType int
 )
-
-type Registry interface {
-	Get(ctx context.Context, pluginName string, id string) (sdk.Processor, error)
-}
 
 // Instance represents a processor persisted in a database.
 // An Instance is used to create a RunnableProcessor which represents

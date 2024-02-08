@@ -12,10 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//go:generate mockgen -destination=mock/processor_registry.go -package=mock -mock_names=Registry=Registry . Registry
+
 package processor
 
 import (
 	"context"
+	sdk "github.com/conduitio/conduit-processor-sdk"
 	"time"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -24,16 +27,20 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/metrics/measure"
 )
 
+type PluginRegistry interface {
+	Get(ctx context.Context, pluginName string, id string) (sdk.Processor, error)
+}
+
 type Service struct {
 	logger log.CtxLogger
 
-	registry  Registry
+	registry  PluginRegistry
 	instances map[string]*Instance
 	store     *Store
 }
 
 // NewService creates a new processor service.
-func NewService(logger log.CtxLogger, db database.DB, registry Registry) *Service {
+func NewService(logger log.CtxLogger, db database.DB, registry PluginRegistry) *Service {
 	return &Service{
 		logger:    logger.WithComponent("processor.Service"),
 		registry:  registry,
