@@ -16,6 +16,9 @@ package processor
 
 import (
 	"context"
+	"testing"
+	"time"
+
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cchan"
@@ -26,8 +29,6 @@ import (
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/matryer/is"
 	"go.uber.org/mock/gomock"
-	"testing"
-	"time"
 )
 
 func TestRunnableProcessor_Open(t *testing.T) {
@@ -181,4 +182,84 @@ func TestRunnableProcessor_Process(t *testing.T) {
 	is.True(gotRec)
 	is.NoErr(err)
 	is.Equal(recsOut[0], sdk.SingleRecord(rec.ToOpenCDC()))
+}
+
+func TestRunnableProcessor_Process_Filter(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	inst := &Instance{
+		Config: Config{
+			Settings: map[string]string{
+				"foo": "bar",
+			},
+			Workers: 123,
+		},
+
+		inInsp:  inspector.New(log.Nop(), inspector.DefaultBufferSize),
+		outInsp: inspector.New(log.Nop(), inspector.DefaultBufferSize),
+	}
+	recsIn := []opencdc.Record{
+		{
+			Key: opencdc.RawData("test key in"),
+		},
+	}
+
+	proc := mock.NewProcessor(gomock.NewController(t))
+	proc.EXPECT().Process(gomock.Any(), recsIn).Return([]sdk.ProcessedRecord{sdk.FilterRecord{}})
+
+	underTest := newRunnableProcessor(proc, inst)
+	inSession := underTest.inInsp.NewSession(ctx, "id-in")
+	outSession := underTest.outInsp.NewSession(ctx, "id-out")
+
+	_ = underTest.Process(ctx, recsIn)
+	defer underTest.Close()
+
+	rec, gotRec, err := cchan.ChanOut[record.Record](inSession.C).RecvTimeout(ctx, 100*time.Millisecond)
+	is.True(gotRec)
+	is.NoErr(err)
+	is.Equal(record.FromOpenCDC(recsIn[0]), rec)
+
+	_, gotRec, err = cchan.ChanOut[record.Record](outSession.C).RecvTimeout(ctx, 100*time.Millisecond)
+	is.True(!gotRec)
+	is.True(cerrors.Is(err, context.DeadlineExceeded))
+}
+
+func TestRunnableProcessor_Process_Error(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	inst := &Instance{
+		Config: Config{
+			Settings: map[string]string{
+				"foo": "bar",
+			},
+			Workers: 123,
+		},
+
+		inInsp:  inspector.New(log.Nop(), inspector.DefaultBufferSize),
+		outInsp: inspector.New(log.Nop(), inspector.DefaultBufferSize),
+	}
+	recsIn := []opencdc.Record{
+		{
+			Key: opencdc.RawData("test key in"),
+		},
+	}
+
+	proc := mock.NewProcessor(gomock.NewController(t))
+	proc.EXPECT().Process(gomock.Any(), recsIn).Return([]sdk.ProcessedRecord{sdk.ErrorRecord{}})
+
+	underTest := newRunnableProcessor(proc, inst)
+	inSession := underTest.inInsp.NewSession(ctx, "id-in")
+	outSession := underTest.outInsp.NewSession(ctx, "id-out")
+
+	_ = underTest.Process(ctx, recsIn)
+	defer underTest.Close()
+
+	rec, gotRec, err := cchan.ChanOut[record.Record](inSession.C).RecvTimeout(ctx, 100*time.Millisecond)
+	is.True(gotRec)
+	is.NoErr(err)
+	is.Equal(record.FromOpenCDC(recsIn[0]), rec)
+
+	_, gotRec, err = cchan.ChanOut[record.Record](outSession.C).RecvTimeout(ctx, 100*time.Millisecond)
+	is.True(!gotRec)
+	is.True(cerrors.Is(err, context.DeadlineExceeded))
 }
