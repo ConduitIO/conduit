@@ -15,9 +15,10 @@
 package record
 
 import (
-	"github.com/conduitio/conduit-commons/opencdc"
+	"fmt"
 	"testing"
 
+	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/google/go-cmp/cmp"
 	"github.com/matryer/is"
 )
@@ -145,39 +146,189 @@ func TestRecord_ToMap(t *testing.T) {
 	is.Equal(want, got)
 }
 
-func TestRecord_ToOpenCDC(t *testing.T) {
-	runTest := func(t *testing.T) {}
-	data := []struct {
-		in  Data
-		out opencdc.Data
+func TestRecord_ToOpenCDC_Keys(t *testing.T) {
+	testCases := dataTestCases()
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			is := is.New(t)
+
+			underTest := Record{Key: tc.in}
+			got := underTest.ToOpenCDC()
+			is.Equal(tc.want, got.Key)
+		})
+	}
+}
+
+func TestRecord_ToOpenCDC_PayloadBefore(t *testing.T) {
+	testCases := dataTestCases()
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			is := is.New(t)
+
+			underTest := Record{
+				Payload: Change{Before: tc.in},
+			}
+			got := underTest.ToOpenCDC()
+			is.Equal(tc.want, got.Payload.Before)
+		})
+	}
+}
+
+func TestRecord_ToOpenCDC_PayloadAfter(t *testing.T) {
+	testCases := dataTestCases()
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			is := is.New(t)
+
+			underTest := Record{
+				Payload: Change{After: tc.in},
+			}
+			got := underTest.ToOpenCDC()
+			is.Equal(tc.want, got.Payload.After)
+		})
+	}
+}
+
+func TestRecord_ToOpenCDC_Position(t *testing.T) {
+	testCases := []struct {
+		name string
+		in   Position
+		want opencdc.Position
 	}{
 		{
-			in:  nil,
-			out: nil,
+			name: "nil",
 		},
 		{
-			in:  RawData{Raw: []byte("some raw, uncooked data")},
-			out: opencdc.RawData("some raw, uncooked data"),
+			name: "raw",
+			in:   Position("raw, uncooked data"),
+			want: opencdc.Position("raw, uncooked data"),
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			is := is.New(t)
+
+			underTest := Record{Position: tc.in}
+			got := underTest.ToOpenCDC()
+			is.Equal(tc.want, got.Position)
+		})
+	}
+}
+
+func TestRecord_ToOpenCDC_Metadata(t *testing.T) {
+	testCases := []struct {
+		name string
+		in   Metadata
+		want opencdc.Metadata
+	}{
+		{
+			name: "nil",
 		},
 		{
-			in: StructuredData{
-				"letters": "a,b,c",
-				"number":  1,
-				"numbers": []int{11, 22, 33},
+			name: "empty",
+			in:   Metadata{},
+			want: opencdc.Metadata{},
+		},
+		{
+			name: "non-empty",
+			in: Metadata{
+				"k":                             "v",
+				MetadataOpenCDCVersion:          OpenCDCVersion,
+				MetadataConduitSourcePluginName: "file",
 			},
-			out: opencdc.StructuredData{
-				"letters": "a,b,c",
-				"number":  1,
-				"numbers": []int{11, 22, 33},
+			want: opencdc.Metadata{
+				"k":                                     "v",
+				opencdc.MetadataOpenCDCVersion:          opencdc.OpenCDCVersion,
+				opencdc.MetadataConduitSourcePluginName: "file",
 			},
 		},
 	}
 
-	for _, key := range data {
-		for _, before := range data {
-			for _, after := range data {
-				t.Run("something", runTest(key, before, after))
-			}
-		}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			is := is.New(t)
+
+			underTest := Record{Metadata: tc.in}
+			got := underTest.ToOpenCDC()
+			is.Equal(tc.want, got.Metadata)
+		})
+	}
+}
+
+func TestRecord_ToOpenCDC_Operation(t *testing.T) {
+	testCases := []struct {
+		in   Operation
+		want opencdc.Operation
+	}{
+		{
+			in:   OperationCreate,
+			want: opencdc.OperationCreate,
+		},
+		{
+			in:   OperationSnapshot,
+			want: opencdc.OperationSnapshot,
+		},
+		{
+			in:   OperationUpdate,
+			want: opencdc.OperationUpdate,
+		},
+		{
+			in:   OperationDelete,
+			want: opencdc.OperationDelete,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf("%v", tc.in), func(t *testing.T) {
+			is := is.New(t)
+
+			underTest := Record{Operation: tc.in}
+			got := underTest.ToOpenCDC()
+			is.Equal(tc.want, got.Operation)
+		})
+	}
+}
+
+type dataTestCase struct {
+	name string
+	in   Data
+	want opencdc.Data
+}
+
+func dataTestCases() []dataTestCase {
+	return []dataTestCase{
+		{
+			name: "nil",
+			in:   nil,
+			want: nil,
+		},
+		{
+			name: "raw",
+			in:   RawData{Raw: []byte("raw, uncooked data")},
+			want: opencdc.RawData("raw, uncooked data"),
+		},
+		{
+			name: "structured",
+			in: StructuredData{
+				"key1": "string-value",
+				"key2": 123,
+				"key3": []int{4, 5, 6},
+				"key4": map[string]interface{}{
+					"letters": "abc",
+				},
+			},
+			want: opencdc.StructuredData{
+				"key1": "string-value",
+				"key2": 123,
+				"key3": []int{4, 5, 6},
+				"key4": map[string]interface{}{
+					"letters": "abc",
+				},
+			},
+		},
 	}
 }
