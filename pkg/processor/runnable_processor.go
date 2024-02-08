@@ -48,7 +48,7 @@ func (p *RunnableProcessor) Open(ctx context.Context) error {
 
 	err = p.proc.Open(ctx)
 	if err != nil {
-		return cerrors.Errorf("failed opening processors: %w", err)
+		return cerrors.Errorf("failed opening processor: %w", err)
 	}
 
 	return nil

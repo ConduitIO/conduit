@@ -26,7 +26,6 @@ import (
 
 // FuncWrapper is an adapter allowing use of a function as a processor.Interface.
 // todo think about moving to the processor sdk for very simple processors
-// todo implement methods
 type FuncWrapper struct {
 	sdk.UnimplementedProcessor
 
