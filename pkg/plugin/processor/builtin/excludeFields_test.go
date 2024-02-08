@@ -25,29 +25,6 @@ import (
 )
 
 func TestExcludeFields_Process(t *testing.T) {
-	is := is.New(t)
-	proc := excludeFields{
-		fields: []string{".Metadata", ".Payload.After.foo"},
-	}
-	records := []opencdc.Record{
-		{
-			Metadata: map[string]string{"key1": "val1", "key2": "val2"},
-			Payload: opencdc.Change{
-				Before: nil,
-				After: opencdc.StructuredData{
-					"foo":  "bar",
-					"keep": "me",
-				},
-			},
-		},
-	}
-	output := proc.Process(context.Background(), records)
-	is.True(len(output) == 1)
-	is.Equal(output[0].(sdk.SingleRecord).Metadata, opencdc.Metadata{})
-	is.Equal(output[0].(sdk.SingleRecord).Payload.After, opencdc.StructuredData{"keep": "me"})
-}
-
-func TestExcludeFields_Process1(t *testing.T) {
 	proc := setField{}
 	ctx := context.Background()
 	testCases := []struct {
@@ -101,7 +78,7 @@ func TestExcludeFields_Process1(t *testing.T) {
 			proc.field = tc.field
 			proc.value = tc.value
 			output := proc.Process(ctx, []opencdc.Record{tc.record})
-			is.True(len(output) > 0)
+			is.True(len(output) == 1)
 			is.Equal(output[0].(sdk.SingleRecord).Metadata, tc.want.Metadata)
 			is.Equal(output[0].(sdk.SingleRecord).Payload, tc.want.Payload)
 			is.Equal(output[0].(sdk.SingleRecord).Operation, tc.want.Operation)
@@ -110,7 +87,7 @@ func TestExcludeFields_Process1(t *testing.T) {
 
 }
 
-func TestExcludeFields_Configure(t *testing.T) {
+func TestRenameField_Configure(t *testing.T) {
 	proc := setField{}
 	ctx := context.Background()
 	testCases := []struct {
