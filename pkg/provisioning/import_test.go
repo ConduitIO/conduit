@@ -131,7 +131,7 @@ func TestActionBuilder_Build(t *testing.T) {
 	logger := log.Nop()
 	ctrl := gomock.NewController(t)
 
-	srv, pipSrv, connSrv, procSrv, plugSrv := newTestService(ctrl, logger)
+	srv, pipSrv, connSrv, procSrv, connPlugSrv := newTestService(ctrl, logger)
 
 	oldConfig := config.Pipeline{
 		ID:   "config-id",
@@ -232,10 +232,10 @@ func TestActionBuilder_Build(t *testing.T) {
 
 	wantOldActions := []action{
 		deleteConnectorAction{
-			cfg:              oldConfig.Connectors[3],
-			pipelineID:       oldConfig.ID,
-			connectorService: connSrv,
-			pluginService:    plugSrv,
+			cfg:                    oldConfig.Connectors[3],
+			pipelineID:             oldConfig.ID,
+			connectorService:       connSrv,
+			connectorPluginService: connPlugSrv,
 		},
 		deleteProcessorAction{
 			cfg: oldConfig.Connectors[3].Processors[0],
@@ -261,16 +261,16 @@ func TestActionBuilder_Build(t *testing.T) {
 			pipelineService: pipSrv,
 		},
 		deleteConnectorAction{
-			cfg:              oldConfig.Connectors[1],
-			pipelineID:       oldConfig.ID,
-			connectorService: connSrv,
-			pluginService:    plugSrv,
+			cfg:                    oldConfig.Connectors[1],
+			pipelineID:             oldConfig.ID,
+			connectorService:       connSrv,
+			connectorPluginService: connPlugSrv,
 		},
 		createConnectorAction{
-			cfg:              newConfig.Connectors[1],
-			pipelineID:       newConfig.ID,
-			connectorService: connSrv,
-			pluginService:    plugSrv,
+			cfg:                    newConfig.Connectors[1],
+			pipelineID:             newConfig.ID,
+			connectorService:       connSrv,
+			connectorPluginService: connPlugSrv,
 		},
 		updateConnectorAction{
 			oldConfig:        oldConfig.Connectors[2],
@@ -278,10 +278,10 @@ func TestActionBuilder_Build(t *testing.T) {
 			connectorService: connSrv,
 		},
 		createConnectorAction{
-			cfg:              newConfig.Connectors[3],
-			pipelineID:       newConfig.ID,
-			connectorService: connSrv,
-			pluginService:    plugSrv,
+			cfg:                    newConfig.Connectors[3],
+			pipelineID:             newConfig.ID,
+			connectorService:       connSrv,
+			connectorPluginService: connPlugSrv,
 		},
 		createProcessorAction{
 			cfg: newConfig.Connectors[3].Processors[0],
@@ -503,17 +503,17 @@ func TestActionsBuilder_PrepareConnectorActions_Create(t *testing.T) {
 	logger := log.Nop()
 	ctrl := gomock.NewController(t)
 
-	srv, _, connSrv, _, plugSrv := newTestService(ctrl, logger)
+	srv, _, connSrv, _, connPlugSrv := newTestService(ctrl, logger)
 
 	oldConfig := config.Connector{}
 	newConfig := config.Connector{ID: "config-id"}
 	pipelineID := uuid.NewString()
 
 	want := []action{createConnectorAction{
-		cfg:              newConfig,
-		pipelineID:       pipelineID,
-		connectorService: connSrv,
-		pluginService:    plugSrv,
+		cfg:                    newConfig,
+		pipelineID:             pipelineID,
+		connectorService:       connSrv,
+		connectorPluginService: connPlugSrv,
 	}}
 
 	got := srv.newActionsBuilder().prepareConnectorActions(oldConfig, newConfig, pipelineID)
@@ -525,17 +525,17 @@ func TestActionsBuilder_PrepareConnectorActions_Delete(t *testing.T) {
 	logger := log.Nop()
 	ctrl := gomock.NewController(t)
 
-	srv, _, connSrv, _, plugSrv := newTestService(ctrl, logger)
+	srv, _, connSrv, _, connPlugSrv := newTestService(ctrl, logger)
 
 	oldConfig := config.Connector{ID: "config-id"}
 	newConfig := config.Connector{}
 	pipelineID := uuid.NewString()
 
 	want := []action{deleteConnectorAction{
-		cfg:              oldConfig,
-		pipelineID:       pipelineID,
-		connectorService: connSrv,
-		pluginService:    plugSrv,
+		cfg:                    oldConfig,
+		pipelineID:             pipelineID,
+		connectorService:       connSrv,
+		connectorPluginService: connPlugSrv,
 	}}
 
 	got := srv.newActionsBuilder().prepareConnectorActions(oldConfig, newConfig, pipelineID)
@@ -623,7 +623,7 @@ func TestActionsBuilder_PrepareConnectorActions_Recreate(t *testing.T) {
 	logger := log.Nop()
 	ctrl := gomock.NewController(t)
 
-	srv, _, connSrv, _, plugSrv := newTestService(ctrl, logger)
+	srv, _, connSrv, _, connPlugSrv := newTestService(ctrl, logger)
 	pipelineID := uuid.NewString()
 
 	testCases := []struct {
@@ -644,15 +644,15 @@ func TestActionsBuilder_PrepareConnectorActions_Recreate(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			is := is.New(t)
 			want := []action{deleteConnectorAction{
-				cfg:              tc.oldConfig,
-				pipelineID:       pipelineID,
-				connectorService: connSrv,
-				pluginService:    plugSrv,
+				cfg:                    tc.oldConfig,
+				pipelineID:             pipelineID,
+				connectorService:       connSrv,
+				connectorPluginService: connPlugSrv,
 			}, createConnectorAction{
-				cfg:              tc.newConfig,
-				pipelineID:       pipelineID,
-				connectorService: connSrv,
-				pluginService:    plugSrv,
+				cfg:                    tc.newConfig,
+				pipelineID:             pipelineID,
+				connectorService:       connSrv,
+				connectorPluginService: connPlugSrv,
 			}}
 			got := srv.newActionsBuilder().prepareConnectorActions(tc.oldConfig, tc.newConfig, pipelineID)
 			is.Equal(got, want)
@@ -808,16 +808,16 @@ func TestActionsBuilder_PrepareProcessorActions_Recreate(t *testing.T) {
 
 func intPtr(i int) *int { return &i }
 
-func newTestService(ctrl *gomock.Controller, logger log.CtxLogger) (*Service, *mock.PipelineService, *mock.ConnectorService, *mock.ProcessorService, *mock.PluginService) {
+func newTestService(ctrl *gomock.Controller, logger log.CtxLogger) (*Service, *mock.PipelineService, *mock.ConnectorService, *mock.ProcessorService, *mock.ConnectorPluginService) {
 	db := &inmemory.DB{}
 	pipSrv := mock.NewPipelineService(ctrl)
 	connSrv := mock.NewConnectorService(ctrl)
 	procSrv := mock.NewProcessorService(ctrl)
-	plugSrv := mock.NewPluginService(ctrl)
+	connPlugSrv := mock.NewConnectorPluginService(ctrl)
 
-	srv := NewService(db, logger, pipSrv, connSrv, procSrv, plugSrv, "")
+	srv := NewService(db, logger, pipSrv, connSrv, procSrv, connPlugSrv, "")
 
-	return srv, pipSrv, connSrv, procSrv, plugSrv
+	return srv, pipSrv, connSrv, procSrv, connPlugSrv
 }
 
 type fakeAction struct {

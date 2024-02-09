@@ -80,18 +80,18 @@ func (s *Service) rollbackActions(ctx context.Context, actions []action) bool {
 
 func (s *Service) newActionsBuilder() actionsBuilder {
 	return actionsBuilder{
-		pipelineService:  s.pipelineService,
-		connectorService: s.connectorService,
-		processorService: s.processorService,
-		pluginService:    s.pluginService,
+		pipelineService:        s.pipelineService,
+		connectorService:       s.connectorService,
+		processorService:       s.processorService,
+		connectorPluginService: s.connectorPluginService,
 	}
 }
 
 type actionsBuilder struct {
-	pipelineService  PipelineService
-	connectorService ConnectorService
-	processorService ProcessorService
-	pluginService    PluginService
+	pipelineService        PipelineService
+	connectorService       ConnectorService
+	processorService       ProcessorService
+	connectorPluginService ConnectorPluginService
 }
 
 func (ab actionsBuilder) Build(oldConfig, newConfig config.Pipeline) []action {
@@ -232,18 +232,18 @@ func (ab actionsBuilder) prepareConnectorActions(oldConfig, newConfig config.Con
 	if oldConfig.ID == "" {
 		// no old config, it's a brand new connector
 		return []action{createConnectorAction{
-			cfg:              newConfig,
-			pipelineID:       pipelineID,
-			connectorService: ab.connectorService,
-			pluginService:    ab.pluginService,
+			cfg:                    newConfig,
+			pipelineID:             pipelineID,
+			connectorService:       ab.connectorService,
+			connectorPluginService: ab.connectorPluginService,
 		}}
 	} else if newConfig.ID == "" {
 		// no new config, it's an old connector that needs to be deleted
 		return []action{deleteConnectorAction{
-			cfg:              oldConfig,
-			pipelineID:       pipelineID,
-			connectorService: ab.connectorService,
-			pluginService:    ab.pluginService,
+			cfg:                    oldConfig,
+			pipelineID:             pipelineID,
+			connectorService:       ab.connectorService,
+			connectorPluginService: ab.connectorPluginService,
 		}}
 	}
 
@@ -274,16 +274,16 @@ func (ab actionsBuilder) prepareConnectorActions(oldConfig, newConfig config.Con
 	// we have to delete the old connector and create a new one
 	return []action{
 		deleteConnectorAction{
-			cfg:              oldConfig,
-			pipelineID:       pipelineID,
-			connectorService: ab.connectorService,
-			pluginService:    ab.pluginService,
+			cfg:                    oldConfig,
+			pipelineID:             pipelineID,
+			connectorService:       ab.connectorService,
+			connectorPluginService: ab.connectorPluginService,
 		},
 		createConnectorAction{
-			cfg:              newConfig,
-			pipelineID:       pipelineID,
-			connectorService: ab.connectorService,
-			pluginService:    ab.pluginService,
+			cfg:                    newConfig,
+			pipelineID:             pipelineID,
+			connectorService:       ab.connectorService,
+			connectorPluginService: ab.connectorPluginService,
 		},
 	}
 }

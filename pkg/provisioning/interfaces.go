@@ -24,7 +24,7 @@ import (
 	"github.com/conduitio/conduit/pkg/processor"
 )
 
-//go:generate mockgen -destination=mock/provisioning.go -package=mock -mock_names=PipelineService=PipelineService,ConnectorService=ConnectorService,ProcessorService=ProcessorService,PluginService=PluginService . PipelineService,ConnectorService,ProcessorService,PluginService
+//go:generate mockgen -destination=mock/provisioning.go -package=mock -mock_names=PipelineService=PipelineService,ConnectorService=ConnectorService,ProcessorService=ProcessorService,ConnectorPluginService=ConnectorPluginService . PipelineService,ConnectorService,ProcessorService,ConnectorPluginService
 
 type PipelineService interface {
 	Get(ctx context.Context, id string) (*pipeline.Instance, error)
@@ -69,6 +69,6 @@ type ProcessorService interface {
 	Delete(ctx context.Context, id string) error
 }
 
-type PluginService interface {
+type ConnectorPluginService interface {
 	NewDispenser(ctx log.CtxLogger, name string) (connectorPlugin.Dispenser, error)
 }
