@@ -20,8 +20,8 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin/connector"
 )
 
-type PluginOrchestrator base
+type ConnectorPluginOrchestrator base
 
-func (ps *PluginOrchestrator) ListConnectors(ctx context.Context) (map[string]connector.Specification, error) {
-	return ps.plugins.ListConnectors(ctx)
+func (ps *ConnectorPluginOrchestrator) List(ctx context.Context) (map[string]connector.Specification, error) {
+	return ps.connectorPlugins.List(ctx)
 }

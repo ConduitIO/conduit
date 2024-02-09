@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:generate mockgen -source=registry.go -destination=mock/processor_creator.go -package=mock -mock_names=processorCreator=ProcessorCreator . processorCreator
+//go:generate mockgen -source=service.go -destination=mock/registry.go -package=mock -mock_names=registry=Registry . registry
 
 package processor
 
@@ -25,42 +25,62 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin"
 )
 
-type processorCreator interface {
+type registry interface {
 	NewProcessor(ctx context.Context, fullName plugin.FullName, id string) (sdk.Processor, error)
+	List() map[plugin.FullName]sdk.Specification
 }
 
-type Registry struct {
+type PluginService struct {
 	logger log.CtxLogger
 
-	builtinReg    processorCreator
-	standaloneReg processorCreator
+	builtinReg    registry
+	standaloneReg registry
 }
 
-func NewRegistry(logger log.CtxLogger, br processorCreator, sr processorCreator) *Registry {
-	return &Registry{
-		logger:        logger,
+func NewPluginService(logger log.CtxLogger, br registry, sr registry) *PluginService {
+	return &PluginService{
+		logger:        logger.WithComponent("processor.PluginService"),
 		builtinReg:    br,
 		standaloneReg: sr,
 	}
 }
 
-func (r *Registry) Get(ctx context.Context, pluginName string, id string) (sdk.Processor, error) {
+func (s *PluginService) Check(context.Context) error {
+	return nil
+}
+
+func (s *PluginService) NewProcessor(ctx context.Context, pluginName string, id string) (sdk.Processor, error) {
 	fullName := plugin.FullName(pluginName)
 	switch fullName.PluginType() {
 	// standalone processors take precedence
 	// over built-in processors with the same name
 	case plugin.PluginTypeStandalone:
-		return r.standaloneReg.NewProcessor(ctx, fullName, id)
+		return s.standaloneReg.NewProcessor(ctx, fullName, id)
 	case plugin.PluginTypeBuiltin:
-		return r.builtinReg.NewProcessor(ctx, fullName, id)
+		return s.builtinReg.NewProcessor(ctx, fullName, id)
 	case plugin.PluginTypeAny:
-		d, err := r.standaloneReg.NewProcessor(ctx, fullName, id)
+		d, err := s.standaloneReg.NewProcessor(ctx, fullName, id)
 		if err != nil {
-			r.logger.Debug(ctx).Err(err).Msg("could not find standalone plugin dispenser, falling back to builtin plugin")
-			d, err = r.builtinReg.NewProcessor(ctx, fullName, id)
+			s.logger.Debug(ctx).Err(err).Msg("could not find standalone plugin dispenser, falling back to builtin plugin")
+			d, err = s.builtinReg.NewProcessor(ctx, fullName, id)
 		}
 		return d, err
 	default:
 		return nil, cerrors.Errorf("invalid plugin name prefix %q", fullName.PluginType())
 	}
+}
+
+func (s *PluginService) List(context.Context) (map[string]sdk.Specification, error) {
+	builtinSpecs := s.builtinReg.List()
+	standaloneSpecs := s.standaloneReg.List()
+
+	specs := make(map[string]sdk.Specification, len(builtinSpecs)+len(standaloneSpecs))
+	for k, v := range builtinSpecs {
+		specs[string(k)] = v
+	}
+	for k, v := range standaloneSpecs {
+		specs[string(k)] = v
+	}
+
+	return specs, nil
 }

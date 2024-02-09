@@ -30,11 +30,10 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/orchestrator/mock"
 	"github.com/conduitio/conduit/pkg/pipeline"
-	connector2 "github.com/conduitio/conduit/pkg/plugin/connector"
+	conn_plugin "github.com/conduitio/conduit/pkg/plugin/connector"
 	conn_builtin "github.com/conduitio/conduit/pkg/plugin/connector/builtin"
 	conn_standalone "github.com/conduitio/conduit/pkg/plugin/connector/standalone"
 	"github.com/conduitio/conduit/pkg/processor"
-	proc_mock "github.com/conduitio/conduit/pkg/processor/mock"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/google/go-cmp/cmp"
 	"github.com/matryer/is"
@@ -46,13 +45,14 @@ import (
 // a context is passed to a function.
 var ctxType = reflect.TypeOf((*context.Context)(nil)).Elem()
 
-func newMockServices(t *testing.T) (*mock.PipelineService, *mock.ConnectorService, *mock.ProcessorService, *mock.PluginService) {
+func newMockServices(t *testing.T) (*mock.PipelineService, *mock.ConnectorService, *mock.ProcessorService, *mock.ConnectorPluginService, *mock.ProcessorPluginService) {
 	ctrl := gomock.NewController(t)
 
 	return mock.NewPipelineService(ctrl),
 		mock.NewConnectorService(ctrl),
 		mock.NewProcessorService(ctrl),
-		mock.NewPluginService(ctrl)
+		mock.NewConnectorPluginService(ctrl),
+		mock.NewProcessorPluginService(ctrl)
 }
 
 func TestPipelineSimple(t *testing.T) {
@@ -70,15 +70,15 @@ func TestPipelineSimple(t *testing.T) {
 		is.NoErr(err)
 	})
 
-	pluginService := connector2.NewService(
+	connPluginService := conn_plugin.NewPluginService(
 		logger,
 		conn_builtin.NewRegistry(logger, conn_builtin.DefaultDispenserFactories),
 		conn_standalone.NewRegistry(logger, ""),
 	)
 
-	procRegistry := proc_mock.NewPluginRegistry(gomock.NewController(t))
-	procRegistry.EXPECT().
-		Get(gomock.Any(), "removereadat", gomock.Any()).
+	procPluginService := mock.NewProcessorPluginService(gomock.NewController(t))
+	procPluginService.EXPECT().
+		NewProcessor(gomock.Any(), "removereadat", gomock.Any()).
 		Return(
 			sdk.NewProcessorFunc(sdk.Specification{Name: "removereadat"}, func(ctx context.Context, r opencdc.Record) (opencdc.Record, error) {
 				delete(r.Metadata, record.MetadataReadAt) // read at is different every time, remove it
@@ -95,8 +95,9 @@ func TestPipelineSimple(t *testing.T) {
 		logger,
 		pipeline.NewService(logger, db),
 		connector.NewService(logger, db, connector.NewPersister(logger, db, time.Second, 3)),
-		processor.NewService(logger, db, procRegistry),
-		pluginService,
+		processor.NewService(logger, db, procPluginService),
+		connPluginService,
+		procPluginService,
 	)
 
 	// create a host pipeline

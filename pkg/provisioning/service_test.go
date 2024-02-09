@@ -28,7 +28,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/database/badger"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/pipeline"
-	connector2 "github.com/conduitio/conduit/pkg/plugin/connector"
+	conn_plugin "github.com/conduitio/conduit/pkg/plugin/connector"
 	"github.com/conduitio/conduit/pkg/plugin/connector/builtin"
 	"github.com/conduitio/conduit/pkg/plugin/connector/standalone"
 	"github.com/conduitio/conduit/pkg/processor"
@@ -487,7 +487,7 @@ func TestService_IntegrationTestServices(t *testing.T) {
 		is.NoErr(err)
 	})
 
-	pluginService := connector2.NewService(
+	connPluginService := conn_plugin.NewPluginService(
 		logger,
 		builtin.NewRegistry(logger, builtin.DefaultDispenserFactories),
 		standalone.NewRegistry(logger, ""),
@@ -496,9 +496,9 @@ func TestService_IntegrationTestServices(t *testing.T) {
 	plService := pipeline.NewService(logger, db)
 	connService := connector.NewService(logger, db, connector.NewPersister(logger, db, time.Second, 3))
 
-	procRegistry := proc_mock.NewPluginRegistry(gomock.NewController(t))
-	procRegistry.EXPECT().
-		Get(gomock.Any(), "removereadat", gomock.Any()).
+	procPluginService := proc_mock.NewPluginService(gomock.NewController(t))
+	procPluginService.EXPECT().
+		NewProcessor(gomock.Any(), "removereadat", gomock.Any()).
 		Return(
 			sdk.NewProcessorFunc(sdk.Specification{Name: "removereadat"}, func(ctx context.Context, r opencdc.Record) (opencdc.Record, error) {
 				delete(r.Metadata, record.MetadataReadAt) // read at is different every time, remove it
@@ -506,7 +506,7 @@ func TestService_IntegrationTestServices(t *testing.T) {
 			}),
 			nil,
 		).AnyTimes()
-	procService := processor.NewService(logger, db, procRegistry)
+	procService := processor.NewService(logger, db, procPluginService)
 
 	// create destination file
 	destFile := "./test/dest-file.txt"
@@ -517,7 +517,7 @@ func TestService_IntegrationTestServices(t *testing.T) {
 		is.NoErr(err)
 	})
 
-	service := NewService(db, logger, plService, connService, procService, pluginService, "./test/pipelines4-integration-test")
+	service := NewService(db, logger, plService, connService, procService, connPluginService, "./test/pipelines4-integration-test")
 	err = service.Init(context.Background())
 	is.NoErr(err)
 
