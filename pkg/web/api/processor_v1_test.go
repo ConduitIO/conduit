@@ -25,7 +25,6 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/inspector"
 	"github.com/conduitio/conduit/pkg/processor"
-	procmock "github.com/conduitio/conduit/pkg/processor/mock"
 	apimock "github.com/conduitio/conduit/pkg/web/api/mock"
 	"github.com/conduitio/conduit/pkg/web/api/toproto"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
@@ -42,7 +41,6 @@ func TestProcessorAPIv1_ListProcessors(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	psMock := apimock.NewProcessorOrchestrator(ctrl)
 	api := NewProcessorAPIv1(psMock)
-	p := procmock.NewProcessor(ctrl)
 
 	config := processor.Config{
 		Settings: map[string]string{"titan": "armored"},
@@ -58,7 +56,6 @@ func TestProcessorAPIv1_ListProcessors(t *testing.T) {
 				Type: processor.ParentTypeConnector,
 			},
 			Config:    config,
-			Processor: p,
 			UpdatedAt: now,
 			CreatedAt: now,
 		},
@@ -70,7 +67,6 @@ func TestProcessorAPIv1_ListProcessors(t *testing.T) {
 				Type: processor.ParentTypeConnector,
 			},
 			Config:    config,
-			Processor: p,
 			UpdatedAt: now,
 			CreatedAt: now,
 		},
@@ -127,7 +123,6 @@ func TestProcessorAPIv1_ListProcessorsByParents(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	psMock := apimock.NewProcessorOrchestrator(ctrl)
 	api := NewProcessorAPIv1(psMock)
-	p := procmock.NewProcessor(ctrl)
 
 	config := processor.Config{
 		Settings: map[string]string{"titan": "armored"},
@@ -144,7 +139,6 @@ func TestProcessorAPIv1_ListProcessorsByParents(t *testing.T) {
 				Type: processor.ParentTypeConnector,
 			},
 			Config:    config,
-			Processor: p,
 			UpdatedAt: now,
 			CreatedAt: now,
 		},
@@ -156,7 +150,6 @@ func TestProcessorAPIv1_ListProcessorsByParents(t *testing.T) {
 				Type: processor.ParentTypeConnector,
 			},
 			Config:    config,
-			Processor: p,
 			UpdatedAt: now,
 			CreatedAt: now,
 		},
@@ -168,7 +161,6 @@ func TestProcessorAPIv1_ListProcessorsByParents(t *testing.T) {
 				Type: processor.ParentTypePipeline,
 			},
 			Config:    processor.Config{},
-			Processor: p,
 			UpdatedAt: now,
 			CreatedAt: now,
 		},
@@ -180,7 +172,6 @@ func TestProcessorAPIv1_ListProcessorsByParents(t *testing.T) {
 				Type: processor.ParentTypePipeline,
 			},
 			Config:    processor.Config{},
-			Processor: p,
 			UpdatedAt: now,
 			CreatedAt: now,
 		},
@@ -252,7 +243,6 @@ func TestProcessorAPIv1_CreateProcessor(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	psMock := apimock.NewProcessorOrchestrator(ctrl)
 	api := NewProcessorAPIv1(psMock)
-	p := procmock.NewProcessor(ctrl)
 
 	config := processor.Config{
 		Settings: map[string]string{"titan": "armored"},
@@ -267,7 +257,6 @@ func TestProcessorAPIv1_CreateProcessor(t *testing.T) {
 			Type: processor.ParentTypeConnector,
 		},
 		Config:    config,
-		Processor: p,
 		Condition: "{{ true }}",
 		UpdatedAt: now,
 		CreatedAt: now,
@@ -310,7 +299,6 @@ func TestProcessorAPIv1_GetProcessor(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	psMock := apimock.NewProcessorOrchestrator(ctrl)
 	api := NewProcessorAPIv1(psMock)
-	p := procmock.NewProcessor(ctrl)
 
 	now := time.Now()
 	pr := &processor.Instance{
@@ -323,7 +311,6 @@ func TestProcessorAPIv1_GetProcessor(t *testing.T) {
 		Config: processor.Config{
 			Settings: map[string]string{"titan": "armored"},
 		},
-		Processor: p,
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
@@ -362,7 +349,6 @@ func TestProcessorAPIv1_UpdateProcessor(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	psMock := apimock.NewProcessorOrchestrator(ctrl)
 	api := NewProcessorAPIv1(psMock)
-	p := procmock.NewProcessor(ctrl)
 
 	config := processor.Config{
 		Settings: map[string]string{"titan": "armored"},
@@ -377,7 +363,6 @@ func TestProcessorAPIv1_UpdateProcessor(t *testing.T) {
 			Type: processor.ParentTypeConnector,
 		},
 		Config:    config,
-		Processor: p,
 		UpdatedAt: now,
 		CreatedAt: now,
 	}

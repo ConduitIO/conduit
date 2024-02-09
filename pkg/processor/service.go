@@ -12,28 +12,35 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//go:generate mockgen -destination=mock/processor_registry.go -package=mock -mock_names=PluginRegistry=PluginRegistry . PluginRegistry
+
 package processor
 
 import (
 	"context"
 	"time"
 
+	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/database"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/measure"
 )
 
+type PluginRegistry interface {
+	Get(ctx context.Context, pluginName string, id string) (sdk.Processor, error)
+}
+
 type Service struct {
 	logger log.CtxLogger
 
-	registry  Registry
+	registry  PluginRegistry
 	instances map[string]*Instance
 	store     *Store
 }
 
 // NewService creates a new processor service.
-func NewService(logger log.CtxLogger, db database.DB, registry Registry) *Service {
+func NewService(logger log.CtxLogger, db database.DB, registry PluginRegistry) *Service {
 	return &Service{
 		logger:    logger.WithComponent("processor.Service"),
 		registry:  registry,
@@ -54,6 +61,7 @@ func (s *Service) Init(ctx context.Context) error {
 	s.logger.Info(ctx).Int("count", len(s.instances)).Msg("processors initialized")
 
 	for _, i := range instances {
+		i.init(s.logger)
 		measure.ProcessorsGauge.WithValues(i.Plugin).Inc()
 	}
 
@@ -83,20 +91,18 @@ func (s *Service) Get(_ context.Context, id string) (*Instance, error) {
 	return ins, nil
 }
 
-func (s *Service) InitInstance(ctx context.Context, i *Instance) error {
-	if i.Processor != nil {
-		return ErrProcessorRunning
+func (s *Service) MakeRunnableProcessor(ctx context.Context, i *Instance) (*RunnableProcessor, error) {
+	if i.running {
+		return nil, ErrProcessorRunning
 	}
 
-	// todo make registru return a processor.Interface
-	// (add inspector there automatically)
 	p, err := s.registry.Get(ctx, i.Plugin, i.ID)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	i.Processor = newInspectableProcessor(p, s.logger)
 
-	return nil
+	i.running = true
+	return newRunnableProcessor(p, i), nil
 }
 
 // Create will create a new processor instance.
@@ -116,6 +122,16 @@ func (s *Service) Create(
 		cfg.Workers = 1
 	}
 
+	// check if the processor plugin exists
+	p, err := s.registry.Get(ctx, plugin, id)
+	if err != nil {
+		return nil, cerrors.Errorf("could not get processor: %w", err)
+	}
+	err = p.Teardown(ctx)
+	if err != nil {
+		s.logger.Warn(ctx).Err(err).Msg("processor teardown failed")
+	}
+
 	now := time.Now()
 	instance := &Instance{
 		ID:            id,
@@ -127,9 +143,10 @@ func (s *Service) Create(
 		Config:        cfg,
 		Condition:     cond,
 	}
+	instance.init(s.logger)
 
 	// persist instance
-	err := s.store.Set(ctx, instance.ID, instance)
+	err = s.store.Set(ctx, instance.ID, instance)
 	if err != nil {
 		return nil, err
 	}
@@ -147,13 +164,10 @@ func (s *Service) Update(ctx context.Context, id string, cfg Config) (*Instance,
 		return nil, err
 	}
 
-	// this can't really fail, this call already passed when creating the instance
-	p, err := s.registry.Get(ctx, instance.Plugin, instance.ID)
-	if err != nil {
-		return nil, cerrors.Errorf("could not get processor: %w", err)
+	if instance.running {
+		return nil, cerrors.Errorf("could not update processor instance (ID: %s): %w", id, ErrProcessorRunning)
 	}
 
-	instance.Processor = newInspectableProcessor(p, s.logger)
 	instance.Config = cfg
 	instance.UpdatedAt = time.Now()
 
@@ -174,12 +188,16 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 		return err
 	}
 
+	if instance.running {
+		return cerrors.Errorf("could not delete processor instance (ID: %s): %w", id, ErrProcessorRunning)
+	}
+
 	err = s.store.Delete(ctx, id)
 	if err != nil {
 		return cerrors.Errorf("could not delete processor instance from store: %w", err)
 	}
 	delete(s.instances, id)
-	instance.Processor.Close()
+	instance.Close()
 	measure.ProcessorsGauge.WithValues(instance.Plugin).Dec()
 
 	return nil

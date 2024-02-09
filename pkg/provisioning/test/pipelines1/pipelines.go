@@ -87,7 +87,6 @@ var P1P1 = &processor.Instance{
 		Workers:  1,
 		Settings: map[string]string{"additionalProp1": "string"},
 	},
-	Processor: nil,
 
 	ProvisionedBy: processor.ProvisionTypeConfig,
 	CreatedAt:     time.Now(),
@@ -105,7 +104,6 @@ var P1C2P1 = &processor.Instance{
 		Workers:  10,
 		Settings: map[string]string{"additionalProp1": "string"},
 	},
-	Processor: nil,
 
 	ProvisionedBy: processor.ProvisionTypeConfig,
 	CreatedAt:     time.Now(),

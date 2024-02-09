@@ -20,23 +20,26 @@ import (
 	"testing"
 	"time"
 
+	"github.com/conduitio/conduit-commons/opencdc"
+	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/ctxutil"
 	"github.com/conduitio/conduit/pkg/foundation/database/badger"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/pipeline"
-	"github.com/conduitio/conduit/pkg/plugin"
+	connector2 "github.com/conduitio/conduit/pkg/plugin/connector"
 	"github.com/conduitio/conduit/pkg/plugin/connector/builtin"
 	"github.com/conduitio/conduit/pkg/plugin/connector/standalone"
 	"github.com/conduitio/conduit/pkg/processor"
 	proc_mock "github.com/conduitio/conduit/pkg/processor/mock"
-	proc_builtin "github.com/conduitio/conduit/pkg/processor/procbuiltin"
 	p1 "github.com/conduitio/conduit/pkg/provisioning/test/pipelines1"
 	p2 "github.com/conduitio/conduit/pkg/provisioning/test/pipelines2"
 	p3 "github.com/conduitio/conduit/pkg/provisioning/test/pipelines3"
 	p4 "github.com/conduitio/conduit/pkg/provisioning/test/pipelines4-integration-test"
 	"github.com/conduitio/conduit/pkg/record"
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/matryer/is"
 	"github.com/rs/zerolog"
 	"go.uber.org/mock/gomock"
@@ -484,7 +487,7 @@ func TestService_IntegrationTestServices(t *testing.T) {
 		is.NoErr(err)
 	})
 
-	pluginService := plugin.NewService(
+	pluginService := connector2.NewService(
 		logger,
 		builtin.NewRegistry(logger, builtin.DefaultDispenserFactories),
 		standalone.NewRegistry(logger, ""),
@@ -493,11 +496,11 @@ func TestService_IntegrationTestServices(t *testing.T) {
 	plService := pipeline.NewService(logger, db)
 	connService := connector.NewService(logger, db, connector.NewPersister(logger, db, time.Second, 3))
 
-	procRegistry := proc_mock.NewRegistry(gomock.NewController(t))
+	procRegistry := proc_mock.NewPluginRegistry(gomock.NewController(t))
 	procRegistry.EXPECT().
 		Get(gomock.Any(), "removereadat", gomock.Any()).
 		Return(
-			proc_builtin.NewFuncWrapper(func(ctx context.Context, r record.Record) (record.Record, error) {
+			sdk.NewProcessorFunc(sdk.Specification{Name: "removereadat"}, func(ctx context.Context, r opencdc.Record) (opencdc.Record, error) {
 				delete(r.Metadata, record.MetadataReadAt) // read at is different every time, remove it
 				return r, nil
 			}),
@@ -541,8 +544,10 @@ func TestService_IntegrationTestServices(t *testing.T) {
 		is.NoErr(err)
 		want.CreatedAt = got.CreatedAt
 		want.UpdatedAt = got.UpdatedAt
-		want.Processor = got.Processor
-		is.Equal(got, want)
+		diff := cmp.Diff(got, want, cmpopts.IgnoreUnexported(processor.Instance{}))
+		if diff != "" {
+			t.Errorf("mismatch (-want +got): %s", diff)
+		}
 	}
 
 	// checking connectors

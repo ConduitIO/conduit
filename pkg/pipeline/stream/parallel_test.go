@@ -29,7 +29,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/csync"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/noop"
-	pmock "github.com/conduitio/conduit/pkg/processor/mock"
+	"github.com/conduitio/conduit/pkg/pipeline/stream/mock"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/matryer/is"
 	"go.uber.org/mock/gomock"
@@ -561,7 +561,7 @@ func TestParallelNode_Processor(t *testing.T) {
 	const msgCount = 1000
 
 	// create a dummy processor
-	proc := pmock.NewProcessor(ctrl)
+	proc := mock.NewProcessor(ctrl)
 	proc.EXPECT().
 		Open(gomock.Any()).
 		Times(workerCount)

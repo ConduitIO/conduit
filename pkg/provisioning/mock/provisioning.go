@@ -399,18 +399,19 @@ func (mr *ProcessorServiceMockRecorder) Get(arg0, arg1 any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*ProcessorService)(nil).Get), arg0, arg1)
 }
 
-// InitInstance mocks base method.
-func (m *ProcessorService) InitInstance(arg0 context.Context, arg1 *processor.Instance) error {
+// MakeRunnableProcessor mocks base method.
+func (m *ProcessorService) MakeRunnableProcessor(arg0 context.Context, arg1 *processor.Instance) (*processor.RunnableProcessor, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "InitInstance", arg0, arg1)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret := m.ctrl.Call(m, "MakeRunnableProcessor", arg0, arg1)
+	ret0, _ := ret[0].(*processor.RunnableProcessor)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
-// InitInstance indicates an expected call of InitInstance.
-func (mr *ProcessorServiceMockRecorder) InitInstance(arg0, arg1 any) *gomock.Call {
+// MakeRunnableProcessor indicates an expected call of MakeRunnableProcessor.
+func (mr *ProcessorServiceMockRecorder) MakeRunnableProcessor(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InitInstance", reflect.TypeOf((*ProcessorService)(nil).InitInstance), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MakeRunnableProcessor", reflect.TypeOf((*ProcessorService)(nil).MakeRunnableProcessor), arg0, arg1)
 }
 
 // Update mocks base method.

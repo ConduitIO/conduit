@@ -22,18 +22,19 @@ import (
 	"testing"
 	"time"
 
+	"github.com/conduitio/conduit-commons/opencdc"
+	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/ctxutil"
 	"github.com/conduitio/conduit/pkg/foundation/database/badger"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/orchestrator/mock"
 	"github.com/conduitio/conduit/pkg/pipeline"
-	"github.com/conduitio/conduit/pkg/plugin"
-	"github.com/conduitio/conduit/pkg/plugin/connector/builtin"
-	"github.com/conduitio/conduit/pkg/plugin/connector/standalone"
+	connector2 "github.com/conduitio/conduit/pkg/plugin/connector"
+	conn_builtin "github.com/conduitio/conduit/pkg/plugin/connector/builtin"
+	conn_standalone "github.com/conduitio/conduit/pkg/plugin/connector/standalone"
 	"github.com/conduitio/conduit/pkg/processor"
 	proc_mock "github.com/conduitio/conduit/pkg/processor/mock"
-	proc_builtin "github.com/conduitio/conduit/pkg/processor/procbuiltin"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/google/go-cmp/cmp"
 	"github.com/matryer/is"
@@ -69,22 +70,25 @@ func TestPipelineSimple(t *testing.T) {
 		is.NoErr(err)
 	})
 
-	pluginService := plugin.NewService(
+	pluginService := connector2.NewService(
 		logger,
-		builtin.NewRegistry(logger, builtin.DefaultDispenserFactories),
-		standalone.NewRegistry(logger, ""),
+		conn_builtin.NewRegistry(logger, conn_builtin.DefaultDispenserFactories),
+		conn_standalone.NewRegistry(logger, ""),
 	)
 
-	procRegistry := proc_mock.NewRegistry(gomock.NewController(t))
+	procRegistry := proc_mock.NewPluginRegistry(gomock.NewController(t))
 	procRegistry.EXPECT().
 		Get(gomock.Any(), "removereadat", gomock.Any()).
 		Return(
-			proc_builtin.NewFuncWrapper(func(ctx context.Context, r record.Record) (record.Record, error) {
+			sdk.NewProcessorFunc(sdk.Specification{Name: "removereadat"}, func(ctx context.Context, r opencdc.Record) (opencdc.Record, error) {
 				delete(r.Metadata, record.MetadataReadAt) // read at is different every time, remove it
 				return r, nil
 			}),
 			nil,
-		)
+		).
+		// once when creating a processor instance (to verify the plugin exists)
+		// and once when building the pipeline nodes (to make a runnable processor)
+		Times(2)
 
 	orc := NewOrchestrator(
 		db,

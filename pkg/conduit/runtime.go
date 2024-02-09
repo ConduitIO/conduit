@@ -43,7 +43,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/multierror"
 	"github.com/conduitio/conduit/pkg/orchestrator"
 	"github.com/conduitio/conduit/pkg/pipeline"
-	"github.com/conduitio/conduit/pkg/plugin"
+	conn_plugin "github.com/conduitio/conduit/pkg/plugin/connector"
 	conn_builtin "github.com/conduitio/conduit/pkg/plugin/connector/builtin"
 	conn_standalone "github.com/conduitio/conduit/pkg/plugin/connector/standalone"
 	proc_plugin "github.com/conduitio/conduit/pkg/plugin/processor"
@@ -86,7 +86,7 @@ type Runtime struct {
 	connectorService *connector.Service
 	processorService *processor.Service
 
-	pluginService *plugin.Service
+	pluginService *conn_plugin.Service
 
 	connectorPersister *connector.Persister
 	logger             log.CtxLogger
@@ -183,7 +183,7 @@ func newServices(
 	db database.DB,
 	connPersister *connector.Persister,
 	cfg Config,
-) (*pipeline.Service, *connector.Service, *processor.Service, *plugin.Service, error) {
+) (*pipeline.Service, *connector.Service, *processor.Service, *conn_plugin.Service, error) {
 	pipelineService := pipeline.NewService(logger, db)
 	connectorService := connector.NewService(logger, db, connPersister)
 
@@ -199,7 +199,7 @@ func newServices(
 	)
 
 	processorService := processor.NewService(logger, db, procReg)
-	pluginService := plugin.NewService(
+	pluginService := conn_plugin.NewService(
 		logger,
 		conn_builtin.NewRegistry(logger, cfg.PluginDispenserFactories),
 		conn_standalone.NewRegistry(logger, cfg.Connectors.Path),
