@@ -41,7 +41,7 @@ func TestService_Init_Success(t *testing.T) {
 	p := proc_mock.NewProcessor(gomock.NewController(t))
 	p.EXPECT().Teardown(ctx).Return(nil)
 
-	registry := newProcessorRegistry(t, map[string]sdk.Processor{procType: p})
+	registry := newPluginService(t, map[string]sdk.Processor{procType: p})
 	service := NewService(log.Nop(), db, registry)
 
 	// create a processor instance
@@ -91,7 +91,7 @@ func TestService_Check(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			is := is.New(t)
 			db.EXPECT().Ping(gomock.Any()).Return(tc.wantErr)
-			service := NewService(logger, db, &proc_plugin.Registry{})
+			service := NewService(logger, db, &proc_plugin.PluginService{})
 
 			gotErr := service.Check(ctx)
 			is.Equal(tc.wantErr, gotErr)
@@ -122,7 +122,7 @@ func TestService_Create_Success(t *testing.T) {
 		},
 	}
 
-	registry := newProcessorRegistry(t, map[string]sdk.Processor{want.Plugin: p})
+	registry := newPluginService(t, map[string]sdk.Processor{want.Plugin: p})
 	service := NewService(log.Nop(), db, registry)
 
 	got, err := service.Create(
@@ -153,9 +153,9 @@ func TestService_Init_PluginNotFound(t *testing.T) {
 	ctx := context.Background()
 	db := &inmemory.DB{}
 
-	procGetter := mock.NewPluginRegistry(gomock.NewController(t))
+	procGetter := mock.NewPluginService(gomock.NewController(t))
 	procGetter.EXPECT().
-		Get(gomock.Any(), gomock.Any(), gomock.Any()).
+		NewProcessor(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil, plugin.ErrPluginNotFound)
 	service := NewService(log.Nop(), db, procGetter)
 
@@ -178,9 +178,9 @@ func TestService_Create_BuilderFail(t *testing.T) {
 
 	wantErr := cerrors.New("builder failed")
 
-	procGetter := mock.NewPluginRegistry(gomock.NewController(t))
+	procGetter := mock.NewPluginService(gomock.NewController(t))
 	procGetter.EXPECT().
-		Get(gomock.Any(), gomock.Any(), gomock.Any()).
+		NewProcessor(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil, wantErr)
 	service := NewService(log.Nop(), db, procGetter)
 
@@ -202,7 +202,7 @@ func TestService_Create_WorkersNegative(t *testing.T) {
 	ctx := context.Background()
 	db := &inmemory.DB{}
 
-	service := NewService(log.Nop(), db, &proc_plugin.Registry{})
+	service := NewService(log.Nop(), db, &proc_plugin.PluginService{})
 
 	got, err := service.Create(
 		ctx,
@@ -226,7 +226,7 @@ func TestService_Delete_Success(t *testing.T) {
 	procType := "processor-type"
 	p := proc_mock.NewProcessor(gomock.NewController(t))
 	p.EXPECT().Teardown(ctx).Return(nil)
-	registry := newProcessorRegistry(t, map[string]sdk.Processor{procType: p})
+	registry := newPluginService(t, map[string]sdk.Processor{procType: p})
 	service := NewService(log.Nop(), db, registry)
 
 	// create a processor instance
@@ -257,7 +257,7 @@ func TestService_Delete_ProcessorIsRunning(t *testing.T) {
 	procType := "processor-type"
 	p := proc_mock.NewProcessor(gomock.NewController(t))
 	p.EXPECT().Teardown(ctx).Return(nil).AnyTimes()
-	registry := newProcessorRegistry(t, map[string]sdk.Processor{procType: p})
+	registry := newPluginService(t, map[string]sdk.Processor{procType: p})
 	service := NewService(log.Nop(), db, registry)
 
 	// create a processor instance
@@ -294,7 +294,7 @@ func TestService_Delete_Fail(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
 	db := &inmemory.DB{}
-	service := NewService(log.Nop(), db, &proc_plugin.Registry{})
+	service := NewService(log.Nop(), db, &proc_plugin.PluginService{})
 
 	err := service.Delete(ctx, "non-existent processor")
 	is.True(cerrors.Is(err, ErrInstanceNotFound)) // expected instance not found error
@@ -309,7 +309,7 @@ func TestService_Get_Success(t *testing.T) {
 	p := proc_mock.NewProcessor(gomock.NewController(t))
 	p.EXPECT().Teardown(ctx).Return(nil)
 
-	registry := newProcessorRegistry(t, map[string]sdk.Processor{procType: p})
+	registry := newPluginService(t, map[string]sdk.Processor{procType: p})
 	service := NewService(log.Nop(), db, registry)
 
 	// create a processor instance
@@ -325,7 +325,7 @@ func TestService_Get_Fail(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
 	db := &inmemory.DB{}
-	service := NewService(log.Nop(), db, &proc_plugin.Registry{})
+	service := NewService(log.Nop(), db, &proc_plugin.PluginService{})
 
 	got, err := service.Get(ctx, "non-existent processor")
 	is.True(cerrors.Is(err, ErrInstanceNotFound)) // expected instance not found error
@@ -336,7 +336,7 @@ func TestService_List_Empty(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
 	db := &inmemory.DB{}
-	service := NewService(log.Nop(), db, &proc_plugin.Registry{})
+	service := NewService(log.Nop(), db, &proc_plugin.PluginService{})
 
 	instances := service.List(ctx)
 	is.True(instances != nil)
@@ -352,7 +352,7 @@ func TestService_List_Some(t *testing.T) {
 	p := proc_mock.NewProcessor(gomock.NewController(t))
 	p.EXPECT().Teardown(ctx).Return(nil).Times(3)
 
-	registry := newProcessorRegistry(t, map[string]sdk.Processor{procType: p})
+	registry := newPluginService(t, map[string]sdk.Processor{procType: p})
 	service := NewService(log.Nop(), db, registry)
 
 	// create a couple of processor instances
@@ -376,7 +376,7 @@ func TestService_Update_Success(t *testing.T) {
 	p := proc_mock.NewProcessor(gomock.NewController(t))
 	p.EXPECT().Teardown(ctx).Return(nil)
 
-	registry := newProcessorRegistry(t, map[string]sdk.Processor{procType: p})
+	registry := newPluginService(t, map[string]sdk.Processor{procType: p})
 	service := NewService(log.Nop(), db, registry)
 
 	// create a processor instance
@@ -404,21 +404,21 @@ func TestService_Update_Fail(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
 	db := &inmemory.DB{}
-	service := NewService(log.Nop(), db, &proc_plugin.Registry{})
+	service := NewService(log.Nop(), db, &proc_plugin.PluginService{})
 
 	got, err := service.Update(ctx, "non-existent processor", Config{})
 	is.True(cerrors.Is(err, ErrInstanceNotFound)) // expected instance not found error
 	is.Equal(got, nil)
 }
 
-// newProcessorRegistry creates a registry with builders for the supplied
+// newPluginService creates a registry with builders for the supplied
 // processors map keyed by processor type. If a value in the map is nil then a
 // builder will be registered that returns an error.
-func newProcessorRegistry(t *testing.T, processors map[string]sdk.Processor) *mock.PluginRegistry {
-	pg := mock.NewPluginRegistry(gomock.NewController(t))
+func newPluginService(t *testing.T, processors map[string]sdk.Processor) *mock.PluginService {
+	pg := mock.NewPluginService(gomock.NewController(t))
 	for name, proc := range processors {
 		pg.EXPECT().
-			Get(gomock.Any(), name, gomock.Any()).AnyTimes().
+			NewProcessor(gomock.Any(), name, gomock.Any()).AnyTimes().
 			Return(proc, nil)
 	}
 	return pg

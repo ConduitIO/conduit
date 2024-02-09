@@ -26,7 +26,7 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-func TestRegistry_GetBuiltin_NotFound(t *testing.T) {
+func TestPluginService_GetBuiltin_NotFound(t *testing.T) {
 	ctx := context.Background()
 	is := is.New(t)
 	ctrl := gomock.NewController(t)
@@ -34,20 +34,20 @@ func TestRegistry_GetBuiltin_NotFound(t *testing.T) {
 	id := "test-id"
 	name := "builtin:test-processor"
 
-	br := mock.NewProcessorCreator(ctrl)
+	br := mock.NewRegistry(ctrl)
 	br.EXPECT().
 		NewProcessor(gomock.Any(), plugin.FullName(name), id).
 		Return(nil, plugin.ErrPluginNotFound)
 
-	sr := mock.NewProcessorCreator(ctrl)
+	sr := mock.NewRegistry(ctrl)
 
-	underTest := NewRegistry(log.Nop(), br, sr)
-	got, err := underTest.Get(ctx, name, id)
+	underTest := NewPluginService(log.Nop(), br, sr)
+	got, err := underTest.NewProcessor(ctx, name, id)
 	is.True(cerrors.Is(err, plugin.ErrPluginNotFound))
 	is.True(got == nil)
 }
 
-func TestRegistry_GetStandalone_NotFound(t *testing.T) {
+func TestPluginService_GetStandalone_NotFound(t *testing.T) {
 	ctx := context.Background()
 	is := is.New(t)
 	ctrl := gomock.NewController(t)
@@ -55,45 +55,45 @@ func TestRegistry_GetStandalone_NotFound(t *testing.T) {
 	id := "test-id"
 	name := "standalone:test-processor"
 
-	br := mock.NewProcessorCreator(ctrl)
-	sr := mock.NewProcessorCreator(ctrl)
+	br := mock.NewRegistry(ctrl)
+	sr := mock.NewRegistry(ctrl)
 	sr.EXPECT().
 		NewProcessor(gomock.Any(), plugin.FullName(name), id).
 		Return(nil, plugin.ErrPluginNotFound)
 
-	underTest := NewRegistry(log.Nop(), br, sr)
-	got, err := underTest.Get(ctx, name, id)
+	underTest := NewPluginService(log.Nop(), br, sr)
+	got, err := underTest.NewProcessor(ctx, name, id)
 	is.True(cerrors.Is(err, plugin.ErrPluginNotFound))
 	is.True(got == nil)
 }
 
-func TestRegistry_InvalidPluginType(t *testing.T) {
+func TestPluginService_InvalidPluginType(t *testing.T) {
 	ctx := context.Background()
 	is := is.New(t)
 	ctrl := gomock.NewController(t)
 
-	br := mock.NewProcessorCreator(ctrl)
-	sr := mock.NewProcessorCreator(ctrl)
-	underTest := NewRegistry(log.Nop(), br, sr)
+	br := mock.NewRegistry(ctrl)
+	sr := mock.NewRegistry(ctrl)
+	underTest := NewPluginService(log.Nop(), br, sr)
 
-	got, err := underTest.Get(ctx, "crunchy:test-processor", "test-id")
+	got, err := underTest.NewProcessor(ctx, "crunchy:test-processor", "test-id")
 	is.True(err != nil)
 	is.Equal("invalid plugin name prefix \"crunchy\"", err.Error())
 	is.True(got == nil)
 }
 
-func TestRegistry_Get(t *testing.T) {
+func TestPluginService_Get(t *testing.T) {
 	ctx := context.Background()
 
 	testCases := []struct {
 		name     string
 		procName string
-		setup    func(br *mock.ProcessorCreator, sr *mock.ProcessorCreator, proc *mock.Processor)
+		setup    func(br *mock.Registry, sr *mock.Registry, proc *mock.Processor)
 	}{
 		{
 			name:     "get built-in",
 			procName: "builtin:test-processor",
-			setup: func(br *mock.ProcessorCreator, sr *mock.ProcessorCreator, proc *mock.Processor) {
+			setup: func(br *mock.Registry, sr *mock.Registry, proc *mock.Processor) {
 				br.EXPECT().
 					NewProcessor(gomock.Any(), plugin.FullName("builtin:test-processor"), "test-id").
 					Return(proc, nil)
@@ -102,7 +102,7 @@ func TestRegistry_Get(t *testing.T) {
 		{
 			name:     "get standalone",
 			procName: "standalone:test-processor",
-			setup: func(br *mock.ProcessorCreator, sr *mock.ProcessorCreator, proc *mock.Processor) {
+			setup: func(br *mock.Registry, sr *mock.Registry, proc *mock.Processor) {
 				sr.EXPECT().
 					NewProcessor(gomock.Any(), plugin.FullName("standalone:test-processor"), "test-id").
 					Return(proc, nil)
@@ -111,7 +111,7 @@ func TestRegistry_Get(t *testing.T) {
 		{
 			name:     "standalone preferred",
 			procName: "test-processor",
-			setup: func(br *mock.ProcessorCreator, sr *mock.ProcessorCreator, proc *mock.Processor) {
+			setup: func(br *mock.Registry, sr *mock.Registry, proc *mock.Processor) {
 				sr.EXPECT().
 					NewProcessor(gomock.Any(), plugin.FullName("test-processor"), "test-id").
 					Return(proc, nil)
@@ -125,12 +125,12 @@ func TestRegistry_Get(t *testing.T) {
 			ctrl := gomock.NewController(t)
 
 			want := mock.NewProcessor(ctrl)
-			br := mock.NewProcessorCreator(ctrl)
-			sr := mock.NewProcessorCreator(ctrl)
+			br := mock.NewRegistry(ctrl)
+			sr := mock.NewRegistry(ctrl)
 			tc.setup(br, sr, want)
 
-			underTest := NewRegistry(log.Nop(), br, sr)
-			got, err := underTest.Get(ctx, tc.procName, "test-id")
+			underTest := NewPluginService(log.Nop(), br, sr)
+			got, err := underTest.NewProcessor(ctx, tc.procName, "test-id")
 			is.NoErr(err)
 			is.Equal(want, got)
 		})

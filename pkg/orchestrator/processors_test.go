@@ -34,7 +34,7 @@ func TestProcessorOrchestrator_CreateOnPipeline_Success(t *testing.T) {
 
 	ctx := context.Background()
 	db := &inmemory.DB{}
-	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
+	plsMock, consMock, procsMock, connPluginMock, procPluginMock := newMockServices(t)
 
 	pl := &pipeline.Instance{
 		ID:     uuid.NewString(),
@@ -71,7 +71,7 @@ func TestProcessorOrchestrator_CreateOnPipeline_Success(t *testing.T) {
 		AddProcessor(gomock.AssignableToTypeOf(ctxType), pl.ID, want.ID).
 		Return(pl, nil)
 
-	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
+	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, connPluginMock, procPluginMock)
 	got, err := orc.Processors.Create(ctx, want.Plugin, want.Parent, want.Config, want.Condition)
 	is.NoErr(err)
 	is.Equal(want, got)
@@ -82,7 +82,7 @@ func TestProcessorOrchestrator_CreateOnPipeline_PipelineNotExist(t *testing.T) {
 
 	ctx := context.Background()
 	db := &inmemory.DB{}
-	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
+	plsMock, consMock, procsMock, connPluginMock, procPluginMock := newMockServices(t)
 
 	parent := processor.Parent{
 		ID:   uuid.NewString(),
@@ -93,7 +93,7 @@ func TestProcessorOrchestrator_CreateOnPipeline_PipelineNotExist(t *testing.T) {
 		Get(gomock.AssignableToTypeOf(ctxType), parent.ID).
 		Return(nil, wantErr)
 
-	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
+	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, connPluginMock, procPluginMock)
 	got, err := orc.Processors.Create(ctx, "test-processor", parent, processor.Config{}, "")
 	is.True(err != nil)
 	is.True(cerrors.Is(err, wantErr)) // errors did not match
@@ -105,7 +105,7 @@ func TestProcessorOrchestrator_CreateOnPipeline_PipelineRunning(t *testing.T) {
 
 	ctx := context.Background()
 	db := &inmemory.DB{}
-	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
+	plsMock, consMock, procsMock, connPluginMock, procPluginMock := newMockServices(t)
 
 	pl := &pipeline.Instance{
 		ID:     uuid.NewString(),
@@ -119,7 +119,7 @@ func TestProcessorOrchestrator_CreateOnPipeline_PipelineRunning(t *testing.T) {
 		Get(gomock.AssignableToTypeOf(ctxType), pl.ID).
 		Return(pl, nil)
 
-	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
+	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, connPluginMock, procPluginMock)
 	got, err := orc.Processors.Create(ctx, "test-processor", parent, processor.Config{}, "")
 	is.True(err != nil)
 	is.Equal(pipeline.ErrPipelineRunning, err)
@@ -131,7 +131,7 @@ func TestProcessorOrchestrator_CreateOnPipeline_PipelineProvisionedByConfig(t *t
 
 	ctx := context.Background()
 	db := &inmemory.DB{}
-	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
+	plsMock, consMock, procsMock, connPluginMock, procPluginMock := newMockServices(t)
 
 	pl := &pipeline.Instance{
 		ID:            uuid.NewString(),
@@ -146,7 +146,7 @@ func TestProcessorOrchestrator_CreateOnPipeline_PipelineProvisionedByConfig(t *t
 		Get(gomock.AssignableToTypeOf(ctxType), pl.ID).
 		Return(pl, nil)
 
-	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
+	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, connPluginMock, procPluginMock)
 	got, err := orc.Processors.Create(ctx, "test-processor", parent, processor.Config{}, "")
 	is.Equal(got, nil)
 	is.True(err != nil)
@@ -158,7 +158,7 @@ func TestProcessorOrchestrator_CreateOnPipeline_CreateProcessorError(t *testing.
 
 	ctx := context.Background()
 	db := &inmemory.DB{}
-	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
+	plsMock, consMock, procsMock, connPluginMock, procPluginMock := newMockServices(t)
 
 	pl := &pipeline.Instance{
 		ID:     uuid.NewString(),
@@ -185,7 +185,7 @@ func TestProcessorOrchestrator_CreateOnPipeline_CreateProcessorError(t *testing.
 		).
 		Return(nil, wantErr)
 
-	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
+	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, connPluginMock, procPluginMock)
 	got, err := orc.Processors.Create(ctx, "test-processor", parent, processor.Config{}, "")
 	is.True(err != nil)
 	is.True(cerrors.Is(err, wantErr)) // errors did not match
@@ -197,7 +197,7 @@ func TestProcessorOrchestrator_CreateOnPipeline_AddProcessorError(t *testing.T) 
 
 	ctx := context.Background()
 	db := &inmemory.DB{}
-	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
+	plsMock, consMock, procsMock, connPluginMock, procPluginMock := newMockServices(t)
 
 	pl := &pipeline.Instance{
 		ID:     uuid.NewString(),
@@ -239,7 +239,7 @@ func TestProcessorOrchestrator_CreateOnPipeline_AddProcessorError(t *testing.T) 
 		Delete(gomock.AssignableToTypeOf(ctxType), proc.ID).
 		Return(nil)
 
-	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
+	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, connPluginMock, procPluginMock)
 	got, err := orc.Processors.Create(ctx, proc.Plugin, proc.Parent, proc.Config, proc.Condition)
 	is.True(err != nil)
 	is.True(cerrors.Is(err, wantErr)) // errors did not match
@@ -251,7 +251,7 @@ func TestProcessorOrchestrator_CreateOnConnector_Success(t *testing.T) {
 
 	ctx := context.Background()
 	db := &inmemory.DB{}
-	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
+	plsMock, consMock, procsMock, connPluginMock, procPluginMock := newMockServices(t)
 
 	pl := &pipeline.Instance{
 		ID:     uuid.NewString(),
@@ -295,7 +295,7 @@ func TestProcessorOrchestrator_CreateOnConnector_Success(t *testing.T) {
 		AddProcessor(gomock.AssignableToTypeOf(ctxType), conn.ID, want.ID).
 		Return(conn, nil)
 
-	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
+	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, connPluginMock, procPluginMock)
 	got, err := orc.Processors.Create(ctx, want.Plugin, want.Parent, want.Config, want.Condition)
 	is.NoErr(err)
 	is.Equal(want, got)
@@ -306,7 +306,7 @@ func TestProcessorOrchestrator_CreateOnConnector_ConnectorNotExist(t *testing.T)
 
 	ctx := context.Background()
 	db := &inmemory.DB{}
-	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
+	plsMock, consMock, procsMock, connPluginMock, procPluginMock := newMockServices(t)
 
 	parent := processor.Parent{
 		ID:   uuid.NewString(),
@@ -317,7 +317,7 @@ func TestProcessorOrchestrator_CreateOnConnector_ConnectorNotExist(t *testing.T)
 		Get(gomock.AssignableToTypeOf(ctxType), parent.ID).
 		Return(nil, wantErr)
 
-	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
+	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, connPluginMock, procPluginMock)
 	got, err := orc.Processors.Create(ctx, "test-processor", parent, processor.Config{}, "")
 	is.True(err != nil)
 	is.True(cerrors.Is(err, wantErr)) // errors did not match
@@ -329,7 +329,7 @@ func TestProcessorOrchestrator_UpdateOnPipeline_Success(t *testing.T) {
 
 	ctx := context.Background()
 	db := &inmemory.DB{}
-	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
+	plsMock, consMock, procsMock, connPluginMock, procPluginMock := newMockServices(t)
 
 	pl := &pipeline.Instance{
 		ID:     uuid.NewString(),
@@ -371,7 +371,7 @@ func TestProcessorOrchestrator_UpdateOnPipeline_Success(t *testing.T) {
 		Update(gomock.AssignableToTypeOf(ctxType), want.ID, want.Config).
 		Return(want, nil)
 
-	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
+	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, connPluginMock, procPluginMock)
 	got, err := orc.Processors.Update(ctx, before.ID, newConfig)
 	is.NoErr(err)
 	is.Equal(want, got)
@@ -382,7 +382,7 @@ func TestProcessorOrchestrator_UpdateOnPipeline_ProcessorNotExist(t *testing.T) 
 
 	ctx := context.Background()
 	db := &inmemory.DB{}
-	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
+	plsMock, consMock, procsMock, connPluginMock, procPluginMock := newMockServices(t)
 
 	pl := &pipeline.Instance{
 		ID:     uuid.NewString(),
@@ -408,7 +408,7 @@ func TestProcessorOrchestrator_UpdateOnPipeline_ProcessorNotExist(t *testing.T) 
 		Get(gomock.AssignableToTypeOf(ctxType), before.ID).
 		Return(nil, wantErr)
 
-	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
+	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, connPluginMock, procPluginMock)
 	got, err := orc.Processors.Update(ctx, before.ID, newConfig)
 	is.True(err != nil)
 	is.True(cerrors.Is(err, wantErr)) // errors did not match")
@@ -420,7 +420,7 @@ func TestProcessorOrchestrator_UpdateOnPipeline_PipelineRunning(t *testing.T) {
 
 	ctx := context.Background()
 	db := &inmemory.DB{}
-	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
+	plsMock, consMock, procsMock, connPluginMock, procPluginMock := newMockServices(t)
 
 	pl := &pipeline.Instance{
 		ID:     uuid.NewString(),
@@ -448,7 +448,7 @@ func TestProcessorOrchestrator_UpdateOnPipeline_PipelineRunning(t *testing.T) {
 		Get(gomock.AssignableToTypeOf(ctxType), pl.ID).
 		Return(pl, nil)
 
-	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
+	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, connPluginMock, procPluginMock)
 	got, err := orc.Processors.Update(ctx, before.ID, newConfig)
 	is.True(err != nil)
 	is.Equal(pipeline.ErrPipelineRunning, err)
@@ -460,7 +460,7 @@ func TestProcessorOrchestrator_UpdateOnPipeline_ProcessorProvisionedByConfig(t *
 
 	ctx := context.Background()
 	db := &inmemory.DB{}
-	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
+	plsMock, consMock, procsMock, connPluginMock, procPluginMock := newMockServices(t)
 
 	pl := &pipeline.Instance{
 		ID:            uuid.NewString(),
@@ -487,7 +487,7 @@ func TestProcessorOrchestrator_UpdateOnPipeline_ProcessorProvisionedByConfig(t *
 		Get(gomock.AssignableToTypeOf(ctxType), before.ID).
 		Return(before, nil)
 
-	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
+	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, connPluginMock, procPluginMock)
 	got, err := orc.Processors.Update(ctx, before.ID, newConfig)
 	is.Equal(got, nil)
 	is.True(err != nil)
@@ -499,7 +499,7 @@ func TestProcessorOrchestrator_UpdateOnPipeline_UpdateFail(t *testing.T) {
 
 	ctx := context.Background()
 	db := &inmemory.DB{}
-	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
+	plsMock, consMock, procsMock, connPluginMock, procPluginMock := newMockServices(t)
 
 	pl := &pipeline.Instance{
 		ID:     uuid.NewString(),
@@ -542,7 +542,7 @@ func TestProcessorOrchestrator_UpdateOnPipeline_UpdateFail(t *testing.T) {
 		Update(gomock.AssignableToTypeOf(ctxType), want.ID, want.Config).
 		Return(nil, wantErr)
 
-	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
+	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, connPluginMock, procPluginMock)
 	got, err := orc.Processors.Update(ctx, before.ID, newConfig)
 	is.True(err != nil)
 	is.Equal(wantErr, err)
@@ -554,7 +554,7 @@ func TestProcessorOrchestrator_UpdateOnConnector_ConnectorNotExist(t *testing.T)
 
 	ctx := context.Background()
 	db := &inmemory.DB{}
-	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
+	plsMock, consMock, procsMock, connPluginMock, procPluginMock := newMockServices(t)
 
 	connID := uuid.NewString()
 	want := &processor.Instance{
@@ -574,7 +574,7 @@ func TestProcessorOrchestrator_UpdateOnConnector_ConnectorNotExist(t *testing.T)
 		Get(gomock.AssignableToTypeOf(ctxType), connID).
 		Return(nil, wantErr)
 
-	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
+	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, connPluginMock, procPluginMock)
 	got, err := orc.Processors.Update(ctx, want.ID, processor.Config{})
 	is.True(err != nil)
 	is.True(cerrors.Is(err, wantErr)) // errors did not match
@@ -586,7 +586,7 @@ func TestProcessorOrchestrator_DeleteOnPipeline_Success(t *testing.T) {
 
 	ctx := context.Background()
 	db := &inmemory.DB{}
-	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
+	plsMock, consMock, procsMock, connPluginMock, procPluginMock := newMockServices(t)
 
 	pl := &pipeline.Instance{
 		ID:     uuid.NewString(),
@@ -617,7 +617,7 @@ func TestProcessorOrchestrator_DeleteOnPipeline_Success(t *testing.T) {
 		RemoveProcessor(gomock.AssignableToTypeOf(ctxType), pl.ID, want.ID).
 		Return(pl, nil)
 
-	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
+	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, connPluginMock, procPluginMock)
 	err := orc.Processors.Delete(ctx, want.ID)
 	is.NoErr(err)
 }
@@ -627,7 +627,7 @@ func TestProcessorOrchestrator_DeleteOnPipeline_ProcessorNotExist(t *testing.T) 
 
 	ctx := context.Background()
 	db := &inmemory.DB{}
-	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
+	plsMock, consMock, procsMock, connPluginMock, procPluginMock := newMockServices(t)
 
 	pl := &pipeline.Instance{
 		ID:     uuid.NewString(),
@@ -650,7 +650,7 @@ func TestProcessorOrchestrator_DeleteOnPipeline_ProcessorNotExist(t *testing.T) 
 		Get(gomock.AssignableToTypeOf(ctxType), want.ID).
 		Return(nil, wantErr)
 
-	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
+	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, connPluginMock, procPluginMock)
 	err := orc.Processors.Delete(ctx, want.ID)
 	is.True(err != nil)
 	is.True(cerrors.Is(err, wantErr)) // errors did not match
@@ -661,7 +661,7 @@ func TestProcessorOrchestrator_DeleteOnPipeline_PipelineRunning(t *testing.T) {
 
 	ctx := context.Background()
 	db := &inmemory.DB{}
-	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
+	plsMock, consMock, procsMock, connPluginMock, procPluginMock := newMockServices(t)
 
 	pl := &pipeline.Instance{
 		ID:     uuid.NewString(),
@@ -686,7 +686,7 @@ func TestProcessorOrchestrator_DeleteOnPipeline_PipelineRunning(t *testing.T) {
 		Get(gomock.AssignableToTypeOf(ctxType), pl.ID).
 		Return(pl, nil)
 
-	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
+	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, connPluginMock, procPluginMock)
 	err := orc.Processors.Delete(ctx, want.ID)
 	is.True(err != nil)
 	is.Equal(pipeline.ErrPipelineRunning, err)
@@ -697,7 +697,7 @@ func TestProcessorOrchestrator_DeleteOnPipeline_Fail(t *testing.T) {
 
 	ctx := context.Background()
 	db := &inmemory.DB{}
-	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
+	plsMock, consMock, procsMock, connPluginMock, procPluginMock := newMockServices(t)
 
 	pl := &pipeline.Instance{
 		ID:     uuid.NewString(),
@@ -726,7 +726,7 @@ func TestProcessorOrchestrator_DeleteOnPipeline_Fail(t *testing.T) {
 		Delete(gomock.AssignableToTypeOf(ctxType), want.ID).
 		Return(wantErr)
 
-	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
+	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, connPluginMock, procPluginMock)
 	err := orc.Processors.Delete(ctx, want.ID)
 	is.True(err != nil)
 	is.True(cerrors.Is(err, wantErr)) // errors did not match
@@ -737,7 +737,7 @@ func TestProcessorOrchestrator_DeleteOnPipeline_RemoveProcessorFail(t *testing.T
 
 	ctx := context.Background()
 	db := &inmemory.DB{}
-	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
+	plsMock, consMock, procsMock, connPluginMock, procPluginMock := newMockServices(t)
 
 	pl := &pipeline.Instance{
 		ID:     uuid.NewString(),
@@ -782,7 +782,7 @@ func TestProcessorOrchestrator_DeleteOnPipeline_RemoveProcessorFail(t *testing.T
 		).
 		Return(want, nil)
 
-	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
+	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, connPluginMock, procPluginMock)
 	err := orc.Processors.Delete(ctx, want.ID)
 	is.True(err != nil)
 }
@@ -792,7 +792,7 @@ func TestProcessorOrchestrator_DeleteOnConnector_Fail(t *testing.T) {
 
 	ctx := context.Background()
 	db := &inmemory.DB{}
-	plsMock, consMock, procsMock, pluginMock := newMockServices(t)
+	plsMock, consMock, procsMock, connPluginMock, procPluginMock := newMockServices(t)
 
 	pl := &pipeline.Instance{
 		ID:     uuid.NewString(),
@@ -844,7 +844,7 @@ func TestProcessorOrchestrator_DeleteOnConnector_Fail(t *testing.T) {
 		).
 		Return(want, nil)
 
-	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, pluginMock)
+	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, connPluginMock, procPluginMock)
 	err := orc.Processors.Delete(ctx, want.ID)
 	is.True(err != nil)
 }
