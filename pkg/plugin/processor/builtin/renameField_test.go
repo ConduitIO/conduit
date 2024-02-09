@@ -23,28 +23,28 @@ import (
 	"github.com/matryer/is"
 )
 
-func TestExcludeFields_Process(t *testing.T) {
+func TestRenameField_Process(t *testing.T) {
 	is := is.New(t)
-	proc := excludeFields{
-		fields: []string{".Metadata", ".Payload.After.foo"},
+	proc := renameField{
+		mapping: map[string]string{".Metadata.key1": "newKey", ".Payload.After.foo": "newFoo"},
 	}
 	records := []opencdc.Record{
 		{
 			Metadata: map[string]string{"key1": "val1", "key2": "val2"},
 			Payload: opencdc.Change{
+				Before: nil,
 				After: opencdc.StructuredData{
-					"foo":  "bar",
-					"keep": "me",
+					"foo": "bar",
 				},
 			},
 		},
 	}
 	want := opencdc.Record{
-
-		Metadata: map[string]string{},
+		Metadata: map[string]string{"newKey": "val1", "key2": "val2"},
 		Payload: opencdc.Change{
+			Before: nil,
 			After: opencdc.StructuredData{
-				"keep": "me",
+				"newFoo": "bar",
 			},
 		},
 	}
@@ -54,8 +54,8 @@ func TestExcludeFields_Process(t *testing.T) {
 	is.Equal(output[0].(sdk.SingleRecord).Payload.After, want.Payload.After)
 }
 
-func TestExcludeField_Configure(t *testing.T) {
-	proc := excludeFields{}
+func TestRenameField_Configure(t *testing.T) {
+	proc := renameField{}
 	ctx := context.Background()
 	testCases := []struct {
 		name    string
@@ -64,19 +64,15 @@ func TestExcludeField_Configure(t *testing.T) {
 	}{
 		{
 			name:    "valid config",
-			cfg:     map[string]string{"fields": ".Metadata,.Payload"},
+			cfg:     map[string]string{"mapping": ".Payload.After.foo:bar"},
 			wantErr: false,
 		}, {
-			name:    "missing parameter",
+			name:    "invalid config, contains a top-level reference",
+			cfg:     map[string]string{"mapping": ".Metadata:foo,.Payload.After.foo:bar"},
+			wantErr: true,
+		}, {
+			name:    "mapping param is missing",
 			cfg:     map[string]string{},
-			wantErr: true,
-		}, {
-			name:    "cannot exclude .Operation",
-			cfg:     map[string]string{"fields": ".Operation"},
-			wantErr: true,
-		}, {
-			name:    "cannot exclude .Position",
-			cfg:     map[string]string{"fields": ".Position"},
 			wantErr: true,
 		},
 	}
