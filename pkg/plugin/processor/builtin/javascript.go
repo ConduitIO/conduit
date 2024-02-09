@@ -192,6 +192,9 @@ func (p *jsProcessor) jsRecord(runtime *goja.Runtime) func(goja.ConstructorCall)
 		// We return a jsRecord struct, however because we are
 		// not changing call.This instanceof will not work as expected.
 
+		// JavaScript records are always initialized with metadata
+		// so that it's easier to write processor code
+		// (without worrying about initializing it every time)
 		r := jsRecord{
 			Metadata: make(map[string]string),
 		}
@@ -202,12 +205,10 @@ func (p *jsProcessor) jsRecord(runtime *goja.Runtime) func(goja.ConstructorCall)
 
 func (p *jsProcessor) jsContentRaw(runtime *goja.Runtime) func(goja.ConstructorCall) *goja.Object {
 	return func(call goja.ConstructorCall) *goja.Object {
-		// TODO accept arguments
-		// We return a opencdc.RawData struct, however because we are
-		// not changing call.This instanceof will not work as expected.
-
-		// todo have checks for arguments
-		r := opencdc.RawData(call.Arguments[0].String())
+		var r opencdc.RawData
+		if len(call.Arguments) == 1 {
+			r = opencdc.RawData(call.Arguments[0].String())
+		}
 		// We need to return a pointer to make the returned object mutable.
 		return runtime.ToValue(&r).ToObject(runtime)
 	}

@@ -22,6 +22,8 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/dop251/goja"
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/matryer/is"
 	"github.com/rs/zerolog"
 	"testing"
@@ -99,7 +101,6 @@ func TestJSProcessor_Process(t *testing.T) {
 					Metadata:  opencdc.Metadata{"existing": "val"},
 					Key:       opencdc.RawData("bar"),
 					Payload: opencdc.Change{
-						Before: nil,
 						After: opencdc.StructuredData(
 							map[string]interface{}{
 								"aaa": 111,
@@ -116,7 +117,6 @@ func TestJSProcessor_Process(t *testing.T) {
 					Metadata:  opencdc.Metadata{"existing": "val", "returned": "JS"},
 					Key:       opencdc.RawData("baz"),
 					Payload: opencdc.Change{
-						Before: nil,
 						After: opencdc.StructuredData{
 							"aaa": 111,
 							"bbb": []string{"foo", "bar"},
@@ -143,8 +143,7 @@ func TestJSProcessor_Process(t *testing.T) {
 					Metadata: opencdc.Metadata{"existing": "val"},
 					Key:      opencdc.RawData("bar"),
 					Payload: opencdc.Change{
-						Before: nil,
-						After:  opencdc.RawData("foo"),
+						After: opencdc.RawData("foo"),
 					},
 				},
 			},
@@ -154,7 +153,6 @@ func TestJSProcessor_Process(t *testing.T) {
 					Metadata: opencdc.Metadata{"existing": "val", "returned": "JS"},
 					Key:      opencdc.RawData("baz"),
 					Payload: opencdc.Change{
-						Before: nil,
 						After: opencdc.StructuredData{
 							"foo": "bar",
 						},
@@ -178,8 +176,7 @@ func TestJSProcessor_Process(t *testing.T) {
 					Metadata: opencdc.Metadata{"existing": "val"},
 					Key:      opencdc.RawData("bar"),
 					Payload: opencdc.Change{
-						Before: nil,
-						After:  opencdc.RawData("foo"),
+						After: opencdc.RawData("foo"),
 					},
 				},
 			},
@@ -189,8 +186,7 @@ func TestJSProcessor_Process(t *testing.T) {
 					Metadata: opencdc.Metadata{"existing": "val", "returned": "JS"},
 					Key:      opencdc.RawData("baz"),
 					Payload: opencdc.Change{
-						Before: nil,
-						After:  opencdc.RawData("foobar"),
+						After: opencdc.RawData("foobar"),
 					},
 				},
 			},
@@ -213,22 +209,43 @@ func TestJSProcessor_Process(t *testing.T) {
 					Metadata: opencdc.Metadata{"returned": "JS"},
 					Key:      opencdc.RawData("baz"),
 					Payload: opencdc.Change{
-						Before: nil,
-						After:  opencdc.RawData("foobar"),
+						After: opencdc.RawData("foobar"),
+					},
+				},
+			},
+		},
+		{
+			name: "use empty raw data",
+			script: `
+				function process(record) {
+					r = new Record();
+					r.Position = "3";
+					r.Payload.After = new RawData("foobar");
+					return r;
+				}`,
+			args: []opencdc.Record{{Position: opencdc.Position("3")}},
+			want: []sdk.ProcessedRecord{
+				sdk.SingleRecord{
+					Position: []byte("3"),
+					// JavaScript records are always initialized with metadata
+					Metadata: opencdc.Metadata{},
+					Payload: opencdc.Change{
+						After: opencdc.RawData("foobar"),
 					},
 				},
 			},
 		},
 	}
+
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			is := is.New(t)
-			ctx := context.Background()
-
 			underTest := newTestJavaScriptProc(t, tc.script)
 
-			got := underTest.Process(ctx, tc.args)
-			is.Equal(tc.want, got) // expected different record
+			got := underTest.Process(context.Background(), tc.args)
+			diff := cmp.Diff(tc.want, got, cmpopts.IgnoreUnexported(sdk.SingleRecord{}))
+			if diff != "" {
+				t.Errorf("mismatch (-want +got):\n%s", diff)
+			}
 		})
 	}
 }
@@ -326,8 +343,7 @@ func TestJSProcessor_DataTypes(t *testing.T) {
 			want: []sdk.ProcessedRecord{
 				sdk.SingleRecord{
 					Payload: opencdc.Change{
-						Before: nil,
-						After:  opencdc.RawData("foobar"),
+						After: opencdc.RawData("foobar"),
 					},
 				},
 			},
