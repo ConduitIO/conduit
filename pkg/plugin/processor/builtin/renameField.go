@@ -47,6 +47,10 @@ func (p *renameField) Specification() (sdk.Specification, error) {
 				Validations: []sdk.Validation{
 					{
 						Type: sdk.ValidationTypeRequired,
+					}, {
+						Type: sdk.ValidationTypeExclusion,
+						Value: MetadataReference + "," + PayloadReference + "," + PayloadBeforeReference + "," +
+							PayloadAfterReference + "," + PositionReference + KeyReference + "," + OperationReference,
 					},
 				},
 			},
