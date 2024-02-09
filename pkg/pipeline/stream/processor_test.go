@@ -176,12 +176,11 @@ func TestProcessorNode_ErrorWithNackHandler(t *testing.T) {
 
 func TestProcessorNode_BadProcessor_ReturnsMoreRecords(t *testing.T) {
 	is := is.New(t)
-	ctx := context.Background()
 
 	processor := mock.NewProcessor(gomock.NewController(t))
 	processor.EXPECT().Open(gomock.Any())
 	processor.EXPECT().
-		Process(ctx, gomock.Any()).
+		Process(context.Background(), gomock.Any()).
 		// processor returns 2 records instead of one
 		Return([]sdk.ProcessedRecord{sdk.SingleRecord{}, sdk.SingleRecord{}})
 	processor.EXPECT().Teardown(gomock.Any())
@@ -192,6 +191,35 @@ func TestProcessorNode_BadProcessor_ReturnsMoreRecords(t *testing.T) {
 		return nil // the error should be regarded as handled
 	}
 
+	testNodeWithError(is, processor, nackHandler)
+}
+
+func TestProcessorNode_BadProcessor_ChangesPosition(t *testing.T) {
+	is := is.New(t)
+
+	processor := mock.NewProcessor(gomock.NewController(t))
+	processor.EXPECT().Open(gomock.Any())
+	processor.EXPECT().
+		Process(context.Background(), gomock.Any()).
+		// processor returns 2 records instead of one
+		Return([]sdk.ProcessedRecord{sdk.SingleRecord{Position: opencdc.Position("new position")}})
+	processor.EXPECT().Teardown(gomock.Any())
+
+	nackHandler := func(msg *Message, nackMetadata NackMetadata) error {
+		// expected underlying error to be the processor error
+		is.New(t).Equal(
+			"processor changed position from 'test position' to 'new position' "+
+				"(not allowed because source connector cannot correctly acknowledge messages)",
+			nackMetadata.Reason.Error(),
+		)
+		return nil // the error should be regarded as handled
+	}
+
+	testNodeWithError(is, processor, nackHandler)
+}
+
+func testNodeWithError(is *is.I, processor *mock.Processor, nackHandler NackHandler) {
+	ctx := context.Background()
 	n := ProcessorNode{
 		Name:           "test",
 		Processor:      processor,
@@ -202,7 +230,12 @@ func TestProcessorNode_BadProcessor_ReturnsMoreRecords(t *testing.T) {
 	n.Sub(in)
 	out := n.Pub()
 
-	msg := &Message{Ctx: ctx}
+	msg := &Message{
+		Ctx: ctx,
+		Record: record.Record{
+			Position: record.Position("test position"),
+		},
+	}
 	msg.RegisterNackHandler(nackHandler)
 	go func() {
 		// publisher
@@ -212,7 +245,6 @@ func TestProcessorNode_BadProcessor_ReturnsMoreRecords(t *testing.T) {
 
 	err := n.Run(ctx)
 	is.True(err != nil)
-	is.New(t).Equal("processor was given 1 record(s), but returned 2", err.Error())
 	is.Equal(MessageStatusNacked, msg.Status())
 
 	// after the node stops the out channel should be closed

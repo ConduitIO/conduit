@@ -98,8 +98,9 @@ func (n *ProcessorNode) Run(ctx context.Context) error {
 
 		switch v := recsOut[0].(type) {
 		case sdk.SingleRecord:
-			// todo write a test for this
 			err := n.handleSingleRecord(ctx, msg, v)
+			// handleSingleRecord already checks the nack error (if any)
+			// so it's enough to just return the error from it
 			if err != nil {
 				return err
 			}
@@ -130,11 +131,15 @@ func (n *ProcessorNode) SetLogger(logger log.CtxLogger) {
 	n.logger = logger
 }
 
+// handleSingleRecord handles a sdk.SingleRecord by checking the position,
+// setting the new record on the message and sending it downstream.
+// If there are any errors, the method nacks the message and returns
+// an appropriate error (if nack-ing failed, it returns the nack error)
 func (n *ProcessorNode) handleSingleRecord(ctx context.Context, msg *Message, v sdk.SingleRecord) error {
 	recOut := record.FromOpenCDC(opencdc.Record(v))
 	if !bytes.Equal(recOut.Position, msg.Record.Position) {
 		err := cerrors.Errorf(
-			"processor changed position from %v to %v "+
+			"processor changed position from '%v' to '%v' "+
 				"(not allowed because source connector cannot correctly acknowledge messages)",
 			msg.Record.Position,
 			recOut.Position,
