@@ -39,14 +39,14 @@ func TestProcessorNode_Success(t *testing.T) {
 		Position: []byte(uuid.NewString()),
 		Metadata: map[string]string{"foo": "bar"},
 	}
-	newPosition := []byte(uuid.NewString())
+	newMetaKey := "bar2"
 
 	processor := mock.NewProcessor(ctrl)
 	processor.EXPECT().Open(gomock.Any())
 	processor.EXPECT().
 		Process(ctx, []opencdc.Record{wantRec.ToOpenCDC()}).
 		DoAndReturn(func(_ context.Context, got []opencdc.Record) []sdk.ProcessedRecord {
-			got[0].Position = newPosition
+			got[0].Metadata["foo"] = newMetaKey
 			return []sdk.ProcessedRecord{sdk.SingleRecord(got[0])}
 		})
 	processor.EXPECT().Teardown(gomock.Any())
@@ -82,7 +82,7 @@ func TestProcessorNode_Success(t *testing.T) {
 		Ctx:    ctx,
 		Record: wantRec,
 	}
-	wantMsg.Record.Position = newPosition // position was transformed
+	wantMsg.Record.Metadata["foo"] = newMetaKey // position was transformed
 	is.Equal(wantMsg, got)
 
 	wg.Wait() // wait for node to stop running
@@ -131,7 +131,9 @@ func TestProcessorNode_ErrorWithoutNackHandler(t *testing.T) {
 }
 
 func TestProcessorNode_ErrorWithNackHandler(t *testing.T) {
+	is := is.New(t)
 	ctx := context.Background()
+
 	wantErr := cerrors.New("something bad happened")
 	processor := mock.NewProcessor(gomock.NewController(t))
 	processor.EXPECT().Open(gomock.Any())
@@ -140,40 +142,10 @@ func TestProcessorNode_ErrorWithNackHandler(t *testing.T) {
 		Return([]sdk.ProcessedRecord{sdk.ErrorRecord{Error: wantErr}})
 	processor.EXPECT().Teardown(gomock.Any())
 
-	testErrorWithNackHandler(
-		t,
-		processor,
-		func(msg *Message, nackMetadata NackMetadata) error {
-			is.New(t).True(cerrors.Is(nackMetadata.Reason, wantErr)) // expected underlying error to be the processor error
-			return nil                                               // the error should be regarded as handled
-		},
-	)
-}
-
-func TestProcessorNode_BadProcessor_ReturnsMoreRecords(t *testing.T) {
-	ctx := context.Background()
-	processor := mock.NewProcessor(gomock.NewController(t))
-	processor.EXPECT().Open(gomock.Any())
-	processor.EXPECT().
-		Process(ctx, gomock.Any()).
-		// processor returns 2 records instead of one
-		Return([]sdk.ProcessedRecord{sdk.SingleRecord{}, sdk.SingleRecord{}})
-	processor.EXPECT().Teardown(gomock.Any())
-
-	testErrorWithNackHandler(
-		t,
-		processor,
-		func(msg *Message, nackMetadata NackMetadata) error {
-			// expected underlying error to be the processor error
-			is.New(t).Equal("processor was given 1 record(s), but returned 2", nackMetadata.Reason.Error())
-			return nil // the error should be regarded as handled
-		},
-	)
-}
-
-func testErrorWithNackHandler(t *testing.T, processor *mock.Processor, nackHandler NackHandler) {
-	is := is.New(t)
-	ctx := context.Background()
+	nackHandler := func(msg *Message, nackMetadata NackMetadata) error {
+		is.New(t).True(cerrors.Is(nackMetadata.Reason, wantErr)) // expected underlying error to be the processor error
+		return nil                                               // the error should be regarded as handled
+	}
 
 	n := ProcessorNode{
 		Name:           "test",
@@ -195,6 +167,52 @@ func testErrorWithNackHandler(t *testing.T, processor *mock.Processor, nackHandl
 
 	err := n.Run(ctx)
 	is.NoErr(err)
+	is.Equal(MessageStatusNacked, msg.Status())
+
+	// after the node stops the out channel should be closed
+	_, ok := <-out
+	is.Equal(false, ok)
+}
+
+func TestProcessorNode_BadProcessor_ReturnsMoreRecords(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+
+	processor := mock.NewProcessor(gomock.NewController(t))
+	processor.EXPECT().Open(gomock.Any())
+	processor.EXPECT().
+		Process(ctx, gomock.Any()).
+		// processor returns 2 records instead of one
+		Return([]sdk.ProcessedRecord{sdk.SingleRecord{}, sdk.SingleRecord{}})
+	processor.EXPECT().Teardown(gomock.Any())
+
+	nackHandler := func(msg *Message, nackMetadata NackMetadata) error {
+		// expected underlying error to be the processor error
+		is.New(t).Equal("processor was given 1 record(s), but returned 2", nackMetadata.Reason.Error())
+		return nil // the error should be regarded as handled
+	}
+
+	n := ProcessorNode{
+		Name:           "test",
+		Processor:      processor,
+		ProcessorTimer: noop.Timer{},
+	}
+
+	in := make(chan *Message)
+	n.Sub(in)
+	out := n.Pub()
+
+	msg := &Message{Ctx: ctx}
+	msg.RegisterNackHandler(nackHandler)
+	go func() {
+		// publisher
+		in <- msg
+		close(in)
+	}()
+
+	err := n.Run(ctx)
+	is.True(err != nil)
+	is.New(t).Equal("processor was given 1 record(s), but returned 2", err.Error())
 	is.Equal(MessageStatusNacked, msg.Status())
 
 	// after the node stops the out channel should be closed

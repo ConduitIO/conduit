@@ -99,7 +99,10 @@ func (n *ProcessorNode) Run(ctx context.Context) error {
 		switch v := recsOut[0].(type) {
 		case sdk.SingleRecord:
 			// todo write a test for this
-			return n.handleSingleRecord(ctx, msg, v)
+			err := n.handleSingleRecord(ctx, msg, v)
+			if err != nil {
+				return err
+			}
 		case sdk.FilterRecord:
 			// NB: Ack skipped messages since they've been correctly handled
 			err := msg.Ack()

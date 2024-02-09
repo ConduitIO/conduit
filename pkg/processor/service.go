@@ -12,15 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:generate mockgen -destination=mock/processor_registry.go -package=mock -mock_names=Registry=Registry . Registry
+//go:generate mockgen -destination=mock/processor_registry.go -package=mock -mock_names=PluginRegistry=PluginRegistry . PluginRegistry
 
 package processor
 
 import (
 	"context"
-	sdk "github.com/conduitio/conduit-processor-sdk"
 	"time"
 
+	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/database"
 	"github.com/conduitio/conduit/pkg/foundation/log"

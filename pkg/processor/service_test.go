@@ -153,7 +153,7 @@ func TestService_Init_PluginNotFound(t *testing.T) {
 	ctx := context.Background()
 	db := &inmemory.DB{}
 
-	procGetter := mock.NewRegistry(gomock.NewController(t))
+	procGetter := mock.NewPluginRegistry(gomock.NewController(t))
 	procGetter.EXPECT().
 		Get(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil, plugin.ErrPluginNotFound)
@@ -178,7 +178,7 @@ func TestService_Create_BuilderFail(t *testing.T) {
 
 	wantErr := cerrors.New("builder failed")
 
-	procGetter := mock.NewRegistry(gomock.NewController(t))
+	procGetter := mock.NewPluginRegistry(gomock.NewController(t))
 	procGetter.EXPECT().
 		Get(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil, wantErr)
@@ -414,8 +414,8 @@ func TestService_Update_Fail(t *testing.T) {
 // newProcessorRegistry creates a registry with builders for the supplied
 // processors map keyed by processor type. If a value in the map is nil then a
 // builder will be registered that returns an error.
-func newProcessorRegistry(t *testing.T, processors map[string]sdk.Processor) *mock.Registry {
-	pg := mock.NewRegistry(gomock.NewController(t))
+func newProcessorRegistry(t *testing.T, processors map[string]sdk.Processor) *mock.PluginRegistry {
+	pg := mock.NewPluginRegistry(gomock.NewController(t))
 	for name, proc := range processors {
 		pg.EXPECT().
 			Get(gomock.Any(), name, gomock.Any()).AnyTimes().
