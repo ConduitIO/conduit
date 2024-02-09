@@ -60,8 +60,8 @@ func (p *excludeFields) Configure(_ context.Context, cfg map[string]string) erro
 	}
 	p.fields = strings.Split(fields, ",")
 	for _, field := range p.fields {
-		if field == ".Position" || field == ".Operation" {
-			return cerrors.Errorf("it is not allowed to exclude the fields %q and %q", ".Operation", ".Position")
+		if field == PositionReference || field == OperationReference {
+			return cerrors.Errorf("it is not allowed to exclude the fields %q and %q", OperationReference, PositionReference)
 		}
 	}
 

@@ -16,6 +16,20 @@ package builtin
 
 import "github.com/conduitio/conduit/pkg/foundation/cerrors"
 
+// references
+
+const (
+	KeyReference           = ".Key"
+	OperationReference     = ".Operation"
+	MetadataReference      = ".Metadata"
+	PositionReference      = ".Position"
+	PayloadReference       = ".Payload"
+	PayloadAfterReference  = ".Payload.After"
+	PayloadBeforeReference = ".Payload.Before"
+)
+
+// errors
+
 var (
 	ErrRequiredParamMissing = cerrors.New("missing a required parameter for the processor")
 )

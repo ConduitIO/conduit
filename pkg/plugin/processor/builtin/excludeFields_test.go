@@ -20,75 +20,34 @@ import (
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
-	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/matryer/is"
 )
 
 func TestExcludeFields_Process(t *testing.T) {
-	proc := setField{}
-	ctx := context.Background()
-	testCases := []struct {
-		field  string
-		value  string
-		record opencdc.Record
-		want   opencdc.Record
-	}{
+	is := is.New(t)
+	proc := excludeFields{
+		fields: []string{".Metadata", ".Payload.After.foo"},
+	}
+	records := []opencdc.Record{
 		{
-			field: ".Metadata.table",
-			value: "postgres",
-			record: opencdc.Record{
-				Metadata: map[string]string{"table": "my-table"},
-			},
-			want: opencdc.Record{
-				Metadata: map[string]string{"table": "postgres"},
+			Metadata: map[string]string{"key1": "val1", "key2": "val2"},
+			Payload: opencdc.Change{
+				Before: nil,
+				After: opencdc.StructuredData{
+					"foo":  "bar",
+					"keep": "me",
+				},
 			},
 		},
-		{
-			field: ".Operation",
-			value: "delete",
-			record: opencdc.Record{
-				Operation: opencdc.OperationCreate,
-			},
-			want: opencdc.Record{
-				Operation: opencdc.OperationDelete,
-			},
-		}, {
-			field: ".Payload.After.foo",
-			value: "new-val",
-			record: opencdc.Record{
-				Payload: opencdc.Change{
-					Before: nil,
-					After: opencdc.StructuredData{
-						"foo": "bar",
-					},
-				},
-			},
-			want: opencdc.Record{
-				Payload: opencdc.Change{
-					Before: nil,
-					After: opencdc.StructuredData{
-						"foo": "new-val",
-					},
-				},
-			},
-		}}
-	for _, tc := range testCases {
-		t.Run(tc.field, func(t *testing.T) {
-			is := is.New(t)
-			proc.field = tc.field
-			proc.value = tc.value
-			output := proc.Process(ctx, []opencdc.Record{tc.record})
-			is.True(len(output) == 1)
-			is.Equal(output[0].(sdk.SingleRecord).Metadata, tc.want.Metadata)
-			is.Equal(output[0].(sdk.SingleRecord).Payload, tc.want.Payload)
-			is.Equal(output[0].(sdk.SingleRecord).Operation, tc.want.Operation)
-		})
 	}
-
+	output := proc.Process(context.Background(), records)
+	is.True(len(output) == 1)
+	is.Equal(output[0].(sdk.SingleRecord).Metadata, opencdc.Metadata{})
+	is.Equal(output[0].(sdk.SingleRecord).Payload.After, opencdc.StructuredData{"keep": "me"})
 }
 
-func TestRenameField_Configure(t *testing.T) {
-	proc := setField{}
+func TestExcludeField_Configure(t *testing.T) {
+	proc := excludeFields{}
 	ctx := context.Background()
 	testCases := []struct {
 		name    string
@@ -97,19 +56,19 @@ func TestRenameField_Configure(t *testing.T) {
 	}{
 		{
 			name:    "valid config",
-			cfg:     map[string]string{"field": ".Metadata", "value": "sth"},
+			cfg:     map[string]string{"fields": ".Metadata,.Payload"},
 			wantErr: false,
 		}, {
-			name:    "value param is missing",
-			cfg:     map[string]string{"field": ".Metadata"},
-			wantErr: true,
-		}, {
-			name:    "field param is missing",
-			cfg:     map[string]string{"value": "sth"},
-			wantErr: true,
-		}, {
-			name:    "all params are missing",
+			name:    "missing parameter",
 			cfg:     map[string]string{},
+			wantErr: true,
+		}, {
+			name:    "cannot exclude .Operation",
+			cfg:     map[string]string{"fields": ".Operation"},
+			wantErr: true,
+		}, {
+			name:    "cannot exclude .Position",
+			cfg:     map[string]string{"fields": ".Position"},
 			wantErr: true,
 		},
 	}
@@ -119,7 +78,7 @@ func TestRenameField_Configure(t *testing.T) {
 			is := is.New(t)
 			err := proc.Configure(ctx, tc.cfg)
 			if tc.wantErr {
-				is.True(cerrors.Is(err, ErrRequiredParamMissing))
+				is.True(err != nil)
 				return
 			}
 			is.NoErr(err)
