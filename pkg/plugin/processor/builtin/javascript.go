@@ -23,15 +23,14 @@ import (
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/conduitio/conduit/pkg/record"
 	"github.com/dop251/goja"
 	"github.com/dop251/goja_nodejs/require"
 )
 
 const entrypoint = "process"
 
-// jsRecord is an intermediary representation of record.Record that is passed to
-// the JavaScript transform. We use this because using record.Record would not
+// jsRecord is an intermediary representation of opencdc.Record that is passed to
+// the JavaScript transform. We use this because using opencdc.Record would not
 // allow us to modify or access certain data (e.g. metadata or structured data).
 type jsRecord struct {
 	Position  []byte
@@ -204,10 +203,11 @@ func (p *jsProcessor) jsRecord(runtime *goja.Runtime) func(goja.ConstructorCall)
 func (p *jsProcessor) jsContentRaw(runtime *goja.Runtime) func(goja.ConstructorCall) *goja.Object {
 	return func(call goja.ConstructorCall) *goja.Object {
 		// TODO accept arguments
-		// We return a record.RawData struct, however because we are
+		// We return a opencdc.RawData struct, however because we are
 		// not changing call.This instanceof will not work as expected.
 
-		r := record.RawData{}
+		// todo have checks for arguments
+		r := opencdc.RawData(call.Arguments[0].String())
 		// We need to return a pointer to make the returned object mutable.
 		return runtime.ToValue(&r).ToObject(runtime)
 	}
