@@ -24,6 +24,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/record/schema"
 )
@@ -186,6 +187,33 @@ func (r Record) Clone() Record {
 	return clone
 }
 
+func (r Record) ToOpenCDC() opencdc.Record {
+	return opencdc.Record{
+		Position:  opencdc.Position(r.Position),
+		Operation: opencdc.Operation(r.Operation),
+		Metadata:  opencdc.Metadata(r.Metadata),
+		Key:       toOpenCDCData(r.Key),
+		Payload: opencdc.Change{
+			Before: toOpenCDCData(r.Payload.Before),
+			After:  toOpenCDCData(r.Payload.After),
+		},
+	}
+}
+
+func toOpenCDCData(data Data) opencdc.Data {
+	switch v := data.(type) {
+	case nil:
+		return nil
+	case RawData:
+		return opencdc.RawData(v.Bytes())
+	case StructuredData:
+		return opencdc.StructuredData(v)
+	default:
+		// this shouldn't happen, we hope
+		panic(cerrors.Errorf("unrecognized data type: %T", v))
+	}
+}
+
 type Metadata map[string]string
 
 type Change struct {
@@ -269,5 +297,32 @@ func (d RawData) Clone() Data {
 	return RawData{
 		Raw:    bytes.Clone(d.Raw),
 		Schema: d.Schema, // this field is currently unused, we don't care about cloning it atm
+	}
+}
+
+func FromOpenCDC(in opencdc.Record) Record {
+	return Record{
+		Position:  Position(in.Position),
+		Operation: Operation(in.Operation),
+		Metadata:  Metadata(in.Metadata),
+		Key:       fromOpenCDCData(in.Key),
+		Payload: Change{
+			Before: fromOpenCDCData(in.Payload.Before),
+			After:  fromOpenCDCData(in.Payload.After),
+		},
+	}
+}
+
+func fromOpenCDCData(data opencdc.Data) Data {
+	switch v := data.(type) {
+	case nil:
+		return nil
+	case opencdc.RawData:
+		return RawData{Raw: v.Bytes()}
+	case opencdc.StructuredData:
+		return StructuredData(v)
+	default:
+		// this shouldn't happen, we hope
+		panic(cerrors.Errorf("unrecognized data type: %T", v))
 	}
 }

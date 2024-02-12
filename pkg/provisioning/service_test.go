@@ -20,22 +20,26 @@ import (
 	"testing"
 	"time"
 
+	"github.com/conduitio/conduit-commons/opencdc"
+	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/ctxutil"
 	"github.com/conduitio/conduit/pkg/foundation/database/badger"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/pipeline"
-	"github.com/conduitio/conduit/pkg/plugin"
+	conn_plugin "github.com/conduitio/conduit/pkg/plugin/connector"
 	"github.com/conduitio/conduit/pkg/plugin/connector/builtin"
 	"github.com/conduitio/conduit/pkg/plugin/connector/standalone"
 	"github.com/conduitio/conduit/pkg/processor"
-	"github.com/conduitio/conduit/pkg/processor/procbuiltin"
+	proc_mock "github.com/conduitio/conduit/pkg/processor/mock"
 	p1 "github.com/conduitio/conduit/pkg/provisioning/test/pipelines1"
 	p2 "github.com/conduitio/conduit/pkg/provisioning/test/pipelines2"
 	p3 "github.com/conduitio/conduit/pkg/provisioning/test/pipelines3"
 	p4 "github.com/conduitio/conduit/pkg/provisioning/test/pipelines4-integration-test"
 	"github.com/conduitio/conduit/pkg/record"
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/matryer/is"
 	"github.com/rs/zerolog"
 	"go.uber.org/mock/gomock"
@@ -89,7 +93,7 @@ var (
 			Type: processor.ParentTypePipeline,
 		},
 		Config: processor.Config{Settings: map[string]string{}},
-		Type:   "js",
+		Plugin: "js",
 	}
 	oldConnectorProcessorInstance = &processor.Instance{
 		ID: "pipeline1:con2:proc1con",
@@ -98,7 +102,7 @@ var (
 			Type: processor.ParentTypeConnector,
 		},
 		Config: processor.Config{Settings: map[string]string{}},
-		Type:   "js",
+		Plugin: "js",
 	}
 )
 
@@ -483,7 +487,7 @@ func TestService_IntegrationTestServices(t *testing.T) {
 		is.NoErr(err)
 	})
 
-	pluginService := plugin.NewService(
+	connPluginService := conn_plugin.NewPluginService(
 		logger,
 		builtin.NewRegistry(logger, builtin.DefaultDispenserFactories),
 		standalone.NewRegistry(logger, ""),
@@ -491,17 +495,18 @@ func TestService_IntegrationTestServices(t *testing.T) {
 
 	plService := pipeline.NewService(logger, db)
 	connService := connector.NewService(logger, db, connector.NewPersister(logger, db, time.Second, 3))
-	procService := processor.NewService(logger, db, processor.GlobalBuilderRegistry)
 
-	// add builtin processor for removing metadata
-	// TODO at the time of writing we don't have a processor for manipulating
-	//  metadata, once we have it we can use it instead of adding our own
-	processor.GlobalBuilderRegistry.MustRegister("removereadat", func(config processor.Config) (processor.Interface, error) {
-		return procbuiltin.NewFuncWrapper(func(ctx context.Context, r record.Record) (record.Record, error) {
-			delete(r.Metadata, record.MetadataReadAt) // read at is different every time, remove it
-			return r, nil
-		}), nil
-	})
+	procPluginService := proc_mock.NewPluginService(gomock.NewController(t))
+	procPluginService.EXPECT().
+		NewProcessor(gomock.Any(), "removereadat", gomock.Any()).
+		Return(
+			sdk.NewProcessorFunc(sdk.Specification{Name: "removereadat"}, func(ctx context.Context, r opencdc.Record) (opencdc.Record, error) {
+				delete(r.Metadata, record.MetadataReadAt) // read at is different every time, remove it
+				return r, nil
+			}),
+			nil,
+		).AnyTimes()
+	procService := processor.NewService(logger, db, procPluginService)
 
 	// create destination file
 	destFile := "./test/dest-file.txt"
@@ -512,7 +517,7 @@ func TestService_IntegrationTestServices(t *testing.T) {
 		is.NoErr(err)
 	})
 
-	service := NewService(db, logger, plService, connService, procService, pluginService, "./test/pipelines4-integration-test")
+	service := NewService(db, logger, plService, connService, procService, connPluginService, "./test/pipelines4-integration-test")
 	err = service.Init(context.Background())
 	is.NoErr(err)
 
@@ -539,8 +544,10 @@ func TestService_IntegrationTestServices(t *testing.T) {
 		is.NoErr(err)
 		want.CreatedAt = got.CreatedAt
 		want.UpdatedAt = got.UpdatedAt
-		got.Processor = nil // processor is a function and can't be compared
-		is.Equal(got, want)
+		diff := cmp.Diff(got, want, cmpopts.IgnoreUnexported(processor.Instance{}))
+		if diff != "" {
+			t.Errorf("mismatch (-want +got): %s", diff)
+		}
 	}
 
 	// checking connectors

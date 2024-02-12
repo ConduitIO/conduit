@@ -21,6 +21,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/conduitio/conduit-commons/opencdc"
+	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/csync"
 	"github.com/conduitio/conduit/pkg/foundation/ctxutil"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -28,8 +30,6 @@ import (
 	"github.com/conduitio/conduit/pkg/pipeline/stream"
 	streammock "github.com/conduitio/conduit/pkg/pipeline/stream/mock"
 	connectorPlugin "github.com/conduitio/conduit/pkg/plugin/connector"
-	"github.com/conduitio/conduit/pkg/processor"
-	procmock "github.com/conduitio/conduit/pkg/processor/mock"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/rs/zerolog"
 	"go.uber.org/mock/gomock"
@@ -234,6 +234,7 @@ func Example_complexStream() {
 	}
 
 	// Unordered output:
+	// DBG opening processor component=ProcessorNode node_id=counter
 	// DBG got record message_id=generator2/1 node_id=printer2
 	// DBG got record message_id=generator2/1 node_id=printer1
 	// DBG received ack message_id=generator2/1 node_id=generator2
@@ -301,6 +302,7 @@ func Example_complexStream() {
 	// DBG incoming messages channel closed component=SourceAckerNode node_id=generator1-acker
 	// DBG incoming messages channel closed component=SourceAckerNode node_id=generator2-acker
 	// DBG incoming messages channel closed component=ProcessorNode node_id=counter
+	// DBG tearing down processor component=ProcessorNode node_id=counter
 	// DBG incoming messages channel closed component=DestinationNode node_id=printer1
 	// DBG incoming messages channel closed component=DestinationNode node_id=printer2
 	// DBG incoming messages channel closed component=DestinationAckerNode node_id=printer1-acker
@@ -393,12 +395,22 @@ func printerDestination(ctrl *gomock.Controller, logger log.CtxLogger, nodeID st
 	return destination
 }
 
-func counterProcessor(ctrl *gomock.Controller, count *int) processor.Interface {
-	proc := procmock.NewProcessor(ctrl)
-	proc.EXPECT().Process(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, r record.Record) (record.Record, error) {
-		*count++
-		return r, nil
-	}).AnyTimes()
+func counterProcessor(ctrl *gomock.Controller, count *int) stream.Processor {
+	proc := streammock.NewProcessor(ctrl)
+	proc.EXPECT().Open(gomock.Any())
+	proc.EXPECT().
+		Process(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(ctx context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
+			*count++
+
+			out := make([]sdk.ProcessedRecord, len(records))
+			for i, r := range records {
+				out[i] = sdk.SingleRecord(r)
+			}
+
+			return out
+		}).AnyTimes()
+	proc.EXPECT().Teardown(gomock.Any())
 	return proc
 }
 

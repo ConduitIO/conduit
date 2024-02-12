@@ -48,7 +48,7 @@ func TestValidator_MandatoryFields(t *testing.T) {
 			Processors: []Processor{{
 				ID: "pipeline1proc1",
 				// mandatory field
-				Type: "",
+				Plugin: "",
 				Settings: map[string]string{
 					"additionalProp1": "string",
 					"additionalProp2": "string",
@@ -219,7 +219,7 @@ func TestValidator_InvalidFields(t *testing.T) {
 			Description: "desc1",
 			Processors: []Processor{{
 				ID:       "proc1",
-				Type:     "js",
+				Plugin:   "js",
 				Settings: map[string]string{},
 				// invalid field
 				Workers: -1,
@@ -260,7 +260,7 @@ func TestValidator_MultiErrors(t *testing.T) {
 			Processors: []Processor{{
 				ID: "pipeline1proc1",
 				// mandatory field #2
-				Type: "",
+				Plugin: "",
 				Settings: map[string]string{
 					"additionalProp1": "string",
 					"additionalProp2": "string",
@@ -270,7 +270,7 @@ func TestValidator_MultiErrors(t *testing.T) {
 		Processors: []Processor{{
 			ID: "pipeline1proc1",
 			// mandatory field #3
-			Type: "",
+			Plugin: "",
 			Settings: map[string]string{
 				"additionalProp1": "string",
 				"additionalProp2": "string",
@@ -316,8 +316,8 @@ func TestValidator_DuplicateID(t *testing.T) {
 				},
 				Processors: []Processor{
 					{
-						ID:   "pipeline1proc1",
-						Type: "js",
+						ID:     "pipeline1proc1",
+						Plugin: "js",
 						Settings: map[string]string{
 							"additionalProp1": "string",
 							"additionalProp2": "string",
@@ -336,8 +336,8 @@ func TestValidator_DuplicateID(t *testing.T) {
 				},
 				Processors: []Processor{
 					{
-						ID:   "pipeline1proc1",
-						Type: "js",
+						ID:     "pipeline1proc1",
+						Plugin: "js",
 						Settings: map[string]string{
 							"additionalProp1": "string",
 							"additionalProp2": "string",
@@ -348,8 +348,8 @@ func TestValidator_DuplicateID(t *testing.T) {
 		},
 		Processors: []Processor{
 			{
-				ID:   "pipeline1proc1",
-				Type: "js",
+				ID:     "pipeline1proc1",
+				Plugin: "js",
 				Settings: map[string]string{
 					"additionalProp1": "string",
 					"additionalProp2": "string",

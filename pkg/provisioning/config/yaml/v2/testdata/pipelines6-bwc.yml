@@ -1,0 +1,28 @@
+---
+version: 2.2
+
+pipelines:
+  - id: pipeline6
+    status: running
+    name: pipeline6
+    description: desc1
+    connectors:
+      - id: con1
+        type: source
+        plugin: builtin:s3
+        name: s3-source
+        settings:
+          aws.region: us-east-1
+          aws.bucket: my-bucket
+        processors:
+          - id: proc1
+            plugin: js
+            settings:
+              additionalProp1: string
+              additionalProp2: string
+    processors:
+      - id: pipeline1proc1
+        type: js
+        settings:
+          additionalProp1: string
+          additionalProp2: string

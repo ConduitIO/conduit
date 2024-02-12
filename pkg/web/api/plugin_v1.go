@@ -26,21 +26,21 @@ import (
 	"google.golang.org/grpc"
 )
 
-//go:generate mockgen -destination=mock/plugin.go -package=mock -mock_names=PluginOrchestrator=PluginOrchestrator . PluginOrchestrator
+//go:generate mockgen -destination=mock/connector_plugin.go -package=mock -mock_names=ConnectorPluginOrchestrator=ConnectorPluginOrchestrator . ConnectorPluginOrchestrator
 
-// PluginOrchestrator defines a CRUD interface that manages the Plugin resource.
-type PluginOrchestrator interface {
-	// ListConnectors will return all connector plugins' specs.
-	ListConnectors(ctx context.Context) (map[string]connectorPlugin.Specification, error)
+// ConnectorPluginOrchestrator defines a CRUD interface that manages the Plugin resource.
+type ConnectorPluginOrchestrator interface {
+	// List will return all connector plugins' specs.
+	List(ctx context.Context) (map[string]connectorPlugin.Specification, error)
 }
 
 type PluginAPIv1 struct {
 	apiv1.UnimplementedPluginServiceServer
-	ps PluginOrchestrator
+	cpo ConnectorPluginOrchestrator
 }
 
-func NewPluginAPIv1(ps PluginOrchestrator) *PluginAPIv1 {
-	return &PluginAPIv1{ps: ps}
+func NewPluginAPIv1(cpo ConnectorPluginOrchestrator) *PluginAPIv1 {
+	return &PluginAPIv1{cpo: cpo}
 }
 
 func (p *PluginAPIv1) Register(srv *grpc.Server) {
@@ -60,7 +60,7 @@ func (p *PluginAPIv1) ListPlugins(
 		}
 	}
 
-	mp, err := p.ps.ListConnectors(ctx)
+	mp, err := p.cpo.List(ctx)
 	if err != nil {
 		return nil, status.PluginError(err)
 	}

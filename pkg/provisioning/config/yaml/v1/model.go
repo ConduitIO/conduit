@@ -156,7 +156,8 @@ func (c Connector) processorsToConfig() []config.Processor {
 
 func (p Processor) ToConfig() config.Processor {
 	return config.Processor{
-		Type:     p.Type,
+		// Type was removed in favor of Plugin
+		Plugin:   p.Type,
 		Settings: p.Settings,
 		Workers:  p.Workers,
 	}

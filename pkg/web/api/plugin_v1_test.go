@@ -32,8 +32,8 @@ func TestPluginAPIv1_ListPluginByName(t *testing.T) {
 
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
-	psMock := mock.NewPluginOrchestrator(ctrl)
-	api := NewPluginAPIv1(psMock)
+	cpoMock := mock.NewConnectorPluginOrchestrator(ctrl)
+	api := NewPluginAPIv1(cpoMock)
 
 	names := []string{"do-not-want-this-plugin", "want-p1", "want-p2", "skip", "another-skipped"}
 
@@ -60,8 +60,8 @@ func TestPluginAPIv1_ListPluginByName(t *testing.T) {
 		plsMap[name] = ps
 	}
 
-	psMock.EXPECT().
-		ListConnectors(ctx).
+	cpoMock.EXPECT().
+		List(ctx).
 		Return(plsMap, nil).
 		Times(1)
 

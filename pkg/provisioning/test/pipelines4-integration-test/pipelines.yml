@@ -22,10 +22,10 @@ pipelines:
           path: ./test/dest-file.txt
         processors:
           - id: con2proc1
-            type: removereadat
+            plugin: removereadat
     processors:
       - id: proc1
-        type: removereadat
+        plugin: removereadat
 ---
 version: 2.0
 pipelines:
