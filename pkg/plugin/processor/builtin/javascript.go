@@ -140,8 +140,7 @@ func (p *jsProcessor) Process(_ context.Context, records []opencdc.Record) []sdk
 
 	result, err := g.function(goja.Undefined(), jsRecs)
 	if err != nil {
-		// todo moar records
-		return []sdk.ProcessedRecord{sdk.ErrorRecord{Error: err}}
+		return p.makeProcessedRecords(sdk.ErrorRecord{Error: err}, len(records))
 	}
 
 	return p.toSDKRecords(g.runtime, result, len(records))
@@ -193,7 +192,7 @@ func (p *jsProcessor) newFunction(runtime *goja.Runtime, src string) (goja.Calla
 
 func (p *jsProcessor) jsRecord(runtime *goja.Runtime) func(goja.ConstructorCall) *goja.Object {
 	return func(call goja.ConstructorCall) *goja.Object {
-		// TODO accept arguments
+		// TODO accept arguments-
 		// We return a jsRecord struct, however because we are
 		// not changing call.This instanceof will not work as expected.
 
@@ -262,13 +261,13 @@ func (p *jsProcessor) toJSRecords(runtime *goja.Runtime, recs []opencdc.Record) 
 	return runtime.ToValue(jsRecs)
 }
 
-func (p *jsProcessor) toSDKRecords(runtime *goja.Runtime, v goja.Value, inputCount int) []sdk.ProcessedRecord {
+func (p *jsProcessor) toSDKRecords(runtime *goja.Runtime, v goja.Value, recordsCount int) []sdk.ProcessedRecord {
 	var jsRecs []*jsRecord
 	err := runtime.ExportTo(v, &jsRecs)
 	if err != nil {
 		return p.makeProcessedRecords(
 			sdk.ErrorRecord{Error: cerrors.Errorf("failed exporting JavaScript records to Go values: %w", err)},
-			inputCount,
+			recordsCount,
 		)
 	}
 
