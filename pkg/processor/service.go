@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:generate mockgen -destination=mock/processor_registry.go -package=mock -mock_names=PluginRegistry=PluginRegistry . PluginRegistry
+//go:generate mockgen -destination=mock/plugin_service.go -package=mock -mock_names=PluginService=PluginService . PluginService
 
 package processor
 
@@ -27,20 +27,20 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/metrics/measure"
 )
 
-type PluginRegistry interface {
-	Get(ctx context.Context, pluginName string, id string) (sdk.Processor, error)
+type PluginService interface {
+	NewProcessor(ctx context.Context, pluginName string, id string) (sdk.Processor, error)
 }
 
 type Service struct {
 	logger log.CtxLogger
 
-	registry  PluginRegistry
+	registry  PluginService
 	instances map[string]*Instance
 	store     *Store
 }
 
-// NewService creates a new processor service.
-func NewService(logger log.CtxLogger, db database.DB, registry PluginRegistry) *Service {
+// NewService creates a new processor plugin service.
+func NewService(logger log.CtxLogger, db database.DB, registry PluginService) *Service {
 	return &Service{
 		logger:    logger.WithComponent("processor.Service"),
 		registry:  registry,
@@ -96,7 +96,7 @@ func (s *Service) MakeRunnableProcessor(ctx context.Context, i *Instance) (*Runn
 		return nil, ErrProcessorRunning
 	}
 
-	p, err := s.registry.Get(ctx, i.Plugin, i.ID)
+	p, err := s.registry.NewProcessor(ctx, i.Plugin, i.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -123,7 +123,7 @@ func (s *Service) Create(
 	}
 
 	// check if the processor plugin exists
-	p, err := s.registry.Get(ctx, plugin, id)
+	p, err := s.registry.NewProcessor(ctx, plugin, id)
 	if err != nil {
 		return nil, cerrors.Errorf("could not get processor: %w", err)
 	}

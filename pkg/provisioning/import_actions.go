@@ -96,8 +96,8 @@ type createConnectorAction struct {
 	cfg        config.Connector
 	pipelineID string
 
-	connectorService ConnectorService
-	pluginService    PluginService
+	connectorService       ConnectorService
+	connectorPluginService ConnectorPluginService
 }
 
 func (a createConnectorAction) String() string {
@@ -131,7 +131,7 @@ func (a createConnectorAction) Do(ctx context.Context) error {
 	return nil
 }
 func (a createConnectorAction) Rollback(ctx context.Context) error {
-	err := a.connectorService.Delete(ctx, a.cfg.ID, a.pluginService)
+	err := a.connectorService.Delete(ctx, a.cfg.ID, a.connectorPluginService)
 	// ignore instance not found errors, this means the action failed to
 	// create the connector in the first place
 	if cerrors.Is(err, connector.ErrInstanceNotFound) {
