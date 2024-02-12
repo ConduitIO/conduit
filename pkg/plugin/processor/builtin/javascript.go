@@ -144,7 +144,7 @@ func (p *jsProcessor) Process(_ context.Context, records []opencdc.Record) []sdk
 		return []sdk.ProcessedRecord{sdk.ErrorRecord{Error: err}}
 	}
 
-	return p.toSDKRecords(result, len(records))
+	return p.toSDKRecords(g.runtime, result, len(records))
 }
 
 func (p *jsProcessor) Teardown(context.Context) error {
@@ -262,18 +262,12 @@ func (p *jsProcessor) toJSRecords(runtime *goja.Runtime, recs []opencdc.Record) 
 	return runtime.ToValue(jsRecs)
 }
 
-func (p *jsProcessor) toSDKRecords(v goja.Value, inputCount int) []sdk.ProcessedRecord {
-	raw := v.Export()
-	if raw == nil {
-		return p.makeProcessedRecords(sdk.FilterRecord{}, inputCount)
-	}
-
-	jsRecs, ok := raw.([]*jsRecord)
-	if !ok {
+func (p *jsProcessor) toSDKRecords(runtime *goja.Runtime, v goja.Value, inputCount int) []sdk.ProcessedRecord {
+	var jsRecs []*jsRecord
+	err := runtime.ExportTo(v, &jsRecs)
+	if err != nil {
 		return p.makeProcessedRecords(
-			sdk.ErrorRecord{
-				Error: cerrors.Errorf("js function expected to return a slice, but returned: %T", raw),
-			},
+			sdk.ErrorRecord{Error: cerrors.Errorf("failed exporting JavaScript records to Go values: %w", err)},
 			inputCount,
 		)
 	}
@@ -300,6 +294,10 @@ func (p *jsProcessor) toProcessedRecord(obj interface{}) sdk.ProcessedRecord {
 	if !ok {
 		return sdk.ErrorRecord{Error: cerrors.Errorf("expected a *jsRecord, but got %T", obj)}
 	}
+	if jsRec == nil {
+		return sdk.FilterRecord{}
+	}
+
 	var op opencdc.Operation
 	err := op.UnmarshalText([]byte(jsRec.Operation))
 	if err != nil {

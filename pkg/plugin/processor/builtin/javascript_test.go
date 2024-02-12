@@ -257,7 +257,7 @@ func TestJSProcessor_Filtering(t *testing.T) {
 		{
 			name: "always skip",
 			script: `function process(r) {
-				return null;
+				return [null];
 			}`,
 			input:      []opencdc.Record{{}},
 			skipRecord: true,
@@ -276,10 +276,10 @@ func TestJSProcessor_Filtering(t *testing.T) {
 		{
 			name: "filter out based on a field - negative",
 			script: `function process(r) {
-				if (r.Metadata["keepme"] != undefined) {
+				if (r[0].Metadata["keepme"] != undefined) {
 					return r
 				}
-				return null;
+				return [null];
 			}`,
 			input:      []opencdc.Record{{Metadata: opencdc.Metadata{"foo": "bar"}}},
 			skipRecord: true,
