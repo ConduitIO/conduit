@@ -25,6 +25,10 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin"
 )
 
+var defaultBuiltinProcessors = map[string]ProcessorPluginConstructor{
+	"custom.javascript": NewJavaScriptProcessor,
+}
+
 type Registry struct {
 	logger log.CtxLogger
 
@@ -40,6 +44,10 @@ type blueprint struct {
 }
 
 type ProcessorPluginConstructor func(log.CtxLogger) sdk.Processor
+
+func NewDefaultRegistry(logger log.CtxLogger) *Registry {
+	return NewRegistry(logger, defaultBuiltinProcessors)
+}
 
 func NewRegistry(logger log.CtxLogger, constructors map[string]ProcessorPluginConstructor) *Registry {
 	logger = logger.WithComponent("builtin.Registry")

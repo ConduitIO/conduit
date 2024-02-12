@@ -194,7 +194,7 @@ func newServices(
 
 	procReg := proc_plugin.NewRegistry(
 		logger,
-		proc_builtin.NewRegistry(logger, nil),
+		proc_builtin.NewDefaultRegistry(logger),
 		standaloneReg,
 	)
 
