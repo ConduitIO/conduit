@@ -16,9 +16,17 @@ package builtinv1
 
 import (
 	"context"
+	"sync"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/log"
 )
+
+var sandboxChanPool = sync.Pool{
+	New: func() any {
+		return make(chan any)
+	},
+}
 
 // runSandbox takes a function and runs it in a sandboxed mode that catches
 // panics and converts them into an error instead.
@@ -28,27 +36,71 @@ func runSandbox[REQ any, RES any](
 	f func(context.Context, REQ) (RES, error),
 	ctx context.Context, // context is the second parameter on purpose
 	req REQ,
+	logger log.CtxLogger,
 ) (res RES, err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			panicErr, ok := r.(error)
-			if !ok {
-				panicErr = cerrors.Errorf("panic: %v", r)
-			}
-			err = panicErr
+	c := sandboxChanPool.Get().(chan any)
+
+	returnResponse := func(ctx context.Context, res RES, err error) {
+		defer sandboxChanPool.Put(c)
+		select {
+		case <-ctx.Done():
+			// The context was cancelled, nobody will fetch the result.
+			logger.Error(ctx).
+				Any("response", res).
+				Err(err).
+				Msg("context cancelled when trying to return response from builtin connector plugin (this message comes from a detached plugin)")
+		case c <- res:
+			// The result was sent, now send the error if any and return the
+			// channel to the pool.
+			c <- err
 		}
+	}
+
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				err, ok := r.(error)
+				if !ok {
+					err = cerrors.Errorf("panic: %v", r)
+				}
+				// return the panic error
+				returnResponse(ctx, res, err)
+			}
+		}()
+
+		res, err := f(ctx, req)
+		returnResponse(ctx, res, err)
 	}()
-	return f(ctx, req)
+
+	select {
+	case <-ctx.Done():
+		// Context was cancelled, detach from calling goroutine and return.
+		logger.Error(ctx).Msg("context cancelled while waiting for builtin connector plugin to respond, detaching from plugin")
+		return res, ctx.Err()
+	case v := <-c:
+		// We got a response, which means the goroutine will send another value
+		// (the error) and then return the channel to the pool.
+		if v != nil {
+			res = v.(RES)
+		}
+		v = <-c
+		if v != nil {
+			err = v.(error)
+		}
+	}
+
+	return res, err
 }
 
 func runSandboxNoResp[REQ any](
 	f func(context.Context, REQ) error,
 	ctx context.Context, // context is the second parameter on purpose
 	req REQ,
+	logger log.CtxLogger,
 ) error {
 	_, err := runSandbox(func(ctx context.Context, req REQ) (any, error) {
 		err := f(ctx, req)
 		return nil, err
-	}, ctx, req)
+	}, ctx, req, logger)
 	return err
 }

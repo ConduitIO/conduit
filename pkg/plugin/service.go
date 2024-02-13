@@ -56,8 +56,6 @@ func (s *Service) Check(_ context.Context) error {
 }
 
 func (s *Service) NewDispenser(logger log.CtxLogger, name string) (Dispenser, error) {
-	logger = logger.WithComponent("plugin")
-
 	fullName := FullName(name)
 	switch fullName.PluginType() {
 	case PluginTypeStandalone:

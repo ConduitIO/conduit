@@ -112,10 +112,6 @@ func (s *sourcePluginClient) Ack(_ context.Context, p record.Position) error {
 }
 
 func (s *sourcePluginClient) Stop(ctx context.Context) (record.Position, error) {
-	if s.stream == nil {
-		return nil, plugin.ErrStreamNotOpen
-	}
-
 	protoReq := toproto.SourceStopRequest()
 	protoResp, err := s.grpcClient.Stop(ctx, protoReq)
 	if err != nil {

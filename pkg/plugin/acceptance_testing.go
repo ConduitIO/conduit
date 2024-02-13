@@ -62,6 +62,7 @@ func AcceptanceTestV1(t *testing.T, tdf testDispenserFunc) {
 	run(t, tdf, testSource_Lifecycle_OnCreated)
 	run(t, tdf, testSource_Lifecycle_OnUpdated)
 	run(t, tdf, testSource_Lifecycle_OnDeleted)
+	run(t, tdf, testSource_BlockingFunctions)
 
 	// destination tests
 	run(t, tdf, testDestination_Configure_Success)
@@ -78,6 +79,7 @@ func AcceptanceTestV1(t *testing.T, tdf testDispenserFunc) {
 	run(t, tdf, testDestination_Lifecycle_OnCreated)
 	run(t, tdf, testDestination_Lifecycle_OnUpdated)
 	run(t, tdf, testDestination_Lifecycle_OnDeleted)
+	run(t, tdf, testDestination_BlockingFunctions)
 }
 
 func run(t *testing.T, tdf testDispenserFunc, test func(*testing.T, testDispenserFunc)) {
@@ -636,6 +638,105 @@ func testSource_Lifecycle_OnDeleted(t *testing.T, tdf testDispenserFunc) {
 	is.NoErr(err)
 }
 
+func testSource_BlockingFunctions(t *testing.T, tdf testDispenserFunc) {
+	testCases := []struct {
+		name               string
+		prepareExpectation func(m *mock.SourcePlugin, blockUntil chan struct{})
+		callFn             func(context.Context, SourcePlugin) error
+	}{{
+		name: "Configure",
+		prepareExpectation: func(m *mock.SourcePlugin, blockUntil chan struct{}) {
+			m.EXPECT().
+				Configure(gomock.Any(), cpluginv1.SourceConfigureRequest{}).
+				Do(func(context.Context, cpluginv1.SourceConfigureRequest) {
+					<-blockUntil
+				})
+		},
+		callFn: func(ctx context.Context, d SourcePlugin) error {
+			return d.Configure(ctx, map[string]string{})
+		},
+	}, {
+		name: "Start",
+		prepareExpectation: func(m *mock.SourcePlugin, blockUntil chan struct{}) {
+			m.EXPECT().
+				Start(gomock.Any(), cpluginv1.SourceStartRequest{}).
+				Do(func(context.Context, cpluginv1.SourceStartRequest) {
+					<-blockUntil
+				})
+		},
+		callFn: func(ctx context.Context, d SourcePlugin) error {
+			return d.Start(ctx, nil)
+		},
+	}, {
+		name: "Stop",
+		prepareExpectation: func(m *mock.SourcePlugin, blockUntil chan struct{}) {
+			m.EXPECT().
+				Stop(gomock.Any(), cpluginv1.SourceStopRequest{}).
+				Do(func(context.Context, cpluginv1.SourceStopRequest) {
+					<-blockUntil
+				})
+		},
+		callFn: func(ctx context.Context, d SourcePlugin) error {
+			_, err := d.Stop(ctx)
+			return err
+		},
+	}, {
+		name: "Teardown",
+		prepareExpectation: func(m *mock.SourcePlugin, blockUntil chan struct{}) {
+			m.EXPECT().
+				Teardown(gomock.Any(), cpluginv1.SourceTeardownRequest{}).
+				Do(func(context.Context, cpluginv1.SourceTeardownRequest) {
+					<-blockUntil
+				})
+		},
+		callFn: func(ctx context.Context, d SourcePlugin) error {
+			return d.Teardown(ctx)
+		},
+	}}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			is := is.New(t)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			dispenser, _, mockSource, _ := tdf(t)
+
+			blockUntil := make(chan struct{})
+			tc.prepareExpectation(mockSource, blockUntil)
+
+			source, err := dispenser.DispenseSource()
+			is.NoErr(err)
+
+			fnErr := make(chan error)
+			go func() {
+				// call function in goroutine, because the mock will block
+				fnErr <- tc.callFn(ctx, source)
+			}()
+
+			// ensure that the call to the function is blocked
+			select {
+			case <-fnErr:
+				t.Fatal("plugin call should block")
+			case <-time.After(time.Second):
+			}
+
+			// cancelling the context should unblock the call, regardless if the
+			// mock is still blocking
+			cancel()
+			select {
+			case err = <-fnErr:
+				is.Equal(err, context.Canceled)
+			case <-time.After(time.Second):
+				t.Fatal("call to plugin should have stopped blocking")
+			}
+
+			// release the blocked call to the mock
+			close(blockUntil)
+		})
+	}
+}
+
 // -----------------
 // -- DESTINATION --
 // -----------------
@@ -1048,4 +1149,102 @@ func testDestination_Lifecycle_OnDeleted(t *testing.T, tdf testDispenserFunc) {
 
 	err = destination.LifecycleOnDeleted(ctx, want)
 	is.NoErr(err)
+}
+
+func testDestination_BlockingFunctions(t *testing.T, tdf testDispenserFunc) {
+	testCases := []struct {
+		name               string
+		prepareExpectation func(m *mock.DestinationPlugin, blockUntil chan struct{})
+		callFn             func(context.Context, DestinationPlugin) error
+	}{{
+		name: "Configure",
+		prepareExpectation: func(m *mock.DestinationPlugin, blockUntil chan struct{}) {
+			m.EXPECT().
+				Configure(gomock.Any(), cpluginv1.DestinationConfigureRequest{}).
+				Do(func(context.Context, cpluginv1.DestinationConfigureRequest) {
+					<-blockUntil
+				})
+		},
+		callFn: func(ctx context.Context, d DestinationPlugin) error {
+			return d.Configure(ctx, map[string]string{})
+		},
+	}, {
+		name: "Start",
+		prepareExpectation: func(m *mock.DestinationPlugin, blockUntil chan struct{}) {
+			m.EXPECT().
+				Start(gomock.Any(), cpluginv1.DestinationStartRequest{}).
+				Do(func(context.Context, cpluginv1.DestinationStartRequest) {
+					<-blockUntil
+				})
+		},
+		callFn: func(ctx context.Context, d DestinationPlugin) error {
+			return d.Start(ctx)
+		},
+	}, {
+		name: "Stop",
+		prepareExpectation: func(m *mock.DestinationPlugin, blockUntil chan struct{}) {
+			m.EXPECT().
+				Stop(gomock.Any(), cpluginv1.DestinationStopRequest{}).
+				Do(func(context.Context, cpluginv1.DestinationStopRequest) {
+					<-blockUntil
+				})
+		},
+		callFn: func(ctx context.Context, d DestinationPlugin) error {
+			return d.Stop(ctx, nil)
+		},
+	}, {
+		name: "Teardown",
+		prepareExpectation: func(m *mock.DestinationPlugin, blockUntil chan struct{}) {
+			m.EXPECT().
+				Teardown(gomock.Any(), cpluginv1.DestinationTeardownRequest{}).
+				Do(func(context.Context, cpluginv1.DestinationTeardownRequest) {
+					<-blockUntil
+				})
+		},
+		callFn: func(ctx context.Context, d DestinationPlugin) error {
+			return d.Teardown(ctx)
+		},
+	}}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			is := is.New(t)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			dispenser, _, _, mockDestination := tdf(t)
+
+			blockUntil := make(chan struct{})
+			tc.prepareExpectation(mockDestination, blockUntil)
+
+			destination, err := dispenser.DispenseDestination()
+			is.NoErr(err)
+
+			fnErr := make(chan error)
+			go func() {
+				// call function in goroutine, because the mock will block
+				fnErr <- tc.callFn(ctx, destination)
+			}()
+
+			// ensure that the call to the function is blocked
+			select {
+			case <-fnErr:
+				t.Fatal("plugin call should block")
+			case <-time.After(time.Second):
+			}
+
+			// cancelling the context should unblock the call, regardless if the
+			// mock is still blocking
+			cancel()
+			select {
+			case err = <-fnErr:
+				is.Equal(err, context.Canceled)
+			case <-time.After(time.Second):
+				t.Fatal("call to plugin should have stopped blocking")
+			}
+
+			// release the blocked call to the mock
+			close(blockUntil)
+		})
+	}
 }

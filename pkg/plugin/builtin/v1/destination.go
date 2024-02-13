@@ -58,7 +58,7 @@ func (s *destinationPluginAdapter) withLogger(ctx context.Context) context.Conte
 
 func (s *destinationPluginAdapter) Configure(ctx context.Context, cfg map[string]string) error {
 	s.logger.Trace(ctx).Msg("calling Configure")
-	_, err := runSandbox(s.impl.Configure, s.withLogger(ctx), toplugin.DestinationConfigureRequest(cfg))
+	_, err := runSandbox(s.impl.Configure, s.withLogger(ctx), toplugin.DestinationConfigureRequest(cfg), s.logger)
 	return err
 }
 
@@ -69,7 +69,7 @@ func (s *destinationPluginAdapter) Start(ctx context.Context) error {
 
 	req := toplugin.DestinationStartRequest()
 	s.logger.Trace(ctx).Msg("calling Start")
-	_, err := runSandbox(s.impl.Start, s.withLogger(ctx), req)
+	_, err := runSandbox(s.impl.Start, s.withLogger(ctx), req, s.logger)
 	if err != nil {
 		return err
 	}
@@ -77,7 +77,7 @@ func (s *destinationPluginAdapter) Start(ctx context.Context) error {
 	s.stream = newDestinationRunStream(ctx)
 	go func() {
 		s.logger.Trace(ctx).Msg("calling Run")
-		err := runSandboxNoResp(s.impl.Run, s.withLogger(ctx), cpluginv1.DestinationRunStream(s.stream))
+		err := runSandboxNoResp(s.impl.Run, s.withLogger(ctx), cpluginv1.DestinationRunStream(s.stream), s.logger)
 		if err != nil {
 			if !s.stream.stop(err) {
 				s.logger.Err(ctx, err).Msg("stream already stopped")
@@ -130,36 +130,32 @@ func (s *destinationPluginAdapter) Ack(ctx context.Context) (record.Position, er
 }
 
 func (s *destinationPluginAdapter) Stop(ctx context.Context, lastPosition record.Position) error {
-	if s.stream == nil {
-		return plugin.ErrStreamNotOpen
-	}
-
 	s.logger.Trace(ctx).Bytes(log.RecordPositionField, lastPosition).Msg("calling Stop")
-	_, err := runSandbox(s.impl.Stop, s.withLogger(ctx), toplugin.DestinationStopRequest(lastPosition))
+	_, err := runSandbox(s.impl.Stop, s.withLogger(ctx), toplugin.DestinationStopRequest(lastPosition), s.logger)
 	return err
 }
 
 func (s *destinationPluginAdapter) Teardown(ctx context.Context) error {
 	s.logger.Trace(ctx).Msg("calling Teardown")
-	_, err := runSandbox(s.impl.Teardown, s.withLogger(ctx), toplugin.DestinationTeardownRequest())
+	_, err := runSandbox(s.impl.Teardown, s.withLogger(ctx), toplugin.DestinationTeardownRequest(), s.logger)
 	return err
 }
 
 func (s *destinationPluginAdapter) LifecycleOnCreated(ctx context.Context, cfg map[string]string) error {
 	s.logger.Trace(ctx).Msg("calling LifecycleOnCreated")
-	_, err := runSandbox(s.impl.LifecycleOnCreated, s.withLogger(ctx), toplugin.DestinationLifecycleOnCreatedRequest(cfg))
+	_, err := runSandbox(s.impl.LifecycleOnCreated, s.withLogger(ctx), toplugin.DestinationLifecycleOnCreatedRequest(cfg), s.logger)
 	return err
 }
 
 func (s *destinationPluginAdapter) LifecycleOnUpdated(ctx context.Context, cfgBefore, cfgAfter map[string]string) error {
 	s.logger.Trace(ctx).Msg("calling LifecycleOnUpdated")
-	_, err := runSandbox(s.impl.LifecycleOnUpdated, s.withLogger(ctx), toplugin.DestinationLifecycleOnUpdatedRequest(cfgBefore, cfgAfter))
+	_, err := runSandbox(s.impl.LifecycleOnUpdated, s.withLogger(ctx), toplugin.DestinationLifecycleOnUpdatedRequest(cfgBefore, cfgAfter), s.logger)
 	return err
 }
 
 func (s *destinationPluginAdapter) LifecycleOnDeleted(ctx context.Context, cfg map[string]string) error {
 	s.logger.Trace(ctx).Msg("calling LifecycleOnDeleted")
-	_, err := runSandbox(s.impl.LifecycleOnDeleted, s.withLogger(ctx), toplugin.DestinationLifecycleOnDeletedRequest(cfg))
+	_, err := runSandbox(s.impl.LifecycleOnDeleted, s.withLogger(ctx), toplugin.DestinationLifecycleOnDeletedRequest(cfg), s.logger)
 	return err
 }
 

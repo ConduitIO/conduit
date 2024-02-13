@@ -191,6 +191,7 @@ func (r *Registry) NewDispenser(logger log.CtxLogger, fullName plugin.FullName) 
 		return nil, cerrors.Errorf("could not find standalone plugin, only found versions %v: %w", availableVersions, plugin.ErrPluginNotFound)
 	}
 
+	logger = logger.WithComponent("plugin.standalone")
 	return standalonev1.NewDispenser(logger.ZerologWithComponent(), bp.path)
 }
 
