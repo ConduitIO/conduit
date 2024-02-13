@@ -17,6 +17,8 @@ package js
 import (
 	"bytes"
 	"context"
+	"testing"
+
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -26,7 +28,6 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/matryer/is"
 	"github.com/rs/zerolog"
-	"testing"
 )
 
 func TestJSProcessor_Logger(t *testing.T) {
@@ -90,7 +91,6 @@ func TestJSProcessor_Error(t *testing.T) {
 	gotErr, ok := got[0].(sdk.ErrorRecord)
 	is.True(ok)
 	is.Equal(gotErr.Error.Error(), "something bad happened")
-
 }
 
 func TestJSProcessor_Process(t *testing.T) {
