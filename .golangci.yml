@@ -33,6 +33,10 @@ linters-settings:
     values:
       regexp:
         copyright-year: 20[2-9]\d
+  revive:
+    rules:
+      - name: unused-parameter
+        disabled: true
 
 issues:
   exclude-rules:
