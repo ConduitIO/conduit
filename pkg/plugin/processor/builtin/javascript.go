@@ -43,6 +43,13 @@ type jsRecord struct {
 	}
 }
 
+type jsFilterRecord struct {
+}
+
+type jsErrorRecord struct {
+	Error string
+}
+
 // gojaContext represents one independent goja context.
 type gojaContext struct {
 	runtime  *goja.Runtime
@@ -74,9 +81,19 @@ func (p *jsProcessor) Specification() (sdk.Specification, error) {
 			"script": {
 				Default: "",
 				Type:    sdk.ParameterTypeString,
-				Description: "Processor code. " +
-					"Needs to contain a function called 'process' which accepts a record, " +
-					"and returns a record or null (to filter out a record).",
+				Description: `
+JavaScript code for this processor. It needs to have a function 'process()' that
+accepts an array of records and returns an array of processed records.
+
+The processed records in the returned array need to have matching indexes with 
+records in the input array. In other words, for the record at input_array[i]
+the processed record should be at output_array[i].
+
+The processed record can be one of the following:
+1. a processed record itself
+2. a filter record (constructed with new FilterRecord())
+3. an error record (constructred with new ErrorRecord())
+`,
 				Validations: nil,
 			},
 			"script.path": {
@@ -157,6 +174,8 @@ func (p *jsProcessor) newJSRuntime(logger log.CtxLogger) (*goja.Runtime, error) 
 	runtimeHelpers := map[string]interface{}{
 		"logger":         &logger,
 		"Record":         p.jsRecord(rt),
+		"FilterRecord":   p.jsFilterRecord(rt),
+		"ErrorRecord":    p.jsErrorRecord(rt),
 		"RawData":        p.jsContentRaw(rt),
 		"StructuredData": p.jsContentStructured(rt),
 	}
@@ -204,6 +223,24 @@ func (p *jsProcessor) jsRecord(runtime *goja.Runtime) func(goja.ConstructorCall)
 		}
 		// We need to return a pointer to make the returned object mutable.
 		return runtime.ToValue(&r).ToObject(runtime)
+	}
+}
+
+func (p *jsProcessor) jsFilterRecord(runtime *goja.Runtime) func(goja.ConstructorCall) *goja.Object {
+	return func(call goja.ConstructorCall) *goja.Object {
+		// We need to return a pointer to make the returned object mutable.
+		return runtime.ToValue(&jsFilterRecord{}).ToObject(runtime)
+	}
+}
+
+func (p *jsProcessor) jsErrorRecord(runtime *goja.Runtime) func(goja.ConstructorCall) *goja.Object {
+	return func(call goja.ConstructorCall) *goja.Object {
+		rec := &jsErrorRecord{}
+		if len(call.Arguments) == 1 {
+			rec.Error = call.Arguments[0].String()
+		}
+		// We need to return a pointer to make the returned object mutable.
+		return runtime.ToValue(rec).ToObject(runtime)
 	}
 }
 
@@ -262,7 +299,7 @@ func (p *jsProcessor) toJSRecords(runtime *goja.Runtime, recs []opencdc.Record) 
 }
 
 func (p *jsProcessor) toSDKRecords(runtime *goja.Runtime, v goja.Value, recordsCount int) []sdk.ProcessedRecord {
-	var jsRecs []*jsRecord
+	var jsRecs []interface{}
 	err := runtime.ExportTo(v, &jsRecs)
 	if err != nil {
 		return p.makeProcessedRecords(
@@ -289,14 +326,21 @@ func (p *jsProcessor) makeProcessedRecords(record sdk.ProcessedRecord, count int
 }
 
 func (p *jsProcessor) toProcessedRecord(obj interface{}) sdk.ProcessedRecord {
-	jsRec, ok := obj.(*jsRecord)
-	if !ok {
-		return sdk.ErrorRecord{Error: cerrors.Errorf("expected a *jsRecord, but got %T", obj)}
-	}
-	if jsRec == nil {
+	switch v := obj.(type) {
+	case *jsRecord:
+		return p.toSingleRecord(v)
+	case *jsFilterRecord:
 		return sdk.FilterRecord{}
+	case *jsErrorRecord:
+		return sdk.ErrorRecord{Error: cerrors.New(v.Error)}
+	default:
+		return sdk.ErrorRecord{
+			Error: cerrors.Errorf("expected one of [*jsRecord, jsFilterRecord, jsErrorRecord], but got %T", obj),
+		}
 	}
+}
 
+func (p *jsProcessor) toSingleRecord(jsRec *jsRecord) sdk.ProcessedRecord {
 	var op opencdc.Operation
 	err := op.UnmarshalText([]byte(jsRec.Operation))
 	if err != nil {

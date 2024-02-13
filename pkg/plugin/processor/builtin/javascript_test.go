@@ -76,6 +76,23 @@ func TestJSProcessor_MissingEntrypoint(t *testing.T) {
 	) // expected different error message
 }
 
+func TestJSProcessor_Error(t *testing.T) {
+	is := is.New(t)
+	underTest := newTestJavaScriptProc(
+		t,
+		`function process(r) {
+				return [new ErrorRecord("something bad happened")];
+			}`,
+	)
+
+	got := underTest.Process(context.Background(), []opencdc.Record{{}})
+	is.Equal(1, len(got))
+	gotErr, ok := got[0].(sdk.ErrorRecord)
+	is.True(ok)
+	is.Equal(gotErr.Error.Error(), "something bad happened")
+
+}
+
 func TestJSProcessor_Process(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -232,6 +249,36 @@ func TestJSProcessor_Process(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "filter: always skip",
+			script: `function process(r) {
+				return [new FilterRecord()];
+			}`,
+			args: []opencdc.Record{{}},
+			want: []sdk.ProcessedRecord{sdk.FilterRecord{}},
+		},
+		{
+			name: "filter: not matching",
+			script: `function process(r) {
+				if (r[0].Metadata["keepme"] != undefined) {
+					return r
+				}
+				return [new FilterRecord()];
+			}`,
+			args: []opencdc.Record{{Metadata: opencdc.Metadata{"keepme": "yes"}}},
+			want: []sdk.ProcessedRecord{sdk.SingleRecord{Metadata: opencdc.Metadata{"keepme": "yes"}}},
+		},
+		{
+			name: "filter: not matching",
+			script: `function process(r) {
+				if (r[0].Metadata["keepme"] != undefined) {
+					return r
+				}
+				return [new FilterRecord()];
+			}`,
+			args: []opencdc.Record{{Metadata: opencdc.Metadata{"foo": "bar"}}},
+			want: []sdk.ProcessedRecord{sdk.FilterRecord{}},
+		},
 	}
 
 	for _, tc := range tests {
@@ -243,57 +290,6 @@ func TestJSProcessor_Process(t *testing.T) {
 			if diff != "" {
 				t.Errorf("mismatch (-want +got):\n%s", diff)
 			}
-		})
-	}
-}
-
-func TestJSProcessor_Filtering(t *testing.T) {
-	testCases := []struct {
-		name       string
-		script     string
-		input      []opencdc.Record
-		skipRecord bool
-	}{
-		{
-			name: "always skip",
-			script: `function process(r) {
-				return [null];
-			}`,
-			input:      []opencdc.Record{{}},
-			skipRecord: true,
-		},
-		{
-			name: "filter based on a field - positive",
-			script: `function process(r) {
-				if (r.Metadata["keepme"] != undefined) {
-					return r
-				}
-				return null;
-			}`,
-			input:      []opencdc.Record{{Metadata: opencdc.Metadata{"keepme": "yes"}}},
-			skipRecord: false,
-		},
-		{
-			name: "filter out based on a field - negative",
-			script: `function process(r) {
-				if (r[0].Metadata["keepme"] != undefined) {
-					return r
-				}
-				return [null];
-			}`,
-			input:      []opencdc.Record{{Metadata: opencdc.Metadata{"foo": "bar"}}},
-			skipRecord: true,
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			is := is.New(t)
-			underTest := newTestJavaScriptProc(t, tc.script)
-
-			rec := underTest.Process(context.Background(), tc.input)
-			_, ok := rec[0].(sdk.FilterRecord)
-			is.Equal(tc.skipRecord, ok)
 		})
 	}
 }
