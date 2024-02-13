@@ -16,6 +16,7 @@ package builtin
 
 import (
 	"context"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/js"
 	"reflect"
 	"runtime/debug"
 
@@ -26,7 +27,7 @@ import (
 )
 
 var defaultBuiltinProcessors = map[string]ProcessorPluginConstructor{
-	"custom.javascript": NewJavaScriptProcessor,
+	"custom.javascript": js.New,
 }
 
 type Registry struct {

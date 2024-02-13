@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package builtin
+package js
 
 import (
 	"bytes"
@@ -35,7 +35,7 @@ func TestJSProcessor_Logger(t *testing.T) {
 
 	var buf bytes.Buffer
 	logger := log.New(zerolog.New(&buf))
-	underTest := NewJavaScriptProcessor(logger)
+	underTest := New(logger)
 	err := underTest.Configure(
 		ctx,
 		map[string]string{
@@ -61,7 +61,7 @@ func TestJSProcessor_MissingEntrypoint(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
 
-	underTest := NewJavaScriptProcessor(log.Nop())
+	underTest := New(log.Nop())
 	err := underTest.Configure(
 		ctx,
 		map[string]string{"script": `function something() { logger.Debug("no entrypoint"); }`},
@@ -206,10 +206,10 @@ func TestJSProcessor_Process(t *testing.T) {
 			},
 		},
 		{
-			name: "return new record with raw data",
+			name: "return new SingleRecord with raw data",
 			script: `
 				function process(record) {
-					r = new Record();
+					r = new SingleRecord();
 					r.Position = "3"
 					r.Metadata["returned"] = "JS";
 					r.Key = new RawData("baz");
@@ -232,7 +232,7 @@ func TestJSProcessor_Process(t *testing.T) {
 			name: "use empty raw data",
 			script: `
 				function process(record) {
-					r = new Record();
+					r = new SingleRecord();
 					r.Position = "3";
 					r.Payload.After = new RawData("foobar");
 					return [r];
@@ -405,7 +405,7 @@ func TestJSProcessor_BrokenJSCode(t *testing.T) {
 	ctx := context.Background()
 	src := `function {`
 
-	p := NewJavaScriptProcessor(log.Test(t))
+	p := New(log.Test(t))
 	err := p.Configure(
 		ctx,
 		map[string]string{
@@ -459,7 +459,7 @@ func newTestJavaScriptProc(t *testing.T, src string) sdk.Processor {
 	is := is.New(t)
 	ctx := context.Background()
 
-	p := NewJavaScriptProcessor(log.Test(t))
+	p := New(log.Test(t))
 	err := p.Configure(
 		ctx,
 		map[string]string{

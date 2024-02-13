@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package builtin
+package js
 
 import (
 	"context"
@@ -29,10 +29,10 @@ import (
 
 const entrypoint = "process"
 
-// jsRecord is an intermediary representation of opencdc.Record that is passed to
+// singleRecord is an intermediary representation of opencdc.Record that is passed to
 // the JavaScript transform. We use this because using opencdc.Record would not
 // allow us to modify or access certain data (e.g. metadata or structured data).
-type jsRecord struct {
+type singleRecord struct {
 	Position  []byte
 	Operation string
 	Metadata  map[string]string
@@ -43,10 +43,10 @@ type jsRecord struct {
 	}
 }
 
-type jsFilterRecord struct {
+type filterRecord struct {
 }
 
-type jsErrorRecord struct {
+type errorRecord struct {
 	Error string
 }
 
@@ -56,7 +56,7 @@ type gojaContext struct {
 	function goja.Callable
 }
 
-type jsProcessor struct {
+type processor struct {
 	sdk.UnimplementedProcessor
 
 	// src is the JavaScript code that will be executed
@@ -66,15 +66,15 @@ type jsProcessor struct {
 	logger   log.CtxLogger
 }
 
-func NewJavaScriptProcessor(logger log.CtxLogger) sdk.Processor {
-	return &jsProcessor{logger: logger}
+func New(logger log.CtxLogger) sdk.Processor {
+	return &processor{logger: logger}
 }
 
-func (p *jsProcessor) Specification() (sdk.Specification, error) {
+func (p *processor) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
 		Name:        "custom.javascript",
 		Summary:     "JavaScript processor",
-		Description: "",
+		Description: "A JavaScript processor for Conduit",
 		Version:     "v0.1.0",
 		Author:      "Meroxa, Inc.",
 		Parameters: map[string]sdk.Parameter{
@@ -106,7 +106,7 @@ The processed record can be one of the following:
 	}, nil
 }
 
-func (p *jsProcessor) Configure(_ context.Context, m map[string]string) error {
+func (p *processor) Configure(_ context.Context, m map[string]string) error {
 	script, hasScript := m["script"]
 	scriptPath, hasScriptPath := m["script.path"]
 	switch {
@@ -125,8 +125,8 @@ func (p *jsProcessor) Configure(_ context.Context, m map[string]string) error {
 	return nil
 }
 
-func (p *jsProcessor) Open(context.Context) error {
-	runtime, err := p.newJSRuntime(p.logger)
+func (p *processor) Open(context.Context) error {
+	runtime, err := p.newRuntime(p.logger)
 	if err != nil {
 		return cerrors.Errorf("failed initializing JS runtime: %w", err)
 	}
@@ -138,7 +138,7 @@ func (p *jsProcessor) Open(context.Context) error {
 
 	p.gojaPool.New = func() any {
 		// create a new runtime for the function, so it's executed in a separate goja context
-		rt, _ := p.newJSRuntime(p.logger)
+		rt, _ := p.newRuntime(p.logger)
 		f, _ := p.newFunction(rt, p.src)
 		return &gojaContext{
 			runtime:  rt,
@@ -149,7 +149,7 @@ func (p *jsProcessor) Open(context.Context) error {
 	return nil
 }
 
-func (p *jsProcessor) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
+func (p *processor) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 	g := p.gojaPool.Get().(*gojaContext)
 	defer p.gojaPool.Put(g)
 
@@ -163,19 +163,19 @@ func (p *jsProcessor) Process(_ context.Context, records []opencdc.Record) []sdk
 	return p.toSDKRecords(g.runtime, result, len(records))
 }
 
-func (p *jsProcessor) Teardown(context.Context) error {
+func (p *processor) Teardown(context.Context) error {
 	return nil
 }
 
-func (p *jsProcessor) newJSRuntime(logger log.CtxLogger) (*goja.Runtime, error) {
+func (p *processor) newRuntime(logger log.CtxLogger) (*goja.Runtime, error) {
 	rt := goja.New()
 	require.NewRegistry().Enable(rt)
 
 	runtimeHelpers := map[string]interface{}{
 		"logger":         &logger,
-		"Record":         p.jsRecord(rt),
-		"FilterRecord":   p.jsFilterRecord(rt),
-		"ErrorRecord":    p.jsErrorRecord(rt),
+		"SingleRecord":   p.newSingleRecord(rt),
+		"FilterRecord":   p.newFilterRecord(rt),
+		"ErrorRecord":    p.newErrorRecord(rt),
 		"RawData":        p.jsContentRaw(rt),
 		"StructuredData": p.jsContentStructured(rt),
 	}
@@ -189,7 +189,7 @@ func (p *jsProcessor) newJSRuntime(logger log.CtxLogger) (*goja.Runtime, error) 
 	return rt, nil
 }
 
-func (p *jsProcessor) newFunction(runtime *goja.Runtime, src string) (goja.Callable, error) {
+func (p *processor) newFunction(runtime *goja.Runtime, src string) (goja.Callable, error) {
 	prg, err := goja.Compile("", src, false)
 	if err != nil {
 		return nil, cerrors.Errorf("failed to compile script: %w", err)
@@ -209,16 +209,15 @@ func (p *jsProcessor) newFunction(runtime *goja.Runtime, src string) (goja.Calla
 	return entrypointFunc, nil
 }
 
-func (p *jsProcessor) jsRecord(runtime *goja.Runtime) func(goja.ConstructorCall) *goja.Object {
+func (p *processor) newSingleRecord(runtime *goja.Runtime) func(goja.ConstructorCall) *goja.Object {
 	return func(call goja.ConstructorCall) *goja.Object {
-		// TODO accept arguments-
-		// We return a jsRecord struct, however because we are
+		// We return a singleRecord struct, however because we are
 		// not changing call.This instanceof will not work as expected.
 
 		// JavaScript records are always initialized with metadata
 		// so that it's easier to write processor code
 		// (without worrying about initializing it every time)
-		r := jsRecord{
+		r := singleRecord{
 			Metadata: make(map[string]string),
 		}
 		// We need to return a pointer to make the returned object mutable.
@@ -226,16 +225,16 @@ func (p *jsProcessor) jsRecord(runtime *goja.Runtime) func(goja.ConstructorCall)
 	}
 }
 
-func (p *jsProcessor) jsFilterRecord(runtime *goja.Runtime) func(goja.ConstructorCall) *goja.Object {
+func (p *processor) newFilterRecord(runtime *goja.Runtime) func(goja.ConstructorCall) *goja.Object {
 	return func(call goja.ConstructorCall) *goja.Object {
 		// We need to return a pointer to make the returned object mutable.
-		return runtime.ToValue(&jsFilterRecord{}).ToObject(runtime)
+		return runtime.ToValue(&filterRecord{}).ToObject(runtime)
 	}
 }
 
-func (p *jsProcessor) jsErrorRecord(runtime *goja.Runtime) func(goja.ConstructorCall) *goja.Object {
+func (p *processor) newErrorRecord(runtime *goja.Runtime) func(goja.ConstructorCall) *goja.Object {
 	return func(call goja.ConstructorCall) *goja.Object {
-		rec := &jsErrorRecord{}
+		rec := &errorRecord{}
 		if len(call.Arguments) == 1 {
 			rec.Error = call.Arguments[0].String()
 		}
@@ -244,7 +243,7 @@ func (p *jsProcessor) jsErrorRecord(runtime *goja.Runtime) func(goja.Constructor
 	}
 }
 
-func (p *jsProcessor) jsContentRaw(runtime *goja.Runtime) func(goja.ConstructorCall) *goja.Object {
+func (p *processor) jsContentRaw(runtime *goja.Runtime) func(goja.ConstructorCall) *goja.Object {
 	return func(call goja.ConstructorCall) *goja.Object {
 		var r opencdc.RawData
 		if len(call.Arguments) == 1 {
@@ -255,7 +254,7 @@ func (p *jsProcessor) jsContentRaw(runtime *goja.Runtime) func(goja.ConstructorC
 	}
 }
 
-func (p *jsProcessor) jsContentStructured(runtime *goja.Runtime) func(goja.ConstructorCall) *goja.Object {
+func (p *processor) jsContentStructured(runtime *goja.Runtime) func(goja.ConstructorCall) *goja.Object {
 	return func(call goja.ConstructorCall) *goja.Object {
 		// TODO accept arguments
 		// We return a map[string]interface{} struct, however because we are
@@ -266,7 +265,7 @@ func (p *jsProcessor) jsContentStructured(runtime *goja.Runtime) func(goja.Const
 	}
 }
 
-func (p *jsProcessor) toJSRecords(runtime *goja.Runtime, recs []opencdc.Record) goja.Value {
+func (p *processor) toJSRecords(runtime *goja.Runtime, recs []opencdc.Record) goja.Value {
 	convertData := func(d opencdc.Data) interface{} {
 		switch v := d.(type) {
 		case opencdc.RawData:
@@ -277,9 +276,9 @@ func (p *jsProcessor) toJSRecords(runtime *goja.Runtime, recs []opencdc.Record) 
 		return nil
 	}
 
-	jsRecs := make([]*jsRecord, len(recs))
+	jsRecs := make([]*singleRecord, len(recs))
 	for i, r := range recs {
-		jsRecs[i] = &jsRecord{
+		jsRecs[i] = &singleRecord{
 			Position:  r.Position,
 			Operation: r.Operation.String(),
 			Metadata:  r.Metadata,
@@ -298,7 +297,7 @@ func (p *jsProcessor) toJSRecords(runtime *goja.Runtime, recs []opencdc.Record) 
 	return runtime.ToValue(jsRecs)
 }
 
-func (p *jsProcessor) toSDKRecords(runtime *goja.Runtime, v goja.Value, recordsCount int) []sdk.ProcessedRecord {
+func (p *processor) toSDKRecords(runtime *goja.Runtime, v goja.Value, recordsCount int) []sdk.ProcessedRecord {
 	var jsRecs []interface{}
 	err := runtime.ExportTo(v, &jsRecs)
 	if err != nil {
@@ -316,7 +315,7 @@ func (p *jsProcessor) toSDKRecords(runtime *goja.Runtime, v goja.Value, recordsC
 	return out
 }
 
-func (p *jsProcessor) makeProcessedRecords(record sdk.ProcessedRecord, count int) []sdk.ProcessedRecord {
+func (p *processor) makeProcessedRecords(record sdk.ProcessedRecord, count int) []sdk.ProcessedRecord {
 	out := make([]sdk.ProcessedRecord, count)
 	for i := 0; i < count; i++ {
 		out[i] = record
@@ -325,22 +324,22 @@ func (p *jsProcessor) makeProcessedRecords(record sdk.ProcessedRecord, count int
 	return out
 }
 
-func (p *jsProcessor) toProcessedRecord(obj interface{}) sdk.ProcessedRecord {
+func (p *processor) toProcessedRecord(obj interface{}) sdk.ProcessedRecord {
 	switch v := obj.(type) {
-	case *jsRecord:
+	case *singleRecord:
 		return p.toSingleRecord(v)
-	case *jsFilterRecord:
+	case *filterRecord:
 		return sdk.FilterRecord{}
-	case *jsErrorRecord:
+	case *errorRecord:
 		return sdk.ErrorRecord{Error: cerrors.New(v.Error)}
 	default:
 		return sdk.ErrorRecord{
-			Error: cerrors.Errorf("expected one of [*jsRecord, jsFilterRecord, jsErrorRecord], but got %T", obj),
+			Error: cerrors.Errorf("expected one of [*singleRecord, *filterRecord, *errorRecord], but got %T", obj),
 		}
 	}
 }
 
-func (p *jsProcessor) toSingleRecord(jsRec *jsRecord) sdk.ProcessedRecord {
+func (p *processor) toSingleRecord(jsRec *singleRecord) sdk.ProcessedRecord {
 	var op opencdc.Operation
 	err := op.UnmarshalText([]byte(jsRec.Operation))
 	if err != nil {
