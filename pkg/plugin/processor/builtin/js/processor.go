@@ -235,7 +235,7 @@ func (p *processor) newFilterRecord(runtime *goja.Runtime) func(goja.Constructor
 func (p *processor) newErrorRecord(runtime *goja.Runtime) func(goja.ConstructorCall) *goja.Object {
 	return func(call goja.ConstructorCall) *goja.Object {
 		rec := &errorRecord{}
-		if len(call.Arguments) == 1 {
+		if len(call.Arguments) > 0 {
 			rec.Error = call.Arguments[0].String()
 		}
 		// We need to return a pointer to make the returned object mutable.
@@ -246,8 +246,8 @@ func (p *processor) newErrorRecord(runtime *goja.Runtime) func(goja.ConstructorC
 func (p *processor) jsContentRaw(runtime *goja.Runtime) func(goja.ConstructorCall) *goja.Object {
 	return func(call goja.ConstructorCall) *goja.Object {
 		var r opencdc.RawData
-		if len(call.Arguments) == 1 {
-			r = opencdc.RawData(call.Arguments[0].String())
+		if len(call.Arguments) > 0 {
+			r = opencdc.RawData(call.Argument(0).String())
 		}
 		// We need to return a pointer to make the returned object mutable.
 		return runtime.ToValue(&r).ToObject(runtime)
