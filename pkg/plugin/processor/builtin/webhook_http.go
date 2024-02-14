@@ -48,7 +48,7 @@ var defaultWebhookHTTPConfig = map[string]string{
 type webhookHTTPConfig struct {
 	URL         string `mapstructure:"request.url"`
 	Method      string `mapstructure:"request.method"`
-	ContentType string `mapstructure:"contentType"`
+	ContentType string `mapstructure:"request.contentType"`
 
 	BackoffRetryCount  float64       `mapstructure:"backoffRetry.count"`
 	BackoffRetryMin    time.Duration `mapstructure:"backoffRetry.min"`
