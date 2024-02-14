@@ -1,6 +1,8 @@
 run:
   timeout: 3m
+  skip-dirs-use-default: false
   skip-dirs:
+    - /examples/
     - /ui/.*
 
 linters-settings:
