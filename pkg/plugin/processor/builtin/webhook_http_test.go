@@ -433,7 +433,7 @@ func TestHTTPRequest_FilterRecord(t *testing.T) {
 		{Payload: opencdc.Change{After: opencdc.RawData("random data")}},
 	}
 
-	wantBody := rec[0].Bytes()
+	wantBody := getRequestBody(is, ".", rec)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(resp http.ResponseWriter, req *http.Request) {
 		is.Equal(wantMethod, req.Method)
