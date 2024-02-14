@@ -74,8 +74,8 @@ func TestHTTPRequest_Build(t *testing.T) {
 				"backoffRetry.count": "not-a-number",
 			},
 			wantErr: `failed parsing configuration: failed decoding map: 1 error(s) decoding:
-		
-		* cannot parse 'backoffRetry.count' as float: strconv.ParseFloat: parsing "not-a-number": invalid syntax`,
+
+* cannot parse 'backoffRetry.count' as float: strconv.ParseFloat: parsing "not-a-number": invalid syntax`,
 		},
 		{
 			name: "invalid backoffRetry.min returns error",
@@ -84,7 +84,9 @@ func TestHTTPRequest_Build(t *testing.T) {
 				"backoffRetry.count": "1",
 				"backoffRetry.min":   "not-a-duration",
 			},
-			wantErr: "something",
+			wantErr: `failed parsing configuration: failed decoding map: 1 error(s) decoding:
+
+* error decoding 'backoffRetry.min': time: invalid duration "not-a-duration"`,
 		},
 		{
 			name: "invalid backoffRetry.max returns error",
@@ -93,7 +95,9 @@ func TestHTTPRequest_Build(t *testing.T) {
 				"backoffRetry.count": "1",
 				"backoffRetry.max":   "not-a-duration",
 			},
-			wantErr: "something",
+			wantErr: `failed parsing configuration: failed decoding map: 1 error(s) decoding:
+
+* error decoding 'backoffRetry.max': time: invalid duration "not-a-duration"`,
 		},
 		{
 			name: "invalid backoffRetry.factor returns error",
@@ -102,7 +106,9 @@ func TestHTTPRequest_Build(t *testing.T) {
 				"backoffRetry.count":  "1",
 				"backoffRetry.factor": "not-a-number",
 			},
-			wantErr: "something",
+			wantErr: `failed parsing configuration: failed decoding map: 1 error(s) decoding:
+
+* cannot parse 'backoffRetry.factor' as float: strconv.ParseFloat: parsing "not-a-number": invalid syntax`,
 		},
 		{
 			name: "valid url returns processor",
