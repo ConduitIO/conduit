@@ -141,11 +141,11 @@ func TestHTTPRequest_Build(t *testing.T) {
 			name: "valid url, method and backoff retry config returns processor",
 			config: map[string]string{
 				"request.url":         "http://example.com",
+				"request.contentType": "application/json",
 				"backoffRetry.count":  "1",
 				"backoffRetry.min":    "10ms",
 				"backoffRetry.max":    "1s",
 				"backoffRetry.factor": "1.3",
-				"contentType":         "application/json",
 			},
 			wantErr: "",
 		},

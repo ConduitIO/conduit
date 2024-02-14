@@ -33,8 +33,8 @@ import (
 )
 
 var defaultWebhookHTTPConfig = map[string]string{
-	"request.method": http.MethodPost,
-	"contentType":    "application/json",
+	"request.method":      http.MethodPost,
+	"request.contentType": "application/json",
 
 	"backoffRetry.count":  "0",
 	"backoffRetry.min":    "100ms",
