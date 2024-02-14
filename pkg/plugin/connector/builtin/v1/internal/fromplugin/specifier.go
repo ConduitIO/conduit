@@ -70,9 +70,11 @@ func SpecifierParameter(in cpluginv1.SpecifierParameter) connectorPlugin.Paramet
 			requiredExists = true
 		}
 	}
-	// needed for backward compatibility, in.Required is converted to a validation of type ValidationTypeRequired
+	//nolint:staticcheck // needed for backward compatibility
+	// in.Required is converted to a validation of type ValidationTypeRequired
 	// making sure not to duplicate the required validation
 	if in.Required && !requiredExists {
+		//nolint:makezero // we don't know upfront if we need add this validation
 		validations = append(validations, connectorPlugin.Validation{
 			Type: connectorPlugin.ValidationTypeRequired,
 		})
