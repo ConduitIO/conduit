@@ -17,7 +17,6 @@ package builtin
 import (
 	"bytes"
 	"context"
-	"github.com/conduitio/conduit/pkg/foundation/log"
 	"io"
 	"maps"
 	"net/http"
@@ -27,6 +26,7 @@ import (
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/jpillora/backoff"
 	"github.com/mitchellh/mapstructure"
 )
@@ -170,7 +170,6 @@ func (w *webhookHTTP) processRecordWithBackOff(ctx context.Context, r opencdc.Re
 		b.Reset() // reset for next processor execution
 		return processed
 	}
-
 }
 
 func (w *webhookHTTP) processRecord(ctx context.Context, r opencdc.Record) sdk.ProcessedRecord {

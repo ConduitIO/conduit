@@ -16,15 +16,16 @@ package builtin
 
 import (
 	"context"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"io"
-	"net/http"
-	"net/http/httptest"
-	"testing"
 
 	"github.com/matryer/is"
 )
@@ -125,7 +126,7 @@ func TestHTTPRequest_Build(t *testing.T) {
 			},
 			wantErr: "",
 		},
-		//{
+		// {
 		//	name: "invalid backoff retry config is ignored",
 		//	config: map[string]string{
 		//		"url":                 "http://example.com",
@@ -134,7 +135,7 @@ func TestHTTPRequest_Build(t *testing.T) {
 		//		"backoffRetry.factor": "not-a-number",
 		//	},
 		//	wantErr: "something",
-		//},
+		// },
 		{
 			name: "valid url, method and backoff retry config returns processor",
 			config: map[string]string{
