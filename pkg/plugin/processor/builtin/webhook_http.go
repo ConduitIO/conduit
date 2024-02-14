@@ -55,21 +55,21 @@ type webhookHTTPConfig struct {
 	BackoffRetryMax    time.Duration `mapstructure:"backoffRetry.max"`
 	BackoffRetryFactor float64       `mapstructure:"backoffRetry.factor"`
 
-	// RequestBody specifies which field from the input record
+	// RequestBodyRef specifies which field from the input record
 	// should be used as the body in the HTTP request.
 	// The value of this parameter should be a valid record field reference:
 	// See: sdk.NewReferenceResolver
-	RequestBody *sdk.ReferenceResolver `mapstructure:"request.body"`
-	// ResponseBody specifies to which field should the
+	RequestBodyRef *sdk.ReferenceResolver `mapstructure:"request.body"`
+	// ResponseBodyRef specifies to which field should the
 	// response body be saved to.
 	// The value of this parameter should be a valid record field reference:
 	// See: sdk.NewReferenceResolver
-	ResponseBody *sdk.ReferenceResolver `mapstructure:"response.body"`
-	// ResponseStatus specifies to which field should the
+	ResponseBodyRef *sdk.ReferenceResolver `mapstructure:"response.body"`
+	// ResponseStatusRef specifies to which field should the
 	// response status be saved to.
 	// The value of this parameter should be a valid record field reference:
 	// See: sdk.NewReferenceResolver
-	ResponseStatus *sdk.ReferenceResolver `mapstructure:"response.status"`
+	ResponseStatusRef *sdk.ReferenceResolver `mapstructure:"response.status"`
 }
 
 type webhookHTTP struct {
@@ -102,7 +102,7 @@ Record.Payload.After. If the response code is (204 No Content) then the record w
 }
 
 func (w *webhookHTTP) Configure(_ context.Context, userCfgMap map[string]string) error {
-	cfgMap := w.addDefaultConfiguration(userCfgMap)
+	cfgMap := w.withDefaultConfig(userCfgMap)
 	// Check required parameters
 	if cfgMap["request.url"] == "" {
 		return cerrors.Errorf("missing required parameter 'url'")
@@ -145,7 +145,6 @@ func (w *webhookHTTP) Teardown(context.Context) error {
 }
 
 func (w *webhookHTTP) processRecordWithBackOff(ctx context.Context, r opencdc.Record) sdk.ProcessedRecord {
-	// default retry values
 	b := &backoff.Backoff{
 		Factor: w.config.BackoffRetryFactor,
 		Min:    w.config.BackoffRetryMin,
@@ -203,9 +202,9 @@ func (w *webhookHTTP) processRecord(ctx context.Context, r opencdc.Record) sdk.P
 		return sdk.ErrorRecord{Error: cerrors.Errorf("error trying to read response body: %w", err)}
 	}
 
-	if resp.StatusCode > 299 {
+	if resp.StatusCode >= 300 {
 		// regard status codes over 299 as errors
-		return sdk.ErrorRecord{Error: cerrors.Errorf("invalid status code %v (body: %q)", resp.StatusCode, string(body))}
+		return sdk.ErrorRecord{Error: cerrors.Errorf("error status code %v (body: %q)", resp.StatusCode, string(body))}
 	}
 	// skip if body has no content
 	if resp.StatusCode == http.StatusNoContent {
@@ -213,11 +212,11 @@ func (w *webhookHTTP) processRecord(ctx context.Context, r opencdc.Record) sdk.P
 	}
 
 	// Set response body
-	err = w.setField(&r, w.config.ResponseBody, opencdc.RawData(body))
+	err = w.setField(&r, w.config.ResponseBodyRef, opencdc.RawData(body))
 	if err != nil {
 		return sdk.ErrorRecord{Error: cerrors.Errorf("failed setting response body: %w", err)}
 	}
-	err = w.setField(&r, w.config.ResponseStatus, resp.StatusCode)
+	err = w.setField(&r, w.config.ResponseStatusRef, resp.StatusCode)
 	if err != nil {
 		return sdk.ErrorRecord{Error: cerrors.Errorf("failed setting response status: %w", err)}
 	}
@@ -247,7 +246,7 @@ func (w *webhookHTTP) decodeConfig(cfg *webhookHTTPConfig, cfgMap map[string]str
 	return nil
 }
 
-func (w *webhookHTTP) addDefaultConfiguration(userCfgMap map[string]string) map[string]string {
+func (w *webhookHTTP) withDefaultConfig(userCfgMap map[string]string) map[string]string {
 	out := maps.Clone(defaultWebhookHTTPConfig)
 	maps.Copy(out, userCfgMap)
 
@@ -259,11 +258,12 @@ func (w *webhookHTTP) setField(r *opencdc.Record, refRes *sdk.ReferenceResolver,
 		return nil
 	}
 
-	respBodyRef, err := refRes.Resolve(r)
+	ref, err := refRes.Resolve(r)
 	if err != nil {
 		return err
 	}
-	err = respBodyRef.Set(data)
+
+	err = ref.Set(data)
 	if err != nil {
 		return err
 	}
@@ -272,10 +272,11 @@ func (w *webhookHTTP) setField(r *opencdc.Record, refRes *sdk.ReferenceResolver,
 }
 
 func (w *webhookHTTP) getRequestBody(r opencdc.Record) ([]byte, error) {
-	ref, err := w.config.RequestBody.Resolve(&r)
+	ref, err := w.config.RequestBodyRef.Resolve(&r)
 	if err != nil {
 		return nil, cerrors.Errorf("failed resolving request.body: %w", err)
 	}
+
 	return json.Marshal(ref.Get())
 }
 
