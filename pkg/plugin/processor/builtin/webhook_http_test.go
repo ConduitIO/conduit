@@ -308,7 +308,7 @@ func TestHTTPRequest_Success(t *testing.T) {
 			is.NoErr(err)
 
 			got := underTest.Process(context.Background(), tc.args)
-			diff := cmp.Diff(got, tc.want, cmpopts.IgnoreUnexported(sdk.SingleRecord{}))
+			diff := cmp.Diff(tc.want, got, cmpopts.IgnoreUnexported(sdk.SingleRecord{}))
 			if diff != "" {
 				t.Logf("mismatch (-want +got): %s", diff)
 				t.Fail()
@@ -320,7 +320,7 @@ func TestHTTPRequest_Success(t *testing.T) {
 func getRequestBody(is *is.I, field string, records []opencdc.Record) []byte {
 	f := field
 	if f == "" {
-		f = ".Payload.After"
+		f = "."
 	}
 
 	refRes, err := sdk.NewReferenceResolver(f)
