@@ -63,7 +63,7 @@ func TestHTTPRequest_Build(t *testing.T) {
 			name: "invalid method returns error",
 			config: map[string]string{
 				"url":    "http://example.com",
-				"method": "foo",
+				"method": ":foo",
 			},
 			wantErr: "configuration check failed: net/http: invalid method \":foo\"",
 		},
