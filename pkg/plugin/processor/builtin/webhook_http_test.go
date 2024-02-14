@@ -33,39 +33,39 @@ func TestHTTPRequest_Build(t *testing.T) {
 	tests := []struct {
 		name    string
 		config  map[string]string
-		wantErr bool
+		wantErr string
 	}{
 		{
 			name:    "nil config returns error",
 			config:  nil,
-			wantErr: true,
+			wantErr: "missing required parameter 'url'",
 		},
 		{
 			name:    "empty config returns error",
 			config:  map[string]string{},
-			wantErr: true,
+			wantErr: "missing required parameter 'url'",
 		},
 		{
 			name: "empty url returns error",
 			config: map[string]string{
 				"url": "",
 			},
-			wantErr: true,
+			wantErr: "missing required parameter 'url'",
 		},
 		{
 			name: "invalid url returns error",
 			config: map[string]string{
 				"url": ":not/a/valid/url",
 			},
-			wantErr: true,
+			wantErr: "configuration check failed: parse \":not/a/valid/url\": missing protocol scheme",
 		},
 		{
 			name: "invalid method returns error",
 			config: map[string]string{
 				"url":    "http://example.com",
-				"method": ":foo",
+				"method": "foo",
 			},
-			wantErr: true,
+			wantErr: "configuration check failed: net/http: invalid method \":foo\"",
 		},
 		{
 			name: "invalid backoffRetry.count returns error",
@@ -73,7 +73,9 @@ func TestHTTPRequest_Build(t *testing.T) {
 				"url":                "http://example.com",
 				"backoffRetry.count": "not-a-number",
 			},
-			wantErr: true,
+			wantErr: `failed parsing configuration: failed decoding map: 1 error(s) decoding:
+		
+		* cannot parse 'backoffRetry.count' as float: strconv.ParseFloat: parsing "not-a-number": invalid syntax`,
 		},
 		{
 			name: "invalid backoffRetry.min returns error",
@@ -82,7 +84,7 @@ func TestHTTPRequest_Build(t *testing.T) {
 				"backoffRetry.count": "1",
 				"backoffRetry.min":   "not-a-duration",
 			},
-			wantErr: true,
+			wantErr: "something",
 		},
 		{
 			name: "invalid backoffRetry.max returns error",
@@ -91,7 +93,7 @@ func TestHTTPRequest_Build(t *testing.T) {
 				"backoffRetry.count": "1",
 				"backoffRetry.max":   "not-a-duration",
 			},
-			wantErr: true,
+			wantErr: "something",
 		},
 		{
 			name: "invalid backoffRetry.factor returns error",
@@ -100,14 +102,14 @@ func TestHTTPRequest_Build(t *testing.T) {
 				"backoffRetry.count":  "1",
 				"backoffRetry.factor": "not-a-number",
 			},
-			wantErr: true,
+			wantErr: "something",
 		},
 		{
 			name: "valid url returns processor",
 			config: map[string]string{
 				"url": "http://example.com",
 			},
-			wantErr: false,
+			wantErr: "",
 		},
 		{
 			name: "valid url and method returns processor",
@@ -115,7 +117,7 @@ func TestHTTPRequest_Build(t *testing.T) {
 				"url":    "http://example.com",
 				"method": "GET",
 			},
-			wantErr: false,
+			wantErr: "",
 		},
 		//{
 		//	name: "invalid backoff retry config is ignored",
@@ -125,7 +127,7 @@ func TestHTTPRequest_Build(t *testing.T) {
 		//		"backoffRetry.max":    "not-a-duration",
 		//		"backoffRetry.factor": "not-a-number",
 		//	},
-		//	wantErr: false,
+		//	wantErr: "something",
 		//},
 		{
 			name: "valid url, method and backoff retry config returns processor",
@@ -137,7 +139,7 @@ func TestHTTPRequest_Build(t *testing.T) {
 				"backoffRetry.factor": "1.3",
 				"contentType":         "application/json",
 			},
-			wantErr: false,
+			wantErr: "",
 		},
 		{
 			name: "invalid: same value of response.body and response.status",
@@ -146,7 +148,7 @@ func TestHTTPRequest_Build(t *testing.T) {
 				"response.body":   ".Payload.After",
 				"response.status": ".Payload.After",
 			},
-			wantErr: true,
+			wantErr: "response.body and response.status set to same field",
 		},
 		{
 			name: "valid response.body and response.status",
@@ -155,16 +157,20 @@ func TestHTTPRequest_Build(t *testing.T) {
 				"response.body":   ".Payload.After",
 				"response.status": `.Metadata["response.status"]`,
 			},
-			wantErr: false,
+			wantErr: "",
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			is := is.New(t)
 			underTest := NewWebhookHTTP(log.Test(t))
 			err := underTest.Configure(context.Background(), tc.config)
-			if (err != nil) != tc.wantErr {
-				t.Errorf("HTTPRequest() error = %v, wantErr = %v", err, tc.wantErr)
+			if tc.wantErr == "" {
+				is.NoErr(err)
+			} else {
+				is.True(err != nil)
+				is.Equal(tc.wantErr, err.Error())
 			}
 		})
 	}
