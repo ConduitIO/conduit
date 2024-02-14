@@ -18,6 +18,9 @@ import (
 	"context"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
+	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -31,78 +34,90 @@ func TestHTTPRequest_Build(t *testing.T) {
 		name    string
 		config  map[string]string
 		wantErr bool
-	}{{
-		name:    "nil config returns error",
-		config:  nil,
-		wantErr: true,
-	}, {
-		name:    "empty config returns error",
-		config:  map[string]string{},
-		wantErr: true,
-	}, {
-		name: "empty url returns error",
-		config: map[string]string{
-			"url": "",
+	}{
+		{
+			name:    "nil config returns error",
+			config:  nil,
+			wantErr: true,
 		},
-		wantErr: true,
-	}, {
-		name: "invalid url returns error",
-		config: map[string]string{
-			"url": ":not/a/valid/url",
+		{
+			name:    "empty config returns error",
+			config:  map[string]string{},
+			wantErr: true,
 		},
-		wantErr: true,
-	}, {
-		name: "invalid method returns error",
-		config: map[string]string{
-			"url":    "http://example.com",
-			"method": ":foo",
+		{
+			name: "empty url returns error",
+			config: map[string]string{
+				"url": "",
+			},
+			wantErr: true,
 		},
-		wantErr: true,
-	}, {
-		name: "invalid backoffRetry.count returns error",
-		config: map[string]string{
-			"url":                "http://example.com",
-			"backoffRetry.count": "not-a-number",
+		{
+			name: "invalid url returns error",
+			config: map[string]string{
+				"url": ":not/a/valid/url",
+			},
+			wantErr: true,
 		},
-		wantErr: true,
-	}, {
-		name: "invalid backoffRetry.min returns error",
-		config: map[string]string{
-			"url":                "http://example.com",
-			"backoffRetry.count": "1",
-			"backoffRetry.min":   "not-a-duration",
+		{
+			name: "invalid method returns error",
+			config: map[string]string{
+				"url":    "http://example.com",
+				"method": ":foo",
+			},
+			wantErr: true,
 		},
-		wantErr: true,
-	}, {
-		name: "invalid backoffRetry.max returns error",
-		config: map[string]string{
-			"url":                "http://example.com",
-			"backoffRetry.count": "1",
-			"backoffRetry.max":   "not-a-duration",
+		{
+			name: "invalid backoffRetry.count returns error",
+			config: map[string]string{
+				"url":                "http://example.com",
+				"backoffRetry.count": "not-a-number",
+			},
+			wantErr: true,
 		},
-		wantErr: true,
-	}, {
-		name: "invalid backoffRetry.factor returns error",
-		config: map[string]string{
-			"url":                 "http://example.com",
-			"backoffRetry.count":  "1",
-			"backoffRetry.factor": "not-a-number",
+		{
+			name: "invalid backoffRetry.min returns error",
+			config: map[string]string{
+				"url":                "http://example.com",
+				"backoffRetry.count": "1",
+				"backoffRetry.min":   "not-a-duration",
+			},
+			wantErr: true,
 		},
-		wantErr: true,
-	}, {
-		name: "valid url returns processor",
-		config: map[string]string{
-			"url": "http://example.com",
+		{
+			name: "invalid backoffRetry.max returns error",
+			config: map[string]string{
+				"url":                "http://example.com",
+				"backoffRetry.count": "1",
+				"backoffRetry.max":   "not-a-duration",
+			},
+			wantErr: true,
 		},
-		wantErr: false,
-	}, {
-		name: "valid url and method returns processor",
-		config: map[string]string{
-			"url":    "http://example.com",
-			"method": "GET",
+		{
+			name: "invalid backoffRetry.factor returns error",
+			config: map[string]string{
+				"url":                 "http://example.com",
+				"backoffRetry.count":  "1",
+				"backoffRetry.factor": "not-a-number",
+			},
+			wantErr: true,
 		},
-		wantErr: false,
-	}, {
+		{
+			name: "valid url returns processor",
+			config: map[string]string{
+				"url": "http://example.com",
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid url and method returns processor",
+			config: map[string]string{
+				"url":    "http://example.com",
+				"method": "GET",
+			},
+			wantErr: false,
+		},
+		//{
 		//	name: "invalid backoff retry config is ignored",
 		//	config: map[string]string{
 		//		"url":                 "http://example.com",
@@ -111,22 +126,42 @@ func TestHTTPRequest_Build(t *testing.T) {
 		//		"backoffRetry.factor": "not-a-number",
 		//	},
 		//	wantErr: false,
-		//}, {
-		name: "valid url, method and backoff retry config returns processor",
-		config: map[string]string{
-			"url":                 "http://example.com",
-			"backoffRetry.count":  "1",
-			"backoffRetry.min":    "10ms",
-			"backoffRetry.max":    "1s",
-			"backoffRetry.factor": "1.3",
-			"contentType":         "application/json",
+		//},
+		{
+			name: "valid url, method and backoff retry config returns processor",
+			config: map[string]string{
+				"url":                 "http://example.com",
+				"backoffRetry.count":  "1",
+				"backoffRetry.min":    "10ms",
+				"backoffRetry.max":    "1s",
+				"backoffRetry.factor": "1.3",
+				"contentType":         "application/json",
+			},
+			wantErr: false,
 		},
-		wantErr: false,
-	}}
+		{
+			name: "invalid: same value of response.body and response.status",
+			config: map[string]string{
+				"url":             "http://example.com",
+				"response.body":   ".Payload.After",
+				"response.status": ".Payload.After",
+			},
+			wantErr: true,
+		},
+		{
+			name: "valid response.body and response.status",
+			config: map[string]string{
+				"url":             "http://example.com",
+				"response.body":   ".Payload.After",
+				"response.status": `.Metadata["response.status"]`,
+			},
+			wantErr: false,
+		},
+	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			underTest := NewWebhookHTTP()
+			underTest := NewWebhookHTTP(log.Test(t))
 			err := underTest.Configure(context.Background(), tc.config)
 			if (err != nil) != tc.wantErr {
 				t.Errorf("HTTPRequest() error = %v, wantErr = %v", err, tc.wantErr)
@@ -158,8 +193,7 @@ func TestHTTPRequest_Success(t *testing.T) {
 			}},
 			want: []sdk.ProcessedRecord{sdk.SingleRecord{
 				Payload: opencdc.Change{
-					Before: nil,
-					After:  opencdc.RawData(respBody),
+					After: opencdc.RawData(respBody),
 				},
 			},
 			},
@@ -169,17 +203,39 @@ func TestHTTPRequest_Success(t *testing.T) {
 			config: map[string]string{},
 			args: []opencdc.Record{{
 				Payload: opencdc.Change{
-					Before: nil,
-					After:  opencdc.RawData("random data"),
+					After: opencdc.RawData("random data"),
 				},
 			}},
 			want: []sdk.ProcessedRecord{sdk.SingleRecord{
 				Payload: opencdc.Change{
-					Before: nil,
-					After:  opencdc.RawData(respBody),
+					After: opencdc.RawData(respBody),
 				},
 			}},
-		}}
+		},
+		{
+			name: "custom field for response body and status",
+			config: map[string]string{
+				"response.body":   ".Payload.After.Body",
+				"response.status": ".Payload.After.Status",
+			},
+			args: []opencdc.Record{{
+				Payload: opencdc.Change{
+					After: opencdc.StructuredData{
+						"a key": "random data",
+					},
+				},
+			}},
+			want: []sdk.ProcessedRecord{sdk.SingleRecord{
+				Payload: opencdc.Change{
+					After: opencdc.StructuredData{
+						"a key":  "random data",
+						"Body":   opencdc.RawData(respBody),
+						"Status": 200,
+					},
+				},
+			}},
+		},
+	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -205,12 +261,16 @@ func TestHTTPRequest_Success(t *testing.T) {
 			defer srv.Close()
 
 			tc.config["url"] = srv.URL
-			underTest := NewWebhookHTTP()
+			underTest := NewWebhookHTTP(log.Test(t))
 			err := underTest.Configure(context.Background(), tc.config)
 			is.NoErr(err)
 
 			got := underTest.Process(context.Background(), tc.args)
-			is.Equal(tc.want, got)
+			diff := cmp.Diff(got, tc.want, cmpopts.IgnoreUnexported(sdk.SingleRecord{}))
+			if diff != "" {
+				t.Logf("mismatch (-want +got): %s", diff)
+				t.Fail()
+			}
 		})
 	}
 }
@@ -255,7 +315,7 @@ func TestHTTPRequest_RetrySuccess(t *testing.T) {
 		"backoffRetry.factor": "1.2",
 	}
 
-	underTest := NewWebhookHTTP()
+	underTest := NewWebhookHTTP(log.Test(t))
 	err := underTest.Configure(context.Background(), config)
 	is.NoErr(err)
 
@@ -291,7 +351,7 @@ func TestHTTPRequest_RetryFail(t *testing.T) {
 		"backoffRetry.factor": "1.2",
 	}
 
-	underTest := NewWebhookHTTP()
+	underTest := NewWebhookHTTP(log.Test(t))
 	err := underTest.Configure(context.Background(), config)
 	is.NoErr(err)
 
@@ -330,7 +390,7 @@ func TestHTTPRequest_FilterRecord(t *testing.T) {
 		"url": srv.URL,
 	}
 
-	underTest := NewWebhookHTTP()
+	underTest := NewWebhookHTTP(log.Test(t))
 	err := underTest.Configure(context.Background(), config)
 	is.NoErr(err)
 

@@ -17,7 +17,9 @@ package builtin
 import (
 	"bytes"
 	"context"
+	"github.com/conduitio/conduit/pkg/foundation/log"
 	"io"
+	"maps"
 	"net/http"
 	"reflect"
 	"time"
@@ -29,21 +31,19 @@ import (
 	"github.com/mitchellh/mapstructure"
 )
 
-var defaultWebhookHTTPConfig = webhootHTTPConfig{
-	Method:             http.MethodPost,
-	ContentType:        "application/json",
-	BackoffRetryCount:  0,
-	BackoffRetryMin:    100 * time.Millisecond,
-	BackoffRetryMax:    5 * time.Second,
-	BackoffRetryFactor: 2,
+var defaultWebhookHTTPConfig = map[string]string{
+	"method":      http.MethodPost,
+	"contentType": "application/json",
+
+	"backoffRetry.count":  "0",
+	"backoffRetry.min":    "100ms",
+	"backoffRetry.max":    "5s",
+	"backoffRetry.factor": "2",
+
+	"response.body": ".Payload.After",
 }
 
-// HTTPRequest builds a processor that sends an HTTP request to the specified URL with the specified HTTP method
-// (default is POST) with a content-type header as the specified value (default is application/json). the whole
-// record as json will be used as the request body and the raw response body will be set under Record.Payload.After.
-// if the response code is (204 No Content) then the record will be filtered out.
-
-type webhootHTTPConfig struct {
+type webhookHTTPConfig struct {
 	URL         string `mapstructure:"url"`
 	Method      string `mapstructure:"method"`
 	ContentType string `mapstructure:"contentType"`
@@ -52,16 +52,34 @@ type webhootHTTPConfig struct {
 	BackoffRetryMin    time.Duration `mapstructure:"backoffRetry.min"`
 	BackoffRetryMax    time.Duration `mapstructure:"backoffRetry.max"`
 	BackoffRetryFactor float64       `mapstructure:"backoffRetry.factor"`
+
+	// RequestBody specifies which field from the input record
+	// should be used as the body in the HTTP request.
+	// The value of this parameter should be a valid record field reference:
+	// See: sdk.NewReferenceResolver
+	RequestBody *sdk.ReferenceResolver `mapstructure:"request.body"`
+	// ResponseBody specifies to which field should the
+	// response body be saved to.
+	// The value of this parameter should be a valid record field reference:
+	// See: sdk.NewReferenceResolver
+	ResponseBody *sdk.ReferenceResolver `mapstructure:"response.body"`
+	// ResponseStatus specifies to which field should the
+	// response status be saved to.
+	// The value of this parameter should be a valid record field reference:
+	// See: sdk.NewReferenceResolver
+	ResponseStatus *sdk.ReferenceResolver `mapstructure:"response.status"`
 }
 
 type webhookHTTP struct {
 	sdk.UnimplementedProcessor
 
-	config webhootHTTPConfig
+	logger log.CtxLogger
+
+	config webhookHTTPConfig
 }
 
-func NewWebhookHTTP() sdk.Processor {
-	return &webhookHTTP{}
+func NewWebhookHTTP(l log.CtxLogger) sdk.Processor {
+	return &webhookHTTP{logger: l.WithComponent("builtin.webhookHTTP")}
 }
 
 func (w *webhookHTTP) Specification() (sdk.Specification, error) {
@@ -81,14 +99,20 @@ Record.Payload.After. If the response code is (204 No Content) then the record w
 	}, nil
 }
 
-func (w *webhookHTTP) Configure(_ context.Context, cfgMap map[string]string) error {
-	cfg := defaultWebhookHTTPConfig
+func (w *webhookHTTP) Configure(_ context.Context, userCfgMap map[string]string) error {
+	cfgMap := w.addDefaultConfiguration(userCfgMap)
+	// Check required parameters
+	if cfgMap["url"] == "" {
+		return cerrors.Errorf("missing required parameter 'url'")
+	}
+	if cfgMap["response.body"] == cfgMap["response.status"] {
+		return cerrors.Errorf("response.body and response.status set to same field")
+	}
+
+	cfg := webhookHTTPConfig{}
 	err := w.decodeConfig(&cfg, cfgMap)
 	if err != nil {
 		return cerrors.Errorf("failed parsing configuration: %w", err)
-	}
-	if cfg.URL == "" {
-		return cerrors.Errorf("missing required parameter 'url'")
 	}
 
 	// preflight check
@@ -97,10 +121,11 @@ func (w *webhookHTTP) Configure(_ context.Context, cfgMap map[string]string) err
 		return cerrors.Errorf("configuration check failed: %w", err)
 	}
 	w.config = cfg
+
 	return nil
 }
 
-func (w *webhookHTTP) Open(ctx context.Context) error {
+func (w *webhookHTTP) Open(context.Context) error {
 	return nil
 }
 
@@ -113,7 +138,7 @@ func (w *webhookHTTP) Process(ctx context.Context, records []opencdc.Record) []s
 	return out
 }
 
-func (w *webhookHTTP) Teardown(ctx context.Context) error {
+func (w *webhookHTTP) Teardown(context.Context) error {
 	return nil
 }
 
@@ -127,10 +152,19 @@ func (w *webhookHTTP) processRecordWithBackOff(ctx context.Context, r opencdc.Re
 
 	for {
 		processed := w.processRecord(ctx, r)
-		_, isErr := processed.(sdk.ErrorRecord)
-		if isErr && b.Attempt() < w.config.BackoffRetryCount {
-			// TODO log message that we are retrying, include error cause (we don't have access to a proper logger)
-			time.Sleep(b.Duration())
+		errRec, isErr := processed.(sdk.ErrorRecord)
+		attempt := b.Attempt()
+		duration := b.Duration()
+
+		if isErr && attempt < w.config.BackoffRetryCount {
+			w.logger.Debug(ctx).
+				Err(errRec.Error).
+				Float64("attempt", attempt).
+				Float64("backoffRetry.count", w.config.BackoffRetryCount).
+				Int64("backoffRetry.duration", duration.Milliseconds()).
+				Msg("retrying HTTP request")
+
+			time.Sleep(duration)
 			continue
 		}
 		b.Reset() // reset for next processor execution
@@ -174,15 +208,25 @@ func (w *webhookHTTP) processRecord(ctx context.Context, r opencdc.Record) sdk.P
 		return sdk.FilterRecord{}
 	}
 
-	r.Payload.After = opencdc.RawData(body)
+	// Set response body
+	err = w.setField(&r, w.config.ResponseBody, opencdc.RawData(body))
+	if err != nil {
+		return sdk.ErrorRecord{Error: cerrors.Errorf("failed setting response body: %w", err)}
+	}
+	err = w.setField(&r, w.config.ResponseStatus, resp.StatusCode)
+	if err != nil {
+		return sdk.ErrorRecord{Error: cerrors.Errorf("failed setting response status: %w", err)}
+	}
+
 	return sdk.SingleRecord(r)
 }
 
-func (w *webhookHTTP) decodeConfig(cfg *webhootHTTPConfig, cfgMap map[string]string) error {
+func (w *webhookHTTP) decodeConfig(cfg *webhookHTTPConfig, cfgMap map[string]string) error {
 	decCfg := &mapstructure.DecoderConfig{
 		WeaklyTypedInput: true,
 		DecodeHook: mapstructure.ComposeDecodeHookFunc(
 			ToDurationDecoderHook(),
+			ToReferenceResolvedDecodeHook(),
 		),
 		Result: &cfg,
 	}
@@ -199,14 +243,52 @@ func (w *webhookHTTP) decodeConfig(cfg *webhootHTTPConfig, cfgMap map[string]str
 	return nil
 }
 
+func (w *webhookHTTP) addDefaultConfiguration(userCfgMap map[string]string) map[string]string {
+	out := maps.Clone(defaultWebhookHTTPConfig)
+	maps.Copy(out, userCfgMap)
+
+	return out
+}
+
+func (w *webhookHTTP) setField(r *opencdc.Record, refRes *sdk.ReferenceResolver, data any) error {
+	if refRes == nil {
+		return nil
+	}
+
+	respBodyRef, err := refRes.Resolve(r)
+	if err != nil {
+		return err
+	}
+	err = respBodyRef.Set(data)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func ToDurationDecoderHook() mapstructure.DecodeHookFunc {
-	return func(f reflect.Type, t reflect.Type, data interface{}) (interface{}, error) {
-		if t != reflect.TypeOf(time.Duration(0)) {
+	return func(from reflect.Type, to reflect.Type, data interface{}) (interface{}, error) {
+		if to != reflect.TypeOf(time.Duration(0)) {
 			return data, nil
 		}
 
-		if f.Kind() == reflect.String {
+		if from.Kind() == reflect.String {
 			return time.ParseDuration(data.(string))
+		}
+
+		return data, nil
+	}
+}
+
+func ToReferenceResolvedDecodeHook() mapstructure.DecodeHookFunc {
+	return func(from reflect.Type, to reflect.Type, data interface{}) (interface{}, error) {
+		if to != reflect.TypeOf(sdk.ReferenceResolver{}) {
+			return data, nil
+		}
+
+		if from.Kind() == reflect.String {
+			return sdk.NewReferenceResolver(data.(string))
 		}
 
 		return data, nil
