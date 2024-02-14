@@ -322,7 +322,8 @@ func getRequestBody(is *is.I, field string, records []opencdc.Record) []byte {
 	if f == "" {
 		f = ".Payload.After"
 	}
-	refRes, err := sdk.NewReferenceResolver(field)
+
+	refRes, err := sdk.NewReferenceResolver(f)
 	is.NoErr(err)
 
 	ref, err := refRes.Resolve(&records[0])
