@@ -250,7 +250,7 @@ func TestHTTPRequest_Success(t *testing.T) {
 			}},
 		},
 		{
-			name: "custom field for request body",
+			name: "request body: custom field, structured",
 			config: map[string]string{
 				"request.body":  ".Payload.Before",
 				"response.body": ".Payload.After.httpResponse",
@@ -270,6 +270,30 @@ func TestHTTPRequest_Success(t *testing.T) {
 					Before: opencdc.StructuredData{
 						"before-key": "before-data",
 					},
+					After: opencdc.StructuredData{
+						"after-key":    "after-data",
+						"httpResponse": opencdc.RawData("foo-bar/response"),
+					},
+				},
+			}},
+		},
+		{
+			name: "request body: custom field, raw",
+			config: map[string]string{
+				"request.body":  ".Payload.Before",
+				"response.body": ".Payload.After.httpResponse",
+			},
+			args: []opencdc.Record{{
+				Payload: opencdc.Change{
+					Before: opencdc.RawData("uncooked data"),
+					After: opencdc.StructuredData{
+						"after-key": "after-data",
+					},
+				},
+			}},
+			want: []sdk.ProcessedRecord{sdk.SingleRecord{
+				Payload: opencdc.Change{
+					Before: opencdc.RawData("uncooked data"),
 					After: opencdc.StructuredData{
 						"after-key":    "after-data",
 						"httpResponse": opencdc.RawData("foo-bar/response"),
