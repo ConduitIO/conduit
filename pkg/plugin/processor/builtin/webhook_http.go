@@ -17,6 +17,7 @@ package builtin
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"maps"
 	"net/http"
@@ -32,20 +33,21 @@ import (
 )
 
 var defaultWebhookHTTPConfig = map[string]string{
-	"method":      http.MethodPost,
-	"contentType": "application/json",
+	"request.method": http.MethodPost,
+	"contentType":    "application/json",
 
 	"backoffRetry.count":  "0",
 	"backoffRetry.min":    "100ms",
 	"backoffRetry.max":    "5s",
 	"backoffRetry.factor": "2",
 
+	"request.body":  ".",
 	"response.body": ".Payload.After",
 }
 
 type webhookHTTPConfig struct {
-	URL         string `mapstructure:"url"`
-	Method      string `mapstructure:"method"`
+	URL         string `mapstructure:"request.url"`
+	Method      string `mapstructure:"request.method"`
 	ContentType string `mapstructure:"contentType"`
 
 	BackoffRetryCount  float64       `mapstructure:"backoffRetry.count"`
@@ -102,7 +104,7 @@ Record.Payload.After. If the response code is (204 No Content) then the record w
 func (w *webhookHTTP) Configure(_ context.Context, userCfgMap map[string]string) error {
 	cfgMap := w.addDefaultConfiguration(userCfgMap)
 	// Check required parameters
-	if cfgMap["url"] == "" {
+	if cfgMap["request.url"] == "" {
 		return cerrors.Errorf("missing required parameter 'url'")
 	}
 	if cfgMap["response.body"] == cfgMap["response.status"] {
@@ -173,13 +175,16 @@ func (w *webhookHTTP) processRecordWithBackOff(ctx context.Context, r opencdc.Re
 }
 
 func (w *webhookHTTP) processRecord(ctx context.Context, r opencdc.Record) sdk.ProcessedRecord {
-	jsonRec := r.Bytes()
+	reqBody, err := w.getRequestBody(r)
+	if err != nil {
+		return sdk.ErrorRecord{Error: cerrors.Errorf("failed getting request body: %w")}
+	}
 
 	req, err := http.NewRequestWithContext(
 		ctx,
 		w.config.Method,
 		w.config.URL,
-		bytes.NewReader(jsonRec),
+		bytes.NewReader(reqBody),
 	)
 	if err != nil {
 		return sdk.ErrorRecord{Error: cerrors.Errorf("error trying to create HTTP request: %w", err)}
@@ -264,6 +269,14 @@ func (w *webhookHTTP) setField(r *opencdc.Record, refRes *sdk.ReferenceResolver,
 	}
 
 	return nil
+}
+
+func (w *webhookHTTP) getRequestBody(r opencdc.Record) ([]byte, error) {
+	ref, err := w.config.RequestBody.Resolve(&r)
+	if err != nil {
+		return nil, cerrors.Errorf("failed resolving request.body: %w", err)
+	}
+	return json.Marshal(ref.Get())
 }
 
 func ToDurationDecoderHook() mapstructure.DecodeHookFunc {

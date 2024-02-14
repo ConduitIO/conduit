@@ -16,6 +16,7 @@ package builtin
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -49,29 +50,29 @@ func TestHTTPRequest_Build(t *testing.T) {
 		{
 			name: "empty url returns error",
 			config: map[string]string{
-				"url": "",
+				"request.url": "",
 			},
 			wantErr: "missing required parameter 'url'",
 		},
 		{
 			name: "invalid url returns error",
 			config: map[string]string{
-				"url": ":not/a/valid/url",
+				"request.url": ":not/a/valid/url",
 			},
 			wantErr: "configuration check failed: parse \":not/a/valid/url\": missing protocol scheme",
 		},
 		{
 			name: "invalid method returns error",
 			config: map[string]string{
-				"url":    "http://example.com",
-				"method": ":foo",
+				"request.url":    "http://example.com",
+				"request.method": ":foo",
 			},
 			wantErr: "configuration check failed: net/http: invalid method \":foo\"",
 		},
 		{
 			name: "invalid backoffRetry.count returns error",
 			config: map[string]string{
-				"url":                "http://example.com",
+				"request.url":        "http://example.com",
 				"backoffRetry.count": "not-a-number",
 			},
 			wantErr: `failed parsing configuration: failed decoding map: 1 error(s) decoding:
@@ -81,7 +82,7 @@ func TestHTTPRequest_Build(t *testing.T) {
 		{
 			name: "invalid backoffRetry.min returns error",
 			config: map[string]string{
-				"url":                "http://example.com",
+				"request.url":        "http://example.com",
 				"backoffRetry.count": "1",
 				"backoffRetry.min":   "not-a-duration",
 			},
@@ -92,7 +93,7 @@ func TestHTTPRequest_Build(t *testing.T) {
 		{
 			name: "invalid backoffRetry.max returns error",
 			config: map[string]string{
-				"url":                "http://example.com",
+				"request.url":        "http://example.com",
 				"backoffRetry.count": "1",
 				"backoffRetry.max":   "not-a-duration",
 			},
@@ -103,7 +104,7 @@ func TestHTTPRequest_Build(t *testing.T) {
 		{
 			name: "invalid backoffRetry.factor returns error",
 			config: map[string]string{
-				"url":                 "http://example.com",
+				"request.url":         "http://example.com",
 				"backoffRetry.count":  "1",
 				"backoffRetry.factor": "not-a-number",
 			},
@@ -114,22 +115,22 @@ func TestHTTPRequest_Build(t *testing.T) {
 		{
 			name: "valid url returns processor",
 			config: map[string]string{
-				"url": "http://example.com",
+				"request.url": "http://example.com",
 			},
 			wantErr: "",
 		},
 		{
 			name: "valid url and method returns processor",
 			config: map[string]string{
-				"url":    "http://example.com",
-				"method": "GET",
+				"request.url":    "http://example.com",
+				"request.method": "GET",
 			},
 			wantErr: "",
 		},
 		// {
 		//	name: "invalid backoff retry config is ignored",
 		//	config: map[string]string{
-		//		"url":                 "http://example.com",
+		//		"request.url":                 "http://example.com",
 		//		"backoffRetry.min":    "not-a-duration",
 		//		"backoffRetry.max":    "not-a-duration",
 		//		"backoffRetry.factor": "not-a-number",
@@ -139,7 +140,7 @@ func TestHTTPRequest_Build(t *testing.T) {
 		{
 			name: "valid url, method and backoff retry config returns processor",
 			config: map[string]string{
-				"url":                 "http://example.com",
+				"request.url":         "http://example.com",
 				"backoffRetry.count":  "1",
 				"backoffRetry.min":    "10ms",
 				"backoffRetry.max":    "1s",
@@ -151,7 +152,7 @@ func TestHTTPRequest_Build(t *testing.T) {
 		{
 			name: "invalid: same value of response.body and response.status",
 			config: map[string]string{
-				"url":             "http://example.com",
+				"request.url":     "http://example.com",
 				"response.body":   ".Payload.After",
 				"response.status": ".Payload.After",
 			},
@@ -160,7 +161,7 @@ func TestHTTPRequest_Build(t *testing.T) {
 		{
 			name: "valid response.body and response.status",
 			config: map[string]string{
-				"url":             "http://example.com",
+				"request.url":     "http://example.com",
 				"response.body":   ".Payload.After",
 				"response.status": `.Metadata["response.status"]`,
 			},
@@ -194,7 +195,7 @@ func TestHTTPRequest_Success(t *testing.T) {
 	}{
 		{
 			name:   "structured data",
-			config: map[string]string{"method": "GET"},
+			config: map[string]string{"request.method": "GET"},
 			args: []opencdc.Record{{
 				Payload: opencdc.Change{
 					Before: nil,
@@ -228,8 +229,8 @@ func TestHTTPRequest_Success(t *testing.T) {
 		{
 			name: "custom field for response body and status",
 			config: map[string]string{
-				"response.body":   ".Payload.After.Body",
-				"response.status": ".Payload.After.Status",
+				"response.body":   ".Payload.After.body",
+				"response.status": ".Payload.After.status",
 			},
 			args: []opencdc.Record{{
 				Payload: opencdc.Change{
@@ -242,8 +243,36 @@ func TestHTTPRequest_Success(t *testing.T) {
 				Payload: opencdc.Change{
 					After: opencdc.StructuredData{
 						"a key":  "random data",
-						"Body":   opencdc.RawData(respBody),
-						"Status": 200,
+						"body":   opencdc.RawData(respBody),
+						"status": 200,
+					},
+				},
+			}},
+		},
+		{
+			name: "custom field for request body",
+			config: map[string]string{
+				"request.body":  ".Payload.Before",
+				"response.body": ".Payload.After.httpResponse",
+			},
+			args: []opencdc.Record{{
+				Payload: opencdc.Change{
+					Before: opencdc.StructuredData{
+						"before-key": "before-data",
+					},
+					After: opencdc.StructuredData{
+						"after-key": "after-data",
+					},
+				},
+			}},
+			want: []sdk.ProcessedRecord{sdk.SingleRecord{
+				Payload: opencdc.Change{
+					Before: opencdc.StructuredData{
+						"before-key": "before-data",
+					},
+					After: opencdc.StructuredData{
+						"after-key":    "after-data",
+						"httpResponse": opencdc.RawData("foo-bar/response"),
 					},
 				},
 			}},
@@ -254,12 +283,12 @@ func TestHTTPRequest_Success(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			is := is.New(t)
 
-			wantMethod := tc.config["method"]
+			wantMethod := tc.config["request.method"]
 			if wantMethod == "" {
 				wantMethod = "POST" // default
 			}
 
-			wantBody := tc.args[0].Bytes()
+			wantBody := getRequestBody(is, tc.config["request.body"], tc.args)
 
 			srv := httptest.NewServer(http.HandlerFunc(func(resp http.ResponseWriter, req *http.Request) {
 				is.Equal(wantMethod, req.Method)
@@ -273,7 +302,7 @@ func TestHTTPRequest_Success(t *testing.T) {
 			}))
 			defer srv.Close()
 
-			tc.config["url"] = srv.URL
+			tc.config["request.url"] = srv.URL
 			underTest := NewWebhookHTTP(log.Test(t))
 			err := underTest.Configure(context.Background(), tc.config)
 			is.NoErr(err)
@@ -286,6 +315,23 @@ func TestHTTPRequest_Success(t *testing.T) {
 			}
 		})
 	}
+}
+
+func getRequestBody(is *is.I, field string, records []opencdc.Record) []byte {
+	f := field
+	if f == "" {
+		f = ".Payload.After"
+	}
+	refRes, err := sdk.NewReferenceResolver(field)
+	is.NoErr(err)
+
+	ref, err := refRes.Resolve(&records[0])
+	is.NoErr(err)
+
+	bytes, err := json.Marshal(ref.Get())
+	is.NoErr(err)
+
+	return bytes
 }
 
 func TestHTTPRequest_RetrySuccess(t *testing.T) {
@@ -321,7 +367,7 @@ func TestHTTPRequest_RetrySuccess(t *testing.T) {
 	defer srv.Close()
 
 	config := map[string]string{
-		"url":                 srv.URL,
+		"request.url":         srv.URL,
 		"backoffRetry.count":  "4",
 		"backoffRetry.min":    "5ms",
 		"backoffRetry.max":    "10ms",
@@ -357,7 +403,7 @@ func TestHTTPRequest_RetryFail(t *testing.T) {
 	defer srv.Close()
 
 	config := map[string]string{
-		"url":                 srv.URL,
+		"request.url":         srv.URL,
 		"backoffRetry.count":  "5",
 		"backoffRetry.min":    "5ms",
 		"backoffRetry.max":    "10ms",
@@ -400,7 +446,7 @@ func TestHTTPRequest_FilterRecord(t *testing.T) {
 	defer srv.Close()
 
 	config := map[string]string{
-		"url": srv.URL,
+		"request.url": srv.URL,
 	}
 
 	underTest := NewWebhookHTTP(log.Test(t))
