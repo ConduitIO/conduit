@@ -31,7 +31,7 @@ import (
 	"github.com/matryer/is"
 )
 
-func TestHTTPRequest_Build(t *testing.T) {
+func TestWebhookHTTP_Configure(t *testing.T) {
 	tests := []struct {
 		name    string
 		config  map[string]string
@@ -40,19 +40,19 @@ func TestHTTPRequest_Build(t *testing.T) {
 		{
 			name:    "nil config returns error",
 			config:  nil,
-			wantErr: "missing required parameter 'url'",
+			wantErr: "configuration invalid: missing required parameter 'url'",
 		},
 		{
 			name:    "empty config returns error",
 			config:  map[string]string{},
-			wantErr: "missing required parameter 'url'",
+			wantErr: "configuration invalid: missing required parameter 'url'",
 		},
 		{
 			name: "empty url returns error",
 			config: map[string]string{
 				"request.url": "",
 			},
-			wantErr: "missing required parameter 'url'",
+			wantErr: "configuration invalid: missing required parameter 'url'",
 		},
 		{
 			name: "invalid url returns error",
@@ -156,7 +156,7 @@ func TestHTTPRequest_Build(t *testing.T) {
 				"response.body":   ".Payload.After",
 				"response.status": ".Payload.After",
 			},
-			wantErr: "response.body and response.status set to same field",
+			wantErr: "configuration invalid: response.body and response.status set to same field",
 		},
 		{
 			name: "valid response.body and response.status",
@@ -184,7 +184,7 @@ func TestHTTPRequest_Build(t *testing.T) {
 	}
 }
 
-func TestHTTPRequest_Success(t *testing.T) {
+func TestWebhookHTTP_Success(t *testing.T) {
 	respBody := []byte("foo-bar/response")
 
 	tests := []struct {
@@ -365,7 +365,7 @@ func TestHTTPRequest_Success(t *testing.T) {
 	}
 }
 
-func TestHTTPRequest_RetrySuccess(t *testing.T) {
+func TestWebhookHTTP_RetrySuccess(t *testing.T) {
 	is := is.New(t)
 
 	respBody := []byte("foo-bar/response")
@@ -421,7 +421,7 @@ func TestHTTPRequest_RetrySuccess(t *testing.T) {
 	is.Equal(srvHandlerCount, 5)
 }
 
-func TestHTTPRequest_RetryFail(t *testing.T) {
+func TestWebhookHTTP_RetryFail(t *testing.T) {
 	is := is.New(t)
 
 	srvHandlerCount := 0
@@ -455,7 +455,7 @@ func TestHTTPRequest_RetryFail(t *testing.T) {
 	is.Equal(srvHandlerCount, 6) // expected 6 requests (1 regular and 5 retries)
 }
 
-func TestHTTPRequest_FilterRecord(t *testing.T) {
+func TestWebhookHTTP_FilterRecord(t *testing.T) {
 	is := is.New(t)
 
 	wantMethod := "POST"
