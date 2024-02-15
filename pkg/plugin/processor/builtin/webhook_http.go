@@ -209,6 +209,12 @@ func (w *webhookHTTP) processRecordWithBackOff(ctx context.Context, r opencdc.Re
 
 // processRecord processes a single record (without retries)
 func (w *webhookHTTP) processRecord(ctx context.Context, r opencdc.Record) sdk.ProcessedRecord {
+	var key []byte
+	if r.Key != nil {
+		key = r.Key.Bytes()
+	}
+	w.logger.Trace(ctx).Bytes("record_key", key).Msg("processing record")
+
 	req, err := w.buildRequest(ctx, r)
 	if err != nil {
 		return sdk.ErrorRecord{Error: cerrors.Errorf("cannot create HTTP request: %w", err)}
