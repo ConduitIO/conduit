@@ -73,23 +73,23 @@ func (p *excludeFields) Open(context.Context) error {
 }
 
 func (p *excludeFields) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
-	out := make([]sdk.ProcessedRecord, len(records))
-	for i, record := range records {
+	out := make([]sdk.ProcessedRecord, 0, len(records))
+	for _, record := range records {
 		for _, field := range p.fields {
 			resolver, err := sdk.NewReferenceResolver(field)
 			if err != nil {
-				return []sdk.ProcessedRecord{sdk.ErrorRecord{Error: err}}
+				return append(out, sdk.ErrorRecord{Error: err})
 			}
 			ref, err := resolver.Resolve(&record)
 			if err != nil {
-				return []sdk.ProcessedRecord{sdk.ErrorRecord{Error: err}}
+				return append(out, sdk.ErrorRecord{Error: err})
 			}
 			err = ref.Delete()
 			if err != nil {
-				return []sdk.ProcessedRecord{sdk.ErrorRecord{Error: err}}
+				return append(out, sdk.ErrorRecord{Error: err})
 			}
 		}
-		out[i] = sdk.SingleRecord(record)
+		out = append(out, sdk.SingleRecord(record))
 	}
 	return out
 }

@@ -50,8 +50,10 @@ func TestRenameField_Process(t *testing.T) {
 	}
 	output := proc.Process(context.Background(), records)
 	is.True(len(output) == 1)
-	is.Equal(output[0].(sdk.SingleRecord).Metadata, want.Metadata)
-	is.Equal(output[0].(sdk.SingleRecord).Payload.After, want.Payload.After)
+	res, ok := output[0].(sdk.SingleRecord)
+	is.True(ok) // output record is not a sdk.SingleRecord type
+	is.Equal(res.Metadata, want.Metadata)
+	is.Equal(res.Payload.After, want.Payload.After)
 }
 
 func TestRenameField_Configure(t *testing.T) {

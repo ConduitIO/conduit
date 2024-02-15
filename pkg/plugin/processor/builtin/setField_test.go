@@ -26,6 +26,7 @@ import (
 
 func TestSetField_Process(t *testing.T) {
 	proc := setField{}
+	var err error
 	ctx := context.Background()
 	testCases := []struct {
 		field  string
@@ -75,13 +76,16 @@ func TestSetField_Process(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.field, func(t *testing.T) {
 			is := is.New(t)
-			proc.field = tc.field
 			proc.value = tc.value
+			proc.referenceResolver, err = sdk.NewReferenceResolver(tc.field)
+			is.NoErr(err)
 			output := proc.Process(ctx, []opencdc.Record{tc.record})
 			is.True(len(output) == 1)
-			is.Equal(output[0].(sdk.SingleRecord).Metadata, tc.want.Metadata)
-			is.Equal(output[0].(sdk.SingleRecord).Payload, tc.want.Payload)
-			is.Equal(output[0].(sdk.SingleRecord).Operation, tc.want.Operation)
+			res, ok := output[0].(sdk.SingleRecord)
+			is.True(ok) // output record is not a sdk.SingleRecord type
+			is.Equal(res.Metadata, tc.want.Metadata)
+			is.Equal(res.Payload, tc.want.Payload)
+			is.Equal(res.Operation, tc.want.Operation)
 		})
 	}
 

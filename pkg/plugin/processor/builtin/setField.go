@@ -23,11 +23,10 @@ import (
 )
 
 type setField struct {
-	sdk.UnimplementedProcessor
+	referenceResolver sdk.ReferenceResolver
+	value             string
 
-	// cfg
-	field string
-	value string
+	sdk.UnimplementedProcessor
 }
 
 func (p *setField) Specification() (sdk.Specification, error) {
@@ -71,7 +70,11 @@ func (p *setField) Configure(_ context.Context, cfg map[string]string) error {
 	if !ok {
 		return cerrors.Errorf("%w (%q)", ErrRequiredParamMissing, "value")
 	}
-	p.field = field
+	resolver, err := sdk.NewReferenceResolver(field)
+	if err != nil {
+		return err
+	}
+	p.referenceResolver = resolver
 	p.value = value
 
 	return nil
@@ -82,21 +85,17 @@ func (p *setField) Open(context.Context) error {
 }
 
 func (p *setField) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
-	out := make([]sdk.ProcessedRecord, len(records))
-	for i, record := range records {
-		resolver, err := sdk.NewReferenceResolver(p.field)
+	out := make([]sdk.ProcessedRecord, 0, len(records))
+	for _, record := range records {
+		ref, err := p.referenceResolver.Resolve(&record)
 		if err != nil {
-			return []sdk.ProcessedRecord{sdk.ErrorRecord{Error: err}}
-		}
-		ref, err := resolver.Resolve(&record)
-		if err != nil {
-			return []sdk.ProcessedRecord{sdk.ErrorRecord{Error: err}}
+			return append(out, sdk.ErrorRecord{Error: err})
 		}
 		err = ref.Set(p.value)
 		if err != nil {
-			return []sdk.ProcessedRecord{sdk.ErrorRecord{Error: err}}
+			return append(out, sdk.ErrorRecord{Error: err})
 		}
-		out[i] = sdk.SingleRecord(record)
+		out = append(out, sdk.SingleRecord(record))
 	}
 	return out
 }

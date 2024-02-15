@@ -24,10 +24,9 @@ import (
 )
 
 type renameField struct {
-	sdk.UnimplementedProcessor
-
-	// cfg
 	mapping map[string]string
+
+	sdk.UnimplementedProcessor
 }
 
 func (p *renameField) Specification() (sdk.Specification, error) {
@@ -90,15 +89,15 @@ func (p *renameField) Open(context.Context) error {
 }
 
 func (p *renameField) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
-	out := make([]sdk.ProcessedRecord, len(records))
-	for i, record := range records {
+	out := make([]sdk.ProcessedRecord, 0, len(records))
+	for _, record := range records {
 		for key, val := range p.mapping {
 			err := p.rename(record, key, val)
 			if err != nil {
-				return []sdk.ProcessedRecord{sdk.ErrorRecord{Error: err}}
+				return append(out, sdk.ErrorRecord{Error: err})
 			}
 		}
-		out[i] = sdk.SingleRecord(record)
+		out = append(out, sdk.SingleRecord(record))
 	}
 	return out
 }
