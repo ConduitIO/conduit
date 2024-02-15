@@ -22,14 +22,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/conduitio/conduit/pkg/foundation/csync"
-
+	"github.com/conduitio/conduit-commons/config"
 	sdk "github.com/conduitio/conduit-processor-sdk"
-
-	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
-
+	"github.com/conduitio/conduit/pkg/foundation/csync"
 	"github.com/stealthrocket/wazergo"
 	"github.com/tetratelabs/wazero"
+	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 )
 
 const (
@@ -115,15 +113,12 @@ func TestMain(m *testing.M) {
 }
 
 func ChaosProcessorSpecifications() sdk.Specification {
-	param := sdk.Parameter{
+	param := config.Parameter{
 		Default:     "success",
-		Type:        sdk.ParameterTypeString,
+		Type:        config.ParameterTypeString,
 		Description: "prefix",
-		Validations: []sdk.Validation{
-			{
-				Type:  sdk.ValidationTypeInclusion,
-				Value: "success,error,panic",
-			},
+		Validations: []config.Validation{
+			config.ValidationInclusion{List: []string{"success", "error", "panic"}},
 		},
 	}
 	return sdk.Specification{
@@ -132,17 +127,15 @@ func ChaosProcessorSpecifications() sdk.Specification {
 		Description: "chaos processor description",
 		Version:     "v1.3.5",
 		Author:      "Meroxa, Inc.",
-		Parameters: map[string]sdk.Parameter{
+		Parameters: map[string]config.Parameter{
 			"configure": param,
 			"open":      param,
 			"process.prefix": {
 				Default:     "",
-				Type:        sdk.ParameterTypeString,
+				Type:        config.ParameterTypeString,
 				Description: "prefix to be added to the payload's after",
-				Validations: []sdk.Validation{
-					{
-						Type: sdk.ValidationTypeRequired,
-					},
+				Validations: []config.Validation{
+					config.ValidationRequired{},
 				},
 			},
 			"process":  param,
