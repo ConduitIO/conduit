@@ -16,11 +16,11 @@ package procbuiltin
 
 import (
 	"context"
-	"encoding/json"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/record"
+	"github.com/goccy/go-json"
 )
 
 const (

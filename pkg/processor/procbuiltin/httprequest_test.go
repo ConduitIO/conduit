@@ -16,7 +16,6 @@ package procbuiltin
 
 import (
 	"context"
-	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -24,6 +23,7 @@ import (
 
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/record"
+	"github.com/goccy/go-json"
 	"github.com/matryer/is"
 )
 

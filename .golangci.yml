@@ -13,7 +13,9 @@ linters-settings:
           - pkg: golang.org/x/xerrors
             desc: To accommodate for custom error creation and handling use Conduit's 'cerrors' package instead.
           - pkg: github.com/golang/mock
-            desc: github.com/golang/mock is deprecated, use go.uber.org/mock instead
+            desc: github.com/golang/mock is deprecated, use go.uber.org/mock instead.
+          - pkg: encoding/json
+            desc: github.com/goccy/go-json is preferred for performance reasons.
   gofmt:
     simplify: false
   govet:
