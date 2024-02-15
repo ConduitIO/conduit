@@ -37,7 +37,7 @@ func runSandbox[REQ any, RES any](
 	ctx context.Context, // context is the second parameter on purpose
 	req REQ,
 	logger log.CtxLogger,
-) (res RES, err error) {
+) (RES, error) {
 	c := sandboxChanPool.Get().(chan any)
 
 	returnResponse := func(ctx context.Context, res RES, err error) {
@@ -64,7 +64,8 @@ func runSandbox[REQ any, RES any](
 					err = cerrors.Errorf("panic: %v", r)
 				}
 				// return the panic error
-				returnResponse(ctx, res, err)
+				var emptyRes RES
+				returnResponse(ctx, emptyRes, err)
 			}
 		}()
 
@@ -76,8 +77,12 @@ func runSandbox[REQ any, RES any](
 	case <-ctx.Done():
 		// Context was cancelled, detach from calling goroutine and return.
 		logger.Error(ctx).Msg("context cancelled while waiting for builtin connector plugin to respond, detaching from plugin")
-		return res, ctx.Err()
+		var emptyRes RES
+		return emptyRes, ctx.Err()
 	case v := <-c:
+		var res RES
+		var err error
+
 		// We got a response, which means the goroutine will send another value
 		// (the error) and then return the channel to the pool.
 		if v != nil {
@@ -87,9 +92,8 @@ func runSandbox[REQ any, RES any](
 		if v != nil {
 			err = v.(error)
 		}
+		return res, err
 	}
-
-	return res, err
 }
 
 func runSandboxNoResp[REQ any](
