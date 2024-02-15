@@ -218,7 +218,14 @@ func (w *webhookHTTP) processRecord(ctx context.Context, r opencdc.Record) sdk.P
 	if err != nil {
 		return sdk.ErrorRecord{Error: cerrors.Errorf("error executing HTTP request: %w", err)}
 	}
-	defer resp.Body.Close()
+	defer func() {
+		errClose := resp.Body.Close()
+		if errClose != nil {
+			w.logger.Debug(ctx).
+				Err(errClose).
+				Msg("failed closing response body (possible resource leak)")
+		}
+	}()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
