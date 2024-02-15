@@ -247,22 +247,26 @@ func (w *webhookHTTP) processRecord(ctx context.Context, r opencdc.Record) sdk.P
 	return sdk.SingleRecord(r)
 }
 
-func (w *webhookHTTP) setField(r *opencdc.Record, refRes *sdk.ReferenceResolver, data any) error {
-	if refRes == nil {
-		return nil
-	}
-
-	ref, err := refRes.Resolve(r)
+func (w *webhookHTTP) buildRequest(ctx context.Context, r opencdc.Record) (*http.Request, error) {
+	reqBody, err := w.requestBody(r)
 	if err != nil {
-		return err
+		return nil, cerrors.Errorf("failed getting request body: %w", err)
 	}
 
-	err = ref.Set(data)
+	req, err := http.NewRequestWithContext(
+		ctx,
+		w.config.Method,
+		w.config.URL,
+		bytes.NewReader(reqBody),
+	)
 	if err != nil {
-		return err
+		return nil, cerrors.Errorf("error creating HTTP request: %w", err)
 	}
 
-	return nil
+	// todo make it possible to add more headers, e.g. auth headers etc.
+	req.Header.Set("Content-Type", w.config.ContentType)
+
+	return req, nil
 }
 
 // requestBody returns the request body for the given record,
@@ -290,6 +294,24 @@ func (w *webhookHTTP) validateConfig(cfg map[string]string) error {
 	if cfg["response.body"] == cfg["response.status"] {
 		return cerrors.Errorf("response.body and response.status set to same field")
 	}
+	return nil
+}
+
+func (w *webhookHTTP) setField(r *opencdc.Record, refRes *sdk.ReferenceResolver, data any) error {
+	if refRes == nil {
+		return nil
+	}
+
+	ref, err := refRes.Resolve(r)
+	if err != nil {
+		return err
+	}
+
+	err = ref.Set(data)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -327,26 +349,4 @@ func ToReferenceResolvedDecodeHook() mapstructure.DecodeHookFunc {
 
 func (w *webhookHTTP) Teardown(context.Context) error {
 	return nil
-}
-
-func (w *webhookHTTP) buildRequest(ctx context.Context, r opencdc.Record) (*http.Request, error) {
-	reqBody, err := w.requestBody(r)
-	if err != nil {
-		return nil, cerrors.Errorf("failed getting request body: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(
-		ctx,
-		w.config.Method,
-		w.config.URL,
-		bytes.NewReader(reqBody),
-	)
-	if err != nil {
-		return nil, cerrors.Errorf("error creating HTTP request: %w", err)
-	}
-
-	// todo make it possible to add more headers, e.g. auth headers etc.
-	req.Header.Set("Content-Type", w.config.ContentType)
-
-	return req, nil
 }
