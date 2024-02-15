@@ -3,7 +3,7 @@
 This package contains code taken from https://github.com/golang/tools/tree/master/internal/diff
 on February 15th, 2024. We need the code to create a unified diff between two strings.
 
-The code is left as-is, except two changes:
+The code is left as-is, except 3 changes:
 
 - The imports were changed to reference the Conduit module path. This was done
   using the following command:
