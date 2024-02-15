@@ -16,7 +16,6 @@ package builtin
 
 import (
 	"context"
-	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -25,6 +24,7 @@ import (
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/goccy/go-json"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 
@@ -341,24 +341,6 @@ func TestHTTPRequest_Success(t *testing.T) {
 	}
 }
 
-func getRequestBody(is *is.I, field string, records []opencdc.Record) []byte {
-	f := field
-	if f == "" {
-		f = "."
-	}
-
-	refRes, err := sdk.NewReferenceResolver(f)
-	is.NoErr(err)
-
-	ref, err := refRes.Resolve(&records[0])
-	is.NoErr(err)
-
-	bytes, err := json.Marshal(ref.Get())
-	is.NoErr(err)
-
-	return bytes
-}
-
 func TestHTTPRequest_RetrySuccess(t *testing.T) {
 	is := is.New(t)
 
@@ -480,4 +462,22 @@ func TestHTTPRequest_FilterRecord(t *testing.T) {
 
 	got := underTest.Process(context.Background(), rec)
 	is.Equal(got, []sdk.ProcessedRecord{sdk.FilterRecord{}})
+}
+
+func getRequestBody(is *is.I, field string, records []opencdc.Record) []byte {
+	f := field
+	if f == "" {
+		f = "."
+	}
+
+	refRes, err := sdk.NewReferenceResolver(f)
+	is.NoErr(err)
+
+	ref, err := refRes.Resolve(&records[0])
+	is.NoErr(err)
+
+	bytes, err := json.Marshal(ref.Get())
+	is.NoErr(err)
+
+	return bytes
 }

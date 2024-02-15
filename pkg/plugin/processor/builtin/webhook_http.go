@@ -17,7 +17,6 @@ package builtin
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"io"
 	"maps"
 	"net/http"
@@ -28,6 +27,7 @@ import (
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/goccy/go-json"
 	"github.com/jpillora/backoff"
 	"github.com/mitchellh/mapstructure"
 )
@@ -277,7 +277,12 @@ func (w *webhookHTTP) getRequestBody(r opencdc.Record) ([]byte, error) {
 		return nil, cerrors.Errorf("failed resolving request.body: %w", err)
 	}
 
-	return json.Marshal(ref.Get())
+	val := ref.Get()
+	if raw, ok := val.(opencdc.RawData); ok {
+		return raw.Bytes(), nil
+	}
+
+	return json.Marshal(val)
 }
 
 func ToDurationDecoderHook() mapstructure.DecodeHookFunc {
