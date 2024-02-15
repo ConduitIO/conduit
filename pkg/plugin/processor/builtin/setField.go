@@ -33,7 +33,7 @@ func (p *setField) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
 		Name:        "field.set",
 		Summary:     "set the value of a certain field",
-		Description: "set the value of a certain field",
+		Description: "set the value of a certain field, processor only runs on structured data.",
 		Version:     "v1.0",
 		Author:      "Meroxa, Inc.",
 		Parameters: map[string]sdk.Parameter{

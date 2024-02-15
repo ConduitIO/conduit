@@ -34,7 +34,8 @@ func (p *excludeFields) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
 		Name: "field.subset.exclude",
 		Summary: "remove a subset of fields from the record, all other fields are left untouched. If a field is " +
-			"excluded that contains nested data, the whole tree will be removed. It is not allowed to exclude .Position or .Operation.",
+			"excluded that contains nested data, the whole tree will be removed. Processor only runs on structured data, " +
+			"and it is not allowed to exclude .Position or .Operation.",
 		Description: "remove a subset of fields from the record",
 		Version:     "v1.0",
 		Author:      "Meroxa, Inc.",

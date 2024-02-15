@@ -34,7 +34,7 @@ func (p *renameField) Specification() (sdk.Specification, error) {
 		Name:    "field.rename",
 		Summary: "rename a group of fields",
 		Description: "rename a group of fields. It is not allowed to rename top-level fields (.Operation, " +
-			".Position, .Key, .Metadata, .Payload.Before, .Payload.After)",
+			".Position, .Key, .Metadata, .Payload.Before, .Payload.After), processor only runs on structured data.",
 		Version: "v1.0",
 		Author:  "Meroxa, Inc.",
 		Parameters: map[string]sdk.Parameter{
