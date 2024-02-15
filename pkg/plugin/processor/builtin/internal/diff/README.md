@@ -12,5 +12,7 @@ The code is left as-is, except 3 changes:
   find . -type f -exec sed -i '' 's/golang.org\/x\/tools\/internal/github.com\/conduitio\/conduit\/pkg\/plugin\/processor\/builtin\/internal/g' {} +
   ```
 
+- The package `golang.org/x/tools/internal/diff/myers` was removed, as it's deprecated.
+
 - The package `golang.org/x/tools/internal/testenv` was added into the `diff` package,
   as that's the only place it's used. It also only includes the required functions.
