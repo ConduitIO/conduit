@@ -278,7 +278,7 @@ func TestHTTPRequest_Success(t *testing.T) {
 			}},
 		},
 		{
-			name: "request body: custom field, raw",
+			name: "request body: custom field, raw data",
 			config: map[string]string{
 				"request.body":  ".Payload.Before",
 				"response.body": ".Payload.After.httpResponse",
@@ -296,6 +296,30 @@ func TestHTTPRequest_Success(t *testing.T) {
 					Before: opencdc.RawData("uncooked data"),
 					After: opencdc.StructuredData{
 						"after-key":    "after-data",
+						"httpResponse": opencdc.RawData("foo-bar/response"),
+					},
+				},
+			}},
+		},
+		{
+			name: "request body: custom field, []byte data",
+			config: map[string]string{
+				"request.body":  ".Payload.After.contents",
+				"response.body": ".Payload.After.httpResponse",
+			},
+			args: []opencdc.Record{{
+				Payload: opencdc.Change{
+					After: opencdc.StructuredData{
+						"contents":  []byte{15, 2, 20, 24},
+						"after-key": "after-data",
+					},
+				},
+			}},
+			want: []sdk.ProcessedRecord{sdk.SingleRecord{
+				Payload: opencdc.Change{
+					After: opencdc.StructuredData{
+						"after-key":    "after-data",
+						"contents":     []byte{15, 2, 20, 24},
 						"httpResponse": opencdc.RawData("foo-bar/response"),
 					},
 				},
@@ -475,6 +499,11 @@ func getRequestBody(is *is.I, field string, records []opencdc.Record) []byte {
 
 	ref, err := refRes.Resolve(&records[0])
 	is.NoErr(err)
+
+	val := ref.Get()
+	if raw, ok := val.(opencdc.RawData); ok {
+		return raw.Bytes()
+	}
 
 	bytes, err := json.Marshal(ref.Get())
 	is.NoErr(err)
