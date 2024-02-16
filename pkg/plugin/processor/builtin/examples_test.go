@@ -87,18 +87,18 @@ func RunExample(p sdk.Processor, e example) {
 	switch rec := got[0].(type) {
 	case sdk.SingleRecord:
 		// produce JSON diff
-		havePrettyJson, err := json.MarshalIndent(e.Have, "", "  ")
+		havePrettyJSON, err := json.MarshalIndent(e.Have, "", "  ")
 		if err != nil {
 			log.Fatalf("failed to marshal test record to JSON: %v", err)
 		}
 
-		gotPrettyJson, err := json.MarshalIndent(rec, "", "  ")
+		gotPrettyJSON, err := json.MarshalIndent(rec, "", "  ")
 		if err != nil {
 			log.Fatalf("failed to marshal processed record to JSON: %v", err)
 		}
 
-		edits := diff.Strings(string(havePrettyJson), string(gotPrettyJson))
-		unified, err := diff.ToUnified("before", "after", string(havePrettyJson)+"\n", edits, 100)
+		edits := diff.Strings(string(havePrettyJSON), string(gotPrettyJSON))
+		unified, err := diff.ToUnified("before", "after", string(havePrettyJSON)+"\n", edits, 100)
 		if err != nil {
 			log.Fatalf("failed to produce unified diff: %v", err)
 		}

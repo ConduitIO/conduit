@@ -2,8 +2,9 @@ run:
   timeout: 3m
   skip-dirs-use-default: false
   skip-dirs:
-    - /examples/
-    - /ui/.*
+    - ^examples/
+    - ^ui/
+    - ^pkg/plugin/processor/builtin/internal/diff # external code
 
 linters-settings:
   depguard:
