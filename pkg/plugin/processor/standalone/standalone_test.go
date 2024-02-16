@@ -81,6 +81,7 @@ func TestMain(m *testing.M) {
 	exitOnError(err, "error instantiating WASI")
 
 	CompiledHostModule, err = wazergo.Compile(ctx, TestRuntime, hostModule)
+	exitOnError(err, "error compiling host module")
 
 	// load test processors
 	var wg csync.WaitGroup
@@ -96,6 +97,7 @@ func TestMain(m *testing.M) {
 		wg.Add(1)
 		go func(binary []byte, target *wazero.CompiledModule, path string) {
 			defer wg.Done()
+			var err error
 			*target, err = TestRuntime.CompileModule(ctx, binary)
 			exitOnError(err, "error compiling module "+path)
 		}(*t.V1, t.V2, path)
