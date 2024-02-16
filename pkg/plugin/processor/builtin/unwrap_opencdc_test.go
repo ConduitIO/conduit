@@ -16,6 +16,8 @@ package builtin
 
 import (
 	"context"
+	"testing"
+
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -23,10 +25,9 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/matryer/is"
-	"testing"
 )
 
-const Record_Update_NoBefore = `{
+const RecordUpdateWithBefore = `{
         "position": "NzgyNjJmODUtODNmMS00ZGQwLWEyZDAtNTRmNjA1ZjkyYTg0",
         "operation": "update",
         "metadata": {
@@ -53,7 +54,7 @@ const Record_Update_NoBefore = `{
         }
       }`
 
-const Record_Update_WithoutBefore = `{
+const RecordUpdateNoBefore = `{
         "position": "NzgyNjJmODUtODNmMS00ZGQwLWEyZDAtNTRmNjA1ZjkyYTg0",
         "operation": "update",
         "metadata": {
@@ -74,7 +75,7 @@ const Record_Update_WithoutBefore = `{
         }
       }`
 
-const Record_Delete_NoBefore = `{
+const RecordDeleteNoBefore = `{
         "position": "NzgyNjJmODUtODNmMS00ZGQwLWEyZDAtNTRmNjA1ZjkyYTg0",
         "operation": "delete",
         "metadata": {
@@ -89,7 +90,7 @@ const Record_Delete_NoBefore = `{
         }
       }`
 
-const Record_Delete_WithBefore = `{
+const RecordDeleteWithBefore = `{
         "position": "NzgyNjJmODUtODNmMS00ZGQwLWEyZDAtNTRmNjA1ZjkyYTg0",
         "operation": "delete",
         "metadata": {
@@ -110,7 +111,7 @@ const Record_Delete_WithBefore = `{
         }
       }`
 
-const Record_Create = `{
+const RecordCreate = `{
         "position": "NzgyNjJmODUtODNmMS00ZGQwLWEyZDAtNTRmNjA1ZjkyYTg0",
         "operation": "create",
         "metadata": {
@@ -314,7 +315,7 @@ func TestUnwrapOpenCDC(t *testing.T) {
 				},
 				Payload: opencdc.Change{
 					Before: nil,
-					After:  opencdc.RawData(Record_Create),
+					After:  opencdc.RawData(RecordCreate),
 				},
 				Position: []byte("eyJHcm91cElEIjoiNGQ2ZTBhMjktNzAwZi00Yjk4LWEzY2MtZWUyNzZhZTc4MjVjIiwiVG9waWMiOiJzdHJlYW0tNzhscG5jaHg3dHpweXF6LWdlbmVyYXRvciIsIlBhcnRpdGlvbiI6MCwiT2Zmc2V0IjoyMjF9"),
 			},
@@ -354,7 +355,7 @@ func TestUnwrapOpenCDC(t *testing.T) {
 				},
 				Payload: opencdc.Change{
 					Before: nil,
-					After:  opencdc.RawData(Record_Delete_WithBefore),
+					After:  opencdc.RawData(RecordDeleteWithBefore),
 				},
 				Position: []byte("eyJHcm91cElEIjoiNGQ2ZTBhMjktNzAwZi00Yjk4LWEzY2MtZWUyNzZhZTc4MjVjIiwiVG9waWMiOiJzdHJlYW0tNzhscG5jaHg3dHpweXF6LWdlbmVyYXRvciIsIlBhcnRpdGlvbiI6MCwiT2Zmc2V0IjoyMjF9"),
 			},
@@ -394,7 +395,7 @@ func TestUnwrapOpenCDC(t *testing.T) {
 				},
 				Payload: opencdc.Change{
 					Before: nil,
-					After:  opencdc.RawData(Record_Delete_NoBefore),
+					After:  opencdc.RawData(RecordDeleteNoBefore),
 				},
 				Position: []byte("eyJHcm91cElEIjoiNGQ2ZTBhMjktNzAwZi00Yjk4LWEzY2MtZWUyNzZhZTc4MjVjIiwiVG9waWMiOiJzdHJlYW0tNzhscG5jaHg3dHpweXF6LWdlbmVyYXRvciIsIlBhcnRpdGlvbiI6MCwiT2Zmc2V0IjoyMjF9"),
 			},
@@ -428,7 +429,7 @@ func TestUnwrapOpenCDC(t *testing.T) {
 				},
 				Payload: opencdc.Change{
 					Before: nil,
-					After:  opencdc.RawData(Record_Update_NoBefore),
+					After:  opencdc.RawData(RecordUpdateWithBefore),
 				},
 				Position: []byte("eyJHcm91cElEIjoiNGQ2ZTBhMjktNzAwZi00Yjk4LWEzY2MtZWUyNzZhZTc4MjVjIiwiVG9waWMiOiJzdHJlYW0tNzhscG5jaHg3dHpweXF6LWdlbmVyYXRvciIsIlBhcnRpdGlvbiI6MCwiT2Zmc2V0IjoyMjF9"),
 			},
@@ -474,7 +475,7 @@ func TestUnwrapOpenCDC(t *testing.T) {
 				},
 				Payload: opencdc.Change{
 					Before: nil,
-					After:  opencdc.RawData(Record_Update_WithoutBefore),
+					After:  opencdc.RawData(RecordUpdateNoBefore),
 				},
 				Position: []byte("eyJHcm91cElEIjoiNGQ2ZTBhMjktNzAwZi00Yjk4LWEzY2MtZWUyNzZhZTc4MjVjIiwiVG9waWMiOiJzdHJlYW0tNzhscG5jaHg3dHpweXF6LWdlbmVyYXRvciIsIlBhcnRpdGlvbiI6MCwiT2Zmc2V0IjoyMjF9"),
 			},

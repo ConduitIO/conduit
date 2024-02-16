@@ -102,7 +102,6 @@ func (u *unwrapOpenCDC) processRecord(rec opencdc.Record) sdk.ProcessedRecord {
 	// Position is the only key we preserve from the original record to maintain the reference respect other messages
 	// that will be coming from in the event of chaining pipelines (e.g.: source -> kafka, kafka -> destination)
 	return sdk.SingleRecord(opencdcRec)
-
 }
 
 func (u *unwrapOpenCDC) Teardown(context.Context) error {
