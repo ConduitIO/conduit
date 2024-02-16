@@ -26,25 +26,7 @@ import (
 	"testing"
 )
 
-const DebeziumRecordPayload = `{
-		 "payload": {
-		   "after": {
-		     "description": "test1",
-		     "id": 27
-		   },
-		   "before": null,
-		   "op": "c",
-		   "source": {
-		     "opencdc.readAt": "1674061777225877000",
-		     "opencdc.version": "v1"
-		   },
-		   "transaction": null,
-		   "ts_ms": 1674061777225
-		 },
-		 "schema": {} 
-		}`
-
-const OpenCDCRecordUpdateWithBeforePayload = `{
+const Record_Update_NoBefore = `{
         "position": "NzgyNjJmODUtODNmMS00ZGQwLWEyZDAtNTRmNjA1ZjkyYTg0",
         "operation": "update",
         "metadata": {
@@ -71,7 +53,7 @@ const OpenCDCRecordUpdateWithBeforePayload = `{
         }
       }`
 
-const OpenCDCRecordUpdateWithoutBeforePayload = `{
+const Record_Update_WithoutBefore = `{
         "position": "NzgyNjJmODUtODNmMS00ZGQwLWEyZDAtNTRmNjA1ZjkyYTg0",
         "operation": "update",
         "metadata": {
@@ -92,7 +74,7 @@ const OpenCDCRecordUpdateWithoutBeforePayload = `{
         }
       }`
 
-const OpenCDCRecordDeleteWithoutBeforePayload = `{
+const Record_Delete_NoBefore = `{
         "position": "NzgyNjJmODUtODNmMS00ZGQwLWEyZDAtNTRmNjA1ZjkyYTg0",
         "operation": "delete",
         "metadata": {
@@ -107,7 +89,7 @@ const OpenCDCRecordDeleteWithoutBeforePayload = `{
         }
       }`
 
-const OpenCDCRecordDeleteWithBeforePayload = `{
+const Record_Delete_WithBefore = `{
         "position": "NzgyNjJmODUtODNmMS00ZGQwLWEyZDAtNTRmNjA1ZjkyYTg0",
         "operation": "delete",
         "metadata": {
@@ -127,7 +109,8 @@ const OpenCDCRecordDeleteWithBeforePayload = `{
           "after": null
         }
       }`
-const OpenCDCRecordCreatePayload = `{
+
+const Record_Create = `{
         "position": "NzgyNjJmODUtODNmMS00ZGQwLWEyZDAtNTRmNjA1ZjkyYTg0",
         "operation": "create",
         "metadata": {
@@ -156,7 +139,7 @@ func TestUnwrapOpenCDC(t *testing.T) {
 		config map[string]string
 	}{
 		{
-			name:   "opencdc record create with structured data and no payload after",
+			name:   "create with structured data and no payload after",
 			config: map[string]string{"field": ".Payload.After"},
 			record: opencdc.Record{
 				Key:       opencdc.RawData("one-key"),
@@ -168,7 +151,7 @@ func TestUnwrapOpenCDC(t *testing.T) {
 			want: sdk.ErrorRecord{Error: cerrors.New("field to unmarshal is nil")},
 		},
 		{
-			name:   "opencdc record create with an invalid operation",
+			name:   "create with an invalid operation",
 			config: map[string]string{"field": ".Payload.After"},
 			record: opencdc.Record{
 				Key:       opencdc.RawData("one-key-raw-data"),
@@ -194,7 +177,7 @@ func TestUnwrapOpenCDC(t *testing.T) {
 			},
 		},
 		{
-			name:   "opencdc record create with an invalid metadata",
+			name:   "create with an invalid metadata",
 			config: map[string]string{"field": ".Payload.After"},
 			record: opencdc.Record{
 				Key:       opencdc.RawData("one-key-raw-data"),
@@ -219,7 +202,7 @@ func TestUnwrapOpenCDC(t *testing.T) {
 			},
 		},
 		{
-			name:   "opencdc record create with an invalid key",
+			name:   "create with an invalid key",
 			config: map[string]string{"field": ".Payload.After"},
 			record: opencdc.Record{
 				Key:       opencdc.RawData("one-key-raw-data"),
@@ -242,7 +225,7 @@ func TestUnwrapOpenCDC(t *testing.T) {
 			want: sdk.ErrorRecord{Error: cerrors.New("failed unmarshaling record: expected a opencdc.Data or a string, got float64")},
 		},
 		{
-			name:   "opencdc record create with an invalid payload",
+			name:   "create with an invalid payload",
 			config: map[string]string{"field": ".Payload.After"},
 			record: opencdc.Record{
 				Key:       opencdc.RawData("one-key-raw-data"),
@@ -256,7 +239,7 @@ func TestUnwrapOpenCDC(t *testing.T) {
 			want: sdk.ErrorRecord{Error: cerrors.New("failed to unmarshal raw data as JSON: expected { character for map value")},
 		},
 		{
-			name:   "opencdc record create with structured data",
+			name:   "create with structured data",
 			config: map[string]string{"field": ".Payload.After"},
 			record: opencdc.Record{
 				Key:       opencdc.RawData("one-key"),
@@ -317,7 +300,7 @@ func TestUnwrapOpenCDC(t *testing.T) {
 			},
 		},
 		{
-			name:   "opencdc record create with raw data",
+			name:   "create with raw data",
 			config: map[string]string{"field": ".Payload.After"},
 			record: opencdc.Record{
 				Key:       opencdc.RawData("one-key-raw-data"),
@@ -331,7 +314,7 @@ func TestUnwrapOpenCDC(t *testing.T) {
 				},
 				Payload: opencdc.Change{
 					Before: nil,
-					After:  opencdc.RawData(OpenCDCRecordCreatePayload),
+					After:  opencdc.RawData(Record_Create),
 				},
 				Position: []byte("eyJHcm91cElEIjoiNGQ2ZTBhMjktNzAwZi00Yjk4LWEzY2MtZWUyNzZhZTc4MjVjIiwiVG9waWMiOiJzdHJlYW0tNzhscG5jaHg3dHpweXF6LWdlbmVyYXRvciIsIlBhcnRpdGlvbiI6MCwiT2Zmc2V0IjoyMjF9"),
 			},
@@ -357,7 +340,7 @@ func TestUnwrapOpenCDC(t *testing.T) {
 			},
 		},
 		{
-			name:   "opencdc record delete with before and with raw data",
+			name:   "delete with before and with raw data",
 			config: map[string]string{"field": ".Payload.After"},
 			record: opencdc.Record{
 				Key:       opencdc.RawData("one-key-raw-data"),
@@ -371,7 +354,7 @@ func TestUnwrapOpenCDC(t *testing.T) {
 				},
 				Payload: opencdc.Change{
 					Before: nil,
-					After:  opencdc.RawData(OpenCDCRecordDeleteWithBeforePayload),
+					After:  opencdc.RawData(Record_Delete_WithBefore),
 				},
 				Position: []byte("eyJHcm91cElEIjoiNGQ2ZTBhMjktNzAwZi00Yjk4LWEzY2MtZWUyNzZhZTc4MjVjIiwiVG9waWMiOiJzdHJlYW0tNzhscG5jaHg3dHpweXF6LWdlbmVyYXRvciIsIlBhcnRpdGlvbiI6MCwiT2Zmc2V0IjoyMjF9"),
 			},
@@ -397,7 +380,7 @@ func TestUnwrapOpenCDC(t *testing.T) {
 			},
 		},
 		{
-			name:   "opencdc record delete without before and with raw data",
+			name:   "delete without before and with raw data",
 			config: map[string]string{"field": ".Payload.After"},
 			record: opencdc.Record{
 				Key:       opencdc.RawData("one-key-raw-data"),
@@ -411,7 +394,7 @@ func TestUnwrapOpenCDC(t *testing.T) {
 				},
 				Payload: opencdc.Change{
 					Before: nil,
-					After:  opencdc.RawData(OpenCDCRecordDeleteWithoutBeforePayload),
+					After:  opencdc.RawData(Record_Delete_NoBefore),
 				},
 				Position: []byte("eyJHcm91cElEIjoiNGQ2ZTBhMjktNzAwZi00Yjk4LWEzY2MtZWUyNzZhZTc4MjVjIiwiVG9waWMiOiJzdHJlYW0tNzhscG5jaHg3dHpweXF6LWdlbmVyYXRvciIsIlBhcnRpdGlvbiI6MCwiT2Zmc2V0IjoyMjF9"),
 			},
@@ -431,7 +414,7 @@ func TestUnwrapOpenCDC(t *testing.T) {
 			},
 		},
 		{
-			name:   "opencdc record update with before and with raw data",
+			name:   "update with before and with raw data",
 			config: map[string]string{"field": ".Payload.After"},
 			record: opencdc.Record{
 				Key:       opencdc.RawData("one-key-raw-data"),
@@ -445,7 +428,7 @@ func TestUnwrapOpenCDC(t *testing.T) {
 				},
 				Payload: opencdc.Change{
 					Before: nil,
-					After:  opencdc.RawData(OpenCDCRecordUpdateWithBeforePayload),
+					After:  opencdc.RawData(Record_Update_NoBefore),
 				},
 				Position: []byte("eyJHcm91cElEIjoiNGQ2ZTBhMjktNzAwZi00Yjk4LWEzY2MtZWUyNzZhZTc4MjVjIiwiVG9waWMiOiJzdHJlYW0tNzhscG5jaHg3dHpweXF6LWdlbmVyYXRvciIsIlBhcnRpdGlvbiI6MCwiT2Zmc2V0IjoyMjF9"),
 			},
@@ -477,7 +460,7 @@ func TestUnwrapOpenCDC(t *testing.T) {
 			},
 		},
 		{
-			name:   "opencdc record update without before and with raw data",
+			name:   "update without before and with raw data",
 			config: map[string]string{"field": ".Payload.After"},
 			record: opencdc.Record{
 				Key:       opencdc.RawData("one-key-raw-data"),
@@ -491,7 +474,7 @@ func TestUnwrapOpenCDC(t *testing.T) {
 				},
 				Payload: opencdc.Change{
 					Before: nil,
-					After:  opencdc.RawData(OpenCDCRecordUpdateWithoutBeforePayload),
+					After:  opencdc.RawData(Record_Update_WithoutBefore),
 				},
 				Position: []byte("eyJHcm91cElEIjoiNGQ2ZTBhMjktNzAwZi00Yjk4LWEzY2MtZWUyNzZhZTc4MjVjIiwiVG9waWMiOiJzdHJlYW0tNzhscG5jaHg3dHpweXF6LWdlbmVyYXRvciIsIlBhcnRpdGlvbiI6MCwiT2Zmc2V0IjoyMjF9"),
 			},
