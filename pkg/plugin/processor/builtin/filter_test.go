@@ -28,6 +28,5 @@ func TestFilter_Process(t *testing.T) {
 	}
 	want := []sdk.ProcessedRecord{sdk.FilterRecord{}, sdk.FilterRecord{}}
 	output := proc.Process(context.Background(), records)
-	is.True(len(output) == 2)
 	is.Equal(output, want)
 }

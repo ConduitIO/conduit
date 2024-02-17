@@ -16,6 +16,7 @@ package builtin
 
 import (
 	"context"
+	"golang.org/x/exp/slices"
 	"strings"
 
 	"github.com/conduitio/conduit-commons/opencdc"
@@ -29,27 +30,30 @@ type renameField struct {
 	sdk.UnimplementedProcessor
 }
 
+var forbiddenFields = []string{MetadataReference, PayloadReference, PayloadBeforeReference, PayloadAfterReference,
+	PositionReference, KeyReference, OperationReference}
+
 func (p *renameField) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
 		Name:    "field.rename",
-		Summary: "rename a group of fields",
-		Description: "rename a group of fields. It is not allowed to rename top-level fields (.Operation, " +
-			".Position, .Key, .Metadata, .Payload.Before, .Payload.After), processor only runs on structured data.",
-		Version: "v1.0",
+		Summary: "Rename a group of fields",
+		Description: `Rename a group of field names to new names. It is not allowed to rename top-level fields (.Operation, .Position, 
+.Key, .Metadata, .Payload.Before, .Payload.After).
+Note that this processor only runs on structured data, if the record contains JSON data, then use the processor "decode.json" to parse it into structured data first.`,
+		Version: "v0.1.0",
 		Author:  "Meroxa, Inc.",
 		Parameters: map[string]sdk.Parameter{
 			"mapping": {
 				Default: "",
 				Type:    sdk.ParameterTypeString,
-				Description: "a comma separated list of keys and values, for fields and their new names, " +
-					"ex: .Metadata.key:id,.Payload.After.foo:bar",
+				Description: `A comma separated list of keys and values for fields and their new names (keys and values 
+are separated by columns ":"), ex: ".Metadata.key:id,.Payload.After.foo:bar".`,
 				Validations: []sdk.Validation{
 					{
 						Type: sdk.ValidationTypeRequired,
 					}, {
-						Type: sdk.ValidationTypeExclusion,
-						Value: MetadataReference + "," + PayloadReference + "," + PayloadBeforeReference + "," +
-							PayloadAfterReference + "," + PositionReference + KeyReference + "," + OperationReference,
+						Type:  sdk.ValidationTypeExclusion,
+						Value: strings.Join(forbiddenFields, ","),
 					},
 				},
 			},
@@ -72,8 +76,7 @@ func (p *renameField) Configure(_ context.Context, cfg map[string]string) error 
 				"ex: .Metadata.key:id,.Payload.After.foo:bar", "mapping")
 		}
 		key := strings.TrimSpace(parts[0])
-		if key == OperationReference || key == KeyReference || key == PayloadReference || key ==
-			PayloadBeforeReference || key == PayloadAfterReference || key == PositionReference || key == MetadataReference {
+		if slices.Contains(forbiddenFields, key) {
 			return cerrors.Errorf("cannot rename one of the top-level fields %q", key)
 		}
 		value := strings.TrimSpace(parts[1])
@@ -102,8 +105,8 @@ func (p *renameField) Process(_ context.Context, records []opencdc.Record) []sdk
 	return out
 }
 
-func (p *renameField) rename(record opencdc.Record, key, val string) error {
-	resolver1, err := sdk.NewReferenceResolver(key)
+func (p *renameField) rename(record opencdc.Record, oldName, newName string) error {
+	resolver1, err := sdk.NewReferenceResolver(oldName)
 	if err != nil {
 		return err
 	}
@@ -111,7 +114,7 @@ func (p *renameField) rename(record opencdc.Record, key, val string) error {
 	if err != nil {
 		return err
 	}
-	resolver2, err := sdk.NewReferenceResolver(p.getNameWithPrefix(val, key))
+	resolver2, err := sdk.NewReferenceResolver(p.getNameWithPrefix(newName, oldName))
 	if err != nil {
 		return err
 	}

@@ -27,12 +27,13 @@ type Filter struct {
 
 func (p *Filter) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
-		Name:        "filter",
-		Summary:     "acknowledges all records that get passed to the filter",
-		Description: "acknowledges all records that get passed to the filter",
-		Version:     "v1.0",
-		Author:      "Meroxa, Inc.",
-		Parameters:  map[string]sdk.Parameter{},
+		Name:    "filter",
+		Summary: "Acknowledges all records that get passed to the filter.",
+		Description: `Acknowledges all records that get passed to the filter, so the records will be filtered out if 
+the condition provided to the processor is evaluated to "true".`,
+		Version:    "v0.1.0",
+		Author:     "Meroxa, Inc.",
+		Parameters: map[string]sdk.Parameter{},
 	}, nil
 }
 

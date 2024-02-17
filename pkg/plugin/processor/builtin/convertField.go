@@ -35,18 +35,18 @@ type convertField struct {
 func (p *convertField) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
 		Name:    "field.convert",
-		Summary: "convert the type of a field",
-		Description: "convert takes the field of one type and converts it into another type (e.g. string to integer). " +
-			"The applicable types are string, int, float and bool. Converting can be done between any combination of " +
-			"types. Note that booleans will be converted to numeric values 1 (true) and 0 (false). Processor is only " +
-			"applicable to .Key, .Payload.Before and .Payload.After prefixes, and only applicable if said fields are structured data.",
-		Version: "v1.0",
+		Summary: "Convert the type of a field.",
+		Description: `Convert takes the field of one type and converts it into another type (e.g. string to integer). 
+The applicable types are string, int, float and bool. Converting can be done between any combination of types. Note that
+booleans will be converted to numeric values 1 (true) and 0 (false). Processor is only applicable to .Key, .Payload.Before
+and .Payload.After prefixes, and only applicable if said fields are structured data.`,
+		Version: "v0.1.0",
 		Author:  "Meroxa, Inc.",
 		Parameters: map[string]sdk.Parameter{
 			"field": {
 				Default:     "",
 				Type:        sdk.ParameterTypeString,
-				Description: "the target field, as it would be addressed in a Go template",
+				Description: "The target field, as it would be addressed in a Go template.",
 				Validations: []sdk.Validation{
 					{
 						Type: sdk.ValidationTypeRequired,
@@ -56,7 +56,7 @@ func (p *convertField) Specification() (sdk.Specification, error) {
 			"type": {
 				Default:     "",
 				Type:        sdk.ParameterTypeString,
-				Description: "the target field type after conversion",
+				Description: "The target field type after conversion.",
 				Validations: []sdk.Validation{
 					{
 						Type: sdk.ValidationTypeRequired,
@@ -75,10 +75,8 @@ func (p *convertField) Configure(_ context.Context, cfg map[string]string) error
 	if !ok {
 		return cerrors.Errorf("%w (%q)", ErrRequiredParamMissing, "field")
 	}
-	if !strings.HasPrefix(field, ".Payload.After") &&
-		!strings.HasPrefix(field, ".Payload.Before") &&
-		!strings.HasPrefix(field, ".Key") {
-		return cerrors.Errorf("processor is only applicable to .Key, .Payload.Before and .Payload.After prefixes.")
+	if !strings.HasPrefix(field, ".Payload") && !strings.HasPrefix(field, ".Key") {
+		return cerrors.Errorf("processor is only applicable to .Key and .Payload prefixes.")
 	}
 	typ, ok := cfg["type"]
 	if !ok {
@@ -119,27 +117,30 @@ func (p *convertField) Process(_ context.Context, records []opencdc.Record) []sd
 }
 
 func (p *convertField) stringToType(value, typ string) (any, error) {
-	var err error
-	var newVal any
 	switch typ {
 	case "string":
 		return value, nil
 	case "int":
-		if newVal, err = strconv.Atoi(value); err == nil {
-			return newVal, nil
+		newVal, err := strconv.Atoi(value)
+		if err != nil {
+			return nil, err
 		}
+		return newVal, nil
 	case "float":
-		if newVal, err = strconv.ParseFloat(value, 64); err == nil {
-			return newVal, nil
+		newVal, err := strconv.ParseFloat(value, 64)
+		if err != nil {
+			return nil, err
 		}
+		return newVal, nil
 	case "bool":
-		if newVal, err = strconv.ParseBool(value); err == nil {
-			return newVal, nil
+		newVal, err := strconv.ParseBool(value)
+		if err != nil {
+			return nil, err
 		}
+		return newVal, nil
 	default:
-		err = cerrors.Errorf("undefined type")
+		return nil, cerrors.Errorf("undefined type %q", typ)
 	}
-	return nil, err
 }
 
 func (p *convertField) toString(value any) string {
@@ -152,7 +153,7 @@ func (p *convertField) toString(value any) string {
 		return strconv.FormatFloat(v, 'f', -1, 64)
 	case bool:
 		if p.typ == "int" || p.typ == "float" {
-			return p.boolToString(v)
+			return p.boolToStringNumber(v)
 		}
 		return strconv.FormatBool(v)
 	default:
@@ -160,8 +161,11 @@ func (p *convertField) toString(value any) string {
 	}
 }
 
-func (p *convertField) boolToString(b bool) string {
-	return map[bool]string{true: "1", false: "0"}[b]
+func (p *convertField) boolToStringNumber(b bool) string {
+	if b {
+		return "1"
+	}
+	return "0"
 }
 
 func (p *convertField) Teardown(context.Context) error {

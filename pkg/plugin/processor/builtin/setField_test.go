@@ -32,7 +32,7 @@ func TestSetField_Process(t *testing.T) {
 		field  string
 		value  string
 		record opencdc.Record
-		want   opencdc.Record
+		want   sdk.SingleRecord
 	}{
 		{
 			field: ".Metadata.table",
@@ -40,7 +40,7 @@ func TestSetField_Process(t *testing.T) {
 			record: opencdc.Record{
 				Metadata: map[string]string{"table": "my-table"},
 			},
-			want: opencdc.Record{
+			want: sdk.SingleRecord{
 				Metadata: map[string]string{"table": "postgres"},
 			},
 		},
@@ -50,7 +50,7 @@ func TestSetField_Process(t *testing.T) {
 			record: opencdc.Record{
 				Operation: opencdc.OperationCreate,
 			},
-			want: opencdc.Record{
+			want: sdk.SingleRecord{
 				Operation: opencdc.OperationDelete,
 			},
 		}, {
@@ -64,7 +64,7 @@ func TestSetField_Process(t *testing.T) {
 					},
 				},
 			},
-			want: opencdc.Record{
+			want: sdk.SingleRecord{
 				Payload: opencdc.Change{
 					Before: nil,
 					After: opencdc.StructuredData{
@@ -81,11 +81,7 @@ func TestSetField_Process(t *testing.T) {
 			is.NoErr(err)
 			output := proc.Process(ctx, []opencdc.Record{tc.record})
 			is.True(len(output) == 1)
-			res, ok := output[0].(sdk.SingleRecord)
-			is.True(ok) // output record is not a sdk.SingleRecord type
-			is.Equal(res.Metadata, tc.want.Metadata)
-			is.Equal(res.Payload, tc.want.Payload)
-			is.Equal(res.Operation, tc.want.Operation)
+			is.Equal(output[0], tc.want)
 		})
 	}
 

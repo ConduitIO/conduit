@@ -39,7 +39,7 @@ func TestRenameField_Process(t *testing.T) {
 			},
 		},
 	}
-	want := opencdc.Record{
+	want := sdk.SingleRecord{
 		Metadata: map[string]string{"newKey": "val1", "key2": "val2"},
 		Payload: opencdc.Change{
 			Before: nil,
@@ -50,10 +50,7 @@ func TestRenameField_Process(t *testing.T) {
 	}
 	output := proc.Process(context.Background(), records)
 	is.True(len(output) == 1)
-	res, ok := output[0].(sdk.SingleRecord)
-	is.True(ok) // output record is not a sdk.SingleRecord type
-	is.Equal(res.Metadata, want.Metadata)
-	is.Equal(res.Payload.After, want.Payload.After)
+	is.Equal(output[0], want)
 }
 
 func TestRenameField_Configure(t *testing.T) {

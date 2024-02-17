@@ -16,7 +16,6 @@ package builtin
 
 import (
 	"context"
-
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -31,16 +30,17 @@ type setField struct {
 
 func (p *setField) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
-		Name:        "field.set",
-		Summary:     "set the value of a certain field",
-		Description: "set the value of a certain field, processor only runs on structured data.",
-		Version:     "v1.0",
-		Author:      "Meroxa, Inc.",
+		Name:    "field.set",
+		Summary: "Set the value of a certain field.",
+		Description: `Set the value of a certain field to any value. 
+Note that this processor only runs on structured data, if the record contains JSON data, then use the processor "decode.json" to parse it into structured data first.`,
+		Version: "v0.1.0",
+		Author:  "Meroxa, Inc.",
 		Parameters: map[string]sdk.Parameter{
 			"field": {
 				Default:     "",
 				Type:        sdk.ParameterTypeString,
-				Description: "the field to be set, use Go template format.",
+				Description: "The target field, as it would be addressed in a Go template.",
 				Validations: []sdk.Validation{
 					{
 						Type: sdk.ValidationTypeRequired,
@@ -50,7 +50,7 @@ func (p *setField) Specification() (sdk.Specification, error) {
 			"value": {
 				Default:     "",
 				Type:        sdk.ParameterTypeString,
-				Description: "new value to set the field to.",
+				Description: `A Go template expression which will be evaluated and stored in "field".`,
 				Validations: []sdk.Validation{
 					{
 						Type: sdk.ValidationTypeRequired,
@@ -91,7 +91,7 @@ func (p *setField) Process(_ context.Context, records []opencdc.Record) []sdk.Pr
 		if err != nil {
 			return append(out, sdk.ErrorRecord{Error: err})
 		}
-		err = ref.Set(p.value)
+		err = ref.Set(p.value) // todo: evaluate value
 		if err != nil {
 			return append(out, sdk.ErrorRecord{Error: err})
 		}

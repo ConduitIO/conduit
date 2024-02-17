@@ -32,7 +32,7 @@ func TestConvertField_Process(t *testing.T) {
 		field  string
 		typ    string
 		record opencdc.Record
-		want   opencdc.Record
+		want   sdk.SingleRecord
 	}{
 		{
 			name:  "string to int",
@@ -41,7 +41,7 @@ func TestConvertField_Process(t *testing.T) {
 			record: opencdc.Record{
 				Key: opencdc.StructuredData{"id": "54"},
 			},
-			want: opencdc.Record{
+			want: sdk.SingleRecord{
 				Key: opencdc.StructuredData{"id": 54},
 			},
 		}, {
@@ -51,7 +51,7 @@ func TestConvertField_Process(t *testing.T) {
 			record: opencdc.Record{
 				Key: opencdc.StructuredData{"id": "54"},
 			},
-			want: opencdc.Record{
+			want: sdk.SingleRecord{
 				Key: opencdc.StructuredData{"id": 54.0},
 			},
 		}, {
@@ -61,7 +61,7 @@ func TestConvertField_Process(t *testing.T) {
 			record: opencdc.Record{
 				Key: opencdc.StructuredData{"id": "1"},
 			},
-			want: opencdc.Record{
+			want: sdk.SingleRecord{
 				Key: opencdc.StructuredData{"id": true},
 			},
 		}, {
@@ -71,7 +71,7 @@ func TestConvertField_Process(t *testing.T) {
 			record: opencdc.Record{
 				Key: opencdc.StructuredData{"id": "54"},
 			},
-			want: opencdc.Record{
+			want: sdk.SingleRecord{
 				Key: opencdc.StructuredData{"id": "54"},
 			},
 		},
@@ -82,7 +82,7 @@ func TestConvertField_Process(t *testing.T) {
 			record: opencdc.Record{
 				Key: opencdc.StructuredData{"id": 54},
 			},
-			want: opencdc.Record{
+			want: sdk.SingleRecord{
 				Key: opencdc.StructuredData{"id": 54},
 			},
 		}, {
@@ -92,7 +92,7 @@ func TestConvertField_Process(t *testing.T) {
 			record: opencdc.Record{
 				Key: opencdc.StructuredData{"id": 54},
 			},
-			want: opencdc.Record{
+			want: sdk.SingleRecord{
 				Key: opencdc.StructuredData{"id": 54.0},
 			},
 		}, {
@@ -102,7 +102,7 @@ func TestConvertField_Process(t *testing.T) {
 			record: opencdc.Record{
 				Key: opencdc.StructuredData{"id": 1},
 			},
-			want: opencdc.Record{
+			want: sdk.SingleRecord{
 				Key: opencdc.StructuredData{"id": true},
 			},
 		}, {
@@ -112,7 +112,7 @@ func TestConvertField_Process(t *testing.T) {
 			record: opencdc.Record{
 				Key: opencdc.StructuredData{"id": 54},
 			},
-			want: opencdc.Record{
+			want: sdk.SingleRecord{
 				Key: opencdc.StructuredData{"id": "54"},
 			},
 		}, {
@@ -122,7 +122,7 @@ func TestConvertField_Process(t *testing.T) {
 			record: opencdc.Record{
 				Key: opencdc.StructuredData{"id": 54.0},
 			},
-			want: opencdc.Record{
+			want: sdk.SingleRecord{
 				Key: opencdc.StructuredData{"id": 54},
 			},
 		}, {
@@ -132,7 +132,7 @@ func TestConvertField_Process(t *testing.T) {
 			record: opencdc.Record{
 				Key: opencdc.StructuredData{"id": 54.0},
 			},
-			want: opencdc.Record{
+			want: sdk.SingleRecord{
 				Key: opencdc.StructuredData{"id": 54.0},
 			},
 		}, {
@@ -142,7 +142,7 @@ func TestConvertField_Process(t *testing.T) {
 			record: opencdc.Record{
 				Key: opencdc.StructuredData{"id": 1.0},
 			},
-			want: opencdc.Record{
+			want: sdk.SingleRecord{
 				Key: opencdc.StructuredData{"id": true},
 			},
 		}, {
@@ -152,7 +152,7 @@ func TestConvertField_Process(t *testing.T) {
 			record: opencdc.Record{
 				Key: opencdc.StructuredData{"id": 54.0},
 			},
-			want: opencdc.Record{
+			want: sdk.SingleRecord{
 				Key: opencdc.StructuredData{"id": "54"},
 			},
 		}, {
@@ -162,7 +162,7 @@ func TestConvertField_Process(t *testing.T) {
 			record: opencdc.Record{
 				Key: opencdc.StructuredData{"id": true},
 			},
-			want: opencdc.Record{
+			want: sdk.SingleRecord{
 				Key: opencdc.StructuredData{"id": 1},
 			},
 		}, {
@@ -172,7 +172,7 @@ func TestConvertField_Process(t *testing.T) {
 			record: opencdc.Record{
 				Key: opencdc.StructuredData{"id": false},
 			},
-			want: opencdc.Record{
+			want: sdk.SingleRecord{
 				Key: opencdc.StructuredData{"id": 0.0},
 			},
 		}, {
@@ -182,7 +182,7 @@ func TestConvertField_Process(t *testing.T) {
 			record: opencdc.Record{
 				Key: opencdc.StructuredData{"id": true},
 			},
-			want: opencdc.Record{
+			want: sdk.SingleRecord{
 				Key: opencdc.StructuredData{"id": true},
 			},
 		}, {
@@ -192,7 +192,7 @@ func TestConvertField_Process(t *testing.T) {
 			record: opencdc.Record{
 				Key: opencdc.StructuredData{"id": false},
 			},
-			want: opencdc.Record{
+			want: sdk.SingleRecord{
 				Key: opencdc.StructuredData{"id": "false"},
 			},
 		},
@@ -205,9 +205,7 @@ func TestConvertField_Process(t *testing.T) {
 			is.NoErr(err)
 			output := proc.Process(ctx, []opencdc.Record{tc.record})
 			is.True(len(output) == 1)
-			res, ok := output[0].(sdk.SingleRecord)
-			is.True(ok) // output record is not a sdk.SingleRecord type
-			is.Equal(res.Key, tc.want.Key)
+			is.Equal(output[0], tc.want)
 		})
 	}
 
