@@ -12,17 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package builtin
+//go:generate paramgen -output=http_paramgen.go httpConfig
+
+package webhook
 
 import (
 	"bytes"
 	"context"
 	"io"
-	"maps"
 	"net/http"
 	"reflect"
+	"strconv"
 	"time"
 
+	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -32,62 +35,49 @@ import (
 	"github.com/mitchellh/mapstructure"
 )
 
-var defaultWebhookHTTPConfig = map[string]string{
-	"request.method":      http.MethodPost,
-	"request.contentType": "application/json",
-
-	"backoffRetry.count":  "0",
-	"backoffRetry.factor": "2",
-	"backoffRetry.min":    "100ms",
-	"backoffRetry.max":    "5s",
-
-	"request.body":  ".",
-	"response.body": ".Payload.After",
-}
-
-type webhookHTTPConfig struct {
+type httpConfig struct {
 	// URL used in the HTTP request.
-	URL string `mapstructure:"request.url"`
+	URL string `json:"request.url" validate:"required"`
 	// HTTP request method to be used.
-	Method string `mapstructure:"request.method"`
+	Method string `json:"request.method" default:"POST"`
 	// Value of the Content-Type header.
-	ContentType string `mapstructure:"request.contentType"`
+	ContentType string `json:"request.contentType" default:"application/json"`
 
 	// Maximum number of retries for an individual record when backing off following an error.
-	// Defaults to 0.
-	BackoffRetryCount float64 `mapstructure:"backoffRetry.count"`
+	BackoffRetryCount float64 `json:"backoffRetry.count" default:"0"`
 	// The multiplying factor for each increment step.
-	// Default: 2.
-	BackoffRetryFactor float64 `mapstructure:"backoffRetry.factor"`
+	BackoffRetryFactor float64 `json:"backoffRetry.factor" default:"2"`
 	// Minimum waiting time before retrying.
-	// Default: 100ms
-	BackoffRetryMin time.Duration `mapstructure:"backoffRetry.min"`
+	BackoffRetryMin time.Duration `json:"backoffRetry.min" default:"100ms"`
 	// Maximum waiting time before retrying.
-	// Default: 5s
-	BackoffRetryMax time.Duration `mapstructure:"backoffRetry.max"`
+	BackoffRetryMax time.Duration `json:"backoffRetry.max" default:"5s"`
 
 	// RequestBodyRef specifies which field from the input record
 	// should be used as the body in the HTTP request.
 	// The value of this parameter should be a valid record field reference:
 	// See: sdk.NewReferenceResolver
-	RequestBodyRef *sdk.ReferenceResolver `mapstructure:"request.body"`
+	RequestBodyRef string `json:"request.body" default:"."`
 	// ResponseBodyRef specifies to which field should the
 	// response body be saved to.
 	// The value of this parameter should be a valid record field reference:
 	// See: sdk.NewReferenceResolver
-	ResponseBodyRef *sdk.ReferenceResolver `mapstructure:"response.body"`
+	ResponseBodyRef string `json:"response.body" default:".Payload.After"`
 	// ResponseStatusRef specifies to which field should the
 	// response status be saved to.
 	// The value of this parameter should be a valid record field reference:
 	// See: sdk.NewReferenceResolver
-	ResponseStatusRef *sdk.ReferenceResolver `mapstructure:"response.status"`
+	ResponseStatusRef string `json:"response.status"`
 }
 
 type webhookHTTP struct {
 	sdk.UnimplementedProcessor
 
 	logger log.CtxLogger
-	config webhookHTTPConfig
+	config httpConfig
+
+	requestBodyRef    *sdk.ReferenceResolver
+	responseBodyRef   *sdk.ReferenceResolver
+	responseStatusRef *sdk.ReferenceResolver
 }
 
 func NewWebhookHTTP(l log.CtxLogger) sdk.Processor {
@@ -107,20 +97,47 @@ Record.Payload.After. If the response code is (204 No Content) then the record w
 `,
 		Version:    "v0.1.0",
 		Author:     "Meroxa, Inc.",
-		Parameters: nil,
+		Parameters: httpConfig{}.Parameters(),
 	}, nil
 }
 
-func (w *webhookHTTP) Configure(_ context.Context, userCfgMap map[string]string) error {
-	cfgMap := w.withDefaultConfig(userCfgMap)
-	err := w.validateConfig(cfgMap)
+func (w *webhookHTTP) Configure(_ context.Context, m map[string]string) error {
+	cfg := httpConfig{}
+	inputCfg := config.Config(m).
+		Sanitize().
+		ApplyDefaults(cfg.Parameters())
+
+	err := inputCfg.Validate(cfg.Parameters())
 	if err != nil {
-		return cerrors.Errorf("configuration invalid: %w", err)
+		return cerrors.Errorf("invalid configuration: %w", err)
+	}
+	if inputCfg["response.body"] == inputCfg["response.status"] {
+		return cerrors.New("invalid configuration: response.body and response.status set to same field")
 	}
 
-	cfg, err := w.decodeConfig(cfgMap)
+	err = inputCfg.DecodeInto(&cfg)
 	if err != nil {
-		return cerrors.Errorf("failed parsing configuration: %w", err)
+		return cerrors.Errorf("failed decoding configuration: %w", err)
+	}
+
+	requestBodyRef, err := sdk.NewReferenceResolver(cfg.RequestBodyRef)
+	if err != nil {
+		return cerrors.Errorf("failed parsing request.body %v: %w", w.config.RequestBodyRef, err)
+	}
+	w.requestBodyRef = &requestBodyRef
+
+	responseBodyRef, err := sdk.NewReferenceResolver(cfg.ResponseBodyRef)
+	if err != nil {
+		return cerrors.Errorf("failed parsing response.body %v: %w", w.config.ResponseBodyRef, err)
+	}
+	w.responseBodyRef = &responseBodyRef
+
+	if cfg.ResponseStatusRef != "" {
+		responseStatusRef, err := sdk.NewReferenceResolver(cfg.ResponseStatusRef)
+		if err != nil {
+			return cerrors.Errorf("failed parsing response.status %v: %w", w.config.ResponseStatusRef, err)
+		}
+		w.responseStatusRef = &responseStatusRef
 	}
 
 	// preflight check
@@ -131,38 +148,6 @@ func (w *webhookHTTP) Configure(_ context.Context, userCfgMap map[string]string)
 	w.config = cfg
 
 	return nil
-}
-
-// withDefaultConfig merges the given configuration with the default one.
-func (w *webhookHTTP) withDefaultConfig(in map[string]string) map[string]string {
-	out := maps.Clone(defaultWebhookHTTPConfig)
-	maps.Copy(out, in)
-
-	return out
-}
-
-func (w *webhookHTTP) decodeConfig(cfgMap map[string]string) (webhookHTTPConfig, error) {
-	cfg := webhookHTTPConfig{}
-
-	decCfg := &mapstructure.DecoderConfig{
-		WeaklyTypedInput: true,
-		DecodeHook: mapstructure.ComposeDecodeHookFunc(
-			ToDurationDecoderHook(),
-			ToReferenceResolvedDecodeHook(),
-		),
-		Result: &cfg,
-	}
-	dec, err := mapstructure.NewDecoder(decCfg)
-	if err != nil {
-		return webhookHTTPConfig{}, cerrors.Errorf("failed creating new decoder: %w", err)
-	}
-
-	err = dec.Decode(cfgMap)
-	if err != nil {
-		return webhookHTTPConfig{}, cerrors.Errorf("failed decoding map: %w", err)
-	}
-
-	return cfg, nil
 }
 
 func (w *webhookHTTP) Open(context.Context) error {
@@ -248,11 +233,11 @@ func (w *webhookHTTP) processRecord(ctx context.Context, r opencdc.Record) sdk.P
 	}
 
 	// Set response body
-	err = w.setField(&r, w.config.ResponseBodyRef, opencdc.RawData(body))
+	err = w.setField(&r, w.responseBodyRef, opencdc.RawData(body))
 	if err != nil {
 		return sdk.ErrorRecord{Error: cerrors.Errorf("failed setting response body: %w", err)}
 	}
-	err = w.setField(&r, w.config.ResponseStatusRef, resp.StatusCode)
+	err = w.setField(&r, w.responseStatusRef, strconv.Itoa(resp.StatusCode))
 	if err != nil {
 		return sdk.ErrorRecord{Error: cerrors.Errorf("failed setting response status: %w", err)}
 	}
@@ -285,7 +270,7 @@ func (w *webhookHTTP) buildRequest(ctx context.Context, r opencdc.Record) (*http
 // requestBody returns the request body for the given record,
 // using the configured field reference (see: request.body configuration parameter).
 func (w *webhookHTTP) requestBody(r opencdc.Record) ([]byte, error) {
-	ref, err := w.config.RequestBodyRef.Resolve(&r)
+	ref, err := w.requestBodyRef.Resolve(&r)
 	if err != nil {
 		return nil, cerrors.Errorf("failed resolving request.body: %w", err)
 	}

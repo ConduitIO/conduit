@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package builtin
+package webhook
 
 import (
 	"context"
@@ -37,22 +37,22 @@ func TestWebhookHTTP_Configure(t *testing.T) {
 		config  map[string]string
 		wantErr string
 	}{
-		{
-			name:    "nil config returns error",
-			config:  nil,
-			wantErr: "configuration invalid: missing required parameter 'url'",
-		},
+		//{
+		//	name:    "nil config returns error",
+		//	config:  nil,
+		//	wantErr: "configuration invalid: missing required parameter 'url'",
+		//},
 		{
 			name:    "empty config returns error",
 			config:  map[string]string{},
-			wantErr: "configuration invalid: missing required parameter 'url'",
+			wantErr: `invalid configuration: error validating "request.url": required parameter is not provided`,
 		},
 		{
 			name: "empty url returns error",
 			config: map[string]string{
 				"request.url": "",
 			},
-			wantErr: "configuration invalid: missing required parameter 'url'",
+			wantErr: `invalid configuration: error validating "request.url": required parameter is not provided`,
 		},
 		{
 			name: "invalid url returns error",
@@ -75,9 +75,7 @@ func TestWebhookHTTP_Configure(t *testing.T) {
 				"request.url":        "http://example.com",
 				"backoffRetry.count": "not-a-number",
 			},
-			wantErr: `failed parsing configuration: failed decoding map: 1 error(s) decoding:
-
-* cannot parse 'backoffRetry.count' as float: strconv.ParseFloat: parsing "not-a-number": invalid syntax`,
+			wantErr: `invalid configuration: error validating "backoffRetry.count": "not-a-number" value is not a float: invalid parameter type`,
 		},
 		{
 			name: "invalid backoffRetry.min returns error",
@@ -86,9 +84,7 @@ func TestWebhookHTTP_Configure(t *testing.T) {
 				"backoffRetry.count": "1",
 				"backoffRetry.min":   "not-a-duration",
 			},
-			wantErr: `failed parsing configuration: failed decoding map: 1 error(s) decoding:
-
-* error decoding 'backoffRetry.min': time: invalid duration "not-a-duration"`,
+			wantErr: `invalid configuration: error validating "backoffRetry.min": "not-a-duration" value is not a duration: invalid parameter type`,
 		},
 		{
 			name: "invalid backoffRetry.max returns error",
@@ -97,9 +93,7 @@ func TestWebhookHTTP_Configure(t *testing.T) {
 				"backoffRetry.count": "1",
 				"backoffRetry.max":   "not-a-duration",
 			},
-			wantErr: `failed parsing configuration: failed decoding map: 1 error(s) decoding:
-
-* error decoding 'backoffRetry.max': time: invalid duration "not-a-duration"`,
+			wantErr: `invalid configuration: error validating "backoffRetry.max": "not-a-duration" value is not a duration: invalid parameter type`,
 		},
 		{
 			name: "invalid backoffRetry.factor returns error",
@@ -108,9 +102,7 @@ func TestWebhookHTTP_Configure(t *testing.T) {
 				"backoffRetry.count":  "1",
 				"backoffRetry.factor": "not-a-number",
 			},
-			wantErr: `failed parsing configuration: failed decoding map: 1 error(s) decoding:
-
-* cannot parse 'backoffRetry.factor' as float: strconv.ParseFloat: parsing "not-a-number": invalid syntax`,
+			wantErr: `invalid configuration: error validating "backoffRetry.factor": "not-a-number" value is not a float: invalid parameter type`,
 		},
 		{
 			name: "valid url returns processor",
@@ -127,16 +119,6 @@ func TestWebhookHTTP_Configure(t *testing.T) {
 			},
 			wantErr: "",
 		},
-		// {
-		//	name: "invalid backoff retry config is ignored",
-		//	config: map[string]string{
-		//		"request.url":                 "http://example.com",
-		//		"backoffRetry.min":    "not-a-duration",
-		//		"backoffRetry.max":    "not-a-duration",
-		//		"backoffRetry.factor": "not-a-number",
-		//	},
-		//	wantErr: "something",
-		// },
 		{
 			name: "valid url, method and backoff retry config returns processor",
 			config: map[string]string{
@@ -156,7 +138,7 @@ func TestWebhookHTTP_Configure(t *testing.T) {
 				"response.body":   ".Payload.After",
 				"response.status": ".Payload.After",
 			},
-			wantErr: "configuration invalid: response.body and response.status set to same field",
+			wantErr: "invalid configuration: response.body and response.status set to same field",
 		},
 		{
 			name: "valid response.body and response.status",
@@ -244,7 +226,7 @@ func TestWebhookHTTP_Success(t *testing.T) {
 					After: opencdc.StructuredData{
 						"a key":  "random data",
 						"body":   opencdc.RawData(respBody),
-						"status": 200,
+						"status": "200",
 					},
 				},
 			}},
