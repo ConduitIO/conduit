@@ -200,7 +200,7 @@ func TestConvertField_Process(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			is := is.New(t)
-			proc.typ = tc.typ
+			proc.config.Type = tc.typ
 			proc.referenceResolver, err = sdk.NewReferenceResolver(tc.field)
 			is.NoErr(err)
 			output := proc.Process(ctx, []opencdc.Record{tc.record})

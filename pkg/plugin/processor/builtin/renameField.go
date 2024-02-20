@@ -12,16 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//go:generate paramgen -output=renameField_paramgen.go renameFieldConfig
+
 package builtin
 
 import (
 	"context"
-	"golang.org/x/exp/slices"
 	"strings"
 
+	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"golang.org/x/exp/slices"
 )
 
 type renameField struct {
@@ -33,6 +36,12 @@ type renameField struct {
 var forbiddenFields = []string{MetadataReference, PayloadReference, PayloadBeforeReference, PayloadAfterReference,
 	PositionReference, KeyReference, OperationReference}
 
+type renameFieldConfig struct {
+	// Mapping A comma separated list of keys and values for fields and their new names (keys and values
+	// are separated by columns ":"), ex: ".Metadata.key:id,.Payload.After.foo:bar".
+	Mapping []string `json:"mapping" validate:"required"`
+}
+
 func (p *renameField) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
 		Name:    "field.rename",
@@ -40,36 +49,29 @@ func (p *renameField) Specification() (sdk.Specification, error) {
 		Description: `Rename a group of field names to new names. It is not allowed to rename top-level fields (.Operation, .Position, 
 .Key, .Metadata, .Payload.Before, .Payload.After).
 Note that this processor only runs on structured data, if the record contains JSON data, then use the processor "decode.json" to parse it into structured data first.`,
-		Version: "v0.1.0",
-		Author:  "Meroxa, Inc.",
-		Parameters: map[string]sdk.Parameter{
-			"mapping": {
-				Default: "",
-				Type:    sdk.ParameterTypeString,
-				Description: `A comma separated list of keys and values for fields and their new names (keys and values 
-are separated by columns ":"), ex: ".Metadata.key:id,.Payload.After.foo:bar".`,
-				Validations: []sdk.Validation{
-					{
-						Type: sdk.ValidationTypeRequired,
-					}, {
-						Type:  sdk.ValidationTypeExclusion,
-						Value: strings.Join(forbiddenFields, ","),
-					},
-				},
-			},
-		},
+		Version:    "v0.1.0",
+		Author:     "Meroxa, Inc.",
+		Parameters: renameFieldConfig{}.Parameters(),
 	}, nil
 }
 
-func (p *renameField) Configure(_ context.Context, cfg map[string]string) error {
-	list, ok := cfg["mapping"]
-	if !ok || list == "" {
-		return cerrors.Errorf("%w (%q)", ErrRequiredParamMissing, "mapping")
+func (p *renameField) Configure(_ context.Context, m map[string]string) error {
+	cfg := renameFieldConfig{}
+	inputCfg := config.Config(m).
+		Sanitize().
+		ApplyDefaults(cfg.Parameters())
+
+	err := inputCfg.Validate(cfg.Parameters())
+	if err != nil {
+		return cerrors.Errorf("invalid configuration: %w", err)
+	}
+	err = inputCfg.DecodeInto(&cfg)
+	if err != nil {
+		return cerrors.Errorf("failed decoding configuration: %w", err)
 	}
 
 	result := make(map[string]string)
-	pairs := strings.Split(list, ",")
-	for _, pair := range pairs {
+	for _, pair := range cfg.Mapping {
 		parts := strings.Split(pair, ":")
 		if len(parts) != 2 {
 			return cerrors.Errorf("wrong format for the %q param, should be a comma separated list of keys and values,"+

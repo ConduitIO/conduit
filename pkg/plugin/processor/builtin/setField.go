@@ -12,10 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//go:generate paramgen -output=setField_paramgen.go setFieldConfig
+
 package builtin
 
 import (
 	"context"
+
+	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -23,9 +27,16 @@ import (
 
 type setField struct {
 	referenceResolver sdk.ReferenceResolver
-	value             string
+	config            setFieldConfig
 
 	sdk.UnimplementedProcessor
+}
+
+type setFieldConfig struct {
+	// Field The target field, as it would be addressed in a Go template.
+	Field string `json:"field" validate:"required"`
+	// Value A Go template expression which will be evaluated and stored in "field".
+	Value string `json:"value" validate:"required"`
 }
 
 func (p *setField) Specification() (sdk.Specification, error) {
@@ -33,50 +44,34 @@ func (p *setField) Specification() (sdk.Specification, error) {
 		Name:    "field.set",
 		Summary: "Set the value of a certain field.",
 		Description: `Set the value of a certain field to any value. 
-Note that this processor only runs on structured data, if the record contains JSON data, then use the processor "decode.json" to parse it into structured data first.`,
-		Version: "v0.1.0",
-		Author:  "Meroxa, Inc.",
-		Parameters: map[string]sdk.Parameter{
-			"field": {
-				Default:     "",
-				Type:        sdk.ParameterTypeString,
-				Description: "The target field, as it would be addressed in a Go template.",
-				Validations: []sdk.Validation{
-					{
-						Type: sdk.ValidationTypeRequired,
-					},
-				},
-			},
-			"value": {
-				Default:     "",
-				Type:        sdk.ParameterTypeString,
-				Description: `A Go template expression which will be evaluated and stored in "field".`,
-				Validations: []sdk.Validation{
-					{
-						Type: sdk.ValidationTypeRequired,
-					},
-				},
-			},
-		},
+Note that this processor only runs on structured data, if the record contains JSON data, then use the processor
+"decode.json" to parse it into structured data first.`,
+		Version:    "v0.1.0",
+		Author:     "Meroxa, Inc.",
+		Parameters: setFieldConfig{}.Parameters(),
 	}, nil
 }
 
-func (p *setField) Configure(_ context.Context, cfg map[string]string) error {
-	field, ok := cfg["field"]
-	if !ok {
-		return cerrors.Errorf("%w (%q)", ErrRequiredParamMissing, "field")
+func (p *setField) Configure(_ context.Context, m map[string]string) error {
+	cfg := setFieldConfig{}
+	inputCfg := config.Config(m).
+		Sanitize().
+		ApplyDefaults(cfg.Parameters())
+
+	err := inputCfg.Validate(cfg.Parameters())
+	if err != nil {
+		return cerrors.Errorf("invalid configuration: %w", err)
 	}
-	value, ok := cfg["value"]
-	if !ok {
-		return cerrors.Errorf("%w (%q)", ErrRequiredParamMissing, "value")
+	err = inputCfg.DecodeInto(&cfg)
+	if err != nil {
+		return cerrors.Errorf("failed decoding configuration: %w", err)
 	}
-	resolver, err := sdk.NewReferenceResolver(field)
+	resolver, err := sdk.NewReferenceResolver(cfg.Field)
 	if err != nil {
 		return err
 	}
 	p.referenceResolver = resolver
-	p.value = value
-
+	p.config = cfg
 	return nil
 }
 
@@ -91,7 +86,7 @@ func (p *setField) Process(_ context.Context, records []opencdc.Record) []sdk.Pr
 		if err != nil {
 			return append(out, sdk.ErrorRecord{Error: err})
 		}
-		err = ref.Set(p.value) // todo: evaluate value
+		err = ref.Set(p.config.Value) // todo: evaluate value
 		if err != nil {
 			return append(out, sdk.ErrorRecord{Error: err})
 		}

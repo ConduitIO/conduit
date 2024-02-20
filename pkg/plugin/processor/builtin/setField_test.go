@@ -16,11 +16,11 @@ package builtin
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
-	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/matryer/is"
 )
 
@@ -29,14 +29,12 @@ func TestSetField_Process(t *testing.T) {
 	var err error
 	ctx := context.Background()
 	testCases := []struct {
-		field  string
-		value  string
+		config map[string]string
 		record opencdc.Record
 		want   sdk.SingleRecord
 	}{
 		{
-			field: ".Metadata.table",
-			value: "postgres",
+			config: map[string]string{"field": ".Metadata.table", "value": "postgres"},
 			record: opencdc.Record{
 				Metadata: map[string]string{"table": "my-table"},
 			},
@@ -45,8 +43,7 @@ func TestSetField_Process(t *testing.T) {
 			},
 		},
 		{
-			field: ".Operation",
-			value: "delete",
+			config: map[string]string{"field": ".Operation", "value": "delete"},
 			record: opencdc.Record{
 				Operation: opencdc.OperationCreate,
 			},
@@ -54,8 +51,7 @@ func TestSetField_Process(t *testing.T) {
 				Operation: opencdc.OperationDelete,
 			},
 		}, {
-			field: ".Payload.After.foo",
-			value: "new-val",
+			config: map[string]string{"field": ".Payload.After.foo", "value": "new-val"},
 			record: opencdc.Record{
 				Payload: opencdc.Change{
 					Before: nil,
@@ -74,10 +70,9 @@ func TestSetField_Process(t *testing.T) {
 			},
 		}}
 	for _, tc := range testCases {
-		t.Run(tc.field, func(t *testing.T) {
+		t.Run(tc.config["field"], func(t *testing.T) {
 			is := is.New(t)
-			proc.value = tc.value
-			proc.referenceResolver, err = sdk.NewReferenceResolver(tc.field)
+			err = proc.Configure(ctx, tc.config)
 			is.NoErr(err)
 			output := proc.Process(ctx, []opencdc.Record{tc.record})
 			is.True(len(output) == 1)
@@ -119,7 +114,7 @@ func TestSetField_Configure(t *testing.T) {
 			is := is.New(t)
 			err := proc.Configure(ctx, tc.cfg)
 			if tc.wantErr {
-				is.True(cerrors.Is(err, ErrRequiredParamMissing))
+				is.True(strings.Contains(err.Error(), "required parameter is not provided"))
 				return
 			}
 			is.NoErr(err)

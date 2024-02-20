@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//go:generate paramgen -output=convertField_paramgen.go convertFieldConfig
+
 package builtin
 
 import (
@@ -20,6 +22,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -27,9 +30,16 @@ import (
 
 type convertField struct {
 	referenceResolver sdk.ReferenceResolver
-	typ               string
+	config            convertFieldConfig
 
 	sdk.UnimplementedProcessor
+}
+
+type convertFieldConfig struct {
+	// Field The target field, as it would be addressed in a Go template.
+	Field string `json:"field" validate:"required"`
+	// Type The target field type after conversion.
+	Type string `json:"type" validate:"required,inclusion=string|int|float|bool"`
 }
 
 func (p *convertField) Specification() (sdk.Specification, error) {
@@ -40,58 +50,37 @@ func (p *convertField) Specification() (sdk.Specification, error) {
 The applicable types are string, int, float and bool. Converting can be done between any combination of types. Note that
 booleans will be converted to numeric values 1 (true) and 0 (false). Processor is only applicable to .Key, .Payload.Before
 and .Payload.After prefixes, and only applicable if said fields are structured data.`,
-		Version: "v0.1.0",
-		Author:  "Meroxa, Inc.",
-		Parameters: map[string]sdk.Parameter{
-			"field": {
-				Default:     "",
-				Type:        sdk.ParameterTypeString,
-				Description: "The target field, as it would be addressed in a Go template.",
-				Validations: []sdk.Validation{
-					{
-						Type: sdk.ValidationTypeRequired,
-					},
-				},
-			},
-			"type": {
-				Default:     "",
-				Type:        sdk.ParameterTypeString,
-				Description: "The target field type after conversion.",
-				Validations: []sdk.Validation{
-					{
-						Type: sdk.ValidationTypeRequired,
-					}, {
-						Type:  sdk.ValidationTypeInclusion,
-						Value: "string,int,float,bool",
-					},
-				},
-			},
-		},
+		Version:    "v0.1.0",
+		Author:     "Meroxa, Inc.",
+		Parameters: convertFieldConfig{}.Parameters(),
 	}, nil
 }
 
-func (p *convertField) Configure(_ context.Context, cfg map[string]string) error {
-	field, ok := cfg["field"]
-	if !ok {
-		return cerrors.Errorf("%w (%q)", ErrRequiredParamMissing, "field")
+func (p *convertField) Configure(_ context.Context, m map[string]string) error {
+
+	cfg := convertFieldConfig{}
+	inputCfg := config.Config(m).
+		Sanitize().
+		ApplyDefaults(cfg.Parameters())
+
+	err := inputCfg.Validate(cfg.Parameters())
+	if err != nil {
+		return cerrors.Errorf("invalid configuration: %w", err)
 	}
-	if !strings.HasPrefix(field, ".Payload") && !strings.HasPrefix(field, ".Key") {
+	err = inputCfg.DecodeInto(&cfg)
+	if err != nil {
+		return cerrors.Errorf("failed decoding configuration: %w", err)
+	}
+	if !strings.HasPrefix(cfg.Field, ".Payload") && !strings.HasPrefix(cfg.Field, ".Key") {
 		return cerrors.Errorf("processor is only applicable to .Key and .Payload prefixes.")
 	}
-	typ, ok := cfg["type"]
-	if !ok {
-		return cerrors.Errorf("%w (%q)", ErrRequiredParamMissing, "type")
-	}
-	if typ != "float" && typ != "int" && typ != "bool" && typ != "string" {
-		return cerrors.Errorf("invalid type %q, applicable types are string, int, float and bool", typ)
-	}
-	resolver, err := sdk.NewReferenceResolver(field)
+
+	resolver, err := sdk.NewReferenceResolver(cfg.Field)
 	if err != nil {
 		return err
 	}
 	p.referenceResolver = resolver
-	p.typ = typ
-
+	p.config = cfg
 	return nil
 }
 
@@ -106,7 +95,7 @@ func (p *convertField) Process(_ context.Context, records []opencdc.Record) []sd
 		if err != nil {
 			return append(out, sdk.ErrorRecord{Error: err})
 		}
-		newVal, err := p.stringToType(p.toString(ref.Get()), p.typ)
+		newVal, err := p.stringToType(p.toString(ref.Get()), p.config.Type)
 		if err != nil {
 			return append(out, sdk.ErrorRecord{Error: err})
 		}
@@ -152,7 +141,7 @@ func (p *convertField) toString(value any) string {
 	case float64:
 		return strconv.FormatFloat(v, 'f', -1, 64)
 	case bool:
-		if p.typ == "int" || p.typ == "float" {
+		if p.config.Type == "int" || p.config.Type == "float" {
 			return p.boolToStringNumber(v)
 		}
 		return strconv.FormatBool(v)

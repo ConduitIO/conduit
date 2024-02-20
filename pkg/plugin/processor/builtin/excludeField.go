@@ -12,24 +12,31 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//go:generate paramgen -output=excludeField_paramgen.go excludeFieldConfig
+
 package builtin
 
 import (
 	"context"
-	"strings"
 
+	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 )
 
-type excludeFields struct {
-	fields []string
+type excludeField struct {
+	config excludeFieldConfig
 
 	sdk.UnimplementedProcessor
 }
 
-func (p *excludeFields) Specification() (sdk.Specification, error) {
+type excludeFieldConfig struct {
+	// Fields to be excluded from the record, as it would be addressed in a Go template, as a comma separated list.
+	Fields []string `json:"fields" validate:"required"`
+}
+
+func (p *excludeField) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
 		Name: "field.subset.exclude",
 		Summary: `Remove a subset of fields from the record, all the other fields are left untouched. 
@@ -39,44 +46,42 @@ Note that this processor only runs on structured data, if the record contains JS
 		Description: "Remove a subset of fields from the record.",
 		Version:     "v0.1.0",
 		Author:      "Meroxa, Inc.",
-		Parameters: map[string]sdk.Parameter{
-			"fields": {
-				Default:     "",
-				Type:        sdk.ParameterTypeString,
-				Description: "Fields to be excluded from the record.",
-				Validations: []sdk.Validation{
-					{
-						Type: sdk.ValidationTypeRequired,
-					},
-				},
-			},
-		},
+		Parameters:  excludeFieldConfig{}.Parameters(),
 	}, nil
 }
 
-func (p *excludeFields) Configure(_ context.Context, cfg map[string]string) error {
-	fields, ok := cfg["fields"]
-	if !ok {
-		return cerrors.Errorf("%w (%q)", ErrRequiredParamMissing, "fields")
+func (p *excludeField) Configure(_ context.Context, m map[string]string) error {
+	cfg := excludeFieldConfig{}
+	inputCfg := config.Config(m).
+		Sanitize().
+		ApplyDefaults(cfg.Parameters())
+
+	err := inputCfg.Validate(cfg.Parameters())
+	if err != nil {
+		return cerrors.Errorf("invalid configuration: %w", err)
 	}
-	p.fields = strings.Split(fields, ",")
-	for _, field := range p.fields {
+	err = inputCfg.DecodeInto(&cfg)
+	if err != nil {
+		return cerrors.Errorf("failed decoding configuration: %w", err)
+	}
+
+	for _, field := range cfg.Fields {
 		if field == PositionReference || field == OperationReference {
 			return cerrors.Errorf("it is not allowed to exclude the fields %q and %q", OperationReference, PositionReference)
 		}
 	}
-
+	p.config = cfg
 	return nil
 }
 
-func (p *excludeFields) Open(context.Context) error {
+func (p *excludeField) Open(context.Context) error {
 	return nil
 }
 
-func (p *excludeFields) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
+func (p *excludeField) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 	out := make([]sdk.ProcessedRecord, 0, len(records))
 	for _, record := range records {
-		for _, field := range p.fields {
+		for _, field := range p.config.Fields {
 			resolver, err := sdk.NewReferenceResolver(field)
 			if err != nil {
 				return append(out, sdk.ErrorRecord{Error: err})
@@ -95,6 +100,6 @@ func (p *excludeFields) Process(_ context.Context, records []opencdc.Record) []s
 	return out
 }
 
-func (p *excludeFields) Teardown(context.Context) error {
+func (p *excludeField) Teardown(context.Context) error {
 	return nil
 }

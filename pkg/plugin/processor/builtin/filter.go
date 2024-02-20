@@ -17,6 +17,7 @@ package builtin
 import (
 	"context"
 
+	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 )
@@ -33,7 +34,7 @@ func (p *Filter) Specification() (sdk.Specification, error) {
 the condition provided to the processor is evaluated to "true".`,
 		Version:    "v0.1.0",
 		Author:     "Meroxa, Inc.",
-		Parameters: map[string]sdk.Parameter{},
+		Parameters: map[string]config.Parameter{},
 	}, nil
 }
 
