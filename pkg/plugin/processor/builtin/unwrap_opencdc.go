@@ -118,7 +118,7 @@ func (u *unwrapOpenCDC) processRecord(rec opencdc.Record) sdk.ProcessedRecord {
 		return sdk.ErrorRecord{Error: cerrors.Errorf("unexpected data type %T", v)}
 	}
 
-	opencdcRec, err := u.UnmarshalRecord(data)
+	opencdcRec, err := u.unmarshalRecord(data)
 	if err != nil {
 		return sdk.ErrorRecord{Error: cerrors.Errorf("failed unmarshaling record: %w", err)}
 	}
@@ -133,23 +133,23 @@ func (u *unwrapOpenCDC) Teardown(context.Context) error {
 	return nil
 }
 
-func (u *unwrapOpenCDC) UnmarshalRecord(structData opencdc.StructuredData) (opencdc.Record, error) {
-	operation, err := u.UnmarshalOperation(structData)
+func (u *unwrapOpenCDC) unmarshalRecord(structData opencdc.StructuredData) (opencdc.Record, error) {
+	operation, err := u.unmarshalOperation(structData)
 	if err != nil {
 		return opencdc.Record{}, err
 	}
 
-	metadata, err := u.UnmarshalMetadata(structData)
+	metadata, err := u.unmarshalMetadata(structData)
 	if err != nil {
 		return opencdc.Record{}, err
 	}
 
-	key, err := u.UnmarshalKey(structData)
+	key, err := u.unmarshalKey(structData)
 	if err != nil {
 		return opencdc.Record{}, err
 	}
 
-	payload, err := u.UnmarshalPayload(structData)
+	payload, err := u.unmarshalPayload(structData)
 	if err != nil {
 		return opencdc.Record{}, err
 	}
@@ -162,8 +162,8 @@ func (u *unwrapOpenCDC) UnmarshalRecord(structData opencdc.StructuredData) (open
 	}, nil
 }
 
-// UnmarshalOperation extracts operation from a structuredData record.
-func (u *unwrapOpenCDC) UnmarshalOperation(structData opencdc.StructuredData) (opencdc.Operation, error) {
+// unmarshalOperation extracts operation from a structuredData record.
+func (u *unwrapOpenCDC) unmarshalOperation(structData opencdc.StructuredData) (opencdc.Operation, error) {
 	var operation opencdc.Operation
 	op, ok := structData["operation"]
 	if !ok {
@@ -183,8 +183,8 @@ func (u *unwrapOpenCDC) UnmarshalOperation(structData opencdc.StructuredData) (o
 	return operation, nil
 }
 
-// UnmarshalMetadata extracts metadata from a structuredData record.
-func (u *unwrapOpenCDC) UnmarshalMetadata(structData opencdc.StructuredData) (opencdc.Metadata, error) {
+// unmarshalMetadata extracts metadata from a structuredData record.
+func (u *unwrapOpenCDC) unmarshalMetadata(structData opencdc.StructuredData) (opencdc.Metadata, error) {
 	var metadata opencdc.Metadata
 	meta, ok := structData["metadata"]
 	if !ok {
@@ -205,8 +205,8 @@ func (u *unwrapOpenCDC) UnmarshalMetadata(structData opencdc.StructuredData) (op
 	return metadata, nil
 }
 
-// UnmarshalKey extracts key from a structuredData record.
-func (u *unwrapOpenCDC) UnmarshalKey(structData opencdc.StructuredData) (opencdc.Data, error) {
+// unmarshalKey extracts key from a structuredData record.
+func (u *unwrapOpenCDC) unmarshalKey(structData opencdc.StructuredData) (opencdc.Data, error) {
 	var key opencdc.Data
 	ky, ok := structData["key"]
 	if !ok {
@@ -257,8 +257,8 @@ func (u *unwrapOpenCDC) convertPayloadData(payload map[string]interface{}, key s
 	}
 }
 
-// UnmarshalPayload extracts payload from a structuredData record.
-func (u *unwrapOpenCDC) UnmarshalPayload(structData opencdc.StructuredData) (opencdc.Change, error) {
+// unmarshalPayload extracts payload from a structuredData record.
+func (u *unwrapOpenCDC) unmarshalPayload(structData opencdc.StructuredData) (opencdc.Change, error) {
 	var payload opencdc.Change
 	pl, ok := structData["payload"]
 	if !ok {
