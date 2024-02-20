@@ -37,11 +37,11 @@ func TestWebhookHTTP_Configure(t *testing.T) {
 		config  map[string]string
 		wantErr string
 	}{
-		//{
-		//	name:    "nil config returns error",
-		//	config:  nil,
-		//	wantErr: "configuration invalid: missing required parameter 'url'",
-		//},
+		// {
+		// name:    "nil config returns error",
+		// config:  nil,
+		// wantErr: "configuration invalid: missing required parameter 'url'",
+		// },
 		{
 			name:    "empty config returns error",
 			config:  map[string]string{},

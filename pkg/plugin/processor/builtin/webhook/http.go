@@ -69,7 +69,7 @@ type httpConfig struct {
 	ResponseStatusRef string `json:"response.status"`
 }
 
-type webhookHTTP struct {
+type httpProcessor struct {
 	sdk.UnimplementedProcessor
 
 	logger log.CtxLogger
@@ -81,10 +81,10 @@ type webhookHTTP struct {
 }
 
 func NewWebhookHTTP(l log.CtxLogger) sdk.Processor {
-	return &webhookHTTP{logger: l.WithComponent("builtin.webhookHTTP")}
+	return &httpProcessor{logger: l.WithComponent("builtin.httpProcessor")}
 }
 
-func (w *webhookHTTP) Specification() (sdk.Specification, error) {
+func (p *httpProcessor) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
 		Name:    "webhook.http",
 		Summary: "HTTP webhook processor",
@@ -101,7 +101,7 @@ Record.Payload.After. If the response code is (204 No Content) then the record w
 	}, nil
 }
 
-func (w *webhookHTTP) Configure(_ context.Context, m map[string]string) error {
+func (p *httpProcessor) Configure(_ context.Context, m map[string]string) error {
 	cfg := httpConfig{}
 	inputCfg := config.Config(m).
 		Sanitize().
@@ -122,22 +122,22 @@ func (w *webhookHTTP) Configure(_ context.Context, m map[string]string) error {
 
 	requestBodyRef, err := sdk.NewReferenceResolver(cfg.RequestBodyRef)
 	if err != nil {
-		return cerrors.Errorf("failed parsing request.body %v: %w", w.config.RequestBodyRef, err)
+		return cerrors.Errorf("failed parsing request.body %v: %w", p.config.RequestBodyRef, err)
 	}
-	w.requestBodyRef = &requestBodyRef
+	p.requestBodyRef = &requestBodyRef
 
 	responseBodyRef, err := sdk.NewReferenceResolver(cfg.ResponseBodyRef)
 	if err != nil {
-		return cerrors.Errorf("failed parsing response.body %v: %w", w.config.ResponseBodyRef, err)
+		return cerrors.Errorf("failed parsing response.body %v: %w", p.config.ResponseBodyRef, err)
 	}
-	w.responseBodyRef = &responseBodyRef
+	p.responseBodyRef = &responseBodyRef
 
 	if cfg.ResponseStatusRef != "" {
 		responseStatusRef, err := sdk.NewReferenceResolver(cfg.ResponseStatusRef)
 		if err != nil {
-			return cerrors.Errorf("failed parsing response.status %v: %w", w.config.ResponseStatusRef, err)
+			return cerrors.Errorf("failed parsing response.status %v: %w", p.config.ResponseStatusRef, err)
 		}
-		w.responseStatusRef = &responseStatusRef
+		p.responseStatusRef = &responseStatusRef
 	}
 
 	// preflight check
@@ -145,42 +145,42 @@ func (w *webhookHTTP) Configure(_ context.Context, m map[string]string) error {
 	if err != nil {
 		return cerrors.Errorf("configuration check failed: %w", err)
 	}
-	w.config = cfg
+	p.config = cfg
 
 	return nil
 }
 
-func (w *webhookHTTP) Open(context.Context) error {
+func (p *httpProcessor) Open(context.Context) error {
 	return nil
 }
 
-func (w *webhookHTTP) Process(ctx context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
+func (p *httpProcessor) Process(ctx context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 	out := make([]sdk.ProcessedRecord, len(records))
 	for i, rec := range records {
-		out[i] = w.processRecordWithBackOff(ctx, rec)
+		out[i] = p.processRecordWithBackOff(ctx, rec)
 	}
 
 	return out
 }
 
-func (w *webhookHTTP) processRecordWithBackOff(ctx context.Context, r opencdc.Record) sdk.ProcessedRecord {
+func (p *httpProcessor) processRecordWithBackOff(ctx context.Context, r opencdc.Record) sdk.ProcessedRecord {
 	b := &backoff.Backoff{
-		Factor: w.config.BackoffRetryFactor,
-		Min:    w.config.BackoffRetryMin,
-		Max:    w.config.BackoffRetryMax,
+		Factor: p.config.BackoffRetryFactor,
+		Min:    p.config.BackoffRetryMin,
+		Max:    p.config.BackoffRetryMax,
 	}
 
 	for {
-		processed := w.processRecord(ctx, r)
+		processed := p.processRecord(ctx, r)
 		errRec, isErr := processed.(sdk.ErrorRecord)
 		attempt := b.Attempt()
 		duration := b.Duration()
 
-		if isErr && attempt < w.config.BackoffRetryCount {
-			w.logger.Debug(ctx).
+		if isErr && attempt < p.config.BackoffRetryCount {
+			p.logger.Debug(ctx).
 				Err(errRec.Error).
 				Float64("attempt", attempt).
-				Float64("backoffRetry.count", w.config.BackoffRetryCount).
+				Float64("backoffRetry.count", p.config.BackoffRetryCount).
 				Int64("backoffRetry.duration", duration.Milliseconds()).
 				Msg("retrying HTTP request")
 
@@ -193,14 +193,14 @@ func (w *webhookHTTP) processRecordWithBackOff(ctx context.Context, r opencdc.Re
 }
 
 // processRecord processes a single record (without retries)
-func (w *webhookHTTP) processRecord(ctx context.Context, r opencdc.Record) sdk.ProcessedRecord {
+func (p *httpProcessor) processRecord(ctx context.Context, r opencdc.Record) sdk.ProcessedRecord {
 	var key []byte
 	if r.Key != nil {
 		key = r.Key.Bytes()
 	}
-	w.logger.Trace(ctx).Bytes("record_key", key).Msg("processing record")
+	p.logger.Trace(ctx).Bytes("record_key", key).Msg("processing record")
 
-	req, err := w.buildRequest(ctx, r)
+	req, err := p.buildRequest(ctx, r)
 	if err != nil {
 		return sdk.ErrorRecord{Error: cerrors.Errorf("cannot create HTTP request: %w", err)}
 	}
@@ -212,7 +212,7 @@ func (w *webhookHTTP) processRecord(ctx context.Context, r opencdc.Record) sdk.P
 	defer func() {
 		errClose := resp.Body.Close()
 		if errClose != nil {
-			w.logger.Debug(ctx).
+			p.logger.Debug(ctx).
 				Err(errClose).
 				Msg("failed closing response body (possible resource leak)")
 		}
@@ -233,11 +233,11 @@ func (w *webhookHTTP) processRecord(ctx context.Context, r opencdc.Record) sdk.P
 	}
 
 	// Set response body
-	err = w.setField(&r, w.responseBodyRef, opencdc.RawData(body))
+	err = p.setField(&r, p.responseBodyRef, opencdc.RawData(body))
 	if err != nil {
 		return sdk.ErrorRecord{Error: cerrors.Errorf("failed setting response body: %w", err)}
 	}
-	err = w.setField(&r, w.responseStatusRef, strconv.Itoa(resp.StatusCode))
+	err = p.setField(&r, p.responseStatusRef, strconv.Itoa(resp.StatusCode))
 	if err != nil {
 		return sdk.ErrorRecord{Error: cerrors.Errorf("failed setting response status: %w", err)}
 	}
@@ -245,16 +245,16 @@ func (w *webhookHTTP) processRecord(ctx context.Context, r opencdc.Record) sdk.P
 	return sdk.SingleRecord(r)
 }
 
-func (w *webhookHTTP) buildRequest(ctx context.Context, r opencdc.Record) (*http.Request, error) {
-	reqBody, err := w.requestBody(r)
+func (p *httpProcessor) buildRequest(ctx context.Context, r opencdc.Record) (*http.Request, error) {
+	reqBody, err := p.requestBody(r)
 	if err != nil {
 		return nil, cerrors.Errorf("failed getting request body: %w", err)
 	}
 
 	req, err := http.NewRequestWithContext(
 		ctx,
-		w.config.Method,
-		w.config.URL,
+		p.config.Method,
+		p.config.URL,
 		bytes.NewReader(reqBody),
 	)
 	if err != nil {
@@ -262,15 +262,15 @@ func (w *webhookHTTP) buildRequest(ctx context.Context, r opencdc.Record) (*http
 	}
 
 	// todo make it possible to add more headers, e.g. auth headers etc.
-	req.Header.Set("Content-Type", w.config.ContentType)
+	req.Header.Set("Content-Type", p.config.ContentType)
 
 	return req, nil
 }
 
 // requestBody returns the request body for the given record,
 // using the configured field reference (see: request.body configuration parameter).
-func (w *webhookHTTP) requestBody(r opencdc.Record) ([]byte, error) {
-	ref, err := w.requestBodyRef.Resolve(&r)
+func (p *httpProcessor) requestBody(r opencdc.Record) ([]byte, error) {
+	ref, err := p.requestBodyRef.Resolve(&r)
 	if err != nil {
 		return nil, cerrors.Errorf("failed resolving request.body: %w", err)
 	}
@@ -285,17 +285,7 @@ func (w *webhookHTTP) requestBody(r opencdc.Record) ([]byte, error) {
 	return json.Marshal(val)
 }
 
-func (w *webhookHTTP) validateConfig(cfg map[string]string) error {
-	if cfg["request.url"] == "" {
-		return cerrors.Errorf("missing required parameter 'url'")
-	}
-	if cfg["response.body"] == cfg["response.status"] {
-		return cerrors.Errorf("response.body and response.status set to same field")
-	}
-	return nil
-}
-
-func (w *webhookHTTP) setField(r *opencdc.Record, refRes *sdk.ReferenceResolver, data any) error {
+func (p *httpProcessor) setField(r *opencdc.Record, refRes *sdk.ReferenceResolver, data any) error {
 	if refRes == nil {
 		return nil
 	}
@@ -345,6 +335,6 @@ func ToReferenceResolvedDecodeHook() mapstructure.DecodeHookFunc {
 	}
 }
 
-func (w *webhookHTTP) Teardown(context.Context) error {
+func (p *httpProcessor) Teardown(context.Context) error {
 	return nil
 }
