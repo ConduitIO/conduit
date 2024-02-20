@@ -67,7 +67,7 @@ func (httpConfig) Parameters() map[string]config.Parameter {
 		},
 		"response.status": {
 			Default:     "",
-			Description: "response.status specifies to which field should the response status be saved to. The value of this parameter should be a valid record field reference: See: sdk.NewReferenceResolver",
+			Description: "response.status specifies to which field should the response status be saved to. The value of this parameter should be a valid record field reference. If no value is set, then the response status will NOT be saved. See: sdk.NewReferenceResolver",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},
