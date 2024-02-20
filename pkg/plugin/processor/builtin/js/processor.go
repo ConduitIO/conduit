@@ -19,6 +19,7 @@ import (
 	"os"
 	"sync"
 
+	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -77,10 +78,10 @@ func (p *processor) Specification() (sdk.Specification, error) {
 		Description: "A JavaScript processor for Conduit",
 		Version:     "v0.1.0",
 		Author:      "Meroxa, Inc.",
-		Parameters: map[string]sdk.Parameter{
+		Parameters: map[string]config.Parameter{
 			"script": {
 				Default: "",
-				Type:    sdk.ParameterTypeString,
+				Type:    config.ParameterTypeString,
 				Description: `
 JavaScript code for this processor. It needs to have a function 'process()' that
 accepts an array of records and returns an array of processed records.
@@ -98,7 +99,7 @@ The processed record can be one of the following:
 			},
 			"script.path": {
 				Default:     "",
-				Type:        sdk.ParameterTypeString,
+				Type:        config.ParameterTypeString,
 				Description: "Path to a .js file containing the processor code.",
 				Validations: nil,
 			},

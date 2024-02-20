@@ -17,6 +17,7 @@ package standalone
 import (
 	"fmt"
 
+	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	opencdcv1 "github.com/conduitio/conduit-commons/proto/opencdc/v1"
 	sdk "github.com/conduitio/conduit-processor-sdk"
@@ -27,49 +28,21 @@ import (
 // protoConverter converts between the SDK and protobuf types.
 type protoConverter struct{}
 
-func (c protoConverter) specification(resp *processorv1.Specify_Response) sdk.Specification {
+func (c protoConverter) specification(resp *processorv1.Specify_Response) (sdk.Specification, error) {
+	params := make(config.Parameters, len(resp.Parameters))
+	err := params.FromProto(resp.Parameters)
+	if err != nil {
+		return sdk.Specification{}, err
+	}
+
 	return sdk.Specification{
 		Name:        resp.Name,
 		Summary:     resp.Summary,
 		Description: resp.Description,
 		Version:     resp.Version,
 		Author:      resp.Author,
-		Parameters:  c.specificationParameters(resp.Parameters),
-	}
-}
-
-func (c protoConverter) specificationParameters(in map[string]*processorv1.Specify_Parameter) map[string]sdk.Parameter {
-	if in == nil {
-		return nil
-	}
-
-	out := make(map[string]sdk.Parameter, len(in))
-	for name, param := range in {
-		out[name] = sdk.Parameter{
-			Default:     param.Default,
-			Type:        sdk.ParameterType(param.Type),
-			Description: param.Description,
-			Validations: c.specificationParameterValidations(param.Validations),
-		}
-	}
-
-	return out
-}
-
-func (c protoConverter) specificationParameterValidations(in []*processorv1.Specify_Parameter_Validation) []sdk.Validation {
-	if in == nil {
-		return nil
-	}
-
-	out := make([]sdk.Validation, len(in))
-	for i, v := range in {
-		out[i] = sdk.Validation{
-			Type:  sdk.ValidationType(v.Type),
-			Value: v.Value,
-		}
-	}
-
-	return out
+		Parameters:  params,
+	}, nil
 }
 
 func (c protoConverter) records(in []opencdc.Record) ([]*opencdcv1.Record, error) {
