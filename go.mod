@@ -32,7 +32,6 @@ require (
 	github.com/jackc/pgx/v5 v5.5.2
 	github.com/jpillora/backoff v1.0.0
 	github.com/matryer/is v1.4.1
-	github.com/mitchellh/mapstructure v1.5.0
 	github.com/peterbourgon/ff/v3 v3.4.0
 	github.com/piotrkowalczuk/promgrpc/v4 v4.1.2
 	github.com/prometheus/client_golang v1.18.0
@@ -230,6 +229,7 @@ require (
 	github.com/mitchellh/copystructure v1.2.0 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/mitchellh/go-testing-interface v1.14.1 // indirect
+	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect
 	github.com/moby/term v0.5.0 // indirect
 	github.com/moricho/tparallel v0.3.1 // indirect
