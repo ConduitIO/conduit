@@ -132,7 +132,51 @@ const RecordCreate = `{
         }
       }`
 
-func TestUnwrapOpenCDC(t *testing.T) {
+func TestUnwrapOpenCDC_Configure(t *testing.T) {
+	testCases := []struct {
+		name    string
+		in      map[string]string
+		wantErr string
+	}{
+		{
+			name:    "no field",
+			in:      map[string]string{},
+			wantErr: "missing required parameter 'field'",
+		},
+		{
+			name:    "only fields in .Payload are allowed",
+			in:      map[string]string{"field": ".Metadata"},
+			wantErr: "only payload can be unwrapped, field given: .Metadata",
+		},
+		{
+			name:    "invalid field",
+			in:      map[string]string{"field": ".Payload.Something"},
+			wantErr: `invalid reference: invalid reference ".Payload.Something": unexpected field "Something": cannot resolve reference`,
+		},
+		{
+			name:    "valid field",
+			in:      map[string]string{"field": ".Payload.After"},
+			wantErr: "",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			is := is.New(t)
+
+			underTest := newUnwrapOpenCDC(log.Test(t))
+			gotErr := underTest.Configure(context.Background(), tc.in)
+			if tc.wantErr == "" {
+				is.NoErr(gotErr)
+			} else {
+				is.True(gotErr != nil)
+				is.Equal(tc.wantErr, gotErr.Error())
+			}
+		})
+	}
+}
+
+func TestUnwrapOpenCDC_Process(t *testing.T) {
 	tests := []struct {
 		name   string
 		record opencdc.Record

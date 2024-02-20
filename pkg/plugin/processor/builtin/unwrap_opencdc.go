@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -40,7 +41,27 @@ func newUnwrapOpenCDC(logger log.CtxLogger) sdk.Processor {
 
 func (u *unwrapOpenCDC) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
-		Name: "unwrap.opencdc",
+		Name:    "unwrap.opencdc",
+		Summary: "A processor that unwraps the OpenCDC record saved in one of record's fields.",
+		Description: `
+The unwrap.cdc processors unwraps the OpenCDC record saved in one of record's fields.
+This is useful in situations where a record goes through intermediate systems before 
+being written to a final destination. In these cases, the original OpenCDC record is
+part of the payload read from the intermediate system and needs to be unwrapped before
+being written to the destination.
+'`,
+		Version: "v0.1.0",
+		Author:  "Meroxa, Inc.",
+		Parameters: config.Parameters{
+			"field": config.Parameter{
+				Default: ".Payload.After",
+				Description: `
+A reference to the field which contains the OpenCDC record.
+
+For more information about record references, see: https://github.com/ConduitIO/conduit-processor-sdk/blob/cbdc5dcb5d3109f8f13b88624c9e360076b0bcdb/util.go#L66.`,
+				Type: config.ParameterTypeString,
+			},
+		},
 	}, nil
 }
 
@@ -56,7 +77,7 @@ func (u *unwrapOpenCDC) Configure(_ context.Context, m map[string]string) error 
 
 	rr, err := sdk.NewReferenceResolver(field)
 	if err != nil {
-		return cerrors.Errorf("reference invalid: %w", err)
+		return cerrors.Errorf("invalid reference: %w", err)
 	}
 
 	u.fieldRefRes = rr
