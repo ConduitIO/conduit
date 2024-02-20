@@ -190,7 +190,7 @@ func (p *wasmProcessor) Specification() (sdk.Specification, error) {
 
 	switch specResp := resp.Response.(type) {
 	case *processorv1.CommandResponse_Specify:
-		return p.protoconv.specification(specResp.Specify), nil
+		return p.protoconv.specification(specResp.Specify)
 	default:
 		return sdk.Specification{}, fmt.Errorf("unexpected response type: %T", resp)
 	}
