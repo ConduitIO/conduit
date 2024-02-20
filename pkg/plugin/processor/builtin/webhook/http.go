@@ -21,7 +21,6 @@ import (
 	"context"
 	"io"
 	"net/http"
-	"reflect"
 	"strconv"
 	"time"
 
@@ -32,7 +31,6 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/goccy/go-json"
 	"github.com/jpillora/backoff"
-	"github.com/mitchellh/mapstructure"
 )
 
 type httpConfig struct {
@@ -64,7 +62,8 @@ type httpConfig struct {
 	ResponseBodyRef string `json:"response.body" default:".Payload.After"`
 	// ResponseStatusRef specifies to which field should the
 	// response status be saved to.
-	// The value of this parameter should be a valid record field reference:
+	// The value of this parameter should be a valid record field reference.
+	// If no value is set, then the response status will NOT be saved.
 	// See: sdk.NewReferenceResolver
 	ResponseStatusRef string `json:"response.status"`
 }
@@ -81,7 +80,7 @@ type httpProcessor struct {
 }
 
 func NewWebhookHTTP(l log.CtxLogger) sdk.Processor {
-	return &httpProcessor{logger: l.WithComponent("builtin.httpProcessor")}
+	return &httpProcessor{logger: l.WithComponent("webhook.httpProcessor")}
 }
 
 func (p *httpProcessor) Specification() (sdk.Specification, error) {
@@ -89,11 +88,8 @@ func (p *httpProcessor) Specification() (sdk.Specification, error) {
 		Name:    "webhook.http",
 		Summary: "HTTP webhook processor",
 		Description: `
-A processor that sends an HTTP request to the specified URL with the specified HTTP method
-(default is POST) with a content-type header as the specified value (default is application/json).
-
-The whole record as json will be used as the request body and the raw response body will be set under 
-Record.Payload.After. If the response code is (204 No Content) then the record will be filtered out.
+A processor that sends an HTTP request to the specified URL, retries on error and 
+saves the response body and, optionally, the response status. 
 `,
 		Version:    "v0.1.0",
 		Author:     "Meroxa, Inc.",
@@ -111,6 +107,7 @@ func (p *httpProcessor) Configure(_ context.Context, m map[string]string) error 
 	if err != nil {
 		return cerrors.Errorf("invalid configuration: %w", err)
 	}
+
 	if inputCfg["response.body"] == inputCfg["response.status"] {
 		return cerrors.New("invalid configuration: response.body and response.status set to same field")
 	}
@@ -132,6 +129,7 @@ func (p *httpProcessor) Configure(_ context.Context, m map[string]string) error 
 	}
 	p.responseBodyRef = &responseBodyRef
 
+	// This field is optional and, if not set, response status won't be saved.
 	if cfg.ResponseStatusRef != "" {
 		responseStatusRef, err := sdk.NewReferenceResolver(cfg.ResponseStatusRef)
 		if err != nil {
@@ -301,38 +299,6 @@ func (p *httpProcessor) setField(r *opencdc.Record, refRes *sdk.ReferenceResolve
 	}
 
 	return nil
-}
-
-// ToDurationDecoderHook returns a mapstructure.DecodeHookFunc
-// that decodes a string into a time.Duration.
-func ToDurationDecoderHook() mapstructure.DecodeHookFunc {
-	return func(from reflect.Type, to reflect.Type, data interface{}) (interface{}, error) {
-		if to != reflect.TypeOf(time.Duration(0)) {
-			return data, nil
-		}
-
-		if from.Kind() == reflect.String {
-			return time.ParseDuration(data.(string))
-		}
-
-		return data, nil
-	}
-}
-
-// ToReferenceResolvedDecodeHook returns a mapstructure.DecodeHookFunc
-// that decodes a string into a sdk.ReferenceResolver.
-func ToReferenceResolvedDecodeHook() mapstructure.DecodeHookFunc {
-	return func(from reflect.Type, to reflect.Type, data interface{}) (interface{}, error) {
-		if to != reflect.TypeOf(sdk.ReferenceResolver{}) {
-			return data, nil
-		}
-
-		if from.Kind() == reflect.String {
-			return sdk.NewReferenceResolver(data.(string))
-		}
-
-		return data, nil
-	}
 }
 
 func (p *httpProcessor) Teardown(context.Context) error {
