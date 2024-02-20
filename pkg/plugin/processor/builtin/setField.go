@@ -17,8 +17,11 @@
 package builtin
 
 import (
+	"bytes"
 	"context"
+	"text/template"
 
+	"github.com/Masterminds/sprig/v3"
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
@@ -27,7 +30,7 @@ import (
 
 type setField struct {
 	referenceResolver sdk.ReferenceResolver
-	config            setFieldConfig
+	tmpl              *template.Template
 
 	sdk.UnimplementedProcessor
 }
@@ -66,12 +69,16 @@ func (p *setField) Configure(_ context.Context, m map[string]string) error {
 	if err != nil {
 		return cerrors.Errorf("failed decoding configuration: %w", err)
 	}
+	tmpl, err := template.New("").Funcs(sprig.FuncMap()).Parse(cfg.Value)
+	if err != nil {
+		return cerrors.Errorf("failed to parse the %q param template: %w", "value", err)
+	}
+	p.tmpl = tmpl
 	resolver, err := sdk.NewReferenceResolver(cfg.Field)
 	if err != nil {
-		return err
+		return cerrors.Errorf("failed to parse the %q param: %w", "field", err)
 	}
 	p.referenceResolver = resolver
-	p.config = cfg
 	return nil
 }
 
@@ -82,11 +89,17 @@ func (p *setField) Open(context.Context) error {
 func (p *setField) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 	out := make([]sdk.ProcessedRecord, 0, len(records))
 	for _, record := range records {
+		var b bytes.Buffer
+		// evaluate the new value
+		err := p.tmpl.Execute(&b, record)
+		if err != nil {
+			return append(out, sdk.ErrorRecord{Error: err})
+		}
 		ref, err := p.referenceResolver.Resolve(&record)
 		if err != nil {
 			return append(out, sdk.ErrorRecord{Error: err})
 		}
-		err = ref.Set(p.config.Value) // todo: evaluate value
+		err = ref.Set(b.String())
 		if err != nil {
 			return append(out, sdk.ErrorRecord{Error: err})
 		}

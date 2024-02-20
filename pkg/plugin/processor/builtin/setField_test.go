@@ -16,7 +16,6 @@ package builtin
 
 import (
 	"context"
-	"strings"
 	"testing"
 
 	"github.com/conduitio/conduit-commons/opencdc"
@@ -51,12 +50,13 @@ func TestSetField_Process(t *testing.T) {
 				Operation: opencdc.OperationDelete,
 			},
 		}, {
-			config: map[string]string{"field": ".Payload.After.foo", "value": "new-val"},
+			config: map[string]string{"field": ".Payload.After.foo", "value": "{{ .Payload.After.baz }}"},
 			record: opencdc.Record{
 				Payload: opencdc.Change{
 					Before: nil,
 					After: opencdc.StructuredData{
 						"foo": "bar",
+						"baz": "bar2",
 					},
 				},
 			},
@@ -64,7 +64,8 @@ func TestSetField_Process(t *testing.T) {
 				Payload: opencdc.Change{
 					Before: nil,
 					After: opencdc.StructuredData{
-						"foo": "new-val",
+						"foo": "bar2",
+						"baz": "bar2",
 					},
 				},
 			},
@@ -92,8 +93,13 @@ func TestSetField_Configure(t *testing.T) {
 	}{
 		{
 			name:    "valid config",
-			cfg:     map[string]string{"field": ".Metadata", "value": "sth"},
+			cfg:     map[string]string{"field": ".Metadata", "value": "{{ .Payload.After.foo }}"},
 			wantErr: false,
+		},
+		{
+			name:    "invalid value template format",
+			cfg:     map[string]string{"field": ".Metadata", "value": "{{ invalid }}"},
+			wantErr: true,
 		}, {
 			name:    "value param is missing",
 			cfg:     map[string]string{"field": ".Metadata"},
@@ -114,7 +120,7 @@ func TestSetField_Configure(t *testing.T) {
 			is := is.New(t)
 			err := proc.Configure(ctx, tc.cfg)
 			if tc.wantErr {
-				is.True(strings.Contains(err.Error(), "required parameter is not provided"))
+				is.True(err != nil)
 				return
 			}
 			is.NoErr(err)

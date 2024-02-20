@@ -77,7 +77,7 @@ func (p *convertField) Configure(_ context.Context, m map[string]string) error {
 
 	resolver, err := sdk.NewReferenceResolver(cfg.Field)
 	if err != nil {
-		return err
+		return cerrors.Errorf("failed to parse the %q param: %w", "field", err)
 	}
 	p.referenceResolver = resolver
 	p.config = cfg
