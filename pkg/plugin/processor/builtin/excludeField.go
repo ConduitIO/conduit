@@ -26,7 +26,8 @@ import (
 )
 
 type excludeField struct {
-	config excludeFieldConfig
+	config             excludeFieldConfig
+	referenceResolvers []sdk.ReferenceResolver
 
 	sdk.UnimplementedProcessor
 }
@@ -65,9 +66,14 @@ func (p *excludeField) Configure(_ context.Context, m map[string]string) error {
 		return cerrors.Errorf("failed decoding configuration: %w", err)
 	}
 
-	for _, field := range cfg.Fields {
+	p.referenceResolvers = make([]sdk.ReferenceResolver, len(cfg.Fields))
+	for i, field := range cfg.Fields {
 		if field == PositionReference || field == OperationReference {
 			return cerrors.Errorf("it is not allowed to exclude the fields %q and %q", OperationReference, PositionReference)
+		}
+		p.referenceResolvers[i], err = sdk.NewReferenceResolver(field)
+		if err != nil {
+			return cerrors.Errorf("invalid reference: %w", err)
 		}
 	}
 	p.config = cfg
@@ -81,12 +87,8 @@ func (p *excludeField) Open(context.Context) error {
 func (p *excludeField) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 	out := make([]sdk.ProcessedRecord, 0, len(records))
 	for _, record := range records {
-		for _, field := range p.config.Fields {
-			resolver, err := sdk.NewReferenceResolver(field)
-			if err != nil {
-				return append(out, sdk.ErrorRecord{Error: err})
-			}
-			ref, err := resolver.Resolve(&record)
+		for i := range p.config.Fields {
+			ref, err := p.referenceResolvers[i].Resolve(&record)
 			if err != nil {
 				return append(out, sdk.ErrorRecord{Error: err})
 			}

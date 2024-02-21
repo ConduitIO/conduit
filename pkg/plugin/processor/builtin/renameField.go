@@ -28,7 +28,8 @@ import (
 )
 
 type renameField struct {
-	mapping map[string]string
+	mapping            map[string]string
+	referenceResolvers []sdk.ReferenceResolver
 
 	sdk.UnimplementedProcessor
 }
@@ -70,8 +71,9 @@ func (p *renameField) Configure(_ context.Context, m map[string]string) error {
 		return cerrors.Errorf("failed decoding configuration: %w", err)
 	}
 
-	result := make(map[string]string)
-	for _, pair := range cfg.Mapping {
+	result := make(map[string]string, len(cfg.Mapping))
+	p.referenceResolvers = make([]sdk.ReferenceResolver, len(cfg.Mapping))
+	for i, pair := range cfg.Mapping {
 		parts := strings.Split(pair, ":")
 		if len(parts) != 2 {
 			return cerrors.Errorf("wrong format for the %q param, should be a comma separated list of keys and values,"+
@@ -83,6 +85,10 @@ func (p *renameField) Configure(_ context.Context, m map[string]string) error {
 		}
 		value := strings.TrimSpace(parts[1])
 		result[key] = value
+		p.referenceResolvers[i], err = sdk.NewReferenceResolver(key)
+		if err != nil {
+			return cerrors.Errorf("invalid reference: %w", err)
+		}
 	}
 	p.mapping = result
 
@@ -94,25 +100,24 @@ func (p *renameField) Open(context.Context) error {
 }
 
 func (p *renameField) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
+	index := 0
 	out := make([]sdk.ProcessedRecord, 0, len(records))
 	for _, record := range records {
 		for key, val := range p.mapping {
-			err := p.rename(record, key, val)
+			err := p.rename(index, record, key, val)
 			if err != nil {
 				return append(out, sdk.ErrorRecord{Error: err})
 			}
+			index++
 		}
 		out = append(out, sdk.SingleRecord(record))
+		index = 0
 	}
 	return out
 }
 
-func (p *renameField) rename(record opencdc.Record, oldName, newName string) error {
-	resolver1, err := sdk.NewReferenceResolver(oldName)
-	if err != nil {
-		return err
-	}
-	ref1, err := resolver1.Resolve(&record)
+func (p *renameField) rename(index int, record opencdc.Record, oldName, newName string) error {
+	ref1, err := p.referenceResolvers[index].Resolve(&record)
 	if err != nil {
 		return err
 	}
