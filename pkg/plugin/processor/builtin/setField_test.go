@@ -28,11 +28,13 @@ func TestSetField_Process(t *testing.T) {
 	var err error
 	ctx := context.Background()
 	testCases := []struct {
+		name   string
 		config map[string]string
 		record opencdc.Record
 		want   sdk.SingleRecord
 	}{
 		{
+			name:   "setting a metadata field",
 			config: map[string]string{"field": ".Metadata.table", "value": "postgres"},
 			record: opencdc.Record{
 				Metadata: map[string]string{"table": "my-table"},
@@ -42,6 +44,17 @@ func TestSetField_Process(t *testing.T) {
 			},
 		},
 		{
+			name:   "setting a non existent field",
+			config: map[string]string{"field": ".Metadata.nonExistent", "value": "postgres"},
+			record: opencdc.Record{
+				Metadata: map[string]string{"table": "my-table"},
+			},
+			want: sdk.SingleRecord{
+				Metadata: map[string]string{"table": "my-table", "nonExistent": "postgres"},
+			},
+		},
+		{
+			name:   "setting the operation field",
 			config: map[string]string{"field": ".Operation", "value": "delete"},
 			record: opencdc.Record{
 				Operation: opencdc.OperationCreate,
@@ -50,6 +63,7 @@ func TestSetField_Process(t *testing.T) {
 				Operation: opencdc.OperationDelete,
 			},
 		}, {
+			name:   "setting the payload.after with a go template evaluated value",
 			config: map[string]string{"field": ".Payload.After.foo", "value": "{{ .Payload.After.baz }}"},
 			record: opencdc.Record{
 				Payload: opencdc.Change{
@@ -71,7 +85,7 @@ func TestSetField_Process(t *testing.T) {
 			},
 		}}
 	for _, tc := range testCases {
-		t.Run(tc.config["field"], func(t *testing.T) {
+		t.Run(tc.name, func(t *testing.T) {
 			is := is.New(t)
 			err = proc.Configure(ctx, tc.config)
 			is.NoErr(err)
