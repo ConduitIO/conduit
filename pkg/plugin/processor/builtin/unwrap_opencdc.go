@@ -44,7 +44,7 @@ func (u *unwrapOpenCDC) Specification() (sdk.Specification, error) {
 		Name:    "unwrap.opencdc",
 		Summary: "A processor that unwraps the OpenCDC record saved in one of record's fields.",
 		Description: `
-The unwrap.cdc processors unwraps the OpenCDC record saved in one of record's fields.
+The unwrap.opencdc processors unwraps the OpenCDC record saved in one of the record's fields.
 This is useful in situations where a record goes through intermediate systems before 
 being written to a final destination. In these cases, the original OpenCDC record is
 part of the payload read from the intermediate system and needs to be unwrapped before
