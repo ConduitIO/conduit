@@ -109,6 +109,10 @@ func TestSetField_Configure(t *testing.T) {
 			cfg:     map[string]string{"value": "sth"},
 			wantErr: true,
 		}, {
+			name:    "cannot set .Position",
+			cfg:     map[string]string{"field": ".Position", "value": "newPos"},
+			wantErr: true,
+		}, {
 			name:    "all params are missing",
 			cfg:     map[string]string{},
 			wantErr: true,

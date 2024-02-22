@@ -15,6 +15,7 @@ func (setFieldConfig) Parameters() map[string]config.Parameter {
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{
 				config.ValidationRequired{},
+				config.ValidationExclusion{List: []string{".Position"}},
 			},
 		},
 		"value": {

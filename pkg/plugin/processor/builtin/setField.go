@@ -37,7 +37,7 @@ type setField struct {
 
 type setFieldConfig struct {
 	// Field The target field, as it would be addressed in a Go template.
-	Field string `json:"field" validate:"required"`
+	Field string `json:"field" validate:"required,exclusion=.Position"`
 	// Value A Go template expression which will be evaluated and stored in "field".
 	Value string `json:"value" validate:"required"`
 }
@@ -46,7 +46,7 @@ func (p *setField) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
 		Name:    "field.set",
 		Summary: "Set the value of a certain field.",
-		Description: `Set the value of a certain field to any value. 
+		Description: `Set the value of a certain field to any value. It is not allowed to set the .Position field.
 Note that this processor only runs on structured data, if the record contains JSON data, then use the processor
 "decode.json" to parse it into structured data first.`,
 		Version:    "v0.1.0",
