@@ -89,9 +89,13 @@ func (u *unwrapOpenCDC) Open(context.Context) error {
 }
 
 func (u *unwrapOpenCDC) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
-	out := make([]sdk.ProcessedRecord, len(records))
-	for i, rec := range records {
-		out[i] = u.processRecord(rec)
+	out := make([]sdk.ProcessedRecord, 0, len(records))
+	for _, rec := range records {
+		proc := u.processRecord(rec)
+		out = append(out, proc)
+		if _, ok := proc.(sdk.ErrorRecord); ok {
+			return out
+		}
 	}
 
 	return out
@@ -120,7 +124,7 @@ func (u *unwrapOpenCDC) processRecord(rec opencdc.Record) sdk.ProcessedRecord {
 
 	opencdcRec, err := u.unmarshalRecord(data)
 	if err != nil {
-		return sdk.ErrorRecord{Error: cerrors.Errorf("failed unmarshaling record: %w", err)}
+		return sdk.ErrorRecord{Error: cerrors.Errorf("failed unmarshalling record: %w", err)}
 	}
 	opencdcRec.Position = rec.Position
 
@@ -136,22 +140,22 @@ func (u *unwrapOpenCDC) Teardown(context.Context) error {
 func (u *unwrapOpenCDC) unmarshalRecord(structData opencdc.StructuredData) (opencdc.Record, error) {
 	operation, err := u.unmarshalOperation(structData)
 	if err != nil {
-		return opencdc.Record{}, err
+		return opencdc.Record{}, cerrors.Errorf("failed unmarshalling operation: %w", err)
 	}
 
 	metadata, err := u.unmarshalMetadata(structData)
 	if err != nil {
-		return opencdc.Record{}, err
+		return opencdc.Record{}, cerrors.Errorf("failed unmarshalling metadata: %w", err)
 	}
 
 	key, err := u.unmarshalKey(structData)
 	if err != nil {
-		return opencdc.Record{}, err
+		return opencdc.Record{}, cerrors.Errorf("failed unmarshalling key: %w", err)
 	}
 
 	payload, err := u.unmarshalPayload(structData)
 	if err != nil {
-		return opencdc.Record{}, err
+		return opencdc.Record{}, cerrors.Errorf("failed unmarshalling payload: %w", err)
 	}
 
 	return opencdc.Record{
@@ -167,7 +171,7 @@ func (u *unwrapOpenCDC) unmarshalOperation(structData opencdc.StructuredData) (o
 	var operation opencdc.Operation
 	op, ok := structData["operation"]
 	if !ok {
-		return operation, cerrors.Errorf("record payload after doesn't contain operation")
+		return operation, cerrors.New("no operation")
 	}
 
 	switch opType := op.(type) {
@@ -188,7 +192,7 @@ func (u *unwrapOpenCDC) unmarshalMetadata(structData opencdc.StructuredData) (op
 	var metadata opencdc.Metadata
 	meta, ok := structData["metadata"]
 	if !ok {
-		return metadata, cerrors.Errorf("record payload after doesn't contain metadata")
+		return metadata, cerrors.New("no metadata")
 	}
 
 	switch m := meta.(type) {
@@ -210,7 +214,7 @@ func (u *unwrapOpenCDC) unmarshalKey(structData opencdc.StructuredData) (opencdc
 	var key opencdc.Data
 	ky, ok := structData["key"]
 	if !ok {
-		return key, cerrors.Errorf("record payload after doesn't contain key")
+		return key, cerrors.New("no key")
 	}
 	switch k := ky.(type) {
 	case map[string]interface{}:
@@ -262,7 +266,7 @@ func (u *unwrapOpenCDC) unmarshalPayload(structData opencdc.StructuredData) (ope
 	var payload opencdc.Change
 	pl, ok := structData["payload"]
 	if !ok {
-		return payload, cerrors.Errorf("record payload doesn't contain payload")
+		return payload, cerrors.New("no payload")
 	}
 
 	switch p := pl.(type) {

@@ -218,7 +218,7 @@ func TestUnwrapOpenCDC_Process(t *testing.T) {
 				Position: []byte("test position"),
 			},
 			want: sdk.ErrorRecord{
-				Error: cerrors.New("failed unmarshaling record: invalid operation \"foobar\""),
+				Error: cerrors.New("failed unmarshalling record: failed unmarshalling operation: invalid operation \"foobar\""),
 			},
 		},
 		{
@@ -243,7 +243,7 @@ func TestUnwrapOpenCDC_Process(t *testing.T) {
 				Position: []byte("test-position"),
 			},
 			want: sdk.ErrorRecord{
-				Error: cerrors.New("failed unmarshaling record: expected a opencdc.Metadata or a map[string]interface{}, got string"),
+				Error: cerrors.New("failed unmarshalling record: failed unmarshalling metadata: expected a opencdc.Metadata or a map[string]interface{}, got string"),
 			},
 		},
 		{
@@ -267,7 +267,9 @@ func TestUnwrapOpenCDC_Process(t *testing.T) {
 				},
 				Position: []byte("test-pos"),
 			},
-			want: sdk.ErrorRecord{Error: cerrors.New("failed unmarshaling record: expected a opencdc.Data or a string, got float64")},
+			want: sdk.ErrorRecord{
+				Error: cerrors.New("failed unmarshalling record: failed unmarshalling key: expected a opencdc.Data or a string, got float64"),
+			},
 		},
 		{
 			name:   "create with an invalid payload",
