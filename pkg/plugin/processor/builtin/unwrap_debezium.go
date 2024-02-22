@@ -17,6 +17,9 @@ package builtin
 import (
 	"context"
 	"github.com/conduitio/conduit-commons/config"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/log"
+	"strings"
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
@@ -38,6 +41,13 @@ const (
 
 type unwrapDebezium struct {
 	sdk.UnimplementedProcessor
+
+	logger      log.CtxLogger
+	fieldRefRes sdk.ReferenceResolver
+}
+
+func newUnwrapDebezium(logger log.CtxLogger) sdk.Processor {
+	return &unwrapDebezium{logger: logger}
 }
 
 func (u *unwrapDebezium) Specification() (sdk.Specification, error) {
@@ -67,18 +77,35 @@ This should be a valid reference within an OpenCDC record, as specified here: ht
 }
 
 func (u *unwrapDebezium) Configure(ctx context.Context, m map[string]string) error {
-	//TODO implement me
-	panic("implement me")
+	field, ok := m["field"]
+	if !ok {
+		return cerrors.New("missing required parameter 'field'")
+	}
+
+	if !strings.HasPrefix(field, ".Payload") {
+		return cerrors.Errorf("only payload can be unwrapped, field given: %v", field)
+	}
+
+	rr, err := sdk.NewReferenceResolver(field)
+	if err != nil {
+		return cerrors.Errorf("invalid reference: %w", err)
+	}
+
+	u.fieldRefRes = rr
+	return nil
 }
 
 func (u *unwrapDebezium) Open(ctx context.Context) error {
-	//TODO implement me
-	panic("implement me")
+	return nil
 }
 
 func (u *unwrapDebezium) Process(ctx context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
-	//TODO implement me
-	panic("implement me")
+	out := make([]sdk.ProcessedRecord, len(records))
+	for i, rec := range records {
+		out[i] = u.processRecord(rec)
+	}
+
+	return out
 }
 
 func (u *unwrapDebezium) Teardown(ctx context.Context) error {
