@@ -71,10 +71,8 @@ In such cases, the Debezium record is set as the OpenCDC record's payload, and n
 
 This should be a valid reference within an OpenCDC record, as specified here: https://github.com/ConduitIO/conduit-processor-sdk/blob/main/util.go#L66
 `,
-				Type: config.ParameterTypeString,
-				Validations: []config.Validation{
-					config.ValidationRequired{},
-				},
+				Type:        config.ParameterTypeString,
+				Validations: nil,
 			},
 		},
 	}, nil
@@ -83,9 +81,10 @@ This should be a valid reference within an OpenCDC record, as specified here: ht
 func (u *unwrapDebezium) Configure(_ context.Context, m map[string]string) error {
 	field, ok := m["field"]
 	if !ok {
-		return cerrors.New("missing required parameter 'field'")
+		field = ".Payload.After"
 	}
 
+	field = strings.TrimSpace(field)
 	if !strings.HasPrefix(field, ".Payload") {
 		return cerrors.Errorf("only payload can be unwrapped, field given: %v", field)
 	}
@@ -122,21 +121,36 @@ func (u *unwrapDebezium) Teardown(context.Context) error {
 
 func (u *unwrapDebezium) processRecord(rec opencdc.Record) sdk.ProcessedRecord {
 	// record must be structured
-	data, err := u.fieldRefRes.Resolve(&rec)
+	ref, err := u.fieldRefRes.Resolve(&rec)
 	if err != nil {
 		return sdk.ErrorRecord{
 			Error: cerrors.Errorf("failed resolving reference: %w", err),
 		}
 	}
 
-	debeziumRec, ok := data.Get().(opencdc.StructuredData)
-	if !ok {
+	var debeziumEvent opencdc.StructuredData
+	switch d := ref.Get().(type) {
+	case opencdc.RawData:
+		// todo: take this section out (use a separate processor for this)
+		// unmarshal raw data to structured
+		err := json.Unmarshal(d.Bytes(), &debeziumEvent)
+		if err != nil {
+			return sdk.ErrorRecord{
+				Error: cerrors.Errorf("failed to unmarshal raw data as JSON: %w", err),
+			}
+		}
+	case opencdc.StructuredData:
+		debeziumEvent = d
+	case map[string]any:
+		debeziumEvent = d
+	default:
 		return sdk.ErrorRecord{
-			Error: cerrors.New("data to be unwrapped must be structured data"),
+			Error: cerrors.Errorf("unexpected data type %T", ref.Get()),
 		}
 	}
+
 	// get payload
-	debeziumRec, ok = debeziumRec["payload"].(map[string]any) // the payload has the debezium record
+	debeziumRec, ok := debeziumEvent["payload"].(map[string]any) // the payload has the debezium record
 	if !ok {
 		return sdk.ErrorRecord{
 			Error: cerrors.New("data to be unwrapped doesn't contain a payload field"),
@@ -328,7 +342,5 @@ func (u *unwrapDebezium) unwrapKey(key opencdc.Data) opencdc.Data {
 	}
 
 	// otherwise, convert the payload to string, then return it as raw data
-	raw := fmt.Sprint(payload)
-
-	return opencdc.RawData(raw)
+	return opencdc.RawData(fmt.Sprint(payload))
 }
