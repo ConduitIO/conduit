@@ -17,7 +17,6 @@ package builtin
 import (
 	"context"
 	"fmt"
-	"github.com/goccy/go-json"
 	"strings"
 	"time"
 
@@ -27,6 +26,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/multierror"
+	"github.com/goccy/go-json"
 )
 
 const (
@@ -130,15 +130,6 @@ func (u *unwrapDebezium) processRecord(rec opencdc.Record) sdk.ProcessedRecord {
 
 	var debeziumEvent opencdc.StructuredData
 	switch d := ref.Get().(type) {
-	case opencdc.RawData:
-		// todo: take this section out (use a separate processor for this)
-		// unmarshal raw data to structured
-		err := json.Unmarshal(d.Bytes(), &debeziumEvent)
-		if err != nil {
-			return sdk.ErrorRecord{
-				Error: cerrors.Errorf("failed to unmarshal raw data as JSON: %w", err),
-			}
-		}
 	case opencdc.StructuredData:
 		debeziumEvent = d
 	case map[string]any:
@@ -212,7 +203,7 @@ func (u *unwrapDebezium) processRecord(rec opencdc.Record) sdk.ProcessedRecord {
 	}
 }
 
-func (d *unwrapDebezium) valueToData(val any) (opencdc.Data, error) {
+func (u *unwrapDebezium) valueToData(val any) (opencdc.Data, error) {
 	switch v := val.(type) {
 	case map[string]any:
 		return opencdc.StructuredData(v), nil
@@ -226,7 +217,7 @@ func (d *unwrapDebezium) valueToData(val any) (opencdc.Data, error) {
 	}
 }
 
-func (d *unwrapDebezium) validateRecord(data opencdc.StructuredData) error {
+func (u *unwrapDebezium) validateRecord(data opencdc.StructuredData) error {
 	var multiErr error
 	if _, ok := data[debeziumFieldAfter]; !ok {
 		multiErr = multierror.Append(multiErr, cerrors.Errorf("the %q field is missing from debezium payload", debeziumFieldAfter))
@@ -241,7 +232,7 @@ func (d *unwrapDebezium) validateRecord(data opencdc.StructuredData) error {
 	return multiErr
 }
 
-func (d *unwrapDebezium) unwrapMetadata(rec opencdc.Record, dbzRec opencdc.StructuredData) (opencdc.Metadata, error) {
+func (u *unwrapDebezium) unwrapMetadata(rec opencdc.Record, dbzRec opencdc.StructuredData) (opencdc.Metadata, error) {
 	var source map[string]string
 	for field, val := range dbzRec {
 		switch field {
@@ -258,9 +249,9 @@ func (d *unwrapDebezium) unwrapMetadata(rec opencdc.Record, dbzRec opencdc.Struc
 			// don't add prefix for source fields to be consistent with the
 			// behavior of the debezium converter in the SDK - it puts all
 			// metadata fields into the `source` field
-			source = d.flatten("", val)
+			source = u.flatten("", val)
 		default:
-			flattened := d.flatten("debezium."+field, val)
+			flattened := u.flatten("debezium."+field, val)
 			for k, v := range flattened {
 				rec.Metadata[k] = v
 			}
@@ -275,7 +266,7 @@ func (d *unwrapDebezium) unwrapMetadata(rec opencdc.Record, dbzRec opencdc.Struc
 	return rec.Metadata, nil
 }
 
-func (d *unwrapDebezium) flatten(key string, val any) map[string]string {
+func (u *unwrapDebezium) flatten(key string, val any) map[string]string {
 	var prefix string
 	if len(key) > 0 {
 		prefix = key + "."
@@ -284,7 +275,7 @@ func (d *unwrapDebezium) flatten(key string, val any) map[string]string {
 	case map[string]any:
 		out := make(map[string]string)
 		for k1, v1 := range val {
-			for k2, v2 := range d.flatten(prefix+k1, v1) {
+			for k2, v2 := range u.flatten(prefix+k1, v1) {
 				out[k2] = v2
 			}
 		}
@@ -299,7 +290,7 @@ func (d *unwrapDebezium) flatten(key string, val any) map[string]string {
 }
 
 // convertOperation converts debezium operation to openCDC operation
-func (d *unwrapDebezium) convertOperation(op string) (opencdc.Operation, error) {
+func (u *unwrapDebezium) convertOperation(op string) (opencdc.Operation, error) {
 	switch op {
 	case debeziumOpCreate:
 		return opencdc.OperationCreate, nil

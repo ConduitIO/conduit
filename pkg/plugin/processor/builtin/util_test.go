@@ -15,26 +15,38 @@
 package builtin
 
 import (
+	"github.com/google/go-cmp/cmp/cmpopts"
+	"testing"
+
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/google/go-cmp/cmp"
-	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/matryer/is"
-	"reflect"
-	"testing"
 )
 
 func AreEqual(t *testing.T, want, got sdk.ProcessedRecord) {
 	is := is.New(t)
 
-	is.Equal(reflect.TypeOf(want), reflect.TypeOf(got))
 	if wantErr, ok := want.(sdk.ErrorRecord); ok {
-		gotErr := got.(sdk.ErrorRecord)
-		is.Equal(wantErr.Error.Error(), gotErr.Error.Error())
-
-		return
+		gotErr, gotOk := got.(sdk.ErrorRecord)
+		if gotOk {
+			is.Equal(wantErr.Error.Error(), gotErr.Error.Error())
+		}
 	}
 
-	diff := cmp.Diff(want, got, cmpopts.IgnoreUnexported(sdk.SingleRecord{}))
+	opts := []cmp.Option{
+		cmpopts.IgnoreUnexported(sdk.SingleRecord{}),
+		cmp.Comparer(func(e1, e2 error) bool {
+			switch {
+			case e1 == nil && e2 == nil:
+				return true
+			case e1 != nil && e2 != nil:
+				return e1.Error() == e2.Error()
+			default:
+				return false
+			}
+		}),
+	}
+	diff := cmp.Diff(want, got, opts...)
 	if diff != "" {
 		t.Errorf("mismatch (-want +got): %s", diff)
 	}

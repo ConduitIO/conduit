@@ -16,12 +16,13 @@ package builtin
 
 import (
 	"context"
+	"testing"
+
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/matryer/is"
-	"testing"
 )
 
 func TestUnwrapDebezium_Configure(t *testing.T) {
@@ -98,18 +99,8 @@ func TestUnwrapDebezium_Process(t *testing.T) {
 		}`),
 				},
 			},
-			want: sdk.SingleRecord{
-				Operation: opencdc.OperationCreate,
-				Metadata: map[string]string{
-					"opencdc.readAt":  "1674061777225877000",
-					"opencdc.version": "v1",
-				},
-				Key:      opencdc.RawData("id"),
-				Position: []byte("position"),
-				Payload: opencdc.Change{
-					Before: nil,
-					After:  opencdc.StructuredData{"description": "test1", "id": float64(27)},
-				},
+			want: sdk.ErrorRecord{
+				Error: cerrors.New("unexpected data type opencdc.RawData"),
 			},
 		},
 		{
