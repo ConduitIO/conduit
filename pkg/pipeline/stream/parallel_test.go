@@ -22,12 +22,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/conduitio/conduit-commons/opencdc"
+	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cchan"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/csync"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/noop"
-	pmock "github.com/conduitio/conduit/pkg/processor/mock"
+	"github.com/conduitio/conduit/pkg/pipeline/stream/mock"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/matryer/is"
 	"go.uber.org/mock/gomock"
@@ -559,14 +561,28 @@ func TestParallelNode_Processor(t *testing.T) {
 	const msgCount = 1000
 
 	// create a dummy processor
-	proc := pmock.NewProcessor(ctrl)
-	proc.EXPECT().Process(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, r record.Record) (record.Record, error) {
-		current := atomic.AddInt32(&workersCurrent, 1)
-		atomic.CompareAndSwapInt32(&workersHighWatermark, current-1, current)
-		time.Sleep(time.Millisecond) // sleep to let other workers catch up
-		atomic.AddInt32(&workersCurrent, -1)
-		return r, nil
-	}).Times(msgCount)
+	proc := mock.NewProcessor(ctrl)
+	proc.EXPECT().
+		Open(gomock.Any()).
+		Times(workerCount)
+	proc.EXPECT().
+		Process(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(ctx context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
+			current := atomic.AddInt32(&workersCurrent, 1)
+			atomic.CompareAndSwapInt32(&workersHighWatermark, current-1, current)
+			time.Sleep(time.Millisecond) // sleep to let other workers catch up
+			atomic.AddInt32(&workersCurrent, -1)
+
+			out := make([]sdk.ProcessedRecord, len(records))
+			for i, r := range records {
+				out[i] = sdk.SingleRecord(r)
+			}
+
+			return out
+		}).Times(msgCount)
+	proc.EXPECT().
+		Teardown(gomock.Any()).
+		Times(workerCount)
 
 	newProcNode := func(i int) PubSubNode {
 		return &ProcessorNode{

@@ -1,7 +1,10 @@
 run:
   timeout: 3m
+  skip-dirs-use-default: false
   skip-dirs:
-    - /ui/.*
+    - ^examples/
+    - ^ui/
+    - ^pkg/plugin/processor/builtin/internal/diff # external code
 
 linters-settings:
   depguard:
@@ -31,6 +34,10 @@ linters-settings:
     values:
       regexp:
         copyright-year: 20[2-9]\d
+  revive:
+    rules:
+      - name: unused-parameter
+        disabled: true
 
 issues:
   exclude-rules:

@@ -124,16 +124,17 @@ message Processor {
 
   string id = 1 [(google.api.field_behavior) = OUTPUT_ONLY];
   reserved 2; reserved "state"; // message does not track state
+  reserved 4; reserved "type";
   Config config = 3;
-
-  // -- immutable fields -------------------------------------------------------
-
-  string type = 4 [(google.api.field_behavior) = IMMUTABLE];
-  Parent parent = 6 [(google.api.field_behavior) = IMMUTABLE];
   // Condition is a goTemplate formatted string, the value provided to the template is a sdk.Record, it should evaluate
   // to a boolean value, indicating a condition to run the processor for a specific record or not. (template functions
   // provided by `sprig` are injected)
   string condition = 9;
+
+  // -- immutable fields -------------------------------------------------------
+
+  string plugin = 5 [(google.api.field_behavior) = IMMUTABLE];
+  Parent parent = 6 [(google.api.field_behavior) = IMMUTABLE];
 
   google.protobuf.Timestamp created_at = 7;
   google.protobuf.Timestamp updated_at = 8;
@@ -655,7 +656,12 @@ service ConnectorService {
 
 message CreateConnectorRequest {
   Connector.Type type = 1;
-  // Plugin name is the name of the builtin plugin, or the absolute path of a standalone plugin.
+  // Used to reference a plugin. Its format is as follows:
+  // [PLUGIN-TYPE:]PLUGIN-NAME[@VERSION]
+  // PLUGIN-TYPE: One of: builtin, standalone or any (default).
+  // PLUGIN-NAME: The name of the plugin as specified in the plugin specifications.
+  // VERSION: The plugin version as specified in the plugin specifications or latest (default).
+  // For more information, see: https://conduit.io/docs/connectors/referencing/
   string plugin = 2;
   // ID of the pipeline to which the connector will get attached.
   string pipeline_id = 3;
@@ -882,10 +888,11 @@ message InspectProcessorOutResponse {
 
 
 message CreateProcessorRequest {
-  string type = 1;
+  string type = 1 [deprecated = true];
   Processor.Parent parent = 3;
   Processor.Config config = 4;
   string condition = 5;
+  string plugin = 6;
 }
 message CreateProcessorResponse {
   Processor processor = 1;

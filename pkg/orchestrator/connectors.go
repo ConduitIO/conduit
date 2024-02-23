@@ -74,7 +74,7 @@ func (c *ConnectorOrchestrator) Create(
 	if err != nil {
 		return nil, err
 	}
-	r.Append(func() error { return c.connectors.Delete(ctx, conn.ID, c.plugins) })
+	r.Append(func() error { return c.connectors.Delete(ctx, conn.ID, c.connectorPlugins) })
 
 	_, err = c.pipelines.AddConnector(ctx, pl.ID, conn.ID)
 	if err != nil {
@@ -127,7 +127,7 @@ func (c *ConnectorOrchestrator) Delete(ctx context.Context, id string) error {
 	if pl.Status == pipeline.StatusRunning {
 		return pipeline.ErrPipelineRunning
 	}
-	err = c.connectors.Delete(ctx, id, c.plugins)
+	err = c.connectors.Delete(ctx, id, c.connectorPlugins)
 	if err != nil {
 		return err
 	}
@@ -206,9 +206,9 @@ func (c *ConnectorOrchestrator) Validate(
 	var err error
 	switch t {
 	case connector.TypeSource:
-		err = c.plugins.ValidateSourceConfig(ctx, plugin, config.Settings)
+		err = c.connectorPlugins.ValidateSourceConfig(ctx, plugin, config.Settings)
 	case connector.TypeDestination:
-		err = c.plugins.ValidateDestinationConfig(ctx, plugin, config.Settings)
+		err = c.connectorPlugins.ValidateDestinationConfig(ctx, plugin, config.Settings)
 	default:
 		return cerrors.New("invalid connector type")
 	}

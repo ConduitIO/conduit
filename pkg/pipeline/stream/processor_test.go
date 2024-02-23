@@ -19,10 +19,11 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/conduitio/conduit-commons/opencdc"
+	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/noop"
-	"github.com/conduitio/conduit/pkg/processor"
-	"github.com/conduitio/conduit/pkg/processor/mock"
+	"github.com/conduitio/conduit/pkg/pipeline/stream/mock"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/google/uuid"
 	"github.com/matryer/is"
@@ -38,16 +39,17 @@ func TestProcessorNode_Success(t *testing.T) {
 		Position: []byte(uuid.NewString()),
 		Metadata: map[string]string{"foo": "bar"},
 	}
-	newPosition := []byte(uuid.NewString())
+	newMetaKey := "bar2"
 
 	processor := mock.NewProcessor(ctrl)
-	processor.
-		EXPECT().
-		Process(ctx, wantRec).
-		DoAndReturn(func(_ context.Context, got record.Record) (record.Record, error) {
-			got.Position = newPosition
-			return got, nil
+	processor.EXPECT().Open(gomock.Any())
+	processor.EXPECT().
+		Process(ctx, []opencdc.Record{wantRec.ToOpenCDC()}).
+		DoAndReturn(func(_ context.Context, got []opencdc.Record) []sdk.ProcessedRecord {
+			got[0].Metadata["foo"] = newMetaKey
+			return []sdk.ProcessedRecord{sdk.SingleRecord(got[0])}
 		})
+	processor.EXPECT().Teardown(gomock.Any())
 
 	n := ProcessorNode{
 		Name:           "test",
@@ -80,7 +82,7 @@ func TestProcessorNode_Success(t *testing.T) {
 		Ctx:    ctx,
 		Record: wantRec,
 	}
-	wantMsg.Record.Position = newPosition // position was transformed
+	wantMsg.Record.Metadata["foo"] = newMetaKey // position was transformed
 	is.Equal(wantMsg, got)
 
 	wg.Wait() // wait for node to stop running
@@ -97,7 +99,11 @@ func TestProcessorNode_ErrorWithoutNackHandler(t *testing.T) {
 
 	wantErr := cerrors.New("something bad happened")
 	processor := mock.NewProcessor(ctrl)
-	processor.EXPECT().Process(ctx, gomock.Any()).Return(record.Record{}, wantErr)
+	processor.EXPECT().Open(gomock.Any())
+	processor.EXPECT().
+		Process(ctx, gomock.Any()).
+		Return([]sdk.ProcessedRecord{sdk.ErrorRecord{Error: wantErr}})
+	processor.EXPECT().Teardown(gomock.Any())
 
 	n := ProcessorNode{
 		Name:           "test",
@@ -127,11 +133,19 @@ func TestProcessorNode_ErrorWithoutNackHandler(t *testing.T) {
 func TestProcessorNode_ErrorWithNackHandler(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
-	ctrl := gomock.NewController(t)
 
 	wantErr := cerrors.New("something bad happened")
-	processor := mock.NewProcessor(ctrl)
-	processor.EXPECT().Process(ctx, gomock.Any()).Return(record.Record{}, wantErr)
+	processor := mock.NewProcessor(gomock.NewController(t))
+	processor.EXPECT().Open(gomock.Any())
+	processor.EXPECT().
+		Process(ctx, gomock.Any()).
+		Return([]sdk.ProcessedRecord{sdk.ErrorRecord{Error: wantErr}})
+	processor.EXPECT().Teardown(gomock.Any())
+
+	nackHandler := func(msg *Message, nackMetadata NackMetadata) error {
+		is.New(t).True(cerrors.Is(nackMetadata.Reason, wantErr)) // expected underlying error to be the processor error
+		return nil                                               // the error should be regarded as handled
+	}
 
 	n := ProcessorNode{
 		Name:           "test",
@@ -144,10 +158,7 @@ func TestProcessorNode_ErrorWithNackHandler(t *testing.T) {
 	out := n.Pub()
 
 	msg := &Message{Ctx: ctx}
-	msg.RegisterNackHandler(func(msg *Message, nackMetadata NackMetadata) error {
-		is.True(cerrors.Is(nackMetadata.Reason, wantErr)) // expected underlying error to be the processor error
-		return nil                                        // the error should be regarded as handled
-	})
+	msg.RegisterNackHandler(nackHandler)
 	go func() {
 		// publisher
 		in <- msg
@@ -163,6 +174,84 @@ func TestProcessorNode_ErrorWithNackHandler(t *testing.T) {
 	is.Equal(false, ok)
 }
 
+func TestProcessorNode_BadProcessor_ReturnsMoreRecords(t *testing.T) {
+	is := is.New(t)
+
+	processor := mock.NewProcessor(gomock.NewController(t))
+	processor.EXPECT().Open(gomock.Any())
+	processor.EXPECT().
+		Process(context.Background(), gomock.Any()).
+		// processor returns 2 records instead of one
+		Return([]sdk.ProcessedRecord{sdk.SingleRecord{}, sdk.SingleRecord{}})
+	processor.EXPECT().Teardown(gomock.Any())
+
+	nackHandler := func(msg *Message, nackMetadata NackMetadata) error {
+		// expected underlying error to be the processor error
+		is.New(t).Equal("processor was given 1 record(s), but returned 2", nackMetadata.Reason.Error())
+		return nil // the error should be regarded as handled
+	}
+
+	testNodeWithError(is, processor, nackHandler)
+}
+
+func TestProcessorNode_BadProcessor_ChangesPosition(t *testing.T) {
+	is := is.New(t)
+
+	processor := mock.NewProcessor(gomock.NewController(t))
+	processor.EXPECT().Open(gomock.Any())
+	processor.EXPECT().
+		Process(context.Background(), gomock.Any()).
+		// processor returns 2 records instead of one
+		Return([]sdk.ProcessedRecord{sdk.SingleRecord{Position: opencdc.Position("new position")}})
+	processor.EXPECT().Teardown(gomock.Any())
+
+	nackHandler := func(msg *Message, nackMetadata NackMetadata) error {
+		// expected underlying error to be the processor error
+		is.New(t).Equal(
+			"processor changed position from 'test position' to 'new position' "+
+				"(not allowed because source connector cannot correctly acknowledge messages)",
+			nackMetadata.Reason.Error(),
+		)
+		return nil // the error should be regarded as handled
+	}
+
+	testNodeWithError(is, processor, nackHandler)
+}
+
+func testNodeWithError(is *is.I, processor *mock.Processor, nackHandler NackHandler) {
+	ctx := context.Background()
+	n := ProcessorNode{
+		Name:           "test",
+		Processor:      processor,
+		ProcessorTimer: noop.Timer{},
+	}
+
+	in := make(chan *Message)
+	n.Sub(in)
+	out := n.Pub()
+
+	msg := &Message{
+		Ctx: ctx,
+		Record: record.Record{
+			Position: record.Position("test position"),
+		},
+	}
+	msg.RegisterNackHandler(nackHandler)
+	go func() {
+		// publisher
+		in <- msg
+		close(in)
+	}()
+
+	err := n.Run(ctx)
+	is.True(err != nil)
+	is.Equal(MessageStatusNacked, msg.Status())
+
+	// after the node stops the out channel should be closed
+	_, ok := <-out
+	is.Equal(false, ok)
+}
+
 func TestProcessorNode_Skip(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
@@ -170,7 +259,11 @@ func TestProcessorNode_Skip(t *testing.T) {
 
 	// create a dummy processor
 	proc := mock.NewProcessor(ctrl)
-	proc.EXPECT().Process(ctx, gomock.Any()).Return(record.Record{}, processor.ErrSkipRecord)
+	proc.EXPECT().Open(gomock.Any())
+	proc.EXPECT().
+		Process(ctx, gomock.Any()).
+		Return([]sdk.ProcessedRecord{sdk.FilterRecord{}})
+	proc.EXPECT().Teardown(gomock.Any())
 
 	n := ProcessorNode{
 		Name:           "test",

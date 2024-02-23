@@ -34,14 +34,14 @@ import (
 )
 
 type Service struct {
-	db               database.DB
-	logger           log.CtxLogger
-	parser           config.Parser
-	pipelineService  PipelineService
-	connectorService ConnectorService
-	processorService ProcessorService
-	pluginService    PluginService
-	pipelinesPath    string
+	db                     database.DB
+	logger                 log.CtxLogger
+	parser                 config.Parser
+	pipelineService        PipelineService
+	connectorService       ConnectorService
+	processorService       ProcessorService
+	connectorPluginService ConnectorPluginService
+	pipelinesPath          string
 }
 
 func NewService(
@@ -50,18 +50,18 @@ func NewService(
 	plService PipelineService,
 	connService ConnectorService,
 	procService ProcessorService,
-	pluginService PluginService,
+	connPluginService ConnectorPluginService,
 	pipelinesDir string,
 ) *Service {
 	return &Service{
-		db:               db,
-		logger:           logger.WithComponent("provisioning.Service"),
-		parser:           yaml.NewParser(logger),
-		pipelineService:  plService,
-		connectorService: connService,
-		processorService: procService,
-		pluginService:    pluginService,
-		pipelinesPath:    pipelinesDir,
+		db:                     db,
+		logger:                 logger.WithComponent("provisioning.Service"),
+		parser:                 yaml.NewParser(logger),
+		pipelineService:        plService,
+		connectorService:       connService,
+		processorService:       procService,
+		connectorPluginService: connPluginService,
+		pipelinesPath:          pipelinesDir,
 	}
 }
 
@@ -247,7 +247,7 @@ func (s *Service) provisionPipeline(ctx context.Context, cfg config.Pipeline) er
 	// check if pipeline should be running
 	if cfg.Status == config.StatusRunning {
 		// TODO set status and let the pipeline service start it
-		err := s.pipelineService.Start(ctx, s.connectorService, s.processorService, s.pluginService, cfg.ID)
+		err := s.pipelineService.Start(ctx, s.connectorService, s.processorService, s.connectorPluginService, cfg.ID)
 		if err != nil {
 			return cerrors.Errorf("could not start the pipeline %q: %w", cfg.ID, err)
 		}

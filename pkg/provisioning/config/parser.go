@@ -40,7 +40,7 @@ type Connector struct {
 
 type Processor struct {
 	ID        string
-	Type      string
+	Plugin    string
 	Settings  map[string]string
 	Workers   int
 	Condition string
@@ -64,7 +64,7 @@ var (
 	ConnectorImmutableFields = []string{"Type", "Plugin"}
 	ConnectorMutableFields   = []string{"Name", "Settings", "Processors"}
 
-	ProcessorImmutableFields = []string{"Type"}
+	ProcessorImmutableFields = []string{"Plugin"}
 	ProcessorMutableFields   = []string{"Settings", "Workers", "Condition"}
 )
 

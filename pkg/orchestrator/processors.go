@@ -29,7 +29,7 @@ type ProcessorOrchestrator base
 
 func (p *ProcessorOrchestrator) Create(
 	ctx context.Context,
-	procType string,
+	plugin string,
 	parent processor.Parent,
 	cfg processor.Config,
 	cond string,
@@ -58,7 +58,15 @@ func (p *ProcessorOrchestrator) Create(
 	}
 
 	// create processor and add to pipeline or connector
-	proc, err := p.processors.Create(ctx, uuid.NewString(), procType, parent, cfg, processor.ProvisionTypeAPI, cond)
+	proc, err := p.processors.Create(
+		ctx,
+		uuid.NewString(),
+		plugin,
+		parent,
+		cfg,
+		processor.ProvisionTypeAPI,
+		cond,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -110,7 +118,7 @@ func (p *ProcessorOrchestrator) InspectIn(
 		return nil, err
 	}
 
-	return proc.Processor.InspectIn(ctx, proc.ID), nil
+	return proc.InspectIn(ctx, proc.ID), nil
 }
 
 func (p *ProcessorOrchestrator) InspectOut(
@@ -122,7 +130,7 @@ func (p *ProcessorOrchestrator) InspectOut(
 		return nil, err
 	}
 
-	return proc.Processor.InspectOut(ctx, proc.ID), nil
+	return proc.InspectOut(ctx, proc.ID), nil
 }
 
 func (p *ProcessorOrchestrator) Get(ctx context.Context, id string) (*processor.Instance, error) {
@@ -213,7 +221,7 @@ func (p *ProcessorOrchestrator) Delete(ctx context.Context, id string) error {
 		return err
 	}
 	r.Append(func() error {
-		_, err = p.processors.Create(ctx, id, proc.Type, proc.Parent, proc.Config, processor.ProvisionTypeAPI, proc.Condition)
+		_, err = p.processors.Create(ctx, id, proc.Plugin, proc.Parent, proc.Config, processor.ProvisionTypeAPI, proc.Condition)
 		return err
 	})
 

@@ -31,14 +31,14 @@ import (
 	"google.golang.org/grpc"
 )
 
-// ProcessorOrchestrator defines a CRUD interface that manages the Interface resource.
+// ProcessorOrchestrator defines a CRUD interface that manages the processor resource.
 type ProcessorOrchestrator interface {
 	List(ctx context.Context) map[string]*processor.Instance
-	// Get will return a single Interface or an error if it doesn't exist.
+	// Get will return a single processor or an error if it doesn't exist.
 	Get(ctx context.Context, id string) (*processor.Instance, error)
-	// Create will make a new Interface.
+	// Create will make a new processor.
 	Create(ctx context.Context, procType string, parent processor.Parent, cfg processor.Config, condition string) (*processor.Instance, error)
-	// Update will update a Interface's config.
+	// Update will update a processor's config.
 	Update(ctx context.Context, id string, cfg processor.Config) (*processor.Instance, error)
 	// Delete removes a processor
 	Delete(ctx context.Context, id string) error
@@ -165,9 +165,19 @@ func (p *ProcessorAPIv1) CreateProcessor(
 	ctx context.Context,
 	req *apiv1.CreateProcessorRequest,
 ) (*apiv1.CreateProcessorResponse, error) {
+	//nolint:staticcheck // we're fine with allowing Type for some time more
+	if req.Type != "" && req.Plugin != "" {
+		return nil, status.ProcessorError(cerrors.New("only one of [type, plugin] can be specified"))
+	}
+	plugin := req.Plugin
+	if plugin == "" {
+		//nolint:staticcheck // we're fine with allowing Type for some time more
+		plugin = req.Type
+	}
+
 	created, err := p.ps.Create(
 		ctx,
-		req.Type,
+		plugin,
 		fromproto.ProcessorParent(req.Parent),
 		fromproto.ProcessorConfig(req.Config),
 		req.Condition,
