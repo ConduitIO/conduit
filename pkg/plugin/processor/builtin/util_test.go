@@ -15,11 +15,11 @@
 package builtin
 
 import (
-	"github.com/google/go-cmp/cmp/cmpopts"
 	"testing"
 
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/matryer/is"
 )
 
