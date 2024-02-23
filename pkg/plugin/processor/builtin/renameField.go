@@ -84,11 +84,11 @@ func (p *renameField) Configure(_ context.Context, m map[string]string) error {
 			return cerrors.Errorf("cannot rename one of the top-level fields %q", key)
 		}
 		value := strings.TrimSpace(parts[1])
-		result[key] = value
 		p.referenceResolvers[i], err = sdk.NewReferenceResolver(key)
 		if err != nil {
 			return cerrors.Errorf("invalid reference: %w", err)
 		}
+		result[key] = value
 	}
 	p.mapping = result
 
@@ -103,8 +103,12 @@ func (p *renameField) Process(_ context.Context, records []opencdc.Record) []sdk
 	index := 0
 	out := make([]sdk.ProcessedRecord, 0, len(records))
 	for _, record := range records {
-		for key, val := range p.mapping {
-			err := p.rename(index, record, key, val)
+		for _, newName := range p.mapping {
+			ref, err := p.referenceResolvers[index].Resolve(&record)
+			if err != nil {
+				return append(out, sdk.ErrorRecord{Error: err})
+			}
+			err = ref.Rename(newName)
 			if err != nil {
 				return append(out, sdk.ErrorRecord{Error: err})
 			}
@@ -114,44 +118,6 @@ func (p *renameField) Process(_ context.Context, records []opencdc.Record) []sdk
 		index = 0
 	}
 	return out
-}
-
-func (p *renameField) rename(index int, record opencdc.Record, oldName, newName string) error {
-	ref1, err := p.referenceResolvers[index].Resolve(&record)
-	if err != nil {
-		return err
-	}
-	resolver2, err := sdk.NewReferenceResolver(p.getNameWithPrefix(newName, oldName))
-	if err != nil {
-		return err
-	}
-	// create a second reference to the new name
-	ref2, err := resolver2.Resolve(&record)
-	if err != nil {
-		return err
-	}
-	// copy the value over to the new name
-	err = ref2.Set(ref1.Get())
-	if err != nil {
-		return err
-	}
-	// delete the old name field
-	err = ref1.Delete()
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (p *renameField) getNameWithPrefix(newName, oldName string) string {
-	// split the oldName by dots
-	parts := strings.Split(oldName, ".")
-
-	// replace the last value with the new name
-	parts[len(parts)-1] = newName
-	// len(parts) is always 2 or more, because top-level renames are not allowed (would've failed before).
-
-	return strings.Join(parts, ".")
 }
 
 func (p *renameField) Teardown(context.Context) error {
