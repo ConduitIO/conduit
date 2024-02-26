@@ -16,10 +16,10 @@ package js
 
 import (
 	"context"
-	"github.com/conduitio/conduit-commons/config"
 	"os"
 	"sync"
 
+	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
