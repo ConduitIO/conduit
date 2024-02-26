@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//go:generate paramgen -output=config_paramgen.go processorConfig
+
 package js
 
 import (
@@ -57,6 +59,23 @@ type gojaContext struct {
 	function goja.Callable
 }
 
+type processorConfig struct {
+	// Script is the JavaScript code for this processor.
+	// It needs to have a function 'process()' that accepts
+	// an array of records and returns an array of processed records.
+	// The processed records in the returned array need to have matching indexes with
+	// records in the input array. In other words, for the record at input_array[i]
+	// the processed record should be at output_array[i].
+	//
+	// The processed record can be one of the following:
+	// 1. a processed record itself
+	// 2. a filter record (constructed with new FilterRecord())
+	// 3. an error record (constructred with new ErrorRecord())
+	Script string `json:"script"`
+	// ScriptPath is the path to a .js file containing the processor code.
+	ScriptPath string `json:"script.path"`
+}
+
 type processor struct {
 	sdk.UnimplementedProcessor
 
@@ -83,24 +102,14 @@ func (p *processor) Specification() (sdk.Specification, error) {
 				Default: "",
 				Type:    config.ParameterTypeString,
 				Description: `
-JavaScript code for this processor. It needs to have a function 'process()' that
-accepts an array of records and returns an array of processed records.
 
-The processed records in the returned array need to have matching indexes with 
-records in the input array. In other words, for the record at input_array[i]
-the processed record should be at output_array[i].
-
-The processed record can be one of the following:
-1. a processed record itself
-2. a filter record (constructed with new FilterRecord())
-3. an error record (constructred with new ErrorRecord())
 `,
 				Validations: nil,
 			},
 			"script.path": {
 				Default:     "",
 				Type:        config.ParameterTypeString,
-				Description: "Path to a .js file containing the processor code.",
+				Description: "",
 				Validations: nil,
 			},
 		},
@@ -108,17 +117,26 @@ The processed record can be one of the following:
 }
 
 func (p *processor) Configure(_ context.Context, m map[string]string) error {
-	script := m["script"]
-	scriptPath := m["script.path"]
+	cfg := processorConfig{}
+	err := config.Config(m).Sanitize().ApplyDefaults(cfg.Parameters()).Validate(cfg.Parameters())
+	if err != nil {
+		return cerrors.Errorf("invalid configuration: %w", err)
+	}
+
+	err = config.Config(m).DecodeInto(&cfg)
+	if err != nil {
+		return cerrors.Errorf("failed decoding configuration: %w", err)
+	}
+
 	switch {
-	case script != "" && scriptPath != "":
+	case cfg.Script != "" && cfg.ScriptPath != "":
 		return cerrors.New("only one of: [script, script.path] should be provided")
-	case script != "":
-		p.src = script
-	case scriptPath != "":
-		file, err := os.ReadFile(scriptPath)
+	case cfg.Script != "":
+		p.src = cfg.Script
+	case cfg.ScriptPath != "":
+		file, err := os.ReadFile(cfg.ScriptPath)
 		if err != nil {
-			return cerrors.Errorf("error reading script from path %v: %w", scriptPath, err)
+			return cerrors.Errorf("error reading script from path %v: %w", cfg.ScriptPath, err)
 		}
 		p.src = string(file)
 	default:
