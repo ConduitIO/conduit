@@ -17,7 +17,6 @@ package procbuiltin
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"io"
 	"net/http"
 	"net/url"
@@ -26,6 +25,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/record"
+	"github.com/goccy/go-json"
 	"github.com/jpillora/backoff"
 )
 

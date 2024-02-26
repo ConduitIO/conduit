@@ -17,7 +17,6 @@ package procbuiltin
 import (
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -25,6 +24,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/multierror"
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/record"
+	"github.com/goccy/go-json"
 )
 
 type unwrapProcessor struct {
