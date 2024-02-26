@@ -11,25 +11,29 @@ func (httpConfig) Parameters() map[string]config.Parameter {
 	return map[string]config.Parameter{
 		"backoffRetry.count": {
 			Default:     "0",
-			Description: "Maximum number of retries for an individual record when backing off following an error.",
+			Description: "backoffRetry.count is the maximum number of retries for an individual record when backing off following an error.",
 			Type:        config.ParameterTypeFloat,
-			Validations: []config.Validation{},
+			Validations: []config.Validation{
+				config.ValidationGreaterThan{V: -1},
+			},
 		},
 		"backoffRetry.factor": {
 			Default:     "2",
-			Description: "The multiplying factor for each increment step.",
+			Description: "backoffRetry.factor is the multiplying factor for each increment step.",
 			Type:        config.ParameterTypeFloat,
-			Validations: []config.Validation{},
+			Validations: []config.Validation{
+				config.ValidationGreaterThan{V: 0},
+			},
 		},
 		"backoffRetry.max": {
 			Default:     "5s",
-			Description: "Maximum waiting time before retrying.",
+			Description: "backoffRetry.max is the maximum waiting time before retrying.",
 			Type:        config.ParameterTypeDuration,
 			Validations: []config.Validation{},
 		},
 		"backoffRetry.min": {
 			Default:     "100ms",
-			Description: "Minimum waiting time before retrying.",
+			Description: "backoffRetry.min is the minimum waiting time before retrying.",
 			Type:        config.ParameterTypeDuration,
 			Validations: []config.Validation{},
 		},
@@ -41,13 +45,13 @@ func (httpConfig) Parameters() map[string]config.Parameter {
 		},
 		"request.contentType": {
 			Default:     "application/json",
-			Description: "Value of the Content-Type header.",
+			Description: "request.contentType is the value of the Content-Type header.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},
 		"request.method": {
 			Default:     "POST",
-			Description: "HTTP request method to be used.",
+			Description: "request.method is the HTTP request method to be used.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},

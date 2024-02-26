@@ -36,18 +36,19 @@ import (
 type httpConfig struct {
 	// URL used in the HTTP request.
 	URL string `json:"request.url" validate:"required"`
-	// HTTP request method to be used.
+	// Method is the HTTP request method to be used.
 	Method string `json:"request.method" default:"POST"`
-	// Value of the Content-Type header.
+	// ContentType is the value of the Content-Type header.
 	ContentType string `json:"request.contentType" default:"application/json"`
 
-	// Maximum number of retries for an individual record when backing off following an error.
-	BackoffRetryCount float64 `json:"backoffRetry.count" default:"0"`
-	// The multiplying factor for each increment step.
-	BackoffRetryFactor float64 `json:"backoffRetry.factor" default:"2"`
-	// Minimum waiting time before retrying.
+	// BackoffRetryCount is the maximum number of retries for an individual record
+	// when backing off following an error.
+	BackoffRetryCount float64 `json:"backoffRetry.count" default:"0" validate:"gt=-1"`
+	// BackoffRetryFactor is the multiplying factor for each increment step.
+	BackoffRetryFactor float64 `json:"backoffRetry.factor" default:"2" validate:"gt=0"`
+	// BackoffRetryMin is the minimum waiting time before retrying.
 	BackoffRetryMin time.Duration `json:"backoffRetry.min" default:"100ms"`
-	// Maximum waiting time before retrying.
+	// BackoffRetryMax is the maximum waiting time before retrying.
 	BackoffRetryMax time.Duration `json:"backoffRetry.max" default:"5s"`
 
 	// RequestBodyRef specifies which field from the input record
@@ -153,9 +154,13 @@ func (p *httpProcessor) Open(context.Context) error {
 }
 
 func (p *httpProcessor) Process(ctx context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
-	out := make([]sdk.ProcessedRecord, len(records))
-	for i, rec := range records {
-		out[i] = p.processRecordWithBackOff(ctx, rec)
+	out := make([]sdk.ProcessedRecord, 0, len(records))
+	for _, rec := range records {
+		procRec := p.processRecordWithBackOff(ctx, rec)
+		out = append(out, procRec)
+		if _, ok := procRec.(sdk.ErrorRecord); ok {
+			return out
+		}
 	}
 
 	return out
