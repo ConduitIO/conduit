@@ -16,10 +16,10 @@ package js
 
 import (
 	"context"
+	"github.com/conduitio/conduit-commons/config"
 	"os"
 	"sync"
 
-	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -108,19 +108,21 @@ The processed record can be one of the following:
 }
 
 func (p *processor) Configure(_ context.Context, m map[string]string) error {
-	script, hasScript := m["script"]
-	scriptPath, hasScriptPath := m["script.path"]
+	script := m["script"]
+	scriptPath := m["script.path"]
 	switch {
-	case hasScript && hasScriptPath:
+	case script != "" && scriptPath != "":
 		return cerrors.New("only one of: [script, script.path] should be provided")
-	case hasScript:
+	case script != "":
 		p.src = script
-	case hasScriptPath:
+	case scriptPath != "":
 		file, err := os.ReadFile(scriptPath)
 		if err != nil {
 			return cerrors.Errorf("error reading script from path %v: %w", scriptPath, err)
 		}
 		p.src = string(file)
+	default:
+		return cerrors.New("one of: [script, script.path] needs to be provided")
 	}
 
 	return nil
