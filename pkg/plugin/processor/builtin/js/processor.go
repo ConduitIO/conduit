@@ -310,9 +310,13 @@ func (p *processor) toSDKRecords(runtime *goja.Runtime, v goja.Value, recordsCou
 		)
 	}
 
-	out := make([]sdk.ProcessedRecord, len(jsRecs))
-	for i, jsr := range jsRecs {
-		out[i] = p.toProcessedRecord(jsr)
+	out := make([]sdk.ProcessedRecord, 0, len(jsRecs))
+	for _, jsr := range jsRecs {
+		procRec := p.toProcessedRecord(jsr)
+		out = append(out, procRec)
+		if _, ok := procRec.(sdk.ErrorRecord); ok {
+			return out
+		}
 	}
 
 	return out
