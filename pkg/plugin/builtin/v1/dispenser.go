@@ -45,7 +45,7 @@ func NewDispenser(
 }
 
 func (d *Dispenser) DispenseSpecifier() (plugin.SpecifierPlugin, error) {
-	return newSpecifierPluginAdapter(d.specifierPlugin()), nil
+	return newSpecifierPluginAdapter(d.specifierPlugin(), d.pluginLogger("specifier")), nil
 }
 
 func (d *Dispenser) DispenseSource() (plugin.SourcePlugin, error) {

@@ -19,13 +19,16 @@ import (
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/matryer/is"
+	"github.com/rs/zerolog"
 )
 
 func TestRunSandbox(t *testing.T) {
 	ctx := context.Background()
 	is := is.New(t)
 	haveErr := cerrors.New("test error")
+	logger := log.New(zerolog.New(zerolog.NewTestWriter(t)))
 
 	type testReq struct {
 		foo string
@@ -84,7 +87,7 @@ func TestRunSandbox(t *testing.T) {
 
 	for _, td := range testData {
 		t.Run(td.name, func(t *testing.T) {
-			gotResp, gotErr := runSandbox(td.f, ctx, td.req)
+			gotResp, gotErr := runSandbox(td.f, ctx, td.req, logger)
 			is.Equal(gotResp, td.resp)
 			if td.strict {
 				// strict mode means we expect a very specific error
@@ -100,7 +103,9 @@ func TestRunSandbox(t *testing.T) {
 func TestRunSandboxNoResp(t *testing.T) {
 	ctx := context.Background()
 	is := is.New(t)
+	logger := log.New(zerolog.New(zerolog.NewTestWriter(t)))
+
 	wantErr := cerrors.New("test error")
-	gotErr := runSandboxNoResp(func(context.Context, any) error { panic(wantErr) }, ctx, nil)
+	gotErr := runSandboxNoResp(func(context.Context, any) error { panic(wantErr) }, ctx, nil, logger)
 	is.Equal(gotErr, wantErr)
 }

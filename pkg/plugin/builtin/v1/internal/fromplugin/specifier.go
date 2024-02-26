@@ -70,9 +70,11 @@ func SpecifierParameter(in cpluginv1.SpecifierParameter) plugin.Parameter {
 			requiredExists = true
 		}
 	}
-	// needed for backward compatibility, in.Required is converted to a validation of type ValidationTypeRequired
-	// making sure not to duplicate the required validation
+	//nolint:staticcheck // needed for backward compatibility, in.Required is
+	// converted to a validation of type ValidationTypeRequired making sure not
+	// to duplicate the required validation
 	if in.Required && !requiredExists {
+		//nolint:makezero // false positive, we actually want to append here
 		validations = append(validations, plugin.Validation{
 			Type: plugin.ValidationTypeRequired,
 		})
