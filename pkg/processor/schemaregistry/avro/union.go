@@ -30,6 +30,7 @@ import (
 type UnionResolver struct {
 	mapUnionPaths   []path
 	arrayUnionPaths []path
+	nullUnionPaths  []path
 	resolver        *avro.TypeResolver
 }
 
@@ -40,6 +41,7 @@ type UnionResolver struct {
 func NewUnionResolver(schema avro.Schema) UnionResolver {
 	var mapUnionPaths []path
 	var arrayUnionPaths []path
+	var nullUnionPaths []path
 	// traverse the schema and extract paths to all maps and arrays with a union
 	// as the value type
 	traverseSchema(schema, func(p path) {
@@ -53,11 +55,17 @@ func NewUnionResolver(schema avro.Schema) UnionResolver {
 			pCopy := make(path, len(p))
 			copy(pCopy, p)
 			arrayUnionPaths = append(arrayUnionPaths, pCopy)
+		} else if isNullUnion(p[len(p)-1].schema) {
+			// path points to a null union, copy and store it
+			pCopy := make(path, len(p))
+			copy(pCopy, p)
+			nullUnionPaths = append(nullUnionPaths, pCopy)
 		}
 	})
 	return UnionResolver{
 		mapUnionPaths:   mapUnionPaths,
 		arrayUnionPaths: arrayUnionPaths,
+		nullUnionPaths:  nullUnionPaths,
 		resolver:        avro.NewTypeResolver(),
 	}
 }
@@ -68,7 +76,9 @@ func NewUnionResolver(schema avro.Schema) UnionResolver {
 // (e.g. map[string]any{"string":"foo"}). This function takes that map and
 // extracts the actual value from it (e.g. "foo").
 func (r UnionResolver) AfterUnmarshal(val any) error {
-	if len(r.mapUnionPaths) == 0 && len(r.arrayUnionPaths) == 0 {
+	if len(r.mapUnionPaths) == 0 &&
+		len(r.arrayUnionPaths) == 0 &&
+		len(r.nullUnionPaths) == 0 {
 		return nil // shortcut
 	}
 
@@ -77,6 +87,10 @@ func (r UnionResolver) AfterUnmarshal(val any) error {
 		return err
 	}
 	substitutions, err = r.afterUnmarshalArraySubstitutions(val, substitutions)
+	if err != nil {
+		return err
+	}
+	substitutions, err = r.afterUnmarshalNullUnionSubstitutions(val, substitutions)
 	if err != nil {
 		return err
 	}
@@ -181,6 +195,13 @@ func (r UnionResolver) afterUnmarshalArraySubstitutions(val any, substitutions [
 			}
 		}
 	}
+	return substitutions, nil
+}
+
+func (r UnionResolver) afterUnmarshalNullUnionSubstitutions(val any, substitutions []substitution) ([]substitution, error) {
+	// TODO traverse the value and collect all substitutions for null unions
+	//  (e.g. replace map[string]any{"int": 0} with nil), but for that we need
+	//  to have access to the field containing this value.
 	return substitutions, nil
 }
 
@@ -367,6 +388,24 @@ func isArrayUnion(schema avro.Schema) bool {
 		// at least one of the types in the union must be a map or array for this
 		// to count as a map with a union type
 		if s.Type() == avro.Array || s.Type() == avro.Map {
+			return true
+		}
+	}
+	return false
+}
+
+func isNullUnion(schema avro.Schema) bool {
+	// TODO we need to have access to the field containing this schema to update
+	//  the value, so this is not entirely correct
+
+	s, ok := schema.(*avro.UnionSchema)
+	if !ok {
+		return false
+	}
+	for _, s := range s.Types() {
+		// at least one of the types in the union must be a map or array for this
+		// to count as a map with a union type
+		if s.Type() == avro.Null {
 			return true
 		}
 	}

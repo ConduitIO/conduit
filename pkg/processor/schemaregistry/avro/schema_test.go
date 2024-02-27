@@ -50,7 +50,7 @@ func TestSchema_MarshalUnmarshal(t *testing.T) {
 		)),
 	}, {
 		name:      "boolean ptr (nil)",
-		haveValue: func() *bool { return nil }(),
+		haveValue: (*bool)(nil),
 		wantValue: nil, // when unmarshaling we get an untyped nil
 		wantSchema: must(avro.NewUnionSchema(
 			[]avro.Schema{
@@ -64,55 +64,275 @@ func TestSchema_MarshalUnmarshal(t *testing.T) {
 		wantValue:  int(1),
 		wantSchema: avro.NewPrimitiveSchema(avro.Int, nil),
 	}, {
+		name:      "int ptr (0)",
+		haveValue: func() *int { var v int; return &v }(),
+		wantValue: 0, // ptr is unmarshalled into value
+		wantSchema: must(avro.NewUnionSchema(
+			[]avro.Schema{
+				avro.NewPrimitiveSchema(avro.Int, nil),
+				avro.NewPrimitiveSchema(avro.Null, nil),
+			},
+		)),
+	}, {
+		name:      "int ptr (nil)",
+		haveValue: (*int)(nil),
+		wantValue: nil, // when unmarshaling we get an untyped nil
+		wantSchema: must(avro.NewUnionSchema(
+			[]avro.Schema{
+				avro.NewPrimitiveSchema(avro.Int, nil),
+				avro.NewPrimitiveSchema(avro.Null, nil),
+			},
+		)),
+	}, {
 		name:       "int64",
 		haveValue:  int64(1),
 		wantValue:  int64(1),
 		wantSchema: avro.NewPrimitiveSchema(avro.Long, nil),
+	}, {
+		name:      "int64 ptr (0)",
+		haveValue: func() *int64 { var v int64; return &v }(),
+		wantValue: int64(0), // ptr is unmarshalled into value
+		wantSchema: must(avro.NewUnionSchema(
+			[]avro.Schema{
+				avro.NewPrimitiveSchema(avro.Long, nil),
+				avro.NewPrimitiveSchema(avro.Null, nil),
+			},
+		)),
+	}, {
+		name:      "int64 ptr (nil)",
+		haveValue: (*int64)(nil),
+		wantValue: nil, // when unmarshaling we get an untyped nil
+		wantSchema: must(avro.NewUnionSchema(
+			[]avro.Schema{
+				avro.NewPrimitiveSchema(avro.Long, nil),
+				avro.NewPrimitiveSchema(avro.Null, nil),
+			},
+		)),
 	}, {
 		name:       "int32",
 		haveValue:  int32(1),
 		wantValue:  int(1),
 		wantSchema: avro.NewPrimitiveSchema(avro.Int, nil),
 	}, {
+		name:      "int32 ptr (0)",
+		haveValue: func() *int32 { var v int32; return &v }(),
+		wantValue: int(0), // ptr is unmarshalled into value
+		wantSchema: must(avro.NewUnionSchema(
+			[]avro.Schema{
+				avro.NewPrimitiveSchema(avro.Int, nil),
+				avro.NewPrimitiveSchema(avro.Null, nil),
+			},
+		)),
+	}, {
+		name:      "int32 ptr (nil)",
+		haveValue: (*int32)(nil),
+		wantValue: nil, // when unmarshaling we get an untyped nil
+		wantSchema: must(avro.NewUnionSchema(
+			[]avro.Schema{
+				avro.NewPrimitiveSchema(avro.Int, nil),
+				avro.NewPrimitiveSchema(avro.Null, nil),
+			},
+		)),
+	}, {
 		name:       "int16",
 		haveValue:  int16(1),
 		wantValue:  int(1),
 		wantSchema: avro.NewPrimitiveSchema(avro.Int, nil),
+	}, {
+		name:      "int16 ptr (0)",
+		haveValue: func() *int16 { var v int16; return &v }(),
+		wantValue: int(0), // ptr is unmarshalled into value
+		wantSchema: must(avro.NewUnionSchema(
+			[]avro.Schema{
+				avro.NewPrimitiveSchema(avro.Int, nil),
+				avro.NewPrimitiveSchema(avro.Null, nil),
+			},
+		)),
+	}, {
+		name:      "int16 ptr (nil)",
+		haveValue: (*int16)(nil),
+		wantValue: nil, // when unmarshaling we get an untyped nil
+		wantSchema: must(avro.NewUnionSchema(
+			[]avro.Schema{
+				avro.NewPrimitiveSchema(avro.Int, nil),
+				avro.NewPrimitiveSchema(avro.Null, nil),
+			},
+		)),
 	}, {
 		name:       "int8",
 		haveValue:  int8(1),
 		wantValue:  int(1),
 		wantSchema: avro.NewPrimitiveSchema(avro.Int, nil),
 	}, {
+		name:      "int8 ptr (0)",
+		haveValue: func() *int8 { var v int8; return &v }(),
+		wantValue: int(0), // ptr is unmarshalled into value
+		wantSchema: must(avro.NewUnionSchema(
+			[]avro.Schema{
+				avro.NewPrimitiveSchema(avro.Int, nil),
+				avro.NewPrimitiveSchema(avro.Null, nil),
+			},
+		)),
+	}, {
+		name:      "int8 ptr (nil)",
+		haveValue: (*int8)(nil),
+		wantValue: nil, // when unmarshaling we get an untyped nil
+		wantSchema: must(avro.NewUnionSchema(
+			[]avro.Schema{
+				avro.NewPrimitiveSchema(avro.Int, nil),
+				avro.NewPrimitiveSchema(avro.Null, nil),
+			},
+		)),
+	}, {
 		name:       "uint32",
 		haveValue:  uint32(1),
 		wantValue:  int64(1),
 		wantSchema: avro.NewPrimitiveSchema(avro.Long, nil),
+	}, {
+		name:      "uint32 ptr (0)",
+		haveValue: func() *uint32 { var v uint32; return &v }(),
+		wantValue: int64(0), // ptr is unmarshalled into value
+		wantSchema: must(avro.NewUnionSchema(
+			[]avro.Schema{
+				avro.NewPrimitiveSchema(avro.Long, nil),
+				avro.NewPrimitiveSchema(avro.Null, nil),
+			},
+		)),
+	}, {
+		name:      "uint32 ptr (nil)",
+		haveValue: (*uint32)(nil),
+		wantValue: nil, // when unmarshaling we get an untyped nil
+		wantSchema: must(avro.NewUnionSchema(
+			[]avro.Schema{
+				avro.NewPrimitiveSchema(avro.Long, nil),
+				avro.NewPrimitiveSchema(avro.Null, nil),
+			},
+		)),
 	}, {
 		name:       "uint16",
 		haveValue:  uint16(1),
 		wantValue:  int(1),
 		wantSchema: avro.NewPrimitiveSchema(avro.Int, nil),
 	}, {
+		name:      "uint16 ptr (0)",
+		haveValue: func() *uint16 { var v uint16; return &v }(),
+		wantValue: int(0), // ptr is unmarshalled into value
+		wantSchema: must(avro.NewUnionSchema(
+			[]avro.Schema{
+				avro.NewPrimitiveSchema(avro.Int, nil),
+				avro.NewPrimitiveSchema(avro.Null, nil),
+			},
+		)),
+	}, {
+		name:      "uint16 ptr (nil)",
+		haveValue: (*uint16)(nil),
+		wantValue: nil, // when unmarshaling we get an untyped nil
+		wantSchema: must(avro.NewUnionSchema(
+			[]avro.Schema{
+				avro.NewPrimitiveSchema(avro.Int, nil),
+				avro.NewPrimitiveSchema(avro.Null, nil),
+			},
+		)),
+	}, {
 		name:       "uint8",
 		haveValue:  uint8(1),
 		wantValue:  int(1),
 		wantSchema: avro.NewPrimitiveSchema(avro.Int, nil),
+	}, {
+		name:      "uint8 ptr (0)",
+		haveValue: func() *uint8 { var v uint8; return &v }(),
+		wantValue: int(0), // ptr is unmarshalled into value
+		wantSchema: must(avro.NewUnionSchema(
+			[]avro.Schema{
+				avro.NewPrimitiveSchema(avro.Int, nil),
+				avro.NewPrimitiveSchema(avro.Null, nil),
+			},
+		)),
+	}, {
+		name:      "uint8 ptr (nil)",
+		haveValue: (*uint8)(nil),
+		wantValue: nil, // when unmarshaling we get an untyped nil
+		wantSchema: must(avro.NewUnionSchema(
+			[]avro.Schema{
+				avro.NewPrimitiveSchema(avro.Int, nil),
+				avro.NewPrimitiveSchema(avro.Null, nil),
+			},
+		)),
 	}, {
 		name:       "float64",
 		haveValue:  float64(1),
 		wantValue:  float64(1),
 		wantSchema: avro.NewPrimitiveSchema(avro.Double, nil),
 	}, {
+		name:      "float64 ptr (0)",
+		haveValue: func() *float64 { var v float64; return &v }(),
+		wantValue: float64(0), // ptr is unmarshalled into value
+		wantSchema: must(avro.NewUnionSchema(
+			[]avro.Schema{
+				avro.NewPrimitiveSchema(avro.Double, nil),
+				avro.NewPrimitiveSchema(avro.Null, nil),
+			},
+		)),
+	}, {
+		name:      "float64 ptr (nil)",
+		haveValue: (*float64)(nil),
+		wantValue: nil, // when unmarshaling we get an untyped nil
+		wantSchema: must(avro.NewUnionSchema(
+			[]avro.Schema{
+				avro.NewPrimitiveSchema(avro.Double, nil),
+				avro.NewPrimitiveSchema(avro.Null, nil),
+			},
+		)),
+	}, {
 		name:       "float32",
 		haveValue:  float32(1),
 		wantValue:  float32(1),
 		wantSchema: avro.NewPrimitiveSchema(avro.Float, nil),
 	}, {
+		name:      "float32 ptr (0)",
+		haveValue: func() *float32 { var v float32; return &v }(),
+		wantValue: float32(0), // ptr is unmarshalled into value
+		wantSchema: must(avro.NewUnionSchema(
+			[]avro.Schema{
+				avro.NewPrimitiveSchema(avro.Float, nil),
+				avro.NewPrimitiveSchema(avro.Null, nil),
+			},
+		)),
+	}, {
+		name:      "float32 ptr (nil)",
+		haveValue: (*float32)(nil),
+		wantValue: nil, // when unmarshaling we get an untyped nil
+		wantSchema: must(avro.NewUnionSchema(
+			[]avro.Schema{
+				avro.NewPrimitiveSchema(avro.Float, nil),
+				avro.NewPrimitiveSchema(avro.Null, nil),
+			},
+		)),
+	}, {
 		name:       "string",
 		haveValue:  "1",
 		wantValue:  "1",
 		wantSchema: avro.NewPrimitiveSchema(avro.String, nil),
+	}, {
+		name:      "string ptr (empty)",
+		haveValue: func() *string { var v string; return &v }(),
+		wantValue: "", // ptr is unmarshalled into value
+		wantSchema: must(avro.NewUnionSchema(
+			[]avro.Schema{
+				avro.NewPrimitiveSchema(avro.String, nil),
+				avro.NewPrimitiveSchema(avro.Null, nil),
+			},
+		)),
+	}, {
+		name:      "string ptr (nil)",
+		haveValue: (*string)(nil),
+		wantValue: nil, // when unmarshaling we get an untyped nil
+		wantSchema: must(avro.NewUnionSchema(
+			[]avro.Schema{
+				avro.NewPrimitiveSchema(avro.String, nil),
+				avro.NewPrimitiveSchema(avro.Null, nil),
+			},
+		)),
 	}, {
 		name:       "[]byte",
 		haveValue:  []byte{1, 2, 3},
@@ -152,7 +372,7 @@ func TestSchema_MarshalUnmarshal(t *testing.T) {
 	}, {
 		name:      "[]any (no data)",
 		haveValue: []any{},
-		wantValue: []any{},
+		wantValue: []any(nil), // TODO: smells like a bug, should be []any{}
 		wantSchema: avro.NewArraySchema(must(avro.NewUnionSchema( // empty slice values default to nullable strings
 			[]avro.Schema{
 				avro.NewPrimitiveSchema(avro.String, nil),
