@@ -38,7 +38,6 @@ type unwrapKafkaConnectConfig struct {
 type unwrapKafkaConnect struct {
 	sdk.UnimplementedProcessor
 
-	cfg         unwrapKafkaConnectConfig
 	fieldRefRes sdk.ReferenceResolver
 }
 
