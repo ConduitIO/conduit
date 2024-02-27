@@ -16,7 +16,6 @@ func (unwrapOpenCDCConfig) Parameters() map[string]config.Parameter {
 			Description: "Filter is a reference to the field which contains the OpenCDC record.  For more information about record references, see: https://github.com/ConduitIO/conduit-processor-sdk/blob/cbdc5dcb5d3109f8f13b88624c9e360076b0bcdb/util.go#L66.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{
-				config.ValidationRequired{},
 				config.ValidationRegex{Regex: regexp.MustCompile("^.Payload")},
 			},
 		},
