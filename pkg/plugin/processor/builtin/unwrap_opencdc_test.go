@@ -141,7 +141,7 @@ func TestUnwrapOpenCDC_Configure(t *testing.T) {
 		{
 			name:    "only fields in .Payload are allowed",
 			in:      map[string]string{"field": ".Metadata"},
-			wantErr: `invalid configuration: error validating "field": ".Metadata" should match the regex "^.Payload": regex validation failed`,
+			wantErr: `failed parsing configuration: config invalid: error validating "field": ".Metadata" should match the regex "^.Payload": regex validation failed`,
 		},
 		{
 			name:    "invalid field",

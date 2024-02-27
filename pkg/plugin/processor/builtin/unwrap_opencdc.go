@@ -21,7 +21,6 @@ import (
 	"encoding/base64"
 	"fmt"
 
-	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -64,17 +63,11 @@ being written to the destination.
 	}, nil
 }
 
-func (u *unwrapOpenCDC) Configure(_ context.Context, m map[string]string) error {
+func (u *unwrapOpenCDC) Configure(ctx context.Context, m map[string]string) error {
 	cfg := unwrapOpenCDCConfig{}
-	inputCfg := config.Config(m).Sanitize().ApplyDefaults(cfg.Parameters())
-	err := inputCfg.Validate(cfg.Parameters())
+	err := sdk.ParseConfig(ctx, m, &cfg, cfg.Parameters())
 	if err != nil {
-		return cerrors.Errorf("invalid configuration: %w", err)
-	}
-
-	err = inputCfg.DecodeInto(&cfg)
-	if err != nil {
-		return cerrors.Errorf("failed decoding configuration: %w", err)
+		return cerrors.Errorf("failed parsing configuration: %w", err)
 	}
 
 	rr, err := sdk.NewReferenceResolver(cfg.Field)
