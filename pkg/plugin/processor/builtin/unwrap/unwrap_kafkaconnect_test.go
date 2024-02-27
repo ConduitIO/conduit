@@ -100,13 +100,13 @@ func TestUnwrapKafkaConnect_Process(t *testing.T) {
 			},
 		},
 		{
-			name:   "payload is invalid JSON",
+			name:   "raw payload not supported",
 			config: map[string]string{},
 			record: opencdc.Record{
 				Metadata: map[string]string{},
 				Payload: opencdc.Change{
 					Before: nil,
-					After:  opencdc.RawData("\"invalid\":\"true\""),
+					After:  opencdc.RawData(`{"description": "test2"}`),
 				},
 			},
 			want: sdk.ErrorRecord{Error: cerrors.New("unexpected data type opencdc.RawData (only structured data is supported)")},
