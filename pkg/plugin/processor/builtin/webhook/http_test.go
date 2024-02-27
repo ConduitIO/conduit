@@ -40,14 +40,14 @@ func TestWebhookHTTP_Configure(t *testing.T) {
 		{
 			name:    "empty config returns error",
 			config:  map[string]string{},
-			wantErr: `invalid configuration: error validating "request.url": required parameter is not provided`,
+			wantErr: `failed parsing configuration: config invalid: error validating "request.url": required parameter is not provided`,
 		},
 		{
 			name: "empty url returns error",
 			config: map[string]string{
 				"request.url": "",
 			},
-			wantErr: `invalid configuration: error validating "request.url": required parameter is not provided`,
+			wantErr: `failed parsing configuration: config invalid: error validating "request.url": required parameter is not provided`,
 		},
 		{
 			name: "invalid url returns error",
@@ -70,7 +70,7 @@ func TestWebhookHTTP_Configure(t *testing.T) {
 				"request.url":        "http://example.com",
 				"backoffRetry.count": "not-a-number",
 			},
-			wantErr: `invalid configuration: error validating "backoffRetry.count": "not-a-number" value is not a float: invalid parameter type`,
+			wantErr: `failed parsing configuration: config invalid: error validating "backoffRetry.count": "not-a-number" value is not a float: invalid parameter type`,
 		},
 		{
 			name: "invalid backoffRetry.min returns error",
@@ -79,7 +79,7 @@ func TestWebhookHTTP_Configure(t *testing.T) {
 				"backoffRetry.count": "1",
 				"backoffRetry.min":   "not-a-duration",
 			},
-			wantErr: `invalid configuration: error validating "backoffRetry.min": "not-a-duration" value is not a duration: invalid parameter type`,
+			wantErr: `failed parsing configuration: config invalid: error validating "backoffRetry.min": "not-a-duration" value is not a duration: invalid parameter type`,
 		},
 		{
 			name: "invalid backoffRetry.max returns error",
@@ -88,7 +88,7 @@ func TestWebhookHTTP_Configure(t *testing.T) {
 				"backoffRetry.count": "1",
 				"backoffRetry.max":   "not-a-duration",
 			},
-			wantErr: `invalid configuration: error validating "backoffRetry.max": "not-a-duration" value is not a duration: invalid parameter type`,
+			wantErr: `failed parsing configuration: config invalid: error validating "backoffRetry.max": "not-a-duration" value is not a duration: invalid parameter type`,
 		},
 		{
 			name: "invalid backoffRetry.factor returns error",
@@ -97,7 +97,7 @@ func TestWebhookHTTP_Configure(t *testing.T) {
 				"backoffRetry.count":  "1",
 				"backoffRetry.factor": "not-a-number",
 			},
-			wantErr: `invalid configuration: error validating "backoffRetry.factor": "not-a-number" value is not a float: invalid parameter type`,
+			wantErr: `failed parsing configuration: config invalid: error validating "backoffRetry.factor": "not-a-number" value is not a float: invalid parameter type`,
 		},
 		{
 			name: "valid url returns processor",

@@ -24,7 +24,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -98,24 +97,15 @@ saves the response body and, optionally, the response status.
 	}, nil
 }
 
-func (p *httpProcessor) Configure(_ context.Context, m map[string]string) error {
+func (p *httpProcessor) Configure(ctx context.Context, m map[string]string) error {
 	cfg := httpConfig{}
-	inputCfg := config.Config(m).
-		Sanitize().
-		ApplyDefaults(cfg.Parameters())
-
-	err := inputCfg.Validate(cfg.Parameters())
+	err := sdk.ParseConfig(ctx, m, &cfg, cfg.Parameters())
 	if err != nil {
-		return cerrors.Errorf("invalid configuration: %w", err)
+		return cerrors.Errorf("failed parsing configuration: %w", err)
 	}
 
-	if inputCfg["response.body"] == inputCfg["response.status"] {
+	if cfg.ResponseBodyRef == cfg.ResponseStatusRef {
 		return cerrors.New("invalid configuration: response.body and response.status set to same field")
-	}
-
-	err = inputCfg.DecodeInto(&cfg)
-	if err != nil {
-		return cerrors.Errorf("failed decoding configuration: %w", err)
 	}
 
 	requestBodyRef, err := sdk.NewReferenceResolver(cfg.RequestBodyRef)
