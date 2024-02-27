@@ -116,16 +116,11 @@ func (p *processor) Specification() (sdk.Specification, error) {
 	}, nil
 }
 
-func (p *processor) Configure(_ context.Context, m map[string]string) error {
+func (p *processor) Configure(ctx context.Context, m map[string]string) error {
 	cfg := processorConfig{}
-	err := config.Config(m).Sanitize().ApplyDefaults(cfg.Parameters()).Validate(cfg.Parameters())
+	err := sdk.ParseConfig(ctx, m, &cfg, cfg.Parameters())
 	if err != nil {
-		return cerrors.Errorf("invalid configuration: %w", err)
-	}
-
-	err = config.Config(m).DecodeInto(&cfg)
-	if err != nil {
-		return cerrors.Errorf("failed decoding configuration: %w", err)
+		return cerrors.Errorf("failed parsing configuration: %w", err)
 	}
 
 	switch {
