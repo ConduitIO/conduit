@@ -44,7 +44,7 @@ func TestUnwrapDebezium_Configure(t *testing.T) {
 		{
 			name:    "invalid field",
 			config:  map[string]string{"field": ".Key"},
-			wantErr: "only payload can be unwrapped, field given: .Key",
+			wantErr: `invalid configuration: error validating "field": ".Key" should match the regex "^.Payload": regex validation failed`,
 		},
 	}
 

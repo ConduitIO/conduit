@@ -12,12 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//go:generate paramgen -output=unwrap_debezium_paramgen.go unwrapDebeziumConfig
+
 package builtin
 
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/conduitio/conduit-commons/config"
@@ -42,6 +43,13 @@ const (
 	debeziumFieldOp        = "op"
 	debeziumFieldTimestamp = "ts_ms"
 )
+
+type unwrapDebeziumConfig struct {
+	// Field is a reference to the field which contains the Debezium record.
+	//
+	// For more information about record references, see: https://github.com/ConduitIO/conduit-processor-sdk/blob/cbdc5dcb5d3109f8f13b88624c9e360076b0bcdb/util.go#L66.
+	Field string `json:"field" validate:"regex=^.Payload" default:".Payload.After"`
+}
 
 type unwrapDebezium struct {
 	sdk.UnimplementedProcessor
@@ -79,17 +87,19 @@ This should be a valid reference within an OpenCDC record, as specified here: ht
 }
 
 func (u *unwrapDebezium) Configure(_ context.Context, m map[string]string) error {
-	field, ok := m["field"]
-	if !ok {
-		field = ".Payload.After"
+	cfg := unwrapDebeziumConfig{}
+	inputCfg := config.Config(m).Sanitize().ApplyDefaults(cfg.Parameters())
+	err := inputCfg.Validate(cfg.Parameters())
+	if err != nil {
+		return cerrors.Errorf("invalid configuration: %w", err)
 	}
 
-	field = strings.TrimSpace(field)
-	if !strings.HasPrefix(field, ".Payload") {
-		return cerrors.Errorf("only payload can be unwrapped, field given: %v", field)
+	err = inputCfg.DecodeInto(&cfg)
+	if err != nil {
+		return cerrors.Errorf("failed decoding configuration: %w", err)
 	}
 
-	rr, err := sdk.NewReferenceResolver(field)
+	rr, err := sdk.NewReferenceResolver(cfg.Field)
 	if err != nil {
 		return cerrors.Errorf("invalid reference: %w", err)
 	}
