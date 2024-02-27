@@ -1,4 +1,4 @@
-// Copyright © 2023 Meroxa, Inc.
+// Copyright © 2024 Meroxa, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -139,14 +139,9 @@ func TestUnwrapOpenCDC_Configure(t *testing.T) {
 		wantErr string
 	}{
 		{
-			name:    "no field",
-			in:      map[string]string{},
-			wantErr: "missing required parameter 'field'",
-		},
-		{
 			name:    "only fields in .Payload are allowed",
 			in:      map[string]string{"field": ".Metadata"},
-			wantErr: "only payload can be unwrapped, field given: .Metadata",
+			wantErr: `invalid configuration: error validating "field": ".Metadata" should match the regex "^.Payload": regex validation failed`,
 		},
 		{
 			name:    "invalid field",
@@ -155,7 +150,7 @@ func TestUnwrapOpenCDC_Configure(t *testing.T) {
 		},
 		{
 			name:    "valid field",
-			in:      map[string]string{"field": ".Payload.After"},
+			in:      map[string]string{"field": ".Payload.Before"},
 			wantErr: "",
 		},
 	}
@@ -185,7 +180,7 @@ func TestUnwrapOpenCDC_Process(t *testing.T) {
 	}{
 		{
 			name:   "create with structured data and no payload after",
-			config: map[string]string{"field": ".Payload.After"},
+			config: map[string]string{},
 			record: opencdc.Record{
 				Key:       opencdc.RawData("one-key"),
 				Operation: opencdc.OperationCreate,
@@ -197,7 +192,7 @@ func TestUnwrapOpenCDC_Process(t *testing.T) {
 		},
 		{
 			name:   "create with an invalid operation",
-			config: map[string]string{"field": ".Payload.After"},
+			config: map[string]string{},
 			record: opencdc.Record{
 				Key:       opencdc.RawData("one-key-raw-data"),
 				Operation: opencdc.OperationCreate,
@@ -223,7 +218,7 @@ func TestUnwrapOpenCDC_Process(t *testing.T) {
 		},
 		{
 			name:   "create with an invalid metadata",
-			config: map[string]string{"field": ".Payload.After"},
+			config: map[string]string{},
 			record: opencdc.Record{
 				Key:       opencdc.RawData("one-key-raw-data"),
 				Operation: opencdc.OperationCreate,
@@ -248,7 +243,7 @@ func TestUnwrapOpenCDC_Process(t *testing.T) {
 		},
 		{
 			name:   "create with an invalid key",
-			config: map[string]string{"field": ".Payload.After"},
+			config: map[string]string{},
 			record: opencdc.Record{
 				Key:       opencdc.RawData("one-key-raw-data"),
 				Operation: opencdc.OperationCreate,
@@ -273,7 +268,7 @@ func TestUnwrapOpenCDC_Process(t *testing.T) {
 		},
 		{
 			name:   "create with an invalid payload",
-			config: map[string]string{"field": ".Payload.After"},
+			config: map[string]string{},
 			record: opencdc.Record{
 				Key:       opencdc.RawData("one-key-raw-data"),
 				Operation: opencdc.OperationCreate,
@@ -287,7 +282,7 @@ func TestUnwrapOpenCDC_Process(t *testing.T) {
 		},
 		{
 			name:   "create with structured data",
-			config: map[string]string{"field": ".Payload.After"},
+			config: map[string]string{},
 			record: opencdc.Record{
 				Key:       opencdc.RawData("one-key"),
 				Operation: opencdc.OperationCreate,
@@ -348,7 +343,7 @@ func TestUnwrapOpenCDC_Process(t *testing.T) {
 		},
 		{
 			name:   "create with raw data",
-			config: map[string]string{"field": ".Payload.After"},
+			config: map[string]string{},
 			record: opencdc.Record{
 				Key:       opencdc.RawData("one-key-raw-data"),
 				Operation: opencdc.OperationCreate,
@@ -388,7 +383,7 @@ func TestUnwrapOpenCDC_Process(t *testing.T) {
 		},
 		{
 			name:   "delete with before and with raw data",
-			config: map[string]string{"field": ".Payload.After"},
+			config: map[string]string{},
 			record: opencdc.Record{
 				Key:       opencdc.RawData("one-key-raw-data"),
 				Operation: opencdc.OperationCreate,
@@ -428,7 +423,7 @@ func TestUnwrapOpenCDC_Process(t *testing.T) {
 		},
 		{
 			name:   "delete without before and with raw data",
-			config: map[string]string{"field": ".Payload.After"},
+			config: map[string]string{},
 			record: opencdc.Record{
 				Key:       opencdc.RawData("one-key-raw-data"),
 				Operation: opencdc.OperationCreate,
@@ -462,7 +457,7 @@ func TestUnwrapOpenCDC_Process(t *testing.T) {
 		},
 		{
 			name:   "update with before and with raw data",
-			config: map[string]string{"field": ".Payload.After"},
+			config: map[string]string{},
 			record: opencdc.Record{
 				Key:       opencdc.RawData("one-key-raw-data"),
 				Operation: opencdc.OperationCreate,
@@ -508,7 +503,7 @@ func TestUnwrapOpenCDC_Process(t *testing.T) {
 		},
 		{
 			name:   "update without before and with raw data",
-			config: map[string]string{"field": ".Payload.After"},
+			config: map[string]string{},
 			record: opencdc.Record{
 				Key:       opencdc.RawData("one-key-raw-data"),
 				Operation: opencdc.OperationCreate,
@@ -522,6 +517,48 @@ func TestUnwrapOpenCDC_Process(t *testing.T) {
 				Payload: opencdc.Change{
 					Before: nil,
 					After:  opencdc.RawData(RecordUpdateNoBefore),
+				},
+				Position: []byte("eyJHcm91cElEIjoiNGQ2ZTBhMjktNzAwZi00Yjk4LWEzY2MtZWUyNzZhZTc4MjVjIiwiVG9waWMiOiJzdHJlYW0tNzhscG5jaHg3dHpweXF6LWdlbmVyYXRvciIsIlBhcnRpdGlvbiI6MCwiT2Zmc2V0IjoyMjF9"),
+			},
+			want: sdk.SingleRecord{
+				Operation: opencdc.OperationUpdate,
+				Metadata: opencdc.Metadata{
+					"conduit.source.connector.id": "source-generator-78lpnchx7tzpyqz:source",
+					"opencdc.readAt":              "1706028953595546000",
+					"opencdc.version":             "v1",
+				},
+				Payload: opencdc.Change{
+					Before: nil,
+					After: opencdc.StructuredData{
+						"event_id":     float64(1747353650),
+						"msg":          "string 0e8955b3-7fb5-4dda-8064-e10dc007f00d",
+						"pg_generator": false,
+						"sensor_id":    float64(1250383582),
+						"triggered":    false,
+					},
+				},
+				Key:      opencdc.RawData("17774941-57a2-42fa-b430-8912a9424b3a"),
+				Position: []byte("eyJHcm91cElEIjoiNGQ2ZTBhMjktNzAwZi00Yjk4LWEzY2MtZWUyNzZhZTc4MjVjIiwiVG9waWMiOiJzdHJlYW0tNzhscG5jaHg3dHpweXF6LWdlbmVyYXRvciIsIlBhcnRpdGlvbiI6MCwiT2Zmc2V0IjoyMjF9"),
+			},
+		},
+		{
+			name:   "update without before and with raw data",
+			config: map[string]string{"field": ".Payload.After.nested"},
+			record: opencdc.Record{
+				Key:       opencdc.RawData("one-key-raw-data"),
+				Operation: opencdc.OperationCreate,
+				Metadata: map[string]string{
+					"conduit.source.connector.id": "dest-log-78lpnchx7tzpyqz:source-kafka",
+					"kafka.topic":                 "stream-78lpnchx7tzpyqz-generator",
+					"opencdc.createdAt":           "1706028953595000000",
+					"opencdc.readAt":              "1706028953606997000",
+					"opencdc.version":             "v1",
+				},
+				Payload: opencdc.Change{
+					Before: nil,
+					After: opencdc.StructuredData{
+						"nested": opencdc.RawData(RecordUpdateNoBefore),
+					},
 				},
 				Position: []byte("eyJHcm91cElEIjoiNGQ2ZTBhMjktNzAwZi00Yjk4LWEzY2MtZWUyNzZhZTc4MjVjIiwiVG9waWMiOiJzdHJlYW0tNzhscG5jaHg3dHpweXF6LWdlbmVyYXRvciIsIlBhcnRpdGlvbiI6MCwiT2Zmc2V0IjoyMjF9"),
 			},

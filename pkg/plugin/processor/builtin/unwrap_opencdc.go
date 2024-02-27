@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//go:generate paramgen -output=unwrap_opencdc_paramgen.go unwrapOpenCDCConfig
+
 package builtin
 
 import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"strings"
-
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
@@ -27,6 +27,13 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/goccy/go-json"
 )
+
+type unwrapOpenCDCConfig struct {
+	// Filter is a reference to the field which contains the OpenCDC record.
+	//
+	//For more information about record references, see: https://github.com/ConduitIO/conduit-processor-sdk/blob/cbdc5dcb5d3109f8f13b88624c9e360076b0bcdb/util.go#L66.
+	Field string `json:"field" validate:"regex=^.Payload" default:".Payload.After"`
+}
 
 type unwrapOpenCDC struct {
 	sdk.UnimplementedProcessor
@@ -50,32 +57,26 @@ being written to a final destination. In these cases, the original OpenCDC recor
 part of the payload read from the intermediate system and needs to be unwrapped before
 being written to the destination.
 '`,
-		Version: "v0.1.0",
-		Author:  "Meroxa, Inc.",
-		Parameters: config.Parameters{
-			"field": config.Parameter{
-				Default: ".Payload.After",
-				Description: `
-A reference to the field which contains the OpenCDC record.
-
-For more information about record references, see: https://github.com/ConduitIO/conduit-processor-sdk/blob/cbdc5dcb5d3109f8f13b88624c9e360076b0bcdb/util.go#L66.`,
-				Type: config.ParameterTypeString,
-			},
-		},
+		Version:    "v0.1.0",
+		Author:     "Meroxa, Inc.",
+		Parameters: unwrapOpenCDCConfig{}.Parameters(),
 	}, nil
 }
 
 func (u *unwrapOpenCDC) Configure(_ context.Context, m map[string]string) error {
-	field, ok := m["field"]
-	if !ok {
-		return cerrors.New("missing required parameter 'field'")
+	cfg := unwrapOpenCDCConfig{}
+	inputCfg := config.Config(m).Sanitize().ApplyDefaults(cfg.Parameters())
+	err := inputCfg.Validate(cfg.Parameters())
+	if err != nil {
+		return cerrors.Errorf("invalid configuration: %w", err)
 	}
 
-	if !strings.HasPrefix(field, ".Payload") {
-		return cerrors.Errorf("only payload can be unwrapped, field given: %v", field)
+	err = inputCfg.DecodeInto(&cfg)
+	if err != nil {
+		return cerrors.Errorf("failed decoding configuration: %w", err)
 	}
 
-	rr, err := sdk.NewReferenceResolver(field)
+	rr, err := sdk.NewReferenceResolver(cfg.Field)
 	if err != nil {
 		return cerrors.Errorf("invalid reference: %w", err)
 	}
