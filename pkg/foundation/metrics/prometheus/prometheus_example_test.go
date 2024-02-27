@@ -25,8 +25,6 @@ import (
 	"github.com/prometheus/common/expfmt"
 )
 
-const fmtText = `text/plain; version=` + expfmt.TextVersion + `; charset=utf-8`
-
 var (
 	testCounter = metrics.NewCounter("prom_example_counter", "example")
 	testTimer   = metrics.NewTimer("prom_example_timer", "example")
@@ -56,7 +54,7 @@ func ExampleNewRegistry() {
 		panic(err)
 	}
 
-	enc := expfmt.NewEncoder(os.Stdout, fmtText)
+	enc := expfmt.NewEncoder(os.Stdout, expfmt.NewFormat(expfmt.TypeTextPlain))
 	for _, m := range gatheredMetrics {
 		if strings.HasPrefix(m.GetName(), "prom_example_") {
 			err := enc.Encode(m)
