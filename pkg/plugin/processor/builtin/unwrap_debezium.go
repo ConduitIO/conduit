@@ -70,6 +70,10 @@ func (u *unwrapDebezium) Specification() (sdk.Specification, error) {
 		Summary: "Unwraps a Debezium record from the input OpenCDC record.",
 		Description: `This processor unwraps a Debezium record from the input OpenCDC record.
 
+The wrapped (Debezium) record replaces the wrapping record (being processed) completely, except for the position.
+
+The Debezium record's metadata and the wrapping record's metadata is merged, with the Debezium metadata having precedence.
+
 This is useful in cases where Conduit acts as an intermediary between a Debezium source and a Debezium destination. 
 In such cases, the Debezium record is set as the OpenCDC record's payload, and needs to be unwrapped for further usage.`,
 		Version:    "v0.1.0",
