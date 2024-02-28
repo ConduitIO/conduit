@@ -68,7 +68,7 @@ func TestUnwrapDebezium_Configure(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			is := is.New(t)
 
-			err := newUnwrapDebezium(log.Test(t)).Configure(context.Background(), tc.config)
+			err := NewDebezium(log.Test(t)).Configure(context.Background(), tc.config)
 			if tc.wantErr != "" {
 				is.True(err != nil)
 				is.Equal(tc.wantErr, err.Error())
@@ -92,7 +92,7 @@ func TestUnwrapDebezium_Process(t *testing.T) {
 			config: map[string]string{"field": ".Payload.After"},
 			record: opencdc.Record{
 				Metadata: map[string]string{},
-				Key:      opencdc.RawData(`{"payload":"id"}`),
+				Key:      opencdc.RawData(`{"payload":"27"}`),
 				Position: []byte("position"),
 				Payload: opencdc.Change{
 					Before: nil,
@@ -115,8 +115,18 @@ func TestUnwrapDebezium_Process(t *testing.T) {
 		}`),
 				},
 			},
-			want: sdk.ErrorRecord{
-				Error: cerrors.New("unexpected data type opencdc.RawData"),
+			want: sdk.SingleRecord{
+				Position:  opencdc.Position("position"),
+				Key:       opencdc.RawData("27"),
+				Operation: opencdc.OperationCreate,
+				Metadata: map[string]string{
+					"opencdc.readAt":  "1674061777225877000",
+					"opencdc.version": "v1",
+				},
+				Payload: opencdc.Change{
+					Before: nil,
+					After:  opencdc.StructuredData{"description": "test1", "id": float64(27)},
+				},
 			},
 		},
 		{
@@ -240,7 +250,7 @@ func TestUnwrapDebezium_Process(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			is := is.New(t)
 
-			underTest := newUnwrapDebezium(log.Test(t))
+			underTest := NewDebezium(log.Test(t))
 			err := underTest.Configure(context.Background(), tc.config)
 			is.NoErr(err)
 

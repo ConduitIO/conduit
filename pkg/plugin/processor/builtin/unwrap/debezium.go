@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:generate paramgen -output=debezium_config_paramgen.go debeziumConfig
+//go:generate paramgen -output=debezium_config_paramgen.go debeziumProcConfig
 
 package unwrap
 
@@ -44,7 +44,7 @@ const (
 	debeziumFieldTimestamp = "ts_ms"
 )
 
-type debeziumConfig struct {
+type debeziumProcConfig struct {
 	// TODO change link to docs
 
 	// Field is a reference to the field which contains the Debezium record.
@@ -53,18 +53,18 @@ type debeziumConfig struct {
 	Field string `json:"field" validate:"regex=^.Payload" default:".Payload.After"`
 }
 
-type debezium struct {
+type debeziumProcessor struct {
 	sdk.UnimplementedProcessor
 
 	logger      log.CtxLogger
 	fieldRefRes sdk.ReferenceResolver
 }
 
-func newUnwrapDebezium(logger log.CtxLogger) sdk.Processor {
-	return &debezium{logger: logger}
+func NewDebezium(logger log.CtxLogger) sdk.Processor {
+	return &debeziumProcessor{logger: logger}
 }
 
-func (d *debezium) Specification() (sdk.Specification, error) {
+func (d *debeziumProcessor) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
 		Name:    "unwrap.debezium",
 		Summary: "Unwraps a Debezium record from the input OpenCDC record.",
@@ -78,12 +78,12 @@ This is useful in cases where Conduit acts as an intermediary between a Debezium
 In such cases, the Debezium record is set as the OpenCDC record's payload, and needs to be unwrapped for further usage.`,
 		Version:    "v0.1.0",
 		Author:     "Meroxa, Inc.",
-		Parameters: debeziumConfig{}.Parameters(),
+		Parameters: debeziumProcConfig{}.Parameters(),
 	}, nil
 }
 
-func (d *debezium) Configure(_ context.Context, m map[string]string) error {
-	cfg := debeziumConfig{}
+func (d *debeziumProcessor) Configure(_ context.Context, m map[string]string) error {
+	cfg := debeziumProcConfig{}
 	inputCfg := config.Config(m).Sanitize().ApplyDefaults(cfg.Parameters())
 	err := inputCfg.Validate(cfg.Parameters())
 	if err != nil {
@@ -104,11 +104,11 @@ func (d *debezium) Configure(_ context.Context, m map[string]string) error {
 	return nil
 }
 
-func (d *debezium) Open(context.Context) error {
+func (d *debeziumProcessor) Open(context.Context) error {
 	return nil
 }
 
-func (d *debezium) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
+func (d *debeziumProcessor) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 	out := make([]sdk.ProcessedRecord, 0, len(records))
 	for _, rec := range records {
 		proc := d.processRecord(rec)
@@ -121,11 +121,11 @@ func (d *debezium) Process(_ context.Context, records []opencdc.Record) []sdk.Pr
 	return out
 }
 
-func (d *debezium) Teardown(context.Context) error {
+func (d *debeziumProcessor) Teardown(context.Context) error {
 	return nil
 }
 
-func (d *debezium) processRecord(rec opencdc.Record) sdk.ProcessedRecord {
+func (d *debeziumProcessor) processRecord(rec opencdc.Record) sdk.ProcessedRecord {
 	// record must be structured
 	ref, err := d.fieldRefRes.Resolve(&rec)
 	if err != nil {
@@ -140,6 +140,13 @@ func (d *debezium) processRecord(rec opencdc.Record) sdk.ProcessedRecord {
 		debeziumEvent = d
 	case map[string]any:
 		debeziumEvent = d
+	case opencdc.RawData:
+		err := json.Unmarshal(d.Bytes(), &debeziumEvent)
+		if err != nil {
+			return sdk.ErrorRecord{
+				Error: cerrors.Errorf("failed unmarshalling JSON from raw data: %w", err),
+			}
+		}
 	default:
 		return sdk.ErrorRecord{
 			Error: cerrors.Errorf("unexpected data type %T", ref.Get()),
@@ -209,7 +216,7 @@ func (d *debezium) processRecord(rec opencdc.Record) sdk.ProcessedRecord {
 	}
 }
 
-func (d *debezium) valueToData(val any) (opencdc.Data, error) {
+func (d *debeziumProcessor) valueToData(val any) (opencdc.Data, error) {
 	switch v := val.(type) {
 	case map[string]any:
 		return opencdc.StructuredData(v), nil
@@ -223,7 +230,7 @@ func (d *debezium) valueToData(val any) (opencdc.Data, error) {
 	}
 }
 
-func (d *debezium) validateRecord(data opencdc.StructuredData) error {
+func (d *debeziumProcessor) validateRecord(data opencdc.StructuredData) error {
 	var multiErr error
 	if _, ok := data[debeziumFieldAfter]; !ok {
 		multiErr = multierror.Append(multiErr, cerrors.Errorf("the %q field is missing from debezium payload", debeziumFieldAfter))
@@ -238,7 +245,7 @@ func (d *debezium) validateRecord(data opencdc.StructuredData) error {
 	return multiErr
 }
 
-func (d *debezium) unwrapMetadata(rec opencdc.Record, dbzRec opencdc.StructuredData) (opencdc.Metadata, error) {
+func (d *debeziumProcessor) unwrapMetadata(rec opencdc.Record, dbzRec opencdc.StructuredData) (opencdc.Metadata, error) {
 	var source map[string]string
 	for field, val := range dbzRec {
 		switch field {
@@ -272,7 +279,7 @@ func (d *debezium) unwrapMetadata(rec opencdc.Record, dbzRec opencdc.StructuredD
 	return rec.Metadata, nil
 }
 
-func (d *debezium) flatten(key string, val any) map[string]string {
+func (d *debeziumProcessor) flatten(key string, val any) map[string]string {
 	var prefix string
 	if len(key) > 0 {
 		prefix = key + "."
@@ -296,7 +303,7 @@ func (d *debezium) flatten(key string, val any) map[string]string {
 }
 
 // convertOperation converts debezium operation to openCDC operation
-func (d *debezium) convertOperation(op string) (opencdc.Operation, error) {
+func (d *debeziumProcessor) convertOperation(op string) (opencdc.Operation, error) {
 	switch op {
 	case debeziumOpCreate:
 		return opencdc.OperationCreate, nil
@@ -312,7 +319,7 @@ func (d *debezium) convertOperation(op string) (opencdc.Operation, error) {
 	return 0, cerrors.Errorf("%q is an invalid operation", op)
 }
 
-func (d *debezium) unwrapKey(key opencdc.Data) opencdc.Data {
+func (d *debeziumProcessor) unwrapKey(key opencdc.Data) opencdc.Data {
 	// convert the key to structured data
 	var structKey opencdc.StructuredData
 	switch d := key.(type) {

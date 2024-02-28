@@ -9,7 +9,7 @@ import (
 	"github.com/conduitio/conduit-commons/config"
 )
 
-func (debeziumConfig) Parameters() map[string]config.Parameter {
+func (debeziumProcConfig) Parameters() map[string]config.Parameter {
 	return map[string]config.Parameter{
 		"field": {
 			Default:     ".Payload.After",
