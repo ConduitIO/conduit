@@ -100,8 +100,9 @@ func (p *renameField) Open(context.Context) error {
 func (p *renameField) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 	out := make([]sdk.ProcessedRecord, 0, len(records))
 	for _, record := range records {
+		rec := record
 		for i, newName := range p.newNames {
-			ref, err := p.referenceResolvers[i].Resolve(&record)
+			ref, err := p.referenceResolvers[i].Resolve(&rec)
 			if err != nil {
 				return append(out, sdk.ErrorRecord{Error: err})
 			}
@@ -110,7 +111,7 @@ func (p *renameField) Process(_ context.Context, records []opencdc.Record) []sdk
 				return append(out, sdk.ErrorRecord{Error: err})
 			}
 		}
-		out = append(out, sdk.SingleRecord(record))
+		out = append(out, sdk.SingleRecord(rec))
 	}
 	return out
 }

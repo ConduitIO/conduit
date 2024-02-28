@@ -81,7 +81,8 @@ func (p *convertField) Open(context.Context) error {
 func (p *convertField) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 	out := make([]sdk.ProcessedRecord, 0, len(records))
 	for _, record := range records {
-		ref, err := p.referenceResolver.Resolve(&record)
+		rec := record
+		ref, err := p.referenceResolver.Resolve(&rec)
 		if err != nil {
 			return append(out, sdk.ErrorRecord{Error: err})
 		}
@@ -90,7 +91,10 @@ func (p *convertField) Process(_ context.Context, records []opencdc.Record) []sd
 			return append(out, sdk.ErrorRecord{Error: err})
 		}
 		err = ref.Set(newVal)
-		out = append(out, sdk.SingleRecord(record))
+		if err != nil {
+			return append(out, sdk.ErrorRecord{Error: err})
+		}
+		out = append(out, sdk.SingleRecord(rec))
 	}
 	return out
 }

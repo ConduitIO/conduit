@@ -86,13 +86,14 @@ func (p *setField) Open(context.Context) error {
 func (p *setField) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 	out := make([]sdk.ProcessedRecord, 0, len(records))
 	for _, record := range records {
+		rec := record
 		var b bytes.Buffer
 		// evaluate the new value
-		err := p.tmpl.Execute(&b, record)
+		err := p.tmpl.Execute(&b, rec)
 		if err != nil {
 			return append(out, sdk.ErrorRecord{Error: err})
 		}
-		ref, err := p.referenceResolver.Resolve(&record)
+		ref, err := p.referenceResolver.Resolve(&rec)
 		if err != nil {
 			return append(out, sdk.ErrorRecord{Error: err})
 		}
@@ -100,7 +101,7 @@ func (p *setField) Process(_ context.Context, records []opencdc.Record) []sdk.Pr
 		if err != nil {
 			return append(out, sdk.ErrorRecord{Error: err})
 		}
-		out = append(out, sdk.SingleRecord(record))
+		out = append(out, sdk.SingleRecord(rec))
 	}
 	return out
 }

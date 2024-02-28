@@ -94,7 +94,6 @@ func TestSetField_Process(t *testing.T) {
 			is.Equal(output[0], tc.want)
 		})
 	}
-
 }
 
 func TestSetField_Configure(t *testing.T) {

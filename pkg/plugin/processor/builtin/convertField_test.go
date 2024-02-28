@@ -209,7 +209,6 @@ func TestConvertField_Process(t *testing.T) {
 			is.Equal(output[0], tc.want)
 		})
 	}
-
 }
 
 func TestConvertField_ProcessFail(t *testing.T) {
@@ -263,7 +262,6 @@ func TestConvertField_ProcessFail(t *testing.T) {
 			is.True(strings.Contains(rec.Error.Error(), tc.wantErr))
 		})
 	}
-
 }
 
 func TestConvertField_Configure(t *testing.T) {
