@@ -21,6 +21,7 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/js"
 )
 
+//nolint:govet // a more descriptive example description
 func ExampleJavaScriptProcessor_Simple() {
 	p := js.New(log.Nop())
 
