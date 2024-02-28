@@ -13,3 +13,64 @@
 // limitations under the License.
 
 package builtin
+
+import (
+	"github.com/conduitio/conduit-commons/opencdc"
+	sdk "github.com/conduitio/conduit-processor-sdk"
+	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/js"
+)
+
+func ExampleJavaScriptProcessor_Simple() {
+	p := js.New(log.Nop())
+
+	RunExample(p, example{
+		Description: "",
+		Config: map[string]string{
+			"script": `function process(records) {
+					records[0].Metadata["processed"] = "true";
+					let existing = String.fromCharCode.apply(String, records[0].Payload.After);
+					records[0].Payload.After = RawData("hello, " + existing);
+					return records;
+				}`,
+		},
+		Have: opencdc.Record{
+			Metadata: map[string]string{
+				"existing-key": "existing-value",
+			},
+			Payload: opencdc.Change{
+				After: opencdc.RawData("world"),
+			},
+		},
+		Want: sdk.SingleRecord{
+			Metadata: map[string]string{
+				"existing-key": "existing-value",
+				"processed":    "true",
+			},
+			Payload: opencdc.Change{
+				After: opencdc.RawData("hello, world"),
+			},
+		},
+	})
+
+	// Output:
+	// processor transformed record:
+	// --- before
+	// +++ after
+	// @@ -1,12 +1,13 @@
+	//  {
+	//    "position": null,
+	//    "operation": "Operation(0)",
+	//    "metadata": {
+	// -    "existing-key": "existing-value"
+	// +    "existing-key": "existing-value",
+	// +    "processed": "true"
+	//    },
+	//    "key": null,
+	//    "payload": {
+	//      "before": null,
+	//-    "after": "d29ybGQ="
+	//+    "after": "aGVsbG8sIHdvcmxk"
+	//    }
+	//  }
+}
