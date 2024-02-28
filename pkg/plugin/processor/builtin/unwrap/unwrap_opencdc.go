@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:generate paramgen -output=unwrap_opencdc_paramgen.go unwrapOpenCDCConfig
+//go:generate paramgen -output=opencdc_paramgen.go openCDCConfig
 
-package builtin
+package unwrap
 
 import (
 	"context"
@@ -28,25 +28,25 @@ import (
 	"github.com/goccy/go-json"
 )
 
-type unwrapOpenCDCConfig struct {
+type openCDCConfig struct {
 	// Field is a reference to the field which contains the OpenCDC record.
 	//
 	// For more information about record references, see: https://github.com/ConduitIO/conduit-processor-sdk/blob/cbdc5dcb5d3109f8f13b88624c9e360076b0bcdb/util.go#L66.
 	Field string `json:"field" validate:"regex=^.Payload" default:".Payload.After"`
 }
 
-type unwrapOpenCDC struct {
+type openCDCProcessor struct {
 	sdk.UnimplementedProcessor
 
 	logger      log.CtxLogger
 	fieldRefRes sdk.ReferenceResolver
 }
 
-func newUnwrapOpenCDC(logger log.CtxLogger) sdk.Processor {
-	return &unwrapOpenCDC{logger: logger}
+func NewOpenCDCProcessor(logger log.CtxLogger) sdk.Processor {
+	return &openCDCProcessor{logger: logger}
 }
 
-func (u *unwrapOpenCDC) Specification() (sdk.Specification, error) {
+func (u *openCDCProcessor) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
 		Name:    "unwrap.opencdc",
 		Summary: "A processor that unwraps the OpenCDC record saved in one of record's fields.",
@@ -59,12 +59,12 @@ being written to the destination.
 '`,
 		Version:    "v0.1.0",
 		Author:     "Meroxa, Inc.",
-		Parameters: unwrapOpenCDCConfig{}.Parameters(),
+		Parameters: openCDCConfig{}.Parameters(),
 	}, nil
 }
 
-func (u *unwrapOpenCDC) Configure(ctx context.Context, m map[string]string) error {
-	cfg := unwrapOpenCDCConfig{}
+func (u *openCDCProcessor) Configure(ctx context.Context, m map[string]string) error {
+	cfg := openCDCConfig{}
 	err := sdk.ParseConfig(ctx, m, &cfg, cfg.Parameters())
 	if err != nil {
 		return cerrors.Errorf("failed parsing configuration: %w", err)
@@ -79,11 +79,11 @@ func (u *unwrapOpenCDC) Configure(ctx context.Context, m map[string]string) erro
 	return nil
 }
 
-func (u *unwrapOpenCDC) Open(context.Context) error {
+func (u *openCDCProcessor) Open(context.Context) error {
 	return nil
 }
 
-func (u *unwrapOpenCDC) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
+func (u *openCDCProcessor) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 	out := make([]sdk.ProcessedRecord, 0, len(records))
 	for _, rec := range records {
 		proc := u.processRecord(rec)
@@ -96,7 +96,7 @@ func (u *unwrapOpenCDC) Process(_ context.Context, records []opencdc.Record) []s
 	return out
 }
 
-func (u *unwrapOpenCDC) processRecord(rec opencdc.Record) sdk.ProcessedRecord {
+func (u *openCDCProcessor) processRecord(rec opencdc.Record) sdk.ProcessedRecord {
 	ref, err := u.fieldRefRes.Resolve(&rec)
 	if err != nil {
 		return sdk.ErrorRecord{Error: cerrors.Errorf("failed resolving record reference: %w", err)}
@@ -128,11 +128,11 @@ func (u *unwrapOpenCDC) processRecord(rec opencdc.Record) sdk.ProcessedRecord {
 	return sdk.SingleRecord(opencdcRec)
 }
 
-func (u *unwrapOpenCDC) Teardown(context.Context) error {
+func (u *openCDCProcessor) Teardown(context.Context) error {
 	return nil
 }
 
-func (u *unwrapOpenCDC) unmarshalRecord(structData opencdc.StructuredData) (opencdc.Record, error) {
+func (u *openCDCProcessor) unmarshalRecord(structData opencdc.StructuredData) (opencdc.Record, error) {
 	operation, err := u.unmarshalOperation(structData)
 	if err != nil {
 		return opencdc.Record{}, cerrors.Errorf("failed unmarshalling operation: %w", err)
@@ -162,7 +162,7 @@ func (u *unwrapOpenCDC) unmarshalRecord(structData opencdc.StructuredData) (open
 }
 
 // unmarshalOperation extracts operation from a structuredData record.
-func (u *unwrapOpenCDC) unmarshalOperation(structData opencdc.StructuredData) (opencdc.Operation, error) {
+func (u *openCDCProcessor) unmarshalOperation(structData opencdc.StructuredData) (opencdc.Operation, error) {
 	var operation opencdc.Operation
 	op, ok := structData["operation"]
 	if !ok {
@@ -183,7 +183,7 @@ func (u *unwrapOpenCDC) unmarshalOperation(structData opencdc.StructuredData) (o
 }
 
 // unmarshalMetadata extracts metadata from a structuredData record.
-func (u *unwrapOpenCDC) unmarshalMetadata(structData opencdc.StructuredData) (opencdc.Metadata, error) {
+func (u *openCDCProcessor) unmarshalMetadata(structData opencdc.StructuredData) (opencdc.Metadata, error) {
 	var metadata opencdc.Metadata
 	meta, ok := structData["metadata"]
 	if !ok {
@@ -205,7 +205,7 @@ func (u *unwrapOpenCDC) unmarshalMetadata(structData opencdc.StructuredData) (op
 }
 
 // unmarshalKey extracts key from a structuredData record.
-func (u *unwrapOpenCDC) unmarshalKey(structData opencdc.StructuredData) (opencdc.Data, error) {
+func (u *openCDCProcessor) unmarshalKey(structData opencdc.StructuredData) (opencdc.Data, error) {
 	var key opencdc.Data
 	ky, ok := structData["key"]
 	if !ok {
@@ -231,7 +231,7 @@ func (u *unwrapOpenCDC) unmarshalKey(structData opencdc.StructuredData) (opencdc
 	return key, nil
 }
 
-func (u *unwrapOpenCDC) convertPayloadData(payload map[string]interface{}, key string) (opencdc.Data, error) {
+func (u *openCDCProcessor) convertPayloadData(payload map[string]interface{}, key string) (opencdc.Data, error) {
 	payloadData, ok := payload[key]
 	if !ok {
 		return nil, nil
@@ -257,7 +257,7 @@ func (u *unwrapOpenCDC) convertPayloadData(payload map[string]interface{}, key s
 }
 
 // unmarshalPayload extracts payload from a structuredData record.
-func (u *unwrapOpenCDC) unmarshalPayload(structData opencdc.StructuredData) (opencdc.Change, error) {
+func (u *openCDCProcessor) unmarshalPayload(structData opencdc.StructuredData) (opencdc.Change, error) {
 	var payload opencdc.Change
 	pl, ok := structData["payload"]
 	if !ok {

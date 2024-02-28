@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package builtin
+package unwrap
 
 import (
 	"context"
@@ -159,7 +159,7 @@ func TestUnwrapOpenCDC_Configure(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			is := is.New(t)
 
-			underTest := newUnwrapOpenCDC(log.Test(t))
+			underTest := NewOpenCDCProcessor(log.Test(t))
 			gotErr := underTest.Configure(context.Background(), tc.in)
 			if tc.wantErr == "" {
 				is.NoErr(gotErr)
@@ -590,7 +590,7 @@ func TestUnwrapOpenCDC_Process(t *testing.T) {
 			is := is.New(t)
 			ctx := context.Background()
 
-			underTest := newUnwrapOpenCDC(log.Test(t))
+			underTest := NewOpenCDCProcessor(log.Test(t))
 			err := underTest.Configure(ctx, tt.config)
 			is.NoErr(err)
 
