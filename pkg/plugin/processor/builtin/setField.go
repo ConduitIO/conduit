@@ -34,6 +34,10 @@ type setField struct {
 	sdk.UnimplementedProcessor
 }
 
+func newSetField() *setField {
+	return &setField{}
+}
+
 type setFieldConfig struct {
 	// Field is the target field, as it would be addressed in a Go template (e.g. `.Payload.After.foo`).
 	// Note that it is not allowed to set the .Position field.

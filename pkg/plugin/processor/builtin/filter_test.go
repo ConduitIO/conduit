@@ -11,7 +11,7 @@ import (
 
 func TestFilter_Process(t *testing.T) {
 	is := is.New(t)
-	proc := Filter{}
+	proc := newFilter()
 	records := []opencdc.Record{
 		{
 			Metadata: map[string]string{"key1": "val1"},

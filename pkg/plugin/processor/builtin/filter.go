@@ -26,6 +26,10 @@ type Filter struct {
 	sdk.UnimplementedProcessor
 }
 
+func newFilter() *Filter {
+	return &Filter{}
+}
+
 func (p *Filter) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
 		Name:    "filter",

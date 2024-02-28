@@ -24,7 +24,7 @@ import (
 )
 
 func TestSetField_Process(t *testing.T) {
-	proc := setField{}
+	proc := newSetField()
 	var err error
 	ctx := context.Background()
 	testCases := []struct {
@@ -98,7 +98,7 @@ func TestSetField_Process(t *testing.T) {
 }
 
 func TestSetField_Configure(t *testing.T) {
-	proc := setField{}
+	proc := newSetField()
 	ctx := context.Background()
 	testCases := []struct {
 		name    string

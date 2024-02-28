@@ -33,6 +33,10 @@ type convertField struct {
 	sdk.UnimplementedProcessor
 }
 
+func newConvertField() *convertField {
+	return &convertField{}
+}
+
 type convertFieldConfig struct {
 	// Field is the target field, as it would be addressed in a Go template (e.g. `.Payload.After.foo`).
 	// you can only convert fields that are under .Key and .Payload, and said fields should contain structured data.

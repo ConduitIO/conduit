@@ -31,6 +31,10 @@ type excludeField struct {
 	sdk.UnimplementedProcessor
 }
 
+func newExcludeField() *excludeField {
+	return &excludeField{}
+}
+
 type excludeFieldConfig struct {
 	// Fields is a comma separated list of target fields, as they would be addressed in a Go template (e.g. `.Metadata,.Payload.After.foo`).
 	Fields []string `json:"fields" validate:"required"`

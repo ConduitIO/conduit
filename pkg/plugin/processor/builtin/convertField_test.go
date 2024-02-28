@@ -25,7 +25,7 @@ import (
 )
 
 func TestConvertField_Process(t *testing.T) {
-	proc := convertField{}
+	proc := newConvertField()
 	ctx := context.Background()
 	var err error
 	testCases := []struct {
@@ -213,7 +213,7 @@ func TestConvertField_Process(t *testing.T) {
 }
 
 func TestConvertField_ProcessFail(t *testing.T) {
-	proc := convertField{}
+	proc := newConvertField()
 	ctx := context.Background()
 	var err error
 	testCases := []struct {
@@ -267,7 +267,7 @@ func TestConvertField_ProcessFail(t *testing.T) {
 }
 
 func TestConvertField_Configure(t *testing.T) {
-	proc := convertField{}
+	proc := newConvertField()
 	ctx := context.Background()
 	testCases := []struct {
 		name    string

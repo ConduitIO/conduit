@@ -27,10 +27,14 @@ import (
 )
 
 type renameField struct {
-	mapping            map[string]string
+	newNames           []string
 	referenceResolvers []sdk.ReferenceResolver
 
 	sdk.UnimplementedProcessor
+}
+
+func newRenameField() *renameField {
+	return &renameField{}
 }
 
 var forbiddenFields = []string{MetadataReference, PayloadReference, PayloadBeforeReference, PayloadAfterReference,
@@ -61,29 +65,30 @@ func (p *renameField) Configure(ctx context.Context, m map[string]string) error 
 	if err != nil {
 		return cerrors.Errorf("failed to parse configurations: %w", err)
 	}
-	result := make(map[string]string, len(cfg.Mapping))
 	p.referenceResolvers = make([]sdk.ReferenceResolver, len(cfg.Mapping))
+	p.newNames = make([]string, len(cfg.Mapping))
 	for i, pair := range cfg.Mapping {
 		parts := strings.Split(pair, ":")
 		if len(parts) != 2 {
 			return cerrors.Errorf("wrong format for the %q param, should be a comma separated list of keys and values,"+
 				"ex: .Metadata.key:id,.Payload.After.foo:bar", "mapping")
 		}
+
 		key := strings.TrimSpace(parts[0])
 		if slices.Contains(forbiddenFields, key) {
 			return cerrors.Errorf("cannot rename one of the top-level fields %q", key)
-		}
-		value := strings.TrimSpace(parts[1])
-		if len(value) == 0 {
-			return cerrors.Errorf("cannot rename the key %q to an empty string", key)
 		}
 		p.referenceResolvers[i], err = sdk.NewReferenceResolver(key)
 		if err != nil {
 			return cerrors.Errorf("invalid reference: %w", err)
 		}
-		result[key] = value
+
+		value := strings.TrimSpace(parts[1])
+		if len(value) == 0 {
+			return cerrors.Errorf("cannot rename the key %q to an empty string", key)
+		}
+		p.newNames[i] = value
 	}
-	p.mapping = result
 
 	return nil
 }
@@ -93,23 +98,20 @@ func (p *renameField) Open(context.Context) error {
 }
 
 func (p *renameField) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
-	//index := 0
 	out := make([]sdk.ProcessedRecord, 0, len(records))
-	//for _, record := range records {
-	//	for _, newName := range p.mapping {
-	//		ref, err := p.referenceResolvers[index].Resolve(&record)
-	//		if err != nil {
-	//			return append(out, sdk.ErrorRecord{Error: err})
-	//		}
-	//		err = ref.Rename(newName)
-	//		if err != nil {
-	//			return append(out, sdk.ErrorRecord{Error: err})
-	//		}
-	//		index++
-	//	}
-	//	out = append(out, sdk.SingleRecord(record))
-	//	index = 0
-	//}
+	for _, record := range records {
+		for i, newName := range p.newNames {
+			ref, err := p.referenceResolvers[i].Resolve(&record)
+			if err != nil {
+				return append(out, sdk.ErrorRecord{Error: err})
+			}
+			_, err = ref.Rename(newName)
+			if err != nil {
+				return append(out, sdk.ErrorRecord{Error: err})
+			}
+		}
+		out = append(out, sdk.SingleRecord(record))
+	}
 	return out
 }
 
