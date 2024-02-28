@@ -1,1 +1,62 @@
-[]
+[
+  {
+    "specification": {
+      "Name": "unwrap.debezium",
+      "Summary": "Unwraps a Debezium record from the input OpenCDC record.",
+      "Description": "This processor unwraps a Debezium record from the input OpenCDC record.\n\nThe wrapped (Debezium) record replaces the wrapping record (being processed) completely, except for the position.\n\nThe Debezium record's metadata and the wrapping record's metadata is merged, with the Debezium metadata having precedence.\n\nThis is useful in cases where Conduit acts as an intermediary between a Debezium source and a Debezium destination. \nIn such cases, the Debezium record is set as the OpenCDC record's payload, and needs to be unwrapped for further usage.",
+      "Version": "v0.1.0",
+      "Author": "Meroxa, Inc.",
+      "Parameters": {
+        "field": {
+          "Default": ".Payload.After",
+          "Description": "field is a reference to the field which contains the Debezium record.  For more information about record references, see: https://github.com/ConduitIO/conduit-processor-sdk/blob/cbdc5dcb5d3109f8f13b88624c9e360076b0bcdb/util.go#L66.",
+          "Type": 1,
+          "Validations": [
+            {
+              "Regex": "^.Payload"
+            }
+          ]
+        }
+      }
+    },
+    "examples": [
+      {
+        "description": "",
+        "config": {
+          "field": ".Payload.After.nested"
+        },
+        "have": {
+          "position": "dGVzdC1wb3NpdGlvbg==",
+          "operation": "Operation(0)",
+          "metadata": {
+            "metadata-key": "metadata-value"
+          },
+          "key": "eyJwYXlsb2FkIjoiMjcifQ==",
+          "payload": {
+            "before": null,
+            "after": {
+              "nested": "{\n\t\t\t\t\t\t \"payload\": {\n\t\t\t\t\t\t   \"after\": {\n\t\t\t\t\t\t\t \"description\": \"test1\",\n\t\t\t\t\t\t\t \"id\": 27\n\t\t\t\t\t\t   },\n\t\t\t\t\t\t   \"before\": null,\n\t\t\t\t\t\t   \"op\": \"c\",\n\t\t\t\t\t\t   \"source\": {\n\t\t\t\t\t\t\t \"opencdc.readAt\": \"1674061777225877000\",\n\t\t\t\t\t\t\t \"opencdc.version\": \"v1\"\n\t\t\t\t\t\t   },\n\t\t\t\t\t\t   \"transaction\": null,\n\t\t\t\t\t\t   \"ts_ms\": 1674061777225\n\t\t\t\t\t\t },\n\t\t\t\t\t\t \"schema\": {} \n\t\t\t\t\t\t}"
+            }
+          }
+        },
+        "want": {
+          "position": "dGVzdC1wb3NpdGlvbg==",
+          "operation": "create",
+          "metadata": {
+            "metadata-key": "metadata-value",
+            "opencdc.readAt": "1674061777225877000",
+            "opencdc.version": "v1"
+          },
+          "key": "Mjc=",
+          "payload": {
+            "before": null,
+            "after": {
+              "description": "test1",
+              "id": 27
+            }
+          }
+        }
+      }
+    ]
+  }
+]

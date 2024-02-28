@@ -21,6 +21,7 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/unwrap"
 )
 
+//nolint:govet // we're using a more descriptive name of example
 func ExampleUnwrapDebezium() {
 	p := unwrap.NewDebezium(log.Nop())
 
