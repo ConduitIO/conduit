@@ -16,7 +16,7 @@ package unwrap
 
 import (
 	"context"
-	"github.com/conduitio/conduit/pkg/plugin/processor/builtin"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"testing"
 
 	"github.com/conduitio/conduit-commons/opencdc"
@@ -26,6 +26,20 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/matryer/is"
 )
+
+var cmpProcessedRecordOpts = []cmp.Option{
+	cmpopts.IgnoreUnexported(sdk.SingleRecord{}),
+	cmp.Comparer(func(e1, e2 error) bool {
+		switch {
+		case e1 == nil && e2 == nil:
+			return true
+		case e1 != nil && e2 != nil:
+			return e1.Error() == e2.Error()
+		default:
+			return false
+		}
+	}),
+}
 
 func TestUnwrapDebezium_Configure(t *testing.T) {
 	testCases := []struct {
@@ -170,7 +184,7 @@ func TestUnwrapDebezium_Process(t *testing.T) {
 				},
 			},
 			want: sdk.ErrorRecord{
-				Error: cerrors.New("expected error message"),
+				Error: cerrors.New("data to be unwrapped doesn't contain a payload field"),
 			},
 		},
 		{
@@ -232,7 +246,7 @@ func TestUnwrapDebezium_Process(t *testing.T) {
 
 			gotSlice := underTest.Process(context.Background(), []opencdc.Record{tc.record})
 			is.Equal(1, len(gotSlice))
-			is.Equal("", cmp.Diff(tc.want, gotSlice[0], builtin.cmpProcessedRecordOpts...))
+			is.Equal("", cmp.Diff(tc.want, gotSlice[0], cmpProcessedRecordOpts...))
 		})
 	}
 }
