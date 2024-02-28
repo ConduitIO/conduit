@@ -16,7 +16,6 @@ package unwrap
 
 import (
 	"context"
-	"github.com/google/go-cmp/cmp/cmpopts"
 	"testing"
 
 	"github.com/conduitio/conduit-commons/opencdc"
@@ -24,6 +23,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/matryer/is"
 )
 
