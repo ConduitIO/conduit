@@ -31,6 +31,20 @@ import (
 
 // -- HELPERS ------------------------------------------------------------------
 
+var cmpProcessedRecordOpts = []cmp.Option{
+	cmpopts.IgnoreUnexported(sdk.SingleRecord{}),
+	cmp.Comparer(func(e1, e2 error) bool {
+		switch {
+		case e1 == nil && e2 == nil:
+			return true
+		case e1 != nil && e2 != nil:
+			return e1.Error() == e2.Error()
+		default:
+			return false
+		}
+	}),
+}
+
 var processors = map[string]*procInfo{}
 
 type procInfo struct {
@@ -80,7 +94,7 @@ func RunExample(p sdk.Processor, e example) {
 		log.Fatalf("expected 1 record to be returned, got %d", len(got))
 	}
 
-	if d := cmp.Diff(e.Want, got[0], cmpopts.IgnoreUnexported(sdk.SingleRecord{})); d != "" {
+	if d := cmp.Diff(e.Want, got[0], cmpProcessedRecordOpts...); d != "" {
 		log.Fatalf("processed record did not match expectation:\n%v", d)
 	}
 

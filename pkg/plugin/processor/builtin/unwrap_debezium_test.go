@@ -22,6 +22,7 @@ import (
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/google/go-cmp/cmp"
 	"github.com/matryer/is"
 )
 
@@ -168,7 +169,7 @@ func TestUnwrapDebezium_Process(t *testing.T) {
 				},
 			},
 			want: sdk.ErrorRecord{
-				Error: cerrors.New("data to be unwrapped doesn't contain a payload field"),
+				Error: cerrors.New("expected error message"),
 			},
 		},
 		{
@@ -230,7 +231,7 @@ func TestUnwrapDebezium_Process(t *testing.T) {
 
 			gotSlice := underTest.Process(context.Background(), []opencdc.Record{tc.record})
 			is.Equal(1, len(gotSlice))
-			AreEqual(t, tc.want, gotSlice[0])
+			is.Equal("", cmp.Diff(tc.want, gotSlice[0], cmpProcessedRecordOpts...))
 		})
 	}
 }
