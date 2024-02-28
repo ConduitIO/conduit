@@ -12,10 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package builtin
+package unwrap
 
 import (
 	"context"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin"
 	"testing"
 
 	"github.com/conduitio/conduit-commons/opencdc"
@@ -231,7 +232,7 @@ func TestUnwrapDebezium_Process(t *testing.T) {
 
 			gotSlice := underTest.Process(context.Background(), []opencdc.Record{tc.record})
 			is.Equal(1, len(gotSlice))
-			is.Equal("", cmp.Diff(tc.want, gotSlice[0], cmpProcessedRecordOpts...))
+			is.Equal("", cmp.Diff(tc.want, gotSlice[0], builtin.cmpProcessedRecordOpts...))
 		})
 	}
 }

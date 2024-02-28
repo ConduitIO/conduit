@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:generate paramgen -output=unwrap_debezium_paramgen.go unwrapDebeziumConfig
+//go:generate paramgen -output=debezium_config_paramgen.go debeziumConfig
 
-package builtin
+package unwrap
 
 import (
 	"context"
@@ -44,7 +44,7 @@ const (
 	debeziumFieldTimestamp = "ts_ms"
 )
 
-type unwrapDebeziumConfig struct {
+type debeziumConfig struct {
 	// TODO change link to docs
 
 	// Field is a reference to the field which contains the Debezium record.
@@ -53,7 +53,7 @@ type unwrapDebeziumConfig struct {
 	Field string `json:"field" validate:"regex=^.Payload" default:".Payload.After"`
 }
 
-type unwrapDebezium struct {
+type debezium struct {
 	sdk.UnimplementedProcessor
 
 	logger      log.CtxLogger
@@ -61,10 +61,10 @@ type unwrapDebezium struct {
 }
 
 func newUnwrapDebezium(logger log.CtxLogger) sdk.Processor {
-	return &unwrapDebezium{logger: logger}
+	return &debezium{logger: logger}
 }
 
-func (u *unwrapDebezium) Specification() (sdk.Specification, error) {
+func (d *debezium) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
 		Name:    "unwrap.debezium",
 		Summary: "Unwraps a Debezium record from the input OpenCDC record.",
@@ -78,12 +78,12 @@ This is useful in cases where Conduit acts as an intermediary between a Debezium
 In such cases, the Debezium record is set as the OpenCDC record's payload, and needs to be unwrapped for further usage.`,
 		Version:    "v0.1.0",
 		Author:     "Meroxa, Inc.",
-		Parameters: unwrapDebeziumConfig{}.Parameters(),
+		Parameters: debeziumConfig{}.Parameters(),
 	}, nil
 }
 
-func (u *unwrapDebezium) Configure(_ context.Context, m map[string]string) error {
-	cfg := unwrapDebeziumConfig{}
+func (d *debezium) Configure(_ context.Context, m map[string]string) error {
+	cfg := debeziumConfig{}
 	inputCfg := config.Config(m).Sanitize().ApplyDefaults(cfg.Parameters())
 	err := inputCfg.Validate(cfg.Parameters())
 	if err != nil {
@@ -100,18 +100,18 @@ func (u *unwrapDebezium) Configure(_ context.Context, m map[string]string) error
 		return cerrors.Errorf("invalid reference: %w", err)
 	}
 
-	u.fieldRefRes = rr
+	d.fieldRefRes = rr
 	return nil
 }
 
-func (u *unwrapDebezium) Open(context.Context) error {
+func (d *debezium) Open(context.Context) error {
 	return nil
 }
 
-func (u *unwrapDebezium) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
+func (d *debezium) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 	out := make([]sdk.ProcessedRecord, 0, len(records))
 	for _, rec := range records {
-		proc := u.processRecord(rec)
+		proc := d.processRecord(rec)
 		out = append(out, proc)
 		if _, ok := proc.(sdk.ErrorRecord); ok {
 			return out
@@ -121,13 +121,13 @@ func (u *unwrapDebezium) Process(_ context.Context, records []opencdc.Record) []
 	return out
 }
 
-func (u *unwrapDebezium) Teardown(context.Context) error {
+func (d *debezium) Teardown(context.Context) error {
 	return nil
 }
 
-func (u *unwrapDebezium) processRecord(rec opencdc.Record) sdk.ProcessedRecord {
+func (d *debezium) processRecord(rec opencdc.Record) sdk.ProcessedRecord {
 	// record must be structured
-	ref, err := u.fieldRefRes.Resolve(&rec)
+	ref, err := d.fieldRefRes.Resolve(&rec)
 	if err != nil {
 		return sdk.ErrorRecord{
 			Error: cerrors.Errorf("failed resolving reference: %w", err),
@@ -155,21 +155,21 @@ func (u *unwrapDebezium) processRecord(rec opencdc.Record) sdk.ProcessedRecord {
 	}
 
 	// check fields under payload
-	err = u.validateRecord(debeziumRec)
+	err = d.validateRecord(debeziumRec)
 	if err != nil {
 		return sdk.ErrorRecord{
 			Error: cerrors.Errorf("invalid record: %w", err),
 		}
 	}
 
-	before, err := u.valueToData(debeziumRec[debeziumFieldBefore])
+	before, err := d.valueToData(debeziumRec[debeziumFieldBefore])
 	if err != nil {
 		return sdk.ErrorRecord{
 			Error: cerrors.Errorf("failed to parse field %s: %w", debeziumFieldBefore, err),
 		}
 	}
 
-	after, err := u.valueToData(debeziumRec[debeziumFieldAfter])
+	after, err := d.valueToData(debeziumRec[debeziumFieldAfter])
 	if err != nil {
 		return sdk.ErrorRecord{
 			Error: cerrors.Errorf("failed to parse field %s: %w", debeziumFieldAfter, err),
@@ -183,14 +183,14 @@ func (u *unwrapDebezium) processRecord(rec opencdc.Record) sdk.ProcessedRecord {
 		}
 	}
 
-	operation, err := u.convertOperation(op)
+	operation, err := d.convertOperation(op)
 	if err != nil {
 		return sdk.ErrorRecord{
 			Error: cerrors.Errorf("error unwrapping operation: %w", err),
 		}
 	}
 
-	metadata, err := u.unwrapMetadata(rec, debeziumRec)
+	metadata, err := d.unwrapMetadata(rec, debeziumRec)
 	if err != nil {
 		return sdk.ErrorRecord{
 			Error: cerrors.Errorf("error unwrapping metadata: %w", err),
@@ -198,7 +198,7 @@ func (u *unwrapDebezium) processRecord(rec opencdc.Record) sdk.ProcessedRecord {
 	}
 
 	return sdk.SingleRecord{
-		Key:       u.unwrapKey(rec.Key),
+		Key:       d.unwrapKey(rec.Key),
 		Position:  rec.Position,
 		Operation: operation,
 		Payload: opencdc.Change{
@@ -209,7 +209,7 @@ func (u *unwrapDebezium) processRecord(rec opencdc.Record) sdk.ProcessedRecord {
 	}
 }
 
-func (u *unwrapDebezium) valueToData(val any) (opencdc.Data, error) {
+func (d *debezium) valueToData(val any) (opencdc.Data, error) {
 	switch v := val.(type) {
 	case map[string]any:
 		return opencdc.StructuredData(v), nil
@@ -223,7 +223,7 @@ func (u *unwrapDebezium) valueToData(val any) (opencdc.Data, error) {
 	}
 }
 
-func (u *unwrapDebezium) validateRecord(data opencdc.StructuredData) error {
+func (d *debezium) validateRecord(data opencdc.StructuredData) error {
 	var multiErr error
 	if _, ok := data[debeziumFieldAfter]; !ok {
 		multiErr = multierror.Append(multiErr, cerrors.Errorf("the %q field is missing from debezium payload", debeziumFieldAfter))
@@ -238,7 +238,7 @@ func (u *unwrapDebezium) validateRecord(data opencdc.StructuredData) error {
 	return multiErr
 }
 
-func (u *unwrapDebezium) unwrapMetadata(rec opencdc.Record, dbzRec opencdc.StructuredData) (opencdc.Metadata, error) {
+func (d *debezium) unwrapMetadata(rec opencdc.Record, dbzRec opencdc.StructuredData) (opencdc.Metadata, error) {
 	var source map[string]string
 	for field, val := range dbzRec {
 		switch field {
@@ -255,9 +255,9 @@ func (u *unwrapDebezium) unwrapMetadata(rec opencdc.Record, dbzRec opencdc.Struc
 			// don't add prefix for source fields to be consistent with the
 			// behavior of the debezium converter in the SDK - it puts all
 			// metadata fields into the `source` field
-			source = u.flatten("", val)
+			source = d.flatten("", val)
 		default:
-			flattened := u.flatten("debezium."+field, val)
+			flattened := d.flatten("debezium."+field, val)
 			for k, v := range flattened {
 				rec.Metadata[k] = v
 			}
@@ -272,7 +272,7 @@ func (u *unwrapDebezium) unwrapMetadata(rec opencdc.Record, dbzRec opencdc.Struc
 	return rec.Metadata, nil
 }
 
-func (u *unwrapDebezium) flatten(key string, val any) map[string]string {
+func (d *debezium) flatten(key string, val any) map[string]string {
 	var prefix string
 	if len(key) > 0 {
 		prefix = key + "."
@@ -281,7 +281,7 @@ func (u *unwrapDebezium) flatten(key string, val any) map[string]string {
 	case map[string]any:
 		out := make(map[string]string)
 		for k1, v1 := range val {
-			for k2, v2 := range u.flatten(prefix+k1, v1) {
+			for k2, v2 := range d.flatten(prefix+k1, v1) {
 				out[k2] = v2
 			}
 		}
@@ -296,7 +296,7 @@ func (u *unwrapDebezium) flatten(key string, val any) map[string]string {
 }
 
 // convertOperation converts debezium operation to openCDC operation
-func (u *unwrapDebezium) convertOperation(op string) (opencdc.Operation, error) {
+func (d *debezium) convertOperation(op string) (opencdc.Operation, error) {
 	switch op {
 	case debeziumOpCreate:
 		return opencdc.OperationCreate, nil
@@ -312,7 +312,7 @@ func (u *unwrapDebezium) convertOperation(op string) (opencdc.Operation, error) 
 	return 0, cerrors.Errorf("%q is an invalid operation", op)
 }
 
-func (u *unwrapDebezium) unwrapKey(key opencdc.Data) opencdc.Data {
+func (d *debezium) unwrapKey(key opencdc.Data) opencdc.Data {
 	// convert the key to structured data
 	var structKey opencdc.StructuredData
 	switch d := key.(type) {
