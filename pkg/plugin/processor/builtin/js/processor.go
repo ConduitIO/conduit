@@ -92,11 +92,27 @@ func New(logger log.CtxLogger) sdk.Processor {
 
 func (p *processor) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
-		Name:        "custom.javascript",
-		Summary:     "JavaScript processor",
-		Description: "A JavaScript processor for Conduit",
-		Version:     "v0.1.0",
-		Author:      "Meroxa, Inc.",
+		Name:    "custom.javascript",
+		Summary: "JavaScript processor",
+		Description: `A processor that makes it possible to process Conduit records using JavaScript.
+
+The following helper functions and fields are available:
+* logger: a logger that outputs to Conduit's logs. Check zerolog's API on how to use it.
+* SingleRecord(): constructs a new record which represents a successful processing result.
+It's analogous to sdk.SingleRecord from Conduit's Go processor SDK.
+* FilterRecord(): returning a FilterRecord from the process() functions means that the
+record should be dropped from the pipeline.
+* ErrorRecord(): returning an ErrorRecord from the process() function means that there
+was an error processing the input record. Details about the error can be provided through a
+string argument in the constructor, e.g. ErrorRecord("details about the error").
+* RawData(): creates a raw data object. It's analogous to opencdc.RawData. Optionally, it
+accepts a string argument, which will be cast into a byte array, for example: record.Key = RawData("new key").
+* StructuredData(): creates a structured data (map-like) object.
+
+To find out what's possible with the JS processors, also refer to the documentation for 
+[goja](https://github.com/dop251/goja), which is the JavaScript engine we use.`,
+		Version: "v0.1.0",
+		Author:  "Meroxa, Inc.",
 		Parameters: map[string]config.Parameter{
 			"script": {
 				Default: "",
