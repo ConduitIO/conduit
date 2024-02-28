@@ -21,7 +21,6 @@ import (
 	"os"
 	"sync"
 
-	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -111,24 +110,9 @@ accepts a string argument, which will be cast into a byte array, for example: re
 
 To find out what's possible with the JS processors, also refer to the documentation for 
 [goja](https://github.com/dop251/goja), which is the JavaScript engine we use.`,
-		Version: "v0.1.0",
-		Author:  "Meroxa, Inc.",
-		Parameters: map[string]config.Parameter{
-			"script": {
-				Default: "",
-				Type:    config.ParameterTypeString,
-				Description: `
-
-`,
-				Validations: nil,
-			},
-			"script.path": {
-				Default:     "",
-				Type:        config.ParameterTypeString,
-				Description: "",
-				Validations: nil,
-			},
-		},
+		Version:    "v0.1.0",
+		Author:     "Meroxa, Inc.",
+		Parameters: processorConfig{}.Parameters(),
 	}, nil
 }
 
