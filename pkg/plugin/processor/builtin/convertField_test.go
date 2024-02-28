@@ -16,6 +16,7 @@ package builtin
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/conduitio/conduit-commons/opencdc"
@@ -206,6 +207,60 @@ func TestConvertField_Process(t *testing.T) {
 			output := proc.Process(ctx, []opencdc.Record{tc.record})
 			is.True(len(output) == 1)
 			is.Equal(output[0], tc.want)
+		})
+	}
+
+}
+
+func TestConvertField_ProcessFail(t *testing.T) {
+	proc := convertField{}
+	ctx := context.Background()
+	var err error
+	testCases := []struct {
+		name    string
+		field   string
+		typ     string
+		record  opencdc.Record
+		wantErr string
+	}{
+		{
+			name:  "string to int, int out of range",
+			field: ".Key.id",
+			typ:   "int",
+			record: opencdc.Record{
+				Key: opencdc.StructuredData{"id": "9999999999999999999"},
+			},
+			wantErr: "value out of range",
+		},
+		{
+			name:  "string to int, string is not a valid number",
+			field: ".Key.id",
+			typ:   "int",
+			record: opencdc.Record{
+				Key: opencdc.StructuredData{"id": "nan"},
+			},
+			wantErr: "invalid syntax",
+		}, {
+			name:  "float to int, float is out of range",
+			field: ".Key.id",
+			typ:   "int",
+			record: opencdc.Record{
+				Key: opencdc.StructuredData{"id": 9999999999999999999.0},
+			},
+			wantErr: "value out of range",
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			is := is.New(t)
+			proc.config.Type = tc.typ
+			proc.referenceResolver, err = sdk.NewReferenceResolver(tc.field)
+			is.NoErr(err)
+			output := proc.Process(ctx, []opencdc.Record{tc.record})
+			is.True(len(output) == 1)
+			rec, ok := output[0].(sdk.ErrorRecord)
+			is.True(ok)
+			is.True(strings.Contains(rec.Error.Error(), tc.wantErr))
 		})
 	}
 

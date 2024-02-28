@@ -20,9 +20,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
-	"strings"
 
-	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -37,7 +35,7 @@ type convertField struct {
 
 type convertFieldConfig struct {
 	// Field The target field, as it would be addressed in a Go template.
-	Field string `json:"field" validate:"required"`
+	Field string `json:"field" validate:"required,regex=^.(Payload|Key).*"`
 	// Type The target field type after conversion.
 	Type string `json:"type" validate:"required,inclusion=string|int|float|bool"`
 }
@@ -49,38 +47,25 @@ func (p *convertField) Specification() (sdk.Specification, error) {
 		Description: `Convert takes the field of one type and converts it into another type (e.g. string to integer). 
 The applicable types are string, int, float and bool. Converting can be done between any combination of types. Note that
 booleans will be converted to numeric values 1 (true) and 0 (false). Processor is only applicable to .Key, .Payload.Before
-and .Payload.After prefixes, and only applicable if said fields are structured data.`,
+and .Payload.After prefixes, and only applicable if said fields contain structured data.
+if the record contains raw JSON data, then use the processor "decode.json" to parse it into structured data first.`,
 		Version:    "v0.1.0",
 		Author:     "Meroxa, Inc.",
 		Parameters: convertFieldConfig{}.Parameters(),
 	}, nil
 }
 
-func (p *convertField) Configure(_ context.Context, m map[string]string) error {
-
-	cfg := convertFieldConfig{}
-	inputCfg := config.Config(m).
-		Sanitize().
-		ApplyDefaults(cfg.Parameters())
-
-	err := inputCfg.Validate(cfg.Parameters())
+func (p *convertField) Configure(ctx context.Context, m map[string]string) error {
+	err := sdk.ParseConfig(ctx, m, &p.config, convertFieldConfig{}.Parameters())
 	if err != nil {
-		return cerrors.Errorf("invalid configuration: %w", err)
-	}
-	err = inputCfg.DecodeInto(&cfg)
-	if err != nil {
-		return cerrors.Errorf("failed decoding configuration: %w", err)
-	}
-	if !strings.HasPrefix(cfg.Field, ".Payload") && !strings.HasPrefix(cfg.Field, ".Key") {
-		return cerrors.Errorf("processor is only applicable to .Key and .Payload prefixes.")
+		return cerrors.Errorf("failed to parse configurations: %w", err)
 	}
 
-	resolver, err := sdk.NewReferenceResolver(cfg.Field)
+	resolver, err := sdk.NewReferenceResolver(p.config.Field)
 	if err != nil {
 		return cerrors.Errorf("failed to parse the %q param: %w", "field", err)
 	}
 	p.referenceResolver = resolver
-	p.config = cfg
 	return nil
 }
 

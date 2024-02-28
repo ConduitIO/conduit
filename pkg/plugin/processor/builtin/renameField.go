@@ -20,7 +20,6 @@ import (
 	"context"
 	"strings"
 
-	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -38,39 +37,30 @@ var forbiddenFields = []string{MetadataReference, PayloadReference, PayloadBefor
 	PositionReference, KeyReference, OperationReference}
 
 type renameFieldConfig struct {
-	// Mapping A comma separated list of keys and values for fields and their new names (keys and values
-	// are separated by columns ":"), ex: ".Metadata.key:id,.Payload.After.foo:bar".
+	// Mapping is a comma separated list of keys and values for fields and their new names (keys and values
+	// are separated by colons ":"). For example: `.Metadata.key:id,.Payload.After.foo:bar`.
 	Mapping []string `json:"mapping" validate:"required"`
 }
 
 func (p *renameField) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
 		Name:    "field.rename",
-		Summary: "Rename a group of fields",
+		Summary: "Rename a group of fields.",
 		Description: `Rename a group of field names to new names. It is not allowed to rename top-level fields (.Operation, .Position, 
 .Key, .Metadata, .Payload.Before, .Payload.After).
-Note that this processor only runs on structured data, if the record contains JSON data, then use the processor "decode.json" to parse it into structured data first.`,
+Note that this processor only runs on structured data, if the record contains raw JSON data, then use the processor "decode.json" to parse it into structured data first.`,
 		Version:    "v0.1.0",
 		Author:     "Meroxa, Inc.",
 		Parameters: renameFieldConfig{}.Parameters(),
 	}, nil
 }
 
-func (p *renameField) Configure(_ context.Context, m map[string]string) error {
+func (p *renameField) Configure(ctx context.Context, m map[string]string) error {
 	cfg := renameFieldConfig{}
-	inputCfg := config.Config(m).
-		Sanitize().
-		ApplyDefaults(cfg.Parameters())
-
-	err := inputCfg.Validate(cfg.Parameters())
+	err := sdk.ParseConfig(ctx, m, &cfg, renameFieldConfig{}.Parameters())
 	if err != nil {
-		return cerrors.Errorf("invalid configuration: %w", err)
+		return cerrors.Errorf("failed to parse configurations: %w", err)
 	}
-	err = inputCfg.DecodeInto(&cfg)
-	if err != nil {
-		return cerrors.Errorf("failed decoding configuration: %w", err)
-	}
-
 	result := make(map[string]string, len(cfg.Mapping))
 	p.referenceResolvers = make([]sdk.ReferenceResolver, len(cfg.Mapping))
 	for i, pair := range cfg.Mapping {
@@ -84,6 +74,9 @@ func (p *renameField) Configure(_ context.Context, m map[string]string) error {
 			return cerrors.Errorf("cannot rename one of the top-level fields %q", key)
 		}
 		value := strings.TrimSpace(parts[1])
+		if len(value) == 0 {
+			return cerrors.Errorf("cannot rename the key %q to an empty string", key)
+		}
 		p.referenceResolvers[i], err = sdk.NewReferenceResolver(key)
 		if err != nil {
 			return cerrors.Errorf("invalid reference: %w", err)
@@ -100,23 +93,23 @@ func (p *renameField) Open(context.Context) error {
 }
 
 func (p *renameField) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
-	index := 0
+	//index := 0
 	out := make([]sdk.ProcessedRecord, 0, len(records))
-	for _, record := range records {
-		for _, newName := range p.mapping {
-			ref, err := p.referenceResolvers[index].Resolve(&record)
-			if err != nil {
-				return append(out, sdk.ErrorRecord{Error: err})
-			}
-			err = ref.Rename(newName)
-			if err != nil {
-				return append(out, sdk.ErrorRecord{Error: err})
-			}
-			index++
-		}
-		out = append(out, sdk.SingleRecord(record))
-		index = 0
-	}
+	//for _, record := range records {
+	//	for _, newName := range p.mapping {
+	//		ref, err := p.referenceResolvers[index].Resolve(&record)
+	//		if err != nil {
+	//			return append(out, sdk.ErrorRecord{Error: err})
+	//		}
+	//		err = ref.Rename(newName)
+	//		if err != nil {
+	//			return append(out, sdk.ErrorRecord{Error: err})
+	//		}
+	//		index++
+	//	}
+	//	out = append(out, sdk.SingleRecord(record))
+	//	index = 0
+	//}
 	return out
 }
 

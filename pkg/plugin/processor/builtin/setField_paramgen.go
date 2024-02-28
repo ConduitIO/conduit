@@ -20,7 +20,7 @@ func (setFieldConfig) Parameters() map[string]config.Parameter {
 		},
 		"value": {
 			Default:     "",
-			Description: "value A Go template expression which will be evaluated and stored in \"field\".",
+			Description: "value is a Go template expression which will be evaluated and stored in `field` (e.g. `{{ .Payload.After }}`).",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{
 				config.ValidationRequired{},

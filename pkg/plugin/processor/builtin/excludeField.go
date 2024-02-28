@@ -19,7 +19,6 @@ package builtin
 import (
 	"context"
 
-	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -39,35 +38,25 @@ type excludeFieldConfig struct {
 
 func (p *excludeField) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
-		Name: "field.subset.exclude",
-		Summary: `Remove a subset of fields from the record, all the other fields are left untouched. 
+		Name:    "field.subset.exclude",
+		Summary: "Remove a subset of fields from the record.",
+		Description: `Remove a subset of fields from the record, all the other fields are left untouched. 
 If a field is excluded that contains nested data, the whole tree will be removed.  
 It is not allowed to exclude .Position or .Operation fields.
-Note that this processor only runs on structured data, if the record contains JSON data, then use the processor "decode.json" to parse it into structured data first.`,
-		Description: "Remove a subset of fields from the record.",
-		Version:     "v0.1.0",
-		Author:      "Meroxa, Inc.",
-		Parameters:  excludeFieldConfig{}.Parameters(),
+Note that this processor only runs on structured data, if the record contains raw JSON data, then use the processor "decode.json" to parse it into structured data first.`,
+		Version:    "v0.1.0",
+		Author:     "Meroxa, Inc.",
+		Parameters: excludeFieldConfig{}.Parameters(),
 	}, nil
 }
 
-func (p *excludeField) Configure(_ context.Context, m map[string]string) error {
-	cfg := excludeFieldConfig{}
-	inputCfg := config.Config(m).
-		Sanitize().
-		ApplyDefaults(cfg.Parameters())
-
-	err := inputCfg.Validate(cfg.Parameters())
+func (p *excludeField) Configure(ctx context.Context, m map[string]string) error {
+	err := sdk.ParseConfig(ctx, m, &p.config, excludeFieldConfig{}.Parameters())
 	if err != nil {
-		return cerrors.Errorf("invalid configuration: %w", err)
+		return cerrors.Errorf("failed to parse configurations: %w", err)
 	}
-	err = inputCfg.DecodeInto(&cfg)
-	if err != nil {
-		return cerrors.Errorf("failed decoding configuration: %w", err)
-	}
-
-	p.referenceResolvers = make([]sdk.ReferenceResolver, len(cfg.Fields))
-	for i, field := range cfg.Fields {
+	p.referenceResolvers = make([]sdk.ReferenceResolver, len(p.config.Fields))
+	for i, field := range p.config.Fields {
 		if field == PositionReference || field == OperationReference {
 			return cerrors.Errorf("it is not allowed to exclude the fields %q and %q", OperationReference, PositionReference)
 		}
@@ -76,7 +65,6 @@ func (p *excludeField) Configure(_ context.Context, m map[string]string) error {
 			return cerrors.Errorf("invalid reference: %w", err)
 		}
 	}
-	p.config = cfg
 	return nil
 }
 

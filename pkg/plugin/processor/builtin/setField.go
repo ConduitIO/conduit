@@ -22,7 +22,6 @@ import (
 	"text/template"
 
 	"github.com/Masterminds/sprig/v3"
-	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -38,7 +37,7 @@ type setField struct {
 type setFieldConfig struct {
 	// Field The target field, as it would be addressed in a Go template.
 	Field string `json:"field" validate:"required,exclusion=.Position"`
-	// Value A Go template expression which will be evaluated and stored in "field".
+	// Value is a Go template expression which will be evaluated and stored in `field` (e.g. `{{ .Payload.After }}`).
 	Value string `json:"value" validate:"required"`
 }
 
@@ -47,7 +46,7 @@ func (p *setField) Specification() (sdk.Specification, error) {
 		Name:    "field.set",
 		Summary: "Set the value of a certain field.",
 		Description: `Set the value of a certain field to any value. It is not allowed to set the .Position field.
-Note that this processor only runs on structured data, if the record contains JSON data, then use the processor
+Note that this processor only runs on structured data, if the record contains raw JSON data, then use the processor
 "decode.json" to parse it into structured data first.`,
 		Version:    "v0.1.0",
 		Author:     "Meroxa, Inc.",
@@ -55,20 +54,13 @@ Note that this processor only runs on structured data, if the record contains JS
 	}, nil
 }
 
-func (p *setField) Configure(_ context.Context, m map[string]string) error {
+func (p *setField) Configure(ctx context.Context, m map[string]string) error {
 	cfg := setFieldConfig{}
-	inputCfg := config.Config(m).
-		Sanitize().
-		ApplyDefaults(cfg.Parameters())
+	err := sdk.ParseConfig(ctx, m, &cfg, setFieldConfig{}.Parameters())
+	if err != nil {
+		return cerrors.Errorf("failed to parse configurations: %w", err)
+	}
 
-	err := inputCfg.Validate(cfg.Parameters())
-	if err != nil {
-		return cerrors.Errorf("invalid configuration: %w", err)
-	}
-	err = inputCfg.DecodeInto(&cfg)
-	if err != nil {
-		return cerrors.Errorf("failed decoding configuration: %w", err)
-	}
 	tmpl, err := template.New("").Funcs(sprig.FuncMap()).Parse(cfg.Value)
 	if err != nil {
 		return cerrors.Errorf("failed to parse the %q param template: %w", "value", err)

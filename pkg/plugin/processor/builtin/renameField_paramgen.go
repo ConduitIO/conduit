@@ -11,7 +11,7 @@ func (renameFieldConfig) Parameters() map[string]config.Parameter {
 	return map[string]config.Parameter{
 		"mapping": {
 			Default:     "",
-			Description: "mapping A comma separated list of keys and values for fields and their new names (keys and values are separated by columns \":\"), ex: \".Metadata.key:id,.Payload.After.foo:bar\".",
+			Description: "mapping is a comma separated list of keys and values for fields and their new names (keys and values are separated by colons \":\"). For example: `.Metadata.key:id,.Payload.After.foo:bar`.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{
 				config.ValidationRequired{},
