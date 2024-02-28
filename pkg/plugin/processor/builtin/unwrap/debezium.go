@@ -147,6 +147,13 @@ func (d *debeziumProcessor) processRecord(rec opencdc.Record) sdk.ProcessedRecor
 				Error: cerrors.Errorf("failed unmarshalling JSON from raw data: %w", err),
 			}
 		}
+	case string:
+		err := json.Unmarshal([]byte(d), &debeziumEvent)
+		if err != nil {
+			return sdk.ErrorRecord{
+				Error: cerrors.Errorf("failed unmarshalling JSON from string: %w", err),
+			}
+		}
 	default:
 		return sdk.ErrorRecord{
 			Error: cerrors.Errorf("unexpected data type %T", ref.Get()),
