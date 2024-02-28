@@ -45,6 +45,8 @@ const (
 )
 
 type unwrapDebeziumConfig struct {
+	// TODO change link to docs
+
 	// Field is a reference to the field which contains the Debezium record.
 	//
 	// For more information about record references, see: https://github.com/ConduitIO/conduit-processor-sdk/blob/cbdc5dcb5d3109f8f13b88624c9e360076b0bcdb/util.go#L66.
@@ -70,19 +72,9 @@ func (u *unwrapDebezium) Specification() (sdk.Specification, error) {
 
 This is useful in cases where Conduit acts as an intermediary between a Debezium source and a Debezium destination. 
 In such cases, the Debezium record is set as the OpenCDC record's payload, and needs to be unwrapped for further usage.`,
-		Version: "v0.1.0",
-		Author:  "Meroxa, Inc.",
-		Parameters: config.Parameters{
-			"field": {
-				Default: ".Payload.After",
-				Description: `Reference to the field which contains the wrapped Debezium record.
-
-This should be a valid reference within an OpenCDC record, as specified here: https://github.com/ConduitIO/conduit-processor-sdk/blob/main/util.go#L66
-`,
-				Type:        config.ParameterTypeString,
-				Validations: nil,
-			},
-		},
+		Version:    "v0.1.0",
+		Author:     "Meroxa, Inc.",
+		Parameters: unwrapDebeziumConfig{}.Parameters(),
 	}, nil
 }
 
