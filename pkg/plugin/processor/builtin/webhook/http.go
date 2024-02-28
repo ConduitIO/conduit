@@ -72,7 +72,9 @@ type httpProcessor struct {
 	sdk.UnimplementedProcessor
 
 	logger log.CtxLogger
-	config httpConfig
+
+	config     httpConfig
+	backoffCfg *backoff.Backoff
 
 	requestBodyRef    *sdk.ReferenceResolver
 	responseBodyRef   *sdk.ReferenceResolver
@@ -98,31 +100,30 @@ saves the response body and, optionally, the response status.
 }
 
 func (p *httpProcessor) Configure(ctx context.Context, m map[string]string) error {
-	cfg := httpConfig{}
-	err := sdk.ParseConfig(ctx, m, &cfg, cfg.Parameters())
+	err := sdk.ParseConfig(ctx, m, &p.config, p.config.Parameters())
 	if err != nil {
 		return cerrors.Errorf("failed parsing configuration: %w", err)
 	}
 
-	if cfg.ResponseBodyRef == cfg.ResponseStatusRef {
+	if p.config.ResponseBodyRef == p.config.ResponseStatusRef {
 		return cerrors.New("invalid configuration: response.body and response.status set to same field")
 	}
 
-	requestBodyRef, err := sdk.NewReferenceResolver(cfg.RequestBodyRef)
+	requestBodyRef, err := sdk.NewReferenceResolver(p.config.RequestBodyRef)
 	if err != nil {
 		return cerrors.Errorf("failed parsing request.body %v: %w", p.config.RequestBodyRef, err)
 	}
 	p.requestBodyRef = &requestBodyRef
 
-	responseBodyRef, err := sdk.NewReferenceResolver(cfg.ResponseBodyRef)
+	responseBodyRef, err := sdk.NewReferenceResolver(p.config.ResponseBodyRef)
 	if err != nil {
 		return cerrors.Errorf("failed parsing response.body %v: %w", p.config.ResponseBodyRef, err)
 	}
 	p.responseBodyRef = &responseBodyRef
 
 	// This field is optional and, if not set, response status won't be saved.
-	if cfg.ResponseStatusRef != "" {
-		responseStatusRef, err := sdk.NewReferenceResolver(cfg.ResponseStatusRef)
+	if p.config.ResponseStatusRef != "" {
+		responseStatusRef, err := sdk.NewReferenceResolver(p.config.ResponseStatusRef)
 		if err != nil {
 			return cerrors.Errorf("failed parsing response.status %v: %w", p.config.ResponseStatusRef, err)
 		}
@@ -130,12 +131,16 @@ func (p *httpProcessor) Configure(ctx context.Context, m map[string]string) erro
 	}
 
 	// preflight check
-	_, err = http.NewRequest(cfg.Method, cfg.URL, bytes.NewReader([]byte{}))
+	_, err = http.NewRequest(p.config.Method, p.config.URL, bytes.NewReader([]byte{}))
 	if err != nil {
 		return cerrors.Errorf("configuration check failed: %w", err)
 	}
-	p.config = cfg
 
+	p.backoffCfg = &backoff.Backoff{
+		Factor: p.config.BackoffRetryFactor,
+		Min:    p.config.BackoffRetryMin,
+		Max:    p.config.BackoffRetryMax,
+	}
 	return nil
 }
 
@@ -146,47 +151,48 @@ func (p *httpProcessor) Open(context.Context) error {
 func (p *httpProcessor) Process(ctx context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 	out := make([]sdk.ProcessedRecord, 0, len(records))
 	for _, rec := range records {
-		procRec := p.processRecordWithBackOff(ctx, rec)
-		out = append(out, procRec)
-		if _, ok := procRec.(sdk.ErrorRecord); ok {
-			return out
+		proc, err := p.processRecordWithBackOff(ctx, rec)
+		if err != nil {
+			return append(out, sdk.ErrorRecord{Error: err})
 		}
+		out = append(out, proc)
 	}
 
 	return out
 }
 
-func (p *httpProcessor) processRecordWithBackOff(ctx context.Context, r opencdc.Record) sdk.ProcessedRecord {
-	b := &backoff.Backoff{
-		Factor: p.config.BackoffRetryFactor,
-		Min:    p.config.BackoffRetryMin,
-		Max:    p.config.BackoffRetryMax,
-	}
-
+func (p *httpProcessor) processRecordWithBackOff(ctx context.Context, r opencdc.Record) (sdk.ProcessedRecord, error) {
 	for {
-		processed := p.processRecord(ctx, r)
-		errRec, isErr := processed.(sdk.ErrorRecord)
-		attempt := b.Attempt()
-		duration := b.Duration()
+		processed, err := p.processRecord(ctx, r)
+		attempt := p.backoffCfg.Attempt()
+		duration := p.backoffCfg.Duration()
 
-		if isErr && attempt < p.config.BackoffRetryCount {
+		if err != nil && attempt < p.config.BackoffRetryCount {
 			p.logger.Debug(ctx).
-				Err(errRec.Error).
+				Err(err).
 				Float64("attempt", attempt).
 				Float64("backoffRetry.count", p.config.BackoffRetryCount).
 				Int64("backoffRetry.duration", duration.Milliseconds()).
 				Msg("retrying HTTP request")
 
-			time.Sleep(duration)
-			continue
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(duration):
+				continue
+			}
 		}
-		b.Reset() // reset for next processor execution
-		return processed
+		p.backoffCfg.Reset() // reset for next processor execution
+		if err != nil {
+			return nil, err
+		}
+
+		return processed, nil
 	}
 }
 
 // processRecord processes a single record (without retries)
-func (p *httpProcessor) processRecord(ctx context.Context, r opencdc.Record) sdk.ProcessedRecord {
+func (p *httpProcessor) processRecord(ctx context.Context, r opencdc.Record) (sdk.ProcessedRecord, error) {
 	var key []byte
 	if r.Key != nil {
 		key = r.Key.Bytes()
@@ -195,12 +201,12 @@ func (p *httpProcessor) processRecord(ctx context.Context, r opencdc.Record) sdk
 
 	req, err := p.buildRequest(ctx, r)
 	if err != nil {
-		return sdk.ErrorRecord{Error: cerrors.Errorf("cannot create HTTP request: %w", err)}
+		return nil, cerrors.Errorf("cannot create HTTP request: %w", err)
 	}
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return sdk.ErrorRecord{Error: cerrors.Errorf("error executing HTTP request: %w", err)}
+		return nil, cerrors.Errorf("error executing HTTP request: %w", err)
 	}
 	defer func() {
 		errClose := resp.Body.Close()
@@ -213,29 +219,29 @@ func (p *httpProcessor) processRecord(ctx context.Context, r opencdc.Record) sdk
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return sdk.ErrorRecord{Error: cerrors.Errorf("error reading response body: %w", err)}
+		return nil, cerrors.Errorf("error reading response body: %w", err)
 	}
 
 	if resp.StatusCode >= 300 {
 		// regard status codes over 299 as errors
-		return sdk.ErrorRecord{Error: cerrors.Errorf("error status code %v (body: %q)", resp.StatusCode, string(body))}
+		return nil, cerrors.Errorf("error status code %v (body: %q)", resp.StatusCode, string(body))
 	}
 	// skip if body has no content
 	if resp.StatusCode == http.StatusNoContent {
-		return sdk.FilterRecord{}
+		return sdk.FilterRecord{}, nil
 	}
 
 	// Set response body
 	err = p.setField(&r, p.responseBodyRef, opencdc.RawData(body))
 	if err != nil {
-		return sdk.ErrorRecord{Error: cerrors.Errorf("failed setting response body: %w", err)}
+		return nil, cerrors.Errorf("failed setting response body: %w", err)
 	}
 	err = p.setField(&r, p.responseStatusRef, strconv.Itoa(resp.StatusCode))
 	if err != nil {
-		return sdk.ErrorRecord{Error: cerrors.Errorf("failed setting response status: %w", err)}
+		return nil, cerrors.Errorf("failed setting response status: %w", err)
 	}
 
-	return sdk.SingleRecord(r)
+	return sdk.SingleRecord(r), nil
 }
 
 func (p *httpProcessor) buildRequest(ctx context.Context, r opencdc.Record) (*http.Request, error) {
