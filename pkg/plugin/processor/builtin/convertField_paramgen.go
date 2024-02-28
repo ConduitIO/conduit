@@ -13,7 +13,7 @@ func (convertFieldConfig) Parameters() map[string]config.Parameter {
 	return map[string]config.Parameter{
 		"field": {
 			Default:     "",
-			Description: "field The target field, as it would be addressed in a Go template.",
+			Description: "field is the target field, as it would be addressed in a Go template (e.g. `.Payload.After.foo`). you can only convert fields that are under .Key and .Payload, and said fields should contain structured data.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{
 				config.ValidationRequired{},
@@ -22,7 +22,7 @@ func (convertFieldConfig) Parameters() map[string]config.Parameter {
 		},
 		"type": {
 			Default:     "",
-			Description: "type The target field type after conversion.",
+			Description: "type is the target field type after conversion, available options are: string, int, float, bool.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{
 				config.ValidationRequired{},

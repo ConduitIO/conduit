@@ -35,7 +35,8 @@ type setField struct {
 }
 
 type setFieldConfig struct {
-	// Field The target field, as it would be addressed in a Go template.
+	// Field is the target field, as it would be addressed in a Go template (e.g. `.Payload.After.foo`).
+	// Note that it is not allowed to set the .Position field.
 	Field string `json:"field" validate:"required,exclusion=.Position"`
 	// Value is a Go template expression which will be evaluated and stored in `field` (e.g. `{{ .Payload.After }}`).
 	Value string `json:"value" validate:"required"`
