@@ -15,13 +15,14 @@
 package builtin
 
 import (
+	"io"
+	"net/http"
+	"net/http/httptest"
+
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/webhook"
-	"io"
-	"net/http"
-	"net/http/httptest"
 )
 
 //nolint:govet // we're using a more descriptive name of example
