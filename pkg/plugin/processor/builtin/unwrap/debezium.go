@@ -111,11 +111,11 @@ func (d *debeziumProcessor) Open(context.Context) error {
 func (d *debeziumProcessor) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 	out := make([]sdk.ProcessedRecord, 0, len(records))
 	for _, rec := range records {
-		proc := d.processRecord(rec)
-		out = append(out, proc)
-		if _, ok := proc.(sdk.ErrorRecord); ok {
-			return out
+		proc, err := d.processRecord(rec)
+		if err != nil {
+			return append(out, sdk.ErrorRecord{Error: err})
 		}
+		out = append(out, proc)
 	}
 
 	return out
@@ -125,13 +125,11 @@ func (d *debeziumProcessor) Teardown(context.Context) error {
 	return nil
 }
 
-func (d *debeziumProcessor) processRecord(rec opencdc.Record) sdk.ProcessedRecord {
+func (d *debeziumProcessor) processRecord(rec opencdc.Record) (sdk.ProcessedRecord, error) {
 	// record must be structured
 	ref, err := d.fieldRefRes.Resolve(&rec)
 	if err != nil {
-		return sdk.ErrorRecord{
-			Error: cerrors.Errorf("failed resolving reference: %w", err),
-		}
+		return nil, cerrors.Errorf("failed resolving reference: %w", err)
 	}
 
 	var debeziumEvent opencdc.StructuredData
@@ -143,72 +141,52 @@ func (d *debeziumProcessor) processRecord(rec opencdc.Record) sdk.ProcessedRecor
 	case opencdc.RawData:
 		err := json.Unmarshal(d.Bytes(), &debeziumEvent)
 		if err != nil {
-			return sdk.ErrorRecord{
-				Error: cerrors.Errorf("failed unmarshalling JSON from raw data: %w", err),
-			}
+			return nil, cerrors.Errorf("failed unmarshalling JSON from raw data: %w", err)
 		}
 	case string:
 		err := json.Unmarshal([]byte(d), &debeziumEvent)
 		if err != nil {
-			return sdk.ErrorRecord{
-				Error: cerrors.Errorf("failed unmarshalling JSON from string: %w", err),
-			}
+			return nil, cerrors.Errorf("failed unmarshalling JSON from string: %w", err)
 		}
 	default:
-		return sdk.ErrorRecord{
-			Error: cerrors.Errorf("unexpected data type %T", ref.Get()),
-		}
+		return nil, cerrors.Errorf("unexpected data type %T", ref.Get())
 	}
 
 	// get payload
 	debeziumRec, ok := debeziumEvent["payload"].(map[string]any) // the payload has the debezium record
 	if !ok {
-		return sdk.ErrorRecord{
-			Error: cerrors.New("data to be unwrapped doesn't contain a payload field"),
-		}
+		return nil, cerrors.New("data to be unwrapped doesn't contain a payload field")
 	}
 
 	// check fields under payload
 	err = d.validateRecord(debeziumRec)
 	if err != nil {
-		return sdk.ErrorRecord{
-			Error: cerrors.Errorf("invalid record: %w", err),
-		}
+		return nil, cerrors.Errorf("invalid record: %w", err)
 	}
 
 	before, err := d.valueToData(debeziumRec[debeziumFieldBefore])
 	if err != nil {
-		return sdk.ErrorRecord{
-			Error: cerrors.Errorf("failed to parse field %s: %w", debeziumFieldBefore, err),
-		}
+		return nil, cerrors.Errorf("failed to parse field %s: %w", debeziumFieldBefore, err)
 	}
 
 	after, err := d.valueToData(debeziumRec[debeziumFieldAfter])
 	if err != nil {
-		return sdk.ErrorRecord{
-			Error: cerrors.Errorf("failed to parse field %s: %w", debeziumFieldAfter, err),
-		}
+		return nil, cerrors.Errorf("failed to parse field %s: %w", debeziumFieldAfter, err)
 	}
 
 	op, ok := debeziumRec[debeziumFieldOp].(string)
 	if !ok {
-		return sdk.ErrorRecord{
-			Error: cerrors.Errorf("%s operation is not a string", op),
-		}
+		return nil, cerrors.Errorf("%s operation is not a string", op)
 	}
 
 	operation, err := d.convertOperation(op)
 	if err != nil {
-		return sdk.ErrorRecord{
-			Error: cerrors.Errorf("error unwrapping operation: %w", err),
-		}
+		return nil, cerrors.Errorf("error unwrapping operation: %w", err)
 	}
 
 	metadata, err := d.unwrapMetadata(rec, debeziumRec)
 	if err != nil {
-		return sdk.ErrorRecord{
-			Error: cerrors.Errorf("error unwrapping metadata: %w", err),
-		}
+		return nil, cerrors.Errorf("error unwrapping metadata: %w", err)
 	}
 
 	return sdk.SingleRecord{
@@ -220,7 +198,7 @@ func (d *debeziumProcessor) processRecord(rec opencdc.Record) sdk.ProcessedRecor
 			After:  after,
 		},
 		Metadata: metadata,
-	}
+	}, nil
 }
 
 func (d *debeziumProcessor) valueToData(val any) (opencdc.Data, error) {
