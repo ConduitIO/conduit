@@ -16,6 +16,7 @@ package unwrap
 
 import (
 	"context"
+	"github.com/google/go-cmp/cmp"
 	"testing"
 
 	"github.com/conduitio/conduit-commons/opencdc"
@@ -116,14 +117,15 @@ func TestUnwrapKafkaConnect_Process(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			is := is.New(t)
+			ctx := context.Background()
 
 			underTest := newUnwrapKafkaConnect(log.Test(t))
-			err := underTest.Configure(context.Background(), tc.config)
+			err := underTest.Configure(ctx, tc.config)
 			is.NoErr(err)
 
-			gotSlice := underTest.Process(context.Background(), []opencdc.Record{tc.record})
-			is.Equal(1, len(gotSlice))
-			AreEqual(t, tc.want, gotSlice[0])
+			got := underTest.Process(ctx, []opencdc.Record{tc.record})
+			is.Equal(1, len(got))
+			is.Equal("", cmp.Diff(tc.want, got[0], cmpProcessedRecordOpts...))
 		})
 	}
 }

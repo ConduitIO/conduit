@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:generate paramgen -output=unwrap_kafkaconnect_paramgen.go unwrapKafkaConnectConfig
+//go:generate paramgen -output=kafkaconnect_paramgen.go kafkaConnectConfig
 
 package unwrap
 
@@ -28,24 +28,24 @@ import (
 	"github.com/goccy/go-json"
 )
 
-type unwrapKafkaConnectConfig struct {
+type kafkaConnectConfig struct {
 	// Field is a reference to the field which contains the Kafka Connect record.
 	//
 	// For more information about record references, see: https://github.com/ConduitIO/conduit-processor-sdk/blob/cbdc5dcb5d3109f8f13b88624c9e360076b0bcdb/util.go#L66.
 	Field string `json:"field" validate:"regex=^.Payload" default:".Payload.After"`
 }
 
-type unwrapKafkaConnect struct {
+type kafkaConnectProcessor struct {
 	sdk.UnimplementedProcessor
 
 	fieldRefRes sdk.ReferenceResolver
 }
 
-func newUnwrapKafkaConnect(log.CtxLogger) *unwrapKafkaConnect {
-	return &unwrapKafkaConnect{}
+func newUnwrapKafkaConnect(log.CtxLogger) *kafkaConnectProcessor {
+	return &kafkaConnectProcessor{}
 }
 
-func (u *unwrapKafkaConnect) Specification() (sdk.Specification, error) {
+func (u *kafkaConnectProcessor) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
 		Name:    "unwrap.kafkaconnect",
 		Summary: "A processors which unwraps a Kafka Connect record from an OpenCDC record.",
@@ -55,12 +55,12 @@ This is useful in cases where Conduit acts as an intermediary between a Kafka Co
 In such cases, the Kafka Connect record is set as the OpenCDC record's payload, and needs to be unwrapped for further usage.`,
 		Version:    "v0.1.0",
 		Author:     "Meroxa, Inc.",
-		Parameters: unwrapKafkaConnectConfig{}.Parameters(),
+		Parameters: kafkaConnectConfig{}.Parameters(),
 	}, nil
 }
 
-func (u *unwrapKafkaConnect) Configure(_ context.Context, m map[string]string) error {
-	cfg := unwrapKafkaConnectConfig{}
+func (u *kafkaConnectProcessor) Configure(_ context.Context, m map[string]string) error {
+	cfg := kafkaConnectConfig{}
 	inputCfg := config.Config(m).Sanitize().ApplyDefaults(cfg.Parameters())
 	err := inputCfg.Validate(cfg.Parameters())
 	if err != nil {
@@ -81,11 +81,11 @@ func (u *unwrapKafkaConnect) Configure(_ context.Context, m map[string]string) e
 	return nil
 }
 
-func (u *unwrapKafkaConnect) Open(context.Context) error {
+func (u *kafkaConnectProcessor) Open(context.Context) error {
 	return nil
 }
 
-func (u *unwrapKafkaConnect) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
+func (u *kafkaConnectProcessor) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 	out := make([]sdk.ProcessedRecord, 0, len(records))
 	for _, rec := range records {
 		proc := u.processRecord(rec)
@@ -98,7 +98,7 @@ func (u *unwrapKafkaConnect) Process(_ context.Context, records []opencdc.Record
 	return out
 }
 
-func (u *unwrapKafkaConnect) processRecord(rec opencdc.Record) sdk.ProcessedRecord {
+func (u *kafkaConnectProcessor) processRecord(rec opencdc.Record) sdk.ProcessedRecord {
 	// record must be structured
 	ref, err := u.fieldRefRes.Resolve(&rec)
 	if err != nil {
@@ -137,7 +137,7 @@ func (u *unwrapKafkaConnect) processRecord(rec opencdc.Record) sdk.ProcessedReco
 	}
 }
 
-func (u *unwrapKafkaConnect) unwrapKey(key opencdc.Data) opencdc.Data {
+func (u *kafkaConnectProcessor) unwrapKey(key opencdc.Data) opencdc.Data {
 	// convert the key to structured data
 	var structKey opencdc.StructuredData
 	switch d := key.(type) {
@@ -167,6 +167,6 @@ func (u *unwrapKafkaConnect) unwrapKey(key opencdc.Data) opencdc.Data {
 	return opencdc.RawData(fmt.Sprint(payload))
 }
 
-func (u *unwrapKafkaConnect) Teardown(context.Context) error {
+func (u *kafkaConnectProcessor) Teardown(context.Context) error {
 	return nil
 }
