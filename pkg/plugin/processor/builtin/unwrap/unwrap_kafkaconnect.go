@@ -50,8 +50,10 @@ func (u *kafkaConnectProcessor) Specification() (sdk.Specification, error) {
 		Summary: "Unwraps a Kafka Connect record from an OpenCDC record.",
 		Description: `This processor unwraps a Kafka Connect record from the input OpenCDC record.
 
-This is useful in cases where Conduit acts as an intermediary between a Kafka Connect source and a Kafka Connect destination. 
-In such cases, the Kafka Connect record is set as the OpenCDC record's payload, and needs to be unwrapped for further usage.`,
+The input record's payload is replaced with the Kafka Connect record.
+
+This is useful in cases where Conduit acts as an intermediary between a Debezium source and a Debezium destination. 
+In such cases, the Debezium record is set as the OpenCDC record's payload, and needs to be unwrapped for further usage.`,
 		Version:    "v0.1.0",
 		Author:     "Meroxa, Inc.",
 		Parameters: kafkaConnectConfig{}.Parameters(),
@@ -127,7 +129,7 @@ func (u *kafkaConnectProcessor) processRecord(rec opencdc.Record) (sdk.Processed
 	return sdk.SingleRecord{
 		Key:      u.unwrapKey(rec.Key),
 		Position: rec.Position,
-		Metadata: nil,
+		Metadata: rec.Metadata,
 		Payload: opencdc.Change{
 			After: opencdc.StructuredData(structPayload),
 		},
@@ -158,12 +160,15 @@ func (u *kafkaConnectProcessor) unwrapKey(key opencdc.Data) opencdc.Data {
 	}
 
 	// if payload is a map, return the payload as structured data
-	if p, ok := payload.(map[string]any); ok {
+	switch p := payload.(type) {
+	case opencdc.StructuredData:
+		return p
+	case map[string]any:
 		return opencdc.StructuredData(p)
+	default:
+		// otherwise, convert the payload to string, then return it as raw data
+		return opencdc.RawData(fmt.Sprint(payload))
 	}
-
-	// otherwise, convert the payload to string, then return it as raw data
-	return opencdc.RawData(fmt.Sprint(payload))
 }
 
 func (u *kafkaConnectProcessor) Teardown(context.Context) error {
