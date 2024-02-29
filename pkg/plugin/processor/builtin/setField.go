@@ -63,7 +63,7 @@ func (p *setField) Configure(ctx context.Context, m map[string]string) error {
 	cfg := setFieldConfig{}
 	err := sdk.ParseConfig(ctx, m, &cfg, setFieldConfig{}.Parameters())
 	if err != nil {
-		return cerrors.Errorf("failed to parse configurations: %w", err)
+		return cerrors.Errorf("failed to parse configuration: %w", err)
 	}
 
 	tmpl, err := template.New("").Funcs(sprig.FuncMap()).Parse(cfg.Value)

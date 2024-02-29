@@ -57,7 +57,7 @@ Note that this processor only runs on structured data, if the record contains ra
 func (p *excludeField) Configure(ctx context.Context, m map[string]string) error {
 	err := sdk.ParseConfig(ctx, m, &p.config, excludeFieldConfig{}.Parameters())
 	if err != nil {
-		return cerrors.Errorf("failed to parse configurations: %w", err)
+		return cerrors.Errorf("failed to parse configuration: %w", err)
 	}
 	p.referenceResolvers = make([]sdk.ReferenceResolver, len(p.config.Fields))
 	for i, field := range p.config.Fields {

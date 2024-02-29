@@ -63,7 +63,7 @@ func (p *renameField) Configure(ctx context.Context, m map[string]string) error 
 	cfg := renameFieldConfig{}
 	err := sdk.ParseConfig(ctx, m, &cfg, renameFieldConfig{}.Parameters())
 	if err != nil {
-		return cerrors.Errorf("failed to parse configurations: %w", err)
+		return cerrors.Errorf("failed to parse configuration: %w", err)
 	}
 	p.referenceResolvers = make([]sdk.ReferenceResolver, len(cfg.Mapping))
 	p.newNames = make([]string, len(cfg.Mapping))
