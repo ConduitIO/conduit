@@ -16,12 +16,12 @@ package unwrap
 
 import (
 	"context"
-	"github.com/google/go-cmp/cmp"
 	"testing"
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/google/go-cmp/cmp"
 	"github.com/matryer/is"
 )
 
@@ -32,7 +32,7 @@ func TestUnwrapKafkaConnect_Configure(t *testing.T) {
 		wantErr string
 	}{
 		{
-			name:    "optional not provided",
+			name:    "optional parameter not provided",
 			config:  map[string]string{},
 			wantErr: "",
 		},
@@ -93,6 +93,7 @@ func TestUnwrapKafkaConnect_Process(t *testing.T) {
 			},
 			want: sdk.SingleRecord{
 				Operation: opencdc.OperationSnapshot,
+				Metadata:  map[string]string{},
 				Payload: opencdc.Change{
 					After: opencdc.StructuredData{"description": "test2", "id": 27},
 				},

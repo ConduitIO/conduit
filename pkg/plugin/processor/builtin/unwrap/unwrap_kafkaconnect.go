@@ -94,7 +94,6 @@ func (u *kafkaConnectProcessor) Process(_ context.Context, records []opencdc.Rec
 }
 
 func (u *kafkaConnectProcessor) processRecord(rec opencdc.Record) (sdk.ProcessedRecord, error) {
-	// record must be structured
 	ref, err := u.fieldRefRes.Resolve(&rec)
 	if err != nil {
 		return nil, cerrors.Errorf("failed resolving reference: %w", err)
