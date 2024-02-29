@@ -49,7 +49,7 @@ func ExampleSetFieldProcessor() {
 }
 
 //nolint:govet // a more descriptive example description
-func ExampleSetFieldProcessor_AddFeild() {
+func ExampleSetFieldProcessor_AddField() {
 	p := newSetField()
 
 	RunExample(p, example{
@@ -83,6 +83,47 @@ func ExampleSetFieldProcessor_AddFeild() {
 	// +    "after": {
 	// +      "foo": "bar"
 	// +    }
+	//    }
+	//  }
+}
+
+//nolint:govet // a more descriptive example description
+func ExampleSetFieldProcessor_TemplateValue() {
+	p := newSetField()
+
+	RunExample(p, example{
+		Description: `set the value under .Payload.After.postgres to true if .Metadata.table="postgres"`,
+		Config:      map[string]string{"field": ".Payload.After.postgres", "value": "{{ eq .Metadata.table \"postgres\" }}"},
+		Have: opencdc.Record{
+			Metadata:  map[string]string{"table": "postgres"},
+			Operation: opencdc.OperationSnapshot,
+			Payload:   opencdc.Change{After: opencdc.StructuredData{"postgres": "false"}},
+		},
+		Want: sdk.SingleRecord{
+			Metadata:  map[string]string{"table": "postgres"},
+			Operation: opencdc.OperationSnapshot,
+			Payload:   opencdc.Change{After: opencdc.StructuredData{"postgres": "true"}},
+		},
+	})
+
+	// Output:
+	// processor transformed record:
+	// --- before
+	// +++ after
+	// @@ -1,14 +1,14 @@
+	//  {
+	//    "position": null,
+	//    "operation": "snapshot",
+	//    "metadata": {
+	//      "table": "postgres"
+	//    },
+	//    "key": null,
+	//    "payload": {
+	//      "before": null,
+	//      "after": {
+	// -      "postgres": "false"
+	// +      "postgres": "true"
+	//      }
 	//    }
 	//  }
 }
