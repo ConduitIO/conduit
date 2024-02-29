@@ -62,6 +62,7 @@ func ExampleRenameFieldProcessor1() {
 	//  }
 }
 
+//nolint:govet // a more descriptive example description
 func ExampleRenameFieldProcessor2() {
 	p := newRenameField()
 
