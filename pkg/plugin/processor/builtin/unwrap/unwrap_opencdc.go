@@ -52,6 +52,7 @@ func (u *openCDCProcessor) Specification() (sdk.Specification, error) {
 		Summary: "A processor that unwraps the OpenCDC record saved in one of record's fields.",
 		Description: `
 The unwrap.opencdc processors unwraps the OpenCDC record saved in one of the record's fields.
+
 This is useful in situations where a record goes through intermediate systems before 
 being written to a final destination. In these cases, the original OpenCDC record is
 part of the payload read from the intermediate system and needs to be unwrapped before
@@ -199,8 +200,9 @@ func (u *openCDCProcessor) unmarshalMetadata(structData opencdc.StructuredData) 
 			metadata[k] = fmt.Sprint(v)
 		}
 	default:
-		return metadata, cerrors.Errorf("expected a opencdc.Metadata or a map[string]interface{}, got %T", m)
+		return nil, cerrors.Errorf("expected a opencdc.Metadata or a map[string]interface{}, got %T", m)
 	}
+
 	return metadata, nil
 }
 
@@ -212,6 +214,8 @@ func (u *openCDCProcessor) unmarshalKey(structData opencdc.StructuredData) (open
 		return key, cerrors.New("no key")
 	}
 	switch k := ky.(type) {
+	case opencdc.StructuredData:
+		key = k
 	case map[string]interface{}:
 		convertedData := make(opencdc.StructuredData, len(k))
 		for kk, v := range k {
