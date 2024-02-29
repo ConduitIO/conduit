@@ -17,6 +17,7 @@
 package builtin
 
 import (
+	"context"
 	"io"
 	"log"
 	"os"
@@ -24,6 +25,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/goccy/go-json"
 )
 
@@ -48,12 +50,11 @@ func TestMain(m *testing.M) {
 func exportProcessors(output io.Writer) {
 	sorted := sortProcessors(processors)
 
-	bytes, err := json.MarshalIndent(sorted, "", "  ")
-	if err != nil {
-		log.Fatalf("failed to marshal processors to JSON: %v", err)
-	}
+	ctx := opencdc.WithJSONMarshalOptions(context.Background(), &opencdc.JSONMarshalOptions{RawDataAsString: true})
+	enc := json.NewEncoder(output)
+	enc.SetIndent("", "  ")
 
-	_, err = output.Write(bytes)
+	err := enc.EncodeContext(ctx, sorted)
 	if err != nil {
 		log.Fatalf("failed to write processors to output: %v", err)
 	}
