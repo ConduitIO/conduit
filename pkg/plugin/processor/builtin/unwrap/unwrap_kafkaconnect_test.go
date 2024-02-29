@@ -21,7 +21,6 @@ import (
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
-	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/matryer/is"
 )
@@ -45,7 +44,7 @@ func TestUnwrapKafkaConnect_Configure(t *testing.T) {
 		{
 			name:    "invalid field",
 			config:  map[string]string{"field": ".Key"},
-			wantErr: `invalid configuration: error validating "field": ".Key" should match the regex "^.Payload": regex validation failed`,
+			wantErr: `config invalid: error validating "field": ".Key" should match the regex "^.Payload": regex validation failed`,
 		},
 	}
 
@@ -53,7 +52,7 @@ func TestUnwrapKafkaConnect_Configure(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			is := is.New(t)
 
-			err := newUnwrapKafkaConnect(log.Test(t)).Configure(context.Background(), tc.config)
+			err := NewKafkaConnectProcessor(log.Test(t)).Configure(context.Background(), tc.config)
 			if tc.wantErr != "" {
 				is.True(err != nil)
 				is.Equal(tc.wantErr, err.Error())
@@ -71,7 +70,7 @@ func TestUnwrapKafkaConnect_Process(t *testing.T) {
 		want   sdk.ProcessedRecord
 	}{
 		{
-			name:   "structured payload kafka-connect",
+			name:   "structured payload",
 			config: map[string]string{},
 			record: opencdc.Record{
 				Metadata: map[string]string{},
@@ -101,16 +100,39 @@ func TestUnwrapKafkaConnect_Process(t *testing.T) {
 			},
 		},
 		{
-			name:   "raw payload not supported",
+			name:   "raw payload",
 			config: map[string]string{},
 			record: opencdc.Record{
-				Metadata: map[string]string{},
+				Position:  opencdc.Position("test position"),
+				Operation: opencdc.OperationSnapshot,
+				Metadata: map[string]string{
+					"metadata-key": "metadata-value",
+				},
+				Key: opencdc.RawData("key"),
 				Payload: opencdc.Change{
 					Before: nil,
-					After:  opencdc.RawData(`{"description": "test2"}`),
+					After: opencdc.RawData(`{
+						"payload": {
+							"description": "test2"
+						},
+						"schema": {}
+					}`),
 				},
 			},
-			want: sdk.ErrorRecord{Error: cerrors.New("unexpected data type opencdc.RawData (only structured data is supported)")},
+			want: sdk.SingleRecord{
+				Position:  opencdc.Position("test position"),
+				Operation: opencdc.OperationSnapshot,
+				Metadata: map[string]string{
+					"metadata-key": "metadata-value",
+				},
+				Key: opencdc.RawData("key"),
+				Payload: opencdc.Change{
+					Before: nil,
+					After: opencdc.StructuredData{
+						"description": "test2",
+					},
+				},
+			},
 		},
 	}
 
@@ -119,7 +141,7 @@ func TestUnwrapKafkaConnect_Process(t *testing.T) {
 			is := is.New(t)
 			ctx := context.Background()
 
-			underTest := newUnwrapKafkaConnect(log.Test(t))
+			underTest := NewKafkaConnectProcessor(log.Test(t))
 			err := underTest.Configure(ctx, tc.config)
 			is.NoErr(err)
 

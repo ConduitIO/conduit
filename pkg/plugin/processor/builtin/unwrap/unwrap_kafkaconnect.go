@@ -20,7 +20,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -41,14 +40,14 @@ type kafkaConnectProcessor struct {
 	fieldRefRes sdk.ReferenceResolver
 }
 
-func newUnwrapKafkaConnect(log.CtxLogger) *kafkaConnectProcessor {
+func NewKafkaConnectProcessor(log.CtxLogger) *kafkaConnectProcessor {
 	return &kafkaConnectProcessor{}
 }
 
 func (u *kafkaConnectProcessor) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
 		Name:    "unwrap.kafkaconnect",
-		Summary: "A processors which unwraps a Kafka Connect record from an OpenCDC record.",
+		Summary: "Unwraps a Kafka Connect record from an OpenCDC record.",
 		Description: `This processor unwraps a Kafka Connect record from the input OpenCDC record.
 
 This is useful in cases where Conduit acts as an intermediary between a Kafka Connect source and a Kafka Connect destination. 
@@ -59,17 +58,11 @@ In such cases, the Kafka Connect record is set as the OpenCDC record's payload, 
 	}, nil
 }
 
-func (u *kafkaConnectProcessor) Configure(_ context.Context, m map[string]string) error {
+func (u *kafkaConnectProcessor) Configure(ctx context.Context, m map[string]string) error {
 	cfg := kafkaConnectConfig{}
-	inputCfg := config.Config(m).Sanitize().ApplyDefaults(cfg.Parameters())
-	err := inputCfg.Validate(cfg.Parameters())
+	err := sdk.ParseConfig(ctx, m, &cfg, cfg.Parameters())
 	if err != nil {
-		return cerrors.Errorf("invalid configuration: %w", err)
-	}
-
-	err = inputCfg.DecodeInto(&cfg)
-	if err != nil {
-		return cerrors.Errorf("failed decoding configuration: %w", err)
+		return err
 	}
 
 	rr, err := sdk.NewReferenceResolver(cfg.Field)
@@ -88,23 +81,21 @@ func (u *kafkaConnectProcessor) Open(context.Context) error {
 func (u *kafkaConnectProcessor) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 	out := make([]sdk.ProcessedRecord, 0, len(records))
 	for _, rec := range records {
-		proc := u.processRecord(rec)
-		out = append(out, proc)
-		if _, ok := proc.(sdk.ErrorRecord); ok {
-			return out
+		proc, err := u.processRecord(rec)
+		if err != nil {
+			return append(out, sdk.ErrorRecord{Error: err})
 		}
+		out = append(out, proc)
 	}
 
 	return out
 }
 
-func (u *kafkaConnectProcessor) processRecord(rec opencdc.Record) sdk.ProcessedRecord {
+func (u *kafkaConnectProcessor) processRecord(rec opencdc.Record) (sdk.ProcessedRecord, error) {
 	// record must be structured
 	ref, err := u.fieldRefRes.Resolve(&rec)
 	if err != nil {
-		return sdk.ErrorRecord{
-			Error: cerrors.Errorf("failed resolving reference: %w", err),
-		}
+		return nil, cerrors.Errorf("failed resolving reference: %w", err)
 	}
 
 	var kc opencdc.StructuredData
@@ -113,16 +104,24 @@ func (u *kafkaConnectProcessor) processRecord(rec opencdc.Record) sdk.ProcessedR
 		kc = d
 	case map[string]any:
 		kc = d
-	default:
-		return sdk.ErrorRecord{
-			Error: cerrors.Errorf("unexpected data type %T (only structured data is supported)", ref.Get()),
+	case opencdc.RawData:
+		err := json.Unmarshal(d.Bytes(), &kc)
+		if err != nil {
+			return nil, cerrors.Errorf("failed unmarshalling JSON from raw data: %w", err)
 		}
+	case string:
+		err := json.Unmarshal([]byte(d), &kc)
+		if err != nil {
+			return nil, cerrors.Errorf("failed unmarshalling JSON from string: %w", err)
+		}
+	default:
+		return nil, cerrors.Errorf("unexpected data type %T (only structured data is supported)", ref.Get())
 	}
 
 	// get payload
 	structPayload, ok := kc["payload"].(map[string]any)
 	if !ok {
-		return sdk.ErrorRecord{Error: cerrors.New("referenced record field doesn't contain a payload field")}
+		return nil, cerrors.New("referenced record field doesn't contain a payload field")
 	}
 
 	return sdk.SingleRecord{
@@ -130,13 +129,13 @@ func (u *kafkaConnectProcessor) processRecord(rec opencdc.Record) sdk.ProcessedR
 		Position: rec.Position,
 		Metadata: nil,
 		Payload: opencdc.Change{
-			Before: nil,
-			After:  opencdc.StructuredData(structPayload),
+			After: opencdc.StructuredData(structPayload),
 		},
 		Operation: opencdc.OperationSnapshot,
-	}
+	}, nil
 }
 
+// todo same as in debezium
 func (u *kafkaConnectProcessor) unwrapKey(key opencdc.Data) opencdc.Data {
 	// convert the key to structured data
 	var structKey opencdc.StructuredData
