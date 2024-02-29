@@ -53,7 +53,7 @@ func (p *convertField) Specification() (sdk.Specification, error) {
 The applicable types are string, int, float and bool. Converting can be done between any combination of types. Note that
 booleans will be converted to numeric values 1 (true) and 0 (false). Processor is only applicable to .Key, .Payload.Before
 and .Payload.After prefixes, and only applicable if said fields contain structured data.
-if the record contains raw JSON data, then use the processor "decode.json" to parse it into structured data first.`,
+If the record contains raw JSON data, then use the processor "decode.json" to parse it into structured data first.`,
 		Version:    "v0.1.0",
 		Author:     "Meroxa, Inc.",
 		Parameters: convertFieldConfig{}.Parameters(),
