@@ -16,22 +16,24 @@ package builtin
 
 import (
 	"io"
+	"log"
+	"net"
 	"net/http"
 	"net/http/httptest"
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
-	"github.com/conduitio/conduit/pkg/foundation/log"
+	conduit_log "github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/webhook"
 )
 
 //nolint:govet // we're using a more descriptive name of example
 func ExampleWebhookHTTP() {
-	p := webhook.NewWebhookHTTP(log.Nop())
-	srv := httptest.NewServer(http.HandlerFunc(func(resp http.ResponseWriter, req *http.Request) {
-		body, _ := io.ReadAll(req.Body)
-		_, _ = resp.Write([]byte("hello, " + string(body)))
-	}))
+	p := webhook.NewWebhookHTTP(conduit_log.Nop())
+
+	srv := newTestServer()
+	// Stop the server on return from the function.
+	defer srv.Close()
 
 	RunExample(p, example{
 		Description: `
@@ -80,4 +82,26 @@ value of the HTTP response's code in the record's metadata'.`,
 	//    }
 	//  }
 	//
+}
+
+func newTestServer() *httptest.Server {
+	l, err := net.Listen("tcp", "127.0.0.1:54321")
+	if err != nil {
+		log.Fatalf("failed starting test server on port 54321: %v", err)
+	}
+
+	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(resp http.ResponseWriter, req *http.Request) {
+		body, _ := io.ReadAll(req.Body)
+		_, _ = resp.Write([]byte("hello, " + string(body)))
+	}))
+
+	// NewUnstartedServer creates a listener. Close that listener and replace
+	// with the one we created.
+	srv.Listener.Close()
+	srv.Listener = l
+
+	// Start the server.
+	srv.Start()
+
+	return srv
 }
