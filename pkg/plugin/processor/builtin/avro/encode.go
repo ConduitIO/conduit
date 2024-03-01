@@ -18,75 +18,25 @@ package avro
 
 import (
 	"context"
-	"github.com/conduitio/conduit/pkg/foundation/log"
-
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/avro/schemaregistry"
+	"github.com/lovromazgon/franz-go/pkg/sr"
 )
-
-type encodeConfig struct {
-	// URL of the schema registry (e.g. http://localhost:8085)
-	URL string `json:"url" validate:"required"`
-
-	// SchemaStrategy specifies which strategy to use to determine the schema for the record.
-	// Available strategies are:
-	// * `preRegistered` (recommended) - Download an existing schema from the schema registry.
-	//    This strategy is further configured with options starting with `schema.preRegistered.*`.
-	// * `autoRegister` (for development purposes) - Infer the schema from the record and register it
-	//    in the schema registry. This strategy is further configured with options starting with
-	//   `schema.autoRegister.*`.
-	//
-	// For more information about the behavior of each strategy read the main processor description.
-	SchemaStrategy string `json:"schema.strategy"`
-
-	PreRegistered struct {
-		// Subject specifies the subject of the schema in the schema registry used to encode the record.
-		Subject string `json:"subject"`
-		// Version specifies the version of the schema in the schema registry used to encode the record.
-		Version string `json:"version"`
-	} `json:"schema.preRegistered"`
-
-	// AutoRegisteredSubject specifies the subject name under which the inferred schema will be registered
-	// in the schema registry.
-	AutoRegisteredSubject string `json:"schema.autoRegistered.subject"`
-
-	Auth struct {
-		// Username is the username to use with basic authentication. This option is required if
-		// auth.basic.password contains a value. If both auth.basic.username and auth.basic.password
-		// are empty basic authentication is disabled.
-		Username string `json:"basic.username"`
-		// Password is the password to use with basic authentication. This option is required if
-		// auth.basic.username contains a value. If both auth.basic.username and auth.basic.password
-		// are empty basic authentication is disabled.
-		Password string `json:"basic.password"`
-	} `json:"auth"`
-
-	TLS struct {
-		// CACert is the path to a file containing PEM encoded CA certificates. If this option is empty,
-		// Conduit falls back to using the host's root CA set.
-		CACert string `json:"ca.cert"`
-
-		Client struct {
-			// Cert is the path to a file containing a PEM encoded certificate. This option is required
-			// if tls.client.key contains a value. If both tls.client.cert and tls.client.key are empty
-			// TLS is disabled.
-			Cert string `json:"cert"`
-			// Key is the path to a file containing a PEM encoded private key. This option is required
-			// if tls.client.cert contains a value. If both tls.client.cert and tls.client.key are empty
-			// TLS is disabled.
-			Key string `json:"key"`
-		} `json:"client"`
-	} `json:"tls"`
-}
 
 type encodeProcessor struct {
 	sdk.UnimplementedProcessor
 
-	cfg encodeConfig
+	cfg    encodeConfig
+	logger log.CtxLogger
+
+	encoder *schemaregistry.Encoder
 }
 
-func NewEncodeProcessor(log.CtxLogger) sdk.Processor {
-	return &encodeProcessor{}
+func NewEncodeProcessor(logger log.CtxLogger) sdk.Processor {
+	return &encodeProcessor{logger: logger}
 }
 
 func (p *encodeProcessor) Specification() (sdk.Specification, error) {
@@ -125,12 +75,34 @@ func (p *encodeProcessor) Configure(ctx context.Context, m map[string]string) er
 	if err != nil {
 		return err
 	}
+
+	err = cfg.validateBasicAuth()
+	if err != nil {
+		return err
+	}
+
+	err = cfg.parseTLS()
+	if err != nil {
+		return err
+	}
+
+	err = cfg.parseSchemaStrategy()
+	if err != nil {
+		return err
+	}
+
 	p.cfg = cfg
 
 	return nil
 }
 
 func (p *encodeProcessor) Open(ctx context.Context) error {
+	client, err := schemaregistry.NewClient(p.logger, p.cfg.ClientOptions()...)
+	if err != nil {
+		return cerrors.Errorf("could not create schema registry client: %w", err)
+	}
+	p.encoder = schemaregistry.NewEncoder(client, p.logger, &sr.Serde{}, p.cfg.strategy)
+
 	return nil
 }
 
@@ -140,11 +112,5 @@ func (p *encodeProcessor) Process(ctx context.Context, records []opencdc.Record)
 }
 
 func (p *encodeProcessor) Teardown(ctx context.Context) error {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (p *encodeProcessor) mustEmbedUnimplementedProcessor() {
-	//TODO implement me
-	panic("implement me")
+	return nil
 }
