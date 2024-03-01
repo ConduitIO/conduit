@@ -18,6 +18,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/multierror"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/avro/schemaregistry"
@@ -26,6 +27,9 @@ import (
 )
 
 type encodeConfig struct {
+	// Field is the field that will be encoded.
+	Field string `json:"field" default:".Payload.After"`
+
 	// URL of the schema registry (e.g. http://localhost:8085)
 	URL string `json:"url" validate:"required"`
 
@@ -83,6 +87,7 @@ type encodeConfig struct {
 	tlsClientCert *tls.Certificate
 	tlsCACert     *x509.CertPool
 	strategy      schemaregistry.SchemaStrategy
+	fieldResolver sdk.ReferenceResolver
 }
 
 func (c *encodeConfig) validateBasicAuth() error {
@@ -191,5 +196,15 @@ func (c *encodeConfig) parseSchemaStrategyAutoRegister() error {
 		Type:    sr.TypeAvro,
 		Subject: c.AutoRegisteredSubject,
 	}
+	return nil
+}
+
+func (c *encodeConfig) parseTargetField() error {
+	rr, err := sdk.NewReferenceResolver(c.Field)
+	if err != nil {
+		return err
+	}
+
+	c.fieldResolver = rr
 	return nil
 }

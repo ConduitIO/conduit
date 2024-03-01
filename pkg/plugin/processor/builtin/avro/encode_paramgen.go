@@ -21,6 +21,12 @@ func (encodeConfig) Parameters() map[string]config.Parameter {
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},
+		"field": {
+			Default:     ".Payload.After",
+			Description: "field is the field that will be encoded.",
+			Type:        config.ParameterTypeString,
+			Validations: []config.Validation{},
+		},
 		"schema.autoRegistered.subject": {
 			Default:     "",
 			Description: "schema.autoRegistered.subject specifies the subject name under which the inferred schema will be registered in the schema registry.",

@@ -17,9 +17,9 @@ package schemaregistry
 import (
 	"context"
 
+	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/conduitio/conduit/pkg/record"
 	"github.com/lovromazgon/franz-go/pkg/sr"
 )
 
@@ -32,7 +32,7 @@ type Encoder struct {
 }
 
 type SchemaStrategy interface {
-	GetSchema(context.Context, *Client, log.CtxLogger, record.StructuredData) (Schema, sr.SubjectSchema, error)
+	GetSchema(context.Context, *Client, log.CtxLogger, opencdc.StructuredData) (Schema, sr.SubjectSchema, error)
 }
 
 func NewEncoder(client *Client, logger log.CtxLogger, serde *sr.Serde, strategy SchemaStrategy) *Encoder {
@@ -44,10 +44,10 @@ func NewEncoder(client *Client, logger log.CtxLogger, serde *sr.Serde, strategy 
 	}
 }
 
-func (e *Encoder) Encode(ctx context.Context, sd record.StructuredData) (record.RawData, error) {
+func (e *Encoder) Encode(ctx context.Context, sd opencdc.StructuredData) (opencdc.RawData, error) {
 	s, ss, err := e.GetSchema(ctx, e.client, e.logger, sd)
 	if err != nil {
-		return record.RawData{}, cerrors.Errorf("failed to get schema: %w", err)
+		return opencdc.RawData{}, cerrors.Errorf("failed to get schema: %w", err)
 	}
 
 	b, err := e.serde.Encode(sd, sr.ID(ss.ID))
@@ -55,7 +55,7 @@ func (e *Encoder) Encode(ctx context.Context, sd record.StructuredData) (record.
 		// TODO note that we need to register specific indexes when adding support for protobuf
 		e.serde.Register(
 			ss.ID,
-			record.StructuredData{},
+			opencdc.StructuredData{},
 			sr.EncodeFn(encodeFn(s, ss)),
 			sr.DecodeFn(decodeFn(s, ss)),
 		)
@@ -64,9 +64,9 @@ func (e *Encoder) Encode(ctx context.Context, sd record.StructuredData) (record.
 		b, err = e.serde.Encode(sd, sr.ID(ss.ID))
 	}
 	if err != nil {
-		return record.RawData{}, cerrors.Errorf("failed to encode data: %w", err)
+		return opencdc.RawData{}, cerrors.Errorf("failed to encode data: %w", err)
 	}
-	return record.RawData{Raw: b}, nil
+	return opencdc.RawData(b), nil
 }
 
 type ExtractAndUploadSchemaStrategy struct {
@@ -74,7 +74,7 @@ type ExtractAndUploadSchemaStrategy struct {
 	Subject string
 }
 
-func (str ExtractAndUploadSchemaStrategy) GetSchema(ctx context.Context, client *Client, _ log.CtxLogger, sd record.StructuredData) (Schema, sr.SubjectSchema, error) {
+func (str ExtractAndUploadSchemaStrategy) GetSchema(ctx context.Context, client *Client, _ log.CtxLogger, sd opencdc.StructuredData) (Schema, sr.SubjectSchema, error) {
 	sf, ok := DefaultSchemaFactories[str.Type]
 	if !ok {
 		return nil, sr.SubjectSchema{}, cerrors.Errorf("unknown schema type %q (%d)", str.Type.String(), str.Type)
@@ -103,7 +103,7 @@ type DownloadSchemaStrategy struct {
 	Version int
 }
 
-func (str DownloadSchemaStrategy) GetSchema(ctx context.Context, client *Client, _ log.CtxLogger, _ record.StructuredData) (Schema, sr.SubjectSchema, error) {
+func (str DownloadSchemaStrategy) GetSchema(ctx context.Context, client *Client, _ log.CtxLogger, _ opencdc.StructuredData) (Schema, sr.SubjectSchema, error) {
 	// fetch schema from registry
 	ss, err := client.SchemaBySubjectVersion(ctx, str.Subject, str.Version)
 	if err != nil {

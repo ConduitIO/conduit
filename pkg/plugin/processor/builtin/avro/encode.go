@@ -78,17 +78,22 @@ func (p *encodeProcessor) Configure(ctx context.Context, m map[string]string) er
 
 	err = cfg.validateBasicAuth()
 	if err != nil {
-		return err
+		return cerrors.Errorf("invalid basic auth: %w", err)
 	}
 
 	err = cfg.parseTLS()
 	if err != nil {
-		return err
+		return cerrors.Errorf("failed parsing TLS: %w", err)
 	}
 
 	err = cfg.parseSchemaStrategy()
 	if err != nil {
-		return err
+		return cerrors.Errorf("failed parsing schema strategy: %w", err)
+	}
+
+	err = cfg.parseTargetField()
+	if err != nil {
+		return cerrors.Errorf("failed parsing target field: %w", err)
 	}
 
 	p.cfg = cfg
@@ -96,7 +101,7 @@ func (p *encodeProcessor) Configure(ctx context.Context, m map[string]string) er
 	return nil
 }
 
-func (p *encodeProcessor) Open(ctx context.Context) error {
+func (p *encodeProcessor) Open(context.Context) error {
 	client, err := schemaregistry.NewClient(p.logger, p.cfg.ClientOptions()...)
 	if err != nil {
 		return cerrors.Errorf("could not create schema registry client: %w", err)
@@ -107,10 +112,46 @@ func (p *encodeProcessor) Open(ctx context.Context) error {
 }
 
 func (p *encodeProcessor) Process(ctx context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
-	//TODO implement me
-	panic("implement me")
+	out := make([]sdk.ProcessedRecord, 0, len(records))
+	for _, rec := range records {
+		proc, err := p.processRecord(ctx, rec)
+		if err != nil {
+			return append(out, sdk.ErrorRecord{Error: err})
+		}
+
+		out = append(out, proc)
+	}
+
+	return out
 }
 
-func (p *encodeProcessor) Teardown(ctx context.Context) error {
+func (p *encodeProcessor) processRecord(ctx context.Context, rec opencdc.Record) (sdk.ProcessedRecord, error) {
+	field, err := p.cfg.fieldResolver.Resolve(&rec)
+	if err != nil {
+		return nil, cerrors.Errorf("failed resolving field: %w", err)
+	}
+
+	switch d := field.Get().(type) {
+	case opencdc.RawData:
+		return nil, cerrors.New("raw data not supported " +
+			"(hint: if your records carry JSON data you can parse them into structured data " +
+			"with the processor `encode.json`)")
+	case opencdc.StructuredData:
+		rd, err := p.encoder.Encode(ctx, d)
+		if err != nil {
+			return nil, cerrors.Errorf("failed encoding data: %w", err)
+		}
+
+		err = field.Set(rd)
+		if err != nil {
+			return nil, cerrors.Errorf("failed setting encoded value into the record: %w", err)
+		}
+		return sdk.SingleRecord(rec), nil
+	default:
+		return nil, cerrors.Errorf("unexpected data type %T", d)
+	}
+}
+
+func (p *encodeProcessor) Teardown(context.Context) error {
 	return nil
 }
