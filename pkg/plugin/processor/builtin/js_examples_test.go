@@ -70,8 +70,8 @@ func ExampleJavaScriptProcessor_Simple() {
 	//    "key": null,
 	//    "payload": {
 	//      "before": null,
-	//-    "after": "d29ybGQ="
-	//+    "after": "aGVsbG8sIHdvcmxk"
+	//-    "after": "world"
+	//+    "after": "hello, world"
 	//    }
 	//  }
 }
