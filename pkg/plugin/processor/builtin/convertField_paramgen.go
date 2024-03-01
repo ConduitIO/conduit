@@ -17,7 +17,7 @@ func (convertFieldConfig) Parameters() map[string]config.Parameter {
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{
 				config.ValidationRequired{},
-				config.ValidationRegex{Regex: regexp.MustCompile("^.(Payload|Key).*")},
+				config.ValidationRegex{Regex: regexp.MustCompile("^\\.(Payload|Key)\\.*")},
 			},
 		},
 		"type": {

@@ -281,6 +281,10 @@ func TestConvertField_Configure(t *testing.T) {
 			cfg:     map[string]string{"field": ".Metadata.foo", "type": "int"},
 			wantErr: true,
 		}, {
+			name:    "invalid config, invalid prefix",
+			cfg:     map[string]string{"field": "aPayload.foo", "type": "int"},
+			wantErr: true,
+		}, {
 			name:    "invalid config, invalid type",
 			cfg:     map[string]string{"field": ".Key.foo", "type": "map"},
 			wantErr: true,

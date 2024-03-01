@@ -40,7 +40,7 @@ func newConvertField() *convertField {
 type convertFieldConfig struct {
 	// Field is the target field, as it would be addressed in a Go template (e.g. `.Payload.After.foo`).
 	// you can only convert fields that are under .Key and .Payload, and said fields should contain structured data.
-	Field string `json:"field" validate:"required,regex=^.(Payload|Key).*"`
+	Field string `json:"field" validate:"required,regex=^\\.(Payload|Key)\\.*"`
 	// Type is the target field type after conversion, available options are: string, int, float, bool.
 	Type string `json:"type" validate:"required,inclusion=string|int|float|bool"`
 }
