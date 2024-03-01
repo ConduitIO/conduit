@@ -200,7 +200,7 @@ func (c *encodeConfig) parseSchemaStrategyPreRegistered() error {
 
 func (c *encodeConfig) parseSchemaStrategyAutoRegister() error {
 	if c.Schema.AutoRegisteredSubject == "" {
-		return cerrors.New("subject required for schema strategy 'autoRegister")
+		return cerrors.New("subject required for schema strategy 'autoRegister'")
 	}
 
 	c.strategy = schemaregistry.ExtractAndUploadSchemaStrategy{
