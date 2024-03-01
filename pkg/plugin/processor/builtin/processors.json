@@ -14,7 +14,7 @@
           "Validations": [
             {},
             {
-              "Regex": "^\\.(Payload|Key)\\.*"
+              "Regex": "^\\.(Payload|Key).*"
             }
           ]
         },
