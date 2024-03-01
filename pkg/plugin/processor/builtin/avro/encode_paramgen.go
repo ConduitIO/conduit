@@ -35,15 +35,20 @@ func (encodeConfig) Parameters() map[string]config.Parameter {
 		},
 		"schema.preRegistered.version": {
 			Default:     "",
-			Description: "version specifies the version of the schema in the schema registry used to encode the record.",
-			Type:        config.ParameterTypeString,
-			Validations: []config.Validation{},
+			Description: "version specifies the version of the schema in the schema registry used to encode the record. todo validations ok?",
+			Type:        config.ParameterTypeInt,
+			Validations: []config.Validation{
+				config.ValidationGreaterThan{V: 0},
+			},
 		},
 		"schema.strategy": {
 			Default:     "",
 			Description: "schema.strategy specifies which strategy to use to determine the schema for the record. Available strategies are: * `preRegistered` (recommended) - Download an existing schema from the schema registry.    This strategy is further configured with options starting with `schema.preRegistered.*`. * `autoRegister` (for development purposes) - Infer the schema from the record and register it    in the schema registry. This strategy is further configured with options starting with   `schema.autoRegister.*`.  For more information about the behavior of each strategy read the main processor description.",
 			Type:        config.ParameterTypeString,
-			Validations: []config.Validation{},
+			Validations: []config.Validation{
+				config.ValidationRequired{},
+				config.ValidationInclusion{List: []string{"preRegistered", "autoRegister"}},
+			},
 		},
 		"tls.ca.cert": {
 			Default:     "",
