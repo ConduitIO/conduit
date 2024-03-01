@@ -92,7 +92,7 @@ func TestUnwrapKafkaConnect_Process(t *testing.T) {
 				},
 			},
 			want: sdk.SingleRecord{
-				Operation: opencdc.OperationSnapshot,
+				Operation: opencdc.OperationCreate,
 				Metadata:  map[string]string{},
 				Payload: opencdc.Change{
 					After: opencdc.StructuredData{"description": "test2", "id": 27},
@@ -122,7 +122,7 @@ func TestUnwrapKafkaConnect_Process(t *testing.T) {
 			},
 			want: sdk.SingleRecord{
 				Position:  opencdc.Position("test position"),
-				Operation: opencdc.OperationSnapshot,
+				Operation: opencdc.OperationCreate,
 				Metadata: map[string]string{
 					"metadata-key": "metadata-value",
 				},

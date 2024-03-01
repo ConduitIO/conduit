@@ -132,7 +132,7 @@ func (u *kafkaConnectProcessor) processRecord(rec opencdc.Record) (sdk.Processed
 		Payload: opencdc.Change{
 			After: opencdc.StructuredData(structPayload),
 		},
-		Operation: opencdc.OperationSnapshot,
+		Operation: opencdc.OperationCreate,
 	}, nil
 }
 
