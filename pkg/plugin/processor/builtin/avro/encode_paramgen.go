@@ -27,9 +27,9 @@ func (encodeConfig) Parameters() map[string]config.Parameter {
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},
-		"schema.autoRegistered.subject": {
+		"schema.autoRegister.subject": {
 			Default:     "",
-			Description: "autoRegistered.subject specifies the subject name under which the inferred schema will be registered in the schema registry.",
+			Description: "autoRegister.subject specifies the subject name under which the inferred schema will be registered in the schema registry.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},

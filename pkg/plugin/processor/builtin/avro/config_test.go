@@ -30,7 +30,7 @@ func TestConfig_Parse(t *testing.T) {
 		wantErr error
 	}{
 		{
-			name: "only required",
+			name: "preRegistered",
 			input: map[string]string{
 				"url":                          "http://localhost",
 				"schema.strategy":              "preRegistered",
@@ -49,6 +49,22 @@ func TestConfig_Parse(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "autoRegister",
+			input: map[string]string{
+				"url":                         "http://localhost",
+				"schema.strategy":             "autoRegister",
+				"schema.autoRegister.subject": "testsubject",
+			},
+			want: encodeConfig{
+				URL:   "http://localhost",
+				Field: ".Payload.After",
+				Schema: schemaConfig{
+					Strategy:              "autoRegister",
+					AutoRegisteredSubject: "testsubject",
+				},
+			},
+		},
 	}
 
 	for _, tc := range testCases {
@@ -56,7 +72,7 @@ func TestConfig_Parse(t *testing.T) {
 			is := is.New(t)
 
 			got, err := parseConfig(context.Background(), tc.input)
-			is.True(areErrorsEqual(tc.wantErr, err))
+			areErrorsEqual(is, tc.wantErr, err)
 			diff := cmp.Diff(tc.want, *got, cmpopts.IgnoreUnexported(encodeConfig{}))
 			if diff != "" {
 				t.Errorf("mismatch (-want +got): %s", diff)
@@ -65,13 +81,11 @@ func TestConfig_Parse(t *testing.T) {
 	}
 }
 
-func areErrorsEqual(e1, e2 error) bool {
-	switch {
-	case e1 == nil && e2 == nil:
-		return true
-	case e1 != nil && e2 != nil:
-		return e1.Error() == e2.Error()
-	default:
-		return false
+func areErrorsEqual(is *is.I, want, got error) {
+	if want != nil {
+		is.True(got != nil) // expected an error
+		is.Equal(want.Error(), got.Error())
+	} else {
+		is.NoErr(got)
 	}
 }

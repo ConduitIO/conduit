@@ -51,7 +51,7 @@ type schemaConfig struct {
 
 	// AutoRegisteredSubject specifies the subject name under which the inferred schema will be registered
 	// in the schema registry.
-	AutoRegisteredSubject string `json:"autoRegistered.subject"`
+	AutoRegisteredSubject string `json:"autoRegister.subject"`
 }
 
 type authConfig struct {
