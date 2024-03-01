@@ -178,7 +178,7 @@ func (c *encodeConfig) parseSchemaStrategy() error {
 func (c *encodeConfig) parseSchemaStrategyPreRegistered() error {
 	// TODO allow version to be set to "latest"
 	if c.PreRegistered.Subject == "" {
-		return cerrors.New("subject required for schema strategy 'preRegistered")
+		return cerrors.New("subject required for schema strategy 'preRegistered'")
 	}
 	c.strategy = schemaregistry.DownloadSchemaStrategy{
 		Subject: c.PreRegistered.Subject,
