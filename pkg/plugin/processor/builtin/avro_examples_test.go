@@ -16,6 +16,7 @@ package builtin
 
 import (
 	"github.com/conduitio/conduit-commons/opencdc"
+	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/avro"
 )
@@ -32,8 +33,12 @@ func ExampleEncodeAvro() {
 			"schema.preRegistered.subject": "testsubject",
 			"schema.preRegistered.version": "123",
 		},
-		Have: opencdc.Record{},
-		Want: nil,
+		Have: opencdc.Record{
+			Payload: opencdc.Change{
+				After: opencdc.StructuredData{},
+			},
+		},
+		Want: sdk.SingleRecord{},
 	})
 
 	// Output:

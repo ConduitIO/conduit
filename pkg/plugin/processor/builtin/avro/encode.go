@@ -29,7 +29,7 @@ import (
 type encodeProcessor struct {
 	sdk.UnimplementedProcessor
 
-	cfg    encodeConfig
+	cfg    *encodeConfig
 	logger log.CtxLogger
 
 	encoder *schemaregistry.Encoder
@@ -70,30 +70,9 @@ It provides two strategies for determining the schema:
 }
 
 func (p *encodeProcessor) Configure(ctx context.Context, m map[string]string) error {
-	cfg := encodeConfig{}
-	err := sdk.ParseConfig(ctx, m, &cfg, cfg.Parameters())
+	cfg, err := parseConfig(ctx, m)
 	if err != nil {
-		return err
-	}
-
-	err = cfg.validateBasicAuth()
-	if err != nil {
-		return cerrors.Errorf("invalid basic auth: %w", err)
-	}
-
-	err = cfg.parseTLS()
-	if err != nil {
-		return cerrors.Errorf("failed parsing TLS: %w", err)
-	}
-
-	err = cfg.parseSchemaStrategy()
-	if err != nil {
-		return cerrors.Errorf("failed parsing schema strategy: %w", err)
-	}
-
-	err = cfg.parseTargetField()
-	if err != nil {
-		return cerrors.Errorf("failed parsing target field: %w", err)
+		return cerrors.Errorf("invalid config: %w", err)
 	}
 
 	p.cfg = cfg

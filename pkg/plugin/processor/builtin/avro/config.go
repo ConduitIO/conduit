@@ -15,6 +15,7 @@
 package avro
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
@@ -26,13 +27,15 @@ import (
 	"os"
 )
 
-type encodeConfig struct {
-	// Field is the field that will be encoded.
-	Field string `json:"field" default:".Payload.After"`
+type preRegisteredConfig struct {
+	// Subject specifies the subject of the schema in the schema registry used to encode the record.
+	Subject string `json:"subject"`
+	// Version specifies the version of the schema in the schema registry used to encode the record.
+	// todo validations ok?
+	Version int `json:"version" validate:"gt=0"`
+}
 
-	// URL of the schema registry (e.g. http://localhost:8085)
-	URL string `json:"url" validate:"required"`
-
+type schemaConfig struct {
 	// SchemaStrategy specifies which strategy to use to determine the schema for the record.
 	// Available strategies are:
 	// * `preRegistered` (recommended) - Download an existing schema from the schema registry.
@@ -42,52 +45,60 @@ type encodeConfig struct {
 	//   `schema.autoRegister.*`.
 	//
 	// For more information about the behavior of each strategy read the main processor description.
-	SchemaStrategy string `json:"schema.strategy" validate:"required,inclusion=preRegistered|autoRegister"`
+	Strategy string `json:"strategy" validate:"required,inclusion=preRegistered|autoRegister"`
 
-	PreRegistered struct {
-		// Subject specifies the subject of the schema in the schema registry used to encode the record.
-		Subject string `json:"subject"`
-		// Version specifies the version of the schema in the schema registry used to encode the record.
-		// todo validations ok?
-		Version int `json:"version" validate:"gt=0"`
-	} `json:"schema.preRegistered"`
+	PreRegistered preRegisteredConfig `json:"preRegistered"`
 
 	// AutoRegisteredSubject specifies the subject name under which the inferred schema will be registered
 	// in the schema registry.
-	AutoRegisteredSubject string `json:"schema.autoRegistered.subject"`
+	AutoRegisteredSubject string `json:"autoRegistered.subject"`
+}
 
-	Auth struct {
-		// Username is the username to use with basic authentication. This option is required if
-		// auth.basic.password contains a value. If both auth.basic.username and auth.basic.password
-		// are empty basic authentication is disabled.
-		Username string `json:"basic.username"`
-		// Password is the password to use with basic authentication. This option is required if
-		// auth.basic.username contains a value. If both auth.basic.username and auth.basic.password
-		// are empty basic authentication is disabled.
-		Password string `json:"basic.password"`
-	} `json:"auth"`
+type authConfig struct {
+	// Username is the username to use with basic authentication. This option is required if
+	// auth.basic.password contains a value. If both auth.basic.username and auth.basic.password
+	// are empty basic authentication is disabled.
+	Username string `json:"basic.username"`
+	// Password is the password to use with basic authentication. This option is required if
+	// auth.basic.username contains a value. If both auth.basic.username and auth.basic.password
+	// are empty basic authentication is disabled.
+	Password string `json:"basic.password"`
+}
 
-	TLS struct {
-		// CACert is the path to a file containing PEM encoded CA certificates. If this option is empty,
-		// Conduit falls back to using the host's root CA set.
-		CACert string `json:"ca.cert"`
+type tlsConfig struct {
+	// CACert is the path to a file containing PEM encoded CA certificates. If this option is empty,
+	// Conduit falls back to using the host's root CA set.
+	CACert string `json:"ca.cert"`
 
-		Client struct {
-			// Cert is the path to a file containing a PEM encoded certificate. This option is required
-			// if tls.client.key contains a value. If both tls.client.cert and tls.client.key are empty
-			// TLS is disabled.
-			Cert string `json:"cert"`
-			// Key is the path to a file containing a PEM encoded private key. This option is required
-			// if tls.client.cert contains a value. If both tls.client.cert and tls.client.key are empty
-			// TLS is disabled.
-			Key string `json:"key"`
-		} `json:"client"`
-	} `json:"tls"`
+	Client struct {
+		// Cert is the path to a file containing a PEM encoded certificate. This option is required
+		// if tls.client.key contains a value. If both tls.client.cert and tls.client.key are empty
+		// TLS is disabled.
+		Cert string `json:"cert"`
+		// Key is the path to a file containing a PEM encoded private key. This option is required
+		// if tls.client.cert contains a value. If both tls.client.cert and tls.client.key are empty
+		// TLS is disabled.
+		Key string `json:"key"`
+	} `json:"client"`
+}
 
+type encodeConfig struct {
+	// Field is the field that will be encoded.
+	Field string `json:"field" default:".Payload.After"`
+
+	// URL of the schema registry (e.g. http://localhost:8085)
+	URL string `json:"url" validate:"required"`
+
+	Schema schemaConfig `json:"schema"`
+	Auth   authConfig   `json:"auth"`
+	TLS    tlsConfig    `json:"tls"`
+
+	fieldResolver sdk.ReferenceResolver
+	// todo move into schemaConfig
+	strategy schemaregistry.SchemaStrategy
+	// todo move into tlsConfig
 	tlsClientCert *tls.Certificate
 	tlsCACert     *x509.CertPool
-	strategy      schemaregistry.SchemaStrategy
-	fieldResolver sdk.ReferenceResolver
 }
 
 func (c *encodeConfig) validateBasicAuth() error {
@@ -165,36 +176,36 @@ func (c *encodeConfig) ClientOptions() []sr.Opt {
 }
 
 func (c *encodeConfig) parseSchemaStrategy() error {
-	switch c.SchemaStrategy {
+	switch c.Schema.Strategy {
 	case "preRegistered":
 		return c.parseSchemaStrategyPreRegistered()
 	case "autoRegister":
 		return c.parseSchemaStrategyAutoRegister()
 	default:
-		return cerrors.Errorf("unknown schema strategy %q", c.SchemaStrategy)
+		return cerrors.Errorf("unknown schema strategy %q", c.Schema.Strategy)
 	}
 }
 
 func (c *encodeConfig) parseSchemaStrategyPreRegistered() error {
 	// TODO allow version to be set to "latest"
-	if c.PreRegistered.Subject == "" {
+	if c.Schema.PreRegistered.Subject == "" {
 		return cerrors.New("subject required for schema strategy 'preRegistered'")
 	}
 	c.strategy = schemaregistry.DownloadSchemaStrategy{
-		Subject: c.PreRegistered.Subject,
-		Version: c.PreRegistered.Version,
+		Subject: c.Schema.PreRegistered.Subject,
+		Version: c.Schema.PreRegistered.Version,
 	}
 	return nil
 }
 
 func (c *encodeConfig) parseSchemaStrategyAutoRegister() error {
-	if c.AutoRegisteredSubject == "" {
+	if c.Schema.AutoRegisteredSubject == "" {
 		return cerrors.New("subject required for schema strategy 'autoRegister")
 	}
 
 	c.strategy = schemaregistry.ExtractAndUploadSchemaStrategy{
 		Type:    sr.TypeAvro,
-		Subject: c.AutoRegisteredSubject,
+		Subject: c.Schema.AutoRegisteredSubject,
 	}
 	return nil
 }
@@ -207,4 +218,34 @@ func (c *encodeConfig) parseTargetField() error {
 
 	c.fieldResolver = rr
 	return nil
+}
+
+func parseConfig(ctx context.Context, m map[string]string) (*encodeConfig, error) {
+	cfg := &encodeConfig{}
+	err := sdk.ParseConfig(ctx, m, cfg, cfg.Parameters())
+	if err != nil {
+		return nil, err
+	}
+
+	err = cfg.validateBasicAuth()
+	if err != nil {
+		return nil, cerrors.Errorf("invalid basic auth: %w", err)
+	}
+
+	err = cfg.parseTLS()
+	if err != nil {
+		return nil, cerrors.Errorf("failed parsing TLS: %w", err)
+	}
+
+	err = cfg.parseSchemaStrategy()
+	if err != nil {
+		return nil, cerrors.Errorf("failed parsing schema strategy: %w", err)
+	}
+
+	err = cfg.parseTargetField()
+	if err != nil {
+		return nil, cerrors.Errorf("failed parsing target field: %w", err)
+	}
+
+	return cfg, nil
 }
