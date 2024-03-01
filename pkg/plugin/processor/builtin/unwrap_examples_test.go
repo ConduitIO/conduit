@@ -57,7 +57,7 @@ We also see how the key is unwrapped too. In this case, the key comes in as stru
 		},
 		Want: sdk.SingleRecord{
 			Position:  opencdc.Position("test position"),
-			Operation: opencdc.OperationSnapshot,
+			Operation: opencdc.OperationCreate,
 			Metadata: opencdc.Metadata{
 				"metadata-key": "metadata-value",
 			},
@@ -76,23 +76,21 @@ We also see how the key is unwrapped too. In this case, the key comes in as stru
 	// @@ -1,17 +1,16 @@
 	//  {
 	//    "position": "dGVzdCBwb3NpdGlvbg==",
-	// -  "operation": "create",
-	// +  "operation": "snapshot",
+	//    "operation": "create",
 	//    "metadata": {
 	//      "metadata-key": "metadata-value"
 	//    },
 	//    "key": {
 	// -    "payload": {
-	// +    "id": 27
-	// +  },
-	// +  "payload": {
 	// -      "id": 27
+	// +    "id": 27
 	// -    },
-	// +    "before": null,
+	// +  },
 	// -    "schema": {}
 	// -  },
 	// -  "payload": {
-	// -    "before": null,
+	// +  "payload": {
+	//      "before": null,
 	// -    "after": "{\n\t\t\t\t\t\t\"payload\": {\n\t\t\t\t\t\t\t\"description\": \"test2\"\n\t\t\t\t\t\t},\n\t\t\t\t\t\t\"schema\": {}\n\t\t\t\t\t}"
 	// +    "after": {
 	// +      "description": "test2"

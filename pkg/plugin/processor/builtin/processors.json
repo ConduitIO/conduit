@@ -549,7 +549,7 @@
         },
         "want": {
           "position": "dGVzdCBwb3NpdGlvbg==",
-          "operation": "snapshot",
+          "operation": "create",
           "metadata": {
             "metadata-key": "metadata-value"
           },
