@@ -93,7 +93,7 @@ We also see how the key is unwrapped too. In this case, the key comes in as stru
 	// -  },
 	// -  "payload": {
 	// -    "before": null,
-	// -    "after": "ewoJCQkJCQkicGF5bG9hZCI6IHsKCQkJCQkJCSJkZXNjcmlwdGlvbiI6ICJ0ZXN0MiIKCQkJCQkJfSwKCQkJCQkJInNjaGVtYSI6IHt9CgkJCQkJfQ=="
+	// -    "after": "{\n\t\t\t\t\t\t\"payload\": {\n\t\t\t\t\t\t\t\"description\": \"test2\"\n\t\t\t\t\t\t},\n\t\t\t\t\t\t\"schema\": {}\n\t\t\t\t\t}"
 	// +    "after": {
 	// +      "description": "test2"
 	// +    }
