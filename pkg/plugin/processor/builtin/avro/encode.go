@@ -81,6 +81,8 @@ type encodeConfig struct {
 
 type encodeProcessor struct {
 	sdk.UnimplementedProcessor
+
+	cfg encodeConfig
 }
 
 func NewEncodeProcessor(log.CtxLogger) sdk.Processor {
@@ -118,13 +120,18 @@ It provides two strategies for determining the schema:
 }
 
 func (p *encodeProcessor) Configure(ctx context.Context, m map[string]string) error {
-	//TODO implement me
-	panic("implement me")
+	cfg := encodeConfig{}
+	err := sdk.ParseConfig(ctx, m, &cfg, cfg.Parameters())
+	if err != nil {
+		return err
+	}
+	p.cfg = cfg
+
+	return nil
 }
 
 func (p *encodeProcessor) Open(ctx context.Context) error {
-	//TODO implement me
-	panic("implement me")
+	return nil
 }
 
 func (p *encodeProcessor) Process(ctx context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
