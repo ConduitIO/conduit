@@ -183,6 +183,10 @@ missing field: tls.client.key`),
 				},
 				TLS: tlsConfig{
 					CACert: "testdata/cert.pem",
+					Client: clientCert{
+						Cert: "testdata/ca.pem",
+						Key:  "testdata/ca-key.pem",
+					},
 				},
 			},
 		},

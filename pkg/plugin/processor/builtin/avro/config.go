@@ -121,21 +121,23 @@ func (c *authConfig) validate() error {
 	return nil
 }
 
+type clientCert struct {
+	// Cert is the path to a file containing a PEM encoded certificate. This option is required
+	// if tls.client.key contains a value. If both tls.client.cert and tls.client.key are empty
+	// TLS is disabled.
+	Cert string `json:"cert"`
+	// Key is the path to a file containing a PEM encoded private key. This option is required
+	// if tls.client.cert contains a value. If both tls.client.cert and tls.client.key are empty
+	// TLS is disabled.
+	Key string `json:"key"`
+}
+
 type tlsConfig struct {
 	// CACert is the path to a file containing PEM encoded CA certificates. If this option is empty,
 	// Conduit falls back to using the host's root CA set.
 	CACert string `json:"ca.cert"`
 
-	Client struct {
-		// Cert is the path to a file containing a PEM encoded certificate. This option is required
-		// if tls.client.key contains a value. If both tls.client.cert and tls.client.key are empty
-		// TLS is disabled.
-		Cert string `json:"cert"`
-		// Key is the path to a file containing a PEM encoded private key. This option is required
-		// if tls.client.cert contains a value. If both tls.client.cert and tls.client.key are empty
-		// TLS is disabled.
-		Key string `json:"key"`
-	} `json:"client"`
+	Client clientCert `json:"client"`
 
 	tlsClientCert *tls.Certificate
 	tlsCACert     *x509.CertPool
