@@ -30,9 +30,8 @@ import (
 type encodeProcessor struct {
 	sdk.UnimplementedProcessor
 
-	cfg    *encodeConfig
-	logger log.CtxLogger
-
+	logger  log.CtxLogger
+	cfg     *encodeConfig
 	encoder *schemaregistry.Encoder
 }
 

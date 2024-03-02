@@ -152,6 +152,40 @@ func TestConfig_Parse(t *testing.T) {
 			},
 			wantErr: cerrors.New("invalid basic auth: specify a password to enable basic auth or remove field username"),
 		},
+		{
+			name: "tls: missing client cert and key",
+			input: map[string]string{
+				"url":                         "http://localhost",
+				"schema.strategy":             "autoRegister",
+				"schema.autoRegister.subject": "testsubject",
+				"tls.ca.cert":                 "/tmp/something",
+			},
+			wantErr: cerrors.New(`failed parsing TLS: invalid TLS config
+missing field: tls.client.cert
+missing field: tls.client.key`),
+		},
+		{
+			name: "valid tls",
+			input: map[string]string{
+				"url":                         "http://localhost",
+				"schema.strategy":             "autoRegister",
+				"schema.autoRegister.subject": "testsubject",
+				"tls.ca.cert":                 "testdata/cert.pem",
+				"tls.client.cert":             "testdata/ca.pem",
+				"tls.client.key":              "testdata/ca-key.pem",
+			},
+			want: encodeConfig{
+				Field: ".Payload.After",
+				URL:   "http://localhost",
+				Schema: schemaConfig{
+					StrategyType:          "autoRegister",
+					AutoRegisteredSubject: "testsubject",
+				},
+				TLS: tlsConfig{
+					CACert: "testdata/cert.pem",
+				},
+			},
+		},
 	}
 
 	cmpOpts := cmpopts.IgnoreUnexported(encodeConfig{}, schemaConfig{}, tlsConfig{})

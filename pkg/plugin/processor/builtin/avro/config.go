@@ -69,13 +69,14 @@ func (c *schemaConfig) parse() error {
 }
 
 func (c *schemaConfig) parsePreRegistered() error {
-	// TODO allow version to be set to "latest"
 	if c.PreRegistered.Subject == "" {
 		return cerrors.New("subject required for schema strategy 'preRegistered'")
 	}
+	// TODO allow version to be set to "latest"
 	if c.PreRegistered.Version <= 0 {
 		return cerrors.Errorf("version needs to be positive: %v", c.PreRegistered.Version)
 	}
+
 	c.strategy = schemaregistry.DownloadSchemaStrategy{
 		Subject: c.PreRegistered.Subject,
 		Version: c.PreRegistered.Version,
@@ -164,9 +165,9 @@ func (c *tlsConfig) parse() error {
 
 	c.tlsClientCert = &clientCert
 
-	if c.Client.Cert != "" {
+	if c.CACert != "" {
 		// load custom CA cert
-		caCert, err := os.ReadFile(c.Client.Cert)
+		caCert, err := os.ReadFile(c.CACert)
 		if err != nil {
 			return fmt.Errorf("failed to load CA certificate: %w", err)
 		}
