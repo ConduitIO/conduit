@@ -36,7 +36,7 @@ type preRegisteredConfig struct {
 }
 
 type schemaConfig struct {
-	// SchemaStrategy specifies which strategy to use to determine the schema for the record.
+	// StrategyType specifies which strategy to use to determine the schema for the record.
 	// Available strategies are:
 	// * `preRegistered` (recommended) - Download an existing schema from the schema registry.
 	//    This strategy is further configured with options starting with `schema.preRegistered.*`.
@@ -45,13 +45,53 @@ type schemaConfig struct {
 	//   `schema.autoRegister.*`.
 	//
 	// For more information about the behavior of each strategy read the main processor description.
-	Strategy string `json:"strategy" validate:"required,inclusion=preRegistered|autoRegister"`
+	StrategyType string `json:"strategy" validate:"required,inclusion=preRegistered|autoRegister"`
 
 	PreRegistered preRegisteredConfig `json:"preRegistered"`
 
 	// AutoRegisteredSubject specifies the subject name under which the inferred schema will be registered
 	// in the schema registry.
 	AutoRegisteredSubject string `json:"autoRegister.subject"`
+
+	strategy schemaregistry.SchemaStrategy
+}
+
+func (c *schemaConfig) parseSchemaStrategy() error {
+	switch c.StrategyType {
+	case "preRegistered":
+		return c.parsePreRegistered()
+	case "autoRegister":
+		return c.parseAutoRegister()
+	default:
+		return cerrors.Errorf("unknown schema strategy %q", c.StrategyType)
+	}
+}
+
+func (c *schemaConfig) parsePreRegistered() error {
+	// TODO allow version to be set to "latest"
+	if c.PreRegistered.Subject == "" {
+		return cerrors.New("subject required for schema strategy 'preRegistered'")
+	}
+	if c.PreRegistered.Version <= 0 {
+		return cerrors.Errorf("version needs to be positive: %v", c.PreRegistered.Version)
+	}
+	c.strategy = schemaregistry.DownloadSchemaStrategy{
+		Subject: c.PreRegistered.Subject,
+		Version: c.PreRegistered.Version,
+	}
+	return nil
+}
+
+func (c *schemaConfig) parseAutoRegister() error {
+	if c.AutoRegisteredSubject == "" {
+		return cerrors.New("subject required for schema strategy 'autoRegister'")
+	}
+
+	c.strategy = schemaregistry.ExtractAndUploadSchemaStrategy{
+		Type:    sr.TypeAvro,
+		Subject: c.AutoRegisteredSubject,
+	}
+	return nil
 }
 
 type authConfig struct {
@@ -63,6 +103,20 @@ type authConfig struct {
 	// auth.basic.username contains a value. If both auth.basic.username and auth.basic.password
 	// are empty basic authentication is disabled.
 	Password string `json:"basic.password"`
+}
+
+func (c *authConfig) validate() error {
+	switch {
+	case c.Username == "" && c.Password == "":
+		// no basic auth set
+		return nil
+	case c.Username == "":
+		return cerrors.Errorf("specify a username to enable basic auth or remove field password")
+	case c.Password == "":
+		return cerrors.Errorf("specify a password to enable basic auth or remove field username")
+	}
+
+	return nil
 }
 
 type tlsConfig struct {
@@ -80,6 +134,49 @@ type tlsConfig struct {
 		// TLS is disabled.
 		Key string `json:"key"`
 	} `json:"client"`
+
+	tlsClientCert *tls.Certificate
+	tlsCACert     *x509.CertPool
+}
+
+func (c *tlsConfig) parse() error {
+	if c.Client.Cert == "" && c.Client.Key == "" && c.CACert == "" {
+		// no tls config set
+		return nil
+	} else if c.Client.Cert == "" || c.Client.Key == "" {
+		// we are missing some configuration fields
+		err := cerrors.New("invalid TLS config")
+		if c.Client.Cert == "" {
+			err = multierror.Append(err, cerrors.New("missing field: tls.client.cert"))
+		}
+		if c.Client.Key == "" {
+			err = multierror.Append(err, cerrors.New("missing field: tls.client.key"))
+		}
+		// CA cert is optional, we don't check if it's missing
+		return err
+	}
+
+	clientCert, err := tls.LoadX509KeyPair(c.Client.Cert, c.Client.Key)
+	if err != nil {
+		return fmt.Errorf("failed to load client certificate: %w", err)
+	}
+
+	c.tlsClientCert = &clientCert
+
+	if c.Client.Cert != "" {
+		// load custom CA cert
+		caCert, err := os.ReadFile(c.Client.Cert)
+		if err != nil {
+			return fmt.Errorf("failed to load CA certificate: %w", err)
+		}
+		caCertPool := x509.NewCertPool()
+		if ok := caCertPool.AppendCertsFromPEM(caCert); !ok {
+			return cerrors.New("invalid CA cert")
+		}
+		c.tlsCACert = caCertPool
+	}
+
+	return nil
 }
 
 type encodeConfig struct {
@@ -94,65 +191,6 @@ type encodeConfig struct {
 	TLS    tlsConfig    `json:"tls"`
 
 	fieldResolver sdk.ReferenceResolver
-	// todo move into schemaConfig
-	strategy schemaregistry.SchemaStrategy
-	// todo move into tlsConfig
-	tlsClientCert *tls.Certificate
-	tlsCACert     *x509.CertPool
-}
-
-func (c *encodeConfig) validateBasicAuth() error {
-	switch {
-	case c.Auth.Username == "" && c.Auth.Password == "":
-		// no basic auth set
-		return nil
-	case c.Auth.Username == "":
-		return cerrors.Errorf("specify a username to enable basic auth or remove field password")
-	case c.Auth.Password == "":
-		return cerrors.Errorf("specify a password to enable basic auth or remove field username")
-	}
-
-	return nil
-}
-
-func (c *encodeConfig) parseTLS() error {
-	if c.TLS.Client.Cert == "" && c.TLS.Client.Key == "" && c.TLS.CACert == "" {
-		// no tls config set
-		return nil
-	} else if c.TLS.Client.Cert == "" || c.TLS.Client.Key == "" {
-		// we are missing some configuration fields
-		err := cerrors.New("invalid TLS config")
-		if c.TLS.Client.Cert == "" {
-			err = multierror.Append(err, cerrors.New("missing field: tls.client.cert"))
-		}
-		if c.TLS.Client.Key == "" {
-			err = multierror.Append(err, cerrors.New("missing field: tls.client.key"))
-		}
-		// CA cert is optional, we don't check if it's missing
-		return err
-	}
-
-	clientCert, err := tls.LoadX509KeyPair(c.TLS.Client.Cert, c.TLS.Client.Key)
-	if err != nil {
-		return fmt.Errorf("failed to load client certificate: %w", err)
-	}
-
-	c.tlsClientCert = &clientCert
-
-	if c.TLS.Client.Cert != "" {
-		// load custom CA cert
-		caCert, err := os.ReadFile(c.TLS.Client.Cert)
-		if err != nil {
-			return fmt.Errorf("failed to load CA certificate: %w", err)
-		}
-		caCertPool := x509.NewCertPool()
-		if ok := caCertPool.AppendCertsFromPEM(caCert); !ok {
-			return cerrors.New("invalid CA cert")
-		}
-		c.tlsCACert = caCertPool
-	}
-
-	return nil
 }
 
 func (c *encodeConfig) ClientOptions() []sr.Opt {
@@ -161,53 +199,18 @@ func (c *encodeConfig) ClientOptions() []sr.Opt {
 		clientOpts = append(clientOpts, sr.BasicAuth(c.Auth.Username, c.Auth.Password))
 	}
 
-	if c.tlsClientCert != nil {
+	if c.TLS.tlsClientCert != nil {
 		tlsConfig := &tls.Config{
-			Certificates: []tls.Certificate{*c.tlsClientCert},
+			Certificates: []tls.Certificate{*c.TLS.tlsClientCert},
 			MinVersion:   tls.VersionTLS12,
 		}
-		if c.tlsCACert != nil {
-			tlsConfig.RootCAs = c.tlsCACert
+		if c.TLS.tlsCACert != nil {
+			tlsConfig.RootCAs = c.TLS.tlsCACert
 		}
 		clientOpts = append(clientOpts, sr.DialTLSConfig(tlsConfig))
 	}
 
 	return clientOpts
-}
-
-func (c *encodeConfig) parseSchemaStrategy() error {
-	switch c.Schema.Strategy {
-	case "preRegistered":
-		return c.parseSchemaStrategyPreRegistered()
-	case "autoRegister":
-		return c.parseSchemaStrategyAutoRegister()
-	default:
-		return cerrors.Errorf("unknown schema strategy %q", c.Schema.Strategy)
-	}
-}
-
-func (c *encodeConfig) parseSchemaStrategyPreRegistered() error {
-	// TODO allow version to be set to "latest"
-	if c.Schema.PreRegistered.Subject == "" {
-		return cerrors.New("subject required for schema strategy 'preRegistered'")
-	}
-	c.strategy = schemaregistry.DownloadSchemaStrategy{
-		Subject: c.Schema.PreRegistered.Subject,
-		Version: c.Schema.PreRegistered.Version,
-	}
-	return nil
-}
-
-func (c *encodeConfig) parseSchemaStrategyAutoRegister() error {
-	if c.Schema.AutoRegisteredSubject == "" {
-		return cerrors.New("subject required for schema strategy 'autoRegister'")
-	}
-
-	c.strategy = schemaregistry.ExtractAndUploadSchemaStrategy{
-		Type:    sr.TypeAvro,
-		Subject: c.Schema.AutoRegisteredSubject,
-	}
-	return nil
 }
 
 func (c *encodeConfig) parseTargetField() error {
@@ -227,17 +230,17 @@ func parseConfig(ctx context.Context, m map[string]string) (*encodeConfig, error
 		return nil, err
 	}
 
-	err = cfg.validateBasicAuth()
+	err = cfg.Auth.validate()
 	if err != nil {
 		return nil, cerrors.Errorf("invalid basic auth: %w", err)
 	}
 
-	err = cfg.parseTLS()
+	err = cfg.TLS.parse()
 	if err != nil {
 		return nil, cerrors.Errorf("failed parsing TLS: %w", err)
 	}
 
-	err = cfg.parseSchemaStrategy()
+	err = cfg.Schema.parseSchemaStrategy()
 	if err != nil {
 		return nil, cerrors.Errorf("failed parsing schema strategy: %w", err)
 	}

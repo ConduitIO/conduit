@@ -85,7 +85,7 @@ func (p *encodeProcessor) Open(context.Context) error {
 	if err != nil {
 		return cerrors.Errorf("could not create schema registry client: %w", err)
 	}
-	p.encoder = schemaregistry.NewEncoder(client, p.logger, &sr.Serde{}, p.cfg.strategy)
+	p.encoder = schemaregistry.NewEncoder(client, p.logger, &sr.Serde{}, p.cfg.Schema.strategy)
 
 	return nil
 }

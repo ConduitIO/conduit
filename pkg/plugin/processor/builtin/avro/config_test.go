@@ -16,6 +16,7 @@ package avro
 
 import (
 	"context"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/matryer/is"
@@ -41,13 +42,31 @@ func TestConfig_Parse(t *testing.T) {
 				URL:   "http://localhost",
 				Field: ".Payload.After",
 				Schema: schemaConfig{
-					Strategy: "preRegistered",
+					StrategyType: "preRegistered",
 					PreRegistered: preRegisteredConfig{
 						Subject: "testsubject",
 						Version: 123,
 					},
 				},
 			},
+		},
+		{
+			name: "preRegistered without version",
+			input: map[string]string{
+				"url":                          "http://localhost",
+				"schema.strategy":              "preRegistered",
+				"schema.preRegistered.subject": "testsubject",
+			},
+			wantErr: cerrors.New("failed parsing schema strategy: version needs to be positive: 0"),
+		},
+		{
+			name: "preRegistered without subject",
+			input: map[string]string{
+				"url":                          "http://localhost",
+				"schema.strategy":              "preRegistered",
+				"schema.preRegistered.version": "123",
+			},
+			wantErr: cerrors.New("failed parsing schema strategy: subject required for schema strategy 'preRegistered'"),
 		},
 		{
 			name: "autoRegister",
@@ -60,32 +79,39 @@ func TestConfig_Parse(t *testing.T) {
 				URL:   "http://localhost",
 				Field: ".Payload.After",
 				Schema: schemaConfig{
-					Strategy:              "autoRegister",
+					StrategyType:          "autoRegister",
 					AutoRegisteredSubject: "testsubject",
 				},
 			},
 		},
+		{
+			name: "autoRegister without subject",
+			input: map[string]string{
+				"url":             "http://localhost",
+				"schema.strategy": "autoRegister",
+			},
+			wantErr: cerrors.New("failed parsing schema strategy: subject required for schema strategy 'autoRegister'"),
+		},
 	}
 
+	cmpOpts := cmpopts.IgnoreUnexported(encodeConfig{}, schemaConfig{}, tlsConfig{})
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			is := is.New(t)
 
-			got, err := parseConfig(context.Background(), tc.input)
-			areErrorsEqual(is, tc.wantErr, err)
-			diff := cmp.Diff(tc.want, *got, cmpopts.IgnoreUnexported(encodeConfig{}))
+			got, gotErr := parseConfig(context.Background(), tc.input)
+			if tc.wantErr != nil {
+				is.True(gotErr != nil) // expected an error
+				is.Equal(tc.wantErr.Error(), gotErr.Error())
+
+				return
+			}
+
+			is.NoErr(gotErr)
+			diff := cmp.Diff(tc.want, *got, cmpOpts)
 			if diff != "" {
 				t.Errorf("mismatch (-want +got): %s", diff)
 			}
 		})
-	}
-}
-
-func areErrorsEqual(is *is.I, want, got error) {
-	if want != nil {
-		is.True(got != nil) // expected an error
-		is.Equal(want.Error(), got.Error())
-	} else {
-		is.NoErr(got)
 	}
 }

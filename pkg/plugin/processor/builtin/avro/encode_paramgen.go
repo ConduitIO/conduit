@@ -49,7 +49,7 @@ func (encodeConfig) Parameters() map[string]config.Parameter {
 		},
 		"schema.strategy": {
 			Default:     "",
-			Description: "Schemastrategy specifies which strategy to use to determine the schema for the record. Available strategies are: * `preRegistered` (recommended) - Download an existing schema from the schema registry.    This strategy is further configured with options starting with `schema.preRegistered.*`. * `autoRegister` (for development purposes) - Infer the schema from the record and register it    in the schema registry. This strategy is further configured with options starting with   `schema.autoRegister.*`.  For more information about the behavior of each strategy read the main processor description.",
+			Description: "strategy specifies which strategy to use to determine the schema for the record. Available strategies are: * `preRegistered` (recommended) - Download an existing schema from the schema registry.    This strategy is further configured with options starting with `schema.preRegistered.*`. * `autoRegister` (for development purposes) - Infer the schema from the record and register it    in the schema registry. This strategy is further configured with options starting with   `schema.autoRegister.*`.  For more information about the behavior of each strategy read the main processor description.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{
 				config.ValidationRequired{},
