@@ -19,13 +19,13 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/record"
 	"github.com/hamba/avro/v2"
 )
 
 var (
-	structuredDataType = reflect.TypeOf(record.StructuredData{})
+	structuredDataType = reflect.TypeOf(opencdc.StructuredData{})
 	byteType           = reflect.TypeOf(byte(0))
 )
 
@@ -51,7 +51,7 @@ type extractor struct{}
 //     will traverse all values in the slice, extract their types and combine
 //     them in a union type. If the slice is empty, the extracted value type
 //     will default to a nullable string (union type of string and null).
-//   - If Extract encounters a value with the type of record.StructuredData it
+//   - If Extract encounters a value with the type of opencdc.StructuredData it
 //     will treat it as a record and extract a record schema, where each key in
 //     the structured data is extracted into its own record field.
 func (e extractor) Extract(v any) (avro.Schema, error) {
@@ -195,7 +195,7 @@ func (e extractor) extractSlice(path []string, v reflect.Value, t reflect.Type) 
 // type is an interface it falls back to looping through all values, extracting
 // their types and combining them into a nullable union schema.
 // If the key of the map is not a string, this function returns an error. If the
-// type of the map is record.StructuredData it will treat it as a record and
+// type of the map is opencdc.StructuredData it will treat it as a record and
 // extract a record schema, where each key in the structured data is extracted
 // into its own record field.
 func (e extractor) extractMap(path []string, v reflect.Value, t reflect.Type) (avro.Schema, error) {

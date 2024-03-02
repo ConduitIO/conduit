@@ -16,10 +16,10 @@ package schemaregistry
 
 import (
 	"context"
-	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/avro/schemaregistry/internal"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/avro/schemaregistry/internal"
 	"github.com/lovromazgon/franz-go/pkg/sr"
 )
 

@@ -18,8 +18,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/conduitio/conduit/pkg/record"
 	"github.com/lovromazgon/franz-go/pkg/sr"
 	"github.com/matryer/is"
 )
@@ -33,7 +33,7 @@ func TestEncodeDecode_ExtractAndUploadSchemaStrategy(t *testing.T) {
 	client, err := NewClient(logger, sr.URLs(testSchemaRegistryURL(t)))
 	is.NoErr(err)
 
-	have := record.StructuredData{
+	have := opencdc.StructuredData{
 		"myString": "bar",
 		"myInt":    1,
 		"myFloat":  2.3,
@@ -41,13 +41,13 @@ func TestEncodeDecode_ExtractAndUploadSchemaStrategy(t *testing.T) {
 			"foo": true,
 			"bar": 2.2,
 		},
-		"myStruct": record.StructuredData{
+		"myStruct": opencdc.StructuredData{
 			"foo": 1,
 			"bar": false,
 		},
 		"mySlice": []int{1, 2, 3},
 	}
-	want := record.StructuredData{
+	want := opencdc.StructuredData{
 		"myString": "bar",
 		"myInt":    1,
 		"myFloat":  2.3,
@@ -91,11 +91,11 @@ func TestEncodeDecode_DownloadStrategy_Avro(t *testing.T) {
 	client, err := NewClient(logger, sr.URLs(testSchemaRegistryURL(t)))
 	is.NoErr(err)
 
-	have := record.StructuredData{
+	have := opencdc.StructuredData{
 		"myString": "bar",
 		"myInt":    1,
 	}
-	want := record.StructuredData{
+	want := opencdc.StructuredData{
 		"myString": "bar",
 		"myInt":    1,
 	}

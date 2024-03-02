@@ -17,7 +17,6 @@
 package schemaregistry
 
 import (
-	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/avro/schemaregistry/internal"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -26,6 +25,7 @@ import (
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/avro/schemaregistry/internal"
 	"github.com/goccy/go-json"
 	"github.com/lovromazgon/franz-go/pkg/sr"
 )

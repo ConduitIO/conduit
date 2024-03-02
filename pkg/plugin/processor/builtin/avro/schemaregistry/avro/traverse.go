@@ -19,8 +19,8 @@ import (
 	"reflect"
 	"sort"
 
+	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/record"
 	"github.com/hamba/avro/v2"
 )
 
@@ -109,11 +109,11 @@ func traverseValue(val any, p path, hasEncodedUnions bool, fn func(v any)) error
 			switch val := val.(type) {
 			case map[string]any:
 				return traverse(val[l.field.Name()], index+1)
-			case record.StructuredData:
+			case opencdc.StructuredData:
 				return traverse(val[l.field.Name()], index+1)
 			case *map[string]any:
 				return traverse(*val, index) // traverse value
-			case *record.StructuredData:
+			case *opencdc.StructuredData:
 				return traverse(*val, index) // traverse value
 			}
 			return newUnexpectedTypeError(avro.Record, map[string]any{}, val)

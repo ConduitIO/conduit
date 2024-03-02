@@ -18,8 +18,8 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/record"
 	"github.com/hamba/avro/v2"
 	"github.com/matryer/is"
 )
@@ -273,8 +273,8 @@ func TestSchema_MarshalUnmarshal(t *testing.T) {
 			}))),
 		}))),
 	}, {
-		name: "record.StructuredData",
-		haveValue: record.StructuredData{
+		name: "opencdc.StructuredData",
+		haveValue: opencdc.StructuredData{
 			"foo": "bar",
 			"bar": 1,
 			"baz": []int{1, 2, 3},
@@ -295,8 +295,8 @@ func TestSchema_MarshalUnmarshal(t *testing.T) {
 		)),
 	}}
 
-	newRecord := func(v any) record.StructuredData {
-		return record.StructuredData{"foo": v}
+	newRecord := func(v any) opencdc.StructuredData {
+		return opencdc.StructuredData{"foo": v}
 	}
 
 	for _, tc := range testCases {
@@ -324,7 +324,7 @@ func TestSchema_MarshalUnmarshal(t *testing.T) {
 			is.NoErr(err)
 
 			// unmarshal the bytes back into structured data and compare the value
-			var gotValue record.StructuredData
+			var gotValue opencdc.StructuredData
 			err = gotSchema.Unmarshal(bytes, &gotValue)
 			is.NoErr(err)
 
@@ -337,13 +337,13 @@ func TestSchema_MarshalUnmarshal(t *testing.T) {
 func TestSchemaForType_NestedStructuredData(t *testing.T) {
 	is := is.New(t)
 
-	have := record.StructuredData{
+	have := opencdc.StructuredData{
 		"foo": "bar",
-		"level1": record.StructuredData{
+		"level1": opencdc.StructuredData{
 			"foo": "bar",
-			"level2": record.StructuredData{
+			"level2": opencdc.StructuredData{
 				"foo": "bar",
-				"level3": record.StructuredData{
+				"level3": opencdc.StructuredData{
 					"foo":        "bar",
 					"regularMap": map[string]bool{},
 				},
@@ -394,7 +394,7 @@ func TestSchemaForType_NestedStructuredData(t *testing.T) {
 	is.NoErr(err)
 	// only try to unmarshal to ensure there's no error, other tests assert that
 	// umarshaled data matches the expectations
-	var unmarshaled record.StructuredData
+	var unmarshaled opencdc.StructuredData
 	err = got.Unmarshal(bytes, &unmarshaled)
 	is.NoErr(err)
 }

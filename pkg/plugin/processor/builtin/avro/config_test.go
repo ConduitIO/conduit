@@ -16,11 +16,12 @@ package avro
 
 import (
 	"context"
+	"testing"
+
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/matryer/is"
-	"testing"
 )
 
 func TestConfig_Parse(t *testing.T) {
@@ -91,6 +92,65 @@ func TestConfig_Parse(t *testing.T) {
 				"schema.strategy": "autoRegister",
 			},
 			wantErr: cerrors.New("failed parsing schema strategy: subject required for schema strategy 'autoRegister'"),
+		},
+		{
+			name: "non-default target field",
+			input: map[string]string{
+				"url":                         "http://localhost",
+				"schema.strategy":             "autoRegister",
+				"schema.autoRegister.subject": "testsubject",
+				"field":                       ".Payload.After.something",
+			},
+			want: encodeConfig{
+				Field: ".Payload.After.something",
+				URL:   "http://localhost",
+				Schema: schemaConfig{
+					StrategyType:          "autoRegister",
+					AutoRegisteredSubject: "testsubject",
+				},
+			},
+		},
+		{
+			name: "valid auth",
+			input: map[string]string{
+				"url":                         "http://localhost",
+				"schema.strategy":             "autoRegister",
+				"schema.autoRegister.subject": "testsubject",
+				"auth.basic.username":         "user@example.com",
+				"auth.basic.password":         "Passw0rd",
+			},
+			want: encodeConfig{
+				URL:   "http://localhost",
+				Field: ".Payload.After",
+				Schema: schemaConfig{
+					StrategyType:          "autoRegister",
+					AutoRegisteredSubject: "testsubject",
+				},
+				Auth: authConfig{
+					Username: "user@example.com",
+					Password: "Passw0rd",
+				},
+			},
+		},
+		{
+			name: "auth -- no username",
+			input: map[string]string{
+				"url":                         "http://localhost",
+				"schema.strategy":             "autoRegister",
+				"schema.autoRegister.subject": "testsubject",
+				"auth.basic.password":         "Passw0rd",
+			},
+			wantErr: cerrors.New("invalid basic auth: specify a username to enable basic auth or remove field password"),
+		},
+		{
+			name: "auth -- no password",
+			input: map[string]string{
+				"url":                         "http://localhost",
+				"schema.strategy":             "autoRegister",
+				"schema.autoRegister.subject": "testsubject",
+				"auth.basic.username":         "username@example.com",
+			},
+			wantErr: cerrors.New("invalid basic auth: specify a password to enable basic auth or remove field username"),
 		},
 	}
 

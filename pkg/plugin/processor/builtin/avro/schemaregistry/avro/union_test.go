@@ -18,7 +18,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/conduitio/conduit/pkg/record"
+	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/matryer/is"
 )
 
@@ -84,8 +84,8 @@ func TestUnionResolver(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			is := is.New(t)
 
-			newRecord := func() record.StructuredData {
-				sd := record.StructuredData{
+			newRecord := func() opencdc.StructuredData {
+				sd := opencdc.StructuredData{
 					"foo1": tc.have,
 					"map1": map[string]any{
 						"foo2": tc.have,
@@ -100,7 +100,7 @@ func TestUnionResolver(t *testing.T) {
 				}
 				return sd
 			}
-			want := record.StructuredData{
+			want := opencdc.StructuredData{
 				"foo1": tc.have, // normal field shouldn't change
 				"map1": map[string]any{
 					"foo2": tc.want,

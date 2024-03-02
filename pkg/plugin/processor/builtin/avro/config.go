@@ -19,12 +19,13 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	"os"
+
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/multierror"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/avro/schemaregistry"
 	"github.com/lovromazgon/franz-go/pkg/sr"
-	"os"
 )
 
 type preRegisteredConfig struct {
@@ -56,7 +57,7 @@ type schemaConfig struct {
 	strategy schemaregistry.SchemaStrategy
 }
 
-func (c *schemaConfig) parseSchemaStrategy() error {
+func (c *schemaConfig) parse() error {
 	switch c.StrategyType {
 	case "preRegistered":
 		return c.parsePreRegistered()
@@ -200,14 +201,14 @@ func (c *encodeConfig) ClientOptions() []sr.Opt {
 	}
 
 	if c.TLS.tlsClientCert != nil {
-		tlsConfig := &tls.Config{
+		tlsCfg := &tls.Config{
 			Certificates: []tls.Certificate{*c.TLS.tlsClientCert},
 			MinVersion:   tls.VersionTLS12,
 		}
 		if c.TLS.tlsCACert != nil {
-			tlsConfig.RootCAs = c.TLS.tlsCACert
+			tlsCfg.RootCAs = c.TLS.tlsCACert
 		}
-		clientOpts = append(clientOpts, sr.DialTLSConfig(tlsConfig))
+		clientOpts = append(clientOpts, sr.DialTLSConfig(tlsCfg))
 	}
 
 	return clientOpts
@@ -240,7 +241,7 @@ func parseConfig(ctx context.Context, m map[string]string) (*encodeConfig, error
 		return nil, cerrors.Errorf("failed parsing TLS: %w", err)
 	}
 
-	err = cfg.Schema.parseSchemaStrategy()
+	err = cfg.Schema.parse()
 	if err != nil {
 		return nil, cerrors.Errorf("failed parsing schema strategy: %w", err)
 	}

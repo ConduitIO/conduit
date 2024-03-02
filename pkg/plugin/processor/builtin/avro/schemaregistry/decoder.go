@@ -17,9 +17,9 @@ package schemaregistry
 import (
 	"context"
 
+	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/conduitio/conduit/pkg/record"
 	"github.com/lovromazgon/franz-go/pkg/sr"
 )
 
@@ -37,16 +37,16 @@ func NewDecoder(client *Client, logger log.CtxLogger, serde *sr.Serde) *Decoder 
 	}
 }
 
-func (d *Decoder) Decode(ctx context.Context, b record.RawData) (record.StructuredData, error) {
-	var out record.StructuredData
-	err := d.serde.Decode(b.Raw, &out)
+func (d *Decoder) Decode(ctx context.Context, b opencdc.RawData) (opencdc.StructuredData, error) {
+	var out opencdc.StructuredData
+	err := d.serde.Decode(b.Bytes(), &out)
 	if cerrors.Is(err, sr.ErrNotRegistered) {
 		err = d.findAndRegisterSchema(ctx, b)
 		if err != nil {
 			return nil, err
 		}
 		// retry decoding
-		err = d.serde.Decode(b.Raw, &out)
+		err = d.serde.Decode(b.Bytes(), &out)
 	}
 	if err != nil {
 		return nil, cerrors.Errorf("failed to decode raw data: %w", err)
@@ -55,8 +55,8 @@ func (d *Decoder) Decode(ctx context.Context, b record.RawData) (record.Structur
 	return out, nil
 }
 
-func (d *Decoder) findAndRegisterSchema(ctx context.Context, b record.RawData) error {
-	id, _, _ := d.serde.Header().DecodeID(b.Raw) // we know this won't throw an error since Decode didn't return ErrBadHeader
+func (d *Decoder) findAndRegisterSchema(ctx context.Context, b opencdc.RawData) error {
+	id, _, _ := d.serde.Header().DecodeID(b.Bytes()) // we know this won't throw an error since Decode didn't return ErrBadHeader
 	s, err := d.client.SchemaByID(ctx, id)
 	if err != nil {
 		return cerrors.Errorf("failed to get schema: %w", err)
@@ -72,7 +72,7 @@ func (d *Decoder) findAndRegisterSchema(ctx context.Context, b record.RawData) e
 
 	d.serde.Register(
 		id,
-		record.StructuredData{},
+		opencdc.StructuredData{},
 		sr.EncodeFn(encodeFn(schema, sr.SubjectSchema{ID: id})),
 		sr.DecodeFn(decodeFn(schema, sr.SubjectSchema{ID: id})),
 	)
