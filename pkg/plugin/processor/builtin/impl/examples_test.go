@@ -14,4 +14,4 @@
 
 //go:generate go test -count=1 -tags export_processors .
 
-package filter
+package impl

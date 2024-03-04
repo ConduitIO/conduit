@@ -12,23 +12,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:build export_processors
-
-package filter
+package impl
 
 import (
-	"os"
-	"testing"
-
+	"github.com/conduitio/conduit-commons/opencdc"
+	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal/exampleutil"
 )
 
-func TestMain(m *testing.M) {
-	code := m.Run()
-	if code > 0 {
-		os.Exit(code)
-	}
+//nolint:govet // we're using a more descriptive name of example
+func ExampleFilterProcessor() {
+	p := NewFilterProcessor()
 
-	// tests passed, export the processors
-	exampleutil.ExportProcessors()
+	exampleutil.RunExample(p, exampleutil.Example{
+		Summary: `filter out the record`,
+		Config:  map[string]string{},
+		Have: opencdc.Record{
+			Operation: opencdc.OperationCreate,
+			Metadata:  map[string]string{"key1": "val1"},
+			Payload:   opencdc.Change{After: opencdc.StructuredData{"foo": "bar"}, Before: opencdc.StructuredData{"bar": "baz"}},
+		},
+		Want: sdk.FilterRecord{}})
+
+	// Output:
+	// processor filtered record out
 }

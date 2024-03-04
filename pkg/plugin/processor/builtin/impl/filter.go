@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package filter
+package impl
 
 import (
 	"context"
@@ -22,15 +22,15 @@ import (
 	sdk "github.com/conduitio/conduit-processor-sdk"
 )
 
-type processor struct {
+type filterProcessor struct {
 	sdk.UnimplementedProcessor
 }
 
-func New() sdk.Processor {
-	return &processor{}
+func NewFilterProcessor() sdk.Processor {
+	return &filterProcessor{}
 }
 
-func (p *processor) Specification() (sdk.Specification, error) {
+func (p *filterProcessor) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
 		Name:    "filter",
 		Summary: "Acknowledges all records that get passed to the filter.",
@@ -43,15 +43,15 @@ Make sure to add a condition to this processor, otherwise all records will be fi
 	}, nil
 }
 
-func (p *processor) Configure(_ context.Context, _ map[string]string) error {
+func (p *filterProcessor) Configure(_ context.Context, _ map[string]string) error {
 	return nil
 }
 
-func (p *processor) Open(context.Context) error {
+func (p *filterProcessor) Open(context.Context) error {
 	return nil
 }
 
-func (p *processor) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
+func (p *filterProcessor) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 	out := make([]sdk.ProcessedRecord, len(records))
 	for i := range records {
 		out[i] = sdk.FilterRecord{}
@@ -59,6 +59,6 @@ func (p *processor) Process(_ context.Context, records []opencdc.Record) []sdk.P
 	return out
 }
 
-func (p *processor) Teardown(context.Context) error {
+func (p *filterProcessor) Teardown(context.Context) error {
 	return nil
 }

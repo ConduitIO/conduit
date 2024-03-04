@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package filter
+package impl
 
 import (
 	"context"
@@ -25,7 +25,7 @@ import (
 
 func TestFilter_Process(t *testing.T) {
 	is := is.New(t)
-	proc := New()
+	proc := NewFilterProcessor()
 	records := []opencdc.Record{
 		{
 			Metadata: map[string]string{"key1": "val1"},
