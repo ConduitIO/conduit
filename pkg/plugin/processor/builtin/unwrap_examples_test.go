@@ -32,9 +32,10 @@ func ExampleUnwrapDebezium() {
 			"field": ".Payload.After.nested",
 		},
 		Have: opencdc.Record{
-			Position: opencdc.Position("test-position"),
-			Key:      opencdc.RawData(`{"payload":"27"}`),
-			Metadata: opencdc.Metadata{"metadata-key": "metadata-value"},
+			Position:  opencdc.Position("test-position"),
+			Operation: opencdc.OperationCreate,
+			Key:       opencdc.RawData(`{"payload":"27"}`),
+			Metadata:  opencdc.Metadata{"metadata-key": "metadata-value"},
 			Payload: opencdc.Change{
 				After: opencdc.StructuredData{
 					"nested": `{
@@ -82,13 +83,12 @@ func ExampleUnwrapDebezium() {
 	// @@ -1,14 +1,17 @@
 	//  {
 	//    "position": "dGVzdC1wb3NpdGlvbg==",
-	// -  "operation": "Operation(0)",
-	// +  "operation": "create",
+	//    "operation": "create",
 	//    "metadata": {
 	// -    "metadata-key": "metadata-value"
 	// +    "metadata-key": "metadata-value",
 	// -  },
-	// -  "key": "eyJwYXlsb2FkIjoiMjcifQ==",
+	// -  "key": "{\"payload\":\"27\"}",
 	// -  "payload": {
 	// -    "before": null,
 	// -    "after": {
@@ -96,7 +96,7 @@ func ExampleUnwrapDebezium() {
 	// +    "opencdc.readAt": "1674061777225877000",
 	// +    "opencdc.version": "v1"
 	// +  },
-	// +  "key": "Mjc=",
+	// +  "key": "27",
 	// +  "payload": {
 	// +    "before": null,
 	// +    "after": {
