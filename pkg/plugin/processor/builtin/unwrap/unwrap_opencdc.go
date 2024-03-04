@@ -50,14 +50,9 @@ func (u *openCDCProcessor) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
 		Name:    "unwrap.opencdc",
 		Summary: "A processor that unwraps the OpenCDC record saved in one of record's fields.",
-		Description: `
-The unwrap.opencdc processors unwraps the OpenCDC record saved in one of the record's fields.
-
-This is useful in situations where a record goes through intermediate systems before 
-being written to a final destination. In these cases, the original OpenCDC record is
-part of the payload read from the intermediate system and needs to be unwrapped before
-being written to the destination.
-'`,
+		Description: `The unwrap.opencdc processor is useful in situations where a record goes through intermediate 
+systems before being written to a final destination. In these cases, the original OpenCDC record is part of the payload 
+read from the intermediate system and needs to be unwrapped before being written.`,
 		Version:    "v0.1.0",
 		Author:     "Meroxa, Inc.",
 		Parameters: openCDCConfig{}.Parameters(),
@@ -87,20 +82,20 @@ func (u *openCDCProcessor) Open(context.Context) error {
 func (u *openCDCProcessor) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 	out := make([]sdk.ProcessedRecord, 0, len(records))
 	for _, rec := range records {
-		proc := u.processRecord(rec)
-		out = append(out, proc)
-		if _, ok := proc.(sdk.ErrorRecord); ok {
-			return out
+		proc, err := u.processRecord(rec)
+		if err != nil {
+			return append(out, sdk.ErrorRecord{Error: err})
 		}
+		out = append(out, proc)
 	}
 
 	return out
 }
 
-func (u *openCDCProcessor) processRecord(rec opencdc.Record) sdk.ProcessedRecord {
+func (u *openCDCProcessor) processRecord(rec opencdc.Record) (sdk.ProcessedRecord, error) {
 	ref, err := u.fieldRefRes.Resolve(&rec)
 	if err != nil {
-		return sdk.ErrorRecord{Error: cerrors.Errorf("failed resolving record reference: %w", err)}
+		return nil, cerrors.Errorf("failed resolving record reference: %w", err)
 	}
 
 	var data opencdc.StructuredData
@@ -108,25 +103,25 @@ func (u *openCDCProcessor) processRecord(rec opencdc.Record) sdk.ProcessedRecord
 	case opencdc.RawData:
 		// unmarshal raw data to structured
 		if err := json.Unmarshal(v.Bytes(), &data); err != nil {
-			return sdk.ErrorRecord{Error: cerrors.Errorf("failed to unmarshal raw data as JSON: %w", err)}
+			return nil, cerrors.Errorf("failed to unmarshal raw data as JSON: %w", err)
 		}
 	case opencdc.StructuredData:
 		data = v
 	case nil:
-		return sdk.ErrorRecord{Error: cerrors.New("field to unmarshal is nil")}
+		return nil, cerrors.New("field to unmarshal is nil")
 	default:
-		return sdk.ErrorRecord{Error: cerrors.Errorf("unexpected data type %T", v)}
+		return nil, cerrors.Errorf("unexpected data type %T", v)
 	}
 
 	opencdcRec, err := u.unmarshalRecord(data)
 	if err != nil {
-		return sdk.ErrorRecord{Error: cerrors.Errorf("failed unmarshalling record: %w", err)}
+		return nil, cerrors.Errorf("failed unmarshalling record: %w", err)
 	}
-	opencdcRec.Position = rec.Position
-
 	// Position is the only key we preserve from the original record to maintain the reference respect other messages
 	// that will be coming from in the event of chaining pipelines (e.g.: source -> kafka, kafka -> destination)
-	return sdk.SingleRecord(opencdcRec)
+	opencdcRec.Position = rec.Position
+
+	return sdk.SingleRecord(opencdcRec), nil
 }
 
 func (u *openCDCProcessor) Teardown(context.Context) error {
@@ -188,7 +183,7 @@ func (u *openCDCProcessor) unmarshalMetadata(structData opencdc.StructuredData) 
 	var metadata opencdc.Metadata
 	meta, ok := structData["metadata"]
 	if !ok {
-		return metadata, cerrors.New("no metadata")
+		return nil, cerrors.New("no metadata")
 	}
 
 	switch m := meta.(type) {
@@ -197,7 +192,13 @@ func (u *openCDCProcessor) unmarshalMetadata(structData opencdc.StructuredData) 
 	case map[string]interface{}:
 		metadata = make(opencdc.Metadata, len(m))
 		for k, v := range m {
-			metadata[k] = fmt.Sprint(v)
+			// if it's already a string, then fmt.Sprint() will be slower
+			if str, ok := v.(string); ok {
+				metadata[k] = str
+			} else {
+				metadata[k] = fmt.Sprint(v)
+			}
+
 		}
 	default:
 		return nil, cerrors.Errorf("expected a opencdc.Metadata or a map[string]interface{}, got %T", m)
