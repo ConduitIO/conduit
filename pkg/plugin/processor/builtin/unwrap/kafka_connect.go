@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:generate paramgen -output=kafkaconnect_paramgen.go kafkaConnectConfig
+//go:generate paramgen -output=kafka_connect_paramgen.go kafkaConnectConfig
 
 package unwrap
 
