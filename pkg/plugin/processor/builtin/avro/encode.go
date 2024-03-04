@@ -19,13 +19,13 @@ package avro
 
 import (
 	"context"
-	"github.com/goccy/go-json"
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/avro/schemaregistry"
+	"github.com/goccy/go-json"
 	"github.com/lovromazgon/franz-go/pkg/sr"
 )
 
@@ -117,6 +117,9 @@ func (p *encodeProcessor) processRecord(ctx context.Context, rec opencdc.Record)
 	}
 
 	data, err := p.structuredData(field.Get())
+	if err != nil {
+		return nil, cerrors.Errorf("failed getting structured data: %w", err)
+	}
 
 	rd, err := p.encoder.Encode(ctx, data)
 	if err != nil {
