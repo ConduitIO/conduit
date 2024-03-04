@@ -1077,8 +1077,6 @@ github.com/cncf/xds/go v0.0.0-20230607035331-e9ce68804cb4/go.mod h1:eXthEFrGJvWH
 github.com/cockroachdb/apd v1.1.0 h1:3LFP3629v+1aKXU5Q37mxmRxX/pIu1nijXydLShEq5I=
 github.com/cockroachdb/apd v1.1.0/go.mod h1:8Sl8LxpKi29FqWXR16WEFZRNSz3SoPzUzeMeY4+DwBQ=
 github.com/colinmarc/hdfs/v2 v2.1.1/go.mod h1:M3x+k8UKKmxtFu++uAZ0OtDU8jR3jnaZIAc6yK4Ue0c=
-github.com/conduitio/conduit-commons v0.0.0-20240228185905-49ce3f31fbcd h1:BuKtwSyIMzhGWkU7diay5vimV4qJfKQZxMhwNjPaygc=
-github.com/conduitio/conduit-commons v0.0.0-20240228185905-49ce3f31fbcd/go.mod h1:Hhr5nik71/Wz3yrLjaKSZ2HRQp1wNSOPY2JGGKz7fsw=
 github.com/conduitio/conduit-commons v0.0.0-20240229152559-fc28d3c4fc2a h1:ws7NuQWtrgzJeroWcU+gVFJk80khMnIq6Uam/vz1FAw=
 github.com/conduitio/conduit-commons v0.0.0-20240229152559-fc28d3c4fc2a/go.mod h1:Hhr5nik71/Wz3yrLjaKSZ2HRQp1wNSOPY2JGGKz7fsw=
 github.com/conduitio/conduit-connector-file v0.6.0 h1:8tsGeGhKvFwYQZztOOL5/tmOhVShsfo9lQ3b/0fX8kQ=
@@ -1097,8 +1095,6 @@ github.com/conduitio/conduit-connector-s3 v0.5.1 h1:yRo8004ryCIZc/S3iWQ1rN6pm6bj
 github.com/conduitio/conduit-connector-s3 v0.5.1/go.mod h1:nbxzsyS95gbFJ28Job9vFFB+byRFINSv70/13Yi4mKQ=
 github.com/conduitio/conduit-connector-sdk v0.8.0 h1:gvchqoj5d3AQsBoIosx4i32L8Ex9+5BuAyHi/IM9VD4=
 github.com/conduitio/conduit-connector-sdk v0.8.0/go.mod h1:nOz4K3X6fD8YMe5CPbULwSEE18Eu02ZrpT6o6KwQfxs=
-github.com/conduitio/conduit-processor-sdk v0.0.0-20240228181202-04383fd82d29 h1:X6e4OnuJOHb3znmkvSPEf1hVJB7aWAOW7jZX+fMhLf8=
-github.com/conduitio/conduit-processor-sdk v0.0.0-20240228181202-04383fd82d29/go.mod h1:F/tmVZiXzZY60bzUSqwStM1TPaGvmQ9b1n1LuVtAOio=
 github.com/conduitio/conduit-processor-sdk v0.0.0-20240229143457-8e887f258dcb h1:IRlDZcq+HUn+wriXhm7KvBD3mNv6jn6kkNWtBvFB4lM=
 github.com/conduitio/conduit-processor-sdk v0.0.0-20240229143457-8e887f258dcb/go.mod h1:jzWbEx7jzOHi0KFg9iFMKz1bS7DkHJ6ujpB+W6vNgjc=
 github.com/conduitio/yaml/v3 v3.3.0 h1:kbbaOSHcuH39gP4+rgbJGl6DSbLZcJgEaBvkEXJlCsI=
