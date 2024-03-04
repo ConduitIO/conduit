@@ -17,14 +17,15 @@
 package builtin
 
 import (
+	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal/diff"
+	"github.com/goccy/go-json"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 )
@@ -100,15 +101,15 @@ func RunExample(p sdk.Processor, e example) {
 
 	switch rec := got[0].(type) {
 	case sdk.SingleRecord:
-		// produce JSON diff
-		havePrettyJSON, err := json.MarshalIndent(e.Have, "", "  ")
+		// Serialize records to pretty JSON for comparison.
+		havePrettyJSON, err := recordToPrettyJSON(e.Have)
 		if err != nil {
-			log.Fatalf("failed to marshal test record to JSON: %v", err)
+			log.Fatalf("failed to marshal test record to pretty JSON: %v", err)
 		}
 
-		gotPrettyJSON, err := json.MarshalIndent(rec, "", "  ")
+		gotPrettyJSON, err := recordToPrettyJSON(opencdc.Record(rec))
 		if err != nil {
-			log.Fatalf("failed to marshal processed record to JSON: %v", err)
+			log.Fatalf("failed to marshal processed record to pretty JSON: %v", err)
 		}
 
 		edits := diff.Strings(string(havePrettyJSON), string(gotPrettyJSON))
@@ -126,4 +127,20 @@ func RunExample(p sdk.Processor, e example) {
 
 	// append example to processor
 	pi.Examples = append(pi.Examples, e)
+}
+
+func recordToPrettyJSON(r opencdc.Record) ([]byte, error) {
+	serializer := opencdc.JSONSerializer{RawDataAsString: true}
+
+	// Serialize records to pretty JSON for comparison.
+	haveJSON, err := serializer.Serialize(r)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal test record to JSON: %w", err)
+	}
+	var buf bytes.Buffer
+	err = json.Indent(&buf, haveJSON, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("failed to indent test record JSON: %w", err)
+	}
+	return buf.Bytes(), nil
 }
