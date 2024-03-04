@@ -13,11 +13,13 @@
 // limitations under the License.
 
 //go:generate paramgen -output=encode_paramgen.go encodeConfig
+//go:generate mockgen -source encode.go -destination=mock_encoder.go -package=avro -mock_names=encoder=MockEncoder . encoder
 
 package avro
 
 import (
 	"context"
+	"github.com/goccy/go-json"
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
@@ -27,12 +29,16 @@ import (
 	"github.com/lovromazgon/franz-go/pkg/sr"
 )
 
+type encoder interface {
+	Encode(ctx context.Context, sd opencdc.StructuredData) (opencdc.RawData, error)
+}
+
 type encodeProcessor struct {
 	sdk.UnimplementedProcessor
 
 	logger  log.CtxLogger
 	cfg     *encodeConfig
-	encoder *schemaregistry.Encoder
+	encoder encoder
 }
 
 func NewEncodeProcessor(logger log.CtxLogger) sdk.Processor {
@@ -110,27 +116,47 @@ func (p *encodeProcessor) processRecord(ctx context.Context, rec opencdc.Record)
 		return nil, cerrors.Errorf("failed resolving field: %w", err)
 	}
 
-	switch d := field.Get().(type) {
-	case opencdc.RawData:
-		return nil, cerrors.New("raw data not supported " +
-			"(hint: if your records carry JSON data you can parse them into structured data " +
-			"with the processor `encode.json`)")
-	case opencdc.StructuredData:
-		rd, err := p.encoder.Encode(ctx, d)
-		if err != nil {
-			return nil, cerrors.Errorf("failed encoding data: %w", err)
-		}
+	data, err := p.structuredData(field.Get())
 
-		err = field.Set(rd)
-		if err != nil {
-			return nil, cerrors.Errorf("failed setting encoded value into the record: %w", err)
-		}
-		return sdk.SingleRecord(rec), nil
-	default:
-		return nil, cerrors.Errorf("unexpected data type %T", d)
+	rd, err := p.encoder.Encode(ctx, data)
+	if err != nil {
+		return nil, cerrors.Errorf("failed encoding data: %w", err)
 	}
+
+	err = field.Set(rd)
+	if err != nil {
+		return nil, cerrors.Errorf("failed setting encoded value into the record: %w", err)
+	}
+	return sdk.SingleRecord(rec), nil
 }
 
 func (p *encodeProcessor) Teardown(context.Context) error {
 	return nil
+}
+
+func (p *encodeProcessor) structuredData(data any) (opencdc.StructuredData, error) {
+	var sd opencdc.StructuredData
+	switch v := data.(type) {
+	case opencdc.RawData:
+		err := json.Unmarshal(v.Bytes(), &sd)
+		if err != nil {
+			return nil, cerrors.Errorf("failed unmarshalling JSON from raw data: %w", err)
+		}
+	case string:
+		err := json.Unmarshal([]byte(v), &sd)
+		if err != nil {
+			return nil, cerrors.Errorf("failed unmarshalling JSON from raw data: %w", err)
+		}
+	case []byte:
+		err := json.Unmarshal(v, &sd)
+		if err != nil {
+			return nil, cerrors.Errorf("failed unmarshalling JSON from raw data: %w", err)
+		}
+	case opencdc.StructuredData:
+		sd = v
+	default:
+		return nil, cerrors.Errorf("unexpected data type %T", v)
+	}
+
+	return sd, nil
 }
