@@ -236,7 +236,7 @@ func (u *openCDCProcessor) unmarshalKey(structData opencdc.StructuredData) (open
 	return key, nil
 }
 
-func (u *openCDCProcessor) convertPayloadData(payload map[string]interface{}, key string) (opencdc.Data, error) {
+func (u *openCDCProcessor) convertData(payload map[string]interface{}, key string) (opencdc.Data, error) {
 	payloadData, ok := payload[key]
 	if !ok {
 		return nil, nil
@@ -244,11 +244,7 @@ func (u *openCDCProcessor) convertPayloadData(payload map[string]interface{}, ke
 
 	switch data := payloadData.(type) {
 	case map[string]interface{}:
-		convertedData := make(opencdc.StructuredData, len(data))
-		for k, v := range data {
-			convertedData[k] = v
-		}
-		return convertedData, nil
+		return opencdc.StructuredData(data), nil
 	case string:
 		decoded := make([]byte, base64.StdEncoding.DecodedLen(len(data)))
 		n, err := base64.StdEncoding.Decode(decoded, []byte(data))
@@ -273,12 +269,12 @@ func (u *openCDCProcessor) unmarshalPayload(structData opencdc.StructuredData) (
 	case opencdc.Change:
 		payload = p
 	case map[string]interface{}:
-		before, err := u.convertPayloadData(p, "before")
+		before, err := u.convertData(p, "before")
 		if err != nil {
 			return opencdc.Change{}, err
 		}
 
-		after, err := u.convertPayloadData(p, "after")
+		after, err := u.convertData(p, "after")
 		if err != nil {
 			return opencdc.Change{}, err
 		}
