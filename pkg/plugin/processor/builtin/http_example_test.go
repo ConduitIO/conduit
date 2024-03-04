@@ -77,11 +77,10 @@ value of the HTTP response's code in the record's metadata'.`,
 	//    "key": null,
 	//    "payload": {
 	//      "before": null,
-	// -    "after": "d29ybGQ="
-	// +    "after": "aGVsbG8sIHdvcmxk"
+	// -    "after": "world"
+	// +    "after": "hello, world"
 	//    }
 	//  }
-	//
 }
 
 func newTestServer() *httptest.Server {
