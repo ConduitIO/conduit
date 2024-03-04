@@ -23,23 +23,8 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/google/go-cmp/cmp"
-	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/matryer/is"
 )
-
-var cmpProcessedRecordOpts = []cmp.Option{
-	cmpopts.IgnoreUnexported(sdk.SingleRecord{}),
-	cmp.Comparer(func(e1, e2 error) bool {
-		switch {
-		case e1 == nil && e2 == nil:
-			return true
-		case e1 != nil && e2 != nil:
-			return e1.Error() == e2.Error()
-		default:
-			return false
-		}
-	}),
-}
 
 func TestUnwrapDebezium_Configure(t *testing.T) {
 	testCases := []struct {
