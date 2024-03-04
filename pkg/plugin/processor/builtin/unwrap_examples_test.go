@@ -79,7 +79,7 @@ func ExampleUnwrapOpenCDC() {
 	// -  "operation": "create",
 	// +  "operation": "update",
 	//    "metadata": {},
-	// -  "key": "d3JhcHBpbmcga2V5",
+	// -  "key": "wrapping key",
 	// +  "key": {
 	// +    "id": "test-key"
 	// +  },
