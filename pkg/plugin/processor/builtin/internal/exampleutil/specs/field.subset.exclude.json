@@ -1,0 +1,102 @@
+{
+  "specification": {
+    "name": "field.subset.exclude",
+    "summary": "Remove a subset of fields from the record.",
+    "description": "Remove a subset of fields from the record, all the other fields are left untouched.\nIf a field is excluded that contains nested data, the whole tree will be removed.\nIt is not allowed to exclude .Position or .Operation fields.\nNote that this processor only runs on structured data, if the record contains raw JSON data, then use the processor \"decode.json\" to parse it into structured data first.",
+    "version": "v0.1.0",
+    "author": "Meroxa, Inc.",
+    "parameters": {
+      "fields": {
+        "default": "",
+        "description": "Fields is a comma separated list of target fields, as they would be addressed in a Go template (e.g. `.Metadata,.Payload.After.foo`).",
+        "type": "string",
+        "validations": [
+          {
+            "type": "required",
+            "value": ""
+          }
+        ]
+      }
+    }
+  },
+  "examples": [
+    {
+      "summary": "Exclude all fields under payload",
+      "description": "",
+      "config": {
+        "fields": ".Payload"
+      },
+      "have": {
+        "position": null,
+        "operation": "create",
+        "metadata": {
+          "key1": "val1"
+        },
+        "key": null,
+        "payload": {
+          "before": {
+            "bar": "baz"
+          },
+          "after": {
+            "foo": "bar"
+          }
+        }
+      },
+      "want": {
+        "position": null,
+        "operation": "create",
+        "metadata": {
+          "key1": "val1"
+        },
+        "key": null,
+        "payload": {
+          "before": null,
+          "after": null
+        }
+      }
+    },
+    {
+      "summary": "Exclude metadata and some fields under payload and key",
+      "description": "",
+      "config": {
+        "fields": ".Metadata,.Payload.After.foo,.Key.key1"
+      },
+      "have": {
+        "position": null,
+        "operation": "create",
+        "metadata": {
+          "source": "s3"
+        },
+        "key": {
+          "key1": "val1",
+          "key2": "val2"
+        },
+        "payload": {
+          "before": {
+            "bar": "baz"
+          },
+          "after": {
+            "foo": "bar",
+            "foobar": "baz"
+          }
+        }
+      },
+      "want": {
+        "position": null,
+        "operation": "create",
+        "metadata": {},
+        "key": {
+          "key2": "val2"
+        },
+        "payload": {
+          "before": {
+            "bar": "baz"
+          },
+          "after": {
+            "foobar": "baz"
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,34 @@
+{
+  "specification": {
+    "name": "filter",
+    "summary": "Acknowledges all records that get passed to the filter.",
+    "description": "Acknowledges all records that get passed to the filter, so the records will be filtered out if \nthe condition provided to the processor is evaluated to \"true\".\nMake sure to add a condition to this processor, otherwise all records will be filtered out.\"",
+    "version": "v0.1.0",
+    "author": "Meroxa, Inc.",
+    "parameters": {}
+  },
+  "examples": [
+    {
+      "summary": "filter out the record",
+      "description": "",
+      "config": {},
+      "have": {
+        "position": null,
+        "operation": "create",
+        "metadata": {
+          "key1": "val1"
+        },
+        "key": null,
+        "payload": {
+          "before": {
+            "bar": "baz"
+          },
+          "after": {
+            "foo": "bar"
+          }
+        }
+      },
+      "want": {}
+    }
+  ]
+}

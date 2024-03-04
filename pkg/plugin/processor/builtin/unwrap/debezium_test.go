@@ -22,11 +22,12 @@ import (
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal"
 	"github.com/google/go-cmp/cmp"
 	"github.com/matryer/is"
 )
 
-func TestUnwrapDebezium_Configure(t *testing.T) {
+func TestDebeziumProcessor_Configure(t *testing.T) {
 	testCases := []struct {
 		name    string
 		config  map[string]string
@@ -64,7 +65,7 @@ func TestUnwrapDebezium_Configure(t *testing.T) {
 	}
 }
 
-func TestUnwrapDebezium_Process(t *testing.T) {
+func TestDebeziumProcessor_Process(t *testing.T) {
 	testCases := []struct {
 		name    string
 		config  map[string]string
@@ -241,7 +242,7 @@ func TestUnwrapDebezium_Process(t *testing.T) {
 
 			gotSlice := underTest.Process(context.Background(), []opencdc.Record{tc.record})
 			is.Equal(1, len(gotSlice))
-			is.Equal("", cmp.Diff(tc.want, gotSlice[0], cmpProcessedRecordOpts...))
+			is.Equal("", cmp.Diff(tc.want, gotSlice[0], internal.CmpProcessedRecordOpts...))
 		})
 	}
 }

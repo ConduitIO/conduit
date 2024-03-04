@@ -1,0 +1,151 @@
+{
+  "specification": {
+    "name": "field.convert",
+    "summary": "Convert the type of a field.",
+    "description": "Convert takes the field of one type and converts it into another type (e.g. string to integer). \nThe applicable types are string, int, float and bool. Converting can be done between any combination of types. Note that\nbooleans will be converted to numeric values 1 (true) and 0 (false). Processor is only applicable to .Key, .Payload.Before\nand .Payload.After prefixes, and only applicable if said fields contain structured data.\nIf the record contains raw JSON data, then use the processor \"decode.json\" to parse it into structured data first.",
+    "version": "v0.1.0",
+    "author": "Meroxa, Inc.",
+    "parameters": {
+      "field": {
+        "default": "",
+        "description": "Field is the target field, as it would be addressed in a Go template (e.g. `.Payload.After.foo`).\nyou can only convert fields that are under .Key and .Payload, and said fields should contain structured data.",
+        "type": "string",
+        "validations": [
+          {
+            "type": "required",
+            "value": ""
+          },
+          {
+            "type": "regex",
+            "value": "^\\.(Payload|Key).*"
+          }
+        ]
+      },
+      "type": {
+        "default": "",
+        "description": "Type is the target field type after conversion, available options are: string, int, float, bool.",
+        "type": "string",
+        "validations": [
+          {
+            "type": "required",
+            "value": ""
+          },
+          {
+            "type": "inclusion",
+            "value": "string,int,float,bool"
+          }
+        ]
+      }
+    }
+  },
+  "examples": [
+    {
+      "summary": "change .Payload.After.done type to bool",
+      "description": "",
+      "config": {
+        "field": ".Payload.After.done",
+        "type": "bool"
+      },
+      "have": {
+        "position": null,
+        "operation": "update",
+        "metadata": null,
+        "key": {
+          "id": "123"
+        },
+        "payload": {
+          "before": null,
+          "after": {
+            "done": "1"
+          }
+        }
+      },
+      "want": {
+        "position": null,
+        "operation": "update",
+        "metadata": null,
+        "key": {
+          "id": "123"
+        },
+        "payload": {
+          "before": null,
+          "after": {
+            "done": true
+          }
+        }
+      }
+    },
+    {
+      "summary": "change .Key.id type to string",
+      "description": "",
+      "config": {
+        "field": ".Key.id",
+        "type": "string"
+      },
+      "have": {
+        "position": null,
+        "operation": "update",
+        "metadata": null,
+        "key": {
+          "id": 123.345
+        },
+        "payload": {
+          "before": null,
+          "after": {
+            "foo": "bar"
+          }
+        }
+      },
+      "want": {
+        "position": null,
+        "operation": "update",
+        "metadata": null,
+        "key": {
+          "id": "123.345"
+        },
+        "payload": {
+          "before": null,
+          "after": {
+            "foo": "bar"
+          }
+        }
+      }
+    },
+    {
+      "summary": "Change field type in key",
+      "description": "In this example we take the string in field `.Key.id` and change its data type to `int`.",
+      "config": {
+        "field": ".Key.id",
+        "type": "int"
+      },
+      "have": {
+        "position": null,
+        "operation": "update",
+        "metadata": null,
+        "key": {
+          "id": "123"
+        },
+        "payload": {
+          "before": null,
+          "after": {
+            "foo": "bar"
+          }
+        }
+      },
+      "want": {
+        "position": null,
+        "operation": "update",
+        "metadata": null,
+        "key": {
+          "id": 123
+        },
+        "payload": {
+          "before": null,
+          "after": {
+            "foo": "bar"
+          }
+        }
+      }
+    }
+  ]
+}

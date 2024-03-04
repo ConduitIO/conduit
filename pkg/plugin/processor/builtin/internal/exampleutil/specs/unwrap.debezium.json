@@ -1,0 +1,62 @@
+{
+  "specification": {
+    "name": "unwrap.debezium",
+    "summary": "Unwraps a Debezium record from the input OpenCDC record.",
+    "description": "In this processor, the wrapped (Debezium) record replaces the wrapping record (being processed) \ncompletely, except for the position.\n\nThe Debezium record's metadata and the wrapping record's metadata is merged, with the Debezium metadata having precedence.\n\nThis is useful in cases where Conduit acts as an intermediary between a Debezium source and a Debezium destination. \nIn such cases, the Debezium record is set as the OpenCDC record's payload, and needs to be unwrapped for further usage.",
+    "version": "v0.1.0",
+    "author": "Meroxa, Inc.",
+    "parameters": {
+      "field": {
+        "default": ".Payload.After",
+        "description": "Field is a reference to the field which contains the Debezium record.\n\nFor more information about record references, see: https://github.com/ConduitIO/conduit-processor-sdk/blob/cbdc5dcb5d3109f8f13b88624c9e360076b0bcdb/util.go#L66.",
+        "type": "string",
+        "validations": [
+          {
+            "type": "regex",
+            "value": "^.Payload"
+          }
+        ]
+      }
+    }
+  },
+  "examples": [
+    {
+      "summary": "",
+      "description": "This example how to unwrap a Debezium record from a field nested in a record's\n.Payload.After field. It additionally shows how the key is unwrapped, and the metadata merged.",
+      "config": {
+        "field": ".Payload.After.nested"
+      },
+      "have": {
+        "position": "dGVzdC1wb3NpdGlvbg==",
+        "operation": "create",
+        "metadata": {
+          "metadata-key": "metadata-value"
+        },
+        "key": "{\"payload\":\"27\"}",
+        "payload": {
+          "before": null,
+          "after": {
+            "nested": "{\n  \"payload\": {\n    \"after\": {\n      \"description\": \"test1\",\n      \"id\": 27\n    },\n    \"before\": null,\n    \"op\": \"c\",\n    \"source\": {\n      \"opencdc.readAt\": \"1674061777225877000\",\n      \"opencdc.version\": \"v1\"\n    },\n    \"transaction\": null,\n    \"ts_ms\": 1674061777225\n  },\n  \"schema\": {}\n}"
+          }
+        }
+      },
+      "want": {
+        "position": "dGVzdC1wb3NpdGlvbg==",
+        "operation": "create",
+        "metadata": {
+          "metadata-key": "metadata-value",
+          "opencdc.readAt": "1674061777225877000",
+          "opencdc.version": "v1"
+        },
+        "key": "27",
+        "payload": {
+          "before": null,
+          "after": {
+            "description": "test1",
+            "id": 27
+          }
+        }
+      }
+    }
+  ]
+}

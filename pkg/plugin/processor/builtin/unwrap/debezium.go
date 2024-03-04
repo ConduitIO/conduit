@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:generate paramgen -output=debezium_config_paramgen.go debeziumProcConfig
+//go:generate paramgen -output=debezium_paramgen.go debeziumConfig
 
 package unwrap
 
@@ -44,7 +44,7 @@ const (
 	debeziumFieldTimestamp = "ts_ms"
 )
 
-type debeziumProcConfig struct {
+type debeziumConfig struct {
 	// TODO change link to docs
 
 	// Field is a reference to the field which contains the Debezium record.
@@ -77,12 +77,12 @@ This is useful in cases where Conduit acts as an intermediary between a Debezium
 In such cases, the Debezium record is set as the OpenCDC record's payload, and needs to be unwrapped for further usage.`,
 		Version:    "v0.1.0",
 		Author:     "Meroxa, Inc.",
-		Parameters: debeziumProcConfig{}.Parameters(),
+		Parameters: debeziumConfig{}.Parameters(),
 	}, nil
 }
 
 func (d *debeziumProcessor) Configure(_ context.Context, m map[string]string) error {
-	cfg := debeziumProcConfig{}
+	cfg := debeziumConfig{}
 	inputCfg := config.Config(m).Sanitize().ApplyDefaults(cfg.Parameters())
 	err := inputCfg.Validate(cfg.Parameters())
 	if err != nil {

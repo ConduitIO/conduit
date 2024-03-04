@@ -31,7 +31,7 @@ import (
 	"github.com/matryer/is"
 )
 
-func TestWebhookHTTP_Configure(t *testing.T) {
+func TestHTTPProcessor_Configure(t *testing.T) {
 	tests := []struct {
 		name    string
 		config  map[string]string
@@ -149,7 +149,7 @@ func TestWebhookHTTP_Configure(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			is := is.New(t)
-			underTest := NewWebhookHTTP(log.Test(t))
+			underTest := NewHTTPProcessor(log.Test(t))
 			err := underTest.Configure(context.Background(), tc.config)
 			if tc.wantErr == "" {
 				is.NoErr(err)
@@ -161,7 +161,7 @@ func TestWebhookHTTP_Configure(t *testing.T) {
 	}
 }
 
-func TestWebhookHTTP_Success(t *testing.T) {
+func TestHTTPProcessor_Success(t *testing.T) {
 	respBody := []byte("foo-bar/response")
 
 	tests := []struct {
@@ -328,7 +328,7 @@ func TestWebhookHTTP_Success(t *testing.T) {
 			defer srv.Close()
 
 			tc.config["request.url"] = srv.URL
-			underTest := NewWebhookHTTP(log.Test(t))
+			underTest := NewHTTPProcessor(log.Test(t))
 			err := underTest.Configure(context.Background(), tc.config)
 			is.NoErr(err)
 
@@ -342,7 +342,7 @@ func TestWebhookHTTP_Success(t *testing.T) {
 	}
 }
 
-func TestWebhookHTTP_RetrySuccess(t *testing.T) {
+func TestHTTPProcessor_RetrySuccess(t *testing.T) {
 	is := is.New(t)
 
 	respBody := []byte("foo-bar/response")
@@ -382,7 +382,7 @@ func TestWebhookHTTP_RetrySuccess(t *testing.T) {
 		"backoffRetry.factor": "1.2",
 	}
 
-	underTest := NewWebhookHTTP(log.Test(t))
+	underTest := NewHTTPProcessor(log.Test(t))
 	err := underTest.Configure(context.Background(), config)
 	is.NoErr(err)
 
@@ -398,7 +398,7 @@ func TestWebhookHTTP_RetrySuccess(t *testing.T) {
 	is.Equal(srvHandlerCount, 5)
 }
 
-func TestWebhookHTTP_RetryFail(t *testing.T) {
+func TestHTTPProcessor_RetryFail(t *testing.T) {
 	is := is.New(t)
 
 	srvHandlerCount := 0
@@ -418,7 +418,7 @@ func TestWebhookHTTP_RetryFail(t *testing.T) {
 		"backoffRetry.factor": "1.2",
 	}
 
-	underTest := NewWebhookHTTP(log.Test(t))
+	underTest := NewHTTPProcessor(log.Test(t))
 	err := underTest.Configure(context.Background(), config)
 	is.NoErr(err)
 
@@ -432,7 +432,7 @@ func TestWebhookHTTP_RetryFail(t *testing.T) {
 	is.Equal(srvHandlerCount, 6) // expected 6 requests (1 regular and 5 retries)
 }
 
-func TestWebhookHTTP_FilterRecord(t *testing.T) {
+func TestHTTPProcessor_FilterRecord(t *testing.T) {
 	is := is.New(t)
 
 	wantMethod := "POST"
@@ -457,7 +457,7 @@ func TestWebhookHTTP_FilterRecord(t *testing.T) {
 		"request.url": srv.URL,
 	}
 
-	underTest := NewWebhookHTTP(log.Test(t))
+	underTest := NewHTTPProcessor(log.Test(t))
 	err := underTest.Configure(context.Background(), config)
 	is.NoErr(err)
 

@@ -1,0 +1,64 @@
+{
+  "specification": {
+    "name": "unwrap.kafkaconnect",
+    "summary": "Unwraps a Kafka Connect record from an OpenCDC record.",
+    "description": "This processor unwraps a Kafka Connect record from the input OpenCDC record.\n\nThe input record's payload is replaced with the Kafka Connect record.\n\nThis is useful in cases where Conduit acts as an intermediary between a Debezium source and a Debezium destination. \nIn such cases, the Debezium record is set as the OpenCDC record's payload, and needs to be unwrapped for further usage.",
+    "version": "v0.1.0",
+    "author": "Meroxa, Inc.",
+    "parameters": {
+      "field": {
+        "default": ".Payload.After",
+        "description": "Field is a reference to the field which contains the Kafka Connect record.\n\nFor more information about record references, see: https://github.com/ConduitIO/conduit-processor-sdk/blob/cbdc5dcb5d3109f8f13b88624c9e360076b0bcdb/util.go#L66.",
+        "type": "string",
+        "validations": [
+          {
+            "type": "regex",
+            "value": "^.Payload"
+          }
+        ]
+      }
+    }
+  },
+  "examples": [
+    {
+      "summary": "",
+      "description": "This example shows how to unwrap a Kafka Connect record.\n\nThe Kafka Connect record is serialized as a JSON string in the .Payload.After field (raw data).\nThe Kafka Connect record's payload will replace the OpenCDC record's payload.\n\nWe also see how the key is unwrapped too. In this case, the key comes in as structured data.\n",
+      "config": {
+        "field": ".Payload.After"
+      },
+      "have": {
+        "position": "dGVzdCBwb3NpdGlvbg==",
+        "operation": "create",
+        "metadata": {
+          "metadata-key": "metadata-value"
+        },
+        "key": {
+          "payload": {
+            "id": 27
+          },
+          "schema": {}
+        },
+        "payload": {
+          "before": null,
+          "after": "{\n\"payload\": {\n  \"description\": \"test2\"\n},\n\"schema\": {}\n}"
+        }
+      },
+      "want": {
+        "position": "dGVzdCBwb3NpdGlvbg==",
+        "operation": "create",
+        "metadata": {
+          "metadata-key": "metadata-value"
+        },
+        "key": {
+          "id": 27
+        },
+        "payload": {
+          "before": null,
+          "after": {
+            "description": "test2"
+          }
+        }
+      }
+    }
+  ]
+}

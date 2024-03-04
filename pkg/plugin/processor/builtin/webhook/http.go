@@ -81,7 +81,7 @@ type httpProcessor struct {
 	responseStatusRef *sdk.ReferenceResolver
 }
 
-func NewWebhookHTTP(l log.CtxLogger) sdk.Processor {
+func NewHTTPProcessor(l log.CtxLogger) sdk.Processor {
 	return &httpProcessor{logger: l.WithComponent("webhook.httpProcessor")}
 }
 

@@ -40,7 +40,7 @@ type kafkaConnectProcessor struct {
 	fieldRefRes sdk.ReferenceResolver
 }
 
-func NewKafkaConnectProcessor(log.CtxLogger) *kafkaConnectProcessor {
+func NewKafkaConnectProcessor(log.CtxLogger) sdk.Processor {
 	return &kafkaConnectProcessor{}
 }
 

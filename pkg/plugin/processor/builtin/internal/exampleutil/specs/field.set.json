@@ -1,0 +1,137 @@
+{
+  "specification": {
+    "name": "field.set",
+    "summary": "Set the value of a certain field.",
+    "description": "Set the value of a certain field to any value. It is not allowed to set the .Position field.\nThe new value can be a Go template expression, the processor will evaluate the output and assign the value to the target field.\nIf the \"field\" provided doesn't exist, the processor will create that field and assign its value.\nThis processor can be used for multiple purposes, like extracting fields, hoisting data, inserting fields, copying fields, masking fields, etc.\nNote that this processor only runs on structured data, if the record contains raw JSON data, then use the processor\n\"decode.json\" to parse it into structured data first.",
+    "version": "v0.1.0",
+    "author": "Meroxa, Inc.",
+    "parameters": {
+      "field": {
+        "default": "",
+        "description": "Field is the target field, as it would be addressed in a Go template (e.g. `.Payload.After.foo`).\nNote that it is not allowed to set the .Position field.",
+        "type": "string",
+        "validations": [
+          {
+            "type": "required",
+            "value": ""
+          },
+          {
+            "type": "exclusion",
+            "value": ".Position"
+          }
+        ]
+      },
+      "value": {
+        "default": "",
+        "description": "Value is a Go template expression which will be evaluated and stored in `field` (e.g. `{{ .Payload.After }}`).",
+        "type": "string",
+        "validations": [
+          {
+            "type": "required",
+            "value": ""
+          }
+        ]
+      }
+    }
+  },
+  "examples": [
+    {
+      "summary": "Processor will set the operation into \"update\".",
+      "description": "",
+      "config": {
+        "field": ".Operation",
+        "value": "update"
+      },
+      "have": {
+        "position": null,
+        "operation": "create",
+        "metadata": null,
+        "key": null,
+        "payload": {
+          "before": null,
+          "after": null
+        }
+      },
+      "want": {
+        "position": null,
+        "operation": "update",
+        "metadata": null,
+        "key": null,
+        "payload": {
+          "before": null,
+          "after": null
+        }
+      }
+    },
+    {
+      "summary": "Processor will create a new field and set its value",
+      "description": "",
+      "config": {
+        "field": ".Payload.After.foo",
+        "value": "bar"
+      },
+      "have": {
+        "position": null,
+        "operation": "snapshot",
+        "metadata": null,
+        "key": {
+          "my-key": "id"
+        },
+        "payload": {
+          "before": null,
+          "after": null
+        }
+      },
+      "want": {
+        "position": null,
+        "operation": "snapshot",
+        "metadata": null,
+        "key": {
+          "my-key": "id"
+        },
+        "payload": {
+          "before": null,
+          "after": {
+            "foo": "bar"
+          }
+        }
+      }
+    },
+    {
+      "summary": "set the value under .Payload.After.postgres to true if .Metadata.table=\"postgres\"",
+      "description": "",
+      "config": {
+        "field": ".Payload.After.postgres",
+        "value": "{{ eq .Metadata.table \"postgres\" }}"
+      },
+      "have": {
+        "position": null,
+        "operation": "snapshot",
+        "metadata": {
+          "table": "postgres"
+        },
+        "key": null,
+        "payload": {
+          "before": null,
+          "after": {
+            "postgres": "false"
+          }
+        }
+      },
+      "want": {
+        "position": null,
+        "operation": "snapshot",
+        "metadata": {
+          "table": "postgres"
+        },
+        "key": null,
+        "payload": {
+          "before": null,
+          "after": {
+            "postgres": "true"
+          }
+        }
+      }
+    }
+  ]
+}

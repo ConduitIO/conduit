@@ -21,11 +21,12 @@ import (
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal"
 	"github.com/google/go-cmp/cmp"
 	"github.com/matryer/is"
 )
 
-func TestUnwrapKafkaConnect_Configure(t *testing.T) {
+func TestKafkaConnectProcessor_Configure(t *testing.T) {
 	testCases := []struct {
 		name    string
 		config  map[string]string
@@ -62,7 +63,7 @@ func TestUnwrapKafkaConnect_Configure(t *testing.T) {
 		})
 	}
 }
-func TestUnwrapKafkaConnect_Process(t *testing.T) {
+func TestKafkaConnectProcessor_Process(t *testing.T) {
 	testCases := []struct {
 		name   string
 		config map[string]string
@@ -148,7 +149,7 @@ func TestUnwrapKafkaConnect_Process(t *testing.T) {
 
 			got := underTest.Process(ctx, []opencdc.Record{tc.record})
 			is.Equal(1, len(got))
-			is.Equal("", cmp.Diff(tc.want, got[0], cmpProcessedRecordOpts...))
+			is.Equal("", cmp.Diff(tc.want, got[0], internal.CmpProcessedRecordOpts...))
 		})
 	}
 }
