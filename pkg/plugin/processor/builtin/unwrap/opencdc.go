@@ -198,7 +198,6 @@ func (u *openCDCProcessor) unmarshalMetadata(structData opencdc.StructuredData) 
 			} else {
 				metadata[k] = fmt.Sprint(v)
 			}
-
 		}
 	default:
 		return nil, cerrors.Errorf("expected a opencdc.Metadata or a map[string]interface{}, got %T", m)
