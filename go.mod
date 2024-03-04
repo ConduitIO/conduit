@@ -30,6 +30,7 @@ require (
 	github.com/hashicorp/go-hclog v1.6.2
 	github.com/hashicorp/go-plugin v1.6.0
 	github.com/jackc/pgx/v5 v5.5.2
+	github.com/jpillora/backoff v1.0.0
 	github.com/matryer/is v1.4.1
 	github.com/peterbourgon/ff/v3 v3.4.0
 	github.com/piotrkowalczuk/promgrpc/v4 v4.1.2
@@ -200,7 +201,6 @@ require (
 	github.com/jingyugao/rowserrcheck v1.1.1 // indirect
 	github.com/jirfag/go-printf-func-name v0.0.0-20200119135958-7558a9eaa5af // indirect
 	github.com/jjti/go-spancheck v0.5.2 // indirect
-	github.com/jpillora/backoff v1.0.0 // indirect
 	github.com/julz/importas v0.1.0 // indirect
 	github.com/kisielk/errcheck v1.7.0 // indirect
 	github.com/kisielk/gotool v1.0.0 // indirect

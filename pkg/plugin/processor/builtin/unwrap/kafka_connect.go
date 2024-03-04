@@ -18,13 +18,13 @@ package unwrap
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/goccy/go-json"
 )
 
 type kafkaConnectConfig struct {

@@ -625,5 +625,125 @@
         }
       }
     ]
+  },
+  {
+    "specification": {
+      "Name": "webhook.http",
+      "Summary": "HTTP webhook processor",
+      "Description": "\nA processor that sends an HTTP request to the specified URL, retries on error and \nsaves the response body and, optionally, the response status. \n",
+      "Version": "v0.1.0",
+      "Author": "Meroxa, Inc.",
+      "Parameters": {
+        "backoffRetry.count": {
+          "Default": "0",
+          "Description": "backoffRetry.count is the maximum number of retries for an individual record when backing off following an error.",
+          "Type": 3,
+          "Validations": [
+            {
+              "V": -1
+            }
+          ]
+        },
+        "backoffRetry.factor": {
+          "Default": "2",
+          "Description": "backoffRetry.factor is the multiplying factor for each increment step.",
+          "Type": 3,
+          "Validations": [
+            {
+              "V": 0
+            }
+          ]
+        },
+        "backoffRetry.max": {
+          "Default": "5s",
+          "Description": "backoffRetry.max is the maximum waiting time before retrying.",
+          "Type": 6,
+          "Validations": []
+        },
+        "backoffRetry.min": {
+          "Default": "100ms",
+          "Description": "backoffRetry.min is the minimum waiting time before retrying.",
+          "Type": 6,
+          "Validations": []
+        },
+        "request.body": {
+          "Default": ".",
+          "Description": "request.body specifies which field from the input record should be used as the body in the HTTP request. The value of this parameter should be a valid record field reference: See: sdk.NewReferenceResolver",
+          "Type": 1,
+          "Validations": []
+        },
+        "request.contentType": {
+          "Default": "application/json",
+          "Description": "request.contentType is the value of the Content-Type header.",
+          "Type": 1,
+          "Validations": []
+        },
+        "request.method": {
+          "Default": "POST",
+          "Description": "request.method is the HTTP request method to be used.",
+          "Type": 1,
+          "Validations": []
+        },
+        "request.url": {
+          "Default": "",
+          "Description": "request.url used in the HTTP request.",
+          "Type": 1,
+          "Validations": [
+            {}
+          ]
+        },
+        "response.body": {
+          "Default": ".Payload.After",
+          "Description": "response.body specifies to which field should the response body be saved to. The value of this parameter should be a valid record field reference: See: sdk.NewReferenceResolver",
+          "Type": 1,
+          "Validations": []
+        },
+        "response.status": {
+          "Default": "",
+          "Description": "response.status specifies to which field should the response status be saved to. The value of this parameter should be a valid record field reference. If no value is set, then the response status will NOT be saved. See: sdk.NewReferenceResolver",
+          "Type": 1,
+          "Validations": []
+        }
+      }
+    },
+    "examples": [
+      {
+        "description": "\nThis example shows how to use the HTTP processor to send a record's .Payload.After field to a dummy HTTP server \nthat replies back with a greeting. \n\nThe record's .Payload.After is overwritten with the response. Additionally, the example shows how to store the \nvalue of the HTTP response's code in the record's metadata'.",
+        "config": {
+          "backoffRetry.count": "0",
+          "backoffRetry.factor": "2",
+          "backoffRetry.max": "5s",
+          "backoffRetry.min": "100ms",
+          "request.body": ".Payload.After",
+          "request.contentType": "application/json",
+          "request.method": "POST",
+          "request.url": "http://127.0.0.1:54321",
+          "response.body": ".Payload.After",
+          "response.status": ".Metadata[\"http_status\"]"
+        },
+        "have": {
+          "position": null,
+          "operation": "Operation(0)",
+          "metadata": null,
+          "key": null,
+          "payload": {
+            "before": null,
+            "after": "world"
+          }
+        },
+        "want": {
+          "position": null,
+          "operation": "Operation(0)",
+          "metadata": {
+            "http_status": "200"
+          },
+          "key": null,
+          "payload": {
+            "before": null,
+            "after": "hello, world"
+          }
+        }
+      }
+    ]
   }
 ]
