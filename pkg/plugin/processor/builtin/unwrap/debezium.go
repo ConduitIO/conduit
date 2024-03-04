@@ -68,9 +68,8 @@ func (d *debeziumProcessor) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
 		Name:    "unwrap.debezium",
 		Summary: "Unwraps a Debezium record from the input OpenCDC record.",
-		Description: `This processor unwraps a Debezium record from the input OpenCDC record.
-
-The wrapped (Debezium) record replaces the wrapping record (being processed) completely, except for the position.
+		Description: `In this processor, the wrapped (Debezium) record replaces the wrapping record (being processed) 
+completely, except for the position.
 
 The Debezium record's metadata and the wrapping record's metadata is merged, with the Debezium metadata having precedence.
 
