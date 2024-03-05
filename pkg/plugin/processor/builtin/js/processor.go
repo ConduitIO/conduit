@@ -52,19 +52,15 @@ type gojaContext struct {
 }
 
 type processorConfig struct {
-	// Script is the JavaScript code for this processor.
-	// It needs to have a function 'process()' that accepts
-	// an array of records and returns an array of processed records.
-	// The processed records in the returned array need to have matching indexes with
-	// records in the input array. In other words, for the record at input_array[i]
-	// the processed record should be at output_array[i].
-	//
-	// The processed record can be one of the following:
-	// 1. a processed record itself
-	// 2. a filter record (constructed with new FilterRecord())
-	// 3. an error record (constructred with new ErrorRecord())
+	// JavaScript code for this processor.
+	// It needs to have a function `process()` that accept
+	// a record and returns a record.
+	// The `process()` function can either modify the input record and return it,
+	// or create a new record.
+	// If a record needs to be filtered (dropped from the pipeline),
+	// then the `process()` function should return a `null`.
 	Script string `json:"script"`
-	// ScriptPath is the path to a .js file containing the processor code.
+	// The path to a .js file containing the processor code.
 	ScriptPath string `json:"script.path"`
 }
 
@@ -90,7 +86,7 @@ func (p *processor) Specification() (sdk.Specification, error) {
 
 The following helper functions and fields are available:
 * logger: a logger that outputs to Conduit's logs. Check zerolog's API on how to use it.
-* SingleRecord(): constructs a new record which represents a successful processing result.
+* Record(): constructs a new record which represents a successful processing result.
 It's analogous to sdk.SingleRecord from Conduit's Go processor SDK.
 * RawData(): creates a raw data object. It's analogous to opencdc.RawData. Optionally, it
 accepts a string argument, which will be cast into a byte array, for example: record.Key = RawData("new key").
