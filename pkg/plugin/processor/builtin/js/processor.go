@@ -31,7 +31,7 @@ import (
 
 const entrypoint = "process"
 
-// singleRecord is an intermediary representation of opencdc.Record that is passed to
+// jsRecord is an intermediary representation of opencdc.Record that is passed to
 // the JavaScript transform. We use this because using opencdc.Record would not
 // allow us to modify or access certain data (e.g. metadata or structured data).
 type jsRecord struct {
@@ -43,13 +43,6 @@ type jsRecord struct {
 		Before any
 		After  any
 	}
-}
-
-type filterRecord struct {
-}
-
-type errorRecord struct {
-	Error string
 }
 
 // gojaContext represents one independent goja context.
@@ -178,7 +171,6 @@ func (p *processor) Process(_ context.Context, records []opencdc.Record) []sdk.P
 		}
 
 		out = append(out, proc)
-
 	}
 
 	return out
@@ -241,24 +233,6 @@ func (p *processor) newSingleRecord(runtime *goja.Runtime) func(goja.Constructor
 		}
 		// We need to return a pointer to make the returned object mutable.
 		return runtime.ToValue(&r).ToObject(runtime)
-	}
-}
-
-func (p *processor) newFilterRecord(runtime *goja.Runtime) func(goja.ConstructorCall) *goja.Object {
-	return func(call goja.ConstructorCall) *goja.Object {
-		// We need to return a pointer to make the returned object mutable.
-		return runtime.ToValue(&filterRecord{}).ToObject(runtime)
-	}
-}
-
-func (p *processor) newErrorRecord(runtime *goja.Runtime) func(goja.ConstructorCall) *goja.Object {
-	return func(call goja.ConstructorCall) *goja.Object {
-		rec := &errorRecord{}
-		if len(call.Arguments) > 0 {
-			rec.Error = call.Arguments[0].String()
-		}
-		// We need to return a pointer to make the returned object mutable.
-		return runtime.ToValue(rec).ToObject(runtime)
 	}
 }
 
@@ -350,57 +324,4 @@ func (p *processor) toSDKRecords(v goja.Value) (sdk.ProcessedRecord, error) {
 			After:  convertData(jsr.Payload.After),
 		},
 	}, nil
-}
-
-func (p *processor) makeProcessedRecords(record sdk.ProcessedRecord, count int) []sdk.ProcessedRecord {
-	out := make([]sdk.ProcessedRecord, count)
-	for i := 0; i < count; i++ {
-		out[i] = record
-	}
-
-	return out
-}
-
-func (p *processor) toProcessedRecord(obj interface{}) sdk.ProcessedRecord {
-	switch v := obj.(type) {
-	case *jsRecord:
-		return p.toSingleRecord(v)
-	case *filterRecord:
-		return sdk.FilterRecord{}
-	case *errorRecord:
-		return sdk.ErrorRecord{Error: cerrors.New(v.Error)}
-	default:
-		return sdk.ErrorRecord{
-			Error: cerrors.Errorf("expected one of [*singleRecord, *filterRecord, *errorRecord], but got %T", obj),
-		}
-	}
-}
-
-func (p *processor) toSingleRecord(jsRec *jsRecord) sdk.ProcessedRecord {
-	var op opencdc.Operation
-	err := op.UnmarshalText([]byte(jsRec.Operation))
-	if err != nil {
-		return sdk.ErrorRecord{Error: cerrors.Errorf("could not unmarshal operation: %w", err)}
-	}
-
-	convertData := func(d interface{}) opencdc.Data {
-		switch v := d.(type) {
-		case *opencdc.RawData:
-			return *v
-		case map[string]interface{}:
-			return opencdc.StructuredData(v)
-		}
-		return nil
-	}
-
-	return sdk.SingleRecord{
-		Position:  jsRec.Position,
-		Operation: op,
-		Metadata:  jsRec.Metadata,
-		Key:       convertData(jsRec.Key),
-		Payload: opencdc.Change{
-			Before: convertData(jsRec.Payload.Before),
-			After:  convertData(jsRec.Payload.After),
-		},
-	}
 }

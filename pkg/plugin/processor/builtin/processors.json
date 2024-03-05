@@ -3,19 +3,19 @@
     "specification": {
       "Name": "custom.javascript",
       "Summary": "JavaScript processor",
-      "Description": "A processor that makes it possible to process Conduit records using JavaScript.\n\nThe following helper functions and fields are available:\n* logger: a logger that outputs to Conduit's logs. Check zerolog's API on how to use it.\n* SingleRecord(): constructs a new record which represents a successful processing result.\nIt's analogous to sdk.SingleRecord from Conduit's Go processor SDK.\n* FilterRecord(): returning a FilterRecord from the process() functions means that the\nrecord should be dropped from the pipeline.\n* ErrorRecord(): returning an ErrorRecord from the process() function means that there\nwas an error processing the input record. Details about the error can be provided through a\nstring argument in the constructor, e.g. ErrorRecord(\"details about the error\").\n* RawData(): creates a raw data object. It's analogous to opencdc.RawData. Optionally, it\naccepts a string argument, which will be cast into a byte array, for example: record.Key = RawData(\"new key\").\n* StructuredData(): creates a structured data (map-like) object.\n\nTo find out what's possible with the JS processors, also refer to the documentation for \n[goja](https://github.com/dop251/goja), which is the JavaScript engine we use.",
+      "Description": "A processor that makes it possible to process Conduit records using JavaScript.\n\nThe following helper functions and fields are available:\n* logger: a logger that outputs to Conduit's logs. Check zerolog's API on how to use it.\n* SingleRecord(): constructs a new record which represents a successful processing result.\nIt's analogous to sdk.SingleRecord from Conduit's Go processor SDK.\n* RawData(): creates a raw data object. It's analogous to opencdc.RawData. Optionally, it\naccepts a string argument, which will be cast into a byte array, for example: record.Key = RawData(\"new key\").\n* StructuredData(): creates a structured data (map-like) object.\n\nTo find out what's possible with the JS processors, also refer to the documentation for \n[goja](https://github.com/dop251/goja), which is the JavaScript engine we use.",
       "Version": "v0.1.0",
       "Author": "Meroxa, Inc.",
       "Parameters": {
         "script": {
           "default": "",
-          "description": "script is the Javascript code for this processor. It needs to have a function 'process()' that accepts an array of records and returns an array of processed records. The processed records in the returned array need to have matching indexes with records in the input array. In other words, for the record at input_array[i] the processed record should be at output_array[i].  The processed record can be one of the following: 1. a processed record itself 2. a filter record (constructed with new FilterRecord()) 3. an error record (constructred with new ErrorRecord())",
+          "description": "Script is the JavaScript code for this processor.\nIt needs to have a function 'process()' that accepts\nan array of records and returns an array of processed records.\nThe processed records in the returned array need to have matching indexes with\nrecords in the input array. In other words, for the record at input_array[i]\nthe processed record should be at output_array[i].\n\nThe processed record can be one of the following:\n1. a processed record itself\n2. a filter record (constructed with new FilterRecord())\n3. an error record (constructred with new ErrorRecord())",
           "type": "string",
           "validations": []
         },
         "script.path": {
           "default": "",
-          "description": "script.path is the path to a .js file containing the processor code.",
+          "description": "ScriptPath is the path to a .js file containing the processor code.",
           "type": "string",
           "validations": []
         }
@@ -25,7 +25,7 @@
       {
         "description": "",
         "config": {
-          "script": "function process(records) {\n\t\t\t\t\trecords[0].Metadata[\"processed\"] = \"true\";\n\t\t\t\t\tlet existing = String.fromCharCode.apply(String, records[0].Payload.After);\n\t\t\t\t\trecords[0].Payload.After = RawData(\"hello, \" + existing);\n\t\t\t\t\treturn records;\n\t\t\t\t}",
+          "script": "function process(rec) {\n\t\t\t\t\trec.Metadata[\"processed\"] = \"true\";\n\t\t\t\t\tlet existing = String.fromCharCode.apply(String, rec.Payload.After);\n\t\t\t\t\trec.Payload.After = RawData(\"hello, \" + existing);\n\t\t\t\t\treturn rec;\n\t\t\t\t}",
           "script.path": ""
         },
         "have": {
