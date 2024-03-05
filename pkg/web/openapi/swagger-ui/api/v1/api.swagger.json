@@ -1036,7 +1036,92 @@
     },
     "/v1/plugins": {
       "get": {
+        "summary": "deprecated: use ListConnectorPlugins instead",
         "operationId": "PluginService_ListPlugins",
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "$ref": "#/definitions/v1PluginSpecifications"
+              }
+            }
+          },
+          "500": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            },
+            "examples": {
+              "application/json": {
+                "code": 13,
+                "message": "server error",
+                "details": []
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "name",
+            "description": "Regex to filter plugins by name.",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "PluginService"
+        ]
+      }
+    },
+    "/v1/plugins/connectors": {
+      "get": {
+        "operationId": "PluginService_ListConnectorPlugins",
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "$ref": "#/definitions/v1ConnectorPluginSpecifications"
+              }
+            }
+          },
+          "500": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            },
+            "examples": {
+              "application/json": {
+                "code": 13,
+                "message": "server error",
+                "details": []
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "name",
+            "description": "Regex to filter plugins by name.",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "PluginService"
+        ]
+      }
+    },
+    "/v1/plugins/processors": {
+      "get": {
+        "operationId": "PluginService_ListProcessorPlugins",
         "responses": {
           "200": {
             "description": "",
@@ -1467,33 +1552,6 @@
         }
       }
     },
-    "ParameterValidation": {
-      "type": "object",
-      "properties": {
-        "type": {
-          "$ref": "#/definitions/ParameterValidationType"
-        },
-        "value": {
-          "type": "string",
-          "description": "The value to be compared with the parameter,\nor a comma separated list in case of Validation.TYPE_INCLUSION or Validation.TYPE_EXCLUSION."
-        }
-      },
-      "description": "Validation to be made on the parameter."
-    },
-    "ParameterValidationType": {
-      "type": "string",
-      "enum": [
-        "TYPE_UNSPECIFIED",
-        "TYPE_REQUIRED",
-        "TYPE_GREATER_THAN",
-        "TYPE_LESS_THAN",
-        "TYPE_INCLUSION",
-        "TYPE_EXCLUSION",
-        "TYPE_REGEX"
-      ],
-      "default": "TYPE_UNSPECIFIED",
-      "description": " - TYPE_REQUIRED: Parameter must be present.\n - TYPE_GREATER_THAN: Parameter must be greater than {value}.\n - TYPE_LESS_THAN: Parameter must be less than {value}.\n - TYPE_INCLUSION: Parameter must be included in the comma separated list {value}.\n - TYPE_EXCLUSION: Parameter must not be included in the comma separated list {value}.\n - TYPE_REGEX: Parameter must match the regex {value}."
-    },
     "PipelineDLQ": {
       "type": "object",
       "properties": {
@@ -1532,40 +1590,33 @@
         }
       }
     },
-    "PluginSpecificationsParameter": {
+    "PluginSpecificationsParameterValidation": {
       "type": "object",
       "properties": {
-        "description": {
-          "type": "string"
-        },
-        "default": {
-          "type": "string"
-        },
         "type": {
-          "$ref": "#/definitions/PluginSpecificationsParameterType"
+          "$ref": "#/definitions/PluginSpecificationsParameterValidationType"
         },
-        "validations": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "$ref": "#/definitions/ParameterValidation"
-          }
+        "value": {
+          "type": "string",
+          "description": "The value to be compared with the parameter,\nor a comma separated list in case of Validation.TYPE_INCLUSION or Validation.TYPE_EXCLUSION."
         }
-      }
+      },
+      "title": "Deprecated: use config.v1.Validation instead"
     },
-    "PluginSpecificationsParameterType": {
+    "PluginSpecificationsParameterValidationType": {
       "type": "string",
       "enum": [
         "TYPE_UNSPECIFIED",
-        "TYPE_STRING",
-        "TYPE_INT",
-        "TYPE_FLOAT",
-        "TYPE_BOOL",
-        "TYPE_FILE",
-        "TYPE_DURATION"
+        "TYPE_REQUIRED",
+        "TYPE_GREATER_THAN",
+        "TYPE_LESS_THAN",
+        "TYPE_INCLUSION",
+        "TYPE_EXCLUSION",
+        "TYPE_REGEX"
       ],
       "default": "TYPE_UNSPECIFIED",
-      "description": "Type shows the parameter type.\n\n - TYPE_STRING: Parameter is a string.\n - TYPE_INT: Parameter is an integer.\n - TYPE_FLOAT: Parameter is a float.\n - TYPE_BOOL: Parameter is a boolean.\n - TYPE_FILE: Parameter is a file.\n - TYPE_DURATION: Parameter is a duration."
+      "description": "- TYPE_REQUIRED: Parameter must be present.\n - TYPE_GREATER_THAN: Parameter must be greater than {value}.\n - TYPE_LESS_THAN: Parameter must be less than {value}.\n - TYPE_INCLUSION: Parameter must be included in the comma separated list {value}.\n - TYPE_EXCLUSION: Parameter must not be included in the comma separated list {value}.\n - TYPE_REGEX: Parameter must match the regex {value}.",
+      "title": "Deprecated: use config.v1.Validation.Type instead"
     },
     "ProcessorParent": {
       "type": "object",
@@ -1601,6 +1652,73 @@
           "type": "string"
         }
       }
+    },
+    "configv1Parameter": {
+      "type": "object",
+      "properties": {
+        "default": {
+          "type": "string",
+          "description": "Default is the default value of the parameter. If there is no default\nvalue use an empty string."
+        },
+        "description": {
+          "type": "string",
+          "description": "Description explains what the parameter does and how to configure it."
+        },
+        "type": {
+          "$ref": "#/definitions/configv1ParameterType",
+          "description": "Type defines the parameter data type."
+        },
+        "validations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/configv1Validation"
+          },
+          "description": "Validations are validations to be made on the parameter."
+        }
+      },
+      "description": "Parameter describes a single config parameter."
+    },
+    "configv1ParameterType": {
+      "type": "string",
+      "enum": [
+        "TYPE_UNSPECIFIED",
+        "TYPE_STRING",
+        "TYPE_INT",
+        "TYPE_FLOAT",
+        "TYPE_BOOL",
+        "TYPE_FILE",
+        "TYPE_DURATION"
+      ],
+      "default": "TYPE_UNSPECIFIED",
+      "description": "Type shows the parameter type.\n\n - TYPE_STRING: Parameter is a string.\n - TYPE_INT: Parameter is an integer.\n - TYPE_FLOAT: Parameter is a float.\n - TYPE_BOOL: Parameter is a boolean.\n - TYPE_FILE: Parameter is a file.\n - TYPE_DURATION: Parameter is a duration."
+    },
+    "configv1Validation": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "$ref": "#/definitions/configv1ValidationType"
+        },
+        "value": {
+          "type": "string",
+          "description": "The value to be compared with the parameter,\nor a comma separated list in case of Validation.TYPE_INCLUSION or Validation.TYPE_EXCLUSION."
+        }
+      },
+      "description": "Validation to be made on the parameter."
+    },
+    "configv1ValidationType": {
+      "type": "string",
+      "enum": [
+        "TYPE_UNSPECIFIED",
+        "TYPE_REQUIRED",
+        "TYPE_GREATER_THAN",
+        "TYPE_LESS_THAN",
+        "TYPE_INCLUSION",
+        "TYPE_EXCLUSION",
+        "TYPE_REGEX"
+      ],
+      "default": "TYPE_UNSPECIFIED",
+      "description": " - TYPE_REQUIRED: Parameter must be present.\n - TYPE_GREATER_THAN: Parameter must be greater than {value}.\n - TYPE_LESS_THAN: Parameter must be less than {value}.\n - TYPE_INCLUSION: Parameter must be included in the comma separated list {value}.\n - TYPE_EXCLUSION: Parameter must not be included in the comma separated list {value}.\n - TYPE_REGEX: Parameter must match the regex {value}."
     },
     "googlerpcStatus": {
       "type": "object",
@@ -1719,6 +1837,46 @@
           }
         }
       }
+    },
+    "v1ConnectorPluginSpecifications": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Name is the name of the plugin."
+        },
+        "summary": {
+          "type": "string",
+          "description": "Summary is a brief description of the plugin and what it does,\nideally not longer than one sentence."
+        },
+        "description": {
+          "type": "string",
+          "description": "Description is a longer form field, appropriate for README-like\ntext that the author can provide for documentation about the\nusage of the plugin."
+        },
+        "version": {
+          "type": "string",
+          "description": "Version string. Should follow semantic versioning and use the \"v\"\nprefix (e.g. v1.23.4)."
+        },
+        "author": {
+          "type": "string",
+          "description": "Author declares the entity that created or maintains this plugin."
+        },
+        "destinationParams": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/configv1Parameter"
+          },
+          "description": "A map that describes parameters available for configuring the\ndestination plugin."
+        },
+        "sourceParams": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/configv1Parameter"
+          },
+          "description": "A map that describes parameters available for configuring the\nsource plugin."
+        }
+      },
+      "description": "ConnectorPluginSpecifications describes the specifications of a connector plugin."
     },
     "v1ConnectorType": {
       "type": "string",
@@ -1905,6 +2063,18 @@
         }
       }
     },
+    "v1ListConnectorPluginsResponse": {
+      "type": "object",
+      "properties": {
+        "plugins": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1ConnectorPluginSpecifications"
+          }
+        }
+      }
+    },
     "v1ListConnectorsResponse": {
       "type": "object",
       "properties": {
@@ -2033,16 +2203,54 @@
         "destinationParams": {
           "type": "object",
           "additionalProperties": {
-            "$ref": "#/definitions/PluginSpecificationsParameter"
+            "$ref": "#/definitions/v1PluginSpecificationsParameter"
           }
         },
         "sourceParams": {
           "type": "object",
           "additionalProperties": {
-            "$ref": "#/definitions/PluginSpecificationsParameter"
+            "$ref": "#/definitions/v1PluginSpecificationsParameter"
           }
         }
-      }
+      },
+      "title": "Deprecated: use ConnectorPluginSpecifications instead"
+    },
+    "v1PluginSpecificationsParameter": {
+      "type": "object",
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "default": {
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/definitions/v1PluginSpecificationsParameterType"
+        },
+        "validations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/PluginSpecificationsParameterValidation"
+          }
+        }
+      },
+      "title": "Deprecated: use config.v1.Parameter instead"
+    },
+    "v1PluginSpecificationsParameterType": {
+      "type": "string",
+      "enum": [
+        "TYPE_UNSPECIFIED",
+        "TYPE_STRING",
+        "TYPE_INT",
+        "TYPE_FLOAT",
+        "TYPE_BOOL",
+        "TYPE_FILE",
+        "TYPE_DURATION"
+      ],
+      "default": "TYPE_UNSPECIFIED",
+      "description": "- TYPE_STRING: Parameter is a string.\n - TYPE_INT: Parameter is an integer.\n - TYPE_FLOAT: Parameter is a float.\n - TYPE_BOOL: Parameter is a boolean.\n - TYPE_FILE: Parameter is a file.\n - TYPE_DURATION: Parameter is a duration.",
+      "title": "Deprecated: use config.v1.Parameter.Type instead"
     },
     "v1Processor": {
       "type": "object",

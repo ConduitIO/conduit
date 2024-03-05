@@ -1280,14 +1280,19 @@ var InformationService_ServiceDesc = grpc.ServiceDesc{
 }
 
 const (
-	PluginService_ListPlugins_FullMethodName = "/api.v1.PluginService/ListPlugins"
+	PluginService_ListPlugins_FullMethodName          = "/api.v1.PluginService/ListPlugins"
+	PluginService_ListConnectorPlugins_FullMethodName = "/api.v1.PluginService/ListConnectorPlugins"
+	PluginService_ListProcessorPlugins_FullMethodName = "/api.v1.PluginService/ListProcessorPlugins"
 )
 
 // PluginServiceClient is the client API for PluginService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type PluginServiceClient interface {
+	// deprecated: use ListConnectorPlugins instead
 	ListPlugins(ctx context.Context, in *ListPluginsRequest, opts ...grpc.CallOption) (*ListPluginsResponse, error)
+	ListConnectorPlugins(ctx context.Context, in *ListPluginsRequest, opts ...grpc.CallOption) (*ListConnectorPluginsResponse, error)
+	ListProcessorPlugins(ctx context.Context, in *ListPluginsRequest, opts ...grpc.CallOption) (*ListPluginsResponse, error)
 }
 
 type pluginServiceClient struct {
@@ -1307,11 +1312,32 @@ func (c *pluginServiceClient) ListPlugins(ctx context.Context, in *ListPluginsRe
 	return out, nil
 }
 
+func (c *pluginServiceClient) ListConnectorPlugins(ctx context.Context, in *ListPluginsRequest, opts ...grpc.CallOption) (*ListConnectorPluginsResponse, error) {
+	out := new(ListConnectorPluginsResponse)
+	err := c.cc.Invoke(ctx, PluginService_ListConnectorPlugins_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *pluginServiceClient) ListProcessorPlugins(ctx context.Context, in *ListPluginsRequest, opts ...grpc.CallOption) (*ListPluginsResponse, error) {
+	out := new(ListPluginsResponse)
+	err := c.cc.Invoke(ctx, PluginService_ListProcessorPlugins_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // PluginServiceServer is the server API for PluginService service.
 // All implementations must embed UnimplementedPluginServiceServer
 // for forward compatibility
 type PluginServiceServer interface {
+	// deprecated: use ListConnectorPlugins instead
 	ListPlugins(context.Context, *ListPluginsRequest) (*ListPluginsResponse, error)
+	ListConnectorPlugins(context.Context, *ListPluginsRequest) (*ListConnectorPluginsResponse, error)
+	ListProcessorPlugins(context.Context, *ListPluginsRequest) (*ListPluginsResponse, error)
 	mustEmbedUnimplementedPluginServiceServer()
 }
 
@@ -1321,6 +1347,12 @@ type UnimplementedPluginServiceServer struct {
 
 func (UnimplementedPluginServiceServer) ListPlugins(context.Context, *ListPluginsRequest) (*ListPluginsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListPlugins not implemented")
+}
+func (UnimplementedPluginServiceServer) ListConnectorPlugins(context.Context, *ListPluginsRequest) (*ListConnectorPluginsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListConnectorPlugins not implemented")
+}
+func (UnimplementedPluginServiceServer) ListProcessorPlugins(context.Context, *ListPluginsRequest) (*ListPluginsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListProcessorPlugins not implemented")
 }
 func (UnimplementedPluginServiceServer) mustEmbedUnimplementedPluginServiceServer() {}
 
@@ -1353,6 +1385,42 @@ func _PluginService_ListPlugins_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
+func _PluginService_ListConnectorPlugins_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListPluginsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginServiceServer).ListConnectorPlugins(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginService_ListConnectorPlugins_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginServiceServer).ListConnectorPlugins(ctx, req.(*ListPluginsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PluginService_ListProcessorPlugins_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListPluginsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginServiceServer).ListProcessorPlugins(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginService_ListProcessorPlugins_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginServiceServer).ListProcessorPlugins(ctx, req.(*ListPluginsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // PluginService_ServiceDesc is the grpc.ServiceDesc for PluginService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1363,6 +1431,14 @@ var PluginService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListPlugins",
 			Handler:    _PluginService_ListPlugins_Handler,
+		},
+		{
+			MethodName: "ListConnectorPlugins",
+			Handler:    _PluginService_ListConnectorPlugins_Handler,
+		},
+		{
+			MethodName: "ListProcessorPlugins",
+			Handler:    _PluginService_ListProcessorPlugins_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
