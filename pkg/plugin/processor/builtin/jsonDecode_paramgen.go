@@ -4,6 +4,8 @@
 package builtin
 
 import (
+	"regexp"
+
 	"github.com/conduitio/conduit-commons/config"
 )
 
@@ -11,11 +13,11 @@ func (jsonDecodeConfig) Parameters() map[string]config.Parameter {
 	return map[string]config.Parameter{
 		"field": {
 			Default:     "",
-			Description: "Field is the target field, as it would be addressed in a Go template (e.g. `.Payload.After`).\nApplicable values are `.Key`, `.Payload.Before` and `.Payload.After`, as they accept structured data format.",
+			Description: "Field is the target field, as it would be addressed in a Go template (e.g. `.Payload.After.foo`).\nyou can only decode fields that are under .Key and .Payload.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{
 				config.ValidationRequired{},
-				config.ValidationInclusion{List: []string{".Key", ".Payload.Before", ".Payload.After"}},
+				config.ValidationRegex{Regex: regexp.MustCompile("^\\.(Payload|Key).*")},
 			},
 		},
 	}

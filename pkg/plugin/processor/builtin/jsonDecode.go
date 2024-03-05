@@ -36,9 +36,9 @@ func newJSONDecode() *jsonDecode {
 }
 
 type jsonDecodeConfig struct {
-	// Field is the target field, as it would be addressed in a Go template (e.g. `.Payload.After`).
-	// Applicable values are `.Key`, `.Payload.Before` and `.Payload.After`, as they accept structured data format.
-	Field string `json:"field" validate:"required,inclusion=.Key|.Payload.Before|.Payload.After"`
+	// Field is the target field, as it would be addressed in a Go template (e.g. `.Payload.After.foo`).
+	// you can only decode fields that are under .Key and .Payload.
+	Field string `json:"field" validate:"required,regex=^\\.(Payload|Key).*"`
 }
 
 func (p *jsonDecode) Specification() (sdk.Specification, error) {
@@ -47,7 +47,7 @@ func (p *jsonDecode) Specification() (sdk.Specification, error) {
 		Summary: "Decodes a specific field from JSON raw data (string) to structured data.",
 		Description: `The processor takes JSON raw data (string) from the target field, parses it as JSON structured data
 and stores the decoded structured data in the target field.
-This processor is only applicable to .Key, .Payload.Before and .Payload.After, as they accept structured data format.
+This processor is only applicable to fields under .Key, .Payload.Before and .Payload.After, as they accept structured data format.
 `,
 		Version:    "v0.1.0",
 		Author:     "Meroxa, Inc.",
@@ -85,24 +85,22 @@ func (p *jsonDecode) Process(_ context.Context, records []opencdc.Record) []sdk.
 		data := ref.Get()
 		switch d := data.(type) {
 		case opencdc.RawData:
-			var jsonData opencdc.StructuredData
-			if len(d.Bytes()) == 0 {
-				// set value to empty json
-				err := ref.Set(jsonData)
-				if err != nil {
-					return append(out, sdk.ErrorRecord{Error: err})
-				}
-				break
-			}
-			err := json.Unmarshal(d.Bytes(), &jsonData)
-			if err != nil {
-				return append(out, sdk.ErrorRecord{Error: cerrors.Errorf("failed to unmarshal raw data as JSON: %w", err)})
-			}
-			err = ref.Set(jsonData)
+			bytes := d.Bytes()
+			err := p.setJSONData(bytes, ref)
 			if err != nil {
 				return append(out, sdk.ErrorRecord{Error: err})
 			}
-
+		case string:
+			bytes := []byte(d)
+			err := p.setJSONData(bytes, ref)
+			if err != nil {
+				return append(out, sdk.ErrorRecord{Error: err})
+			}
+		case []byte:
+			err := p.setJSONData(d, ref)
+			if err != nil {
+				return append(out, sdk.ErrorRecord{Error: err})
+			}
 		case opencdc.StructuredData:
 			// data is already structured
 		case nil:
@@ -117,4 +115,17 @@ func (p *jsonDecode) Process(_ context.Context, records []opencdc.Record) []sdk.
 
 func (p *jsonDecode) Teardown(context.Context) error {
 	return nil
+}
+
+func (p *jsonDecode) setJSONData(bytes []byte, ref sdk.Reference) error {
+	var jsonData opencdc.StructuredData
+	if len(bytes) == 0 {
+		// value is an empty json
+		return ref.Set(jsonData)
+	}
+	err := json.Unmarshal(bytes, &jsonData)
+	if err != nil {
+		return cerrors.Errorf("failed to unmarshal raw data as JSON: %w", err)
+	}
+	return ref.Set(jsonData)
 }

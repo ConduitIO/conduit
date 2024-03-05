@@ -46,18 +46,22 @@ func TestDecodeJSON_Process(t *testing.T) {
 			},
 			wantErr: false,
 		}, {
-			name:   "raw payload.after to structured",
-			config: map[string]string{"field": ".Payload.After"},
+			name:   "raw payload.after.foo to structured",
+			config: map[string]string{"field": ".Payload.After.foo"},
 			record: opencdc.Record{
 				Payload: opencdc.Change{
-					After: opencdc.RawData(`{"after":{"data":4,"id":3},"foo":"bar"}`),
+					After: opencdc.StructuredData{
+						"foo": `{"after":{"data":4,"id":3},"baz":"bar"}`,
+					},
 				},
 			},
 			want: sdk.SingleRecord{
 				Payload: opencdc.Change{
 					After: opencdc.StructuredData{
-						"after": map[string]interface{}{"data": float64(4), "id": float64(3)},
-						"foo":   "bar",
+						"foo": opencdc.StructuredData{
+							"after": map[string]interface{}{"data": float64(4), "id": float64(3)},
+							"baz":   "bar",
+						},
 					},
 				},
 			},

@@ -62,46 +62,53 @@ func ExampleJSONDecodeProcessor_RawKey() {
 }
 
 //nolint:govet // a more descriptive example description
-func ExampleJSONDecodeProcessor_RawPayload() {
+func ExampleJSONDecodeProcessor_RawPayloadField() {
 	p := newJSONDecode()
 
 	RunExample(p, example{
-		Description: `Decode the raw data .Payload.Before into structured data.`,
-		Config:      map[string]string{"field": ".Payload.Before"},
+		Description: `Decode the raw data .Payload.Before.foo into structured data.`,
+		Config:      map[string]string{"field": ".Payload.Before.foo"},
 		Have: opencdc.Record{
 			Operation: opencdc.OperationSnapshot,
 			Payload: opencdc.Change{
-				Before: opencdc.RawData(`{"before":{"data":4},"foo":"bar"}`),
+				Before: opencdc.StructuredData{
+					"foo": `{"before":{"data":4,"id":3},"baz":"bar"}`,
+				},
 			},
 		},
 		Want: sdk.SingleRecord{
 			Operation: opencdc.OperationSnapshot,
 			Payload: opencdc.Change{
 				Before: opencdc.StructuredData{
-					"before": map[string]interface{}{"data": float64(4)},
-					"foo":    "bar",
+					"foo": opencdc.StructuredData{
+						"before": map[string]interface{}{"data": float64(4), "id": float64(3)},
+						"baz":    "bar",
+					},
 				},
-			}},
-	})
+			},
+		}})
 
 	// Output:
 	// processor transformed record:
 	// --- before
 	// +++ after
-	// @@ -1,10 +1,15 @@
+	// @@ -1,12 +1,18 @@
 	//  {
 	//    "position": null,
 	//    "operation": "snapshot",
 	//    "metadata": null,
 	//    "key": null,
 	//    "payload": {
-	// -    "before": "{\"before\":{\"data\":4},\"foo\":\"bar\"}",
-	// +    "before": {
-	// +      "before": {
-	// +        "data": 4
-	// +      },
-	// +      "foo": "bar"
-	// +    },
+	//      "before": {
+	// -      "foo": "{\"before\":{\"data\":4,\"id\":3},\"baz\":\"bar\"}"
+	// +      "foo": {
+	// +        "baz": "bar",
+	// +        "before": {
+	// +          "data": 4,
+	// +          "id": 3
+	// +        }
+	// +      }
+	//      },
 	//      "after": null
 	//    }
 	//  }
