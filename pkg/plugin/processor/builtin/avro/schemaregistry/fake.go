@@ -17,6 +17,9 @@
 package schemaregistry
 
 import (
+	"fmt"
+	"log"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -42,10 +45,10 @@ var (
 // This method is only used if examples are run without --tags=integration. It
 // is meant as a utility to allow faster iteration when developing, please run
 // integration tests to ensure the code works with a real schema registry.
-func ExampleSchemaRegistryURL(exampleName string) (string, func()) {
+func ExampleSchemaRegistryURL(exampleName string, port int) (string, func()) {
 	// discard all schema registry logs in examples
 	logf := func(_ string, _ ...any) {}
-	return fakeSchemaRegistryURL(exampleName, logf)
+	return fakeSchemaRegistryURL(exampleName, logf, port)
 }
 
 // TestSchemaRegistryURL creates a fake in-memory schema registry server and
@@ -56,19 +59,31 @@ func ExampleSchemaRegistryURL(exampleName string) (string, func()) {
 // developing, please run integration tests to ensure the code works with a real
 // schema registry.
 func TestSchemaRegistryURL(t testing.TB) string {
-	url, cleanup := fakeSchemaRegistryURL(t.Name(), t.Logf)
+	url, cleanup := fakeSchemaRegistryURL(t.Name(), t.Logf, 0)
 	t.Cleanup(cleanup)
 	return url
 }
 
-func fakeSchemaRegistryURL(name string, logf func(format string, args ...any)) (string, func()) {
+func fakeSchemaRegistryURL(name string, logf func(format string, args ...any), port int) (string, func()) {
 	fakeServerByTestLock.Lock()
 	defer fakeServerByTestLock.Unlock()
 
 	srv := fakeServerByTest[name]
 	cleanup := func() {}
 	if srv == nil {
-		srv = httptest.NewServer(newFakeServer(logf))
+		srv = httptest.NewUnstartedServer(newFakeServer(logf))
+		if port > 0 {
+			// NewUnstartedServer creates a listener. Close that listener and replace
+			// with a custom one.
+			_ = srv.Listener.Close()
+			l, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+			if err != nil {
+				log.Fatalf("failed starting test server on port %d: %v", port, err)
+			}
+			srv.Listener = l
+		}
+
+		srv.Start()
 		fakeServerByTest[name] = srv
 		cleanup = srv.Close
 	}

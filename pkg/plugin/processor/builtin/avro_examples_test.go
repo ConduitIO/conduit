@@ -28,7 +28,7 @@ import (
 
 //nolint:govet // a more descriptive example description
 func ExampleEncodeProcessor_autoRegister() {
-	url, cleanup := schemaregistry.ExampleSchemaRegistryURL("ExampleEncodeProcessor_autoRegister")
+	url, cleanup := schemaregistry.ExampleSchemaRegistryURL("ExampleEncodeProcessor_autoRegister", 54321)
 	defer cleanup()
 
 	p := avro.NewEncodeProcessor(log.Nop())
@@ -107,7 +107,7 @@ with the ` + "`autoRegister`" + ` schema strategy. The processor encodes the rec
 
 //nolint:govet // a more descriptive example description
 func ExampleEncodeProcessor_preRegistered() {
-	url, cleanup := schemaregistry.ExampleSchemaRegistryURL("ExampleEncodeProcessor_preRegistered")
+	url, cleanup := schemaregistry.ExampleSchemaRegistryURL("ExampleEncodeProcessor_preRegistered", 54321)
 	defer cleanup()
 
 	client, err := schemaregistry.NewClient(log.Nop(), sr.URLs(url))
