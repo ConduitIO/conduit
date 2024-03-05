@@ -1096,14 +1096,14 @@ service PluginService {
     };
   };
 
-  rpc ListConnectorPlugins(ListPluginsRequest) returns (ListConnectorPluginsResponse) {
+  rpc ListConnectorPlugins(ListConnectorPluginsRequest) returns (ListConnectorPluginsResponse) {
     option (google.api.http) = {
       get: "/v1/plugins/connectors"
       response_body: "plugins"
     };
   };
 
-  rpc ListProcessorPlugins(ListPluginsRequest) returns (ListPluginsResponse) {
+  rpc ListProcessorPlugins(ListProcessorPluginsRequest) returns (ListProcessorPluginsResponse) {
     option (google.api.http) = {
       get: "/v1/plugins/processors"
       response_body: "plugins"

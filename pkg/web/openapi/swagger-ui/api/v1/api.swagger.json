@@ -1129,7 +1129,7 @@
               "type": "array",
               "items": {
                 "type": "object",
-                "$ref": "#/definitions/v1PluginSpecifications"
+                "$ref": "#/definitions/v1ProcessorPluginSpecifications"
               }
             }
           },
@@ -2111,6 +2111,18 @@
         }
       }
     },
+    "v1ListProcessorPluginsResponse": {
+      "type": "object",
+      "properties": {
+        "plugins": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1ProcessorPluginSpecifications"
+          }
+        }
+      }
+    },
     "v1ListProcessorsResponse": {
       "type": "object",
       "properties": {
@@ -2296,6 +2308,39 @@
           "format": "int32"
         }
       }
+    },
+    "v1ProcessorPluginSpecifications": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Name is the name of the plugin."
+        },
+        "summary": {
+          "type": "string",
+          "description": "Summary is a brief description of the plugin and what it does,\nideally not longer than one sentence."
+        },
+        "description": {
+          "type": "string",
+          "description": "Description is a longer form field, appropriate for README-like\ntext that the author can provide for documentation about the\nusage of the plugin."
+        },
+        "version": {
+          "type": "string",
+          "description": "Version string. Should follow semantic versioning and use the \"v\"\nprefix (e.g. v1.23.4)."
+        },
+        "author": {
+          "type": "string",
+          "description": "Author declares the entity that created or maintains this plugin."
+        },
+        "parameters": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/configv1Parameter"
+          },
+          "description": "A map that describes parameters available for configuring the\nprocessor plugin."
+        }
+      },
+      "description": "ConnectorPluginSpecifications describes the specifications of a processor plugin."
     },
     "v1Record": {
       "type": "object",

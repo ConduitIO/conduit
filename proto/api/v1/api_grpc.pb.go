@@ -1291,8 +1291,8 @@ const (
 type PluginServiceClient interface {
 	// deprecated: use ListConnectorPlugins instead
 	ListPlugins(ctx context.Context, in *ListPluginsRequest, opts ...grpc.CallOption) (*ListPluginsResponse, error)
-	ListConnectorPlugins(ctx context.Context, in *ListPluginsRequest, opts ...grpc.CallOption) (*ListConnectorPluginsResponse, error)
-	ListProcessorPlugins(ctx context.Context, in *ListPluginsRequest, opts ...grpc.CallOption) (*ListPluginsResponse, error)
+	ListConnectorPlugins(ctx context.Context, in *ListConnectorPluginsRequest, opts ...grpc.CallOption) (*ListConnectorPluginsResponse, error)
+	ListProcessorPlugins(ctx context.Context, in *ListProcessorPluginsRequest, opts ...grpc.CallOption) (*ListProcessorPluginsResponse, error)
 }
 
 type pluginServiceClient struct {
@@ -1312,7 +1312,7 @@ func (c *pluginServiceClient) ListPlugins(ctx context.Context, in *ListPluginsRe
 	return out, nil
 }
 
-func (c *pluginServiceClient) ListConnectorPlugins(ctx context.Context, in *ListPluginsRequest, opts ...grpc.CallOption) (*ListConnectorPluginsResponse, error) {
+func (c *pluginServiceClient) ListConnectorPlugins(ctx context.Context, in *ListConnectorPluginsRequest, opts ...grpc.CallOption) (*ListConnectorPluginsResponse, error) {
 	out := new(ListConnectorPluginsResponse)
 	err := c.cc.Invoke(ctx, PluginService_ListConnectorPlugins_FullMethodName, in, out, opts...)
 	if err != nil {
@@ -1321,8 +1321,8 @@ func (c *pluginServiceClient) ListConnectorPlugins(ctx context.Context, in *List
 	return out, nil
 }
 
-func (c *pluginServiceClient) ListProcessorPlugins(ctx context.Context, in *ListPluginsRequest, opts ...grpc.CallOption) (*ListPluginsResponse, error) {
-	out := new(ListPluginsResponse)
+func (c *pluginServiceClient) ListProcessorPlugins(ctx context.Context, in *ListProcessorPluginsRequest, opts ...grpc.CallOption) (*ListProcessorPluginsResponse, error) {
+	out := new(ListProcessorPluginsResponse)
 	err := c.cc.Invoke(ctx, PluginService_ListProcessorPlugins_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -1336,8 +1336,8 @@ func (c *pluginServiceClient) ListProcessorPlugins(ctx context.Context, in *List
 type PluginServiceServer interface {
 	// deprecated: use ListConnectorPlugins instead
 	ListPlugins(context.Context, *ListPluginsRequest) (*ListPluginsResponse, error)
-	ListConnectorPlugins(context.Context, *ListPluginsRequest) (*ListConnectorPluginsResponse, error)
-	ListProcessorPlugins(context.Context, *ListPluginsRequest) (*ListPluginsResponse, error)
+	ListConnectorPlugins(context.Context, *ListConnectorPluginsRequest) (*ListConnectorPluginsResponse, error)
+	ListProcessorPlugins(context.Context, *ListProcessorPluginsRequest) (*ListProcessorPluginsResponse, error)
 	mustEmbedUnimplementedPluginServiceServer()
 }
 
@@ -1348,10 +1348,10 @@ type UnimplementedPluginServiceServer struct {
 func (UnimplementedPluginServiceServer) ListPlugins(context.Context, *ListPluginsRequest) (*ListPluginsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListPlugins not implemented")
 }
-func (UnimplementedPluginServiceServer) ListConnectorPlugins(context.Context, *ListPluginsRequest) (*ListConnectorPluginsResponse, error) {
+func (UnimplementedPluginServiceServer) ListConnectorPlugins(context.Context, *ListConnectorPluginsRequest) (*ListConnectorPluginsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListConnectorPlugins not implemented")
 }
-func (UnimplementedPluginServiceServer) ListProcessorPlugins(context.Context, *ListPluginsRequest) (*ListPluginsResponse, error) {
+func (UnimplementedPluginServiceServer) ListProcessorPlugins(context.Context, *ListProcessorPluginsRequest) (*ListProcessorPluginsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListProcessorPlugins not implemented")
 }
 func (UnimplementedPluginServiceServer) mustEmbedUnimplementedPluginServiceServer() {}
@@ -1386,7 +1386,7 @@ func _PluginService_ListPlugins_Handler(srv interface{}, ctx context.Context, de
 }
 
 func _PluginService_ListConnectorPlugins_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ListPluginsRequest)
+	in := new(ListConnectorPluginsRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -1398,13 +1398,13 @@ func _PluginService_ListConnectorPlugins_Handler(srv interface{}, ctx context.Co
 		FullMethod: PluginService_ListConnectorPlugins_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(PluginServiceServer).ListConnectorPlugins(ctx, req.(*ListPluginsRequest))
+		return srv.(PluginServiceServer).ListConnectorPlugins(ctx, req.(*ListConnectorPluginsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
 func _PluginService_ListProcessorPlugins_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ListPluginsRequest)
+	in := new(ListProcessorPluginsRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -1416,7 +1416,7 @@ func _PluginService_ListProcessorPlugins_Handler(srv interface{}, ctx context.Co
 		FullMethod: PluginService_ListProcessorPlugins_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(PluginServiceServer).ListProcessorPlugins(ctx, req.(*ListPluginsRequest))
+		return srv.(PluginServiceServer).ListProcessorPlugins(ctx, req.(*ListProcessorPluginsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }

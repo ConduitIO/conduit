@@ -1278,7 +1278,7 @@ var (
 )
 
 func request_PluginService_ListConnectorPlugins_0(ctx context.Context, marshaler runtime.Marshaler, client PluginServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq ListPluginsRequest
+	var protoReq ListConnectorPluginsRequest
 	var metadata runtime.ServerMetadata
 
 	if err := req.ParseForm(); err != nil {
@@ -1294,7 +1294,7 @@ func request_PluginService_ListConnectorPlugins_0(ctx context.Context, marshaler
 }
 
 func local_request_PluginService_ListConnectorPlugins_0(ctx context.Context, marshaler runtime.Marshaler, server PluginServiceServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq ListPluginsRequest
+	var protoReq ListConnectorPluginsRequest
 	var metadata runtime.ServerMetadata
 
 	if err := req.ParseForm(); err != nil {
@@ -1314,7 +1314,7 @@ var (
 )
 
 func request_PluginService_ListProcessorPlugins_0(ctx context.Context, marshaler runtime.Marshaler, client PluginServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq ListPluginsRequest
+	var protoReq ListProcessorPluginsRequest
 	var metadata runtime.ServerMetadata
 
 	if err := req.ParseForm(); err != nil {
@@ -1330,7 +1330,7 @@ func request_PluginService_ListProcessorPlugins_0(ctx context.Context, marshaler
 }
 
 func local_request_PluginService_ListProcessorPlugins_0(ctx context.Context, marshaler runtime.Marshaler, server PluginServiceServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq ListPluginsRequest
+	var protoReq ListProcessorPluginsRequest
 	var metadata runtime.ServerMetadata
 
 	if err := req.ParseForm(); err != nil {
@@ -3236,7 +3236,7 @@ type response_PluginService_ListProcessorPlugins_0 struct {
 }
 
 func (m response_PluginService_ListProcessorPlugins_0) XXX_ResponseBody() interface{} {
-	response := m.Message.(*ListPluginsResponse)
+	response := m.Message.(*ListProcessorPluginsResponse)
 	return response.Plugins
 }
 
