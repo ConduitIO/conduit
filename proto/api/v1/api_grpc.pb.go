@@ -1289,7 +1289,8 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type PluginServiceClient interface {
-	// deprecated: use ListConnectorPlugins instead
+	// Deprecated: Do not use.
+	// Deprecated: use ListConnectorPlugins instead.
 	ListPlugins(ctx context.Context, in *ListPluginsRequest, opts ...grpc.CallOption) (*ListPluginsResponse, error)
 	ListConnectorPlugins(ctx context.Context, in *ListConnectorPluginsRequest, opts ...grpc.CallOption) (*ListConnectorPluginsResponse, error)
 	ListProcessorPlugins(ctx context.Context, in *ListProcessorPluginsRequest, opts ...grpc.CallOption) (*ListProcessorPluginsResponse, error)
@@ -1303,6 +1304,7 @@ func NewPluginServiceClient(cc grpc.ClientConnInterface) PluginServiceClient {
 	return &pluginServiceClient{cc}
 }
 
+// Deprecated: Do not use.
 func (c *pluginServiceClient) ListPlugins(ctx context.Context, in *ListPluginsRequest, opts ...grpc.CallOption) (*ListPluginsResponse, error) {
 	out := new(ListPluginsResponse)
 	err := c.cc.Invoke(ctx, PluginService_ListPlugins_FullMethodName, in, out, opts...)
@@ -1334,7 +1336,8 @@ func (c *pluginServiceClient) ListProcessorPlugins(ctx context.Context, in *List
 // All implementations must embed UnimplementedPluginServiceServer
 // for forward compatibility
 type PluginServiceServer interface {
-	// deprecated: use ListConnectorPlugins instead
+	// Deprecated: Do not use.
+	// Deprecated: use ListConnectorPlugins instead.
 	ListPlugins(context.Context, *ListPluginsRequest) (*ListPluginsResponse, error)
 	ListConnectorPlugins(context.Context, *ListConnectorPluginsRequest) (*ListConnectorPluginsResponse, error)
 	ListProcessorPlugins(context.Context, *ListProcessorPluginsRequest) (*ListProcessorPluginsResponse, error)

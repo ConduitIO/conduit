@@ -1036,7 +1036,7 @@
     },
     "/v1/plugins": {
       "get": {
-        "summary": "deprecated: use ListConnectorPlugins instead",
+        "summary": "Deprecated: use ListConnectorPlugins instead.",
         "operationId": "PluginService_ListPlugins",
         "responses": {
           "200": {
@@ -1601,7 +1601,7 @@
           "description": "The value to be compared with the parameter,\nor a comma separated list in case of Validation.TYPE_INCLUSION or Validation.TYPE_EXCLUSION."
         }
       },
-      "title": "Deprecated: use config.v1.Validation instead"
+      "description": "Deprecated: use config.v1.Validation instead."
     },
     "PluginSpecificationsParameterValidationType": {
       "type": "string",
@@ -1615,8 +1615,7 @@
         "TYPE_REGEX"
       ],
       "default": "TYPE_UNSPECIFIED",
-      "description": "- TYPE_REQUIRED: Parameter must be present.\n - TYPE_GREATER_THAN: Parameter must be greater than {value}.\n - TYPE_LESS_THAN: Parameter must be less than {value}.\n - TYPE_INCLUSION: Parameter must be included in the comma separated list {value}.\n - TYPE_EXCLUSION: Parameter must not be included in the comma separated list {value}.\n - TYPE_REGEX: Parameter must match the regex {value}.",
-      "title": "Deprecated: use config.v1.Validation.Type instead"
+      "description": "Deprecated: use config.v1.Validation.Type instead.\n\n - TYPE_REQUIRED: Parameter must be present.\n - TYPE_GREATER_THAN: Parameter must be greater than {value}.\n - TYPE_LESS_THAN: Parameter must be less than {value}.\n - TYPE_INCLUSION: Parameter must be included in the comma separated list {value}.\n - TYPE_EXCLUSION: Parameter must not be included in the comma separated list {value}.\n - TYPE_REGEX: Parameter must match the regex {value}."
     },
     "ProcessorParent": {
       "type": "object",
@@ -2225,7 +2224,7 @@
           }
         }
       },
-      "title": "Deprecated: use ConnectorPluginSpecifications instead"
+      "description": "Deprecated: use ConnectorPluginSpecifications instead."
     },
     "v1PluginSpecificationsParameter": {
       "type": "object",
@@ -2247,7 +2246,7 @@
           }
         }
       },
-      "title": "Deprecated: use config.v1.Parameter instead"
+      "description": "Deprecated: use config.v1.Parameter instead."
     },
     "v1PluginSpecificationsParameterType": {
       "type": "string",
@@ -2261,8 +2260,7 @@
         "TYPE_DURATION"
       ],
       "default": "TYPE_UNSPECIFIED",
-      "description": "- TYPE_STRING: Parameter is a string.\n - TYPE_INT: Parameter is an integer.\n - TYPE_FLOAT: Parameter is a float.\n - TYPE_BOOL: Parameter is a boolean.\n - TYPE_FILE: Parameter is a file.\n - TYPE_DURATION: Parameter is a duration.",
-      "title": "Deprecated: use config.v1.Parameter.Type instead"
+      "description": "Deprecated: use config.v1.Parameter.Type instead.\n\n - TYPE_STRING: Parameter is a string.\n - TYPE_INT: Parameter is an integer.\n - TYPE_FLOAT: Parameter is a float.\n - TYPE_BOOL: Parameter is a boolean.\n - TYPE_FILE: Parameter is a file.\n - TYPE_DURATION: Parameter is a duration."
     },
     "v1Processor": {
       "type": "object",

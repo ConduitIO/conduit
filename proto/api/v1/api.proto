@@ -186,19 +186,19 @@ message ProcessorPluginSpecifications{
   map<string, config.v1.Parameter> parameters = 6;
 }
 
-// Deprecated: use ConnectorPluginSpecifications instead
+// Deprecated: use ConnectorPluginSpecifications instead.
 message PluginSpecifications{
   option deprecated = true;
 
-  // Deprecated: use config.v1.Parameter instead
+  // Deprecated: use config.v1.Parameter instead.
   message Parameter {
     option deprecated = true;
 
-    // Deprecated: use config.v1.Validation instead
+    // Deprecated: use config.v1.Validation instead.
     message Validation{
       option deprecated = true;
 
-      // Deprecated: use config.v1.Validation.Type instead
+      // Deprecated: use config.v1.Validation.Type instead.
       enum Type {
         option deprecated = true;
         TYPE_UNSPECIFIED = 0;
@@ -222,7 +222,7 @@ message PluginSpecifications{
       string value = 2;
     }
 
-    // Deprecated: use config.v1.Parameter.Type instead
+    // Deprecated: use config.v1.Parameter.Type instead.
     enum Type {
       option deprecated = true;
       TYPE_UNSPECIFIED = 0;
@@ -1088,8 +1088,9 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
 };
 
 service PluginService {
-  // deprecated: use ListConnectorPlugins instead
+  // Deprecated: use ListConnectorPlugins instead.
   rpc ListPlugins(ListPluginsRequest) returns (ListPluginsResponse) {
+    option deprecated = true;
     option (google.api.http) = {
       get: "/v1/plugins"
       response_body: "plugins"
