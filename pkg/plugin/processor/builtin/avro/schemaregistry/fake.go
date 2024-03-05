@@ -35,24 +35,44 @@ var (
 	fakeServerByTestLock sync.Mutex
 )
 
-// testSchemaRegistryURL creates a fake in-memory schema registry server and
-// returns its address. This method is only used if the tests are run without
+// ExampleSchemaRegistryURL creates a fake in-memory schema registry server and
+// returns its address and a cleanup function which should be executed in a
+// deferred call.
+//
+// This method is only used if examples are run without --tags=integration. It
+// is meant as a utility to allow faster iteration when developing, please run
+// integration tests to ensure the code works with a real schema registry.
+func ExampleSchemaRegistryURL(exampleName string) (string, func()) {
+	// discard all schema registry logs in examples
+	logf := func(_ string, _ ...any) {}
+	return fakeSchemaRegistryURL(exampleName, logf)
+}
+
+// TestSchemaRegistryURL creates a fake in-memory schema registry server and
+// returns its address.
+//
+// This method is only used if the tests are run without
 // --tags=integration. It is meant as a utility to allow faster iteration when
 // developing, please run integration tests to ensure the code works with a real
 // schema registry.
-func testSchemaRegistryURL(t *testing.T) string {
+func TestSchemaRegistryURL(t testing.TB) string {
+	url, cleanup := fakeSchemaRegistryURL(t.Name(), t.Logf)
+	t.Cleanup(cleanup)
+	return url
+}
+
+func fakeSchemaRegistryURL(name string, logf func(format string, args ...any)) (string, func()) {
 	fakeServerByTestLock.Lock()
 	defer fakeServerByTestLock.Unlock()
 
-	srv := fakeServerByTest[t.Name()]
+	srv := fakeServerByTest[name]
+	cleanup := func() {}
 	if srv == nil {
-		srv = httptest.NewServer(newFakeServer(t.Logf))
-		fakeServerByTest[t.Name()] = srv
-		t.Cleanup(func() {
-			srv.Close()
-		})
+		srv = httptest.NewServer(newFakeServer(logf))
+		fakeServerByTest[name] = srv
+		cleanup = srv.Close
 	}
-	return srv.URL
+	return srv.URL, cleanup
 }
 
 const (

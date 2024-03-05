@@ -18,10 +18,10 @@ package schemaregistry
 
 import "testing"
 
-// testSchemaRegistryURL points to the schema registry defined in
+// TestSchemaRegistryURL points to the schema registry defined in
 // /test/docker-compose-schemaregistry.yml.
 // This method is only used if the tests are run with --tags=integration.
-func testSchemaRegistryURL(t *testing.T) string {
+func TestSchemaRegistryURL(t testing.TB) string {
 	t.Log("Using real schema registry server")
 	return "localhost:8085"
 }
