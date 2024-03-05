@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//go:build !integration
+
 package builtin
 
 import (
@@ -28,7 +30,7 @@ import (
 
 //nolint:govet // a more descriptive example description
 func ExampleEncodeProcessor_autoRegister() {
-	url, cleanup := schemaregistry.ExampleSchemaRegistryURL("ExampleEncodeProcessor_autoRegister", 54321)
+	url, cleanup := schemaregistry.ExampleSchemaRegistryURL("ExampleEncodeProcessor_autoRegister", 54322)
 	defer cleanup()
 
 	p := avro.NewEncodeProcessor(log.Nop())
@@ -37,8 +39,8 @@ func ExampleEncodeProcessor_autoRegister() {
 		// Summary: "TODO",
 		Description: `This example shows the usage of the ` + "`avro.encode`" + ` processor
 with the ` + "`autoRegister`" + ` schema strategy. The processor encodes the record's
-` + "`.Payload.After`" + ` field using the schema that is registered on the fly under the subject
-` + "`example-autoRegister`" + `.`,
+` + "`.Payload.After`" + ` field using the schema that is extracted from the data
+and registered on the fly under the subject` + "`example-autoRegister`" + `.`,
 		Config: map[string]string{
 			"url":                         url,
 			"schema.strategy":             "autoRegister",
@@ -107,7 +109,7 @@ with the ` + "`autoRegister`" + ` schema strategy. The processor encodes the rec
 
 //nolint:govet // a more descriptive example description
 func ExampleEncodeProcessor_preRegistered() {
-	url, cleanup := schemaregistry.ExampleSchemaRegistryURL("ExampleEncodeProcessor_preRegistered", 54321)
+	url, cleanup := schemaregistry.ExampleSchemaRegistryURL("ExampleEncodeProcessor_preRegistered", 54322)
 	defer cleanup()
 
 	client, err := schemaregistry.NewClient(log.Nop(), sr.URLs(url))
@@ -136,9 +138,21 @@ func ExampleEncodeProcessor_preRegistered() {
 	RunExample(p, example{
 		// Summary: "TODO",
 		Description: `This example shows the usage of the ` + "`avro.encode`" + ` processor
-with the ` + "`preRegistered`" + ` schema strategy. The processor encodes the record's
-` + "`.Key`" + ` field using the a schema that is registered before running the example
-under the subject ` + "`example-preRegistered`" + ` and version ` + "`1`" + `.`,
+with the ` + "`preRegistered`" + ` schema strategy. When using this strategy, the
+schema has to be manually pre-registered. In this example we use the following schema:
+
+` + "```json" + `
+{
+  "type":"record",
+  "name":"record",
+  "fields":[
+    {"name":"myString","type":"string"},
+    {"name":"myInt","type":"int"}
+  ]
+}
+` + "```" + `
+
+The processor encodes the record's` + "`.Key`" + ` field using the above schema.`,
 		Config: map[string]string{
 			"url":                          url,
 			"schema.strategy":              "preRegistered",
