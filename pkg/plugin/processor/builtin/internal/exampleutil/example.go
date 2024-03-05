@@ -92,7 +92,6 @@ func RunExample(p sdk.Processor, e Example) {
 		if err != nil {
 			log.Fatalf("failed to marshal test record to pretty JSON: %v", err)
 		}
-
 		gotPrettyJSON, err := recordToPrettyJSON(opencdc.Record(rec))
 		if err != nil {
 			log.Fatalf("failed to marshal processed record to pretty JSON: %v", err)

@@ -1,0 +1,67 @@
+{
+  "specification": {
+    "name": "unwrap.opencdc",
+    "summary": "A processor that unwraps the OpenCDC record saved in one of record's fields.",
+    "description": "The unwrap.opencdc processor is useful in situations where a record goes through intermediate \nsystems before being written to a final destination. In these cases, the original OpenCDC record is part of the payload \nread from the intermediate system and needs to be unwrapped before being written.\n\nNote: if the wrapped OpenCDC record is not in a structured data field, then it's assumed that it's stored in JSON format.",
+    "version": "v0.1.0",
+    "author": "Meroxa, Inc.",
+    "parameters": {
+      "field": {
+        "default": ".Payload.After",
+        "description": "Field is a reference to the field which contains the OpenCDC record.\n\nFor more information about record references, see: https://github.com/ConduitIO/conduit-processor-sdk/blob/cbdc5dcb5d3109f8f13b88624c9e360076b0bcdb/util.go#L66.",
+        "type": "string",
+        "validations": []
+      }
+    }
+  },
+  "examples": [
+    {
+      "summary": "",
+      "description": "",
+      "config": {
+        "field": ".Payload.After"
+      },
+      "have": {
+        "position": "d3JhcHBpbmcgcG9zaXRpb24=",
+        "operation": "create",
+        "metadata": {},
+        "key": "wrapping key",
+        "payload": {
+          "before": null,
+          "after": {
+            "key": {
+              "id": "test-key"
+            },
+            "metadata": {},
+            "operation": "update",
+            "payload": {
+              "before": null,
+              "after": {
+                "msg": "string 0e8955b3-7fb5-4dda-8064-e10dc007f00d",
+                "sensor_id": 1250383582,
+                "triggered": false
+              }
+            },
+            "position": "dGVzdC1wb3NpdGlvbg=="
+          }
+        }
+      },
+      "want": {
+        "position": "d3JhcHBpbmcgcG9zaXRpb24=",
+        "operation": "update",
+        "metadata": {},
+        "key": {
+          "id": "test-key"
+        },
+        "payload": {
+          "before": null,
+          "after": {
+            "msg": "string 0e8955b3-7fb5-4dda-8064-e10dc007f00d",
+            "sensor_id": 1250383582,
+            "triggered": false
+          }
+        }
+      }
+    }
+  ]
+}
