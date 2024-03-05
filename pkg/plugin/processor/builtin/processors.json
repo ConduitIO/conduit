@@ -713,15 +713,15 @@
   },
   {
     "specification": {
-      "Name": "json.decode",
-      "Summary": "Decodes a specific field from raw data (string) to JSON structured data.",
-      "Description": "The processor takes raw data (string) from the target field, parses it as JSON and stores the decoded\nstructured data in the target field.\nThis processor is only applicable to .Key, .Payload.Before and .Payload.After, as they accept structured data format.\n",
-      "Version": "v0.1.0",
-      "Author": "Meroxa, Inc.",
-      "Parameters": {
+      "name": "json.decode",
+      "summary": "Decodes a specific field from JSON raw data (string) to structured data.",
+      "description": "The processor takes JSON raw data (string) from the target field, parses it as JSON structured data\nand stores the decoded structured data in the target field.\nThis processor is only applicable to fields under .Key, .Payload.Before and .Payload.After, as they accept structured data format.\n",
+      "version": "v0.1.0",
+      "author": "Meroxa, Inc.",
+      "parameters": {
         "field": {
           "default": "",
-          "description": "field is the target field, as it would be addressed in a Go template (e.g. `.Payload.After`). Applicable values are `.Key`, `.Payload.Before` and `.Payload.After`, as they accept structured data.",
+          "description": "Field is the target field, as it would be addressed in a Go template (e.g. `.Payload.After.foo`).\nyou can only decode fields that are under .Key and .Payload.",
           "type": "string",
           "validations": [
             {
@@ -729,8 +729,8 @@
               "value": ""
             },
             {
-              "type": "inclusion",
-              "value": ".Key,.Payload.Before,.Payload.After"
+              "type": "regex",
+              "value": "^\\.(Payload|Key).*"
             }
           ]
         }
@@ -769,9 +769,9 @@
         }
       },
       {
-        "description": "Decode the raw data .Payload.Before into structured data.",
+        "description": "Decode the raw data .Payload.Before.foo into structured data.",
         "config": {
-          "field": ".Payload.Before"
+          "field": ".Payload.Before.foo"
         },
         "have": {
           "position": null,
@@ -779,7 +779,9 @@
           "metadata": null,
           "key": null,
           "payload": {
-            "before": "{\"before\":{\"data\":4},\"foo\":\"bar\"}",
+            "before": {
+              "foo": "{\"before\":{\"data\":4,\"id\":3},\"baz\":\"bar\"}"
+            },
             "after": null
           }
         },
@@ -790,10 +792,13 @@
           "key": null,
           "payload": {
             "before": {
-              "before": {
-                "data": 4
-              },
-              "foo": "bar"
+              "foo": {
+                "baz": "bar",
+                "before": {
+                  "data": 4,
+                  "id": 3
+                }
+              }
             },
             "after": null
           }
@@ -803,12 +808,6 @@
   },
   {
     "specification": {
-      "Name": "unwrap.debezium",
-      "Summary": "Unwraps a Debezium record from the input OpenCDC record.",
-      "Description": "In this processor, the wrapped (Debezium) record replaces the wrapping record (being processed) \ncompletely, except for the position.\n\nThe Debezium record's metadata and the wrapping record's metadata is merged, with the Debezium metadata having precedence.\n\nThis is useful in cases where Conduit acts as an intermediary between a Debezium source and a Debezium destination. \nIn such cases, the Debezium record is set as the OpenCDC record's payload, and needs to be unwrapped for further usage.",
-      "Version": "v0.1.0",
-      "Author": "Meroxa, Inc.",
-      "Parameters": {
       "name": "unwrap.debezium",
       "summary": "Unwraps a Debezium record from the input OpenCDC record.",
       "description": "In this processor, the wrapped (Debezium) record replaces the wrapping record (being processed) \ncompletely, except for the position.\n\nThe Debezium record's metadata and the wrapping record's metadata is merged, with the Debezium metadata having precedence.\n\nThis is useful in cases where Conduit acts as an intermediary between a Debezium source and a Debezium destination. \nIn such cases, the Debezium record is set as the OpenCDC record's payload, and needs to be unwrapped for further usage.",
