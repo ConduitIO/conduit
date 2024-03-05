@@ -138,11 +138,6 @@ func TestUnwrapOpenCDC_Configure(t *testing.T) {
 		wantErr string
 	}{
 		{
-			name:    "only fields in .Payload are allowed",
-			in:      map[string]string{"field": ".Metadata"},
-			wantErr: `failed parsing configuration: config invalid: error validating "field": ".Metadata" should match the regex "^.Payload": regex validation failed`,
-		},
-		{
 			name:    "invalid field",
 			in:      map[string]string{"field": ".Payload.Something"},
 			wantErr: `invalid reference: invalid reference ".Payload.Something": unexpected field "Something": cannot resolve reference`,

@@ -630,7 +630,7 @@
     "specification": {
       "Name": "unwrap.opencdc",
       "Summary": "A processor that unwraps the OpenCDC record saved in one of record's fields.",
-      "Description": "The unwrap.opencdc processor is useful in situations where a record goes through intermediate \nsystems before being written to a final destination. In these cases, the original OpenCDC record is part of the payload \nread from the intermediate system and needs to be unwrapped before being written.",
+      "Description": "The unwrap.opencdc processor is useful in situations where a record goes through intermediate \nsystems before being written to a final destination. In these cases, the original OpenCDC record is part of the payload \nread from the intermediate system and needs to be unwrapped before being written.\n\nNote: if the wrapped OpenCDC record is not in a structured data field, then it's assumed that it's stored in JSON format.",
       "Version": "v0.1.0",
       "Author": "Meroxa, Inc.",
       "Parameters": {

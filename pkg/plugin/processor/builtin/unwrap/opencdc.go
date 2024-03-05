@@ -51,7 +51,9 @@ func (u *openCDCProcessor) Specification() (sdk.Specification, error) {
 		Summary: "A processor that unwraps the OpenCDC record saved in one of record's fields.",
 		Description: `The unwrap.opencdc processor is useful in situations where a record goes through intermediate 
 systems before being written to a final destination. In these cases, the original OpenCDC record is part of the payload 
-read from the intermediate system and needs to be unwrapped before being written.`,
+read from the intermediate system and needs to be unwrapped before being written.
+
+Note: if the wrapped OpenCDC record is not in a structured data field, then it's assumed that it's stored in JSON format.`,
 		Version:    "v0.1.0",
 		Author:     "Meroxa, Inc.",
 		Parameters: openCDCConfig{}.Parameters(),
@@ -102,6 +104,11 @@ func (u *openCDCProcessor) processRecord(rec opencdc.Record) (sdk.ProcessedRecor
 	case opencdc.RawData:
 		// unmarshal raw data to structured
 		if err := json.Unmarshal(v.Bytes(), &data); err != nil {
+			return nil, cerrors.Errorf("failed to unmarshal raw data as JSON: %w", err)
+		}
+	case string:
+		// unmarshal raw data to structured
+		if err := json.Unmarshal([]byte(v), &data); err != nil {
 			return nil, cerrors.Errorf("failed to unmarshal raw data as JSON: %w", err)
 		}
 	case opencdc.StructuredData:
@@ -205,26 +212,26 @@ func (u *openCDCProcessor) unmarshalMetadata(structData opencdc.StructuredData) 
 	return metadata, nil
 }
 
-func (u *openCDCProcessor) convertData(payload map[string]interface{}, key string) (opencdc.Data, error) {
-	payloadData, ok := payload[key]
-	if !ok || payloadData == nil {
+func (u *openCDCProcessor) convertData(m map[string]interface{}, key string) (opencdc.Data, error) {
+	data, ok := m[key]
+	if !ok || data == nil {
 		return nil, nil
 	}
 
-	switch data := payloadData.(type) {
-	case opencdc.StructuredData:
-		return data, nil
+	switch d := data.(type) {
+	case opencdc.Data:
+		return d, nil
 	case map[string]interface{}:
-		return opencdc.StructuredData(data), nil
+		return opencdc.StructuredData(d), nil
 	case string:
-		decoded := make([]byte, base64.StdEncoding.DecodedLen(len(data)))
-		n, err := base64.StdEncoding.Decode(decoded, []byte(data))
+		decoded := make([]byte, base64.StdEncoding.DecodedLen(len(d)))
+		n, err := base64.StdEncoding.Decode(decoded, []byte(d))
 		if err != nil {
 			return nil, cerrors.Errorf("couldn't decode payload %s: %w", err, key)
 		}
 		return opencdc.RawData(decoded[:n]), nil
 	default:
-		return nil, cerrors.Errorf("expected a map[string]interface{} or string, got: %T", data)
+		return nil, cerrors.Errorf("expected a map[string]interface{} or string, got: %T", d)
 	}
 }
 
