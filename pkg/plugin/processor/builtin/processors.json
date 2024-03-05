@@ -1,1 +1,749 @@
-[]
+[
+  {
+    "specification": {
+      "Name": "field.convert",
+      "Summary": "Convert the type of a field.",
+      "Description": "Convert takes the field of one type and converts it into another type (e.g. string to integer). \nThe applicable types are string, int, float and bool. Converting can be done between any combination of types. Note that\nbooleans will be converted to numeric values 1 (true) and 0 (false). Processor is only applicable to .Key, .Payload.Before\nand .Payload.After prefixes, and only applicable if said fields contain structured data.\nIf the record contains raw JSON data, then use the processor \"decode.json\" to parse it into structured data first.",
+      "Version": "v0.1.0",
+      "Author": "Meroxa, Inc.",
+      "Parameters": {
+        "field": {
+          "Default": "",
+          "Description": "field is the target field, as it would be addressed in a Go template (e.g. `.Payload.After.foo`). you can only convert fields that are under .Key and .Payload, and said fields should contain structured data.",
+          "Type": 1,
+          "Validations": [
+            {},
+            {
+              "Regex": "^\\.(Payload|Key).*"
+            }
+          ]
+        },
+        "type": {
+          "Default": "",
+          "Description": "type is the target field type after conversion, available options are: string, int, float, bool.",
+          "Type": 1,
+          "Validations": [
+            {},
+            {
+              "List": [
+                "string",
+                "int",
+                "float",
+                "bool"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "examples": [
+      {
+        "description": "change .Key.id type to int",
+        "config": {
+          "field": ".Key.id",
+          "type": "int"
+        },
+        "have": {
+          "position": null,
+          "operation": "update",
+          "metadata": null,
+          "key": {
+            "id": "123"
+          },
+          "payload": {
+            "before": null,
+            "after": {
+              "foo": "bar"
+            }
+          }
+        },
+        "want": {
+          "position": null,
+          "operation": "update",
+          "metadata": null,
+          "key": {
+            "id": 123
+          },
+          "payload": {
+            "before": null,
+            "after": {
+              "foo": "bar"
+            }
+          }
+        }
+      },
+      {
+        "description": "change .Key.id type to string",
+        "config": {
+          "field": ".Key.id",
+          "type": "string"
+        },
+        "have": {
+          "position": null,
+          "operation": "update",
+          "metadata": null,
+          "key": {
+            "id": 123.345
+          },
+          "payload": {
+            "before": null,
+            "after": {
+              "foo": "bar"
+            }
+          }
+        },
+        "want": {
+          "position": null,
+          "operation": "update",
+          "metadata": null,
+          "key": {
+            "id": "123.345"
+          },
+          "payload": {
+            "before": null,
+            "after": {
+              "foo": "bar"
+            }
+          }
+        }
+      },
+      {
+        "description": "change .Payload.After.done type to bool",
+        "config": {
+          "field": ".Payload.After.done",
+          "type": "bool"
+        },
+        "have": {
+          "position": null,
+          "operation": "update",
+          "metadata": null,
+          "key": {
+            "id": "123"
+          },
+          "payload": {
+            "before": null,
+            "after": {
+              "done": "1"
+            }
+          }
+        },
+        "want": {
+          "position": null,
+          "operation": "update",
+          "metadata": null,
+          "key": {
+            "id": "123"
+          },
+          "payload": {
+            "before": null,
+            "after": {
+              "done": true
+            }
+          }
+        }
+      }
+    ]
+  },
+  {
+    "specification": {
+      "Name": "field.rename",
+      "Summary": "Rename a group of fields.",
+      "Description": "Rename a group of field names to new names. It is not allowed to rename top-level fields (.Operation, .Position, \n.Key, .Metadata, .Payload.Before, .Payload.After).\nNote that this processor only runs on structured data, if the record contains raw JSON data, then use the processor \"decode.json\" to parse it into structured data first.",
+      "Version": "v0.1.0",
+      "Author": "Meroxa, Inc.",
+      "Parameters": {
+        "mapping": {
+          "Default": "",
+          "Description": "mapping is a comma separated list of keys and values for fields and their new names (keys and values are separated by colons \":\"). For example: `.Metadata.key:id,.Payload.After.foo:bar`.",
+          "Type": 1,
+          "Validations": [
+            {}
+          ]
+        }
+      }
+    },
+    "examples": [
+      {
+        "description": "Rename two fields, one under key, and one under payload.before.",
+        "config": {
+          "mapping": ".Key.id:table,.Payload.Before.bar:renamedBar"
+        },
+        "have": {
+          "position": null,
+          "operation": "create",
+          "metadata": {
+            "key1": "val1"
+          },
+          "key": {
+            "id": "table-name"
+          },
+          "payload": {
+            "before": {
+              "bar": "baz"
+            },
+            "after": {
+              "foo": "bar"
+            }
+          }
+        },
+        "want": {
+          "position": null,
+          "operation": "create",
+          "metadata": {
+            "key1": "val1"
+          },
+          "key": {
+            "table": "table-name"
+          },
+          "payload": {
+            "before": {
+              "renamedBar": "baz"
+            },
+            "after": {
+              "foo": "bar"
+            }
+          }
+        }
+      },
+      {
+        "description": "Rename two fields, one under metadata, and one under payload.after.",
+        "config": {
+          "mapping": ".Metadata.key1:newKey,.Payload.After.foo:newFoo"
+        },
+        "have": {
+          "position": null,
+          "operation": "create",
+          "metadata": {
+            "key1": "val1"
+          },
+          "key": null,
+          "payload": {
+            "before": {
+              "bar": "baz"
+            },
+            "after": {
+              "foo": "bar"
+            }
+          }
+        },
+        "want": {
+          "position": null,
+          "operation": "create",
+          "metadata": {
+            "newKey": "val1"
+          },
+          "key": null,
+          "payload": {
+            "before": {
+              "bar": "baz"
+            },
+            "after": {
+              "newFoo": "bar"
+            }
+          }
+        }
+      }
+    ]
+  },
+  {
+    "specification": {
+      "Name": "field.set",
+      "Summary": "Set the value of a certain field.",
+      "Description": "Set the value of a certain field to any value. It is not allowed to set the .Position field.\nThe new value can be a Go template expression, the processor will evaluate the output and assign the value to the target field.\nIf the \"field\" provided doesn't exist, the processor will create that field and assign its value.\nThis processor can be used for multiple purposes, like extracting fields, hoisting data, inserting fields, copying fields, masking fields, etc.\nNote that this processor only runs on structured data, if the record contains raw JSON data, then use the processor\n\"decode.json\" to parse it into structured data first.",
+      "Version": "v0.1.0",
+      "Author": "Meroxa, Inc.",
+      "Parameters": {
+        "field": {
+          "Default": "",
+          "Description": "field is the target field, as it would be addressed in a Go template (e.g. `.Payload.After.foo`). Note that it is not allowed to set the .Position field.",
+          "Type": 1,
+          "Validations": [
+            {},
+            {
+              "List": [
+                ".Position"
+              ]
+            }
+          ]
+        },
+        "value": {
+          "Default": "",
+          "Description": "value is a Go template expression which will be evaluated and stored in `field` (e.g. `{{ .Payload.After }}`).",
+          "Type": 1,
+          "Validations": [
+            {}
+          ]
+        }
+      }
+    },
+    "examples": [
+      {
+        "description": "Processor will create a new field and set its value",
+        "config": {
+          "field": ".Payload.After.foo",
+          "value": "bar"
+        },
+        "have": {
+          "position": null,
+          "operation": "snapshot",
+          "metadata": null,
+          "key": {
+            "my-key": "id"
+          },
+          "payload": {
+            "before": null,
+            "after": null
+          }
+        },
+        "want": {
+          "position": null,
+          "operation": "snapshot",
+          "metadata": null,
+          "key": {
+            "my-key": "id"
+          },
+          "payload": {
+            "before": null,
+            "after": {
+              "foo": "bar"
+            }
+          }
+        }
+      },
+      {
+        "description": "Processor will set the operation into \"update\".",
+        "config": {
+          "field": ".Operation",
+          "value": "update"
+        },
+        "have": {
+          "position": null,
+          "operation": "create",
+          "metadata": null,
+          "key": null,
+          "payload": {
+            "before": null,
+            "after": null
+          }
+        },
+        "want": {
+          "position": null,
+          "operation": "update",
+          "metadata": null,
+          "key": null,
+          "payload": {
+            "before": null,
+            "after": null
+          }
+        }
+      },
+      {
+        "description": "set the value under .Payload.After.postgres to true if .Metadata.table=\"postgres\"",
+        "config": {
+          "field": ".Payload.After.postgres",
+          "value": "{{ eq .Metadata.table \"postgres\" }}"
+        },
+        "have": {
+          "position": null,
+          "operation": "snapshot",
+          "metadata": {
+            "table": "postgres"
+          },
+          "key": null,
+          "payload": {
+            "before": null,
+            "after": {
+              "postgres": "false"
+            }
+          }
+        },
+        "want": {
+          "position": null,
+          "operation": "snapshot",
+          "metadata": {
+            "table": "postgres"
+          },
+          "key": null,
+          "payload": {
+            "before": null,
+            "after": {
+              "postgres": "true"
+            }
+          }
+        }
+      }
+    ]
+  },
+  {
+    "specification": {
+      "Name": "field.subset.exclude",
+      "Summary": "Remove a subset of fields from the record.",
+      "Description": "Remove a subset of fields from the record, all the other fields are left untouched. \nIf a field is excluded that contains nested data, the whole tree will be removed.  \nIt is not allowed to exclude .Position or .Operation fields.\nNote that this processor only runs on structured data, if the record contains raw JSON data, then use the processor \"decode.json\" to parse it into structured data first.",
+      "Version": "v0.1.0",
+      "Author": "Meroxa, Inc.",
+      "Parameters": {
+        "fields": {
+          "Default": "",
+          "Description": "fields is a comma separated list of target fields, as they would be addressed in a Go template (e.g. `.Metadata,.Payload.After.foo`).",
+          "Type": 1,
+          "Validations": [
+            {}
+          ]
+        }
+      }
+    },
+    "examples": [
+      {
+        "description": "exclude all fields under payload",
+        "config": {
+          "fields": ".Payload"
+        },
+        "have": {
+          "position": null,
+          "operation": "create",
+          "metadata": {
+            "key1": "val1"
+          },
+          "key": null,
+          "payload": {
+            "before": {
+              "bar": "baz"
+            },
+            "after": {
+              "foo": "bar"
+            }
+          }
+        },
+        "want": {
+          "position": null,
+          "operation": "create",
+          "metadata": {
+            "key1": "val1"
+          },
+          "key": null,
+          "payload": {
+            "before": null,
+            "after": null
+          }
+        }
+      },
+      {
+        "description": "exclude metadata, and some fields under payload and key",
+        "config": {
+          "fields": ".Metadata,.Payload.After.foo,.Key.key1"
+        },
+        "have": {
+          "position": null,
+          "operation": "create",
+          "metadata": {
+            "source": "s3"
+          },
+          "key": {
+            "key1": "val1",
+            "key2": "val2"
+          },
+          "payload": {
+            "before": {
+              "bar": "baz"
+            },
+            "after": {
+              "foo": "bar",
+              "foobar": "baz"
+            }
+          }
+        },
+        "want": {
+          "position": null,
+          "operation": "create",
+          "metadata": {},
+          "key": {
+            "key2": "val2"
+          },
+          "payload": {
+            "before": {
+              "bar": "baz"
+            },
+            "after": {
+              "foobar": "baz"
+            }
+          }
+        }
+      }
+    ]
+  },
+  {
+    "specification": {
+      "Name": "filter",
+      "Summary": "Acknowledges all records that get passed to the filter.",
+      "Description": "Acknowledges all records that get passed to the filter, so the records will be filtered out if \nthe condition provided to the processor is evaluated to \"true\".\nMake sure to add a condition to this processor, otherwise all records will be filtered out.\"",
+      "Version": "v0.1.0",
+      "Author": "Meroxa, Inc.",
+      "Parameters": {}
+    },
+    "examples": [
+      {
+        "description": "filter out the record",
+        "config": {},
+        "have": {
+          "position": null,
+          "operation": "create",
+          "metadata": {
+            "key1": "val1"
+          },
+          "key": null,
+          "payload": {
+            "before": {
+              "bar": "baz"
+            },
+            "after": {
+              "foo": "bar"
+            }
+          }
+        },
+        "want": {}
+      }
+    ]
+  },
+  {
+    "specification": {
+      "Name": "unwrap.debezium",
+      "Summary": "Unwraps a Debezium record from the input OpenCDC record.",
+      "Description": "In this processor, the wrapped (Debezium) record replaces the wrapping record (being processed) \ncompletely, except for the position.\n\nThe Debezium record's metadata and the wrapping record's metadata is merged, with the Debezium metadata having precedence.\n\nThis is useful in cases where Conduit acts as an intermediary between a Debezium source and a Debezium destination. \nIn such cases, the Debezium record is set as the OpenCDC record's payload, and needs to be unwrapped for further usage.",
+      "Version": "v0.1.0",
+      "Author": "Meroxa, Inc.",
+      "Parameters": {
+        "field": {
+          "Default": ".Payload.After",
+          "Description": "field is a reference to the field which contains the Debezium record.  For more information about record references, see: https://github.com/ConduitIO/conduit-processor-sdk/blob/cbdc5dcb5d3109f8f13b88624c9e360076b0bcdb/util.go#L66.",
+          "Type": 1,
+          "Validations": [
+            {
+              "Regex": "^.Payload"
+            }
+          ]
+        }
+      }
+    },
+    "examples": [
+      {
+        "description": "This example how to unwrap a Debezium record from a field nested in a record's\n.Payload.After field. It additionally shows how the key is unwrapped, and the metadata merged.",
+        "config": {
+          "field": ".Payload.After.nested"
+        },
+        "have": {
+          "position": "dGVzdC1wb3NpdGlvbg==",
+          "operation": "create",
+          "metadata": {
+            "metadata-key": "metadata-value"
+          },
+          "key": "{\"payload\":\"27\"}",
+          "payload": {
+            "before": null,
+            "after": {
+              "nested": "{\n\t\t\t\t\t\t \"payload\": {\n\t\t\t\t\t\t   \"after\": {\n\t\t\t\t\t\t\t \"description\": \"test1\",\n\t\t\t\t\t\t\t \"id\": 27\n\t\t\t\t\t\t   },\n\t\t\t\t\t\t   \"before\": null,\n\t\t\t\t\t\t   \"op\": \"c\",\n\t\t\t\t\t\t   \"source\": {\n\t\t\t\t\t\t\t \"opencdc.readAt\": \"1674061777225877000\",\n\t\t\t\t\t\t\t \"opencdc.version\": \"v1\"\n\t\t\t\t\t\t   },\n\t\t\t\t\t\t   \"transaction\": null,\n\t\t\t\t\t\t   \"ts_ms\": 1674061777225\n\t\t\t\t\t\t },\n\t\t\t\t\t\t \"schema\": {} \n\t\t\t\t\t\t}"
+            }
+          }
+        },
+        "want": {
+          "position": "dGVzdC1wb3NpdGlvbg==",
+          "operation": "create",
+          "metadata": {
+            "metadata-key": "metadata-value",
+            "opencdc.readAt": "1674061777225877000",
+            "opencdc.version": "v1"
+          },
+          "key": "27",
+          "payload": {
+            "before": null,
+            "after": {
+              "description": "test1",
+              "id": 27
+            }
+          }
+        }
+      }
+    ]
+  },
+  {
+    "specification": {
+      "Name": "unwrap.kafkaconnect",
+      "Summary": "Unwraps a Kafka Connect record from an OpenCDC record.",
+      "Description": "This processor unwraps a Kafka Connect record from the input OpenCDC record.\n\nThe input record's payload is replaced with the Kafka Connect record.\n\nThis is useful in cases where Conduit acts as an intermediary between a Debezium source and a Debezium destination. \nIn such cases, the Debezium record is set as the OpenCDC record's payload, and needs to be unwrapped for further usage.",
+      "Version": "v0.1.0",
+      "Author": "Meroxa, Inc.",
+      "Parameters": {
+        "field": {
+          "Default": ".Payload.After",
+          "Description": "field is a reference to the field which contains the Kafka Connect record.  For more information about record references, see: https://github.com/ConduitIO/conduit-processor-sdk/blob/cbdc5dcb5d3109f8f13b88624c9e360076b0bcdb/util.go#L66.",
+          "Type": 1,
+          "Validations": [
+            {
+              "Regex": "^.Payload"
+            }
+          ]
+        }
+      }
+    },
+    "examples": [
+      {
+        "description": "This example shows how to unwrap a Kafka Connect record.\n\nThe Kafka Connect record is serialized as a JSON string in the .Payload.After field (raw data).\nThe Kafka Connect record's payload will replace the OpenCDC record's payload.\n\nWe also see how the key is unwrapped too. In this case, the key comes in as structured data.\n",
+        "config": {
+          "field": ".Payload.After"
+        },
+        "have": {
+          "position": "dGVzdCBwb3NpdGlvbg==",
+          "operation": "create",
+          "metadata": {
+            "metadata-key": "metadata-value"
+          },
+          "key": {
+            "payload": {
+              "id": 27
+            },
+            "schema": {}
+          },
+          "payload": {
+            "before": null,
+            "after": "{\n\"payload\": {\n  \"description\": \"test2\"\n},\n\"schema\": {}\n}"
+          }
+        },
+        "want": {
+          "position": "dGVzdCBwb3NpdGlvbg==",
+          "operation": "create",
+          "metadata": {
+            "metadata-key": "metadata-value"
+          },
+          "key": {
+            "id": 27
+          },
+          "payload": {
+            "before": null,
+            "after": {
+              "description": "test2"
+            }
+          }
+        }
+      }
+    ]
+  },
+  {
+    "specification": {
+      "Name": "webhook.http",
+      "Summary": "HTTP webhook processor",
+      "Description": "\nA processor that sends an HTTP request to the specified URL, retries on error and \nsaves the response body and, optionally, the response status. \n",
+      "Version": "v0.1.0",
+      "Author": "Meroxa, Inc.",
+      "Parameters": {
+        "backoffRetry.count": {
+          "Default": "0",
+          "Description": "backoffRetry.count is the maximum number of retries for an individual record when backing off following an error.",
+          "Type": 3,
+          "Validations": [
+            {
+              "V": -1
+            }
+          ]
+        },
+        "backoffRetry.factor": {
+          "Default": "2",
+          "Description": "backoffRetry.factor is the multiplying factor for each increment step.",
+          "Type": 3,
+          "Validations": [
+            {
+              "V": 0
+            }
+          ]
+        },
+        "backoffRetry.max": {
+          "Default": "5s",
+          "Description": "backoffRetry.max is the maximum waiting time before retrying.",
+          "Type": 6,
+          "Validations": []
+        },
+        "backoffRetry.min": {
+          "Default": "100ms",
+          "Description": "backoffRetry.min is the minimum waiting time before retrying.",
+          "Type": 6,
+          "Validations": []
+        },
+        "request.body": {
+          "Default": ".",
+          "Description": "request.body specifies which field from the input record should be used as the body in the HTTP request. The value of this parameter should be a valid record field reference: See: sdk.NewReferenceResolver",
+          "Type": 1,
+          "Validations": []
+        },
+        "request.contentType": {
+          "Default": "application/json",
+          "Description": "request.contentType is the value of the Content-Type header.",
+          "Type": 1,
+          "Validations": []
+        },
+        "request.method": {
+          "Default": "POST",
+          "Description": "request.method is the HTTP request method to be used.",
+          "Type": 1,
+          "Validations": []
+        },
+        "request.url": {
+          "Default": "",
+          "Description": "request.url used in the HTTP request.",
+          "Type": 1,
+          "Validations": [
+            {}
+          ]
+        },
+        "response.body": {
+          "Default": ".Payload.After",
+          "Description": "response.body specifies to which field should the response body be saved to. The value of this parameter should be a valid record field reference: See: sdk.NewReferenceResolver",
+          "Type": 1,
+          "Validations": []
+        },
+        "response.status": {
+          "Default": "",
+          "Description": "response.status specifies to which field should the response status be saved to. The value of this parameter should be a valid record field reference. If no value is set, then the response status will NOT be saved. See: sdk.NewReferenceResolver",
+          "Type": 1,
+          "Validations": []
+        }
+      }
+    },
+    "examples": [
+      {
+        "description": "\nThis example shows how to use the HTTP processor to send a record's .Payload.After field to a dummy HTTP server \nthat replies back with a greeting. \n\nThe record's .Payload.After is overwritten with the response. Additionally, the example shows how to store the \nvalue of the HTTP response's code in the record's metadata'.",
+        "config": {
+          "backoffRetry.count": "0",
+          "backoffRetry.factor": "2",
+          "backoffRetry.max": "5s",
+          "backoffRetry.min": "100ms",
+          "request.body": ".Payload.After",
+          "request.contentType": "application/json",
+          "request.method": "POST",
+          "request.url": "http://127.0.0.1:54321",
+          "response.body": ".Payload.After",
+          "response.status": ".Metadata[\"http_status\"]"
+        },
+        "have": {
+          "position": null,
+          "operation": "Operation(0)",
+          "metadata": null,
+          "key": null,
+          "payload": {
+            "before": null,
+            "after": "world"
+          }
+        },
+        "want": {
+          "position": null,
+          "operation": "Operation(0)",
+          "metadata": {
+            "http_status": "200"
+          },
+          "key": null,
+          "payload": {
+            "before": null,
+            "after": "hello, world"
+          }
+        }
+      }
+    ]
+  }
+]

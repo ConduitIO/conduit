@@ -1,4 +1,4 @@
-// Copyright © 2022 Meroxa, Inc.
+// Copyright © 2024 Meroxa, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,14 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:build tools
-
-package main
+package unwrap
 
 import (
-	_ "github.com/bufbuild/buf/cmd/buf"
-	_ "github.com/conduitio/conduit-commons/paramgen"
-	_ "github.com/golangci/golangci-lint/cmd/golangci-lint"
-	_ "go.uber.org/mock/mockgen"
-	_ "golang.org/x/tools/cmd/stringer"
+	sdk "github.com/conduitio/conduit-processor-sdk"
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 )
+
+var cmpProcessedRecordOpts = []cmp.Option{
+	cmpopts.IgnoreUnexported(sdk.SingleRecord{}),
+	cmp.Comparer(func(e1, e2 error) bool {
+		switch {
+		case e1 == nil && e2 == nil:
+			return true
+		case e1 != nil && e2 != nil:
+			return e1.Error() == e2.Error()
+		default:
+			return false
+		}
+	}),
+}
