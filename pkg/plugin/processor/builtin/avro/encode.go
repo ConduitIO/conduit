@@ -19,6 +19,7 @@ package avro
 
 import (
 	"context"
+	"crypto/tls"
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
@@ -31,6 +32,72 @@ import (
 
 type encoder interface {
 	Encode(ctx context.Context, sd opencdc.StructuredData) (opencdc.RawData, error)
+}
+
+type encodeConfig struct {
+	// The field that will be encoded.
+	Field string `json:"field" default:".Payload.After"`
+
+	// URL of the schema registry (e.g. http://localhost:8085)
+	URL string `json:"url" validate:"required"`
+
+	Schema schemaConfig `json:"schema"`
+	Auth   authConfig   `json:"auth"`
+	TLS    tlsConfig    `json:"tls"`
+
+	fieldResolver sdk.ReferenceResolver
+}
+
+func (c encodeConfig) ClientOptions() []sr.Opt {
+	clientOpts := []sr.Opt{sr.URLs(c.URL), sr.Normalize()}
+	if c.Auth.Username != "" && c.Auth.Password != "" {
+		clientOpts = append(clientOpts, sr.BasicAuth(c.Auth.Username, c.Auth.Password))
+	}
+
+	if c.TLS.tlsClientCert != nil {
+		tlsCfg := &tls.Config{
+			Certificates: []tls.Certificate{*c.TLS.tlsClientCert},
+			MinVersion:   tls.VersionTLS12,
+		}
+		if c.TLS.tlsCACert != nil {
+			tlsCfg.RootCAs = c.TLS.tlsCACert
+		}
+		clientOpts = append(clientOpts, sr.DialTLSConfig(tlsCfg))
+	}
+
+	return clientOpts
+}
+
+func parseEncodeConfig(ctx context.Context, m map[string]string) (encodeConfig, error) {
+	cfg := encodeConfig{}
+	err := sdk.ParseConfig(ctx, m, &cfg, cfg.Parameters())
+	if err != nil {
+		return encodeConfig{}, err
+	}
+
+	err = cfg.Auth.validate()
+	if err != nil {
+		return encodeConfig{}, cerrors.Errorf("invalid basic auth: %w", err)
+	}
+
+	err = cfg.TLS.parse()
+	if err != nil {
+		return encodeConfig{}, cerrors.Errorf("failed parsing TLS: %w", err)
+	}
+
+	err = cfg.Schema.parse()
+	if err != nil {
+		return encodeConfig{}, cerrors.Errorf("failed parsing schema strategy: %w", err)
+	}
+
+	// Parse target field
+	rr, err := sdk.NewReferenceResolver(cfg.Field)
+	if err != nil {
+		return encodeConfig{}, cerrors.Errorf("failed parsing target field: %w", err)
+	}
+	cfg.fieldResolver = rr
+
+	return cfg, nil
 }
 
 type encodeProcessor struct {
@@ -48,8 +115,8 @@ func NewEncodeProcessor(logger log.CtxLogger) sdk.Processor {
 func (p *encodeProcessor) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
 		Name:    "avro.encode",
-		Summary: "",
-		Description: `The processor takes structured data and encodes it using a schema into the [Avro format](https://avro.apache.org/).
+		Summary: "Encodes a record's field into the Avro format",
+		Description: `The processor takes a record's field and encodes it using a schema into the [Avro format](https://avro.apache.org/).
 It provides two strategies for determining the schema:
 
 * **preRegistered** (recommended)
@@ -76,7 +143,7 @@ It provides two strategies for determining the schema:
 }
 
 func (p *encodeProcessor) Configure(ctx context.Context, m map[string]string) error {
-	cfg, err := parseConfig(ctx, m)
+	cfg, err := parseEncodeConfig(ctx, m)
 	if err != nil {
 		return cerrors.Errorf("invalid config: %w", err)
 	}

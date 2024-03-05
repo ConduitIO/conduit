@@ -15,13 +15,11 @@
 package avro
 
 import (
-	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
 	"os"
 
-	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/multierror"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/avro/schemaregistry"
@@ -179,70 +177,4 @@ func (c *tlsConfig) parse() error {
 	}
 
 	return nil
-}
-
-type encodeConfig struct {
-	// The field that will be encoded.
-	Field string `json:"field" default:".Payload.After"`
-
-	// URL of the schema registry (e.g. http://localhost:8085)
-	URL string `json:"url" validate:"required"`
-
-	Schema schemaConfig `json:"schema"`
-	Auth   authConfig   `json:"auth"`
-	TLS    tlsConfig    `json:"tls"`
-
-	fieldResolver sdk.ReferenceResolver
-}
-
-func (c encodeConfig) ClientOptions() []sr.Opt {
-	clientOpts := []sr.Opt{sr.URLs(c.URL), sr.Normalize()}
-	if c.Auth.Username != "" && c.Auth.Password != "" {
-		clientOpts = append(clientOpts, sr.BasicAuth(c.Auth.Username, c.Auth.Password))
-	}
-
-	if c.TLS.tlsClientCert != nil {
-		tlsCfg := &tls.Config{
-			Certificates: []tls.Certificate{*c.TLS.tlsClientCert},
-			MinVersion:   tls.VersionTLS12,
-		}
-		if c.TLS.tlsCACert != nil {
-			tlsCfg.RootCAs = c.TLS.tlsCACert
-		}
-		clientOpts = append(clientOpts, sr.DialTLSConfig(tlsCfg))
-	}
-
-	return clientOpts
-}
-
-func parseConfig(ctx context.Context, m map[string]string) (encodeConfig, error) {
-	cfg := encodeConfig{}
-	err := sdk.ParseConfig(ctx, m, &cfg, cfg.Parameters())
-	if err != nil {
-		return encodeConfig{}, err
-	}
-
-	err = cfg.Auth.validate()
-	if err != nil {
-		return encodeConfig{}, cerrors.Errorf("invalid basic auth: %w", err)
-	}
-
-	err = cfg.TLS.parse()
-	if err != nil {
-		return encodeConfig{}, cerrors.Errorf("failed parsing TLS: %w", err)
-	}
-
-	err = cfg.Schema.parse()
-	if err != nil {
-		return encodeConfig{}, cerrors.Errorf("failed parsing schema strategy: %w", err)
-	}
-
-	// Parse target field
-	rr, err := sdk.NewReferenceResolver(cfg.Field)
-	if err != nil {
-		return encodeConfig{}, cerrors.Errorf("failed parsing target field: %w", err)
-	}
-	cfg.fieldResolver = rr
-
-	return cfg, nil
 }
