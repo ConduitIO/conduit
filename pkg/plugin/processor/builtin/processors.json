@@ -8,16 +8,16 @@
       "Author": "Meroxa, Inc.",
       "Parameters": {
         "script": {
-          "Default": "",
-          "Description": "script is the Javascript code for this processor. It needs to have a function 'process()' that accepts an array of records and returns an array of processed records. The processed records in the returned array need to have matching indexes with records in the input array. In other words, for the record at input_array[i] the processed record should be at output_array[i].  The processed record can be one of the following: 1. a processed record itself 2. a filter record (constructed with new FilterRecord()) 3. an error record (constructred with new ErrorRecord())",
-          "Type": 1,
-          "Validations": []
+          "default": "",
+          "description": "script is the Javascript code for this processor. It needs to have a function 'process()' that accepts an array of records and returns an array of processed records. The processed records in the returned array need to have matching indexes with records in the input array. In other words, for the record at input_array[i] the processed record should be at output_array[i].  The processed record can be one of the following: 1. a processed record itself 2. a filter record (constructed with new FilterRecord()) 3. an error record (constructred with new ErrorRecord())",
+          "type": "string",
+          "validations": []
         },
         "script.path": {
-          "Default": "",
-          "Description": "script.path is the path to a .js file containing the processor code.",
-          "Type": 1,
-          "Validations": []
+          "default": "",
+          "description": "script.path is the path to a .js file containing the processor code.",
+          "type": "string",
+          "validations": []
         }
       }
     },
