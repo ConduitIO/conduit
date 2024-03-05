@@ -590,10 +590,7 @@ func TestUnwrapOpenCDC_Process(t *testing.T) {
 
 			got := underTest.Process(ctx, []opencdc.Record{tt.record})
 			is.Equal(1, len(got))
-			diff := cmp.Diff(tt.want, got[0], cmpProcessedRecordOpts...)
-			if diff != "" {
-				t.Errorf("process() diff = %s", diff)
-			}
+			is.Equal("", cmp.Diff(tt.want, got[0], cmpProcessedRecordOpts...))
 		})
 	}
 }
