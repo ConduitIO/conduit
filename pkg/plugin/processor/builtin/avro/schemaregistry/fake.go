@@ -18,7 +18,6 @@ package schemaregistry
 
 import (
 	"fmt"
-	"log"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -78,7 +77,7 @@ func fakeSchemaRegistryURL(name string, logf func(format string, args ...any), p
 			_ = srv.Listener.Close()
 			l, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
 			if err != nil {
-				log.Fatalf("failed starting test server on port %d: %v", port, err)
+				panic(fmt.Sprintf("failed starting test server on port %d: %v", port, err))
 			}
 			srv.Listener = l
 		}
