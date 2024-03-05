@@ -11,7 +11,7 @@ func (jsonDecodeConfig) Parameters() map[string]config.Parameter {
 	return map[string]config.Parameter{
 		"field": {
 			Default:     "",
-			Description: "field is the target field, as it would be addressed in a Go template (e.g. `.Payload.After`). Applicable values are `.Key`, `.Payload.Before` and `.Payload.After`, as they accept structured data.",
+			Description: "Field is the target field, as it would be addressed in a Go template (e.g. `.Payload.After`).\nApplicable values are `.Key`, `.Payload.Before` and `.Payload.After`, as they accept structured data format.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{
 				config.ValidationRequired{},

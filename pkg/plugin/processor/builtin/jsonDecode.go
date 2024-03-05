@@ -44,9 +44,9 @@ type jsonDecodeConfig struct {
 func (p *jsonDecode) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
 		Name:    "json.decode",
-		Summary: "Decodes a specific field from raw data (string) to JSON structured data.",
-		Description: `The processor takes raw data (string) from the target field, parses it as JSON and stores the decoded
-structured data in the target field.
+		Summary: "Decodes a specific field from JSON raw data (string) to structured data.",
+		Description: `The processor takes JSON raw data (string) from the target field, parses it as JSON structured data
+and stores the decoded structured data in the target field.
 This processor is only applicable to .Key, .Payload.Before and .Payload.After, as they accept structured data format.
 `,
 		Version:    "v0.1.0",
