@@ -38,11 +38,11 @@ func ExampleEncodeProcessor_autoRegister() {
 		Description: `This example shows the usage of the ` + "`avro.encode`" + ` processor
 with the ` + "`autoRegister`" + ` schema strategy. The processor encodes the record's
 ` + "`.Payload.After`" + ` field using the schema that is registered on the fly under the subject
-` + "`example-subject`" + `.`,
+` + "`example-autoRegister`" + `.`,
 		Config: map[string]string{
 			"url":                         url,
 			"schema.strategy":             "autoRegister",
-			"schema.autoRegister.subject": "example-subject",
+			"schema.autoRegister.subject": "example-autoRegister",
 		},
 		Have: opencdc.Record{
 			Position:  opencdc.Position("test-position"),
