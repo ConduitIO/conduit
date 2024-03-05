@@ -9,7 +9,7 @@
       "parameters": {
         "field": {
           "default": "",
-          "description": "field is the target field, as it would be addressed in a Go template (e.g. `.Payload.After.foo`). you can only convert fields that are under .Key and .Payload, and said fields should contain structured data.",
+          "description": "Field is the target field, as it would be addressed in a Go template (e.g. `.Payload.After.foo`).\nyou can only convert fields that are under .Key and .Payload, and said fields should contain structured data.",
           "type": "string",
           "validations": [
             {
@@ -24,7 +24,7 @@
         },
         "type": {
           "default": "",
-          "description": "type is the target field type after conversion, available options are: string, int, float, bool.",
+          "description": "Type is the target field type after conversion, available options are: string, int, float, bool.",
           "type": "string",
           "validations": [
             {
