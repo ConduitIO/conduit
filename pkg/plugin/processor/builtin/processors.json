@@ -1,12 +1,205 @@
 [
   {
     "specification": {
-      "Name": "custom.javascript",
-      "Summary": "JavaScript processor",
-      "Description": "A processor that makes it possible to process Conduit records using JavaScript.\n\nThe following helper functions and fields are available:\n* logger: a logger that outputs to Conduit's logs. Check zerolog's API on how to use it.\n* SingleRecord(): constructs a new record which represents a successful processing result.\nIt's analogous to sdk.SingleRecord from Conduit's Go processor SDK.\n* RawData(): creates a raw data object. It's analogous to opencdc.RawData. Optionally, it\naccepts a string argument, which will be cast into a byte array, for example: record.Key = RawData(\"new key\").\n* StructuredData(): creates a structured data (map-like) object.\n\nTo find out what's possible with the JS processors, also refer to the documentation for \n[goja](https://github.com/dop251/goja), which is the JavaScript engine we use.",
-      "Version": "v0.1.0",
-      "Author": "Meroxa, Inc.",
-      "Parameters": {
+      "name": "avro.encode",
+      "summary": "",
+      "description": "The processor takes structured data and encodes it using a schema into the [Avro format](https://avro.apache.org/).\nIt provides two strategies for determining the schema:\n\n* **preRegistered** (recommended)\n  This strategy downloads an existing schema from the schema registry and uses it to encode the record.\n  This requires the schema to already be registered in the schema registry. The schema is downloaded\n  only once and cached locally.\n* **autoRegister** (for development purposes)\n  This strategy infers the schema by inspecting the structured data and registers it in the schema\n  registry. If the record schema is known in advance it's recommended to use the preRegistered strategy\n  and manually register the schema, as this strategy comes with limitations.\n\n  The strategy uses reflection to traverse the structured data of each record and determine the type\n  of each field. If a specific field is set to nil the processor won't have enough information to determine\n  the type and will default to a nullable string. Because of this it is not guaranteed that two records\n  with the same structure produce the same schema or even a backwards compatible schema. The processor\n  registers each inferred schema in the schema registry with the same subject, therefore the schema compatibility\n  checks need to be disabled for this schema to prevent failures. If the schema subject does not exist before running\n  this processor, it will automatically set the correct compatibility settings in the schema registry.\n",
+      "version": "v0.1.0",
+      "author": "Meroxa, Inc.",
+      "parameters": {
+        "auth.basic.password": {
+          "default": "",
+          "description": "The password to use with basic authentication. This option is required if\nauth.basic.username contains a value. If both auth.basic.username and auth.basic.password\nare empty basic authentication is disabled.",
+          "type": "string",
+          "validations": []
+        },
+        "auth.basic.username": {
+          "default": "",
+          "description": "The username to use with basic authentication. This option is required if\nauth.basic.password contains a value. If both auth.basic.username and auth.basic.password\nare empty basic authentication is disabled.",
+          "type": "string",
+          "validations": []
+        },
+        "field": {
+          "default": ".Payload.After",
+          "description": "The field that will be encoded.",
+          "type": "string",
+          "validations": []
+        },
+        "schema.autoRegister.subject": {
+          "default": "",
+          "description": "The subject name under which the inferred schema will be registered in the schema registry.",
+          "type": "string",
+          "validations": []
+        },
+        "schema.preRegistered.subject": {
+          "default": "",
+          "description": "The subject of the schema in the schema registry used to encode the record.",
+          "type": "string",
+          "validations": []
+        },
+        "schema.preRegistered.version": {
+          "default": "",
+          "description": "The version of the schema in the schema registry used to encode the record.",
+          "type": "int",
+          "validations": [
+            {
+              "type": "greater-than",
+              "value": "0"
+            }
+          ]
+        },
+        "schema.strategy": {
+          "default": "",
+          "description": "Strategy to use to determine the schema for the record.\nAvailable strategies are:\n* `preRegistered` (recommended) - Download an existing schema from the schema registry.\n   This strategy is further configured with options starting with `schema.preRegistered.*`.\n* `autoRegister` (for development purposes) - Infer the schema from the record and register it\n   in the schema registry. This strategy is further configured with options starting with\n  `schema.autoRegister.*`.\n\nFor more information about the behavior of each strategy read the main processor description.",
+          "type": "string",
+          "validations": [
+            {
+              "type": "required",
+              "value": ""
+            },
+            {
+              "type": "inclusion",
+              "value": "preRegistered,autoRegister"
+            }
+          ]
+        },
+        "tls.ca.cert": {
+          "default": "",
+          "description": "The path to a file containing PEM encoded CA certificates. If this option is empty,\nConduit falls back to using the host's root CA set.",
+          "type": "string",
+          "validations": []
+        },
+        "tls.client.cert": {
+          "default": "",
+          "description": "The path to a file containing a PEM encoded certificate. This option is required\nif tls.client.key contains a value. If both tls.client.cert and tls.client.key are empty\nTLS is disabled.",
+          "type": "string",
+          "validations": []
+        },
+        "tls.client.key": {
+          "default": "",
+          "description": "The path to a file containing a PEM encoded private key. This option is required\nif tls.client.cert contains a value. If both tls.client.cert and tls.client.key are empty\nTLS is disabled.",
+          "type": "string",
+          "validations": []
+        },
+        "url": {
+          "default": "",
+          "description": "URL of the schema registry (e.g. http://localhost:8085)",
+          "type": "string",
+          "validations": [
+            {
+              "type": "required",
+              "value": ""
+            }
+          ]
+        }
+      }
+    },
+    "examples": [
+      {
+        "description": "This example shows the usage of the `avro.encode` processor\nwith the `autoRegister` schema strategy. The processor encodes the record's\n`.Payload.After` field using the schema that is extracted from the data\nand registered on the fly under the subject`example-autoRegister`.",
+        "config": {
+          "auth.basic.password": "",
+          "auth.basic.username": "",
+          "field": ".Payload.After",
+          "schema.autoRegister.subject": "example-autoRegister",
+          "schema.preRegistered.subject": "",
+          "schema.preRegistered.version": "",
+          "schema.strategy": "autoRegister",
+          "tls.ca.cert": "",
+          "tls.client.cert": "",
+          "tls.client.key": "",
+          "url": "http://127.0.0.1:54322"
+        },
+        "have": {
+          "position": "dGVzdC1wb3NpdGlvbg==",
+          "operation": "create",
+          "metadata": {
+            "key1": "val1"
+          },
+          "key": null,
+          "payload": {
+            "before": null,
+            "after": {
+              "myFloat": 2.3,
+              "myInt": 1,
+              "myMap": {
+                "bar": 2.2,
+                "foo": true
+              },
+              "myString": "bar",
+              "myStruct": {
+                "bar": false,
+                "foo": 1
+              }
+            }
+          }
+        },
+        "want": {
+          "position": "dGVzdC1wb3NpdGlvbg==",
+          "operation": "create",
+          "metadata": {
+            "key1": "val1"
+          },
+          "key": null,
+          "payload": {
+            "before": null,
+            "after": "\u0000\u0000\u0000\u0000\u0001ffffff\u0002@\u0002\ufffd\ufffd\ufffd\ufffd\ufffd\ufffd\u0001@\u0001\u0006bar\u0000\u0002"
+          }
+        }
+      },
+      {
+        "description": "This example shows the usage of the `avro.encode` processor\nwith the `preRegistered` schema strategy. When using this strategy, the\nschema has to be manually pre-registered. In this example we use the following schema:\n\n```json\n{\n  \"type\":\"record\",\n  \"name\":\"record\",\n  \"fields\":[\n    {\"name\":\"myString\",\"type\":\"string\"},\n    {\"name\":\"myInt\",\"type\":\"int\"}\n  ]\n}\n```\n\nThe processor encodes the record's`.Key` field using the above schema.",
+        "config": {
+          "auth.basic.password": "",
+          "auth.basic.username": "",
+          "field": ".Key",
+          "schema.autoRegister.subject": "",
+          "schema.preRegistered.subject": "example-preRegistered",
+          "schema.preRegistered.version": "1",
+          "schema.strategy": "preRegistered",
+          "tls.ca.cert": "",
+          "tls.client.cert": "",
+          "tls.client.key": "",
+          "url": "http://127.0.0.1:54322"
+        },
+        "have": {
+          "position": "dGVzdC1wb3NpdGlvbg==",
+          "operation": "create",
+          "metadata": {
+            "key1": "val1"
+          },
+          "key": {
+            "myInt": 1,
+            "myString": "bar"
+          },
+          "payload": {
+            "before": null,
+            "after": null
+          }
+        },
+        "want": {
+          "position": "dGVzdC1wb3NpdGlvbg==",
+          "operation": "create",
+          "metadata": {
+            "key1": "val1"
+          },
+          "key": "\u0000\u0000\u0000\u0000\u0001\u0006bar\u0002",
+          "payload": {
+            "before": null,
+            "after": null
+          }
+        }
+      }
+    ]
+  },
+  {
+    "specification": {
+      "name": "custom.javascript",
+      "summary": "JavaScript processor",
+      "description": "A processor that makes it possible to process Conduit records using JavaScript.\n\nThe following helper functions and fields are available:\n* logger: a logger that outputs to Conduit's logs. Check zerolog's API on how to use it.\n* Record(): constructs a new record which represents a successful processing result.\nIt's analogous to sdk.SingleRecord from Conduit's Go processor SDK.\n* RawData(): creates a raw data object. It's analogous to opencdc.RawData. Optionally, it\naccepts a string argument, which will be cast into a byte array, for example: record.Key = RawData(\"new key\").\n* StructuredData(): creates a structured data (map-like) object.\n\nTo find out what's possible with the JS processors, also refer to the documentation for \n[goja](https://github.com/dop251/goja), which is the JavaScript engine we use.",
+      "version": "v0.1.0",
+      "author": "Meroxa, Inc.",
+      "parameters": {
         "script": {
           "default": "",
           "description": "Script is the JavaScript code for this processor.\nIt needs to have a function 'process()' that accepts\nan array of records and returns an array of processed records.\nThe processed records in the returned array need to have matching indexes with\nrecords in the input array. In other words, for the record at input_array[i]\nthe processed record should be at output_array[i].\n\nThe processed record can be one of the following:\n1. a processed record itself\n2. a filter record (constructed with new FilterRecord())\n3. an error record (constructred with new ErrorRecord())",
@@ -58,12 +251,12 @@
   },
   {
     "specification": {
-      "Name": "field.convert",
-      "Summary": "Convert the type of a field.",
-      "Description": "Convert takes the field of one type and converts it into another type (e.g. string to integer). \nThe applicable types are string, int, float and bool. Converting can be done between any combination of types. Note that\nbooleans will be converted to numeric values 1 (true) and 0 (false). Processor is only applicable to .Key, .Payload.Before\nand .Payload.After prefixes, and only applicable if said fields contain structured data.\nIf the record contains raw JSON data, then use the processor \"decode.json\" to parse it into structured data first.",
-      "Version": "v0.1.0",
-      "Author": "Meroxa, Inc.",
-      "Parameters": {
+      "name": "field.convert",
+      "summary": "Convert the type of a field.",
+      "description": "Convert takes the field of one type and converts it into another type (e.g. string to integer). \nThe applicable types are string, int, float and bool. Converting can be done between any combination of types. Note that\nbooleans will be converted to numeric values 1 (true) and 0 (false). Processor is only applicable to .Key, .Payload.Before\nand .Payload.After prefixes, and only applicable if said fields contain structured data.\nIf the record contains raw JSON data, then use the processor \"decode.json\" to parse it into structured data first.",
+      "version": "v0.1.0",
+      "author": "Meroxa, Inc.",
+      "parameters": {
         "field": {
           "default": "",
           "description": "Field is the target field, as it would be addressed in a Go template (e.g. `.Payload.After.foo`).\nyou can only convert fields that are under .Key and .Payload, and said fields should contain structured data.",
@@ -206,12 +399,12 @@
   },
   {
     "specification": {
-      "Name": "field.rename",
-      "Summary": "Rename a group of fields.",
-      "Description": "Rename a group of field names to new names. It is not allowed to rename top-level fields (.Operation, .Position, \n.Key, .Metadata, .Payload.Before, .Payload.After).\nNote that this processor only runs on structured data, if the record contains raw JSON data, then use the processor \"decode.json\" to parse it into structured data first.",
-      "Version": "v0.1.0",
-      "Author": "Meroxa, Inc.",
-      "Parameters": {
+      "name": "field.rename",
+      "summary": "Rename a group of fields.",
+      "description": "Rename a group of field names to new names. It is not allowed to rename top-level fields (.Operation, .Position, \n.Key, .Metadata, .Payload.Before, .Payload.After).\nNote that this processor only runs on structured data, if the record contains raw JSON data, then use the processor \"decode.json\" to parse it into structured data first.",
+      "version": "v0.1.0",
+      "author": "Meroxa, Inc.",
+      "parameters": {
         "mapping": {
           "default": "",
           "description": "Mapping is a comma separated list of keys and values for fields and their new names (keys and values\nare separated by colons \":\"). For example: `.Metadata.key:id,.Payload.After.foo:bar`.",
@@ -310,12 +503,12 @@
   },
   {
     "specification": {
-      "Name": "field.set",
-      "Summary": "Set the value of a certain field.",
-      "Description": "Set the value of a certain field to any value. It is not allowed to set the .Position field.\nThe new value can be a Go template expression, the processor will evaluate the output and assign the value to the target field.\nIf the \"field\" provided doesn't exist, the processor will create that field and assign its value.\nThis processor can be used for multiple purposes, like extracting fields, hoisting data, inserting fields, copying fields, masking fields, etc.\nNote that this processor only runs on structured data, if the record contains raw JSON data, then use the processor\n\"decode.json\" to parse it into structured data first.",
-      "Version": "v0.1.0",
-      "Author": "Meroxa, Inc.",
-      "Parameters": {
+      "name": "field.set",
+      "summary": "Set the value of a certain field.",
+      "description": "Set the value of a certain field to any value. It is not allowed to set the .Position field.\nThe new value can be a Go template expression, the processor will evaluate the output and assign the value to the target field.\nIf the \"field\" provided doesn't exist, the processor will create that field and assign its value.\nThis processor can be used for multiple purposes, like extracting fields, hoisting data, inserting fields, copying fields, masking fields, etc.\nNote that this processor only runs on structured data, if the record contains raw JSON data, then use the processor\n\"decode.json\" to parse it into structured data first.",
+      "version": "v0.1.0",
+      "author": "Meroxa, Inc.",
+      "parameters": {
         "field": {
           "default": "",
           "description": "Field is the target field, as it would be addressed in a Go template (e.g. `.Payload.After.foo`).\nNote that it is not allowed to set the .Position field.",
@@ -444,12 +637,12 @@
   },
   {
     "specification": {
-      "Name": "field.subset.exclude",
-      "Summary": "Remove a subset of fields from the record.",
-      "Description": "Remove a subset of fields from the record, all the other fields are left untouched. \nIf a field is excluded that contains nested data, the whole tree will be removed.  \nIt is not allowed to exclude .Position or .Operation fields.\nNote that this processor only runs on structured data, if the record contains raw JSON data, then use the processor \"decode.json\" to parse it into structured data first.",
-      "Version": "v0.1.0",
-      "Author": "Meroxa, Inc.",
-      "Parameters": {
+      "name": "field.subset.exclude",
+      "summary": "Remove a subset of fields from the record.",
+      "description": "Remove a subset of fields from the record, all the other fields are left untouched. \nIf a field is excluded that contains nested data, the whole tree will be removed.  \nIt is not allowed to exclude .Position or .Operation fields.\nNote that this processor only runs on structured data, if the record contains raw JSON data, then use the processor \"decode.json\" to parse it into structured data first.",
+      "version": "v0.1.0",
+      "author": "Meroxa, Inc.",
+      "parameters": {
         "fields": {
           "default": "",
           "description": "Fields is a comma separated list of target fields, as they would be addressed in a Go template (e.g. `.Metadata,.Payload.After.foo`).",
@@ -544,12 +737,12 @@
   },
   {
     "specification": {
-      "Name": "filter",
-      "Summary": "Acknowledges all records that get passed to the filter.",
-      "Description": "Acknowledges all records that get passed to the filter, so the records will be filtered out if \nthe condition provided to the processor is evaluated to \"true\".\nMake sure to add a condition to this processor, otherwise all records will be filtered out.\"",
-      "Version": "v0.1.0",
-      "Author": "Meroxa, Inc.",
-      "Parameters": {}
+      "name": "filter",
+      "summary": "Acknowledges all records that get passed to the filter.",
+      "description": "Acknowledges all records that get passed to the filter, so the records will be filtered out if \nthe condition provided to the processor is evaluated to \"true\".\nMake sure to add a condition to this processor, otherwise all records will be filtered out.\"",
+      "version": "v0.1.0",
+      "author": "Meroxa, Inc.",
+      "parameters": {}
     },
     "examples": [
       {
@@ -577,12 +770,12 @@
   },
   {
     "specification": {
-      "Name": "unwrap.debezium",
-      "Summary": "Unwraps a Debezium record from the input OpenCDC record.",
-      "Description": "In this processor, the wrapped (Debezium) record replaces the wrapping record (being processed) \ncompletely, except for the position.\n\nThe Debezium record's metadata and the wrapping record's metadata is merged, with the Debezium metadata having precedence.\n\nThis is useful in cases where Conduit acts as an intermediary between a Debezium source and a Debezium destination. \nIn such cases, the Debezium record is set as the OpenCDC record's payload, and needs to be unwrapped for further usage.",
-      "Version": "v0.1.0",
-      "Author": "Meroxa, Inc.",
-      "Parameters": {
+      "name": "unwrap.debezium",
+      "summary": "Unwraps a Debezium record from the input OpenCDC record.",
+      "description": "In this processor, the wrapped (Debezium) record replaces the wrapping record (being processed) \ncompletely, except for the position.\n\nThe Debezium record's metadata and the wrapping record's metadata is merged, with the Debezium metadata having precedence.\n\nThis is useful in cases where Conduit acts as an intermediary between a Debezium source and a Debezium destination. \nIn such cases, the Debezium record is set as the OpenCDC record's payload, and needs to be unwrapped for further usage.",
+      "version": "v0.1.0",
+      "author": "Meroxa, Inc.",
+      "parameters": {
         "field": {
           "default": ".Payload.After",
           "description": "Field is a reference to the field which contains the Debezium record.\n\nFor more information about record references, see: https://github.com/ConduitIO/conduit-processor-sdk/blob/cbdc5dcb5d3109f8f13b88624c9e360076b0bcdb/util.go#L66.",
@@ -638,12 +831,12 @@
   },
   {
     "specification": {
-      "Name": "unwrap.kafkaconnect",
-      "Summary": "Unwraps a Kafka Connect record from an OpenCDC record.",
-      "Description": "This processor unwraps a Kafka Connect record from the input OpenCDC record.\n\nThe input record's payload is replaced with the Kafka Connect record.\n\nThis is useful in cases where Conduit acts as an intermediary between a Debezium source and a Debezium destination. \nIn such cases, the Debezium record is set as the OpenCDC record's payload, and needs to be unwrapped for further usage.",
-      "Version": "v0.1.0",
-      "Author": "Meroxa, Inc.",
-      "Parameters": {
+      "name": "unwrap.kafkaconnect",
+      "summary": "Unwraps a Kafka Connect record from an OpenCDC record.",
+      "description": "This processor unwraps a Kafka Connect record from the input OpenCDC record.\n\nThe input record's payload is replaced with the Kafka Connect record.\n\nThis is useful in cases where Conduit acts as an intermediary between a Debezium source and a Debezium destination. \nIn such cases, the Debezium record is set as the OpenCDC record's payload, and needs to be unwrapped for further usage.",
+      "version": "v0.1.0",
+      "author": "Meroxa, Inc.",
+      "parameters": {
         "field": {
           "default": ".Payload.After",
           "description": "Field is a reference to the field which contains the Kafka Connect record.\n\nFor more information about record references, see: https://github.com/ConduitIO/conduit-processor-sdk/blob/cbdc5dcb5d3109f8f13b88624c9e360076b0bcdb/util.go#L66.",
@@ -701,12 +894,12 @@
   },
   {
     "specification": {
-      "Name": "unwrap.opencdc",
-      "Summary": "A processor that unwraps the OpenCDC record saved in one of record's fields.",
-      "Description": "The unwrap.opencdc processor is useful in situations where a record goes through intermediate \nsystems before being written to a final destination. In these cases, the original OpenCDC record is part of the payload \nread from the intermediate system and needs to be unwrapped before being written.\n\nNote: if the wrapped OpenCDC record is not in a structured data field, then it's assumed that it's stored in JSON format.",
-      "Version": "v0.1.0",
-      "Author": "Meroxa, Inc.",
-      "Parameters": {
+      "name": "unwrap.opencdc",
+      "summary": "A processor that unwraps the OpenCDC record saved in one of record's fields.",
+      "description": "The unwrap.opencdc processor is useful in situations where a record goes through intermediate \nsystems before being written to a final destination. In these cases, the original OpenCDC record is part of the payload \nread from the intermediate system and needs to be unwrapped before being written.\n\nNote: if the wrapped OpenCDC record is not in a structured data field, then it's assumed that it's stored in JSON format.",
+      "version": "v0.1.0",
+      "author": "Meroxa, Inc.",
+      "parameters": {
         "field": {
           "default": ".Payload.After",
           "description": "Field is a reference to the field which contains the OpenCDC record.\n\nFor more information about record references, see: https://github.com/ConduitIO/conduit-processor-sdk/blob/cbdc5dcb5d3109f8f13b88624c9e360076b0bcdb/util.go#L66.",
@@ -767,12 +960,12 @@
   },
   {
     "specification": {
-      "Name": "webhook.http",
-      "Summary": "HTTP webhook processor",
-      "Description": "\nA processor that sends an HTTP request to the specified URL, retries on error and \nsaves the response body and, optionally, the response status. \n",
-      "Version": "v0.1.0",
-      "Author": "Meroxa, Inc.",
-      "Parameters": {
+      "name": "webhook.http",
+      "summary": "HTTP webhook processor",
+      "description": "\nA processor that sends an HTTP request to the specified URL, retries on error and \nsaves the response body and, optionally, the response status. \n",
+      "version": "v0.1.0",
+      "author": "Meroxa, Inc.",
+      "parameters": {
         "backoffRetry.count": {
           "default": "0",
           "description": "BackoffRetryCount is the maximum number of retries for an individual record\nwhen backing off following an error.",

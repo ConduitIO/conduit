@@ -11,13 +11,13 @@ func (processorConfig) Parameters() map[string]config.Parameter {
 	return map[string]config.Parameter{
 		"script": {
 			Default:     "",
-			Description: "Script is the JavaScript code for this processor.\nIt needs to have a function 'process()' that accepts\nan array of records and returns an array of processed records.\nThe processed records in the returned array need to have matching indexes with\nrecords in the input array. In other words, for the record at input_array[i]\nthe processed record should be at output_array[i].\n\nThe processed record can be one of the following:\n1. a processed record itself\n2. a filter record (constructed with new FilterRecord())\n3. an error record (constructred with new ErrorRecord())",
+			Description: "JavaScript code for this processor.\nIt needs to have a function `process()` that accept\na record and returns a record.\nThe `process()` function can either modify the input record and return it,\nor create a new record.\nIf a record needs to be filtered (dropped from the pipeline),\nthen the `process()` function should return a `null`.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},
 		"script.path": {
 			Default:     "",
-			Description: "ScriptPath is the path to a .js file containing the processor code.",
+			Description: "The path to a .js file containing the processor code.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},
