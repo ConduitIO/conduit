@@ -9,7 +9,7 @@
       "Parameters": {
         "field": {
           "Default": "",
-          "Description": "field is the target field, as it would be addressed in a Go template (e.g. `.Payload.After.foo`). you can only convert fields that are under .Key and .Payload, and said fields should contain structured data.",
+          "Description": "Field is the target field, as it would be addressed in a Go template (e.g. `.Payload.After.foo`).\nyou can only convert fields that are under .Key and .Payload, and said fields should contain structured data.",
           "Type": 1,
           "Validations": [
             {},
@@ -20,7 +20,7 @@
         },
         "type": {
           "Default": "",
-          "Description": "type is the target field type after conversion, available options are: string, int, float, bool.",
+          "Description": "Type is the target field type after conversion, available options are: string, int, float, bool.",
           "Type": 1,
           "Validations": [
             {},
@@ -154,7 +154,7 @@
       "Parameters": {
         "mapping": {
           "Default": "",
-          "Description": "Mapping is a comma separated list of keys and values for fields and their new names (keys and values\nare separated by colons \":\"). For example: `.Metadata.key:id,.Payload.After.foo:bar`.",
+          "Description": "mapping is a comma separated list of keys and values for fields and their new names (keys and values are separated by colons \":\"). For example: `.Metadata.key:id,.Payload.After.foo:bar`.",
           "Type": 1,
           "Validations": [
             {}
@@ -255,7 +255,7 @@
       "Parameters": {
         "field": {
           "Default": "",
-          "Description": "Field is the target field, as it would be addressed in a Go template (e.g. `.Payload.After.foo`).\nNote that it is not allowed to set the .Position field.",
+          "Description": "field is the target field, as it would be addressed in a Go template (e.g. `.Payload.After.foo`). Note that it is not allowed to set the .Position field.",
           "Type": 1,
           "Validations": [
             {},
@@ -268,7 +268,7 @@
         },
         "value": {
           "Default": "",
-          "Description": "Value is a Go template expression which will be evaluated and stored in `field` (e.g. `{{ .Payload.After }}`).",
+          "Description": "value is a Go template expression which will be evaluated and stored in `field` (e.g. `{{ .Payload.After }}`).",
           "Type": 1,
           "Validations": [
             {}
@@ -384,7 +384,7 @@
       "Parameters": {
         "fields": {
           "Default": "",
-          "Description": "Fields is a comma separated list of target fields, as they would be addressed in a Go template (e.g. `.Metadata,.Payload.After.foo`).",
+          "Description": "fields is a comma separated list of target fields, as they would be addressed in a Go template (e.g. `.Metadata,.Payload.After.foo`).",
           "Type": 1,
           "Validations": [
             {}
@@ -514,7 +514,7 @@
       "Parameters": {
         "field": {
           "Default": ".Payload.After",
-          "Description": "Field is a reference to the field which contains the Debezium record.\n\nFor more information about record references, see: https://github.com/ConduitIO/conduit-processor-sdk/blob/cbdc5dcb5d3109f8f13b88624c9e360076b0bcdb/util.go#L66.",
+          "Description": "field is a reference to the field which contains the Debezium record.  For more information about record references, see: https://github.com/ConduitIO/conduit-processor-sdk/blob/cbdc5dcb5d3109f8f13b88624c9e360076b0bcdb/util.go#L66.",
           "Type": 1,
           "Validations": [
             {
@@ -574,7 +574,7 @@
       "Parameters": {
         "field": {
           "Default": ".Payload.After",
-          "Description": "Field is a reference to the field which contains the Kafka Connect record.\n\nFor more information about record references, see: https://github.com/ConduitIO/conduit-processor-sdk/blob/cbdc5dcb5d3109f8f13b88624c9e360076b0bcdb/util.go#L66.",
+          "Description": "field is a reference to the field which contains the Kafka Connect record.  For more information about record references, see: https://github.com/ConduitIO/conduit-processor-sdk/blob/cbdc5dcb5d3109f8f13b88624c9e360076b0bcdb/util.go#L66.",
           "Type": 1,
           "Validations": [
             {
@@ -636,7 +636,7 @@
       "Parameters": {
         "field": {
           "Default": ".Payload.After",
-          "Description": "Field is a reference to the field which contains the OpenCDC record.\n\nFor more information about record references, see: https://github.com/ConduitIO/conduit-processor-sdk/blob/cbdc5dcb5d3109f8f13b88624c9e360076b0bcdb/util.go#L66.",
+          "Description": "field is a reference to the field which contains the OpenCDC record.  For more information about record references, see: https://github.com/ConduitIO/conduit-processor-sdk/blob/cbdc5dcb5d3109f8f13b88624c9e360076b0bcdb/util.go#L66.",
           "Type": 1,
           "Validations": []
         }
@@ -702,7 +702,7 @@
       "Parameters": {
         "backoffRetry.count": {
           "Default": "0",
-          "Description": "BackoffRetryCount is the maximum number of retries for an individual record\nwhen backing off following an error.",
+          "Description": "backoffRetry.count is the maximum number of retries for an individual record when backing off following an error.",
           "Type": 3,
           "Validations": [
             {
@@ -712,7 +712,7 @@
         },
         "backoffRetry.factor": {
           "Default": "2",
-          "Description": "BackoffRetryFactor is the multiplying factor for each increment step.",
+          "Description": "backoffRetry.factor is the multiplying factor for each increment step.",
           "Type": 3,
           "Validations": [
             {
@@ -722,37 +722,37 @@
         },
         "backoffRetry.max": {
           "Default": "5s",
-          "Description": "BackoffRetryMax is the maximum waiting time before retrying.",
+          "Description": "backoffRetry.max is the maximum waiting time before retrying.",
           "Type": 6,
           "Validations": []
         },
         "backoffRetry.min": {
           "Default": "100ms",
-          "Description": "BackoffRetryMin is the minimum waiting time before retrying.",
+          "Description": "backoffRetry.min is the minimum waiting time before retrying.",
           "Type": 6,
           "Validations": []
         },
         "request.body": {
           "Default": ".",
-          "Description": "RequestBodyRef specifies which field from the input record\nshould be used as the body in the HTTP request.\nThe value of this parameter should be a valid record field reference:\nSee: sdk.NewReferenceResolver",
+          "Description": "request.body specifies which field from the input record should be used as the body in the HTTP request. The value of this parameter should be a valid record field reference: See: sdk.NewReferenceResolver",
           "Type": 1,
           "Validations": []
         },
         "request.contentType": {
           "Default": "application/json",
-          "Description": "ContentType is the value of the Content-Type header.",
+          "Description": "request.contentType is the value of the Content-Type header.",
           "Type": 1,
           "Validations": []
         },
         "request.method": {
           "Default": "POST",
-          "Description": "Method is the HTTP request method to be used.",
+          "Description": "request.method is the HTTP request method to be used.",
           "Type": 1,
           "Validations": []
         },
         "request.url": {
           "Default": "",
-          "Description": "URL used in the HTTP request.",
+          "Description": "request.url used in the HTTP request.",
           "Type": 1,
           "Validations": [
             {}
@@ -760,13 +760,13 @@
         },
         "response.body": {
           "Default": ".Payload.After",
-          "Description": "ResponseBodyRef specifies to which field should the\nresponse body be saved to.\nThe value of this parameter should be a valid record field reference:\nSee: sdk.NewReferenceResolver",
+          "Description": "response.body specifies to which field should the response body be saved to. The value of this parameter should be a valid record field reference: See: sdk.NewReferenceResolver",
           "Type": 1,
           "Validations": []
         },
         "response.status": {
           "Default": "",
-          "Description": "ResponseStatusRef specifies to which field should the\nresponse status be saved to.\nThe value of this parameter should be a valid record field reference.\nIf no value is set, then the response status will NOT be saved.\nSee: sdk.NewReferenceResolver",
+          "Description": "response.status specifies to which field should the response status be saved to. The value of this parameter should be a valid record field reference. If no value is set, then the response status will NOT be saved. See: sdk.NewReferenceResolver",
           "Type": 1,
           "Validations": []
         }

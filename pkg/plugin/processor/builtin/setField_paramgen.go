@@ -11,7 +11,7 @@ func (setFieldConfig) Parameters() map[string]config.Parameter {
 	return map[string]config.Parameter{
 		"field": {
 			Default:     "",
-			Description: "field is the target field, as it would be addressed in a Go template (e.g. `.Payload.After.foo`). Note that it is not allowed to set the .Position field.",
+			Description: "Field is the target field, as it would be addressed in a Go template (e.g. `.Payload.After.foo`).\nNote that it is not allowed to set the .Position field.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{
 				config.ValidationRequired{},
@@ -20,7 +20,7 @@ func (setFieldConfig) Parameters() map[string]config.Parameter {
 		},
 		"value": {
 			Default:     "",
-			Description: "value is a Go template expression which will be evaluated and stored in `field` (e.g. `{{ .Payload.After }}`).",
+			Description: "Value is a Go template expression which will be evaluated and stored in `field` (e.g. `{{ .Payload.After }}`).",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{
 				config.ValidationRequired{},
