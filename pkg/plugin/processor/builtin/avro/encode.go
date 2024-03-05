@@ -47,7 +47,7 @@ func NewEncodeProcessor(logger log.CtxLogger) sdk.Processor {
 
 func (p *encodeProcessor) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
-		Name:    "encode.avro",
+		Name:    "avro.encode",
 		Summary: "",
 		Description: `The processor takes structured data and encodes it using a schema into the [Avro format](https://avro.apache.org/).
 It provides two strategies for determining the schema:
