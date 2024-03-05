@@ -11,7 +11,7 @@ func (httpConfig) Parameters() map[string]config.Parameter {
 	return map[string]config.Parameter{
 		"backoffRetry.count": {
 			Default:     "0",
-			Description: "BackoffRetryCount is the maximum number of retries for an individual record\nwhen backing off following an error.",
+			Description: "backoffRetry.count is the maximum number of retries for an individual record when backing off following an error.",
 			Type:        config.ParameterTypeFloat,
 			Validations: []config.Validation{
 				config.ValidationGreaterThan{V: -1},
@@ -19,7 +19,7 @@ func (httpConfig) Parameters() map[string]config.Parameter {
 		},
 		"backoffRetry.factor": {
 			Default:     "2",
-			Description: "BackoffRetryFactor is the multiplying factor for each increment step.",
+			Description: "backoffRetry.factor is the multiplying factor for each increment step.",
 			Type:        config.ParameterTypeFloat,
 			Validations: []config.Validation{
 				config.ValidationGreaterThan{V: 0},
@@ -27,37 +27,37 @@ func (httpConfig) Parameters() map[string]config.Parameter {
 		},
 		"backoffRetry.max": {
 			Default:     "5s",
-			Description: "BackoffRetryMax is the maximum waiting time before retrying.",
+			Description: "backoffRetry.max is the maximum waiting time before retrying.",
 			Type:        config.ParameterTypeDuration,
 			Validations: []config.Validation{},
 		},
 		"backoffRetry.min": {
 			Default:     "100ms",
-			Description: "BackoffRetryMin is the minimum waiting time before retrying.",
+			Description: "backoffRetry.min is the minimum waiting time before retrying.",
 			Type:        config.ParameterTypeDuration,
 			Validations: []config.Validation{},
 		},
 		"request.body": {
 			Default:     ".",
-			Description: "RequestBodyRef specifies which field from the input record\nshould be used as the body in the HTTP request.\nThe value of this parameter should be a valid record field reference:\nSee: sdk.NewReferenceResolver",
+			Description: "request.body specifies which field from the input record should be used as the body in the HTTP request. The value of this parameter should be a valid record field reference: See: sdk.NewReferenceResolver",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},
 		"request.contentType": {
 			Default:     "application/json",
-			Description: "ContentType is the value of the Content-Type header.",
+			Description: "request.contentType is the value of the Content-Type header.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},
 		"request.method": {
 			Default:     "POST",
-			Description: "Method is the HTTP request method to be used.",
+			Description: "request.method is the HTTP request method to be used.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},
 		"request.url": {
 			Default:     "",
-			Description: "URL used in the HTTP request.",
+			Description: "request.url used in the HTTP request.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{
 				config.ValidationRequired{},
@@ -65,13 +65,13 @@ func (httpConfig) Parameters() map[string]config.Parameter {
 		},
 		"response.body": {
 			Default:     ".Payload.After",
-			Description: "ResponseBodyRef specifies to which field should the\nresponse body be saved to.\nThe value of this parameter should be a valid record field reference:\nSee: sdk.NewReferenceResolver",
+			Description: "response.body specifies to which field should the response body be saved to. The value of this parameter should be a valid record field reference: See: sdk.NewReferenceResolver",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},
 		"response.status": {
 			Default:     "",
-			Description: "ResponseStatusRef specifies to which field should the\nresponse status be saved to.\nThe value of this parameter should be a valid record field reference.\nIf no value is set, then the response status will NOT be saved.\nSee: sdk.NewReferenceResolver",
+			Description: "response.status specifies to which field should the response status be saved to. The value of this parameter should be a valid record field reference. If no value is set, then the response status will NOT be saved. See: sdk.NewReferenceResolver",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},

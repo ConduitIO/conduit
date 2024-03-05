@@ -11,7 +11,7 @@ func (excludeFieldConfig) Parameters() map[string]config.Parameter {
 	return map[string]config.Parameter{
 		"fields": {
 			Default:     "",
-			Description: "Fields is a comma separated list of target fields, as they would be addressed in a Go template (e.g. `.Metadata,.Payload.After.foo`).",
+			Description: "fields is a comma separated list of target fields, as they would be addressed in a Go template (e.g. `.Metadata,.Payload.After.foo`).",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{
 				config.ValidationRequired{},
