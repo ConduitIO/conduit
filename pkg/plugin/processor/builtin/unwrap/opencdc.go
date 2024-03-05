@@ -20,7 +20,6 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -139,7 +138,7 @@ func (u *openCDCProcessor) unmarshalRecord(structData opencdc.StructuredData) (o
 		return opencdc.Record{}, cerrors.Errorf("failed unmarshalling metadata: %w", err)
 	}
 
-	key, err := u.unmarshalKey(structData)
+	key, err := u.convertData(structData, "key")
 	if err != nil {
 		return opencdc.Record{}, cerrors.Errorf("failed unmarshalling key: %w", err)
 	}
@@ -206,42 +205,15 @@ func (u *openCDCProcessor) unmarshalMetadata(structData opencdc.StructuredData) 
 	return metadata, nil
 }
 
-// unmarshalKey extracts key from a structuredData record.
-func (u *openCDCProcessor) unmarshalKey(structData opencdc.StructuredData) (opencdc.Data, error) {
-	var key opencdc.Data
-	ky, ok := structData["key"]
-	if !ok {
-		return key, cerrors.New("no key")
-	}
-	switch k := ky.(type) {
-	case opencdc.StructuredData:
-		key = k
-	case map[string]interface{}:
-		convertedData := make(opencdc.StructuredData, len(k))
-		for kk, v := range k {
-			convertedData[kk] = v
-		}
-		key = convertedData
-	case string:
-		decoded := make([]byte, base64.StdEncoding.DecodedLen(len(k)))
-		n, err := base64.StdEncoding.Decode(decoded, []byte(k))
-		if err != nil {
-			return key, cerrors.Errorf("couldn't decode key: %w", err)
-		}
-		key = opencdc.RawData(decoded[:n])
-	default:
-		return key, cerrors.Errorf("expected a opencdc.Data or a string, got %T", k)
-	}
-	return key, nil
-}
-
 func (u *openCDCProcessor) convertData(payload map[string]interface{}, key string) (opencdc.Data, error) {
 	payloadData, ok := payload[key]
-	if !ok {
+	if !ok || payloadData == nil {
 		return nil, nil
 	}
 
 	switch data := payloadData.(type) {
+	case opencdc.StructuredData:
+		return data, nil
 	case map[string]interface{}:
 		return opencdc.StructuredData(data), nil
 	case string:
@@ -252,7 +224,7 @@ func (u *openCDCProcessor) convertData(payload map[string]interface{}, key strin
 		}
 		return opencdc.RawData(decoded[:n]), nil
 	default:
-		return nil, nil
+		return nil, cerrors.Errorf("expected a map[string]interface{} or string, got: %T", data)
 	}
 }
 

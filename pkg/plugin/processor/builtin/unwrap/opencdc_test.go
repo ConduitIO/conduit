@@ -23,7 +23,6 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/google/go-cmp/cmp"
-	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/matryer/is"
 )
 
@@ -263,7 +262,7 @@ func TestUnwrapOpenCDC_Process(t *testing.T) {
 				Position: []byte("test-pos"),
 			},
 			want: sdk.ErrorRecord{
-				Error: cerrors.New("failed unmarshalling record: failed unmarshalling key: expected a opencdc.Data or a string, got float64"),
+				Error: cerrors.New("failed unmarshalling record: failed unmarshalling key: expected a map[string]interface{} or string, got: float64"),
 			},
 		},
 		{
@@ -596,16 +595,7 @@ func TestUnwrapOpenCDC_Process(t *testing.T) {
 
 			got := underTest.Process(ctx, []opencdc.Record{tt.record})
 			is.Equal(1, len(got))
-			errRec, gotErr := got[0].(sdk.ErrorRecord)
-			if gotErr {
-				wantErr, ok := tt.want.(sdk.ErrorRecord)
-				is.True(ok)
-				is.Equal(wantErr.Error.Error(), errRec.Error.Error())
-
-				return
-			}
-
-			diff := cmp.Diff(tt.want, got[0], cmpopts.IgnoreUnexported(sdk.SingleRecord{}))
+			diff := cmp.Diff(tt.want, got[0], cmpProcessedRecordOpts...)
 			if diff != "" {
 				t.Errorf("process() diff = %s", diff)
 			}
