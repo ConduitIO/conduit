@@ -1,36 +1,39 @@
 [
   {
     "specification": {
-      "Name": "field.convert",
-      "Summary": "Convert the type of a field.",
-      "Description": "Convert takes the field of one type and converts it into another type (e.g. string to integer). \nThe applicable types are string, int, float and bool. Converting can be done between any combination of types. Note that\nbooleans will be converted to numeric values 1 (true) and 0 (false). Processor is only applicable to .Key, .Payload.Before\nand .Payload.After prefixes, and only applicable if said fields contain structured data.\nIf the record contains raw JSON data, then use the processor \"decode.json\" to parse it into structured data first.",
-      "Version": "v0.1.0",
-      "Author": "Meroxa, Inc.",
-      "Parameters": {
+      "name": "field.convert",
+      "summary": "Convert the type of a field.",
+      "description": "Convert takes the field of one type and converts it into another type (e.g. string to integer). \nThe applicable types are string, int, float and bool. Converting can be done between any combination of types. Note that\nbooleans will be converted to numeric values 1 (true) and 0 (false). Processor is only applicable to .Key, .Payload.Before\nand .Payload.After prefixes, and only applicable if said fields contain structured data.\nIf the record contains raw JSON data, then use the processor \"decode.json\" to parse it into structured data first.",
+      "version": "v0.1.0",
+      "author": "Meroxa, Inc.",
+      "parameters": {
         "field": {
-          "Default": "",
-          "Description": "field is the target field, as it would be addressed in a Go template (e.g. `.Payload.After.foo`). you can only convert fields that are under .Key and .Payload, and said fields should contain structured data.",
-          "Type": 1,
-          "Validations": [
-            {},
+          "default": "",
+          "description": "field is the target field, as it would be addressed in a Go template (e.g. `.Payload.After.foo`). you can only convert fields that are under .Key and .Payload, and said fields should contain structured data.",
+          "type": "string",
+          "validations": [
             {
-              "Regex": "^\\.(Payload|Key).*"
+              "type": "required",
+              "value": ""
+            },
+            {
+              "type": "regex",
+              "value": "^\\.(Payload|Key).*"
             }
           ]
         },
         "type": {
-          "Default": "",
-          "Description": "type is the target field type after conversion, available options are: string, int, float, bool.",
-          "Type": 1,
-          "Validations": [
-            {},
+          "default": "",
+          "description": "type is the target field type after conversion, available options are: string, int, float, bool.",
+          "type": "string",
+          "validations": [
             {
-              "List": [
-                "string",
-                "int",
-                "float",
-                "bool"
-              ]
+              "type": "required",
+              "value": ""
+            },
+            {
+              "type": "inclusion",
+              "value": "string,int,float,bool"
             }
           ]
         }
@@ -146,18 +149,21 @@
   },
   {
     "specification": {
-      "Name": "field.rename",
-      "Summary": "Rename a group of fields.",
-      "Description": "Rename a group of field names to new names. It is not allowed to rename top-level fields (.Operation, .Position, \n.Key, .Metadata, .Payload.Before, .Payload.After).\nNote that this processor only runs on structured data, if the record contains raw JSON data, then use the processor \"decode.json\" to parse it into structured data first.",
-      "Version": "v0.1.0",
-      "Author": "Meroxa, Inc.",
-      "Parameters": {
+      "name": "field.rename",
+      "summary": "Rename a group of fields.",
+      "description": "Rename a group of field names to new names. It is not allowed to rename top-level fields (.Operation, .Position, \n.Key, .Metadata, .Payload.Before, .Payload.After).\nNote that this processor only runs on structured data, if the record contains raw JSON data, then use the processor \"decode.json\" to parse it into structured data first.",
+      "version": "v0.1.0",
+      "author": "Meroxa, Inc.",
+      "parameters": {
         "mapping": {
-          "Default": "",
-          "Description": "mapping is a comma separated list of keys and values for fields and their new names (keys and values are separated by colons \":\"). For example: `.Metadata.key:id,.Payload.After.foo:bar`.",
-          "Type": 1,
-          "Validations": [
-            {}
+          "default": "",
+          "description": "mapping is a comma separated list of keys and values for fields and their new names (keys and values are separated by colons \":\"). For example: `.Metadata.key:id,.Payload.After.foo:bar`.",
+          "type": "string",
+          "validations": [
+            {
+              "type": "required",
+              "value": ""
+            }
           ]
         }
       }
@@ -247,31 +253,36 @@
   },
   {
     "specification": {
-      "Name": "field.set",
-      "Summary": "Set the value of a certain field.",
-      "Description": "Set the value of a certain field to any value. It is not allowed to set the .Position field.\nThe new value can be a Go template expression, the processor will evaluate the output and assign the value to the target field.\nIf the \"field\" provided doesn't exist, the processor will create that field and assign its value.\nThis processor can be used for multiple purposes, like extracting fields, hoisting data, inserting fields, copying fields, masking fields, etc.\nNote that this processor only runs on structured data, if the record contains raw JSON data, then use the processor\n\"decode.json\" to parse it into structured data first.",
-      "Version": "v0.1.0",
-      "Author": "Meroxa, Inc.",
-      "Parameters": {
+      "name": "field.set",
+      "summary": "Set the value of a certain field.",
+      "description": "Set the value of a certain field to any value. It is not allowed to set the .Position field.\nThe new value can be a Go template expression, the processor will evaluate the output and assign the value to the target field.\nIf the \"field\" provided doesn't exist, the processor will create that field and assign its value.\nThis processor can be used for multiple purposes, like extracting fields, hoisting data, inserting fields, copying fields, masking fields, etc.\nNote that this processor only runs on structured data, if the record contains raw JSON data, then use the processor\n\"decode.json\" to parse it into structured data first.",
+      "version": "v0.1.0",
+      "author": "Meroxa, Inc.",
+      "parameters": {
         "field": {
-          "Default": "",
-          "Description": "field is the target field, as it would be addressed in a Go template (e.g. `.Payload.After.foo`). Note that it is not allowed to set the .Position field.",
-          "Type": 1,
-          "Validations": [
-            {},
+          "default": "",
+          "description": "field is the target field, as it would be addressed in a Go template (e.g. `.Payload.After.foo`). Note that it is not allowed to set the .Position field.",
+          "type": "string",
+          "validations": [
             {
-              "List": [
-                ".Position"
-              ]
+              "type": "required",
+              "value": ""
+            },
+            {
+              "type": "exclusion",
+              "value": ".Position"
             }
           ]
         },
         "value": {
-          "Default": "",
-          "Description": "value is a Go template expression which will be evaluated and stored in `field` (e.g. `{{ .Payload.After }}`).",
-          "Type": 1,
-          "Validations": [
-            {}
+          "default": "",
+          "description": "value is a Go template expression which will be evaluated and stored in `field` (e.g. `{{ .Payload.After }}`).",
+          "type": "string",
+          "validations": [
+            {
+              "type": "required",
+              "value": ""
+            }
           ]
         }
       }
@@ -376,18 +387,21 @@
   },
   {
     "specification": {
-      "Name": "field.subset.exclude",
-      "Summary": "Remove a subset of fields from the record.",
-      "Description": "Remove a subset of fields from the record, all the other fields are left untouched. \nIf a field is excluded that contains nested data, the whole tree will be removed.  \nIt is not allowed to exclude .Position or .Operation fields.\nNote that this processor only runs on structured data, if the record contains raw JSON data, then use the processor \"decode.json\" to parse it into structured data first.",
-      "Version": "v0.1.0",
-      "Author": "Meroxa, Inc.",
-      "Parameters": {
+      "name": "field.subset.exclude",
+      "summary": "Remove a subset of fields from the record.",
+      "description": "Remove a subset of fields from the record, all the other fields are left untouched. \nIf a field is excluded that contains nested data, the whole tree will be removed.  \nIt is not allowed to exclude .Position or .Operation fields.\nNote that this processor only runs on structured data, if the record contains raw JSON data, then use the processor \"decode.json\" to parse it into structured data first.",
+      "version": "v0.1.0",
+      "author": "Meroxa, Inc.",
+      "parameters": {
         "fields": {
-          "Default": "",
-          "Description": "fields is a comma separated list of target fields, as they would be addressed in a Go template (e.g. `.Metadata,.Payload.After.foo`).",
-          "Type": 1,
-          "Validations": [
-            {}
+          "default": "",
+          "description": "fields is a comma separated list of target fields, as they would be addressed in a Go template (e.g. `.Metadata,.Payload.After.foo`).",
+          "type": "string",
+          "validations": [
+            {
+              "type": "required",
+              "value": ""
+            }
           ]
         }
       }
@@ -473,12 +487,12 @@
   },
   {
     "specification": {
-      "Name": "filter",
-      "Summary": "Acknowledges all records that get passed to the filter.",
-      "Description": "Acknowledges all records that get passed to the filter, so the records will be filtered out if \nthe condition provided to the processor is evaluated to \"true\".\nMake sure to add a condition to this processor, otherwise all records will be filtered out.\"",
-      "Version": "v0.1.0",
-      "Author": "Meroxa, Inc.",
-      "Parameters": {}
+      "name": "filter",
+      "summary": "Acknowledges all records that get passed to the filter.",
+      "description": "Acknowledges all records that get passed to the filter, so the records will be filtered out if \nthe condition provided to the processor is evaluated to \"true\".\nMake sure to add a condition to this processor, otherwise all records will be filtered out.\"",
+      "version": "v0.1.0",
+      "author": "Meroxa, Inc.",
+      "parameters": {}
     },
     "examples": [
       {
@@ -506,19 +520,20 @@
   },
   {
     "specification": {
-      "Name": "unwrap.debezium",
-      "Summary": "Unwraps a Debezium record from the input OpenCDC record.",
-      "Description": "In this processor, the wrapped (Debezium) record replaces the wrapping record (being processed) \ncompletely, except for the position.\n\nThe Debezium record's metadata and the wrapping record's metadata is merged, with the Debezium metadata having precedence.\n\nThis is useful in cases where Conduit acts as an intermediary between a Debezium source and a Debezium destination. \nIn such cases, the Debezium record is set as the OpenCDC record's payload, and needs to be unwrapped for further usage.",
-      "Version": "v0.1.0",
-      "Author": "Meroxa, Inc.",
-      "Parameters": {
+      "name": "unwrap.debezium",
+      "summary": "Unwraps a Debezium record from the input OpenCDC record.",
+      "description": "In this processor, the wrapped (Debezium) record replaces the wrapping record (being processed) \ncompletely, except for the position.\n\nThe Debezium record's metadata and the wrapping record's metadata is merged, with the Debezium metadata having precedence.\n\nThis is useful in cases where Conduit acts as an intermediary between a Debezium source and a Debezium destination. \nIn such cases, the Debezium record is set as the OpenCDC record's payload, and needs to be unwrapped for further usage.",
+      "version": "v0.1.0",
+      "author": "Meroxa, Inc.",
+      "parameters": {
         "field": {
-          "Default": ".Payload.After",
-          "Description": "field is a reference to the field which contains the Debezium record.  For more information about record references, see: https://github.com/ConduitIO/conduit-processor-sdk/blob/cbdc5dcb5d3109f8f13b88624c9e360076b0bcdb/util.go#L66.",
-          "Type": 1,
-          "Validations": [
+          "default": ".Payload.After",
+          "description": "field is a reference to the field which contains the Debezium record.  For more information about record references, see: https://github.com/ConduitIO/conduit-processor-sdk/blob/cbdc5dcb5d3109f8f13b88624c9e360076b0bcdb/util.go#L66.",
+          "type": "string",
+          "validations": [
             {
-              "Regex": "^.Payload"
+              "type": "regex",
+              "value": "^.Payload"
             }
           ]
         }
@@ -566,19 +581,20 @@
   },
   {
     "specification": {
-      "Name": "unwrap.kafkaconnect",
-      "Summary": "Unwraps a Kafka Connect record from an OpenCDC record.",
-      "Description": "This processor unwraps a Kafka Connect record from the input OpenCDC record.\n\nThe input record's payload is replaced with the Kafka Connect record.\n\nThis is useful in cases where Conduit acts as an intermediary between a Debezium source and a Debezium destination. \nIn such cases, the Debezium record is set as the OpenCDC record's payload, and needs to be unwrapped for further usage.",
-      "Version": "v0.1.0",
-      "Author": "Meroxa, Inc.",
-      "Parameters": {
+      "name": "unwrap.kafkaconnect",
+      "summary": "Unwraps a Kafka Connect record from an OpenCDC record.",
+      "description": "This processor unwraps a Kafka Connect record from the input OpenCDC record.\n\nThe input record's payload is replaced with the Kafka Connect record.\n\nThis is useful in cases where Conduit acts as an intermediary between a Debezium source and a Debezium destination. \nIn such cases, the Debezium record is set as the OpenCDC record's payload, and needs to be unwrapped for further usage.",
+      "version": "v0.1.0",
+      "author": "Meroxa, Inc.",
+      "parameters": {
         "field": {
-          "Default": ".Payload.After",
-          "Description": "field is a reference to the field which contains the Kafka Connect record.  For more information about record references, see: https://github.com/ConduitIO/conduit-processor-sdk/blob/cbdc5dcb5d3109f8f13b88624c9e360076b0bcdb/util.go#L66.",
-          "Type": 1,
-          "Validations": [
+          "default": ".Payload.After",
+          "description": "field is a reference to the field which contains the Kafka Connect record.  For more information about record references, see: https://github.com/ConduitIO/conduit-processor-sdk/blob/cbdc5dcb5d3109f8f13b88624c9e360076b0bcdb/util.go#L66.",
+          "type": "string",
+          "validations": [
             {
-              "Regex": "^.Payload"
+              "type": "regex",
+              "value": "^.Payload"
             }
           ]
         }
@@ -628,81 +644,86 @@
   },
   {
     "specification": {
-      "Name": "webhook.http",
-      "Summary": "HTTP webhook processor",
-      "Description": "\nA processor that sends an HTTP request to the specified URL, retries on error and \nsaves the response body and, optionally, the response status. \n",
-      "Version": "v0.1.0",
-      "Author": "Meroxa, Inc.",
-      "Parameters": {
+      "name": "webhook.http",
+      "summary": "HTTP webhook processor",
+      "description": "\nA processor that sends an HTTP request to the specified URL, retries on error and \nsaves the response body and, optionally, the response status. \n",
+      "version": "v0.1.0",
+      "author": "Meroxa, Inc.",
+      "parameters": {
         "backoffRetry.count": {
-          "Default": "0",
-          "Description": "backoffRetry.count is the maximum number of retries for an individual record when backing off following an error.",
-          "Type": 3,
-          "Validations": [
+          "default": "0",
+          "description": "backoffRetry.count is the maximum number of retries for an individual record when backing off following an error.",
+          "type": "float",
+          "validations": [
             {
-              "V": -1
+              "type": "greater-than",
+              "value": "-1"
             }
           ]
         },
         "backoffRetry.factor": {
-          "Default": "2",
-          "Description": "backoffRetry.factor is the multiplying factor for each increment step.",
-          "Type": 3,
-          "Validations": [
+          "default": "2",
+          "description": "backoffRetry.factor is the multiplying factor for each increment step.",
+          "type": "float",
+          "validations": [
             {
-              "V": 0
+              "type": "greater-than",
+              "value": "0"
             }
           ]
         },
         "backoffRetry.max": {
-          "Default": "5s",
-          "Description": "backoffRetry.max is the maximum waiting time before retrying.",
-          "Type": 6,
-          "Validations": []
+          "default": "5s",
+          "description": "backoffRetry.max is the maximum waiting time before retrying.",
+          "type": "duration",
+          "validations": []
         },
         "backoffRetry.min": {
-          "Default": "100ms",
-          "Description": "backoffRetry.min is the minimum waiting time before retrying.",
-          "Type": 6,
-          "Validations": []
+          "default": "100ms",
+          "description": "backoffRetry.min is the minimum waiting time before retrying.",
+          "type": "duration",
+          "validations": []
         },
         "request.body": {
-          "Default": ".",
-          "Description": "request.body specifies which field from the input record should be used as the body in the HTTP request. The value of this parameter should be a valid record field reference: See: sdk.NewReferenceResolver",
-          "Type": 1,
-          "Validations": []
+          "default": ".",
+          "description": "request.body specifies which field from the input record should be used as the body in the HTTP request. The value of this parameter should be a valid record field reference: See: sdk.NewReferenceResolver",
+          "type": "string",
+          "validations": []
         },
         "request.contentType": {
-          "Default": "application/json",
-          "Description": "request.contentType is the value of the Content-Type header.",
-          "Type": 1,
-          "Validations": []
+          "default": "application/json",
+          "description": "request.contentType is the value of the Content-Type header.",
+          "type": "string",
+          "validations": []
         },
         "request.method": {
-          "Default": "POST",
-          "Description": "request.method is the HTTP request method to be used.",
-          "Type": 1,
-          "Validations": []
+          "default": "POST",
+          "description": "request.method is the HTTP request method to be used.",
+          "type": "string",
+          "validations": []
         },
         "request.url": {
-          "Default": "",
-          "Description": "request.url used in the HTTP request.",
-          "Type": 1,
-          "Validations": [
-            {}
+          "default": "",
+          "description": "request.url used in the HTTP request.",
+          "type": "string",
+          "validations": [
+            {
+              "type": "required",
+              "value": ""
+            }
           ]
         },
         "response.body": {
-          "Default": ".Payload.After",
-          "Description": "response.body specifies to which field should the response body be saved to. The value of this parameter should be a valid record field reference: See: sdk.NewReferenceResolver",
-          "Type": 1,
-          "Validations": []
+          "default": ".Payload.After",
+          "description": "response.body specifies to which field should the response body be saved to. The value of this parameter should be a valid record field reference: See: sdk.NewReferenceResolver",
+          "type": "string",
+          "validations": []
         },
         "response.status": {
-          "Default": "",
-          "Description": "response.status specifies to which field should the response status be saved to. The value of this parameter should be a valid record field reference. If no value is set, then the response status will NOT be saved. See: sdk.NewReferenceResolver",
-          "Type": 1,
-          "Validations": []
+          "default": "",
+          "description": "response.status specifies to which field should the response status be saved to. The value of this parameter should be a valid record field reference. If no value is set, then the response status will NOT be saved. See: sdk.NewReferenceResolver",
+          "type": "string",
+          "validations": []
         }
       }
     },

@@ -29,15 +29,14 @@ import (
 )
 
 type preRegisteredConfig struct {
-	// Subject specifies the subject of the schema in the schema registry used to encode the record.
+	// The subject of the schema in the schema registry used to encode the record.
 	Subject string `json:"subject"`
-	// Version specifies the version of the schema in the schema registry used to encode the record.
-	// todo validations ok?
+	// The version of the schema in the schema registry used to encode the record.
 	Version int `json:"version" validate:"gt=0"`
 }
 
 type schemaConfig struct {
-	// StrategyType specifies which strategy to use to determine the schema for the record.
+	// Strategy to use to determine the schema for the record.
 	// Available strategies are:
 	// * `preRegistered` (recommended) - Download an existing schema from the schema registry.
 	//    This strategy is further configured with options starting with `schema.preRegistered.*`.
@@ -50,8 +49,7 @@ type schemaConfig struct {
 
 	PreRegistered preRegisteredConfig `json:"preRegistered"`
 
-	// AutoRegisteredSubject specifies the subject name under which the inferred schema will be registered
-	// in the schema registry.
+	// The subject name under which the inferred schema will be registered in the schema registry.
 	AutoRegisteredSubject string `json:"autoRegister.subject"`
 
 	strategy schemaregistry.SchemaStrategy
@@ -97,11 +95,11 @@ func (c *schemaConfig) parseAutoRegister() error {
 }
 
 type authConfig struct {
-	// Username is the username to use with basic authentication. This option is required if
+	// The username to use with basic authentication. This option is required if
 	// auth.basic.password contains a value. If both auth.basic.username and auth.basic.password
 	// are empty basic authentication is disabled.
 	Username string `json:"basic.username"`
-	// Password is the password to use with basic authentication. This option is required if
+	// The password to use with basic authentication. This option is required if
 	// auth.basic.username contains a value. If both auth.basic.username and auth.basic.password
 	// are empty basic authentication is disabled.
 	Password string `json:"basic.password"`
@@ -122,18 +120,18 @@ func (c *authConfig) validate() error {
 }
 
 type clientCert struct {
-	// Cert is the path to a file containing a PEM encoded certificate. This option is required
+	// The path to a file containing a PEM encoded certificate. This option is required
 	// if tls.client.key contains a value. If both tls.client.cert and tls.client.key are empty
 	// TLS is disabled.
 	Cert string `json:"cert"`
-	// Key is the path to a file containing a PEM encoded private key. This option is required
+	// The path to a file containing a PEM encoded private key. This option is required
 	// if tls.client.cert contains a value. If both tls.client.cert and tls.client.key are empty
 	// TLS is disabled.
 	Key string `json:"key"`
 }
 
 type tlsConfig struct {
-	// CACert is the path to a file containing PEM encoded CA certificates. If this option is empty,
+	// The path to a file containing PEM encoded CA certificates. If this option is empty,
 	// Conduit falls back to using the host's root CA set.
 	CACert string `json:"ca.cert"`
 
@@ -184,7 +182,7 @@ func (c *tlsConfig) parse() error {
 }
 
 type encodeConfig struct {
-	// Field is the field that will be encoded.
+	// The field that will be encoded.
 	Field string `json:"field" default:".Payload.After"`
 
 	// URL of the schema registry (e.g. http://localhost:8085)
@@ -197,7 +195,7 @@ type encodeConfig struct {
 	fieldResolver sdk.ReferenceResolver
 }
 
-func (c *encodeConfig) ClientOptions() []sr.Opt {
+func (c encodeConfig) ClientOptions() []sr.Opt {
 	clientOpts := []sr.Opt{sr.URLs(c.URL), sr.Normalize()}
 	if c.Auth.Username != "" && c.Auth.Password != "" {
 		clientOpts = append(clientOpts, sr.BasicAuth(c.Auth.Username, c.Auth.Password))
@@ -217,7 +215,7 @@ func (c *encodeConfig) ClientOptions() []sr.Opt {
 	return clientOpts
 }
 
-func (c *encodeConfig) parseTargetField() error {
+func (c encodeConfig) parseTargetField() error {
 	rr, err := sdk.NewReferenceResolver(c.Field)
 	if err != nil {
 		return err

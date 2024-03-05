@@ -11,37 +11,37 @@ func (encodeConfig) Parameters() map[string]config.Parameter {
 	return map[string]config.Parameter{
 		"auth.basic.password": {
 			Default:     "",
-			Description: "basic.password is the password to use with basic authentication. This option is required if auth.basic.username contains a value. If both auth.basic.username and auth.basic.password are empty basic authentication is disabled.",
+			Description: "The password to use with basic authentication. This option is required if auth.basic.username contains a value. If both auth.basic.username and auth.basic.password are empty basic authentication is disabled.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},
 		"auth.basic.username": {
 			Default:     "",
-			Description: "basic.username is the username to use with basic authentication. This option is required if auth.basic.password contains a value. If both auth.basic.username and auth.basic.password are empty basic authentication is disabled.",
+			Description: "The username to use with basic authentication. This option is required if auth.basic.password contains a value. If both auth.basic.username and auth.basic.password are empty basic authentication is disabled.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},
 		"field": {
 			Default:     ".Payload.After",
-			Description: "field is the field that will be encoded.",
+			Description: "The field that will be encoded.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},
 		"schema.autoRegister.subject": {
 			Default:     "",
-			Description: "autoRegister.subject specifies the subject name under which the inferred schema will be registered in the schema registry.",
+			Description: "The subject name under which the inferred schema will be registered in the schema registry.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},
 		"schema.preRegistered.subject": {
 			Default:     "",
-			Description: "subject specifies the subject of the schema in the schema registry used to encode the record.",
+			Description: "The subject of the schema in the schema registry used to encode the record.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},
 		"schema.preRegistered.version": {
 			Default:     "",
-			Description: "version specifies the version of the schema in the schema registry used to encode the record. todo validations ok?",
+			Description: "The version of the schema in the schema registry used to encode the record.",
 			Type:        config.ParameterTypeInt,
 			Validations: []config.Validation{
 				config.ValidationGreaterThan{V: 0},
@@ -49,7 +49,7 @@ func (encodeConfig) Parameters() map[string]config.Parameter {
 		},
 		"schema.strategy": {
 			Default:     "",
-			Description: "strategy specifies which strategy to use to determine the schema for the record. Available strategies are: * `preRegistered` (recommended) - Download an existing schema from the schema registry.    This strategy is further configured with options starting with `schema.preRegistered.*`. * `autoRegister` (for development purposes) - Infer the schema from the record and register it    in the schema registry. This strategy is further configured with options starting with   `schema.autoRegister.*`.  For more information about the behavior of each strategy read the main processor description.",
+			Description: "Strategy to use to determine the schema for the record. Available strategies are: * `preRegistered` (recommended) - Download an existing schema from the schema registry.    This strategy is further configured with options starting with `schema.preRegistered.*`. * `autoRegister` (for development purposes) - Infer the schema from the record and register it    in the schema registry. This strategy is further configured with options starting with   `schema.autoRegister.*`.  For more information about the behavior of each strategy read the main processor description.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{
 				config.ValidationRequired{},
@@ -58,19 +58,19 @@ func (encodeConfig) Parameters() map[string]config.Parameter {
 		},
 		"tls.ca.cert": {
 			Default:     "",
-			Description: "ca.cert is the path to a file containing PEM encoded CA certificates. If this option is empty, Conduit falls back to using the host's root CA set.",
+			Description: "The path to a file containing PEM encoded CA certificates. If this option is empty, Conduit falls back to using the host's root CA set.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},
 		"tls.client.cert": {
 			Default:     "",
-			Description: "cert is the path to a file containing a PEM encoded certificate. This option is required if tls.client.key contains a value. If both tls.client.cert and tls.client.key are empty TLS is disabled.",
+			Description: "The path to a file containing a PEM encoded certificate. This option is required if tls.client.key contains a value. If both tls.client.cert and tls.client.key are empty TLS is disabled.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},
 		"tls.client.key": {
 			Default:     "",
-			Description: "key is the path to a file containing a PEM encoded private key. This option is required if tls.client.cert contains a value. If both tls.client.cert and tls.client.key are empty TLS is disabled.",
+			Description: "The path to a file containing a PEM encoded private key. This option is required if tls.client.cert contains a value. If both tls.client.cert and tls.client.key are empty TLS is disabled.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},
