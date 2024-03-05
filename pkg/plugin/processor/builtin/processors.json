@@ -9,7 +9,7 @@
       "Parameters": {
         "field": {
           "Default": "",
-          "Description": "field is the target field, as it would be addressed in a Go template (e.g. `.Payload.After.foo`). you can only convert fields that are under .Key and .Payload, and said fields should contain structured data.",
+          "Description": "Field is the target field, as it would be addressed in a Go template (e.g. `.Payload.After.foo`).\nyou can only convert fields that are under .Key and .Payload, and said fields should contain structured data.",
           "Type": 1,
           "Validations": [
             {},
@@ -20,7 +20,7 @@
         },
         "type": {
           "Default": "",
-          "Description": "type is the target field type after conversion, available options are: string, int, float, bool.",
+          "Description": "Type is the target field type after conversion, available options are: string, int, float, bool.",
           "Type": 1,
           "Validations": [
             {},
@@ -638,11 +638,7 @@
           "Default": ".Payload.After",
           "Description": "field is a reference to the field which contains the OpenCDC record.  For more information about record references, see: https://github.com/ConduitIO/conduit-processor-sdk/blob/cbdc5dcb5d3109f8f13b88624c9e360076b0bcdb/util.go#L66.",
           "Type": 1,
-          "Validations": [
-            {
-              "Regex": "^.Payload"
-            }
-          ]
+          "Validations": []
         }
       }
     },
