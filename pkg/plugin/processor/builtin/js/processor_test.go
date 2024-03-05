@@ -17,6 +17,7 @@ package js
 import (
 	"bytes"
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/conduitio/conduit-commons/opencdc"
@@ -82,7 +83,7 @@ func TestJSProcessor_Error(t *testing.T) {
 	underTest := newTestJavaScriptProc(
 		t,
 		`function process(r) {
-				return [new ErrorRecord("something bad happened")];
+				throw new Error('something bad happened');
 			}`,
 	)
 
@@ -90,7 +91,7 @@ func TestJSProcessor_Error(t *testing.T) {
 	is.Equal(1, len(got))
 	gotErr, ok := got[0].(sdk.ErrorRecord)
 	is.True(ok)
-	is.Equal(gotErr.Error.Error(), "something bad happened")
+	is.True(strings.Contains(gotErr.Error.Error(), "something bad happened"))
 }
 
 func TestJSProcessor_Process(t *testing.T) {
@@ -104,10 +105,10 @@ func TestJSProcessor_Process(t *testing.T) {
 			name: "change fields of structured record",
 			script: `
 				function process(rec) {
-					rec[0].Operation = "update";
-					rec[0].Metadata["returned"] = "JS";
-					rec[0].Key = RawData("baz");
-					rec[0].Payload.After["ccc"] = "baz";
+					rec.Operation = "update";
+					rec.Metadata["returned"] = "JS";
+					rec.Key = RawData("baz");
+					rec.Payload.After["ccc"] = "baz";
 					return rec;
 				}`,
 			args: []opencdc.Record{
@@ -146,10 +147,10 @@ func TestJSProcessor_Process(t *testing.T) {
 			name: "complete change incoming record with structured data",
 			script: `
 				function process(rec) {
-					rec[0].Metadata["returned"] = "JS";
-					rec[0].Key = RawData("baz");
-					rec[0].Payload.After = new StructuredData();
-					rec[0].Payload.After["foo"] = "bar";
+					rec.Metadata["returned"] = "JS";
+					rec.Key = RawData("baz");
+					rec.Payload.After = new StructuredData();
+					rec.Payload.After["foo"] = "bar";
 					return rec;
 				}`,
 			args: []opencdc.Record{
@@ -179,9 +180,9 @@ func TestJSProcessor_Process(t *testing.T) {
 			name: "complete change incoming record with raw data",
 			script: `
 				function process(rec) {
-					rec[0].Metadata["returned"] = "JS";
-					rec[0].Key = RawData("baz");
-					rec[0].Payload.After = RawData(String.fromCharCode.apply(String, rec[0].Payload.After) + "bar");
+					rec.Metadata["returned"] = "JS";
+					rec.Key = RawData("baz");
+					rec.Payload.After = RawData(String.fromCharCode.apply(String, rec.Payload.After) + "bar");
 					return rec;
 				}`,
 			args: []opencdc.Record{
@@ -209,12 +210,12 @@ func TestJSProcessor_Process(t *testing.T) {
 			name: "return new SingleRecord with raw data",
 			script: `
 				function process(record) {
-					r = new SingleRecord();
+					r = new Record();
 					r.Position = "3"
 					r.Metadata["returned"] = "JS";
 					r.Key = new RawData("baz");
 					r.Payload.After = new RawData("foobar");
-					return [r];
+					return r;
 				}`,
 			args: []opencdc.Record{{Position: opencdc.Position("3")}},
 			want: []sdk.ProcessedRecord{
@@ -232,10 +233,10 @@ func TestJSProcessor_Process(t *testing.T) {
 			name: "use empty raw data",
 			script: `
 				function process(record) {
-					r = new SingleRecord();
+					r = new Record();
 					r.Position = "3";
 					r.Payload.After = new RawData("foobar");
-					return [r];
+					return r;
 				}`,
 			args: []opencdc.Record{{Position: opencdc.Position("3")}},
 			want: []sdk.ProcessedRecord{
@@ -252,7 +253,7 @@ func TestJSProcessor_Process(t *testing.T) {
 		{
 			name: "filter: always skip",
 			script: `function process(r) {
-				return [new FilterRecord()];
+				return null;
 			}`,
 			args: []opencdc.Record{{}},
 			want: []sdk.ProcessedRecord{sdk.FilterRecord{}},
@@ -260,10 +261,10 @@ func TestJSProcessor_Process(t *testing.T) {
 		{
 			name: "filter: not matching",
 			script: `function process(r) {
-				if (r[0].Metadata["keepme"] != undefined) {
+				if (r.Metadata["keepme"] != undefined) {
 					return r
 				}
-				return [new FilterRecord()];
+				return null;
 			}`,
 			args: []opencdc.Record{{Metadata: opencdc.Metadata{"keepme": "yes"}}},
 			want: []sdk.ProcessedRecord{sdk.SingleRecord{Metadata: opencdc.Metadata{"keepme": "yes"}}},
@@ -271,10 +272,10 @@ func TestJSProcessor_Process(t *testing.T) {
 		{
 			name: "filter: not matching",
 			script: `function process(r) {
-				if (r[0].Metadata["keepme"] != undefined) {
+				if (r.Metadata["keepme"] != undefined) {
 					return r
 				}
-				return [new FilterRecord()];
+				return null;
 			}`,
 			args: []opencdc.Record{{Metadata: opencdc.Metadata{"foo": "bar"}}},
 			want: []sdk.ProcessedRecord{sdk.FilterRecord{}},
@@ -304,7 +305,7 @@ func TestJSProcessor_DataTypes(t *testing.T) {
 		{
 			name: "position from string",
 			src: `function process(rec) {
-				rec[0].Position = "foobar";
+				rec.Position = "foobar";
 				return rec;
 			}`,
 			input: []opencdc.Record{{}},
@@ -317,7 +318,7 @@ func TestJSProcessor_DataTypes(t *testing.T) {
 		{
 			name: "raw payload, data from string",
 			src: `function process(rec) {
-				rec[0].Payload.After = new RawData("foobar");
+				rec.Payload.After = new RawData("foobar");
 				return rec;
 			}`,
 			input: []opencdc.Record{{}},
@@ -332,7 +333,7 @@ func TestJSProcessor_DataTypes(t *testing.T) {
 		{
 			name: "raw key, data from string",
 			src: `function process(rec) {
-				rec[0].Key = new RawData("foobar");
+				rec.Key = new RawData("foobar");
 				return rec;
 			}`,
 			input: []opencdc.Record{{}},
@@ -345,8 +346,8 @@ func TestJSProcessor_DataTypes(t *testing.T) {
 		{
 			name: "update metadata",
 			src: `function process(rec) {
-				rec[0].Metadata["new_key"] = "new_value"
-				delete rec[0].Metadata.remove_me;
+				rec.Metadata["new_key"] = "new_value"
+				delete rec.Metadata.remove_me;
 				return rec;
 			}`,
 			input: []opencdc.Record{{
@@ -429,7 +430,7 @@ func TestJSProcessor_ScriptWithMultipleFunctions(t *testing.T) {
 		}
 		
 		function process(rec) {
-			rec[0].Metadata["updated_key"] = getValue()
+			rec.Metadata["updated_key"] = getValue()
 			return rec;
 		}
 	`
