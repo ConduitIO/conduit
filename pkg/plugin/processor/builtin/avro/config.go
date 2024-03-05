@@ -215,42 +215,34 @@ func (c encodeConfig) ClientOptions() []sr.Opt {
 	return clientOpts
 }
 
-func (c encodeConfig) parseTargetField() error {
-	rr, err := sdk.NewReferenceResolver(c.Field)
+func parseConfig(ctx context.Context, m map[string]string) (encodeConfig, error) {
+	cfg := encodeConfig{}
+	err := sdk.ParseConfig(ctx, m, &cfg, cfg.Parameters())
 	if err != nil {
-		return err
-	}
-
-	c.fieldResolver = rr
-	return nil
-}
-
-func parseConfig(ctx context.Context, m map[string]string) (*encodeConfig, error) {
-	cfg := &encodeConfig{}
-	err := sdk.ParseConfig(ctx, m, cfg, cfg.Parameters())
-	if err != nil {
-		return nil, err
+		return encodeConfig{}, err
 	}
 
 	err = cfg.Auth.validate()
 	if err != nil {
-		return nil, cerrors.Errorf("invalid basic auth: %w", err)
+		return encodeConfig{}, cerrors.Errorf("invalid basic auth: %w", err)
 	}
 
 	err = cfg.TLS.parse()
 	if err != nil {
-		return nil, cerrors.Errorf("failed parsing TLS: %w", err)
+		return encodeConfig{}, cerrors.Errorf("failed parsing TLS: %w", err)
 	}
 
 	err = cfg.Schema.parse()
 	if err != nil {
-		return nil, cerrors.Errorf("failed parsing schema strategy: %w", err)
+		return encodeConfig{}, cerrors.Errorf("failed parsing schema strategy: %w", err)
 	}
 
-	err = cfg.parseTargetField()
+	// Parse target field
+	rr, err := sdk.NewReferenceResolver(cfg.Field)
 	if err != nil {
-		return nil, cerrors.Errorf("failed parsing target field: %w", err)
+		return encodeConfig{}, cerrors.Errorf("failed parsing target field: %w", err)
 	}
+	cfg.fieldResolver = rr
 
 	return cfg, nil
 }

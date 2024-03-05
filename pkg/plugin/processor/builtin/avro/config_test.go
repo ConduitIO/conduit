@@ -206,7 +206,7 @@ missing field: tls.client.key`),
 			}
 
 			is.NoErr(gotErr)
-			diff := cmp.Diff(tc.want, *got, cmpOpts)
+			diff := cmp.Diff(tc.want, got, cmpOpts)
 			if diff != "" {
 				t.Errorf("mismatch (-want +got): %s", diff)
 			}

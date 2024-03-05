@@ -37,7 +37,7 @@ type encodeProcessor struct {
 	sdk.UnimplementedProcessor
 
 	logger  log.CtxLogger
-	cfg     *encodeConfig
+	cfg     encodeConfig
 	encoder encoder
 }
 
