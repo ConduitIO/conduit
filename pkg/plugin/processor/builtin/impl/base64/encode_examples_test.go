@@ -81,7 +81,7 @@ into a base64 encoded string.`,
 func ExampleBase64EncodeProcessor_stringField() {
 	p := NewEncodeProcessor(log.Nop())
 	exampleutil.RunExample(p, exampleutil.Example{
-		// Summary: "TODO",
+		Summary: "Encode a value using Base64",
 		Description: `This example encodes a single value stored in ` + "`.Payload.After.foo`" + `
 into a base64 encoded string.`,
 		Config: map[string]string{

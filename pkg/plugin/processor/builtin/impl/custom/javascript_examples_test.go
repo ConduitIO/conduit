@@ -26,7 +26,9 @@ func ExampleJavascriptProcessor() {
 	p := NewJavascriptProcessor(log.Nop())
 
 	exampleutil.RunExample(p, exampleutil.Example{
-		Description: "",
+		Summary: "Modify a record's metadata and payload using JavaScript",
+		Description: "In this example we use the `custom.javascript` processor to add a metadata key " +
+			"to the input record. It also adds 'hello, ' to `.Payload.After`.",
 		Config: map[string]string{
 			"script": `function process(rec) {
   rec.Metadata["processed"] = "true";

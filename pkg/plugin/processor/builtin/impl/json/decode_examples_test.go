@@ -25,8 +25,8 @@ func ExampleDecodeProcessor_rawKey() {
 	p := NewDecodeProcessor()
 
 	exampleutil.RunExample(p, exampleutil.Example{
-		Description: `Decode the raw data .Key into structured data.`,
-		Config:      map[string]string{"field": ".Key"},
+		Summary: `Decode the raw data .Key into structured data`,
+		Config:  map[string]string{"field": ".Key"},
 		Have: opencdc.Record{
 			Operation: opencdc.OperationCreate,
 			Key:       opencdc.RawData(`{"after":{"data":4,"id":3}}`),

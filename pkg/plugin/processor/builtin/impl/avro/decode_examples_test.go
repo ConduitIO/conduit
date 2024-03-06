@@ -55,7 +55,7 @@ func ExampleDecodeProcessor() {
 	p := NewDecodeProcessor(log.Nop())
 
 	exampleutil.RunExample(p, exampleutil.Example{
-		// Summary: "TODO",
+		Summary: "Decode a record field in Avro format",
 		Description: `This example shows the usage of the ` + "`avro.decode`" + ` processor.
 The processor decodes the record's` + "`.Key`" + ` field using the schema that is
 downloaded from the schema registry and needs to exist under the subject` + "`example-decode`" + `.

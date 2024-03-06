@@ -66,7 +66,7 @@ func ExampleConvertProcessor_intToBool() {
 	p := NewConvertProcessor()
 
 	exampleutil.RunExample(p, exampleutil.Example{
-		Summary: `change .Payload.After.done type to bool`,
+		Summary: `Change .Payload.After.done type to bool`,
 		Config:  map[string]string{"field": ".Payload.After.done", "type": "bool"},
 		Have: opencdc.Record{
 			Operation: opencdc.OperationUpdate,
@@ -106,7 +106,7 @@ func ExampleConvertProcessor_floatToString() {
 	p := NewConvertProcessor()
 
 	exampleutil.RunExample(p, exampleutil.Example{
-		Summary: `change .Key.id type to string`,
+		Summary: `Change .Key.id type to string`,
 		Config:  map[string]string{"field": ".Key.id", "type": "string"},
 		Have: opencdc.Record{
 			Operation: opencdc.OperationUpdate,

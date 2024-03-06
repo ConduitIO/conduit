@@ -27,8 +27,8 @@ func ExampleOpenCDCProcessor() {
 
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary: "Unwrap an OpenCDC record",
-		Description: `In this example we use the ` + "`unwrap.opencdc`" + ` processor to 
-unwrap the OpenCDC record found in the record's ` + "`.Payload.After`" + ` field.`,
+		Description: "In this example we use the `unwrap.opencdc` processor to unwrap the OpenCDC record found in the " +
+			"record's `.Payload.After` field.",
 		Config: map[string]string{},
 		Have: opencdc.Record{
 			Position:  opencdc.Position("wrapping position"),

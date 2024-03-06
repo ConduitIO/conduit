@@ -25,7 +25,7 @@ import (
 func ExampleDecodeProcessor() {
 	p := NewDecodeProcessor(log.Nop())
 	exampleutil.RunExample(p, exampleutil.Example{
-		// Summary: "TODO",
+		Summary: "Decode a Base64 encoded string",
 		Description: `This example decodes the base64 encoded string stored in
 ` + "`.Payload.After`" + `. Note that the result is a string, so if you want to
 further process the result (e.g. parse the string as JSON), you need to chain

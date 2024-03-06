@@ -40,7 +40,7 @@ func ExampleEncodeProcessor_autoRegister() {
 		Description: `This example shows the usage of the ` + "`avro.encode`" + ` processor
 with the ` + "`autoRegister`" + ` schema strategy. The processor encodes the record's
 ` + "`.Payload.After`" + ` field using the schema that is extracted from the data
-and registered on the fly under the subject` + "`example-autoRegister`" + `.`,
+and registered on the fly under the subject ` + "`example-autoRegister`" + `.`,
 		Config: map[string]string{
 			"url":                         url,
 			"schema.strategy":             "autoRegister",
