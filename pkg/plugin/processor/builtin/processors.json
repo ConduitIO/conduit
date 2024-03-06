@@ -715,7 +715,7 @@
     "specification": {
       "name": "json.decode",
       "summary": "Decodes a specific field from JSON raw data (string) to structured data.",
-      "description": "The processor takes JSON raw data (string) from the target field, parses it as JSON structured data\nand stores the decoded structured data in the target field.\nThis processor is only applicable to fields under .Key, .Payload.Before and .Payload.After, as they accept structured data format.\n",
+      "description": "The processor takes JSON raw data (string) from the target field, parses it as JSON structured data\nand stores the decoded structured data in the target field.\n\nThis processor is only applicable to fields under `.Key`, `.Payload`.Before and `.Payload.After`,\nas they can contain structured data.",
       "version": "v0.1.0",
       "author": "Meroxa, Inc.",
       "parameters": {
