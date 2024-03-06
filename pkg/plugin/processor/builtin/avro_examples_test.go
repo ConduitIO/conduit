@@ -198,3 +198,91 @@ The processor encodes the record's` + "`.Key`" + ` field using the above schema.
 	//    }
 	//  }
 }
+
+//nolint:govet // a more descriptive example description
+func ExampleDecodeProcessor() {
+	url, cleanup := schemaregistry.ExampleSchemaRegistryURL("ExampleDecodeProcessor", 54322)
+	defer cleanup()
+
+	client, err := schemaregistry.NewClient(log.Nop(), sr.URLs(url))
+	if err != nil {
+		panic(fmt.Sprintf("failed to create schema registry client: %v", err))
+	}
+
+	_, err = client.CreateSchema(context.Background(), "example-decode", sr.Schema{
+		Type: sr.TypeAvro,
+		Schema: `
+{
+  "type":"record",
+  "name":"record",
+  "fields":[
+    {"name":"myString","type":"string"},
+    {"name":"myInt","type":"int"}
+  ]
+}`,
+	})
+	if err != nil {
+		panic(fmt.Sprintf("failed to create schema: %v", err))
+	}
+
+	p := avro.NewDecodeProcessor(log.Nop())
+
+	RunExample(p, example{
+		// Summary: "TODO",
+		Description: `This example shows the usage of the ` + "`avro.decode`" + ` processor.
+The processor decodes the record's` + "`.Key`" + ` field using the schema that is
+downloaded from the schema registry and needs to exist under the subject` + "`example-decode`" + `.
+In this example we use the following schema:
+
+` + "```json" + `
+{
+  "type":"record",
+  "name":"record",
+  "fields":[
+    {"name":"myString","type":"string"},
+    {"name":"myInt","type":"int"}
+  ]
+}
+` + "```",
+		Config: map[string]string{
+			"url":   url,
+			"field": ".Key",
+		},
+		Have: opencdc.Record{
+			Position:  opencdc.Position("test-position"),
+			Operation: opencdc.OperationCreate,
+			Metadata:  map[string]string{"key1": "val1"},
+			Key:       opencdc.RawData([]byte{0, 0, 0, 0, 1, 6, 98, 97, 114, 2}),
+		},
+		Want: sdk.SingleRecord{
+			Position:  opencdc.Position("test-position"),
+			Operation: opencdc.OperationCreate,
+			Metadata:  map[string]string{"key1": "val1"},
+			Key: opencdc.StructuredData{
+				"myString": "bar",
+				"myInt":    1,
+			},
+		}})
+
+	// Output:
+	// processor transformed record:
+	// --- before
+	// +++ after
+	// @@ -1,12 +1,15 @@
+	//  {
+	//    "position": "dGVzdC1wb3NpdGlvbg==",
+	//    "operation": "create",
+	//    "metadata": {
+	//      "key1": "val1"
+	//    },
+	// -  "key": "\u0000\u0000\u0000\u0000\u0001\u0006bar\u0002",
+	// +  "key": {
+	// +    "myInt": 1,
+	// +    "myString": "bar"
+	// +  },
+	//    "payload": {
+	//      "before": null,
+	//      "after": null
+	//    }
+	//  }
+}

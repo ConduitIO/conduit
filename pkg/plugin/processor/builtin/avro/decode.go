@@ -20,7 +20,6 @@ package avro
 import (
 	"context"
 	"crypto/tls"
-	"encoding/base64"
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
@@ -110,15 +109,14 @@ func (p *decodeProcessor) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
 		Name:    "avro.encode",
 		Summary: "Decodes a field's raw data in the Avro format",
-		Description: `The processor takes raw data (bytes or a Base64-encoded string) in the specified field and decodes 
-it from the [Avro format](https://avro.apache.org/) into structured data. It extracts the schema ID from the data, 
+		Description: `The processor takes raw data (bytes or a string) in the specified field and decodes
+it from the [Avro format](https://avro.apache.org/) into structured data. It extracts the schema ID from the data,
 downloads the associated schema from the [schema registry](https://docs.confluent.io/platform/current/schema-registry/index.html)
-and decodes the payload. The schema is cached locally after it's first downloaded. 
+and decodes the payload. The schema is cached locally after it's first downloaded.
 
-If the processor encounters structured data or the data 
-can't be decoded it returns an error.
+If the processor encounters structured data or the data can't be decoded it returns an error.
 
-This processor is the counterpart to 'avro.encode'.`,
+This processor is the counterpart to [` + "`avro.encode`" + `](/docs/processors/builtin/avro.encode).`,
 		Version:    "v0.1.0",
 		Author:     "Meroxa, Inc.",
 		Parameters: decodeConfig{}.Parameters(),
@@ -190,12 +188,7 @@ func (p *decodeProcessor) rawData(data any) (opencdc.RawData, error) {
 	case []byte:
 		return v, nil
 	case string:
-		decoded := make([]byte, base64.StdEncoding.DecodedLen(len(v)))
-		n, err := base64.StdEncoding.Decode(decoded, []byte(v))
-		if err != nil {
-			return nil, cerrors.Errorf("couldn't base64-decode data: %w", err)
-		}
-		return opencdc.RawData(decoded[:n]), nil
+		return []byte(v), nil
 	default:
 		return nil, cerrors.Errorf("unexpected data type %T", v)
 	}

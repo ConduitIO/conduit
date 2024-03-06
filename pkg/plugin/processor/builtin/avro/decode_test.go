@@ -16,7 +16,6 @@ package avro
 
 import (
 	"context"
-	"encoding/base64"
 	"testing"
 
 	"github.com/conduitio/conduit-commons/opencdc"
@@ -43,7 +42,7 @@ func TestDecodeProcessor_Process_RawData_CustomField(t *testing.T) {
 		},
 		{
 			name:  "string (base64 encoded byte slice",
-			field: base64.StdEncoding.EncodeToString([]byte(data)),
+			field: data,
 		},
 	}
 

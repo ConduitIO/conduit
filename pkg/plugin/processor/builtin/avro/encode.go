@@ -135,7 +135,8 @@ It provides two strategies for determining the schema:
   registers each inferred schema in the schema registry with the same subject, therefore the schema compatibility
   checks need to be disabled for this schema to prevent failures. If the schema subject does not exist before running
   this processor, it will automatically set the correct compatibility settings in the schema registry.
-`,
+
+This processor is the counterpart to [` + "`avro.decode`" + `](/docs/processors/builtin/avro.decode).`,
 		Version:    "v0.1.0",
 		Author:     "Meroxa, Inc.",
 		Parameters: encodeConfig{}.Parameters(),
