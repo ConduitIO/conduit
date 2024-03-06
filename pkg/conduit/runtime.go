@@ -437,7 +437,7 @@ func (r *Runtime) serveGRPCAPI(ctx context.Context, t *tomb.Tomb) (net.Addr, err
 	connectorAPIv1 := api.NewConnectorAPIv1(r.Orchestrator.Connectors)
 	connectorAPIv1.Register(grpcServer)
 
-	pluginAPIv1 := api.NewPluginAPIv1(r.Orchestrator.ConnectorPlugins)
+	pluginAPIv1 := api.NewPluginAPIv1(r.Orchestrator.ConnectorPlugins, r.Orchestrator.ProcessorPlugins)
 	pluginAPIv1.Register(grpcServer)
 
 	info := api.NewInformation(Version(false))
