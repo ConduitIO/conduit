@@ -197,7 +197,7 @@ missing field: tls.client.key`),
 		t.Run(tc.name, func(t *testing.T) {
 			is := is.New(t)
 
-			got, gotErr := parseConfig(context.Background(), tc.input)
+			got, gotErr := parseEncodeConfig(context.Background(), tc.input)
 			if tc.wantErr != nil {
 				is.True(gotErr != nil) // expected an error
 				is.Equal(tc.wantErr.Error(), gotErr.Error())
