@@ -12,52 +12,54 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:generate paramgen -output=jsonEncode_paramgen.go jsonEncodeConfig
+//go:generate paramgen -output=encode_paramgen.go encodeConfig
 
-package builtin
+package json
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/log"
 )
 
-type jsonEncode struct {
+type encodeProcessor struct {
 	referenceResolver sdk.ReferenceResolver
 
 	sdk.UnimplementedProcessor
 }
 
-func newJSONEncode() *jsonEncode {
-	return &jsonEncode{}
+func newEncodeProcessor(log.CtxLogger) sdk.Processor {
+	return &encodeProcessor{}
 }
 
-type jsonEncodeConfig struct {
+type encodeConfig struct {
 	// Field is the target field, as it would be addressed in a Go template (e.g. `.Payload.After.foo`).
 	// you can only encode fields that are under .Key, .Payload.Before and .Payload.After.
 	Field string `json:"field" validate:"required,regex=^\\.(Payload|Key).*,exclusion=.Payload"`
 }
 
-func (p *jsonEncode) Specification() (sdk.Specification, error) {
+func (p *encodeProcessor) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
 		Name:    "json.encode",
 		Summary: "Encodes a specific field from structured data to JSON raw data (string).",
-		Description: `The processor takes structured data from the target field, encodes it into JSON raw data (string)
-and stores the encoded string in the target field.
+		Description: `The processor takes data from the target field, encodes it into s JSON value
+and stores the encoded value in the target field.
 
 This processor is only applicable to fields under ` + "`.Key`" + `, ` + "`.Payload`.Before" + ` and
 ` + "`.Payload.After`" + `, as they can contain structured data.`,
 		Version:    "v0.1.0",
 		Author:     "Meroxa, Inc.",
-		Parameters: jsonEncodeConfig{}.Parameters(),
+		Parameters: encodeConfig{}.Parameters(),
 	}, nil
 }
 
-func (p *jsonEncode) Configure(ctx context.Context, m map[string]string) error {
-	cfg := jsonEncodeConfig{}
-	err := sdk.ParseConfig(ctx, m, &cfg, jsonEncodeConfig{}.Parameters())
+func (p *encodeProcessor) Configure(ctx context.Context, m map[string]string) error {
+	cfg := encodeConfig{}
+	err := sdk.ParseConfig(ctx, m, &cfg, encodeConfig{}.Parameters())
 	if err != nil {
 		return cerrors.Errorf("failed to parse configuration: %w", err)
 	}
@@ -69,14 +71,14 @@ func (p *jsonEncode) Configure(ctx context.Context, m map[string]string) error {
 	return nil
 }
 
-func (p *jsonEncode) Open(context.Context) error {
+func (p *encodeProcessor) Open(context.Context) error {
 	return nil
 }
 
-func (p *jsonEncode) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
+func (p *encodeProcessor) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 	out := make([]sdk.ProcessedRecord, 0, len(records))
 	for _, record := range records {
-		rec, err := p.jsonEncode(record)
+		rec, err := p.encode(record)
 		if err != nil {
 			return append(out, sdk.ErrorRecord{Error: err})
 		}
@@ -85,35 +87,22 @@ func (p *jsonEncode) Process(_ context.Context, records []opencdc.Record) []sdk.
 	return out
 }
 
-func (p *jsonEncode) Teardown(context.Context) error {
+func (p *encodeProcessor) Teardown(context.Context) error {
 	return nil
 }
 
-func (p *jsonEncode) jsonEncode(rec opencdc.Record) (sdk.ProcessedRecord, error) {
+func (p *encodeProcessor) encode(rec opencdc.Record) (sdk.ProcessedRecord, error) {
 	ref, err := p.referenceResolver.Resolve(&rec)
 	if err != nil {
 		return nil, cerrors.Errorf("failed to resolve the field: %w", err)
 	}
-
-	var raw []byte
-	switch val := ref.Get().(type) {
-	case []byte:
-		raw = val
-		// do we want to fail if the []byte or string is not a valid json string?
-	case opencdc.RawData:
-		raw = val
-	case opencdc.StructuredData:
-		raw = val.Bytes()
-	case nil:
-		return sdk.SingleRecord(rec), nil
-	default:
-		return nil, cerrors.Errorf("unexpected data type %T", val)
+	value, err := json.Marshal(ref.Get())
+	if err != nil {
+		return nil, err
 	}
-
-	err = ref.Set(opencdc.RawData(raw))
+	err = ref.Set(value)
 	if err != nil {
 		return nil, cerrors.Errorf("failed to set the JSON encoded value into the record: %w", err)
 	}
-
 	return sdk.SingleRecord(rec), nil
 }

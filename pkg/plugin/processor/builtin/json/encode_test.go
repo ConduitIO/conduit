@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package builtin
+package json
 
 import (
 	"context"
@@ -20,12 +20,12 @@ import (
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
-	"github.com/google/go-cmp/cmp"
+	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/matryer/is"
 )
 
-func TestEncodeJSON_Process(t *testing.T) {
-	proc := newJSONEncode()
+func TestEncode_Process(t *testing.T) {
+	proc := newEncodeProcessor(log.Nop())
 	ctx := context.Background()
 	testCases := []struct {
 		name   string
@@ -45,12 +45,12 @@ func TestEncodeJSON_Process(t *testing.T) {
 				Key: opencdc.RawData(`{"after":{"data":4,"id":3}}`),
 			},
 		}, {
-			name:   "structured payload.after.foo to raw",
+			name:   "encode payload.after.foo map",
 			config: map[string]string{"field": ".Payload.After.foo"},
 			record: opencdc.Record{
 				Payload: opencdc.Change{
 					After: opencdc.StructuredData{
-						"foo": opencdc.StructuredData{
+						"foo": map[string]any{
 							"after": map[string]any{"data": float64(4), "id": float64(3)},
 							"baz":   "bar",
 						},
@@ -60,7 +60,7 @@ func TestEncodeJSON_Process(t *testing.T) {
 			want: sdk.SingleRecord{
 				Payload: opencdc.Change{
 					After: opencdc.StructuredData{
-						"foo": opencdc.RawData(`{"after":{"data":4,"id":3},"baz":"bar"}`),
+						"foo": []uint8(`{"after":{"data":4,"id":3},"baz":"bar"}`),
 					},
 				},
 			},
@@ -79,6 +79,36 @@ func TestEncodeJSON_Process(t *testing.T) {
 					After: opencdc.RawData(`{"foo":["one","two","three"]}`),
 				},
 			},
+		}, {
+			name:   "encode int value",
+			config: map[string]string{"field": ".Payload.After.foo"},
+			record: opencdc.Record{
+				Payload: opencdc.Change{
+					After: opencdc.StructuredData{
+						"foo": 123,
+					},
+				},
+			},
+			want: sdk.SingleRecord{
+				Payload: opencdc.Change{
+					After: opencdc.StructuredData{
+						"foo": []uint8("123"),
+					},
+				},
+			},
+		}, {
+			name:   "nil value",
+			config: map[string]string{"field": ".Payload.After"},
+			record: opencdc.Record{
+				Payload: opencdc.Change{
+					After: nil,
+				},
+			},
+			want: sdk.SingleRecord{
+				Payload: opencdc.Change{
+					After: opencdc.RawData("null"),
+				},
+			},
 		},
 	}
 	for _, tc := range testCases {
@@ -88,13 +118,16 @@ func TestEncodeJSON_Process(t *testing.T) {
 			is.NoErr(err)
 			got := proc.Process(ctx, []opencdc.Record{tc.record})
 			is.Equal(1, len(got))
-			is.Equal("", cmp.Diff(tc.want, got[0], cmpProcessedRecordOpts...))
+			// todo delete line after merging into refactoring PR
+			is.Equal(tc.want, got[0])
+			// todo uncomment when merged into refactoring PR
+			//is.Equal("", cmp.Diff(tc.want, got[0], internal.cmpProcessedRecordOpts...))
 		})
 	}
 }
 
-func TestEncodeJSON_Configure(t *testing.T) {
-	proc := newJSONEncode()
+func TestEncode_Configure(t *testing.T) {
+	proc := newEncodeProcessor(log.Nop())
 	ctx := context.Background()
 	testCases := []struct {
 		name    string
