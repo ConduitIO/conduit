@@ -121,7 +121,7 @@ func TestEncode_Process(t *testing.T) {
 			// todo delete line after merging into refactoring PR
 			is.Equal(tc.want, got[0])
 			// todo uncomment when merged into refactoring PR
-			//is.Equal("", cmp.Diff(tc.want, got[0], internal.cmpProcessedRecordOpts...))
+			// is.Equal("", cmp.Diff(tc.want, got[0], internal.cmpProcessedRecordOpts...))
 		})
 	}
 }
