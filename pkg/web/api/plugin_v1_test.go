@@ -19,6 +19,8 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/conduitio/conduit-commons/config"
+	processorSdk "github.com/conduitio/conduit-processor-sdk"
 	connectorPlugin "github.com/conduitio/conduit/pkg/plugin/connector"
 	"github.com/conduitio/conduit/pkg/web/api/mock"
 	"github.com/conduitio/conduit/pkg/web/api/toproto"
@@ -27,13 +29,14 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
+// Deprecated: testing the old plugin API.
 func TestPluginAPIv1_ListPluginByName(t *testing.T) {
 	is := is.New(t)
 
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	cpoMock := mock.NewConnectorPluginOrchestrator(ctrl)
-	api := NewPluginAPIv1(cpoMock)
+	api := NewPluginAPIv1(cpoMock, nil)
 
 	names := []string{"do-not-want-this-plugin", "want-p1", "want-p2", "skip", "another-skipped"}
 
@@ -95,13 +98,138 @@ func TestPluginAPIv1_ListPluginByName(t *testing.T) {
 
 	is.NoErr(err)
 
+	sortPlugins := func(p []*apiv1.PluginSpecifications) {
+		sort.Slice(p, func(i, j int) bool {
+			return p[i].Name < p[j].Name
+		})
+	}
+
 	sortPlugins(want.Plugins)
 	sortPlugins(got.Plugins)
 	is.Equal(want, got)
 }
 
-func sortPlugins(p []*apiv1.PluginSpecifications) {
-	sort.Slice(p, func(i, j int) bool {
-		return p[i].Name < p[j].Name
-	})
+func TestPluginAPIv1_ListConnectorPluginsByName(t *testing.T) {
+	is := is.New(t)
+
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+	cpoMock := mock.NewConnectorPluginOrchestrator(ctrl)
+	api := NewPluginAPIv1(cpoMock, nil)
+
+	names := []string{"do-not-want-this-plugin", "want-p1", "want-p2", "skip", "another-skipped"}
+
+	plsMap := make(map[string]connectorPlugin.Specification)
+	pls := make([]connectorPlugin.Specification, 0)
+
+	for _, name := range names {
+		ps := connectorPlugin.Specification{
+			Name:        name,
+			Description: "desc",
+			Version:     "v1.0",
+			Author:      "Aaron",
+			SourceParams: map[string]connectorPlugin.Parameter{
+				"param": {
+					Type: connectorPlugin.ParameterTypeString,
+					Validations: []connectorPlugin.Validation{{
+						Type: connectorPlugin.ValidationTypeRequired,
+					}},
+				},
+			},
+			DestinationParams: map[string]connectorPlugin.Parameter{},
+		}
+		pls = append(pls, ps)
+		plsMap[name] = ps
+	}
+
+	cpoMock.EXPECT().
+		List(ctx).
+		Return(plsMap, nil).
+		Times(1)
+
+	want := &apiv1.ListConnectorPluginsResponse{
+		Plugins: []*apiv1.ConnectorPluginSpecifications{
+			toproto.ConnectorPluginSpecifications(pls[1].Name, pls[1]),
+			toproto.ConnectorPluginSpecifications(pls[2].Name, pls[2]),
+		},
+	}
+
+	got, err := api.ListConnectorPlugins(
+		ctx,
+		&apiv1.ListConnectorPluginsRequest{Name: "want-.*"},
+	)
+
+	is.NoErr(err)
+
+	sortPlugins := func(p []*apiv1.ConnectorPluginSpecifications) {
+		sort.Slice(p, func(i, j int) bool {
+			return p[i].Name < p[j].Name
+		})
+	}
+
+	sortPlugins(want.Plugins)
+	sortPlugins(got.Plugins)
+	is.Equal(want, got)
+}
+
+func TestPluginAPIv1_ListProcessorPluginsByName(t *testing.T) {
+	is := is.New(t)
+
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+	ppoMock := mock.NewProcessorPluginOrchestrator(ctrl)
+	api := NewPluginAPIv1(nil, ppoMock)
+
+	names := []string{"do-not-want-this-plugin", "want-p1", "want-p2", "skip", "another-skipped"}
+
+	plsMap := make(map[string]processorSdk.Specification)
+	pls := make([]processorSdk.Specification, 0)
+
+	for _, name := range names {
+		ps := processorSdk.Specification{
+			Name:        name,
+			Description: "desc",
+			Version:     "v1.0",
+			Author:      "Aaron",
+			Parameters: map[string]config.Parameter{
+				"param": {
+					Type: config.ParameterTypeString,
+					Validations: []config.Validation{
+						config.ValidationRequired{},
+					},
+				},
+			},
+		}
+		pls = append(pls, ps)
+		plsMap[name] = ps
+	}
+
+	ppoMock.EXPECT().
+		List(ctx).
+		Return(plsMap, nil).
+		Times(1)
+
+	want := &apiv1.ListProcessorPluginsResponse{
+		Plugins: []*apiv1.ProcessorPluginSpecifications{
+			toproto.ProcessorPluginSpecifications(pls[1].Name, pls[1]),
+			toproto.ProcessorPluginSpecifications(pls[2].Name, pls[2]),
+		},
+	}
+
+	got, err := api.ListProcessorPlugins(
+		ctx,
+		&apiv1.ListProcessorPluginsRequest{Name: "want-.*"},
+	)
+
+	is.NoErr(err)
+
+	sortPlugins := func(p []*apiv1.ProcessorPluginSpecifications) {
+		sort.Slice(p, func(i, j int) bool {
+			return p[i].Name < p[j].Name
+		})
+	}
+
+	sortPlugins(want.Plugins)
+	sortPlugins(got.Plugins)
+	is.Equal(want, got)
 }

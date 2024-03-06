@@ -2108,7 +2108,8 @@
             "$ref": "#/definitions/v1PluginSpecifications"
           }
         }
-      }
+      },
+      "description": "Deprecated: use ListConnectorPlugins instead."
     },
     "v1ListProcessorPluginsResponse": {
       "type": "object",
@@ -2338,7 +2339,7 @@
           "description": "A map that describes parameters available for configuring the\nprocessor plugin."
         }
       },
-      "description": "ConnectorPluginSpecifications describes the specifications of a processor plugin."
+      "description": "ProcessorPluginSpecifications describes the specifications of a processor plugin."
     },
     "v1Record": {
       "type": "object",

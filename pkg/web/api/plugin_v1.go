@@ -18,6 +18,7 @@ import (
 	"context"
 	"regexp"
 
+	processorSdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	connectorPlugin "github.com/conduitio/conduit/pkg/plugin/connector"
 	"github.com/conduitio/conduit/pkg/web/api/status"
@@ -27,26 +28,42 @@ import (
 )
 
 //go:generate mockgen -destination=mock/connector_plugin.go -package=mock -mock_names=ConnectorPluginOrchestrator=ConnectorPluginOrchestrator . ConnectorPluginOrchestrator
+//go:generate mockgen -destination=mock/processor_plugin.go -package=mock -mock_names=ProcessorPluginOrchestrator=ProcessorPluginOrchestrator . ProcessorPluginOrchestrator
 
-// ConnectorPluginOrchestrator defines a CRUD interface that manages the Plugin resource.
+// ConnectorPluginOrchestrator defines a CRUD interface that manages connector plugins.
 type ConnectorPluginOrchestrator interface {
 	// List will return all connector plugins' specs.
 	List(ctx context.Context) (map[string]connectorPlugin.Specification, error)
 }
 
-type PluginAPIv1 struct {
-	apiv1.UnimplementedPluginServiceServer
-	cpo ConnectorPluginOrchestrator
+// ProcessorPluginOrchestrator defines a CRUD interface that manages processor plugins.
+type ProcessorPluginOrchestrator interface {
+	// List will return all processor plugins' specs.
+	List(ctx context.Context) (map[string]processorSdk.Specification, error)
 }
 
-func NewPluginAPIv1(cpo ConnectorPluginOrchestrator) *PluginAPIv1 {
-	return &PluginAPIv1{cpo: cpo}
+type PluginAPIv1 struct {
+	apiv1.UnimplementedPluginServiceServer
+	connectorPluginOrchestrator ConnectorPluginOrchestrator
+	processorPluginOrchestrator ProcessorPluginOrchestrator
+}
+
+func NewPluginAPIv1(
+	cpo ConnectorPluginOrchestrator,
+	ppo ProcessorPluginOrchestrator,
+) *PluginAPIv1 {
+	return &PluginAPIv1{
+		connectorPluginOrchestrator: cpo,
+		processorPluginOrchestrator: ppo,
+	}
 }
 
 func (p *PluginAPIv1) Register(srv *grpc.Server) {
 	apiv1.RegisterPluginServiceServer(srv, p)
 }
 
+// Deprecated: this is here for backwards compatibility with the old plugin API.
+// Use ListConnectorPlugins instead.
 func (p *PluginAPIv1) ListPlugins(
 	ctx context.Context,
 	req *apiv1.ListPluginsRequest,
@@ -60,7 +77,7 @@ func (p *PluginAPIv1) ListPlugins(
 		}
 	}
 
-	mp, err := p.cpo.List(ctx)
+	mp, err := p.connectorPluginOrchestrator.List(ctx)
 	if err != nil {
 		return nil, status.PluginError(err)
 	}
@@ -70,8 +87,66 @@ func (p *PluginAPIv1) ListPlugins(
 		if nameFilter != nil && !nameFilter.MatchString(name) {
 			continue // don't add to result list, filter didn't match
 		}
-		plist = append(plist, toproto.Plugin(name, v))
+		plist = append(plist, toproto.PluginSpecifications(name, v))
 	}
 
 	return &apiv1.ListPluginsResponse{Plugins: plist}, nil
+}
+
+func (p *PluginAPIv1) ListConnectorPlugins(
+	ctx context.Context,
+	req *apiv1.ListConnectorPluginsRequest,
+) (*apiv1.ListConnectorPluginsResponse, error) {
+	var nameFilter *regexp.Regexp
+	if req.GetName() != "" {
+		var err error
+		nameFilter, err = regexp.Compile("^" + req.GetName() + "$")
+		if err != nil {
+			return nil, status.PluginError(cerrors.New("invalid name regex"))
+		}
+	}
+
+	mp, err := p.connectorPluginOrchestrator.List(ctx)
+	if err != nil {
+		return nil, status.PluginError(err)
+	}
+	var plist []*apiv1.ConnectorPluginSpecifications
+
+	for name, v := range mp {
+		if nameFilter != nil && !nameFilter.MatchString(name) {
+			continue // don't add to result list, filter didn't match
+		}
+		plist = append(plist, toproto.ConnectorPluginSpecifications(name, v))
+	}
+
+	return &apiv1.ListConnectorPluginsResponse{Plugins: plist}, nil
+}
+
+func (p *PluginAPIv1) ListProcessorPlugins(
+	ctx context.Context,
+	req *apiv1.ListProcessorPluginsRequest,
+) (*apiv1.ListProcessorPluginsResponse, error) {
+	var nameFilter *regexp.Regexp
+	if req.GetName() != "" {
+		var err error
+		nameFilter, err = regexp.Compile("^" + req.GetName() + "$")
+		if err != nil {
+			return nil, status.PluginError(cerrors.New("invalid name regex"))
+		}
+	}
+
+	mp, err := p.processorPluginOrchestrator.List(ctx)
+	if err != nil {
+		return nil, status.PluginError(err)
+	}
+	var plist []*apiv1.ProcessorPluginSpecifications
+
+	for name, v := range mp {
+		if nameFilter != nil && !nameFilter.MatchString(name) {
+			continue // don't add to result list, filter didn't match
+		}
+		plist = append(plist, toproto.ProcessorPluginSpecifications(name, v))
+	}
+
+	return &apiv1.ListProcessorPluginsResponse{Plugins: plist}, nil
 }

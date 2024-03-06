@@ -165,7 +165,7 @@ message ConnectorPluginSpecifications{
   map<string, config.v1.Parameter> source_params = 7;
 }
 
-// ConnectorPluginSpecifications describes the specifications of a processor plugin.
+// ProcessorPluginSpecifications describes the specifications of a processor plugin.
 message ProcessorPluginSpecifications{
   // Name is the name of the plugin.
   string name = 1;
@@ -1112,12 +1112,16 @@ service PluginService {
   };
 }
 
+// Deprecated: use ListConnectorPlugins instead.
 message ListPluginsRequest {
+  option deprecated = true;
   // Regex to filter plugins by name.
   string name = 1;
 }
 
+// Deprecated: use ListConnectorPlugins instead.
 message ListPluginsResponse{
+  option deprecated = true;
   repeated PluginSpecifications plugins = 1;
 }
 
