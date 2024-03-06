@@ -23,7 +23,12 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/js"
 )
+
+var DefaultBuiltinProcessors = map[string]ProcessorPluginConstructor{
+	"custom.javascript": js.New,
+}
 
 type Registry struct {
 	logger log.CtxLogger
