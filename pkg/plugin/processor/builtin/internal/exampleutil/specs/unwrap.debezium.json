@@ -21,7 +21,7 @@
   },
   "examples": [
     {
-      "summary": "",
+      "summary": "Unwrap a Debezium record",
       "description": "This example how to unwrap a Debezium record from a field nested in a record's\n.Payload.After field. It additionally shows how the key is unwrapped, and the metadata merged.",
       "config": {
         "field": ".Payload.After.nested"

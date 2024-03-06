@@ -36,7 +36,7 @@
   },
   "examples": [
     {
-      "summary": "Processor will set the operation into \"update\".",
+      "summary": "Sets a record's operation to \"update\"",
       "description": "",
       "config": {
         "field": ".Operation",
@@ -98,7 +98,7 @@
       }
     },
     {
-      "summary": "set the value under .Payload.After.postgres to true if .Metadata.table=\"postgres\"",
+      "summary": "Set the value under .Payload.After.postgres to true if .Metadata.table=\"postgres\"",
       "description": "",
       "config": {
         "field": ".Payload.After.postgres",

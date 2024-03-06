@@ -1,0 +1,100 @@
+{
+  "specification": {
+    "name": "avro.decode",
+    "summary": "Decodes a field's raw data in the Avro format",
+    "description": "The processor takes raw data (bytes or a string) in the specified field and decodes\nit from the [Avro format](https://avro.apache.org/) into structured data. It extracts the schema ID from the data,\ndownloads the associated schema from the [schema registry](https://docs.confluent.io/platform/current/schema-registry/index.html)\nand decodes the payload. The schema is cached locally after it's first downloaded.\n\nIf the processor encounters structured data or the data can't be decoded it returns an error.\n\nThis processor is the counterpart to [`avro.encode`](/docs/processors/builtin/avro.encode).",
+    "version": "v0.1.0",
+    "author": "Meroxa, Inc.",
+    "parameters": {
+      "auth.basic.password": {
+        "default": "",
+        "description": "The password to use with basic authentication. This option is required if\nauth.basic.username contains a value. If both auth.basic.username and auth.basic.password\nare empty basic authentication is disabled.",
+        "type": "string",
+        "validations": []
+      },
+      "auth.basic.username": {
+        "default": "",
+        "description": "The username to use with basic authentication. This option is required if\nauth.basic.password contains a value. If both auth.basic.username and auth.basic.password\nare empty basic authentication is disabled.",
+        "type": "string",
+        "validations": []
+      },
+      "field": {
+        "default": ".Payload.After",
+        "description": "The field that will be encoded.",
+        "type": "string",
+        "validations": []
+      },
+      "tls.ca.cert": {
+        "default": "",
+        "description": "The path to a file containing PEM encoded CA certificates. If this option is empty,\nConduit falls back to using the host's root CA set.",
+        "type": "string",
+        "validations": []
+      },
+      "tls.client.cert": {
+        "default": "",
+        "description": "The path to a file containing a PEM encoded certificate. This option is required\nif tls.client.key contains a value. If both tls.client.cert and tls.client.key are empty\nTLS is disabled.",
+        "type": "string",
+        "validations": []
+      },
+      "tls.client.key": {
+        "default": "",
+        "description": "The path to a file containing a PEM encoded private key. This option is required\nif tls.client.cert contains a value. If both tls.client.cert and tls.client.key are empty\nTLS is disabled.",
+        "type": "string",
+        "validations": []
+      },
+      "url": {
+        "default": "",
+        "description": "URL of the schema registry (e.g. http://localhost:8085)",
+        "type": "string",
+        "validations": [
+          {
+            "type": "required",
+            "value": ""
+          }
+        ]
+      }
+    }
+  },
+  "examples": [
+    {
+      "summary": "",
+      "description": "This example shows the usage of the `avro.decode` processor.\nThe processor decodes the record's`.Key` field using the schema that is\ndownloaded from the schema registry and needs to exist under the subject`example-decode`.\nIn this example we use the following schema:\n\n```json\n{\n  \"type\":\"record\",\n  \"name\":\"record\",\n  \"fields\":[\n    {\"name\":\"myString\",\"type\":\"string\"},\n    {\"name\":\"myInt\",\"type\":\"int\"}\n  ]\n}\n```",
+      "config": {
+        "auth.basic.password": "",
+        "auth.basic.username": "",
+        "field": ".Key",
+        "tls.ca.cert": "",
+        "tls.client.cert": "",
+        "tls.client.key": "",
+        "url": "http://127.0.0.1:54322"
+      },
+      "have": {
+        "position": "dGVzdC1wb3NpdGlvbg==",
+        "operation": "create",
+        "metadata": {
+          "key1": "val1"
+        },
+        "key": "\u0000\u0000\u0000\u0000\u0001\u0006bar\u0002",
+        "payload": {
+          "before": null,
+          "after": null
+        }
+      },
+      "want": {
+        "position": "dGVzdC1wb3NpdGlvbg==",
+        "operation": "create",
+        "metadata": {
+          "key1": "val1"
+        },
+        "key": {
+          "myInt": 1,
+          "myString": "bar"
+        },
+        "payload": {
+          "before": null,
+          "after": null
+        }
+      }
+    }
+  ]
+}

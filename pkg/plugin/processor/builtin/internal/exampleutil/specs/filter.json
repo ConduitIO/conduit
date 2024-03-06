@@ -9,7 +9,7 @@
   },
   "examples": [
     {
-      "summary": "filter out the record",
+      "summary": "Filter out the record",
       "description": "",
       "config": {},
       "have": {

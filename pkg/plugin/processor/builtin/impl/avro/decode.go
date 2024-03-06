@@ -107,7 +107,7 @@ func NewDecodeProcessor(logger log.CtxLogger) sdk.Processor {
 
 func (p *decodeProcessor) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
-		Name:    "avro.encode",
+		Name:    "avro.decode",
 		Summary: "Decodes a field's raw data in the Avro format",
 		Description: `The processor takes raw data (bytes or a string) in the specified field and decodes
 it from the [Avro format](https://avro.apache.org/) into structured data. It extracts the schema ID from the data,
