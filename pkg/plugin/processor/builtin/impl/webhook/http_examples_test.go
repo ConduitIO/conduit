@@ -37,7 +37,7 @@ func ExampleHTTPProcessor() {
 	defer srv.Close()
 
 	exampleutil.RunExample(p, exampleutil.Example{
-		Summary: `Send request`,
+		Summary: `Send a request to an HTTP server`,
 		Description: `
 This example shows how to use the HTTP processor to send a record's .Payload.After field to a dummy HTTP server 
 that replies back with a greeting. 

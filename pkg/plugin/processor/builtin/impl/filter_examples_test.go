@@ -25,7 +25,7 @@ func ExampleFilterProcessor() {
 	p := NewFilterProcessor()
 
 	exampleutil.RunExample(p, exampleutil.Example{
-		Summary: `filter out the record`,
+		Summary: `Filter out the record`,
 		Config:  map[string]string{},
 		Have: opencdc.Record{
 			Operation: opencdc.OperationCreate,

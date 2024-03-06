@@ -25,7 +25,7 @@ func ExampleSetProcessor_setOperation() {
 	p := NewSetProcessor()
 
 	exampleutil.RunExample(p, exampleutil.Example{
-		Summary: `Processor will set the operation into "update".`,
+		Summary: `Sets a record's operation to "update".`,
 		Config:  map[string]string{"field": ".Operation", "value": "update"},
 		Have:    opencdc.Record{Operation: opencdc.OperationCreate},
 		Want:    sdk.SingleRecord{Operation: opencdc.OperationUpdate},

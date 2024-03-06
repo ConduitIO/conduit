@@ -26,6 +26,7 @@ func ExampleKafkaConnectProcesor() {
 	p := NewKafkaConnectProcessor(log.Nop())
 
 	exampleutil.RunExample(p, exampleutil.Example{
+		Summary: "Unwrap a Kafka Connect record",
 		Description: `This example shows how to unwrap a Kafka Connect record.
 
 The Kafka Connect record is serialized as a JSON string in the .Payload.After field (raw data).

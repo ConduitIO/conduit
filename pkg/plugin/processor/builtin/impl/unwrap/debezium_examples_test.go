@@ -26,6 +26,7 @@ func ExampleDebeziumProcessor() {
 	p := NewDebezium(log.Nop())
 
 	exampleutil.RunExample(p, exampleutil.Example{
+		Summary: "Unwrap a Debezium record",
 		Description: `This example how to unwrap a Debezium record from a field nested in a record's
 .Payload.After field. It additionally shows how the key is unwrapped, and the metadata merged.`,
 		Config: map[string]string{
