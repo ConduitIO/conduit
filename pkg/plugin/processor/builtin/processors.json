@@ -218,7 +218,7 @@
       {
         "description": "",
         "config": {
-          "script": "function process(rec) {\n\t\t\t\t\trec.Metadata[\"processed\"] = \"true\";\n\t\t\t\t\tlet existing = String.fromCharCode.apply(String, rec.Payload.After);\n\t\t\t\t\trec.Payload.After = RawData(\"hello, \" + existing);\n\t\t\t\t\treturn rec;\n\t\t\t\t}",
+          "script": "function process(rec) {\n  rec.Metadata[\"processed\"] = \"true\";\n  let existing = String.fromCharCode.apply(String, rec.Payload.After);\n  rec.Payload.After = RawData(\"hello, \" + existing);\n  return rec;\n}",
           "script.path": ""
         },
         "have": {

@@ -29,11 +29,11 @@ func ExampleJavaScriptProcessor_Simple() {
 		Description: "",
 		Config: map[string]string{
 			"script": `function process(rec) {
-					rec.Metadata["processed"] = "true";
-					let existing = String.fromCharCode.apply(String, rec.Payload.After);
-					rec.Payload.After = RawData("hello, " + existing);
-					return rec;
-				}`,
+  rec.Metadata["processed"] = "true";
+  let existing = String.fromCharCode.apply(String, rec.Payload.After);
+  rec.Payload.After = RawData("hello, " + existing);
+  return rec;
+}`,
 		},
 		Have: opencdc.Record{
 			Metadata: map[string]string{
