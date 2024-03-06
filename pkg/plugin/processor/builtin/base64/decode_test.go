@@ -27,7 +27,7 @@ import (
 	"github.com/matryer/is"
 )
 
-func TestEncodeProcessor_Success(t *testing.T) {
+func TestDecodeProcessor_Success(t *testing.T) {
 	ctx := context.Background()
 
 	testCases := []struct {
@@ -36,90 +36,33 @@ func TestEncodeProcessor_Success(t *testing.T) {
 		record opencdc.Record
 		want   sdk.SingleRecord
 	}{{
-		name:  "encode raw data",
+		name:  "decode raw data",
 		field: ".Key",
 		record: opencdc.Record{
-			Key: opencdc.RawData("foo"),
-		},
-		want: sdk.SingleRecord{
 			Key: opencdc.RawData("Zm9v"),
 		},
+		want: sdk.SingleRecord{
+			Key: opencdc.RawData("foo"),
+		},
 	}, {
-		name:  "encode string",
+		name:  "decode string",
 		field: ".Key.foo",
 		record: opencdc.Record{
+			Key: opencdc.StructuredData{
+				"foo": "YmFy",
+			},
+		},
+		want: sdk.SingleRecord{
 			Key: opencdc.StructuredData{
 				"foo": "bar",
 			},
 		},
-		want: sdk.SingleRecord{
-			Key: opencdc.StructuredData{
-				"foo": "YmFy",
-			},
-		},
-	}, {
-		name:  "encode int",
-		field: ".Key.foo",
-		record: opencdc.Record{
-			Key: opencdc.StructuredData{
-				"foo": 1,
-			},
-		},
-		want: sdk.SingleRecord{
-			Key: opencdc.StructuredData{
-				"foo": "MQ==",
-			},
-		},
-	}, {
-		name:  "encode float",
-		field: ".Key.foo",
-		record: opencdc.Record{
-			Key: opencdc.StructuredData{
-				"foo": 1.1,
-			},
-		},
-		want: sdk.SingleRecord{
-			Key: opencdc.StructuredData{
-				"foo": "MS4x",
-			},
-		},
-	}, {
-		name:  "encode bool",
-		field: ".Key.foo",
-		record: opencdc.Record{
-			Key: opencdc.StructuredData{
-				"foo": true,
-			},
-		},
-		want: sdk.SingleRecord{
-			Key: opencdc.StructuredData{
-				"foo": "dHJ1ZQ==",
-			},
-		},
-	}, {
-		name:  "encode []byte",
-		field: ".Key.foo",
-		record: opencdc.Record{
-			Key: opencdc.StructuredData{
-				"foo": []byte("bar"),
-			},
-		},
-		want: sdk.SingleRecord{
-			Key: opencdc.StructuredData{
-				"foo": "YmFy",
-			},
-		},
-	}, {
-		name:   "encode nil",
-		field:  ".Key",
-		record: opencdc.Record{},
-		want:   sdk.SingleRecord{},
 	}}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			is := is.New(t)
-			proc := NewEncodeProcessor(log.Nop())
+			proc := NewDecodeProcessor(log.Nop())
 			err := proc.Configure(ctx, map[string]string{"field": tc.field})
 			is.NoErr(err)
 			got := proc.Process(ctx, []opencdc.Record{tc.record})
@@ -129,7 +72,7 @@ func TestEncodeProcessor_Success(t *testing.T) {
 	}
 }
 
-func TestEncodeProcessor_Fail(t *testing.T) {
+func TestDecodeProcessor_Fail(t *testing.T) {
 	ctx := context.Background()
 
 	testCases := []struct {
@@ -138,7 +81,7 @@ func TestEncodeProcessor_Fail(t *testing.T) {
 		record  opencdc.Record
 		wantErr error
 	}{{
-		name:  "encode structured data",
+		name:  "decode structured data",
 		field: ".Key",
 		record: opencdc.Record{
 			Key: opencdc.StructuredData{
@@ -147,7 +90,7 @@ func TestEncodeProcessor_Fail(t *testing.T) {
 		},
 		wantErr: cerrors.New("unexpected data type opencdc.StructuredData"),
 	}, {
-		name:  "encode map",
+		name:  "decode map",
 		field: ".Key.foo",
 		record: opencdc.Record{
 			Key: opencdc.StructuredData{
@@ -157,12 +100,39 @@ func TestEncodeProcessor_Fail(t *testing.T) {
 			},
 		},
 		wantErr: cerrors.New("unexpected data type map[string]interface {}"),
+	}, {
+		name:  "decode int",
+		field: ".Key.foo",
+		record: opencdc.Record{
+			Key: opencdc.StructuredData{
+				"foo": 1,
+			},
+		},
+		wantErr: cerrors.New("unexpected data type int"),
+	}, {
+		name:  "decode float",
+		field: ".Key.foo",
+		record: opencdc.Record{
+			Key: opencdc.StructuredData{
+				"foo": 1.1,
+			},
+		},
+		wantErr: cerrors.New("unexpected data type float64"),
+	}, {
+		name:  "invalid base64 string",
+		field: ".Key.foo",
+		record: opencdc.Record{
+			Key: opencdc.StructuredData{
+				"foo": "bar",
+			},
+		},
+		wantErr: cerrors.New("failed to decode the value: illegal base64 data at input byte 0"),
 	}}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			is := is.New(t)
-			proc := NewEncodeProcessor(log.Nop())
+			proc := NewDecodeProcessor(log.Nop())
 			err := proc.Configure(ctx, map[string]string{"field": tc.field})
 			is.NoErr(err)
 			got := proc.Process(ctx, []opencdc.Record{tc.record})

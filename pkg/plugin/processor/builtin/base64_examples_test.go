@@ -52,7 +52,8 @@ into a base64 encoded string.`,
 					"foo": "bar",
 				},
 			},
-		}})
+		},
+	})
 
 	// Output:
 	// processor transformed record:
@@ -107,7 +108,8 @@ into a base64 encoded string.`,
 					"foo": "YmFy",
 				},
 			},
-		}})
+		},
+	})
 
 	// Output:
 	// processor transformed record:
@@ -126,6 +128,64 @@ into a base64 encoded string.`,
 	//      "after": {
 	// -      "foo": "bar"
 	// +      "foo": "YmFy"
+	//      }
+	//    }
+	//  }
+}
+
+//nolint:govet // a more descriptive example description
+func ExampleBase64DecodeProcessor() {
+	p := base64.NewDecodeProcessor(log.Nop())
+	RunExample(p, example{
+		// Summary: "TODO",
+		Description: `This example decodes the base64 encoded string stored in
+` + "`.Payload.After`" + `. Note that the result is a string, so if you want to
+further process the result (e.g. parse the string as JSON), you need to chain
+other processors (e.g. [` + "`json.decode`" + `](/docs/processors/builtin/decode.json)).`,
+		Config: map[string]string{
+			"field": ".Payload.After.foo",
+		},
+		Have: opencdc.Record{
+			Position:  opencdc.Position("test-position"),
+			Operation: opencdc.OperationCreate,
+			Metadata:  map[string]string{"key1": "val1"},
+			Key:       opencdc.RawData("test-key"),
+			Payload: opencdc.Change{
+				After: opencdc.StructuredData{
+					"foo": "YmFy",
+				},
+			},
+		},
+		Want: sdk.SingleRecord{
+			Position:  opencdc.Position("test-position"),
+			Operation: opencdc.OperationCreate,
+			Metadata:  map[string]string{"key1": "val1"},
+			Key:       opencdc.RawData("test-key"),
+			Payload: opencdc.Change{
+				After: opencdc.StructuredData{
+					"foo": "bar",
+				},
+			},
+		},
+	})
+
+	// Output:
+	// processor transformed record:
+	// --- before
+	// +++ after
+	// @@ -1,14 +1,14 @@
+	//  {
+	//    "position": "dGVzdC1wb3NpdGlvbg==",
+	//    "operation": "create",
+	//    "metadata": {
+	//      "key1": "val1"
+	//    },
+	//    "key": "test-key",
+	//    "payload": {
+	//      "before": null,
+	//      "after": {
+	// -      "foo": "YmFy"
+	// +      "foo": "bar"
 	//      }
 	//    }
 	//  }
