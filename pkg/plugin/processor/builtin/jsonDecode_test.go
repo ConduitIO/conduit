@@ -41,7 +41,7 @@ func TestDecodeJSON_Process(t *testing.T) {
 			},
 			want: sdk.SingleRecord{
 				Key: opencdc.StructuredData{
-					"after": map[string]interface{}{"data": float64(4), "id": float64(3)},
+					"after": map[string]any{"data": float64(4), "id": float64(3)},
 				},
 			},
 			wantErr: false,
@@ -58,10 +58,46 @@ func TestDecodeJSON_Process(t *testing.T) {
 			want: sdk.SingleRecord{
 				Payload: opencdc.Change{
 					After: opencdc.StructuredData{
-						"foo": opencdc.StructuredData{
-							"after": map[string]interface{}{"data": float64(4), "id": float64(3)},
+						"foo": map[string]any{
+							"after": map[string]any{"data": float64(4), "id": float64(3)},
 							"baz":   "bar",
 						},
+					},
+				},
+			},
+			wantErr: false,
+		}, {
+			name:   "slice payload.after.foo to structured",
+			config: map[string]string{"field": ".Payload.After.foo"},
+			record: opencdc.Record{
+				Payload: opencdc.Change{
+					After: opencdc.StructuredData{
+						"foo": `["one", "two", "three"]`,
+					},
+				},
+			},
+			want: sdk.SingleRecord{
+				Payload: opencdc.Change{
+					After: opencdc.StructuredData{
+						"foo": []any{"one", "two", "three"},
+					},
+				},
+			},
+			wantErr: false,
+		}, {
+			name:   "string JSON value payload.after.foo to structured",
+			config: map[string]string{"field": ".Payload.After.foo"},
+			record: opencdc.Record{
+				Payload: opencdc.Change{
+					After: opencdc.StructuredData{
+						"foo": `"bar"`,
+					},
+				},
+			},
+			want: sdk.SingleRecord{
+				Payload: opencdc.Change{
+					After: opencdc.StructuredData{
+						"foo": "bar",
 					},
 				},
 			},
@@ -77,7 +113,7 @@ func TestDecodeJSON_Process(t *testing.T) {
 			want: sdk.SingleRecord{
 				Payload: opencdc.Change{
 					Before: opencdc.StructuredData{
-						"before": map[string]interface{}{"data": float64(4)},
+						"before": map[string]any{"data": float64(4)},
 						"foo":    "bar",
 					},
 				},
@@ -88,12 +124,12 @@ func TestDecodeJSON_Process(t *testing.T) {
 			config: map[string]string{"field": ".Key"},
 			record: opencdc.Record{
 				Key: opencdc.StructuredData{
-					"after": map[string]interface{}{"data": float64(4), "id": float64(3)},
+					"after": map[string]any{"data": float64(4), "id": float64(3)},
 				},
 			},
 			want: sdk.SingleRecord{
 				Key: opencdc.StructuredData{
-					"after": map[string]interface{}{"data": float64(4), "id": float64(3)},
+					"after": map[string]any{"data": float64(4), "id": float64(3)},
 				},
 			},
 			wantErr: false,
@@ -104,7 +140,7 @@ func TestDecodeJSON_Process(t *testing.T) {
 				Key: opencdc.RawData(""),
 			},
 			want: sdk.SingleRecord{
-				Key: opencdc.StructuredData(nil),
+				Key: nil,
 			},
 			wantErr: false,
 		}, {
@@ -169,6 +205,11 @@ func TestDecodeJSON_Configure(t *testing.T) {
 		{
 			name:    "valid field, payload.before",
 			config:  map[string]string{"field": ".Payload.Before"},
+			wantErr: false,
+		},
+		{
+			name:    "valid field, payload.after.foo",
+			config:  map[string]string{"field": ".Payload.After.foo"},
 			wantErr: false,
 		},
 		{

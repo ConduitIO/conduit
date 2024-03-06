@@ -80,8 +80,8 @@ func ExampleJSONDecodeProcessor_RawPayloadField() {
 			Operation: opencdc.OperationSnapshot,
 			Payload: opencdc.Change{
 				Before: opencdc.StructuredData{
-					"foo": opencdc.StructuredData{
-						"before": map[string]interface{}{"data": float64(4), "id": float64(3)},
+					"foo": map[string]any{
+						"before": map[string]any{"data": float64(4), "id": float64(3)},
 						"baz":    "bar",
 					},
 				},

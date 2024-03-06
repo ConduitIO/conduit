@@ -47,8 +47,9 @@ func (p *jsonDecode) Specification() (sdk.Specification, error) {
 		Summary: "Decodes a specific field from JSON raw data (string) to structured data.",
 		Description: `The processor takes JSON raw data (string) from the target field, parses it as JSON structured data
 and stores the decoded structured data in the target field.
-This processor is only applicable to fields under .Key, .Payload.Before and .Payload.After, as they accept structured data format.
-`,
+
+This processor is only applicable to fields under ` + "`.Key`" + `, ` + "`.Payload`.Before" + ` and ` + "`.Payload.After`" + `,
+as they can contain structured data.`,
 		Version:    "v0.1.0",
 		Author:     "Meroxa, Inc.",
 		Parameters: jsonDecodeConfig{}.Parameters(),
@@ -101,7 +102,7 @@ func (p *jsonDecode) Process(_ context.Context, records []opencdc.Record) []sdk.
 			if err != nil {
 				return append(out, sdk.ErrorRecord{Error: err})
 			}
-		case opencdc.StructuredData:
+		case opencdc.StructuredData, map[string]any:
 			// data is already structured
 		case nil:
 			// if the field is nil leave it as it is
@@ -118,11 +119,11 @@ func (p *jsonDecode) Teardown(context.Context) error {
 }
 
 func (p *jsonDecode) setJSONData(bytes []byte, ref sdk.Reference) error {
-	var jsonData opencdc.StructuredData
 	if len(bytes) == 0 {
 		// value is an empty json
-		return ref.Set(jsonData)
+		return ref.Set(nil)
 	}
+	var jsonData any
 	err := json.Unmarshal(bytes, &jsonData)
 	if err != nil {
 		return cerrors.Errorf("failed to unmarshal raw data as JSON: %w", err)
