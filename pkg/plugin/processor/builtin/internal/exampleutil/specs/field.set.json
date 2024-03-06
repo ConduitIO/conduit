@@ -64,7 +64,7 @@
       }
     },
     {
-      "summary": "Processor will create a new field and set its value",
+      "summary": "Create a new field and set its value",
       "description": "",
       "config": {
         "field": ".Payload.After.foo",

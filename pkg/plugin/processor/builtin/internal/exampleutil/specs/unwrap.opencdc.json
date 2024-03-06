@@ -17,7 +17,7 @@
   "examples": [
     {
       "summary": "Unwrap an OpenCDC record",
-      "description": "In this example we use the `unwrap.opencdc` processor to \nunwrap the OpenCDC record found in the record's `.Payload.After` field.",
+      "description": "In this example we use the `unwrap.opencdc` processor to unwrap the OpenCDC record found in the record's `.Payload.After` field.",
       "config": {
         "field": ".Payload.After"
       },

@@ -96,7 +96,7 @@
   "examples": [
     {
       "summary": "Auto-register schema",
-      "description": "This example shows the usage of the `avro.encode` processor\nwith the `autoRegister` schema strategy. The processor encodes the record's\n`.Payload.After` field using the schema that is extracted from the data\nand registered on the fly under the subject`example-autoRegister`.",
+      "description": "This example shows the usage of the `avro.encode` processor\nwith the `autoRegister` schema strategy. The processor encodes the record's\n`.Payload.After` field using the schema that is extracted from the data\nand registered on the fly under the subject `example-autoRegister`.",
       "config": {
         "auth.basic.password": "",
         "auth.basic.username": "",

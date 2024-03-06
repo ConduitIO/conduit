@@ -25,7 +25,7 @@
   },
   "examples": [
     {
-      "summary": "",
+      "summary": "Decode a Base64 encoded string",
       "description": "This example decodes the base64 encoded string stored in\n`.Payload.After`. Note that the result is a string, so if you want to\nfurther process the result (e.g. parse the string as JSON), you need to chain\nother processors (e.g. [`json.decode`](/docs/processors/builtin/decode.json)).",
       "config": {
         "field": ".Payload.After.foo"

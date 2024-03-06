@@ -22,7 +22,7 @@
   "examples": [
     {
       "summary": "Unwrap a Kafka Connect record",
-      "description": "This example shows how to unwrap a Kafka Connect record.\n\nThe Kafka Connect record is serialized as a JSON string in the .Payload.After field (raw data).\nThe Kafka Connect record's payload will replace the OpenCDC record's payload.\n\nWe also see how the key is unwrapped too. In this case, the key comes in as structured data.\n",
+      "description": "This example shows how to unwrap a Kafka Connect record.\n\nThe Kafka Connect record is serialized as a JSON string in the `.Payload.After` field (raw data).\nThe Kafka Connect record's payload will replace the OpenCDC record's payload.\n\nWe also see how the key is unwrapped too. In this case, the key comes in as structured data.",
       "config": {
         "field": ".Payload.After"
       },

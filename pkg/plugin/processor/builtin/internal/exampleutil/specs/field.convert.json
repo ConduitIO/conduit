@@ -40,7 +40,7 @@
   },
   "examples": [
     {
-      "summary": "change .Payload.After.done type to bool",
+      "summary": "Change .Payload.After.done type to bool",
       "description": "",
       "config": {
         "field": ".Payload.After.done",
@@ -76,7 +76,7 @@
       }
     },
     {
-      "summary": "change .Key.id type to string",
+      "summary": "Change .Key.id type to string",
       "description": "",
       "config": {
         "field": ".Key.id",

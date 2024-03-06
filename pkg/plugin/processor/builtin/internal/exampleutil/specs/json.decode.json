@@ -29,8 +29,8 @@
   },
   "examples": [
     {
-      "summary": "",
-      "description": "Decode the raw data .Key into structured data.",
+      "summary": "Decode the raw data .Key into structured data",
+      "description": "",
       "config": {
         "field": ".Key"
       },

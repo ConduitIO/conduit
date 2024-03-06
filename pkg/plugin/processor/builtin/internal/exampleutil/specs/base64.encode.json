@@ -25,7 +25,7 @@
   },
   "examples": [
     {
-      "summary": "",
+      "summary": "Encode a value using Base64",
       "description": "This example encodes a single value stored in `.Payload.After.foo`\ninto a base64 encoded string.",
       "config": {
         "field": ".Payload.After.foo"
