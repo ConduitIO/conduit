@@ -17,12 +17,13 @@ package subset
 import (
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
+	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal/exampleutil"
 )
 
 //nolint:govet // a more descriptive example description
 func ExampleExcludeProcessor_oneField() {
-	p := NewExcludeProcessor()
+	p := NewExcludeProcessor(log.Nop())
 
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary: `Exclude all fields under payload`,
@@ -64,7 +65,7 @@ func ExampleExcludeProcessor_oneField() {
 
 //nolint:govet // a more descriptive example description
 func ExampleExcludeProcessor_multipleFields() {
-	p := NewExcludeProcessor()
+	p := NewExcludeProcessor(log.Nop())
 
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary: `Exclude metadata and some fields under payload and key`,

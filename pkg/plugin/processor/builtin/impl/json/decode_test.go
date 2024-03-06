@@ -21,13 +21,14 @@ import (
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal"
 	"github.com/google/go-cmp/cmp"
 	"github.com/matryer/is"
 )
 
 func TestDecodeJSON_Process(t *testing.T) {
-	proc := NewDecodeProcessor()
+	proc := NewDecodeProcessor(log.Nop())
 	ctx := context.Background()
 	testCases := []struct {
 		name   string
@@ -173,7 +174,7 @@ func TestDecodeJSON_Process(t *testing.T) {
 }
 
 func TestDecodeJSON_Configure(t *testing.T) {
-	proc := NewDecodeProcessor()
+	proc := NewDecodeProcessor(log.Nop())
 	ctx := context.Background()
 	testCases := []struct {
 		name    string

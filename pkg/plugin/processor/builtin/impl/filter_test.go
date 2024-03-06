@@ -20,12 +20,13 @@ import (
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
+	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/matryer/is"
 )
 
 func TestFilter_Process(t *testing.T) {
 	is := is.New(t)
-	proc := NewFilterProcessor()
+	proc := NewFilterProcessor(log.Nop())
 	records := []opencdc.Record{
 		{
 			Metadata: map[string]string{"key1": "val1"},

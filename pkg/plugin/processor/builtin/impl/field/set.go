@@ -19,13 +19,13 @@ package field
 import (
 	"bytes"
 	"context"
-	"github.com/conduitio/conduit/pkg/foundation/log"
 	"text/template"
 
 	"github.com/Masterminds/sprig/v3"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/log"
 )
 
 type setProcessor struct {

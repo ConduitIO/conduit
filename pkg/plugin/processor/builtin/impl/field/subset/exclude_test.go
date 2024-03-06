@@ -20,12 +20,13 @@ import (
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
+	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/matryer/is"
 )
 
 func TestExcludeFields_Process(t *testing.T) {
 	is := is.New(t)
-	proc := NewExcludeProcessor()
+	proc := NewExcludeProcessor(log.Nop())
 	cfg := map[string]string{"fields": ".Metadata,.Payload.After.foo"}
 	ctx := context.Background()
 	records := []opencdc.Record{
@@ -55,7 +56,7 @@ func TestExcludeFields_Process(t *testing.T) {
 }
 
 func TestExcludeField_Configure(t *testing.T) {
-	proc := NewExcludeProcessor()
+	proc := NewExcludeProcessor(log.Nop())
 	ctx := context.Background()
 	testCases := []struct {
 		name    string

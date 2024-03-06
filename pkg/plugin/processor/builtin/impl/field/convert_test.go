@@ -21,11 +21,12 @@ import (
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
+	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/matryer/is"
 )
 
 func TestConvertField_Process(t *testing.T) {
-	proc := NewConvertProcessor().(*convertProcessor)
+	proc := NewConvertProcessor(log.Nop()).(*convertProcessor)
 	ctx := context.Background()
 	var err error
 	testCases := []struct {
@@ -212,7 +213,7 @@ func TestConvertField_Process(t *testing.T) {
 }
 
 func TestConvertField_ProcessFail(t *testing.T) {
-	proc := NewConvertProcessor().(*convertProcessor)
+	proc := NewConvertProcessor(log.Nop()).(*convertProcessor)
 	ctx := context.Background()
 	var err error
 	testCases := []struct {
@@ -265,7 +266,7 @@ func TestConvertField_ProcessFail(t *testing.T) {
 }
 
 func TestConvertField_Configure(t *testing.T) {
-	proc := NewConvertProcessor()
+	proc := NewConvertProcessor(log.Nop())
 	ctx := context.Background()
 	testCases := []struct {
 		name    string

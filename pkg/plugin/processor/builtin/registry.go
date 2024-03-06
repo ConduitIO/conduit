@@ -16,14 +16,6 @@ package builtin
 
 import (
 	"context"
-	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl"
-	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/avro"
-	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/base64"
-	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/field"
-	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/field/subset"
-	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/json"
-	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/unwrap"
-	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/webhook"
 	"reflect"
 	"runtime/debug"
 
@@ -31,7 +23,15 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/avro"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/base64"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/custom"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/field"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/field/subset"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/json"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/unwrap"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/webhook"
 )
 
 var DefaultBuiltinProcessors = map[string]ProcessorPluginConstructor{

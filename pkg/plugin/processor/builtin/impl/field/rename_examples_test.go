@@ -17,12 +17,13 @@ package field
 import (
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
+	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal/exampleutil"
 )
 
 //nolint:govet // a more descriptive example description
 func ExampleRenameProcessor_rename1() {
-	p := NewRenameProcessor()
+	p := NewRenameProcessor(log.Nop())
 
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary: `Rename two fields, one under metadata, and one under payload.after`,
@@ -65,7 +66,7 @@ func ExampleRenameProcessor_rename1() {
 
 //nolint:govet // a more descriptive example description
 func ExampleRenameProcessor_rename2() {
-	p := NewRenameProcessor()
+	p := NewRenameProcessor(log.Nop())
 
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary: `Rename two fields, one under key, and one under payload.before`,

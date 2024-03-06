@@ -17,12 +17,13 @@ package impl
 import (
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
+	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal/exampleutil"
 )
 
 //nolint:govet // we're using a more descriptive name of example
 func ExampleFilterProcessor() {
-	p := NewFilterProcessor()
+	p := NewFilterProcessor(log.Nop())
 
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary: `Filter out the record`,

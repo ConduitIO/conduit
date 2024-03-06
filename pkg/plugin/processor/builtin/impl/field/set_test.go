@@ -20,11 +20,12 @@ import (
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
+	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/matryer/is"
 )
 
 func TestSetField_Process(t *testing.T) {
-	proc := NewSetProcessor()
+	proc := NewSetProcessor(log.Nop())
 	var err error
 	ctx := context.Background()
 	testCases := []struct {
@@ -97,7 +98,7 @@ func TestSetField_Process(t *testing.T) {
 }
 
 func TestSetField_Configure(t *testing.T) {
-	proc := NewSetProcessor()
+	proc := NewSetProcessor(log.Nop())
 	ctx := context.Background()
 	testCases := []struct {
 		name    string

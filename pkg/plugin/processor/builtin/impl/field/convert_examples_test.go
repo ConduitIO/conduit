@@ -17,12 +17,13 @@ package field
 import (
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
+	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal/exampleutil"
 )
 
 //nolint:govet // a more descriptive example description
 func ExampleConvertProcessor_stringToInt() {
-	p := NewConvertProcessor()
+	p := NewConvertProcessor(log.Nop())
 
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary:     `Change field type in key`,
@@ -63,7 +64,7 @@ func ExampleConvertProcessor_stringToInt() {
 
 //nolint:govet // a more descriptive example description
 func ExampleConvertProcessor_intToBool() {
-	p := NewConvertProcessor()
+	p := NewConvertProcessor(log.Nop())
 
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary: `Change .Payload.After.done type to bool`,
@@ -103,7 +104,7 @@ func ExampleConvertProcessor_intToBool() {
 
 //nolint:govet // a more descriptive example description
 func ExampleConvertProcessor_floatToString() {
-	p := NewConvertProcessor()
+	p := NewConvertProcessor(log.Nop())
 
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary: `Change .Key.id type to string`,

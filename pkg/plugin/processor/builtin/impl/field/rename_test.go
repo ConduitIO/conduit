@@ -20,12 +20,13 @@ import (
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
+	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/matryer/is"
 )
 
 func TestRenameField_Process(t *testing.T) {
 	is := is.New(t)
-	proc := NewRenameProcessor()
+	proc := NewRenameProcessor(log.Nop())
 	ctx := context.Background()
 	config := map[string]string{"mapping": ".Metadata.key1:newKey,.Payload.After.foo:newFoo"}
 	records := []opencdc.Record{
@@ -56,7 +57,7 @@ func TestRenameField_Process(t *testing.T) {
 }
 
 func TestRenameField_Configure(t *testing.T) {
-	proc := NewRenameProcessor()
+	proc := NewRenameProcessor(log.Nop())
 	ctx := context.Background()
 	testCases := []struct {
 		name    string

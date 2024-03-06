@@ -17,12 +17,13 @@ package json
 import (
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
+	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal/exampleutil"
 )
 
 //nolint:govet // a more descriptive example description
 func ExampleDecodeProcessor_rawKey() {
-	p := NewDecodeProcessor()
+	p := NewDecodeProcessor(log.Nop())
 
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary: `Decode the raw data .Key into structured data`,
@@ -64,7 +65,7 @@ func ExampleDecodeProcessor_rawKey() {
 
 //nolint:govet // a more descriptive example description
 func ExampleDecodeProcessor_rawPayloadField() {
-	p := NewDecodeProcessor()
+	p := NewDecodeProcessor(log.Nop())
 
 	exampleutil.RunExample(p, exampleutil.Example{
 		Description: `Decode the raw data .Payload.Before.foo into structured data.`,

@@ -17,12 +17,13 @@ package field
 import (
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
+	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal/exampleutil"
 )
 
 //nolint:govet // a more descriptive example description
 func ExampleSetProcessor_setOperation() {
-	p := NewSetProcessor()
+	p := NewSetProcessor(log.Nop())
 
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary: `Sets a record's operation to "update"`,
@@ -51,7 +52,7 @@ func ExampleSetProcessor_setOperation() {
 
 //nolint:govet // a more descriptive example description
 func ExampleSetProcessor_addField() {
-	p := NewSetProcessor()
+	p := NewSetProcessor(log.Nop())
 
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary: `Create a new field and set its value`,
@@ -90,7 +91,7 @@ func ExampleSetProcessor_addField() {
 
 //nolint:govet // a more descriptive example description
 func ExampleSetProcessor_template() {
-	p := NewSetProcessor()
+	p := NewSetProcessor(log.Nop())
 
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary: `Set the value under .Payload.After.postgres to true if .Metadata.table="postgres"`,

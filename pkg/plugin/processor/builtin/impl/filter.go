@@ -16,11 +16,11 @@ package impl
 
 import (
 	"context"
-	"github.com/conduitio/conduit/pkg/foundation/log"
 
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
+	"github.com/conduitio/conduit/pkg/foundation/log"
 )
 
 type filterProcessor struct {
