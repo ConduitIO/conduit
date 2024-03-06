@@ -18,6 +18,7 @@ func (jsonDecodeConfig) Parameters() map[string]config.Parameter {
 			Validations: []config.Validation{
 				config.ValidationRequired{},
 				config.ValidationRegex{Regex: regexp.MustCompile("^\\.(Payload|Key).*")},
+				config.ValidationExclusion{List: []string{".Payload"}},
 			},
 		},
 	}

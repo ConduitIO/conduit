@@ -38,18 +38,19 @@ func newJSONDecode() *jsonDecode {
 type jsonDecodeConfig struct {
 	// Field is the target field, as it would be addressed in a Go template (e.g. `.Payload.After.foo`).
 	// you can only decode fields that are under .Key and .Payload.
-	Field string `json:"field" validate:"required,regex=^\\.(Payload|Key).*"`
+	Field string `json:"field" validate:"required,regex=^\\.(Payload|Key).*,exclusion=.Payload"`
 }
 
 func (p *jsonDecode) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
 		Name:    "json.decode",
 		Summary: "Decodes a specific field from JSON raw data (string) to structured data.",
-		Description: `The processor takes JSON raw data (string) from the target field, parses it as JSON structured data
-and stores the decoded structured data in the target field.
+		Description: `The processor takes JSON raw data (` + "`string`" + ` or ` + "`[]byte`" + `)
+from the target field, parses it as JSON structured data and stores the decoded
+structured data in the target field.
 
-This processor is only applicable to fields under ` + "`.Key`" + `, ` + "`.Payload`.Before" + ` and ` + "`.Payload.After`" + `,
-as they can contain structured data.`,
+This processor is only applicable to fields under ` + "`.Key`" + `, ` + "`.Payload`.Before" + ` and
+` + "`.Payload.After`" + `, as they can contain structured data.`,
 		Version:    "v0.1.0",
 		Author:     "Meroxa, Inc.",
 		Parameters: jsonDecodeConfig{}.Parameters(),
@@ -64,7 +65,7 @@ func (p *jsonDecode) Configure(ctx context.Context, m map[string]string) error {
 	}
 	resolver, err := sdk.NewReferenceResolver(cfg.Field)
 	if err != nil {
-		return cerrors.Errorf("failed to parse the %q param: %w", "field", err)
+		return cerrors.Errorf(`failed to parse the "field" parameter: %w`, err)
 	}
 	p.referenceResolver = resolver
 	return nil

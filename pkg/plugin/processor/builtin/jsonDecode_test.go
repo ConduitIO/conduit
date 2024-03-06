@@ -20,6 +20,8 @@ import (
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/google/go-cmp/cmp"
 	"github.com/matryer/is"
 )
 
@@ -27,11 +29,10 @@ func TestDecodeJSON_Process(t *testing.T) {
 	proc := newJSONDecode()
 	ctx := context.Background()
 	testCases := []struct {
-		name    string
-		config  map[string]string
-		record  opencdc.Record
-		want    sdk.SingleRecord
-		wantErr bool
+		name   string
+		config map[string]string
+		record opencdc.Record
+		want   sdk.ProcessedRecord
 	}{
 		{
 			name:   "raw key to structured",
@@ -44,7 +45,6 @@ func TestDecodeJSON_Process(t *testing.T) {
 					"after": map[string]any{"data": float64(4), "id": float64(3)},
 				},
 			},
-			wantErr: false,
 		}, {
 			name:   "raw payload.after.foo to structured",
 			config: map[string]string{"field": ".Payload.After.foo"},
@@ -65,7 +65,6 @@ func TestDecodeJSON_Process(t *testing.T) {
 					},
 				},
 			},
-			wantErr: false,
 		}, {
 			name:   "slice payload.after.foo to structured",
 			config: map[string]string{"field": ".Payload.After.foo"},
@@ -83,7 +82,6 @@ func TestDecodeJSON_Process(t *testing.T) {
 					},
 				},
 			},
-			wantErr: false,
 		}, {
 			name:   "string JSON value payload.after.foo to structured",
 			config: map[string]string{"field": ".Payload.After.foo"},
@@ -101,7 +99,6 @@ func TestDecodeJSON_Process(t *testing.T) {
 					},
 				},
 			},
-			wantErr: false,
 		}, {
 			name:   "raw payload.before to structured",
 			config: map[string]string{"field": ".Payload.Before"},
@@ -118,7 +115,6 @@ func TestDecodeJSON_Process(t *testing.T) {
 					},
 				},
 			},
-			wantErr: false,
 		}, {
 			name:   "already structured data",
 			config: map[string]string{"field": ".Key"},
@@ -132,7 +128,6 @@ func TestDecodeJSON_Process(t *testing.T) {
 					"after": map[string]any{"data": float64(4), "id": float64(3)},
 				},
 			},
-			wantErr: false,
 		}, {
 			name:   "empty raw data converted to empty structured data",
 			config: map[string]string{"field": ".Key"},
@@ -142,7 +137,6 @@ func TestDecodeJSON_Process(t *testing.T) {
 			want: sdk.SingleRecord{
 				Key: nil,
 			},
-			wantErr: false,
 		}, {
 			name:   "nil value",
 			config: map[string]string{"field": ".Payload.After"},
@@ -156,15 +150,13 @@ func TestDecodeJSON_Process(t *testing.T) {
 					After: nil,
 				},
 			},
-			wantErr: false,
 		}, {
 			name:   "invalid json",
 			config: map[string]string{"field": ".Key"},
 			record: opencdc.Record{
 				Key: opencdc.RawData(`"invalid":"json"`),
 			},
-			want:    sdk.SingleRecord{},
-			wantErr: true,
+			want: sdk.ErrorRecord{Error: cerrors.New("failed to unmarshal raw data as JSON: invalid character ':' after top-level value")},
 		},
 	}
 	for _, tc := range testCases {
@@ -172,14 +164,9 @@ func TestDecodeJSON_Process(t *testing.T) {
 			is := is.New(t)
 			err := proc.Configure(ctx, tc.config)
 			is.NoErr(err)
-			output := proc.Process(ctx, []opencdc.Record{tc.record})
-			is.True(len(output) == 1)
-			if tc.wantErr {
-				_, ok := output[0].(sdk.ErrorRecord)
-				is.True(ok)
-				return
-			}
-			is.Equal(output[0], tc.want)
+			got := proc.Process(ctx, []opencdc.Record{tc.record})
+			is.Equal(1, len(got))
+			is.Equal("", cmp.Diff(tc.want, got[0], cmpProcessedRecordOpts...))
 		})
 	}
 }
@@ -218,8 +205,13 @@ func TestDecodeJSON_Configure(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:    "invalid field",
+			name:    "invalid field .Metadata",
 			config:  map[string]string{"field": ".Metadata"},
+			wantErr: true,
+		},
+		{
+			name:    "invalid field, .Payload",
+			config:  map[string]string{"field": ".Payload"},
 			wantErr: true,
 		},
 	}
