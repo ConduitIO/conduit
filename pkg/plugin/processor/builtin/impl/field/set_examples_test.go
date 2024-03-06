@@ -25,7 +25,7 @@ func ExampleSetProcessor_setOperation() {
 	p := NewSetProcessor()
 
 	exampleutil.RunExample(p, exampleutil.Example{
-		Summary: `Sets a record's operation to "update".`,
+		Summary: `Sets a record's operation to "update"`,
 		Config:  map[string]string{"field": ".Operation", "value": "update"},
 		Have:    opencdc.Record{Operation: opencdc.OperationCreate},
 		Want:    sdk.SingleRecord{Operation: opencdc.OperationUpdate},
@@ -93,7 +93,7 @@ func ExampleSetProcessor_template() {
 	p := NewSetProcessor()
 
 	exampleutil.RunExample(p, exampleutil.Example{
-		Summary: `set the value under .Payload.After.postgres to true if .Metadata.table="postgres"`,
+		Summary: `Set the value under .Payload.After.postgres to true if .Metadata.table="postgres"`,
 		Config:  map[string]string{"field": ".Payload.After.postgres", "value": "{{ eq .Metadata.table \"postgres\" }}"},
 		Have: opencdc.Record{
 			Metadata:  map[string]string{"table": "postgres"},
