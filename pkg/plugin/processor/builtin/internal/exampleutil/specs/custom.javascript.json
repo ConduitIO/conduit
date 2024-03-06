@@ -1,0 +1,58 @@
+{
+  "specification": {
+    "name": "custom.javascript",
+    "summary": "JavaScript processor",
+    "description": "A processor that makes it possible to process Conduit records using JavaScript.\n\nThe following helper functions and fields are available:\n* logger: a logger that outputs to Conduit's logs. Check zerolog's API on how to use it.\n* Record(): constructs a new record which represents a successful processing result.\nIt's analogous to sdk.SingleRecord from Conduit's Go processor SDK.\n* RawData(): creates a raw data object. It's analogous to opencdc.RawData. Optionally, it\naccepts a string argument, which will be cast into a byte array, for example: record.Key = RawData(\"new key\").\n* StructuredData(): creates a structured data (map-like) object.\n\nTo find out what's possible with the JS processors, also refer to the documentation for \n[goja](https://github.com/dop251/goja), which is the JavaScript engine we use.",
+    "version": "v0.1.0",
+    "author": "Meroxa, Inc.",
+    "parameters": {
+      "script": {
+        "default": "",
+        "description": "JavaScript code for this processor.\nIt needs to have a function `process()` that accept\na record and returns a record.\nThe `process()` function can either modify the input record and return it,\nor create a new record.\nIf a record needs to be filtered (dropped from the pipeline),\nthen the `process()` function should return a `null`.",
+        "type": "string",
+        "validations": []
+      },
+      "script.path": {
+        "default": "",
+        "description": "The path to a .js file containing the processor code.",
+        "type": "string",
+        "validations": []
+      }
+    }
+  },
+  "examples": [
+    {
+      "summary": "",
+      "description": "",
+      "config": {
+        "script": "function process(rec) {\n  rec.Metadata[\"processed\"] = \"true\";\n  let existing = String.fromCharCode.apply(String, rec.Payload.After);\n  rec.Payload.After = RawData(\"hello, \" + existing);\n  return rec;\n}",
+        "script.path": ""
+      },
+      "have": {
+        "position": null,
+        "operation": "Operation(0)",
+        "metadata": {
+          "existing-key": "existing-value"
+        },
+        "key": null,
+        "payload": {
+          "before": null,
+          "after": "world"
+        }
+      },
+      "want": {
+        "position": null,
+        "operation": "Operation(0)",
+        "metadata": {
+          "existing-key": "existing-value",
+          "processed": "true"
+        },
+        "key": null,
+        "payload": {
+          "before": null,
+          "after": "hello, world"
+        }
+      }
+    }
+  ]
+}

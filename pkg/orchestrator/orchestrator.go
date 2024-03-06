@@ -33,6 +33,7 @@ type Orchestrator struct {
 	Pipelines        *PipelineOrchestrator
 	Connectors       *ConnectorOrchestrator
 	ConnectorPlugins *ConnectorPluginOrchestrator
+	ProcessorPlugins *ProcessorPluginOrchestrator
 }
 
 func NewOrchestrator(
@@ -59,6 +60,7 @@ func NewOrchestrator(
 		Pipelines:        (*PipelineOrchestrator)(&b),
 		Connectors:       (*ConnectorOrchestrator)(&b),
 		ConnectorPlugins: (*ConnectorPluginOrchestrator)(&b),
+		ProcessorPlugins: (*ProcessorPluginOrchestrator)(&b),
 	}
 }
 

@@ -1,0 +1,98 @@
+{
+  "specification": {
+    "name": "base64.encode",
+    "summary": "Encode a field to base64.",
+    "description": "The processor will encode the value of the target field to base64 and store the\nresult in the target field. It is not allowed to encode the `.Position` field.\nIf the provided field doesn't exist, the processor will create that field and\nassign its value.",
+    "version": "v0.1.0",
+    "author": "Meroxa, Inc.",
+    "parameters": {
+      "field": {
+        "default": "",
+        "description": "Field is the target field, as it would be addressed in a Go template (e.g. `.Payload.After.foo`).\nNote that it is not allowed to base64 encode the `.Position` field.",
+        "type": "string",
+        "validations": [
+          {
+            "type": "required",
+            "value": ""
+          },
+          {
+            "type": "exclusion",
+            "value": ".Position"
+          }
+        ]
+      }
+    }
+  },
+  "examples": [
+    {
+      "summary": "",
+      "description": "This example encodes a single value stored in `.Payload.After.foo`\ninto a base64 encoded string.",
+      "config": {
+        "field": ".Payload.After.foo"
+      },
+      "have": {
+        "position": "dGVzdC1wb3NpdGlvbg==",
+        "operation": "create",
+        "metadata": {
+          "key1": "val1"
+        },
+        "key": "test-key",
+        "payload": {
+          "before": null,
+          "after": {
+            "foo": "bar"
+          }
+        }
+      },
+      "want": {
+        "position": "dGVzdC1wb3NpdGlvbg==",
+        "operation": "create",
+        "metadata": {
+          "key1": "val1"
+        },
+        "key": "test-key",
+        "payload": {
+          "before": null,
+          "after": {
+            "foo": "YmFy"
+          }
+        }
+      }
+    },
+    {
+      "summary": "",
+      "description": "This example encodes the raw payload stored in `.Key`\ninto a base64 encoded string.",
+      "config": {
+        "field": ".Key"
+      },
+      "have": {
+        "position": "dGVzdC1wb3NpdGlvbg==",
+        "operation": "create",
+        "metadata": {
+          "key1": "val1"
+        },
+        "key": "test-key",
+        "payload": {
+          "before": null,
+          "after": {
+            "foo": "bar"
+          }
+        }
+      },
+      "want": {
+        "position": "dGVzdC1wb3NpdGlvbg==",
+        "operation": "create",
+        "metadata": {
+          "key1": "val1"
+        },
+        "key": "dGVzdC1rZXk=",
+        "payload": {
+          "before": null,
+          "after": {
+            "foo": "bar"
+          }
+        }
+      }
+    }
+  ]
+}
