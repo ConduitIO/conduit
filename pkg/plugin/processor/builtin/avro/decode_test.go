@@ -16,7 +16,6 @@ package avro
 
 import (
 	"context"
-	"go.uber.org/mock/gomock"
 	"testing"
 
 	"github.com/conduitio/conduit-commons/opencdc"
@@ -24,6 +23,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/google/go-cmp/cmp"
 	"github.com/matryer/is"
+	"go.uber.org/mock/gomock"
 )
 
 func TestDecodeProcessor_Process_RawData_CustomField(t *testing.T) {

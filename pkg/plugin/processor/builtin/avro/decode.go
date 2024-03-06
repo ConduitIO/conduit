@@ -20,6 +20,7 @@ package avro
 import (
 	"context"
 	"crypto/tls"
+
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -194,6 +195,5 @@ func (p *decodeProcessor) rawData(data any) (opencdc.RawData, error) {
 }
 
 func (p *decodeProcessor) Teardown(ctx context.Context) error {
-	//TODO implement me
-	panic("implement me")
+	return nil
 }
