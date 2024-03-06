@@ -17,7 +17,7 @@ package processor
 import (
 	"testing"
 
-	"github.com/conduitio/conduit/pkg/record"
+	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/matryer/is"
 )
 
@@ -32,9 +32,9 @@ func Test_ProcessorCondition_InvalidTemplate(t *testing.T) {
 func Test_ProcessorCondition_EvaluateTrue(t *testing.T) {
 	is := is.New(t)
 	condition := `{{ eq .Metadata.key "val" }}`
-	rec := record.Record{
-		Position: record.Position("position-out"),
-		Metadata: record.Metadata{"key": "val"},
+	rec := opencdc.Record{
+		Position: opencdc.Position("position-out"),
+		Metadata: opencdc.Metadata{"key": "val"},
 	}
 	tmpl, err := newProcessorCondition(condition)
 	is.NoErr(err)
@@ -46,9 +46,9 @@ func Test_ProcessorCondition_EvaluateTrue(t *testing.T) {
 func Test_ProcessorCondition_EvaluateFalse(t *testing.T) {
 	is := is.New(t)
 	condition := `{{ eq .Metadata.key "wrongVal" }}`
-	rec := record.Record{
-		Position: record.Position("position-out"),
-		Metadata: record.Metadata{"key": "val"},
+	rec := opencdc.Record{
+		Position: opencdc.Position("position-out"),
+		Metadata: opencdc.Metadata{"key": "val"},
 	}
 	tmpl, err := newProcessorCondition(condition)
 	is.NoErr(err)
@@ -60,9 +60,9 @@ func Test_ProcessorCondition_EvaluateFalse(t *testing.T) {
 func Test_ProcessorCondition_NonBooleanOutput(t *testing.T) {
 	is := is.New(t)
 	condition := `{{ printf "hi" }}`
-	rec := record.Record{
-		Position: record.Position("position-out"),
-		Metadata: record.Metadata{"key": "val"},
+	rec := opencdc.Record{
+		Position: opencdc.Position("position-out"),
+		Metadata: opencdc.Metadata{"key": "val"},
 	}
 	tmpl, err := newProcessorCondition(condition)
 	is.NoErr(err)

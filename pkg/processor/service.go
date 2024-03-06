@@ -100,9 +100,13 @@ func (s *Service) MakeRunnableProcessor(ctx context.Context, i *Instance) (*Runn
 	if err != nil {
 		return nil, err
 	}
+	cond, err := newProcessorCondition(i.Condition)
+	if err != nil {
+		return nil, cerrors.Errorf("invalid condition: %w", err)
+	}
 
 	i.running = true
-	return newRunnableProcessor(p, i), nil
+	return newRunnableProcessor(p, cond, i), nil
 }
 
 // Create will create a new processor instance.

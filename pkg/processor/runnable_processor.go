@@ -28,15 +28,18 @@ import (
 type RunnableProcessor struct {
 	*Instance
 	proc sdk.Processor
+	cond *processorCondition
 }
 
 func newRunnableProcessor(
 	proc sdk.Processor,
+	cond *processorCondition,
 	i *Instance,
 ) *RunnableProcessor {
 	return &RunnableProcessor{
 		Instance: i,
 		proc:     proc,
+		cond:     cond,
 	}
 }
 
@@ -59,19 +62,39 @@ func (p *RunnableProcessor) Process(ctx context.Context, records []opencdc.Recor
 		p.inInsp.Send(ctx, record.FromOpenCDC(inRec))
 	}
 
-	outRecs := p.proc.Process(ctx, records)
-	for _, outRec := range outRecs {
-		singleRec, ok := outRec.(sdk.SingleRecord)
+	out := make([]sdk.ProcessedRecord, 0, len(records))
+	for _, rec := range records {
+		keep, err := p.evaluateCondition(rec)
+		if err != nil {
+			return append(out, sdk.ErrorRecord{Error: cerrors.Errorf("failed evaluating condition: %w", err)})
+		}
+		if !keep {
+			out = append(out, sdk.FilterRecord{})
+			continue
+		}
+
+		proc := p.proc.Process(ctx, records)
+		// todo check if processor returned more than 1 result
+		singleRec, ok := proc[0].(sdk.SingleRecord)
 		if ok {
 			p.outInsp.Send(ctx, record.FromOpenCDC(opencdc.Record(singleRec)))
 		}
+		out = append(out, proc[0])
 	}
 
-	return outRecs
+	return out
 }
 
 func (p *RunnableProcessor) Teardown(ctx context.Context) error {
 	err := p.proc.Teardown(ctx)
 	p.running = false
 	return err
+}
+
+func (p *RunnableProcessor) evaluateCondition(rec opencdc.Record) (bool, error) {
+	if p.cond == nil {
+		return true, nil
+	}
+
+	return p.cond.Evaluate(rec)
 }

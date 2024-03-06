@@ -17,11 +17,12 @@ package processor
 import (
 	"bytes"
 	"strconv"
+	"strings"
 	"text/template"
 
 	"github.com/Masterminds/sprig/v3"
+	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/record"
 )
 
 // processorCondition parse go templates, Evaluate them for provided records, and return the boolean value of the output.
@@ -32,6 +33,9 @@ type processorCondition struct {
 
 // newProcessorCondition parses and returns the template, returns an error if template parsing failed.
 func newProcessorCondition(condition string) (*processorCondition, error) {
+	if strings.Trim(condition, " ") == "" {
+		return nil, nil
+	}
 	// parse template
 	tmpl, err := template.New("").Funcs(sprig.FuncMap()).Parse(condition)
 	if err != nil {
@@ -45,7 +49,7 @@ func newProcessorCondition(condition string) (*processorCondition, error) {
 
 // Evaluate executes the template for the provided record, and parses the output into a boolean, returns an error
 // if output is not a boolean.
-func (t *processorCondition) Evaluate(rec record.Record) (bool, error) {
+func (t *processorCondition) Evaluate(rec opencdc.Record) (bool, error) {
 	var b bytes.Buffer
 	err := t.tmpl.Execute(&b, rec)
 	if err != nil {
