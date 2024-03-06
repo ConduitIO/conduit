@@ -15,6 +15,8 @@
 package toproto
 
 import (
+	configv1 "github.com/conduitio/conduit-commons/proto/config/v1"
+	processorSdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/plugin/connector"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 )
@@ -37,7 +39,8 @@ func _() {
 	_ = vTypes[int(connector.ParameterTypeDuration)-int(apiv1.PluginSpecifications_Parameter_TYPE_DURATION)]
 }
 
-func Plugin(name string, in connector.Specification) *apiv1.PluginSpecifications {
+// Deprecated: this is here for backwards compatibility with the old plugin API.
+func PluginSpecifications(name string, in connector.Specification) *apiv1.PluginSpecifications {
 	return &apiv1.PluginSpecifications{
 		Name:              name,
 		Summary:           in.Summary,
@@ -49,6 +52,7 @@ func Plugin(name string, in connector.Specification) *apiv1.PluginSpecifications
 	}
 }
 
+// Deprecated: this is here for backwards compatibility with the old plugin API.
 func PluginParamsMap(in map[string]connector.Parameter) map[string]*apiv1.PluginSpecifications_Parameter {
 	out := make(map[string]*apiv1.PluginSpecifications_Parameter)
 	for k, v := range in {
@@ -62,18 +66,63 @@ func PluginParamsMap(in map[string]connector.Parameter) map[string]*apiv1.Plugin
 	return out
 }
 
+// Deprecated: this is here for backwards compatibility with the old plugin API.
 func PluginParamValidations(in []connector.Validation) []*apiv1.PluginSpecifications_Parameter_Validation {
 	// we need an empty slice here so that the returned JSON would be "validations":[] instead of "validations":null
 	out := make([]*apiv1.PluginSpecifications_Parameter_Validation, 0)
 	for _, v := range in {
 		out = append(out, &apiv1.PluginSpecifications_Parameter_Validation{
-			Type:  ValidationType(v.Type),
+			Type:  apiv1.PluginSpecifications_Parameter_Validation_Type(v.Type),
 			Value: v.Value,
 		})
 	}
 	return out
 }
 
-func ValidationType(in connector.ValidationType) apiv1.PluginSpecifications_Parameter_Validation_Type {
-	return apiv1.PluginSpecifications_Parameter_Validation_Type(in)
+func ConnectorPluginSpecifications(name string, in connector.Specification) *apiv1.ConnectorPluginSpecifications {
+	return &apiv1.ConnectorPluginSpecifications{
+		Name:              name,
+		Summary:           in.Summary,
+		Description:       in.Description,
+		Version:           in.Version,
+		DestinationParams: ConnectorPluginParamsMap(in.DestinationParams),
+		SourceParams:      ConnectorPluginParamsMap(in.SourceParams),
+	}
+}
+
+func ConnectorPluginParamsMap(in map[string]connector.Parameter) map[string]*configv1.Parameter {
+	out := make(map[string]*configv1.Parameter)
+	for k, v := range in {
+		out[k] = &configv1.Parameter{
+			Description: v.Description,
+			Default:     v.Default,
+			Type:        configv1.Parameter_Type(v.Type),
+			Validations: ConnectorPluginParamValidations(v.Validations),
+		}
+	}
+	return out
+}
+
+func ConnectorPluginParamValidations(in []connector.Validation) []*configv1.Validation {
+	// we need an empty slice here so that the returned JSON would be "validations":[] instead of "validations":null
+	out := make([]*configv1.Validation, 0)
+	for _, v := range in {
+		out = append(out, &configv1.Validation{
+			Type:  configv1.Validation_Type(v.Type),
+			Value: v.Value,
+		})
+	}
+	return out
+}
+
+func ProcessorPluginSpecifications(name string, in processorSdk.Specification) *apiv1.ProcessorPluginSpecifications {
+	params := make(map[string]*configv1.Parameter)
+	in.Parameters.ToProto(params)
+	return &apiv1.ProcessorPluginSpecifications{
+		Name:        name,
+		Summary:     in.Summary,
+		Description: in.Description,
+		Version:     in.Version,
+		Parameters:  params,
+	}
 }

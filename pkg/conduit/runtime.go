@@ -431,10 +431,10 @@ func (r *Runtime) serveGRPCAPI(ctx context.Context, t *tomb.Tomb) (net.Addr, err
 	pipelineAPIv1 := api.NewPipelineAPIv1(r.Orchestrator.Pipelines)
 	pipelineAPIv1.Register(grpcServer)
 
-	processorAPIv1 := api.NewProcessorAPIv1(r.Orchestrator.Processors)
+	processorAPIv1 := api.NewProcessorAPIv1(r.Orchestrator.Processors, r.Orchestrator.ProcessorPlugins)
 	processorAPIv1.Register(grpcServer)
 
-	connectorAPIv1 := api.NewConnectorAPIv1(r.Orchestrator.Connectors)
+	connectorAPIv1 := api.NewConnectorAPIv1(r.Orchestrator.Connectors, r.Orchestrator.ConnectorPlugins)
 	connectorAPIv1.Register(grpcServer)
 
 	pluginAPIv1 := api.NewPluginAPIv1(r.Orchestrator.ConnectorPlugins)
