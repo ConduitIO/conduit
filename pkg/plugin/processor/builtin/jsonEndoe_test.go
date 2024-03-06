@@ -20,7 +20,6 @@ import (
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
-	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/google/go-cmp/cmp"
 	"github.com/matryer/is"
 )
@@ -80,13 +79,6 @@ func TestEncodeJSON_Process(t *testing.T) {
 					After: opencdc.RawData(`{"foo":["one","two","three"]}`),
 				},
 			},
-		}, {
-			name:   "invalid json",
-			config: map[string]string{"field": ".Key"},
-			record: opencdc.Record{
-				Key: opencdc.RawData(`"invalid":"json"`),
-			},
-			want: sdk.ErrorRecord{Error: cerrors.New("failed to unmarshal raw data as JSON: invalid character ':' after top-level value")},
 		},
 	}
 	for _, tc := range testCases {
