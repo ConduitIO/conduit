@@ -16,6 +16,7 @@ package impl
 
 import (
 	"context"
+	"github.com/conduitio/conduit/pkg/foundation/log"
 
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
@@ -26,7 +27,7 @@ type filterProcessor struct {
 	sdk.UnimplementedProcessor
 }
 
-func NewFilterProcessor() sdk.Processor {
+func NewFilterProcessor(log.CtxLogger) sdk.Processor {
 	return &filterProcessor{}
 }
 

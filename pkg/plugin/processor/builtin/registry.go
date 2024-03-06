@@ -16,6 +16,14 @@ package builtin
 
 import (
 	"context"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/avro"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/base64"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/field"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/field/subset"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/json"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/unwrap"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/webhook"
 	"reflect"
 	"runtime/debug"
 
@@ -27,7 +35,21 @@ import (
 )
 
 var DefaultBuiltinProcessors = map[string]ProcessorPluginConstructor{
-	"custom.javascript": custom.NewJavascriptProcessor,
+	"avro.encode":          avro.NewEncodeProcessor,
+	"avro.decode":          avro.NewDecodeProcessor,
+	"base64.decode":        base64.NewDecodeProcessor,
+	"base64.encode":        base64.NewEncodeProcessor,
+	"custom.javascript":    custom.NewJavascriptProcessor,
+	"filter":               impl.NewFilterProcessor,
+	"field.convert":        field.NewConvertProcessor,
+	"field.rename":         field.NewRenameProcessor,
+	"field.set":            field.NewSetProcessor,
+	"field.subset.exclude": subset.NewExcludeProcessor,
+	"json.decode":          json.NewDecodeProcessor,
+	"unwrap.debezium":      unwrap.NewDebezium,
+	"unwrap.kafkaconnect":  unwrap.NewKafkaConnectProcessor,
+	"unwrap.opencdc":       unwrap.NewOpenCDCProcessor,
+	"webhook.http":         webhook.NewHTTPProcessor,
 }
 
 type Registry struct {

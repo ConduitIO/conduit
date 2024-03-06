@@ -18,6 +18,7 @@ package subset
 
 import (
 	"context"
+	"github.com/conduitio/conduit/pkg/foundation/log"
 
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal"
 
@@ -33,7 +34,7 @@ type excludeProcessor struct {
 	sdk.UnimplementedProcessor
 }
 
-func NewExcludeProcessor() *excludeProcessor {
+func NewExcludeProcessor(log.CtxLogger) sdk.Processor {
 	return &excludeProcessor{}
 }
 

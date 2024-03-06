@@ -19,6 +19,7 @@ package field
 import (
 	"context"
 	"fmt"
+	"github.com/conduitio/conduit/pkg/foundation/log"
 	"strconv"
 
 	"github.com/conduitio/conduit-commons/opencdc"
@@ -33,7 +34,7 @@ type convertProcessor struct {
 	sdk.UnimplementedProcessor
 }
 
-func NewConvertProcessor() sdk.Processor {
+func NewConvertProcessor(log.CtxLogger) sdk.Processor {
 	return &convertProcessor{}
 }
 

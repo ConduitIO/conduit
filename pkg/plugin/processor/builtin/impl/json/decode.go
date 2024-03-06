@@ -19,6 +19,7 @@ package json
 import (
 	"context"
 	"encoding/json"
+	"github.com/conduitio/conduit/pkg/foundation/log"
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
@@ -31,7 +32,7 @@ type decodeProcessor struct {
 	referenceResolver sdk.ReferenceResolver
 }
 
-func NewDecodeProcessor() sdk.Processor {
+func NewDecodeProcessor(log.CtxLogger) sdk.Processor {
 	return &decodeProcessor{}
 }
 

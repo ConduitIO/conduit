@@ -18,6 +18,7 @@ package field
 
 import (
 	"context"
+	"github.com/conduitio/conduit/pkg/foundation/log"
 	"strings"
 
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal"
@@ -35,7 +36,7 @@ type renameProcessor struct {
 	sdk.UnimplementedProcessor
 }
 
-func NewRenameProcessor() sdk.Processor {
+func NewRenameProcessor(log.CtxLogger) sdk.Processor {
 	return &renameProcessor{}
 }
 

@@ -19,6 +19,7 @@ package field
 import (
 	"bytes"
 	"context"
+	"github.com/conduitio/conduit/pkg/foundation/log"
 	"text/template"
 
 	"github.com/Masterminds/sprig/v3"
@@ -34,7 +35,7 @@ type setProcessor struct {
 	sdk.UnimplementedProcessor
 }
 
-func NewSetProcessor() sdk.Processor {
+func NewSetProcessor(log.CtxLogger) sdk.Processor {
 	return &setProcessor{}
 }
 
