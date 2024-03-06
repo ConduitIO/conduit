@@ -115,7 +115,7 @@ it from the [Avro format](https://avro.apache.org/) into structured data. It ext
 downloads the associated schema from the [schema registry](https://docs.confluent.io/platform/current/schema-registry/index.html)
 and decodes the payload. The schema is cached locally after it's first downloaded. 
 
-Currently, the processor only supports the Avro format. If the processor encounters structured data or the data 
+If the processor encounters structured data or the data 
 can't be decoded it returns an error.
 
 This processor is the counterpart to 'avro.encode'.`,
