@@ -74,12 +74,14 @@ func (p *RunnableProcessor) Process(ctx context.Context, records []opencdc.Recor
 		}
 
 		proc := p.proc.Process(ctx, records)
-		// todo check if processor returned more than 1 result
 		singleRec, ok := proc[0].(sdk.SingleRecord)
 		if ok {
 			p.outInsp.Send(ctx, record.FromOpenCDC(opencdc.Record(singleRec)))
 		}
-		out = append(out, proc[0])
+		// NB: the processor node that is calling this RunnableProcessor
+		// will check if the number of processed records is equal
+		// to the number of input records.
+		out = append(out, proc...)
 	}
 
 	return out
