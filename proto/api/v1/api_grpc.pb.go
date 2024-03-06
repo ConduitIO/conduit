@@ -479,13 +479,14 @@ var PipelineService_ServiceDesc = grpc.ServiceDesc{
 }
 
 const (
-	ConnectorService_ListConnectors_FullMethodName    = "/api.v1.ConnectorService/ListConnectors"
-	ConnectorService_InspectConnector_FullMethodName  = "/api.v1.ConnectorService/InspectConnector"
-	ConnectorService_GetConnector_FullMethodName      = "/api.v1.ConnectorService/GetConnector"
-	ConnectorService_CreateConnector_FullMethodName   = "/api.v1.ConnectorService/CreateConnector"
-	ConnectorService_ValidateConnector_FullMethodName = "/api.v1.ConnectorService/ValidateConnector"
-	ConnectorService_UpdateConnector_FullMethodName   = "/api.v1.ConnectorService/UpdateConnector"
-	ConnectorService_DeleteConnector_FullMethodName   = "/api.v1.ConnectorService/DeleteConnector"
+	ConnectorService_ListConnectors_FullMethodName       = "/api.v1.ConnectorService/ListConnectors"
+	ConnectorService_InspectConnector_FullMethodName     = "/api.v1.ConnectorService/InspectConnector"
+	ConnectorService_GetConnector_FullMethodName         = "/api.v1.ConnectorService/GetConnector"
+	ConnectorService_CreateConnector_FullMethodName      = "/api.v1.ConnectorService/CreateConnector"
+	ConnectorService_ValidateConnector_FullMethodName    = "/api.v1.ConnectorService/ValidateConnector"
+	ConnectorService_UpdateConnector_FullMethodName      = "/api.v1.ConnectorService/UpdateConnector"
+	ConnectorService_DeleteConnector_FullMethodName      = "/api.v1.ConnectorService/DeleteConnector"
+	ConnectorService_ListConnectorPlugins_FullMethodName = "/api.v1.ConnectorService/ListConnectorPlugins"
 )
 
 // ConnectorServiceClient is the client API for ConnectorService service.
@@ -499,6 +500,7 @@ type ConnectorServiceClient interface {
 	ValidateConnector(ctx context.Context, in *ValidateConnectorRequest, opts ...grpc.CallOption) (*ValidateConnectorResponse, error)
 	UpdateConnector(ctx context.Context, in *UpdateConnectorRequest, opts ...grpc.CallOption) (*UpdateConnectorResponse, error)
 	DeleteConnector(ctx context.Context, in *DeleteConnectorRequest, opts ...grpc.CallOption) (*DeleteConnectorResponse, error)
+	ListConnectorPlugins(ctx context.Context, in *ListConnectorPluginsRequest, opts ...grpc.CallOption) (*ListConnectorPluginsResponse, error)
 }
 
 type connectorServiceClient struct {
@@ -595,6 +597,15 @@ func (c *connectorServiceClient) DeleteConnector(ctx context.Context, in *Delete
 	return out, nil
 }
 
+func (c *connectorServiceClient) ListConnectorPlugins(ctx context.Context, in *ListConnectorPluginsRequest, opts ...grpc.CallOption) (*ListConnectorPluginsResponse, error) {
+	out := new(ListConnectorPluginsResponse)
+	err := c.cc.Invoke(ctx, ConnectorService_ListConnectorPlugins_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ConnectorServiceServer is the server API for ConnectorService service.
 // All implementations must embed UnimplementedConnectorServiceServer
 // for forward compatibility
@@ -606,6 +617,7 @@ type ConnectorServiceServer interface {
 	ValidateConnector(context.Context, *ValidateConnectorRequest) (*ValidateConnectorResponse, error)
 	UpdateConnector(context.Context, *UpdateConnectorRequest) (*UpdateConnectorResponse, error)
 	DeleteConnector(context.Context, *DeleteConnectorRequest) (*DeleteConnectorResponse, error)
+	ListConnectorPlugins(context.Context, *ListConnectorPluginsRequest) (*ListConnectorPluginsResponse, error)
 	mustEmbedUnimplementedConnectorServiceServer()
 }
 
@@ -633,6 +645,9 @@ func (UnimplementedConnectorServiceServer) UpdateConnector(context.Context, *Upd
 }
 func (UnimplementedConnectorServiceServer) DeleteConnector(context.Context, *DeleteConnectorRequest) (*DeleteConnectorResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeleteConnector not implemented")
+}
+func (UnimplementedConnectorServiceServer) ListConnectorPlugins(context.Context, *ListConnectorPluginsRequest) (*ListConnectorPluginsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListConnectorPlugins not implemented")
 }
 func (UnimplementedConnectorServiceServer) mustEmbedUnimplementedConnectorServiceServer() {}
 
@@ -776,6 +791,24 @@ func _ConnectorService_DeleteConnector_Handler(srv interface{}, ctx context.Cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ConnectorService_ListConnectorPlugins_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListConnectorPluginsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConnectorServiceServer).ListConnectorPlugins(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ConnectorService_ListConnectorPlugins_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConnectorServiceServer).ListConnectorPlugins(ctx, req.(*ListConnectorPluginsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ConnectorService_ServiceDesc is the grpc.ServiceDesc for ConnectorService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -807,6 +840,10 @@ var ConnectorService_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "DeleteConnector",
 			Handler:    _ConnectorService_DeleteConnector_Handler,
 		},
+		{
+			MethodName: "ListConnectorPlugins",
+			Handler:    _ConnectorService_ListConnectorPlugins_Handler,
+		},
 	},
 	Streams: []grpc.StreamDesc{
 		{
@@ -819,13 +856,14 @@ var ConnectorService_ServiceDesc = grpc.ServiceDesc{
 }
 
 const (
-	ProcessorService_ListProcessors_FullMethodName      = "/api.v1.ProcessorService/ListProcessors"
-	ProcessorService_InspectProcessorIn_FullMethodName  = "/api.v1.ProcessorService/InspectProcessorIn"
-	ProcessorService_InspectProcessorOut_FullMethodName = "/api.v1.ProcessorService/InspectProcessorOut"
-	ProcessorService_GetProcessor_FullMethodName        = "/api.v1.ProcessorService/GetProcessor"
-	ProcessorService_CreateProcessor_FullMethodName     = "/api.v1.ProcessorService/CreateProcessor"
-	ProcessorService_UpdateProcessor_FullMethodName     = "/api.v1.ProcessorService/UpdateProcessor"
-	ProcessorService_DeleteProcessor_FullMethodName     = "/api.v1.ProcessorService/DeleteProcessor"
+	ProcessorService_ListProcessors_FullMethodName       = "/api.v1.ProcessorService/ListProcessors"
+	ProcessorService_InspectProcessorIn_FullMethodName   = "/api.v1.ProcessorService/InspectProcessorIn"
+	ProcessorService_InspectProcessorOut_FullMethodName  = "/api.v1.ProcessorService/InspectProcessorOut"
+	ProcessorService_GetProcessor_FullMethodName         = "/api.v1.ProcessorService/GetProcessor"
+	ProcessorService_CreateProcessor_FullMethodName      = "/api.v1.ProcessorService/CreateProcessor"
+	ProcessorService_UpdateProcessor_FullMethodName      = "/api.v1.ProcessorService/UpdateProcessor"
+	ProcessorService_DeleteProcessor_FullMethodName      = "/api.v1.ProcessorService/DeleteProcessor"
+	ProcessorService_ListProcessorPlugins_FullMethodName = "/api.v1.ProcessorService/ListProcessorPlugins"
 )
 
 // ProcessorServiceClient is the client API for ProcessorService service.
@@ -841,6 +879,7 @@ type ProcessorServiceClient interface {
 	CreateProcessor(ctx context.Context, in *CreateProcessorRequest, opts ...grpc.CallOption) (*CreateProcessorResponse, error)
 	UpdateProcessor(ctx context.Context, in *UpdateProcessorRequest, opts ...grpc.CallOption) (*UpdateProcessorResponse, error)
 	DeleteProcessor(ctx context.Context, in *DeleteProcessorRequest, opts ...grpc.CallOption) (*DeleteProcessorResponse, error)
+	ListProcessorPlugins(ctx context.Context, in *ListProcessorPluginsRequest, opts ...grpc.CallOption) (*ListProcessorPluginsResponse, error)
 }
 
 type processorServiceClient struct {
@@ -960,6 +999,15 @@ func (c *processorServiceClient) DeleteProcessor(ctx context.Context, in *Delete
 	return out, nil
 }
 
+func (c *processorServiceClient) ListProcessorPlugins(ctx context.Context, in *ListProcessorPluginsRequest, opts ...grpc.CallOption) (*ListProcessorPluginsResponse, error) {
+	out := new(ListProcessorPluginsResponse)
+	err := c.cc.Invoke(ctx, ProcessorService_ListProcessorPlugins_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ProcessorServiceServer is the server API for ProcessorService service.
 // All implementations must embed UnimplementedProcessorServiceServer
 // for forward compatibility
@@ -973,6 +1021,7 @@ type ProcessorServiceServer interface {
 	CreateProcessor(context.Context, *CreateProcessorRequest) (*CreateProcessorResponse, error)
 	UpdateProcessor(context.Context, *UpdateProcessorRequest) (*UpdateProcessorResponse, error)
 	DeleteProcessor(context.Context, *DeleteProcessorRequest) (*DeleteProcessorResponse, error)
+	ListProcessorPlugins(context.Context, *ListProcessorPluginsRequest) (*ListProcessorPluginsResponse, error)
 	mustEmbedUnimplementedProcessorServiceServer()
 }
 
@@ -1000,6 +1049,9 @@ func (UnimplementedProcessorServiceServer) UpdateProcessor(context.Context, *Upd
 }
 func (UnimplementedProcessorServiceServer) DeleteProcessor(context.Context, *DeleteProcessorRequest) (*DeleteProcessorResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeleteProcessor not implemented")
+}
+func (UnimplementedProcessorServiceServer) ListProcessorPlugins(context.Context, *ListProcessorPluginsRequest) (*ListProcessorPluginsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListProcessorPlugins not implemented")
 }
 func (UnimplementedProcessorServiceServer) mustEmbedUnimplementedProcessorServiceServer() {}
 
@@ -1146,6 +1198,24 @@ func _ProcessorService_DeleteProcessor_Handler(srv interface{}, ctx context.Cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ProcessorService_ListProcessorPlugins_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListProcessorPluginsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ProcessorServiceServer).ListProcessorPlugins(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ProcessorService_ListProcessorPlugins_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ProcessorServiceServer).ListProcessorPlugins(ctx, req.(*ListProcessorPluginsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ProcessorService_ServiceDesc is the grpc.ServiceDesc for ProcessorService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1172,6 +1242,10 @@ var ProcessorService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeleteProcessor",
 			Handler:    _ProcessorService_DeleteProcessor_Handler,
+		},
+		{
+			MethodName: "ListProcessorPlugins",
+			Handler:    _ProcessorService_ListProcessorPlugins_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{
@@ -1280,9 +1354,7 @@ var InformationService_ServiceDesc = grpc.ServiceDesc{
 }
 
 const (
-	PluginService_ListPlugins_FullMethodName          = "/api.v1.PluginService/ListPlugins"
-	PluginService_ListConnectorPlugins_FullMethodName = "/api.v1.PluginService/ListConnectorPlugins"
-	PluginService_ListProcessorPlugins_FullMethodName = "/api.v1.PluginService/ListProcessorPlugins"
+	PluginService_ListPlugins_FullMethodName = "/api.v1.PluginService/ListPlugins"
 )
 
 // PluginServiceClient is the client API for PluginService service.
@@ -1290,10 +1362,8 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type PluginServiceClient interface {
 	// Deprecated: Do not use.
-	// Deprecated: use ListConnectorPlugins instead.
+	// Deprecated: use ConnectorService.ListConnectorPlugins instead.
 	ListPlugins(ctx context.Context, in *ListPluginsRequest, opts ...grpc.CallOption) (*ListPluginsResponse, error)
-	ListConnectorPlugins(ctx context.Context, in *ListConnectorPluginsRequest, opts ...grpc.CallOption) (*ListConnectorPluginsResponse, error)
-	ListProcessorPlugins(ctx context.Context, in *ListProcessorPluginsRequest, opts ...grpc.CallOption) (*ListProcessorPluginsResponse, error)
 }
 
 type pluginServiceClient struct {
@@ -1314,33 +1384,13 @@ func (c *pluginServiceClient) ListPlugins(ctx context.Context, in *ListPluginsRe
 	return out, nil
 }
 
-func (c *pluginServiceClient) ListConnectorPlugins(ctx context.Context, in *ListConnectorPluginsRequest, opts ...grpc.CallOption) (*ListConnectorPluginsResponse, error) {
-	out := new(ListConnectorPluginsResponse)
-	err := c.cc.Invoke(ctx, PluginService_ListConnectorPlugins_FullMethodName, in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *pluginServiceClient) ListProcessorPlugins(ctx context.Context, in *ListProcessorPluginsRequest, opts ...grpc.CallOption) (*ListProcessorPluginsResponse, error) {
-	out := new(ListProcessorPluginsResponse)
-	err := c.cc.Invoke(ctx, PluginService_ListProcessorPlugins_FullMethodName, in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 // PluginServiceServer is the server API for PluginService service.
 // All implementations must embed UnimplementedPluginServiceServer
 // for forward compatibility
 type PluginServiceServer interface {
 	// Deprecated: Do not use.
-	// Deprecated: use ListConnectorPlugins instead.
+	// Deprecated: use ConnectorService.ListConnectorPlugins instead.
 	ListPlugins(context.Context, *ListPluginsRequest) (*ListPluginsResponse, error)
-	ListConnectorPlugins(context.Context, *ListConnectorPluginsRequest) (*ListConnectorPluginsResponse, error)
-	ListProcessorPlugins(context.Context, *ListProcessorPluginsRequest) (*ListProcessorPluginsResponse, error)
 	mustEmbedUnimplementedPluginServiceServer()
 }
 
@@ -1350,12 +1400,6 @@ type UnimplementedPluginServiceServer struct {
 
 func (UnimplementedPluginServiceServer) ListPlugins(context.Context, *ListPluginsRequest) (*ListPluginsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListPlugins not implemented")
-}
-func (UnimplementedPluginServiceServer) ListConnectorPlugins(context.Context, *ListConnectorPluginsRequest) (*ListConnectorPluginsResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method ListConnectorPlugins not implemented")
-}
-func (UnimplementedPluginServiceServer) ListProcessorPlugins(context.Context, *ListProcessorPluginsRequest) (*ListProcessorPluginsResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method ListProcessorPlugins not implemented")
 }
 func (UnimplementedPluginServiceServer) mustEmbedUnimplementedPluginServiceServer() {}
 
@@ -1388,42 +1432,6 @@ func _PluginService_ListPlugins_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
-func _PluginService_ListConnectorPlugins_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ListConnectorPluginsRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(PluginServiceServer).ListConnectorPlugins(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: PluginService_ListConnectorPlugins_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(PluginServiceServer).ListConnectorPlugins(ctx, req.(*ListConnectorPluginsRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _PluginService_ListProcessorPlugins_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ListProcessorPluginsRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(PluginServiceServer).ListProcessorPlugins(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: PluginService_ListProcessorPlugins_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(PluginServiceServer).ListProcessorPlugins(ctx, req.(*ListProcessorPluginsRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 // PluginService_ServiceDesc is the grpc.ServiceDesc for PluginService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1434,14 +1442,6 @@ var PluginService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListPlugins",
 			Handler:    _PluginService_ListPlugins_Handler,
-		},
-		{
-			MethodName: "ListConnectorPlugins",
-			Handler:    _PluginService_ListConnectorPlugins_Handler,
-		},
-		{
-			MethodName: "ListProcessorPlugins",
-			Handler:    _PluginService_ListProcessorPlugins_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

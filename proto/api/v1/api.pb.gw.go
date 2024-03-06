@@ -910,6 +910,42 @@ func local_request_ConnectorService_DeleteConnector_0(ctx context.Context, marsh
 }
 
 var (
+	filter_ConnectorService_ListConnectorPlugins_0 = &utilities.DoubleArray{Encoding: map[string]int{}, Base: []int(nil), Check: []int(nil)}
+)
+
+func request_ConnectorService_ListConnectorPlugins_0(ctx context.Context, marshaler runtime.Marshaler, client ConnectorServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var protoReq ListConnectorPluginsRequest
+	var metadata runtime.ServerMetadata
+
+	if err := req.ParseForm(); err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	if err := runtime.PopulateQueryParameters(&protoReq, req.Form, filter_ConnectorService_ListConnectorPlugins_0); err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+
+	msg, err := client.ListConnectorPlugins(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
+	return msg, metadata, err
+
+}
+
+func local_request_ConnectorService_ListConnectorPlugins_0(ctx context.Context, marshaler runtime.Marshaler, server ConnectorServiceServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var protoReq ListConnectorPluginsRequest
+	var metadata runtime.ServerMetadata
+
+	if err := req.ParseForm(); err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	if err := runtime.PopulateQueryParameters(&protoReq, req.Form, filter_ConnectorService_ListConnectorPlugins_0); err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+
+	msg, err := server.ListConnectorPlugins(ctx, &protoReq)
+	return msg, metadata, err
+
+}
+
+var (
 	filter_ProcessorService_ListProcessors_0 = &utilities.DoubleArray{Encoding: map[string]int{}, Base: []int(nil), Check: []int(nil)}
 )
 
@@ -1219,6 +1255,42 @@ func local_request_ProcessorService_DeleteProcessor_0(ctx context.Context, marsh
 
 }
 
+var (
+	filter_ProcessorService_ListProcessorPlugins_0 = &utilities.DoubleArray{Encoding: map[string]int{}, Base: []int(nil), Check: []int(nil)}
+)
+
+func request_ProcessorService_ListProcessorPlugins_0(ctx context.Context, marshaler runtime.Marshaler, client ProcessorServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var protoReq ListProcessorPluginsRequest
+	var metadata runtime.ServerMetadata
+
+	if err := req.ParseForm(); err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	if err := runtime.PopulateQueryParameters(&protoReq, req.Form, filter_ProcessorService_ListProcessorPlugins_0); err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+
+	msg, err := client.ListProcessorPlugins(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
+	return msg, metadata, err
+
+}
+
+func local_request_ProcessorService_ListProcessorPlugins_0(ctx context.Context, marshaler runtime.Marshaler, server ProcessorServiceServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var protoReq ListProcessorPluginsRequest
+	var metadata runtime.ServerMetadata
+
+	if err := req.ParseForm(); err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	if err := runtime.PopulateQueryParameters(&protoReq, req.Form, filter_ProcessorService_ListProcessorPlugins_0); err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+
+	msg, err := server.ListProcessorPlugins(ctx, &protoReq)
+	return msg, metadata, err
+
+}
+
 func request_InformationService_GetInfo_0(ctx context.Context, marshaler runtime.Marshaler, client InformationServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
 	var protoReq GetInfoRequest
 	var metadata runtime.ServerMetadata
@@ -1269,78 +1341,6 @@ func local_request_PluginService_ListPlugins_0(ctx context.Context, marshaler ru
 	}
 
 	msg, err := server.ListPlugins(ctx, &protoReq)
-	return msg, metadata, err
-
-}
-
-var (
-	filter_PluginService_ListConnectorPlugins_0 = &utilities.DoubleArray{Encoding: map[string]int{}, Base: []int(nil), Check: []int(nil)}
-)
-
-func request_PluginService_ListConnectorPlugins_0(ctx context.Context, marshaler runtime.Marshaler, client PluginServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq ListConnectorPluginsRequest
-	var metadata runtime.ServerMetadata
-
-	if err := req.ParseForm(); err != nil {
-		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
-	}
-	if err := runtime.PopulateQueryParameters(&protoReq, req.Form, filter_PluginService_ListConnectorPlugins_0); err != nil {
-		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
-	}
-
-	msg, err := client.ListConnectorPlugins(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
-	return msg, metadata, err
-
-}
-
-func local_request_PluginService_ListConnectorPlugins_0(ctx context.Context, marshaler runtime.Marshaler, server PluginServiceServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq ListConnectorPluginsRequest
-	var metadata runtime.ServerMetadata
-
-	if err := req.ParseForm(); err != nil {
-		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
-	}
-	if err := runtime.PopulateQueryParameters(&protoReq, req.Form, filter_PluginService_ListConnectorPlugins_0); err != nil {
-		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
-	}
-
-	msg, err := server.ListConnectorPlugins(ctx, &protoReq)
-	return msg, metadata, err
-
-}
-
-var (
-	filter_PluginService_ListProcessorPlugins_0 = &utilities.DoubleArray{Encoding: map[string]int{}, Base: []int(nil), Check: []int(nil)}
-)
-
-func request_PluginService_ListProcessorPlugins_0(ctx context.Context, marshaler runtime.Marshaler, client PluginServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq ListProcessorPluginsRequest
-	var metadata runtime.ServerMetadata
-
-	if err := req.ParseForm(); err != nil {
-		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
-	}
-	if err := runtime.PopulateQueryParameters(&protoReq, req.Form, filter_PluginService_ListProcessorPlugins_0); err != nil {
-		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
-	}
-
-	msg, err := client.ListProcessorPlugins(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
-	return msg, metadata, err
-
-}
-
-func local_request_PluginService_ListProcessorPlugins_0(ctx context.Context, marshaler runtime.Marshaler, server PluginServiceServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq ListProcessorPluginsRequest
-	var metadata runtime.ServerMetadata
-
-	if err := req.ParseForm(); err != nil {
-		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
-	}
-	if err := runtime.PopulateQueryParameters(&protoReq, req.Form, filter_PluginService_ListProcessorPlugins_0); err != nil {
-		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
-	}
-
-	msg, err := server.ListProcessorPlugins(ctx, &protoReq)
 	return msg, metadata, err
 
 }
@@ -1792,6 +1792,31 @@ func RegisterConnectorServiceHandlerServer(ctx context.Context, mux *runtime.Ser
 
 	})
 
+	mux.Handle("GET", pattern_ConnectorService_ListConnectorPlugins_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		var stream runtime.ServerTransportStream
+		ctx = grpc.NewContextWithServerTransportStream(ctx, &stream)
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		var err error
+		var annotatedContext context.Context
+		annotatedContext, err = runtime.AnnotateIncomingContext(ctx, mux, req, "/api.v1.ConnectorService/ListConnectorPlugins", runtime.WithHTTPPathPattern("/v1/connectors/plugins"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := local_request_ConnectorService_ListConnectorPlugins_0(annotatedContext, inboundMarshaler, server, req, pathParams)
+		md.HeaderMD, md.TrailerMD = metadata.Join(md.HeaderMD, stream.Header()), metadata.Join(md.TrailerMD, stream.Trailer())
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+
+		forward_ConnectorService_ListConnectorPlugins_0(annotatedContext, mux, outboundMarshaler, w, req, response_ConnectorService_ListConnectorPlugins_0{resp}, mux.GetForwardResponseOptions()...)
+
+	})
+
 	return nil
 }
 
@@ -1940,6 +1965,31 @@ func RegisterProcessorServiceHandlerServer(ctx context.Context, mux *runtime.Ser
 
 	})
 
+	mux.Handle("GET", pattern_ProcessorService_ListProcessorPlugins_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		var stream runtime.ServerTransportStream
+		ctx = grpc.NewContextWithServerTransportStream(ctx, &stream)
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		var err error
+		var annotatedContext context.Context
+		annotatedContext, err = runtime.AnnotateIncomingContext(ctx, mux, req, "/api.v1.ProcessorService/ListProcessorPlugins", runtime.WithHTTPPathPattern("/v1/processors/plugins"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := local_request_ProcessorService_ListProcessorPlugins_0(annotatedContext, inboundMarshaler, server, req, pathParams)
+		md.HeaderMD, md.TrailerMD = metadata.Join(md.HeaderMD, stream.Header()), metadata.Join(md.TrailerMD, stream.Trailer())
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+
+		forward_ProcessorService_ListProcessorPlugins_0(annotatedContext, mux, outboundMarshaler, w, req, response_ProcessorService_ListProcessorPlugins_0{resp}, mux.GetForwardResponseOptions()...)
+
+	})
+
 	return nil
 }
 
@@ -2005,56 +2055,6 @@ func RegisterPluginServiceHandlerServer(ctx context.Context, mux *runtime.ServeM
 		}
 
 		forward_PluginService_ListPlugins_0(annotatedContext, mux, outboundMarshaler, w, req, response_PluginService_ListPlugins_0{resp}, mux.GetForwardResponseOptions()...)
-
-	})
-
-	mux.Handle("GET", pattern_PluginService_ListConnectorPlugins_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
-		ctx, cancel := context.WithCancel(req.Context())
-		defer cancel()
-		var stream runtime.ServerTransportStream
-		ctx = grpc.NewContextWithServerTransportStream(ctx, &stream)
-		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
-		var err error
-		var annotatedContext context.Context
-		annotatedContext, err = runtime.AnnotateIncomingContext(ctx, mux, req, "/api.v1.PluginService/ListConnectorPlugins", runtime.WithHTTPPathPattern("/v1/plugins/connectors"))
-		if err != nil {
-			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
-			return
-		}
-		resp, md, err := local_request_PluginService_ListConnectorPlugins_0(annotatedContext, inboundMarshaler, server, req, pathParams)
-		md.HeaderMD, md.TrailerMD = metadata.Join(md.HeaderMD, stream.Header()), metadata.Join(md.TrailerMD, stream.Trailer())
-		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
-		if err != nil {
-			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
-			return
-		}
-
-		forward_PluginService_ListConnectorPlugins_0(annotatedContext, mux, outboundMarshaler, w, req, response_PluginService_ListConnectorPlugins_0{resp}, mux.GetForwardResponseOptions()...)
-
-	})
-
-	mux.Handle("GET", pattern_PluginService_ListProcessorPlugins_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
-		ctx, cancel := context.WithCancel(req.Context())
-		defer cancel()
-		var stream runtime.ServerTransportStream
-		ctx = grpc.NewContextWithServerTransportStream(ctx, &stream)
-		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
-		var err error
-		var annotatedContext context.Context
-		annotatedContext, err = runtime.AnnotateIncomingContext(ctx, mux, req, "/api.v1.PluginService/ListProcessorPlugins", runtime.WithHTTPPathPattern("/v1/plugins/processors"))
-		if err != nil {
-			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
-			return
-		}
-		resp, md, err := local_request_PluginService_ListProcessorPlugins_0(annotatedContext, inboundMarshaler, server, req, pathParams)
-		md.HeaderMD, md.TrailerMD = metadata.Join(md.HeaderMD, stream.Header()), metadata.Join(md.TrailerMD, stream.Trailer())
-		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
-		if err != nil {
-			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
-			return
-		}
-
-		forward_PluginService_ListProcessorPlugins_0(annotatedContext, mux, outboundMarshaler, w, req, response_PluginService_ListProcessorPlugins_0{resp}, mux.GetForwardResponseOptions()...)
 
 	})
 
@@ -2659,6 +2659,28 @@ func RegisterConnectorServiceHandlerClient(ctx context.Context, mux *runtime.Ser
 
 	})
 
+	mux.Handle("GET", pattern_ConnectorService_ListConnectorPlugins_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		var err error
+		var annotatedContext context.Context
+		annotatedContext, err = runtime.AnnotateContext(ctx, mux, req, "/api.v1.ConnectorService/ListConnectorPlugins", runtime.WithHTTPPathPattern("/v1/connectors/plugins"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := request_ConnectorService_ListConnectorPlugins_0(annotatedContext, inboundMarshaler, client, req, pathParams)
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+
+		forward_ConnectorService_ListConnectorPlugins_0(annotatedContext, mux, outboundMarshaler, w, req, response_ConnectorService_ListConnectorPlugins_0{resp}, mux.GetForwardResponseOptions()...)
+
+	})
+
 	return nil
 }
 
@@ -2707,6 +2729,15 @@ func (m response_ConnectorService_UpdateConnector_0) XXX_ResponseBody() interfac
 	return response.Connector
 }
 
+type response_ConnectorService_ListConnectorPlugins_0 struct {
+	proto.Message
+}
+
+func (m response_ConnectorService_ListConnectorPlugins_0) XXX_ResponseBody() interface{} {
+	response := m.Message.(*ListConnectorPluginsResponse)
+	return response.Plugins
+}
+
 var (
 	pattern_ConnectorService_ListConnectors_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "connectors"}, ""))
 
@@ -2721,6 +2752,8 @@ var (
 	pattern_ConnectorService_UpdateConnector_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2}, []string{"v1", "connectors", "id"}, ""))
 
 	pattern_ConnectorService_DeleteConnector_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2}, []string{"v1", "connectors", "id"}, ""))
+
+	pattern_ConnectorService_ListConnectorPlugins_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2}, []string{"v1", "connectors", "plugins"}, ""))
 )
 
 var (
@@ -2737,6 +2770,8 @@ var (
 	forward_ConnectorService_UpdateConnector_0 = runtime.ForwardResponseMessage
 
 	forward_ConnectorService_DeleteConnector_0 = runtime.ForwardResponseMessage
+
+	forward_ConnectorService_ListConnectorPlugins_0 = runtime.ForwardResponseMessage
 )
 
 // RegisterProcessorServiceHandlerFromEndpoint is same as RegisterProcessorServiceHandler but
@@ -2937,6 +2972,28 @@ func RegisterProcessorServiceHandlerClient(ctx context.Context, mux *runtime.Ser
 
 	})
 
+	mux.Handle("GET", pattern_ProcessorService_ListProcessorPlugins_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		var err error
+		var annotatedContext context.Context
+		annotatedContext, err = runtime.AnnotateContext(ctx, mux, req, "/api.v1.ProcessorService/ListProcessorPlugins", runtime.WithHTTPPathPattern("/v1/processors/plugins"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := request_ProcessorService_ListProcessorPlugins_0(annotatedContext, inboundMarshaler, client, req, pathParams)
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+
+		forward_ProcessorService_ListProcessorPlugins_0(annotatedContext, mux, outboundMarshaler, w, req, response_ProcessorService_ListProcessorPlugins_0{resp}, mux.GetForwardResponseOptions()...)
+
+	})
+
 	return nil
 }
 
@@ -2994,6 +3051,15 @@ func (m response_ProcessorService_UpdateProcessor_0) XXX_ResponseBody() interfac
 	return response.Processor
 }
 
+type response_ProcessorService_ListProcessorPlugins_0 struct {
+	proto.Message
+}
+
+func (m response_ProcessorService_ListProcessorPlugins_0) XXX_ResponseBody() interface{} {
+	response := m.Message.(*ListProcessorPluginsResponse)
+	return response.Plugins
+}
+
 var (
 	pattern_ProcessorService_ListProcessors_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "processors"}, ""))
 
@@ -3008,6 +3074,8 @@ var (
 	pattern_ProcessorService_UpdateProcessor_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2}, []string{"v1", "processors", "id"}, ""))
 
 	pattern_ProcessorService_DeleteProcessor_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2}, []string{"v1", "processors", "id"}, ""))
+
+	pattern_ProcessorService_ListProcessorPlugins_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2}, []string{"v1", "processors", "plugins"}, ""))
 )
 
 var (
@@ -3024,6 +3092,8 @@ var (
 	forward_ProcessorService_UpdateProcessor_0 = runtime.ForwardResponseMessage
 
 	forward_ProcessorService_DeleteProcessor_0 = runtime.ForwardResponseMessage
+
+	forward_ProcessorService_ListProcessorPlugins_0 = runtime.ForwardResponseMessage
 )
 
 // RegisterInformationServiceHandlerFromEndpoint is same as RegisterInformationServiceHandler but
@@ -3166,50 +3236,6 @@ func RegisterPluginServiceHandlerClient(ctx context.Context, mux *runtime.ServeM
 
 	})
 
-	mux.Handle("GET", pattern_PluginService_ListConnectorPlugins_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
-		ctx, cancel := context.WithCancel(req.Context())
-		defer cancel()
-		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
-		var err error
-		var annotatedContext context.Context
-		annotatedContext, err = runtime.AnnotateContext(ctx, mux, req, "/api.v1.PluginService/ListConnectorPlugins", runtime.WithHTTPPathPattern("/v1/plugins/connectors"))
-		if err != nil {
-			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
-			return
-		}
-		resp, md, err := request_PluginService_ListConnectorPlugins_0(annotatedContext, inboundMarshaler, client, req, pathParams)
-		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
-		if err != nil {
-			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
-			return
-		}
-
-		forward_PluginService_ListConnectorPlugins_0(annotatedContext, mux, outboundMarshaler, w, req, response_PluginService_ListConnectorPlugins_0{resp}, mux.GetForwardResponseOptions()...)
-
-	})
-
-	mux.Handle("GET", pattern_PluginService_ListProcessorPlugins_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
-		ctx, cancel := context.WithCancel(req.Context())
-		defer cancel()
-		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
-		var err error
-		var annotatedContext context.Context
-		annotatedContext, err = runtime.AnnotateContext(ctx, mux, req, "/api.v1.PluginService/ListProcessorPlugins", runtime.WithHTTPPathPattern("/v1/plugins/processors"))
-		if err != nil {
-			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
-			return
-		}
-		resp, md, err := request_PluginService_ListProcessorPlugins_0(annotatedContext, inboundMarshaler, client, req, pathParams)
-		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
-		if err != nil {
-			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
-			return
-		}
-
-		forward_PluginService_ListProcessorPlugins_0(annotatedContext, mux, outboundMarshaler, w, req, response_PluginService_ListProcessorPlugins_0{resp}, mux.GetForwardResponseOptions()...)
-
-	})
-
 	return nil
 }
 
@@ -3222,36 +3248,10 @@ func (m response_PluginService_ListPlugins_0) XXX_ResponseBody() interface{} {
 	return response.Plugins
 }
 
-type response_PluginService_ListConnectorPlugins_0 struct {
-	proto.Message
-}
-
-func (m response_PluginService_ListConnectorPlugins_0) XXX_ResponseBody() interface{} {
-	response := m.Message.(*ListConnectorPluginsResponse)
-	return response.Plugins
-}
-
-type response_PluginService_ListProcessorPlugins_0 struct {
-	proto.Message
-}
-
-func (m response_PluginService_ListProcessorPlugins_0) XXX_ResponseBody() interface{} {
-	response := m.Message.(*ListProcessorPluginsResponse)
-	return response.Plugins
-}
-
 var (
 	pattern_PluginService_ListPlugins_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "plugins"}, ""))
-
-	pattern_PluginService_ListConnectorPlugins_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2}, []string{"v1", "plugins", "connectors"}, ""))
-
-	pattern_PluginService_ListProcessorPlugins_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2}, []string{"v1", "plugins", "processors"}, ""))
 )
 
 var (
 	forward_PluginService_ListPlugins_0 = runtime.ForwardResponseMessage
-
-	forward_PluginService_ListConnectorPlugins_0 = runtime.ForwardResponseMessage
-
-	forward_PluginService_ListProcessorPlugins_0 = runtime.ForwardResponseMessage
 )

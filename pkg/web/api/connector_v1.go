@@ -14,10 +14,15 @@
 
 //go:generate mockgen -destination=mock/connector.go -package=mock -mock_names=ConnectorOrchestrator=ConnectorOrchestrator . ConnectorOrchestrator
 //go:generate mockgen -destination=mock/connector_service.go -package=mock -mock_names=ConnectorService_InspectConnectorServer=ConnectorService_InspectConnectorServer github.com/conduitio/conduit/proto/api/v1 ConnectorService_InspectConnectorServer
+//go:generate mockgen -destination=mock/connector_plugin.go -package=mock -mock_names=ConnectorPluginOrchestrator=ConnectorPluginOrchestrator . ConnectorPluginOrchestrator
+
 package api
 
 import (
 	"context"
+	"regexp"
+
+	connectorPlugin "github.com/conduitio/conduit/pkg/plugin/connector"
 
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -39,13 +44,25 @@ type ConnectorOrchestrator interface {
 	Inspect(ctx context.Context, id string) (*inspector.Session, error)
 }
 
-type ConnectorAPIv1 struct {
-	apiv1.UnimplementedConnectorServiceServer
-	cs ConnectorOrchestrator
+type ConnectorPluginOrchestrator interface {
+	// List will return all connector plugins' specs.
+	List(ctx context.Context) (map[string]connectorPlugin.Specification, error)
 }
 
-func NewConnectorAPIv1(cs ConnectorOrchestrator) *ConnectorAPIv1 {
-	return &ConnectorAPIv1{cs: cs}
+type ConnectorAPIv1 struct {
+	apiv1.UnimplementedConnectorServiceServer
+	connectorOrchestrator       ConnectorOrchestrator
+	connectorPluginOrchestrator ConnectorPluginOrchestrator
+}
+
+func NewConnectorAPIv1(
+	co ConnectorOrchestrator,
+	cpo ConnectorPluginOrchestrator,
+) *ConnectorAPIv1 {
+	return &ConnectorAPIv1{
+		connectorOrchestrator:       co,
+		connectorPluginOrchestrator: cpo,
+	}
 }
 
 func (c *ConnectorAPIv1) Register(srv *grpc.Server) {
@@ -57,7 +74,7 @@ func (c *ConnectorAPIv1) ListConnectors(
 	req *apiv1.ListConnectorsRequest,
 ) (*apiv1.ListConnectorsResponse, error) {
 	// TODO: Implement filtering and limiting.
-	list := c.cs.List(ctx)
+	list := c.connectorOrchestrator.List(ctx)
 	var clist []*apiv1.Connector
 	for _, v := range list {
 		if req.PipelineId == "" || req.PipelineId == v.PipelineID {
@@ -73,7 +90,7 @@ func (c *ConnectorAPIv1) InspectConnector(req *apiv1.InspectConnectorRequest, se
 		return status.ConnectorError(cerrors.ErrEmptyID)
 	}
 
-	session, err := c.cs.Inspect(server.Context(), req.Id)
+	session, err := c.connectorOrchestrator.Inspect(server.Context(), req.Id)
 	if err != nil {
 		return status.ConnectorError(cerrors.Errorf("failed to inspect connector: %w", err))
 	}
@@ -105,7 +122,7 @@ func (c *ConnectorAPIv1) GetConnector(
 	}
 
 	// fetch the connector from the ConnectorOrchestrator
-	pr, err := c.cs.Get(ctx, req.Id)
+	pr, err := c.connectorOrchestrator.Get(ctx, req.Id)
 	if err != nil {
 		return nil, status.ConnectorError(cerrors.Errorf("failed to get connector by ID: %w", err))
 	}
@@ -121,7 +138,7 @@ func (c *ConnectorAPIv1) CreateConnector(
 	ctx context.Context,
 	req *apiv1.CreateConnectorRequest,
 ) (*apiv1.CreateConnectorResponse, error) {
-	created, err := c.cs.Create(
+	created, err := c.connectorOrchestrator.Create(
 		ctx,
 		fromproto.ConnectorType(req.Type),
 		req.Plugin,
@@ -145,7 +162,7 @@ func (c *ConnectorAPIv1) UpdateConnector(
 		return nil, cerrors.ErrEmptyID
 	}
 
-	updated, err := c.cs.Update(ctx, req.Id, fromproto.ConnectorConfig(req.Config))
+	updated, err := c.connectorOrchestrator.Update(ctx, req.Id, fromproto.ConnectorConfig(req.Config))
 
 	if err != nil {
 		return nil, status.ConnectorError(cerrors.Errorf("failed to update connector: %w", err))
@@ -157,7 +174,7 @@ func (c *ConnectorAPIv1) UpdateConnector(
 }
 
 func (c *ConnectorAPIv1) DeleteConnector(ctx context.Context, req *apiv1.DeleteConnectorRequest) (*apiv1.DeleteConnectorResponse, error) {
-	err := c.cs.Delete(ctx, req.Id)
+	err := c.connectorOrchestrator.Delete(ctx, req.Id)
 
 	if err != nil {
 		return nil, status.ConnectorError(cerrors.Errorf("failed to delete connector: %w", err))
@@ -172,7 +189,7 @@ func (c *ConnectorAPIv1) ValidateConnector(
 	ctx context.Context,
 	req *apiv1.ValidateConnectorRequest,
 ) (*apiv1.ValidateConnectorResponse, error) {
-	err := c.cs.Validate(
+	err := c.connectorOrchestrator.Validate(
 		ctx,
 		fromproto.ConnectorType(req.Type),
 		req.Plugin,
@@ -184,4 +201,33 @@ func (c *ConnectorAPIv1) ValidateConnector(
 	}
 
 	return &apiv1.ValidateConnectorResponse{}, nil
+}
+
+func (c *ConnectorAPIv1) ListConnectorPlugins(
+	ctx context.Context,
+	req *apiv1.ListConnectorPluginsRequest,
+) (*apiv1.ListConnectorPluginsResponse, error) {
+	var nameFilter *regexp.Regexp
+	if req.GetName() != "" {
+		var err error
+		nameFilter, err = regexp.Compile("^" + req.GetName() + "$")
+		if err != nil {
+			return nil, status.PluginError(cerrors.New("invalid name regex"))
+		}
+	}
+
+	mp, err := c.connectorPluginOrchestrator.List(ctx)
+	if err != nil {
+		return nil, status.PluginError(err)
+	}
+	var plist []*apiv1.ConnectorPluginSpecifications
+
+	for name, v := range mp {
+		if nameFilter != nil && !nameFilter.MatchString(name) {
+			continue // don't add to result list, filter didn't match
+		}
+		plist = append(plist, toproto.ConnectorPluginSpecifications(name, v))
+	}
+
+	return &apiv1.ListConnectorPluginsResponse{Plugins: plist}, nil
 }

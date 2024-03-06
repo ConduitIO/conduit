@@ -20,6 +20,8 @@ import (
 	"testing"
 	"time"
 
+	connectorPlugin "github.com/conduitio/conduit/pkg/plugin/connector"
+
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cchan"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -41,7 +43,7 @@ func TestConnectorAPIv1_ListConnectors(t *testing.T) {
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	csMock := apimock.NewConnectorOrchestrator(ctrl)
-	api := NewConnectorAPIv1(csMock)
+	api := NewConnectorAPIv1(csMock, nil)
 
 	source := newTestSource()
 	destination := newTestDestination()
@@ -118,7 +120,7 @@ func TestConnectorAPIv1_ListConnectorsByPipeline(t *testing.T) {
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	csMock := apimock.NewConnectorOrchestrator(ctrl)
-	api := NewConnectorAPIv1(csMock)
+	api := NewConnectorAPIv1(csMock, nil)
 
 	source := newTestSource()
 	destination := newTestDestination()
@@ -171,7 +173,7 @@ func TestConnectorAPIv1_CreateConnector(t *testing.T) {
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	csMock := apimock.NewConnectorOrchestrator(ctrl)
-	api := NewConnectorAPIv1(csMock)
+	api := NewConnectorAPIv1(csMock, nil)
 
 	source := newTestSource()
 
@@ -221,7 +223,7 @@ func TestConnectorAPIv1_InspectConnector_SendRecord(t *testing.T) {
 	defer cancel()
 	ctrl := gomock.NewController(t)
 	csMock := apimock.NewConnectorOrchestrator(ctrl)
-	api := NewConnectorAPIv1(csMock)
+	api := NewConnectorAPIv1(csMock, nil)
 
 	id := uuid.NewString()
 	rec := generateTestRecord()
@@ -258,7 +260,7 @@ func TestConnectorAPIv1_InspectConnector_SendErr(t *testing.T) {
 	defer cancel()
 	ctrl := gomock.NewController(t)
 	csMock := apimock.NewConnectorOrchestrator(ctrl)
-	api := NewConnectorAPIv1(csMock)
+	api := NewConnectorAPIv1(csMock, nil)
 	id := uuid.NewString()
 
 	ins := inspector.New(log.Nop(), 10)
@@ -297,7 +299,7 @@ func TestConnectorAPIv1_InspectConnector_Err(t *testing.T) {
 	defer cancel()
 	ctrl := gomock.NewController(t)
 	csMock := apimock.NewConnectorOrchestrator(ctrl)
-	api := NewConnectorAPIv1(csMock)
+	api := NewConnectorAPIv1(csMock, nil)
 	id := uuid.NewString()
 	err := cerrors.New("not found, sorry")
 
@@ -338,7 +340,7 @@ func TestConnectorAPIv1_GetConnector(t *testing.T) {
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	csMock := apimock.NewConnectorOrchestrator(ctrl)
-	api := NewConnectorAPIv1(csMock)
+	api := NewConnectorAPIv1(csMock, nil)
 
 	source := newTestSource()
 
@@ -384,7 +386,7 @@ func TestConnectorAPIv1_UpdateConnector(t *testing.T) {
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	csMock := apimock.NewConnectorOrchestrator(ctrl)
-	api := NewConnectorAPIv1(csMock)
+	api := NewConnectorAPIv1(csMock, nil)
 
 	before := newTestSource()
 	after := newTestSource()
@@ -437,7 +439,7 @@ func TestConnectorAPIv1_DeleteConnector(t *testing.T) {
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	csMock := apimock.NewConnectorOrchestrator(ctrl)
-	api := NewConnectorAPIv1(csMock)
+	api := NewConnectorAPIv1(csMock, nil)
 
 	id := uuid.NewString()
 
@@ -462,7 +464,7 @@ func TestConnectorAPIv1_ValidateConnector(t *testing.T) {
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	csMock := apimock.NewConnectorOrchestrator(ctrl)
-	api := NewConnectorAPIv1(csMock)
+	api := NewConnectorAPIv1(csMock, nil)
 
 	config := connector.Config{
 		Name:     "A source connector",
@@ -496,7 +498,7 @@ func TestConnectorAPIv1_ValidateConnectorError(t *testing.T) {
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	csMock := apimock.NewConnectorOrchestrator(ctrl)
-	api := NewConnectorAPIv1(csMock)
+	api := NewConnectorAPIv1(csMock, nil)
 
 	config := connector.Config{
 		Name:     "A source connector",
@@ -520,6 +522,69 @@ func TestConnectorAPIv1_ValidateConnectorError(t *testing.T) {
 	)
 
 	is.True(err != nil)
+}
+
+func TestConnectorAPIv1_ListConnectorPluginsByName(t *testing.T) {
+	is := is.New(t)
+
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+	cpoMock := apimock.NewConnectorPluginOrchestrator(ctrl)
+	api := NewConnectorAPIv1(nil, cpoMock)
+
+	names := []string{"do-not-want-this-plugin", "want-p1", "want-p2", "skip", "another-skipped"}
+
+	plsMap := make(map[string]connectorPlugin.Specification)
+	pls := make([]connectorPlugin.Specification, 0)
+
+	for _, name := range names {
+		ps := connectorPlugin.Specification{
+			Name:        name,
+			Description: "desc",
+			Version:     "v1.0",
+			Author:      "Aaron",
+			SourceParams: map[string]connectorPlugin.Parameter{
+				"param": {
+					Type: connectorPlugin.ParameterTypeString,
+					Validations: []connectorPlugin.Validation{{
+						Type: connectorPlugin.ValidationTypeRequired,
+					}},
+				},
+			},
+			DestinationParams: map[string]connectorPlugin.Parameter{},
+		}
+		pls = append(pls, ps)
+		plsMap[name] = ps
+	}
+
+	cpoMock.EXPECT().
+		List(ctx).
+		Return(plsMap, nil).
+		Times(1)
+
+	want := &apiv1.ListConnectorPluginsResponse{
+		Plugins: []*apiv1.ConnectorPluginSpecifications{
+			toproto.ConnectorPluginSpecifications(pls[1].Name, pls[1]),
+			toproto.ConnectorPluginSpecifications(pls[2].Name, pls[2]),
+		},
+	}
+
+	got, err := api.ListConnectorPlugins(
+		ctx,
+		&apiv1.ListConnectorPluginsRequest{Name: "want-.*"},
+	)
+
+	is.NoErr(err)
+
+	sortPlugins := func(p []*apiv1.ConnectorPluginSpecifications) {
+		sort.Slice(p, func(i, j int) bool {
+			return p[i].Name < p[j].Name
+		})
+	}
+
+	sortPlugins(want.Plugins)
+	sortPlugins(got.Plugins)
+	is.Equal(want, got)
 }
 
 func sortConnectors(c []*apiv1.Connector) {

@@ -769,6 +769,13 @@ service ConnectorService {
       }
     };
   };
+
+  rpc ListConnectorPlugins(ListConnectorPluginsRequest) returns (ListConnectorPluginsResponse) {
+    option (google.api.http) = {
+      get: "/v1/connectors/plugins"
+      response_body: "plugins"
+    };
+  };
 }
 
 message CreateConnectorRequest {
@@ -834,6 +841,15 @@ message DeleteConnectorRequest {
   string id = 1;
 }
 message DeleteConnectorResponse {}
+
+message ListConnectorPluginsRequest {
+  // Regex to filter plugins by name.
+  string name = 1;
+}
+
+message ListConnectorPluginsResponse{
+  repeated ConnectorPluginSpecifications plugins = 1;
+}
 
 // ProcessorService exposes CRUD functionality for managing processors.
 service ProcessorService {
@@ -980,6 +996,13 @@ service ProcessorService {
       }
     };
   };
+
+  rpc ListProcessorPlugins(ListProcessorPluginsRequest) returns (ListProcessorPluginsResponse) {
+    option (google.api.http) = {
+      get: "/v1/processors/plugins"
+      response_body: "plugins"
+    };
+  };
 }
 
 message ListProcessorsRequest {
@@ -1035,6 +1058,15 @@ message DeleteProcessorRequest {
 }
 message DeleteProcessorResponse {}
 
+message ListProcessorPluginsRequest {
+  // Regex to filter plugins by name.
+  string name = 1;
+}
+
+message ListProcessorPluginsResponse{
+  repeated ProcessorPluginSpecifications plugins = 1;
+}
+
 service InformationService {
   rpc GetInfo (GetInfoRequest) returns (GetInfoResponse) {
     option (google.api.http) = {
@@ -1087,8 +1119,9 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
   }
 };
 
+// Deprecated: use ConnectorService and ProcessorService instead.
 service PluginService {
-  // Deprecated: use ListConnectorPlugins instead.
+  // Deprecated: use ConnectorService.ListConnectorPlugins instead.
   rpc ListPlugins(ListPluginsRequest) returns (ListPluginsResponse) {
     option deprecated = true;
     option (google.api.http) = {
@@ -1096,49 +1129,17 @@ service PluginService {
       response_body: "plugins"
     };
   };
-
-  rpc ListConnectorPlugins(ListConnectorPluginsRequest) returns (ListConnectorPluginsResponse) {
-    option (google.api.http) = {
-      get: "/v1/plugins/connectors"
-      response_body: "plugins"
-    };
-  };
-
-  rpc ListProcessorPlugins(ListProcessorPluginsRequest) returns (ListProcessorPluginsResponse) {
-    option (google.api.http) = {
-      get: "/v1/plugins/processors"
-      response_body: "plugins"
-    };
-  };
 }
 
-// Deprecated: use ListConnectorPlugins instead.
+// Deprecated: use ConnectorService.ListConnectorPlugins instead.
 message ListPluginsRequest {
   option deprecated = true;
   // Regex to filter plugins by name.
   string name = 1;
 }
 
-// Deprecated: use ListConnectorPlugins instead.
+// Deprecated: use ConnectorService.ListConnectorPlugins instead.
 message ListPluginsResponse{
   option deprecated = true;
   repeated PluginSpecifications plugins = 1;
-}
-
-message ListConnectorPluginsRequest {
-  // Regex to filter plugins by name.
-  string name = 1;
-}
-
-message ListConnectorPluginsResponse{
-  repeated ConnectorPluginSpecifications plugins = 1;
-}
-
-message ListProcessorPluginsRequest {
-  // Regex to filter plugins by name.
-  string name = 1;
-}
-
-message ListProcessorPluginsResponse{
-  repeated ProcessorPluginSpecifications plugins = 1;
 }

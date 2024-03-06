@@ -156,6 +156,48 @@
         ]
       }
     },
+    "/v1/connectors/plugins": {
+      "get": {
+        "operationId": "ConnectorService_ListConnectorPlugins",
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "$ref": "#/definitions/v1ConnectorPluginSpecifications"
+              }
+            }
+          },
+          "500": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            },
+            "examples": {
+              "application/json": {
+                "code": 13,
+                "message": "server error",
+                "details": []
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "name",
+            "description": "Regex to filter plugins by name.",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "ConnectorService"
+        ]
+      }
+    },
     "/v1/connectors/validate": {
       "post": {
         "operationId": "ConnectorService_ValidateConnector",
@@ -1036,7 +1078,7 @@
     },
     "/v1/plugins": {
       "get": {
-        "summary": "Deprecated: use ListConnectorPlugins instead.",
+        "summary": "Deprecated: use ConnectorService.ListConnectorPlugins instead.",
         "operationId": "PluginService_ListPlugins",
         "responses": {
           "200": {
@@ -1046,90 +1088,6 @@
               "items": {
                 "type": "object",
                 "$ref": "#/definitions/v1PluginSpecifications"
-              }
-            }
-          },
-          "500": {
-            "description": "",
-            "schema": {
-              "$ref": "#/definitions/googlerpcStatus"
-            },
-            "examples": {
-              "application/json": {
-                "code": 13,
-                "message": "server error",
-                "details": []
-              }
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "name",
-            "description": "Regex to filter plugins by name.",
-            "in": "query",
-            "required": false,
-            "type": "string"
-          }
-        ],
-        "tags": [
-          "PluginService"
-        ]
-      }
-    },
-    "/v1/plugins/connectors": {
-      "get": {
-        "operationId": "PluginService_ListConnectorPlugins",
-        "responses": {
-          "200": {
-            "description": "",
-            "schema": {
-              "type": "array",
-              "items": {
-                "type": "object",
-                "$ref": "#/definitions/v1ConnectorPluginSpecifications"
-              }
-            }
-          },
-          "500": {
-            "description": "",
-            "schema": {
-              "$ref": "#/definitions/googlerpcStatus"
-            },
-            "examples": {
-              "application/json": {
-                "code": 13,
-                "message": "server error",
-                "details": []
-              }
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "name",
-            "description": "Regex to filter plugins by name.",
-            "in": "query",
-            "required": false,
-            "type": "string"
-          }
-        ],
-        "tags": [
-          "PluginService"
-        ]
-      }
-    },
-    "/v1/plugins/processors": {
-      "get": {
-        "operationId": "PluginService_ListProcessorPlugins",
-        "responses": {
-          "200": {
-            "description": "",
-            "schema": {
-              "type": "array",
-              "items": {
-                "type": "object",
-                "$ref": "#/definitions/v1ProcessorPluginSpecifications"
               }
             }
           },
@@ -1249,6 +1207,48 @@
             "schema": {
               "$ref": "#/definitions/v1CreateProcessorRequest"
             }
+          }
+        ],
+        "tags": [
+          "ProcessorService"
+        ]
+      }
+    },
+    "/v1/processors/plugins": {
+      "get": {
+        "operationId": "ProcessorService_ListProcessorPlugins",
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "$ref": "#/definitions/v1ProcessorPluginSpecifications"
+              }
+            }
+          },
+          "500": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            },
+            "examples": {
+              "application/json": {
+                "code": 13,
+                "message": "server error",
+                "details": []
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "name",
+            "description": "Regex to filter plugins by name.",
+            "in": "query",
+            "required": false,
+            "type": "string"
           }
         ],
         "tags": [
@@ -2109,7 +2109,7 @@
           }
         }
       },
-      "description": "Deprecated: use ListConnectorPlugins instead."
+      "description": "Deprecated: use ConnectorService.ListConnectorPlugins instead."
     },
     "v1ListProcessorPluginsResponse": {
       "type": "object",
