@@ -168,7 +168,7 @@ func (p *decodeProcessor) processRecord(ctx context.Context, rec opencdc.Record)
 
 	data, err := p.rawData(field.Get())
 	if err != nil {
-		return nil, cerrors.Errorf("failed getting structured data: %w", err)
+		return nil, cerrors.Errorf("failed getting raw data: %w", err)
 	}
 
 	rd, err := p.decoder.Decode(ctx, data)
@@ -178,7 +178,7 @@ func (p *decodeProcessor) processRecord(ctx context.Context, rec opencdc.Record)
 
 	err = field.Set(rd)
 	if err != nil {
-		return nil, cerrors.Errorf("failed setting encoded value into the record: %w", err)
+		return nil, cerrors.Errorf("failed setting the decoded value: %w", err)
 	}
 	return sdk.SingleRecord(rec), nil
 }
