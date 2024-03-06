@@ -16,6 +16,7 @@ package avro
 
 import (
 	"context"
+	"encoding/base64"
 	"testing"
 
 	"github.com/conduitio/conduit-commons/opencdc"
@@ -27,17 +28,22 @@ import (
 )
 
 func TestDecodeProcessor_Process_RawData_CustomField(t *testing.T) {
+	data := `{"field_int": 123}`
 	testCases := []struct {
 		name  string
 		field interface{}
 	}{
 		{
 			name:  "opencdc.RawData",
-			field: opencdc.RawData(`{"field_int": 123}`),
+			field: opencdc.RawData(data),
 		},
 		{
 			name:  "[]byte",
-			field: []byte(`{"field_int": 123}`),
+			field: []byte(data),
+		},
+		{
+			name:  "string (base64 encoded byte slice",
+			field: base64.StdEncoding.EncodeToString([]byte(data)),
 		},
 	}
 
@@ -70,7 +76,7 @@ func TestDecodeProcessor_Process_RawData_CustomField(t *testing.T) {
 			// skipping Open(), so we can inject a mock encoder
 			mockDecoder := NewMockDecoder(gomock.NewController(t))
 			mockDecoder.EXPECT().
-				Decode(ctx, opencdc.RawData(`{"field_int": 123}`)).
+				Decode(ctx, opencdc.RawData(data)).
 				Return(decodedVal, nil)
 			underTest.(*decodeProcessor).decoder = mockDecoder
 

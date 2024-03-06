@@ -20,6 +20,7 @@ package avro
 import (
 	"context"
 	"crypto/tls"
+	"encoding/base64"
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
@@ -108,11 +109,12 @@ func NewDecodeProcessor(logger log.CtxLogger) sdk.Processor {
 func (p *decodeProcessor) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
 		Name:    "avro.encode",
-		Summary: "Decodes a record's field from the ",
-		Description: `The processor takes raw data (bytes) in the specified field and decodes it from the 
-[Avro format](https://avro.apache.org/) into structured data. It extracts the schema ID from the data, 
+		Summary: "Decodes a field's raw data in the Avro format",
+		Description: `The processor takes raw data (bytes or a Base64-encoded string) in the specified field and decodes 
+it from the [Avro format](https://avro.apache.org/) into structured data. It extracts the schema ID from the data, 
 downloads the associated schema from the [schema registry](https://docs.confluent.io/platform/current/schema-registry/index.html)
 and decodes the payload. The schema is cached locally after it's first downloaded. 
+
 Currently, the processor only supports the Avro format. If the processor encounters structured data or the data 
 can't be decoded it returns an error.
 
@@ -187,8 +189,13 @@ func (p *decodeProcessor) rawData(data any) (opencdc.RawData, error) {
 		return v, nil
 	case []byte:
 		return v, nil
-	case opencdc.StructuredData:
-		return v.Bytes(), nil
+	case string:
+		decoded := make([]byte, base64.StdEncoding.DecodedLen(len(v)))
+		n, err := base64.StdEncoding.Decode(decoded, []byte(v))
+		if err != nil {
+			return nil, cerrors.Errorf("couldn't base64-decode data: %w", err)
+		}
+		return opencdc.RawData(decoded[:n]), nil
 	default:
 		return nil, cerrors.Errorf("unexpected data type %T", v)
 	}
