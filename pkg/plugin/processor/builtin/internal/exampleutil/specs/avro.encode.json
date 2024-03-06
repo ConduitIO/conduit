@@ -1,8 +1,8 @@
 {
   "specification": {
     "name": "avro.encode",
-    "summary": "",
-    "description": "The processor takes structured data and encodes it using a schema into the [Avro format](https://avro.apache.org/).\nIt provides two strategies for determining the schema:\n\n* **preRegistered** (recommended)\n  This strategy downloads an existing schema from the schema registry and uses it to encode the record.\n  This requires the schema to already be registered in the schema registry. The schema is downloaded\n  only once and cached locally.\n* **autoRegister** (for development purposes)\n  This strategy infers the schema by inspecting the structured data and registers it in the schema\n  registry. If the record schema is known in advance it's recommended to use the preRegistered strategy\n  and manually register the schema, as this strategy comes with limitations.\n\n  The strategy uses reflection to traverse the structured data of each record and determine the type\n  of each field. If a specific field is set to nil the processor won't have enough information to determine\n  the type and will default to a nullable string. Because of this it is not guaranteed that two records\n  with the same structure produce the same schema or even a backwards compatible schema. The processor\n  registers each inferred schema in the schema registry with the same subject, therefore the schema compatibility\n  checks need to be disabled for this schema to prevent failures. If the schema subject does not exist before running\n  this processor, it will automatically set the correct compatibility settings in the schema registry.\n",
+    "summary": "Decodes a field's raw data in the Avro format",
+    "description": "The processor takes raw data (bytes or a string) in the specified field and decodes\nit from the [Avro format](https://avro.apache.org/) into structured data. It extracts the schema ID from the data,\ndownloads the associated schema from the [schema registry](https://docs.confluent.io/platform/current/schema-registry/index.html)\nand decodes the payload. The schema is cached locally after it's first downloaded.\n\nIf the processor encounters structured data or the data can't be decoded it returns an error.\n\nThis processor is the counterpart to [`avro.encode`](/docs/processors/builtin/avro.encode).",
     "version": "v0.1.0",
     "author": "Meroxa, Inc.",
     "parameters": {
@@ -23,44 +23,6 @@
         "description": "The field that will be encoded.",
         "type": "string",
         "validations": []
-      },
-      "schema.autoRegister.subject": {
-        "default": "",
-        "description": "The subject name under which the inferred schema will be registered in the schema registry.",
-        "type": "string",
-        "validations": []
-      },
-      "schema.preRegistered.subject": {
-        "default": "",
-        "description": "The subject of the schema in the schema registry used to encode the record.",
-        "type": "string",
-        "validations": []
-      },
-      "schema.preRegistered.version": {
-        "default": "",
-        "description": "The version of the schema in the schema registry used to encode the record.",
-        "type": "int",
-        "validations": [
-          {
-            "type": "greater-than",
-            "value": "0"
-          }
-        ]
-      },
-      "schema.strategy": {
-        "default": "",
-        "description": "Strategy to use to determine the schema for the record.\nAvailable strategies are:\n* `preRegistered` (recommended) - Download an existing schema from the schema registry.\n   This strategy is further configured with options starting with `schema.preRegistered.*`.\n* `autoRegister` (for development purposes) - Infer the schema from the record and register it\n   in the schema registry. This strategy is further configured with options starting with\n  `schema.autoRegister.*`.\n\nFor more information about the behavior of each strategy read the main processor description.",
-        "type": "string",
-        "validations": [
-          {
-            "type": "required",
-            "value": ""
-          },
-          {
-            "type": "inclusion",
-            "value": "preRegistered,autoRegister"
-          }
-        ]
       },
       "tls.ca.cert": {
         "default": "",
@@ -94,6 +56,46 @@
     }
   },
   "examples": [
+    {
+      "summary": "",
+      "description": "This example shows the usage of the `avro.decode` processor.\nThe processor decodes the record's`.Key` field using the schema that is\ndownloaded from the schema registry and needs to exist under the subject`example-decode`.\nIn this example we use the following schema:\n\n```json\n{\n  \"type\":\"record\",\n  \"name\":\"record\",\n  \"fields\":[\n    {\"name\":\"myString\",\"type\":\"string\"},\n    {\"name\":\"myInt\",\"type\":\"int\"}\n  ]\n}\n```",
+      "config": {
+        "auth.basic.password": "",
+        "auth.basic.username": "",
+        "field": ".Key",
+        "tls.ca.cert": "",
+        "tls.client.cert": "",
+        "tls.client.key": "",
+        "url": "http://127.0.0.1:54322"
+      },
+      "have": {
+        "position": "dGVzdC1wb3NpdGlvbg==",
+        "operation": "create",
+        "metadata": {
+          "key1": "val1"
+        },
+        "key": "\u0000\u0000\u0000\u0000\u0001\u0006bar\u0002",
+        "payload": {
+          "before": null,
+          "after": null
+        }
+      },
+      "want": {
+        "position": "dGVzdC1wb3NpdGlvbg==",
+        "operation": "create",
+        "metadata": {
+          "key1": "val1"
+        },
+        "key": {
+          "myInt": 1,
+          "myString": "bar"
+        },
+        "payload": {
+          "before": null,
+          "after": null
+        }
+      }
+    },
     {
       "summary": "Auto-register schema",
       "description": "This example shows the usage of the `avro.encode` processor\nwith the `autoRegister` schema strategy. The processor encodes the record's\n`.Payload.After` field using the schema that is extracted from the data\nand registered on the fly under the subject`example-autoRegister`.",

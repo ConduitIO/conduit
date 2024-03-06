@@ -1,0 +1,101 @@
+{
+  "specification": {
+    "name": "json.decode",
+    "summary": "Decodes a specific field from JSON raw data (string) to structured data.",
+    "description": "The processor takes JSON raw data (`string` or `[]byte`)\nfrom the target field, parses it as JSON structured data and stores the decoded\nstructured data in the target field.\n\nThis processor is only applicable to fields under `.Key`, `.Payload`.Before and\n`.Payload.After`, as they can contain structured data.",
+    "version": "v0.1.0",
+    "author": "Meroxa, Inc.",
+    "parameters": {
+      "field": {
+        "default": "",
+        "description": "Field is the target field, as it would be addressed in a Go template (e.g. `.Payload.After.foo`).\nyou can only decode fields that are under .Key and .Payload.",
+        "type": "string",
+        "validations": [
+          {
+            "type": "required",
+            "value": ""
+          },
+          {
+            "type": "regex",
+            "value": "^\\.(Payload|Key).*"
+          },
+          {
+            "type": "exclusion",
+            "value": ".Payload"
+          }
+        ]
+      }
+    }
+  },
+  "examples": [
+    {
+      "summary": "",
+      "description": "Decode the raw data .Key into structured data.",
+      "config": {
+        "field": ".Key"
+      },
+      "have": {
+        "position": null,
+        "operation": "create",
+        "metadata": null,
+        "key": "{\"after\":{\"data\":4,\"id\":3}}",
+        "payload": {
+          "before": null,
+          "after": null
+        }
+      },
+      "want": {
+        "position": null,
+        "operation": "create",
+        "metadata": null,
+        "key": {
+          "after": {
+            "data": 4,
+            "id": 3
+          }
+        },
+        "payload": {
+          "before": null,
+          "after": null
+        }
+      }
+    },
+    {
+      "summary": "",
+      "description": "Decode the raw data .Payload.Before.foo into structured data.",
+      "config": {
+        "field": ".Payload.Before.foo"
+      },
+      "have": {
+        "position": null,
+        "operation": "snapshot",
+        "metadata": null,
+        "key": null,
+        "payload": {
+          "before": {
+            "foo": "{\"before\":{\"data\":4,\"id\":3},\"baz\":\"bar\"}"
+          },
+          "after": null
+        }
+      },
+      "want": {
+        "position": null,
+        "operation": "snapshot",
+        "metadata": null,
+        "key": null,
+        "payload": {
+          "before": {
+            "foo": {
+              "baz": "bar",
+              "before": {
+                "data": 4,
+                "id": 3
+              }
+            }
+          },
+          "after": null
+        }
+      }
+    }
+  ]
+}

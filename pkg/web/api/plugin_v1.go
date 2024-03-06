@@ -19,34 +19,29 @@ import (
 	"regexp"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	connectorPlugin "github.com/conduitio/conduit/pkg/plugin/connector"
 	"github.com/conduitio/conduit/pkg/web/api/status"
 	"github.com/conduitio/conduit/pkg/web/api/toproto"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	"google.golang.org/grpc"
 )
 
-//go:generate mockgen -destination=mock/connector_plugin.go -package=mock -mock_names=ConnectorPluginOrchestrator=ConnectorPluginOrchestrator . ConnectorPluginOrchestrator
-
-// ConnectorPluginOrchestrator defines a CRUD interface that manages the Plugin resource.
-type ConnectorPluginOrchestrator interface {
-	// List will return all connector plugins' specs.
-	List(ctx context.Context) (map[string]connectorPlugin.Specification, error)
-}
-
 type PluginAPIv1 struct {
 	apiv1.UnimplementedPluginServiceServer
-	cpo ConnectorPluginOrchestrator
+	connectorPluginOrchestrator ConnectorPluginOrchestrator
 }
 
-func NewPluginAPIv1(cpo ConnectorPluginOrchestrator) *PluginAPIv1 {
-	return &PluginAPIv1{cpo: cpo}
+func NewPluginAPIv1(
+	cpo ConnectorPluginOrchestrator,
+) *PluginAPIv1 {
+	return &PluginAPIv1{connectorPluginOrchestrator: cpo}
 }
 
 func (p *PluginAPIv1) Register(srv *grpc.Server) {
 	apiv1.RegisterPluginServiceServer(srv, p)
 }
 
+// Deprecated: this is here for backwards compatibility with the old plugin API.
+// Use ListConnectorPlugins instead.
 func (p *PluginAPIv1) ListPlugins(
 	ctx context.Context,
 	req *apiv1.ListPluginsRequest,
@@ -60,7 +55,7 @@ func (p *PluginAPIv1) ListPlugins(
 		}
 	}
 
-	mp, err := p.cpo.List(ctx)
+	mp, err := p.connectorPluginOrchestrator.List(ctx)
 	if err != nil {
 		return nil, status.PluginError(err)
 	}
@@ -70,7 +65,7 @@ func (p *PluginAPIv1) ListPlugins(
 		if nameFilter != nil && !nameFilter.MatchString(name) {
 			continue // don't add to result list, filter didn't match
 		}
-		plist = append(plist, toproto.Plugin(name, v))
+		plist = append(plist, toproto.PluginSpecifications(name, v))
 	}
 
 	return &apiv1.ListPluginsResponse{Plugins: plist}, nil

@@ -27,6 +27,7 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
+// Deprecated: testing the old plugin API.
 func TestPluginAPIv1_ListPluginByName(t *testing.T) {
 	is := is.New(t)
 
@@ -95,13 +96,13 @@ func TestPluginAPIv1_ListPluginByName(t *testing.T) {
 
 	is.NoErr(err)
 
+	sortPlugins := func(p []*apiv1.PluginSpecifications) {
+		sort.Slice(p, func(i, j int) bool {
+			return p[i].Name < p[j].Name
+		})
+	}
+
 	sortPlugins(want.Plugins)
 	sortPlugins(got.Plugins)
 	is.Equal(want, got)
-}
-
-func sortPlugins(p []*apiv1.PluginSpecifications) {
-	sort.Slice(p, func(i, j int) bool {
-		return p[i].Name < p[j].Name
-	})
 }
