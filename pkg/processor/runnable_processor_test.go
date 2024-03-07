@@ -327,24 +327,26 @@ func TestRunnableProcessor_Process_Batch(t *testing.T) {
 	ctx := context.Background()
 	inst := newTestInstance()
 	recsIn := []opencdc.Record{
-		{Metadata: opencdc.Metadata{"key": "yes", "rec": "1"}},
+		{Metadata: opencdc.Metadata{"key": "no", "rec": "1"}},
 		{Metadata: opencdc.Metadata{"key": "yes", "rec": "2"}},
 		{Metadata: opencdc.Metadata{"key": "no", "rec": "3"}},
 		{Metadata: opencdc.Metadata{"key": "no", "rec": "4"}},
 		{Metadata: opencdc.Metadata{"key": "yes", "rec": "5"}},
 		{Metadata: opencdc.Metadata{"key": "no", "rec": "6"}},
+		{Metadata: opencdc.Metadata{"key": "yes", "rec": "7"}},
 	}
 
 	wantRecs := []sdk.ProcessedRecord{
-		sdk.SingleRecord{Metadata: opencdc.Metadata{"key": "yes", "rec": "1", "processed": "true"}},
+		sdk.SingleRecord(recsIn[0]),
 		sdk.SingleRecord{Metadata: opencdc.Metadata{"key": "yes", "rec": "2", "processed": "true"}},
 		sdk.SingleRecord(recsIn[2]),
 		sdk.SingleRecord(recsIn[3]),
 		sdk.SingleRecord{Metadata: opencdc.Metadata{"key": "yes", "rec": "5", "processed": "true"}},
 		sdk.SingleRecord(recsIn[5]),
+		sdk.SingleRecord{Metadata: opencdc.Metadata{"key": "yes", "rec": "7", "processed": "true"}},
 	}
 	proc := mock.NewProcessor(gomock.NewController(t))
-	proc.EXPECT().Process(ctx, []opencdc.Record{recsIn[0], recsIn[1], recsIn[4]}).DoAndReturn(func(_ context.Context, recs []opencdc.Record) []sdk.ProcessedRecord {
+	proc.EXPECT().Process(ctx, []opencdc.Record{recsIn[1], recsIn[4], recsIn[6]}).DoAndReturn(func(_ context.Context, recs []opencdc.Record) []sdk.ProcessedRecord {
 		out := make([]sdk.ProcessedRecord, 0, len(recs))
 		for _, rec := range recs {
 			rec.Metadata["processed"] = "true"
