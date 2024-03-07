@@ -8,7 +8,7 @@ require (
 	github.com/Masterminds/sprig/v3 v3.2.3
 	github.com/NYTimes/gziphandler v1.1.1
 	github.com/bufbuild/buf v1.29.0
-	github.com/conduitio/conduit-commons v0.1.0
+	github.com/conduitio/conduit-commons v0.0.1
 	github.com/conduitio/conduit-connector-file v0.6.0
 	github.com/conduitio/conduit-connector-generator v0.5.0
 	github.com/conduitio/conduit-connector-kafka v0.7.1
@@ -53,7 +53,7 @@ require (
 	golang.org/x/xerrors v0.0.0-20231012003039-104605ab7028
 	google.golang.org/genproto/googleapis/api v0.0.0-20240125205218-1f4bbc51befe
 	google.golang.org/grpc v1.61.0
-	google.golang.org/protobuf v1.33.0
+	google.golang.org/protobuf v1.32.0
 	gopkg.in/tomb.v2 v2.0.0-20161208151619-d5d1b5820637
 )
 
