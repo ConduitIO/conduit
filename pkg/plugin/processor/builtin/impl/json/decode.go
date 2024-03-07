@@ -38,7 +38,7 @@ func NewDecodeProcessor(log.CtxLogger) sdk.Processor {
 
 type decodeConfig struct {
 	// Field is the target field, as it would be addressed in a Go template (e.g. `.Payload.After.foo`).
-	// you can only decode fields that are under .Key and .Payload.
+	// you can only decode fields that are under `.Key` and `.Payload`.
 	Field string `json:"field" validate:"required,regex=^\\.(Payload|Key).*,exclusion=.Payload"`
 }
 

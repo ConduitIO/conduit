@@ -26,7 +26,7 @@
   "examples": [
     {
       "summary": "Encode record key to base64",
-      "description": "TThis example takes a record containing raw data in\n.Key and converts it into a base64 encoded string.",
+      "description": "TThis example takes a record containing raw data in\n`.Key` and converts it into a base64 encoded string.",
       "config": {
         "field": ".Key"
       },
@@ -61,7 +61,7 @@
     },
     {
       "summary": "Encode nested value to base64",
-      "description": "This example takes a record containing a string in\n.Payload.Before.foo and converts it into a base64 encoded string.",
+      "description": "This example takes a record containing a string in\n`.Payload.Before.foo` and converts it into a base64 encoded string.",
       "config": {
         "field": ".Payload.After.foo"
       },

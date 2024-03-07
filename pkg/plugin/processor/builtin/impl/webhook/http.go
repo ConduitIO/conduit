@@ -37,34 +37,30 @@ type httpConfig struct {
 	URL string `json:"request.url" validate:"required"`
 	// Method is the HTTP request method to be used.
 	Method string `json:"request.method" default:"POST"`
-	// ContentType is the value of the Content-Type header.
+	// The value of the `Content-Type` header.
 	ContentType string `json:"request.contentType" default:"application/json"`
 
-	// BackoffRetryCount is the maximum number of retries for an individual record
-	// when backing off following an error.
+	// Maximum number of retries for an individual record when backing off following an error.
 	BackoffRetryCount float64 `json:"backoffRetry.count" default:"0" validate:"gt=-1"`
-	// BackoffRetryFactor is the multiplying factor for each increment step.
+	// The multiplying factor for each increment step.
 	BackoffRetryFactor float64 `json:"backoffRetry.factor" default:"2" validate:"gt=0"`
-	// BackoffRetryMin is the minimum waiting time before retrying.
+	// The minimum waiting time before retrying.
 	BackoffRetryMin time.Duration `json:"backoffRetry.min" default:"100ms"`
-	// BackoffRetryMax is the maximum waiting time before retrying.
+	// The maximum waiting time before retrying.
 	BackoffRetryMax time.Duration `json:"backoffRetry.max" default:"5s"`
 
-	// RequestBodyRef specifies which field from the input record
-	// should be used as the body in the HTTP request.
-	// The value of this parameter should be a valid record field reference:
-	// See: sdk.NewReferenceResolver
+	// Specifies which field from the input record should be used as the body in
+	// the HTTP request. The value of this parameter should be a valid record
+	// field reference (see [`sdk.NewReferenceResolver`](https://github.com/ConduitIO/conduit-processor-sdk/blob/02b60dc7acad11a2fcdf0a0188a13cf573648650/util.go#L53-L66)).
 	RequestBodyRef string `json:"request.body" default:"."`
-	// ResponseBodyRef specifies to which field should the
-	// response body be saved to.
-	// The value of this parameter should be a valid record field reference:
-	// See: sdk.NewReferenceResolver
+	// Specifies in which field should the response body be saved.
+	// The value of this parameter should be a valid record field reference
+	// (see [`sdk.NewReferenceResolver`](https://github.com/ConduitIO/conduit-processor-sdk/blob/02b60dc7acad11a2fcdf0a0188a13cf573648650/util.go#L53-L66)).
 	ResponseBodyRef string `json:"response.body" default:".Payload.After"`
-	// ResponseStatusRef specifies to which field should the
-	// response status be saved to.
-	// The value of this parameter should be a valid record field reference.
+	// Specifies in which field should the response status be saved.
+	// The value of this parameter should be a valid record field reference
+	// (see [`sdk.NewReferenceResolver`](https://github.com/ConduitIO/conduit-processor-sdk/blob/02b60dc7acad11a2fcdf0a0188a13cf573648650/util.go#L53-L66)).
 	// If no value is set, then the response status will NOT be saved.
-	// See: sdk.NewReferenceResolver
 	ResponseStatusRef string `json:"response.status"`
 }
 
@@ -88,7 +84,7 @@ func NewHTTPProcessor(l log.CtxLogger) sdk.Processor {
 func (p *httpProcessor) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
 		Name:    "webhook.http",
-		Summary: "HTTP webhook processor",
+		Summary: "Trigger a HTTP request for every record.",
 		Description: `A processor that sends an HTTP request to the specified URL, retries on error and 
 saves the response body and, optionally, the response status.`,
 		Version:    "v0.1.0",

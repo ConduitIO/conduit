@@ -58,7 +58,7 @@ type javascriptConfig struct {
 	// The `process()` function can either modify the input record and return it,
 	// or create a new record.
 	// If a record needs to be filtered (dropped from the pipeline),
-	// then the `process()` function should return a `null`.
+	// then the `process()` function should return `null`.
 	Script string `json:"script"`
 	// The path to a .js file containing the processor code.
 	ScriptPath string `json:"script.path"`
@@ -81,18 +81,18 @@ func NewJavascriptProcessor(logger log.CtxLogger) sdk.Processor {
 func (p *javascriptProcessor) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
 		Name:    "custom.javascript",
-		Summary: "JavaScript processor",
+		Summary: "Run custom JavaScript code.",
 		Description: `A processor that makes it possible to process Conduit records using JavaScript.
 
-The following helper functions and fields are available:
-* logger: a logger that outputs to Conduit's logs. Check zerolog's API on how to use it.
-* Record(): constructs a new record which represents a successful processing result.
-It's analogous to sdk.SingleRecord from Conduit's Go processor SDK.
-* RawData(): creates a raw data object. It's analogous to opencdc.RawData. Optionally, it
-accepts a string argument, which will be cast into a byte array, for example: record.Key = RawData("new key").
-* StructuredData(): creates a structured data (map-like) object.
+The following helper functions and variables are available:
+* ` + "`logger`" + `: a logger that outputs to Conduit's logs. Check out [Zerolog's API](https://github.com/rs/zerolog) on how to use it.
+* ` + "`Record()`" + `: constructs a new record which represents a successful processing result.
+It's analogous to ` + "`sdk.SingleRecord`" + ` from Conduit's Go processor SDK.
+* ` + "`RawData()`" + `: creates a raw data object. It's analogous to ` + "`opencdc.RawData`" + `. Optionally, it
+accepts a string argument, which will be cast into a byte array, for example: ` + "`record.Key = RawData(\"new key\")`" + `.
+* ` + "`StructuredData()`" + `: creates a structured data (map-like) object.
 
-To find out what's possible with the JS processors, also refer to the documentation for 
+To find out what's possible with the JS processor, also refer to the documentation for 
 [goja](https://github.com/dop251/goja), which is the JavaScript engine we use.`,
 		Version:    "v0.1.0",
 		Author:     "Meroxa, Inc.",

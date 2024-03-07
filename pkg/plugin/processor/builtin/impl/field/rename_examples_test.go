@@ -27,8 +27,8 @@ func ExampleRenameProcessor_rename1() {
 
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary: `Rename multiple fields`,
-		Description: `This example renames the fields in ` + ".Metadata" + ` and
-` + ".Payload.After" + ` as specified in the ` + "mapping" + ` configuration parameter.`,
+		Description: `This example renames the fields in ` + "`.Metadata`" + ` and
+` + "`.Payload.After`" + ` as specified in the ` + "`mapping`" + ` configuration parameter.`,
 		Config: map[string]string{"mapping": ".Metadata.key1:newKey,.Payload.After.foo:newFoo"},
 		Have: opencdc.Record{
 			Operation: opencdc.OperationCreate,
