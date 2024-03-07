@@ -23,11 +23,33 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
-	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/js"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/avro"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/base64"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/custom"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/field"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/json"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/unwrap"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/webhook"
 )
 
 var DefaultBuiltinProcessors = map[string]ProcessorPluginConstructor{
-	"custom.javascript": js.New,
+	"avro.decode":         avro.NewDecodeProcessor,
+	"avro.encode":         avro.NewEncodeProcessor,
+	"base64.decode":       base64.NewDecodeProcessor,
+	"base64.encode":       base64.NewEncodeProcessor,
+	"custom.javascript":   custom.NewJavascriptProcessor,
+	"filter":              impl.NewFilterProcessor,
+	"field.convert":       field.NewConvertProcessor,
+	"field.exclude":       field.NewExcludeProcessor,
+	"field.rename":        field.NewRenameProcessor,
+	"field.set":           field.NewSetProcessor,
+	"json.decode":         json.NewDecodeProcessor,
+	"json.encode":         json.NewEncodeProcessor,
+	"unwrap.debezium":     unwrap.NewDebeziumProcessor,
+	"unwrap.kafkaconnect": unwrap.NewKafkaConnectProcessor,
+	"unwrap.opencdc":      unwrap.NewOpenCDCProcessor,
+	"webhook.http":        webhook.NewHTTPProcessor,
 }
 
 type Registry struct {
