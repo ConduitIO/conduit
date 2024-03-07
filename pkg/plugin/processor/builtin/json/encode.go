@@ -32,7 +32,7 @@ type encodeProcessor struct {
 	sdk.UnimplementedProcessor
 }
 
-func newEncodeProcessor(log.CtxLogger) sdk.Processor {
+func NewEncodeProcessor(log.CtxLogger) sdk.Processor {
 	return &encodeProcessor{}
 }
 

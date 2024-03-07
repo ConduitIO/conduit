@@ -25,7 +25,7 @@ import (
 )
 
 func TestEncode_Process(t *testing.T) {
-	proc := newEncodeProcessor(log.Nop())
+	proc := NewEncodeProcessor(log.Nop())
 	ctx := context.Background()
 	testCases := []struct {
 		name   string
@@ -127,7 +127,7 @@ func TestEncode_Process(t *testing.T) {
 }
 
 func TestEncode_Configure(t *testing.T) {
-	proc := newEncodeProcessor(log.Nop())
+	proc := NewEncodeProcessor(log.Nop())
 	ctx := context.Background()
 	testCases := []struct {
 		name    string
