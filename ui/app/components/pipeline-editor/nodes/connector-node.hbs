@@ -25,12 +25,15 @@
   >
     <div class="flex items-center justify-between mb-1">
       <div
-        class="text-xs font-medium w-1/2 overflow-hidden text-ellipsis"
+        class="text-xs font-medium w-1/2 overflow-hidden text-ellipsis whitespace-nowrap"
         data-test-connector-node-name
       >
         {{@connector.name}}
       </div>
-      <div class="text-gray-500 text-xs" data-test-connector-node-plugin-name>
+      <div
+        class="text-gray-500 text-xs w-1/2 overflow-hidden text-ellipsis whitespace-nowrap"
+        data-test-connector-node-plugin-name
+      >
         {{@connector.plugin.id}}
       </div>
     </div>

@@ -17,11 +17,11 @@ package processor
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"strings"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/database"
+	"github.com/goccy/go-json"
 )
 
 const (

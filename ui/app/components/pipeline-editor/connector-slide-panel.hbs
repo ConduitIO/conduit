@@ -12,7 +12,7 @@
       {{if this.isShowingNewTransformPanel '-translate-x-152'}}"
   >
     <div class="flex flex-col w-76">
-      <div class="flex justify-between items-center bg-white p-6">
+      <div class="flex justify-between items-center bg-white px-6 pt-6 pb-2">
         <span
           class="slide-panel-header font-semibold w-3/4 overflow-hidden text-ellipsis"
           data-test-connector-slide-panel-node-name
@@ -72,6 +72,7 @@
           {{/if}}
         </div>
       </div>
+      <div class="px-6 pb-6 text-sm">{{@selectedNode.plugin.id}}</div>
       <div class="flex px-4 mb-12">
         <Mxa::Button
           @buttonType="secondary"

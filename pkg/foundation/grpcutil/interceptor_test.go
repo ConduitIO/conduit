@@ -17,11 +17,11 @@ package grpcutil
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/foundation/ctxutil"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/goccy/go-json"
 	"github.com/google/uuid"
 	"github.com/matryer/is"
 	"github.com/rs/zerolog"

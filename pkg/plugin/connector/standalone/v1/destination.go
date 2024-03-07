@@ -118,10 +118,6 @@ func (s *destinationPluginClient) Ack(_ context.Context) (record.Position, error
 }
 
 func (s *destinationPluginClient) Stop(ctx context.Context, lastPosition record.Position) error {
-	if s.stream == nil {
-		return connector.ErrStreamNotOpen
-	}
-
 	protoReq := toproto.DestinationStopRequest(lastPosition)
 	_, err := s.grpcClient.Stop(ctx, protoReq)
 	if err != nil {
