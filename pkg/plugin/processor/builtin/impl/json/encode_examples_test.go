@@ -12,20 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package builtin
+package json
 
 import (
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/json"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal/exampleutil"
 )
 
 //nolint:govet // a more descriptive example description
 func ExampleEncodeProcessor_structuredKey() {
-	p := json.NewEncodeProcessor(log.Nop())
+	p := NewEncodeProcessor(log.Nop())
 
-	RunExample(p, example{
+	exampleutil.RunExample(p, exampleutil.Example{
 		Description: `Encode a .Key structured data to JSON.`,
 		Config:      map[string]string{"field": ".Key"},
 		Have: opencdc.Record{
@@ -64,9 +64,9 @@ func ExampleEncodeProcessor_structuredKey() {
 
 //nolint:govet // a more descriptive example description
 func ExampleEncodeProcessor_mapToJSON() {
-	p := json.NewEncodeProcessor(log.Nop())
+	p := NewEncodeProcessor(log.Nop())
 
-	RunExample(p, example{
+	exampleutil.RunExample(p, exampleutil.Example{
 		Description: `Encode a map under .Payload.Before.foo into a JSON value.`,
 		Config:      map[string]string{"field": ".Payload.Before.foo"},
 		Have: opencdc.Record{

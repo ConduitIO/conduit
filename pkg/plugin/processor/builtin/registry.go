@@ -28,28 +28,28 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/base64"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/custom"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/field"
-	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/field/subset"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/json"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/unwrap"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/webhook"
 )
 
 var DefaultBuiltinProcessors = map[string]ProcessorPluginConstructor{
-	"avro.encode":          avro.NewEncodeProcessor,
-	"avro.decode":          avro.NewDecodeProcessor,
-	"base64.decode":        base64.NewDecodeProcessor,
-	"base64.encode":        base64.NewEncodeProcessor,
-	"custom.javascript":    custom.NewJavascriptProcessor,
-	"filter":               impl.NewFilterProcessor,
-	"field.convert":        field.NewConvertProcessor,
-	"field.rename":         field.NewRenameProcessor,
-	"field.set":            field.NewSetProcessor,
-	"field.subset.exclude": subset.NewExcludeProcessor,
-	"json.decode":          json.NewDecodeProcessor,
-	"unwrap.debezium":      unwrap.NewDebezium,
-	"unwrap.kafkaconnect":  unwrap.NewKafkaConnectProcessor,
-	"unwrap.opencdc":       unwrap.NewOpenCDCProcessor,
-	"webhook.http":         webhook.NewHTTPProcessor,
+	"avro.decode":         avro.NewDecodeProcessor,
+	"avro.encode":         avro.NewEncodeProcessor,
+	"base64.decode":       base64.NewDecodeProcessor,
+	"base64.encode":       base64.NewEncodeProcessor,
+	"custom.javascript":   custom.NewJavascriptProcessor,
+	"filter":              impl.NewFilterProcessor,
+	"field.convert":       field.NewConvertProcessor,
+	"field.exclude":       field.NewExcludeProcessor,
+	"field.rename":        field.NewRenameProcessor,
+	"field.set":           field.NewSetProcessor,
+	"json.decode":         json.NewDecodeProcessor,
+	"json.encode":         json.NewEncodeProcessor,
+	"unwrap.debezium":     unwrap.NewDebeziumProcessor,
+	"unwrap.kafkaconnect": unwrap.NewKafkaConnectProcessor,
+	"unwrap.opencdc":      unwrap.NewOpenCDCProcessor,
+	"webhook.http":        webhook.NewHTTPProcessor,
 }
 
 type Registry struct {

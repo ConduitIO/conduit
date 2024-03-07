@@ -18,6 +18,9 @@ import (
 	"context"
 	"testing"
 
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal"
+	"github.com/google/go-cmp/cmp"
+
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -118,10 +121,7 @@ func TestEncode_Process(t *testing.T) {
 			is.NoErr(err)
 			got := proc.Process(ctx, []opencdc.Record{tc.record})
 			is.Equal(1, len(got))
-			// todo delete line after merging into refactoring PR
-			is.Equal(tc.want, got[0])
-			// todo uncomment when merged into refactoring PR
-			// is.Equal("", cmp.Diff(tc.want, got[0], internal.cmpProcessedRecordOpts...))
+			is.Equal("", cmp.Diff(tc.want, got[0], internal.CmpProcessedRecordOpts...))
 		})
 	}
 }

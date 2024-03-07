@@ -54,7 +54,7 @@ func TestDebeziumProcessor_Configure(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			is := is.New(t)
 
-			err := NewDebezium(log.Test(t)).Configure(context.Background(), tc.config)
+			err := NewDebeziumProcessor(log.Test(t)).Configure(context.Background(), tc.config)
 			if tc.wantErr != "" {
 				is.True(err != nil)
 				is.Equal(tc.wantErr, err.Error())
@@ -236,7 +236,7 @@ func TestDebeziumProcessor_Process(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			is := is.New(t)
 
-			underTest := NewDebezium(log.Test(t))
+			underTest := NewDebeziumProcessor(log.Test(t))
 			err := underTest.Configure(context.Background(), tc.config)
 			is.NoErr(err)
 
