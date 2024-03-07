@@ -14,7 +14,7 @@
 
 //go:generate paramgen -output=exclude_paramgen.go excludeConfig
 
-package subset
+package field
 
 import (
 	"context"
@@ -44,7 +44,7 @@ type excludeConfig struct {
 
 func (p *excludeProcessor) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
-		Name:    "field.subset.exclude",
+		Name:    "field.exclude",
 		Summary: "Remove a subset of fields from the record.",
 		Description: `Remove a subset of fields from the record, all the other fields are left untouched.
 If a field is excluded that contains nested data, the whole tree will be removed.

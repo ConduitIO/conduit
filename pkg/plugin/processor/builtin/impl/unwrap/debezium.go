@@ -60,7 +60,7 @@ type debeziumProcessor struct {
 	fieldRefRes sdk.ReferenceResolver
 }
 
-func NewDebezium(logger log.CtxLogger) sdk.Processor {
+func NewDebeziumProcessor(logger log.CtxLogger) sdk.Processor {
 	return &debeziumProcessor{logger: logger}
 }
 

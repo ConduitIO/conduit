@@ -18,6 +18,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal"
+
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -81,7 +83,7 @@ func TestDecodeProcessor_Process_RawData_CustomField(t *testing.T) {
 
 			got := underTest.Process(ctx, []opencdc.Record{input})
 			is.Equal(1, len(got))
-			is.Equal("", cmp.Diff(want, got[0], cmpProcessedRecordOpts...))
+			is.Equal("", cmp.Diff(want, got[0], internal.CmpProcessedRecordOpts...))
 		})
 	}
 }

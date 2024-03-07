@@ -23,7 +23,7 @@ import (
 
 //nolint:govet // we're using a more descriptive name of example
 func ExampleDebeziumProcessor() {
-	p := NewDebezium(log.Nop())
+	p := NewDebeziumProcessor(log.Nop())
 
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary: "Unwrap a Debezium record",
