@@ -29,39 +29,8 @@
   },
   "examples": [
     {
-      "summary": "",
-      "description": "Encode a .Key structured data to JSON.",
-      "config": {
-        "field": ".Key"
-      },
-      "have": {
-        "position": null,
-        "operation": "create",
-        "metadata": null,
-        "key": {
-          "tables": [
-            "table1,table2"
-          ]
-        },
-        "payload": {
-          "before": null,
-          "after": null
-        }
-      },
-      "want": {
-        "position": null,
-        "operation": "create",
-        "metadata": null,
-        "key": "{\"tables\":[\"table1,table2\"]}",
-        "payload": {
-          "before": null,
-          "after": null
-        }
-      }
-    },
-    {
-      "summary": "",
-      "description": "Encode a map under .Payload.Before.foo into a JSON value.",
+      "summary": "Encode nested field to JSON",
+      "description": "This example takes a record containing a map in\n.Payload.Before.foo and converts it into a raw JSON string.",
       "config": {
         "field": ".Payload.Before.foo"
       },
@@ -92,6 +61,37 @@
           "before": {
             "foo": "{\"baz\":\"bar\",\"before\":{\"data\":4,\"id\":3}}"
           },
+          "after": null
+        }
+      }
+    },
+    {
+      "summary": "Encode record key to JSON",
+      "description": "This example takes a record containing structured data in\n.Key and converts it into a raw JSON string.",
+      "config": {
+        "field": ".Key"
+      },
+      "have": {
+        "position": null,
+        "operation": "create",
+        "metadata": null,
+        "key": {
+          "tables": [
+            "table1,table2"
+          ]
+        },
+        "payload": {
+          "before": null,
+          "after": null
+        }
+      },
+      "want": {
+        "position": null,
+        "operation": "create",
+        "metadata": null,
+        "key": "{\"tables\":[\"table1,table2\"]}",
+        "payload": {
+          "before": null,
           "after": null
         }
       }

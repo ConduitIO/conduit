@@ -29,8 +29,8 @@
   },
   "examples": [
     {
-      "summary": "Decode the raw data .Key into structured data",
-      "description": "",
+      "summary": "Decode record key as JSON",
+      "description": "This example takes a record containing a raw JSON string in\n.Key and converts it into structured data.",
       "config": {
         "field": ".Key"
       },
@@ -61,8 +61,8 @@
       }
     },
     {
-      "summary": "",
-      "description": "Decode the raw data .Payload.Before.foo into structured data.",
+      "summary": "Decode nested field as JSON",
+      "description": "This example takes a record containing a raw JSON string in\n.Payload.Before.foo and converts it into a map.",
       "config": {
         "field": ".Payload.Before.foo"
       },

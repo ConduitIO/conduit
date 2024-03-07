@@ -26,8 +26,10 @@ func ExampleEncodeProcessor_structuredKey() {
 	p := NewEncodeProcessor(log.Nop())
 
 	exampleutil.RunExample(p, exampleutil.Example{
-		Description: `Encode a .Key structured data to JSON.`,
-		Config:      map[string]string{"field": ".Key"},
+		Summary: "Encode record key to JSON",
+		Description: `This example takes a record containing structured data in
+` + ".Key" + ` and converts it into a raw JSON string.`,
+		Config: map[string]string{"field": ".Key"},
 		Have: opencdc.Record{
 			Operation: opencdc.OperationCreate,
 			Key: opencdc.StructuredData{
@@ -67,8 +69,10 @@ func ExampleEncodeProcessor_mapToJSON() {
 	p := NewEncodeProcessor(log.Nop())
 
 	exampleutil.RunExample(p, exampleutil.Example{
-		Description: `Encode a map under .Payload.Before.foo into a JSON value.`,
-		Config:      map[string]string{"field": ".Payload.Before.foo"},
+		Summary: "Encode nested field to JSON",
+		Description: `This example takes a record containing a map in
+` + ".Payload.Before.foo" + ` and converts it into a raw JSON string.`,
+		Config: map[string]string{"field": ".Payload.Before.foo"},
 		Have: opencdc.Record{
 			Operation: opencdc.OperationSnapshot,
 			Payload: opencdc.Change{

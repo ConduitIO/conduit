@@ -25,43 +25,8 @@
   },
   "examples": [
     {
-      "summary": "Encode a value using Base64",
-      "description": "This example encodes a single value stored in `.Payload.After.foo`\ninto a base64 encoded string.",
-      "config": {
-        "field": ".Payload.After.foo"
-      },
-      "have": {
-        "position": "dGVzdC1wb3NpdGlvbg==",
-        "operation": "create",
-        "metadata": {
-          "key1": "val1"
-        },
-        "key": "test-key",
-        "payload": {
-          "before": null,
-          "after": {
-            "foo": "bar"
-          }
-        }
-      },
-      "want": {
-        "position": "dGVzdC1wb3NpdGlvbg==",
-        "operation": "create",
-        "metadata": {
-          "key1": "val1"
-        },
-        "key": "test-key",
-        "payload": {
-          "before": null,
-          "after": {
-            "foo": "YmFy"
-          }
-        }
-      }
-    },
-    {
-      "summary": "",
-      "description": "This example encodes the raw payload stored in `.Key`\ninto a base64 encoded string.",
+      "summary": "Encode record key to base64",
+      "description": "TThis example takes a record containing raw data in\n.Key and converts it into a base64 encoded string.",
       "config": {
         "field": ".Key"
       },
@@ -90,6 +55,41 @@
           "before": null,
           "after": {
             "foo": "bar"
+          }
+        }
+      }
+    },
+    {
+      "summary": "Encode nested value to base64",
+      "description": "This example takes a record containing a string in\n.Payload.Before.foo and converts it into a base64 encoded string.",
+      "config": {
+        "field": ".Payload.After.foo"
+      },
+      "have": {
+        "position": "dGVzdC1wb3NpdGlvbg==",
+        "operation": "create",
+        "metadata": {
+          "key1": "val1"
+        },
+        "key": "test-key",
+        "payload": {
+          "before": null,
+          "after": {
+            "foo": "bar"
+          }
+        }
+      },
+      "want": {
+        "position": "dGVzdC1wb3NpdGlvbg==",
+        "operation": "create",
+        "metadata": {
+          "key1": "val1"
+        },
+        "key": "test-key",
+        "payload": {
+          "before": null,
+          "after": {
+            "foo": "YmFy"
           }
         }
       }

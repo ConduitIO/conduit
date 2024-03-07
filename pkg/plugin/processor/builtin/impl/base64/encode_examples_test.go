@@ -25,9 +25,9 @@ import (
 func ExampleEncodeProcessor_rawData() {
 	p := NewEncodeProcessor(log.Nop())
 	exampleutil.RunExample(p, exampleutil.Example{
-		// Summary: "TODO",
-		Description: `This example encodes the raw payload stored in ` + "`.Key`" + `
-into a base64 encoded string.`,
+		Summary: "Encode record key to base64",
+		Description: `TThis example takes a record containing raw data in
+` + ".Key" + ` and converts it into a base64 encoded string.`,
 		Config: map[string]string{
 			"field": ".Key",
 		},
@@ -81,9 +81,9 @@ into a base64 encoded string.`,
 func ExampleBase64EncodeProcessor_stringField() {
 	p := NewEncodeProcessor(log.Nop())
 	exampleutil.RunExample(p, exampleutil.Example{
-		Summary: "Encode a value using Base64",
-		Description: `This example encodes a single value stored in ` + "`.Payload.After.foo`" + `
-into a base64 encoded string.`,
+		Summary: "Encode nested value to base64",
+		Description: `This example takes a record containing a string in
+` + ".Payload.Before.foo" + ` and converts it into a base64 encoded string.`,
 		Config: map[string]string{
 			"field": ".Payload.After.foo",
 		},

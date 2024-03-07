@@ -56,7 +56,7 @@ The new value can be a Go template expression, the processor will evaluate the o
 If the "field" provided doesn't exist, the processor will create that field and assign its value.
 This processor can be used for multiple purposes, like extracting fields, hoisting data, inserting fields, copying fields, masking fields, etc.
 Note that this processor only runs on structured data, if the record contains raw JSON data, then use the processor
-"decode.json" to parse it into structured data first.`,
+[` + "json.decode" + `](/docs/processors/builtin/json.decode) to parse it into structured data first.`,
 		Version:    "v0.1.0",
 		Author:     "Meroxa, Inc.",
 		Parameters: setConfig{}.Parameters(),

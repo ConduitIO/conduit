@@ -26,8 +26,9 @@ func ExampleExcludeProcessor_oneField() {
 	p := NewExcludeProcessor(log.Nop())
 
 	exampleutil.RunExample(p, exampleutil.Example{
-		Summary: `Exclude all fields under payload`,
-		Config:  map[string]string{"fields": ".Payload"},
+		Summary:     "Exclude all fields in payload",
+		Description: "Excluding all fields in `.Payload` results in an empty payload.",
+		Config:      map[string]string{"fields": ".Payload"},
 		Have: opencdc.Record{
 			Operation: opencdc.OperationCreate,
 			Metadata:  map[string]string{"key1": "val1"},
@@ -68,8 +69,11 @@ func ExampleExcludeProcessor_multipleFields() {
 	p := NewExcludeProcessor(log.Nop())
 
 	exampleutil.RunExample(p, exampleutil.Example{
-		Summary: `Exclude metadata and some fields under payload and key`,
-		Config:  map[string]string{"fields": ".Metadata,.Payload.After.foo,.Key.key1"},
+		Summary: `Exclude multiple fields`,
+		Description: `It's possible to exclude multiple fields by providing a
+comma-separated list of fields. In this example, we exclude ` + ".Metadata" + `,
+` + ".Payload.After.foo" + ` and ` + ".Key.key1" + `.`,
+		Config: map[string]string{"fields": ".Metadata,.Payload.After.foo,.Key.key1"},
 		Have: opencdc.Record{
 			Operation: opencdc.OperationCreate,
 			Metadata:  map[string]string{"source": "s3"},

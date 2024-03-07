@@ -26,8 +26,8 @@ func ExampleConvertProcessor_stringToInt() {
 	p := NewConvertProcessor(log.Nop())
 
 	exampleutil.RunExample(p, exampleutil.Example{
-		Summary:     `Change field type in key`,
-		Description: "In this example we take the string in field `.Key.id` and change its data type to `int`.",
+		Summary:     "Convert `string` to `int`",
+		Description: "This example takes the string in field `.Key.id` and changes its data type to `int`.",
 		Config:      map[string]string{"field": ".Key.id", "type": "int"},
 		Have: opencdc.Record{
 			Operation: opencdc.OperationUpdate,
@@ -67,12 +67,13 @@ func ExampleConvertProcessor_intToBool() {
 	p := NewConvertProcessor(log.Nop())
 
 	exampleutil.RunExample(p, exampleutil.Example{
-		Summary: `Change .Payload.After.done type to bool`,
-		Config:  map[string]string{"field": ".Payload.After.done", "type": "bool"},
+		Summary:     "Convert `int` to `bool`",
+		Description: "This example takes the `int` in field `.Payload.After.done` and changes its data type to `bool`.",
+		Config:      map[string]string{"field": ".Payload.After.done", "type": "bool"},
 		Have: opencdc.Record{
 			Operation: opencdc.OperationUpdate,
 			Key:       opencdc.StructuredData{"id": "123"},
-			Payload:   opencdc.Change{After: opencdc.StructuredData{"done": "1"}},
+			Payload:   opencdc.Change{After: opencdc.StructuredData{"done": 1}},
 		},
 		Want: sdk.SingleRecord{
 			Operation: opencdc.OperationUpdate,
@@ -95,7 +96,7 @@ func ExampleConvertProcessor_intToBool() {
 	//    "payload": {
 	//      "before": null,
 	//      "after": {
-	// -      "done": "1"
+	// -      "done": 1
 	// +      "done": true
 	//      }
 	//    }
@@ -107,8 +108,9 @@ func ExampleConvertProcessor_floatToString() {
 	p := NewConvertProcessor(log.Nop())
 
 	exampleutil.RunExample(p, exampleutil.Example{
-		Summary: `Change .Key.id type to string`,
-		Config:  map[string]string{"field": ".Key.id", "type": "string"},
+		Summary:     "Convert `float` to `string`",
+		Description: "This example takes the `float` in field `.Key.id` and changes its data type to `string`.",
+		Config:      map[string]string{"field": ".Key.id", "type": "string"},
 		Have: opencdc.Record{
 			Operation: opencdc.OperationUpdate,
 			Key:       opencdc.StructuredData{"id": 123.345},
