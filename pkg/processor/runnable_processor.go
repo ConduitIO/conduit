@@ -93,7 +93,7 @@ func (p *RunnableProcessor) Process(ctx context.Context, records []opencdc.Recor
 		}
 
 		if len(keptRecords) > 0 {
-			outRecs = p.proc.Process(ctx, records)
+			outRecs = p.proc.Process(ctx, keptRecords)
 		}
 		if err != nil {
 			outRecs = append(outRecs, sdk.ErrorRecord{Error: err})
@@ -103,9 +103,9 @@ func (p *RunnableProcessor) Process(ctx context.Context, records []opencdc.Recor
 		// original order of the records.
 		if len(passthroughRecordIndexes) > 0 {
 			tmp := make([]sdk.ProcessedRecord, len(records))
-			prevIndex := 0
+			prevIndex := -1
 			for i, index := range passthroughRecordIndexes {
-				copy(tmp[prevIndex:index], outRecs[prevIndex:index-i])
+				copy(tmp[prevIndex+1:index], outRecs[prevIndex-i+1:index-i])
 				tmp[index] = sdk.SingleRecord(records[index])
 				prevIndex = index
 			}

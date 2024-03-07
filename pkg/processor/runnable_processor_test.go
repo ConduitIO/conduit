@@ -320,7 +320,51 @@ func TestRunnableProcessor_Process_ConditionError(t *testing.T) {
 			"invalid syntax",
 		gotRec.Error.Error(),
 	)
+}
 
+func TestRunnableProcessor_Process_Batch(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	inst := newTestInstance()
+	recsIn := []opencdc.Record{
+		{Metadata: opencdc.Metadata{"key": "yes", "rec": "1"}},
+		{Metadata: opencdc.Metadata{"key": "yes", "rec": "2"}},
+		{Metadata: opencdc.Metadata{"key": "no", "rec": "3"}},
+		{Metadata: opencdc.Metadata{"key": "no", "rec": "4"}},
+		{Metadata: opencdc.Metadata{"key": "yes", "rec": "5"}},
+		{Metadata: opencdc.Metadata{"key": "no", "rec": "6"}},
+	}
+
+	wantRecs := []sdk.ProcessedRecord{
+		sdk.SingleRecord{Metadata: opencdc.Metadata{"key": "yes", "rec": "1", "processed": "true"}},
+		sdk.SingleRecord{Metadata: opencdc.Metadata{"key": "yes", "rec": "2", "processed": "true"}},
+		sdk.SingleRecord(recsIn[2]),
+		sdk.SingleRecord(recsIn[3]),
+		sdk.SingleRecord{Metadata: opencdc.Metadata{"key": "yes", "rec": "5", "processed": "true"}},
+		sdk.SingleRecord(recsIn[5]),
+	}
+	proc := mock.NewProcessor(gomock.NewController(t))
+	proc.EXPECT().Process(ctx, []opencdc.Record{recsIn[0], recsIn[1], recsIn[4]}).DoAndReturn(func(_ context.Context, recs []opencdc.Record) []sdk.ProcessedRecord {
+		out := make([]sdk.ProcessedRecord, 0, len(recs))
+		for _, rec := range recs {
+			rec.Metadata["processed"] = "true"
+			out = append(out, sdk.SingleRecord{Metadata: rec.Metadata})
+		}
+		return out
+	})
+
+	condition, err := newProcessorCondition(`{{ eq .Metadata.key "yes" }}`)
+	is.NoErr(err)
+	underTest := newRunnableProcessor(
+		proc,
+		condition,
+		inst,
+	)
+
+	gotRecs := underTest.Process(ctx, recsIn)
+	defer underTest.Close()
+
+	is.Equal(wantRecs, gotRecs)
 }
 
 func newTestInstance() *Instance {
