@@ -116,7 +116,7 @@ func (p *RunnableProcessor) Process(ctx context.Context, records []opencdc.Recor
 				prevIndex = index
 			}
 			// if the last index is not the last record, copy the rest
-			if passthroughRecordIndexes[len(passthroughRecordIndexes)-1] != len(records)-1 {
+			if passthroughRecordIndexes[len(passthroughRecordIndexes)-1] != len(tmp)-1 {
 				copy(tmp[prevIndex+1:], outRecs[prevIndex-len(passthroughRecordIndexes)+1:])
 			}
 			outRecs = tmp
