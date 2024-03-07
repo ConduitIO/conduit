@@ -2,7 +2,7 @@
   "specification": {
     "name": "field.convert",
     "summary": "Convert the type of a field.",
-    "description": "Convert takes the field of one type and converts it into another type (e.g. string to integer). \nThe applicable types are string, int, float and bool. Converting can be done between any combination of types. Note that\nbooleans will be converted to numeric values 1 (true) and 0 (false). Processor is only applicable to .Key, .Payload.Before\nand .Payload.After prefixes, and only applicable if said fields contain structured data.\nIf the record contains raw JSON data, then use the processor \"decode.json\" to parse it into structured data first.",
+    "description": "Convert takes the field of one type and converts it into another type (e.g. string to integer). \nThe applicable types are string, int, float and bool. Converting can be done between any combination of types. Note that\nbooleans will be converted to numeric values 1 (true) and 0 (false). Processor is only applicable to .Key, .Payload.Before\nand .Payload.After prefixes, and only applicable if said fields contain structured data.\nIf the record contains raw JSON data, then use the processor [json.decode](/docs/processors/builtin/json.decode)\nto parse it into structured data first.",
     "version": "v0.1.0",
     "author": "Meroxa, Inc.",
     "parameters": {
@@ -40,44 +40,8 @@
   },
   "examples": [
     {
-      "summary": "Change .Payload.After.done type to bool",
-      "description": "",
-      "config": {
-        "field": ".Payload.After.done",
-        "type": "bool"
-      },
-      "have": {
-        "position": null,
-        "operation": "update",
-        "metadata": null,
-        "key": {
-          "id": "123"
-        },
-        "payload": {
-          "before": null,
-          "after": {
-            "done": "1"
-          }
-        }
-      },
-      "want": {
-        "position": null,
-        "operation": "update",
-        "metadata": null,
-        "key": {
-          "id": "123"
-        },
-        "payload": {
-          "before": null,
-          "after": {
-            "done": true
-          }
-        }
-      }
-    },
-    {
-      "summary": "Change .Key.id type to string",
-      "description": "",
+      "summary": "Convert `float` to `string`",
+      "description": "This example takes the `float` in field `.Key.id` and changes its data type to `string`.",
       "config": {
         "field": ".Key.id",
         "type": "string"
@@ -112,8 +76,44 @@
       }
     },
     {
-      "summary": "Change field type in key",
-      "description": "In this example we take the string in field `.Key.id` and change its data type to `int`.",
+      "summary": "Convert `int` to `bool`",
+      "description": "This example takes the `int` in field `.Payload.After.done` and changes its data type to `bool`.",
+      "config": {
+        "field": ".Payload.After.done",
+        "type": "bool"
+      },
+      "have": {
+        "position": null,
+        "operation": "update",
+        "metadata": null,
+        "key": {
+          "id": "123"
+        },
+        "payload": {
+          "before": null,
+          "after": {
+            "done": 1
+          }
+        }
+      },
+      "want": {
+        "position": null,
+        "operation": "update",
+        "metadata": null,
+        "key": {
+          "id": "123"
+        },
+        "payload": {
+          "before": null,
+          "after": {
+            "done": true
+          }
+        }
+      }
+    },
+    {
+      "summary": "Convert `string` to `int`",
+      "description": "This example takes the string in field `.Key.id` and changes its data type to `int`.",
       "config": {
         "field": ".Key.id",
         "type": "int"

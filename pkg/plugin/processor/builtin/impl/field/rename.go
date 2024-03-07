@@ -49,10 +49,13 @@ func (p *renameProcessor) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
 		Name:    "field.rename",
 		Summary: "Rename a group of fields.",
-		Description: `Rename a group of field names to new names. It is not allowed to rename top-level fields (` + "`.Operation`" + `, ` + "`.Position`" + `, 
+		Description: `Rename a group of field names to new names. It is not
+allowed to rename top-level fields (` + "`.Operation`" + `, ` + "`.Position`" + `, 
 ` + "`.Key`" + `, ` + "`.Metadata`" + `, ` + "`.Payload.Before`" + `, ` + "`.Payload.After`" + `).
 
-Note that this processor only runs on structured data, if the record contains raw JSON data, then use the processor "decode.json" to parse it into structured data first.`,
+Note that this processor only runs on structured data, if the record contains raw
+JSON data, then use the processor [` + "json.decode" + `](/docs/processors/builtin/json.decode)
+to parse it into structured data first.`,
 		Version:    "v0.1.0",
 		Author:     "Meroxa, Inc.",
 		Parameters: renameConfig{}.Parameters(),

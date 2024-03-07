@@ -48,8 +48,11 @@ func (p *excludeProcessor) Specification() (sdk.Specification, error) {
 		Summary: "Remove a subset of fields from the record.",
 		Description: `Remove a subset of fields from the record, all the other fields are left untouched.
 If a field is excluded that contains nested data, the whole tree will be removed.
-It is not allowed to exclude .Position or .Operation fields.
-Note that this processor only runs on structured data, if the record contains raw JSON data, then use the processor "decode.json" to parse it into structured data first.`,
+It is not allowed to exclude ` + ".Position" + ` or ` + ".Operation" + ` fields.
+
+Note that this processor only runs on structured data, if the record contains
+raw JSON data, then use the processor [` + "json.decode" + `](/docs/processors/builtin/json.decode)
+to parse it into structured data first.`,
 		Version:    "v0.1.0",
 		Author:     "Meroxa, Inc.",
 		Parameters: excludeConfig{}.Parameters(),

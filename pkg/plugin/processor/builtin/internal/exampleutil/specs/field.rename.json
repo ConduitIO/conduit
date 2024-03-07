@@ -2,7 +2,7 @@
   "specification": {
     "name": "field.rename",
     "summary": "Rename a group of fields.",
-    "description": "Rename a group of field names to new names. It is not allowed to rename top-level fields (`.Operation`, `.Position`, \n`.Key`, `.Metadata`, `.Payload.Before`, `.Payload.After`).\n\nNote that this processor only runs on structured data, if the record contains raw JSON data, then use the processor \"decode.json\" to parse it into structured data first.",
+    "description": "Rename a group of field names to new names. It is not\nallowed to rename top-level fields (`.Operation`, `.Position`, \n`.Key`, `.Metadata`, `.Payload.Before`, `.Payload.After`).\n\nNote that this processor only runs on structured data, if the record contains raw\nJSON data, then use the processor [json.decode](/docs/processors/builtin/json.decode)\nto parse it into structured data first.",
     "version": "v0.1.0",
     "author": "Meroxa, Inc.",
     "parameters": {
@@ -21,8 +21,8 @@
   },
   "examples": [
     {
-      "summary": "Rename two fields, one under metadata, and one under payload.after",
-      "description": "",
+      "summary": "Rename multiple fields",
+      "description": "This example renames the fields in .Metadata and\n.Payload.After as specified in the mapping configuration parameter.",
       "config": {
         "mapping": ".Metadata.key1:newKey,.Payload.After.foo:newFoo"
       },
@@ -55,49 +55,6 @@
           },
           "after": {
             "newFoo": "bar"
-          }
-        }
-      }
-    },
-    {
-      "summary": "Rename two fields, one under key, and one under payload.before",
-      "description": "",
-      "config": {
-        "mapping": ".Key.id:table,.Payload.Before.bar:renamedBar"
-      },
-      "have": {
-        "position": null,
-        "operation": "create",
-        "metadata": {
-          "key1": "val1"
-        },
-        "key": {
-          "id": "table-name"
-        },
-        "payload": {
-          "before": {
-            "bar": "baz"
-          },
-          "after": {
-            "foo": "bar"
-          }
-        }
-      },
-      "want": {
-        "position": null,
-        "operation": "create",
-        "metadata": {
-          "key1": "val1"
-        },
-        "key": {
-          "table": "table-name"
-        },
-        "payload": {
-          "before": {
-            "renamedBar": "baz"
-          },
-          "after": {
-            "foo": "bar"
           }
         }
       }

@@ -26,10 +26,11 @@ func ExampleSetProcessor_setOperation() {
 	p := NewSetProcessor(log.Nop())
 
 	exampleutil.RunExample(p, exampleutil.Example{
-		Summary: `Sets a record's operation to "update"`,
-		Config:  map[string]string{"field": ".Operation", "value": "update"},
-		Have:    opencdc.Record{Operation: opencdc.OperationCreate},
-		Want:    sdk.SingleRecord{Operation: opencdc.OperationUpdate},
+		Summary:     "Sets the record operation to `update`",
+		Description: "This example sets the `.Operation` field to `update` for all records.",
+		Config:      map[string]string{"field": ".Operation", "value": "update"},
+		Have:        opencdc.Record{Operation: opencdc.OperationCreate},
+		Want:        sdk.SingleRecord{Operation: opencdc.OperationUpdate},
 	})
 
 	// Output:
@@ -55,8 +56,10 @@ func ExampleSetProcessor_addField() {
 	p := NewSetProcessor(log.Nop())
 
 	exampleutil.RunExample(p, exampleutil.Example{
-		Summary: `Create a new field and set its value`,
-		Config:  map[string]string{"field": ".Payload.After.foo", "value": "bar"},
+		Summary: `Add field`,
+		Description: `This example adds a new field to the record. The field is
+added to ` + ".Payload.After" + ` and is set to ` + "bar" + `.`,
+		Config: map[string]string{"field": ".Payload.After.foo", "value": "bar"},
 		Have: opencdc.Record{Operation: opencdc.OperationSnapshot,
 			Key: opencdc.StructuredData{"my-key": "id"},
 		},
@@ -94,8 +97,9 @@ func ExampleSetProcessor_template() {
 	p := NewSetProcessor(log.Nop())
 
 	exampleutil.RunExample(p, exampleutil.Example{
-		Summary: `Set the value under .Payload.After.postgres to true if .Metadata.table="postgres"`,
-		Config:  map[string]string{"field": ".Payload.After.postgres", "value": "{{ eq .Metadata.table \"postgres\" }}"},
+		Summary:     `Set field using Go template`,
+		Description: "This example sets the `.Payload.After.postgres` field to `true` if the `.Metadata.table` field contains `postgres`.",
+		Config:      map[string]string{"field": ".Payload.After.postgres", "value": "{{ eq .Metadata.table \"postgres\" }}"},
 		Have: opencdc.Record{
 			Metadata:  map[string]string{"table": "postgres"},
 			Operation: opencdc.OperationSnapshot,

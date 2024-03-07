@@ -43,6 +43,9 @@ linters-settings:
 
 issues:
   exclude-rules:
+    - path: 'pkg/plugin/processor/builtin/impl'
+      linters:
+        - goconst
     - path: '(.+)acceptance_testing\.go'
       linters:
         - stylecheck
