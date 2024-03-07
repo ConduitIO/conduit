@@ -62,41 +62,69 @@ func (p *RunnableProcessor) Process(ctx context.Context, records []opencdc.Recor
 		p.inInsp.Send(ctx, record.FromOpenCDC(inRec))
 	}
 
-	out := make([]sdk.ProcessedRecord, 0, len(records))
-	for _, rec := range records {
-		keep, err := p.evaluateCondition(rec)
-		if err != nil {
-			return append(out, sdk.ErrorRecord{Error: cerrors.Errorf("failed evaluating condition: %w", err)})
-		}
-		if !keep {
-			out = append(out, sdk.SingleRecord(rec))
-			continue
+	var outRecs []sdk.ProcessedRecord
+	if p.cond == nil {
+		outRecs = p.proc.Process(ctx, records)
+	} else {
+		// We need to first evaluate condition for each record.
+
+		// TODO reuse these slices or at least use a pool
+		// keptRecords are records that will be sent to the processor
+		keptRecords := make([]opencdc.Record, 0, len(records))
+		// passthroughRecordIndexes are indexes of records that are just passed
+		// through to the other side.
+		passthroughRecordIndexes := make([]int, 0, len(records))
+
+		var err error
+
+		for i, rec := range records {
+			var keep bool
+			keep, err = p.cond.Evaluate(rec)
+			if err != nil {
+				err = cerrors.Errorf("failed evaluating condition: %w", err)
+				break
+			}
+
+			if keep {
+				keptRecords = append(keptRecords, rec)
+			} else {
+				passthroughRecordIndexes = append(passthroughRecordIndexes, i)
+			}
 		}
 
-		proc := p.proc.Process(ctx, records)
-		singleRec, ok := proc[0].(sdk.SingleRecord)
+		if len(keptRecords) > 0 {
+			outRecs = p.proc.Process(ctx, records)
+		}
+		if err != nil {
+			outRecs = append(outRecs, sdk.ErrorRecord{Error: err})
+		}
+
+		// Add passthrough records back into the resultset and keep the
+		// original order of the records.
+		if len(passthroughRecordIndexes) > 0 {
+			tmp := make([]sdk.ProcessedRecord, len(records))
+			prevIndex := 0
+			for i, index := range passthroughRecordIndexes {
+				copy(tmp[prevIndex:index], outRecs[prevIndex:index-i])
+				tmp[index] = sdk.SingleRecord(records[index])
+				prevIndex = index
+			}
+			outRecs = tmp
+		}
+	}
+
+	for _, outRec := range outRecs {
+		singleRec, ok := outRec.(sdk.SingleRecord)
 		if ok {
 			p.outInsp.Send(ctx, record.FromOpenCDC(opencdc.Record(singleRec)))
 		}
-		// NB: the processor node that is calling this RunnableProcessor
-		// will check if the number of processed records is equal
-		// to the number of input records.
-		out = append(out, proc...)
 	}
 
-	return out
+	return outRecs
 }
 
 func (p *RunnableProcessor) Teardown(ctx context.Context) error {
 	err := p.proc.Teardown(ctx)
 	p.running = false
 	return err
-}
-
-func (p *RunnableProcessor) evaluateCondition(rec opencdc.Record) (bool, error) {
-	if p.cond == nil {
-		return true, nil
-	}
-
-	return p.cond.Evaluate(rec)
 }
