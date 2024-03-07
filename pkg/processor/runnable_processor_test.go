@@ -82,7 +82,7 @@ func TestRunnableProcessor_Open(t *testing.T) {
 				proc.EXPECT().Open(gomock.Any()).Return(tc.openErr)
 			}
 
-			underTest := newRunnableProcessor(proc, inst)
+			underTest := newRunnableProcessor(proc, nil, inst)
 			err := underTest.Open(ctx)
 			if tc.wantErr == nil {
 				is.NoErr(err)
@@ -128,7 +128,7 @@ func TestRunnableProcessor_Teardown(t *testing.T) {
 			proc := mock.NewProcessor(gomock.NewController(t))
 			proc.EXPECT().Teardown(gomock.Any()).Return(tc.teardownErr)
 
-			underTest := newRunnableProcessor(proc, inst)
+			underTest := newRunnableProcessor(proc, nil, inst)
 			err := underTest.Teardown(ctx)
 			if tc.wantErr == nil {
 				is.NoErr(err)
@@ -139,20 +139,10 @@ func TestRunnableProcessor_Teardown(t *testing.T) {
 	}
 }
 
-func TestRunnableProcessor_Process(t *testing.T) {
+func TestRunnableProcessor_ProcessedRecordsInspected(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
-	inst := &Instance{
-		Config: Config{
-			Settings: map[string]string{
-				"foo": "bar",
-			},
-			Workers: 123,
-		},
-
-		inInsp:  inspector.New(log.Nop(), inspector.DefaultBufferSize),
-		outInsp: inspector.New(log.Nop(), inspector.DefaultBufferSize),
-	}
+	inst := newTestInstance()
 	recsIn := []opencdc.Record{
 		{
 			Key: opencdc.RawData("test key in"),
@@ -166,7 +156,7 @@ func TestRunnableProcessor_Process(t *testing.T) {
 	proc := mock.NewProcessor(gomock.NewController(t))
 	proc.EXPECT().Process(gomock.Any(), recsIn).Return(recsOut)
 
-	underTest := newRunnableProcessor(proc, inst)
+	underTest := newRunnableProcessor(proc, nil, inst)
 	inSession := underTest.inInsp.NewSession(ctx, "id-in")
 	outSession := underTest.outInsp.NewSession(ctx, "id-out")
 
@@ -184,20 +174,10 @@ func TestRunnableProcessor_Process(t *testing.T) {
 	is.Equal(recsOut[0], sdk.SingleRecord(rec.ToOpenCDC()))
 }
 
-func TestRunnableProcessor_Process_Filter(t *testing.T) {
+func TestRunnableProcessor_FilteredRecordsNotInspected(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
-	inst := &Instance{
-		Config: Config{
-			Settings: map[string]string{
-				"foo": "bar",
-			},
-			Workers: 123,
-		},
-
-		inInsp:  inspector.New(log.Nop(), inspector.DefaultBufferSize),
-		outInsp: inspector.New(log.Nop(), inspector.DefaultBufferSize),
-	}
+	inst := newTestInstance()
 	recsIn := []opencdc.Record{
 		{
 			Key: opencdc.RawData("test key in"),
@@ -207,7 +187,7 @@ func TestRunnableProcessor_Process_Filter(t *testing.T) {
 	proc := mock.NewProcessor(gomock.NewController(t))
 	proc.EXPECT().Process(gomock.Any(), recsIn).Return([]sdk.ProcessedRecord{sdk.FilterRecord{}})
 
-	underTest := newRunnableProcessor(proc, inst)
+	underTest := newRunnableProcessor(proc, nil, inst)
 	inSession := underTest.inInsp.NewSession(ctx, "id-in")
 	outSession := underTest.outInsp.NewSession(ctx, "id-out")
 
@@ -224,20 +204,10 @@ func TestRunnableProcessor_Process_Filter(t *testing.T) {
 	is.True(cerrors.Is(err, context.DeadlineExceeded))
 }
 
-func TestRunnableProcessor_Process_Error(t *testing.T) {
+func TestRunnableProcessor_ErrorRecordsNotInspected(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
-	inst := &Instance{
-		Config: Config{
-			Settings: map[string]string{
-				"foo": "bar",
-			},
-			Workers: 123,
-		},
-
-		inInsp:  inspector.New(log.Nop(), inspector.DefaultBufferSize),
-		outInsp: inspector.New(log.Nop(), inspector.DefaultBufferSize),
-	}
+	inst := newTestInstance()
 	recsIn := []opencdc.Record{
 		{
 			Key: opencdc.RawData("test key in"),
@@ -247,7 +217,7 @@ func TestRunnableProcessor_Process_Error(t *testing.T) {
 	proc := mock.NewProcessor(gomock.NewController(t))
 	proc.EXPECT().Process(gomock.Any(), recsIn).Return([]sdk.ProcessedRecord{sdk.ErrorRecord{}})
 
-	underTest := newRunnableProcessor(proc, inst)
+	underTest := newRunnableProcessor(proc, nil, inst)
 	inSession := underTest.inInsp.NewSession(ctx, "id-in")
 	outSession := underTest.outInsp.NewSession(ctx, "id-out")
 
@@ -262,4 +232,153 @@ func TestRunnableProcessor_Process_Error(t *testing.T) {
 	_, gotRec, err = cchan.ChanOut[record.Record](outSession.C).RecvTimeout(ctx, 100*time.Millisecond)
 	is.True(!gotRec)
 	is.True(cerrors.Is(err, context.DeadlineExceeded))
+}
+
+func TestRunnableProcessor_Process_ConditionNotMatching(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	inst := newTestInstance()
+	recsIn := []opencdc.Record{
+		{
+			Metadata: opencdc.Metadata{"key": "something"},
+		},
+	}
+
+	proc := mock.NewProcessor(gomock.NewController(t))
+
+	condition, err := newProcessorCondition(`{{ eq .Metadata.key "val" }}`)
+	is.NoErr(err)
+	underTest := newRunnableProcessor(
+		proc,
+		condition,
+		inst,
+	)
+
+	recsOut := underTest.Process(ctx, recsIn)
+	defer underTest.Close()
+
+	is.Equal([]sdk.ProcessedRecord{sdk.SingleRecord(recsIn[0])}, recsOut)
+}
+
+func TestRunnableProcessor_Process_ConditionMatching(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	inst := newTestInstance()
+	recsIn := []opencdc.Record{
+		{
+			Metadata: opencdc.Metadata{"key": "val"},
+		},
+	}
+
+	wantRecs := []sdk.ProcessedRecord{sdk.SingleRecord{Key: opencdc.RawData(`a key`)}}
+	proc := mock.NewProcessor(gomock.NewController(t))
+	proc.EXPECT().Process(ctx, recsIn).Return(wantRecs)
+
+	condition, err := newProcessorCondition(`{{ eq .Metadata.key "val" }}`)
+	is.NoErr(err)
+	underTest := newRunnableProcessor(
+		proc,
+		condition,
+		inst,
+	)
+
+	gotRecs := underTest.Process(ctx, recsIn)
+	defer underTest.Close()
+
+	is.Equal(wantRecs, gotRecs)
+}
+
+func TestRunnableProcessor_Process_ConditionError(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	inst := newTestInstance()
+	recsIn := []opencdc.Record{
+		{
+			Metadata: opencdc.Metadata{"key": "val"},
+		},
+	}
+
+	proc := mock.NewProcessor(gomock.NewController(t))
+
+	condition, err := newProcessorCondition("junk")
+	is.NoErr(err)
+	underTest := newRunnableProcessor(
+		proc,
+		condition,
+		inst,
+	)
+
+	gotRecs := underTest.Process(ctx, recsIn)
+	defer underTest.Close()
+
+	is.Equal(1, len(gotRecs))
+	gotRec, gotErr := gotRecs[0].(sdk.ErrorRecord)
+	is.True(gotErr)
+	is.Equal(
+		"failed evaluating condition: error converting the condition go-template output to boolean, "+
+			"strconv.ParseBool: parsing \"junk\": invalid syntax: strconv.ParseBool: parsing \"junk\": "+
+			"invalid syntax",
+		gotRec.Error.Error(),
+	)
+}
+
+func TestRunnableProcessor_Process_Batch(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	inst := newTestInstance()
+	recsIn := []opencdc.Record{
+		{Metadata: opencdc.Metadata{"key": "no", "rec": "1"}},
+		{Metadata: opencdc.Metadata{"key": "yes", "rec": "2"}},
+		{Metadata: opencdc.Metadata{"key": "no", "rec": "3"}},
+		{Metadata: opencdc.Metadata{"key": "no", "rec": "4"}},
+		{Metadata: opencdc.Metadata{"key": "yes", "rec": "5"}},
+		{Metadata: opencdc.Metadata{"key": "no", "rec": "6"}},
+		{Metadata: opencdc.Metadata{"key": "yes", "rec": "7"}},
+	}
+
+	wantRecs := []sdk.ProcessedRecord{
+		sdk.SingleRecord(recsIn[0]),
+		sdk.SingleRecord{Metadata: opencdc.Metadata{"key": "yes", "rec": "2", "processed": "true"}},
+		sdk.SingleRecord(recsIn[2]),
+		sdk.SingleRecord(recsIn[3]),
+		sdk.SingleRecord{Metadata: opencdc.Metadata{"key": "yes", "rec": "5", "processed": "true"}},
+		sdk.SingleRecord(recsIn[5]),
+		sdk.SingleRecord{Metadata: opencdc.Metadata{"key": "yes", "rec": "7", "processed": "true"}},
+	}
+	proc := mock.NewProcessor(gomock.NewController(t))
+	proc.EXPECT().Process(ctx, []opencdc.Record{recsIn[1], recsIn[4], recsIn[6]}).DoAndReturn(func(_ context.Context, recs []opencdc.Record) []sdk.ProcessedRecord {
+		out := make([]sdk.ProcessedRecord, 0, len(recs))
+		for _, rec := range recs {
+			rec.Metadata["processed"] = "true"
+			out = append(out, sdk.SingleRecord{Metadata: rec.Metadata})
+		}
+		return out
+	})
+
+	condition, err := newProcessorCondition(`{{ eq .Metadata.key "yes" }}`)
+	is.NoErr(err)
+	underTest := newRunnableProcessor(
+		proc,
+		condition,
+		inst,
+	)
+
+	gotRecs := underTest.Process(ctx, recsIn)
+	defer underTest.Close()
+
+	is.Equal(wantRecs, gotRecs)
+}
+
+func newTestInstance() *Instance {
+	return &Instance{
+		Config: Config{
+			Settings: map[string]string{
+				"foo": "bar",
+			},
+			Workers: 123,
+		},
+
+		inInsp:  inspector.New(log.Nop(), inspector.DefaultBufferSize),
+		outInsp: inspector.New(log.Nop(), inspector.DefaultBufferSize),
+	}
 }

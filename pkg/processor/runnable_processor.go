@@ -28,15 +28,18 @@ import (
 type RunnableProcessor struct {
 	*Instance
 	proc sdk.Processor
+	cond *processorCondition
 }
 
 func newRunnableProcessor(
 	proc sdk.Processor,
+	cond *processorCondition,
 	i *Instance,
 ) *RunnableProcessor {
 	return &RunnableProcessor{
 		Instance: i,
 		proc:     proc,
+		cond:     cond,
 	}
 }
 
@@ -59,7 +62,74 @@ func (p *RunnableProcessor) Process(ctx context.Context, records []opencdc.Recor
 		p.inInsp.Send(ctx, record.FromOpenCDC(inRec))
 	}
 
-	outRecs := p.proc.Process(ctx, records)
+	var outRecs []sdk.ProcessedRecord
+	if p.cond == nil {
+		outRecs = p.proc.Process(ctx, records)
+	} else {
+		// We need to first evaluate condition for each record.
+
+		// TODO reuse these slices or at least use a pool
+		// keptRecords are records that will be sent to the processor
+		keptRecords := make([]opencdc.Record, 0, len(records))
+		// passthroughRecordIndexes are indexes of records that are just passed
+		// through to the other side.
+		passthroughRecordIndexes := make([]int, 0, len(records))
+
+		var err error
+
+		for i, rec := range records {
+			var keep bool
+			keep, err = p.cond.Evaluate(rec)
+			if err != nil {
+				err = cerrors.Errorf("failed evaluating condition: %w", err)
+				break
+			}
+
+			if keep {
+				keptRecords = append(keptRecords, rec)
+			} else {
+				passthroughRecordIndexes = append(passthroughRecordIndexes, i)
+			}
+		}
+
+		if len(keptRecords) > 0 {
+			outRecs = p.proc.Process(ctx, keptRecords)
+			if len(outRecs) > len(keptRecords) {
+				return []sdk.ProcessedRecord{
+					sdk.ErrorRecord{Error: cerrors.New("processor returned more records than input")},
+				}
+			}
+		}
+		if err != nil {
+			outRecs = append(outRecs, sdk.ErrorRecord{Error: err})
+		}
+
+		// Add passthrough records back into the resultset and keep the
+		// original order of the records.
+		if len(passthroughRecordIndexes) == len(records) {
+			// Optimization for the case where no records are kept
+			outRecs = make([]sdk.ProcessedRecord, len(records))
+			for i, rec := range records {
+				outRecs[i] = sdk.SingleRecord(rec)
+			}
+		} else if len(passthroughRecordIndexes) > 0 {
+			tmp := make([]sdk.ProcessedRecord, len(outRecs)+len(passthroughRecordIndexes))
+			prevIndex := -1
+			for i, index := range passthroughRecordIndexes {
+				// TODO index-i can be out of bounds if the processor returns
+				//  fewer records than the input.
+				copy(tmp[prevIndex+1:index], outRecs[prevIndex-i+1:index-i])
+				tmp[index] = sdk.SingleRecord(records[index])
+				prevIndex = index
+			}
+			// if the last index is not the last record, copy the rest
+			if passthroughRecordIndexes[len(passthroughRecordIndexes)-1] != len(tmp)-1 {
+				copy(tmp[prevIndex+1:], outRecs[prevIndex-len(passthroughRecordIndexes)+1:])
+			}
+			outRecs = tmp
+		}
+	}
+
 	for _, outRec := range outRecs {
 		singleRec, ok := outRec.(sdk.SingleRecord)
 		if ok {
