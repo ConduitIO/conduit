@@ -101,8 +101,14 @@ func (p *RunnableProcessor) Process(ctx context.Context, records []opencdc.Recor
 
 		// Add passthrough records back into the resultset and keep the
 		// original order of the records.
-		if len(passthroughRecordIndexes) > 0 {
-			tmp := make([]sdk.ProcessedRecord, len(records))
+		if len(passthroughRecordIndexes) == len(records) {
+			// Optimization for the case where no records are kept
+			outRecs = make([]sdk.ProcessedRecord, len(records))
+			for i, rec := range records {
+				outRecs[i] = sdk.SingleRecord(rec)
+			}
+		} else if len(passthroughRecordIndexes) > 0 {
+			tmp := make([]sdk.ProcessedRecord, len(outRecs)+len(passthroughRecordIndexes))
 			prevIndex := -1
 			for i, index := range passthroughRecordIndexes {
 				copy(tmp[prevIndex+1:index], outRecs[prevIndex-i+1:index-i])
