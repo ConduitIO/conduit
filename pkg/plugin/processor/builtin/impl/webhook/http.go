@@ -89,10 +89,8 @@ func (p *httpProcessor) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
 		Name:    "webhook.http",
 		Summary: "HTTP webhook processor",
-		Description: `
-A processor that sends an HTTP request to the specified URL, retries on error and 
-saves the response body and, optionally, the response status. 
-`,
+		Description: `A processor that sends an HTTP request to the specified URL, retries on error and 
+saves the response body and, optionally, the response status.`,
 		Version:    "v0.1.0",
 		Author:     "Meroxa, Inc.",
 		Parameters: httpConfig{}.Parameters(),

@@ -39,11 +39,11 @@ func ExampleHTTPProcessor() {
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary: `Send a request to an HTTP server`,
 		Description: `
-This example shows how to use the HTTP processor to send a record's .Payload.After field to a dummy HTTP server 
-that replies back with a greeting. 
+This example shows how to use the HTTP processor to send a record's ` + ".Payload.After" + ` field to a dummy HTTP server
+that replies back with a greeting.
 
-The record's .Payload.After is overwritten with the response. Additionally, the example shows how to store the 
-value of the HTTP response's code in the record's metadata'.`,
+The record's ` + ".Payload.After" + ` is overwritten with the response. Additionally, the example shows how to store the
+value of the HTTP response's code in the metadata field ` + "http_status" + `.`,
 		Config: map[string]string{
 			"request.url":     srv.URL,
 			"request.body":    ".Payload.After",

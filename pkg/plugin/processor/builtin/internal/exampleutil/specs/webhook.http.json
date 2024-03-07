@@ -2,7 +2,7 @@
   "specification": {
     "name": "webhook.http",
     "summary": "HTTP webhook processor",
-    "description": "\nA processor that sends an HTTP request to the specified URL, retries on error and \nsaves the response body and, optionally, the response status. \n",
+    "description": "A processor that sends an HTTP request to the specified URL, retries on error and \nsaves the response body and, optionally, the response status.",
     "version": "v0.1.0",
     "author": "Meroxa, Inc.",
     "parameters": {
@@ -86,7 +86,7 @@
   "examples": [
     {
       "summary": "Send a request to an HTTP server",
-      "description": "\nThis example shows how to use the HTTP processor to send a record's .Payload.After field to a dummy HTTP server \nthat replies back with a greeting. \n\nThe record's .Payload.After is overwritten with the response. Additionally, the example shows how to store the \nvalue of the HTTP response's code in the record's metadata'.",
+      "description": "\nThis example shows how to use the HTTP processor to send a record's .Payload.After field to a dummy HTTP server\nthat replies back with a greeting.\n\nThe record's .Payload.After is overwritten with the response. Additionally, the example shows how to store the\nvalue of the HTTP response's code in the metadata field http_status.",
       "config": {
         "backoffRetry.count": "0",
         "backoffRetry.factor": "2",

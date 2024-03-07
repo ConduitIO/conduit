@@ -150,7 +150,7 @@ func (r *Registry) reloadPlugins() {
 }
 
 func (r *Registry) loadPlugins(ctx context.Context, pluginDir string) map[string]map[string]blueprint {
-	r.logger.Debug(ctx).Msgf("loading processor plugins from directory %v", pluginDir)
+	r.logger.Info(ctx).Msgf("loading processor plugins from directory %v ...", pluginDir)
 	plugins := make(map[string]map[string]blueprint)
 
 	dirEntries, err := os.ReadDir(pluginDir)
