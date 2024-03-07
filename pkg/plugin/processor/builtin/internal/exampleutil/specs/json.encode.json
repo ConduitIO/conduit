@@ -1,0 +1,100 @@
+{
+  "specification": {
+    "name": "json.encode",
+    "summary": "Encodes a specific field from structured data to JSON raw data (string).",
+    "description": "The processor takes data from the target field, encodes it into s JSON value\nand stores the encoded value in the target field.\n\nThis processor is only applicable to fields under `.Key`, `.Payload`.Before and\n`.Payload.After`, as they can contain structured data.",
+    "version": "v0.1.0",
+    "author": "Meroxa, Inc.",
+    "parameters": {
+      "field": {
+        "default": "",
+        "description": "Field is the target field, as it would be addressed in a Go template (e.g. `.Payload.After.foo`).\nyou can only encode fields that are under .Key, .Payload.Before and .Payload.After.",
+        "type": "string",
+        "validations": [
+          {
+            "type": "required",
+            "value": ""
+          },
+          {
+            "type": "regex",
+            "value": "^\\.(Payload|Key).*"
+          },
+          {
+            "type": "exclusion",
+            "value": ".Payload"
+          }
+        ]
+      }
+    }
+  },
+  "examples": [
+    {
+      "summary": "Encode nested field to JSON",
+      "description": "This example takes a record containing a map in\n.Payload.Before.foo and converts it into a raw JSON string.",
+      "config": {
+        "field": ".Payload.Before.foo"
+      },
+      "have": {
+        "position": null,
+        "operation": "snapshot",
+        "metadata": null,
+        "key": null,
+        "payload": {
+          "before": {
+            "foo": {
+              "baz": "bar",
+              "before": {
+                "data": 4,
+                "id": 3
+              }
+            }
+          },
+          "after": null
+        }
+      },
+      "want": {
+        "position": null,
+        "operation": "snapshot",
+        "metadata": null,
+        "key": null,
+        "payload": {
+          "before": {
+            "foo": "{\"baz\":\"bar\",\"before\":{\"data\":4,\"id\":3}}"
+          },
+          "after": null
+        }
+      }
+    },
+    {
+      "summary": "Encode record key to JSON",
+      "description": "This example takes a record containing structured data in\n.Key and converts it into a raw JSON string.",
+      "config": {
+        "field": ".Key"
+      },
+      "have": {
+        "position": null,
+        "operation": "create",
+        "metadata": null,
+        "key": {
+          "tables": [
+            "table1,table2"
+          ]
+        },
+        "payload": {
+          "before": null,
+          "after": null
+        }
+      },
+      "want": {
+        "position": null,
+        "operation": "create",
+        "metadata": null,
+        "key": "{\"tables\":[\"table1,table2\"]}",
+        "payload": {
+          "before": null,
+          "after": null
+        }
+      }
+    }
+  ]
+}

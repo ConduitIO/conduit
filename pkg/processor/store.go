@@ -33,14 +33,12 @@ const (
 
 // Store handles the persistence and fetching of processor instances.
 type Store struct {
-	db       database.DB
-	registry *BuilderRegistry
+	db database.DB
 }
 
-func NewStore(db database.DB, registry *BuilderRegistry) *Store {
+func NewStore(db database.DB) *Store {
 	return &Store{
-		db:       db,
-		registry: registry,
+		db: db,
 	}
 }
 
@@ -132,13 +130,10 @@ func (*Store) trimKeyPrefix(key string) string {
 
 // encode encodes a instance from *Instance to []byte. It uses storeInstance in
 // the background to encode the instance including the processor type.
-func (*Store) encode(instance *Instance) ([]byte, error) {
-	i := *instance    // create copy of instance as to not modify it
-	i.Processor = nil // do not persist processor
-
+func (*Store) encode(i *Instance) ([]byte, error) {
 	var b bytes.Buffer
 	enc := json.NewEncoder(&b)
-	err := enc.Encode(i)
+	err := enc.Encode(*i)
 	if err != nil {
 		return nil, err
 	}
@@ -156,17 +151,5 @@ func (s *Store) decode(raw []byte) (*Instance, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	builder, err := s.registry.Get(i.Type)
-	if err != nil {
-		return nil, cerrors.Errorf("could not get processor builder for instance %s: %w", i.ID, err)
-	}
-
-	proc, err := builder(i.Config)
-	if err != nil {
-		return nil, cerrors.Errorf("could not create processor: %w", err)
-	}
-
-	i.Processor = proc
 	return &i, nil
 }

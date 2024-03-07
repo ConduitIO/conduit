@@ -1,7 +1,10 @@
 run:
   timeout: 3m
+  skip-dirs-use-default: false
   skip-dirs:
-    - /ui/.*
+    - ^examples/
+    - ^ui/
+    - ^pkg/plugin/processor/builtin/internal/diff # external code
 
 linters-settings:
   depguard:
@@ -40,6 +43,9 @@ linters-settings:
 
 issues:
   exclude-rules:
+    - path: 'pkg/plugin/processor/builtin/impl'
+      linters:
+        - goconst
     - path: '(.+)acceptance_testing\.go'
       linters:
         - stylecheck

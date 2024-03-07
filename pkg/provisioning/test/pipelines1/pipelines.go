@@ -77,8 +77,8 @@ var P1C2 = &connector.Instance{
 }
 
 var P1P1 = &processor.Instance{
-	ID:   "pipeline1:proc1",
-	Type: "js",
+	ID:     "pipeline1:proc1",
+	Plugin: "js",
 	Parent: processor.Parent{
 		ID:   "pipeline1",
 		Type: processor.ParentTypePipeline,
@@ -87,7 +87,6 @@ var P1P1 = &processor.Instance{
 		Workers:  1,
 		Settings: map[string]string{"additionalProp1": "string"},
 	},
-	Processor: nil,
 
 	ProvisionedBy: processor.ProvisionTypeConfig,
 	CreatedAt:     time.Now(),
@@ -95,8 +94,8 @@ var P1P1 = &processor.Instance{
 }
 
 var P1C2P1 = &processor.Instance{
-	ID:   "pipeline1:con2:proc1con",
-	Type: "js",
+	ID:     "pipeline1:con2:proc1con",
+	Plugin: "js",
 	Parent: processor.Parent{
 		ID:   "pipeline1:con2",
 		Type: processor.ParentTypeConnector,
@@ -105,7 +104,6 @@ var P1C2P1 = &processor.Instance{
 		Workers:  10,
 		Settings: map[string]string{"additionalProp1": "string"},
 	},
-	Processor: nil,
 
 	ProvisionedBy: processor.ProvisionTypeConfig,
 	CreatedAt:     time.Now(),

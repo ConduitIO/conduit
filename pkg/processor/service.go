@@ -12,33 +12,40 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//go:generate mockgen -destination=mock/plugin_service.go -package=mock -mock_names=PluginService=PluginService . PluginService
+
 package processor
 
 import (
 	"context"
 	"time"
 
+	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/database"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/measure"
 )
 
+type PluginService interface {
+	NewProcessor(ctx context.Context, pluginName string, id string) (sdk.Processor, error)
+}
+
 type Service struct {
 	logger log.CtxLogger
 
-	registry  *BuilderRegistry
+	registry  PluginService
 	instances map[string]*Instance
 	store     *Store
 }
 
-// NewService creates a new processor service.
-func NewService(logger log.CtxLogger, db database.DB, registry *BuilderRegistry) *Service {
+// NewService creates a new processor plugin service.
+func NewService(logger log.CtxLogger, db database.DB, registry PluginService) *Service {
 	return &Service{
 		logger:    logger.WithComponent("processor.Service"),
 		registry:  registry,
 		instances: make(map[string]*Instance),
-		store:     NewStore(db, registry),
+		store:     NewStore(db),
 	}
 }
 
@@ -54,7 +61,8 @@ func (s *Service) Init(ctx context.Context) error {
 	s.logger.Info(ctx).Int("count", len(s.instances)).Msg("processors initialized")
 
 	for _, i := range instances {
-		measure.ProcessorsGauge.WithValues(i.Type).Inc()
+		i.init(s.logger)
+		measure.ProcessorsGauge.WithValues(i.Plugin).Inc()
 	}
 
 	return nil
@@ -83,11 +91,29 @@ func (s *Service) Get(_ context.Context, id string) (*Instance, error) {
 	return ins, nil
 }
 
+func (s *Service) MakeRunnableProcessor(ctx context.Context, i *Instance) (*RunnableProcessor, error) {
+	if i.running {
+		return nil, ErrProcessorRunning
+	}
+
+	p, err := s.registry.NewProcessor(ctx, i.Plugin, i.ID)
+	if err != nil {
+		return nil, err
+	}
+	cond, err := newProcessorCondition(i.Condition)
+	if err != nil {
+		return nil, cerrors.Errorf("invalid condition: %w", err)
+	}
+
+	i.running = true
+	return newRunnableProcessor(p, cond, i), nil
+}
+
 // Create will create a new processor instance.
 func (s *Service) Create(
 	ctx context.Context,
 	id string,
-	procType string,
+	plugin string,
 	parent Parent,
 	cfg Config,
 	pt ProvisionType,
@@ -100,14 +126,14 @@ func (s *Service) Create(
 		cfg.Workers = 1
 	}
 
-	builder, err := s.registry.Get(procType)
+	// check if the processor plugin exists
+	p, err := s.registry.NewProcessor(ctx, plugin, id)
 	if err != nil {
-		return nil, err
+		return nil, cerrors.Errorf("could not get processor: %w", err)
 	}
-
-	p, err := builder(cfg)
+	err = p.Teardown(ctx)
 	if err != nil {
-		return nil, cerrors.Errorf("could not build processor: %w", err)
+		s.logger.Warn(ctx).Err(err).Msg("processor teardown failed")
 	}
 
 	now := time.Now()
@@ -116,12 +142,12 @@ func (s *Service) Create(
 		UpdatedAt:     now,
 		CreatedAt:     now,
 		ProvisionedBy: pt,
-		Type:          procType,
+		Plugin:        plugin,
 		Parent:        parent,
 		Config:        cfg,
-		Processor:     p,
 		Condition:     cond,
 	}
+	instance.init(s.logger)
 
 	// persist instance
 	err = s.store.Set(ctx, instance.ID, instance)
@@ -130,7 +156,7 @@ func (s *Service) Create(
 	}
 
 	s.instances[instance.ID] = instance
-	measure.ProcessorsGauge.WithValues(procType).Inc()
+	measure.ProcessorsGauge.WithValues(plugin).Inc()
 
 	return instance, nil
 }
@@ -142,15 +168,10 @@ func (s *Service) Update(ctx context.Context, id string, cfg Config) (*Instance,
 		return nil, err
 	}
 
-	// this can't really fail, this call already passed when creating the instance
-	builder, _ := s.registry.Get(instance.Type)
-
-	p, err := builder(cfg)
-	if err != nil {
-		return nil, cerrors.Errorf("could not build processor: %w", err)
+	if instance.running {
+		return nil, cerrors.Errorf("could not update processor instance (ID: %s): %w", id, ErrProcessorRunning)
 	}
 
-	instance.Processor = p
 	instance.Config = cfg
 	instance.UpdatedAt = time.Now()
 
@@ -171,13 +192,17 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 		return err
 	}
 
+	if instance.running {
+		return cerrors.Errorf("could not delete processor instance (ID: %s): %w", id, ErrProcessorRunning)
+	}
+
 	err = s.store.Delete(ctx, id)
 	if err != nil {
 		return cerrors.Errorf("could not delete processor instance from store: %w", err)
 	}
 	delete(s.instances, id)
-	instance.Processor.Close()
-	measure.ProcessorsGauge.WithValues(instance.Type).Dec()
+	instance.Close()
+	measure.ProcessorsGauge.WithValues(instance.Plugin).Dec()
 
 	return nil
 }

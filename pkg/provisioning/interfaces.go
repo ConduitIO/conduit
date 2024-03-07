@@ -20,11 +20,11 @@ import (
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/pipeline"
-	"github.com/conduitio/conduit/pkg/plugin"
+	connectorPlugin "github.com/conduitio/conduit/pkg/plugin/connector"
 	"github.com/conduitio/conduit/pkg/processor"
 )
 
-//go:generate mockgen -destination=mock/provisioning.go -package=mock -mock_names=PipelineService=PipelineService,ConnectorService=ConnectorService,ProcessorService=ProcessorService,PluginService=PluginService . PipelineService,ConnectorService,ProcessorService,PluginService
+//go:generate mockgen -destination=mock/provisioning.go -package=mock -mock_names=PipelineService=PipelineService,ConnectorService=ConnectorService,ProcessorService=ProcessorService,ConnectorPluginService=ConnectorPluginService . PipelineService,ConnectorService,ProcessorService,ConnectorPluginService
 
 type PipelineService interface {
 	Get(ctx context.Context, id string) (*pipeline.Instance, error)
@@ -34,7 +34,7 @@ type PipelineService interface {
 	Delete(ctx context.Context, pipelineID string) error
 	UpdateDLQ(ctx context.Context, pipelineID string, cfg pipeline.DLQ) (*pipeline.Instance, error)
 
-	Start(ctx context.Context, connFetcher pipeline.ConnectorFetcher, procFetcher pipeline.ProcessorFetcher, pluginFetcher pipeline.PluginDispenserFetcher, pipelineID string) error
+	Start(ctx context.Context, connFetcher pipeline.ConnectorFetcher, procService pipeline.ProcessorService, pluginFetcher pipeline.PluginDispenserFetcher, pipelineID string) error
 	Stop(ctx context.Context, pipelineID string, force bool) error
 
 	AddConnector(ctx context.Context, pipelineID string, connectorID string) (*pipeline.Instance, error)
@@ -55,11 +55,20 @@ type ConnectorService interface {
 
 type ProcessorService interface {
 	Get(ctx context.Context, id string) (*processor.Instance, error)
-	Create(ctx context.Context, id string, procType string, parent processor.Parent, cfg processor.Config, p processor.ProvisionType, condition string) (*processor.Instance, error)
+	Create(
+		ctx context.Context,
+		id string,
+		plugin string,
+		parent processor.Parent,
+		cfg processor.Config,
+		p processor.ProvisionType,
+		condition string,
+	) (*processor.Instance, error)
+	MakeRunnableProcessor(ctx context.Context, i *processor.Instance) (*processor.RunnableProcessor, error)
 	Update(ctx context.Context, id string, cfg processor.Config) (*processor.Instance, error)
 	Delete(ctx context.Context, id string) error
 }
 
-type PluginService interface {
-	NewDispenser(ctx log.CtxLogger, name string) (plugin.Dispenser, error)
+type ConnectorPluginService interface {
+	NewDispenser(ctx log.CtxLogger, name string) (connectorPlugin.Dispenser, error)
 }

@@ -15,39 +15,11 @@
 package plugin
 
 import (
-	"fmt"
-
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 )
 
 var (
-	ErrStreamNotOpen    = cerrors.New("stream not open")
 	ErrPluginNotFound   = cerrors.New("plugin not found")
 	ErrPluginNotRunning = cerrors.New("plugin is not running")
 	ErrUnimplemented    = cerrors.New("method not implemented")
 )
-
-type ValidationError struct {
-	err error
-}
-
-// Error formats the error message.
-func (e *ValidationError) Error() string {
-	if e == nil {
-		return ""
-	}
-	return fmt.Sprintf("validation error: %v", e.err)
-}
-
-// Unwrap returns the underlying error.
-func (e *ValidationError) Unwrap() error {
-	if e == nil {
-		return nil
-	}
-	return e.err
-}
-
-func (e *ValidationError) Is(target error) bool {
-	_, ok := target.(*ValidationError)
-	return ok
-}

@@ -20,12 +20,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/conduitio/conduit-commons/config"
+	processorSdk "github.com/conduitio/conduit-processor-sdk"
+
 	"github.com/conduitio/conduit/pkg/foundation/cchan"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/inspector"
 	"github.com/conduitio/conduit/pkg/processor"
-	procmock "github.com/conduitio/conduit/pkg/processor/mock"
 	apimock "github.com/conduitio/conduit/pkg/web/api/mock"
 	"github.com/conduitio/conduit/pkg/web/api/toproto"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
@@ -41,8 +43,7 @@ func TestProcessorAPIv1_ListProcessors(t *testing.T) {
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	psMock := apimock.NewProcessorOrchestrator(ctrl)
-	api := NewProcessorAPIv1(psMock)
-	p := procmock.NewProcessor(ctrl)
+	api := NewProcessorAPIv1(psMock, nil)
 
 	config := processor.Config{
 		Settings: map[string]string{"titan": "armored"},
@@ -51,26 +52,24 @@ func TestProcessorAPIv1_ListProcessors(t *testing.T) {
 	now := time.Now()
 	prs := []*processor.Instance{
 		{
-			ID:   uuid.NewString(),
-			Type: "Pants",
+			ID:     uuid.NewString(),
+			Plugin: "Pants",
 			Parent: processor.Parent{
 				ID:   uuid.NewString(),
 				Type: processor.ParentTypeConnector,
 			},
 			Config:    config,
-			Processor: p,
 			UpdatedAt: now,
 			CreatedAt: now,
 		},
 		{
-			ID:   uuid.NewString(),
-			Type: "Pants Too",
+			ID:     uuid.NewString(),
+			Plugin: "Pants Too",
 			Parent: processor.Parent{
 				ID:   uuid.NewString(),
 				Type: processor.ParentTypeConnector,
 			},
 			Config:    config,
-			Processor: p,
 			UpdatedAt: now,
 			CreatedAt: now,
 		},
@@ -83,8 +82,8 @@ func TestProcessorAPIv1_ListProcessors(t *testing.T) {
 
 	want := &apiv1.ListProcessorsResponse{Processors: []*apiv1.Processor{
 		{
-			Id:   prs[0].ID,
-			Type: prs[0].Type,
+			Id:     prs[0].ID,
+			Plugin: prs[0].Plugin,
 			Config: &apiv1.Processor_Config{
 				Settings: prs[0].Config.Settings,
 			},
@@ -97,8 +96,8 @@ func TestProcessorAPIv1_ListProcessors(t *testing.T) {
 		},
 
 		{
-			Id:   prs[1].ID,
-			Type: prs[1].Type,
+			Id:     prs[1].ID,
+			Plugin: prs[1].Plugin,
 			Config: &apiv1.Processor_Config{
 				Settings: prs[1].Config.Settings,
 			},
@@ -126,8 +125,7 @@ func TestProcessorAPIv1_ListProcessorsByParents(t *testing.T) {
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	psMock := apimock.NewProcessorOrchestrator(ctrl)
-	api := NewProcessorAPIv1(psMock)
-	p := procmock.NewProcessor(ctrl)
+	api := NewProcessorAPIv1(psMock, nil)
 
 	config := processor.Config{
 		Settings: map[string]string{"titan": "armored"},
@@ -137,50 +135,46 @@ func TestProcessorAPIv1_ListProcessorsByParents(t *testing.T) {
 	sharedParent := uuid.NewString()
 	prs := []*processor.Instance{
 		{
-			ID:   uuid.NewString(),
-			Type: "Pants",
+			ID:     uuid.NewString(),
+			Plugin: "Pants",
 			Parent: processor.Parent{
 				ID:   sharedParent,
 				Type: processor.ParentTypeConnector,
 			},
 			Config:    config,
-			Processor: p,
 			UpdatedAt: now,
 			CreatedAt: now,
 		},
 		{
-			ID:   uuid.NewString(),
-			Type: "Pants Too",
+			ID:     uuid.NewString(),
+			Plugin: "Pants Too",
 			Parent: processor.Parent{
 				ID:   uuid.NewString(),
 				Type: processor.ParentTypeConnector,
 			},
 			Config:    config,
-			Processor: p,
 			UpdatedAt: now,
 			CreatedAt: now,
 		},
 		{
-			ID:   uuid.NewString(),
-			Type: "Pants Thrice",
+			ID:     uuid.NewString(),
+			Plugin: "Pants Thrice",
 			Parent: processor.Parent{
 				ID:   uuid.NewString(),
 				Type: processor.ParentTypePipeline,
 			},
 			Config:    processor.Config{},
-			Processor: p,
 			UpdatedAt: now,
 			CreatedAt: now,
 		},
 		{
-			ID:   uuid.NewString(),
-			Type: "Shorts",
+			ID:     uuid.NewString(),
+			Plugin: "Shorts",
 			Parent: processor.Parent{
 				ID:   sharedParent,
 				Type: processor.ParentTypePipeline,
 			},
 			Config:    processor.Config{},
-			Processor: p,
 			UpdatedAt: now,
 			CreatedAt: now,
 		},
@@ -195,8 +189,8 @@ func TestProcessorAPIv1_ListProcessorsByParents(t *testing.T) {
 
 	want := &apiv1.ListProcessorsResponse{Processors: []*apiv1.Processor{
 		{
-			Id:   prs[0].ID,
-			Type: prs[0].Type,
+			Id:     prs[0].ID,
+			Plugin: prs[0].Plugin,
 			Config: &apiv1.Processor_Config{
 				Settings: prs[0].Config.Settings,
 			},
@@ -209,8 +203,8 @@ func TestProcessorAPIv1_ListProcessorsByParents(t *testing.T) {
 		},
 
 		{
-			Id:   prs[2].ID,
-			Type: prs[2].Type,
+			Id:     prs[2].ID,
+			Plugin: prs[2].Plugin,
 			Config: &apiv1.Processor_Config{
 				Settings: prs[2].Config.Settings,
 			},
@@ -222,8 +216,8 @@ func TestProcessorAPIv1_ListProcessorsByParents(t *testing.T) {
 			UpdatedAt: timestamppb.New(prs[1].UpdatedAt),
 		},
 		{
-			Id:   prs[3].ID,
-			Type: prs[3].Type,
+			Id:     prs[3].ID,
+			Plugin: prs[3].Plugin,
 			Config: &apiv1.Processor_Config{
 				Settings: prs[3].Config.Settings,
 			},
@@ -251,8 +245,7 @@ func TestProcessorAPIv1_CreateProcessor(t *testing.T) {
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	psMock := apimock.NewProcessorOrchestrator(ctrl)
-	api := NewProcessorAPIv1(psMock)
-	p := procmock.NewProcessor(ctrl)
+	api := NewProcessorAPIv1(psMock, nil)
 
 	config := processor.Config{
 		Settings: map[string]string{"titan": "armored"},
@@ -260,23 +253,22 @@ func TestProcessorAPIv1_CreateProcessor(t *testing.T) {
 
 	now := time.Now()
 	pr := &processor.Instance{
-		ID:   uuid.NewString(),
-		Type: "Pants",
+		ID:     uuid.NewString(),
+		Plugin: "Pants",
 		Parent: processor.Parent{
 			ID:   uuid.NewString(),
 			Type: processor.ParentTypeConnector,
 		},
 		Config:    config,
-		Processor: p,
 		Condition: "{{ true }}",
 		UpdatedAt: now,
 		CreatedAt: now,
 	}
-	psMock.EXPECT().Create(ctx, pr.Type, pr.Parent, config, pr.Condition).Return(pr, nil).Times(1)
+	psMock.EXPECT().Create(ctx, pr.Plugin, pr.Parent, config, pr.Condition).Return(pr, nil).Times(1)
 
 	want := &apiv1.CreateProcessorResponse{Processor: &apiv1.Processor{
-		Id:   pr.ID,
-		Type: pr.Type,
+		Id:     pr.ID,
+		Plugin: pr.Plugin,
 		Config: &apiv1.Processor_Config{
 			Settings: pr.Config.Settings,
 		},
@@ -292,7 +284,7 @@ func TestProcessorAPIv1_CreateProcessor(t *testing.T) {
 	got, err := api.CreateProcessor(
 		ctx,
 		&apiv1.CreateProcessorRequest{
-			Type:      want.Processor.Type,
+			Plugin:    want.Processor.Plugin,
 			Parent:    want.Processor.Parent,
 			Config:    want.Processor.Config,
 			Condition: want.Processor.Condition,
@@ -309,13 +301,12 @@ func TestProcessorAPIv1_GetProcessor(t *testing.T) {
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	psMock := apimock.NewProcessorOrchestrator(ctrl)
-	api := NewProcessorAPIv1(psMock)
-	p := procmock.NewProcessor(ctrl)
+	api := NewProcessorAPIv1(psMock, nil)
 
 	now := time.Now()
 	pr := &processor.Instance{
-		ID:   uuid.NewString(),
-		Type: "Pants",
+		ID:     uuid.NewString(),
+		Plugin: "Pants",
 		Parent: processor.Parent{
 			ID:   uuid.NewString(),
 			Type: processor.ParentTypeConnector,
@@ -323,7 +314,6 @@ func TestProcessorAPIv1_GetProcessor(t *testing.T) {
 		Config: processor.Config{
 			Settings: map[string]string{"titan": "armored"},
 		},
-		Processor: p,
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
@@ -331,8 +321,8 @@ func TestProcessorAPIv1_GetProcessor(t *testing.T) {
 	psMock.EXPECT().Get(ctx, pr.ID).Return(pr, nil).Times(1)
 
 	want := &apiv1.GetProcessorResponse{Processor: &apiv1.Processor{
-		Id:   pr.ID,
-		Type: pr.Type,
+		Id:     pr.ID,
+		Plugin: pr.Plugin,
 		Config: &apiv1.Processor_Config{
 			Settings: pr.Config.Settings,
 		},
@@ -361,8 +351,7 @@ func TestProcessorAPIv1_UpdateProcessor(t *testing.T) {
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	psMock := apimock.NewProcessorOrchestrator(ctrl)
-	api := NewProcessorAPIv1(psMock)
-	p := procmock.NewProcessor(ctrl)
+	api := NewProcessorAPIv1(psMock, nil)
 
 	config := processor.Config{
 		Settings: map[string]string{"titan": "armored"},
@@ -370,22 +359,21 @@ func TestProcessorAPIv1_UpdateProcessor(t *testing.T) {
 
 	now := time.Now()
 	pr := &processor.Instance{
-		ID:   uuid.NewString(),
-		Type: "Pants",
+		ID:     uuid.NewString(),
+		Plugin: "Pants",
 		Parent: processor.Parent{
 			ID:   uuid.NewString(),
 			Type: processor.ParentTypeConnector,
 		},
 		Config:    config,
-		Processor: p,
 		UpdatedAt: now,
 		CreatedAt: now,
 	}
 	psMock.EXPECT().Update(ctx, pr.ID, config).Return(pr, nil).Times(1)
 
 	want := &apiv1.UpdateProcessorResponse{Processor: &apiv1.Processor{
-		Id:   pr.ID,
-		Type: pr.Type,
+		Id:     pr.ID,
+		Plugin: pr.Plugin,
 		Config: &apiv1.Processor_Config{
 			Settings: pr.Config.Settings,
 		},
@@ -415,7 +403,7 @@ func TestProcessorAPIv1_DeleteProcessor(t *testing.T) {
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	psMock := apimock.NewProcessorOrchestrator(ctrl)
-	api := NewProcessorAPIv1(psMock)
+	api := NewProcessorAPIv1(psMock, nil)
 
 	id := uuid.NewString()
 
@@ -441,7 +429,7 @@ func TestProcessorAPIv1_InspectIn_SendRecord(t *testing.T) {
 	defer cancel()
 	ctrl := gomock.NewController(t)
 	orchestrator := apimock.NewProcessorOrchestrator(ctrl)
-	api := NewProcessorAPIv1(orchestrator)
+	api := NewProcessorAPIv1(orchestrator, nil)
 
 	id := uuid.NewString()
 	rec := generateTestRecord()
@@ -478,7 +466,7 @@ func TestProcessorAPIv1_InspectIn_SendErr(t *testing.T) {
 	defer cancel()
 	ctrl := gomock.NewController(t)
 	orchestrator := apimock.NewProcessorOrchestrator(ctrl)
-	api := NewProcessorAPIv1(orchestrator)
+	api := NewProcessorAPIv1(orchestrator, nil)
 	id := uuid.NewString()
 
 	ins := inspector.New(log.Nop(), 10)
@@ -517,7 +505,7 @@ func TestProcessorAPIv1_InspectIn_Err(t *testing.T) {
 	defer cancel()
 	ctrl := gomock.NewController(t)
 	orchestrator := apimock.NewProcessorOrchestrator(ctrl)
-	api := NewProcessorAPIv1(orchestrator)
+	api := NewProcessorAPIv1(orchestrator, nil)
 	id := uuid.NewString()
 	err := cerrors.New("not found, sorry")
 
@@ -538,6 +526,68 @@ func TestProcessorAPIv1_InspectIn_Err(t *testing.T) {
 		"rpc error: code = Internal desc = failed to inspect processor: not found, sorry",
 		errAPI.Error(),
 	)
+}
+
+func TestProcessorAPIv1_ListProcessorPluginsByName(t *testing.T) {
+	is := is.New(t)
+
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+	ppoMock := apimock.NewProcessorPluginOrchestrator(ctrl)
+	api := NewProcessorAPIv1(nil, ppoMock)
+
+	names := []string{"do-not-want-this-plugin", "want-p1", "want-p2", "skip", "another-skipped"}
+
+	plsMap := make(map[string]processorSdk.Specification)
+	pls := make([]processorSdk.Specification, 0)
+
+	for _, name := range names {
+		ps := processorSdk.Specification{
+			Name:        name,
+			Description: "desc",
+			Version:     "v1.0",
+			Author:      "Aaron",
+			Parameters: map[string]config.Parameter{
+				"param": {
+					Type: config.ParameterTypeString,
+					Validations: []config.Validation{
+						config.ValidationRequired{},
+					},
+				},
+			},
+		}
+		pls = append(pls, ps)
+		plsMap[name] = ps
+	}
+
+	ppoMock.EXPECT().
+		List(ctx).
+		Return(plsMap, nil).
+		Times(1)
+
+	want := &apiv1.ListProcessorPluginsResponse{
+		Plugins: []*apiv1.ProcessorPluginSpecifications{
+			toproto.ProcessorPluginSpecifications(pls[1].Name, pls[1]),
+			toproto.ProcessorPluginSpecifications(pls[2].Name, pls[2]),
+		},
+	}
+
+	got, err := api.ListProcessorPlugins(
+		ctx,
+		&apiv1.ListProcessorPluginsRequest{Name: "want-.*"},
+	)
+
+	is.NoErr(err)
+
+	sortPlugins := func(p []*apiv1.ProcessorPluginSpecifications) {
+		sort.Slice(p, func(i, j int) bool {
+			return p[i].Name < p[j].Name
+		})
+	}
+
+	sortPlugins(want.Plugins)
+	sortPlugins(got.Plugins)
+	is.Equal(want, got)
 }
 
 func sortProcessors(c []*apiv1.Processor) {

@@ -30,7 +30,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/metrics/measure"
 	"github.com/conduitio/conduit/pkg/foundation/multierror"
 	"github.com/conduitio/conduit/pkg/pipeline/stream"
-	"github.com/conduitio/conduit/pkg/plugin"
+	connectorPlugin "github.com/conduitio/conduit/pkg/plugin/connector"
 	"github.com/conduitio/conduit/pkg/processor"
 	"gopkg.in/tomb.v2"
 )
@@ -41,21 +41,22 @@ type ConnectorFetcher interface {
 	Create(ctx context.Context, id string, t connector.Type, plugin string, pipelineID string, cfg connector.Config, p connector.ProvisionType) (*connector.Instance, error)
 }
 
-// ProcessorFetcher can fetch a processor instance.
-type ProcessorFetcher interface {
+// ProcessorService can fetch a processor instance and make a runnable processor from it.
+type ProcessorService interface {
 	Get(ctx context.Context, id string) (*processor.Instance, error)
+	MakeRunnableProcessor(ctx context.Context, i *processor.Instance) (*processor.RunnableProcessor, error)
 }
 
 // PluginDispenserFetcher can fetch a plugin.
 type PluginDispenserFetcher interface {
-	NewDispenser(logger log.CtxLogger, name string) (plugin.Dispenser, error)
+	NewDispenser(logger log.CtxLogger, name string) (connectorPlugin.Dispenser, error)
 }
 
 // Run runs pipelines that had the running state in store.
 func (s *Service) Run(
 	ctx context.Context,
 	connFetcher ConnectorFetcher,
-	procFetcher ProcessorFetcher,
+	procService ProcessorService,
 	pluginFetcher PluginDispenserFetcher,
 ) error {
 	var err error
@@ -64,7 +65,7 @@ func (s *Service) Run(
 	// run pipelines that are in the StatusSystemStopped state
 	for _, instance := range s.instances {
 		if instance.Status == StatusSystemStopped {
-			startErr := s.Start(ctx, connFetcher, procFetcher, pluginFetcher, instance.ID)
+			startErr := s.Start(ctx, connFetcher, procService, pluginFetcher, instance.ID)
 			if startErr != nil {
 				// try to start remaining pipelines and gather errors
 				err = multierror.Append(err, startErr)
@@ -80,7 +81,7 @@ func (s *Service) Run(
 func (s *Service) Start(
 	ctx context.Context,
 	connFetcher ConnectorFetcher,
-	procFetcher ProcessorFetcher,
+	procService ProcessorService,
 	pluginFetcher PluginDispenserFetcher,
 	pipelineID string,
 ) error {
@@ -95,7 +96,7 @@ func (s *Service) Start(
 	s.logger.Debug(ctx).Str(log.PipelineIDField, pl.ID).Msg("starting pipeline")
 
 	s.logger.Trace(ctx).Str(log.PipelineIDField, pl.ID).Msg("building nodes")
-	nodes, err := s.buildNodes(ctx, connFetcher, procFetcher, pluginFetcher, pl)
+	nodes, err := s.buildNodes(ctx, connFetcher, procService, pluginFetcher, pl)
 	if err != nil {
 		return cerrors.Errorf("could not build nodes for pipeline %s: %w", pl.ID, err)
 	}
@@ -226,7 +227,7 @@ func (s *Service) waitInternal() error {
 func (s *Service) buildNodes(
 	ctx context.Context,
 	connFetcher ConnectorFetcher,
-	procFetcher ProcessorFetcher,
+	procService ProcessorService,
 	pluginFetcher PluginDispenserFetcher,
 	pl *Instance,
 ) ([]stream.Node, error) {
@@ -234,7 +235,7 @@ func (s *Service) buildNodes(
 	fanIn := stream.FaninNode{Name: "fanin"}
 	fanOut := stream.FanoutNode{Name: "fanout"}
 
-	sourceNodes, err := s.buildSourceNodes(ctx, connFetcher, procFetcher, pluginFetcher, pl, &fanIn)
+	sourceNodes, err := s.buildSourceNodes(ctx, connFetcher, procService, pluginFetcher, pl, &fanIn)
 	if err != nil {
 		return nil, cerrors.Errorf("could not build source nodes: %w", err)
 	}
@@ -242,12 +243,12 @@ func (s *Service) buildNodes(
 		return nil, cerrors.New("can't build pipeline without any source connectors")
 	}
 
-	processorNodes, err := s.buildProcessorNodes(ctx, procFetcher, pl, pl.ProcessorIDs, &fanIn, &fanOut)
+	processorNodes, err := s.buildProcessorNodes(ctx, procService, pl, pl.ProcessorIDs, &fanIn, &fanOut)
 	if err != nil {
 		return nil, cerrors.Errorf("could not build processor nodes: %w", err)
 	}
 
-	destinationNodes, err := s.buildDestinationNodes(ctx, connFetcher, procFetcher, pluginFetcher, pl, &fanOut)
+	destinationNodes, err := s.buildDestinationNodes(ctx, connFetcher, procService, pluginFetcher, pl, &fanOut)
 	if err != nil {
 		return nil, cerrors.Errorf("could not build destination nodes: %w", err)
 	}
@@ -275,7 +276,7 @@ func (s *Service) buildNodes(
 
 func (s *Service) buildProcessorNodes(
 	ctx context.Context,
-	procFetcher ProcessorFetcher,
+	procService ProcessorService,
 	pl *Instance,
 	processorIDs []string,
 	first stream.PubNode,
@@ -285,16 +286,21 @@ func (s *Service) buildProcessorNodes(
 
 	prev := first
 	for _, procID := range processorIDs {
-		proc, err := procFetcher.Get(ctx, procID)
+		instance, err := procService.Get(ctx, procID)
 		if err != nil {
 			return nil, cerrors.Errorf("could not fetch processor: %w", err)
 		}
 
+		runnableProc, err := procService.MakeRunnableProcessor(ctx, instance)
+		if err != nil {
+			return nil, err
+		}
+
 		var node stream.PubSubNode
-		if proc.Config.Workers > 1 {
-			node = s.buildParallelProcessorNode(pl, proc)
+		if instance.Config.Workers > 1 {
+			node = s.buildParallelProcessorNode(pl, runnableProc)
 		} else {
-			node = s.buildProcessorNode(pl, proc)
+			node = s.buildProcessorNode(pl, runnableProc)
 		}
 
 		node.Sub(prev.Pub())
@@ -309,7 +315,7 @@ func (s *Service) buildProcessorNodes(
 
 func (s *Service) buildParallelProcessorNode(
 	pl *Instance,
-	proc *processor.Instance,
+	proc *processor.RunnableProcessor,
 ) *stream.ParallelNode {
 	return &stream.ParallelNode{
 		Name: proc.ID + "-parallel",
@@ -324,19 +330,19 @@ func (s *Service) buildParallelProcessorNode(
 
 func (s *Service) buildProcessorNode(
 	pl *Instance,
-	proc *processor.Instance,
+	proc *processor.RunnableProcessor,
 ) *stream.ProcessorNode {
 	return &stream.ProcessorNode{
 		Name:           proc.ID,
-		Processor:      proc.Processor,
-		ProcessorTimer: measure.ProcessorExecutionDurationTimer.WithValues(pl.Config.Name, proc.Type),
+		Processor:      proc,
+		ProcessorTimer: measure.ProcessorExecutionDurationTimer.WithValues(pl.Config.Name, proc.Plugin),
 	}
 }
 
 func (s *Service) buildSourceNodes(
 	ctx context.Context,
 	connFetcher ConnectorFetcher,
-	procFetcher ProcessorFetcher,
+	procService ProcessorService,
 	pluginFetcher PluginDispenserFetcher,
 	pl *Instance,
 	next stream.SubNode,
@@ -377,7 +383,7 @@ func (s *Service) buildSourceNodes(
 		metricsNode := s.buildMetricsNode(pl, instance)
 		metricsNode.Sub(ackerNode.Pub())
 
-		procNodes, err := s.buildProcessorNodes(ctx, procFetcher, pl, instance.ProcessorIDs, metricsNode, next)
+		procNodes, err := s.buildProcessorNodes(ctx, procService, pl, instance.ProcessorIDs, metricsNode, next)
 		if err != nil {
 			return nil, cerrors.Errorf("could not build processor nodes for connector %s: %w", instance.ID, err)
 		}
@@ -475,7 +481,7 @@ func (s *Service) buildDestinationAckerNode(
 func (s *Service) buildDestinationNodes(
 	ctx context.Context,
 	connFetcher ConnectorFetcher,
-	procFetcher ProcessorFetcher,
+	procService ProcessorService,
 	pluginFetcher PluginDispenserFetcher,
 	pl *Instance,
 	prev stream.PubNode,
@@ -511,7 +517,7 @@ func (s *Service) buildDestinationNodes(
 		destinationNode.Sub(metricsNode.Pub())
 		ackerNode.Sub(destinationNode.Pub())
 
-		connNodes, err := s.buildProcessorNodes(ctx, procFetcher, pl, instance.ProcessorIDs, prev, metricsNode)
+		connNodes, err := s.buildProcessorNodes(ctx, procService, pl, instance.ProcessorIDs, prev, metricsNode)
 		if err != nil {
 			return nil, cerrors.Errorf("could not build processor nodes for connector %s: %w", instance.ID, err)
 		}

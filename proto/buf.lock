@@ -4,13 +4,13 @@ deps:
   - remote: buf.build
     owner: conduitio
     repository: conduit-commons
-    commit: de2e1a18c9e042119dedd69b852efc21
-    digest: shake256:1275ac9a7d437cc6b48bd6ff2e9edc59f0450a8f9ab6050f49fb9949e231b7f4d91debfd42b09fc29d9e4aed1b9904266a46a46f7a5676218b53aafb7efe211d
+    commit: 5b10e1d6574640b2864772621d09bba7
+    digest: shake256:54f1581e61a4f540fe141893c80a924e0091cfe57b19bde9078ca10dd152828acdebcc8e6b9abf2fb6c8dbede06d0903fc85b426009ad9e9fb149813bfe75d63
   - remote: buf.build
     owner: googleapis
     repository: googleapis
-    commit: a86849a25cc04f4dbe9b15ddddfbc488
-    digest: shake256:e19143328f8cbfe13fc226aeee5e63773ca494693a72740a7560664270039a380d94a1344234b88c7691311460df9a9b1c2982190d0a2612eae80368718e1943
+    commit: 7e6f6e774e29406da95bd61cdcdbc8bc
+    digest: shake256:fe43dd2265ea0c07d76bd925eeba612667cf4c948d2ce53d6e367e1b4b3cb5fa69a51e6acb1a6a50d32f894f054a35e6c0406f6808a483f2752e10c866ffbf73
   - remote: buf.build
     owner: grpc-ecosystem
     repository: grpc-gateway

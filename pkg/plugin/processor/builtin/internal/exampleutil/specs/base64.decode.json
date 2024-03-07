@@ -1,0 +1,63 @@
+{
+  "specification": {
+    "name": "base64.decode",
+    "summary": "Decode a field to base64.",
+    "description": "The processor will decode the value of the target field from base64 and store the\nresult in the target field. It is not allowed to decode the `.Position` field.",
+    "version": "v0.1.0",
+    "author": "Meroxa, Inc.",
+    "parameters": {
+      "field": {
+        "default": "",
+        "description": "Field is the target field, as it would be addressed in a Go template (e.g. `.Payload.After.foo`).\nNote that it is not allowed to base64 decode the `.Position` field.",
+        "type": "string",
+        "validations": [
+          {
+            "type": "required",
+            "value": ""
+          },
+          {
+            "type": "exclusion",
+            "value": ".Position"
+          }
+        ]
+      }
+    }
+  },
+  "examples": [
+    {
+      "summary": "Decode a base64 encoded string",
+      "description": "This example decodes the base64 encoded string stored in\n`.Payload.After`. Note that the result is a string, so if you want to\nfurther process the result (e.g. parse the string as JSON), you need to chain\nother processors (e.g. [`json.decode`](/docs/processors/builtin/json.decode)).",
+      "config": {
+        "field": ".Payload.After.foo"
+      },
+      "have": {
+        "position": "dGVzdC1wb3NpdGlvbg==",
+        "operation": "create",
+        "metadata": {
+          "key1": "val1"
+        },
+        "key": "test-key",
+        "payload": {
+          "before": null,
+          "after": {
+            "foo": "YmFy"
+          }
+        }
+      },
+      "want": {
+        "position": "dGVzdC1wb3NpdGlvbg==",
+        "operation": "create",
+        "metadata": {
+          "key1": "val1"
+        },
+        "key": "test-key",
+        "payload": {
+          "before": null,
+          "after": {
+            "foo": "bar"
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,5 +1,5 @@
 ---
-version: 2.0
+version: 2.2
 
 pipelines:
   - id: pipeline1
@@ -17,13 +17,13 @@ pipelines:
           aws.bucket: my-bucket
         processors:
           - id: proc1
-            type: js
+            plugin: js
             settings:
               additionalProp1: string
               additionalProp2: string
     processors:
       - id: pipeline1proc1
-        type: js
+        plugin: js
         settings:
           additionalProp1: string
           additionalProp2: string
@@ -50,7 +50,7 @@ pipelines:
           path: my/path
         processors:
           - id: con2proc1
-            type: hoistfield
+            plugin: hoistfield
             settings:
               additionalProp1: string
               additionalProp2: string

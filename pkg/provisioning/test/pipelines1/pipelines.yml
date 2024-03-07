@@ -21,13 +21,13 @@ pipelines:
           path: my/path/file2.txt
         processors:
           - id: proc1con
-            type: js
+            plugin: js
             workers: 10
             settings:
               additionalProp1: string
     processors:
       - id: proc1
-        type: js
+        plugin: js
         settings:
           additionalProp1: string
     dead-letter-queue:

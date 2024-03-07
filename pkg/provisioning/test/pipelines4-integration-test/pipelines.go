@@ -77,8 +77,8 @@ var P1C2 = &connector.Instance{
 }
 
 var P1P1 = &processor.Instance{
-	ID:   "pipeline1:proc1",
-	Type: "removereadat",
+	ID:     "pipeline1:proc1",
+	Plugin: "removereadat",
 	Parent: processor.Parent{
 		ID:   "pipeline1",
 		Type: processor.ParentTypePipeline,
@@ -87,7 +87,6 @@ var P1P1 = &processor.Instance{
 		Settings: nil,
 		Workers:  1,
 	},
-	Processor: nil,
 
 	ProvisionedBy: processor.ProvisionTypeConfig,
 	CreatedAt:     time.Now(),
@@ -95,8 +94,8 @@ var P1P1 = &processor.Instance{
 }
 
 var P1C2P1 = &processor.Instance{
-	ID:   "pipeline1:con2:con2proc1",
-	Type: "removereadat",
+	ID:     "pipeline1:con2:con2proc1",
+	Plugin: "removereadat",
 	Parent: processor.Parent{
 		ID:   "pipeline1:con2",
 		Type: processor.ParentTypeConnector,
@@ -105,7 +104,6 @@ var P1C2P1 = &processor.Instance{
 		Settings: nil,
 		Workers:  1,
 	},
-	Processor: nil,
 
 	ProvisionedBy: processor.ProvisionTypeConfig,
 	CreatedAt:     time.Now(),

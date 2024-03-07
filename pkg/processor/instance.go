@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:generate mockgen -destination=mock/processor.go -package=mock -mock_names=Interface=Processor . Interface
 //go:generate stringer -type=ParentType -trimprefix ParentType
 
 package processor
@@ -21,8 +20,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/inspector"
-	"github.com/conduitio/conduit/pkg/record"
 )
 
 const (
@@ -42,37 +41,46 @@ type (
 	ProvisionType int
 )
 
-// Interface is the interface that represents a single message processor that
-// can be executed on one record and manipulate it.
-type Interface interface {
-	// Process runs the processor function on a record.
-	Process(ctx context.Context, record record.Record) (record.Record, error)
-
-	// InspectIn starts an inspection session for input records for this processor.
-	InspectIn(ctx context.Context, id string) *inspector.Session
-	// InspectOut starts an inspection session for output records for this processor.
-	InspectOut(ctx context.Context, id string) *inspector.Session
-
-	// Close closes this processor and releases any resources
-	// which may have been used by it.
-	Close()
-}
-
-// Instance represents a processor instance.
+// Instance represents a processor persisted in a database.
+// An Instance is used to create a RunnableProcessor which represents
+// a processor which can be used in a pipeline.
 type Instance struct {
 	ID            string
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
 	ProvisionedBy ProvisionType
 
-	Type string
+	Plugin string
 	// Condition is a goTemplate formatted string, the value provided to the template is a sdk.Record, it should evaluate
 	// to a boolean value, indicating a condition to run the processor for a specific record or not. (template functions
 	// provided by `sprig` are injected)
 	Condition string
 	Parent    Parent
 	Config    Config
-	Processor Interface
+
+	// Needed because a user can start inspecting a processor
+	// before the processor is actually running.
+	inInsp  *inspector.Inspector
+	outInsp *inspector.Inspector
+	running bool
+}
+
+func (i *Instance) init(logger log.CtxLogger) {
+	i.inInsp = inspector.New(logger, inspector.DefaultBufferSize)
+	i.outInsp = inspector.New(logger, inspector.DefaultBufferSize)
+}
+
+func (i *Instance) InspectIn(ctx context.Context, id string) *inspector.Session {
+	return i.inInsp.NewSession(ctx, id)
+}
+
+func (i *Instance) InspectOut(ctx context.Context, id string) *inspector.Session {
+	return i.outInsp.NewSession(ctx, id)
+}
+
+func (i *Instance) Close() {
+	i.inInsp.Close()
+	i.outInsp.Close()
 }
 
 // Parent represents the connection to the entity a processor is connected to.
