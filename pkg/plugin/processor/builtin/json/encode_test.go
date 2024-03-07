@@ -60,7 +60,7 @@ func TestEncode_Process(t *testing.T) {
 			want: sdk.SingleRecord{
 				Payload: opencdc.Change{
 					After: opencdc.StructuredData{
-						"foo": []uint8(`{"after":{"data":4,"id":3},"baz":"bar"}`),
+						"foo": `{"after":{"data":4,"id":3},"baz":"bar"}`,
 					},
 				},
 			},
@@ -92,7 +92,7 @@ func TestEncode_Process(t *testing.T) {
 			want: sdk.SingleRecord{
 				Payload: opencdc.Change{
 					After: opencdc.StructuredData{
-						"foo": []uint8("123"),
+						"foo": "123",
 					},
 				},
 			},
@@ -106,7 +106,7 @@ func TestEncode_Process(t *testing.T) {
 			},
 			want: sdk.SingleRecord{
 				Payload: opencdc.Change{
-					After: opencdc.RawData("null"),
+					After: nil,
 				},
 			},
 		},

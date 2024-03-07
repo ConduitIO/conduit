@@ -96,11 +96,17 @@ func (p *encodeProcessor) encode(rec opencdc.Record) (sdk.ProcessedRecord, error
 	if err != nil {
 		return nil, cerrors.Errorf("failed to resolve the field: %w", err)
 	}
-	value, err := json.Marshal(ref.Get())
+	valIn := ref.Get()
+	if valIn == nil {
+		// do not encode nil values
+		return sdk.SingleRecord(rec), nil
+	}
+
+	valOut, err := json.Marshal(valIn)
 	if err != nil {
 		return nil, err
 	}
-	err = ref.Set(value)
+	err = ref.Set(string(valOut))
 	if err != nil {
 		return nil, cerrors.Errorf("failed to set the JSON encoded value into the record: %w", err)
 	}

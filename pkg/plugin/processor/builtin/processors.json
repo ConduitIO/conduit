@@ -1154,7 +1154,7 @@
           "key": null,
           "payload": {
             "before": {
-              "foo": "eyJiYXoiOiJiYXIiLCJiZWZvcmUiOnsiZGF0YSI6NCwiaWQiOjN9fQ=="
+              "foo": "{\"baz\":\"bar\",\"before\":{\"data\":4,\"id\":3}}"
             },
             "after": null
           }

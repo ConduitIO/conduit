@@ -22,7 +22,7 @@ import (
 )
 
 //nolint:govet // a more descriptive example description
-func ExampleDecodeProcessor_structuredKey() {
+func ExampleEncodeProcessor_structuredKey() {
 	p := json.NewEncodeProcessor(log.Nop())
 
 	RunExample(p, example{
@@ -63,7 +63,7 @@ func ExampleDecodeProcessor_structuredKey() {
 }
 
 //nolint:govet // a more descriptive example description
-func ExampleDecodeProcessor_mapToJSON() {
+func ExampleEncodeProcessor_mapToJSON() {
 	p := json.NewEncodeProcessor(log.Nop())
 
 	RunExample(p, example{
@@ -84,9 +84,11 @@ func ExampleDecodeProcessor_mapToJSON() {
 			Operation: opencdc.OperationSnapshot,
 			Payload: opencdc.Change{
 				Before: opencdc.StructuredData{
-					"foo": []uint8(`{"baz":"bar","before":{"data":4,"id":3}}`)},
+					"foo": `{"baz":"bar","before":{"data":4,"id":3}}`,
+				},
 			},
-		}})
+		},
+	})
 
 	// Output:
 	// processor transformed record:
@@ -107,7 +109,7 @@ func ExampleDecodeProcessor_mapToJSON() {
 	// -          "id": 3
 	// -        }
 	// -      }
-	// +      "foo": "eyJiYXoiOiJiYXIiLCJiZWZvcmUiOnsiZGF0YSI6NCwiaWQiOjN9fQ=="
+	// +      "foo": "{\"baz\":\"bar\",\"before\":{\"data\":4,\"id\":3}}"
 	//      },
 	//      "after": null
 	//    }
