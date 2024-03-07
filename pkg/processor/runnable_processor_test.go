@@ -257,7 +257,7 @@ func TestRunnableProcessor_Process_ConditionNotMatching(t *testing.T) {
 	recsOut := underTest.Process(ctx, recsIn)
 	defer underTest.Close()
 
-	is.Equal([]sdk.ProcessedRecord{sdk.FilterRecord{}}, recsOut)
+	is.Equal([]sdk.ProcessedRecord{sdk.SingleRecord(recsIn[0])}, recsOut)
 }
 
 func TestRunnableProcessor_Process_ConditionMatching(t *testing.T) {

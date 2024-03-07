@@ -69,7 +69,7 @@ func (p *RunnableProcessor) Process(ctx context.Context, records []opencdc.Recor
 			return append(out, sdk.ErrorRecord{Error: cerrors.Errorf("failed evaluating condition: %w", err)})
 		}
 		if !keep {
-			out = append(out, sdk.FilterRecord{})
+			out = append(out, sdk.SingleRecord(rec))
 			continue
 		}
 
