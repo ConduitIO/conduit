@@ -61,7 +61,7 @@ download:
 
 install-tools: download
 	@echo Installing tools from tools.go
-	@go list -e -f '{{ join .Imports "\n" }}' tools.go | xargs -I % ./scripts/tool-version.sh % | xargs -tI % go install %
+	@go list -e -f '{{ join .Imports "\n" }}' tools.go | xargs -I % go list -f "%@{{.Module.Version}}" % | xargs -tI % go install %
 	@go mod tidy
 
 generate:
