@@ -58,7 +58,7 @@ func ExampleSetProcessor_addField() {
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary: `Add field`,
 		Description: `This example adds a new field to the record. The field is
-added to ` + ".Payload.After" + ` and is set to ` + "bar" + `.`,
+added to ` + "`.Payload.After`" + ` and is set to ` + "`bar`" + `.`,
 		Config: map[string]string{"field": ".Payload.After.foo", "value": "bar"},
 		Have: opencdc.Record{Operation: opencdc.OperationSnapshot,
 			Key: opencdc.StructuredData{"my-key": "id"},

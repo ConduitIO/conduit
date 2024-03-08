@@ -40,7 +40,7 @@ func NewConvertProcessor(log.CtxLogger) sdk.Processor {
 
 type convertConfig struct {
 	// Field is the target field, as it would be addressed in a Go template (e.g. `.Payload.After.foo`).
-	// you can only convert fields that are under .Key and .Payload, and said fields should contain structured data.
+	// you can only convert fields that are under `.Key` and `.Payload`, and said fields should contain structured data.
 	Field string `json:"field" validate:"required,regex=^\\.(Payload|Key).*"`
 	// Type is the target field type after conversion, available options are: string, int, float, bool.
 	Type string `json:"type" validate:"required,inclusion=string|int|float|bool"`
@@ -52,9 +52,9 @@ func (p *convertProcessor) Specification() (sdk.Specification, error) {
 		Summary: "Convert the type of a field.",
 		Description: `Convert takes the field of one type and converts it into another type (e.g. string to integer). 
 The applicable types are string, int, float and bool. Converting can be done between any combination of types. Note that
-booleans will be converted to numeric values 1 (true) and 0 (false). Processor is only applicable to .Key, .Payload.Before
-and .Payload.After prefixes, and only applicable if said fields contain structured data.
-If the record contains raw JSON data, then use the processor [` + "json.decode" + `](/docs/processors/builtin/json.decode)
+booleans will be converted to numeric values 1 (true) and 0 (false). Processor is only applicable to ` + "`.Key`" + `, ` + "`.Payload.Before`" + `
+and ` + "`.Payload.After`" + ` prefixes, and only applicable if said fields contain structured data.
+If the record contains raw JSON data, then use the processor [` + "`json.decode`" + `](/docs/processors/builtin/json.decode)
 to parse it into structured data first.`,
 		Version:    "v0.1.0",
 		Author:     "Meroxa, Inc.",

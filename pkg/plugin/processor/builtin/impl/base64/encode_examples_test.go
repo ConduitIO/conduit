@@ -27,7 +27,7 @@ func ExampleEncodeProcessor_rawData() {
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary: "Encode record key to base64",
 		Description: `TThis example takes a record containing raw data in
-` + ".Key" + ` and converts it into a base64 encoded string.`,
+` + "`.Key`" + ` and converts it into a base64 encoded string.`,
 		Config: map[string]string{
 			"field": ".Key",
 		},
@@ -83,7 +83,7 @@ func ExampleBase64EncodeProcessor_stringField() {
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary: "Encode nested value to base64",
 		Description: `This example takes a record containing a string in
-` + ".Payload.Before.foo" + ` and converts it into a base64 encoded string.`,
+` + "`.Payload.Before.foo`" + ` and converts it into a base64 encoded string.`,
 		Config: map[string]string{
 			"field": ".Payload.After.foo",
 		},

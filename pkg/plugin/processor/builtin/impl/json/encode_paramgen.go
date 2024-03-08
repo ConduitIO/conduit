@@ -13,7 +13,7 @@ func (encodeConfig) Parameters() map[string]config.Parameter {
 	return map[string]config.Parameter{
 		"field": {
 			Default:     "",
-			Description: "Field is the target field, as it would be addressed in a Go template (e.g. `.Payload.After.foo`).\nyou can only encode fields that are under .Key, .Payload.Before and .Payload.After.",
+			Description: "Field is the target field, as it would be addressed in a Go template (e.g. `.Payload.After.foo`).\nyou can only encode fields that are under `.Key`, `.Payload.Before` and `.Payload.After`.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{
 				config.ValidationRequired{},

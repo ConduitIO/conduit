@@ -37,7 +37,8 @@ func (p *filterProcessor) Specification() (sdk.Specification, error) {
 		Summary: "Acknowledges all records that get passed to the filter.",
 		Description: `Acknowledges all records that get passed to the filter, so the records will be filtered out if 
 the condition provided to the processor is evaluated to "true".
-Make sure to add a condition to this processor, otherwise all records will be filtered out."`,
+
+**Important:** Make sure to add a condition to this processor, otherwise all records will be filtered out.`,
 		Version:    "v0.1.0",
 		Author:     "Meroxa, Inc.",
 		Parameters: map[string]config.Parameter{},

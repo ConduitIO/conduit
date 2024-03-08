@@ -41,7 +41,7 @@ func NewSetProcessor(log.CtxLogger) sdk.Processor {
 
 type setConfig struct {
 	// Field is the target field, as it would be addressed in a Go template (e.g. `.Payload.After.foo`).
-	// Note that it is not allowed to set the .Position field.
+	// Note that it is not allowed to set the `.Position` field.
 	Field string `json:"field" validate:"required,exclusion=.Position"`
 	// Value is a Go template expression which will be evaluated and stored in `field` (e.g. `{{ .Payload.After }}`).
 	Value string `json:"value" validate:"required"`
@@ -51,12 +51,12 @@ func (p *setProcessor) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
 		Name:    "field.set",
 		Summary: "Set the value of a certain field.",
-		Description: `Set the value of a certain field to any value. It is not allowed to set the .Position field.
+		Description: `Set the value of a certain field to any value. It is not allowed to set the ` + "`.Position`" + ` field.
 The new value can be a Go template expression, the processor will evaluate the output and assign the value to the target field.
-If the "field" provided doesn't exist, the processor will create that field and assign its value.
+If the provided ` + "`field`" + ` doesn't exist, the processor will create that field and assign its value.
 This processor can be used for multiple purposes, like extracting fields, hoisting data, inserting fields, copying fields, masking fields, etc.
 Note that this processor only runs on structured data, if the record contains raw JSON data, then use the processor
-[` + "json.decode" + `](/docs/processors/builtin/json.decode) to parse it into structured data first.`,
+[` + "`json.decode`" + `](/docs/processors/builtin/json.decode) to parse it into structured data first.`,
 		Version:    "v0.1.0",
 		Author:     "Meroxa, Inc.",
 		Parameters: setConfig{}.Parameters(),

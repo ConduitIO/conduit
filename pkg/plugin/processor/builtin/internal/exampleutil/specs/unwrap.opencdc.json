@@ -1,14 +1,14 @@
 {
   "specification": {
     "name": "unwrap.opencdc",
-    "summary": "A processor that unwraps the OpenCDC record saved in one of record's fields.",
-    "description": "The unwrap.opencdc processor is useful in situations where a record goes through intermediate \nsystems before being written to a final destination. In these cases, the original OpenCDC record is part of the payload \nread from the intermediate system and needs to be unwrapped before being written.\n\nNote: if the wrapped OpenCDC record is not in a structured data field, then it's assumed that it's stored in JSON format.",
+    "summary": "Unwraps an OpenCDC record saved in one of the record's fields.",
+    "description": "The `unwrap.opencdc` processor is useful in situations where a record goes through intermediate\nsystems before being written to a final destination. In these cases, the original OpenCDC record is part of the payload\nread from the intermediate system and needs to be unwrapped before being written.\n\nNote: if the wrapped OpenCDC record is not in a structured data field, then it's assumed that it's stored in JSON format.",
     "version": "v0.1.0",
     "author": "Meroxa, Inc.",
     "parameters": {
       "field": {
         "default": ".Payload.After",
-        "description": "Field is a reference to the field which contains the OpenCDC record.\n\nFor more information about record references, see: https://github.com/ConduitIO/conduit-processor-sdk/blob/cbdc5dcb5d3109f8f13b88624c9e360076b0bcdb/util.go#L66.",
+        "description": "Field is a reference to the field which contains the OpenCDC record\n(see [`sdk.NewReferenceResolver`](https://github.com/ConduitIO/conduit-processor-sdk/blob/02b60dc7acad11a2fcdf0a0188a13cf573648650/util.go#L53-L66)).",
         "type": "string",
         "validations": []
       }
