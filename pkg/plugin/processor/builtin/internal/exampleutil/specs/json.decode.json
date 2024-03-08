@@ -8,7 +8,7 @@
     "parameters": {
       "field": {
         "default": "",
-        "description": "Field is the target field, as it would be addressed in a Go template (e.g. `.Payload.After.foo`).\nyou can only decode fields that are under .Key and .Payload.",
+        "description": "Field is the target field, as it would be addressed in a Go template (e.g. `.Payload.After.foo`).\nyou can only decode fields that are under `.Key` and `.Payload`.",
         "type": "string",
         "validations": [
           {
@@ -30,7 +30,7 @@
   "examples": [
     {
       "summary": "Decode record key as JSON",
-      "description": "This example takes a record containing a raw JSON string in\n.Key and converts it into structured data.",
+      "description": "This example takes a record containing a raw JSON string in\n`.Key` and converts it into structured data.",
       "config": {
         "field": ".Key"
       },
@@ -62,7 +62,7 @@
     },
     {
       "summary": "Decode nested field as JSON",
-      "description": "This example takes a record containing a raw JSON string in\n.Payload.Before.foo and converts it into a map.",
+      "description": "This example takes a record containing a raw JSON string in\n`.Payload.Before.foo` and converts it into a map.",
       "config": {
         "field": ".Payload.Before.foo"
       },

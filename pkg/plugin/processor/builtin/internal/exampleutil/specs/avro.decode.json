@@ -1,7 +1,7 @@
 {
   "specification": {
     "name": "avro.decode",
-    "summary": "Decodes a field's raw data in the Avro format",
+    "summary": "Decodes a field's raw data in the Avro format.",
     "description": "The processor takes raw data (bytes or a string) in the specified field and decodes\nit from the [Avro format](https://avro.apache.org/) into structured data. It extracts the schema ID from the data,\ndownloads the associated schema from the [schema registry](https://docs.confluent.io/platform/current/schema-registry/index.html)\nand decodes the payload. The schema is cached locally after it's first downloaded.\n\nIf the processor encounters structured data or the data can't be decoded it returns an error.\n\nThis processor is the counterpart to [`avro.encode`](/docs/processors/builtin/avro.encode).",
     "version": "v0.1.0",
     "author": "Meroxa, Inc.",

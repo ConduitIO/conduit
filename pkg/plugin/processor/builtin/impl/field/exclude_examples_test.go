@@ -71,8 +71,8 @@ func ExampleExcludeProcessor_multipleFields() {
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary: `Exclude multiple fields`,
 		Description: `It's possible to exclude multiple fields by providing a
-comma-separated list of fields. In this example, we exclude ` + ".Metadata" + `,
-` + ".Payload.After.foo" + ` and ` + ".Key.key1" + `.`,
+comma-separated list of fields. In this example, we exclude ` + "`.Metadata`" + `,
+` + "`.Payload.After.foo`" + ` and ` + "`.Key.key1`" + `.`,
 		Config: map[string]string{"fields": ".Metadata,.Payload.After.foo,.Key.key1"},
 		Have: opencdc.Record{
 			Operation: opencdc.OperationCreate,

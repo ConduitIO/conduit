@@ -11,7 +11,7 @@ func (openCDCConfig) Parameters() map[string]config.Parameter {
 	return map[string]config.Parameter{
 		"field": {
 			Default:     ".Payload.After",
-			Description: "Field is a reference to the field which contains the OpenCDC record.\n\nFor more information about record references, see: https://github.com/ConduitIO/conduit-processor-sdk/blob/cbdc5dcb5d3109f8f13b88624c9e360076b0bcdb/util.go#L66.",
+			Description: "Field is a reference to the field which contains the OpenCDC record\n(see [`sdk.NewReferenceResolver`](https://github.com/ConduitIO/conduit-processor-sdk/blob/02b60dc7acad11a2fcdf0a0188a13cf573648650/util.go#L53-L66)).",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},

@@ -28,7 +28,7 @@ func ExampleDecodeProcessor_rawKey() {
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary: `Decode record key as JSON`,
 		Description: `This example takes a record containing a raw JSON string in
-` + ".Key" + ` and converts it into structured data.`,
+` + "`.Key`" + ` and converts it into structured data.`,
 		Config: map[string]string{"field": ".Key"},
 		Have: opencdc.Record{
 			Operation: opencdc.OperationCreate,
@@ -72,7 +72,7 @@ func ExampleDecodeProcessor_rawPayloadField() {
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary: "Decode nested field as JSON",
 		Description: `This example takes a record containing a raw JSON string in
-` + ".Payload.Before.foo" + ` and converts it into a map.`,
+` + "`.Payload.Before.foo`" + ` and converts it into a map.`,
 		Config: map[string]string{"field": ".Payload.Before.foo"},
 		Have: opencdc.Record{
 			Operation: opencdc.OperationSnapshot,

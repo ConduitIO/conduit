@@ -38,7 +38,7 @@ func NewEncodeProcessor(log.CtxLogger) sdk.Processor {
 
 type encodeConfig struct {
 	// Field is the target field, as it would be addressed in a Go template (e.g. `.Payload.After.foo`).
-	// you can only encode fields that are under .Key, .Payload.Before and .Payload.After.
+	// you can only encode fields that are under `.Key`, `.Payload.Before` and `.Payload.After`.
 	Field string `json:"field" validate:"required,regex=^\\.(Payload|Key).*,exclusion=.Payload"`
 }
 
@@ -46,7 +46,7 @@ func (p *encodeProcessor) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
 		Name:    "json.encode",
 		Summary: "Encodes a specific field from structured data to JSON raw data (string).",
-		Description: `The processor takes data from the target field, encodes it into s JSON value
+		Description: `The processor takes data from the target field, encodes it into a JSON value
 and stores the encoded value in the target field.
 
 This processor is only applicable to fields under ` + "`.Key`" + `, ` + "`.Payload`.Before" + ` and

@@ -13,7 +13,7 @@ func (decodeConfig) Parameters() map[string]config.Parameter {
 	return map[string]config.Parameter{
 		"field": {
 			Default:     "",
-			Description: "Field is the target field, as it would be addressed in a Go template (e.g. `.Payload.After.foo`).\nyou can only decode fields that are under .Key and .Payload.",
+			Description: "Field is the target field, as it would be addressed in a Go template (e.g. `.Payload.After.foo`).\nyou can only decode fields that are under `.Key` and `.Payload`.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{
 				config.ValidationRequired{},

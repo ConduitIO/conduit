@@ -2,13 +2,13 @@
   "specification": {
     "name": "json.encode",
     "summary": "Encodes a specific field from structured data to JSON raw data (string).",
-    "description": "The processor takes data from the target field, encodes it into s JSON value\nand stores the encoded value in the target field.\n\nThis processor is only applicable to fields under `.Key`, `.Payload`.Before and\n`.Payload.After`, as they can contain structured data.",
+    "description": "The processor takes data from the target field, encodes it into a JSON value\nand stores the encoded value in the target field.\n\nThis processor is only applicable to fields under `.Key`, `.Payload`.Before and\n`.Payload.After`, as they can contain structured data.",
     "version": "v0.1.0",
     "author": "Meroxa, Inc.",
     "parameters": {
       "field": {
         "default": "",
-        "description": "Field is the target field, as it would be addressed in a Go template (e.g. `.Payload.After.foo`).\nyou can only encode fields that are under .Key, .Payload.Before and .Payload.After.",
+        "description": "Field is the target field, as it would be addressed in a Go template (e.g. `.Payload.After.foo`).\nyou can only encode fields that are under `.Key`, `.Payload.Before` and `.Payload.After`.",
         "type": "string",
         "validations": [
           {
@@ -30,7 +30,7 @@
   "examples": [
     {
       "summary": "Encode nested field to JSON",
-      "description": "This example takes a record containing a map in\n.Payload.Before.foo and converts it into a raw JSON string.",
+      "description": "This example takes a record containing a map in\n`.Payload.Before.foo` and converts it into a raw JSON string.",
       "config": {
         "field": ".Payload.Before.foo"
       },
@@ -67,7 +67,7 @@
     },
     {
       "summary": "Encode record key to JSON",
-      "description": "This example takes a record containing structured data in\n.Key and converts it into a raw JSON string.",
+      "description": "This example takes a record containing structured data in\n`.Key` and converts it into a raw JSON string.",
       "config": {
         "field": ".Key"
       },
