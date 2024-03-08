@@ -84,7 +84,7 @@ func NewHTTPProcessor(l log.CtxLogger) sdk.Processor {
 func (p *httpProcessor) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
 		Name:    "webhook.http",
-		Summary: "Trigger a HTTP request for every record.",
+		Summary: "Trigger an HTTP request for every record.",
 		Description: `A processor that sends an HTTP request to the specified URL, retries on error and 
 saves the response body and, optionally, the response status.`,
 		Version:    "v0.1.0",
