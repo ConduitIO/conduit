@@ -238,7 +238,7 @@ and replace fields, post payloads to HTTP endpoints etc. Conduit also provides
 the ability to write custom processors in JavaScript.
 
 More detailed information as well as examples can be found in
-the [Processors documentation](/docs/processors.md).
+the [Processors documentation](https://conduit.io/docs/processors/getting-started).
 
 ## API
 
@@ -283,7 +283,7 @@ documentation:
   a Conduit pipeline works.
 - [Pipeline Configuration Files](docs/pipeline_configuration_files.md)
   explains how you can define pipelines using YAML files.
-- [Processors](docs/processors.md) contains examples and more information about
+- [Processors](https://conduit.io/docs/processors/getting-started) contains examples and more information about
   Conduit processors.
 - [Conduit Architecture](docs/architecture.md)
   will give you a high-level overview of Conduit.
