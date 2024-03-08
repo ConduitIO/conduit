@@ -54,7 +54,7 @@ func ExampleNewRegistry() {
 		panic(err)
 	}
 
-	enc := expfmt.NewEncoder(os.Stdout, expfmt.FmtText)
+	enc := expfmt.NewEncoder(os.Stdout, expfmt.NewFormat(expfmt.TypeTextPlain))
 	for _, m := range gatheredMetrics {
 		if strings.HasPrefix(m.GetName(), "prom_example_") {
 			err := enc.Encode(m)
