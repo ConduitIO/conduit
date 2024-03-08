@@ -37,8 +37,9 @@ func NewEncodeProcessor(log.CtxLogger) sdk.Processor {
 }
 
 type encodeConfig struct {
-	// Field is the target field, as it would be addressed in a Go template (e.g. `.Payload.After.foo`).
-	// you can only encode fields that are under `.Key`, `.Payload.Before` and `.Payload.After`.
+	// Field is a reference to the target field.
+	// For more information about the format, read [Referencing fields](https://conduit.io/docs/processors/referencing-fields).
+	// Only fields that are under `.Key` and `.Payload` can be encoded.
 	Field string `json:"field" validate:"required,regex=^\\.(Payload|Key).*,exclusion=.Payload"`
 }
 

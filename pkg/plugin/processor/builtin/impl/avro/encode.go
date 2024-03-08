@@ -36,6 +36,7 @@ type encoder interface {
 
 type encodeConfig struct {
 	// The field that will be encoded.
+	// For more information about the format, read [Referencing fields](https://conduit.io/docs/processors/referencing-fields).
 	Field string `json:"field" default:".Payload.After"`
 
 	// URL of the schema registry (e.g. http://localhost:8085)

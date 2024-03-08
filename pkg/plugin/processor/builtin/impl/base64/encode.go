@@ -35,7 +35,8 @@ type encodeProcessor struct {
 }
 
 type encodeConfig struct {
-	// Field is the target field, as it would be addressed in a Go template (e.g. `.Payload.After.foo`).
+	// Field is a reference to the target field.
+	// For more information about the format, read [Referencing fields](https://conduit.io/docs/processors/referencing-fields).
 	// Note that it is not allowed to base64 encode the `.Position` field.
 	Field string `json:"field" validate:"required,exclusion=.Position"`
 }

@@ -29,8 +29,8 @@ import (
 )
 
 type openCDCConfig struct {
-	// Field is a reference to the field which contains the OpenCDC record
-	// (see [`sdk.NewReferenceResolver`](https://github.com/ConduitIO/conduit-processor-sdk/blob/02b60dc7acad11a2fcdf0a0188a13cf573648650/util.go#L53-L66)).
+	// Field is a reference to the field that contains the OpenCDC record.
+	// For more information about the format, read [Referencing fields](https://conduit.io/docs/processors/referencing-fields).
 	Field string `json:"field" default:".Payload.After"`
 }
 

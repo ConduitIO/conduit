@@ -34,7 +34,8 @@ type decodeProcessor struct {
 }
 
 type decodeConfig struct {
-	// Field is the target field, as it would be addressed in a Go template (e.g. `.Payload.After.foo`).
+	// Field is the reference to target field.
+	// For more information about the format, read [Referencing fields](https://conduit.io/docs/processors/referencing-fields).
 	// Note that it is not allowed to base64 decode the `.Position` field.
 	Field string `json:"field" validate:"required,exclusion=.Position"`
 }
