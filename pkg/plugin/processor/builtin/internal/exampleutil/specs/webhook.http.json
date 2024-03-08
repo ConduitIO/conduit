@@ -1,7 +1,7 @@
 {
   "specification": {
     "name": "webhook.http",
-    "summary": "Trigger a HTTP request for every record.",
+    "summary": "Trigger an HTTP request for every record.",
     "description": "A processor that sends an HTTP request to the specified URL, retries on error and \nsaves the response body and, optionally, the response status.",
     "version": "v0.1.0",
     "author": "Meroxa, Inc.",
