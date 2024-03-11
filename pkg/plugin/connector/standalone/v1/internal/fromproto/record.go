@@ -78,8 +78,7 @@ func Data(in *opencdcv1.Data) (record.Data, error) {
 	switch v := d.(type) {
 	case *opencdcv1.Data_RawData:
 		return record.RawData{
-			Raw:    v.RawData,
-			Schema: nil,
+			Raw: v.RawData,
 		}, nil
 	case *opencdcv1.Data_StructuredData:
 		return record.StructuredData(v.StructuredData.AsMap()), nil
