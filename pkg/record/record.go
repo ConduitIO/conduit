@@ -25,7 +25,6 @@ import (
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/record/schema"
 	"github.com/goccy/go-json"
 )
 
@@ -275,8 +274,7 @@ func (d StructuredData) Clone() Data {
 
 // RawData contains unstructured data in form of a byte slice.
 type RawData struct {
-	Raw    []byte
-	Schema schema.Schema
+	Raw []byte
 }
 
 func (d RawData) MarshalText() ([]byte, error) {
@@ -295,8 +293,7 @@ func (d RawData) Bytes() []byte {
 
 func (d RawData) Clone() Data {
 	return RawData{
-		Raw:    bytes.Clone(d.Raw),
-		Schema: d.Schema, // this field is currently unused, we don't care about cloning it atm
+		Raw: bytes.Clone(d.Raw),
 	}
 }
 
