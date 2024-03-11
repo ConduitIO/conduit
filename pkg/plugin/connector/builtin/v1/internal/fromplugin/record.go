@@ -77,8 +77,7 @@ func Data(in cpluginv1.Data) (record.Data, error) {
 	switch v := in.(type) {
 	case cpluginv1.RawData:
 		return record.RawData{
-			Raw:    v,
-			Schema: nil,
+			Raw: v,
 		}, nil
 	case cpluginv1.StructuredData:
 		return record.StructuredData(v), nil
