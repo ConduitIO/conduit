@@ -26,8 +26,8 @@ func ExampleOpenCDCProcessor() {
 	p := NewOpenCDCProcessor(log.Nop())
 
 	exampleutil.RunExample(p, exampleutil.Example{
-		Summary: "Unwrap an OpenCDC record",
-		Description: "In this example we use the `unwrap.opencdc` processor to unwrap the OpenCDC record found in the " +
+		Summary: "Unwrap an [OpenCDC record](https://conduit.io/docs/features/opencdc-record)",
+		Description: "In this example we use the `unwrap.opencdc` processor to unwrap the [OpenCDC record](https://conduit.io/docs/features/opencdc-record) found in the " +
 			"record's `.Payload.After` field.",
 		Config: map[string]string{},
 		Have: opencdc.Record{
