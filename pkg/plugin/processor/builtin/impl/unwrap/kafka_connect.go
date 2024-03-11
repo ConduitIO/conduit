@@ -46,13 +46,13 @@ func NewKafkaConnectProcessor(log.CtxLogger) sdk.Processor {
 func (u *kafkaConnectProcessor) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
 		Name:    "unwrap.kafkaconnect",
-		Summary: "Unwraps a Kafka Connect record from an OpenCDC record.",
-		Description: `This processor unwraps a Kafka Connect record from the input OpenCDC record.
+		Summary: "Unwraps a Kafka Connect record from an [OpenCDC record](https://conduit.io/docs/features/opencdc-record).",
+		Description: `This processor unwraps a Kafka Connect record from the input [OpenCDC record](https://conduit.io/docs/features/opencdc-record).
 
 The input record's payload is replaced with the Kafka Connect record.
 
 This is useful in cases where Conduit acts as an intermediary between a Debezium source and a Debezium destination. 
-In such cases, the Debezium record is set as the OpenCDC record's payload, and needs to be unwrapped for further usage.`,
+In such cases, the Debezium record is set as the [OpenCDC record](https://conduit.io/docs/features/opencdc-record)'s payload, and needs to be unwrapped for further usage.`,
 		Version:    "v0.1.0",
 		Author:     "Meroxa, Inc.",
 		Parameters: kafkaConnectConfig{}.Parameters(),
