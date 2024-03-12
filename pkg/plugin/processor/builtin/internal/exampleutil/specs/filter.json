@@ -2,7 +2,7 @@
   "specification": {
     "name": "filter",
     "summary": "Acknowledges all records that get passed to the filter.",
-    "description": "Acknowledges all records that get passed to the filter, so the records will be filtered out if \nthe condition provided to the processor is evaluated to \"true\".\n\n**Important:** Make sure to add a condition to this processor, otherwise all records will be filtered out.",
+    "description": "Acknowledges all records that get passed to the filter, so\nthe records will be filtered out if the condition provided to the processor is\nevaluated to `true`.\n\n**Important:** Make sure to add a [condition](https://conduit.io/docs/processors/conditions)\nto this processor, otherwise all records will be filtered out.",
     "version": "v0.1.0",
     "author": "Meroxa, Inc.",
     "parameters": {}

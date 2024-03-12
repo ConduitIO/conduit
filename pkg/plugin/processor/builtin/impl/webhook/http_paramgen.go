@@ -39,7 +39,7 @@ func (httpConfig) Parameters() map[string]config.Parameter {
 		},
 		"request.body": {
 			Default:     ".",
-			Description: "Specifies which field from the input record should be used as the body in\nthe HTTP request. The value of this parameter should be a valid record\nfield reference (see [`sdk.NewReferenceResolver`](https://github.com/ConduitIO/conduit-processor-sdk/blob/02b60dc7acad11a2fcdf0a0188a13cf573648650/util.go#L53-L66)).",
+			Description: "Specifies which field from the input record should be used as the body in\nthe HTTP request.\n\nFor more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},
@@ -65,13 +65,13 @@ func (httpConfig) Parameters() map[string]config.Parameter {
 		},
 		"response.body": {
 			Default:     ".Payload.After",
-			Description: "Specifies in which field should the response body be saved.\nThe value of this parameter should be a valid record field reference\n(see [`sdk.NewReferenceResolver`](https://github.com/ConduitIO/conduit-processor-sdk/blob/02b60dc7acad11a2fcdf0a0188a13cf573648650/util.go#L53-L66)).",
+			Description: "Specifies in which field should the response body be saved.\n\nFor more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},
 		"response.status": {
 			Default:     "",
-			Description: "Specifies in which field should the response status be saved.\nThe value of this parameter should be a valid record field reference\n(see [`sdk.NewReferenceResolver`](https://github.com/ConduitIO/conduit-processor-sdk/blob/02b60dc7acad11a2fcdf0a0188a13cf573648650/util.go#L53-L66)).\nIf no value is set, then the response status will NOT be saved.",
+			Description: "Specifies in which field should the response status be saved. If no value\nis set, then the response status will NOT be saved.\n\nFor more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},

@@ -37,8 +37,10 @@ func NewDecodeProcessor(log.CtxLogger) sdk.Processor {
 }
 
 type decodeConfig struct {
-	// Field is the target field, as it would be addressed in a Go template (e.g. `.Payload.After.foo`).
-	// you can only decode fields that are under `.Key` and `.Payload`.
+	// Field is a reference to the target field. Only fields that are under
+	// `.Key` and `.Payload` can be decoded.
+	//
+	// For more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).
 	Field string `json:"field" validate:"required,regex=^\\.(Payload|Key).*,exclusion=.Payload"`
 }
 

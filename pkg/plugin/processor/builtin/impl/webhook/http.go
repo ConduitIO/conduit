@@ -50,17 +50,18 @@ type httpConfig struct {
 	BackoffRetryMax time.Duration `json:"backoffRetry.max" default:"5s"`
 
 	// Specifies which field from the input record should be used as the body in
-	// the HTTP request. The value of this parameter should be a valid record
-	// field reference (see [`sdk.NewReferenceResolver`](https://github.com/ConduitIO/conduit-processor-sdk/blob/02b60dc7acad11a2fcdf0a0188a13cf573648650/util.go#L53-L66)).
+	// the HTTP request.
+	//
+	// For more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).
 	RequestBodyRef string `json:"request.body" default:"."`
 	// Specifies in which field should the response body be saved.
-	// The value of this parameter should be a valid record field reference
-	// (see [`sdk.NewReferenceResolver`](https://github.com/ConduitIO/conduit-processor-sdk/blob/02b60dc7acad11a2fcdf0a0188a13cf573648650/util.go#L53-L66)).
+	//
+	// For more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).
 	ResponseBodyRef string `json:"response.body" default:".Payload.After"`
-	// Specifies in which field should the response status be saved.
-	// The value of this parameter should be a valid record field reference
-	// (see [`sdk.NewReferenceResolver`](https://github.com/ConduitIO/conduit-processor-sdk/blob/02b60dc7acad11a2fcdf0a0188a13cf573648650/util.go#L53-L66)).
-	// If no value is set, then the response status will NOT be saved.
+	// Specifies in which field should the response status be saved. If no value
+	// is set, then the response status will NOT be saved.
+	//
+	// For more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).
 	ResponseStatusRef string `json:"response.status"`
 }
 

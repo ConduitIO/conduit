@@ -40,8 +40,12 @@ func NewRenameProcessor(log.CtxLogger) sdk.Processor {
 }
 
 type renameConfig struct {
-	// Mapping is a comma separated list of keys and values for fields and their new names (keys and values
-	// are separated by colons ":"). For example: `.Metadata.key:id,.Payload.After.foo:bar`.
+	// Mapping is a comma separated list of keys and values for fields and their
+	// new names (keys and values are separated by colons ":").
+	//
+	// For example: `.Metadata.key:id,.Payload.After.foo:bar`.
+	//
+	// For more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).
 	Mapping []string `json:"mapping" validate:"required"`
 }
 
