@@ -35,7 +35,8 @@ type decoder interface {
 
 type decodeConfig struct {
 	// The field that will be decoded.
-	// For more information about the format, read [Referencing fields](https://conduit.io/docs/processors/referencing-fields).
+	//
+	// For more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).
 	Field string `json:"field" default:".Payload.After"`
 
 	// URL of the schema registry (e.g. http://localhost:8085)

@@ -13,7 +13,7 @@ func (convertConfig) Parameters() map[string]config.Parameter {
 	return map[string]config.Parameter{
 		"field": {
 			Default:     "",
-			Description: "Field is the target field, as it would be addressed in a Go template (e.g. `.Payload.After.foo`).\nyou can only convert fields that are under `.Key` and `.Payload`, and said fields should contain structured data.",
+			Description: "Field is the target field that should be converted.\nNote that you can only convert fields in structured data under `.Key` and\n`.Payload`.\n\nFor more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{
 				config.ValidationRequired{},

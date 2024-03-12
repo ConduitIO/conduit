@@ -20,7 +20,7 @@
       },
       "field": {
         "default": ".Payload.After",
-        "description": "The field that will be encoded.",
+        "description": "The field that will be decoded.\n\nFor more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).",
         "type": "string",
         "validations": []
       },

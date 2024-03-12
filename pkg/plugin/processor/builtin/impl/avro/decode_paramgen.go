@@ -23,7 +23,7 @@ func (decodeConfig) Parameters() map[string]config.Parameter {
 		},
 		"field": {
 			Default:     ".Payload.After",
-			Description: "The field that will be encoded.",
+			Description: "The field that will be decoded.\n\nFor more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},

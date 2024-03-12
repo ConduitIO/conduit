@@ -39,8 +39,11 @@ func NewConvertProcessor(log.CtxLogger) sdk.Processor {
 }
 
 type convertConfig struct {
-	// Field is the target field, as it would be addressed in a Go template (e.g. `.Payload.After.foo`).
-	// you can only convert fields that are under `.Key` and `.Payload`, and said fields should contain structured data.
+	// Field is the target field that should be converted.
+	// Note that you can only convert fields in structured data under `.Key` and
+	// `.Payload`.
+	//
+	// For more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).
 	Field string `json:"field" validate:"required,regex=^\\.(Payload|Key).*"`
 	// Type is the target field type after conversion, available options are: string, int, float, bool.
 	Type string `json:"type" validate:"required,inclusion=string|int|float|bool"`

@@ -8,7 +8,7 @@
     "parameters": {
       "fields": {
         "default": "",
-        "description": "Fields is a comma separated list of target fields, as they would be addressed in a Go template (e.g. `.Metadata,.Payload.After.foo`).",
+        "description": "Fields is a comma separated list of target fields which should be excluded.\n\nFor more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).",
         "type": "string",
         "validations": [
           {

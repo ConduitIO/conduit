@@ -29,7 +29,8 @@ import (
 
 type kafkaConnectConfig struct {
 	// Field is a reference to the field that contains the Kafka Connect record.
-	// For more information about the format, read [Referencing fields](https://conduit.io/docs/processors/referencing-fields).
+	//
+	// For more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).
 	Field string `json:"field" validate:"regex=^.Payload" default:".Payload.After"`
 }
 

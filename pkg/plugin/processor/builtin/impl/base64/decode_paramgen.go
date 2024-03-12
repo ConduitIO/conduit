@@ -11,7 +11,7 @@ func (decodeConfig) Parameters() map[string]config.Parameter {
 	return map[string]config.Parameter{
 		"field": {
 			Default:     "",
-			Description: "Field is the target field, as it would be addressed in a Go template (e.g. `.Payload.After.foo`).\nNote that it is not allowed to base64 decode the `.Position` field.",
+			Description: "Field is the reference to target field. Note that it is not allowed to\nbase64 decode the `.Position` field.\n\nFor more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{
 				config.ValidationRequired{},
