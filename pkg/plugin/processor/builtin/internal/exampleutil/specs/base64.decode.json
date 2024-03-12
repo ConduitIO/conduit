@@ -8,7 +8,7 @@
     "parameters": {
       "field": {
         "default": "",
-        "description": "Field is the reference to target field. Note that it is not allowed to\nbase64 decode the `.Position` field.\n\nFor more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).",
+        "description": "Field is the reference to the target field. Note that it is not allowed to\nbase64 decode the `.Position` field.\n\nFor more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).",
         "type": "string",
         "validations": [
           {

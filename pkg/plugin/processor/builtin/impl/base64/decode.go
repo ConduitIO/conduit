@@ -34,7 +34,7 @@ type decodeProcessor struct {
 }
 
 type decodeConfig struct {
-	// Field is the reference to target field. Note that it is not allowed to
+	// Field is the reference to the target field. Note that it is not allowed to
 	// base64 decode the `.Position` field.
 	//
 	// For more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).

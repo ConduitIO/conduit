@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// This file is here only to contain the go:generate statement. It's named with
+// a "z_" prefix to ensure it's processed last by go generate.
+
 //go:generate go test -count=1 -tags export_processors .
 
-package avro
+package custom
