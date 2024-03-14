@@ -73,13 +73,6 @@ func (fn FullName) PluginVersion() string {
 }
 
 func (fn FullName) PluginVersionGreaterThan(right FullName) bool {
-	if right == "" {
-		return true // right is empty, left is greater either way
-	}
-	if fn == "" {
-		return true // left is empty, right is greater either way
-	}
-
 	leftVersion := fn.PluginVersion()
 	leftSemver, errLeft := semver.NewVersion(leftVersion)
 
@@ -88,6 +81,12 @@ func (fn FullName) PluginVersionGreaterThan(right FullName) bool {
 
 	switch {
 	case errLeft != nil && errRight != nil:
+		switch {
+		case leftVersion == PluginVersionLatest:
+			return false // latest could be anything, we prioritize explicit versions
+		case rightVersion == PluginVersionLatest:
+			return true // latest could be anything, we prioritize explicit versions
+		}
 		// both are invalid semvers, compare as strings
 		return leftVersion < rightVersion
 	case errRight != nil:
