@@ -28,6 +28,7 @@ func TestFullName(t *testing.T) {
 		pn string // expected plugin name
 		pv string // expected plugin version
 	}{
+		{fn: "", pt: "any", pn: "", pv: "latest"},
 		{fn: "my-plugin", pt: "any", pn: "my-plugin", pv: "latest"},
 		{fn: "builtin:my-plugin", pt: "builtin", pn: "my-plugin", pv: "latest"},
 		{fn: "my-plugin@v0.1.1", pt: "any", pn: "my-plugin", pv: "v0.1.1"},
@@ -50,7 +51,7 @@ func TestFullName_PluginVersionGreaterThanP(t *testing.T) {
 	testCases := []struct {
 		v1 string // left version
 		v2 string // right version
-		gt bool   // want greater than
+		gt bool   // is left greater than right
 	}{
 		{v1: "v0.0.1", v2: "v0.0.1", gt: false},
 		{v1: "v0.1", v2: "v0.0.1", gt: true},
@@ -60,8 +61,12 @@ func TestFullName_PluginVersionGreaterThanP(t *testing.T) {
 		{v1: "foo", v2: "v0.0.1", gt: false},
 		{v1: "v0.0.1", v2: "foo", gt: true},
 		{v1: "foo", v2: "bar", gt: false},
-		{v1: "bar", v2: "foo", gt: false},
+		{v1: "bar", v2: "foo", gt: true},
 		{v1: "v0.0.1", v2: "v0.0.1-dirty", gt: true},
+		{v1: "bar", v2: "", gt: true},
+		{v1: "v1", v2: "", gt: true},
+		{v1: "", v2: "bar", gt: false},
+		{v1: "", v2: "v1", gt: false},
 	}
 
 	for _, tc := range testCases {
