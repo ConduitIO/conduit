@@ -138,6 +138,27 @@ func (r *Registry) NewProcessor(ctx context.Context, fullName plugin.FullName, i
 	return p, nil
 }
 
+// Register registers a standalone processor plugin from the specified path.
+// If a plugin with the same name and version is already registered, it will
+// return plugin.ErrPluginAlreadyRegistered.
+func (r *Registry) Register(ctx context.Context, path string) (plugin.FullName, error) {
+	bp, err := r.loadBlueprint(ctx, path)
+	if err != nil {
+		return "", err
+	}
+
+	r.m.Lock()
+	defer r.m.Unlock()
+	_, err = r.addBlueprint(r.plugins, bp)
+	if err != nil {
+		// close module as we won't use it
+		_ = bp.module.Close(ctx)
+		return "", err
+	}
+
+	return bp.fullName, nil
+}
+
 func (r *Registry) reloadPlugins() {
 	if r.pluginDir == "" {
 		return // no plugin dir, no plugins to load
@@ -173,55 +194,37 @@ func (r *Registry) loadPlugins(ctx context.Context, pluginDir string) map[string
 
 		pluginPath := path.Join(pluginDir, dirEntry.Name())
 
-		// create dispenser without a logger to not spam logs on refresh
-		module, specs, err := r.loadModuleAndSpecifications(ctx, pluginPath)
+		bp, err := r.loadBlueprint(ctx, pluginPath)
 		if err != nil {
 			warn(ctx, err, pluginPath)
 			continue
 		}
 
-		versionMap := plugins[specs.Name]
-		if versionMap == nil {
-			versionMap = make(map[string]blueprint)
-			plugins[specs.Name] = versionMap
-		}
-
-		fullName := plugin.NewFullName(plugin.PluginTypeStandalone, specs.Name, specs.Version)
-		if conflict, ok := versionMap[specs.Version]; ok {
-			err = cerrors.Errorf("conflict detected, processor plugin %v already registered, please remove either %v or %v, these plugins won't be usable until that happens", fullName, conflict.path, pluginPath)
-			warn(ctx, err, pluginPath)
+		isLatest, err := r.addBlueprint(plugins, bp)
+		if err != nil {
+			warn(ctx, err, bp.path)
 			// close module as we won't use it
-			_ = module.Close(ctx)
+			_ = bp.module.Close(ctx)
 			// delete plugin from map at the end so that further duplicates can
 			// still be found
 			defer func() {
-				delete(versionMap, specs.Version)
-				if len(versionMap) == 0 {
-					delete(plugins, specs.Name)
+				delete(plugins[bp.specification.Name], bp.specification.Version)
+				if len(plugins[bp.specification.Name]) == 0 {
+					delete(plugins, bp.specification.Name)
 				}
 			}()
 			continue
 		}
 
-		bp := blueprint{
-			fullName:      fullName,
-			specification: specs,
-			path:          pluginPath,
-			module:        module,
-		}
-		versionMap[specs.Version] = bp
-
-		latestFullName := versionMap[plugin.PluginVersionLatest].fullName
-		if fullName.PluginVersionGreaterThan(latestFullName) {
-			versionMap[plugin.PluginVersionLatest] = bp
+		if isLatest {
 			r.logger.Debug(ctx).
-				Str(log.PluginPathField, pluginPath).
+				Str(log.PluginPathField, bp.path).
 				Str(log.PluginNameField, string(bp.fullName)).
 				Msg("set processor plugin as latest")
 		}
 
 		r.logger.Debug(ctx).
-			Str(log.PluginPathField, pluginPath).
+			Str(log.PluginPathField, bp.path).
 			Str(log.PluginNameField, string(bp.fullName)).
 			Msg("loaded standalone processor plugin")
 	}
@@ -229,19 +232,19 @@ func (r *Registry) loadPlugins(ctx context.Context, pluginDir string) map[string
 	return plugins
 }
 
-func (r *Registry) loadModuleAndSpecifications(ctx context.Context, pluginPath string) (_ wazero.CompiledModule, _ sdk.Specification, err error) {
-	wasmBytes, err := os.ReadFile(pluginPath)
+func (r *Registry) loadBlueprint(ctx context.Context, path string) (blueprint, error) {
+	wasmBytes, err := os.ReadFile(path)
 	if err != nil {
-		return nil, sdk.Specification{}, fmt.Errorf("failed to read WASM file %q: %w", pluginPath, err)
+		return blueprint{}, fmt.Errorf("failed to read WASM file %q: %w", path, err)
 	}
 
 	r.logger.Debug(ctx).
-		Str("path", pluginPath).
+		Str("path", path).
 		Msg("compiling WASM module")
 
 	module, err := r.runtime.CompileModule(ctx, wasmBytes)
 	if err != nil {
-		return nil, sdk.Specification{}, fmt.Errorf("failed to compile WASM module: %w", err)
+		return blueprint{}, fmt.Errorf("failed to compile WASM module: %w", err)
 	}
 	defer func() {
 		if err != nil {
@@ -251,7 +254,7 @@ func (r *Registry) loadModuleAndSpecifications(ctx context.Context, pluginPath s
 
 	p, err := newWASMProcessor(ctx, r.runtime, module, r.hostModule, "init-processor", log.Nop())
 	if err != nil {
-		return nil, sdk.Specification{}, fmt.Errorf("failed to create a new WASM processor: %w", err)
+		return blueprint{}, fmt.Errorf("failed to create a new WASM processor: %w", err)
 	}
 	defer func() {
 		err := p.Teardown(ctx)
@@ -262,10 +265,35 @@ func (r *Registry) loadModuleAndSpecifications(ctx context.Context, pluginPath s
 
 	specs, err := p.Specification()
 	if err != nil {
-		return nil, sdk.Specification{}, err
+		return blueprint{}, err
 	}
 
-	return module, specs, nil
+	return blueprint{
+		fullName:      plugin.NewFullName(plugin.PluginTypeStandalone, specs.Name, specs.Version),
+		specification: specs,
+		path:          path,
+		module:        module,
+	}, nil
+}
+
+func (r *Registry) addBlueprint(plugins map[string]map[string]blueprint, bp blueprint) (isLatest bool, err error) {
+	versionMap := plugins[bp.specification.Name]
+	if versionMap == nil {
+		versionMap = make(map[string]blueprint)
+		plugins[bp.specification.Name] = versionMap
+	} else if conflict, ok := versionMap[bp.specification.Version]; ok {
+		return false, cerrors.Errorf("failed to register plugin %v from %v: %w (conflicts with %v)", bp.fullName, bp.path, plugin.ErrPluginAlreadyRegistered, conflict.path)
+	}
+
+	versionMap[bp.specification.Version] = bp
+
+	latestFullName := versionMap[plugin.PluginVersionLatest].fullName
+	if bp.fullName.PluginVersionGreaterThan(latestFullName) {
+		versionMap[plugin.PluginVersionLatest] = bp
+		isLatest = true
+	}
+
+	return isLatest, nil
 }
 
 func (r *Registry) List() map[plugin.FullName]sdk.Specification {

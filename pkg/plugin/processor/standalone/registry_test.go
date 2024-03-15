@@ -23,6 +23,7 @@ import (
 	"github.com/conduitio/conduit-commons/csync"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/google/uuid"
@@ -137,5 +138,11 @@ func TestRegistry_ChaosProcessor(t *testing.T) {
 		}
 		err = wg.WaitTimeout(ctx, time.Minute)
 		is.NoErr(err)
+	})
+
+	t.Run("RegisterDuplicate", func(t *testing.T) {
+		fn, err := underTest.Register(ctx, testPluginChaosDir+"processor.wasm")
+		is.True(cerrors.Is(err, plugin.ErrPluginAlreadyRegistered))
+		is.Equal("", string(fn))
 	})
 }
