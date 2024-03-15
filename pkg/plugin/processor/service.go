@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:generate mockgen -source=service.go -destination=mock/registry.go -package=mock -mock_names=registry=Registry . registry
+//go:generate mockgen -source=service.go -destination=mock/registry.go -package=mock -mock_names=registry=Registry,standaloneRegistry=StandaloneRegistry . registry,standaloneRegistry
 
 package processor
 
@@ -30,14 +30,19 @@ type registry interface {
 	List() map[plugin.FullName]sdk.Specification
 }
 
+type standaloneRegistry interface {
+	registry
+	Register(ctx context.Context, path string) (plugin.FullName, error)
+}
+
 type PluginService struct {
 	logger log.CtxLogger
 
 	builtinReg    registry
-	standaloneReg registry
+	standaloneReg standaloneRegistry
 }
 
-func NewPluginService(logger log.CtxLogger, br registry, sr registry) *PluginService {
+func NewPluginService(logger log.CtxLogger, br registry, sr standaloneRegistry) *PluginService {
 	return &PluginService{
 		logger:        logger.WithComponent("processor.PluginService"),
 		builtinReg:    br,
@@ -68,6 +73,16 @@ func (s *PluginService) NewProcessor(ctx context.Context, pluginName string, id 
 	default:
 		return nil, cerrors.Errorf("invalid plugin name prefix %q", fullName.PluginType())
 	}
+}
+
+// RegisterStandalonePlugin registers a standalone processor plugin from the
+// specified path and returns the full name of the plugin or an error.
+func (s *PluginService) RegisterStandalonePlugin(ctx context.Context, path string) (string, error) {
+	fullName, err := s.standaloneReg.Register(ctx, path)
+	if err != nil {
+		return "", cerrors.Errorf("failed to register standalone processor: %w", err)
+	}
+	return string(fullName), nil
 }
 
 func (s *PluginService) List(context.Context) (map[string]sdk.Specification, error) {
