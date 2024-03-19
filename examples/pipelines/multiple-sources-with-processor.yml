@@ -8,14 +8,14 @@ pipelines:
       to each of those. This is a pipeline processor, meaning that it processes records
       from all sources.
     connectors:
-      - id: company-1
+      - id: employees-1
         type: source
         plugin: builtin:generator
         settings:
           format.type: "structured"
           format.options: "id:int,name:string,company:string,trial:bool"
           recordCount: "1"
-      - id: company-2
+      - id: employees-2
         type: source
         plugin: builtin:generator
         settings:
