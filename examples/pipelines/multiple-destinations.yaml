@@ -17,9 +17,9 @@ pipelines:
         type: destination
         plugin: builtin:file
         settings:
-          path: /tmp/file-destination-1.txt
+          path: ./example-1.out
       - id: file-destination-2
         type: destination
         plugin: builtin:file
         settings:
-          path: /tmp/file-destination-2.txt
+          path: ./example-2.out

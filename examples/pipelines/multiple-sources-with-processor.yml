@@ -26,7 +26,7 @@ pipelines:
         type: destination
         plugin: builtin:file
         settings:
-          path: /tmp/file-destination.txt
+          path: ./example.out
     processors:
       - id: extract-name
         plugin: field.set
