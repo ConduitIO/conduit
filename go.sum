@@ -1092,8 +1092,8 @@ github.com/conduitio/conduit-connector-file v0.6.0 h1:8tsGeGhKvFwYQZztOOL5/tmOhV
 github.com/conduitio/conduit-connector-file v0.6.0/go.mod h1:ju7PiB4kTJgqng4KVXDt/Gvw/53kFwSzi5Ez9EDXxNI=
 github.com/conduitio/conduit-connector-generator v0.5.0 h1:zpXHif89DCJ13nftKLv31uI2AJGicpY5H1V7SwldRNo=
 github.com/conduitio/conduit-connector-generator v0.5.0/go.mod h1:CQKGYQNAnO6+bJSurzwtmGf98XoyeU6zsMJI/OCrlJI=
-github.com/conduitio/conduit-connector-kafka v0.7.1 h1:95tKtmuSylzPWloJkq/diYkhuWkTCQaJDuOnr5rVy/w=
-github.com/conduitio/conduit-connector-kafka v0.7.1/go.mod h1:xP2H6oFbPeJWpWq0GJjbTdrVkMyc6wO35mxR3PTrfvk=
+github.com/conduitio/conduit-connector-kafka v0.7.2 h1:2kiCYI6CbuSGdNGBbhtjPB4Zv5PjtFduf35EL6vv0gY=
+github.com/conduitio/conduit-connector-kafka v0.7.2/go.mod h1:dpkglwPd42tdgUJpYEFWM2WOLCwFDP9HC5EPqMuiVUU=
 github.com/conduitio/conduit-connector-log v0.3.0 h1:J9CD/y86D/3i/C1MI0lrTiFnLwwnpJKQJu3M+jDiI4Y=
 github.com/conduitio/conduit-connector-log v0.3.0/go.mod h1:R0gHB21mw/9BXYAKfx9IKQLEsPuB05zJPJXB6JFxYGs=
 github.com/conduitio/conduit-connector-postgres v0.5.0 h1:G8NDnad0W+3Hqfmlsj5MKE/39J4NRsJa1d8wqPUQa88=
@@ -2029,10 +2029,10 @@ github.com/tomarrell/wrapcheck/v2 v2.8.1 h1:HxSqDSN0sAt0yJYsrcYVoEeyM4aI9yAm3KQp
 github.com/tomarrell/wrapcheck/v2 v2.8.1/go.mod h1:/n2Q3NZ4XFT50ho6Hbxg+RV1uyo2Uow/Vdm9NQcl5SE=
 github.com/tommy-muehle/go-mnd/v2 v2.5.1 h1:NowYhSdyE/1zwK9QCLeRb6USWdoif80Ie+v+yU8u1Zw=
 github.com/tommy-muehle/go-mnd/v2 v2.5.1/go.mod h1:WsUAkMJMYww6l/ufffCD3m+P7LEvr8TnZn9lwVDlgzw=
-github.com/twmb/franz-go v1.15.4 h1:qBCkHaiutetnrXjAUWA99D9FEcZVMt2AYwkH3vWEQTw=
-github.com/twmb/franz-go v1.15.4/go.mod h1:rC18hqNmfo8TMc1kz7CQmHL74PLNF8KVvhflxiiJZCU=
-github.com/twmb/franz-go/pkg/kadm v1.10.0 h1:3oYKNP+e3HGo4GYadrDeRxOaAIsOXmX6LBVMz9PxpCU=
-github.com/twmb/franz-go/pkg/kadm v1.10.0/go.mod h1:hUMoV4SRho+2ij/S9cL39JaLsr+XINjn0ZkCdBY2DXc=
+github.com/twmb/franz-go v1.16.1 h1:rpWc7fB9jd7TgmCyfxzenBI+QbgS8ZfJOUQE+tzPtbE=
+github.com/twmb/franz-go v1.16.1/go.mod h1:/pER254UPPGp/4WfGqRi+SIRGE50RSQzVubQp6+N4FA=
+github.com/twmb/franz-go/pkg/kadm v1.11.0 h1:FfeWJ0qadntFpAcQt8JzNXW4dijjytZNLrzJuzzzuxA=
+github.com/twmb/franz-go/pkg/kadm v1.11.0/go.mod h1:qrhkdH+SWS3ivmbqOgHbpgVHamhaKcjH0UM+uOp0M1A=
 github.com/twmb/franz-go/pkg/kmsg v1.7.0 h1:a457IbvezYfA5UkiBvyV3zj0Is3y1i8EJgqjJYoij2E=
 github.com/twmb/franz-go/pkg/kmsg v1.7.0/go.mod h1:se9Mjdt0Nwzc9lnjJ0HyDtLyBnaBDAd7pCje47OhSyw=
 github.com/twmb/go-cache v1.2.1 h1:yUkLutow4S2x5NMbqFW24o14OsucoFI5Fzmlb6uBinM=
