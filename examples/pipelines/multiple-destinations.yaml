@@ -3,7 +3,7 @@ pipelines:
   - id: multiple-destinations
     status: running
     description: >
-      An example pipeline which gets data a generator source and writes it
+      An example pipeline that reads data one generator source and writes it
       to multiple file destinations.
     connectors:
       - id: employees-source

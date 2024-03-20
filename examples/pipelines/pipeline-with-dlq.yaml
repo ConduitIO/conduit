@@ -3,9 +3,9 @@ pipelines:
   - id: pipeline-with-dlq
     status: running
     description: >
-      An example pipeline with a dead-letter queue backed by the file connector.
+      An example pipeline with a dead-letter queue backed by the built-in file plugin.
       The failed records will be written to dlq.out.
-      The failures are simulated with the field.convert processor that tries to
+      The failures are simulated with the `field.convert` processor that tries to
       convert a non-numerical string into a float.
     connectors:
       - id: generator-source
@@ -28,7 +28,7 @@ pipelines:
           path: ./example.out
     dead-letter-queue: # Dead-letter queue (DLQ) configuration
       plugin: "builtin:file"    # DLQ Connector plugin
-      settings: # A map of configuration keys and values for the plugin (specific to the chosen plugin)
+      settings: # Configure the file plugin used for DLQ
         path: "./dlq.out"
       window-size: 2            # DLQ nack window size
       window-nack-threshold: 1  # DLQ nack window threshold

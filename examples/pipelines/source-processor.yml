@@ -3,10 +3,12 @@ pipelines:
   - id: add-department
     status: running
     description: >
-      An example pipeline that reads data (imaginary employees) from two generator
-      sources and uses the built-in `field.set` processor to add a department field
-      to each of those. This is a pipeline processor, meaning that it processes records
-      from all sources.
+      An example pipeline which reads data (imaginary employees) from two generator
+      sources, processes it and writes it to a file.
+      
+      It attaches the built-in `field.set` processor to one of the sources
+      to add a `department` field to its records. The records from the other source
+      are not processed.
     connectors:
       - id: employees-1
         type: source
@@ -15,6 +17,12 @@ pipelines:
           format.type: "structured"
           format.options: "id:int,name:string,company:string,trial:bool"
           recordCount: "1"
+        processors:
+          - id: extract-name
+            plugin: field.set
+            settings:
+              field: '.Payload.After.department'
+              value: 'finance'
       - id: employees-2
         type: source
         plugin: builtin:generator
@@ -27,9 +35,3 @@ pipelines:
         plugin: builtin:file
         settings:
           path: ./example.out
-    processors:
-      - id: extract-name
-        plugin: field.set
-        settings:
-          field: '.Payload.After.department'
-          value: 'finance'
