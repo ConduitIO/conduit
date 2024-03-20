@@ -233,9 +233,13 @@ A processor is a component that operates on a single record that flows through a
 pipeline. It can either change the record (i.e. **transform** it) or **filter**
 it out based on some criteria.
 
-Conduit provides a number of built-in processors, which can be used to filter
-and replace fields, post payloads to HTTP endpoints etc. Conduit also provides
-the ability to write custom processors in JavaScript.
+Conduit provides a number of builtin processors, which can be used to manipulate fields,
+send requests to HTTP endpoints, and more, check [Builtin processors](https://conduit.io/docs/processors/builtin/) 
+for the list of builtin processors and documentations.
+
+Conduit also provides the ability to write your own [Standalone Processor](https://conduit.io/docs/processors/standalone/building),
+or you can use the builtin processor [`custom.javascript`](https://conduit.io/docs/processors/builtin/custom.javascript)
+to write custom processors in javascript.
 
 More detailed information as well as examples can be found in
 the [Processors documentation](https://conduit.io/docs/processors/getting-started).
