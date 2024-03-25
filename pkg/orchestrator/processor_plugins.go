@@ -25,3 +25,7 @@ type ProcessorPluginOrchestrator base
 func (ps *ProcessorPluginOrchestrator) List(ctx context.Context) (map[string]processorSdk.Specification, error) {
 	return ps.processorPlugins.List(ctx)
 }
+
+func (ps *ProcessorPluginOrchestrator) RegisterStandalonePlugin(ctx context.Context, path string) (string, error) {
+	return ps.processorPlugins.RegisterStandalonePlugin(ctx, path)
+}

@@ -591,3 +591,18 @@ func (mr *ProcessorPluginServiceMockRecorder) NewProcessor(arg0, arg1, arg2 any)
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewProcessor", reflect.TypeOf((*ProcessorPluginService)(nil).NewProcessor), arg0, arg1, arg2)
 }
+
+// RegisterStandalonePlugin mocks base method.
+func (m *ProcessorPluginService) RegisterStandalonePlugin(arg0 context.Context, arg1 string) (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RegisterStandalonePlugin", arg0, arg1)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RegisterStandalonePlugin indicates an expected call of RegisterStandalonePlugin.
+func (mr *ProcessorPluginServiceMockRecorder) RegisterStandalonePlugin(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterStandalonePlugin", reflect.TypeOf((*ProcessorPluginService)(nil).RegisterStandalonePlugin), arg0, arg1)
+}

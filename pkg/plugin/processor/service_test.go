@@ -39,7 +39,7 @@ func TestPluginService_GetBuiltin_NotFound(t *testing.T) {
 		NewProcessor(gomock.Any(), plugin.FullName(name), id).
 		Return(nil, plugin.ErrPluginNotFound)
 
-	sr := mock.NewRegistry(ctrl)
+	sr := mock.NewStandaloneRegistry(ctrl)
 
 	underTest := NewPluginService(log.Nop(), br, sr)
 	got, err := underTest.NewProcessor(ctx, name, id)
@@ -56,7 +56,7 @@ func TestPluginService_GetStandalone_NotFound(t *testing.T) {
 	name := "standalone:test-processor"
 
 	br := mock.NewRegistry(ctrl)
-	sr := mock.NewRegistry(ctrl)
+	sr := mock.NewStandaloneRegistry(ctrl)
 	sr.EXPECT().
 		NewProcessor(gomock.Any(), plugin.FullName(name), id).
 		Return(nil, plugin.ErrPluginNotFound)
@@ -73,7 +73,7 @@ func TestPluginService_InvalidPluginType(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
 	br := mock.NewRegistry(ctrl)
-	sr := mock.NewRegistry(ctrl)
+	sr := mock.NewStandaloneRegistry(ctrl)
 	underTest := NewPluginService(log.Nop(), br, sr)
 
 	got, err := underTest.NewProcessor(ctx, "crunchy:test-processor", "test-id")
@@ -88,12 +88,12 @@ func TestPluginService_Get(t *testing.T) {
 	testCases := []struct {
 		name     string
 		procName string
-		setup    func(br *mock.Registry, sr *mock.Registry, proc *mock.Processor)
+		setup    func(br *mock.Registry, sr *mock.StandaloneRegistry, proc *mock.Processor)
 	}{
 		{
 			name:     "get built-in",
 			procName: "builtin:test-processor",
-			setup: func(br *mock.Registry, sr *mock.Registry, proc *mock.Processor) {
+			setup: func(br *mock.Registry, sr *mock.StandaloneRegistry, proc *mock.Processor) {
 				br.EXPECT().
 					NewProcessor(gomock.Any(), plugin.FullName("builtin:test-processor"), "test-id").
 					Return(proc, nil)
@@ -102,7 +102,7 @@ func TestPluginService_Get(t *testing.T) {
 		{
 			name:     "get standalone",
 			procName: "standalone:test-processor",
-			setup: func(br *mock.Registry, sr *mock.Registry, proc *mock.Processor) {
+			setup: func(br *mock.Registry, sr *mock.StandaloneRegistry, proc *mock.Processor) {
 				sr.EXPECT().
 					NewProcessor(gomock.Any(), plugin.FullName("standalone:test-processor"), "test-id").
 					Return(proc, nil)
@@ -111,7 +111,7 @@ func TestPluginService_Get(t *testing.T) {
 		{
 			name:     "standalone preferred",
 			procName: "test-processor",
-			setup: func(br *mock.Registry, sr *mock.Registry, proc *mock.Processor) {
+			setup: func(br *mock.Registry, sr *mock.StandaloneRegistry, proc *mock.Processor) {
 				sr.EXPECT().
 					NewProcessor(gomock.Any(), plugin.FullName("test-processor"), "test-id").
 					Return(proc, nil)
@@ -126,7 +126,7 @@ func TestPluginService_Get(t *testing.T) {
 
 			want := mock.NewProcessor(ctrl)
 			br := mock.NewRegistry(ctrl)
-			sr := mock.NewRegistry(ctrl)
+			sr := mock.NewStandaloneRegistry(ctrl)
 			tc.setup(br, sr, want)
 
 			underTest := NewPluginService(log.Nop(), br, sr)
