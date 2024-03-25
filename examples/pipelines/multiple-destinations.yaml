@@ -1,0 +1,25 @@
+version: 2.2
+pipelines:
+  - id: multiple-destinations
+    status: running
+    description: >
+      An example pipeline that reads data one generator source and writes it
+      to multiple file destinations.
+    connectors:
+      - id: employees-source
+        type: source
+        plugin: builtin:generator
+        settings:
+          format.type: "structured"
+          format.options: "id:int,name:string,company:string,trial:bool"
+          recordCount: "1"
+      - id: file-destination-1
+        type: destination
+        plugin: builtin:file
+        settings:
+          path: ./example-1.out
+      - id: file-destination-2
+        type: destination
+        plugin: builtin:file
+        settings:
+          path: ./example-2.out

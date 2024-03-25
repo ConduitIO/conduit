@@ -89,7 +89,7 @@ func SpecifierParameter(in *connectorv1.Specifier_Parameter) (connector.Paramete
 	}
 	// needed for backward compatibility, in.Required is converted to a validation of type ValidationTypeRequired
 	// making sure not to duplicate the required validation
-	if in.Required && !requiredExists { //nolint: staticcheck // required is still supported for now
+	if in.Required && !requiredExists { //nolint:staticcheck // required is still supported for now
 		validations = append(validations, connector.Validation{ //nolint: makezero // list is full so need to append
 			Type: connector.ValidationTypeRequired,
 		})
