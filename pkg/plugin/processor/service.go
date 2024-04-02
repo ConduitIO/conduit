@@ -80,7 +80,7 @@ func (s *PluginService) NewProcessor(ctx context.Context, pluginName string, id 
 func (s *PluginService) RegisterStandalonePlugin(ctx context.Context, path string) (string, error) {
 	fullName, err := s.standaloneReg.Register(ctx, path)
 	if err != nil {
-		return "", cerrors.Errorf("failed to register standalone processor: %w", err)
+		return string(fullName), cerrors.Errorf("failed to register standalone processor: %w", err)
 	}
 	return string(fullName), nil
 }
