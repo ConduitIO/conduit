@@ -133,6 +133,8 @@ func (p *convertProcessor) stringToType(value, typ string) (any, error) {
 
 func (p *convertProcessor) toString(value any) string {
 	switch v := value.(type) {
+	case []byte:
+		return string(v)
 	case string:
 		return v
 	case int:

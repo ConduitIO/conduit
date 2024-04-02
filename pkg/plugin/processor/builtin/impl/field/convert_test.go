@@ -197,6 +197,16 @@ func TestConvertField_Process(t *testing.T) {
 			want: sdk.SingleRecord{
 				Key: opencdc.StructuredData{"id": "false"},
 			},
+		}, {
+			name:  "bytes to string",
+			field: ".Key.id",
+			typ:   "string",
+			record: opencdc.Record{
+				Key: opencdc.StructuredData{"id": []byte("foo")},
+			},
+			want: sdk.SingleRecord{
+				Key: opencdc.StructuredData{"id": "foo"},
+			},
 		},
 	}
 	for _, tc := range testCases {
