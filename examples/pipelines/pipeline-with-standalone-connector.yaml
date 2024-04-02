@@ -1,0 +1,19 @@
+version: 2.2
+pipelines:
+  - id: file-to-file
+    status: running
+    description: >
+      An example pipeline reading from the standalone chaos connector and writing into a file destination.
+      
+      To use the chaos connector, download the appropariate binary from https://github.com/conduitio-labs/conduit-connector-chaos/releases/latest.
+      
+      The binary needs to be stored in the `connectors` directory, adjacent to the `conduit` binary.
+    connectors:
+      - id: chaos-source
+        type: source
+        plugin: standalone:chaos
+      - id: file-destination
+        type: destination
+        plugin: builtin:file
+        settings:
+          path: ./example.out

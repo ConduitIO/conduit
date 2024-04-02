@@ -1,0 +1,34 @@
+---
+version: 2.2
+pipelines:
+  - id: pipeline-with-js-processor
+    status: running
+    description: > 
+      An example pipeline that uses the built-in JavaScript processor (`custom.javascript`).
+      
+      It reads data from the `example.in` file, prefixes every line with 'hi there' and writes the results
+      to the `example.out` file.
+      
+      Results can be viewed with `tail -f example.out | jq '.payload.after |= @base64d'`.
+    connectors:
+      - id: file-source
+        type: source
+        plugin: "builtin:file"
+        name: file-source
+        settings:
+          path: ./example.in
+      - id: file-destination
+        type: destination
+        plugin: "builtin:file"
+        name: file-destination
+        settings:
+          path: ./example.out
+    processors:
+      - id: greeting-processor
+        plugin: "custom.javascript"
+        settings:
+          script: |
+            function process(rec) {
+              rec.Payload.After = RawData("hi there " + String.fromCharCode.apply(String, rec.Payload.After));
+              return rec;
+            }
