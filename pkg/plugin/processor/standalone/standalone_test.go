@@ -93,14 +93,10 @@ func TestMain(m *testing.M) {
 			continue
 		}
 
-		// compile modules in parallel
-		wg.Add(1)
-		go func(binary []byte, target *wazero.CompiledModule, path string) {
-			defer wg.Done()
-			var err error
-			*target, err = TestRuntime.CompileModule(ctx, binary)
-			exitOnError(err, "error compiling module "+path)
-		}(*t.V1, t.V2, path)
+		// note that modules can't be compiled in parallel, because the runtime
+		// is not thread-safe
+		*t.V2, err = TestRuntime.CompileModule(ctx, *t.V1)
+		exitOnError(err, "error compiling module "+path)
 	}
 	err = wg.WaitTimeout(ctx, time.Minute)
 	exitOnError(err, "timed out waiting on modules to compile")
