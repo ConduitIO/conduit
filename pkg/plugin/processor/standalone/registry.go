@@ -22,16 +22,13 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
-
-	"github.com/stealthrocket/wazergo"
-
-	"github.com/tetratelabs/wazero"
-
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
+	"github.com/stealthrocket/wazergo"
+	"github.com/tetratelabs/wazero"
+	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 )
 
 // Registry is a directory registry of processor plugins, organized by plugin
@@ -153,7 +150,7 @@ func (r *Registry) Register(ctx context.Context, path string) (plugin.FullName, 
 	if err != nil {
 		// close module as we won't use it
 		_ = bp.module.Close(ctx)
-		return "", err
+		return bp.fullName, err
 	}
 
 	return bp.fullName, nil
@@ -200,7 +197,7 @@ func (r *Registry) loadPlugins(ctx context.Context, pluginDir string) map[string
 			continue
 		}
 
-		isLatest, err := r.addBlueprint(plugins, bp)
+		isLatestVersion, err := r.addBlueprint(plugins, bp)
 		if err != nil {
 			warn(ctx, err, bp.path)
 			// close module as we won't use it
@@ -216,7 +213,7 @@ func (r *Registry) loadPlugins(ctx context.Context, pluginDir string) map[string
 			continue
 		}
 
-		if isLatest {
+		if isLatestVersion {
 			r.logger.Debug(ctx).
 				Str(log.PluginPathField, bp.path).
 				Str(log.PluginNameField, string(bp.fullName)).
@@ -276,7 +273,7 @@ func (r *Registry) loadBlueprint(ctx context.Context, path string) (blueprint, e
 	}, nil
 }
 
-func (r *Registry) addBlueprint(plugins map[string]map[string]blueprint, bp blueprint) (isLatest bool, err error) {
+func (r *Registry) addBlueprint(plugins map[string]map[string]blueprint, bp blueprint) (isLatestVersion bool, err error) {
 	versionMap := plugins[bp.specification.Name]
 	if versionMap == nil {
 		versionMap = make(map[string]blueprint)
@@ -290,10 +287,10 @@ func (r *Registry) addBlueprint(plugins map[string]map[string]blueprint, bp blue
 	latestFullName := versionMap[plugin.PluginVersionLatest].fullName
 	if bp.fullName.PluginVersionGreaterThan(latestFullName) {
 		versionMap[plugin.PluginVersionLatest] = bp
-		isLatest = true
+		isLatestVersion = true
 	}
 
-	return isLatest, nil
+	return isLatestVersion, nil
 }
 
 func (r *Registry) List() map[plugin.FullName]sdk.Specification {

@@ -143,6 +143,6 @@ func TestRegistry_ChaosProcessor(t *testing.T) {
 	t.Run("RegisterDuplicate", func(t *testing.T) {
 		fn, err := underTest.Register(ctx, testPluginChaosDir+"processor.wasm")
 		is.True(cerrors.Is(err, plugin.ErrPluginAlreadyRegistered))
-		is.Equal("", string(fn))
+		is.Equal("standalone:chaos-processor@v1.3.5", string(fn))
 	})
 }
