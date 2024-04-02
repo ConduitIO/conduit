@@ -110,10 +110,6 @@ func (p *renameProcessor) Configure(ctx context.Context, m map[string]string) er
 	return nil
 }
 
-func (p *renameProcessor) Open(context.Context) error {
-	return nil
-}
-
 func (p *renameProcessor) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 	out := make([]sdk.ProcessedRecord, 0, len(records))
 	for _, record := range records {
@@ -131,8 +127,4 @@ func (p *renameProcessor) Process(_ context.Context, records []opencdc.Record) [
 		out = append(out, sdk.SingleRecord(rec))
 	}
 	return out
-}
-
-func (p *renameProcessor) Teardown(context.Context) error {
-	return nil
 }

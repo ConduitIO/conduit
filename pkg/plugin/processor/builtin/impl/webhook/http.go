@@ -139,10 +139,6 @@ func (p *httpProcessor) Configure(ctx context.Context, m map[string]string) erro
 	return nil
 }
 
-func (p *httpProcessor) Open(context.Context) error {
-	return nil
-}
-
 func (p *httpProcessor) Process(ctx context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 	out := make([]sdk.ProcessedRecord, 0, len(records))
 	for _, rec := range records {
@@ -294,9 +290,5 @@ func (p *httpProcessor) setField(r *opencdc.Record, refRes *sdk.ReferenceResolve
 		return err
 	}
 
-	return nil
-}
-
-func (p *httpProcessor) Teardown(context.Context) error {
 	return nil
 }

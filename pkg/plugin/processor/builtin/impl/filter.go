@@ -47,22 +47,10 @@ to this processor, otherwise all records will be filtered out.`,
 	}, nil
 }
 
-func (p *filterProcessor) Configure(_ context.Context, _ map[string]string) error {
-	return nil
-}
-
-func (p *filterProcessor) Open(context.Context) error {
-	return nil
-}
-
 func (p *filterProcessor) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 	out := make([]sdk.ProcessedRecord, len(records))
 	for i := range records {
 		out[i] = sdk.FilterRecord{}
 	}
 	return out
-}
-
-func (p *filterProcessor) Teardown(context.Context) error {
-	return nil
 }
