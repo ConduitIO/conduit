@@ -76,10 +76,6 @@ func (u *kafkaConnectProcessor) Configure(ctx context.Context, m map[string]stri
 	return nil
 }
 
-func (u *kafkaConnectProcessor) Open(context.Context) error {
-	return nil
-}
-
 func (u *kafkaConnectProcessor) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 	out := make([]sdk.ProcessedRecord, 0, len(records))
 	for _, rec := range records {
@@ -168,8 +164,4 @@ func (u *kafkaConnectProcessor) unwrapKey(key opencdc.Data) opencdc.Data {
 		// otherwise, convert the payload to string, then return it as raw data
 		return opencdc.RawData(fmt.Sprint(payload))
 	}
-}
-
-func (u *kafkaConnectProcessor) Teardown(context.Context) error {
-	return nil
 }

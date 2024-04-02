@@ -79,10 +79,6 @@ func (p *excludeProcessor) Configure(ctx context.Context, m map[string]string) e
 	return nil
 }
 
-func (p *excludeProcessor) Open(context.Context) error {
-	return nil
-}
-
 func (p *excludeProcessor) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 	out := make([]sdk.ProcessedRecord, 0, len(records))
 	for _, record := range records {
@@ -100,8 +96,4 @@ func (p *excludeProcessor) Process(_ context.Context, records []opencdc.Record) 
 		out = append(out, sdk.SingleRecord(rec))
 	}
 	return out
-}
-
-func (p *excludeProcessor) Teardown(context.Context) error {
-	return nil
 }

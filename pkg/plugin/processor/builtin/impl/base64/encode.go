@@ -75,8 +75,6 @@ func (p *encodeProcessor) Configure(ctx context.Context, m map[string]string) er
 	return nil
 }
 
-func (p *encodeProcessor) Open(context.Context) error { return nil }
-
 func (p *encodeProcessor) Process(ctx context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 	out := make([]sdk.ProcessedRecord, 0, len(records))
 	for _, rec := range records {
@@ -121,5 +119,3 @@ func (p *encodeProcessor) base64Encode(rec opencdc.Record) (sdk.ProcessedRecord,
 
 	return sdk.SingleRecord(rec), nil
 }
-
-func (p *encodeProcessor) Teardown(context.Context) error { return nil }

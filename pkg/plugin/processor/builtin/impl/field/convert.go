@@ -79,10 +79,6 @@ func (p *convertProcessor) Configure(ctx context.Context, m map[string]string) e
 	return nil
 }
 
-func (p *convertProcessor) Open(context.Context) error {
-	return nil
-}
-
 func (p *convertProcessor) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 	out := make([]sdk.ProcessedRecord, 0, len(records))
 	for _, record := range records {
@@ -156,8 +152,4 @@ func (p *convertProcessor) boolToStringNumber(b bool) string {
 		return "1"
 	}
 	return "0"
-}
-
-func (p *convertProcessor) Teardown(context.Context) error {
-	return nil
 }

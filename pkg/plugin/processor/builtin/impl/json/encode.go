@@ -73,10 +73,6 @@ func (p *encodeProcessor) Configure(ctx context.Context, m map[string]string) er
 	return nil
 }
 
-func (p *encodeProcessor) Open(context.Context) error {
-	return nil
-}
-
 func (p *encodeProcessor) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 	out := make([]sdk.ProcessedRecord, 0, len(records))
 	for _, record := range records {
@@ -87,10 +83,6 @@ func (p *encodeProcessor) Process(_ context.Context, records []opencdc.Record) [
 		out = append(out, rec)
 	}
 	return out
-}
-
-func (p *encodeProcessor) Teardown(context.Context) error {
-	return nil
 }
 
 func (p *encodeProcessor) encode(rec opencdc.Record) (sdk.ProcessedRecord, error) {
