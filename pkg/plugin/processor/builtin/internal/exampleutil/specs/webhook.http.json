@@ -1,0 +1,126 @@
+{
+  "specification": {
+    "name": "webhook.http",
+    "summary": "Trigger an HTTP request for every record.",
+    "description": "A processor that sends an HTTP request to the specified URL, retries on error and \nsaves the response body and, optionally, the response status.",
+    "version": "v0.1.0",
+    "author": "Meroxa, Inc.",
+    "parameters": {
+      "backoffRetry.count": {
+        "default": "0",
+        "description": "Maximum number of retries for an individual record when backing off following an error.",
+        "type": "float",
+        "validations": [
+          {
+            "type": "greater-than",
+            "value": "-1"
+          }
+        ]
+      },
+      "backoffRetry.factor": {
+        "default": "2",
+        "description": "The multiplying factor for each increment step.",
+        "type": "float",
+        "validations": [
+          {
+            "type": "greater-than",
+            "value": "0"
+          }
+        ]
+      },
+      "backoffRetry.max": {
+        "default": "5s",
+        "description": "The maximum waiting time before retrying.",
+        "type": "duration",
+        "validations": []
+      },
+      "backoffRetry.min": {
+        "default": "100ms",
+        "description": "The minimum waiting time before retrying.",
+        "type": "duration",
+        "validations": []
+      },
+      "request.body": {
+        "default": ".",
+        "description": "Specifies which field from the input record should be used as the body in\nthe HTTP request.\n\nFor more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).",
+        "type": "string",
+        "validations": []
+      },
+      "request.contentType": {
+        "default": "application/json",
+        "description": "The value of the `Content-Type` header.",
+        "type": "string",
+        "validations": []
+      },
+      "request.method": {
+        "default": "POST",
+        "description": "Method is the HTTP request method to be used.",
+        "type": "string",
+        "validations": []
+      },
+      "request.url": {
+        "default": "",
+        "description": "URL used in the HTTP request.",
+        "type": "string",
+        "validations": [
+          {
+            "type": "required",
+            "value": ""
+          }
+        ]
+      },
+      "response.body": {
+        "default": ".Payload.After",
+        "description": "Specifies in which field should the response body be saved.\n\nFor more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).",
+        "type": "string",
+        "validations": []
+      },
+      "response.status": {
+        "default": "",
+        "description": "Specifies in which field should the response status be saved. If no value\nis set, then the response status will NOT be saved.\n\nFor more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).",
+        "type": "string",
+        "validations": []
+      }
+    }
+  },
+  "examples": [
+    {
+      "summary": "Send a request to an HTTP server",
+      "description": "\nThis example shows how to use the HTTP processor to send a record's `.Payload.After` field to a dummy HTTP server\nthat replies back with a greeting.\n\nThe record's `.Payload.After` is overwritten with the response. Additionally, the example shows how to store the\nvalue of the HTTP response's code in the metadata field `http_status`.",
+      "config": {
+        "backoffRetry.count": "0",
+        "backoffRetry.factor": "2",
+        "backoffRetry.max": "5s",
+        "backoffRetry.min": "100ms",
+        "request.body": ".Payload.After",
+        "request.contentType": "application/json",
+        "request.method": "POST",
+        "request.url": "http://127.0.0.1:54321",
+        "response.body": ".Payload.After",
+        "response.status": ".Metadata[\"http_status\"]"
+      },
+      "have": {
+        "position": null,
+        "operation": "Operation(0)",
+        "metadata": null,
+        "key": null,
+        "payload": {
+          "before": null,
+          "after": "world"
+        }
+      },
+      "want": {
+        "position": null,
+        "operation": "Operation(0)",
+        "metadata": {
+          "http_status": "200"
+        },
+        "key": null,
+        "payload": {
+          "before": null,
+          "after": "hello, world"
+        }
+      }
+    }
+  ]
+}

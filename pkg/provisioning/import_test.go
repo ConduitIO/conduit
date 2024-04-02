@@ -131,7 +131,7 @@ func TestActionBuilder_Build(t *testing.T) {
 	logger := log.Nop()
 	ctrl := gomock.NewController(t)
 
-	srv, pipSrv, connSrv, procSrv, plugSrv := newTestService(ctrl, logger)
+	srv, pipSrv, connSrv, procSrv, connPlugSrv := newTestService(ctrl, logger)
 
 	oldConfig := config.Pipeline{
 		ID:   "config-id",
@@ -164,21 +164,21 @@ func TestActionBuilder_Build(t *testing.T) {
 		}},
 		Processors: []config.Processor{{
 			// this processor does not change, it should be ignored
-			ID:   "proc-1",
-			Type: "proc-type",
+			ID:     "proc-1",
+			Plugin: "proc-type",
 		}, {
 			// this processor contains an invalid change, it should be recreated
-			ID:   "proc-2",
-			Type: "old-proc-type", // type was updated
+			ID:     "proc-2",
+			Plugin: "old-proc-type", // type was updated
 		}, {
 			// this processor gets new settings, it should be updated
 			ID:       "proc-3",
-			Type:     "proc-type",
+			Plugin:   "proc-type",
 			Settings: map[string]string{"foo": "bar"},
 		}, {
 			// this processor is deleted in the new config, it should be deleted
-			ID:   "proc-deleted",
-			Type: "proc-type",
+			ID:     "proc-deleted",
+			Plugin: "proc-type",
 		}},
 	}
 	newConfig := config.Pipeline{
@@ -212,30 +212,30 @@ func TestActionBuilder_Build(t *testing.T) {
 		}},
 		Processors: []config.Processor{{
 			// this processor does not change, it should be ignored
-			ID:   "proc-1",
-			Type: "proc-type",
+			ID:     "proc-1",
+			Plugin: "proc-type",
 		}, {
 			// this processor contains an invalid change, it should be recreated
-			ID:   "proc-2",
-			Type: "new-proc-type", // type was updated
+			ID:     "proc-2",
+			Plugin: "new-proc-type", // type was updated
 		}, {
 			// this processor gets new settings, it should be updated
 			ID:       "proc-3",
-			Type:     "proc-type",
+			Plugin:   "proc-type",
 			Settings: map[string]string{"foo": "baz"},
 		}, {
 			// this processor is new, it should be created
-			ID:   "proc-new",
-			Type: "proc-type",
+			ID:     "proc-new",
+			Plugin: "proc-type",
 		}},
 	}
 
 	wantOldActions := []action{
 		deleteConnectorAction{
-			cfg:              oldConfig.Connectors[3],
-			pipelineID:       oldConfig.ID,
-			connectorService: connSrv,
-			pluginService:    plugSrv,
+			cfg:                    oldConfig.Connectors[3],
+			pipelineID:             oldConfig.ID,
+			connectorService:       connSrv,
+			connectorPluginService: connPlugSrv,
 		},
 		deleteProcessorAction{
 			cfg: oldConfig.Connectors[3].Processors[0],
@@ -261,16 +261,16 @@ func TestActionBuilder_Build(t *testing.T) {
 			pipelineService: pipSrv,
 		},
 		deleteConnectorAction{
-			cfg:              oldConfig.Connectors[1],
-			pipelineID:       oldConfig.ID,
-			connectorService: connSrv,
-			pluginService:    plugSrv,
+			cfg:                    oldConfig.Connectors[1],
+			pipelineID:             oldConfig.ID,
+			connectorService:       connSrv,
+			connectorPluginService: connPlugSrv,
 		},
 		createConnectorAction{
-			cfg:              newConfig.Connectors[1],
-			pipelineID:       newConfig.ID,
-			connectorService: connSrv,
-			pluginService:    plugSrv,
+			cfg:                    newConfig.Connectors[1],
+			pipelineID:             newConfig.ID,
+			connectorService:       connSrv,
+			connectorPluginService: connPlugSrv,
 		},
 		updateConnectorAction{
 			oldConfig:        oldConfig.Connectors[2],
@@ -278,10 +278,10 @@ func TestActionBuilder_Build(t *testing.T) {
 			connectorService: connSrv,
 		},
 		createConnectorAction{
-			cfg:              newConfig.Connectors[3],
-			pipelineID:       newConfig.ID,
-			connectorService: connSrv,
-			pluginService:    plugSrv,
+			cfg:                    newConfig.Connectors[3],
+			pipelineID:             newConfig.ID,
+			connectorService:       connSrv,
+			connectorPluginService: connPlugSrv,
 		},
 		createProcessorAction{
 			cfg: newConfig.Connectors[3].Processors[0],
@@ -426,13 +426,13 @@ func TestActionsBuilder_PreparePipelineActions_NoAction(t *testing.T) {
 		name: "different Processors (same ID)",
 		oldConfig: config.Pipeline{ID: "config-id", Processors: []config.Processor{{
 			ID:       "proc-id", // only ID has to match
-			Type:     "old-type",
+			Plugin:   "old-type",
 			Settings: map[string]string{"foo": "bar"},
 			Workers:  1,
 		}}},
 		newConfig: config.Pipeline{ID: "config-id", Processors: []config.Processor{{
 			ID:       "proc-id", // only ID has to match
-			Type:     "new-type",
+			Plugin:   "new-type",
 			Settings: map[string]string{"foo": "baz"},
 			Workers:  2,
 		}}},
@@ -503,17 +503,17 @@ func TestActionsBuilder_PrepareConnectorActions_Create(t *testing.T) {
 	logger := log.Nop()
 	ctrl := gomock.NewController(t)
 
-	srv, _, connSrv, _, plugSrv := newTestService(ctrl, logger)
+	srv, _, connSrv, _, connPlugSrv := newTestService(ctrl, logger)
 
 	oldConfig := config.Connector{}
 	newConfig := config.Connector{ID: "config-id"}
 	pipelineID := uuid.NewString()
 
 	want := []action{createConnectorAction{
-		cfg:              newConfig,
-		pipelineID:       pipelineID,
-		connectorService: connSrv,
-		pluginService:    plugSrv,
+		cfg:                    newConfig,
+		pipelineID:             pipelineID,
+		connectorService:       connSrv,
+		connectorPluginService: connPlugSrv,
 	}}
 
 	got := srv.newActionsBuilder().prepareConnectorActions(oldConfig, newConfig, pipelineID)
@@ -525,17 +525,17 @@ func TestActionsBuilder_PrepareConnectorActions_Delete(t *testing.T) {
 	logger := log.Nop()
 	ctrl := gomock.NewController(t)
 
-	srv, _, connSrv, _, plugSrv := newTestService(ctrl, logger)
+	srv, _, connSrv, _, connPlugSrv := newTestService(ctrl, logger)
 
 	oldConfig := config.Connector{ID: "config-id"}
 	newConfig := config.Connector{}
 	pipelineID := uuid.NewString()
 
 	want := []action{deleteConnectorAction{
-		cfg:              oldConfig,
-		pipelineID:       pipelineID,
-		connectorService: connSrv,
-		pluginService:    plugSrv,
+		cfg:                    oldConfig,
+		pipelineID:             pipelineID,
+		connectorService:       connSrv,
+		connectorPluginService: connPlugSrv,
 	}}
 
 	got := srv.newActionsBuilder().prepareConnectorActions(oldConfig, newConfig, pipelineID)
@@ -560,13 +560,13 @@ func TestActionsBuilder_PrepareConnectorActions_NoAction(t *testing.T) {
 		name: "different Processors",
 		oldConfig: config.Connector{ID: "config-id", Processors: []config.Processor{{
 			ID:       "proc-id", // only ID has to match
-			Type:     "old-type",
+			Plugin:   "old-type",
 			Settings: map[string]string{"foo": "bar"},
 			Workers:  1,
 		}}},
 		newConfig: config.Connector{ID: "config-id", Processors: []config.Processor{{
 			ID:       "proc-id", // only ID has to match
-			Type:     "new-type",
+			Plugin:   "new-type",
 			Settings: map[string]string{"foo": "baz"},
 			Workers:  2,
 		}}},
@@ -623,7 +623,7 @@ func TestActionsBuilder_PrepareConnectorActions_Recreate(t *testing.T) {
 	logger := log.Nop()
 	ctrl := gomock.NewController(t)
 
-	srv, _, connSrv, _, plugSrv := newTestService(ctrl, logger)
+	srv, _, connSrv, _, connPlugSrv := newTestService(ctrl, logger)
 	pipelineID := uuid.NewString()
 
 	testCases := []struct {
@@ -644,15 +644,15 @@ func TestActionsBuilder_PrepareConnectorActions_Recreate(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			is := is.New(t)
 			want := []action{deleteConnectorAction{
-				cfg:              tc.oldConfig,
-				pipelineID:       pipelineID,
-				connectorService: connSrv,
-				pluginService:    plugSrv,
+				cfg:                    tc.oldConfig,
+				pipelineID:             pipelineID,
+				connectorService:       connSrv,
+				connectorPluginService: connPlugSrv,
 			}, createConnectorAction{
-				cfg:              tc.newConfig,
-				pipelineID:       pipelineID,
-				connectorService: connSrv,
-				pluginService:    plugSrv,
+				cfg:                    tc.newConfig,
+				pipelineID:             pipelineID,
+				connectorService:       connSrv,
+				connectorPluginService: connPlugSrv,
 			}}
 			got := srv.newActionsBuilder().prepareConnectorActions(tc.oldConfig, tc.newConfig, pipelineID)
 			is.Equal(got, want)
@@ -780,8 +780,8 @@ func TestActionsBuilder_PrepareProcessorActions_Recreate(t *testing.T) {
 		newConfig config.Processor
 	}{{
 		name:      "different Type",
-		oldConfig: config.Processor{ID: "config-id", Type: "old-type"},
-		newConfig: config.Processor{ID: "config-id", Type: "new-type"},
+		oldConfig: config.Processor{ID: "config-id", Plugin: "old-type"},
+		newConfig: config.Processor{ID: "config-id", Plugin: "new-type"},
 	}}
 
 	for _, tc := range testCases {
@@ -808,16 +808,16 @@ func TestActionsBuilder_PrepareProcessorActions_Recreate(t *testing.T) {
 
 func intPtr(i int) *int { return &i }
 
-func newTestService(ctrl *gomock.Controller, logger log.CtxLogger) (*Service, *mock.PipelineService, *mock.ConnectorService, *mock.ProcessorService, *mock.PluginService) {
+func newTestService(ctrl *gomock.Controller, logger log.CtxLogger) (*Service, *mock.PipelineService, *mock.ConnectorService, *mock.ProcessorService, *mock.ConnectorPluginService) {
 	db := &inmemory.DB{}
 	pipSrv := mock.NewPipelineService(ctrl)
 	connSrv := mock.NewConnectorService(ctrl)
 	procSrv := mock.NewProcessorService(ctrl)
-	plugSrv := mock.NewPluginService(ctrl)
+	connPlugSrv := mock.NewConnectorPluginService(ctrl)
 
-	srv := NewService(db, logger, pipSrv, connSrv, procSrv, plugSrv, "")
+	srv := NewService(db, logger, pipSrv, connSrv, procSrv, connPlugSrv, "")
 
-	return srv, pipSrv, connSrv, procSrv, plugSrv
+	return srv, pipSrv, connSrv, procSrv, connPlugSrv
 }
 
 type fakeAction struct {

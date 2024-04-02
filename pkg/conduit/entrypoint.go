@@ -89,7 +89,8 @@ func (*Entrypoint) Flags(cfg *Config) *flag.FlagSet {
 	flags.StringVar(&cfg.Log.Level, "log.level", cfg.Log.Level, "sets logging level; accepts debug, info, warn, error, trace")
 	flags.StringVar(&cfg.Log.Format, "log.format", cfg.Log.Format, "sets the format of the logging; accepts json, cli")
 
-	flags.StringVar(&cfg.Connectors.Path, "connectors.path", cfg.Connectors.Path, "path to standalone connectors directory")
+	flags.StringVar(&cfg.Connectors.Path, "connectors.path", cfg.Connectors.Path, "path to standalone connectors' directory")
+	flags.StringVar(&cfg.Processors.Path, "processors.path", cfg.Processors.Path, "path to standalone processors' directory")
 
 	flags.StringVar(&cfg.Pipelines.Path, "pipelines.path", cfg.Pipelines.Path, "path to the directory that has the yaml pipeline configuration files, or a single pipeline configuration file")
 	flags.BoolVar(&cfg.Pipelines.ExitOnError, "pipelines.exit-on-error", cfg.Pipelines.ExitOnError, "exit Conduit if a pipeline experiences an error while running")
@@ -98,6 +99,7 @@ func (*Entrypoint) Flags(cfg *Config) *flag.FlagSet {
 	showDevHelp := flags.Bool("dev", false, "used together with the dev flag it shows dev flags")
 	flags.StringVar(&cfg.dev.cpuprofile, "dev.cpuprofile", "", "write cpu profile to file")
 	flags.StringVar(&cfg.dev.memprofile, "dev.memprofile", "", "write memory profile to file")
+	flags.StringVar(&cfg.dev.blockprofile, "dev.blockprofile", "", "write block profile to file")
 
 	// show user or dev flags
 	flags.Usage = func() {

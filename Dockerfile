@@ -19,12 +19,11 @@ COPY . .
 RUN GOOS=linux GOARCH=amd64 CGO_ENABLED=0 make build
 
 # Copy built binaries to production slim image.
-FROM alpine:3.17 AS final
+FROM alpine:3.19 AS final
 # HTTP API
 EXPOSE 8080/tcp
 # gRPC API
 EXPOSE 8084/tcp
 WORKDIR /app
 COPY --from=base /app/conduit /app
-COPY --from=base /app/conduit-pipeline-check /app
 CMD ["/app/conduit"]

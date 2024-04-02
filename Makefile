@@ -7,11 +7,9 @@
 # the correct version.
 VERSION=`git describe --tags --dirty`
 GO_VERSION_CHECK=`./scripts/check-go-version.sh`
-# Needs to match with what's in .github/workflows/lint.yml
-GOLANG_CI_LINT_VER	:= v1.55.2
 
 # The build target should stay at the top since we want it to be the default target.
-build: check-go-version pkg/web/ui/dist build-pipeline-check
+build: check-go-version pkg/web/ui/dist
 	go build -ldflags "-X 'github.com/conduitio/conduit/pkg/conduit.version=${VERSION}'" -o conduit -tags ui ./cmd/conduit/main.go
 	@echo "\nBuild complete. Enjoy using Conduit!"
 	@echo "Get started by running:"
@@ -33,20 +31,13 @@ test-integration:
 		docker compose -f test/docker-compose-postgres.yml -f test/docker-compose-schemaregistry.yml down; \
 		exit $$ret
 
-.PHONY: golangci-lint-install
-golangci-lint-install:
-	go install github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANG_CI_LINT_VER)
-
 .PHONY: lint
-lint: golangci-lint-install
+lint:
 	golangci-lint run -v
 
 build-server: check-go-version
 	go build -ldflags "-X 'github.com/conduitio/conduit/pkg/conduit.version=${VERSION}'" -o conduit ./cmd/conduit/main.go
 	@echo "build version: ${VERSION}"
-
-build-pipeline-check: check-go-version
-	go build -o conduit-pipeline-check ./cmd/conduit-pipeline-check/main.go
 
 run:
 	go run ./cmd/conduit/main.go
@@ -62,7 +53,6 @@ proto-lint:
 
 clean:
 	@rm -f conduit
-	@rm -f conduit-pipeline-check
 	@rm -rf pkg/web/ui/dist
 
 download:
@@ -71,11 +61,11 @@ download:
 
 install-tools: download
 	@echo Installing tools from tools.go
-	@go list -e -f '{{ join .Imports "\n" }}' tools.go | xargs -tI % go install %
+	@go list -e -f '{{ join .Imports "\n" }}' tools.go | xargs -I % go list -f "%@{{.Module.Version}}" % | xargs -tI % go install %
 	@go mod tidy
 
 generate:
-	go generate ./...
+	go generate -x ./...
 
 pkg/web/ui/dist:
 	make ui-dist

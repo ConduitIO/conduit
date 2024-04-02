@@ -26,6 +26,7 @@ import (
 	v1 "github.com/conduitio/conduit/pkg/provisioning/config/yaml/v1"
 	v2 "github.com/conduitio/conduit/pkg/provisioning/config/yaml/v2"
 	"github.com/conduitio/yaml/v3"
+	"github.com/google/go-cmp/cmp"
 	"github.com/matryer/is"
 	"github.com/rs/zerolog"
 )
@@ -276,7 +277,7 @@ func TestParser_V2_Success(t *testing.T) {
 	intPtr := func(i int) *int { return &i }
 	want := Configurations{
 		v2.Configuration{
-			Version: "2.0",
+			Version: "2.2",
 			Pipelines: []v2.Pipeline{
 				{
 					ID:          "pipeline1",
@@ -285,8 +286,8 @@ func TestParser_V2_Success(t *testing.T) {
 					Description: "desc1",
 					Processors: []v2.Processor{
 						{
-							ID:   "pipeline1proc1",
-							Type: "js",
+							ID:     "pipeline1proc1",
+							Plugin: "js",
 							Settings: map[string]string{
 								"additionalProp1": "string",
 								"additionalProp2": "string",
@@ -305,8 +306,8 @@ func TestParser_V2_Success(t *testing.T) {
 							},
 							Processors: []v2.Processor{
 								{
-									ID:   "proc1",
-									Type: "js",
+									ID:     "proc1",
+									Plugin: "js",
 									Settings: map[string]string{
 										"additionalProp1": "string",
 										"additionalProp2": "string",
@@ -345,8 +346,8 @@ func TestParser_V2_Success(t *testing.T) {
 							},
 							Processors: []v2.Processor{
 								{
-									ID:   "con2proc1",
-									Type: "hoistfield",
+									ID:     "con2proc1",
+									Plugin: "hoistfield",
 									Settings: map[string]string{
 										"additionalProp1": "string",
 										"additionalProp2": "string",
@@ -372,7 +373,72 @@ func TestParser_V2_Success(t *testing.T) {
 
 	got, err := parser.ParseConfigurations(context.Background(), file)
 	is.NoErr(err)
-	is.Equal(got, want)
+	diff := cmp.Diff(want, got)
+	if diff != "" {
+		t.Errorf("%v", diff)
+	}
+}
+
+func TestParser_V2_BackwardsCompatibility(t *testing.T) {
+	is := is.New(t)
+	parser := NewParser(log.Nop())
+	filepath := "./v2/testdata/pipelines6-bwc.yml"
+	want := Configurations{
+		v2.Configuration{
+			Version: "2.2",
+			Pipelines: []v2.Pipeline{
+				{
+					ID:          "pipeline6",
+					Status:      "running",
+					Name:        "pipeline6",
+					Description: "desc1",
+					Processors: []v2.Processor{
+						{
+							ID:   "pipeline1proc1",
+							Type: "js",
+							Settings: map[string]string{
+								"additionalProp1": "string",
+								"additionalProp2": "string",
+							},
+						},
+					},
+					Connectors: []v2.Connector{
+						{
+							ID:     "con1",
+							Type:   "source",
+							Plugin: "builtin:s3",
+							Name:   "s3-source",
+							Settings: map[string]string{
+								"aws.region": "us-east-1",
+								"aws.bucket": "my-bucket",
+							},
+							Processors: []v2.Processor{
+								{
+									ID:     "proc1",
+									Plugin: "js",
+									Settings: map[string]string{
+										"additionalProp1": "string",
+										"additionalProp2": "string",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	file, err := os.Open(filepath)
+	is.NoErr(err)
+	defer file.Close()
+
+	got, err := parser.ParseConfigurations(context.Background(), file)
+	is.NoErr(err)
+	diff := cmp.Diff(want, got)
+	if diff != "" {
+		t.Errorf("%v", diff)
+	}
 }
 
 func TestParser_V2_Warnings(t *testing.T) {
@@ -391,7 +457,7 @@ func TestParser_V2_Warnings(t *testing.T) {
 
 	// check warnings
 	want := `{"level":"warn","component":"yaml.Parser","line":6,"column":5,"field":"unknownField","message":"field unknownField not found in type v2.Pipeline"}
-{"level":"warn","component":"yaml.Parser","line":38,"column":1,"field":"version","value":"2.12","message":"unrecognized version 2.12, falling back to parser version 2.0"}
+{"level":"warn","component":"yaml.Parser","line":38,"column":1,"field":"version","value":"2.12","message":"unrecognized version 2.12, falling back to parser version 2.2"}
 `
 	is.Equal(out.String(), want)
 }

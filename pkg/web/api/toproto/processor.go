@@ -30,11 +30,12 @@ func _() {
 func Processor(in *processor.Instance) *apiv1.Processor {
 	return &apiv1.Processor{
 		Id:        in.ID,
-		Type:      in.Type,
+		Plugin:    in.Plugin,
 		CreatedAt: timestamppb.New(in.CreatedAt),
 		UpdatedAt: timestamppb.New(in.UpdatedAt),
 		Config:    ProcessorConfig(in.Config),
 		Parent:    ProcessorParent(in.Parent),
+		Condition: in.Condition,
 	}
 }
 

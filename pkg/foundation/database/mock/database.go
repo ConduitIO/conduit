@@ -5,6 +5,7 @@
 //
 //	mockgen -destination=mock/database.go -package=mock -mock_names=DB=DB . DB
 //
+
 // Package mock is a generated GoMock package.
 package mock
 

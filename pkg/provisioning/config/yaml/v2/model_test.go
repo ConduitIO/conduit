@@ -15,9 +15,9 @@
 package v2
 
 import (
-	"encoding/json"
 	"testing"
 
+	"github.com/goccy/go-json"
 	"github.com/matryer/is"
 )
 
@@ -31,8 +31,9 @@ func TestConfiguration_JSON(t *testing.T) {
 		Description: "desc1",
 		Processors: []Processor{
 			{
-				ID:   "pipeline1proc1",
-				Type: "js",
+				ID:        "pipeline1proc1",
+				Plugin:    "alpha",
+				Condition: "{{ true }}",
 				Settings: map[string]string{
 					"additionalProp1": "string",
 					"additionalProp2": "string",
@@ -90,6 +91,8 @@ func TestConfiguration_JSON(t *testing.T) {
         {
           "id": "proc1",
           "type": "js",
+          "plugin": "",
+          "condition": "",
           "settings": {
             "additionalProp1": "string",
             "additionalProp2": "string"
@@ -102,7 +105,9 @@ func TestConfiguration_JSON(t *testing.T) {
   "processors": [
     {
       "id": "pipeline1proc1",
-      "type": "js",
+      "type": "",
+      "plugin": "alpha",
+      "condition": "{{ true }}",
       "settings": {
         "additionalProp1": "string",
         "additionalProp2": "string"

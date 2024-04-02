@@ -75,6 +75,8 @@ dist/
 
 # Standalone connectors
 /connectors
+# Standalone processors
+/processors
 
 /pipelines
 
@@ -83,3 +85,9 @@ dist/
 
 # Escape Analysis Report
 escape_analysis.txt
+
+# Profiles
+*.prof
+
+# Compiled test wasm processors
+pkg/plugin/processor/standalone/test/wasm_processors/*/processor.wasm

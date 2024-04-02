@@ -19,13 +19,47 @@ import (
 	"github.com/conduitio/conduit/pkg/provisioning/config/yaml/internal"
 )
 
-const LatestVersion = "2.0"
+const LatestVersion = "2.2"
 const MajorVersion = "2"
 
 // Changelog should be adjusted every time we change the pipeline config and add
 // a new config version. Based on the changelog the parser will output warnings.
 var Changelog = internal.Changelog{
 	"2.0": {}, // initial version
+	"2.1": {
+		{
+			Field:      "pipelines.*.processors.*.condition",
+			ChangeType: internal.FieldIntroduced,
+			Message:    "field condition was introduced in version 2.1, please update the pipeline config version",
+		},
+		{
+			Field:      "pipelines.*.connectors.*.processors.*.condition",
+			ChangeType: internal.FieldIntroduced,
+			Message:    "field condition was introduced in version 2.1, please update the pipeline config version",
+		},
+	},
+	"2.2": {
+		{
+			Field:      "pipelines.*.processors.*.plugin",
+			ChangeType: internal.FieldIntroduced,
+			Message:    "field plugin was introduced in version 2.2, please update the pipeline config version",
+		},
+		{
+			Field:      "pipelines.*.connectors.*.processors.*.plugin",
+			ChangeType: internal.FieldIntroduced,
+			Message:    "field plugin was introduced in version 2.2, please update the pipeline config version",
+		},
+		{
+			Field:      "pipelines.*.processors.*.type",
+			ChangeType: internal.FieldDeprecated,
+			Message:    "please use field 'plugin' (introduced in version 2.2)",
+		},
+		{
+			Field:      "pipelines.*.connectors.*.processors.*.type",
+			ChangeType: internal.FieldDeprecated,
+			Message:    "please use field 'plugin' (introduced in version 2.2)",
+		},
+	},
 }
 
 type Configuration struct {
@@ -53,10 +87,12 @@ type Connector struct {
 }
 
 type Processor struct {
-	ID       string            `yaml:"id" json:"id"`
-	Type     string            `yaml:"type" json:"type"`
-	Settings map[string]string `yaml:"settings" json:"settings"`
-	Workers  int               `yaml:"workers" json:"workers"`
+	ID        string            `yaml:"id" json:"id"`
+	Type      string            `yaml:"type" json:"type"`
+	Plugin    string            `yaml:"plugin" json:"plugin"`
+	Condition string            `yaml:"condition" json:"condition"`
+	Settings  map[string]string `yaml:"settings" json:"settings"`
+	Workers   int               `yaml:"workers" json:"workers"`
 }
 
 type DLQ struct {
@@ -135,11 +171,17 @@ func (c Connector) processorsToConfig() []config.Processor {
 }
 
 func (p Processor) ToConfig() config.Processor {
+	plugin := p.Plugin
+	if plugin == "" {
+		plugin = p.Type
+	}
+
 	return config.Processor{
-		ID:       p.ID,
-		Type:     p.Type,
-		Settings: p.Settings,
-		Workers:  p.Workers,
+		ID:        p.ID,
+		Plugin:    plugin,
+		Settings:  p.Settings,
+		Workers:   p.Workers,
+		Condition: p.Condition,
 	}
 }
 

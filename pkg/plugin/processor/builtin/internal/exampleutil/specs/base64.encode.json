@@ -1,0 +1,98 @@
+{
+  "specification": {
+    "name": "base64.encode",
+    "summary": "Encode a field to base64.",
+    "description": "The processor will encode the value of the target field to base64 and store the\nresult in the target field. It is not allowed to encode the `.Position` field.\nIf the provided field doesn't exist, the processor will create that field and\nassign its value.",
+    "version": "v0.1.0",
+    "author": "Meroxa, Inc.",
+    "parameters": {
+      "field": {
+        "default": "",
+        "description": "Field is a reference to the target field. Note that it is not allowed to\nbase64 encode the `.Position` field.\n\nFor more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).",
+        "type": "string",
+        "validations": [
+          {
+            "type": "required",
+            "value": ""
+          },
+          {
+            "type": "exclusion",
+            "value": ".Position"
+          }
+        ]
+      }
+    }
+  },
+  "examples": [
+    {
+      "summary": "Encode record key to base64",
+      "description": "TThis example takes a record containing raw data in\n`.Key` and converts it into a base64 encoded string.",
+      "config": {
+        "field": ".Key"
+      },
+      "have": {
+        "position": "dGVzdC1wb3NpdGlvbg==",
+        "operation": "create",
+        "metadata": {
+          "key1": "val1"
+        },
+        "key": "test-key",
+        "payload": {
+          "before": null,
+          "after": {
+            "foo": "bar"
+          }
+        }
+      },
+      "want": {
+        "position": "dGVzdC1wb3NpdGlvbg==",
+        "operation": "create",
+        "metadata": {
+          "key1": "val1"
+        },
+        "key": "dGVzdC1rZXk=",
+        "payload": {
+          "before": null,
+          "after": {
+            "foo": "bar"
+          }
+        }
+      }
+    },
+    {
+      "summary": "Encode nested value to base64",
+      "description": "This example takes a record containing a string in\n`.Payload.Before.foo` and converts it into a base64 encoded string.",
+      "config": {
+        "field": ".Payload.After.foo"
+      },
+      "have": {
+        "position": "dGVzdC1wb3NpdGlvbg==",
+        "operation": "create",
+        "metadata": {
+          "key1": "val1"
+        },
+        "key": "test-key",
+        "payload": {
+          "before": null,
+          "after": {
+            "foo": "bar"
+          }
+        }
+      },
+      "want": {
+        "position": "dGVzdC1wb3NpdGlvbg==",
+        "operation": "create",
+        "metadata": {
+          "key1": "val1"
+        },
+        "key": "test-key",
+        "payload": {
+          "before": null,
+          "after": {
+            "foo": "YmFy"
+          }
+        }
+      }
+    }
+  ]
+}

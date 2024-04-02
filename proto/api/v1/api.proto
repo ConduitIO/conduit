@@ -3,6 +3,7 @@ syntax = "proto3";
 package api.v1;
 
 import "opencdc/v1/opencdc.proto";
+import "config/v1/parameter.proto";
 import "google/api/field_behavior.proto";
 import "google/api/annotations.proto";
 import "protoc-gen-openapiv2/options/annotations.proto";
@@ -124,16 +125,137 @@ message Processor {
 
   string id = 1 [(google.api.field_behavior) = OUTPUT_ONLY];
   reserved 2; reserved "state"; // message does not track state
+  reserved 4; reserved "type";
   Config config = 3;
+  // Condition is a goTemplate formatted string, the value provided to the template is a sdk.Record, it should evaluate
+  // to a boolean value, indicating a condition to run the processor for a specific record or not. (template functions
+  // provided by `sprig` are injected)
+  string condition = 9;
 
   // -- immutable fields -------------------------------------------------------
 
-  string type = 4 [(google.api.field_behavior) = IMMUTABLE];
+  string plugin = 5 [(google.api.field_behavior) = IMMUTABLE];
   Parent parent = 6 [(google.api.field_behavior) = IMMUTABLE];
 
   google.protobuf.Timestamp created_at = 7;
   google.protobuf.Timestamp updated_at = 8;
 }
+
+// ConnectorPluginSpecifications describes the specifications of a connector plugin.
+message ConnectorPluginSpecifications{
+  // Name is the name of the plugin.
+  string name = 1;
+  // Summary is a brief description of the plugin and what it does,
+  // ideally not longer than one sentence.
+  string summary = 2;
+  // Description is a longer form field, appropriate for README-like
+  // text that the author can provide for documentation about the
+  // usage of the plugin.
+  string description = 3;
+  // Version string. Should follow semantic versioning and use the "v"
+  // prefix (e.g. v1.23.4).
+  string version = 4;
+  // Author declares the entity that created or maintains this plugin.
+  string author = 5;
+  // A map that describes parameters available for configuring the
+  // destination plugin.
+  map<string, config.v1.Parameter> destination_params = 6;
+  // A map that describes parameters available for configuring the
+  // source plugin.
+  map<string, config.v1.Parameter> source_params = 7;
+}
+
+// ProcessorPluginSpecifications describes the specifications of a processor plugin.
+message ProcessorPluginSpecifications{
+  // Name is the name of the plugin.
+  string name = 1;
+  // Summary is a brief description of the plugin and what it does,
+  // ideally not longer than one sentence.
+  string summary = 2;
+  // Description is a longer form field, appropriate for README-like
+  // text that the author can provide for documentation about the
+  // usage of the plugin.
+  string description = 3;
+  // Version string. Should follow semantic versioning and use the "v"
+  // prefix (e.g. v1.23.4).
+  string version = 4;
+  // Author declares the entity that created or maintains this plugin.
+  string author = 5;
+  // A map that describes parameters available for configuring the
+  // processor plugin.
+  map<string, config.v1.Parameter> parameters = 6;
+}
+
+// Deprecated: use ConnectorPluginSpecifications instead.
+message PluginSpecifications{
+  option deprecated = true;
+
+  // Deprecated: use config.v1.Parameter instead.
+  message Parameter {
+    option deprecated = true;
+
+    // Deprecated: use config.v1.Validation instead.
+    message Validation{
+      option deprecated = true;
+
+      // Deprecated: use config.v1.Validation.Type instead.
+      enum Type {
+        option deprecated = true;
+        TYPE_UNSPECIFIED = 0;
+        // Parameter must be present.
+        TYPE_REQUIRED = 1;
+        // Parameter must be greater than {value}.
+        TYPE_GREATER_THAN = 2;
+        // Parameter must be less than {value}.
+        TYPE_LESS_THAN = 3;
+        // Parameter must be included in the comma separated list {value}.
+        TYPE_INCLUSION = 4;
+        // Parameter must not be included in the comma separated list {value}.
+        TYPE_EXCLUSION = 5;
+        // Parameter must match the regex {value}.
+        TYPE_REGEX = 6;
+      }
+
+      Type type = 1;
+      // The value to be compared with the parameter,
+      // or a comma separated list in case of Validation.TYPE_INCLUSION or Validation.TYPE_EXCLUSION.
+      string value = 2;
+    }
+
+    // Deprecated: use config.v1.Parameter.Type instead.
+    enum Type {
+      option deprecated = true;
+      TYPE_UNSPECIFIED = 0;
+      // Parameter is a string.
+      TYPE_STRING = 1;
+      // Parameter is an integer.
+      TYPE_INT = 2;
+      // Parameter is a float.
+      TYPE_FLOAT = 3;
+      // Parameter is a boolean.
+      TYPE_BOOL = 4;
+      // Parameter is a file.
+      TYPE_FILE = 5;
+      // Parameter is a duration.
+      TYPE_DURATION = 6;
+    }
+
+    string description = 1;
+    string default = 2;
+    Type type = 3;
+    repeated Validation validations = 4;
+  }
+
+  string name = 1;
+  string summary = 2;
+  string description = 3;
+  string version = 4;
+  string author = 5;
+  map<string, Parameter> destination_params = 6;
+  map<string, Parameter> source_params = 7;
+}
+
+// -- services -----------------------------------------------------------------
 
 // PipelineService exposes functionality for managing pipelines.
 // Endpoints in this service can be used to create, fetch, modify or delete a
@@ -647,11 +769,23 @@ service ConnectorService {
       }
     };
   };
+
+  rpc ListConnectorPlugins(ListConnectorPluginsRequest) returns (ListConnectorPluginsResponse) {
+    option (google.api.http) = {
+      get: "/v1/connectors/plugins"
+      response_body: "plugins"
+    };
+  };
 }
 
 message CreateConnectorRequest {
   Connector.Type type = 1;
-  // Plugin name is the name of the builtin plugin, or the absolute path of a standalone plugin.
+  // Used to reference a plugin. Its format is as follows:
+  // [PLUGIN-TYPE:]PLUGIN-NAME[@VERSION]
+  // PLUGIN-TYPE: One of: builtin, standalone or any (default).
+  // PLUGIN-NAME: The name of the plugin as specified in the plugin specifications.
+  // VERSION: The plugin version as specified in the plugin specifications or latest (default).
+  // For more information, see: https://conduit.io/docs/connectors/referencing/
   string plugin = 2;
   // ID of the pipeline to which the connector will get attached.
   string pipeline_id = 3;
@@ -707,6 +841,15 @@ message DeleteConnectorRequest {
   string id = 1;
 }
 message DeleteConnectorResponse {}
+
+message ListConnectorPluginsRequest {
+  // Regex to filter plugins by name.
+  string name = 1;
+}
+
+message ListConnectorPluginsResponse{
+  repeated ConnectorPluginSpecifications plugins = 1;
+}
 
 // ProcessorService exposes CRUD functionality for managing processors.
 service ProcessorService {
@@ -853,6 +996,13 @@ service ProcessorService {
       }
     };
   };
+
+  rpc ListProcessorPlugins(ListProcessorPluginsRequest) returns (ListProcessorPluginsResponse) {
+    option (google.api.http) = {
+      get: "/v1/processors/plugins"
+      response_body: "plugins"
+    };
+  };
 }
 
 message ListProcessorsRequest {
@@ -878,9 +1028,11 @@ message InspectProcessorOutResponse {
 
 
 message CreateProcessorRequest {
-  string type = 1;
+  string type = 1 [deprecated = true];
   Processor.Parent parent = 3;
   Processor.Config config = 4;
+  string condition = 5;
+  string plugin = 6;
 }
 message CreateProcessorResponse {
   Processor processor = 1;
@@ -905,6 +1057,15 @@ message DeleteProcessorRequest {
   string id = 1;
 }
 message DeleteProcessorResponse {}
+
+message ListProcessorPluginsRequest {
+  // Regex to filter plugins by name.
+  string name = 1;
+}
+
+message ListProcessorPluginsResponse{
+  repeated ProcessorPluginSpecifications plugins = 1;
+}
 
 service InformationService {
   rpc GetInfo (GetInfoRequest) returns (GetInfoResponse) {
@@ -958,8 +1119,11 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
   }
 };
 
+// Deprecated: use ConnectorService and ProcessorService instead.
 service PluginService {
+  // Deprecated: use ConnectorService.ListConnectorPlugins instead.
   rpc ListPlugins(ListPluginsRequest) returns (ListPluginsResponse) {
+    option deprecated = true;
     option (google.api.http) = {
       get: "/v1/plugins"
       response_body: "plugins"
@@ -967,69 +1131,15 @@ service PluginService {
   };
 }
 
+// Deprecated: use ConnectorService.ListConnectorPlugins instead.
 message ListPluginsRequest {
+  option deprecated = true;
   // Regex to filter plugins by name.
   string name = 1;
 }
 
+// Deprecated: use ConnectorService.ListConnectorPlugins instead.
 message ListPluginsResponse{
+  option deprecated = true;
   repeated PluginSpecifications plugins = 1;
-}
-
-message PluginSpecifications{
-  message Parameter {
-    // Validation to be made on the parameter.
-    message Validation{
-      enum Type {
-        TYPE_UNSPECIFIED = 0;
-        // Parameter must be present.
-        TYPE_REQUIRED = 1;
-        // Parameter must be greater than {value}.
-        TYPE_GREATER_THAN = 2;
-        // Parameter must be less than {value}.
-        TYPE_LESS_THAN = 3;
-        // Parameter must be included in the comma separated list {value}.
-        TYPE_INCLUSION = 4;
-        // Parameter must not be included in the comma separated list {value}.
-        TYPE_EXCLUSION = 5;
-        // Parameter must match the regex {value}.
-        TYPE_REGEX = 6;
-      }
-
-      Type type = 1;
-      // The value to be compared with the parameter,
-      // or a comma separated list in case of Validation.TYPE_INCLUSION or Validation.TYPE_EXCLUSION.
-      string value = 2;
-    }
-
-    // Type shows the parameter type.
-    enum Type {
-      TYPE_UNSPECIFIED = 0;
-      // Parameter is a string.
-      TYPE_STRING = 1;
-      // Parameter is an integer.
-      TYPE_INT = 2;
-      // Parameter is a float.
-      TYPE_FLOAT = 3;
-      // Parameter is a boolean.
-      TYPE_BOOL = 4;
-      // Parameter is a file.
-      TYPE_FILE = 5;
-      // Parameter is a duration.
-      TYPE_DURATION = 6;
-    }
-
-    string description = 1;
-    string default = 2;
-    Type type = 3;
-    repeated Validation validations = 4;
-  }
-
-  string name = 1;
-  string summary = 2;
-  string description = 3;
-  string version = 4;
-  string author = 5;
-  map<string, Parameter> destination_params = 6;
-  map<string, Parameter> source_params = 7;
 }

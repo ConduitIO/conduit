@@ -5,6 +5,7 @@
 //
 //	mockgen -destination=mock/processor.go -package=mock -mock_names=ProcessorOrchestrator=ProcessorOrchestrator . ProcessorOrchestrator
 //
+
 // Package mock is a generated GoMock package.
 package mock
 
@@ -41,18 +42,18 @@ func (m *ProcessorOrchestrator) EXPECT() *ProcessorOrchestratorMockRecorder {
 }
 
 // Create mocks base method.
-func (m *ProcessorOrchestrator) Create(arg0 context.Context, arg1 string, arg2 processor.Parent, arg3 processor.Config) (*processor.Instance, error) {
+func (m *ProcessorOrchestrator) Create(arg0 context.Context, arg1 string, arg2 processor.Parent, arg3 processor.Config, arg4 string) (*processor.Instance, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Create", arg0, arg1, arg2, arg3)
+	ret := m.ctrl.Call(m, "Create", arg0, arg1, arg2, arg3, arg4)
 	ret0, _ := ret[0].(*processor.Instance)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Create indicates an expected call of Create.
-func (mr *ProcessorOrchestratorMockRecorder) Create(arg0, arg1, arg2, arg3 any) *gomock.Call {
+func (mr *ProcessorOrchestratorMockRecorder) Create(arg0, arg1, arg2, arg3, arg4 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*ProcessorOrchestrator)(nil).Create), arg0, arg1, arg2, arg3)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*ProcessorOrchestrator)(nil).Create), arg0, arg1, arg2, arg3, arg4)
 }
 
 // Delete mocks base method.

@@ -43,9 +43,12 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/multierror"
 	"github.com/conduitio/conduit/pkg/orchestrator"
 	"github.com/conduitio/conduit/pkg/pipeline"
-	"github.com/conduitio/conduit/pkg/plugin"
-	"github.com/conduitio/conduit/pkg/plugin/builtin"
-	"github.com/conduitio/conduit/pkg/plugin/standalone"
+	conn_plugin "github.com/conduitio/conduit/pkg/plugin/connector"
+	conn_builtin "github.com/conduitio/conduit/pkg/plugin/connector/builtin"
+	conn_standalone "github.com/conduitio/conduit/pkg/plugin/connector/standalone"
+	proc_plugin "github.com/conduitio/conduit/pkg/plugin/processor"
+	proc_builtin "github.com/conduitio/conduit/pkg/plugin/processor/builtin"
+	proc_standalone "github.com/conduitio/conduit/pkg/plugin/processor/standalone"
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/provisioning"
 	"github.com/conduitio/conduit/pkg/web/api"
@@ -63,10 +66,6 @@ import (
 	"google.golang.org/grpc/reflection"
 	"google.golang.org/grpc/stats"
 	"gopkg.in/tomb.v2"
-
-	// NB: anonymous import triggers processor registry creation
-	_ "github.com/conduitio/conduit/pkg/processor/procbuiltin"
-	_ "github.com/conduitio/conduit/pkg/processor/procjs"
 )
 
 const (
@@ -87,7 +86,8 @@ type Runtime struct {
 	connectorService *connector.Service
 	processorService *processor.Service
 
-	pluginService *plugin.Service
+	connectorPluginService *conn_plugin.PluginService
+	processorPluginService *proc_plugin.PluginService
 
 	connectorPersister *connector.Persister
 	logger             log.CtxLogger
@@ -132,14 +132,14 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 	)
 
 	// Create all necessary internal services
-	plService, connService, procService, pluginService, err := newServices(logger, db, connectorPersister, cfg)
+	plService, connService, procService, connPluginService, procPluginService, err := newServices(logger, db, connectorPersister, cfg)
 	if err != nil {
 		return nil, cerrors.Errorf("failed to create services: %w", err)
 	}
 
-	provisionService := provisioning.NewService(db, logger, plService, connService, procService, pluginService, cfg.Pipelines.Path)
+	provisionService := provisioning.NewService(db, logger, plService, connService, procService, connPluginService, cfg.Pipelines.Path)
 
-	orc := orchestrator.NewOrchestrator(db, logger, plService, connService, procService, pluginService)
+	orc := orchestrator.NewOrchestrator(db, logger, plService, connService, procService, connPluginService, procPluginService)
 
 	r := &Runtime{
 		Config:           cfg,
@@ -151,7 +151,9 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 		pipelineService:  plService,
 		connectorService: connService,
 		processorService: procService,
-		pluginService:    pluginService,
+
+		connectorPluginService: connPluginService,
+		processorPluginService: procPluginService,
 
 		connectorPersister: connectorPersister,
 
@@ -184,50 +186,42 @@ func newServices(
 	db database.DB,
 	connPersister *connector.Persister,
 	cfg Config,
-) (*pipeline.Service, *connector.Service, *processor.Service, *plugin.Service, error) {
-	pipelineService := pipeline.NewService(logger, db)
-	connectorService := connector.NewService(logger, db, connPersister)
-	processorService := processor.NewService(logger, db, cfg.ProcessorBuilderRegistry)
-	pluginService := plugin.NewService(
+) (*pipeline.Service, *connector.Service, *processor.Service, *conn_plugin.PluginService, *proc_plugin.PluginService, error) {
+	standaloneReg, err := proc_standalone.NewRegistry(logger, cfg.Processors.Path)
+	if err != nil {
+		return nil, nil, nil, nil, nil, cerrors.Errorf("failed creating processor registry: %w", err)
+	}
+
+	procPluginService := proc_plugin.NewPluginService(
 		logger,
-		builtin.NewRegistry(logger, cfg.PluginDispenserFactories),
-		standalone.NewRegistry(logger, cfg.Connectors.Path),
+		proc_builtin.NewRegistry(logger, proc_builtin.DefaultBuiltinProcessors),
+		standaloneReg,
 	)
 
-	return pipelineService, connectorService, processorService, pluginService, nil
+	connPluginService := conn_plugin.NewPluginService(
+		logger,
+		conn_builtin.NewRegistry(logger, cfg.PluginDispenserFactories),
+		conn_standalone.NewRegistry(logger, cfg.Connectors.Path),
+	)
+
+	pipelineService := pipeline.NewService(logger, db)
+	connectorService := connector.NewService(logger, db, connPersister)
+	processorService := processor.NewService(logger, db, procPluginService)
+
+	return pipelineService, connectorService, processorService, connPluginService, procPluginService, nil
 }
 
 // Run initializes all of Conduit's underlying services and starts the GRPC and
 // HTTP APIs. This function blocks until the supplied context is cancelled or
 // one of the services experiences a fatal error.
 func (r *Runtime) Run(ctx context.Context) (err error) {
-	t, ctx := tomb.WithContext(ctx)
+	cleanup, err := r.initProfiling(ctx)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
 
-	if r.Config.dev.cpuprofile != "" {
-		f, err := os.Create(r.Config.dev.cpuprofile)
-		if err != nil {
-			return cerrors.Errorf("could not create CPU profile: %w", err)
-		}
-		defer f.Close()
-		if err := pprof.StartCPUProfile(f); err != nil {
-			return cerrors.Errorf("could not start CPU profile: %w", err)
-		}
-		defer pprof.StopCPUProfile()
-	}
-	if r.Config.dev.memprofile != "" {
-		defer func() {
-			f, err := os.Create(r.Config.dev.memprofile)
-			if err != nil {
-				r.logger.Err(ctx, err).Msg("could not create memory profile")
-				return
-			}
-			defer f.Close()
-			runtime.GC() // get up-to-date statistics
-			if err := pprof.WriteHeapProfile(f); err != nil {
-				r.logger.Err(ctx, err).Msg("could not write memory profile")
-			}
-		}()
-	}
+	t, ctx := tomb.WithContext(ctx)
 
 	defer func() {
 		if err != nil {
@@ -282,7 +276,7 @@ func (r *Runtime) Run(ctx context.Context) (err error) {
 		}
 	}
 
-	err = r.pipelineService.Run(ctx, r.connectorService, r.processorService, r.pluginService)
+	err = r.pipelineService.Run(ctx, r.connectorService, r.processorService, r.connectorPluginService)
 	if err != nil {
 		multierror.ForEach(err, func(err error) {
 			r.logger.Err(ctx, err).Msg("pipeline failed to be started")
@@ -312,6 +306,75 @@ func (r *Runtime) Run(ctx context.Context) (err error) {
 
 	close(r.Ready)
 	return nil
+}
+
+func (r *Runtime) initProfiling(ctx context.Context) (deferred func(), err error) {
+	deferred = func() {}
+
+	// deferFunc adds the func into deferred so it can be executed by the caller
+	// in a defer statement
+	deferFunc := func(f func()) {
+		oldDeferred := deferred
+		deferred = func() {
+			f()
+			oldDeferred()
+		}
+	}
+	// ignoreErr returns a function that executes f and ignores the returned error
+	ignoreErr := func(f func() error) func() {
+		return func() {
+			_ = f() // ignore error
+		}
+	}
+	defer func() {
+		if err != nil {
+			// on error we make sure deferred functions are executed and return
+			// an empty function as deferred instead
+			deferred()
+			deferred = func() {}
+		}
+	}()
+
+	if r.Config.dev.cpuprofile != "" {
+		f, err := os.Create(r.Config.dev.cpuprofile)
+		if err != nil {
+			return deferred, cerrors.Errorf("could not create CPU profile: %w", err)
+		}
+		deferFunc(ignoreErr(f.Close))
+		if err := pprof.StartCPUProfile(f); err != nil {
+			return deferred, cerrors.Errorf("could not start CPU profile: %w", err)
+		}
+		deferFunc(pprof.StopCPUProfile)
+	}
+	if r.Config.dev.memprofile != "" {
+		deferFunc(func() {
+			f, err := os.Create(r.Config.dev.memprofile)
+			if err != nil {
+				r.logger.Err(ctx, err).Msg("could not create memory profile")
+				return
+			}
+			defer f.Close()
+			runtime.GC() // get up-to-date statistics
+			if err := pprof.WriteHeapProfile(f); err != nil {
+				r.logger.Err(ctx, err).Msg("could not write memory profile")
+			}
+		})
+	}
+	if r.Config.dev.blockprofile != "" {
+		runtime.SetBlockProfileRate(1)
+		deferFunc(func() {
+			f, err := os.Create(r.Config.dev.blockprofile)
+			if err != nil {
+				r.logger.Err(ctx, err).Msg("could not create block profile")
+				return
+			}
+			defer f.Close()
+			if err := pprof.Lookup("block").WriteTo(f, 0); err != nil {
+				r.logger.Err(ctx, err).Msg("could not write block profile")
+			}
+		})
+	}
+	return
 }
 
 func (r *Runtime) registerCleanup(t *tomb.Tomb) {
@@ -368,13 +431,13 @@ func (r *Runtime) serveGRPCAPI(ctx context.Context, t *tomb.Tomb) (net.Addr, err
 	pipelineAPIv1 := api.NewPipelineAPIv1(r.Orchestrator.Pipelines)
 	pipelineAPIv1.Register(grpcServer)
 
-	processorAPIv1 := api.NewProcessorAPIv1(r.Orchestrator.Processors)
+	processorAPIv1 := api.NewProcessorAPIv1(r.Orchestrator.Processors, r.Orchestrator.ProcessorPlugins)
 	processorAPIv1.Register(grpcServer)
 
-	connectorAPIv1 := api.NewConnectorAPIv1(r.Orchestrator.Connectors)
+	connectorAPIv1 := api.NewConnectorAPIv1(r.Orchestrator.Connectors, r.Orchestrator.ConnectorPlugins)
 	connectorAPIv1.Register(grpcServer)
 
-	pluginAPIv1 := api.NewPluginAPIv1(r.Orchestrator.Plugins)
+	pluginAPIv1 := api.NewPluginAPIv1(r.Orchestrator.ConnectorPlugins)
 	pluginAPIv1.Register(grpcServer)
 
 	info := api.NewInformation(Version(false))
@@ -387,10 +450,11 @@ func (r *Runtime) serveGRPCAPI(ctx context.Context, t *tomb.Tomb) (net.Addr, err
 	// Names taken from api.proto
 	healthServer := api.NewHealthServer(
 		map[string]api.Checker{
-			"PipelineService":  r.pipelineService,
-			"ConnectorService": r.connectorService,
-			"ProcessorService": r.processorService,
-			"PluginService":    r.pluginService,
+			"PipelineService":        r.pipelineService,
+			"ConnectorService":       r.connectorService,
+			"ProcessorService":       r.processorService,
+			"ConnectorPluginService": r.connectorPluginService,
+			"ProcessorPluginService": r.processorPluginService,
 		},
 		r.logger,
 	)
@@ -587,7 +651,7 @@ func (r *Runtime) serveHTTP(
 ) (net.Addr, error) {
 	ln, err := net.Listen("tcp", srv.Addr)
 	if err != nil {
-		return nil, cerrors.Errorf("failed to listen on address %q: %w", r.Config.API.GRPC.Address, err)
+		return nil, cerrors.Errorf("failed to listen on address %q: %w", r.Config.API.HTTP.Address, err)
 	}
 
 	t.Go(func() error {

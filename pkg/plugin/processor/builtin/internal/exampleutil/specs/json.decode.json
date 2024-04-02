@@ -1,0 +1,101 @@
+{
+  "specification": {
+    "name": "json.decode",
+    "summary": "Decodes a specific field from JSON raw data (string) to structured data.",
+    "description": "The processor takes JSON raw data (`string` or `[]byte`)\nfrom the target field, parses it as JSON structured data and stores the decoded\nstructured data in the target field.\n\nThis processor is only applicable to fields under `.Key`, `.Payload`.Before and\n`.Payload.After`, as they can contain structured data.",
+    "version": "v0.1.0",
+    "author": "Meroxa, Inc.",
+    "parameters": {
+      "field": {
+        "default": "",
+        "description": "Field is a reference to the target field. Only fields that are under\n`.Key` and `.Payload` can be decoded.\n\nFor more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).",
+        "type": "string",
+        "validations": [
+          {
+            "type": "required",
+            "value": ""
+          },
+          {
+            "type": "regex",
+            "value": "^\\.(Payload|Key).*"
+          },
+          {
+            "type": "exclusion",
+            "value": ".Payload"
+          }
+        ]
+      }
+    }
+  },
+  "examples": [
+    {
+      "summary": "Decode record key as JSON",
+      "description": "This example takes a record containing a raw JSON string in\n`.Key` and converts it into structured data.",
+      "config": {
+        "field": ".Key"
+      },
+      "have": {
+        "position": null,
+        "operation": "create",
+        "metadata": null,
+        "key": "{\"after\":{\"data\":4,\"id\":3}}",
+        "payload": {
+          "before": null,
+          "after": null
+        }
+      },
+      "want": {
+        "position": null,
+        "operation": "create",
+        "metadata": null,
+        "key": {
+          "after": {
+            "data": 4,
+            "id": 3
+          }
+        },
+        "payload": {
+          "before": null,
+          "after": null
+        }
+      }
+    },
+    {
+      "summary": "Decode nested field as JSON",
+      "description": "This example takes a record containing a raw JSON string in\n`.Payload.Before.foo` and converts it into a map.",
+      "config": {
+        "field": ".Payload.Before.foo"
+      },
+      "have": {
+        "position": null,
+        "operation": "snapshot",
+        "metadata": null,
+        "key": null,
+        "payload": {
+          "before": {
+            "foo": "{\"before\":{\"data\":4,\"id\":3},\"baz\":\"bar\"}"
+          },
+          "after": null
+        }
+      },
+      "want": {
+        "position": null,
+        "operation": "snapshot",
+        "metadata": null,
+        "key": null,
+        "payload": {
+          "before": {
+            "foo": {
+              "baz": "bar",
+              "before": {
+                "data": 4,
+                "id": 3
+              }
+            }
+          },
+          "after": null
+        }
+      }
+    }
+  ]
+}

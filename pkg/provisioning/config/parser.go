@@ -39,10 +39,11 @@ type Connector struct {
 }
 
 type Processor struct {
-	ID       string
-	Type     string
-	Settings map[string]string
-	Workers  int
+	ID        string
+	Plugin    string
+	Settings  map[string]string
+	Workers   int
+	Condition string
 }
 
 type DLQ struct {
@@ -63,8 +64,8 @@ var (
 	ConnectorImmutableFields = []string{"Type", "Plugin"}
 	ConnectorMutableFields   = []string{"Name", "Settings", "Processors"}
 
-	ProcessorImmutableFields = []string{"Type"}
-	ProcessorMutableFields   = []string{"Settings", "Workers"}
+	ProcessorImmutableFields = []string{"Plugin"}
+	ProcessorMutableFields   = []string{"Settings", "Workers", "Condition"}
 )
 
 // Parser reads data from reader and parses all pipelines defined in the

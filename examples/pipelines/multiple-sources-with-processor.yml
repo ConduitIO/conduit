@@ -1,0 +1,35 @@
+version: 2.2
+pipelines:
+  - id: add-department
+    status: running
+    description: >
+      An example pipeline that reads data (imaginary employees) from two generator
+      sources and uses the built-in `field.set` processor to add a department field
+      to each of those. This is a pipeline processor, meaning that it processes records
+      from all sources.
+    connectors:
+      - id: employees-1
+        type: source
+        plugin: builtin:generator
+        settings:
+          format.type: "structured"
+          format.options: "id:int,name:string,company:string,trial:bool"
+          recordCount: "1"
+      - id: employees-2
+        type: source
+        plugin: builtin:generator
+        settings:
+          format.type: "structured"
+          format.options: "id:int,name:string,company:string,trial:bool"
+          recordCount: "2"
+      - id: file-destination
+        type: destination
+        plugin: builtin:file
+        settings:
+          path: ./example.out
+    processors:
+      - id: extract-name
+        plugin: field.set
+        settings:
+          field: '.Payload.After.department'
+          value: 'finance'

@@ -19,34 +19,29 @@ import (
 	"regexp"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/conduitio/conduit/pkg/web/api/status"
 	"github.com/conduitio/conduit/pkg/web/api/toproto"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	"google.golang.org/grpc"
 )
 
-//go:generate mockgen -destination=mock/plugin.go -package=mock -mock_names=PluginOrchestrator=PluginOrchestrator . PluginOrchestrator
-
-// PluginOrchestrator defines a CRUD interface that manages the Plugin resource.
-type PluginOrchestrator interface {
-	// List will return all plugins' specs.
-	List(ctx context.Context) (map[string]plugin.Specification, error)
-}
-
 type PluginAPIv1 struct {
 	apiv1.UnimplementedPluginServiceServer
-	ps PluginOrchestrator
+	connectorPluginOrchestrator ConnectorPluginOrchestrator
 }
 
-func NewPluginAPIv1(ps PluginOrchestrator) *PluginAPIv1 {
-	return &PluginAPIv1{ps: ps}
+func NewPluginAPIv1(
+	cpo ConnectorPluginOrchestrator,
+) *PluginAPIv1 {
+	return &PluginAPIv1{connectorPluginOrchestrator: cpo}
 }
 
 func (p *PluginAPIv1) Register(srv *grpc.Server) {
 	apiv1.RegisterPluginServiceServer(srv, p)
 }
 
+// Deprecated: this is here for backwards compatibility with the old plugin API.
+// Use ListConnectorPlugins instead.
 func (p *PluginAPIv1) ListPlugins(
 	ctx context.Context,
 	req *apiv1.ListPluginsRequest,
@@ -60,7 +55,7 @@ func (p *PluginAPIv1) ListPlugins(
 		}
 	}
 
-	mp, err := p.ps.List(ctx)
+	mp, err := p.connectorPluginOrchestrator.List(ctx)
 	if err != nil {
 		return nil, status.PluginError(err)
 	}
@@ -70,7 +65,7 @@ func (p *PluginAPIv1) ListPlugins(
 		if nameFilter != nil && !nameFilter.MatchString(name) {
 			continue // don't add to result list, filter didn't match
 		}
-		plist = append(plist, toproto.Plugin(name, v))
+		plist = append(plist, toproto.PluginSpecifications(name, v))
 	}
 
 	return &apiv1.ListPluginsResponse{Plugins: plist}, nil

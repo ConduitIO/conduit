@@ -96,8 +96,8 @@ type createConnectorAction struct {
 	cfg        config.Connector
 	pipelineID string
 
-	connectorService ConnectorService
-	pluginService    PluginService
+	connectorService       ConnectorService
+	connectorPluginService ConnectorPluginService
 }
 
 func (a createConnectorAction) String() string {
@@ -131,7 +131,7 @@ func (a createConnectorAction) Do(ctx context.Context) error {
 	return nil
 }
 func (a createConnectorAction) Rollback(ctx context.Context) error {
-	err := a.connectorService.Delete(ctx, a.cfg.ID, a.pluginService)
+	err := a.connectorService.Delete(ctx, a.cfg.ID, a.connectorPluginService)
 	// ignore instance not found errors, this means the action failed to
 	// create the connector in the first place
 	if cerrors.Is(err, connector.ErrInstanceNotFound) {
@@ -163,13 +163,14 @@ func (a createProcessorAction) Do(ctx context.Context) error {
 	_, err := a.processorService.Create(
 		ctx,
 		a.cfg.ID,
-		a.cfg.Type,
+		a.cfg.Plugin,
 		a.parent,
 		processor.Config{
 			Settings: a.cfg.Settings,
 			Workers:  a.cfg.Workers,
 		},
 		processor.ProvisionTypeConfig,
+		a.cfg.Condition,
 	)
 	if err != nil {
 		return cerrors.Errorf("failed to create processor: %w", err)

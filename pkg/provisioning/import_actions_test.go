@@ -294,10 +294,10 @@ func TestCreateConnectorAction_Do(t *testing.T) {
 			connSrv.EXPECT().AddProcessor(ctx, haveCfg.ID, haveCfg.Processors[1].ID)
 
 			a := createConnectorAction{
-				cfg:              haveCfg,
-				pipelineID:       pipelineID,
-				connectorService: connSrv,
-				pluginService:    nil, // only needed for Rollback
+				cfg:                    haveCfg,
+				pipelineID:             pipelineID,
+				connectorService:       connSrv,
+				connectorPluginService: nil, // only needed for Rollback
 			}
 			err := a.Do(ctx)
 			is.NoErr(err)
@@ -320,15 +320,15 @@ func TestCreateConnectorAction_Rollback(t *testing.T) {
 		Processors: []config.Processor{{ID: "proc1"}, {ID: "proc2"}},
 	}
 
-	plugSrv := mock.NewPluginService(ctrl)
+	connPlugSrv := mock.NewConnectorPluginService(ctrl)
 	connSrv := mock.NewConnectorService(ctrl)
-	connSrv.EXPECT().Delete(ctx, haveCfg.ID, plugSrv)
+	connSrv.EXPECT().Delete(ctx, haveCfg.ID, connPlugSrv)
 
 	a := createConnectorAction{
-		cfg:              haveCfg,
-		pipelineID:       pipelineID,
-		connectorService: connSrv,
-		pluginService:    plugSrv,
+		cfg:                    haveCfg,
+		pipelineID:             pipelineID,
+		connectorService:       connSrv,
+		connectorPluginService: connPlugSrv,
 	}
 	err := a.Rollback(ctx)
 	is.NoErr(err)
@@ -413,15 +413,15 @@ func TestDeleteConnectorAction_Do(t *testing.T) {
 		Processors: []config.Processor{{ID: "proc1"}, {ID: "proc2"}},
 	}
 
-	plugSrv := mock.NewPluginService(ctrl)
+	connPlugSrv := mock.NewConnectorPluginService(ctrl)
 	connSrv := mock.NewConnectorService(ctrl)
-	connSrv.EXPECT().Delete(ctx, haveCfg.ID, plugSrv)
+	connSrv.EXPECT().Delete(ctx, haveCfg.ID, connPlugSrv)
 
 	a := deleteConnectorAction{
-		cfg:              haveCfg,
-		pipelineID:       pipelineID,
-		connectorService: connSrv,
-		pluginService:    plugSrv,
+		cfg:                    haveCfg,
+		pipelineID:             pipelineID,
+		connectorService:       connSrv,
+		connectorPluginService: connPlugSrv,
 	}
 	err := a.Do(ctx)
 	is.NoErr(err)
@@ -462,10 +462,10 @@ func TestDeleteConnectorAction_Rollback(t *testing.T) {
 			connSrv.EXPECT().AddProcessor(ctx, haveCfg.ID, haveCfg.Processors[1].ID)
 
 			a := deleteConnectorAction{
-				cfg:              haveCfg,
-				pipelineID:       pipelineID,
-				connectorService: connSrv,
-				pluginService:    nil, // only needed for Do
+				cfg:                    haveCfg,
+				pipelineID:             pipelineID,
+				connectorService:       connSrv,
+				connectorPluginService: nil, // only needed for Do
 			}
 			err := a.Rollback(ctx)
 			is.NoErr(err)
@@ -479,10 +479,11 @@ func TestCreateProcessorAction_Do(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
 	haveCfg := config.Processor{
-		ID:       uuid.NewString(),
-		Type:     "processor-type",
-		Settings: map[string]string{"foo": "bar"},
-		Workers:  2,
+		ID:        uuid.NewString(),
+		Plugin:    "processor-type",
+		Settings:  map[string]string{"foo": "bar"},
+		Workers:   2,
+		Condition: "{{ eq .Metadata.opencdc.version \"v1\" }}",
 	}
 	wantCfg := processor.Config{
 		Settings: haveCfg.Settings,
@@ -494,7 +495,7 @@ func TestCreateProcessorAction_Do(t *testing.T) {
 	}
 
 	procSrv := mock.NewProcessorService(ctrl)
-	procSrv.EXPECT().Create(ctx, haveCfg.ID, haveCfg.Type, parent, wantCfg, processor.ProvisionTypeConfig)
+	procSrv.EXPECT().Create(ctx, haveCfg.ID, haveCfg.Plugin, parent, wantCfg, processor.ProvisionTypeConfig, haveCfg.Condition)
 
 	a := createProcessorAction{
 		cfg:              haveCfg,
@@ -512,7 +513,7 @@ func TestCreateProcessorAction_Rollback(t *testing.T) {
 
 	haveCfg := config.Processor{
 		ID:       uuid.NewString(),
-		Type:     "processor-type",
+		Plugin:   "processor-type",
 		Settings: map[string]string{"foo": "bar"},
 		Workers:  2,
 	}
@@ -532,7 +533,7 @@ func TestCreateProcessorAction_Rollback(t *testing.T) {
 func TestUpdateProcessorAction(t *testing.T) {
 	haveCfg := config.Processor{
 		ID:       uuid.NewString(),
-		Type:     "processor-type",
+		Plugin:   "processor-type",
 		Settings: map[string]string{"foo": "bar"},
 		Workers:  2,
 	}
@@ -593,7 +594,7 @@ func TestDeleteProcessorAction_Do(t *testing.T) {
 
 	haveCfg := config.Processor{
 		ID:       uuid.NewString(),
-		Type:     "processor-type",
+		Plugin:   "processor-type",
 		Settings: map[string]string{"foo": "bar"},
 		Workers:  2,
 	}
@@ -616,10 +617,11 @@ func TestDeleteProcessorAction_Rollback(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
 	haveCfg := config.Processor{
-		ID:       uuid.NewString(),
-		Type:     "processor-type",
-		Settings: map[string]string{"foo": "bar"},
-		Workers:  2,
+		ID:        uuid.NewString(),
+		Plugin:    "processor-type",
+		Settings:  map[string]string{"foo": "bar"},
+		Workers:   2,
+		Condition: "{{ eq .Metadata.opencdc.version \"v1\" }}",
 	}
 	wantCfg := processor.Config{
 		Settings: haveCfg.Settings,
@@ -631,7 +633,7 @@ func TestDeleteProcessorAction_Rollback(t *testing.T) {
 	}
 
 	procSrv := mock.NewProcessorService(ctrl)
-	procSrv.EXPECT().Create(ctx, haveCfg.ID, haveCfg.Type, parent, wantCfg, processor.ProvisionTypeConfig)
+	procSrv.EXPECT().Create(ctx, haveCfg.ID, haveCfg.Plugin, parent, wantCfg, processor.ProvisionTypeConfig, haveCfg.Condition)
 
 	a := deleteProcessorAction{
 		cfg:              haveCfg,

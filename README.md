@@ -47,7 +47,7 @@ Conduit was created and open-sourced by [Meroxa](https://meroxa.io).
 1. Download and extract
    the [latest release](https://github.com/conduitio/conduit/releases/latest).
 2. Download
-   the [example pipeline](/examples/pipelines/file-to-file.yml)
+   the [example pipeline](/examples/pipelines/file-to-file.yaml)
    and put it in the directory named `pipelines` in the same directory as the
    Conduit binary.
 3. Run Conduit (`./conduit`). The example pipeline will start automatically.
@@ -113,7 +113,7 @@ Download the right `.deb` file for your machine architecture from the
 [latest release](https://github.com/conduitio/conduit/releases/latest), then run:
 
 ```sh
-dpkg -i conduit_0.6.0_Linux_x86_64.deb
+dpkg -i conduit_0.8.0_Linux_x86_64.deb
 ```
 
 ### RPM
@@ -122,7 +122,7 @@ Download the right `.rpm` file for your machine architecture from the
 [latest release](https://github.com/conduitio/conduit/releases/latest), then run:
 
 ```sh
-rpm -i conduit_0.6.0_Linux_x86_64.rpm
+rpm -i conduit_0.8.0_Linux_x86_64.rpm
 ```
 
 ### Build from source
@@ -191,9 +191,9 @@ each configuration option based on the following priorities:
 ## Connectors
 
 For the full list of available connectors, see
-the [Connector List](docs/connectors.md). If there's a connector that you're
-looking for that isn't available in Conduit, please file
-an [issue](https://github.com/ConduitIO/conduit/issues/new?assignees=&labels=triage&template=3-connector-request.yml&title=Connector%3A+%3Cresource%3E+%5BSource%2FDestination%5D)
+the [Connector List](https://conduit.io/docs/connectors/connector-list). If
+there's a connector that you're looking for that isn't available in Conduit,
+please file an [issue](https://github.com/ConduitIO/conduit/issues/new?assignees=&labels=triage&template=3-connector-request.yml&title=Connector%3A+%3Cresource%3E+%5BSource%2FDestination%5D)
 .
 
 Conduit loads standalone connectors at startup. The connector binaries need to
@@ -233,12 +233,16 @@ A processor is a component that operates on a single record that flows through a
 pipeline. It can either change the record (i.e. **transform** it) or **filter**
 it out based on some criteria.
 
-Conduit provides a number of built-in processors, which can be used to filter
-and replace fields, post payloads to HTTP endpoints etc. Conduit also provides
-the ability to write custom processors in JavaScript.
+Conduit provides a number of builtin processors, which can be used to manipulate fields,
+send requests to HTTP endpoints, and more, check [Builtin processors](https://conduit.io/docs/processors/builtin/)
+for the list of builtin processors and documentations.
+
+Conduit also provides the ability to write your own [Standalone Processor](https://conduit.io/docs/processors/standalone/building),
+or you can use the builtin processor [`custom.javascript`](https://conduit.io/docs/processors/builtin/custom.javascript)
+to write custom processors in JavaScript.
 
 More detailed information as well as examples can be found in
-the [Processors documentation](/docs/processors.md).
+the [Processors documentation](https://conduit.io/docs/processors/getting-started).
 
 ## API
 
@@ -283,7 +287,7 @@ documentation:
   a Conduit pipeline works.
 - [Pipeline Configuration Files](docs/pipeline_configuration_files.md)
   explains how you can define pipelines using YAML files.
-- [Processors](docs/processors.md) contains examples and more information about
+- [Processors](https://conduit.io/docs/processors/getting-started) contains examples and more information about
   Conduit processors.
 - [Conduit Architecture](docs/architecture.md)
   will give you a high-level overview of Conduit.

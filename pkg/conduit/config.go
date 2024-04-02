@@ -20,8 +20,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/database"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/conduitio/conduit/pkg/plugin/builtin"
-	"github.com/conduitio/conduit/pkg/processor"
+	"github.com/conduitio/conduit/pkg/plugin/connector/builtin"
 	"github.com/rs/zerolog"
 )
 
@@ -68,17 +67,21 @@ type Config struct {
 		Path string
 	}
 
+	Processors struct {
+		Path string
+	}
+
 	Pipelines struct {
 		Path        string
 		ExitOnError bool
 	}
 
 	PluginDispenserFactories map[string]builtin.DispenserFactory
-	ProcessorBuilderRegistry *processor.BuilderRegistry
 
 	dev struct {
-		cpuprofile string
-		memprofile string
+		cpuprofile   string
+		memprofile   string
+		blockprofile string
 	}
 }
 
@@ -93,10 +96,10 @@ func DefaultConfig() Config {
 	cfg.Log.Level = "info"
 	cfg.Log.Format = "cli"
 	cfg.Connectors.Path = "./connectors"
+	cfg.Processors.Path = "./processors"
 	cfg.Pipelines.Path = "./pipelines"
 
 	cfg.PluginDispenserFactories = builtin.DefaultDispenserFactories
-	cfg.ProcessorBuilderRegistry = processor.GlobalBuilderRegistry
 	return cfg
 }
 

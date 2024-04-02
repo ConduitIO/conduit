@@ -17,6 +17,7 @@ package pipeline
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -155,21 +156,21 @@ func TestService_Create_ValidateSuccess(t *testing.T) {
 	service := NewService(logger, db)
 
 	testCases := []struct {
-		name   string
-		connID string
-		data   Config
+		name string
+		id   string
+		data Config
 	}{{
-		name:   "valid config name",
-		connID: uuid.NewString(),
+		name: "valid config name",
+		id:   strings.Repeat("a", 128),
 		data: Config{
-			Name:        "Name#@-/_0%$",
-			Description: "",
+			Name:        strings.Repeat("a", 128),
+			Description: strings.Repeat("a", 8192),
 		},
 	}, {
-		name:   "valid connector ID",
-		connID: "Aa0-_:",
+		name: "valid pipeline ID",
+		id:   "Aa0-_:.",
 		data: Config{
-			Name:        "test-connector",
+			Name:        "Name#@-/_0%$",
 			Description: "",
 		},
 	}}
@@ -178,7 +179,7 @@ func TestService_Create_ValidateSuccess(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := service.Create(
 				ctx,
-				tt.connID,
+				tt.id,
 				tt.data,
 				ProvisionTypeAPI,
 			)
@@ -198,39 +199,47 @@ func TestService_Create_ValidateError(t *testing.T) {
 
 	testCases := []struct {
 		name    string
-		connID  string
+		id      string
 		errType error
 		data    Config
 	}{{
 		name:    "empty config name",
-		connID:  uuid.NewString(),
+		id:      uuid.NewString(),
 		errType: ErrNameMissing,
 		data: Config{
 			Name:        "",
 			Description: "",
 		},
 	}, {
-		name:    "pipeline name over 64 characters",
-		connID:  uuid.NewString(),
+		name:    "pipeline name over 128 characters",
+		id:      uuid.NewString(),
 		errType: ErrNameOverLimit,
 		data: Config{
-			Name:        "aaaaaaaaa1bbbbbbbbb2ccccccccc3ddddddddd4eeeeeeeee5fffffffff6ggggg",
+			Name:        strings.Repeat("a", 129),
 			Description: "",
 		},
 	}, {
-		name:    "pipeline ID over 64 characters",
-		connID:  "aaaaaaaaa1bbbbbbbbb2ccccccccc3ddddddddd4eeeeeeeee5fffffffff6ggggg",
+		name:    "pipeline ID over 128 characters",
+		id:      strings.Repeat("a", 129),
 		errType: ErrIDOverLimit,
 		data: Config{
-			Name:        "test-connector",
+			Name:        "test-pipeline",
 			Description: "",
 		},
 	}, {
-		name:    "invalid characters in connector ID",
-		connID:  "a%bc",
+		name:    "pipeline description over 8192 characters",
+		id:      uuid.NewString(),
+		errType: ErrDescriptionOverLimit,
+		data: Config{
+			Name:        "test-pipeline",
+			Description: strings.Repeat("a", 8193),
+		},
+	}, {
+		name:    "invalid characters in pipeline ID",
+		id:      "a%bc",
 		errType: ErrInvalidCharacters,
 		data: Config{
-			Name:        "test-connector",
+			Name:        "test-pipeline",
 			Description: "",
 		},
 	}}
@@ -239,7 +248,7 @@ func TestService_Create_ValidateError(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := service.Create(
 				ctx,
-				tt.connID,
+				tt.id,
 				tt.data,
 				ProvisionTypeAPI,
 			)

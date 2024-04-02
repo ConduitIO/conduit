@@ -26,7 +26,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/noop"
 	"github.com/conduitio/conduit/pkg/pipeline/stream/mock"
-	"github.com/conduitio/conduit/pkg/plugin"
+	connectorPlugin "github.com/conduitio/conduit/pkg/plugin/connector"
 	"github.com/conduitio/conduit/pkg/record"
 	"github.com/google/uuid"
 	"github.com/matryer/is"
@@ -97,7 +97,7 @@ func TestSourceNode_Stop_ConcurrentFail(t *testing.T) {
 	src.EXPECT().Read(gomock.Any()).DoAndReturn(func(ctx context.Context) (record.Record, error) {
 		close(startRead)
 		<-unblockRead
-		return record.Record{}, plugin.ErrStreamNotOpen
+		return record.Record{}, connectorPlugin.ErrStreamNotOpen
 	}).Times(1)
 	startStop := make(chan struct{})
 	unblockStop := make(chan struct{})
@@ -124,7 +124,7 @@ func TestSourceNode_Stop_ConcurrentFail(t *testing.T) {
 	go func() {
 		defer close(nodeDone)
 		err := node.Run(ctx)
-		is.True(cerrors.Is(err, plugin.ErrStreamNotOpen))
+		is.True(cerrors.Is(err, connectorPlugin.ErrStreamNotOpen))
 	}()
 
 	_, ok, err := cchan.ChanOut[struct{}](startRead).RecvTimeout(ctx, time.Second)
@@ -348,7 +348,7 @@ func newMockSource(ctrl *gomock.Controller, recordCount int, wantErr error) (*mo
 				return record.Record{}, wantErr
 			}
 			<-teardown
-			return record.Record{}, plugin.ErrStreamNotOpen
+			return record.Record{}, connectorPlugin.ErrStreamNotOpen
 		}
 		r := records[position]
 		position++

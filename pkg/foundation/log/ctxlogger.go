@@ -16,6 +16,9 @@ package log
 
 import (
 	"context"
+	"reflect"
+	"strings"
+	"testing"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/rs/zerolog"
@@ -46,6 +49,11 @@ func Nop() CtxLogger {
 	return CtxLogger{Logger: zerolog.Nop()}
 }
 
+// Test returns a test logger that writes to the supplied testing.TB.
+func Test(t testing.TB) CtxLogger {
+	return CtxLogger{Logger: zerolog.New(zerolog.NewTestWriter(t))}
+}
+
 // InitLogger returns a logger initialized with the wanted level and format
 func InitLogger(level zerolog.Level, f Format) CtxLogger {
 	var w = GetWriter(f)
@@ -64,6 +72,20 @@ func InitLogger(level zerolog.Level, f Format) CtxLogger {
 // component is an empty string then nothing will be added to the output.
 func (l CtxLogger) WithComponent(component string) CtxLogger {
 	l.component = component
+	return l
+}
+
+func (l CtxLogger) WithComponentFromType(c any) CtxLogger {
+	cType := reflect.TypeOf(c)
+	for cType.Kind() == reflect.Ptr || cType.Kind() == reflect.Interface {
+		cType = cType.Elem()
+	}
+
+	pkgPath := cType.PkgPath()
+	pkgPath = strings.TrimPrefix(pkgPath, "github.com/conduitio/conduit/pkg/")
+	pkgPath = strings.ReplaceAll(pkgPath, "/", ".")
+	typeName := cType.Name()
+	l.component = pkgPath + "." + typeName
 	return l
 }
 
