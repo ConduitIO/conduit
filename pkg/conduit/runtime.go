@@ -469,8 +469,7 @@ func (r *Runtime) serveHTTPAPI(
 	t *tomb.Tomb,
 	addr net.Addr,
 ) (net.Addr, error) {
-	conn, err := grpc.DialContext(ctx, addr.String(),
-		grpc.WithBlock(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(addr.String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return nil, cerrors.Errorf("failed to dial server: %w", err)
 	}
