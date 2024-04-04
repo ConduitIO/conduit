@@ -19,7 +19,7 @@ jobs:
     - name: Use Node
       uses: actions/setup-node@v4
       with:
-        node-version: '16'
+        node-version: 18.x
     - name: Install dependencies
       run: make ui-dependencies
     - uses: mydea/ember-cli-code-coverage-action@4d49818fff56371e4fdacdfbb1c00573f4cdda01
