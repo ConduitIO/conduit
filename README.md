@@ -130,7 +130,7 @@ rpm -i conduit_0.8.0_Linux_x86_64.rpm
 Requirements:
 
 - [Go](https://golang.org/) (1.21 or later)
-- [Node.js](https://nodejs.org/) (16.x)
+- [Node.js](https://nodejs.org/) (18.x)
 - [Yarn](https://yarnpkg.com/) (latest 1.x)
 - [Ember CLI](https://ember-cli.com/)
 - [Make](https://www.gnu.org/software/make/)
