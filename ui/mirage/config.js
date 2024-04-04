@@ -1,12 +1,10 @@
 import config from 'conduit-ui/config/environment';
 import { createServer } from 'miragejs';
 
-import { discoverEmberDataModels } from 'ember-cli-mirage';
-
 export default function (cfg) {
   return createServer({
     ...cfg,
-    models: { ...discoverEmberDataModels(), ...cfg.models },
+    models: { ...cfg.models },
     routes() {
       // v1 Conduit REST API
       this.urlPrefix = config.conduitAPIURL;

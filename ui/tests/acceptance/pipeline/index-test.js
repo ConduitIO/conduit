@@ -2,7 +2,7 @@ import { assert, module, test } from 'qunit';
 import { find, visit, click, waitUntil, fillIn } from '@ember/test-helpers';
 import { setupApplicationTest } from 'ember-qunit';
 import { setupMirage } from 'ember-cli-mirage/test-support';
-import { Response } from 'ember-cli-mirage';
+import { Response } from 'miragejs';
 
 const page = {
   pipelineSubheaderName: '[data-test-pipeline-subheader-name]',
