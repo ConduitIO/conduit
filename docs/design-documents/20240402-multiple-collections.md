@@ -10,9 +10,8 @@ integration with various data sources and destinations.
 ### Goals
 
 - Enable connectors to read from and write to multiple tables efficiently.
-- Introduce standardized metadata fields for better interoperability and
+- Introduce standardized metadata fields to ensure interoperability and
   configurability.
-- Extend connector specifications to include supported features (nice to have).
 
 ## Implementation Overview
 
@@ -67,48 +66,3 @@ type, same as any other constant.
   - Support routing records to a target topic based on data taken from the
     record. This behavior should be configurable through the `topic` parameter,
     which should default to `{{ .Metadata["opencdc.collection"] }}`.
-
-### Connector Specification Extension
-
-> Note: This feature is a "nice-to-have".
-
-We will extend connector specifications to include features supported by each
-connector. This will allow connectors to signal to Conduit if they have support
-for handling multiple collections or features like snapshotting, CDC, long
-polling, resuming consistently after a restart etc. The goal is to provide
-clarity to users regarding connector capabilities.
-
-#### Example Connector Specification Extension
-
-The actual implementation still needs to be figured out, but could look
-something like this:
-
-```go
-func Specification() sdk.Specification {
-    return sdk.Specification{
-        Name:     "example",
-        Version:  "v0.1.0",
-        Summary:  "Example connector",
-        Author:   "Meroxa, Inc.",
-        Features: []sdk.Feature{
-            sdk.FeatureMultipleCollections{},
-            sdk.FeatureCDC{
-                Snapshot: false, // does not support snapshotting in CDC mode
-                Resume:   true,  // resuming won't lose any data
-            },
-            sdk.FeatureLongPolling{
-                Snapshot: true,  // supports snapshotting in long-polling mode
-                Resume:   false, // data might be missed after a resume
-            },
-        },
-    }
-}
-```
-
-We still need to map this to a proto message and think about what features
-to distinguish.
-
-## Future Considerations
-
-- **UI Integration:** Enhance user experience by providing information about
-  connector features in the UI.
