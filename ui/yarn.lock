@@ -368,7 +368,7 @@
   dependencies:
     "@babel/helper-plugin-utils" "^7.14.5"
 
-"@babel/plugin-syntax-decorators@^7.16.7", "@babel/plugin-syntax-decorators@^7.24.1":
+"@babel/plugin-syntax-decorators@^7.16.7", "@babel/plugin-syntax-decorators@^7.23.3", "@babel/plugin-syntax-decorators@^7.24.1":
   version "7.24.1"
   resolved "https://registry.yarnpkg.com/@babel/plugin-syntax-decorators/-/plugin-syntax-decorators-7.24.1.tgz#71d9ad06063a6ac5430db126b5df48c70ee885fa"
   integrity sha512-05RJdO/cCrtVWuAaSn1tS3bH8jbsJa/Y1uD186u6J4C/1mnHFxseeuWpsqr9anvo7TUulev7tm7GDwRV+VuhDw==
@@ -1265,7 +1265,7 @@
     ember-cli-version-checker "^5.1.2"
     semver "^7.3.5"
 
-"@embroider/addon-shim@^1.5.0", "@embroider/addon-shim@^1.8.3", "@embroider/addon-shim@^1.8.4", "@embroider/addon-shim@^1.8.6":
+"@embroider/addon-shim@^1.8.3", "@embroider/addon-shim@^1.8.4", "@embroider/addon-shim@^1.8.6", "@embroider/addon-shim@^1.8.7":
   version "1.8.7"
   resolved "https://registry.yarnpkg.com/@embroider/addon-shim/-/addon-shim-1.8.7.tgz#ba2dcb0647ed2cb0c500c835326266b89ceec595"
   integrity sha512-JGOQNRj3UR0NdWEg8MsM2eqPLncEwSB1IX+rwntIj22TEKj8biqx7GDgSbeH+ZedijmCh354Hf2c5rthrdzUAw==
@@ -2613,7 +2613,7 @@ babel-import-util@^1.1.0, babel-import-util@^1.2.2, babel-import-util@^1.3.0:
   resolved "https://registry.yarnpkg.com/babel-import-util/-/babel-import-util-1.4.1.tgz#1df6fd679845df45494bac9ca12461d49497fdd4"
   integrity sha512-TNdiTQdPhXlx02pzG//UyVPSKE7SNWjY0n4So/ZnjQpWwaM5LvWBLkWa1JKll5u06HNscHD91XZPuwrMg1kadQ==
 
-babel-import-util@^2.0.0:
+babel-import-util@^2.0.0, babel-import-util@^2.0.1:
   version "2.0.1"
   resolved "https://registry.yarnpkg.com/babel-import-util/-/babel-import-util-2.0.1.tgz#263a2963ee9208428c04f05326c6ea32b2206ac6"
   integrity sha512-N1ZfNprtf/37x0R05J0QCW/9pCAcuI+bjZIK9tlu0JEkwEST7ssdD++gxHRbD58AiG5QE5OuNYhRoEFsc1wESw==
@@ -4499,6 +4499,14 @@ decode-uri-component@^0.2.0:
   resolved "https://registry.yarnpkg.com/decode-uri-component/-/decode-uri-component-0.2.2.tgz#e69dbe25d37941171dd540e024c444cd5188e1e9"
   integrity sha512-FqUYQ+8o158GyGTrMFJms9qh3CqTKvAqgqsTnkLI8sKu0028orqBhxNMFkFen0zGyg6epACD32pjVk58ngIErQ==
 
+decorator-transforms@^1.0.1:
+  version "1.1.0"
+  resolved "https://registry.yarnpkg.com/decorator-transforms/-/decorator-transforms-1.1.0.tgz#2c1e1b7b550fd5e4ba1ac67e57214a5c100ab8f8"
+  integrity sha512-n3WCgc3PB2t9mLV4SJd87IjTbKeFUGw2sU5eEBYczSmcvj3guX4eMW4XOowlQqGk7I/da6+bwv1ydw1ZtNqWaw==
+  dependencies:
+    "@babel/plugin-syntax-decorators" "^7.23.3"
+    babel-import-util "^2.0.1"
+
 deep-is@^0.1.3:
   version "0.1.4"
   resolved "https://registry.yarnpkg.com/deep-is/-/deep-is-0.1.4.tgz#a6f2dce612fadd2ef1f519b73551f17e85199831"
@@ -4755,7 +4763,7 @@ ember-auto-import@^1.11.3:
     walk-sync "^0.3.3"
     webpack "^4.43.0"
 
-ember-auto-import@^2.4.1, ember-auto-import@^2.4.3, ember-auto-import@^2.5.0, ember-auto-import@^2.6.0, ember-auto-import@^2.6.3:
+ember-auto-import@^2.4.1, ember-auto-import@^2.4.3, ember-auto-import@^2.5.0, ember-auto-import@^2.6.0, ember-auto-import@^2.6.3, ember-auto-import@^2.7.2:
   version "2.7.2"
   resolved "https://registry.yarnpkg.com/ember-auto-import/-/ember-auto-import-2.7.2.tgz#5e74b6a8839fab25e23af6cff6f74b1b424d8f25"
   integrity sha512-pkWIljmJClYL17YBk8FjO7NrZPQoY9v0b+FooJvaHf/xlDQIBYVP7OaDHbNuNbpj7+wAwSDAnnwxjCoLsmm4cw==
@@ -4986,7 +4994,7 @@ ember-cli-htmlbars@^5.3.1, ember-cli-htmlbars@^5.7.1:
     strip-bom "^4.0.0"
     walk-sync "^2.2.0"
 
-ember-cli-htmlbars@^6.0.1, ember-cli-htmlbars@^6.1.1, ember-cli-htmlbars@^6.2.0:
+ember-cli-htmlbars@^6.0.1, ember-cli-htmlbars@^6.1.1, ember-cli-htmlbars@^6.2.0, ember-cli-htmlbars@^6.3.0:
   version "6.3.0"
   resolved "https://registry.yarnpkg.com/ember-cli-htmlbars/-/ember-cli-htmlbars-6.3.0.tgz#ac85f2bbd09788992ab7f9ca832cd044fb8e5798"
   integrity sha512-N9Y80oZfcfWLsqickMfRd9YByVcTGyhYRnYQ2XVPVrp6jyUyOeRWmEAPh7ERSXpp8Ws4hr/JB9QVQrn/yZa+Ag==
@@ -5328,18 +5336,15 @@ ember-compatibility-helpers@^1.1.2, ember-compatibility-helpers@^1.2.0, ember-co
     fs-extra "^9.1.0"
     semver "^5.4.1"
 
-ember-concurrency@^3.1.1:
-  version "3.1.1"
-  resolved "https://registry.yarnpkg.com/ember-concurrency/-/ember-concurrency-3.1.1.tgz#7f55ba4bfa4f42cfb23f8cb70aa3c6ef224e9500"
-  integrity sha512-doXFYYfy1C7jez+jDDlfahTp03QdjXeSY/W3Zbnx/q3UNJ9g10Shf2d7M/HvWo/TC22eU+6dPLIpqd/6q4pR+Q==
+ember-concurrency@^4.0.0, ember-concurrency@^4.0.1:
+  version "4.0.2"
+  resolved "https://registry.yarnpkg.com/ember-concurrency/-/ember-concurrency-4.0.2.tgz#fddf23ceaa25088e1221883622ddf8aac2b305d9"
+  integrity sha512-enmStRE8bHIeF/kPZoDZlzP9YINN7H8l3Myk1sVkqo235ph0Vjee37AGCw44eRq6cBRvcdQmb5K3pkzVY7A6WA==
   dependencies:
     "@babel/helper-plugin-utils" "^7.12.13"
     "@babel/types" "^7.12.13"
-    "@glimmer/tracking" "^1.1.2"
-    ember-cli-babel "^7.26.11"
-    ember-cli-babel-plugin-helpers "^1.1.1"
-    ember-cli-htmlbars "^6.2.0"
-    ember-compatibility-helpers "^1.2.0"
+    "@embroider/addon-shim" "^1.8.7"
+    decorator-transforms "^1.0.1"
 
 ember-css-transitions@^4.4.0:
   version "4.4.0"
@@ -5451,12 +5456,12 @@ ember-in-element-polyfill@^1.0.1:
   dependencies:
     ember-cli-babel "^7.26.5"
 
-ember-keyboard@8.2.0:
-  version "8.2.0"
-  resolved "https://registry.yarnpkg.com/ember-keyboard/-/ember-keyboard-8.2.0.tgz#d11fa7f0443606b7c1850bbd8253274a00046e11"
-  integrity sha512-h2kuS2irtIyvNbAMkGDlDTB4TPXwgmC6Nu9bIuGWoCjkGdgJbUg0VegfyRJ1TlxbIHlAelbqVpE8UhfgY5wEag==
+ember-keyboard@8.2.1:
+  version "8.2.1"
+  resolved "https://registry.yarnpkg.com/ember-keyboard/-/ember-keyboard-8.2.1.tgz#945a8a71068d81c06ad26851008ef81061db2a59"
+  integrity sha512-wT9xpt3GKsiodGZoifKU4OyeRjXWlmKV9ZHHsp6wJBwMFpl4wWPjTNdINxivk2qg/WFNIh8nUiwuG4+soWXPdw==
   dependencies:
-    "@embroider/addon-shim" "^1.5.0"
+    "@embroider/addon-shim" "^1.8.4"
     ember-destroyable-polyfill "^2.0.3"
     ember-modifier "^2.1.2 || ^3.1.0 || ^4.0.0"
     ember-modifier-manager-polyfill "^1.2.0"
@@ -9039,15 +9044,16 @@ mute-stream@0.0.8:
   resolved "https://registry.yarnpkg.com/mute-stream/-/mute-stream-0.0.8.tgz#1630c42b2251ff81e2a283de96a5497ea92e5e0d"
   integrity sha512-nnbWWOkoWyUsTjKrhgD0dcz22mdkSnpYqbEjIm2nhwhuxlSkpywJmBo8h0ZqJdkp73mb90SssHkN4rsRaBAfAA==
 
-"mx-ui-components@https://github.com/ConduitIO/mx-ui-components.git#v2.10.0":
-  version "2.10.0"
-  resolved "https://github.com/ConduitIO/mx-ui-components.git#b7b19d014b61b873bf4567218152b81d9e49b953"
+"mx-ui-components@https://github.com/ConduitIO/mx-ui-components.git#v3.0.0":
+  version "3.0.0"
+  resolved "https://github.com/ConduitIO/mx-ui-components.git#fbfa18b58b89b9525c9588c4537be61706928ffa"
   dependencies:
     "@ember/string" "^3.1.1"
-    ember-auto-import "^2.6.3"
-    ember-cli-babel "^7.26.11"
-    ember-cli-htmlbars "^6.2.0"
-    ember-keyboard "8.2.0"
+    ember-auto-import "^2.7.2"
+    ember-cli-babel "^8.2.0"
+    ember-cli-htmlbars "^6.3.0"
+    ember-concurrency "^4.0.0"
+    ember-keyboard "8.2.1"
     ember-modifier "^4.1.0"
     ember-named-blocks-polyfill "^0.2.5"
     ember-root-url "^1.0.1"
