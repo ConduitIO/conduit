@@ -1,4 +1,4 @@
-import { Factory, trait } from 'ember-cli-mirage';
+import { Factory, trait } from 'miragejs';
 import { generateBlueprint } from 'conduit-ui/utils/blueprints/generate-blueprint-data';
 
 export default Factory.extend({

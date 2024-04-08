@@ -44,18 +44,18 @@
     "ember-cli": "~4.8.0",
     "ember-cli-app-version": "^6.0.1",
     "ember-cli-babel": "^7.26.11",
-    "ember-cli-code-coverage": "^1.0.3",
+    "ember-cli-code-coverage": "^3.0.0",
     "ember-cli-dependency-checker": "^3.3.2",
     "ember-cli-deprecation-workflow": "^2.2.0",
     "ember-cli-flash": "^4.0.0",
     "ember-cli-htmlbars": "^6.2.0",
     "ember-cli-inject-live-reload": "^2.1.0",
-    "ember-cli-mirage": "^2.4.0",
+    "ember-cli-mirage": "^3.0.3",
     "ember-cli-netlify": "^0.4.1",
     "ember-cli-postcss": "^8.2.0",
     "ember-cli-sri": "^2.1.1",
     "ember-cli-terser": "^4.0.2",
-    "ember-concurrency": "^2.3.7",
+    "ember-concurrency": "^4.0.2",
     "ember-css-transitions": "^4.4.0",
     "ember-data": "~4.9.1",
     "ember-fetch": "^8.1.2",
@@ -78,7 +78,7 @@
     "eslint-plugin-prettier": "^4.2.1",
     "eslint-plugin-qunit": "^7.3.4",
     "loader.js": "^4.7.0",
-    "mx-ui-components": "https://github.com/ConduitIO/mx-ui-components.git#v2.10.0",
+    "mx-ui-components": "https://github.com/ConduitIO/mx-ui-components.git#v3.0.0",
     "npm-run-all": "^4.1.5",
     "postcss-import": "^15.1.0",
     "prettier": "^2.7.1",
@@ -88,7 +88,7 @@
     "webpack": "^5.89.0"
   },
   "engines": {
-    "node": "14.* || 16.* || >= 18"
+    "node": ">= 18"
   },
   "ember": {
     "edition": "octane"
