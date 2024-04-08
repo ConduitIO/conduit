@@ -5328,7 +5328,7 @@ ember-compatibility-helpers@^1.1.2, ember-compatibility-helpers@^1.2.0, ember-co
     fs-extra "^9.1.0"
     semver "^5.4.1"
 
-ember-concurrency@^3.0.0:
+ember-concurrency@^3.1.0:
   version "3.1.1"
   resolved "https://registry.yarnpkg.com/ember-concurrency/-/ember-concurrency-3.1.1.tgz#7f55ba4bfa4f42cfb23f8cb70aa3c6ef224e9500"
   integrity sha512-doXFYYfy1C7jez+jDDlfahTp03QdjXeSY/W3Zbnx/q3UNJ9g10Shf2d7M/HvWo/TC22eU+6dPLIpqd/6q4pR+Q==
