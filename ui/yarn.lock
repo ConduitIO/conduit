@@ -6090,13 +6090,6 @@ ember-tooltips@^3.6.0:
     resolve "^1.10.1"
     tooltip.js "^1.1.5"
 
-ember-truth-helpers@^3.1.1:
-  version "3.1.1"
-  resolved "https://registry.yarnpkg.com/ember-truth-helpers/-/ember-truth-helpers-3.1.1.tgz#434715926d72bcc63b8a115dec09745fda4474dc"
-  integrity sha512-FHwJAx77aA5q27EhdaaiBFuy9No+8yaWNT5A7zs0sIFCmf14GbcLn69vJEp6mW7vkITezizGAWhw7gL0Wbk7DA==
-  dependencies:
-    ember-cli-babel "^7.22.1"
-
 ember-truth-helpers@^4.0.3:
   version "4.0.3"
   resolved "https://registry.yarnpkg.com/ember-truth-helpers/-/ember-truth-helpers-4.0.3.tgz#02705dc36f2d68f1d4cff0d8226396c8ae5dee2e"
