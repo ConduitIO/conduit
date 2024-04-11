@@ -103,7 +103,7 @@ module(
         assert
           .dom('[data-test-stream-inspector-single-record]')
           .includesText(
-            '{ position: "", operation: "", metadata: {}, key: {}, payload: {} }'
+            '{ position: "", operation: "", metadata: {}, key: {}, payload: {}, }'
           );
       });
     });

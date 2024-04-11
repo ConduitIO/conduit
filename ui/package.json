@@ -37,7 +37,7 @@
     "broccoli-asset-rev": "^3.0.0",
     "d3-selection": "^3.0.0",
     "d3-zoom": "^3.0.0",
-    "ember-auto-import": "^2.6.3",
+    "ember-auto-import": "^2.7.2",
     "ember-basic-dropdown": "^7.2.1",
     "ember-changeset": "^4.1.2",
     "ember-changeset-validations": "^4.1.1",
@@ -78,10 +78,12 @@
     "eslint-plugin-prettier": "^4.2.1",
     "eslint-plugin-qunit": "^7.3.4",
     "loader.js": "^4.7.0",
+    "miragejs": "~0.1.48",
     "mx-ui-components": "https://github.com/ConduitIO/mx-ui-components.git#v3.0.0",
     "npm-run-all": "^4.1.5",
     "postcss-import": "^15.1.0",
     "prettier": "^2.7.1",
+    "pretty-print-json": "^3.0.0",
     "qunit": "^2.19.4",
     "qunit-dom": "^2.0.0",
     "tailwindcss": "^3.3.1",
@@ -92,14 +94,5 @@
   },
   "ember": {
     "edition": "octane"
-  },
-  "dependencies": {
-    "pretty-print-json": "^1.4.1"
-  },
-  "resolutions": {
-    "miragejs": "~0.1.47",
-    "@embroider/macros": "^1.10.0",
-    "@embroider/util": "^1.10.0",
-    "ember-cli-babel": "^7.26.11"
   }
 }
