@@ -1880,6 +1880,13 @@
     "@pnpm/error" "5.0.3"
     find-up "^5.0.0"
 
+"@simple-dom/document@^1.4.0":
+  version "1.4.0"
+  resolved "https://registry.yarnpkg.com/@simple-dom/document/-/document-1.4.0.tgz#af60855f957f284d436983798ef1006cca1a1678"
+  integrity sha512-/RUeVH4kuD3rzo5/91+h4Z1meLSLP66eXqpVAw/4aZmYozkeqUkMprq0znL4psX/adEed5cBgiNJcfMz/eKZLg==
+  dependencies:
+    "@simple-dom/interface" "^1.4.0"
+
 "@simple-dom/interface@^1.4.0":
   version "1.4.0"
   resolved "https://registry.yarnpkg.com/@simple-dom/interface/-/interface-1.4.0.tgz#e8feea579232017f89b0138e2726facda6fbb71f"
@@ -5896,12 +5903,13 @@ ember-named-blocks-polyfill@^0.2.5:
     ember-cli-babel "^7.19.0"
     ember-cli-version-checker "^5.1.1"
 
-ember-page-title@^7.0.0:
-  version "7.0.0"
-  resolved "https://registry.yarnpkg.com/ember-page-title/-/ember-page-title-7.0.0.tgz#11bebd4901d80757646c9006954a13e4fc187421"
-  integrity sha512-oq6+HYbeVD/BnxIO5AkP4gWlsatdgW2HFO10F8+XQiJZrwa7cC7Wm54JNGqQkavkDQTgNSiy1Fe2NILJ14MmAg==
+ember-page-title@^8.2.3:
+  version "8.2.3"
+  resolved "https://registry.yarnpkg.com/ember-page-title/-/ember-page-title-8.2.3.tgz#1ed47ff26e2c9ba581e9e7d3ef1b01977843978e"
+  integrity sha512-9XH4EVPCpSCyXRsLPzdDydU4HgQnaVeJJTrRF0WVh5bZERI9DgxuHv1NPmZU28todHRH91KcBc5nx8kIVJmqUw==
   dependencies:
-    ember-cli-babel "^7.26.6"
+    "@embroider/addon-shim" "^1.8.7"
+    "@simple-dom/document" "^1.4.0"
 
 ember-qunit@^8.0.2:
   version "8.0.2"
