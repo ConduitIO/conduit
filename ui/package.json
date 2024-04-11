@@ -85,7 +85,7 @@
     "prettier": "^2.8.8",
     "pretty-print-json": "^3.0.0",
     "qunit": "^2.20.1",
-    "qunit-dom": "^2.0.0",
+    "qunit-dom": "^3.1.1",
     "tailwindcss": "^3.4.3",
     "webpack": "^5.91.0"
   },
