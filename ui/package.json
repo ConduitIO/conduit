@@ -27,7 +27,7 @@
   "devDependencies": {
     "@ember/optional-features": "^2.1.0",
     "@ember/render-modifiers": "^2.1.0",
-    "@ember/test-helpers": "^2.9.4",
+    "@ember/test-helpers": "^3.3.0",
     "@glimmer/component": "^1.1.2",
     "@glimmer/tracking": "^1.1.2",
     "@meroxa/ui-base": "https://github.com/meroxa/ui-base.git#2.0.0",
@@ -62,7 +62,7 @@
     "ember-load-initializers": "^2.1.2",
     "ember-modifier": "^4.1.0",
     "ember-page-title": "^7.0.0",
-    "ember-qunit": "^6.2.0",
+    "ember-qunit": "^8.0.2",
     "ember-resolver": "^9.0.1",
     "ember-root-url": "^1.0.1",
     "ember-sortable": "^5.0.1",
