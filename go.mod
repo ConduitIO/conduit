@@ -1,6 +1,6 @@
 module github.com/conduitio/conduit
 
-go 1.21.5
+go 1.22.2
 
 require (
 	buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go v1.32.0-20231027202514-3f42134f4c56.1
