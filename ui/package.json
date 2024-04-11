@@ -81,7 +81,7 @@
     "miragejs": "~0.1.48",
     "mx-ui-components": "https://github.com/ConduitIO/mx-ui-components.git#v3.0.0",
     "npm-run-all": "^4.1.5",
-    "postcss-import": "^15.1.0",
+    "postcss-import": "^16.1.0",
     "prettier": "^2.8.8",
     "pretty-print-json": "^3.0.0",
     "qunit": "^2.20.1",
