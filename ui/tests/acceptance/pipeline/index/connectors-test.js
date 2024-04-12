@@ -53,7 +53,7 @@ module('Acceptance | pipeline/index/connectors-test', function (hooks) {
         await click(page.connectorModalPluginSelect.option);
 
         const configFields = document.querySelectorAll(
-          page.connectorModalConfigFields
+          page.connectorModalConfigFields,
         );
 
         await fillIn(configFields[0], 'path/to/file.eren');
@@ -72,7 +72,7 @@ module('Acceptance | pipeline/index/connectors-test', function (hooks) {
       module('then editing a new connector', function (hooks) {
         hooks.beforeEach(async function () {
           await click(
-            '[data-test-connector-node="source-titan-connector"] > div'
+            '[data-test-connector-node="source-titan-connector"] > div',
           );
           await click(page.connectorSlidePanelDropdownTrigger);
           await click(page.connectorSlidePanelDropdownEditButton);
@@ -80,7 +80,7 @@ module('Acceptance | pipeline/index/connectors-test', function (hooks) {
 
         test('it retains all the current values', function (assert) {
           const configFields = document.querySelectorAll(
-            page.connectorModalConfigFields
+            page.connectorModalConfigFields,
           );
 
           assert.dom(page.connectorModalNameInput).hasValue('Titan Connector');
@@ -91,7 +91,7 @@ module('Acceptance | pipeline/index/connectors-test', function (hooks) {
       module('then deleting a new connector', function (hooks) {
         hooks.beforeEach(async function () {
           await click(
-            '[data-test-connector-node="source-titan-connector"] > div'
+            '[data-test-connector-node="source-titan-connector"] > div',
           );
           await click(page.connectorSlidePanelDropdownTrigger);
           await click(page.connectorSlidePanelDropdownDeleteButton);

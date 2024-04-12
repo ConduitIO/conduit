@@ -13,7 +13,7 @@ module('Integration | Helper | dasherize', function (hooks) {
 
     assert.strictEqual(
       this.element.textContent.trim(),
-      'woop-dasherize-me-please'
+      'woop-dasherize-me-please',
     );
   });
 });

@@ -41,7 +41,7 @@ export default Factory.extend({
       'path',
       'File path',
       'TYPE_STRING',
-      { isRequired: true }
+      { isRequired: true },
     );
 
     return { ...requiredString };
@@ -57,33 +57,33 @@ export default Factory.extend({
         'Titan Name',
         'Enter Titan Name',
         'TYPE_STRING',
-        { isRequired: true }
+        { isRequired: true },
       );
       const requiredNumber = generateBlueprint(
         'titan:height',
         'Titan Height',
         'Enter Titan Height',
         'TYPE_INT',
-        { isRequired: true }
+        { isRequired: true },
       );
       const requiredSelect = generateBlueprint(
         'titan.type',
         'Titan Type',
         'Enter Titan Type',
         'TYPE_STRING',
-        { isRequired: true }
+        { isRequired: true },
       );
 
       const optionalText = generateBlueprint(
         'titan:description',
         'Titan Description',
-        'Enter Titan Description'
+        'Enter Titan Description',
       );
       const optionalBoo = generateBlueprint(
         'titan:founding',
         'Founding',
         'Founding',
-        'TYPE_BOOL'
+        'TYPE_BOOL',
       );
 
       return {

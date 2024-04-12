@@ -17,7 +17,7 @@ Router.map(function () {
       function () {
         // => this.route('index');
         this.route('settings');
-      }
+      },
     );
   });
 

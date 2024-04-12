@@ -13,14 +13,14 @@ export function generateBlueprint(
   label,
   description,
   type,
-  validationOpts = {}
+  validationOpts = {},
 ) {
   let validations = [];
 
   if (validationOpts.isRequired) {
     const requiredValidation = generateBlueprintValidations(
       'TYPE_REQUIRED',
-      ''
+      '',
     );
     validations = [requiredValidation];
   }
@@ -48,14 +48,14 @@ export function generateBlueprintField(
   description,
   type,
   validationOpts = {},
-  populatedValue
+  populatedValue,
 ) {
   const blueprint = generateBlueprint(
     id,
     label,
     description,
     type,
-    validationOpts
+    validationOpts,
   );
 
   let configurable;

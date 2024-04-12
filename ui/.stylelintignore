@@ -1,0 +1,10 @@
+# unconventional files
+/blueprints/*/files/
+/coverage/*
+
+# compiled output
+/dist/
+/dist-prod/
+
+# addons
+/.node_modules.ember-try/

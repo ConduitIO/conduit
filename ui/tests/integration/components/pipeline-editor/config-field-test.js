@@ -18,13 +18,13 @@ module(
               'titanName',
               'Titan Name',
               'Enter Titan Name',
-              'TYPE_STRING'
+              'TYPE_STRING',
             );
             this.field = field;
             this.setInputValue = () => {};
 
             await render(
-              hbs`<PipelineEditor::ConfigField @field={{this.field}} @setInputValue={{this.setInputValue}} />`
+              hbs`<PipelineEditor::ConfigField @field={{this.field}} @setInputValue={{this.setInputValue}} />`,
             );
           });
 
@@ -32,7 +32,7 @@ module(
             assert.dom('input').hasAttribute('type', 'text');
             assert.dom('input').doesNotHaveClass('bg-orange-100');
           });
-        }
+        },
       );
 
       module(
@@ -44,7 +44,7 @@ module(
               'Titan Name',
               'Enter Titan Name',
               'TYPE_STRING',
-              { isRequired: true }
+              { isRequired: true },
             );
             this.field = field;
             this.setInputValue = (changeset, event) => {
@@ -52,7 +52,7 @@ module(
             };
 
             await render(
-              hbs`<PipelineEditor::ConfigField @field={{this.field}} @setInputValue={{this.setInputValue}} />`
+              hbs`<PipelineEditor::ConfigField @field={{this.field}} @setInputValue={{this.setInputValue}} />`,
             );
           });
 
@@ -69,7 +69,7 @@ module(
             await fillIn('input', '');
             assert.dom('input').hasClass('bg-orange-100');
           });
-        }
+        },
       );
     });
 
@@ -80,13 +80,13 @@ module(
             'titan:height',
             'Titan Height',
             'Enter Titan Height',
-            'TYPE_INT'
+            'TYPE_INT',
           );
           this.field = field;
           this.setInputValue = () => {};
 
           await render(
-            hbs`<PipelineEditor::ConfigField @field={{this.field}} @setInputValue={{this.setInputValue}} />`
+            hbs`<PipelineEditor::ConfigField @field={{this.field}} @setInputValue={{this.setInputValue}} />`,
           );
         });
 
@@ -104,7 +104,7 @@ module(
               'Titan Height',
               'Enter Titan Height',
               'TYPE_INT',
-              { isRequired: true }
+              { isRequired: true },
             );
             this.field = field;
             this.setInputValue = (changeset, event) => {
@@ -112,7 +112,7 @@ module(
             };
 
             await render(
-              hbs`<PipelineEditor::ConfigField @field={{this.field}} @setInputValue={{this.setInputValue}} />`
+              hbs`<PipelineEditor::ConfigField @field={{this.field}} @setInputValue={{this.setInputValue}} />`,
             );
           });
 
@@ -139,7 +139,7 @@ module(
             await fillIn('input', '500');
             assert.dom('input').doesNotHaveClass('bg-orange-100');
           });
-        }
+        },
       );
 
       module(
@@ -164,7 +164,7 @@ module(
                     value: '0',
                   },
                 ],
-              }
+              },
             );
             this.field = field;
             this.setInputValue = (changeset, event) => {
@@ -172,7 +172,7 @@ module(
             };
 
             await render(
-              hbs`<PipelineEditor::ConfigField @field={{this.field}} @setInputValue={{this.setInputValue}} />`
+              hbs`<PipelineEditor::ConfigField @field={{this.field}} @setInputValue={{this.setInputValue}} />`,
             );
           });
 
@@ -188,7 +188,7 @@ module(
             assert.dom('input').hasClass('bg-orange-100');
             assert.dom('[data-test-config-field-error]').exists({ count: 2 });
           });
-        }
+        },
       );
     });
 
@@ -199,13 +199,13 @@ module(
             'titan:eatingyou',
             'Is eating you',
             '',
-            'TYPE_BOOL'
+            'TYPE_BOOL',
           );
           this.field = field;
           this.setInputValue = () => {};
 
           await render(
-            hbs`<PipelineEditor::ConfigField @field={{this.field}} @setInputValue={{this.setInputValue}} />`
+            hbs`<PipelineEditor::ConfigField @field={{this.field}} @setInputValue={{this.setInputValue}} />`,
           );
         });
 
@@ -233,14 +233,14 @@ module(
                   },
                 ],
               },
-              'Warhammer'
+              'Warhammer',
             );
 
             this.field = field;
             this.setInputValue = () => {};
 
             await render(
-              hbs`<PipelineEditor::ConfigField @field={{this.field}} @setInputValue={{this.setInputValue}} />`
+              hbs`<PipelineEditor::ConfigField @field={{this.field}} @setInputValue={{this.setInputValue}} />`,
             );
           });
 
@@ -253,8 +253,8 @@ module(
               .dom('[data-test-select-display-selected]')
               .containsText('Warhammer');
           });
-        }
+        },
       );
     });
-  }
+  },
 );

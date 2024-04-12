@@ -19,12 +19,12 @@ export default class PipelineEditorConnectorSlidePanelTransformPanel extends Com
     this.connectorTransform = this.args.connectorTransform;
     this.blueprintFields = generateBlueprintFields(
       this.connectorTransform.data.transform.blueprint,
-      this.connectorTransform
+      this.connectorTransform,
     );
 
     this.selectedTransformOnOption = this.transformOnOptions.findBy(
       'value',
-      this.connectorTransform.type
+      this.connectorTransform.type,
     );
   }
 
@@ -52,7 +52,7 @@ export default class PipelineEditorConnectorSlidePanelTransformPanel extends Com
     this.connectorTransform.type = option.value;
     this.selectedTransformOnOption = this.transformOnOptions.findBy(
       'value',
-      option.value
+      option.value,
     );
   }
 
@@ -63,7 +63,7 @@ export default class PipelineEditorConnectorSlidePanelTransformPanel extends Com
     if (fieldChangeset.isValid) {
       this.connectorTransform.set(
         `config.settings.${fieldChangeset.id}`,
-        fieldChangeset.value
+        fieldChangeset.value,
       );
     } else {
       this.connectorTransform.set(`config.${fieldChangeset.id}`, undefined);

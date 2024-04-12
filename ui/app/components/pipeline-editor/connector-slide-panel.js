@@ -46,7 +46,7 @@ export default class PipelineEditorConnectorSlidePanel extends Component {
         ConnectorTransformValidations,
         {
           changesetKeys: ['type', 'config', 'parent'],
-        }
+        },
       );
     });
   }
@@ -68,7 +68,7 @@ export default class PipelineEditorConnectorSlidePanel extends Component {
       ConnectorTransformValidations,
       {
         changesetKeys: ['type', 'config', 'parent', 'transform'],
-      }
+      },
     );
 
     this.isShowingNewTransformPanel = true;
@@ -136,7 +136,7 @@ export default class PipelineEditorConnectorSlidePanel extends Component {
       ConnectorTransformValidations,
       {
         changesetKeys: ['type', 'config', 'parent', 'transform'],
-      }
+      },
     );
 
     this.addTransform(changeset);

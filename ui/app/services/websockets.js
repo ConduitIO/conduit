@@ -7,7 +7,7 @@ export default class WebsocketsService extends Service {
   connect(id, entityType) {
     if (!this._entities.get(id)) {
       const entitySocket = new WebSocket(
-        `ws://localhost:8080/v1/${entityType}/${id}/inspect`
+        `ws://localhost:8080/v1/${entityType}/${id}/inspect`,
       );
 
       this._entities.set(id, new EntityInspection(id, entitySocket));

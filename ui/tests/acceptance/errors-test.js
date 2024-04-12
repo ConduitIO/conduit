@@ -33,7 +33,7 @@ module('Acceptance | error', function (hooks) {
         return new Response(
           500,
           {},
-          { code: 500, message: 'Internal server error' }
+          { code: 500, message: 'Internal server error' },
         );
       });
 
@@ -44,7 +44,7 @@ module('Acceptance | error', function (hooks) {
       await click(page.connectorModalPluginSelect.select);
       await click(page.connectorModalPluginSelect.option);
       const configFields = document.querySelectorAll(
-        page.connectorModalConfigFields
+        page.connectorModalConfigFields,
       );
 
       await fillIn(configFields[0], 'path/to/file.sundown');
@@ -63,7 +63,7 @@ module('Acceptance | error', function (hooks) {
 
       await click('[data-test-error-dismiss]');
       await waitUntil(
-        () => findAll('[data-test-flash-message="Error"]').length < 1
+        () => findAll('[data-test-flash-message="Error"]').length < 1,
       );
 
       assert.dom('[data-test-flash-message="Error"]').doesNotExist();

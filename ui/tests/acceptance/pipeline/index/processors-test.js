@@ -44,7 +44,7 @@ module('Acceptance | pipeline/index/processors', function (hooks) {
 
     test('it retains all the processor values', async function () {
       await click(
-        find(`${page.connectorTransforms} [data-test-button="edit-transform"]`)
+        find(`${page.connectorTransforms} [data-test-button="edit-transform"]`),
       );
       assert.dom(findAll(page.configFields)[0]).hasValue('maskme');
       assert.dom(findAll(page.configFields)[1]).hasValue('~*~*~*~*~');
@@ -56,7 +56,7 @@ module('Acceptance | pipeline/index/processors', function (hooks) {
       const pipeline = this.server.create('pipeline', 'withGenericConnectors');
       const connector = this.server.schema.find(
         'connector',
-        pipeline.connectorIds.firstObject
+        pipeline.connectorIds.firstObject,
       );
       this.server.create('processor', {
         parent: {
@@ -68,7 +68,7 @@ module('Acceptance | pipeline/index/processors', function (hooks) {
       await click(page.sourceNode);
       await click(page.transformsTab);
       await click(
-        find(`${page.connectorTransforms} [data-test-button="edit-transform"]`)
+        find(`${page.connectorTransforms} [data-test-button="edit-transform"]`),
       );
       await fillIn(findAll(page.configFields)[0], 'maskmenext');
       await fillIn(findAll(page.configFields)[1], '<><><>');
@@ -77,7 +77,7 @@ module('Acceptance | pipeline/index/processors', function (hooks) {
 
     test('it updates with the edited values', async function (assert) {
       await click(
-        find(`${page.connectorTransforms} [data-test-button="edit-transform"]`)
+        find(`${page.connectorTransforms} [data-test-button="edit-transform"]`),
       );
       assert.dom(findAll(page.configFields)[0]).hasValue('maskmenext');
       assert.dom(findAll(page.configFields)[1]).hasValue('<><><>');
@@ -89,7 +89,7 @@ module('Acceptance | pipeline/index/processors', function (hooks) {
       const pipeline = this.server.create('pipeline', 'withGenericConnectors');
       const connector = this.server.schema.find(
         'connector',
-        pipeline.connectorIds.firstObject
+        pipeline.connectorIds.firstObject,
       );
       this.server.create('processor', {
         parent: {
@@ -101,7 +101,7 @@ module('Acceptance | pipeline/index/processors', function (hooks) {
       await click(page.sourceNode);
       await click(page.transformsTab);
       await click(
-        find(`${page.connectorTransforms} [data-test-button="edit-transform"]`)
+        find(`${page.connectorTransforms} [data-test-button="edit-transform"]`),
       );
       await click(page.transformOptionsTrigger);
       await click(page.deleteTransformButton);

@@ -16,7 +16,7 @@ export default class ProcessorSerializer extends ApplicationSerializer {
     const serialized = super.serialize(snapshot, options);
 
     const serializedConfigSettings = Object.keys(
-      serialized.config.settings
+      serialized.config.settings,
     ).reduce((acc, settingsKey) => {
       acc[settingsKey.replace('@@', '.')] =
         serialized.config.settings[settingsKey];
@@ -36,7 +36,7 @@ export default class ProcessorSerializer extends ApplicationSerializer {
             hash.config.settings[settingsKey];
           return acc;
         },
-        {}
+        {},
       );
     }
 

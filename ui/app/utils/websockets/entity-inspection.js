@@ -29,7 +29,7 @@ export default class EntityInspection {
         }
         if (data.result !== 'null') {
           this._records.pushObject(
-            htmlSafe(prettyPrintJson.toHtml(data.result))
+            htmlSafe(prettyPrintJson.toHtml(data.result)),
           );
         }
       });
