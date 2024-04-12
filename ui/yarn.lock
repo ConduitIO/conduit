@@ -33,7 +33,7 @@
   resolved "https://registry.yarnpkg.com/@babel/compat-data/-/compat-data-7.24.4.tgz#6f102372e9094f25d908ca0d34fc74c74606059a"
   integrity sha512-vg8Gih2MLK+kOkHJp4gBEIkyaIi00jgWot2D9QOmmfLC8jINSOzmCLta6Bvz/JSBCqnegV0L80jhxkol5GWNfQ==
 
-"@babel/core@^7.1.6", "@babel/core@^7.12.0", "@babel/core@^7.12.3", "@babel/core@^7.16.10", "@babel/core@^7.16.7", "@babel/core@^7.21.4", "@babel/core@^7.22.20", "@babel/core@^7.24.0", "@babel/core@^7.3.4":
+"@babel/core@^7.1.6", "@babel/core@^7.12.0", "@babel/core@^7.12.3", "@babel/core@^7.16.10", "@babel/core@^7.16.7", "@babel/core@^7.21.4", "@babel/core@^7.22.20", "@babel/core@^7.24.0", "@babel/core@^7.24.4", "@babel/core@^7.3.4":
   version "7.24.4"
   resolved "https://registry.yarnpkg.com/@babel/core/-/core-7.24.4.tgz#1f758428e88e0d8c563874741bc4ffc4f71a4717"
   integrity sha512-MBVlMXP+kkl5394RBLSxxk/iLTeVGuXTV3cIDXavPpMMqnSnt6apKgan/U8O3USWZCWZT/TbgfEpKa4uMgN4Dg==
@@ -63,7 +63,7 @@
     eslint-visitor-keys "^2.1.0"
     semver "^6.3.1"
 
-"@babel/eslint-parser@^7.23.10":
+"@babel/eslint-parser@^7.24.1":
   version "7.24.1"
   resolved "https://registry.yarnpkg.com/@babel/eslint-parser/-/eslint-parser-7.24.1.tgz#e27eee93ed1d271637165ef3a86e2b9332395c32"
   integrity sha512-d5guuzMlPeDfZIbpQ8+g1NaCNuAGBBGNECh0HVqz1sjOeVLh2CEaifuOysCH18URW6R7pqXINvf5PaR/dC6jLQ==
@@ -336,7 +336,7 @@
     "@babel/helper-create-class-features-plugin" "^7.18.6"
     "@babel/helper-plugin-utils" "^7.18.6"
 
-"@babel/plugin-proposal-decorators@^7.13.5", "@babel/plugin-proposal-decorators@^7.16.7", "@babel/plugin-proposal-decorators@^7.20.13", "@babel/plugin-proposal-decorators@^7.24.0":
+"@babel/plugin-proposal-decorators@^7.13.5", "@babel/plugin-proposal-decorators@^7.16.7", "@babel/plugin-proposal-decorators@^7.20.13", "@babel/plugin-proposal-decorators@^7.24.1":
   version "7.24.1"
   resolved "https://registry.yarnpkg.com/@babel/plugin-proposal-decorators/-/plugin-proposal-decorators-7.24.1.tgz#bab2b9e174a2680f0a80f341f3ec70f809f8bb4b"
   integrity sha512-zPEvzFijn+hRvJuX2Vu3KbEBN39LN3f7tW3MQO2LsIs57B26KU+kUc82BdAktS1VCM6libzh45eKGI65lg0cpA==
@@ -5510,7 +5510,7 @@ ember-auto-import@^2.3.0, ember-auto-import@^2.4.0, ember-auto-import@^2.5.0, em
     typescript-memoize "^1.0.0-alpha.3"
     walk-sync "^3.0.0"
 
-ember-basic-dropdown@^7.2.1:
+ember-basic-dropdown@^7.3.0:
   version "7.3.0"
   resolved "https://registry.yarnpkg.com/ember-basic-dropdown/-/ember-basic-dropdown-7.3.0.tgz#981e2be5d2c40e49d44bad33eafb89fab05fd7dc"
   integrity sha512-XzLd1noCrHjG7O35HpZ+ljj7VwPPqon7svbvNJ2U7421e00eXBUVcCioGJFo1NnnPkjc14FTDc5UwktbGSbJdQ==
@@ -12956,7 +12956,7 @@ stylelint-prettier@^4.1.0:
   dependencies:
     prettier-linter-helpers "^1.0.0"
 
-stylelint@^16.3.0:
+stylelint@^16.3.1:
   version "16.3.1"
   resolved "https://registry.yarnpkg.com/stylelint/-/stylelint-16.3.1.tgz#006cc6cd4bd8e7b3acb1607bb8e8de85121b7847"
   integrity sha512-/JOwQnBvxEKOT2RtNgGpBVXnCSMBgKOL2k7w0K52htwCyJls4+cHvc4YZgXlVoAZS9QJd2DgYAiRnja96pTgxw==
