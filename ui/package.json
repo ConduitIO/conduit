@@ -102,5 +102,10 @@
   },
   "ember": {
     "edition": "octane"
+  },
+  "overrides": {
+    "ember-tooltips": {
+      "ember-auto-import": "$ember-auto-import"
+    }
   }
 }
