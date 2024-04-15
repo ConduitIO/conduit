@@ -46,7 +46,7 @@ export default Factory.extend({
           pipeline,
           plugin: filePlugin,
         },
-        'withPopulatedFileConfig'
+        'withPopulatedFileConfig',
       );
 
       server.create(
@@ -57,7 +57,7 @@ export default Factory.extend({
           pipeline,
           plugin: filePlugin,
         },
-        'withPopulatedFileConfig'
+        'withPopulatedFileConfig',
       );
 
       server.create(
@@ -68,7 +68,7 @@ export default Factory.extend({
           pipeline,
           plugin: filePlugin,
         },
-        'withPopulatedFileConfig'
+        'withPopulatedFileConfig',
       );
     },
   }),
@@ -95,7 +95,7 @@ export default Factory.extend({
         genericPlugin = server.create(
           'plugin',
           'source',
-          'withGenericBlueprint'
+          'withGenericBlueprint',
         );
       }
 
@@ -107,7 +107,7 @@ export default Factory.extend({
           config: { name: 'Source One' },
           pipeline,
         },
-        'withPopulatedGenericConfig'
+        'withPopulatedGenericConfig',
       );
 
       server.create(
@@ -118,7 +118,7 @@ export default Factory.extend({
           config: { name: 'Destination One' },
           pipeline,
         },
-        'withPopulatedGenericConfig'
+        'withPopulatedGenericConfig',
       );
 
       server.create(
@@ -129,7 +129,7 @@ export default Factory.extend({
           config: { name: 'Destination Two' },
           pipeline,
         },
-        'withPopulatedGenericConfig'
+        'withPopulatedGenericConfig',
       );
     },
   }),

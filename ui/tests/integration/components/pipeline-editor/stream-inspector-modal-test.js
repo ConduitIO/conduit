@@ -26,7 +26,7 @@ module(
           hbs`<PipelineEditor::StreamInspectorModal
                 @onDismiss={{this.dummyDismiss}}
                 @pipeline={{this.pipeline}}
-                @entityId="123"/>`
+                @entityId="123"/>`,
         );
 
         assert.dom('[data-test-stream-inspector="empty-record"]').exists();
@@ -37,7 +37,7 @@ module(
           hbs`<PipelineEditor::StreamInspectorModal
                 @onDismiss={{this.dummyDismiss}}
                 @pipeline={{this.pipeline}}
-                @entityId="123"/>`
+                @entityId="123"/>`,
         );
 
         await click('[data-test-stream-inspector-show-single-record]');
@@ -53,7 +53,7 @@ module(
           hbs`<PipelineEditor::StreamInspectorModal
                 @onDismiss={{this.dummyDismiss}}
                 @pipeline={{this.pipeline}}
-                @entityId="123"/>`
+                @entityId="123"/>`,
         );
         this.socket.triggerRecord();
 
@@ -80,7 +80,7 @@ module(
           hbs`<PipelineEditor::StreamInspectorModal
                 @onDismiss={{this.dummyDismiss}}
                 @pipeline={{this.pipeline}}
-                @entityId="123"/>`
+                @entityId="123"/>`,
         );
         this.socket.triggerRecords(20);
 
@@ -94,7 +94,7 @@ module(
           hbs`<PipelineEditor::StreamInspectorModal
                 @onDismiss={{this.dummyDismiss}}
                 @pipeline={{this.pipeline}}
-                @entityId="123"/>`
+                @entityId="123"/>`,
         );
 
         this.socket.triggerRecords(10);
@@ -103,7 +103,7 @@ module(
         assert
           .dom('[data-test-stream-inspector-single-record]')
           .includesText(
-            '{ position: "", operation: "", metadata: {}, key: {}, payload: {} }'
+            '{ position: "", operation: "", metadata: {}, key: {}, payload: {}, }',
           );
       });
     });
@@ -114,7 +114,7 @@ module(
           hbs`<PipelineEditor::StreamInspectorModal
                 @onDismiss={{this.dummyDismiss}}
                 @pipeline={{this.pipeline}}
-                @entityId="123"/>`
+                @entityId="123"/>`,
         );
         this.socket.triggerRecord();
 
@@ -127,7 +127,7 @@ module(
           hbs`<PipelineEditor::StreamInspectorModal
                 @onDismiss={{this.dummyDismiss}}
                 @pipeline={{this.pipeline}}
-                @entityId="123"/>`
+                @entityId="123"/>`,
         );
 
         this.socket.triggerRecords(3);
@@ -145,5 +145,5 @@ module(
           .exists({ count: 3 });
       });
     });
-  }
+  },
 );

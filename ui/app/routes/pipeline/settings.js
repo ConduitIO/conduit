@@ -21,7 +21,7 @@ export default class PipelineSettingsRoute extends Route {
       PipelineValidations,
       {
         changesetKeys: ['name', 'description', 'tags'],
-      }
+      },
     );
   }
 

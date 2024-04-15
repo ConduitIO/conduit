@@ -25,5 +25,5 @@ module(
 
       assert.equal(this.element.textContent.trim(), 'template block text');
     });
-  }
+  },
 );

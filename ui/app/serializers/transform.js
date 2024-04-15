@@ -13,7 +13,7 @@ export default class TransformSerializer extends ApplicationSerializer {
         typeClass,
         payload,
         payload.id,
-        'findRecord'
+        'findRecord',
       );
     }
 

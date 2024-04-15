@@ -70,7 +70,7 @@ export default class PipelineEditorConfigFieldComponent extends Component {
   generateSelectOptions() {
     const inclusionValidation = this.args.field.rawValidations.findBy(
       'type',
-      'TYPE_INCLUSION'
+      'TYPE_INCLUSION',
     );
     return inclusionValidation.value.split(',').map((item) => {
       return {

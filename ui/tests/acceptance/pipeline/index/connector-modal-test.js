@@ -31,7 +31,7 @@ module('Acceptance | pipeline/index/connector-modal-test', function (hooks) {
       'plugin',
       'source',
       'destination',
-      'withGenericBlueprint'
+      'withGenericBlueprint',
     );
   });
 
@@ -73,7 +73,6 @@ module('Acceptance | pipeline/index/connector-modal-test', function (hooks) {
     });
 
     test('sends the connectors configuration on save', async function (assert) {
-      assert.expect(2);
       const pipelineID = this.pipeline.id;
       this.server.post(
         '/connectors',
@@ -95,7 +94,7 @@ module('Acceptance | pipeline/index/connector-modal-test', function (hooks) {
               plugin: 'builtin:generic',
               type: 'TYPE_SOURCE',
             },
-            'it calls the API with the correct protocol'
+            'it calls the API with the correct protocol',
           );
 
           const plugin = plugins.find(attrs.plugin);
@@ -107,14 +106,14 @@ module('Acceptance | pipeline/index/connector-modal-test', function (hooks) {
             pipeline,
             plugin,
           });
-        }
+        },
       );
       await fillIn(page.connectorModalNameInput, 'My Connector');
       await click(page.connectorModalPluginSelect.select);
       await click(page.connectorModalPluginSelect.sourceOption);
 
       const configFields = document.querySelectorAll(
-        page.connectorModalConfigFields
+        page.connectorModalConfigFields,
       );
 
       await fillIn(configFields[0], 'sleep');
@@ -165,7 +164,6 @@ module('Acceptance | pipeline/index/connector-modal-test', function (hooks) {
     });
 
     test('sends the connectors configuration on save', async function (assert) {
-      assert.expect(2);
       const pipelineID = this.pipeline.id;
       this.server.post(
         '/connectors',
@@ -187,7 +185,7 @@ module('Acceptance | pipeline/index/connector-modal-test', function (hooks) {
               plugin: 'builtin:generic',
               type: 'TYPE_DESTINATION',
             },
-            'it calls the API with the correct protocol'
+            'it calls the API with the correct protocol',
           );
           const plugin = plugins.find(attrs.plugin);
           const pipeline = pipelines.find(attrs.pipeline_id);
@@ -198,14 +196,14 @@ module('Acceptance | pipeline/index/connector-modal-test', function (hooks) {
             pipeline,
             plugin,
           });
-        }
+        },
       );
       await fillIn(page.connectorModalNameInput, 'My Connector');
       await click(page.connectorModalPluginSelect.select);
       await click(page.connectorModalPluginSelect.destinationOption);
 
       const configFields = document.querySelectorAll(
-        page.connectorModalConfigFields
+        page.connectorModalConfigFields,
       );
 
       await fillIn(configFields[0], 'sleep');

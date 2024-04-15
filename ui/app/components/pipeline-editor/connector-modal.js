@@ -51,7 +51,7 @@ export default class PipelineEditorNewConnectorModal extends Component {
     if (this.isEditing) {
       this.blueprintFields = generateBlueprintFields(
         this.connector.plugin.getParams(this.connector.type),
-        this.connector
+        this.connector,
       );
     } else {
       this.blueprintFields = [];
@@ -149,7 +149,7 @@ export default class PipelineEditorNewConnectorModal extends Component {
       this.connector.validate();
       this.blueprintFields = generateBlueprintFields(
         plugin.getParams(this.connector.type),
-        this.connector
+        this.connector,
       );
     }
     this.isShowingRequiredTab = true;
@@ -162,7 +162,7 @@ export default class PipelineEditorNewConnectorModal extends Component {
     if (fieldChangeset.isValid) {
       this.connector.set(
         `config.settings.${fieldChangeset.id}`,
-        fieldChangeset.value
+        fieldChangeset.value,
       );
     } else {
       this.connector.set(`config.settings.${fieldChangeset.id}`, undefined);

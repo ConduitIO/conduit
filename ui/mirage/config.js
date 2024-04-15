@@ -68,7 +68,7 @@ function routes() {
           pipeline,
           plugin,
         });
-      }
+      },
     );
 
     this.put('/connectors/:id');

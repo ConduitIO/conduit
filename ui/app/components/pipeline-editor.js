@@ -109,7 +109,7 @@ export default class PipelineEditorComponent extends Component {
             'connectorPlugin',
             'pipeline',
           ],
-        }
+        },
       );
     });
   }
@@ -179,7 +179,7 @@ export default class PipelineEditorComponent extends Component {
           'connectorPlugin',
           'pipeline',
         ],
-      }
+      },
     );
     this.isShowingNewConnectorModal = true;
   }
@@ -249,7 +249,7 @@ export default class PipelineEditorComponent extends Component {
     await connector.data.destroyRecord();
 
     this.wrappedConnectors.removeObject(
-      this.wrappedConnectors.findBy('id', connectorId)
+      this.wrappedConnectors.findBy('id', connectorId),
     );
     this.pipelineNodeManager.regeneratePaths();
     this.selectNode(null);
@@ -263,7 +263,7 @@ export default class PipelineEditorComponent extends Component {
       function () {
         this.selectedNode = node;
       },
-      10
+      10,
     );
 
     if (event) {

@@ -83,7 +83,7 @@ export default class PipelineNodeManagerService extends Service {
 
   unregisterDestinationNode(element) {
     this.destinationNodes.removeObject(
-      this.destinationNodes.findBy('element', element)
+      this.destinationNodes.findBy('element', element),
     );
   }
 

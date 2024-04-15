@@ -23,7 +23,7 @@ module('Acceptance | pipelines/index', function (hooks) {
       this.pipeline = this.server.create(
         'pipeline',
         { state: { status: 'STATUS_RUNNING' } },
-        'withFileConnectors'
+        'withFileConnectors',
       );
 
       this.server.delete('/pipelines/:id', function () {
@@ -34,7 +34,7 @@ module('Acceptance | pipelines/index', function (hooks) {
             code: 9,
             message: 'failed to delete pipeline: pipeline is running',
             details: [],
-          }
+          },
         );
       });
 

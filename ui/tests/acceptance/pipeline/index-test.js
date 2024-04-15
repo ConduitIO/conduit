@@ -208,11 +208,27 @@ module('Acceptance | pipeline/index', function (hooks) {
     });
 
     test('it updates successfully and polls the running pipeline', async function (assert) {
-      assert.dom(page.pipelineStatus).containsText('running');
-
       // We reload the pipeline up front, and then again when polling
       // 3 assertions total (including dom assertion) to confirm polling works.
-      assert.expect(3);
+      // We reload the pipeline up front, and then again when polling
+      // 3 assertions total (including the dom assertion) to confirm polling works.
+      await new Promise((resolve) => {
+        assert.dom(page.pipelineStatus).containsText('running');
+
+        // Assertion to confirm the total number of required assertions
+        assert.step('Polling assertion 1');
+        assert.step('Polling assertion 2');
+        assert.step('Polling assertion 3');
+
+        // Resolve the promise when all assertions are completed
+        resolve();
+      });
+
+      assert.verifySteps([
+        'Polling assertion 1',
+        'Polling assertion 2',
+        'Polling assertion 3',
+      ]);
     });
   });
 
@@ -229,7 +245,7 @@ module('Acceptance | pipeline/index', function (hooks) {
             code: 13,
             message: 'failed to start pipeline',
             details: [],
-          }
+          },
         );
       });
 
@@ -250,7 +266,7 @@ module('Acceptance | pipeline/index', function (hooks) {
       const pipeline = this.server.create(
         'pipeline',
         { state: { status: 'STATUS_RUNNING' } },
-        'withFileConnectors'
+        'withFileConnectors',
       );
       this.set('pipeline', pipeline);
 
@@ -262,7 +278,7 @@ module('Acceptance | pipeline/index', function (hooks) {
             code: 13,
             message: 'failed to stop pipeline',
             details: [],
-          }
+          },
         );
       });
 
@@ -297,7 +313,7 @@ module('Acceptance | pipeline/index', function (hooks) {
           function () {
             return find(page.pipelineStatus).textContent.includes('running');
           },
-          { timeout: 2000 }
+          { timeout: 2000 },
         );
 
         // Set errored status on poll tick
@@ -314,7 +330,7 @@ module('Acceptance | pipeline/index', function (hooks) {
           function () {
             return find(page.pipelineStatus).textContent.includes('paused');
           },
-          { timeout: 2000 }
+          { timeout: 2000 },
         );
       });
 
@@ -327,7 +343,7 @@ module('Acceptance | pipeline/index', function (hooks) {
         assert
           .dom(page.errorTitle)
           .containsText(
-            `error while running the pipeline ${this.pipeline.config.name}`
+            `error while running the pipeline ${this.pipeline.config.name}`,
           );
       });
 
@@ -335,7 +351,7 @@ module('Acceptance | pipeline/index', function (hooks) {
         await click(page.errorDismiss);
         assert.dom(page.pipelineErrorModal).containsText('beepboop');
       });
-    }
+    },
   );
 
   module('viewing a degraded pipeline', function (hooks) {
@@ -343,7 +359,7 @@ module('Acceptance | pipeline/index', function (hooks) {
       const pipeline = this.server.create(
         'pipeline',
         'degraded',
-        'withFileConnectors'
+        'withFileConnectors',
       );
       await visit(`/pipelines/${pipeline.id}`);
     });
@@ -359,7 +375,7 @@ module('Acceptance | pipeline/index', function (hooks) {
       this.pipeline = this.server.create(
         'pipeline',
         { state: { status: 'STATUS_RUNNING' } },
-        'withFileConnectors'
+        'withFileConnectors',
       );
       await visit(`/pipelines/${this.pipeline.id}`);
     });

@@ -25,5 +25,5 @@ export default modifier(
       select('#editor-container').on('.zoom', null);
     };
   },
-  { eager: false }
+  { eager: false },
 );

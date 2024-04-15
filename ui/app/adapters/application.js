@@ -22,7 +22,7 @@ export default class ApplicationAdapter extends RESTAdapter {
       return payload;
     } else if (this.isInvalid(status, headers, payload)) {
       return new InvalidError(
-        typeof payload === 'object' ? payload.details : undefined
+        typeof payload === 'object' ? payload.details : undefined,
       );
     }
 
@@ -30,7 +30,7 @@ export default class ApplicationAdapter extends RESTAdapter {
       status,
       headers,
       payload,
-      requestData
+      requestData,
     );
 
     if (handledResponse.isAdapterError) {
