@@ -47,7 +47,7 @@ Conduit was created and open-sourced by [Meroxa](https://meroxa.io).
 1. Download and extract
    the [latest release](https://github.com/conduitio/conduit/releases/latest).
 2. Download
-   the [example pipeline](/examples/pipelines/file-to-file.yml)
+   the [example pipeline](/examples/pipelines/file-to-file.yaml)
    and put it in the directory named `pipelines` in the same directory as the
    Conduit binary.
 3. Run Conduit (`./conduit`). The example pipeline will start automatically.
@@ -129,8 +129,8 @@ rpm -i conduit_0.8.0_Linux_x86_64.rpm
 
 Requirements:
 
-- [Go](https://golang.org/) (1.21 or later)
-- [Node.js](https://nodejs.org/) (16.x)
+- [Go](https://golang.org/)
+- [Node.js](https://nodejs.org/) (18.x)
 - [Yarn](https://yarnpkg.com/) (latest 1.x)
 - [Ember CLI](https://ember-cli.com/)
 - [Make](https://www.gnu.org/software/make/)

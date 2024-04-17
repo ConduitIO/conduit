@@ -77,10 +77,6 @@ func (u *openCDCProcessor) Configure(ctx context.Context, m map[string]string) e
 	return nil
 }
 
-func (u *openCDCProcessor) Open(context.Context) error {
-	return nil
-}
-
 func (u *openCDCProcessor) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 	out := make([]sdk.ProcessedRecord, 0, len(records))
 	for _, rec := range records {
@@ -129,10 +125,6 @@ func (u *openCDCProcessor) processRecord(rec opencdc.Record) (sdk.ProcessedRecor
 	opencdcRec.Position = rec.Position
 
 	return sdk.SingleRecord(opencdcRec), nil
-}
-
-func (u *openCDCProcessor) Teardown(context.Context) error {
-	return nil
 }
 
 func (u *openCDCProcessor) unmarshalRecord(structData opencdc.StructuredData) (opencdc.Record, error) {

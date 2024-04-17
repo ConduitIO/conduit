@@ -8,7 +8,7 @@ export default class ConnectorPluginSerializer extends ApplicationSerializer {
     hash.destinationParams = super._replaceKeys(
       hash.destinationParams,
       '.',
-      '@@'
+      '@@',
     );
 
     return super.normalize(typeClass, hash);

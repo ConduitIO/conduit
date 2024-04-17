@@ -1,5 +1,5 @@
 # Start with a golang base
-FROM golang:1.21-bullseye AS base
+FROM golang:1.22-bullseye AS base
 
 # Install core tools
 RUN apt-get update &&\
@@ -7,11 +7,11 @@ RUN apt-get update &&\
     apt-get install -y build-essential &&\
     apt-get install -y git
 
-# Install Node@v16
-RUN curl -sL https://deb.nodesource.com/setup_16.x | bash - &&\
+# Install Node@v18
+RUN curl -sL https://deb.nodesource.com/setup_18.x | bash - &&\
     apt-get install -y nodejs &&\
     npm update &&\
-    npm i -g yarn@1.22.17
+    npm i -g yarn@1.22.22
 
 # Build the full app binary
 WORKDIR /app

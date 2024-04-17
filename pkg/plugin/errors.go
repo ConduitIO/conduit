@@ -19,7 +19,8 @@ import (
 )
 
 var (
-	ErrPluginNotFound   = cerrors.New("plugin not found")
-	ErrPluginNotRunning = cerrors.New("plugin is not running")
-	ErrUnimplemented    = cerrors.New("method not implemented")
+	ErrPluginNotFound          = cerrors.New("plugin not found")
+	ErrPluginNotRunning        = cerrors.New("plugin is not running")
+	ErrUnimplemented           = cerrors.New("method not implemented")
+	ErrPluginAlreadyRegistered = cerrors.New("plugin with the same name and version already registered")
 )

@@ -326,7 +326,3 @@ func (p *httpProcessor) setField(r *opencdc.Record, refRes *sdk.ReferenceResolve
 
 	return nil
 }
-
-func (p *httpProcessor) Teardown(context.Context) error {
-	return nil
-}

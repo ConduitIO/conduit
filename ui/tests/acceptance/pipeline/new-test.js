@@ -24,7 +24,7 @@ module('Acceptance | pipeline/new', function (hooks) {
       await fillIn(page.pipelineFormNameInput, 'Pants');
       await fillIn(
         page.pipelineFormDescriptionInput,
-        'I am a pipeline description'
+        'I am a pipeline description',
       );
     });
 
@@ -38,7 +38,7 @@ module('Acceptance | pipeline/new', function (hooks) {
       await fillIn(page.pipelineFormNameInput, 'Pants');
       await fillIn(
         page.pipelineFormDescriptionInput,
-        'I am a pipeline description'
+        'I am a pipeline description',
       );
       await click(page.pipelineFormPrimaryButton);
     });

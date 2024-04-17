@@ -14,7 +14,7 @@ export default class ConnectorSerializer extends ApplicationSerializer {
     const configSettings = super._replaceKeys(
       snapshot.record.config.settings,
       '@@',
-      '.'
+      '.',
     );
 
     snapshot.record.config.settings = configSettings;
@@ -22,7 +22,7 @@ export default class ConnectorSerializer extends ApplicationSerializer {
     return {
       config: snapshot.record.config,
       type: Object.keys(CONNECTOR_TYPE_MAP).find(
-        (key) => CONNECTOR_TYPE_MAP[key] === snapshot.record.type
+        (key) => CONNECTOR_TYPE_MAP[key] === snapshot.record.type,
       ),
       plugin: snapshot.record.plugin.get('id'),
       pipeline_id: snapshot.record.pipeline.get('id'),
@@ -33,7 +33,7 @@ export default class ConnectorSerializer extends ApplicationSerializer {
     const hasOnlyType = /^(any|builtin|standalone):[\w-]+$/.test(matchTo);
     const hasOnlyVersion = /^[\w-]+@v\S+$/.test(matchTo);
     const hasTypeAndVersion = /^(any|builtin|standalone):[\w-]+@v\S+$/.test(
-      matchTo
+      matchTo,
     );
 
     let pluginName = matchTo;
@@ -126,7 +126,7 @@ export default class ConnectorSerializer extends ApplicationSerializer {
       const configSettings = super._replaceKeys(
         hash.config?.settings,
         '.',
-        '@@'
+        '@@',
       );
       hash.config.settings = configSettings;
     }

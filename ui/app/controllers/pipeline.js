@@ -24,7 +24,7 @@ export default class PipelineController extends Controller {
     pipeline.onPipelineEvent(
       'onPipelineDegraded',
       this,
-      this._handlePipelineRunError
+      this._handlePipelineRunError,
     );
     pipeline.pollPipeline.perform();
   }

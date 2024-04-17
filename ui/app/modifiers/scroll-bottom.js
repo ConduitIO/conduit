@@ -7,5 +7,5 @@ export default modifier(
       element.scrollTop = 0;
     };
   },
-  { eager: false }
+  { eager: false },
 );

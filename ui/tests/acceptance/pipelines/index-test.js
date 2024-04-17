@@ -2,7 +2,7 @@ import { assert, module, test } from 'qunit';
 import { visit, click, fillIn, currentURL } from '@ember/test-helpers';
 import { setupApplicationTest } from 'ember-qunit';
 import { setupMirage } from 'ember-cli-mirage/test-support';
-import { Response } from 'ember-cli-mirage';
+import { Response } from 'miragejs';
 
 const page = {
   pipelineDropdownTrigger: '[data-test-dropdown-trigger="pipeline-list-item"]',
@@ -23,7 +23,7 @@ module('Acceptance | pipelines/index', function (hooks) {
       this.pipeline = this.server.create(
         'pipeline',
         { state: { status: 'STATUS_RUNNING' } },
-        'withFileConnectors'
+        'withFileConnectors',
       );
 
       this.server.delete('/pipelines/:id', function () {
@@ -34,7 +34,7 @@ module('Acceptance | pipelines/index', function (hooks) {
             code: 9,
             message: 'failed to delete pipeline: pipeline is running',
             details: [],
-          }
+          },
         );
       });
 

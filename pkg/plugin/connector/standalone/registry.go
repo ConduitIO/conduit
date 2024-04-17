@@ -117,7 +117,7 @@ func (r *Registry) loadPlugins(ctx context.Context, pluginDir string) map[string
 
 		fullName := plugin.NewFullName(plugin.PluginTypeStandalone, specs.Name, specs.Version)
 		if conflict, ok := versionMap[specs.Version]; ok {
-			err = cerrors.Errorf("conflict detected, connector plugin %v already registered, please remove either %v or %v, these plugins won't be usable until that happens", fullName, conflict.path, pluginPath)
+			err = cerrors.Errorf("failed to load plugin %v from %v: %w (conflicts with %v)", fullName, pluginPath, plugin.ErrPluginAlreadyRegistered, conflict.path)
 			warn(ctx, err, pluginPath)
 			// delete plugin from map at the end so that further duplicates can
 			// still be found

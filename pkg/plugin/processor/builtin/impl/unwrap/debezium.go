@@ -102,10 +102,6 @@ func (d *debeziumProcessor) Configure(_ context.Context, m map[string]string) er
 	return nil
 }
 
-func (d *debeziumProcessor) Open(context.Context) error {
-	return nil
-}
-
 func (d *debeziumProcessor) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 	out := make([]sdk.ProcessedRecord, 0, len(records))
 	for _, rec := range records {
@@ -117,10 +113,6 @@ func (d *debeziumProcessor) Process(_ context.Context, records []opencdc.Record)
 	}
 
 	return out
-}
-
-func (d *debeziumProcessor) Teardown(context.Context) error {
-	return nil
 }
 
 func (d *debeziumProcessor) processRecord(rec opencdc.Record) (sdk.ProcessedRecord, error) {

@@ -26,7 +26,7 @@ export default class PipelineRoute extends Route {
         PipelineValidations,
         {
           changesetKeys: ['name', 'description'],
-        }
+        },
       );
       pipeline.validate();
     } else {

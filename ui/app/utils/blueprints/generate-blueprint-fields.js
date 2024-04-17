@@ -54,7 +54,7 @@ const ConfigValidationMap = {
     const parseFn = fieldType === 'TYPE_INT' ? parseInt : parseFloat;
     const options = Object.assign(
       { allowBlank: !isRequired },
-      { gt: parseFn(value.gt), lt: parseFn(value.lt) }
+      { gt: parseFn(value.gt), lt: parseFn(value.lt) },
     );
 
     return validateNumber(options);
@@ -73,7 +73,7 @@ export default function generateBlueprintFields(blueprint, configurable) {
     const validations = generateConfigValidations(
       fieldOpts.validations,
       fieldOpts.type,
-      isRequired
+      isRequired,
     );
 
     const fieldModel = {
@@ -110,7 +110,7 @@ function generateConfigValidations(fieldValidations, fieldType, isRequired) {
     return ConfigValidationMap[validation.type](
       validation.value,
       fieldType,
-      isRequired
+      isRequired,
     );
   });
 

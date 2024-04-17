@@ -1,4 +1,4 @@
-import { RestSerializer } from 'ember-cli-mirage';
+import { RestSerializer } from 'miragejs';
 
 export default RestSerializer.extend({
   root: false,

@@ -28,5 +28,5 @@ module(
       assert.dom('[data-test-status-badge]').hasClass('text-white');
       assert.dom('[data-test-status-badge]').containsText('paused');
     });
-  }
+  },
 );

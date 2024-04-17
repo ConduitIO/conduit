@@ -74,10 +74,6 @@ func (p *decodeProcessor) Configure(ctx context.Context, m map[string]string) er
 	return nil
 }
 
-func (p *decodeProcessor) Open(context.Context) error {
-	return nil
-}
-
 func (p *decodeProcessor) Process(_ context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 	out := make([]sdk.ProcessedRecord, 0, len(records))
 	for _, record := range records {
@@ -116,10 +112,6 @@ func (p *decodeProcessor) Process(_ context.Context, records []opencdc.Record) [
 		out = append(out, sdk.SingleRecord(rec))
 	}
 	return out
-}
-
-func (p *decodeProcessor) Teardown(context.Context) error {
-	return nil
 }
 
 func (p *decodeProcessor) setJSONData(bytes []byte, ref sdk.Reference) error {

@@ -72,8 +72,6 @@ func (p *decodeProcessor) Configure(ctx context.Context, m map[string]string) er
 	return nil
 }
 
-func (p *decodeProcessor) Open(context.Context) error { return nil }
-
 func (p *decodeProcessor) Process(ctx context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 	out := make([]sdk.ProcessedRecord, 0, len(records))
 	for _, rec := range records {
@@ -119,5 +117,3 @@ func (p *decodeProcessor) base64Decode(rec opencdc.Record) (sdk.ProcessedRecord,
 
 	return sdk.SingleRecord(rec), nil
 }
-
-func (p *decodeProcessor) Teardown(context.Context) error { return nil }
