@@ -165,10 +165,6 @@ func (p *httpProcessor) EvaluateURL(rec opencdc.Record) (string, error) {
 	return b.String(), nil
 }
 
-func (p *httpProcessor) Open(context.Context) error {
-	return nil
-}
-
 func (p *httpProcessor) Process(ctx context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 	out := make([]sdk.ProcessedRecord, 0, len(records))
 	for _, rec := range records {

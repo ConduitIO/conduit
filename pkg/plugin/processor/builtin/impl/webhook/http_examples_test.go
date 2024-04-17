@@ -20,12 +20,12 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
-
-	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal/exampleutil"
+	"strings"
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	conduit_log "github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal/exampleutil"
 )
 
 //nolint:govet // we're using a more descriptive name of example
@@ -85,6 +85,63 @@ value of the HTTP response's code in the metadata field ` + "`http_status`" + `.
 	//  }
 }
 
+//nolint:govet // we're using a more descriptive name of example
+func ExampleHTTPProcessor_DynamicURL() {
+	p := NewHTTPProcessor(conduit_log.Nop())
+
+	srv := newTestServer()
+	// Stop the server on return from the function.
+	defer srv.Close()
+
+	exampleutil.RunExample(p, exampleutil.Example{
+		Summary: `Send a request to an HTTP server with a dynamic URL`,
+		Description: `
+This example shows how to use the HTTP processor to use a record's ` + "`.Payload.After.name`" + ` field in the URL path,
+send it to a dummy HTTP server, and get a greeting with the name back.
+
+The response will be written under the record's ` + "`.Payload.After.response`.",
+		Config: map[string]string{
+			"request.url":   srv.URL + "/{{.Payload.After.name}}",
+			"response.body": ".Payload.After.response",
+		},
+		Have: opencdc.Record{
+			Payload: opencdc.Change{
+				After: opencdc.StructuredData{
+					"name": "foo",
+				},
+			},
+		},
+		Want: sdk.SingleRecord{
+			Payload: opencdc.Change{
+				After: opencdc.StructuredData{
+					"name":     "foo",
+					"response": []byte("hello, foo!"),
+				},
+			},
+		},
+	})
+
+	// Output:
+	// processor transformed record:
+	// --- before
+	// +++ after
+	// @@ -1,12 +1,13 @@
+	//  {
+	//    "position": null,
+	//    "operation": "Operation(0)",
+	//    "metadata": null,
+	//    "key": null,
+	//    "payload": {
+	//      "before": null,
+	//      "after": {
+	// -      "name": "foo"
+	// +      "name": "foo",
+	// +      "response": "aGVsbG8sIGZvbyE="
+	//      }
+	//    }
+	//  }
+}
+
 func newTestServer() *httptest.Server {
 	l, err := net.Listen("tcp", "127.0.0.1:54321")
 	if err != nil {
@@ -92,8 +149,12 @@ func newTestServer() *httptest.Server {
 	}
 
 	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(resp http.ResponseWriter, req *http.Request) {
-		body, _ := io.ReadAll(req.Body)
-		_, _ = resp.Write([]byte("hello, " + string(body)))
+		if req.URL.Path != "/" {
+			_, _ = resp.Write([]byte("hello, " + strings.TrimPrefix(req.URL.Path, "/") + "!"))
+		} else {
+			body, _ := io.ReadAll(req.Body)
+			_, _ = resp.Write([]byte("hello, " + string(body)))
+		}
 	}))
 
 	// NewUnstartedServer creates a listener. Close that listener and replace

@@ -121,6 +121,47 @@
           "after": "hello, world"
         }
       }
+    },
+    {
+      "summary": "Send a request to an HTTP server with a dynamic URL",
+      "description": "\nThis example shows how to use the HTTP processor to use a record's `.Payload.After.name` field in the URL path,\nsend it to a dummy HTTP server, and get a greeting with the name back.\n\nThe response will be written under the record's `.Payload.After.response`.",
+      "config": {
+        "backoffRetry.count": "0",
+        "backoffRetry.factor": "2",
+        "backoffRetry.max": "5s",
+        "backoffRetry.min": "100ms",
+        "request.body": ".",
+        "request.contentType": "application/json",
+        "request.method": "POST",
+        "request.url": "http://127.0.0.1:54321/{{.Payload.After.name}}",
+        "response.body": ".Payload.After.response",
+        "response.status": ""
+      },
+      "have": {
+        "position": null,
+        "operation": "Operation(0)",
+        "metadata": null,
+        "key": null,
+        "payload": {
+          "before": null,
+          "after": {
+            "name": "foo"
+          }
+        }
+      },
+      "want": {
+        "position": null,
+        "operation": "Operation(0)",
+        "metadata": null,
+        "key": null,
+        "payload": {
+          "before": null,
+          "after": {
+            "name": "foo",
+            "response": "aGVsbG8sIGZvbyE="
+          }
+        }
+      }
     }
   ]
 }
