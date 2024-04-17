@@ -107,6 +107,20 @@ func TestHTTPProcessor_Configure(t *testing.T) {
 			wantErr: "",
 		},
 		{
+			name: "valid url template returns processor",
+			config: map[string]string{
+				"request.url": "http://example.com/{{.Payload.After}}",
+			},
+			wantErr: "",
+		},
+		{
+			name: "invalid url template with a hyphen",
+			config: map[string]string{
+				"request.url": "http://example.com/{{.Payload.After.my-key}}",
+			},
+			wantErr: "error while parsing the URL template: template: :1: bad character U+002D '-'",
+		},
+		{
 			name: "valid url and method returns processor",
 			config: map[string]string{
 				"request.url":    "http://example.com",
@@ -220,7 +234,7 @@ func TestHTTPProcessor_Success(t *testing.T) {
 				Payload: opencdc.Change{
 					After: opencdc.StructuredData{
 						"a key":  "random data",
-						"body":   opencdc.RawData(respBody),
+						"body":   respBody,
 						"status": "200",
 					},
 				},
@@ -249,7 +263,7 @@ func TestHTTPProcessor_Success(t *testing.T) {
 					},
 					After: opencdc.StructuredData{
 						"after-key":    "after-data",
-						"httpResponse": opencdc.RawData("foo-bar/response"),
+						"httpResponse": []byte("foo-bar/response"),
 					},
 				},
 			}},
@@ -273,7 +287,7 @@ func TestHTTPProcessor_Success(t *testing.T) {
 					Before: opencdc.RawData("uncooked data"),
 					After: opencdc.StructuredData{
 						"after-key":    "after-data",
-						"httpResponse": opencdc.RawData("foo-bar/response"),
+						"httpResponse": []byte("foo-bar/response"),
 					},
 				},
 			}},
@@ -297,7 +311,7 @@ func TestHTTPProcessor_Success(t *testing.T) {
 					After: opencdc.StructuredData{
 						"after-key":    "after-data",
 						"contents":     []byte{15, 2, 20, 24},
-						"httpResponse": opencdc.RawData("foo-bar/response"),
+						"httpResponse": []byte("foo-bar/response"),
 					},
 				},
 			}},
@@ -328,6 +342,99 @@ func TestHTTPProcessor_Success(t *testing.T) {
 			defer srv.Close()
 
 			tc.config["request.url"] = srv.URL
+			underTest := NewHTTPProcessor(log.Test(t))
+			err := underTest.Configure(context.Background(), tc.config)
+			is.NoErr(err)
+
+			got := underTest.Process(context.Background(), tc.args)
+			diff := cmp.Diff(tc.want, got, cmpopts.IgnoreUnexported(sdk.SingleRecord{}))
+			if diff != "" {
+				t.Logf("mismatch (-want +got): %s", diff)
+				t.Fail()
+			}
+		})
+	}
+}
+
+func TestHTTPProcessor_URLTemplate(t *testing.T) {
+	respBody := []byte("foo-bar/response")
+
+	tests := []struct {
+		name     string
+		config   map[string]string
+		pathTmpl string // will be attached to the URL
+		path     string // expected result of the pathTmpl
+		args     []opencdc.Record
+		want     []sdk.ProcessedRecord
+	}{
+		{
+			name:     "URL template, success",
+			config:   map[string]string{"request.method": "GET"},
+			pathTmpl: "/{{.Payload.After.foo}}",
+			path:     "/123",
+			args: []opencdc.Record{{
+				Payload: opencdc.Change{
+					Before: nil,
+					After: opencdc.StructuredData{
+						"foo": 123,
+					},
+				},
+			}},
+			want: []sdk.ProcessedRecord{sdk.SingleRecord{
+				Payload: opencdc.Change{
+					After: opencdc.RawData(respBody),
+				},
+			},
+			},
+		},
+		{
+			name:     "URL template, key with a hyphen",
+			config:   map[string]string{},
+			pathTmpl: `/{{index .Payload.After "foo-bar"}}`,
+			path:     "/baz",
+			args: []opencdc.Record{{
+				Payload: opencdc.Change{
+					After: opencdc.StructuredData{
+						"foo-bar": "baz",
+					},
+				},
+			}},
+			want: []sdk.ProcessedRecord{sdk.SingleRecord{
+				Payload: opencdc.Change{
+					After: opencdc.RawData(respBody),
+				},
+			}},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			is := is.New(t)
+
+			wantMethod := tc.config["request.method"]
+			if wantMethod == "" {
+				wantMethod = "POST" // default
+			}
+
+			wantBody := getRequestBody(is, tc.config["request.body"], tc.args)
+
+			srv := httptest.NewServer(http.HandlerFunc(func(resp http.ResponseWriter, req *http.Request) {
+				// check the expected path with the evaluated URL
+				is.Equal(req.URL.Path, tc.path)
+
+				is.Equal(wantMethod, req.Method)
+
+				gotBody, err := io.ReadAll(req.Body)
+				is.NoErr(err)
+				is.Equal(wantBody, gotBody)
+
+				_, err = resp.Write(respBody)
+				is.NoErr(err)
+			}))
+			defer srv.Close()
+
+			// attach the path template to the URL
+			tc.config["request.url"] = srv.URL + tc.pathTmpl
 			underTest := NewHTTPProcessor(log.Test(t))
 			err := underTest.Configure(context.Background(), tc.config)
 			is.NoErr(err)

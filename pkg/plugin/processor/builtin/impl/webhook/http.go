@@ -22,8 +22,11 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
+	"text/template"
 	"time"
 
+	"github.com/Masterminds/sprig/v3"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -33,7 +36,10 @@ import (
 )
 
 type httpConfig struct {
-	// URL used in the HTTP request.
+	// URL is a Go template expression for the URL used in the HTTP request, using Go [templates](https://pkg.go.dev/text/template).
+	// The value provided to the template is [opencdc.Record](https://github.com/ConduitIO/conduit-commons/blob/59ecfbe5d5be2ac4cd9a674d274862d164123f36/opencdc/record.go#L30),
+	// so the template has access to all its fields (e.g. .Position, .Key, .Metadata, and so on). We also inject all template functions provided by [sprig](https://masterminds.github.io/sprig/)
+	// to make it easier to write templates.
 	URL string `json:"request.url" validate:"required"`
 	// Method is the HTTP request method to be used.
 	Method string `json:"request.method" default:"POST"`
@@ -76,6 +82,7 @@ type httpProcessor struct {
 	requestBodyRef    *sdk.ReferenceResolver
 	responseBodyRef   *sdk.ReferenceResolver
 	responseStatusRef *sdk.ReferenceResolver
+	urlTmpl           *template.Template
 }
 
 func NewHTTPProcessor(l log.CtxLogger) sdk.Processor {
@@ -124,6 +131,13 @@ func (p *httpProcessor) Configure(ctx context.Context, m map[string]string) erro
 		}
 		p.responseStatusRef = &responseStatusRef
 	}
+	if strings.Contains(p.config.URL, "{{") {
+		// create URL template
+		p.urlTmpl, err = template.New("").Funcs(sprig.FuncMap()).Parse(p.config.URL)
+		if err != nil {
+			return cerrors.Errorf("error while parsing the URL template: %w", err)
+		}
+	}
 
 	// preflight check
 	_, err = http.NewRequest(p.config.Method, p.config.URL, bytes.NewReader([]byte{}))
@@ -137,6 +151,18 @@ func (p *httpProcessor) Configure(ctx context.Context, m map[string]string) erro
 		Max:    p.config.BackoffRetryMax,
 	}
 	return nil
+}
+
+func (p *httpProcessor) EvaluateURL(rec opencdc.Record) (string, error) {
+	if p.urlTmpl == nil {
+		return p.config.URL, nil
+	}
+	var b bytes.Buffer
+	err := p.urlTmpl.Execute(&b, rec)
+	if err != nil {
+		return p.config.URL, cerrors.Errorf("error while evaluating URL template: %w", err)
+	}
+	return b.String(), nil
 }
 
 func (p *httpProcessor) Open(context.Context) error {
@@ -227,7 +253,7 @@ func (p *httpProcessor) processRecord(ctx context.Context, r opencdc.Record) (sd
 	}
 
 	// Set response body
-	err = p.setField(&r, p.responseBodyRef, opencdc.RawData(body))
+	err = p.setField(&r, p.responseBodyRef, body)
 	if err != nil {
 		return nil, cerrors.Errorf("failed setting response body: %w", err)
 	}
@@ -245,10 +271,14 @@ func (p *httpProcessor) buildRequest(ctx context.Context, r opencdc.Record) (*ht
 		return nil, cerrors.Errorf("failed getting request body: %w", err)
 	}
 
+	url, err := p.EvaluateURL(r)
+	if err != nil {
+		return nil, err
+	}
 	req, err := http.NewRequestWithContext(
 		ctx,
 		p.config.Method,
-		p.config.URL,
+		url,
 		bytes.NewReader(reqBody),
 	)
 	if err != nil {
