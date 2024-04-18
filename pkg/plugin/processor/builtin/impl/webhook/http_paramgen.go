@@ -38,7 +38,7 @@ func (httpConfig) Parameters() map[string]config.Parameter {
 			Validations: []config.Validation{},
 		},
 		"request.body": {
-			Default:     ".",
+			Default:     "",
 			Description: "Specifies which field from the input record should be used as the body in\nthe HTTP request.\n\nFor more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
@@ -50,7 +50,7 @@ func (httpConfig) Parameters() map[string]config.Parameter {
 			Validations: []config.Validation{},
 		},
 		"request.method": {
-			Default:     "POST",
+			Default:     "GET",
 			Description: "Method is the HTTP request method to be used.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},

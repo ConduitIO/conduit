@@ -50,11 +50,15 @@ value of the HTTP response's code in the metadata field ` + "`http_status`" + `.
 			"response.status": `.Metadata["http_status"]`,
 		},
 		Have: opencdc.Record{
+			Operation: opencdc.OperationUpdate,
+			Position:  opencdc.Position("pos-1"),
 			Payload: opencdc.Change{
 				After: opencdc.RawData("world"),
 			},
 		},
 		Want: sdk.SingleRecord{
+			Operation: opencdc.OperationUpdate,
+			Position:  opencdc.Position("pos-1"),
 			Metadata: map[string]string{
 				"http_status": "200",
 			},
@@ -70,8 +74,8 @@ value of the HTTP response's code in the metadata field ` + "`http_status`" + `.
 	// +++ after
 	// @@ -1,10 +1,12 @@
 	//  {
-	//    "position": null,
-	//    "operation": "Operation(0)",
+	//    "position": "cG9zLTE=",
+	//    "operation": "update",
 	// -  "metadata": null,
 	// +  "metadata": {
 	// +    "http_status": "200"
@@ -105,6 +109,8 @@ The response will be written under the record's ` + "`.Payload.After.response`."
 			"response.body": ".Payload.After.response",
 		},
 		Have: opencdc.Record{
+			Operation: opencdc.OperationCreate,
+			Position:  opencdc.Position("pos-1"),
 			Payload: opencdc.Change{
 				After: opencdc.StructuredData{
 					"name": "foo",
@@ -112,6 +118,8 @@ The response will be written under the record's ` + "`.Payload.After.response`."
 			},
 		},
 		Want: sdk.SingleRecord{
+			Operation: opencdc.OperationCreate,
+			Position:  opencdc.Position("pos-1"),
 			Payload: opencdc.Change{
 				After: opencdc.StructuredData{
 					"name":     "foo",
@@ -127,8 +135,8 @@ The response will be written under the record's ` + "`.Payload.After.response`."
 	// +++ after
 	// @@ -1,12 +1,13 @@
 	//  {
-	//    "position": null,
-	//    "operation": "Operation(0)",
+	//    "position": "cG9zLTE=",
+	//    "operation": "create",
 	//    "metadata": null,
 	//    "key": null,
 	//    "payload": {
