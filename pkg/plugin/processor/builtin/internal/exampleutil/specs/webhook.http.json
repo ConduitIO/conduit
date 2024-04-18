@@ -41,7 +41,7 @@
         "validations": []
       },
       "request.body": {
-        "default": ".",
+        "default": "",
         "description": "Specifies which field from the input record should be used as the body in\nthe HTTP request.\n\nFor more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).",
         "type": "string",
         "validations": []
@@ -53,7 +53,7 @@
         "validations": []
       },
       "request.method": {
-        "default": "POST",
+        "default": "GET",
         "description": "Method is the HTTP request method to be used.",
         "type": "string",
         "validations": []
@@ -94,14 +94,14 @@
         "backoffRetry.min": "100ms",
         "request.body": ".Payload.After",
         "request.contentType": "application/json",
-        "request.method": "POST",
+        "request.method": "GET",
         "request.url": "http://127.0.0.1:54321",
         "response.body": ".Payload.After",
         "response.status": ".Metadata[\"http_status\"]"
       },
       "have": {
-        "position": null,
-        "operation": "Operation(0)",
+        "position": "cG9zLTE=",
+        "operation": "update",
         "metadata": null,
         "key": null,
         "payload": {
@@ -110,8 +110,8 @@
         }
       },
       "want": {
-        "position": null,
-        "operation": "Operation(0)",
+        "position": "cG9zLTE=",
+        "operation": "update",
         "metadata": {
           "http_status": "200"
         },
@@ -130,16 +130,16 @@
         "backoffRetry.factor": "2",
         "backoffRetry.max": "5s",
         "backoffRetry.min": "100ms",
-        "request.body": ".",
+        "request.body": "",
         "request.contentType": "application/json",
-        "request.method": "POST",
+        "request.method": "GET",
         "request.url": "http://127.0.0.1:54321/{{.Payload.After.name}}",
         "response.body": ".Payload.After.response",
         "response.status": ""
       },
       "have": {
-        "position": null,
-        "operation": "Operation(0)",
+        "position": "cG9zLTE=",
+        "operation": "create",
         "metadata": null,
         "key": null,
         "payload": {
@@ -150,8 +150,8 @@
         }
       },
       "want": {
-        "position": null,
-        "operation": "Operation(0)",
+        "position": "cG9zLTE=",
+        "operation": "create",
         "metadata": null,
         "key": null,
         "payload": {
