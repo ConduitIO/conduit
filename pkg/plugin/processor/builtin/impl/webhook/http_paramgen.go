@@ -38,7 +38,7 @@ func (httpConfig) Parameters() map[string]config.Parameter {
 			Validations: []config.Validation{},
 		},
 		"request.body": {
-			Default:     ".",
+			Default:     "",
 			Description: "Specifies which field from the input record should be used as the body in\nthe HTTP request.\n\nFor more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
@@ -50,14 +50,14 @@ func (httpConfig) Parameters() map[string]config.Parameter {
 			Validations: []config.Validation{},
 		},
 		"request.method": {
-			Default:     "POST",
+			Default:     "GET",
 			Description: "Method is the HTTP request method to be used.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},
 		"request.url": {
 			Default:     "",
-			Description: "URL used in the HTTP request.",
+			Description: "URL is a Go template expression for the URL used in the HTTP request, using Go [templates](https://pkg.go.dev/text/template).\nThe value provided to the template is [opencdc.Record](https://github.com/ConduitIO/conduit-commons/blob/59ecfbe5d5be2ac4cd9a674d274862d164123f36/opencdc/record.go#L30),\nso the template has access to all its fields (e.g. .Position, .Key, .Metadata, and so on). We also inject all template functions provided by [sprig](https://masterminds.github.io/sprig/)\nto make it easier to write templates.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{
 				config.ValidationRequired{},

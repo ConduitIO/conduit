@@ -41,7 +41,7 @@
         "validations": []
       },
       "request.body": {
-        "default": ".",
+        "default": "",
         "description": "Specifies which field from the input record should be used as the body in\nthe HTTP request.\n\nFor more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).",
         "type": "string",
         "validations": []
@@ -53,14 +53,14 @@
         "validations": []
       },
       "request.method": {
-        "default": "POST",
+        "default": "GET",
         "description": "Method is the HTTP request method to be used.",
         "type": "string",
         "validations": []
       },
       "request.url": {
         "default": "",
-        "description": "URL used in the HTTP request.",
+        "description": "URL is a Go template expression for the URL used in the HTTP request, using Go [templates](https://pkg.go.dev/text/template).\nThe value provided to the template is [opencdc.Record](https://github.com/ConduitIO/conduit-commons/blob/59ecfbe5d5be2ac4cd9a674d274862d164123f36/opencdc/record.go#L30),\nso the template has access to all its fields (e.g. .Position, .Key, .Metadata, and so on). We also inject all template functions provided by [sprig](https://masterminds.github.io/sprig/)\nto make it easier to write templates.",
         "type": "string",
         "validations": [
           {
@@ -94,14 +94,14 @@
         "backoffRetry.min": "100ms",
         "request.body": ".Payload.After",
         "request.contentType": "application/json",
-        "request.method": "POST",
+        "request.method": "GET",
         "request.url": "http://127.0.0.1:54321",
         "response.body": ".Payload.After",
         "response.status": ".Metadata[\"http_status\"]"
       },
       "have": {
-        "position": null,
-        "operation": "Operation(0)",
+        "position": "cG9zLTE=",
+        "operation": "update",
         "metadata": null,
         "key": null,
         "payload": {
@@ -110,8 +110,8 @@
         }
       },
       "want": {
-        "position": null,
-        "operation": "Operation(0)",
+        "position": "cG9zLTE=",
+        "operation": "update",
         "metadata": {
           "http_status": "200"
         },
@@ -119,6 +119,47 @@
         "payload": {
           "before": null,
           "after": "hello, world"
+        }
+      }
+    },
+    {
+      "summary": "Send a request to an HTTP server with a dynamic URL",
+      "description": "\nThis example shows how to use the HTTP processor to use a record's `.Payload.After.name` field in the URL path,\nsend it to a dummy HTTP server, and get a greeting with the name back.\n\nThe response will be written under the record's `.Payload.After.response`.",
+      "config": {
+        "backoffRetry.count": "0",
+        "backoffRetry.factor": "2",
+        "backoffRetry.max": "5s",
+        "backoffRetry.min": "100ms",
+        "request.body": "",
+        "request.contentType": "application/json",
+        "request.method": "GET",
+        "request.url": "http://127.0.0.1:54321/{{.Payload.After.name}}",
+        "response.body": ".Payload.After.response",
+        "response.status": ""
+      },
+      "have": {
+        "position": "cG9zLTE=",
+        "operation": "create",
+        "metadata": null,
+        "key": null,
+        "payload": {
+          "before": null,
+          "after": {
+            "name": "foo"
+          }
+        }
+      },
+      "want": {
+        "position": "cG9zLTE=",
+        "operation": "create",
+        "metadata": null,
+        "key": null,
+        "payload": {
+          "before": null,
+          "after": {
+            "name": "foo",
+            "response": "aGVsbG8sIGZvbyE="
+          }
         }
       }
     }
