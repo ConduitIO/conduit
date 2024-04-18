@@ -399,6 +399,18 @@ func TestHTTPProcessor_URLTemplate(t *testing.T) {
 				},
 			}},
 		},
+		{
+			name:     "URL template, value that has spaces",
+			pathTmpl: `/{{.Payload.Before.query}}`,
+			path:     "/what+is+conduit",
+			args: []opencdc.Record{{
+				Payload: opencdc.Change{
+					Before: opencdc.StructuredData{
+						"query": "what is conduit",
+					},
+				},
+			}},
+		},
 	}
 
 	for _, tc := range tests {
