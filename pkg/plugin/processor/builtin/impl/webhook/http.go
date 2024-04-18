@@ -164,7 +164,8 @@ func (p *httpProcessor) EvaluateURL(rec opencdc.Record) (string, error) {
 	if err != nil {
 		return "", cerrors.Errorf("error while evaluating URL template: %w", err)
 	}
-	return b.String(), nil
+	url := strings.ReplaceAll(b.String(), " ", "+")
+	return url, nil
 }
 
 func (p *httpProcessor) Process(ctx context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
