@@ -21,6 +21,7 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"text/template"
@@ -164,8 +165,16 @@ func (p *httpProcessor) EvaluateURL(rec opencdc.Record) (string, error) {
 	if err != nil {
 		return "", cerrors.Errorf("error while evaluating URL template: %w", err)
 	}
-	url := strings.ReplaceAll(b.String(), " ", "+")
-	return url, nil
+	u, err := url.Parse(b.String())
+	if err != nil {
+		return "", cerrors.Errorf("error parsing URL: %w", err)
+	}
+	q, err := url.ParseQuery(u.RawQuery)
+	if err != nil {
+		return "", cerrors.Errorf("error parsing URL query: %w", err)
+	}
+	u.RawQuery = q.Encode()
+	return u.String(), nil
 }
 
 func (p *httpProcessor) Process(ctx context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
