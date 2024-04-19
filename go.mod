@@ -1,8 +1,6 @@
 module github.com/conduitio/conduit
 
-go 1.21.1
-
-toolchain go1.22.1
+go 1.22.2
 
 require (
 	buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go v1.33.0-20240416201300-ca2899286658.1
@@ -43,7 +41,7 @@ require (
 	github.com/piotrkowalczuk/promgrpc/v4 v4.1.3
 	github.com/prometheus/client_golang v1.19.0
 	github.com/prometheus/client_model v0.6.1
-	github.com/prometheus/common v0.52.3
+	github.com/prometheus/common v0.53.0
 	github.com/rs/zerolog v1.32.0
 	github.com/stealthrocket/wazergo v0.19.1
 	github.com/tetratelabs/wazero v1.7.1
