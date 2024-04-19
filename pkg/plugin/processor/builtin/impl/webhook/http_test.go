@@ -399,6 +399,18 @@ func TestHTTPProcessor_URLTemplate(t *testing.T) {
 				},
 			}},
 		},
+		{
+			name:     "URL template, path and query have spaces",
+			pathTmpl: `/{{.Payload.Before.url}}`,
+			path:     "/what%20is%20conduit?id=my+id",
+			args: []opencdc.Record{{
+				Payload: opencdc.Change{
+					Before: opencdc.StructuredData{
+						"url": "what is conduit?id=my id",
+					},
+				},
+			}},
+		},
 	}
 
 	for _, tc := range tests {
@@ -407,7 +419,7 @@ func TestHTTPProcessor_URLTemplate(t *testing.T) {
 
 			srv := httptest.NewServer(http.HandlerFunc(func(resp http.ResponseWriter, req *http.Request) {
 				// check the expected path with the evaluated URL
-				is.Equal(req.URL.Path, tc.path)
+				is.Equal(req.URL.String(), tc.path)
 			}))
 			defer srv.Close()
 
