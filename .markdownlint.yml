@@ -43,3 +43,6 @@ proper-names:
   names:
     - JavaScript
     - Conduit
+
+MD033:
+  allowed_elements: ["img"]
