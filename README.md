@@ -1,9 +1,9 @@
 # Conduit
-![scarf pixel](https://static.scarf.sh/a.png?x-pxid=ae2e6c1b-5c87-4c4f-80bd-dd598b2e3c3b)
 ![Logo](https://raw.githubusercontent.com/ConduitIO/.github/main/images/conduit-logo-outlined.svg)
 
 _Data Integration for Production Data Stores. :dizzy:_
 
+![scarf pixel](https://static.scarf.sh/a.png?x-pxid=ae2e6c1b-5c87-4c4f-80bd-dd598b2e3c3b)
 [![License](https://img.shields.io/badge/license-Apache%202-blue)](https://github.com/ConduitIO/conduit/blob/main/LICENSE.md)
 [![Test](https://github.com/ConduitIO/conduit/actions/workflows/test.yml/badge.svg)](https://github.com/ConduitIO/conduit/actions/workflows/test.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/conduitio/conduit)](https://goreportcard.com/report/github.com/conduitio/conduit)
