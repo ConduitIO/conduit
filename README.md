@@ -11,6 +11,7 @@ _Data Integration for Production Data Stores. :dizzy:_
 [![Go Reference](https://pkg.go.dev/badge/github.com/conduitio/conduit.svg)](https://pkg.go.dev/github.com/conduitio/conduit)
 [![Conduit docs](https://img.shields.io/badge/conduit-docs-blue)](https://www.conduit.io/docs/introduction/getting-started)
 [![API docs](https://img.shields.io/badge/HTTP_API-docs-blue)](https://docs.conduit.io/api)
+<img referrerpolicy="no-referrer-when-downgrade" src="https://static.scarf.sh/a.png?x-pxid=ae2e6c1b-5c87-4c4f-80bd-dd598b2e3c3b"/> <!-- markdownlint-disable-line MD013 MD045 MD033-->
 
 ## Overview
 
