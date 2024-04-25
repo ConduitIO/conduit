@@ -15,6 +15,8 @@
 package toplugin
 
 import (
+	"maps"
+
 	"github.com/conduitio/conduit-connector-protocol/cpluginv1"
 	"github.com/conduitio/conduit/pkg/record"
 )
@@ -23,7 +25,7 @@ func SourceConfigureRequest(in map[string]string) cpluginv1.SourceConfigureReque
 	out := cpluginv1.SourceConfigureRequest{}
 	if len(in) > 0 {
 		// gRPC sends `nil` if the map is empty, match behavior
-		out.Config = in
+		out.Config = maps.Clone(in)
 	}
 	return out
 }

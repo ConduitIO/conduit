@@ -23,9 +23,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-
 	"github.com/conduitio/conduit-commons/opencdc"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/goccy/go-json"
 )
 
