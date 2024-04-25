@@ -24,16 +24,16 @@ the same directory.
     * Run `scripts/get-compare-link.sh ../conduit-commons/` to compare the latest tag and the `main` branch.
     * If the changes should be released/tagged, push a new tag.
 2. https://github.com/conduitio/conduit-connector-protocol
-    * Update `conduit-commons` if needed
+    * Update `conduit-commons` if needed: `go get github.com/conduitio/conduit-commons@vX.Y.Z`
     * Run `scripts/get-compare-link.sh ../conduit-connector-protocol/` to compare the latest tag and the `main` branch.
     * If the changes should be released/tagged, push a new tag.
 3. https://github.com/ConduitIO/conduit-connector-sdk
-    * Update `conduit-commons` if needed
-    * Update `conduit-connector-protocol` if needed
+    * Update `conduit-commons` if needed: `go get github.com/conduitio/conduit-commons@vX.Y.Z`
+    * Update `conduit-connector-protocol` if needed: `go get github.com/conduitio/conduit-connector-protocol@vX.Y.Z`
     * Run `scripts/get-compare-link.sh ../conduit-connector-sdk/` to compare the latest tag and the `main` branch.
     * If the changes should be released/tagged, push a new tag.
 4. https://github.com/ConduitIO/conduit-processor-sdk
-    * Update `conduit-commons` if needed
+    * Update `conduit-commons` if needed: `go get github.com/conduitio/conduit-commons@vX.Y.Z`
     * Run `scripts/get-compare-link.sh ../conduit-processor-sdk/` to compare the latest tag and the `main` branch.
     * If the changes should be released/tagged, push a new tag.
 5. Bump the Connector SDK in all the built-in connectors: `scripts/bump-sdk-in-connectors.sh vX.Y.Z`
