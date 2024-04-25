@@ -20,10 +20,9 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal"
-
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal/diff"
 	"github.com/goccy/go-json"
 	"github.com/google/go-cmp/cmp"

@@ -98,16 +98,9 @@
       "summary": "Auto-register schema",
       "description": "This example shows the usage of the `avro.encode` processor\nwith the `autoRegister` schema strategy. The processor encodes the record's\n`.Payload.After` field using the schema that is extracted from the data\nand registered on the fly under the subject `example-autoRegister`.",
       "config": {
-        "auth.basic.password": "",
-        "auth.basic.username": "",
         "field": ".Payload.After",
         "schema.autoRegister.subject": "example-autoRegister",
-        "schema.preRegistered.subject": "",
-        "schema.preRegistered.version": "",
         "schema.strategy": "autoRegister",
-        "tls.ca.cert": "",
-        "tls.client.cert": "",
-        "tls.client.key": "",
         "url": "http://127.0.0.1:54322"
       },
       "have": {
@@ -151,16 +144,10 @@
       "summary": "Pre-register schema",
       "description": "This example shows the usage of the `avro.encode` processor\nwith the `preRegistered` schema strategy. When using this strategy, the\nschema has to be manually pre-registered. In this example we use the following schema:\n\n```json\n{\n  \"type\":\"record\",\n  \"name\":\"record\",\n  \"fields\":[\n    {\"name\":\"myString\",\"type\":\"string\"},\n    {\"name\":\"myInt\",\"type\":\"int\"}\n  ]\n}\n```\n\nThe processor encodes the record's`.Key` field using the above schema.",
       "config": {
-        "auth.basic.password": "",
-        "auth.basic.username": "",
         "field": ".Key",
-        "schema.autoRegister.subject": "",
         "schema.preRegistered.subject": "example-preRegistered",
         "schema.preRegistered.version": "1",
         "schema.strategy": "preRegistered",
-        "tls.ca.cert": "",
-        "tls.client.cert": "",
-        "tls.client.key": "",
         "url": "http://127.0.0.1:54322"
       },
       "have": {

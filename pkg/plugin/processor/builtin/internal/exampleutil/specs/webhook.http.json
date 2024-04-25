@@ -130,12 +130,10 @@
         "backoffRetry.factor": "2",
         "backoffRetry.max": "5s",
         "backoffRetry.min": "100ms",
-        "request.body": "",
         "request.contentType": "application/json",
         "request.method": "GET",
         "request.url": "http://127.0.0.1:54321/{{.Payload.After.name}}",
-        "response.body": ".Payload.After.response",
-        "response.status": ""
+        "response.body": ".Payload.After.response"
       },
       "have": {
         "position": "cG9zLTE=",
