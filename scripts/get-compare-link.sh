@@ -12,8 +12,8 @@ cd "$1" || { echo "Failed to move into repository directory"; exit 1; }
 # Fetch tags
 git fetch --tags || { echo "Failed to fetch tags"; exit 1; }
 
-# Get the latest tag
-latest_tag=$(git describe --tags --abbrev=0) || { echo "Failed to get latest tag"; exit 1; }
+# Get the latest tag across all branches
+latest_tag=$(git describe --tags "$(git rev-list --tags --max-count=1)") || { echo "Failed to get latest tag"; exit 1; }
 
 # Get the owner and repository name from the remote URL
 repo_url=$(git config --get remote.origin.url)

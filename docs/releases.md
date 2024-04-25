@@ -16,9 +16,37 @@ latest Docker image which is not a nightly is tagged with `latest`.
 
 ### Update dependencies
 
-Dependencies should be updated in the following order:
+Dependencies should be updated in the order described below. The instructions
+assume that this repository and the other Conduit repositories are all cloned in
+the same directory.
+
 1. https://github.com/ConduitIO/conduit-commons/
-  * 
+    * Run `scripts/get-compare-link.sh ../conduit-commons/` to compare the latest tag and the `main` branch.
+    * If the changes should be released/tagged, push a new tag.
+2. https://github.com/conduitio/conduit-connector-protocol
+    * Update `conduit-commons` if needed
+    * Run `scripts/get-compare-link.sh ../conduit-connector-protocol/` to compare the latest tag and the `main` branch.
+    * If the changes should be released/tagged, push a new tag.
+3. https://github.com/ConduitIO/conduit-connector-sdk
+    * Update `conduit-commons` if needed
+    * Update `conduit-connector-protocol` if needed
+    * Run `scripts/get-compare-link.sh ../conduit-connector-sdk/` to compare the latest tag and the `main` branch.
+    * If the changes should be released/tagged, push a new tag.
+4. https://github.com/ConduitIO/conduit-processor-sdk
+    * Update `conduit-commons` if needed
+    * Run `scripts/get-compare-link.sh ../conduit-processor-sdk/` to compare the latest tag and the `main` branch.
+    * If the changes should be released/tagged, push a new tag.
+5. Bump the Connector SDK in all the built-in connectors: `scripts/bump-sdk-in-connectors.sh vX.Y.Z`
+6. For each of the built-in connectors (file, kafka, generator, s3, postgres, log):
+    * Run `scripts/get-compare-link.sh ../conduit-processor-sdk/` to compare the latest tag and the `main` branch.
+    * If the changes should be released/tagged, push a new tag.
+7. Bump the built-in connectors: `scripts/bump-builtin-connectors.sh`
+8. Conduit itself
+    * Update `conduit-connector-sdk` if needed
+    * Update `conduit-processor-sdk` if needed
+    * Update `conduit-connector-protocol` if needed
+    * Update `conduit-commons` if needed
+    * Release Conduit (see instructions below)
 
 ## How to release a new version
 
