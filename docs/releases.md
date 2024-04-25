@@ -48,7 +48,12 @@ the same directory.
     - Update `conduit-commons` if needed
     - Release Conduit (see instructions below)
 
-## How to release a new version
+## Documentation
+
+1. Write a blog post
+2. Regenerate processor documentation on [`conduit-site`](https://github.com/ConduitIO/conduit-site).
+
+## Releasing Conduit
 
 A release is triggered by pushing a new tag which starts with `v` (for example `v1.2.3`). Everything else is then
 handled by GoReleaser and GitHub actions. To push a new tag, please use the script [scripts/tag.sh](https://github.com/ConduitIO/conduit/blob/main/scripts/tag.sh),
