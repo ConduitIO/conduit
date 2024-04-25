@@ -12,6 +12,14 @@ A Conduit release has the following parts:
 - a GitHub package, which is the official Docker image for Conduit. It's available on GitHub's Container Registry. The
 latest Docker image which is not a nightly is tagged with `latest`.
 
+## Before a release
+
+### Update dependencies
+
+Dependencies should be updated in the following order:
+1. https://github.com/ConduitIO/conduit-commons/
+  * 
+
 ## How to release a new version
 
 A release is triggered by pushing a new tag which starts with `v` (for example `v1.2.3`). Everything else is then
