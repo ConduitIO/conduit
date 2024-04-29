@@ -84,7 +84,7 @@ var P1P1 = &processor.Instance{
 		Type: processor.ParentTypePipeline,
 	},
 	Config: processor.Config{
-		Settings: nil,
+		Settings: map[string]string{},
 		Workers:  1,
 	},
 
@@ -101,7 +101,7 @@ var P1C2P1 = &processor.Instance{
 		Type: processor.ParentTypeConnector,
 	},
 	Config: processor.Config{
-		Settings: nil,
+		Settings: map[string]string{},
 		Workers:  1,
 	},
 
