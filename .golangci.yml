@@ -1,7 +1,7 @@
 run:
   timeout: 3m
-  skip-dirs-use-default: false
-  skip-dirs:
+  exclude-dirs-use-default: false
+  exclude-dirs:
     - ^examples/
     - ^ui/
     - ^pkg/plugin/processor/builtin/internal/diff # external code

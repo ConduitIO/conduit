@@ -3,20 +3,20 @@ module github.com/conduitio/conduit
 go 1.22.2
 
 require (
-	buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go v1.33.0-20240416201300-ca2899286658.1
+	buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go v1.34.0-20240416201300-ca2899286658.1
 	github.com/Masterminds/semver/v3 v3.2.1
 	github.com/Masterminds/sprig/v3 v3.2.3
 	github.com/NYTimes/gziphandler v1.1.1
 	github.com/bufbuild/buf v1.31.0
-	github.com/conduitio/conduit-commons v0.1.1
+	github.com/conduitio/conduit-commons v0.2.0
 	github.com/conduitio/conduit-connector-file v0.6.0
-	github.com/conduitio/conduit-connector-generator v0.5.0
-	github.com/conduitio/conduit-connector-kafka v0.7.2
+	github.com/conduitio/conduit-connector-generator v0.6.0
+	github.com/conduitio/conduit-connector-kafka v0.8.0
 	github.com/conduitio/conduit-connector-log v0.3.0
-	github.com/conduitio/conduit-connector-postgres v0.6.0
-	github.com/conduitio/conduit-connector-protocol v0.5.1-0.20240104160905-e9e61586fb8d
+	github.com/conduitio/conduit-connector-postgres v0.7.0
+	github.com/conduitio/conduit-connector-protocol v0.6.0
 	github.com/conduitio/conduit-connector-s3 v0.5.1
-	github.com/conduitio/conduit-connector-sdk v0.8.0
+	github.com/conduitio/conduit-connector-sdk v0.9.1
 	github.com/conduitio/conduit-processor-sdk v0.1.1
 	github.com/conduitio/yaml/v3 v3.3.0
 	github.com/dgraph-io/badger/v4 v4.2.0
@@ -53,7 +53,7 @@ require (
 	golang.org/x/xerrors v0.0.0-20231012003039-104605ab7028
 	google.golang.org/genproto/googleapis/api v0.0.0-20240415180920-8c6c420018be
 	google.golang.org/grpc v1.63.2
-	google.golang.org/protobuf v1.33.0
+	google.golang.org/protobuf v1.34.0
 	gopkg.in/tomb.v2 v2.0.0-20161208151619-d5d1b5820637
 )
 
@@ -124,7 +124,7 @@ require (
 	github.com/containerd/stargz-snapshotter/estargz v0.15.1 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.4 // indirect
 	github.com/curioswitch/go-reassign v0.2.0 // indirect
-	github.com/daixiang0/gci v0.12.3 // indirect
+	github.com/daixiang0/gci v0.13.4 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/denis-tingaikin/go-header v0.5.0 // indirect
 	github.com/dgraph-io/ristretto v0.1.1 // indirect

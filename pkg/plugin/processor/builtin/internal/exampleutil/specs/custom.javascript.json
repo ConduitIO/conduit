@@ -25,8 +25,7 @@
       "summary": "Modify a record's metadata and payload using JavaScript",
       "description": "In this example we use the `custom.javascript` processor to add a metadata key to the input record. It also prepends \"hello, \" to `.Payload.After`.",
       "config": {
-        "script": "function process(rec) {\n  rec.Metadata[\"processed\"] = \"true\";\n  let existing = String.fromCharCode.apply(String, rec.Payload.After);\n  rec.Payload.After = RawData(\"hello, \" + existing);\n  return rec;\n}",
-        "script.path": ""
+        "script": "function process(rec) {\n  rec.Metadata[\"processed\"] = \"true\";\n  let existing = String.fromCharCode.apply(String, rec.Payload.After);\n  rec.Payload.After = RawData(\"hello, \" + existing);\n  return rec;\n}"
       },
       "have": {
         "position": null,

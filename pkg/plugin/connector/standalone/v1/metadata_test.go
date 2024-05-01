@@ -17,8 +17,8 @@ package standalonev1
 import (
 	"testing"
 
+	metadatav1 "github.com/conduitio/conduit-commons/proto/metadata/v1"
 	opencdcv1 "github.com/conduitio/conduit-commons/proto/opencdc/v1"
-	connectorv1 "github.com/conduitio/conduit-connector-protocol/proto/connector/v1"
 	"github.com/conduitio/conduit/pkg/record"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/runtime/protoimpl"
@@ -30,10 +30,10 @@ func TestMetadataConstants(t *testing.T) {
 		record.MetadataOpenCDCVersion:                  opencdcv1.E_MetadataVersion,
 		record.MetadataCreatedAt:                       opencdcv1.E_MetadataCreatedAt,
 		record.MetadataReadAt:                          opencdcv1.E_MetadataReadAt,
-		record.MetadataConduitSourcePluginName:         connectorv1.E_MetadataConduitSourcePluginName,
-		record.MetadataConduitSourcePluginVersion:      connectorv1.E_MetadataConduitSourcePluginVersion,
-		record.MetadataConduitDestinationPluginName:    connectorv1.E_MetadataConduitDestinationPluginName,
-		record.MetadataConduitDestinationPluginVersion: connectorv1.E_MetadataConduitDestinationPluginVersion,
+		record.MetadataConduitSourcePluginName:         metadatav1.E_MetadataConduitSourcePluginName,
+		record.MetadataConduitSourcePluginVersion:      metadatav1.E_MetadataConduitSourcePluginVersion,
+		record.MetadataConduitDestinationPluginName:    metadatav1.E_MetadataConduitDestinationPluginName,
+		record.MetadataConduitDestinationPluginVersion: metadatav1.E_MetadataConduitDestinationPluginVersion,
 	}
 	for goConstant, extensionInfo := range wantMapping {
 		protoConstant := proto.GetExtension(extensionInfo.TypeDescriptor().ParentFile().Options(), extensionInfo)

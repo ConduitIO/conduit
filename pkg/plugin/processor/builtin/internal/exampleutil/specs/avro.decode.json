@@ -60,12 +60,7 @@
       "summary": "Decode a record field in Avro format",
       "description": "This example shows the usage of the `avro.decode` processor.\nThe processor decodes the record's`.Key` field using the schema that is\ndownloaded from the schema registry and needs to exist under the subject`example-decode`.\nIn this example we use the following schema:\n\n```json\n{\n  \"type\":\"record\",\n  \"name\":\"record\",\n  \"fields\":[\n    {\"name\":\"myString\",\"type\":\"string\"},\n    {\"name\":\"myInt\",\"type\":\"int\"}\n  ]\n}\n```",
       "config": {
-        "auth.basic.password": "",
-        "auth.basic.username": "",
         "field": ".Key",
-        "tls.ca.cert": "",
-        "tls.client.cert": "",
-        "tls.client.key": "",
         "url": "http://127.0.0.1:54322"
       },
       "have": {

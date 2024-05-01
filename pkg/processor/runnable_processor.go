@@ -16,6 +16,7 @@ package processor
 
 import (
 	"context"
+	"maps"
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
@@ -44,7 +45,7 @@ func newRunnableProcessor(
 }
 
 func (p *RunnableProcessor) Open(ctx context.Context) error {
-	err := p.proc.Configure(ctx, p.Config.Settings)
+	err := p.proc.Configure(ctx, maps.Clone(p.Config.Settings))
 	if err != nil {
 		return cerrors.Errorf("failed configuring processor: %w", err)
 	}
