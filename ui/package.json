@@ -46,7 +46,7 @@
     "ember-basic-dropdown": "^7.3.0",
     "ember-changeset": "^4.1.2",
     "ember-changeset-validations": "^4.1.1",
-    "ember-cli": "~5.7.0",
+    "ember-cli": "~5.8.1",
     "ember-cli-app-version": "^6.0.1",
     "ember-cli-babel": "^8.2.0",
     "ember-cli-code-coverage": "^3.0.0",
