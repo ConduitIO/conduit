@@ -40,7 +40,6 @@ the above.
    cost of repeatedly fetching the same schema many times (especially over
    gRPC), schemas should be cached by the SDK.
 
-
 ## Schema format
 
 A destination connector should work with one schema format only, regardless of
@@ -70,6 +69,71 @@ The following types are supported:
   * union
 
 Every field in a schema can be marked as optional (nullable).
+
+## Implementation
+
+Schema support is part of the OpenCDC standard. A schema is represented by the
+following Protobuf message:
+
+```protobuf
+syntax = "proto3";
+
+message Schema {
+  string id = 1;
+  repeated Field fields = 2;
+}
+
+message FieldType {
+  oneof type {
+    PrimitiveFieldType primitiveType = 1;
+    ArrayType arrayType = 2;
+    MapType mapType = 3;
+    StructType structType = 4;
+    UnionType unionType = 5;
+  }
+}
+
+enum PrimitiveFieldType {
+  BOOLEAN = 0;
+  INT8 = 1;
+  // other primitive types
+}
+
+message ArrayType {
+  FieldType elementType = 1;
+}
+
+message MapType {
+  FieldType keyType = 1;
+  FieldType valueType = 2;
+}
+
+message StructType {
+  repeated Field fields = 1;
+}
+
+message UnionType {
+  repeated FieldType types = 1;
+}
+
+message Field {
+  string name = 1;
+  oneof type {
+    PrimitiveFieldType primitiveType = 2;
+    ArrayType arrayType = 3;
+    MapType mapType = 4;
+    StructType structType = 5;
+    UnionType unionType = 6;
+  }
+  bool optional = 7;
+  // todo: find appropriate type
+  any defaultValue = 8;
+}
+```
+
+A reference to a schema is saved in a new metadata field, `opencdc.schemaID`.
+
+### Schema-related operations in connectors
 
 ## Questions
 
