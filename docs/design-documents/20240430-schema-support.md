@@ -32,12 +32,14 @@ the above.
    instances.
 4. It should be possible for a schema to evolve.
 5. A source connector should be able to register a schema.
-6. A destination connector should be able to fetch a specific schema version.
-7. The Connector SDK should cache the schemas.
+6. A destination connector should be able to fetch a specific schema.
+7. A destination connector needs a way to know that a schema changed.
+8. The Connector SDK should cache the schemas.
 
    Reason: Standalone connectors and Conduit communicate via gRPC. To avoid the
    cost of repeatedly fetching the same schema many times (especially over
    gRPC), schemas should be cached by the SDK.
+
 
 ## Schema format
 
@@ -46,15 +48,15 @@ the underlying or intermediary schema formats used. This makes it easy for a
 connector developer to write code, since it doesn't require handling of
 potentially multiple schema types.
 
-## Schema metadata
+A schema consists of following:
+* reference: a string that uniquely identifies a schema in Conduit
+* list of fields, where each field is described with following:
+  * name
+  * type
+  * optional (boolean value)
+  * default value
 
-* Reference
-* Name
-* Version
-
-## Supported types
-
-The following types should be supported:
+The following types are supported:
 * Primitive:
   * boolean
   * integers: 8, 16, 32, 64-bit 
@@ -68,14 +70,6 @@ The following types should be supported:
   * union
 
 Every field in a schema can be marked as optional (nullable).
-
-## Schemas creation and evolution
-
-TBD
-
-## Schema registry
-
-TBD
 
 ## Questions
 
@@ -93,6 +87,7 @@ TBD
    destination.
 
    **A**:
+3. **Q**: Should schemas be available in processors?
 
 ## Other considerations
 
