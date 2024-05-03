@@ -3,12 +3,14 @@
 <!-- TOC -->
   * [The problem](#the-problem)
   * [Requirements](#requirements)
-  * [Non-goals](#non-goals)
-  * [Schema format](#schema-format)
   * [Support for schemas originating from other streaming tools](#support-for-schemas-originating-from-other-streaming-tools)
-      * [Schema is left as part of the record](#schema-is-left-as-part-of-the-record)
-      * [Schema is copied into the schema registry](#schema-is-copied-into-the-schema-registry)
-  * [Schema evolution and versioning](#schema-evolution-and-versioning)
+    * [Schema is left as part of the record](#schema-is-left-as-part-of-the-record)
+    * [Schema is copied into the schema registry](#schema-is-copied-into-the-schema-registry)
+  * [Schema operations](#schema-operations)
+    * [Creating a schema](#creating-a-schema-)
+    * [Updating a schema (evolution and versioning)](#updating-a-schema-evolution-and-versioning)
+    * [Fetching a schema](#fetching-a-schema)
+  * [Schema format](#schema-format)
   * [Implementation](#implementation)
     * [Schema storage](#schema-storage)
     * [Schema service](#schema-service)
@@ -35,6 +37,24 @@ To do so, the following is required:
 This design document focuses on the schema support in Conduit in the context of
 the above.
 
+## Open questions
+
+1. **Q**: Should a schema be accessible across Conduit instances?
+
+   Schemas need to be accessible across pipelines (requirement #3). If the
+   schema registry is part of Conduit, should we make it accessible via the API?
+
+   **A**:
+2. **Q**: Should Conduit allow schemas from other streaming tools?
+
+   Conduit is sometimes used together with other streaming tools, such as Kafka
+   Connect. For example, Kafka Connect is used to stream data to a topic, and
+   then Conduit is used to read the data from the topic and write it into a
+   destination.
+
+   **A**:
+3. **Q**: Should schemas be available in processors?
+
 ## Requirements
 
 1. Records **should not** carry the full schema. 
@@ -60,40 +80,6 @@ the above.
    cost of repeatedly fetching the same schema many times (especially over
    gRPC), schemas should be cached by the SDK.
 
-## Non-goals
-
-## Schema format
-
-A destination connector should work with one schema format only, regardless of
-the underlying or intermediary schema formats used. This makes it easy for a
-connector developer to write code, since it doesn't require handling of
-potentially multiple schema types.
-
-A schema consists of following:
-- reference: a string that uniquely identifies a schema in Conduit
-- list of fields, where each field is described with following:
-  - name
-  - type
-  - optional (boolean value)
-  - default value
-
-The following types are supported:
-
-- basic:
-  - boolean
-  - integers: 8, 16, 32, 64-bit 
-  - float: single precision (32-bit) and double precision (64-bit) IEEE 754 floating-point number
-  - bytes
-  - string
-  - timestamp
-- complex:
-  - array
-  - map
-  - struct
-  - union
-
-Every field in a schema can be marked as optional (nullable).
-
 ## Support for schemas originating from other streaming tools
 
 Conduit is sometimes used alongside other streaming tools. For example, Kafka
@@ -106,20 +92,64 @@ connectors with Conduit. Here we have two possibilities:
 2. The schema can be found in a schema registry (e.g. an Avro schema registry)
 
 Following options are possible here:
+1. schema is left as part of the record
+2. schema is copied into the schema registry
 
-#### Schema is left as part of the record
+TODO
 
-#### Schema is copied into the schema registry
+## Schema operations
 
-## Schema evolution and versioning
+### Creating a schema 
 
-TBD (this section is about checking if a new version of a schema is compatible
-with the previous one)
+TODO
+
+### Updating a schema (evolution and versioning)
+
+TODO
+
+### Fetching a schema
+
+TODO
+
+## Schema format
+
+A destination connector should work with one schema format only, regardless of
+the underlying or intermediary schema formats used. This makes it easy for a
+connector developer to write code, since it doesn't require handling of
+potentially multiple schema types.
+
+A schema consists of following:
+- reference: a string that uniquely identifies a schema in Conduit
+- list of fields, where each field is described with following:
+    - name
+    - type
+    - optional (boolean value)
+    - default value
+
+The following types are supported:
+
+- basic:
+    - boolean
+    - integers: 8, 16, 32, 64-bit
+    - float: single precision (32-bit) and double precision (64-bit) IEEE 754 floating-point number
+    - bytes
+    - string
+    - timestamp
+- complex:
+    - array
+    - map
+    - struct
+    - union
+
+Every field in a schema can be marked as optional (nullable).
 
 ## Implementation
 
-Schema support is part of the OpenCDC standard. A schema is represented by the
-following Protobuf message:
+Conduit exposes a schema service that provides the required schema operations.
+The implementation of the service is discussed in a later section.
+
+Schema support is added as part of the OpenCDC standard. A schema is represented
+by the following Protobuf message:
 
 ```protobuf
 syntax = "proto3";
@@ -180,15 +210,6 @@ message Field {
 The Connector SDK will provide Go types and functions to work with schemas, i.e.
 a connector developer won't work with Protobuf directly.
 
-### Schema storage
-
-The schemas are stored in Conduit's database. Based on the current requirements,
-there's no need to use an external service.
-
-### Schema service
-
-The following section discusses the implementation of a schema service in Conduit.
-
 #### Schema service interface
 
 This section discusses the schema service's interface.
@@ -241,7 +262,7 @@ message Response {
    the connector) needs to check the response type. In case multiple commands
    are sent, we need ordering guarantees.
 
-##### Option 2: Exposing Conduit as a service
+##### Option 2: Exposing a gRPC service in Conduit
 
 Conduit exposes a service to work with schemas. Connectors access the service
 and call methods on the service. 
@@ -264,26 +285,29 @@ send its gRPC port to the connector via the `Configure` method.
 
 ##### Chosen option
 
-**Option 2** is the chosen method since it offers more clarity and the support for
-remote Conduit instances.
+**Option 2** is the chosen method since it offers more clarity and the support
+for remote Conduit instances.
 
-## Questions
+### Schema storage and service implementation
 
-1. **Q**: Should a schema be accessible across Conduit instances?
+#### Option 1: Conduit itself is the schema registry
 
-   Schemas need to be accessible across pipelines (requirement #3). If the
-   schema registry is part of Conduit, should we make it accessible via the API?
-   
-   **A**:
-2. **Q**: Should Conduit allow schemas from other streaming tools?
+A schema registry can be implemented within Conduit. 
 
-   Conduit is sometimes used together with other streaming tools, such as Kafka
-   Connect. For example, Kafka Connect is used to stream data to a topic, and
-   then Conduit is used to read the data from the topic and write it into a
-   destination.
+#### Option 2: A centralized, external schema registry
 
-   **A**:
-3. **Q**: Should schemas be available in processors?
+A standalone schema service (such
+as [Apicurio Registry](https://www.apicur.io/registry/)) can be used to manage
+schemas. A single schema service deployment is accessed by multiple Conduit
+instances.
+
+#### Chosen option
+
+Option 1 keeps the tech stack simple. However, it also means that connectors
+fetching schemas need to be aware which Conduit instance is managing them.
+
+Option 2 removes that complexity at the expense of adding a new infrastructure
+item.
 
 ## Other considerations
 
