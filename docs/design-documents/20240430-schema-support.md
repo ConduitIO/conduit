@@ -5,17 +5,18 @@
   * [Open questions](#open-questions)
   * [Requirements](#requirements)
   * [Support for schemas originating from other streaming tools](#support-for-schemas-originating-from-other-streaming-tools)
-  * [Schema operations](#schema-operations)
   * [Schema format](#schema-format)
   * [Implementation](#implementation)
+    * [Schema storage and service implementation](#schema-storage-and-service-implementation)
+      * [Option 1: Conduit itself hosts the schema registry](#option-1-conduit-itself-hosts-the-schema-registry)
+      * [Option 2: A centralized, external schema registry, accessed through Conduit](#option-2-a-centralized-external-schema-registry-accessed-through-conduit)
+      * [Option 3: A centralized, external schema registry, accessed by connectors directly](#option-3-a-centralized-external-schema-registry-accessed-by-connectors-directly)
+      * [Chosen option](#chosen-option)
+    * [Schema format](#schema-format-1)
       * [Schema service interface](#schema-service-interface)
         * [Option 1: Stream of commands and responses](#option-1-stream-of-commands-and-responses)
         * [Option 2: Exposing a gRPC service in Conduit](#option-2-exposing-a-grpc-service-in-conduit)
-        * [Chosen option](#chosen-option)
-    * [Schema storage and service implementation](#schema-storage-and-service-implementation)
-      * [Option 1: Conduit itself is the schema registry](#option-1-conduit-itself-is-the-schema-registry)
-      * [Option 2: A centralized, external schema registry](#option-2-a-centralized-external-schema-registry)
-      * [Chosen option](#chosen-option-1)
+        * [Chosen option](#chosen-option-1)
   * [Summary](#summary)
   * [Other considerations](#other-considerations)
 <!-- TOC -->
@@ -131,7 +132,7 @@ Every field in a schema can be marked as optional (nullable).
 
 ### Schema storage and service implementation
 
-#### Option 1: Conduit itself is the schema registry
+#### Option 1: Conduit itself hosts the schema registry
 
 A schema registry can be implemented within Conduit.
 
