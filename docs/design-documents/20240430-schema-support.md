@@ -2,23 +2,21 @@
 
 <!-- TOC -->
   * [The problem](#the-problem)
+  * [Open questions](#open-questions)
   * [Requirements](#requirements)
   * [Support for schemas originating from other streaming tools](#support-for-schemas-originating-from-other-streaming-tools)
-    * [Schema is left as part of the record](#schema-is-left-as-part-of-the-record)
-    * [Schema is copied into the schema registry](#schema-is-copied-into-the-schema-registry)
   * [Schema operations](#schema-operations)
-    * [Creating a schema](#creating-a-schema-)
-    * [Updating a schema (evolution and versioning)](#updating-a-schema-evolution-and-versioning)
-    * [Fetching a schema](#fetching-a-schema)
   * [Schema format](#schema-format)
   * [Implementation](#implementation)
-    * [Schema storage](#schema-storage)
-    * [Schema service](#schema-service)
       * [Schema service interface](#schema-service-interface)
         * [Option 1: Stream of commands and responses](#option-1-stream-of-commands-and-responses)
-        * [Option 2: Exposing Conduit as a service](#option-2-exposing-conduit-as-a-service)
+        * [Option 2: Exposing a gRPC service in Conduit](#option-2-exposing-a-grpc-service-in-conduit)
         * [Chosen option](#chosen-option)
-  * [Questions](#questions)
+    * [Schema storage and service implementation](#schema-storage-and-service-implementation)
+      * [Option 1: Conduit itself is the schema registry](#option-1-conduit-itself-is-the-schema-registry)
+      * [Option 2: A centralized, external schema registry](#option-2-a-centralized-external-schema-registry)
+      * [Chosen option](#chosen-option-1)
+  * [Summary](#summary)
   * [Other considerations](#other-considerations)
 <!-- TOC -->
 
@@ -98,18 +96,6 @@ Following options are possible here:
 TODO
 
 ## Schema operations
-
-### Creating a schema 
-
-TODO
-
-### Updating a schema (evolution and versioning)
-
-TODO
-
-### Fetching a schema
-
-TODO
 
 ## Schema format
 
@@ -308,6 +294,18 @@ fetching schemas need to be aware which Conduit instance is managing them.
 
 Option 2 removes that complexity at the expense of adding a new infrastructure
 item.
+
+## Summary
+
+The following design is proposed: 
+
+Conduit exposes a gRPC service for managing schemas. When Conduit starts a
+connector, it sends the connector its gRPC port. A connector creates and fetches
+schemas through the gRPC service.
+
+Conduit's gRPC service is an abstraction/indirection for an external schema
+registry (such as Apicurio Registry), that is accessed by multiple Conduit
+instances.
 
 ## Other considerations
 
