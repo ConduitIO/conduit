@@ -23,9 +23,9 @@ the [target collections](https://conduit.io/docs/introduction/vocabulary).
 
 To do so, the following is required:
 
-* collection name
-* collection metadata
-* schema
+- collection name
+- collection metadata
+- schema
 
 This design document focuses on the schema support in Conduit in the context of
 the above.
@@ -65,26 +65,27 @@ connector developer to write code, since it doesn't require handling of
 potentially multiple schema types.
 
 A schema consists of following:
-* reference: a string that uniquely identifies a schema in Conduit
-* list of fields, where each field is described with following:
-  * name
-  * type
-  * optional (boolean value)
-  * default value
+- reference: a string that uniquely identifies a schema in Conduit
+- list of fields, where each field is described with following:
+  - name
+  - type
+  - optional (boolean value)
+  - default value
 
 The following types are supported:
-* basic:
-  * boolean
-  * integers: 8, 16, 32, 64-bit 
-  * float: single precision (32-bit) and double precision (64-bit) IEEE 754 floating-point number
-  * bytes
-  * string
-  * timestamp
-* complex:
-  * array
-  * map
-  * struct
-  * union
+
+- basic:
+  - boolean
+  - integers: 8, 16, 32, 64-bit 
+  - float: single precision (32-bit) and double precision (64-bit) IEEE 754 floating-point number
+  - bytes
+  - string
+  - timestamp
+- complex:
+  - array
+  - map
+  - struct
+  - union
 
 Every field in a schema can be marked as optional (nullable).
 
@@ -98,6 +99,8 @@ connectors with Conduit. Here we have two possibilities:
 
 1. The schema is part of the record (e.g. Debezium records)
 2. The schema can be found in a schema registry (e.g. an Avro schema registry)
+
+TBD
 
 ## Schema evolution
 
