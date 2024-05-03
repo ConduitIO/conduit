@@ -95,8 +95,6 @@ Following options are possible here:
 
 TODO
 
-## Schema operations
-
 ## Schema format
 
 A destination connector should work with one schema format only, regardless of
@@ -130,6 +128,38 @@ The following types are supported:
 Every field in a schema can be marked as optional (nullable).
 
 ## Implementation
+
+### Schema storage and service implementation
+
+#### Option 1: Conduit itself is the schema registry
+
+A schema registry can be implemented within Conduit.
+
+#### Option 2: A centralized, external schema registry, accessed through Conduit
+
+A standalone schema service (such
+as [Apicurio Registry](https://www.apicur.io/registry/)) can be used to manage
+schemas. A single schema service deployment is accessed by multiple Conduit
+instances. Connectors access the schema registry through Conduit.
+
+#### Option 3: A centralized, external schema registry, accessed by connectors directly
+
+This option is similar to the above, in the sense that a centralized schema
+registry is used. However, in this option, Conduit is not used as an
+intermediary. Rather, connectors access the schema registry directly. 
+
+#### Chosen option
+
+Option 1 keeps the tech stack simple. However, it also means that connectors
+fetching schemas need to be aware which Conduit instance is managing them.
+
+Options 2 and 3 remove that complexity at the expense of adding a new infrastructure
+item.
+
+Having Conduit as an intermediary makes schema registry updates easier, so
+option 2 is the suggested option.
+
+### Schema format
 
 Conduit exposes a schema service that provides the required schema operations.
 The implementation of the service is discussed in a later section.
@@ -273,27 +303,6 @@ send its gRPC port to the connector via the `Configure` method.
 
 **Option 2** is the chosen method since it offers more clarity and the support
 for remote Conduit instances.
-
-### Schema storage and service implementation
-
-#### Option 1: Conduit itself is the schema registry
-
-A schema registry can be implemented within Conduit. 
-
-#### Option 2: A centralized, external schema registry
-
-A standalone schema service (such
-as [Apicurio Registry](https://www.apicur.io/registry/)) can be used to manage
-schemas. A single schema service deployment is accessed by multiple Conduit
-instances.
-
-#### Chosen option
-
-Option 1 keeps the tech stack simple. However, it also means that connectors
-fetching schemas need to be aware which Conduit instance is managing them.
-
-Option 2 removes that complexity at the expense of adding a new infrastructure
-item.
 
 ## Summary
 
