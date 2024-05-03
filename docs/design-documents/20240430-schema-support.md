@@ -1,4 +1,19 @@
-# Schema support
+<h1>Schema support</h1>
+
+<!-- TOC -->
+  * [The problem](#the-problem)
+  * [Requirements](#requirements)
+  * [Schema format](#schema-format)
+  * [Support for schemas originating from other streaming tools](#support-for-schemas-originating-from-other-streaming-tools)
+  * [Schema evolution](#schema-evolution)
+  * [Implementation](#implementation)
+    * [Schema operations](#schema-operations)
+      * [Option 1: Stream of commands and responses](#option-1-stream-of-commands-and-responses)
+      * [Option 2: Exposing Conduit as a service](#option-2-exposing-conduit-as-a-service)
+      * [Chosen option](#chosen-option)
+  * [Questions](#questions)
+  * [Other considerations](#other-considerations)
+<!-- TOC -->
 
 ## The problem
 
@@ -19,8 +34,8 @@ the above.
 
 1. Records **should not** carry the full schema. 
 
-   Reason: If a record would carry the whole schema, that would increase the
-   record size a lot.
+   Reason: If a record would carry the whole schema, that might increase a
+   record's size significantly.
 2. Sources and destinations need to be able to work with multiple schemas.
    
    Reason: Multiple collections support.
@@ -40,6 +55,8 @@ the above.
    cost of repeatedly fetching the same schema many times (especially over
    gRPC), schemas should be cached by the SDK.
 
+## Non-goals
+
 ## Schema format
 
 A destination connector should work with one schema format only, regardless of
@@ -56,19 +73,36 @@ A schema consists of following:
   * default value
 
 The following types are supported:
-* Primitive:
+* basic:
   * boolean
   * integers: 8, 16, 32, 64-bit 
   * float: single precision (32-bit) and double precision (64-bit) IEEE 754 floating-point number
   * bytes
   * string
-* Complex:
+  * timestamp
+* complex:
   * array
   * map
   * struct
   * union
 
 Every field in a schema can be marked as optional (nullable).
+
+## Support for schemas originating from other streaming tools
+
+Conduit is sometimes used alongside other streaming tools. For example, Kafka
+Connect may be used to read data from a source and write it into a topic.
+Conduit then reads messages from that topic and writes it into a destination. We
+also have the Kafka Connect wrapper which makes it possible to use Kafka Connect
+connectors with Conduit. Here we have two possibilities:
+
+1. The schema is part of the record (e.g. Debezium records)
+2. The schema can be found in a schema registry (e.g. an Avro schema registry)
+
+## Schema evolution
+
+TBD (this section is about checking if a new version of a schema is compatible
+with the previous one)
 
 ## Implementation
 
@@ -131,9 +165,92 @@ message Field {
 }
 ```
 
-A reference to a schema is saved in a new metadata field, `opencdc.schemaID`.
+### Schema storage
 
-### Schema-related operations in connectors
+The schemas are stored in Conduit's database. Currently, there's no need to use
+an external service.
+
+### Schema operations
+
+Source connectors need a way to register a schema, and destination connectors
+need a way to fetch a schema. Regardless of which schema registry is used (an
+internal one in Conduit or an external service), the access should be abstracted
+away and should go through Conduit. With that, we have the following
+implementation options:
+
+#### Option 1: Stream of commands and responses
+
+This pattern is used in WASM processors. A server (in this case: Conduit)
+listens to commands (in this case: via a bidirectional gRPC stream). A client (
+in this case: a connector) sends a command to either register a schema or fetch
+a schema. Conduit receives the command and replies. An example can be seen below:
+
+```protobuf
+rpc CommandStream(stream Command) returns (stream Response);
+```
+
+For different types of commands and response to be supported, `Command`
+and `Response` need to have a `oneof` field where all the possible commands
+and respective responses are listed:
+
+```protobuf
+message Command {
+    oneof cmd {
+        SaveSchemaCommand saveSchemaCmd = 1;
+        // etc.
+   }
+}
+
+message Response {
+  oneof resp {
+    SaveSchemaResponse saveSchemaResp = 1;
+    // etc.
+  }
+}
+```    
+**Advantages**:
+
+1. No additional connection setup. When Conduit starts a connector process, it
+   establishes a connection. The same connection is used for all communication (
+   e.g. configuring a connector, opening, reading/writing records, etc.)
+2. Connector actions (which are planned for a future milestone) might use the
+   same command-and-reply stream.
+
+**Disadvantages**:
+
+1. Separate flow needed to establish a connector to a remote Conduit instance (
+   see [requirement](#requirements) #3).
+2. A single method for all the operations makes both, the server and client
+   implementation, more complex. In Conduit, a single gRPC method needs to check
+   for the command type and then reply with a response. Then the client (i.e.
+   the connector) needs to check the response type. In case multiple commands
+   are sent, we need ordering guarantees.
+
+#### Option 2: Exposing Conduit as a service
+
+Conduit exposes a service to work with schemas. Connectors access the service
+and call methods on the service. 
+
+For this work, a connector (i.e. clients of the schema service) needs Conduit's
+IP address and the gRPC port. The IP address can be fetched
+using [peer](https://pkg.go.dev/google.golang.org/grpc/peer#Peer). Conduit can
+send its gRPC port to the connector via the `Configure` method.
+
+**Advantages**: 
+
+1. Works with a remote Conduit instance (see [requirement](#requirements) #3).
+2. Easy to understand: the gRPC methods, together with requests and responses,
+   can easily be understood from a proto file.
+3. An HTTP API for the schema registry can easily be exposed (if needed).
+
+**Disadvatanges**:
+
+1. Changes needed to communicate Conduit's gRPC port to the connector.
+
+#### Chosen option
+
+**Option 2** is the chosen method since it offers more clarity and the support for
+remote Conduit instances.
 
 ## Questions
 
