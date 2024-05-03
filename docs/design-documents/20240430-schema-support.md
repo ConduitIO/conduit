@@ -3,14 +3,19 @@
 <!-- TOC -->
   * [The problem](#the-problem)
   * [Requirements](#requirements)
+  * [Non-goals](#non-goals)
   * [Schema format](#schema-format)
   * [Support for schemas originating from other streaming tools](#support-for-schemas-originating-from-other-streaming-tools)
-  * [Schema evolution](#schema-evolution)
+      * [Schema is left as part of the record](#schema-is-left-as-part-of-the-record)
+      * [Schema is copied into the schema registry](#schema-is-copied-into-the-schema-registry)
+  * [Schema evolution and versioning](#schema-evolution-and-versioning)
   * [Implementation](#implementation)
-    * [Schema operations](#schema-operations)
-      * [Option 1: Stream of commands and responses](#option-1-stream-of-commands-and-responses)
-      * [Option 2: Exposing Conduit as a service](#option-2-exposing-conduit-as-a-service)
-      * [Chosen option](#chosen-option)
+    * [Schema storage](#schema-storage)
+    * [Schema service](#schema-service)
+      * [Schema service interface](#schema-service-interface)
+        * [Option 1: Stream of commands and responses](#option-1-stream-of-commands-and-responses)
+        * [Option 2: Exposing Conduit as a service](#option-2-exposing-conduit-as-a-service)
+        * [Chosen option](#chosen-option)
   * [Questions](#questions)
   * [Other considerations](#other-considerations)
 <!-- TOC -->
@@ -100,9 +105,13 @@ connectors with Conduit. Here we have two possibilities:
 1. The schema is part of the record (e.g. Debezium records)
 2. The schema can be found in a schema registry (e.g. an Avro schema registry)
 
-TBD
+Following options are possible here:
 
-## Schema evolution
+#### Schema is left as part of the record
+
+#### Schema is copied into the schema registry
+
+## Schema evolution and versioning
 
 TBD (this section is about checking if a new version of a schema is compatible
 with the previous one)
@@ -168,20 +177,23 @@ message Field {
 }
 ```
 
+The Connector SDK will provide Go types and functions to work with schemas, i.e.
+a connector developer won't work with Protobuf directly.
+
 ### Schema storage
 
-The schemas are stored in Conduit's database. Currently, there's no need to use
-an external service.
+The schemas are stored in Conduit's database. Based on the current requirements,
+there's no need to use an external service.
 
-### Schema operations
+### Schema service
 
-Source connectors need a way to register a schema, and destination connectors
-need a way to fetch a schema. Regardless of which schema registry is used (an
-internal one in Conduit or an external service), the access should be abstracted
-away and should go through Conduit. With that, we have the following
-implementation options:
+The following section discusses the implementation of a schema service in Conduit.
 
-#### Option 1: Stream of commands and responses
+#### Schema service interface
+
+This section discusses the schema service's interface.
+
+##### Option 1: Stream of commands and responses
 
 This pattern is used in WASM processors. A server (in this case: Conduit)
 listens to commands (in this case: via a bidirectional gRPC stream). A client (
@@ -229,7 +241,7 @@ message Response {
    the connector) needs to check the response type. In case multiple commands
    are sent, we need ordering guarantees.
 
-#### Option 2: Exposing Conduit as a service
+##### Option 2: Exposing Conduit as a service
 
 Conduit exposes a service to work with schemas. Connectors access the service
 and call methods on the service. 
@@ -250,7 +262,7 @@ send its gRPC port to the connector via the `Configure` method.
 
 1. Changes needed to communicate Conduit's gRPC port to the connector.
 
-#### Chosen option
+##### Chosen option
 
 **Option 2** is the chosen method since it offers more clarity and the support for
 remote Conduit instances.
