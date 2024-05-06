@@ -47,6 +47,8 @@ release:
   prerelease: auto
   mode: append
   footer: |
+    ## Release Artifacts
+
     ### OSX Darwin
     
     - 📦 [conduit_{{ .Version }}_Darwin_arm64.tar.gz](https://conduit.gateway.scarf.sh/conduit/download/{{ .Tag }}/conduit_{{ .Version }}_Darwin_arm64.tar.gz)
