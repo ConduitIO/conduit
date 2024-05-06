@@ -51,7 +51,7 @@ release:
 
     To pull the image, you can execute the following command:
     ```
-    docker pull ghcr.io/conduitio/conduit:{{ .Tag }}
+    docker pull conduit.docker.scarf.sh/conduitio/conduit:{{ .Tag }}
     ```
 nfpms:
   - license: Apache-2.0
