@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+service SchemaService {
+  rpc Create(CreateSchemaRequest) returns (CreateSchemaResponse);
+  rpc Fetch(FetchSchemaRequest) returns (FetchSchemaResponse);
+}
+
+message CreateSchemaRequest {
+  string name = 1;
+  // other fields
+}
+
+message CreateSchemaResponse {
+  string id = 1;
+}
+
+message FetchSchemaRequest {
+  string id = 1;
+}
+message FetchSchemaResponse {}

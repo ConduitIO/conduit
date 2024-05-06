@@ -4,8 +4,10 @@
   * [The problem](#the-problem)
   * [Open questions](#open-questions)
   * [Requirements](#requirements)
-  * [Support for schemas originating from other streaming tools](#support-for-schemas-originating-from-other-streaming-tools)
   * [Schema format](#schema-format)
+  * [Schema operations](#schema-operations)
+    * [Create](#create)
+    * [Fetch](#fetch)
   * [Implementation](#implementation)
     * [Schema storage and service implementation](#schema-storage-and-service-implementation)
       * [Option 1: Conduit itself hosts the schema registry](#option-1-conduit-itself-hosts-the-schema-registry)
@@ -74,11 +76,18 @@ the above.
 5. A source connector should be able to register a schema.
 6. A destination connector should be able to fetch a specific schema.
 7. A destination connector needs a way to know that a schema changed.
-8. The Connector SDK should cache the schemas.
+8. The Connector SDK should provide an API to work with the schemas. 
+9. The Connector SDK should cache the schemas.
 
    Reason: Standalone connectors and Conduit communicate via gRPC. To avoid the
-   cost of repeatedly fetching or creating the same schema many times (especially over
-   gRPC), schemas should be cached by the SDK.
+   cost of repeatedly fetching or creating the same schema many times (
+   especially over gRPC), schemas should be cached by the SDK.
+
+## Non-goals
+
+- Schema auto-generation: Given that a source connector usually has direct
+  access to a source collection, and also knows most about the source types,
+  schema auto-generation is not a requirement.
 
 ## Schema format
 
@@ -110,7 +119,25 @@ The following types are supported:
     - struct
     - union
 
-Every field in a schema can be marked as optional (nullable).
+Every field in a schema can be marked as optional (nullable). Alternatively,
+nullable fields can also be represented as a union of the `null` type and the
+field type. However, simply checking a boolean flag that a field is
+optional/nullable is better developer experience.
+
+## Schema operations
+
+### Create
+
+**Request**: A request to create a schema contains the schema name and at least
+one field.
+
+**Response**: If successful, the new schema's ID is returned. If a schema with
+the same name and field specs exists, no new schema is created, and the existing
+schema's ID is returned.
+
+### Fetch
+
+The only type of fetch supported is fetch by ID.
 
 ## Implementation
 
@@ -118,13 +145,14 @@ Every field in a schema can be marked as optional (nullable).
 
 #### Option 1: Conduit itself hosts the schema registry
 
-A schema registry can be implemented within Conduit.
+The schema registry is implemented as part of Conduit. The schemas are stored in
+Conduit's database.
 
 #### Option 2: A centralized, external schema registry, accessed through Conduit
 
 A standalone schema service (such
-as [Apicurio Registry](https://www.apicur.io/registry/)) can be used to manage
-schemas. A single schema service deployment is accessed by multiple Conduit
+as [Apicurio Registry](https://www.apicur.io/registry/)) is used to manage
+the schemas. A single schema service deployment is accessed by multiple Conduit
 instances. Connectors access the schema registry through Conduit.
 
 #### Option 3: A centralized, external schema registry, accessed by connectors directly
@@ -136,7 +164,8 @@ intermediary. Rather, connectors access the schema registry directly.
 #### Chosen option
 
 Option 1 keeps the tech stack simple. However, it also means that connectors
-fetching schemas need to be aware which Conduit instance is managing them.
+fetching schemas need to be aware which Conduit instance is managing them, which
+is complicating error handling and recovery.
 
 Options 2 and 3 remove that complexity at the expense of adding a new infrastructure
 item.
@@ -208,12 +237,15 @@ message Field {
 }
 ```
 
+Records reference schemas using a new metadata field, `opencdc.schemaID`.
+
 The Connector SDK will provide Go types and functions to work with schemas, i.e.
 a connector developer won't work with Protobuf directly.
 
 #### Schema service interface
 
-This section discusses the schema service's interface.
+This section discusses the schema service's interface. Below we discuss options
+for the communication between Conduit and the connectors.
 
 ##### Option 1: Stream of commands and responses
 
@@ -272,6 +304,31 @@ For this work, a connector (i.e. clients of the schema service) needs Conduit's
 IP address and the gRPC port. The IP address can be fetched
 using [peer](https://pkg.go.dev/google.golang.org/grpc/peer#Peer). Conduit can
 send its gRPC port to the connector via the `Configure` method.
+
+A skeleton of the gRPC definition of the service would be:
+
+```protobuf
+syntax = "proto3";
+
+service SchemaService {
+  rpc Create(CreateSchemaRequest) returns (CreateSchemaResponse);
+  rpc Fetch(FetchSchemaRequest) returns (FetchSchemaResponse);
+}
+
+message CreateSchemaRequest {
+  string name = 1;
+  // other fields
+}
+
+message CreateSchemaResponse {
+  string id = 1;
+}
+
+message FetchSchemaRequest {
+  string id = 1;
+}
+message FetchSchemaResponse {}
+```
 
 **Advantages**: 
 
