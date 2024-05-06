@@ -4,6 +4,7 @@
   * [The problem](#the-problem)
   * [Open questions](#open-questions)
   * [Requirements](#requirements)
+  * [Non-goals](#non-goals)
   * [Schema format](#schema-format)
   * [Schema operations](#schema-operations)
     * [Create](#create)
@@ -58,7 +59,7 @@ the above.
 
 ## Requirements
 
-1. Records **should not** carry the full schema. 
+1. Records **should not** carry the whole schema.
 
    Reason: If a record would carry the whole schema, that might increase a
    record's size significantly.
