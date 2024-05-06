@@ -68,7 +68,8 @@ the above.
    Reason: Pipelines might work together to stream data from A to B, through an
    intermediary C. For example, PostgreSQL to Kafka, and then Kafka to
    Snowflake. Also, in the future, pipelines might run in isolation on different
-   instances.
+   instances. Additionally, Conduit may be used so that there's one pipeline per
+   instance. In such cases, we'd need this feature.
 4. It should be possible for a schema to evolve.
 5. A source connector should be able to register a schema.
 6. A destination connector should be able to fetch a specific schema.
@@ -76,25 +77,8 @@ the above.
 8. The Connector SDK should cache the schemas.
 
    Reason: Standalone connectors and Conduit communicate via gRPC. To avoid the
-   cost of repeatedly fetching the same schema many times (especially over
+   cost of repeatedly fetching or creating the same schema many times (especially over
    gRPC), schemas should be cached by the SDK.
-
-## Support for schemas originating from other streaming tools
-
-Conduit is sometimes used alongside other streaming tools. For example, Kafka
-Connect may be used to read data from a source and write it into a topic.
-Conduit then reads messages from that topic and writes it into a destination. We
-also have the Kafka Connect wrapper which makes it possible to use Kafka Connect
-connectors with Conduit. Here we have two possibilities:
-
-1. The schema is part of the record (e.g. Debezium records)
-2. The schema can be found in a schema registry (e.g. an Avro schema registry)
-
-Following options are possible here:
-1. schema is left as part of the record
-2. schema is copied into the schema registry
-
-TODO
 
 ## Schema format
 
