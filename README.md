@@ -154,7 +154,7 @@ Our Docker images are hosted on GitHub's Container Registry. To run the latest
 Conduit version, you should run the following command:
 
 ```sh
-docker run -p 8080:8080 ghcr.io/conduitio/conduit:latest
+docker run -p 8080:8080 conduit.docker.scarf.sh/conduitio/conduit:latest
 ```
 
 The Docker image includes the [UI](#ui), you can access it by navigating
