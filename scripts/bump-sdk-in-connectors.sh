@@ -19,7 +19,7 @@ SDK_V=$1
 
 for conn in 'file' 'kafka' 'generator' 's3' 'postgres' 'log'
 do
-	cd ../conduit-connector-$conn
+	cd ../conduit-connector-$conn || exit
 
 	echo
 	echo "Working on conduit-connector-$conn"
@@ -36,5 +36,5 @@ do
 
 	gh pr create --fill --head bump-sdk-version-$SDK_V
 
-	cd ../conduit
+	cd ../conduit || exit
 done

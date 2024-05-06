@@ -22,8 +22,6 @@ import (
 )
 
 func TestEnrich_DefaultValues(t *testing.T) {
-	is := is.New(t)
-
 	testCases := []struct {
 		name string
 		have Pipeline
@@ -127,10 +125,50 @@ func TestEnrich_DefaultValues(t *testing.T) {
 			Connectors: nil,
 			Processors: nil,
 		},
+	}, {
+		name: "pipeline3",
+		have: Pipeline{
+			ID:          "pipeline3",
+			Status:      "stopped",
+			Description: "empty",
+			Connectors: []Connector{
+				{ID: "con1"},
+			},
+			Processors: []Processor{
+				{ID: "proc1"},
+			},
+		},
+		want: Pipeline{
+			ID:          "pipeline3",
+			Status:      "stopped",
+			Name:        "pipeline3",
+			Description: "empty",
+			DLQ: DLQ{
+				Plugin:              pipeline.DefaultDLQ.Plugin,
+				Settings:            pipeline.DefaultDLQ.Settings,
+				WindowSize:          &pipeline.DefaultDLQ.WindowSize,
+				WindowNackThreshold: &pipeline.DefaultDLQ.WindowNackThreshold,
+			},
+			Connectors: []Connector{
+				{
+					ID:       "pipeline3:con1",
+					Name:     "con1",
+					Settings: map[string]string{},
+				},
+			},
+			Processors: []Processor{
+				{
+					ID:       "pipeline3:proc1",
+					Workers:  1,
+					Settings: map[string]string{},
+				},
+			},
+		},
 	}}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			is := is.New(t)
 			got := Enrich(tc.have)
 			is.Equal(got, tc.want)
 		})
