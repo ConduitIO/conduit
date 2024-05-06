@@ -62,6 +62,9 @@ func enrichConnectors(mp []Connector, pipelineID string) []Connector {
 		if cfg.Name == "" {
 			cfg.Name = cfg.ID
 		}
+		if cfg.Settings == nil {
+			cfg.Settings = make(map[string]string)
+		}
 		// attach the pipelineID to the connectorID
 		cfg.ID = pipelineID + ":" + cfg.ID
 		cfg.Processors = enrichProcessors(cfg.Processors, cfg.ID)
@@ -79,6 +82,9 @@ func enrichProcessors(mp []Processor, parentID string) []Processor {
 	for i, cfg := range mp {
 		if cfg.Workers == 0 {
 			cfg.Workers = 1
+		}
+		if cfg.Settings == nil {
+			cfg.Settings = make(map[string]string)
 		}
 		cfg.ID = parentID + ":" + cfg.ID
 		out[i] = cfg
