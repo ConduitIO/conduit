@@ -1,56 +1,39 @@
 <h1>Schema support</h1>
 
 <!-- TOC -->
-  * [The problem](#the-problem)
-  * [Open questions](#open-questions)
+  * [The goal](#the-goal)
   * [Requirements](#requirements)
-  * [Non-goals](#non-goals)
-  * [Schema format](#schema-format)
+  * [Schema structure](#schema-structure)
   * [Schema operations](#schema-operations)
     * [Create](#create)
     * [Fetch](#fetch)
   * [Implementation](#implementation)
+    * [Schema format](#schema-format)
+      * [Option 1: Our own schema format](#option-1-our-own-schema-format)
+      * [Option 2: Avro](#option-2-avro)
+      * [Option 3: Protobuf schema](#option-3-protobuf-schema)
+      * [Chosen option](#chosen-option)
     * [Schema storage](#schema-storage)
       * [Option 1: Conduit itself hosts the schema registry](#option-1-conduit-itself-hosts-the-schema-registry)
       * [Option 2: A centralized, external schema registry, accessed through Conduit](#option-2-a-centralized-external-schema-registry-accessed-through-conduit)
       * [Option 3: A centralized, external schema registry, accessed by connectors directly](#option-3-a-centralized-external-schema-registry-accessed-by-connectors-directly)
-      * [Chosen option](#chosen-option)
+      * [Chosen option](#chosen-option-1)
     * [Schema definition](#schema-definition)
     * [Schema service interface](#schema-service-interface)
       * [Option 1: Stream of commands and responses](#option-1-stream-of-commands-and-responses)
       * [Option 2: Exposing a gRPC service in Conduit](#option-2-exposing-a-grpc-service-in-conduit)
-      * [Chosen option](#chosen-option-1)
+      * [Chosen option](#chosen-option-2)
+  * [Connector SDK changes](#connector-sdk-changes)
   * [How are requirements addressed](#how-are-requirements-addressed)
   * [Summary](#summary)
   * [Other considerations](#other-considerations)
 <!-- TOC -->
 
-## The problem
+## The goal
 
-A Conduit user would like to start using a destination connector **without**
-manually setting up
-the [target collections](https://conduit.io/docs/introduction/vocabulary).
-
-To do so, the following is required:
-
-- collection name
-- collection metadata
-- schema
-
-This design document focuses on the schema support in Conduit in the context of
-the above.
-
-## Open questions
-
-1. **Q**: Should Conduit allow schemas from other streaming tools?
-
-   Conduit is sometimes used together with other streaming tools, such as Kafka
-   Connect. For example, Kafka Connect is used to stream data to a topic, and
-   then Conduit is used to read the data from the topic and write it into a
-   destination.
-
-   **A**:
-2. **Q**: Should schemas be available in processors?
+The goal of schema support is to make the information about data types available
+in a pipeline. This is needed to cover a few use cases, such as automatically
+creating a destination collection or propagating schema changes.
 
 ## Requirements
 
@@ -78,14 +61,14 @@ the above.
    Reason: Standalone connectors and Conduit communicate via gRPC. To avoid the
    cost of repeatedly fetching or creating the same schema many times (
    especially over gRPC), schemas should be cached by the SDK.
+10. Schema auto-generation
 
-## Non-goals
+    Reason: Schema auto-generation is a useful feature when working with data
+    sources that have structured data encoded into a binary format (e.g. a JSON
+    file). In such cases, it's useful to have the schema auto-generated as a
+    starting point for further processing and/or writing into a destination.
 
-- Schema auto-generation: Given that a source connector usually has direct
-  access to a source collection, and also knows most about the source types,
-  schema auto-generation is not a requirement.
-
-## Schema format
+## Schema structure
 
 A destination connector should work with one schema format only, regardless of
 the underlying or intermediary schema formats used. This makes it easy for a
@@ -160,83 +143,14 @@ intermediary. Rather, connectors access the schema registry directly.
 #### Chosen option
 
 Option 1 keeps the tech stack simple. However, it also means that connectors
-fetching schemas need to be aware which Conduit instance is managing them, which
-is complicating error handling and recovery.
+fetching schemas need to be aware which Conduit instance is managing them (so
+they can connect to it), which is complicating error handling and recovery.
 
-Options 2 and 3 remove that complexity at the expense of adding a new infrastructure
-item.
+Options 2 and 3 remove that complexity at the expense of adding a new
+infrastructure item.
 
 Having Conduit as an intermediary makes schema registry updates easier, so
 option 2 is the suggested option.
-
-### Schema definition
-
-Conduit exposes a schema service that provides the required schema operations.
-The implementation of the service is discussed in a later section.
-
-Schema support is added as part of the OpenCDC standard. A schema is represented
-by the following Protobuf message:
-
-```protobuf
-syntax = "proto3";
-
-message Schema {
-  string id = 1;
-  repeated Field fields = 2;
-}
-
-message FieldType {
-  oneof type {
-    PrimitiveFieldType primitiveType = 1;
-    ArrayType arrayType = 2;
-    MapType mapType = 3;
-    StructType structType = 4;
-    UnionType unionType = 5;
-  }
-}
-
-enum PrimitiveFieldType {
-  BOOLEAN = 0;
-  INT8 = 1;
-  // other primitive types
-}
-
-message ArrayType {
-  FieldType elementType = 1;
-}
-
-message MapType {
-  FieldType keyType = 1;
-  FieldType valueType = 2;
-}
-
-message StructType {
-  repeated Field fields = 1;
-}
-
-message UnionType {
-  repeated FieldType types = 1;
-}
-
-message Field {
-  string name = 1;
-  oneof type {
-    PrimitiveFieldType primitiveType = 2;
-    ArrayType arrayType = 3;
-    MapType mapType = 4;
-    StructType structType = 5;
-    UnionType unionType = 6;
-  }
-  bool optional = 7;
-  // todo: find appropriate type
-  any defaultValue = 8;
-}
-```
-
-Records reference schemas using a new metadata field, `opencdc.schemaID`.
-
-The Connector SDK will provide Go types and functions to work with schemas, i.e.
-a connector developer won't work with Protobuf directly.
 
 ### Schema service interface
 
@@ -333,7 +247,7 @@ message FetchSchemaResponse {}
    can easily be understood from a proto file.
 3. An HTTP API for the schema registry can easily be exposed (if needed).
 
-**Disadvatanges**:
+**Disadvantages**:
 
 1. Changes needed to communicate Conduit's gRPC port to the connector.
 
@@ -341,6 +255,69 @@ message FetchSchemaResponse {}
 
 **Option 2** is the chosen method since it offers more clarity and the support
 for remote Conduit instances.
+
+### Schema format
+
+This section discusses the schema format to be used.
+
+There are two aspects of this:
+
+- the schema format used internally (when registering a schema in the schema
+  service, updating it, fetching, etc.)
+- the schema format exposed to connector developers (through the Connector SDK)
+
+Having them different makes only sense if we expose our own format in the
+Connector SDK. The internal format is dictated by the external schema registry
+that we will use, which supports only widely known formats, i.e. we won't be
+able to use our own schema format for that purpose.
+
+With that, having our own schema format in the Connector SDK that is converted
+to another schema format in Conduit is justified if, for example:
+
+- we want to decouple the Connector SDK and Conduit release cycle from the
+  schema format release cycle
+- we want to limit or add feature on top of the schema format
+
+#### Option 1: Our own schema format
+
+**Advantages**:
+
+1. Allows us to implement a minimal set of features.
+
+**Disadvantages**:
+
+1. Requires to develop tooling (which may or may not be a big effort depending
+   on the schema features we'd like to support).
+2. Requires a learning path for connector developers.
+3. As discussed below, we'll use an external service for managing schemas. With
+   that, we'll be transforming our schema format into one that is compatible
+   with the schema service.
+
+#### Option 2: Avro
+
+We use Avro as the schema format used by the Connector SDK and internally.
+
+**Advantages**:
+
+1. Minimal work on the implementation.
+2. A widely used schema format.
+
+**Disadvantages**:
+
+#### Option 3: Protobuf schema
+
+**Advantages**
+
+TBD
+
+**Disadvantages**:
+
+TBD
+
+#### Chosen option
+
+Option 1 is good for a limited set of features, however, we'd like to have
+extensive support for managing schemas.
 
 ## Connector SDK changes
 
