@@ -183,6 +183,75 @@ option 2 is the suggested option.
 
 However, **our goal is to eventually implement option 1**.
 
+### Schema format
+
+This section discusses the schema format to be used.
+
+There are two aspects of this:
+
+- the schema format used internally (when registering a schema in the schema
+  service, updating it, fetching, etc.)
+- the schema format exposed to connector developers (through the Connector SDK)
+
+Having them different makes only sense if we expose our own format in the
+Connector SDK. The internal format is dictated by the schema registry that we
+will use, which supports only widely known formats, i.e. we won't be able to use
+our own schema format for that purpose.
+
+Advantages of that approach are:
+
+1. We can decouple the Connector SDK and Conduit release cycle from the schema
+   format release cycle
+2. We want to limit or add feature on top of the schema format
+3. We can more easily switch the internal schema format, if needed
+
+The disadvantages are:
+
+1. Newer features and fixes in the schema format used internally (e.g. Avro)
+   sometimes need to be explicitly added to the schema format used
+2. Code is mostly duplicated
+
+#### Option 1: Our own schema format
+
+**Advantages**:
+
+1. Allows us to implement a minimal set of features.
+
+**Disadvantages**:
+
+1. Requires to develop tooling (which may or may not be a big effort depending
+   on the schema features we'd like to support).
+2. Requires a learning path for connector developers.
+3. As discussed below, we'll use an external service for managing schemas. With
+   that, we'll be transforming our schema format into one that is compatible
+   with the schema service.
+
+#### Option 2: Avro
+
+We use Avro as the schema format used by the Connector SDK and internally.
+
+**Advantages**:
+
+1. Minimal work on the implementation.
+2. A widely used schema format.
+
+**Disadvantages**:
+
+#### Option 3: Protobuf schema
+
+**Advantages**
+
+TBD
+
+**Disadvantages**:
+
+TBD
+
+#### Chosen option
+
+Option 1 is good for a limited set of features, however, we'd like to have
+extensive support for managing schemas.
+
 ### Schema service interface
 
 This section discusses the schema service's interface. Below we discuss options
@@ -286,69 +355,6 @@ message FetchSchemaResponse {}
 
 **Option 2** is the chosen method since it offers more clarity and the support
 for remote Conduit instances.
-
-### Schema format
-
-This section discusses the schema format to be used.
-
-There are two aspects of this:
-
-- the schema format used internally (when registering a schema in the schema
-  service, updating it, fetching, etc.)
-- the schema format exposed to connector developers (through the Connector SDK)
-
-Having them different makes only sense if we expose our own format in the
-Connector SDK. The internal format is dictated by the external schema registry
-that we will use, which supports only widely known formats, i.e. we won't be
-able to use our own schema format for that purpose.
-
-With that, having our own schema format in the Connector SDK that is converted
-to another schema format in Conduit is justified if, for example:
-
-- we want to decouple the Connector SDK and Conduit release cycle from the
-  schema format release cycle
-- we want to limit or add feature on top of the schema format
-
-#### Option 1: Our own schema format
-
-**Advantages**:
-
-1. Allows us to implement a minimal set of features.
-
-**Disadvantages**:
-
-1. Requires to develop tooling (which may or may not be a big effort depending
-   on the schema features we'd like to support).
-2. Requires a learning path for connector developers.
-3. As discussed below, we'll use an external service for managing schemas. With
-   that, we'll be transforming our schema format into one that is compatible
-   with the schema service.
-
-#### Option 2: Avro
-
-We use Avro as the schema format used by the Connector SDK and internally.
-
-**Advantages**:
-
-1. Minimal work on the implementation.
-2. A widely used schema format.
-
-**Disadvantages**:
-
-#### Option 3: Protobuf schema
-
-**Advantages**
-
-TBD
-
-**Disadvantages**:
-
-TBD
-
-#### Chosen option
-
-Option 1 is good for a limited set of features, however, we'd like to have
-extensive support for managing schemas.
 
 ## Connector SDK changes
 
