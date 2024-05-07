@@ -47,6 +47,31 @@ release:
   prerelease: auto
   mode: append
   footer: |
+    ## Release Artifacts
+
+    ### OSX Darwin
+    
+    - 📦 [conduit_{{ .Version }}_Darwin_arm64.tar.gz](https://conduit.gateway.scarf.sh/conduit/download/{{ .Tag }}/conduit_{{ .Version }}_Darwin_arm64.tar.gz)
+    - 📦 [conduit_{{ .Version }}_Darwin_x86_64.tar.gz](https://conduit.gateway.scarf.sh/conduit/download/{{ .Tag }}/conduit_{{ .Version }}_Darwin_x86_64.tar.gz)
+    
+    ### Linux
+    
+    - 📦 [conduit_{{ .Version }}_Linux_arm64.deb](https://conduit.gateway.scarf.sh/conduit/download/{{ .Tag }}/conduit_{{ .Version }}_Linux_arm64.deb)
+    - 📦 [conduit_{{ .Version }}_Linux_arm64.rpm](https://conduit.gateway.scarf.sh/conduit/download/{{ .Tag }}/conduit_{{ .Version }}_Linux_arm64.rpm)
+    - 📦 [conduit_{{ .Version }}_Linux_arm64.tar.gz](https://conduit.gateway.scarf.sh/conduit/download/{{ .Tag }}/conduit_{{ .Version }}_Linux_arm64.tar.gz)
+    - 📦 [conduit_{{ .Version }}_Linux_i386.deb](https://conduit.gateway.scarf.sh/conduit/download/{{ .Tag }}/conduit_{{ .Version }}_Linux_i386.deb)
+    - 📦 [conduit_{{ .Version }}_Linux_i386.rpm](https://conduit.gateway.scarf.sh/conduit/download/{{ .Tag }}/conduit_{{ .Version }}_Linux_i386.rpm)
+    - 📦 [conduit_{{ .Version }}_Linux_i386.tar.gz](https://conduit.gateway.scarf.sh/conduit/download/{{ .Tag }}/conduit_{{ .Version }}_Linux_i386.tar.gz)
+    - 📦 [conduit_{{ .Version }}_Linux_x86_64.deb](https://conduit.gateway.scarf.sh/conduit/download/{{ .Tag }}/conduit_{{ .Version }}_Linux_x86_64.deb)
+    - 📦 [conduit_{{ .Version }}_Linux_x86_64.rpm](https://conduit.gateway.scarf.sh/conduit/download/{{ .Tag }}/conduit_{{ .Version }}_Linux_x86_64.rpm)
+    - 📦 [conduit_{{ .Version }}_Linux_x86_64.tar.gz](https://conduit.gateway.scarf.sh/conduit/download/{{ .Tag }}/conduit_{{ .Version }}_Linux_x86_64.tar.gz)
+    
+    ### Windows
+    
+    - 📦 [conduit_{{ .Version }}_Windows_arm64.zip](https://conduit.gateway.scarf.sh/conduit/download/{{ .Tag }}/conduit_{{ .Version }}_Windows_arm64.zip)
+    - 📦 [conduit_{{ .Version }}_Windows_i386.zip](https://conduit.gateway.scarf.sh/conduit/download/{{ .Tag }}/conduit_{{ .Version }}_Windows_i386.zip)
+    - 📦 [conduit_{{ .Version }}_Windows_x86_64.zip](https://conduit.gateway.scarf.sh/conduit/download/{{ .Tag }}/conduit_{{ .Version }}_Windows_x86_64.zip)
+
     ## Docker images
 
     To pull the image, you can execute the following command:
