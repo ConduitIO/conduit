@@ -127,30 +127,61 @@ The only type of fetch supported is fetch by ID.
 The schema registry is implemented as part of Conduit. The schemas are stored in
 Conduit's database.
 
+**Advantages**
+
+1. The tech stack is kept simple. One of the primary goals of Conduit is ease of
+   deployment.
+2. The schema operations that need to be implemented are relatively simple.
+
+**Disadvantages**:
+
+1. Implementing replication, fail-over, etc. to make the schema service
+   production ready will require some time.
+
 #### Option 2: A centralized, external schema registry, accessed through Conduit
 
 A standalone schema service (such
 as [Apicurio Registry](https://www.apicur.io/registry/)) is used to manage
 the schemas. A single schema service deployment is accessed by multiple Conduit
-instances. Connectors access the schema registry through Conduit.
+instances. **Connectors access the schema registry through Conduit**.
+
+**Advantages**:
+
+1. Shortens the time to implement schema support in Conduit.
+2. The schema service can be more easily changed.
+
+**Disadvantages**:
+
+1. Makes the tech stack more complex.
 
 #### Option 3: A centralized, external schema registry, accessed by connectors directly
 
 This option is similar to the above, in the sense that a centralized schema
 registry is used. However, in this option, Conduit is not used as an
-intermediary. Rather, connectors access the schema registry directly. 
+intermediary. Rather, **connectors access the schema registry directly**. 
+
+**Advantages**:
+
+1. Shortens the time to implement schema support in Conduit.
+
+**Disadvantages**:
+
+1. Makes the tech stack more complex.
+2. Connectors need to follow the schema service's upgrades more closely.
 
 #### Chosen option
 
-Option 1 keeps the tech stack simple. However, it also means that connectors
-fetching schemas need to be aware which Conduit instance is managing them (so
-they can connect to it), which is complicating error handling and recovery.
+Option 1 keeps the tech stack simple and is in line with Conduit's philosophy of
+being deployed as a single binary. However, without replication, fail-over, etc.
+it cannot be considered production ready.
 
 Options 2 and 3 remove that complexity at the expense of adding a new
 infrastructure item.
 
 Having Conduit as an intermediary makes schema registry updates easier, so
 option 2 is the suggested option.
+
+However, **our goal is to eventually implement option 1**.
 
 ### Schema service interface
 
