@@ -34,8 +34,15 @@ func ConnectorConfig(in *apiv1.Connector_Config) connector.Config {
 	if in == nil {
 		return connector.Config{}
 	}
+
+	settings := in.Settings
+
+	if settings == nil {
+		settings = make(map[string]string)
+	}
+
 	return connector.Config{
 		Name:     in.Name,
-		Settings: in.Settings,
+		Settings: settings,
 	}
 }
