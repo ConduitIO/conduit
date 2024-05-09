@@ -4,8 +4,8 @@
 4d63.com/gochecknoglobals v0.2.1/go.mod h1:KRE8wtJB3CXCsb1xy421JfTHIIbmT3U5ruxw2Qu8fSU=
 buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.33.0-20240401165935-b983156c5e99.1 h1:2IGhRovxlsOIQgx2ekZWo4wTPAYpck41+18ICxs37is=
 buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.33.0-20240401165935-b983156c5e99.1/go.mod h1:Tgn5bgL220vkFOI0KPStlcClPeOJzAv4uT+V8JXGUnw=
-buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go v1.34.1-20240507201547-18e8bf1967c9.1 h1:bZAkXphdseSRNwImzis1/0yt9HP9FUrt600jH378pqo=
-buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go v1.34.1-20240507201547-18e8bf1967c9.1/go.mod h1:gUfBTdJmhwTJHoIaOQjy7xczHhqjkQfXSKs5TY4IsUY=
+buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go v1.34.1-20240508200658-39c2d8800e78.1 h1:j/+aQpI7XJJHv7ZiRghlTzevRAof6UFma3Oi/NFrNbw=
+buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go v1.34.1-20240508200658-39c2d8800e78.1/go.mod h1:gUfBTdJmhwTJHoIaOQjy7xczHhqjkQfXSKs5TY4IsUY=
 cloud.google.com/go v0.26.0/go.mod h1:aQUYkXzVsufM+DwF1aE+0xfcU+56JwCaLick0ClmMTw=
 cloud.google.com/go v0.34.0/go.mod h1:aQUYkXzVsufM+DwF1aE+0xfcU+56JwCaLick0ClmMTw=
 cloud.google.com/go v0.38.0/go.mod h1:990N+gfupTy94rShfmMCWGDn0LpTmnzTp2qbd1dvSRU=
@@ -82,8 +82,8 @@ contrib.go.opencensus.io/exporter/stackdriver v0.13.10/go.mod h1:I5htMbyta491eUx
 contrib.go.opencensus.io/integrations/ocsql v0.1.7/go.mod h1:8DsSdjz3F+APR+0z0WkU1aRorQCFfRxvqjUUPMbF3fE=
 dmitri.shuralyov.com/gpu/mtl v0.0.0-20190408044501-666a987793e9/go.mod h1:H6x//7gZCb22OMCxBHrMx7a5I7Hp++hsVxbQ4BYO7hU=
 gioui.org v0.0.0-20210308172011-57750fc8a0a6/go.mod h1:RSH6KIUZ0p2xy5zHDxgAM4zumjgTw83q2ge/PI+yyw8=
-github.com/4meepo/tagalign v1.3.3 h1:ZsOxcwGD/jP4U/aw7qeWu58i7dwYemfy5Y+IF1ACoNw=
-github.com/4meepo/tagalign v1.3.3/go.mod h1:Q9c1rYMZJc9dPRkbQPpcBNCLEmY2njbAsXhQOZFE2dE=
+github.com/4meepo/tagalign v1.3.4 h1:P51VcvBnf04YkHzjfclN6BbsopfJR5rxs1n+5zHt+w8=
+github.com/4meepo/tagalign v1.3.4/go.mod h1:M+pnkHH2vG8+qhE5bVc/zeP7HS/j910Fwa9TUSyZVI0=
 github.com/Abirdcfly/dupword v0.0.14 h1:3U4ulkc8EUo+CaT105/GJ1BQwtgyj6+VaBVbAX11Ba8=
 github.com/Abirdcfly/dupword v0.0.14/go.mod h1:VKDAbxdY8YbKUByLGg8EETzYSuC4crm9WwI6Y3S0cLI=
 github.com/Antonboom/errname v0.1.13 h1:JHICqsewj/fNckzrfVSe+T33svwQxmjC+1ntDsHOVvM=
@@ -445,8 +445,8 @@ github.com/fzipp/gocyclo v0.6.0/go.mod h1:rXPyn8fnlpa0R2csP/31uerbiVBugk5whMdlya
 github.com/gammazero/deque v0.2.1 h1:qSdsbG6pgp6nL7A0+K/B7s12mcCY/5l5SIUpMOl+dC0=
 github.com/gammazero/deque v0.2.1/go.mod h1:LFroj8x4cMYCukHJDbxFCkT+r9AndaJnFMuZDV34tuU=
 github.com/ghodss/yaml v1.0.0/go.mod h1:4dBDuWmgqj2HViK6kFavaiC9ZROes6MMH2rRYeMEF04=
-github.com/ghostiam/protogetter v0.3.5 h1:+f7UiF8XNd4w3a//4DnusQ2SZjPkUjxkMEfjbxOK4Ug=
-github.com/ghostiam/protogetter v0.3.5/go.mod h1:7lpeDnEJ1ZjL/YtyoN99ljO4z0pd3H0d18/t2dPBxHw=
+github.com/ghostiam/protogetter v0.3.6 h1:R7qEWaSgFCsy20yYHNIJsU9ZOb8TziSRRxuAOTVKeOk=
+github.com/ghostiam/protogetter v0.3.6/go.mod h1:7lpeDnEJ1ZjL/YtyoN99ljO4z0pd3H0d18/t2dPBxHw=
 github.com/gin-contrib/sse v0.1.0/go.mod h1:RHrZQHXnP2xjPF+u1gW/2HnVO7nvIa9PG3Gm+fLHvGI=
 github.com/gin-gonic/gin v1.6.3/go.mod h1:75u5sXoLsGZoRN5Sgbi1eraJ4GU3++wFwWzhwvtwp4M=
 github.com/gin-gonic/gin v1.7.3/go.mod h1:jD2toBW3GZUr5UMcdrwQA10I7RuaFOl/SGeDjXkfUtY=
@@ -577,8 +577,8 @@ github.com/golangci/dupl v0.0.0-20180902072040-3e9179ac440a h1:w8hkcTqaFpzKqonE9
 github.com/golangci/dupl v0.0.0-20180902072040-3e9179ac440a/go.mod h1:ryS0uhF+x9jgbj/N71xsEqODy9BN81/GonCZiOzirOk=
 github.com/golangci/gofmt v0.0.0-20231018234816-f50ced29576e h1:ULcKCDV1LOZPFxGZaA6TlQbiM3J2GCPnkx/bGF6sX/g=
 github.com/golangci/gofmt v0.0.0-20231018234816-f50ced29576e/go.mod h1:Pm5KhLPA8gSnQwrQ6ukebRcapGb/BG9iUkdaiCcGHJM=
-github.com/golangci/golangci-lint v1.58.0 h1:r8duFARMJ0VdSM9tDXAdt2+f57dfZQmagvYX6kmkUKQ=
-github.com/golangci/golangci-lint v1.58.0/go.mod h1:WAY3BnSLvTUEv41Q0v3ZFzNybLRF+a7Vd9Da8Jx9Eqo=
+github.com/golangci/golangci-lint v1.58.1 h1:IYKjkt7nofq/mYXiDUyJiBZQi5kxD0jPCjBy6VXxjz8=
+github.com/golangci/golangci-lint v1.58.1/go.mod h1:IX9uSbhwDDOVTcceKZWmshlally+fOQYv1pZhIJCMNw=
 github.com/golangci/misspell v0.5.1 h1:/SjR1clj5uDjNLwYzCahHwIOPmQgoH04AyQIiWGbhCM=
 github.com/golangci/misspell v0.5.1/go.mod h1:keMNyY6R9isGaSAu+4Q8NMBwMPkh15Gtc8UCVoDtAWo=
 github.com/golangci/modinfo v0.3.4 h1:oU5huX3fbxqQXdfspamej74DFX0kyGLkw1ppvXoJ8GA=
