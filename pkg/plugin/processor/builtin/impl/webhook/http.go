@@ -44,8 +44,10 @@ type httpConfig struct {
 	URL string `json:"request.url" validate:"required"`
 	// Method is the HTTP request method to be used.
 	Method string `json:"request.method" default:"GET"`
-	// The value of the `Content-Type` header.
+	// Deprecated: use `headers.Content-Type` instead.
 	ContentType string `json:"request.contentType" default:"application/json"`
+	// Headers to add to the request, use headers.* to specify the key and set its value, ex: "headers.Authorization"="Bearer key".
+	Headers map[string]string
 
 	// Maximum number of retries for an individual record when backing off following an error.
 	BackoffRetryCount float64 `json:"backoffRetry.count" default:"0" validate:"gt=-1"`
@@ -108,6 +110,11 @@ func (p *httpProcessor) Configure(ctx context.Context, m map[string]string) erro
 		return cerrors.Errorf("failed parsing configuration: %w", err)
 	}
 
+	err = p.validateHeaders()
+	if err != nil {
+		return err
+	}
+
 	if p.config.ResponseBodyRef == p.config.ResponseStatusRef {
 		return cerrors.New("invalid configuration: response.body and response.status set to same field")
 	}
@@ -152,6 +159,23 @@ func (p *httpProcessor) Configure(ctx context.Context, m map[string]string) erro
 		Factor: p.config.BackoffRetryFactor,
 		Min:    p.config.BackoffRetryMin,
 		Max:    p.config.BackoffRetryMax,
+	}
+	return nil
+}
+
+func (p *httpProcessor) validateHeaders() error {
+	if p.config.Headers != nil {
+		_, ok := p.config.Headers["Content-Type"]
+		if p.config.ContentType != "" && ok {
+			return cerrors.Errorf("Configuration error, cannot provide both \"request.contentType\" and \"headers.Content-Type\", use \"headers.Content-Type\" only.")
+		}
+		if p.config.ContentType != "" && !ok {
+			p.config.Headers["Content-Type"] = p.config.ContentType
+		}
+	}
+	if p.config.Headers == nil && p.config.ContentType != "" {
+		p.config.Headers = make(map[string]string)
+		p.config.Headers["Content-Type"] = p.config.ContentType
 	}
 	return nil
 }
@@ -293,8 +317,10 @@ func (p *httpProcessor) buildRequest(ctx context.Context, r opencdc.Record) (*ht
 		return nil, cerrors.Errorf("error creating HTTP request: %w", err)
 	}
 
-	// todo make it possible to add more headers, e.g. auth headers etc.
-	req.Header.Set("Content-Type", p.config.ContentType)
+	// set header values
+	for key, val := range p.config.Headers {
+		req.Header.Set(key, val)
+	}
 
 	return req, nil
 }

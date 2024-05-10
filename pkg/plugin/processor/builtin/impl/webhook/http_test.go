@@ -141,6 +141,19 @@ func TestHTTPProcessor_Configure(t *testing.T) {
 			wantErr: "",
 		},
 		{
+			name: "invalid, request.contentType and headers.Content-Type are both specified",
+			config: map[string]string{
+				"request.url":          "http://example.com",
+				"request.contentType":  "application/json",
+				"headers.Content-Type": "application/json",
+				"backoffRetry.count":   "1",
+				"backoffRetry.min":     "10ms",
+				"backoffRetry.max":     "1s",
+				"backoffRetry.factor":  "1.3",
+			},
+			wantErr: "Configuration error, cannot provide both \"request.contentType\" and \"headers.Content-Type\", use \"headers.Content-Type\" only.",
+		},
+		{
 			name: "invalid: same value of response.body and response.status",
 			config: map[string]string{
 				"request.url":     "http://example.com",
