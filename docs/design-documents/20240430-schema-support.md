@@ -200,18 +200,18 @@ Connector SDK. The internal format is dictated by the schema registry that we
 will use, which supports only widely known formats, i.e. we won't be able to use
 our own schema format for that purpose.
 
-Advantages of that approach are:
-
+**Advantages**:
 1. We can decouple the Connector SDK and Conduit release cycle from the schema
-   format release cycle
-2. We want to limit or add feature on top of the schema format
+   internal format release cycle
+2. We want to limit or add feature on top of internal the schema format
 3. We can more easily switch the internal schema format, if needed
 
-The disadvantages are:
+**Disadvantages**:
 
 1. Newer features and fixes in the schema format used internally (e.g. Avro)
    sometimes need to be explicitly added to the schema format used
 2. Boilerplate code that converts the SDK schema into the internal schema
+3. Boilerplate code that exposes schema-related operations (encode/decode record payloads)
 
 #### Internal schema format
 
@@ -287,9 +287,7 @@ message Response {
 
 **Disadvantages**:
 
-1. Separate flow needed to establish a connector to a remote Conduit instance (
-   see [requirement](#requirements) #3).
-2. A single method for all the operations makes both, the server and client
+1. A single method for all the operations makes both, the server and client
    implementation, more complex. In Conduit, a single gRPC method needs to check
    for the command type and then reply with a response. Then the client (i.e.
    the connector) needs to check the response type. In case multiple commands
@@ -332,10 +330,9 @@ message FetchSchemaResponse {}
 
 **Advantages**: 
 
-1. Works with a remote Conduit instance (see [requirement](#requirements) #3).
-2. Easy to understand: the gRPC methods, together with requests and responses,
+1. Easy to understand: the gRPC methods, together with requests and responses,
    can easily be understood from a proto file.
-3. An HTTP API for the schema registry can easily be exposed (if needed).
+2. An HTTP API for the schema registry can easily be exposed (if needed).
 
 **Disadvantages**:
 
@@ -409,3 +406,6 @@ instances.
    permissions then just writing data to a collection. For some users, the
    benefit of having restricted permissions might outweigh the benefit of
    auto-creating collections.
+2. **OpenCDC structured data**: it's becoming less useful, because it's types
+   are limited. With the schema support, OpenCDC's `RawData` can be used
+   everywhere.
