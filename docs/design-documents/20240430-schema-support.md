@@ -8,22 +8,24 @@
     * [Create](#create)
     * [Fetch](#fetch)
   * [Implementation](#implementation)
-    * [Schema format](#schema-format)
-      * [Option 1: Our own schema format](#option-1-our-own-schema-format)
-      * [Option 2: Avro](#option-2-avro)
-      * [Option 3: Protobuf schema](#option-3-protobuf-schema)
-      * [Chosen option](#chosen-option)
     * [Schema storage](#schema-storage)
       * [Option 1: Conduit itself hosts the schema registry](#option-1-conduit-itself-hosts-the-schema-registry)
       * [Option 2: A centralized, external schema registry, accessed through Conduit](#option-2-a-centralized-external-schema-registry-accessed-through-conduit)
       * [Option 3: A centralized, external schema registry, accessed by connectors directly](#option-3-a-centralized-external-schema-registry-accessed-by-connectors-directly)
+      * [Chosen option](#chosen-option)
+    * [Schema format](#schema-format)
+      * [Internal schema format](#internal-schema-format)
+        * [Option 1: Avro](#option-1-avro)
+        * [Option 2: Protobuf schema](#option-2-protobuf-schema)
       * [Chosen option](#chosen-option-1)
-    * [Schema definition](#schema-definition)
     * [Schema service interface](#schema-service-interface)
       * [Option 1: Stream of commands and responses](#option-1-stream-of-commands-and-responses)
       * [Option 2: Exposing a gRPC service in Conduit](#option-2-exposing-a-grpc-service-in-conduit)
       * [Chosen option](#chosen-option-2)
-  * [Connector SDK changes](#connector-sdk-changes)
+  * [Required changes](#required-changes)
+    * [Conduit](#conduit)
+    * [Connector SDK](#connector-sdk)
+    * [Processor SDK](#processor-sdk)
   * [How are requirements addressed](#how-are-requirements-addressed)
   * [Summary](#summary)
   * [Other considerations](#other-considerations)
@@ -209,48 +211,36 @@ The disadvantages are:
 
 1. Newer features and fixes in the schema format used internally (e.g. Avro)
    sometimes need to be explicitly added to the schema format used
-2. Code is mostly duplicated
+2. Boilerplate code that converts the SDK schema into the internal schema
 
-#### Option 1: Our own schema format
+#### Internal schema format
 
-**Advantages**:
-
-1. Allows us to implement a minimal set of features.
-
-**Disadvantages**:
-
-1. Requires to develop tooling (which may or may not be a big effort depending
-   on the schema features we'd like to support).
-2. Requires a learning path for connector developers.
-3. As discussed below, we'll use an external service for managing schemas. With
-   that, we'll be transforming our schema format into one that is compatible
-   with the schema service.
-
-#### Option 2: Avro
+##### Option 1: Avro
 
 We use Avro as the schema format used by the Connector SDK and internally.
 
 **Advantages**:
 
-1. Minimal work on the implementation.
+1. Schema is a first-class citizen
 2. A widely used schema format.
+3. A popular option with Kafka Connect (makes it easier for users to migrate)
 
 **Disadvantages**:
 
-#### Option 3: Protobuf schema
+##### Option 2: Protobuf schema
 
 **Advantages**
 
-TBD
+1. Faster (de)serialization
 
 **Disadvantages**:
 
-TBD
+1. Protobuf libs don't offer a way to create a `.proto` file, i.e. that needs to
+   be done manually.
 
 #### Chosen option
 
-Option 1 is good for a limited set of features, however, we'd like to have
-extensive support for managing schemas.
+
 
 ### Schema service interface
 
@@ -356,9 +346,22 @@ message FetchSchemaResponse {}
 **Option 2** is the chosen method since it offers more clarity and the support
 for remote Conduit instances.
 
-## Connector SDK changes
+## Required changes
 
-TBD
+### Conduit
+
+Conduit needs to expose a gRPC service as explained above. The schema service
+might need[1] to convert the schema format into one that Apicurio Registry
+supports. The gRPC needs to be able to work with an Apicurio Registry. 
+
+When starting or configuring a connector, Conduit needs to send it its gRPC
+port.
+
+[1] This depends on whether we decide to use our own format in the Connector SDK.
+
+### Connector SDK
+
+### Processor SDK
 
 ## How are requirements addressed
 
