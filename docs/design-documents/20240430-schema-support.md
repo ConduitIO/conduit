@@ -240,7 +240,12 @@ We use Avro as the schema format used by the Connector SDK and internally.
 
 #### Chosen option
 
+The schema registry that we plan to use (Apicurio Registry) is not constrained
+to a single schema. Similar is true for Conduit as well.
 
+Hence, we can make it possible for multiple schema formats to be used. The first
+one to be supported is Avro. The Connector SDK will provide utility functions to
+make building schemas easier.
 
 ### Schema service interface
 
@@ -347,16 +352,24 @@ for remote Conduit instances.
 
 ### Conduit
 
-Conduit needs to expose a gRPC service as explained above. The schema service
-might need[1] to convert the schema format into one that Apicurio Registry
-supports. The gRPC needs to be able to work with an Apicurio Registry. 
+Conduit needs to expose a gRPC service as explained above. The gRPC service
+exposes methods needed for connectors to work with schemas.
 
 When starting or configuring a connector, Conduit needs to send it its gRPC
 port.
 
-[1] This depends on whether we decide to use our own format in the Connector SDK.
+Internally, Conduit will use the Apicurio Registry to work with schemas. In future,
+we plan to migrate to our own schema registry so that the tech stack is kept
+simple and Conduit can be run with a single binary.
 
 ### Connector SDK
+
+For the needs of source connectors, the Connector SDK needs to provide the
+following functions:
+
+1. A function/builder that builds an Avro schema.
+2. A function that registers a schema.
+3. A function that encodes a value using the built schema.
 
 ### Processor SDK
 
