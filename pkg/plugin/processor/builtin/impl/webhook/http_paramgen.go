@@ -39,7 +39,7 @@ func (httpConfig) Parameters() map[string]config.Parameter {
 		},
 		"headers.*": {
 			Default:     "",
-			Description: "Headers to add to the request, use headers.* to specify the key and set its value, ex: \"headers.Authorization\"=\"Bearer key\".",
+			Description: "Headers to add to the request, use `headers.*` to specify the header and its value (e.g. `headers.Authorization: \"Bearer key\"`).",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},

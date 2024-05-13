@@ -74,6 +74,27 @@ type httpConfig struct {
 	ResponseStatusRef string `json:"response.status"`
 }
 
+func (c *httpConfig) validateHeaders() error {
+	if c.Headers == nil {
+		c.Headers = make(map[string]string)
+	}
+
+	var headerValue string
+	for name, value := range c.Headers {
+		if strings.ToLower(name) == "content-type" {
+			headerValue = value
+		}
+	}
+
+	if headerValue != "" && c.ContentType != "" {
+		return cerrors.Errorf("Configuration error, cannot provide both \"request.contentType\" and \"headers.Content-Type\", use \"headers.Content-Type\" only.")
+	}
+
+	c.Headers["Content-Type"] = headerValue
+
+	return nil
+}
+
 type httpProcessor struct {
 	sdk.UnimplementedProcessor
 
@@ -110,7 +131,7 @@ func (p *httpProcessor) Configure(ctx context.Context, m map[string]string) erro
 		return cerrors.Errorf("failed parsing configuration: %w", err)
 	}
 
-	err = p.validateHeaders()
+	err = p.config.validateHeaders()
 	if err != nil {
 		return err
 	}
@@ -159,23 +180,6 @@ func (p *httpProcessor) Configure(ctx context.Context, m map[string]string) erro
 		Factor: p.config.BackoffRetryFactor,
 		Min:    p.config.BackoffRetryMin,
 		Max:    p.config.BackoffRetryMax,
-	}
-	return nil
-}
-
-func (p *httpProcessor) validateHeaders() error {
-	if p.config.Headers != nil {
-		_, ok := p.config.Headers["Content-Type"]
-		if p.config.ContentType != "" && ok {
-			return cerrors.Errorf("Configuration error, cannot provide both \"request.contentType\" and \"headers.Content-Type\", use \"headers.Content-Type\" only.")
-		}
-		if p.config.ContentType != "" && !ok {
-			p.config.Headers["Content-Type"] = p.config.ContentType
-		}
-	}
-	if p.config.Headers == nil && p.config.ContentType != "" {
-		p.config.Headers = make(map[string]string)
-		p.config.Headers["Content-Type"] = p.config.ContentType
 	}
 	return nil
 }
