@@ -47,7 +47,7 @@ type httpConfig struct {
 	// Deprecated: use `headers.Content-Type` instead.
 	ContentType string `json:"request.contentType" default:"application/json"`
 	// Headers to add to the request, use `headers.*` to specify the header and its value (e.g. `headers.Authorization: "Bearer key"`).
-	Headers map[string]string
+	Headers map[string]string `json:"headers"`
 
 	// Maximum number of retries for an individual record when backing off following an error.
 	BackoffRetryCount float64 `json:"backoffRetry.count" default:"0" validate:"gt=-1"`
