@@ -46,7 +46,7 @@ type httpConfig struct {
 	Method string `json:"request.method" default:"GET"`
 	// Deprecated: use `headers.Content-Type` instead.
 	ContentType string `json:"request.contentType" default:"application/json"`
-	// Headers to add to the request, use headers.* to specify the key and set its value, ex: "headers.Authorization"="Bearer key".
+	// Headers to add to the request, use `headers.*` to specify the header and its value (e.g. `headers.Authorization: "Bearer key"`).
 	Headers map[string]string
 
 	// Maximum number of retries for an individual record when backing off following an error.
