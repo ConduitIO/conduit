@@ -18,6 +18,7 @@ package webhook
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"io"
 	"net/http"
@@ -74,23 +75,28 @@ type httpConfig struct {
 	ResponseStatusRef string `json:"response.status"`
 }
 
-func (c *httpConfig) validateHeaders() error {
+func (c *httpConfig) parseHeaders() error {
 	if c.Headers == nil {
 		c.Headers = make(map[string]string)
 	}
 
-	var headerValue string
+	var hName, hValue string
 	for name, value := range c.Headers {
 		if strings.ToLower(name) == "content-type" {
-			headerValue = value
+			hValue = value
+			hName = name
 		}
 	}
 
-	if headerValue != "" && c.ContentType != "" {
+	if hValue != "" && c.ContentType != "" {
 		return cerrors.Errorf("Configuration error, cannot provide both \"request.contentType\" and \"headers.Content-Type\", use \"headers.Content-Type\" only.")
 	}
 
-	c.Headers["Content-Type"] = headerValue
+	delete(c.Headers, hName)
+	c.Headers["Content-Type"] = cmp.Or(hValue, c.ContentType)
+	// the ContentType field is deprecated,
+	// so we're preparing for completely removing it in a later release
+	c.ContentType = ""
 
 	return nil
 }
@@ -131,7 +137,7 @@ func (p *httpProcessor) Configure(ctx context.Context, m map[string]string) erro
 		return cerrors.Errorf("failed parsing configuration: %w", err)
 	}
 
-	err = p.config.validateHeaders()
+	err = p.config.parseHeaders()
 	if err != nil {
 		return err
 	}

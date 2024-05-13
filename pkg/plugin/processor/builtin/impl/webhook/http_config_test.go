@@ -88,10 +88,10 @@ func TestHTTPConfig_ValidateHeaders(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			is := is.New(t)
-			err := tc.input.validateHeaders()
+			err := tc.input.parseHeaders()
 
 			if tc.wantErr == "" {
-				is.NoErr(err)
+				is.Equal(tc.wantConfig, tc.input)
 			} else {
 				is.True(err != nil)
 				is.Equal(tc.wantErr, err.Error())
