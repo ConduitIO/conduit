@@ -3,7 +3,7 @@ module github.com/conduitio/conduit
 go 1.22.2
 
 require (
-	buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go v1.34.1-20240509201444-ba66afc387e7.1
+	buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go v1.34.1-20240510200701-cf1213ca7b09.1
 	github.com/Masterminds/semver/v3 v3.2.1
 	github.com/Masterminds/sprig/v3 v3.2.3
 	github.com/NYTimes/gziphandler v1.1.1
@@ -31,7 +31,7 @@ require (
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.19.1
 	github.com/hamba/avro/v2 v2.21.1
 	github.com/hashicorp/go-hclog v1.6.3
-	github.com/hashicorp/go-plugin v1.6.0
+	github.com/hashicorp/go-plugin v1.6.1
 	github.com/jackc/pgx/v5 v5.5.5
 	github.com/jpillora/backoff v1.0.0
 	github.com/lovromazgon/franz-go/pkg/sr v0.0.0-20230630140346-bb9ce3f90f4a
@@ -44,7 +44,7 @@ require (
 	github.com/prometheus/common v0.53.0
 	github.com/rs/zerolog v1.32.0
 	github.com/stealthrocket/wazergo v0.19.1
-	github.com/tetratelabs/wazero v1.7.1
+	github.com/tetratelabs/wazero v1.7.2
 	github.com/twmb/go-cache v1.2.1
 	go.uber.org/goleak v1.3.0
 	go.uber.org/mock v0.4.0
