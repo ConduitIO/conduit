@@ -12,43 +12,43 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package builtinv1
+package builtinv2
 
 import (
 	"context"
 
-	"github.com/conduitio/conduit-connector-protocol/cpluginv1"
+	"github.com/conduitio/conduit-commons/opencdc"
+	"github.com/conduitio/conduit-connector-protocol/cpluginv2"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin/connector"
 	"github.com/conduitio/conduit/pkg/plugin/connector/builtin/v1/internal/fromplugin"
 	"github.com/conduitio/conduit/pkg/plugin/connector/builtin/v1/internal/toplugin"
-	"github.com/conduitio/conduit/pkg/record"
 	"github.com/rs/zerolog"
 )
 
 // destinationPluginAdapter implements the destination plugin interface used
 // internally in Conduit and relays the calls to a destination plugin defined in
-// conduit-connector-protocol (cpluginv1). This adapter needs to make sure it
+// conduit-connector-protocol (cpluginv2). This adapter needs to make sure it
 // behaves in the same way as the standalone plugin adapter, which communicates
 // with the plugin through gRPC, so that the caller can use both of them
 // interchangeably.
 type destinationPluginAdapter struct {
-	impl cpluginv1.DestinationPlugin
+	impl cpluginv2.DestinationPlugin
 	// logger is used as the internal logger of destinationPluginAdapter.
 	logger log.CtxLogger
 	// ctxLogger is attached to the context of each call to the plugin.
 	ctxLogger zerolog.Logger
 
-	stream *stream[cpluginv1.DestinationRunRequest, cpluginv1.DestinationRunResponse]
+	stream *stream[cpluginv2.DestinationRunRequest, cpluginv2.DestinationRunResponse]
 }
 
 var _ connector.DestinationPlugin = (*destinationPluginAdapter)(nil)
 
-func newDestinationPluginAdapter(impl cpluginv1.DestinationPlugin, logger log.CtxLogger) *destinationPluginAdapter {
+func newDestinationPluginAdapter(impl cpluginv2.DestinationPlugin, logger log.CtxLogger) *destinationPluginAdapter {
 	return &destinationPluginAdapter{
 		impl:      impl,
-		logger:    logger.WithComponent("builtinv1.destinationPluginAdapter"),
+		logger:    logger.WithComponent("builtinv2.destinationPluginAdapter"),
 		ctxLogger: logger.WithComponent("plugin").ZerologWithComponent()}
 }
 
@@ -77,7 +77,7 @@ func (s *destinationPluginAdapter) Start(ctx context.Context) error {
 	s.stream = newDestinationRunStream(ctx)
 	go func() {
 		s.logger.Trace(ctx).Msg("calling Run")
-		err := runSandboxNoResp(s.impl.Run, s.withLogger(ctx), cpluginv1.DestinationRunStream(s.stream), s.logger)
+		err := runSandboxNoResp(s.impl.Run, s.withLogger(ctx), cpluginv2.DestinationRunStream(s.stream), s.logger)
 		if err != nil {
 			if !s.stream.stop(err) {
 				s.logger.Err(ctx, err).Msg("stream already stopped")
@@ -91,7 +91,7 @@ func (s *destinationPluginAdapter) Start(ctx context.Context) error {
 	return nil
 }
 
-func (s *destinationPluginAdapter) Write(ctx context.Context, r record.Record) error {
+func (s *destinationPluginAdapter) Write(ctx context.Context, r opencdc.Record) error {
 	if s.stream == nil {
 		return connector.ErrStreamNotOpen
 	}
@@ -110,7 +110,7 @@ func (s *destinationPluginAdapter) Write(ctx context.Context, r record.Record) e
 	return nil
 }
 
-func (s *destinationPluginAdapter) Ack(ctx context.Context) (record.Position, error) {
+func (s *destinationPluginAdapter) Ack(ctx context.Context) (opencdc.Position, error) {
 	if s.stream == nil {
 		return nil, connector.ErrStreamNotOpen
 	}
@@ -129,7 +129,7 @@ func (s *destinationPluginAdapter) Ack(ctx context.Context) (record.Position, er
 	return position, nil
 }
 
-func (s *destinationPluginAdapter) Stop(ctx context.Context, lastPosition record.Position) error {
+func (s *destinationPluginAdapter) Stop(ctx context.Context, lastPosition opencdc.Position) error {
 	s.logger.Trace(ctx).Bytes(log.RecordPositionField, lastPosition).Msg("calling Stop")
 	_, err := runSandbox(s.impl.Stop, s.withLogger(ctx), toplugin.DestinationStopRequest(lastPosition), s.logger)
 	return err
@@ -159,11 +159,11 @@ func (s *destinationPluginAdapter) LifecycleOnDeleted(ctx context.Context, cfg m
 	return err
 }
 
-func newDestinationRunStream(ctx context.Context) *stream[cpluginv1.DestinationRunRequest, cpluginv1.DestinationRunResponse] {
-	return &stream[cpluginv1.DestinationRunRequest, cpluginv1.DestinationRunResponse]{
+func newDestinationRunStream(ctx context.Context) *stream[cpluginv2.DestinationRunRequest, cpluginv2.DestinationRunResponse] {
+	return &stream[cpluginv2.DestinationRunRequest, cpluginv2.DestinationRunResponse]{
 		ctx:      ctx,
 		stopChan: make(chan struct{}),
-		reqChan:  make(chan cpluginv1.DestinationRunRequest),
-		respChan: make(chan cpluginv1.DestinationRunResponse),
+		reqChan:  make(chan cpluginv2.DestinationRunRequest),
+		respChan: make(chan cpluginv2.DestinationRunResponse),
 	}
 }

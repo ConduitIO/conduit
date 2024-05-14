@@ -19,7 +19,9 @@ package connector
 import (
 	"context"
 
-	"github.com/conduitio/conduit/pkg/record"
+	"github.com/conduitio/conduit-commons/config"
+
+	"github.com/conduitio/conduit-commons/opencdc"
 )
 
 // Dispenser dispenses specifier, source and destination plugins.
@@ -41,17 +43,17 @@ type SourcePlugin interface {
 	// the context passed to Start is closed. If the context is closed no more
 	// records or acks can be passed between Conduit or the plugin (hard stop).
 	// To stop the stream gracefully use the method Stop.
-	Start(context.Context, record.Position) error
+	Start(context.Context, opencdc.Position) error
 
 	// Read will block until the plugin returns a new record or until the stream
 	// is closed (i.e. Stop is called and the plugin closes the stream). All
 	// records returned by Read need to be acked using the function Ack and the
 	// position of the record. Read will return ErrStreamNotOpen is the stream
 	// is not open.
-	Read(context.Context) (record.Record, error)
+	Read(context.Context) (opencdc.Record, error)
 	// Ack signals to the plugin that the record with that position was
 	// processed and all resources related to that record can be released.
-	Ack(context.Context, record.Position) error
+	Ack(context.Context, opencdc.Position) error
 
 	// Stop should be called to invoke a graceful shutdown of the stream. It
 	// will signal the plugin to stop retrieving new records and flush any
@@ -62,7 +64,7 @@ type SourcePlugin interface {
 	// should call Teardown to close the stream. After the stream is closed the
 	// Read method will return the appropriate error signaling the stream is
 	// closed.
-	Stop(context.Context) (record.Position, error)
+	Stop(context.Context) (opencdc.Position, error)
 
 	// Teardown is the last call that must be issued before discarding the
 	// plugin. It signals to the plugin it can release any open resources and
@@ -102,11 +104,11 @@ type DestinationPlugin interface {
 	// been cached and will be written at a later point in time. Acknowledgments
 	// can be received through Ack to figure out if a record was actually
 	// processed or if an error happened while processing it.
-	Write(context.Context, record.Record) error
+	Write(context.Context, opencdc.Record) error
 	// Ack blocks until an acknowledgment is received that a record was
 	// processed and returns the position of that record. If the record wasn't
 	// successfully processed the function returns the position and an error.
-	Ack(context.Context) (record.Position, error)
+	Ack(context.Context) (opencdc.Position, error)
 
 	// Stop signals to the plugin that the record with the specified position is
 	// the last one and no more records will be written to the stream after it.
@@ -121,7 +123,7 @@ type DestinationPlugin interface {
 	// are received Conduit should call Teardown to close the stream. After the
 	// stream is closed the Ack method will return the appropriate error
 	// signaling the stream is closed.
-	Stop(context.Context, record.Position) error
+	Stop(context.Context, opencdc.Position) error
 
 	// Teardown is the last call that must be issued before discarding the
 	// plugin. It signals to the plugin it can release any open resources and
@@ -164,45 +166,6 @@ type Specification struct {
 	Author string
 	// SourceParams and DestinationParams are maps of named Parameters that
 	// describe how to configure the plugins Destination or Source.
-	SourceParams      map[string]Parameter
-	DestinationParams map[string]Parameter
+	SourceParams      config.Parameters
+	DestinationParams config.Parameters
 }
-
-// Parameter is a helper struct for defining plugin Specifications.
-type Parameter struct {
-	// Default is the default value of the parameter, if any.
-	Default string
-	// Type defines the parameter data type.
-	Type ParameterType
-	// Description holds a description of the field and how to configure it.
-	Description string
-	// Validations list of validations to check for the parameter.
-	Validations []Validation
-}
-
-type Validation struct {
-	Type  ValidationType
-	Value string
-}
-
-type ValidationType int64
-
-const (
-	ValidationTypeRequired ValidationType = iota + 1
-	ValidationTypeGreaterThan
-	ValidationTypeLessThan
-	ValidationTypeInclusion
-	ValidationTypeExclusion
-	ValidationTypeRegex
-)
-
-type ParameterType int
-
-const (
-	ParameterTypeString ParameterType = iota + 1
-	ParameterTypeInt
-	ParameterTypeFloat
-	ParameterTypeBool
-	ParameterTypeFile
-	ParameterTypeDuration
-)

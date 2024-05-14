@@ -14,8 +14,8 @@
 
 package toplugin
 
-import "github.com/conduitio/conduit-connector-protocol/cpluginv1"
+import "github.com/conduitio/conduit-connector-protocol/cpluginv2"
 
-func SpecifierSpecifyRequest() cpluginv1.SpecifierSpecifyRequest {
-	return cpluginv1.SpecifierSpecifyRequest{}
+func SpecifierSpecifyRequest() cpluginv2.SpecifierSpecifyRequest {
+	return cpluginv2.SpecifierSpecifyRequest{}
 }

@@ -23,14 +23,15 @@ import (
 	kafka "github.com/conduitio/conduit-connector-kafka"
 	connLog "github.com/conduitio/conduit-connector-log"
 	postgres "github.com/conduitio/conduit-connector-postgres"
-	"github.com/conduitio/conduit-connector-protocol/cpluginv1"
 	s3 "github.com/conduitio/conduit-connector-s3"
+
+	"github.com/conduitio/conduit-connector-protocol/cpluginv2"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/conduitio/conduit/pkg/plugin/connector"
-	builtinv1 "github.com/conduitio/conduit/pkg/plugin/connector/builtin/v1"
+	builtinv2 "github.com/conduitio/conduit/pkg/plugin/connector/builtin/v2"
 )
 
 var (
@@ -72,14 +73,15 @@ func NewDispenserFactory(conn sdk.Connector) DispenserFactory {
 	}
 
 	return func(name plugin.FullName, logger log.CtxLogger) connector.Dispenser {
-		return builtinv1.NewDispenser(
+		return builtinv2.NewDispenser(
 			name,
 			logger,
-			func() cpluginv1.SpecifierPlugin {
+			func() cpluginv2.SpecifierPlugin {
+				// TODO need to update the SDK first
 				return sdk.NewSpecifierPlugin(conn.NewSpecification(), conn.NewSource(), conn.NewDestination())
 			},
-			func() cpluginv1.SourcePlugin { return sdk.NewSourcePlugin(conn.NewSource()) },
-			func() cpluginv1.DestinationPlugin { return sdk.NewDestinationPlugin(conn.NewDestination()) },
+			func() cpluginv2.SourcePlugin { return sdk.NewSourcePlugin(conn.NewSource()) },
+			func() cpluginv2.DestinationPlugin { return sdk.NewDestinationPlugin(conn.NewDestination()) },
 		)
 	}
 }

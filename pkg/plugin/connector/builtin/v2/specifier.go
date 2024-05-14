@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package builtinv1
+package builtinv2
 
 import (
 	"context"
 
-	"github.com/conduitio/conduit-connector-protocol/cpluginv1"
+	"github.com/conduitio/conduit-connector-protocol/cpluginv2"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin/connector"
 	"github.com/conduitio/conduit/pkg/plugin/connector/builtin/v1/internal/fromplugin"
@@ -25,17 +25,17 @@ import (
 )
 
 type specifierPluginAdapter struct {
-	impl cpluginv1.SpecifierPlugin
+	impl cpluginv2.SpecifierPlugin
 	// logger is used as the internal logger of specifierPluginAdapter.
 	logger log.CtxLogger
 }
 
 var _ connector.SpecifierPlugin = (*specifierPluginAdapter)(nil)
 
-func newSpecifierPluginAdapter(impl cpluginv1.SpecifierPlugin, logger log.CtxLogger) *specifierPluginAdapter {
+func newSpecifierPluginAdapter(impl cpluginv2.SpecifierPlugin, logger log.CtxLogger) *specifierPluginAdapter {
 	return &specifierPluginAdapter{
 		impl:   impl,
-		logger: logger.WithComponent("builtinv1.specifierPluginAdapter"),
+		logger: logger.WithComponent("builtinv2.specifierPluginAdapter"),
 	}
 }
 

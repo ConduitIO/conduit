@@ -17,12 +17,12 @@ package toplugin
 import (
 	"maps"
 
-	"github.com/conduitio/conduit-connector-protocol/cpluginv1"
-	"github.com/conduitio/conduit/pkg/record"
+	"github.com/conduitio/conduit-commons/opencdc"
+	"github.com/conduitio/conduit-connector-protocol/cpluginv2"
 )
 
-func SourceConfigureRequest(in map[string]string) cpluginv1.SourceConfigureRequest {
-	out := cpluginv1.SourceConfigureRequest{}
+func SourceConfigureRequest(in map[string]string) cpluginv2.SourceConfigureRequest {
+	out := cpluginv2.SourceConfigureRequest{}
 	if len(in) > 0 {
 		// gRPC sends `nil` if the map is empty, match behavior
 		out.Config = maps.Clone(in)
@@ -30,28 +30,28 @@ func SourceConfigureRequest(in map[string]string) cpluginv1.SourceConfigureReque
 	return out
 }
 
-func SourceStartRequest(in record.Position) cpluginv1.SourceStartRequest {
-	return cpluginv1.SourceStartRequest{
+func SourceStartRequest(in opencdc.Position) cpluginv2.SourceStartRequest {
+	return cpluginv2.SourceStartRequest{
 		Position: in,
 	}
 }
 
-func SourceRunRequest(in record.Position) cpluginv1.SourceRunRequest {
-	return cpluginv1.SourceRunRequest{
+func SourceRunRequest(in opencdc.Position) cpluginv2.SourceRunRequest {
+	return cpluginv2.SourceRunRequest{
 		AckPosition: in,
 	}
 }
 
-func SourceStopRequest() cpluginv1.SourceStopRequest {
-	return cpluginv1.SourceStopRequest{}
+func SourceStopRequest() cpluginv2.SourceStopRequest {
+	return cpluginv2.SourceStopRequest{}
 }
 
-func SourceTeardownRequest() cpluginv1.SourceTeardownRequest {
-	return cpluginv1.SourceTeardownRequest{}
+func SourceTeardownRequest() cpluginv2.SourceTeardownRequest {
+	return cpluginv2.SourceTeardownRequest{}
 }
 
-func SourceLifecycleOnCreatedRequest(cfg map[string]string) cpluginv1.SourceLifecycleOnCreatedRequest {
-	out := cpluginv1.SourceLifecycleOnCreatedRequest{}
+func SourceLifecycleOnCreatedRequest(cfg map[string]string) cpluginv2.SourceLifecycleOnCreatedRequest {
+	out := cpluginv2.SourceLifecycleOnCreatedRequest{}
 	if len(cfg) > 0 {
 		// gRPC sends `nil` if the map is empty, match behavior
 		out.Config = cfg
@@ -59,8 +59,8 @@ func SourceLifecycleOnCreatedRequest(cfg map[string]string) cpluginv1.SourceLife
 	return out
 }
 
-func SourceLifecycleOnUpdatedRequest(cfgBefore, cfgAfter map[string]string) cpluginv1.SourceLifecycleOnUpdatedRequest {
-	out := cpluginv1.SourceLifecycleOnUpdatedRequest{}
+func SourceLifecycleOnUpdatedRequest(cfgBefore, cfgAfter map[string]string) cpluginv2.SourceLifecycleOnUpdatedRequest {
+	out := cpluginv2.SourceLifecycleOnUpdatedRequest{}
 	// gRPC sends `nil` if the map is empty, match behavior
 	if len(cfgBefore) > 0 {
 		out.ConfigBefore = cfgBefore
@@ -71,8 +71,8 @@ func SourceLifecycleOnUpdatedRequest(cfgBefore, cfgAfter map[string]string) cplu
 	return out
 }
 
-func SourceLifecycleOnDeletedRequest(cfg map[string]string) cpluginv1.SourceLifecycleOnDeletedRequest {
-	out := cpluginv1.SourceLifecycleOnDeletedRequest{}
+func SourceLifecycleOnDeletedRequest(cfg map[string]string) cpluginv2.SourceLifecycleOnDeletedRequest {
+	out := cpluginv2.SourceLifecycleOnDeletedRequest{}
 	if len(cfg) > 0 {
 		// gRPC sends `nil` if the map is empty, match behavior
 		out.Config = cfg

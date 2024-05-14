@@ -12,14 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package builtinv1
+package fromplugin
 
 import (
-	"testing"
-
-	"github.com/conduitio/conduit/pkg/plugin/connector"
+	"github.com/conduitio/conduit-commons/opencdc"
+	"github.com/conduitio/conduit-connector-protocol/cpluginv2"
 )
 
-func TestAcceptance(t *testing.T) {
-	connector.AcceptanceTestV1(t, newTestDispenser)
+func SourceRunResponse(in cpluginv2.SourceRunResponse) (opencdc.Record, error) {
+	return in.Record, nil
+}
+
+func SourceStopResponse(in cpluginv2.SourceStopResponse) (opencdc.Position, error) {
+	return in.LastPosition, nil
 }

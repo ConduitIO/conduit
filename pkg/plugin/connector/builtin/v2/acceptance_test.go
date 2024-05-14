@@ -12,13 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package fromplugin
+package builtinv2
 
 import (
-	"github.com/conduitio/conduit-connector-protocol/cpluginv1"
-	"github.com/conduitio/conduit/pkg/record"
+	"testing"
+
+	"github.com/conduitio/conduit/pkg/plugin/connector"
 )
 
-func DestinationRunResponse(in cpluginv1.DestinationRunResponse) (record.Position, string) {
-	return in.AckPosition, in.Error
+func TestAcceptance(t *testing.T) {
+	connector.AcceptanceTestV2(t, newTestDispenser)
 }

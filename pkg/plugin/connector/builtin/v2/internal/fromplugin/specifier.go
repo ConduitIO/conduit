@@ -15,18 +15,18 @@
 package fromplugin
 
 import (
-	"github.com/conduitio/conduit-connector-protocol/cpluginv1"
-	"github.com/conduitio/conduit/pkg/record"
+	"github.com/conduitio/conduit-connector-protocol/cpluginv2"
+	connectorPlugin "github.com/conduitio/conduit/pkg/plugin/connector"
 )
 
-func SourceRunResponse(in cpluginv1.SourceRunResponse) (record.Record, error) {
-	out, err := Record(in.Record)
-	if err != nil {
-		return record.Record{}, nil
-	}
-	return out, nil
-}
-
-func SourceStopResponse(in cpluginv1.SourceStopResponse) (record.Position, error) {
-	return in.LastPosition, nil
+func SpecifierSpecifyResponse(in cpluginv2.SpecifierSpecifyResponse) (connectorPlugin.Specification, error) {
+	return connectorPlugin.Specification{
+		Name:              in.Name,
+		Summary:           in.Summary,
+		Description:       in.Description,
+		Version:           in.Version,
+		Author:            in.Author,
+		DestinationParams: in.DestinationParams,
+		SourceParams:      in.SourceParams,
+	}, nil
 }

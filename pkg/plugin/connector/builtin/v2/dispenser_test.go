@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package builtinv1
+package builtinv2
 
 import (
 	"testing"
 
-	"github.com/conduitio/conduit-connector-protocol/cpluginv1"
-	"github.com/conduitio/conduit-connector-protocol/cpluginv1/mock"
+	"github.com/conduitio/conduit-connector-protocol/cpluginv2"
+	"github.com/conduitio/conduit-connector-protocol/cpluginv2/mock"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin/connector"
 	"github.com/rs/zerolog"
@@ -36,9 +36,9 @@ func newTestDispenser(t *testing.T) (connector.Dispenser, *mock.SpecifierPlugin,
 	dispenser := NewDispenser(
 		"mockPlugin",
 		logger,
-		func() cpluginv1.SpecifierPlugin { return mockSpecifier },
-		func() cpluginv1.SourcePlugin { return mockSource },
-		func() cpluginv1.DestinationPlugin { return mockDestination },
+		func() cpluginv2.SpecifierPlugin { return mockSpecifier },
+		func() cpluginv2.SourcePlugin { return mockSource },
+		func() cpluginv2.DestinationPlugin { return mockDestination },
 	)
 	return dispenser, mockSpecifier, mockSource, mockDestination
 }

@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package builtinv1
+package builtinv2
 
 import (
-	"github.com/conduitio/conduit-connector-protocol/cpluginv1"
+	"github.com/conduitio/conduit-connector-protocol/cpluginv2"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/conduitio/conduit/pkg/plugin/connector"
@@ -24,17 +24,17 @@ import (
 type Dispenser struct {
 	name              plugin.FullName
 	logger            log.CtxLogger
-	specifierPlugin   func() cpluginv1.SpecifierPlugin
-	sourcePlugin      func() cpluginv1.SourcePlugin
-	destinationPlugin func() cpluginv1.DestinationPlugin
+	specifierPlugin   func() cpluginv2.SpecifierPlugin
+	sourcePlugin      func() cpluginv2.SourcePlugin
+	destinationPlugin func() cpluginv2.DestinationPlugin
 }
 
 func NewDispenser(
 	name plugin.FullName,
 	logger log.CtxLogger,
-	specifierPlugin func() cpluginv1.SpecifierPlugin,
-	sourcePlugin func() cpluginv1.SourcePlugin,
-	destinationPlugin func() cpluginv1.DestinationPlugin,
+	specifierPlugin func() cpluginv2.SpecifierPlugin,
+	sourcePlugin func() cpluginv2.SourcePlugin,
+	destinationPlugin func() cpluginv2.DestinationPlugin,
 ) *Dispenser {
 	return &Dispenser{
 		name:              name,

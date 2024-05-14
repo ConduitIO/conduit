@@ -12,43 +12,43 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package builtinv1
+package builtinv2
 
 import (
 	"context"
 
-	"github.com/conduitio/conduit-connector-protocol/cpluginv1"
+	"github.com/conduitio/conduit-commons/opencdc"
+	"github.com/conduitio/conduit-connector-protocol/cpluginv2"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin/connector"
 	"github.com/conduitio/conduit/pkg/plugin/connector/builtin/v1/internal/fromplugin"
 	"github.com/conduitio/conduit/pkg/plugin/connector/builtin/v1/internal/toplugin"
-	"github.com/conduitio/conduit/pkg/record"
 	"github.com/rs/zerolog"
 )
 
 // sourcePluginAdapter implements the source plugin interface used internally in
 // Conduit and relays the calls to a source plugin defined in
-// conduit-connector-protocol (cpluginv1). This adapter needs to make sure it
+// conduit-connector-protocol (cpluginv2). This adapter needs to make sure it
 // behaves in the same way as the standalone plugin adapter, which communicates
 // with the plugin through gRPC, so that the caller can use both of them
 // interchangeably.
 type sourcePluginAdapter struct {
-	impl cpluginv1.SourcePlugin
+	impl cpluginv2.SourcePlugin
 	// logger is used as the internal logger of sourcePluginAdapter.
 	logger log.CtxLogger
 	// ctxLogger is attached to the context of each call to the plugin.
 	ctxLogger zerolog.Logger
 
-	stream *stream[cpluginv1.SourceRunRequest, cpluginv1.SourceRunResponse]
+	stream *stream[cpluginv2.SourceRunRequest, cpluginv2.SourceRunResponse]
 }
 
 var _ connector.SourcePlugin = (*sourcePluginAdapter)(nil)
 
-func newSourcePluginAdapter(impl cpluginv1.SourcePlugin, logger log.CtxLogger) *sourcePluginAdapter {
+func newSourcePluginAdapter(impl cpluginv2.SourcePlugin, logger log.CtxLogger) *sourcePluginAdapter {
 	return &sourcePluginAdapter{
 		impl:      impl,
-		logger:    logger.WithComponent("builtinv1.sourcePluginAdapter"),
+		logger:    logger.WithComponent("builtinv2.sourcePluginAdapter"),
 		ctxLogger: logger.WithComponent("plugin").ZerologWithComponent(),
 	}
 }
@@ -63,7 +63,7 @@ func (s *sourcePluginAdapter) Configure(ctx context.Context, cfg map[string]stri
 	return err
 }
 
-func (s *sourcePluginAdapter) Start(ctx context.Context, p record.Position) error {
+func (s *sourcePluginAdapter) Start(ctx context.Context, p opencdc.Position) error {
 	if s.stream != nil {
 		return cerrors.New("plugin already running")
 	}
@@ -80,7 +80,7 @@ func (s *sourcePluginAdapter) Start(ctx context.Context, p record.Position) erro
 	s.stream = newSourceRunStream(ctx)
 	go func() {
 		s.logger.Trace(ctx).Msg("calling Run")
-		err := runSandboxNoResp(s.impl.Run, s.withLogger(ctx), cpluginv1.SourceRunStream(s.stream), s.logger)
+		err := runSandboxNoResp(s.impl.Run, s.withLogger(ctx), cpluginv2.SourceRunStream(s.stream), s.logger)
 		if err != nil {
 			if !s.stream.stop(err) {
 				s.logger.Err(ctx, err).Msg("stream already stopped")
@@ -94,26 +94,26 @@ func (s *sourcePluginAdapter) Start(ctx context.Context, p record.Position) erro
 	return nil
 }
 
-func (s *sourcePluginAdapter) Read(ctx context.Context) (record.Record, error) {
+func (s *sourcePluginAdapter) Read(ctx context.Context) (opencdc.Record, error) {
 	if s.stream == nil {
-		return record.Record{}, connector.ErrStreamNotOpen
+		return opencdc.Record{}, connector.ErrStreamNotOpen
 	}
 
 	s.logger.Trace(ctx).Msg("receiving record")
 	resp, err := s.stream.recvInternal()
 	if err != nil {
-		return record.Record{}, cerrors.Errorf("builtin plugin receive failed: %w", err)
+		return opencdc.Record{}, cerrors.Errorf("builtin plugin receive failed: %w", err)
 	}
 
 	out, err := fromplugin.SourceRunResponse(resp)
 	if err != nil {
-		return record.Record{}, err
+		return opencdc.Record{}, err
 	}
 
 	return out, nil
 }
 
-func (s *sourcePluginAdapter) Ack(ctx context.Context, p record.Position) error {
+func (s *sourcePluginAdapter) Ack(ctx context.Context, p opencdc.Position) error {
 	if s.stream == nil {
 		return connector.ErrStreamNotOpen
 	}
@@ -129,7 +129,7 @@ func (s *sourcePluginAdapter) Ack(ctx context.Context, p record.Position) error 
 	return nil
 }
 
-func (s *sourcePluginAdapter) Stop(ctx context.Context) (record.Position, error) {
+func (s *sourcePluginAdapter) Stop(ctx context.Context) (opencdc.Position, error) {
 	s.logger.Trace(ctx).Msg("calling Stop")
 	resp, err := runSandbox(s.impl.Stop, s.withLogger(ctx), toplugin.SourceStopRequest(), s.logger)
 	if err != nil {
@@ -162,11 +162,11 @@ func (s *sourcePluginAdapter) LifecycleOnDeleted(ctx context.Context, cfg map[st
 	return err
 }
 
-func newSourceRunStream(ctx context.Context) *stream[cpluginv1.SourceRunRequest, cpluginv1.SourceRunResponse] {
-	return &stream[cpluginv1.SourceRunRequest, cpluginv1.SourceRunResponse]{
+func newSourceRunStream(ctx context.Context) *stream[cpluginv2.SourceRunRequest, cpluginv2.SourceRunResponse] {
+	return &stream[cpluginv2.SourceRunRequest, cpluginv2.SourceRunResponse]{
 		ctx:      ctx,
 		stopChan: make(chan struct{}),
-		reqChan:  make(chan cpluginv1.SourceRunRequest),
-		respChan: make(chan cpluginv1.SourceRunResponse),
+		reqChan:  make(chan cpluginv2.SourceRunRequest),
+		respChan: make(chan cpluginv2.SourceRunResponse),
 	}
 }
