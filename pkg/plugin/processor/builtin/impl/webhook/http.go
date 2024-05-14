@@ -18,7 +18,6 @@ package webhook
 
 import (
 	"bytes"
-	"cmp"
 	"context"
 	"io"
 	"net/http"

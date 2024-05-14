@@ -79,7 +79,7 @@ func TestHTTPConfig_ValidateHeaders(t *testing.T) {
 			},
 			wantConfig: httpConfig{
 				Headers: map[string]string{
-					"Content-Type": "application/json",
+					"content-type": "application/json",
 				},
 			},
 		},
