@@ -17,6 +17,7 @@ package avro
 import (
 	"reflect"
 
+	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/hamba/avro/v2"
 	"github.com/modern-go/reflect2"
@@ -30,6 +31,7 @@ import (
 type UnionResolver struct {
 	mapUnionPaths   []path
 	arrayUnionPaths []path
+	nullUnionPaths  []path
 	resolver        *avro.TypeResolver
 }
 
@@ -40,6 +42,7 @@ type UnionResolver struct {
 func NewUnionResolver(schema avro.Schema) UnionResolver {
 	var mapUnionPaths []path
 	var arrayUnionPaths []path
+	var nullUnionPaths []path
 	// traverse the schema and extract paths to all maps and arrays with a union
 	// as the value type
 	traverseSchema(schema, func(p path) {
@@ -53,11 +56,17 @@ func NewUnionResolver(schema avro.Schema) UnionResolver {
 			pCopy := make(path, len(p))
 			copy(pCopy, p)
 			arrayUnionPaths = append(arrayUnionPaths, pCopy)
+		} else if isNullUnion(p[len(p)-1].schema) {
+			// path points to a null union, copy and store it
+			pCopy := make(path, len(p)-1)
+			copy(pCopy, p[:len(p)-1])
+			nullUnionPaths = append(nullUnionPaths, pCopy)
 		}
 	})
 	return UnionResolver{
 		mapUnionPaths:   mapUnionPaths,
 		arrayUnionPaths: arrayUnionPaths,
+		nullUnionPaths:  nullUnionPaths,
 		resolver:        avro.NewTypeResolver(),
 	}
 }
@@ -68,7 +77,9 @@ func NewUnionResolver(schema avro.Schema) UnionResolver {
 // (e.g. map[string]any{"string":"foo"}). This function takes that map and
 // extracts the actual value from it (e.g. "foo").
 func (r UnionResolver) AfterUnmarshal(val any) error {
-	if len(r.mapUnionPaths) == 0 && len(r.arrayUnionPaths) == 0 {
+	if len(r.mapUnionPaths) == 0 &&
+		len(r.arrayUnionPaths) == 0 &&
+		len(r.nullUnionPaths) == 0 {
 		return nil // shortcut
 	}
 
@@ -77,6 +88,10 @@ func (r UnionResolver) AfterUnmarshal(val any) error {
 		return err
 	}
 	substitutions, err = r.afterUnmarshalArraySubstitutions(val, substitutions)
+	if err != nil {
+		return err
+	}
+	substitutions, err = r.afterUnmarshalNullUnionSubstitutions(val, substitutions)
 	if err != nil {
 		return err
 	}
@@ -175,6 +190,60 @@ func (r UnionResolver) afterUnmarshalArraySubstitutions(val any, substitutions [
 						a:     arrays[i],
 						index: index,
 						val:   actualVal,
+					})
+					break
+				}
+			}
+		}
+	}
+	return substitutions, nil
+}
+
+func (r UnionResolver) afterUnmarshalNullUnionSubstitutions(val any, substitutions []substitution) ([]substitution, error) {
+	for _, p := range r.nullUnionPaths {
+		// first collect all values that are nullable
+		var maps []map[string]any
+		err := traverseValue(val, p, true, func(v any) {
+			switch v := v.(type) {
+			case map[string]any:
+				maps = append(maps, v)
+			case *map[string]any:
+				maps = append(maps, *v)
+			case *opencdc.StructuredData:
+				maps = append(maps, *v)
+			}
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		// Loop through collected maps and collect all substitutions. These maps
+		// contain values encoded as maps with a single key:value pair, where
+		// key is the type name (e.g. {"int":1}). We want to replace all these
+		// maps with the actual value (e.g. 1).
+		// We don't replace them in the loop, because we want to make sure all
+		// maps actually contain only 1 value.
+		for i, mapUnion := range maps {
+			for k, v := range mapUnion {
+				if v == nil {
+					// do no change nil values
+					continue
+				}
+				vmap, ok := v.(map[string]any)
+				if !ok {
+					// if the value is not a map, it's not a nil value
+					continue
+				}
+				if len(vmap) != 1 {
+					return nil, cerrors.Errorf("expected single value encoded as a map, got %d elements", len(vmap))
+				}
+
+				// this is a map with a single value, store the substitution
+				for _, actualVal := range vmap {
+					substitutions = append(substitutions, mapSubstitution{
+						m:   maps[i],
+						key: k,
+						val: actualVal,
 					})
 					break
 				}
@@ -367,6 +436,24 @@ func isArrayUnion(schema avro.Schema) bool {
 		// at least one of the types in the union must be a map or array for this
 		// to count as a map with a union type
 		if s.Type() == avro.Array || s.Type() == avro.Map {
+			return true
+		}
+	}
+	return false
+}
+
+func isNullUnion(schema avro.Schema) bool {
+	s, ok := schema.(*avro.UnionSchema)
+	if !ok {
+		return false
+	}
+	if len(s.Types()) != 2 {
+		return false
+	}
+	for _, s := range s.Types() {
+		// at least one of the types in the union must be a map or array for this
+		// to count as a map with a union type
+		if s.Type() == avro.Null {
 			return true
 		}
 	}
