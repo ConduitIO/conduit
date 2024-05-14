@@ -40,6 +40,12 @@
         "type": "duration",
         "validations": []
       },
+      "headers.*": {
+        "default": "",
+        "description": "Headers to add to the request, use `headers.*` to specify the header and its value (e.g. `headers.Authorization: \"Bearer key\"`).",
+        "type": "string",
+        "validations": []
+      },
       "request.body": {
         "default": "",
         "description": "Specifies which field from the input record should be used as the body in\nthe HTTP request.\n\nFor more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).",
@@ -48,7 +54,7 @@
       },
       "request.contentType": {
         "default": "application/json",
-        "description": "The value of the `Content-Type` header.",
+        "description": "Deprecated: use `headers.Content-Type` instead.",
         "type": "string",
         "validations": []
       },
