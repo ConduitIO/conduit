@@ -304,9 +304,18 @@ Conduit exposes a service to work with schemas. Connectors access the service
 and call methods on the service. 
 
 For this work, a connector (i.e. clients of the schema service) needs Conduit's
-IP address and the gRPC port. The IP address can be fetched
-using [peer](https://pkg.go.dev/google.golang.org/grpc/peer#Peer). Conduit can
-send its gRPC port to the connector via the `Configure` method.
+IP address and the gRPC port. It's safe to assume that in most, if not all, real
+world use cases, Conduit and connectors will be running on the same host, so we
+can assume that the host is `localhost`. The gRPC port can be communicated to
+the connector via an environment variable.
+
+This service is intended to be used by connectors only. To facilitate that,
+Conduit can generate tokens that connectors would use to authenticate with
+Conduit. 
+
+The service should run on a random port. In VMs with hardened security, that
+might not be always possible, so it should be possible for the schema service to
+run on a pre-defined port.
 
 A skeleton of the gRPC definition of the service would be:
 
@@ -338,10 +347,14 @@ message FetchSchemaResponse {}
 1. Easy to understand: the gRPC methods, together with requests and responses,
    can easily be understood from a proto file.
 2. An HTTP API for the schema registry can easily be exposed (if needed).
+3. This API can be extended to include other methods that a connector might
+   need (e.g. connector storage)
 
 **Disadvantages**:
 
 1. Changes needed to communicate Conduit's gRPC port to the connector.
+2. Streams are faster that gRPC method calls. However, registering or fetching a
+   schema is an infrequent operation, so this is not a concern for us.
 
 #### Chosen option
 
