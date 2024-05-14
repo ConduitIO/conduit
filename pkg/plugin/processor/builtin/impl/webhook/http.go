@@ -80,20 +80,17 @@ func (c *httpConfig) parseHeaders() error {
 		c.Headers = make(map[string]string)
 	}
 
-	var hName, hValue string
-	for name, value := range c.Headers {
+	if c.ContentType == "" {
+		return nil // Nothing to replace in headers
+	}
+
+	for name, _ := range c.Headers {
 		if strings.ToLower(name) == "content-type" {
-			hValue = value
-			hName = name
+			return cerrors.Errorf("Configuration error, cannot provide both \"request.contentType\" and \"headers.Content-Type\", use \"headers.Content-Type\" only.")
 		}
 	}
 
-	if hValue != "" && c.ContentType != "" {
-		return cerrors.Errorf("Configuration error, cannot provide both \"request.contentType\" and \"headers.Content-Type\", use \"headers.Content-Type\" only.")
-	}
-
-	delete(c.Headers, hName)
-	c.Headers["Content-Type"] = cmp.Or(hValue, c.ContentType)
+	c.Headers["Content-Type"] = c.ContentType
 	// the ContentType field is deprecated,
 	// so we're preparing for completely removing it in a later release
 	c.ContentType = ""
