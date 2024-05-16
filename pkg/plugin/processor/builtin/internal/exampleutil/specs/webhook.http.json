@@ -48,7 +48,7 @@
       },
       "request.body": {
         "default": "",
-        "description": "Specifies which field from the input record should be used as the body in\nthe HTTP request.\n\nFor more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).",
+        "description": "Specifies the body that will be sent in the HTTP request. The field accepts\na Go [templates](https://pkg.go.dev/text/template) that's evaluated using the\n[opencdc.Record](https://pkg.go.dev/github.com/conduitio/conduit-commons/opencdc#Record)\nas input. By default, the body is empty.\n\nTo send the whole record as JSON you can use `{{ toJson . }}`.",
         "type": "string",
         "validations": []
       },
@@ -92,14 +92,14 @@
   "examples": [
     {
       "summary": "Send a request to an HTTP server",
-      "description": "\nThis example shows how to use the HTTP processor to send a record's `.Payload.After` field to a dummy HTTP server\nthat replies back with a greeting.\n\nThe record's `.Payload.After` is overwritten with the response. Additionally, the example shows how to set a request\nheader and how to store the value of the HTTP response's code in the metadata field `http_status`.",
+      "description": "\nThis example shows how to use the HTTP processor to send a record's `.Payload.After` field as a string to a dummy\nHTTP server that replies back with a greeting.\n\nThe record's `.Payload.After` is overwritten with the response. Additionally, the example shows how to set a request\nheader and how to store the value of the HTTP response's code in the metadata field `http_status`.",
       "config": {
         "backoffRetry.count": "0",
         "backoffRetry.factor": "2",
         "backoffRetry.max": "5s",
         "backoffRetry.min": "100ms",
         "headers.content-type": "application/json",
-        "request.body": ".Payload.After",
+        "request.body": "{{ printf \"%s\" .Payload.After }}",
         "request.method": "GET",
         "request.url": "http://127.0.0.1:54321",
         "response.body": ".Payload.After",

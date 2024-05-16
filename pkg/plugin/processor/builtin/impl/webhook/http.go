@@ -32,7 +32,6 @@ import (
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/goccy/go-json"
 	"github.com/jpillora/backoff"
 )
 
@@ -58,11 +57,13 @@ type httpConfig struct {
 	// The maximum waiting time before retrying.
 	BackoffRetryMax time.Duration `json:"backoffRetry.max" default:"5s"`
 
-	// Specifies which field from the input record should be used as the body in
-	// the HTTP request.
+	// Specifies the body that will be sent in the HTTP request. The field accepts
+	// a Go [templates](https://pkg.go.dev/text/template) that's evaluated using the
+	// [opencdc.Record](https://pkg.go.dev/github.com/conduitio/conduit-commons/opencdc#Record)
+	// as input. By default, the body is empty.
 	//
-	// For more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).
-	RequestBodyRef string `json:"request.body"`
+	// To send the whole record as JSON you can use `{{ toJson . }}`.
+	RequestBodyTmpl string `json:"request.body"`
 	// Specifies in which field should the response body be saved.
 	//
 	// For more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).
@@ -110,10 +111,11 @@ type httpProcessor struct {
 	config     httpConfig
 	backoffCfg *backoff.Backoff
 
-	requestBodyRef    *sdk.ReferenceResolver
+	urlTmpl         *template.Template
+	requestBodyTmpl *template.Template
+
 	responseBodyRef   *sdk.ReferenceResolver
 	responseStatusRef *sdk.ReferenceResolver
-	urlTmpl           *template.Template
 }
 
 func NewHTTPProcessor(l log.CtxLogger) sdk.Processor {
@@ -150,12 +152,13 @@ func (p *httpProcessor) Configure(ctx context.Context, m map[string]string) erro
 		return cerrors.New("invalid configuration: response.body and response.status set to same field")
 	}
 
-	if p.config.RequestBodyRef != "" {
-		requestBodyRef, err := sdk.NewReferenceResolver(p.config.RequestBodyRef)
+	// parse request body template
+	if strings.Contains(p.config.RequestBodyTmpl, "{{") {
+		// create URL template
+		p.requestBodyTmpl, err = template.New("").Funcs(sprig.FuncMap()).Parse(p.config.RequestBodyTmpl)
 		if err != nil {
-			return cerrors.Errorf("failed parsing request.body %v: %w", p.config.RequestBodyRef, err)
+			return cerrors.Errorf("failed parsing request.body %v: %w", err)
 		}
-		p.requestBodyRef = &requestBodyRef
 	}
 
 	responseBodyRef, err := sdk.NewReferenceResolver(p.config.ResponseBodyRef)
@@ -172,6 +175,8 @@ func (p *httpProcessor) Configure(ctx context.Context, m map[string]string) erro
 		}
 		p.responseStatusRef = &responseStatusRef
 	}
+
+	// parse URL template
 	if strings.Contains(p.config.URL, "{{") {
 		// create URL template
 		p.urlTmpl, err = template.New("").Funcs(sprig.FuncMap()).Parse(p.config.URL)
@@ -192,27 +197,6 @@ func (p *httpProcessor) Configure(ctx context.Context, m map[string]string) erro
 		Max:    p.config.BackoffRetryMax,
 	}
 	return nil
-}
-
-func (p *httpProcessor) EvaluateURL(rec opencdc.Record) (string, error) {
-	if p.urlTmpl == nil {
-		return p.config.URL, nil
-	}
-	var b bytes.Buffer
-	err := p.urlTmpl.Execute(&b, rec)
-	if err != nil {
-		return "", cerrors.Errorf("error while evaluating URL template: %w", err)
-	}
-	u, err := url.Parse(b.String())
-	if err != nil {
-		return "", cerrors.Errorf("error parsing URL: %w", err)
-	}
-	q, err := url.ParseQuery(u.RawQuery)
-	if err != nil {
-		return "", cerrors.Errorf("error parsing URL query: %w", err)
-	}
-	u.RawQuery = q.Encode()
-	return u.String(), nil
 }
 
 func (p *httpProcessor) Process(ctx context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
@@ -313,7 +297,7 @@ func (p *httpProcessor) buildRequest(ctx context.Context, r opencdc.Record) (*ht
 		return nil, cerrors.Errorf("failed getting request body: %w", err)
 	}
 
-	url, err := p.EvaluateURL(r)
+	url, err := p.evaluateURL(r)
 	if err != nil {
 		return nil, err
 	}
@@ -335,25 +319,44 @@ func (p *httpProcessor) buildRequest(ctx context.Context, r opencdc.Record) (*ht
 	return req, nil
 }
 
+func (p *httpProcessor) evaluateURL(rec opencdc.Record) (string, error) {
+	if p.urlTmpl == nil {
+		return p.config.URL, nil
+	}
+	var b bytes.Buffer
+	err := p.urlTmpl.Execute(&b, rec)
+	if err != nil {
+		return "", cerrors.Errorf("error while evaluating URL template: %w", err)
+	}
+	u, err := url.Parse(b.String())
+	if err != nil {
+		return "", cerrors.Errorf("error parsing URL: %w", err)
+	}
+	q, err := url.ParseQuery(u.RawQuery)
+	if err != nil {
+		return "", cerrors.Errorf("error parsing URL query: %w", err)
+	}
+	u.RawQuery = q.Encode()
+	return u.String(), nil
+}
+
 // requestBody returns the request body for the given record,
 // using the configured field reference (see: request.body configuration parameter).
 func (p *httpProcessor) requestBody(r opencdc.Record) ([]byte, error) {
-	if p.requestBodyRef == nil {
+	if p.requestBodyTmpl == nil {
+		if p.config.RequestBodyTmpl != "" {
+			return []byte(p.config.RequestBodyTmpl), nil
+		}
 		return nil, nil
 	}
-	ref, err := p.requestBodyRef.Resolve(&r)
+
+	var b bytes.Buffer
+	err := p.requestBodyTmpl.Execute(&b, r)
 	if err != nil {
-		return nil, cerrors.Errorf("failed resolving request.body: %w", err)
+		return nil, cerrors.Errorf("error while evaluating request body template: %w", err)
 	}
 
-	val := ref.Get()
-	// Raw byte data should be sent as it is, as that's most often what we want
-	// If we json.Marshal it first, it will be Base64-encoded.
-	if raw, ok := val.(opencdc.RawData); ok {
-		return raw.Bytes(), nil
-	}
-
-	return json.Marshal(val)
+	return b.Bytes(), nil
 }
 
 func (p *httpProcessor) setField(r *opencdc.Record, refRes *sdk.ReferenceResolver, data any) error {

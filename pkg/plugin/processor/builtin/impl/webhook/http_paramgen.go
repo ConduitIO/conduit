@@ -45,7 +45,7 @@ func (httpConfig) Parameters() map[string]config.Parameter {
 		},
 		"request.body": {
 			Default:     "",
-			Description: "Specifies which field from the input record should be used as the body in\nthe HTTP request.\n\nFor more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).",
+			Description: "Specifies the body that will be sent in the HTTP request. The field accepts\na Go [templates](https://pkg.go.dev/text/template) that's evaluated using the\n[opencdc.Record](https://pkg.go.dev/github.com/conduitio/conduit-commons/opencdc#Record)\nas input. By default, the body is empty.\n\nTo send the whole record as JSON you can use `{{ toJson . }}`.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},
