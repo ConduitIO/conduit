@@ -45,7 +45,7 @@ type httpConfig struct {
 	// Method is the HTTP request method to be used.
 	Method string `json:"request.method" default:"GET"`
 	// Deprecated: use `headers.Content-Type` instead.
-	ContentType string `json:"request.contentType" default:"application/json"`
+	ContentType string `json:"request.contentType"`
 	// Headers to add to the request, use `headers.*` to specify the header and its value (e.g. `headers.Authorization: "Bearer key"`).
 	Headers map[string]string `json:"headers"`
 
@@ -79,20 +79,25 @@ func (c *httpConfig) parseHeaders() error {
 		c.Headers = make(map[string]string)
 	}
 
-	if c.ContentType == "" {
-		return nil // Nothing to replace in headers
-	}
-
+	var isContentTypeSet bool
 	for name, _ := range c.Headers {
 		if strings.ToLower(name) == "content-type" {
-			return cerrors.Errorf("Configuration error, cannot provide both \"request.contentType\" and \"headers.Content-Type\", use \"headers.Content-Type\" only.")
+			isContentTypeSet = true
+			break
 		}
 	}
 
-	c.Headers["Content-Type"] = c.ContentType
-	// the ContentType field is deprecated,
-	// so we're preparing for completely removing it in a later release
-	c.ContentType = ""
+	switch {
+	case isContentTypeSet && c.ContentType != "":
+		return cerrors.Errorf(`configuration error, cannot provide both "request.contentType" and "headers.Content-Type", use "headers.Content-Type" only`)
+	case !isContentTypeSet && c.ContentType != "":
+		// Use contents of deprecated field.
+		c.Headers["Content-Type"] = c.ContentType
+		c.ContentType = ""
+	case !isContentTypeSet:
+		// By default, we set the Content-Type to application/json.
+		c.Headers["Content-Type"] = "application/json"
+	}
 
 	return nil
 }

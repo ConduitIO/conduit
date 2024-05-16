@@ -42,12 +42,13 @@ func ExampleHTTPProcessor() {
 This example shows how to use the HTTP processor to send a record's ` + "`.Payload.After`" + ` field to a dummy HTTP server
 that replies back with a greeting.
 
-The record's ` + "`.Payload.After`" + ` is overwritten with the response. Additionally, the example shows how to store the
-value of the HTTP response's code in the metadata field ` + "`http_status`" + `.`,
+The record's ` + "`.Payload.After`" + ` is overwritten with the response. Additionally, the example shows how to set a request
+header and how to store the value of the HTTP response's code in the metadata field ` + "`http_status`" + `.`,
 		Config: map[string]string{
-			"request.url":     srv.URL,
-			"request.body":    ".Payload.After",
-			"response.status": `.Metadata["http_status"]`,
+			"request.url":          srv.URL,
+			"request.body":         ".Payload.After",
+			"response.status":      `.Metadata["http_status"]`,
+			"headers.content-type": "application/json",
 		},
 		Have: opencdc.Record{
 			Operation: opencdc.OperationUpdate,

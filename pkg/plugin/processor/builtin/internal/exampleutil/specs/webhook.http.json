@@ -53,7 +53,7 @@
         "validations": []
       },
       "request.contentType": {
-        "default": "application/json",
+        "default": "",
         "description": "Deprecated: use `headers.Content-Type` instead.",
         "type": "string",
         "validations": []
@@ -92,14 +92,14 @@
   "examples": [
     {
       "summary": "Send a request to an HTTP server",
-      "description": "\nThis example shows how to use the HTTP processor to send a record's `.Payload.After` field to a dummy HTTP server\nthat replies back with a greeting.\n\nThe record's `.Payload.After` is overwritten with the response. Additionally, the example shows how to store the\nvalue of the HTTP response's code in the metadata field `http_status`.",
+      "description": "\nThis example shows how to use the HTTP processor to send a record's `.Payload.After` field to a dummy HTTP server\nthat replies back with a greeting.\n\nThe record's `.Payload.After` is overwritten with the response. Additionally, the example shows how to set a request\nheader and how to store the value of the HTTP response's code in the metadata field `http_status`.",
       "config": {
         "backoffRetry.count": "0",
         "backoffRetry.factor": "2",
         "backoffRetry.max": "5s",
         "backoffRetry.min": "100ms",
+        "headers.content-type": "application/json",
         "request.body": ".Payload.After",
-        "request.contentType": "application/json",
         "request.method": "GET",
         "request.url": "http://127.0.0.1:54321",
         "response.body": ".Payload.After",
@@ -136,7 +136,6 @@
         "backoffRetry.factor": "2",
         "backoffRetry.max": "5s",
         "backoffRetry.min": "100ms",
-        "request.contentType": "application/json",
         "request.method": "GET",
         "request.url": "http://127.0.0.1:54321/{{.Payload.After.name}}",
         "response.body": ".Payload.After.response"

@@ -50,7 +50,7 @@ func (httpConfig) Parameters() map[string]config.Parameter {
 			Validations: []config.Validation{},
 		},
 		"request.contentType": {
-			Default:     "application/json",
+			Default:     "",
 			Description: "Deprecated: use `headers.Content-Type` instead.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
