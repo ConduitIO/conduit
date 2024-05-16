@@ -141,6 +141,23 @@ func TestHTTPProcessor_Configure(t *testing.T) {
 			wantErr: "",
 		},
 		{
+			name: "content-type header",
+			config: map[string]string{
+				"request.url":          "http://example.com",
+				"headers.content-type": "application/json",
+			},
+			wantErr: "",
+		},
+		{
+			name: "invalid: content-type header and request.contentType",
+			config: map[string]string{
+				"request.url":          "http://example.com",
+				"request.contentType":  "application/json",
+				"headers.content-type": "application/json",
+			},
+			wantErr: `configuration error, cannot provide both "request.contentType" and "headers.Content-Type", use "headers.Content-Type" only`,
+		},
+		{
 			name: "invalid: same value of response.body and response.status",
 			config: map[string]string{
 				"request.url":     "http://example.com",
@@ -181,7 +198,8 @@ func TestHTTPProcessor_Success(t *testing.T) {
 	tests := []struct {
 		name   string
 		config map[string]string
-		args   []opencdc.Record
+		status int
+		recs   []opencdc.Record
 		want   []sdk.ProcessedRecord
 	}{
 		{
@@ -190,7 +208,8 @@ func TestHTTPProcessor_Success(t *testing.T) {
 				"request.method": "POST",
 				"request.body":   ".",
 			},
-			args: []opencdc.Record{{
+			status: 200,
+			recs: []opencdc.Record{{
 				Payload: opencdc.Change{
 					Before: nil,
 					After: opencdc.StructuredData{
@@ -212,7 +231,8 @@ func TestHTTPProcessor_Success(t *testing.T) {
 				"request.method": "GET",
 				"request.body":   ".",
 			},
-			args: []opencdc.Record{{
+			status: 200,
+			recs: []opencdc.Record{{
 				Payload: opencdc.Change{
 					After: opencdc.RawData("random data"),
 				},
@@ -231,7 +251,8 @@ func TestHTTPProcessor_Success(t *testing.T) {
 				"request.method":  "POST",
 				"request.body":    ".",
 			},
-			args: []opencdc.Record{{
+			status: 404,
+			recs: []opencdc.Record{{
 				Payload: opencdc.Change{
 					After: opencdc.StructuredData{
 						"a key": "random data",
@@ -243,7 +264,7 @@ func TestHTTPProcessor_Success(t *testing.T) {
 					After: opencdc.StructuredData{
 						"a key":  "random data",
 						"body":   respBody,
-						"status": "200",
+						"status": "404",
 					},
 				},
 			}},
@@ -255,7 +276,8 @@ func TestHTTPProcessor_Success(t *testing.T) {
 				"response.body":  ".Payload.After.httpResponse",
 				"request.method": "POST",
 			},
-			args: []opencdc.Record{{
+			status: 200,
+			recs: []opencdc.Record{{
 				Payload: opencdc.Change{
 					Before: opencdc.StructuredData{
 						"before-key": "before-data",
@@ -284,7 +306,8 @@ func TestHTTPProcessor_Success(t *testing.T) {
 				"response.body":  ".Payload.After.httpResponse",
 				"request.method": "POST",
 			},
-			args: []opencdc.Record{{
+			status: 200,
+			recs: []opencdc.Record{{
 				Payload: opencdc.Change{
 					Before: opencdc.RawData("uncooked data"),
 					After: opencdc.StructuredData{
@@ -309,7 +332,8 @@ func TestHTTPProcessor_Success(t *testing.T) {
 				"response.body":  ".Payload.After.httpResponse",
 				"request.method": "POST",
 			},
-			args: []opencdc.Record{{
+			status: 200,
+			recs: []opencdc.Record{{
 				Payload: opencdc.Change{
 					After: opencdc.StructuredData{
 						"contents":  []byte{15, 2, 20, 24},
@@ -338,7 +362,7 @@ func TestHTTPProcessor_Success(t *testing.T) {
 				wantMethod = "GET" // default
 			}
 
-			wantBody := getRequestBody(is, tc.config["request.body"], tc.args)
+			wantBody := getRequestBody(is, tc.config["request.body"], tc.recs)
 
 			srv := httptest.NewServer(http.HandlerFunc(func(resp http.ResponseWriter, req *http.Request) {
 				is.Equal(wantMethod, req.Method)
@@ -347,6 +371,7 @@ func TestHTTPProcessor_Success(t *testing.T) {
 				is.NoErr(err)
 				is.Equal(wantBody, gotBody)
 
+				resp.WriteHeader(tc.status)
 				_, err = resp.Write(respBody)
 				is.NoErr(err)
 			}))
@@ -357,7 +382,7 @@ func TestHTTPProcessor_Success(t *testing.T) {
 			err := underTest.Configure(context.Background(), tc.config)
 			is.NoErr(err)
 
-			got := underTest.Process(context.Background(), tc.args)
+			got := underTest.Process(context.Background(), tc.recs)
 			diff := cmp.Diff(tc.want, got, cmpopts.IgnoreUnexported(sdk.SingleRecord{}))
 			if diff != "" {
 				t.Logf("mismatch (-want +got): %s", diff)
@@ -372,13 +397,13 @@ func TestHTTPProcessor_URLTemplate(t *testing.T) {
 		name     string
 		pathTmpl string // will be attached to the URL
 		path     string // expected result of the pathTmpl
-		args     []opencdc.Record
+		recs     []opencdc.Record
 	}{
 		{
 			name:     "URL template, success",
 			pathTmpl: "/{{.Payload.After.foo}}",
 			path:     "/123",
-			args: []opencdc.Record{{
+			recs: []opencdc.Record{{
 				Payload: opencdc.Change{
 					Before: nil,
 					After: opencdc.StructuredData{
@@ -391,7 +416,7 @@ func TestHTTPProcessor_URLTemplate(t *testing.T) {
 			name:     "URL template, key with a hyphen",
 			pathTmpl: `/{{index .Payload.After "foo-bar"}}`,
 			path:     "/baz",
-			args: []opencdc.Record{{
+			recs: []opencdc.Record{{
 				Payload: opencdc.Change{
 					After: opencdc.StructuredData{
 						"foo-bar": "baz",
@@ -403,7 +428,7 @@ func TestHTTPProcessor_URLTemplate(t *testing.T) {
 			name:     "URL template, path and query have spaces",
 			pathTmpl: `/{{.Payload.Before.url}}`,
 			path:     "/what%20is%20conduit?id=my+id",
-			args: []opencdc.Record{{
+			recs: []opencdc.Record{{
 				Payload: opencdc.Change{
 					Before: opencdc.StructuredData{
 						"url": "what is conduit?id=my id",
@@ -431,7 +456,7 @@ func TestHTTPProcessor_URLTemplate(t *testing.T) {
 			err := underTest.Configure(context.Background(), config)
 			is.NoErr(err)
 
-			got := underTest.Process(context.Background(), tc.args)
+			got := underTest.Process(context.Background(), tc.recs)
 			is.Equal(1, len(got))
 			_, ok := got[0].(sdk.SingleRecord)
 			is.True(ok)
@@ -528,40 +553,6 @@ func TestHTTPProcessor_RetryFail(t *testing.T) {
 	_, isErr := got[0].(sdk.ErrorRecord)
 	is.True(isErr)               // expected an error
 	is.Equal(srvHandlerCount, 6) // expected 6 requests (1 regular and 5 retries)
-}
-
-func TestHTTPProcessor_FilterRecord(t *testing.T) {
-	is := is.New(t)
-
-	wantMethod := "GET"
-	rec := []opencdc.Record{
-		{Payload: opencdc.Change{After: opencdc.RawData("random data")}},
-	}
-
-	wantBody := getRequestBody(is, ".", rec)
-
-	srv := httptest.NewServer(http.HandlerFunc(func(resp http.ResponseWriter, req *http.Request) {
-		is.Equal(wantMethod, req.Method)
-
-		gotBody, err := io.ReadAll(req.Body)
-		is.NoErr(err)
-		is.Equal(wantBody, gotBody)
-
-		resp.WriteHeader(http.StatusNoContent)
-	}))
-	defer srv.Close()
-
-	config := map[string]string{
-		"request.url":  srv.URL,
-		"request.body": ".",
-	}
-
-	underTest := NewHTTPProcessor(log.Test(t))
-	err := underTest.Configure(context.Background(), config)
-	is.NoErr(err)
-
-	got := underTest.Process(context.Background(), rec)
-	is.Equal(got, []sdk.ProcessedRecord{sdk.FilterRecord{}})
 }
 
 func getRequestBody(is *is.I, field string, records []opencdc.Record) []byte {

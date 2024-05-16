@@ -39,7 +39,7 @@ import (
 type httpConfig struct {
 	// URL is a Go template expression for the URL used in the HTTP request, using Go [templates](https://pkg.go.dev/text/template).
 	// The value provided to the template is [opencdc.Record](https://github.com/ConduitIO/conduit-commons/blob/59ecfbe5d5be2ac4cd9a674d274862d164123f36/opencdc/record.go#L30),
-	// so the template has access to all its fields (e.g. .Position, .Key, .Metadata, and so on). We also inject all template functions provided by [sprig](https://masterminds.github.io/sprig/)
+	// so the template has access to all its fields (e.g. `.Position`, `.Key`, `.Metadata`, and so on). We also inject all template functions provided by [sprig](https://masterminds.github.io/sprig/)
 	// to make it easier to write templates.
 	URL string `json:"request.url" validate:"required"`
 	// Method is the HTTP request method to be used.
@@ -125,7 +125,10 @@ func (p *httpProcessor) Specification() (sdk.Specification, error) {
 		Name:    "webhook.http",
 		Summary: "Trigger an HTTP request for every record.",
 		Description: `A processor that sends an HTTP request to the specified URL, retries on error and 
-saves the response body and, optionally, the response status.`,
+saves the response body and, optionally, the response status.
+
+A status code over 500 is regarded as an error and will cause the processor to retry the request.
+The processor will retry the request according to the backoff configuration.`,
 		Version:    "v0.1.0",
 		Author:     "Meroxa, Inc.",
 		Parameters: httpConfig{}.Parameters(),
@@ -286,13 +289,9 @@ func (p *httpProcessor) processRecord(ctx context.Context, r opencdc.Record) (sd
 		return nil, cerrors.Errorf("error reading response body: %w", err)
 	}
 
-	if resp.StatusCode >= 300 {
-		// regard status codes over 299 as errors
+	if resp.StatusCode >= 500 {
+		// regard status codes over 500 as errors
 		return nil, cerrors.Errorf("error status code %v (body: %q)", resp.StatusCode, string(body))
-	}
-	// skip if body has no content
-	if resp.StatusCode == http.StatusNoContent {
-		return sdk.FilterRecord{}, nil
 	}
 
 	// Set response body

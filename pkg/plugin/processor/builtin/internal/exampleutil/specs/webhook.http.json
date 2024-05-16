@@ -2,7 +2,7 @@
   "specification": {
     "name": "webhook.http",
     "summary": "Trigger an HTTP request for every record.",
-    "description": "A processor that sends an HTTP request to the specified URL, retries on error and \nsaves the response body and, optionally, the response status.",
+    "description": "A processor that sends an HTTP request to the specified URL, retries on error and \nsaves the response body and, optionally, the response status.\n\nA status code over 500 is regarded as an error and will cause the processor to retry the request.\nThe processor will retry the request according to the backoff configuration.",
     "version": "v0.1.0",
     "author": "Meroxa, Inc.",
     "parameters": {
@@ -66,7 +66,7 @@
       },
       "request.url": {
         "default": "",
-        "description": "URL is a Go template expression for the URL used in the HTTP request, using Go [templates](https://pkg.go.dev/text/template).\nThe value provided to the template is [opencdc.Record](https://github.com/ConduitIO/conduit-commons/blob/59ecfbe5d5be2ac4cd9a674d274862d164123f36/opencdc/record.go#L30),\nso the template has access to all its fields (e.g. .Position, .Key, .Metadata, and so on). We also inject all template functions provided by [sprig](https://masterminds.github.io/sprig/)\nto make it easier to write templates.",
+        "description": "URL is a Go template expression for the URL used in the HTTP request, using Go [templates](https://pkg.go.dev/text/template).\nThe value provided to the template is [opencdc.Record](https://github.com/ConduitIO/conduit-commons/blob/59ecfbe5d5be2ac4cd9a674d274862d164123f36/opencdc/record.go#L30),\nso the template has access to all its fields (e.g. `.Position`, `.Key`, `.Metadata`, and so on). We also inject all template functions provided by [sprig](https://masterminds.github.io/sprig/)\nto make it easier to write templates.",
         "type": "string",
         "validations": [
           {
