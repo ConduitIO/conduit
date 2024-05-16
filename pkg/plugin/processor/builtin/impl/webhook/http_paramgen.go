@@ -37,6 +37,12 @@ func (httpConfig) Parameters() map[string]config.Parameter {
 			Type:        config.ParameterTypeDuration,
 			Validations: []config.Validation{},
 		},
+		"headers.*": {
+			Default:     "",
+			Description: "Headers to add to the request, use `headers.*` to specify the header and its value (e.g. `headers.Authorization: \"Bearer key\"`).",
+			Type:        config.ParameterTypeString,
+			Validations: []config.Validation{},
+		},
 		"request.body": {
 			Default:     "",
 			Description: "Specifies which field from the input record should be used as the body in\nthe HTTP request.\n\nFor more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).",
@@ -45,7 +51,7 @@ func (httpConfig) Parameters() map[string]config.Parameter {
 		},
 		"request.contentType": {
 			Default:     "application/json",
-			Description: "The value of the `Content-Type` header.",
+			Description: "Deprecated: use `headers.Content-Type` instead.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},
