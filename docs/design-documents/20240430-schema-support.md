@@ -5,8 +5,6 @@
   * [Requirements](#requirements)
   * [Schema structure](#schema-structure)
   * [Schema operations](#schema-operations)
-    * [Create](#create)
-    * [Fetch](#fetch)
   * [Implementation](#implementation)
     * [Schema storage](#schema-storage)
       * [Option 1: Conduit itself hosts the schema registry](#option-1-conduit-itself-hosts-the-schema-registry)
@@ -24,9 +22,9 @@
       * [Chosen option](#chosen-option-2)
   * [Required changes](#required-changes)
     * [Conduit](#conduit)
+    * [Conduit Commons](#conduit-commons)
     * [Connector SDK](#connector-sdk)
     * [Processor SDK](#processor-sdk)
-  * [How are requirements addressed](#how-are-requirements-addressed)
   * [Summary](#summary)
   * [Other considerations](#other-considerations)
 <!-- TOC -->
@@ -107,18 +105,10 @@ optional/nullable is better developer experience.
 
 ## Schema operations
 
-### Create
+The required schema operations are:
 
-**Request**: A request to create a schema contains the schema name and at least
-one field.
-
-**Response**: If successful, the new schema's ID is returned. If a schema with
-the same name and field specs exists, no new schema is created, and the existing
-schema's ID is returned.
-
-### Fetch
-
-The only type of fetch supported is fetch by ID.
+1. create (using a name and list of fields)
+2. fetch (using a schema ID)
 
 ## Implementation
 
@@ -365,65 +355,51 @@ for remote Conduit instances.
 
 ### Conduit
 
-Conduit needs to expose a gRPC service as explained above. The gRPC service
-exposes methods needed for connectors to work with schemas.
+Conduit needs to expose a gRPC schema service as explained above. The gRPC
+service exposes methods needed for connectors to work with schemas. Initially,
+the service will use the Apicurio Registry to actually manage the schemas. Later
+on, we will migrate to our own schema registry.
 
-When starting or configuring a connector, Conduit needs to send it its gRPC
-port.
+The service's port will be random and Conduit will make it available to
+connectors via an environment variable.
 
-Internally, Conduit will use the Apicurio Registry to work with schemas. In future,
-we plan to migrate to our own schema registry so that the tech stack is kept
-simple and Conduit can be run with a single binary.
+### Conduit Commons
+
+Conduit Commons needs to provide the following functions that will be used by
+multiple libraries (Connector SDK, Processor SDK):
+
+1. A function that creates an Avro schema
+2. A function that encodes values using an Avro schema
+3. A function decodes a slice of bytes into a value, using an Avro schema 
 
 ### Connector SDK
 
-For the needs of source connectors, the Connector SDK needs to provide the
-following functions:
+The Connector SDK needs to provide the following functions:
 
-1. A function/builder that builds an Avro schema.
-2. A function that registers a schema.
-3. A function that encodes a value using the built schema.
+1. A function that registers a schema.
+2. A function that fetches a schema.
 
 ### Processor SDK
 
-## How are requirements addressed
+The Processor SDK needs to provide the following functions:
 
-1. Records **should not** carry the whole schema.
-
-   Addressed by saving the schemas in a schema service and records keeping a
-   reference to the schema.
-2. Sources and destinations need to be able to work with multiple schemas.
-
-   The schema service doesn't put any limitations on source collections.
-3. A schema should be accessible across pipelines and Conduit instances.
-
-   Addressed through the usage of an external schema registry.
-4. It should be possible for a schema to evolve.
-
-   There's no explicit support for schema versions, as they're not needed. A new
-   schema version can be created as a new schema object.
-5. A source connector should be able to register a schema.
-
-   The Connector SDK will provide a function to save a schema.
-6. A destination connector should be able to fetch a specific schema.
-
-   The Connector SDK will provide a function to fetch a schema.
-7. A destination connector needs a way to know that a schema changed.
-
-   A destination connector can compare the IDs or the records it received.
-8. The Connector SDK should provide an API to work with the schemas.
-9. The Connector SDK should cache the schemas.
+1. A function that registers a schema.
+2. A function that fetches a schema.
 
 ## Summary
 
 The following design is proposed: 
 
-Conduit exposes a gRPC service for managing schemas. When Conduit starts a
-connector, it sends the connector its gRPC port. A connector creates and fetches
-schemas through the gRPC service.
+Records will reference schemas using IDs. All schemas will be in the Avro
+format. In the future, we might add support for other formats too.
+
+Connectors and processors will access the schemas through a gRPC service exposed
+by Conduit. When Conduit starts a connector, it publishes the port through an
+environment variable. A connector creates and fetches schemas through the
+service.
 
 Conduit's gRPC service is an abstraction/indirection for an external schema
-registry (such as Apicurio Registry), that is accessed by multiple Conduit
+registry (Apicurio Registry), that is accessed by multiple Conduit
 instances.
 
 ## Other considerations
