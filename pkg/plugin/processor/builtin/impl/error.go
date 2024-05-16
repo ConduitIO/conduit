@@ -22,7 +22,6 @@ import (
 	"text/template"
 
 	"github.com/Masterminds/sprig/v3"
-	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -58,7 +57,7 @@ which results in the record being sent to the DLQ if it's configured, or the pip
 to this processor, otherwise all records will provoke an error.`,
 		Version:    "v0.1.0",
 		Author:     "Meroxa, Inc.",
-		Parameters: map[string]config.Parameter{},
+		Parameters: p.config.Parameters(),
 	}, nil
 }
 
