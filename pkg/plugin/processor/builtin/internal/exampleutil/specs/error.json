@@ -1,0 +1,45 @@
+{
+  "specification": {
+    "name": "error",
+    "summary": "Returns an error for all records that get passed to the processor.",
+    "description": "Any time a record is passed to this processor it returns an error,\nwhich results in the record being sent to the DLQ if it's configured, or the pipeline stopping.\n\n**Important:** Make sure to add a [condition](https://conduit.io/docs/processors/conditions)\nto this processor, otherwise all records will trigger an error.",
+    "version": "v0.1.0",
+    "author": "Meroxa, Inc.",
+    "parameters": {
+      "message": {
+        "default": "error processor triggered",
+        "description": "Error message to be returned. This can be a Go [template](https://pkg.go.dev/text/template)\nexecuted on each [`Record`](https://pkg.go.dev/github.com/conduitio/conduit-commons/opencdc#Record)\nbeing processed.",
+        "type": "string",
+        "validations": []
+      }
+    }
+  },
+  "examples": [
+    {
+      "summary": "Error record with custom error message",
+      "description": "This example shows how to configure the error processor to\nreturn a custom error message for a record using a Go template.",
+      "config": {
+        "message": "custom error message with data from record: {{.Metadata.foo}}"
+      },
+      "have": {
+        "position": null,
+        "operation": "create",
+        "metadata": {
+          "foo": "bar"
+        },
+        "key": null,
+        "payload": {
+          "before": {
+            "bar": "baz"
+          },
+          "after": {
+            "foo": "bar"
+          }
+        }
+      },
+      "want": {
+        "error": "custom error message with data from record: bar"
+      }
+    }
+  ]
+}
