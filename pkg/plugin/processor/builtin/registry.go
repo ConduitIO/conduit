@@ -39,6 +39,7 @@ var DefaultBuiltinProcessors = map[string]ProcessorPluginConstructor{
 	"base64.decode":       base64.NewDecodeProcessor,
 	"base64.encode":       base64.NewEncodeProcessor,
 	"custom.javascript":   custom.NewJavascriptProcessor,
+	"error":               impl.NewErrorProcessor,
 	"filter":              impl.NewFilterProcessor,
 	"field.convert":       field.NewConvertProcessor,
 	"field.exclude":       field.NewExcludeProcessor,
