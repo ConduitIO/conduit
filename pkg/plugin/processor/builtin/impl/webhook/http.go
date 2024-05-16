@@ -44,8 +44,10 @@ type httpConfig struct {
 	URL string `json:"request.url" validate:"required"`
 	// Method is the HTTP request method to be used.
 	Method string `json:"request.method" default:"GET"`
-	// The value of the `Content-Type` header.
+	// Deprecated: use `headers.Content-Type` instead.
 	ContentType string `json:"request.contentType" default:"application/json"`
+	// Headers to add to the request, use `headers.*` to specify the header and its value (e.g. `headers.Authorization: "Bearer key"`).
+	Headers map[string]string `json:"headers"`
 
 	// Maximum number of retries for an individual record when backing off following an error.
 	BackoffRetryCount float64 `json:"backoffRetry.count" default:"0" validate:"gt=-1"`
@@ -70,6 +72,29 @@ type httpConfig struct {
 	//
 	// For more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).
 	ResponseStatusRef string `json:"response.status"`
+}
+
+func (c *httpConfig) parseHeaders() error {
+	if c.Headers == nil {
+		c.Headers = make(map[string]string)
+	}
+
+	if c.ContentType == "" {
+		return nil // Nothing to replace in headers
+	}
+
+	for name, _ := range c.Headers {
+		if strings.ToLower(name) == "content-type" {
+			return cerrors.Errorf("Configuration error, cannot provide both \"request.contentType\" and \"headers.Content-Type\", use \"headers.Content-Type\" only.")
+		}
+	}
+
+	c.Headers["Content-Type"] = c.ContentType
+	// the ContentType field is deprecated,
+	// so we're preparing for completely removing it in a later release
+	c.ContentType = ""
+
+	return nil
 }
 
 type httpProcessor struct {
@@ -106,6 +131,11 @@ func (p *httpProcessor) Configure(ctx context.Context, m map[string]string) erro
 	err := sdk.ParseConfig(ctx, m, &p.config, p.config.Parameters())
 	if err != nil {
 		return cerrors.Errorf("failed parsing configuration: %w", err)
+	}
+
+	err = p.config.parseHeaders()
+	if err != nil {
+		return err
 	}
 
 	if p.config.ResponseBodyRef == p.config.ResponseStatusRef {
@@ -293,8 +323,10 @@ func (p *httpProcessor) buildRequest(ctx context.Context, r opencdc.Record) (*ht
 		return nil, cerrors.Errorf("error creating HTTP request: %w", err)
 	}
 
-	// todo make it possible to add more headers, e.g. auth headers etc.
-	req.Header.Set("Content-Type", p.config.ContentType)
+	// set header values
+	for key, val := range p.config.Headers {
+		req.Header.Set(key, val)
+	}
 
 	return req, nil
 }
