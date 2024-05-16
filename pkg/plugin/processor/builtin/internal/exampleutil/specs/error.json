@@ -31,7 +31,7 @@
         }
       },
       "want": {
-        "Error": {}
+        "error": "custom error message with data from record: bar"
       }
     }
   ]
