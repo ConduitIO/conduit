@@ -54,7 +54,7 @@ func (p *errorProcessor) Specification() (sdk.Specification, error) {
 which results in the record being sent to the DLQ if it's configured, or the pipeline stopping.
 
 **Important:** Make sure to add a [condition](https://conduit.io/docs/processors/conditions)
-to this processor, otherwise all records will provoke an error.`,
+to this processor, otherwise all records will trigger an error.`,
 		Version:    "v0.1.0",
 		Author:     "Meroxa, Inc.",
 		Parameters: p.config.Parameters(),
