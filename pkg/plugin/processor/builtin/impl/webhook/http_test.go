@@ -27,7 +27,6 @@ import (
 	"github.com/goccy/go-json"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-
 	"github.com/matryer/is"
 )
 
