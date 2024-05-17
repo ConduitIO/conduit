@@ -187,7 +187,7 @@ There are two aspects of this:
 
 1. The schema format used internally (when registering a schema in the schema
   service, updating it, fetching, etc.)
-- the schema format exposed to connector developers (through the Connector SDK)
+2. The schema format exposed to connector developers (through the Connector SDK)
 
 Having them different makes only sense if we expose our own format in the
 Connector SDK. The internal format is dictated by the schema registry that we
