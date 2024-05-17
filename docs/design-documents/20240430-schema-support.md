@@ -198,7 +198,7 @@ our own schema format for that purpose.
 
 1. We can decouple the Connector SDK and Conduit release cycle from the schema
    internal format release cycle
-2. We want to limit or add feature on top of internal the schema format
+2. We want to limit or add features on top of the internal schema format
 3. We can more easily switch the internal schema format, if needed
 
 **Disadvantages**:
