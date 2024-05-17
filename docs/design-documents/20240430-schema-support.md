@@ -210,8 +210,12 @@ We use Avro as the schema format used by the Connector SDK and internally.
 1. Schema is a first-class citizen
 2. A widely used schema format
 3. A popular option with Kafka Connect (makes it easier for users to migrate)
+4. Supports many types (including timestamps, as a logical type)
 
 **Disadvantages**:
+
+1. Likely slower (de)serialization
+2. Verbose schemas
 
 ##### Option 2: Protobuf schema
 
