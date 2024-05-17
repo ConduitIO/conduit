@@ -415,6 +415,6 @@ instances.
    permissions then just writing data to a collection. For some users, the
    benefit of having restricted permissions might outweigh the benefit of
    auto-creating collections.
-2. **OpenCDC structured data**: it's becoming less useful, because it's types
+2. **OpenCDC structured data**: it's becoming less useful, because its types
    are limited. With the schema support, OpenCDC's `RawData` can be used
    everywhere.
