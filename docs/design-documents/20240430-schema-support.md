@@ -212,7 +212,7 @@ We use Avro as the schema format used by the Connector SDK and internally.
 **Advantages**:
 
 1. Schema is a first-class citizen
-2. A widely used schema format.
+2. A widely used schema format
 3. A popular option with Kafka Connect (makes it easier for users to migrate)
 
 **Disadvantages**:
