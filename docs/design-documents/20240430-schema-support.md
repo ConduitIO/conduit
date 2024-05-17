@@ -351,12 +351,17 @@ for remote Conduit instances.
 
 ## Required changes
 
+### Conduit Connector Protocol
+
+Conduit's schema service definition needs to be added to
+the [Conduit Connector Protocol](https://github.com/ConduitIO/conduit-connector-protocol).
+
 ### Conduit
 
-Conduit needs to expose a gRPC schema service as explained above. The gRPC
-service exposes methods needed for connectors to work with schemas. Initially,
-the service will use the Apicurio Registry to actually manage the schemas. Later
-on, we will migrate to our own schema registry.
+Conduit needs to expose a gRPC schema service as defined in the protocol. The
+gRPC service exposes methods needed for connectors to work with schemas.
+Initially, the service will use the Apicurio Registry to actually manage the
+schemas. Later on, we will migrate to our own schema registry.
 
 The service's port will be random and Conduit will make it available to
 connectors via an environment variable.
