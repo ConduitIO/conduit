@@ -110,7 +110,7 @@ optional/nullable is better developer experience.
 
 The required schema operations are:
 
-1. create (using a name and list of fields)
+1. register (using a name and list of fields)
 2. fetch (using a schema ID)
 
 ## Implementation
