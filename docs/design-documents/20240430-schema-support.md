@@ -186,7 +186,7 @@ This section discusses the schema format to be used.
 There are two aspects of this:
 
 1. The schema format used internally (when registering a schema in the schema
-  service, updating it, fetching, etc.)
+  service, updating, fetching, etc.)
 2. The schema format exposed to connector developers (through the Connector SDK)
 
 Having them different makes only sense if we expose our own format in the
