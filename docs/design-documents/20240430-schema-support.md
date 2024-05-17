@@ -376,10 +376,11 @@ multiple libraries (Connector SDK, Processor SDK):
 
 ### Connector SDK
 
-The Connector SDK needs to provide the following functions:
-
-1. A function that registers a schema.
-2. A function that fetches a schema.
+The Connector SDK will need some middleware that can auto-generate a schema,
+register it in Conduit, attach the schema metadata and encode the payload in the
+source connector. Then we need the opposite in the destination connector - based
+on the metadata it fetches the schema and decodes the payload back into
+structured data.
 
 ### Processor SDK
 
