@@ -15,11 +15,12 @@
 package webhook
 
 import (
-	"github.com/matryer/is"
 	"testing"
+
+	"github.com/matryer/is"
 )
 
-func TestHTTPConfig_ValidateHeaders(t *testing.T) {
+func TestHTTPConfig_ParseHeaders(t *testing.T) {
 	testCases := []struct {
 		name       string
 		input      httpConfig
@@ -34,7 +35,7 @@ func TestHTTPConfig_ValidateHeaders(t *testing.T) {
 					"Content-Type": "application/json",
 				},
 			},
-			wantErr: `Configuration error, cannot provide both "request.contentType" and "headers.Content-Type", use "headers.Content-Type" only.`,
+			wantErr: `configuration error, cannot provide both "request.contentType" and "headers.Content-Type", use "headers.Content-Type" only`,
 		},
 		{
 			name: "ContentType field present, header present, different case",
@@ -44,7 +45,7 @@ func TestHTTPConfig_ValidateHeaders(t *testing.T) {
 					"content-type": "application/json",
 				},
 			},
-			wantErr: `Configuration error, cannot provide both "request.contentType" and "headers.Content-Type", use "headers.Content-Type" only.`,
+			wantErr: `configuration error, cannot provide both "request.contentType" and "headers.Content-Type", use "headers.Content-Type" only`,
 		},
 		{
 			name: "ContentType field presents, header not present",

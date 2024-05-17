@@ -45,12 +45,12 @@ func (httpConfig) Parameters() map[string]config.Parameter {
 		},
 		"request.body": {
 			Default:     "",
-			Description: "Specifies which field from the input record should be used as the body in\nthe HTTP request.\n\nFor more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).",
+			Description: "Specifies the body that will be sent in the HTTP request. The field accepts\na Go [templates](https://pkg.go.dev/text/template) that's evaluated using the\n[opencdc.Record](https://pkg.go.dev/github.com/conduitio/conduit-commons/opencdc#Record)\nas input. By default, the body is empty.\n\nTo send the whole record as JSON you can use `{{ toJson . }}`.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},
 		"request.contentType": {
-			Default:     "application/json",
+			Default:     "",
 			Description: "Deprecated: use `headers.Content-Type` instead.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
@@ -63,7 +63,7 @@ func (httpConfig) Parameters() map[string]config.Parameter {
 		},
 		"request.url": {
 			Default:     "",
-			Description: "URL is a Go template expression for the URL used in the HTTP request, using Go [templates](https://pkg.go.dev/text/template).\nThe value provided to the template is [opencdc.Record](https://github.com/ConduitIO/conduit-commons/blob/59ecfbe5d5be2ac4cd9a674d274862d164123f36/opencdc/record.go#L30),\nso the template has access to all its fields (e.g. .Position, .Key, .Metadata, and so on). We also inject all template functions provided by [sprig](https://masterminds.github.io/sprig/)\nto make it easier to write templates.",
+			Description: "URL is a Go template expression for the URL used in the HTTP request, using Go [templates](https://pkg.go.dev/text/template).\nThe value provided to the template is [opencdc.Record](https://pkg.go.dev/github.com/conduitio/conduit-commons/opencdc#Record),\nso the template has access to all its fields (e.g. `.Position`, `.Key`, `.Metadata`, and so on). We also inject all template functions provided by [sprig](https://masterminds.github.io/sprig/)\nto make it easier to write templates.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{
 				config.ValidationRequired{},
