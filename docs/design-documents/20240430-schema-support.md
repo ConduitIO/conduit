@@ -72,11 +72,6 @@ creating a destination collection or propagating schema changes.
 
 ## Schema structure
 
-A destination connector should work with one schema format only, regardless of
-the underlying or intermediary schema formats used. This makes it easy for a
-connector developer to write code, since it doesn't require handling of
-potentially multiple schema types.
-
 A schema consists of following:
 
 - reference: a string that uniquely identifies a schema in Conduit
@@ -320,16 +315,16 @@ A skeleton of the gRPC definition of the service would be:
 syntax = "proto3";
 
 service SchemaService {
-  rpc Create(CreateSchemaRequest) returns (CreateSchemaResponse);
+  rpc Register(RegisterSchemaRequest) returns (RegisterSchemaResponse);
   rpc Fetch(FetchSchemaRequest) returns (FetchSchemaResponse);
 }
 
-message CreateSchemaRequest {
+message RegisterSchemaRequest {
   string name = 1;
   // other fields
 }
 
-message CreateSchemaResponse {
+message RegisterSchemaResponse {
   string id = 1;
 }
 
@@ -375,7 +370,7 @@ connectors via an environment variable.
 Conduit Commons needs to provide the following functions that will be used by
 multiple libraries (Connector SDK, Processor SDK):
 
-1. A function that creates an Avro schema
+1. A function that creates and registers an Avro schema
 2. A function that encodes values using an Avro schema
 3. A function decodes a slice of bytes into a value, using an Avro schema
 
@@ -402,7 +397,7 @@ format. In the future, we might add support for other formats too.
 
 Connectors and processors will access the schemas through a gRPC service exposed
 by Conduit. When Conduit starts a connector, it publishes the port through an
-environment variable. A connector creates and fetches schemas through the
+environment variable. A connector registers and fetches schemas through the
 service.
 
 Conduit's gRPC service is an abstraction/indirection for an external schema
