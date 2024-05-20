@@ -16,10 +16,11 @@ package schema
 
 import (
 	"context"
+	"strconv"
+
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/avro/schemaregistry"
 	"github.com/lovromazgon/franz-go/pkg/sr"
-	"strconv"
 )
 
 type Service struct {

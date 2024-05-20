@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package connector_util_services
+package connservices
 
 //go:generate mockgen -destination=mock/schema_service.go -package=mock -mock_names=SchemaService=SchemaService . SchemaService
 

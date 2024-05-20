@@ -12,12 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package connector_util_services
+package connservices
 
 import (
 	"context"
+	"testing"
+
 	schemav1 "github.com/conduitio/conduit-connector-protocol/proto/schema/v1"
-	"github.com/conduitio/conduit/pkg/connector_util_services/mock"
+	"github.com/conduitio/conduit/pkg/connservices/mock"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/schema"
 	"github.com/google/go-cmp/cmp"
@@ -26,7 +28,6 @@ import (
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"testing"
 )
 
 func TestSchemaService_Register(t *testing.T) {

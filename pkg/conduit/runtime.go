@@ -20,8 +20,6 @@ package conduit
 
 import (
 	"context"
-	"github.com/conduitio/conduit/pkg/connector_util_services"
-	"github.com/conduitio/conduit/pkg/schema"
 	"net"
 	"net/http"
 	"os"
@@ -31,6 +29,7 @@ import (
 	"time"
 
 	"github.com/conduitio/conduit/pkg/connector"
+	"github.com/conduitio/conduit/pkg/connservices"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/ctxutil"
 	"github.com/conduitio/conduit/pkg/foundation/database"
@@ -53,6 +52,7 @@ import (
 	proc_standalone "github.com/conduitio/conduit/pkg/plugin/processor/standalone"
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/provisioning"
+	"github.com/conduitio/conduit/pkg/schema"
 	"github.com/conduitio/conduit/pkg/web/api"
 	"github.com/conduitio/conduit/pkg/web/openapi"
 	"github.com/conduitio/conduit/pkg/web/ui"
@@ -485,7 +485,7 @@ func (r *Runtime) startSchemaService(ctx context.Context, t *tomb.Tomb) (net.Add
 		// grpc.StatsHandler(r.newGrpcStatsHandler()),
 	)
 
-	pipelineAPIv1 := connector_util_services.NewSchemaServiceAPIv1(r.schemaService)
+	pipelineAPIv1 := connservices.NewSchemaServiceAPIv1(r.schemaService)
 	pipelineAPIv1.RegisterInServer(grpcServer)
 
 	// Makes it easier to use command line tools to interact
