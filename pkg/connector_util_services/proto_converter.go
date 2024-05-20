@@ -17,7 +17,7 @@ package connector_util_services
 import (
 	"fmt"
 
-	schemav1 "github.com/conduitio/conduit-connector-protocol/proto/schema_service/v1"
+	schemav1 "github.com/conduitio/conduit-connector-protocol/proto/schema/v1"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/schema"
 )
@@ -41,7 +41,7 @@ func (c protoConverter) schemaInstance(req *schemav1.RegisterSchemaRequest) (sch
 
 func (c protoConverter) schemaType(typ schemav1.SchemaType) (schema.Type, error) {
 	switch typ {
-	case schemav1.SchemaType_TYPE_AVRO:
+	case schemav1.SchemaType_SCHEMA_TYPE_AVRO:
 		return schema.TypeAvro, nil
 	default:
 		return 0, cerrors.Errorf("unsupported %q", typ)
@@ -61,7 +61,7 @@ func (c protoConverter) fetchResponse(inst schema.Instance) *schemav1.FetchSchem
 func (c protoConverter) protoType(t schema.Type) schemav1.SchemaType {
 	switch t {
 	case schema.TypeAvro:
-		return schemav1.SchemaType_TYPE_AVRO
+		return schemav1.SchemaType_SCHEMA_TYPE_AVRO
 	default:
 		panic(fmt.Errorf("unsupported schema type %q", t))
 	}

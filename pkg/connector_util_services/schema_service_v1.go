@@ -19,7 +19,7 @@ package connector_util_services
 import (
 	"context"
 
-	schemav1 "github.com/conduitio/conduit-connector-protocol/proto/schema_service/v1"
+	schemav1 "github.com/conduitio/conduit-connector-protocol/proto/schema/v1"
 	"github.com/conduitio/conduit/pkg/schema"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"

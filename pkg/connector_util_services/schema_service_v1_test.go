@@ -16,7 +16,7 @@ package connector_util_services
 
 import (
 	"context"
-	schemav1 "github.com/conduitio/conduit-connector-protocol/proto/schema_service/v1"
+	schemav1 "github.com/conduitio/conduit-connector-protocol/proto/schema/v1"
 	"github.com/conduitio/conduit/pkg/connector_util_services/mock"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/schema"
