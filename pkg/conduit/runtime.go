@@ -20,6 +20,8 @@ package conduit
 
 import (
 	"context"
+	"github.com/conduitio/conduit/pkg/connector_util_services"
+	"github.com/conduitio/conduit/pkg/schema"
 	"net"
 	"net/http"
 	"os"
@@ -89,6 +91,8 @@ type Runtime struct {
 	connectorPluginService *conn_plugin.PluginService
 	processorPluginService *proc_plugin.PluginService
 
+	schemaService *schema.Service
+
 	connectorPersister *connector.Persister
 	logger             log.CtxLogger
 }
@@ -154,6 +158,8 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 
 		connectorPluginService: connPluginService,
 		processorPluginService: procPluginService,
+
+		schemaService: schema.NewService(),
 
 		connectorPersister: connectorPersister,
 
@@ -282,6 +288,12 @@ func (r *Runtime) Run(ctx context.Context) (err error) {
 			r.logger.Err(ctx, err).Msg("pipeline failed to be started")
 		})
 	}
+
+	schemaServiceAddr, err := r.startSchemaService(ctx, t)
+	if err != nil {
+		return cerrors.Errorf("failed to serve schema service API: %w", err)
+	}
+	r.logger.Info(ctx).Msgf("schema service started on %v", schemaServiceAddr)
 
 	if r.Config.API.Enabled {
 		// Serve grpc and http API
@@ -461,7 +473,29 @@ func (r *Runtime) serveGRPCAPI(ctx context.Context, t *tomb.Tomb) (net.Addr, err
 	grpc_health_v1.RegisterHealthServer(grpcServer, healthServer)
 
 	// serve grpc server
-	return r.serveGRPC(ctx, t, grpcServer)
+	return r.serveGRPC(ctx, t, grpcServer, r.Config.API.GRPC.Address)
+}
+
+func (r *Runtime) startSchemaService(ctx context.Context, t *tomb.Tomb) (net.Addr, error) {
+	grpcServer := grpc.NewServer(
+		grpc.ChainUnaryInterceptor(
+			grpcutil.RequestIDUnaryServerInterceptor(r.logger),
+			grpcutil.LoggerUnaryServerInterceptor(r.logger),
+		),
+		// grpc.StatsHandler(r.newGrpcStatsHandler()),
+	)
+
+	pipelineAPIv1 := connector_util_services.NewSchemaServiceAPIv1(r.schemaService)
+	pipelineAPIv1.RegisterInServer(grpcServer)
+
+	// Makes it easier to use command line tools to interact
+	// with the gRPC API.
+	// https://github.com/grpc/grpc/blob/master/doc/server-reflection.md
+	reflection.Register(grpcServer)
+
+	// todo add to health server
+	// serve grpc server
+	return r.serveGRPC(ctx, t, grpcServer, ":8085")
 }
 
 func (r *Runtime) serveHTTPAPI(
@@ -614,8 +648,9 @@ func (r *Runtime) serveGRPC(
 	ctx context.Context,
 	t *tomb.Tomb,
 	srv *grpc.Server,
+	address string,
 ) (net.Addr, error) {
-	ln, err := net.Listen("tcp", r.Config.API.GRPC.Address)
+	ln, err := net.Listen("tcp", address)
 	if err != nil {
 		return nil, cerrors.Errorf("failed to listen on address %q: %w", r.Config.API.GRPC.Address, err)
 	}

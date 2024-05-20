@@ -94,10 +94,10 @@ const (
 	errorCodeSchemaNotFound  = 40403
 )
 
-// fakeRegistry is a simple fake registry meant to be used in tests. It stores
+// FakeRegistry is a simple fake registry meant to be used in tests. It stores
 // schemas in memory and supports only the basic functionality needed in our
 // tests and supported by our client.
-type fakeRegistry struct {
+type FakeRegistry struct {
 	schemas            []sr.SubjectSchema
 	fingerprintIDCache map[uint64]int
 	idSequence         int
@@ -106,7 +106,7 @@ type fakeRegistry struct {
 	initOnce sync.Once
 }
 
-func (fr *fakeRegistry) init() {
+func (fr *FakeRegistry) Init() {
 	fr.initOnce.Do(func() {
 		fr.m.Lock()
 		defer fr.m.Unlock()
@@ -115,8 +115,8 @@ func (fr *fakeRegistry) init() {
 	})
 }
 
-func (fr *fakeRegistry) CreateSchema(subject string, schema sr.Schema) sr.SubjectSchema {
-	fr.init()
+func (fr *FakeRegistry) CreateSchema(subject string, schema sr.Schema) sr.SubjectSchema {
+	fr.Init()
 	fr.m.Lock()
 	defer fr.m.Unlock()
 
@@ -149,8 +149,8 @@ func (fr *fakeRegistry) CreateSchema(subject string, schema sr.Schema) sr.Subjec
 	return ss
 }
 
-func (fr *fakeRegistry) SchemaByID(id int) (sr.Schema, bool) {
-	fr.init()
+func (fr *FakeRegistry) SchemaByID(id int) (sr.Schema, bool) {
+	fr.Init()
 	fr.m.Lock()
 	defer fr.m.Unlock()
 
@@ -158,32 +158,32 @@ func (fr *fakeRegistry) SchemaByID(id int) (sr.Schema, bool) {
 	return s, ok
 }
 
-func (fr *fakeRegistry) SchemaBySubjectVersion(subject string, version int) (sr.SubjectSchema, bool) {
-	fr.init()
+func (fr *FakeRegistry) SchemaBySubjectVersion(subject string, version int) (sr.SubjectSchema, bool) {
+	fr.Init()
 	fr.m.Lock()
 	defer fr.m.Unlock()
 
 	return fr.findBySubjectVersion(subject, version)
 }
 
-func (fr *fakeRegistry) SubjectVersionsByID(id int) []sr.SubjectSchema {
-	fr.init()
+func (fr *FakeRegistry) SubjectVersionsByID(id int) []sr.SubjectSchema {
+	fr.Init()
 	fr.m.Lock()
 	defer fr.m.Unlock()
 
 	return fr.findAllByID(id)
 }
 
-func (fr *fakeRegistry) nextID() int {
+func (fr *FakeRegistry) nextID() int {
 	fr.idSequence++
 	return fr.idSequence
 }
 
-func (fr *fakeRegistry) nextVersion(subject string) int {
+func (fr *FakeRegistry) nextVersion(subject string) int {
 	return len(fr.findBySubject(subject)) + 1
 }
 
-func (fr *fakeRegistry) findBySubject(subject string) []sr.SubjectSchema {
+func (fr *FakeRegistry) findBySubject(subject string) []sr.SubjectSchema {
 	var sss []sr.SubjectSchema
 	for _, ss := range fr.schemas {
 		if ss.Subject == subject {
@@ -193,7 +193,7 @@ func (fr *fakeRegistry) findBySubject(subject string) []sr.SubjectSchema {
 	return sss
 }
 
-func (fr *fakeRegistry) findOneByID(id int) (sr.Schema, bool) {
+func (fr *FakeRegistry) findOneByID(id int) (sr.Schema, bool) {
 	for _, ss := range fr.schemas {
 		if ss.ID == id {
 			return ss.Schema, true
@@ -202,7 +202,7 @@ func (fr *fakeRegistry) findOneByID(id int) (sr.Schema, bool) {
 	return sr.Schema{}, false
 }
 
-func (fr *fakeRegistry) findAllByID(id int) []sr.SubjectSchema {
+func (fr *FakeRegistry) findAllByID(id int) []sr.SubjectSchema {
 	var sss []sr.SubjectSchema
 	for _, ss := range fr.schemas {
 		if ss.ID == id {
@@ -212,7 +212,7 @@ func (fr *fakeRegistry) findAllByID(id int) []sr.SubjectSchema {
 	return sss
 }
 
-func (fr *fakeRegistry) findBySubjectID(subject string, id int) (sr.SubjectSchema, bool) {
+func (fr *FakeRegistry) findBySubjectID(subject string, id int) (sr.SubjectSchema, bool) {
 	for _, ss := range fr.schemas {
 		if ss.Subject == subject && ss.ID == id {
 			return ss, true
@@ -221,7 +221,7 @@ func (fr *fakeRegistry) findBySubjectID(subject string, id int) (sr.SubjectSchem
 	return sr.SubjectSchema{}, false
 }
 
-func (fr *fakeRegistry) findBySubjectVersion(subject string, version int) (sr.SubjectSchema, bool) {
+func (fr *FakeRegistry) findBySubjectVersion(subject string, version int) (sr.SubjectSchema, bool) {
 	for _, ss := range fr.schemas {
 		if ss.Subject == subject && ss.Version == version {
 			return ss, true
@@ -232,7 +232,7 @@ func (fr *fakeRegistry) findBySubjectVersion(subject string, version int) (sr.Su
 
 // fakeServer is a fake schema registry server.
 type fakeServer struct {
-	fr   fakeRegistry
+	fr   FakeRegistry
 	logf func(format string, args ...any)
 }
 
