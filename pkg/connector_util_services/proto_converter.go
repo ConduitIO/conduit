@@ -1,4 +1,4 @@
-// Copyright © 2024 Meroxa, Inc.
+// Copyright © 2024 `Meroxa, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -25,7 +25,7 @@ import (
 type protoConverter struct {
 }
 
-func (c protoConverter) schemaInstance(req *schemav1.RegisterSchemaRequest) (schema.Instance, error) {
+func (c protoConverter) schemaInstance(req *schemav1.RegisterRequest) (schema.Instance, error) {
 	typ, err := c.schemaType(req.Type)
 	if err != nil {
 		return schema.Instance{}, fmt.Errorf("invalid schema type: %w", err)
@@ -39,29 +39,31 @@ func (c protoConverter) schemaInstance(req *schemav1.RegisterSchemaRequest) (sch
 	}, nil
 }
 
-func (c protoConverter) schemaType(typ schemav1.SchemaType) (schema.Type, error) {
+func (c protoConverter) schemaType(typ schemav1.Schema_Type) (schema.Type, error) {
 	switch typ {
-	case schemav1.SchemaType_SCHEMA_TYPE_AVRO:
+	case schemav1.Schema_TYPE_AVRO:
 		return schema.TypeAvro, nil
 	default:
 		return 0, cerrors.Errorf("unsupported %q", typ)
 	}
 }
 
-func (c protoConverter) fetchResponse(inst schema.Instance) *schemav1.FetchSchemaResponse {
-	return &schemav1.FetchSchemaResponse{
-		Id:      inst.ID,
-		Name:    inst.Name,
-		Version: inst.Version,
-		Type:    c.protoType(inst.Type),
-		Bytes:   inst.Bytes,
+func (c protoConverter) fetchResponse(inst schema.Instance) *schemav1.FetchResponse {
+	return &schemav1.FetchResponse{
+		Schema: &schemav1.Schema{
+			Id:      inst.ID,
+			Name:    inst.Name,
+			Version: inst.Version,
+			Type:    c.protoType(inst.Type),
+			Bytes:   inst.Bytes,
+		},
 	}
 }
 
-func (c protoConverter) protoType(t schema.Type) schemav1.SchemaType {
+func (c protoConverter) protoType(t schema.Type) schemav1.Schema_Type {
 	switch t {
 	case schema.TypeAvro:
-		return schemav1.SchemaType_SCHEMA_TYPE_AVRO
+		return schemav1.Schema_TYPE_AVRO
 	default:
 		panic(fmt.Errorf("unsupported schema type %q", t))
 	}

@@ -42,7 +42,7 @@ func NewSchemaServiceAPIv1(s SchemaService) *SchemaServiceAPIv1 {
 	return &SchemaServiceAPIv1{service: s}
 }
 
-func (s *SchemaServiceAPIv1) Register(ctx context.Context, req *schemav1.RegisterSchemaRequest) (*schemav1.RegisterSchemaResponse, error) {
+func (s *SchemaServiceAPIv1) Register(ctx context.Context, req *schemav1.RegisterRequest) (*schemav1.RegisterResponse, error) {
 	si, err := s.protoConv.schemaInstance(req)
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "failed to deserialize schema: %v", err)
@@ -53,10 +53,10 @@ func (s *SchemaServiceAPIv1) Register(ctx context.Context, req *schemav1.Registe
 		return nil, status.Errorf(codes.Internal, "registering failed: %v", err)
 	}
 
-	return &schemav1.RegisterSchemaResponse{Id: id}, nil
+	return &schemav1.RegisterResponse{Id: id}, nil
 }
 
-func (s *SchemaServiceAPIv1) Fetch(ctx context.Context, req *schemav1.FetchSchemaRequest) (*schemav1.FetchSchemaResponse, error) {
+func (s *SchemaServiceAPIv1) Fetch(ctx context.Context, req *schemav1.FetchRequest) (*schemav1.FetchResponse, error) {
 	si, err := s.service.Fetch(ctx, req.Id)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "fetching schema %v failed: %v", req.Id, err)

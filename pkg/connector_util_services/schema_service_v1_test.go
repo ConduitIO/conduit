@@ -32,20 +32,20 @@ import (
 func TestSchemaService_Register(t *testing.T) {
 	testCases := []struct {
 		name         string
-		input        *schemav1.RegisterSchemaRequest
-		setupService func(*mock.SchemaService, *schemav1.RegisterSchemaRequest)
-		wantResponse *schemav1.RegisterSchemaResponse
+		input        *schemav1.RegisterRequest
+		setupService func(*mock.SchemaService, *schemav1.RegisterRequest)
+		wantResponse *schemav1.RegisterResponse
 		wantErr      error
 	}{
 		{
 			name: "valid request",
-			input: &schemav1.RegisterSchemaRequest{
+			input: &schemav1.RegisterRequest{
 				Name:    "my-collection",
 				Version: 0,
-				Type:    schemav1.SchemaType_TYPE_AVRO,
+				Type:    schemav1.Schema_TYPE_AVRO,
 				Bytes:   []byte{1, 2, 3},
 			},
-			setupService: func(svc *mock.SchemaService, req *schemav1.RegisterSchemaRequest) {
+			setupService: func(svc *mock.SchemaService, req *schemav1.RegisterRequest) {
 				svc.EXPECT().
 					Register(gomock.Any(), schema.Instance{
 						Name:    "my-collection",
@@ -55,29 +55,29 @@ func TestSchemaService_Register(t *testing.T) {
 					}).
 					Return("abc", nil)
 			},
-			wantResponse: &schemav1.RegisterSchemaResponse{
+			wantResponse: &schemav1.RegisterResponse{
 				Id: "abc",
 			},
 		},
 		{
 			name: "unknown schema type",
-			input: &schemav1.RegisterSchemaRequest{
+			input: &schemav1.RegisterRequest{
 				Name:    "my-collection",
 				Version: 0,
-				Type:    schemav1.SchemaType_TYPE_UNDEFINED,
+				Type:    schemav1.Schema_TYPE_UNSPECIFIED,
 				Bytes:   []byte{1, 2, 3},
 			},
-			wantErr: status.Error(codes.InvalidArgument, `failed to deserialize schema: invalid schema type: unsupported "TYPE_UNDEFINED"`),
+			wantErr: status.Error(codes.InvalidArgument, `failed to deserialize schema: invalid schema type: unsupported "TYPE_UNSPECIFIED"`),
 		},
 		{
 			name: "service error",
-			input: &schemav1.RegisterSchemaRequest{
+			input: &schemav1.RegisterRequest{
 				Name:    "my-collection",
 				Version: 0,
-				Type:    schemav1.SchemaType_TYPE_AVRO,
+				Type:    schemav1.Schema_TYPE_AVRO,
 				Bytes:   []byte{1, 2, 3},
 			},
-			setupService: func(svc *mock.SchemaService, req *schemav1.RegisterSchemaRequest) {
+			setupService: func(svc *mock.SchemaService, req *schemav1.RegisterRequest) {
 				svc.EXPECT().
 					Register(gomock.Any(), schema.Instance{
 						Name:    "my-collection",
@@ -107,7 +107,11 @@ func TestSchemaService_Register(t *testing.T) {
 				is.NoErr(err)
 				is.Equal(
 					"",
-					cmp.Diff(tc.wantResponse, gotResponse, cmpopts.IgnoreUnexported(schemav1.RegisterSchemaResponse{})),
+					cmp.Diff(
+						tc.wantResponse,
+						gotResponse,
+						cmpopts.IgnoreUnexported(schemav1.RegisterResponse{}, schemav1.Schema{}),
+					),
 				)
 			} else {
 				is.True(err != nil) // expected an error
@@ -120,17 +124,17 @@ func TestSchemaService_Register(t *testing.T) {
 func TestSchemaService_Fetch(t *testing.T) {
 	testCases := []struct {
 		name         string
-		input        *schemav1.FetchSchemaRequest
-		setupService func(*mock.SchemaService, *schemav1.FetchSchemaRequest)
-		wantResponse *schemav1.FetchSchemaResponse
+		input        *schemav1.FetchRequest
+		setupService func(*mock.SchemaService, *schemav1.FetchRequest)
+		wantResponse *schemav1.FetchResponse
 		wantErr      error
 	}{
 		{
 			name: "valid request",
-			input: &schemav1.FetchSchemaRequest{
+			input: &schemav1.FetchRequest{
 				Id: "abc",
 			},
-			setupService: func(svc *mock.SchemaService, req *schemav1.FetchSchemaRequest) {
+			setupService: func(svc *mock.SchemaService, req *schemav1.FetchRequest) {
 				svc.EXPECT().
 					Fetch(gomock.Any(), "abc").
 					Return(schema.Instance{
@@ -141,20 +145,22 @@ func TestSchemaService_Fetch(t *testing.T) {
 						Bytes:   []byte{1, 2, 3},
 					}, nil)
 			},
-			wantResponse: &schemav1.FetchSchemaResponse{
-				Id:      "abc",
-				Name:    "my-collection",
-				Version: 321,
-				Type:    schemav1.SchemaType_TYPE_AVRO,
-				Bytes:   []byte{1, 2, 3},
+			wantResponse: &schemav1.FetchResponse{
+				Schema: &schemav1.Schema{
+					Id:      "abc",
+					Name:    "my-collection",
+					Version: 321,
+					Type:    schemav1.Schema_TYPE_AVRO,
+					Bytes:   []byte{1, 2, 3},
+				},
 			},
 		},
 		{
 			name: "service error",
-			input: &schemav1.FetchSchemaRequest{
+			input: &schemav1.FetchRequest{
 				Id: "abc",
 			},
-			setupService: func(svc *mock.SchemaService, req *schemav1.FetchSchemaRequest) {
+			setupService: func(svc *mock.SchemaService, req *schemav1.FetchRequest) {
 				svc.EXPECT().
 					Fetch(gomock.Any(), "abc").
 					Return(schema.Instance{}, cerrors.New("boom"))
@@ -179,7 +185,11 @@ func TestSchemaService_Fetch(t *testing.T) {
 				is.NoErr(err)
 				is.Equal(
 					"",
-					cmp.Diff(tc.wantResponse, gotResponse, cmpopts.IgnoreUnexported(schemav1.FetchSchemaResponse{})),
+					cmp.Diff(
+						tc.wantResponse,
+						gotResponse,
+						cmpopts.IgnoreUnexported(schemav1.FetchResponse{}, schemav1.Schema{}),
+					),
 				)
 			} else {
 				is.True(err != nil) // expected an error
