@@ -18,9 +18,9 @@ package connservices
 
 import (
 	"context"
-	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 
 	schemav1 "github.com/conduitio/conduit-connector-protocol/proto/schema/v1"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/schema"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"

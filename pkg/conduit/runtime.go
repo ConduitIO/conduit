@@ -66,7 +66,6 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
-	"google.golang.org/grpc/stats"
 	"gopkg.in/tomb.v2"
 )
 
@@ -94,7 +93,9 @@ type Runtime struct {
 	schemaService *schema.Service
 
 	connectorPersister *connector.Persister
-	logger             log.CtxLogger
+
+	logger           log.CtxLogger
+	gRPCStatsHandler *promgrpc.StatsHandler
 }
 
 // NewRuntime sets up a Runtime instance and primes it for start.
@@ -163,9 +164,17 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 
 		connectorPersister: connectorPersister,
 
-		logger: logger,
+		gRPCStatsHandler: newGRPCStatsHandler(),
+		logger:           logger,
 	}
 	return r, nil
+}
+
+func newGRPCStatsHandler() *promgrpc.StatsHandler {
+	h := promgrpc.ServerStatsHandler()
+	promclient.MustRegister(h)
+
+	return h
 }
 
 func newLogger(level string, format string) log.CtxLogger {
@@ -289,12 +298,14 @@ func (r *Runtime) Run(ctx context.Context) (err error) {
 		})
 	}
 
+	// APIs needed by connector plugins
 	schemaServiceAddr, err := r.startSchemaService(ctx, t)
 	if err != nil {
 		return cerrors.Errorf("failed to serve schema service API: %w", err)
 	}
 	r.logger.Info(ctx).Msgf("schema service started on %v", schemaServiceAddr)
 
+	// Public gRPC and HTTP API
 	if r.Config.API.Enabled {
 		// Serve grpc and http API
 		grpcAddr, err := r.serveGRPCAPI(ctx, t)
@@ -412,21 +423,6 @@ func (r *Runtime) registerCleanup(t *tomb.Tomb) {
 	})
 }
 
-func (r *Runtime) newGrpcStatsHandler() stats.Handler {
-	// We are manually creating the stats handler and not using
-	// promgrpc.ServerStatsHandler(), because we don't need metrics related to
-	// messages. They would be relevant for GRPC streams, we don't use them.
-	grpcStatsHandler := promgrpc.NewStatsHandler(
-		promgrpc.NewServerConnectionsStatsHandler(promgrpc.NewServerConnectionsGaugeVec()),
-		promgrpc.NewServerRequestsTotalStatsHandler(promgrpc.NewServerRequestsTotalCounterVec()),
-		promgrpc.NewServerRequestsInFlightStatsHandler(promgrpc.NewServerRequestsInFlightGaugeVec()),
-		promgrpc.NewServerRequestDurationStatsHandler(promgrpc.NewServerRequestDurationHistogramVec()),
-		promgrpc.NewServerResponsesTotalStatsHandler(promgrpc.NewServerResponsesTotalCounterVec()),
-	)
-	promclient.MustRegister(grpcStatsHandler)
-	return grpcStatsHandler
-}
-
 func (r *Runtime) newHTTPMetricsHandler() http.Handler {
 	return promhttp.Handler()
 }
@@ -437,7 +433,7 @@ func (r *Runtime) serveGRPCAPI(ctx context.Context, t *tomb.Tomb) (net.Addr, err
 			grpcutil.RequestIDUnaryServerInterceptor(r.logger),
 			grpcutil.LoggerUnaryServerInterceptor(r.logger),
 		),
-		grpc.StatsHandler(r.newGrpcStatsHandler()),
+		grpc.StatsHandler(r.gRPCStatsHandler),
 	)
 
 	pipelineAPIv1 := api.NewPipelineAPIv1(r.Orchestrator.Pipelines)
@@ -482,13 +478,11 @@ func (r *Runtime) startSchemaService(ctx context.Context, t *tomb.Tomb) (net.Add
 			grpcutil.RequestIDUnaryServerInterceptor(r.logger),
 			grpcutil.LoggerUnaryServerInterceptor(r.logger),
 		),
-		// todo enable
-		// (disable because Prometheus was complaining about double-registration)
-		// grpc.StatsHandler(r.newGrpcStatsHandler()),
+		grpc.StatsHandler(r.gRPCStatsHandler),
 	)
 
-	pipelineAPIv1 := connservices.NewSchemaServiceAPIv1(r.schemaService)
-	pipelineAPIv1.RegisterInServer(grpcServer)
+	schemaServiceAPI := connservices.NewSchemaServiceAPIv1(r.schemaService)
+	schemaServiceAPI.RegisterInServer(grpcServer)
 
 	// Makes it easier to use command line tools to interact
 	// with the gRPC API.
