@@ -23,7 +23,7 @@ require (
 	github.com/dop251/goja v0.0.0-20231027120936-b396bb4c349d
 	github.com/dop251/goja_nodejs v0.0.0-20231122114759-e84d9a924c5c
 	github.com/gammazero/deque v0.2.1
-	github.com/goccy/go-json v0.10.2
+	github.com/goccy/go-json v0.10.3
 	github.com/golangci/golangci-lint v1.58.2
 	github.com/google/go-cmp v0.6.0
 	github.com/google/uuid v1.6.0
