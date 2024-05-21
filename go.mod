@@ -3,7 +3,7 @@ module github.com/conduitio/conduit
 go 1.22.2
 
 require (
-	buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go v1.34.1-20240516201131-8c5085307891.1
+	buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go v1.34.1-20240520203035-fc19f750c9fd.1
 	github.com/Masterminds/semver/v3 v3.2.1
 	github.com/Masterminds/sprig/v3 v3.2.3
 	github.com/NYTimes/gziphandler v1.1.1
@@ -23,13 +23,13 @@ require (
 	github.com/dop251/goja v0.0.0-20231027120936-b396bb4c349d
 	github.com/dop251/goja_nodejs v0.0.0-20231122114759-e84d9a924c5c
 	github.com/gammazero/deque v0.2.1
-	github.com/goccy/go-json v0.10.2
+	github.com/goccy/go-json v0.10.3
 	github.com/golangci/golangci-lint v1.58.2
 	github.com/google/go-cmp v0.6.0
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.1
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.20.0
-	github.com/hamba/avro/v2 v2.21.1
+	github.com/hamba/avro/v2 v2.22.0
 	github.com/hashicorp/go-hclog v1.6.3
 	github.com/hashicorp/go-plugin v1.6.1
 	github.com/jackc/pgx/v5 v5.5.5
