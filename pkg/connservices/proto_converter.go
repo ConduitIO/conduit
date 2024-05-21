@@ -32,10 +32,9 @@ func (c protoConverter) schemaInstance(req *schemav1.RegisterRequest) (schema.In
 	}
 
 	return schema.Instance{
-		Name:    req.Name,
-		Version: req.Version,
-		Type:    typ,
-		Bytes:   req.Bytes,
+		Name:  req.Name,
+		Type:  typ,
+		Bytes: req.Bytes,
 	}, nil
 }
 

@@ -41,10 +41,9 @@ func TestSchemaService_Register(t *testing.T) {
 		{
 			name: "valid request",
 			input: &schemav1.RegisterRequest{
-				Name:    "my-collection",
-				Version: 0,
-				Type:    schemav1.Schema_TYPE_AVRO,
-				Bytes:   []byte{1, 2, 3},
+				Name:  "my-collection",
+				Type:  schemav1.Schema_TYPE_AVRO,
+				Bytes: []byte{1, 2, 3},
 			},
 			setupService: func(svc *mock.SchemaService, req *schemav1.RegisterRequest) {
 				svc.EXPECT().
@@ -63,20 +62,18 @@ func TestSchemaService_Register(t *testing.T) {
 		{
 			name: "unknown schema type",
 			input: &schemav1.RegisterRequest{
-				Name:    "my-collection",
-				Version: 0,
-				Type:    schemav1.Schema_TYPE_UNSPECIFIED,
-				Bytes:   []byte{1, 2, 3},
+				Name:  "my-collection",
+				Type:  schemav1.Schema_TYPE_UNSPECIFIED,
+				Bytes: []byte{1, 2, 3},
 			},
 			wantErr: status.Error(codes.InvalidArgument, `failed to deserialize schema: invalid schema type: unsupported "TYPE_UNSPECIFIED"`),
 		},
 		{
 			name: "service error",
 			input: &schemav1.RegisterRequest{
-				Name:    "my-collection",
-				Version: 0,
-				Type:    schemav1.Schema_TYPE_AVRO,
-				Bytes:   []byte{1, 2, 3},
+				Name:  "my-collection",
+				Type:  schemav1.Schema_TYPE_AVRO,
+				Bytes: []byte{1, 2, 3},
 			},
 			setupService: func(svc *mock.SchemaService, req *schemav1.RegisterRequest) {
 				svc.EXPECT().
