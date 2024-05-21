@@ -482,6 +482,8 @@ func (r *Runtime) startSchemaService(ctx context.Context, t *tomb.Tomb) (net.Add
 			grpcutil.RequestIDUnaryServerInterceptor(r.logger),
 			grpcutil.LoggerUnaryServerInterceptor(r.logger),
 		),
+		// todo enable
+		// (disable because Prometheus was complaining about double-registration)
 		// grpc.StatsHandler(r.newGrpcStatsHandler()),
 	)
 
