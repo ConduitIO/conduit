@@ -23,6 +23,10 @@ import (
 	"github.com/lovromazgon/franz-go/pkg/sr"
 )
 
+var (
+	ErrSchemaNotFound = cerrors.New("schema not found")
+)
+
 type Service struct {
 	fakeReg *schemaregistry.FakeRegistry
 }
@@ -51,7 +55,7 @@ func (s *Service) Fetch(ctx context.Context, id string) (Instance, error) {
 
 	schema, found := s.fakeReg.SchemaByID(idInt)
 	if !found {
-		return Instance{}, cerrors.New("schema not found")
+		return Instance{}, ErrSchemaNotFound
 	}
 
 	return Instance{

@@ -18,6 +18,7 @@ package connservices
 
 import (
 	"context"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 
 	schemav1 "github.com/conduitio/conduit-connector-protocol/proto/schema/v1"
 	"github.com/conduitio/conduit/pkg/schema"
@@ -58,6 +59,9 @@ func (s *SchemaServiceAPIv1) Register(ctx context.Context, req *schemav1.Registe
 
 func (s *SchemaServiceAPIv1) Fetch(ctx context.Context, req *schemav1.FetchRequest) (*schemav1.FetchResponse, error) {
 	si, err := s.service.Fetch(ctx, req.Id)
+	if cerrors.Is(err, schema.ErrSchemaNotFound) {
+		return nil, status.Errorf(codes.NotFound, "schema with ID %v not found", req.Id)
+	}
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "fetching schema %v failed: %v", req.Id, err)
 	}
