@@ -3,11 +3,11 @@ module github.com/conduitio/conduit
 go 1.22.2
 
 require (
-	buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go v1.34.1-20240520203035-fc19f750c9fd.1
+	buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go v1.34.1-20240521202637-9cc83ecd0fd0.1
 	github.com/Masterminds/semver/v3 v3.2.1
 	github.com/Masterminds/sprig/v3 v3.2.3
 	github.com/NYTimes/gziphandler v1.1.1
-	github.com/bufbuild/buf v1.32.0
+	github.com/bufbuild/buf v1.32.1
 	github.com/conduitio/conduit-commons v0.2.0
 	github.com/conduitio/conduit-connector-file v0.6.0
 	github.com/conduitio/conduit-connector-generator v0.6.0
