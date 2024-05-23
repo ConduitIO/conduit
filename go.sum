@@ -9,8 +9,8 @@ buf.build/gen/go/bufbuild/registry/connectrpc/go v1.16.1-20240514010100-299bd9c9
 buf.build/gen/go/bufbuild/registry/connectrpc/go v1.16.1-20240514010100-299bd9c9a0c4.1/go.mod h1:3Vwq3HRCNOcnv99Ra+/8K5cntwO/Gw98cIjsjQVxf4E=
 buf.build/gen/go/bufbuild/registry/protocolbuffers/go v1.34.1-20240514010100-299bd9c9a0c4.1 h1:zrXXp1IT3qukIKorguvnrw/JzxYttBrXzktUQGiQHqA=
 buf.build/gen/go/bufbuild/registry/protocolbuffers/go v1.34.1-20240514010100-299bd9c9a0c4.1/go.mod h1:8ONhsyCTLQ9kBslWnMgPrXTcxzCkKlxZqN9ewUveui8=
-buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go v1.34.1-20240521202637-9cc83ecd0fd0.1 h1:0++IaSdAglsOj2W+W+4sceqBPznx38xLNukGKB2IPB4=
-buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go v1.34.1-20240521202637-9cc83ecd0fd0.1/go.mod h1:gUfBTdJmhwTJHoIaOQjy7xczHhqjkQfXSKs5TY4IsUY=
+buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go v1.34.1-20240522201210-05684d294cc5.1 h1:OltUGuDeFvaqDZx9vW9pZt5SGl5FA5RbSB114pksDwk=
+buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go v1.34.1-20240522201210-05684d294cc5.1/go.mod h1:gUfBTdJmhwTJHoIaOQjy7xczHhqjkQfXSKs5TY4IsUY=
 cloud.google.com/go v0.26.0/go.mod h1:aQUYkXzVsufM+DwF1aE+0xfcU+56JwCaLick0ClmMTw=
 cloud.google.com/go v0.34.0/go.mod h1:aQUYkXzVsufM+DwF1aE+0xfcU+56JwCaLick0ClmMTw=
 cloud.google.com/go v0.38.0/go.mod h1:990N+gfupTy94rShfmMCWGDn0LpTmnzTp2qbd1dvSRU=
