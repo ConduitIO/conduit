@@ -39,16 +39,22 @@ func NewService() *Service {
 	return &Service{fakeReg: fr}
 }
 
-func (s *Service) Register(_ context.Context, inst schema.Instance) (string, error) {
+func (s *Service) Create(_ context.Context, inst schema.Instance) (schema.Instance, error) {
 	created := s.fakeReg.CreateSchema(inst.Name, sr.Schema{
 		Schema: string(inst.Bytes),
 		Type:   sr.TypeAvro,
 	})
 
-	return strconv.Itoa(created.ID), nil
+	return schema.Instance{
+		ID:      strconv.Itoa(created.ID),
+		Name:    "",
+		Version: 0,
+		Type:    schema.TypeAvro,
+		Bytes:   []byte(created.Schema.Schema),
+	}, nil
 }
 
-func (s *Service) Fetch(_ context.Context, id string) (schema.Instance, error) {
+func (s *Service) Get(_ context.Context, id string) (schema.Instance, error) {
 	idInt, err := strconv.Atoi(id)
 	if err != nil {
 		return schema.Instance{}, cerrors.Errorf("invalid schema id: %w", err)

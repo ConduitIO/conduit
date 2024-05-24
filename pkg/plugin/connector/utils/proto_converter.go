@@ -16,16 +16,16 @@ package utils
 
 import (
 	"fmt"
+	conduitv1 "github.com/conduitio/conduit-connector-protocol/proto/conduit/v1"
 
 	"github.com/conduitio/conduit-commons/schema"
-	schemav1 "github.com/conduitio/conduit-connector-protocol/proto/schema/v1"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 )
 
 type protoConverter struct {
 }
 
-func (c protoConverter) schemaInstance(req *schemav1.RegisterRequest) (schema.Instance, error) {
+func (c protoConverter) schemaInstance(req *conduitv1.CreateRequest) (schema.Instance, error) {
 	typ, err := c.schemaType(req.Type)
 	if err != nil {
 		return schema.Instance{}, fmt.Errorf("invalid schema type: %w", err)
@@ -38,18 +38,18 @@ func (c protoConverter) schemaInstance(req *schemav1.RegisterRequest) (schema.In
 	}, nil
 }
 
-func (c protoConverter) schemaType(typ schemav1.Schema_Type) (schema.Type, error) {
+func (c protoConverter) schemaType(typ conduitv1.Schema_Type) (schema.Type, error) {
 	switch typ {
-	case schemav1.Schema_TYPE_AVRO:
+	case conduitv1.Schema_TYPE_AVRO:
 		return schema.TypeAvro, nil
 	default:
 		return 0, cerrors.Errorf("unsupported %q", typ)
 	}
 }
 
-func (c protoConverter) fetchResponse(inst schema.Instance) *schemav1.FetchResponse {
-	return &schemav1.FetchResponse{
-		Schema: &schemav1.Schema{
+func (c protoConverter) getResponse(inst schema.Instance) *conduitv1.GetResponse {
+	return &conduitv1.GetResponse{
+		Schema: &conduitv1.Schema{
 			Id:      inst.ID,
 			Name:    inst.Name,
 			Version: inst.Version,
@@ -59,11 +59,23 @@ func (c protoConverter) fetchResponse(inst schema.Instance) *schemav1.FetchRespo
 	}
 }
 
-func (c protoConverter) protoType(t schema.Type) schemav1.Schema_Type {
+func (c protoConverter) protoType(t schema.Type) conduitv1.Schema_Type {
 	switch t {
 	case schema.TypeAvro:
-		return schemav1.Schema_TYPE_AVRO
+		return conduitv1.Schema_TYPE_AVRO
 	default:
 		panic(fmt.Errorf("unsupported schema type %q", t))
+	}
+}
+
+func (c protoConverter) createResponse(inst schema.Instance) *conduitv1.CreateResponse {
+	return &conduitv1.CreateResponse{
+		Schema: &conduitv1.Schema{
+			Id:      inst.ID,
+			Name:    inst.Name,
+			Version: inst.Version,
+			Type:    c.protoType(inst.Type),
+			Bytes:   inst.Bytes,
+		},
 	}
 }

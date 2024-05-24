@@ -41,7 +41,7 @@ func (m *SchemaService) EXPECT() *SchemaServiceMockRecorder {
 }
 
 // Fetch mocks base method.
-func (m *SchemaService) Fetch(arg0 context.Context, arg1 string) (schema.Instance, error) {
+func (m *SchemaService) Get(arg0 context.Context, arg1 string) (schema.Instance, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Fetch", arg0, arg1)
 	ret0, _ := ret[0].(schema.Instance)
@@ -52,11 +52,11 @@ func (m *SchemaService) Fetch(arg0 context.Context, arg1 string) (schema.Instanc
 // Fetch indicates an expected call of Fetch.
 func (mr *SchemaServiceMockRecorder) Fetch(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Fetch", reflect.TypeOf((*SchemaService)(nil).Fetch), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Fetch", reflect.TypeOf((*SchemaService)(nil).Get), arg0, arg1)
 }
 
 // Register mocks base method.
-func (m *SchemaService) Register(arg0 context.Context, arg1 schema.Instance) (string, error) {
+func (m *SchemaService) Create(arg0 context.Context, arg1 schema.Instance) (string, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Register", arg0, arg1)
 	ret0, _ := ret[0].(string)
@@ -67,5 +67,5 @@ func (m *SchemaService) Register(arg0 context.Context, arg1 schema.Instance) (st
 // Register indicates an expected call of Register.
 func (mr *SchemaServiceMockRecorder) Register(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Register", reflect.TypeOf((*SchemaService)(nil).Register), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Register", reflect.TypeOf((*SchemaService)(nil).Create), arg0, arg1)
 }
