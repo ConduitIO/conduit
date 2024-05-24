@@ -44,7 +44,7 @@ func NewSchemaServiceAPIv1(s SchemaService) *SchemaServiceAPIv1 {
 	return &SchemaServiceAPIv1{service: s}
 }
 
-func (s *SchemaServiceAPIv1) Register(ctx context.Context, req *conduitv1.CreateRequest) (*conduitv1.CreateResponse, error) {
+func (s *SchemaServiceAPIv1) Create(ctx context.Context, req *conduitv1.CreateRequest) (*conduitv1.CreateResponse, error) {
 	si, err := s.protoConv.schemaInstance(req)
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "failed to deserialize schema: %v", err)
@@ -58,7 +58,7 @@ func (s *SchemaServiceAPIv1) Register(ctx context.Context, req *conduitv1.Create
 	return s.protoConv.createResponse(sch), nil
 }
 
-func (s *SchemaServiceAPIv1) Fetch(ctx context.Context, req *conduitv1.GetRequest) (*conduitv1.GetResponse, error) {
+func (s *SchemaServiceAPIv1) Get(ctx context.Context, req *conduitv1.GetRequest) (*conduitv1.GetResponse, error) {
 	si, err := s.service.Get(ctx, req.Id)
 	if cerrors.Is(err, schema.ErrSchemaNotFound) {
 		return nil, status.Errorf(codes.NotFound, "schema with ID %v not found", req.Id)
