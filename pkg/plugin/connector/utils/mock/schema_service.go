@@ -40,32 +40,32 @@ func (m *SchemaService) EXPECT() *SchemaServiceMockRecorder {
 	return m.recorder
 }
 
-// Fetch mocks base method.
-func (m *SchemaService) Get(arg0 context.Context, arg1 string) (schema.Instance, error) {
+// Create mocks base method.
+func (m *SchemaService) Create(arg0 context.Context, arg1 schema.Instance) (schema.Instance, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Fetch", arg0, arg1)
+	ret := m.ctrl.Call(m, "Create", arg0, arg1)
 	ret0, _ := ret[0].(schema.Instance)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// Fetch indicates an expected call of Fetch.
-func (mr *SchemaServiceMockRecorder) Fetch(arg0, arg1 any) *gomock.Call {
+// Create indicates an expected call of Create.
+func (mr *SchemaServiceMockRecorder) Create(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Fetch", reflect.TypeOf((*SchemaService)(nil).Get), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*SchemaService)(nil).Create), arg0, arg1)
 }
 
-// Register mocks base method.
-func (m *SchemaService) Create(arg0 context.Context, arg1 schema.Instance) (string, error) {
+// Get mocks base method.
+func (m *SchemaService) Get(arg0 context.Context, arg1 string) (schema.Instance, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Register", arg0, arg1)
-	ret0, _ := ret[0].(string)
+	ret := m.ctrl.Call(m, "Get", arg0, arg1)
+	ret0, _ := ret[0].(schema.Instance)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// Register indicates an expected call of Register.
-func (mr *SchemaServiceMockRecorder) Register(arg0, arg1 any) *gomock.Call {
+// Get indicates an expected call of Get.
+func (mr *SchemaServiceMockRecorder) Get(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Register", reflect.TypeOf((*SchemaService)(nil).Create), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*SchemaService)(nil).Get), arg0, arg1)
 }
