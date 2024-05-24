@@ -489,8 +489,16 @@ func (r *Runtime) startSchemaService(ctx context.Context, t *tomb.Tomb) (net.Add
 	// https://github.com/grpc/grpc/blob/master/doc/server-reflection.md
 	reflection.Register(grpcServer)
 
-	// todo add to health server
-	// serve grpc server
+	// Names taken from schema.proto
+	healthServer := api.NewHealthServer(
+		map[string]api.Checker{
+			"SchemaService": r.schemaService,
+		},
+		r.logger,
+	)
+	grpc_health_v1.RegisterHealthServer(grpcServer, healthServer)
+
+	// todo make port random
 	return r.serveGRPC(ctx, t, grpcServer, ":8085")
 }
 
