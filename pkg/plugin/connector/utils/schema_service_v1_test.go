@@ -12,16 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package connservices
+package utils
 
 import (
 	"context"
 	"testing"
 
+	schema "github.com/conduitio/conduit-commons/schema"
 	schemav1 "github.com/conduitio/conduit-connector-protocol/proto/schema/v1"
-	"github.com/conduitio/conduit/pkg/connservices/mock"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/schema"
+	"github.com/conduitio/conduit/pkg/plugin/connector/utils/mock"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/matryer/is"

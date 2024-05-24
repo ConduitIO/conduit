@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package connservices
+package utils
 
 import (
 	"fmt"
 
+	"github.com/conduitio/conduit-commons/schema"
 	schemav1 "github.com/conduitio/conduit-connector-protocol/proto/schema/v1"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/schema"
 )
 
 type protoConverter struct {

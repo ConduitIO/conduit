@@ -29,7 +29,6 @@ import (
 	"time"
 
 	"github.com/conduitio/conduit/pkg/connector"
-	"github.com/conduitio/conduit/pkg/connservices"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/ctxutil"
 	"github.com/conduitio/conduit/pkg/foundation/database"
@@ -47,6 +46,7 @@ import (
 	conn_plugin "github.com/conduitio/conduit/pkg/plugin/connector"
 	conn_builtin "github.com/conduitio/conduit/pkg/plugin/connector/builtin"
 	conn_standalone "github.com/conduitio/conduit/pkg/plugin/connector/standalone"
+	"github.com/conduitio/conduit/pkg/plugin/connector/utils"
 	proc_plugin "github.com/conduitio/conduit/pkg/plugin/processor"
 	proc_builtin "github.com/conduitio/conduit/pkg/plugin/processor/builtin"
 	proc_standalone "github.com/conduitio/conduit/pkg/plugin/processor/standalone"
@@ -481,7 +481,7 @@ func (r *Runtime) startSchemaService(ctx context.Context, t *tomb.Tomb) (net.Add
 		grpc.StatsHandler(r.gRPCStatsHandler),
 	)
 
-	schemaServiceAPI := connservices.NewSchemaServiceAPIv1(r.schemaService)
+	schemaServiceAPI := utils.NewSchemaServiceAPIv1(r.schemaService)
 	schemaServiceAPI.RegisterInServer(grpcServer)
 
 	// Makes it easier to use command line tools to interact

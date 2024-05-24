@@ -12,13 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package connservices
+package utils
 
 //go:generate mockgen -destination=mock/schema_service.go -package=mock -mock_names=SchemaService=SchemaService . SchemaService
 
 import (
 	"context"
 
+	cschema "github.com/conduitio/conduit-commons/schema"
 	schemav1 "github.com/conduitio/conduit-connector-protocol/proto/schema/v1"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/schema"
@@ -28,8 +29,8 @@ import (
 )
 
 type SchemaService interface {
-	Register(ctx context.Context, schema schema.Instance) (string, error)
-	Fetch(ctx context.Context, id string) (schema.Instance, error)
+	Register(ctx context.Context, schema cschema.Instance) (string, error)
+	Fetch(ctx context.Context, id string) (cschema.Instance, error)
 }
 
 type SchemaServiceAPIv1 struct {

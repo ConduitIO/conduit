@@ -18,6 +18,7 @@ import (
 	"context"
 	"strconv"
 
+	"github.com/conduitio/conduit-commons/schema"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/avro/schemaregistry"
 	"github.com/lovromazgon/franz-go/pkg/sr"
@@ -38,7 +39,7 @@ func NewService() *Service {
 	return &Service{fakeReg: fr}
 }
 
-func (s *Service) Register(ctx context.Context, inst Instance) (string, error) {
+func (s *Service) Register(_ context.Context, inst schema.Instance) (string, error) {
 	created := s.fakeReg.CreateSchema(inst.Name, sr.Schema{
 		Schema: string(inst.Bytes),
 		Type:   sr.TypeAvro,
@@ -47,22 +48,22 @@ func (s *Service) Register(ctx context.Context, inst Instance) (string, error) {
 	return strconv.Itoa(created.ID), nil
 }
 
-func (s *Service) Fetch(ctx context.Context, id string) (Instance, error) {
+func (s *Service) Fetch(_ context.Context, id string) (schema.Instance, error) {
 	idInt, err := strconv.Atoi(id)
 	if err != nil {
-		return Instance{}, cerrors.Errorf("invalid instance id: %w", err)
+		return schema.Instance{}, cerrors.Errorf("invalid schema id: %w", err)
 	}
 
-	schema, found := s.fakeReg.SchemaByID(idInt)
+	sch, found := s.fakeReg.SchemaByID(idInt)
 	if !found {
-		return Instance{}, ErrSchemaNotFound
+		return schema.Instance{}, ErrSchemaNotFound
 	}
 
-	return Instance{
+	return schema.Instance{
 		ID:      id,
 		Name:    "",
 		Version: 0,
-		Type:    TypeAvro,
-		Bytes:   []byte(schema.Schema),
+		Type:    schema.TypeAvro,
+		Bytes:   []byte(sch.Schema),
 	}, nil
 }

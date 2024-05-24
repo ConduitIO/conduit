@@ -13,6 +13,6 @@
 // limitations under the License.
 
 /*
-Package connservices contains APIs meant to be used by connectors only.
+Package utils contains APIs meant to be used by connectors only.
 */
-package connservices
+package utils
