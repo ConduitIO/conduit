@@ -18,19 +18,12 @@ import (
 	"context"
 	"runtime/debug"
 
-	file "github.com/conduitio/conduit-connector-file"
-	generator "github.com/conduitio/conduit-connector-generator"
-	kafka "github.com/conduitio/conduit-connector-kafka"
-	connLog "github.com/conduitio/conduit-connector-log"
-	postgres "github.com/conduitio/conduit-connector-postgres"
 	"github.com/conduitio/conduit-connector-protocol/cplugin"
-	s3 "github.com/conduitio/conduit-connector-s3"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/conduitio/conduit/pkg/plugin/connector"
-	builtinv1 "github.com/conduitio/conduit/pkg/plugin/connector/builtin/v1"
 )
 
 var (
@@ -38,12 +31,12 @@ var (
 	// built-in plugins. The key of the map is the import path of the module
 	// containing the connector implementation.
 	DefaultDispenserFactories = map[string]DispenserFactory{
-		"github.com/conduitio/conduit-connector-file":      NewDispenserFactory(file.Connector),
-		"github.com/conduitio/conduit-connector-kafka":     NewDispenserFactory(kafka.Connector),
-		"github.com/conduitio/conduit-connector-generator": NewDispenserFactory(generator.Connector),
-		"github.com/conduitio/conduit-connector-s3":        NewDispenserFactory(s3.Connector),
-		"github.com/conduitio/conduit-connector-postgres":  NewDispenserFactory(postgres.Connector),
-		"github.com/conduitio/conduit-connector-log":       NewDispenserFactory(connLog.Connector),
+		// "github.com/conduitio/conduit-connector-file":      NewDispenserFactory(file.Connector),
+		// "github.com/conduitio/conduit-connector-kafka":     NewDispenserFactory(kafka.Connector),
+		// "github.com/conduitio/conduit-connector-generator": NewDispenserFactory(generator.Connector),
+		// "github.com/conduitio/conduit-connector-s3":        NewDispenserFactory(s3.Connector),
+		// "github.com/conduitio/conduit-connector-postgres":  NewDispenserFactory(postgres.Connector),
+		// "github.com/conduitio/conduit-connector-log":       NewDispenserFactory(connLog.Connector),
 	}
 )
 
@@ -72,7 +65,7 @@ func NewDispenserFactory(conn sdk.Connector) DispenserFactory {
 	}
 
 	return func(name plugin.FullName, logger log.CtxLogger) connector.Dispenser {
-		return builtinv1.NewDispenser(
+		return NewDispenser(
 			name,
 			logger,
 			func() cplugin.SpecifierPlugin {

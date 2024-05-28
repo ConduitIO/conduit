@@ -1,4 +1,4 @@
-// Copyright © 2022 Meroxa, Inc.
+// Copyright © 2024 Meroxa, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package builtinv1
+package builtin
 
 import (
 	"context"
@@ -40,23 +40,8 @@ func runSandbox[REQ any, RES any](
 ) (RES, error) {
 	c := sandboxChanPool.Get().(chan any)
 
-	returnResponse := func(ctx context.Context, res RES, err error) {
-		defer sandboxChanPool.Put(c)
-		select {
-		case <-ctx.Done():
-			// The context was cancelled, nobody will fetch the result.
-			logger.Error(ctx).
-				Any("response", res).
-				Err(err).
-				Msg("context cancelled when trying to return response from builtin connector plugin (this message comes from a detached plugin)")
-		case c <- res:
-			// The result was sent, now send the error if any and return the
-			// channel to the pool.
-			c <- err
-		}
-	}
-
 	go func() {
+		defer sandboxChanPool.Put(c)
 		defer func() {
 			if r := recover(); r != nil {
 				err, ok := r.(error)
@@ -65,12 +50,12 @@ func runSandbox[REQ any, RES any](
 				}
 				// return the panic error
 				var emptyRes RES
-				returnResponse(ctx, emptyRes, err)
+				returnResponse(ctx, emptyRes, err, c, logger)
 			}
 		}()
 
 		res, err := f(ctx, req)
-		returnResponse(ctx, res, err)
+		returnResponse(ctx, res, err, c, logger)
 	}()
 
 	select {
@@ -93,6 +78,20 @@ func runSandbox[REQ any, RES any](
 			err = v.(error)
 		}
 		return res, err
+	}
+}
+
+func returnResponse(ctx context.Context, res any, err error, c chan<- any, logger log.CtxLogger) {
+	select {
+	case <-ctx.Done():
+		// The context was cancelled, nobody will fetch the result.
+		logger.Error(ctx).
+			Any("response", res).
+			Err(err).
+			Msg("context cancelled when trying to return response from builtin connector plugin (this message comes from a detached plugin)")
+	case c <- res:
+		// The result was sent, now send the error if any.
+		c <- err
 	}
 }
 
