@@ -13,8 +13,8 @@ import (
 	context "context"
 	reflect "reflect"
 
+	cplugin "github.com/conduitio/conduit-connector-protocol/cplugin"
 	connector "github.com/conduitio/conduit/pkg/plugin/connector"
-	record "github.com/conduitio/conduit/pkg/record"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -109,27 +109,13 @@ func (m *DestinationPlugin) EXPECT() *DestinationPluginMockRecorder {
 	return m.recorder
 }
 
-// Ack mocks base method.
-func (m *DestinationPlugin) Ack(arg0 context.Context) (record.Position, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Ack", arg0)
-	ret0, _ := ret[0].(record.Position)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// Ack indicates an expected call of Ack.
-func (mr *DestinationPluginMockRecorder) Ack(arg0 any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Ack", reflect.TypeOf((*DestinationPlugin)(nil).Ack), arg0)
-}
-
 // Configure mocks base method.
-func (m *DestinationPlugin) Configure(arg0 context.Context, arg1 map[string]string) error {
+func (m *DestinationPlugin) Configure(arg0 context.Context, arg1 cplugin.DestinationConfigureRequest) (cplugin.DestinationConfigureResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Configure", arg0, arg1)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(cplugin.DestinationConfigureResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // Configure indicates an expected call of Configure.
@@ -139,11 +125,12 @@ func (mr *DestinationPluginMockRecorder) Configure(arg0, arg1 any) *gomock.Call 
 }
 
 // LifecycleOnCreated mocks base method.
-func (m *DestinationPlugin) LifecycleOnCreated(arg0 context.Context, arg1 map[string]string) error {
+func (m *DestinationPlugin) LifecycleOnCreated(arg0 context.Context, arg1 cplugin.DestinationLifecycleOnCreatedRequest) (cplugin.DestinationLifecycleOnCreatedResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "LifecycleOnCreated", arg0, arg1)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(cplugin.DestinationLifecycleOnCreatedResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // LifecycleOnCreated indicates an expected call of LifecycleOnCreated.
@@ -153,11 +140,12 @@ func (mr *DestinationPluginMockRecorder) LifecycleOnCreated(arg0, arg1 any) *gom
 }
 
 // LifecycleOnDeleted mocks base method.
-func (m *DestinationPlugin) LifecycleOnDeleted(arg0 context.Context, arg1 map[string]string) error {
+func (m *DestinationPlugin) LifecycleOnDeleted(arg0 context.Context, arg1 cplugin.DestinationLifecycleOnDeletedRequest) (cplugin.DestinationLifecycleOnDeletedResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "LifecycleOnDeleted", arg0, arg1)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(cplugin.DestinationLifecycleOnDeletedResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // LifecycleOnDeleted indicates an expected call of LifecycleOnDeleted.
@@ -167,39 +155,70 @@ func (mr *DestinationPluginMockRecorder) LifecycleOnDeleted(arg0, arg1 any) *gom
 }
 
 // LifecycleOnUpdated mocks base method.
-func (m *DestinationPlugin) LifecycleOnUpdated(arg0 context.Context, arg1, arg2 map[string]string) error {
+func (m *DestinationPlugin) LifecycleOnUpdated(arg0 context.Context, arg1 cplugin.DestinationLifecycleOnUpdatedRequest) (cplugin.DestinationLifecycleOnUpdatedResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "LifecycleOnUpdated", arg0, arg1, arg2)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret := m.ctrl.Call(m, "LifecycleOnUpdated", arg0, arg1)
+	ret0, _ := ret[0].(cplugin.DestinationLifecycleOnUpdatedResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // LifecycleOnUpdated indicates an expected call of LifecycleOnUpdated.
-func (mr *DestinationPluginMockRecorder) LifecycleOnUpdated(arg0, arg1, arg2 any) *gomock.Call {
+func (mr *DestinationPluginMockRecorder) LifecycleOnUpdated(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LifecycleOnUpdated", reflect.TypeOf((*DestinationPlugin)(nil).LifecycleOnUpdated), arg0, arg1, arg2)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LifecycleOnUpdated", reflect.TypeOf((*DestinationPlugin)(nil).LifecycleOnUpdated), arg0, arg1)
 }
 
-// Start mocks base method.
-func (m *DestinationPlugin) Start(arg0 context.Context) error {
+// NewStream mocks base method.
+func (m *DestinationPlugin) NewStream() cplugin.DestinationRunStream {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Start", arg0)
+	ret := m.ctrl.Call(m, "NewStream")
+	ret0, _ := ret[0].(cplugin.DestinationRunStream)
+	return ret0
+}
+
+// NewStream indicates an expected call of NewStream.
+func (mr *DestinationPluginMockRecorder) NewStream() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewStream", reflect.TypeOf((*DestinationPlugin)(nil).NewStream))
+}
+
+// Open mocks base method.
+func (m *DestinationPlugin) Open(arg0 context.Context, arg1 cplugin.DestinationOpenRequest) (cplugin.DestinationOpenResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Open", arg0, arg1)
+	ret0, _ := ret[0].(cplugin.DestinationOpenResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Open indicates an expected call of Open.
+func (mr *DestinationPluginMockRecorder) Open(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Open", reflect.TypeOf((*DestinationPlugin)(nil).Open), arg0, arg1)
+}
+
+// Run mocks base method.
+func (m *DestinationPlugin) Run(arg0 context.Context, arg1 cplugin.DestinationRunStream) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Run", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// Start indicates an expected call of Start.
-func (mr *DestinationPluginMockRecorder) Start(arg0 any) *gomock.Call {
+// Run indicates an expected call of Run.
+func (mr *DestinationPluginMockRecorder) Run(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*DestinationPlugin)(nil).Start), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Run", reflect.TypeOf((*DestinationPlugin)(nil).Run), arg0, arg1)
 }
 
 // Stop mocks base method.
-func (m *DestinationPlugin) Stop(arg0 context.Context, arg1 record.Position) error {
+func (m *DestinationPlugin) Stop(arg0 context.Context, arg1 cplugin.DestinationStopRequest) (cplugin.DestinationStopResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Stop", arg0, arg1)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(cplugin.DestinationStopResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // Stop indicates an expected call of Stop.
@@ -209,31 +228,18 @@ func (mr *DestinationPluginMockRecorder) Stop(arg0, arg1 any) *gomock.Call {
 }
 
 // Teardown mocks base method.
-func (m *DestinationPlugin) Teardown(arg0 context.Context) error {
+func (m *DestinationPlugin) Teardown(arg0 context.Context, arg1 cplugin.DestinationTeardownRequest) (cplugin.DestinationTeardownResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Teardown", arg0)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret := m.ctrl.Call(m, "Teardown", arg0, arg1)
+	ret0, _ := ret[0].(cplugin.DestinationTeardownResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // Teardown indicates an expected call of Teardown.
-func (mr *DestinationPluginMockRecorder) Teardown(arg0 any) *gomock.Call {
+func (mr *DestinationPluginMockRecorder) Teardown(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Teardown", reflect.TypeOf((*DestinationPlugin)(nil).Teardown), arg0)
-}
-
-// Write mocks base method.
-func (m *DestinationPlugin) Write(arg0 context.Context, arg1 record.Record) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Write", arg0, arg1)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// Write indicates an expected call of Write.
-func (mr *DestinationPluginMockRecorder) Write(arg0, arg1 any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Write", reflect.TypeOf((*DestinationPlugin)(nil).Write), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Teardown", reflect.TypeOf((*DestinationPlugin)(nil).Teardown), arg0, arg1)
 }
 
 // SourcePlugin is a mock of SourcePlugin interface.
@@ -259,26 +265,13 @@ func (m *SourcePlugin) EXPECT() *SourcePluginMockRecorder {
 	return m.recorder
 }
 
-// Ack mocks base method.
-func (m *SourcePlugin) Ack(arg0 context.Context, arg1 record.Position) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Ack", arg0, arg1)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// Ack indicates an expected call of Ack.
-func (mr *SourcePluginMockRecorder) Ack(arg0, arg1 any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Ack", reflect.TypeOf((*SourcePlugin)(nil).Ack), arg0, arg1)
-}
-
 // Configure mocks base method.
-func (m *SourcePlugin) Configure(arg0 context.Context, arg1 map[string]string) error {
+func (m *SourcePlugin) Configure(arg0 context.Context, arg1 cplugin.SourceConfigureRequest) (cplugin.SourceConfigureResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Configure", arg0, arg1)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(cplugin.SourceConfigureResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // Configure indicates an expected call of Configure.
@@ -288,11 +281,12 @@ func (mr *SourcePluginMockRecorder) Configure(arg0, arg1 any) *gomock.Call {
 }
 
 // LifecycleOnCreated mocks base method.
-func (m *SourcePlugin) LifecycleOnCreated(arg0 context.Context, arg1 map[string]string) error {
+func (m *SourcePlugin) LifecycleOnCreated(arg0 context.Context, arg1 cplugin.SourceLifecycleOnCreatedRequest) (cplugin.SourceLifecycleOnCreatedResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "LifecycleOnCreated", arg0, arg1)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(cplugin.SourceLifecycleOnCreatedResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // LifecycleOnCreated indicates an expected call of LifecycleOnCreated.
@@ -302,11 +296,12 @@ func (mr *SourcePluginMockRecorder) LifecycleOnCreated(arg0, arg1 any) *gomock.C
 }
 
 // LifecycleOnDeleted mocks base method.
-func (m *SourcePlugin) LifecycleOnDeleted(arg0 context.Context, arg1 map[string]string) error {
+func (m *SourcePlugin) LifecycleOnDeleted(arg0 context.Context, arg1 cplugin.SourceLifecycleOnDeletedRequest) (cplugin.SourceLifecycleOnDeletedResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "LifecycleOnDeleted", arg0, arg1)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(cplugin.SourceLifecycleOnDeletedResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // LifecycleOnDeleted indicates an expected call of LifecycleOnDeleted.
@@ -316,75 +311,91 @@ func (mr *SourcePluginMockRecorder) LifecycleOnDeleted(arg0, arg1 any) *gomock.C
 }
 
 // LifecycleOnUpdated mocks base method.
-func (m *SourcePlugin) LifecycleOnUpdated(arg0 context.Context, arg1, arg2 map[string]string) error {
+func (m *SourcePlugin) LifecycleOnUpdated(arg0 context.Context, arg1 cplugin.SourceLifecycleOnUpdatedRequest) (cplugin.SourceLifecycleOnUpdatedResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "LifecycleOnUpdated", arg0, arg1, arg2)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// LifecycleOnUpdated indicates an expected call of LifecycleOnUpdated.
-func (mr *SourcePluginMockRecorder) LifecycleOnUpdated(arg0, arg1, arg2 any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LifecycleOnUpdated", reflect.TypeOf((*SourcePlugin)(nil).LifecycleOnUpdated), arg0, arg1, arg2)
-}
-
-// Read mocks base method.
-func (m *SourcePlugin) Read(arg0 context.Context) (record.Record, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Read", arg0)
-	ret0, _ := ret[0].(record.Record)
+	ret := m.ctrl.Call(m, "LifecycleOnUpdated", arg0, arg1)
+	ret0, _ := ret[0].(cplugin.SourceLifecycleOnUpdatedResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// Read indicates an expected call of Read.
-func (mr *SourcePluginMockRecorder) Read(arg0 any) *gomock.Call {
+// LifecycleOnUpdated indicates an expected call of LifecycleOnUpdated.
+func (mr *SourcePluginMockRecorder) LifecycleOnUpdated(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Read", reflect.TypeOf((*SourcePlugin)(nil).Read), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LifecycleOnUpdated", reflect.TypeOf((*SourcePlugin)(nil).LifecycleOnUpdated), arg0, arg1)
 }
 
-// Start mocks base method.
-func (m *SourcePlugin) Start(arg0 context.Context, arg1 record.Position) error {
+// NewStream mocks base method.
+func (m *SourcePlugin) NewStream() cplugin.SourceRunStream {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Start", arg0, arg1)
+	ret := m.ctrl.Call(m, "NewStream")
+	ret0, _ := ret[0].(cplugin.SourceRunStream)
+	return ret0
+}
+
+// NewStream indicates an expected call of NewStream.
+func (mr *SourcePluginMockRecorder) NewStream() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewStream", reflect.TypeOf((*SourcePlugin)(nil).NewStream))
+}
+
+// Open mocks base method.
+func (m *SourcePlugin) Open(arg0 context.Context, arg1 cplugin.SourceOpenRequest) (cplugin.SourceOpenResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Open", arg0, arg1)
+	ret0, _ := ret[0].(cplugin.SourceOpenResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Open indicates an expected call of Open.
+func (mr *SourcePluginMockRecorder) Open(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Open", reflect.TypeOf((*SourcePlugin)(nil).Open), arg0, arg1)
+}
+
+// Run mocks base method.
+func (m *SourcePlugin) Run(arg0 context.Context, arg1 cplugin.SourceRunStream) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Run", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// Start indicates an expected call of Start.
-func (mr *SourcePluginMockRecorder) Start(arg0, arg1 any) *gomock.Call {
+// Run indicates an expected call of Run.
+func (mr *SourcePluginMockRecorder) Run(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*SourcePlugin)(nil).Start), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Run", reflect.TypeOf((*SourcePlugin)(nil).Run), arg0, arg1)
 }
 
 // Stop mocks base method.
-func (m *SourcePlugin) Stop(arg0 context.Context) (record.Position, error) {
+func (m *SourcePlugin) Stop(arg0 context.Context, arg1 cplugin.SourceStopRequest) (cplugin.SourceStopResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Stop", arg0)
-	ret0, _ := ret[0].(record.Position)
+	ret := m.ctrl.Call(m, "Stop", arg0, arg1)
+	ret0, _ := ret[0].(cplugin.SourceStopResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Stop indicates an expected call of Stop.
-func (mr *SourcePluginMockRecorder) Stop(arg0 any) *gomock.Call {
+func (mr *SourcePluginMockRecorder) Stop(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*SourcePlugin)(nil).Stop), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*SourcePlugin)(nil).Stop), arg0, arg1)
 }
 
 // Teardown mocks base method.
-func (m *SourcePlugin) Teardown(arg0 context.Context) error {
+func (m *SourcePlugin) Teardown(arg0 context.Context, arg1 cplugin.SourceTeardownRequest) (cplugin.SourceTeardownResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Teardown", arg0)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret := m.ctrl.Call(m, "Teardown", arg0, arg1)
+	ret0, _ := ret[0].(cplugin.SourceTeardownResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // Teardown indicates an expected call of Teardown.
-func (mr *SourcePluginMockRecorder) Teardown(arg0 any) *gomock.Call {
+func (mr *SourcePluginMockRecorder) Teardown(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Teardown", reflect.TypeOf((*SourcePlugin)(nil).Teardown), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Teardown", reflect.TypeOf((*SourcePlugin)(nil).Teardown), arg0, arg1)
 }
 
 // SpecifierPlugin is a mock of SpecifierPlugin interface.
@@ -411,16 +422,16 @@ func (m *SpecifierPlugin) EXPECT() *SpecifierPluginMockRecorder {
 }
 
 // Specify mocks base method.
-func (m *SpecifierPlugin) Specify() (connector.Specification, error) {
+func (m *SpecifierPlugin) Specify(arg0 context.Context, arg1 cplugin.SpecifierSpecifyRequest) (cplugin.SpecifierSpecifyResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Specify")
-	ret0, _ := ret[0].(connector.Specification)
+	ret := m.ctrl.Call(m, "Specify", arg0, arg1)
+	ret0, _ := ret[0].(cplugin.SpecifierSpecifyResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Specify indicates an expected call of Specify.
-func (mr *SpecifierPluginMockRecorder) Specify() *gomock.Call {
+func (mr *SpecifierPluginMockRecorder) Specify(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Specify", reflect.TypeOf((*SpecifierPlugin)(nil).Specify))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Specify", reflect.TypeOf((*SpecifierPlugin)(nil).Specify), arg0, arg1)
 }

@@ -21,11 +21,11 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/conduitio/conduit-connector-protocol/cplugin"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/conduitio/conduit/pkg/plugin/connector"
-	standalonev1 "github.com/conduitio/conduit/pkg/plugin/connector/standalone/v1"
 	"github.com/rs/zerolog"
 )
 
@@ -41,9 +41,9 @@ type Registry struct {
 }
 
 type blueprint struct {
-	fullName      plugin.FullName
-	specification connector.Specification
-	path          string
+	FullName      plugin.FullName
+	Specification cplugin.Specification
+	Path          string
 	// TODO store hash of plugin binary and compare before running the binary to
 	// ensure someone can't switch the plugin after we registered it
 }
@@ -117,7 +117,7 @@ func (r *Registry) loadPlugins(ctx context.Context, pluginDir string) map[string
 
 		fullName := plugin.NewFullName(plugin.PluginTypeStandalone, specs.Name, specs.Version)
 		if conflict, ok := versionMap[specs.Version]; ok {
-			err = cerrors.Errorf("failed to load plugin %v from %v: %w (conflicts with %v)", fullName, pluginPath, plugin.ErrPluginAlreadyRegistered, conflict.path)
+			err = cerrors.Errorf("failed to load plugin %v from %v: %w (conflicts with %v)", fullName, pluginPath, plugin.ErrPluginAlreadyRegistered, conflict.Path)
 			warn(ctx, err, pluginPath)
 			// delete plugin from map at the end so that further duplicates can
 			// still be found
@@ -131,48 +131,48 @@ func (r *Registry) loadPlugins(ctx context.Context, pluginDir string) map[string
 		}
 
 		bp := blueprint{
-			fullName:      fullName,
-			specification: specs,
-			path:          pluginPath,
+			FullName:      fullName,
+			Specification: specs,
+			Path:          pluginPath,
 		}
 		versionMap[specs.Version] = bp
 
-		latestFullName := versionMap[plugin.PluginVersionLatest].fullName
+		latestFullName := versionMap[plugin.PluginVersionLatest].FullName
 		if fullName.PluginVersionGreaterThan(latestFullName) {
 			versionMap[plugin.PluginVersionLatest] = bp
 			r.logger.Debug(ctx).
 				Str(log.PluginPathField, pluginPath).
-				Str(log.PluginNameField, string(bp.fullName)).
+				Str(log.PluginNameField, string(bp.FullName)).
 				Msg("set connector plugin as latest")
 		}
 
 		r.logger.Debug(ctx).
 			Str(log.PluginPathField, pluginPath).
-			Str(log.PluginNameField, string(bp.fullName)).
+			Str(log.PluginNameField, string(bp.FullName)).
 			Msg("loaded standalone connector plugin")
 	}
 
 	return plugins
 }
 
-func (r *Registry) loadSpecifications(pluginPath string) (connector.Specification, error) {
+func (r *Registry) loadSpecifications(pluginPath string) (cplugin.Specification, error) {
 	// create dispenser without a logger to not spam logs on refresh
-	dispenser, err := standalonev1.NewDispenser(zerolog.Nop(), pluginPath)
+	dispenser, err := NewDispenser(zerolog.Nop(), pluginPath)
 	if err != nil {
-		return connector.Specification{}, cerrors.Errorf("failed to create connector dispenser: %w", err)
+		return cplugin.Specification{}, cerrors.Errorf("failed to create connector dispenser: %w", err)
 	}
 
 	specPlugin, err := dispenser.DispenseSpecifier()
 	if err != nil {
-		return connector.Specification{}, cerrors.Errorf("failed to dispense connector specifier (tip: check if the file is a valid connector plugin binary and if you have permissions for running it): %w", err)
+		return cplugin.Specification{}, cerrors.Errorf("failed to dispense connector specifier (tip: check if the file is a valid connector plugin binary and if you have permissions for running it): %w", err)
 	}
 
-	specs, err := specPlugin.Specify()
+	resp, err := specPlugin.Specify(context.Background(), cplugin.SpecifierSpecifyRequest{})
 	if err != nil {
-		return connector.Specification{}, cerrors.Errorf("failed to get connector specs: %w", err)
+		return cplugin.Specification{}, cerrors.Errorf("failed to get connector specs: %w", err)
 	}
 
-	return specs, nil
+	return resp.Specification, nil
 }
 
 func (r *Registry) NewDispenser(logger log.CtxLogger, fullName plugin.FullName) (connector.Dispenser, error) {
@@ -193,20 +193,20 @@ func (r *Registry) NewDispenser(logger log.CtxLogger, fullName plugin.FullName) 
 	}
 
 	logger = logger.WithComponent("plugin.standalone")
-	return standalonev1.NewDispenser(logger.ZerologWithComponent(), bp.path)
+	return NewDispenser(logger.ZerologWithComponent(), bp.Path)
 }
 
-func (r *Registry) List() map[plugin.FullName]connector.Specification {
+func (r *Registry) List() map[plugin.FullName]cplugin.Specification {
 	r.m.RLock()
 	defer r.m.RUnlock()
 
-	specs := make(map[plugin.FullName]connector.Specification, len(r.plugins))
+	specs := make(map[plugin.FullName]cplugin.Specification, len(r.plugins))
 	for _, versions := range r.plugins {
 		for version, bp := range versions {
 			if version == plugin.PluginVersionLatest {
 				continue // skip latest versions
 			}
-			specs[bp.fullName] = bp.specification
+			specs[bp.FullName] = bp.Specification
 		}
 	}
 	return specs

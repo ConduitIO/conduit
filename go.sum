@@ -340,10 +340,16 @@ github.com/conduitio/conduit-connector-postgres v0.7.2 h1:CjJQwWgdF122RsrwNApnPb
 github.com/conduitio/conduit-connector-postgres v0.7.2/go.mod h1:s/LEfoEv4CQAj2CYouBOt2Vx95xKbgX9L2LRuiZlr44=
 github.com/conduitio/conduit-connector-protocol v0.6.0 h1:2gMOCOpa+c97CHIpZv7Niu3V4o5UgRr6fzj9kzfRV7o=
 github.com/conduitio/conduit-connector-protocol v0.6.0/go.mod h1:3mo59xYX9etFoR3n82R7J50La1iWK+Vm63H8z2wo4QM=
+github.com/conduitio/conduit-connector-protocol v0.6.1-0.20240522160346-94685acd7300 h1:fQYJ+e37UGgUyGA7mofJtnLs79O8qKXWjBAt9Gr9NlE=
+github.com/conduitio/conduit-connector-protocol v0.6.1-0.20240522160346-94685acd7300/go.mod h1:SKioiokwG3wfHt/Aj1rlVjQoBgZQwmwNl2pvqaVhjws=
+github.com/conduitio/conduit-connector-protocol v0.6.1-0.20240528122612-9f3a6736e27a h1:VO94mCGbKxLcC341ng1bmSh4+qe3WMg0p9dHtnaJN/A=
+github.com/conduitio/conduit-connector-protocol v0.6.1-0.20240528122612-9f3a6736e27a/go.mod h1:VJ+fhYBI9F7iI9wjmgB6HAuI4e2fM0QAmuebrxCNqmY=
 github.com/conduitio/conduit-connector-s3 v0.5.1 h1:yRo8004ryCIZc/S3iWQ1rN6pm6bjySlXFCGZOl1rE1E=
 github.com/conduitio/conduit-connector-s3 v0.5.1/go.mod h1:nbxzsyS95gbFJ28Job9vFFB+byRFINSv70/13Yi4mKQ=
 github.com/conduitio/conduit-connector-sdk v0.9.1 h1:DiMUn7udnjWvyaDsyeTZFHeYTEIdqUU6dqPunEEE3Kw=
 github.com/conduitio/conduit-connector-sdk v0.9.1/go.mod h1:cNoofumgDlsaThkxkNYg7zab4AkmRZt1V711aO7guGU=
+github.com/conduitio/conduit-connector-sdk v0.9.2-0.20240524152746-d0dbf8018237 h1:m69IQ4V67p7JjtbA9VepPgUGXD2ZnrdAI/x0Z8kzqRg=
+github.com/conduitio/conduit-connector-sdk v0.9.2-0.20240524152746-d0dbf8018237/go.mod h1:J1K4g+EjX5oUMcGzR7KVBaCvzlF14QEYGrgxxJukyiw=
 github.com/conduitio/conduit-processor-sdk v0.1.2-0.20240516124003-442e4a3f0edd h1:R+tpcZKWOnr6LRsXr85C167SK9MhaLhYUEjBSUupU9Y=
 github.com/conduitio/conduit-processor-sdk v0.1.2-0.20240516124003-442e4a3f0edd/go.mod h1:E9zqj0atY1+yBHWi4eZ3TagCZSBnFxBQBUcZktL6RFE=
 github.com/conduitio/yaml/v3 v3.3.0 h1:kbbaOSHcuH39gP4+rgbJGl6DSbLZcJgEaBvkEXJlCsI=

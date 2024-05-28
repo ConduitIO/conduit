@@ -1,4 +1,4 @@
-// Copyright © 2022 Meroxa, Inc.
+// Copyright © 2024 Meroxa, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,12 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package standalonev1
+package standalone
 
 import (
 	"context"
 	"sync"
 
+	"github.com/conduitio/conduit-connector-protocol/cplugin"
+	"github.com/conduitio/conduit-connector-protocol/cplugin/client"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/plugin/connector"
 	goplugin "github.com/hashicorp/go-plugin"
@@ -27,14 +29,14 @@ import (
 type Dispenser struct {
 	logger zerolog.Logger
 	path   string
-	opts   []ClientOption
+	opts   []client.Option
 
 	dispensed bool
 	client    *goplugin.Client
 	m         sync.Mutex
 }
 
-func NewDispenser(logger zerolog.Logger, path string, opts ...ClientOption) (*Dispenser, error) {
+func NewDispenser(logger zerolog.Logger, path string, opts ...client.Option) (*Dispenser, error) {
 	d := Dispenser{
 		logger: logger,
 		path:   path,
@@ -50,7 +52,7 @@ func NewDispenser(logger zerolog.Logger, path string, opts ...ClientOption) (*Di
 }
 
 func (d *Dispenser) initClient() error {
-	c, err := NewClient(d.logger, d.path, d.opts...)
+	c, err := client.New(&hcLogger{logger: d.logger}, d.path, d.opts...)
 	if err != nil {
 		return cerrors.Errorf("could not create go-plugin client: %w", err)
 	}
@@ -65,10 +67,6 @@ func (d *Dispenser) dispense() error {
 
 	if d.dispensed {
 		return cerrors.New("plugin already dispensed, can't dispense twice")
-	}
-	err := d.initClient()
-	if err != nil {
-		return err
 	}
 
 	d.dispensed = true
@@ -165,9 +163,9 @@ type specifierPluginDispenserSignaller struct {
 	d *Dispenser
 }
 
-func (s specifierPluginDispenserSignaller) Specify() (connector.Specification, error) {
+func (s specifierPluginDispenserSignaller) Specify(ctx context.Context, req cplugin.SpecifierSpecifyRequest) (cplugin.SpecifierSpecifyResponse, error) {
 	defer s.d.teardown()
-	return s.SpecifierPlugin.Specify()
+	return s.SpecifierPlugin.Specify(ctx, req)
 }
 
 type sourcePluginDispenserSignaller struct {
@@ -175,9 +173,9 @@ type sourcePluginDispenserSignaller struct {
 	d *Dispenser
 }
 
-func (s sourcePluginDispenserSignaller) Teardown(ctx context.Context) error {
+func (s sourcePluginDispenserSignaller) Teardown(ctx context.Context, req cplugin.SourceTeardownRequest) (cplugin.SourceTeardownResponse, error) {
 	defer s.d.teardown()
-	return s.SourcePlugin.Teardown(ctx)
+	return s.SourcePlugin.Teardown(ctx, req)
 }
 
 type destinationPluginDispenserSignaller struct {
@@ -185,7 +183,7 @@ type destinationPluginDispenserSignaller struct {
 	d *Dispenser
 }
 
-func (s destinationPluginDispenserSignaller) Teardown(ctx context.Context) error {
+func (s destinationPluginDispenserSignaller) Teardown(ctx context.Context, req cplugin.DestinationTeardownRequest) (cplugin.DestinationTeardownResponse, error) {
 	defer s.d.teardown()
-	return s.DestinationPlugin.Teardown(ctx)
+	return s.DestinationPlugin.Teardown(ctx, req)
 }

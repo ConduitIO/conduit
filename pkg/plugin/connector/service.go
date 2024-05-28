@@ -17,6 +17,8 @@ package connector
 import (
 	"context"
 
+	"github.com/conduitio/conduit-connector-protocol/cplugin"
+
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
@@ -34,7 +36,7 @@ import (
 //     compiled independently of Conduit and can be included at runtime.
 type registry interface {
 	NewDispenser(logger log.CtxLogger, name plugin.FullName) (Dispenser, error)
-	List() map[plugin.FullName]Specification
+	List() map[plugin.FullName]cplugin.Specification
 }
 
 type PluginService struct {
@@ -81,11 +83,11 @@ func (s *PluginService) NewDispenser(logger log.CtxLogger, name string) (Dispens
 	}
 }
 
-func (s *PluginService) List(context.Context) (map[string]Specification, error) {
+func (s *PluginService) List(context.Context) (map[string]cplugin.Specification, error) {
 	builtinSpecs := s.builtinReg.List()
 	standaloneSpecs := s.standaloneReg.List()
 
-	specs := make(map[string]Specification, len(builtinSpecs)+len(standaloneSpecs))
+	specs := make(map[string]cplugin.Specification, len(builtinSpecs)+len(standaloneSpecs))
 	for k, v := range builtinSpecs {
 		specs[string(k)] = v
 	}
@@ -108,13 +110,13 @@ func (s *PluginService) ValidateSourceConfig(ctx context.Context, name string, s
 	}
 
 	defer func() {
-		terr := src.Teardown(ctx)
+		_, terr := src.Teardown(ctx, cplugin.SourceTeardownRequest{})
 		if err == nil {
 			err = terr // only overwrite error if it's nil
 		}
 	}()
 
-	err = src.Configure(ctx, settings)
+	_, err = src.Configure(ctx, cplugin.SourceConfigureRequest{Config: settings})
 	if err != nil {
 		return &ValidationError{Err: err}
 	}
@@ -134,13 +136,13 @@ func (s *PluginService) ValidateDestinationConfig(ctx context.Context, name stri
 	}
 
 	defer func() {
-		terr := dest.Teardown(ctx)
+		_, terr := dest.Teardown(ctx, cplugin.DestinationTeardownRequest{})
 		if err == nil {
 			err = terr // only overwrite error if it's nil
 		}
 	}()
 
-	err = dest.Configure(ctx, settings)
+	_, err = dest.Configure(ctx, cplugin.DestinationConfigureRequest{Config: settings})
 	if err != nil {
 		return &ValidationError{Err: err}
 	}
