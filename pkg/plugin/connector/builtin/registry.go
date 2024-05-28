@@ -23,7 +23,7 @@ import (
 	kafka "github.com/conduitio/conduit-connector-kafka"
 	connLog "github.com/conduitio/conduit-connector-log"
 	postgres "github.com/conduitio/conduit-connector-postgres"
-	"github.com/conduitio/conduit-connector-protocol/cpluginv1"
+	"github.com/conduitio/conduit-connector-protocol/cplugin"
 	s3 "github.com/conduitio/conduit-connector-s3"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -57,7 +57,7 @@ type Registry struct {
 
 type blueprint struct {
 	fullName         plugin.FullName
-	specification    connector.Specification
+	specification    cplugin.Specification
 	dispenserFactory DispenserFactory
 }
 
@@ -75,11 +75,11 @@ func NewDispenserFactory(conn sdk.Connector) DispenserFactory {
 		return builtinv1.NewDispenser(
 			name,
 			logger,
-			func() cpluginv1.SpecifierPlugin {
+			func() cplugin.SpecifierPlugin {
 				return sdk.NewSpecifierPlugin(conn.NewSpecification(), conn.NewSource(), conn.NewDestination())
 			},
-			func() cpluginv1.SourcePlugin { return sdk.NewSourcePlugin(conn.NewSource()) },
-			func() cpluginv1.DestinationPlugin { return sdk.NewDestinationPlugin(conn.NewDestination()) },
+			func() cplugin.SourcePlugin { return sdk.NewSourcePlugin(conn.NewSource()) },
+			func() cplugin.DestinationPlugin { return sdk.NewDestinationPlugin(conn.NewDestination()) },
 		)
 	}
 }
@@ -136,23 +136,23 @@ func loadPlugins(buildInfo *debug.BuildInfo, factories map[string]DispenserFacto
 	return plugins
 }
 
-func getSpecification(moduleName string, factory DispenserFactory, buildInfo *debug.BuildInfo) (connector.Specification, error) {
+func getSpecification(moduleName string, factory DispenserFactory, buildInfo *debug.BuildInfo) (cplugin.Specification, error) {
 	dispenser := factory("", log.CtxLogger{})
 	specPlugin, err := dispenser.DispenseSpecifier()
 	if err != nil {
-		return connector.Specification{}, cerrors.Errorf("could not dispense specifier for built in plugin: %w", err)
+		return cplugin.Specification{}, cerrors.Errorf("could not dispense specifier for built in plugin: %w", err)
 	}
-	specs, err := specPlugin.Specify()
+	resp, err := specPlugin.Specify(context.Background(), cplugin.SpecifierSpecifyRequest{})
 	if err != nil {
-		return connector.Specification{}, cerrors.Errorf("could not get specs for built in plugin: %w", err)
+		return cplugin.Specification{}, cerrors.Errorf("could not get specs for built in plugin: %w", err)
 	}
 
 	if version := getModuleVersion(buildInfo.Deps, moduleName); version != "" {
 		// overwrite version with the import version
-		specs.Version = version
+		resp.Specification.Version = version
 	}
 
-	return specs, nil
+	return resp.Specification, nil
 }
 
 func getModuleVersion(deps []*debug.Module, moduleName string) string {
@@ -188,8 +188,8 @@ func (r *Registry) NewDispenser(logger log.CtxLogger, fullName plugin.FullName) 
 	return b.dispenserFactory(fullName, logger), nil
 }
 
-func (r *Registry) List() map[plugin.FullName]connector.Specification {
-	specs := make(map[plugin.FullName]connector.Specification, len(r.plugins))
+func (r *Registry) List() map[plugin.FullName]cplugin.Specification {
+	specs := make(map[plugin.FullName]cplugin.Specification, len(r.plugins))
 	for _, versions := range r.plugins {
 		for version, bp := range versions {
 			if version == plugin.PluginVersionLatest {

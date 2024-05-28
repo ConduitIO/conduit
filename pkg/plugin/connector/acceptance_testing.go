@@ -165,7 +165,7 @@ func testSource_Configure_Success(t *testing.T, tdf testDispenserFunc) {
 	source, err := dispenser.DispenseSource()
 	is.NoErr(err)
 
-	got, err := source.Configure(ctx, cplugin.SourceConfigureRequest{Config: map[string]string{}})
+	got, err := source.Configure(ctx, cplugin.SourceConfigureRequest{Config: nil})
 	is.NoErr(err)
 	is.Equal(got, cplugin.SourceConfigureResponse{})
 }

@@ -21,5 +21,5 @@ import (
 )
 
 func TestAcceptance(t *testing.T) {
-	connector.AcceptanceTestV1(t, newTestDispenser)
+	connector.AcceptanceTest(t, newTestDispenser)
 }

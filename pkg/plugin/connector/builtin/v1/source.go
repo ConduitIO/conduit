@@ -16,39 +16,34 @@ package builtinv1
 
 import (
 	"context"
+	"fmt"
 
-	"github.com/conduitio/conduit-connector-protocol/cpluginv1"
-	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit-connector-protocol/cplugin"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin/connector"
-	"github.com/conduitio/conduit/pkg/plugin/connector/builtin/v1/internal/fromplugin"
-	"github.com/conduitio/conduit/pkg/plugin/connector/builtin/v1/internal/toplugin"
-	"github.com/conduitio/conduit/pkg/record"
 	"github.com/rs/zerolog"
 )
 
 // sourcePluginAdapter implements the source plugin interface used internally in
 // Conduit and relays the calls to a source plugin defined in
-// conduit-connector-protocol (cpluginv1). This adapter needs to make sure it
+// conduit-connector-protocol (cplugin). This adapter needs to make sure it
 // behaves in the same way as the standalone plugin adapter, which communicates
 // with the plugin through gRPC, so that the caller can use both of them
 // interchangeably.
 type sourcePluginAdapter struct {
-	impl cpluginv1.SourcePlugin
+	impl cplugin.SourcePlugin
 	// logger is used as the internal logger of sourcePluginAdapter.
 	logger log.CtxLogger
 	// ctxLogger is attached to the context of each call to the plugin.
 	ctxLogger zerolog.Logger
-
-	stream *stream[cpluginv1.SourceRunRequest, cpluginv1.SourceRunResponse]
 }
 
 var _ connector.SourcePlugin = (*sourcePluginAdapter)(nil)
 
-func newSourcePluginAdapter(impl cpluginv1.SourcePlugin, logger log.CtxLogger) *sourcePluginAdapter {
+func newSourcePluginAdapter(impl cplugin.SourcePlugin, logger log.CtxLogger) *sourcePluginAdapter {
 	return &sourcePluginAdapter{
 		impl:      impl,
-		logger:    logger.WithComponent("builtinv1.sourcePluginAdapter"),
+		logger:    logger.WithComponent("builtin.sourcePluginAdapter"),
 		ctxLogger: logger.WithComponent("plugin").ZerologWithComponent(),
 	}
 }
@@ -57,116 +52,68 @@ func (s *sourcePluginAdapter) withLogger(ctx context.Context) context.Context {
 	return s.ctxLogger.WithContext(ctx)
 }
 
-func (s *sourcePluginAdapter) Configure(ctx context.Context, cfg map[string]string) error {
-	s.logger.Trace(ctx).Msg("calling Configure")
-	_, err := runSandbox(s.impl.Configure, s.withLogger(ctx), toplugin.SourceConfigureRequest(cfg), s.logger)
-	return err
+func (s *sourcePluginAdapter) Configure(ctx context.Context, in cplugin.SourceConfigureRequest) (cplugin.SourceConfigureResponse, error) {
+	s.logger.Debug(ctx).Any("request", in).Msg("calling Configure")
+	return runSandbox(s.impl.Configure, s.withLogger(ctx), in, s.logger)
 }
 
-func (s *sourcePluginAdapter) Start(ctx context.Context, p record.Position) error {
-	if s.stream != nil {
-		return cerrors.New("plugin already running")
+func (s *sourcePluginAdapter) Open(ctx context.Context, in cplugin.SourceOpenRequest) (cplugin.SourceOpenResponse, error) {
+	s.logger.Debug(ctx).Any("request", in).Msg("calling Start")
+	return runSandbox(s.impl.Open, s.withLogger(ctx), in, s.logger)
+}
+
+func (s *sourcePluginAdapter) Run(ctx context.Context, stream cplugin.SourceRunStream) error {
+	inmemStream, ok := stream.(*InMemorySourceRunStream)
+	if !ok {
+		return fmt.Errorf("invalid stream type, expected %T, got %T", s.NewStream(), stream)
+	}
+	if inmemStream.stream != nil {
+		return fmt.Errorf("stream has already been initialized")
 	}
 
-	req := toplugin.SourceStartRequest(p)
+	inmemStream.Init(ctx)
 
-	s.logger.Trace(ctx).Msg("calling Start")
-	resp, err := runSandbox(s.impl.Start, s.withLogger(ctx), req, s.logger)
-	if err != nil {
-		return err
-	}
-	_ = resp // empty response
-
-	s.stream = newSourceRunStream(ctx)
+	s.logger.Debug(ctx).Msg("calling Run")
 	go func() {
-		s.logger.Trace(ctx).Msg("calling Run")
-		err := runSandboxNoResp(s.impl.Run, s.withLogger(ctx), cpluginv1.SourceRunStream(s.stream), s.logger)
+		err := runSandboxNoResp(s.impl.Run, s.withLogger(ctx), stream, s.logger)
 		if err != nil {
-			if !s.stream.stop(err) {
+			if !inmemStream.Close(err) {
 				s.logger.Err(ctx, err).Msg("stream already stopped")
 			}
 		} else {
-			s.stream.stop(connector.ErrStreamNotOpen)
+			inmemStream.Close(connector.ErrStreamNotOpen)
 		}
-		s.logger.Trace(ctx).Msg("Run stopped")
+		s.logger.Debug(ctx).Msg("Run stopped")
 	}()
 
 	return nil
 }
 
-func (s *sourcePluginAdapter) Read(ctx context.Context) (record.Record, error) {
-	if s.stream == nil {
-		return record.Record{}, connector.ErrStreamNotOpen
-	}
-
-	s.logger.Trace(ctx).Msg("receiving record")
-	resp, err := s.stream.recvInternal()
-	if err != nil {
-		return record.Record{}, cerrors.Errorf("builtin plugin receive failed: %w", err)
-	}
-
-	out, err := fromplugin.SourceRunResponse(resp)
-	if err != nil {
-		return record.Record{}, err
-	}
-
-	return out, nil
+func (s *sourcePluginAdapter) Stop(ctx context.Context, in cplugin.SourceStopRequest) (cplugin.SourceStopResponse, error) {
+	s.logger.Debug(ctx).Any("request", in).Msg("calling Stop")
+	return runSandbox(s.impl.Stop, s.withLogger(ctx), in, s.logger)
 }
 
-func (s *sourcePluginAdapter) Ack(ctx context.Context, p record.Position) error {
-	if s.stream == nil {
-		return connector.ErrStreamNotOpen
-	}
-
-	req := toplugin.SourceRunRequest(p)
-
-	s.logger.Trace(ctx).Msg("sending ack")
-	err := s.stream.sendInternal(req)
-	if err != nil {
-		return cerrors.Errorf("builtin plugin send failed: %w", err)
-	}
-
-	return nil
+func (s *sourcePluginAdapter) Teardown(ctx context.Context, in cplugin.SourceTeardownRequest) (cplugin.SourceTeardownResponse, error) {
+	s.logger.Debug(ctx).Any("request", in).Msg("calling Teardown")
+	return runSandbox(s.impl.Teardown, s.withLogger(ctx), in, s.logger)
 }
 
-func (s *sourcePluginAdapter) Stop(ctx context.Context) (record.Position, error) {
-	s.logger.Trace(ctx).Msg("calling Stop")
-	resp, err := runSandbox(s.impl.Stop, s.withLogger(ctx), toplugin.SourceStopRequest(), s.logger)
-	if err != nil {
-		return nil, err
-	}
-	return fromplugin.SourceStopResponse(resp)
+func (s *sourcePluginAdapter) LifecycleOnCreated(ctx context.Context, in cplugin.SourceLifecycleOnCreatedRequest) (cplugin.SourceLifecycleOnCreatedResponse, error) {
+	s.logger.Debug(ctx).Any("request", in).Msg("calling LifecycleOnCreated")
+	return runSandbox(s.impl.LifecycleOnCreated, s.withLogger(ctx), in, s.logger)
 }
 
-func (s *sourcePluginAdapter) Teardown(ctx context.Context) error {
-	s.logger.Trace(ctx).Msg("calling Teardown")
-	_, err := runSandbox(s.impl.Teardown, s.withLogger(ctx), toplugin.SourceTeardownRequest(), s.logger)
-	return err
+func (s *sourcePluginAdapter) LifecycleOnUpdated(ctx context.Context, in cplugin.SourceLifecycleOnUpdatedRequest) (cplugin.SourceLifecycleOnUpdatedResponse, error) {
+	s.logger.Debug(ctx).Any("request", in).Msg("calling LifecycleOnUpdated")
+	return runSandbox(s.impl.LifecycleOnUpdated, s.withLogger(ctx), in, s.logger)
 }
 
-func (s *sourcePluginAdapter) LifecycleOnCreated(ctx context.Context, cfg map[string]string) error {
-	s.logger.Trace(ctx).Msg("calling LifecycleOnCreated")
-	_, err := runSandbox(s.impl.LifecycleOnCreated, s.withLogger(ctx), toplugin.SourceLifecycleOnCreatedRequest(cfg), s.logger)
-	return err
+func (s *sourcePluginAdapter) LifecycleOnDeleted(ctx context.Context, in cplugin.SourceLifecycleOnDeletedRequest) (cplugin.SourceLifecycleOnDeletedResponse, error) {
+	s.logger.Debug(ctx).Any("request", in).Msg("calling LifecycleOnDeleted")
+	return runSandbox(s.impl.LifecycleOnDeleted, s.withLogger(ctx), in, s.logger)
 }
 
-func (s *sourcePluginAdapter) LifecycleOnUpdated(ctx context.Context, cfgBefore, cfgAfter map[string]string) error {
-	s.logger.Trace(ctx).Msg("calling LifecycleOnUpdated")
-	_, err := runSandbox(s.impl.LifecycleOnUpdated, s.withLogger(ctx), toplugin.SourceLifecycleOnUpdatedRequest(cfgBefore, cfgAfter), s.logger)
-	return err
-}
-
-func (s *sourcePluginAdapter) LifecycleOnDeleted(ctx context.Context, cfg map[string]string) error {
-	s.logger.Trace(ctx).Msg("calling LifecycleOnDeleted")
-	_, err := runSandbox(s.impl.LifecycleOnDeleted, s.withLogger(ctx), toplugin.SourceLifecycleOnDeletedRequest(cfg), s.logger)
-	return err
-}
-
-func newSourceRunStream(ctx context.Context) *stream[cpluginv1.SourceRunRequest, cpluginv1.SourceRunResponse] {
-	return &stream[cpluginv1.SourceRunRequest, cpluginv1.SourceRunResponse]{
-		ctx:      ctx,
-		stopChan: make(chan struct{}),
-		reqChan:  make(chan cpluginv1.SourceRunRequest),
-		respChan: make(chan cpluginv1.SourceRunResponse),
-	}
+func (s *sourcePluginAdapter) NewStream() cplugin.SourceRunStream {
+	return &InMemorySourceRunStream{}
 }

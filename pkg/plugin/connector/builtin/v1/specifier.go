@@ -17,37 +17,27 @@ package builtinv1
 import (
 	"context"
 
-	"github.com/conduitio/conduit-connector-protocol/cpluginv1"
+	"github.com/conduitio/conduit-connector-protocol/cplugin"
+
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin/connector"
-	"github.com/conduitio/conduit/pkg/plugin/connector/builtin/v1/internal/fromplugin"
-	"github.com/conduitio/conduit/pkg/plugin/connector/builtin/v1/internal/toplugin"
 )
 
 type specifierPluginAdapter struct {
-	impl cpluginv1.SpecifierPlugin
+	impl cplugin.SpecifierPlugin
 	// logger is used as the internal logger of specifierPluginAdapter.
 	logger log.CtxLogger
 }
 
 var _ connector.SpecifierPlugin = (*specifierPluginAdapter)(nil)
 
-func newSpecifierPluginAdapter(impl cpluginv1.SpecifierPlugin, logger log.CtxLogger) *specifierPluginAdapter {
+func newSpecifierPluginAdapter(impl cplugin.SpecifierPlugin, logger log.CtxLogger) *specifierPluginAdapter {
 	return &specifierPluginAdapter{
 		impl:   impl,
-		logger: logger.WithComponent("builtinv1.specifierPluginAdapter"),
+		logger: logger.WithComponent("builtin.specifierPluginAdapter"),
 	}
 }
 
-func (s *specifierPluginAdapter) Specify() (connector.Specification, error) {
-	req := toplugin.SpecifierSpecifyRequest()
-	resp, err := runSandbox(s.impl.Specify, context.Background(), req, s.logger)
-	if err != nil {
-		return connector.Specification{}, err
-	}
-	out, err := fromplugin.SpecifierSpecifyResponse(resp)
-	if err != nil {
-		return connector.Specification{}, err
-	}
-	return out, nil
+func (s *specifierPluginAdapter) Specify(ctx context.Context, in cplugin.SpecifierSpecifyRequest) (cplugin.SpecifierSpecifyResponse, error) {
+	return runSandbox(s.impl.Specify, ctx, in, s.logger)
 }
