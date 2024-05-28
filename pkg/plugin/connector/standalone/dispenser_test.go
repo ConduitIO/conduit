@@ -23,9 +23,9 @@ import (
 
 	"github.com/conduitio/conduit-connector-protocol/cplugin"
 	"github.com/conduitio/conduit-connector-protocol/cplugin/client"
+	"github.com/conduitio/conduit-connector-protocol/cplugin/mock"
 	"github.com/conduitio/conduit-connector-protocol/cplugin/server"
 	"github.com/conduitio/conduit/pkg/plugin/connector"
-	mock "github.com/conduitio/conduit/pkg/plugin/connector/internal"
 	goplugin "github.com/hashicorp/go-plugin"
 	"github.com/rs/zerolog"
 	"go.uber.org/mock/gomock"
@@ -33,9 +33,9 @@ import (
 
 func newTestDispenser(t *testing.T, logger zerolog.Logger, version int) (
 	connector.Dispenser,
-	*mock.MockSpecifierPlugin,
-	*mock.MockSourcePlugin,
-	*mock.MockDestinationPlugin,
+	*mock.SpecifierPlugin,
+	*mock.SourcePlugin,
+	*mock.DestinationPlugin,
 ) {
 	ctx, cancel := context.WithCancel(context.Background())
 	ctrl := gomock.NewController(t)
@@ -43,9 +43,9 @@ func newTestDispenser(t *testing.T, logger zerolog.Logger, version int) (
 	ch := make(chan *goplugin.ReattachConfig, 1)
 	closeCh := make(chan struct{})
 
-	mockSpecifier := mock.NewMockSpecifierPlugin(ctrl)
-	mockSource := mock.NewMockSourcePlugin(ctrl)
-	mockDestination := mock.NewMockDestinationPlugin(ctrl)
+	mockSpecifier := mock.NewSpecifierPlugin(ctrl)
+	mockSource := mock.NewSourcePlugin(ctrl)
+	mockDestination := mock.NewDestinationPlugin(ctrl)
 
 	t.Cleanup(func() {
 		cancel()

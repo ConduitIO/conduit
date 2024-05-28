@@ -17,23 +17,23 @@ package standalone
 import (
 	"testing"
 
+	"github.com/conduitio/conduit-connector-protocol/cplugin/mock"
 	v1 "github.com/conduitio/conduit-connector-protocol/cplugin/v1"
 	v2 "github.com/conduitio/conduit-connector-protocol/cplugin/v2"
 	"github.com/conduitio/conduit/pkg/plugin/connector"
-	mock "github.com/conduitio/conduit/pkg/plugin/connector/internal"
 	"github.com/rs/zerolog"
 )
 
 func TestAcceptanceV1(t *testing.T) {
 	logger := zerolog.Nop()
-	connector.AcceptanceTestV1(t, func(t *testing.T) (connector.Dispenser, *mock.MockSpecifierPlugin, *mock.MockSourcePlugin, *mock.MockDestinationPlugin) {
+	connector.AcceptanceTest(t, func(t *testing.T) (connector.Dispenser, *mock.SpecifierPlugin, *mock.SourcePlugin, *mock.DestinationPlugin) {
 		return newTestDispenser(t, logger, v1.Version)
 	})
 }
 
 func TestAcceptanceV2(t *testing.T) {
 	logger := zerolog.Nop()
-	connector.AcceptanceTestV1(t, func(t *testing.T) (connector.Dispenser, *mock.MockSpecifierPlugin, *mock.MockSourcePlugin, *mock.MockDestinationPlugin) {
+	connector.AcceptanceTest(t, func(t *testing.T) (connector.Dispenser, *mock.SpecifierPlugin, *mock.SourcePlugin, *mock.DestinationPlugin) {
 		return newTestDispenser(t, logger, v2.Version)
 	})
 }
