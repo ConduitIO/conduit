@@ -14,7 +14,7 @@
 
 //go:build !integration
 
-package schemaregistry
+package schema
 
 import (
 	"fmt"
@@ -27,7 +27,6 @@ import (
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/avro/schemaregistry/internal"
 	"github.com/goccy/go-json"
 	"github.com/lovromazgon/franz-go/pkg/sr"
 )
@@ -106,21 +105,18 @@ type FakeRegistry struct {
 	initOnce sync.Once
 }
 
-func (fr *FakeRegistry) Init() {
-	fr.initOnce.Do(func() {
-		fr.m.Lock()
-		defer fr.m.Unlock()
-		fr.schemas = make([]sr.SubjectSchema, 0)
-		fr.fingerprintIDCache = make(map[uint64]int)
-	})
+func NewFakeRegistry() *FakeRegistry {
+	return &FakeRegistry{
+		schemas:            make([]sr.SubjectSchema, 0),
+		fingerprintIDCache: make(map[uint64]int),
+	}
 }
 
 func (fr *FakeRegistry) CreateSchema(subject string, schema sr.Schema) sr.SubjectSchema {
-	fr.Init()
 	fr.m.Lock()
 	defer fr.m.Unlock()
 
-	fp := internal.Rabin([]byte(schema.Schema))
+	fp := Rabin([]byte(schema.Schema))
 	id, ok := fr.fingerprintIDCache[fp]
 	if ok {
 		// schema exists, see if subject matches
@@ -150,7 +146,6 @@ func (fr *FakeRegistry) CreateSchema(subject string, schema sr.Schema) sr.Subjec
 }
 
 func (fr *FakeRegistry) SchemaByID(id int) (sr.Schema, bool) {
-	fr.Init()
 	fr.m.Lock()
 	defer fr.m.Unlock()
 
@@ -159,7 +154,6 @@ func (fr *FakeRegistry) SchemaByID(id int) (sr.Schema, bool) {
 }
 
 func (fr *FakeRegistry) SchemaBySubjectVersion(subject string, version int) (sr.SubjectSchema, bool) {
-	fr.Init()
 	fr.m.Lock()
 	defer fr.m.Unlock()
 
@@ -167,7 +161,6 @@ func (fr *FakeRegistry) SchemaBySubjectVersion(subject string, version int) (sr.
 }
 
 func (fr *FakeRegistry) SubjectVersionsByID(id int) []sr.SubjectSchema {
-	fr.Init()
 	fr.m.Lock()
 	defer fr.m.Unlock()
 
@@ -232,12 +225,13 @@ func (fr *FakeRegistry) findBySubjectVersion(subject string, version int) (sr.Su
 
 // fakeServer is a fake schema registry server.
 type fakeServer struct {
-	fr   FakeRegistry
+	fr   *FakeRegistry
 	logf func(format string, args ...any)
 }
 
 func newFakeServer(logf func(format string, args ...any)) *fakeServer {
 	fs := &fakeServer{
+		fr:   NewFakeRegistry(),
 		logf: func(format string, args ...any) { /* no op */ },
 	}
 	if logf != nil {

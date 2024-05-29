@@ -20,7 +20,6 @@ import (
 
 	"github.com/conduitio/conduit-commons/schema"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/avro/schemaregistry"
 	"github.com/lovromazgon/franz-go/pkg/sr"
 )
 
@@ -29,14 +28,11 @@ var (
 )
 
 type Service struct {
-	fakeReg *schemaregistry.FakeRegistry
+	fakeReg *FakeRegistry
 }
 
 func NewService() *Service {
-	fr := &schemaregistry.FakeRegistry{}
-	fr.Init()
-
-	return &Service{fakeReg: fr}
+	return &Service{fakeReg: NewFakeRegistry()}
 }
 
 func (s *Service) Check(ctx context.Context) error {

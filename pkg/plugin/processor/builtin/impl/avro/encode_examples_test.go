@@ -19,6 +19,7 @@ package avro
 import (
 	"context"
 	"fmt"
+	"github.com/conduitio/conduit/pkg/schema"
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
@@ -30,7 +31,7 @@ import (
 
 //nolint:govet // a more descriptive example description
 func ExampleEncodeProcessor_autoRegister() {
-	url, cleanup := schemaregistry.ExampleSchemaRegistryURL("ExampleEncodeProcessor_autoRegister", 54322)
+	url, cleanup := schema.ExampleSchemaRegistryURL("ExampleEncodeProcessor_autoRegister", 54322)
 	defer cleanup()
 
 	p := NewEncodeProcessor(log.Nop())
@@ -109,7 +110,7 @@ and registered on the fly under the subject ` + "`example-autoRegister`" + `.`,
 
 //nolint:govet // a more descriptive example description
 func ExampleEncodeProcessor_preRegistered() {
-	url, cleanup := schemaregistry.ExampleSchemaRegistryURL("ExampleEncodeProcessor_preRegistered", 54322)
+	url, cleanup := schema.ExampleSchemaRegistryURL("ExampleEncodeProcessor_preRegistered", 54322)
 	defer cleanup()
 
 	client, err := schemaregistry.NewClient(log.Nop(), sr.URLs(url))

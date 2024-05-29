@@ -16,6 +16,7 @@ package internal
 
 import (
 	"fmt"
+	"github.com/conduitio/conduit/pkg/schema"
 	"sync"
 
 	"github.com/lovromazgon/franz-go/pkg/sr"
@@ -32,7 +33,7 @@ func newSubjectVersion(subject string, version int) subjectVersion {
 }
 
 func newSubjectFingerprint(subject string, text string) subjectFingerprint {
-	fingerprint := Rabin([]byte(text))
+	fingerprint := schema.Rabin([]byte(text))
 	return subjectFingerprint(fmt.Sprintf("%s:%d", subject, fingerprint))
 }
 

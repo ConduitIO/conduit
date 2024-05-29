@@ -19,6 +19,7 @@ package avro
 import (
 	"context"
 	"fmt"
+	"github.com/conduitio/conduit/pkg/schema"
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
@@ -30,7 +31,7 @@ import (
 
 //nolint:govet // a more descriptive example description
 func ExampleDecodeProcessor() {
-	url, cleanup := schemaregistry.ExampleSchemaRegistryURL("ExampleDecodeProcessor", 54322)
+	url, cleanup := schema.ExampleSchemaRegistryURL("ExampleDecodeProcessor", 54322)
 	defer cleanup()
 
 	client, err := schemaregistry.NewClient(log.Nop(), sr.URLs(url))

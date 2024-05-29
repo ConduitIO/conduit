@@ -16,6 +16,7 @@ package schemaregistry
 
 import (
 	"context"
+	"github.com/conduitio/conduit/pkg/schema"
 	"testing"
 
 	"github.com/conduitio/conduit-commons/opencdc"
@@ -30,7 +31,7 @@ func TestEncodeDecode_ExtractAndUploadSchemaStrategy(t *testing.T) {
 	logger := log.Nop()
 
 	var serde sr.Serde
-	client, err := NewClient(logger, sr.URLs(TestSchemaRegistryURL(t)))
+	client, err := NewClient(logger, sr.URLs(schema.TestSchemaRegistryURL(t)))
 	is.NoErr(err)
 
 	have := opencdc.StructuredData{
@@ -88,7 +89,7 @@ func TestEncodeDecode_DownloadStrategy_Avro(t *testing.T) {
 	logger := log.Nop()
 
 	var serde sr.Serde
-	client, err := NewClient(logger, sr.URLs(TestSchemaRegistryURL(t)))
+	client, err := NewClient(logger, sr.URLs(schema.TestSchemaRegistryURL(t)))
 	is.NoErr(err)
 
 	have := opencdc.StructuredData{

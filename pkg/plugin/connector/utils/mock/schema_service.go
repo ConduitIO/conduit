@@ -41,18 +41,18 @@ func (m *SchemaService) EXPECT() *SchemaServiceMockRecorder {
 }
 
 // Create mocks base method.
-func (m *SchemaService) Create(arg0 context.Context, arg1 schema.Instance) (schema.Instance, error) {
+func (m *SchemaService) Create(arg0 context.Context, arg1 string, arg2 []byte) (schema.Instance, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Create", arg0, arg1)
+	ret := m.ctrl.Call(m, "Create", arg0, arg1, arg2)
 	ret0, _ := ret[0].(schema.Instance)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Create indicates an expected call of Create.
-func (mr *SchemaServiceMockRecorder) Create(arg0, arg1 any) *gomock.Call {
+func (mr *SchemaServiceMockRecorder) Create(arg0, arg1, arg2 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*SchemaService)(nil).Create), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*SchemaService)(nil).Create), arg0, arg1, arg2)
 }
 
 // Get mocks base method.
