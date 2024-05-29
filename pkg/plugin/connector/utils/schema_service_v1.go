@@ -18,9 +18,9 @@ package utils
 
 import (
 	"context"
-	"github.com/conduitio/conduit-connector-protocol/conduit/v1/toproto"
 
 	commschema "github.com/conduitio/conduit-commons/schema"
+	"github.com/conduitio/conduit-connector-protocol/conduit/schema/v1/toproto"
 	conduitv1 "github.com/conduitio/conduit-connector-protocol/proto/conduit/v1"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/schema"
@@ -49,7 +49,7 @@ func (s *SchemaServiceAPIv1) Create(ctx context.Context, req *conduitv1.CreateSc
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to create schema: %v", err)
 	}
-	return toproto.CreateResponse(created), nil
+	return toproto.CreateSchemaResponse(created), nil
 }
 
 func (s *SchemaServiceAPIv1) Get(ctx context.Context, req *conduitv1.GetSchemaRequest) (*conduitv1.GetSchemaResponse, error) {
@@ -61,7 +61,7 @@ func (s *SchemaServiceAPIv1) Get(ctx context.Context, req *conduitv1.GetSchemaRe
 		return nil, status.Errorf(codes.Internal, "fetching schema %v failed: %v", req.Id, err)
 	}
 
-	return toproto.GetResponse(inst), nil
+	return toproto.GetSchemaResponse(inst), nil
 }
 
 // RegisterInServer registers the service in the server.

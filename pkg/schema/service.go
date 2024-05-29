@@ -39,9 +39,9 @@ func (s *Service) Check(ctx context.Context) error {
 	return nil
 }
 
-func (s *Service) Create(_ context.Context, inst schema.Instance) (schema.Instance, error) {
-	created := s.fakeReg.CreateSchema(inst.Name, sr.Schema{
-		Schema: string(inst.Bytes),
+func (s *Service) Create(_ context.Context, name string, bytes []byte) (schema.Instance, error) {
+	created := s.fakeReg.CreateSchema(name, sr.Schema{
+		Schema: string(bytes),
 		Type:   sr.TypeAvro,
 	})
 

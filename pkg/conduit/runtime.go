@@ -299,7 +299,7 @@ func (r *Runtime) Run(ctx context.Context) (err error) {
 	}
 
 	// APIs needed by connector plugins
-	schemaServiceAddr, err := r.startSchemaService(ctx, t)
+	schemaServiceAddr, err := r.startConnectorUtils(ctx, t)
 	if err != nil {
 		return cerrors.Errorf("failed to serve schema service API: %w", err)
 	}
@@ -472,7 +472,8 @@ func (r *Runtime) serveGRPCAPI(ctx context.Context, t *tomb.Tomb) (net.Addr, err
 	return r.serveGRPC(ctx, t, grpcServer, r.Config.API.GRPC.Address)
 }
 
-func (r *Runtime) startSchemaService(ctx context.Context, t *tomb.Tomb) (net.Addr, error) {
+// startConnectorUtils starts all the utility services neededed by connectors.
+func (r *Runtime) startConnectorUtils(ctx context.Context, t *tomb.Tomb) (net.Addr, error) {
 	grpcServer := grpc.NewServer(
 		grpc.ChainUnaryInterceptor(
 			grpcutil.RequestIDUnaryServerInterceptor(r.logger),

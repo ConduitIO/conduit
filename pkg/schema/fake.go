@@ -101,8 +101,7 @@ type FakeRegistry struct {
 	fingerprintIDCache map[uint64]int
 	idSequence         int
 
-	m        sync.Mutex
-	initOnce sync.Once
+	m sync.Mutex
 }
 
 func NewFakeRegistry() *FakeRegistry {
