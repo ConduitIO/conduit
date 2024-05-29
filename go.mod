@@ -8,13 +8,13 @@ require (
 	github.com/Masterminds/sprig/v3 v3.2.3
 	github.com/NYTimes/gziphandler v1.1.1
 	github.com/bufbuild/buf v1.32.2
-	github.com/conduitio/conduit-commons v0.2.1-0.20240529133748-8cae36becb39
+	github.com/conduitio/conduit-commons v0.2.1-0.20240529171657-31b922714201
 	github.com/conduitio/conduit-connector-file v0.6.0
 	github.com/conduitio/conduit-connector-generator v0.6.0
 	github.com/conduitio/conduit-connector-kafka v0.8.0
 	github.com/conduitio/conduit-connector-log v0.3.0
 	github.com/conduitio/conduit-connector-postgres v0.7.0
-	github.com/conduitio/conduit-connector-protocol v0.6.1-0.20240529170440-32b3fb1d033c
+	github.com/conduitio/conduit-connector-protocol v0.6.1-0.20240529173900-1b035e5090a0
 	github.com/conduitio/conduit-connector-s3 v0.5.1
 	github.com/conduitio/conduit-connector-sdk v0.9.1
 	github.com/conduitio/conduit-processor-sdk v0.1.2-0.20240516124003-442e4a3f0edd
