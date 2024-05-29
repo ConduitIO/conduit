@@ -289,6 +289,7 @@ func (s *Service) SetState(ctx context.Context, id string, state any) (*Instance
 
 	return conn, err
 }
+
 func (s *Service) validateConnector(cfg Config, id string) error {
 	// contains all the errors occurred while provisioning configuration files.
 	var multierr error

@@ -31,6 +31,7 @@ var (
 	// built-in plugins. The key of the map is the import path of the module
 	// containing the connector implementation.
 	DefaultDispenserFactories = map[string]DispenserFactory{
+		// TODO update connectors to latest SDK and uncomment
 		// "github.com/conduitio/conduit-connector-file":      NewDispenserFactory(file.Connector),
 		// "github.com/conduitio/conduit-connector-kafka":     NewDispenserFactory(kafka.Connector),
 		// "github.com/conduitio/conduit-connector-generator": NewDispenserFactory(generator.Connector),
