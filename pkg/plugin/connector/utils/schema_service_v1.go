@@ -20,8 +20,6 @@ import (
 	"context"
 
 	commschema "github.com/conduitio/conduit-commons/schema"
-	"github.com/conduitio/conduit-connector-protocol/conduit/v1/fromproto"
-	"github.com/conduitio/conduit-connector-protocol/conduit/v1/toproto"
 	conduitv1 "github.com/conduitio/conduit-connector-protocol/proto/conduit/v1"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/schema"
@@ -46,21 +44,11 @@ func NewSchemaServiceAPIv1(s SchemaService) *SchemaServiceAPIv1 {
 }
 
 func (s *SchemaServiceAPIv1) Create(ctx context.Context, req *conduitv1.CreateSchemaRequest) (*conduitv1.CreateSchemaResponse, error) {
-	si, err := fromproto.SchemaInstance(req)
-	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "failed to deserialize schema: %v", err)
-	}
-
-	sch, err := s.service.Create(ctx, si)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "registering failed: %v", err)
-	}
-
-	return toproto.CreateResponse(sch), nil
+	return nil, nil
 }
 
 func (s *SchemaServiceAPIv1) Get(ctx context.Context, req *conduitv1.GetSchemaRequest) (*conduitv1.GetSchemaResponse, error) {
-	si, err := s.service.Get(ctx, req.Id)
+	_, err := s.service.Get(ctx, req.Id)
 	if cerrors.Is(err, schema.ErrSchemaNotFound) {
 		return nil, status.Errorf(codes.NotFound, "schema with ID %v not found", req.Id)
 	}
@@ -68,7 +56,7 @@ func (s *SchemaServiceAPIv1) Get(ctx context.Context, req *conduitv1.GetSchemaRe
 		return nil, status.Errorf(codes.Internal, "fetching schema %v failed: %v", req.Id, err)
 	}
 
-	return toproto.GetResponse(si), nil
+	return nil, nil
 }
 
 // RegisterInServer registers the service in the server.
