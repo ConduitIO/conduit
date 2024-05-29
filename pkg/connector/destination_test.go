@@ -39,17 +39,7 @@ func TestDestination_NoLifecycleEvent(t *testing.T) {
 	// assume that the same config was already active last time
 	dest.Instance.LastActiveConfig = dest.Instance.Config
 
-	stream := &builtin.InMemoryDestinationRunStream{}
-
-	destinationMock.EXPECT().Configure(
-		gomock.Any(),
-		cplugin.DestinationConfigureRequest{
-			Config: dest.Instance.Config.Settings,
-		},
-	).Return(cplugin.DestinationConfigureResponse{}, nil)
-	destinationMock.EXPECT().Open(gomock.Any(), cplugin.DestinationOpenRequest{}).Return(cplugin.DestinationOpenResponse{}, nil)
-	destinationMock.EXPECT().NewStream().Return(stream)
-	destinationMock.EXPECT().Run(gomock.Any(), stream).Return(nil)
+	_ = expectDestinationOpen(dest, destinationMock)
 
 	// destination should not trigger any lifecycle event, because the config did not change
 
@@ -70,24 +60,12 @@ func TestDestination_LifecycleOnCreated_Success(t *testing.T) {
 	// before plugin is started we expect LastActiveConfig to be empty
 	is.Equal(dest.Instance.LastActiveConfig, Config{})
 
-	stream := &builtin.InMemoryDestinationRunStream{}
-
-	destinationMock.EXPECT().Configure(
-		gomock.Any(),
-		cplugin.DestinationConfigureRequest{
-			Config: dest.Instance.Config.Settings,
-		},
-	).Return(cplugin.DestinationConfigureResponse{}, nil)
-	destinationMock.EXPECT().Open(gomock.Any(), cplugin.DestinationOpenRequest{}).Return(cplugin.DestinationOpenResponse{}, nil)
-	destinationMock.EXPECT().NewStream().Return(stream)
-	destinationMock.EXPECT().Run(gomock.Any(), stream).Return(nil)
+	_ = expectDestinationOpen(dest, destinationMock)
 
 	// destination should know it's the first run and trigger LifecycleOnCreated
 	destinationMock.EXPECT().LifecycleOnCreated(
 		gomock.Any(),
-		cplugin.DestinationLifecycleOnCreatedRequest{
-			Config: dest.Instance.Config.Settings,
-		},
+		cplugin.DestinationLifecycleOnCreatedRequest{Config: dest.Instance.Config.Settings},
 	).Return(cplugin.DestinationLifecycleOnCreatedResponse{}, nil)
 
 	err := dest.Open(ctx)
@@ -107,17 +85,7 @@ func TestDestination_LifecycleOnUpdated_Success(t *testing.T) {
 	// assume that there was a config already active, but with different settings
 	dest.Instance.LastActiveConfig.Settings = map[string]string{"last-active": "yes"}
 
-	stream := &builtin.InMemoryDestinationRunStream{}
-
-	destinationMock.EXPECT().Configure(
-		gomock.Any(),
-		cplugin.DestinationConfigureRequest{
-			Config: dest.Instance.Config.Settings,
-		},
-	).Return(cplugin.DestinationConfigureResponse{}, nil)
-	destinationMock.EXPECT().Open(gomock.Any(), cplugin.DestinationOpenRequest{}).Return(cplugin.DestinationOpenResponse{}, nil)
-	destinationMock.EXPECT().NewStream().Return(stream)
-	destinationMock.EXPECT().Run(gomock.Any(), stream).Return(nil)
+	_ = expectDestinationOpen(dest, destinationMock)
 
 	// destination should know it was already run once with a different config and trigger LifecycleOnUpdated
 	destinationMock.EXPECT().LifecycleOnUpdated(
@@ -147,18 +115,14 @@ func TestDestination_LifecycleOnCreated_Error(t *testing.T) {
 
 	destinationMock.EXPECT().Configure(
 		gomock.Any(),
-		cplugin.DestinationConfigureRequest{
-			Config: dest.Instance.Config.Settings,
-		},
+		cplugin.DestinationConfigureRequest{Config: dest.Instance.Config.Settings},
 	).Return(cplugin.DestinationConfigureResponse{}, nil)
 
 	// destination should know it's the first run and trigger LifecycleOnCreated, but it fails
 	want := cerrors.New("whoops")
 	destinationMock.EXPECT().LifecycleOnCreated(
 		gomock.Any(),
-		cplugin.DestinationLifecycleOnCreatedRequest{
-			Config: dest.Instance.Config.Settings,
-		},
+		cplugin.DestinationLifecycleOnCreatedRequest{Config: dest.Instance.Config.Settings},
 	).Return(cplugin.DestinationLifecycleOnCreatedResponse{}, want)
 
 	// destination should terminate plugin in case of an error
@@ -183,9 +147,7 @@ func TestDestination_LifecycleOnDeleted_Success(t *testing.T) {
 
 	destinationMock.EXPECT().LifecycleOnDeleted(
 		gomock.Any(),
-		cplugin.DestinationLifecycleOnDeletedRequest{
-			Config: dest.Instance.LastActiveConfig.Settings,
-		},
+		cplugin.DestinationLifecycleOnDeletedRequest{Config: dest.Instance.LastActiveConfig.Settings},
 	).Return(cplugin.DestinationLifecycleOnDeletedResponse{}, nil)
 
 	destinationMock.EXPECT().Teardown(gomock.Any(), cplugin.DestinationTeardownRequest{}).Return(cplugin.DestinationTeardownResponse{}, nil)
@@ -207,9 +169,7 @@ func TestDestination_LifecycleOnDeleted_BackwardsCompatibility(t *testing.T) {
 	// we should ignore the error if the plugin does not implement lifecycle events
 	destinationMock.EXPECT().LifecycleOnDeleted(
 		gomock.Any(),
-		cplugin.DestinationLifecycleOnDeletedRequest{
-			Config: dest.Instance.LastActiveConfig.Settings,
-		},
+		cplugin.DestinationLifecycleOnDeletedRequest{Config: dest.Instance.LastActiveConfig.Settings},
 	).Return(cplugin.DestinationLifecycleOnDeletedResponse{}, plugin.ErrUnimplemented)
 
 	destinationMock.EXPECT().Teardown(gomock.Any(), cplugin.DestinationTeardownRequest{}).Return(cplugin.DestinationTeardownResponse{}, nil)
@@ -263,4 +223,21 @@ func newTestDestination(ctx context.Context, t *testing.T, ctrl *gomock.Controll
 	dest, ok := conn.(*Destination)
 	is.True(ok)
 	return dest, destinationMock
+}
+
+func expectDestinationOpen(dest *Destination, destinationMock *mock.DestinationPlugin) *builtin.InMemoryDestinationRunStream {
+	stream := &builtin.InMemoryDestinationRunStream{}
+
+	destinationMock.EXPECT().Configure(gomock.Any(),
+		cplugin.DestinationConfigureRequest{
+			Config: dest.Instance.Config.Settings,
+		},
+	).Return(cplugin.DestinationConfigureResponse{}, nil)
+	destinationMock.EXPECT().Open(gomock.Any(), cplugin.DestinationOpenRequest{}).Return(cplugin.DestinationOpenResponse{}, nil)
+	destinationMock.EXPECT().NewStream().Return(stream)
+	destinationMock.EXPECT().Run(gomock.Any(), stream).Do(func(ctx context.Context, _ cplugin.DestinationRunStream) {
+		stream.Init(ctx)
+	}).Return(nil)
+
+	return stream
 }

@@ -36,10 +36,16 @@ func (s *InMemoryDestinationRunStream) Init(ctx context.Context) {
 }
 
 func (s *InMemoryDestinationRunStream) Client() cplugin.DestinationRunStreamClient {
+	if s.stream == nil {
+		panic("invalid use of builtin.InMemoryDestinationRunStream - stream has not been initialized using Init")
+	}
 	return (*inMemoryStreamClient[cplugin.DestinationRunRequest, cplugin.DestinationRunResponse])(s.stream)
 }
 
 func (s *InMemoryDestinationRunStream) Server() cplugin.DestinationRunStreamServer {
+	if s.stream == nil {
+		panic("invalid use of builtin.InMemoryDestinationRunStream - stream has not been initialized using Init")
+	}
 	return (*inMemoryStreamServer[cplugin.DestinationRunRequest, cplugin.DestinationRunResponse])(s.stream)
 }
 
@@ -61,10 +67,16 @@ func (s *InMemorySourceRunStream) Init(ctx context.Context) {
 }
 
 func (s *InMemorySourceRunStream) Client() cplugin.SourceRunStreamClient {
+	if s.stream == nil {
+		panic("invalid use of builtin.InMemoryDestinationRunStream - stream has not been initialized using Init")
+	}
 	return (*inMemoryStreamClient[cplugin.SourceRunRequest, cplugin.SourceRunResponse])(s.stream)
 }
 
 func (s *InMemorySourceRunStream) Server() cplugin.SourceRunStreamServer {
+	if s.stream == nil {
+		panic("invalid use of builtin.InMemoryDestinationRunStream - stream has not been initialized using Init")
+	}
 	return (*inMemoryStreamServer[cplugin.SourceRunRequest, cplugin.SourceRunResponse])(s.stream)
 }
 
