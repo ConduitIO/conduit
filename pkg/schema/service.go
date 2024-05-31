@@ -18,7 +18,6 @@ package schema
 
 import (
 	"context"
-
 	commschema "github.com/conduitio/conduit-commons/schema"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 )

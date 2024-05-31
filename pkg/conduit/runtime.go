@@ -90,7 +90,7 @@ type Runtime struct {
 	connectorPluginService *conn_plugin.PluginService
 	processorPluginService *proc_plugin.PluginService
 
-	schemaService *schema.InMemoryService
+	schemaService schema.Service
 
 	connectorPersister *connector.Persister
 
