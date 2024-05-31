@@ -14,12 +14,9 @@
 
 package utils
 
-//go:generate mockgen -destination=mock/schema_service.go -package=mock -mock_names=SchemaService=SchemaService . SchemaService
-
 import (
 	"context"
 
-	commschema "github.com/conduitio/conduit-commons/schema"
 	"github.com/conduitio/conduit-connector-protocol/conduit/schema/v1/toproto"
 	conduitv1 "github.com/conduitio/conduit-connector-protocol/proto/conduit/v1"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -29,18 +26,13 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-type SchemaService interface {
-	Create(ctx context.Context, name string, bytes []byte) (commschema.Instance, error)
-	Get(ctx context.Context, id string) (commschema.Instance, error)
-}
-
 type SchemaServiceAPIv1 struct {
 	conduitv1.UnimplementedSchemaServiceServer
 
-	service SchemaService
+	service schema.Service
 }
 
-func NewSchemaServiceAPIv1(s SchemaService) *SchemaServiceAPIv1 {
+func NewSchemaServiceAPIv1(s schema.Service) *SchemaServiceAPIv1 {
 	return &SchemaServiceAPIv1{service: s}
 }
 

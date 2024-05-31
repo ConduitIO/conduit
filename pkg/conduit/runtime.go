@@ -90,7 +90,7 @@ type Runtime struct {
 	connectorPluginService *conn_plugin.PluginService
 	processorPluginService *proc_plugin.PluginService
 
-	schemaService *schema.Service
+	schemaService *schema.InMemoryService
 
 	connectorPersister *connector.Persister
 
@@ -160,7 +160,7 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 		connectorPluginService: connPluginService,
 		processorPluginService: procPluginService,
 
-		schemaService: schema.NewService(),
+		schemaService: schema.NewInMemoryService(),
 
 		connectorPersister: connectorPersister,
 

@@ -14,62 +14,20 @@
 
 package schema
 
+//go:generate mockgen -destination=mock/schema_service.go -package=mock -mock_names=Service=Service . Service
+
 import (
 	"context"
-	"strconv"
 
-	"github.com/conduitio/conduit-commons/schema"
+	commschema "github.com/conduitio/conduit-commons/schema"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/lovromazgon/franz-go/pkg/sr"
 )
 
 var (
 	ErrSchemaNotFound = cerrors.New("schema not found")
 )
 
-type Service struct {
-	fakeReg *FakeRegistry
-}
-
-func NewService() *Service {
-	return &Service{fakeReg: NewFakeRegistry()}
-}
-
-func (s *Service) Check(ctx context.Context) error {
-	return nil
-}
-
-func (s *Service) Create(_ context.Context, name string, bytes []byte) (schema.Instance, error) {
-	created := s.fakeReg.CreateSchema(name, sr.Schema{
-		Schema: string(bytes),
-		Type:   sr.TypeAvro,
-	})
-
-	return schema.Instance{
-		ID:      strconv.Itoa(created.ID),
-		Name:    "",
-		Version: 0,
-		Type:    schema.TypeAvro,
-		Bytes:   []byte(created.Schema.Schema),
-	}, nil
-}
-
-func (s *Service) Get(_ context.Context, id string) (schema.Instance, error) {
-	idInt, err := strconv.Atoi(id)
-	if err != nil {
-		return schema.Instance{}, cerrors.Errorf("invalid schema id: %w", err)
-	}
-
-	sch, found := s.fakeReg.SchemaByID(idInt)
-	if !found {
-		return schema.Instance{}, ErrSchemaNotFound
-	}
-
-	return schema.Instance{
-		ID:      id,
-		Name:    "",
-		Version: 0,
-		Type:    schema.TypeAvro,
-		Bytes:   []byte(sch.Schema),
-	}, nil
+type Service interface {
+	Create(ctx context.Context, name string, bytes []byte) (commschema.Instance, error)
+	Get(ctx context.Context, id string) (commschema.Instance, error)
 }
