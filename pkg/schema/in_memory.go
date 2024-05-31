@@ -16,10 +16,11 @@ package schema
 
 import (
 	"context"
+	"strconv"
+
 	"github.com/conduitio/conduit-commons/schema"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/lovromazgon/franz-go/pkg/sr"
-	"strconv"
 )
 
 type InMemoryService struct {

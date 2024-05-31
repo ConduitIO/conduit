@@ -21,7 +21,7 @@ import (
 	"github.com/conduitio/conduit-commons/schema"
 	conduitv1 "github.com/conduitio/conduit-connector-protocol/proto/conduit/v1"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/plugin/connector/utils/mock"
+	"github.com/conduitio/conduit/pkg/schema/mock"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/matryer/is"
@@ -34,7 +34,7 @@ func TestSchemaService_Register(t *testing.T) {
 	testCases := []struct {
 		name         string
 		input        *conduitv1.CreateSchemaRequest
-		setupService func(*mock.SchemaService, *conduitv1.CreateSchemaRequest)
+		setupService func(*mock.Service, *conduitv1.CreateSchemaRequest)
 		wantResponse *conduitv1.CreateSchemaResponse
 		wantErr      error
 	}{
@@ -45,7 +45,7 @@ func TestSchemaService_Register(t *testing.T) {
 				Type:  conduitv1.Schema_TYPE_AVRO,
 				Bytes: []byte{1, 2, 3},
 			},
-			setupService: func(svc *mock.SchemaService, req *conduitv1.CreateSchemaRequest) {
+			setupService: func(svc *mock.Service, req *conduitv1.CreateSchemaRequest) {
 				svc.EXPECT().
 					Create(gomock.Any(), req.Name, req.Bytes).
 					Return(
@@ -76,7 +76,7 @@ func TestSchemaService_Register(t *testing.T) {
 				Type:  conduitv1.Schema_TYPE_AVRO,
 				Bytes: []byte{1, 2, 3},
 			},
-			setupService: func(svc *mock.SchemaService, req *conduitv1.CreateSchemaRequest) {
+			setupService: func(svc *mock.Service, req *conduitv1.CreateSchemaRequest) {
 				svc.EXPECT().
 					Create(gomock.Any(), gomock.Any(), gomock.Any()).
 					Return(schema.Instance{}, cerrors.New("boom"))
@@ -90,7 +90,7 @@ func TestSchemaService_Register(t *testing.T) {
 			is := is.New(t)
 			ctx := context.Background()
 
-			svc := mock.NewSchemaService(gomock.NewController(t))
+			svc := mock.NewService(gomock.NewController(t))
 			if tc.setupService != nil {
 				tc.setupService(svc, tc.input)
 			}
@@ -119,7 +119,7 @@ func TestSchemaService_Fetch(t *testing.T) {
 	testCases := []struct {
 		name         string
 		input        *conduitv1.GetSchemaRequest
-		setupService func(*mock.SchemaService, *conduitv1.GetSchemaRequest)
+		setupService func(*mock.Service, *conduitv1.GetSchemaRequest)
 		wantResponse *conduitv1.GetSchemaResponse
 		wantErr      error
 	}{
@@ -128,7 +128,7 @@ func TestSchemaService_Fetch(t *testing.T) {
 			input: &conduitv1.GetSchemaRequest{
 				Id: "abc",
 			},
-			setupService: func(svc *mock.SchemaService, req *conduitv1.GetSchemaRequest) {
+			setupService: func(svc *mock.Service, req *conduitv1.GetSchemaRequest) {
 				svc.EXPECT().
 					Get(gomock.Any(), "abc").
 					Return(schema.Instance{
@@ -154,7 +154,7 @@ func TestSchemaService_Fetch(t *testing.T) {
 			input: &conduitv1.GetSchemaRequest{
 				Id: "abc",
 			},
-			setupService: func(svc *mock.SchemaService, req *conduitv1.GetSchemaRequest) {
+			setupService: func(svc *mock.Service, req *conduitv1.GetSchemaRequest) {
 				svc.EXPECT().
 					Get(gomock.Any(), "abc").
 					Return(schema.Instance{}, cerrors.New("boom"))
@@ -168,7 +168,7 @@ func TestSchemaService_Fetch(t *testing.T) {
 			is := is.New(t)
 			ctx := context.Background()
 
-			svc := mock.NewSchemaService(gomock.NewController(t))
+			svc := mock.NewService(gomock.NewController(t))
 			if tc.setupService != nil {
 				tc.setupService(svc, tc.input)
 			}
