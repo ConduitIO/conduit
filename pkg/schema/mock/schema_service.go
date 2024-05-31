@@ -40,6 +40,20 @@ func (m *Service) EXPECT() *ServiceMockRecorder {
 	return m.recorder
 }
 
+// Check mocks base method.
+func (m *Service) Check(arg0 context.Context) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Check", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Check indicates an expected call of Check.
+func (mr *ServiceMockRecorder) Check(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Check", reflect.TypeOf((*Service)(nil).Check), arg0)
+}
+
 // Create mocks base method.
 func (m *Service) Create(arg0 context.Context, arg1 string, arg2 []byte) (schema.Instance, error) {
 	m.ctrl.T.Helper()

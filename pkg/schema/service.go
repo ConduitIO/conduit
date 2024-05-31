@@ -18,6 +18,7 @@ package schema
 
 import (
 	"context"
+
 	commschema "github.com/conduitio/conduit-commons/schema"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 )
@@ -29,4 +30,6 @@ var (
 type Service interface {
 	Create(ctx context.Context, name string, bytes []byte) (commschema.Instance, error)
 	Get(ctx context.Context, id string) (commschema.Instance, error)
+
+	Check(ctx context.Context) error
 }
