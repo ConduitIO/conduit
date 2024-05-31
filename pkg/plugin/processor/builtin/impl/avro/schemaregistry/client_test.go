@@ -17,13 +17,13 @@ package schemaregistry
 import (
 	"context"
 	"fmt"
-	"github.com/conduitio/conduit/pkg/schema"
 	"net/http"
 	"sync"
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/schema"
 	"github.com/lovromazgon/franz-go/pkg/sr"
 	"github.com/matryer/is"
 )

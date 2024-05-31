@@ -9,8 +9,8 @@ buf.build/gen/go/bufbuild/registry/connectrpc/go v1.16.2-20240514010100-299bd9c9
 buf.build/gen/go/bufbuild/registry/connectrpc/go v1.16.2-20240514010100-299bd9c9a0c4.1/go.mod h1:qOlHhXCDAWLWEoNzkgRu1gaWnCN94MS0fm4Kk7GoQAw=
 buf.build/gen/go/bufbuild/registry/protocolbuffers/go v1.34.1-20240514010100-299bd9c9a0c4.1 h1:zrXXp1IT3qukIKorguvnrw/JzxYttBrXzktUQGiQHqA=
 buf.build/gen/go/bufbuild/registry/protocolbuffers/go v1.34.1-20240514010100-299bd9c9a0c4.1/go.mod h1:8ONhsyCTLQ9kBslWnMgPrXTcxzCkKlxZqN9ewUveui8=
-buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go v1.34.1-20240522201210-05684d294cc5.1 h1:OltUGuDeFvaqDZx9vW9pZt5SGl5FA5RbSB114pksDwk=
-buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go v1.34.1-20240522201210-05684d294cc5.1/go.mod h1:gUfBTdJmhwTJHoIaOQjy7xczHhqjkQfXSKs5TY4IsUY=
+buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go v1.34.1-20240524201210-f04e50c23f5f.1 h1:ZtAsM9ACS6lQ7/gVjlGf0+CvL7dX1Ume2WYyFCTC+Wo=
+buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go v1.34.1-20240524201210-f04e50c23f5f.1/go.mod h1:gUfBTdJmhwTJHoIaOQjy7xczHhqjkQfXSKs5TY4IsUY=
 cloud.google.com/go v0.26.0/go.mod h1:aQUYkXzVsufM+DwF1aE+0xfcU+56JwCaLick0ClmMTw=
 cloud.google.com/go v0.34.0/go.mod h1:aQUYkXzVsufM+DwF1aE+0xfcU+56JwCaLick0ClmMTw=
 cloud.google.com/go v0.38.0/go.mod h1:990N+gfupTy94rShfmMCWGDn0LpTmnzTp2qbd1dvSRU=
@@ -336,8 +336,8 @@ github.com/conduitio/conduit-connector-kafka v0.8.0 h1:NsiihUjhzl+PWrxTWrbtCEV6U
 github.com/conduitio/conduit-connector-kafka v0.8.0/go.mod h1:1fkIxtjojlTKNQ0RpMNPUkz2h1VNVtZHOyIsZVT1U2I=
 github.com/conduitio/conduit-connector-log v0.3.0 h1:J9CD/y86D/3i/C1MI0lrTiFnLwwnpJKQJu3M+jDiI4Y=
 github.com/conduitio/conduit-connector-log v0.3.0/go.mod h1:R0gHB21mw/9BXYAKfx9IKQLEsPuB05zJPJXB6JFxYGs=
-github.com/conduitio/conduit-connector-postgres v0.7.0 h1:At6O5e4eFegESTgzxZeY1eh0i+1FO5L4R35PZ9s7te0=
-github.com/conduitio/conduit-connector-postgres v0.7.0/go.mod h1:d39rdzjiCFUaBbFsg+Lh0KorMIY6KbQDu8HrDu/5Zvs=
+github.com/conduitio/conduit-connector-postgres v0.7.2 h1:CjJQwWgdF122RsrwNApnPbOLr3QbEr5QEZcIftiI2F8=
+github.com/conduitio/conduit-connector-postgres v0.7.2/go.mod h1:s/LEfoEv4CQAj2CYouBOt2Vx95xKbgX9L2LRuiZlr44=
 github.com/conduitio/conduit-connector-protocol v0.6.1-0.20240531155555-9f527ab320ba h1:WLxW9oq2ezB1VuwKJev4FBEX+VmmkvRx7v9ytEQNn58=
 github.com/conduitio/conduit-connector-protocol v0.6.1-0.20240531155555-9f527ab320ba/go.mod h1:NBaqMfTbpv9Wttd8X7fQ8CjhFrgmu2TUcARo8lglyUI=
 github.com/conduitio/conduit-connector-s3 v0.5.1 h1:yRo8004ryCIZc/S3iWQ1rN6pm6bjySlXFCGZOl1rE1E=
@@ -729,6 +729,8 @@ github.com/jackc/pgconn v1.8.0/go.mod h1:1C2Pb36bGIP9QHGBYCjnyhqu7Rv3sGshaQUvmfG
 github.com/jackc/pgconn v1.9.0/go.mod h1:YctiPyvzfU11JFxoXokUOOKQXQmDMoJL9vJzHH8/2JY=
 github.com/jackc/pgconn v1.9.1-0.20210724152538-d89c8390a530/go.mod h1:4z2w8XhRbP1hYxkpTuBjTS3ne3J48K83+u0zoyvg2pI=
 github.com/jackc/pgconn v1.11.0/go.mod h1:4z2w8XhRbP1hYxkpTuBjTS3ne3J48K83+u0zoyvg2pI=
+github.com/jackc/pgerrcode v0.0.0-20240316143900-6e2875d9b438 h1:Dj0L5fhJ9F82ZJyVOmBx6msDp/kfd1t9GRfny/mfJA0=
+github.com/jackc/pgerrcode v0.0.0-20240316143900-6e2875d9b438/go.mod h1:a/s9Lp5W7n/DD0VrVoyJ00FbP2ytTPDVOivvn2bMlds=
 github.com/jackc/pgio v1.0.0 h1:g12B9UwVnzGhueNavwioyEEpAmqMe1E/BN9ES+8ovkE=
 github.com/jackc/pgio v1.0.0/go.mod h1:oP+2QK2wFfUWgr+gxjoBH9KGBb31Eio69xUb0w5bYf8=
 github.com/jackc/pglogrepl v0.0.0-20240307033717-828fbfe908e9 h1:86CQbMauoZdLS0HDLcEHYo6rErjiCBjVvcxGsioIn7s=
@@ -759,8 +761,8 @@ github.com/jackc/pgx/v4 v4.0.0-20190421002000-1b8f0016e912/go.mod h1:no/Y67Jkk/9
 github.com/jackc/pgx/v4 v4.0.0-pre1.0.20190824185557-6972a5742186/go.mod h1:X+GQnOEnf1dqHGpw7JmHqHc1NxDoalibchSk9/RWuDc=
 github.com/jackc/pgx/v4 v4.12.1-0.20210724153913-640aa07df17c/go.mod h1:1QD0+tgSXP7iUjYm9C1NxKhny7lq6ee99u/z+IHFcgs=
 github.com/jackc/pgx/v4 v4.15.0/go.mod h1:D/zyOyXiaM1TmVWnOM18p0xdDtdakRBa0RsVGI3U3bw=
-github.com/jackc/pgx/v5 v5.5.5 h1:amBjrZVmksIdNjxGW/IiIMzxMKZFelXbUoPNb+8sjQw=
-github.com/jackc/pgx/v5 v5.5.5/go.mod h1:ez9gk+OAat140fv9ErkZDYFWmXLfV+++K0uAOiwgm1A=
+github.com/jackc/pgx/v5 v5.6.0 h1:SWJzexBzPL5jb0GEsrPMLIsi/3jOo7RHlzTjcAeDrPY=
+github.com/jackc/pgx/v5 v5.6.0/go.mod h1:DNZ/vlrUnhWCoFGxHAG8U2ljioxukquj7utPDgtQdTw=
 github.com/jackc/puddle v0.0.0-20190413234325-e4ced69a3a2b/go.mod h1:m4B5Dj62Y0fbyuIc15OsIqK0+JU8nkqQjsgx7dvjSWk=
 github.com/jackc/puddle v0.0.0-20190608224051-11cab39313c9/go.mod h1:m4B5Dj62Y0fbyuIc15OsIqK0+JU8nkqQjsgx7dvjSWk=
 github.com/jackc/puddle v1.1.3/go.mod h1:m4B5Dj62Y0fbyuIc15OsIqK0+JU8nkqQjsgx7dvjSWk=

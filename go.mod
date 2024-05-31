@@ -3,7 +3,7 @@ module github.com/conduitio/conduit
 go 1.22.2
 
 require (
-	buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go v1.34.1-20240522201210-05684d294cc5.1
+	buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go v1.34.1-20240524201210-f04e50c23f5f.1
 	github.com/Masterminds/semver/v3 v3.2.1
 	github.com/Masterminds/sprig/v3 v3.2.3
 	github.com/NYTimes/gziphandler v1.1.1
@@ -13,7 +13,7 @@ require (
 	github.com/conduitio/conduit-connector-generator v0.6.0
 	github.com/conduitio/conduit-connector-kafka v0.8.0
 	github.com/conduitio/conduit-connector-log v0.3.0
-	github.com/conduitio/conduit-connector-postgres v0.7.0
+	github.com/conduitio/conduit-connector-postgres v0.7.2
 	github.com/conduitio/conduit-connector-protocol v0.6.1-0.20240531155555-9f527ab320ba
 	github.com/conduitio/conduit-connector-s3 v0.5.1
 	github.com/conduitio/conduit-connector-sdk v0.9.1
@@ -32,7 +32,7 @@ require (
 	github.com/hamba/avro/v2 v2.22.0
 	github.com/hashicorp/go-hclog v1.6.3
 	github.com/hashicorp/go-plugin v1.6.1
-	github.com/jackc/pgx/v5 v5.5.5
+	github.com/jackc/pgx/v5 v5.6.0
 	github.com/jpillora/backoff v1.0.0
 	github.com/lovromazgon/franz-go/pkg/sr v0.0.0-20230630140346-bb9ce3f90f4a
 	github.com/matryer/is v1.4.1
@@ -194,6 +194,7 @@ require (
 	github.com/huandu/xstrings v1.4.0 // indirect
 	github.com/imdario/mergo v0.3.16 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
+	github.com/jackc/pgerrcode v0.0.0-20240316143900-6e2875d9b438 // indirect
 	github.com/jackc/pgio v1.0.0 // indirect
 	github.com/jackc/pglogrepl v0.0.0-20240307033717-828fbfe908e9 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
