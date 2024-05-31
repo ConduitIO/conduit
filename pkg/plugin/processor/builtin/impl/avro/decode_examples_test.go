@@ -19,13 +19,13 @@ package avro
 import (
 	"context"
 	"fmt"
-	"github.com/conduitio/conduit/pkg/schema"
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/avro/schemaregistry"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal/exampleutil"
+	"github.com/conduitio/conduit/pkg/schema"
 	"github.com/lovromazgon/franz-go/pkg/sr"
 )
 
