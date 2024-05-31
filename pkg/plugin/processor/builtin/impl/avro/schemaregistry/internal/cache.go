@@ -16,9 +16,9 @@ package internal
 
 import (
 	"fmt"
-	"github.com/conduitio/conduit/pkg/schema"
 	"sync"
 
+	"github.com/conduitio/conduit/pkg/schema"
 	"github.com/lovromazgon/franz-go/pkg/sr"
 	"github.com/twmb/go-cache/cache"
 )

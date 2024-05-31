@@ -16,11 +16,11 @@ package schemaregistry
 
 import (
 	"context"
-	"github.com/conduitio/conduit/pkg/schema"
 	"testing"
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/schema"
 	"github.com/lovromazgon/franz-go/pkg/sr"
 	"github.com/matryer/is"
 )
