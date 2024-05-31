@@ -146,6 +146,13 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 
 	orc := orchestrator.NewOrchestrator(db, logger, plService, connService, procService, connPluginService, procPluginService)
 
+	var schemaService schema.Service
+	if cfg.ApicurioURL != "" {
+		schemaService = schema.NewApicurioService()
+	} else {
+		schemaService = schema.NewInMemoryService()
+	}
+
 	r := &Runtime{
 		Config:           cfg,
 		DB:               db,
@@ -160,7 +167,7 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 		connectorPluginService: connPluginService,
 		processorPluginService: procPluginService,
 
-		schemaService: schema.NewInMemoryService(),
+		schemaService: schemaService,
 
 		connectorPersister: connectorPersister,
 
