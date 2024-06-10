@@ -24,10 +24,10 @@ require (
 	github.com/dop251/goja_nodejs v0.0.0-20231122114759-e84d9a924c5c
 	github.com/gammazero/deque v0.2.1
 	github.com/goccy/go-json v0.10.3
-	github.com/golangci/golangci-lint v1.59.0
+	github.com/golangci/golangci-lint v1.59.1
 	github.com/google/go-cmp v0.6.0
 	github.com/google/uuid v1.6.0
-	github.com/gorilla/websocket v1.5.1
+	github.com/gorilla/websocket v1.5.2
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.20.0
 	github.com/hamba/avro/v2 v2.22.1
 	github.com/hashicorp/go-hclog v1.6.3
@@ -69,7 +69,7 @@ require (
 	github.com/Abirdcfly/dupword v0.0.14 // indirect
 	github.com/Antonboom/errname v0.1.13 // indirect
 	github.com/Antonboom/nilnil v0.1.9 // indirect
-	github.com/Antonboom/testifylint v1.3.0 // indirect
+	github.com/Antonboom/testifylint v1.3.1 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20230124172434-306776ec8161 // indirect
 	github.com/BurntSushi/toml v1.4.0 // indirect
 	github.com/Crocmagnon/fatcontext v0.2.2 // indirect
@@ -161,7 +161,7 @@ require (
 	github.com/go-toolsmith/astp v1.1.0 // indirect
 	github.com/go-toolsmith/strparse v1.1.0 // indirect
 	github.com/go-toolsmith/typep v1.1.0 // indirect
-	github.com/go-viper/mapstructure/v2 v2.0.0-alpha.1 // indirect
+	github.com/go-viper/mapstructure/v2 v2.0.0 // indirect
 	github.com/go-xmlfmt/xmlfmt v1.1.2 // indirect
 	github.com/gobwas/glob v0.2.3 // indirect
 	github.com/gofrs/flock v0.8.1 // indirect
@@ -173,7 +173,7 @@ require (
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/golangci/dupl v0.0.0-20180902072040-3e9179ac440a // indirect
 	github.com/golangci/gofmt v0.0.0-20231018234816-f50ced29576e // indirect
-	github.com/golangci/misspell v0.5.1 // indirect
+	github.com/golangci/misspell v0.6.0 // indirect
 	github.com/golangci/modinfo v0.3.4 // indirect
 	github.com/golangci/plugin-module-register v0.1.1 // indirect
 	github.com/golangci/revgrep v0.5.3 // indirect
@@ -257,7 +257,7 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pkg/profile v1.7.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/polyfloyd/go-errorlint v1.5.1 // indirect
+	github.com/polyfloyd/go-errorlint v1.5.2 // indirect
 	github.com/prometheus/procfs v0.13.0 // indirect
 	github.com/quasilyte/go-ruleguard v0.4.2 // indirect
 	github.com/quasilyte/go-ruleguard/dsl v0.3.22 // indirect
@@ -271,7 +271,7 @@ require (
 	github.com/sanposhiho/wastedassign/v2 v2.0.7 // indirect
 	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1 // indirect
 	github.com/sashamelentyev/interfacebloat v1.1.0 // indirect
-	github.com/sashamelentyev/usestdlibvars v1.25.0 // indirect
+	github.com/sashamelentyev/usestdlibvars v1.26.0 // indirect
 	github.com/securego/gosec/v2 v2.20.1-0.20240525090044-5f0084eb01a9 // indirect
 	github.com/shazow/go-diff v0.0.0-20160112020656-b6b7b6733b8c // indirect
 	github.com/shopspring/decimal v1.3.1 // indirect
@@ -313,7 +313,7 @@ require (
 	github.com/ykadowak/zerologlint v0.1.5 // indirect
 	gitlab.com/bosi/decorder v0.4.2 // indirect
 	go-simpler.org/musttag v0.12.2 // indirect
-	go-simpler.org/sloglint v0.7.0 // indirect
+	go-simpler.org/sloglint v0.7.1 // indirect
 	go.opencensus.io v0.24.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.49.0 // indirect
 	go.opentelemetry.io/otel v1.24.0 // indirect
@@ -340,5 +340,5 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	honnef.co/go/tools v0.4.7 // indirect
 	mvdan.cc/gofumpt v0.6.0 // indirect
-	mvdan.cc/unparam v0.0.0-20240427195214-063aff900ca1 // indirect
+	mvdan.cc/unparam v0.0.0-20240528143540-8a5130ca722f // indirect
 )
