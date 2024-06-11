@@ -500,7 +500,7 @@ func (r *Runtime) startConnectorUtils(ctx context.Context, t *tomb.Tomb) (net.Ad
 	grpc_health_v1.RegisterHealthServer(grpcServer, healthServer)
 
 	// todo make port random
-	return r.serveGRPC(ctx, t, grpcServer, ":8085")
+	return r.serveGRPC(ctx, t, grpcServer, ":8184")
 }
 
 func (r *Runtime) serveHTTPAPI(
@@ -657,7 +657,7 @@ func (r *Runtime) serveGRPC(
 ) (net.Addr, error) {
 	ln, err := net.Listen("tcp", address)
 	if err != nil {
-		return nil, cerrors.Errorf("failed to listen on address %q: %w", r.Config.API.GRPC.Address, err)
+		return nil, cerrors.Errorf("failed to listen on address %q: %w", address, err)
 	}
 
 	t.Go(func() error {
