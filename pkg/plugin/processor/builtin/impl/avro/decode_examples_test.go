@@ -25,12 +25,13 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/avro/schemaregistry"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal/exampleutil"
+	"github.com/conduitio/conduit/pkg/schema"
 	"github.com/lovromazgon/franz-go/pkg/sr"
 )
 
 //nolint:govet // a more descriptive example description
 func ExampleDecodeProcessor() {
-	url, cleanup := schemaregistry.ExampleSchemaRegistryURL("ExampleDecodeProcessor", 54322)
+	url, cleanup := schema.ExampleSchemaRegistryURL("ExampleDecodeProcessor", 54322)
 	defer cleanup()
 
 	client, err := schemaregistry.NewClient(log.Nop(), sr.URLs(url))

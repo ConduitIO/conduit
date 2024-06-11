@@ -52,7 +52,7 @@ import (
 	proc_standalone "github.com/conduitio/conduit/pkg/plugin/processor/standalone"
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/provisioning"
-	"github.com/conduitio/conduit/pkg/schema"
+	"github.com/conduitio/conduit/pkg/schemaregistry"
 	"github.com/conduitio/conduit/pkg/web/api"
 	"github.com/conduitio/conduit/pkg/web/openapi"
 	"github.com/conduitio/conduit/pkg/web/ui"
@@ -90,7 +90,7 @@ type Runtime struct {
 	connectorPluginService *conn_plugin.PluginService
 	processorPluginService *proc_plugin.PluginService
 
-	schemaService schema.Service
+	schemaService schemaregistry.Service
 
 	connectorPersister *connector.Persister
 
@@ -146,6 +146,22 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 
 	orc := orchestrator.NewOrchestrator(db, logger, plService, connService, procService, connPluginService, procPluginService)
 
+	var schemaService schemaregistry.Service
+	schemaService = cfg.Schema.Service
+
+	if schemaService == nil {
+		switch cfg.Schema.Type {
+		case SchemaTypeConfluent:
+			schemaService = schemaregistry.NewConfluentService(
+				context.Background(), logger, cfg.Schema.Confluent.ConnectionString, cfg.Schema.Confluent.HealthCheckPath,
+			)
+		case SchemaTypeInMemory:
+			schemaService = schemaregistry.NewInMemoryService()
+		default:
+			schemaService = schemaregistry.NewInMemoryService()
+		}
+	}
+
 	r := &Runtime{
 		Config:           cfg,
 		DB:               db,
@@ -160,7 +176,7 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 		connectorPluginService: connPluginService,
 		processorPluginService: procPluginService,
 
-		schemaService: schema.NewInMemoryService(),
+		schemaService: schemaService,
 
 		connectorPersister: connectorPersister,
 
@@ -463,6 +479,7 @@ func (r *Runtime) serveGRPCAPI(ctx context.Context, t *tomb.Tomb) (net.Addr, err
 			"ProcessorService":       r.processorService,
 			"ConnectorPluginService": r.connectorPluginService,
 			"ProcessorPluginService": r.processorPluginService,
+			"SchemaService":          r.schemaService,
 		},
 		r.logger,
 	)

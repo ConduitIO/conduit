@@ -1,4 +1,4 @@
-// Copyright © 2023 Meroxa, Inc.
+// Copyright © 2024 Meroxa, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,29 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package schema
+package schemaregistry
+
+//go:generate mockgen -destination=mock/schema_service.go -package=mock -mock_names=Service=Service . Service
 
 import (
-	"testing"
+	"context"
 
-	"github.com/matryer/is"
+	commschema "github.com/conduitio/conduit-commons/schema"
 )
 
-func TestRabin(t *testing.T) {
-	testCases := []struct {
-		have string
-		want uint64
-	}{
-		{have: `"int"`, want: 0x7275d51a3f395c8f},
-		{have: `"string"`, want: 0x8f014872634503c7},
-		{have: `"bool"`, want: 0x4a1c6b80ca0bcf48},
-	}
+type Service interface {
+	Create(ctx context.Context, name string, bytes []byte) (commschema.Instance, error)
+	Get(ctx context.Context, id string) (commschema.Instance, error)
 
-	for _, tc := range testCases {
-		t.Run(tc.have, func(t *testing.T) {
-			is := is.New(t)
-			got := Rabin([]byte(tc.have))
-			is.Equal(tc.want, got)
-		})
-	}
+	Check(ctx context.Context) error
 }
