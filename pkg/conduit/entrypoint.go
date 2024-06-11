@@ -95,6 +95,13 @@ func (*Entrypoint) Flags(cfg *Config) *flag.FlagSet {
 	flags.StringVar(&cfg.Pipelines.Path, "pipelines.path", cfg.Pipelines.Path, "path to the directory that has the yaml pipeline configuration files, or a single pipeline configuration file")
 	flags.BoolVar(&cfg.Pipelines.ExitOnError, "pipelines.exit-on-error", cfg.Pipelines.ExitOnError, "exit Conduit if a pipeline experiences an error while running")
 
+	flags.StringVar(&cfg.Cluster.ID, "cluster.id", cfg.Cluster.ID, "unique identifier for the node in the cluster")
+	flags.IntVar(&cfg.Cluster.SerfPort, "cluster.serf-port", cfg.Cluster.SerfPort, "port used by Serf")
+	flags.IntVar(&cfg.Cluster.RaftPort, "cluster.raft-port", cfg.Cluster.RaftPort, "port used by Raft")
+	flags.Func("cluster.peers", "comma separated list of peers to join the cluster", func(s string) error {
+		return cfg.Cluster.Peers.UnmarshalText([]byte(s))
+	})
+
 	// NB: flags with prefix dev.* are hidden from help output by default, they only show up using '-dev -help'
 	showDevHelp := flags.Bool("dev", false, "used together with the dev flag it shows dev flags")
 	flags.StringVar(&cfg.dev.cpuprofile, "dev.cpuprofile", "", "write cpu profile to file")

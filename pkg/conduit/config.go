@@ -32,6 +32,13 @@ const (
 
 // Config holds all configurable values for Conduit.
 type Config struct {
+	Cluster struct {
+		ID       string
+		SerfPort int
+		RaftPort int
+		Peers    peers
+	}
+
 	DB struct {
 		// When Driver is specified it takes precedence over other DB related
 		// fields.
@@ -98,6 +105,9 @@ func DefaultConfig() Config {
 	cfg.Connectors.Path = "./connectors"
 	cfg.Processors.Path = "./processors"
 	cfg.Pipelines.Path = "./pipelines"
+
+	cfg.Cluster.SerfPort = 8300
+	cfg.Cluster.Peers = peers{}
 
 	cfg.PluginDispenserFactories = builtin.DefaultDispenserFactories
 	return cfg

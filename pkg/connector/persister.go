@@ -19,13 +19,17 @@ import (
 	"sync"
 	"time"
 
+	"github.com/conduitio/conduit/pkg/cluster"
+
+	"github.com/hashicorp/raft"
+
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/database"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 )
 
 const (
-	DefaultPersisterDelayThreshold       = time.Second
+	DefaultPersisterDelayThreshold       = time.Second * 3
 	DefaultPersisterBundleCountThreshold = 10000
 )
 
@@ -47,6 +51,10 @@ type Persister struct {
 	batch       map[string]persistData
 	flushTimer  *time.Timer
 	flushWg     sync.WaitGroup
+
+	// cluster poc
+	raft      *raft.Raft
+	positions map[string]string
 }
 
 // PersistCallback is a function that's called when a connector is persisted.
@@ -64,6 +72,7 @@ func NewPersister(
 	db database.DB,
 	delayThreshold time.Duration,
 	bundleCountThreshold int,
+	raft *raft.Raft,
 ) *Persister {
 	return &Persister{
 		logger: logger.WithComponent("connector.Persister"),
@@ -73,6 +82,9 @@ func NewPersister(
 
 		delayThreshold:       delayThreshold,
 		bundleCountThreshold: bundleCountThreshold,
+
+		raft:      raft,
+		positions: make(map[string]string),
 	}
 }
 
@@ -113,11 +125,15 @@ func (p *Persister) Persist(ctx context.Context, conn *Instance, callback Persis
 	if err != nil {
 		return cerrors.Errorf("failed to prepare connector for persistence: %w", err)
 	}
+
 	p.batch[conn.ID] = persistData{
 		callback:  callback,
 		storeFunc: storeFunc,
 	}
 	p.bundleCount++
+	if conn.Type == TypeSource && conn.State != nil {
+		p.positions[conn.ID] = conn.State.(SourceState).Position.String()
+	}
 
 	if p.bundleCount == p.bundleCountThreshold {
 		p.logger.Trace(ctx).Msg("reached bundle count threshold")
@@ -162,16 +178,18 @@ func (p *Persister) triggerFlush(ctx context.Context) {
 	p.flushWg.Wait()
 
 	// reset callbacks and bundle count
+	positions := p.positions
 	batch := p.batch
 	p.batch = nil
+	p.positions = make(map[string]string)
 	p.bundleCount = 0
 
 	p.flushWg.Add(1)
-	go p.flushNow(ctx, batch)
+	go p.flushNow(ctx, batch, positions)
 }
 
 // flushNow will flush the state to the store.
-func (p *Persister) flushNow(ctx context.Context, batch map[string]persistData) {
+func (p *Persister) flushNow(ctx context.Context, batch map[string]persistData, positions map[string]string) {
 	defer p.flushWg.Done()
 	start := time.Now()
 
@@ -204,4 +222,9 @@ func (p *Persister) flushNow(ctx context.Context, batch map[string]persistData) 
 		Int("count", len(batch)).
 		Dur(log.DurationField, time.Since(start)).
 		Msg("persisted connectors")
+
+	err = p.raft.Apply(cluster.EncodePositions(positions), time.Second).Error()
+	if err != nil {
+		p.logger.Err(ctx, err).Msg("error applying positions to raft")
+	}
 }

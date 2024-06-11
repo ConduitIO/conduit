@@ -19,14 +19,23 @@
 package conduit
 
 import (
+	"bytes"
 	"context"
+	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"os"
 	"runtime"
 	"runtime/pprof"
+	"strconv"
 	"strings"
 	"time"
+
+	"github.com/hashicorp/raft"
+	"github.com/hashicorp/serf/serf"
+
+	"github.com/conduitio/conduit/pkg/cluster"
 
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -91,6 +100,9 @@ type Runtime struct {
 
 	connectorPersister *connector.Persister
 	logger             log.CtxLogger
+
+	serf *cluster.Serf
+	raft *cluster.Raft
 }
 
 // NewRuntime sets up a Runtime instance and primes it for start.
@@ -125,10 +137,27 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 	configurePrometheus()
 	measure.ConduitInfo.WithValues(Version(true)).Inc()
 
+	if cfg.Cluster.ID == "" {
+		cfg.Cluster.ID = fmt.Sprintf("conduit:%d", cfg.Cluster.SerfPort)
+	}
+	if cfg.Cluster.RaftPort == 0 {
+		cfg.Cluster.RaftPort = cfg.Cluster.SerfPort + 1
+	}
+
+	raft, err := cluster.CreateRaft(cfg.Cluster.ID, "localhost", cfg.Cluster.RaftPort, cfg.DB.Badger.Path, cluster.NewFSM(logger))
+	if err != nil {
+		return nil, cerrors.Errorf("failed to create raft: %w", err)
+	}
+	serf, err := cluster.CreateSerf(cfg.Cluster.ID, "localhost", cfg.Cluster.SerfPort, cfg.DB.Badger.Path, cfg.Cluster.Peers.serfAddrs())
+	if err != nil {
+		return nil, cerrors.Errorf("failed to create serf: %w", err)
+	}
+
 	// Start the connector persister
 	connectorPersister := connector.NewPersister(logger, db,
 		connector.DefaultPersisterDelayThreshold,
 		connector.DefaultPersisterBundleCountThreshold,
+		raft.Raft,
 	)
 
 	// Create all necessary internal services
@@ -158,6 +187,9 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 		connectorPersister: connectorPersister,
 
 		logger: logger,
+
+		serf: serf,
+		raft: raft,
 	}
 	return r, nil
 }
@@ -237,6 +269,8 @@ func (r *Runtime) Run(ctx context.Context) (err error) {
 
 	// Register cleanup function that will run after tomb is killed
 	r.registerCleanup(t)
+
+	r.runCluster(ctx, t)
 
 	// Init each service
 	err = r.processorService.Init(ctx)
@@ -674,4 +708,150 @@ func (r *Runtime) serveHTTP(
 
 	r.logger.Info(ctx).Str(log.ServerAddressField, ln.Addr().String()).Msg("http server started")
 	return ln.Addr(), nil
+}
+
+func (r *Runtime) runCluster(
+	ctx context.Context,
+	t *tomb.Tomb,
+) {
+	logger := r.logger.WithComponent("cluster")
+
+	t.Go(func() (err error) {
+		defer func() {
+			leader := r.raft.VerifyLeader()
+			if leader.Error() == nil {
+				logger.Info(ctx).Msg("I am the leader, removing myself before I stop")
+				// we are the leader, remove ourselves
+				raftAddr := fmt.Sprintf("localhost:%d", r.Config.Cluster.RaftPort)
+				future := r.raft.RemoveServer(raft.ServerID(raftAddr), 0, 0)
+				if err := future.Error(); err != nil {
+					// log
+					logger.Err(ctx, err).Msg("removing raft server failed")
+				}
+			}
+
+			logger.Info(ctx).Msg("Shutting down Raft ...")
+			future := r.raft.Shutdown()
+			futureErr := future.Error()
+			if futureErr != nil {
+				futureErr = cerrors.Errorf("failed to shutdown Raft: %w", futureErr)
+				err = errors.Join(err, futureErr)
+			}
+		}()
+
+		defer func() {
+			tmpErr := r.serf.Leave()
+			if tmpErr != nil {
+				tmpErr = cerrors.Errorf("failed to leave serf: %w", tmpErr)
+				err = errors.Join(err, tmpErr)
+			}
+			tmpErr = r.serf.Shutdown()
+			if tmpErr != nil {
+				tmpErr = fmt.Errorf("failed to shutdown serf: %w", tmpErr)
+				err = errors.Join(err, tmpErr)
+			}
+		}()
+
+		ticker := time.NewTicker(3 * time.Second)
+
+		for {
+			select {
+			case <-ctx.Done():
+				logger.Info(ctx).Msg("shutting down cluster")
+				return nil
+			case <-ticker.C:
+				future := r.raft.VerifyLeader()
+				if err := future.Error(); err != nil {
+					logger.Info(ctx).Msg("node is a follower")
+				} else {
+					logger.Info(ctx).Msg("node is a leader")
+				}
+			case ev := <-r.serf.EventCh:
+				leader := r.raft.VerifyLeader()
+				if leader.Error() != nil {
+					continue
+				}
+
+				if memberEvent, ok := ev.(serf.MemberEvent); ok {
+					for _, member := range memberEvent.Members {
+						eventType := memberEvent.EventType()
+						peer := peer{
+							host:     "localhost",
+							serfPort: int(member.Port),
+							raftPort: int(member.Port) + 1,
+						}
+						logger.Info(ctx).Msgf("member event: %v (%+v)\n", eventType, peer)
+
+						if eventType == serf.EventMemberJoin {
+							future := r.raft.AddVoter(raft.ServerID(peer.raftAddr()), raft.ServerAddress(peer.raftAddr()), 0, 0)
+							if err := future.Error(); err != nil {
+								// log
+								logger.Err(ctx, err).Msg("adding raft voter failed")
+							}
+						} else if eventType == serf.EventMemberLeave || eventType == serf.EventMemberFailed {
+							logger.Info(ctx).Msgf("removing raft server: %s\n", peer.raftAddr())
+							future := r.raft.RemoveServer(raft.ServerID(peer.raftAddr()), 0, 0)
+							if err := future.Error(); err != nil {
+								// log
+								logger.Err(ctx, err).Msg("removing raft server failed")
+							}
+						}
+					}
+				}
+			}
+		}
+	})
+}
+
+type peer struct {
+	host     string
+	serfPort int
+	raftPort int
+}
+
+func (p peer) raftAddr() string {
+	return fmt.Sprintf("%s:%d", p.host, p.raftPort)
+}
+
+func (p peer) serfAddr() string {
+	return fmt.Sprintf("%s:%d", p.host, p.serfPort)
+}
+
+func (p *peer) UnmarshalText(text []byte) error {
+	host, portRaw, found := strings.Cut(string(text), ":")
+	if !found {
+		return fmt.Errorf("invalid peer, needs to follow the format \"host:port\": %s", text)
+	}
+	port, err := strconv.Atoi(portRaw)
+	if err != nil {
+		return fmt.Errorf("invalid port: %w", err)
+	}
+	p.host = host
+	p.serfPort = port
+	p.raftPort = port + 1
+	return nil
+}
+
+type peers []peer
+
+func (p peers) serfAddrs() []string {
+	addrs := make([]string, len(p))
+	for i, peer := range p {
+		addrs[i] = peer.serfAddr()
+	}
+	return addrs
+}
+
+func (p *peers) UnmarshalText(text []byte) error {
+	var out peers
+	for i, peerText := range bytes.Split(text, []byte(",")) {
+		var tmpPeer peer
+		err := tmpPeer.UnmarshalText(peerText)
+		if err != nil {
+			return fmt.Errorf("peer %d invalid: %w", i, err)
+		}
+		out = append(out, tmpPeer)
+	}
+	*p = out
+	return nil
 }
