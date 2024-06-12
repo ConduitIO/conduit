@@ -507,7 +507,7 @@ func TestSchema_MarshalUnmarshal(t *testing.T) {
 			"foo": "bar",
 			"bar": 1,
 			"baz": []any{1, 2, 3},
-			"tz":  now,
+			"tz":  now.Truncate(time.Microsecond), // Avro cannot does not support nanoseconds
 		},
 		wantSchema: must(avro.NewRecordSchema(
 			"record.foo",
