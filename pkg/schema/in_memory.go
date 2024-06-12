@@ -44,7 +44,7 @@ func (s *InMemoryService) Create(_ context.Context, name string, bytes []byte) (
 	return schema.Instance{
 		ID:      strconv.Itoa(created.ID),
 		Name:    created.Subject,
-		Version: created.Version,
+		Version: int32(created.Version),
 		Type:    schema.TypeAvro,
 		Bytes:   []byte(created.Schema.Schema),
 	}, nil
@@ -61,10 +61,13 @@ func (s *InMemoryService) Get(_ context.Context, id string) (schema.Instance, er
 		return schema.Instance{}, ErrSchemaNotFound
 	}
 
+	sv := s.reg.SubjectVersionsByID(idInt)
+
 	return schema.Instance{
-		ID:      id,
-		Name:    created.Subject,
-		Version: created.Version,
+		ID: id,
+		// todo fix
+		Name:    sv[0].Subject,
+		Version: int32(sv[0].Version),
 		Type:    schema.TypeAvro,
 		Bytes:   []byte(sch.Schema),
 	}, nil
