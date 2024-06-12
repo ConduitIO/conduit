@@ -18,10 +18,6 @@ package schemaregistry
 
 import (
 	"fmt"
-	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/schema"
-	"github.com/goccy/go-json"
-	"github.com/lovromazgon/franz-go/pkg/sr"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -29,6 +25,11 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/schema"
+	"github.com/goccy/go-json"
+	"github.com/lovromazgon/franz-go/pkg/sr"
 )
 
 var (
