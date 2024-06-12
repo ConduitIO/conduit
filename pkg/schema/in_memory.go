@@ -63,8 +63,8 @@ func (s *InMemoryService) Get(_ context.Context, id string) (schema.Instance, er
 
 	return schema.Instance{
 		ID:      id,
-		Name:    "",
-		Version: 0,
+		Name:    created.Subject,
+		Version: created.Version,
 		Type:    schema.TypeAvro,
 		Bytes:   []byte(sch.Schema),
 	}, nil
