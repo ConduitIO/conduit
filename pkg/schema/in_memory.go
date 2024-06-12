@@ -50,6 +50,7 @@ func (s *InMemoryService) Create(_ context.Context, name string, bytes []byte) (
 	}, nil
 }
 
+// todo returned schema instance doesn't contain name and version
 func (s *InMemoryService) Get(_ context.Context, id string) (schema.Instance, error) {
 	idInt, err := strconv.Atoi(id)
 	if err != nil {
@@ -61,14 +62,9 @@ func (s *InMemoryService) Get(_ context.Context, id string) (schema.Instance, er
 		return schema.Instance{}, ErrSchemaNotFound
 	}
 
-	sv := s.reg.SubjectVersionsByID(idInt)
-
 	return schema.Instance{
-		ID: id,
-		// todo fix
-		Name:    sv[0].Subject,
-		Version: int32(sv[0].Version),
-		Type:    schema.TypeAvro,
-		Bytes:   []byte(sch.Schema),
+		ID:    id,
+		Type:  schema.TypeAvro,
+		Bytes: []byte(sch.Schema),
 	}, nil
 }
