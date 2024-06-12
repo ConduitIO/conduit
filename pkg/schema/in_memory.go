@@ -24,11 +24,11 @@ import (
 )
 
 type InMemoryService struct {
-	fakeReg *FakeRegistry
+	reg *InMemoryRegistry
 }
 
 func NewInMemoryService() *InMemoryService {
-	return &InMemoryService{fakeReg: NewFakeRegistry()}
+	return &InMemoryService{reg: NewInMemoryRegistry()}
 }
 
 func (s *InMemoryService) Check(context.Context) error {
@@ -36,7 +36,7 @@ func (s *InMemoryService) Check(context.Context) error {
 }
 
 func (s *InMemoryService) Create(_ context.Context, name string, bytes []byte) (schema.Instance, error) {
-	created := s.fakeReg.CreateSchema(name, sr.Schema{
+	created := s.reg.CreateSchema(name, sr.Schema{
 		Schema: string(bytes),
 		Type:   sr.TypeAvro,
 	})
@@ -56,7 +56,7 @@ func (s *InMemoryService) Get(_ context.Context, id string) (schema.Instance, er
 		return schema.Instance{}, cerrors.Errorf("invalid schema id: %w", err)
 	}
 
-	sch, found := s.fakeReg.SchemaByID(idInt)
+	sch, found := s.reg.SchemaByID(idInt)
 	if !found {
 		return schema.Instance{}, ErrSchemaNotFound
 	}
