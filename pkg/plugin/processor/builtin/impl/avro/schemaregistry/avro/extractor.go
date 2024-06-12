@@ -61,7 +61,6 @@ func (e extractor) Extract(v any) (avro.Schema, error) {
 }
 
 func (e extractor) extract(path []string, v reflect.Value, t reflect.Type) (avro.Schema, error) {
-
 	if t == nil {
 		return nil, cerrors.Errorf("%s: can't get schema for untyped nil", strings.Join(path, ".")) // untyped nil
 	}
