@@ -20,7 +20,6 @@ import (
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/conduitio/conduit/pkg/schema"
 	"github.com/lovromazgon/franz-go/pkg/sr"
 	"github.com/matryer/is"
 )
@@ -31,7 +30,7 @@ func TestEncodeDecode_ExtractAndUploadSchemaStrategy(t *testing.T) {
 	logger := log.Nop()
 
 	var serde sr.Serde
-	client, err := NewClient(logger, sr.URLs(schema.TestSchemaRegistryURL(t)))
+	client, err := NewClient(logger, sr.URLs(TestSchemaRegistryURL(t)))
 	is.NoErr(err)
 
 	have := opencdc.StructuredData{
@@ -89,7 +88,7 @@ func TestEncodeDecode_DownloadStrategy_Avro(t *testing.T) {
 	logger := log.Nop()
 
 	var serde sr.Serde
-	client, err := NewClient(logger, sr.URLs(schema.TestSchemaRegistryURL(t)))
+	client, err := NewClient(logger, sr.URLs(TestSchemaRegistryURL(t)))
 	is.NoErr(err)
 
 	have := opencdc.StructuredData{

@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//go:build !integration
+
 package avro
 
 import (
@@ -23,13 +25,12 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/avro/schemaregistry"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal/exampleutil"
-	"github.com/conduitio/conduit/pkg/schema"
 	"github.com/lovromazgon/franz-go/pkg/sr"
 )
 
 //nolint:govet // a more descriptive example description
 func ExampleEncodeProcessor_autoRegister() {
-	url, cleanup := schema.ExampleSchemaRegistryURL("ExampleEncodeProcessor_autoRegister", 54322)
+	url, cleanup := schemaregistry.ExampleSchemaRegistryURL("ExampleEncodeProcessor_autoRegister", 54322)
 	defer cleanup()
 
 	p := NewEncodeProcessor(log.Nop())
@@ -108,7 +109,7 @@ and registered on the fly under the subject ` + "`example-autoRegister`" + `.`,
 
 //nolint:govet // a more descriptive example description
 func ExampleEncodeProcessor_preRegistered() {
-	url, cleanup := schema.ExampleSchemaRegistryURL("ExampleEncodeProcessor_preRegistered", 54322)
+	url, cleanup := schemaregistry.ExampleSchemaRegistryURL("ExampleEncodeProcessor_preRegistered", 54322)
 	defer cleanup()
 
 	client, err := schemaregistry.NewClient(log.Nop(), sr.URLs(url))

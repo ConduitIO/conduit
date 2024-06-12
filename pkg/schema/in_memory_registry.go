@@ -15,8 +15,9 @@
 package schema
 
 import (
-	"github.com/lovromazgon/franz-go/pkg/sr"
 	"sync"
+
+	"github.com/lovromazgon/franz-go/pkg/sr"
 )
 
 // InMemoryRegistry is a simple fake registry meant to be used in tests. It stores
