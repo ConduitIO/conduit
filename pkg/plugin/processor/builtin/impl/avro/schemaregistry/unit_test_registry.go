@@ -95,13 +95,13 @@ func fakeSchemaRegistryURL(name string, logf func(format string, args ...any), p
 
 // fakeServer is a fake schema registry server.
 type fakeServer struct {
-	fr   *schema.InMemoryRegistry
+	reg  *schema.InMemoryRegistry
 	logf func(format string, args ...any)
 }
 
 func newFakeServer(logf func(format string, args ...any)) *fakeServer {
 	fs := &fakeServer{
-		fr:   schema.NewInMemoryRegistry(),
+		reg:  schema.NewInMemoryRegistry(),
 		logf: func(format string, args ...any) { /* no op */ },
 	}
 	if logf != nil {
@@ -184,13 +184,13 @@ func (fs *fakeServer) createSchema(w http.ResponseWriter, r *http.Request, subje
 		return
 	}
 
-	ss := fs.fr.CreateSchema(subject, s)
+	ss := fs.reg.CreateSchema(subject, s)
 	fs.json(w, map[string]any{"id": ss.ID})
 }
 
 func (fs *fakeServer) schemaBySubjectVersion(w http.ResponseWriter, _ *http.Request, subject string, version int) {
 	// GET /subjects/{subject}/versions/{version}
-	ss, ok := fs.fr.SchemaBySubjectVersion(subject, version)
+	ss, ok := fs.reg.SchemaBySubjectVersion(subject, version)
 	if !ok {
 		fs.errorWithCode(w, http.StatusNotFound, errorCodeSubjectNotFound, cerrors.New("subject not found"))
 		return
@@ -200,7 +200,7 @@ func (fs *fakeServer) schemaBySubjectVersion(w http.ResponseWriter, _ *http.Requ
 
 func (fs *fakeServer) schemaByID(w http.ResponseWriter, _ *http.Request, id int) {
 	// GET /schemas/ids/{id}
-	s, ok := fs.fr.SchemaByID(id)
+	s, ok := fs.reg.SchemaByID(id)
 	if !ok {
 		fs.errorWithCode(w, http.StatusNotFound, errorCodeSchemaNotFound, cerrors.New("schema not found"))
 		return
@@ -210,7 +210,7 @@ func (fs *fakeServer) schemaByID(w http.ResponseWriter, _ *http.Request, id int)
 
 func (fs *fakeServer) subjectVersionsByID(w http.ResponseWriter, _ *http.Request, id int) {
 	// GET /schemas/ids/{id}/versions
-	sss := fs.fr.SubjectVersionsByID(id)
+	sss := fs.reg.SubjectVersionsByID(id)
 	fs.json(w, sss)
 }
 
