@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -25,8 +26,9 @@ import (
 )
 
 var (
-	structuredDataType = reflect.TypeOf(opencdc.StructuredData{})
-	byteType           = reflect.TypeOf(byte(0))
+	structuredDataType = reflect.TypeFor[opencdc.StructuredData]()
+	byteType           = reflect.TypeFor[byte]()
+	timeType           = reflect.TypeFor[time.Time]()
 )
 
 // extractor exposes a way to extract an Avro schema from a Go value.
@@ -59,6 +61,7 @@ func (e extractor) Extract(v any) (avro.Schema, error) {
 }
 
 func (e extractor) extract(path []string, v reflect.Value, t reflect.Type) (avro.Schema, error) {
+
 	if t == nil {
 		return nil, cerrors.Errorf("%s: can't get schema for untyped nil", strings.Join(path, ".")) // untyped nil
 	}
@@ -89,6 +92,13 @@ func (e extractor) extract(path []string, v reflect.Value, t reflect.Type) (avro
 	case reflect.Map:
 		return e.extractMap(path, v, t)
 	case reflect.Struct:
+		switch t {
+		case timeType:
+			return avro.NewPrimitiveSchema(
+				avro.Long,
+				avro.NewPrimitiveLogicalSchema(avro.TimestampMicros),
+			), nil
+		}
 		return e.extractStruct(path, v, t)
 	}
 	// Invalid, Uintptr, UnsafePointer, Uint64, Uint, Complex64, Complex128, Chan, Func
