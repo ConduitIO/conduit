@@ -160,6 +160,7 @@ func TestConfig_Validate(t *testing.T) {
 			validConfig.Log.Level = "info"
 			validConfig.Log.Format = "cli"
 			validConfig.Pipelines.Path = "./pipelines"
+			validConfig.Schema.Type = SchemaTypeInMemory
 
 			underTest := tc.setupConfig(validConfig)
 			got := underTest.Validate()
