@@ -14,17 +14,8 @@
 
 package schema
 
-//go:generate mockgen -destination=mock/schema_service.go -package=mock -mock_names=Service=Service . Service
+import "github.com/conduitio/conduit/pkg/foundation/cerrors"
 
-import (
-	"context"
-
-	commschema "github.com/conduitio/conduit-commons/schema"
+var (
+	ErrSchemaNotFound = cerrors.New("schema not found")
 )
-
-type Service interface {
-	Create(ctx context.Context, name string, bytes []byte) (commschema.Instance, error)
-	Get(ctx context.Context, id string) (commschema.Instance, error)
-
-	Check(ctx context.Context) error
-}
