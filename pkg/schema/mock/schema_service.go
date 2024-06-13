@@ -70,16 +70,16 @@ func (mr *ServiceMockRecorder) Create(arg0, arg1, arg2 any) *gomock.Call {
 }
 
 // Get mocks base method.
-func (m *Service) Get(arg0 context.Context, arg1 string) (schema.Instance, error) {
+func (m *Service) Get(arg0 context.Context, arg1 string, arg2 int) (schema.Instance, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Get", arg0, arg1)
+	ret := m.ctrl.Call(m, "Get", arg0, arg1, arg2)
 	ret0, _ := ret[0].(schema.Instance)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Get indicates an expected call of Get.
-func (mr *ServiceMockRecorder) Get(arg0, arg1 any) *gomock.Call {
+func (mr *ServiceMockRecorder) Get(arg0, arg1, arg2 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*Service)(nil).Get), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*Service)(nil).Get), arg0, arg1, arg2)
 }

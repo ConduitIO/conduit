@@ -23,6 +23,7 @@ import (
 	kafka "github.com/conduitio/conduit-connector-kafka"
 	connLog "github.com/conduitio/conduit-connector-log"
 	postgres "github.com/conduitio/conduit-connector-postgres"
+	cschema "github.com/conduitio/conduit-connector-protocol/conduit/schema"
 	"github.com/conduitio/conduit-connector-protocol/cpluginv1"
 	s3 "github.com/conduitio/conduit-connector-s3"
 	sdk "github.com/conduitio/conduit-connector-sdk"
@@ -31,19 +32,20 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/conduitio/conduit/pkg/plugin/connector"
 	builtinv1 "github.com/conduitio/conduit/pkg/plugin/connector/builtin/v1"
+	"github.com/conduitio/conduit/pkg/schema"
 )
 
 var (
-	// DefaultDispenserFactories contains default dispenser factories for
+	// DefaultBuiltinConnectors contains default dispenser factories for
 	// built-in plugins. The key of the map is the import path of the module
 	// containing the connector implementation.
-	DefaultDispenserFactories = map[string]DispenserFactory{
-		"github.com/conduitio/conduit-connector-file":      NewDispenserFactory(file.Connector),
-		"github.com/conduitio/conduit-connector-kafka":     NewDispenserFactory(kafka.Connector),
-		"github.com/conduitio/conduit-connector-generator": NewDispenserFactory(generator.Connector),
-		"github.com/conduitio/conduit-connector-s3":        NewDispenserFactory(s3.Connector),
-		"github.com/conduitio/conduit-connector-postgres":  NewDispenserFactory(postgres.Connector),
-		"github.com/conduitio/conduit-connector-log":       NewDispenserFactory(connLog.Connector),
+	DefaultBuiltinConnectors = map[string]sdk.Connector{
+		"github.com/conduitio/conduit-connector-file":      file.Connector,
+		"github.com/conduitio/conduit-connector-kafka":     kafka.Connector,
+		"github.com/conduitio/conduit-connector-generator": generator.Connector,
+		"github.com/conduitio/conduit-connector-s3":        s3.Connector,
+		"github.com/conduitio/conduit-connector-postgres":  postgres.Connector,
+		"github.com/conduitio/conduit-connector-log":       connLog.Connector,
 	}
 )
 
@@ -63,7 +65,7 @@ type blueprint struct {
 
 type DispenserFactory func(name plugin.FullName, logger log.CtxLogger) connector.Dispenser
 
-func NewDispenserFactory(conn sdk.Connector) DispenserFactory {
+func NewDispenserFactory(conn sdk.Connector, schemaService cschema.Service) DispenserFactory {
 	if conn.NewSource == nil {
 		conn.NewSource = func() sdk.Source { return nil }
 	}
@@ -75,6 +77,7 @@ func NewDispenserFactory(conn sdk.Connector) DispenserFactory {
 		return builtinv1.NewDispenser(
 			name,
 			logger,
+			schemaService,
 			func() cpluginv1.SpecifierPlugin {
 				return sdk.NewSpecifierPlugin(conn.NewSpecification(), conn.NewSource(), conn.NewDestination())
 			},
@@ -84,7 +87,7 @@ func NewDispenserFactory(conn sdk.Connector) DispenserFactory {
 	}
 }
 
-func NewRegistry(logger log.CtxLogger, factories map[string]DispenserFactory) *Registry {
+func NewRegistry(logger log.CtxLogger, connectors map[string]sdk.Connector, service schema.Service) *Registry {
 	logger = logger.WithComponentFromType(Registry{})
 	buildInfo, ok := debug.ReadBuildInfo()
 	if !ok {
@@ -94,16 +97,18 @@ func NewRegistry(logger log.CtxLogger, factories map[string]DispenserFactory) *R
 	}
 
 	r := &Registry{
-		plugins: loadPlugins(buildInfo, factories),
+		plugins: loadPlugins(buildInfo, connectors, schema.NewProtocolServiceAdapter(service)),
 		logger:  logger,
 	}
 	logger.Info(context.Background()).Int("count", len(r.List())).Msg("builtin plugins initialized")
 	return r
 }
 
-func loadPlugins(buildInfo *debug.BuildInfo, factories map[string]DispenserFactory) map[string]map[string]blueprint {
-	plugins := make(map[string]map[string]blueprint, len(factories))
-	for moduleName, factory := range factories {
+func loadPlugins(buildInfo *debug.BuildInfo, connectors map[string]sdk.Connector, schemaService cschema.Service) map[string]map[string]blueprint {
+	plugins := make(map[string]map[string]blueprint, len(connectors))
+	for moduleName, conn := range connectors {
+		factory := NewDispenserFactory(conn, schemaService)
+
 		specs, err := getSpecification(moduleName, factory, buildInfo)
 		if err != nil {
 			// stop initialization if a built-in plugin is misbehaving

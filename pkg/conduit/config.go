@@ -17,6 +17,7 @@ package conduit
 import (
 	"os"
 
+	sdk "github.com/conduitio/conduit-connector-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/database"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -76,7 +77,7 @@ type Config struct {
 		ExitOnError bool
 	}
 
-	PluginDispenserFactories map[string]builtin.DispenserFactory
+	ConnectorPlugins map[string]sdk.Connector
 
 	dev struct {
 		cpuprofile   string
@@ -99,7 +100,7 @@ func DefaultConfig() Config {
 	cfg.Processors.Path = "./processors"
 	cfg.Pipelines.Path = "./pipelines"
 
-	cfg.PluginDispenserFactories = builtin.DefaultDispenserFactories
+	cfg.ConnectorPlugins = builtin.DefaultBuiltinConnectors
 	return cfg
 }
 

@@ -35,6 +35,7 @@ import (
 	conn_standalone "github.com/conduitio/conduit/pkg/plugin/connector/standalone"
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/record"
+	"github.com/conduitio/conduit/pkg/schema"
 	"github.com/google/go-cmp/cmp"
 	"github.com/matryer/is"
 	"github.com/rs/zerolog"
@@ -72,7 +73,7 @@ func TestPipelineSimple(t *testing.T) {
 
 	connPluginService := conn_plugin.NewPluginService(
 		logger,
-		conn_builtin.NewRegistry(logger, conn_builtin.DefaultDispenserFactories),
+		conn_builtin.NewRegistry(logger, conn_builtin.DefaultBuiltinConnectors, schema.NewInMemoryService()),
 		conn_standalone.NewRegistry(logger, ""),
 	)
 

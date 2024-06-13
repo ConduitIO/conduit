@@ -17,6 +17,7 @@ package builtinv1
 import (
 	"testing"
 
+	schemamock "github.com/conduitio/conduit-connector-protocol/conduit/schema/mock"
 	"github.com/conduitio/conduit-connector-protocol/cpluginv1"
 	"github.com/conduitio/conduit-connector-protocol/cpluginv1/mock"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -32,10 +33,12 @@ func newTestDispenser(t *testing.T) (connector.Dispenser, *mock.SpecifierPlugin,
 	mockSpecifier := mock.NewSpecifierPlugin(ctrl)
 	mockSource := mock.NewSourcePlugin(ctrl)
 	mockDestination := mock.NewDestinationPlugin(ctrl)
-
+	mockSchemaService := schemamock.NewService(ctrl)
+	
 	dispenser := NewDispenser(
 		"mockPlugin",
 		logger,
+		mockSchemaService,
 		func() cpluginv1.SpecifierPlugin { return mockSpecifier },
 		func() cpluginv1.SourcePlugin { return mockSource },
 		func() cpluginv1.DestinationPlugin { return mockDestination },

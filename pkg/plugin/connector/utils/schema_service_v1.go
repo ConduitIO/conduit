@@ -45,12 +45,20 @@ func (s *SchemaServiceAPIv1) Create(ctx context.Context, req *conduitv1.CreateSc
 }
 
 func (s *SchemaServiceAPIv1) Get(ctx context.Context, req *conduitv1.GetSchemaRequest) (*conduitv1.GetSchemaResponse, error) {
-	inst, err := s.service.Get(ctx, req.Id)
+	inst, err := s.service.Get(ctx, req.Name, int(req.Version))
 	if cerrors.Is(err, schema.ErrSchemaNotFound) {
-		return nil, status.Errorf(codes.NotFound, "schema with ID %v not found", req.Id)
+		return nil, status.Errorf(
+			codes.NotFound,
+			"schema with name %v, version %v not found",
+			req.Name, req.Version,
+		)
 	}
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "fetching schema %v failed: %v", req.Id, err)
+		return nil, status.Errorf(
+			codes.Internal,
+			"getting schema with name %v, version %v failed: %v",
+			req.Name, req.Version, err,
+		)
 	}
 
 	return toproto.GetSchemaResponse(inst), nil

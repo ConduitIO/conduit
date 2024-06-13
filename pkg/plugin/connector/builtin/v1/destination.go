@@ -17,6 +17,8 @@ package builtinv1
 import (
 	"context"
 
+	cschema "github.com/conduitio/conduit-connector-protocol/conduit/schema"
+	"github.com/conduitio/conduit-connector-protocol/conduit/schema/client"
 	"github.com/conduitio/conduit-connector-protocol/cpluginv1"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -38,61 +40,66 @@ type destinationPluginAdapter struct {
 	// logger is used as the internal logger of destinationPluginAdapter.
 	logger log.CtxLogger
 	// ctxLogger is attached to the context of each call to the plugin.
-	ctxLogger zerolog.Logger
-
-	stream *stream[cpluginv1.DestinationRunRequest, cpluginv1.DestinationRunResponse]
+	ctxLogger     zerolog.Logger
+	schemaService cschema.Service
+	stream        *stream[cpluginv1.DestinationRunRequest, cpluginv1.DestinationRunResponse]
 }
 
 var _ connector.DestinationPlugin = (*destinationPluginAdapter)(nil)
 
-func newDestinationPluginAdapter(impl cpluginv1.DestinationPlugin, logger log.CtxLogger) *destinationPluginAdapter {
+func newDestinationPluginAdapter(impl cpluginv1.DestinationPlugin, logger log.CtxLogger, schemaService cschema.Service) *destinationPluginAdapter {
 	return &destinationPluginAdapter{
-		impl:      impl,
-		logger:    logger.WithComponent("builtinv1.destinationPluginAdapter"),
-		ctxLogger: logger.WithComponent("plugin").ZerologWithComponent()}
+		impl:          impl,
+		schemaService: schemaService,
+		logger:        logger.WithComponent("builtinv1.destinationPluginAdapter"),
+		ctxLogger:     logger.WithComponent("plugin").ZerologWithComponent()}
 }
 
-func (s *destinationPluginAdapter) withLogger(ctx context.Context) context.Context {
-	return s.ctxLogger.WithContext(ctx)
+func (d *destinationPluginAdapter) withLogger(ctx context.Context) context.Context {
+	return d.ctxLogger.WithContext(ctx)
 }
 
-func (s *destinationPluginAdapter) Configure(ctx context.Context, cfg map[string]string) error {
-	s.logger.Trace(ctx).Msg("calling Configure")
-	_, err := runSandbox(s.impl.Configure, s.withLogger(ctx), toplugin.DestinationConfigureRequest(cfg), s.logger)
+func (d *destinationPluginAdapter) withSchemaService(ctx context.Context) context.Context {
+	return client.WithSchemaService(ctx, d.schemaService)
+}
+
+func (d *destinationPluginAdapter) Configure(ctx context.Context, cfg map[string]string) error {
+	d.logger.Trace(ctx).Msg("calling Configure")
+	_, err := runSandbox(d.impl.Configure, d.withSchemaService(d.withLogger(ctx)), toplugin.DestinationConfigureRequest(cfg), d.logger)
 	return err
 }
 
-func (s *destinationPluginAdapter) Start(ctx context.Context) error {
-	if s.stream != nil {
+func (d *destinationPluginAdapter) Start(ctx context.Context) error {
+	if d.stream != nil {
 		return cerrors.New("plugin already running")
 	}
 
 	req := toplugin.DestinationStartRequest()
-	s.logger.Trace(ctx).Msg("calling Start")
-	_, err := runSandbox(s.impl.Start, s.withLogger(ctx), req, s.logger)
+	d.logger.Trace(ctx).Msg("calling Start")
+	_, err := runSandbox(d.impl.Start, d.withSchemaService(d.withLogger(ctx)), req, d.logger)
 	if err != nil {
 		return err
 	}
 
-	s.stream = newDestinationRunStream(ctx)
+	d.stream = newDestinationRunStream(ctx)
 	go func() {
-		s.logger.Trace(ctx).Msg("calling Run")
-		err := runSandboxNoResp(s.impl.Run, s.withLogger(ctx), cpluginv1.DestinationRunStream(s.stream), s.logger)
+		d.logger.Trace(ctx).Msg("calling Run")
+		err := runSandboxNoResp(d.impl.Run, d.withSchemaService(d.withLogger(ctx)), cpluginv1.DestinationRunStream(d.stream), d.logger)
 		if err != nil {
-			if !s.stream.stop(err) {
-				s.logger.Err(ctx, err).Msg("stream already stopped")
+			if !d.stream.stop(err) {
+				d.logger.Err(ctx, err).Msg("stream already stopped")
 			}
 		} else {
-			s.stream.stop(connector.ErrStreamNotOpen)
+			d.stream.stop(connector.ErrStreamNotOpen)
 		}
-		s.logger.Trace(ctx).Msg("Run stopped")
+		d.logger.Trace(ctx).Msg("Run stopped")
 	}()
 
 	return nil
 }
 
-func (s *destinationPluginAdapter) Write(ctx context.Context, r record.Record) error {
-	if s.stream == nil {
+func (d *destinationPluginAdapter) Write(ctx context.Context, r record.Record) error {
+	if d.stream == nil {
 		return connector.ErrStreamNotOpen
 	}
 
@@ -101,8 +108,8 @@ func (s *destinationPluginAdapter) Write(ctx context.Context, r record.Record) e
 		return err
 	}
 
-	s.logger.Trace(ctx).Msg("sending record")
-	err = s.stream.sendInternal(req)
+	d.logger.Trace(ctx).Msg("sending record")
+	err = d.stream.sendInternal(req)
 	if err != nil {
 		return cerrors.Errorf("builtin plugin send failed: %w", err)
 	}
@@ -110,13 +117,13 @@ func (s *destinationPluginAdapter) Write(ctx context.Context, r record.Record) e
 	return nil
 }
 
-func (s *destinationPluginAdapter) Ack(ctx context.Context) (record.Position, error) {
-	if s.stream == nil {
+func (d *destinationPluginAdapter) Ack(ctx context.Context) (record.Position, error) {
+	if d.stream == nil {
 		return nil, connector.ErrStreamNotOpen
 	}
 
-	s.logger.Trace(ctx).Msg("receiving ack")
-	resp, err := s.stream.recvInternal()
+	d.logger.Trace(ctx).Msg("receiving ack")
+	resp, err := d.stream.recvInternal()
 	if err != nil {
 		return nil, err
 	}
@@ -129,33 +136,33 @@ func (s *destinationPluginAdapter) Ack(ctx context.Context) (record.Position, er
 	return position, nil
 }
 
-func (s *destinationPluginAdapter) Stop(ctx context.Context, lastPosition record.Position) error {
-	s.logger.Trace(ctx).Bytes(log.RecordPositionField, lastPosition).Msg("calling Stop")
-	_, err := runSandbox(s.impl.Stop, s.withLogger(ctx), toplugin.DestinationStopRequest(lastPosition), s.logger)
+func (d *destinationPluginAdapter) Stop(ctx context.Context, lastPosition record.Position) error {
+	d.logger.Trace(ctx).Bytes(log.RecordPositionField, lastPosition).Msg("calling Stop")
+	_, err := runSandbox(d.impl.Stop, d.withSchemaService(d.withLogger(ctx)), toplugin.DestinationStopRequest(lastPosition), d.logger)
 	return err
 }
 
-func (s *destinationPluginAdapter) Teardown(ctx context.Context) error {
-	s.logger.Trace(ctx).Msg("calling Teardown")
-	_, err := runSandbox(s.impl.Teardown, s.withLogger(ctx), toplugin.DestinationTeardownRequest(), s.logger)
+func (d *destinationPluginAdapter) Teardown(ctx context.Context) error {
+	d.logger.Trace(ctx).Msg("calling Teardown")
+	_, err := runSandbox(d.impl.Teardown, d.withSchemaService(d.withLogger(ctx)), toplugin.DestinationTeardownRequest(), d.logger)
 	return err
 }
 
-func (s *destinationPluginAdapter) LifecycleOnCreated(ctx context.Context, cfg map[string]string) error {
-	s.logger.Trace(ctx).Msg("calling LifecycleOnCreated")
-	_, err := runSandbox(s.impl.LifecycleOnCreated, s.withLogger(ctx), toplugin.DestinationLifecycleOnCreatedRequest(cfg), s.logger)
+func (d *destinationPluginAdapter) LifecycleOnCreated(ctx context.Context, cfg map[string]string) error {
+	d.logger.Trace(ctx).Msg("calling LifecycleOnCreated")
+	_, err := runSandbox(d.impl.LifecycleOnCreated, d.withSchemaService(d.withLogger(ctx)), toplugin.DestinationLifecycleOnCreatedRequest(cfg), d.logger)
 	return err
 }
 
-func (s *destinationPluginAdapter) LifecycleOnUpdated(ctx context.Context, cfgBefore, cfgAfter map[string]string) error {
-	s.logger.Trace(ctx).Msg("calling LifecycleOnUpdated")
-	_, err := runSandbox(s.impl.LifecycleOnUpdated, s.withLogger(ctx), toplugin.DestinationLifecycleOnUpdatedRequest(cfgBefore, cfgAfter), s.logger)
+func (d *destinationPluginAdapter) LifecycleOnUpdated(ctx context.Context, cfgBefore, cfgAfter map[string]string) error {
+	d.logger.Trace(ctx).Msg("calling LifecycleOnUpdated")
+	_, err := runSandbox(d.impl.LifecycleOnUpdated, d.withSchemaService(d.withLogger(ctx)), toplugin.DestinationLifecycleOnUpdatedRequest(cfgBefore, cfgAfter), d.logger)
 	return err
 }
 
-func (s *destinationPluginAdapter) LifecycleOnDeleted(ctx context.Context, cfg map[string]string) error {
-	s.logger.Trace(ctx).Msg("calling LifecycleOnDeleted")
-	_, err := runSandbox(s.impl.LifecycleOnDeleted, s.withLogger(ctx), toplugin.DestinationLifecycleOnDeletedRequest(cfg), s.logger)
+func (d *destinationPluginAdapter) LifecycleOnDeleted(ctx context.Context, cfg map[string]string) error {
+	d.logger.Trace(ctx).Msg("calling LifecycleOnDeleted")
+	_, err := runSandbox(d.impl.LifecycleOnDeleted, d.withSchemaService(d.withLogger(ctx)), toplugin.DestinationLifecycleOnDeletedRequest(cfg), d.logger)
 	return err
 }
 

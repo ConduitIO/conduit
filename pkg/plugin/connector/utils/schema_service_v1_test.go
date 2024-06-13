@@ -30,7 +30,7 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-func TestSchemaService_Register(t *testing.T) {
+func TestSchemaService_Create(t *testing.T) {
 	testCases := []struct {
 		name         string
 		input        *conduitv1.CreateSchemaRequest
@@ -115,7 +115,7 @@ func TestSchemaService_Register(t *testing.T) {
 	}
 }
 
-func TestSchemaService_Fetch(t *testing.T) {
+func TestSchemaService_Get(t *testing.T) {
 	testCases := []struct {
 		name         string
 		input        *conduitv1.GetSchemaRequest
@@ -126,11 +126,12 @@ func TestSchemaService_Fetch(t *testing.T) {
 		{
 			name: "valid request",
 			input: &conduitv1.GetSchemaRequest{
-				Id: "abc",
+				Name:    "abc",
+				Version: 123,
 			},
 			setupService: func(svc *mock.Service, req *conduitv1.GetSchemaRequest) {
 				svc.EXPECT().
-					Get(gomock.Any(), "abc").
+					Get(gomock.Any(), "abc", 123).
 					Return(schema.Instance{
 						ID:      "abc",
 						Name:    "my-collection",
@@ -152,14 +153,15 @@ func TestSchemaService_Fetch(t *testing.T) {
 		{
 			name: "service error",
 			input: &conduitv1.GetSchemaRequest{
-				Id: "abc",
+				Name:    "abc",
+				Version: 123,
 			},
 			setupService: func(svc *mock.Service, req *conduitv1.GetSchemaRequest) {
 				svc.EXPECT().
-					Get(gomock.Any(), "abc").
+					Get(gomock.Any(), "abc", 123).
 					Return(schema.Instance{}, cerrors.New("boom"))
 			},
-			wantErr: status.Error(codes.Internal, "fetching schema abc failed: boom"),
+			wantErr: status.Error(codes.Internal, "getting schema with name abc, version 123 failed: boom"),
 		},
 	}
 

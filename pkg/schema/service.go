@@ -24,7 +24,7 @@ import (
 
 type Service interface {
 	Create(ctx context.Context, name string, bytes []byte) (commschema.Instance, error)
-	Get(ctx context.Context, id string) (commschema.Instance, error)
+	Get(ctx context.Context, name string, version int) (commschema.Instance, error)
 
 	Check(ctx context.Context) error
 }

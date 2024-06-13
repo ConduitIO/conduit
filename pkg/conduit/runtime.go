@@ -137,7 +137,7 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 	)
 
 	// Create all necessary internal services
-	plService, connService, procService, connPluginService, procPluginService, err := newServices(logger, db, connectorPersister, cfg)
+	plService, connService, procService, connPluginService, procPluginService, schemaService, err := newServices(logger, db, connectorPersister, cfg)
 	if err != nil {
 		return nil, cerrors.Errorf("failed to create services: %w", err)
 	}
@@ -160,7 +160,7 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 		connectorPluginService: connPluginService,
 		processorPluginService: procPluginService,
 
-		schemaService: schema.NewInMemoryService(),
+		schemaService: schemaService,
 
 		connectorPersister: connectorPersister,
 
@@ -201,10 +201,10 @@ func newServices(
 	db database.DB,
 	connPersister *connector.Persister,
 	cfg Config,
-) (*pipeline.Service, *connector.Service, *processor.Service, *conn_plugin.PluginService, *proc_plugin.PluginService, error) {
+) (*pipeline.Service, *connector.Service, *processor.Service, *conn_plugin.PluginService, *proc_plugin.PluginService, schema.Service, error) {
 	standaloneReg, err := proc_standalone.NewRegistry(logger, cfg.Processors.Path)
 	if err != nil {
-		return nil, nil, nil, nil, nil, cerrors.Errorf("failed creating processor registry: %w", err)
+		return nil, nil, nil, nil, nil, nil, cerrors.Errorf("failed creating processor registry: %w", err)
 	}
 
 	procPluginService := proc_plugin.NewPluginService(
@@ -213,9 +213,11 @@ func newServices(
 		standaloneReg,
 	)
 
+	schemaService := schema.NewInMemoryService()
+
 	connPluginService := conn_plugin.NewPluginService(
 		logger,
-		conn_builtin.NewRegistry(logger, cfg.PluginDispenserFactories),
+		conn_builtin.NewRegistry(logger, cfg.ConnectorPlugins, schemaService),
 		conn_standalone.NewRegistry(logger, cfg.Connectors.Path),
 	)
 
@@ -223,7 +225,7 @@ func newServices(
 	connectorService := connector.NewService(logger, db, connPersister)
 	processorService := processor.NewService(logger, db, procPluginService)
 
-	return pipelineService, connectorService, processorService, connPluginService, procPluginService, nil
+	return pipelineService, connectorService, processorService, connPluginService, procPluginService, schemaService, nil
 }
 
 // Run initializes all of Conduit's underlying services and starts the GRPC and
