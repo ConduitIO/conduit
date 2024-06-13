@@ -1,4 +1,4 @@
-// Copyright © 2023 Meroxa, Inc.
+// Copyright © 2024 Meroxa, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -27,7 +27,7 @@ import (
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/avro/schemaregistry/internal"
+	"github.com/conduitio/conduit/pkg/schema"
 	"github.com/goccy/go-json"
 	"github.com/lovromazgon/franz-go/pkg/sr"
 )
@@ -35,6 +35,11 @@ import (
 var (
 	fakeServerByTest     = make(map[string]*httptest.Server)
 	fakeServerByTestLock sync.Mutex
+)
+
+const (
+	errorCodeSubjectNotFound = 40401
+	errorCodeSchemaNotFound  = 40403
 )
 
 // ExampleSchemaRegistryURL creates a fake in-memory schema registry server and
@@ -89,155 +94,15 @@ func fakeSchemaRegistryURL(name string, logf func(format string, args ...any), p
 	return srv.URL, cleanup
 }
 
-const (
-	errorCodeSubjectNotFound = 40401
-	errorCodeSchemaNotFound  = 40403
-)
-
-// fakeRegistry is a simple fake registry meant to be used in tests. It stores
-// schemas in memory and supports only the basic functionality needed in our
-// tests and supported by our client.
-type fakeRegistry struct {
-	schemas            []sr.SubjectSchema
-	fingerprintIDCache map[uint64]int
-	idSequence         int
-
-	m        sync.Mutex
-	initOnce sync.Once
-}
-
-func (fr *fakeRegistry) init() {
-	fr.initOnce.Do(func() {
-		fr.m.Lock()
-		defer fr.m.Unlock()
-		fr.schemas = make([]sr.SubjectSchema, 0)
-		fr.fingerprintIDCache = make(map[uint64]int)
-	})
-}
-
-func (fr *fakeRegistry) CreateSchema(subject string, schema sr.Schema) sr.SubjectSchema {
-	fr.init()
-	fr.m.Lock()
-	defer fr.m.Unlock()
-
-	fp := internal.Rabin([]byte(schema.Schema))
-	id, ok := fr.fingerprintIDCache[fp]
-	if ok {
-		// schema exists, see if subject matches
-		ss, ok := fr.findBySubjectID(subject, id)
-		if ok {
-			// schema exists for this subject, return it
-			return ss
-		}
-	}
-	if !ok {
-		// schema does not exist yet
-		id = fr.nextID()
-	}
-	version := fr.nextVersion(subject)
-
-	ss := sr.SubjectSchema{
-		Subject: subject,
-		Version: version,
-		ID:      id,
-		Schema:  schema,
-	}
-
-	fr.schemas = append(fr.schemas, ss)
-	fr.fingerprintIDCache[fp] = id
-
-	return ss
-}
-
-func (fr *fakeRegistry) SchemaByID(id int) (sr.Schema, bool) {
-	fr.init()
-	fr.m.Lock()
-	defer fr.m.Unlock()
-
-	s, ok := fr.findOneByID(id)
-	return s, ok
-}
-
-func (fr *fakeRegistry) SchemaBySubjectVersion(subject string, version int) (sr.SubjectSchema, bool) {
-	fr.init()
-	fr.m.Lock()
-	defer fr.m.Unlock()
-
-	return fr.findBySubjectVersion(subject, version)
-}
-
-func (fr *fakeRegistry) SubjectVersionsByID(id int) []sr.SubjectSchema {
-	fr.init()
-	fr.m.Lock()
-	defer fr.m.Unlock()
-
-	return fr.findAllByID(id)
-}
-
-func (fr *fakeRegistry) nextID() int {
-	fr.idSequence++
-	return fr.idSequence
-}
-
-func (fr *fakeRegistry) nextVersion(subject string) int {
-	return len(fr.findBySubject(subject)) + 1
-}
-
-func (fr *fakeRegistry) findBySubject(subject string) []sr.SubjectSchema {
-	var sss []sr.SubjectSchema
-	for _, ss := range fr.schemas {
-		if ss.Subject == subject {
-			sss = append(sss, ss)
-		}
-	}
-	return sss
-}
-
-func (fr *fakeRegistry) findOneByID(id int) (sr.Schema, bool) {
-	for _, ss := range fr.schemas {
-		if ss.ID == id {
-			return ss.Schema, true
-		}
-	}
-	return sr.Schema{}, false
-}
-
-func (fr *fakeRegistry) findAllByID(id int) []sr.SubjectSchema {
-	var sss []sr.SubjectSchema
-	for _, ss := range fr.schemas {
-		if ss.ID == id {
-			sss = append(sss, ss)
-		}
-	}
-	return sss
-}
-
-func (fr *fakeRegistry) findBySubjectID(subject string, id int) (sr.SubjectSchema, bool) {
-	for _, ss := range fr.schemas {
-		if ss.Subject == subject && ss.ID == id {
-			return ss, true
-		}
-	}
-	return sr.SubjectSchema{}, false
-}
-
-func (fr *fakeRegistry) findBySubjectVersion(subject string, version int) (sr.SubjectSchema, bool) {
-	for _, ss := range fr.schemas {
-		if ss.Subject == subject && ss.Version == version {
-			return ss, true
-		}
-	}
-	return sr.SubjectSchema{}, false
-}
-
 // fakeServer is a fake schema registry server.
 type fakeServer struct {
-	fr   fakeRegistry
+	reg  *schema.InMemoryRegistry
 	logf func(format string, args ...any)
 }
 
 func newFakeServer(logf func(format string, args ...any)) *fakeServer {
 	fs := &fakeServer{
+		reg:  schema.NewInMemoryRegistry(),
 		logf: func(format string, args ...any) { /* no op */ },
 	}
 	if logf != nil {
@@ -320,13 +185,13 @@ func (fs *fakeServer) createSchema(w http.ResponseWriter, r *http.Request, subje
 		return
 	}
 
-	ss := fs.fr.CreateSchema(subject, s)
+	ss := fs.reg.CreateSchema(subject, s)
 	fs.json(w, map[string]any{"id": ss.ID})
 }
 
 func (fs *fakeServer) schemaBySubjectVersion(w http.ResponseWriter, _ *http.Request, subject string, version int) {
 	// GET /subjects/{subject}/versions/{version}
-	ss, ok := fs.fr.SchemaBySubjectVersion(subject, version)
+	ss, ok := fs.reg.SchemaBySubjectVersion(subject, version)
 	if !ok {
 		fs.errorWithCode(w, http.StatusNotFound, errorCodeSubjectNotFound, cerrors.New("subject not found"))
 		return
@@ -336,7 +201,7 @@ func (fs *fakeServer) schemaBySubjectVersion(w http.ResponseWriter, _ *http.Requ
 
 func (fs *fakeServer) schemaByID(w http.ResponseWriter, _ *http.Request, id int) {
 	// GET /schemas/ids/{id}
-	s, ok := fs.fr.SchemaByID(id)
+	s, ok := fs.reg.SchemaByID(id)
 	if !ok {
 		fs.errorWithCode(w, http.StatusNotFound, errorCodeSchemaNotFound, cerrors.New("schema not found"))
 		return
@@ -346,7 +211,7 @@ func (fs *fakeServer) schemaByID(w http.ResponseWriter, _ *http.Request, id int)
 
 func (fs *fakeServer) subjectVersionsByID(w http.ResponseWriter, _ *http.Request, id int) {
 	// GET /schemas/ids/{id}/versions
-	sss := fs.fr.SubjectVersionsByID(id)
+	sss := fs.reg.SubjectVersionsByID(id)
 	fs.json(w, sss)
 }
 

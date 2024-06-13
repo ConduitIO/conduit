@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package internal
+package schema
 
 const rabinEmpty = uint64(0xc15d213aa4d7a795)
 

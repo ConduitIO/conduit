@@ -1,4 +1,4 @@
-// Copyright © 2023 Meroxa, Inc.
+// Copyright © 2024 Meroxa, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,29 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package internal
+package schema
 
-import (
-	"testing"
+import "github.com/conduitio/conduit/pkg/foundation/cerrors"
 
-	"github.com/matryer/is"
+var (
+	ErrSchemaNotFound = cerrors.New("schema not found")
 )
-
-func TestRabin(t *testing.T) {
-	testCases := []struct {
-		have string
-		want uint64
-	}{
-		{have: `"int"`, want: 0x7275d51a3f395c8f},
-		{have: `"string"`, want: 0x8f014872634503c7},
-		{have: `"bool"`, want: 0x4a1c6b80ca0bcf48},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.have, func(t *testing.T) {
-			is := is.New(t)
-			got := Rabin([]byte(tc.have))
-			is.Equal(tc.want, got)
-		})
-	}
-}
