@@ -27,7 +27,7 @@ import (
 
 // ConfluentService interacts with the Confluent Schema Registry using Apicurio as a backend
 type ConfluentService struct {
-	client          Client
+	client          *Client
 	logger          log.CtxLogger
 	connString      string
 	healthCheckPath string
@@ -39,14 +39,14 @@ func NewConfluentService(ctx context.Context, l log.CtxLogger, connString, healt
 		l.Err(ctx, err).Msg("failed to create confluent service client")
 	}
 	return &ConfluentService{
-		client:          *client,
+		client:          client,
 		logger:          l,
 		connString:      connString,
 		healthCheckPath: healthCheckPath,
 	}
 }
 
-func (a ConfluentService) Create(ctx context.Context, name string, bytes []byte) (schema.Instance, error) {
+func (a *ConfluentService) Create(ctx context.Context, name string, bytes []byte) (schema.Instance, error) {
 	ss, err := a.client.CreateSchema(ctx, name, sr.Schema{
 		Schema: string(bytes),
 		Type:   sr.TypeAvro,
@@ -64,7 +64,7 @@ func (a ConfluentService) Create(ctx context.Context, name string, bytes []byte)
 	}, nil
 }
 
-func (a ConfluentService) Get(ctx context.Context, id string) (schema.Instance, error) {
+func (a *ConfluentService) Get(ctx context.Context, id string) (schema.Instance, error) {
 	schemaID, err := strconv.Atoi(id)
 	if err != nil {
 		a.logger.Err(ctx, err).Msg(fmt.Sprintf("invalid schema id: %s", id))

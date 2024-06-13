@@ -118,9 +118,7 @@ func DefaultConfig() Config {
 	return cfg
 }
 
-func (c Config) Validate() error {
-	// TODO simplify validation with struct tags
-
+func (c Config) validateDBConfig() error {
 	if c.DB.Driver == nil {
 		switch c.DB.Type {
 		case DBTypeBadger:
@@ -140,7 +138,10 @@ func (c Config) Validate() error {
 			return invalidConfigFieldErr("db.type")
 		}
 	}
+	return nil
+}
 
+func (c Config) validateSchema() error {
 	if c.Schema.Service == nil {
 		switch c.Schema.Type {
 		case SchemaTypeConfluent:
@@ -155,6 +156,19 @@ func (c Config) Validate() error {
 		default:
 			return invalidConfigFieldErr("schema.type")
 		}
+	}
+	return nil
+}
+
+func (c Config) Validate() error {
+	// TODO simplify validation with struct tags
+
+	if err := c.validateDBConfig(); err != nil {
+		return err
+	}
+
+	if err := c.validateSchema(); err != nil {
+		return err
 	}
 
 	if c.API.Enabled {

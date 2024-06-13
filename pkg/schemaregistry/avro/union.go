@@ -46,17 +46,18 @@ func NewUnionResolver(schema avro.Schema) UnionResolver {
 	// traverse the schema and extract paths to all maps and arrays with a union
 	// as the value type
 	traverseSchema(schema, func(p path) {
-		if isMapUnion(p[len(p)-1].schema) {
+		switch {
+		case isMapUnion(p[len(p)-1].schema):
 			// path points to a map with a union type, copy and store it
 			pCopy := make(path, len(p))
 			copy(pCopy, p)
 			mapUnionPaths = append(mapUnionPaths, pCopy)
-		} else if isArrayUnion(p[len(p)-1].schema) {
+		case isArrayUnion(p[len(p)-1].schema):
 			// path points to an array with a union type, copy and store it
 			pCopy := make(path, len(p))
 			copy(pCopy, p)
 			arrayUnionPaths = append(arrayUnionPaths, pCopy)
-		} else if isNullUnion(p[len(p)-1].schema) {
+		case isNullUnion(p[len(p)-1].schema):
 			// path points to a null union, copy and store it
 			pCopy := make(path, len(p)-1)
 			copy(pCopy, p[:len(p)-1])
