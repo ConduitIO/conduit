@@ -27,7 +27,7 @@ require (
 	github.com/golangci/golangci-lint v1.59.1
 	github.com/google/go-cmp v0.6.0
 	github.com/google/uuid v1.6.0
-	github.com/gorilla/websocket v1.5.2
+	github.com/gorilla/websocket v1.5.3
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.20.0
 	github.com/hamba/avro/v2 v2.22.1
 	github.com/hashicorp/go-hclog v1.6.3
