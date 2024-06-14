@@ -25,3 +25,11 @@ updates:
       interval: "monthly"
     commit-message:
       prefix: "npm:"
+
+  # Maintain dependencies for GitHub Actions
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: ".docker:"
