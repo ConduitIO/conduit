@@ -131,21 +131,21 @@ func (n *DestinationAckerNode) worker(
 			msg := n.queue.PopFront()
 			n.m.Unlock()
 
-			pos, err := n.Destination.Ack(ctx)
-			if pos == nil {
-				// empty position is returned only if an actual error happened
-				handleError(msg, cerrors.Errorf("failed to receive ack: %w", err))
-				return
-			}
-			if !bytes.Equal(msg.Record.Position, pos) {
-				handleError(msg, cerrors.Errorf("received unexpected ack, expected position %q but got %q", msg.Record.Position, pos))
-				return
-			}
-
-			err = n.handleAck(msg, err)
+			acks, err := n.Destination.Ack(ctx)
 			if err != nil {
-				errChan <- err
+				handleError(msg, cerrors.Errorf("error while fetching acks: %w", err))
 				return
+			}
+			for _, ack := range acks {
+				if !bytes.Equal(msg.Record.Position, ack.Position) {
+					handleError(msg, cerrors.Errorf("received unexpected ack, expected position %q but got %q", msg.Record.Position, ack.Position))
+					return
+				}
+				err = n.handleAck(msg, ack.Error)
+				if err != nil {
+					errChan <- err
+					return
+				}
 			}
 		}
 	}

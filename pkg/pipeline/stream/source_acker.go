@@ -17,6 +17,8 @@ package stream
 import (
 	"context"
 
+	"github.com/conduitio/conduit-commons/opencdc"
+
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/semaphore"
@@ -94,7 +96,7 @@ func (n *SourceAckerNode) registerAckHandler(msg *Message, ticket semaphore.Tick
 			}
 
 			n.logger.Trace(msg.Ctx).Msg("forwarding ack to source connector")
-			err = n.Source.Ack(msg.Ctx, msg.Record.Position)
+			err = n.Source.Ack(msg.Ctx, []opencdc.Position{msg.Record.Position})
 			if err != nil {
 				return cerrors.Errorf("failed to forward ack to source connector: %w", err)
 			}
@@ -108,7 +110,7 @@ func (n *SourceAckerNode) registerAckHandler(msg *Message, ticket semaphore.Tick
 func (n *SourceAckerNode) registerNackHandler(msg *Message, ticket semaphore.Ticket) {
 	msg.RegisterNackHandler(
 		func(msg *Message, nackMetadata NackMetadata) (err error) {
-			n.logger.Trace(msg.Ctx).Msg("acquiring semaphore for nack")
+			n.logger.Trace(msg.Ctx).Any("nackMetadata", nackMetadata).Msg("acquiring semaphore for nack")
 			lock := n.sem.Acquire(ticket)
 			defer func() {
 				if err != nil {
@@ -131,7 +133,7 @@ func (n *SourceAckerNode) registerNackHandler(msg *Message, ticket semaphore.Tic
 
 			// The nacked record was successfully stored in the DLQ, we consider
 			// the record "processed" so we need to ack it in the source.
-			err = n.Source.Ack(msg.Ctx, msg.Record.Position)
+			err = n.Source.Ack(msg.Ctx, []opencdc.Position{msg.Record.Position})
 			if err != nil {
 				return cerrors.Errorf("failed to forward nack to source connector: %w", err)
 			}

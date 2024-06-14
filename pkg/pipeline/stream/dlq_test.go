@@ -21,13 +21,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/foundation/cchan"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/csync"
 	"github.com/conduitio/conduit/pkg/foundation/metrics"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/noop"
 	"github.com/conduitio/conduit/pkg/pipeline/stream/mock"
-	"github.com/conduitio/conduit/pkg/record"
 	"github.com/google/uuid"
 	"github.com/matryer/is"
 	"go.uber.org/mock/gomock"
@@ -239,7 +239,7 @@ func TestDLQHandlerNode_Nack_ForwardToDLQ_Success(t *testing.T) {
 	for i := 0; i < n.WindowNackThreshold; i++ {
 		msg := &Message{
 			Ctx:    ctx,
-			Record: record.Record{Position: []byte(uuid.NewString())},
+			Record: opencdc.Record{Position: []byte(uuid.NewString())},
 		}
 		wantErr := cerrors.New("test error")
 		wantNackMetadata := NackMetadata{
@@ -252,7 +252,7 @@ func TestDLQHandlerNode_Nack_ForwardToDLQ_Success(t *testing.T) {
 
 		dlqHandler.EXPECT().
 			Write(msg.Ctx, gomock.Any()).
-			Do(func(ctx context.Context, got record.Record) {
+			Do(func(ctx context.Context, got opencdc.Record) {
 				// ignore created at
 				at, _ := got.Metadata.GetCreatedAt()
 				wantRec.Metadata.SetCreatedAt(at)

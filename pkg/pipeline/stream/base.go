@@ -18,10 +18,10 @@ import (
 	"context"
 	"sync"
 
+	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/ctxutil"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/conduitio/conduit/pkg/record"
 )
 
 // nodeState is used to represent the state of a node (in nodes that need it).
@@ -38,7 +38,7 @@ var (
 type triggerFunc func() (*Message, error)
 
 // msgFetcherFunc is used in pubNodeBase to fetch the next message.
-type msgFetcherFunc func(context.Context) (*Message, error)
+type msgFetcherFunc func(context.Context) ([]*Message, error)
 
 // cleanupFunc should be called to release any resources.
 type cleanupFunc func()
@@ -164,7 +164,7 @@ func (n *pubNodeBase) Trigger(
 			}
 			go func() {
 				for {
-					msg, err := msgFetcher(ctx)
+					msgs, err := msgFetcher(ctx)
 					if err != nil {
 						if !cerrors.Is(err, context.Canceled) {
 							// ignore context error because it is going to be caught
@@ -173,7 +173,9 @@ func (n *pubNodeBase) Trigger(
 						}
 						return
 					}
-					n.msgChan <- msg
+					for _, msg := range msgs {
+						n.msgChan <- msg
+					}
 				}
 			}()
 		})
@@ -193,7 +195,7 @@ func (n *pubNodeBase) Trigger(
 // stopping a source connector. It is a bit hacky, but it doesn't require us to
 // create a separate channel for signals which makes it performant and easiest
 // to implement.
-func (n *pubNodeBase) InjectControlMessage(ctx context.Context, msgType ControlMessageType, r record.Record) error {
+func (n *pubNodeBase) InjectControlMessage(ctx context.Context, msgType ControlMessageType, r opencdc.Record) error {
 	n.lock.Lock()
 	defer n.lock.Unlock()
 	if !n.running {

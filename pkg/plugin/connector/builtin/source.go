@@ -17,6 +17,7 @@ package builtin
 import (
 	"context"
 	"fmt"
+	"io"
 
 	"github.com/conduitio/conduit-connector-protocol/cplugin"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -81,7 +82,7 @@ func (s *sourcePluginAdapter) Run(ctx context.Context, stream cplugin.SourceRunS
 				s.logger.Err(ctx, err).Msg("stream already stopped")
 			}
 		} else {
-			inmemStream.Close(connector.ErrStreamNotOpen)
+			inmemStream.Close(io.EOF)
 		}
 		s.logger.Debug(ctx).Msg("Run stopped")
 	}()

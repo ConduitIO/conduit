@@ -22,12 +22,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/foundation/cchan"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/noop"
 	"github.com/conduitio/conduit/pkg/pipeline/stream/mock"
 	connectorPlugin "github.com/conduitio/conduit/pkg/plugin/connector"
-	"github.com/conduitio/conduit/pkg/record"
 	"github.com/google/uuid"
 	"github.com/matryer/is"
 	"go.uber.org/mock/gomock"
@@ -94,14 +94,14 @@ func TestSourceNode_Stop_ConcurrentFail(t *testing.T) {
 	src.EXPECT().ID().Return("source-connector").AnyTimes()
 	src.EXPECT().Open(gomock.Any()).Return(nil).Times(1)
 	src.EXPECT().Errors().Return(make(chan error)).Times(1)
-	src.EXPECT().Read(gomock.Any()).DoAndReturn(func(ctx context.Context) (record.Record, error) {
+	src.EXPECT().Read(gomock.Any()).DoAndReturn(func(ctx context.Context) (opencdc.Record, error) {
 		close(startRead)
 		<-unblockRead
-		return record.Record{}, connectorPlugin.ErrStreamNotOpen
+		return opencdc.Record{}, connectorPlugin.ErrStreamNotOpen
 	}).Times(1)
 	startStop := make(chan struct{})
 	unblockStop := make(chan struct{})
-	src.EXPECT().Stop(gomock.Any()).DoAndReturn(func(ctx context.Context) (record.Position, error) {
+	src.EXPECT().Stop(gomock.Any()).DoAndReturn(func(ctx context.Context) (opencdc.Position, error) {
 		select {
 		case <-startStop:
 			// startStop already closed, ignore
@@ -256,12 +256,12 @@ func TestSourceNode_ForceStop(t *testing.T) {
 				connectorCtx = ctx
 				return nil
 			}).Times(1)
-			src.EXPECT().Read(gomock.Any()).DoAndReturn(func(ctx context.Context) (record.Record, error) {
+			src.EXPECT().Read(gomock.Any()).DoAndReturn(func(ctx context.Context) (opencdc.Record, error) {
 				close(onStuck)
-				<-connectorCtx.Done()          // block until connector stream is closed
-				return record.Record{}, io.EOF // io.EOF is returned when the stream is closed
+				<-connectorCtx.Done()           // block until connector stream is closed
+				return opencdc.Record{}, io.EOF // io.EOF is returned when the stream is closed
 			}).Times(1)
-			src.EXPECT().Stop(gomock.Any()).DoAndReturn(func(ctx context.Context) (record.Position, error) {
+			src.EXPECT().Stop(gomock.Any()).DoAndReturn(func(ctx context.Context) (opencdc.Position, error) {
 				<-ctx.Done() // block until context is done
 				return nil, ctx.Err()
 			}).Times(1)
@@ -321,18 +321,18 @@ func TestSourceNode_ForceStop(t *testing.T) {
 // newMockSource creates a connector source and record that will be produced by
 // the source connector. After producing the requested number of records it
 // returns wantErr or blocks until the context is closed.
-func newMockSource(ctrl *gomock.Controller, recordCount int, wantErr error) (*mock.Source, []record.Record) {
+func newMockSource(ctrl *gomock.Controller, recordCount int, wantErr error) (*mock.Source, []opencdc.Record) {
 	position := 0
-	records := make([]record.Record, recordCount)
+	records := make([]opencdc.Record, recordCount)
 	for i := 0; i < recordCount; i++ {
-		records[i] = record.Record{
-			Operation: record.OperationCreate,
-			Key:       record.RawData{Raw: []byte(uuid.NewString())},
-			Payload: record.Change{
+		records[i] = opencdc.Record{
+			Operation: opencdc.OperationCreate,
+			Key:       opencdc.RawData(uuid.NewString()),
+			Payload: opencdc.Change{
 				Before: nil,
-				After:  record.RawData{Raw: []byte(uuid.NewString())},
+				After:  opencdc.RawData(uuid.NewString()),
 			},
-			Position: record.Position(strconv.Itoa(i)),
+			Position: opencdc.Position(strconv.Itoa(i)),
 		}
 	}
 
@@ -342,21 +342,21 @@ func newMockSource(ctrl *gomock.Controller, recordCount int, wantErr error) (*mo
 	source.EXPECT().ID().Return("source-connector").AnyTimes()
 	source.EXPECT().Open(gomock.Any()).Return(nil).Times(1)
 	source.EXPECT().Errors().Return(make(chan error)).Times(1)
-	source.EXPECT().Read(gomock.Any()).DoAndReturn(func(ctx context.Context) (record.Record, error) {
+	source.EXPECT().Read(gomock.Any()).DoAndReturn(func(ctx context.Context) ([]opencdc.Record, error) {
 		if position == recordCount {
 			if wantErr != nil {
-				return record.Record{}, wantErr
+				return nil, wantErr
 			}
 			<-teardown
-			return record.Record{}, connectorPlugin.ErrStreamNotOpen
+			return nil, connectorPlugin.ErrStreamNotOpen
 		}
 		r := records[position]
 		position++
-		return r, nil
+		return []opencdc.Record{r}, nil
 	}).
 		MinTimes(recordCount).    // can be recordCount if the source receives stop before producing last record
 		MaxTimes(recordCount + 1) // can be recordCount+1 if the source checks for another record before the stop signal is received
-	source.EXPECT().Stop(gomock.Any()).DoAndReturn(func(ctx context.Context) (record.Position, error) {
+	source.EXPECT().Stop(gomock.Any()).DoAndReturn(func(ctx context.Context) (opencdc.Position, error) {
 		if len(records) == 0 {
 			return nil, nil
 		}

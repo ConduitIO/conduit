@@ -20,11 +20,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/foundation/cchan"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/noop"
 	"github.com/conduitio/conduit/pkg/pipeline/stream/mock"
-	"github.com/conduitio/conduit/pkg/record"
 	"github.com/matryer/is"
 	"go.uber.org/mock/gomock"
 )
@@ -66,7 +66,7 @@ func TestDestinationNode_ForceStop(t *testing.T) {
 				connectorCtx = ctx
 				return nil
 			}).Times(1)
-			src.EXPECT().Write(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, r record.Record) error {
+			src.EXPECT().Write(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, r []opencdc.Record) error {
 				close(onStuck)
 				<-connectorCtx.Done() // block until connector stream is closed
 				return io.EOF         // io.EOF is returned when the stream is closed

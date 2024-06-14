@@ -22,8 +22,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/conduitio/conduit-commons/opencdc"
-	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/ctxutil"
 	"github.com/conduitio/conduit/pkg/foundation/database/badger"
@@ -33,8 +31,9 @@ import (
 	conn_plugin "github.com/conduitio/conduit/pkg/plugin/connector"
 	conn_builtin "github.com/conduitio/conduit/pkg/plugin/connector/builtin"
 	conn_standalone "github.com/conduitio/conduit/pkg/plugin/connector/standalone"
+	proc_plugin "github.com/conduitio/conduit/pkg/plugin/processor"
+	proc_builtin "github.com/conduitio/conduit/pkg/plugin/processor/builtin"
 	"github.com/conduitio/conduit/pkg/processor"
-	"github.com/conduitio/conduit/pkg/record"
 	"github.com/google/go-cmp/cmp"
 	"github.com/matryer/is"
 	"github.com/rs/zerolog"
@@ -76,19 +75,11 @@ func TestPipelineSimple(t *testing.T) {
 		conn_standalone.NewRegistry(logger, ""),
 	)
 
-	procPluginService := mock.NewProcessorPluginService(gomock.NewController(t))
-	procPluginService.EXPECT().
-		NewProcessor(gomock.Any(), "removereadat", gomock.Any()).
-		Return(
-			sdk.NewProcessorFunc(sdk.Specification{Name: "removereadat"}, func(ctx context.Context, r opencdc.Record) (opencdc.Record, error) {
-				delete(r.Metadata, record.MetadataReadAt) // read at is different every time, remove it
-				return r, nil
-			}),
-			nil,
-		).
-		// once when creating a processor instance (to verify the plugin exists)
-		// and once when building the pipeline nodes (to make a runnable processor)
-		Times(2)
+	procPluginService := proc_plugin.NewPluginService(
+		logger,
+		proc_builtin.NewRegistry(logger, proc_builtin.DefaultBuiltinProcessors),
+		nil,
+	)
 
 	orc := NewOrchestrator(
 		db,
@@ -121,12 +112,16 @@ func TestPipelineSimple(t *testing.T) {
 
 	_, err = orc.Processors.Create(
 		ctx,
-		"removereadat",
+		"field.exclude",
 		processor.Parent{
 			ID:   pl.ID,
 			Type: processor.ParentTypePipeline,
 		},
-		processor.Config{},
+		processor.Config{
+			Settings: map[string]string{
+				"fields": `.Metadata["opencdc.readAt"]`,
+			},
+		},
 		"",
 	)
 	is.NoErr(err)

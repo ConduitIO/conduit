@@ -51,6 +51,11 @@ type DestinationState struct {
 	Positions map[string]opencdc.Position
 }
 
+type DestinationAck struct {
+	Position opencdc.Position
+	Error    error
+}
+
 func (d *Destination) ID() string {
 	return d.Instance.ID
 }
@@ -205,7 +210,7 @@ func (d *Destination) Write(ctx context.Context, r []opencdc.Record) error {
 	return nil
 }
 
-func (d *Destination) Ack(context.Context) ([]opencdc.Position, error) {
+func (d *Destination) Ack(context.Context) ([]DestinationAck, error) {
 	cleanup, err := d.preparePluginCall()
 	defer cleanup()
 	if err != nil {
@@ -217,16 +222,14 @@ func (d *Destination) Ack(context.Context) ([]opencdc.Position, error) {
 		return nil, cerrors.Errorf("error receiving ack: %w", err)
 	}
 
-	var positions []opencdc.Position
-	for _, ack := range resp.Acks {
-		positions = append(positions, ack.Position)
+	acks := make([]DestinationAck, len(resp.Acks))
+	for i, ack := range resp.Acks {
+		acks[i] = DestinationAck{Position: ack.Position}
 		if ack.Error != "" {
-			// Return positions of positively acknowledged records and the error
-			// for the last, negatively acknowledged record.
-			return positions, cerrors.Errorf("plugin negatively acknowledged record: %s", ack.Error)
+			acks[i].Error = cerrors.New(ack.Error)
 		}
 	}
-	return positions, nil
+	return acks, nil
 }
 
 func (d *Destination) OnDelete(ctx context.Context) (err error) {

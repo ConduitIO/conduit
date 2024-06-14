@@ -19,9 +19,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/conduitio/conduit-commons/opencdc"
+
 	"github.com/conduitio/conduit/pkg/foundation/cchan"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/record"
 	"github.com/matryer/is"
 )
 
@@ -44,8 +45,8 @@ func TestFanout_HappyPath(t *testing.T) {
 	}()
 
 	want := &Message{
-		Record: record.Record{
-			Key: record.RawData{Raw: []byte("test-key")},
+		Record: opencdc.Record{
+			Key: opencdc.RawData("test-key"),
 		},
 	}
 	in <- want

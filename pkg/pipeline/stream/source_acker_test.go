@@ -22,11 +22,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/foundation/cchan"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/csync"
 	"github.com/conduitio/conduit/pkg/pipeline/stream/mock"
-	"github.com/conduitio/conduit/pkg/record"
 	"github.com/matryer/is"
 	"go.uber.org/mock/gomock"
 )
@@ -40,9 +40,9 @@ func TestSourceAckerNode_ForwardAck(t *testing.T) {
 
 	_, in, out := helper.newSourceAckerNode(ctx, t, src)
 
-	want := &Message{Ctx: ctx, Record: record.Record{Position: []byte("foo")}}
+	want := &Message{Ctx: ctx, Record: opencdc.Record{Position: []byte("foo")}}
 	// expect to receive an ack in the source after the message is acked
-	src.EXPECT().Ack(want.Ctx, want.Record.Position).Return(nil)
+	src.EXPECT().Ack(want.Ctx, []opencdc.Position{want.Record.Position}).Return(nil)
 
 	in <- want
 	got := <-out
@@ -108,7 +108,7 @@ func TestSourceAckerNode_FailedAck(t *testing.T) {
 	// the 500th message should be acked unsuccessfully
 	wantErr := cerrors.New("test error")
 	src.EXPECT().
-		Ack(ctx, messages[500].Record.Position).
+		Ack(ctx, []opencdc.Position{messages[500].Record.Position}).
 		Return(wantErr).
 		After(expectedCalls[len(expectedCalls)-1]) // should happen after last acked call
 
@@ -250,7 +250,7 @@ func (sourceAckerNodeTestHelper) sendMessages(
 	for i := 0; i < count; i++ {
 		m := &Message{
 			Ctx: ctx,
-			Record: record.Record{
+			Record: opencdc.Record{
 				Position: []byte(strconv.Itoa(i)), // position is monotonically increasing
 			},
 		}
@@ -272,7 +272,7 @@ func (sourceAckerNodeTestHelper) expectAcks(
 	expectedCalls := make([]*gomock.Call, count)
 	for i := 0; i < count; i++ {
 		expectedCalls[i] = src.EXPECT().
-			Ack(ctx, messages[i].Record.Position).
+			Ack(ctx, []opencdc.Position{messages[i].Record.Position}).
 			Return(nil)
 	}
 

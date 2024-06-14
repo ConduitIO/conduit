@@ -18,11 +18,10 @@ import (
 	"bytes"
 	"context"
 
+	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/foundation/csync"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/pipeline/stream"
-	"github.com/conduitio/conduit/pkg/record"
 )
 
 // DLQDestination is a DLQ handler that forwards DLQ records to a destination
@@ -31,7 +30,7 @@ type DLQDestination struct {
 	Destination stream.Destination
 	Logger      log.CtxLogger
 
-	lastPosition record.Position
+	lastPosition opencdc.Position
 }
 
 func (d *DLQDestination) Open(ctx context.Context) error {
@@ -42,37 +41,28 @@ func (d *DLQDestination) Open(ctx context.Context) error {
 // waits until an ack is received for the record before it returns. If the
 // record write fails or the destination returns a nack, the function returns an
 // error.
-func (d *DLQDestination) Write(ctx context.Context, rec record.Record) error {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	var (
-		wg     csync.WaitGroup
-		pos    record.Position
-		ackErr error
-	)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		pos, ackErr = d.Destination.Ack(ctx)
-	}()
-
-	err := d.Destination.Write(ctx, rec)
+func (d *DLQDestination) Write(ctx context.Context, rec opencdc.Record) error {
+	err := d.Destination.Write(ctx, []opencdc.Record{rec})
 	if err != nil {
 		return err
 	}
 
 	d.lastPosition = rec.Position
 
-	err = wg.Wait(ctx)
+	ack, err := d.Destination.Ack(ctx)
 	if err != nil {
 		return err
 	}
-	if !bytes.Equal(rec.Position, pos) {
-		return cerrors.Errorf("received unexpected ack, expected position %q but got %q", rec.Position, pos)
+
+	if len(ack) != 1 {
+		return cerrors.Errorf("expected 1 ack but got %d", len(ack))
 	}
-	if ackErr != nil {
-		return ackErr // nack
+
+	if !bytes.Equal(rec.Position, ack[0].Position) {
+		return cerrors.Errorf("received unexpected ack, expected position %q but got %q", rec.Position, ack)
+	}
+	if ack[0].Error != nil {
+		return ack[0].Error // nack
 	}
 
 	return nil
