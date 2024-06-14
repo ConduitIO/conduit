@@ -52,8 +52,6 @@ func TestConfluentService_Create(t *testing.T) {
 	instance, err := service.Create(ctx, name, bytes)
 	assert.NoError(t, err)
 
-	// TODO: Be able to compare the schema type more consistently (i.e.: use the same type)
-	// assert.Equal(t, sr.TypeAvro.String(), instance.Type)
 	assert.Equal(t, bytes, instance.Bytes)
 	assert.Equal(t, name, instance.Name)
 }

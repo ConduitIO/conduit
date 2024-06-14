@@ -46,8 +46,8 @@ func NewConfluentService(ctx context.Context, l log.CtxLogger, connString, healt
 	}
 }
 
-func (a *ConfluentService) Create(ctx context.Context, name string, bytes []byte) (schema.Instance, error) {
-	ss, err := a.client.CreateSchema(ctx, name, sr.Schema{
+func (c *ConfluentService) Create(ctx context.Context, name string, bytes []byte) (schema.Instance, error) {
+	ss, err := c.client.CreateSchema(ctx, name, sr.Schema{
 		Schema: string(bytes),
 		Type:   sr.TypeAvro,
 	})
@@ -64,15 +64,15 @@ func (a *ConfluentService) Create(ctx context.Context, name string, bytes []byte
 	}, nil
 }
 
-func (a *ConfluentService) Get(ctx context.Context, id string) (schema.Instance, error) {
+func (c *ConfluentService) Get(ctx context.Context, id string) (schema.Instance, error) {
 	schemaID, err := strconv.Atoi(id)
 	if err != nil {
-		a.logger.Err(ctx, err).Msg(fmt.Sprintf("invalid schema id: %s", id))
+		c.logger.Err(ctx, err).Msg(fmt.Sprintf("invalid schema id: %s", id))
 		return schema.Instance{}, err
 	}
-	s, err := a.client.SchemaByID(ctx, schemaID)
+	s, err := c.client.SchemaByID(ctx, schemaID)
 	if err != nil {
-		a.logger.Err(ctx, err).Msg(fmt.Sprintf("failed to get schema by id: %s", id))
+		c.logger.Err(ctx, err).Msg(fmt.Sprintf("failed to get schema by id: %s", id))
 		return schema.Instance{}, err
 	}
 
@@ -82,24 +82,24 @@ func (a *ConfluentService) Get(ctx context.Context, id string) (schema.Instance,
 	}, nil
 }
 
-func (a *ConfluentService) Check(ctx context.Context) error {
-	url := fmt.Sprintf("%s%s", a.connString, a.healthCheckPath)
+func (c *ConfluentService) Check(ctx context.Context) error {
+	url := fmt.Sprintf("%s%s", c.connString, c.healthCheckPath)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		a.logger.Err(ctx, err).Msg("couldn't create http request for schema registry")
+		c.logger.Err(ctx, err).Msg("couldn't create http request for schema registry")
 		return err
 	}
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		a.logger.Err(ctx, err).Msg("couldn't connect with the schema registry")
+		c.logger.Err(ctx, err).Msg("couldn't connect with the schema registry")
 		return err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		a.logger.Err(ctx, err).Msg(fmt.Sprintf("schema registry healthcheck failed with status code %d", resp.StatusCode))
+		c.logger.Err(ctx, err).Msg(fmt.Sprintf("schema registry healthcheck failed with status code %d", resp.StatusCode))
 		return err
 	}
 

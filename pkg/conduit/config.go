@@ -21,7 +21,6 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/database"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin/connector/builtin"
-	"github.com/conduitio/conduit/pkg/schemaregistry"
 	"github.com/rs/zerolog"
 )
 
@@ -89,8 +88,7 @@ type Config struct {
 	}
 
 	Schema struct {
-		Service schemaregistry.Service
-		Type    string
+		Type string
 
 		Confluent struct {
 			ConnectionString string
@@ -141,21 +139,19 @@ func (c Config) validateDBConfig() error {
 	return nil
 }
 
-func (c Config) validateSchema() error {
-	if c.Schema.Service == nil {
-		switch c.Schema.Type {
-		case SchemaTypeConfluent:
-			if c.Schema.Confluent.ConnectionString == "" {
-				return requiredConfigFieldErr("schema.confluent.connection-string")
-			}
-			if c.Schema.Confluent.HealthCheckPath == "" {
-				return requiredConfigFieldErr("schema.confluent.health-check-path")
-			}
-		case SchemaTypeInMemory:
-			// all good
-		default:
-			return invalidConfigFieldErr("schema.type")
+func (c Config) validateSchemaConfig() error {
+	switch c.Schema.Type {
+	case SchemaTypeConfluent:
+		if c.Schema.Confluent.ConnectionString == "" {
+			return requiredConfigFieldErr("schema.confluent.connection-string")
 		}
+		if c.Schema.Confluent.HealthCheckPath == "" {
+			return requiredConfigFieldErr("schema.confluent.health-check-path")
+		}
+	case SchemaTypeInMemory:
+		// all good
+	default:
+		return invalidConfigFieldErr("schema.type")
 	}
 	return nil
 }
@@ -167,7 +163,7 @@ func (c Config) Validate() error {
 		return err
 	}
 
-	if err := c.validateSchema(); err != nil {
+	if err := c.validateSchemaConfig(); err != nil {
 		return err
 	}
 
