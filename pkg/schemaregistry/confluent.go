@@ -84,7 +84,7 @@ func (c *ConfluentService) Get(ctx context.Context, id string) (schema.Instance,
 	}, nil
 }
 
-func (c *ConfluentService) getHealthCheckUrl() (string, error) {
+func (c *ConfluentService) getHealthCheckURL() (string, error) {
 	baseURL, err := url.Parse(c.connString)
 	if err != nil {
 		return "", err
@@ -95,7 +95,7 @@ func (c *ConfluentService) getHealthCheckUrl() (string, error) {
 }
 
 func (c *ConfluentService) Check(ctx context.Context) error {
-	url, err := c.getHealthCheckUrl()
+	url, err := c.getHealthCheckURL()
 	if err != nil {
 		return err
 	}

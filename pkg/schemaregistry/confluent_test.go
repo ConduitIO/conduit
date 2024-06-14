@@ -118,7 +118,7 @@ func TestConfluentService_GetHealthCheckUrl(t *testing.T) {
 
 			expectedURL := "http://localhost:8085/health"
 
-			gotURL, err := service.getHealthCheckUrl()
+			gotURL, err := service.getHealthCheckURL()
 			assert.NoError(t, err)
 			assert.Equal(t, expectedURL, gotURL)
 		})
