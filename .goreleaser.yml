@@ -43,6 +43,7 @@ changelog:
       - '^npm:'
       - '^go.mod:'
       - '^.github:'
+      - '^docker:'
       - Merge branch
 release:
   prerelease: auto

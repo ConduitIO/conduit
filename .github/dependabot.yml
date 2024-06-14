@@ -32,4 +32,4 @@ updates:
     schedule:
       interval: "weekly"
     commit-message:
-      prefix: ".docker:"
+      prefix: "docker:"
