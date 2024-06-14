@@ -50,13 +50,12 @@ func TestConfluentService_Create(t *testing.T) {
 	bytes := []byte(`{"type":"record","name":"test","fields":[{"name":"field1","type":"string"}]}`)
 
 	instance, err := service.Create(ctx, name, bytes)
-
 	assert.NoError(t, err)
-	assert.Equal(t, name, instance.Name)
 
 	// TODO: Be able to compare the schema type more consistently (i.e.: use the same type)
-	//assert.Equal(t, sr.TypeAvro.String(), instance.Type)
+	// assert.Equal(t, sr.TypeAvro.String(), instance.Type)
 	assert.Equal(t, bytes, instance.Bytes)
+	assert.Equal(t, name, instance.Name)
 }
 
 func TestConfluentService_Get(t *testing.T) {
@@ -69,8 +68,9 @@ func TestConfluentService_Get(t *testing.T) {
 	bytes := []byte(`{"type":"record","name":"test","fields":[{"name":"field1","type":"string"}]}`)
 
 	instance, err := service.Create(ctx, expectedName, bytes)
-	gotInstance, err := service.Get(ctx, instance.ID)
+	assert.NoError(t, err)
 
+	gotInstance, err := service.Get(ctx, instance.ID)
 	assert.NoError(t, err)
 	assert.Equalf(t, gotInstance.ID, instance.ID, "expected id %s, got %s", instance.ID, gotInstance.ID)
 	assert.Emptyf(t, gotInstance.Name, "expected empty name, got %s", gotInstance.Name)
