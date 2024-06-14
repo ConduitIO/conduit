@@ -44,6 +44,7 @@ require (
 	github.com/prometheus/common v0.53.0
 	github.com/rs/zerolog v1.33.0
 	github.com/stealthrocket/wazergo v0.19.1
+	github.com/stretchr/testify v1.9.0
 	github.com/tetratelabs/wazero v1.7.2
 	github.com/twmb/go-cache v1.2.1
 	go.uber.org/goleak v1.3.0
@@ -290,7 +291,6 @@ require (
 	github.com/stbenjam/no-sprintf-host-port v0.1.1 // indirect
 	github.com/stoewer/go-strcase v1.3.0 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
-	github.com/stretchr/testify v1.9.0 // indirect
 	github.com/subosito/gotenv v1.4.1 // indirect
 	github.com/t-yuki/gocover-cobertura v0.0.0-20180217150009-aaee18c8195c // indirect
 	github.com/tdakkota/asciicheck v0.2.0 // indirect
