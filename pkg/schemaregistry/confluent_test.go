@@ -84,3 +84,44 @@ func TestConfluentService_Check(t *testing.T) {
 
 	assert.NoError(t, err)
 }
+
+func TestConfluentService_GetHealthCheckUrl(t *testing.T) {
+
+	testCases := []struct {
+		name            string
+		connString      string
+		healthCheckPath string
+	}{
+		{
+			name:            "when connString has trailing slash and healthCheckPath has leading slash",
+			connString:      "http://localhost:8085/",
+			healthCheckPath: "/health",
+		},
+		{
+			name:            "when connString has no trailing slash and healthCheckPath has no leading slash",
+			connString:      "http://localhost:8085",
+			healthCheckPath: "/health",
+		},
+		{
+			name:            "when connString has no trailing slash and healthCheckPath has no leading slash",
+			connString:      "http://localhost:8085",
+			healthCheckPath: "health",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			l := log.Nop()
+
+			service := NewConfluentService(ctx, l, tc.connString, tc.healthCheckPath)
+
+			expectedURL := "http://localhost:8085/health"
+
+			gotURL, err := service.getHealthCheckUrl()
+			assert.NoError(t, err)
+			assert.Equal(t, expectedURL, gotURL)
+		})
+	}
+
+}

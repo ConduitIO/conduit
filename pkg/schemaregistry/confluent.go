@@ -18,7 +18,9 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
+	"strings"
 
 	"github.com/conduitio/conduit-commons/schema"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -82,8 +84,21 @@ func (c *ConfluentService) Get(ctx context.Context, id string) (schema.Instance,
 	}, nil
 }
 
+func (c *ConfluentService) getHealthCheckUrl() (string, error) {
+	baseURL, err := url.Parse(c.connString)
+	if err != nil {
+		return "", err
+	}
+	path := strings.TrimLeft(c.healthCheckPath, "/")
+	baseURL.Path = path
+	return baseURL.String(), nil
+}
+
 func (c *ConfluentService) Check(ctx context.Context) error {
-	url := fmt.Sprintf("%s%s", c.connString, c.healthCheckPath)
+	url, err := c.getHealthCheckUrl()
+	if err != nil {
+		return err
+	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
