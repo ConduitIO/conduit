@@ -77,8 +77,8 @@ func (a *ConfluentService) Get(ctx context.Context, id string) (schema.Instance,
 	}
 
 	return schema.Instance{
-		ID:   id,
-		Name: s.Schema,
+		ID:    id,
+		Bytes: []byte(s.Schema),
 	}, nil
 }
 
