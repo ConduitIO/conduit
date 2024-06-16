@@ -28,6 +28,9 @@ const (
 	DBTypeBadger   = "badger"
 	DBTypePostgres = "postgres"
 	DBTypeInMemory = "inmemory"
+
+	SchemaTypeConfluent = "confluent"
+	SchemaTypeInMemory  = "inmemory"
 )
 
 // Config holds all configurable values for Conduit.
@@ -83,11 +86,20 @@ type Config struct {
 		memprofile   string
 		blockprofile string
 	}
+
+	Schema struct {
+		Type string
+
+		Confluent struct {
+			ConnectionString string
+			HealthCheckPath  string
+		}
+	}
 }
 
 func DefaultConfig() Config {
 	var cfg Config
-	cfg.DB.Type = "badger"
+	cfg.DB.Type = DBTypeBadger
 	cfg.DB.Badger.Path = "conduit.db"
 	cfg.DB.Postgres.Table = "conduit_kv_store"
 	cfg.API.Enabled = true
@@ -98,14 +110,13 @@ func DefaultConfig() Config {
 	cfg.Connectors.Path = "./connectors"
 	cfg.Processors.Path = "./processors"
 	cfg.Pipelines.Path = "./pipelines"
+	cfg.Schema.Type = SchemaTypeInMemory
 
 	cfg.PluginDispenserFactories = builtin.DefaultDispenserFactories
 	return cfg
 }
 
-func (c Config) Validate() error {
-	// TODO simplify validation with struct tags
-
+func (c Config) validateDBConfig() error {
 	if c.DB.Driver == nil {
 		switch c.DB.Type {
 		case DBTypeBadger:
@@ -124,6 +135,36 @@ func (c Config) Validate() error {
 		default:
 			return invalidConfigFieldErr("db.type")
 		}
+	}
+	return nil
+}
+
+func (c Config) validateSchemaConfig() error {
+	switch c.Schema.Type {
+	case SchemaTypeConfluent:
+		if c.Schema.Confluent.ConnectionString == "" {
+			return requiredConfigFieldErr("schema.confluent.connection-string")
+		}
+		if c.Schema.Confluent.HealthCheckPath == "" {
+			return requiredConfigFieldErr("schema.confluent.health-check-path")
+		}
+	case SchemaTypeInMemory:
+		// all good
+	default:
+		return invalidConfigFieldErr("schema.type")
+	}
+	return nil
+}
+
+func (c Config) Validate() error {
+	// TODO simplify validation with struct tags
+
+	if err := c.validateDBConfig(); err != nil {
+		return err
+	}
+
+	if err := c.validateSchemaConfig(); err != nil {
+		return err
 	}
 
 	if c.API.Enabled {

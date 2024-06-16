@@ -27,7 +27,6 @@ import (
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/schema"
 	"github.com/goccy/go-json"
 	"github.com/lovromazgon/franz-go/pkg/sr"
 )
@@ -96,13 +95,13 @@ func fakeSchemaRegistryURL(name string, logf func(format string, args ...any), p
 
 // fakeServer is a fake schema registry server.
 type fakeServer struct {
-	reg  *schema.InMemoryRegistry
+	reg  *InMemoryRegistry
 	logf func(format string, args ...any)
 }
 
 func newFakeServer(logf func(format string, args ...any)) *fakeServer {
 	fs := &fakeServer{
-		reg:  schema.NewInMemoryRegistry(),
+		reg:  NewInMemoryRegistry(),
 		logf: func(format string, args ...any) { /* no op */ },
 	}
 	if logf != nil {
