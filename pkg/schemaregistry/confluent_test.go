@@ -21,7 +21,7 @@ import (
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/stretchr/testify/assert"
+	"github.com/matryer/is"
 )
 
 const (
@@ -35,14 +35,16 @@ func TestNewConfluentService(t *testing.T) {
 
 	service := NewConfluentService(ctx, l, connString, healthCheckPath)
 
-	assert.NotNil(t, service)
-	assert.Equal(t, connString, service.connString)
-	assert.Equal(t, healthCheckPath, service.healthCheckPath)
+	is := is.New(t)
+	is.True(service != nil)
+	is.Equal(connString, service.connString)
+	is.Equal(healthCheckPath, service.healthCheckPath)
 }
 
 func TestConfluentService_Create(t *testing.T) {
 	ctx := context.Background()
 	l := log.Nop()
+	is := is.New(t)
 
 	service := NewConfluentService(ctx, l, connString, healthCheckPath)
 
@@ -50,15 +52,15 @@ func TestConfluentService_Create(t *testing.T) {
 	bytes := []byte(`{"type":"record","name":"test","fields":[{"name":"field1","type":"string"}]}`)
 
 	instance, err := service.Create(ctx, name, bytes)
-	assert.NoError(t, err)
-
-	assert.Equal(t, bytes, instance.Bytes)
-	assert.Equal(t, name, instance.Name)
+	is.NoErr(err)
+	is.Equal(bytes, instance.Bytes)
+	is.Equal(name, instance.Name)
 }
 
 func TestConfluentService_Get(t *testing.T) {
 	ctx := context.Background()
 	l := log.Nop()
+	is := is.New(t)
 
 	service := NewConfluentService(ctx, l, connString, healthCheckPath)
 
@@ -66,27 +68,27 @@ func TestConfluentService_Get(t *testing.T) {
 	bytes := []byte(`{"type":"record","name":"test","fields":[{"name":"field1","type":"string"}]}`)
 
 	instance, err := service.Create(ctx, expectedName, bytes)
-	assert.NoError(t, err)
+	is.NoErr(err)
 
 	gotInstance, err := service.Get(ctx, instance.ID)
-	assert.NoError(t, err)
-	assert.Equalf(t, gotInstance.ID, instance.ID, "expected id %s, got %s", instance.ID, gotInstance.ID)
-	assert.Emptyf(t, gotInstance.Name, "expected empty name, got %s", gotInstance.Name)
-	assert.Equalf(t, gotInstance.Bytes, instance.Bytes, "expected bytes %s, got %s", instance.Bytes, gotInstance.Bytes)
+	is.NoErr(err)
+
+	is.Equal(gotInstance.ID, instance.ID)
+	is.Equal(gotInstance.Name, instance.Name)
+	is.Equal(gotInstance.Bytes, instance.Bytes)
 }
 
 func TestConfluentService_Check(t *testing.T) {
 	ctx := context.Background()
 	l := log.Nop()
+	is := is.New(t)
 
 	service := NewConfluentService(ctx, l, connString, healthCheckPath)
 	err := service.Check(ctx)
-
-	assert.NoError(t, err)
+	is.NoErr(err)
 }
 
 func TestConfluentService_GetHealthCheckUrl(t *testing.T) {
-
 	testCases := []struct {
 		name            string
 		connString      string
@@ -113,14 +115,15 @@ func TestConfluentService_GetHealthCheckUrl(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := context.Background()
 			l := log.Nop()
+			is := is.New(t)
 
 			service := NewConfluentService(ctx, l, tc.connString, tc.healthCheckPath)
 
 			expectedURL := "http://localhost:8085/health"
 
 			gotURL, err := service.getHealthCheckURL()
-			assert.NoError(t, err)
-			assert.Equal(t, expectedURL, gotURL)
+			is.NoErr(err)
+			is.Equal(expectedURL, gotURL)
 		})
 	}
 
