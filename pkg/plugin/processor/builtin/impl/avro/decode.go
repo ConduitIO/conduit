@@ -25,7 +25,7 @@ import (
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/avro/schemaregistry"
+	"github.com/conduitio/conduit/pkg/schemaregistry"
 	"github.com/lovromazgon/franz-go/pkg/sr"
 )
 

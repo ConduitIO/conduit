@@ -12,11 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package schema
+package schemaregistry
 
 import (
 	"sync"
 
+	"github.com/conduitio/conduit/pkg/schemaregistry/internal"
 	"github.com/lovromazgon/franz-go/pkg/sr"
 )
 
@@ -42,7 +43,7 @@ func (r *InMemoryRegistry) CreateSchema(subject string, schema sr.Schema) sr.Sub
 	r.m.Lock()
 	defer r.m.Unlock()
 
-	fp := Rabin([]byte(schema.Schema))
+	fp := internal.Rabin([]byte(schema.Schema))
 	id, ok := r.fingerprintIDCache[fp]
 	if ok {
 		// schema exists, see if subject matches
