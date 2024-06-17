@@ -146,17 +146,6 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 
 	orc := orchestrator.NewOrchestrator(db, logger, plService, connService, procService, connPluginService, procPluginService)
 
-	switch cfg.Schema.Type {
-	case SchemaTypeConfluent:
-		schemaService = schemaregistry.NewConfluentService(
-			context.Background(), logger, cfg.Schema.Confluent.ConnectionString, cfg.Schema.Confluent.HealthCheckPath,
-		)
-	case SchemaTypeInMemory:
-		schemaService = schemaregistry.NewInMemoryService()
-	default:
-		schemaService = schemaregistry.NewInMemoryService()
-	}
-
 	r := &Runtime{
 		Config:           cfg,
 		DB:               db,
@@ -224,7 +213,17 @@ func newServices(
 		standaloneReg,
 	)
 
-	schemaService := schemaregistry.NewInMemoryService()
+	var schemaService schemaregistry.Service
+	switch cfg.Schema.Type {
+	case SchemaTypeConfluent:
+		schemaService = schemaregistry.NewConfluentService(
+			context.Background(), logger, cfg.Schema.Confluent.ConnectionString, cfg.Schema.Confluent.HealthCheckPath,
+		)
+	case SchemaTypeInMemory:
+		schemaService = schemaregistry.NewInMemoryService()
+	default:
+		schemaService = schemaregistry.NewInMemoryService()
+	}
 
 	connPluginService := conn_plugin.NewPluginService(
 		logger,

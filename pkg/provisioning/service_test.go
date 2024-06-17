@@ -16,7 +16,6 @@ package provisioning
 
 import (
 	"context"
-	"github.com/conduitio/conduit/pkg/schemaregistry"
 	"os"
 	"testing"
 	"time"
@@ -39,6 +38,7 @@ import (
 	p3 "github.com/conduitio/conduit/pkg/provisioning/test/pipelines3"
 	p4 "github.com/conduitio/conduit/pkg/provisioning/test/pipelines4-integration-test"
 	"github.com/conduitio/conduit/pkg/record"
+	"github.com/conduitio/conduit/pkg/schemaregistry"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/matryer/is"

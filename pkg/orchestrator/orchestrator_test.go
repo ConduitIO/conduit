@@ -17,7 +17,6 @@ package orchestrator
 import (
 	"context"
 	"fmt"
-	"github.com/conduitio/conduit/pkg/schemaregistry"
 	"os"
 	"reflect"
 	"testing"
@@ -36,6 +35,7 @@ import (
 	conn_standalone "github.com/conduitio/conduit/pkg/plugin/connector/standalone"
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/record"
+	"github.com/conduitio/conduit/pkg/schemaregistry"
 	"github.com/google/go-cmp/cmp"
 	"github.com/matryer/is"
 	"github.com/rs/zerolog"
