@@ -16,6 +16,7 @@ package builtin
 
 import (
 	"context"
+	"github.com/conduitio/conduit/pkg/schemaregistry"
 	"runtime/debug"
 
 	file "github.com/conduitio/conduit-connector-file"
@@ -32,7 +33,6 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/conduitio/conduit/pkg/plugin/connector"
 	builtinv1 "github.com/conduitio/conduit/pkg/plugin/connector/builtin/v1"
-	"github.com/conduitio/conduit/pkg/schema"
 )
 
 var (
@@ -87,7 +87,7 @@ func NewDispenserFactory(conn sdk.Connector, schemaService cschema.Service) Disp
 	}
 }
 
-func NewRegistry(logger log.CtxLogger, connectors map[string]sdk.Connector, service schema.Service) *Registry {
+func NewRegistry(logger log.CtxLogger, connectors map[string]sdk.Connector, service schemaregistry.Service) *Registry {
 	logger = logger.WithComponentFromType(Registry{})
 	buildInfo, ok := debug.ReadBuildInfo()
 	if !ok {
@@ -97,7 +97,7 @@ func NewRegistry(logger log.CtxLogger, connectors map[string]sdk.Connector, serv
 	}
 
 	r := &Registry{
-		plugins: loadPlugins(buildInfo, connectors, schema.NewProtocolServiceAdapter(service)),
+		plugins: loadPlugins(buildInfo, connectors, schemaregistry.NewProtocolServiceAdapter(service)),
 		logger:  logger,
 	}
 	logger.Info(context.Background()).Int("count", len(r.List())).Msg("builtin plugins initialized")

@@ -16,6 +16,7 @@ package provisioning
 
 import (
 	"context"
+	"github.com/conduitio/conduit/pkg/schemaregistry"
 	"os"
 	"testing"
 	"time"
@@ -38,7 +39,6 @@ import (
 	p3 "github.com/conduitio/conduit/pkg/provisioning/test/pipelines3"
 	p4 "github.com/conduitio/conduit/pkg/provisioning/test/pipelines4-integration-test"
 	"github.com/conduitio/conduit/pkg/record"
-	"github.com/conduitio/conduit/pkg/schema"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/matryer/is"
@@ -490,7 +490,7 @@ func TestService_IntegrationTestServices(t *testing.T) {
 
 	connPluginService := conn_plugin.NewPluginService(
 		logger,
-		builtin.NewRegistry(logger, builtin.DefaultBuiltinConnectors, schema.NewInMemoryService()),
+		builtin.NewRegistry(logger, builtin.DefaultBuiltinConnectors, schemaregistry.NewInMemoryService()),
 		standalone.NewRegistry(logger, ""),
 	)
 

@@ -52,7 +52,7 @@ import (
 	proc_standalone "github.com/conduitio/conduit/pkg/plugin/processor/standalone"
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/provisioning"
-	"github.com/conduitio/conduit/pkg/schema"
+	"github.com/conduitio/conduit/pkg/schemaregistry"
 	"github.com/conduitio/conduit/pkg/web/api"
 	"github.com/conduitio/conduit/pkg/web/openapi"
 	"github.com/conduitio/conduit/pkg/web/ui"
@@ -90,7 +90,7 @@ type Runtime struct {
 	connectorPluginService *conn_plugin.PluginService
 	processorPluginService *proc_plugin.PluginService
 
-	schemaService schema.Service
+	schemaService schemaregistry.Service
 
 	connectorPersister *connector.Persister
 
@@ -145,6 +145,17 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 	provisionService := provisioning.NewService(db, logger, plService, connService, procService, connPluginService, cfg.Pipelines.Path)
 
 	orc := orchestrator.NewOrchestrator(db, logger, plService, connService, procService, connPluginService, procPluginService)
+
+	switch cfg.Schema.Type {
+	case SchemaTypeConfluent:
+		schemaService = schemaregistry.NewConfluentService(
+			context.Background(), logger, cfg.Schema.Confluent.ConnectionString, cfg.Schema.Confluent.HealthCheckPath,
+		)
+	case SchemaTypeInMemory:
+		schemaService = schemaregistry.NewInMemoryService()
+	default:
+		schemaService = schemaregistry.NewInMemoryService()
+	}
 
 	r := &Runtime{
 		Config:           cfg,
@@ -201,7 +212,7 @@ func newServices(
 	db database.DB,
 	connPersister *connector.Persister,
 	cfg Config,
-) (*pipeline.Service, *connector.Service, *processor.Service, *conn_plugin.PluginService, *proc_plugin.PluginService, schema.Service, error) {
+) (*pipeline.Service, *connector.Service, *processor.Service, *conn_plugin.PluginService, *proc_plugin.PluginService, schemaregistry.Service, error) {
 	standaloneReg, err := proc_standalone.NewRegistry(logger, cfg.Processors.Path)
 	if err != nil {
 		return nil, nil, nil, nil, nil, nil, cerrors.Errorf("failed creating processor registry: %w", err)
@@ -213,7 +224,7 @@ func newServices(
 		standaloneReg,
 	)
 
-	schemaService := schema.NewInMemoryService()
+	schemaService := schemaregistry.NewInMemoryService()
 
 	connPluginService := conn_plugin.NewPluginService(
 		logger,
@@ -465,6 +476,7 @@ func (r *Runtime) serveGRPCAPI(ctx context.Context, t *tomb.Tomb) (net.Addr, err
 			"ProcessorService":       r.processorService,
 			"ConnectorPluginService": r.connectorPluginService,
 			"ProcessorPluginService": r.processorPluginService,
+			"SchemaService":          r.schemaService,
 		},
 		r.logger,
 	)

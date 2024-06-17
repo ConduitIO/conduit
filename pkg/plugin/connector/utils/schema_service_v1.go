@@ -20,7 +20,7 @@ import (
 	"github.com/conduitio/conduit-connector-protocol/conduit/schema/v1/toproto"
 	conduitv1 "github.com/conduitio/conduit-connector-protocol/proto/conduit/v1"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/schema"
+	"github.com/conduitio/conduit/pkg/schemaregistry"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -29,10 +29,10 @@ import (
 type SchemaServiceAPIv1 struct {
 	conduitv1.UnimplementedSchemaServiceServer
 
-	service schema.Service
+	service schemaregistry.Service
 }
 
-func NewSchemaServiceAPIv1(s schema.Service) *SchemaServiceAPIv1 {
+func NewSchemaServiceAPIv1(s schemaregistry.Service) *SchemaServiceAPIv1 {
 	return &SchemaServiceAPIv1{service: s}
 }
 
@@ -46,7 +46,7 @@ func (s *SchemaServiceAPIv1) Create(ctx context.Context, req *conduitv1.CreateSc
 
 func (s *SchemaServiceAPIv1) Get(ctx context.Context, req *conduitv1.GetSchemaRequest) (*conduitv1.GetSchemaResponse, error) {
 	inst, err := s.service.Get(ctx, req.Name, int(req.Version))
-	if cerrors.Is(err, schema.ErrSchemaNotFound) {
+	if cerrors.Is(err, schemaregistry.ErrSchemaNotFound) {
 		return nil, status.Errorf(
 			codes.NotFound,
 			"schema with name %v, version %v not found",

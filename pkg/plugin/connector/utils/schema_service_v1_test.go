@@ -21,7 +21,7 @@ import (
 	"github.com/conduitio/conduit-commons/schema"
 	conduitv1 "github.com/conduitio/conduit-connector-protocol/proto/conduit/v1"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/schema/mock"
+	"github.com/conduitio/conduit/pkg/schemaregistry/mock"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/matryer/is"
