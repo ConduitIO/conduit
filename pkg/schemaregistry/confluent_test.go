@@ -70,11 +70,11 @@ func TestConfluentService_Get(t *testing.T) {
 	instance, err := service.Create(ctx, expectedName, bytes)
 	is.NoErr(err)
 
-	gotInstance, err := service.Get(ctx, instance.ID)
+	gotInstance, err := service.Get(ctx, instance.Name, instance.Version)
 	is.NoErr(err)
 
 	is.Equal(gotInstance.ID, instance.ID)
-	is.True(gotInstance.Name == "")
+	is.Equal(gotInstance.Name, instance.Name)
 	is.Equal(gotInstance.Bytes, instance.Bytes)
 }
 
