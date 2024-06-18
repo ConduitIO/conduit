@@ -26,7 +26,6 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/inspector"
 	"github.com/conduitio/conduit/pkg/plugin/processor/mock"
-	"github.com/conduitio/conduit/pkg/record"
 	"github.com/matryer/is"
 	"go.uber.org/mock/gomock"
 )
@@ -163,15 +162,15 @@ func TestRunnableProcessor_ProcessedRecordsInspected(t *testing.T) {
 	_ = underTest.Process(ctx, recsIn)
 	defer underTest.Close()
 
-	rec, gotRec, err := cchan.ChanOut[record.Record](inSession.C).RecvTimeout(ctx, 100*time.Millisecond)
+	rec, gotRec, err := cchan.ChanOut[opencdc.Record](inSession.C).RecvTimeout(ctx, 100*time.Millisecond)
 	is.True(gotRec)
 	is.NoErr(err)
-	is.Equal(record.FromOpenCDC(recsIn[0]), rec)
+	is.Equal(recsIn[0], rec)
 
-	rec, gotRec, err = cchan.ChanOut[record.Record](outSession.C).RecvTimeout(ctx, 100*time.Millisecond)
+	rec, gotRec, err = cchan.ChanOut[opencdc.Record](outSession.C).RecvTimeout(ctx, 100*time.Millisecond)
 	is.True(gotRec)
 	is.NoErr(err)
-	is.Equal(recsOut[0], sdk.SingleRecord(rec.ToOpenCDC()))
+	is.Equal(recsOut[0], sdk.SingleRecord(rec))
 }
 
 func TestRunnableProcessor_FilteredRecordsNotInspected(t *testing.T) {
@@ -194,12 +193,12 @@ func TestRunnableProcessor_FilteredRecordsNotInspected(t *testing.T) {
 	_ = underTest.Process(ctx, recsIn)
 	defer underTest.Close()
 
-	rec, gotRec, err := cchan.ChanOut[record.Record](inSession.C).RecvTimeout(ctx, 100*time.Millisecond)
+	rec, gotRec, err := cchan.ChanOut[opencdc.Record](inSession.C).RecvTimeout(ctx, 100*time.Millisecond)
 	is.True(gotRec)
 	is.NoErr(err)
-	is.Equal(record.FromOpenCDC(recsIn[0]), rec)
+	is.Equal(recsIn[0], rec)
 
-	_, gotRec, err = cchan.ChanOut[record.Record](outSession.C).RecvTimeout(ctx, 100*time.Millisecond)
+	_, gotRec, err = cchan.ChanOut[opencdc.Record](outSession.C).RecvTimeout(ctx, 100*time.Millisecond)
 	is.True(!gotRec)
 	is.True(cerrors.Is(err, context.DeadlineExceeded))
 }
@@ -224,12 +223,12 @@ func TestRunnableProcessor_ErrorRecordsNotInspected(t *testing.T) {
 	_ = underTest.Process(ctx, recsIn)
 	defer underTest.Close()
 
-	rec, gotRec, err := cchan.ChanOut[record.Record](inSession.C).RecvTimeout(ctx, 100*time.Millisecond)
+	rec, gotRec, err := cchan.ChanOut[opencdc.Record](inSession.C).RecvTimeout(ctx, 100*time.Millisecond)
 	is.True(gotRec)
 	is.NoErr(err)
-	is.Equal(record.FromOpenCDC(recsIn[0]), rec)
+	is.Equal(recsIn[0], rec)
 
-	_, gotRec, err = cchan.ChanOut[record.Record](outSession.C).RecvTimeout(ctx, 100*time.Millisecond)
+	_, gotRec, err = cchan.ChanOut[opencdc.Record](outSession.C).RecvTimeout(ctx, 100*time.Millisecond)
 	is.True(!gotRec)
 	is.True(cerrors.Is(err, context.DeadlineExceeded))
 }

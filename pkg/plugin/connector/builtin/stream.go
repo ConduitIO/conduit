@@ -111,7 +111,7 @@ func (s *inMemoryStream[REQ, RES]) Close(reason error) bool {
 // inMemoryStreamClient mimics the behavior of a gRPC client stream using channels.
 // REQ represents the type sent from the client to the server, RES is the type
 // sent from the server to the client.
-type inMemoryStreamClient[REQ any, RES any] inMemoryStream[REQ, RES]
+type inMemoryStreamClient[REQ cloner[REQ], RES any] inMemoryStream[REQ, RES]
 
 func (s *inMemoryStreamClient[REQ, RES]) Send(req REQ) error {
 	select {
@@ -119,7 +119,9 @@ func (s *inMemoryStreamClient[REQ, RES]) Send(req REQ) error {
 		return s.ctx.Err()
 	case <-s.stopChan:
 		return io.EOF
-	case s.reqChan <- req:
+	// We clone the data before sending it into the stream to avoid
+	// sharing the same data between the server and the client.
+	case s.reqChan <- req.Clone():
 		return nil
 	}
 }
@@ -143,7 +145,7 @@ func (s *inMemoryStreamClient[REQ, RES]) emptyRes() RES {
 // inMemoryStreamServer mimics the behavior of a gRPC server stream using channels.
 // REQ represents the type sent from the client to the server, RES is the type
 // sent from the server to the client.
-type inMemoryStreamServer[REQ any, RES any] inMemoryStream[REQ, RES]
+type inMemoryStreamServer[REQ any, RES cloner[RES]] inMemoryStream[REQ, RES]
 
 func (s *inMemoryStreamServer[REQ, RES]) Send(resp RES) error {
 	select {
@@ -151,7 +153,9 @@ func (s *inMemoryStreamServer[REQ, RES]) Send(resp RES) error {
 		return s.ctx.Err()
 	case <-s.stopChan:
 		return io.EOF
-	case s.respChan <- resp:
+	// We clone the data before sending it into the stream to avoid
+	// sharing the same data between the server and the client.
+	case s.respChan <- resp.Clone():
 		return nil
 	}
 }
@@ -170,4 +174,8 @@ func (s *inMemoryStreamServer[REQ, RES]) Recv() (REQ, error) {
 func (s *inMemoryStreamServer[REQ, RES]) emptyReq() REQ {
 	var r REQ
 	return r
+}
+
+type cloner[T any] interface {
+	Clone() T
 }
