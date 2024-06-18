@@ -18,6 +18,8 @@ import (
 	"context"
 	"runtime/debug"
 
+	file "github.com/conduitio/conduit-connector-file"
+	connLog "github.com/conduitio/conduit-connector-log"
 	"github.com/conduitio/conduit-connector-protocol/cplugin"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -32,12 +34,12 @@ var (
 	// containing the connector implementation.
 	DefaultDispenserFactories = map[string]DispenserFactory{
 		// TODO update connectors to latest SDK and uncomment
-		// "github.com/conduitio/conduit-connector-file":      NewDispenserFactory(file.Connector),
-		// "github.com/conduitio/conduit-connector-kafka":     NewDispenserFactory(kafka.Connector),
+		"github.com/conduitio/conduit-connector-file": NewDispenserFactory(file.Connector),
 		// "github.com/conduitio/conduit-connector-generator": NewDispenserFactory(generator.Connector),
-		// "github.com/conduitio/conduit-connector-s3":        NewDispenserFactory(s3.Connector),
+		// "github.com/conduitio/conduit-connector-kafka":     NewDispenserFactory(kafka.Connector),
+		"github.com/conduitio/conduit-connector-log": NewDispenserFactory(connLog.Connector),
 		// "github.com/conduitio/conduit-connector-postgres":  NewDispenserFactory(postgres.Connector),
-		// "github.com/conduitio/conduit-connector-log":       NewDispenserFactory(connLog.Connector),
+		// "github.com/conduitio/conduit-connector-s3":        NewDispenserFactory(s3.Connector),
 	}
 )
 

@@ -112,7 +112,7 @@ func TestPipelineSimple(t *testing.T) {
 
 	_, err = orc.Processors.Create(
 		ctx,
-		"field.exclude",
+		"builtin:field.exclude",
 		processor.Parent{
 			ID:   pl.ID,
 			Type: processor.ParentTypePipeline,
@@ -153,11 +153,11 @@ func TestPipelineSimple(t *testing.T) {
 	is.NoErr(err)
 	t.Log("successfully stopped pipeline")
 
-	want := `{"position":"Mg==","operation":"create","metadata":{"conduit.source.connector.id":"%[1]v","file.path":"./fixtures/file-source.txt","opencdc.version":"v1"},"key":"MQ==","payload":{"before":null,"after":"MQ=="}}
-{"position":"NA==","operation":"create","metadata":{"conduit.source.connector.id":"%[1]v","file.path":"./fixtures/file-source.txt","opencdc.version":"v1"},"key":"Mg==","payload":{"before":null,"after":"Mg=="}}
-{"position":"Ng==","operation":"create","metadata":{"conduit.source.connector.id":"%[1]v","file.path":"./fixtures/file-source.txt","opencdc.version":"v1"},"key":"Mw==","payload":{"before":null,"after":"Mw=="}}
-{"position":"OA==","operation":"create","metadata":{"conduit.source.connector.id":"%[1]v","file.path":"./fixtures/file-source.txt","opencdc.version":"v1"},"key":"NA==","payload":{"before":null,"after":"NA=="}}
-{"position":"MTA=","operation":"create","metadata":{"conduit.source.connector.id":"%[1]v","file.path":"./fixtures/file-source.txt","opencdc.version":"v1"},"key":"NQ==","payload":{"before":null,"after":"NQ=="}}
+	want := `{"position":"Mg==","operation":"create","metadata":{"conduit.source.connector.id":"%[1]v","file.path":"./fixtures/file-source.txt"},"key":"MQ==","payload":{"before":null,"after":"MQ=="}}
+{"position":"NA==","operation":"create","metadata":{"conduit.source.connector.id":"%[1]v","file.path":"./fixtures/file-source.txt"},"key":"Mg==","payload":{"before":null,"after":"Mg=="}}
+{"position":"Ng==","operation":"create","metadata":{"conduit.source.connector.id":"%[1]v","file.path":"./fixtures/file-source.txt"},"key":"Mw==","payload":{"before":null,"after":"Mw=="}}
+{"position":"OA==","operation":"create","metadata":{"conduit.source.connector.id":"%[1]v","file.path":"./fixtures/file-source.txt"},"key":"NA==","payload":{"before":null,"after":"NA=="}}
+{"position":"MTA=","operation":"create","metadata":{"conduit.source.connector.id":"%[1]v","file.path":"./fixtures/file-source.txt"},"key":"NQ==","payload":{"before":null,"after":"NQ=="}}
 `
 	want = fmt.Sprintf(want, conn.ID)
 

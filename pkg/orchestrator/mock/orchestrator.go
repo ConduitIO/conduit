@@ -13,6 +13,7 @@ import (
 	context "context"
 	reflect "reflect"
 
+	cplugin "github.com/conduitio/conduit-connector-protocol/cplugin"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	connector "github.com/conduitio/conduit/pkg/connector"
 	log "github.com/conduitio/conduit/pkg/foundation/log"
@@ -482,10 +483,10 @@ func (m *ConnectorPluginService) EXPECT() *ConnectorPluginServiceMockRecorder {
 }
 
 // List mocks base method.
-func (m *ConnectorPluginService) List(arg0 context.Context) (map[string]connector0.Specification, error) {
+func (m *ConnectorPluginService) List(arg0 context.Context) (map[string]cplugin.Specification, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "List", arg0)
-	ret0, _ := ret[0].(map[string]connector0.Specification)
+	ret0, _ := ret[0].(map[string]cplugin.Specification)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
