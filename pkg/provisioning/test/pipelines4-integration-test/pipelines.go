@@ -17,10 +17,9 @@ package pipelines4
 import (
 	"time"
 
-	"github.com/conduitio/conduit/pkg/processor"
-
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/pipeline"
+	"github.com/conduitio/conduit/pkg/processor"
 )
 
 // ---------------

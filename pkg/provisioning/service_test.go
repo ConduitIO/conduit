@@ -20,9 +20,6 @@ import (
 	"testing"
 	"time"
 
-	proc_plugin "github.com/conduitio/conduit/pkg/plugin/processor"
-	proc_builtin "github.com/conduitio/conduit/pkg/plugin/processor/builtin"
-
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/ctxutil"
@@ -32,6 +29,8 @@ import (
 	conn_plugin "github.com/conduitio/conduit/pkg/plugin/connector"
 	"github.com/conduitio/conduit/pkg/plugin/connector/builtin"
 	"github.com/conduitio/conduit/pkg/plugin/connector/standalone"
+	proc_plugin "github.com/conduitio/conduit/pkg/plugin/processor"
+	proc_builtin "github.com/conduitio/conduit/pkg/plugin/processor/builtin"
 	"github.com/conduitio/conduit/pkg/processor"
 	p1 "github.com/conduitio/conduit/pkg/provisioning/test/pipelines1"
 	p2 "github.com/conduitio/conduit/pkg/provisioning/test/pipelines2"

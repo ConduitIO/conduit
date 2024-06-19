@@ -18,14 +18,12 @@ import (
 	"context"
 	"testing"
 
-	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/plugin"
-
 	"github.com/conduitio/conduit-commons/opencdc"
-
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit-processor-sdk/wasm"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/matryer/is"
 )
 
