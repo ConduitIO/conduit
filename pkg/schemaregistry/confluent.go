@@ -60,7 +60,7 @@ func (c *ConfluentService) Create(ctx context.Context, name string, bytes []byte
 	return schema.Instance{
 		ID:      strconv.Itoa(ss.ID),
 		Name:    name,
-		Version: int32(ss.Version),
+		Version: ss.Version,
 		Type:    schema.TypeAvro,
 		Bytes:   []byte(ss.Schema.Schema),
 	}, nil
@@ -77,7 +77,7 @@ func (c *ConfluentService) Get(ctx context.Context, name string, version int) (s
 		// todo change ID in schema.Instance to integer
 		ID:      strconv.Itoa(s.ID),
 		Name:    s.Subject,
-		Version: int32(s.Version),
+		Version: s.Version,
 		Type:    schema.TypeAvro,
 		Bytes:   []byte(s.Schema.Schema),
 	}, nil
