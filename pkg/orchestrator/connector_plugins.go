@@ -17,11 +17,11 @@ package orchestrator
 import (
 	"context"
 
-	"github.com/conduitio/conduit-connector-protocol/cplugin"
+	"github.com/conduitio/conduit-connector-protocol/pconnector"
 )
 
 type ConnectorPluginOrchestrator base
 
-func (ps *ConnectorPluginOrchestrator) List(ctx context.Context) (map[string]cplugin.Specification, error) {
+func (ps *ConnectorPluginOrchestrator) List(ctx context.Context) (map[string]pconnector.Specification, error) {
 	return ps.connectorPlugins.List(ctx)
 }

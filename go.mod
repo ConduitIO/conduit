@@ -11,8 +11,8 @@ require (
 	github.com/conduitio/conduit-commons v0.2.0
 	github.com/conduitio/conduit-connector-file v0.6.1-0.20240617175842-95603b2484cd
 	github.com/conduitio/conduit-connector-log v0.3.1-0.20240617183109-ebb4394d0015
-	github.com/conduitio/conduit-connector-protocol v0.6.1-0.20240610142755-192e55f5e39f
-	github.com/conduitio/conduit-connector-sdk v0.9.2-0.20240610143409-ef4f93957e9a
+	github.com/conduitio/conduit-connector-protocol v0.6.1-0.20240619121958-1df466646d01
+	github.com/conduitio/conduit-connector-sdk v0.9.2-0.20240619124114-6a89e0d7add8
 	github.com/conduitio/conduit-processor-sdk v0.1.2-0.20240516124003-442e4a3f0edd
 	github.com/conduitio/yaml/v3 v3.3.0
 	github.com/dgraph-io/badger/v4 v4.2.0
@@ -307,5 +307,3 @@ require (
 	mvdan.cc/gofumpt v0.6.0 // indirect
 	mvdan.cc/unparam v0.0.0-20240528143540-8a5130ca722f // indirect
 )
-
-replace github.com/conduitio/conduit-connector-protocol => ../conduit-connector-protocol

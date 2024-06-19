@@ -17,8 +17,8 @@ package builtin
 import (
 	"testing"
 
-	"github.com/conduitio/conduit-connector-protocol/cplugin"
-	"github.com/conduitio/conduit-connector-protocol/cplugin/mock"
+	"github.com/conduitio/conduit-connector-protocol/pconnector"
+	"github.com/conduitio/conduit-connector-protocol/pconnector/mock"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin/connector"
 	"github.com/rs/zerolog"
@@ -36,9 +36,9 @@ func newTestDispenser(t *testing.T) (connector.Dispenser, *mock.SpecifierPlugin,
 	dispenser := NewDispenser(
 		"mockPlugin",
 		logger,
-		func() cplugin.SpecifierPlugin { return mockSpecifier },
-		func() cplugin.SourcePlugin { return mockSource },
-		func() cplugin.DestinationPlugin { return mockDestination },
+		func() pconnector.SpecifierPlugin { return mockSpecifier },
+		func() pconnector.SourcePlugin { return mockSource },
+		func() pconnector.DestinationPlugin { return mockDestination },
 	)
 	return dispenser, mockSpecifier, mockSource, mockDestination
 }

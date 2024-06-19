@@ -17,27 +17,26 @@ package builtin
 import (
 	"context"
 
-	"github.com/conduitio/conduit-connector-protocol/cplugin"
-
+	"github.com/conduitio/conduit-connector-protocol/pconnector"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin/connector"
 )
 
 type specifierPluginAdapter struct {
-	impl cplugin.SpecifierPlugin
+	impl pconnector.SpecifierPlugin
 	// logger is used as the internal logger of specifierPluginAdapter.
 	logger log.CtxLogger
 }
 
 var _ connector.SpecifierPlugin = (*specifierPluginAdapter)(nil)
 
-func newSpecifierPluginAdapter(impl cplugin.SpecifierPlugin, logger log.CtxLogger) *specifierPluginAdapter {
+func newSpecifierPluginAdapter(impl pconnector.SpecifierPlugin, logger log.CtxLogger) *specifierPluginAdapter {
 	return &specifierPluginAdapter{
 		impl:   impl,
 		logger: logger.WithComponent("builtin.specifierPluginAdapter"),
 	}
 }
 
-func (s *specifierPluginAdapter) Specify(ctx context.Context, in cplugin.SpecifierSpecifyRequest) (cplugin.SpecifierSpecifyResponse, error) {
+func (s *specifierPluginAdapter) Specify(ctx context.Context, in pconnector.SpecifierSpecifyRequest) (pconnector.SpecifierSpecifyResponse, error) {
 	return runSandbox(s.impl.Specify, ctx, in, s.logger)
 }

@@ -273,7 +273,7 @@ func (sourceAckerNodeTestHelper) expectAcks(
 	for i := 0; i < count; i++ {
 		expectedCalls[i] = src.EXPECT().
 			Ack(ctx, []opencdc.Position{messages[i].Record.Position}).
-			Return(nil)
+			Return(nil).Call
 	}
 
 	return expectedCalls

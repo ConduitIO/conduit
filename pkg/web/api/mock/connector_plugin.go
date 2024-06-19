@@ -13,7 +13,7 @@ import (
 	context "context"
 	reflect "reflect"
 
-	cplugin "github.com/conduitio/conduit-connector-protocol/cplugin"
+	pconnector "github.com/conduitio/conduit-connector-protocol/pconnector"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -41,10 +41,10 @@ func (m *ConnectorPluginOrchestrator) EXPECT() *ConnectorPluginOrchestratorMockR
 }
 
 // List mocks base method.
-func (m *ConnectorPluginOrchestrator) List(arg0 context.Context) (map[string]cplugin.Specification, error) {
+func (m *ConnectorPluginOrchestrator) List(arg0 context.Context) (map[string]pconnector.Specification, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "List", arg0)
-	ret0, _ := ret[0].(map[string]cplugin.Specification)
+	ret0, _ := ret[0].(map[string]pconnector.Specification)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -62,19 +62,19 @@ type ConnectorPluginOrchestratorListCall struct {
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *ConnectorPluginOrchestratorListCall) Return(arg0 map[string]cplugin.Specification, arg1 error) *ConnectorPluginOrchestratorListCall {
+func (c *ConnectorPluginOrchestratorListCall) Return(arg0 map[string]pconnector.Specification, arg1 error) *ConnectorPluginOrchestratorListCall {
 	c.Call = c.Call.Return(arg0, arg1)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *ConnectorPluginOrchestratorListCall) Do(f func(context.Context) (map[string]cplugin.Specification, error)) *ConnectorPluginOrchestratorListCall {
+func (c *ConnectorPluginOrchestratorListCall) Do(f func(context.Context) (map[string]pconnector.Specification, error)) *ConnectorPluginOrchestratorListCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *ConnectorPluginOrchestratorListCall) DoAndReturn(f func(context.Context) (map[string]cplugin.Specification, error)) *ConnectorPluginOrchestratorListCall {
+func (c *ConnectorPluginOrchestratorListCall) DoAndReturn(f func(context.Context) (map[string]pconnector.Specification, error)) *ConnectorPluginOrchestratorListCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

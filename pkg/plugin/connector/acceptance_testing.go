@@ -26,8 +26,8 @@ import (
 
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
-	"github.com/conduitio/conduit-connector-protocol/cplugin"
-	"github.com/conduitio/conduit-connector-protocol/cplugin/mock"
+	"github.com/conduitio/conduit-connector-protocol/pconnector"
+	"github.com/conduitio/conduit-connector-protocol/pconnector/mock"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
@@ -101,8 +101,8 @@ func testSpecifier_Specify_Success(t *testing.T, tdf testDispenserFunc) {
 	ctx := context.Background()
 	dispenser, mockSpecifier, _, _ := tdf(t)
 
-	want := cplugin.SpecifierSpecifyResponse{
-		Specification: cplugin.Specification{
+	want := pconnector.SpecifierSpecifyResponse{
+		Specification: pconnector.Specification{
 			Name:        "test-name",
 			Summary:     "A short summary",
 			Description: "A long description",
@@ -120,13 +120,13 @@ func testSpecifier_Specify_Success(t *testing.T, tdf testDispenserFunc) {
 	}
 
 	mockSpecifier.EXPECT().
-		Specify(gomock.Any(), cplugin.SpecifierSpecifyRequest{}).
+		Specify(gomock.Any(), pconnector.SpecifierSpecifyRequest{}).
 		Return(want, nil)
 
 	specifier, err := dispenser.DispenseSpecifier()
 	is.NoErr(err)
 
-	got, err := specifier.Specify(ctx, cplugin.SpecifierSpecifyRequest{})
+	got, err := specifier.Specify(ctx, pconnector.SpecifierSpecifyRequest{})
 	is.NoErr(err)
 
 	is.Equal("", cmp.Diff(want, got))
@@ -139,13 +139,13 @@ func testSpecifier_Specify_Fail(t *testing.T, tdf testDispenserFunc) {
 
 	want := cerrors.New("specify error")
 	mockSpecifier.EXPECT().
-		Specify(gomock.Any(), cplugin.SpecifierSpecifyRequest{}).
-		Return(cplugin.SpecifierSpecifyResponse{}, want)
+		Specify(gomock.Any(), pconnector.SpecifierSpecifyRequest{}).
+		Return(pconnector.SpecifierSpecifyResponse{}, want)
 
 	specifier, err := dispenser.DispenseSpecifier()
 	is.NoErr(err)
 
-	_, got := specifier.Specify(ctx, cplugin.SpecifierSpecifyRequest{})
+	_, got := specifier.Specify(ctx, pconnector.SpecifierSpecifyRequest{})
 	is.Equal(got.Error(), want.Error())
 }
 
@@ -159,15 +159,15 @@ func testSource_Configure_Success(t *testing.T, tdf testDispenserFunc) {
 	dispenser, _, mockSource, _ := tdf(t)
 
 	mockSource.EXPECT().
-		Configure(gomock.Any(), cplugin.SourceConfigureRequest{Config: nil}).
-		Return(cplugin.SourceConfigureResponse{}, nil)
+		Configure(gomock.Any(), pconnector.SourceConfigureRequest{Config: nil}).
+		Return(pconnector.SourceConfigureResponse{}, nil)
 
 	source, err := dispenser.DispenseSource()
 	is.NoErr(err)
 
-	got, err := source.Configure(ctx, cplugin.SourceConfigureRequest{Config: nil})
+	got, err := source.Configure(ctx, pconnector.SourceConfigureRequest{Config: nil})
 	is.NoErr(err)
-	is.Equal(got, cplugin.SourceConfigureResponse{})
+	is.Equal(got, pconnector.SourceConfigureResponse{})
 }
 
 func testSource_Configure_Fail(t *testing.T, tdf testDispenserFunc) {
@@ -181,13 +181,13 @@ func testSource_Configure_Fail(t *testing.T, tdf testDispenserFunc) {
 	}
 	want := cerrors.New("init error")
 	mockSource.EXPECT().
-		Configure(gomock.Any(), cplugin.SourceConfigureRequest{Config: cfg}).
-		Return(cplugin.SourceConfigureResponse{}, want)
+		Configure(gomock.Any(), pconnector.SourceConfigureRequest{Config: cfg}).
+		Return(pconnector.SourceConfigureResponse{}, want)
 
 	source, err := dispenser.DispenseSource()
 	is.NoErr(err)
 
-	_, got := source.Configure(ctx, cplugin.SourceConfigureRequest{Config: cfg})
+	_, got := source.Configure(ctx, pconnector.SourceConfigureRequest{Config: cfg})
 	is.Equal(got.Error(), want.Error())
 }
 
@@ -199,13 +199,13 @@ func testSource_Open_WithPosition(t *testing.T, tdf testDispenserFunc) {
 	pos := opencdc.Position("test-position")
 
 	mockSource.EXPECT().
-		Open(gomock.Any(), cplugin.SourceOpenRequest{Position: pos}).
-		Return(cplugin.SourceOpenResponse{}, nil)
+		Open(gomock.Any(), pconnector.SourceOpenRequest{Position: pos}).
+		Return(pconnector.SourceOpenResponse{}, nil)
 
 	source, err := dispenser.DispenseSource()
 	is.NoErr(err)
 
-	_, err = source.Open(ctx, cplugin.SourceOpenRequest{Position: pos})
+	_, err = source.Open(ctx, pconnector.SourceOpenRequest{Position: pos})
 	is.NoErr(err)
 }
 
@@ -215,15 +215,15 @@ func testSource_Open_EmptyPosition(t *testing.T, tdf testDispenserFunc) {
 	dispenser, _, mockSource, _ := tdf(t)
 
 	mockSource.EXPECT().
-		Open(gomock.Any(), cplugin.SourceOpenRequest{Position: nil}).
-		Return(cplugin.SourceOpenResponse{}, nil)
+		Open(gomock.Any(), pconnector.SourceOpenRequest{Position: nil}).
+		Return(pconnector.SourceOpenResponse{}, nil)
 
 	source, err := dispenser.DispenseSource()
 	is.NoErr(err)
 
-	resp, err := source.Open(ctx, cplugin.SourceOpenRequest{Position: nil})
+	resp, err := source.Open(ctx, pconnector.SourceOpenRequest{Position: nil})
 	is.NoErr(err)
-	is.Equal(resp, cplugin.SourceOpenResponse{})
+	is.Equal(resp, pconnector.SourceOpenResponse{})
 }
 
 func testSource_Run_Success(t *testing.T, tdf testDispenserFunc) {
@@ -250,10 +250,10 @@ func testSource_Run_Success(t *testing.T, tdf testDispenserFunc) {
 
 	mockSource.EXPECT().
 		Run(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(ctx context.Context, stream cplugin.SourceRunStream) error {
+		DoAndReturn(func(ctx context.Context, stream pconnector.SourceRunStream) error {
 			serverStream := stream.Server()
 			for _, r := range want {
-				err := serverStream.Send(cplugin.SourceRunResponse{Records: []opencdc.Record{r}})
+				err := serverStream.Send(pconnector.SourceRunResponse{Records: []opencdc.Record{r}})
 				if err != nil {
 					return err
 				}
@@ -300,20 +300,20 @@ func testSource_StreamRecv_AfterStop(t *testing.T, tdf testDispenserFunc) {
 	ctx := context.Background()
 	dispenser, _, mockSource, _ := tdf(t)
 
-	want := cplugin.SourceStopResponse{
+	want := pconnector.SourceStopResponse{
 		LastPosition: []byte("foo"),
 	}
 
 	stopRunCh := make(chan struct{})
 	mockSource.EXPECT().
 		Run(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(context.Context, cplugin.SourceRunStream) error {
+		DoAndReturn(func(context.Context, pconnector.SourceRunStream) error {
 			<-stopRunCh
 			return nil
 		})
 	mockSource.EXPECT().
-		Stop(gomock.Any(), cplugin.SourceStopRequest{}).
-		DoAndReturn(func(context.Context, cplugin.SourceStopRequest) (cplugin.SourceStopResponse, error) {
+		Stop(gomock.Any(), pconnector.SourceStopRequest{}).
+		DoAndReturn(func(context.Context, pconnector.SourceStopRequest) (pconnector.SourceStopResponse, error) {
 			close(stopRunCh)
 			return want, nil
 		})
@@ -327,7 +327,7 @@ func testSource_StreamRecv_AfterStop(t *testing.T, tdf testDispenserFunc) {
 
 	clientStream := stream.Client()
 
-	got, err := source.Stop(ctx, cplugin.SourceStopRequest{})
+	got, err := source.Stop(ctx, pconnector.SourceStopRequest{})
 	is.NoErr(err)
 	is.Equal(got, want)
 
@@ -349,7 +349,7 @@ func testSource_StreamRecv_CancelContext(t *testing.T, tdf testDispenserFunc) {
 	stopRunCh := make(chan struct{})
 	mockSource.EXPECT().
 		Run(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(ctx context.Context, stream cplugin.SourceRunStream) error {
+		DoAndReturn(func(ctx context.Context, stream pconnector.SourceRunStream) error {
 			<-stopRunCh
 			return nil
 		})
@@ -389,7 +389,7 @@ func testSource_StreamSend_Success(t *testing.T, tdf testDispenserFunc) {
 	closeCh := make(chan struct{})
 	mockSource.EXPECT().
 		Run(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, stream cplugin.SourceRunStream) error {
+		DoAndReturn(func(_ context.Context, stream pconnector.SourceRunStream) error {
 			defer close(closeCh)
 			serverStream := stream.Server()
 			got, err := serverStream.Recv()
@@ -408,7 +408,7 @@ func testSource_StreamSend_Success(t *testing.T, tdf testDispenserFunc) {
 
 	clientStream := stream.Client()
 
-	err = clientStream.Send(cplugin.SourceRunRequest{AckPositions: []opencdc.Position{want}})
+	err = clientStream.Send(pconnector.SourceRunRequest{AckPositions: []opencdc.Position{want}})
 	is.NoErr(err)
 
 	select {
@@ -421,7 +421,7 @@ func testSource_StreamSend_Success(t *testing.T, tdf testDispenserFunc) {
 	time.Sleep(time.Millisecond * 50)
 
 	// acking after the stream is closed should result in an error
-	err = clientStream.Send(cplugin.SourceRunRequest{AckPositions: []opencdc.Position{want}})
+	err = clientStream.Send(pconnector.SourceRunRequest{AckPositions: []opencdc.Position{want}})
 	is.True(cerrors.Is(err, ErrStreamNotOpen))
 }
 
@@ -437,7 +437,7 @@ func testSource_Run_Fail(t *testing.T, tdf testDispenserFunc) {
 	closeCh := make(chan struct{})
 	mockSource.EXPECT().
 		Run(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, stream cplugin.SourceRunStream) error {
+		DoAndReturn(func(_ context.Context, stream pconnector.SourceRunStream) error {
 			defer close(closeCh)
 			serverStream := stream.Server()
 			_, _ = serverStream.Recv() // receive ack and fail
@@ -453,7 +453,7 @@ func testSource_Run_Fail(t *testing.T, tdf testDispenserFunc) {
 
 	clientStream := stream.Client()
 
-	err = clientStream.Send(cplugin.SourceRunRequest{AckPositions: []opencdc.Position{opencdc.Position("test-position")}})
+	err = clientStream.Send(pconnector.SourceRunRequest{AckPositions: []opencdc.Position{opencdc.Position("test-position")}})
 	is.NoErr(err)
 
 	select {
@@ -474,7 +474,7 @@ func testSource_Run_Fail(t *testing.T, tdf testDispenserFunc) {
 	is.Equal(got.Error(), want.Error())
 
 	// Ack returns just a generic error
-	err = clientStream.Send(cplugin.SourceRunRequest{AckPositions: []opencdc.Position{opencdc.Position("test-position")}})
+	err = clientStream.Send(pconnector.SourceRunRequest{AckPositions: []opencdc.Position{opencdc.Position("test-position")}})
 	is.True(cerrors.Is(err, ErrStreamNotOpen))
 }
 
@@ -484,15 +484,15 @@ func testSource_Teardown_Success(t *testing.T, tdf testDispenserFunc) {
 	dispenser, _, mockSource, _ := tdf(t)
 
 	mockSource.EXPECT().
-		Teardown(gomock.Any(), cplugin.SourceTeardownRequest{}).
-		Return(cplugin.SourceTeardownResponse{}, nil)
+		Teardown(gomock.Any(), pconnector.SourceTeardownRequest{}).
+		Return(pconnector.SourceTeardownResponse{}, nil)
 
 	source, err := dispenser.DispenseSource()
 	is.NoErr(err)
 
-	teardownResp, err := source.Teardown(ctx, cplugin.SourceTeardownRequest{})
+	teardownResp, err := source.Teardown(ctx, pconnector.SourceTeardownRequest{})
 	is.NoErr(err)
-	is.Equal(teardownResp, cplugin.SourceTeardownResponse{})
+	is.Equal(teardownResp, pconnector.SourceTeardownResponse{})
 }
 
 func testSource_Teardown_Fail(t *testing.T, tdf testDispenserFunc) {
@@ -502,13 +502,13 @@ func testSource_Teardown_Fail(t *testing.T, tdf testDispenserFunc) {
 
 	want := cerrors.New("init error")
 	mockSource.EXPECT().
-		Teardown(gomock.Any(), cplugin.SourceTeardownRequest{}).
-		Return(cplugin.SourceTeardownResponse{}, want)
+		Teardown(gomock.Any(), pconnector.SourceTeardownRequest{}).
+		Return(pconnector.SourceTeardownResponse{}, want)
 
 	source, err := dispenser.DispenseSource()
 	is.NoErr(err)
 
-	_, got := source.Teardown(ctx, cplugin.SourceTeardownRequest{})
+	_, got := source.Teardown(ctx, pconnector.SourceTeardownRequest{})
 	is.Equal(got.Error(), want.Error())
 }
 
@@ -517,20 +517,20 @@ func testSource_Lifecycle_OnCreated(t *testing.T, tdf testDispenserFunc) {
 	ctx := context.Background()
 	dispenser, _, mockSource, _ := tdf(t)
 
-	want := cplugin.SourceLifecycleOnCreatedRequest{
+	want := pconnector.SourceLifecycleOnCreatedRequest{
 		Config: map[string]string{"foo": "bar"},
 	}
 
 	mockSource.EXPECT().
 		LifecycleOnCreated(gomock.Any(), want).
-		Return(cplugin.SourceLifecycleOnCreatedResponse{}, nil)
+		Return(pconnector.SourceLifecycleOnCreatedResponse{}, nil)
 
 	source, err := dispenser.DispenseSource()
 	is.NoErr(err)
 
 	resp, err := source.LifecycleOnCreated(ctx, want)
 	is.NoErr(err)
-	is.Equal(resp, cplugin.SourceLifecycleOnCreatedResponse{})
+	is.Equal(resp, pconnector.SourceLifecycleOnCreatedResponse{})
 }
 
 func testSource_Lifecycle_OnUpdated(t *testing.T, tdf testDispenserFunc) {
@@ -538,21 +538,21 @@ func testSource_Lifecycle_OnUpdated(t *testing.T, tdf testDispenserFunc) {
 	ctx := context.Background()
 	dispenser, _, mockSource, _ := tdf(t)
 
-	want := cplugin.SourceLifecycleOnUpdatedRequest{
+	want := pconnector.SourceLifecycleOnUpdatedRequest{
 		ConfigBefore: map[string]string{"foo": "bar"},
 		ConfigAfter:  map[string]string{"foo": "baz"},
 	}
 
 	mockSource.EXPECT().
 		LifecycleOnUpdated(gomock.Any(), want).
-		Return(cplugin.SourceLifecycleOnUpdatedResponse{}, nil)
+		Return(pconnector.SourceLifecycleOnUpdatedResponse{}, nil)
 
 	source, err := dispenser.DispenseSource()
 	is.NoErr(err)
 
 	resp, err := source.LifecycleOnUpdated(ctx, want)
 	is.NoErr(err)
-	is.Equal(resp, cplugin.SourceLifecycleOnUpdatedResponse{})
+	is.Equal(resp, pconnector.SourceLifecycleOnUpdatedResponse{})
 }
 
 func testSource_Lifecycle_OnDeleted(t *testing.T, tdf testDispenserFunc) {
@@ -560,20 +560,20 @@ func testSource_Lifecycle_OnDeleted(t *testing.T, tdf testDispenserFunc) {
 	ctx := context.Background()
 	dispenser, _, mockSource, _ := tdf(t)
 
-	want := cplugin.SourceLifecycleOnDeletedRequest{
+	want := pconnector.SourceLifecycleOnDeletedRequest{
 		Config: map[string]string{"foo": "bar"},
 	}
 
 	mockSource.EXPECT().
 		LifecycleOnDeleted(gomock.Any(), want).
-		Return(cplugin.SourceLifecycleOnDeletedResponse{}, nil)
+		Return(pconnector.SourceLifecycleOnDeletedResponse{}, nil)
 
 	source, err := dispenser.DispenseSource()
 	is.NoErr(err)
 
 	resp, err := source.LifecycleOnDeleted(ctx, want)
 	is.NoErr(err)
-	is.Equal(resp, cplugin.SourceLifecycleOnDeletedResponse{})
+	is.Equal(resp, pconnector.SourceLifecycleOnDeletedResponse{})
 }
 
 func testSource_BlockingFunctions(t *testing.T, tdf testDispenserFunc) {
@@ -585,52 +585,52 @@ func testSource_BlockingFunctions(t *testing.T, tdf testDispenserFunc) {
 		name: "Configure",
 		prepareExpectation: func(m *mock.SourcePlugin, blockUntil chan struct{}) {
 			m.EXPECT().
-				Configure(gomock.Any(), cplugin.SourceConfigureRequest{}).
-				Do(func(context.Context, cplugin.SourceConfigureRequest) {
+				Configure(gomock.Any(), pconnector.SourceConfigureRequest{}).
+				Do(func(context.Context, pconnector.SourceConfigureRequest) {
 					<-blockUntil
 				})
 		},
 		callFn: func(ctx context.Context, d SourcePlugin) error {
-			_, err := d.Configure(ctx, cplugin.SourceConfigureRequest{})
+			_, err := d.Configure(ctx, pconnector.SourceConfigureRequest{})
 			return err
 		},
 	}, {
 		name: "Open",
 		prepareExpectation: func(m *mock.SourcePlugin, blockUntil chan struct{}) {
 			m.EXPECT().
-				Open(gomock.Any(), cplugin.SourceOpenRequest{}).
-				Do(func(context.Context, cplugin.SourceOpenRequest) {
+				Open(gomock.Any(), pconnector.SourceOpenRequest{}).
+				Do(func(context.Context, pconnector.SourceOpenRequest) {
 					<-blockUntil
 				})
 		},
 		callFn: func(ctx context.Context, d SourcePlugin) error {
-			_, err := d.Open(ctx, cplugin.SourceOpenRequest{})
+			_, err := d.Open(ctx, pconnector.SourceOpenRequest{})
 			return err
 		},
 	}, {
 		name: "Stop",
 		prepareExpectation: func(m *mock.SourcePlugin, blockUntil chan struct{}) {
 			m.EXPECT().
-				Stop(gomock.Any(), cplugin.SourceStopRequest{}).
-				Do(func(context.Context, cplugin.SourceStopRequest) {
+				Stop(gomock.Any(), pconnector.SourceStopRequest{}).
+				Do(func(context.Context, pconnector.SourceStopRequest) {
 					<-blockUntil
 				})
 		},
 		callFn: func(ctx context.Context, d SourcePlugin) error {
-			_, err := d.Stop(ctx, cplugin.SourceStopRequest{})
+			_, err := d.Stop(ctx, pconnector.SourceStopRequest{})
 			return err
 		},
 	}, {
 		name: "Teardown",
 		prepareExpectation: func(m *mock.SourcePlugin, blockUntil chan struct{}) {
 			m.EXPECT().
-				Teardown(gomock.Any(), cplugin.SourceTeardownRequest{}).
-				Do(func(context.Context, cplugin.SourceTeardownRequest) {
+				Teardown(gomock.Any(), pconnector.SourceTeardownRequest{}).
+				Do(func(context.Context, pconnector.SourceTeardownRequest) {
 					<-blockUntil
 				})
 		},
 		callFn: func(ctx context.Context, d SourcePlugin) error {
-			_, err := d.Teardown(ctx, cplugin.SourceTeardownRequest{})
+			_, err := d.Teardown(ctx, pconnector.SourceTeardownRequest{})
 			return err
 		},
 	}}
@@ -688,15 +688,15 @@ func testDestination_Configure_Success(t *testing.T, tdf testDispenserFunc) {
 	dispenser, _, _, mockDestination := tdf(t)
 
 	mockDestination.EXPECT().
-		Configure(gomock.Any(), cplugin.DestinationConfigureRequest{Config: nil}).
-		Return(cplugin.DestinationConfigureResponse{}, nil)
+		Configure(gomock.Any(), pconnector.DestinationConfigureRequest{Config: nil}).
+		Return(pconnector.DestinationConfigureResponse{}, nil)
 
 	destination, err := dispenser.DispenseDestination()
 	is.NoErr(err)
 
-	resp, err := destination.Configure(ctx, cplugin.DestinationConfigureRequest{Config: nil})
+	resp, err := destination.Configure(ctx, pconnector.DestinationConfigureRequest{Config: nil})
 	is.NoErr(err)
-	is.Equal(resp, cplugin.DestinationConfigureResponse{})
+	is.Equal(resp, pconnector.DestinationConfigureResponse{})
 }
 
 func testDestination_Configure_Fail(t *testing.T, tdf testDispenserFunc) {
@@ -710,13 +710,13 @@ func testDestination_Configure_Fail(t *testing.T, tdf testDispenserFunc) {
 	}
 	want := cerrors.New("init error")
 	mockDestination.EXPECT().
-		Configure(gomock.Any(), cplugin.DestinationConfigureRequest{Config: cfg}).
-		Return(cplugin.DestinationConfigureResponse{}, want)
+		Configure(gomock.Any(), pconnector.DestinationConfigureRequest{Config: cfg}).
+		Return(pconnector.DestinationConfigureResponse{}, want)
 
 	destination, err := dispenser.DispenseDestination()
 	is.NoErr(err)
 
-	_, got := destination.Configure(ctx, cplugin.DestinationConfigureRequest{Config: cfg})
+	_, got := destination.Configure(ctx, pconnector.DestinationConfigureRequest{Config: cfg})
 	is.Equal(got.Error(), want.Error())
 }
 
@@ -726,15 +726,15 @@ func testDestination_Open_Success(t *testing.T, tdf testDispenserFunc) {
 	dispenser, _, _, mockDestination := tdf(t)
 
 	mockDestination.EXPECT().
-		Open(gomock.Any(), cplugin.DestinationOpenRequest{}).
-		Return(cplugin.DestinationOpenResponse{}, nil)
+		Open(gomock.Any(), pconnector.DestinationOpenRequest{}).
+		Return(pconnector.DestinationOpenResponse{}, nil)
 
 	destination, err := dispenser.DispenseDestination()
 	is.NoErr(err)
 
-	openResp, err := destination.Open(ctx, cplugin.DestinationOpenRequest{})
+	openResp, err := destination.Open(ctx, pconnector.DestinationOpenRequest{})
 	is.NoErr(err)
-	is.Equal(openResp, cplugin.DestinationOpenResponse{})
+	is.Equal(openResp, pconnector.DestinationOpenResponse{})
 }
 
 func testDestination_Open_Fail(t *testing.T, tdf testDispenserFunc) {
@@ -745,13 +745,13 @@ func testDestination_Open_Fail(t *testing.T, tdf testDispenserFunc) {
 	want := cerrors.New("test error")
 
 	mockDestination.EXPECT().
-		Open(gomock.Any(), cplugin.DestinationOpenRequest{}).
-		Return(cplugin.DestinationOpenResponse{}, want)
+		Open(gomock.Any(), pconnector.DestinationOpenRequest{}).
+		Return(pconnector.DestinationOpenResponse{}, want)
 
 	destination, err := dispenser.DispenseDestination()
 	is.NoErr(err)
 
-	_, got := destination.Open(ctx, cplugin.DestinationOpenRequest{})
+	_, got := destination.Open(ctx, pconnector.DestinationOpenRequest{})
 	is.Equal(got.Error(), want.Error())
 }
 
@@ -776,7 +776,7 @@ func testDestination_Run_Success(t *testing.T, tdf testDispenserFunc) {
 	closeCh := make(chan struct{})
 	mockDestination.EXPECT().
 		Run(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, stream cplugin.DestinationRunStream) error {
+		DoAndReturn(func(_ context.Context, stream pconnector.DestinationRunStream) error {
 			defer close(closeCh)
 			serverStream := stream.Server()
 			got, err := serverStream.Recv()
@@ -795,7 +795,7 @@ func testDestination_Run_Success(t *testing.T, tdf testDispenserFunc) {
 
 	clientStream := stream.Client()
 
-	err = clientStream.Send(cplugin.DestinationRunRequest{
+	err = clientStream.Send(pconnector.DestinationRunRequest{
 		Records: []opencdc.Record{want},
 	})
 	is.NoErr(err)
@@ -809,7 +809,7 @@ func testDestination_Run_Success(t *testing.T, tdf testDispenserFunc) {
 	// wait for stream closing to propagate from plugin to Conduit
 	time.Sleep(time.Millisecond * 100)
 
-	err = clientStream.Send(cplugin.DestinationRunRequest{Records: []opencdc.Record{{}}})
+	err = clientStream.Send(pconnector.DestinationRunRequest{Records: []opencdc.Record{{}}})
 	is.True(cerrors.Is(err, ErrStreamNotOpen))
 }
 
@@ -825,7 +825,7 @@ func testDestination_Run_Fail(t *testing.T, tdf testDispenserFunc) {
 	closeCh := make(chan struct{})
 	mockDestination.EXPECT().
 		Run(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, stream cplugin.DestinationRunStream) error {
+		DoAndReturn(func(_ context.Context, stream pconnector.DestinationRunStream) error {
 			defer close(closeCh)
 			serverStream := stream.Server()
 			_, _ = serverStream.Recv() // receive record and fail
@@ -841,7 +841,7 @@ func testDestination_Run_Fail(t *testing.T, tdf testDispenserFunc) {
 
 	clientStream := stream.Client()
 
-	err = clientStream.Send(cplugin.DestinationRunRequest{Records: []opencdc.Record{{}}})
+	err = clientStream.Send(pconnector.DestinationRunRequest{Records: []opencdc.Record{{}}})
 	is.NoErr(err)
 
 	select {
@@ -861,7 +861,7 @@ func testDestination_Run_Fail(t *testing.T, tdf testDispenserFunc) {
 	is.Equal(got.Error(), want.Error())
 
 	// Send returns just a generic error
-	err = clientStream.Send(cplugin.DestinationRunRequest{Records: []opencdc.Record{{}}})
+	err = clientStream.Send(pconnector.DestinationRunRequest{Records: []opencdc.Record{{}}})
 	is.True(cerrors.Is(err, ErrStreamNotOpen))
 }
 
@@ -893,11 +893,11 @@ func testDestination_StreamRecv_Success(t *testing.T, tdf testDispenserFunc) {
 
 	mockDestination.EXPECT().
 		Run(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, stream cplugin.DestinationRunStream) error {
+		DoAndReturn(func(_ context.Context, stream pconnector.DestinationRunStream) error {
 			serverStream := stream.Server()
 			for _, p := range want {
-				err := serverStream.Send(cplugin.DestinationRunResponse{
-					Acks: []cplugin.DestinationRunResponseAck{{
+				err := serverStream.Send(pconnector.DestinationRunResponse{
+					Acks: []pconnector.DestinationRunResponseAck{{
 						Position: p,
 					}},
 				})
@@ -933,17 +933,17 @@ func testDestination_StreamRecv_WithError(t *testing.T, tdf testDispenserFunc) {
 	ctx := context.Background()
 	dispenser, _, _, mockDestination := tdf(t)
 
-	want := cplugin.DestinationRunResponseAck{
+	want := pconnector.DestinationRunResponseAck{
 		Position: opencdc.Position("test-position"),
 		Error:    "test error",
 	}
 
 	mockDestination.EXPECT().
 		Run(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, stream cplugin.DestinationRunStream) error {
+		DoAndReturn(func(_ context.Context, stream pconnector.DestinationRunStream) error {
 			serverStream := stream.Server()
-			err := serverStream.Send(cplugin.DestinationRunResponse{
-				Acks: []cplugin.DestinationRunResponseAck{want},
+			err := serverStream.Send(pconnector.DestinationRunResponse{
+				Acks: []pconnector.DestinationRunResponseAck{want},
 			})
 			is.NoErr(err)
 			return nil
@@ -960,7 +960,7 @@ func testDestination_StreamRecv_WithError(t *testing.T, tdf testDispenserFunc) {
 
 	got, err := clientStream.Recv()
 	is.NoErr(err)
-	is.Equal("", cmp.Diff(got.Acks, []cplugin.DestinationRunResponseAck{want}))
+	is.Equal("", cmp.Diff(got.Acks, []pconnector.DestinationRunResponseAck{want}))
 }
 
 func testDestination_Teardown_Success(t *testing.T, tdf testDispenserFunc) {
@@ -969,15 +969,15 @@ func testDestination_Teardown_Success(t *testing.T, tdf testDispenserFunc) {
 	dispenser, _, _, mockDestination := tdf(t)
 
 	mockDestination.EXPECT().
-		Teardown(gomock.Any(), cplugin.DestinationTeardownRequest{}).
-		Return(cplugin.DestinationTeardownResponse{}, nil)
+		Teardown(gomock.Any(), pconnector.DestinationTeardownRequest{}).
+		Return(pconnector.DestinationTeardownResponse{}, nil)
 
 	destination, err := dispenser.DispenseDestination()
 	is.NoErr(err)
 
-	teardownResp, err := destination.Teardown(ctx, cplugin.DestinationTeardownRequest{})
+	teardownResp, err := destination.Teardown(ctx, pconnector.DestinationTeardownRequest{})
 	is.NoErr(err)
-	is.Equal(teardownResp, cplugin.DestinationTeardownResponse{})
+	is.Equal(teardownResp, pconnector.DestinationTeardownResponse{})
 }
 
 func testDestination_Teardown_Fail(t *testing.T, tdf testDispenserFunc) {
@@ -987,13 +987,13 @@ func testDestination_Teardown_Fail(t *testing.T, tdf testDispenserFunc) {
 
 	want := cerrors.New("init error")
 	mockDestination.EXPECT().
-		Teardown(gomock.Any(), cplugin.DestinationTeardownRequest{}).
-		Return(cplugin.DestinationTeardownResponse{}, want)
+		Teardown(gomock.Any(), pconnector.DestinationTeardownRequest{}).
+		Return(pconnector.DestinationTeardownResponse{}, want)
 
 	destination, err := dispenser.DispenseDestination()
 	is.NoErr(err)
 
-	_, got := destination.Teardown(ctx, cplugin.DestinationTeardownRequest{})
+	_, got := destination.Teardown(ctx, pconnector.DestinationTeardownRequest{})
 	is.Equal(got.Error(), want.Error())
 }
 
@@ -1002,20 +1002,20 @@ func testDestination_Lifecycle_OnCreated(t *testing.T, tdf testDispenserFunc) {
 	ctx := context.Background()
 	dispenser, _, _, mockDestination := tdf(t)
 
-	want := cplugin.DestinationLifecycleOnCreatedRequest{
+	want := pconnector.DestinationLifecycleOnCreatedRequest{
 		Config: map[string]string{"foo": "bar"},
 	}
 
 	mockDestination.EXPECT().
 		LifecycleOnCreated(gomock.Any(), want).
-		Return(cplugin.DestinationLifecycleOnCreatedResponse{}, nil)
+		Return(pconnector.DestinationLifecycleOnCreatedResponse{}, nil)
 
 	destination, err := dispenser.DispenseDestination()
 	is.NoErr(err)
 
 	resp, err := destination.LifecycleOnCreated(ctx, want)
 	is.NoErr(err)
-	is.Equal(resp, cplugin.DestinationLifecycleOnCreatedResponse{})
+	is.Equal(resp, pconnector.DestinationLifecycleOnCreatedResponse{})
 }
 
 func testDestination_Lifecycle_OnUpdated(t *testing.T, tdf testDispenserFunc) {
@@ -1023,21 +1023,21 @@ func testDestination_Lifecycle_OnUpdated(t *testing.T, tdf testDispenserFunc) {
 	ctx := context.Background()
 	dispenser, _, _, mockDestination := tdf(t)
 
-	want := cplugin.DestinationLifecycleOnUpdatedRequest{
+	want := pconnector.DestinationLifecycleOnUpdatedRequest{
 		ConfigBefore: map[string]string{"foo": "bar"},
 		ConfigAfter:  map[string]string{"foo": "baz"},
 	}
 
 	mockDestination.EXPECT().
 		LifecycleOnUpdated(gomock.Any(), want).
-		Return(cplugin.DestinationLifecycleOnUpdatedResponse{}, nil)
+		Return(pconnector.DestinationLifecycleOnUpdatedResponse{}, nil)
 
 	destination, err := dispenser.DispenseDestination()
 	is.NoErr(err)
 
 	resp, err := destination.LifecycleOnUpdated(ctx, want)
 	is.NoErr(err)
-	is.Equal(resp, cplugin.DestinationLifecycleOnUpdatedResponse{})
+	is.Equal(resp, pconnector.DestinationLifecycleOnUpdatedResponse{})
 }
 
 func testDestination_Lifecycle_OnDeleted(t *testing.T, tdf testDispenserFunc) {
@@ -1045,20 +1045,20 @@ func testDestination_Lifecycle_OnDeleted(t *testing.T, tdf testDispenserFunc) {
 	ctx := context.Background()
 	dispenser, _, _, mockDestination := tdf(t)
 
-	want := cplugin.DestinationLifecycleOnDeletedRequest{
+	want := pconnector.DestinationLifecycleOnDeletedRequest{
 		Config: map[string]string{"foo": "bar"},
 	}
 
 	mockDestination.EXPECT().
 		LifecycleOnDeleted(gomock.Any(), want).
-		Return(cplugin.DestinationLifecycleOnDeletedResponse{}, nil)
+		Return(pconnector.DestinationLifecycleOnDeletedResponse{}, nil)
 
 	destination, err := dispenser.DispenseDestination()
 	is.NoErr(err)
 
 	resp, err := destination.LifecycleOnDeleted(ctx, want)
 	is.NoErr(err)
-	is.Equal(resp, cplugin.DestinationLifecycleOnDeletedResponse{})
+	is.Equal(resp, pconnector.DestinationLifecycleOnDeletedResponse{})
 }
 
 func testDestination_BlockingFunctions(t *testing.T, tdf testDispenserFunc) {
@@ -1070,52 +1070,52 @@ func testDestination_BlockingFunctions(t *testing.T, tdf testDispenserFunc) {
 		name: "Configure",
 		prepareExpectation: func(m *mock.DestinationPlugin, blockUntil chan struct{}) {
 			m.EXPECT().
-				Configure(gomock.Any(), cplugin.DestinationConfigureRequest{}).
-				Do(func(context.Context, cplugin.DestinationConfigureRequest) {
+				Configure(gomock.Any(), pconnector.DestinationConfigureRequest{}).
+				Do(func(context.Context, pconnector.DestinationConfigureRequest) {
 					<-blockUntil
 				})
 		},
 		callFn: func(ctx context.Context, d DestinationPlugin) error {
-			_, err := d.Configure(ctx, cplugin.DestinationConfigureRequest{})
+			_, err := d.Configure(ctx, pconnector.DestinationConfigureRequest{})
 			return err
 		},
 	}, {
 		name: "Open",
 		prepareExpectation: func(m *mock.DestinationPlugin, blockUntil chan struct{}) {
 			m.EXPECT().
-				Open(gomock.Any(), cplugin.DestinationOpenRequest{}).
-				Do(func(context.Context, cplugin.DestinationOpenRequest) {
+				Open(gomock.Any(), pconnector.DestinationOpenRequest{}).
+				Do(func(context.Context, pconnector.DestinationOpenRequest) {
 					<-blockUntil
 				})
 		},
 		callFn: func(ctx context.Context, d DestinationPlugin) error {
-			_, err := d.Open(ctx, cplugin.DestinationOpenRequest{})
+			_, err := d.Open(ctx, pconnector.DestinationOpenRequest{})
 			return err
 		},
 	}, {
 		name: "Stop",
 		prepareExpectation: func(m *mock.DestinationPlugin, blockUntil chan struct{}) {
 			m.EXPECT().
-				Stop(gomock.Any(), cplugin.DestinationStopRequest{}).
-				Do(func(context.Context, cplugin.DestinationStopRequest) {
+				Stop(gomock.Any(), pconnector.DestinationStopRequest{}).
+				Do(func(context.Context, pconnector.DestinationStopRequest) {
 					<-blockUntil
 				})
 		},
 		callFn: func(ctx context.Context, d DestinationPlugin) error {
-			_, err := d.Stop(ctx, cplugin.DestinationStopRequest{})
+			_, err := d.Stop(ctx, pconnector.DestinationStopRequest{})
 			return err
 		},
 	}, {
 		name: "Teardown",
 		prepareExpectation: func(m *mock.DestinationPlugin, blockUntil chan struct{}) {
 			m.EXPECT().
-				Teardown(gomock.Any(), cplugin.DestinationTeardownRequest{}).
-				Do(func(context.Context, cplugin.DestinationTeardownRequest) {
+				Teardown(gomock.Any(), pconnector.DestinationTeardownRequest{}).
+				Do(func(context.Context, pconnector.DestinationTeardownRequest) {
 					<-blockUntil
 				})
 		},
 		callFn: func(ctx context.Context, d DestinationPlugin) error {
-			_, err := d.Teardown(ctx, cplugin.DestinationTeardownRequest{})
+			_, err := d.Teardown(ctx, pconnector.DestinationTeardownRequest{})
 			return err
 		},
 	}}

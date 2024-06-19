@@ -17,9 +17,9 @@ package standalone
 import (
 	"testing"
 
-	"github.com/conduitio/conduit-connector-protocol/cplugin/mock"
-	v1 "github.com/conduitio/conduit-connector-protocol/cplugin/v1"
-	v2 "github.com/conduitio/conduit-connector-protocol/cplugin/v2"
+	"github.com/conduitio/conduit-connector-protocol/pconnector/mock"
+	v1 "github.com/conduitio/conduit-connector-protocol/pconnector/v1"
+	v2 "github.com/conduitio/conduit-connector-protocol/pconnector/v2"
 	"github.com/conduitio/conduit/pkg/plugin/connector"
 	"github.com/rs/zerolog"
 )

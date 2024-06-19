@@ -16,9 +16,7 @@
 
 package connector
 
-import (
-	"github.com/conduitio/conduit-connector-protocol/cplugin"
-)
+import "github.com/conduitio/conduit-connector-protocol/pconnector"
 
 // Dispenser dispenses specifier, source and destination plugins.
 type Dispenser interface {
@@ -28,15 +26,15 @@ type Dispenser interface {
 }
 
 type SourcePlugin interface {
-	cplugin.SourcePlugin
-	NewStream() cplugin.SourceRunStream
+	pconnector.SourcePlugin
+	NewStream() pconnector.SourceRunStream
 }
 
 type DestinationPlugin interface {
-	cplugin.DestinationPlugin
-	NewStream() cplugin.DestinationRunStream
+	pconnector.DestinationPlugin
+	NewStream() pconnector.DestinationRunStream
 }
 
 type SpecifierPlugin interface {
-	cplugin.SpecifierPlugin
+	pconnector.SpecifierPlugin
 }

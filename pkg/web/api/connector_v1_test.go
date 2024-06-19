@@ -23,7 +23,7 @@ import (
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	opencdcv1 "github.com/conduitio/conduit-commons/proto/opencdc/v1"
-	"github.com/conduitio/conduit-connector-protocol/cplugin"
+	"github.com/conduitio/conduit-connector-protocol/pconnector"
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cchan"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -544,11 +544,11 @@ func TestConnectorAPIv1_ListConnectorPluginsByName(t *testing.T) {
 
 	names := []string{"do-not-want-this-plugin", "want-p1", "want-p2", "skip", "another-skipped"}
 
-	plsMap := make(map[string]cplugin.Specification)
-	pls := make([]cplugin.Specification, 0)
+	plsMap := make(map[string]pconnector.Specification)
+	pls := make([]pconnector.Specification, 0)
 
 	for _, name := range names {
-		ps := cplugin.Specification{
+		ps := pconnector.Specification{
 			Name:        name,
 			Description: "desc",
 			Version:     "v1.0",

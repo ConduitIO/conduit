@@ -21,7 +21,7 @@ import (
 	"testing"
 
 	"github.com/conduitio/conduit-commons/opencdc"
-	"github.com/conduitio/conduit-connector-protocol/cplugin"
+	"github.com/conduitio/conduit-connector-protocol/pconnector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/plugin/connector/builtin"
 	"github.com/matryer/is"
@@ -64,7 +64,7 @@ func SourcePluginWithConfigure() ConfigurableSourcePluginOption {
 	return configurableSourcePluginOptionFunc(func(p *ConfigurableSourcePlugin) {
 		p.EXPECT().
 			Configure(gomock.Any(), gomock.Any()).
-			Return(cplugin.SourceConfigureResponse{}, nil)
+			Return(pconnector.SourceConfigureResponse{}, nil)
 	})
 }
 
@@ -72,7 +72,7 @@ func SourcePluginWithOpen() ConfigurableSourcePluginOption {
 	return configurableSourcePluginOptionFunc(func(p *ConfigurableSourcePlugin) {
 		p.EXPECT().
 			Open(gomock.Any(), gomock.Any()).
-			Return(cplugin.SourceOpenResponse{}, nil)
+			Return(pconnector.SourceOpenResponse{}, nil)
 	})
 }
 
@@ -83,7 +83,7 @@ func SourcePluginWithRun() ConfigurableSourcePluginOption {
 		p.EXPECT().NewStream().Return(p.Stream)
 		p.EXPECT().
 			Run(gomock.Any(), gomock.Any()).
-			DoAndReturn(func(ctx context.Context, _ cplugin.SourceRunStream) error {
+			DoAndReturn(func(ctx context.Context, _ pconnector.SourceRunStream) error {
 				p.Stream.Init(ctx)
 				if len(p.onRun) == 0 {
 					// No other expectations for Run.
@@ -120,7 +120,7 @@ func SourcePluginWithRecords(records []opencdc.Record, wantErr error) Configurab
 			defer done.Store(true)
 			serverStream := p.Stream.Server()
 			for _, rec := range records {
-				err := serverStream.Send(cplugin.SourceRunResponse{Records: []opencdc.Record{rec}})
+				err := serverStream.Send(pconnector.SourceRunResponse{Records: []opencdc.Record{rec}})
 				if err != nil {
 					return cerrors.Errorf("source mock send stream error: %w", err)
 				}
@@ -166,14 +166,14 @@ func SourcePluginWithStop() ConfigurableSourcePluginOption {
 	return configurableSourcePluginOptionFunc(func(p *ConfigurableSourcePlugin) {
 		p.EXPECT().
 			Stop(gomock.Any(), gomock.Any()).
-			DoAndReturn(func(ctx context.Context, in cplugin.SourceStopRequest) (cplugin.SourceStopResponse, error) {
+			DoAndReturn(func(ctx context.Context, in pconnector.SourceStopRequest) (pconnector.SourceStopResponse, error) {
 				p.isStopped.Store(true)
 				lastPosition := p.lastPosition.Load()
 				if lastPosition == nil {
 					var empty opencdc.Position
 					lastPosition = &empty
 				}
-				return cplugin.SourceStopResponse{LastPosition: *lastPosition}, nil
+				return pconnector.SourceStopResponse{LastPosition: *lastPosition}, nil
 			})
 	})
 }
@@ -182,6 +182,6 @@ func SourcePluginWithTeardown() ConfigurableSourcePluginOption {
 	return configurableSourcePluginOptionFunc(func(p *ConfigurableSourcePlugin) {
 		p.EXPECT().
 			Teardown(gomock.Any(), gomock.Any()).
-			Return(cplugin.SourceTeardownResponse{}, nil)
+			Return(pconnector.SourceTeardownResponse{}, nil)
 	})
 }

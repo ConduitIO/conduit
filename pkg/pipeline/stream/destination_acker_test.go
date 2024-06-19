@@ -248,7 +248,7 @@ func TestDestinationAckerNode_UnexpectedPosition(t *testing.T) {
 	dest.EXPECT().Ack(gomock.Any()).
 		DoAndReturn(func(ctx context.Context) ([]connector.DestinationAck, error) {
 			return nil, cerrors.New("stream closed") // second Ack call is to drain outstanding acks
-		}).After(ackCall).AnyTimes()
+		}).After(ackCall.Call).AnyTimes()
 
 	// nack should be still called when node exits
 	nackHandlerDone := make(chan struct{})
@@ -364,7 +364,7 @@ func TestDestinationAckerNode_MessageAckError(t *testing.T) {
 	dest.EXPECT().Ack(gomock.Any()).
 		DoAndReturn(func(ctx context.Context) ([]connector.DestinationAck, error) {
 			return nil, cerrors.New("stream closed") // second Ack call is to drain outstanding acks
-		}).After(ackCall).AnyTimes()
+		}).After(ackCall.Call).AnyTimes()
 
 	ackHandlerDone := make(chan struct{})
 	msg.RegisterAckHandler(func(*Message) error {

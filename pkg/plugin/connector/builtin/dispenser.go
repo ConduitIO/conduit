@@ -15,7 +15,7 @@
 package builtin
 
 import (
-	"github.com/conduitio/conduit-connector-protocol/cplugin"
+	"github.com/conduitio/conduit-connector-protocol/pconnector"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/conduitio/conduit/pkg/plugin/connector"
@@ -24,17 +24,17 @@ import (
 type Dispenser struct {
 	name              plugin.FullName
 	logger            log.CtxLogger
-	specifierPlugin   func() cplugin.SpecifierPlugin
-	sourcePlugin      func() cplugin.SourcePlugin
-	destinationPlugin func() cplugin.DestinationPlugin
+	specifierPlugin   func() pconnector.SpecifierPlugin
+	sourcePlugin      func() pconnector.SourcePlugin
+	destinationPlugin func() pconnector.DestinationPlugin
 }
 
 func NewDispenser(
 	name plugin.FullName,
 	logger log.CtxLogger,
-	specifierPlugin func() cplugin.SpecifierPlugin,
-	sourcePlugin func() cplugin.SourcePlugin,
-	destinationPlugin func() cplugin.DestinationPlugin,
+	specifierPlugin func() pconnector.SpecifierPlugin,
+	sourcePlugin func() pconnector.SourcePlugin,
+	destinationPlugin func() pconnector.DestinationPlugin,
 ) *Dispenser {
 	return &Dispenser{
 		name:              name,

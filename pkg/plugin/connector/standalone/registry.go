@@ -21,7 +21,7 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/conduitio/conduit-connector-protocol/cplugin"
+	"github.com/conduitio/conduit-connector-protocol/pconnector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
@@ -42,7 +42,7 @@ type Registry struct {
 
 type blueprint struct {
 	FullName      plugin.FullName
-	Specification cplugin.Specification
+	Specification pconnector.Specification
 	Path          string
 	// TODO store hash of plugin binary and compare before running the binary to
 	// ensure someone can't switch the plugin after we registered it
@@ -155,21 +155,21 @@ func (r *Registry) loadPlugins(ctx context.Context, pluginDir string) map[string
 	return plugins
 }
 
-func (r *Registry) loadSpecifications(pluginPath string) (cplugin.Specification, error) {
+func (r *Registry) loadSpecifications(pluginPath string) (pconnector.Specification, error) {
 	// create dispenser without a logger to not spam logs on refresh
 	dispenser, err := NewDispenser(zerolog.Nop(), pluginPath)
 	if err != nil {
-		return cplugin.Specification{}, cerrors.Errorf("failed to create connector dispenser: %w", err)
+		return pconnector.Specification{}, cerrors.Errorf("failed to create connector dispenser: %w", err)
 	}
 
 	specPlugin, err := dispenser.DispenseSpecifier()
 	if err != nil {
-		return cplugin.Specification{}, cerrors.Errorf("failed to dispense connector specifier (tip: check if the file is a valid connector plugin binary and if you have permissions for running it): %w", err)
+		return pconnector.Specification{}, cerrors.Errorf("failed to dispense connector specifier (tip: check if the file is a valid connector plugin binary and if you have permissions for running it): %w", err)
 	}
 
-	resp, err := specPlugin.Specify(context.Background(), cplugin.SpecifierSpecifyRequest{})
+	resp, err := specPlugin.Specify(context.Background(), pconnector.SpecifierSpecifyRequest{})
 	if err != nil {
-		return cplugin.Specification{}, cerrors.Errorf("failed to get connector specs: %w", err)
+		return pconnector.Specification{}, cerrors.Errorf("failed to get connector specs: %w", err)
 	}
 
 	return resp.Specification, nil
@@ -196,11 +196,11 @@ func (r *Registry) NewDispenser(logger log.CtxLogger, fullName plugin.FullName) 
 	return NewDispenser(logger.ZerologWithComponent(), bp.Path)
 }
 
-func (r *Registry) List() map[plugin.FullName]cplugin.Specification {
+func (r *Registry) List() map[plugin.FullName]pconnector.Specification {
 	r.m.RLock()
 	defer r.m.RUnlock()
 
-	specs := make(map[plugin.FullName]cplugin.Specification, len(r.plugins))
+	specs := make(map[plugin.FullName]pconnector.Specification, len(r.plugins))
 	for _, versions := range r.plugins {
 		for version, bp := range versions {
 			if version == plugin.PluginVersionLatest {

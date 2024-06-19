@@ -18,7 +18,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/conduitio/conduit-connector-protocol/cplugin"
+	"github.com/conduitio/conduit-connector-protocol/pconnector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/database/inmemory"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -65,8 +65,8 @@ func TestDestination_LifecycleOnCreated_Success(t *testing.T) {
 	// destination should know it's the first run and trigger LifecycleOnCreated
 	destinationMock.EXPECT().LifecycleOnCreated(
 		gomock.Any(),
-		cplugin.DestinationLifecycleOnCreatedRequest{Config: dest.Instance.Config.Settings},
-	).Return(cplugin.DestinationLifecycleOnCreatedResponse{}, nil)
+		pconnector.DestinationLifecycleOnCreatedRequest{Config: dest.Instance.Config.Settings},
+	).Return(pconnector.DestinationLifecycleOnCreatedResponse{}, nil)
 
 	err := dest.Open(ctx)
 	is.NoErr(err)
@@ -90,11 +90,11 @@ func TestDestination_LifecycleOnUpdated_Success(t *testing.T) {
 	// destination should know it was already run once with a different config and trigger LifecycleOnUpdated
 	destinationMock.EXPECT().LifecycleOnUpdated(
 		gomock.Any(),
-		cplugin.DestinationLifecycleOnUpdatedRequest{
+		pconnector.DestinationLifecycleOnUpdatedRequest{
 			ConfigBefore: dest.Instance.LastActiveConfig.Settings,
 			ConfigAfter:  dest.Instance.Config.Settings,
 		},
-	).Return(cplugin.DestinationLifecycleOnUpdatedResponse{}, nil)
+	).Return(pconnector.DestinationLifecycleOnUpdatedResponse{}, nil)
 
 	err := dest.Open(ctx)
 	is.NoErr(err)
@@ -115,18 +115,18 @@ func TestDestination_LifecycleOnCreated_Error(t *testing.T) {
 
 	destinationMock.EXPECT().Configure(
 		gomock.Any(),
-		cplugin.DestinationConfigureRequest{Config: dest.Instance.Config.Settings},
-	).Return(cplugin.DestinationConfigureResponse{}, nil)
+		pconnector.DestinationConfigureRequest{Config: dest.Instance.Config.Settings},
+	).Return(pconnector.DestinationConfigureResponse{}, nil)
 
 	// destination should know it's the first run and trigger LifecycleOnCreated, but it fails
 	want := cerrors.New("whoops")
 	destinationMock.EXPECT().LifecycleOnCreated(
 		gomock.Any(),
-		cplugin.DestinationLifecycleOnCreatedRequest{Config: dest.Instance.Config.Settings},
-	).Return(cplugin.DestinationLifecycleOnCreatedResponse{}, want)
+		pconnector.DestinationLifecycleOnCreatedRequest{Config: dest.Instance.Config.Settings},
+	).Return(pconnector.DestinationLifecycleOnCreatedResponse{}, want)
 
 	// destination should terminate plugin in case of an error
-	destinationMock.EXPECT().Teardown(gomock.Any(), cplugin.DestinationTeardownRequest{}).Return(cplugin.DestinationTeardownResponse{}, nil)
+	destinationMock.EXPECT().Teardown(gomock.Any(), pconnector.DestinationTeardownRequest{}).Return(pconnector.DestinationTeardownResponse{}, nil)
 
 	err := dest.Open(ctx)
 	is.True(cerrors.Is(err, want))
@@ -147,10 +147,10 @@ func TestDestination_LifecycleOnDeleted_Success(t *testing.T) {
 
 	destinationMock.EXPECT().LifecycleOnDeleted(
 		gomock.Any(),
-		cplugin.DestinationLifecycleOnDeletedRequest{Config: dest.Instance.LastActiveConfig.Settings},
-	).Return(cplugin.DestinationLifecycleOnDeletedResponse{}, nil)
+		pconnector.DestinationLifecycleOnDeletedRequest{Config: dest.Instance.LastActiveConfig.Settings},
+	).Return(pconnector.DestinationLifecycleOnDeletedResponse{}, nil)
 
-	destinationMock.EXPECT().Teardown(gomock.Any(), cplugin.DestinationTeardownRequest{}).Return(cplugin.DestinationTeardownResponse{}, nil)
+	destinationMock.EXPECT().Teardown(gomock.Any(), pconnector.DestinationTeardownRequest{}).Return(pconnector.DestinationTeardownResponse{}, nil)
 
 	err := dest.OnDelete(ctx)
 	is.NoErr(err)
@@ -169,10 +169,10 @@ func TestDestination_LifecycleOnDeleted_BackwardsCompatibility(t *testing.T) {
 	// we should ignore the error if the plugin does not implement lifecycle events
 	destinationMock.EXPECT().LifecycleOnDeleted(
 		gomock.Any(),
-		cplugin.DestinationLifecycleOnDeletedRequest{Config: dest.Instance.LastActiveConfig.Settings},
-	).Return(cplugin.DestinationLifecycleOnDeletedResponse{}, plugin.ErrUnimplemented)
+		pconnector.DestinationLifecycleOnDeletedRequest{Config: dest.Instance.LastActiveConfig.Settings},
+	).Return(pconnector.DestinationLifecycleOnDeletedResponse{}, plugin.ErrUnimplemented)
 
-	destinationMock.EXPECT().Teardown(gomock.Any(), cplugin.DestinationTeardownRequest{}).Return(cplugin.DestinationTeardownResponse{}, nil)
+	destinationMock.EXPECT().Teardown(gomock.Any(), pconnector.DestinationTeardownRequest{}).Return(pconnector.DestinationTeardownResponse{}, nil)
 
 	err := dest.OnDelete(ctx)
 	is.NoErr(err)
@@ -229,15 +229,16 @@ func expectDestinationOpen(dest *Destination, destinationMock *mock.DestinationP
 	stream := &builtin.InMemoryDestinationRunStream{}
 
 	destinationMock.EXPECT().Configure(gomock.Any(),
-		cplugin.DestinationConfigureRequest{
+		pconnector.DestinationConfigureRequest{
 			Config: dest.Instance.Config.Settings,
 		},
-	).Return(cplugin.DestinationConfigureResponse{}, nil)
-	destinationMock.EXPECT().Open(gomock.Any(), cplugin.DestinationOpenRequest{}).Return(cplugin.DestinationOpenResponse{}, nil)
+	).Return(pconnector.DestinationConfigureResponse{}, nil)
+	destinationMock.EXPECT().Open(gomock.Any(), pconnector.DestinationOpenRequest{}).Return(pconnector.DestinationOpenResponse{}, nil)
 	destinationMock.EXPECT().NewStream().Return(stream)
-	destinationMock.EXPECT().Run(gomock.Any(), stream).Do(func(ctx context.Context, _ cplugin.DestinationRunStream) {
+	destinationMock.EXPECT().Run(gomock.Any(), stream).DoAndReturn(func(ctx context.Context, _ pconnector.DestinationRunStream) error {
 		stream.Init(ctx)
-	}).Return(nil)
+		return nil
+	})
 
 	return stream
 }

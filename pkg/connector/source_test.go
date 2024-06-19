@@ -19,7 +19,7 @@ import (
 	"testing"
 
 	"github.com/conduitio/conduit-commons/opencdc"
-	"github.com/conduitio/conduit-connector-protocol/cplugin"
+	"github.com/conduitio/conduit-connector-protocol/pconnector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/database/inmemory"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -66,8 +66,8 @@ func TestSource_LifecycleOnCreated_Success(t *testing.T) {
 	// source should know it's the first run and trigger LifecycleOnCreated
 	sourceMock.EXPECT().LifecycleOnCreated(
 		gomock.Any(),
-		cplugin.SourceLifecycleOnCreatedRequest{Config: src.Instance.Config.Settings},
-	).Return(cplugin.SourceLifecycleOnCreatedResponse{}, nil)
+		pconnector.SourceLifecycleOnCreatedRequest{Config: src.Instance.Config.Settings},
+	).Return(pconnector.SourceLifecycleOnCreatedResponse{}, nil)
 
 	err := src.Open(ctx)
 	is.NoErr(err)
@@ -91,11 +91,11 @@ func TestSource_LifecycleOnUpdated_Success(t *testing.T) {
 	// source should know it was already run once with a different config and trigger LifecycleOnUpdated
 	sourceMock.EXPECT().LifecycleOnUpdated(
 		gomock.Any(),
-		cplugin.SourceLifecycleOnUpdatedRequest{
+		pconnector.SourceLifecycleOnUpdatedRequest{
 			ConfigBefore: src.Instance.LastActiveConfig.Settings,
 			ConfigAfter:  src.Instance.Config.Settings,
 		},
-	).Return(cplugin.SourceLifecycleOnUpdatedResponse{}, nil)
+	).Return(pconnector.SourceLifecycleOnUpdatedResponse{}, nil)
 
 	err := src.Open(ctx)
 	is.NoErr(err)
@@ -116,18 +116,18 @@ func TestSource_LifecycleOnCreated_Error(t *testing.T) {
 
 	sourceMock.EXPECT().Configure(
 		gomock.Any(),
-		cplugin.SourceConfigureRequest{Config: src.Instance.Config.Settings},
-	).Return(cplugin.SourceConfigureResponse{}, nil)
+		pconnector.SourceConfigureRequest{Config: src.Instance.Config.Settings},
+	).Return(pconnector.SourceConfigureResponse{}, nil)
 
 	// source should know it's the first run and trigger LifecycleOnCreated, but it fails
 	want := cerrors.New("whoops")
 	sourceMock.EXPECT().LifecycleOnCreated(
 		gomock.Any(),
-		cplugin.SourceLifecycleOnCreatedRequest{Config: src.Instance.Config.Settings},
-	).Return(cplugin.SourceLifecycleOnCreatedResponse{}, want)
+		pconnector.SourceLifecycleOnCreatedRequest{Config: src.Instance.Config.Settings},
+	).Return(pconnector.SourceLifecycleOnCreatedResponse{}, want)
 
 	// source should terminate plugin in case of an error
-	sourceMock.EXPECT().Teardown(gomock.Any(), cplugin.SourceTeardownRequest{}).Return(cplugin.SourceTeardownResponse{}, nil)
+	sourceMock.EXPECT().Teardown(gomock.Any(), pconnector.SourceTeardownRequest{}).Return(pconnector.SourceTeardownResponse{}, nil)
 
 	err := src.Open(ctx)
 	is.True(cerrors.Is(err, want))
@@ -148,10 +148,10 @@ func TestSource_LifecycleOnDeleted_Success(t *testing.T) {
 
 	sourceMock.EXPECT().LifecycleOnDeleted(
 		gomock.Any(),
-		cplugin.SourceLifecycleOnDeletedRequest{Config: src.Instance.LastActiveConfig.Settings},
-	).Return(cplugin.SourceLifecycleOnDeletedResponse{}, nil)
+		pconnector.SourceLifecycleOnDeletedRequest{Config: src.Instance.LastActiveConfig.Settings},
+	).Return(pconnector.SourceLifecycleOnDeletedResponse{}, nil)
 
-	sourceMock.EXPECT().Teardown(gomock.Any(), cplugin.SourceTeardownRequest{}).Return(cplugin.SourceTeardownResponse{}, nil)
+	sourceMock.EXPECT().Teardown(gomock.Any(), pconnector.SourceTeardownRequest{}).Return(pconnector.SourceTeardownResponse{}, nil)
 
 	err := src.OnDelete(ctx)
 	is.NoErr(err)
@@ -170,10 +170,10 @@ func TestSource_LifecycleOnDeleted_BackwardsCompatibility(t *testing.T) {
 	// we should ignore the error if the plugin does not implement lifecycle events
 	sourceMock.EXPECT().LifecycleOnDeleted(
 		gomock.Any(),
-		cplugin.SourceLifecycleOnDeletedRequest{Config: src.Instance.LastActiveConfig.Settings},
-	).Return(cplugin.SourceLifecycleOnDeletedResponse{}, plugin.ErrUnimplemented)
+		pconnector.SourceLifecycleOnDeletedRequest{Config: src.Instance.LastActiveConfig.Settings},
+	).Return(pconnector.SourceLifecycleOnDeletedResponse{}, plugin.ErrUnimplemented)
 
-	sourceMock.EXPECT().Teardown(gomock.Any(), cplugin.SourceTeardownRequest{}).Return(cplugin.SourceTeardownResponse{}, nil)
+	sourceMock.EXPECT().Teardown(gomock.Any(), pconnector.SourceTeardownRequest{}).Return(pconnector.SourceTeardownResponse{}, nil)
 
 	err := src.OnDelete(ctx)
 	is.NoErr(err)
@@ -204,8 +204,8 @@ func TestSource_Ack_Deadlock(t *testing.T) {
 	stream := expectSourceOpen(src, sourceMock)
 	sourceMock.EXPECT().LifecycleOnCreated(
 		gomock.Any(),
-		cplugin.SourceLifecycleOnCreatedRequest{Config: src.Instance.Config.Settings},
-	).Return(cplugin.SourceLifecycleOnCreatedResponse{}, nil)
+		pconnector.SourceLifecycleOnCreatedRequest{Config: src.Instance.Config.Settings},
+	).Return(pconnector.SourceLifecycleOnCreatedResponse{}, nil)
 
 	err := src.Open(ctx)
 	is.NoErr(err)
@@ -262,15 +262,16 @@ func expectSourceOpen(src *Source, sourceMock *mock.SourcePlugin) *builtin.InMem
 	stream := &builtin.InMemorySourceRunStream{}
 
 	sourceMock.EXPECT().Configure(gomock.Any(),
-		cplugin.SourceConfigureRequest{
+		pconnector.SourceConfigureRequest{
 			Config: src.Instance.Config.Settings,
 		},
-	).Return(cplugin.SourceConfigureResponse{}, nil)
-	sourceMock.EXPECT().Open(gomock.Any(), cplugin.SourceOpenRequest{}).Return(cplugin.SourceOpenResponse{}, nil)
+	).Return(pconnector.SourceConfigureResponse{}, nil)
+	sourceMock.EXPECT().Open(gomock.Any(), pconnector.SourceOpenRequest{}).Return(pconnector.SourceOpenResponse{}, nil)
 	sourceMock.EXPECT().NewStream().Return(stream)
-	sourceMock.EXPECT().Run(gomock.Any(), stream).Do(func(ctx context.Context, _ cplugin.SourceRunStream) {
+	sourceMock.EXPECT().Run(gomock.Any(), stream).DoAndReturn(func(ctx context.Context, _ pconnector.SourceRunStream) error {
 		stream.Init(ctx)
-	}).Return(nil)
+		return nil
+	})
 
 	return stream
 }

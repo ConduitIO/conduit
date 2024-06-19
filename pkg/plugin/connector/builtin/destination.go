@@ -19,7 +19,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/conduitio/conduit-connector-protocol/cplugin"
+	"github.com/conduitio/conduit-connector-protocol/pconnector"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin/connector"
 	"github.com/rs/zerolog"
@@ -27,12 +27,12 @@ import (
 
 // destinationPluginAdapter implements the destination plugin interface used
 // internally in Conduit and relays the calls to a destination plugin defined in
-// conduit-connector-protocol (cplugin). This adapter needs to make sure it
+// conduit-connector-protocol (pconnector). This adapter needs to make sure it
 // behaves in the same way as the standalone plugin adapter, which communicates
 // with the plugin through gRPC, so that the caller can use both of them
 // interchangeably.
 type destinationPluginAdapter struct {
-	impl cplugin.DestinationPlugin
+	impl pconnector.DestinationPlugin
 	// logger is used as the internal logger of destinationPluginAdapter.
 	logger log.CtxLogger
 	// ctxLogger is attached to the context of each call to the plugin.
@@ -41,7 +41,7 @@ type destinationPluginAdapter struct {
 
 var _ connector.DestinationPlugin = (*destinationPluginAdapter)(nil)
 
-func newDestinationPluginAdapter(impl cplugin.DestinationPlugin, logger log.CtxLogger) *destinationPluginAdapter {
+func newDestinationPluginAdapter(impl pconnector.DestinationPlugin, logger log.CtxLogger) *destinationPluginAdapter {
 	return &destinationPluginAdapter{
 		impl:      impl,
 		logger:    logger.WithComponent("builtin.destinationPluginAdapter"),
@@ -52,17 +52,17 @@ func (s *destinationPluginAdapter) withLogger(ctx context.Context) context.Conte
 	return s.ctxLogger.WithContext(ctx)
 }
 
-func (s *destinationPluginAdapter) Configure(ctx context.Context, in cplugin.DestinationConfigureRequest) (cplugin.DestinationConfigureResponse, error) {
+func (s *destinationPluginAdapter) Configure(ctx context.Context, in pconnector.DestinationConfigureRequest) (pconnector.DestinationConfigureResponse, error) {
 	s.logger.Debug(ctx).Any("request", in).Msg("calling Configure")
 	return runSandbox(s.impl.Configure, s.withLogger(ctx), in.Clone(), s.logger)
 }
 
-func (s *destinationPluginAdapter) Open(ctx context.Context, in cplugin.DestinationOpenRequest) (cplugin.DestinationOpenResponse, error) {
+func (s *destinationPluginAdapter) Open(ctx context.Context, in pconnector.DestinationOpenRequest) (pconnector.DestinationOpenResponse, error) {
 	s.logger.Debug(ctx).Any("request", in).Msg("calling Open")
 	return runSandbox(s.impl.Open, s.withLogger(ctx), in.Clone(), s.logger)
 }
 
-func (s *destinationPluginAdapter) Run(ctx context.Context, stream cplugin.DestinationRunStream) error {
+func (s *destinationPluginAdapter) Run(ctx context.Context, stream pconnector.DestinationRunStream) error {
 	inmemStream, ok := stream.(*InMemoryDestinationRunStream)
 	if !ok {
 		return fmt.Errorf("invalid stream type, expected %T, got %T", s.NewStream(), stream)
@@ -89,31 +89,31 @@ func (s *destinationPluginAdapter) Run(ctx context.Context, stream cplugin.Desti
 	return nil
 }
 
-func (s *destinationPluginAdapter) Stop(ctx context.Context, in cplugin.DestinationStopRequest) (cplugin.DestinationStopResponse, error) {
+func (s *destinationPluginAdapter) Stop(ctx context.Context, in pconnector.DestinationStopRequest) (pconnector.DestinationStopResponse, error) {
 	s.logger.Debug(ctx).Any("request", in).Msg("calling Stop")
 	return runSandbox(s.impl.Stop, s.withLogger(ctx), in.Clone(), s.logger)
 }
 
-func (s *destinationPluginAdapter) Teardown(ctx context.Context, in cplugin.DestinationTeardownRequest) (cplugin.DestinationTeardownResponse, error) {
+func (s *destinationPluginAdapter) Teardown(ctx context.Context, in pconnector.DestinationTeardownRequest) (pconnector.DestinationTeardownResponse, error) {
 	s.logger.Debug(ctx).Any("request", in).Msg("calling Teardown")
 	return runSandbox(s.impl.Teardown, s.withLogger(ctx), in.Clone(), s.logger)
 }
 
-func (s *destinationPluginAdapter) LifecycleOnCreated(ctx context.Context, in cplugin.DestinationLifecycleOnCreatedRequest) (cplugin.DestinationLifecycleOnCreatedResponse, error) {
+func (s *destinationPluginAdapter) LifecycleOnCreated(ctx context.Context, in pconnector.DestinationLifecycleOnCreatedRequest) (pconnector.DestinationLifecycleOnCreatedResponse, error) {
 	s.logger.Debug(ctx).Any("request", in).Msg("calling LifecycleOnCreated")
 	return runSandbox(s.impl.LifecycleOnCreated, s.withLogger(ctx), in.Clone(), s.logger)
 }
 
-func (s *destinationPluginAdapter) LifecycleOnUpdated(ctx context.Context, in cplugin.DestinationLifecycleOnUpdatedRequest) (cplugin.DestinationLifecycleOnUpdatedResponse, error) {
+func (s *destinationPluginAdapter) LifecycleOnUpdated(ctx context.Context, in pconnector.DestinationLifecycleOnUpdatedRequest) (pconnector.DestinationLifecycleOnUpdatedResponse, error) {
 	s.logger.Debug(ctx).Any("request", in).Msg("calling LifecycleOnUpdated")
 	return runSandbox(s.impl.LifecycleOnUpdated, s.withLogger(ctx), in.Clone(), s.logger)
 }
 
-func (s *destinationPluginAdapter) LifecycleOnDeleted(ctx context.Context, in cplugin.DestinationLifecycleOnDeletedRequest) (cplugin.DestinationLifecycleOnDeletedResponse, error) {
+func (s *destinationPluginAdapter) LifecycleOnDeleted(ctx context.Context, in pconnector.DestinationLifecycleOnDeletedRequest) (pconnector.DestinationLifecycleOnDeletedResponse, error) {
 	s.logger.Debug(ctx).Any("request", in).Msg("calling LifecycleOnDeleted")
 	return runSandbox(s.impl.LifecycleOnDeleted, s.withLogger(ctx), in.Clone(), s.logger)
 }
 
-func (s *destinationPluginAdapter) NewStream() cplugin.DestinationRunStream {
+func (s *destinationPluginAdapter) NewStream() pconnector.DestinationRunStream {
 	return &InMemoryDestinationRunStream{}
 }

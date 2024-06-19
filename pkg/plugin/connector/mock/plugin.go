@@ -13,7 +13,7 @@ import (
 	context "context"
 	reflect "reflect"
 
-	cplugin "github.com/conduitio/conduit-connector-protocol/cplugin"
+	pconnector "github.com/conduitio/conduit-connector-protocol/pconnector"
 	connector "github.com/conduitio/conduit/pkg/plugin/connector"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -182,10 +182,10 @@ func (m *DestinationPlugin) EXPECT() *DestinationPluginMockRecorder {
 }
 
 // Configure mocks base method.
-func (m *DestinationPlugin) Configure(arg0 context.Context, arg1 cplugin.DestinationConfigureRequest) (cplugin.DestinationConfigureResponse, error) {
+func (m *DestinationPlugin) Configure(arg0 context.Context, arg1 pconnector.DestinationConfigureRequest) (pconnector.DestinationConfigureResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Configure", arg0, arg1)
-	ret0, _ := ret[0].(cplugin.DestinationConfigureResponse)
+	ret0, _ := ret[0].(pconnector.DestinationConfigureResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -203,28 +203,28 @@ type DestinationPluginConfigureCall struct {
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *DestinationPluginConfigureCall) Return(arg0 cplugin.DestinationConfigureResponse, arg1 error) *DestinationPluginConfigureCall {
+func (c *DestinationPluginConfigureCall) Return(arg0 pconnector.DestinationConfigureResponse, arg1 error) *DestinationPluginConfigureCall {
 	c.Call = c.Call.Return(arg0, arg1)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *DestinationPluginConfigureCall) Do(f func(context.Context, cplugin.DestinationConfigureRequest) (cplugin.DestinationConfigureResponse, error)) *DestinationPluginConfigureCall {
+func (c *DestinationPluginConfigureCall) Do(f func(context.Context, pconnector.DestinationConfigureRequest) (pconnector.DestinationConfigureResponse, error)) *DestinationPluginConfigureCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *DestinationPluginConfigureCall) DoAndReturn(f func(context.Context, cplugin.DestinationConfigureRequest) (cplugin.DestinationConfigureResponse, error)) *DestinationPluginConfigureCall {
+func (c *DestinationPluginConfigureCall) DoAndReturn(f func(context.Context, pconnector.DestinationConfigureRequest) (pconnector.DestinationConfigureResponse, error)) *DestinationPluginConfigureCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
 
 // LifecycleOnCreated mocks base method.
-func (m *DestinationPlugin) LifecycleOnCreated(arg0 context.Context, arg1 cplugin.DestinationLifecycleOnCreatedRequest) (cplugin.DestinationLifecycleOnCreatedResponse, error) {
+func (m *DestinationPlugin) LifecycleOnCreated(arg0 context.Context, arg1 pconnector.DestinationLifecycleOnCreatedRequest) (pconnector.DestinationLifecycleOnCreatedResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "LifecycleOnCreated", arg0, arg1)
-	ret0, _ := ret[0].(cplugin.DestinationLifecycleOnCreatedResponse)
+	ret0, _ := ret[0].(pconnector.DestinationLifecycleOnCreatedResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -242,28 +242,28 @@ type DestinationPluginLifecycleOnCreatedCall struct {
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *DestinationPluginLifecycleOnCreatedCall) Return(arg0 cplugin.DestinationLifecycleOnCreatedResponse, arg1 error) *DestinationPluginLifecycleOnCreatedCall {
+func (c *DestinationPluginLifecycleOnCreatedCall) Return(arg0 pconnector.DestinationLifecycleOnCreatedResponse, arg1 error) *DestinationPluginLifecycleOnCreatedCall {
 	c.Call = c.Call.Return(arg0, arg1)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *DestinationPluginLifecycleOnCreatedCall) Do(f func(context.Context, cplugin.DestinationLifecycleOnCreatedRequest) (cplugin.DestinationLifecycleOnCreatedResponse, error)) *DestinationPluginLifecycleOnCreatedCall {
+func (c *DestinationPluginLifecycleOnCreatedCall) Do(f func(context.Context, pconnector.DestinationLifecycleOnCreatedRequest) (pconnector.DestinationLifecycleOnCreatedResponse, error)) *DestinationPluginLifecycleOnCreatedCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *DestinationPluginLifecycleOnCreatedCall) DoAndReturn(f func(context.Context, cplugin.DestinationLifecycleOnCreatedRequest) (cplugin.DestinationLifecycleOnCreatedResponse, error)) *DestinationPluginLifecycleOnCreatedCall {
+func (c *DestinationPluginLifecycleOnCreatedCall) DoAndReturn(f func(context.Context, pconnector.DestinationLifecycleOnCreatedRequest) (pconnector.DestinationLifecycleOnCreatedResponse, error)) *DestinationPluginLifecycleOnCreatedCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
 
 // LifecycleOnDeleted mocks base method.
-func (m *DestinationPlugin) LifecycleOnDeleted(arg0 context.Context, arg1 cplugin.DestinationLifecycleOnDeletedRequest) (cplugin.DestinationLifecycleOnDeletedResponse, error) {
+func (m *DestinationPlugin) LifecycleOnDeleted(arg0 context.Context, arg1 pconnector.DestinationLifecycleOnDeletedRequest) (pconnector.DestinationLifecycleOnDeletedResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "LifecycleOnDeleted", arg0, arg1)
-	ret0, _ := ret[0].(cplugin.DestinationLifecycleOnDeletedResponse)
+	ret0, _ := ret[0].(pconnector.DestinationLifecycleOnDeletedResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -281,28 +281,28 @@ type DestinationPluginLifecycleOnDeletedCall struct {
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *DestinationPluginLifecycleOnDeletedCall) Return(arg0 cplugin.DestinationLifecycleOnDeletedResponse, arg1 error) *DestinationPluginLifecycleOnDeletedCall {
+func (c *DestinationPluginLifecycleOnDeletedCall) Return(arg0 pconnector.DestinationLifecycleOnDeletedResponse, arg1 error) *DestinationPluginLifecycleOnDeletedCall {
 	c.Call = c.Call.Return(arg0, arg1)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *DestinationPluginLifecycleOnDeletedCall) Do(f func(context.Context, cplugin.DestinationLifecycleOnDeletedRequest) (cplugin.DestinationLifecycleOnDeletedResponse, error)) *DestinationPluginLifecycleOnDeletedCall {
+func (c *DestinationPluginLifecycleOnDeletedCall) Do(f func(context.Context, pconnector.DestinationLifecycleOnDeletedRequest) (pconnector.DestinationLifecycleOnDeletedResponse, error)) *DestinationPluginLifecycleOnDeletedCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *DestinationPluginLifecycleOnDeletedCall) DoAndReturn(f func(context.Context, cplugin.DestinationLifecycleOnDeletedRequest) (cplugin.DestinationLifecycleOnDeletedResponse, error)) *DestinationPluginLifecycleOnDeletedCall {
+func (c *DestinationPluginLifecycleOnDeletedCall) DoAndReturn(f func(context.Context, pconnector.DestinationLifecycleOnDeletedRequest) (pconnector.DestinationLifecycleOnDeletedResponse, error)) *DestinationPluginLifecycleOnDeletedCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
 
 // LifecycleOnUpdated mocks base method.
-func (m *DestinationPlugin) LifecycleOnUpdated(arg0 context.Context, arg1 cplugin.DestinationLifecycleOnUpdatedRequest) (cplugin.DestinationLifecycleOnUpdatedResponse, error) {
+func (m *DestinationPlugin) LifecycleOnUpdated(arg0 context.Context, arg1 pconnector.DestinationLifecycleOnUpdatedRequest) (pconnector.DestinationLifecycleOnUpdatedResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "LifecycleOnUpdated", arg0, arg1)
-	ret0, _ := ret[0].(cplugin.DestinationLifecycleOnUpdatedResponse)
+	ret0, _ := ret[0].(pconnector.DestinationLifecycleOnUpdatedResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -320,28 +320,28 @@ type DestinationPluginLifecycleOnUpdatedCall struct {
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *DestinationPluginLifecycleOnUpdatedCall) Return(arg0 cplugin.DestinationLifecycleOnUpdatedResponse, arg1 error) *DestinationPluginLifecycleOnUpdatedCall {
+func (c *DestinationPluginLifecycleOnUpdatedCall) Return(arg0 pconnector.DestinationLifecycleOnUpdatedResponse, arg1 error) *DestinationPluginLifecycleOnUpdatedCall {
 	c.Call = c.Call.Return(arg0, arg1)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *DestinationPluginLifecycleOnUpdatedCall) Do(f func(context.Context, cplugin.DestinationLifecycleOnUpdatedRequest) (cplugin.DestinationLifecycleOnUpdatedResponse, error)) *DestinationPluginLifecycleOnUpdatedCall {
+func (c *DestinationPluginLifecycleOnUpdatedCall) Do(f func(context.Context, pconnector.DestinationLifecycleOnUpdatedRequest) (pconnector.DestinationLifecycleOnUpdatedResponse, error)) *DestinationPluginLifecycleOnUpdatedCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *DestinationPluginLifecycleOnUpdatedCall) DoAndReturn(f func(context.Context, cplugin.DestinationLifecycleOnUpdatedRequest) (cplugin.DestinationLifecycleOnUpdatedResponse, error)) *DestinationPluginLifecycleOnUpdatedCall {
+func (c *DestinationPluginLifecycleOnUpdatedCall) DoAndReturn(f func(context.Context, pconnector.DestinationLifecycleOnUpdatedRequest) (pconnector.DestinationLifecycleOnUpdatedResponse, error)) *DestinationPluginLifecycleOnUpdatedCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
 
 // NewStream mocks base method.
-func (m *DestinationPlugin) NewStream() cplugin.DestinationRunStream {
+func (m *DestinationPlugin) NewStream() pconnector.DestinationRunStream {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "NewStream")
-	ret0, _ := ret[0].(cplugin.DestinationRunStream)
+	ret0, _ := ret[0].(pconnector.DestinationRunStream)
 	return ret0
 }
 
@@ -358,28 +358,28 @@ type DestinationPluginNewStreamCall struct {
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *DestinationPluginNewStreamCall) Return(arg0 cplugin.DestinationRunStream) *DestinationPluginNewStreamCall {
+func (c *DestinationPluginNewStreamCall) Return(arg0 pconnector.DestinationRunStream) *DestinationPluginNewStreamCall {
 	c.Call = c.Call.Return(arg0)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *DestinationPluginNewStreamCall) Do(f func() cplugin.DestinationRunStream) *DestinationPluginNewStreamCall {
+func (c *DestinationPluginNewStreamCall) Do(f func() pconnector.DestinationRunStream) *DestinationPluginNewStreamCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *DestinationPluginNewStreamCall) DoAndReturn(f func() cplugin.DestinationRunStream) *DestinationPluginNewStreamCall {
+func (c *DestinationPluginNewStreamCall) DoAndReturn(f func() pconnector.DestinationRunStream) *DestinationPluginNewStreamCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
 
 // Open mocks base method.
-func (m *DestinationPlugin) Open(arg0 context.Context, arg1 cplugin.DestinationOpenRequest) (cplugin.DestinationOpenResponse, error) {
+func (m *DestinationPlugin) Open(arg0 context.Context, arg1 pconnector.DestinationOpenRequest) (pconnector.DestinationOpenResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Open", arg0, arg1)
-	ret0, _ := ret[0].(cplugin.DestinationOpenResponse)
+	ret0, _ := ret[0].(pconnector.DestinationOpenResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -397,25 +397,25 @@ type DestinationPluginOpenCall struct {
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *DestinationPluginOpenCall) Return(arg0 cplugin.DestinationOpenResponse, arg1 error) *DestinationPluginOpenCall {
+func (c *DestinationPluginOpenCall) Return(arg0 pconnector.DestinationOpenResponse, arg1 error) *DestinationPluginOpenCall {
 	c.Call = c.Call.Return(arg0, arg1)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *DestinationPluginOpenCall) Do(f func(context.Context, cplugin.DestinationOpenRequest) (cplugin.DestinationOpenResponse, error)) *DestinationPluginOpenCall {
+func (c *DestinationPluginOpenCall) Do(f func(context.Context, pconnector.DestinationOpenRequest) (pconnector.DestinationOpenResponse, error)) *DestinationPluginOpenCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *DestinationPluginOpenCall) DoAndReturn(f func(context.Context, cplugin.DestinationOpenRequest) (cplugin.DestinationOpenResponse, error)) *DestinationPluginOpenCall {
+func (c *DestinationPluginOpenCall) DoAndReturn(f func(context.Context, pconnector.DestinationOpenRequest) (pconnector.DestinationOpenResponse, error)) *DestinationPluginOpenCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
 
 // Run mocks base method.
-func (m *DestinationPlugin) Run(arg0 context.Context, arg1 cplugin.DestinationRunStream) error {
+func (m *DestinationPlugin) Run(arg0 context.Context, arg1 pconnector.DestinationRunStream) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Run", arg0, arg1)
 	ret0, _ := ret[0].(error)
@@ -441,22 +441,22 @@ func (c *DestinationPluginRunCall) Return(arg0 error) *DestinationPluginRunCall 
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *DestinationPluginRunCall) Do(f func(context.Context, cplugin.DestinationRunStream) error) *DestinationPluginRunCall {
+func (c *DestinationPluginRunCall) Do(f func(context.Context, pconnector.DestinationRunStream) error) *DestinationPluginRunCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *DestinationPluginRunCall) DoAndReturn(f func(context.Context, cplugin.DestinationRunStream) error) *DestinationPluginRunCall {
+func (c *DestinationPluginRunCall) DoAndReturn(f func(context.Context, pconnector.DestinationRunStream) error) *DestinationPluginRunCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
 
 // Stop mocks base method.
-func (m *DestinationPlugin) Stop(arg0 context.Context, arg1 cplugin.DestinationStopRequest) (cplugin.DestinationStopResponse, error) {
+func (m *DestinationPlugin) Stop(arg0 context.Context, arg1 pconnector.DestinationStopRequest) (pconnector.DestinationStopResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Stop", arg0, arg1)
-	ret0, _ := ret[0].(cplugin.DestinationStopResponse)
+	ret0, _ := ret[0].(pconnector.DestinationStopResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -474,28 +474,28 @@ type DestinationPluginStopCall struct {
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *DestinationPluginStopCall) Return(arg0 cplugin.DestinationStopResponse, arg1 error) *DestinationPluginStopCall {
+func (c *DestinationPluginStopCall) Return(arg0 pconnector.DestinationStopResponse, arg1 error) *DestinationPluginStopCall {
 	c.Call = c.Call.Return(arg0, arg1)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *DestinationPluginStopCall) Do(f func(context.Context, cplugin.DestinationStopRequest) (cplugin.DestinationStopResponse, error)) *DestinationPluginStopCall {
+func (c *DestinationPluginStopCall) Do(f func(context.Context, pconnector.DestinationStopRequest) (pconnector.DestinationStopResponse, error)) *DestinationPluginStopCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *DestinationPluginStopCall) DoAndReturn(f func(context.Context, cplugin.DestinationStopRequest) (cplugin.DestinationStopResponse, error)) *DestinationPluginStopCall {
+func (c *DestinationPluginStopCall) DoAndReturn(f func(context.Context, pconnector.DestinationStopRequest) (pconnector.DestinationStopResponse, error)) *DestinationPluginStopCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
 
 // Teardown mocks base method.
-func (m *DestinationPlugin) Teardown(arg0 context.Context, arg1 cplugin.DestinationTeardownRequest) (cplugin.DestinationTeardownResponse, error) {
+func (m *DestinationPlugin) Teardown(arg0 context.Context, arg1 pconnector.DestinationTeardownRequest) (pconnector.DestinationTeardownResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Teardown", arg0, arg1)
-	ret0, _ := ret[0].(cplugin.DestinationTeardownResponse)
+	ret0, _ := ret[0].(pconnector.DestinationTeardownResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -513,19 +513,19 @@ type DestinationPluginTeardownCall struct {
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *DestinationPluginTeardownCall) Return(arg0 cplugin.DestinationTeardownResponse, arg1 error) *DestinationPluginTeardownCall {
+func (c *DestinationPluginTeardownCall) Return(arg0 pconnector.DestinationTeardownResponse, arg1 error) *DestinationPluginTeardownCall {
 	c.Call = c.Call.Return(arg0, arg1)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *DestinationPluginTeardownCall) Do(f func(context.Context, cplugin.DestinationTeardownRequest) (cplugin.DestinationTeardownResponse, error)) *DestinationPluginTeardownCall {
+func (c *DestinationPluginTeardownCall) Do(f func(context.Context, pconnector.DestinationTeardownRequest) (pconnector.DestinationTeardownResponse, error)) *DestinationPluginTeardownCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *DestinationPluginTeardownCall) DoAndReturn(f func(context.Context, cplugin.DestinationTeardownRequest) (cplugin.DestinationTeardownResponse, error)) *DestinationPluginTeardownCall {
+func (c *DestinationPluginTeardownCall) DoAndReturn(f func(context.Context, pconnector.DestinationTeardownRequest) (pconnector.DestinationTeardownResponse, error)) *DestinationPluginTeardownCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -554,10 +554,10 @@ func (m *SourcePlugin) EXPECT() *SourcePluginMockRecorder {
 }
 
 // Configure mocks base method.
-func (m *SourcePlugin) Configure(arg0 context.Context, arg1 cplugin.SourceConfigureRequest) (cplugin.SourceConfigureResponse, error) {
+func (m *SourcePlugin) Configure(arg0 context.Context, arg1 pconnector.SourceConfigureRequest) (pconnector.SourceConfigureResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Configure", arg0, arg1)
-	ret0, _ := ret[0].(cplugin.SourceConfigureResponse)
+	ret0, _ := ret[0].(pconnector.SourceConfigureResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -575,28 +575,28 @@ type SourcePluginConfigureCall struct {
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *SourcePluginConfigureCall) Return(arg0 cplugin.SourceConfigureResponse, arg1 error) *SourcePluginConfigureCall {
+func (c *SourcePluginConfigureCall) Return(arg0 pconnector.SourceConfigureResponse, arg1 error) *SourcePluginConfigureCall {
 	c.Call = c.Call.Return(arg0, arg1)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *SourcePluginConfigureCall) Do(f func(context.Context, cplugin.SourceConfigureRequest) (cplugin.SourceConfigureResponse, error)) *SourcePluginConfigureCall {
+func (c *SourcePluginConfigureCall) Do(f func(context.Context, pconnector.SourceConfigureRequest) (pconnector.SourceConfigureResponse, error)) *SourcePluginConfigureCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *SourcePluginConfigureCall) DoAndReturn(f func(context.Context, cplugin.SourceConfigureRequest) (cplugin.SourceConfigureResponse, error)) *SourcePluginConfigureCall {
+func (c *SourcePluginConfigureCall) DoAndReturn(f func(context.Context, pconnector.SourceConfigureRequest) (pconnector.SourceConfigureResponse, error)) *SourcePluginConfigureCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
 
 // LifecycleOnCreated mocks base method.
-func (m *SourcePlugin) LifecycleOnCreated(arg0 context.Context, arg1 cplugin.SourceLifecycleOnCreatedRequest) (cplugin.SourceLifecycleOnCreatedResponse, error) {
+func (m *SourcePlugin) LifecycleOnCreated(arg0 context.Context, arg1 pconnector.SourceLifecycleOnCreatedRequest) (pconnector.SourceLifecycleOnCreatedResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "LifecycleOnCreated", arg0, arg1)
-	ret0, _ := ret[0].(cplugin.SourceLifecycleOnCreatedResponse)
+	ret0, _ := ret[0].(pconnector.SourceLifecycleOnCreatedResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -614,28 +614,28 @@ type SourcePluginLifecycleOnCreatedCall struct {
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *SourcePluginLifecycleOnCreatedCall) Return(arg0 cplugin.SourceLifecycleOnCreatedResponse, arg1 error) *SourcePluginLifecycleOnCreatedCall {
+func (c *SourcePluginLifecycleOnCreatedCall) Return(arg0 pconnector.SourceLifecycleOnCreatedResponse, arg1 error) *SourcePluginLifecycleOnCreatedCall {
 	c.Call = c.Call.Return(arg0, arg1)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *SourcePluginLifecycleOnCreatedCall) Do(f func(context.Context, cplugin.SourceLifecycleOnCreatedRequest) (cplugin.SourceLifecycleOnCreatedResponse, error)) *SourcePluginLifecycleOnCreatedCall {
+func (c *SourcePluginLifecycleOnCreatedCall) Do(f func(context.Context, pconnector.SourceLifecycleOnCreatedRequest) (pconnector.SourceLifecycleOnCreatedResponse, error)) *SourcePluginLifecycleOnCreatedCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *SourcePluginLifecycleOnCreatedCall) DoAndReturn(f func(context.Context, cplugin.SourceLifecycleOnCreatedRequest) (cplugin.SourceLifecycleOnCreatedResponse, error)) *SourcePluginLifecycleOnCreatedCall {
+func (c *SourcePluginLifecycleOnCreatedCall) DoAndReturn(f func(context.Context, pconnector.SourceLifecycleOnCreatedRequest) (pconnector.SourceLifecycleOnCreatedResponse, error)) *SourcePluginLifecycleOnCreatedCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
 
 // LifecycleOnDeleted mocks base method.
-func (m *SourcePlugin) LifecycleOnDeleted(arg0 context.Context, arg1 cplugin.SourceLifecycleOnDeletedRequest) (cplugin.SourceLifecycleOnDeletedResponse, error) {
+func (m *SourcePlugin) LifecycleOnDeleted(arg0 context.Context, arg1 pconnector.SourceLifecycleOnDeletedRequest) (pconnector.SourceLifecycleOnDeletedResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "LifecycleOnDeleted", arg0, arg1)
-	ret0, _ := ret[0].(cplugin.SourceLifecycleOnDeletedResponse)
+	ret0, _ := ret[0].(pconnector.SourceLifecycleOnDeletedResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -653,28 +653,28 @@ type SourcePluginLifecycleOnDeletedCall struct {
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *SourcePluginLifecycleOnDeletedCall) Return(arg0 cplugin.SourceLifecycleOnDeletedResponse, arg1 error) *SourcePluginLifecycleOnDeletedCall {
+func (c *SourcePluginLifecycleOnDeletedCall) Return(arg0 pconnector.SourceLifecycleOnDeletedResponse, arg1 error) *SourcePluginLifecycleOnDeletedCall {
 	c.Call = c.Call.Return(arg0, arg1)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *SourcePluginLifecycleOnDeletedCall) Do(f func(context.Context, cplugin.SourceLifecycleOnDeletedRequest) (cplugin.SourceLifecycleOnDeletedResponse, error)) *SourcePluginLifecycleOnDeletedCall {
+func (c *SourcePluginLifecycleOnDeletedCall) Do(f func(context.Context, pconnector.SourceLifecycleOnDeletedRequest) (pconnector.SourceLifecycleOnDeletedResponse, error)) *SourcePluginLifecycleOnDeletedCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *SourcePluginLifecycleOnDeletedCall) DoAndReturn(f func(context.Context, cplugin.SourceLifecycleOnDeletedRequest) (cplugin.SourceLifecycleOnDeletedResponse, error)) *SourcePluginLifecycleOnDeletedCall {
+func (c *SourcePluginLifecycleOnDeletedCall) DoAndReturn(f func(context.Context, pconnector.SourceLifecycleOnDeletedRequest) (pconnector.SourceLifecycleOnDeletedResponse, error)) *SourcePluginLifecycleOnDeletedCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
 
 // LifecycleOnUpdated mocks base method.
-func (m *SourcePlugin) LifecycleOnUpdated(arg0 context.Context, arg1 cplugin.SourceLifecycleOnUpdatedRequest) (cplugin.SourceLifecycleOnUpdatedResponse, error) {
+func (m *SourcePlugin) LifecycleOnUpdated(arg0 context.Context, arg1 pconnector.SourceLifecycleOnUpdatedRequest) (pconnector.SourceLifecycleOnUpdatedResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "LifecycleOnUpdated", arg0, arg1)
-	ret0, _ := ret[0].(cplugin.SourceLifecycleOnUpdatedResponse)
+	ret0, _ := ret[0].(pconnector.SourceLifecycleOnUpdatedResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -692,28 +692,28 @@ type SourcePluginLifecycleOnUpdatedCall struct {
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *SourcePluginLifecycleOnUpdatedCall) Return(arg0 cplugin.SourceLifecycleOnUpdatedResponse, arg1 error) *SourcePluginLifecycleOnUpdatedCall {
+func (c *SourcePluginLifecycleOnUpdatedCall) Return(arg0 pconnector.SourceLifecycleOnUpdatedResponse, arg1 error) *SourcePluginLifecycleOnUpdatedCall {
 	c.Call = c.Call.Return(arg0, arg1)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *SourcePluginLifecycleOnUpdatedCall) Do(f func(context.Context, cplugin.SourceLifecycleOnUpdatedRequest) (cplugin.SourceLifecycleOnUpdatedResponse, error)) *SourcePluginLifecycleOnUpdatedCall {
+func (c *SourcePluginLifecycleOnUpdatedCall) Do(f func(context.Context, pconnector.SourceLifecycleOnUpdatedRequest) (pconnector.SourceLifecycleOnUpdatedResponse, error)) *SourcePluginLifecycleOnUpdatedCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *SourcePluginLifecycleOnUpdatedCall) DoAndReturn(f func(context.Context, cplugin.SourceLifecycleOnUpdatedRequest) (cplugin.SourceLifecycleOnUpdatedResponse, error)) *SourcePluginLifecycleOnUpdatedCall {
+func (c *SourcePluginLifecycleOnUpdatedCall) DoAndReturn(f func(context.Context, pconnector.SourceLifecycleOnUpdatedRequest) (pconnector.SourceLifecycleOnUpdatedResponse, error)) *SourcePluginLifecycleOnUpdatedCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
 
 // NewStream mocks base method.
-func (m *SourcePlugin) NewStream() cplugin.SourceRunStream {
+func (m *SourcePlugin) NewStream() pconnector.SourceRunStream {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "NewStream")
-	ret0, _ := ret[0].(cplugin.SourceRunStream)
+	ret0, _ := ret[0].(pconnector.SourceRunStream)
 	return ret0
 }
 
@@ -730,28 +730,28 @@ type SourcePluginNewStreamCall struct {
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *SourcePluginNewStreamCall) Return(arg0 cplugin.SourceRunStream) *SourcePluginNewStreamCall {
+func (c *SourcePluginNewStreamCall) Return(arg0 pconnector.SourceRunStream) *SourcePluginNewStreamCall {
 	c.Call = c.Call.Return(arg0)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *SourcePluginNewStreamCall) Do(f func() cplugin.SourceRunStream) *SourcePluginNewStreamCall {
+func (c *SourcePluginNewStreamCall) Do(f func() pconnector.SourceRunStream) *SourcePluginNewStreamCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *SourcePluginNewStreamCall) DoAndReturn(f func() cplugin.SourceRunStream) *SourcePluginNewStreamCall {
+func (c *SourcePluginNewStreamCall) DoAndReturn(f func() pconnector.SourceRunStream) *SourcePluginNewStreamCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
 
 // Open mocks base method.
-func (m *SourcePlugin) Open(arg0 context.Context, arg1 cplugin.SourceOpenRequest) (cplugin.SourceOpenResponse, error) {
+func (m *SourcePlugin) Open(arg0 context.Context, arg1 pconnector.SourceOpenRequest) (pconnector.SourceOpenResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Open", arg0, arg1)
-	ret0, _ := ret[0].(cplugin.SourceOpenResponse)
+	ret0, _ := ret[0].(pconnector.SourceOpenResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -769,25 +769,25 @@ type SourcePluginOpenCall struct {
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *SourcePluginOpenCall) Return(arg0 cplugin.SourceOpenResponse, arg1 error) *SourcePluginOpenCall {
+func (c *SourcePluginOpenCall) Return(arg0 pconnector.SourceOpenResponse, arg1 error) *SourcePluginOpenCall {
 	c.Call = c.Call.Return(arg0, arg1)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *SourcePluginOpenCall) Do(f func(context.Context, cplugin.SourceOpenRequest) (cplugin.SourceOpenResponse, error)) *SourcePluginOpenCall {
+func (c *SourcePluginOpenCall) Do(f func(context.Context, pconnector.SourceOpenRequest) (pconnector.SourceOpenResponse, error)) *SourcePluginOpenCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *SourcePluginOpenCall) DoAndReturn(f func(context.Context, cplugin.SourceOpenRequest) (cplugin.SourceOpenResponse, error)) *SourcePluginOpenCall {
+func (c *SourcePluginOpenCall) DoAndReturn(f func(context.Context, pconnector.SourceOpenRequest) (pconnector.SourceOpenResponse, error)) *SourcePluginOpenCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
 
 // Run mocks base method.
-func (m *SourcePlugin) Run(arg0 context.Context, arg1 cplugin.SourceRunStream) error {
+func (m *SourcePlugin) Run(arg0 context.Context, arg1 pconnector.SourceRunStream) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Run", arg0, arg1)
 	ret0, _ := ret[0].(error)
@@ -813,22 +813,22 @@ func (c *SourcePluginRunCall) Return(arg0 error) *SourcePluginRunCall {
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *SourcePluginRunCall) Do(f func(context.Context, cplugin.SourceRunStream) error) *SourcePluginRunCall {
+func (c *SourcePluginRunCall) Do(f func(context.Context, pconnector.SourceRunStream) error) *SourcePluginRunCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *SourcePluginRunCall) DoAndReturn(f func(context.Context, cplugin.SourceRunStream) error) *SourcePluginRunCall {
+func (c *SourcePluginRunCall) DoAndReturn(f func(context.Context, pconnector.SourceRunStream) error) *SourcePluginRunCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
 
 // Stop mocks base method.
-func (m *SourcePlugin) Stop(arg0 context.Context, arg1 cplugin.SourceStopRequest) (cplugin.SourceStopResponse, error) {
+func (m *SourcePlugin) Stop(arg0 context.Context, arg1 pconnector.SourceStopRequest) (pconnector.SourceStopResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Stop", arg0, arg1)
-	ret0, _ := ret[0].(cplugin.SourceStopResponse)
+	ret0, _ := ret[0].(pconnector.SourceStopResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -846,28 +846,28 @@ type SourcePluginStopCall struct {
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *SourcePluginStopCall) Return(arg0 cplugin.SourceStopResponse, arg1 error) *SourcePluginStopCall {
+func (c *SourcePluginStopCall) Return(arg0 pconnector.SourceStopResponse, arg1 error) *SourcePluginStopCall {
 	c.Call = c.Call.Return(arg0, arg1)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *SourcePluginStopCall) Do(f func(context.Context, cplugin.SourceStopRequest) (cplugin.SourceStopResponse, error)) *SourcePluginStopCall {
+func (c *SourcePluginStopCall) Do(f func(context.Context, pconnector.SourceStopRequest) (pconnector.SourceStopResponse, error)) *SourcePluginStopCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *SourcePluginStopCall) DoAndReturn(f func(context.Context, cplugin.SourceStopRequest) (cplugin.SourceStopResponse, error)) *SourcePluginStopCall {
+func (c *SourcePluginStopCall) DoAndReturn(f func(context.Context, pconnector.SourceStopRequest) (pconnector.SourceStopResponse, error)) *SourcePluginStopCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
 
 // Teardown mocks base method.
-func (m *SourcePlugin) Teardown(arg0 context.Context, arg1 cplugin.SourceTeardownRequest) (cplugin.SourceTeardownResponse, error) {
+func (m *SourcePlugin) Teardown(arg0 context.Context, arg1 pconnector.SourceTeardownRequest) (pconnector.SourceTeardownResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Teardown", arg0, arg1)
-	ret0, _ := ret[0].(cplugin.SourceTeardownResponse)
+	ret0, _ := ret[0].(pconnector.SourceTeardownResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -885,19 +885,19 @@ type SourcePluginTeardownCall struct {
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *SourcePluginTeardownCall) Return(arg0 cplugin.SourceTeardownResponse, arg1 error) *SourcePluginTeardownCall {
+func (c *SourcePluginTeardownCall) Return(arg0 pconnector.SourceTeardownResponse, arg1 error) *SourcePluginTeardownCall {
 	c.Call = c.Call.Return(arg0, arg1)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *SourcePluginTeardownCall) Do(f func(context.Context, cplugin.SourceTeardownRequest) (cplugin.SourceTeardownResponse, error)) *SourcePluginTeardownCall {
+func (c *SourcePluginTeardownCall) Do(f func(context.Context, pconnector.SourceTeardownRequest) (pconnector.SourceTeardownResponse, error)) *SourcePluginTeardownCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *SourcePluginTeardownCall) DoAndReturn(f func(context.Context, cplugin.SourceTeardownRequest) (cplugin.SourceTeardownResponse, error)) *SourcePluginTeardownCall {
+func (c *SourcePluginTeardownCall) DoAndReturn(f func(context.Context, pconnector.SourceTeardownRequest) (pconnector.SourceTeardownResponse, error)) *SourcePluginTeardownCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -926,10 +926,10 @@ func (m *SpecifierPlugin) EXPECT() *SpecifierPluginMockRecorder {
 }
 
 // Specify mocks base method.
-func (m *SpecifierPlugin) Specify(arg0 context.Context, arg1 cplugin.SpecifierSpecifyRequest) (cplugin.SpecifierSpecifyResponse, error) {
+func (m *SpecifierPlugin) Specify(arg0 context.Context, arg1 pconnector.SpecifierSpecifyRequest) (pconnector.SpecifierSpecifyResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Specify", arg0, arg1)
-	ret0, _ := ret[0].(cplugin.SpecifierSpecifyResponse)
+	ret0, _ := ret[0].(pconnector.SpecifierSpecifyResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -947,19 +947,19 @@ type SpecifierPluginSpecifyCall struct {
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *SpecifierPluginSpecifyCall) Return(arg0 cplugin.SpecifierSpecifyResponse, arg1 error) *SpecifierPluginSpecifyCall {
+func (c *SpecifierPluginSpecifyCall) Return(arg0 pconnector.SpecifierSpecifyResponse, arg1 error) *SpecifierPluginSpecifyCall {
 	c.Call = c.Call.Return(arg0, arg1)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *SpecifierPluginSpecifyCall) Do(f func(context.Context, cplugin.SpecifierSpecifyRequest) (cplugin.SpecifierSpecifyResponse, error)) *SpecifierPluginSpecifyCall {
+func (c *SpecifierPluginSpecifyCall) Do(f func(context.Context, pconnector.SpecifierSpecifyRequest) (pconnector.SpecifierSpecifyResponse, error)) *SpecifierPluginSpecifyCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *SpecifierPluginSpecifyCall) DoAndReturn(f func(context.Context, cplugin.SpecifierSpecifyRequest) (cplugin.SpecifierSpecifyResponse, error)) *SpecifierPluginSpecifyCall {
+func (c *SpecifierPluginSpecifyCall) DoAndReturn(f func(context.Context, pconnector.SpecifierSpecifyRequest) (pconnector.SpecifierSpecifyResponse, error)) *SpecifierPluginSpecifyCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

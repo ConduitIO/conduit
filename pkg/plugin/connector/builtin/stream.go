@@ -19,34 +19,34 @@ import (
 	"io"
 	"sync"
 
-	"github.com/conduitio/conduit-connector-protocol/cplugin"
+	"github.com/conduitio/conduit-connector-protocol/pconnector"
 )
 
 type InMemoryDestinationRunStream struct {
-	stream *inMemoryStream[cplugin.DestinationRunRequest, cplugin.DestinationRunResponse]
+	stream *inMemoryStream[pconnector.DestinationRunRequest, pconnector.DestinationRunResponse]
 }
 
 func (s *InMemoryDestinationRunStream) Init(ctx context.Context) {
-	s.stream = &inMemoryStream[cplugin.DestinationRunRequest, cplugin.DestinationRunResponse]{
+	s.stream = &inMemoryStream[pconnector.DestinationRunRequest, pconnector.DestinationRunResponse]{
 		ctx:      ctx,
-		reqChan:  make(chan cplugin.DestinationRunRequest),
-		respChan: make(chan cplugin.DestinationRunResponse),
+		reqChan:  make(chan pconnector.DestinationRunRequest),
+		respChan: make(chan pconnector.DestinationRunResponse),
 		stopChan: make(chan struct{}),
 	}
 }
 
-func (s *InMemoryDestinationRunStream) Client() cplugin.DestinationRunStreamClient {
+func (s *InMemoryDestinationRunStream) Client() pconnector.DestinationRunStreamClient {
 	if s.stream == nil {
 		panic("invalid use of builtin.InMemoryDestinationRunStream - stream has not been initialized using Init")
 	}
-	return (*inMemoryStreamClient[cplugin.DestinationRunRequest, cplugin.DestinationRunResponse])(s.stream)
+	return (*inMemoryStreamClient[pconnector.DestinationRunRequest, pconnector.DestinationRunResponse])(s.stream)
 }
 
-func (s *InMemoryDestinationRunStream) Server() cplugin.DestinationRunStreamServer {
+func (s *InMemoryDestinationRunStream) Server() pconnector.DestinationRunStreamServer {
 	if s.stream == nil {
 		panic("invalid use of builtin.InMemoryDestinationRunStream - stream has not been initialized using Init")
 	}
-	return (*inMemoryStreamServer[cplugin.DestinationRunRequest, cplugin.DestinationRunResponse])(s.stream)
+	return (*inMemoryStreamServer[pconnector.DestinationRunRequest, pconnector.DestinationRunResponse])(s.stream)
 }
 
 func (s *InMemoryDestinationRunStream) Close(reason error) bool {
@@ -54,30 +54,30 @@ func (s *InMemoryDestinationRunStream) Close(reason error) bool {
 }
 
 type InMemorySourceRunStream struct {
-	stream *inMemoryStream[cplugin.SourceRunRequest, cplugin.SourceRunResponse]
+	stream *inMemoryStream[pconnector.SourceRunRequest, pconnector.SourceRunResponse]
 }
 
 func (s *InMemorySourceRunStream) Init(ctx context.Context) {
-	s.stream = &inMemoryStream[cplugin.SourceRunRequest, cplugin.SourceRunResponse]{
+	s.stream = &inMemoryStream[pconnector.SourceRunRequest, pconnector.SourceRunResponse]{
 		ctx:      ctx,
-		reqChan:  make(chan cplugin.SourceRunRequest),
-		respChan: make(chan cplugin.SourceRunResponse),
+		reqChan:  make(chan pconnector.SourceRunRequest),
+		respChan: make(chan pconnector.SourceRunResponse),
 		stopChan: make(chan struct{}),
 	}
 }
 
-func (s *InMemorySourceRunStream) Client() cplugin.SourceRunStreamClient {
+func (s *InMemorySourceRunStream) Client() pconnector.SourceRunStreamClient {
 	if s.stream == nil {
 		panic("invalid use of builtin.InMemoryDestinationRunStream - stream has not been initialized using Init")
 	}
-	return (*inMemoryStreamClient[cplugin.SourceRunRequest, cplugin.SourceRunResponse])(s.stream)
+	return (*inMemoryStreamClient[pconnector.SourceRunRequest, pconnector.SourceRunResponse])(s.stream)
 }
 
-func (s *InMemorySourceRunStream) Server() cplugin.SourceRunStreamServer {
+func (s *InMemorySourceRunStream) Server() pconnector.SourceRunStreamServer {
 	if s.stream == nil {
 		panic("invalid use of builtin.InMemoryDestinationRunStream - stream has not been initialized using Init")
 	}
-	return (*inMemoryStreamServer[cplugin.SourceRunRequest, cplugin.SourceRunResponse])(s.stream)
+	return (*inMemoryStreamServer[pconnector.SourceRunRequest, pconnector.SourceRunResponse])(s.stream)
 }
 
 func (s *InMemorySourceRunStream) Close(reason error) bool {

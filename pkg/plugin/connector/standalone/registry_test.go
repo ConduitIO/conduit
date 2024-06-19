@@ -22,7 +22,7 @@ import (
 	"testing"
 
 	"github.com/conduitio/conduit-commons/config"
-	"github.com/conduitio/conduit-connector-protocol/cplugin"
+	"github.com/conduitio/conduit-connector-protocol/pconnector"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/matryer/is"
@@ -57,7 +57,7 @@ func testPluginBlueprint() blueprint {
 	return blueprint{
 		FullName: plugin.FullName(fmt.Sprintf("standalone:%v@%v", testPluginName, testPluginVersion)),
 		Path:     path.Join(testPluginDir, "testplugin.sh"),
-		Specification: cplugin.Specification{
+		Specification: pconnector.Specification{
 			Name:        testPluginName,
 			Summary:     testPluginSummary,
 			Description: testPluginDescription,
@@ -127,7 +127,7 @@ func TestRegistry_List(t *testing.T) {
 
 	got := r.List()
 	bp := testPluginBlueprint()
-	want := map[plugin.FullName]cplugin.Specification{
+	want := map[plugin.FullName]pconnector.Specification{
 		bp.FullName: bp.Specification,
 	}
 	is.Equal(got, want)

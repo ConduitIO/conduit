@@ -19,7 +19,7 @@ import (
 	"sync"
 
 	"github.com/conduitio/conduit-commons/opencdc"
-	"github.com/conduitio/conduit-connector-protocol/cplugin"
+	"github.com/conduitio/conduit-connector-protocol/pconnector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
@@ -38,7 +38,7 @@ type Destination struct {
 
 	// stream is the stream used to exchange records and acks with the
 	// destination plugin.
-	stream cplugin.DestinationRunStreamClient
+	stream pconnector.DestinationRunStreamClient
 
 	// stopStream is a function that closes the context of the stream.
 	stopStream context.CancelFunc
@@ -81,7 +81,7 @@ func (d *Destination) Open(ctx context.Context) (err error) {
 	defer func() {
 		// ensure the plugin gets torn down if something bad happens
 		if err != nil {
-			_, tdErr := d.plugin.Teardown(ctx, cplugin.DestinationTeardownRequest{})
+			_, tdErr := d.plugin.Teardown(ctx, pconnector.DestinationTeardownRequest{})
 			if tdErr != nil {
 				d.Instance.logger.Err(ctx, tdErr).Msg("could not tear down destination connector plugin")
 			}
@@ -147,7 +147,7 @@ func (d *Destination) Stop(ctx context.Context, lastPosition opencdc.Position) e
 	d.Instance.logger.Debug(ctx).
 		Bytes(log.RecordPositionField, lastPosition).
 		Msg("sending stop signal to destination connector plugin")
-	_, err = d.plugin.Stop(ctx, cplugin.DestinationStopRequest{LastPosition: lastPosition})
+	_, err = d.plugin.Stop(ctx, pconnector.DestinationStopRequest{LastPosition: lastPosition})
 	if err != nil {
 		return cerrors.Errorf("could not stop destination plugin: %w", err)
 	}
@@ -173,7 +173,7 @@ func (d *Destination) Teardown(ctx context.Context) error {
 	d.wg.Wait()
 
 	d.Instance.logger.Debug(ctx).Msg("tearing down destination connector plugin")
-	_, err := d.plugin.Teardown(ctx, cplugin.DestinationTeardownRequest{})
+	_, err := d.plugin.Teardown(ctx, pconnector.DestinationTeardownRequest{})
 
 	d.plugin = nil
 	d.Instance.connector = nil
@@ -202,7 +202,7 @@ func (d *Destination) Write(ctx context.Context, r []opencdc.Record) error {
 	}
 
 	d.Instance.inspector.Send(ctx, r)
-	err = d.stream.Send(cplugin.DestinationRunRequest{Records: r})
+	err = d.stream.Send(pconnector.DestinationRunRequest{Records: r})
 	if err != nil {
 		return cerrors.Errorf("error writing record: %w", err)
 	}
@@ -249,7 +249,7 @@ func (d *Destination) OnDelete(ctx context.Context) (err error) {
 	_, err = d.triggerLifecycleEvent(ctx, d.Instance.LastActiveConfig.Settings, nil)
 
 	// call teardown to close plugin regardless of the error
-	_, tdErr := d.plugin.Teardown(ctx, cplugin.DestinationTeardownRequest{})
+	_, tdErr := d.plugin.Teardown(ctx, pconnector.DestinationTeardownRequest{})
 
 	d.plugin = nil
 
@@ -279,7 +279,7 @@ func (d *Destination) preparePluginCall() (func(), error) {
 
 func (d *Destination) configure(ctx context.Context) error {
 	d.Instance.logger.Trace(ctx).Msg("configuring destination connector plugin")
-	_, err := d.plugin.Configure(ctx, cplugin.DestinationConfigureRequest{Config: d.Instance.Config.Settings})
+	_, err := d.plugin.Configure(ctx, pconnector.DestinationConfigureRequest{Config: d.Instance.Config.Settings})
 	if err != nil {
 		return cerrors.Errorf("could not configure destination connector plugin: %w", err)
 	}
@@ -288,7 +288,7 @@ func (d *Destination) configure(ctx context.Context) error {
 
 func (d *Destination) open(ctx context.Context) error {
 	d.Instance.logger.Trace(ctx).Msg("opening destination connector plugin")
-	_, err := d.plugin.Open(ctx, cplugin.DestinationOpenRequest{})
+	_, err := d.plugin.Open(ctx, pconnector.DestinationOpenRequest{})
 	if err != nil {
 		return cerrors.Errorf("could not open destination connector plugin: %w", err)
 	}
@@ -326,7 +326,7 @@ func (d *Destination) triggerLifecycleEvent(ctx context.Context, oldConfig, newC
 	// created
 	case oldConfig == nil && newConfig != nil:
 		d.Instance.logger.Trace(ctx).Msg("triggering lifecycle event \"created\" on destination connector plugin")
-		_, err := d.plugin.LifecycleOnCreated(ctx, cplugin.DestinationLifecycleOnCreatedRequest{Config: newConfig})
+		_, err := d.plugin.LifecycleOnCreated(ctx, pconnector.DestinationLifecycleOnCreatedRequest{Config: newConfig})
 		if err != nil {
 			return false, cerrors.Errorf("error while triggering lifecycle event \"created\": %w", err)
 		}
@@ -335,7 +335,7 @@ func (d *Destination) triggerLifecycleEvent(ctx context.Context, oldConfig, newC
 	// updated
 	case oldConfig != nil && newConfig != nil:
 		d.Instance.logger.Trace(ctx).Msg("triggering lifecycle event \"updated\" on destination connector plugin")
-		_, err := d.plugin.LifecycleOnUpdated(ctx, cplugin.DestinationLifecycleOnUpdatedRequest{
+		_, err := d.plugin.LifecycleOnUpdated(ctx, pconnector.DestinationLifecycleOnUpdatedRequest{
 			ConfigBefore: oldConfig,
 			ConfigAfter:  newConfig,
 		})
@@ -347,7 +347,7 @@ func (d *Destination) triggerLifecycleEvent(ctx context.Context, oldConfig, newC
 	// deleted
 	case oldConfig != nil && newConfig == nil:
 		d.Instance.logger.Trace(ctx).Msg("triggering lifecycle event \"deleted\" on destination connector plugin")
-		_, err := d.plugin.LifecycleOnDeleted(ctx, cplugin.DestinationLifecycleOnDeletedRequest{Config: oldConfig})
+		_, err := d.plugin.LifecycleOnDeleted(ctx, pconnector.DestinationLifecycleOnDeletedRequest{Config: oldConfig})
 		if err != nil {
 			return false, cerrors.Errorf("error while triggering lifecycle event \"deleted\": %w", err)
 		}

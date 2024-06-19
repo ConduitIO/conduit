@@ -24,7 +24,7 @@ import (
 	"time"
 
 	"github.com/conduitio/conduit-commons/opencdc"
-	"github.com/conduitio/conduit-connector-protocol/cplugin"
+	"github.com/conduitio/conduit-connector-protocol/pconnector"
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cchan"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -474,8 +474,8 @@ func asserterDestination(
 	rchan := make(chan opencdc.Record, 1)
 
 	destinationPlugin := pmock.NewDestinationPlugin(ctrl)
-	destinationPlugin.EXPECT().Open(gomock.Any(), gomock.Any()).Return(cplugin.DestinationOpenResponse{}, nil)
-	destinationPlugin.EXPECT().Configure(gomock.Any(), gomock.Any()).Return(cplugin.DestinationConfigureResponse{}, nil)
+	destinationPlugin.EXPECT().Open(gomock.Any(), gomock.Any()).Return(pconnector.DestinationOpenResponse{}, nil)
+	destinationPlugin.EXPECT().Configure(gomock.Any(), gomock.Any()).Return(pconnector.DestinationConfigureResponse{}, nil)
 
 	{
 		// TODO assert last position in call to mock
@@ -484,16 +484,16 @@ func asserterDestination(
 			lastPosition = want[len(want)-1].Position
 		}
 		_ = lastPosition
-		destinationPlugin.EXPECT().Stop(gomock.Any(), gomock.Any()).Return(cplugin.DestinationStopResponse{}, nil)
-		destinationPlugin.EXPECT().Teardown(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, _ cplugin.DestinationTeardownRequest) (cplugin.DestinationTeardownResponse, error) {
+		destinationPlugin.EXPECT().Stop(gomock.Any(), gomock.Any()).Return(pconnector.DestinationStopResponse{}, nil)
+		destinationPlugin.EXPECT().Teardown(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, _ pconnector.DestinationTeardownRequest) (pconnector.DestinationTeardownResponse, error) {
 			close(rchan)
-			return cplugin.DestinationTeardownResponse{}, nil
+			return pconnector.DestinationTeardownResponse{}, nil
 		})
 	}
 
 	strm := &builtin.InMemoryDestinationRunStream{}
 	destinationPlugin.EXPECT().NewStream().Return(strm)
-	destinationPlugin.EXPECT().Run(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, _ cplugin.DestinationRunStream) error {
+	destinationPlugin.EXPECT().Run(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, _ pconnector.DestinationRunStream) error {
 		strm.Init(ctx)
 
 		serverStream := strm.Server()
@@ -504,11 +504,11 @@ func asserterDestination(
 					// ctrl.T.Errorf("unexpected error: %v", err)
 					return
 				}
-				acks := make([]cplugin.DestinationRunResponseAck, len(req.Records))
+				acks := make([]pconnector.DestinationRunResponseAck, len(req.Records))
 				for i, rec := range req.Records {
-					acks[i] = cplugin.DestinationRunResponseAck{Position: rec.Position}
+					acks[i] = pconnector.DestinationRunResponseAck{Position: rec.Position}
 				}
-				err = serverStream.Send(cplugin.DestinationRunResponse{Acks: acks})
+				err = serverStream.Send(pconnector.DestinationRunResponse{Acks: acks})
 				if err != nil {
 					// ctrl.T.Errorf("unexpected error: %v", err)
 					return

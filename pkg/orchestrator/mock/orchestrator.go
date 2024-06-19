@@ -13,7 +13,7 @@ import (
 	context "context"
 	reflect "reflect"
 
-	cplugin "github.com/conduitio/conduit-connector-protocol/cplugin"
+	pconnector "github.com/conduitio/conduit-connector-protocol/pconnector"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	connector "github.com/conduitio/conduit/pkg/connector"
 	log "github.com/conduitio/conduit/pkg/foundation/log"
@@ -1083,10 +1083,10 @@ func (m *ConnectorPluginService) EXPECT() *ConnectorPluginServiceMockRecorder {
 }
 
 // List mocks base method.
-func (m *ConnectorPluginService) List(arg0 context.Context) (map[string]cplugin.Specification, error) {
+func (m *ConnectorPluginService) List(arg0 context.Context) (map[string]pconnector.Specification, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "List", arg0)
-	ret0, _ := ret[0].(map[string]cplugin.Specification)
+	ret0, _ := ret[0].(map[string]pconnector.Specification)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1104,19 +1104,19 @@ type ConnectorPluginServiceListCall struct {
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *ConnectorPluginServiceListCall) Return(arg0 map[string]cplugin.Specification, arg1 error) *ConnectorPluginServiceListCall {
+func (c *ConnectorPluginServiceListCall) Return(arg0 map[string]pconnector.Specification, arg1 error) *ConnectorPluginServiceListCall {
 	c.Call = c.Call.Return(arg0, arg1)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *ConnectorPluginServiceListCall) Do(f func(context.Context) (map[string]cplugin.Specification, error)) *ConnectorPluginServiceListCall {
+func (c *ConnectorPluginServiceListCall) Do(f func(context.Context) (map[string]pconnector.Specification, error)) *ConnectorPluginServiceListCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *ConnectorPluginServiceListCall) DoAndReturn(f func(context.Context) (map[string]cplugin.Specification, error)) *ConnectorPluginServiceListCall {
+func (c *ConnectorPluginServiceListCall) DoAndReturn(f func(context.Context) (map[string]pconnector.Specification, error)) *ConnectorPluginServiceListCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

@@ -22,9 +22,8 @@ import (
 	"strings"
 
 	"github.com/conduitio/conduit-commons/config"
-
-	"github.com/conduitio/conduit-connector-protocol/cplugin"
-	"github.com/conduitio/conduit-connector-protocol/cplugin/server"
+	"github.com/conduitio/conduit-connector-protocol/pconnector"
+	"github.com/conduitio/conduit-connector-protocol/pconnector/server"
 )
 
 // These constants need to match the constants in pkg/plugin/connector/standalone/registry_test.go
@@ -58,9 +57,9 @@ const (
 
 func main() {
 	err := server.Serve(
-		func() cplugin.SpecifierPlugin { return specifierPlugin{} },
-		func() cplugin.SourcePlugin { return nil },
-		func() cplugin.DestinationPlugin { return nil },
+		func() pconnector.SpecifierPlugin { return specifierPlugin{} },
+		func() pconnector.SourcePlugin { return nil },
+		func() pconnector.DestinationPlugin { return nil },
 	)
 	if err != nil {
 		log.Fatal(err)
@@ -69,9 +68,9 @@ func main() {
 
 type specifierPlugin struct{}
 
-func (s specifierPlugin) Specify(context.Context, cplugin.SpecifierSpecifyRequest) (cplugin.SpecifierSpecifyResponse, error) {
-	return cplugin.SpecifierSpecifyResponse{
-		Specification: cplugin.Specification{
+func (s specifierPlugin) Specify(context.Context, pconnector.SpecifierSpecifyRequest) (pconnector.SpecifierSpecifyResponse, error) {
+	return pconnector.SpecifierSpecifyResponse{
+		Specification: pconnector.Specification{
 			Name:        testPluginName,
 			Summary:     testPluginSummary,
 			Description: testPluginDescription,

@@ -18,8 +18,8 @@ import (
 	"context"
 	"sync"
 
-	"github.com/conduitio/conduit-connector-protocol/cplugin"
-	"github.com/conduitio/conduit-connector-protocol/cplugin/client"
+	"github.com/conduitio/conduit-connector-protocol/pconnector"
+	"github.com/conduitio/conduit-connector-protocol/pconnector/client"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/plugin/connector"
 	goplugin "github.com/hashicorp/go-plugin"
@@ -163,7 +163,7 @@ type specifierPluginDispenserSignaller struct {
 	d *Dispenser
 }
 
-func (s specifierPluginDispenserSignaller) Specify(ctx context.Context, req cplugin.SpecifierSpecifyRequest) (cplugin.SpecifierSpecifyResponse, error) {
+func (s specifierPluginDispenserSignaller) Specify(ctx context.Context, req pconnector.SpecifierSpecifyRequest) (pconnector.SpecifierSpecifyResponse, error) {
 	defer s.d.teardown()
 	return s.SpecifierPlugin.Specify(ctx, req)
 }
@@ -173,7 +173,7 @@ type sourcePluginDispenserSignaller struct {
 	d *Dispenser
 }
 
-func (s sourcePluginDispenserSignaller) Teardown(ctx context.Context, req cplugin.SourceTeardownRequest) (cplugin.SourceTeardownResponse, error) {
+func (s sourcePluginDispenserSignaller) Teardown(ctx context.Context, req pconnector.SourceTeardownRequest) (pconnector.SourceTeardownResponse, error) {
 	defer s.d.teardown()
 	return s.SourcePlugin.Teardown(ctx, req)
 }
@@ -183,7 +183,7 @@ type destinationPluginDispenserSignaller struct {
 	d *Dispenser
 }
 
-func (s destinationPluginDispenserSignaller) Teardown(ctx context.Context, req cplugin.DestinationTeardownRequest) (cplugin.DestinationTeardownResponse, error) {
+func (s destinationPluginDispenserSignaller) Teardown(ctx context.Context, req pconnector.DestinationTeardownRequest) (pconnector.DestinationTeardownResponse, error) {
 	defer s.d.teardown()
 	return s.DestinationPlugin.Teardown(ctx, req)
 }

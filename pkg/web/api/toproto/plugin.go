@@ -17,7 +17,7 @@ package toproto
 import (
 	"github.com/conduitio/conduit-commons/config"
 	configv1 "github.com/conduitio/conduit-commons/proto/config/v1"
-	"github.com/conduitio/conduit-connector-protocol/cplugin"
+	"github.com/conduitio/conduit-connector-protocol/pconnector"
 	processorSdk "github.com/conduitio/conduit-processor-sdk"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 )
@@ -41,7 +41,7 @@ func _() {
 }
 
 // Deprecated: this is here for backwards compatibility with the old plugin API.
-func PluginSpecifications(name string, in cplugin.Specification) *apiv1.PluginSpecifications {
+func PluginSpecifications(name string, in pconnector.Specification) *apiv1.PluginSpecifications {
 	return &apiv1.PluginSpecifications{
 		Name:              name,
 		Summary:           in.Summary,
@@ -80,7 +80,7 @@ func PluginParamValidations(in []config.Validation) []*apiv1.PluginSpecification
 	return out
 }
 
-func ConnectorPluginSpecifications(name string, in cplugin.Specification) *apiv1.ConnectorPluginSpecifications {
+func ConnectorPluginSpecifications(name string, in pconnector.Specification) *apiv1.ConnectorPluginSpecifications {
 	return &apiv1.ConnectorPluginSpecifications{
 		Name:              name,
 		Summary:           in.Summary,

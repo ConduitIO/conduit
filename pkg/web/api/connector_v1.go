@@ -23,7 +23,7 @@ import (
 	"regexp"
 
 	opencdcv1 "github.com/conduitio/conduit-commons/proto/opencdc/v1"
-	"github.com/conduitio/conduit-connector-protocol/cplugin"
+	"github.com/conduitio/conduit-connector-protocol/pconnector"
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/inspector"
@@ -46,7 +46,7 @@ type ConnectorOrchestrator interface {
 
 type ConnectorPluginOrchestrator interface {
 	// List will return all connector plugins' specs.
-	List(ctx context.Context) (map[string]cplugin.Specification, error)
+	List(ctx context.Context) (map[string]pconnector.Specification, error)
 }
 
 type ConnectorAPIv1 struct {

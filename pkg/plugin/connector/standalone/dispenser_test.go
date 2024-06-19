@@ -21,10 +21,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/conduitio/conduit-connector-protocol/cplugin"
-	"github.com/conduitio/conduit-connector-protocol/cplugin/client"
-	"github.com/conduitio/conduit-connector-protocol/cplugin/mock"
-	"github.com/conduitio/conduit-connector-protocol/cplugin/server"
+	"github.com/conduitio/conduit-connector-protocol/pconnector"
+	"github.com/conduitio/conduit-connector-protocol/pconnector/client"
+	"github.com/conduitio/conduit-connector-protocol/pconnector/mock"
+	"github.com/conduitio/conduit-connector-protocol/pconnector/server"
 	"github.com/conduitio/conduit/pkg/plugin/connector"
 	goplugin "github.com/hashicorp/go-plugin"
 	"github.com/rs/zerolog"
@@ -56,9 +56,9 @@ func newTestDispenser(t *testing.T, logger zerolog.Logger, version int) (
 		// Trick to convince the plugin it should use a specific protocol version
 		os.Setenv("PLUGIN_PROTOCOL_VERSIONS", strconv.Itoa(version))
 		err := server.Serve(
-			func() cplugin.SpecifierPlugin { return mockSpecifier },
-			func() cplugin.SourcePlugin { return mockSource },
-			func() cplugin.DestinationPlugin { return mockDestination },
+			func() pconnector.SpecifierPlugin { return mockSpecifier },
+			func() pconnector.SourcePlugin { return mockSource },
+			func() pconnector.DestinationPlugin { return mockDestination },
 			server.WithDebug(ctx, ch, nil),
 		)
 		if err != nil {

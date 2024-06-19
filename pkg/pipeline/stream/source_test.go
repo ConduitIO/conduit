@@ -92,13 +92,13 @@ func TestSourceNode_Stop_ConcurrentFail(t *testing.T) {
 	startRead := make(chan struct{})
 	unblockRead := make(chan struct{})
 	src.EXPECT().ID().Return("source-connector").AnyTimes()
-	src.EXPECT().Open(gomock.Any()).Return(nil).Times(1)
-	src.EXPECT().Errors().Return(make(chan error)).Times(1)
-	src.EXPECT().Read(gomock.Any()).DoAndReturn(func(ctx context.Context) (opencdc.Record, error) {
+	src.EXPECT().Open(gomock.Any()).Return(nil)
+	src.EXPECT().Errors().Return(make(chan error))
+	src.EXPECT().Read(gomock.Any()).DoAndReturn(func(ctx context.Context) ([]opencdc.Record, error) {
 		close(startRead)
 		<-unblockRead
-		return opencdc.Record{}, connectorPlugin.ErrStreamNotOpen
-	}).Times(1)
+		return nil, connectorPlugin.ErrStreamNotOpen
+	})
 	startStop := make(chan struct{})
 	unblockStop := make(chan struct{})
 	src.EXPECT().Stop(gomock.Any()).DoAndReturn(func(ctx context.Context) (opencdc.Position, error) {
@@ -111,7 +111,7 @@ func TestSourceNode_Stop_ConcurrentFail(t *testing.T) {
 		<-unblockStop
 		return nil, wantErr
 	}).Times(3)
-	src.EXPECT().Teardown(gomock.Any()).Return(nil).Times(1)
+	src.EXPECT().Teardown(gomock.Any()).Return(nil)
 
 	node := &SourceNode{
 		Name:          "source-node",
@@ -233,12 +233,12 @@ func TestSourceNode_ForceStop(t *testing.T) {
 		mockSource: func(onStuck chan struct{}) *mock.Source {
 			src := mock.NewSource(ctrl)
 			src.EXPECT().ID().Return("source-connector").AnyTimes()
-			src.EXPECT().Errors().Return(make(chan error)).Times(1)
+			src.EXPECT().Errors().Return(make(chan error))
 			src.EXPECT().Open(gomock.Any()).DoAndReturn(func(ctx context.Context) error {
 				close(onStuck)
 				<-ctx.Done() // block until context is done
 				return ctx.Err()
-			}).Times(1)
+			})
 			return src
 		},
 		wantErr: context.Canceled,
@@ -248,23 +248,23 @@ func TestSourceNode_ForceStop(t *testing.T) {
 			var connectorCtx context.Context
 			src := mock.NewSource(ctrl)
 			src.EXPECT().ID().Return("source-connector").AnyTimes()
-			src.EXPECT().Errors().Return(make(chan error)).Times(1)
-			src.EXPECT().Teardown(gomock.Any()).Return(nil).Times(1)
+			src.EXPECT().Errors().Return(make(chan error))
+			src.EXPECT().Teardown(gomock.Any()).Return(nil)
 			src.EXPECT().Open(gomock.Any()).DoAndReturn(func(ctx context.Context) error {
 				// the connector opens the stream in open and keeps it open
 				// until the context is open
 				connectorCtx = ctx
 				return nil
-			}).Times(1)
-			src.EXPECT().Read(gomock.Any()).DoAndReturn(func(ctx context.Context) (opencdc.Record, error) {
+			})
+			src.EXPECT().Read(gomock.Any()).DoAndReturn(func(ctx context.Context) ([]opencdc.Record, error) {
 				close(onStuck)
-				<-connectorCtx.Done()           // block until connector stream is closed
-				return opencdc.Record{}, io.EOF // io.EOF is returned when the stream is closed
-			}).Times(1)
+				<-connectorCtx.Done() // block until connector stream is closed
+				return nil, io.EOF    // io.EOF is returned when the stream is closed
+			})
 			src.EXPECT().Stop(gomock.Any()).DoAndReturn(func(ctx context.Context) (opencdc.Position, error) {
 				<-ctx.Done() // block until context is done
 				return nil, ctx.Err()
-			}).Times(1)
+			})
 			return src
 		},
 		wantErr: io.EOF,
@@ -340,8 +340,8 @@ func newMockSource(ctrl *gomock.Controller, recordCount int, wantErr error) (*mo
 
 	teardown := make(chan struct{})
 	source.EXPECT().ID().Return("source-connector").AnyTimes()
-	source.EXPECT().Open(gomock.Any()).Return(nil).Times(1)
-	source.EXPECT().Errors().Return(make(chan error)).Times(1)
+	source.EXPECT().Open(gomock.Any()).Return(nil)
+	source.EXPECT().Errors().Return(make(chan error))
 	source.EXPECT().Read(gomock.Any()).DoAndReturn(func(ctx context.Context) ([]opencdc.Record, error) {
 		if position == recordCount {
 			if wantErr != nil {
@@ -361,11 +361,11 @@ func newMockSource(ctrl *gomock.Controller, recordCount int, wantErr error) (*mo
 			return nil, nil
 		}
 		return records[len(records)-1].Position, nil
-	}).Times(1)
+	})
 	source.EXPECT().Teardown(gomock.Any()).DoAndReturn(func(ctx context.Context) error {
 		close(teardown)
 		return nil
-	}).Times(1)
+	})
 
 	return source, records
 }
