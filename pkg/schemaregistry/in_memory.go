@@ -43,7 +43,7 @@ func (s *InMemoryService) Create(_ context.Context, name string, bytes []byte) (
 	return schema.Instance{
 		ID:      strconv.Itoa(created.ID),
 		Name:    created.Subject,
-		Version: created.Version,
+		Version: int32(created.Version),
 		Type:    schema.TypeAvro,
 		Bytes:   []byte(created.Schema.Schema),
 	}, nil
@@ -60,7 +60,7 @@ func (s *InMemoryService) Get(_ context.Context, name string, version int) (sche
 		ID:      strconv.Itoa(sch.ID),
 		Type:    schema.TypeAvro,
 		Name:    sch.Subject,
-		Version: sch.Version,
+		Version: int32(sch.Version),
 		Bytes:   []byte(sch.Schema.Schema),
 	}, nil
 }

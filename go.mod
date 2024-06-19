@@ -8,15 +8,15 @@ require (
 	github.com/Masterminds/sprig/v3 v3.2.3
 	github.com/NYTimes/gziphandler v1.1.1
 	github.com/bufbuild/buf v1.32.2
-	github.com/conduitio/conduit-commons v0.2.1-0.20240529171657-31b922714201
+	github.com/conduitio/conduit-commons v0.2.1-0.20240613095004-061edf8e3a04
 	github.com/conduitio/conduit-connector-file v0.6.0
 	github.com/conduitio/conduit-connector-generator v0.6.0
 	github.com/conduitio/conduit-connector-kafka v0.8.0
 	github.com/conduitio/conduit-connector-log v0.3.0
-	github.com/conduitio/conduit-connector-postgres v0.7.3-0.20240619163436-ea0d589f79f0
-	github.com/conduitio/conduit-connector-protocol v0.6.1-0.20240619162501-35b52976f15f
+	github.com/conduitio/conduit-connector-postgres v0.7.3-0.20240619164740-fe954bf0c692
+	github.com/conduitio/conduit-connector-protocol v0.6.1-0.20240619164503-2476e664cc54
 	github.com/conduitio/conduit-connector-s3 v0.5.1
-	github.com/conduitio/conduit-connector-sdk v0.9.2-0.20240619162527-69d204277874
+	github.com/conduitio/conduit-connector-sdk v0.9.2-0.20240619164540-4cc0cd86e1ad
 	github.com/conduitio/conduit-processor-sdk v0.1.2-0.20240516124003-442e4a3f0edd
 	github.com/conduitio/yaml/v3 v3.3.0
 	github.com/dgraph-io/badger/v4 v4.2.0
