@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"github.com/conduitio/conduit-commons/opencdc"
-	"github.com/conduitio/conduit-connector-protocol/pconnector"
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cchan"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -33,7 +32,6 @@ import (
 	"github.com/conduitio/conduit/pkg/pipeline/stream"
 	"github.com/conduitio/conduit/pkg/plugin"
 	connectorPlugin "github.com/conduitio/conduit/pkg/plugin/connector"
-	"github.com/conduitio/conduit/pkg/plugin/connector/builtin"
 	pmock "github.com/conduitio/conduit/pkg/plugin/connector/mock"
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/google/uuid"
@@ -469,78 +467,23 @@ func generatorSource(
 func asserterDestination(
 	ctrl *gomock.Controller,
 	persister *connector.Persister,
-	want []opencdc.Record,
+	records []opencdc.Record,
 ) (*connector.Instance, *pmock.Dispenser) {
-	rchan := make(chan opencdc.Record, 1)
-
-	destinationPlugin := pmock.NewDestinationPlugin(ctrl)
-	destinationPlugin.EXPECT().Open(gomock.Any(), gomock.Any()).Return(pconnector.DestinationOpenResponse{}, nil)
-	destinationPlugin.EXPECT().Configure(gomock.Any(), gomock.Any()).Return(pconnector.DestinationConfigureResponse{}, nil)
-
-	{
-		// TODO assert last position in call to mock
-		var lastPosition opencdc.Position
-		if len(want) > 0 {
-			lastPosition = want[len(want)-1].Position
-		}
-		_ = lastPosition
-		destinationPlugin.EXPECT().Stop(gomock.Any(), gomock.Any()).Return(pconnector.DestinationStopResponse{}, nil)
-		destinationPlugin.EXPECT().Teardown(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, _ pconnector.DestinationTeardownRequest) (pconnector.DestinationTeardownResponse, error) {
-			close(rchan)
-			return pconnector.DestinationTeardownResponse{}, nil
-		})
+	var lastPosition opencdc.Position
+	if len(records) > 0 {
+		lastPosition = records[len(records)-1].Position
 	}
 
-	strm := &builtin.InMemoryDestinationRunStream{}
-	destinationPlugin.EXPECT().NewStream().Return(strm)
-	destinationPlugin.EXPECT().Run(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, _ pconnector.DestinationRunStream) error {
-		strm.Init(ctx)
+	destinationPluginOptions := []pmock.ConfigurableDestinationPluginOption{
+		pmock.DestinationPluginWithConfigure(),
+		pmock.DestinationPluginWithOpen(),
+		pmock.DestinationPluginWithRun(),
+		pmock.DestinationPluginWithRecords(records),
+		pmock.DestinationPluginWithStop(lastPosition),
+		pmock.DestinationPluginWithTeardown(),
+	}
 
-		serverStream := strm.Server()
-		go func() {
-			for {
-				req, err := serverStream.Recv()
-				if err != nil {
-					// ctrl.T.Errorf("unexpected error: %v", err)
-					return
-				}
-				acks := make([]pconnector.DestinationRunResponseAck, len(req.Records))
-				for i, rec := range req.Records {
-					acks[i] = pconnector.DestinationRunResponseAck{Position: rec.Position}
-				}
-				err = serverStream.Send(pconnector.DestinationRunResponse{Acks: acks})
-				if err != nil {
-					// ctrl.T.Errorf("unexpected error: %v", err)
-					return
-				}
-			}
-		}()
-		return nil
-	})
-
-	// destinationPlugin.EXPECT().Write(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, r opencdc.Record) error {
-	// 	position, err := strconv.Atoi(r.Position.String())
-	// 	is.NoErr(err)
-	// 	// Conduit enriches metadata, assert and copy it over into the expectation
-	// 	is.Equal(len(r.Metadata), 1)
-	// 	want[position].Metadata = r.Metadata
-	//
-	// 	is.Equal(want[position], r)
-	// 	recordCount++
-	// 	rchan <- r
-	// 	return nil
-	// }).AnyTimes()
-	// destinationPlugin.EXPECT().Ack(gomock.Any()).DoAndReturn(func(ctx context.Context) (opencdc.Position, error) {
-	// 	select {
-	// 	case <-ctx.Done():
-	// 		return nil, ctx.Err()
-	// 	case r, ok := <-rchan:
-	// 		if !ok {
-	// 			return nil, nil
-	// 		}
-	// 		return r.Position, nil
-	// 	}
-	// }).AnyTimes()
+	destinationPlugin := pmock.NewConfigurableDestinationPlugin(ctrl, destinationPluginOptions...)
 
 	dest := dummyDestination(persister)
 
