@@ -55,7 +55,7 @@ func AcceptanceTest(t *testing.T, tdf testDispenserFunc) {
 	run(t, tdf, testSource_Open_EmptyPosition)
 	run(t, tdf, testSource_Run_Success)
 	run(t, tdf, testSource_Run_Fail)
-	run(t, tdf, testSource_Stream_WithoutRun)
+	run(t, tdf, testSource_Stream_WithoutRunPanics)
 	run(t, tdf, testSource_StreamRecv_AfterStop)
 	run(t, tdf, testSource_StreamRecv_CancelContext)
 	run(t, tdf, testSource_StreamSend_Success)
@@ -73,7 +73,7 @@ func AcceptanceTest(t *testing.T, tdf testDispenserFunc) {
 	run(t, tdf, testDestination_Open_Fail)
 	run(t, tdf, testDestination_Run_Success)
 	run(t, tdf, testDestination_Run_Fail)
-	run(t, tdf, testDestination_Stream_WithoutRun)
+	run(t, tdf, testDestination_Stream_WithoutRunPanics)
 	run(t, tdf, testDestination_StreamRecv_Success)
 	run(t, tdf, testDestination_StreamRecv_WithError)
 	run(t, tdf, testDestination_Teardown_Success)
@@ -279,9 +279,7 @@ func testSource_Run_Success(t *testing.T, tdf testDispenserFunc) {
 	is.Equal("", cmp.Diff(want, got, cmpopts.IgnoreUnexported(opencdc.Record{})))
 }
 
-func testSource_Stream_WithoutRun(t *testing.T, tdf testDispenserFunc) {
-	t.Skip("TODO: this test panics, we should probably return an error")
-
+func testSource_Stream_WithoutRunPanics(t *testing.T, tdf testDispenserFunc) {
 	is := is.New(t)
 	dispenser, _, _, _ := tdf(t)
 
@@ -289,10 +287,12 @@ func testSource_Stream_WithoutRun(t *testing.T, tdf testDispenserFunc) {
 	is.NoErr(err)
 
 	stream := source.NewStream()
-	// TODO this panics, should we return an error?
-	clientStream := stream.Client()
-	_, err = clientStream.Recv()
-	is.True(cerrors.Is(err, ErrStreamNotOpen))
+
+	defer func() {
+		is.True(recover() != nil)
+	}()
+	stream.Client()
+	t.Fail() // getting a stream without calling Run should panic
 }
 
 func testSource_StreamRecv_AfterStop(t *testing.T, tdf testDispenserFunc) {
@@ -865,9 +865,7 @@ func testDestination_Run_Fail(t *testing.T, tdf testDispenserFunc) {
 	is.True(cerrors.Is(err, ErrStreamNotOpen))
 }
 
-func testDestination_Stream_WithoutRun(t *testing.T, tdf testDispenserFunc) {
-	t.Skip("TODO: this test panics, we should probably return an error")
-
+func testDestination_Stream_WithoutRunPanics(t *testing.T, tdf testDispenserFunc) {
 	is := is.New(t)
 	dispenser, _, _, _ := tdf(t)
 
@@ -875,10 +873,12 @@ func testDestination_Stream_WithoutRun(t *testing.T, tdf testDispenserFunc) {
 	is.NoErr(err)
 
 	stream := destination.NewStream()
-	// TODO this panics, should we return an error?
-	clientStream := stream.Client()
-	_, err = clientStream.Recv()
-	is.True(cerrors.Is(err, ErrStreamNotOpen))
+
+	defer func() {
+		is.True(recover() != nil)
+	}()
+	stream.Client()
+	t.Fail() // getting a stream without calling Run should panic
 }
 
 func testDestination_StreamRecv_Success(t *testing.T, tdf testDispenserFunc) {
