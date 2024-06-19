@@ -36,8 +36,8 @@ import (
 )
 
 var (
-	// DefaultBuiltinConnectors contains default dispenser factories for
-	// built-in plugins. The key of the map is the import path of the module
+	// DefaultBuiltinConnectors contains the default built-in connectors.
+	// The key of the map is the import path of the module
 	// containing the connector implementation.
 	DefaultBuiltinConnectors = map[string]sdk.Connector{
 		"github.com/conduitio/conduit-connector-file":      file.Connector,
@@ -60,12 +60,12 @@ type Registry struct {
 type blueprint struct {
 	fullName         plugin.FullName
 	specification    connector.Specification
-	dispenserFactory DispenserFactory
+	dispenserFactory dispenserFactory
 }
 
-type DispenserFactory func(name plugin.FullName, logger log.CtxLogger) connector.Dispenser
+type dispenserFactory func(name plugin.FullName, logger log.CtxLogger) connector.Dispenser
 
-func NewDispenserFactory(conn sdk.Connector, schemaService cschema.Service) DispenserFactory {
+func newDispenserFactory(conn sdk.Connector, schemaService cschema.Service) dispenserFactory {
 	if conn.NewSource == nil {
 		conn.NewSource = func() sdk.Source { return nil }
 	}
@@ -107,7 +107,7 @@ func NewRegistry(logger log.CtxLogger, connectors map[string]sdk.Connector, serv
 func loadPlugins(buildInfo *debug.BuildInfo, connectors map[string]sdk.Connector, schemaService cschema.Service) map[string]map[string]blueprint {
 	plugins := make(map[string]map[string]blueprint, len(connectors))
 	for moduleName, conn := range connectors {
-		factory := NewDispenserFactory(conn, schemaService)
+		factory := newDispenserFactory(conn, schemaService)
 
 		specs, err := getSpecification(moduleName, factory, buildInfo)
 		if err != nil {
@@ -141,7 +141,7 @@ func loadPlugins(buildInfo *debug.BuildInfo, connectors map[string]sdk.Connector
 	return plugins
 }
 
-func getSpecification(moduleName string, factory DispenserFactory, buildInfo *debug.BuildInfo) (connector.Specification, error) {
+func getSpecification(moduleName string, factory dispenserFactory, buildInfo *debug.BuildInfo) (connector.Specification, error) {
 	dispenser := factory("", log.CtxLogger{})
 	specPlugin, err := dispenser.DispenseSpecifier()
 	if err != nil {

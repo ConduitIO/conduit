@@ -216,9 +216,12 @@ func newServices(
 	var schemaService schemaregistry.Service
 	switch cfg.Schema.Type {
 	case SchemaTypeConfluent:
-		schemaService = schemaregistry.NewConfluentService(
-			context.Background(), logger, cfg.Schema.Confluent.ConnectionString, cfg.Schema.Confluent.HealthCheckPath,
+		schemaService, err = schemaregistry.NewConfluentService(
+			logger, cfg.Schema.Confluent.ConnectionString, cfg.Schema.Confluent.HealthCheckPath,
 		)
+		if err != nil {
+			return nil, nil, nil, nil, nil, nil, cerrors.Errorf("failed to create Confluent schema service: %w", err)
+		}
 	case SchemaTypeInMemory:
 		schemaService = schemaregistry.NewInMemoryService()
 	default:

@@ -17,6 +17,7 @@ package schemaregistry
 import (
 	"context"
 	"fmt"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -35,17 +36,18 @@ type ConfluentService struct {
 	healthCheckPath string
 }
 
-func NewConfluentService(ctx context.Context, l log.CtxLogger, connString, healthCheckPath string) *ConfluentService {
+func NewConfluentService(l log.CtxLogger, connString, healthCheckPath string) (*ConfluentService, error) {
 	client, err := NewClient(l, sr.URLs(connString))
 	if err != nil {
-		l.Err(ctx, err).Msg("failed to create confluent service client")
+		return nil, cerrors.Errorf("failed to create schema registry client: %w", err)
 	}
+
 	return &ConfluentService{
 		client:          client,
 		logger:          l,
 		connString:      connString,
 		healthCheckPath: healthCheckPath,
-	}
+	}, nil
 }
 
 func (c *ConfluentService) Create(ctx context.Context, name string, bytes []byte) (schema.Instance, error) {
