@@ -55,12 +55,14 @@ func (s *sourcePluginAdapter) withLogger(ctx context.Context) context.Context {
 
 func (s *sourcePluginAdapter) Configure(ctx context.Context, in pconnector.SourceConfigureRequest) (pconnector.SourceConfigureResponse, error) {
 	s.logger.Debug(ctx).Any("request", in).Msg("calling Configure")
-	return runSandbox(s.impl.Configure, s.withLogger(ctx), in.Clone(), s.logger)
+	out, err := runSandbox(s.impl.Configure, s.withLogger(ctx), in.Clone(), s.logger)
+	return out.Clone(), err
 }
 
 func (s *sourcePluginAdapter) Open(ctx context.Context, in pconnector.SourceOpenRequest) (pconnector.SourceOpenResponse, error) {
 	s.logger.Debug(ctx).Any("request", in).Msg("calling Start")
-	return runSandbox(s.impl.Open, s.withLogger(ctx), in.Clone(), s.logger)
+	out, err := runSandbox(s.impl.Open, s.withLogger(ctx), in.Clone(), s.logger)
+	return out.Clone(), err
 }
 
 func (s *sourcePluginAdapter) Run(ctx context.Context, stream pconnector.SourceRunStream) error {
@@ -92,27 +94,32 @@ func (s *sourcePluginAdapter) Run(ctx context.Context, stream pconnector.SourceR
 
 func (s *sourcePluginAdapter) Stop(ctx context.Context, in pconnector.SourceStopRequest) (pconnector.SourceStopResponse, error) {
 	s.logger.Debug(ctx).Any("request", in).Msg("calling Stop")
-	return runSandbox(s.impl.Stop, s.withLogger(ctx), in.Clone(), s.logger)
+	out, err := runSandbox(s.impl.Stop, s.withLogger(ctx), in.Clone(), s.logger)
+	return out.Clone(), err
 }
 
 func (s *sourcePluginAdapter) Teardown(ctx context.Context, in pconnector.SourceTeardownRequest) (pconnector.SourceTeardownResponse, error) {
 	s.logger.Debug(ctx).Any("request", in).Msg("calling Teardown")
-	return runSandbox(s.impl.Teardown, s.withLogger(ctx), in.Clone(), s.logger)
+	out, err := runSandbox(s.impl.Teardown, s.withLogger(ctx), in.Clone(), s.logger)
+	return out.Clone(), err
 }
 
 func (s *sourcePluginAdapter) LifecycleOnCreated(ctx context.Context, in pconnector.SourceLifecycleOnCreatedRequest) (pconnector.SourceLifecycleOnCreatedResponse, error) {
 	s.logger.Debug(ctx).Any("request", in).Msg("calling LifecycleOnCreated")
-	return runSandbox(s.impl.LifecycleOnCreated, s.withLogger(ctx), in.Clone(), s.logger)
+	out, err := runSandbox(s.impl.LifecycleOnCreated, s.withLogger(ctx), in.Clone(), s.logger)
+	return out.Clone(), err
 }
 
 func (s *sourcePluginAdapter) LifecycleOnUpdated(ctx context.Context, in pconnector.SourceLifecycleOnUpdatedRequest) (pconnector.SourceLifecycleOnUpdatedResponse, error) {
 	s.logger.Debug(ctx).Any("request", in).Msg("calling LifecycleOnUpdated")
-	return runSandbox(s.impl.LifecycleOnUpdated, s.withLogger(ctx), in.Clone(), s.logger)
+	out, err := runSandbox(s.impl.LifecycleOnUpdated, s.withLogger(ctx), in.Clone(), s.logger)
+	return out.Clone(), err
 }
 
 func (s *sourcePluginAdapter) LifecycleOnDeleted(ctx context.Context, in pconnector.SourceLifecycleOnDeletedRequest) (pconnector.SourceLifecycleOnDeletedResponse, error) {
 	s.logger.Debug(ctx).Any("request", in).Msg("calling LifecycleOnDeleted")
-	return runSandbox(s.impl.LifecycleOnDeleted, s.withLogger(ctx), in.Clone(), s.logger)
+	out, err := runSandbox(s.impl.LifecycleOnDeleted, s.withLogger(ctx), in.Clone(), s.logger)
+	return out.Clone(), err
 }
 
 func (s *sourcePluginAdapter) NewStream() pconnector.SourceRunStream {
