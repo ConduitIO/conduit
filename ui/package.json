@@ -27,7 +27,7 @@
     "test-coverage": "COVERAGE=true ember test"
   },
   "devDependencies": {
-    "@babel/core": "^7.24.4",
+    "@babel/core": "^7.24.7",
     "@babel/eslint-parser": "^7.24.7",
     "@babel/plugin-proposal-decorators": "^7.24.1",
     "@ember/optional-features": "^2.1.0",
