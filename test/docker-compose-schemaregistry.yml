@@ -2,7 +2,7 @@ version: '3'
 
 services:
   zookeeper:
-    image: confluentinc/cp-zookeeper:7.4.0
+    image: confluentinc/cp-zookeeper:7.6.1
     environment:
       ZOOKEEPER_CLIENT_PORT: '2181'
       ZOOKEEPER_ADMIN_ENABLE_SERVER: 'false'
@@ -10,7 +10,7 @@ services:
       - confluent
 
   kafka:
-    image: confluentinc/cp-kafka:7.4.0
+    image: confluentinc/cp-kafka:7.6.1
     environment:
       KAFKA_BROKER_ID: '0'
       KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
@@ -22,7 +22,7 @@ services:
       - confluent
 
   schema-registry:
-    image: confluentinc/cp-schema-registry:7.4.0
+    image: confluentinc/cp-schema-registry:7.6.1
     depends_on:
       - kafka
     ports:
