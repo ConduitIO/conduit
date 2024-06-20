@@ -19,6 +19,7 @@ import (
 	"runtime/debug"
 
 	file "github.com/conduitio/conduit-connector-file"
+	generator "github.com/conduitio/conduit-connector-generator"
 	connLog "github.com/conduitio/conduit-connector-log"
 	"github.com/conduitio/conduit-connector-protocol/pconnector"
 	sdk "github.com/conduitio/conduit-connector-sdk"
@@ -34,8 +35,8 @@ var (
 	// containing the connector implementation.
 	DefaultDispenserFactories = map[string]DispenserFactory{
 		// TODO update connectors to latest SDK and uncomment
-		"github.com/conduitio/conduit-connector-file": NewDispenserFactory(file.Connector),
-		// "github.com/conduitio/conduit-connector-generator": NewDispenserFactory(generator.Connector),
+		"github.com/conduitio/conduit-connector-file":      NewDispenserFactory(file.Connector),
+		"github.com/conduitio/conduit-connector-generator": NewDispenserFactory(generator.Connector),
 		// "github.com/conduitio/conduit-connector-kafka":     NewDispenserFactory(kafka.Connector),
 		"github.com/conduitio/conduit-connector-log": NewDispenserFactory(connLog.Connector),
 		// "github.com/conduitio/conduit-connector-postgres":  NewDispenserFactory(postgres.Connector),

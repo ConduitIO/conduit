@@ -10,6 +10,7 @@ require (
 	github.com/bufbuild/buf v1.33.0
 	github.com/conduitio/conduit-commons v0.2.0
 	github.com/conduitio/conduit-connector-file v0.6.1-0.20240617175842-95603b2484cd
+	github.com/conduitio/conduit-connector-generator v0.6.1-0.20240620145304-7e4ca8299a21
 	github.com/conduitio/conduit-connector-log v0.3.1-0.20240617183109-ebb4394d0015
 	github.com/conduitio/conduit-connector-protocol v0.6.1-0.20240619121958-1df466646d01
 	github.com/conduitio/conduit-connector-sdk v0.9.2-0.20240619124114-6a89e0d7add8

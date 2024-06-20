@@ -128,6 +128,8 @@ github.com/conduitio/conduit-commons v0.2.0 h1:TMpVGXi0Wski537qLAyQWdGjuGHEhaZxO
 github.com/conduitio/conduit-commons v0.2.0/go.mod h1:i7Q2jm7FBSi2zj1/4MCsFD1hIKAbvamlNtSQfkhUTiY=
 github.com/conduitio/conduit-connector-file v0.6.1-0.20240617175842-95603b2484cd h1:CufBtOe2v9Uzo+K70A8QXsMque1yJKzeQmY6DaEj3/M=
 github.com/conduitio/conduit-connector-file v0.6.1-0.20240617175842-95603b2484cd/go.mod h1:bCnmA+29l871cNhroZfiCS2O8+GhBNVECfL5DOof2ew=
+github.com/conduitio/conduit-connector-generator v0.6.1-0.20240620145304-7e4ca8299a21 h1:pe4W85S0/5J3IUAIMdlsp0VmYMmYms5R9NigKxaHJCM=
+github.com/conduitio/conduit-connector-generator v0.6.1-0.20240620145304-7e4ca8299a21/go.mod h1:2+n1SGAJ/+TpJC9YvxTUWHKt9e0Tm12JcqFJ8OndhX4=
 github.com/conduitio/conduit-connector-log v0.3.1-0.20240617183109-ebb4394d0015 h1:1Rah6h/D41E3tTgGUiNg4N6CoXqtsd4o6J0noYHLz0E=
 github.com/conduitio/conduit-connector-log v0.3.1-0.20240617183109-ebb4394d0015/go.mod h1:6IkveRPUPJDCtdH6vXOW1T+B8Vj99OA+szybqYSnlyY=
 github.com/conduitio/conduit-connector-protocol v0.6.1-0.20240619121958-1df466646d01 h1:sZA0aZpZlleULAu+KQYL+WAapXdJNzV3XnSJmwAF0Mg=
