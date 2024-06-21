@@ -31,6 +31,9 @@ import (
 // behaves in the same way as the standalone plugin adapter, which communicates
 // with the plugin through gRPC, so that the caller can use both of them
 // interchangeably.
+// All methods of sourcePluginAdapter use runSandbox to catch panics and convert
+// them into errors. The adapter also logs the calls and clones the request and
+// response objects to avoid any side effects.
 type sourcePluginAdapter struct {
 	impl pconnector.SourcePlugin
 	// logger is used as the internal logger of sourcePluginAdapter.
