@@ -18,9 +18,9 @@ import (
 	"context"
 
 	"github.com/conduitio/conduit-commons/opencdc"
+	"github.com/conduitio/conduit-commons/semaphore"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/conduitio/conduit/pkg/foundation/semaphore"
 )
 
 // SourceAckerNode is responsible for handling acknowledgments for messages of

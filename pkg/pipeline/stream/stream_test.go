@@ -21,10 +21,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/conduitio/conduit-commons/csync"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/connector"
-	"github.com/conduitio/conduit/pkg/foundation/csync"
 	"github.com/conduitio/conduit/pkg/foundation/ctxutil"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/noop"

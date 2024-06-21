@@ -20,12 +20,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/conduitio/conduit-commons/cchan"
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	opencdcv1 "github.com/conduitio/conduit-commons/proto/opencdc/v1"
 	"github.com/conduitio/conduit-connector-protocol/pconnector"
 	"github.com/conduitio/conduit/pkg/connector"
-	"github.com/conduitio/conduit/pkg/foundation/cchan"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/inspector"

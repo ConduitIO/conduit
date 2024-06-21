@@ -21,9 +21,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/conduitio/conduit-commons/csync"
 	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/foundation/csync"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics"
 )
