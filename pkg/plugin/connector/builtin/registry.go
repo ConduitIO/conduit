@@ -20,8 +20,10 @@ import (
 
 	file "github.com/conduitio/conduit-connector-file"
 	generator "github.com/conduitio/conduit-connector-generator"
+	kafka "github.com/conduitio/conduit-connector-kafka"
 	connLog "github.com/conduitio/conduit-connector-log"
 	"github.com/conduitio/conduit-connector-protocol/pconnector"
+	s3 "github.com/conduitio/conduit-connector-s3"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -37,10 +39,10 @@ var (
 		// TODO update connectors to latest SDK and uncomment
 		"github.com/conduitio/conduit-connector-file":      NewDispenserFactory(file.Connector),
 		"github.com/conduitio/conduit-connector-generator": NewDispenserFactory(generator.Connector),
-		// "github.com/conduitio/conduit-connector-kafka":     NewDispenserFactory(kafka.Connector),
-		"github.com/conduitio/conduit-connector-log": NewDispenserFactory(connLog.Connector),
+		"github.com/conduitio/conduit-connector-kafka":     NewDispenserFactory(kafka.Connector),
+		"github.com/conduitio/conduit-connector-log":       NewDispenserFactory(connLog.Connector),
 		// "github.com/conduitio/conduit-connector-postgres":  NewDispenserFactory(postgres.Connector),
-		// "github.com/conduitio/conduit-connector-s3":        NewDispenserFactory(s3.Connector),
+		"github.com/conduitio/conduit-connector-s3": NewDispenserFactory(s3.Connector),
 	}
 )
 
