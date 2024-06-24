@@ -16,6 +16,7 @@ package schemaregistry
 
 import (
 	"context"
+
 	"github.com/conduitio/conduit-commons/schema"
 	"github.com/lovromazgon/franz-go/pkg/sr"
 )
