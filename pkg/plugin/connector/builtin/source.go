@@ -25,7 +25,7 @@ import (
 	"github.com/rs/zerolog"
 )
 
-// sourcePluginAdapter implements the source plugin interface used internally in
+// sourcePluginAdapter implements connector.SourcePlugin used internally in
 // Conduit and relays the calls to a source plugin defined in
 // conduit-connector-protocol (pconnector). This adapter needs to make sure it
 // behaves in the same way as the standalone plugin adapter, which communicates

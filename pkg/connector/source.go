@@ -308,16 +308,15 @@ func (s *Source) open(ctx context.Context) error {
 
 func (s *Source) run(ctx context.Context) error {
 	s.Instance.logger.Trace(ctx).Msg("running source connector plugin")
-	ctx, s.stopStream = context.WithCancel(ctx)
+	ctx, stopStream := context.WithCancel(ctx)
 	stream := s.plugin.NewStream()
 	err := s.plugin.Run(ctx, stream)
 	if err != nil {
-		s.stopStream()
-		s.stopStream = nil
-		s.stream = nil
+		stopStream()
 		return cerrors.Errorf("could not run source connector plugin: %w", err)
 	}
 	s.stream = stream.Client()
+	s.stopStream = stopStream
 	return nil
 }
 

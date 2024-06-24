@@ -297,16 +297,15 @@ func (d *Destination) open(ctx context.Context) error {
 
 func (d *Destination) run(ctx context.Context) error {
 	d.Instance.logger.Trace(ctx).Msg("running destination connector plugin")
-	ctx, d.stopStream = context.WithCancel(ctx)
+	ctx, stopStream := context.WithCancel(ctx)
 	stream := d.plugin.NewStream()
 	err := d.plugin.Run(ctx, stream)
 	if err != nil {
-		d.stopStream()
-		d.stopStream = nil
-		d.stream = nil
+		stopStream()
 		return cerrors.Errorf("could not run destination connector plugin: %w", err)
 	}
 	d.stream = stream.Client()
+	d.stopStream = stopStream
 	return nil
 }
 
