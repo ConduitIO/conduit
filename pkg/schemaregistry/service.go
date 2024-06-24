@@ -23,8 +23,8 @@ import (
 )
 
 type Service interface {
-	Create(ctx context.Context, name string, bytes []byte) (commschema.Instance, error)
-	Get(ctx context.Context, name string, version int) (commschema.Instance, error)
+	Create(ctx context.Context, subject string, bytes []byte) (commschema.Instance, error)
+	Get(ctx context.Context, subject string, version int) (commschema.Instance, error)
 
 	Check(ctx context.Context) error
 }

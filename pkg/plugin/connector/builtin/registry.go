@@ -16,6 +16,7 @@ package builtin
 
 import (
 	"context"
+	"github.com/conduitio/conduit-connector-sdk/schema"
 	"github.com/conduitio/conduit/pkg/schemaregistry"
 	"runtime/debug"
 
@@ -24,7 +25,6 @@ import (
 	kafka "github.com/conduitio/conduit-connector-kafka"
 	connLog "github.com/conduitio/conduit-connector-log"
 	postgres "github.com/conduitio/conduit-connector-postgres"
-	cschema "github.com/conduitio/conduit-connector-protocol/conduit/schema"
 	"github.com/conduitio/conduit-connector-protocol/cpluginv1"
 	s3 "github.com/conduitio/conduit-connector-s3"
 	sdk "github.com/conduitio/conduit-connector-sdk"
@@ -65,7 +65,7 @@ type blueprint struct {
 
 type dispenserFactory func(name plugin.FullName, logger log.CtxLogger) connector.Dispenser
 
-func newDispenserFactory(conn sdk.Connector, schemaService cschema.Service) dispenserFactory {
+func newDispenserFactory(conn sdk.Connector) dispenserFactory {
 	if conn.NewSource == nil {
 		conn.NewSource = func() sdk.Source { return nil }
 	}
@@ -77,7 +77,6 @@ func newDispenserFactory(conn sdk.Connector, schemaService cschema.Service) disp
 		return builtinv1.NewDispenser(
 			name,
 			logger,
-			schemaService,
 			func() cpluginv1.SpecifierPlugin {
 				return sdk.NewSpecifierPlugin(conn.NewSpecification(), conn.NewSource(), conn.NewDestination())
 			},
@@ -96,18 +95,20 @@ func NewRegistry(logger log.CtxLogger, connectors map[string]sdk.Connector, serv
 		buildInfo = &debug.BuildInfo{} // prevent nil pointer exceptions
 	}
 
+	schema.Service = schemaregistry.NewProtocolServiceAdapter(service)
+
 	r := &Registry{
-		plugins: loadPlugins(buildInfo, connectors, schemaregistry.NewProtocolServiceAdapter(service)),
+		plugins: loadPlugins(buildInfo, connectors),
 		logger:  logger,
 	}
 	logger.Info(context.Background()).Int("count", len(r.List())).Msg("builtin plugins initialized")
 	return r
 }
 
-func loadPlugins(buildInfo *debug.BuildInfo, connectors map[string]sdk.Connector, schemaService cschema.Service) map[string]map[string]blueprint {
+func loadPlugins(buildInfo *debug.BuildInfo, connectors map[string]sdk.Connector) map[string]map[string]blueprint {
 	plugins := make(map[string]map[string]blueprint, len(connectors))
 	for moduleName, conn := range connectors {
-		factory := newDispenserFactory(conn, schemaService)
+		factory := newDispenserFactory(conn)
 
 		specs, err := getSpecification(moduleName, factory, buildInfo)
 		if err != nil {

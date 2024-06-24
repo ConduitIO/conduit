@@ -37,7 +37,7 @@ func NewSchemaServiceAPIv1(s schemaregistry.Service) *SchemaServiceAPIv1 {
 }
 
 func (s *SchemaServiceAPIv1) Create(ctx context.Context, req *conduitv1.CreateSchemaRequest) (*conduitv1.CreateSchemaResponse, error) {
-	created, err := s.service.Create(ctx, req.Name, req.Bytes)
+	created, err := s.service.Create(ctx, req.Subject, req.Bytes)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to create schema: %v", err)
 	}
@@ -45,19 +45,19 @@ func (s *SchemaServiceAPIv1) Create(ctx context.Context, req *conduitv1.CreateSc
 }
 
 func (s *SchemaServiceAPIv1) Get(ctx context.Context, req *conduitv1.GetSchemaRequest) (*conduitv1.GetSchemaResponse, error) {
-	inst, err := s.service.Get(ctx, req.Name, int(req.Version))
+	inst, err := s.service.Get(ctx, req.Subject, int(req.Version))
 	if cerrors.Is(err, schemaregistry.ErrSchemaNotFound) {
 		return nil, status.Errorf(
 			codes.NotFound,
 			"schema with name %v, version %v not found",
-			req.Name, req.Version,
+			req.Subject, req.Version,
 		)
 	}
 	if err != nil {
 		return nil, status.Errorf(
 			codes.Internal,
 			"getting schema with name %v, version %v failed: %v",
-			req.Name, req.Version, err,
+			req.Subject, req.Version, err,
 		)
 	}
 

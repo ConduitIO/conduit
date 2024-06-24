@@ -20,7 +20,6 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 
 	"github.com/conduitio/conduit-commons/schema"
@@ -50,8 +49,8 @@ func NewConfluentService(l log.CtxLogger, connString, healthCheckPath string) (*
 	}, nil
 }
 
-func (c *ConfluentService) Create(ctx context.Context, name string, bytes []byte) (schema.Instance, error) {
-	ss, err := c.client.CreateSchema(ctx, name, sr.Schema{
+func (c *ConfluentService) Create(ctx context.Context, subject string, bytes []byte) (schema.Instance, error) {
+	ss, err := c.client.CreateSchema(ctx, subject, sr.Schema{
 		Schema: string(bytes),
 		Type:   sr.TypeAvro,
 	})
@@ -60,25 +59,22 @@ func (c *ConfluentService) Create(ctx context.Context, name string, bytes []byte
 	}
 
 	return schema.Instance{
-		ID:      strconv.Itoa(ss.ID),
-		Name:    name,
+		Subject: subject,
 		Version: ss.Version,
 		Type:    schema.TypeAvro,
 		Bytes:   []byte(ss.Schema.Schema),
 	}, nil
 }
 
-func (c *ConfluentService) Get(ctx context.Context, name string, version int) (schema.Instance, error) {
-	s, err := c.client.SchemaBySubjectVersion(ctx, name, version)
+func (c *ConfluentService) Get(ctx context.Context, subject string, version int) (schema.Instance, error) {
+	s, err := c.client.SchemaBySubjectVersion(ctx, subject, version)
 	if err != nil {
-		c.logger.Err(ctx, err).Msgf("failed to get schema by name %v and version %v", name, version)
+		c.logger.Err(ctx, err).Msgf("failed to get schema by subject %v and version %v", subject, version)
 		return schema.Instance{}, err
 	}
 
 	return schema.Instance{
-		// todo change ID in schema.Instance to integer
-		ID:      strconv.Itoa(s.ID),
-		Name:    s.Subject,
+		Subject: s.Subject,
 		Version: s.Version,
 		Type:    schema.TypeAvro,
 		Bytes:   []byte(s.Schema.Schema),

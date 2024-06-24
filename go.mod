@@ -8,13 +8,13 @@ require (
 	github.com/Masterminds/sprig/v3 v3.2.3
 	github.com/NYTimes/gziphandler v1.1.1
 	github.com/bufbuild/buf v1.32.2
-	github.com/conduitio/conduit-commons v0.2.1-0.20240613095004-061edf8e3a04
+	github.com/conduitio/conduit-commons v0.2.1-0.20240621181508-bcad84fa5ac9
 	github.com/conduitio/conduit-connector-file v0.6.0
 	github.com/conduitio/conduit-connector-generator v0.6.0
 	github.com/conduitio/conduit-connector-kafka v0.8.0
 	github.com/conduitio/conduit-connector-log v0.3.0
 	github.com/conduitio/conduit-connector-postgres v0.7.3-0.20240619164740-fe954bf0c692
-	github.com/conduitio/conduit-connector-protocol v0.6.1-0.20240619164503-2476e664cc54
+	github.com/conduitio/conduit-connector-protocol v0.6.1-0.20240621181654-3e374e4cfa9c
 	github.com/conduitio/conduit-connector-s3 v0.5.1
 	github.com/conduitio/conduit-connector-sdk v0.9.2-0.20240619164540-4cc0cd86e1ad
 	github.com/conduitio/conduit-processor-sdk v0.1.2-0.20240516124003-442e4a3f0edd
@@ -342,3 +342,11 @@ require (
 	mvdan.cc/gofumpt v0.6.0 // indirect
 	mvdan.cc/unparam v0.0.0-20240427195214-063aff900ca1 // indirect
 )
+
+replace github.com/conduitio/conduit-connector-sdk => ../conduit-connector-sdk
+
+replace github.com/conduitio/conduit-connector-protocol => ../conduit-connector-protocol
+
+replace github.com/conduitio/conduit-commons => ../conduit-commons
+
+replace github.com/conduitio/conduit-connector-postgres => ../conduit-connector-postgres

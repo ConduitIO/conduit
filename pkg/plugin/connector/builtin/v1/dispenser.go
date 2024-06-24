@@ -15,7 +15,6 @@
 package builtinv1
 
 import (
-	cschema "github.com/conduitio/conduit-connector-protocol/conduit/schema"
 	"github.com/conduitio/conduit-connector-protocol/cpluginv1"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
@@ -23,9 +22,8 @@ import (
 )
 
 type Dispenser struct {
-	name          plugin.FullName
-	logger        log.CtxLogger
-	schemaService cschema.Service
+	name   plugin.FullName
+	logger log.CtxLogger
 
 	specifierPlugin   func() cpluginv1.SpecifierPlugin
 	sourcePlugin      func() cpluginv1.SourcePlugin
@@ -35,7 +33,6 @@ type Dispenser struct {
 func NewDispenser(
 	name plugin.FullName,
 	logger log.CtxLogger,
-	schemaService cschema.Service,
 	specifierPlugin func() cpluginv1.SpecifierPlugin,
 	sourcePlugin func() cpluginv1.SourcePlugin,
 	destinationPlugin func() cpluginv1.DestinationPlugin,
@@ -43,7 +40,6 @@ func NewDispenser(
 	return &Dispenser{
 		name:              name,
 		logger:            logger,
-		schemaService:     schemaService,
 		specifierPlugin:   specifierPlugin,
 		sourcePlugin:      sourcePlugin,
 		destinationPlugin: destinationPlugin,
@@ -55,19 +51,11 @@ func (d *Dispenser) DispenseSpecifier() (connector.SpecifierPlugin, error) {
 }
 
 func (d *Dispenser) DispenseSource() (connector.SourcePlugin, error) {
-	return newSourcePluginAdapter(
-		d.sourcePlugin(),
-		d.pluginLogger("source"),
-		d.schemaService,
-	), nil
+	return newSourcePluginAdapter(d.sourcePlugin(), d.pluginLogger("source")), nil
 }
 
 func (d *Dispenser) DispenseDestination() (connector.DestinationPlugin, error) {
-	return newDestinationPluginAdapter(
-		d.destinationPlugin(),
-		d.pluginLogger("destination"),
-		d.schemaService,
-	), nil
+	return newDestinationPluginAdapter(d.destinationPlugin(), d.pluginLogger("destination")), nil
 }
 
 func (d *Dispenser) pluginLogger(pluginType string) log.CtxLogger {

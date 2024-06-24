@@ -16,8 +16,6 @@ package schemaregistry
 
 import (
 	"context"
-	"strconv"
-
 	"github.com/conduitio/conduit-commons/schema"
 	"github.com/lovromazgon/franz-go/pkg/sr"
 )
@@ -41,15 +39,13 @@ func (s *InMemoryService) Create(_ context.Context, name string, bytes []byte) (
 	})
 
 	return schema.Instance{
-		ID:      strconv.Itoa(created.ID),
-		Name:    created.Subject,
+		Subject: created.Subject,
 		Version: created.Version,
 		Type:    schema.TypeAvro,
 		Bytes:   []byte(created.Schema.Schema),
 	}, nil
 }
 
-// todo returned schema instance doesn't contain name and version
 func (s *InMemoryService) Get(_ context.Context, name string, version int) (schema.Instance, error) {
 	sch, found := s.reg.SchemaBySubjectVersion(name, version)
 	if !found {
@@ -57,9 +53,8 @@ func (s *InMemoryService) Get(_ context.Context, name string, version int) (sche
 	}
 
 	return schema.Instance{
-		ID:      strconv.Itoa(sch.ID),
 		Type:    schema.TypeAvro,
-		Name:    sch.Subject,
+		Subject: sch.Subject,
 		Version: sch.Version,
 		Bytes:   []byte(sch.Schema.Schema),
 	}, nil

@@ -17,7 +17,7 @@ package schemaregistry
 import (
 	"context"
 
-	"github.com/conduitio/conduit-connector-protocol/conduit/schema"
+	pschema "github.com/conduitio/conduit-connector-protocol/conduit/schema"
 )
 
 type protocolService struct {
@@ -25,29 +25,29 @@ type protocolService struct {
 }
 
 // NewProtocolServiceAdapter creates an adapter for Service that
-// implements the schema.Service interface from the protocol.
-func NewProtocolServiceAdapter(s Service) schema.Service {
+// implements the pschema.Service interface from the protocol.
+func NewProtocolServiceAdapter(s Service) pschema.Service {
 	return &protocolService{target: s}
 }
 
-func (p *protocolService) Create(ctx context.Context, request schema.CreateRequest) (schema.CreateResponse, error) {
-	res, err := p.target.Create(ctx, request.Name, request.Bytes)
+func (p *protocolService) Create(ctx context.Context, request pschema.CreateRequest) (pschema.CreateResponse, error) {
+	res, err := p.target.Create(ctx, request.Subject, request.Bytes)
 	if err != nil {
-		return schema.CreateResponse{}, err
+		return pschema.CreateResponse{}, err
 	}
 
-	return schema.CreateResponse{
+	return pschema.CreateResponse{
 		Instance: res,
 	}, nil
 }
 
-func (p *protocolService) Get(ctx context.Context, request schema.GetRequest) (schema.GetResponse, error) {
-	res, err := p.target.Get(ctx, request.Name, request.Version)
+func (p *protocolService) Get(ctx context.Context, request pschema.GetRequest) (pschema.GetResponse, error) {
+	res, err := p.target.Get(ctx, request.Subject, request.Version)
 	if err != nil {
-		return schema.GetResponse{}, err
+		return pschema.GetResponse{}, err
 	}
 
-	return schema.GetResponse{
+	return pschema.GetResponse{
 		Instance: res,
 	}, nil
 }
