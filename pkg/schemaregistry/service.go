@@ -14,17 +14,17 @@
 
 package schemaregistry
 
-//go:generate mockgen -destination=mock/schema_service.go -package=mock -mock_names=Service=Service . Service
+//go:generate mockgen -typed -destination=mock/schema_service.go -package=mock -mock_names=Service=Service . Service
 
 import (
 	"context"
 
-	commschema "github.com/conduitio/conduit-commons/schema"
+	"github.com/conduitio/conduit-commons/schema"
 )
 
 type Service interface {
-	Create(ctx context.Context, subject string, bytes []byte) (commschema.Instance, error)
-	Get(ctx context.Context, subject string, version int) (commschema.Instance, error)
+	Create(ctx context.Context, subject string, bytes []byte) (schema.Instance, error)
+	Get(ctx context.Context, subject string, version int) (schema.Instance, error)
 
 	Check(ctx context.Context) error
 }

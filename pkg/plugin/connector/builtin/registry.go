@@ -95,6 +95,8 @@ func NewRegistry(logger log.CtxLogger, connectors map[string]sdk.Connector, serv
 		buildInfo = &debug.BuildInfo{} // prevent nil pointer exceptions
 	}
 
+	// The built-in plugins use Conduit's own schema service
+	// (through an adapter that converts it to a pschema.Service).
 	schema.Service = schemaregistry.NewProtocolServiceAdapter(service)
 
 	r := &Registry{

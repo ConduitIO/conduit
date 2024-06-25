@@ -25,7 +25,7 @@ type protocolService struct {
 }
 
 // NewProtocolServiceAdapter creates an adapter for Service that
-// implements the pschema.Service interface from the protocol.
+// implements the pschema.Service interface (from conduit-connector-protocol).
 func NewProtocolServiceAdapter(s Service) pschema.Service {
 	return &protocolService{target: s}
 }
