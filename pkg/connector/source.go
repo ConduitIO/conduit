@@ -18,11 +18,12 @@ import (
 	"context"
 	"sync"
 
+	"github.com/conduitio/conduit-commons/opencdc"
+	"github.com/conduitio/conduit-connector-protocol/pconnector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
 	connectorPlugin "github.com/conduitio/conduit/pkg/plugin/connector"
-	"github.com/conduitio/conduit/pkg/record"
 )
 
 type Source struct {
@@ -35,6 +36,10 @@ type Source struct {
 	// when it was processing something asynchronously (e.g. persisting state).
 	errs chan error
 
+	// stream is the stream used to exchange records and acks with the
+	// source plugin.
+	stream pconnector.SourceRunStreamClient
+
 	// stopStream is a function that closes the context of the stream
 	stopStream context.CancelFunc
 
@@ -43,7 +48,7 @@ type Source struct {
 }
 
 type SourceState struct {
-	Position record.Position
+	Position opencdc.Position
 }
 
 func (s *Source) ID() string {
@@ -71,7 +76,7 @@ func (s *Source) Open(ctx context.Context) (err error) {
 	defer func() {
 		// ensure the plugin gets torn down if something bad happens
 		if err != nil {
-			tdErr := s.plugin.Teardown(ctx)
+			_, tdErr := s.plugin.Teardown(ctx, pconnector.SourceTeardownRequest{})
 			if tdErr != nil {
 				s.Instance.logger.Err(ctx, tdErr).Msg("could not tear down source connector plugin")
 			}
@@ -103,7 +108,12 @@ func (s *Source) Open(ctx context.Context) (err error) {
 		}
 	}
 
-	err = s.start(ctx)
+	err = s.open(ctx)
+	if err != nil {
+		return err
+	}
+
+	err = s.run(ctx)
 	if err != nil {
 		return err
 	}
@@ -116,7 +126,7 @@ func (s *Source) Open(ctx context.Context) (err error) {
 	return nil
 }
 
-func (s *Source) Stop(ctx context.Context) (record.Position, error) {
+func (s *Source) Stop(ctx context.Context) (opencdc.Position, error) {
 	cleanup, err := s.preparePluginCall()
 	defer cleanup()
 	if err != nil {
@@ -124,15 +134,15 @@ func (s *Source) Stop(ctx context.Context) (record.Position, error) {
 	}
 
 	s.Instance.logger.Debug(ctx).Msg("sending stop signal to source connector plugin")
-	lastPosition, err := s.plugin.Stop(ctx)
+	resp, err := s.plugin.Stop(ctx, pconnector.SourceStopRequest{})
 	if err != nil {
 		return nil, cerrors.Errorf("could not stop source plugin: %w", err)
 	}
 
 	s.Instance.logger.Info(ctx).
-		Bytes(log.RecordPositionField, lastPosition).
+		Bytes(log.RecordPositionField, resp.LastPosition).
 		Msg("source connector plugin successfully responded to stop signal")
-	return lastPosition, nil
+	return resp.LastPosition, nil
 }
 
 func (s *Source) Teardown(ctx context.Context) error {
@@ -152,7 +162,7 @@ func (s *Source) Teardown(ctx context.Context) error {
 	s.wg.Wait()
 
 	s.Instance.logger.Debug(ctx).Msg("tearing down source connector plugin")
-	err := s.plugin.Teardown(ctx)
+	_, err := s.plugin.Teardown(ctx, pconnector.SourceTeardownRequest{})
 
 	s.plugin = nil
 	s.Instance.connector = nil
@@ -166,46 +176,42 @@ func (s *Source) Teardown(ctx context.Context) error {
 	return nil
 }
 
-func (s *Source) Read(ctx context.Context) (record.Record, error) {
+func (s *Source) Read(ctx context.Context) ([]opencdc.Record, error) {
 	cleanup, err := s.preparePluginCall()
 	defer cleanup()
 	if err != nil {
-		return record.Record{}, err
+		return nil, err
 	}
 
-	r, err := s.plugin.Read(ctx)
+	if s.stream == nil {
+		return nil, cerrors.Errorf("source stream not open: %w", connectorPlugin.ErrStreamNotOpen)
+	}
+
+	resp, err := s.stream.Recv()
 	if err != nil {
-		return r, err
+		return nil, err
 	}
 
-	if r.Key == nil {
-		r.Key = record.RawData{}
-	}
-	if r.Payload.Before == nil {
-		r.Payload.Before = record.RawData{}
-	}
-	if r.Payload.After == nil {
-		r.Payload.After = record.RawData{}
+	for _, r := range resp.Records {
+		s.sanitizeRecord(&r)
 	}
 
-	if r.Metadata == nil {
-		r.Metadata = record.Metadata{}
-	}
-	// source connector ID is added to all records
-	r.Metadata.SetConduitSourceConnectorID(s.Instance.ID)
-
-	s.Instance.inspector.Send(ctx, r)
-	return r, nil
+	s.Instance.inspector.Send(ctx, resp.Records)
+	return resp.Records, nil
 }
 
-func (s *Source) Ack(ctx context.Context, p record.Position) error {
+func (s *Source) Ack(ctx context.Context, p []opencdc.Position) error {
 	cleanup, err := s.preparePluginCall()
 	defer cleanup()
 	if err != nil {
 		return err
 	}
 
-	err = s.plugin.Ack(ctx, p)
+	if s.stream == nil {
+		return cerrors.Errorf("source stream not open: %w", connectorPlugin.ErrStreamNotOpen)
+	}
+
+	err = s.stream.Send(pconnector.SourceRunRequest{AckPositions: p})
 	if err != nil {
 		return err
 	}
@@ -214,7 +220,7 @@ func (s *Source) Ack(ctx context.Context, p record.Position) error {
 	// can safely prepare the connector before it stores it
 	s.Instance.Lock()
 	defer s.Instance.Unlock()
-	s.Instance.State = SourceState{Position: p}
+	s.Instance.State = SourceState{Position: p[len(p)-1]}
 	err = s.Instance.persister.Persist(ctx, s.Instance, func(err error) {
 		if err != nil {
 			s.errs <- err
@@ -244,7 +250,7 @@ func (s *Source) OnDelete(ctx context.Context) (err error) {
 	_, err = s.triggerLifecycleEvent(ctx, s.Instance.LastActiveConfig.Settings, nil)
 
 	// call teardown to close plugin regardless of the error
-	tdErr := s.plugin.Teardown(ctx)
+	_, tdErr := s.plugin.Teardown(ctx, pconnector.SourceTeardownRequest{})
 
 	s.plugin = nil
 
@@ -282,10 +288,36 @@ func (s *Source) state() SourceState {
 
 func (s *Source) configure(ctx context.Context) error {
 	s.Instance.logger.Trace(ctx).Msg("configuring source connector plugin")
-	err := s.plugin.Configure(ctx, s.Instance.Config.Settings)
+	_, err := s.plugin.Configure(ctx, pconnector.SourceConfigureRequest{Config: s.Instance.Config.Settings})
 	if err != nil {
 		return cerrors.Errorf("could not configure source connector plugin: %w", err)
 	}
+	return nil
+}
+
+func (s *Source) open(ctx context.Context) error {
+	s.Instance.logger.Trace(ctx).Msg("opening source connector plugin")
+	_, err := s.plugin.Open(ctx, pconnector.SourceOpenRequest{
+		Position: s.state().Position,
+	})
+	if err != nil {
+		return cerrors.Errorf("could not open source connector plugin: %w", err)
+	}
+	return nil
+}
+
+func (s *Source) run(ctx context.Context) error {
+	s.Instance.logger.Trace(ctx).Msg("running source connector plugin")
+	ctx, s.stopStream = context.WithCancel(ctx)
+	stream := s.plugin.NewStream()
+	err := s.plugin.Run(ctx, stream)
+	if err != nil {
+		s.stopStream()
+		s.stopStream = nil
+		s.stream = nil
+		return cerrors.Errorf("could not run source connector plugin: %w", err)
+	}
+	s.stream = stream.Client()
 	return nil
 }
 
@@ -305,7 +337,7 @@ func (s *Source) triggerLifecycleEvent(ctx context.Context, oldConfig, newConfig
 	// created
 	case oldConfig == nil && newConfig != nil:
 		s.Instance.logger.Trace(ctx).Msg("triggering lifecycle event \"created\" on source connector plugin")
-		err := s.plugin.LifecycleOnCreated(ctx, newConfig)
+		_, err := s.plugin.LifecycleOnCreated(ctx, pconnector.SourceLifecycleOnCreatedRequest{Config: newConfig})
 		if err != nil {
 			return false, cerrors.Errorf("error while triggering lifecycle event \"created\": %w", err)
 		}
@@ -314,7 +346,10 @@ func (s *Source) triggerLifecycleEvent(ctx context.Context, oldConfig, newConfig
 	// updated
 	case oldConfig != nil && newConfig != nil:
 		s.Instance.logger.Trace(ctx).Msg("triggering lifecycle event \"updated\" on source connector plugin")
-		err := s.plugin.LifecycleOnUpdated(ctx, oldConfig, newConfig)
+		_, err := s.plugin.LifecycleOnUpdated(ctx, pconnector.SourceLifecycleOnUpdatedRequest{
+			ConfigBefore: oldConfig,
+			ConfigAfter:  newConfig,
+		})
 		if err != nil {
 			return false, cerrors.Errorf("error while triggering lifecycle event \"updated\": %w", err)
 		}
@@ -323,7 +358,7 @@ func (s *Source) triggerLifecycleEvent(ctx context.Context, oldConfig, newConfig
 	// deleted
 	case oldConfig != nil && newConfig == nil:
 		s.Instance.logger.Trace(ctx).Msg("triggering lifecycle event \"deleted\" on source connector plugin")
-		err := s.plugin.LifecycleOnDeleted(ctx, oldConfig)
+		_, err := s.plugin.LifecycleOnDeleted(ctx, pconnector.SourceLifecycleOnDeletedRequest{Config: oldConfig})
 		if err != nil {
 			return false, cerrors.Errorf("error while triggering lifecycle event \"deleted\": %w", err)
 		}
@@ -341,16 +376,22 @@ func (s *Source) triggerLifecycleEvent(ctx context.Context, oldConfig, newConfig
 	}
 }
 
-func (s *Source) start(ctx context.Context) error {
-	s.Instance.logger.Trace(ctx).Msg("starting source connector plugin")
-	ctx, s.stopStream = context.WithCancel(ctx)
-	err := s.plugin.Start(ctx, s.state().Position)
-	if err != nil {
-		s.stopStream()
-		s.stopStream = nil
-		return cerrors.Errorf("could not start source connector plugin: %w", err)
+func (s *Source) sanitizeRecord(r *opencdc.Record) {
+	if r.Key == nil {
+		r.Key = opencdc.RawData{}
 	}
-	return nil
+	if r.Payload.Before == nil {
+		r.Payload.Before = opencdc.RawData{}
+	}
+	if r.Payload.After == nil {
+		r.Payload.After = opencdc.RawData{}
+	}
+
+	if r.Metadata == nil {
+		r.Metadata = opencdc.Metadata{}
+	}
+	// source connector ID is added to all records
+	r.Metadata.SetConduitSourceConnectorID(s.Instance.ID)
 }
 
 func (*Source) isEqual(cfg1, cfg2 map[string]string) bool {

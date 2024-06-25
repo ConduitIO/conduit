@@ -421,12 +421,7 @@
             "in": "body",
             "required": true,
             "schema": {
-              "type": "object",
-              "properties": {
-                "config": {
-                  "$ref": "#/definitions/v1ConnectorConfig"
-                }
-              }
+              "$ref": "#/definitions/ConnectorServiceUpdateConnectorBody"
             }
           }
         ],
@@ -806,12 +801,7 @@
             "in": "body",
             "required": true,
             "schema": {
-              "type": "object",
-              "properties": {
-                "config": {
-                  "$ref": "#/definitions/v1PipelineConfig"
-                }
-              }
+              "$ref": "#/definitions/PipelineServiceUpdatePipelineBody"
             }
           }
         ],
@@ -1062,12 +1052,7 @@
             "in": "body",
             "required": true,
             "schema": {
-              "type": "object",
-              "properties": {
-                "force": {
-                  "type": "boolean"
-                }
-              }
+              "$ref": "#/definitions/PipelineServiceStopPipelineBody"
             }
           }
         ],
@@ -1427,12 +1412,7 @@
             "in": "body",
             "required": true,
             "schema": {
-              "type": "object",
-              "properties": {
-                "config": {
-                  "$ref": "#/definitions/v1ProcessorConfig"
-                }
-              }
+              "$ref": "#/definitions/ProcessorServiceUpdateProcessorBody"
             }
           }
         ],
@@ -1543,6 +1523,14 @@
         }
       }
     },
+    "ConnectorServiceUpdateConnectorBody": {
+      "type": "object",
+      "properties": {
+        "config": {
+          "$ref": "#/definitions/v1ConnectorConfig"
+        }
+      }
+    },
     "ConnectorSourceState": {
       "type": "object",
       "properties": {
@@ -1575,6 +1563,22 @@
           "type": "string",
           "format": "uint64",
           "title": "window_nack_threshold defines the number of nacks in the window that are\ntolerated. Crossing the threshold stops the pipeline.\ndefault = 0"
+        }
+      }
+    },
+    "PipelineServiceStopPipelineBody": {
+      "type": "object",
+      "properties": {
+        "force": {
+          "type": "boolean"
+        }
+      }
+    },
+    "PipelineServiceUpdatePipelineBody": {
+      "type": "object",
+      "properties": {
+        "config": {
+          "$ref": "#/definitions/v1PipelineConfig"
         }
       }
     },
@@ -1637,6 +1641,14 @@
       ],
       "default": "TYPE_UNSPECIFIED",
       "description": "Type shows the processor's parent type.\n\n - TYPE_CONNECTOR: Processor parent is a connector.\n - TYPE_PIPELINE: Processor parent is a pipeline."
+    },
+    "ProcessorServiceUpdateProcessorBody": {
+      "type": "object",
+      "properties": {
+        "config": {
+          "$ref": "#/definitions/v1ProcessorConfig"
+        }
+      }
     },
     "apiv1Info": {
       "type": "object",

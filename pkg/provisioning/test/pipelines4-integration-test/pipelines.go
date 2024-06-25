@@ -17,10 +17,9 @@ package pipelines4
 import (
 	"time"
 
-	"github.com/conduitio/conduit/pkg/processor"
-
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/pipeline"
+	"github.com/conduitio/conduit/pkg/processor"
 )
 
 // ---------------
@@ -78,14 +77,16 @@ var P1C2 = &connector.Instance{
 
 var P1P1 = &processor.Instance{
 	ID:     "pipeline1:proc1",
-	Plugin: "removereadat",
+	Plugin: "builtin:field.exclude",
 	Parent: processor.Parent{
 		ID:   "pipeline1",
 		Type: processor.ParentTypePipeline,
 	},
 	Config: processor.Config{
-		Settings: map[string]string{},
-		Workers:  1,
+		Settings: map[string]string{
+			"fields": `.Metadata["opencdc.readAt"]`,
+		},
+		Workers: 1,
 	},
 
 	ProvisionedBy: processor.ProvisionTypeConfig,
@@ -95,14 +96,16 @@ var P1P1 = &processor.Instance{
 
 var P1C2P1 = &processor.Instance{
 	ID:     "pipeline1:con2:con2proc1",
-	Plugin: "removereadat",
+	Plugin: "builtin:field.exclude",
 	Parent: processor.Parent{
 		ID:   "pipeline1:con2",
 		Type: processor.ParentTypeConnector,
 	},
 	Config: processor.Config{
-		Settings: map[string]string{},
-		Workers:  1,
+		Settings: map[string]string{
+			"fields": `.Metadata["opencdc.readAt"]`,
+		},
+		Workers: 1,
 	},
 
 	ProvisionedBy: processor.ProvisionTypeConfig,

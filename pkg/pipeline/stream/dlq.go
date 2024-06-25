@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:generate mockgen -destination=mock/dlq.go -package=mock -mock_names=DLQHandler=DLQHandler . DLQHandler
+//go:generate mockgen -typed -destination=mock/dlq.go -package=mock -mock_names=DLQHandler=DLQHandler . DLQHandler
 
 package stream
 
@@ -21,18 +21,18 @@ import (
 	"sync"
 	"time"
 
+	"github.com/conduitio/conduit-commons/csync"
+	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/foundation/csync"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics"
-	"github.com/conduitio/conduit/pkg/record"
 )
 
 var dlqHandlerNodeStateBroken nodeState = "broken"
 
 type DLQHandler interface {
 	Open(context.Context) error
-	Write(context.Context, record.Record) error
+	Write(context.Context, opencdc.Record) error
 	Close(context.Context) error
 }
 
@@ -175,15 +175,15 @@ func (n *DLQHandlerNode) Nack(msg *Message, nackMetadata NackMetadata) (err erro
 	return nil
 }
 
-func (n *DLQHandlerNode) dlqRecord(msg *Message, nackMetadata NackMetadata) (record.Record, error) {
-	r := record.Record{
-		Position:  record.Position(msg.ID()),
-		Operation: record.OperationCreate,
-		Metadata:  record.Metadata{},
+func (n *DLQHandlerNode) dlqRecord(msg *Message, nackMetadata NackMetadata) (opencdc.Record, error) {
+	r := opencdc.Record{
+		Position:  opencdc.Position(msg.ID()),
+		Operation: opencdc.OperationCreate,
+		Metadata:  opencdc.Metadata{},
 		Key:       nil,
-		Payload: record.Change{
+		Payload: opencdc.Change{
 			Before: nil,
-			After:  record.StructuredData(msg.Record.Map()), // failed record is stored here
+			After:  opencdc.StructuredData(msg.Record.Map()), // failed record is stored here
 		},
 	}
 	r.Metadata.SetCreatedAt(time.Now())

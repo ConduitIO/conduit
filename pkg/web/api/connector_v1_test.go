@@ -20,14 +20,15 @@ import (
 	"testing"
 	"time"
 
-	connectorPlugin "github.com/conduitio/conduit/pkg/plugin/connector"
-
+	"github.com/conduitio/conduit-commons/cchan"
+	"github.com/conduitio/conduit-commons/config"
+	"github.com/conduitio/conduit-commons/opencdc"
+	opencdcv1 "github.com/conduitio/conduit-commons/proto/opencdc/v1"
+	"github.com/conduitio/conduit-connector-protocol/pconnector"
 	"github.com/conduitio/conduit/pkg/connector"
-	"github.com/conduitio/conduit/pkg/foundation/cchan"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/inspector"
-	"github.com/conduitio/conduit/pkg/record"
 	apimock "github.com/conduitio/conduit/pkg/web/api/mock"
 	"github.com/conduitio/conduit/pkg/web/api/toproto"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
@@ -48,7 +49,7 @@ func TestConnectorAPIv1_ListConnectors(t *testing.T) {
 	source := newTestSource()
 	destination := newTestDestination()
 	destination.State = connector.DestinationState{
-		Positions: map[string]record.Position{source.ID: []byte("irrelevant")},
+		Positions: map[string]opencdc.Position{source.ID: []byte("irrelevant")},
 	}
 
 	csMock.EXPECT().
@@ -227,7 +228,8 @@ func TestConnectorAPIv1_InspectConnector_SendRecord(t *testing.T) {
 
 	id := uuid.NewString()
 	rec := generateTestRecord()
-	recProto, err := toproto.Record(rec)
+	recProto := &opencdcv1.Record{}
+	err := rec.ToProto(recProto)
 	is.NoErr(err)
 
 	ins := inspector.New(log.Nop(), 10)
@@ -238,8 +240,14 @@ func TestConnectorAPIv1_InspectConnector_SendRecord(t *testing.T) {
 		Return(session, nil).
 		Times(1)
 
+	inspectChan := make(chan struct{})
 	inspectServer := apimock.NewConnectorService_InspectConnectorServer(ctrl)
-	inspectServer.EXPECT().Send(gomock.Eq(&apiv1.InspectConnectorResponse{Record: recProto}))
+	inspectServer.EXPECT().
+		Send(&apiv1.InspectConnectorResponse{Record: recProto}).
+		DoAndReturn(func(_ *apiv1.InspectConnectorResponse) error {
+			close(inspectChan)
+			return nil
+		})
 	inspectServer.EXPECT().Context().Return(ctx).AnyTimes()
 
 	go func() {
@@ -248,9 +256,11 @@ func TestConnectorAPIv1_InspectConnector_SendRecord(t *testing.T) {
 			inspectServer,
 		)
 	}()
-	ins.Send(ctx, rec)
+	ins.Send(ctx, []opencdc.Record{rec})
 
-	time.Sleep(100 * time.Millisecond)
+	_, ok, err := cchan.ChanOut[struct{}](inspectChan).RecvTimeout(ctx, 100*time.Millisecond)
+	is.NoErr(err)
+	is.True(!ok)
 }
 
 func TestConnectorAPIv1_InspectConnector_SendErr(t *testing.T) {
@@ -284,7 +294,7 @@ func TestConnectorAPIv1_InspectConnector_SendErr(t *testing.T) {
 		)
 		errC <- err
 	}()
-	ins.Send(ctx, generateTestRecord())
+	ins.Send(ctx, []opencdc.Record{generateTestRecord()})
 
 	err, b, err2 := cchan.ChanOut[error](errC).RecvTimeout(context.Background(), 100*time.Millisecond)
 	is.NoErr(err2)
@@ -322,14 +332,14 @@ func TestConnectorAPIv1_InspectConnector_Err(t *testing.T) {
 	)
 }
 
-func generateTestRecord() record.Record {
-	return record.Record{
-		Position:  record.Position("test-position"),
-		Operation: record.OperationCreate,
-		Metadata:  record.Metadata{"metadata-key": "metadata-value"},
-		Key:       record.RawData{Raw: []byte("test-key")},
-		Payload: record.Change{
-			After: record.RawData{Raw: []byte("test-payload")},
+func generateTestRecord() opencdc.Record {
+	return opencdc.Record{
+		Position:  opencdc.Position("test-position"),
+		Operation: opencdc.OperationCreate,
+		Metadata:  opencdc.Metadata{"metadata-key": "metadata-value"},
+		Key:       opencdc.RawData("test-key"),
+		Payload: opencdc.Change{
+			After: opencdc.RawData("test-payload"),
 		},
 	}
 }
@@ -534,24 +544,24 @@ func TestConnectorAPIv1_ListConnectorPluginsByName(t *testing.T) {
 
 	names := []string{"do-not-want-this-plugin", "want-p1", "want-p2", "skip", "another-skipped"}
 
-	plsMap := make(map[string]connectorPlugin.Specification)
-	pls := make([]connectorPlugin.Specification, 0)
+	plsMap := make(map[string]pconnector.Specification)
+	pls := make([]pconnector.Specification, 0)
 
 	for _, name := range names {
-		ps := connectorPlugin.Specification{
+		ps := pconnector.Specification{
 			Name:        name,
 			Description: "desc",
 			Version:     "v1.0",
 			Author:      "Aaron",
-			SourceParams: map[string]connectorPlugin.Parameter{
+			SourceParams: map[string]config.Parameter{
 				"param": {
-					Type: connectorPlugin.ParameterTypeString,
-					Validations: []connectorPlugin.Validation{{
-						Type: connectorPlugin.ValidationTypeRequired,
-					}},
+					Type: config.ParameterTypeString,
+					Validations: []config.Validation{
+						config.ValidationRequired{},
+					},
 				},
 			},
-			DestinationParams: map[string]connectorPlugin.Parameter{},
+			DestinationParams: map[string]config.Parameter{},
 		}
 		pls = append(pls, ps)
 		plsMap[name] = ps

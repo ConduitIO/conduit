@@ -17,6 +17,7 @@ package avro
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -25,6 +26,8 @@ import (
 )
 
 func TestSchema_MarshalUnmarshal(t *testing.T) {
+	now := time.Now().UTC()
+
 	testCases := []struct {
 		name string
 		// haveValue is the value we use to extract the schema and which gets marshaled
@@ -498,11 +501,13 @@ func TestSchema_MarshalUnmarshal(t *testing.T) {
 			"foo": "bar",
 			"bar": 1,
 			"baz": []int{1, 2, 3},
+			"tz":  now,
 		},
 		wantValue: map[string]any{ // structured data is unmarshaled into a map
 			"foo": "bar",
 			"bar": 1,
 			"baz": []any{1, 2, 3},
+			"tz":  now.Truncate(time.Microsecond), // Avro cannot does not support nanoseconds
 		},
 		wantSchema: must(avro.NewRecordSchema(
 			"record.foo",
@@ -511,6 +516,7 @@ func TestSchema_MarshalUnmarshal(t *testing.T) {
 				must(avro.NewField("foo", avro.NewPrimitiveSchema(avro.String, nil))),
 				must(avro.NewField("bar", avro.NewPrimitiveSchema(avro.Int, nil))),
 				must(avro.NewField("baz", avro.NewArraySchema(avro.NewPrimitiveSchema(avro.Int, nil)))),
+				must(avro.NewField("tz", avro.NewPrimitiveSchema(avro.Long, avro.NewPrimitiveLogicalSchema(avro.TimestampMicros)))),
 			},
 		)),
 	}}

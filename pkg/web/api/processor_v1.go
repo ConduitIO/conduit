@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:generate mockgen -destination=mock/processor.go -package=mock -mock_names=ProcessorOrchestrator=ProcessorOrchestrator . ProcessorOrchestrator
-//go:generate mockgen -destination=mock/processor_service_in.go -package=mock -mock_names=ProcessorService_InspectProcessorInServer=ProcessorService_InspectProcessorInServer github.com/conduitio/conduit/proto/api/v1 ProcessorService_InspectProcessorInServer
-//go:generate mockgen -destination=mock/processor_service_out.go -package=mock -mock_names=ProcessorService_InspectProcessorOutServer=ProcessorService_InspectProcessorOutServer github.com/conduitio/conduit/proto/api/v1 ProcessorService_InspectProcessorOutServer
-//go:generate mockgen -destination=mock/processor_plugin.go -package=mock -mock_names=ProcessorPluginOrchestrator=ProcessorPluginOrchestrator . ProcessorPluginOrchestrator
+//go:generate mockgen -typed -destination=mock/processor.go -package=mock -mock_names=ProcessorOrchestrator=ProcessorOrchestrator . ProcessorOrchestrator
+//go:generate mockgen -typed -destination=mock/processor_service_in.go -package=mock -mock_names=ProcessorService_InspectProcessorInServer=ProcessorService_InspectProcessorInServer github.com/conduitio/conduit/proto/api/v1 ProcessorService_InspectProcessorInServer
+//go:generate mockgen -typed -destination=mock/processor_service_out.go -package=mock -mock_names=ProcessorService_InspectProcessorOutServer=ProcessorService_InspectProcessorOutServer github.com/conduitio/conduit/proto/api/v1 ProcessorService_InspectProcessorOutServer
+//go:generate mockgen -typed -destination=mock/processor_plugin.go -package=mock -mock_names=ProcessorPluginOrchestrator=ProcessorPluginOrchestrator . ProcessorPluginOrchestrator
 
 package api
 
@@ -24,8 +24,8 @@ import (
 	"regexp"
 	"slices"
 
+	opencdcv1 "github.com/conduitio/conduit-commons/proto/opencdc/v1"
 	processorSdk "github.com/conduitio/conduit-processor-sdk"
-
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/inspector"
 	"github.com/conduitio/conduit/pkg/processor"
@@ -109,16 +109,17 @@ func (p *ProcessorAPIv1) InspectProcessorIn(
 	}
 
 	for rec := range session.C {
-		recProto, err2 := toproto.Record(rec)
-		if err2 != nil {
-			return cerrors.Errorf("failed converting record: %w", err2)
+		recProto := &opencdcv1.Record{}
+		err := rec.ToProto(recProto)
+		if err != nil {
+			return cerrors.Errorf("failed converting record: %w", err)
 		}
 
-		err2 = server.Send(&apiv1.InspectProcessorInResponse{
+		err = server.Send(&apiv1.InspectProcessorInResponse{
 			Record: recProto,
 		})
-		if err2 != nil {
-			return cerrors.Errorf("failed sending record: %w", err2)
+		if err != nil {
+			return cerrors.Errorf("failed sending record: %w", err)
 		}
 	}
 
@@ -139,16 +140,17 @@ func (p *ProcessorAPIv1) InspectProcessorOut(
 	}
 
 	for rec := range session.C {
-		recProto, err2 := toproto.Record(rec)
-		if err2 != nil {
-			return cerrors.Errorf("failed converting record: %w", err2)
+		recProto := &opencdcv1.Record{}
+		err := rec.ToProto(recProto)
+		if err != nil {
+			return cerrors.Errorf("failed converting record: %w", err)
 		}
 
-		err2 = server.Send(&apiv1.InspectProcessorOutResponse{
+		err = server.Send(&apiv1.InspectProcessorOutResponse{
 			Record: recProto,
 		})
-		if err2 != nil {
-			return cerrors.Errorf("failed sending record: %w", err2)
+		if err != nil {
+			return cerrors.Errorf("failed sending record: %w", err)
 		}
 	}
 

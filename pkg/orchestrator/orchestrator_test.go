@@ -22,8 +22,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/conduitio/conduit-commons/opencdc"
-	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/ctxutil"
 	"github.com/conduitio/conduit/pkg/foundation/database/badger"
@@ -33,8 +31,9 @@ import (
 	conn_plugin "github.com/conduitio/conduit/pkg/plugin/connector"
 	conn_builtin "github.com/conduitio/conduit/pkg/plugin/connector/builtin"
 	conn_standalone "github.com/conduitio/conduit/pkg/plugin/connector/standalone"
+	proc_plugin "github.com/conduitio/conduit/pkg/plugin/processor"
+	proc_builtin "github.com/conduitio/conduit/pkg/plugin/processor/builtin"
 	"github.com/conduitio/conduit/pkg/processor"
-	"github.com/conduitio/conduit/pkg/record"
 	"github.com/conduitio/conduit/pkg/schemaregistry"
 	"github.com/google/go-cmp/cmp"
 	"github.com/matryer/is"
@@ -77,19 +76,11 @@ func TestPipelineSimple(t *testing.T) {
 		conn_standalone.NewRegistry(logger, ""),
 	)
 
-	procPluginService := mock.NewProcessorPluginService(gomock.NewController(t))
-	procPluginService.EXPECT().
-		NewProcessor(gomock.Any(), "removereadat", gomock.Any()).
-		Return(
-			sdk.NewProcessorFunc(sdk.Specification{Name: "removereadat"}, func(ctx context.Context, r opencdc.Record) (opencdc.Record, error) {
-				delete(r.Metadata, record.MetadataReadAt) // read at is different every time, remove it
-				return r, nil
-			}),
-			nil,
-		).
-		// once when creating a processor instance (to verify the plugin exists)
-		// and once when building the pipeline nodes (to make a runnable processor)
-		Times(2)
+	procPluginService := proc_plugin.NewPluginService(
+		logger,
+		proc_builtin.NewRegistry(logger, proc_builtin.DefaultBuiltinProcessors),
+		nil,
+	)
 
 	orc := NewOrchestrator(
 		db,
@@ -122,12 +113,16 @@ func TestPipelineSimple(t *testing.T) {
 
 	_, err = orc.Processors.Create(
 		ctx,
-		"removereadat",
+		"builtin:field.exclude",
 		processor.Parent{
 			ID:   pl.ID,
 			Type: processor.ParentTypePipeline,
 		},
-		processor.Config{},
+		processor.Config{
+			Settings: map[string]string{
+				"fields": `.Metadata["opencdc.readAt"]`,
+			},
+		},
 		"",
 	)
 	is.NoErr(err)
@@ -159,11 +154,11 @@ func TestPipelineSimple(t *testing.T) {
 	is.NoErr(err)
 	t.Log("successfully stopped pipeline")
 
-	want := `{"position":"Mg==","operation":"create","metadata":{"conduit.source.connector.id":"%[1]v","file.path":"./fixtures/file-source.txt","opencdc.version":"v1"},"key":"MQ==","payload":{"before":null,"after":"MQ=="}}
-{"position":"NA==","operation":"create","metadata":{"conduit.source.connector.id":"%[1]v","file.path":"./fixtures/file-source.txt","opencdc.version":"v1"},"key":"Mg==","payload":{"before":null,"after":"Mg=="}}
-{"position":"Ng==","operation":"create","metadata":{"conduit.source.connector.id":"%[1]v","file.path":"./fixtures/file-source.txt","opencdc.version":"v1"},"key":"Mw==","payload":{"before":null,"after":"Mw=="}}
-{"position":"OA==","operation":"create","metadata":{"conduit.source.connector.id":"%[1]v","file.path":"./fixtures/file-source.txt","opencdc.version":"v1"},"key":"NA==","payload":{"before":null,"after":"NA=="}}
-{"position":"MTA=","operation":"create","metadata":{"conduit.source.connector.id":"%[1]v","file.path":"./fixtures/file-source.txt","opencdc.version":"v1"},"key":"NQ==","payload":{"before":null,"after":"NQ=="}}
+	want := `{"position":"Mg==","operation":"create","metadata":{"conduit.source.connector.id":"%[1]v","file.path":"./fixtures/file-source.txt"},"key":"MQ==","payload":{"before":null,"after":"MQ=="}}
+{"position":"NA==","operation":"create","metadata":{"conduit.source.connector.id":"%[1]v","file.path":"./fixtures/file-source.txt"},"key":"Mg==","payload":{"before":null,"after":"Mg=="}}
+{"position":"Ng==","operation":"create","metadata":{"conduit.source.connector.id":"%[1]v","file.path":"./fixtures/file-source.txt"},"key":"Mw==","payload":{"before":null,"after":"Mw=="}}
+{"position":"OA==","operation":"create","metadata":{"conduit.source.connector.id":"%[1]v","file.path":"./fixtures/file-source.txt"},"key":"NA==","payload":{"before":null,"after":"NA=="}}
+{"position":"MTA=","operation":"create","metadata":{"conduit.source.connector.id":"%[1]v","file.path":"./fixtures/file-source.txt"},"key":"NQ==","payload":{"before":null,"after":"NQ=="}}
 `
 	want = fmt.Sprintf(want, conn.ID)
 

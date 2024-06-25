@@ -17,9 +17,9 @@ package orchestrator
 import (
 	"context"
 
+	"github.com/conduitio/conduit-commons/rollback"
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/foundation/rollback"
 	"github.com/conduitio/conduit/pkg/inspector"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	"github.com/google/uuid"
