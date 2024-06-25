@@ -17,7 +17,7 @@ package utils
 import (
 	"context"
 
-	"github.com/conduitio/conduit-connector-protocol/conduit/schema/v1/toproto"
+	"github.com/conduitio/conduit-connector-protocol/conduit/pschema/v1/toproto"
 	conduitv1 "github.com/conduitio/conduit-connector-protocol/proto/conduit/v1"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/schemaregistry"
@@ -37,7 +37,7 @@ func NewSchemaServiceAPIv1(s schemaregistry.Service) *SchemaServiceAPIv1 {
 }
 
 func (s *SchemaServiceAPIv1) Create(ctx context.Context, req *conduitv1.CreateSchemaRequest) (*conduitv1.CreateSchemaResponse, error) {
-	created, err := s.service.Create(ctx, req.Name, req.Bytes)
+	created, err := s.service.Create(ctx, req.Subject, req.Bytes)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to create schema: %v", err)
 	}
@@ -45,12 +45,20 @@ func (s *SchemaServiceAPIv1) Create(ctx context.Context, req *conduitv1.CreateSc
 }
 
 func (s *SchemaServiceAPIv1) Get(ctx context.Context, req *conduitv1.GetSchemaRequest) (*conduitv1.GetSchemaResponse, error) {
-	inst, err := s.service.Get(ctx, req.Id)
+	inst, err := s.service.Get(ctx, req.Subject, int(req.Version))
 	if cerrors.Is(err, schemaregistry.ErrSchemaNotFound) {
-		return nil, status.Errorf(codes.NotFound, "schema with ID %v not found", req.Id)
+		return nil, status.Errorf(
+			codes.NotFound,
+			"schema with name %v, version %v not found",
+			req.Subject, req.Version,
+		)
 	}
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "fetching schema %v failed: %v", req.Id, err)
+		return nil, status.Errorf(
+			codes.Internal,
+			"getting schema with name %v, version %v failed: %v",
+			req.Subject, req.Version, err,
+		)
 	}
 
 	return toproto.GetSchemaResponse(inst), nil
