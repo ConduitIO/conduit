@@ -16,11 +16,11 @@ package schemaregistry
 
 import (
 	"context"
-	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"testing"
 
 	"github.com/conduitio/conduit-commons/schema"
 	"github.com/conduitio/conduit-connector-protocol/conduit/pschema"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/schemaregistry/mock"
 	"github.com/matryer/is"
 	"go.uber.org/mock/gomock"
