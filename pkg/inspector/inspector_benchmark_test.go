@@ -18,8 +18,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/conduitio/conduit/pkg/record"
 )
 
 func BenchmarkInspector_NoSession_Send(b *testing.B) {
@@ -27,7 +27,7 @@ func BenchmarkInspector_NoSession_Send(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		ins.Send(context.Background(), record.Record{Position: record.Position("test-pos")})
+		ins.Send(context.Background(), []opencdc.Record{{Position: opencdc.Position("test-pos")}})
 	}
 }
 
@@ -37,7 +37,7 @@ func BenchmarkInspector_SingleSession_Send(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		ins.Send(context.Background(), record.Record{Position: record.Position("test-pos")})
+		ins.Send(context.Background(), []opencdc.Record{{Position: opencdc.Position("test-pos")}})
 	}
 }
 
@@ -49,6 +49,6 @@ func BenchmarkInspector_10Sessions_Send(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		ins.Send(context.Background(), record.Record{Position: record.Position("test-pos")})
+		ins.Send(context.Background(), []opencdc.Record{{Position: opencdc.Position("test-pos")}})
 	}
 }

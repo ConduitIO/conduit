@@ -19,13 +19,12 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/conduitio/conduit/pkg/plugin"
-
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	processorv1 "github.com/conduitio/conduit-processor-sdk/proto/processor/v1"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/stealthrocket/wazergo"
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/api"

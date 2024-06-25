@@ -20,10 +20,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/conduitio/conduit-commons/cchan"
 	"github.com/conduitio/conduit-commons/config"
+	"github.com/conduitio/conduit-commons/opencdc"
+	opencdcv1 "github.com/conduitio/conduit-commons/proto/opencdc/v1"
 	processorSdk "github.com/conduitio/conduit-processor-sdk"
-
-	"github.com/conduitio/conduit/pkg/foundation/cchan"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/inspector"
@@ -433,7 +434,8 @@ func TestProcessorAPIv1_InspectIn_SendRecord(t *testing.T) {
 
 	id := uuid.NewString()
 	rec := generateTestRecord()
-	recProto, err := toproto.Record(rec)
+	recProto := &opencdcv1.Record{}
+	err := rec.ToProto(recProto)
 	is.NoErr(err)
 
 	ins := inspector.New(log.Nop(), 10)
@@ -444,8 +446,14 @@ func TestProcessorAPIv1_InspectIn_SendRecord(t *testing.T) {
 		Return(session, nil).
 		Times(1)
 
+	inspectChan := make(chan struct{})
 	inspectServer := apimock.NewProcessorService_InspectProcessorInServer(ctrl)
-	inspectServer.EXPECT().Send(gomock.Eq(&apiv1.InspectProcessorInResponse{Record: recProto}))
+	inspectServer.EXPECT().
+		Send(&apiv1.InspectProcessorInResponse{Record: recProto}).
+		DoAndReturn(func(_ *apiv1.InspectProcessorInResponse) error {
+			close(inspectChan)
+			return nil
+		})
 	inspectServer.EXPECT().Context().Return(ctx).AnyTimes()
 
 	go func() {
@@ -454,9 +462,11 @@ func TestProcessorAPIv1_InspectIn_SendRecord(t *testing.T) {
 			inspectServer,
 		)
 	}()
-	ins.Send(ctx, rec)
+	ins.Send(ctx, []opencdc.Record{rec})
 
-	time.Sleep(100 * time.Millisecond)
+	_, ok, err := cchan.ChanOut[struct{}](inspectChan).RecvTimeout(ctx, 100*time.Millisecond)
+	is.NoErr(err)
+	is.True(!ok)
 }
 
 func TestProcessorAPIv1_InspectIn_SendErr(t *testing.T) {
@@ -490,7 +500,7 @@ func TestProcessorAPIv1_InspectIn_SendErr(t *testing.T) {
 		)
 		errC <- err
 	}()
-	ins.Send(ctx, generateTestRecord())
+	ins.Send(ctx, []opencdc.Record{generateTestRecord()})
 
 	err, b, err2 := cchan.ChanOut[error](errC).RecvTimeout(context.Background(), 100*time.Millisecond)
 	is.NoErr(err2)

@@ -20,9 +20,8 @@ import (
 	"context"
 	"sync"
 
+	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/foundation/multierror"
-	"github.com/conduitio/conduit/pkg/record"
 )
 
 type (
@@ -53,7 +52,7 @@ type Message struct {
 	// further.
 	Ctx context.Context
 	// Record represents a single record attached to the message.
-	Record record.Record
+	Record opencdc.Record
 
 	// SourceID contains the source connector ID.
 	SourceID string
@@ -153,7 +152,7 @@ func (m *Message) RegisterStatusHandler(h StatusChangeHandler) {
 		// all handlers are called and errors collected
 		err1 := h(msg, change)
 		err2 := next(msg, change)
-		return multierror.Append(err1, err2)
+		return cerrors.Join(err1, err2)
 	}
 }
 

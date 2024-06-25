@@ -21,8 +21,12 @@ import (
 	"os"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+<<<<<<< HEAD
 	"github.com/conduitio/conduit/pkg/foundation/multierror"
 	"github.com/conduitio/conduit/pkg/schemaregistry"
+=======
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/avro/schemaregistry"
+>>>>>>> lovro/migrate-to-conduit-commons
 	"github.com/lovromazgon/franz-go/pkg/sr"
 )
 
@@ -145,15 +149,15 @@ func (c *tlsConfig) parse() error {
 		return nil
 	} else if c.Client.Cert == "" || c.Client.Key == "" {
 		// we are missing some configuration fields
-		err := cerrors.New("invalid TLS config")
+		errs := []error{cerrors.New("invalid TLS config")}
 		if c.Client.Cert == "" {
-			err = multierror.Append(err, cerrors.New("missing field: tls.client.cert"))
+			errs = append(errs, cerrors.New("missing field: tls.client.cert"))
 		}
 		if c.Client.Key == "" {
-			err = multierror.Append(err, cerrors.New("missing field: tls.client.key"))
+			errs = append(errs, cerrors.New("missing field: tls.client.key"))
 		}
 		// CA cert is optional, we don't check if it's missing
-		return err
+		return cerrors.Join(errs...)
 	}
 
 	clientCert, err := tls.LoadX509KeyPair(c.Client.Cert, c.Client.Key)
