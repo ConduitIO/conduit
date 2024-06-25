@@ -17,7 +17,7 @@ package schemaregistry
 import (
 	"context"
 
-	pschema "github.com/conduitio/conduit-connector-protocol/conduit/schema"
+	"github.com/conduitio/conduit-connector-protocol/conduit/pschema"
 )
 
 type protocolService struct {

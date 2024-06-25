@@ -17,7 +17,7 @@ package utils
 import (
 	"context"
 
-	"github.com/conduitio/conduit-connector-protocol/conduit/schema/v1/toproto"
+	"github.com/conduitio/conduit-connector-protocol/conduit/pschema/v1/toproto"
 	conduitv1 "github.com/conduitio/conduit-connector-protocol/proto/conduit/v1"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/schemaregistry"
