@@ -146,7 +146,7 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 		logger:           logger,
 	}
 
-	err := initServices(r, logger, db, connectorPersister, cfg)
+	err := initServices(r)
 	if err != nil {
 		return nil, cerrors.Errorf("failed to initialize services: %w", err)
 	}
@@ -155,23 +155,23 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 }
 
 // Create all necessary internal services
-func initServices(r *Runtime, logger log.CtxLogger, db database.DB, persister *connector.Persister, cfg Config) error {
-	standaloneReg, err := proc_standalone.NewRegistry(logger, cfg.Processors.Path)
+func initServices(r *Runtime) error {
+	standaloneReg, err := proc_standalone.NewRegistry(r.logger, r.Config.Processors.Path)
 	if err != nil {
 		return cerrors.Errorf("failed creating processor registry: %w", err)
 	}
 
 	procPluginService := proc_plugin.NewPluginService(
-		logger,
-		proc_builtin.NewRegistry(logger, proc_builtin.DefaultBuiltinProcessors),
+		r.logger,
+		proc_builtin.NewRegistry(r.logger, proc_builtin.DefaultBuiltinProcessors),
 		standaloneReg,
 	)
 
 	var schemaService schemaregistry.Service
-	switch cfg.Schema.Type {
+	switch r.Config.Schema.Type {
 	case SchemaTypeConfluent:
 		schemaService, err = schemaregistry.NewConfluentService(
-			logger, cfg.Schema.Confluent.ConnectionString, cfg.Schema.Confluent.HealthCheckPath,
+			r.logger, r.Config.Schema.Confluent.ConnectionString, r.Config.Schema.Confluent.HealthCheckPath,
 		)
 		if err != nil {
 			return cerrors.Errorf("failed to create Confluent schema service: %w", err)
@@ -183,18 +183,18 @@ func initServices(r *Runtime, logger log.CtxLogger, db database.DB, persister *c
 	}
 
 	connPluginService := conn_plugin.NewPluginService(
-		logger,
-		conn_builtin.NewRegistry(logger, cfg.ConnectorPlugins, schemaService),
-		conn_standalone.NewRegistry(logger, cfg.Connectors.Path),
+		r.logger,
+		conn_builtin.NewRegistry(r.logger, r.Config.ConnectorPlugins, schemaService),
+		conn_standalone.NewRegistry(r.logger, r.Config.Connectors.Path),
 	)
 
-	plService := pipeline.NewService(logger, db)
-	connService := connector.NewService(logger, db, persister)
-	procService := processor.NewService(logger, db, procPluginService)
+	plService := pipeline.NewService(r.logger, r.DB)
+	connService := connector.NewService(r.logger, r.DB, r.connectorPersister)
+	procService := processor.NewService(r.logger, r.DB, procPluginService)
 
-	provisionService := provisioning.NewService(db, logger, plService, connService, procService, connPluginService, cfg.Pipelines.Path)
+	provisionService := provisioning.NewService(r.DB, r.logger, plService, connService, procService, connPluginService, r.Config.Pipelines.Path)
 
-	orc := orchestrator.NewOrchestrator(db, logger, plService, connService, procService, connPluginService, procPluginService)
+	orc := orchestrator.NewOrchestrator(r.DB, r.logger, plService, connService, procService, connPluginService, procPluginService)
 
 	r.Orchestrator = orc
 	r.ProvisionService = provisionService
