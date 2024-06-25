@@ -21,12 +21,7 @@ import (
 	"os"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-<<<<<<< HEAD
-	"github.com/conduitio/conduit/pkg/foundation/multierror"
 	"github.com/conduitio/conduit/pkg/schemaregistry"
-=======
-	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/avro/schemaregistry"
->>>>>>> lovro/migrate-to-conduit-commons
 	"github.com/lovromazgon/franz-go/pkg/sr"
 )
 
