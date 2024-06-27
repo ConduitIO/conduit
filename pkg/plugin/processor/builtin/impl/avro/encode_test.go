@@ -163,3 +163,44 @@ func TestEncodeProcessor_Process_RawData_CustomField(t *testing.T) {
 		})
 	}
 }
+
+func TestEncodeProcessor_Process_EmptyPayloadAfter(t *testing.T) {
+	t.Run("empty .Payload.After", func(t *testing.T) {
+		is := is.New(t)
+		ctx := context.Background()
+
+		config := map[string]string{
+			"url":                         "http://localhost",
+			"field":                       ".Payload.After",
+			"schema.strategy":             "autoRegister",
+			"schema.autoRegister.subject": "testsubject",
+		}
+		input := opencdc.Record{
+			Payload: opencdc.Change{
+				Before: opencdc.StructuredData{
+					"something": opencdc.RawData(`{"field_int": 123}`),
+				},
+				After: opencdc.StructuredData{},
+			},
+		}
+
+		encodedValue := opencdc.RawData("{}")
+		want := sdk.SingleRecord(input.Clone())
+		want.Payload.After = encodedValue
+
+		underTest := NewEncodeProcessor(log.Nop())
+		err := underTest.Configure(ctx, config)
+		is.NoErr(err)
+
+		// skipping Open(), so we can inject a mock encoder
+		mockEncoder := NewMockEncoder(gomock.NewController(t))
+		mockEncoder.EXPECT().
+			Encode(ctx, opencdc.StructuredData{}).
+			Return(encodedValue, nil)
+		underTest.(*encodeProcessor).encoder = mockEncoder
+
+		got := underTest.Process(ctx, []opencdc.Record{input})
+		is.Equal(1, len(got))
+		is.Equal("", cmp.Diff(want, got[0], internal.CmpProcessedRecordOpts...))
+	})
+}
