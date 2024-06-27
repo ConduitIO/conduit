@@ -213,7 +213,7 @@ func (p *encodeProcessor) structuredData(data any) (opencdc.StructuredData, erro
 	case opencdc.RawData:
 		b := v.Bytes()
 		// if data is empty, then return empty structured data
-		if len(b) == 0 || b == nil {
+		if len(b) == 0 {
 			return sd, nil
 		}
 		err := json.Unmarshal(b, &sd)
