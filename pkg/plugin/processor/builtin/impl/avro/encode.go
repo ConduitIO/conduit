@@ -211,7 +211,12 @@ func (p *encodeProcessor) structuredData(data any) (opencdc.StructuredData, erro
 	var sd opencdc.StructuredData
 	switch v := data.(type) {
 	case opencdc.RawData:
-		err := json.Unmarshal(v.Bytes(), &sd)
+		b := v.Bytes()
+		// if data is empty, then return empty structured data
+		if len(b) == 0 || b == nil {
+			return sd, nil
+		}
+		err := json.Unmarshal(b, &sd)
 		if err != nil {
 			return nil, cerrors.Errorf("failed unmarshalling JSON from raw data: %w", err)
 		}
