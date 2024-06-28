@@ -44,12 +44,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.NIGHTLY_BUILD_GH_TOKEN }}
       - name: 'Delete nightly containers older than a week'
-        uses: snok/container-retention-policy@v2.1.2
+        uses: snok/container-retention-policy@v3.0.0
         with:
+          account: ConduitIO
           image-names: conduit
-          cut-off: 1 week ago UTC
-          account-type: org
-          org-name: ConduitIO
-          keep-at-least: 5
+          image-tags: '*-nightly*'
+          keep-n-most-recent: 5
           token: ${{ secrets.NIGHTLY_BUILD_GH_TOKEN }}
-          filter-tags: '*-nightly*'
+          dry-run: true
