@@ -21,16 +21,16 @@ import (
 	"sync"
 	"time"
 
+	"github.com/conduitio/conduit-commons/csync"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
-	"github.com/conduitio/conduit/pkg/foundation/csync"
+	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/ctxutil"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/noop"
 	"github.com/conduitio/conduit/pkg/pipeline/stream"
 	streammock "github.com/conduitio/conduit/pkg/pipeline/stream/mock"
 	connectorPlugin "github.com/conduitio/conduit/pkg/plugin/connector"
-	"github.com/conduitio/conduit/pkg/record"
 	"github.com/rs/zerolog"
 	"go.uber.org/mock/gomock"
 )
@@ -330,31 +330,31 @@ func generatorSource(ctrl *gomock.Controller, logger log.CtxLogger, nodeID strin
 	teardown := make(chan struct{})
 	source := streammock.NewSource(ctrl)
 	source.EXPECT().ID().Return(nodeID).AnyTimes()
-	source.EXPECT().Open(gomock.Any()).Return(nil).Times(1)
+	source.EXPECT().Open(gomock.Any()).Return(nil)
 	source.EXPECT().Teardown(gomock.Any()).DoAndReturn(func(context.Context) error {
 		close(teardown)
 		return nil
-	}).Times(1)
-	source.EXPECT().Ack(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, p record.Position) error {
+	})
+	source.EXPECT().Ack(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, p []opencdc.Position) error {
 		logger.Debug(ctx).Str("node_id", nodeID).Msg("received ack")
 		return nil
 	}).Times(recordCount)
-	source.EXPECT().Read(gomock.Any()).DoAndReturn(func(ctx context.Context) (record.Record, error) {
+	source.EXPECT().Read(gomock.Any()).DoAndReturn(func(ctx context.Context) ([]opencdc.Record, error) {
 		time.Sleep(delay)
 
 		if position == recordCount {
 			// block until Teardown is called
 			<-teardown
-			return record.Record{}, connectorPlugin.ErrStreamNotOpen
+			return nil, connectorPlugin.ErrStreamNotOpen
 		}
 
 		position++
-		return record.Record{
-			Position: record.Position(strconv.Itoa(position)),
-		}, nil
+		return []opencdc.Record{{
+			Position: opencdc.Position(strconv.Itoa(position)),
+		}}, nil
 	}).MinTimes(recordCount + 1)
-	source.EXPECT().Stop(gomock.Any()).DoAndReturn(func(context.Context) (record.Position, error) {
-		return record.Position(strconv.Itoa(position)), nil
+	source.EXPECT().Stop(gomock.Any()).DoAndReturn(func(context.Context) (opencdc.Position, error) {
+		return opencdc.Position(strconv.Itoa(position)), nil
 	})
 	source.EXPECT().Errors().Return(make(chan error))
 
@@ -362,19 +362,21 @@ func generatorSource(ctrl *gomock.Controller, logger log.CtxLogger, nodeID strin
 }
 
 func printerDestination(ctrl *gomock.Controller, logger log.CtxLogger, nodeID string) stream.Destination {
-	var lastPosition record.Position
-	rchan := make(chan record.Record, 1)
+	var lastPosition opencdc.Position
+	rchan := make(chan opencdc.Record, 1)
 	destination := streammock.NewDestination(ctrl)
-	destination.EXPECT().Open(gomock.Any()).Return(nil).Times(1)
-	destination.EXPECT().Write(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, r record.Record) error {
-		logger.Debug(ctx).
-			Str("node_id", nodeID).
-			Msg("got record")
-		lastPosition = r.Position
-		rchan <- r
+	destination.EXPECT().Open(gomock.Any()).Return(nil)
+	destination.EXPECT().Write(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, recs []opencdc.Record) error {
+		for _, r := range recs {
+			logger.Debug(ctx).
+				Str("node_id", nodeID).
+				Msg("got record")
+			lastPosition = r.Position
+			rchan <- r
+		}
 		return nil
 	}).AnyTimes()
-	destination.EXPECT().Ack(gomock.Any()).DoAndReturn(func(ctx context.Context) (record.Position, error) {
+	destination.EXPECT().Ack(gomock.Any()).DoAndReturn(func(ctx context.Context) ([]connector.DestinationAck, error) {
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
@@ -382,14 +384,14 @@ func printerDestination(ctrl *gomock.Controller, logger log.CtxLogger, nodeID st
 			if !ok {
 				return nil, nil
 			}
-			return r.Position, nil
+			return []connector.DestinationAck{{Position: r.Position}}, nil
 		}
 	}).AnyTimes()
-	destination.EXPECT().Stop(gomock.Any(), EqLazy(func() interface{} { return lastPosition })).Return(nil).Times(1)
+	destination.EXPECT().Stop(gomock.Any(), EqLazy(func() interface{} { return lastPosition })).Return(nil)
 	destination.EXPECT().Teardown(gomock.Any()).DoAndReturn(func(ctx context.Context) error {
 		close(rchan)
 		return nil
-	}).Times(1)
+	})
 	destination.EXPECT().Errors().Return(make(chan error))
 
 	return destination

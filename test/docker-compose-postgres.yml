@@ -1,7 +1,7 @@
 version: '3'
 services:
   pg-0:
-    image: postgres:14
+    image: postgres:16
     ports:
       - "5432:5432"
     volumes:

@@ -151,8 +151,6 @@ func TestGetStackTrace(t *testing.T) {
 }
 
 func TestLogOrReplace(t *testing.T) {
-	is := is.New(t)
-
 	errFoo := cerrors.New("foo")
 	errBar := cerrors.New("bar")
 
@@ -189,6 +187,8 @@ func TestLogOrReplace(t *testing.T) {
 
 	for testName, tc := range testCases {
 		t.Run(testName, func(t *testing.T) {
+			is := is.New(t)
+
 			logCalled := false
 			gotErr := cerrors.LogOrReplace(tc.oldErr, tc.newErr, func() {
 				logCalled = true
@@ -197,4 +197,23 @@ func TestLogOrReplace(t *testing.T) {
 			is.Equal(tc.wantLogCalled, logCalled)
 		})
 	}
+}
+
+func TestForEach(t *testing.T) {
+	is := is.New(t)
+
+	errFoo := cerrors.New("foo")
+	errBar := cerrors.New("bar")
+	errBaz := cerrors.New("baz")
+
+	multiErr := cerrors.Join(errFoo, errBar)
+	multiErr = cerrors.Join(multiErr, errBaz)
+
+	want := []error{errFoo, errBar, errBaz}
+	i := 0
+	cerrors.ForEach(multiErr, func(err error) {
+		is.Equal(want[i], err)
+		i++
+	})
+	is.Equal(len(want), i)
 }

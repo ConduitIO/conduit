@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:generate mockgen -source=service.go -destination=mock/registry.go -package=mock -mock_names=registry=Registry,standaloneRegistry=StandaloneRegistry . registry,standaloneRegistry
+//go:generate mockgen -typed -source=service.go -destination=mock/registry.go -package=mock -mock_names=registry=Registry,standaloneRegistry=StandaloneRegistry . registry,standaloneRegistry
 
 package processor
 

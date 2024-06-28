@@ -20,26 +20,26 @@ import (
 	"testing"
 	"time"
 
-	"github.com/conduitio/conduit/pkg/foundation/cchan"
+	"github.com/conduitio/conduit-commons/cchan"
+	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/conduitio/conduit/pkg/record"
 	"github.com/matryer/is"
 )
 
 func TestInspector_Send_NoSessions(*testing.T) {
 	underTest := New(log.Nop(), 10)
-	underTest.Send(context.Background(), record.Record{})
+	underTest.Send(context.Background(), []opencdc.Record{{}})
 }
 
 func TestInspector_Send_SingleSession(t *testing.T) {
 	underTest := New(log.Nop(), 10)
 	s := underTest.NewSession(context.Background(), "test-id")
 
-	r := record.Record{
-		Position: record.Position("test-pos"),
+	r := opencdc.Record{
+		Position: opencdc.Position("test-pos"),
 	}
-	underTest.Send(context.Background(), r)
+	underTest.Send(context.Background(), []opencdc.Record{r})
 	assertGotRecord(is.New(t), s, r)
 }
 
@@ -50,10 +50,10 @@ func TestInspector_Send_MultipleSessions(t *testing.T) {
 	s1 := underTest.NewSession(context.Background(), "test-id")
 	s2 := underTest.NewSession(context.Background(), "test-id")
 
-	r := record.Record{
-		Position: record.Position("test-pos"),
+	r := opencdc.Record{
+		Position: opencdc.Position("test-pos"),
 	}
-	underTest.Send(context.Background(), r)
+	underTest.Send(context.Background(), []opencdc.Record{r})
 	assertGotRecord(is, s1, r)
 	assertGotRecord(is, s2, r)
 }
@@ -64,17 +64,17 @@ func TestInspector_Send_SessionClosed(t *testing.T) {
 	underTest := New(log.Nop(), 10)
 	s := underTest.NewSession(context.Background(), "test-id")
 
-	r := record.Record{
-		Position: record.Position("test-pos"),
+	r := opencdc.Record{
+		Position: opencdc.Position("test-pos"),
 	}
-	underTest.Send(context.Background(), r)
+	underTest.Send(context.Background(), []opencdc.Record{r})
 	assertGotRecord(is, s, r)
 
 	underTest.remove(s.id)
 	underTest.Send(
 		context.Background(),
-		record.Record{
-			Position: record.Position("test-pos-2"),
+		[]opencdc.Record{
+			{Position: opencdc.Position("test-pos-2")},
 		},
 	)
 }
@@ -97,15 +97,15 @@ func TestInspector_Send_SessionCtxCanceled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	s := underTest.NewSession(ctx, "test-id")
 
-	r := record.Record{
-		Position: record.Position("test-pos"),
+	r := opencdc.Record{
+		Position: opencdc.Position("test-pos"),
 	}
-	underTest.Send(context.Background(), r)
+	underTest.Send(context.Background(), []opencdc.Record{r})
 	assertGotRecord(is, s, r)
 
 	cancel()
 
-	_, got, err := cchan.ChanOut[record.Record](s.C).RecvTimeout(context.Background(), 100*time.Millisecond)
+	_, got, err := cchan.ChanOut[opencdc.Record](s.C).RecvTimeout(context.Background(), 100*time.Millisecond)
 	is.NoErr(err)
 	is.True(!got) // expected no record
 }
@@ -125,8 +125,8 @@ func TestInspector_Send_SlowConsumer(t *testing.T) {
 	for i := 0; i < bufferSize+1; i++ {
 		underTest.Send(
 			context.Background(),
-			record.Record{
-				Position: record.Position(fmt.Sprintf("test-pos-%v", i)),
+			[]opencdc.Record{
+				{Position: opencdc.Position(fmt.Sprintf("test-pos-%v", i))},
 			},
 		)
 	}
@@ -135,19 +135,19 @@ func TestInspector_Send_SlowConsumer(t *testing.T) {
 		assertGotRecord(
 			is,
 			s,
-			record.Record{
-				Position: record.Position(fmt.Sprintf("test-pos-%v", i)),
+			opencdc.Record{
+				Position: opencdc.Position(fmt.Sprintf("test-pos-%v", i)),
 			},
 		)
 	}
 
-	_, got, err := cchan.ChanOut[record.Record](s.C).RecvTimeout(context.Background(), 100*time.Millisecond)
+	_, got, err := cchan.ChanOut[opencdc.Record](s.C).RecvTimeout(context.Background(), 100*time.Millisecond)
 	is.True(cerrors.Is(err, context.DeadlineExceeded))
 	is.True(!got)
 }
 
-func assertGotRecord(is *is.I, s *Session, recWant record.Record) {
-	recGot, got, err := cchan.ChanOut[record.Record](s.C).RecvTimeout(context.Background(), 100*time.Millisecond)
+func assertGotRecord(is *is.I, s *Session, recWant opencdc.Record) {
+	recGot, got, err := cchan.ChanOut[opencdc.Record](s.C).RecvTimeout(context.Background(), 100*time.Millisecond)
 	is.NoErr(err)
 	is.True(got)
 	is.Equal(recWant, recGot)

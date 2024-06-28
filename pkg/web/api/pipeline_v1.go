@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:generate mockgen -destination=mock/pipeline.go -package=mock -mock_names=PipelineOrchestrator=PipelineOrchestrator . PipelineOrchestrator
+//go:generate mockgen -typed -destination=mock/pipeline.go -package=mock -mock_names=PipelineOrchestrator=PipelineOrchestrator . PipelineOrchestrator
 
 package api
 

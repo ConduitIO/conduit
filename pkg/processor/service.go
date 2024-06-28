@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:generate mockgen -destination=mock/plugin_service.go -package=mock -mock_names=PluginService=PluginService . PluginService
+//go:generate mockgen -typed -destination=mock/plugin_service.go -package=mock -mock_names=PluginService=PluginService . PluginService
 
 package processor
 

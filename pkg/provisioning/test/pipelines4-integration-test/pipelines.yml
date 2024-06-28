@@ -22,10 +22,14 @@ pipelines:
           path: ./test/dest-file.txt
         processors:
           - id: con2proc1
-            plugin: removereadat
+            plugin: builtin:field.exclude
+            settings:
+              fields: '.Metadata["opencdc.readAt"]'
     processors:
       - id: proc1
-        plugin: removereadat
+        plugin: builtin:field.exclude
+        settings:
+          fields: '.Metadata["opencdc.readAt"]'
 ---
 version: 2.0
 pipelines:

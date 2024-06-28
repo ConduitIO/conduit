@@ -19,11 +19,11 @@ package postgres
 import (
 	"context"
 	"fmt"
-	"github.com/matryer/is"
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/foundation/database"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/matryer/is"
 )
 
 func TestDB(t *testing.T) {

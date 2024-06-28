@@ -20,8 +20,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/conduitio/conduit-commons/opencdc"
-	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/ctxutil"
@@ -31,13 +29,13 @@ import (
 	conn_plugin "github.com/conduitio/conduit/pkg/plugin/connector"
 	"github.com/conduitio/conduit/pkg/plugin/connector/builtin"
 	"github.com/conduitio/conduit/pkg/plugin/connector/standalone"
+	proc_plugin "github.com/conduitio/conduit/pkg/plugin/processor"
+	proc_builtin "github.com/conduitio/conduit/pkg/plugin/processor/builtin"
 	"github.com/conduitio/conduit/pkg/processor"
-	proc_mock "github.com/conduitio/conduit/pkg/processor/mock"
 	p1 "github.com/conduitio/conduit/pkg/provisioning/test/pipelines1"
 	p2 "github.com/conduitio/conduit/pkg/provisioning/test/pipelines2"
 	p3 "github.com/conduitio/conduit/pkg/provisioning/test/pipelines3"
 	p4 "github.com/conduitio/conduit/pkg/provisioning/test/pipelines4-integration-test"
-	"github.com/conduitio/conduit/pkg/record"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/matryer/is"
@@ -493,19 +491,14 @@ func TestService_IntegrationTestServices(t *testing.T) {
 		standalone.NewRegistry(logger, ""),
 	)
 
+	procPluginService := proc_plugin.NewPluginService(
+		logger,
+		proc_builtin.NewRegistry(logger, proc_builtin.DefaultBuiltinProcessors),
+		nil,
+	)
+
 	plService := pipeline.NewService(logger, db)
 	connService := connector.NewService(logger, db, connector.NewPersister(logger, db, time.Second, 3))
-
-	procPluginService := proc_mock.NewPluginService(gomock.NewController(t))
-	procPluginService.EXPECT().
-		NewProcessor(gomock.Any(), "removereadat", gomock.Any()).
-		Return(
-			sdk.NewProcessorFunc(sdk.Specification{Name: "removereadat"}, func(ctx context.Context, r opencdc.Record) (opencdc.Record, error) {
-				delete(r.Metadata, record.MetadataReadAt) // read at is different every time, remove it
-				return r, nil
-			}),
-			nil,
-		).AnyTimes()
 	procService := processor.NewService(logger, db, procPluginService)
 
 	// create destination file

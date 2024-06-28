@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:generate mockgen -destination=mock/source.go -package=mock -mock_names=Source=Source . Source
+//go:generate mockgen -typed -destination=mock/source.go -package=mock -mock_names=Source=Source . Source
 
 package stream
 
@@ -22,11 +22,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/conduitio/conduit-commons/csync"
+	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/foundation/csync"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics"
-	"github.com/conduitio/conduit/pkg/record"
 )
 
 const (
@@ -49,7 +49,7 @@ type SourceNode struct {
 
 	stop struct {
 		sync.Mutex
-		position        record.Position
+		position        opencdc.Position
 		reason          error
 		positionFetched bool
 		successful      bool
@@ -59,9 +59,9 @@ type SourceNode struct {
 type Source interface {
 	ID() string
 	Open(context.Context) error
-	Read(context.Context) (record.Record, error)
-	Ack(context.Context, record.Position) error
-	Stop(context.Context) (record.Position, error)
+	Read(context.Context) ([]opencdc.Record, error)
+	Ack(context.Context, []opencdc.Position) error
+	Stop(context.Context) (opencdc.Position, error)
 	Teardown(context.Context) error
 	Errors() <-chan error
 }
@@ -80,14 +80,18 @@ func (n *SourceNode) Run(ctx context.Context) (err error) {
 		ctx,
 		n.logger,
 		n.Source.Errors(),
-		func(ctx context.Context) (*Message, error) {
+		func(ctx context.Context) ([]*Message, error) {
 			n.logger.Trace(ctx).Msg("reading record from source connector")
-			r, err := n.Source.Read(ctx)
+			recs, err := n.Source.Read(ctx)
 			if err != nil {
 				return nil, cerrors.Errorf("error reading from source: %w", err)
 			}
 
-			return &Message{Record: r, SourceID: n.Source.ID()}, nil
+			msgs := make([]*Message, len(recs))
+			for i, r := range recs {
+				msgs[i] = &Message{Record: r, SourceID: n.Source.ID()}
+			}
+			return msgs, nil
 		},
 	)
 	if err != nil {
@@ -125,9 +129,9 @@ func (n *SourceNode) Run(ctx context.Context) (err error) {
 	var (
 		// when source node encounters the record with this position it needs to
 		// stop retrieving new records
-		stopPosition record.Position
+		stopPosition opencdc.Position
 		// last processed position is stored in this position
-		lastPosition record.Position
+		lastPosition opencdc.Position
 	)
 
 	for {
@@ -230,7 +234,7 @@ func (n *SourceNode) stopGraceful(ctx context.Context, reason error) (err error)
 	// InjectControlMessage will inject a message into the stream of messages
 	// being processed by SourceNode to let it know when it should stop
 	// processing new messages.
-	return n.base.InjectControlMessage(ctx, ControlMessageStopSourceNode, record.Record{
+	return n.base.InjectControlMessage(ctx, ControlMessageStopSourceNode, opencdc.Record{
 		Position: n.stop.position,
 	})
 }

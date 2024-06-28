@@ -58,7 +58,7 @@ func TestEncodeProcessor_Process_StructuredData(t *testing.T) {
 	mockEncoder := NewMockEncoder(gomock.NewController(t))
 	mockEncoder.EXPECT().
 		Encode(ctx, input.Payload.After).
-		Return(want.Payload.After, nil)
+		Return(want.Payload.After.(opencdc.RawData), nil)
 	underTest.(*encodeProcessor).encoder = mockEncoder
 
 	got := underTest.Process(ctx, []opencdc.Record{input})
@@ -95,7 +95,7 @@ func TestEncodeProcessor_Process_RawData(t *testing.T) {
 	mockEncoder := NewMockEncoder(gomock.NewController(t))
 	mockEncoder.EXPECT().
 		Encode(ctx, opencdc.StructuredData{"field_int": float64(123)}).
-		Return(want.Payload.After, nil)
+		Return(want.Payload.After.(opencdc.RawData), nil)
 	underTest.(*encodeProcessor).encoder = mockEncoder
 
 	got := underTest.Process(ctx, []opencdc.Record{input})

@@ -18,10 +18,9 @@ import (
 	"io"
 
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/tetratelabs/wazero"
-
 	"github.com/goccy/go-json"
 	"github.com/rs/zerolog"
+	"github.com/tetratelabs/wazero"
 )
 
 // wasmLogWriter is a logger adapter for the WASM stderr and stdout streams.

@@ -9,20 +9,20 @@ managed:
     override:
       buf.build/grpc-ecosystem/grpc-gateway: buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go
 plugins:
-  - plugin: buf.build/protocolbuffers/go:v1.32.0
+  - plugin: buf.build/protocolbuffers/go:v1.34.2
     out: .
     opt:
       - paths=source_relative
-  - plugin: buf.build/grpc/go:v1.3.0
+  - plugin: buf.build/grpc/go:v1.4.0
     out: .
     opt:
       - paths=source_relative
-  - plugin: buf.build/grpc-ecosystem/gateway:v2.18.1
+  - plugin: buf.build/grpc-ecosystem/gateway:v2.20.0
     out: .
     opt:
       - paths=source_relative
       - logtostderr=true
-  - plugin: buf.build/grpc-ecosystem/openapiv2:v2.18.1
+  - plugin: buf.build/grpc-ecosystem/openapiv2:v2.20.0
     out: .
     opt:
       - logtostderr=true

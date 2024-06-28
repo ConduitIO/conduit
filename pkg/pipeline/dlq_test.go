@@ -18,10 +18,11 @@ import (
 	"context"
 	"testing"
 
+	"github.com/conduitio/conduit-commons/opencdc"
+	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	streammock "github.com/conduitio/conduit/pkg/pipeline/stream/mock"
-	"github.com/conduitio/conduit/pkg/record"
 	"github.com/matryer/is"
 	"go.uber.org/mock/gomock"
 )
@@ -38,30 +39,19 @@ func TestDLQDestination_Success(t *testing.T) {
 		Logger:      logger,
 	}
 
-	want := record.Record{
+	want := opencdc.Record{
 		Position:  []byte("test-position"),
-		Operation: record.OperationCreate,
+		Operation: opencdc.OperationCreate,
 		Metadata:  map[string]string{"foo": "bar"},
-		Key:       record.RawData{Raw: []byte("key")},
-		Payload: record.Change{
+		Key:       opencdc.RawData("key"),
+		Payload: opencdc.Change{
 			Before: nil,
-			After:  record.StructuredData{"baz": "qux"},
+			After:  opencdc.StructuredData{"baz": "qux"},
 		},
 	}
 
-	// connHelper is used to ensure that Write and Ack are called simultaneously
-	// otherwise we could experience a deadlock in the connector
-	connHelper := make(chan struct{})
-	dest.EXPECT().Ack(gomock.Any()).
-		DoAndReturn(func(context.Context) (record.Position, error) {
-			<-connHelper // Write is happening same time as Ack
-			return want.Position, nil
-		})
-	dest.EXPECT().Write(gomock.Any(), want).
-		DoAndReturn(func(context.Context, record.Record) error {
-			connHelper <- struct{}{} // signal to Ack that Write is happening
-			return nil
-		})
+	dest.EXPECT().Write(gomock.Any(), []opencdc.Record{want}).Return(nil)
+	dest.EXPECT().Ack(gomock.Any()).Return([]connector.DestinationAck{{Position: want.Position}}, nil)
 
 	err := dlq.Write(ctx, want)
 	is.NoErr(err)
@@ -79,23 +69,12 @@ func TestDLQDestination_DestinationWriteError(t *testing.T) {
 		Logger:      logger,
 	}
 
-	rec := record.Record{
+	rec := opencdc.Record{
 		Position: []byte("test-position"),
 	}
 	wantErr := cerrors.New("test write error")
 
-	connHelper := make(chan struct{})
-	dest.EXPECT().Ack(gomock.Any()).
-		DoAndReturn(func(ctx context.Context) (record.Position, error) {
-			<-connHelper // Write is happening same time as Ack
-			<-ctx.Done() // block until context is closed
-			return nil, ctx.Err()
-		})
-	dest.EXPECT().Write(gomock.Any(), rec).
-		DoAndReturn(func(context.Context, record.Record) error {
-			connHelper <- struct{}{} // signal to Ack that Write is happening
-			return wantErr
-		})
+	dest.EXPECT().Write(gomock.Any(), []opencdc.Record{rec}).Return(wantErr)
 
 	err := dlq.Write(ctx, rec)
 	is.True(err != nil)
@@ -114,24 +93,13 @@ func TestDLQDestination_DestinationNack(t *testing.T) {
 		Logger:      logger,
 	}
 
-	rec := record.Record{
+	rec := opencdc.Record{
 		Position: []byte("test-position"),
 	}
 	wantErr := cerrors.New("test nack error")
 
-	// connHelper is used to ensure that Write and Ack are called simultaneously
-	// otherwise we could experience a deadlock in the connector
-	connHelper := make(chan struct{})
-	dest.EXPECT().Ack(gomock.Any()).
-		DoAndReturn(func(context.Context) (record.Position, error) {
-			<-connHelper                 // Write is happening same time as Ack
-			return rec.Position, wantErr // record is nacked
-		})
-	dest.EXPECT().Write(gomock.Any(), rec).
-		DoAndReturn(func(context.Context, record.Record) error {
-			connHelper <- struct{}{} // signal to Ack that Write is happening
-			return nil               // write function succeeded, error is sent back in nack
-		})
+	dest.EXPECT().Write(gomock.Any(), []opencdc.Record{rec}).Return(nil)
+	dest.EXPECT().Ack(gomock.Any()).Return([]connector.DestinationAck{{Position: rec.Position, Error: wantErr}}, nil)
 
 	err := dlq.Write(ctx, rec)
 	is.True(err != nil)

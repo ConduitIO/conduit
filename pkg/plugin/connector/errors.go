@@ -16,11 +16,10 @@ package connector
 
 import (
 	"fmt"
-
-	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"io"
 )
 
-var ErrStreamNotOpen = cerrors.New("stream not open")
+var ErrStreamNotOpen = io.EOF
 
 type ValidationError struct {
 	Err error

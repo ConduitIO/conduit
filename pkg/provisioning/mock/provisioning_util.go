@@ -18,23 +18,22 @@ import (
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	"github.com/conduitio/conduit/pkg/processor"
-	"go.uber.org/mock/gomock"
 )
 
 // CreateWithInstance is a utility function that lets you declare an expected call to
 // Create with arguments taken from the supplied instance.
-func (mr *PipelineServiceMockRecorder) CreateWithInstance(ctx interface{}, instance *pipeline.Instance) *gomock.Call {
+func (mr *PipelineServiceMockRecorder) CreateWithInstance(ctx interface{}, instance *pipeline.Instance) *PipelineServiceCreateCall {
 	return mr.Create(ctx, instance.ID, instance.Config, instance.ProvisionedBy)
 }
 
 // CreateWithInstance is a utility function that lets you declare an expected call to
 // Create with arguments taken from the supplied instance.
-func (mr *ConnectorServiceMockRecorder) CreateWithInstance(ctx interface{}, instance *connector.Instance) *gomock.Call {
+func (mr *ConnectorServiceMockRecorder) CreateWithInstance(ctx interface{}, instance *connector.Instance) *ConnectorServiceCreateCall {
 	return mr.Create(ctx, instance.ID, instance.Type, instance.Plugin, instance.PipelineID, instance.Config, instance.ProvisionedBy)
 }
 
 // CreateWithInstance is a utility function that lets you declare an expected call to
 // Create with arguments taken from the supplied instance.
-func (mr *ProcessorServiceMockRecorder) CreateWithInstance(ctx interface{}, instance *processor.Instance) *gomock.Call {
+func (mr *ProcessorServiceMockRecorder) CreateWithInstance(ctx interface{}, instance *processor.Instance) *ProcessorServiceCreateCall {
 	return mr.Create(ctx, instance.ID, instance.Plugin, instance.Parent, instance.Config, instance.ProvisionedBy, instance.Condition)
 }

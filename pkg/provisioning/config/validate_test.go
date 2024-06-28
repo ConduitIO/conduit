@@ -20,7 +20,6 @@ import (
 
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/foundation/multierror"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	"github.com/matryer/is"
 )
@@ -280,18 +279,17 @@ func TestValidator_MultiErrors(t *testing.T) {
 
 	err := Validate(before)
 
-	var invalid, mandatory int
-	var multierr *multierror.Error
-	is.True(cerrors.As(err, &multierr))
-	for _, gotErr := range multierr.Errors() {
-		if cerrors.Is(gotErr, ErrInvalidField) {
+	var invalid, mandatory, all int
+	cerrors.ForEach(err, func(err error) {
+		all++
+		if cerrors.Is(err, ErrInvalidField) {
 			invalid++
 		}
-		if cerrors.Is(gotErr, ErrMandatoryField) {
+		if cerrors.Is(err, ErrMandatoryField) {
 			mandatory++
 		}
-	}
-	is.Equal(len(multierr.Errors()), 4)
+	})
+	is.Equal(all, 4)
 	is.Equal(invalid, 1)
 	is.Equal(mandatory, 3)
 }

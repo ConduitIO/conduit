@@ -266,12 +266,12 @@ func TestPubNodeBase_TriggerSuccess(t *testing.T) {
 	n := &pubNodeBase{}
 	n.Pub()
 
-	want := &Message{}
+	want := []*Message{{}}
 	trigger, cleanup, err := n.Trigger(
 		ctx,
 		logger,
 		nil,
-		func(context.Context) (*Message, error) {
+		func(context.Context) ([]*Message, error) {
 			return want, nil
 		},
 	)
@@ -283,7 +283,7 @@ func TestPubNodeBase_TriggerSuccess(t *testing.T) {
 
 	got, err := trigger()
 	is.NoErr(err)
-	is.Equal(want, got)
+	is.Equal(want[0], got)
 }
 
 func TestPubNodeBase_TriggerWithErrorChan(t *testing.T) {

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 //go:generate paramgen -output=encode_paramgen.go encodeConfig
-//go:generate mockgen -source encode.go -destination=mock_encoder.go -package=avro -mock_names=encoder=MockEncoder . encoder
+//go:generate mockgen -typed -source encode.go -destination=mock_encoder.go -package=avro -mock_names=encoder=MockEncoder . encoder
 
 package avro
 
@@ -25,7 +25,7 @@ import (
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/avro/schemaregistry"
+	"github.com/conduitio/conduit/pkg/schemaregistry"
 	"github.com/goccy/go-json"
 	"github.com/lovromazgon/franz-go/pkg/sr"
 )

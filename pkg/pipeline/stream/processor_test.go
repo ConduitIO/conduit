@@ -24,7 +24,6 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/noop"
 	"github.com/conduitio/conduit/pkg/pipeline/stream/mock"
-	"github.com/conduitio/conduit/pkg/record"
 	"github.com/google/uuid"
 	"github.com/matryer/is"
 	"go.uber.org/mock/gomock"
@@ -35,7 +34,7 @@ func TestProcessorNode_Success(t *testing.T) {
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 
-	wantRec := record.Record{
+	wantRec := opencdc.Record{
 		Position: []byte(uuid.NewString()),
 		Metadata: map[string]string{"foo": "bar"},
 	}
@@ -44,7 +43,7 @@ func TestProcessorNode_Success(t *testing.T) {
 	processor := mock.NewProcessor(ctrl)
 	processor.EXPECT().Open(gomock.Any())
 	processor.EXPECT().
-		Process(ctx, []opencdc.Record{wantRec.ToOpenCDC()}).
+		Process(ctx, []opencdc.Record{wantRec}).
 		DoAndReturn(func(_ context.Context, got []opencdc.Record) []sdk.ProcessedRecord {
 			got[0].Metadata["foo"] = newMetaKey
 			return []sdk.ProcessedRecord{sdk.SingleRecord(got[0])}
@@ -232,8 +231,8 @@ func testNodeWithError(is *is.I, processor *mock.Processor, nackHandler NackHand
 
 	msg := &Message{
 		Ctx: ctx,
-		Record: record.Record{
-			Position: record.Position("test position"),
+		Record: opencdc.Record{
+			Position: opencdc.Position("test position"),
 		},
 	}
 	msg.RegisterNackHandler(nackHandler)
@@ -277,7 +276,7 @@ func TestProcessorNode_Skip(t *testing.T) {
 	out := n.Pub()
 
 	// send a message on the pipeline that will be skipped
-	msg := &Message{Ctx: ctx, Record: record.Record{}}
+	msg := &Message{Ctx: ctx, Record: opencdc.Record{}}
 
 	// register a dummy AckHandler and NackHandler for tests.
 	counter := 0

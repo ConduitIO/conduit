@@ -93,6 +93,20 @@ func LogOrReplace(oldErr, newErr error, log func()) error {
 	return oldErr
 }
 
+// ForEach is a utility function that can be used to iterate over all errors in
+// a multierror created using Join. It will call the provided function for each
+// error in the chain.
+func ForEach(err error, fn func(error)) {
+	multiErr, ok := err.(interface{ Unwrap() []error })
+	if !ok {
+		fn(err)
+		return
+	}
+	for _, w := range multiErr.Unwrap() {
+		ForEach(w, fn)
+	}
+}
+
 func hasStackTrace(err error) bool {
 	errT := reflect.TypeOf(err)
 	return errT != nil && errT.Elem().PkgPath() == "golang.org/x/xerrors"

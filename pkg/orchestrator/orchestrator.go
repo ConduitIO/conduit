@@ -12,13 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:generate mockgen -destination=mock/orchestrator.go -package=mock -mock_names=PipelineService=PipelineService,ConnectorService=ConnectorService,ProcessorService=ProcessorService,ConnectorPluginService=ConnectorPluginService,ProcessorPluginService=ProcessorPluginService . PipelineService,ConnectorService,ProcessorService,ConnectorPluginService,ProcessorPluginService
+//go:generate mockgen -typed -destination=mock/orchestrator.go -package=mock -mock_names=PipelineService=PipelineService,ConnectorService=ConnectorService,ProcessorService=ProcessorService,ConnectorPluginService=ConnectorPluginService,ProcessorPluginService=ProcessorPluginService . PipelineService,ConnectorService,ProcessorService,ConnectorPluginService,ProcessorPluginService
 
 package orchestrator
 
 import (
 	"context"
 
+	"github.com/conduitio/conduit-connector-protocol/pconnector"
 	processorSdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/database"
@@ -120,7 +121,7 @@ type ProcessorService interface {
 }
 
 type ConnectorPluginService interface {
-	List(ctx context.Context) (map[string]connectorPlugin.Specification, error)
+	List(ctx context.Context) (map[string]pconnector.Specification, error)
 	NewDispenser(logger log.CtxLogger, name string) (connectorPlugin.Dispenser, error)
 	ValidateSourceConfig(ctx context.Context, name string, settings map[string]string) error
 	ValidateDestinationConfig(ctx context.Context, name string, settings map[string]string) error

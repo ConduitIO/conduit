@@ -1,3 +1,4 @@
+version: 2
 before:
   hooks:
     - make ui-dist
@@ -42,6 +43,7 @@ changelog:
       - '^npm:'
       - '^go.mod:'
       - '^.github:'
+      - '^docker:'
       - Merge branch
 release:
   prerelease: auto

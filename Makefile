@@ -46,7 +46,7 @@ proto-generate:
 	rm -rf proto/gen && cd proto && buf generate
 
 proto-update:
-	cd proto && buf mod update
+	cd proto && buf dep update
 
 proto-lint:
 	cd proto && buf lint

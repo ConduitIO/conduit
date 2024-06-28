@@ -24,7 +24,6 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/database"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/measure"
-	"github.com/conduitio/conduit/pkg/foundation/multierror"
 )
 
 var idRegex = regexp.MustCompile(`^[A-Za-z0-9-_:.]*$`)
@@ -289,26 +288,27 @@ func (s *Service) SetState(ctx context.Context, id string, state any) (*Instance
 
 	return conn, err
 }
+
 func (s *Service) validateConnector(cfg Config, id string) error {
 	// contains all the errors occurred while provisioning configuration files.
-	var multierr error
+	var errs []error
 
 	if cfg.Name == "" {
-		multierr = multierror.Append(multierr, ErrNameMissing)
+		errs = append(errs, ErrNameMissing)
 	}
 	if len(cfg.Name) > NameLengthLimit {
-		multierr = multierror.Append(multierr, ErrNameOverLimit)
+		errs = append(errs, ErrNameOverLimit)
 	}
 	if id == "" {
-		multierr = multierror.Append(multierr, ErrIDMissing)
+		errs = append(errs, ErrIDMissing)
 	}
 	matched := idRegex.MatchString(id)
 	if !matched {
-		multierr = multierror.Append(multierr, ErrInvalidCharacters)
+		errs = append(errs, ErrInvalidCharacters)
 	}
 	if len(id) > IDLengthLimit {
-		multierr = multierror.Append(multierr, ErrIDOverLimit)
+		errs = append(errs, ErrIDOverLimit)
 	}
 
-	return multierr
+	return cerrors.Join(errs...)
 }

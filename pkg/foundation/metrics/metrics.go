@@ -17,7 +17,7 @@ package metrics
 import (
 	"time"
 
-	"github.com/conduitio/conduit/pkg/record"
+	"github.com/conduitio/conduit-commons/opencdc"
 )
 
 // Registry is an object that can create and collect metrics.
@@ -399,7 +399,7 @@ func NewRecordBytesHistogram(h Histogram) RecordBytesHistogram {
 	return RecordBytesHistogram{h}
 }
 
-func (m RecordBytesHistogram) Observe(r record.Record) {
+func (m RecordBytesHistogram) Observe(r opencdc.Record) {
 	// TODO for now we call method Bytes() on key and payload to get the
 	//  bytes representation. In case of a structured payload or key it
 	//  is marshaled into JSON, which might not be the correct way to

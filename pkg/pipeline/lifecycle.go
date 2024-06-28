@@ -28,7 +28,6 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/measure"
-	"github.com/conduitio/conduit/pkg/foundation/multierror"
 	"github.com/conduitio/conduit/pkg/pipeline/stream"
 	connectorPlugin "github.com/conduitio/conduit/pkg/plugin/connector"
 	"github.com/conduitio/conduit/pkg/processor"
@@ -59,21 +58,21 @@ func (s *Service) Run(
 	procService ProcessorService,
 	pluginFetcher PluginDispenserFetcher,
 ) error {
-	var err error
+	var errs []error
 	s.logger.Debug(ctx).Msg("initializing pipelines statuses")
 
 	// run pipelines that are in the StatusSystemStopped state
 	for _, instance := range s.instances {
 		if instance.Status == StatusSystemStopped {
-			startErr := s.Start(ctx, connFetcher, procService, pluginFetcher, instance.ID)
-			if startErr != nil {
+			err := s.Start(ctx, connFetcher, procService, pluginFetcher, instance.ID)
+			if err != nil {
 				// try to start remaining pipelines and gather errors
-				err = multierror.Append(err, startErr)
+				errs = append(errs, err)
 			}
 		}
 	}
 
-	return err
+	return cerrors.Join(errs...)
 }
 
 // Start builds and starts a pipeline with the given ID.
@@ -140,19 +139,19 @@ func (s *Service) Stop(ctx context.Context, pipelineID string, force bool) error
 
 func (s *Service) stopGraceful(ctx context.Context, pl *Instance, reason error) error {
 	s.logger.Info(ctx).Str(log.PipelineIDField, pl.ID).Msg("gracefully stopping pipeline")
-	var err error
+	var errs []error
 	for _, n := range pl.n {
 		if node, ok := n.(stream.StoppableNode); ok {
 			// stop all pub nodes
 			s.logger.Trace(ctx).Str(log.NodeIDField, n.ID()).Msg("stopping node")
-			stopErr := node.Stop(ctx, reason)
-			if stopErr != nil {
-				s.logger.Err(ctx, stopErr).Str(log.NodeIDField, n.ID()).Msg("stop failed")
-				err = multierror.Append(err, stopErr)
+			err := node.Stop(ctx, reason)
+			if err != nil {
+				s.logger.Err(ctx, err).Str(log.NodeIDField, n.ID()).Msg("stop failed")
+				errs = append(errs, err)
 			}
 		}
 	}
-	return err
+	return cerrors.Join(errs...)
 }
 
 func (s *Service) stopForceful(ctx context.Context, pl *Instance) error {
@@ -213,14 +212,14 @@ func (s *Service) Wait(timeout time.Duration) error {
 // waitInternal blocks until all pipelines are stopped and returns an error if any of
 // the pipelines failed to stop gracefully.
 func (s *Service) waitInternal() error {
-	var err error
+	var errs []error
 	for _, pl := range s.instances {
-		plErr := pl.Wait()
-		if plErr != nil {
-			err = multierror.Append(err, plErr)
+		err := pl.Wait()
+		if err != nil {
+			errs = append(errs, err)
 		}
 	}
-	return err
+	return cerrors.Join(errs...)
 }
 
 // buildsNodes will build and connect all nodes configured in the pipeline.
