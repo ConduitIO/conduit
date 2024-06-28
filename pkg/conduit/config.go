@@ -28,6 +28,7 @@ const (
 	DBTypeBadger   = "badger"
 	DBTypePostgres = "postgres"
 	DBTypeInMemory = "inmemory"
+	DBTypeSQLite   = "sqlite"
 )
 
 // Config holds all configurable values for Conduit.
@@ -44,6 +45,10 @@ type Config struct {
 		Postgres struct {
 			ConnectionString string
 			Table            string
+		}
+		SQLite struct {
+			Path  string
+			Table string
 		}
 	}
 
@@ -90,6 +95,8 @@ func DefaultConfig() Config {
 	cfg.DB.Type = "badger"
 	cfg.DB.Badger.Path = "conduit.db"
 	cfg.DB.Postgres.Table = "conduit_kv_store"
+	cfg.DB.SQLite.Path = "conduit.db"
+	cfg.DB.SQLite.Table = "conduit_kv_store"
 	cfg.API.Enabled = true
 	cfg.API.HTTP.Address = ":8080"
 	cfg.API.GRPC.Address = ":8084"
@@ -106,24 +113,8 @@ func DefaultConfig() Config {
 func (c Config) Validate() error {
 	// TODO simplify validation with struct tags
 
-	if c.DB.Driver == nil {
-		switch c.DB.Type {
-		case DBTypeBadger:
-			if c.DB.Badger.Path == "" {
-				return requiredConfigFieldErr("db.badger.path")
-			}
-		case DBTypePostgres:
-			if c.DB.Postgres.ConnectionString == "" {
-				return requiredConfigFieldErr("db.postgres.connection-string")
-			}
-			if c.DB.Postgres.Table == "" {
-				return requiredConfigFieldErr("db.postgres.table")
-			}
-		case DBTypeInMemory:
-			// all good
-		default:
-			return invalidConfigFieldErr("db.type")
-		}
+	if err := c.validateDBConfig(); err != nil {
+		return err
 	}
 
 	if c.API.Enabled {
@@ -158,6 +149,37 @@ func (c Config) Validate() error {
 	_, err = os.Stat(c.Pipelines.Path)
 	if c.Pipelines.Path != "./pipelines" && os.IsNotExist(err) {
 		return invalidConfigFieldErr("pipelines.path")
+	}
+
+	return nil
+}
+
+func (c Config) validateDBConfig() error {
+	if c.DB.Driver == nil {
+		switch c.DB.Type {
+		case DBTypeBadger:
+			if c.DB.Badger.Path == "" {
+				return requiredConfigFieldErr("db.badger.path")
+			}
+		case DBTypePostgres:
+			if c.DB.Postgres.ConnectionString == "" {
+				return requiredConfigFieldErr("db.postgres.connection-string")
+			}
+			if c.DB.Postgres.Table == "" {
+				return requiredConfigFieldErr("db.postgres.table")
+			}
+		case DBTypeInMemory:
+			// all good
+		case DBTypeSQLite:
+			if c.DB.SQLite.Path == "" {
+				return requiredConfigFieldErr("db.sqlite.path")
+			}
+			if c.DB.SQLite.Table == "" {
+				return requiredConfigFieldErr("db.sqlite.table")
+			}
+		default:
+			return invalidConfigFieldErr("db.type")
+		}
 	}
 
 	return nil
