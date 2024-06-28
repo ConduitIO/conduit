@@ -31,6 +31,8 @@ import (
 var hostModule wazergo.HostModule[*hostModuleInstance] = hostModuleFunctions{
 	"command_request":  wazergo.F1((*hostModuleInstance).commandRequest),
 	"command_response": wazergo.F1((*hostModuleInstance).commandResponse),
+	"create_schema":    wazergo.F1((*hostModuleInstance).createSchema),
+	"get_schema":       wazergo.F1((*hostModuleInstance).getSchema),
 }
 
 // hostModuleFunctions type implements HostModule, providing the module name,
@@ -83,6 +85,12 @@ type hostModuleInstance struct {
 	commandResponses chan<- tuple[*processorv1.CommandResponse, error]
 
 	parkedCommandRequest *processorv1.CommandRequest
+
+	parkedCreateSchemaResponse *processorv1.CreateSchemaResponse
+	parkedCreateSchemaRequest  *processorv1.CreateSchemaRequest
+
+	parkedGetSchemaResponse *processorv1.GetSchemaResponse
+	parkedGetSchemaRequest  *processorv1.GetSchemaRequest
 }
 
 func (*hostModuleInstance) Close(context.Context) error { return nil }
@@ -144,4 +152,102 @@ func (m *hostModuleInstance) commandResponse(ctx context.Context, buf types.Byte
 
 	m.commandResponses <- tuple[*processorv1.CommandResponse, error]{&resp, nil}
 	return 0
+}
+
+// createSchema is the exported function that is called by the WASM module to
+// create a schema and set the buffer bytes to the marshalled response.
+// It returns the response size on success, or an error code on error.
+func (m *hostModuleInstance) createSchema(ctx context.Context, buf types.Bytes) types.Uint32 {
+	m.logger.Trace(ctx).Msg("executing create_schema")
+
+	var req processorv1.CreateSchemaRequest
+	var resp processorv1.CreateSchemaResponse
+	length := len(buf)
+	if m.parkedCreateSchemaRequest != nil {
+		// compare requests?
+		length = proto.Size(m.parkedCreateSchemaRequest)
+	}
+	err := proto.Unmarshal(buf[:length], &req)
+	if err != nil {
+		m.logger.Err(ctx, err).Msg("failed unmarshalling protobuf create schema request")
+		return wasm.ErrorCodeSchemaUnmarshal
+	}
+
+	if m.parkedCreateSchemaResponse == nil {
+		// use a stub response for now
+		resp = processorv1.CreateSchemaResponse{
+			Schema: &processorv1.Schema{
+				Bytes: []byte("CONDUIT_SCHEMA_CREATE"),
+			},
+		}
+		m.parkedCreateSchemaResponse = &resp
+		m.parkedCreateSchemaRequest = &req
+	}
+
+	// If the buffer is too small, we park the response and return the size of the
+	// response. The next call to createSchema will return the same response.
+	if size := proto.Size(m.parkedCreateSchemaResponse); len(buf) < size {
+		m.logger.Warn(ctx).
+			Int("response_bytes", size).
+			Int("allocated_bytes", len(buf)).
+			Msgf("insufficient memory, response will be parked until next call to create_schema")
+		return types.Uint32(size)
+	}
+	out, err := proto.MarshalOptions{}.MarshalAppend(buf[:0], m.parkedCreateSchemaResponse)
+	if err != nil {
+		m.logger.Err(ctx, err).Msg("failed marshalling protobuf create schema response")
+		return wasm.ErrorCodeSchemaMarshal
+	}
+	m.parkedCreateSchemaResponse = nil
+	m.parkedCreateSchemaRequest = nil
+
+	return types.Uint32(len(out))
+}
+
+// getSchema is the exported function that is called by the WASM module to
+// get a schema and set the buffer bytes to the marshalled response.
+// It returns the response size on success, or an error code on error.
+func (m *hostModuleInstance) getSchema(ctx context.Context, buf types.Bytes) types.Uint32 {
+	m.logger.Trace(ctx).Msg("executing get_schema")
+	var req processorv1.GetSchemaRequest
+	var resp processorv1.GetSchemaResponse
+	length := len(buf)
+	if m.parkedGetSchemaRequest != nil {
+		length = proto.Size(m.parkedGetSchemaRequest)
+	}
+	err := proto.Unmarshal(buf[:length], &req)
+	if err != nil {
+		m.logger.Err(ctx, err).Msg("failed unmarshalling protobuf get schema request")
+		return wasm.ErrorCodeSchemaUnmarshal
+	}
+
+	if m.parkedGetSchemaResponse == nil {
+		// use a stub response for now
+		resp = processorv1.GetSchemaResponse{
+			Schema: &processorv1.Schema{
+				Bytes: []byte("CONDUIT_SCHEMA_GET"),
+			},
+		}
+		m.parkedGetSchemaResponse = &resp
+		m.parkedGetSchemaRequest = &req
+	}
+
+	// If the buffer is too small, we park the response and return the size of the
+	// response. The next call to getSchema will return the same response.
+	if size := proto.Size(m.parkedGetSchemaResponse); len(buf) < size {
+		m.logger.Warn(ctx).
+			Int("response_bytes", size).
+			Int("allocated_bytes", len(buf)).
+			Msgf("insufficient memory, response will be parked until next call to get_schema")
+		return types.Uint32(size)
+	}
+	out, err := proto.MarshalOptions{}.MarshalAppend(buf[:0], m.parkedGetSchemaResponse)
+	if err != nil {
+		m.logger.Err(ctx, err).Msg("failed marshalling protobuf get schema response")
+		return wasm.ErrorCodeSchemaMarshal
+	}
+	m.parkedGetSchemaResponse = nil
+	m.parkedGetSchemaRequest = nil
+
+	return types.Uint32(len(out))
 }
