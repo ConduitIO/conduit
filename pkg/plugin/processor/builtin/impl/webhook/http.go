@@ -81,7 +81,7 @@ func (c *httpConfig) parseHeaders() error {
 	}
 
 	var isContentTypeSet bool
-	for name, _ := range c.Headers {
+	for name := range c.Headers {
 		if strings.ToLower(name) == "content-type" {
 			isContentTypeSet = true
 			break

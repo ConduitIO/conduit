@@ -91,8 +91,7 @@ func (e extractor) extract(path []string, v reflect.Value, t reflect.Type) (avro
 	case reflect.Map:
 		return e.extractMap(path, v, t)
 	case reflect.Struct:
-		switch t {
-		case timeType:
+		if t == timeType {
 			return avro.NewPrimitiveSchema(
 				avro.Long,
 				avro.NewPrimitiveLogicalSchema(avro.TimestampMicros),
