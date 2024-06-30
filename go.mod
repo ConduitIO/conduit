@@ -13,10 +13,10 @@ require (
 	github.com/conduitio/conduit-connector-generator v0.6.1-0.20240621111436-e9fa3464f7b2
 	github.com/conduitio/conduit-connector-kafka v0.8.1-0.20240621111431-87c01cf39a06
 	github.com/conduitio/conduit-connector-log v0.3.1-0.20240621111440-e2f0f04a35a4
-	github.com/conduitio/conduit-connector-postgres v0.7.5-0.20240620165635-baf453b429f9
+	github.com/conduitio/conduit-connector-postgres v0.7.6-0.20240630172132-84b5a6e6104f
 	github.com/conduitio/conduit-connector-protocol v0.6.1-0.20240619121958-1df466646d01
-	github.com/conduitio/conduit-connector-s3 v0.5.2-0.20240621111427-a60fe03eca17
-	github.com/conduitio/conduit-connector-sdk v0.9.2-0.20240619124114-6a89e0d7add8
+	github.com/conduitio/conduit-connector-s3 v0.5.2-0.20240630172807-e278fde1fb46
+	github.com/conduitio/conduit-connector-sdk v0.9.2-0.20240628152134-4cafa91a4ded
 	github.com/conduitio/conduit-processor-sdk v0.1.2-0.20240516124003-442e4a3f0edd
 	github.com/conduitio/yaml/v3 v3.3.0
 	github.com/dgraph-io/badger/v4 v4.2.0
@@ -90,8 +90,8 @@ require (
 	github.com/ashanbrown/makezero v1.1.1 // indirect
 	github.com/aws/aws-sdk-go-v2 v1.30.0 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.6.2 // indirect
-	github.com/aws/aws-sdk-go-v2/config v1.27.21 // indirect
-	github.com/aws/aws-sdk-go-v2/credentials v1.17.21 // indirect
+	github.com/aws/aws-sdk-go-v2/config v1.27.22 // indirect
+	github.com/aws/aws-sdk-go-v2/credentials v1.17.22 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.16.8 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/configsources v1.3.12 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.6.12 // indirect
@@ -101,10 +101,10 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.3.14 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.11.14 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.17.12 // indirect
-	github.com/aws/aws-sdk-go-v2/service/s3 v1.56.1 // indirect
-	github.com/aws/aws-sdk-go-v2/service/sso v1.21.1 // indirect
-	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.25.1 // indirect
-	github.com/aws/aws-sdk-go-v2/service/sts v1.29.1 // indirect
+	github.com/aws/aws-sdk-go-v2/service/s3 v1.57.0 // indirect
+	github.com/aws/aws-sdk-go-v2/service/sso v1.22.0 // indirect
+	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.26.0 // indirect
+	github.com/aws/aws-sdk-go-v2/service/sts v1.30.0 // indirect
 	github.com/aws/smithy-go v1.20.2 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bkielbasa/cyclop v1.2.1 // indirect
