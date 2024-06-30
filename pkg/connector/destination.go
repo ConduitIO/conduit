@@ -190,7 +190,7 @@ func (d *Destination) Teardown(ctx context.Context) error {
 	return nil
 }
 
-func (d *Destination) Write(ctx context.Context, r []opencdc.Record) error {
+func (d *Destination) Write(ctx context.Context, recs []opencdc.Record) error {
 	cleanup, err := d.preparePluginCall()
 	defer cleanup()
 	if err != nil {
@@ -201,8 +201,8 @@ func (d *Destination) Write(ctx context.Context, r []opencdc.Record) error {
 		return cerrors.Errorf("destination stream not open: %w", connectorPlugin.ErrStreamNotOpen)
 	}
 
-	d.Instance.inspector.Send(ctx, r)
-	err = d.stream.Send(pconnector.DestinationRunRequest{Records: r})
+	d.Instance.inspector.Send(ctx, recs)
+	err = d.stream.Send(pconnector.DestinationRunRequest{Records: recs})
 	if err != nil {
 		return cerrors.Errorf("error writing record: %w", err)
 	}

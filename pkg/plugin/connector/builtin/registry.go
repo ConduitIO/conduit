@@ -22,6 +22,7 @@ import (
 	generator "github.com/conduitio/conduit-connector-generator"
 	kafka "github.com/conduitio/conduit-connector-kafka"
 	connLog "github.com/conduitio/conduit-connector-log"
+	postgres "github.com/conduitio/conduit-connector-postgres"
 	"github.com/conduitio/conduit-connector-protocol/pconnector"
 	s3 "github.com/conduitio/conduit-connector-s3"
 	sdk "github.com/conduitio/conduit-connector-sdk"
@@ -41,8 +42,8 @@ var (
 		"github.com/conduitio/conduit-connector-generator": NewDispenserFactory(generator.Connector),
 		"github.com/conduitio/conduit-connector-kafka":     NewDispenserFactory(kafka.Connector),
 		"github.com/conduitio/conduit-connector-log":       NewDispenserFactory(connLog.Connector),
-		// "github.com/conduitio/conduit-connector-postgres":  NewDispenserFactory(postgres.Connector),
-		"github.com/conduitio/conduit-connector-s3": NewDispenserFactory(s3.Connector),
+		"github.com/conduitio/conduit-connector-postgres":  NewDispenserFactory(postgres.Connector),
+		"github.com/conduitio/conduit-connector-s3":        NewDispenserFactory(s3.Connector),
 	}
 )
 

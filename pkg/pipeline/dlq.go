@@ -53,11 +53,9 @@ func (d *DLQDestination) Write(ctx context.Context, rec opencdc.Record) error {
 	if err != nil {
 		return err
 	}
-
 	if len(ack) != 1 {
 		return cerrors.Errorf("expected 1 ack but got %d", len(ack))
 	}
-
 	if !bytes.Equal(rec.Position, ack[0].Position) {
 		return cerrors.Errorf("received unexpected ack, expected position %q but got %q", rec.Position, ack)
 	}
