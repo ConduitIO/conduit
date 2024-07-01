@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:generate mockgen -destination=mock/processor.go -package=mock -mock_names=Processor=Processor . Processor
+//go:generate mockgen -typed -destination=mock/processor.go -package=mock -mock_names=Processor=Processor . Processor
 
 package stream
 
@@ -26,7 +26,6 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics"
-	"github.com/conduitio/conduit/pkg/record"
 )
 
 type ProcessorNode struct {
@@ -81,7 +80,7 @@ func (n *ProcessorNode) Run(ctx context.Context) error {
 		}
 
 		executeTime := time.Now()
-		recsIn := []opencdc.Record{msg.Record.ToOpenCDC()}
+		recsIn := []opencdc.Record{msg.Record}
 		recsOut := n.Processor.Process(msg.Ctx, recsIn)
 		n.ProcessorTimer.Update(time.Since(executeTime))
 
@@ -135,14 +134,13 @@ func (n *ProcessorNode) SetLogger(logger log.CtxLogger) {
 // setting the new record on the message and sending it downstream.
 // If there are any errors, the method nacks the message and returns
 // an appropriate error (if nack-ing failed, it returns the nack error)
-func (n *ProcessorNode) handleSingleRecord(ctx context.Context, msg *Message, v sdk.SingleRecord) error {
-	recOut := record.FromOpenCDC(opencdc.Record(v))
-	if !bytes.Equal(recOut.Position, msg.Record.Position) {
+func (n *ProcessorNode) handleSingleRecord(ctx context.Context, msg *Message, rec sdk.SingleRecord) error {
+	if !bytes.Equal(rec.Position, msg.Record.Position) {
 		err := cerrors.Errorf(
 			"processor changed position from '%v' to '%v' "+
 				"(not allowed because source connector cannot correctly acknowledge messages)",
 			msg.Record.Position,
-			recOut.Position,
+			rec.Position,
 		)
 
 		if nackErr := msg.Nack(err, n.ID()); nackErr != nil {
@@ -153,7 +151,7 @@ func (n *ProcessorNode) handleSingleRecord(ctx context.Context, msg *Message, v 
 		return err
 	}
 
-	msg.Record = recOut
+	msg.Record = opencdc.Record(rec)
 	err := n.base.Send(ctx, n.logger, msg)
 	if err != nil {
 		return msg.Nack(err, n.ID())

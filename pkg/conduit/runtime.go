@@ -40,7 +40,6 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/metrics"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/measure"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/prometheus"
-	"github.com/conduitio/conduit/pkg/foundation/multierror"
 	"github.com/conduitio/conduit/pkg/orchestrator"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	conn_plugin "github.com/conduitio/conduit/pkg/plugin/connector"
@@ -264,7 +263,7 @@ func (r *Runtime) Run(ctx context.Context) (err error) {
 
 	err = r.ProvisionService.Init(ctx)
 	if err != nil {
-		multierror.ForEach(err, func(err error) {
+		cerrors.ForEach(err, func(err error) {
 			r.logger.Err(ctx, err).Msg("provisioning failed")
 		})
 		if r.Config.Pipelines.ExitOnError {
@@ -278,7 +277,7 @@ func (r *Runtime) Run(ctx context.Context) (err error) {
 
 	err = r.pipelineService.Run(ctx, r.connectorService, r.processorService, r.connectorPluginService)
 	if err != nil {
-		multierror.ForEach(err, func(err error) {
+		cerrors.ForEach(err, func(err error) {
 			r.logger.Err(ctx, err).Msg("pipeline failed to be started")
 		})
 	}

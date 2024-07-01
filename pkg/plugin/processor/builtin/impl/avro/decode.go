@@ -13,7 +13,7 @@
 // limitations under the License.
 
 //go:generate paramgen -output=decode_paramgen.go decodeConfig
-//go:generate mockgen -source decode.go -destination=mock_decoder.go -package=avro -mock_names=decoder=MockDecoder . decoder
+//go:generate mockgen -typed -source decode.go -destination=mock_decoder.go -package=avro -mock_names=decoder=MockDecoder . decoder
 
 package avro
 

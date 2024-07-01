@@ -26,7 +26,6 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/ctxutil"
 	"github.com/conduitio/conduit/pkg/foundation/database"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/conduitio/conduit/pkg/foundation/multierror"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	"github.com/conduitio/conduit/pkg/provisioning/config"
 	"github.com/conduitio/conduit/pkg/provisioning/config/yaml"
@@ -78,14 +77,15 @@ func (s *Service) Init(ctx context.Context) error {
 	}
 
 	// contains all the errors occurred while provisioning configuration files.
-	var multierr error
+	var errs []error
 
 	// parse pipeline config files
 	configs := make([]config.Pipeline, 0, len(files))
 	for _, file := range files {
 		cfg, err := s.parsePipelineConfigFile(ctx, file)
 		if err != nil {
-			return multierror.Append(multierr, err)
+			errs = append(errs, err)
+			continue
 		}
 		configs = append(configs, cfg...)
 	}
@@ -95,7 +95,7 @@ func (s *Service) Init(ctx context.Context) error {
 
 	// delete duplicate pipelines (if any)
 	for duplicateID, duplicateIndexes := range s.findDuplicateIDs(configs) {
-		multierr = cerrors.Errorf("%d pipelines with ID %q will be skipped: %w", len(duplicateIndexes), duplicateID, ErrDuplicatedPipelineID)
+		errs = append(errs, cerrors.Errorf("%d pipelines with ID %q will be skipped: %w", len(duplicateIndexes), duplicateID, ErrDuplicatedPipelineID))
 		configs = s.deleteIndexes(configs, duplicateIndexes)
 
 		// duplicated IDs should still count towards all encountered pipeline IDs
@@ -108,12 +108,12 @@ func (s *Service) Init(ctx context.Context) error {
 		pipelineInstance, err := s.pipelineService.Get(ctx, pl.ID)
 		if err != nil {
 			if !cerrors.Is(err, pipeline.ErrInstanceNotFound) {
-				multierr = multierror.Append(multierr, cerrors.Errorf("error getting pipeline instance with ID %q: %w", pl.ID, err))
+				errs = append(errs, cerrors.Errorf("error getting pipeline instance with ID %q: %w", pl.ID, err))
 			}
 			continue
 		}
 		if pipelineInstance.ProvisionedBy != pipeline.ProvisionTypeConfig {
-			multierr = multierror.Append(multierr, cerrors.Errorf("pipelines with ID %q will be skipped: %w", pl.ID, ErrNotProvisionedByConfig))
+			errs = append(errs, cerrors.Errorf("pipelines with ID %q will be skipped: %w", pl.ID, ErrNotProvisionedByConfig))
 			apiProvisioned = append(apiProvisioned, i)
 		}
 	}
@@ -126,7 +126,7 @@ func (s *Service) Init(ctx context.Context) error {
 
 		err = s.provisionPipeline(ctx, cfg)
 		if err != nil {
-			multierr = multierror.Append(multierr, cerrors.Errorf("pipeline %q, error while provisioning: %w", cfg.ID, err))
+			errs = append(errs, cerrors.Errorf("pipeline %q, error while provisioning: %w", cfg.ID, err))
 			continue
 		}
 		successPls = append(successPls, cfg.ID)
@@ -140,7 +140,7 @@ func (s *Service) Init(ctx context.Context) error {
 		Str("pipelines_path", s.pipelinesPath).
 		Msg("pipeline configs provisioned")
 
-	return multierr
+	return cerrors.Join(errs...)
 }
 
 // Delete exposes a way to delete pipelines provisioned using the provisioning

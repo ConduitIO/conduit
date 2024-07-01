@@ -20,11 +20,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/conduitio/conduit/pkg/foundation/cchan"
+	"github.com/conduitio/conduit-commons/cchan"
+	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/noop"
 	"github.com/conduitio/conduit/pkg/pipeline/stream/mock"
-	"github.com/conduitio/conduit/pkg/record"
 	"github.com/matryer/is"
 	"go.uber.org/mock/gomock"
 )
@@ -42,12 +42,12 @@ func TestDestinationNode_ForceStop(t *testing.T) {
 		mockDestination: func(onStuck chan struct{}) *mock.Destination {
 			src := mock.NewDestination(ctrl)
 			src.EXPECT().ID().Return("destination-connector").AnyTimes()
-			src.EXPECT().Errors().Return(make(chan error)).Times(1)
+			src.EXPECT().Errors().Return(make(chan error))
 			src.EXPECT().Open(gomock.Any()).DoAndReturn(func(ctx context.Context) error {
 				close(onStuck)
 				<-ctx.Done() // block until context is done
 				return ctx.Err()
-			}).Times(1)
+			})
 			return src
 		},
 		wantMsg: false,
@@ -58,20 +58,20 @@ func TestDestinationNode_ForceStop(t *testing.T) {
 			var connectorCtx context.Context
 			src := mock.NewDestination(ctrl)
 			src.EXPECT().ID().Return("destination-connector").AnyTimes()
-			src.EXPECT().Errors().Return(make(chan error)).Times(1)
-			src.EXPECT().Teardown(gomock.Any()).Return(nil).Times(1)
+			src.EXPECT().Errors().Return(make(chan error))
+			src.EXPECT().Teardown(gomock.Any()).Return(nil)
 			src.EXPECT().Open(gomock.Any()).DoAndReturn(func(ctx context.Context) error {
 				// the connector opens the stream in open and keeps it open
 				// until the context is open
 				connectorCtx = ctx
 				return nil
-			}).Times(1)
-			src.EXPECT().Write(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, r record.Record) error {
+			})
+			src.EXPECT().Write(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, r []opencdc.Record) error {
 				close(onStuck)
 				<-connectorCtx.Done() // block until connector stream is closed
 				return io.EOF         // io.EOF is returned when the stream is closed
-			}).Times(1)
-			src.EXPECT().Stop(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+			})
+			src.EXPECT().Stop(gomock.Any(), gomock.Any()).Return(nil)
 			return src
 		},
 		wantMsg: true,

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:generate mockgen -destination=mock/destination.go -package=mock -mock_names=Destination=Destination . Destination
+//go:generate mockgen -typed -destination=mock/destination.go -package=mock -mock_names=Destination=Destination . Destination
 
 package stream
 
@@ -20,10 +20,11 @@ import (
 	"context"
 	"time"
 
+	"github.com/conduitio/conduit-commons/opencdc"
+	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics"
-	"github.com/conduitio/conduit/pkg/record"
 )
 
 // DestinationNode wraps a Destination connector and implements the Sub node interface
@@ -41,9 +42,9 @@ type DestinationNode struct {
 type Destination interface {
 	ID() string
 	Open(context.Context) error
-	Write(context.Context, record.Record) error
-	Ack(context.Context) (record.Position, error)
-	Stop(context.Context, record.Position) error
+	Write(context.Context, []opencdc.Record) error
+	Ack(context.Context) ([]connector.DestinationAck, error)
+	Stop(context.Context, opencdc.Position) error
 	Teardown(context.Context) error
 	Errors() <-chan error
 }
@@ -69,7 +70,7 @@ func (n *DestinationNode) Run(ctx context.Context) (err error) {
 
 	var (
 		// lastPosition stores the position of the last successfully processed record
-		lastPosition record.Position
+		lastPosition opencdc.Position
 		// openMsgTracker tracks open messages until they are acked or nacked
 		openMsgTracker OpenMessagesTracker
 	)
@@ -104,7 +105,7 @@ func (n *DestinationNode) Run(ctx context.Context) (err error) {
 		n.logger.Trace(msg.Ctx).Msg("writing record to destination connector")
 
 		writeTime := time.Now()
-		err = n.Destination.Write(msg.Ctx, msg.Record)
+		err = n.Destination.Write(msg.Ctx, []opencdc.Record{msg.Record})
 		if err != nil {
 			// An error in Write is a fatal error, we probably won't be able to
 			// process any further messages because there is a problem in the

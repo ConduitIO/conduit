@@ -18,11 +18,13 @@ import (
 	"context"
 	"fmt"
 	"path"
+	"regexp"
 	"testing"
 
+	"github.com/conduitio/conduit-commons/config"
+	"github.com/conduitio/conduit-connector-protocol/pconnector"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
-	"github.com/conduitio/conduit/pkg/plugin/connector"
 	"github.com/matryer/is"
 )
 
@@ -53,70 +55,49 @@ const (
 
 func testPluginBlueprint() blueprint {
 	return blueprint{
-		fullName: plugin.FullName(fmt.Sprintf("standalone:%v@%v", testPluginName, testPluginVersion)),
-		path:     path.Join(testPluginDir, "testplugin.sh"),
-		specification: connector.Specification{
+		FullName: plugin.FullName(fmt.Sprintf("standalone:%v@%v", testPluginName, testPluginVersion)),
+		Path:     path.Join(testPluginDir, "testplugin.sh"),
+		Specification: pconnector.Specification{
 			Name:        testPluginName,
 			Summary:     testPluginSummary,
 			Description: testPluginDescription,
 			Version:     testPluginVersion,
 			Author:      testPluginAuthor,
-			SourceParams: map[string]connector.Parameter{
+			SourceParams: map[string]config.Parameter{
 				testPluginSourceParam1: {
 					Default:     testPluginSourceParam1Default,
-					Type:        connector.ParameterTypeString, // default type
+					Type:        0, // no type
 					Description: testPluginSourceParam1Description,
-					Validations: []connector.Validation{
-						{
-							Type:  connector.ValidationTypeRequired,
-							Value: "",
-						},
-						{
-							Type:  connector.ValidationTypeInclusion,
-							Value: "one,two",
-						},
+					Validations: []config.Validation{
+						config.ValidationRequired{},
+						config.ValidationInclusion{List: []string{"one", "two"}},
 					},
 				},
 				testPluginSourceParam2: {
 					Default:     testPluginSourceParam2Default,
-					Type:        connector.ParameterTypeInt,
+					Type:        config.ParameterTypeInt,
 					Description: testPluginSourceParam2Description,
-					Validations: []connector.Validation{
-						{
-							Type:  connector.ValidationTypeExclusion,
-							Value: "3,4",
-						},
-						{
-							Type:  connector.ValidationTypeGreaterThan,
-							Value: "1",
-						},
+					Validations: []config.Validation{
+						config.ValidationExclusion{List: []string{"3", "4"}},
+						config.ValidationGreaterThan{V: 1},
 					},
 				},
 			},
-			DestinationParams: map[string]connector.Parameter{
+			DestinationParams: map[string]config.Parameter{
 				testPluginDestinationParam1: {
 					Default:     testPluginDestinationParam1Default,
-					Type:        connector.ParameterTypeInt,
+					Type:        config.ParameterTypeInt,
 					Description: testPluginDestinationParam1Description,
-					Validations: []connector.Validation{
-						{
-							Type:  connector.ValidationTypeLessThan,
-							Value: "10",
-						},
-						{
-							Type:  connector.ValidationTypeRegex,
-							Value: "[1-9]",
-						},
-						{
-							Type: connector.ValidationTypeRequired,
-						},
+					Validations: []config.Validation{
+						config.ValidationLessThan{V: 10},
+						config.ValidationRegex{Regex: regexp.MustCompile("[1-9]")},
 					},
 				},
 				testPluginDestinationParam2: {
 					Default:     testPluginDestinationParam2Default,
-					Type:        connector.ParameterTypeDuration,
+					Type:        config.ParameterTypeDuration,
 					Description: testPluginDestinationParam2Description,
-					Validations: []connector.Validation{},
+					Validations: nil,
 				},
 			},
 		},
@@ -126,7 +107,7 @@ func testPluginBlueprint() blueprint {
 func TestRegistry_loadPlugins(t *testing.T) {
 	is := is.New(t)
 
-	r := NewRegistry(log.Nop(), "")
+	r := NewRegistry(log.Test(t), "")
 	got := r.loadPlugins(context.Background(), testPluginDir)
 	want := map[string]map[string]blueprint{
 		testPluginName: {
@@ -146,8 +127,8 @@ func TestRegistry_List(t *testing.T) {
 
 	got := r.List()
 	bp := testPluginBlueprint()
-	want := map[plugin.FullName]connector.Specification{
-		bp.fullName: bp.specification,
+	want := map[plugin.FullName]pconnector.Specification{
+		bp.FullName: bp.Specification,
 	}
 	is.Equal(got, want)
 }
