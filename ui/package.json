@@ -42,7 +42,7 @@
     "concurrently": "^8.2.2",
     "d3-selection": "^3.0.0",
     "d3-zoom": "^3.0.0",
-    "ember-auto-import": "^2.7.2",
+    "ember-auto-import": "^2.7.4",
     "ember-basic-dropdown": "^7.3.0",
     "ember-changeset": "^4.1.2",
     "ember-changeset-validations": "^4.1.1",
