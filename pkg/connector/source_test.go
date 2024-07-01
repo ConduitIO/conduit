@@ -16,17 +16,16 @@ package connector
 
 import (
 	"context"
-	"sync"
 	"testing"
-	"time"
 
+	"github.com/conduitio/conduit-commons/opencdc"
+	"github.com/conduitio/conduit-connector-protocol/pconnector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/foundation/csync"
 	"github.com/conduitio/conduit/pkg/foundation/database/inmemory"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
+	"github.com/conduitio/conduit/pkg/plugin/connector/builtin"
 	"github.com/conduitio/conduit/pkg/plugin/connector/mock"
-	"github.com/conduitio/conduit/pkg/record"
 	"github.com/matryer/is"
 	"go.uber.org/mock/gomock"
 )
@@ -41,8 +40,7 @@ func TestSource_NoLifecycleEvent(t *testing.T) {
 	// assume that the same config was already active last time
 	src.Instance.LastActiveConfig = src.Instance.Config
 
-	sourceMock.EXPECT().Configure(gomock.Any(), src.Instance.Config.Settings).Return(nil)
-	sourceMock.EXPECT().Start(gomock.Any(), nil).Return(nil)
+	_ = expectSourceOpen(src, sourceMock)
 
 	// source should not trigger any lifecycle event, because the config did not change
 
@@ -63,11 +61,13 @@ func TestSource_LifecycleOnCreated_Success(t *testing.T) {
 	// before plugin is started we expect LastActiveConfig to be empty
 	is.Equal(src.Instance.LastActiveConfig, Config{})
 
-	sourceMock.EXPECT().Configure(gomock.Any(), src.Instance.Config.Settings).Return(nil)
-	sourceMock.EXPECT().Start(gomock.Any(), nil).Return(nil)
+	_ = expectSourceOpen(src, sourceMock)
 
 	// source should know it's the first run and trigger LifecycleOnCreated
-	sourceMock.EXPECT().LifecycleOnCreated(gomock.Any(), src.Instance.Config.Settings).Return(nil)
+	sourceMock.EXPECT().LifecycleOnCreated(
+		gomock.Any(),
+		pconnector.SourceLifecycleOnCreatedRequest{Config: src.Instance.Config.Settings},
+	).Return(pconnector.SourceLifecycleOnCreatedResponse{}, nil)
 
 	err := src.Open(ctx)
 	is.NoErr(err)
@@ -86,11 +86,16 @@ func TestSource_LifecycleOnUpdated_Success(t *testing.T) {
 	// assume that there was a config already active, but with different settings
 	src.Instance.LastActiveConfig.Settings = map[string]string{"last-active": "yes"}
 
-	sourceMock.EXPECT().Configure(gomock.Any(), src.Instance.Config.Settings).Return(nil)
-	sourceMock.EXPECT().Start(gomock.Any(), nil).Return(nil)
+	_ = expectSourceOpen(src, sourceMock)
 
 	// source should know it was already run once with a different config and trigger LifecycleOnUpdated
-	sourceMock.EXPECT().LifecycleOnUpdated(gomock.Any(), src.Instance.LastActiveConfig.Settings, src.Instance.Config.Settings).Return(nil)
+	sourceMock.EXPECT().LifecycleOnUpdated(
+		gomock.Any(),
+		pconnector.SourceLifecycleOnUpdatedRequest{
+			ConfigBefore: src.Instance.LastActiveConfig.Settings,
+			ConfigAfter:  src.Instance.Config.Settings,
+		},
+	).Return(pconnector.SourceLifecycleOnUpdatedResponse{}, nil)
 
 	err := src.Open(ctx)
 	is.NoErr(err)
@@ -109,14 +114,20 @@ func TestSource_LifecycleOnCreated_Error(t *testing.T) {
 	// before plugin is started we expect LastActiveConfig to be empty
 	is.Equal(src.Instance.LastActiveConfig, Config{})
 
-	sourceMock.EXPECT().Configure(gomock.Any(), src.Instance.Config.Settings).Return(nil)
+	sourceMock.EXPECT().Configure(
+		gomock.Any(),
+		pconnector.SourceConfigureRequest{Config: src.Instance.Config.Settings},
+	).Return(pconnector.SourceConfigureResponse{}, nil)
 
 	// source should know it's the first run and trigger LifecycleOnCreated, but it fails
 	want := cerrors.New("whoops")
-	sourceMock.EXPECT().LifecycleOnCreated(gomock.Any(), src.Instance.Config.Settings).Return(want)
+	sourceMock.EXPECT().LifecycleOnCreated(
+		gomock.Any(),
+		pconnector.SourceLifecycleOnCreatedRequest{Config: src.Instance.Config.Settings},
+	).Return(pconnector.SourceLifecycleOnCreatedResponse{}, want)
 
 	// source should terminate plugin in case of an error
-	sourceMock.EXPECT().Teardown(gomock.Any()).Return(nil)
+	sourceMock.EXPECT().Teardown(gomock.Any(), pconnector.SourceTeardownRequest{}).Return(pconnector.SourceTeardownResponse{}, nil)
 
 	err := src.Open(ctx)
 	is.True(cerrors.Is(err, want))
@@ -135,8 +146,12 @@ func TestSource_LifecycleOnDeleted_Success(t *testing.T) {
 	// assume that there was a config already active, but with different settings
 	src.Instance.LastActiveConfig.Settings = map[string]string{"last-active": "yes"}
 
-	sourceMock.EXPECT().LifecycleOnDeleted(gomock.Any(), src.Instance.LastActiveConfig.Settings).Return(nil)
-	sourceMock.EXPECT().Teardown(gomock.Any()).Return(nil)
+	sourceMock.EXPECT().LifecycleOnDeleted(
+		gomock.Any(),
+		pconnector.SourceLifecycleOnDeletedRequest{Config: src.Instance.LastActiveConfig.Settings},
+	).Return(pconnector.SourceLifecycleOnDeletedResponse{}, nil)
+
+	sourceMock.EXPECT().Teardown(gomock.Any(), pconnector.SourceTeardownRequest{}).Return(pconnector.SourceTeardownResponse{}, nil)
 
 	err := src.OnDelete(ctx)
 	is.NoErr(err)
@@ -153,8 +168,12 @@ func TestSource_LifecycleOnDeleted_BackwardsCompatibility(t *testing.T) {
 	src.Instance.LastActiveConfig.Settings = map[string]string{"last-active": "yes"}
 
 	// we should ignore the error if the plugin does not implement lifecycle events
-	sourceMock.EXPECT().LifecycleOnDeleted(gomock.Any(), src.Instance.LastActiveConfig.Settings).Return(plugin.ErrUnimplemented)
-	sourceMock.EXPECT().Teardown(gomock.Any()).Return(nil)
+	sourceMock.EXPECT().LifecycleOnDeleted(
+		gomock.Any(),
+		pconnector.SourceLifecycleOnDeletedRequest{Config: src.Instance.LastActiveConfig.Settings},
+	).Return(pconnector.SourceLifecycleOnDeletedResponse{}, plugin.ErrUnimplemented)
+
+	sourceMock.EXPECT().Teardown(gomock.Any(), pconnector.SourceTeardownRequest{}).Return(pconnector.SourceTeardownResponse{}, nil)
 
 	err := src.OnDelete(ctx)
 	is.NoErr(err)
@@ -182,27 +201,29 @@ func TestSource_Ack_Deadlock(t *testing.T) {
 
 	src, sourceMock := newTestSource(ctx, t, ctrl)
 
-	sourceMock.EXPECT().Configure(gomock.Any(), src.Instance.Config.Settings).Return(nil)
-	sourceMock.EXPECT().LifecycleOnCreated(gomock.Any(), src.Instance.Config.Settings).Return(nil)
-	sourceMock.EXPECT().Start(gomock.Any(), nil).Return(nil)
-	sourceMock.EXPECT().Ack(gomock.Any(), record.Position("test-pos")).Return(nil).Times(5)
+	stream := expectSourceOpen(src, sourceMock)
+	sourceMock.EXPECT().LifecycleOnCreated(
+		gomock.Any(),
+		pconnector.SourceLifecycleOnCreatedRequest{Config: src.Instance.Config.Settings},
+	).Return(pconnector.SourceLifecycleOnCreatedResponse{}, nil)
 
 	err := src.Open(ctx)
 	is.NoErr(err)
 
 	const msgs = 5
-	var wg sync.WaitGroup
-	wg.Add(msgs)
 	for i := 0; i < msgs; i++ {
 		go func() {
-			err := src.Ack(ctx, record.Position("test-pos"))
-			wg.Done()
+			err := src.Ack(ctx, []opencdc.Position{opencdc.Position("test-pos")})
 			is.NoErr(err)
 		}()
 	}
 
-	err = (*csync.WaitGroup)(&wg).WaitTimeout(ctx, 100*time.Millisecond)
-	is.NoErr(err)
+	serverStream := stream.Server()
+	for i := 0; i < msgs; i++ {
+		resp, err := serverStream.Recv()
+		is.NoErr(err)
+		is.Equal(resp.AckPositions, []opencdc.Position{opencdc.Position("test-pos")})
+	}
 }
 
 func newTestSource(ctx context.Context, t *testing.T, ctrl *gomock.Controller) (*Source, *mock.SourcePlugin) {
@@ -235,4 +256,22 @@ func newTestSource(ctx context.Context, t *testing.T, ctrl *gomock.Controller) (
 	src, ok := conn.(*Source)
 	is.True(ok)
 	return src, sourceMock
+}
+
+func expectSourceOpen(src *Source, sourceMock *mock.SourcePlugin) *builtin.InMemorySourceRunStream {
+	stream := &builtin.InMemorySourceRunStream{}
+
+	sourceMock.EXPECT().Configure(gomock.Any(),
+		pconnector.SourceConfigureRequest{
+			Config: src.Instance.Config.Settings,
+		},
+	).Return(pconnector.SourceConfigureResponse{}, nil)
+	sourceMock.EXPECT().Open(gomock.Any(), pconnector.SourceOpenRequest{}).Return(pconnector.SourceOpenResponse{}, nil)
+	sourceMock.EXPECT().NewStream().Return(stream)
+	sourceMock.EXPECT().Run(gomock.Any(), stream).DoAndReturn(func(ctx context.Context, _ pconnector.SourceRunStream) error {
+		stream.Init(ctx)
+		return nil
+	})
+
+	return stream
 }

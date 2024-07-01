@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:generate mockgen -destination=mock/connector.go -package=mock -mock_names=ConnectorOrchestrator=ConnectorOrchestrator . ConnectorOrchestrator
-//go:generate mockgen -destination=mock/connector_service.go -package=mock -mock_names=ConnectorService_InspectConnectorServer=ConnectorService_InspectConnectorServer github.com/conduitio/conduit/proto/api/v1 ConnectorService_InspectConnectorServer
-//go:generate mockgen -destination=mock/connector_plugin.go -package=mock -mock_names=ConnectorPluginOrchestrator=ConnectorPluginOrchestrator . ConnectorPluginOrchestrator
+//go:generate mockgen -typed -destination=mock/connector.go -package=mock -mock_names=ConnectorOrchestrator=ConnectorOrchestrator . ConnectorOrchestrator
+//go:generate mockgen -typed -destination=mock/connector_service.go -package=mock -mock_names=ConnectorService_InspectConnectorServer=ConnectorService_InspectConnectorServer github.com/conduitio/conduit/proto/api/v1 ConnectorService_InspectConnectorServer
+//go:generate mockgen -typed -destination=mock/connector_plugin.go -package=mock -mock_names=ConnectorPluginOrchestrator=ConnectorPluginOrchestrator . ConnectorPluginOrchestrator
 
 package api
 
@@ -22,8 +22,8 @@ import (
 	"context"
 	"regexp"
 
-	connectorPlugin "github.com/conduitio/conduit/pkg/plugin/connector"
-
+	opencdcv1 "github.com/conduitio/conduit-commons/proto/opencdc/v1"
+	"github.com/conduitio/conduit-connector-protocol/pconnector"
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/inspector"
@@ -46,7 +46,7 @@ type ConnectorOrchestrator interface {
 
 type ConnectorPluginOrchestrator interface {
 	// List will return all connector plugins' specs.
-	List(ctx context.Context) (map[string]connectorPlugin.Specification, error)
+	List(ctx context.Context) (map[string]pconnector.Specification, error)
 }
 
 type ConnectorAPIv1 struct {
@@ -96,16 +96,17 @@ func (c *ConnectorAPIv1) InspectConnector(req *apiv1.InspectConnectorRequest, se
 	}
 
 	for rec := range session.C {
-		recProto, err2 := toproto.Record(rec)
-		if err2 != nil {
-			return cerrors.Errorf("failed converting record: %w", err2)
+		recProto := &opencdcv1.Record{}
+		err := rec.ToProto(recProto)
+		if err != nil {
+			return cerrors.Errorf("failed converting record: %w", err)
 		}
 
-		err2 = server.Send(&apiv1.InspectConnectorResponse{
+		err = server.Send(&apiv1.InspectConnectorResponse{
 			Record: recProto,
 		})
-		if err2 != nil {
-			return cerrors.Errorf("failed sending record: %w", err2)
+		if err != nil {
+			return cerrors.Errorf("failed sending record: %w", err)
 		}
 	}
 

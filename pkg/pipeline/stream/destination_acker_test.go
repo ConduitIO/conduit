@@ -21,9 +21,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/conduitio/conduit-commons/opencdc"
+	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/pipeline/stream/mock"
-	"github.com/conduitio/conduit/pkg/record"
 	"github.com/matryer/is"
 	"go.uber.org/mock/gomock"
 )
@@ -57,13 +58,13 @@ func TestDestinationAckerNode_Cache(t *testing.T) {
 	msgProducerWg.Add(1)
 
 	dest.EXPECT().Ack(gomock.Any()).
-		DoAndReturn(func(ctx context.Context) (record.Position, error) {
+		DoAndReturn(func(ctx context.Context) ([]connector.DestinationAck, error) {
 			// wait for all messages to be produced, this means the node should
 			// be caching them
 			msgProducerWg.Wait()
 			pos := fmt.Sprintf("test-position-%d", currentPosition)
 			currentPosition++
-			return record.Position(pos), nil
+			return []connector.DestinationAck{{Position: opencdc.Position(pos)}}, nil
 		}).Times(count)
 
 	var ackHandlerWg sync.WaitGroup
@@ -71,7 +72,7 @@ func TestDestinationAckerNode_Cache(t *testing.T) {
 	for i := 0; i < count; i++ {
 		pos := fmt.Sprintf("test-position-%d", i)
 		msg := &Message{
-			Record: record.Record{Position: record.Position(pos)},
+			Record: opencdc.Record{Position: opencdc.Position(pos)},
 		}
 		msg.RegisterAckHandler(func(msg *Message) error {
 			ackHandlerWg.Done()
@@ -119,11 +120,11 @@ func TestDestinationAckerNode_ForwardAck(t *testing.T) {
 	// up to this point there should have been no calls to the destination
 	// only after a received message should the node try to fetch the ack
 	msg := &Message{
-		Record: record.Record{Position: record.Position("test-position")},
+		Record: opencdc.Record{Position: opencdc.Position("test-position")},
 	}
 	dest.EXPECT().Ack(gomock.Any()).
-		DoAndReturn(func(ctx context.Context) (record.Position, error) {
-			return msg.Record.Position, nil
+		DoAndReturn(func(ctx context.Context) ([]connector.DestinationAck, error) {
+			return []connector.DestinationAck{{Position: msg.Record.Position}}, nil
 		})
 	ackHandlerDone := make(chan struct{})
 	msg.RegisterAckHandler(func(got *Message) error {
@@ -176,12 +177,13 @@ func TestDestinationAckerNode_ForwardNack(t *testing.T) {
 	// up to this point there should have been no calls to the destination
 	// only after a received message should the node try to fetch the ack
 	msg := &Message{
-		Record: record.Record{Position: record.Position("test-position")},
+		Record: opencdc.Record{Position: opencdc.Position("test-position")},
 	}
 	wantErr := cerrors.New("test error")
 	dest.EXPECT().Ack(gomock.Any()).
-		DoAndReturn(func(ctx context.Context) (record.Position, error) {
-			return msg.Record.Position, wantErr // destination returns nack
+		DoAndReturn(func(ctx context.Context) ([]connector.DestinationAck, error) {
+			// destination returns nack
+			return []connector.DestinationAck{{Position: msg.Record.Position, Error: wantErr}}, nil
 		})
 	nackHandlerDone := make(chan struct{})
 	msg.RegisterNackHandler(func(got *Message, nackMetadata NackMetadata) error {
@@ -236,16 +238,17 @@ func TestDestinationAckerNode_UnexpectedPosition(t *testing.T) {
 	}()
 
 	msg := &Message{
-		Record: record.Record{Position: record.Position("test-position")},
+		Record: opencdc.Record{Position: opencdc.Position("test-position")},
 	}
 	ackCall := dest.EXPECT().Ack(gomock.Any()).
-		DoAndReturn(func(ctx context.Context) (record.Position, error) {
-			return record.Position("something-unexpected"), nil // destination returns unexpected position
+		DoAndReturn(func(ctx context.Context) ([]connector.DestinationAck, error) {
+			// destination returns unexpected position
+			return []connector.DestinationAck{{Position: opencdc.Position("something-unexpected")}}, nil
 		})
 	dest.EXPECT().Ack(gomock.Any()).
-		DoAndReturn(func(ctx context.Context) (record.Position, error) {
+		DoAndReturn(func(ctx context.Context) ([]connector.DestinationAck, error) {
 			return nil, cerrors.New("stream closed") // second Ack call is to drain outstanding acks
-		}).After(ackCall).AnyTimes()
+		}).After(ackCall.Call).AnyTimes()
 
 	// nack should be still called when node exits
 	nackHandlerDone := make(chan struct{})
@@ -297,7 +300,7 @@ func TestDestinationAckerNode_DestinationAckError(t *testing.T) {
 	}()
 
 	dest.EXPECT().Ack(gomock.Any()).
-		DoAndReturn(func(ctx context.Context) (record.Position, error) {
+		DoAndReturn(func(ctx context.Context) ([]connector.DestinationAck, error) {
 			return nil, wantErr // destination returns unexpected error
 		}).
 		// 1st call is from the message that stops the node, 2nd call is from
@@ -307,7 +310,7 @@ func TestDestinationAckerNode_DestinationAckError(t *testing.T) {
 		MinTimes(1)
 
 	in <- &Message{
-		Record: record.Record{Position: record.Position("test-position")},
+		Record: opencdc.Record{Position: opencdc.Position("test-position")},
 	}
 
 	// note that we don't close the in channel this time and still expect the
@@ -352,16 +355,16 @@ func TestDestinationAckerNode_MessageAckError(t *testing.T) {
 	}()
 
 	msg := &Message{
-		Record: record.Record{Position: record.Position("test-position")},
+		Record: opencdc.Record{Position: opencdc.Position("test-position")},
 	}
 	ackCall := dest.EXPECT().Ack(gomock.Any()).
-		DoAndReturn(func(ctx context.Context) (record.Position, error) {
-			return msg.Record.Position, nil
+		DoAndReturn(func(ctx context.Context) ([]connector.DestinationAck, error) {
+			return []connector.DestinationAck{{Position: msg.Record.Position}}, nil
 		})
 	dest.EXPECT().Ack(gomock.Any()).
-		DoAndReturn(func(ctx context.Context) (record.Position, error) {
+		DoAndReturn(func(ctx context.Context) ([]connector.DestinationAck, error) {
 			return nil, cerrors.New("stream closed") // second Ack call is to drain outstanding acks
-		}).After(ackCall).AnyTimes()
+		}).After(ackCall.Call).AnyTimes()
 
 	ackHandlerDone := make(chan struct{})
 	msg.RegisterAckHandler(func(*Message) error {
