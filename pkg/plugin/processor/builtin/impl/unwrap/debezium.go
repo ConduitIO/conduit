@@ -26,7 +26,6 @@ import (
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/conduitio/conduit/pkg/foundation/multierror"
 	"github.com/goccy/go-json"
 )
 
@@ -206,18 +205,18 @@ func (d *debeziumProcessor) valueToData(val any) (opencdc.Data, error) {
 }
 
 func (d *debeziumProcessor) validateRecord(data opencdc.StructuredData) error {
-	var multiErr error
+	var errs []error
 	if _, ok := data[debeziumFieldAfter]; !ok {
-		multiErr = multierror.Append(multiErr, cerrors.Errorf("the %q field is missing from debezium payload", debeziumFieldAfter))
+		errs = append(errs, cerrors.Errorf("the %q field is missing from debezium payload", debeziumFieldAfter))
 	}
 	if _, ok := data[debeziumFieldSource]; !ok {
-		multiErr = multierror.Append(multiErr, cerrors.Errorf("the %q field is missing from debezium payload", debeziumFieldSource))
+		errs = append(errs, cerrors.Errorf("the %q field is missing from debezium payload", debeziumFieldSource))
 	}
 	if _, ok := data[debeziumFieldOp]; !ok {
-		multiErr = multierror.Append(multiErr, cerrors.Errorf("the %q field is missing from debezium payload", debeziumFieldOp))
+		errs = append(errs, cerrors.Errorf("the %q field is missing from debezium payload", debeziumFieldOp))
 	}
 	// ts_ms and transaction can be empty
-	return multiErr
+	return cerrors.Join(errs...)
 }
 
 func (d *debeziumProcessor) unwrapMetadata(rec opencdc.Record, dbzRec opencdc.StructuredData) (opencdc.Metadata, error) {

@@ -22,7 +22,6 @@ import (
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/foundation/multierror"
 )
 
 type (
@@ -153,7 +152,7 @@ func (m *Message) RegisterStatusHandler(h StatusChangeHandler) {
 		// all handlers are called and errors collected
 		err1 := h(msg, change)
 		err2 := next(msg, change)
-		return multierror.Append(err1, err2)
+		return cerrors.Join(err1, err2)
 	}
 }
 

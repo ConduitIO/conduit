@@ -21,7 +21,6 @@ import (
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/conduitio/conduit/pkg/foundation/multierror"
 	"github.com/gammazero/deque"
 )
 
@@ -176,15 +175,18 @@ func (n *DestinationAckerNode) handleAck(msg *Message, err error) error {
 func (n *DestinationAckerNode) teardown(connectorCtx context.Context, reason error) error {
 	// no need to lock, at this point the worker is not running anymore
 
-	var nacked int
-	var err error
+	nacked := n.queue.Len()
+	var errs []error
 	for n.queue.Len() > 0 {
 		msg := n.queue.PopFront()
-		err = multierror.Append(err, msg.Nack(reason, n.ID()))
-		nacked++
+		if err := msg.Nack(reason, n.ID()); err != nil {
+			errs = append(errs, err)
+		}
 	}
-	if err != nil {
-		err = cerrors.Errorf("nacked %d messages when stopping destination acker node, some nacks failed: %w", nacked, err)
+
+	var err error
+	if len(errs) > 0 {
+		err = cerrors.Errorf("nacked %d messages when stopping destination acker node, %d nacks failed: %w", nacked, len(errs), cerrors.Join(errs...))
 	} else if nacked > 0 {
 		err = cerrors.Errorf("nacked %d messages when stopping destination acker node", nacked)
 	}
