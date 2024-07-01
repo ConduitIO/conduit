@@ -77,11 +77,12 @@ func (*Entrypoint) Flags(cfg *Config) *flag.FlagSet {
 	// TODO extract flags from config struct rather than defining flags manually
 	flags := flag.NewFlagSet("conduit", flag.ExitOnError)
 
-	flags.StringVar(&cfg.DB.Type, "db.type", cfg.DB.Type, "database type; accepts badger,postgres,inmemory")
+	flags.StringVar(&cfg.DB.Type, "db.type", cfg.DB.Type, "database type; accepts badger,postgres,inmemory,sqlite")
 	flags.StringVar(&cfg.DB.Badger.Path, "db.badger.path", cfg.DB.Badger.Path, "path to badger DB")
 	flags.StringVar(&cfg.DB.Postgres.ConnectionString, "db.postgres.connection-string", cfg.DB.Postgres.ConnectionString, "postgres connection string")
 	flags.StringVar(&cfg.DB.Postgres.Table, "db.postgres.table", cfg.DB.Postgres.Table, "postgres table in which to store data (will be created if it does not exist)")
-
+	flags.StringVar(&cfg.DB.SQLite.Path, "db.sqlite.path", cfg.DB.SQLite.Path, "path to sqlite3 DB")
+	flags.StringVar(&cfg.DB.SQLite.Table, "db.sqlite.table", cfg.DB.SQLite.Table, "sqlite3 table in which to store data (will be created if it does not exist)")
 	flags.BoolVar(&cfg.API.Enabled, "api.enabled", cfg.API.Enabled, "enable HTTP and gRPC API")
 	flags.StringVar(&cfg.API.HTTP.Address, "http.address", cfg.API.HTTP.Address, "address for serving the HTTP API")
 	flags.StringVar(&cfg.API.GRPC.Address, "grpc.address", cfg.API.GRPC.Address, "address for serving the gRPC API")
