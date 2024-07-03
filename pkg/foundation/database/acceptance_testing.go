@@ -197,32 +197,58 @@ func testConcurrency(t *testing.T, db DB) {
 		ctx := context.Background()
 		is := is.New(t)
 
+		iterationFn := func(ctx context.Context, workerID, iteration int) (err error) {
+			if iteration%2 == 0 {
+				// every other iteration is executed in a transaction
+				var tx Transaction
+				tx, ctx, err = db.NewTransaction(ctx, true)
+				if err != nil {
+					return fmt.Errorf("expected no error when creating transaction, got: %w", err)
+				}
+				defer func() {
+					if err != nil || iteration%4 == 0 {
+						// discard every other transaction
+						tx.Discard()
+						return
+					}
+					err = tx.Commit()
+					if err != nil {
+						err = fmt.Errorf("expected no error when committing transaction, got: %w", err)
+					}
+				}()
+			}
+
+			key := fmt.Sprintf("key-%d-%d", workerID, iteration)
+			val := []byte(fmt.Sprintf("value-%d-%d", workerID, iteration))
+			_, err = db.Get(ctx, key)
+			if !cerrors.Is(err, ErrKeyNotExist) {
+				return fmt.Errorf("expected error when getting value for key %q, got: %w", key, err)
+			}
+			err = db.Set(ctx, key, val)
+			if err != nil {
+				return fmt.Errorf("expected no error when setting value for key %q, got: %w", key, err)
+			}
+			got, err := db.Get(ctx, key)
+			if err != nil {
+				return fmt.Errorf("expected no error when getting value for key %q, got: %w", key, err)
+			}
+			if !bytes.Equal(val, got) {
+				return fmt.Errorf("expected value %q for key %q, got: %q", string(val), key, string(got))
+			}
+			return nil
+		}
+
 		var wg csync.WaitGroup
 		wg.Add(workers)
 		errs := make([]error, workers)
+
 		for i := range workers {
 			go func(i int) {
 				defer wg.Done()
 				for j := range loops {
-					key := fmt.Sprintf("key-%d-%d", i, j)
-					val := []byte(fmt.Sprintf("value-%d-%d", i, j))
-					_, err := db.Get(ctx, key)
-					if !cerrors.Is(err, ErrKeyNotExist) {
-						errs[i] = fmt.Errorf("expected error when getting value for key %q, got: %w", key, err)
-						return
-					}
-					err = db.Set(ctx, key, val)
+					err := iterationFn(ctx, i, j)
 					if err != nil {
-						errs[i] = fmt.Errorf("expected no error when setting value for key %q, got: %w", key, err)
-						return
-					}
-					got, err := db.Get(ctx, key)
-					if err != nil {
-						errs[i] = fmt.Errorf("expected no error when getting value for key %q, got: %w", key, err)
-						return
-					}
-					if !bytes.Equal(val, got) {
-						errs[i] = fmt.Errorf("expected value %q for key %q, got: %q", string(val), key, string(got))
+						errs[i] = err
 						return
 					}
 				}

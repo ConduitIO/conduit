@@ -24,7 +24,6 @@ import (
 )
 
 func TestDB(t *testing.T) {
-	t.Skip("currently fails because of concurrency issues")
 	is := is.New(t)
 
 	db, err := New(
