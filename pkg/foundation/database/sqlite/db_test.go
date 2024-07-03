@@ -12,16 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:build integration
-
 package sqlite
 
 import (
 	"context"
-	"github.com/matryer/is"
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/foundation/database"
+	"github.com/matryer/is"
 	"github.com/rs/zerolog"
 )
 

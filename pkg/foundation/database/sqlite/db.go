@@ -27,15 +27,8 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/ctxutil"
 	"github.com/conduitio/conduit/pkg/foundation/database"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-
 	"github.com/rs/zerolog"
 	_ "modernc.org/sqlite"
-)
-
-const (
-	pragmaJournalWAL = "journal_mode(WAL)"
-	pragmaSync       = "synchronous(NORMAL)"
-	pragmaTempStore  = "temp_store(MEMORY)"
 )
 
 type DB struct {
@@ -46,7 +39,7 @@ type DB struct {
 
 var _ database.DB = (*DB)(nil)
 
-// Init initializes the database structures needed by DB.
+// New initializes the database structures needed by DB.
 func New(ctx context.Context, l zerolog.Logger, path, table string) (*DB, error) {
 	dbpath, err := dburl(path)
 	if err != nil {
@@ -197,7 +190,7 @@ type querier interface {
 }
 
 // getQuerier tries to take the transaction out of the context, if it does not
-// find a transaction it falls back directly to the postgres connection.
+// find a transaction it falls back directly to the sqlite connection.
 func (d *DB) getQuerier(ctx context.Context) querier {
 	txn := d.getTxn(ctx)
 	if txn != nil {
@@ -218,16 +211,16 @@ func (d *DB) getTxn(ctx context.Context) *sql.Tx {
 
 func dburl(path string) (string, error) {
 	v := url.Values{}
-	v.Add("_pragma", pragmaJournalWAL)
-	v.Add("_pragma", pragmaSync)
-	v.Add("_pragma", pragmaTempStore)
+	v.Add("_pragma", "journal_mode(WAL)")
+	v.Add("_pragma", "synchronous(NORMAL)")
+	v.Add("_pragma", "temp_store(MEMORY)")
 
 	abspath, err := filepath.Abs(path)
 	if err != nil {
 		return "", err
 	}
 
-	if err := os.MkdirAll(abspath, 0750); err != nil {
+	if err := os.MkdirAll(abspath, 0o750); err != nil {
 		return "", err
 	}
 
