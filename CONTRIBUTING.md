@@ -45,15 +45,15 @@ and that all the tests still run successfully.
 We would like to ask you to use the provided Git hooks (by running `git config core.hooksPath githooks`),
 which automatically run the tests and the linter when pushing code.
 
-### Quick steps to contribute
+### Quick steps to contribute:
 
-1. Fork the project
-2. Download your fork to your machine
-3. Create your feature branch (`git checkout -b my-new-feature`)
-4. Make changes and run tests
-5. Commit your changes
-6. Push to the branch
-7. Create new pull request
+1. Fork the project.
+2. Download your fork to your machine.
+3. Create your feature branch (`git checkout -b my-new-feature`).
+4. Make changes and run tests.
+5. Commit your changes.
+6. Push to the branch.
+7. Create new pull request.
 
 ## License
 
