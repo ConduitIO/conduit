@@ -1,5 +1,10 @@
 run:
   timeout: 3m
+  exclude-dirs-use-default: false
+  exclude-dirs:
+    - ^examples/
+    - ^ui/
+    - ^pkg/plugin/processor/builtin/internal/diff # external code
 
 linters-settings:
   depguard:
@@ -37,12 +42,6 @@ linters-settings:
         disabled: true
 
 issues:
-  exclude-dirs-use-default: false
-  exclude-dirs:
-    - ^examples/
-    - ^ui/
-    - ^pkg/plugin/processor/builtin/internal/diff # external code
-
   exclude-rules:
     - path: 'pkg/plugin/processor/builtin/impl'
       linters:

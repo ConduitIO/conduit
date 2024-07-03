@@ -104,10 +104,10 @@ type DownloadSchemaStrategy struct {
 }
 
 func (str DownloadSchemaStrategy) GetSchema(ctx context.Context, client *Client, _ log.CtxLogger, _ opencdc.StructuredData) (Schema, sr.SubjectSchema, error) {
-	// fetch schema from registry
+	// get schema from registry
 	ss, err := client.SchemaBySubjectVersion(ctx, str.Subject, str.Version)
 	if err != nil {
-		return nil, sr.SubjectSchema{}, cerrors.Errorf("could not fetch schema with subject %q and version %q: %w", str.Subject, str.Version, err)
+		return nil, sr.SubjectSchema{}, cerrors.Errorf("could not get schema with subject %q and version %q: %w", str.Subject, str.Version, err)
 	}
 
 	sf, ok := DefaultSchemaFactories[ss.Type]

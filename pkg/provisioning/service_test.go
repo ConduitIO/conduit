@@ -36,6 +36,7 @@ import (
 	p2 "github.com/conduitio/conduit/pkg/provisioning/test/pipelines2"
 	p3 "github.com/conduitio/conduit/pkg/provisioning/test/pipelines3"
 	p4 "github.com/conduitio/conduit/pkg/provisioning/test/pipelines4-integration-test"
+	"github.com/conduitio/conduit/pkg/schemaregistry"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/matryer/is"
@@ -487,7 +488,7 @@ func TestService_IntegrationTestServices(t *testing.T) {
 
 	connPluginService := conn_plugin.NewPluginService(
 		logger,
-		builtin.NewRegistry(logger, builtin.DefaultDispenserFactories),
+		builtin.NewRegistry(logger, builtin.DefaultBuiltinConnectors, schemaregistry.NewInMemoryService()),
 		standalone.NewRegistry(logger, ""),
 	)
 

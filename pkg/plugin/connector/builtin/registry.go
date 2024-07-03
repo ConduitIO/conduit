@@ -26,24 +26,25 @@ import (
 	"github.com/conduitio/conduit-connector-protocol/pconnector"
 	s3 "github.com/conduitio/conduit-connector-s3"
 	sdk "github.com/conduitio/conduit-connector-sdk"
+	"github.com/conduitio/conduit-connector-sdk/schema"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/conduitio/conduit/pkg/plugin/connector"
+	"github.com/conduitio/conduit/pkg/schemaregistry"
 )
 
 var (
-	// DefaultDispenserFactories contains default dispenser factories for
-	// built-in plugins. The key of the map is the import path of the module
+	// DefaultBuiltinConnectors contains the default built-in connectors.
+	// The key of the map is the import path of the module
 	// containing the connector implementation.
-	DefaultDispenserFactories = map[string]DispenserFactory{
-		// TODO update connectors to latest SDK and uncomment
-		"github.com/conduitio/conduit-connector-file":      NewDispenserFactory(file.Connector),
-		"github.com/conduitio/conduit-connector-generator": NewDispenserFactory(generator.Connector),
-		"github.com/conduitio/conduit-connector-kafka":     NewDispenserFactory(kafka.Connector),
-		"github.com/conduitio/conduit-connector-log":       NewDispenserFactory(connLog.Connector),
-		"github.com/conduitio/conduit-connector-postgres":  NewDispenserFactory(postgres.Connector),
-		"github.com/conduitio/conduit-connector-s3":        NewDispenserFactory(s3.Connector),
+	DefaultBuiltinConnectors = map[string]sdk.Connector{
+		"github.com/conduitio/conduit-connector-file":      file.Connector,
+		"github.com/conduitio/conduit-connector-generator": generator.Connector,
+		"github.com/conduitio/conduit-connector-kafka":     kafka.Connector,
+		"github.com/conduitio/conduit-connector-log":       connLog.Connector,
+		"github.com/conduitio/conduit-connector-postgres":  postgres.Connector,
+		"github.com/conduitio/conduit-connector-s3":        s3.Connector,
 	}
 )
 
@@ -58,12 +59,12 @@ type Registry struct {
 type blueprint struct {
 	fullName         plugin.FullName
 	specification    pconnector.Specification
-	dispenserFactory DispenserFactory
+	dispenserFactory dispenserFactory
 }
 
-type DispenserFactory func(name plugin.FullName, logger log.CtxLogger) connector.Dispenser
+type dispenserFactory func(name plugin.FullName, logger log.CtxLogger) connector.Dispenser
 
-func NewDispenserFactory(conn sdk.Connector) DispenserFactory {
+func newDispenserFactory(conn sdk.Connector) dispenserFactory {
 	if conn.NewSource == nil {
 		conn.NewSource = func() sdk.Source { return nil }
 	}
@@ -84,7 +85,7 @@ func NewDispenserFactory(conn sdk.Connector) DispenserFactory {
 	}
 }
 
-func NewRegistry(logger log.CtxLogger, factories map[string]DispenserFactory) *Registry {
+func NewRegistry(logger log.CtxLogger, connectors map[string]sdk.Connector, service schemaregistry.Service) *Registry {
 	logger = logger.WithComponentFromType(Registry{})
 	buildInfo, ok := debug.ReadBuildInfo()
 	if !ok {
@@ -93,17 +94,23 @@ func NewRegistry(logger log.CtxLogger, factories map[string]DispenserFactory) *R
 		buildInfo = &debug.BuildInfo{} // prevent nil pointer exceptions
 	}
 
+	// The built-in plugins use Conduit's own schema service
+	// (through an adapter that converts it to a pschema.Service).
+	schema.Service = schemaregistry.NewProtocolServiceAdapter(service)
+
 	r := &Registry{
-		plugins: loadPlugins(buildInfo, factories),
+		plugins: loadPlugins(buildInfo, connectors),
 		logger:  logger,
 	}
 	logger.Info(context.Background()).Int("count", len(r.List())).Msg("builtin plugins initialized")
 	return r
 }
 
-func loadPlugins(buildInfo *debug.BuildInfo, factories map[string]DispenserFactory) map[string]map[string]blueprint {
-	plugins := make(map[string]map[string]blueprint, len(factories))
-	for moduleName, factory := range factories {
+func loadPlugins(buildInfo *debug.BuildInfo, connectors map[string]sdk.Connector) map[string]map[string]blueprint {
+	plugins := make(map[string]map[string]blueprint, len(connectors))
+	for moduleName, conn := range connectors {
+		factory := newDispenserFactory(conn)
+
 		specs, err := getSpecification(moduleName, factory, buildInfo)
 		if err != nil {
 			// stop initialization if a built-in plugin is misbehaving
@@ -136,7 +143,7 @@ func loadPlugins(buildInfo *debug.BuildInfo, factories map[string]DispenserFacto
 	return plugins
 }
 
-func getSpecification(moduleName string, factory DispenserFactory, buildInfo *debug.BuildInfo) (pconnector.Specification, error) {
+func getSpecification(moduleName string, factory dispenserFactory, buildInfo *debug.BuildInfo) (pconnector.Specification, error) {
 	dispenser := factory("", log.CtxLogger{})
 	specPlugin, err := dispenser.DispenseSpecifier()
 	if err != nil {

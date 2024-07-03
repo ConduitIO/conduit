@@ -135,51 +135,77 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 		connector.DefaultPersisterBundleCountThreshold,
 	)
 
-	// Create all necessary internal services
-	plService, connService, procService, connPluginService, procPluginService, err := newServices(logger, db, connectorPersister, cfg)
-	if err != nil {
-		return nil, cerrors.Errorf("failed to create services: %w", err)
-	}
-
-	provisionService := provisioning.NewService(db, logger, plService, connService, procService, connPluginService, cfg.Pipelines.Path)
-
-	orc := orchestrator.NewOrchestrator(db, logger, plService, connService, procService, connPluginService, procPluginService)
-
-	var schemaService schemaregistry.Service
-
-	switch cfg.Schema.Type {
-	case SchemaTypeConfluent:
-		schemaService = schemaregistry.NewConfluentService(
-			context.Background(), logger, cfg.Schema.Confluent.ConnectionString, cfg.Schema.Confluent.HealthCheckPath,
-		)
-	case SchemaTypeInMemory:
-		schemaService = schemaregistry.NewInMemoryService()
-	default:
-		schemaService = schemaregistry.NewInMemoryService()
-	}
-
 	r := &Runtime{
-		Config:           cfg,
-		DB:               db,
-		Orchestrator:     orc,
-		ProvisionService: provisionService,
-		Ready:            make(chan struct{}),
-
-		pipelineService:  plService,
-		connectorService: connService,
-		processorService: procService,
-
-		connectorPluginService: connPluginService,
-		processorPluginService: procPluginService,
-
-		schemaService: schemaService,
+		Config: cfg,
+		DB:     db,
+		Ready:  make(chan struct{}),
 
 		connectorPersister: connectorPersister,
 
 		gRPCStatsHandler: newGRPCStatsHandler(),
 		logger:           logger,
 	}
+
+	err := initServices(r)
+	if err != nil {
+		return nil, cerrors.Errorf("failed to initialize services: %w", err)
+	}
+
 	return r, nil
+}
+
+// Create all necessary internal services
+func initServices(r *Runtime) error {
+	standaloneReg, err := proc_standalone.NewRegistry(r.logger, r.Config.Processors.Path)
+	if err != nil {
+		return cerrors.Errorf("failed creating processor registry: %w", err)
+	}
+
+	procPluginService := proc_plugin.NewPluginService(
+		r.logger,
+		proc_builtin.NewRegistry(r.logger, proc_builtin.DefaultBuiltinProcessors),
+		standaloneReg,
+	)
+
+	var schemaService schemaregistry.Service
+	switch r.Config.Schema.Type {
+	case SchemaTypeConfluent:
+		schemaService, err = schemaregistry.NewConfluentService(
+			r.logger, r.Config.Schema.Confluent.ConnectionString, r.Config.Schema.Confluent.HealthCheckPath,
+		)
+		if err != nil {
+			return cerrors.Errorf("failed to create Confluent schema service: %w", err)
+		}
+	case SchemaTypeInMemory:
+		schemaService = schemaregistry.NewInMemoryService()
+	default:
+		schemaService = schemaregistry.NewInMemoryService()
+	}
+
+	connPluginService := conn_plugin.NewPluginService(
+		r.logger,
+		conn_builtin.NewRegistry(r.logger, r.Config.ConnectorPlugins, schemaService),
+		conn_standalone.NewRegistry(r.logger, r.Config.Connectors.Path),
+	)
+
+	plService := pipeline.NewService(r.logger, r.DB)
+	connService := connector.NewService(r.logger, r.DB, r.connectorPersister)
+	procService := processor.NewService(r.logger, r.DB, procPluginService)
+
+	provisionService := provisioning.NewService(r.DB, r.logger, plService, connService, procService, connPluginService, r.Config.Pipelines.Path)
+
+	orc := orchestrator.NewOrchestrator(r.DB, r.logger, plService, connService, procService, connPluginService, procPluginService)
+
+	r.Orchestrator = orc
+	r.ProvisionService = provisionService
+	r.pipelineService = plService
+	r.connectorService = connService
+	r.processorService = procService
+	r.connectorPluginService = connPluginService
+	r.processorPluginService = procPluginService
+	r.schemaService = schemaService
+
+	return nil
 }
 
 func newGRPCStatsHandler() *promgrpc.StatsHandler {
@@ -206,36 +232,6 @@ func configurePrometheus() {
 	registry := prometheus.NewRegistry(nil)
 	promclient.MustRegister(registry)
 	metrics.Register(registry)
-}
-
-func newServices(
-	logger log.CtxLogger,
-	db database.DB,
-	connPersister *connector.Persister,
-	cfg Config,
-) (*pipeline.Service, *connector.Service, *processor.Service, *conn_plugin.PluginService, *proc_plugin.PluginService, error) {
-	standaloneReg, err := proc_standalone.NewRegistry(logger, cfg.Processors.Path)
-	if err != nil {
-		return nil, nil, nil, nil, nil, cerrors.Errorf("failed creating processor registry: %w", err)
-	}
-
-	procPluginService := proc_plugin.NewPluginService(
-		logger,
-		proc_builtin.NewRegistry(logger, proc_builtin.DefaultBuiltinProcessors),
-		standaloneReg,
-	)
-
-	connPluginService := conn_plugin.NewPluginService(
-		logger,
-		conn_builtin.NewRegistry(logger, cfg.PluginDispenserFactories),
-		conn_standalone.NewRegistry(logger, cfg.Connectors.Path),
-	)
-
-	pipelineService := pipeline.NewService(logger, db)
-	connectorService := connector.NewService(logger, db, connPersister)
-	processorService := processor.NewService(logger, db, procPluginService)
-
-	return pipelineService, connectorService, processorService, connPluginService, procPluginService, nil
 }
 
 // Run initializes all of Conduit's underlying services and starts the GRPC and

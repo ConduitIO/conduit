@@ -19,10 +19,10 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 
 	"github.com/conduitio/conduit-commons/schema"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/lovromazgon/franz-go/pkg/sr"
 )
@@ -35,52 +35,49 @@ type ConfluentService struct {
 	healthCheckPath string
 }
 
-func NewConfluentService(ctx context.Context, l log.CtxLogger, connString, healthCheckPath string) *ConfluentService {
+func NewConfluentService(l log.CtxLogger, connString, healthCheckPath string) (*ConfluentService, error) {
 	client, err := NewClient(l, sr.URLs(connString))
 	if err != nil {
-		l.Err(ctx, err).Msg("failed to create confluent service client")
+		return nil, cerrors.Errorf("failed to create schema registry client: %w", err)
 	}
+
 	return &ConfluentService{
 		client:          client,
 		logger:          l,
 		connString:      connString,
 		healthCheckPath: healthCheckPath,
-	}
+	}, nil
 }
 
-func (c *ConfluentService) Create(ctx context.Context, name string, bytes []byte) (schema.Instance, error) {
-	ss, err := c.client.CreateSchema(ctx, name, sr.Schema{
+func (c *ConfluentService) Create(ctx context.Context, subject string, bytes []byte) (schema.Schema, error) {
+	ss, err := c.client.CreateSchema(ctx, subject, sr.Schema{
 		Schema: string(bytes),
 		Type:   sr.TypeAvro,
 	})
 	if err != nil {
-		return schema.Instance{}, err
+		return schema.Schema{}, err
 	}
 
-	return schema.Instance{
-		ID:      strconv.Itoa(ss.ID),
-		Name:    name,
-		Version: 0,
+	return schema.Schema{
+		Subject: subject,
+		Version: ss.Version,
 		Type:    schema.TypeAvro,
 		Bytes:   []byte(ss.Schema.Schema),
 	}, nil
 }
 
-func (c *ConfluentService) Get(ctx context.Context, id string) (schema.Instance, error) {
-	schemaID, err := strconv.Atoi(id)
+func (c *ConfluentService) Get(ctx context.Context, subject string, version int) (schema.Schema, error) {
+	s, err := c.client.SchemaBySubjectVersion(ctx, subject, version)
 	if err != nil {
-		c.logger.Err(ctx, err).Msg(fmt.Sprintf("invalid schema id: %s", id))
-		return schema.Instance{}, err
-	}
-	s, err := c.client.SchemaByID(ctx, schemaID)
-	if err != nil {
-		c.logger.Err(ctx, err).Msg(fmt.Sprintf("failed to get schema by id: %s", id))
-		return schema.Instance{}, err
+		c.logger.Err(ctx, err).Msgf("failed to get schema by subject %v and version %v", subject, version)
+		return schema.Schema{}, err
 	}
 
-	return schema.Instance{
-		ID:    id,
-		Bytes: []byte(s.Schema),
+	return schema.Schema{
+		Subject: s.Subject,
+		Version: s.Version,
+		Type:    schema.TypeAvro,
+		Bytes:   []byte(s.Schema.Schema),
 	}, nil
 }
 

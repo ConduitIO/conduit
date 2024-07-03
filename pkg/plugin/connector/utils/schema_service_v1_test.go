@@ -18,6 +18,7 @@ import (
 	"context"
 	"testing"
 
+	schemav1 "github.com/conduitio/conduit-commons/proto/schema/v1"
 	"github.com/conduitio/conduit-commons/schema"
 	conduitv1 "github.com/conduitio/conduit-connector-protocol/proto/conduit/v1"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -30,7 +31,7 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-func TestSchemaService_Register(t *testing.T) {
+func TestSchemaService_Create(t *testing.T) {
 	testCases := []struct {
 		name         string
 		input        *conduitv1.CreateSchemaRequest
@@ -41,17 +42,16 @@ func TestSchemaService_Register(t *testing.T) {
 		{
 			name: "valid request",
 			input: &conduitv1.CreateSchemaRequest{
-				Name:  "my-collection",
-				Type:  conduitv1.Schema_TYPE_AVRO,
-				Bytes: []byte{1, 2, 3},
+				Subject: "my-collection",
+				Type:    schemav1.Schema_TYPE_AVRO,
+				Bytes:   []byte{1, 2, 3},
 			},
 			setupService: func(svc *mock.Service, req *conduitv1.CreateSchemaRequest) {
 				svc.EXPECT().
-					Create(gomock.Any(), req.Name, req.Bytes).
+					Create(gomock.Any(), req.Subject, req.Bytes).
 					Return(
-						schema.Instance{
-							ID:      "123",
-							Name:    "my-collection",
+						schema.Schema{
+							Subject: "my-collection",
 							Version: 0,
 							Type:    schema.TypeAvro,
 							Bytes:   []byte{1, 2, 3},
@@ -60,11 +60,10 @@ func TestSchemaService_Register(t *testing.T) {
 					)
 			},
 			wantResponse: &conduitv1.CreateSchemaResponse{
-				Schema: &conduitv1.Schema{
-					Id:      "123",
-					Name:    "my-collection",
+				Schema: &schemav1.Schema{
+					Subject: "my-collection",
 					Version: 0,
-					Type:    conduitv1.Schema_TYPE_AVRO,
+					Type:    schemav1.Schema_TYPE_AVRO,
 					Bytes:   []byte{1, 2, 3},
 				},
 			},
@@ -72,14 +71,14 @@ func TestSchemaService_Register(t *testing.T) {
 		{
 			name: "service error",
 			input: &conduitv1.CreateSchemaRequest{
-				Name:  "my-collection",
-				Type:  conduitv1.Schema_TYPE_AVRO,
-				Bytes: []byte{1, 2, 3},
+				Subject: "my-collection",
+				Type:    schemav1.Schema_TYPE_AVRO,
+				Bytes:   []byte{1, 2, 3},
 			},
 			setupService: func(svc *mock.Service, req *conduitv1.CreateSchemaRequest) {
 				svc.EXPECT().
 					Create(gomock.Any(), gomock.Any(), gomock.Any()).
-					Return(schema.Instance{}, cerrors.New("boom"))
+					Return(schema.Schema{}, cerrors.New("boom"))
 			},
 			wantErr: status.Error(codes.Internal, `failed to create schema: boom`),
 		},
@@ -104,7 +103,7 @@ func TestSchemaService_Register(t *testing.T) {
 					cmp.Diff(
 						tc.wantResponse,
 						gotResponse,
-						cmpopts.IgnoreUnexported(conduitv1.CreateSchemaResponse{}, conduitv1.Schema{}),
+						cmpopts.IgnoreUnexported(conduitv1.CreateSchemaResponse{}, schemav1.Schema{}),
 					),
 				)
 			} else {
@@ -115,7 +114,7 @@ func TestSchemaService_Register(t *testing.T) {
 	}
 }
 
-func TestSchemaService_Fetch(t *testing.T) {
+func TestSchemaService_Get(t *testing.T) {
 	testCases := []struct {
 		name         string
 		input        *conduitv1.GetSchemaRequest
@@ -126,25 +125,24 @@ func TestSchemaService_Fetch(t *testing.T) {
 		{
 			name: "valid request",
 			input: &conduitv1.GetSchemaRequest{
-				Id: "abc",
+				Subject: "abc",
+				Version: 123,
 			},
 			setupService: func(svc *mock.Service, req *conduitv1.GetSchemaRequest) {
 				svc.EXPECT().
-					Get(gomock.Any(), "abc").
-					Return(schema.Instance{
-						ID:      "abc",
-						Name:    "my-collection",
+					Get(gomock.Any(), "abc", 123).
+					Return(schema.Schema{
+						Subject: "my-collection",
 						Version: 321,
 						Type:    schema.TypeAvro,
 						Bytes:   []byte{1, 2, 3},
 					}, nil)
 			},
 			wantResponse: &conduitv1.GetSchemaResponse{
-				Schema: &conduitv1.Schema{
-					Id:      "abc",
-					Name:    "my-collection",
+				Schema: &schemav1.Schema{
+					Subject: "my-collection",
 					Version: 321,
-					Type:    conduitv1.Schema_TYPE_AVRO,
+					Type:    schemav1.Schema_TYPE_AVRO,
 					Bytes:   []byte{1, 2, 3},
 				},
 			},
@@ -152,14 +150,15 @@ func TestSchemaService_Fetch(t *testing.T) {
 		{
 			name: "service error",
 			input: &conduitv1.GetSchemaRequest{
-				Id: "abc",
+				Subject: "abc",
+				Version: 123,
 			},
 			setupService: func(svc *mock.Service, req *conduitv1.GetSchemaRequest) {
 				svc.EXPECT().
-					Get(gomock.Any(), "abc").
-					Return(schema.Instance{}, cerrors.New("boom"))
+					Get(gomock.Any(), "abc", 123).
+					Return(schema.Schema{}, cerrors.New("boom"))
 			},
-			wantErr: status.Error(codes.Internal, "fetching schema abc failed: boom"),
+			wantErr: status.Error(codes.Internal, "getting schema with name abc, version 123 failed: boom"),
 		},
 	}
 
@@ -182,7 +181,7 @@ func TestSchemaService_Fetch(t *testing.T) {
 					cmp.Diff(
 						tc.wantResponse,
 						gotResponse,
-						cmpopts.IgnoreUnexported(conduitv1.GetSchemaResponse{}, conduitv1.Schema{}),
+						cmpopts.IgnoreUnexported(conduitv1.GetSchemaResponse{}, schemav1.Schema{}),
 					),
 				)
 			} else {
