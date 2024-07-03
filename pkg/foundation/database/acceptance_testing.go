@@ -15,6 +15,7 @@
 package database
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"runtime"
@@ -22,6 +23,9 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/conduitio/conduit-commons/csync"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/google/uuid"
@@ -41,12 +45,12 @@ func AcceptanceTest(t *testing.T, db DB) {
 	testDelete(t, db)
 	testGetKeys(t, db)
 	testTransactionVisibility(t, db)
+	testConcurrency(t, db)
 }
 
 func testSetGet(t *testing.T, db DB) {
-	is := is.New(t)
-
 	t.Run(testName(), func(t *testing.T) {
+		is := is.New(t)
 		txn, ctx, err := db.NewTransaction(context.Background(), true)
 		is.NoErr(err)
 		defer txn.Discard()
@@ -64,9 +68,8 @@ func testSetGet(t *testing.T, db DB) {
 }
 
 func testUpdate(t *testing.T, db DB) {
-	is := is.New(t)
-
 	t.Run(testName(), func(t *testing.T) {
+		is := is.New(t)
 		txn, ctx, err := db.NewTransaction(context.Background(), true)
 		is.NoErr(err)
 		defer txn.Discard()
@@ -87,9 +90,8 @@ func testUpdate(t *testing.T, db DB) {
 }
 
 func testDelete(t *testing.T, db DB) {
-	is := is.New(t)
-
 	t.Run(testName(), func(t *testing.T) {
+		is := is.New(t)
 		txn, ctx, err := db.NewTransaction(context.Background(), true)
 		is.NoErr(err)
 		defer txn.Discard()
@@ -110,10 +112,9 @@ func testDelete(t *testing.T, db DB) {
 }
 
 func testGetKeys(t *testing.T, db DB) {
-	is := is.New(t)
-
 	const valuesSize = 100
 	t.Run(testName(), func(t *testing.T) {
+		is := is.New(t)
 		txn, ctx, err := db.NewTransaction(context.Background(), true)
 		is.NoErr(err)
 		defer txn.Discard()
@@ -130,6 +131,7 @@ func testGetKeys(t *testing.T, db DB) {
 		is.NoErr(err)
 
 		t.Run("withKeyPrefix", func(t *testing.T) {
+			is := is.New(t)
 			gotKeys, err := db.GetKeys(ctx, keyPrefix)
 			is.NoErr(err)
 			is.True(len(gotKeys) == valuesSize) // expects .GetKeys to return 100 keys
@@ -139,6 +141,7 @@ func testGetKeys(t *testing.T, db DB) {
 		})
 
 		t.Run("emptyKeyPrefix", func(t *testing.T) {
+			is := is.New(t)
 			gotKeys, err := db.GetKeys(ctx, "")
 			is.NoErr(err)
 			is.True(len(gotKeys) == valuesSize+1) // expects .GetKeys to return 101 keys
@@ -148,6 +151,7 @@ func testGetKeys(t *testing.T, db DB) {
 		})
 
 		t.Run("nonExistingPrefix", func(t *testing.T) {
+			is := is.New(t)
 			gotKeys, err := db.GetKeys(ctx, "non-existing-prefix")
 			is.NoErr(err)
 			is.Equal([]string(nil), gotKeys)
@@ -156,9 +160,8 @@ func testGetKeys(t *testing.T, db DB) {
 }
 
 func testTransactionVisibility(t *testing.T, db DB) {
-	is := is.New(t)
-
 	t.Run(testName(), func(t *testing.T) {
+		is := is.New(t)
 		txn, ctx, err := db.NewTransaction(context.Background(), true)
 		is.NoErr(err)
 		defer txn.Discard()
@@ -181,6 +184,53 @@ func testTransactionVisibility(t *testing.T, db DB) {
 		got, err = db.Get(context.Background(), key)
 		is.NoErr(err)
 		is.Equal(want, got)
+	})
+}
+
+func testConcurrency(t *testing.T, db DB) {
+	const (
+		workers = 100
+		loops   = 100
+	)
+
+	t.Run(testName(), func(t *testing.T) {
+		ctx := context.Background()
+		is := is.New(t)
+
+		var wg csync.WaitGroup
+		wg.Add(workers)
+		errs := make([]error, workers)
+		for i := range workers {
+			go func(i int) {
+				defer wg.Done()
+				for j := range loops {
+					key := fmt.Sprintf("key-%d-%d", i, j)
+					val := []byte(fmt.Sprintf("value-%d-%d", i, j))
+					_, err := db.Get(ctx, key)
+					if !cerrors.Is(err, ErrKeyNotExist) {
+						errs[i] = fmt.Errorf("expected error when getting value for key %q, got: %w", key, err)
+						return
+					}
+					err = db.Set(ctx, key, val)
+					if err != nil {
+						errs[i] = fmt.Errorf("expected no error when setting value for key %q, got: %w", key, err)
+						return
+					}
+					got, err := db.Get(ctx, key)
+					if err != nil {
+						errs[i] = fmt.Errorf("expected no error when getting value for key %q, got: %w", key, err)
+						return
+					}
+					if !bytes.Equal(val, got) {
+						errs[i] = fmt.Errorf("expected value %q for key %q, got: %q", string(val), key, string(got))
+						return
+					}
+				}
+			}(i)
+		}
+		err := wg.WaitTimeout(ctx, time.Second*10)
+		is.NoErr(err)
+		is.NoErr(cerrors.Join(errs...))
 	})
 }
 
