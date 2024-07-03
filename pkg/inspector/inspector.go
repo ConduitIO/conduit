@@ -19,9 +19,9 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/measure"
-	"github.com/conduitio/conduit/pkg/record"
 	"github.com/google/uuid"
 )
 
@@ -31,7 +31,7 @@ const DefaultBufferSize = 1000
 // into channel C. If the buffer of C is full, records will be dropped. C will
 // be closed once the session is removed from the inspector.
 type Session struct {
-	C chan record.Record
+	C chan opencdc.Record
 
 	id          string
 	componentID string
@@ -70,7 +70,7 @@ func New(logger log.CtxLogger, bufferSize int) *Inspector {
 // closed.
 func (i *Inspector) NewSession(ctx context.Context, componentID string) *Session {
 	s := &Session{
-		C:           make(chan record.Record, i.bufferSize),
+		C:           make(chan opencdc.Record, i.bufferSize),
 		id:          uuid.NewString(),
 		componentID: componentID,
 	}
@@ -84,30 +84,33 @@ func (i *Inspector) NewSession(ctx context.Context, componentID string) *Session
 	return s
 }
 
-// Send the given record to all registered sessions.
+// Send the given records to all registered sessions.
 // The method does not wait for consumers to get the records.
-func (i *Inspector) Send(ctx context.Context, r record.Record) {
+func (i *Inspector) Send(ctx context.Context, batch []opencdc.Record) {
 	// shortcut - we don't expect any sessions, so we check the atomic variable
 	// before acquiring an actual lock
 	if !i.hasSessions.Load() {
 		return
 	}
 
-	// clone record only once, the listeners aren't expected to manipulate the records
-	rClone := r.Clone()
-
 	// locks are needed to make sure the `sessions` slice
 	// is not modified as we're iterating over it
 	i.lock.Lock()
 	defer i.lock.Unlock()
-	for _, s := range i.sessions {
-		select {
-		case s.C <- rClone:
-		default:
-			i.logger.
-				Warn(ctx).
-				Str(log.InspectorSessionID, s.id).
-				Msg("session buffer full, record will be dropped")
+
+	for _, r := range batch {
+		// clone record only once, the listeners aren't expected to manipulate the records
+		rClone := r.Clone()
+
+		for _, s := range i.sessions {
+			select {
+			case s.C <- rClone:
+			default:
+				i.logger.
+					Warn(ctx).
+					Str(log.InspectorSessionID, s.id).
+					Msg("session buffer full, record will be dropped")
+			}
 		}
 	}
 }

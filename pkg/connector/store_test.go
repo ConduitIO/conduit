@@ -19,11 +19,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/database"
 	"github.com/conduitio/conduit/pkg/foundation/database/inmemory"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/conduitio/conduit/pkg/record"
 	"github.com/google/uuid"
 	"github.com/matryer/is"
 )
@@ -109,7 +109,7 @@ func TestStore_GetAll(t *testing.T) {
 		case 1:
 			conn.Type = TypeDestination
 			conn.State = DestinationState{
-				Positions: map[string]record.Position{
+				Positions: map[string]opencdc.Position{
 					uuid.NewString(): []byte(uuid.NewString()),
 				},
 			}

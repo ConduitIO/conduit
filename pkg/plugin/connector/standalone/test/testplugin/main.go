@@ -18,9 +18,12 @@ package main
 import (
 	"context"
 	"log"
+	"regexp"
+	"strings"
 
-	"github.com/conduitio/conduit-connector-protocol/cpluginv1"
-	"github.com/conduitio/conduit-connector-protocol/cpluginv1/server"
+	"github.com/conduitio/conduit-commons/config"
+	"github.com/conduitio/conduit-connector-protocol/pconnector"
+	"github.com/conduitio/conduit-connector-protocol/pconnector/server"
 )
 
 // These constants need to match the constants in pkg/plugin/connector/standalone/registry_test.go
@@ -36,30 +39,27 @@ const (
 	testPluginSourceParam1Description = "Required parameter"
 	testPluginSourceParam2            = "src.bar"
 	testPluginSourceParam2Default     = "bar"
-	testPluginSourceParam2Required    = false
 	testPluginSourceParam2Description = "Optional parameter"
 
 	testPluginDestinationParam1            = "dest.foo"
 	testPluginDestinationParam1Default     = ""
-	testPluginDestinationParam1Required    = true
 	testPluginDestinationParam1Description = "Required parameter"
 	testPluginDestinationParam2            = "dest.bar"
 	testPluginDestinationParam2Default     = "bar"
-	testPluginDestinationParam2Required    = false
 	testPluginDestinationParam2Description = "Optional parameter"
 
 	testPluginValidationInclusionValue   = "one,two"
 	testPluginValidationExclusionValue   = "3,4"
 	testPluginValidationRegexValue       = "[1-9]"
-	testPluginValidationLessThanValue    = "10"
-	testPluginValidationGreaterThanValue = "1"
+	testPluginValidationLessThanValue    = 10
+	testPluginValidationGreaterThanValue = 1
 )
 
 func main() {
 	err := server.Serve(
-		func() cpluginv1.SpecifierPlugin { return specifierPlugin{} },
-		func() cpluginv1.SourcePlugin { return nil },
-		func() cpluginv1.DestinationPlugin { return nil },
+		func() pconnector.SpecifierPlugin { return specifierPlugin{} },
+		func() pconnector.SourcePlugin { return nil },
+		func() pconnector.DestinationPlugin { return nil },
 	)
 	if err != nil {
 		log.Fatal(err)
@@ -68,66 +68,48 @@ func main() {
 
 type specifierPlugin struct{}
 
-func (s specifierPlugin) Specify(context.Context, cpluginv1.SpecifierSpecifyRequest) (cpluginv1.SpecifierSpecifyResponse, error) {
-	return cpluginv1.SpecifierSpecifyResponse{
-		Name:        testPluginName,
-		Summary:     testPluginSummary,
-		Description: testPluginDescription,
-		Version:     testPluginVersion,
-		Author:      testPluginAuthor,
-		SourceParams: map[string]cpluginv1.SpecifierParameter{
-			testPluginSourceParam1: {
-				Default:     testPluginSourceParam1Default,
-				Description: testPluginSourceParam1Description,
-				Validations: []cpluginv1.ParameterValidation{
-					{
-						Type: cpluginv1.ValidationTypeRequired,
+func (s specifierPlugin) Specify(context.Context, pconnector.SpecifierSpecifyRequest) (pconnector.SpecifierSpecifyResponse, error) {
+	return pconnector.SpecifierSpecifyResponse{
+		Specification: pconnector.Specification{
+			Name:        testPluginName,
+			Summary:     testPluginSummary,
+			Description: testPluginDescription,
+			Version:     testPluginVersion,
+			Author:      testPluginAuthor,
+			SourceParams: config.Parameters{
+				testPluginSourceParam1: {
+					Default:     testPluginSourceParam1Default,
+					Description: testPluginSourceParam1Description,
+					Validations: []config.Validation{
+						config.ValidationRequired{},
+						config.ValidationInclusion{List: strings.Split(testPluginValidationInclusionValue, ",")},
 					},
-					{
-						Type:  cpluginv1.ValidationTypeInclusion,
-						Value: testPluginValidationInclusionValue,
+				},
+				testPluginSourceParam2: {
+					Default:     testPluginSourceParam2Default,
+					Description: testPluginSourceParam2Description,
+					Type:        config.ParameterTypeInt,
+					Validations: []config.Validation{
+						config.ValidationExclusion{List: strings.Split(testPluginValidationExclusionValue, ",")},
+						config.ValidationGreaterThan{V: testPluginValidationGreaterThanValue},
 					},
 				},
 			},
-			testPluginSourceParam2: {
-				Default:     testPluginSourceParam2Default,
-				Required:    testPluginSourceParam2Required,
-				Description: testPluginSourceParam2Description,
-				Type:        cpluginv1.ParameterTypeInt,
-				Validations: []cpluginv1.ParameterValidation{
-					{
-						Type:  cpluginv1.ValidationTypeExclusion,
-						Value: testPluginValidationExclusionValue,
-					},
-					{
-						Type:  cpluginv1.ValidationTypeGreaterThan,
-						Value: testPluginValidationGreaterThanValue,
+			DestinationParams: config.Parameters{
+				testPluginDestinationParam1: {
+					Default:     testPluginDestinationParam1Default,
+					Description: testPluginDestinationParam1Description,
+					Type:        config.ParameterTypeInt,
+					Validations: []config.Validation{
+						config.ValidationLessThan{V: testPluginValidationLessThanValue},
+						config.ValidationRegex{Regex: regexp.MustCompile(testPluginValidationRegexValue)},
 					},
 				},
-			},
-		},
-		DestinationParams: map[string]cpluginv1.SpecifierParameter{
-			testPluginDestinationParam1: {
-				Default:     testPluginDestinationParam1Default,
-				Required:    testPluginDestinationParam1Required,
-				Description: testPluginDestinationParam1Description,
-				Type:        cpluginv1.ParameterTypeInt,
-				Validations: []cpluginv1.ParameterValidation{
-					{
-						Type:  cpluginv1.ValidationTypeLessThan,
-						Value: testPluginValidationLessThanValue,
-					},
-					{
-						Type:  cpluginv1.ValidationTypeRegex,
-						Value: testPluginValidationRegexValue,
-					},
+				testPluginDestinationParam2: {
+					Default:     testPluginDestinationParam2Default,
+					Description: testPluginDestinationParam2Description,
+					Type:        config.ParameterTypeDuration,
 				},
-			},
-			testPluginDestinationParam2: {
-				Default:     testPluginDestinationParam2Default,
-				Required:    testPluginDestinationParam2Required,
-				Description: testPluginDestinationParam2Description,
-				Type:        cpluginv1.ParameterTypeDuration,
 			},
 		},
 	}, nil

@@ -21,12 +21,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/database/inmemory"
 	"github.com/conduitio/conduit/pkg/foundation/database/mock"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	pmock "github.com/conduitio/conduit/pkg/plugin/connector/mock"
-	"github.com/conduitio/conduit/pkg/record"
 	"github.com/google/uuid"
 	"github.com/matryer/is"
 	"go.uber.org/mock/gomock"
@@ -568,15 +568,15 @@ func TestService_SetState(t *testing.T) {
 		{
 			name:     "correct state (source)",
 			connType: TypeSource,
-			state:    SourceState{Position: record.Position("test position")},
+			state:    SourceState{Position: opencdc.Position("test position")},
 			wantErr:  nil,
 		},
 		{
 			name:     "correct state (destination)",
 			connType: TypeDestination,
 			state: DestinationState{
-				Positions: map[string]record.Position{
-					"test-connector": record.Position("test-position"),
+				Positions: map[string]opencdc.Position{
+					"test-connector": opencdc.Position("test-position"),
 				},
 			},
 			wantErr: nil,
@@ -585,8 +585,8 @@ func TestService_SetState(t *testing.T) {
 			name:     "wrong state",
 			connType: TypeSource,
 			state: DestinationState{
-				Positions: map[string]record.Position{
-					"test-connector": record.Position("test-position"),
+				Positions: map[string]opencdc.Position{
+					"test-connector": opencdc.Position("test-position"),
 				},
 			},
 			wantErr: ErrInvalidConnectorStateType,

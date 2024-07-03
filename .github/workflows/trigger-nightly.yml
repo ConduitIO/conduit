@@ -49,6 +49,6 @@ jobs:
           account: ConduitIO
           image-names: conduit
           image-tags: '*-nightly*'
-          keep-n-most-recent: 5
+          cut-off: 1w
           token: ${{ secrets.NIGHTLY_BUILD_GH_TOKEN }}
           dry-run: true

@@ -22,15 +22,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/conduitio/conduit-commons/cchan"
+	"github.com/conduitio/conduit-commons/csync"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
-	"github.com/conduitio/conduit/pkg/foundation/cchan"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/foundation/csync"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/noop"
 	"github.com/conduitio/conduit/pkg/pipeline/stream/mock"
-	"github.com/conduitio/conduit/pkg/record"
 	"github.com/matryer/is"
 	"go.uber.org/mock/gomock"
 )
@@ -379,7 +378,7 @@ func TestParallelNode_Success(t *testing.T) {
 
 	// send messages to workers until each has one message + 1 for the parallel node itself
 	for i := 0; i < workerCount+1; i++ {
-		in <- &Message{Ctx: ctx, Record: record.Record{Key: record.StructuredData{"id": i}}}
+		in <- &Message{Ctx: ctx, Record: opencdc.Record{Key: opencdc.StructuredData{"id": i}}}
 	}
 
 	// sending another message to the node results in a timeout, because it is blocking
@@ -404,7 +403,7 @@ func TestParallelNode_Success(t *testing.T) {
 		if !ok {
 			break
 		}
-		is.Equal(msg.Record.Key, record.StructuredData{"id": i})
+		is.Equal(msg.Record.Key, opencdc.StructuredData{"id": i})
 		i++
 	}
 	is.Equal(i, workerCount+1)
@@ -456,7 +455,7 @@ func TestParallelNode_ErrorAll(t *testing.T) {
 
 	// send messages to workers until each has one message
 	for i := 0; i < workerCount; i++ {
-		in <- &Message{Ctx: ctx, Record: record.Record{Key: record.StructuredData{"id": i}}}
+		in <- &Message{Ctx: ctx, Record: opencdc.Record{Key: opencdc.StructuredData{"id": i}}}
 	}
 	// unblock all workers and allow them to send the messages forward
 	for i := 0; i < workerCount; i++ {
@@ -494,7 +493,7 @@ func TestParallelNode_ErrorSingle(t *testing.T) {
 						return err
 					}
 					controlChan <- struct{}{}
-					if msg.Record.Key.(record.StructuredData)["id"].(int) == 1 {
+					if msg.Record.Key.(opencdc.StructuredData)["id"].(int) == 1 {
 						// only message with id 1 fails
 						return msg.Nack(cerrors.New("test error"), name)
 					}
@@ -524,7 +523,7 @@ func TestParallelNode_ErrorSingle(t *testing.T) {
 
 	// send messages to workers until each has one message
 	for i := 0; i < workerCount; i++ {
-		in <- &Message{Ctx: ctx, Record: record.Record{Key: record.StructuredData{"id": i}}}
+		in <- &Message{Ctx: ctx, Record: opencdc.Record{Key: opencdc.StructuredData{"id": i}}}
 	}
 	// unblock all workers and allow them to send the messages forward
 	for i := 0; i < workerCount; i++ {
@@ -537,7 +536,7 @@ func TestParallelNode_ErrorSingle(t *testing.T) {
 	msg, ok, err := cchan.ChanOut[*Message](out).RecvTimeout(ctx, time.Millisecond*100)
 	is.NoErr(err)
 	is.True(ok)
-	is.Equal(msg.Record.Key, record.StructuredData{"id": 0})
+	is.Equal(msg.Record.Key, opencdc.StructuredData{"id": 0})
 
 	// out should get closed after that, as all other messages are nacked
 	_, ok, err = cchan.ChanOut[*Message](out).RecvTimeout(ctx, time.Millisecond*100)
@@ -614,14 +613,14 @@ func TestParallelNode_Processor(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for i := 0; i < msgCount; i++ {
-			in <- &Message{Ctx: ctx, Record: record.Record{Key: record.StructuredData{"id": i}}}
+			in <- &Message{Ctx: ctx, Record: opencdc.Record{Key: opencdc.StructuredData{"id": i}}}
 		}
 		close(in)
 	}()
 
 	i := 0
 	for msg := range out {
-		is.Equal(msg.Record.Key, record.StructuredData{"id": i})
+		is.Equal(msg.Record.Key, opencdc.StructuredData{"id": i})
 		i++
 	}
 	is.Equal(i, msgCount)

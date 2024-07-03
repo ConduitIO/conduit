@@ -118,7 +118,7 @@ func TestMessage_Ack_WithFailingHandler(t *testing.T) {
 	// doing the same thing twice should have the same result
 	for i := 0; i < 2; i++ {
 		err := msg.Ack()
-		if err != wantErr {
+		if !cerrors.Is(err, wantErr) {
 			t.Fatalf("ack expected error %v, got: %v", wantErr, err)
 		}
 		assertMessageIsAcked(t, &msg)
@@ -265,7 +265,7 @@ func TestMessage_Nack_WithFailingHandler(t *testing.T) {
 	// doing the same thing twice should have the same result
 	for i := 0; i < 2; i++ {
 		err := msg.Nack(nil, "")
-		if err != wantErr {
+		if !cerrors.Is(err, wantErr) {
 			t.Fatalf("nack expected error %v, got: %v", wantErr, err)
 		}
 		assertMessageIsNacked(t, &msg)

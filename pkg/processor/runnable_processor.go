@@ -21,7 +21,6 @@ import (
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/record"
 )
 
 // RunnableProcessor is a stream.Processor which has been
@@ -59,9 +58,7 @@ func (p *RunnableProcessor) Open(ctx context.Context) error {
 }
 
 func (p *RunnableProcessor) Process(ctx context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
-	for _, inRec := range records {
-		p.inInsp.Send(ctx, record.FromOpenCDC(inRec))
-	}
+	p.inInsp.Send(ctx, records)
 
 	var outRecs []sdk.ProcessedRecord
 	if p.cond == nil {
@@ -131,12 +128,14 @@ func (p *RunnableProcessor) Process(ctx context.Context, records []opencdc.Recor
 		}
 	}
 
+	inspectorRecs := make([]opencdc.Record, 0, len(outRecs))
 	for _, outRec := range outRecs {
 		singleRec, ok := outRec.(sdk.SingleRecord)
 		if ok {
-			p.outInsp.Send(ctx, record.FromOpenCDC(opencdc.Record(singleRec)))
+			inspectorRecs = append(inspectorRecs, opencdc.Record(singleRec))
 		}
 	}
+	p.outInsp.Send(ctx, inspectorRecs)
 
 	return outRecs
 }

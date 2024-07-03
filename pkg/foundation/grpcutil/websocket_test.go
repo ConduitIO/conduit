@@ -23,7 +23,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/conduitio/conduit/pkg/foundation/cchan"
+	"github.com/conduitio/conduit-commons/cchan"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/gorilla/websocket"
 	"github.com/matryer/is"
