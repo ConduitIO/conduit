@@ -26,7 +26,6 @@ import (
 	"time"
 
 	"github.com/conduitio/conduit-commons/csync"
-
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/google/uuid"
 	"github.com/matryer/is"

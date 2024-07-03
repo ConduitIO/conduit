@@ -27,7 +27,6 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/ctxutil"
 	"github.com/conduitio/conduit/pkg/foundation/database"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/rs/zerolog"
 	_ "modernc.org/sqlite"
 )
 
@@ -40,7 +39,7 @@ type DB struct {
 var _ database.DB = (*DB)(nil)
 
 // New initializes the database structures needed by DB.
-func New(ctx context.Context, l zerolog.Logger, path, table string) (*DB, error) {
+func New(ctx context.Context, l log.CtxLogger, path, table string) (*DB, error) {
 	dbpath, err := dburl(path)
 	if err != nil {
 		return nil, cerrors.Errorf("failed to construct db path: %w", err)
@@ -64,7 +63,7 @@ func New(ctx context.Context, l zerolog.Logger, path, table string) (*DB, error)
 	}
 
 	return &DB{
-		logger: log.New(l.With().Str(log.ComponentField, "sqlite3.DB").Logger()),
+		logger: l.WithComponent("sqlite.DB"),
 		db:     db,
 		table:  table,
 	}, nil

@@ -18,9 +18,10 @@ import (
 	"context"
 	"testing"
 
+	"github.com/conduitio/conduit/pkg/foundation/log"
+
 	"github.com/conduitio/conduit/pkg/foundation/database"
 	"github.com/matryer/is"
-	"github.com/rs/zerolog"
 )
 
 func TestDB(t *testing.T) {
@@ -28,7 +29,7 @@ func TestDB(t *testing.T) {
 
 	db, err := New(
 		context.Background(),
-		zerolog.Nop(),
+		log.Nop(),
 		t.TempDir(),
 		"conduit_kv_test",
 	)

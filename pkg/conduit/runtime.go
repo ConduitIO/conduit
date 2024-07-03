@@ -115,7 +115,7 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 			db = &inmemory.DB{}
 			logger.Warn(context.Background()).Msg("Using in-memory store, all pipeline configurations will be lost when Conduit stops.")
 		case DBTypeSQLite:
-			db, err = sqlite.New(context.Background(), logger.Logger, cfg.DB.SQLite.Path, cfg.DB.SQLite.Table)
+			db, err = sqlite.New(context.Background(), logger, cfg.DB.SQLite.Path, cfg.DB.SQLite.Table)
 		default:
 			err = cerrors.Errorf("invalid DB type %q", cfg.DB.Type)
 		}
