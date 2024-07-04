@@ -228,7 +228,7 @@ func dburl(path string) (string, error) {
 		return "", err
 	}
 
-	if err := os.MkdirAll(abspath, 0o750); err != nil {
+	if err := os.MkdirAll(abspath, 0o644); err != nil {
 		return "", err
 	}
 
