@@ -18,9 +18,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/conduitio/conduit/pkg/foundation/log"
-
 	"github.com/conduitio/conduit/pkg/foundation/database"
+	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/matryer/is"
 )
 
