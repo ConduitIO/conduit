@@ -40,11 +40,13 @@ var _ database.DB = (*DB)(nil)
 
 // New initializes the database structures needed by DB.
 func New(ctx context.Context, l log.CtxLogger, path, table string) (*DB, error) {
+	l = l.WithComponent("sqlite.DB")
+
 	dbpath, err := dburl(path)
 	if err != nil {
 		return nil, cerrors.Errorf("failed to construct db path: %w", err)
 	}
-	fmt.Println("path", dbpath)
+	l.Info(ctx).Str("path", dbpath).Msg("opening sqlite database")
 
 	db, err := sql.Open("sqlite", dbpath)
 	if err != nil {
@@ -63,7 +65,7 @@ func New(ctx context.Context, l log.CtxLogger, path, table string) (*DB, error) 
 	}
 
 	return &DB{
-		logger: l.WithComponent("sqlite.DB"),
+		logger: l,
 		db:     db,
 		table:  table,
 	}, nil
