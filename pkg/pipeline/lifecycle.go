@@ -352,7 +352,6 @@ func (s *Service) buildSourceNodes(
 	if err != nil {
 		return nil, err
 	}
-	nodes = append(nodes, dlqHandlerNode)
 
 	for _, connID := range pl.ConnectorIDs {
 		instance, err := connFetcher.Get(ctx, connID)
@@ -391,6 +390,9 @@ func (s *Service) buildSourceNodes(
 		nodes = append(nodes, procNodes...)
 	}
 
+	if len(nodes) != 0 {
+		nodes = append(nodes, dlqHandlerNode)
+	}
 	return nodes, nil
 }
 
