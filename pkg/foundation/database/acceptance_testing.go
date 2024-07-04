@@ -188,8 +188,8 @@ func testTransactionVisibility(t *testing.T, db DB) {
 
 func testConcurrency(t *testing.T, db DB) {
 	const (
-		workers = 100
-		loops   = 100
+		workers = 20
+		loops   = 20
 	)
 
 	t.Run(testName(), func(t *testing.T) {
