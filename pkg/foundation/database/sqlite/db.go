@@ -213,6 +213,13 @@ func dburl(path string) (string, error) {
 	v.Add("_pragma", "journal_mode(WAL)")
 	v.Add("_pragma", "synchronous(NORMAL)")
 	v.Add("_pragma", "temp_store(MEMORY)")
+	v.Add("_pragma", "busy_timeout(10000)")
+
+	// N.B. By default all SQLite transactions are started as
+	//      deferred. This can lead to some issues when the database
+	//      is used concurrently. This sets the tx lock to take place
+	//       immediately.
+	v.Add("_txlock", "immediate")
 
 	abspath, err := filepath.Abs(path)
 	if err != nil {
