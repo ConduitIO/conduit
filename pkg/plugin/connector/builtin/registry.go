@@ -85,7 +85,7 @@ func newDispenserFactory(conn sdk.Connector) dispenserFactory {
 	}
 }
 
-func NewRegistry(logger log.CtxLogger, connectors map[string]sdk.Connector, service schemaregistry.Service) *Registry {
+func NewRegistry(logger log.CtxLogger, connectors map[string]sdk.Connector, service *schemaregistry.Service) *Registry {
 	logger = logger.WithComponentFromType(Registry{})
 	buildInfo, ok := debug.ReadBuildInfo()
 	if !ok {
@@ -95,8 +95,7 @@ func NewRegistry(logger log.CtxLogger, connectors map[string]sdk.Connector, serv
 	}
 
 	// The built-in plugins use Conduit's own schema service
-	// (through an adapter that converts it to a pschema.Service).
-	schema.Service = schemaregistry.NewProtocolServiceAdapter(service)
+	schema.Service = service
 
 	r := &Registry{
 		plugins: loadPlugins(buildInfo, connectors),

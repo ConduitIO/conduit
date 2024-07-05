@@ -28,6 +28,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/twmb/franz-go/pkg/sr"
+
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/ctxutil"
@@ -45,7 +47,6 @@ import (
 	conn_plugin "github.com/conduitio/conduit/pkg/plugin/connector"
 	conn_builtin "github.com/conduitio/conduit/pkg/plugin/connector/builtin"
 	conn_standalone "github.com/conduitio/conduit/pkg/plugin/connector/standalone"
-	"github.com/conduitio/conduit/pkg/plugin/connector/utils"
 	proc_plugin "github.com/conduitio/conduit/pkg/plugin/processor"
 	proc_builtin "github.com/conduitio/conduit/pkg/plugin/processor/builtin"
 	proc_standalone "github.com/conduitio/conduit/pkg/plugin/processor/standalone"
@@ -89,7 +90,7 @@ type Runtime struct {
 	connectorPluginService *conn_plugin.PluginService
 	processorPluginService *proc_plugin.PluginService
 
-	schemaService schemaregistry.Service
+	schemaService *schemaregistry.Service
 
 	connectorPersister *connector.Persister
 
@@ -167,20 +168,25 @@ func initServices(r *Runtime) error {
 		standaloneReg,
 	)
 
-	var schemaService schemaregistry.Service
-	switch r.Config.Schema.Type {
-	case SchemaTypeConfluent:
-		schemaService, err = schemaregistry.NewConfluentService(
-			r.logger, r.Config.Schema.Confluent.ConnectionString, r.Config.Schema.Confluent.HealthCheckPath,
-		)
-		if err != nil {
-			return cerrors.Errorf("failed to create Confluent schema service: %w", err)
-		}
-	case SchemaTypeInMemory:
-		schemaService = schemaregistry.NewInMemoryService()
-	default:
-		schemaService = schemaregistry.NewInMemoryService()
+	// TODO configure builtin schema if requred
+	srClient, err := schemaregistry.NewClient(r.logger, sr.URLs(r.Config.SchemaRegistry.Confluent.ConnectionString))
+	if err != nil {
+		return cerrors.Errorf("failed to create schema registry client: %w", err)
 	}
+	schemaService := schemaregistry.NewService(r.logger, srClient)
+	// switch r.Config.Schema.Type {
+	// case SchemaTypeConfluent:
+	// 	schemaService, err = schemaregistry.NewConfluentService(
+	// 		r.logger, r.Config.Schema.Confluent.ConnectionString, r.Config.Schema.Confluent.HealthCheckPath,
+	// 	)
+	// 	if err != nil {
+	// 		return cerrors.Errorf("failed to create Confluent schema service: %w", err)
+	// 	}
+	// case SchemaTypeInMemory:
+	// 	schemaService = schemaregistry.NewInMemoryService()
+	// default:
+	// 	schemaService = schemaregistry.NewInMemoryService()
+	// }
 
 	connPluginService := conn_plugin.NewPluginService(
 		r.logger,
@@ -491,8 +497,9 @@ func (r *Runtime) startConnectorUtils(ctx context.Context, t *tomb.Tomb) (net.Ad
 		grpc.StatsHandler(r.gRPCStatsHandler),
 	)
 
-	schemaServiceAPI := utils.NewSchemaServiceAPIv1(r.schemaService)
-	schemaServiceAPI.RegisterInServer(grpcServer)
+	// TODO
+	// schemaServiceAPI := utils.NewSchemaServiceAPIv1(r.schemaService)
+	// schemaServiceAPI.RegisterInServer(grpcServer)
 
 	// Makes it easier to use command line tools to interact
 	// with the gRPC API.

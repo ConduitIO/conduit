@@ -18,7 +18,9 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/lovromazgon/franz-go/pkg/sr"
+	"github.com/conduitio/conduit-commons/rabin"
+
+	"github.com/twmb/franz-go/pkg/sr"
 	"github.com/twmb/go-cache/cache"
 )
 
@@ -32,7 +34,7 @@ func newSubjectVersion(subject string, version int) subjectVersion {
 }
 
 func newSubjectFingerprint(subject string, text string) subjectFingerprint {
-	fingerprint := Rabin([]byte(text))
+	fingerprint := rabin.Bytes([]byte(text))
 	return subjectFingerprint(fmt.Sprintf("%s:%d", subject, fingerprint))
 }
 

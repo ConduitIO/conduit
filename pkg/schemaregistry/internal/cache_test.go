@@ -19,7 +19,7 @@ import (
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/lovromazgon/franz-go/pkg/sr"
+	"github.com/twmb/franz-go/pkg/sr"
 	"github.com/matryer/is"
 )
 

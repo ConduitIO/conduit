@@ -1,4 +1,4 @@
-// Copyright © 2023 Meroxa, Inc.
+// Copyright © 2024 Meroxa, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,16 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package schemaregistry
+package internal
 
 import (
 	"context"
 	"testing"
 
+	"github.com/conduitio/conduit/pkg/schemaregistry"
+	"github.com/conduitio/conduit/pkg/schemaregistry/schemaregistrytest"
+
 	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/lovromazgon/franz-go/pkg/sr"
 	"github.com/matryer/is"
+	"github.com/twmb/franz-go/pkg/sr"
 )
 
 func TestEncodeDecode_ExtractAndUploadSchemaStrategy(t *testing.T) {
@@ -29,8 +32,7 @@ func TestEncodeDecode_ExtractAndUploadSchemaStrategy(t *testing.T) {
 	ctx := context.Background()
 	logger := log.Nop()
 
-	var serde sr.Serde
-	client, err := NewClient(logger, sr.URLs(TestSchemaRegistryURL(t)))
+	client, err := schemaregistry.NewClient(logger, sr.URLs(schemaregistrytest.TestSchemaRegistryURL(t)))
 	is.NoErr(err)
 
 	have := opencdc.StructuredData{
@@ -62,24 +64,18 @@ func TestEncodeDecode_ExtractAndUploadSchemaStrategy(t *testing.T) {
 		"mySlice": []any{1, 2, 3}, // slice without type
 	}
 
-	for schemaType := range DefaultSchemaFactories {
-		t.Run(schemaType.String(), func(t *testing.T) {
-			is := is.New(t)
-			enc := NewEncoder(client, logger, &serde, ExtractAndUploadSchemaStrategy{
-				Type:    schemaType,
-				Subject: "test1" + schemaType.String(),
-			})
-			dec := NewDecoder(client, logger, &serde)
+	enc := NewEncoder(client, logger, ExtractAndUploadSchemaStrategy{
+		Subject: "test1",
+	})
+	dec := NewDecoder(client, logger)
 
-			bytes, err := enc.Encode(ctx, have)
-			is.NoErr(err)
+	bytes, err := enc.Encode(ctx, have)
+	is.NoErr(err)
 
-			got, err := dec.Decode(ctx, bytes)
-			is.NoErr(err)
+	got, err := dec.Decode(ctx, bytes)
+	is.NoErr(err)
 
-			is.Equal(want, got)
-		})
-	}
+	is.Equal(want, got)
 }
 
 func TestEncodeDecode_DownloadStrategy_Avro(t *testing.T) {
@@ -87,8 +83,7 @@ func TestEncodeDecode_DownloadStrategy_Avro(t *testing.T) {
 	ctx := context.Background()
 	logger := log.Nop()
 
-	var serde sr.Serde
-	client, err := NewClient(logger, sr.URLs(TestSchemaRegistryURL(t)))
+	client, err := schemaregistry.NewClient(logger, sr.URLs(schemaregistrytest.TestSchemaRegistryURL(t)))
 	is.NoErr(err)
 
 	have := opencdc.StructuredData{
@@ -113,11 +108,11 @@ func TestEncodeDecode_DownloadStrategy_Avro(t *testing.T) {
 	})
 	is.NoErr(err)
 
-	enc := NewEncoder(client, logger, &serde, DownloadSchemaStrategy{
+	enc := NewEncoder(client, logger, DownloadSchemaStrategy{
 		Subject: ss.Subject,
 		Version: ss.Version,
 	})
-	dec := NewDecoder(client, logger, &serde)
+	dec := NewDecoder(client, logger)
 
 	bytes, err := enc.Encode(ctx, have)
 	is.NoErr(err)

@@ -14,17 +14,61 @@
 
 package schemaregistry
 
-//go:generate mockgen -typed -destination=mock/schema_service.go -package=mock -mock_names=Service=Service . Service
-
 import (
 	"context"
 
-	"github.com/conduitio/conduit-commons/schema"
+	"github.com/conduitio/conduit-connector-protocol/pconduit"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/schemaregistry/fromschema"
+	"github.com/conduitio/conduit/pkg/schemaregistry/toschema"
+	"github.com/twmb/franz-go/pkg/sr"
 )
 
-type Service interface {
-	Create(ctx context.Context, subject string, bytes []byte) (schema.Schema, error)
-	Get(ctx context.Context, subject string, version int) (schema.Schema, error)
+type Service struct {
+	registry Registry
+	logger   log.CtxLogger
+}
 
-	Check(ctx context.Context) error
+var _ pconduit.SchemaService = (*Service)(nil)
+
+func NewService(logger log.CtxLogger, registry Registry) *Service {
+	return &Service{
+		registry: registry,
+		logger:   logger,
+	}
+}
+
+func (s *Service) Check(ctx context.Context) error {
+	r, ok := s.registry.(RegistryWithCheck)
+	if !ok {
+		return nil
+	}
+	return r.Check(ctx)
+}
+
+func (s *Service) CreateSchema(ctx context.Context, req pconduit.CreateSchemaRequest) (pconduit.CreateSchemaResponse, error) {
+	ss, err := s.registry.CreateSchema(ctx, req.Subject, sr.Schema{
+		Schema: string(req.Bytes),
+		Type:   fromschema.SrSchemaType(req.Type),
+	})
+	if err != nil {
+		// TODO: convert error
+		return pconduit.CreateSchemaResponse{}, cerrors.Errorf("failed to create schema: %w", err)
+	}
+	return pconduit.CreateSchemaResponse{
+		Schema: toschema.SrSubjectSchema(ss),
+	}, nil
+}
+
+func (s *Service) GetSchema(ctx context.Context, req pconduit.GetSchemaRequest) (pconduit.GetSchemaResponse, error) {
+	ss, err := s.registry.SchemaBySubjectVersion(ctx, req.Subject, req.Version)
+	if err != nil {
+		// TODO: convert error
+		return pconduit.GetSchemaResponse{}, cerrors.Errorf("failed to get schema by subject and version: %w", err)
+	}
+
+	return pconduit.GetSchemaResponse{
+		Schema: toschema.SrSubjectSchema(ss),
+	}, nil
 }

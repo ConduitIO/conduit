@@ -20,7 +20,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/schemaregistry/internal"
-	"github.com/lovromazgon/franz-go/pkg/sr"
+	"github.com/twmb/franz-go/pkg/sr"
 )
 
 // Client is a schema registry client that caches schemas. It is safe for
@@ -32,10 +32,12 @@ type Client struct {
 	cache internal.SchemaCache
 }
 
+var _ RegistryWithCheck = (*Client)(nil)
+
 // NewClient creates a new client using the provided logger and schema registry
 // client options.
-func NewClient(logger log.CtxLogger, opts ...sr.Opt) (*Client, error) {
-	defaultOpts := []sr.Opt{
+func NewClient(logger log.CtxLogger, opts ...sr.ClientOpt) (*Client, error) {
+	defaultOpts := []sr.ClientOpt{
 		sr.UserAgent("conduit"),
 		sr.URLs(), // disable default URL
 	}
@@ -46,7 +48,7 @@ func NewClient(logger log.CtxLogger, opts ...sr.Opt) (*Client, error) {
 	}
 
 	return &Client{
-		logger: logger,
+		logger: logger.WithComponent("schemaregistry.Client"),
 		client: *client,
 	}, nil
 }
@@ -62,8 +64,8 @@ func (c *Client) CreateSchema(ctx context.Context, subject string, schema sr.Sch
 		logEvent = nil // disable output for hit
 
 		// Check if the subject exists. Ignore the error as this is not critical
-		// for creating a schema, we assume the subject exists in case of an error.
-		versions, _ := c.client.SubjectVersions(ctx, subject, sr.ShowDeleted)
+		// for creating a schema, we assume the subject doesn't exist in case of an error.
+		versions, _ := c.client.SubjectVersions(sr.WithParams(ctx, sr.ShowDeleted), subject)
 		subjectExists := len(versions) > 0
 
 		ss, err := c.client.CreateSchema(ctx, subject, schema)
@@ -72,8 +74,14 @@ func (c *Client) CreateSchema(ctx context.Context, subject string, schema sr.Sch
 		}
 
 		if !subjectExists {
-			// if we are created the schema we need to disable compatibility checks
-			c.client.SetCompatibilityLevel(ctx, sr.CompatNone, subject)
+			// if we created the schema we need to disable compatibility checks
+			result := c.client.SetCompatibility(ctx, sr.SetCompatibility{Level: sr.CompatNone}, subject)
+			for _, res := range result {
+				if res.Err != nil {
+					// only log error, don't return it
+					c.logger.Warn(ctx).Err(res.Err).Str("subject", subject).Msg("failed to set compatibility to none, might create issues if an incompatible schema change happens in the future")
+				}
+			}
 		}
 		return ss, nil
 	})
@@ -113,11 +121,17 @@ func (c *Client) SchemaBySubjectVersion(ctx context.Context, subject string, ver
 	ss, err := c.cache.GetBySubjectVersion(subject, version, func() (sr.SubjectSchema, error) {
 		logEvent.Msg("schema cache miss")
 		logEvent = nil // disable output for hit
-		return c.client.SchemaByVersion(ctx, subject, version, sr.HideDeleted)
+		return c.client.SchemaByVersion(ctx, subject, version)
 	})
 	if err != nil {
 		return sr.SubjectSchema{}, cerrors.Errorf("failed to get schema with subject %q and version %q: %w", subject, version, err)
 	}
 	logEvent.Msg("schema cache hit")
 	return ss, nil
+}
+
+// Check checks if the schema registry is reachable.
+func (c *Client) Check(ctx context.Context) error {
+	_, err := c.client.Subjects(ctx) // just check if we can list subjects
+	return err
 }
