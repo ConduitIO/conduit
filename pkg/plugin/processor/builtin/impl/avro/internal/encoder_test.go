@@ -18,11 +18,10 @@ import (
 	"context"
 	"testing"
 
-	"github.com/conduitio/conduit/pkg/schemaregistry"
-	"github.com/conduitio/conduit/pkg/schemaregistry/schemaregistrytest"
-
 	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/schemaregistry"
+	"github.com/conduitio/conduit/pkg/schemaregistry/schemaregistrytest"
 	"github.com/matryer/is"
 	"github.com/twmb/franz-go/pkg/sr"
 )

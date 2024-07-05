@@ -19,8 +19,8 @@ import (
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/twmb/franz-go/pkg/sr"
 	"github.com/matryer/is"
+	"github.com/twmb/franz-go/pkg/sr"
 )
 
 func TestSchemaCache_GetByID(t *testing.T) {

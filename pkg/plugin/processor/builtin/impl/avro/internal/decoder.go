@@ -17,12 +17,11 @@ package internal
 import (
 	"context"
 
-	"github.com/conduitio/conduit/pkg/schemaregistry/toschema"
-
 	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/schemaregistry"
+	"github.com/conduitio/conduit/pkg/schemaregistry/toschema"
 	"github.com/twmb/franz-go/pkg/sr"
 )
 

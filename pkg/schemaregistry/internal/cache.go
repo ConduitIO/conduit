@@ -19,7 +19,6 @@ import (
 	"sync"
 
 	"github.com/conduitio/conduit-commons/rabin"
-
 	"github.com/twmb/franz-go/pkg/sr"
 	"github.com/twmb/go-cache/cache"
 )

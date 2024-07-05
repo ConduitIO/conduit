@@ -23,8 +23,8 @@ import (
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/twmb/franz-go/pkg/sr"
 	"github.com/matryer/is"
+	"github.com/twmb/franz-go/pkg/sr"
 )
 
 func TestClient_NotFound(t *testing.T) {
