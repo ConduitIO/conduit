@@ -28,8 +28,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/twmb/franz-go/pkg/sr"
-
+	conduitschemaregistry "github.com/conduitio/conduit-schema-registry"
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/ctxutil"
@@ -62,6 +61,7 @@ import (
 	promclient "github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/zerolog"
+	"github.com/twmb/franz-go/pkg/sr"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/health/grpc_health_v1"
@@ -168,25 +168,20 @@ func initServices(r *Runtime) error {
 		standaloneReg,
 	)
 
-	// TODO configure builtin schema if requred
-	srClient, err := schemaregistry.NewClient(r.logger, sr.URLs(r.Config.SchemaRegistry.Confluent.ConnectionString))
-	if err != nil {
-		return cerrors.Errorf("failed to create schema registry client: %w", err)
+	var registry schemaregistry.Registry
+	switch r.Config.SchemaRegistry.Type {
+	case SchemaRegistryTypeConfluent:
+		registry, err = schemaregistry.NewClient(r.logger, sr.URLs(r.Config.SchemaRegistry.Confluent.ConnectionString))
+		if err != nil {
+			return cerrors.Errorf("failed to create schema registry client: %w", err)
+		}
+	case SchemaRegistryTypeBuiltin:
+		registry = conduitschemaregistry.NewSchemaRegistry()
+	default:
+		// shouldn't happen, we validate the config
+		return cerrors.Errorf("invalid schema registry type %q", r.Config.SchemaRegistry.Type)
 	}
-	schemaService := schemaregistry.NewService(r.logger, srClient)
-	// switch r.Config.Schema.Type {
-	// case SchemaTypeConfluent:
-	// 	schemaService, err = schemaregistry.NewConfluentService(
-	// 		r.logger, r.Config.Schema.Confluent.ConnectionString, r.Config.Schema.Confluent.HealthCheckPath,
-	// 	)
-	// 	if err != nil {
-	// 		return cerrors.Errorf("failed to create Confluent schema service: %w", err)
-	// 	}
-	// case SchemaTypeInMemory:
-	// 	schemaService = schemaregistry.NewInMemoryService()
-	// default:
-	// 	schemaService = schemaregistry.NewInMemoryService()
-	// }
+	schemaService := schemaregistry.NewService(r.logger, registry)
 
 	connPluginService := conn_plugin.NewPluginService(
 		r.logger,

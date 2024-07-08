@@ -31,7 +31,7 @@ const (
 	DBTypeInMemory = "inmemory"
 
 	SchemaRegistryTypeConfluent = "confluent"
-	SchemaRegistryTypeInMemory  = "inmemory"
+	SchemaRegistryTypeBuiltin   = "builtin"
 )
 
 // Config holds all configurable values for Conduit.
@@ -110,7 +110,7 @@ func DefaultConfig() Config {
 	cfg.Connectors.Path = "./connectors"
 	cfg.Processors.Path = "./processors"
 	cfg.Pipelines.Path = "./pipelines"
-	cfg.SchemaRegistry.Type = SchemaRegistryTypeInMemory
+	cfg.SchemaRegistry.Type = SchemaRegistryTypeBuiltin
 
 	cfg.ConnectorPlugins = builtin.DefaultBuiltinConnectors
 	return cfg
@@ -145,7 +145,7 @@ func (c Config) validateSchemaRegistryConfig() error {
 		if c.SchemaRegistry.Confluent.ConnectionString == "" {
 			return requiredConfigFieldErr("schema-registry.confluent.connection-string")
 		}
-	case SchemaRegistryTypeInMemory:
+	case SchemaRegistryTypeBuiltin:
 		// all good
 	default:
 		return invalidConfigFieldErr("schema-registry.type")
