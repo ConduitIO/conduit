@@ -211,8 +211,8 @@ github.com/ckaznocha/intrange v0.1.2/go.mod h1:RWffCw/vKBwHeOEwWdCikAtY0q4gGt8Vh
 github.com/client9/misspell v0.3.4/go.mod h1:qj6jICC3Q7zFZvVWo7KLAzC3yx5G7kyvSDkc90ppPyw=
 github.com/cncf/udpa/go v0.0.0-20191209042840-269d4d468f6f/go.mod h1:M8M6+tZqaGXZJjfX53e64911xZQV5JYwmTeXPW+k8Sc=
 github.com/colinmarc/hdfs/v2 v2.1.1/go.mod h1:M3x+k8UKKmxtFu++uAZ0OtDU8jR3jnaZIAc6yK4Ue0c=
-github.com/conduitio/conduit-commons v0.2.1-0.20240705194134-f6e3ad42f04d h1:jTuBeCGASmtKAy5Ei+Gof0FIAxuwkM7LH56SH/neB2s=
-github.com/conduitio/conduit-commons v0.2.1-0.20240705194134-f6e3ad42f04d/go.mod h1:oF0KZc+TiVGBdKoMLLQ9Otb83Shq4CRZ2hClhNlFRio=
+github.com/conduitio/conduit-commons v0.2.1-0.20240708122218-5d1883981cfc h1:q2o3R/cXbQBUrJFBHV1YietwB275rBjkmPu1njzV4bk=
+github.com/conduitio/conduit-commons v0.2.1-0.20240708122218-5d1883981cfc/go.mod h1:oF0KZc+TiVGBdKoMLLQ9Otb83Shq4CRZ2hClhNlFRio=
 github.com/conduitio/conduit-connector-file v0.6.1-0.20240621111422-221c138201d3 h1:/mdy7vQzdfqDFLM13M39CYwI6Pk7xClMVZpGQW3+5DQ=
 github.com/conduitio/conduit-connector-file v0.6.1-0.20240621111422-221c138201d3/go.mod h1:bCnmA+29l871cNhroZfiCS2O8+GhBNVECfL5DOof2ew=
 github.com/conduitio/conduit-connector-generator v0.6.1-0.20240621111436-e9fa3464f7b2 h1:WMKvmvaE/E+03/0nz/2JpyelCd2nPtOTuBy3eyWcI58=
