@@ -7,45 +7,55 @@ import (
 	"github.com/conduitio/conduit-commons/config"
 )
 
+const (
+	decodeConfigAuthBasicPassword = "auth.basic.password"
+	decodeConfigAuthBasicUsername = "auth.basic.username"
+	decodeConfigField             = "field"
+	decodeConfigTlsCaCert         = "tls.ca.cert"
+	decodeConfigTlsClientCert     = "tls.client.cert"
+	decodeConfigTlsClientKey      = "tls.client.key"
+	decodeConfigUrl               = "url"
+)
+
 func (decodeConfig) Parameters() map[string]config.Parameter {
 	return map[string]config.Parameter{
-		"auth.basic.password": {
+		decodeConfigAuthBasicPassword: {
 			Default:     "",
 			Description: "The password to use with basic authentication. This option is required if\nauth.basic.username contains a value. If both auth.basic.username and auth.basic.password\nare empty basic authentication is disabled.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},
-		"auth.basic.username": {
+		decodeConfigAuthBasicUsername: {
 			Default:     "",
 			Description: "The username to use with basic authentication. This option is required if\nauth.basic.password contains a value. If both auth.basic.username and auth.basic.password\nare empty basic authentication is disabled.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},
-		"field": {
+		decodeConfigField: {
 			Default:     ".Payload.After",
 			Description: "The field that will be decoded.\n\nFor more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},
-		"tls.ca.cert": {
+		decodeConfigTlsCaCert: {
 			Default:     "",
 			Description: "The path to a file containing PEM encoded CA certificates. If this option is empty,\nConduit falls back to using the host's root CA set.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},
-		"tls.client.cert": {
+		decodeConfigTlsClientCert: {
 			Default:     "",
 			Description: "The path to a file containing a PEM encoded certificate. This option is required\nif tls.client.key contains a value. If both tls.client.cert and tls.client.key are empty\nTLS is disabled.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},
-		"tls.client.key": {
+		decodeConfigTlsClientKey: {
 			Default:     "",
 			Description: "The path to a file containing a PEM encoded private key. This option is required\nif tls.client.cert contains a value. If both tls.client.cert and tls.client.key are empty\nTLS is disabled.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},
-		"url": {
+		decodeConfigUrl: {
 			Default:     "",
 			Description: "URL of the schema registry (e.g. http://localhost:8085)",
 			Type:        config.ParameterTypeString,

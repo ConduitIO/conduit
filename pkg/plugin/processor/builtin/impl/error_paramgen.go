@@ -7,9 +7,13 @@ import (
 	"github.com/conduitio/conduit-commons/config"
 )
 
+const (
+	errorConfigMessage = "message"
+)
+
 func (errorConfig) Parameters() map[string]config.Parameter {
 	return map[string]config.Parameter{
-		"message": {
+		errorConfigMessage: {
 			Default:     "error processor triggered",
 			Description: "Error message to be returned. This can be a Go [template](https://pkg.go.dev/text/template)\nexecuted on each [`Record`](https://pkg.go.dev/github.com/conduitio/conduit-commons/opencdc#Record)\nbeing processed.",
 			Type:        config.ParameterTypeString,

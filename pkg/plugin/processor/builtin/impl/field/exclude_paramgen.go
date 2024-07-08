@@ -7,9 +7,13 @@ import (
 	"github.com/conduitio/conduit-commons/config"
 )
 
+const (
+	excludeConfigFields = "fields"
+)
+
 func (excludeConfig) Parameters() map[string]config.Parameter {
 	return map[string]config.Parameter{
-		"fields": {
+		excludeConfigFields: {
 			Default:     "",
 			Description: "Fields is a comma separated list of target fields which should be excluded.\n\nFor more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).",
 			Type:        config.ParameterTypeString,
