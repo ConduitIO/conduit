@@ -20,6 +20,8 @@ import (
 	"testing"
 	"time"
 
+	conduitschemaregistry "github.com/conduitio/conduit-schema-registry"
+
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/ctxutil"
@@ -486,9 +488,10 @@ func TestService_IntegrationTestServices(t *testing.T) {
 		is.NoErr(err)
 	})
 
+	schemaService := schemaregistry.NewService(logger, conduitschemaregistry.NewSchemaRegistry())
 	connPluginService := conn_plugin.NewPluginService(
 		logger,
-		builtin.NewRegistry(logger, builtin.DefaultBuiltinConnectors, schemaregistry.NewInMemoryService()),
+		builtin.NewRegistry(logger, builtin.DefaultBuiltinConnectors, schemaService),
 		standalone.NewRegistry(logger, ""),
 	)
 
