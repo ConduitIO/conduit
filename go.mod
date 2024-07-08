@@ -8,7 +8,7 @@ require (
 	github.com/Masterminds/sprig/v3 v3.2.3
 	github.com/NYTimes/gziphandler v1.1.1
 	github.com/bufbuild/buf v1.34.0
-	github.com/conduitio/conduit-commons v0.2.1-0.20240705193535-305dfcc2cddd
+	github.com/conduitio/conduit-commons v0.2.1-0.20240705194134-f6e3ad42f04d
 	github.com/conduitio/conduit-connector-file v0.6.1-0.20240621111422-221c138201d3
 	github.com/conduitio/conduit-connector-generator v0.6.1-0.20240621111436-e9fa3464f7b2
 	github.com/conduitio/conduit-connector-kafka v0.8.1-0.20240621111431-87c01cf39a06
@@ -347,5 +347,3 @@ require (
 	mvdan.cc/gofumpt v0.6.0 // indirect
 	mvdan.cc/unparam v0.0.0-20240528143540-8a5130ca722f // indirect
 )
-
-replace github.com/conduitio/conduit-commons => ../conduit-commons
