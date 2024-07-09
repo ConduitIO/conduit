@@ -101,7 +101,7 @@ func NewRegistry(logger log.CtxLogger, connectors map[string]sdk.Connector, serv
 		plugins: loadPlugins(buildInfo, connectors),
 		logger:  logger,
 	}
-	logger.Info(context.Background()).Int("count", len(r.List())).Msg("builtin plugins initialized")
+	logger.Info(context.Background()).Int("count", len(r.List())).Msg("builtin connector plugins initialized")
 	return r
 }
 
