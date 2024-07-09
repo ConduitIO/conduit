@@ -20,8 +20,7 @@ import (
 	"testing"
 	"time"
 
-	conduitschemaregistry "github.com/conduitio/conduit-schema-registry"
-
+	schemaregistry "github.com/conduitio/conduit-schema-registry"
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/ctxutil"
@@ -30,6 +29,7 @@ import (
 	"github.com/conduitio/conduit/pkg/pipeline"
 	conn_plugin "github.com/conduitio/conduit/pkg/plugin/connector"
 	"github.com/conduitio/conduit/pkg/plugin/connector/builtin"
+	"github.com/conduitio/conduit/pkg/plugin/connector/connutils"
 	"github.com/conduitio/conduit/pkg/plugin/connector/standalone"
 	proc_plugin "github.com/conduitio/conduit/pkg/plugin/processor"
 	proc_builtin "github.com/conduitio/conduit/pkg/plugin/processor/builtin"
@@ -38,7 +38,6 @@ import (
 	p2 "github.com/conduitio/conduit/pkg/provisioning/test/pipelines2"
 	p3 "github.com/conduitio/conduit/pkg/provisioning/test/pipelines3"
 	p4 "github.com/conduitio/conduit/pkg/provisioning/test/pipelines4-integration-test"
-	"github.com/conduitio/conduit/pkg/schemaregistry"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/matryer/is"
@@ -488,7 +487,7 @@ func TestService_IntegrationTestServices(t *testing.T) {
 		is.NoErr(err)
 	})
 
-	schemaService := schemaregistry.NewService(logger, conduitschemaregistry.NewSchemaRegistry())
+	schemaService := connutils.NewSchemaService(logger, schemaregistry.NewSchemaRegistry())
 	connPluginService := conn_plugin.NewPluginService(
 		logger,
 		builtin.NewRegistry(logger, builtin.DefaultBuiltinConnectors, schemaService),

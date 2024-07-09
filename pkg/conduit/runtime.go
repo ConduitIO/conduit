@@ -28,6 +28,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/conduitio/conduit/pkg/plugin/connector/connutils"
+
 	pconduitserver "github.com/conduitio/conduit-connector-protocol/pconduit/v1/server"
 	conduitv1 "github.com/conduitio/conduit-connector-protocol/proto/conduit/v1"
 	conduitschemaregistry "github.com/conduitio/conduit-schema-registry"
@@ -92,7 +94,8 @@ type Runtime struct {
 	connectorPluginService *conn_plugin.PluginService
 	processorPluginService *proc_plugin.PluginService
 
-	schemaService *schemaregistry.Service
+	schemaRegistry    schemaregistry.Registry
+	connSchemaService *connutils.SchemaService
 
 	connectorPersister *connector.Persister
 
@@ -170,24 +173,24 @@ func initServices(r *Runtime) error {
 		standaloneReg,
 	)
 
-	var registry schemaregistry.Registry
+	var schemaRegistry schemaregistry.Registry
 	switch r.Config.SchemaRegistry.Type {
 	case SchemaRegistryTypeConfluent:
-		registry, err = schemaregistry.NewClient(r.logger, sr.URLs(r.Config.SchemaRegistry.Confluent.ConnectionString))
+		schemaRegistry, err = schemaregistry.NewClient(r.logger, sr.URLs(r.Config.SchemaRegistry.Confluent.ConnectionString))
 		if err != nil {
 			return cerrors.Errorf("failed to create schema registry client: %w", err)
 		}
 	case SchemaRegistryTypeBuiltin:
-		registry = conduitschemaregistry.NewSchemaRegistry()
+		schemaRegistry = conduitschemaregistry.NewSchemaRegistry()
 	default:
 		// shouldn't happen, we validate the config
 		return cerrors.Errorf("invalid schema registry type %q", r.Config.SchemaRegistry.Type)
 	}
-	schemaService := schemaregistry.NewService(r.logger, registry)
 
+	connSchemaService := connutils.NewSchemaService(r.logger, schemaRegistry)
 	connPluginService := conn_plugin.NewPluginService(
 		r.logger,
-		conn_builtin.NewRegistry(r.logger, r.Config.ConnectorPlugins, schemaService),
+		conn_builtin.NewRegistry(r.logger, r.Config.ConnectorPlugins, connSchemaService),
 		conn_standalone.NewRegistry(r.logger, r.Config.Connectors.Path),
 	)
 
@@ -206,7 +209,8 @@ func initServices(r *Runtime) error {
 	r.processorService = procService
 	r.connectorPluginService = connPluginService
 	r.processorPluginService = procPluginService
-	r.schemaService = schemaService
+	r.schemaRegistry = schemaRegistry
+	r.connSchemaService = connSchemaService
 
 	return nil
 }
@@ -473,7 +477,6 @@ func (r *Runtime) serveGRPCAPI(ctx context.Context, t *tomb.Tomb) (net.Addr, err
 			"ProcessorService":       r.processorService,
 			"ConnectorPluginService": r.connectorPluginService,
 			"ProcessorPluginService": r.processorPluginService,
-			"SchemaService":          r.schemaService,
 		},
 		r.logger,
 	)
@@ -499,7 +502,7 @@ func (r *Runtime) startConnectorUtils(ctx context.Context, t *tomb.Tomb) (net.Ad
 		grpc.StatsHandler(r.gRPCStatsHandler),
 	)
 
-	schemaServiceAPI := pconduitserver.NewSchemaServiceServer(r.schemaService)
+	schemaServiceAPI := pconduitserver.NewSchemaServiceServer(r.connSchemaService)
 	conduitv1.RegisterSchemaServiceServer(grpcServer, schemaServiceAPI)
 
 	// Makes it easier to use command line tools to interact
@@ -510,7 +513,7 @@ func (r *Runtime) startConnectorUtils(ctx context.Context, t *tomb.Tomb) (net.Ad
 	// Names taken from schema.proto
 	healthServer := api.NewHealthServer(
 		map[string]api.Checker{
-			"SchemaService": r.schemaService,
+			"SchemaService": r.connSchemaService,
 		},
 		r.logger,
 	)

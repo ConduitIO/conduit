@@ -18,6 +18,8 @@ import (
 	"context"
 	"runtime/debug"
 
+	"github.com/conduitio/conduit/pkg/plugin/connector/connutils"
+
 	file "github.com/conduitio/conduit-connector-file"
 	generator "github.com/conduitio/conduit-connector-generator"
 	kafka "github.com/conduitio/conduit-connector-kafka"
@@ -31,7 +33,6 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/conduitio/conduit/pkg/plugin/connector"
-	"github.com/conduitio/conduit/pkg/schemaregistry"
 )
 
 var (
@@ -85,7 +86,7 @@ func newDispenserFactory(conn sdk.Connector) dispenserFactory {
 	}
 }
 
-func NewRegistry(logger log.CtxLogger, connectors map[string]sdk.Connector, service *schemaregistry.Service) *Registry {
+func NewRegistry(logger log.CtxLogger, connectors map[string]sdk.Connector, service *connutils.SchemaService) *Registry {
 	logger = logger.WithComponentFromType(Registry{})
 	buildInfo, ok := debug.ReadBuildInfo()
 	if !ok {
