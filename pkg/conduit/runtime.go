@@ -28,6 +28,8 @@ import (
 	"strings"
 	"time"
 
+	pconduitserver "github.com/conduitio/conduit-connector-protocol/pconduit/v1/server"
+	conduitv1 "github.com/conduitio/conduit-connector-protocol/proto/conduit/v1"
 	conduitschemaregistry "github.com/conduitio/conduit-schema-registry"
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -308,11 +310,10 @@ func (r *Runtime) Run(ctx context.Context) (err error) {
 	}
 
 	// APIs needed by connector plugins
-	schemaServiceAddr, err := r.startConnectorUtils(ctx, t)
+	_, err = r.startConnectorUtils(ctx, t)
 	if err != nil {
-		return cerrors.Errorf("failed to serve schema service API: %w", err)
+		return cerrors.Errorf("failed to start connector utilities: %w", err)
 	}
-	r.logger.Info(ctx).Msgf("schema service started on %v", schemaServiceAddr)
 
 	// Public gRPC and HTTP API
 	if r.Config.API.Enabled {
@@ -479,10 +480,16 @@ func (r *Runtime) serveGRPCAPI(ctx context.Context, t *tomb.Tomb) (net.Addr, err
 	grpc_health_v1.RegisterHealthServer(grpcServer, healthServer)
 
 	// serve grpc server
-	return r.serveGRPC(ctx, t, grpcServer, r.Config.API.GRPC.Address)
+	addr, err := r.serveGRPC(ctx, t, grpcServer, r.Config.API.GRPC.Address)
+	if err != nil {
+		return nil, err
+	}
+
+	r.logger.Info(ctx).Str(log.ServerAddressField, addr.String()).Msg("grpc API started")
+	return addr, nil
 }
 
-// startConnectorUtils starts all the utility services neededed by connectors.
+// startConnectorUtils starts all the utility services needed by connectors.
 func (r *Runtime) startConnectorUtils(ctx context.Context, t *tomb.Tomb) (net.Addr, error) {
 	grpcServer := grpc.NewServer(
 		grpc.ChainUnaryInterceptor(
@@ -492,9 +499,8 @@ func (r *Runtime) startConnectorUtils(ctx context.Context, t *tomb.Tomb) (net.Ad
 		grpc.StatsHandler(r.gRPCStatsHandler),
 	)
 
-	// TODO
-	// schemaServiceAPI := utils.NewSchemaServiceAPIv1(r.schemaService)
-	// schemaServiceAPI.RegisterInServer(grpcServer)
+	schemaServiceAPI := pconduitserver.NewSchemaServiceServer(r.schemaService)
+	conduitv1.RegisterSchemaServiceServer(grpcServer, schemaServiceAPI)
 
 	// Makes it easier to use command line tools to interact
 	// with the gRPC API.
@@ -510,16 +516,22 @@ func (r *Runtime) startConnectorUtils(ctx context.Context, t *tomb.Tomb) (net.Ad
 	)
 	grpc_health_v1.RegisterHealthServer(grpcServer, healthServer)
 
-	// todo make port random
-	return r.serveGRPC(ctx, t, grpcServer, ":8184")
+	// Serve utilities on a random port
+	addr, err := r.serveGRPC(ctx, t, grpcServer, ":0")
+	if err != nil {
+		return nil, err
+	}
+
+	r.logger.Info(ctx).Str(log.ServerAddressField, addr.String()).Msg("connector utilities started")
+	return addr, nil
 }
 
 func (r *Runtime) serveHTTPAPI(
 	ctx context.Context,
 	t *tomb.Tomb,
-	addr net.Addr,
+	grpcAddr net.Addr,
 ) (net.Addr, error) {
-	conn, err := grpc.NewClient(addr.String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(grpcAddr.String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return nil, cerrors.Errorf("failed to dial server: %w", err)
 	}
@@ -627,7 +639,7 @@ func (r *Runtime) serveHTTPAPI(
 		r.logger,
 	)
 
-	return r.serveHTTP(
+	addr, err := r.serveHTTP(
 		ctx,
 		t,
 		&http.Server{
@@ -636,6 +648,12 @@ func (r *Runtime) serveHTTPAPI(
 			ReadHeaderTimeout: 10 * time.Second,
 		},
 	)
+	if err != nil {
+		return nil, err
+	}
+
+	r.logger.Info(ctx).Str(log.ServerAddressField, addr.String()).Msg("http API started")
+	return addr, nil
 }
 
 func preflightHandler(w http.ResponseWriter) {
@@ -690,7 +708,6 @@ func (r *Runtime) serveGRPC(
 		}
 	})
 
-	r.logger.Info(ctx).Str(log.ServerAddressField, ln.Addr().String()).Msg("grpc server started")
 	return ln.Addr(), nil
 }
 
@@ -723,6 +740,5 @@ func (r *Runtime) serveHTTP(
 		return srv.Shutdown(ctx)
 	})
 
-	r.logger.Info(ctx).Str(log.ServerAddressField, ln.Addr().String()).Msg("http server started")
 	return ln.Addr(), nil
 }
