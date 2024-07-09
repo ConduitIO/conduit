@@ -15,9 +15,13 @@
 package standalone
 
 import (
+	"bytes"
 	"context"
 
+	schemav1 "github.com/conduitio/conduit-commons/schema"
+	conduitv1 "github.com/conduitio/conduit-processor-sdk/proto/conduit/v1"
 	processorv1 "github.com/conduitio/conduit-processor-sdk/proto/processor/v1"
+	pschema "github.com/conduitio/conduit-processor-sdk/schema"
 	"github.com/conduitio/conduit-processor-sdk/wasm"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -86,11 +90,11 @@ type hostModuleInstance struct {
 
 	parkedCommandRequest *processorv1.CommandRequest
 
-	parkedCreateSchemaResponse *processorv1.CreateSchemaResponse
-	parkedCreateSchemaRequest  *processorv1.CreateSchemaRequest
+	parkedCreateSchemaResponse *conduitv1.CreateSchemaResponse
+	parkedCreateSchemaBuffer   []byte
 
-	parkedGetSchemaResponse *processorv1.GetSchemaResponse
-	parkedGetSchemaRequest  *processorv1.GetSchemaRequest
+	parkedGetSchemaResponse *conduitv1.GetSchemaResponse
+	parkedGetSchemaBuffer   []byte
 }
 
 func (*hostModuleInstance) Close(context.Context) error { return nil }
@@ -160,12 +164,23 @@ func (m *hostModuleInstance) commandResponse(ctx context.Context, buf types.Byte
 func (m *hostModuleInstance) createSchema(ctx context.Context, buf types.Bytes) types.Uint32 {
 	m.logger.Trace(ctx).Msg("executing create_schema")
 
-	var req processorv1.CreateSchemaRequest
-	var resp processorv1.CreateSchemaResponse
+	if m.parkedCreateSchemaResponse != nil {
+		if bytes.Equal(buf[:len(m.parkedCreateSchemaBuffer)], m.parkedCreateSchemaBuffer) {
+			m.parkedCreateSchemaResponse = nil
+			m.parkedCreateSchemaBuffer = nil
+			out, err := proto.MarshalOptions{}.MarshalAppend(buf[:0], m.parkedCreateSchemaResponse)
+			if err != nil {
+				m.logger.Err(ctx, err).Msg("failed marshalling protobuf create schema response")
+				return wasm.ErrorCodeSchemaMarshal
+			}
+			return types.Uint32(len(out))
+		}
+	}
+
+	var req conduitv1.CreateSchemaRequest
 	length := len(buf)
-	if m.parkedCreateSchemaRequest != nil {
-		// compare requests?
-		length = proto.Size(m.parkedCreateSchemaRequest)
+	if m.parkedCreateSchemaBuffer != nil {
+		length = len(m.parkedCreateSchemaBuffer)
 	}
 	err := proto.Unmarshal(buf[:length], &req)
 	if err != nil {
@@ -173,16 +188,13 @@ func (m *hostModuleInstance) createSchema(ctx context.Context, buf types.Bytes) 
 		return wasm.ErrorCodeSchemaUnmarshal
 	}
 
-	if m.parkedCreateSchemaResponse == nil {
-		// use a stub response for now
-		resp = processorv1.CreateSchemaResponse{
-			Schema: &processorv1.Schema{
-				Bytes: []byte("CONDUIT_SCHEMA_CREATE"),
-			},
-		}
-		m.parkedCreateSchemaResponse = &resp
-		m.parkedCreateSchemaRequest = &req
+	// use a stub response for now
+	schema := schemav1.Schema{
+		Bytes: []byte("CONDUIT_SCHEMA_CREATE"),
 	}
+	resp := pschema.CreateSchemaResponse(schema)
+	m.parkedCreateSchemaResponse = resp
+	m.parkedCreateSchemaBuffer = buf
 
 	// If the buffer is too small, we park the response and return the size of the
 	// response. The next call to createSchema will return the same response.
@@ -199,7 +211,7 @@ func (m *hostModuleInstance) createSchema(ctx context.Context, buf types.Bytes) 
 		return wasm.ErrorCodeSchemaMarshal
 	}
 	m.parkedCreateSchemaResponse = nil
-	m.parkedCreateSchemaRequest = nil
+	m.parkedCreateSchemaBuffer = nil
 
 	return types.Uint32(len(out))
 }
@@ -209,11 +221,25 @@ func (m *hostModuleInstance) createSchema(ctx context.Context, buf types.Bytes) 
 // It returns the response size on success, or an error code on error.
 func (m *hostModuleInstance) getSchema(ctx context.Context, buf types.Bytes) types.Uint32 {
 	m.logger.Trace(ctx).Msg("executing get_schema")
-	var req processorv1.GetSchemaRequest
-	var resp processorv1.GetSchemaResponse
+
+	if m.parkedGetSchemaResponse != nil {
+		if bytes.Equal(buf[:len(m.parkedGetSchemaBuffer)], m.parkedGetSchemaBuffer) {
+			m.parkedGetSchemaResponse = nil
+			m.parkedGetSchemaBuffer = nil
+			out, err := proto.MarshalOptions{}.MarshalAppend(buf[:0], m.parkedGetSchemaResponse)
+			if err != nil {
+				m.logger.Err(ctx, err).Msg("failed marshalling protobuf get schema response")
+				return wasm.ErrorCodeSchemaMarshal
+			}
+			return types.Uint32(len(out))
+		}
+	}
+
+	// get and unmarshal the request
+	var req conduitv1.GetSchemaRequest
 	length := len(buf)
-	if m.parkedGetSchemaRequest != nil {
-		length = proto.Size(m.parkedGetSchemaRequest)
+	if m.parkedGetSchemaBuffer != nil {
+		length = len(m.parkedGetSchemaBuffer)
 	}
 	err := proto.Unmarshal(buf[:length], &req)
 	if err != nil {
@@ -221,16 +247,14 @@ func (m *hostModuleInstance) getSchema(ctx context.Context, buf types.Bytes) typ
 		return wasm.ErrorCodeSchemaUnmarshal
 	}
 
-	if m.parkedGetSchemaResponse == nil {
-		// use a stub response for now
-		resp = processorv1.GetSchemaResponse{
-			Schema: &processorv1.Schema{
-				Bytes: []byte("CONDUIT_SCHEMA_GET"),
-			},
-		}
-		m.parkedGetSchemaResponse = &resp
-		m.parkedGetSchemaRequest = &req
+	// todo: resp := schemaService.GetSchema(unmarshalledRequest)
+	// use a stub response for now
+	schema := schemav1.Schema{
+		Bytes: []byte("CONDUIT_SCHEMA_GET"),
 	}
+	resp := pschema.GetSchemaResponse(schema)
+	m.parkedGetSchemaResponse = resp
+	m.parkedGetSchemaBuffer = buf
 
 	// If the buffer is too small, we park the response and return the size of the
 	// response. The next call to getSchema will return the same response.
@@ -247,7 +271,7 @@ func (m *hostModuleInstance) getSchema(ctx context.Context, buf types.Bytes) typ
 		return wasm.ErrorCodeSchemaMarshal
 	}
 	m.parkedGetSchemaResponse = nil
-	m.parkedGetSchemaRequest = nil
+	m.parkedGetSchemaBuffer = nil
 
 	return types.Uint32(len(out))
 }
