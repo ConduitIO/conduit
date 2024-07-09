@@ -28,8 +28,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/conduitio/conduit/pkg/plugin/connector/connutils"
-
 	pconduitserver "github.com/conduitio/conduit-connector-protocol/pconduit/v1/server"
 	conduitv1 "github.com/conduitio/conduit-connector-protocol/proto/conduit/v1"
 	conduitschemaregistry "github.com/conduitio/conduit-schema-registry"
@@ -49,6 +47,7 @@ import (
 	"github.com/conduitio/conduit/pkg/pipeline"
 	conn_plugin "github.com/conduitio/conduit/pkg/plugin/connector"
 	conn_builtin "github.com/conduitio/conduit/pkg/plugin/connector/builtin"
+	"github.com/conduitio/conduit/pkg/plugin/connector/connutils"
 	conn_standalone "github.com/conduitio/conduit/pkg/plugin/connector/standalone"
 	proc_plugin "github.com/conduitio/conduit/pkg/plugin/processor"
 	proc_builtin "github.com/conduitio/conduit/pkg/plugin/processor/builtin"

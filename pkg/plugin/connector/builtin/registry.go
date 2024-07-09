@@ -18,8 +18,6 @@ import (
 	"context"
 	"runtime/debug"
 
-	"github.com/conduitio/conduit/pkg/plugin/connector/connutils"
-
 	file "github.com/conduitio/conduit-connector-file"
 	generator "github.com/conduitio/conduit-connector-generator"
 	kafka "github.com/conduitio/conduit-connector-kafka"
@@ -33,6 +31,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/conduitio/conduit/pkg/plugin/connector"
+	"github.com/conduitio/conduit/pkg/plugin/connector/connutils"
 )
 
 var (

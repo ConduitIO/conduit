@@ -137,9 +137,8 @@ func (p *decodeProcessor) Configure(ctx context.Context, m map[string]string) er
 	return nil
 }
 
-func (p *decodeProcessor) Open(ctx context.Context) error {
-	// TODO: use the same schema registry as schemaregistry.Service, or better
-	//  yet, refactor the processor to use the service directly.
+func (p *decodeProcessor) Open(context.Context) error {
+	// TODO: somehow inject the schemaregistry.Registry that Conduit created.
 	client, err := schemaregistry.NewClient(p.logger, p.cfg.ClientOptions()...)
 	if err != nil {
 		return cerrors.Errorf("could not create schema registry client: %w", err)
