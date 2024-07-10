@@ -51,4 +51,3 @@ jobs:
           image-tags: '*-nightly*'
           cut-off: 1w
           token: ${{ secrets.NIGHTLY_BUILD_GH_TOKEN }}
-          dry-run: true
