@@ -164,15 +164,17 @@ func (m *hostModuleInstance) commandResponse(ctx context.Context, buf types.Byte
 func (m *hostModuleInstance) createSchema(ctx context.Context, buf types.Bytes) types.Uint32 {
 	m.logger.Trace(ctx).Msg("executing create_schema")
 
+	// check if there's a parked response from the last call
 	if m.parkedCreateSchemaResponse != nil {
+		// make sure the request is the same as the last one
 		if bytes.Equal(buf[:len(m.parkedCreateSchemaBuffer)], m.parkedCreateSchemaBuffer) {
-			m.parkedCreateSchemaResponse = nil
-			m.parkedCreateSchemaBuffer = nil
 			out, err := proto.MarshalOptions{}.MarshalAppend(buf[:0], m.parkedCreateSchemaResponse)
 			if err != nil {
 				m.logger.Err(ctx, err).Msg("failed marshalling protobuf create schema response")
 				return wasm.ErrorCodeSchemaMarshal
 			}
+			m.parkedCreateSchemaResponse = nil
+			m.parkedCreateSchemaBuffer = nil
 			return types.Uint32(len(out))
 		}
 	}
@@ -222,15 +224,17 @@ func (m *hostModuleInstance) createSchema(ctx context.Context, buf types.Bytes) 
 func (m *hostModuleInstance) getSchema(ctx context.Context, buf types.Bytes) types.Uint32 {
 	m.logger.Trace(ctx).Msg("executing get_schema")
 
+	// check if there's a parked response from the last call
 	if m.parkedGetSchemaResponse != nil {
+		// make sure the request is the same as the last one
 		if bytes.Equal(buf[:len(m.parkedGetSchemaBuffer)], m.parkedGetSchemaBuffer) {
-			m.parkedGetSchemaResponse = nil
-			m.parkedGetSchemaBuffer = nil
 			out, err := proto.MarshalOptions{}.MarshalAppend(buf[:0], m.parkedGetSchemaResponse)
 			if err != nil {
 				m.logger.Err(ctx, err).Msg("failed marshalling protobuf get schema response")
 				return wasm.ErrorCodeSchemaMarshal
 			}
+			m.parkedGetSchemaResponse = nil
+			m.parkedGetSchemaBuffer = nil
 			return types.Uint32(len(out))
 		}
 	}
