@@ -30,7 +30,7 @@ import (
 type DB struct {
 	initOnce sync.Once
 	values   map[string][]byte
-	m        sync.Mutex
+	m        sync.RWMutex
 }
 
 var _ database.DB = (*DB)(nil)
@@ -124,6 +124,10 @@ func (d *DB) Get(ctx context.Context, key string) ([]byte, error) {
 		}
 		return val, nil
 	}
+
+	d.m.RLock()
+	defer d.m.RUnlock()
+
 	val, ok := d.values[key]
 	if !ok {
 		return nil, database.ErrKeyNotExist
@@ -158,6 +162,10 @@ func (d *DB) GetKeys(ctx context.Context, prefix string) ([]string, error) {
 		}
 		return result, nil
 	}
+
+	d.m.RLock()
+	defer d.m.RUnlock()
+
 	var result []string
 	for k := range d.values {
 		if strings.HasPrefix(k, prefix) {
