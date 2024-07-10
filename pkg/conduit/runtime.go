@@ -20,6 +20,7 @@ package conduit
 
 import (
 	"context"
+	"gopkg.in/tomb.v2"
 	"net"
 	"net/http"
 	"os"
@@ -60,6 +61,7 @@ import (
 	"github.com/conduitio/conduit/pkg/web/ui"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	grpcruntime "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"github.com/piotrkowalczuk/promgrpc/v4"
 	promclient "github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/zerolog"
@@ -157,7 +159,7 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 }
 
 // Create all necessary internal services
-func initServices(r *Runtime) error {
+func createServices(r *Runtime) error {
 	standaloneReg, err := proc_standalone.NewRegistry(r.logger, r.Config.Processors.Path)
 	if err != nil {
 		return cerrors.Errorf("failed creating processor registry: %w", err)
