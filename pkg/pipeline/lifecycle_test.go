@@ -166,8 +166,54 @@ func TestService_buildNodes_noSourceNode(t *testing.T) {
 		},
 		pl,
 	)
+	is.Equal(err.Error(), wantErr)
+	is.Equal(got, nil)
+}
 
-	fmt.Printf("got: %v, want: %v", err, wantErr)
+func TestService_buildNodes_noDestinationNode(t *testing.T) {
+	is := is.New(t)
+	ctx, killAll := context.WithCancel(context.Background())
+	defer killAll()
+	ctrl := gomock.NewController(t)
+	logger := log.New(zerolog.Nop())
+	db := &inmemory.DB{}
+	persister := connector.NewPersister(logger, db, time.Second, 3)
+
+	ps := NewService(logger, db)
+
+	wantErr := "can't build pipeline without any destination connectors"
+
+	source := dummySource(persister)
+	dlq := dummyDestination(persister)
+
+	pl := &Instance{
+		ID:     uuid.NewString(),
+		Config: Config{Name: "test-pipeline"},
+		Status: StatusUserStopped,
+		DLQ: DLQ{
+			Plugin:              dlq.Plugin,
+			Settings:            map[string]string{},
+			WindowSize:          3,
+			WindowNackThreshold: 2,
+		},
+		ConnectorIDs: []string{source.ID},
+	}
+
+	got, err := ps.buildNodes(
+		ctx,
+		testConnectorFetcher{
+			source.ID: source,
+			testDLQID: dlq,
+		},
+		testProcessorFetcher{},
+		testPluginFetcher{
+			source.Plugin: pmock.NewDispenser(ctrl),
+			dlq.Plugin:    pmock.NewDispenser(ctrl),
+		},
+		pl,
+	)
+
+	is.Equal(err.Error(), wantErr)
 	is.Equal(got, nil)
 }
 
