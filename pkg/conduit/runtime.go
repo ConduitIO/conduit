@@ -20,7 +20,6 @@ package conduit
 
 import (
 	"context"
-	"gopkg.in/tomb.v2"
 	"net"
 	"net/http"
 	"os"
@@ -70,6 +69,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
+	"gopkg.in/tomb.v2"
 )
 
 const (
