@@ -78,7 +78,13 @@ func newTestDispenser(t *testing.T, logger zerolog.Logger, version int) (
 	}
 
 	// Connect
-	dispenser, err := NewDispenser(logger, "", client.WithReattachConfig(config), reattachVersionedPluginOption{version: version})
+	dispenser, err := NewDispenser(
+		logger,
+		"",
+		":12345",
+		client.WithReattachConfig(config),
+		reattachVersionedPluginOption{version: version},
+	)
 	if err != nil {
 		t.Fatal("could not create dispenser", err)
 	}

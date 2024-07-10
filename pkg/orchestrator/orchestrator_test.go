@@ -77,6 +77,7 @@ func TestPipelineSimple(t *testing.T) {
 		conn_builtin.NewRegistry(logger, conn_builtin.DefaultBuiltinConnectors, schemaService),
 		conn_standalone.NewRegistry(logger, ""),
 	)
+	connPluginService.Init(ctx, "")
 
 	procPluginService := proc_plugin.NewPluginService(
 		logger,

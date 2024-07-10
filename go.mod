@@ -8,7 +8,7 @@ require (
 	github.com/Masterminds/sprig/v3 v3.2.3
 	github.com/NYTimes/gziphandler v1.1.1
 	github.com/bufbuild/buf v1.34.0
-	github.com/conduitio/conduit-commons v0.2.1-0.20240708122218-5d1883981cfc
+	github.com/conduitio/conduit-commons v0.2.1-0.20240709142247-d973cba9694c
 	github.com/conduitio/conduit-connector-file v0.6.1-0.20240621111422-221c138201d3
 	github.com/conduitio/conduit-connector-generator v0.6.1-0.20240621111436-e9fa3464f7b2
 	github.com/conduitio/conduit-connector-kafka v0.8.1-0.20240621111431-87c01cf39a06
@@ -16,7 +16,7 @@ require (
 	github.com/conduitio/conduit-connector-postgres v0.7.6-0.20240630172132-84b5a6e6104f
 	github.com/conduitio/conduit-connector-protocol v0.6.1-0.20240705154009-b938cfa7f251
 	github.com/conduitio/conduit-connector-s3 v0.5.2-0.20240630172807-e278fde1fb46
-	github.com/conduitio/conduit-connector-sdk v0.9.2-0.20240705162050-971c5f7facc2
+	github.com/conduitio/conduit-connector-sdk v0.9.2-0.20240708234418-34d1c368caee
 	github.com/conduitio/conduit-processor-sdk v0.1.2-0.20240516124003-442e4a3f0edd
 	github.com/conduitio/conduit-schema-registry v0.0.0-20240705193355-7e2064b44e0d
 	github.com/conduitio/yaml/v3 v3.3.0
@@ -37,7 +37,6 @@ require (
 	github.com/matryer/is v1.4.1
 	github.com/neilotoole/slogt v1.1.0
 	github.com/peterbourgon/ff/v3 v3.4.0
-	github.com/piotrkowalczuk/promgrpc/v4 v4.1.3
 	github.com/prometheus/client_golang v1.19.1
 	github.com/prometheus/client_model v0.6.1
 	github.com/prometheus/common v0.55.0
@@ -346,4 +345,10 @@ require (
 	honnef.co/go/tools v0.4.7 // indirect
 	mvdan.cc/gofumpt v0.6.0 // indirect
 	mvdan.cc/unparam v0.0.0-20240528143540-8a5130ca722f // indirect
+)
+
+replace (
+	github.com/conduitio/conduit-connector-postgres => ../conduit-connector-postgres
+	github.com/conduitio/conduit-connector-protocol => ../conduit-connector-protocol
+	github.com/conduitio/conduit-connector-sdk => ../conduit-connector-sdk
 )

@@ -34,6 +34,7 @@ import (
 //     separate process and communicates with it via gRPC. These plugins are
 //     compiled independently of Conduit and can be included at runtime.
 type registry interface {
+	Init(context.Context, string)
 	NewDispenser(logger log.CtxLogger, name plugin.FullName) (Dispenser, error)
 	List() map[plugin.FullName]pconnector.Specification
 }
@@ -55,6 +56,11 @@ func NewPluginService(
 		builtinReg:    builtin,
 		standaloneReg: standalone,
 	}
+}
+
+func (s *PluginService) Init(ctx context.Context, connUtilsAddr string) {
+	s.builtinReg.Init(ctx, connUtilsAddr)
+	s.standaloneReg.Init(ctx, connUtilsAddr)
 }
 
 func (s *PluginService) Check(context.Context) error {
