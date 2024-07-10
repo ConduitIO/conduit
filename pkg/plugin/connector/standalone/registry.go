@@ -67,7 +67,7 @@ func NewRegistry(logger log.CtxLogger, pluginDir string) *Registry {
 	return r
 }
 
-func (r *Registry) Init(ctx context.Context, connUtilsAddr string) {
+func (r *Registry) Init(ctx context.Context, connUtilsAddr string, connUtilsToken string) {
 	r.connUtilsAddr = connUtilsAddr
 
 	plugins := r.loadPlugins(ctx)

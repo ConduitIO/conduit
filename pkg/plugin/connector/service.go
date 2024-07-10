@@ -26,30 +26,41 @@ import (
 // registry is an object that can create new plugin dispensers. We need to use
 // an interface to prevent a cyclic dependency between the plugin package and
 // builtin and standalone packages.
-// There are two registries that implement this interface:
-//   - The built-in registry creates a dispenser which dispenses a plugin adapter
-//     that communicates with the plugin directly as if it was a library. These
-//     plugins are baked into the Conduit binary and included at compile time.
-//   - The standalone registry creates a dispenser which starts the plugin in a
-//     separate process and communicates with it via gRPC. These plugins are
-//     compiled independently of Conduit and can be included at runtime.
+// There are two registries that implement this interface: builtinReg and standaloneReg
 type registry interface {
-	Init(context.Context, string)
 	NewDispenser(logger log.CtxLogger, name plugin.FullName) (Dispenser, error)
 	List() map[plugin.FullName]pconnector.Specification
+}
+
+// The built-in registry creates a dispenser which dispenses a plugin adapter
+// that communicates with the plugin directly as if it was a library. These
+// plugins are baked into the Conduit binary and included at compile time.
+type builtinReg interface {
+	registry
+
+	Init(context.Context)
+}
+
+// standaloneReg creates a dispenser which starts the plugin in a
+// separate process and communicates with it via gRPC. These plugins are
+// compiled independently of Conduit and can be included at runtime.
+type standaloneReg interface {
+	registry
+
+	Init(ctx context.Context, connUtilsAddr string, connUtilsToken string)
 }
 
 type PluginService struct {
 	logger log.CtxLogger
 
-	builtinReg    registry
-	standaloneReg registry
+	builtinReg    builtinReg
+	standaloneReg standaloneReg
 }
 
 func NewPluginService(
 	logger log.CtxLogger,
-	builtin registry,
-	standalone registry,
+	builtin builtinReg,
+	standalone standaloneReg,
 ) *PluginService {
 	return &PluginService{
 		logger:        logger.WithComponent("connector.PluginService"),
@@ -59,8 +70,8 @@ func NewPluginService(
 }
 
 func (s *PluginService) Init(ctx context.Context, connUtilsAddr string) {
-	s.builtinReg.Init(ctx, connUtilsAddr)
-	s.standaloneReg.Init(ctx, connUtilsAddr)
+	s.builtinReg.Init(ctx)
+	s.standaloneReg.Init(ctx, connUtilsAddr, "token-value")
 }
 
 func (s *PluginService) Check(context.Context) error {

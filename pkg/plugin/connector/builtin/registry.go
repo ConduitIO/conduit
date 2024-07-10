@@ -99,7 +99,7 @@ func NewRegistry(logger log.CtxLogger, connectors map[string]sdk.Connector, serv
 	return r
 }
 
-func (r *Registry) Init(ctx context.Context, s string) {
+func (r *Registry) Init(ctx context.Context) {
 	buildInfo, ok := debug.ReadBuildInfo()
 	if !ok {
 		// we are using modules, build info should always be available, we are staying on the safe side
