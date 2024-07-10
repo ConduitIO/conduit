@@ -35,6 +35,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/database/badger"
 	"github.com/conduitio/conduit/pkg/foundation/database/inmemory"
 	"github.com/conduitio/conduit/pkg/foundation/database/postgres"
+	"github.com/conduitio/conduit/pkg/foundation/database/sqlite"
 	"github.com/conduitio/conduit/pkg/foundation/grpcutil"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics"
@@ -113,6 +114,8 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 		case DBTypeInMemory:
 			db = &inmemory.DB{}
 			logger.Warn(context.Background()).Msg("Using in-memory store, all pipeline configurations will be lost when Conduit stops.")
+		case DBTypeSQLite:
+			db, err = sqlite.New(context.Background(), logger, cfg.DB.SQLite.Path, cfg.DB.SQLite.Table)
 		default:
 			err = cerrors.Errorf("invalid DB type %q", cfg.DB.Type)
 		}
