@@ -25,8 +25,9 @@ import (
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/avro/internal"
 	"github.com/conduitio/conduit/pkg/schemaregistry"
-	"github.com/lovromazgon/franz-go/pkg/sr"
+	"github.com/twmb/franz-go/pkg/sr"
 )
 
 type decoder interface {
@@ -75,8 +76,8 @@ func parseDecodeConfig(ctx context.Context, m map[string]string) (decodeConfig, 
 	return cfg, nil
 }
 
-func (c decodeConfig) ClientOptions() []sr.Opt {
-	clientOpts := []sr.Opt{sr.URLs(c.URL), sr.Normalize()}
+func (c decodeConfig) ClientOptions() []sr.ClientOpt {
+	clientOpts := []sr.ClientOpt{sr.URLs(c.URL)}
 	if c.Auth.Username != "" && c.Auth.Password != "" {
 		clientOpts = append(clientOpts, sr.BasicAuth(c.Auth.Username, c.Auth.Password))
 	}
@@ -136,12 +137,13 @@ func (p *decodeProcessor) Configure(ctx context.Context, m map[string]string) er
 	return nil
 }
 
-func (p *decodeProcessor) Open(ctx context.Context) error {
+func (p *decodeProcessor) Open(context.Context) error {
+	// TODO: somehow inject the schemaregistry.Registry that Conduit created.
 	client, err := schemaregistry.NewClient(p.logger, p.cfg.ClientOptions()...)
 	if err != nil {
 		return cerrors.Errorf("could not create schema registry client: %w", err)
 	}
-	p.decoder = schemaregistry.NewDecoder(client, p.logger, &sr.Serde{})
+	p.decoder = internal.NewDecoder(client, p.logger)
 
 	return nil
 }

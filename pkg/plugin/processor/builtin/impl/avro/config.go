@@ -21,8 +21,7 @@ import (
 	"os"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/schemaregistry"
-	"github.com/lovromazgon/franz-go/pkg/sr"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/avro/internal"
 )
 
 type preRegisteredConfig struct {
@@ -49,7 +48,7 @@ type schemaConfig struct {
 	// The subject name under which the inferred schema will be registered in the schema registry.
 	AutoRegisteredSubject string `json:"autoRegister.subject"`
 
-	strategy schemaregistry.SchemaStrategy
+	strategy internal.SchemaStrategy
 }
 
 func (c *schemaConfig) parse() error {
@@ -72,7 +71,7 @@ func (c *schemaConfig) parsePreRegistered() error {
 		return cerrors.Errorf("version needs to be positive: %v", c.PreRegistered.Version)
 	}
 
-	c.strategy = schemaregistry.DownloadSchemaStrategy{
+	c.strategy = internal.DownloadSchemaStrategy{
 		Subject: c.PreRegistered.Subject,
 		Version: c.PreRegistered.Version,
 	}
@@ -84,8 +83,7 @@ func (c *schemaConfig) parseAutoRegister() error {
 		return cerrors.New("subject required for schema strategy 'autoRegister'")
 	}
 
-	c.strategy = schemaregistry.ExtractAndUploadSchemaStrategy{
-		Type:    sr.TypeAvro,
+	c.strategy = internal.ExtractAndUploadSchemaStrategy{
 		Subject: c.AutoRegisteredSubject,
 	}
 	return nil

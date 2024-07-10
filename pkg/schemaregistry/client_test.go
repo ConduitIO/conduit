@@ -23,8 +23,9 @@ import (
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/lovromazgon/franz-go/pkg/sr"
+	"github.com/conduitio/conduit/pkg/schemaregistry/schemaregistrytest"
 	"github.com/matryer/is"
+	"github.com/twmb/franz-go/pkg/sr"
 )
 
 func TestClient_NotFound(t *testing.T) {
@@ -36,7 +37,7 @@ func TestClient_NotFound(t *testing.T) {
 	c, err := NewClient(
 		logger,
 		sr.HTTPClient(&http.Client{Transport: rtr}),
-		sr.URLs(TestSchemaRegistryURL(t)),
+		sr.URLs(schemaregistrytest.TestSchemaRegistryURL(t)),
 	)
 	is.NoErr(err)
 
@@ -95,7 +96,7 @@ func TestClient_CacheMiss(t *testing.T) {
 	// register schema in the schema registry but not in the client, to get a
 	// cache miss but fetch from registry should return the schema
 
-	srClient, err := sr.NewClient(sr.URLs(TestSchemaRegistryURL(t)))
+	srClient, err := sr.NewClient(sr.URLs(schemaregistrytest.TestSchemaRegistryURL(t)))
 	is.NoErr(err)
 	want, err := srClient.CreateSchema(ctx, "test-cache-miss", sr.Schema{
 		Schema: `"string"`,
@@ -109,7 +110,7 @@ func TestClient_CacheMiss(t *testing.T) {
 	c, err := NewClient(
 		logger,
 		sr.HTTPClient(&http.Client{Transport: rtr}),
-		sr.URLs(TestSchemaRegistryURL(t)),
+		sr.URLs(schemaregistrytest.TestSchemaRegistryURL(t)),
 	)
 	is.NoErr(err)
 
@@ -180,7 +181,7 @@ func TestClient_CacheHit(t *testing.T) {
 	c, err := NewClient(
 		logger,
 		sr.HTTPClient(&http.Client{Transport: rtr}),
-		sr.URLs(TestSchemaRegistryURL(t)),
+		sr.URLs(schemaregistrytest.TestSchemaRegistryURL(t)),
 	)
 	is.NoErr(err)
 
@@ -217,7 +218,7 @@ func TestClient_CacheHit(t *testing.T) {
 	)
 	rtr.AssertRecord(is, 4,
 		assertMethod("PUT"),
-		assertRequestURI("/config/test-cache-hit?defaultToGlobal=true"),
+		assertRequestURI("/config/test-cache-hit"),
 		assertResponseStatus(200),
 		assertError(nil),
 	)

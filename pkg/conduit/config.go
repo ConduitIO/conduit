@@ -17,6 +17,7 @@ package conduit
 import (
 	"os"
 
+	sdk "github.com/conduitio/conduit-connector-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/database"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -29,8 +30,8 @@ const (
 	DBTypePostgres = "postgres"
 	DBTypeInMemory = "inmemory"
 
-	SchemaTypeConfluent = "confluent"
-	SchemaTypeInMemory  = "inmemory"
+	SchemaRegistryTypeConfluent = "confluent"
+	SchemaRegistryTypeBuiltin   = "builtin"
 )
 
 // Config holds all configurable values for Conduit.
@@ -79,7 +80,7 @@ type Config struct {
 		ExitOnError bool
 	}
 
-	PluginDispenserFactories map[string]builtin.DispenserFactory
+	ConnectorPlugins map[string]sdk.Connector
 
 	dev struct {
 		cpuprofile   string
@@ -87,12 +88,11 @@ type Config struct {
 		blockprofile string
 	}
 
-	Schema struct {
+	SchemaRegistry struct {
 		Type string
 
 		Confluent struct {
 			ConnectionString string
-			HealthCheckPath  string
 		}
 	}
 }
@@ -110,9 +110,9 @@ func DefaultConfig() Config {
 	cfg.Connectors.Path = "./connectors"
 	cfg.Processors.Path = "./processors"
 	cfg.Pipelines.Path = "./pipelines"
-	cfg.Schema.Type = SchemaTypeInMemory
+	cfg.SchemaRegistry.Type = SchemaRegistryTypeBuiltin
 
-	cfg.PluginDispenserFactories = builtin.DefaultDispenserFactories
+	cfg.ConnectorPlugins = builtin.DefaultBuiltinConnectors
 	return cfg
 }
 
@@ -139,19 +139,16 @@ func (c Config) validateDBConfig() error {
 	return nil
 }
 
-func (c Config) validateSchemaConfig() error {
-	switch c.Schema.Type {
-	case SchemaTypeConfluent:
-		if c.Schema.Confluent.ConnectionString == "" {
-			return requiredConfigFieldErr("schema.confluent.connection-string")
+func (c Config) validateSchemaRegistryConfig() error {
+	switch c.SchemaRegistry.Type {
+	case SchemaRegistryTypeConfluent:
+		if c.SchemaRegistry.Confluent.ConnectionString == "" {
+			return requiredConfigFieldErr("schema-registry.confluent.connection-string")
 		}
-		if c.Schema.Confluent.HealthCheckPath == "" {
-			return requiredConfigFieldErr("schema.confluent.health-check-path")
-		}
-	case SchemaTypeInMemory:
+	case SchemaRegistryTypeBuiltin:
 		// all good
 	default:
-		return invalidConfigFieldErr("schema.type")
+		return invalidConfigFieldErr("schema-registry.type")
 	}
 	return nil
 }
@@ -163,7 +160,7 @@ func (c Config) Validate() error {
 		return err
 	}
 
-	if err := c.validateSchemaConfig(); err != nil {
+	if err := c.validateSchemaRegistryConfig(); err != nil {
 		return err
 	}
 

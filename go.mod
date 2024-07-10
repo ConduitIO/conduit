@@ -8,16 +8,17 @@ require (
 	github.com/Masterminds/sprig/v3 v3.2.3
 	github.com/NYTimes/gziphandler v1.1.1
 	github.com/bufbuild/buf v1.34.0
-	github.com/conduitio/conduit-commons v0.2.1-0.20240701165122-3948a38f3667
+	github.com/conduitio/conduit-commons v0.2.1-0.20240708122218-5d1883981cfc
 	github.com/conduitio/conduit-connector-file v0.6.1-0.20240621111422-221c138201d3
 	github.com/conduitio/conduit-connector-generator v0.6.1-0.20240621111436-e9fa3464f7b2
 	github.com/conduitio/conduit-connector-kafka v0.8.1-0.20240621111431-87c01cf39a06
 	github.com/conduitio/conduit-connector-log v0.3.1-0.20240621111440-e2f0f04a35a4
 	github.com/conduitio/conduit-connector-postgres v0.7.6-0.20240630172132-84b5a6e6104f
-	github.com/conduitio/conduit-connector-protocol v0.6.1-0.20240703140334-b3295b0a9f6e
+	github.com/conduitio/conduit-connector-protocol v0.6.1-0.20240705154009-b938cfa7f251
 	github.com/conduitio/conduit-connector-s3 v0.5.2-0.20240630172807-e278fde1fb46
-	github.com/conduitio/conduit-connector-sdk v0.9.2-0.20240628152134-4cafa91a4ded
+	github.com/conduitio/conduit-connector-sdk v0.9.2-0.20240705162050-971c5f7facc2
 	github.com/conduitio/conduit-processor-sdk v0.1.2-0.20240516124003-442e4a3f0edd
+	github.com/conduitio/conduit-schema-registry v0.0.0-20240705193355-7e2064b44e0d
 	github.com/conduitio/yaml/v3 v3.3.0
 	github.com/dgraph-io/badger/v4 v4.2.0
 	github.com/dop251/goja v0.0.0-20231027120936-b396bb4c349d
@@ -29,14 +30,12 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.20.0
-	github.com/hamba/avro/v2 v2.22.1
 	github.com/hashicorp/go-hclog v1.6.3
 	github.com/hashicorp/go-plugin v1.6.1
 	github.com/jackc/pgx/v5 v5.6.0
 	github.com/jpillora/backoff v1.0.0
-	github.com/lovromazgon/franz-go/pkg/sr v0.0.0-20230630140346-bb9ce3f90f4a
 	github.com/matryer/is v1.4.1
-	github.com/modern-go/reflect2 v1.0.2
+	github.com/neilotoole/slogt v1.1.0
 	github.com/peterbourgon/ff/v3 v3.4.0
 	github.com/piotrkowalczuk/promgrpc/v4 v4.1.3
 	github.com/prometheus/client_golang v1.19.1
@@ -45,6 +44,7 @@ require (
 	github.com/rs/zerolog v1.33.0
 	github.com/stealthrocket/wazergo v0.19.1
 	github.com/tetratelabs/wazero v1.7.3
+	github.com/twmb/franz-go/pkg/sr v1.0.0
 	github.com/twmb/go-cache v1.2.1
 	go.uber.org/mock v0.4.0
 	golang.org/x/exp v0.0.0-20240613232115-7f521ea00fb8
@@ -186,6 +186,7 @@ require (
 	github.com/gostaticanalysis/comment v1.4.2 // indirect
 	github.com/gostaticanalysis/forcetypeassert v0.1.0 // indirect
 	github.com/gostaticanalysis/nilerr v0.1.1 // indirect
+	github.com/hamba/avro/v2 v2.22.1 // indirect
 	github.com/hashicorp/go-version v1.7.0 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/hashicorp/yamux v0.1.1 // indirect
@@ -238,6 +239,7 @@ require (
 	github.com/moby/docker-image-spec v1.3.1 // indirect
 	github.com/moby/term v0.5.0 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
+	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/moricho/tparallel v0.3.1 // indirect
 	github.com/morikuni/aec v1.0.0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect

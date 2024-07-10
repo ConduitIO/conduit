@@ -22,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	schemaregistry "github.com/conduitio/conduit-schema-registry"
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/ctxutil"
 	"github.com/conduitio/conduit/pkg/foundation/database/badger"
@@ -30,6 +31,7 @@ import (
 	"github.com/conduitio/conduit/pkg/pipeline"
 	conn_plugin "github.com/conduitio/conduit/pkg/plugin/connector"
 	conn_builtin "github.com/conduitio/conduit/pkg/plugin/connector/builtin"
+	"github.com/conduitio/conduit/pkg/plugin/connector/connutils"
 	conn_standalone "github.com/conduitio/conduit/pkg/plugin/connector/standalone"
 	proc_plugin "github.com/conduitio/conduit/pkg/plugin/processor"
 	proc_builtin "github.com/conduitio/conduit/pkg/plugin/processor/builtin"
@@ -69,9 +71,10 @@ func TestPipelineSimple(t *testing.T) {
 		is.NoErr(err)
 	})
 
+	schemaService := connutils.NewSchemaService(logger, schemaregistry.NewSchemaRegistry())
 	connPluginService := conn_plugin.NewPluginService(
 		logger,
-		conn_builtin.NewRegistry(logger, conn_builtin.DefaultDispenserFactories),
+		conn_builtin.NewRegistry(logger, conn_builtin.DefaultBuiltinConnectors, schemaService),
 		conn_standalone.NewRegistry(logger, ""),
 	)
 
