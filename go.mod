@@ -14,7 +14,7 @@ require (
 	github.com/conduitio/conduit-connector-kafka v0.8.1-0.20240621111431-87c01cf39a06
 	github.com/conduitio/conduit-connector-log v0.3.1-0.20240621111440-e2f0f04a35a4
 	github.com/conduitio/conduit-connector-postgres v0.7.6-0.20240630172132-84b5a6e6104f
-	github.com/conduitio/conduit-connector-protocol v0.6.1-0.20240705154009-b938cfa7f251
+	github.com/conduitio/conduit-connector-protocol v0.6.1-0.20240711112538-4e32f3a34aa3
 	github.com/conduitio/conduit-connector-s3 v0.5.2-0.20240630172807-e278fde1fb46
 	github.com/conduitio/conduit-connector-sdk v0.9.2-0.20240708234418-34d1c368caee
 	github.com/conduitio/conduit-processor-sdk v0.1.2-0.20240516124003-442e4a3f0edd
@@ -346,10 +346,4 @@ require (
 	honnef.co/go/tools v0.4.7 // indirect
 	mvdan.cc/gofumpt v0.6.0 // indirect
 	mvdan.cc/unparam v0.0.0-20240528143540-8a5130ca722f // indirect
-)
-
-replace (
-	github.com/conduitio/conduit-connector-postgres => ../conduit-connector-postgres
-	github.com/conduitio/conduit-connector-protocol => ../conduit-connector-protocol
-	github.com/conduitio/conduit-connector-sdk => ../conduit-connector-sdk
 )
