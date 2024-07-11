@@ -227,8 +227,8 @@ github.com/conduitio/conduit-connector-protocol v0.6.1-0.20240711112538-4e32f3a3
 github.com/conduitio/conduit-connector-protocol v0.6.1-0.20240711112538-4e32f3a34aa3/go.mod h1:xNSCnYxVZFTqa7JTTn4zSannSLK1/hUhSJnoV/cXzes=
 github.com/conduitio/conduit-connector-s3 v0.5.2-0.20240630172807-e278fde1fb46 h1:tur/pSyX1RLzkxiBwhsV1qa6wP60pb20hJMptH5RRJY=
 github.com/conduitio/conduit-connector-s3 v0.5.2-0.20240630172807-e278fde1fb46/go.mod h1:m+pf2cMF+qCwhMj9gUBV1BPGLPYauhtYkj2zFddfvdE=
-github.com/conduitio/conduit-connector-sdk v0.9.2-0.20240708234418-34d1c368caee h1:SYy2RDH4SoMQlUhvaaYsd9u+n1VEw+Z5ZgibvYGbbpc=
-github.com/conduitio/conduit-connector-sdk v0.9.2-0.20240708234418-34d1c368caee/go.mod h1:sf6tsSp7JVSKisjc/0gYXGPClENg3DmBq6P/SytSm6Y=
+github.com/conduitio/conduit-connector-sdk v0.9.2-0.20240711113046-c35080163f50 h1:2Ulz4jm9E48EN69/D/jDbU+NVYWAbAFPnAMDM7XhKg8=
+github.com/conduitio/conduit-connector-sdk v0.9.2-0.20240711113046-c35080163f50/go.mod h1:almw9AfqD+crgICqoFDAzfMZNOgA7qXcLPhRF0N7Qs0=
 github.com/conduitio/conduit-processor-sdk v0.1.2-0.20240516124003-442e4a3f0edd h1:R+tpcZKWOnr6LRsXr85C167SK9MhaLhYUEjBSUupU9Y=
 github.com/conduitio/conduit-processor-sdk v0.1.2-0.20240516124003-442e4a3f0edd/go.mod h1:E9zqj0atY1+yBHWi4eZ3TagCZSBnFxBQBUcZktL6RFE=
 github.com/conduitio/conduit-schema-registry v0.0.0-20240705193355-7e2064b44e0d h1:C6wRzdyqdQQCL/lCruAsH0j1JoN2GEZBQdDHoxA2B0o=
