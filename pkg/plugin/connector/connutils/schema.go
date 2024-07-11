@@ -55,7 +55,7 @@ func (s *SchemaService) Check(ctx context.Context) error {
 func (s *SchemaService) CreateSchema(ctx context.Context, req pconduit.CreateSchemaRequest) (pconduit.CreateSchemaResponse, error) {
 	err := s.validateToken(ctx)
 	if err != nil {
-		return pconduit.CreateSchemaResponse{}, cerrors.Errorf("invalid token: %w", err)
+		return pconduit.CreateSchemaResponse{}, err
 	}
 
 	ss, err := s.registry.CreateSchema(ctx, req.Subject, sr.Schema{
@@ -77,7 +77,7 @@ func (s *SchemaService) CreateSchema(ctx context.Context, req pconduit.CreateSch
 func (s *SchemaService) GetSchema(ctx context.Context, req pconduit.GetSchemaRequest) (pconduit.GetSchemaResponse, error) {
 	err := s.validateToken(ctx)
 	if err != nil {
-		return pconduit.GetSchemaResponse{}, cerrors.Errorf("invalid token: %w", err)
+		return pconduit.GetSchemaResponse{}, err
 	}
 
 	ss, err := s.registry.SchemaBySubjectVersion(ctx, req.Subject, req.Version)
@@ -101,7 +101,7 @@ func (s *SchemaService) Token() string {
 func (s *SchemaService) validateToken(ctx context.Context) error {
 	token := pconduit.ConnectorTokenFromContext(ctx)
 	if token != s.Token() {
-		return cerrors.Errorf("token %v is invalid", token)
+		return cerrors.Errorf("token %q is invalid", token)
 	}
 
 	return nil
