@@ -30,9 +30,10 @@ import (
 )
 
 type Registry struct {
-	logger        log.CtxLogger
-	pluginDir     string
-	connUtilsAddr string
+	logger         log.CtxLogger
+	pluginDir      string
+	connUtilsAddr  string
+	connUtilsToken string
 
 	// plugins stores plugin blueprints in a 2D map, first key is the plugin
 	// name, the second key is the plugin version
@@ -69,6 +70,7 @@ func NewRegistry(logger log.CtxLogger, pluginDir string) *Registry {
 
 func (r *Registry) Init(ctx context.Context, connUtilsAddr string, connUtilsToken string) {
 	r.connUtilsAddr = connUtilsAddr
+	r.connUtilsToken = connUtilsToken
 
 	plugins := r.loadPlugins(ctx)
 	r.m.Lock()
@@ -159,7 +161,7 @@ func (r *Registry) loadPlugins(ctx context.Context) map[string]map[string]bluepr
 
 func (r *Registry) loadSpecifications(pluginPath string) (pconnector.Specification, error) {
 	// create dispenser without a logger to not spam logs on refresh
-	dispenser, err := NewDispenser(zerolog.Nop(), pluginPath, r.connUtilsAddr)
+	dispenser, err := NewDispenser(zerolog.Nop(), pluginPath, r.connUtilsAddr, r.connUtilsToken)
 	if err != nil {
 		return pconnector.Specification{}, cerrors.Errorf("failed to create connector dispenser: %w", err)
 	}
@@ -195,7 +197,7 @@ func (r *Registry) NewDispenser(logger log.CtxLogger, fullName plugin.FullName) 
 	}
 
 	logger = logger.WithComponent("plugin.standalone")
-	return NewDispenser(logger.ZerologWithComponent(), bp.Path, r.connUtilsAddr)
+	return NewDispenser(logger.ZerologWithComponent(), bp.Path, r.connUtilsAddr, r.connUtilsToken)
 }
 
 func (r *Registry) List() map[plugin.FullName]pconnector.Specification {

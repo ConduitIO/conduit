@@ -69,9 +69,9 @@ func NewPluginService(
 	}
 }
 
-func (s *PluginService) Init(ctx context.Context, connUtilsAddr string) {
+func (s *PluginService) Init(ctx context.Context, connUtilsAddr string, connUtilsToken string) {
 	s.builtinReg.Init(ctx)
-	s.standaloneReg.Init(ctx, connUtilsAddr, "token-value")
+	s.standaloneReg.Init(ctx, connUtilsAddr, connUtilsToken)
 }
 
 func (s *PluginService) Check(context.Context) error {

@@ -714,6 +714,8 @@ func (r *Runtime) initServices(ctx context.Context, t *tomb.Tomb) error {
 		return cerrors.Errorf("failed to init processor service: %w", err)
 	}
 
+	token := r.connSchemaService.Token()
+
 	// Initialize APIs needed by connector plugins
 	// Needs to be initialized before connectorPluginService
 	// because the standalone connector registry needs to run all plugins,
@@ -724,7 +726,7 @@ func (r *Runtime) initServices(ctx context.Context, t *tomb.Tomb) error {
 	}
 	r.logger.Info(ctx).Msgf("connector utilities started on %v", connUtilsAddr)
 
-	r.connectorPluginService.Init(ctx, connUtilsAddr.String())
+	r.connectorPluginService.Init(ctx, connUtilsAddr.String(), token)
 
 	err = r.connectorService.Init(ctx)
 	if err != nil {

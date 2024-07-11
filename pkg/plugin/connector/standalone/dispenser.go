@@ -27,22 +27,24 @@ import (
 )
 
 type Dispenser struct {
-	logger        zerolog.Logger
-	connUtilsAddr string
-	path          string
-	opts          []client.Option
+	logger         zerolog.Logger
+	connUtilsAddr  string
+	connUtilsToken string
+	path           string
+	opts           []client.Option
 
 	dispensed bool
 	client    *goplugin.Client
 	m         sync.Mutex
 }
 
-func NewDispenser(logger zerolog.Logger, path string, connUtilsAddr string, opts ...client.Option) (*Dispenser, error) {
+func NewDispenser(logger zerolog.Logger, path string, connUtilsAddr string, connUtilsToken string, opts ...client.Option) (*Dispenser, error) {
 	d := Dispenser{
-		logger:        logger,
-		path:          path,
-		connUtilsAddr: connUtilsAddr,
-		opts:          opts,
+		logger:         logger,
+		path:           path,
+		connUtilsAddr:  connUtilsAddr,
+		connUtilsToken: connUtilsToken,
+		opts:           opts,
 	}
 
 	err := d.initClient()
@@ -54,7 +56,7 @@ func NewDispenser(logger zerolog.Logger, path string, connUtilsAddr string, opts
 }
 
 func (d *Dispenser) initClient() error {
-	c, err := client.New(&hcLogger{logger: d.logger}, d.path, d.connUtilsAddr, d.opts...)
+	c, err := client.New(&hcLogger{logger: d.logger}, d.path, d.connUtilsAddr, d.connUtilsToken, d.opts...)
 	if err != nil {
 		return cerrors.Errorf("could not create go-plugin client: %w", err)
 	}
