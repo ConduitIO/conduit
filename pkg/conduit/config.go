@@ -29,6 +29,7 @@ const (
 	DBTypeBadger   = "badger"
 	DBTypePostgres = "postgres"
 	DBTypeInMemory = "inmemory"
+	DBTypeSQLite   = "sqlite"
 
 	SchemaRegistryTypeConfluent = "confluent"
 	SchemaRegistryTypeBuiltin   = "builtin"
@@ -48,6 +49,10 @@ type Config struct {
 		Postgres struct {
 			ConnectionString string
 			Table            string
+		}
+		SQLite struct {
+			Path  string
+			Table string
 		}
 	}
 
@@ -102,6 +107,8 @@ func DefaultConfig() Config {
 	cfg.DB.Type = DBTypeBadger
 	cfg.DB.Badger.Path = "conduit.db"
 	cfg.DB.Postgres.Table = "conduit_kv_store"
+	cfg.DB.SQLite.Path = "conduit.db"
+	cfg.DB.SQLite.Table = "conduit_kv_store"
 	cfg.API.Enabled = true
 	cfg.API.HTTP.Address = ":8080"
 	cfg.API.GRPC.Address = ":8084"
@@ -132,6 +139,13 @@ func (c Config) validateDBConfig() error {
 			}
 		case DBTypeInMemory:
 			// all good
+		case DBTypeSQLite:
+			if c.DB.SQLite.Path == "" {
+				return requiredConfigFieldErr("db.sqlite.path")
+			}
+			if c.DB.SQLite.Table == "" {
+				return requiredConfigFieldErr("db.sqlite.table")
+			}
 		default:
 			return invalidConfigFieldErr("db.type")
 		}
