@@ -10,6 +10,9 @@ builds:
       - darwin
       - linux
       - windows
+    ignore:
+      - goos: windows
+        goarch: "386"
     env:
       - CGO_ENABLED=0
     tags:
@@ -71,7 +74,6 @@ release:
     ### Windows
     
     - 📦 [conduit_{{ .Version }}_Windows_arm64.zip](https://conduit.gateway.scarf.sh/conduit/download/{{ .Tag }}/conduit_{{ .Version }}_Windows_arm64.zip)
-    - 📦 [conduit_{{ .Version }}_Windows_i386.zip](https://conduit.gateway.scarf.sh/conduit/download/{{ .Tag }}/conduit_{{ .Version }}_Windows_i386.zip)
     - 📦 [conduit_{{ .Version }}_Windows_x86_64.zip](https://conduit.gateway.scarf.sh/conduit/download/{{ .Tag }}/conduit_{{ .Version }}_Windows_x86_64.zip)
 
     ## Docker images
