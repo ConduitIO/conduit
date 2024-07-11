@@ -16,7 +16,6 @@ package standalone
 
 import (
 	"context"
-	"os"
 	"strconv"
 	"testing"
 	"time"
@@ -54,7 +53,7 @@ func newTestDispenser(t *testing.T, logger zerolog.Logger, version int) (
 	go func() {
 		defer close(closeCh)
 		// Trick to convince the plugin it should use a specific protocol version
-		os.Setenv("PLUGIN_PROTOCOL_VERSIONS", strconv.Itoa(version))
+		t.Setenv("PLUGIN_PROTOCOL_VERSIONS", strconv.Itoa(version))
 		err := server.Serve(
 			func() pconnector.SpecifierPlugin { return mockSpecifier },
 			func() pconnector.SourcePlugin { return mockSource },
@@ -81,7 +80,6 @@ func newTestDispenser(t *testing.T, logger zerolog.Logger, version int) (
 	dispenser, err := NewDispenser(
 		logger,
 		"",
-		":12345",
 		client.WithReattachConfig(config),
 		reattachVersionedPluginOption{version: version},
 	)

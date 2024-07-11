@@ -16,11 +16,12 @@ package connutils
 
 import (
 	"context"
+	"testing"
+
 	"github.com/conduitio/conduit-connector-protocol/pconduit"
 	conduitschemaregistry "github.com/conduitio/conduit-schema-registry"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/matryer/is"
-	"testing"
 )
 
 func TestSchemaService_ValidateToken(t *testing.T) {
@@ -53,5 +54,4 @@ func TestSchemaService_ValidateToken(t *testing.T) {
 			is.Equal(err.Error(), tc.wantErr)
 		})
 	}
-
 }

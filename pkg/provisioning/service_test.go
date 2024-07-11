@@ -493,7 +493,7 @@ func TestService_IntegrationTestServices(t *testing.T) {
 		builtin.NewRegistry(logger, builtin.DefaultBuiltinConnectors, schemaService),
 		standalone.NewRegistry(logger, ""),
 	)
-	connPluginService.Init(ctx, "")
+	connPluginService.Init(ctx, "conn-utils-token:12345", "conn-utils-token")
 
 	procPluginService := proc_plugin.NewPluginService(
 		logger,

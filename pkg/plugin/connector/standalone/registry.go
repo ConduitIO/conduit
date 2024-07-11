@@ -22,6 +22,7 @@ import (
 	"sync"
 
 	"github.com/conduitio/conduit-connector-protocol/pconnector"
+	"github.com/conduitio/conduit-connector-protocol/pconnector/client"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
@@ -161,7 +162,12 @@ func (r *Registry) loadPlugins(ctx context.Context) map[string]map[string]bluepr
 
 func (r *Registry) loadSpecifications(pluginPath string) (pconnector.Specification, error) {
 	// create dispenser without a logger to not spam logs on refresh
-	dispenser, err := NewDispenser(zerolog.Nop(), pluginPath, r.connUtilsAddr, r.connUtilsToken)
+	dispenser, err := NewDispenser(
+		zerolog.Nop(),
+		pluginPath,
+		client.WithConnectorUtilsAddress(r.connUtilsAddr),
+		client.WithConnectorUtilsToken(r.connUtilsToken),
+	)
 	if err != nil {
 		return pconnector.Specification{}, cerrors.Errorf("failed to create connector dispenser: %w", err)
 	}
@@ -197,7 +203,12 @@ func (r *Registry) NewDispenser(logger log.CtxLogger, fullName plugin.FullName) 
 	}
 
 	logger = logger.WithComponent("plugin.standalone")
-	return NewDispenser(logger.ZerologWithComponent(), bp.Path, r.connUtilsAddr, r.connUtilsToken)
+	return NewDispenser(
+		logger.ZerologWithComponent(),
+		bp.Path,
+		client.WithConnectorUtilsAddress(r.connUtilsAddr),
+		client.WithConnectorUtilsToken(r.connUtilsToken),
+	)
 }
 
 func (r *Registry) List() map[plugin.FullName]pconnector.Specification {
