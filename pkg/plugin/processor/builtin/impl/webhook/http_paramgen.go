@@ -7,23 +7,9 @@ import (
 	"github.com/conduitio/conduit-commons/config"
 )
 
-const (
-	httpConfigBackoffRetryCount  = "backoffRetry.count"
-	httpConfigBackoffRetryFactor = "backoffRetry.factor"
-	httpConfigBackoffRetryMax    = "backoffRetry.max"
-	httpConfigBackoffRetryMin    = "backoffRetry.min"
-	httpConfigHeaders            = "headers.*"
-	httpConfigRequestBody        = "request.body"
-	httpConfigRequestContentType = "request.contentType"
-	httpConfigRequestMethod      = "request.method"
-	httpConfigRequestUrl         = "request.url"
-	httpConfigResponseBody       = "response.body"
-	httpConfigResponseStatus     = "response.status"
-)
-
 func (httpConfig) Parameters() map[string]config.Parameter {
 	return map[string]config.Parameter{
-		httpConfigBackoffRetryCount: {
+		"backoffRetry.count": {
 			Default:     "0",
 			Description: "Maximum number of retries for an individual record when backing off following an error.",
 			Type:        config.ParameterTypeFloat,
@@ -31,7 +17,7 @@ func (httpConfig) Parameters() map[string]config.Parameter {
 				config.ValidationGreaterThan{V: -1},
 			},
 		},
-		httpConfigBackoffRetryFactor: {
+		"backoffRetry.factor": {
 			Default:     "2",
 			Description: "The multiplying factor for each increment step.",
 			Type:        config.ParameterTypeFloat,
@@ -39,43 +25,43 @@ func (httpConfig) Parameters() map[string]config.Parameter {
 				config.ValidationGreaterThan{V: 0},
 			},
 		},
-		httpConfigBackoffRetryMax: {
+		"backoffRetry.max": {
 			Default:     "5s",
 			Description: "The maximum waiting time before retrying.",
 			Type:        config.ParameterTypeDuration,
 			Validations: []config.Validation{},
 		},
-		httpConfigBackoffRetryMin: {
+		"backoffRetry.min": {
 			Default:     "100ms",
 			Description: "The minimum waiting time before retrying.",
 			Type:        config.ParameterTypeDuration,
 			Validations: []config.Validation{},
 		},
-		httpConfigHeaders: {
+		"headers.*": {
 			Default:     "",
 			Description: "Headers to add to the request, use `headers.*` to specify the header and its value (e.g. `headers.Authorization: \"Bearer key\"`).",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},
-		httpConfigRequestBody: {
+		"request.body": {
 			Default:     "",
 			Description: "Specifies the body that will be sent in the HTTP request. The field accepts\na Go [templates](https://pkg.go.dev/text/template) that's evaluated using the\n[opencdc.Record](https://pkg.go.dev/github.com/conduitio/conduit-commons/opencdc#Record)\nas input. By default, the body is empty.\n\nTo send the whole record as JSON you can use `{{ toJson . }}`.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},
-		httpConfigRequestContentType: {
+		"request.contentType": {
 			Default:     "",
 			Description: "Deprecated: use `headers.Content-Type` instead.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},
-		httpConfigRequestMethod: {
+		"request.method": {
 			Default:     "GET",
 			Description: "Method is the HTTP request method to be used.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},
-		httpConfigRequestUrl: {
+		"request.url": {
 			Default:     "",
 			Description: "URL is a Go template expression for the URL used in the HTTP request, using Go [templates](https://pkg.go.dev/text/template).\nThe value provided to the template is [opencdc.Record](https://pkg.go.dev/github.com/conduitio/conduit-commons/opencdc#Record),\nso the template has access to all its fields (e.g. `.Position`, `.Key`, `.Metadata`, and so on). We also inject all template functions provided by [sprig](https://masterminds.github.io/sprig/)\nto make it easier to write templates.",
 			Type:        config.ParameterTypeString,
@@ -83,13 +69,13 @@ func (httpConfig) Parameters() map[string]config.Parameter {
 				config.ValidationRequired{},
 			},
 		},
-		httpConfigResponseBody: {
+		"response.body": {
 			Default:     ".Payload.After",
 			Description: "Specifies in which field should the response body be saved.\n\nFor more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},
-		httpConfigResponseStatus: {
+		"response.status": {
 			Default:     "",
 			Description: "Specifies in which field should the response status be saved. If no value\nis set, then the response status will NOT be saved.\n\nFor more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).",
 			Type:        config.ParameterTypeString,

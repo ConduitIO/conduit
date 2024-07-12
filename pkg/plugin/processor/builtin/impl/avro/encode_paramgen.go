@@ -7,53 +7,39 @@ import (
 	"github.com/conduitio/conduit-commons/config"
 )
 
-const (
-	encodeConfigAuthBasicPassword          = "auth.basic.password"
-	encodeConfigAuthBasicUsername          = "auth.basic.username"
-	encodeConfigField                      = "field"
-	encodeConfigSchemaAutoRegisterSubject  = "schema.autoRegister.subject"
-	encodeConfigSchemaPreRegisteredSubject = "schema.preRegistered.subject"
-	encodeConfigSchemaPreRegisteredVersion = "schema.preRegistered.version"
-	encodeConfigSchemaStrategy             = "schema.strategy"
-	encodeConfigTlsCaCert                  = "tls.ca.cert"
-	encodeConfigTlsClientCert              = "tls.client.cert"
-	encodeConfigTlsClientKey               = "tls.client.key"
-	encodeConfigUrl                        = "url"
-)
-
 func (encodeConfig) Parameters() map[string]config.Parameter {
 	return map[string]config.Parameter{
-		encodeConfigAuthBasicPassword: {
+		"auth.basic.password": {
 			Default:     "",
 			Description: "The password to use with basic authentication. This option is required if\nauth.basic.username contains a value. If both auth.basic.username and auth.basic.password\nare empty basic authentication is disabled.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},
-		encodeConfigAuthBasicUsername: {
+		"auth.basic.username": {
 			Default:     "",
 			Description: "The username to use with basic authentication. This option is required if\nauth.basic.password contains a value. If both auth.basic.username and auth.basic.password\nare empty basic authentication is disabled.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},
-		encodeConfigField: {
+		"field": {
 			Default:     ".Payload.After",
 			Description: "The field that will be encoded.\n\nFor more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},
-		encodeConfigSchemaAutoRegisterSubject: {
+		"schema.autoRegister.subject": {
 			Default:     "",
 			Description: "The subject name under which the inferred schema will be registered in the schema registry.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},
-		encodeConfigSchemaPreRegisteredSubject: {
+		"schema.preRegistered.subject": {
 			Default:     "",
 			Description: "The subject of the schema in the schema registry used to encode the record.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},
-		encodeConfigSchemaPreRegisteredVersion: {
+		"schema.preRegistered.version": {
 			Default:     "",
 			Description: "The version of the schema in the schema registry used to encode the record.",
 			Type:        config.ParameterTypeInt,
@@ -61,7 +47,7 @@ func (encodeConfig) Parameters() map[string]config.Parameter {
 				config.ValidationGreaterThan{V: 0},
 			},
 		},
-		encodeConfigSchemaStrategy: {
+		"schema.strategy": {
 			Default:     "",
 			Description: "Strategy to use to determine the schema for the record.\nAvailable strategies are:\n* `preRegistered` (recommended) - Download an existing schema from the schema registry.\n   This strategy is further configured with options starting with `schema.preRegistered.*`.\n* `autoRegister` (for development purposes) - Infer the schema from the record and register it\n   in the schema registry. This strategy is further configured with options starting with\n  `schema.autoRegister.*`.\n\nFor more information about the behavior of each strategy read the main processor description.",
 			Type:        config.ParameterTypeString,
@@ -70,25 +56,25 @@ func (encodeConfig) Parameters() map[string]config.Parameter {
 				config.ValidationInclusion{List: []string{"preRegistered", "autoRegister"}},
 			},
 		},
-		encodeConfigTlsCaCert: {
+		"tls.ca.cert": {
 			Default:     "",
 			Description: "The path to a file containing PEM encoded CA certificates. If this option is empty,\nConduit falls back to using the host's root CA set.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},
-		encodeConfigTlsClientCert: {
+		"tls.client.cert": {
 			Default:     "",
 			Description: "The path to a file containing a PEM encoded certificate. This option is required\nif tls.client.key contains a value. If both tls.client.cert and tls.client.key are empty\nTLS is disabled.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},
-		encodeConfigTlsClientKey: {
+		"tls.client.key": {
 			Default:     "",
 			Description: "The path to a file containing a PEM encoded private key. This option is required\nif tls.client.cert contains a value. If both tls.client.cert and tls.client.key are empty\nTLS is disabled.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},
-		encodeConfigUrl: {
+		"url": {
 			Default:     "",
 			Description: "URL of the schema registry (e.g. http://localhost:8085)",
 			Type:        config.ParameterTypeString,

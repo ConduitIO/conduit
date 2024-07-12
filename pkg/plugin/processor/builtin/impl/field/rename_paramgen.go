@@ -7,13 +7,9 @@ import (
 	"github.com/conduitio/conduit-commons/config"
 )
 
-const (
-	renameConfigMapping = "mapping"
-)
-
 func (renameConfig) Parameters() map[string]config.Parameter {
 	return map[string]config.Parameter{
-		renameConfigMapping: {
+		"mapping": {
 			Default:     "",
 			Description: "Mapping is a comma separated list of keys and values for fields and their\nnew names (keys and values are separated by colons \":\").\n\nFor example: `.Metadata.key:id,.Payload.After.foo:bar`.\n\nFor more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).",
 			Type:        config.ParameterTypeString,

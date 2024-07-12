@@ -73,6 +73,13 @@ func newDispenserFactory(conn sdk.Connector) dispenserFactory {
 		conn.NewDestination = func() sdk.Destination { return nil }
 	}
 
+	// TODO fill out
+	cfg := pconnector.PluginConfig{
+		Token:       "",
+		ConnectorID: "",
+		Level:       0,
+	}
+
 	return func(name plugin.FullName, logger log.CtxLogger) connector.Dispenser {
 		return NewDispenser(
 			name,
@@ -80,8 +87,12 @@ func newDispenserFactory(conn sdk.Connector) dispenserFactory {
 			func() pconnector.SpecifierPlugin {
 				return sdk.NewSpecifierPlugin(conn.NewSpecification(), conn.NewSource(), conn.NewDestination())
 			},
-			func() pconnector.SourcePlugin { return sdk.NewSourcePlugin(conn.NewSource()) },
-			func() pconnector.DestinationPlugin { return sdk.NewDestinationPlugin(conn.NewDestination()) },
+			func(connectorID string) pconnector.SourcePlugin {
+				return sdk.NewSourcePlugin(conn.NewSource(), cfg)
+			},
+			func(connectorID string) pconnector.DestinationPlugin {
+				return sdk.NewDestinationPlugin(conn.NewDestination())
+			},
 		)
 	}
 }

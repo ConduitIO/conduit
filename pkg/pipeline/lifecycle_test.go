@@ -456,7 +456,7 @@ func generatorSource(
 	source := dummySource(persister)
 
 	dispenser := pmock.NewDispenser(ctrl)
-	dispenser.EXPECT().DispenseSource().Return(sourcePlugin, nil)
+	dispenser.EXPECT().DispenseSource(source.ID).Return(sourcePlugin, nil)
 
 	return source, dispenser
 }
@@ -488,7 +488,7 @@ func asserterDestination(
 	dest := dummyDestination(persister)
 
 	dispenser := pmock.NewDispenser(ctrl)
-	dispenser.EXPECT().DispenseDestination().Return(destinationPlugin, nil)
+	dispenser.EXPECT().DispenseDestination(dest.ID).Return(destinationPlugin, nil)
 
 	return dest, dispenser
 }

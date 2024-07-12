@@ -162,7 +162,7 @@ func testSource_Configure_Success(t *testing.T, tdf testDispenserFunc) {
 		Configure(gomock.Any(), pconnector.SourceConfigureRequest{Config: nil}).
 		Return(pconnector.SourceConfigureResponse{}, nil)
 
-	source, err := dispenser.DispenseSource()
+	source, err := dispenser.DispenseSource("test-connector-id")
 	is.NoErr(err)
 
 	got, err := source.Configure(ctx, pconnector.SourceConfigureRequest{Config: nil})
@@ -184,7 +184,7 @@ func testSource_Configure_Fail(t *testing.T, tdf testDispenserFunc) {
 		Configure(gomock.Any(), pconnector.SourceConfigureRequest{Config: cfg}).
 		Return(pconnector.SourceConfigureResponse{}, want)
 
-	source, err := dispenser.DispenseSource()
+	source, err := dispenser.DispenseSource("test-connector-id")
 	is.NoErr(err)
 
 	_, got := source.Configure(ctx, pconnector.SourceConfigureRequest{Config: cfg})
@@ -202,7 +202,7 @@ func testSource_Open_WithPosition(t *testing.T, tdf testDispenserFunc) {
 		Open(gomock.Any(), pconnector.SourceOpenRequest{Position: pos}).
 		Return(pconnector.SourceOpenResponse{}, nil)
 
-	source, err := dispenser.DispenseSource()
+	source, err := dispenser.DispenseSource("test-connector-id")
 	is.NoErr(err)
 
 	_, err = source.Open(ctx, pconnector.SourceOpenRequest{Position: pos})
@@ -218,7 +218,7 @@ func testSource_Open_EmptyPosition(t *testing.T, tdf testDispenserFunc) {
 		Open(gomock.Any(), pconnector.SourceOpenRequest{Position: nil}).
 		Return(pconnector.SourceOpenResponse{}, nil)
 
-	source, err := dispenser.DispenseSource()
+	source, err := dispenser.DispenseSource("test-connector-id")
 	is.NoErr(err)
 
 	resp, err := source.Open(ctx, pconnector.SourceOpenRequest{Position: nil})
@@ -261,7 +261,7 @@ func testSource_Run_Success(t *testing.T, tdf testDispenserFunc) {
 			return nil
 		})
 
-	source, err := dispenser.DispenseSource()
+	source, err := dispenser.DispenseSource("test-connector-id")
 	is.NoErr(err)
 
 	stream := source.NewStream()
@@ -283,7 +283,7 @@ func testSource_Stream_WithoutRunPanics(t *testing.T, tdf testDispenserFunc) {
 	is := is.New(t)
 	dispenser, _, _, _ := tdf(t)
 
-	source, err := dispenser.DispenseSource()
+	source, err := dispenser.DispenseSource("test-connector-id")
 	is.NoErr(err)
 
 	stream := source.NewStream()
@@ -318,7 +318,7 @@ func testSource_StreamRecv_AfterStop(t *testing.T, tdf testDispenserFunc) {
 			return want, nil
 		})
 
-	source, err := dispenser.DispenseSource()
+	source, err := dispenser.DispenseSource("test-connector-id")
 	is.NoErr(err)
 
 	stream := source.NewStream()
@@ -354,7 +354,7 @@ func testSource_StreamRecv_CancelContext(t *testing.T, tdf testDispenserFunc) {
 			return nil
 		})
 
-	source, err := dispenser.DispenseSource()
+	source, err := dispenser.DispenseSource("test-connector-id")
 	is.NoErr(err)
 
 	runCtx, runCancel := context.WithCancel(ctx)
@@ -399,7 +399,7 @@ func testSource_StreamSend_Success(t *testing.T, tdf testDispenserFunc) {
 			return nil
 		})
 
-	source, err := dispenser.DispenseSource()
+	source, err := dispenser.DispenseSource("test-connector-id")
 	is.NoErr(err)
 
 	stream := source.NewStream()
@@ -444,7 +444,7 @@ func testSource_Run_Fail(t *testing.T, tdf testDispenserFunc) {
 			return want
 		})
 
-	source, err := dispenser.DispenseSource()
+	source, err := dispenser.DispenseSource("test-connector-id")
 	is.NoErr(err)
 
 	stream := source.NewStream()
@@ -487,7 +487,7 @@ func testSource_Teardown_Success(t *testing.T, tdf testDispenserFunc) {
 		Teardown(gomock.Any(), pconnector.SourceTeardownRequest{}).
 		Return(pconnector.SourceTeardownResponse{}, nil)
 
-	source, err := dispenser.DispenseSource()
+	source, err := dispenser.DispenseSource("test-connector-id")
 	is.NoErr(err)
 
 	teardownResp, err := source.Teardown(ctx, pconnector.SourceTeardownRequest{})
@@ -505,7 +505,7 @@ func testSource_Teardown_Fail(t *testing.T, tdf testDispenserFunc) {
 		Teardown(gomock.Any(), pconnector.SourceTeardownRequest{}).
 		Return(pconnector.SourceTeardownResponse{}, want)
 
-	source, err := dispenser.DispenseSource()
+	source, err := dispenser.DispenseSource("test-connector-id")
 	is.NoErr(err)
 
 	_, got := source.Teardown(ctx, pconnector.SourceTeardownRequest{})
@@ -525,7 +525,7 @@ func testSource_Lifecycle_OnCreated(t *testing.T, tdf testDispenserFunc) {
 		LifecycleOnCreated(gomock.Any(), want).
 		Return(pconnector.SourceLifecycleOnCreatedResponse{}, nil)
 
-	source, err := dispenser.DispenseSource()
+	source, err := dispenser.DispenseSource("test-connector-id")
 	is.NoErr(err)
 
 	resp, err := source.LifecycleOnCreated(ctx, want)
@@ -547,7 +547,7 @@ func testSource_Lifecycle_OnUpdated(t *testing.T, tdf testDispenserFunc) {
 		LifecycleOnUpdated(gomock.Any(), want).
 		Return(pconnector.SourceLifecycleOnUpdatedResponse{}, nil)
 
-	source, err := dispenser.DispenseSource()
+	source, err := dispenser.DispenseSource("test-connector-id")
 	is.NoErr(err)
 
 	resp, err := source.LifecycleOnUpdated(ctx, want)
@@ -568,7 +568,7 @@ func testSource_Lifecycle_OnDeleted(t *testing.T, tdf testDispenserFunc) {
 		LifecycleOnDeleted(gomock.Any(), want).
 		Return(pconnector.SourceLifecycleOnDeletedResponse{}, nil)
 
-	source, err := dispenser.DispenseSource()
+	source, err := dispenser.DispenseSource("test-connector-id")
 	is.NoErr(err)
 
 	resp, err := source.LifecycleOnDeleted(ctx, want)
@@ -646,7 +646,7 @@ func testSource_BlockingFunctions(t *testing.T, tdf testDispenserFunc) {
 			blockUntil := make(chan struct{})
 			tc.prepareExpectation(mockSource, blockUntil)
 
-			source, err := dispenser.DispenseSource()
+			source, err := dispenser.DispenseSource("test-connector-id")
 			is.NoErr(err)
 
 			fnErr := make(chan error)
@@ -691,7 +691,7 @@ func testDestination_Configure_Success(t *testing.T, tdf testDispenserFunc) {
 		Configure(gomock.Any(), pconnector.DestinationConfigureRequest{Config: nil}).
 		Return(pconnector.DestinationConfigureResponse{}, nil)
 
-	destination, err := dispenser.DispenseDestination()
+	destination, err := dispenser.DispenseDestination("test-connector-id")
 	is.NoErr(err)
 
 	resp, err := destination.Configure(ctx, pconnector.DestinationConfigureRequest{Config: nil})
@@ -713,7 +713,7 @@ func testDestination_Configure_Fail(t *testing.T, tdf testDispenserFunc) {
 		Configure(gomock.Any(), pconnector.DestinationConfigureRequest{Config: cfg}).
 		Return(pconnector.DestinationConfigureResponse{}, want)
 
-	destination, err := dispenser.DispenseDestination()
+	destination, err := dispenser.DispenseDestination("test-connector-id")
 	is.NoErr(err)
 
 	_, got := destination.Configure(ctx, pconnector.DestinationConfigureRequest{Config: cfg})
@@ -729,7 +729,7 @@ func testDestination_Open_Success(t *testing.T, tdf testDispenserFunc) {
 		Open(gomock.Any(), pconnector.DestinationOpenRequest{}).
 		Return(pconnector.DestinationOpenResponse{}, nil)
 
-	destination, err := dispenser.DispenseDestination()
+	destination, err := dispenser.DispenseDestination("test-connector-id")
 	is.NoErr(err)
 
 	openResp, err := destination.Open(ctx, pconnector.DestinationOpenRequest{})
@@ -748,7 +748,7 @@ func testDestination_Open_Fail(t *testing.T, tdf testDispenserFunc) {
 		Open(gomock.Any(), pconnector.DestinationOpenRequest{}).
 		Return(pconnector.DestinationOpenResponse{}, want)
 
-	destination, err := dispenser.DispenseDestination()
+	destination, err := dispenser.DispenseDestination("test-connector-id")
 	is.NoErr(err)
 
 	_, got := destination.Open(ctx, pconnector.DestinationOpenRequest{})
@@ -786,7 +786,7 @@ func testDestination_Run_Success(t *testing.T, tdf testDispenserFunc) {
 			return nil
 		})
 
-	destination, err := dispenser.DispenseDestination()
+	destination, err := dispenser.DispenseDestination("test-connector-id")
 	is.NoErr(err)
 
 	stream := destination.NewStream()
@@ -832,7 +832,7 @@ func testDestination_Run_Fail(t *testing.T, tdf testDispenserFunc) {
 			return want
 		})
 
-	destination, err := dispenser.DispenseDestination()
+	destination, err := dispenser.DispenseDestination("test-connector-id")
 	is.NoErr(err)
 
 	stream := destination.NewStream()
@@ -869,7 +869,7 @@ func testDestination_Stream_WithoutRunPanics(t *testing.T, tdf testDispenserFunc
 	is := is.New(t)
 	dispenser, _, _, _ := tdf(t)
 
-	destination, err := dispenser.DispenseDestination()
+	destination, err := dispenser.DispenseDestination("test-connector-id")
 	is.NoErr(err)
 
 	stream := destination.NewStream()
@@ -906,7 +906,7 @@ func testDestination_StreamRecv_Success(t *testing.T, tdf testDispenserFunc) {
 			return nil
 		})
 
-	destination, err := dispenser.DispenseDestination()
+	destination, err := dispenser.DispenseDestination("test-connector-id")
 	is.NoErr(err)
 
 	stream := destination.NewStream()
@@ -949,7 +949,7 @@ func testDestination_StreamRecv_WithError(t *testing.T, tdf testDispenserFunc) {
 			return nil
 		})
 
-	destination, err := dispenser.DispenseDestination()
+	destination, err := dispenser.DispenseDestination("test-connector-id")
 	is.NoErr(err)
 
 	stream := destination.NewStream()
@@ -972,7 +972,7 @@ func testDestination_Teardown_Success(t *testing.T, tdf testDispenserFunc) {
 		Teardown(gomock.Any(), pconnector.DestinationTeardownRequest{}).
 		Return(pconnector.DestinationTeardownResponse{}, nil)
 
-	destination, err := dispenser.DispenseDestination()
+	destination, err := dispenser.DispenseDestination("test-connector-id")
 	is.NoErr(err)
 
 	teardownResp, err := destination.Teardown(ctx, pconnector.DestinationTeardownRequest{})
@@ -990,7 +990,7 @@ func testDestination_Teardown_Fail(t *testing.T, tdf testDispenserFunc) {
 		Teardown(gomock.Any(), pconnector.DestinationTeardownRequest{}).
 		Return(pconnector.DestinationTeardownResponse{}, want)
 
-	destination, err := dispenser.DispenseDestination()
+	destination, err := dispenser.DispenseDestination("test-connector-id")
 	is.NoErr(err)
 
 	_, got := destination.Teardown(ctx, pconnector.DestinationTeardownRequest{})
@@ -1010,7 +1010,7 @@ func testDestination_Lifecycle_OnCreated(t *testing.T, tdf testDispenserFunc) {
 		LifecycleOnCreated(gomock.Any(), want).
 		Return(pconnector.DestinationLifecycleOnCreatedResponse{}, nil)
 
-	destination, err := dispenser.DispenseDestination()
+	destination, err := dispenser.DispenseDestination("test-connector-id")
 	is.NoErr(err)
 
 	resp, err := destination.LifecycleOnCreated(ctx, want)
@@ -1032,7 +1032,7 @@ func testDestination_Lifecycle_OnUpdated(t *testing.T, tdf testDispenserFunc) {
 		LifecycleOnUpdated(gomock.Any(), want).
 		Return(pconnector.DestinationLifecycleOnUpdatedResponse{}, nil)
 
-	destination, err := dispenser.DispenseDestination()
+	destination, err := dispenser.DispenseDestination("test-connector-id")
 	is.NoErr(err)
 
 	resp, err := destination.LifecycleOnUpdated(ctx, want)
@@ -1053,7 +1053,7 @@ func testDestination_Lifecycle_OnDeleted(t *testing.T, tdf testDispenserFunc) {
 		LifecycleOnDeleted(gomock.Any(), want).
 		Return(pconnector.DestinationLifecycleOnDeletedResponse{}, nil)
 
-	destination, err := dispenser.DispenseDestination()
+	destination, err := dispenser.DispenseDestination("test-connector-id")
 	is.NoErr(err)
 
 	resp, err := destination.LifecycleOnDeleted(ctx, want)
@@ -1131,7 +1131,7 @@ func testDestination_BlockingFunctions(t *testing.T, tdf testDispenserFunc) {
 			blockUntil := make(chan struct{})
 			tc.prepareExpectation(mockDestination, blockUntil)
 
-			destination, err := dispenser.DispenseDestination()
+			destination, err := dispenser.DispenseDestination("test-connector-id")
 			is.NoErr(err)
 
 			fnErr := make(chan error)

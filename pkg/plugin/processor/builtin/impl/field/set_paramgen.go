@@ -7,14 +7,9 @@ import (
 	"github.com/conduitio/conduit-commons/config"
 )
 
-const (
-	setConfigField = "field"
-	setConfigValue = "value"
-)
-
 func (setConfig) Parameters() map[string]config.Parameter {
 	return map[string]config.Parameter{
-		setConfigField: {
+		"field": {
 			Default:     "",
 			Description: "Field is the target field that will be set. Note that it is not allowed\nto set the `.Position` field.\n\nFor more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).",
 			Type:        config.ParameterTypeString,
@@ -23,7 +18,7 @@ func (setConfig) Parameters() map[string]config.Parameter {
 				config.ValidationExclusion{List: []string{".Position"}},
 			},
 		},
-		setConfigValue: {
+		"value": {
 			Default:     "",
 			Description: "Value is a Go template expression which will be evaluated and stored in `field` (e.g. `{{ .Payload.After }}`).",
 			Type:        config.ParameterTypeString,

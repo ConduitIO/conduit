@@ -120,7 +120,7 @@ func (s *PluginService) ValidateSourceConfig(ctx context.Context, name string, s
 		return cerrors.Errorf("couldn't get dispenser: %w", err)
 	}
 
-	src, err := d.DispenseSource()
+	src, err := d.DispenseSource("validate-source-config")
 	if err != nil {
 		return cerrors.Errorf("could not dispense source: %w", err)
 	}
@@ -146,7 +146,7 @@ func (s *PluginService) ValidateDestinationConfig(ctx context.Context, name stri
 		return cerrors.Errorf("couldn't get dispenser: %w", err)
 	}
 
-	dest, err := d.DispenseDestination()
+	dest, err := d.DispenseDestination("validate-destination-config")
 	if err != nil {
 		return cerrors.Errorf("could not dispense destination: %w", err)
 	}

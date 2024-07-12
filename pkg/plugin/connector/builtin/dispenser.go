@@ -25,16 +25,16 @@ type Dispenser struct {
 	name              plugin.FullName
 	logger            log.CtxLogger
 	specifierPlugin   func() pconnector.SpecifierPlugin
-	sourcePlugin      func() pconnector.SourcePlugin
-	destinationPlugin func() pconnector.DestinationPlugin
+	sourcePlugin      func(connectorID string) pconnector.SourcePlugin
+	destinationPlugin func(connectorID string) pconnector.DestinationPlugin
 }
 
 func NewDispenser(
 	name plugin.FullName,
 	logger log.CtxLogger,
 	specifierPlugin func() pconnector.SpecifierPlugin,
-	sourcePlugin func() pconnector.SourcePlugin,
-	destinationPlugin func() pconnector.DestinationPlugin,
+	sourcePlugin func(connectorID string) pconnector.SourcePlugin,
+	destinationPlugin func(connectorID string) pconnector.DestinationPlugin,
 ) *Dispenser {
 	return &Dispenser{
 		name:              name,
@@ -49,12 +49,12 @@ func (d *Dispenser) DispenseSpecifier() (connector.SpecifierPlugin, error) {
 	return newSpecifierPluginAdapter(d.specifierPlugin(), d.pluginLogger("specifier")), nil
 }
 
-func (d *Dispenser) DispenseSource() (connector.SourcePlugin, error) {
-	return newSourcePluginAdapter(d.sourcePlugin(), d.pluginLogger("source")), nil
+func (d *Dispenser) DispenseSource(connectorID string) (connector.SourcePlugin, error) {
+	return newSourcePluginAdapter(d.sourcePlugin(connectorID), d.pluginLogger("source")), nil
 }
 
-func (d *Dispenser) DispenseDestination() (connector.DestinationPlugin, error) {
-	return newDestinationPluginAdapter(d.destinationPlugin(), d.pluginLogger("destination")), nil
+func (d *Dispenser) DispenseDestination(connectorID string) (connector.DestinationPlugin, error) {
+	return newDestinationPluginAdapter(d.destinationPlugin(connectorID), d.pluginLogger("destination")), nil
 }
 
 func (d *Dispenser) pluginLogger(pluginType string) log.CtxLogger {

@@ -42,18 +42,18 @@ func (m *Dispenser) EXPECT() *DispenserMockRecorder {
 }
 
 // DispenseDestination mocks base method.
-func (m *Dispenser) DispenseDestination() (connector.DestinationPlugin, error) {
+func (m *Dispenser) DispenseDestination(arg0 string) (connector.DestinationPlugin, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DispenseDestination")
+	ret := m.ctrl.Call(m, "DispenseDestination", arg0)
 	ret0, _ := ret[0].(connector.DestinationPlugin)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // DispenseDestination indicates an expected call of DispenseDestination.
-func (mr *DispenserMockRecorder) DispenseDestination() *DispenserDispenseDestinationCall {
+func (mr *DispenserMockRecorder) DispenseDestination(arg0 any) *DispenserDispenseDestinationCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DispenseDestination", reflect.TypeOf((*Dispenser)(nil).DispenseDestination))
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DispenseDestination", reflect.TypeOf((*Dispenser)(nil).DispenseDestination), arg0)
 	return &DispenserDispenseDestinationCall{Call: call}
 }
 
@@ -69,30 +69,30 @@ func (c *DispenserDispenseDestinationCall) Return(arg0 connector.DestinationPlug
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *DispenserDispenseDestinationCall) Do(f func() (connector.DestinationPlugin, error)) *DispenserDispenseDestinationCall {
+func (c *DispenserDispenseDestinationCall) Do(f func(string) (connector.DestinationPlugin, error)) *DispenserDispenseDestinationCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *DispenserDispenseDestinationCall) DoAndReturn(f func() (connector.DestinationPlugin, error)) *DispenserDispenseDestinationCall {
+func (c *DispenserDispenseDestinationCall) DoAndReturn(f func(string) (connector.DestinationPlugin, error)) *DispenserDispenseDestinationCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
 
 // DispenseSource mocks base method.
-func (m *Dispenser) DispenseSource() (connector.SourcePlugin, error) {
+func (m *Dispenser) DispenseSource(arg0 string) (connector.SourcePlugin, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DispenseSource")
+	ret := m.ctrl.Call(m, "DispenseSource", arg0)
 	ret0, _ := ret[0].(connector.SourcePlugin)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // DispenseSource indicates an expected call of DispenseSource.
-func (mr *DispenserMockRecorder) DispenseSource() *DispenserDispenseSourceCall {
+func (mr *DispenserMockRecorder) DispenseSource(arg0 any) *DispenserDispenseSourceCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DispenseSource", reflect.TypeOf((*Dispenser)(nil).DispenseSource))
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DispenseSource", reflect.TypeOf((*Dispenser)(nil).DispenseSource), arg0)
 	return &DispenserDispenseSourceCall{Call: call}
 }
 
@@ -108,13 +108,13 @@ func (c *DispenserDispenseSourceCall) Return(arg0 connector.SourcePlugin, arg1 e
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *DispenserDispenseSourceCall) Do(f func() (connector.SourcePlugin, error)) *DispenserDispenseSourceCall {
+func (c *DispenserDispenseSourceCall) Do(f func(string) (connector.SourcePlugin, error)) *DispenserDispenseSourceCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *DispenserDispenseSourceCall) DoAndReturn(f func() (connector.SourcePlugin, error)) *DispenserDispenseSourceCall {
+func (c *DispenserDispenseSourceCall) DoAndReturn(f func(string) (connector.SourcePlugin, error)) *DispenserDispenseSourceCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
