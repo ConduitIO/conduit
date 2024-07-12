@@ -113,7 +113,9 @@ func (d *Dispenser) DispenseSpecifier() (connector.SpecifierPlugin, error) {
 }
 
 func (d *Dispenser) DispenseSource(connectorID string) (connector.SourcePlugin, error) {
-	d.opts = append(d.opts, client.WithEnvVar("CONNECTOR_ID", connectorID))
+	if connectorID != "" {
+		d.opts = append(d.opts, client.WithEnvVar("CONNECTOR_ID", connectorID))
+	}
 
 	err := d.dispense()
 	if err != nil {
@@ -138,7 +140,9 @@ func (d *Dispenser) DispenseSource(connectorID string) (connector.SourcePlugin, 
 }
 
 func (d *Dispenser) DispenseDestination(connectorID string) (connector.DestinationPlugin, error) {
-	d.opts = append(d.opts, client.WithEnvVar("CONNECTOR_ID", connectorID))
+	if connectorID != "" {
+		d.opts = append(d.opts, client.WithEnvVar("CONNECTOR_ID", connectorID))
+	}
 
 	err := d.dispense()
 	if err != nil {

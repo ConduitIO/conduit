@@ -73,11 +73,9 @@ func newDispenserFactory(conn sdk.Connector) dispenserFactory {
 		conn.NewDestination = func() sdk.Destination { return nil }
 	}
 
-	// TODO fill out
 	cfg := pconnector.PluginConfig{
-		Token:       "",
-		ConnectorID: "",
-		Level:       0,
+		// can be taken from logger.GetLevel()
+		LogLevel: 0,
 	}
 
 	return func(name plugin.FullName, logger log.CtxLogger) connector.Dispenser {
@@ -88,10 +86,16 @@ func newDispenserFactory(conn sdk.Connector) dispenserFactory {
 				return sdk.NewSpecifierPlugin(conn.NewSpecification(), conn.NewSource(), conn.NewDestination())
 			},
 			func(connectorID string) pconnector.SourcePlugin {
+				// TODO add connector ID to cfg
+				// TODO generate token (based on the connector ID) and add token to cfg
+				// TODO get log level from logger/config
 				return sdk.NewSourcePlugin(conn.NewSource(), cfg)
 			},
 			func(connectorID string) pconnector.DestinationPlugin {
-				return sdk.NewDestinationPlugin(conn.NewDestination())
+				// TODO add connector ID to cfg
+				// TODO generate token (based on the connector ID) and add token to cfg
+				// TODO get log level from logger/config
+				return sdk.NewDestinationPlugin(conn.NewDestination(), cfg)
 			},
 		)
 	}
