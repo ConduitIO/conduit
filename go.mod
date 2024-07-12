@@ -347,9 +347,3 @@ require (
 	mvdan.cc/gofumpt v0.6.0 // indirect
 	mvdan.cc/unparam v0.0.0-20240528143540-8a5130ca722f // indirect
 )
-
-replace (
-	github.com/conduitio/conduit-connector-postgres => ../conduit-connector-postgres
-	github.com/conduitio/conduit-connector-protocol => ../conduit-connector-protocol
-	github.com/conduitio/conduit-connector-sdk => ../conduit-connector-sdk
-)
