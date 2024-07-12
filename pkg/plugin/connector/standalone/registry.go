@@ -16,6 +16,7 @@ package standalone
 
 import (
 	"context"
+	"github.com/conduitio/conduit-connector-protocol/pconduit"
 	"os"
 	"path"
 	"path/filepath"
@@ -165,8 +166,8 @@ func (r *Registry) loadSpecifications(pluginPath string) (pconnector.Specificati
 	dispenser, err := NewDispenser(
 		zerolog.Nop(),
 		pluginPath,
-		client.WithConnectorUtilsAddress(r.connUtilsAddr),
-		client.WithConnectorUtilsToken(r.connUtilsToken),
+		client.WithEnvVar(pconduit.EnvConduitConnectorUtilitiesGRPCTarget, r.connUtilsAddr),
+		client.WithEnvVar(pconduit.EnvConduitConnectorSchemaToken, r.connUtilsToken),
 	)
 	if err != nil {
 		return pconnector.Specification{}, cerrors.Errorf("failed to create connector dispenser: %w", err)
@@ -206,8 +207,8 @@ func (r *Registry) NewDispenser(logger log.CtxLogger, fullName plugin.FullName) 
 	return NewDispenser(
 		logger.ZerologWithComponent(),
 		bp.Path,
-		client.WithConnectorUtilsAddress(r.connUtilsAddr),
-		client.WithConnectorUtilsToken(r.connUtilsToken),
+		client.WithEnvVar(pconduit.EnvConduitConnectorUtilitiesGRPCTarget, r.connUtilsAddr),
+		client.WithEnvVar(pconduit.EnvConduitConnectorSchemaToken, r.connUtilsToken),
 	)
 }
 
