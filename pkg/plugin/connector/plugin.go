@@ -21,8 +21,8 @@ import "github.com/conduitio/conduit-connector-protocol/pconnector"
 // Dispenser dispenses specifier, source and destination plugins.
 type Dispenser interface {
 	DispenseSpecifier() (SpecifierPlugin, error)
-	DispenseSource() (SourcePlugin, error)
-	DispenseDestination() (DestinationPlugin, error)
+	DispenseSource(connectorID string) (SourcePlugin, error)
+	DispenseDestination(connectorID string) (DestinationPlugin, error)
 }
 
 type SourcePlugin interface {

@@ -21,7 +21,9 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/conduitio/conduit-connector-protocol/pconduit"
 	"github.com/conduitio/conduit-connector-protocol/pconnector"
+	"github.com/conduitio/conduit-connector-protocol/pconnector/client"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
@@ -30,8 +32,10 @@ import (
 )
 
 type Registry struct {
-	logger    log.CtxLogger
-	pluginDir string
+	logger         log.CtxLogger
+	pluginDir      string
+	connUtilsAddr  string
+	connUtilsToken string
 
 	// plugins stores plugin blueprints in a 2D map, first key is the plugin
 	// name, the second key is the plugin version
@@ -60,30 +64,32 @@ func NewRegistry(logger log.CtxLogger, pluginDir string) *Registry {
 			r.logger.Warn(context.Background()).Err(err).Msg("could not extract absolute connector plugins path")
 		} else {
 			r.pluginDir = absPluginDir // store plugin dir for hot reloads
-			r.reloadPlugins()
 		}
 	}
-
-	r.logger.Info(context.Background()).
-		Str(log.PluginPathField, r.pluginDir).
-		Int("count", len(r.List())).
-		Msg("standalone connector plugins initialized")
 
 	return r
 }
 
-func (r *Registry) reloadPlugins() {
-	plugins := r.loadPlugins(context.Background(), r.pluginDir)
+func (r *Registry) Init(ctx context.Context, connUtilsAddr string, connUtilsToken string) {
+	r.connUtilsAddr = connUtilsAddr
+	r.connUtilsToken = connUtilsToken
+
+	plugins := r.loadPlugins(ctx)
 	r.m.Lock()
 	r.plugins = plugins
 	r.m.Unlock()
+
+	r.logger.Info(ctx).
+		Str(log.PluginPathField, r.pluginDir).
+		Int("count", len(r.List())).
+		Msg("standalone connector plugins initialized")
 }
 
-func (r *Registry) loadPlugins(ctx context.Context, pluginDir string) map[string]map[string]blueprint {
-	r.logger.Debug(ctx).Msgf("loading connector plugins from directory %v", pluginDir)
+func (r *Registry) loadPlugins(ctx context.Context) map[string]map[string]blueprint {
+	r.logger.Debug(ctx).Msgf("loading connector plugins from directory %v", r.pluginDir)
 	plugins := make(map[string]map[string]blueprint)
 
-	dirEntries, err := os.ReadDir(pluginDir)
+	dirEntries, err := os.ReadDir(r.pluginDir)
 	if err != nil {
 		r.logger.Warn(ctx).Err(err).Msg("could not read connector plugin directory")
 		return plugins // return empty map
@@ -101,7 +107,7 @@ func (r *Registry) loadPlugins(ctx context.Context, pluginDir string) map[string
 			continue
 		}
 
-		pluginPath := path.Join(pluginDir, dirEntry.Name())
+		pluginPath := path.Join(r.pluginDir, dirEntry.Name())
 
 		specs, err := r.loadSpecifications(pluginPath)
 		if err != nil {
@@ -157,7 +163,12 @@ func (r *Registry) loadPlugins(ctx context.Context, pluginDir string) map[string
 
 func (r *Registry) loadSpecifications(pluginPath string) (pconnector.Specification, error) {
 	// create dispenser without a logger to not spam logs on refresh
-	dispenser, err := NewDispenser(zerolog.Nop(), pluginPath)
+	dispenser, err := NewDispenser(
+		zerolog.Nop(),
+		pluginPath,
+		client.WithEnvVar(pconduit.EnvConduitConnectorUtilitiesGRPCTarget, r.connUtilsAddr),
+		client.WithEnvVar(pconduit.EnvConduitConnectorSchemaToken, r.connUtilsToken),
+	)
 	if err != nil {
 		return pconnector.Specification{}, cerrors.Errorf("failed to create connector dispenser: %w", err)
 	}
@@ -193,7 +204,12 @@ func (r *Registry) NewDispenser(logger log.CtxLogger, fullName plugin.FullName) 
 	}
 
 	logger = logger.WithComponent("plugin.standalone")
-	return NewDispenser(logger.ZerologWithComponent(), bp.Path)
+	return NewDispenser(
+		logger.ZerologWithComponent(),
+		bp.Path,
+		client.WithEnvVar(pconduit.EnvConduitConnectorUtilitiesGRPCTarget, r.connUtilsAddr),
+		client.WithEnvVar(pconduit.EnvConduitConnectorSchemaToken, r.connUtilsToken),
+	)
 }
 
 func (r *Registry) List() map[plugin.FullName]pconnector.Specification {

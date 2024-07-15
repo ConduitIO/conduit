@@ -51,6 +51,7 @@ var (
 type Registry struct {
 	logger log.CtxLogger
 
+	connectors map[string]sdk.Connector
 	// plugins stores plugin blueprints in a 2D map, first key is the plugin
 	// name, the second key is the plugin version
 	plugins map[string]map[string]blueprint
@@ -72,6 +73,11 @@ func newDispenserFactory(conn sdk.Connector) dispenserFactory {
 		conn.NewDestination = func() sdk.Destination { return nil }
 	}
 
+	cfg := pconnector.PluginConfig{
+		// can be taken from logger.GetLevel()
+		LogLevel: 0,
+	}
+
 	return func(name plugin.FullName, logger log.CtxLogger) connector.Dispenser {
 		return NewDispenser(
 			name,
@@ -79,30 +85,45 @@ func newDispenserFactory(conn sdk.Connector) dispenserFactory {
 			func() pconnector.SpecifierPlugin {
 				return sdk.NewSpecifierPlugin(conn.NewSpecification(), conn.NewSource(), conn.NewDestination())
 			},
-			func() pconnector.SourcePlugin { return sdk.NewSourcePlugin(conn.NewSource()) },
-			func() pconnector.DestinationPlugin { return sdk.NewDestinationPlugin(conn.NewDestination()) },
+			func(connectorID string) pconnector.SourcePlugin {
+				// TODO add connector ID to cfg
+				// TODO generate token (based on the connector ID) and add token to cfg
+				// TODO get log level from logger/config
+				return sdk.NewSourcePlugin(conn.NewSource(), cfg)
+			},
+			func(connectorID string) pconnector.DestinationPlugin {
+				// TODO add connector ID to cfg
+				// TODO generate token (based on the connector ID) and add token to cfg
+				// TODO get log level from logger/config
+				return sdk.NewDestinationPlugin(conn.NewDestination(), cfg)
+			},
 		)
 	}
 }
 
 func NewRegistry(logger log.CtxLogger, connectors map[string]sdk.Connector, service *connutils.SchemaService) *Registry {
 	logger = logger.WithComponentFromType(Registry{})
-	buildInfo, ok := debug.ReadBuildInfo()
-	if !ok {
-		// we are using modules, build info should always be available, we are staying on the safe side
-		logger.Warn(context.Background()).Msg("build info not available, built-in plugin versions may not be read correctly")
-		buildInfo = &debug.BuildInfo{} // prevent nil pointer exceptions
-	}
-
 	// The built-in plugins use Conduit's own schema service
 	schema.Service = service
 
 	r := &Registry{
-		plugins: loadPlugins(buildInfo, connectors),
-		logger:  logger,
+		logger:     logger,
+		connectors: connectors,
 	}
-	logger.Info(context.Background()).Int("count", len(r.List())).Msg("builtin connector plugins initialized")
+
 	return r
+}
+
+func (r *Registry) Init(ctx context.Context) {
+	buildInfo, ok := debug.ReadBuildInfo()
+	if !ok {
+		// we are using modules, build info should always be available, we are staying on the safe side
+		r.logger.Warn(ctx).Msg("build info not available, built-in plugin versions may not be read correctly")
+		buildInfo = &debug.BuildInfo{} // prevent nil pointer exceptions
+	}
+
+	r.plugins = loadPlugins(buildInfo, r.connectors)
+	r.logger.Info(ctx).Int("count", len(r.List())).Msg("builtin connector plugins initialized")
 }
 
 func loadPlugins(buildInfo *debug.BuildInfo, connectors map[string]sdk.Connector) map[string]map[string]blueprint {
