@@ -217,8 +217,8 @@ github.com/conduitio/conduit-connector-file v0.6.1-0.20240621111422-221c138201d3
 github.com/conduitio/conduit-connector-file v0.6.1-0.20240621111422-221c138201d3/go.mod h1:bCnmA+29l871cNhroZfiCS2O8+GhBNVECfL5DOof2ew=
 github.com/conduitio/conduit-connector-generator v0.6.1-0.20240621111436-e9fa3464f7b2 h1:WMKvmvaE/E+03/0nz/2JpyelCd2nPtOTuBy3eyWcI58=
 github.com/conduitio/conduit-connector-generator v0.6.1-0.20240621111436-e9fa3464f7b2/go.mod h1:2+n1SGAJ/+TpJC9YvxTUWHKt9e0Tm12JcqFJ8OndhX4=
-github.com/conduitio/conduit-connector-kafka v0.8.1-0.20240621111431-87c01cf39a06 h1:40SjCqWle0p9UpUxFAFS3RKqIWsApBajaQ1ScOSE6Vo=
-github.com/conduitio/conduit-connector-kafka v0.8.1-0.20240621111431-87c01cf39a06/go.mod h1:R2S8a3eFbiSp7VnXln3UnrIcnShKp6toGNpC0mXyoIA=
+github.com/conduitio/conduit-connector-kafka v0.8.2 h1:zmdpvPPhiMsiaDuggZaIIbrfm/cNiKcP8pzSdjFMecY=
+github.com/conduitio/conduit-connector-kafka v0.8.2/go.mod h1:ngQtpzQRcYkZl5LnaKsV1udN6MSDfAZ8Kp6LaAHi4AE=
 github.com/conduitio/conduit-connector-log v0.3.1-0.20240621111440-e2f0f04a35a4 h1:MrfxObXRj7Psz981MNNi6wUj+diu7nuq+/Wl3MqXMpk=
 github.com/conduitio/conduit-connector-log v0.3.1-0.20240621111440-e2f0f04a35a4/go.mod h1:6IkveRPUPJDCtdH6vXOW1T+B8Vj99OA+szybqYSnlyY=
 github.com/conduitio/conduit-connector-postgres v0.7.6-0.20240630172132-84b5a6e6104f h1:p8CH8UlYkOSlqOREJtUW9eHm6fyn3M+5b0lUQByMVvg=
@@ -843,8 +843,8 @@ github.com/tommy-muehle/go-mnd/v2 v2.5.1 h1:NowYhSdyE/1zwK9QCLeRb6USWdoif80Ie+v+
 github.com/tommy-muehle/go-mnd/v2 v2.5.1/go.mod h1:WsUAkMJMYww6l/ufffCD3m+P7LEvr8TnZn9lwVDlgzw=
 github.com/twmb/franz-go v1.17.0 h1:hawgCx5ejDHkLe6IwAtFWwxi3OU4OztSTl7ZV5rwkYk=
 github.com/twmb/franz-go v1.17.0/go.mod h1:NreRdJ2F7dziDY/m6VyspWd6sNxHKXdMZI42UfQ3GXM=
-github.com/twmb/franz-go/pkg/kadm v1.12.0 h1:I8P/gpXFzhl73QcAYmJu+1fOXvrynyH/MAotr2udEg4=
-github.com/twmb/franz-go/pkg/kadm v1.12.0/go.mod h1:VMvpfjz/szpH9WB+vGM+rteTzVv0djyHFimci9qm2C0=
+github.com/twmb/franz-go/pkg/kadm v1.11.0 h1:FfeWJ0qadntFpAcQt8JzNXW4dijjytZNLrzJuzzzuxA=
+github.com/twmb/franz-go/pkg/kadm v1.11.0/go.mod h1:qrhkdH+SWS3ivmbqOgHbpgVHamhaKcjH0UM+uOp0M1A=
 github.com/twmb/franz-go/pkg/kmsg v1.8.0 h1:lAQB9Z3aMrIP9qF9288XcFf/ccaSxEitNA1CDTEIeTA=
 github.com/twmb/franz-go/pkg/kmsg v1.8.0/go.mod h1:HzYEb8G3uu5XevZbtU0dVbkphaKTHk0X68N5ka4q6mU=
 github.com/twmb/go-cache v1.2.1 h1:yUkLutow4S2x5NMbqFW24o14OsucoFI5Fzmlb6uBinM=
