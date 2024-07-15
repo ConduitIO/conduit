@@ -9,9 +9,13 @@ import (
 	"github.com/conduitio/conduit-commons/config"
 )
 
+const (
+	encodeConfigField = "field"
+)
+
 func (encodeConfig) Parameters() map[string]config.Parameter {
 	return map[string]config.Parameter{
-		"field": {
+		encodeConfigField: {
 			Default:     "",
 			Description: "Field is a reference to the target field. Only fields that are under\n`.Key` and `.Payload` can be encoded.\n\nFor more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).",
 			Type:        config.ParameterTypeString,

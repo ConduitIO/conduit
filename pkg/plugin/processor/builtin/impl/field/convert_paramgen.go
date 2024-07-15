@@ -9,9 +9,14 @@ import (
 	"github.com/conduitio/conduit-commons/config"
 )
 
+const (
+	convertConfigField = "field"
+	convertConfigType  = "type"
+)
+
 func (convertConfig) Parameters() map[string]config.Parameter {
 	return map[string]config.Parameter{
-		"field": {
+		convertConfigField: {
 			Default:     "",
 			Description: "Field is the target field that should be converted.\nNote that you can only convert fields in structured data under `.Key` and\n`.Payload`.\n\nFor more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).",
 			Type:        config.ParameterTypeString,
@@ -20,7 +25,7 @@ func (convertConfig) Parameters() map[string]config.Parameter {
 				config.ValidationRegex{Regex: regexp.MustCompile("^\\.(Payload|Key).*")},
 			},
 		},
-		"type": {
+		convertConfigType: {
 			Default:     "",
 			Description: "Type is the target field type after conversion, available options are: string, int, float, bool.",
 			Type:        config.ParameterTypeString,

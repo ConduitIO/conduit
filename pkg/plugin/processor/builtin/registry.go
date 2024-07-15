@@ -70,7 +70,7 @@ type blueprint struct {
 type ProcessorPluginConstructor func(log.CtxLogger) sdk.Processor
 
 func NewRegistry(logger log.CtxLogger, constructors map[string]ProcessorPluginConstructor) *Registry {
-	logger = logger.WithComponent("builtin.Registry")
+	logger = logger.WithComponent("plugin.processor.builtin.Registry")
 	buildInfo, ok := debug.ReadBuildInfo()
 	if !ok {
 		// we are using modules, build info should always be available, we are staying on the safe side
@@ -82,7 +82,7 @@ func NewRegistry(logger log.CtxLogger, constructors map[string]ProcessorPluginCo
 		plugins: loadPlugins(buildInfo, constructors),
 		logger:  logger,
 	}
-	logger.Info(context.Background()).Int("count", len(r.List())).Msg("builtin plugins initialized")
+	logger.Info(context.Background()).Int("count", len(r.List())).Msg("builtin processor plugins initialized")
 	return r
 }
 

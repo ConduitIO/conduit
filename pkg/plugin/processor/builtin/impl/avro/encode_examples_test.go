@@ -23,14 +23,15 @@ import (
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/avro/schemaregistry"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal/exampleutil"
-	"github.com/lovromazgon/franz-go/pkg/sr"
+	"github.com/conduitio/conduit/pkg/schemaregistry"
+	"github.com/conduitio/conduit/pkg/schemaregistry/schemaregistrytest"
+	"github.com/twmb/franz-go/pkg/sr"
 )
 
 //nolint:govet // a more descriptive example description
 func ExampleEncodeProcessor_autoRegister() {
-	url, cleanup := schemaregistry.ExampleSchemaRegistryURL("ExampleEncodeProcessor_autoRegister", 54322)
+	url, cleanup := schemaregistrytest.ExampleSchemaRegistryURL("ExampleEncodeProcessor_autoRegister", 54322)
 	defer cleanup()
 
 	p := NewEncodeProcessor(log.Nop())
@@ -109,7 +110,7 @@ and registered on the fly under the subject ` + "`example-autoRegister`" + `.`,
 
 //nolint:govet // a more descriptive example description
 func ExampleEncodeProcessor_preRegistered() {
-	url, cleanup := schemaregistry.ExampleSchemaRegistryURL("ExampleEncodeProcessor_preRegistered", 54322)
+	url, cleanup := schemaregistrytest.ExampleSchemaRegistryURL("ExampleEncodeProcessor_preRegistered", 54322)
 	defer cleanup()
 
 	client, err := schemaregistry.NewClient(log.Nop(), sr.URLs(url))

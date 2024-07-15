@@ -25,9 +25,10 @@ import (
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/avro/schemaregistry"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/avro/internal"
+	"github.com/conduitio/conduit/pkg/schemaregistry"
 	"github.com/goccy/go-json"
-	"github.com/lovromazgon/franz-go/pkg/sr"
+	"github.com/twmb/franz-go/pkg/sr"
 )
 
 type encoder interface {
@@ -50,8 +51,8 @@ type encodeConfig struct {
 	fieldResolver sdk.ReferenceResolver
 }
 
-func (c encodeConfig) ClientOptions() []sr.Opt {
-	clientOpts := []sr.Opt{sr.URLs(c.URL), sr.Normalize()}
+func (c encodeConfig) ClientOptions() []sr.ClientOpt {
+	clientOpts := []sr.ClientOpt{sr.URLs(c.URL)}
 	if c.Auth.Username != "" && c.Auth.Password != "" {
 		clientOpts = append(clientOpts, sr.BasicAuth(c.Auth.Username, c.Auth.Password))
 	}
@@ -157,11 +158,12 @@ func (p *encodeProcessor) Configure(ctx context.Context, m map[string]string) er
 }
 
 func (p *encodeProcessor) Open(context.Context) error {
+	// TODO: somehow inject the schemaregistry.Registry that Conduit created.
 	client, err := schemaregistry.NewClient(p.logger, p.cfg.ClientOptions()...)
 	if err != nil {
 		return cerrors.Errorf("could not create schema registry client: %w", err)
 	}
-	p.encoder = schemaregistry.NewEncoder(client, p.logger, &sr.Serde{}, p.cfg.Schema.strategy)
+	p.encoder = internal.NewEncoder(client, p.logger, p.cfg.Schema.strategy)
 
 	return nil
 }

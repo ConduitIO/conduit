@@ -17,6 +17,7 @@ package conduit
 import (
 	"os"
 
+	sdk "github.com/conduitio/conduit-connector-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/database"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -29,6 +30,9 @@ const (
 	DBTypePostgres = "postgres"
 	DBTypeInMemory = "inmemory"
 	DBTypeSQLite   = "sqlite"
+
+	SchemaRegistryTypeConfluent = "confluent"
+	SchemaRegistryTypeBuiltin   = "builtin"
 )
 
 // Config holds all configurable values for Conduit.
@@ -81,18 +85,26 @@ type Config struct {
 		ExitOnError bool
 	}
 
-	PluginDispenserFactories map[string]builtin.DispenserFactory
+	ConnectorPlugins map[string]sdk.Connector
 
 	dev struct {
 		cpuprofile   string
 		memprofile   string
 		blockprofile string
 	}
+
+	SchemaRegistry struct {
+		Type string
+
+		Confluent struct {
+			ConnectionString string
+		}
+	}
 }
 
 func DefaultConfig() Config {
 	var cfg Config
-	cfg.DB.Type = "badger"
+	cfg.DB.Type = DBTypeBadger
 	cfg.DB.Badger.Path = "conduit.db"
 	cfg.DB.Postgres.Table = "conduit_kv_store"
 	cfg.DB.SQLite.Path = "conduit.db"
@@ -105,15 +117,64 @@ func DefaultConfig() Config {
 	cfg.Connectors.Path = "./connectors"
 	cfg.Processors.Path = "./processors"
 	cfg.Pipelines.Path = "./pipelines"
+	cfg.SchemaRegistry.Type = SchemaRegistryTypeBuiltin
 
-	cfg.PluginDispenserFactories = builtin.DefaultDispenserFactories
+	cfg.ConnectorPlugins = builtin.DefaultBuiltinConnectors
 	return cfg
+}
+
+func (c Config) validateDBConfig() error {
+	if c.DB.Driver == nil {
+		switch c.DB.Type {
+		case DBTypeBadger:
+			if c.DB.Badger.Path == "" {
+				return requiredConfigFieldErr("db.badger.path")
+			}
+		case DBTypePostgres:
+			if c.DB.Postgres.ConnectionString == "" {
+				return requiredConfigFieldErr("db.postgres.connection-string")
+			}
+			if c.DB.Postgres.Table == "" {
+				return requiredConfigFieldErr("db.postgres.table")
+			}
+		case DBTypeInMemory:
+			// all good
+		case DBTypeSQLite:
+			if c.DB.SQLite.Path == "" {
+				return requiredConfigFieldErr("db.sqlite.path")
+			}
+			if c.DB.SQLite.Table == "" {
+				return requiredConfigFieldErr("db.sqlite.table")
+			}
+		default:
+			return invalidConfigFieldErr("db.type")
+		}
+	}
+	return nil
+}
+
+func (c Config) validateSchemaRegistryConfig() error {
+	switch c.SchemaRegistry.Type {
+	case SchemaRegistryTypeConfluent:
+		if c.SchemaRegistry.Confluent.ConnectionString == "" {
+			return requiredConfigFieldErr("schema-registry.confluent.connection-string")
+		}
+	case SchemaRegistryTypeBuiltin:
+		// all good
+	default:
+		return invalidConfigFieldErr("schema-registry.type")
+	}
+	return nil
 }
 
 func (c Config) Validate() error {
 	// TODO simplify validation with struct tags
 
 	if err := c.validateDBConfig(); err != nil {
+		return err
+	}
+
+	if err := c.validateSchemaRegistryConfig(); err != nil {
 		return err
 	}
 
@@ -149,37 +210,6 @@ func (c Config) Validate() error {
 	_, err = os.Stat(c.Pipelines.Path)
 	if c.Pipelines.Path != "./pipelines" && os.IsNotExist(err) {
 		return invalidConfigFieldErr("pipelines.path")
-	}
-
-	return nil
-}
-
-func (c Config) validateDBConfig() error {
-	if c.DB.Driver == nil {
-		switch c.DB.Type {
-		case DBTypeBadger:
-			if c.DB.Badger.Path == "" {
-				return requiredConfigFieldErr("db.badger.path")
-			}
-		case DBTypePostgres:
-			if c.DB.Postgres.ConnectionString == "" {
-				return requiredConfigFieldErr("db.postgres.connection-string")
-			}
-			if c.DB.Postgres.Table == "" {
-				return requiredConfigFieldErr("db.postgres.table")
-			}
-		case DBTypeInMemory:
-			// all good
-		case DBTypeSQLite:
-			if c.DB.SQLite.Path == "" {
-				return requiredConfigFieldErr("db.sqlite.path")
-			}
-			if c.DB.SQLite.Table == "" {
-				return requiredConfigFieldErr("db.sqlite.table")
-			}
-		default:
-			return invalidConfigFieldErr("db.type")
-		}
 	}
 
 	return nil

@@ -28,6 +28,9 @@ import (
 	"strings"
 	"time"
 
+	pconduitserver "github.com/conduitio/conduit-connector-protocol/pconduit/v1/server"
+	conduitv1 "github.com/conduitio/conduit-connector-protocol/proto/conduit/v1"
+	conduitschemaregistry "github.com/conduitio/conduit-schema-registry"
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/ctxutil"
@@ -45,12 +48,14 @@ import (
 	"github.com/conduitio/conduit/pkg/pipeline"
 	conn_plugin "github.com/conduitio/conduit/pkg/plugin/connector"
 	conn_builtin "github.com/conduitio/conduit/pkg/plugin/connector/builtin"
+	"github.com/conduitio/conduit/pkg/plugin/connector/connutils"
 	conn_standalone "github.com/conduitio/conduit/pkg/plugin/connector/standalone"
 	proc_plugin "github.com/conduitio/conduit/pkg/plugin/processor"
 	proc_builtin "github.com/conduitio/conduit/pkg/plugin/processor/builtin"
 	proc_standalone "github.com/conduitio/conduit/pkg/plugin/processor/standalone"
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/provisioning"
+	"github.com/conduitio/conduit/pkg/schemaregistry"
 	"github.com/conduitio/conduit/pkg/web/api"
 	"github.com/conduitio/conduit/pkg/web/openapi"
 	"github.com/conduitio/conduit/pkg/web/ui"
@@ -60,11 +65,11 @@ import (
 	promclient "github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/zerolog"
+	"github.com/twmb/franz-go/pkg/sr"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
-	"google.golang.org/grpc/stats"
 	"gopkg.in/tomb.v2"
 )
 
@@ -89,8 +94,13 @@ type Runtime struct {
 	connectorPluginService *conn_plugin.PluginService
 	processorPluginService *proc_plugin.PluginService
 
+	schemaRegistry    schemaregistry.Registry
+	connSchemaService *connutils.SchemaService
+
 	connectorPersister *connector.Persister
-	logger             log.CtxLogger
+
+	logger           log.CtxLogger
+	gRPCStatsHandler *promgrpc.StatsHandler
 }
 
 // NewRuntime sets up a Runtime instance and primes it for start.
@@ -133,35 +143,85 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 		connector.DefaultPersisterBundleCountThreshold,
 	)
 
-	// Create all necessary internal services
-	plService, connService, procService, connPluginService, procPluginService, err := newServices(logger, db, connectorPersister, cfg)
-	if err != nil {
-		return nil, cerrors.Errorf("failed to create services: %w", err)
-	}
-
-	provisionService := provisioning.NewService(db, logger, plService, connService, procService, connPluginService, cfg.Pipelines.Path)
-
-	orc := orchestrator.NewOrchestrator(db, logger, plService, connService, procService, connPluginService, procPluginService)
-
 	r := &Runtime{
-		Config:           cfg,
-		DB:               db,
-		Orchestrator:     orc,
-		ProvisionService: provisionService,
-		Ready:            make(chan struct{}),
-
-		pipelineService:  plService,
-		connectorService: connService,
-		processorService: procService,
-
-		connectorPluginService: connPluginService,
-		processorPluginService: procPluginService,
+		Config: cfg,
+		DB:     db,
+		Ready:  make(chan struct{}),
 
 		connectorPersister: connectorPersister,
 
-		logger: logger,
+		gRPCStatsHandler: newGRPCStatsHandler(),
+		logger:           logger,
 	}
+
+	err := initServices(r)
+	if err != nil {
+		return nil, cerrors.Errorf("failed to initialize services: %w", err)
+	}
+
 	return r, nil
+}
+
+// Create all necessary internal services
+func initServices(r *Runtime) error {
+	standaloneReg, err := proc_standalone.NewRegistry(r.logger, r.Config.Processors.Path)
+	if err != nil {
+		return cerrors.Errorf("failed creating processor registry: %w", err)
+	}
+
+	procPluginService := proc_plugin.NewPluginService(
+		r.logger,
+		proc_builtin.NewRegistry(r.logger, proc_builtin.DefaultBuiltinProcessors),
+		standaloneReg,
+	)
+
+	var schemaRegistry schemaregistry.Registry
+	switch r.Config.SchemaRegistry.Type {
+	case SchemaRegistryTypeConfluent:
+		schemaRegistry, err = schemaregistry.NewClient(r.logger, sr.URLs(r.Config.SchemaRegistry.Confluent.ConnectionString))
+		if err != nil {
+			return cerrors.Errorf("failed to create schema registry client: %w", err)
+		}
+	case SchemaRegistryTypeBuiltin:
+		schemaRegistry = conduitschemaregistry.NewSchemaRegistry()
+	default:
+		// shouldn't happen, we validate the config
+		return cerrors.Errorf("invalid schema registry type %q", r.Config.SchemaRegistry.Type)
+	}
+
+	connSchemaService := connutils.NewSchemaService(r.logger, schemaRegistry)
+	connPluginService := conn_plugin.NewPluginService(
+		r.logger,
+		conn_builtin.NewRegistry(r.logger, r.Config.ConnectorPlugins, connSchemaService),
+		conn_standalone.NewRegistry(r.logger, r.Config.Connectors.Path),
+	)
+
+	plService := pipeline.NewService(r.logger, r.DB)
+	connService := connector.NewService(r.logger, r.DB, r.connectorPersister)
+	procService := processor.NewService(r.logger, r.DB, procPluginService)
+
+	provisionService := provisioning.NewService(r.DB, r.logger, plService, connService, procService, connPluginService, r.Config.Pipelines.Path)
+
+	orc := orchestrator.NewOrchestrator(r.DB, r.logger, plService, connService, procService, connPluginService, procPluginService)
+
+	r.Orchestrator = orc
+	r.ProvisionService = provisionService
+	r.pipelineService = plService
+	r.connectorService = connService
+	r.processorService = procService
+	r.connectorPluginService = connPluginService
+	r.processorPluginService = procPluginService
+	r.schemaRegistry = schemaRegistry
+	r.connSchemaService = connSchemaService
+
+	return nil
+}
+
+func newGRPCStatsHandler() *promgrpc.StatsHandler {
+	h := promgrpc.ServerStatsHandler()
+	promclient.MustRegister(h)
+
+	return h
 }
 
 func newLogger(level string, format string) log.CtxLogger {
@@ -181,36 +241,6 @@ func configurePrometheus() {
 	registry := prometheus.NewRegistry(nil)
 	promclient.MustRegister(registry)
 	metrics.Register(registry)
-}
-
-func newServices(
-	logger log.CtxLogger,
-	db database.DB,
-	connPersister *connector.Persister,
-	cfg Config,
-) (*pipeline.Service, *connector.Service, *processor.Service, *conn_plugin.PluginService, *proc_plugin.PluginService, error) {
-	standaloneReg, err := proc_standalone.NewRegistry(logger, cfg.Processors.Path)
-	if err != nil {
-		return nil, nil, nil, nil, nil, cerrors.Errorf("failed creating processor registry: %w", err)
-	}
-
-	procPluginService := proc_plugin.NewPluginService(
-		logger,
-		proc_builtin.NewRegistry(logger, proc_builtin.DefaultBuiltinProcessors),
-		standaloneReg,
-	)
-
-	connPluginService := conn_plugin.NewPluginService(
-		logger,
-		conn_builtin.NewRegistry(logger, cfg.PluginDispenserFactories),
-		conn_standalone.NewRegistry(logger, cfg.Connectors.Path),
-	)
-
-	pipelineService := pipeline.NewService(logger, db)
-	connectorService := connector.NewService(logger, db, connPersister)
-	processorService := processor.NewService(logger, db, procPluginService)
-
-	return pipelineService, connectorService, processorService, connPluginService, procPluginService, nil
 }
 
 // Run initializes all of Conduit's underlying services and starts the GRPC and
@@ -285,6 +315,13 @@ func (r *Runtime) Run(ctx context.Context) (err error) {
 		})
 	}
 
+	// APIs needed by connector plugins
+	_, err = r.startConnectorUtils(ctx, t)
+	if err != nil {
+		return cerrors.Errorf("failed to start connector utilities: %w", err)
+	}
+
+	// Public gRPC and HTTP API
 	if r.Config.API.Enabled {
 		// Serve grpc and http API
 		grpcAddr, err := r.serveGRPCAPI(ctx, t)
@@ -402,21 +439,6 @@ func (r *Runtime) registerCleanup(t *tomb.Tomb) {
 	})
 }
 
-func (r *Runtime) newGrpcStatsHandler() stats.Handler {
-	// We are manually creating the stats handler and not using
-	// promgrpc.ServerStatsHandler(), because we don't need metrics related to
-	// messages. They would be relevant for GRPC streams, we don't use them.
-	grpcStatsHandler := promgrpc.NewStatsHandler(
-		promgrpc.NewServerConnectionsStatsHandler(promgrpc.NewServerConnectionsGaugeVec()),
-		promgrpc.NewServerRequestsTotalStatsHandler(promgrpc.NewServerRequestsTotalCounterVec()),
-		promgrpc.NewServerRequestsInFlightStatsHandler(promgrpc.NewServerRequestsInFlightGaugeVec()),
-		promgrpc.NewServerRequestDurationStatsHandler(promgrpc.NewServerRequestDurationHistogramVec()),
-		promgrpc.NewServerResponsesTotalStatsHandler(promgrpc.NewServerResponsesTotalCounterVec()),
-	)
-	promclient.MustRegister(grpcStatsHandler)
-	return grpcStatsHandler
-}
-
 func (r *Runtime) newHTTPMetricsHandler() http.Handler {
 	return promhttp.Handler()
 }
@@ -427,7 +449,7 @@ func (r *Runtime) serveGRPCAPI(ctx context.Context, t *tomb.Tomb) (net.Addr, err
 			grpcutil.RequestIDUnaryServerInterceptor(r.logger),
 			grpcutil.LoggerUnaryServerInterceptor(r.logger),
 		),
-		grpc.StatsHandler(r.newGrpcStatsHandler()),
+		grpc.StatsHandler(r.gRPCStatsHandler),
 	)
 
 	pipelineAPIv1 := api.NewPipelineAPIv1(r.Orchestrator.Pipelines)
@@ -463,15 +485,58 @@ func (r *Runtime) serveGRPCAPI(ctx context.Context, t *tomb.Tomb) (net.Addr, err
 	grpc_health_v1.RegisterHealthServer(grpcServer, healthServer)
 
 	// serve grpc server
-	return r.serveGRPC(ctx, t, grpcServer)
+	addr, err := r.serveGRPC(ctx, t, grpcServer, r.Config.API.GRPC.Address)
+	if err != nil {
+		return nil, err
+	}
+
+	r.logger.Info(ctx).Str(log.ServerAddressField, addr.String()).Msg("grpc API started")
+	return addr, nil
+}
+
+// startConnectorUtils starts all the utility services needed by connectors.
+func (r *Runtime) startConnectorUtils(ctx context.Context, t *tomb.Tomb) (net.Addr, error) {
+	grpcServer := grpc.NewServer(
+		grpc.ChainUnaryInterceptor(
+			grpcutil.RequestIDUnaryServerInterceptor(r.logger),
+			grpcutil.LoggerUnaryServerInterceptor(r.logger),
+		),
+		grpc.StatsHandler(r.gRPCStatsHandler),
+	)
+
+	schemaServiceAPI := pconduitserver.NewSchemaServiceServer(r.connSchemaService)
+	conduitv1.RegisterSchemaServiceServer(grpcServer, schemaServiceAPI)
+
+	// Makes it easier to use command line tools to interact
+	// with the gRPC API.
+	// https://github.com/grpc/grpc/blob/master/doc/server-reflection.md
+	reflection.Register(grpcServer)
+
+	// Names taken from schema.proto
+	healthServer := api.NewHealthServer(
+		map[string]api.Checker{
+			"SchemaService": r.connSchemaService,
+		},
+		r.logger,
+	)
+	grpc_health_v1.RegisterHealthServer(grpcServer, healthServer)
+
+	// Serve utilities on a random port
+	addr, err := r.serveGRPC(ctx, t, grpcServer, ":0")
+	if err != nil {
+		return nil, err
+	}
+
+	r.logger.Info(ctx).Str(log.ServerAddressField, addr.String()).Msg("connector utilities started")
+	return addr, nil
 }
 
 func (r *Runtime) serveHTTPAPI(
 	ctx context.Context,
 	t *tomb.Tomb,
-	addr net.Addr,
+	grpcAddr net.Addr,
 ) (net.Addr, error) {
-	conn, err := grpc.NewClient(addr.String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(grpcAddr.String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return nil, cerrors.Errorf("failed to dial server: %w", err)
 	}
@@ -579,7 +644,7 @@ func (r *Runtime) serveHTTPAPI(
 		r.logger,
 	)
 
-	return r.serveHTTP(
+	addr, err := r.serveHTTP(
 		ctx,
 		t,
 		&http.Server{
@@ -588,6 +653,12 @@ func (r *Runtime) serveHTTPAPI(
 			ReadHeaderTimeout: 10 * time.Second,
 		},
 	)
+	if err != nil {
+		return nil, err
+	}
+
+	r.logger.Info(ctx).Str(log.ServerAddressField, addr.String()).Msg("http API started")
+	return addr, nil
 }
 
 func preflightHandler(w http.ResponseWriter) {
@@ -616,10 +687,11 @@ func (r *Runtime) serveGRPC(
 	ctx context.Context,
 	t *tomb.Tomb,
 	srv *grpc.Server,
+	address string,
 ) (net.Addr, error) {
-	ln, err := net.Listen("tcp", r.Config.API.GRPC.Address)
+	ln, err := net.Listen("tcp", address)
 	if err != nil {
-		return nil, cerrors.Errorf("failed to listen on address %q: %w", r.Config.API.GRPC.Address, err)
+		return nil, cerrors.Errorf("failed to listen on address %q: %w", address, err)
 	}
 
 	t.Go(func() error {
@@ -641,7 +713,6 @@ func (r *Runtime) serveGRPC(
 		}
 	})
 
-	r.logger.Info(ctx).Str(log.ServerAddressField, ln.Addr().String()).Msg("grpc server started")
 	return ln.Addr(), nil
 }
 
@@ -674,6 +745,5 @@ func (r *Runtime) serveHTTP(
 		return srv.Shutdown(ctx)
 	})
 
-	r.logger.Info(ctx).Str(log.ServerAddressField, ln.Addr().String()).Msg("http server started")
 	return ln.Addr(), nil
 }
