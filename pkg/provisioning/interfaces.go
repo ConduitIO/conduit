@@ -70,5 +70,5 @@ type ProcessorService interface {
 }
 
 type ConnectorPluginService interface {
-	NewDispenser(ctx log.CtxLogger, name string) (connectorPlugin.Dispenser, error)
+	NewDispenser(ctx log.CtxLogger, name string, connectorID string) (connectorPlugin.Dispenser, error)
 }

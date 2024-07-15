@@ -43,6 +43,11 @@ func NewDispenser(logger zerolog.Logger, path string, opts ...client.Option) (*D
 		opts:   opts,
 	}
 
+	err := d.initClient()
+	if err != nil {
+		return nil, err
+	}
+
 	return &d, nil
 }
 
@@ -62,11 +67,6 @@ func (d *Dispenser) dispense() error {
 
 	if d.dispensed {
 		return cerrors.New("plugin already dispensed, can't dispense twice")
-	}
-
-	err := d.initClient()
-	if err != nil {
-		return cerrors.Errorf("could not init plugin client: %w", err)
 	}
 
 	d.dispensed = true
@@ -112,11 +112,7 @@ func (d *Dispenser) DispenseSpecifier() (connector.SpecifierPlugin, error) {
 	return specifierPluginDispenserSignaller{specifier, d}, nil
 }
 
-func (d *Dispenser) DispenseSource(connectorID string) (connector.SourcePlugin, error) {
-	if connectorID != "" {
-		d.opts = append(d.opts, client.WithEnvVar("CONNECTOR_ID", connectorID))
-	}
-
+func (d *Dispenser) DispenseSource() (connector.SourcePlugin, error) {
 	err := d.dispense()
 	if err != nil {
 		return nil, err
@@ -139,11 +135,7 @@ func (d *Dispenser) DispenseSource(connectorID string) (connector.SourcePlugin, 
 	return sourcePluginDispenserSignaller{source, d}, nil
 }
 
-func (d *Dispenser) DispenseDestination(connectorID string) (connector.DestinationPlugin, error) {
-	if connectorID != "" {
-		d.opts = append(d.opts, client.WithEnvVar("CONNECTOR_ID", connectorID))
-	}
-
+func (d *Dispenser) DispenseDestination() (connector.DestinationPlugin, error) {
 	err := d.dispense()
 	if err != nil {
 		return nil, err

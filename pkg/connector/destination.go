@@ -73,7 +73,7 @@ func (d *Destination) Open(ctx context.Context) (err error) {
 	}
 
 	d.Instance.logger.Debug(ctx).Msg("dispensing destination connector plugin")
-	d.plugin, err = d.dispenser.DispenseDestination(d.ID())
+	d.plugin, err = d.dispenser.DispenseDestination()
 	if err != nil {
 		return err
 	}
@@ -241,7 +241,7 @@ func (d *Destination) OnDelete(ctx context.Context) (err error) {
 	defer d.Instance.Unlock()
 
 	d.Instance.logger.Debug(ctx).Msg("dispensing destination connector plugin")
-	d.plugin, err = d.dispenser.DispenseDestination(d.ID())
+	d.plugin, err = d.dispenser.DispenseDestination()
 	if err != nil {
 		return err
 	}

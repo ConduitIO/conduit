@@ -28,7 +28,7 @@ import (
 // builtin and standalone packages.
 // There are two registries that implement this interface: builtinReg and standaloneReg
 type registry interface {
-	NewDispenser(logger log.CtxLogger, name plugin.FullName) (Dispenser, error)
+	NewDispenser(logger log.CtxLogger, name plugin.FullName, connectorID string) (Dispenser, error)
 	List() map[plugin.FullName]pconnector.Specification
 }
 
@@ -78,20 +78,20 @@ func (s *PluginService) Check(context.Context) error {
 	return nil
 }
 
-func (s *PluginService) NewDispenser(logger log.CtxLogger, name string) (Dispenser, error) {
+func (s *PluginService) NewDispenser(logger log.CtxLogger, name string, connectorID string) (Dispenser, error) {
 	logger = logger.WithComponent("plugin")
 
 	fullName := plugin.FullName(name)
 	switch fullName.PluginType() {
 	case plugin.PluginTypeStandalone:
-		return s.standaloneReg.NewDispenser(logger, fullName)
+		return s.standaloneReg.NewDispenser(logger, fullName, connectorID)
 	case plugin.PluginTypeBuiltin:
-		return s.builtinReg.NewDispenser(logger, fullName)
+		return s.builtinReg.NewDispenser(logger, fullName, connectorID)
 	case plugin.PluginTypeAny:
-		d, err := s.standaloneReg.NewDispenser(logger, fullName)
+		d, err := s.standaloneReg.NewDispenser(logger, fullName, connectorID)
 		if err != nil {
 			s.logger.Debug(context.Background()).Err(err).Msg("could not find standalone plugin dispenser, falling back to builtin plugin")
-			d, err = s.builtinReg.NewDispenser(logger, fullName)
+			d, err = s.builtinReg.NewDispenser(logger, fullName, connectorID)
 		}
 		return d, err
 	default:
@@ -115,12 +115,12 @@ func (s *PluginService) List(context.Context) (map[string]pconnector.Specificati
 }
 
 func (s *PluginService) ValidateSourceConfig(ctx context.Context, name string, settings map[string]string) (err error) {
-	d, err := s.NewDispenser(s.logger, name)
+	d, err := s.NewDispenser(s.logger, name, "validate-source-config")
 	if err != nil {
 		return cerrors.Errorf("couldn't get dispenser: %w", err)
 	}
 
-	src, err := d.DispenseSource("validate-source-config")
+	src, err := d.DispenseSource()
 	if err != nil {
 		return cerrors.Errorf("could not dispense source: %w", err)
 	}
@@ -141,12 +141,12 @@ func (s *PluginService) ValidateSourceConfig(ctx context.Context, name string, s
 }
 
 func (s *PluginService) ValidateDestinationConfig(ctx context.Context, name string, settings map[string]string) (err error) {
-	d, err := s.NewDispenser(s.logger, name)
+	d, err := s.NewDispenser(s.logger, name, "validate-destination-config")
 	if err != nil {
 		return cerrors.Errorf("couldn't get dispenser: %w", err)
 	}
 
-	dest, err := d.DispenseDestination("validate-destination-config")
+	dest, err := d.DispenseDestination()
 	if err != nil {
 		return cerrors.Errorf("could not dispense destination: %w", err)
 	}

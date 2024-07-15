@@ -68,7 +68,7 @@ func (s *Source) Open(ctx context.Context) (err error) {
 	}
 
 	s.Instance.logger.Debug(ctx).Msg("dispensing source connector plugin")
-	s.plugin, err = s.dispenser.DispenseSource(s.ID())
+	s.plugin, err = s.dispenser.DispenseSource()
 	if err != nil {
 		return err
 	}
@@ -242,7 +242,7 @@ func (s *Source) OnDelete(ctx context.Context) (err error) {
 	defer s.Instance.Unlock()
 
 	s.Instance.logger.Debug(ctx).Msg("dispensing source connector plugin")
-	s.plugin, err = s.dispenser.DispenseSource(s.ID())
+	s.plugin, err = s.dispenser.DispenseSource()
 	if err != nil {
 		return err
 	}

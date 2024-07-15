@@ -186,7 +186,7 @@ func (r *Registry) loadSpecifications(pluginPath string) (pconnector.Specificati
 	return resp.Specification, nil
 }
 
-func (r *Registry) NewDispenser(logger log.CtxLogger, fullName plugin.FullName) (connector.Dispenser, error) {
+func (r *Registry) NewDispenser(logger log.CtxLogger, fullName plugin.FullName, connectorID string) (connector.Dispenser, error) {
 	r.m.RLock()
 	defer r.m.RUnlock()
 
@@ -209,6 +209,7 @@ func (r *Registry) NewDispenser(logger log.CtxLogger, fullName plugin.FullName) 
 		bp.Path,
 		client.WithEnvVar(pconduit.EnvConduitConnectorUtilitiesGRPCTarget, r.connUtilsAddr),
 		client.WithEnvVar(pconduit.EnvConduitConnectorSchemaToken, r.connUtilsToken),
+		client.WithEnvVar("CONDUIT_CONNECTOR_ID", connectorID),
 	)
 }
 
