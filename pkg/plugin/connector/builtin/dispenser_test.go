@@ -35,10 +35,11 @@ func newTestDispenser(t *testing.T) (connector.Dispenser, *mock.SpecifierPlugin,
 
 	dispenser := NewDispenser(
 		"mockPlugin",
+		"mock-connector-id",
 		logger,
 		func() pconnector.SpecifierPlugin { return mockSpecifier },
-		func(string) pconnector.SourcePlugin { return mockSource },
-		func(string) pconnector.DestinationPlugin { return mockDestination },
+		func() pconnector.SourcePlugin { return mockSource },
+		func() pconnector.DestinationPlugin { return mockDestination },
 	)
 	return dispenser, mockSpecifier, mockSource, mockDestination
 }

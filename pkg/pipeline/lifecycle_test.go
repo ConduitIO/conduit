@@ -456,7 +456,7 @@ func generatorSource(
 	source := dummySource(persister)
 
 	dispenser := pmock.NewDispenser(ctrl)
-	dispenser.EXPECT().DispenseSource(source.ID).Return(sourcePlugin, nil)
+	dispenser.EXPECT().DispenseSource().Return(sourcePlugin, nil)
 
 	return source, dispenser
 }
@@ -488,7 +488,7 @@ func asserterDestination(
 	dest := dummyDestination(persister)
 
 	dispenser := pmock.NewDispenser(ctrl)
-	dispenser.EXPECT().DispenseDestination(dest.ID).Return(destinationPlugin, nil)
+	dispenser.EXPECT().DispenseDestination().Return(destinationPlugin, nil)
 
 	return dest, dispenser
 }
@@ -557,7 +557,7 @@ func (tpf testProcessorFetcher) Get(_ context.Context, id string) (*processor.In
 // testPluginFetcher fulfills the PluginFetcher interface.
 type testPluginFetcher map[string]connectorPlugin.Dispenser
 
-func (tpf testPluginFetcher) NewDispenser(_ log.CtxLogger, name string) (connectorPlugin.Dispenser, error) {
+func (tpf testPluginFetcher) NewDispenser(_ log.CtxLogger, name string, _ string) (connectorPlugin.Dispenser, error) {
 	plug, ok := tpf[name]
 	if !ok {
 		return nil, plugin.ErrPluginNotFound

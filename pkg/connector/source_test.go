@@ -249,7 +249,7 @@ func newTestSource(ctx context.Context, t *testing.T, ctrl *gomock.Controller) (
 
 	sourceMock := mock.NewSourcePlugin(ctrl)
 	pluginDispenser := mock.NewDispenser(ctrl)
-	pluginDispenser.EXPECT().DispenseSource(instance.ID).Return(sourceMock, nil).AnyTimes()
+	pluginDispenser.EXPECT().DispenseSource().Return(sourceMock, nil).AnyTimes()
 
 	conn, err := instance.Connector(ctx, fakePluginFetcher{instance.Plugin: pluginDispenser})
 	is.NoErr(err)

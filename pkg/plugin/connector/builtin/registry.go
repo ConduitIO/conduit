@@ -55,6 +55,7 @@ type Registry struct {
 	// plugins stores plugin blueprints in a 2D map, first key is the plugin
 	// name, the second key is the plugin version
 	plugins map[string]map[string]blueprint
+	service *connutils.SchemaService
 }
 
 type blueprint struct {
@@ -65,7 +66,7 @@ type blueprint struct {
 
 type dispenserFactory func(name plugin.FullName, connectorID string, logger log.CtxLogger) connector.Dispenser
 
-func newDispenserFactory(conn sdk.Connector) dispenserFactory {
+func newDispenserFactory(conn sdk.Connector, token string) dispenserFactory {
 	if conn.NewSource == nil {
 		conn.NewSource = func() sdk.Source { return nil }
 	}
@@ -75,6 +76,7 @@ func newDispenserFactory(conn sdk.Connector) dispenserFactory {
 
 	cfg := pconnector.PluginConfig{
 		// can be taken from logger.GetLevel()
+		Token:    token,
 		LogLevel: 0,
 	}
 
@@ -110,6 +112,7 @@ func NewRegistry(logger log.CtxLogger, connectors map[string]sdk.Connector, serv
 	r := &Registry{
 		logger:     logger,
 		connectors: connectors,
+		service:    service,
 	}
 
 	return r
@@ -123,14 +126,14 @@ func (r *Registry) Init(ctx context.Context) {
 		buildInfo = &debug.BuildInfo{} // prevent nil pointer exceptions
 	}
 
-	r.plugins = loadPlugins(buildInfo, r.connectors)
+	r.plugins = r.loadPlugins(buildInfo)
 	r.logger.Info(ctx).Int("count", len(r.List())).Msg("builtin connector plugins initialized")
 }
 
-func loadPlugins(buildInfo *debug.BuildInfo, connectors map[string]sdk.Connector) map[string]map[string]blueprint {
-	plugins := make(map[string]map[string]blueprint, len(connectors))
-	for moduleName, conn := range connectors {
-		factory := newDispenserFactory(conn)
+func (r *Registry) loadPlugins(buildInfo *debug.BuildInfo) map[string]map[string]blueprint {
+	plugins := make(map[string]map[string]blueprint, len(r.connectors))
+	for moduleName, conn := range r.connectors {
+		factory := newDispenserFactory(conn, r.service.Token())
 
 		specs, err := getSpecification(moduleName, factory, buildInfo)
 		if err != nil {

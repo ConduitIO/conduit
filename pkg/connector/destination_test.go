@@ -216,7 +216,7 @@ func newTestDestination(ctx context.Context, t *testing.T, ctrl *gomock.Controll
 
 	destinationMock := mock.NewDestinationPlugin(ctrl)
 	pluginDispenser := mock.NewDispenser(ctrl)
-	pluginDispenser.EXPECT().DispenseDestination(instance.ID).Return(destinationMock, nil).AnyTimes()
+	pluginDispenser.EXPECT().DispenseDestination().Return(destinationMock, nil).AnyTimes()
 
 	conn, err := instance.Connector(ctx, fakePluginFetcher{instance.Plugin: pluginDispenser})
 	is.NoErr(err)
