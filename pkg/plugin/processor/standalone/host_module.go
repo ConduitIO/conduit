@@ -17,11 +17,11 @@ package standalone
 import (
 	"bytes"
 	"context"
-
-	schemav1 "github.com/conduitio/conduit-commons/schema"
+	"github.com/conduitio/conduit-commons/schema"
+	pconduit "github.com/conduitio/conduit-processor-sdk/conduit"
+	"github.com/conduitio/conduit-processor-sdk/conduit/v1/toproto"
 	conduitv1 "github.com/conduitio/conduit-processor-sdk/proto/conduit/v1"
 	processorv1 "github.com/conduitio/conduit-processor-sdk/proto/processor/v1"
-	pschema "github.com/conduitio/conduit-processor-sdk/schema"
 	"github.com/conduitio/conduit-processor-sdk/wasm"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -171,7 +171,7 @@ func (m *hostModuleInstance) createSchema(ctx context.Context, buf types.Bytes) 
 			out, err := proto.MarshalOptions{}.MarshalAppend(buf[:0], m.parkedCreateSchemaResponse)
 			if err != nil {
 				m.logger.Err(ctx, err).Msg("failed marshalling protobuf create schema response")
-				return wasm.ErrorCodeSchemaMarshal
+				return pconduit.ErrorCodeStart
 			}
 			m.parkedCreateSchemaResponse = nil
 			m.parkedCreateSchemaBuffer = nil
@@ -187,14 +187,16 @@ func (m *hostModuleInstance) createSchema(ctx context.Context, buf types.Bytes) 
 	err := proto.Unmarshal(buf[:length], &req)
 	if err != nil {
 		m.logger.Err(ctx, err).Msg("failed unmarshalling protobuf create schema request")
-		return wasm.ErrorCodeSchemaUnmarshal
+		return pconduit.ErrorCodeStart
 	}
 
 	// use a stub response for now
-	schema := schemav1.Schema{
-		Bytes: []byte("CONDUIT_SCHEMA_CREATE"),
+	schemaResp := pconduit.CreateSchemaResponse{
+		Schema: schema.Schema{
+			Bytes: []byte("CONDUIT_SCHEMA_CREATE"),
+		},
 	}
-	resp := pschema.CreateSchemaResponse(schema)
+	resp := toproto.CreateSchemaResponse(schemaResp)
 	m.parkedCreateSchemaResponse = resp
 	m.parkedCreateSchemaBuffer = buf
 
@@ -210,7 +212,7 @@ func (m *hostModuleInstance) createSchema(ctx context.Context, buf types.Bytes) 
 	out, err := proto.MarshalOptions{}.MarshalAppend(buf[:0], m.parkedCreateSchemaResponse)
 	if err != nil {
 		m.logger.Err(ctx, err).Msg("failed marshalling protobuf create schema response")
-		return wasm.ErrorCodeSchemaMarshal
+		return pconduit.ErrorCodeStart
 	}
 	m.parkedCreateSchemaResponse = nil
 	m.parkedCreateSchemaBuffer = nil
@@ -223,7 +225,6 @@ func (m *hostModuleInstance) createSchema(ctx context.Context, buf types.Bytes) 
 // It returns the response size on success, or an error code on error.
 func (m *hostModuleInstance) getSchema(ctx context.Context, buf types.Bytes) types.Uint32 {
 	m.logger.Trace(ctx).Msg("executing get_schema")
-
 	// check if there's a parked response from the last call
 	if m.parkedGetSchemaResponse != nil {
 		// make sure the request is the same as the last one
@@ -231,7 +232,7 @@ func (m *hostModuleInstance) getSchema(ctx context.Context, buf types.Bytes) typ
 			out, err := proto.MarshalOptions{}.MarshalAppend(buf[:0], m.parkedGetSchemaResponse)
 			if err != nil {
 				m.logger.Err(ctx, err).Msg("failed marshalling protobuf get schema response")
-				return wasm.ErrorCodeSchemaMarshal
+				return pconduit.ErrorCodeStart
 			}
 			m.parkedGetSchemaResponse = nil
 			m.parkedGetSchemaBuffer = nil
@@ -248,15 +249,17 @@ func (m *hostModuleInstance) getSchema(ctx context.Context, buf types.Bytes) typ
 	err := proto.Unmarshal(buf[:length], &req)
 	if err != nil {
 		m.logger.Err(ctx, err).Msg("failed unmarshalling protobuf get schema request")
-		return wasm.ErrorCodeSchemaUnmarshal
+		return pconduit.ErrorCodeStart
 	}
 
 	// todo: resp := schemaService.GetSchema(unmarshalledRequest)
 	// use a stub response for now
-	schema := schemav1.Schema{
-		Bytes: []byte("CONDUIT_SCHEMA_GET"),
+	schemaResp := pconduit.GetSchemaResponse{
+		Schema: schema.Schema{
+			Bytes: []byte("CONDUIT_SCHEMA_GET"),
+		},
 	}
-	resp := pschema.GetSchemaResponse(schema)
+	resp := toproto.GetSchemaResponse(schemaResp)
 	m.parkedGetSchemaResponse = resp
 	m.parkedGetSchemaBuffer = buf
 
@@ -272,7 +275,7 @@ func (m *hostModuleInstance) getSchema(ctx context.Context, buf types.Bytes) typ
 	out, err := proto.MarshalOptions{}.MarshalAppend(buf[:0], m.parkedGetSchemaResponse)
 	if err != nil {
 		m.logger.Err(ctx, err).Msg("failed marshalling protobuf get schema response")
-		return wasm.ErrorCodeSchemaMarshal
+		return pconduit.ErrorCodeStart
 	}
 	m.parkedGetSchemaResponse = nil
 	m.parkedGetSchemaBuffer = nil
