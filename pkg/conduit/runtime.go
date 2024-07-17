@@ -84,6 +84,8 @@ type Runtime struct {
 	DB               database.DB
 	Orchestrator     *orchestrator.Orchestrator
 	ProvisionService *provisioning.Service
+	SchemaRegistry   schemaregistry.Registry
+
 	// Ready will be closed when Runtime has successfully started
 	Ready chan struct{}
 
@@ -94,8 +96,7 @@ type Runtime struct {
 	connectorPluginService *conn_plugin.PluginService
 	processorPluginService *proc_plugin.PluginService
 
-	connSchemaService *connutils.SchemaService
-
+	schemaService      *connutils.SchemaService
 	connectorPersister *connector.Persister
 
 	logger           log.CtxLogger
@@ -174,14 +175,18 @@ func createServices(r *Runtime) error {
 		standaloneReg,
 	)
 
-	connSchemaService, err := createSchemaService(r.Config, r.logger)
+	schemaRegistry, err := createSchemaRegistry(r.Config, r.logger)
 	if err != nil {
-		return err
+		return cerrors.Errorf("failed to create schema registry: %w", err)
 	}
 
 	connPluginService := conn_plugin.NewPluginService(
 		r.logger,
-		conn_builtin.NewRegistry(r.logger, r.Config.ConnectorPlugins, connSchemaService),
+		conn_builtin.NewRegistry(
+			r.logger,
+			r.Config.ConnectorPlugins,
+			connutils.NewSchemaService(r.logger, schemaRegistry),
+		),
 		conn_standalone.NewRegistry(r.logger, r.Config.Connectors.Path),
 	)
 
@@ -200,12 +205,12 @@ func createServices(r *Runtime) error {
 	r.processorService = procService
 	r.connectorPluginService = connPluginService
 	r.processorPluginService = procPluginService
-	r.connSchemaService = connSchemaService
+	r.SchemaRegistry = schemaRegistry
 
 	return nil
 }
 
-func createSchemaService(config Config, logger log.CtxLogger) (*connutils.SchemaService, error) {
+func createSchemaRegistry(config Config, logger log.CtxLogger) (schemaregistry.Registry, error) {
 	var schemaRegistry schemaregistry.Registry
 	var err error
 
@@ -222,7 +227,7 @@ func createSchemaService(config Config, logger log.CtxLogger) (*connutils.Schema
 		return nil, cerrors.Errorf("invalid schema registry type %q", config.SchemaRegistry.Type)
 	}
 
-	return connutils.NewSchemaService(logger, schemaRegistry), nil
+	return schemaRegistry, nil
 }
 
 func newGRPCStatsHandler() *promgrpc.StatsHandler {
@@ -467,7 +472,7 @@ func (r *Runtime) startConnectorUtils(ctx context.Context, t *tomb.Tomb) (net.Ad
 		grpc.StatsHandler(r.gRPCStatsHandler),
 	)
 
-	schemaServiceAPI := pconduitserver.NewSchemaServiceServer(r.connSchemaService)
+	schemaServiceAPI := pconduitserver.NewSchemaServiceServer(r.schemaService)
 	conduitv1.RegisterSchemaServiceServer(grpcServer, schemaServiceAPI)
 
 	// Makes it easier to use command line tools to interact
@@ -478,7 +483,7 @@ func (r *Runtime) startConnectorUtils(ctx context.Context, t *tomb.Tomb) (net.Ad
 	// Names taken from schema.proto
 	healthServer := api.NewHealthServer(
 		map[string]api.Checker{
-			"SchemaService": r.connSchemaService,
+			"SchemaService": r.schemaService,
 		},
 		r.logger,
 	)
@@ -717,7 +722,7 @@ func (r *Runtime) initServices(ctx context.Context, t *tomb.Tomb) error {
 		return cerrors.Errorf("failed to init processor service: %w", err)
 	}
 
-	token := r.connSchemaService.Token()
+	token := r.schemaService.Token()
 
 	// Initialize APIs needed by connector plugins
 	// Needs to be initialized before connectorPluginService
