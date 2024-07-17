@@ -75,9 +75,7 @@ func newDispenserFactory(conn sdk.Connector, token string) dispenserFactory {
 	}
 
 	cfg := pconnector.PluginConfig{
-		// can be taken from logger.GetLevel()
-		Token:    token,
-		LogLevel: 0,
+		Token: token,
 	}
 
 	return func(name plugin.FullName, connectorID string, logger log.CtxLogger) connector.Dispenser {
