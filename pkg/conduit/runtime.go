@@ -179,13 +179,14 @@ func createServices(r *Runtime) error {
 	if err != nil {
 		return cerrors.Errorf("failed to create schema registry: %w", err)
 	}
+	schemaService := connutils.NewSchemaService(r.logger, schemaRegistry)
 
 	connPluginService := conn_plugin.NewPluginService(
 		r.logger,
 		conn_builtin.NewRegistry(
 			r.logger,
 			r.Config.ConnectorPlugins,
-			connutils.NewSchemaService(r.logger, schemaRegistry),
+			schemaService,
 		),
 		conn_standalone.NewRegistry(r.logger, r.Config.Connectors.Path),
 	)
@@ -200,12 +201,14 @@ func createServices(r *Runtime) error {
 
 	r.Orchestrator = orc
 	r.ProvisionService = provisionService
+	r.SchemaRegistry = schemaRegistry
+
 	r.pipelineService = plService
 	r.connectorService = connService
 	r.processorService = procService
 	r.connectorPluginService = connPluginService
 	r.processorPluginService = procPluginService
-	r.SchemaRegistry = schemaRegistry
+	r.schemaService = schemaService
 
 	return nil
 }
