@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"path"
+	"path/filepath"
 	"regexp"
 	"testing"
 
@@ -54,9 +55,14 @@ const (
 )
 
 func testPluginBlueprint() blueprint {
+	pluginPath, err := filepath.Abs(path.Join(testPluginDir, "testplugin.sh"))
+	if err != nil {
+		panic(err)
+	}
+
 	return blueprint{
 		FullName: plugin.FullName(fmt.Sprintf("standalone:%v@%v", testPluginName, testPluginVersion)),
-		Path:     path.Join(testPluginDir, "testplugin.sh"),
+		Path:     pluginPath,
 		Specification: pconnector.Specification{
 			Name:        testPluginName,
 			Summary:     testPluginSummary,
@@ -106,9 +112,10 @@ func testPluginBlueprint() blueprint {
 
 func TestRegistry_loadPlugins(t *testing.T) {
 	is := is.New(t)
+	ctx := context.Background()
 
-	r := NewRegistry(log.Test(t), "")
-	got := r.loadPlugins(context.Background(), testPluginDir)
+	r := NewRegistry(log.Test(t), testPluginDir)
+	got := r.loadPlugins(ctx)
 	want := map[string]map[string]blueprint{
 		testPluginName: {
 			testPluginVersion:          testPluginBlueprint(),
@@ -122,8 +129,10 @@ func TestRegistry_loadPlugins(t *testing.T) {
 
 func TestRegistry_List(t *testing.T) {
 	is := is.New(t)
+	ctx := context.Background()
 
 	r := NewRegistry(log.Nop(), testPluginDir)
+	r.Init(ctx, ":12345", "irrelevant-token")
 
 	got := r.List()
 	bp := testPluginBlueprint()

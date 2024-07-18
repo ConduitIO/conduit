@@ -122,7 +122,7 @@ type ProcessorService interface {
 
 type ConnectorPluginService interface {
 	List(ctx context.Context) (map[string]pconnector.Specification, error)
-	NewDispenser(logger log.CtxLogger, name string) (connectorPlugin.Dispenser, error)
+	NewDispenser(logger log.CtxLogger, name string, connectorID string) (connectorPlugin.Dispenser, error)
 	ValidateSourceConfig(ctx context.Context, name string, settings map[string]string) error
 	ValidateDestinationConfig(ctx context.Context, name string, settings map[string]string) error
 }

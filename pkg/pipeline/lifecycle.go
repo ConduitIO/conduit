@@ -48,7 +48,7 @@ type ProcessorService interface {
 
 // PluginDispenserFetcher can fetch a plugin.
 type PluginDispenserFetcher interface {
-	NewDispenser(logger log.CtxLogger, name string) (connectorPlugin.Dispenser, error)
+	NewDispenser(logger log.CtxLogger, name string, connectorID string) (connectorPlugin.Dispenser, error)
 }
 
 // Run runs pipelines that had the running state in store.

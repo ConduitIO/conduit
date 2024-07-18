@@ -84,6 +84,8 @@ type Runtime struct {
 	DB               database.DB
 	Orchestrator     *orchestrator.Orchestrator
 	ProvisionService *provisioning.Service
+	SchemaRegistry   schemaregistry.Registry
+
 	// Ready will be closed when Runtime has successfully started
 	Ready chan struct{}
 
@@ -94,9 +96,7 @@ type Runtime struct {
 	connectorPluginService *conn_plugin.PluginService
 	processorPluginService *proc_plugin.PluginService
 
-	schemaRegistry    schemaregistry.Registry
-	connSchemaService *connutils.SchemaService
-
+	schemaService      *connutils.SchemaService
 	connectorPersister *connector.Persister
 
 	logger           log.CtxLogger
@@ -154,7 +154,7 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 		logger:           logger,
 	}
 
-	err := initServices(r)
+	err := createServices(r)
 	if err != nil {
 		return nil, cerrors.Errorf("failed to initialize services: %w", err)
 	}
@@ -163,7 +163,7 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 }
 
 // Create all necessary internal services
-func initServices(r *Runtime) error {
+func createServices(r *Runtime) error {
 	standaloneReg, err := proc_standalone.NewRegistry(r.logger, r.Config.Processors.Path)
 	if err != nil {
 		return cerrors.Errorf("failed creating processor registry: %w", err)
@@ -175,24 +175,19 @@ func initServices(r *Runtime) error {
 		standaloneReg,
 	)
 
-	var schemaRegistry schemaregistry.Registry
-	switch r.Config.SchemaRegistry.Type {
-	case SchemaRegistryTypeConfluent:
-		schemaRegistry, err = schemaregistry.NewClient(r.logger, sr.URLs(r.Config.SchemaRegistry.Confluent.ConnectionString))
-		if err != nil {
-			return cerrors.Errorf("failed to create schema registry client: %w", err)
-		}
-	case SchemaRegistryTypeBuiltin:
-		schemaRegistry = conduitschemaregistry.NewSchemaRegistry()
-	default:
-		// shouldn't happen, we validate the config
-		return cerrors.Errorf("invalid schema registry type %q", r.Config.SchemaRegistry.Type)
+	schemaRegistry, err := createSchemaRegistry(r.Config, r.logger)
+	if err != nil {
+		return cerrors.Errorf("failed to create schema registry: %w", err)
 	}
+	schemaService := connutils.NewSchemaService(r.logger, schemaRegistry)
 
-	connSchemaService := connutils.NewSchemaService(r.logger, schemaRegistry)
 	connPluginService := conn_plugin.NewPluginService(
 		r.logger,
-		conn_builtin.NewRegistry(r.logger, r.Config.ConnectorPlugins, connSchemaService),
+		conn_builtin.NewRegistry(
+			r.logger,
+			r.Config.ConnectorPlugins,
+			schemaService,
+		),
 		conn_standalone.NewRegistry(r.logger, r.Config.Connectors.Path),
 	)
 
@@ -206,15 +201,36 @@ func initServices(r *Runtime) error {
 
 	r.Orchestrator = orc
 	r.ProvisionService = provisionService
+	r.SchemaRegistry = schemaRegistry
+
 	r.pipelineService = plService
 	r.connectorService = connService
 	r.processorService = procService
 	r.connectorPluginService = connPluginService
 	r.processorPluginService = procPluginService
-	r.schemaRegistry = schemaRegistry
-	r.connSchemaService = connSchemaService
+	r.schemaService = schemaService
 
 	return nil
+}
+
+func createSchemaRegistry(config Config, logger log.CtxLogger) (schemaregistry.Registry, error) {
+	var schemaRegistry schemaregistry.Registry
+	var err error
+
+	switch config.SchemaRegistry.Type {
+	case SchemaRegistryTypeConfluent:
+		schemaRegistry, err = schemaregistry.NewClient(logger, sr.URLs(config.SchemaRegistry.Confluent.ConnectionString))
+		if err != nil {
+			return nil, cerrors.Errorf("failed to create schema registry client: %w", err)
+		}
+	case SchemaRegistryTypeBuiltin:
+		schemaRegistry = conduitschemaregistry.NewSchemaRegistry()
+	default:
+		// shouldn't happen, we validate the config
+		return nil, cerrors.Errorf("invalid schema registry type %q", config.SchemaRegistry.Type)
+	}
+
+	return schemaRegistry, nil
 }
 
 func newGRPCStatsHandler() *promgrpc.StatsHandler {
@@ -270,55 +286,10 @@ func (r *Runtime) Run(ctx context.Context) (err error) {
 	// Register cleanup function that will run after tomb is killed
 	r.registerCleanup(t)
 
-	// Init each service
-	err = r.processorService.Init(ctx)
+	// Initialize all services
+	err = r.initServices(ctx, t)
 	if err != nil {
-		return cerrors.Errorf("failed to init processor service: %w", err)
-	}
-	err = r.connectorService.Init(ctx)
-	if err != nil {
-		return cerrors.Errorf("failed to init connector service: %w", err)
-	}
-
-	if r.Config.Pipelines.ExitOnError {
-		r.pipelineService.OnFailure(func(e pipeline.FailureEvent) {
-			r.logger.Warn(ctx).
-				Err(e.Error).
-				Str(log.PipelineIDField, e.ID).
-				Msg("Conduit will shut down due to a pipeline failure and 'exit on error' enabled")
-			t.Kill(cerrors.Errorf("shut down due to 'exit on error' enabled: %w", e.Error))
-		})
-	}
-	err = r.pipelineService.Init(ctx)
-	if err != nil {
-		return cerrors.Errorf("failed to init pipeline service: %w", err)
-	}
-
-	err = r.ProvisionService.Init(ctx)
-	if err != nil {
-		cerrors.ForEach(err, func(err error) {
-			r.logger.Err(ctx, err).Msg("provisioning failed")
-		})
-		if r.Config.Pipelines.ExitOnError {
-			r.logger.Warn(ctx).
-				Err(err).
-				Msg("Conduit will shut down due to a pipeline provisioning failure and 'exit on error' enabled")
-			err = cerrors.Errorf("shut down due to 'exit on error' enabled: %w", err)
-			return err
-		}
-	}
-
-	err = r.pipelineService.Run(ctx, r.connectorService, r.processorService, r.connectorPluginService)
-	if err != nil {
-		cerrors.ForEach(err, func(err error) {
-			r.logger.Err(ctx, err).Msg("pipeline failed to be started")
-		})
-	}
-
-	// APIs needed by connector plugins
-	_, err = r.startConnectorUtils(ctx, t)
-	if err != nil {
-		return cerrors.Errorf("failed to start connector utilities: %w", err)
+		return cerrors.Errorf("failed to initialize services: %w", err)
 	}
 
 	// Public gRPC and HTTP API
@@ -504,7 +475,7 @@ func (r *Runtime) startConnectorUtils(ctx context.Context, t *tomb.Tomb) (net.Ad
 		grpc.StatsHandler(r.gRPCStatsHandler),
 	)
 
-	schemaServiceAPI := pconduitserver.NewSchemaServiceServer(r.connSchemaService)
+	schemaServiceAPI := pconduitserver.NewSchemaServiceServer(r.schemaService)
 	conduitv1.RegisterSchemaServiceServer(grpcServer, schemaServiceAPI)
 
 	// Makes it easier to use command line tools to interact
@@ -515,7 +486,7 @@ func (r *Runtime) startConnectorUtils(ctx context.Context, t *tomb.Tomb) (net.Ad
 	// Names taken from schema.proto
 	healthServer := api.NewHealthServer(
 		map[string]api.Checker{
-			"SchemaService": r.connSchemaService,
+			"SchemaService": r.schemaService,
 		},
 		r.logger,
 	)
@@ -746,4 +717,67 @@ func (r *Runtime) serveHTTP(
 	})
 
 	return ln.Addr(), nil
+}
+
+func (r *Runtime) initServices(ctx context.Context, t *tomb.Tomb) error {
+	err := r.processorService.Init(ctx)
+	if err != nil {
+		return cerrors.Errorf("failed to init processor service: %w", err)
+	}
+
+	token := r.schemaService.Token()
+
+	// Initialize APIs needed by connector plugins
+	// Needs to be initialized before connectorPluginService
+	// because the standalone connector registry needs to run all plugins,
+	// and the plugins initialize a connector utils client when they are run.
+	connUtilsAddr, err := r.startConnectorUtils(ctx, t)
+	if err != nil {
+		return cerrors.Errorf("failed to start connector utilities API: %w", err)
+	}
+	r.logger.Info(ctx).Msgf("connector utilities started on %v", connUtilsAddr)
+
+	r.connectorPluginService.Init(ctx, connUtilsAddr.String(), token)
+
+	err = r.connectorService.Init(ctx)
+	if err != nil {
+		return cerrors.Errorf("failed to init connector service: %w", err)
+	}
+
+	if r.Config.Pipelines.ExitOnError {
+		r.pipelineService.OnFailure(func(e pipeline.FailureEvent) {
+			r.logger.Warn(ctx).
+				Err(e.Error).
+				Str(log.PipelineIDField, e.ID).
+				Msg("Conduit will shut down due to a pipeline failure and 'exit on error' enabled")
+			t.Kill(cerrors.Errorf("shut down due to 'exit on error' enabled: %w", e.Error))
+		})
+	}
+	err = r.pipelineService.Init(ctx)
+	if err != nil {
+		return cerrors.Errorf("failed to init pipeline service: %w", err)
+	}
+
+	err = r.ProvisionService.Init(ctx)
+	if err != nil {
+		cerrors.ForEach(err, func(err error) {
+			r.logger.Err(ctx, err).Msg("provisioning failed")
+		})
+		if r.Config.Pipelines.ExitOnError {
+			r.logger.Warn(ctx).
+				Err(err).
+				Msg("Conduit will shut down due to a pipeline provisioning failure and 'exit on error' enabled")
+			err = cerrors.Errorf("shut down due to 'exit on error' enabled: %w", err)
+			return err
+		}
+	}
+
+	err = r.pipelineService.Run(ctx, r.connectorService, r.processorService, r.connectorPluginService)
+	if err != nil {
+		cerrors.ForEach(err, func(err error) {
+			r.logger.Err(ctx, err).Msg("pipeline failed to be started")
+		})
+	}
+
+	return nil
 }

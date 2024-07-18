@@ -1122,18 +1122,18 @@ func (c *ConnectorPluginServiceListCall) DoAndReturn(f func(context.Context) (ma
 }
 
 // NewDispenser mocks base method.
-func (m *ConnectorPluginService) NewDispenser(arg0 log.CtxLogger, arg1 string) (connector0.Dispenser, error) {
+func (m *ConnectorPluginService) NewDispenser(arg0 log.CtxLogger, arg1, arg2 string) (connector0.Dispenser, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "NewDispenser", arg0, arg1)
+	ret := m.ctrl.Call(m, "NewDispenser", arg0, arg1, arg2)
 	ret0, _ := ret[0].(connector0.Dispenser)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // NewDispenser indicates an expected call of NewDispenser.
-func (mr *ConnectorPluginServiceMockRecorder) NewDispenser(arg0, arg1 any) *ConnectorPluginServiceNewDispenserCall {
+func (mr *ConnectorPluginServiceMockRecorder) NewDispenser(arg0, arg1, arg2 any) *ConnectorPluginServiceNewDispenserCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewDispenser", reflect.TypeOf((*ConnectorPluginService)(nil).NewDispenser), arg0, arg1)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewDispenser", reflect.TypeOf((*ConnectorPluginService)(nil).NewDispenser), arg0, arg1, arg2)
 	return &ConnectorPluginServiceNewDispenserCall{Call: call}
 }
 
@@ -1149,13 +1149,13 @@ func (c *ConnectorPluginServiceNewDispenserCall) Return(arg0 connector0.Dispense
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *ConnectorPluginServiceNewDispenserCall) Do(f func(log.CtxLogger, string) (connector0.Dispenser, error)) *ConnectorPluginServiceNewDispenserCall {
+func (c *ConnectorPluginServiceNewDispenserCall) Do(f func(log.CtxLogger, string, string) (connector0.Dispenser, error)) *ConnectorPluginServiceNewDispenserCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *ConnectorPluginServiceNewDispenserCall) DoAndReturn(f func(log.CtxLogger, string) (connector0.Dispenser, error)) *ConnectorPluginServiceNewDispenserCall {
+func (c *ConnectorPluginServiceNewDispenserCall) DoAndReturn(f func(log.CtxLogger, string, string) (connector0.Dispenser, error)) *ConnectorPluginServiceNewDispenserCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
