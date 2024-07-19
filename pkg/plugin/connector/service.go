@@ -49,7 +49,7 @@ type builtinReg interface {
 type standaloneReg interface {
 	registry
 
-	Init(ctx context.Context, connUtilsAddr string, connUtilsToken string)
+	Init(ctx context.Context, connUtilsAddr string)
 }
 
 type PluginService struct {
@@ -71,9 +71,9 @@ func NewPluginService(
 	}
 }
 
-func (s *PluginService) Init(ctx context.Context, connUtilsAddr string, connUtilsToken string) {
+func (s *PluginService) Init(ctx context.Context, connUtilsAddr string) {
 	s.builtinReg.Init(ctx)
-	s.standaloneReg.Init(ctx, connUtilsAddr, connUtilsToken)
+	s.standaloneReg.Init(ctx, connUtilsAddr)
 }
 
 func (s *PluginService) Check(context.Context) error {
