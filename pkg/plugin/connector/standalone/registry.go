@@ -164,8 +164,9 @@ func (r *Registry) loadSpecifications(pluginPath string) (pconnector.Specificati
 	dispenser, err := NewDispenser(
 		zerolog.Nop(),
 		pluginPath,
-		// todo is the grpc target really needed?
+		// todo are the grpc target and token really needed?
 		client.WithEnvVar(pconduit.EnvConduitConnectorUtilitiesGRPCTarget, r.connUtilsAddr),
+		client.WithEnvVar(pconduit.EnvConduitConnectorToken, "irrelevant-token"),
 		client.WithEnvVar(pconduit.EnvConduitConnectorID, "load-specifications"),
 	)
 	if err != nil {
