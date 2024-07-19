@@ -12,10 +12,4 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package connector
-
-type Token struct {
-	// todo need better name
-	Token       string `json:"token"`
-	ConnectorID string `json:"connector_id"`
-}
+package connutils
