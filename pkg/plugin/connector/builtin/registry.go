@@ -64,7 +64,7 @@ type blueprint struct {
 	dispenserFactory dispenserFactory
 }
 
-type dispenserFactory func(name plugin.FullName, connectorID string, logger log.CtxLogger) connector.Dispenser
+type dispenserFactory func(name plugin.FullName, cfg pconnector.PluginConfig, logger log.CtxLogger) connector.Dispenser
 
 func newDispenserFactory(conn sdk.Connector, token string) dispenserFactory {
 	if conn.NewSource == nil {
@@ -74,28 +74,17 @@ func newDispenserFactory(conn sdk.Connector, token string) dispenserFactory {
 		conn.NewDestination = func() sdk.Destination { return nil }
 	}
 
-	cfg := pconnector.PluginConfig{
-		Token: token,
-	}
-
-	return func(name plugin.FullName, connectorID string, logger log.CtxLogger) connector.Dispenser {
+	return func(name plugin.FullName, cfg pconnector.PluginConfig, logger log.CtxLogger) connector.Dispenser {
 		return NewDispenser(
 			name,
-			connectorID,
 			logger,
 			func() pconnector.SpecifierPlugin {
 				return sdk.NewSpecifierPlugin(conn.NewSpecification(), conn.NewSource(), conn.NewDestination())
 			},
 			func() pconnector.SourcePlugin {
-				// TODO add connector ID to cfg
-				// TODO generate token (based on the connector ID) and add token to cfg
-				// TODO get log level from logger/config
 				return sdk.NewSourcePlugin(conn.NewSource(), cfg)
 			},
 			func() pconnector.DestinationPlugin {
-				// TODO add connector ID to cfg
-				// TODO generate token (based on the connector ID) and add token to cfg
-				// TODO get log level from logger/config
 				return sdk.NewDestinationPlugin(conn.NewDestination(), cfg)
 			},
 		)
@@ -166,7 +155,7 @@ func (r *Registry) loadPlugins(buildInfo *debug.BuildInfo) map[string]map[string
 }
 
 func getSpecification(moduleName string, factory dispenserFactory, buildInfo *debug.BuildInfo) (pconnector.Specification, error) {
-	dispenser := factory("", "", log.CtxLogger{})
+	dispenser := factory("", pconnector.PluginConfig{}, log.CtxLogger{})
 	specPlugin, err := dispenser.DispenseSpecifier()
 	if err != nil {
 		return pconnector.Specification{}, cerrors.Errorf("could not dispense specifier for built in plugin: %w", err)
@@ -200,7 +189,7 @@ func newFullName(pluginName, pluginVersion string) plugin.FullName {
 	return plugin.NewFullName(plugin.PluginTypeBuiltin, pluginName, pluginVersion)
 }
 
-func (r *Registry) NewDispenser(logger log.CtxLogger, fullName plugin.FullName, connectorID string) (connector.Dispenser, error) {
+func (r *Registry) NewDispenser(logger log.CtxLogger, fullName plugin.FullName, cfg pconnector.PluginConfig) (connector.Dispenser, error) {
 	versionMap, ok := r.plugins[fullName.PluginName()]
 	if !ok {
 		return nil, plugin.ErrPluginNotFound
@@ -214,7 +203,7 @@ func (r *Registry) NewDispenser(logger log.CtxLogger, fullName plugin.FullName, 
 		return nil, cerrors.Errorf("could not find builtin plugin %q, only found versions %v: %w", fullName, availableVersions, plugin.ErrPluginNotFound)
 	}
 
-	return b.dispenserFactory(fullName, connectorID, logger), nil
+	return b.dispenserFactory(fullName, cfg, logger), nil
 }
 
 func (r *Registry) List() map[plugin.FullName]pconnector.Specification {

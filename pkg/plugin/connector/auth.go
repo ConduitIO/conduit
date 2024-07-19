@@ -13,3 +13,9 @@
 // limitations under the License.
 
 package connector
+
+type Token struct {
+	// todo need better name
+	Token       string `json:"token"`
+	ConnectorID string `json:"connector_id"`
+}

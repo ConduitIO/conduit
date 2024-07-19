@@ -16,6 +16,8 @@ package connector
 
 import (
 	"context"
+	"github.com/goccy/go-json"
+	"github.com/google/uuid"
 
 	"github.com/conduitio/conduit-connector-protocol/pconnector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -28,7 +30,7 @@ import (
 // builtin and standalone packages.
 // There are two registries that implement this interface: builtinReg and standaloneReg
 type registry interface {
-	NewDispenser(logger log.CtxLogger, name plugin.FullName, connectorID string) (Dispenser, error)
+	NewDispenser(logger log.CtxLogger, name plugin.FullName, cfg pconnector.PluginConfig) (Dispenser, error)
 	List() map[plugin.FullName]pconnector.Specification
 }
 
@@ -81,17 +83,23 @@ func (s *PluginService) Check(context.Context) error {
 func (s *PluginService) NewDispenser(logger log.CtxLogger, name string, connectorID string) (Dispenser, error) {
 	logger = logger.WithComponent("plugin")
 
+	cfg := pconnector.PluginConfig{
+		Token:       s.generateToken(connectorID),
+		ConnectorID: connectorID,
+		LogLevel:    logger.GetLevel().String(),
+	}
+
 	fullName := plugin.FullName(name)
 	switch fullName.PluginType() {
 	case plugin.PluginTypeStandalone:
-		return s.standaloneReg.NewDispenser(logger, fullName, connectorID)
+		return s.standaloneReg.NewDispenser(logger, fullName, cfg)
 	case plugin.PluginTypeBuiltin:
-		return s.builtinReg.NewDispenser(logger, fullName, connectorID)
+		return s.builtinReg.NewDispenser(logger, fullName, cfg)
 	case plugin.PluginTypeAny:
-		d, err := s.standaloneReg.NewDispenser(logger, fullName, connectorID)
+		d, err := s.standaloneReg.NewDispenser(logger, fullName, cfg)
 		if err != nil {
 			s.logger.Debug(context.Background()).Err(err).Msg("could not find standalone plugin dispenser, falling back to builtin plugin")
-			d, err = s.builtinReg.NewDispenser(logger, fullName, connectorID)
+			d, err = s.builtinReg.NewDispenser(logger, fullName, cfg)
 		}
 		return d, err
 	default:
@@ -164,4 +172,17 @@ func (s *PluginService) ValidateDestinationConfig(ctx context.Context, name stri
 	}
 
 	return nil
+}
+
+func (s *PluginService) generateToken(connectorID string) string {
+	// todo keep track of those
+	bytes, err := json.Marshal(Token{
+		Token:       uuid.NewString(),
+		ConnectorID: connectorID,
+	})
+	if err != nil {
+		panic(cerrors.Errorf("couldn't generate token: %w", err))
+	}
+
+	return string(bytes)
 }
