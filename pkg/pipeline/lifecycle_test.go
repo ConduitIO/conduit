@@ -557,7 +557,7 @@ func (tpf testProcessorFetcher) Get(_ context.Context, id string) (*processor.In
 // testPluginFetcher fulfills the PluginFetcher interface.
 type testPluginFetcher map[string]connectorPlugin.Dispenser
 
-func (tpf testPluginFetcher) NewDispenser(_ log.CtxLogger, name string) (connectorPlugin.Dispenser, error) {
+func (tpf testPluginFetcher) NewDispenser(_ log.CtxLogger, name string, _ string) (connectorPlugin.Dispenser, error) {
 	plug, ok := tpf[name]
 	if !ok {
 		return nil, plugin.ErrPluginNotFound
