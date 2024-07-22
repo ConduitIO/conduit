@@ -52,6 +52,7 @@ import (
 	conn_standalone "github.com/conduitio/conduit/pkg/plugin/connector/standalone"
 	proc_plugin "github.com/conduitio/conduit/pkg/plugin/processor"
 	proc_builtin "github.com/conduitio/conduit/pkg/plugin/processor/builtin"
+	"github.com/conduitio/conduit/pkg/plugin/processor/procutils"
 	proc_standalone "github.com/conduitio/conduit/pkg/plugin/processor/standalone"
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/provisioning"
@@ -90,6 +91,7 @@ type Runtime struct {
 	pipelineService  *pipeline.Service
 	connectorService *connector.Service
 	processorService *processor.Service
+	schemaService    *procutils.SchemaService
 
 	connectorPluginService *conn_plugin.PluginService
 	processorPluginService *proc_plugin.PluginService
@@ -164,17 +166,7 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 
 // Create all necessary internal services
 func initServices(r *Runtime) error {
-	standaloneReg, err := proc_standalone.NewRegistry(r.logger, r.Config.Processors.Path)
-	if err != nil {
-		return cerrors.Errorf("failed creating processor registry: %w", err)
-	}
-
-	procPluginService := proc_plugin.NewPluginService(
-		r.logger,
-		proc_builtin.NewRegistry(r.logger, proc_builtin.DefaultBuiltinProcessors),
-		standaloneReg,
-	)
-
+	var err error
 	var schemaRegistry schemaregistry.Registry
 	switch r.Config.SchemaRegistry.Type {
 	case SchemaRegistryTypeConfluent:
@@ -188,6 +180,19 @@ func initServices(r *Runtime) error {
 		// shouldn't happen, we validate the config
 		return cerrors.Errorf("invalid schema registry type %q", r.Config.SchemaRegistry.Type)
 	}
+
+	procSchemaService := procutils.NewSchemaService(r.logger, schemaRegistry)
+
+	standaloneReg, err := proc_standalone.NewRegistry(r.logger, r.Config.Processors.Path, procSchemaService)
+	if err != nil {
+		return cerrors.Errorf("failed creating processor registry: %w", err)
+	}
+
+	procPluginService := proc_plugin.NewPluginService(
+		r.logger,
+		proc_builtin.NewRegistry(r.logger, proc_builtin.DefaultBuiltinProcessors),
+		standaloneReg,
+	)
 
 	connSchemaService := connutils.NewSchemaService(r.logger, schemaRegistry)
 	connPluginService := conn_plugin.NewPluginService(
@@ -213,6 +218,7 @@ func initServices(r *Runtime) error {
 	r.processorPluginService = procPluginService
 	r.schemaRegistry = schemaRegistry
 	r.connSchemaService = connSchemaService
+	r.schemaService = procSchemaService
 
 	return nil
 }

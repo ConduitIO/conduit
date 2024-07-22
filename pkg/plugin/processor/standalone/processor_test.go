@@ -20,7 +20,8 @@ import (
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
-	"github.com/conduitio/conduit-processor-sdk/wasm"
+	"github.com/conduitio/conduit-processor-sdk/pconduit"
+	"github.com/conduitio/conduit-processor-sdk/schema"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
@@ -32,7 +33,7 @@ func TestWASMProcessor_Specification_Success(t *testing.T) {
 	ctx := context.Background()
 	logger := log.Test(t)
 
-	underTest, err := newWASMProcessor(ctx, TestRuntime, ChaosProcessorModule, CompiledHostModule, "test-processor", logger)
+	underTest, err := newWASMProcessor(ctx, TestRuntime, ChaosProcessorModule, CompiledHostModule, schema.NewInMemoryService(), "test-processor", logger)
 	is.NoErr(err)
 
 	gotSpec, err := underTest.Specification()
@@ -49,11 +50,11 @@ func TestWASMProcessor_Specification_Error(t *testing.T) {
 	ctx := context.Background()
 	logger := log.Test(t)
 
-	underTest, err := newWASMProcessor(ctx, TestRuntime, SpecifyErrorModule, CompiledHostModule, "test-processor", logger)
+	underTest, err := newWASMProcessor(ctx, TestRuntime, SpecifyErrorModule, CompiledHostModule, schema.NewInMemoryService(), "test-processor", logger)
 	is.NoErr(err)
 
 	_, err = underTest.Specification()
-	is.Equal(err, wasm.NewError(0, "boom"))
+	is.Equal(err, pconduit.NewError(0, "boom"))
 
 	// Teardown still works
 	is.NoErr(underTest.Teardown(ctx))
@@ -64,7 +65,7 @@ func TestWASMProcessor_Configure_Success(t *testing.T) {
 	ctx := context.Background()
 	logger := log.Test(t)
 
-	underTest, err := newWASMProcessor(ctx, TestRuntime, ChaosProcessorModule, CompiledHostModule, "test-processor", logger)
+	underTest, err := newWASMProcessor(ctx, TestRuntime, ChaosProcessorModule, CompiledHostModule, schema.NewInMemoryService(), "test-processor", logger)
 	is.NoErr(err)
 
 	err = underTest.Configure(ctx, nil)
@@ -78,11 +79,11 @@ func TestWASMProcessor_Configure_Error(t *testing.T) {
 	ctx := context.Background()
 	logger := log.Test(t)
 
-	underTest, err := newWASMProcessor(ctx, TestRuntime, ChaosProcessorModule, CompiledHostModule, "test-processor", logger)
+	underTest, err := newWASMProcessor(ctx, TestRuntime, ChaosProcessorModule, CompiledHostModule, schema.NewInMemoryService(), "test-processor", logger)
 	is.NoErr(err)
 
 	err = underTest.Configure(ctx, map[string]string{"configure": "error"})
-	is.Equal(err, wasm.NewError(0, "boom"))
+	is.Equal(err, pconduit.NewError(0, "boom"))
 
 	// Teardown still works
 	is.NoErr(underTest.Teardown(ctx))
@@ -93,7 +94,7 @@ func TestWASMProcessor_Configure_Panic(t *testing.T) {
 	ctx := context.Background()
 	logger := log.Test(t)
 
-	underTest, err := newWASMProcessor(ctx, TestRuntime, ChaosProcessorModule, CompiledHostModule, "test-processor", logger)
+	underTest, err := newWASMProcessor(ctx, TestRuntime, ChaosProcessorModule, CompiledHostModule, schema.NewInMemoryService(), "test-processor", logger)
 	is.NoErr(err)
 
 	err = underTest.Configure(ctx, map[string]string{"configure": "panic"})
@@ -109,7 +110,7 @@ func TestWASMProcessor_Open_Success(t *testing.T) {
 	ctx := context.Background()
 	logger := log.Test(t)
 
-	underTest, err := newWASMProcessor(ctx, TestRuntime, ChaosProcessorModule, CompiledHostModule, "test-processor", logger)
+	underTest, err := newWASMProcessor(ctx, TestRuntime, ChaosProcessorModule, CompiledHostModule, schema.NewInMemoryService(), "test-processor", logger)
 	is.NoErr(err)
 
 	err = underTest.Open(ctx)
@@ -123,14 +124,14 @@ func TestWASMProcessor_Open_Error(t *testing.T) {
 	ctx := context.Background()
 	logger := log.Test(t)
 
-	underTest, err := newWASMProcessor(ctx, TestRuntime, ChaosProcessorModule, CompiledHostModule, "test-processor", logger)
+	underTest, err := newWASMProcessor(ctx, TestRuntime, ChaosProcessorModule, CompiledHostModule, schema.NewInMemoryService(), "test-processor", logger)
 	is.NoErr(err)
 
 	err = underTest.Configure(ctx, map[string]string{"open": "error"})
 	is.NoErr(err)
 
 	err = underTest.Open(ctx)
-	is.Equal(err, wasm.NewError(0, "boom"))
+	is.Equal(err, pconduit.NewError(0, "boom"))
 
 	// Teardown still works
 	is.NoErr(underTest.Teardown(ctx))
@@ -141,7 +142,7 @@ func TestWASMProcessor_Open_Panic(t *testing.T) {
 	ctx := context.Background()
 	logger := log.Test(t)
 
-	underTest, err := newWASMProcessor(ctx, TestRuntime, ChaosProcessorModule, CompiledHostModule, "test-processor", logger)
+	underTest, err := newWASMProcessor(ctx, TestRuntime, ChaosProcessorModule, CompiledHostModule, schema.NewInMemoryService(), "test-processor", logger)
 	is.NoErr(err)
 
 	err = underTest.Configure(ctx, map[string]string{"open": "panic"})
@@ -160,7 +161,7 @@ func TestWASMProcessor_Process_Success(t *testing.T) {
 	ctx := context.Background()
 	logger := log.Test(t)
 
-	underTest, err := newWASMProcessor(ctx, TestRuntime, ChaosProcessorModule, CompiledHostModule, "test-processor", logger)
+	underTest, err := newWASMProcessor(ctx, TestRuntime, ChaosProcessorModule, CompiledHostModule, schema.NewInMemoryService(), "test-processor", logger)
 	is.NoErr(err)
 
 	is.NoErr(underTest.Configure(ctx, map[string]string{"process.prefix": "hello!\n\n"}))
@@ -197,7 +198,7 @@ func TestWASMProcessor_Process_Error(t *testing.T) {
 	ctx := context.Background()
 	logger := log.Test(t)
 
-	underTest, err := newWASMProcessor(ctx, TestRuntime, ChaosProcessorModule, CompiledHostModule, "test-processor", logger)
+	underTest, err := newWASMProcessor(ctx, TestRuntime, ChaosProcessorModule, CompiledHostModule, schema.NewInMemoryService(), "test-processor", logger)
 	is.NoErr(err)
 
 	is.NoErr(underTest.Configure(ctx, map[string]string{"process": "error"}))
@@ -207,7 +208,7 @@ func TestWASMProcessor_Process_Error(t *testing.T) {
 
 	errRecord, ok := processed[0].(sdk.ErrorRecord)
 	is.True(ok)
-	is.Equal(errRecord.Error, wasm.NewError(0, "boom"))
+	is.Equal(errRecord.Error, pconduit.NewError(0, "boom"))
 
 	// Teardown still works
 	is.NoErr(underTest.Teardown(ctx))
@@ -218,7 +219,7 @@ func TestWASMProcessor_Process_Panic(t *testing.T) {
 	ctx := context.Background()
 	logger := log.Test(t)
 
-	underTest, err := newWASMProcessor(ctx, TestRuntime, ChaosProcessorModule, CompiledHostModule, "test-processor", logger)
+	underTest, err := newWASMProcessor(ctx, TestRuntime, ChaosProcessorModule, CompiledHostModule, schema.NewInMemoryService(), "test-processor", logger)
 	is.NoErr(err)
 
 	is.NoErr(underTest.Configure(ctx, map[string]string{"process": "panic"}))
