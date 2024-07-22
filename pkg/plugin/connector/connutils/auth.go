@@ -71,3 +71,10 @@ func (s *TokenService) IsTokenValid(token string) error {
 
 	return nil
 }
+
+func (s *TokenService) Deregister(token string) {
+	s.m.Lock()
+	defer s.m.Unlock()
+
+	delete(s.tokens, token)
+}

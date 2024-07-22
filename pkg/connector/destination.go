@@ -138,6 +138,7 @@ func (d *Destination) Open(ctx context.Context) (err error) {
 }
 
 func (d *Destination) Stop(ctx context.Context, lastPosition opencdc.Position) error {
+	// todo option 1: deregister connector token here
 	cleanup, err := d.preparePluginCall()
 	defer cleanup()
 	if err != nil {
