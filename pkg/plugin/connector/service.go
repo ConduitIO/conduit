@@ -16,13 +16,11 @@ package connector
 
 import (
 	"context"
-	"github.com/goccy/go-json"
-	"github.com/google/uuid"
-
 	"github.com/conduitio/conduit-connector-protocol/pconnector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
+	"github.com/conduitio/conduit/pkg/plugin/connector/connutils"
 )
 
 // registry is an object that can create new plugin dispensers. We need to use
@@ -57,17 +55,20 @@ type PluginService struct {
 
 	builtinReg    builtinReg
 	standaloneReg standaloneReg
+	tokenService  *connutils.TokenService
 }
 
 func NewPluginService(
 	logger log.CtxLogger,
 	builtin builtinReg,
 	standalone standaloneReg,
+	tokenService *connutils.TokenService,
 ) *PluginService {
 	return &PluginService{
 		logger:        logger.WithComponent("connector.PluginService"),
 		builtinReg:    builtin,
 		standaloneReg: standalone,
+		tokenService:  tokenService,
 	}
 }
 
@@ -83,8 +84,9 @@ func (s *PluginService) Check(context.Context) error {
 func (s *PluginService) NewDispenser(logger log.CtxLogger, name string, connectorID string) (Dispenser, error) {
 	logger = logger.WithComponent("plugin")
 
+	// todo deregister token when connector stops running
 	cfg := pconnector.PluginConfig{
-		Token:       s.generateToken(connectorID),
+		Token:       s.tokenService.GenerateNew(connectorID),
 		ConnectorID: connectorID,
 		LogLevel:    logger.GetLevel().String(),
 	}
@@ -172,17 +174,4 @@ func (s *PluginService) ValidateDestinationConfig(ctx context.Context, name stri
 	}
 
 	return nil
-}
-
-func (s *PluginService) generateToken(connectorID string) string {
-	// todo keep track of those
-	bytes, err := json.Marshal(Token{
-		Token:       uuid.NewString(),
-		ConnectorID: connectorID,
-	})
-	if err != nil {
-		panic(cerrors.Errorf("couldn't generate token: %w", err))
-	}
-
-	return string(bytes)
 }

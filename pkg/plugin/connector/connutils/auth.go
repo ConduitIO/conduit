@@ -13,3 +13,61 @@
 // limitations under the License.
 
 package connutils
+
+import (
+	"sync"
+
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/goccy/go-json"
+	"github.com/google/uuid"
+)
+
+var ErrInvalidToken = cerrors.New("invalid token")
+
+type Token struct {
+	// todo need better name
+	Token       string `json:"token"`
+	ConnectorID string `json:"connector_id"`
+}
+
+type TokenService struct {
+	tokens map[string]bool
+	m      sync.Mutex
+}
+
+func NewTokenService() *TokenService {
+	return &TokenService{
+		tokens: make(map[string]bool),
+	}
+}
+
+func (s *TokenService) GenerateNew(connectorID string) string {
+	s.m.Lock()
+	defer s.m.Unlock()
+
+	token := Token{
+		Token:       uuid.NewString(),
+		ConnectorID: connectorID,
+	}
+
+	bytes, err := json.Marshal(token)
+	if err != nil {
+		panic(cerrors.Errorf("failed to marshal token: %w", err))
+	}
+
+	tokenStr := string(bytes)
+	s.tokens[tokenStr] = true
+
+	return tokenStr
+}
+
+func (s *TokenService) IsTokenValid(token string) error {
+	s.m.Lock()
+	defer s.m.Unlock()
+
+	if _, ok := s.tokens[token]; !ok {
+		return ErrInvalidToken
+	}
+
+	return nil
+}

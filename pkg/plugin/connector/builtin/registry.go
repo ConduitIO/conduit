@@ -66,7 +66,7 @@ type blueprint struct {
 
 type dispenserFactory func(name plugin.FullName, cfg pconnector.PluginConfig, logger log.CtxLogger) connector.Dispenser
 
-func newDispenserFactory(conn sdk.Connector, token string) dispenserFactory {
+func newDispenserFactory(conn sdk.Connector) dispenserFactory {
 	if conn.NewSource == nil {
 		conn.NewSource = func() sdk.Source { return nil }
 	}
@@ -120,7 +120,7 @@ func (r *Registry) Init(ctx context.Context) {
 func (r *Registry) loadPlugins(buildInfo *debug.BuildInfo) map[string]map[string]blueprint {
 	plugins := make(map[string]map[string]blueprint, len(r.connectors))
 	for moduleName, conn := range r.connectors {
-		factory := newDispenserFactory(conn, r.service.Token())
+		factory := newDispenserFactory(conn)
 
 		specs, err := getSpecification(moduleName, factory, buildInfo)
 		if err != nil {
