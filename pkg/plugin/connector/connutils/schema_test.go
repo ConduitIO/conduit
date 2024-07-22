@@ -33,12 +33,12 @@ func TestSchemaService_ValidateToken(t *testing.T) {
 		{
 			name:    "no token",
 			token:   "",
-			wantErr: "token \"\" is invalid",
+			wantErr: "\"\": invalid token",
 		},
 		{
 			name:    "invalid token",
 			token:   "abc",
-			wantErr: "token \"abc\" is invalid",
+			wantErr: "\"abc\": invalid token",
 		},
 	}
 
@@ -47,7 +47,11 @@ func TestSchemaService_ValidateToken(t *testing.T) {
 			is := is.New(t)
 			ctx := pconduit.ContextWithConnectorToken(context.Background(), tc.token)
 
-			underTest := NewSchemaService(log.Nop(), conduitschemaregistry.NewSchemaRegistry())
+			underTest := NewSchemaService(
+				log.Nop(),
+				conduitschemaregistry.NewSchemaRegistry(),
+				NewTokenService(),
+			)
 			_, err := underTest.CreateSchema(ctx, pconduit.CreateSchemaRequest{})
 
 			is.True(err != nil)

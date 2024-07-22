@@ -66,7 +66,7 @@ func (s *TokenService) IsTokenValid(token string) error {
 	defer s.m.Unlock()
 
 	if _, ok := s.tokens[token]; !ok {
-		return ErrInvalidToken
+		return cerrors.Errorf("%q: %w", token, ErrInvalidToken)
 	}
 
 	return nil

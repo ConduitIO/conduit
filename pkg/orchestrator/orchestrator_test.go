@@ -71,11 +71,17 @@ func TestPipelineSimple(t *testing.T) {
 		is.NoErr(err)
 	})
 
-	schemaService := connutils.NewSchemaService(logger, schemaregistry.NewSchemaRegistry())
+	tokenService := connutils.NewTokenService()
+	schemaService := connutils.NewSchemaService(
+		logger,
+		schemaregistry.NewSchemaRegistry(),
+		tokenService,
+	)
 	connPluginService := conn_plugin.NewPluginService(
 		logger,
 		conn_builtin.NewRegistry(logger, conn_builtin.DefaultBuiltinConnectors, schemaService),
 		conn_standalone.NewRegistry(logger, ""),
+		tokenService,
 	)
 	connPluginService.Init(ctx, "conn-utils-token:12345")
 
