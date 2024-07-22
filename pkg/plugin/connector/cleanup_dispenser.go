@@ -20,56 +20,58 @@ import (
 	"github.com/conduitio/conduit-connector-protocol/pconnector"
 )
 
-type cleanableDispenser struct {
+// cleanupDispenser dispenses sources and destinations
+// for which a cleanup function will be called after they are torn down.
+type cleanupDispenser struct {
 	target  Dispenser
 	cleanup func()
 }
 
-func (c *cleanableDispenser) DispenseSpecifier() (SpecifierPlugin, error) {
+func (c *cleanupDispenser) DispenseSpecifier() (SpecifierPlugin, error) {
 	return c.target.DispenseSpecifier()
 }
 
-func (c *cleanableDispenser) DispenseSource() (SourcePlugin, error) {
+func (c *cleanupDispenser) DispenseSource() (SourcePlugin, error) {
 	plugin, err := c.target.DispenseSource()
 	if err != nil {
 		return nil, err
 	}
 
-	return &cleanableSourcePlugin{
+	return &cleanupSourcePlugin{
 		SourcePlugin: plugin,
 		cleanup:      c.cleanup,
 	}, nil
 }
 
-func (c *cleanableDispenser) DispenseDestination() (DestinationPlugin, error) {
+func (c *cleanupDispenser) DispenseDestination() (DestinationPlugin, error) {
 	plugin, err := c.target.DispenseDestination()
 	if err != nil {
 		return nil, err
 	}
 
-	return &cleanableDestinationPlugin{
+	return &cleanupDestinationPlugin{
 		DestinationPlugin: plugin,
 		cleanup:           c.cleanup,
 	}, nil
 }
 
-type cleanableSourcePlugin struct {
+type cleanupSourcePlugin struct {
 	SourcePlugin
 	cleanup func()
 }
 
-func (c *cleanableSourcePlugin) Teardown(ctx context.Context, req pconnector.SourceTeardownRequest) (pconnector.SourceTeardownResponse, error) {
+func (c *cleanupSourcePlugin) Teardown(ctx context.Context, req pconnector.SourceTeardownRequest) (pconnector.SourceTeardownResponse, error) {
 	defer c.cleanup()
 
 	return c.SourcePlugin.Teardown(ctx, req)
 }
 
-type cleanableDestinationPlugin struct {
+type cleanupDestinationPlugin struct {
 	DestinationPlugin
 	cleanup func()
 }
 
-func (c *cleanableDestinationPlugin) Teardown(ctx context.Context, req pconnector.DestinationTeardownRequest) (pconnector.DestinationTeardownResponse, error) {
+func (c *cleanupDestinationPlugin) Teardown(ctx context.Context, req pconnector.DestinationTeardownRequest) (pconnector.DestinationTeardownResponse, error) {
 	defer c.cleanup()
 
 	return c.DestinationPlugin.Teardown(ctx, req)
