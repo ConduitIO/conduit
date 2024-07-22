@@ -17,7 +17,6 @@ package standalone
 import (
 	"bytes"
 	"context"
-	"errors"
 
 	"github.com/conduitio/conduit-processor-sdk/pconduit"
 	"github.com/conduitio/conduit-processor-sdk/pconduit/v1/fromproto"
@@ -198,7 +197,7 @@ func (m *hostModuleInstance) createSchema(ctx context.Context, buf types.Bytes) 
 	var pErr *pconduit.Error
 	schemaResp, err := m.schemaService.CreateSchema(ctx, fromproto.CreateSchemaRequest(&req))
 	if err != nil {
-		if errors.As(err, &pErr) {
+		if cerrors.As(err, &pErr) {
 			return types.Uint32(pErr.ErrCode)
 		}
 		return pconduit.ErrorCodeStart
@@ -262,7 +261,7 @@ func (m *hostModuleInstance) getSchema(ctx context.Context, buf types.Bytes) typ
 	var pErr *pconduit.Error
 	schemaResp, err := m.schemaService.GetSchema(ctx, fromproto.GetSchemaRequest(&req))
 	if err != nil {
-		if errors.As(err, &pErr) {
+		if cerrors.As(err, &pErr) {
 			return types.Uint32(pErr.ErrCode)
 		}
 		return pconduit.ErrorCodeStart
