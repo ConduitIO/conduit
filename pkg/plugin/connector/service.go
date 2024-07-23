@@ -92,32 +92,12 @@ func (s *PluginService) NewDispenser(logger log.CtxLogger, name string, connecto
 		LogLevel:    logger.GetLevel().String(),
 	}
 
-	var (
-		dispenser Dispenser
-		err       error
-	)
-
-	fullName := plugin.FullName(name)
-	switch fullName.PluginType() {
-	case plugin.PluginTypeStandalone:
-		dispenser, err = s.standaloneReg.NewDispenser(logger, fullName, cfg)
-	case plugin.PluginTypeBuiltin:
-		dispenser, err = s.builtinReg.NewDispenser(logger, fullName, cfg)
-	case plugin.PluginTypeAny:
-		dispenser, err = s.standaloneReg.NewDispenser(logger, fullName, cfg)
-		if err != nil {
-			s.logger.Debug(context.Background()).Err(err).Msg("could not find standalone plugin dispenser, falling back to builtin plugin")
-			dispenser, err = s.builtinReg.NewDispenser(logger, fullName, cfg)
-		}
-	default:
-		return nil, cerrors.Errorf("invalid plugin name prefix %q", fullName.PluginType())
-	}
-
+	dispenser, err := s.newDispenser(logger, name, cfg)
 	if err != nil {
 		return nil, err
 	}
 
-	return &cleanableDispenser{
+	return &cleanupDispenser{
 		target: dispenser,
 		cleanup: func() {
 			s.tokenService.Deregister(cfg.Token)
@@ -190,4 +170,23 @@ func (s *PluginService) ValidateDestinationConfig(ctx context.Context, name stri
 	}
 
 	return nil
+}
+
+func (s *PluginService) newDispenser(logger log.CtxLogger, name string, cfg pconnector.PluginConfig) (Dispenser, error) {
+	fullName := plugin.FullName(name)
+	switch fullName.PluginType() {
+	case plugin.PluginTypeStandalone:
+		return s.standaloneReg.NewDispenser(logger, fullName, cfg)
+	case plugin.PluginTypeBuiltin:
+		return s.builtinReg.NewDispenser(logger, fullName, cfg)
+	case plugin.PluginTypeAny:
+		d, err := s.standaloneReg.NewDispenser(logger, fullName, cfg)
+		if err != nil {
+			s.logger.Debug(context.Background()).Err(err).Msg("could not find standalone plugin dispenser, falling back to builtin plugin")
+			d, err = s.builtinReg.NewDispenser(logger, fullName, cfg)
+		}
+		return d, err
+	default:
+		return nil, cerrors.Errorf("invalid plugin name prefix %q", fullName.PluginType())
+	}
 }
