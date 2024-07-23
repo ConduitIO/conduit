@@ -20,38 +20,38 @@ import (
 	"github.com/conduitio/conduit-connector-protocol/pconnector"
 )
 
-// cleanupDispenser dispenses sources and destinations
+// CleanupDispenser dispenses sources and destinations
 // for which a cleanup function will be called after they are torn down.
-type cleanupDispenser struct {
-	target  Dispenser
-	cleanup func()
+type CleanupDispenser struct {
+	Target  Dispenser
+	Cleanup func()
 }
 
-func (c *cleanupDispenser) DispenseSpecifier() (SpecifierPlugin, error) {
-	return c.target.DispenseSpecifier()
+func (c *CleanupDispenser) DispenseSpecifier() (SpecifierPlugin, error) {
+	return c.Target.DispenseSpecifier()
 }
 
-func (c *cleanupDispenser) DispenseSource() (SourcePlugin, error) {
-	plugin, err := c.target.DispenseSource()
+func (c *CleanupDispenser) DispenseSource() (SourcePlugin, error) {
+	plugin, err := c.Target.DispenseSource()
 	if err != nil {
 		return nil, err
 	}
 
 	return &cleanupSourcePlugin{
 		SourcePlugin: plugin,
-		cleanup:      c.cleanup,
+		cleanup:      c.Cleanup,
 	}, nil
 }
 
-func (c *cleanupDispenser) DispenseDestination() (DestinationPlugin, error) {
-	plugin, err := c.target.DispenseDestination()
+func (c *CleanupDispenser) DispenseDestination() (DestinationPlugin, error) {
+	plugin, err := c.Target.DispenseDestination()
 	if err != nil {
 		return nil, err
 	}
 
 	return &cleanupDestinationPlugin{
 		DestinationPlugin: plugin,
-		cleanup:           c.cleanup,
+		cleanup:           c.Cleanup,
 	}, nil
 }
 

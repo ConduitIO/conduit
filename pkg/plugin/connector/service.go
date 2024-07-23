@@ -97,9 +97,9 @@ func (s *PluginService) NewDispenser(logger log.CtxLogger, name string, connecto
 		return nil, err
 	}
 
-	return &cleanupDispenser{
-		target: dispenser,
-		cleanup: func() {
+	return &CleanupDispenser{
+		Target: dispenser,
+		Cleanup: func() {
 			s.tokenService.Deregister(cfg.Token)
 		},
 	}, nil
