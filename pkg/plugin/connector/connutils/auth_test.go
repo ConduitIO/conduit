@@ -15,9 +15,10 @@
 package connutils
 
 import (
+	"testing"
+
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/matryer/is"
-	"testing"
 )
 
 func TestTokenService_IsTokenValid(t *testing.T) {
