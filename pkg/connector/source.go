@@ -127,7 +127,6 @@ func (s *Source) Open(ctx context.Context) (err error) {
 }
 
 func (s *Source) Stop(ctx context.Context) (opencdc.Position, error) {
-	// todo option 1: deregister connector token here
 	cleanup, err := s.preparePluginCall()
 	defer cleanup()
 	if err != nil {

@@ -24,7 +24,7 @@ import (
 	"github.com/matryer/is"
 )
 
-func TestSchemaService_ValidateToken(t *testing.T) {
+func TestSchemaService_CreateSchema_ValidateToken(t *testing.T) {
 	testCases := []struct {
 		name    string
 		token   string
@@ -53,6 +53,42 @@ func TestSchemaService_ValidateToken(t *testing.T) {
 				NewTokenService(),
 			)
 			_, err := underTest.CreateSchema(ctx, pconduit.CreateSchemaRequest{})
+
+			is.True(err != nil)
+			is.Equal(err.Error(), tc.wantErr)
+		})
+	}
+}
+
+func TestSchemaService_GetSchema_ValidateToken(t *testing.T) {
+	testCases := []struct {
+		name    string
+		token   string
+		wantErr string
+	}{
+		{
+			name:    "no token",
+			token:   "",
+			wantErr: "\"\": invalid token",
+		},
+		{
+			name:    "invalid token",
+			token:   "abc",
+			wantErr: "\"abc\": invalid token",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			is := is.New(t)
+			ctx := pconduit.ContextWithConnectorToken(context.Background(), tc.token)
+
+			underTest := NewSchemaService(
+				log.Nop(),
+				conduitschemaregistry.NewSchemaRegistry(),
+				NewTokenService(),
+			)
+			_, err := underTest.GetSchema(ctx, pconduit.GetSchemaRequest{})
 
 			is.True(err != nil)
 			is.Equal(err.Error(), tc.wantErr)

@@ -25,8 +25,7 @@ import (
 var ErrInvalidToken = cerrors.New("invalid token")
 
 type Token struct {
-	// todo need better name
-	Token       string `json:"token"`
+	Value       string `json:"value"`
 	ConnectorID string `json:"connector_id"`
 }
 
@@ -46,7 +45,7 @@ func (s *TokenService) GenerateNew(connectorID string) string {
 	defer s.m.Unlock()
 
 	token := Token{
-		Token:       uuid.NewString(),
+		Value:       uuid.NewString(),
 		ConnectorID: connectorID,
 	}
 
