@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"github.com/conduitio/conduit-commons/csync"
-
 	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit-connector-protocol/pconnector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
