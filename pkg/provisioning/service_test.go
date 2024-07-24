@@ -20,11 +20,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/conduitio/conduit-commons/database/badger"
 	schemaregistry "github.com/conduitio/conduit-schema-registry"
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/ctxutil"
-	"github.com/conduitio/conduit/pkg/foundation/database/badger"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	conn_plugin "github.com/conduitio/conduit/pkg/plugin/connector"
@@ -487,7 +487,10 @@ func TestService_IntegrationTestServices(t *testing.T) {
 		is.NoErr(err)
 	})
 
-	schemaService := connutils.NewSchemaService(logger, schemaregistry.NewSchemaRegistry())
+	schemaRegistry, err := schemaregistry.NewSchemaRegistry(db)
+	is.NoErr(err)
+
+	schemaService := connutils.NewSchemaService(logger, schemaRegistry)
 	connPluginService := conn_plugin.NewPluginService(
 		logger,
 		builtin.NewRegistry(logger, builtin.DefaultBuiltinConnectors, schemaService),

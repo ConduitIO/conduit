@@ -17,7 +17,7 @@ package ctxutil
 import (
 	"context"
 
-	"github.com/conduitio/conduit/pkg/foundation/database"
+	"github.com/conduitio/conduit-commons/database"
 )
 
 // transactionCtxKey is used as the key when saving the transaction in a context.

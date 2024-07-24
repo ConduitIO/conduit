@@ -16,6 +16,7 @@ package connutils
 
 import (
 	"context"
+	"github.com/conduitio/conduit-commons/database/inmemory"
 	"testing"
 
 	"github.com/conduitio/conduit-connector-protocol/pconduit"
@@ -47,8 +48,11 @@ func TestSchemaService_ValidateToken(t *testing.T) {
 			is := is.New(t)
 			ctx := pconduit.ContextWithConnectorToken(context.Background(), tc.token)
 
-			underTest := NewSchemaService(log.Nop(), conduitschemaregistry.NewSchemaRegistry())
-			_, err := underTest.CreateSchema(ctx, pconduit.CreateSchemaRequest{})
+			schemaRegistry, err := conduitschemaregistry.NewSchemaRegistry(&inmemory.DB{})
+			is.NoErr(err)
+
+			underTest := NewSchemaService(log.Nop(), schemaRegistry)
+			_, err = underTest.CreateSchema(ctx, pconduit.CreateSchemaRequest{})
 
 			is.True(err != nil)
 			is.Equal(err.Error(), tc.wantErr)

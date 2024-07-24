@@ -28,17 +28,17 @@ import (
 	"strings"
 	"time"
 
+	"github.com/conduitio/conduit-commons/database"
+	"github.com/conduitio/conduit-commons/database/badger"
+	"github.com/conduitio/conduit-commons/database/inmemory"
+	"github.com/conduitio/conduit-commons/database/postgres"
+	"github.com/conduitio/conduit-commons/database/sqlite"
 	pconduitserver "github.com/conduitio/conduit-connector-protocol/pconduit/v1/server"
 	conduitv1 "github.com/conduitio/conduit-connector-protocol/proto/conduit/v1"
 	conduitschemaregistry "github.com/conduitio/conduit-schema-registry"
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/ctxutil"
-	"github.com/conduitio/conduit/pkg/foundation/database"
-	"github.com/conduitio/conduit/pkg/foundation/database/badger"
-	"github.com/conduitio/conduit/pkg/foundation/database/inmemory"
-	"github.com/conduitio/conduit/pkg/foundation/database/postgres"
-	"github.com/conduitio/conduit/pkg/foundation/database/sqlite"
 	"github.com/conduitio/conduit/pkg/foundation/grpcutil"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics"
@@ -120,12 +120,12 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 		case DBTypeBadger:
 			db, err = badger.New(logger.Logger, cfg.DB.Badger.Path)
 		case DBTypePostgres:
-			db, err = postgres.New(context.Background(), logger, cfg.DB.Postgres.ConnectionString, cfg.DB.Postgres.Table)
+			db, err = postgres.New(context.Background(), logger.Logger, cfg.DB.Postgres.ConnectionString, cfg.DB.Postgres.Table)
 		case DBTypeInMemory:
 			db = &inmemory.DB{}
 			logger.Warn(context.Background()).Msg("Using in-memory store, all pipeline configurations will be lost when Conduit stops.")
 		case DBTypeSQLite:
-			db, err = sqlite.New(context.Background(), logger, cfg.DB.SQLite.Path, cfg.DB.SQLite.Table)
+			db, err = sqlite.New(context.Background(), logger.Logger, cfg.DB.SQLite.Path, cfg.DB.SQLite.Table)
 		default:
 			err = cerrors.Errorf("invalid DB type %q", cfg.DB.Type)
 		}
@@ -175,7 +175,7 @@ func createServices(r *Runtime) error {
 		standaloneReg,
 	)
 
-	schemaRegistry, err := createSchemaRegistry(r.Config, r.logger)
+	schemaRegistry, err := createSchemaRegistry(r.Config, r.logger, r.DB)
 	if err != nil {
 		return cerrors.Errorf("failed to create schema registry: %w", err)
 	}
@@ -213,7 +213,7 @@ func createServices(r *Runtime) error {
 	return nil
 }
 
-func createSchemaRegistry(config Config, logger log.CtxLogger) (schemaregistry.Registry, error) {
+func createSchemaRegistry(config Config, logger log.CtxLogger, db database.DB) (schemaregistry.Registry, error) {
 	var schemaRegistry schemaregistry.Registry
 	var err error
 
@@ -224,7 +224,10 @@ func createSchemaRegistry(config Config, logger log.CtxLogger) (schemaregistry.R
 			return nil, cerrors.Errorf("failed to create schema registry client: %w", err)
 		}
 	case SchemaRegistryTypeBuiltin:
-		schemaRegistry = conduitschemaregistry.NewSchemaRegistry()
+		schemaRegistry, err = conduitschemaregistry.NewSchemaRegistry(db)
+		if err != nil {
+			return nil, cerrors.Errorf("failed to create built-in schema registry: %w", err)
+		}
 	default:
 		// shouldn't happen, we validate the config
 		return nil, cerrors.Errorf("invalid schema registry type %q", config.SchemaRegistry.Type)
