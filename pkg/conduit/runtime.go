@@ -93,13 +93,13 @@ type Runtime struct {
 	pipelineService  *pipeline.Service
 	connectorService *connector.Service
 	processorService *processor.Service
-	procSchemaService    *procutils.SchemaService
 
 	connectorPluginService *conn_plugin.PluginService
 	processorPluginService *proc_plugin.PluginService
 
-	connSchemaService      *connutils.SchemaService
+	connSchemaService  *connutils.SchemaService
 	connectorPersister *connector.Persister
+	procSchemaService  *procutils.SchemaService
 
 	logger           log.CtxLogger
 	gRPCStatsHandler *promgrpc.StatsHandler
@@ -166,19 +166,9 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 
 // Create all necessary internal services
 func createServices(r *Runtime) error {
-	var err error
-	var schemaRegistry schemaregistry.Registry
-	switch r.Config.SchemaRegistry.Type {
-	case SchemaRegistryTypeConfluent:
-		schemaRegistry, err = schemaregistry.NewClient(r.logger, sr.URLs(r.Config.SchemaRegistry.Confluent.ConnectionString))
-		if err != nil {
-			return cerrors.Errorf("failed to create schema registry client: %w", err)
-		}
-	case SchemaRegistryTypeBuiltin:
-		schemaRegistry = conduitschemaregistry.NewSchemaRegistry()
-	default:
-		// shouldn't happen, we validate the config
-		return cerrors.Errorf("invalid schema registry type %q", r.Config.SchemaRegistry.Type)
+	schemaRegistry, err := createSchemaRegistry(r.Config, r.logger)
+	if err != nil {
+		return cerrors.Errorf("failed to create schema registry: %w", err)
 	}
 
 	procSchemaService := procutils.NewSchemaService(r.logger, schemaRegistry)
