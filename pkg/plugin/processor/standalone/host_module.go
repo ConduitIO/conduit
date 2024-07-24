@@ -21,7 +21,7 @@ import (
 	"github.com/conduitio/conduit-processor-sdk/pconduit"
 	"github.com/conduitio/conduit-processor-sdk/pconduit/v1/fromproto"
 	"github.com/conduitio/conduit-processor-sdk/pconduit/v1/toproto"
-	conduitv1 "github.com/conduitio/conduit-processor-sdk/proto/conduit/v1"
+	pconduitv1 "github.com/conduitio/conduit-processor-sdk/proto/conduit/v1"
 	processorv1 "github.com/conduitio/conduit-processor-sdk/proto/processor/v1"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -92,10 +92,10 @@ type hostModuleInstance struct {
 
 	parkedCommandRequest *processorv1.CommandRequest
 
-	parkedCreateSchemaResponse *conduitv1.CreateSchemaResponse
+	parkedCreateSchemaResponse *pconduitv1.CreateSchemaResponse
 	parkedCreateSchemaBuffer   []byte
 
-	parkedGetSchemaResponse *conduitv1.GetSchemaResponse
+	parkedGetSchemaResponse *pconduitv1.GetSchemaResponse
 	parkedGetSchemaBuffer   []byte
 
 	schemaService pconduit.SchemaService
@@ -183,7 +183,7 @@ func (m *hostModuleInstance) createSchema(ctx context.Context, buf types.Bytes) 
 		}
 	}
 
-	var req conduitv1.CreateSchemaRequest
+	var req pconduitv1.CreateSchemaRequest
 	length := len(buf)
 	if m.parkedCreateSchemaBuffer != nil {
 		length = len(m.parkedCreateSchemaBuffer)
@@ -247,7 +247,7 @@ func (m *hostModuleInstance) getSchema(ctx context.Context, buf types.Bytes) typ
 	}
 
 	// get and unmarshal the request
-	var req conduitv1.GetSchemaRequest
+	var req pconduitv1.GetSchemaRequest
 	length := len(buf)
 	if m.parkedGetSchemaBuffer != nil {
 		length = len(m.parkedGetSchemaBuffer)
