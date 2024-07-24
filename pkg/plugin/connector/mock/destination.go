@@ -17,9 +17,10 @@ package mock
 import (
 	"context"
 	"io"
-	"sync/atomic"
 	"testing"
+	"time"
 
+	"github.com/conduitio/conduit-commons/csync"
 	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit-connector-protocol/pconnector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -109,14 +110,16 @@ func DestinationPluginWithRecords(records []opencdc.Record) ConfigurableDestinat
 		t := p.ctrl.T.(*testing.T)
 		is := is.New(t)
 
-		var done atomic.Bool
+		var wg csync.WaitGroup
+		wg.Add(1)
 		t.Cleanup(func() {
-			is.True(done.Load()) // run didn't finish
+			err := wg.WaitTimeout(context.Background(), time.Second)
+			is.NoErr(err) // run didn't finish
 		})
 
 		offset := 0
 		p.onRun = append(p.onRun, func() error {
-			defer done.Store(true)
+			defer wg.Done()
 			serverStream := p.Stream.Server()
 
 			for {
