@@ -7,7 +7,7 @@ require (
 	github.com/Masterminds/semver/v3 v3.2.1
 	github.com/Masterminds/sprig/v3 v3.2.3
 	github.com/NYTimes/gziphandler v1.1.1
-	github.com/bufbuild/buf v1.34.0
+	github.com/bufbuild/buf v1.35.0
 	github.com/conduitio/conduit-commons v0.2.1-0.20240709142247-d973cba9694c
 	github.com/conduitio/conduit-connector-file v0.6.1-0.20240621111422-221c138201d3
 	github.com/conduitio/conduit-connector-generator v0.6.1-0.20240621111436-e9fa3464f7b2
@@ -17,7 +17,7 @@ require (
 	github.com/conduitio/conduit-connector-protocol v0.6.1-0.20240716144613-8ef04cf70e73
 	github.com/conduitio/conduit-connector-s3 v0.5.2-0.20240630172807-e278fde1fb46
 	github.com/conduitio/conduit-connector-sdk v0.9.2-0.20240716152132-20953984628f
-	github.com/conduitio/conduit-processor-sdk v0.1.2-0.20240516124003-442e4a3f0edd
+	github.com/conduitio/conduit-processor-sdk v0.1.2-0.20240723145807-ddf60098f42b
 	github.com/conduitio/conduit-schema-registry v0.0.0-20240705193355-7e2064b44e0d
 	github.com/conduitio/yaml/v3 v3.3.0
 	github.com/dgraph-io/badger/v4 v4.2.0
@@ -149,7 +149,7 @@ require (
 	github.com/fsnotify/fsnotify v1.7.0 // indirect
 	github.com/fzipp/gocyclo v0.6.0 // indirect
 	github.com/ghostiam/protogetter v0.3.6 // indirect
-	github.com/go-chi/chi/v5 v5.0.13 // indirect
+	github.com/go-chi/chi/v5 v5.0.14 // indirect
 	github.com/go-critic/go-critic v0.11.4 // indirect
 	github.com/go-logr/logr v1.4.2 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
@@ -181,7 +181,7 @@ require (
 	github.com/google/cel-go v0.20.1 // indirect
 	github.com/google/flatbuffers v2.0.8+incompatible // indirect
 	github.com/google/go-containerregistry v0.19.2 // indirect
-	github.com/google/pprof v0.0.0-20240618054019-d3b898a103f8 // indirect
+	github.com/google/pprof v0.0.0-20240622144329-c177fd99eaa9 // indirect
 	github.com/gordonklaus/ineffassign v0.1.0 // indirect
 	github.com/gostaticanalysis/analysisutil v0.7.1 // indirect
 	github.com/gostaticanalysis/comment v1.4.2 // indirect
