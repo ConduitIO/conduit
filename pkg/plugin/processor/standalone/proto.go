@@ -21,7 +21,7 @@ import (
 	"github.com/conduitio/conduit-commons/opencdc"
 	opencdcv1 "github.com/conduitio/conduit-commons/proto/opencdc/v1"
 	sdk "github.com/conduitio/conduit-processor-sdk"
-	"github.com/conduitio/conduit-processor-sdk/pconduit"
+	"github.com/conduitio/conduit-processor-sdk/pprocutils"
 	processorv1 "github.com/conduitio/conduit-processor-sdk/proto/processor/v1"
 )
 
@@ -122,5 +122,5 @@ func (c protoConverter) errorRecord(in *processorv1.Process_ProcessedRecord_Erro
 }
 
 func (c protoConverter) error(e *processorv1.Error) error {
-	return pconduit.NewError(e.Code, e.Message)
+	return pprocutils.NewError(e.Code, e.Message)
 }

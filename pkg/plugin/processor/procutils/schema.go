@@ -17,7 +17,7 @@ package procutils
 import (
 	"context"
 
-	"github.com/conduitio/conduit-processor-sdk/pconduit"
+	"github.com/conduitio/conduit-processor-sdk/pprocutils"
 	conduitschemaregistry "github.com/conduitio/conduit-schema-registry"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -32,7 +32,7 @@ type SchemaService struct {
 	logger   log.CtxLogger
 }
 
-var _ pconduit.SchemaService = (*SchemaService)(nil)
+var _ pprocutils.SchemaService = (*SchemaService)(nil)
 
 func NewSchemaService(logger log.CtxLogger, registry schemaregistry.Registry) *SchemaService {
 	return &SchemaService{
@@ -49,7 +49,7 @@ func (s *SchemaService) Check(ctx context.Context) error {
 	return r.Check(ctx)
 }
 
-func (s *SchemaService) CreateSchema(ctx context.Context, req pconduit.CreateSchemaRequest) (pconduit.CreateSchemaResponse, error) {
+func (s *SchemaService) CreateSchema(ctx context.Context, req pprocutils.CreateSchemaRequest) (pprocutils.CreateSchemaResponse, error) {
 	ss, err := s.registry.CreateSchema(ctx, req.Subject, sr.Schema{
 		Schema: string(req.Bytes),
 		Type:   fromschema.SrSchemaType(req.Type),
@@ -57,26 +57,26 @@ func (s *SchemaService) CreateSchema(ctx context.Context, req pconduit.CreateSch
 	if err != nil {
 		var respErr *sr.ResponseError
 		if cerrors.As(err, &respErr) {
-			return pconduit.CreateSchemaResponse{}, unwrapSrError(respErr)
+			return pprocutils.CreateSchemaResponse{}, unwrapSrError(respErr)
 		}
-		return pconduit.CreateSchemaResponse{}, pconduit.ErrInvalidSchema
+		return pprocutils.CreateSchemaResponse{}, pprocutils.ErrInvalidSchema
 	}
-	return pconduit.CreateSchemaResponse{
+	return pprocutils.CreateSchemaResponse{
 		Schema: toschema.SrSubjectSchema(ss),
 	}, nil
 }
 
-func (s *SchemaService) GetSchema(ctx context.Context, req pconduit.GetSchemaRequest) (pconduit.GetSchemaResponse, error) {
+func (s *SchemaService) GetSchema(ctx context.Context, req pprocutils.GetSchemaRequest) (pprocutils.GetSchemaResponse, error) {
 	ss, err := s.registry.SchemaBySubjectVersion(ctx, req.Subject, req.Version)
 	if err != nil {
 		var respErr *sr.ResponseError
 		if cerrors.As(err, &respErr) {
-			return pconduit.GetSchemaResponse{}, unwrapSrError(respErr)
+			return pprocutils.GetSchemaResponse{}, unwrapSrError(respErr)
 		}
-		return pconduit.GetSchemaResponse{}, pconduit.ErrSubjectNotFound
+		return pprocutils.GetSchemaResponse{}, pprocutils.ErrSubjectNotFound
 	}
 
-	return pconduit.GetSchemaResponse{
+	return pprocutils.GetSchemaResponse{
 		Schema: toschema.SrSubjectSchema(ss),
 	}, nil
 }
@@ -84,11 +84,11 @@ func (s *SchemaService) GetSchema(ctx context.Context, req pconduit.GetSchemaReq
 func unwrapSrError(e *sr.ResponseError) error {
 	switch e.ErrorCode {
 	case conduitschemaregistry.ErrorCodeSubjectNotFound:
-		return pconduit.ErrSubjectNotFound
+		return pprocutils.ErrSubjectNotFound
 	case conduitschemaregistry.ErrorCodeVersionNotFound:
-		return pconduit.ErrVersionNotFound
+		return pprocutils.ErrVersionNotFound
 	case conduitschemaregistry.ErrorCodeInvalidSchema:
-		return pconduit.ErrInvalidSchema
+		return pprocutils.ErrInvalidSchema
 	default:
 		return e
 	}

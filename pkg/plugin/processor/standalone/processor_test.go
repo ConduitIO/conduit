@@ -20,7 +20,7 @@ import (
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
-	"github.com/conduitio/conduit-processor-sdk/pconduit"
+	"github.com/conduitio/conduit-processor-sdk/pprocutils"
 	"github.com/conduitio/conduit-processor-sdk/schema"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -54,7 +54,7 @@ func TestWASMProcessor_Specification_Error(t *testing.T) {
 	is.NoErr(err)
 
 	_, err = underTest.Specification()
-	is.Equal(err, pconduit.NewError(0, "boom"))
+	is.Equal(err, pprocutils.NewError(0, "boom"))
 
 	// Teardown still works
 	is.NoErr(underTest.Teardown(ctx))
@@ -83,7 +83,7 @@ func TestWASMProcessor_Configure_Error(t *testing.T) {
 	is.NoErr(err)
 
 	err = underTest.Configure(ctx, map[string]string{"configure": "error"})
-	is.Equal(err, pconduit.NewError(0, "boom"))
+	is.Equal(err, pprocutils.NewError(0, "boom"))
 
 	// Teardown still works
 	is.NoErr(underTest.Teardown(ctx))
@@ -131,7 +131,7 @@ func TestWASMProcessor_Open_Error(t *testing.T) {
 	is.NoErr(err)
 
 	err = underTest.Open(ctx)
-	is.Equal(err, pconduit.NewError(0, "boom"))
+	is.Equal(err, pprocutils.NewError(0, "boom"))
 
 	// Teardown still works
 	is.NoErr(underTest.Teardown(ctx))
@@ -208,7 +208,7 @@ func TestWASMProcessor_Process_Error(t *testing.T) {
 
 	errRecord, ok := processed[0].(sdk.ErrorRecord)
 	is.True(ok)
-	is.Equal(errRecord.Error, pconduit.NewError(0, "boom"))
+	is.Equal(errRecord.Error, pprocutils.NewError(0, "boom"))
 
 	// Teardown still works
 	is.NoErr(underTest.Teardown(ctx))

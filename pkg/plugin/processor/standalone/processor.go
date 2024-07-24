@@ -21,7 +21,7 @@ import (
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
-	"github.com/conduitio/conduit-processor-sdk/pconduit"
+	"github.com/conduitio/conduit-processor-sdk/pprocutils"
 	processorv1 "github.com/conduitio/conduit-processor-sdk/proto/processor/v1"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -78,7 +78,7 @@ func newWASMProcessor(
 	runtime wazero.Runtime,
 	processorModule wazero.CompiledModule,
 	hostModule *wazergo.CompiledModule[*hostModuleInstance],
-	schemaService pconduit.SchemaService,
+	schemaService pprocutils.SchemaService,
 
 	id string,
 	logger log.CtxLogger,

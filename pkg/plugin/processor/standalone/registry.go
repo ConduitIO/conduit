@@ -23,7 +23,7 @@ import (
 	"sync"
 
 	sdk "github.com/conduitio/conduit-processor-sdk"
-	"github.com/conduitio/conduit-processor-sdk/pconduit"
+	"github.com/conduitio/conduit-processor-sdk/pprocutils"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
@@ -46,7 +46,7 @@ type Registry struct {
 	// multiple times, once for each WASM module.
 	hostModule *wazergo.CompiledModule[*hostModuleInstance]
 
-	schemaService pconduit.SchemaService
+	schemaService pprocutils.SchemaService
 
 	// plugins stores plugin blueprints in a 2D map, first key is the plugin
 	// name, the second key is the plugin version
@@ -64,7 +64,7 @@ type blueprint struct {
 	// ensure someone can't switch the plugin after we registered it
 }
 
-func NewRegistry(logger log.CtxLogger, pluginDir string, schemaService pconduit.SchemaService) (*Registry, error) {
+func NewRegistry(logger log.CtxLogger, pluginDir string, schemaService pprocutils.SchemaService) (*Registry, error) {
 	// context is only used for logging, it's not used for long running operations
 	ctx := context.Background()
 

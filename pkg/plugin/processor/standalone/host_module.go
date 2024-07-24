@@ -18,11 +18,11 @@ import (
 	"bytes"
 	"context"
 
-	"github.com/conduitio/conduit-processor-sdk/pconduit"
-	"github.com/conduitio/conduit-processor-sdk/pconduit/v1/fromproto"
-	"github.com/conduitio/conduit-processor-sdk/pconduit/v1/toproto"
-	pconduitv1 "github.com/conduitio/conduit-processor-sdk/proto/conduit/v1"
+	"github.com/conduitio/conduit-processor-sdk/pprocutils"
+	"github.com/conduitio/conduit-processor-sdk/pprocutils/v1/fromproto"
+	"github.com/conduitio/conduit-processor-sdk/pprocutils/v1/toproto"
 	processorv1 "github.com/conduitio/conduit-processor-sdk/proto/processor/v1"
+	procutilsv1 "github.com/conduitio/conduit-processor-sdk/proto/procutils/v1"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/stealthrocket/wazergo"
@@ -74,7 +74,7 @@ func hostModuleOptions(
 	logger log.CtxLogger,
 	requests <-chan *processorv1.CommandRequest,
 	responses chan<- tuple[*processorv1.CommandResponse, error],
-	schemaService pconduit.SchemaService,
+	schemaService pprocutils.SchemaService,
 ) hostModuleOption {
 	return wazergo.OptionFunc(func(m *hostModuleInstance) {
 		m.logger = logger
@@ -92,13 +92,13 @@ type hostModuleInstance struct {
 
 	parkedCommandRequest *processorv1.CommandRequest
 
-	parkedCreateSchemaResponse *pconduitv1.CreateSchemaResponse
+	parkedCreateSchemaResponse *procutilsv1.CreateSchemaResponse
 	parkedCreateSchemaBuffer   []byte
 
-	parkedGetSchemaResponse *pconduitv1.GetSchemaResponse
+	parkedGetSchemaResponse *procutilsv1.GetSchemaResponse
 	parkedGetSchemaBuffer   []byte
 
-	schemaService pconduit.SchemaService
+	schemaService pprocutils.SchemaService
 }
 
 func (*hostModuleInstance) Close(context.Context) error { return nil }
@@ -117,7 +117,7 @@ func (m *hostModuleInstance) commandRequest(ctx context.Context, buf types.Bytes
 		var ok bool
 		m.parkedCommandRequest, ok = <-m.commandRequests
 		if !ok {
-			return pconduit.ErrorCodeNoMoreCommands
+			return pprocutils.ErrorCodeNoMoreCommands
 		}
 	}
 
@@ -137,7 +137,7 @@ func (m *hostModuleInstance) commandRequest(ctx context.Context, buf types.Bytes
 	out, err := proto.MarshalOptions{}.MarshalAppend(buf[:0], m.parkedCommandRequest)
 	if err != nil {
 		m.logger.Err(ctx, err).Msg("failed marshalling protobuf command request")
-		return pconduit.ErrorCodeUnknownCommandRequest
+		return pprocutils.ErrorCodeUnknownCommandRequest
 	}
 	m.parkedCommandRequest = nil
 
@@ -155,7 +155,7 @@ func (m *hostModuleInstance) commandResponse(ctx context.Context, buf types.Byte
 	if err != nil {
 		m.logger.Err(ctx, err).Msg("failed unmarshalling protobuf command response")
 		m.commandResponses <- tuple[*processorv1.CommandResponse, error]{nil, err}
-		return pconduit.ErrorCodeUnknownCommandResponse
+		return pprocutils.ErrorCodeUnknownCommandResponse
 	}
 
 	m.commandResponses <- tuple[*processorv1.CommandResponse, error]{&resp, nil}
@@ -175,7 +175,7 @@ func (m *hostModuleInstance) createSchema(ctx context.Context, buf types.Bytes) 
 			out, err := proto.MarshalOptions{}.MarshalAppend(buf[:0], m.parkedCreateSchemaResponse)
 			if err != nil {
 				m.logger.Err(ctx, err).Msg("failed marshalling protobuf create schema response")
-				return pconduit.ErrorCodeStart
+				return pprocutils.ErrorCodeStart
 			}
 			m.parkedCreateSchemaResponse = nil
 			m.parkedCreateSchemaBuffer = nil
@@ -183,7 +183,7 @@ func (m *hostModuleInstance) createSchema(ctx context.Context, buf types.Bytes) 
 		}
 	}
 
-	var req pconduitv1.CreateSchemaRequest
+	var req procutilsv1.CreateSchemaRequest
 	length := len(buf)
 	if m.parkedCreateSchemaBuffer != nil {
 		length = len(m.parkedCreateSchemaBuffer)
@@ -191,16 +191,16 @@ func (m *hostModuleInstance) createSchema(ctx context.Context, buf types.Bytes) 
 	err := proto.Unmarshal(buf[:length], &req)
 	if err != nil {
 		m.logger.Err(ctx, err).Msg("failed unmarshalling protobuf create schema request")
-		return pconduit.ErrorCodeStart
+		return pprocutils.ErrorCodeStart
 	}
 
-	var pErr *pconduit.Error
+	var pErr *pprocutils.Error
 	schemaResp, err := m.schemaService.CreateSchema(ctx, fromproto.CreateSchemaRequest(&req))
 	if err != nil {
 		if cerrors.As(err, &pErr) {
 			return types.Uint32(pErr.ErrCode)
 		}
-		return pconduit.ErrorCodeStart
+		return pprocutils.ErrorCodeStart
 	}
 	resp := toproto.CreateSchemaResponse(schemaResp)
 	m.parkedCreateSchemaResponse = resp
@@ -218,7 +218,7 @@ func (m *hostModuleInstance) createSchema(ctx context.Context, buf types.Bytes) 
 	out, err := proto.MarshalOptions{}.MarshalAppend(buf[:0], m.parkedCreateSchemaResponse)
 	if err != nil {
 		m.logger.Err(ctx, err).Msg("failed marshalling protobuf create schema response")
-		return pconduit.ErrorCodeStart
+		return pprocutils.ErrorCodeStart
 	}
 	m.parkedCreateSchemaResponse = nil
 	m.parkedCreateSchemaBuffer = nil
@@ -238,7 +238,7 @@ func (m *hostModuleInstance) getSchema(ctx context.Context, buf types.Bytes) typ
 			out, err := proto.MarshalOptions{}.MarshalAppend(buf[:0], m.parkedGetSchemaResponse)
 			if err != nil {
 				m.logger.Err(ctx, err).Msg("failed marshalling protobuf get schema response")
-				return pconduit.ErrorCodeStart
+				return pprocutils.ErrorCodeStart
 			}
 			m.parkedGetSchemaResponse = nil
 			m.parkedGetSchemaBuffer = nil
@@ -247,7 +247,7 @@ func (m *hostModuleInstance) getSchema(ctx context.Context, buf types.Bytes) typ
 	}
 
 	// get and unmarshal the request
-	var req pconduitv1.GetSchemaRequest
+	var req procutilsv1.GetSchemaRequest
 	length := len(buf)
 	if m.parkedGetSchemaBuffer != nil {
 		length = len(m.parkedGetSchemaBuffer)
@@ -255,16 +255,16 @@ func (m *hostModuleInstance) getSchema(ctx context.Context, buf types.Bytes) typ
 	err := proto.Unmarshal(buf[:length], &req)
 	if err != nil {
 		m.logger.Err(ctx, err).Msg("failed unmarshalling protobuf get schema request")
-		return pconduit.ErrorCodeStart
+		return pprocutils.ErrorCodeStart
 	}
 
-	var pErr *pconduit.Error
+	var pErr *pprocutils.Error
 	schemaResp, err := m.schemaService.GetSchema(ctx, fromproto.GetSchemaRequest(&req))
 	if err != nil {
 		if cerrors.As(err, &pErr) {
 			return types.Uint32(pErr.ErrCode)
 		}
-		return pconduit.ErrorCodeStart
+		return pprocutils.ErrorCodeStart
 	}
 	resp := toproto.GetSchemaResponse(schemaResp)
 	m.parkedGetSchemaResponse = resp
@@ -282,7 +282,7 @@ func (m *hostModuleInstance) getSchema(ctx context.Context, buf types.Bytes) typ
 	out, err := proto.MarshalOptions{}.MarshalAppend(buf[:0], m.parkedGetSchemaResponse)
 	if err != nil {
 		m.logger.Err(ctx, err).Msg("failed marshalling protobuf get schema response")
-		return pconduit.ErrorCodeStart
+		return pprocutils.ErrorCodeStart
 	}
 	m.parkedGetSchemaResponse = nil
 	m.parkedGetSchemaBuffer = nil
