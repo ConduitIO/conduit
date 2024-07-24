@@ -18,7 +18,6 @@ package schemaregistrytest
 
 import (
 	"fmt"
-	"github.com/conduitio/conduit-commons/database/inmemory"
 	"io"
 	"log/slog"
 	"net"
@@ -27,6 +26,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/conduitio/conduit-commons/database/inmemory"
 	schemaregistry "github.com/conduitio/conduit-schema-registry"
 	"github.com/neilotoole/slogt"
 )

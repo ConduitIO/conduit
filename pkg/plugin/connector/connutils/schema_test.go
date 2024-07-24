@@ -16,9 +16,9 @@ package connutils
 
 import (
 	"context"
-	"github.com/conduitio/conduit-commons/database/inmemory"
 	"testing"
 
+	"github.com/conduitio/conduit-commons/database/inmemory"
 	"github.com/conduitio/conduit-connector-protocol/pconduit"
 	conduitschemaregistry "github.com/conduitio/conduit-schema-registry"
 	"github.com/conduitio/conduit/pkg/foundation/log"
