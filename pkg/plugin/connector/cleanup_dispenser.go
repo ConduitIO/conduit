@@ -55,6 +55,8 @@ func (c *CleanupDispenser) DispenseDestination() (DestinationPlugin, error) {
 	}, nil
 }
 
+// cleanupSourcePlugin is a SourcePlugin that can run a cleanup function
+// after its Teardown() method is called
 type cleanupSourcePlugin struct {
 	SourcePlugin
 	cleanup func()
@@ -66,6 +68,8 @@ func (c *cleanupSourcePlugin) Teardown(ctx context.Context, req pconnector.Sourc
 	return c.SourcePlugin.Teardown(ctx, req)
 }
 
+// cleanupDestinationPlugin is a DestinationPlugin that can run a cleanup function
+// after its Teardown() method is called
 type cleanupDestinationPlugin struct {
 	DestinationPlugin
 	cleanup func()
