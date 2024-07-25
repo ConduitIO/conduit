@@ -213,8 +213,8 @@ github.com/cncf/udpa/go v0.0.0-20191209042840-269d4d468f6f/go.mod h1:M8M6+tZqaGX
 github.com/colinmarc/hdfs/v2 v2.1.1/go.mod h1:M3x+k8UKKmxtFu++uAZ0OtDU8jR3jnaZIAc6yK4Ue0c=
 github.com/conduitio/conduit-commons v0.2.1-0.20240717151024-0c8d1f406cb2 h1:0Ba/B4lyxeGIVk4zvVGRx1kAdLuXK+8st/LyMKZCmu4=
 github.com/conduitio/conduit-commons v0.2.1-0.20240717151024-0c8d1f406cb2/go.mod h1:w0eHaH81yoab8VcrrTjFGNGRQMx45RnXWobKMpKjgrM=
-github.com/conduitio/conduit-connector-file v0.6.1-0.20240709112929-6207f9f8efcf h1:fw4Y61EzvRPJ4bqthhQ4IMnRtu2ZOF/B81yFfABPOl8=
-github.com/conduitio/conduit-connector-file v0.6.1-0.20240709112929-6207f9f8efcf/go.mod h1:bCnmA+29l871cNhroZfiCS2O8+GhBNVECfL5DOof2ew=
+github.com/conduitio/conduit-connector-file v0.6.1-0.20240725112913-20f67e1ba9b4 h1:h5A5b+hPIm9ZXplMgBKUQfG4W1Olr1u1BCWVgQ1KTlo=
+github.com/conduitio/conduit-connector-file v0.6.1-0.20240725112913-20f67e1ba9b4/go.mod h1:3YwRc4ungI6NIh5megAPL0vhxuBu4GZ0PLWEqCNX+9E=
 github.com/conduitio/conduit-connector-generator v0.6.1-0.20240621111436-e9fa3464f7b2 h1:WMKvmvaE/E+03/0nz/2JpyelCd2nPtOTuBy3eyWcI58=
 github.com/conduitio/conduit-connector-generator v0.6.1-0.20240621111436-e9fa3464f7b2/go.mod h1:2+n1SGAJ/+TpJC9YvxTUWHKt9e0Tm12JcqFJ8OndhX4=
 github.com/conduitio/conduit-connector-kafka v0.8.1-0.20240621111431-87c01cf39a06 h1:40SjCqWle0p9UpUxFAFS3RKqIWsApBajaQ1ScOSE6Vo=
