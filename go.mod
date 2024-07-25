@@ -16,7 +16,7 @@ require (
 	github.com/conduitio/conduit-connector-postgres v0.7.6-0.20240630172132-84b5a6e6104f
 	github.com/conduitio/conduit-connector-protocol v0.6.1-0.20240724140503-f2dd0a3e4d36
 	github.com/conduitio/conduit-connector-s3 v0.5.2-0.20240630172807-e278fde1fb46
-	github.com/conduitio/conduit-connector-sdk v0.9.2-0.20240725112309-ca667d668641
+	github.com/conduitio/conduit-connector-sdk v0.9.2-0.20240722154834-ba6b9fbfd197
 	github.com/conduitio/conduit-processor-sdk v0.1.2-0.20240516124003-442e4a3f0edd
 	github.com/conduitio/conduit-schema-registry v0.0.0-20240718142017-ea94d9df2f1b
 	github.com/conduitio/yaml/v3 v3.3.0
