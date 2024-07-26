@@ -22,9 +22,9 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/conduitio/conduit-commons/database"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/ctxutil"
-	"github.com/conduitio/conduit/pkg/foundation/database"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	"github.com/conduitio/conduit/pkg/provisioning/config"

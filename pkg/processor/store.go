@@ -19,8 +19,8 @@ import (
 	"context"
 	"strings"
 
+	"github.com/conduitio/conduit-commons/database"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/foundation/database"
 	"github.com/goccy/go-json"
 )
 

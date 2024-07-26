@@ -1,6 +1,6 @@
 module github.com/conduitio/conduit
 
-go 1.22.4
+go 1.22.5
 
 require (
 	buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go v1.34.2-20240617172850-a48fcebcf8f1.2
@@ -8,19 +8,18 @@ require (
 	github.com/Masterminds/sprig/v3 v3.2.3
 	github.com/NYTimes/gziphandler v1.1.1
 	github.com/bufbuild/buf v1.35.1
-	github.com/conduitio/conduit-commons v0.2.1-0.20240709142247-d973cba9694c
+	github.com/conduitio/conduit-commons v0.2.1-0.20240723194042-1db31d4f6d85
 	github.com/conduitio/conduit-connector-file v0.6.1-0.20240621111422-221c138201d3
 	github.com/conduitio/conduit-connector-generator v0.6.1-0.20240621111436-e9fa3464f7b2
 	github.com/conduitio/conduit-connector-kafka v0.8.1-0.20240621111431-87c01cf39a06
 	github.com/conduitio/conduit-connector-log v0.3.1-0.20240621111440-e2f0f04a35a4
 	github.com/conduitio/conduit-connector-postgres v0.7.6-0.20240630172132-84b5a6e6104f
-	github.com/conduitio/conduit-connector-protocol v0.6.1-0.20240716144613-8ef04cf70e73
+	github.com/conduitio/conduit-connector-protocol v0.6.1-0.20240723131404-2586cde4dda1
 	github.com/conduitio/conduit-connector-s3 v0.5.2-0.20240630172807-e278fde1fb46
-	github.com/conduitio/conduit-connector-sdk v0.9.2-0.20240716152132-20953984628f
+	github.com/conduitio/conduit-connector-sdk v0.9.2-0.20240722154834-ba6b9fbfd197
 	github.com/conduitio/conduit-processor-sdk v0.1.2-0.20240516124003-442e4a3f0edd
-	github.com/conduitio/conduit-schema-registry v0.0.0-20240705193355-7e2064b44e0d
+	github.com/conduitio/conduit-schema-registry v0.0.0-20240725155046-a0fdb61d2588
 	github.com/conduitio/yaml/v3 v3.3.0
-	github.com/dgraph-io/badger/v4 v4.2.0
 	github.com/dop251/goja v0.0.0-20231027120936-b396bb4c349d
 	github.com/dop251/goja_nodejs v0.0.0-20231122114759-e84d9a924c5c
 	github.com/gammazero/deque v0.2.1
@@ -32,7 +31,6 @@ require (
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.21.0
 	github.com/hashicorp/go-hclog v1.6.3
 	github.com/hashicorp/go-plugin v1.6.1
-	github.com/jackc/pgx/v5 v5.6.0
 	github.com/jpillora/backoff v1.0.0
 	github.com/matryer/is v1.4.1
 	github.com/neilotoole/slogt v1.1.0
@@ -54,7 +52,6 @@ require (
 	google.golang.org/grpc v1.65.0
 	google.golang.org/protobuf v1.34.2
 	gopkg.in/tomb.v2 v2.0.0-20161208151619-d5d1b5820637
-	modernc.org/sqlite v1.31.1
 )
 
 require (
@@ -130,6 +127,7 @@ require (
 	github.com/daixiang0/gci v0.13.4 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/denis-tingaikin/go-header v0.5.0 // indirect
+	github.com/dgraph-io/badger/v4 v4.2.0 // indirect
 	github.com/dgraph-io/ristretto v0.1.1 // indirect
 	github.com/distribution/reference v0.6.0 // indirect
 	github.com/dlclark/regexp2 v1.10.0 // indirect
@@ -187,7 +185,7 @@ require (
 	github.com/gostaticanalysis/comment v1.4.2 // indirect
 	github.com/gostaticanalysis/forcetypeassert v0.1.0 // indirect
 	github.com/gostaticanalysis/nilerr v0.1.1 // indirect
-	github.com/hamba/avro/v2 v2.22.1 // indirect
+	github.com/hamba/avro/v2 v2.23.0 // indirect
 	github.com/hashicorp/go-version v1.7.0 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
@@ -201,6 +199,7 @@ require (
 	github.com/jackc/pglogrepl v0.0.0-20240307033717-828fbfe908e9 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
+	github.com/jackc/pgx/v5 v5.6.0 // indirect
 	github.com/jackc/puddle/v2 v2.2.1 // indirect
 	github.com/jdx/go-netrc v1.0.0 // indirect
 	github.com/jgautheron/goconst v1.7.1 // indirect
@@ -352,6 +351,7 @@ require (
 	modernc.org/libc v1.55.3 // indirect
 	modernc.org/mathutil v1.6.0 // indirect
 	modernc.org/memory v1.8.0 // indirect
+	modernc.org/sqlite v1.31.1 // indirect
 	modernc.org/strutil v1.2.0 // indirect
 	modernc.org/token v1.1.0 // indirect
 	mvdan.cc/gofumpt v0.6.0 // indirect

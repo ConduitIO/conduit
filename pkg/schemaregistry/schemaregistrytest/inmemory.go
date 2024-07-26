@@ -26,6 +26,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/conduitio/conduit-commons/database/inmemory"
 	schemaregistry "github.com/conduitio/conduit-schema-registry"
 	"github.com/neilotoole/slogt"
 )
@@ -71,7 +72,11 @@ func inMemorySchemaRegistryURL(name string, logger *slog.Logger, port int) (stri
 	cleanup := func() {}
 	if srv == nil {
 		mux := http.NewServeMux()
-		schemaSrv := schemaregistry.NewServer(logger, schemaregistry.NewSchemaRegistry())
+		schemaRegistry, err := schemaregistry.NewSchemaRegistry(&inmemory.DB{})
+		if err != nil {
+			panic(fmt.Sprintf("failed creating schema registry: %v", err))
+		}
+		schemaSrv := schemaregistry.NewServer(logger, schemaRegistry)
 		schemaSrv.RegisterHandlers(mux)
 		srv = httptest.NewUnstartedServer(mux)
 		if port > 0 {
