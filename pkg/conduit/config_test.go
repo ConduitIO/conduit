@@ -17,7 +17,7 @@ package conduit
 import (
 	"testing"
 
-	"github.com/conduitio/conduit/pkg/foundation/database/inmemory"
+	"github.com/conduitio/conduit-commons/database/inmemory"
 	"github.com/matryer/is"
 )
 

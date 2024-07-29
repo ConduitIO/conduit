@@ -22,10 +22,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/conduitio/conduit-commons/database/badger"
 	schemaregistry "github.com/conduitio/conduit-schema-registry"
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/ctxutil"
-	"github.com/conduitio/conduit/pkg/foundation/database/badger"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/orchestrator/mock"
 	"github.com/conduitio/conduit/pkg/pipeline"
@@ -71,17 +71,16 @@ func TestPipelineSimple(t *testing.T) {
 		is.NoErr(err)
 	})
 
-	tokenService := connutils.NewAuthManager()
-	schemaService := connutils.NewSchemaService(
-		logger,
-		schemaregistry.NewSchemaRegistry(),
-		tokenService,
-	)
+	schemaRegistry, err := schemaregistry.NewSchemaRegistry(db)
+	is.NoErr(err)
+	authManager := connutils.NewAuthManager()
+	schemaService := connutils.NewSchemaService(logger, schemaRegistry, authManager)
+
 	connPluginService := conn_plugin.NewPluginService(
 		logger,
 		conn_builtin.NewRegistry(logger, conn_builtin.DefaultBuiltinConnectors, schemaService),
 		conn_standalone.NewRegistry(logger, ""),
-		tokenService,
+		authManager,
 	)
 	connPluginService.Init(ctx, "conn-utils-token:12345")
 

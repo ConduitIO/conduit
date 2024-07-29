@@ -24,10 +24,10 @@ import (
 	"time"
 
 	"github.com/conduitio/conduit-commons/cchan"
+	"github.com/conduitio/conduit-commons/database/inmemory"
 	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/foundation/database/inmemory"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/pipeline/stream"
 	"github.com/conduitio/conduit/pkg/plugin"

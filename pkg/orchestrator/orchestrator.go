@@ -19,10 +19,10 @@ package orchestrator
 import (
 	"context"
 
+	"github.com/conduitio/conduit-commons/database"
 	"github.com/conduitio/conduit-connector-protocol/pconnector"
 	processorSdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/connector"
-	"github.com/conduitio/conduit/pkg/foundation/database"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	connectorPlugin "github.com/conduitio/conduit/pkg/plugin/connector"
