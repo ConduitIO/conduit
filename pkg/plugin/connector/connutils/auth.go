@@ -31,7 +31,7 @@ type token struct {
 
 type AuthManager struct {
 	tokens map[string]bool
-	m      sync.Mutex
+	m      sync.RWMutex
 }
 
 func NewAuthManager() *AuthManager {
@@ -63,8 +63,8 @@ func (s *AuthManager) GenerateNew(connectorID string) string {
 }
 
 func (s *AuthManager) IsTokenValid(token string) error {
-	s.m.Lock()
-	defer s.m.Unlock()
+	s.m.RLock()
+	defer s.m.RUnlock()
 
 	if _, ok := s.tokens[token]; !ok {
 		return cerrors.Errorf("%q: %w", token, ErrInvalidToken)
