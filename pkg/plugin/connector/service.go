@@ -56,14 +56,14 @@ type PluginService struct {
 
 	builtinReg    builtinReg
 	standaloneReg standaloneReg
-	tokenService  *connutils.TokenService
+	tokenService  *connutils.AuthManager
 }
 
 func NewPluginService(
 	logger log.CtxLogger,
 	builtin builtinReg,
 	standalone standaloneReg,
-	tokenService *connutils.TokenService,
+	tokenService *connutils.AuthManager,
 ) *PluginService {
 	return &PluginService{
 		logger:        logger.WithComponent("connector.PluginService"),
@@ -85,7 +85,6 @@ func (s *PluginService) Check(context.Context) error {
 func (s *PluginService) NewDispenser(logger log.CtxLogger, name string, connectorID string) (Dispenser, error) {
 	logger = logger.WithComponent("plugin")
 
-	// todo deregister token when connector stops running
 	cfg := pconnector.PluginConfig{
 		Token:       s.tokenService.GenerateNew(connectorID),
 		ConnectorID: connectorID,

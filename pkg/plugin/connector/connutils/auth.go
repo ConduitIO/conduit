@@ -24,33 +24,35 @@ import (
 
 var ErrInvalidToken = cerrors.New("invalid token")
 
-type Token struct {
+type token struct {
 	Value       string `json:"value"`
 	ConnectorID string `json:"connector_id"`
 }
 
-type TokenService struct {
+type AuthManager struct {
 	tokens map[string]bool
 	m      sync.Mutex
 }
 
-func NewTokenService() *TokenService {
-	return &TokenService{
+func NewAuthManager() *AuthManager {
+	return &AuthManager{
 		tokens: make(map[string]bool),
 	}
 }
 
-func (s *TokenService) GenerateNew(connectorID string) string {
+func (s *AuthManager) GenerateNew(connectorID string) string {
 	s.m.Lock()
 	defer s.m.Unlock()
 
-	token := Token{
+	tkn := token{
 		Value:       uuid.NewString(),
 		ConnectorID: connectorID,
 	}
 
-	bytes, err := json.Marshal(token)
+	bytes, err := json.Marshal(tkn)
 	if err != nil {
+		// token is a struct we use internally, with fields that are known in advance,
+		// so an error isn't really expected.
 		panic(cerrors.Errorf("failed to marshal token: %w", err))
 	}
 
@@ -60,7 +62,7 @@ func (s *TokenService) GenerateNew(connectorID string) string {
 	return tokenStr
 }
 
-func (s *TokenService) IsTokenValid(token string) error {
+func (s *AuthManager) IsTokenValid(token string) error {
 	s.m.Lock()
 	defer s.m.Unlock()
 
@@ -71,7 +73,7 @@ func (s *TokenService) IsTokenValid(token string) error {
 	return nil
 }
 
-func (s *TokenService) Deregister(token string) {
+func (s *AuthManager) Deregister(token string) {
 	s.m.Lock()
 	defer s.m.Unlock()
 

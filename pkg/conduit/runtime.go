@@ -179,7 +179,7 @@ func createServices(r *Runtime) error {
 	if err != nil {
 		return cerrors.Errorf("failed to create schema registry: %w", err)
 	}
-	tokenService := connutils.NewTokenService()
+	tokenService := connutils.NewAuthManager()
 	schemaService := connutils.NewSchemaService(r.logger, schemaRegistry, tokenService)
 
 	connPluginService := conn_plugin.NewPluginService(

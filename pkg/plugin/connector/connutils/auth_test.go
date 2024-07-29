@@ -21,10 +21,10 @@ import (
 	"github.com/matryer/is"
 )
 
-func TestTokenService_IsTokenValid(t *testing.T) {
+func TestAuthManager_IsTokenValid(t *testing.T) {
 	is := is.New(t)
 
-	underTest := NewTokenService()
+	underTest := NewAuthManager()
 
 	token := underTest.GenerateNew("connector-id")
 
@@ -32,10 +32,10 @@ func TestTokenService_IsTokenValid(t *testing.T) {
 	is.NoErr(err)
 }
 
-func TestTokenService_Deregister(t *testing.T) {
+func TestAuthManager_Deregister(t *testing.T) {
 	is := is.New(t)
 
-	underTest := NewTokenService()
+	underTest := NewAuthManager()
 
 	token := underTest.GenerateNew("connector-id")
 	underTest.Deregister(token)

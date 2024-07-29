@@ -29,7 +29,7 @@ import (
 
 type SchemaService struct {
 	registry     schemaregistry.Registry
-	tokenService *TokenService
+	tokenService *AuthManager
 
 	logger log.CtxLogger
 }
@@ -39,7 +39,7 @@ var _ pconduit.SchemaService = (*SchemaService)(nil)
 func NewSchemaService(
 	logger log.CtxLogger,
 	registry schemaregistry.Registry,
-	tokenService *TokenService,
+	tokenService *AuthManager,
 ) *SchemaService {
 	return &SchemaService{
 		registry:     registry,

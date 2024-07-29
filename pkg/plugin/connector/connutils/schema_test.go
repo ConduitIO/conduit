@@ -50,7 +50,7 @@ func TestSchemaService_CreateSchema_ValidateToken(t *testing.T) {
 			underTest := NewSchemaService(
 				log.Nop(),
 				conduitschemaregistry.NewSchemaRegistry(),
-				NewTokenService(),
+				NewAuthManager(),
 			)
 			_, err := underTest.CreateSchema(ctx, pconduit.CreateSchemaRequest{})
 
@@ -86,7 +86,7 @@ func TestSchemaService_GetSchema_ValidateToken(t *testing.T) {
 			underTest := NewSchemaService(
 				log.Nop(),
 				conduitschemaregistry.NewSchemaRegistry(),
-				NewTokenService(),
+				NewAuthManager(),
 			)
 			_, err := underTest.GetSchema(ctx, pconduit.GetSchemaRequest{})
 

@@ -487,7 +487,7 @@ func TestService_IntegrationTestServices(t *testing.T) {
 		is.NoErr(err)
 	})
 
-	tokenService := connutils.NewTokenService()
+	tokenService := connutils.NewAuthManager()
 	schemaService := connutils.NewSchemaService(
 		logger,
 		schemaregistry.NewSchemaRegistry(),
