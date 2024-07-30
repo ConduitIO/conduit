@@ -87,10 +87,10 @@ func TestServiceLifecycle_buildNodes(t *testing.T) {
 	is.NoErr(err)
 
 	want := []stream.Node{
-		&stream.DLQHandlerNode{},
 		&stream.SourceNode{},
 		&stream.SourceAckerNode{},
 		&stream.MetricsNode{},
+		&stream.DLQHandlerNode{},
 		&stream.FaninNode{},
 		&stream.FanoutNode{},
 		&stream.MetricsNode{},
@@ -125,7 +125,7 @@ func TestServiceLifecycle_buildNodes(t *testing.T) {
 	}
 }
 
-func TestService_buildNodes_noSourceNode(t *testing.T) {
+func TestService_buildNodes_NoSourceNode(t *testing.T) {
 	is := is.New(t)
 	ctx, killAll := context.WithCancel(context.Background())
 	defer killAll()
@@ -166,11 +166,13 @@ func TestService_buildNodes_noSourceNode(t *testing.T) {
 		},
 		pl,
 	)
+
+	is.True(err != nil)
 	is.Equal(err.Error(), wantErr)
 	is.Equal(got, nil)
 }
 
-func TestService_buildNodes_noDestinationNode(t *testing.T) {
+func TestService_buildNodes_NoDestinationNode(t *testing.T) {
 	is := is.New(t)
 	ctx, killAll := context.WithCancel(context.Background())
 	defer killAll()
@@ -213,6 +215,7 @@ func TestService_buildNodes_noDestinationNode(t *testing.T) {
 		pl,
 	)
 
+	is.True(err != nil)
 	is.Equal(err.Error(), wantErr)
 	is.Equal(got, nil)
 }
