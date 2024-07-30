@@ -7,15 +7,20 @@ import (
 	"github.com/conduitio/conduit-commons/config"
 )
 
+const (
+	javascriptConfigScript     = "script"
+	javascriptConfigScriptPath = "script.path"
+)
+
 func (javascriptConfig) Parameters() map[string]config.Parameter {
 	return map[string]config.Parameter{
-		"script": {
+		javascriptConfigScript: {
 			Default:     "",
 			Description: "JavaScript code for this processor.\nIt needs to have a function `process()` that accept\na record and returns a record.\nThe `process()` function can either modify the input record and return it,\nor create a new record.\nIf a record needs to be filtered (dropped from the pipeline),\nthen the `process()` function should return `null`.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},
-		"script.path": {
+		javascriptConfigScriptPath: {
 			Default:     "",
 			Description: "The path to a .js file containing the processor code.",
 			Type:        config.ParameterTypeString,

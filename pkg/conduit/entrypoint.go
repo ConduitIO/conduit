@@ -79,7 +79,12 @@ func (*Entrypoint) Flags(cfg *Config) *flag.FlagSet {
 
 	flags.StringVar(&cfg.DB.Type, "db.type", cfg.DB.Type, "database type; accepts badger,postgres,inmemory,sqlite")
 	flags.StringVar(&cfg.DB.Badger.Path, "db.badger.path", cfg.DB.Badger.Path, "path to badger DB")
-	flags.StringVar(&cfg.DB.Postgres.ConnectionString, "db.postgres.connection-string", cfg.DB.Postgres.ConnectionString, "postgres connection string")
+	flags.StringVar(
+		&cfg.DB.Postgres.ConnectionString,
+		"db.postgres.connection-string",
+		cfg.DB.Postgres.ConnectionString,
+		"postgres connection string, may be a database URL or in PostgreSQL keyword/value format",
+	)
 	flags.StringVar(&cfg.DB.Postgres.Table, "db.postgres.table", cfg.DB.Postgres.Table, "postgres table in which to store data (will be created if it does not exist)")
 	flags.StringVar(&cfg.DB.SQLite.Path, "db.sqlite.path", cfg.DB.SQLite.Path, "path to sqlite3 DB")
 	flags.StringVar(&cfg.DB.SQLite.Table, "db.sqlite.table", cfg.DB.SQLite.Table, "sqlite3 table in which to store data (will be created if it does not exist)")
@@ -95,6 +100,9 @@ func (*Entrypoint) Flags(cfg *Config) *flag.FlagSet {
 
 	flags.StringVar(&cfg.Pipelines.Path, "pipelines.path", cfg.Pipelines.Path, "path to the directory that has the yaml pipeline configuration files, or a single pipeline configuration file")
 	flags.BoolVar(&cfg.Pipelines.ExitOnError, "pipelines.exit-on-error", cfg.Pipelines.ExitOnError, "exit Conduit if a pipeline experiences an error while running")
+
+	flags.StringVar(&cfg.SchemaRegistry.Type, "schema-registry.type", cfg.SchemaRegistry.Type, "schema registry type; accepts builtin,confluent")
+	flags.StringVar(&cfg.SchemaRegistry.Confluent.ConnectionString, "schema-registry.confluent.connection-string", cfg.SchemaRegistry.Confluent.ConnectionString, "confluent schema registry connection string")
 
 	// NB: flags with prefix dev.* are hidden from help output by default, they only show up using '-dev -help'
 	showDevHelp := flags.Bool("dev", false, "used together with the dev flag it shows dev flags")

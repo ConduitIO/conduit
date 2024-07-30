@@ -21,10 +21,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/conduitio/conduit-commons/database/inmemory"
+	"github.com/conduitio/conduit-commons/database/mock"
 	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/foundation/database/inmemory"
-	"github.com/conduitio/conduit/pkg/foundation/database/mock"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	pmock "github.com/conduitio/conduit/pkg/plugin/connector/mock"
 	"github.com/google/uuid"

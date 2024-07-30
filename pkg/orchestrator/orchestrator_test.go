@@ -22,14 +22,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/conduitio/conduit-commons/database/badger"
+	schemaregistry "github.com/conduitio/conduit-schema-registry"
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/ctxutil"
-	"github.com/conduitio/conduit/pkg/foundation/database/badger"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/orchestrator/mock"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	conn_plugin "github.com/conduitio/conduit/pkg/plugin/connector"
 	conn_builtin "github.com/conduitio/conduit/pkg/plugin/connector/builtin"
+	"github.com/conduitio/conduit/pkg/plugin/connector/connutils"
 	conn_standalone "github.com/conduitio/conduit/pkg/plugin/connector/standalone"
 	proc_plugin "github.com/conduitio/conduit/pkg/plugin/processor"
 	proc_builtin "github.com/conduitio/conduit/pkg/plugin/processor/builtin"
@@ -69,11 +71,16 @@ func TestPipelineSimple(t *testing.T) {
 		is.NoErr(err)
 	})
 
+	schemaRegistry, err := schemaregistry.NewSchemaRegistry(db)
+	is.NoErr(err)
+
+	schemaService := connutils.NewSchemaService(logger, schemaRegistry)
 	connPluginService := conn_plugin.NewPluginService(
 		logger,
-		conn_builtin.NewRegistry(logger, conn_builtin.DefaultDispenserFactories),
+		conn_builtin.NewRegistry(logger, conn_builtin.DefaultBuiltinConnectors, schemaService),
 		conn_standalone.NewRegistry(logger, ""),
 	)
+	connPluginService.Init(ctx, "conn-utils-token:12345", "conn-utils-token")
 
 	procPluginService := proc_plugin.NewPluginService(
 		logger,

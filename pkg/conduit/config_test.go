@@ -17,7 +17,7 @@ package conduit
 import (
 	"testing"
 
-	"github.com/conduitio/conduit/pkg/foundation/database/inmemory"
+	"github.com/conduitio/conduit-commons/database/inmemory"
 	"github.com/matryer/is"
 )
 
@@ -149,18 +149,8 @@ func TestConfig_Validate(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			var validConfig Config
-			validConfig.DB.Type = DBTypeInMemory
-			validConfig.DB.Badger.Path = "conduit.app"
-			validConfig.DB.Postgres.Table = "conduit_kv_store"
+			validConfig := DefaultConfig()
 			validConfig.DB.Postgres.ConnectionString = "postgres://user:pass@localhost:5432/mydb?sslmode=disable"
-			validConfig.API.Enabled = true
-			validConfig.API.HTTP.Address = ":8080"
-			validConfig.API.GRPC.Address = ":8084"
-			validConfig.Log.Level = "info"
-			validConfig.Log.Format = "cli"
-			validConfig.Pipelines.Path = "./pipelines"
-
 			underTest := tc.setupConfig(validConfig)
 			got := underTest.Validate()
 			if got == nil {

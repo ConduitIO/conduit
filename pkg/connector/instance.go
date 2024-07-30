@@ -86,7 +86,7 @@ type Connector interface {
 
 // PluginDispenserFetcher can fetch a plugin dispenser.
 type PluginDispenserFetcher interface {
-	NewDispenser(logger log.CtxLogger, name string) (connectorPlugin.Dispenser, error)
+	NewDispenser(logger log.CtxLogger, name string, connectorID string) (connectorPlugin.Dispenser, error)
 }
 
 func (i *Instance) Init(logger log.CtxLogger, persister *Persister) {
@@ -120,7 +120,7 @@ func (i *Instance) Connector(_ context.Context, dispenserFetcher PluginDispenser
 		return nil, ErrConnectorRunning
 	}
 
-	pluginDispenser, err := dispenserFetcher.NewDispenser(i.logger, i.Plugin)
+	pluginDispenser, err := dispenserFetcher.NewDispenser(i.logger, i.Plugin, i.ID)
 	if err != nil {
 		return nil, cerrors.Errorf("failed to get plugin dispenser: %w", err)
 	}

@@ -24,10 +24,10 @@ import (
 	"time"
 
 	"github.com/conduitio/conduit-commons/cchan"
+	"github.com/conduitio/conduit-commons/database/inmemory"
 	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/foundation/database/inmemory"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/pipeline/stream"
 	"github.com/conduitio/conduit/pkg/plugin"
@@ -649,7 +649,7 @@ func (tpf testProcessorFetcher) Get(_ context.Context, id string) (*processor.In
 // testPluginFetcher fulfills the PluginFetcher interface.
 type testPluginFetcher map[string]connectorPlugin.Dispenser
 
-func (tpf testPluginFetcher) NewDispenser(_ log.CtxLogger, name string) (connectorPlugin.Dispenser, error) {
+func (tpf testPluginFetcher) NewDispenser(_ log.CtxLogger, name string, _ string) (connectorPlugin.Dispenser, error) {
 	plug, ok := tpf[name]
 	if !ok {
 		return nil, plugin.ErrPluginNotFound

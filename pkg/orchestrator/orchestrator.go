@@ -19,10 +19,10 @@ package orchestrator
 import (
 	"context"
 
+	"github.com/conduitio/conduit-commons/database"
 	"github.com/conduitio/conduit-connector-protocol/pconnector"
 	processorSdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/connector"
-	"github.com/conduitio/conduit/pkg/foundation/database"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	connectorPlugin "github.com/conduitio/conduit/pkg/plugin/connector"
@@ -122,7 +122,7 @@ type ProcessorService interface {
 
 type ConnectorPluginService interface {
 	List(ctx context.Context) (map[string]pconnector.Specification, error)
-	NewDispenser(logger log.CtxLogger, name string) (connectorPlugin.Dispenser, error)
+	NewDispenser(logger log.CtxLogger, name string, connectorID string) (connectorPlugin.Dispenser, error)
 	ValidateSourceConfig(ctx context.Context, name string, settings map[string]string) error
 	ValidateDestinationConfig(ctx context.Context, name string, settings map[string]string) error
 }

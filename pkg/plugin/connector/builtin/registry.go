@@ -26,44 +26,47 @@ import (
 	"github.com/conduitio/conduit-connector-protocol/pconnector"
 	s3 "github.com/conduitio/conduit-connector-s3"
 	sdk "github.com/conduitio/conduit-connector-sdk"
+	"github.com/conduitio/conduit-connector-sdk/schema"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/conduitio/conduit/pkg/plugin/connector"
+	"github.com/conduitio/conduit/pkg/plugin/connector/connutils"
 )
 
 var (
-	// DefaultDispenserFactories contains default dispenser factories for
-	// built-in plugins. The key of the map is the import path of the module
+	// DefaultBuiltinConnectors contains the default built-in connectors.
+	// The key of the map is the import path of the module
 	// containing the connector implementation.
-	DefaultDispenserFactories = map[string]DispenserFactory{
-		// TODO update connectors to latest SDK and uncomment
-		"github.com/conduitio/conduit-connector-file":      NewDispenserFactory(file.Connector),
-		"github.com/conduitio/conduit-connector-generator": NewDispenserFactory(generator.Connector),
-		"github.com/conduitio/conduit-connector-kafka":     NewDispenserFactory(kafka.Connector),
-		"github.com/conduitio/conduit-connector-log":       NewDispenserFactory(connLog.Connector),
-		"github.com/conduitio/conduit-connector-postgres":  NewDispenserFactory(postgres.Connector),
-		"github.com/conduitio/conduit-connector-s3":        NewDispenserFactory(s3.Connector),
+	DefaultBuiltinConnectors = map[string]sdk.Connector{
+		"github.com/conduitio/conduit-connector-file":      file.Connector,
+		"github.com/conduitio/conduit-connector-generator": generator.Connector,
+		"github.com/conduitio/conduit-connector-kafka":     kafka.Connector,
+		"github.com/conduitio/conduit-connector-log":       connLog.Connector,
+		"github.com/conduitio/conduit-connector-postgres":  postgres.Connector,
+		"github.com/conduitio/conduit-connector-s3":        s3.Connector,
 	}
 )
 
 type Registry struct {
 	logger log.CtxLogger
 
+	connectors map[string]sdk.Connector
 	// plugins stores plugin blueprints in a 2D map, first key is the plugin
 	// name, the second key is the plugin version
 	plugins map[string]map[string]blueprint
+	service *connutils.SchemaService
 }
 
 type blueprint struct {
 	fullName         plugin.FullName
 	specification    pconnector.Specification
-	dispenserFactory DispenserFactory
+	dispenserFactory dispenserFactory
 }
 
-type DispenserFactory func(name plugin.FullName, logger log.CtxLogger) connector.Dispenser
+type dispenserFactory func(name plugin.FullName, connectorID string, logger log.CtxLogger) connector.Dispenser
 
-func NewDispenserFactory(conn sdk.Connector) DispenserFactory {
+func newDispenserFactory(conn sdk.Connector, token string) dispenserFactory {
 	if conn.NewSource == nil {
 		conn.NewSource = func() sdk.Source { return nil }
 	}
@@ -71,39 +74,65 @@ func NewDispenserFactory(conn sdk.Connector) DispenserFactory {
 		conn.NewDestination = func() sdk.Destination { return nil }
 	}
 
-	return func(name plugin.FullName, logger log.CtxLogger) connector.Dispenser {
+	cfg := pconnector.PluginConfig{
+		Token: token,
+	}
+
+	return func(name plugin.FullName, connectorID string, logger log.CtxLogger) connector.Dispenser {
 		return NewDispenser(
 			name,
+			connectorID,
 			logger,
 			func() pconnector.SpecifierPlugin {
 				return sdk.NewSpecifierPlugin(conn.NewSpecification(), conn.NewSource(), conn.NewDestination())
 			},
-			func() pconnector.SourcePlugin { return sdk.NewSourcePlugin(conn.NewSource()) },
-			func() pconnector.DestinationPlugin { return sdk.NewDestinationPlugin(conn.NewDestination()) },
+			func() pconnector.SourcePlugin {
+				// TODO add connector ID to cfg
+				// TODO generate token (based on the connector ID) and add token to cfg
+				// TODO get log level from logger/config
+				return sdk.NewSourcePlugin(conn.NewSource(), cfg)
+			},
+			func() pconnector.DestinationPlugin {
+				// TODO add connector ID to cfg
+				// TODO generate token (based on the connector ID) and add token to cfg
+				// TODO get log level from logger/config
+				return sdk.NewDestinationPlugin(conn.NewDestination(), cfg)
+			},
 		)
 	}
 }
 
-func NewRegistry(logger log.CtxLogger, factories map[string]DispenserFactory) *Registry {
+func NewRegistry(logger log.CtxLogger, connectors map[string]sdk.Connector, service *connutils.SchemaService) *Registry {
 	logger = logger.WithComponentFromType(Registry{})
-	buildInfo, ok := debug.ReadBuildInfo()
-	if !ok {
-		// we are using modules, build info should always be available, we are staying on the safe side
-		logger.Warn(context.Background()).Msg("build info not available, built-in plugin versions may not be read correctly")
-		buildInfo = &debug.BuildInfo{} // prevent nil pointer exceptions
-	}
+	// The built-in plugins use Conduit's own schema service
+	schema.Service = service
 
 	r := &Registry{
-		plugins: loadPlugins(buildInfo, factories),
-		logger:  logger,
+		logger:     logger,
+		connectors: connectors,
+		service:    service,
 	}
-	logger.Info(context.Background()).Int("count", len(r.List())).Msg("builtin plugins initialized")
+
 	return r
 }
 
-func loadPlugins(buildInfo *debug.BuildInfo, factories map[string]DispenserFactory) map[string]map[string]blueprint {
-	plugins := make(map[string]map[string]blueprint, len(factories))
-	for moduleName, factory := range factories {
+func (r *Registry) Init(ctx context.Context) {
+	buildInfo, ok := debug.ReadBuildInfo()
+	if !ok {
+		// we are using modules, build info should always be available, we are staying on the safe side
+		r.logger.Warn(ctx).Msg("build info not available, built-in plugin versions may not be read correctly")
+		buildInfo = &debug.BuildInfo{} // prevent nil pointer exceptions
+	}
+
+	r.plugins = r.loadPlugins(buildInfo)
+	r.logger.Info(ctx).Int("count", len(r.List())).Msg("builtin connector plugins initialized")
+}
+
+func (r *Registry) loadPlugins(buildInfo *debug.BuildInfo) map[string]map[string]blueprint {
+	plugins := make(map[string]map[string]blueprint, len(r.connectors))
+	for moduleName, conn := range r.connectors {
+		factory := newDispenserFactory(conn, r.service.Token())
+
 		specs, err := getSpecification(moduleName, factory, buildInfo)
 		if err != nil {
 			// stop initialization if a built-in plugin is misbehaving
@@ -136,8 +165,8 @@ func loadPlugins(buildInfo *debug.BuildInfo, factories map[string]DispenserFacto
 	return plugins
 }
 
-func getSpecification(moduleName string, factory DispenserFactory, buildInfo *debug.BuildInfo) (pconnector.Specification, error) {
-	dispenser := factory("", log.CtxLogger{})
+func getSpecification(moduleName string, factory dispenserFactory, buildInfo *debug.BuildInfo) (pconnector.Specification, error) {
+	dispenser := factory("", "", log.CtxLogger{})
 	specPlugin, err := dispenser.DispenseSpecifier()
 	if err != nil {
 		return pconnector.Specification{}, cerrors.Errorf("could not dispense specifier for built in plugin: %w", err)
@@ -171,7 +200,7 @@ func newFullName(pluginName, pluginVersion string) plugin.FullName {
 	return plugin.NewFullName(plugin.PluginTypeBuiltin, pluginName, pluginVersion)
 }
 
-func (r *Registry) NewDispenser(logger log.CtxLogger, fullName plugin.FullName) (connector.Dispenser, error) {
+func (r *Registry) NewDispenser(logger log.CtxLogger, fullName plugin.FullName, connectorID string) (connector.Dispenser, error) {
 	versionMap, ok := r.plugins[fullName.PluginName()]
 	if !ok {
 		return nil, plugin.ErrPluginNotFound
@@ -185,7 +214,7 @@ func (r *Registry) NewDispenser(logger log.CtxLogger, fullName plugin.FullName) 
 		return nil, cerrors.Errorf("could not find builtin plugin %q, only found versions %v: %w", fullName, availableVersions, plugin.ErrPluginNotFound)
 	}
 
-	return b.dispenserFactory(fullName, logger), nil
+	return b.dispenserFactory(fullName, connectorID, logger), nil
 }
 
 func (r *Registry) List() map[plugin.FullName]pconnector.Specification {

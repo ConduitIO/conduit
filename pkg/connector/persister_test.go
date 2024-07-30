@@ -20,7 +20,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/conduitio/conduit/pkg/foundation/database/inmemory"
+	"github.com/conduitio/conduit-commons/database/inmemory"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/google/uuid"
 	"github.com/matryer/is"
