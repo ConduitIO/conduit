@@ -39,12 +39,7 @@ func TestCleanupDispenser_DispenseSource_Fail(t *testing.T) {
 		DispenseSource().
 		Return(targetSource, wantErr)
 
-	underTest := connector.CleanupDispenser{
-		Target: targetDispenser,
-		Cleanup: func() {
-			called = true
-		},
-	}
+	underTest := connector.DispenserWithCleanup(targetDispenser, func() { called = true })
 
 	_, err := underTest.DispenseSource()
 	is.True(cerrors.Is(err, wantErr))
@@ -83,12 +78,7 @@ func TestCleanupDispenser_Source_Teardown(t *testing.T) {
 				Teardown(gomock.Any(), gomock.Any()).
 				Return(pconnector.SourceTeardownResponse{}, tc.wantErr)
 
-			underTest := connector.CleanupDispenser{
-				Target: targetDispenser,
-				Cleanup: func() {
-					called = true
-				},
-			}
+			underTest := connector.DispenserWithCleanup(targetDispenser, func() { called = true })
 
 			source, err := underTest.DispenseSource()
 			is.NoErr(err)
@@ -118,12 +108,7 @@ func TestCleanupDispenser_DispenseDestination_Fail(t *testing.T) {
 		DispenseDestination().
 		Return(targetDestination, wantErr)
 
-	underTest := connector.CleanupDispenser{
-		Target: targetDispenser,
-		Cleanup: func() {
-			called = true
-		},
-	}
+	underTest := connector.DispenserWithCleanup(targetDispenser, func() { called = true })
 
 	_, err := underTest.DispenseDestination()
 	is.True(cerrors.Is(err, wantErr))
@@ -162,12 +147,7 @@ func TestCleanupDispenser_Destination_Teardown(t *testing.T) {
 				Teardown(gomock.Any(), gomock.Any()).
 				Return(pconnector.DestinationTeardownResponse{}, tc.wantErr)
 
-			underTest := connector.CleanupDispenser{
-				Target: targetDispenser,
-				Cleanup: func() {
-					called = true
-				},
-			}
+			underTest := connector.DispenserWithCleanup(targetDispenser, func() { called = true })
 
 			source, err := underTest.DispenseDestination()
 			is.NoErr(err)

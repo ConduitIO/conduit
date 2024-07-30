@@ -96,12 +96,10 @@ func (s *PluginService) NewDispenser(logger log.CtxLogger, name string, connecto
 		return nil, err
 	}
 
-	return &CleanupDispenser{
-		Target: dispenser,
-		Cleanup: func() {
-			s.tokenService.Deregister(cfg.Token)
-		},
-	}, nil
+	return DispenserWithCleanup(
+		dispenser,
+		func() { s.tokenService.Deregister(cfg.Token) },
+	), nil
 }
 
 func (s *PluginService) List(context.Context) (map[string]pconnector.Specification, error) {
