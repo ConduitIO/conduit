@@ -17,8 +17,6 @@ package standalone
 import (
 	"bytes"
 	"context"
-	"reflect"
-
 	"github.com/conduitio/conduit-processor-sdk/pprocutils"
 	"github.com/conduitio/conduit-processor-sdk/pprocutils/v1/fromproto"
 	"github.com/conduitio/conduit-processor-sdk/pprocutils/v1/toproto"
@@ -58,7 +56,10 @@ func (f hostModuleFunctions) Functions() wazergo.Functions[*hostModuleInstance] 
 // Instantiate creates a new instance of the module. This is called by the
 // runtime when a new instance of the module is created.
 func (f hostModuleFunctions) Instantiate(_ context.Context, opts ...hostModuleOption) (*hostModuleInstance, error) {
-	mod := &hostModuleInstance{}
+	mod := &hostModuleInstance{
+		parkedResponses:  make(map[string]proto.Message),
+		lastRequestBytes: make(map[string][]byte),
+	}
 	wazergo.Configure(mod, opts...)
 	if mod.commandRequests == nil {
 		return nil, cerrors.New("missing command requests channel")
@@ -90,16 +91,11 @@ type hostModuleInstance struct {
 	logger           log.CtxLogger
 	commandRequests  <-chan *processorv1.CommandRequest
 	commandResponses chan<- tuple[*processorv1.CommandResponse, error]
+	schemaService    pprocutils.SchemaService
 
 	parkedCommandRequest *processorv1.CommandRequest
-
-	parkedCreateSchemaResponse *procutilsv1.CreateSchemaResponse
-	parkedCreateSchemaBuffer   []byte
-
-	parkedGetSchemaResponse *procutilsv1.GetSchemaResponse
-	parkedGetSchemaBuffer   []byte
-
-	schemaService pprocutils.SchemaService
+	parkedResponses      map[string]proto.Message
+	lastRequestBytes     map[string][]byte
 }
 
 func (*hostModuleInstance) Close(context.Context) error { return nil }
@@ -163,58 +159,59 @@ func (m *hostModuleInstance) commandResponse(ctx context.Context, buf types.Byte
 	return 0
 }
 
-func (m *hostModuleInstance) handleSchemaRequest(
+// handleWasmRequest is a helper function that handles WASM requests. It
+// unmarshalls the request, calls the service function, and marshals the response.
+// If the buffer is too small, it parks the response and returns the size of the
+// response. The next call to this method will return the same response.
+func (m *hostModuleInstance) handleWasmRequest(
 	ctx context.Context,
 	buf types.Bytes,
-	parkedResponse proto.Message,
-	parkedBuffer *[]byte,
-	serviceFunc func(int) (proto.Message, error),
+	serviceMethod string,
+	serviceFunc func(ctx context.Context, buf types.Bytes) (proto.Message, error),
 ) types.Uint32 {
-	// Check if there's a parked response from the last call
-	if !reflect.ValueOf(parkedResponse).IsNil() {
-		if bytes.Equal(buf[:len(*parkedBuffer)], *parkedBuffer) {
-			out, err := proto.MarshalOptions{}.MarshalAppend(buf[:0], parkedResponse)
-			if err != nil {
-				m.logger.Err(ctx, err).Msg("failed marshalling protobuf create schema response")
-				return pprocutils.ErrorCodeStart
+	lastRequestBytes := m.lastRequestBytes[serviceMethod]
+	parkedResponse := m.parkedResponses[serviceMethod]
+
+	// no request/response parked or the buffer contains a new request
+	if parkedResponse == nil ||
+		(len(buf) >= len(lastRequestBytes) &&
+			!bytes.Equal(lastRequestBytes, buf[:len(lastRequestBytes)])) {
+		resp, err := serviceFunc(ctx, buf)
+		if err != nil {
+			m.logger.Err(ctx, err).
+				Str("method", serviceMethod).
+				Msg("failed executing service method")
+			var pErr *pprocutils.Error
+			if cerrors.As(err, &pErr) {
+				return types.Uint32(pErr.ErrCode)
 			}
-			parkedResponse = nil
-			*parkedBuffer = nil
-			return types.Uint32(len(out))
+			return pprocutils.ErrorCodeStart // TODO use better error
 		}
+		lastRequestBytes = buf
+		parkedResponse = resp
+
+		m.lastRequestBytes[serviceMethod] = lastRequestBytes
+		m.parkedResponses[serviceMethod] = parkedResponse
 	}
-	length := len(buf)
-	if *parkedBuffer != nil {
-		length = len(*parkedBuffer)
-	}
-	resp, err := serviceFunc(length)
-	var pErr *pprocutils.Error
-	if err != nil {
-		if cerrors.As(err, &pErr) {
-			return types.Uint32(pErr.ErrCode)
-		}
-		return pprocutils.ErrorCodeStart
-	}
-	parkedResponse = resp
-	*parkedBuffer = buf
 
 	// If the buffer is too small, we park the response and return the size of the
 	// response. The next call to this method will return the same response.
-	if size := proto.Size(resp); len(buf) < size {
+	if size := proto.Size(parkedResponse); len(buf) < size {
 		m.logger.Warn(ctx).
 			Int("response_bytes", size).
 			Int("allocated_bytes", len(buf)).
-			Msgf("insufficient memory, response will be parked until next call to get_schema")
+			Msgf("insufficient memory, response will be parked until next call to %s", serviceMethod)
 		return types.Uint32(size)
 	}
 
-	out, err := proto.MarshalOptions{}.MarshalAppend(buf[:0], resp)
+	out, err := proto.MarshalOptions{}.MarshalAppend(buf[:0], parkedResponse)
 	if err != nil {
 		m.logger.Err(ctx, err).Msg("failed marshalling protobuf create schema response")
-		return pprocutils.ErrorCodeStart
+		return pprocutils.ErrorCodeStart // TODO use better error
 	}
-	parkedResponse = nil
-	*parkedBuffer = nil
+
+	m.lastRequestBytes[serviceMethod] = nil
+	m.parkedResponses[serviceMethod] = nil
 
 	return types.Uint32(len(out))
 }
@@ -225,9 +222,9 @@ func (m *hostModuleInstance) handleSchemaRequest(
 func (m *hostModuleInstance) createSchema(ctx context.Context, buf types.Bytes) types.Uint32 {
 	m.logger.Trace(ctx).Msg("executing create_schema")
 
-	serviceFunc := func(length int) (proto.Message, error) {
+	serviceFunc := func(ctx context.Context, buf types.Bytes) (proto.Message, error) {
 		var req procutilsv1.CreateSchemaRequest
-		err := proto.Unmarshal(buf[:length], &req)
+		err := proto.Unmarshal(buf, &req)
 		if err != nil {
 			m.logger.Err(ctx, err).Msg("failed unmarshalling protobuf create schema request")
 			return nil, err
@@ -239,12 +236,7 @@ func (m *hostModuleInstance) createSchema(ctx context.Context, buf types.Bytes) 
 		return toproto.CreateSchemaResponse(schemaResp), nil
 	}
 
-	size := m.handleSchemaRequest(ctx, buf, m.parkedCreateSchemaResponse, &m.parkedCreateSchemaBuffer, serviceFunc)
-	if size >= pprocutils.ErrorCodeStart {
-		m.logger.Error(ctx).Msg("failed to handle create schema request")
-	}
-
-	return size
+	return m.handleWasmRequest(ctx, buf, "create_schema", serviceFunc)
 }
 
 // getSchema is the exported function that is called by the WASM module to
@@ -253,9 +245,9 @@ func (m *hostModuleInstance) createSchema(ctx context.Context, buf types.Bytes) 
 func (m *hostModuleInstance) getSchema(ctx context.Context, buf types.Bytes) types.Uint32 {
 	m.logger.Trace(ctx).Msg("executing get_schema")
 
-	serviceFunc := func(length int) (proto.Message, error) {
+	serviceFunc := func(ctx context.Context, buf types.Bytes) (proto.Message, error) {
 		var req procutilsv1.GetSchemaRequest
-		err := proto.Unmarshal(buf[:length], &req)
+		err := proto.Unmarshal(buf, &req)
 		if err != nil {
 			m.logger.Err(ctx, err).Msg("failed unmarshalling protobuf get schema request")
 			return nil, err
@@ -267,9 +259,5 @@ func (m *hostModuleInstance) getSchema(ctx context.Context, buf types.Bytes) typ
 		return toproto.GetSchemaResponse(schemaResp), nil
 	}
 
-	size := m.handleSchemaRequest(ctx, buf, m.parkedGetSchemaResponse, &m.parkedGetSchemaBuffer, serviceFunc)
-	if size >= pprocutils.ErrorCodeStart {
-		m.logger.Error(ctx).Msg("failed to handle get schema request")
-	}
-	return size
+	return m.handleWasmRequest(ctx, buf, "get_schema", serviceFunc)
 }

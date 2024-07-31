@@ -59,7 +59,7 @@ func (s *SchemaService) CreateSchema(ctx context.Context, req pprocutils.CreateS
 		if cerrors.As(err, &respErr) {
 			return pprocutils.CreateSchemaResponse{}, unwrapSrError(respErr)
 		}
-		return pprocutils.CreateSchemaResponse{}, pprocutils.ErrInvalidSchema
+		return pprocutils.CreateSchemaResponse{}, cerrors.Errorf("failed to create schema: %w", err)
 	}
 	return pprocutils.CreateSchemaResponse{
 		Schema: toschema.SrSubjectSchema(ss),
@@ -73,7 +73,7 @@ func (s *SchemaService) GetSchema(ctx context.Context, req pprocutils.GetSchemaR
 		if cerrors.As(err, &respErr) {
 			return pprocutils.GetSchemaResponse{}, unwrapSrError(respErr)
 		}
-		return pprocutils.GetSchemaResponse{}, pprocutils.ErrSubjectNotFound
+		return pprocutils.GetSchemaResponse{}, cerrors.Errorf("failed to get schema by subject and version: %w", err)
 	}
 
 	return pprocutils.GetSchemaResponse{

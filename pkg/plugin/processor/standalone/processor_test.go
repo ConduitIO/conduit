@@ -235,3 +235,18 @@ func TestWASMProcessor_Process_Panic(t *testing.T) {
 	err = underTest.Teardown(ctx)
 	is.True(cerrors.Is(err, plugin.ErrPluginNotRunning))
 }
+
+func TestWASMProcessor_Configure_Schema_Success(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	logger := log.Test(t)
+
+	underTest, err := newWASMProcessor(ctx, TestRuntime, ChaosProcessorModule, CompiledHostModule, schema.NewInMemoryService(), "test-processor", logger)
+	is.NoErr(err)
+
+	err = underTest.Configure(ctx, map[string]string{"configure": "create_and_get_schema"})
+	is.NoErr(err)
+
+	// Teardown still works
+	is.NoErr(underTest.Teardown(ctx))
+}

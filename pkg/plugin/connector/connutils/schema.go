@@ -28,8 +28,8 @@ import (
 )
 
 type SchemaService struct {
-	registry     schemaregistry.Registry
-	tokenService *AuthManager
+	registry    schemaregistry.Registry
+	authManager *AuthManager
 
 	logger log.CtxLogger
 }
@@ -39,12 +39,12 @@ var _ pconnutils.SchemaService = (*SchemaService)(nil)
 func NewSchemaService(
 	logger log.CtxLogger,
 	registry schemaregistry.Registry,
-	tokenService *AuthManager,
+	authManager *AuthManager,
 ) *SchemaService {
 	return &SchemaService{
-		registry:     registry,
-		logger:       logger.WithComponent("connutils.SchemaService"),
-		tokenService: tokenService,
+		registry:    registry,
+		logger:      logger.WithComponent("connutils.SchemaService"),
+		authManager: authManager,
 	}
 }
 
@@ -57,7 +57,7 @@ func (s *SchemaService) Check(ctx context.Context) error {
 }
 
 func (s *SchemaService) CreateSchema(ctx context.Context, req pconnutils.CreateSchemaRequest) (pconnutils.CreateSchemaResponse, error) {
-	err := s.tokenService.IsTokenValid(pconnutils.ConnectorTokenFromContext(ctx))
+	err := s.authManager.IsTokenValid(pconnutils.ConnectorTokenFromContext(ctx))
 	if err != nil {
 		return pconnutils.CreateSchemaResponse{}, err
 	}
@@ -79,7 +79,7 @@ func (s *SchemaService) CreateSchema(ctx context.Context, req pconnutils.CreateS
 }
 
 func (s *SchemaService) GetSchema(ctx context.Context, req pconnutils.GetSchemaRequest) (pconnutils.GetSchemaResponse, error) {
-	err := s.tokenService.IsTokenValid(pconnutils.ConnectorTokenFromContext(ctx))
+	err := s.authManager.IsTokenValid(pconnutils.ConnectorTokenFromContext(ctx))
 	if err != nil {
 		return pconnutils.GetSchemaResponse{}, err
 	}
@@ -100,8 +100,7 @@ func (s *SchemaService) GetSchema(ctx context.Context, req pconnutils.GetSchemaR
 
 func unwrapSrError(e *sr.ResponseError) error {
 	switch e.ErrorCode {
-	case conduitschemaregistry.ErrorCodeSubjectNotFound,
-		conduitschemaregistry.ErrorCodeSchemaNotFound:
+	case conduitschemaregistry.ErrorCodeSubjectNotFound:
 		return pconnutils.ErrSubjectNotFound
 	case conduitschemaregistry.ErrorCodeVersionNotFound:
 		return pconnutils.ErrVersionNotFound
