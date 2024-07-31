@@ -190,19 +190,20 @@ each configuration option based on the following priorities:
       connection-string: postgres://localhost:5432/conduitdb # -db.postgres.connection-string or CONDUIT_DB_POSTGRES_CONNECTION_STRING
   ```
 
-## Storage 
+## Storage
 
 Conduit's own data (information about pipelines, connectors, etc.) can be stored
 in the following databases:
-* BadgerDB (default)
-* PostgreSQL
-* SQLite
+
+- BadgerDB (default)
+- PostgreSQL
+- SQLite
 
 It's also possible to store all the data in memory, which is sometimes useful
 for development purposes.
 
 The database type used can be configured with the `db.type` parameter (through
-any of the [configuration](#configuration) options in Conduit).
+any of the [configuration](#configuring-conduit) options in Conduit).
 For example, the CLI flag to use a PostgresSQL database with Conduit is as
 follows: `-db.type=postgres`.
 
@@ -212,6 +213,7 @@ example, the CLI flag to use a PostgreSQL instance listening on `localhost:5432`
 would be: `-db.postgres.connection-string=postgres://localhost:5432/conduitdb`.
 
 The full example in our case would be:
+
 ```shell
 ./conduit -db.type=postgres -db.postgres.connection-string="postgresql://localhost:5432/conduitdb"
 ```
