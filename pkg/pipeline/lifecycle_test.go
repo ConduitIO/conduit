@@ -24,10 +24,10 @@ import (
 	"time"
 
 	"github.com/conduitio/conduit-commons/cchan"
+	"github.com/conduitio/conduit-commons/database/inmemory"
 	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/foundation/database/inmemory"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/pipeline/stream"
 	"github.com/conduitio/conduit/pkg/plugin"
@@ -87,10 +87,10 @@ func TestServiceLifecycle_buildNodes(t *testing.T) {
 	is.NoErr(err)
 
 	want := []stream.Node{
-		&stream.DLQHandlerNode{},
 		&stream.SourceNode{},
 		&stream.SourceAckerNode{},
 		&stream.MetricsNode{},
+		&stream.DLQHandlerNode{},
 		&stream.FaninNode{},
 		&stream.FanoutNode{},
 		&stream.MetricsNode{},
@@ -123,6 +123,101 @@ func TestServiceLifecycle_buildNodes(t *testing.T) {
 			is.Equal(gotDestination.Instance, dlq)
 		}
 	}
+}
+
+func TestService_buildNodes_NoSourceNode(t *testing.T) {
+	is := is.New(t)
+	ctx, killAll := context.WithCancel(context.Background())
+	defer killAll()
+	ctrl := gomock.NewController(t)
+	logger := log.New(zerolog.Nop())
+	db := &inmemory.DB{}
+	persister := connector.NewPersister(logger, db, time.Second, 3)
+
+	ps := NewService(logger, db)
+
+	wantErr := "can't build pipeline without any source connectors"
+
+	destination := dummyDestination(persister)
+	dlq := dummyDestination(persister)
+	pl := &Instance{
+		ID:     uuid.NewString(),
+		Config: Config{Name: "test-pipeline"},
+		Status: StatusUserStopped,
+		DLQ: DLQ{
+			Plugin:              dlq.Plugin,
+			Settings:            map[string]string{},
+			WindowSize:          3,
+			WindowNackThreshold: 2,
+		},
+		ConnectorIDs: []string{destination.ID},
+	}
+
+	got, err := ps.buildNodes(
+		ctx,
+		testConnectorFetcher{
+			destination.ID: destination,
+			testDLQID:      dlq,
+		},
+		testProcessorFetcher{},
+		testPluginFetcher{
+			destination.Plugin: pmock.NewDispenser(ctrl),
+			dlq.Plugin:         pmock.NewDispenser(ctrl),
+		},
+		pl,
+	)
+
+	is.True(err != nil)
+	is.Equal(err.Error(), wantErr)
+	is.Equal(got, nil)
+}
+
+func TestService_buildNodes_NoDestinationNode(t *testing.T) {
+	is := is.New(t)
+	ctx, killAll := context.WithCancel(context.Background())
+	defer killAll()
+	ctrl := gomock.NewController(t)
+	logger := log.New(zerolog.Nop())
+	db := &inmemory.DB{}
+	persister := connector.NewPersister(logger, db, time.Second, 3)
+
+	ps := NewService(logger, db)
+
+	wantErr := "can't build pipeline without any destination connectors"
+
+	source := dummySource(persister)
+	dlq := dummyDestination(persister)
+
+	pl := &Instance{
+		ID:     uuid.NewString(),
+		Config: Config{Name: "test-pipeline"},
+		Status: StatusUserStopped,
+		DLQ: DLQ{
+			Plugin:              dlq.Plugin,
+			Settings:            map[string]string{},
+			WindowSize:          3,
+			WindowNackThreshold: 2,
+		},
+		ConnectorIDs: []string{source.ID},
+	}
+
+	got, err := ps.buildNodes(
+		ctx,
+		testConnectorFetcher{
+			source.ID: source,
+			testDLQID: dlq,
+		},
+		testProcessorFetcher{},
+		testPluginFetcher{
+			source.Plugin: pmock.NewDispenser(ctrl),
+			dlq.Plugin:    pmock.NewDispenser(ctrl),
+		},
+		pl,
+	)
+
+	is.True(err != nil)
+	is.Equal(err.Error(), wantErr)
+	is.Equal(got, nil)
 }
 
 func TestServiceLifecycle_PipelineSuccess(t *testing.T) {

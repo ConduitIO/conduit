@@ -18,10 +18,10 @@ import (
 	"context"
 	"testing"
 
+	"github.com/conduitio/conduit-commons/database/inmemory"
+	dbmock "github.com/conduitio/conduit-commons/database/mock"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/foundation/database/inmemory"
-	dbmock "github.com/conduitio/conduit/pkg/foundation/database/mock"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
 	proc_plugin "github.com/conduitio/conduit/pkg/plugin/processor"
