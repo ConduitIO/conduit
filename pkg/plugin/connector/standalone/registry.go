@@ -21,9 +21,9 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/conduitio/conduit-connector-protocol/pconduit"
 	"github.com/conduitio/conduit-connector-protocol/pconnector"
 	"github.com/conduitio/conduit-connector-protocol/pconnector/client"
+	"github.com/conduitio/conduit-connector-protocol/pconnutils"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
@@ -164,9 +164,9 @@ func (r *Registry) loadSpecifications(pluginPath string) (pconnector.Specificati
 	dispenser, err := NewDispenser(
 		zerolog.Nop(),
 		pluginPath,
-		client.WithEnvVar(pconduit.EnvConduitConnectorUtilitiesGRPCTarget, r.connUtilsAddr),
-		client.WithEnvVar(pconduit.EnvConduitConnectorToken, "irrelevant-token"),
-		client.WithEnvVar(pconduit.EnvConduitConnectorID, "load-specifications"),
+		client.WithEnvVar(pconnutils.EnvConduitConnectorUtilitiesGRPCTarget, r.connUtilsAddr),
+		client.WithEnvVar(pconnutils.EnvConduitConnectorToken, "irrelevant-token"),
+		client.WithEnvVar(pconnutils.EnvConduitConnectorID, "load-specifications"),
 	)
 	if err != nil {
 		return pconnector.Specification{}, cerrors.Errorf("failed to create connector dispenser: %w", err)
@@ -206,9 +206,9 @@ func (r *Registry) NewDispenser(logger log.CtxLogger, fullName plugin.FullName, 
 	return NewDispenser(
 		logger.ZerologWithComponent(),
 		bp.Path,
-		client.WithEnvVar(pconduit.EnvConduitConnectorUtilitiesGRPCTarget, r.connUtilsAddr),
-		client.WithEnvVar(pconduit.EnvConduitConnectorToken, cfg.Token),
-		client.WithEnvVar(pconduit.EnvConduitConnectorID, cfg.ConnectorID),
+		client.WithEnvVar(pconnutils.EnvConduitConnectorUtilitiesGRPCTarget, r.connUtilsAddr),
+		client.WithEnvVar(pconnutils.EnvConduitConnectorToken, cfg.Token),
+		client.WithEnvVar(pconnutils.EnvConduitConnectorID, cfg.ConnectorID),
 	)
 }
 

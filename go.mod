@@ -11,12 +11,12 @@ require (
 	github.com/conduitio/conduit-commons v0.2.1-0.20240723194042-1db31d4f6d85
 	github.com/conduitio/conduit-connector-file v0.6.1-0.20240709112929-6207f9f8efcf
 	github.com/conduitio/conduit-connector-generator v0.6.1-0.20240621111436-e9fa3464f7b2
-	github.com/conduitio/conduit-connector-kafka v0.8.1-0.20240621111431-87c01cf39a06
+	github.com/conduitio/conduit-connector-kafka v0.8.1-0.20240731132439-34be835edabf
 	github.com/conduitio/conduit-connector-log v0.3.1-0.20240621111440-e2f0f04a35a4
 	github.com/conduitio/conduit-connector-postgres v0.7.6-0.20240630172132-84b5a6e6104f
-	github.com/conduitio/conduit-connector-protocol v0.6.1-0.20240724140503-f2dd0a3e4d36
+	github.com/conduitio/conduit-connector-protocol v0.6.1-0.20240730102156-29a2e67ad980
 	github.com/conduitio/conduit-connector-s3 v0.5.2-0.20240630172807-e278fde1fb46
-	github.com/conduitio/conduit-connector-sdk v0.9.2-0.20240725112309-ca667d668641
+	github.com/conduitio/conduit-connector-sdk v0.9.2-0.20240731123633-05f6d05cf002
 	github.com/conduitio/conduit-processor-sdk v0.1.2-0.20240516124003-442e4a3f0edd
 	github.com/conduitio/conduit-schema-registry v0.0.0-20240725155046-a0fdb61d2588
 	github.com/conduitio/yaml/v3 v3.3.0
