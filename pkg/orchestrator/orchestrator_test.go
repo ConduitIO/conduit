@@ -73,14 +73,16 @@ func TestPipelineSimple(t *testing.T) {
 
 	schemaRegistry, err := schemaregistry.NewSchemaRegistry(db)
 	is.NoErr(err)
+	authManager := connutils.NewAuthManager()
+	schemaService := connutils.NewSchemaService(logger, schemaRegistry, authManager)
 
-	schemaService := connutils.NewSchemaService(logger, schemaRegistry)
 	connPluginService := conn_plugin.NewPluginService(
 		logger,
 		conn_builtin.NewRegistry(logger, conn_builtin.DefaultBuiltinConnectors, schemaService),
 		conn_standalone.NewRegistry(logger, ""),
+		authManager,
 	)
-	connPluginService.Init(ctx, "conn-utils-token:12345", "conn-utils-token")
+	connPluginService.Init(ctx, "conn-utils-token:12345")
 
 	procPluginService := proc_plugin.NewPluginService(
 		logger,

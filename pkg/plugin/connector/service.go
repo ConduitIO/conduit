@@ -21,6 +21,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
+	"github.com/conduitio/conduit/pkg/plugin/connector/connutils"
 )
 
 // registry is an object that can create new plugin dispensers. We need to use
@@ -28,7 +29,7 @@ import (
 // builtin and standalone packages.
 // There are two registries that implement this interface: builtinReg and standaloneReg
 type registry interface {
-	NewDispenser(logger log.CtxLogger, name plugin.FullName, connectorID string) (Dispenser, error)
+	NewDispenser(logger log.CtxLogger, name plugin.FullName, cfg pconnector.PluginConfig) (Dispenser, error)
 	List() map[plugin.FullName]pconnector.Specification
 }
 
@@ -47,7 +48,7 @@ type builtinReg interface {
 type standaloneReg interface {
 	registry
 
-	Init(ctx context.Context, connUtilsAddr string, connUtilsToken string)
+	Init(ctx context.Context, connUtilsAddr string)
 }
 
 type PluginService struct {
@@ -55,23 +56,26 @@ type PluginService struct {
 
 	builtinReg    builtinReg
 	standaloneReg standaloneReg
+	tokenService  *connutils.AuthManager
 }
 
 func NewPluginService(
 	logger log.CtxLogger,
 	builtin builtinReg,
 	standalone standaloneReg,
+	tokenService *connutils.AuthManager,
 ) *PluginService {
 	return &PluginService{
 		logger:        logger.WithComponent("connector.PluginService"),
 		builtinReg:    builtin,
 		standaloneReg: standalone,
+		tokenService:  tokenService,
 	}
 }
 
-func (s *PluginService) Init(ctx context.Context, connUtilsAddr string, connUtilsToken string) {
+func (s *PluginService) Init(ctx context.Context, connUtilsAddr string) {
 	s.builtinReg.Init(ctx)
-	s.standaloneReg.Init(ctx, connUtilsAddr, connUtilsToken)
+	s.standaloneReg.Init(ctx, connUtilsAddr)
 }
 
 func (s *PluginService) Check(context.Context) error {
@@ -81,22 +85,21 @@ func (s *PluginService) Check(context.Context) error {
 func (s *PluginService) NewDispenser(logger log.CtxLogger, name string, connectorID string) (Dispenser, error) {
 	logger = logger.WithComponent("plugin")
 
-	fullName := plugin.FullName(name)
-	switch fullName.PluginType() {
-	case plugin.PluginTypeStandalone:
-		return s.standaloneReg.NewDispenser(logger, fullName, connectorID)
-	case plugin.PluginTypeBuiltin:
-		return s.builtinReg.NewDispenser(logger, fullName, connectorID)
-	case plugin.PluginTypeAny:
-		d, err := s.standaloneReg.NewDispenser(logger, fullName, connectorID)
-		if err != nil {
-			s.logger.Debug(context.Background()).Err(err).Msg("could not find standalone plugin dispenser, falling back to builtin plugin")
-			d, err = s.builtinReg.NewDispenser(logger, fullName, connectorID)
-		}
-		return d, err
-	default:
-		return nil, cerrors.Errorf("invalid plugin name prefix %q", fullName.PluginType())
+	cfg := pconnector.PluginConfig{
+		Token:       s.tokenService.GenerateNew(connectorID),
+		ConnectorID: connectorID,
+		LogLevel:    logger.GetLevel().String(),
 	}
+
+	dispenser, err := s.newDispenser(logger, name, cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	return DispenserWithCleanup(
+		dispenser,
+		func() { s.tokenService.Deregister(cfg.Token) },
+	), nil
 }
 
 func (s *PluginService) List(context.Context) (map[string]pconnector.Specification, error) {
@@ -164,4 +167,23 @@ func (s *PluginService) ValidateDestinationConfig(ctx context.Context, name stri
 	}
 
 	return nil
+}
+
+func (s *PluginService) newDispenser(logger log.CtxLogger, name string, cfg pconnector.PluginConfig) (Dispenser, error) {
+	fullName := plugin.FullName(name)
+	switch fullName.PluginType() {
+	case plugin.PluginTypeStandalone:
+		return s.standaloneReg.NewDispenser(logger, fullName, cfg)
+	case plugin.PluginTypeBuiltin:
+		return s.builtinReg.NewDispenser(logger, fullName, cfg)
+	case plugin.PluginTypeAny:
+		d, err := s.standaloneReg.NewDispenser(logger, fullName, cfg)
+		if err != nil {
+			s.logger.Debug(context.Background()).Err(err).Msg("could not find standalone plugin dispenser, falling back to builtin plugin")
+			d, err = s.builtinReg.NewDispenser(logger, fullName, cfg)
+		}
+		return d, err
+	default:
+		return nil, cerrors.Errorf("invalid plugin name prefix %q", fullName.PluginType())
+	}
 }

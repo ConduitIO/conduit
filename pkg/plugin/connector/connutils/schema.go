@@ -24,23 +24,27 @@ import (
 	"github.com/conduitio/conduit/pkg/schemaregistry"
 	"github.com/conduitio/conduit/pkg/schemaregistry/fromschema"
 	"github.com/conduitio/conduit/pkg/schemaregistry/toschema"
-	"github.com/google/uuid"
 	"github.com/twmb/franz-go/pkg/sr"
 )
 
 type SchemaService struct {
-	registry schemaregistry.Registry
-	logger   log.CtxLogger
-	token    string
+	registry     schemaregistry.Registry
+	tokenService *AuthManager
+
+	logger log.CtxLogger
 }
 
 var _ pconduit.SchemaService = (*SchemaService)(nil)
 
-func NewSchemaService(logger log.CtxLogger, registry schemaregistry.Registry) *SchemaService {
+func NewSchemaService(
+	logger log.CtxLogger,
+	registry schemaregistry.Registry,
+	tokenService *AuthManager,
+) *SchemaService {
 	return &SchemaService{
-		registry: registry,
-		logger:   logger.WithComponent("connutils.SchemaService"),
-		token:    uuid.NewString(),
+		registry:     registry,
+		logger:       logger.WithComponent("connutils.SchemaService"),
+		tokenService: tokenService,
 	}
 }
 
@@ -53,7 +57,7 @@ func (s *SchemaService) Check(ctx context.Context) error {
 }
 
 func (s *SchemaService) CreateSchema(ctx context.Context, req pconduit.CreateSchemaRequest) (pconduit.CreateSchemaResponse, error) {
-	err := s.validateToken(ctx)
+	err := s.tokenService.IsTokenValid(pconduit.ConnectorTokenFromContext(ctx))
 	if err != nil {
 		return pconduit.CreateSchemaResponse{}, err
 	}
@@ -75,7 +79,7 @@ func (s *SchemaService) CreateSchema(ctx context.Context, req pconduit.CreateSch
 }
 
 func (s *SchemaService) GetSchema(ctx context.Context, req pconduit.GetSchemaRequest) (pconduit.GetSchemaResponse, error) {
-	err := s.validateToken(ctx)
+	err := s.tokenService.IsTokenValid(pconduit.ConnectorTokenFromContext(ctx))
 	if err != nil {
 		return pconduit.GetSchemaResponse{}, err
 	}
@@ -92,19 +96,6 @@ func (s *SchemaService) GetSchema(ctx context.Context, req pconduit.GetSchemaReq
 	return pconduit.GetSchemaResponse{
 		Schema: toschema.SrSubjectSchema(ss),
 	}, nil
-}
-
-func (s *SchemaService) Token() string {
-	return s.token
-}
-
-func (s *SchemaService) validateToken(ctx context.Context) error {
-	token := pconduit.ConnectorTokenFromContext(ctx)
-	if token != s.Token() {
-		return cerrors.Errorf("token %q is invalid", token)
-	}
-
-	return nil
 }
 
 func unwrapSrError(e *sr.ResponseError) error {

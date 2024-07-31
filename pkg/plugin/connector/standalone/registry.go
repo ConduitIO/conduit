@@ -32,10 +32,9 @@ import (
 )
 
 type Registry struct {
-	logger         log.CtxLogger
-	pluginDir      string
-	connUtilsAddr  string
-	connUtilsToken string
+	logger        log.CtxLogger
+	pluginDir     string
+	connUtilsAddr string
 
 	// plugins stores plugin blueprints in a 2D map, first key is the plugin
 	// name, the second key is the plugin version
@@ -70,9 +69,8 @@ func NewRegistry(logger log.CtxLogger, pluginDir string) *Registry {
 	return r
 }
 
-func (r *Registry) Init(ctx context.Context, connUtilsAddr string, connUtilsToken string) {
+func (r *Registry) Init(ctx context.Context, connUtilsAddr string) {
 	r.connUtilsAddr = connUtilsAddr
-	r.connUtilsToken = connUtilsToken
 
 	plugins := r.loadPlugins(ctx)
 	r.m.Lock()
@@ -167,7 +165,7 @@ func (r *Registry) loadSpecifications(pluginPath string) (pconnector.Specificati
 		zerolog.Nop(),
 		pluginPath,
 		client.WithEnvVar(pconduit.EnvConduitConnectorUtilitiesGRPCTarget, r.connUtilsAddr),
-		client.WithEnvVar(pconduit.EnvConduitConnectorSchemaToken, r.connUtilsToken),
+		client.WithEnvVar(pconduit.EnvConduitConnectorToken, "irrelevant-token"),
 		client.WithEnvVar(pconduit.EnvConduitConnectorID, "load-specifications"),
 	)
 	if err != nil {
@@ -187,7 +185,7 @@ func (r *Registry) loadSpecifications(pluginPath string) (pconnector.Specificati
 	return resp.Specification, nil
 }
 
-func (r *Registry) NewDispenser(logger log.CtxLogger, fullName plugin.FullName, connectorID string) (connector.Dispenser, error) {
+func (r *Registry) NewDispenser(logger log.CtxLogger, fullName plugin.FullName, cfg pconnector.PluginConfig) (connector.Dispenser, error) {
 	r.m.RLock()
 	defer r.m.RUnlock()
 
@@ -209,8 +207,8 @@ func (r *Registry) NewDispenser(logger log.CtxLogger, fullName plugin.FullName, 
 		logger.ZerologWithComponent(),
 		bp.Path,
 		client.WithEnvVar(pconduit.EnvConduitConnectorUtilitiesGRPCTarget, r.connUtilsAddr),
-		client.WithEnvVar(pconduit.EnvConduitConnectorSchemaToken, r.connUtilsToken),
-		client.WithEnvVar(pconduit.EnvConduitConnectorID, connectorID),
+		client.WithEnvVar(pconduit.EnvConduitConnectorToken, cfg.Token),
+		client.WithEnvVar(pconduit.EnvConduitConnectorID, cfg.ConnectorID),
 	)
 }
 
