@@ -3,11 +3,10 @@
 - `cmd` - Contains main applications. The directory name for each application should match the name of the executable
   (e.g. `cmd/conduit` produces an executable called `conduit`). It is the responsibility of main applications to do 3
   things, it should not include anything else:
-    1. Read the configuration (from a file, the environment or arguments).
-    2. Instantiate, wire up and run internal services.
-    3. Listen for signals (i.e. SIGTERM, SIGINT) and forward them to internal services to ensure a graceful shutdown
-       (e.g. via a closed context).
-    - `conduit` - The entrypoint for the main Conduit executable.
+  1. Read the configuration (from a file, the environment or arguments).
+  2. Instantiate, wire up and run internal services.
+  3. Listen for signals (i.e. SIGTERM, SIGINT) and forward them to internal services to ensure a graceful shutdown (e.g. via a closed context).
+  - `conduit` - The entrypoint for the main Conduit executable.
 - `pkg` - The internal libraries and services that Conduit runs.
     - `conduit` - Defines the main runtime that ties all Conduit layers together.
     - `connector` - Code regarding connectors, including connector store, connector service, connector configurations

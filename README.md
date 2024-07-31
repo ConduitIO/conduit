@@ -296,7 +296,6 @@ documentation:
   provides more information about how Conduit exposes metrics.
 - [Conduit Package structure](docs/package_structure.md)
   provides more information about the different packages in Conduit.
- 
 
 ## Contributing
 
