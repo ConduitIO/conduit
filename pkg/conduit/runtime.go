@@ -33,8 +33,8 @@ import (
 	"github.com/conduitio/conduit-commons/database/inmemory"
 	"github.com/conduitio/conduit-commons/database/postgres"
 	"github.com/conduitio/conduit-commons/database/sqlite"
-	pconduitserver "github.com/conduitio/conduit-connector-protocol/pconduit/v1/server"
-	conduitv1 "github.com/conduitio/conduit-connector-protocol/proto/conduit/v1"
+	pconnutils "github.com/conduitio/conduit-connector-protocol/pconnutils/v1/server"
+	connutilsv1 "github.com/conduitio/conduit-connector-protocol/proto/connutils/v1"
 	conduitschemaregistry "github.com/conduitio/conduit-schema-registry"
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -480,8 +480,8 @@ func (r *Runtime) startConnectorUtils(ctx context.Context, t *tomb.Tomb) (net.Ad
 		grpc.StatsHandler(r.gRPCStatsHandler),
 	)
 
-	schemaServiceAPI := pconduitserver.NewSchemaServiceServer(r.schemaService)
-	conduitv1.RegisterSchemaServiceServer(grpcServer, schemaServiceAPI)
+	schemaServiceAPI := pconnutils.NewSchemaServiceServer(r.schemaService)
+	connutilsv1.RegisterSchemaServiceServer(grpcServer, schemaServiceAPI)
 
 	// Makes it easier to use command line tools to interact
 	// with the gRPC API.
