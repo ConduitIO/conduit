@@ -229,8 +229,10 @@ github.com/conduitio/conduit-connector-s3 v0.5.2-0.20240630172807-e278fde1fb46 h
 github.com/conduitio/conduit-connector-s3 v0.5.2-0.20240630172807-e278fde1fb46/go.mod h1:m+pf2cMF+qCwhMj9gUBV1BPGLPYauhtYkj2zFddfvdE=
 github.com/conduitio/conduit-connector-sdk v0.9.2-0.20240731123633-05f6d05cf002 h1:blkPwC39ZnLxleOoP10NCrBa6rMxY637F+kGXuaUfkY=
 github.com/conduitio/conduit-connector-sdk v0.9.2-0.20240731123633-05f6d05cf002/go.mod h1:FXwte9pgSeO0Fwr8FoFZgvuU3lvUeFUmoo1KswCl8KU=
-github.com/conduitio/conduit-processor-sdk v0.1.2-0.20240516124003-442e4a3f0edd h1:R+tpcZKWOnr6LRsXr85C167SK9MhaLhYUEjBSUupU9Y=
-github.com/conduitio/conduit-processor-sdk v0.1.2-0.20240516124003-442e4a3f0edd/go.mod h1:E9zqj0atY1+yBHWi4eZ3TagCZSBnFxBQBUcZktL6RFE=
+github.com/conduitio/conduit-processor-sdk v0.1.2-0.20240724173432-7ce2390369ec h1:fYFQ+XpoXSQ70eaJlqy+IujomClIBrO3+Gdv9adhrjs=
+github.com/conduitio/conduit-processor-sdk v0.1.2-0.20240724173432-7ce2390369ec/go.mod h1:qbR3i60WsZbjAyZPccj5MOTkIcuymZ18mP4N+v0ujFY=
+github.com/conduitio/conduit-processor-sdk v0.1.2-0.20240729224225-6d3a43af2fbe h1:zwpJ6WpK9wFXhy4wXd2a+a1dsRurII2/PU56dohoN2s=
+github.com/conduitio/conduit-processor-sdk v0.1.2-0.20240729224225-6d3a43af2fbe/go.mod h1:Znxko/tAs76B7e3HjyGQ+ugaCB6bQS8HNVinHkoRhHY=
 github.com/conduitio/conduit-schema-registry v0.0.0-20240725155046-a0fdb61d2588 h1:/OBjxI1JjE3AmifouogZ2KvlhGJ9tQGk4X7UxwjHo1o=
 github.com/conduitio/conduit-schema-registry v0.0.0-20240725155046-a0fdb61d2588/go.mod h1:G5t9W5Z5Mn0nW1TNnIQ1al4piqRXjc1R7HjdHgGFCx4=
 github.com/conduitio/yaml/v3 v3.3.0 h1:kbbaOSHcuH39gP4+rgbJGl6DSbLZcJgEaBvkEXJlCsI=
@@ -849,8 +851,8 @@ github.com/twmb/franz-go/pkg/kadm v1.13.0 h1:bJq4C2ZikUE2jh/wl9MtMTQ/kpmnBgVFh8X
 github.com/twmb/franz-go/pkg/kadm v1.13.0/go.mod h1:VMvpfjz/szpH9WB+vGM+rteTzVv0djyHFimci9qm2C0=
 github.com/twmb/franz-go/pkg/kmsg v1.8.0 h1:lAQB9Z3aMrIP9qF9288XcFf/ccaSxEitNA1CDTEIeTA=
 github.com/twmb/franz-go/pkg/kmsg v1.8.0/go.mod h1:HzYEb8G3uu5XevZbtU0dVbkphaKTHk0X68N5ka4q6mU=
-github.com/twmb/franz-go/pkg/sr v1.0.1 h1:hf3eRFDUWSfmR7JQCS/3JiqZEQwqbiDSS/DooewMHCE=
-github.com/twmb/franz-go/pkg/sr v1.0.1/go.mod h1:aUFRRLI5WYKpKzmWDztzZFecx5eOkCNuuamd91jUV5c=
+github.com/twmb/franz-go/pkg/sr v1.0.0 h1:4FUatTSTEuG2xievT0iDrgnpErgRg7kFLNioJYqfrqs=
+github.com/twmb/franz-go/pkg/sr v1.0.0/go.mod h1:aUFRRLI5WYKpKzmWDztzZFecx5eOkCNuuamd91jUV5c=
 github.com/twmb/go-cache v1.2.1 h1:yUkLutow4S2x5NMbqFW24o14OsucoFI5Fzmlb6uBinM=
 github.com/twmb/go-cache v1.2.1/go.mod h1:lArg9KhCl+GTFMikitLGhIBh/i11OK0lhSveqlMbbrY=
 github.com/ultraware/funlen v0.1.0 h1:BuqclbkY6pO+cvxoq7OsktIXZpgBSkYTQtmwhAK81vI=
