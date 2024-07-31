@@ -17,6 +17,7 @@ package standalone
 import (
 	"bytes"
 	"context"
+
 	"github.com/conduitio/conduit-processor-sdk/pprocutils"
 	"github.com/conduitio/conduit-processor-sdk/pprocutils/v1/fromproto"
 	"github.com/conduitio/conduit-processor-sdk/pprocutils/v1/toproto"
