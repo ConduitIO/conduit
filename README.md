@@ -279,7 +279,7 @@ For more information about the UI refer to the [Readme](ui/README.md) in `/ui`.
 ## Documentation
 
 To learn more about how to use Conduit
-visit [conduit.io/docs](https://conduit.io/docs).
+visit [Conduit.io/docs](https://conduit.io/docs).
 
 If you are interested in internals of Conduit we have prepared some technical
 documentation:
