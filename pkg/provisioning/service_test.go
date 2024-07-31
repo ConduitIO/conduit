@@ -487,16 +487,20 @@ func TestService_IntegrationTestServices(t *testing.T) {
 		is.NoErr(err)
 	})
 
+	tokenService := connutils.NewAuthManager()
+
 	schemaRegistry, err := schemaregistry.NewSchemaRegistry(db)
 	is.NoErr(err)
 
-	schemaService := connutils.NewSchemaService(logger, schemaRegistry)
+	schemaService := connutils.NewSchemaService(logger, schemaRegistry, tokenService)
+
 	connPluginService := conn_plugin.NewPluginService(
 		logger,
 		builtin.NewRegistry(logger, builtin.DefaultBuiltinConnectors, schemaService),
 		standalone.NewRegistry(logger, ""),
+		tokenService,
 	)
-	connPluginService.Init(ctx, "conn-utils-token:12345", "conn-utils-token")
+	connPluginService.Init(ctx, "conn-utils-token:12345")
 
 	procPluginService := proc_plugin.NewPluginService(
 		logger,

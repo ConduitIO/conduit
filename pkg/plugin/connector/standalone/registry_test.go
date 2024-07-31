@@ -132,7 +132,7 @@ func TestRegistry_List(t *testing.T) {
 	ctx := context.Background()
 
 	r := NewRegistry(log.Nop(), testPluginDir)
-	r.Init(ctx, ":12345", "irrelevant-token")
+	r.Init(ctx, ":12345")
 
 	got := r.List()
 	bp := testPluginBlueprint()

@@ -33,8 +33,8 @@ import (
 	"github.com/conduitio/conduit-commons/database/inmemory"
 	"github.com/conduitio/conduit-commons/database/postgres"
 	"github.com/conduitio/conduit-commons/database/sqlite"
-	pconduitserver "github.com/conduitio/conduit-connector-protocol/pconduit/v1/server"
-	conduitv1 "github.com/conduitio/conduit-connector-protocol/proto/conduit/v1"
+	pconnutils "github.com/conduitio/conduit-connector-protocol/pconnutils/v1/server"
+	connutilsv1 "github.com/conduitio/conduit-connector-protocol/proto/connutils/v1"
 	conduitschemaregistry "github.com/conduitio/conduit-schema-registry"
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -183,7 +183,9 @@ func createServices(r *Runtime) error {
 		standaloneReg,
 	)
 
-	connSchemaService := connutils.NewSchemaService(r.logger, schemaRegistry)
+	tokenService := connutils.NewAuthManager()
+	connSchemaService := connutils.NewSchemaService(r.logger, schemaRegistry, tokenService)
+
 	connPluginService := conn_plugin.NewPluginService(
 		r.logger,
 		conn_builtin.NewRegistry(
@@ -192,6 +194,7 @@ func createServices(r *Runtime) error {
 			connSchemaService,
 		),
 		conn_standalone.NewRegistry(r.logger, r.Config.Connectors.Path),
+		tokenService,
 	)
 
 	plService := pipeline.NewService(r.logger, r.DB)
@@ -482,8 +485,8 @@ func (r *Runtime) startConnectorUtils(ctx context.Context, t *tomb.Tomb) (net.Ad
 		grpc.StatsHandler(r.gRPCStatsHandler),
 	)
 
-	schemaServiceAPI := pconduitserver.NewSchemaServiceServer(r.connSchemaService)
-	conduitv1.RegisterSchemaServiceServer(grpcServer, schemaServiceAPI)
+	schemaServiceAPI := pconnutils.NewSchemaServiceServer(r.connSchemaService)
+	connutilsv1.RegisterSchemaServiceServer(grpcServer, schemaServiceAPI)
 
 	// Makes it easier to use command line tools to interact
 	// with the gRPC API.
@@ -732,8 +735,6 @@ func (r *Runtime) initServices(ctx context.Context, t *tomb.Tomb) error {
 		return cerrors.Errorf("failed to init processor service: %w", err)
 	}
 
-	token := r.connSchemaService.Token()
-
 	// Initialize APIs needed by connector plugins
 	// Needs to be initialized before connectorPluginService
 	// because the standalone connector registry needs to run all plugins,
@@ -744,7 +745,7 @@ func (r *Runtime) initServices(ctx context.Context, t *tomb.Tomb) error {
 	}
 	r.logger.Info(ctx).Msgf("connector utilities started on %v", connUtilsAddr)
 
-	r.connectorPluginService.Init(ctx, connUtilsAddr.String(), token)
+	r.connectorPluginService.Init(ctx, connUtilsAddr.String())
 
 	err = r.connectorService.Init(ctx)
 	if err != nil {
