@@ -19,7 +19,7 @@ import (
 	"testing"
 
 	"github.com/conduitio/conduit-commons/database/inmemory"
-	"github.com/conduitio/conduit-connector-protocol/pconduit"
+	"github.com/conduitio/conduit-connector-protocol/pconnutils"
 	conduitschemaregistry "github.com/conduitio/conduit-schema-registry"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/matryer/is"
@@ -46,13 +46,13 @@ func TestSchemaService_CreateSchema_ValidateToken(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			is := is.New(t)
-			ctx := pconduit.ContextWithConnectorToken(context.Background(), tc.token)
+			ctx := pconnutils.ContextWithConnectorToken(context.Background(), tc.token)
 
 			schemaRegistry, err := conduitschemaregistry.NewSchemaRegistry(&inmemory.DB{})
 			is.NoErr(err)
 
 			underTest := NewSchemaService(log.Nop(), schemaRegistry, NewAuthManager())
-			_, err = underTest.CreateSchema(ctx, pconduit.CreateSchemaRequest{})
+			_, err = underTest.CreateSchema(ctx, pconnutils.CreateSchemaRequest{})
 
 			is.True(err != nil)
 			is.Equal(err.Error(), tc.wantErr)
@@ -81,13 +81,13 @@ func TestSchemaService_GetSchema_ValidateToken(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			is := is.New(t)
-			ctx := pconduit.ContextWithConnectorToken(context.Background(), tc.token)
+			ctx := pconnutils.ContextWithConnectorToken(context.Background(), tc.token)
 
 			sr, err := conduitschemaregistry.NewSchemaRegistry(&inmemory.DB{})
 			is.NoErr(err)
 
 			underTest := NewSchemaService(log.Nop(), sr, NewAuthManager())
-			_, err = underTest.GetSchema(ctx, pconduit.GetSchemaRequest{})
+			_, err = underTest.GetSchema(ctx, pconnutils.GetSchemaRequest{})
 
 			is.True(err != nil)
 			is.Equal(err.Error(), tc.wantErr)
