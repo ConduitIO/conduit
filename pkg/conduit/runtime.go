@@ -166,7 +166,7 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 
 // Create all necessary internal services
 func createServices(r *Runtime) error {
-	schemaRegistry, err := createSchemaRegistry(r.Config, r.logger)
+	schemaRegistry, err := createSchemaRegistry(r.Config, r.logger, r.DB)
 	if err != nil {
 		return cerrors.Errorf("failed to create schema registry: %w", err)
 	}

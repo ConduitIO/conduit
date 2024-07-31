@@ -16,9 +16,9 @@ require (
 	github.com/conduitio/conduit-connector-postgres v0.7.6-0.20240630172132-84b5a6e6104f
 	github.com/conduitio/conduit-connector-protocol v0.6.1-0.20240723131404-2586cde4dda1
 	github.com/conduitio/conduit-connector-s3 v0.5.2-0.20240630172807-e278fde1fb46
-	github.com/conduitio/conduit-connector-sdk v0.9.2-0.20240716152132-20953984628f
+	github.com/conduitio/conduit-connector-sdk v0.9.2-0.20240722154834-ba6b9fbfd197
 	github.com/conduitio/conduit-processor-sdk v0.1.2-0.20240724173432-7ce2390369ec
-	github.com/conduitio/conduit-schema-registry v0.0.0-20240705193355-7e2064b44e0d
+	github.com/conduitio/conduit-schema-registry v0.0.0-20240725155046-a0fdb61d2588
 	github.com/conduitio/yaml/v3 v3.3.0
 	github.com/dop251/goja v0.0.0-20231027120936-b396bb4c349d
 	github.com/dop251/goja_nodejs v0.0.0-20231122114759-e84d9a924c5c
