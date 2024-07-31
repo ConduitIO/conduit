@@ -279,7 +279,7 @@ For more information about the UI refer to the [Readme](ui/README.md) in `/ui`.
 ## Documentation
 
 To learn more about how to use Conduit
-visit [docs.Conduit.io](https://docs.conduit.io).
+visit [conduit.io/docs](https://conduit.io/docs).
 
 If you are interested in internals of Conduit we have prepared some technical
 documentation:
@@ -290,10 +290,13 @@ documentation:
   explains how you can define pipelines using YAML files.
 - [Processors](https://conduit.io/docs/processors/getting-started) contains examples and more information about
   Conduit processors.
-- [Conduit Architecture](docs/architecture.md)
+- [Conduit Architecture](https://conduit.io/docs/getting-started/architecture)
   will give you a high-level overview of Conduit.
 - [Conduit Metrics](docs/metrics.md)
   provides more information about how Conduit exposes metrics.
+- [Conduit Package structure](docs/package_structure.md)
+  provides more information about the different packages in Conduit.
+ 
 
 ## Contributing
 
@@ -314,8 +317,7 @@ We also value contributions in form of pull requests. When opening a PR please
 ensure:
 
 - You have followed
-  the [Code Guidelines](https://github.com/ConduitIO/conduit/blob/main/docs/code_guidelines.md)
-  .
+  the [Code Guidelines](https://github.com/ConduitIO/conduit/blob/main/docs/code_guidelines.md).
 - There is no other [pull request](https://github.com/ConduitIO/conduit/pulls)
   for the same update/change.
 - You have written unit tests.
