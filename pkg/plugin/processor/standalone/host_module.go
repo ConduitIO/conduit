@@ -186,7 +186,7 @@ func (m *hostModuleInstance) handleWasmRequest(
 			if cerrors.As(err, &pErr) {
 				return types.Uint32(pErr.ErrCode)
 			}
-			return pprocutils.ErrorCodeStart // TODO use better error
+			return pprocutils.ErrorCodeInternal
 		}
 		lastRequestBytes = buf
 		parkedResponse = resp
@@ -208,7 +208,7 @@ func (m *hostModuleInstance) handleWasmRequest(
 	out, err := proto.MarshalOptions{}.MarshalAppend(buf[:0], parkedResponse)
 	if err != nil {
 		m.logger.Err(ctx, err).Msg("failed marshalling protobuf create schema response")
-		return pprocutils.ErrorCodeStart // TODO use better error
+		return pprocutils.ErrorCodeInternal
 	}
 
 	m.lastRequestBytes[serviceMethod] = nil
