@@ -23,7 +23,6 @@ import (
 
 type Dispenser struct {
 	name              plugin.FullName
-	connectorID       string
 	logger            log.CtxLogger
 	specifierPlugin   func() pconnector.SpecifierPlugin
 	sourcePlugin      func() pconnector.SourcePlugin
@@ -32,7 +31,6 @@ type Dispenser struct {
 
 func NewDispenser(
 	name plugin.FullName,
-	connectorID string,
 	logger log.CtxLogger,
 	specifierPlugin func() pconnector.SpecifierPlugin,
 	sourcePlugin func() pconnector.SourcePlugin,
@@ -40,7 +38,6 @@ func NewDispenser(
 ) *Dispenser {
 	return &Dispenser{
 		name:              name,
-		connectorID:       connectorID,
 		logger:            logger,
 		specifierPlugin:   specifierPlugin,
 		sourcePlugin:      sourcePlugin,
