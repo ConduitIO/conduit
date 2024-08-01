@@ -33,8 +33,8 @@ import (
 	"github.com/conduitio/conduit-commons/database/inmemory"
 	"github.com/conduitio/conduit-commons/database/postgres"
 	"github.com/conduitio/conduit-commons/database/sqlite"
-	pconduitserver "github.com/conduitio/conduit-connector-protocol/pconduit/v1/server"
-	conduitv1 "github.com/conduitio/conduit-connector-protocol/proto/conduit/v1"
+	pconnutils "github.com/conduitio/conduit-connector-protocol/pconnutils/v1/server"
+	connutilsv1 "github.com/conduitio/conduit-connector-protocol/proto/connutils/v1"
 	conduitschemaregistry "github.com/conduitio/conduit-schema-registry"
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -52,6 +52,7 @@ import (
 	conn_standalone "github.com/conduitio/conduit/pkg/plugin/connector/standalone"
 	proc_plugin "github.com/conduitio/conduit/pkg/plugin/processor"
 	proc_builtin "github.com/conduitio/conduit/pkg/plugin/processor/builtin"
+	"github.com/conduitio/conduit/pkg/plugin/processor/procutils"
 	proc_standalone "github.com/conduitio/conduit/pkg/plugin/processor/standalone"
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/provisioning"
@@ -96,8 +97,9 @@ type Runtime struct {
 	connectorPluginService *conn_plugin.PluginService
 	processorPluginService *proc_plugin.PluginService
 
-	schemaService      *connutils.SchemaService
+	connSchemaService  *connutils.SchemaService
 	connectorPersister *connector.Persister
+	procSchemaService  *procutils.SchemaService
 
 	logger           log.CtxLogger
 	gRPCStatsHandler *promgrpc.StatsHandler
@@ -164,7 +166,13 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 
 // Create all necessary internal services
 func createServices(r *Runtime) error {
-	standaloneReg, err := proc_standalone.NewRegistry(r.logger, r.Config.Processors.Path)
+	schemaRegistry, err := createSchemaRegistry(r.Config, r.logger, r.DB)
+	if err != nil {
+		return cerrors.Errorf("failed to create schema registry: %w", err)
+	}
+
+	procSchemaService := procutils.NewSchemaService(r.logger, schemaRegistry)
+	standaloneReg, err := proc_standalone.NewRegistry(r.logger, r.Config.Processors.Path, procSchemaService)
 	if err != nil {
 		return cerrors.Errorf("failed creating processor registry: %w", err)
 	}
@@ -175,19 +183,15 @@ func createServices(r *Runtime) error {
 		standaloneReg,
 	)
 
-	schemaRegistry, err := createSchemaRegistry(r.Config, r.logger, r.DB)
-	if err != nil {
-		return cerrors.Errorf("failed to create schema registry: %w", err)
-	}
 	tokenService := connutils.NewAuthManager()
-	schemaService := connutils.NewSchemaService(r.logger, schemaRegistry, tokenService)
+	connSchemaService := connutils.NewSchemaService(r.logger, schemaRegistry, tokenService)
 
 	connPluginService := conn_plugin.NewPluginService(
 		r.logger,
 		conn_builtin.NewRegistry(
 			r.logger,
 			r.Config.ConnectorPlugins,
-			schemaService,
+			connSchemaService,
 		),
 		conn_standalone.NewRegistry(r.logger, r.Config.Connectors.Path),
 		tokenService,
@@ -210,7 +214,8 @@ func createServices(r *Runtime) error {
 	r.processorService = procService
 	r.connectorPluginService = connPluginService
 	r.processorPluginService = procPluginService
-	r.schemaService = schemaService
+	r.connSchemaService = connSchemaService
+	r.procSchemaService = procSchemaService
 
 	return nil
 }
@@ -480,8 +485,8 @@ func (r *Runtime) startConnectorUtils(ctx context.Context, t *tomb.Tomb) (net.Ad
 		grpc.StatsHandler(r.gRPCStatsHandler),
 	)
 
-	schemaServiceAPI := pconduitserver.NewSchemaServiceServer(r.schemaService)
-	conduitv1.RegisterSchemaServiceServer(grpcServer, schemaServiceAPI)
+	schemaServiceAPI := pconnutils.NewSchemaServiceServer(r.connSchemaService)
+	connutilsv1.RegisterSchemaServiceServer(grpcServer, schemaServiceAPI)
 
 	// Makes it easier to use command line tools to interact
 	// with the gRPC API.
@@ -491,7 +496,7 @@ func (r *Runtime) startConnectorUtils(ctx context.Context, t *tomb.Tomb) (net.Ad
 	// Names taken from schema.proto
 	healthServer := api.NewHealthServer(
 		map[string]api.Checker{
-			"SchemaService": r.schemaService,
+			"SchemaService": r.connSchemaService,
 		},
 		r.logger,
 	)
