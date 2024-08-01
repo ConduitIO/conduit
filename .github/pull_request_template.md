@@ -6,7 +6,7 @@ List any dependencies that are required for this change.
 
 Fixes # (issue)
 
-### Quick checks:
+### Quick checks
 
 - [ ] I have followed the [Code Guidelines](https://github.com/ConduitIO/conduit/blob/main/docs/code_guidelines.md).
 - [ ] There is no other [pull request](https://github.com/ConduitIO/conduit/pulls) for the same update/change.

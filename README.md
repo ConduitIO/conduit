@@ -115,7 +115,7 @@ Download the right `.deb` file for your machine architecture from the
 [latest release](https://github.com/conduitio/conduit/releases/latest), then run:
 
 ```sh
-dpkg -i conduit_0.8.0_Linux_x86_64.deb
+dpkg -i conduit_0.10.0_Linux_x86_64.deb
 ```
 
 ### RPM
@@ -124,7 +124,7 @@ Download the right `.rpm` file for your machine architecture from the
 [latest release](https://github.com/conduitio/conduit/releases/latest), then run:
 
 ```sh
-rpm -i conduit_0.8.0_Linux_x86_64.rpm
+rpm -i conduit_0.10.0_Linux_x86_64.rpm
 ```
 
 ### Build from source
@@ -310,21 +310,23 @@ For more information about the UI refer to the [Readme](ui/README.md) in `/ui`.
 ## Documentation
 
 To learn more about how to use Conduit
-visit [docs.Conduit.io](https://docs.conduit.io).
+visit [Conduit.io/docs](https://conduit.io/docs).
 
 If you are interested in internals of Conduit we have prepared some technical
 documentation:
 
-- [Pipeline Semantics](docs/pipeline_semantics.md) explains the internals of how
+- [Pipeline Semantics](https://conduit.io/docs/features/pipeline-semantics) explains the internals of how
   a Conduit pipeline works.
-- [Pipeline Configuration Files](docs/pipeline_configuration_files.md)
+- [Pipeline Configuration Files](https://conduit.io/docs/pipeline-configuration-files)
   explains how you can define pipelines using YAML files.
 - [Processors](https://conduit.io/docs/processors/getting-started) contains examples and more information about
   Conduit processors.
-- [Conduit Architecture](docs/architecture.md)
+- [Conduit Architecture](https://conduit.io/docs/getting-started/architecture)
   will give you a high-level overview of Conduit.
 - [Conduit Metrics](docs/metrics.md)
   provides more information about how Conduit exposes metrics.
+- [Conduit Package structure](docs/package_structure.md)
+  provides more information about the different packages in Conduit.
 
 ## Contributing
 
@@ -345,8 +347,7 @@ We also value contributions in form of pull requests. When opening a PR please
 ensure:
 
 - You have followed
-  the [Code Guidelines](https://github.com/ConduitIO/conduit/blob/main/docs/code_guidelines.md)
-  .
+  the [Code Guidelines](https://github.com/ConduitIO/conduit/blob/main/docs/code_guidelines.md).
 - There is no other [pull request](https://github.com/ConduitIO/conduit/pulls)
   for the same update/change.
 - You have written unit tests.
