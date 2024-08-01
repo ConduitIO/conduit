@@ -11,16 +11,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: bufbuild/buf-setup-action@v1
+        with:
+          buf_token: ${{ secrets.BUF_TOKEN }}
       - uses: bufbuild/buf-lint-action@v1
         with:
+          buf_token: ${{ secrets.BUF_TOKEN }}
           input: 'proto'
 
-      # We need to fetch main so we can compare breaking changes against whatever is in main right now.
+      # We need to fetch main, so we can compare breaking changes against whatever is in main right now.
       - name: Fetch origin/main
         run: git fetch --no-tags --prune --depth=1 origin +refs/heads/main:refs/remotes/origin/main
 
       - uses: bufbuild/buf-breaking-action@v1
         with:
+          buf_token: ${{ secrets.BUF_TOKEN }}
           input: 'proto'
           against: '.git#branch=origin/main,subdir=proto'
 
@@ -33,8 +37,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: bufbuild/buf-setup-action@v1
+        with:
+          buf_token: ${{ secrets.BUF_TOKEN }}
       - uses: bufbuild/buf-push-action@v1
         with:
           input: 'proto'
           buf_token: ${{ secrets.BUF_TOKEN }}
-
