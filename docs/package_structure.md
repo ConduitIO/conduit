@@ -24,8 +24,8 @@
   - `plugin` - Currently contains all logic related to plugins as well as the plugins themselves. In the future a lot of
       this code will be extracted into separate repositories, what will be left is a plugin service that manages built-in
       and external plugins.
-  - `processor` - Code regarding processors, including processor store, processor service, running processor instances. 
-  - `provisioning` - Exposes a provisioning service that can be used to provision Conduit resources. 
+  - `processor` - Code regarding processors, including processor store, processor service, running processor instances.
+  - `provisioning` - Exposes a provisioning service that can be used to provision Conduit resources.
   - `schemaregistry` - Code regarding the schema registry.
   - `web` - Everything related to Conduit APIs or hosted pages like the UI or Swagger.
 
