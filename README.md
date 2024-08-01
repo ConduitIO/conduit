@@ -284,9 +284,9 @@ visit [Conduit.io/docs](https://conduit.io/docs).
 If you are interested in internals of Conduit we have prepared some technical
 documentation:
 
-- [Pipeline Semantics](docs/pipeline_semantics.md) explains the internals of how
+- [Pipeline Semantics](https://conduit.io/docs/features/pipeline-semantics) explains the internals of how
   a Conduit pipeline works.
-- [Pipeline Configuration Files](docs/pipeline_configuration_files.md)
+- [Pipeline Configuration Files](https://conduit.io/docs/pipeline-configuration-files)
   explains how you can define pipelines using YAML files.
 - [Processors](https://conduit.io/docs/processors/getting-started) contains examples and more information about
   Conduit processors.
