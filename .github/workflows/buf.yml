@@ -2,8 +2,13 @@ name: buf
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
+    paths:
+      - 'proto/**'
   pull_request:
+    paths:
+      - 'proto/**'
 
 jobs:
   validate:
