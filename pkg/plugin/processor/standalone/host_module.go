@@ -15,10 +15,14 @@
 package standalone
 
 import (
+	"bytes"
 	"context"
 
+	"github.com/conduitio/conduit-processor-sdk/pprocutils"
+	"github.com/conduitio/conduit-processor-sdk/pprocutils/v1/fromproto"
+	"github.com/conduitio/conduit-processor-sdk/pprocutils/v1/toproto"
 	processorv1 "github.com/conduitio/conduit-processor-sdk/proto/processor/v1"
-	"github.com/conduitio/conduit-processor-sdk/wasm"
+	procutilsv1 "github.com/conduitio/conduit-processor-sdk/proto/procutils/v1"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/stealthrocket/wazergo"
@@ -31,6 +35,8 @@ import (
 var hostModule wazergo.HostModule[*hostModuleInstance] = hostModuleFunctions{
 	"command_request":  wazergo.F1((*hostModuleInstance).commandRequest),
 	"command_response": wazergo.F1((*hostModuleInstance).commandResponse),
+	"create_schema":    wazergo.F1((*hostModuleInstance).createSchema),
+	"get_schema":       wazergo.F1((*hostModuleInstance).getSchema),
 }
 
 // hostModuleFunctions type implements HostModule, providing the module name,
@@ -51,7 +57,10 @@ func (f hostModuleFunctions) Functions() wazergo.Functions[*hostModuleInstance] 
 // Instantiate creates a new instance of the module. This is called by the
 // runtime when a new instance of the module is created.
 func (f hostModuleFunctions) Instantiate(_ context.Context, opts ...hostModuleOption) (*hostModuleInstance, error) {
-	mod := &hostModuleInstance{}
+	mod := &hostModuleInstance{
+		parkedResponses:  make(map[string]proto.Message),
+		lastRequestBytes: make(map[string][]byte),
+	}
 	wazergo.Configure(mod, opts...)
 	if mod.commandRequests == nil {
 		return nil, cerrors.New("missing command requests channel")
@@ -68,11 +77,13 @@ func hostModuleOptions(
 	logger log.CtxLogger,
 	requests <-chan *processorv1.CommandRequest,
 	responses chan<- tuple[*processorv1.CommandResponse, error],
+	schemaService pprocutils.SchemaService,
 ) hostModuleOption {
 	return wazergo.OptionFunc(func(m *hostModuleInstance) {
 		m.logger = logger
 		m.commandRequests = requests
 		m.commandResponses = responses
+		m.schemaService = schemaService
 	})
 }
 
@@ -81,8 +92,11 @@ type hostModuleInstance struct {
 	logger           log.CtxLogger
 	commandRequests  <-chan *processorv1.CommandRequest
 	commandResponses chan<- tuple[*processorv1.CommandResponse, error]
+	schemaService    pprocutils.SchemaService
 
 	parkedCommandRequest *processorv1.CommandRequest
+	parkedResponses      map[string]proto.Message
+	lastRequestBytes     map[string][]byte
 }
 
 func (*hostModuleInstance) Close(context.Context) error { return nil }
@@ -101,7 +115,7 @@ func (m *hostModuleInstance) commandRequest(ctx context.Context, buf types.Bytes
 		var ok bool
 		m.parkedCommandRequest, ok = <-m.commandRequests
 		if !ok {
-			return wasm.ErrorCodeNoMoreCommands
+			return pprocutils.ErrorCodeNoMoreCommands
 		}
 	}
 
@@ -121,7 +135,7 @@ func (m *hostModuleInstance) commandRequest(ctx context.Context, buf types.Bytes
 	out, err := proto.MarshalOptions{}.MarshalAppend(buf[:0], m.parkedCommandRequest)
 	if err != nil {
 		m.logger.Err(ctx, err).Msg("failed marshalling protobuf command request")
-		return wasm.ErrorCodeUnknownCommandRequest
+		return pprocutils.ErrorCodeUnknownCommandRequest
 	}
 	m.parkedCommandRequest = nil
 
@@ -139,9 +153,112 @@ func (m *hostModuleInstance) commandResponse(ctx context.Context, buf types.Byte
 	if err != nil {
 		m.logger.Err(ctx, err).Msg("failed unmarshalling protobuf command response")
 		m.commandResponses <- tuple[*processorv1.CommandResponse, error]{nil, err}
-		return wasm.ErrorCodeUnknownCommandResponse
+		return pprocutils.ErrorCodeUnknownCommandResponse
 	}
 
 	m.commandResponses <- tuple[*processorv1.CommandResponse, error]{&resp, nil}
 	return 0
+}
+
+// handleWasmRequest is a helper function that handles WASM requests. It
+// unmarshalls the request, calls the service function, and marshals the response.
+// If the buffer is too small, it parks the response and returns the size of the
+// response. The next call to this method will return the same response.
+func (m *hostModuleInstance) handleWasmRequest(
+	ctx context.Context,
+	buf types.Bytes,
+	serviceMethod string,
+	serviceFunc func(ctx context.Context, buf types.Bytes) (proto.Message, error),
+) types.Uint32 {
+	lastRequestBytes := m.lastRequestBytes[serviceMethod]
+	parkedResponse := m.parkedResponses[serviceMethod]
+
+	// no request/response parked or the buffer contains a new request
+	if parkedResponse == nil ||
+		(len(buf) >= len(lastRequestBytes) &&
+			!bytes.Equal(lastRequestBytes, buf[:len(lastRequestBytes)])) {
+		resp, err := serviceFunc(ctx, buf)
+		if err != nil {
+			m.logger.Err(ctx, err).
+				Str("method", serviceMethod).
+				Msg("failed executing service method")
+			var pErr *pprocutils.Error
+			if cerrors.As(err, &pErr) {
+				return types.Uint32(pErr.ErrCode)
+			}
+			return pprocutils.ErrorCodeInternal
+		}
+		lastRequestBytes = buf
+		parkedResponse = resp
+
+		m.lastRequestBytes[serviceMethod] = lastRequestBytes
+		m.parkedResponses[serviceMethod] = parkedResponse
+	}
+
+	// If the buffer is too small, we park the response and return the size of the
+	// response. The next call to this method will return the same response.
+	if size := proto.Size(parkedResponse); len(buf) < size {
+		m.logger.Warn(ctx).
+			Int("response_bytes", size).
+			Int("allocated_bytes", len(buf)).
+			Msgf("insufficient memory, response will be parked until next call to %s", serviceMethod)
+		return types.Uint32(size)
+	}
+
+	out, err := proto.MarshalOptions{}.MarshalAppend(buf[:0], parkedResponse)
+	if err != nil {
+		m.logger.Err(ctx, err).Msg("failed marshalling protobuf create schema response")
+		return pprocutils.ErrorCodeInternal
+	}
+
+	m.lastRequestBytes[serviceMethod] = nil
+	m.parkedResponses[serviceMethod] = nil
+
+	return types.Uint32(len(out))
+}
+
+// createSchema is the exported function that is called by the WASM module to
+// create a schema and set the buffer bytes to the marshalled response.
+// It returns the response size on success, or an error code on error.
+func (m *hostModuleInstance) createSchema(ctx context.Context, buf types.Bytes) types.Uint32 {
+	m.logger.Trace(ctx).Msg("executing create_schema")
+
+	serviceFunc := func(ctx context.Context, buf types.Bytes) (proto.Message, error) {
+		var req procutilsv1.CreateSchemaRequest
+		err := proto.Unmarshal(buf, &req)
+		if err != nil {
+			m.logger.Err(ctx, err).Msg("failed unmarshalling protobuf create schema request")
+			return nil, err
+		}
+		schemaResp, err := m.schemaService.CreateSchema(ctx, fromproto.CreateSchemaRequest(&req))
+		if err != nil {
+			return nil, err
+		}
+		return toproto.CreateSchemaResponse(schemaResp), nil
+	}
+
+	return m.handleWasmRequest(ctx, buf, "create_schema", serviceFunc)
+}
+
+// getSchema is the exported function that is called by the WASM module to
+// get a schema and set the buffer bytes to the marshalled response.
+// It returns the response size on success, or an error code on error.
+func (m *hostModuleInstance) getSchema(ctx context.Context, buf types.Bytes) types.Uint32 {
+	m.logger.Trace(ctx).Msg("executing get_schema")
+
+	serviceFunc := func(ctx context.Context, buf types.Bytes) (proto.Message, error) {
+		var req procutilsv1.GetSchemaRequest
+		err := proto.Unmarshal(buf, &req)
+		if err != nil {
+			m.logger.Err(ctx, err).Msg("failed unmarshalling protobuf get schema request")
+			return nil, err
+		}
+		schemaResp, err := m.schemaService.GetSchema(ctx, fromproto.GetSchemaRequest(&req))
+		if err != nil {
+			return nil, err
+		}
+		return toproto.GetSchemaResponse(schemaResp), nil
+	}
+
+	return m.handleWasmRequest(ctx, buf, "get_schema", serviceFunc)
 }

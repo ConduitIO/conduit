@@ -23,6 +23,7 @@ import (
 	"github.com/conduitio/conduit-commons/csync"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
+	"github.com/conduitio/conduit-processor-sdk/schema"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
@@ -33,7 +34,7 @@ import (
 func TestRegistry_List(t *testing.T) {
 	is := is.New(t)
 
-	underTest, err := NewRegistry(log.Test(t), testPluginChaosDir)
+	underTest, err := NewRegistry(log.Test(t), testPluginChaosDir, schema.NewInMemoryService())
 	is.NoErr(err)
 	list := underTest.List()
 	is.Equal(1, len(list))
@@ -48,7 +49,7 @@ func TestRegistry_List(t *testing.T) {
 func TestRegistry_MalformedProcessor(t *testing.T) {
 	is := is.New(t)
 
-	underTest, err := NewRegistry(log.Test(t), testPluginMalformedDir)
+	underTest, err := NewRegistry(log.Test(t), testPluginMalformedDir, schema.NewInMemoryService())
 	is.NoErr(err)
 	list := underTest.List()
 	is.Equal(0, len(list))
@@ -57,7 +58,7 @@ func TestRegistry_MalformedProcessor(t *testing.T) {
 func TestRegistry_SpecifyError(t *testing.T) {
 	is := is.New(t)
 
-	underTest, err := NewRegistry(log.Test(t), testPluginSpecifyErrorDir)
+	underTest, err := NewRegistry(log.Test(t), testPluginSpecifyErrorDir, schema.NewInMemoryService())
 	is.NoErr(err)
 	list := underTest.List()
 	is.Equal(0, len(list))
@@ -68,7 +69,7 @@ func TestRegistry_ChaosProcessor(t *testing.T) {
 	is := is.New(t)
 
 	// reuse this registry for multiple tests, because it's expensive to create
-	underTest, err := NewRegistry(log.Nop(), testPluginChaosDir)
+	underTest, err := NewRegistry(log.Nop(), testPluginChaosDir, schema.NewInMemoryService())
 	is.NoErr(err)
 
 	const standaloneProcessorName = plugin.FullName("standalone:chaos-processor@v1.3.5")

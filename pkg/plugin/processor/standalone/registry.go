@@ -23,6 +23,7 @@ import (
 	"sync"
 
 	sdk "github.com/conduitio/conduit-processor-sdk"
+	"github.com/conduitio/conduit-processor-sdk/pprocutils"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
@@ -45,6 +46,8 @@ type Registry struct {
 	// multiple times, once for each WASM module.
 	hostModule *wazergo.CompiledModule[*hostModuleInstance]
 
+	schemaService pprocutils.SchemaService
+
 	// plugins stores plugin blueprints in a 2D map, first key is the plugin
 	// name, the second key is the plugin version
 	plugins map[string]map[string]blueprint
@@ -61,7 +64,7 @@ type blueprint struct {
 	// ensure someone can't switch the plugin after we registered it
 }
 
-func NewRegistry(logger log.CtxLogger, pluginDir string) (*Registry, error) {
+func NewRegistry(logger log.CtxLogger, pluginDir string, schemaService pprocutils.SchemaService) (*Registry, error) {
 	// context is only used for logging, it's not used for long running operations
 	ctx := context.Background()
 
@@ -95,10 +98,11 @@ func NewRegistry(logger log.CtxLogger, pluginDir string) (*Registry, error) {
 	}
 
 	r := &Registry{
-		logger:     logger,
-		runtime:    runtime,
-		hostModule: compiledHostModule,
-		pluginDir:  pluginDir,
+		logger:        logger,
+		runtime:       runtime,
+		hostModule:    compiledHostModule,
+		pluginDir:     pluginDir,
+		schemaService: schemaService,
 	}
 
 	r.reloadPlugins()
@@ -127,7 +131,7 @@ func (r *Registry) NewProcessor(ctx context.Context, fullName plugin.FullName, i
 		return nil, cerrors.Errorf("could not find standalone processor plugin, only found versions %v: %w", availableVersions, plugin.ErrPluginNotFound)
 	}
 
-	p, err := newWASMProcessor(ctx, r.runtime, bp.module, r.hostModule, id, r.logger)
+	p, err := newWASMProcessor(ctx, r.runtime, bp.module, r.hostModule, r.schemaService, id, r.logger)
 	if err != nil {
 		return nil, cerrors.Errorf("failed to create a new WASM processor: %w", err)
 	}
@@ -249,7 +253,7 @@ func (r *Registry) loadBlueprint(ctx context.Context, path string) (blueprint, e
 		}
 	}()
 
-	p, err := newWASMProcessor(ctx, r.runtime, module, r.hostModule, "init-processor", log.Nop())
+	p, err := newWASMProcessor(ctx, r.runtime, module, r.hostModule, r.schemaService, "init-processor", log.Nop())
 	if err != nil {
 		return blueprint{}, fmt.Errorf("failed to create a new WASM processor: %w", err)
 	}
