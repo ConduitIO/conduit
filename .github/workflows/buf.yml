@@ -9,6 +9,7 @@ on:
   pull_request:
     paths:
       - 'proto/**'
+  workflow_dispatch:
 
 jobs:
   validate:
