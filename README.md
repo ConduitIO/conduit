@@ -36,6 +36,7 @@ Conduit was created and open-sourced by [Meroxa](https://meroxa.io).
 - [Quick start](#quick-start)
 - [Installation guide](#installation-guide)
 - [Configuring Conduit](#configuring-conduit)
+- [Storage](#storage)
 - [Connectors](#connectors)
 - [Processors](#processors)
 - [API](#api)
@@ -189,6 +190,34 @@ each configuration option based on the following priorities:
       connection-string: postgres://localhost:5432/conduitdb # -db.postgres.connection-string or CONDUIT_DB_POSTGRES_CONNECTION_STRING
   ```
 
+## Storage
+
+Conduit's own data (information about pipelines, connectors, etc.) can be stored
+in the following databases:
+
+- BadgerDB (default)
+- PostgreSQL
+- SQLite
+
+It's also possible to store all the data in memory, which is sometimes useful
+for development purposes.
+
+The database type used can be configured with the `db.type` parameter (through
+any of the [configuration](#configuring-conduit) options in Conduit).
+For example, the CLI flag to use a PostgresSQL database with Conduit is as
+follows: `-db.type=postgres`.
+
+Changing database parameters (e.g. the PostgreSQL connection string) is done
+through parameters of the following form: `db.<db type>.<parameter name>`. For
+example, the CLI flag to use a PostgreSQL instance listening on `localhost:5432`
+would be: `-db.postgres.connection-string=postgres://localhost:5432/conduitdb`.
+
+The full example in our case would be:
+
+```shell
+./conduit -db.type=postgres -db.postgres.connection-string="postgresql://localhost:5432/conduitdb"
+```
+
 ## Connectors
 
 For the full list of available connectors, see
@@ -215,7 +244,9 @@ Conduit ships with a number of built-in connectors:
   source/destination for AWS S3.
 - [Generator connector](https://github.com/ConduitIO/conduit-connector-generator)
   provides a source which generates random data (useful for testing).
-
+- [Log connector](https://github.com/ConduitIO/conduit-connector-log)
+  provides a destination which logs all records (useful for testing).
+  
 Additionally, we have prepared
 a [Kafka Connect wrapper](https://github.com/conduitio/conduit-kafka-connect-wrapper)
 that allows you to run any Apache Kafka Connect connector as part of a Conduit
