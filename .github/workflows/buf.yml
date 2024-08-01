@@ -11,6 +11,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: bufbuild/buf-setup-action@v1
+        env:
+          BUF_TOKEN: ${{ secrets.BUF_TOKEN }}
       - uses: bufbuild/buf-lint-action@v1
         env:
           BUF_TOKEN: ${{ secrets.BUF_TOKEN }}
