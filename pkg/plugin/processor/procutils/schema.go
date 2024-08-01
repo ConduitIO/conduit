@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package connutils
+package procutils
 
 import (
 	"context"
 
-	"github.com/conduitio/conduit-connector-protocol/pconnutils"
+	"github.com/conduitio/conduit-processor-sdk/pprocutils"
 	conduitschemaregistry "github.com/conduitio/conduit-schema-registry"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -28,23 +28,16 @@ import (
 )
 
 type SchemaService struct {
-	registry    schemaregistry.Registry
-	authManager *AuthManager
-
-	logger log.CtxLogger
+	registry schemaregistry.Registry
+	logger   log.CtxLogger
 }
 
-var _ pconnutils.SchemaService = (*SchemaService)(nil)
+var _ pprocutils.SchemaService = (*SchemaService)(nil)
 
-func NewSchemaService(
-	logger log.CtxLogger,
-	registry schemaregistry.Registry,
-	authManager *AuthManager,
-) *SchemaService {
+func NewSchemaService(logger log.CtxLogger, registry schemaregistry.Registry) *SchemaService {
 	return &SchemaService{
-		registry:    registry,
-		logger:      logger.WithComponent("connutils.SchemaService"),
-		authManager: authManager,
+		registry: registry,
+		logger:   logger.WithComponent("procutils.SchemaService"),
 	}
 }
 
@@ -56,12 +49,7 @@ func (s *SchemaService) Check(ctx context.Context) error {
 	return r.Check(ctx)
 }
 
-func (s *SchemaService) CreateSchema(ctx context.Context, req pconnutils.CreateSchemaRequest) (pconnutils.CreateSchemaResponse, error) {
-	err := s.authManager.IsTokenValid(pconnutils.ConnectorTokenFromContext(ctx))
-	if err != nil {
-		return pconnutils.CreateSchemaResponse{}, err
-	}
-
+func (s *SchemaService) CreateSchema(ctx context.Context, req pprocutils.CreateSchemaRequest) (pprocutils.CreateSchemaResponse, error) {
 	ss, err := s.registry.CreateSchema(ctx, req.Subject, sr.Schema{
 		Schema: string(req.Bytes),
 		Type:   fromschema.SrSchemaType(req.Type),
@@ -69,31 +57,26 @@ func (s *SchemaService) CreateSchema(ctx context.Context, req pconnutils.CreateS
 	if err != nil {
 		var respErr *sr.ResponseError
 		if cerrors.As(err, &respErr) {
-			return pconnutils.CreateSchemaResponse{}, unwrapSrError(respErr) // don't wrap response errors
+			return pprocutils.CreateSchemaResponse{}, unwrapSrError(respErr)
 		}
-		return pconnutils.CreateSchemaResponse{}, cerrors.Errorf("failed to create schema: %w", err)
+		return pprocutils.CreateSchemaResponse{}, cerrors.Errorf("failed to create schema: %w", err)
 	}
-	return pconnutils.CreateSchemaResponse{
+	return pprocutils.CreateSchemaResponse{
 		Schema: toschema.SrSubjectSchema(ss),
 	}, nil
 }
 
-func (s *SchemaService) GetSchema(ctx context.Context, req pconnutils.GetSchemaRequest) (pconnutils.GetSchemaResponse, error) {
-	err := s.authManager.IsTokenValid(pconnutils.ConnectorTokenFromContext(ctx))
-	if err != nil {
-		return pconnutils.GetSchemaResponse{}, err
-	}
-
+func (s *SchemaService) GetSchema(ctx context.Context, req pprocutils.GetSchemaRequest) (pprocutils.GetSchemaResponse, error) {
 	ss, err := s.registry.SchemaBySubjectVersion(ctx, req.Subject, req.Version)
 	if err != nil {
 		var respErr *sr.ResponseError
 		if cerrors.As(err, &respErr) {
-			return pconnutils.GetSchemaResponse{}, unwrapSrError(respErr) // don't wrap response errors
+			return pprocutils.GetSchemaResponse{}, unwrapSrError(respErr)
 		}
-		return pconnutils.GetSchemaResponse{}, cerrors.Errorf("failed to get schema by subject and version: %w", err)
+		return pprocutils.GetSchemaResponse{}, cerrors.Errorf("failed to get schema by subject and version: %w", err)
 	}
 
-	return pconnutils.GetSchemaResponse{
+	return pprocutils.GetSchemaResponse{
 		Schema: toschema.SrSubjectSchema(ss),
 	}, nil
 }
@@ -101,13 +84,12 @@ func (s *SchemaService) GetSchema(ctx context.Context, req pconnutils.GetSchemaR
 func unwrapSrError(e *sr.ResponseError) error {
 	switch e.ErrorCode {
 	case conduitschemaregistry.ErrorCodeSubjectNotFound:
-		return pconnutils.ErrSubjectNotFound
+		return pprocutils.ErrSubjectNotFound
 	case conduitschemaregistry.ErrorCodeVersionNotFound:
-		return pconnutils.ErrVersionNotFound
+		return pprocutils.ErrVersionNotFound
 	case conduitschemaregistry.ErrorCodeInvalidSchema:
-		return pconnutils.ErrInvalidSchema
+		return pprocutils.ErrInvalidSchema
 	default:
-		// unknown error, don't unwrap
 		return e
 	}
 }
