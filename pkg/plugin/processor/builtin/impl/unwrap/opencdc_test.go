@@ -18,6 +18,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -135,17 +136,17 @@ const RecordCreate = `{
 func TestUnwrapOpenCDC_Configure(t *testing.T) {
 	testCases := []struct {
 		name    string
-		in      map[string]string
+		config  config.Config
 		wantErr string
 	}{
 		{
 			name:    "invalid field",
-			in:      map[string]string{"field": ".Payload.Something"},
+			config:  config.Config{"field": ".Payload.Something"},
 			wantErr: `invalid reference: invalid reference ".Payload.Something": unexpected field "Something": cannot resolve reference`,
 		},
 		{
 			name:    "valid field",
-			in:      map[string]string{"field": ".Payload.Before"},
+			config:  config.Config{"field": ".Payload.Before"},
 			wantErr: "",
 		},
 	}
@@ -155,7 +156,7 @@ func TestUnwrapOpenCDC_Configure(t *testing.T) {
 			is := is.New(t)
 
 			underTest := NewOpenCDCProcessor(log.Test(t))
-			gotErr := underTest.Configure(context.Background(), tc.in)
+			gotErr := underTest.Configure(context.Background(), tc.config)
 			if tc.wantErr == "" {
 				is.NoErr(gotErr)
 			} else {
@@ -171,11 +172,11 @@ func TestUnwrapOpenCDC_Process(t *testing.T) {
 		name   string
 		record opencdc.Record
 		want   sdk.ProcessedRecord
-		config map[string]string
+		config config.Config
 	}{
 		{
 			name:   "create with structured data and no payload after",
-			config: map[string]string{},
+			config: config.Config{},
 			record: opencdc.Record{
 				Key:       opencdc.RawData("one-key"),
 				Operation: opencdc.OperationCreate,
@@ -187,7 +188,7 @@ func TestUnwrapOpenCDC_Process(t *testing.T) {
 		},
 		{
 			name:   "create with an invalid operation",
-			config: map[string]string{},
+			config: config.Config{},
 			record: opencdc.Record{
 				Key:       opencdc.RawData("one-key-raw-data"),
 				Operation: opencdc.OperationCreate,
@@ -213,7 +214,7 @@ func TestUnwrapOpenCDC_Process(t *testing.T) {
 		},
 		{
 			name:   "create with an invalid metadata",
-			config: map[string]string{},
+			config: config.Config{},
 			record: opencdc.Record{
 				Key:       opencdc.RawData("one-key-raw-data"),
 				Operation: opencdc.OperationCreate,
@@ -238,7 +239,7 @@ func TestUnwrapOpenCDC_Process(t *testing.T) {
 		},
 		{
 			name:   "create with an invalid key",
-			config: map[string]string{},
+			config: config.Config{},
 			record: opencdc.Record{
 				Key:       opencdc.RawData("one-key-raw-data"),
 				Operation: opencdc.OperationCreate,
@@ -263,7 +264,7 @@ func TestUnwrapOpenCDC_Process(t *testing.T) {
 		},
 		{
 			name:   "create with an invalid payload",
-			config: map[string]string{},
+			config: config.Config{},
 			record: opencdc.Record{
 				Key:       opencdc.RawData("one-key-raw-data"),
 				Operation: opencdc.OperationCreate,
@@ -277,7 +278,7 @@ func TestUnwrapOpenCDC_Process(t *testing.T) {
 		},
 		{
 			name:   "create with structured data",
-			config: map[string]string{},
+			config: config.Config{},
 			record: opencdc.Record{
 				Key:       opencdc.RawData("one-key"),
 				Operation: opencdc.OperationCreate,
@@ -338,7 +339,7 @@ func TestUnwrapOpenCDC_Process(t *testing.T) {
 		},
 		{
 			name:   "create with raw data",
-			config: map[string]string{},
+			config: config.Config{},
 			record: opencdc.Record{
 				Key:       opencdc.RawData("one-key-raw-data"),
 				Operation: opencdc.OperationCreate,
@@ -378,7 +379,7 @@ func TestUnwrapOpenCDC_Process(t *testing.T) {
 		},
 		{
 			name:   "delete with before and with raw data",
-			config: map[string]string{},
+			config: config.Config{},
 			record: opencdc.Record{
 				Key:       opencdc.RawData("one-key-raw-data"),
 				Operation: opencdc.OperationCreate,
@@ -418,7 +419,7 @@ func TestUnwrapOpenCDC_Process(t *testing.T) {
 		},
 		{
 			name:   "delete without before and with raw data",
-			config: map[string]string{},
+			config: config.Config{},
 			record: opencdc.Record{
 				Key:       opencdc.RawData("one-key-raw-data"),
 				Operation: opencdc.OperationCreate,
@@ -452,7 +453,7 @@ func TestUnwrapOpenCDC_Process(t *testing.T) {
 		},
 		{
 			name:   "update with before and with raw data",
-			config: map[string]string{},
+			config: config.Config{},
 			record: opencdc.Record{
 				Key:       opencdc.RawData("one-key-raw-data"),
 				Operation: opencdc.OperationCreate,
@@ -498,7 +499,7 @@ func TestUnwrapOpenCDC_Process(t *testing.T) {
 		},
 		{
 			name:   "update without before and with raw data",
-			config: map[string]string{},
+			config: config.Config{},
 			record: opencdc.Record{
 				Key:       opencdc.RawData("one-key-raw-data"),
 				Operation: opencdc.OperationCreate,
@@ -538,7 +539,7 @@ func TestUnwrapOpenCDC_Process(t *testing.T) {
 		},
 		{
 			name:   "update without before and with raw data",
-			config: map[string]string{"field": ".Payload.After.nested"},
+			config: config.Config{"field": ".Payload.After.nested"},
 			record: opencdc.Record{
 				Key:       opencdc.RawData("one-key-raw-data"),
 				Operation: opencdc.OperationCreate,

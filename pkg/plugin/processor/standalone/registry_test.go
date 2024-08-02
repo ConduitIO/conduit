@@ -20,6 +20,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
+
 	"github.com/conduitio/conduit-commons/csync"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
@@ -43,7 +45,7 @@ func TestRegistry_List(t *testing.T) {
 
 	want := ChaosProcessorSpecifications()
 
-	is.Equal(got, want)
+	is.Equal("", cmp.Diff(got, want))
 }
 
 func TestRegistry_MalformedProcessor(t *testing.T) {
@@ -84,7 +86,7 @@ func TestRegistry_ChaosProcessor(t *testing.T) {
 		is.True(ok)
 
 		want := ChaosProcessorSpecifications()
-		is.Equal(got, want)
+		is.Equal("", cmp.Diff(got, want))
 	})
 
 	t.Run("NewProcessor", func(t *testing.T) {
@@ -97,7 +99,7 @@ func TestRegistry_ChaosProcessor(t *testing.T) {
 		is.NoErr(err)
 
 		want := ChaosProcessorSpecifications()
-		is.Equal(got, want)
+		is.Equal("", cmp.Diff(got, want))
 
 		is.NoErr(p.Teardown(ctx))
 	})

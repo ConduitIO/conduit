@@ -18,6 +18,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -32,13 +33,13 @@ func TestDecodeJSON_Process(t *testing.T) {
 	ctx := context.Background()
 	testCases := []struct {
 		name   string
-		config map[string]string
+		config config.Config
 		record opencdc.Record
 		want   sdk.ProcessedRecord
 	}{
 		{
 			name:   "raw key to structured",
-			config: map[string]string{"field": ".Key"},
+			config: config.Config{"field": ".Key"},
 			record: opencdc.Record{
 				Key: opencdc.RawData(`{"after":{"data":4,"id":3}}`),
 			},
@@ -49,7 +50,7 @@ func TestDecodeJSON_Process(t *testing.T) {
 			},
 		}, {
 			name:   "raw payload.after.foo to structured",
-			config: map[string]string{"field": ".Payload.After.foo"},
+			config: config.Config{"field": ".Payload.After.foo"},
 			record: opencdc.Record{
 				Payload: opencdc.Change{
 					After: opencdc.StructuredData{
@@ -69,7 +70,7 @@ func TestDecodeJSON_Process(t *testing.T) {
 			},
 		}, {
 			name:   "slice payload.after.foo to structured",
-			config: map[string]string{"field": ".Payload.After.foo"},
+			config: config.Config{"field": ".Payload.After.foo"},
 			record: opencdc.Record{
 				Payload: opencdc.Change{
 					After: opencdc.StructuredData{
@@ -86,7 +87,7 @@ func TestDecodeJSON_Process(t *testing.T) {
 			},
 		}, {
 			name:   "string JSON value payload.after.foo to structured",
-			config: map[string]string{"field": ".Payload.After.foo"},
+			config: config.Config{"field": ".Payload.After.foo"},
 			record: opencdc.Record{
 				Payload: opencdc.Change{
 					After: opencdc.StructuredData{
@@ -103,7 +104,7 @@ func TestDecodeJSON_Process(t *testing.T) {
 			},
 		}, {
 			name:   "raw payload.before to structured",
-			config: map[string]string{"field": ".Payload.Before"},
+			config: config.Config{"field": ".Payload.Before"},
 			record: opencdc.Record{
 				Payload: opencdc.Change{
 					Before: opencdc.RawData(`{"before":{"data":4},"foo":"bar"}`),
@@ -119,7 +120,7 @@ func TestDecodeJSON_Process(t *testing.T) {
 			},
 		}, {
 			name:   "already structured data",
-			config: map[string]string{"field": ".Key"},
+			config: config.Config{"field": ".Key"},
 			record: opencdc.Record{
 				Key: opencdc.StructuredData{
 					"after": map[string]any{"data": float64(4), "id": float64(3)},
@@ -132,7 +133,7 @@ func TestDecodeJSON_Process(t *testing.T) {
 			},
 		}, {
 			name:   "empty raw data converted to empty structured data",
-			config: map[string]string{"field": ".Key"},
+			config: config.Config{"field": ".Key"},
 			record: opencdc.Record{
 				Key: opencdc.RawData(""),
 			},
@@ -141,7 +142,7 @@ func TestDecodeJSON_Process(t *testing.T) {
 			},
 		}, {
 			name:   "nil value",
-			config: map[string]string{"field": ".Payload.After"},
+			config: config.Config{"field": ".Payload.After"},
 			record: opencdc.Record{
 				Payload: opencdc.Change{
 					After: nil,
@@ -154,7 +155,7 @@ func TestDecodeJSON_Process(t *testing.T) {
 			},
 		}, {
 			name:   "invalid json",
-			config: map[string]string{"field": ".Key"},
+			config: config.Config{"field": ".Key"},
 			record: opencdc.Record{
 				Key: opencdc.RawData(`"invalid":"json"`),
 			},
@@ -178,42 +179,42 @@ func TestDecodeJSON_Configure(t *testing.T) {
 	ctx := context.Background()
 	testCases := []struct {
 		name    string
-		config  map[string]string
+		config  config.Config
 		wantErr bool
 	}{
 		{
 			name:    "valid field, key",
-			config:  map[string]string{"field": ".Key"},
+			config:  config.Config{"field": ".Key"},
 			wantErr: false,
 		},
 		{
 			name:    "valid field, payload.after",
-			config:  map[string]string{"field": ".Payload.After"},
+			config:  config.Config{"field": ".Payload.After"},
 			wantErr: false,
 		},
 		{
 			name:    "valid field, payload.before",
-			config:  map[string]string{"field": ".Payload.Before"},
+			config:  config.Config{"field": ".Payload.Before"},
 			wantErr: false,
 		},
 		{
 			name:    "valid field, payload.after.foo",
-			config:  map[string]string{"field": ".Payload.After.foo"},
+			config:  config.Config{"field": ".Payload.After.foo"},
 			wantErr: false,
 		},
 		{
 			name:    "invalid config, missing param",
-			config:  map[string]string{},
+			config:  config.Config{},
 			wantErr: true,
 		},
 		{
 			name:    "invalid field .Metadata",
-			config:  map[string]string{"field": ".Metadata"},
+			config:  config.Config{"field": ".Metadata"},
 			wantErr: true,
 		},
 		{
 			name:    "invalid field, .Payload",
-			config:  map[string]string{"field": ".Payload"},
+			config:  config.Config{"field": ".Payload"},
 			wantErr: true,
 		},
 	}

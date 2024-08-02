@@ -16,7 +16,6 @@ package builtin
 
 import (
 	"context"
-	"reflect"
 	"runtime/debug"
 
 	sdk "github.com/conduitio/conduit-processor-sdk"
@@ -84,25 +83,6 @@ func NewRegistry(logger log.CtxLogger, constructors map[string]ProcessorPluginCo
 	}
 	logger.Info(context.Background()).Int("count", len(r.List())).Msg("builtin processor plugins initialized")
 	return r
-}
-
-func NewProcessorPluginConstructor(processorPlugin sdk.Processor) ProcessorPluginConstructor {
-	procType := reflect.TypeOf(processorPlugin)
-	for procType.Kind() != reflect.Struct {
-		procType.Elem()
-	}
-
-	f := func(logger log.CtxLogger) sdk.Processor {
-		// TODO create processor plugin wrapper that injects logger into context
-		//  before forwarding the call to the plugin
-		newProcValue := reflect.New(procType)
-		return newProcValue.Interface().(sdk.Processor)
-	}
-
-	// try out f, to catch any panic early
-	f(log.CtxLogger{})
-
-	return f
 }
 
 func loadPlugins(buildInfo *debug.BuildInfo, constructors map[string]ProcessorPluginConstructor) map[string]map[string]blueprint {
@@ -185,7 +165,12 @@ func (r *Registry) NewProcessor(_ context.Context, fullName plugin.FullName, _ s
 		return nil, cerrors.Errorf("could not find builtin plugin %q, only found versions %v: %w", fullName, availableVersions, plugin.ErrPluginNotFound)
 	}
 
-	return b.constructor(r.logger), nil
+	p := b.constructor(r.logger)
+
+	// apply default middleware
+	p = sdk.ProcessorWithMiddleware(p, sdk.DefaultProcessorMiddleware(p.MiddlewareOptions()...)...)
+
+	return p, nil
 }
 
 func (r *Registry) List() map[plugin.FullName]sdk.Specification {

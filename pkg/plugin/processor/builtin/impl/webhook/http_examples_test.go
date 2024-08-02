@@ -22,6 +22,7 @@ import (
 	"net/http/httptest"
 	"strings"
 
+	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	conduit_log "github.com/conduitio/conduit/pkg/foundation/log"
@@ -44,7 +45,7 @@ HTTP server that replies back with a greeting.
 
 The record's ` + "`.Payload.After`" + ` is overwritten with the response. Additionally, the example shows how to set a request
 header and how to store the value of the HTTP response's code in the metadata field ` + "`http_status`" + `.`,
-		Config: map[string]string{
+		Config: config.Config{
 			"request.url":          srv.URL,
 			"request.body":         `{{ printf "%s" .Payload.After }}`,
 			"response.status":      `.Metadata["http_status"]`,
@@ -105,7 +106,7 @@ This example shows how to use the HTTP processor to use a record's ` + "`.Payloa
 send it to a dummy HTTP server, and get a greeting with the name back.
 
 The response will be written under the record's ` + "`.Payload.After.response`.",
-		Config: map[string]string{
+		Config: config.Config{
 			"request.url":   srv.URL + "/{{.Payload.After.name}}",
 			"response.body": ".Payload.After.response",
 		},

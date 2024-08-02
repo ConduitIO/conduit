@@ -15,6 +15,7 @@
 package base64
 
 import (
+	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -30,7 +31,7 @@ func ExampleDecodeProcessor() {
 ` + "`.Payload.After`" + `. Note that the result is a string, so if you want to
 further process the result (e.g. parse the string as JSON), you need to chain
 other processors (e.g. [` + "`json.decode`" + `](/docs/processors/builtin/json.decode)).`,
-		Config: map[string]string{
+		Config: config.Config{
 			"field": ".Payload.After.foo",
 		},
 		Have: opencdc.Record{

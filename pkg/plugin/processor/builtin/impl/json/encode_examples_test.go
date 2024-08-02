@@ -15,6 +15,7 @@
 package json
 
 import (
+	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -29,7 +30,7 @@ func ExampleEncodeProcessor_structuredKey() {
 		Summary: "Encode record key to JSON",
 		Description: `This example takes a record containing structured data in
 ` + "`.Key`" + ` and converts it into a raw JSON string.`,
-		Config: map[string]string{"field": ".Key"},
+		Config: config.Config{"field": ".Key"},
 		Have: opencdc.Record{
 			Operation: opencdc.OperationCreate,
 			Key: opencdc.StructuredData{
@@ -72,7 +73,7 @@ func ExampleEncodeProcessor_mapToJSON() {
 		Summary: "Encode nested field to JSON",
 		Description: `This example takes a record containing a map in
 ` + "`.Payload.Before.foo`" + ` and converts it into a raw JSON string.`,
-		Config: map[string]string{"field": ".Payload.Before.foo"},
+		Config: config.Config{"field": ".Payload.Before.foo"},
 		Have: opencdc.Record{
 			Operation: opencdc.OperationSnapshot,
 			Payload: opencdc.Change{

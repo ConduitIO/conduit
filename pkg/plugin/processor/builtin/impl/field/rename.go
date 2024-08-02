@@ -20,6 +20,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -66,7 +67,7 @@ to parse it into structured data first.`,
 	}, nil
 }
 
-func (p *renameProcessor) Configure(ctx context.Context, m map[string]string) error {
+func (p *renameProcessor) Configure(ctx context.Context, m config.Config) error {
 	var forbiddenFields = []string{
 		internal.MetadataReference,
 		internal.PayloadReference,

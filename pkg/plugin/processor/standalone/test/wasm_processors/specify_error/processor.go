@@ -36,21 +36,6 @@ func (p *testProcessor) Specification() (sdk.Specification, error) {
 	return sdk.Specification{}, errors.New("boom")
 }
 
-func (p *testProcessor) Configure(context.Context, map[string]string) error {
-	// TODO implement me
-	panic("implement me")
-}
-
-func (p *testProcessor) Open(context.Context) error {
-	// TODO implement me
-	panic("implement me")
-}
-
 func (p *testProcessor) Process(context.Context, []opencdc.Record) []sdk.ProcessedRecord {
-	// TODO implement me
-	panic("implement me")
-}
-
-func (p *testProcessor) Teardown(context.Context) error {
-	return nil
+	panic("shouldn't be called")
 }

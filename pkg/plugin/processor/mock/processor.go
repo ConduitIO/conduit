@@ -13,6 +13,7 @@ import (
 	context "context"
 	reflect "reflect"
 
+	config "github.com/conduitio/conduit-commons/config"
 	opencdc "github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	gomock "go.uber.org/mock/gomock"
@@ -43,7 +44,7 @@ func (m *Processor) EXPECT() *ProcessorMockRecorder {
 }
 
 // Configure mocks base method.
-func (m *Processor) Configure(arg0 context.Context, arg1 map[string]string) error {
+func (m *Processor) Configure(arg0 context.Context, arg1 config.Config) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Configure", arg0, arg1)
 	ret0, _ := ret[0].(error)
@@ -69,13 +70,51 @@ func (c *ProcessorConfigureCall) Return(arg0 error) *ProcessorConfigureCall {
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *ProcessorConfigureCall) Do(f func(context.Context, map[string]string) error) *ProcessorConfigureCall {
+func (c *ProcessorConfigureCall) Do(f func(context.Context, config.Config) error) *ProcessorConfigureCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *ProcessorConfigureCall) DoAndReturn(f func(context.Context, map[string]string) error) *ProcessorConfigureCall {
+func (c *ProcessorConfigureCall) DoAndReturn(f func(context.Context, config.Config) error) *ProcessorConfigureCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
+// MiddlewareOptions mocks base method.
+func (m *Processor) MiddlewareOptions() []sdk.ProcessorMiddlewareOption {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MiddlewareOptions")
+	ret0, _ := ret[0].([]sdk.ProcessorMiddlewareOption)
+	return ret0
+}
+
+// MiddlewareOptions indicates an expected call of MiddlewareOptions.
+func (mr *ProcessorMockRecorder) MiddlewareOptions() *ProcessorMiddlewareOptionsCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MiddlewareOptions", reflect.TypeOf((*Processor)(nil).MiddlewareOptions))
+	return &ProcessorMiddlewareOptionsCall{Call: call}
+}
+
+// ProcessorMiddlewareOptionsCall wrap *gomock.Call
+type ProcessorMiddlewareOptionsCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *ProcessorMiddlewareOptionsCall) Return(arg0 []sdk.ProcessorMiddlewareOption) *ProcessorMiddlewareOptionsCall {
+	c.Call = c.Call.Return(arg0)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *ProcessorMiddlewareOptionsCall) Do(f func() []sdk.ProcessorMiddlewareOption) *ProcessorMiddlewareOptionsCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *ProcessorMiddlewareOptionsCall) DoAndReturn(f func() []sdk.ProcessorMiddlewareOption) *ProcessorMiddlewareOptionsCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

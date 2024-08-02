@@ -21,6 +21,7 @@ import (
 	"encoding/base64"
 	"fmt"
 
+	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -61,7 +62,7 @@ Note: if the wrapped [OpenCDC record](https://conduit.io/docs/features/opencdc-r
 	}, nil
 }
 
-func (u *openCDCProcessor) Configure(ctx context.Context, m map[string]string) error {
+func (u *openCDCProcessor) Configure(ctx context.Context, m config.Config) error {
 	cfg := openCDCConfig{}
 	err := sdk.ParseConfig(ctx, m, &cfg, cfg.Parameters())
 	if err != nil {

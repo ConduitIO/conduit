@@ -15,6 +15,7 @@
 package unwrap
 
 import (
+	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -33,7 +34,7 @@ The Kafka Connect record is serialized as a JSON string in the ` + "`.Payload.Af
 The Kafka Connect record's payload will replace the [OpenCDC record](https://conduit.io/docs/features/opencdc-record)'s payload.
 
 We also see how the key is unwrapped too. In this case, the key comes in as structured data.`,
-		Config: map[string]string{},
+		Config: config.Config{},
 		Have: opencdc.Record{
 			Position:  opencdc.Position("test position"),
 			Operation: opencdc.OperationCreate,

@@ -19,6 +19,7 @@ package json
 import (
 	"context"
 
+	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -60,7 +61,7 @@ This processor is only applicable to fields under ` + "`.Key`" + `, ` + "`.Paylo
 	}, nil
 }
 
-func (p *decodeProcessor) Configure(ctx context.Context, m map[string]string) error {
+func (p *decodeProcessor) Configure(ctx context.Context, m config.Config) error {
 	cfg := decodeConfig{}
 	err := sdk.ParseConfig(ctx, m, &cfg, decodeConfig{}.Parameters())
 	if err != nil {

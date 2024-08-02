@@ -70,7 +70,7 @@ func (p *chaosProcessor) Specification() (sdk.Specification, error) {
 	}, nil
 }
 
-func (p *chaosProcessor) Configure(ctx context.Context, cfg map[string]string) error {
+func (p *chaosProcessor) Configure(ctx context.Context, cfg config.Config) error {
 	p.cfg = cfg
 
 	return p.methodBehavior(ctx, "configure")

@@ -21,6 +21,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -32,31 +33,31 @@ import (
 func TestHTTPProcessor_Configure(t *testing.T) {
 	tests := []struct {
 		name    string
-		config  map[string]string
+		config  config.Config
 		wantErr string
 	}{
 		{
 			name:    "empty config returns error",
-			config:  map[string]string{},
+			config:  config.Config{},
 			wantErr: `failed parsing configuration: config invalid: error validating "request.url": required parameter is not provided`,
 		},
 		{
 			name: "empty url returns error",
-			config: map[string]string{
+			config: config.Config{
 				"request.url": "",
 			},
 			wantErr: `failed parsing configuration: config invalid: error validating "request.url": required parameter is not provided`,
 		},
 		{
 			name: "invalid url returns error",
-			config: map[string]string{
+			config: config.Config{
 				"request.url": ":not/a/valid/url",
 			},
 			wantErr: "configuration check failed: parse \":not/a/valid/url\": missing protocol scheme",
 		},
 		{
 			name: "invalid method returns error",
-			config: map[string]string{
+			config: config.Config{
 				"request.url":    "http://example.com",
 				"request.method": ":foo",
 			},
@@ -64,7 +65,7 @@ func TestHTTPProcessor_Configure(t *testing.T) {
 		},
 		{
 			name: "invalid backoffRetry.count returns error",
-			config: map[string]string{
+			config: config.Config{
 				"request.url":        "http://example.com",
 				"backoffRetry.count": "not-a-number",
 			},
@@ -72,7 +73,7 @@ func TestHTTPProcessor_Configure(t *testing.T) {
 		},
 		{
 			name: "invalid backoffRetry.min returns error",
-			config: map[string]string{
+			config: config.Config{
 				"request.url":        "http://example.com",
 				"backoffRetry.count": "1",
 				"backoffRetry.min":   "not-a-duration",
@@ -81,7 +82,7 @@ func TestHTTPProcessor_Configure(t *testing.T) {
 		},
 		{
 			name: "invalid backoffRetry.max returns error",
-			config: map[string]string{
+			config: config.Config{
 				"request.url":        "http://example.com",
 				"backoffRetry.count": "1",
 				"backoffRetry.max":   "not-a-duration",
@@ -90,7 +91,7 @@ func TestHTTPProcessor_Configure(t *testing.T) {
 		},
 		{
 			name: "invalid backoffRetry.factor returns error",
-			config: map[string]string{
+			config: config.Config{
 				"request.url":         "http://example.com",
 				"backoffRetry.count":  "1",
 				"backoffRetry.factor": "not-a-number",
@@ -99,28 +100,28 @@ func TestHTTPProcessor_Configure(t *testing.T) {
 		},
 		{
 			name: "valid url returns processor",
-			config: map[string]string{
+			config: config.Config{
 				"request.url": "http://example.com",
 			},
 			wantErr: "",
 		},
 		{
 			name: "valid url template returns processor",
-			config: map[string]string{
+			config: config.Config{
 				"request.url": "http://example.com/{{.Payload.After}}",
 			},
 			wantErr: "",
 		},
 		{
 			name: "invalid url template with a hyphen",
-			config: map[string]string{
+			config: config.Config{
 				"request.url": "http://example.com/{{.Payload.After.my-key}}",
 			},
 			wantErr: "error while parsing the URL template: template: :1: bad character U+002D '-'",
 		},
 		{
 			name: "valid url and method returns processor",
-			config: map[string]string{
+			config: config.Config{
 				"request.url":    "http://example.com",
 				"request.method": "GET",
 			},
@@ -128,7 +129,7 @@ func TestHTTPProcessor_Configure(t *testing.T) {
 		},
 		{
 			name: "valid url, method and backoff retry config returns processor",
-			config: map[string]string{
+			config: config.Config{
 				"request.url":         "http://example.com",
 				"request.contentType": "application/json",
 				"backoffRetry.count":  "1",
@@ -140,7 +141,7 @@ func TestHTTPProcessor_Configure(t *testing.T) {
 		},
 		{
 			name: "content-type header",
-			config: map[string]string{
+			config: config.Config{
 				"request.url":          "http://example.com",
 				"headers.content-type": "application/json",
 			},
@@ -148,7 +149,7 @@ func TestHTTPProcessor_Configure(t *testing.T) {
 		},
 		{
 			name: "invalid: content-type header and request.contentType",
-			config: map[string]string{
+			config: config.Config{
 				"request.url":          "http://example.com",
 				"request.contentType":  "application/json",
 				"headers.content-type": "application/json",
@@ -157,7 +158,7 @@ func TestHTTPProcessor_Configure(t *testing.T) {
 		},
 		{
 			name: "invalid: same value of response.body and response.status",
-			config: map[string]string{
+			config: config.Config{
 				"request.url":     "http://example.com",
 				"response.body":   ".Payload.After",
 				"response.status": ".Payload.After",
@@ -166,7 +167,7 @@ func TestHTTPProcessor_Configure(t *testing.T) {
 		},
 		{
 			name: "valid response.body and response.status",
-			config: map[string]string{
+			config: config.Config{
 				"request.url":     "http://example.com",
 				"response.body":   ".Payload.After",
 				"response.status": `.Metadata["response.status"]`,
@@ -195,7 +196,7 @@ func TestHTTPProcessor_Success(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		config   map[string]string
+		config   config.Config
 		status   int
 		record   opencdc.Record
 		wantBody string
@@ -203,7 +204,7 @@ func TestHTTPProcessor_Success(t *testing.T) {
 	}{
 		{
 			name: "structured data",
-			config: map[string]string{
+			config: config.Config{
 				"request.method": "POST",
 				"request.body":   "{{ toJson . }}",
 			},
@@ -228,7 +229,7 @@ func TestHTTPProcessor_Success(t *testing.T) {
 		},
 		{
 			name: "raw data",
-			config: map[string]string{
+			config: config.Config{
 				"request.method": "GET",
 				"request.body":   "{{ toJson . }}",
 			},
@@ -249,7 +250,7 @@ func TestHTTPProcessor_Success(t *testing.T) {
 		},
 		{
 			name: "custom field for response body and status",
-			config: map[string]string{
+			config: config.Config{
 				"response.body":   ".Payload.After.body",
 				"response.status": ".Payload.After.status",
 				"request.method":  "POST",
@@ -278,7 +279,7 @@ func TestHTTPProcessor_Success(t *testing.T) {
 		},
 		{
 			name: "request body: custom field, structured",
-			config: map[string]string{
+			config: config.Config{
 				"request.body":   "{{ toJson . }}",
 				"response.body":  ".Payload.After.httpResponse",
 				"request.method": "POST",
@@ -311,7 +312,7 @@ func TestHTTPProcessor_Success(t *testing.T) {
 		},
 		{
 			name: "request body: custom field, raw data",
-			config: map[string]string{
+			config: config.Config{
 				"request.body":   `{{ printf "%s" .Payload.Before }}`,
 				"response.body":  ".Payload.After.httpResponse",
 				"request.method": "POST",
@@ -338,7 +339,7 @@ func TestHTTPProcessor_Success(t *testing.T) {
 		},
 		{
 			name: "request body: static",
-			config: map[string]string{
+			config: config.Config{
 				"request.body":   `foo`,
 				"response.body":  ".Payload.After.httpResponse",
 				"request.method": "POST",
@@ -460,12 +461,12 @@ func TestHTTPProcessor_URLTemplate(t *testing.T) {
 			}))
 			defer srv.Close()
 
-			config := map[string]string{
+			cfg := config.Config{
 				// attach the path template to the URL
 				"request.url": srv.URL + tc.pathTmpl,
 			}
 			underTest := NewHTTPProcessor(log.Test(t))
-			err := underTest.Configure(context.Background(), config)
+			err := underTest.Configure(context.Background(), cfg)
 			is.NoErr(err)
 
 			got := underTest.Process(context.Background(), []opencdc.Record{tc.record})
@@ -508,7 +509,7 @@ func TestHTTPProcessor_RetrySuccess(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	config := map[string]string{
+	cfg := config.Config{
 		"request.url":         srv.URL,
 		"backoffRetry.count":  "4",
 		"backoffRetry.min":    "5ms",
@@ -518,7 +519,7 @@ func TestHTTPProcessor_RetrySuccess(t *testing.T) {
 	}
 
 	underTest := NewHTTPProcessor(log.Test(t))
-	err := underTest.Configure(context.Background(), config)
+	err := underTest.Configure(context.Background(), cfg)
 	is.NoErr(err)
 
 	got := underTest.Process(context.Background(), rec)
@@ -545,7 +546,7 @@ func TestHTTPProcessor_RetryFail(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	config := map[string]string{
+	cfg := config.Config{
 		"request.url":         srv.URL,
 		"backoffRetry.count":  "5",
 		"backoffRetry.min":    "5ms",
@@ -554,7 +555,7 @@ func TestHTTPProcessor_RetryFail(t *testing.T) {
 	}
 
 	underTest := NewHTTPProcessor(log.Test(t))
-	err := underTest.Configure(context.Background(), config)
+	err := underTest.Configure(context.Background(), cfg)
 	is.NoErr(err)
 
 	got := underTest.Process(

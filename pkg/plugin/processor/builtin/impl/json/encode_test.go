@@ -18,6 +18,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -31,13 +32,13 @@ func TestEncode_Process(t *testing.T) {
 	ctx := context.Background()
 	testCases := []struct {
 		name   string
-		config map[string]string
+		config config.Config
 		record opencdc.Record
 		want   sdk.ProcessedRecord
 	}{
 		{
 			name:   "structured key to raw data",
-			config: map[string]string{"field": ".Key"},
+			config: config.Config{"field": ".Key"},
 			record: opencdc.Record{
 				Key: opencdc.StructuredData{
 					"after": map[string]any{"data": float64(4), "id": float64(3)},
@@ -48,7 +49,7 @@ func TestEncode_Process(t *testing.T) {
 			},
 		}, {
 			name:   "encode payload.after.foo map",
-			config: map[string]string{"field": ".Payload.After.foo"},
+			config: config.Config{"field": ".Payload.After.foo"},
 			record: opencdc.Record{
 				Payload: opencdc.Change{
 					After: opencdc.StructuredData{
@@ -68,7 +69,7 @@ func TestEncode_Process(t *testing.T) {
 			},
 		}, {
 			name:   "slice under payload.after to raw",
-			config: map[string]string{"field": ".Payload.After"},
+			config: config.Config{"field": ".Payload.After"},
 			record: opencdc.Record{
 				Payload: opencdc.Change{
 					After: opencdc.StructuredData{
@@ -83,7 +84,7 @@ func TestEncode_Process(t *testing.T) {
 			},
 		}, {
 			name:   "encode int value",
-			config: map[string]string{"field": ".Payload.After.foo"},
+			config: config.Config{"field": ".Payload.After.foo"},
 			record: opencdc.Record{
 				Payload: opencdc.Change{
 					After: opencdc.StructuredData{
@@ -100,7 +101,7 @@ func TestEncode_Process(t *testing.T) {
 			},
 		}, {
 			name:   "nil value",
-			config: map[string]string{"field": ".Payload.After"},
+			config: config.Config{"field": ".Payload.After"},
 			record: opencdc.Record{
 				Payload: opencdc.Change{
 					After: nil,
@@ -130,37 +131,37 @@ func TestEncode_Configure(t *testing.T) {
 	ctx := context.Background()
 	testCases := []struct {
 		name    string
-		config  map[string]string
+		config  config.Config
 		wantErr bool
 	}{
 		{
 			name:    "valid field, key",
-			config:  map[string]string{"field": ".Key"},
+			config:  config.Config{"field": ".Key"},
 			wantErr: false,
 		},
 		{
 			name:    "valid field, payload.after",
-			config:  map[string]string{"field": ".Payload.After"},
+			config:  config.Config{"field": ".Payload.After"},
 			wantErr: false,
 		},
 		{
 			name:    "valid field, payload.after.foo",
-			config:  map[string]string{"field": ".Payload.After.foo"},
+			config:  config.Config{"field": ".Payload.After.foo"},
 			wantErr: false,
 		},
 		{
 			name:    "invalid config, missing param",
-			config:  map[string]string{},
+			config:  config.Config{},
 			wantErr: true,
 		},
 		{
 			name:    "invalid field .Metadata",
-			config:  map[string]string{"field": ".Metadata"},
+			config:  config.Config{"field": ".Metadata"},
 			wantErr: true,
 		},
 		{
 			name:    "invalid field, .Payload",
-			config:  map[string]string{"field": ".Payload"},
+			config:  config.Config{"field": ".Payload"},
 			wantErr: true,
 		},
 	}

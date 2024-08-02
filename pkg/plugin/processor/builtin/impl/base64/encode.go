@@ -21,6 +21,7 @@ import (
 	"encoding/base64"
 	"fmt"
 
+	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -60,7 +61,7 @@ assign its value.`,
 	}, nil
 }
 
-func (p *encodeProcessor) Configure(ctx context.Context, m map[string]string) error {
+func (p *encodeProcessor) Configure(ctx context.Context, m config.Config) error {
 	err := sdk.ParseConfig(ctx, m, &p.config, p.config.Parameters())
 	if err != nil {
 		return cerrors.Errorf("failed to parse configuration: %w", err)

@@ -18,6 +18,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -27,7 +28,7 @@ import (
 func TestError_EmptyConfig(t *testing.T) {
 	is := is.New(t)
 	proc := NewErrorProcessor(log.Nop())
-	cfg := map[string]string{}
+	cfg := config.Config{}
 	ctx := context.Background()
 	records := []opencdc.Record{
 		{
@@ -70,15 +71,15 @@ func TestError_ErrorMessage(t *testing.T) {
 	}
 	testCases := []struct {
 		name            string
-		cfg             map[string]string
+		cfg             config.Config
 		wantErrMessages []string
 	}{{
 		name:            "static error message",
-		cfg:             map[string]string{"message": "static error message"},
+		cfg:             config.Config{"message": "static error message"},
 		wantErrMessages: []string{"static error message", "static error message"},
 	}, {
 		name:            "template error message",
-		cfg:             map[string]string{"message": "error message: {{.Metadata.foo}}"},
+		cfg:             config.Config{"message": "error message: {{.Metadata.foo}}"},
 		wantErrMessages: []string{"error message: rec 1", "error message: rec 2"},
 	}}
 

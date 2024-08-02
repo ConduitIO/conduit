@@ -18,6 +18,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -120,7 +121,7 @@ func TestEncodeProcessor_Success(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			is := is.New(t)
 			proc := NewEncodeProcessor(log.Nop())
-			err := proc.Configure(ctx, map[string]string{"field": tc.field})
+			err := proc.Configure(ctx, config.Config{"field": tc.field})
 			is.NoErr(err)
 			got := proc.Process(ctx, []opencdc.Record{tc.record})
 			is.Equal(1, len(got))
@@ -163,7 +164,7 @@ func TestEncodeProcessor_Fail(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			is := is.New(t)
 			proc := NewEncodeProcessor(log.Nop())
-			err := proc.Configure(ctx, map[string]string{"field": tc.field})
+			err := proc.Configure(ctx, config.Config{"field": tc.field})
 			is.NoErr(err)
 			got := proc.Process(ctx, []opencdc.Record{tc.record})
 			is.Equal(1, len(got))

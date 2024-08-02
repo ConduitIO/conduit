@@ -15,6 +15,7 @@
 package field
 
 import (
+	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -28,7 +29,7 @@ func ExampleSetProcessor_setOperation() {
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary:     "Sets the record operation to `update`",
 		Description: "This example sets the `.Operation` field to `update` for all records.",
-		Config:      map[string]string{"field": ".Operation", "value": "update"},
+		Config:      config.Config{"field": ".Operation", "value": "update"},
 		Have:        opencdc.Record{Operation: opencdc.OperationCreate},
 		Want:        sdk.SingleRecord{Operation: opencdc.OperationUpdate},
 	})
@@ -59,7 +60,7 @@ func ExampleSetProcessor_addField() {
 		Summary: `Add field`,
 		Description: `This example adds a new field to the record. The field is
 added to ` + "`.Payload.After`" + ` and is set to ` + "`bar`" + `.`,
-		Config: map[string]string{"field": ".Payload.After.foo", "value": "bar"},
+		Config: config.Config{"field": ".Payload.After.foo", "value": "bar"},
 		Have: opencdc.Record{Operation: opencdc.OperationSnapshot,
 			Key: opencdc.StructuredData{"my-key": "id"},
 		},
@@ -99,7 +100,7 @@ func ExampleSetProcessor_template() {
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary:     `Set field using Go template`,
 		Description: "This example sets the `.Payload.After.postgres` field to `true` if the `.Metadata.table` field contains `postgres`.",
-		Config:      map[string]string{"field": ".Payload.After.postgres", "value": "{{ eq .Metadata.table \"postgres\" }}"},
+		Config:      config.Config{"field": ".Payload.After.postgres", "value": "{{ eq .Metadata.table \"postgres\" }}"},
 		Have: opencdc.Record{
 			Metadata:  map[string]string{"table": "postgres"},
 			Operation: opencdc.OperationSnapshot,

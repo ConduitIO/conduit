@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/Masterminds/sprig/v3"
+	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -137,7 +138,7 @@ The processor will retry the request according to the backoff configuration.`,
 	}, nil
 }
 
-func (p *httpProcessor) Configure(ctx context.Context, m map[string]string) error {
+func (p *httpProcessor) Configure(ctx context.Context, m config.Config) error {
 	err := sdk.ParseConfig(ctx, m, &p.config, p.config.Parameters())
 	if err != nil {
 		return cerrors.Errorf("failed parsing configuration: %w", err)

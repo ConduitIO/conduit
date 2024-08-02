@@ -18,6 +18,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -27,7 +28,7 @@ import (
 func TestExcludeFields_Process(t *testing.T) {
 	is := is.New(t)
 	proc := NewExcludeProcessor(log.Nop())
-	cfg := map[string]string{"fields": ".Metadata,.Payload.After.foo"}
+	cfg := config.Config{"fields": ".Metadata,.Payload.After.foo"}
 	ctx := context.Background()
 	records := []opencdc.Record{
 		{
@@ -60,24 +61,24 @@ func TestExcludeField_Configure(t *testing.T) {
 	ctx := context.Background()
 	testCases := []struct {
 		name    string
-		cfg     map[string]string
+		cfg     config.Config
 		wantErr bool
 	}{
 		{
 			name:    "valid config",
-			cfg:     map[string]string{"fields": ".Metadata,.Payload"},
+			cfg:     config.Config{"fields": ".Metadata,.Payload"},
 			wantErr: false,
 		}, {
 			name:    "missing parameter",
-			cfg:     map[string]string{},
+			cfg:     config.Config{},
 			wantErr: true,
 		}, {
 			name:    "cannot exclude .Operation",
-			cfg:     map[string]string{"fields": ".Operation"},
+			cfg:     config.Config{"fields": ".Operation"},
 			wantErr: true,
 		}, {
 			name:    "cannot exclude .Position",
-			cfg:     map[string]string{"fields": ".Position"},
+			cfg:     config.Config{"fields": ".Position"},
 			wantErr: true,
 		},
 	}

@@ -18,6 +18,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -28,7 +29,7 @@ func TestRenameField_Process(t *testing.T) {
 	is := is.New(t)
 	proc := NewRenameProcessor(log.Nop())
 	ctx := context.Background()
-	config := map[string]string{"mapping": ".Metadata.key1:newKey,.Payload.After.foo:newFoo"}
+	cfg := config.Config{"mapping": ".Metadata.key1:newKey,.Payload.After.foo:newFoo"}
 	records := []opencdc.Record{
 		{
 			Metadata: map[string]string{"key1": "val1", "key2": "val2"},
@@ -49,7 +50,7 @@ func TestRenameField_Process(t *testing.T) {
 			},
 		},
 	}
-	err := proc.Configure(ctx, config)
+	err := proc.Configure(ctx, cfg)
 	is.NoErr(err)
 	output := proc.Process(context.Background(), records)
 	is.True(len(output) == 1)
@@ -61,20 +62,20 @@ func TestRenameField_Configure(t *testing.T) {
 	ctx := context.Background()
 	testCases := []struct {
 		name    string
-		cfg     map[string]string
+		cfg     config.Config
 		wantErr bool
 	}{
 		{
 			name:    "valid config",
-			cfg:     map[string]string{"mapping": ".Payload.After.foo:bar"},
+			cfg:     config.Config{"mapping": ".Payload.After.foo:bar"},
 			wantErr: false,
 		}, {
 			name:    "invalid config, contains a top-level reference",
-			cfg:     map[string]string{"mapping": ".Metadata:foo,.Payload.After.foo:bar"},
+			cfg:     config.Config{"mapping": ".Metadata:foo,.Payload.After.foo:bar"},
 			wantErr: true,
 		}, {
 			name:    "mapping param is missing",
-			cfg:     map[string]string{},
+			cfg:     config.Config{},
 			wantErr: true,
 		},
 	}

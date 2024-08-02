@@ -17,10 +17,13 @@ package standalone
 import (
 	"context"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"testing"
 	"time"
+
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/csync"
@@ -119,25 +122,36 @@ func ChaosProcessorSpecifications() sdk.Specification {
 			config.ValidationInclusion{List: []string{"success", "error", "panic"}},
 		},
 	}
+
+	dummyProcessor := sdk.NewProcessorFunc(sdk.Specification{}, nil)
+	spec, err := sdk.ProcessorWithMiddleware(dummyProcessor, sdk.DefaultProcessorMiddleware()...).Specification()
+	if err != nil {
+		panic(cerrors.Errorf("failed to get specifications for middleware: %w", err))
+	}
+
+	chaosParams := map[string]config.Parameter{
+		"configure": param,
+		"open":      param,
+		"process.prefix": {
+			Default:     "",
+			Type:        config.ParameterTypeString,
+			Description: "prefix to be added to the payload's after",
+			Validations: []config.Validation{
+				config.ValidationRequired{},
+			},
+		},
+		"process":  param,
+		"teardown": param,
+	}
+	// add parameters from middleware
+	maps.Copy(chaosParams, spec.Parameters)
+
 	return sdk.Specification{
 		Name:        "chaos-processor",
 		Summary:     "chaos processor summary",
 		Description: "chaos processor description",
 		Version:     "v1.3.5",
 		Author:      "Meroxa, Inc.",
-		Parameters: map[string]config.Parameter{
-			"configure": param,
-			"open":      param,
-			"process.prefix": {
-				Default:     "",
-				Type:        config.ParameterTypeString,
-				Description: "prefix to be added to the payload's after",
-				Validations: []config.Validation{
-					config.ValidationRequired{},
-				},
-			},
-			"process":  param,
-			"teardown": param,
-		},
+		Parameters:  chaosParams,
 	}
 }

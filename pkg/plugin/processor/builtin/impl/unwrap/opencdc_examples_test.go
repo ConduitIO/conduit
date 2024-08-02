@@ -15,6 +15,7 @@
 package unwrap
 
 import (
+	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -29,7 +30,7 @@ func ExampleOpenCDCProcessor() {
 		Summary: "Unwrap an [OpenCDC record](https://conduit.io/docs/features/opencdc-record)",
 		Description: "In this example we use the `unwrap.opencdc` processor to unwrap the [OpenCDC record](https://conduit.io/docs/features/opencdc-record) found in the " +
 			"record's `.Payload.After` field.",
-		Config: map[string]string{},
+		Config: config.Config{},
 		Have: opencdc.Record{
 			Position:  opencdc.Position("wrapping position"),
 			Key:       opencdc.RawData("wrapping key"),

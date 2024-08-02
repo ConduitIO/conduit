@@ -18,6 +18,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
+
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit-processor-sdk/pprocutils"
@@ -40,7 +42,7 @@ func TestWASMProcessor_Specification_Success(t *testing.T) {
 	is.NoErr(err)
 
 	wantSpec := ChaosProcessorSpecifications()
-	is.Equal(gotSpec, wantSpec)
+	is.Equal("", cmp.Diff(gotSpec, wantSpec))
 
 	is.NoErr(underTest.Teardown(ctx))
 }
