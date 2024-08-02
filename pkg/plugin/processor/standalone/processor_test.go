@@ -18,8 +18,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/google/go-cmp/cmp"
-
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit-processor-sdk/pprocutils"
