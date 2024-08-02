@@ -23,7 +23,7 @@ import (
 
 //nolint:govet // a more descriptive example description
 func ExampleDecodeProcessor_rawKey() {
-	p := NewDecodeProcessor(log.Nop())
+	p := NewDecodeProcessor(log.Nop(), nil)
 
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary: `Decode record key as JSON`,
@@ -67,7 +67,7 @@ func ExampleDecodeProcessor_rawKey() {
 
 //nolint:govet // a more descriptive example description
 func ExampleDecodeProcessor_rawPayloadField() {
-	p := NewDecodeProcessor(log.Nop())
+	p := NewDecodeProcessor(log.Nop(), nil)
 
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary: "Decode nested field as JSON",

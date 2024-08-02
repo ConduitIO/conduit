@@ -23,7 +23,7 @@ import (
 
 //nolint:govet // a more descriptive example description
 func ExampleEncodeProcessor_rawData() {
-	p := NewEncodeProcessor(log.Nop())
+	p := NewEncodeProcessor(log.Nop(), nil)
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary: "Encode record key to base64",
 		Description: `TThis example takes a record containing raw data in
@@ -79,7 +79,7 @@ func ExampleEncodeProcessor_rawData() {
 
 //nolint:govet // a more descriptive example description
 func ExampleBase64EncodeProcessor_stringField() {
-	p := NewEncodeProcessor(log.Nop())
+	p := NewEncodeProcessor(log.Nop(), nil)
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary: "Encode nested value to base64",
 		Description: `This example takes a record containing a string in

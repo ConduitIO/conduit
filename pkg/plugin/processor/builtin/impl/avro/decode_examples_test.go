@@ -55,7 +55,7 @@ func ExampleDecodeProcessor() {
 		panic(fmt.Sprintf("failed to create schema: %v", err))
 	}
 
-	p := NewDecodeProcessor(log.Nop())
+	p := NewDecodeProcessor(log.Nop(), newTestSchemaService())
 
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary: "Decode a record field in Avro format",

@@ -28,7 +28,7 @@ import (
 )
 
 func TestDecodeJSON_Process(t *testing.T) {
-	proc := NewDecodeProcessor(log.Nop())
+	proc := NewDecodeProcessor(log.Nop(), nil)
 	ctx := context.Background()
 	testCases := []struct {
 		name   string
@@ -174,7 +174,7 @@ func TestDecodeJSON_Process(t *testing.T) {
 }
 
 func TestDecodeJSON_Configure(t *testing.T) {
-	proc := NewDecodeProcessor(log.Nop())
+	proc := NewDecodeProcessor(log.Nop(), nil)
 	ctx := context.Background()
 	testCases := []struct {
 		name    string

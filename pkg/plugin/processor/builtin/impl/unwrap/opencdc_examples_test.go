@@ -23,7 +23,7 @@ import (
 
 //nolint:govet // we're using a more descriptive name of example
 func ExampleOpenCDCProcessor() {
-	p := NewOpenCDCProcessor(log.Nop())
+	p := NewOpenCDCProcessor(log.Nop(), nil)
 
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary: "Unwrap an [OpenCDC record](https://conduit.io/docs/features/opencdc-record)",

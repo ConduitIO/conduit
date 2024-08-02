@@ -23,7 +23,7 @@ import (
 
 //nolint:govet // a more descriptive example description
 func ExampleSetProcessor_setOperation() {
-	p := NewSetProcessor(log.Nop())
+	p := NewSetProcessor(log.Nop(), nil)
 
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary:     "Sets the record operation to `update`",
@@ -53,7 +53,7 @@ func ExampleSetProcessor_setOperation() {
 
 //nolint:govet // a more descriptive example description
 func ExampleSetProcessor_addField() {
-	p := NewSetProcessor(log.Nop())
+	p := NewSetProcessor(log.Nop(), nil)
 
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary: `Add field`,
@@ -94,7 +94,7 @@ added to ` + "`.Payload.After`" + ` and is set to ` + "`bar`" + `.`,
 
 //nolint:govet // a more descriptive example description
 func ExampleSetProcessor_template() {
-	p := NewSetProcessor(log.Nop())
+	p := NewSetProcessor(log.Nop(), nil)
 
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary:     `Set field using Go template`,

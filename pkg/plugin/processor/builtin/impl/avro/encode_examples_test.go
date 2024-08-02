@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:build !integration
-
 package avro
 
 import (
@@ -34,7 +32,7 @@ func ExampleEncodeProcessor_autoRegister() {
 	url, cleanup := schemaregistrytest.ExampleSchemaRegistryURL("ExampleEncodeProcessor_autoRegister", 54322)
 	defer cleanup()
 
-	p := NewEncodeProcessor(log.Nop())
+	p := NewEncodeProcessor(log.Nop(), newTestSchemaService())
 
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary: "Auto-register schema",
@@ -134,7 +132,7 @@ func ExampleEncodeProcessor_preRegistered() {
 		panic(fmt.Sprintf("failed to create schema: %v", err))
 	}
 
-	p := NewEncodeProcessor(log.Nop())
+	p := NewEncodeProcessor(log.Nop(), newTestSchemaService())
 
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary: "Pre-register schema",

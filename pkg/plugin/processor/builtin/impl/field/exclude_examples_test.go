@@ -23,7 +23,7 @@ import (
 
 //nolint:govet // a more descriptive example description
 func ExampleExcludeProcessor_oneField() {
-	p := NewExcludeProcessor(log.Nop())
+	p := NewExcludeProcessor(log.Nop(), nil)
 
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary:     "Exclude all fields in payload",
@@ -66,7 +66,7 @@ func ExampleExcludeProcessor_oneField() {
 
 //nolint:govet // a more descriptive example description
 func ExampleExcludeProcessor_multipleFields() {
-	p := NewExcludeProcessor(log.Nop())
+	p := NewExcludeProcessor(log.Nop(), nil)
 
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary: `Exclude multiple fields`,

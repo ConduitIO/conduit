@@ -23,7 +23,7 @@ import (
 
 //nolint:govet // we're using a more descriptive name of example
 func ExampleKafkaConnectProcesor() {
-	p := NewKafkaConnectProcessor(log.Nop())
+	p := NewKafkaConnectProcessor(log.Nop(), nil)
 
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary: "Unwrap a Kafka Connect record",

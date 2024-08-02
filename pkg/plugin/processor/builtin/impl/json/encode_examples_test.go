@@ -23,7 +23,7 @@ import (
 
 //nolint:govet // a more descriptive example description
 func ExampleEncodeProcessor_structuredKey() {
-	p := NewEncodeProcessor(log.Nop())
+	p := NewEncodeProcessor(log.Nop(), nil)
 
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary: "Encode record key to JSON",
@@ -66,7 +66,7 @@ func ExampleEncodeProcessor_structuredKey() {
 
 //nolint:govet // a more descriptive example description
 func ExampleEncodeProcessor_mapToJSON() {
-	p := NewEncodeProcessor(log.Nop())
+	p := NewEncodeProcessor(log.Nop(), nil)
 
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary: "Encode nested field to JSON",

@@ -23,7 +23,7 @@ import (
 
 //nolint:govet // a more descriptive example description
 func ExampleJavascriptProcessor() {
-	p := NewJavascriptProcessor(log.Nop())
+	p := NewJavascriptProcessor(log.Nop(), nil)
 
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary: "Modify a record's metadata and payload using JavaScript",

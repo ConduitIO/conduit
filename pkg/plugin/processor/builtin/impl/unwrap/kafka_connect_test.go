@@ -53,7 +53,7 @@ func TestKafkaConnectProcessor_Configure(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			is := is.New(t)
 
-			err := NewKafkaConnectProcessor(log.Test(t)).Configure(context.Background(), tc.config)
+			err := NewKafkaConnectProcessor(log.Test(t), nil).Configure(context.Background(), tc.config)
 			if tc.wantErr != "" {
 				is.True(err != nil)
 				is.Equal(tc.wantErr, err.Error())
@@ -143,7 +143,7 @@ func TestKafkaConnectProcessor_Process(t *testing.T) {
 			is := is.New(t)
 			ctx := context.Background()
 
-			underTest := NewKafkaConnectProcessor(log.Test(t))
+			underTest := NewKafkaConnectProcessor(log.Test(t), nil)
 			err := underTest.Configure(ctx, tc.config)
 			is.NoErr(err)
 

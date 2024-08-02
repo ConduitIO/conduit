@@ -30,7 +30,7 @@ import (
 
 //nolint:govet // we're using a more descriptive name of example
 func ExampleHTTPProcessor() {
-	p := NewHTTPProcessor(conduit_log.Nop())
+	p := NewHTTPProcessor(conduit_log.Nop(), nil)
 
 	srv := newTestServer()
 	// Stop the server on return from the function.
@@ -92,7 +92,7 @@ header and how to store the value of the HTTP response's code in the metadata fi
 
 //nolint:govet // we're using a more descriptive name of example
 func ExampleHTTPProcessor_DynamicURL() {
-	p := NewHTTPProcessor(conduit_log.Nop())
+	p := NewHTTPProcessor(conduit_log.Nop(), nil)
 
 	srv := newTestServer()
 	// Stop the server on return from the function.

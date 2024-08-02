@@ -119,7 +119,7 @@ func TestEncodeProcessor_Success(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			is := is.New(t)
-			proc := NewEncodeProcessor(log.Nop())
+			proc := NewEncodeProcessor(log.Nop(), nil)
 			err := proc.Configure(ctx, map[string]string{"field": tc.field})
 			is.NoErr(err)
 			got := proc.Process(ctx, []opencdc.Record{tc.record})
@@ -162,7 +162,7 @@ func TestEncodeProcessor_Fail(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			is := is.New(t)
-			proc := NewEncodeProcessor(log.Nop())
+			proc := NewEncodeProcessor(log.Nop(), nil)
 			err := proc.Configure(ctx, map[string]string{"field": tc.field})
 			is.NoErr(err)
 			got := proc.Process(ctx, []opencdc.Record{tc.record})

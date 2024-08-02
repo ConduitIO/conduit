@@ -50,7 +50,7 @@ func TestEncodeProcessor_Process_StructuredData(t *testing.T) {
 	want := sdk.SingleRecord(input.Clone())
 	want.Payload.After = opencdc.RawData("encoded")
 
-	underTest := NewEncodeProcessor(log.Nop())
+	underTest := NewEncodeProcessor(log.Nop(), newTestSchemaService())
 	err := underTest.Configure(ctx, config)
 	is.NoErr(err)
 
@@ -87,7 +87,7 @@ func TestEncodeProcessor_Process_RawData(t *testing.T) {
 	want := sdk.SingleRecord(input.Clone())
 	want.Payload.After = opencdc.RawData("encoded")
 
-	underTest := NewEncodeProcessor(log.Nop())
+	underTest := NewEncodeProcessor(log.Nop(), newTestSchemaService())
 	err := underTest.Configure(ctx, config)
 	is.NoErr(err)
 
@@ -146,7 +146,7 @@ func TestEncodeProcessor_Process_RawData_CustomField(t *testing.T) {
 			want := sdk.SingleRecord(input.Clone())
 			want.Payload.Before.(opencdc.StructuredData)["something"] = encodedValue
 
-			underTest := NewEncodeProcessor(log.Nop())
+			underTest := NewEncodeProcessor(log.Nop(), newTestSchemaService())
 			err := underTest.Configure(ctx, config)
 			is.NoErr(err)
 
@@ -236,7 +236,7 @@ func TestEncodeProcessor_Process_EmptyPayloadField(t *testing.T) {
 			want.Payload.After = tc.wantPayloadAfter
 			want.Payload.Before = tc.wantPayloadBefore
 
-			underTest := NewEncodeProcessor(log.Nop())
+			underTest := NewEncodeProcessor(log.Nop(), newTestSchemaService())
 			err := underTest.Configure(ctx, config)
 			is.NoErr(err)
 

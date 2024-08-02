@@ -23,7 +23,7 @@ import (
 
 //nolint:govet // we're using a more descriptive name of example
 func ExampleFilterProcessor() {
-	p := NewFilterProcessor(log.Nop())
+	p := NewFilterProcessor(log.Nop(), nil)
 
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary: `Filter out the record`,

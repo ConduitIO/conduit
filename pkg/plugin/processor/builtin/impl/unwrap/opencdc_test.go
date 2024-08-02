@@ -154,7 +154,7 @@ func TestUnwrapOpenCDC_Configure(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			is := is.New(t)
 
-			underTest := NewOpenCDCProcessor(log.Test(t))
+			underTest := NewOpenCDCProcessor(log.Test(t), nil)
 			gotErr := underTest.Configure(context.Background(), tc.in)
 			if tc.wantErr == "" {
 				is.NoErr(gotErr)
@@ -585,7 +585,7 @@ func TestUnwrapOpenCDC_Process(t *testing.T) {
 			is := is.New(t)
 			ctx := context.Background()
 
-			underTest := NewOpenCDCProcessor(log.Test(t))
+			underTest := NewOpenCDCProcessor(log.Test(t), nil)
 			err := underTest.Configure(ctx, tt.config)
 			is.NoErr(err)
 

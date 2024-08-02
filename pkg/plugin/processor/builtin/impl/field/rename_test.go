@@ -26,7 +26,7 @@ import (
 
 func TestRenameField_Process(t *testing.T) {
 	is := is.New(t)
-	proc := NewRenameProcessor(log.Nop())
+	proc := NewRenameProcessor(log.Nop(), nil)
 	ctx := context.Background()
 	config := map[string]string{"mapping": ".Metadata.key1:newKey,.Payload.After.foo:newFoo"}
 	records := []opencdc.Record{
@@ -57,7 +57,7 @@ func TestRenameField_Process(t *testing.T) {
 }
 
 func TestRenameField_Configure(t *testing.T) {
-	proc := NewRenameProcessor(log.Nop())
+	proc := NewRenameProcessor(log.Nop(), nil)
 	ctx := context.Background()
 	testCases := []struct {
 		name    string

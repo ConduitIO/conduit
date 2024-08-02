@@ -23,7 +23,7 @@ import (
 
 //nolint:govet // a more descriptive example description
 func ExampleRenameProcessor_rename1() {
-	p := NewRenameProcessor(log.Nop())
+	p := NewRenameProcessor(log.Nop(), nil)
 
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary: `Rename multiple fields`,

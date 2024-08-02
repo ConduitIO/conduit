@@ -69,7 +69,7 @@ func TestDecodeProcessor_Process_RawData_CustomField(t *testing.T) {
 			want := sdk.SingleRecord(input.Clone())
 			want.Payload.Before.(opencdc.StructuredData)["something"] = decodedVal
 
-			underTest := NewDecodeProcessor(log.Nop())
+			underTest := NewDecodeProcessor(log.Nop(), newTestSchemaService())
 			err := underTest.Configure(ctx, config)
 			is.NoErr(err)
 

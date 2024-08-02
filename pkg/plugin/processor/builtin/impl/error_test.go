@@ -26,7 +26,7 @@ import (
 
 func TestError_EmptyConfig(t *testing.T) {
 	is := is.New(t)
-	proc := NewErrorProcessor(log.Nop())
+	proc := NewErrorProcessor(log.Nop(), nil)
 	cfg := map[string]string{}
 	ctx := context.Background()
 	records := []opencdc.Record{
@@ -85,7 +85,7 @@ func TestError_ErrorMessage(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			is := is.New(t)
-			proc := NewErrorProcessor(log.Nop())
+			proc := NewErrorProcessor(log.Nop(), nil)
 			ctx := context.Background()
 
 			err := proc.Configure(ctx, tc.cfg)

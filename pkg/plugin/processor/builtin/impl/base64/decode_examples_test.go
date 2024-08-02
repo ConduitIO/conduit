@@ -23,7 +23,7 @@ import (
 
 //nolint:govet // a more descriptive example description
 func ExampleDecodeProcessor() {
-	p := NewDecodeProcessor(log.Nop())
+	p := NewDecodeProcessor(log.Nop(), nil)
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary: "Decode a base64 encoded string",
 		Description: `This example decodes the base64 encoded string stored in

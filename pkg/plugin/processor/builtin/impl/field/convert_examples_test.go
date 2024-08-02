@@ -23,7 +23,7 @@ import (
 
 //nolint:govet // a more descriptive example description
 func ExampleConvertProcessor_stringToInt() {
-	p := NewConvertProcessor(log.Nop())
+	p := NewConvertProcessor(log.Nop(), nil)
 
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary:     "Convert `string` to `int`",
@@ -64,7 +64,7 @@ func ExampleConvertProcessor_stringToInt() {
 
 //nolint:govet // a more descriptive example description
 func ExampleConvertProcessor_intToBool() {
-	p := NewConvertProcessor(log.Nop())
+	p := NewConvertProcessor(log.Nop(), nil)
 
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary:     "Convert `int` to `bool`",
@@ -105,7 +105,7 @@ func ExampleConvertProcessor_intToBool() {
 
 //nolint:govet // a more descriptive example description
 func ExampleConvertProcessor_floatToString() {
-	p := NewConvertProcessor(log.Nop())
+	p := NewConvertProcessor(log.Nop(), nil)
 
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary:     "Convert `float` to `string`",

@@ -21,12 +21,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/conduitio/conduit-commons/database/inmemory"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
-	schemaregistry "github.com/conduitio/conduit-schema-registry"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/conduitio/conduit/pkg/plugin/processor/procutils"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/matryer/is"
@@ -181,7 +178,7 @@ func TestHTTPProcessor_Configure(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			is := is.New(t)
-			underTest := NewHTTPProcessor(log.Test(t), newSchemaService(t))
+			underTest := NewHTTPProcessor(log.Test(t), nil)
 			err := underTest.Configure(context.Background(), tc.config)
 			if tc.wantErr == "" {
 				is.NoErr(err)
@@ -390,7 +387,7 @@ func TestHTTPProcessor_Success(t *testing.T) {
 			defer srv.Close()
 
 			tc.config["request.url"] = srv.URL
-			underTest := NewHTTPProcessor(log.Test(t), newSchemaService(t))
+			underTest := NewHTTPProcessor(log.Test(t), nil)
 			err := underTest.Configure(ctx, tc.config)
 			is.NoErr(err)
 
@@ -467,7 +464,7 @@ func TestHTTPProcessor_URLTemplate(t *testing.T) {
 				// attach the path template to the URL
 				"request.url": srv.URL + tc.pathTmpl,
 			}
-			underTest := NewHTTPProcessor(log.Test(t), newSchemaService(t))
+			underTest := NewHTTPProcessor(log.Test(t), nil)
 			err := underTest.Configure(context.Background(), config)
 			is.NoErr(err)
 
@@ -520,7 +517,7 @@ func TestHTTPProcessor_RetrySuccess(t *testing.T) {
 		"request.body":        "{{ toJson . }}",
 	}
 
-	underTest := NewHTTPProcessor(log.Test(t), newSchemaService(t))
+	underTest := NewHTTPProcessor(log.Test(t), nil)
 	err := underTest.Configure(context.Background(), config)
 	is.NoErr(err)
 
@@ -556,7 +553,7 @@ func TestHTTPProcessor_RetryFail(t *testing.T) {
 		"backoffRetry.factor": "1.2",
 	}
 
-	underTest := NewHTTPProcessor(log.Test(t), newSchemaService(t))
+	underTest := NewHTTPProcessor(log.Test(t), nil)
 
 	err := underTest.Configure(context.Background(), config)
 	is.NoErr(err)
@@ -569,14 +566,4 @@ func TestHTTPProcessor_RetryFail(t *testing.T) {
 	_, isErr := got[0].(sdk.ErrorRecord)
 	is.True(isErr)               // expected an error
 	is.Equal(srvHandlerCount, 6) // expected 6 requests (1 regular and 5 retries)
-}
-
-func newSchemaService(t *testing.T) *procutils.SchemaService {
-	is := is.New(t)
-	is.Helper()
-
-	schemaReg, err := schemaregistry.NewSchemaRegistry(&inmemory.DB{})
-	is.NoErr(err)
-
-	return procutils.NewSchemaService(log.Test(t), schemaReg)
 }

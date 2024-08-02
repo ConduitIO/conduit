@@ -86,7 +86,7 @@ func TestPipelineSimple(t *testing.T) {
 
 	procPluginService := proc_plugin.NewPluginService(
 		logger,
-		proc_builtin.NewRegistry(logger, proc_builtin.DefaultBuiltinProcessors),
+		proc_builtin.NewRegistry(logger, proc_builtin.DefaultBuiltinProcessors, nil),
 		nil,
 	)
 

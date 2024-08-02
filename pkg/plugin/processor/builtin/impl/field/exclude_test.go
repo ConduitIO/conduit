@@ -26,7 +26,7 @@ import (
 
 func TestExcludeFields_Process(t *testing.T) {
 	is := is.New(t)
-	proc := NewExcludeProcessor(log.Nop())
+	proc := NewExcludeProcessor(log.Nop(), nil)
 	cfg := map[string]string{"fields": ".Metadata,.Payload.After.foo"}
 	ctx := context.Background()
 	records := []opencdc.Record{
@@ -56,7 +56,7 @@ func TestExcludeFields_Process(t *testing.T) {
 }
 
 func TestExcludeField_Configure(t *testing.T) {
-	proc := NewExcludeProcessor(log.Nop())
+	proc := NewExcludeProcessor(log.Nop(), nil)
 	ctx := context.Background()
 	testCases := []struct {
 		name    string

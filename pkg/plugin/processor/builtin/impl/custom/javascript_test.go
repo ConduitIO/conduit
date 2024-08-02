@@ -37,7 +37,7 @@ func TestJSProcessor_Logger(t *testing.T) {
 
 	var buf bytes.Buffer
 	logger := log.New(zerolog.New(&buf))
-	underTest := NewJavascriptProcessor(logger)
+	underTest := NewJavascriptProcessor(logger, nil)
 	err := underTest.Configure(
 		ctx,
 		map[string]string{
@@ -63,7 +63,7 @@ func TestJSProcessor_MissingEntrypoint(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
 
-	underTest := NewJavascriptProcessor(log.Nop())
+	underTest := NewJavascriptProcessor(log.Nop(), nil)
 	err := underTest.Configure(
 		ctx,
 		map[string]string{"script": `function something() { logger.Debug("no entrypoint"); }`},
@@ -406,7 +406,7 @@ func TestJSProcessor_BrokenJSCode(t *testing.T) {
 	ctx := context.Background()
 	src := `function {`
 
-	p := NewJavascriptProcessor(log.Test(t))
+	p := NewJavascriptProcessor(log.Test(t), nil)
 	err := p.Configure(
 		ctx,
 		map[string]string{
@@ -460,7 +460,7 @@ func newTestJavaScriptProc(t *testing.T, src string) sdk.Processor {
 	is := is.New(t)
 	ctx := context.Background()
 
-	p := NewJavascriptProcessor(log.Test(t))
+	p := NewJavascriptProcessor(log.Test(t), nil)
 	err := p.Configure(
 		ctx,
 		map[string]string{
