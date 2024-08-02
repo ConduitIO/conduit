@@ -54,7 +54,6 @@ func TestDecodeProcessor_Process_RawData_CustomField(t *testing.T) {
 			ctx := context.Background()
 
 			cfg := config.Config{
-				"url":   "http://localhost",
 				"field": ".Payload.Before.something",
 			}
 			input := opencdc.Record{

@@ -19,8 +19,6 @@ package avro
 
 import (
 	"context"
-	"crypto/tls"
-
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
@@ -28,7 +26,6 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/avro/internal"
 	"github.com/conduitio/conduit/pkg/schemaregistry"
-	"github.com/twmb/franz-go/pkg/sr"
 )
 
 type decoder interface {
@@ -41,12 +38,6 @@ type decodeConfig struct {
 	// For more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).
 	Field string `json:"field" default:".Payload.After"`
 
-	// URL of the schema registry (e.g. http://localhost:8085)
-	URL string `json:"url" validate:"required"`
-
-	Auth authConfig `json:"auth"`
-	TLS  tlsConfig  `json:"tls"`
-
 	fieldResolver sdk.ReferenceResolver
 }
 
@@ -55,16 +46,6 @@ func parseDecodeConfig(ctx context.Context, c config.Config) (decodeConfig, erro
 	err := sdk.ParseConfig(ctx, c, &cfg, cfg.Parameters())
 	if err != nil {
 		return decodeConfig{}, err
-	}
-
-	err = cfg.Auth.validate()
-	if err != nil {
-		return decodeConfig{}, cerrors.Errorf("invalid basic auth: %w", err)
-	}
-
-	err = cfg.TLS.parse()
-	if err != nil {
-		return decodeConfig{}, cerrors.Errorf("failed parsing TLS: %w", err)
 	}
 
 	// Parse target field
@@ -77,36 +58,21 @@ func parseDecodeConfig(ctx context.Context, c config.Config) (decodeConfig, erro
 	return cfg, nil
 }
 
-func (c decodeConfig) ClientOptions() []sr.ClientOpt {
-	clientOpts := []sr.ClientOpt{sr.URLs(c.URL)}
-	if c.Auth.Username != "" && c.Auth.Password != "" {
-		clientOpts = append(clientOpts, sr.BasicAuth(c.Auth.Username, c.Auth.Password))
-	}
-
-	if c.TLS.tlsClientCert != nil {
-		tlsCfg := &tls.Config{
-			Certificates: []tls.Certificate{*c.TLS.tlsClientCert},
-			MinVersion:   tls.VersionTLS12,
-		}
-		if c.TLS.tlsCACert != nil {
-			tlsCfg.RootCAs = c.TLS.tlsCACert
-		}
-		clientOpts = append(clientOpts, sr.DialTLSConfig(tlsCfg))
-	}
-
-	return clientOpts
-}
-
 type decodeProcessor struct {
 	sdk.UnimplementedProcessor
 
-	logger  log.CtxLogger
-	cfg     decodeConfig
-	decoder decoder
+	logger   log.CtxLogger
+	cfg      decodeConfig
+	decoder  decoder
+	registry schemaregistry.Registry
 }
 
 func NewDecodeProcessor(logger log.CtxLogger) sdk.Processor {
 	return &decodeProcessor{logger: logger}
+}
+
+func (p *decodeProcessor) SetSchemaRegistry(registry schemaregistry.Registry) {
+	p.registry = registry
 }
 
 func (p *decodeProcessor) Specification() (sdk.Specification, error) {
@@ -139,12 +105,7 @@ func (p *decodeProcessor) Configure(ctx context.Context, c config.Config) error 
 }
 
 func (p *decodeProcessor) Open(context.Context) error {
-	// TODO: somehow inject the schemaregistry.Registry that Conduit created.
-	client, err := schemaregistry.NewClient(p.logger, p.cfg.ClientOptions()...)
-	if err != nil {
-		return cerrors.Errorf("could not create schema registry client: %w", err)
-	}
-	p.decoder = internal.NewDecoder(client, p.logger)
+	p.decoder = internal.NewDecoder(p.registry, p.logger)
 
 	return nil
 }
