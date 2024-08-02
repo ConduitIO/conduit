@@ -34,19 +34,17 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin/connector/connutils"
 )
 
-var (
-	// DefaultBuiltinConnectors contains the default built-in connectors.
-	// The key of the map is the import path of the module
-	// containing the connector implementation.
-	DefaultBuiltinConnectors = map[string]sdk.Connector{
-		"github.com/conduitio/conduit-connector-file":      file.Connector,
-		"github.com/conduitio/conduit-connector-generator": generator.Connector,
-		"github.com/conduitio/conduit-connector-kafka":     kafka.Connector,
-		"github.com/conduitio/conduit-connector-log":       connLog.Connector,
-		"github.com/conduitio/conduit-connector-postgres":  postgres.Connector,
-		"github.com/conduitio/conduit-connector-s3":        s3.Connector,
-	}
-)
+// DefaultBuiltinConnectors contains the default built-in connectors.
+// The key of the map is the import path of the module
+// containing the connector implementation.
+var DefaultBuiltinConnectors = map[string]sdk.Connector{
+	"github.com/conduitio/conduit-connector-file":      file.Connector,
+	"github.com/conduitio/conduit-connector-generator": generator.Connector,
+	"github.com/conduitio/conduit-connector-kafka":     kafka.Connector,
+	"github.com/conduitio/conduit-connector-log":       connLog.Connector,
+	"github.com/conduitio/conduit-connector-postgres":  postgres.Connector,
+	"github.com/conduitio/conduit-connector-s3":        s3.Connector,
+}
 
 type Registry struct {
 	logger log.CtxLogger

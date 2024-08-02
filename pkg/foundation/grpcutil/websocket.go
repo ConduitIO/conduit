@@ -42,9 +42,11 @@ func newInMemoryResponseWriter(writer io.Writer) *inMemoryResponseWriter {
 func (w *inMemoryResponseWriter) Write(b []byte) (int, error) {
 	return w.Writer.Write(b)
 }
+
 func (w *inMemoryResponseWriter) Header() http.Header {
 	return w.header
 }
+
 func (w *inMemoryResponseWriter) WriteHeader(int) {
 	// we don't have a use for the code
 }

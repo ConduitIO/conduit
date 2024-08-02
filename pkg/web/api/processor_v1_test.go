@@ -81,35 +81,36 @@ func TestProcessorAPIv1_ListProcessors(t *testing.T) {
 		prs[1].ID: prs[1],
 	}).Times(1)
 
-	want := &apiv1.ListProcessorsResponse{Processors: []*apiv1.Processor{
-		{
-			Id:     prs[0].ID,
-			Plugin: prs[0].Plugin,
-			Config: &apiv1.Processor_Config{
-				Settings: prs[0].Config.Settings,
+	want := &apiv1.ListProcessorsResponse{
+		Processors: []*apiv1.Processor{
+			{
+				Id:     prs[0].ID,
+				Plugin: prs[0].Plugin,
+				Config: &apiv1.Processor_Config{
+					Settings: prs[0].Config.Settings,
+				},
+				Parent: &apiv1.Processor_Parent{
+					Id:   prs[0].Parent.ID,
+					Type: apiv1.Processor_Parent_Type(prs[0].Parent.Type),
+				},
+				CreatedAt: timestamppb.New(prs[0].CreatedAt),
+				UpdatedAt: timestamppb.New(prs[0].UpdatedAt),
 			},
-			Parent: &apiv1.Processor_Parent{
-				Id:   prs[0].Parent.ID,
-				Type: apiv1.Processor_Parent_Type(prs[0].Parent.Type),
-			},
-			CreatedAt: timestamppb.New(prs[0].CreatedAt),
-			UpdatedAt: timestamppb.New(prs[0].UpdatedAt),
-		},
 
-		{
-			Id:     prs[1].ID,
-			Plugin: prs[1].Plugin,
-			Config: &apiv1.Processor_Config{
-				Settings: prs[1].Config.Settings,
+			{
+				Id:     prs[1].ID,
+				Plugin: prs[1].Plugin,
+				Config: &apiv1.Processor_Config{
+					Settings: prs[1].Config.Settings,
+				},
+				Parent: &apiv1.Processor_Parent{
+					Id:   prs[1].Parent.ID,
+					Type: apiv1.Processor_Parent_Type(prs[1].Parent.Type),
+				},
+				CreatedAt: timestamppb.New(prs[1].CreatedAt),
+				UpdatedAt: timestamppb.New(prs[1].UpdatedAt),
 			},
-			Parent: &apiv1.Processor_Parent{
-				Id:   prs[1].Parent.ID,
-				Type: apiv1.Processor_Parent_Type(prs[1].Parent.Type),
-			},
-			CreatedAt: timestamppb.New(prs[1].CreatedAt),
-			UpdatedAt: timestamppb.New(prs[1].UpdatedAt),
 		},
-	},
 	}
 
 	got, err := api.ListProcessors(ctx, &apiv1.ListProcessorsRequest{})
@@ -188,48 +189,49 @@ func TestProcessorAPIv1_ListProcessorsByParents(t *testing.T) {
 		prs[3].ID: prs[3],
 	}).Times(1)
 
-	want := &apiv1.ListProcessorsResponse{Processors: []*apiv1.Processor{
-		{
-			Id:     prs[0].ID,
-			Plugin: prs[0].Plugin,
-			Config: &apiv1.Processor_Config{
-				Settings: prs[0].Config.Settings,
+	want := &apiv1.ListProcessorsResponse{
+		Processors: []*apiv1.Processor{
+			{
+				Id:     prs[0].ID,
+				Plugin: prs[0].Plugin,
+				Config: &apiv1.Processor_Config{
+					Settings: prs[0].Config.Settings,
+				},
+				Parent: &apiv1.Processor_Parent{
+					Id:   prs[0].Parent.ID,
+					Type: apiv1.Processor_Parent_Type(prs[0].Parent.Type),
+				},
+				CreatedAt: timestamppb.New(prs[0].CreatedAt),
+				UpdatedAt: timestamppb.New(prs[0].UpdatedAt),
 			},
-			Parent: &apiv1.Processor_Parent{
-				Id:   prs[0].Parent.ID,
-				Type: apiv1.Processor_Parent_Type(prs[0].Parent.Type),
-			},
-			CreatedAt: timestamppb.New(prs[0].CreatedAt),
-			UpdatedAt: timestamppb.New(prs[0].UpdatedAt),
-		},
 
-		{
-			Id:     prs[2].ID,
-			Plugin: prs[2].Plugin,
-			Config: &apiv1.Processor_Config{
-				Settings: prs[2].Config.Settings,
+			{
+				Id:     prs[2].ID,
+				Plugin: prs[2].Plugin,
+				Config: &apiv1.Processor_Config{
+					Settings: prs[2].Config.Settings,
+				},
+				Parent: &apiv1.Processor_Parent{
+					Id:   prs[2].Parent.ID,
+					Type: apiv1.Processor_Parent_Type(prs[2].Parent.Type),
+				},
+				CreatedAt: timestamppb.New(prs[1].CreatedAt),
+				UpdatedAt: timestamppb.New(prs[1].UpdatedAt),
 			},
-			Parent: &apiv1.Processor_Parent{
-				Id:   prs[2].Parent.ID,
-				Type: apiv1.Processor_Parent_Type(prs[2].Parent.Type),
+			{
+				Id:     prs[3].ID,
+				Plugin: prs[3].Plugin,
+				Config: &apiv1.Processor_Config{
+					Settings: prs[3].Config.Settings,
+				},
+				Parent: &apiv1.Processor_Parent{
+					Id:   prs[3].Parent.ID,
+					Type: apiv1.Processor_Parent_Type(prs[3].Parent.Type),
+				},
+				CreatedAt: timestamppb.New(prs[3].CreatedAt),
+				UpdatedAt: timestamppb.New(prs[3].UpdatedAt),
 			},
-			CreatedAt: timestamppb.New(prs[1].CreatedAt),
-			UpdatedAt: timestamppb.New(prs[1].UpdatedAt),
 		},
-		{
-			Id:     prs[3].ID,
-			Plugin: prs[3].Plugin,
-			Config: &apiv1.Processor_Config{
-				Settings: prs[3].Config.Settings,
-			},
-			Parent: &apiv1.Processor_Parent{
-				Id:   prs[3].Parent.ID,
-				Type: apiv1.Processor_Parent_Type(prs[3].Parent.Type),
-			},
-			CreatedAt: timestamppb.New(prs[3].CreatedAt),
-			UpdatedAt: timestamppb.New(prs[3].UpdatedAt),
-		},
-	},
 	}
 
 	got, err := api.ListProcessors(ctx, &apiv1.ListProcessorsRequest{ParentIds: []string{sharedParent, prs[2].Parent.ID}})

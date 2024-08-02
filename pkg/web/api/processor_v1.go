@@ -67,7 +67,8 @@ type ProcessorAPIv1 struct {
 // NewProcessorAPIv1 returns a new processor API server.
 func NewProcessorAPIv1(
 	po ProcessorOrchestrator,
-	ppo ProcessorPluginOrchestrator) *ProcessorAPIv1 {
+	ppo ProcessorPluginOrchestrator,
+) *ProcessorAPIv1 {
 	return &ProcessorAPIv1{
 		processorOrchestrator:       po,
 		processorPluginOrchestrator: ppo,
@@ -200,7 +201,6 @@ func (p *ProcessorAPIv1) CreateProcessor(
 		fromproto.ProcessorConfig(req.Config),
 		req.Condition,
 	)
-
 	if err != nil {
 		return nil, status.ProcessorError(cerrors.Errorf("failed to create processor: %w", err))
 	}
@@ -219,7 +219,6 @@ func (p *ProcessorAPIv1) UpdateProcessor(
 	}
 
 	updated, err := p.processorOrchestrator.Update(ctx, req.Id, fromproto.ProcessorConfig(req.Config))
-
 	if err != nil {
 		return nil, status.ProcessorError(cerrors.Errorf("failed to update processor: %w", err))
 	}
@@ -231,7 +230,6 @@ func (p *ProcessorAPIv1) UpdateProcessor(
 
 func (p *ProcessorAPIv1) DeleteProcessor(ctx context.Context, req *apiv1.DeleteProcessorRequest) (*apiv1.DeleteProcessorResponse, error) {
 	err := p.processorOrchestrator.Delete(ctx, req.Id)
-
 	if err != nil {
 		return nil, status.ProcessorError(cerrors.Errorf("failed to delete processor: %w", err))
 	}

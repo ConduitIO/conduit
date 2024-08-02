@@ -63,7 +63,8 @@ func TestSetField_Process(t *testing.T) {
 			want: sdk.SingleRecord{
 				Operation: opencdc.OperationDelete,
 			},
-		}, {
+		},
+		{
 			name:   "setting the payload.after with a go template evaluated value",
 			config: map[string]string{"field": ".Payload.After.foo", "value": "{{ .Payload.After.baz }}"},
 			record: opencdc.Record{
@@ -84,7 +85,8 @@ func TestSetField_Process(t *testing.T) {
 					},
 				},
 			},
-		}}
+		},
+	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			is := is.New(t)
@@ -114,19 +116,23 @@ func TestSetField_Configure(t *testing.T) {
 			name:    "invalid value template format",
 			cfg:     map[string]string{"field": ".Metadata", "value": "{{ invalid }}"},
 			wantErr: true,
-		}, {
+		},
+		{
 			name:    "value param is missing",
 			cfg:     map[string]string{"field": ".Metadata"},
 			wantErr: true,
-		}, {
+		},
+		{
 			name:    "field param is missing",
 			cfg:     map[string]string{"value": "sth"},
 			wantErr: true,
-		}, {
+		},
+		{
 			name:    "cannot set .Position",
 			cfg:     map[string]string{"field": ".Position", "value": "newPos"},
 			wantErr: true,
-		}, {
+		},
+		{
 			name:    "all params are missing",
 			cfg:     map[string]string{},
 			wantErr: true,

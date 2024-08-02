@@ -47,9 +47,11 @@ func (n *parallelTestNode) Pub() <-chan *Message {
 	n.pub = make(chan *Message)
 	return n.pub
 }
+
 func (n *parallelTestNode) Sub(in <-chan *Message) {
 	n.sub = in
 }
+
 func (n *parallelTestNode) Run(ctx context.Context) error {
 	return n.F(ctx, n.sub, n.pub)
 }

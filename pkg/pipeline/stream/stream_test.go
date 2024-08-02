@@ -432,6 +432,7 @@ type gomockLogger log.CtxLogger
 func (g gomockLogger) Errorf(format string, args ...interface{}) {
 	g.Error().Msgf(format, args...)
 }
+
 func (g gomockLogger) Fatalf(format string, args ...interface{}) {
 	g.Fatal().Msgf(format, args...)
 }
@@ -453,6 +454,7 @@ type eqMatcherLazy struct {
 func (e eqMatcherLazy) Matches(x interface{}) bool {
 	return gomock.Eq(e.x()).Matches(x)
 }
+
 func (e eqMatcherLazy) String() string {
 	return gomock.Eq(e.x()).String()
 }

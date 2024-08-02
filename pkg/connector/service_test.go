@@ -248,34 +248,35 @@ func TestService_CreateError(t *testing.T) {
 		plugin     string
 		pipelineID string
 		data       Config
-	}{{
-		name:       "invalid connector type",
-		connType:   0,
-		plugin:     "test-plugin",
-		pipelineID: uuid.NewString(),
-		data: Config{
-			Name:     "test-connector",
-			Settings: map[string]string{"foo": "bar"},
+	}{
+		{
+			name:       "invalid connector type",
+			connType:   0,
+			plugin:     "test-plugin",
+			pipelineID: uuid.NewString(),
+			data: Config{
+				Name:     "test-connector",
+				Settings: map[string]string{"foo": "bar"},
+			},
+		}, {
+			name:       "empty plugin",
+			connType:   TypeSource,
+			plugin:     "",
+			pipelineID: uuid.NewString(),
+			data: Config{
+				Name:     "test-connector",
+				Settings: map[string]string{"foo": "bar"},
+			},
+		}, {
+			name:       "empty pipeline ID",
+			connType:   TypeSource,
+			plugin:     "test-plugin",
+			pipelineID: "",
+			data: Config{
+				Name:     "test-connector",
+				Settings: map[string]string{"foo": "bar"},
+			},
 		},
-	}, {
-		name:       "empty plugin",
-		connType:   TypeSource,
-		plugin:     "",
-		pipelineID: uuid.NewString(),
-		data: Config{
-			Name:     "test-connector",
-			Settings: map[string]string{"foo": "bar"},
-		},
-	}, {
-		name:       "empty pipeline ID",
-		connType:   TypeSource,
-		plugin:     "test-plugin",
-		pipelineID: "",
-		data: Config{
-			Name:     "test-connector",
-			Settings: map[string]string{"foo": "bar"},
-		},
-	},
 	}
 
 	for _, tt := range testCases {

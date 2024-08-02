@@ -333,6 +333,7 @@ func (s *Service) notify(pipelineID string, err error) {
 		handler(e)
 	}
 }
+
 func (s *Service) validatePipeline(cfg Config, id string) error {
 	// contains all the errors occurred while provisioning configuration files.
 	var errs []error

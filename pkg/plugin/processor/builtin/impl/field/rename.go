@@ -67,7 +67,7 @@ to parse it into structured data first.`,
 }
 
 func (p *renameProcessor) Configure(ctx context.Context, m map[string]string) error {
-	var forbiddenFields = []string{
+	forbiddenFields := []string{
 		internal.MetadataReference,
 		internal.PayloadReference,
 		internal.PayloadBeforeReference,

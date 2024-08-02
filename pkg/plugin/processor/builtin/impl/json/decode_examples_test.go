@@ -92,7 +92,8 @@ func ExampleDecodeProcessor_rawPayloadField() {
 					},
 				},
 			},
-		}})
+		},
+	})
 
 	// Output:
 	// processor transformed record:

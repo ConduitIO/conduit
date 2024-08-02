@@ -318,18 +318,21 @@ func assertMethod(method string) roundTripRecordAsserter {
 		is.Equal(method, rec.Request.Method) // unexpected method
 	}
 }
+
 func assertRequestURI(uri string) roundTripRecordAsserter {
 	return func(is *is.I, rec roundTripRecord) {
 		is.Helper()
 		is.Equal(uri, rec.Request.URL.RequestURI()) // unexpected request URI
 	}
 }
+
 func assertResponseStatus(code int) roundTripRecordAsserter {
 	return func(is *is.I, rec roundTripRecord) {
 		is.Helper()
 		is.Equal(code, rec.Response.StatusCode) // unexpected response status
 	}
 }
+
 func assertError(err error) roundTripRecordAsserter {
 	return func(is *is.I, rec roundTripRecord) {
 		is.Helper()

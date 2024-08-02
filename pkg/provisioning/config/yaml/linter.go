@@ -108,6 +108,7 @@ func (w warnings) Sort() warnings {
 	})
 	return w
 }
+
 func (w warnings) Log(ctx context.Context, logger log.CtxLogger) {
 	for _, ww := range w {
 		ww.Log(ctx, logger)

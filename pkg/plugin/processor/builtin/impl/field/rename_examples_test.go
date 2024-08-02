@@ -39,7 +39,8 @@ func ExampleRenameProcessor_rename1() {
 			Operation: opencdc.OperationCreate,
 			Metadata:  map[string]string{"newKey": "val1"},
 			Payload:   opencdc.Change{After: opencdc.StructuredData{"newFoo": "bar"}, Before: opencdc.StructuredData{"bar": "baz"}},
-		}})
+		},
+	})
 
 	// Output:
 	// processor transformed record:

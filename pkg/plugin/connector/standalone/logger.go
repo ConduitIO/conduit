@@ -33,6 +33,7 @@ var hclogZerologLevelMapping = map[hclog.Level]zerolog.Level{
 	hclog.Warn:    zerolog.WarnLevel,
 	hclog.Error:   zerolog.ErrorLevel,
 }
+
 var zerologHclogLevelMapping = func() map[zerolog.Level]hclog.Level {
 	// reverse hclog->zerolog level mapping
 	m := make(map[zerolog.Level]hclog.Level, len(hclogZerologLevelMapping))

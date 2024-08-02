@@ -48,7 +48,8 @@ func newDestinationPluginAdapter(impl pconnector.DestinationPlugin, logger log.C
 	return &destinationPluginAdapter{
 		impl:      impl,
 		logger:    logger.WithComponent("builtin.destinationPluginAdapter"),
-		ctxLogger: logger.WithComponent("plugin").ZerologWithComponent()}
+		ctxLogger: logger.WithComponent("plugin").ZerologWithComponent(),
+	}
 }
 
 func (d *destinationPluginAdapter) withLogger(ctx context.Context) context.Context {

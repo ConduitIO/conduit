@@ -56,7 +56,7 @@ func Test(t testing.TB) CtxLogger {
 
 // InitLogger returns a logger initialized with the wanted level and format
 func InitLogger(level zerolog.Level, f Format) CtxLogger {
-	var w = GetWriter(f)
+	w := GetWriter(f)
 	logger := zerolog.New(w).
 		With().
 		Timestamp().

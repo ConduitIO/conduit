@@ -96,7 +96,7 @@ func hasTool(tool string) error {
 			defer os.RemoveAll(dir)
 
 			mainGo := filepath.Join(dir, "main.go")
-			if err := os.WriteFile(mainGo, []byte("package main\nfunc main() {}\n"), 0644); err != nil {
+			if err := os.WriteFile(mainGo, []byte("package main\nfunc main() {}\n"), 0o644); err != nil {
 				checkGoBuild.err = err
 				return
 			}
