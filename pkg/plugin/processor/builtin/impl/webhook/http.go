@@ -32,6 +32,7 @@ import (
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/plugin/processor/procutils"
 	"github.com/jpillora/backoff"
 )
 
@@ -118,8 +119,8 @@ type httpProcessor struct {
 	responseStatusRef *sdk.ReferenceResolver
 }
 
-func NewHTTPProcessor(l log.CtxLogger) sdk.Processor {
-	return &httpProcessor{logger: l.WithComponent("webhook.httpProcessor")}
+func NewHTTPProcessor(logger log.CtxLogger, _ *procutils.SchemaService) sdk.Processor {
+	return &httpProcessor{logger: logger.WithComponent("webhook.httpProcessor")}
 }
 
 func (p *httpProcessor) Specification() (sdk.Specification, error) {

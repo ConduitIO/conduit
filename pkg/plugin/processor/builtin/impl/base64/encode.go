@@ -25,6 +25,7 @@ import (
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/plugin/processor/procutils"
 )
 
 type encodeProcessor struct {
@@ -42,7 +43,7 @@ type encodeConfig struct {
 	Field string `json:"field" validate:"required,exclusion=.Position"`
 }
 
-func NewEncodeProcessor(log.CtxLogger) sdk.Processor {
+func NewEncodeProcessor(log.CtxLogger, *procutils.SchemaService) sdk.Processor {
 	return &encodeProcessor{}
 }
 

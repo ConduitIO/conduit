@@ -23,6 +23,7 @@ import (
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/plugin/processor/procutils"
 	"github.com/goccy/go-json"
 )
 
@@ -32,7 +33,7 @@ type encodeProcessor struct {
 	sdk.UnimplementedProcessor
 }
 
-func NewEncodeProcessor(log.CtxLogger) sdk.Processor {
+func NewEncodeProcessor(log.CtxLogger, *procutils.SchemaService) sdk.Processor {
 	return &encodeProcessor{}
 }
 

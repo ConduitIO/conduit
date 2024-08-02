@@ -55,7 +55,6 @@ type Registry struct {
 	// plugins stores plugin blueprints in a 2D map, first key is the plugin
 	// name, the second key is the plugin version
 	plugins map[string]map[string]blueprint
-	service *connutils.SchemaService
 }
 
 type blueprint struct {
@@ -96,13 +95,10 @@ func NewRegistry(logger log.CtxLogger, connectors map[string]sdk.Connector, serv
 	// The built-in plugins use Conduit's own schema service
 	schema.Service = service
 
-	r := &Registry{
+	return &Registry{
 		logger:     logger,
 		connectors: connectors,
-		service:    service,
 	}
-
-	return r
 }
 
 func (r *Registry) Init(ctx context.Context) {

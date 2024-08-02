@@ -37,7 +37,7 @@ func TestRegistry_List(t *testing.T) {
 		Version: "v0.1.2",
 	}
 	procPlugin.EXPECT().Specification().Return(procSpec, nil)
-	procConstructor := func(log.CtxLogger) sdk.Processor { return procPlugin }
+	procConstructor := func(log.CtxLogger, *procutils.SchemaService) sdk.Processor { return procPlugin }
 
 	wantList := map[plugin.FullName]sdk.Specification{
 		"builtin:test-processor@v0.1.2": procSpec,

@@ -21,13 +21,14 @@ import (
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/plugin/processor/procutils"
 )
 
 type filterProcessor struct {
 	sdk.UnimplementedProcessor
 }
 
-func NewFilterProcessor(log.CtxLogger) sdk.Processor {
+func NewFilterProcessor(log.CtxLogger, *procutils.SchemaService) sdk.Processor {
 	return &filterProcessor{}
 }
 

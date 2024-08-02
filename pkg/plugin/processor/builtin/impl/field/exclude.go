@@ -24,6 +24,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal"
+	"github.com/conduitio/conduit/pkg/plugin/processor/procutils"
 )
 
 type excludeProcessor struct {
@@ -33,7 +34,7 @@ type excludeProcessor struct {
 	sdk.UnimplementedProcessor
 }
 
-func NewExcludeProcessor(log.CtxLogger) sdk.Processor {
+func NewExcludeProcessor(log.CtxLogger, *procutils.SchemaService) sdk.Processor {
 	return &excludeProcessor{}
 }
 

@@ -31,6 +31,7 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/json"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/unwrap"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/webhook"
+	"github.com/conduitio/conduit/pkg/plugin/processor/procutils"
 )
 
 var DefaultBuiltinProcessors = map[string]ProcessorPluginConstructor{
@@ -58,7 +59,8 @@ type Registry struct {
 
 	// plugins stores plugin blueprints in a 2D map, first key is the plugin
 	// name, the second key is the plugin version
-	plugins map[string]map[string]blueprint
+	plugins       map[string]map[string]blueprint
+	schemaService *procutils.SchemaService
 }
 
 type blueprint struct {
@@ -67,9 +69,13 @@ type blueprint struct {
 	constructor   ProcessorPluginConstructor
 }
 
-type ProcessorPluginConstructor func(log.CtxLogger) sdk.Processor
+type ProcessorPluginConstructor func(log.CtxLogger, *procutils.SchemaService) sdk.Processor
 
-func NewRegistry(logger log.CtxLogger, constructors map[string]ProcessorPluginConstructor) *Registry {
+func NewRegistry(
+	logger log.CtxLogger,
+	constructors map[string]ProcessorPluginConstructor,
+	schemaService *procutils.SchemaService,
+) *Registry {
 	logger = logger.WithComponent("plugin.processor.builtin.Registry")
 	buildInfo, ok := debug.ReadBuildInfo()
 	if !ok {
@@ -79,10 +85,14 @@ func NewRegistry(logger log.CtxLogger, constructors map[string]ProcessorPluginCo
 	}
 
 	r := &Registry{
-		plugins: loadPlugins(buildInfo, constructors),
-		logger:  logger,
+		plugins:       loadPlugins(buildInfo, constructors),
+		logger:        logger,
+		schemaService: schemaService,
 	}
-	logger.Info(context.Background()).Int("count", len(r.List())).Msg("builtin processor plugins initialized")
+	logger.Info(context.Background()).
+		Int("count", len(r.List())).
+		Msg("builtin processor plugins initialized")
+
 	return r
 }
 
@@ -92,7 +102,7 @@ func NewProcessorPluginConstructor(processorPlugin sdk.Processor) ProcessorPlugi
 		procType.Elem()
 	}
 
-	f := func(logger log.CtxLogger) sdk.Processor {
+	f := func(logger log.CtxLogger, schemaService *procutils.SchemaService) sdk.Processor {
 		// TODO create processor plugin wrapper that injects logger into context
 		//  before forwarding the call to the plugin
 		newProcValue := reflect.New(procType)
@@ -100,7 +110,8 @@ func NewProcessorPluginConstructor(processorPlugin sdk.Processor) ProcessorPlugi
 	}
 
 	// try out f, to catch any panic early
-	f(log.CtxLogger{})
+	// todo
+	f(log.CtxLogger{}, nil)
 
 	return f
 }
@@ -141,7 +152,7 @@ func loadPlugins(buildInfo *debug.BuildInfo, constructors map[string]ProcessorPl
 }
 
 func getSpecification(moduleName string, constructor ProcessorPluginConstructor, buildInfo *debug.BuildInfo) (sdk.Specification, error) {
-	procPlugin := constructor(log.CtxLogger{})
+	procPlugin := constructor(log.CtxLogger{}, nil)
 	specs, err := procPlugin.Specification()
 	if err != nil {
 		return sdk.Specification{}, err
@@ -185,7 +196,7 @@ func (r *Registry) NewProcessor(_ context.Context, fullName plugin.FullName, _ s
 		return nil, cerrors.Errorf("could not find builtin plugin %q, only found versions %v: %w", fullName, availableVersions, plugin.ErrPluginNotFound)
 	}
 
-	return b.constructor(r.logger), nil
+	return b.constructor(r.logger, r.schemaService), nil
 }
 
 func (r *Registry) List() map[plugin.FullName]sdk.Specification {

@@ -26,6 +26,7 @@ import (
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/plugin/processor/procutils"
 	"github.com/goccy/go-json"
 )
 
@@ -57,7 +58,7 @@ type debeziumProcessor struct {
 	fieldRefRes sdk.ReferenceResolver
 }
 
-func NewDebeziumProcessor(logger log.CtxLogger) sdk.Processor {
+func NewDebeziumProcessor(logger log.CtxLogger, schemaService *procutils.SchemaService) sdk.Processor {
 	return &debeziumProcessor{logger: logger}
 }
 

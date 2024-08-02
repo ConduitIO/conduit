@@ -25,6 +25,7 @@ import (
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/plugin/processor/procutils"
 )
 
 type convertProcessor struct {
@@ -34,7 +35,7 @@ type convertProcessor struct {
 	sdk.UnimplementedProcessor
 }
 
-func NewConvertProcessor(log.CtxLogger) sdk.Processor {
+func NewConvertProcessor(log.CtxLogger, *procutils.SchemaService) sdk.Processor {
 	return &convertProcessor{}
 }
 

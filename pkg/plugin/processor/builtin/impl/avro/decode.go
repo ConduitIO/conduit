@@ -26,6 +26,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/avro/internal"
+	"github.com/conduitio/conduit/pkg/plugin/processor/procutils"
 	"github.com/conduitio/conduit/pkg/schemaregistry"
 	"github.com/twmb/franz-go/pkg/sr"
 )
@@ -104,7 +105,7 @@ type decodeProcessor struct {
 	decoder decoder
 }
 
-func NewDecodeProcessor(logger log.CtxLogger) sdk.Processor {
+func NewDecodeProcessor(logger log.CtxLogger, schemaService *procutils.SchemaService) sdk.Processor {
 	return &decodeProcessor{logger: logger}
 }
 

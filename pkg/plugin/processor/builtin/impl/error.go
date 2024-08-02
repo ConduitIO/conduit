@@ -26,6 +26,7 @@ import (
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/plugin/processor/procutils"
 )
 
 type errorConfig struct {
@@ -42,7 +43,7 @@ type errorProcessor struct {
 	errorMessageTmpl *template.Template
 }
 
-func NewErrorProcessor(log.CtxLogger) sdk.Processor {
+func NewErrorProcessor(log.CtxLogger, *procutils.SchemaService) sdk.Processor {
 	return &errorProcessor{}
 }
 

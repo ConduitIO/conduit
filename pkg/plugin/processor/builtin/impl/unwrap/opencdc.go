@@ -42,7 +42,7 @@ type openCDCProcessor struct {
 	fieldRefRes sdk.ReferenceResolver
 }
 
-func NewOpenCDCProcessor(logger log.CtxLogger) sdk.Processor {
+func NewOpenCDCProcessor(logger log.CtxLogger, schemaService *procutils.SchemaService) sdk.Processor {
 	return &openCDCProcessor{logger: logger}
 }
 

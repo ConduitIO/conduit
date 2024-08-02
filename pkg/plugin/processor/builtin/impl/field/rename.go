@@ -25,6 +25,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal"
+	"github.com/conduitio/conduit/pkg/plugin/processor/procutils"
 	"golang.org/x/exp/slices"
 )
 
@@ -35,7 +36,7 @@ type renameProcessor struct {
 	sdk.UnimplementedProcessor
 }
 
-func NewRenameProcessor(log.CtxLogger) sdk.Processor {
+func NewRenameProcessor(log.CtxLogger, *procutils.SchemaService) sdk.Processor {
 	return &renameProcessor{}
 }
 

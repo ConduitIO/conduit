@@ -24,6 +24,7 @@ import (
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/plugin/processor/procutils"
 )
 
 type decodeProcessor struct {
@@ -41,7 +42,7 @@ type decodeConfig struct {
 	Field string `json:"field" validate:"required,exclusion=.Position"`
 }
 
-func NewDecodeProcessor(log.CtxLogger) sdk.Processor {
+func NewDecodeProcessor(log.CtxLogger, *procutils.SchemaService) sdk.Processor {
 	return &decodeProcessor{}
 }
 

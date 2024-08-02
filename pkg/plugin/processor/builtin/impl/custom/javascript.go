@@ -25,6 +25,7 @@ import (
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/plugin/processor/procutils"
 	"github.com/dop251/goja"
 	"github.com/dop251/goja_nodejs/require"
 )
@@ -74,7 +75,7 @@ type javascriptProcessor struct {
 	logger   log.CtxLogger
 }
 
-func NewJavascriptProcessor(logger log.CtxLogger) sdk.Processor {
+func NewJavascriptProcessor(logger log.CtxLogger, schemaService *procutils.SchemaService) sdk.Processor {
 	return &javascriptProcessor{logger: logger}
 }
 

@@ -26,6 +26,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/avro/internal"
+	"github.com/conduitio/conduit/pkg/plugin/processor/procutils"
 	"github.com/conduitio/conduit/pkg/schemaregistry"
 	"github.com/goccy/go-json"
 	"github.com/twmb/franz-go/pkg/sr"
@@ -111,7 +112,7 @@ type encodeProcessor struct {
 	encoder encoder
 }
 
-func NewEncodeProcessor(logger log.CtxLogger) sdk.Processor {
+func NewEncodeProcessor(logger log.CtxLogger, schemaService *procutils.SchemaService) sdk.Processor {
 	return &encodeProcessor{logger: logger}
 }
 
