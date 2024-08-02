@@ -18,8 +18,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/google/go-cmp/cmp"
-
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit-processor-sdk/pprocutils"
@@ -27,6 +25,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
+	"github.com/google/go-cmp/cmp"
 	"github.com/matryer/is"
 )
 

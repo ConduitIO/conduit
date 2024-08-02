@@ -23,11 +23,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/csync"
 	sdk "github.com/conduitio/conduit-processor-sdk"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/stealthrocket/wazergo"
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
