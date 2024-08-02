@@ -209,6 +209,7 @@ func (r *Registry) NewDispenser(logger log.CtxLogger, fullName plugin.FullName, 
 		client.WithEnvVar(pconnutils.EnvConduitConnectorUtilitiesGRPCTarget, r.connUtilsAddr),
 		client.WithEnvVar(pconnutils.EnvConduitConnectorToken, cfg.Token),
 		client.WithEnvVar(pconnutils.EnvConduitConnectorID, cfg.ConnectorID),
+		client.WithEnvVar(pconnutils.EnvConduitLogLevel, cfg.LogLevel),
 	)
 }
 
