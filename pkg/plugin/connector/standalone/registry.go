@@ -166,7 +166,7 @@ func (r *Registry) loadSpecifications(pluginPath string) (pconnector.Specificati
 		pluginPath,
 		client.WithEnvVar(pconnutils.EnvConduitConnectorUtilitiesGRPCTarget, r.connUtilsAddr),
 		client.WithEnvVar(pconnutils.EnvConduitConnectorToken, "irrelevant-token"),
-		client.WithEnvVar(pconnutils.EnvConduitConnectorID, "load-specifications"),
+		client.WithEnvVar(pconnector.EnvConduitConnectorID, "load-specifications"),
 	)
 	if err != nil {
 		return pconnector.Specification{}, cerrors.Errorf("failed to create connector dispenser: %w", err)
@@ -208,7 +208,8 @@ func (r *Registry) NewDispenser(logger log.CtxLogger, fullName plugin.FullName, 
 		bp.Path,
 		client.WithEnvVar(pconnutils.EnvConduitConnectorUtilitiesGRPCTarget, r.connUtilsAddr),
 		client.WithEnvVar(pconnutils.EnvConduitConnectorToken, cfg.Token),
-		client.WithEnvVar(pconnutils.EnvConduitConnectorID, cfg.ConnectorID),
+		client.WithEnvVar(pconnector.EnvConduitConnectorID, cfg.ConnectorID),
+		client.WithEnvVar(pconnector.EnvConduitConnectorLogLevel, cfg.LogLevel),
 	)
 }
 

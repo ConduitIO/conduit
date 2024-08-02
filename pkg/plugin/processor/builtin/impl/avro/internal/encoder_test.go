@@ -50,17 +50,17 @@ func TestEncodeDecode_ExtractAndUploadSchemaStrategy(t *testing.T) {
 	}
 	want := opencdc.StructuredData{
 		"myString": "bar",
-		"myInt":    1,
+		"myInt":    int64(1),
 		"myFloat":  2.3,
 		"myMap": map[string]any{
 			"foo": true,
 			"bar": 2.2,
 		},
-		"myStruct": map[string]any{ // records are unmarshaled into a map
-			"foo": 1,
+		"myStruct": map[string]any{ // records are unmarshalled into a map
+			"foo": int64(1),
 			"bar": false,
 		},
-		"mySlice": []any{1, 2, 3}, // slice without type
+		"mySlice": []any{int64(1), int64(2), int64(3)}, // slice without type
 	}
 
 	enc := NewEncoder(client, logger, ExtractAndUploadSchemaStrategy{
