@@ -23,6 +23,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/csync"
 	sdk "github.com/conduitio/conduit-processor-sdk"
