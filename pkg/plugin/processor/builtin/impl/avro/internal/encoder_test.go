@@ -56,7 +56,7 @@ func TestEncodeDecode_ExtractAndUploadSchemaStrategy(t *testing.T) {
 			"foo": true,
 			"bar": 2.2,
 		},
-		"myStruct": map[string]any{ // records are unmarshaled into a map
+		"myStruct": map[string]any{ // records are unmarshalled into a map
 			"foo": int64(1),
 			"bar": false,
 		},
