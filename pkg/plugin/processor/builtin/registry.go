@@ -19,6 +19,8 @@ import (
 	"runtime/debug"
 
 	sdk "github.com/conduitio/conduit-processor-sdk"
+	"github.com/conduitio/conduit-processor-sdk/pprocutils"
+	"github.com/conduitio/conduit-processor-sdk/schema"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
@@ -68,7 +70,14 @@ type blueprint struct {
 
 type ProcessorPluginConstructor func(log.CtxLogger) sdk.Processor
 
-func NewRegistry(logger log.CtxLogger, constructors map[string]ProcessorPluginConstructor) *Registry {
+func NewRegistry(
+	logger log.CtxLogger,
+	constructors map[string]ProcessorPluginConstructor,
+	schemaService pprocutils.SchemaService,
+) *Registry {
+	// set schema service for builtin processors
+	schema.SchemaService = schemaService
+
 	logger = logger.WithComponent("plugin.processor.builtin.Registry")
 	buildInfo, ok := debug.ReadBuildInfo()
 	if !ok {
