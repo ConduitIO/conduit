@@ -8,33 +8,15 @@ import (
 )
 
 const (
-	encodeConfigAuthBasicPassword          = "auth.basic.password"
-	encodeConfigAuthBasicUsername          = "auth.basic.username"
 	encodeConfigField                      = "field"
 	encodeConfigSchemaAutoRegisterSubject  = "schema.autoRegister.subject"
 	encodeConfigSchemaPreRegisteredSubject = "schema.preRegistered.subject"
 	encodeConfigSchemaPreRegisteredVersion = "schema.preRegistered.version"
 	encodeConfigSchemaStrategy             = "schema.strategy"
-	encodeConfigTlsCaCert                  = "tls.ca.cert"
-	encodeConfigTlsClientCert              = "tls.client.cert"
-	encodeConfigTlsClientKey               = "tls.client.key"
-	encodeConfigUrl                        = "url"
 )
 
 func (encodeConfig) Parameters() map[string]config.Parameter {
 	return map[string]config.Parameter{
-		encodeConfigAuthBasicPassword: {
-			Default:     "",
-			Description: "The password to use with basic authentication. This option is required if\nauth.basic.username contains a value. If both auth.basic.username and auth.basic.password\nare empty basic authentication is disabled.",
-			Type:        config.ParameterTypeString,
-			Validations: []config.Validation{},
-		},
-		encodeConfigAuthBasicUsername: {
-			Default:     "",
-			Description: "The username to use with basic authentication. This option is required if\nauth.basic.password contains a value. If both auth.basic.username and auth.basic.password\nare empty basic authentication is disabled.",
-			Type:        config.ParameterTypeString,
-			Validations: []config.Validation{},
-		},
 		encodeConfigField: {
 			Default:     ".Payload.After",
 			Description: "The field that will be encoded.\n\nFor more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).",
@@ -68,32 +50,6 @@ func (encodeConfig) Parameters() map[string]config.Parameter {
 			Validations: []config.Validation{
 				config.ValidationRequired{},
 				config.ValidationInclusion{List: []string{"preRegistered", "autoRegister"}},
-			},
-		},
-		encodeConfigTlsCaCert: {
-			Default:     "",
-			Description: "The path to a file containing PEM encoded CA certificates. If this option is empty,\nConduit falls back to using the host's root CA set.",
-			Type:        config.ParameterTypeString,
-			Validations: []config.Validation{},
-		},
-		encodeConfigTlsClientCert: {
-			Default:     "",
-			Description: "The path to a file containing a PEM encoded certificate. This option is required\nif tls.client.key contains a value. If both tls.client.cert and tls.client.key are empty\nTLS is disabled.",
-			Type:        config.ParameterTypeString,
-			Validations: []config.Validation{},
-		},
-		encodeConfigTlsClientKey: {
-			Default:     "",
-			Description: "The path to a file containing a PEM encoded private key. This option is required\nif tls.client.cert contains a value. If both tls.client.cert and tls.client.key are empty\nTLS is disabled.",
-			Type:        config.ParameterTypeString,
-			Validations: []config.Validation{},
-		},
-		encodeConfigUrl: {
-			Default:     "",
-			Description: "URL of the schema registry (e.g. http://localhost:8085)",
-			Type:        config.ParameterTypeString,
-			Validations: []config.Validation{
-				config.ValidationRequired{},
 			},
 		},
 	}

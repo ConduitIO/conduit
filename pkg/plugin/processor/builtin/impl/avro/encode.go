@@ -19,8 +19,6 @@ package avro
 
 import (
 	"context"
-	"crypto/tls"
-
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
@@ -29,7 +27,6 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/avro/internal"
 	"github.com/conduitio/conduit/pkg/schemaregistry"
 	"github.com/goccy/go-json"
-	"github.com/twmb/franz-go/pkg/sr"
 )
 
 type encoder interface {
@@ -42,34 +39,9 @@ type encodeConfig struct {
 	// For more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).
 	Field string `json:"field" default:".Payload.After"`
 
-	// URL of the schema registry (e.g. http://localhost:8085)
-	URL string `json:"url" validate:"required"`
-
 	Schema schemaConfig `json:"schema"`
-	Auth   authConfig   `json:"auth"`
-	TLS    tlsConfig    `json:"tls"`
 
 	fieldResolver sdk.ReferenceResolver
-}
-
-func (c encodeConfig) ClientOptions() []sr.ClientOpt {
-	clientOpts := []sr.ClientOpt{sr.URLs(c.URL)}
-	if c.Auth.Username != "" && c.Auth.Password != "" {
-		clientOpts = append(clientOpts, sr.BasicAuth(c.Auth.Username, c.Auth.Password))
-	}
-
-	if c.TLS.tlsClientCert != nil {
-		tlsCfg := &tls.Config{
-			Certificates: []tls.Certificate{*c.TLS.tlsClientCert},
-			MinVersion:   tls.VersionTLS12,
-		}
-		if c.TLS.tlsCACert != nil {
-			tlsCfg.RootCAs = c.TLS.tlsCACert
-		}
-		clientOpts = append(clientOpts, sr.DialTLSConfig(tlsCfg))
-	}
-
-	return clientOpts
 }
 
 func parseEncodeConfig(ctx context.Context, c config.Config) (encodeConfig, error) {
@@ -77,16 +49,6 @@ func parseEncodeConfig(ctx context.Context, c config.Config) (encodeConfig, erro
 	err := sdk.ParseConfig(ctx, c, &cfg, cfg.Parameters())
 	if err != nil {
 		return encodeConfig{}, err
-	}
-
-	err = cfg.Auth.validate()
-	if err != nil {
-		return encodeConfig{}, cerrors.Errorf("invalid basic auth: %w", err)
-	}
-
-	err = cfg.TLS.parse()
-	if err != nil {
-		return encodeConfig{}, cerrors.Errorf("failed parsing TLS: %w", err)
 	}
 
 	err = cfg.Schema.parse()
@@ -107,13 +69,18 @@ func parseEncodeConfig(ctx context.Context, c config.Config) (encodeConfig, erro
 type encodeProcessor struct {
 	sdk.UnimplementedProcessor
 
-	logger  log.CtxLogger
-	cfg     encodeConfig
-	encoder encoder
+	logger   log.CtxLogger
+	cfg      encodeConfig
+	encoder  encoder
+	registry schemaregistry.Registry
 }
 
 func NewEncodeProcessor(logger log.CtxLogger) sdk.Processor {
 	return &encodeProcessor{logger: logger}
+}
+
+func (p *encodeProcessor) SetSchemaRegistry(registry schemaregistry.Registry) {
+	p.registry = registry
 }
 
 func (p *encodeProcessor) Specification() (sdk.Specification, error) {
@@ -159,12 +126,7 @@ func (p *encodeProcessor) Configure(ctx context.Context, c config.Config) error 
 }
 
 func (p *encodeProcessor) Open(context.Context) error {
-	// TODO: somehow inject the schemaregistry.Registry that Conduit created.
-	client, err := schemaregistry.NewClient(p.logger, p.cfg.ClientOptions()...)
-	if err != nil {
-		return cerrors.Errorf("could not create schema registry client: %w", err)
-	}
-	p.encoder = internal.NewEncoder(client, p.logger, p.cfg.Schema.strategy)
+	p.encoder = internal.NewEncoder(p.registry, p.logger, p.cfg.Schema.strategy)
 
 	return nil
 }

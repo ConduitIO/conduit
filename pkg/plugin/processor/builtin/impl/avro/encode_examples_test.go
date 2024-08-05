@@ -25,17 +25,19 @@ import (
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal/exampleutil"
-	"github.com/conduitio/conduit/pkg/schemaregistry"
 	"github.com/conduitio/conduit/pkg/schemaregistry/schemaregistrytest"
 	"github.com/twmb/franz-go/pkg/sr"
 )
 
 //nolint:govet // a more descriptive example description
 func ExampleEncodeProcessor_autoRegister() {
-	url, cleanup := schemaregistrytest.ExampleSchemaRegistryURL("ExampleEncodeProcessor_autoRegister", 54322)
-	defer cleanup()
+	schemaRegistry, err := schemaregistrytest.TestSchemaRegistry()
+	if err != nil {
+		panic(err)
+	}
 
-	p := NewEncodeProcessor(log.Nop())
+	p := NewEncodeProcessor(log.Nop()).(*encodeProcessor)
+	p.SetSchemaRegistry(schemaRegistry)
 
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary: "Auto-register schema",
@@ -44,7 +46,6 @@ with the ` + "`autoRegister`" + ` schema strategy. The processor encodes the rec
 ` + "`.Payload.After`" + ` field using the schema that is extracted from the data
 and registered on the fly under the subject ` + "`example-autoRegister`" + `.`,
 		Config: config.Config{
-			"url":                         url,
 			"schema.strategy":             "autoRegister",
 			"schema.autoRegister.subject": "example-autoRegister",
 		},
@@ -111,15 +112,12 @@ and registered on the fly under the subject ` + "`example-autoRegister`" + `.`,
 
 //nolint:govet // a more descriptive example description
 func ExampleEncodeProcessor_preRegistered() {
-	url, cleanup := schemaregistrytest.ExampleSchemaRegistryURL("ExampleEncodeProcessor_preRegistered", 54322)
-	defer cleanup()
-
-	client, err := schemaregistry.NewClient(log.Nop(), sr.URLs(url))
+	schemaRegistry, err := schemaregistrytest.TestSchemaRegistry()
 	if err != nil {
-		panic(fmt.Sprintf("failed to create schema registry client: %v", err))
+		panic(err)
 	}
 
-	_, err = client.CreateSchema(context.Background(), "example-preRegistered", sr.Schema{
+	_, err = schemaRegistry.CreateSchema(context.Background(), "example-preRegistered", sr.Schema{
 		Type: sr.TypeAvro,
 		Schema: `
 {
@@ -135,7 +133,8 @@ func ExampleEncodeProcessor_preRegistered() {
 		panic(fmt.Sprintf("failed to create schema: %v", err))
 	}
 
-	p := NewEncodeProcessor(log.Nop())
+	p := NewEncodeProcessor(log.Nop()).(*encodeProcessor)
+	p.SetSchemaRegistry(schemaRegistry)
 
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary: "Pre-register schema",
@@ -156,7 +155,6 @@ schema has to be manually pre-registered. In this example we use the following s
 
 The processor encodes the record's` + "`.Key`" + ` field using the above schema.`,
 		Config: config.Config{
-			"url":                          url,
 			"schema.strategy":              "preRegistered",
 			"schema.preRegistered.subject": "example-preRegistered",
 			"schema.preRegistered.version": "1",
