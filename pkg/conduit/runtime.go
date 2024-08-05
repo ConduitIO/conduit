@@ -179,7 +179,7 @@ func createServices(r *Runtime) error {
 
 	procPluginService := proc_plugin.NewPluginService(
 		r.logger,
-		proc_builtin.NewRegistry(r.logger, proc_builtin.DefaultBuiltinProcessors, procSchemaService),
+		proc_builtin.NewRegistry(r.logger, proc_builtin.DefaultBuiltinProcessors, schemaRegistry),
 		standaloneReg,
 	)
 

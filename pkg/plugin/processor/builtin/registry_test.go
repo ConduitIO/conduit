@@ -15,6 +15,8 @@
 package builtin
 
 import (
+	"github.com/conduitio/conduit-commons/database/inmemory"
+	schemaregistry "github.com/conduitio/conduit-schema-registry"
 	"testing"
 
 	sdk "github.com/conduitio/conduit-processor-sdk"
@@ -43,7 +45,10 @@ func TestRegistry_List(t *testing.T) {
 		"builtin:test-processor@v0.1.2": procSpec,
 	}
 
-	reg := NewRegistry(logger, map[string]ProcessorPluginConstructor{procSpec.Name: procConstructor}, nil)
+	schemaRegistry, err := schemaregistry.NewSchemaRegistry(&inmemory.DB{})
+	is.NoErr(err)
+
+	reg := NewRegistry(logger, map[string]ProcessorPluginConstructor{procSpec.Name: procConstructor}, schemaRegistry)
 
 	got := reg.List()
 	is.Equal(got, wantList)
