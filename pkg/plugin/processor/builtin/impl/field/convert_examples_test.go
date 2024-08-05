@@ -15,6 +15,8 @@
 package field
 
 import (
+	"time"
+
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
@@ -140,6 +142,49 @@ func ExampleConvertProcessor_floatToString() {
 	//      "before": null,
 	//      "after": {
 	//        "foo": "bar"
+	//      }
+	//    }
+	//  }
+}
+
+//nolint:govet // a more descriptive example description
+func ExampleConvertProcessor_intTotime() {
+	p := NewConvertProcessor(log.Nop())
+
+	timeObj := time.Date(2024, 1, 2, 12, 34, 56, 123456789, time.UTC)
+
+	exampleutil.RunExample(p, exampleutil.Example{
+		Summary:     "Convert `string` to `time`",
+		Description: "This example takes an `int` in field `.Payload.After.createdAt` and parses it as a unix timestamp into a `time.Time` value.",
+		Config:      config.Config{"field": ".Payload.After.createdAt", "type": "time"},
+		Have: opencdc.Record{
+			Operation: opencdc.OperationCreate,
+			Key:       opencdc.StructuredData{"id": 123.345},
+			Payload:   opencdc.Change{After: opencdc.StructuredData{"createdAt": timeObj.UnixNano()}},
+		},
+		Want: sdk.SingleRecord{
+			Operation: opencdc.OperationCreate,
+			Key:       opencdc.StructuredData{"id": 123.345},
+			Payload:   opencdc.Change{After: opencdc.StructuredData{"createdAt": timeObj}},
+		}})
+
+	// Output:
+	// processor transformed record:
+	// --- before
+	// +++ after
+	// @@ -1,14 +1,14 @@
+	//  {
+	//    "position": null,
+	//    "operation": "create",
+	//    "metadata": null,
+	//    "key": {
+	//      "id": 123.345
+	//    },
+	//    "payload": {
+	//      "before": null,
+	//      "after": {
+	// -      "createdAt": 1704198896123456789
+	// +      "createdAt": "2024-01-02T12:34:56.123456789Z"
 	//      }
 	//    }
 	//  }
