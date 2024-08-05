@@ -22,6 +22,7 @@ import (
 	"github.com/conduitio/conduit-processor-sdk/pprocutils"
 	"github.com/conduitio/conduit-processor-sdk/schema"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/ctxutil"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl"
@@ -75,8 +76,11 @@ func NewRegistry(
 	constructors map[string]ProcessorPluginConstructor,
 	schemaService pprocutils.SchemaService,
 ) *Registry {
-	// set schema service for builtin processors
+	// set schema service and logger for builtin processors
 	schema.SchemaService = schemaService
+	pprocutils.Logger = logger.WithComponent("processor").
+		ZerologWithComponent().
+		Hook(ctxutil.ProcessorIDLogCtxHook{})
 
 	logger = logger.WithComponent("plugin.processor.builtin.Registry")
 	buildInfo, ok := debug.ReadBuildInfo()
@@ -160,7 +164,7 @@ func newFullName(pluginName, pluginVersion string) plugin.FullName {
 	return plugin.NewFullName(plugin.PluginTypeBuiltin, pluginName, pluginVersion)
 }
 
-func (r *Registry) NewProcessor(_ context.Context, fullName plugin.FullName, _ string) (sdk.Processor, error) {
+func (r *Registry) NewProcessor(_ context.Context, fullName plugin.FullName, id string) (sdk.Processor, error) {
 	versionMap, ok := r.plugins[fullName.PluginName()]
 	if !ok {
 		return nil, plugin.ErrPluginNotFound
@@ -178,6 +182,8 @@ func (r *Registry) NewProcessor(_ context.Context, fullName plugin.FullName, _ s
 
 	// apply default middleware
 	p = sdk.ProcessorWithMiddleware(p, sdk.DefaultProcessorMiddleware(p.MiddlewareOptions()...)...)
+	// attach processor ID for logs
+	p = newProcessorWithID(p, id)
 
 	return p, nil
 }
