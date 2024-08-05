@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -74,7 +75,7 @@ In this example we use the following schema:
   ]
 }
 ` + "```",
-		Config: map[string]string{
+		Config: config.Config{
 			"url":   url,
 			"field": ".Key",
 		},

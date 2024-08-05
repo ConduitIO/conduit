@@ -18,6 +18,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
@@ -27,13 +28,13 @@ import (
 func TestConfig_Parse(t *testing.T) {
 	testCases := []struct {
 		name    string
-		input   map[string]string
+		input   config.Config
 		want    encodeConfig
 		wantErr error
 	}{
 		{
 			name: "preRegistered",
-			input: map[string]string{
+			input: config.Config{
 				"url":                          "http://localhost",
 				"schema.strategy":              "preRegistered",
 				"schema.preRegistered.subject": "testsubject",
@@ -53,7 +54,7 @@ func TestConfig_Parse(t *testing.T) {
 		},
 		{
 			name: "preRegistered without version",
-			input: map[string]string{
+			input: config.Config{
 				"url":                          "http://localhost",
 				"schema.strategy":              "preRegistered",
 				"schema.preRegistered.subject": "testsubject",
@@ -62,7 +63,7 @@ func TestConfig_Parse(t *testing.T) {
 		},
 		{
 			name: "preRegistered without subject",
-			input: map[string]string{
+			input: config.Config{
 				"url":                          "http://localhost",
 				"schema.strategy":              "preRegistered",
 				"schema.preRegistered.version": "123",
@@ -71,7 +72,7 @@ func TestConfig_Parse(t *testing.T) {
 		},
 		{
 			name: "autoRegister",
-			input: map[string]string{
+			input: config.Config{
 				"url":                         "http://localhost",
 				"schema.strategy":             "autoRegister",
 				"schema.autoRegister.subject": "testsubject",
@@ -87,7 +88,7 @@ func TestConfig_Parse(t *testing.T) {
 		},
 		{
 			name: "autoRegister without subject",
-			input: map[string]string{
+			input: config.Config{
 				"url":             "http://localhost",
 				"schema.strategy": "autoRegister",
 			},
@@ -95,7 +96,7 @@ func TestConfig_Parse(t *testing.T) {
 		},
 		{
 			name: "non-default target field",
-			input: map[string]string{
+			input: config.Config{
 				"url":                         "http://localhost",
 				"schema.strategy":             "autoRegister",
 				"schema.autoRegister.subject": "testsubject",
@@ -112,7 +113,7 @@ func TestConfig_Parse(t *testing.T) {
 		},
 		{
 			name: "valid auth",
-			input: map[string]string{
+			input: config.Config{
 				"url":                         "http://localhost",
 				"schema.strategy":             "autoRegister",
 				"schema.autoRegister.subject": "testsubject",
@@ -134,7 +135,7 @@ func TestConfig_Parse(t *testing.T) {
 		},
 		{
 			name: "auth -- no username",
-			input: map[string]string{
+			input: config.Config{
 				"url":                         "http://localhost",
 				"schema.strategy":             "autoRegister",
 				"schema.autoRegister.subject": "testsubject",
@@ -144,7 +145,7 @@ func TestConfig_Parse(t *testing.T) {
 		},
 		{
 			name: "auth -- no password",
-			input: map[string]string{
+			input: config.Config{
 				"url":                         "http://localhost",
 				"schema.strategy":             "autoRegister",
 				"schema.autoRegister.subject": "testsubject",
@@ -154,7 +155,7 @@ func TestConfig_Parse(t *testing.T) {
 		},
 		{
 			name: "tls: missing client cert and key",
-			input: map[string]string{
+			input: config.Config{
 				"url":                         "http://localhost",
 				"schema.strategy":             "autoRegister",
 				"schema.autoRegister.subject": "testsubject",
@@ -166,7 +167,7 @@ missing field: tls.client.key`),
 		},
 		{
 			name: "valid tls",
-			input: map[string]string{
+			input: config.Config{
 				"url":                         "http://localhost",
 				"schema.strategy":             "autoRegister",
 				"schema.autoRegister.subject": "testsubject",

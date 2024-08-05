@@ -18,6 +18,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -31,7 +32,7 @@ func TestEncodeProcessor_Process_StructuredData(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
 
-	config := map[string]string{
+	cfg := config.Config{
 		"url":                         "http://localhost",
 		"schema.strategy":             "autoRegister",
 		"schema.autoRegister.subject": "testsubject",
@@ -51,7 +52,7 @@ func TestEncodeProcessor_Process_StructuredData(t *testing.T) {
 	want.Payload.After = opencdc.RawData("encoded")
 
 	underTest := NewEncodeProcessor(log.Nop())
-	err := underTest.Configure(ctx, config)
+	err := underTest.Configure(ctx, cfg)
 	is.NoErr(err)
 
 	// skipping Open(), so we can inject a mock encoder
@@ -70,7 +71,7 @@ func TestEncodeProcessor_Process_RawData(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
 
-	config := map[string]string{
+	cfg := config.Config{
 		"url":                         "http://localhost",
 		"schema.strategy":             "autoRegister",
 		"schema.autoRegister.subject": "testsubject",
@@ -88,7 +89,7 @@ func TestEncodeProcessor_Process_RawData(t *testing.T) {
 	want.Payload.After = opencdc.RawData("encoded")
 
 	underTest := NewEncodeProcessor(log.Nop())
-	err := underTest.Configure(ctx, config)
+	err := underTest.Configure(ctx, cfg)
 	is.NoErr(err)
 
 	// skipping Open(), so we can inject a mock encoder
@@ -127,7 +128,7 @@ func TestEncodeProcessor_Process_RawData_CustomField(t *testing.T) {
 			is := is.New(t)
 			ctx := context.Background()
 
-			config := map[string]string{
+			cfg := config.Config{
 				"url":                         "http://localhost",
 				"field":                       ".Payload.Before.something",
 				"schema.strategy":             "autoRegister",
@@ -147,7 +148,7 @@ func TestEncodeProcessor_Process_RawData_CustomField(t *testing.T) {
 			want.Payload.Before.(opencdc.StructuredData)["something"] = encodedValue
 
 			underTest := NewEncodeProcessor(log.Nop())
-			err := underTest.Configure(ctx, config)
+			err := underTest.Configure(ctx, cfg)
 			is.NoErr(err)
 
 			// skipping Open(), so we can inject a mock encoder
@@ -225,7 +226,7 @@ func TestEncodeProcessor_Process_EmptyPayloadField(t *testing.T) {
 			is := is.New(t)
 			ctx := context.Background()
 
-			config := map[string]string{
+			cfg := config.Config{
 				"url":                         "http://localhost",
 				"field":                       tc.field,
 				"schema.strategy":             "autoRegister",
@@ -237,7 +238,7 @@ func TestEncodeProcessor_Process_EmptyPayloadField(t *testing.T) {
 			want.Payload.Before = tc.wantPayloadBefore
 
 			underTest := NewEncodeProcessor(log.Nop())
-			err := underTest.Configure(ctx, config)
+			err := underTest.Configure(ctx, cfg)
 			is.NoErr(err)
 
 			// skipping Open(), so we can inject a mock encoder

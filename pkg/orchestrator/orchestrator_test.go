@@ -35,6 +35,7 @@ import (
 	conn_standalone "github.com/conduitio/conduit/pkg/plugin/connector/standalone"
 	proc_plugin "github.com/conduitio/conduit/pkg/plugin/processor"
 	proc_builtin "github.com/conduitio/conduit/pkg/plugin/processor/builtin"
+	"github.com/conduitio/conduit/pkg/plugin/processor/procutils"
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/google/go-cmp/cmp"
 	"github.com/matryer/is"
@@ -74,19 +75,21 @@ func TestPipelineSimple(t *testing.T) {
 	schemaRegistry, err := schemaregistry.NewSchemaRegistry(db)
 	is.NoErr(err)
 	authManager := connutils.NewAuthManager()
-	schemaService := connutils.NewSchemaService(logger, schemaRegistry, authManager)
+	connSchemaService := connutils.NewSchemaService(logger, schemaRegistry, authManager)
 
 	connPluginService := conn_plugin.NewPluginService(
 		logger,
-		conn_builtin.NewRegistry(logger, conn_builtin.DefaultBuiltinConnectors, schemaService),
+		conn_builtin.NewRegistry(logger, conn_builtin.DefaultBuiltinConnectors, connSchemaService),
 		conn_standalone.NewRegistry(logger, ""),
 		authManager,
 	)
 	connPluginService.Init(ctx, "conn-utils-token:12345")
 
+	procSchemaService := procutils.NewSchemaService(logger, schemaRegistry)
+
 	procPluginService := proc_plugin.NewPluginService(
 		logger,
-		proc_builtin.NewRegistry(logger, proc_builtin.DefaultBuiltinProcessors),
+		proc_builtin.NewRegistry(logger, proc_builtin.DefaultBuiltinProcessors, procSchemaService),
 		nil,
 	)
 

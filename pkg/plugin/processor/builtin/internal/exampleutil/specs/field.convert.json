@@ -23,7 +23,7 @@
       },
       "type": {
         "default": "",
-        "description": "Type is the target field type after conversion, available options are: string, int, float, bool.",
+        "description": "Type is the target field type after conversion, available options are: `string`, `int`, `float`, `bool`, `time`.",
         "type": "string",
         "validations": [
           {
@@ -32,7 +32,7 @@
           },
           {
             "type": "inclusion",
-            "value": "string,int,float,bool"
+            "value": "string,int,float,bool,time"
           }
         ]
       }

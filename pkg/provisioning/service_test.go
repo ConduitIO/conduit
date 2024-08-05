@@ -33,6 +33,7 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin/connector/standalone"
 	proc_plugin "github.com/conduitio/conduit/pkg/plugin/processor"
 	proc_builtin "github.com/conduitio/conduit/pkg/plugin/processor/builtin"
+	"github.com/conduitio/conduit/pkg/plugin/processor/procutils"
 	"github.com/conduitio/conduit/pkg/processor"
 	p1 "github.com/conduitio/conduit/pkg/provisioning/test/pipelines1"
 	p2 "github.com/conduitio/conduit/pkg/provisioning/test/pipelines2"
@@ -492,19 +493,21 @@ func TestService_IntegrationTestServices(t *testing.T) {
 	schemaRegistry, err := schemaregistry.NewSchemaRegistry(db)
 	is.NoErr(err)
 
-	schemaService := connutils.NewSchemaService(logger, schemaRegistry, tokenService)
+	connSchemaService := connutils.NewSchemaService(logger, schemaRegistry, tokenService)
 
 	connPluginService := conn_plugin.NewPluginService(
 		logger,
-		builtin.NewRegistry(logger, builtin.DefaultBuiltinConnectors, schemaService),
+		builtin.NewRegistry(logger, builtin.DefaultBuiltinConnectors, connSchemaService),
 		standalone.NewRegistry(logger, ""),
 		tokenService,
 	)
 	connPluginService.Init(ctx, "conn-utils-token:12345")
 
+	procSchemaService := procutils.NewSchemaService(logger, schemaRegistry)
+
 	procPluginService := proc_plugin.NewPluginService(
 		logger,
-		proc_builtin.NewRegistry(logger, proc_builtin.DefaultBuiltinProcessors),
+		proc_builtin.NewRegistry(logger, proc_builtin.DefaultBuiltinProcessors, procSchemaService),
 		nil,
 	)
 

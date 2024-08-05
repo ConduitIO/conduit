@@ -22,6 +22,7 @@ import (
 	"text/template"
 
 	"github.com/Masterminds/sprig/v3"
+	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -61,7 +62,7 @@ to this processor, otherwise all records will trigger an error.`,
 	}, nil
 }
 
-func (p *errorProcessor) Configure(ctx context.Context, cfg map[string]string) error {
+func (p *errorProcessor) Configure(ctx context.Context, cfg config.Config) error {
 	err := sdk.ParseConfig(ctx, cfg, &p.config, p.config.Parameters())
 	if err != nil {
 		return cerrors.Errorf("failed parsing configuration: %w", err)

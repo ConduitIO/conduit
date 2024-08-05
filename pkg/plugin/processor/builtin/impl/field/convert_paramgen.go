@@ -27,11 +27,11 @@ func (convertConfig) Parameters() map[string]config.Parameter {
 		},
 		convertConfigType: {
 			Default:     "",
-			Description: "Type is the target field type after conversion, available options are: string, int, float, bool.",
+			Description: "Type is the target field type after conversion, available options are: `string`, `int`, `float`, `bool`, `time`.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{
 				config.ValidationRequired{},
-				config.ValidationInclusion{List: []string{"string", "int", "float", "bool"}},
+				config.ValidationInclusion{List: []string{"string", "int", "float", "bool", "time"}},
 			},
 		},
 	}

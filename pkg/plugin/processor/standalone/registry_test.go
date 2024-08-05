@@ -27,6 +27,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
+	"github.com/google/go-cmp/cmp"
 	"github.com/google/uuid"
 	"github.com/matryer/is"
 )
@@ -43,7 +44,7 @@ func TestRegistry_List(t *testing.T) {
 
 	want := ChaosProcessorSpecifications()
 
-	is.Equal(got, want)
+	is.Equal("", cmp.Diff(got, want))
 }
 
 func TestRegistry_MalformedProcessor(t *testing.T) {
@@ -84,7 +85,7 @@ func TestRegistry_ChaosProcessor(t *testing.T) {
 		is.True(ok)
 
 		want := ChaosProcessorSpecifications()
-		is.Equal(got, want)
+		is.Equal("", cmp.Diff(got, want))
 	})
 
 	t.Run("NewProcessor", func(t *testing.T) {
@@ -97,7 +98,7 @@ func TestRegistry_ChaosProcessor(t *testing.T) {
 		is.NoErr(err)
 
 		want := ChaosProcessorSpecifications()
-		is.Equal(got, want)
+		is.Equal("", cmp.Diff(got, want))
 
 		is.NoErr(p.Teardown(ctx))
 	})

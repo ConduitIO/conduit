@@ -15,6 +15,7 @@
 package field
 
 import (
+	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -28,7 +29,7 @@ func ExampleConvertProcessor_stringToInt() {
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary:     "Convert `string` to `int`",
 		Description: "This example takes the string in field `.Key.id` and changes its data type to `int`.",
-		Config:      map[string]string{"field": ".Key.id", "type": "int"},
+		Config:      config.Config{"field": ".Key.id", "type": "int"},
 		Have: opencdc.Record{
 			Operation: opencdc.OperationUpdate,
 			Key:       opencdc.StructuredData{"id": "123"},
@@ -69,7 +70,7 @@ func ExampleConvertProcessor_intToBool() {
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary:     "Convert `int` to `bool`",
 		Description: "This example takes the `int` in field `.Payload.After.done` and changes its data type to `bool`.",
-		Config:      map[string]string{"field": ".Payload.After.done", "type": "bool"},
+		Config:      config.Config{"field": ".Payload.After.done", "type": "bool"},
 		Have: opencdc.Record{
 			Operation: opencdc.OperationUpdate,
 			Key:       opencdc.StructuredData{"id": "123"},
@@ -110,7 +111,7 @@ func ExampleConvertProcessor_floatToString() {
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary:     "Convert `float` to `string`",
 		Description: "This example takes the `float` in field `.Key.id` and changes its data type to `string`.",
-		Config:      map[string]string{"field": ".Key.id", "type": "string"},
+		Config:      config.Config{"field": ".Key.id", "type": "string"},
 		Have: opencdc.Record{
 			Operation: opencdc.OperationUpdate,
 			Key:       opencdc.StructuredData{"id": 123.345},

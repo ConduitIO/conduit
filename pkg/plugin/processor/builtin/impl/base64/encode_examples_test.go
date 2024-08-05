@@ -15,6 +15,7 @@
 package base64
 
 import (
+	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -28,7 +29,7 @@ func ExampleEncodeProcessor_rawData() {
 		Summary: "Encode record key to base64",
 		Description: `TThis example takes a record containing raw data in
 ` + "`.Key`" + ` and converts it into a base64 encoded string.`,
-		Config: map[string]string{
+		Config: config.Config{
 			"field": ".Key",
 		},
 		Have: opencdc.Record{
@@ -84,7 +85,7 @@ func ExampleBase64EncodeProcessor_stringField() {
 		Summary: "Encode nested value to base64",
 		Description: `This example takes a record containing a string in
 ` + "`.Payload.Before.foo`" + ` and converts it into a base64 encoded string.`,
-		Config: map[string]string{
+		Config: config.Config{
 			"field": ".Payload.After.foo",
 		},
 		Have: opencdc.Record{

@@ -21,6 +21,7 @@ import (
 	"context"
 	"crypto/tls"
 
+	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -49,9 +50,9 @@ type decodeConfig struct {
 	fieldResolver sdk.ReferenceResolver
 }
 
-func parseDecodeConfig(ctx context.Context, m map[string]string) (decodeConfig, error) {
+func parseDecodeConfig(ctx context.Context, c config.Config) (decodeConfig, error) {
 	cfg := decodeConfig{}
-	err := sdk.ParseConfig(ctx, m, &cfg, cfg.Parameters())
+	err := sdk.ParseConfig(ctx, c, &cfg, cfg.Parameters())
 	if err != nil {
 		return decodeConfig{}, err
 	}
@@ -126,8 +127,8 @@ This processor is the counterpart to [` + "`avro.encode`" + `](/docs/processors/
 	}, nil
 }
 
-func (p *decodeProcessor) Configure(ctx context.Context, m map[string]string) error {
-	cfg, err := parseDecodeConfig(ctx, m)
+func (p *decodeProcessor) Configure(ctx context.Context, c config.Config) error {
+	cfg, err := parseDecodeConfig(ctx, c)
 	if err != nil {
 		return cerrors.Errorf("invalid config: %w", err)
 	}

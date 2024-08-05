@@ -79,17 +79,11 @@ In such cases, the Debezium record is set as the [OpenCDC record](https://condui
 	}, nil
 }
 
-func (d *debeziumProcessor) Configure(_ context.Context, m map[string]string) error {
+func (d *debeziumProcessor) Configure(ctx context.Context, c config.Config) error {
 	cfg := debeziumConfig{}
-	inputCfg := config.Config(m).Sanitize().ApplyDefaults(cfg.Parameters())
-	err := inputCfg.Validate(cfg.Parameters())
+	err := sdk.ParseConfig(ctx, c, &cfg, cfg.Parameters())
 	if err != nil {
-		return cerrors.Errorf("invalid configuration: %w", err)
-	}
-
-	err = inputCfg.DecodeInto(&cfg)
-	if err != nil {
-		return cerrors.Errorf("failed decoding configuration: %w", err)
+		return err
 	}
 
 	rr, err := sdk.NewReferenceResolver(cfg.Field)
