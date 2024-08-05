@@ -31,7 +31,7 @@ func TestEncodeDecode_ExtractAndUploadSchemaStrategy(t *testing.T) {
 	ctx := context.Background()
 	logger := log.Nop()
 
-	client, err := schemaregistrytest.TestSchemaRegistry()
+	client, err := schemaregistry.NewClient(logger, sr.URLs(schemaregistrytest.TestSchemaRegistryURL(t)))
 	is.NoErr(err)
 
 	have := opencdc.StructuredData{

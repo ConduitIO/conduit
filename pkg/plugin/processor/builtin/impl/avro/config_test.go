@@ -104,7 +104,7 @@ func TestConfig_Parse(t *testing.T) {
 		},
 	}
 
-	cmpOpts := cmpopts.IgnoreUnexported(encodeConfig{}, schemaConfig{}, tlsConfig{})
+	cmpOpts := cmpopts.IgnoreUnexported(encodeConfig{}, schemaConfig{})
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			is := is.New(t)
