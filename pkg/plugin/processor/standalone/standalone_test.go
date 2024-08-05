@@ -85,9 +85,6 @@ func TestMain(m *testing.M) {
 	ctx := context.Background()
 
 	// use interpreter runtime as it's faster for tests
-	cfg := wazero.NewRuntimeConfigInterpreter()
-	TestRuntime = wazero.NewRuntimeWithConfig(ctx, cfg)
-
 	newRuntime = func(ctx context.Context) wazero.Runtime {
 		cfg := wazero.NewRuntimeConfigInterpreter()
 		return wazero.NewRuntimeWithConfig(ctx, cfg)
@@ -95,6 +92,8 @@ func TestMain(m *testing.M) {
 	defer func() {
 		newRuntime = wazero.NewRuntime // reset to default
 	}()
+
+	TestRuntime = newRuntime(ctx)
 
 	_, err := wasi_snapshot_preview1.Instantiate(ctx, TestRuntime)
 	exitOnError(err, "error instantiating WASI")
