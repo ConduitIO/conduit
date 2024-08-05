@@ -15,11 +15,11 @@
 package builtin
 
 import (
-	"github.com/conduitio/conduit-commons/database/inmemory"
-	schemaregistry "github.com/conduitio/conduit-schema-registry"
 	"testing"
 
+	"github.com/conduitio/conduit-commons/database/inmemory"
 	sdk "github.com/conduitio/conduit-processor-sdk"
+	schemaregistry "github.com/conduitio/conduit-schema-registry"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/conduitio/conduit/pkg/plugin/processor/mock"
