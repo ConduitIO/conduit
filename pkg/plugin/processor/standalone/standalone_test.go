@@ -89,9 +89,6 @@ func TestMain(m *testing.M) {
 		cfg := wazero.NewRuntimeConfigInterpreter()
 		return wazero.NewRuntimeWithConfig(ctx, cfg)
 	}
-	defer func() {
-		newRuntime = wazero.NewRuntime // reset to default
-	}()
 
 	TestRuntime = newRuntime(ctx)
 
