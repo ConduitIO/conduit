@@ -10,14 +10,14 @@ require (
 	github.com/bufbuild/buf v1.35.1
 	github.com/conduitio/conduit-commons v0.2.1-0.20240801113202-731b460a2c58
 	github.com/conduitio/conduit-connector-file v0.6.1-0.20240802092632-99d8e67ba629
-	github.com/conduitio/conduit-connector-generator v0.6.1-0.20240621111436-e9fa3464f7b2
+	github.com/conduitio/conduit-connector-generator v0.6.1-0.20240731150050-422a9e3cbd8f
 	github.com/conduitio/conduit-connector-kafka v0.8.1-0.20240802092956-d92779b95e5b
 	github.com/conduitio/conduit-connector-log v0.3.1-0.20240621111440-e2f0f04a35a4
 	github.com/conduitio/conduit-connector-postgres v0.7.6-0.20240630172132-84b5a6e6104f
 	github.com/conduitio/conduit-connector-protocol v0.6.1-0.20240802103310-fd4ab945b1ac
 	github.com/conduitio/conduit-connector-s3 v0.5.2-0.20240802092651-67dc543a6c90
 	github.com/conduitio/conduit-connector-sdk v0.9.2-0.20240802133134-6635ddc2aff6
-	github.com/conduitio/conduit-processor-sdk v0.1.2-0.20240803121812-e641b45ecd3f
+	github.com/conduitio/conduit-processor-sdk v0.1.2-0.20240805142905-479019ef19f3
 	github.com/conduitio/conduit-schema-registry v0.0.0-20240725155046-a0fdb61d2588
 	github.com/conduitio/yaml/v3 v3.3.0
 	github.com/dop251/goja v0.0.0-20231027120936-b396bb4c349d
