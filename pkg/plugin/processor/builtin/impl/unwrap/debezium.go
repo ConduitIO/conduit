@@ -79,9 +79,9 @@ In such cases, the Debezium record is set as the [OpenCDC record](https://condui
 	}, nil
 }
 
-func (d *debeziumProcessor) Configure(ctx context.Context, m config.Config) error {
+func (d *debeziumProcessor) Configure(ctx context.Context, c config.Config) error {
 	cfg := debeziumConfig{}
-	err := sdk.ParseConfig(ctx, m, &cfg, cfg.Parameters())
+	err := sdk.ParseConfig(ctx, c, &cfg, cfg.Parameters())
 	if err != nil {
 		return err
 	}

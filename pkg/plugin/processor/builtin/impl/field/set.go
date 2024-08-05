@@ -66,9 +66,9 @@ Note that this processor only runs on structured data, if the record contains ra
 	}, nil
 }
 
-func (p *setProcessor) Configure(ctx context.Context, m config.Config) error {
+func (p *setProcessor) Configure(ctx context.Context, c config.Config) error {
 	cfg := setConfig{}
-	err := sdk.ParseConfig(ctx, m, &cfg, setConfig{}.Parameters())
+	err := sdk.ParseConfig(ctx, c, &cfg, setConfig{}.Parameters())
 	if err != nil {
 		return cerrors.Errorf("failed to parse configuration: %w", err)
 	}

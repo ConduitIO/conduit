@@ -61,8 +61,8 @@ assign its value.`,
 	}, nil
 }
 
-func (p *encodeProcessor) Configure(ctx context.Context, m config.Config) error {
-	err := sdk.ParseConfig(ctx, m, &p.config, p.config.Parameters())
+func (p *encodeProcessor) Configure(ctx context.Context, c config.Config) error {
+	err := sdk.ParseConfig(ctx, c, &p.config, p.config.Parameters())
 	if err != nil {
 		return cerrors.Errorf("failed to parse configuration: %w", err)
 	}

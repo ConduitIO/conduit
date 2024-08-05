@@ -61,9 +61,9 @@ This processor is only applicable to fields under ` + "`.Key`" + `, ` + "`.Paylo
 	}, nil
 }
 
-func (p *decodeProcessor) Configure(ctx context.Context, m config.Config) error {
+func (p *decodeProcessor) Configure(ctx context.Context, c config.Config) error {
 	cfg := decodeConfig{}
-	err := sdk.ParseConfig(ctx, m, &cfg, decodeConfig{}.Parameters())
+	err := sdk.ParseConfig(ctx, c, &cfg, decodeConfig{}.Parameters())
 	if err != nil {
 		return cerrors.Errorf("failed to parse configuration: %w", err)
 	}
