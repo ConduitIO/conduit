@@ -25,13 +25,17 @@ import (
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal/exampleutil"
+	"github.com/conduitio/conduit/pkg/schemaregistry"
 	"github.com/conduitio/conduit/pkg/schemaregistry/schemaregistrytest"
 	"github.com/twmb/franz-go/pkg/sr"
 )
 
 //nolint:govet // a more descriptive example description
 func ExampleEncodeProcessor_autoRegister() {
-	schemaRegistry, err := schemaregistrytest.TestSchemaRegistry()
+	url, cleanup := schemaregistrytest.ExampleSchemaRegistryURL("ExampleEncodeProcessor_autoRegister", 54322)
+	defer cleanup()
+
+	schemaRegistry, err := schemaregistry.NewClient(log.Nop(), sr.URLs(url))
 	if err != nil {
 		panic(err)
 	}
@@ -112,7 +116,10 @@ and registered on the fly under the subject ` + "`example-autoRegister`" + `.`,
 
 //nolint:govet // a more descriptive example description
 func ExampleEncodeProcessor_preRegistered() {
-	schemaRegistry, err := schemaregistrytest.TestSchemaRegistry()
+	url, cleanup := schemaregistrytest.ExampleSchemaRegistryURL("ExampleEncodeProcessor_preRegistered", 54322)
+	defer cleanup()
+
+	schemaRegistry, err := schemaregistry.NewClient(log.Nop(), sr.URLs(url))
 	if err != nil {
 		panic(err)
 	}

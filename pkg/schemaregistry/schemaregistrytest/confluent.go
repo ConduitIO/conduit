@@ -17,9 +17,6 @@
 package schemaregistrytest
 
 import (
-	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/conduitio/conduit/pkg/schemaregistry"
-	"github.com/twmb/franz-go/pkg/sr"
 	"testing"
 )
 
@@ -36,8 +33,4 @@ func ExampleSchemaRegistryURL(exampleName string, port int) (string, func()) {
 func TestSchemaRegistryURL(t testing.TB) string {
 	t.Log("Using real schema registry server")
 	return "localhost:8085"
-}
-
-func TestSchemaRegistry() (*schemaregistry.Client, error) {
-	return schemaregistry.NewClient(log.Nop(), sr.URLs("localhost:8085"))
 }

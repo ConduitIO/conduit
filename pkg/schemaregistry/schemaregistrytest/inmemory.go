@@ -64,10 +64,6 @@ func TestSchemaRegistryURL(t testing.TB) string {
 	return url
 }
 
-func TestSchemaRegistry() (*schemaregistry.SchemaRegistry, error) {
-	return schemaregistry.NewSchemaRegistry(&inmemory.DB{})
-}
-
 func inMemorySchemaRegistryURL(name string, logger *slog.Logger, port int) (string, func()) {
 	serverByTestLock.Lock()
 	defer serverByTestLock.Unlock()
