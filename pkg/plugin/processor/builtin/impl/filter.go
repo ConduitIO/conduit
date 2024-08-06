@@ -18,6 +18,7 @@ import (
 	"context"
 
 	"github.com/conduitio/conduit-commons/config"
+	"github.com/conduitio/conduit-commons/lang"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -53,4 +54,18 @@ func (p *filterProcessor) Process(_ context.Context, records []opencdc.Record) [
 		out[i] = sdk.FilterRecord{}
 	}
 	return out
+}
+
+func (*filterProcessor) MiddlewareOptions() []sdk.ProcessorMiddlewareOption {
+	// disable schema middleware by default
+	return []sdk.ProcessorMiddlewareOption{
+		sdk.ProcessorWithSchemaEncodeConfig{
+			PayloadEnabled: lang.Ptr(false),
+			KeyEnabled:     lang.Ptr(false),
+		},
+		sdk.ProcessorWithSchemaDecodeConfig{
+			PayloadEnabled: lang.Ptr(false),
+			KeyEnabled:     lang.Ptr(false),
+		},
+	}
 }

@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:build export_processors
+// This file is here to export processor specifications. It's named with a "z_"
+// prefix to ensure it's processed last by go generate.
+
+//go:generate env EXPORT_PROCESSORS=true go test -count=1 -tags export_processors .
 
 package impl
 
@@ -29,6 +32,8 @@ func TestMain(m *testing.M) {
 		os.Exit(code)
 	}
 
-	// tests passed, export the processors
-	exampleutil.ExportProcessors()
+	if os.Getenv("EXPORT_PROCESSORS") == "true" {
+		// tests passed and env var is included, export the processors
+		exampleutil.ExportProcessors()
+	}
 }

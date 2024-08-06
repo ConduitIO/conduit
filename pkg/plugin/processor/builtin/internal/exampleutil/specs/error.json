@@ -11,6 +11,30 @@
         "description": "Error message to be returned. This can be a Go [template](https://pkg.go.dev/text/template)\nexecuted on each [`Record`](https://pkg.go.dev/github.com/conduitio/conduit-commons/opencdc#Record)\nbeing processed.",
         "type": "string",
         "validations": []
+      },
+      "sdk.schema.decode.key.enabled": {
+        "default": "false",
+        "description": "Whether to decode the record key with a schema.",
+        "type": "bool",
+        "validations": null
+      },
+      "sdk.schema.decode.payload.enabled": {
+        "default": "false",
+        "description": "Whether to decode the record payload with a schema.",
+        "type": "bool",
+        "validations": null
+      },
+      "sdk.schema.encode.key.enabled": {
+        "default": "false",
+        "description": "Whether to encode the record key with a schema.",
+        "type": "bool",
+        "validations": null
+      },
+      "sdk.schema.encode.payload.enabled": {
+        "default": "false",
+        "description": "Whether to encode the record payload with a schema.",
+        "type": "bool",
+        "validations": null
       }
     }
   },
