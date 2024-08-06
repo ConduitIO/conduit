@@ -23,30 +23,30 @@ the same directory.
 1. [`conduit-commons`](https://github.com/ConduitIO/conduit-commons)
     - Run `scripts/get-compare-link.sh ../conduit-commons/` to compare the latest tag and the `main` branch.
     - If the changes should be released/tagged, push a new tag.
-1. [`conduit-connector-protocol`](https://github.com/conduitio/conduit-connector-protocol)
+2. [`conduit-connector-protocol`](https://github.com/conduitio/conduit-connector-protocol)
     - Update `conduit-commons` if needed: `go get github.com/conduitio/conduit-commons@vX.Y.Z`
     - Run `scripts/get-compare-link.sh ../conduit-connector-protocol/` to compare the latest tag and the `main` branch.
     - If the changes should be released/tagged, push a new tag.
-1. [`conduit-connector-sdk`](https://github.com/ConduitIO/conduit-connector-sdk)
+3. [`conduit-connector-sdk`](https://github.com/ConduitIO/conduit-connector-sdk)
     - Update `conduit-commons` if needed: `go get github.com/conduitio/conduit-commons@vX.Y.Z`
     - Update `conduit-connector-protocol` if needed: `go get github.com/conduitio/conduit-connector-protocol@vX.Y.Z`
     - Run `scripts/get-compare-link.sh ../conduit-connector-sdk/` to compare the latest tag and the `main` branch.
     - If the changes should be released/tagged, push a new tag.
-1. [`conduit-processor-sdk`](https://github.com/ConduitIO/conduit-processor-sdk)
+4. [`conduit-processor-sdk`](https://github.com/ConduitIO/conduit-processor-sdk)
     - Update `conduit-commons` if needed: `go get github.com/conduitio/conduit-commons@vX.Y.Z`
     - Run `scripts/get-compare-link.sh ../conduit-processor-sdk/` to compare the latest tag and the `main` branch.
     - If the changes should be released/tagged, push a new tag.
-1. [`conduit-schema-registry`](https://github.com/ConduitIO/conduit-schema-registry/)
+5. [`conduit-schema-registry`](https://github.com/ConduitIO/conduit-schema-registry/)
    - Update `conduit-commons` if needed: `go get github.com/conduitio/conduit-commons@vX.Y.Z`
    - Run `scripts/get-compare-link.sh ../conduit-schema-registry/` to compare the latest tag and the `main` branch.
    - If the changes should be released/tagged, push a new tag.
-1. Bump the Connector SDK dependency on [`conduit-connector-template`](https://github.com/ConduitIO/conduit-connector-template)
-1. Bump the Connector SDK in all the built-in connectors: `scripts/bump-sdk-in-connectors.sh vX.Y.Z`
-1. For each of the built-in connectors (file, kafka, generator, s3, postgres, log):
+6. Bump the Connector SDK dependency on [`conduit-connector-template`](https://github.com/ConduitIO/conduit-connector-template)
+7. Bump the Connector SDK in all the built-in connectors: `scripts/bump-sdk-in-connectors.sh vX.Y.Z`
+8. For each of the built-in connectors (file, kafka, generator, s3, postgres, log):
     - Run `scripts/get-compare-link.sh ../conduit-processor-sdk/` to compare the latest tag and the `main` branch.
     - If the changes should be released/tagged, push a new tag.
-1. Bump the built-in connectors: `scripts/bump-builtin-connectors.sh`
-1. Conduit itself
+9. Bump the built-in connectors: `scripts/bump-builtin-connectors.sh`
+10. Conduit itself
     - Update `conduit-schema-registry` if needed
     - Update `conduit-connector-sdk` if needed
     - Update `conduit-processor-sdk` if needed
