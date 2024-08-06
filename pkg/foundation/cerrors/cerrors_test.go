@@ -59,7 +59,7 @@ func TestErrorf(t *testing.T) {
 	s := fmt.Sprintf("%+v", err)
 	is.Equal(
 		"caused by:\n    github.com/conduitio/conduit/pkg/foundation/cerrors_test.TestErrorf\n        "+
-			testFileLocation+":60\n  - "+
+			testFileLocation+":58\n  - "+
 			"foobar:\n    github.com/conduitio/conduit/pkg/foundation/cerrors_test.newError\n        "+
 			helperFilePath+":26",
 		s,
@@ -89,7 +89,7 @@ func TestGetStackTrace(t *testing.T) {
 				{
 					Func: "github.com/conduitio/conduit/pkg/foundation/cerrors_test.TestGetStackTrace",
 					File: testFileLocation,
-					Line: 89,
+					Line: 87,
 				},
 			},
 		},
