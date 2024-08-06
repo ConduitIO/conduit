@@ -40,6 +40,42 @@
   },
   "examples": [
     {
+      "summary": "Convert `int` to `time`",
+      "description": "This example takes an `int` in field `.Payload.After.createdAt` and parses it as a unix timestamp into a `time.Time` value.",
+      "config": {
+        "field": ".Payload.After.createdAt",
+        "type": "time"
+      },
+      "have": {
+        "position": null,
+        "operation": "create",
+        "metadata": null,
+        "key": {
+          "id": 123.345
+        },
+        "payload": {
+          "before": null,
+          "after": {
+            "createdAt": 1704198896123456789
+          }
+        }
+      },
+      "want": {
+        "position": null,
+        "operation": "create",
+        "metadata": null,
+        "key": {
+          "id": 123.345
+        },
+        "payload": {
+          "before": null,
+          "after": {
+            "createdAt": "2024-01-02T12:34:56.123456789Z"
+          }
+        }
+      }
+    },
+    {
       "summary": "Convert `float` to `string`",
       "description": "This example takes the `float` in field `.Key.id` and changes its data type to `string`.",
       "config": {
