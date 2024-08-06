@@ -32,6 +32,11 @@ import (
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 )
 
+// newRuntime is a function that creates a new Wazero runtime. This is used to
+// allow tests to replace the runtime with an interpreter runtime, as it's much
+// faster than the compiler runtime.
+var newRuntime = wazero.NewRuntime
+
 // Registry is a directory registry of processor plugins, organized by plugin
 // type, name and version.
 // Every file in the specified directory is considered a plugin
@@ -81,7 +86,7 @@ func NewRegistry(logger log.CtxLogger, pluginDir string, schemaService pprocutil
 	}
 
 	// we are using the wasm compiler, context is not used
-	runtime := wazero.NewRuntime(ctx)
+	runtime := newRuntime(ctx)
 	// TODO close runtime on shutdown
 
 	_, err := wasi_snapshot_preview1.Instantiate(ctx, runtime)
