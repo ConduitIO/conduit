@@ -113,6 +113,15 @@ func (r *Registry) loadPlugins(ctx context.Context) map[string]map[string]bluepr
 			continue
 		}
 
+		if specs.Version == "" {
+			warn(
+				ctx,
+				cerrors.Errorf("plugin %v has empty version (check if it was built correctly)", pluginPath),
+				pluginPath,
+			)
+			continue
+		}
+
 		versionMap := plugins[specs.Name]
 		if versionMap == nil {
 			versionMap = make(map[string]blueprint)
