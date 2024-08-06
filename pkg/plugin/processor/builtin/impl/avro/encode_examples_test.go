@@ -35,13 +35,13 @@ func ExampleEncodeProcessor_autoRegister() {
 	url, cleanup := schemaregistrytest.ExampleSchemaRegistryURL("ExampleEncodeProcessor_autoRegister", 54322)
 	defer cleanup()
 
-	schemaRegistry, err := schemaregistry.NewClient(log.Nop(), sr.URLs(url))
+	client, err := schemaregistry.NewClient(log.Nop(), sr.URLs(url))
 	if err != nil {
 		panic(err)
 	}
 
 	p := NewEncodeProcessor(log.Nop()).(*encodeProcessor)
-	p.SetSchemaRegistry(schemaRegistry)
+	p.SetSchemaRegistry(client)
 
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary: "Auto-register schema",
@@ -119,12 +119,12 @@ func ExampleEncodeProcessor_preRegistered() {
 	url, cleanup := schemaregistrytest.ExampleSchemaRegistryURL("ExampleEncodeProcessor_preRegistered", 54322)
 	defer cleanup()
 
-	schemaRegistry, err := schemaregistry.NewClient(log.Nop(), sr.URLs(url))
+	client, err := schemaregistry.NewClient(log.Nop(), sr.URLs(url))
 	if err != nil {
 		panic(err)
 	}
 
-	_, err = schemaRegistry.CreateSchema(context.Background(), "example-preRegistered", sr.Schema{
+	_, err = client.CreateSchema(context.Background(), "example-preRegistered", sr.Schema{
 		Type: sr.TypeAvro,
 		Schema: `
 {
@@ -141,7 +141,7 @@ func ExampleEncodeProcessor_preRegistered() {
 	}
 
 	p := NewEncodeProcessor(log.Nop()).(*encodeProcessor)
-	p.SetSchemaRegistry(schemaRegistry)
+	p.SetSchemaRegistry(client)
 
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary: "Pre-register schema",

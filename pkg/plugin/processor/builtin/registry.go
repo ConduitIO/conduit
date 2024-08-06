@@ -187,8 +187,8 @@ func (r *Registry) NewProcessor(_ context.Context, fullName plugin.FullName, id 
 	}
 
 	p := b.constructor(r.logger)
-	if srp, needsSchemaRegistry := p.(schemaRegistryProcessor); needsSchemaRegistry {
-		srp.SetSchemaRegistry(r.schemaRegistry)
+	if sr, setSR := p.(schemaRegistryProcessor); setSR {
+		sr.SetSchemaRegistry(r.schemaRegistry)
 	}
 
 	// apply default middleware
