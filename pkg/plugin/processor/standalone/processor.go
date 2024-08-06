@@ -293,7 +293,6 @@ func (p *wasmProcessor) executeTeardownCommand(ctx context.Context) error {
 	}
 
 	resp, err := p.executeCommand(ctx, req)
-
 	if err != nil {
 		return err
 	}

@@ -164,7 +164,6 @@ func (c *ConnectorAPIv1) UpdateConnector(
 	}
 
 	updated, err := c.connectorOrchestrator.Update(ctx, req.Id, fromproto.ConnectorConfig(req.Config))
-
 	if err != nil {
 		return nil, status.ConnectorError(cerrors.Errorf("failed to update connector: %w", err))
 	}
@@ -176,7 +175,6 @@ func (c *ConnectorAPIv1) UpdateConnector(
 
 func (c *ConnectorAPIv1) DeleteConnector(ctx context.Context, req *apiv1.DeleteConnectorRequest) (*apiv1.DeleteConnectorResponse, error) {
 	err := c.connectorOrchestrator.Delete(ctx, req.Id)
-
 	if err != nil {
 		return nil, status.ConnectorError(cerrors.Errorf("failed to delete connector: %w", err))
 	}
@@ -196,7 +194,6 @@ func (c *ConnectorAPIv1) ValidateConnector(
 		req.Plugin,
 		fromproto.ConnectorConfig(req.Config),
 	)
-
 	if err != nil {
 		return nil, status.ConnectorError(err)
 	}

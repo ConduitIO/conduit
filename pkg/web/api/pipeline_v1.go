@@ -141,7 +141,6 @@ func (p *PipelineAPIv1) UpdatePipeline(
 
 	cfg := fromproto.PipelineConfig(req.Config)
 	updated, err := p.ps.Update(ctx, req.Id, cfg)
-
 	if err != nil {
 		return nil, status.PipelineError(cerrors.Errorf("failed to update pipeline: %w", err))
 	}
@@ -156,7 +155,6 @@ func (p *PipelineAPIv1) DeletePipeline(
 	req *apiv1.DeletePipelineRequest,
 ) (*apiv1.DeletePipelineResponse, error) {
 	err := p.ps.Delete(ctx, req.Id)
-
 	if err != nil {
 		return nil, status.PipelineError(cerrors.Errorf("failed to delete pipeline: %w", err))
 	}
@@ -216,7 +214,6 @@ func (p *PipelineAPIv1) UpdateDLQ(
 
 	cfg := fromproto.PipelineDLQ(req.Dlq)
 	updated, err := p.ps.UpdateDLQ(ctx, req.Id, cfg)
-
 	if err != nil {
 		return nil, status.PipelineError(cerrors.Errorf("failed to update pipeline dead-letter-queue: %w", err))
 	}

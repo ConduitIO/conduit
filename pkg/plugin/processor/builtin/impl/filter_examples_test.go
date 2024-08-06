@@ -34,7 +34,8 @@ func ExampleFilterProcessor() {
 			Metadata:  map[string]string{"key1": "val1"},
 			Payload:   opencdc.Change{After: opencdc.StructuredData{"foo": "bar"}, Before: opencdc.StructuredData{"bar": "baz"}},
 		},
-		Want: sdk.FilterRecord{}})
+		Want: sdk.FilterRecord{},
+	})
 
 	// Output:
 	// processor filtered record out

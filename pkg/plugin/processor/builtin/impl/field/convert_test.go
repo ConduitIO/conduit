@@ -48,7 +48,8 @@ func TestConvertField_Process(t *testing.T) {
 			want: sdk.SingleRecord{
 				Key: opencdc.StructuredData{"id": 54},
 			},
-		}, {
+		},
+		{
 			name:  "string to float",
 			field: ".Key.id",
 			typ:   "float",
@@ -58,7 +59,8 @@ func TestConvertField_Process(t *testing.T) {
 			want: sdk.SingleRecord{
 				Key: opencdc.StructuredData{"id": 54.0},
 			},
-		}, {
+		},
+		{
 			name:  "string to bool",
 			field: ".Key.id",
 			typ:   "bool",
@@ -68,7 +70,8 @@ func TestConvertField_Process(t *testing.T) {
 			want: sdk.SingleRecord{
 				Key: opencdc.StructuredData{"id": true},
 			},
-		}, {
+		},
+		{
 			name:  "string to string",
 			field: ".Key.id",
 			typ:   "string",
@@ -89,7 +92,8 @@ func TestConvertField_Process(t *testing.T) {
 			want: sdk.SingleRecord{
 				Key: opencdc.StructuredData{"id": 54},
 			},
-		}, {
+		},
+		{
 			name:  "int to float",
 			field: ".Key.id",
 			typ:   "float",
@@ -99,7 +103,8 @@ func TestConvertField_Process(t *testing.T) {
 			want: sdk.SingleRecord{
 				Key: opencdc.StructuredData{"id": 54.0},
 			},
-		}, {
+		},
+		{
 			name:  "int to bool",
 			field: ".Key.id",
 			typ:   "bool",
@@ -109,7 +114,8 @@ func TestConvertField_Process(t *testing.T) {
 			want: sdk.SingleRecord{
 				Key: opencdc.StructuredData{"id": true},
 			},
-		}, {
+		},
+		{
 			name:  "int to string",
 			field: ".Key.id",
 			typ:   "string",
@@ -119,7 +125,8 @@ func TestConvertField_Process(t *testing.T) {
 			want: sdk.SingleRecord{
 				Key: opencdc.StructuredData{"id": "54"},
 			},
-		}, {
+		},
+		{
 			name:  "float to int",
 			field: ".Key.id",
 			typ:   "int",
@@ -129,7 +136,8 @@ func TestConvertField_Process(t *testing.T) {
 			want: sdk.SingleRecord{
 				Key: opencdc.StructuredData{"id": 54},
 			},
-		}, {
+		},
+		{
 			name:  "float to float",
 			field: ".Key.id",
 			typ:   "float",
@@ -139,7 +147,8 @@ func TestConvertField_Process(t *testing.T) {
 			want: sdk.SingleRecord{
 				Key: opencdc.StructuredData{"id": 54.0},
 			},
-		}, {
+		},
+		{
 			name:  "float to bool",
 			field: ".Key.id",
 			typ:   "bool",
@@ -149,7 +158,8 @@ func TestConvertField_Process(t *testing.T) {
 			want: sdk.SingleRecord{
 				Key: opencdc.StructuredData{"id": true},
 			},
-		}, {
+		},
+		{
 			name:  "float to string",
 			field: ".Key.id",
 			typ:   "string",
@@ -159,7 +169,8 @@ func TestConvertField_Process(t *testing.T) {
 			want: sdk.SingleRecord{
 				Key: opencdc.StructuredData{"id": "54"},
 			},
-		}, {
+		},
+		{
 			name:  "bool to int",
 			field: ".Key.id",
 			typ:   "int",
@@ -169,7 +180,8 @@ func TestConvertField_Process(t *testing.T) {
 			want: sdk.SingleRecord{
 				Key: opencdc.StructuredData{"id": 1},
 			},
-		}, {
+		},
+		{
 			name:  "bool to float",
 			field: ".Key.id",
 			typ:   "float",
@@ -179,7 +191,8 @@ func TestConvertField_Process(t *testing.T) {
 			want: sdk.SingleRecord{
 				Key: opencdc.StructuredData{"id": 0.0},
 			},
-		}, {
+		},
+		{
 			name:  "bool to bool",
 			field: ".Key.id",
 			typ:   "bool",
@@ -189,7 +202,8 @@ func TestConvertField_Process(t *testing.T) {
 			want: sdk.SingleRecord{
 				Key: opencdc.StructuredData{"id": true},
 			},
-		}, {
+		},
+		{
 			name:  "bool to string",
 			field: ".Key.id",
 			typ:   "string",
@@ -199,7 +213,8 @@ func TestConvertField_Process(t *testing.T) {
 			want: sdk.SingleRecord{
 				Key: opencdc.StructuredData{"id": "false"},
 			},
-		}, {
+		},
+		{
 			name:  "bytes to string",
 			field: ".Key.id",
 			typ:   "string",
@@ -209,7 +224,8 @@ func TestConvertField_Process(t *testing.T) {
 			want: sdk.SingleRecord{
 				Key: opencdc.StructuredData{"id": "foo"},
 			},
-		}, {
+		},
+		{
 			name:  "int to time",
 			field: ".Key.id",
 			typ:   "time",
@@ -219,7 +235,8 @@ func TestConvertField_Process(t *testing.T) {
 			want: sdk.SingleRecord{
 				Key: opencdc.StructuredData{"id": time.Date(2021, 1, 21, 18, 40, 12, 345678999, time.UTC)},
 			},
-		}, {
+		},
+		{
 			name:  "string to time",
 			field: ".Key.id",
 			typ:   "time",
@@ -272,7 +289,8 @@ func TestConvertField_ProcessFail(t *testing.T) {
 				Key: opencdc.StructuredData{"id": "nan"},
 			},
 			wantErr: "invalid syntax",
-		}, {
+		},
+		{
 			name:  "float to int, float is out of range",
 			field: ".Key.id",
 			typ:   "int",
@@ -280,7 +298,8 @@ func TestConvertField_ProcessFail(t *testing.T) {
 				Key: opencdc.StructuredData{"id": 9999999999999999999.0},
 			},
 			wantErr: "value out of range",
-		}, {
+		},
+		{
 			name:  "string to time, invalid format",
 			field: ".Key.id",
 			typ:   "time",

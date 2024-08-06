@@ -47,6 +47,7 @@ type createPipelineAction struct {
 func (a createPipelineAction) String() string {
 	return fmt.Sprintf("create pipeline with ID %v", a.cfg.ID)
 }
+
 func (a createPipelineAction) Do(ctx context.Context) error {
 	_, err := a.pipelineService.Create(ctx, a.cfg.ID, pipeline.Config{
 		Name:        a.cfg.Name,
@@ -82,6 +83,7 @@ func (a createPipelineAction) Do(ctx context.Context) error {
 
 	return nil
 }
+
 func (a createPipelineAction) Rollback(ctx context.Context) error {
 	err := a.pipelineService.Delete(ctx, a.cfg.ID)
 	// ignore instance not found errors, this means the action failed to
@@ -103,6 +105,7 @@ type createConnectorAction struct {
 func (a createConnectorAction) String() string {
 	return fmt.Sprintf("create connector with ID %v", a.cfg.ID)
 }
+
 func (a createConnectorAction) Do(ctx context.Context) error {
 	_, err := a.connectorService.Create(
 		ctx,
@@ -130,6 +133,7 @@ func (a createConnectorAction) Do(ctx context.Context) error {
 
 	return nil
 }
+
 func (a createConnectorAction) Rollback(ctx context.Context) error {
 	err := a.connectorService.Delete(ctx, a.cfg.ID, a.connectorPluginService)
 	// ignore instance not found errors, this means the action failed to
@@ -139,6 +143,7 @@ func (a createConnectorAction) Rollback(ctx context.Context) error {
 	}
 	return err
 }
+
 func (createConnectorAction) connectorType(t string) connector.Type {
 	switch t {
 	case config.TypeSource:
@@ -159,6 +164,7 @@ type createProcessorAction struct {
 func (a createProcessorAction) String() string {
 	return fmt.Sprintf("create processor with ID %v", a.cfg.ID)
 }
+
 func (a createProcessorAction) Do(ctx context.Context) error {
 	_, err := a.processorService.Create(
 		ctx,
@@ -177,6 +183,7 @@ func (a createProcessorAction) Do(ctx context.Context) error {
 	}
 	return nil
 }
+
 func (a createProcessorAction) Rollback(ctx context.Context) error {
 	err := a.processorService.Delete(ctx, a.cfg.ID)
 	// ignore instance not found errors, this means the action failed to
@@ -201,12 +208,15 @@ type updatePipelineAction struct {
 func (a updatePipelineAction) String() string {
 	return fmt.Sprintf("update pipeline with ID %v", a.oldConfig.ID)
 }
+
 func (a updatePipelineAction) Do(ctx context.Context) error {
 	return a.update(ctx, a.newConfig)
 }
+
 func (a updatePipelineAction) Rollback(ctx context.Context) error {
 	return a.update(ctx, a.oldConfig)
 }
+
 func (a updatePipelineAction) update(ctx context.Context, cfg config.Pipeline) error {
 	p, err := a.pipelineService.Update(ctx, cfg.ID, pipeline.Config{
 		Name:        cfg.Name,
@@ -261,6 +271,7 @@ func (a updatePipelineAction) update(ctx context.Context, cfg config.Pipeline) e
 
 	return nil
 }
+
 func (updatePipelineAction) isEqualConnectors(ids []string, connectors []config.Connector) bool {
 	if len(ids) != len(connectors) {
 		return false
@@ -272,6 +283,7 @@ func (updatePipelineAction) isEqualConnectors(ids []string, connectors []config.
 	}
 	return true
 }
+
 func (updatePipelineAction) isEqualProcessors(ids []string, processors []config.Processor) bool {
 	if len(ids) != len(processors) {
 		return false
@@ -294,12 +306,15 @@ type updateConnectorAction struct {
 func (a updateConnectorAction) String() string {
 	return fmt.Sprintf("update connector with ID %v", a.oldConfig.ID)
 }
+
 func (a updateConnectorAction) Do(ctx context.Context) error {
 	return a.update(ctx, a.newConfig)
 }
+
 func (a updateConnectorAction) Rollback(ctx context.Context) error {
 	return a.update(ctx, a.oldConfig)
 }
+
 func (a updateConnectorAction) update(ctx context.Context, cfg config.Connector) error {
 	c, err := a.connectorService.Update(ctx, cfg.ID, connector.Config{
 		Name:     cfg.Name,
@@ -328,6 +343,7 @@ func (a updateConnectorAction) update(ctx context.Context, cfg config.Connector)
 
 	return nil
 }
+
 func (updateConnectorAction) isEqual(ids []string, processors []config.Processor) bool {
 	if len(ids) != len(processors) {
 		return false
@@ -350,12 +366,15 @@ type updateProcessorAction struct {
 func (a updateProcessorAction) String() string {
 	return fmt.Sprintf("update processor with ID %v", a.oldConfig.ID)
 }
+
 func (a updateProcessorAction) Do(ctx context.Context) error {
 	return a.update(ctx, a.newConfig)
 }
+
 func (a updateProcessorAction) Rollback(ctx context.Context) error {
 	return a.update(ctx, a.oldConfig)
 }
+
 func (a updateProcessorAction) update(ctx context.Context, cfg config.Processor) error {
 	_, err := a.processorService.Update(ctx, cfg.ID, processor.Config{
 		Settings: cfg.Settings,
@@ -376,9 +395,11 @@ type deletePipelineAction createPipelineAction // piggyback on create action and
 func (a deletePipelineAction) String() string {
 	return fmt.Sprintf("delete pipeline with ID %v", a.cfg.ID)
 }
+
 func (a deletePipelineAction) Do(ctx context.Context) error {
 	return createPipelineAction(a).Rollback(ctx)
 }
+
 func (a deletePipelineAction) Rollback(ctx context.Context) error {
 	return createPipelineAction(a).Do(ctx)
 }
@@ -388,9 +409,11 @@ type deleteConnectorAction createConnectorAction // piggyback on create action a
 func (a deleteConnectorAction) String() string {
 	return fmt.Sprintf("delete connector with ID %v", a.cfg.ID)
 }
+
 func (a deleteConnectorAction) Do(ctx context.Context) error {
 	return createConnectorAction(a).Rollback(ctx)
 }
+
 func (a deleteConnectorAction) Rollback(ctx context.Context) error {
 	return createConnectorAction(a).Do(ctx)
 }
@@ -400,9 +423,11 @@ type deleteProcessorAction createProcessorAction // piggyback on create action a
 func (a deleteProcessorAction) String() string {
 	return fmt.Sprintf("delete processor with ID %v", a.cfg.ID)
 }
+
 func (a deleteProcessorAction) Do(ctx context.Context) error {
 	return createProcessorAction(a).Rollback(ctx)
 }
+
 func (a deleteProcessorAction) Rollback(ctx context.Context) error {
 	return createProcessorAction(a).Do(ctx)
 }

@@ -37,7 +37,8 @@ func ExampleExcludeProcessor_oneField() {
 		},
 		Want: sdk.SingleRecord{
 			Operation: opencdc.OperationCreate,
-			Metadata:  map[string]string{"key1": "val1"}},
+			Metadata:  map[string]string{"key1": "val1"},
+		},
 	})
 
 	// Output:

@@ -84,7 +84,7 @@ linters:
     # - cyclop # not interested in package complexities at the moment
     # - godot
     - gofmt
-    # - gofumpt
+    - gofumpt
     - goheader
     - goimports
     - revive

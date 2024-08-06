@@ -31,6 +31,10 @@ test-integration:
 		docker compose -f test/docker-compose-postgres.yml -f test/docker-compose-schemaregistry.yml down; \
 		exit $$ret
 
+.PHONY: fmt
+fmt:
+	gofumpt -l -w .
+
 .PHONY: lint
 lint:
 	golangci-lint run -v
