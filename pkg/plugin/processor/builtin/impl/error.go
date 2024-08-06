@@ -23,6 +23,7 @@ import (
 
 	"github.com/Masterminds/sprig/v3"
 	"github.com/conduitio/conduit-commons/config"
+	"github.com/conduitio/conduit-commons/lang"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -99,4 +100,18 @@ func (p *errorProcessor) errorMessage(record opencdc.Record) string {
 		return err.Error()
 	}
 	return buf.String()
+}
+
+func (*errorProcessor) MiddlewareOptions() []sdk.ProcessorMiddlewareOption {
+	// disable schema middleware by default
+	return []sdk.ProcessorMiddlewareOption{
+		sdk.ProcessorWithSchemaEncodeConfig{
+			PayloadEnabled: lang.Ptr(false),
+			KeyEnabled:     lang.Ptr(false),
+		},
+		sdk.ProcessorWithSchemaDecodeConfig{
+			PayloadEnabled: lang.Ptr(false),
+			KeyEnabled:     lang.Ptr(false),
+		},
+	}
 }
