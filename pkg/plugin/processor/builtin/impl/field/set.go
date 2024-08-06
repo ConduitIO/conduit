@@ -90,7 +90,6 @@ func (p *setProcessor) Process(_ context.Context, records []opencdc.Record) []sd
 	out := make([]sdk.ProcessedRecord, 0, len(records))
 	for _, record := range records {
 		rec := record
-		rec.Metadata.GetKeySchemaVersion()
 		var b bytes.Buffer
 		// evaluate the new value
 		err := p.tmpl.Execute(&b, rec)
