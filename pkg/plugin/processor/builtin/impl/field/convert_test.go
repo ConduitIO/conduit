@@ -18,6 +18,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
@@ -208,6 +209,26 @@ func TestConvertField_Process(t *testing.T) {
 			want: sdk.SingleRecord{
 				Key: opencdc.StructuredData{"id": "foo"},
 			},
+		}, {
+			name:  "int to time",
+			field: ".Key.id",
+			typ:   "time",
+			record: opencdc.Record{
+				Key: opencdc.StructuredData{"id": 1611254412345678999},
+			},
+			want: sdk.SingleRecord{
+				Key: opencdc.StructuredData{"id": time.Date(2021, 1, 21, 18, 40, 12, 345678999, time.UTC)},
+			},
+		}, {
+			name:  "string to time",
+			field: ".Key.id",
+			typ:   "time",
+			record: opencdc.Record{
+				Key: opencdc.StructuredData{"id": "2021-01-21T18:40:12.345678999Z"},
+			},
+			want: sdk.SingleRecord{
+				Key: opencdc.StructuredData{"id": time.Date(2021, 1, 21, 18, 40, 12, 345678999, time.UTC)},
+			},
 		},
 	}
 	for _, tc := range testCases {
@@ -259,6 +280,14 @@ func TestConvertField_ProcessFail(t *testing.T) {
 				Key: opencdc.StructuredData{"id": 9999999999999999999.0},
 			},
 			wantErr: "value out of range",
+		}, {
+			name:  "string to time, invalid format",
+			field: ".Key.id",
+			typ:   "time",
+			record: opencdc.Record{
+				Key: opencdc.StructuredData{"id": "21.01.2021 18:40:12"},
+			},
+			wantErr: `parsing time "21.01.2021 18:40:12" as "2006-01-02T15:04:05.999999999Z07:00": cannot parse "21.01.2021 18:40:12" as "2006"`,
 		},
 	}
 	for _, tc := range testCases {

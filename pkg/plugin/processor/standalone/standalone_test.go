@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"github.com/conduitio/conduit-commons/config"
-	"github.com/conduitio/conduit-commons/csync"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/stealthrocket/wazergo"
@@ -72,21 +71,34 @@ func TestMain(m *testing.M) {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
-	err := cmd.Run()
-	exitOnError(err, "error executing bash script")
+	{
+		fmt.Printf("Building test processors (%s)...\n", cmd.String())
+		start := time.Now()
+
+		err := cmd.Run()
+		exitOnError(err, "error executing bash script")
+
+		fmt.Printf("Built test processors in %v\n", time.Since(start))
+	}
 
 	// instantiate shared test runtime
 	ctx := context.Background()
-	TestRuntime = wazero.NewRuntime(ctx)
 
-	_, err = wasi_snapshot_preview1.Instantiate(ctx, TestRuntime)
+	// use interpreter runtime as it's faster for tests
+	newRuntime = func(ctx context.Context) wazero.Runtime {
+		cfg := wazero.NewRuntimeConfigInterpreter()
+		return wazero.NewRuntimeWithConfig(ctx, cfg)
+	}
+
+	TestRuntime = newRuntime(ctx)
+
+	_, err := wasi_snapshot_preview1.Instantiate(ctx, TestRuntime)
 	exitOnError(err, "error instantiating WASI")
 
 	CompiledHostModule, err = wazergo.Compile(ctx, TestRuntime, hostModule)
 	exitOnError(err, "error compiling host module")
 
 	// load test processors
-	var wg csync.WaitGroup
 	for path, t := range testProcessorPaths {
 		*t.V1, err = os.ReadFile(path)
 		exitOnError(err, "error reading file "+path)
@@ -95,13 +107,16 @@ func TestMain(m *testing.M) {
 			continue
 		}
 
+		fmt.Printf("Compiling module %s...\n", path)
+		start := time.Now()
+
 		// note that modules can't be compiled in parallel, because the runtime
 		// is not thread-safe
 		*t.V2, err = TestRuntime.CompileModule(ctx, *t.V1)
 		exitOnError(err, "error compiling module "+path)
+
+		fmt.Printf("Compiled module %s in %v\n", path, time.Since(start))
 	}
-	err = wg.WaitTimeout(ctx, time.Minute)
-	exitOnError(err, "timed out waiting on modules to compile")
 
 	// run tests
 	code := m.Run()
