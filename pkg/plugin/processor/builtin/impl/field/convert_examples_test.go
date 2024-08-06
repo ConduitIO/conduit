@@ -169,7 +169,8 @@ func ExampleConvertProcessor_intTotime() {
 			Operation: opencdc.OperationCreate,
 			Key:       opencdc.StructuredData{"id": 123.345},
 			Payload:   opencdc.Change{After: opencdc.StructuredData{"createdAt": timeObj}},
-		}})
+		},
+	})
 
 	// Output:
 	// processor transformed record:

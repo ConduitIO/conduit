@@ -224,7 +224,8 @@ func TestConvertField_Process(t *testing.T) {
 			want: sdk.SingleRecord{
 				Key: opencdc.StructuredData{"id": "foo"},
 			},
-		}, {
+		},
+		{
 			name:  "int to time",
 			field: ".Key.id",
 			typ:   "time",
@@ -234,7 +235,8 @@ func TestConvertField_Process(t *testing.T) {
 			want: sdk.SingleRecord{
 				Key: opencdc.StructuredData{"id": time.Date(2021, 1, 21, 18, 40, 12, 345678999, time.UTC)},
 			},
-		}, {
+		},
+		{
 			name:  "string to time",
 			field: ".Key.id",
 			typ:   "time",
@@ -296,7 +298,8 @@ func TestConvertField_ProcessFail(t *testing.T) {
 				Key: opencdc.StructuredData{"id": 9999999999999999999.0},
 			},
 			wantErr: "value out of range",
-		}, {
+		},
+		{
 			name:  "string to time, invalid format",
 			field: ".Key.id",
 			typ:   "time",
