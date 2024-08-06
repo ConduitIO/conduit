@@ -33,7 +33,6 @@ func TestEncodeProcessor_Process_StructuredData(t *testing.T) {
 	ctx := context.Background()
 
 	cfg := config.Config{
-		"url":                         "http://localhost",
 		"schema.strategy":             "autoRegister",
 		"schema.autoRegister.subject": "testsubject",
 	}
@@ -72,7 +71,6 @@ func TestEncodeProcessor_Process_RawData(t *testing.T) {
 	ctx := context.Background()
 
 	cfg := config.Config{
-		"url":                         "http://localhost",
 		"schema.strategy":             "autoRegister",
 		"schema.autoRegister.subject": "testsubject",
 	}
@@ -129,7 +127,6 @@ func TestEncodeProcessor_Process_RawData_CustomField(t *testing.T) {
 			ctx := context.Background()
 
 			cfg := config.Config{
-				"url":                         "http://localhost",
 				"field":                       ".Payload.Before.something",
 				"schema.strategy":             "autoRegister",
 				"schema.autoRegister.subject": "testsubject",
@@ -227,7 +224,6 @@ func TestEncodeProcessor_Process_EmptyPayloadField(t *testing.T) {
 			ctx := context.Background()
 
 			cfg := config.Config{
-				"url":                         "http://localhost",
 				"field":                       tc.field,
 				"schema.strategy":             "autoRegister",
 				"schema.autoRegister.subject": "testsubject",

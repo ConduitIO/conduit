@@ -35,7 +35,6 @@ import (
 	conn_standalone "github.com/conduitio/conduit/pkg/plugin/connector/standalone"
 	proc_plugin "github.com/conduitio/conduit/pkg/plugin/processor"
 	proc_builtin "github.com/conduitio/conduit/pkg/plugin/processor/builtin"
-	"github.com/conduitio/conduit/pkg/plugin/processor/procutils"
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/google/go-cmp/cmp"
 	"github.com/matryer/is"
@@ -85,11 +84,9 @@ func TestPipelineSimple(t *testing.T) {
 	)
 	connPluginService.Init(ctx, "conn-utils-token:12345")
 
-	procSchemaService := procutils.NewSchemaService(logger, schemaRegistry)
-
 	procPluginService := proc_plugin.NewPluginService(
 		logger,
-		proc_builtin.NewRegistry(logger, proc_builtin.DefaultBuiltinProcessors, procSchemaService),
+		proc_builtin.NewRegistry(logger, proc_builtin.DefaultBuiltinProcessors, schemaRegistry),
 		nil,
 	)
 

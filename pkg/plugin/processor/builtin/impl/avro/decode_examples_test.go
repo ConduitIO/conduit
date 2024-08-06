@@ -56,7 +56,8 @@ func ExampleDecodeProcessor() {
 		panic(fmt.Sprintf("failed to create schema: %v", err))
 	}
 
-	p := NewDecodeProcessor(log.Nop())
+	p := NewDecodeProcessor(log.Nop()).(*decodeProcessor)
+	p.SetSchemaRegistry(client)
 
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary: "Decode a record field in Avro format",
@@ -76,7 +77,6 @@ In this example we use the following schema:
 }
 ` + "```",
 		Config: config.Config{
-			"url":   url,
 			"field": ".Key",
 		},
 		Have: opencdc.Record{

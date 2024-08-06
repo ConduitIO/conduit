@@ -35,7 +35,13 @@ func ExampleEncodeProcessor_autoRegister() {
 	url, cleanup := schemaregistrytest.ExampleSchemaRegistryURL("ExampleEncodeProcessor_autoRegister", 54322)
 	defer cleanup()
 
-	p := NewEncodeProcessor(log.Nop())
+	client, err := schemaregistry.NewClient(log.Nop(), sr.URLs(url))
+	if err != nil {
+		panic(fmt.Sprintf("failed to create schema registry client: %v", err))
+	}
+
+	p := NewEncodeProcessor(log.Nop()).(*encodeProcessor)
+	p.SetSchemaRegistry(client)
 
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary: "Auto-register schema",
@@ -44,7 +50,6 @@ with the ` + "`autoRegister`" + ` schema strategy. The processor encodes the rec
 ` + "`.Payload.After`" + ` field using the schema that is extracted from the data
 and registered on the fly under the subject ` + "`example-autoRegister`" + `.`,
 		Config: config.Config{
-			"url":                         url,
 			"schema.strategy":             "autoRegister",
 			"schema.autoRegister.subject": "example-autoRegister",
 		},
@@ -136,7 +141,8 @@ func ExampleEncodeProcessor_preRegistered() {
 		panic(fmt.Sprintf("failed to create schema: %v", err))
 	}
 
-	p := NewEncodeProcessor(log.Nop())
+	p := NewEncodeProcessor(log.Nop()).(*encodeProcessor)
+	p.SetSchemaRegistry(client)
 
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary: "Pre-register schema",
@@ -157,7 +163,6 @@ schema has to be manually pre-registered. In this example we use the following s
 
 The processor encodes the record's` + "`.Key`" + ` field using the above schema.`,
 		Config: config.Config{
-			"url":                          url,
 			"schema.strategy":              "preRegistered",
 			"schema.preRegistered.subject": "example-preRegistered",
 			"schema.preRegistered.version": "1",

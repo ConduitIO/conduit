@@ -16,7 +16,9 @@
 
 package schemaregistrytest
 
-import "testing"
+import (
+	"testing"
+)
 
 // ExampleSchemaRegistryURL points to the schema registry defined in
 // /test/docker-compose-schemaregistry.yml.
