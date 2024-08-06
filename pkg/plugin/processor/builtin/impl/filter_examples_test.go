@@ -15,6 +15,7 @@
 package impl
 
 import (
+	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -27,7 +28,7 @@ func ExampleFilterProcessor() {
 
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary: `Filter out the record`,
-		Config:  map[string]string{},
+		Config:  config.Config{},
 		Have: opencdc.Record{
 			Operation: opencdc.OperationCreate,
 			Metadata:  map[string]string{"key1": "val1"},

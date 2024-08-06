@@ -20,6 +20,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -40,7 +41,7 @@ func TestJSProcessor_Logger(t *testing.T) {
 	underTest := NewJavascriptProcessor(logger)
 	err := underTest.Configure(
 		ctx,
-		map[string]string{
+		config.Config{
 			"script": `
 	function process(r) {
 		logger.Info().Msg("Hello");
@@ -66,7 +67,7 @@ func TestJSProcessor_MissingEntrypoint(t *testing.T) {
 	underTest := NewJavascriptProcessor(log.Nop())
 	err := underTest.Configure(
 		ctx,
-		map[string]string{"script": `function something() { logger.Debug("no entrypoint"); }`},
+		config.Config{"script": `function something() { logger.Debug("no entrypoint"); }`},
 	)
 	is.NoErr(err)
 
@@ -407,12 +408,7 @@ func TestJSProcessor_BrokenJSCode(t *testing.T) {
 	src := `function {`
 
 	p := NewJavascriptProcessor(log.Test(t))
-	err := p.Configure(
-		ctx,
-		map[string]string{
-			"script": src,
-		},
-	)
+	err := p.Configure(ctx, config.Config{"script": src})
 	is.NoErr(err) // expected no error when configuration the JS processor
 
 	err = p.Open(ctx)
@@ -461,12 +457,7 @@ func newTestJavaScriptProc(t *testing.T, src string) sdk.Processor {
 	ctx := context.Background()
 
 	p := NewJavascriptProcessor(log.Test(t))
-	err := p.Configure(
-		ctx,
-		map[string]string{
-			"script": src,
-		},
-	)
+	err := p.Configure(ctx, config.Config{"script": src})
 	is.NoErr(err) // expected no error when configuration the JS processor
 	err = p.Open(ctx)
 	is.NoErr(err) // expected no error when opening the JS processor

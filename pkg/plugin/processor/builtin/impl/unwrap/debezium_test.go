@@ -18,6 +18,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -30,23 +31,23 @@ import (
 func TestDebeziumProcessor_Configure(t *testing.T) {
 	testCases := []struct {
 		name    string
-		config  map[string]string
+		config  config.Config
 		wantErr string
 	}{
 		{
 			name:    "optional not provided",
-			config:  map[string]string{},
+			config:  config.Config{},
 			wantErr: "",
 		},
 		{
 			name:    "valid field (within .Payload)",
-			config:  map[string]string{"field": ".Payload.After.something"},
+			config:  config.Config{"field": ".Payload.After.something"},
 			wantErr: "",
 		},
 		{
 			name:    "invalid field",
-			config:  map[string]string{"field": ".Key"},
-			wantErr: `invalid configuration: error validating "field": ".Key" should match the regex "^.Payload": regex validation failed`,
+			config:  config.Config{"field": ".Key"},
+			wantErr: `config invalid: error validating "field": ".Key" should match the regex "^.Payload": regex validation failed`,
 		},
 	}
 
@@ -68,14 +69,14 @@ func TestDebeziumProcessor_Configure(t *testing.T) {
 func TestDebeziumProcessor_Process(t *testing.T) {
 	testCases := []struct {
 		name    string
-		config  map[string]string
+		config  config.Config
 		record  opencdc.Record
 		want    sdk.ProcessedRecord
 		wantErr string
 	}{
 		{
 			name:   "raw payload",
-			config: map[string]string{"field": ".Payload.After"},
+			config: config.Config{"field": ".Payload.After"},
 			record: opencdc.Record{
 				Metadata: map[string]string{},
 				Key:      opencdc.RawData(`{"payload":"27"}`),
@@ -117,7 +118,7 @@ func TestDebeziumProcessor_Process(t *testing.T) {
 		},
 		{
 			name:   "structured payload",
-			config: map[string]string{"field": ".Payload.After"},
+			config: config.Config{"field": ".Payload.After"},
 			record: opencdc.Record{
 				Metadata: map[string]string{
 					"conduit.version": "v0.4.0",
@@ -162,7 +163,7 @@ func TestDebeziumProcessor_Process(t *testing.T) {
 		},
 		{
 			name:   "structured data, payload missing",
-			config: map[string]string{"field": ".Payload.After"},
+			config: config.Config{"field": ".Payload.After"},
 			record: opencdc.Record{
 				Metadata: map[string]string{
 					"conduit.version": "v0.4.0",
@@ -185,7 +186,7 @@ func TestDebeziumProcessor_Process(t *testing.T) {
 		},
 		{
 			name:   "custom field, structured payload",
-			config: map[string]string{"field": ".Payload.After[\"debezium_event\"]"},
+			config: config.Config{"field": ".Payload.After[\"debezium_event\"]"},
 			record: opencdc.Record{
 				Metadata: map[string]string{
 					"conduit.version": "v0.4.0",

@@ -43,7 +43,7 @@ func TestRegistry_List(t *testing.T) {
 		"builtin:test-processor@v0.1.2": procSpec,
 	}
 
-	reg := NewRegistry(logger, map[string]ProcessorPluginConstructor{procSpec.Name: procConstructor})
+	reg := NewRegistry(logger, map[string]ProcessorPluginConstructor{procSpec.Name: procConstructor}, nil)
 
 	got := reg.List()
 	is.Equal(got, wantList)

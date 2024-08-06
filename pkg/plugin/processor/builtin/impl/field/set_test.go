@@ -18,6 +18,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -30,13 +31,13 @@ func TestSetField_Process(t *testing.T) {
 	ctx := context.Background()
 	testCases := []struct {
 		name   string
-		config map[string]string
+		config config.Config
 		record opencdc.Record
 		want   sdk.SingleRecord
 	}{
 		{
 			name:   "setting a metadata field",
-			config: map[string]string{"field": ".Metadata.table", "value": "postgres"},
+			config: config.Config{"field": ".Metadata.table", "value": "postgres"},
 			record: opencdc.Record{
 				Metadata: map[string]string{"table": "my-table"},
 			},
@@ -46,7 +47,7 @@ func TestSetField_Process(t *testing.T) {
 		},
 		{
 			name:   "setting a non existent field",
-			config: map[string]string{"field": ".Metadata.nonExistent", "value": "postgres"},
+			config: config.Config{"field": ".Metadata.nonExistent", "value": "postgres"},
 			record: opencdc.Record{
 				Metadata: map[string]string{"table": "my-table"},
 			},
@@ -56,7 +57,7 @@ func TestSetField_Process(t *testing.T) {
 		},
 		{
 			name:   "setting the operation field",
-			config: map[string]string{"field": ".Operation", "value": "delete"},
+			config: config.Config{"field": ".Operation", "value": "delete"},
 			record: opencdc.Record{
 				Operation: opencdc.OperationCreate,
 			},
@@ -66,7 +67,7 @@ func TestSetField_Process(t *testing.T) {
 		},
 		{
 			name:   "setting the payload.after with a go template evaluated value",
-			config: map[string]string{"field": ".Payload.After.foo", "value": "{{ .Payload.After.baz }}"},
+			config: config.Config{"field": ".Payload.After.foo", "value": "{{ .Payload.After.baz }}"},
 			record: opencdc.Record{
 				Payload: opencdc.Change{
 					Before: nil,
@@ -104,37 +105,37 @@ func TestSetField_Configure(t *testing.T) {
 	ctx := context.Background()
 	testCases := []struct {
 		name    string
-		cfg     map[string]string
+		cfg     config.Config
 		wantErr bool
 	}{
 		{
 			name:    "valid config",
-			cfg:     map[string]string{"field": ".Metadata", "value": "{{ .Payload.After.foo }}"},
+			cfg:     config.Config{"field": ".Metadata", "value": "{{ .Payload.After.foo }}"},
 			wantErr: false,
 		},
 		{
 			name:    "invalid value template format",
-			cfg:     map[string]string{"field": ".Metadata", "value": "{{ invalid }}"},
+			cfg:     config.Config{"field": ".Metadata", "value": "{{ invalid }}"},
 			wantErr: true,
 		},
 		{
 			name:    "value param is missing",
-			cfg:     map[string]string{"field": ".Metadata"},
+			cfg:     config.Config{"field": ".Metadata"},
 			wantErr: true,
 		},
 		{
 			name:    "field param is missing",
-			cfg:     map[string]string{"value": "sth"},
+			cfg:     config.Config{"value": "sth"},
 			wantErr: true,
 		},
 		{
 			name:    "cannot set .Position",
-			cfg:     map[string]string{"field": ".Position", "value": "newPos"},
+			cfg:     config.Config{"field": ".Position", "value": "newPos"},
 			wantErr: true,
 		},
 		{
 			name:    "all params are missing",
-			cfg:     map[string]string{},
+			cfg:     config.Config{},
 			wantErr: true,
 		},
 	}

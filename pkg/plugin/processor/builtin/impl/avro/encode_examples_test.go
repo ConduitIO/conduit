@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -42,7 +43,7 @@ func ExampleEncodeProcessor_autoRegister() {
 with the ` + "`autoRegister`" + ` schema strategy. The processor encodes the record's
 ` + "`.Payload.After`" + ` field using the schema that is extracted from the data
 and registered on the fly under the subject ` + "`example-autoRegister`" + `.`,
-		Config: map[string]string{
+		Config: config.Config{
 			"url":                         url,
 			"schema.strategy":             "autoRegister",
 			"schema.autoRegister.subject": "example-autoRegister",
@@ -155,7 +156,7 @@ schema has to be manually pre-registered. In this example we use the following s
 ` + "```" + `
 
 The processor encodes the record's` + "`.Key`" + ` field using the above schema.`,
-		Config: map[string]string{
+		Config: config.Config{
 			"url":                          url,
 			"schema.strategy":              "preRegistered",
 			"schema.preRegistered.subject": "example-preRegistered",

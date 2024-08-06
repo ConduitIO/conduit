@@ -20,6 +20,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -66,7 +67,7 @@ to parse it into structured data first.`,
 	}, nil
 }
 
-func (p *renameProcessor) Configure(ctx context.Context, m map[string]string) error {
+func (p *renameProcessor) Configure(ctx context.Context, c config.Config) error {
 	forbiddenFields := []string{
 		internal.MetadataReference,
 		internal.PayloadReference,
@@ -78,7 +79,7 @@ func (p *renameProcessor) Configure(ctx context.Context, m map[string]string) er
 	}
 
 	cfg := renameConfig{}
-	err := sdk.ParseConfig(ctx, m, &cfg, renameConfig{}.Parameters())
+	err := sdk.ParseConfig(ctx, c, &cfg, renameConfig{}.Parameters())
 	if err != nil {
 		return cerrors.Errorf("failed to parse configuration: %w", err)
 	}

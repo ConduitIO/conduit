@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -60,9 +61,9 @@ In such cases, the Debezium record is set as the [OpenCDC record](https://condui
 	}, nil
 }
 
-func (u *kafkaConnectProcessor) Configure(ctx context.Context, m map[string]string) error {
+func (u *kafkaConnectProcessor) Configure(ctx context.Context, c config.Config) error {
 	cfg := kafkaConnectConfig{}
-	err := sdk.ParseConfig(ctx, m, &cfg, cfg.Parameters())
+	err := sdk.ParseConfig(ctx, c, &cfg, cfg.Parameters())
 	if err != nil {
 		return err
 	}

@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal"
@@ -43,7 +44,7 @@ type Example struct {
 	Order       int                 `json:"-"`
 	Summary     string              `json:"summary"`
 	Description string              `json:"description"`
-	Config      map[string]string   `json:"config"`
+	Config      config.Config       `json:"config"`
 	Have        opencdc.Record      `json:"have"`
 	Want        sdk.ProcessedRecord `json:"want"`
 }

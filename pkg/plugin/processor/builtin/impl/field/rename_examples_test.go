@@ -15,6 +15,7 @@
 package field
 
 import (
+	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -29,7 +30,7 @@ func ExampleRenameProcessor_rename1() {
 		Summary: `Rename multiple fields`,
 		Description: `This example renames the fields in ` + "`.Metadata`" + ` and
 ` + "`.Payload.After`" + ` as specified in the ` + "`mapping`" + ` configuration parameter.`,
-		Config: map[string]string{"mapping": ".Metadata.key1:newKey,.Payload.After.foo:newFoo"},
+		Config: config.Config{"mapping": ".Metadata.key1:newKey,.Payload.After.foo:newFoo"},
 		Have: opencdc.Record{
 			Operation: opencdc.OperationCreate,
 			Metadata:  map[string]string{"key1": "val1"},

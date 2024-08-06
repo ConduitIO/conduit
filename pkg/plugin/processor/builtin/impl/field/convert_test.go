@@ -19,6 +19,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -296,28 +297,28 @@ func TestConvertField_Configure(t *testing.T) {
 	ctx := context.Background()
 	testCases := []struct {
 		name    string
-		cfg     map[string]string
+		cfg     config.Config
 		wantErr bool
 	}{
 		{
 			name:    "valid config",
-			cfg:     map[string]string{"field": ".Payload.After.foo", "type": "int"},
+			cfg:     config.Config{"field": ".Payload.After.foo", "type": "int"},
 			wantErr: false,
 		}, {
 			name:    "invalid config, contains an invalid prefix for the field",
-			cfg:     map[string]string{"field": ".Metadata.foo", "type": "int"},
+			cfg:     config.Config{"field": ".Metadata.foo", "type": "int"},
 			wantErr: true,
 		}, {
 			name:    "invalid config, invalid prefix",
-			cfg:     map[string]string{"field": "aPayload.foo", "type": "int"},
+			cfg:     config.Config{"field": "aPayload.foo", "type": "int"},
 			wantErr: true,
 		}, {
 			name:    "invalid config, invalid type",
-			cfg:     map[string]string{"field": ".Key.foo", "type": "map"},
+			cfg:     config.Config{"field": ".Key.foo", "type": "map"},
 			wantErr: true,
 		}, {
 			name:    "missing param",
-			cfg:     map[string]string{},
+			cfg:     config.Config{},
 			wantErr: true,
 		},
 	}
