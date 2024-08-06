@@ -117,7 +117,7 @@ func (p *convertProcessor) stringToType(value, typ string) (any, error) {
 		unixnano, err := strconv.Atoi(value)
 		if err == nil {
 			// it's a number, use it as a unix nanosecond timestamp
-			return time.Unix(0, int64(unixnano)), nil
+			return time.Unix(0, int64(unixnano)).UTC(), nil
 		}
 		// try to parse it as a time string
 		return time.Parse(time.RFC3339Nano, value)
