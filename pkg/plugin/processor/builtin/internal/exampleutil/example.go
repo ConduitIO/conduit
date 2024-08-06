@@ -54,6 +54,9 @@ type Example struct {
 // stores the processor specification and example in a global map so it can be
 // used to generate documentation.
 func RunExample(p sdk.Processor, e Example) {
+	// apply default middleware
+	p = sdk.ProcessorWithMiddleware(p, sdk.DefaultProcessorMiddleware(p.MiddlewareOptions()...)...)
+
 	spec, err := p.Specification()
 	if err != nil {
 		log.Fatalf("failed to fetch specification: %v", err)
