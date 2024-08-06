@@ -154,7 +154,7 @@ func ExampleConvertProcessor_intTotime() {
 	timeObj := time.Date(2024, 1, 2, 12, 34, 56, 123456789, time.UTC)
 
 	exampleutil.RunExample(p, exampleutil.Example{
-		Summary:     "Convert `string` to `time`",
+		Summary:     "Convert `int` to `time`",
 		Description: "This example takes an `int` in field `.Payload.After.createdAt` and parses it as a unix timestamp into a `time.Time` value.",
 		Config:      config.Config{"field": ".Payload.After.createdAt", "type": "time"},
 		Have: opencdc.Record{

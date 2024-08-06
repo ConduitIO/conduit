@@ -40,7 +40,7 @@
   },
   "examples": [
     {
-      "summary": "Convert `string` to `time`",
+      "summary": "Convert `int` to `time`",
       "description": "This example takes an `int` in field `.Payload.After.createdAt` and parses it as a unix timestamp into a `time.Time` value.",
       "config": {
         "field": ".Payload.After.createdAt",
