@@ -16,6 +16,7 @@ package builtin
 
 import (
 	"context"
+	"runtime/debug"
 
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit-processor-sdk/pprocutils"
@@ -34,7 +35,6 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/webhook"
 	"github.com/conduitio/conduit/pkg/plugin/processor/procutils"
 	"github.com/conduitio/conduit/pkg/schemaregistry"
-	"runtime/debug"
 )
 
 var DefaultBuiltinProcessors = map[string]ProcessorPluginConstructor{

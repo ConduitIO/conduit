@@ -37,7 +37,7 @@ func ExampleEncodeProcessor_autoRegister() {
 
 	client, err := schemaregistry.NewClient(log.Nop(), sr.URLs(url))
 	if err != nil {
-		panic(err)
+		panic(fmt.Sprintf("failed to create schema registry client: %v", err))
 	}
 
 	p := NewEncodeProcessor(log.Nop()).(*encodeProcessor)
@@ -121,7 +121,7 @@ func ExampleEncodeProcessor_preRegistered() {
 
 	client, err := schemaregistry.NewClient(log.Nop(), sr.URLs(url))
 	if err != nil {
-		panic(err)
+		panic(fmt.Sprintf("failed to create schema registry client: %v", err))
 	}
 
 	_, err = client.CreateSchema(context.Background(), "example-preRegistered", sr.Schema{
