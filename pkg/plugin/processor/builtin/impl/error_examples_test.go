@@ -41,7 +41,8 @@ return a custom error message for a record using a Go template.`,
 		},
 		Want: sdk.ErrorRecord{
 			Error: cerrors.New("custom error message with data from record: bar"),
-		}})
+		},
+	})
 
 	// Output:
 	// processor returned error: custom error message with data from record: bar

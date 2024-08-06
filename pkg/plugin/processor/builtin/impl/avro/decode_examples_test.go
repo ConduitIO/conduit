@@ -93,7 +93,8 @@ In this example we use the following schema:
 				"myString": "bar",
 				"myInt":    1,
 			},
-		}})
+		},
+	})
 
 	// Output:
 	// processor transformed record:

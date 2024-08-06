@@ -41,7 +41,8 @@ func ExampleConvertProcessor_stringToInt() {
 			Operation: opencdc.OperationUpdate,
 			Key:       opencdc.StructuredData{"id": 123},
 			Payload:   opencdc.Change{After: opencdc.StructuredData{"foo": "bar"}},
-		}})
+		},
+	})
 
 	// Output:
 	// processor transformed record:
@@ -82,7 +83,8 @@ func ExampleConvertProcessor_intToBool() {
 			Operation: opencdc.OperationUpdate,
 			Key:       opencdc.StructuredData{"id": "123"},
 			Payload:   opencdc.Change{After: opencdc.StructuredData{"done": true}},
-		}})
+		},
+	})
 
 	// Output:
 	// processor transformed record:
@@ -123,7 +125,8 @@ func ExampleConvertProcessor_floatToString() {
 			Operation: opencdc.OperationUpdate,
 			Key:       opencdc.StructuredData{"id": "123.345"},
 			Payload:   opencdc.Change{After: opencdc.StructuredData{"foo": "bar"}},
-		}})
+		},
+	})
 
 	// Output:
 	// processor transformed record:
@@ -166,7 +169,8 @@ func ExampleConvertProcessor_intTotime() {
 			Operation: opencdc.OperationCreate,
 			Key:       opencdc.StructuredData{"id": 123.345},
 			Payload:   opencdc.Change{After: opencdc.StructuredData{"createdAt": timeObj}},
-		}})
+		},
+	})
 
 	// Output:
 	// processor transformed record:

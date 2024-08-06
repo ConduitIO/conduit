@@ -64,6 +64,7 @@ func (r *Registry) newCounterOpts(name, help string, opts []metrics.Option) prom
 		opts,
 	)
 }
+
 func (r *Registry) applyCounterOptions(promOpts prometheus.CounterOpts, metricsOpts []metrics.Option) prometheus.CounterOpts {
 	for _, mopt := range metricsOpts {
 		opt, ok := mopt.(option)
@@ -102,6 +103,7 @@ func (r *Registry) newGaugeOpts(name, help string, opts []metrics.Option) promet
 		opts,
 	)
 }
+
 func (r *Registry) applyGaugeOptions(promOpts prometheus.GaugeOpts, metricsOpts []metrics.Option) prometheus.GaugeOpts {
 	for _, mopt := range metricsOpts {
 		opt, ok := mopt.(option)
@@ -156,6 +158,7 @@ func (r *Registry) newHistogramOpts(name, help string, opts []metrics.Option) pr
 		opts,
 	)
 }
+
 func (r *Registry) applyHistogramOptions(promOpts prometheus.HistogramOpts, metricsOpts []metrics.Option) prometheus.HistogramOpts {
 	for _, mopt := range metricsOpts {
 		opt, ok := mopt.(option)

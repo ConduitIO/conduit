@@ -80,7 +80,8 @@ and registered on the fly under the subject ` + "`example-autoRegister`" + `.`,
 			Payload: opencdc.Change{
 				After: opencdc.RawData([]byte{0, 0, 0, 0, 1, 102, 102, 102, 102, 102, 102, 2, 64, 2, 154, 153, 153, 153, 153, 153, 1, 64, 1, 6, 98, 97, 114, 0, 2}),
 			},
-		}})
+		},
+	})
 
 	// Output:
 	// processor transformed record:
@@ -181,7 +182,8 @@ The processor encodes the record's` + "`.Key`" + ` field using the above schema.
 			Operation: opencdc.OperationCreate,
 			Metadata:  map[string]string{"key1": "val1"},
 			Key:       opencdc.RawData([]byte{0, 0, 0, 0, 1, 6, 98, 97, 114, 2}),
-		}})
+		},
+	})
 
 	// Output:
 	// processor transformed record:

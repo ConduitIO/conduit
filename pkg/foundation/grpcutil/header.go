@@ -31,8 +31,7 @@ const (
 
 func HeaderMatcher(key string) (string, bool) {
 	switch strings.ToLower(key) {
-	case RequestIDHeader,
-		HTTPEndpointHeader:
+	case RequestIDHeader, HTTPEndpointHeader:
 		return key, true
 	default:
 		return runtime.DefaultHeaderMatcher(key)

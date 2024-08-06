@@ -43,7 +43,7 @@ func ExportProcessors() {
 }
 
 func exportProcessor(path string, processor *procInfo) error {
-	output, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
+	output, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
 		return cerrors.Errorf("failed to open %s: %w", path, err)
 	}

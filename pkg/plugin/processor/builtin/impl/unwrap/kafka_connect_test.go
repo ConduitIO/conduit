@@ -64,6 +64,7 @@ func TestKafkaConnectProcessor_Configure(t *testing.T) {
 		})
 	}
 }
+
 func TestKafkaConnectProcessor_Process(t *testing.T) {
 	testCases := []struct {
 		name   string
