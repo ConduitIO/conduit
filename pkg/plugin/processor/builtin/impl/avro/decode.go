@@ -138,7 +138,7 @@ func (p *decodeProcessor) processRecord(ctx context.Context, rec opencdc.Record)
 
 	rd, err := p.decoder.Decode(ctx, data)
 	if err != nil {
-		return nil, cerrors.Errorf("failed encoding data: %w", err)
+		return nil, cerrors.Errorf("failed decoding data: %w", err)
 	}
 
 	err = field.Set(rd)
