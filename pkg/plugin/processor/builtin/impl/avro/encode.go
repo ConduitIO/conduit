@@ -21,7 +21,6 @@ import (
 	"context"
 
 	"github.com/conduitio/conduit-commons/config"
-	"github.com/conduitio/conduit-commons/lang"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -79,19 +78,6 @@ type encodeProcessor struct {
 
 func NewEncodeProcessor(logger log.CtxLogger) sdk.Processor {
 	return &encodeProcessor{logger: logger}
-}
-
-func (p *encodeProcessor) MiddlewareOptions() []sdk.ProcessorMiddlewareOption {
-	return []sdk.ProcessorMiddlewareOption{
-		sdk.ProcessorWithSchemaDecodeConfig{
-			PayloadEnabled: lang.Ptr(false),
-			KeyEnabled:     lang.Ptr(false),
-		},
-		sdk.ProcessorWithSchemaEncodeConfig{
-			PayloadEnabled: lang.Ptr(false),
-			KeyEnabled:     lang.Ptr(false),
-		},
-	}
 }
 
 func (p *encodeProcessor) SetSchemaRegistry(registry schemaregistry.Registry) {
