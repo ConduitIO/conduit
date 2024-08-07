@@ -79,7 +79,7 @@ jobs:
             org.opencontainers.image.vendor=ConduitIO
 
       - name: Build and push Docker image
-        uses: docker/build-push-action@v6.5.0
+        uses: docker/build-push-action@v6.6.0
         with:
           context: .
           push: true
