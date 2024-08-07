@@ -233,15 +233,21 @@ func (s *Service) provisionPipeline(ctx context.Context, cfg config.Pipeline) er
 		return cerrors.Errorf("invalid pipeline config: %w", err)
 	}
 
-	txn, ctx, err := s.db.NewTransaction(ctx, true)
+	txn, importCtx, err := s.db.NewTransaction(ctx, true)
 	if err != nil {
 		return cerrors.Errorf("could not create db transaction: %w", err)
 	}
 	defer txn.Discard()
 
-	err = s.Import(ctx, cfg)
+	err = s.Import(importCtx, cfg)
 	if err != nil {
 		return cerrors.Errorf("could not import pipeline: %w", err)
+	}
+
+	// commit db transaction
+	err = txn.Commit()
+	if err != nil {
+		return cerrors.Errorf("could not commit db transaction: %w", err)
 	}
 
 	// check if pipeline should be running
@@ -251,12 +257,6 @@ func (s *Service) provisionPipeline(ctx context.Context, cfg config.Pipeline) er
 		if err != nil {
 			return cerrors.Errorf("could not start the pipeline %q: %w", cfg.ID, err)
 		}
-	}
-
-	// commit db transaction
-	err = txn.Commit()
-	if err != nil {
-		return cerrors.Errorf("could not commit db transaction: %w", err)
 	}
 
 	return nil
