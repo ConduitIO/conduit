@@ -17,10 +17,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: bufbuild/buf-action@v1
         with:
+          version: 1.36.0
           token: ${{ secrets.BUF_TOKEN }}
           input: 'proto'
           push: false
-          breaking_against: '${{ github.event.repository.clone_url }}.git#branch=origin/main,subdir=proto'
+          breaking_against: '${{ github.event.repository.clone_url }}#branch=main,subdir=proto'
 
   # Push buf module to the buf schema registry, but only if the validate action succeeded and if the action is running
   # on branch main.
@@ -32,5 +33,6 @@ jobs:
       - uses: actions/checkout@v4
       - uses: bufbuild/buf-action@v1
         with:
+          version: 1.36.0
           token: ${{ secrets.BUF_TOKEN }}
           input: 'proto'
