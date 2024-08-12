@@ -19,6 +19,7 @@ jobs:
         with:
           token: ${{ secrets.BUF_TOKEN }}
           input: 'proto'
+          push: false
           breaking_against: '${{ github.event.repository.clone_url }}.git#branch=origin/main,subdir=proto'
 
   # Push buf module to the buf schema registry, but only if the validate action succeeded and if the action is running
