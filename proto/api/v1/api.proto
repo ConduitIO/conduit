@@ -29,6 +29,7 @@ message Pipeline {
   message Config {
     string name = 1;
     string description = 2;
+    string description_again = 3;
   }
   message DLQ {
     // plugin is the connector plugin used for storing DLQ records
