@@ -17,6 +17,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: bufbuild/buf-action@v1
         with:
+          version: 1.36.0
           token: ${{ secrets.BUF_TOKEN }}
           input: 'proto'
           push: false
@@ -32,5 +33,6 @@ jobs:
       - uses: actions/checkout@v4
       - uses: bufbuild/buf-action@v1
         with:
+          version: 1.36.0
           token: ${{ secrets.BUF_TOKEN }}
           input: 'proto'
