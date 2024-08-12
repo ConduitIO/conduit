@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -55,7 +56,8 @@ func ExampleDecodeProcessor() {
 		panic(fmt.Sprintf("failed to create schema: %v", err))
 	}
 
-	p := NewDecodeProcessor(log.Nop())
+	p := NewDecodeProcessor(log.Nop()).(*decodeProcessor)
+	p.SetSchemaRegistry(client)
 
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary: "Decode a record field in Avro format",
@@ -74,8 +76,7 @@ In this example we use the following schema:
   ]
 }
 ` + "```",
-		Config: map[string]string{
-			"url":   url,
+		Config: config.Config{
 			"field": ".Key",
 		},
 		Have: opencdc.Record{
@@ -92,7 +93,8 @@ In this example we use the following schema:
 				"myString": "bar",
 				"myInt":    1,
 			},
-		}})
+		},
+	})
 
 	// Output:
 	// processor transformed record:

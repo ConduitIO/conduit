@@ -74,11 +74,11 @@ func TestPipelineSimple(t *testing.T) {
 	schemaRegistry, err := schemaregistry.NewSchemaRegistry(db)
 	is.NoErr(err)
 	authManager := connutils.NewAuthManager()
-	schemaService := connutils.NewSchemaService(logger, schemaRegistry, authManager)
+	connSchemaService := connutils.NewSchemaService(logger, schemaRegistry, authManager)
 
 	connPluginService := conn_plugin.NewPluginService(
 		logger,
-		conn_builtin.NewRegistry(logger, conn_builtin.DefaultBuiltinConnectors, schemaService),
+		conn_builtin.NewRegistry(logger, conn_builtin.DefaultBuiltinConnectors, connSchemaService),
 		conn_standalone.NewRegistry(logger, ""),
 		authManager,
 	)
@@ -86,7 +86,7 @@ func TestPipelineSimple(t *testing.T) {
 
 	procPluginService := proc_plugin.NewPluginService(
 		logger,
-		proc_builtin.NewRegistry(logger, proc_builtin.DefaultBuiltinProcessors),
+		proc_builtin.NewRegistry(logger, proc_builtin.DefaultBuiltinProcessors, schemaRegistry),
 		nil,
 	)
 

@@ -15,6 +15,7 @@
 package unwrap
 
 import (
+	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -29,7 +30,7 @@ func ExampleDebeziumProcessor() {
 		Summary: "Unwrap a Debezium record",
 		Description: `This example how to unwrap a Debezium record from a field nested in a record's
 ` + "`.Payload.After`" + ` field. It additionally shows how the key is unwrapped, and the metadata merged.`,
-		Config: map[string]string{
+		Config: config.Config{
 			"field": ".Payload.After.nested",
 		},
 		Have: opencdc.Record{

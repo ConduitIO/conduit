@@ -18,6 +18,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -52,8 +53,7 @@ func TestDecodeProcessor_Process_RawData_CustomField(t *testing.T) {
 			is := is.New(t)
 			ctx := context.Background()
 
-			config := map[string]string{
-				"url":   "http://localhost",
+			cfg := config.Config{
 				"field": ".Payload.Before.something",
 			}
 			input := opencdc.Record{
@@ -70,7 +70,7 @@ func TestDecodeProcessor_Process_RawData_CustomField(t *testing.T) {
 			want.Payload.Before.(opencdc.StructuredData)["something"] = decodedVal
 
 			underTest := NewDecodeProcessor(log.Nop())
-			err := underTest.Configure(ctx, config)
+			err := underTest.Configure(ctx, cfg)
 			is.NoErr(err)
 
 			// skipping Open(), so we can inject a mock encoder

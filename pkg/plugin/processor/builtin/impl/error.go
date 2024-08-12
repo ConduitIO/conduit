@@ -22,6 +22,8 @@ import (
 	"text/template"
 
 	"github.com/Masterminds/sprig/v3"
+	"github.com/conduitio/conduit-commons/config"
+	"github.com/conduitio/conduit-commons/lang"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -61,7 +63,7 @@ to this processor, otherwise all records will trigger an error.`,
 	}, nil
 }
 
-func (p *errorProcessor) Configure(ctx context.Context, cfg map[string]string) error {
+func (p *errorProcessor) Configure(ctx context.Context, cfg config.Config) error {
 	err := sdk.ParseConfig(ctx, cfg, &p.config, p.config.Parameters())
 	if err != nil {
 		return cerrors.Errorf("failed parsing configuration: %w", err)
@@ -98,4 +100,18 @@ func (p *errorProcessor) errorMessage(record opencdc.Record) string {
 		return err.Error()
 	}
 	return buf.String()
+}
+
+func (*errorProcessor) MiddlewareOptions() []sdk.ProcessorMiddlewareOption {
+	// disable schema middleware by default
+	return []sdk.ProcessorMiddlewareOption{
+		sdk.ProcessorWithSchemaEncodeConfig{
+			PayloadEnabled: lang.Ptr(false),
+			KeyEnabled:     lang.Ptr(false),
+		},
+		sdk.ProcessorWithSchemaDecodeConfig{
+			PayloadEnabled: lang.Ptr(false),
+			KeyEnabled:     lang.Ptr(false),
+		},
+	}
 }

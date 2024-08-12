@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal"
@@ -43,7 +44,7 @@ type Example struct {
 	Order       int                 `json:"-"`
 	Summary     string              `json:"summary"`
 	Description string              `json:"description"`
-	Config      map[string]string   `json:"config"`
+	Config      config.Config       `json:"config"`
 	Have        opencdc.Record      `json:"have"`
 	Want        sdk.ProcessedRecord `json:"want"`
 }
@@ -53,6 +54,9 @@ type Example struct {
 // stores the processor specification and example in a global map so it can be
 // used to generate documentation.
 func RunExample(p sdk.Processor, e Example) {
+	// apply default middleware
+	p = sdk.ProcessorWithMiddleware(p, sdk.DefaultProcessorMiddleware(p.MiddlewareOptions()...)...)
+
 	spec, err := p.Specification()
 	if err != nil {
 		log.Fatalf("failed to fetch specification: %v", err)

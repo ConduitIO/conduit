@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit-processor-sdk/pprocutils"
@@ -198,7 +199,7 @@ func (p *wasmProcessor) Specification() (sdk.Specification, error) {
 	}
 }
 
-func (p *wasmProcessor) Configure(ctx context.Context, config map[string]string) error {
+func (p *wasmProcessor) Configure(ctx context.Context, config config.Config) error {
 	req := &processorv1.CommandRequest{
 		Request: &processorv1.CommandRequest_Configure{
 			Configure: &processorv1.Configure_Request{
@@ -292,7 +293,6 @@ func (p *wasmProcessor) executeTeardownCommand(ctx context.Context) error {
 	}
 
 	resp, err := p.executeCommand(ctx, req)
-
 	if err != nil {
 		return err
 	}

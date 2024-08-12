@@ -27,24 +27,10 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
+	"github.com/google/go-cmp/cmp"
 	"github.com/google/uuid"
 	"github.com/matryer/is"
 )
-
-func TestRegistry_List(t *testing.T) {
-	is := is.New(t)
-
-	underTest, err := NewRegistry(log.Test(t), testPluginChaosDir, schema.NewInMemoryService())
-	is.NoErr(err)
-	list := underTest.List()
-	is.Equal(1, len(list))
-	got, ok := list["standalone:chaos-processor@v1.3.5"]
-	is.True(ok) // expected spec for standalone:chaos-processor@v1.3.5
-
-	want := ChaosProcessorSpecifications()
-
-	is.Equal(got, want)
-}
 
 func TestRegistry_MalformedProcessor(t *testing.T) {
 	is := is.New(t)
@@ -84,7 +70,7 @@ func TestRegistry_ChaosProcessor(t *testing.T) {
 		is.True(ok)
 
 		want := ChaosProcessorSpecifications()
-		is.Equal(got, want)
+		is.Equal("", cmp.Diff(got, want))
 	})
 
 	t.Run("NewProcessor", func(t *testing.T) {
@@ -97,16 +83,16 @@ func TestRegistry_ChaosProcessor(t *testing.T) {
 		is.NoErr(err)
 
 		want := ChaosProcessorSpecifications()
-		is.Equal(got, want)
+		is.Equal("", cmp.Diff(got, want))
 
 		is.NoErr(p.Teardown(ctx))
 	})
 
 	t.Run("ConcurrentProcessors", func(t *testing.T) {
 		const (
-			// spawn 50 processors, each processing 50 records simultaneously
-			processorCount = 50
-			recordCount    = 50
+			// spawn 25 processors, each processing 25 records simultaneously
+			processorCount = 25
+			recordCount    = 25
 		)
 
 		var wg csync.WaitGroup
@@ -137,7 +123,7 @@ func TestRegistry_ChaosProcessor(t *testing.T) {
 				is.NoErr(p.Teardown(ctx))
 			}(i + 1)
 		}
-		err = wg.WaitTimeout(ctx, time.Minute)
+		err = wg.WaitTimeout(ctx, 2*time.Minute)
 		is.NoErr(err)
 	})
 

@@ -15,6 +15,9 @@
 package field
 
 import (
+	"time"
+
+	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -28,7 +31,7 @@ func ExampleConvertProcessor_stringToInt() {
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary:     "Convert `string` to `int`",
 		Description: "This example takes the string in field `.Key.id` and changes its data type to `int`.",
-		Config:      map[string]string{"field": ".Key.id", "type": "int"},
+		Config:      config.Config{"field": ".Key.id", "type": "int"},
 		Have: opencdc.Record{
 			Operation: opencdc.OperationUpdate,
 			Key:       opencdc.StructuredData{"id": "123"},
@@ -38,7 +41,8 @@ func ExampleConvertProcessor_stringToInt() {
 			Operation: opencdc.OperationUpdate,
 			Key:       opencdc.StructuredData{"id": 123},
 			Payload:   opencdc.Change{After: opencdc.StructuredData{"foo": "bar"}},
-		}})
+		},
+	})
 
 	// Output:
 	// processor transformed record:
@@ -69,7 +73,7 @@ func ExampleConvertProcessor_intToBool() {
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary:     "Convert `int` to `bool`",
 		Description: "This example takes the `int` in field `.Payload.After.done` and changes its data type to `bool`.",
-		Config:      map[string]string{"field": ".Payload.After.done", "type": "bool"},
+		Config:      config.Config{"field": ".Payload.After.done", "type": "bool"},
 		Have: opencdc.Record{
 			Operation: opencdc.OperationUpdate,
 			Key:       opencdc.StructuredData{"id": "123"},
@@ -79,7 +83,8 @@ func ExampleConvertProcessor_intToBool() {
 			Operation: opencdc.OperationUpdate,
 			Key:       opencdc.StructuredData{"id": "123"},
 			Payload:   opencdc.Change{After: opencdc.StructuredData{"done": true}},
-		}})
+		},
+	})
 
 	// Output:
 	// processor transformed record:
@@ -110,7 +115,7 @@ func ExampleConvertProcessor_floatToString() {
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary:     "Convert `float` to `string`",
 		Description: "This example takes the `float` in field `.Key.id` and changes its data type to `string`.",
-		Config:      map[string]string{"field": ".Key.id", "type": "string"},
+		Config:      config.Config{"field": ".Key.id", "type": "string"},
 		Have: opencdc.Record{
 			Operation: opencdc.OperationUpdate,
 			Key:       opencdc.StructuredData{"id": 123.345},
@@ -120,7 +125,8 @@ func ExampleConvertProcessor_floatToString() {
 			Operation: opencdc.OperationUpdate,
 			Key:       opencdc.StructuredData{"id": "123.345"},
 			Payload:   opencdc.Change{After: opencdc.StructuredData{"foo": "bar"}},
-		}})
+		},
+	})
 
 	// Output:
 	// processor transformed record:
@@ -139,6 +145,50 @@ func ExampleConvertProcessor_floatToString() {
 	//      "before": null,
 	//      "after": {
 	//        "foo": "bar"
+	//      }
+	//    }
+	//  }
+}
+
+//nolint:govet // a more descriptive example description
+func ExampleConvertProcessor_intTotime() {
+	p := NewConvertProcessor(log.Nop())
+
+	timeObj := time.Date(2024, 1, 2, 12, 34, 56, 123456789, time.UTC)
+
+	exampleutil.RunExample(p, exampleutil.Example{
+		Summary:     "Convert `int` to `time`",
+		Description: "This example takes an `int` in field `.Payload.After.createdAt` and parses it as a unix timestamp into a `time.Time` value.",
+		Config:      config.Config{"field": ".Payload.After.createdAt", "type": "time"},
+		Have: opencdc.Record{
+			Operation: opencdc.OperationCreate,
+			Key:       opencdc.StructuredData{"id": 123.345},
+			Payload:   opencdc.Change{After: opencdc.StructuredData{"createdAt": timeObj.UnixNano()}},
+		},
+		Want: sdk.SingleRecord{
+			Operation: opencdc.OperationCreate,
+			Key:       opencdc.StructuredData{"id": 123.345},
+			Payload:   opencdc.Change{After: opencdc.StructuredData{"createdAt": timeObj}},
+		},
+	})
+
+	// Output:
+	// processor transformed record:
+	// --- before
+	// +++ after
+	// @@ -1,14 +1,14 @@
+	//  {
+	//    "position": null,
+	//    "operation": "create",
+	//    "metadata": null,
+	//    "key": {
+	//      "id": 123.345
+	//    },
+	//    "payload": {
+	//      "before": null,
+	//      "after": {
+	// -      "createdAt": 1704198896123456789
+	// +      "createdAt": "2024-01-02T12:34:56.123456789Z"
 	//      }
 	//    }
 	//  }

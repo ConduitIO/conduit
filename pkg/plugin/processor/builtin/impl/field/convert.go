@@ -20,7 +20,9 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"time"
 
+	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -45,8 +47,8 @@ type convertConfig struct {
 	//
 	// For more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).
 	Field string `json:"field" validate:"required,regex=^\\.(Payload|Key).*"`
-	// Type is the target field type after conversion, available options are: string, int, float, bool.
-	Type string `json:"type" validate:"required,inclusion=string|int|float|bool"`
+	// Type is the target field type after conversion, available options are: `string`, `int`, `float`, `bool`, `time`.
+	Type string `json:"type" validate:"required,inclusion=string|int|float|bool|time"`
 }
 
 func (p *convertProcessor) Specification() (sdk.Specification, error) {
@@ -65,8 +67,8 @@ to parse it into structured data first.`,
 	}, nil
 }
 
-func (p *convertProcessor) Configure(ctx context.Context, m map[string]string) error {
-	err := sdk.ParseConfig(ctx, m, &p.config, convertConfig{}.Parameters())
+func (p *convertProcessor) Configure(ctx context.Context, c config.Config) error {
+	err := sdk.ParseConfig(ctx, c, &p.config, convertConfig{}.Parameters())
 	if err != nil {
 		return cerrors.Errorf("failed to parse configuration: %w", err)
 	}
@@ -105,23 +107,20 @@ func (p *convertProcessor) stringToType(value, typ string) (any, error) {
 	case "string":
 		return value, nil
 	case "int":
-		newVal, err := strconv.Atoi(value)
-		if err != nil {
-			return nil, err
-		}
-		return newVal, nil
+		return strconv.Atoi(value)
 	case "float":
-		newVal, err := strconv.ParseFloat(value, 64)
-		if err != nil {
-			return nil, err
-		}
-		return newVal, nil
+		return strconv.ParseFloat(value, 64)
 	case "bool":
-		newVal, err := strconv.ParseBool(value)
-		if err != nil {
-			return nil, err
+		return strconv.ParseBool(value)
+	case "time":
+		// see if it's a number
+		unixnano, err := strconv.Atoi(value)
+		if err == nil {
+			// it's a number, use it as a unix nanosecond timestamp
+			return time.Unix(0, int64(unixnano)).UTC(), nil
 		}
-		return newVal, nil
+		// try to parse it as a time string
+		return time.Parse(time.RFC3339Nano, value)
 	default:
 		return nil, cerrors.Errorf("undefined type %q", typ)
 	}

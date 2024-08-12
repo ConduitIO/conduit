@@ -15,11 +15,6 @@
 package avro
 
 import (
-	"crypto/tls"
-	"crypto/x509"
-	"fmt"
-	"os"
-
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/avro/internal"
 )
@@ -86,92 +81,5 @@ func (c *schemaConfig) parseAutoRegister() error {
 	c.strategy = internal.ExtractAndUploadSchemaStrategy{
 		Subject: c.AutoRegisteredSubject,
 	}
-	return nil
-}
-
-type authConfig struct {
-	// The username to use with basic authentication. This option is required if
-	// auth.basic.password contains a value. If both auth.basic.username and auth.basic.password
-	// are empty basic authentication is disabled.
-	Username string `json:"basic.username"`
-	// The password to use with basic authentication. This option is required if
-	// auth.basic.username contains a value. If both auth.basic.username and auth.basic.password
-	// are empty basic authentication is disabled.
-	Password string `json:"basic.password"`
-}
-
-func (c *authConfig) validate() error {
-	switch {
-	case c.Username == "" && c.Password == "":
-		// no basic auth set
-		return nil
-	case c.Username == "":
-		return cerrors.Errorf("specify a username to enable basic auth or remove field password")
-	case c.Password == "":
-		return cerrors.Errorf("specify a password to enable basic auth or remove field username")
-	}
-
-	return nil
-}
-
-type clientCert struct {
-	// The path to a file containing a PEM encoded certificate. This option is required
-	// if tls.client.key contains a value. If both tls.client.cert and tls.client.key are empty
-	// TLS is disabled.
-	Cert string `json:"cert"`
-	// The path to a file containing a PEM encoded private key. This option is required
-	// if tls.client.cert contains a value. If both tls.client.cert and tls.client.key are empty
-	// TLS is disabled.
-	Key string `json:"key"`
-}
-
-type tlsConfig struct {
-	// The path to a file containing PEM encoded CA certificates. If this option is empty,
-	// Conduit falls back to using the host's root CA set.
-	CACert string `json:"ca.cert"`
-
-	Client clientCert `json:"client"`
-
-	tlsClientCert *tls.Certificate
-	tlsCACert     *x509.CertPool
-}
-
-func (c *tlsConfig) parse() error {
-	if c.Client.Cert == "" && c.Client.Key == "" && c.CACert == "" {
-		// no tls config set
-		return nil
-	} else if c.Client.Cert == "" || c.Client.Key == "" {
-		// we are missing some configuration fields
-		errs := []error{cerrors.New("invalid TLS config")}
-		if c.Client.Cert == "" {
-			errs = append(errs, cerrors.New("missing field: tls.client.cert"))
-		}
-		if c.Client.Key == "" {
-			errs = append(errs, cerrors.New("missing field: tls.client.key"))
-		}
-		// CA cert is optional, we don't check if it's missing
-		return cerrors.Join(errs...)
-	}
-
-	clientCert, err := tls.LoadX509KeyPair(c.Client.Cert, c.Client.Key)
-	if err != nil {
-		return fmt.Errorf("failed to load client certificate: %w", err)
-	}
-
-	c.tlsClientCert = &clientCert
-
-	if c.CACert != "" {
-		// load custom CA cert
-		caCert, err := os.ReadFile(c.CACert)
-		if err != nil {
-			return fmt.Errorf("failed to load CA certificate: %w", err)
-		}
-		caCertPool := x509.NewCertPool()
-		if ok := caCertPool.AppendCertsFromPEM(caCert); !ok {
-			return cerrors.New("invalid CA cert")
-		}
-		c.tlsCACert = caCertPool
-	}
-
 	return nil
 }

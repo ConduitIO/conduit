@@ -25,6 +25,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
+	"github.com/google/go-cmp/cmp"
 	"github.com/matryer/is"
 )
 
@@ -40,7 +41,7 @@ func TestWASMProcessor_Specification_Success(t *testing.T) {
 	is.NoErr(err)
 
 	wantSpec := ChaosProcessorSpecifications()
-	is.Equal(gotSpec, wantSpec)
+	is.Equal("", cmp.Diff(gotSpec, wantSpec))
 
 	is.NoErr(underTest.Teardown(ctx))
 }

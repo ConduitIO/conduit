@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -34,7 +35,13 @@ func ExampleEncodeProcessor_autoRegister() {
 	url, cleanup := schemaregistrytest.ExampleSchemaRegistryURL("ExampleEncodeProcessor_autoRegister", 54322)
 	defer cleanup()
 
-	p := NewEncodeProcessor(log.Nop())
+	client, err := schemaregistry.NewClient(log.Nop(), sr.URLs(url))
+	if err != nil {
+		panic(fmt.Sprintf("failed to create schema registry client: %v", err))
+	}
+
+	p := NewEncodeProcessor(log.Nop()).(*encodeProcessor)
+	p.SetSchemaRegistry(client)
 
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary: "Auto-register schema",
@@ -42,8 +49,7 @@ func ExampleEncodeProcessor_autoRegister() {
 with the ` + "`autoRegister`" + ` schema strategy. The processor encodes the record's
 ` + "`.Payload.After`" + ` field using the schema that is extracted from the data
 and registered on the fly under the subject ` + "`example-autoRegister`" + `.`,
-		Config: map[string]string{
-			"url":                         url,
+		Config: config.Config{
 			"schema.strategy":             "autoRegister",
 			"schema.autoRegister.subject": "example-autoRegister",
 		},
@@ -74,7 +80,8 @@ and registered on the fly under the subject ` + "`example-autoRegister`" + `.`,
 			Payload: opencdc.Change{
 				After: opencdc.RawData([]byte{0, 0, 0, 0, 1, 102, 102, 102, 102, 102, 102, 2, 64, 2, 154, 153, 153, 153, 153, 153, 1, 64, 1, 6, 98, 97, 114, 0, 2}),
 			},
-		}})
+		},
+	})
 
 	// Output:
 	// processor transformed record:
@@ -134,7 +141,8 @@ func ExampleEncodeProcessor_preRegistered() {
 		panic(fmt.Sprintf("failed to create schema: %v", err))
 	}
 
-	p := NewEncodeProcessor(log.Nop())
+	p := NewEncodeProcessor(log.Nop()).(*encodeProcessor)
+	p.SetSchemaRegistry(client)
 
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary: "Pre-register schema",
@@ -154,8 +162,7 @@ schema has to be manually pre-registered. In this example we use the following s
 ` + "```" + `
 
 The processor encodes the record's` + "`.Key`" + ` field using the above schema.`,
-		Config: map[string]string{
-			"url":                          url,
+		Config: config.Config{
 			"schema.strategy":              "preRegistered",
 			"schema.preRegistered.subject": "example-preRegistered",
 			"schema.preRegistered.version": "1",
@@ -175,7 +182,8 @@ The processor encodes the record's` + "`.Key`" + ` field using the above schema.
 			Operation: opencdc.OperationCreate,
 			Metadata:  map[string]string{"key1": "val1"},
 			Key:       opencdc.RawData([]byte{0, 0, 0, 0, 1, 6, 98, 97, 114, 2}),
-		}})
+		},
+	})
 
 	// Output:
 	// processor transformed record:

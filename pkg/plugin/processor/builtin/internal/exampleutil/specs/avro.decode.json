@@ -6,52 +6,35 @@
     "version": "v0.1.0",
     "author": "Meroxa, Inc.",
     "parameters": {
-      "auth.basic.password": {
-        "default": "",
-        "description": "The password to use with basic authentication. This option is required if\nauth.basic.username contains a value. If both auth.basic.username and auth.basic.password\nare empty basic authentication is disabled.",
-        "type": "string",
-        "validations": []
-      },
-      "auth.basic.username": {
-        "default": "",
-        "description": "The username to use with basic authentication. This option is required if\nauth.basic.password contains a value. If both auth.basic.username and auth.basic.password\nare empty basic authentication is disabled.",
-        "type": "string",
-        "validations": []
-      },
       "field": {
         "default": ".Payload.After",
         "description": "The field that will be decoded.\n\nFor more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).",
         "type": "string",
         "validations": []
       },
-      "tls.ca.cert": {
-        "default": "",
-        "description": "The path to a file containing PEM encoded CA certificates. If this option is empty,\nConduit falls back to using the host's root CA set.",
-        "type": "string",
-        "validations": []
+      "sdk.schema.decode.key.enabled": {
+        "default": "true",
+        "description": "Whether to decode the record key using its corresponding schema from the schema registry.",
+        "type": "bool",
+        "validations": null
       },
-      "tls.client.cert": {
-        "default": "",
-        "description": "The path to a file containing a PEM encoded certificate. This option is required\nif tls.client.key contains a value. If both tls.client.cert and tls.client.key are empty\nTLS is disabled.",
-        "type": "string",
-        "validations": []
+      "sdk.schema.decode.payload.enabled": {
+        "default": "true",
+        "description": "Whether to decode the record payload using its corresponding schema from the schema registry.",
+        "type": "bool",
+        "validations": null
       },
-      "tls.client.key": {
-        "default": "",
-        "description": "The path to a file containing a PEM encoded private key. This option is required\nif tls.client.cert contains a value. If both tls.client.cert and tls.client.key are empty\nTLS is disabled.",
-        "type": "string",
-        "validations": []
+      "sdk.schema.encode.key.enabled": {
+        "default": "true",
+        "description": "Whether to encode the record key using its corresponding schema from the schema registry.",
+        "type": "bool",
+        "validations": null
       },
-      "url": {
-        "default": "",
-        "description": "URL of the schema registry (e.g. http://localhost:8085)",
-        "type": "string",
-        "validations": [
-          {
-            "type": "required",
-            "value": ""
-          }
-        ]
+      "sdk.schema.encode.payload.enabled": {
+        "default": "true",
+        "description": "Whether to encode the record payload using its corresponding schema from the schema registry.",
+        "type": "bool",
+        "validations": null
       }
     }
   },
@@ -60,8 +43,7 @@
       "summary": "Decode a record field in Avro format",
       "description": "This example shows the usage of the `avro.decode` processor.\nThe processor decodes the record's`.Key` field using the schema that is\ndownloaded from the schema registry and needs to exist under the subject`example-decode`.\nIn this example we use the following schema:\n\n```json\n{\n  \"type\":\"record\",\n  \"name\":\"record\",\n  \"fields\":[\n    {\"name\":\"myString\",\"type\":\"string\"},\n    {\"name\":\"myInt\",\"type\":\"int\"}\n  ]\n}\n```",
       "config": {
-        "field": ".Key",
-        "url": "http://127.0.0.1:54322"
+        "field": ".Key"
       },
       "have": {
         "position": "dGVzdC1wb3NpdGlvbg==",

@@ -21,6 +21,7 @@ import (
 	"os"
 	"sync"
 
+	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -100,9 +101,9 @@ To find out what's possible with the JS processor, also refer to the documentati
 	}, nil
 }
 
-func (p *javascriptProcessor) Configure(ctx context.Context, m map[string]string) error {
+func (p *javascriptProcessor) Configure(ctx context.Context, c config.Config) error {
 	cfg := javascriptConfig{}
-	err := sdk.ParseConfig(ctx, m, &cfg, cfg.Parameters())
+	err := sdk.ParseConfig(ctx, c, &cfg, cfg.Parameters())
 	if err != nil {
 		return cerrors.Errorf("failed parsing configuration: %w", err)
 	}
