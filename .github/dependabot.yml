@@ -26,7 +26,7 @@ updates:
     commit-message:
       prefix: "npm:"
 
-  # Maintain dependencies for GitHub Actions
+  # Maintain dependencies for Docker
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
