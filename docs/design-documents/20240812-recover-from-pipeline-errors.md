@@ -127,8 +127,8 @@ added later.
 ### Phase 1
 
 In this phase we will deliver the most critical functionality,
-the [recovery mechanism](#Recovery-mechanism)
-and [pipeline state management](#Pipeline-state-management). This is the minimum
+the [recovery mechanism](#recovery-mechanism)
+and [pipeline state management](#pipeline-state-management). This is the minimum
 we need to implement to provide value to our users, while only changing the
 Conduit internals.
 
@@ -139,13 +139,13 @@ This phase includes the following tasks:
 - When a pipeline is restarting it should be in the `recovering` state
 - Add the introduced `recovering` state to the API definition
 - Make the backoff retry default parameters configurable _globally_ (in
-  conduit.yml)
+  `conduit.yml`)
 
 ### Phase 2
 
 This phase includes changes in the connector SDK and gives the connectors the
 ability to circumvent the recovery mechanism when it makes sense to do so
-using [error classification](#Error-classification).
+using [error classification](#error-classification).
 
 The tasks in this phase are:
 
@@ -167,7 +167,7 @@ The tasks in this phase are:
 
 In this phase we will sand off any remaining sharp edges and add more visibility
 and control to the user. This
-includes [record deduplication](#Record-deduplication) and
+includes [record deduplication](#record-deduplication) and
 the [audit log](#audit-log), which are bigger topics and will require a separate
 design document.
 
@@ -179,7 +179,7 @@ design document.
     the processors are stateless and always behave the same. Processors, which
     connect to a 3rd party resource and can experience transient errors, should
     implement retrials internally (like the `webhook.http` processor). Once we
-    implement [error classification](#Error-classification), processors should
+    implement [error classification](#error-classification), processors should
     be allowed to return transient errors which should be treated as such.
 - **How does this functionality interact with a DLQ, especially with a nack
   threshold?**
@@ -188,7 +188,7 @@ design document.
     threshold is reached, triggering a restart loop. Since some records might be
     re-delivered, the same records could land in the DLQ multiple times. I
     propose documenting this edge case for now and tackling the solution as part
-    of [record deduplication](#Record-deduplication).
+    of [record deduplication](#record-deduplication).
     As for the nack threshold - if that threshold is reached it should emit a
     fatal error and put the pipeline into a `degraded` state without triggering
     the recovery mechanism, otherwise the nack threshold would lose its purpose.
