@@ -27,7 +27,7 @@ jobs:
           version: ${{ steps.buf-version.outputs.v }}
           token: ${{ secrets.BUF_TOKEN }}
           input: 'proto'
-          # The repository already exists.
+          # The repository should already exist.
           # If it can be automatically created, that's a sign that it was deleted,
-          # which is likely a major issue.
+          # which is likely a major issue, which we want to be aware of.
           push_disable_create: true
