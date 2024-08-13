@@ -3,7 +3,7 @@ name: "Run 'buf update'"
 on:
   workflow_dispatch:
   schedule:
-    - cron: '*/5 * * * *'
+    - cron: '30 10 * * 1'
 
 jobs:
   update-buf-dependencies:
