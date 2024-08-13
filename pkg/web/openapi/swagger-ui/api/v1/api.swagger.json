@@ -2192,9 +2192,6 @@
         },
         "description": {
           "type": "string"
-        },
-        "descriptionAgain": {
-          "type": "string"
         }
       }
     },

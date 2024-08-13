@@ -1,0 +1,33 @@
+name: buf-validate
+
+on:
+  pull_request:
+    # 'labeled' and 'unlabeled' are included so we can use the 'Buf Skip Breaking' label
+    # and skip a breaking change if that's required.
+    # See: https://github.com/bufbuild/buf-action?tab=readme-ov-file#skip-the-breaking-change-detection-step
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+    paths:
+      - 'proto/**'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # This step sets up the variable steps.buf-version.outputs.v
+      # to contain the version of Buf (e.g. v1.36.0) from go.mod.
+      - name: Get Buf version
+        id: buf-version
+        run: |
+          BUF_VERSION=$( go list -m -f '{{.Version}}' github.com/bufbuild/buf )
+          # remove the leading 'v' in front of the version
+          BUF_VERSION=${BUF_VERSION#v}
+          echo "v=$BUF_VERSION" >> "$GITHUB_OUTPUT"
+      - uses: bufbuild/buf-action@v1
+        with:
+          version: ${{ steps.buf-version.outputs.v }}
+          token: ${{ secrets.BUF_TOKEN }}
+          input: 'proto'
+          push: false
+          breaking_against: '${{ github.event.repository.clone_url }}#branch=main,subdir=proto'
