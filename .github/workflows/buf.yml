@@ -15,9 +15,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      # This step sets up the variable steps.buf-version.outputs.v
+      # to contain the version of Buf (e.g. v1.36.0).
+      # The version is taken from go.mod.
+      - name: Get Buf version
+        id: buf-version
+        run: |
+          BUF_VERSION=$( go list -m -f '{{.Version}}' github.com/bufbuild/buf )
+          echo "v=$BUF_VERSION" >> "$GITHUB_OUTPUT"
       - uses: bufbuild/buf-action@v1
         with:
-          version: 1.36.0
+          version: ${{ steps.buf-version.outputs.v }}
           token: ${{ secrets.BUF_TOKEN }}
           input: 'proto'
           push: false
@@ -31,8 +40,16 @@ jobs:
     if: ${{ github.ref == 'refs/heads/main' }}
     steps:
       - uses: actions/checkout@v4
+      # This step sets up the variable steps.buf-version.outputs.v
+      # to contain the version of Buf (e.g. v1.36.0).
+      # The version is taken from go.mod.
+      - name: Get Buf version
+        id: buf-version
+        run: |
+          BUF_VERSION=$( go list -m -f '{{.Version}}' github.com/bufbuild/buf )
+          echo "v=$BUF_VERSION" >> "$GITHUB_OUTPUT"
       - uses: bufbuild/buf-action@v1
         with:
-          version: 1.36.0
+          version: ${{ steps.buf-version.outputs.v }}
           token: ${{ secrets.BUF_TOKEN }}
           input: 'proto'
