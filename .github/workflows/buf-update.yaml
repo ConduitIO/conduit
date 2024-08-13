@@ -25,16 +25,3 @@ jobs:
           body: Automatic pull request for updating Buf dependencies
           branch: update-buf-dependencies
           commit-message: "[automated] Update Buf dependencies"
-
-      - name: Check if there are updates
-        id: check-for-updates
-        run: |
-          if [[ -n $(git ls-remote --heads origin update-buf-dependencies ) ]]; then
-            echo "exists=true" >> $GITHUB_OUTPUT
-          else
-            echo "exists=false" >> $GITHUB_OUTPUT          
-          fi
-
-      - name: Merge pull request
-        if: "${{ steps.check-for-updates.outputs.exists == 'true' }}"
-        run: gh pr merge --auto --squash update-buf-dependencies
