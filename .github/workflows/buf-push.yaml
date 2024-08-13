@@ -8,8 +8,6 @@ on:
       - 'proto/**'
 
 jobs:
-  # Push buf module to the buf schema registry, but only if the validate action succeeded and if the action is running
-  # on branch main.
   push:
     runs-on: ubuntu-latest
     if: ${{ github.ref == 'refs/heads/main' }}
