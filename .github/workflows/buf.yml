@@ -7,6 +7,10 @@ on:
     paths:
       - 'proto/**'
   pull_request:
+    # 'labeled' and 'unlabeled' are included so we can use the 'Buf Skip Breaking' label
+    # and skip a breaking change if that's required.
+    # See: https://github.com/bufbuild/buf-action?tab=readme-ov-file#skip-the-breaking-change-detection-step
+    types: [opened, synchronize, reopened, labeled, unlabeled]
     paths:
       - 'proto/**'
 
@@ -56,3 +60,7 @@ jobs:
           version: ${{ steps.buf-version.outputs.v }}
           token: ${{ secrets.BUF_TOKEN }}
           input: 'proto'
+          # The repository already exists.
+          # If it can be automatically created, that's a sign that it was deleted,
+          # which is likely a major issue.
+          push_disable_create: true
