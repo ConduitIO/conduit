@@ -23,6 +23,7 @@ jobs:
         id: buf-version
         run: |
           BUF_VERSION=$( go list -m -f '{{.Version}}' github.com/bufbuild/buf )
+          BUF_VERSION=${BUF_VERSION#v}
           echo "v=$BUF_VERSION" >> "$GITHUB_OUTPUT"
       - uses: bufbuild/buf-action@v1
         with:
@@ -47,6 +48,7 @@ jobs:
         id: buf-version
         run: |
           BUF_VERSION=$( go list -m -f '{{.Version}}' github.com/bufbuild/buf )
+          BUF_VERSION=${BUF_VERSION#v}
           echo "v=$BUF_VERSION" >> "$GITHUB_OUTPUT"
       - uses: bufbuild/buf-action@v1
         with:
