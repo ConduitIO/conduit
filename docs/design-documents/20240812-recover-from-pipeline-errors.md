@@ -62,14 +62,14 @@ based on specific production needs.
 
 - **Configurable Parameters:**
   - **Minimum Delay Before Restart:** Default: 1 second
-  - **Maximum Delay Before Restart:** Default: 1 minute
+  - **Maximum Delay Before Restart:** Default: 10 minutes
   - **Backoff Factor:** Default: 2
   - **Maximum Number of Retries:** Default: Infinite
   - **Delay After Which Fail Count is Reset:** Default: 5 minutes (or on first
     successfully end-to-end processed record)
 
-This results in a default delay progression of 1s, 2s, 4s, 8s, 16s, 32s, 1m,...,
-balancing the need for recovery time and minimizing downtime.
+This results in a default delay progression of 1s, 2s, 4s, 8s, 16s, [...], 10m,
+10m, ..., balancing the need for recovery time and minimizing downtime.
 
 ### Consecutive failures and permanent stop
 
@@ -118,6 +118,15 @@ log any important events so we can return them to the user. When done properly,
 this could serve as an audit log of everything a pipeline went through (
 provisioning, starting, fault, recovery, stopping, deprovisioning etc.).
 
+As a first step we should add metrics to give us insights into what is happening
+with a pipeline, specifically:
+
+- A gauge showing the current state of each pipeline (note that Prometheus
+  doesn't support
+  [string values](https://github.com/prometheus/prometheus/issues/2227), so we
+  would need to use labels to represent the status and pipeline ID).
+- A counter showing how many times a pipeline has been restarted automatically.
+
 ## Implementation plan
 
 We will tackle this feature in separate phases, to make sure that the most
@@ -138,8 +147,11 @@ This phase includes the following tasks:
   backoff retry.
 - When a pipeline is restarting it should be in the `recovering` state
 - Add the introduced `recovering` state to the API definition
+- Make sure a `recovering` pipeline can be stopped manually
 - Make the backoff retry default parameters configurable _globally_ (in
   `conduit.yml`)
+- Add metrics for monitoring the pipeline state and the number of automatic
+  restarts
 
 ### Phase 2
 
