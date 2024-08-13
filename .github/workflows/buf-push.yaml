@@ -1,4 +1,4 @@
-name: buf
+name: buf-push
 
 on:
   push:
