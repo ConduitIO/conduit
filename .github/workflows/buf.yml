@@ -17,8 +17,7 @@ jobs:
       - uses: actions/checkout@v4
 
       # This step sets up the variable steps.buf-version.outputs.v
-      # to contain the version of Buf (e.g. v1.36.0).
-      # The version is taken from go.mod.
+      # to contain the version of Buf (e.g. v1.36.0) from go.mod.
       - name: Get Buf version
         id: buf-version
         run: |
@@ -41,9 +40,9 @@ jobs:
     if: ${{ github.ref == 'refs/heads/main' }}
     steps:
       - uses: actions/checkout@v4
-      # This step sets up the variable steps.buf-version.outputs.v
-      # to contain the version of Buf (e.g. v1.36.0).
-      # The version is taken from go.mod.
+
+        # This step sets up the variable steps.buf-version.outputs.v
+        # to contain the version of Buf (e.g. v1.36.0) from go.mod.
       - name: Get Buf version
         id: buf-version
         run: |
