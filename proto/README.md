@@ -7,7 +7,7 @@ the [grpc-gateway](https://github.com/grpc-ecosystem/grpc-gateway).
 ## Client code
 
 The client code for Conduit's API is available as a [Buf remote package](https://docs.buf.build/bsr/remote-packages/go).
-Proto files are pushed to the Buf Schema Registry via a GitHub workflow defined [here](/.github/workflows/buf.yml).
+Proto files are pushed to the Buf Schema Registry via a GitHub workflow defined [here](/.github/workflows/buf-validate.yaml).
 
 To use the client code, firstly run:
 

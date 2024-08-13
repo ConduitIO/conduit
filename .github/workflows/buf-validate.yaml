@@ -1,11 +1,6 @@
-name: buf
+name: buf-validate
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'proto/**'
   pull_request:
     # 'labeled' and 'unlabeled' are included so we can use the 'Buf Skip Breaking' label
     # and skip a breaking change if that's required.
@@ -36,31 +31,3 @@ jobs:
           input: 'proto'
           push: false
           breaking_against: '${{ github.event.repository.clone_url }}#branch=main,subdir=proto'
-
-  # Push buf module to the buf schema registry, but only if the validate action succeeded and if the action is running
-  # on branch main.
-  push:
-    runs-on: ubuntu-latest
-    needs: validate
-    if: ${{ github.ref == 'refs/heads/main' }}
-    steps:
-      - uses: actions/checkout@v4
-
-        # This step sets up the variable steps.buf-version.outputs.v
-        # to contain the version of Buf (e.g. v1.36.0) from go.mod.
-      - name: Get Buf version
-        id: buf-version
-        run: |
-          BUF_VERSION=$( go list -m -f '{{.Version}}' github.com/bufbuild/buf )
-          # remove the leading 'v' in front of the version
-          BUF_VERSION=${BUF_VERSION#v}
-          echo "v=$BUF_VERSION" >> "$GITHUB_OUTPUT"
-      - uses: bufbuild/buf-action@v1
-        with:
-          version: ${{ steps.buf-version.outputs.v }}
-          token: ${{ secrets.BUF_TOKEN }}
-          input: 'proto'
-          # The repository already exists.
-          # If it can be automatically created, that's a sign that it was deleted,
-          # which is likely a major issue.
-          push_disable_create: true
