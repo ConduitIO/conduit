@@ -79,6 +79,18 @@ pipeline successfully processes at least one record or runs without encountering
 an error for a predefined time frame, the count of consecutive failures will
 reset.
 
+### Dead-letter queue errors
+
+If a DLQ ([Dead-letter queue](https://conduit.io/docs/features/dead-letter-queue))
+is configured with a nack threshold greater than 0, the user has configured a
+DLQ and we should respect that. This means that if the nack threshold gets
+exceeded and the DLQ returns an error, that error should degrade the pipeline
+_without_ triggering the recovery mechanism.
+
+In case the nack threshold is set to 0 (default), then any record sent to the
+DLQ will cause the pipeline to stop. In that case, the recovery mechanism should
+try to restart the pipeline, since the DLQ is essentially disabled.
+
 ## Pipeline state management
 
 A new pipeline state, `recovering`, will be introduced to indicate that a
@@ -201,6 +213,3 @@ design document.
     re-delivered, the same records could land in the DLQ multiple times. I
     propose documenting this edge case for now and tackling the solution as part
     of [record deduplication](#record-deduplication).
-    As for the nack threshold - if that threshold is reached it should emit a
-    fatal error and put the pipeline into a `degraded` state without triggering
-    the recovery mechanism, otherwise the nack threshold would lose its purpose.
