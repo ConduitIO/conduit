@@ -1,0 +1,27 @@
+name: "Run 'buf update'"
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '30 10 * * 1'
+
+jobs:
+  update-buf-dependencies:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run 'buf update'
+        run: |
+          export PATH=$PATH:$(go env GOPATH)/bin
+          make install-tools proto-update
+
+      - name: Create pull request
+        uses: peter-evans/create-pull-request@v6.0.2
+        with:
+          title: Update Buf dependencies
+          body: Automatic pull request for updating Buf dependencies
+          branch: update-buf-dependencies
+          commit-message: "[automated] Update Buf dependencies"
