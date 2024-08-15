@@ -91,6 +91,15 @@ In case the nack threshold is set to 0 (default), then any record sent to the
 DLQ will cause the pipeline to stop. In that case, the recovery mechanism should
 try to restart the pipeline, since the DLQ is essentially disabled.
 
+### Processor errors
+
+Most of the processors are stateless and always behave the same, which is why
+processors errors should be regarded as fatal. Processors, which connect to a
+3rd party resource and can experience transient errors, should implement
+retrials internally (like the `webhook.http` processor). Once we
+implement [error classification](#error-classification), processors should be
+allowed to return transient errors which should be treated as such.
+
 ## Pipeline state management
 
 A new pipeline state, `recovering`, will be introduced to indicate that a
@@ -197,14 +206,6 @@ design document.
 
 ## Open questions
 
-- **Should failed processors trigger a retry, or should the pipeline be
-  considered failed immediately?**
-  - I am leaning towards making processor faults fatal by default, as most of
-    the processors are stateless and always behave the same. Processors, which
-    connect to a 3rd party resource and can experience transient errors, should
-    implement retrials internally (like the `webhook.http` processor). Once we
-    implement [error classification](#error-classification), processors should
-    be allowed to return transient errors which should be treated as such.
 - **How does this functionality interact with a DLQ, especially with a nack
   threshold?**
   - There is a potential risk that restarting a pipeline with a nack threshold
