@@ -16,6 +16,7 @@ package pipeline
 
 import (
 	"context"
+	"github.com/conduitio/conduit-commons/lang"
 	"regexp"
 	"strings"
 	"time"
@@ -81,11 +82,9 @@ func (s *Service) Init(ctx context.Context) error {
 	// some instances may be in a running state, put them in StatusSystemStopped state for now
 	for _, instance := range instances {
 		s.instanceNames[instance.Config.Name] = true
-		if instance.Status == StatusRunning {
-			// change status to "systemStopped" to mark which pipeline was running
-			instance.Status = StatusSystemStopped
-		}
-		measure.PipelinesGauge.WithValues(strings.ToLower(instance.Status.String())).Inc()
+		// change status to "systemStopped" to mark which pipeline was running
+		instance.Status.CompareAndSwap(lang.Ptr(StatusRunning), lang.Ptr(StatusSystemStopped))
+		measure.PipelinesGauge.WithValues(strings.ToLower(instance.Status.Load().String())).Inc()
 	}
 
 	s.logger.Info(ctx).Int("count", len(s.instances)).Msg("pipelines initialized")
@@ -129,12 +128,12 @@ func (s *Service) Create(ctx context.Context, id string, cfg Config, p Provision
 	pl := &Instance{
 		ID:            id,
 		Config:        cfg,
-		Status:        StatusUserStopped,
 		CreatedAt:     t,
 		UpdatedAt:     t,
 		ProvisionedBy: p,
 		DLQ:           DefaultDLQ,
 	}
+	pl.Status.Store(lang.Ptr(StatusUserStopped))
 
 	err = s.store.Set(ctx, pl.ID, pl)
 	if err != nil {
@@ -143,7 +142,7 @@ func (s *Service) Create(ctx context.Context, id string, cfg Config, p Provision
 
 	s.instances[pl.ID] = pl
 	s.instanceNames[cfg.Name] = true
-	measure.PipelinesGauge.WithValues(strings.ToLower(pl.Status.String())).Inc()
+	measure.PipelinesGauge.WithValues(strings.ToLower(pl.Status.Load().String())).Inc()
 
 	return pl, nil
 }
@@ -308,7 +307,7 @@ func (s *Service) Delete(ctx context.Context, pipelineID string) error {
 
 	delete(s.instances, pl.ID)
 	delete(s.instanceNames, pl.Config.Name)
-	measure.PipelinesGauge.WithValues(strings.ToLower(pl.Status.String())).Dec()
+	measure.PipelinesGauge.WithValues(strings.ToLower(pl.Status.Load().String())).Dec()
 
 	return nil
 }

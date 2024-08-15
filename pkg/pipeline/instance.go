@@ -17,6 +17,7 @@
 package pipeline
 
 import (
+	"sync/atomic"
 	"time"
 
 	"github.com/conduitio/conduit/pkg/pipeline/stream"
@@ -48,7 +49,7 @@ type (
 type Instance struct {
 	ID            string
 	Config        Config
-	Status        Status
+	Status        atomic.Pointer[Status]
 	Error         string
 	CreatedAt     time.Time
 	UpdatedAt     time.Time

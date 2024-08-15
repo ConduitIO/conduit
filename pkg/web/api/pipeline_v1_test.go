@@ -16,6 +16,7 @@ package api
 
 import (
 	"context"
+	"github.com/conduitio/conduit-commons/lang"
 	"sort"
 	"testing"
 
@@ -42,8 +43,8 @@ func TestPipelineAPIv1_CreatePipeline(t *testing.T) {
 	pl := &pipeline.Instance{
 		ID:     uuid.NewString(),
 		Config: config,
-		Status: pipeline.StatusSystemStopped,
 	}
+	pl.Status.Store(lang.Ptr(pipeline.StatusSystemStopped))
 
 	psMock.EXPECT().Create(ctx, config).Return(pl, nil).Times(1)
 

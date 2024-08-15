@@ -61,7 +61,7 @@ func (c *ConnectorOrchestrator) Create(
 	if pl.ProvisionedBy != pipeline.ProvisionTypeAPI {
 		return nil, cerrors.Errorf("cannot add a connector to the pipeline %q: %w", pl.ID, ErrImmutableProvisionedByConfig)
 	}
-	if pl.Status == pipeline.StatusRunning {
+	if *pl.Status.Load() == pipeline.StatusRunning {
 		return nil, cerrors.Errorf("cannot create connector: %w", pipeline.ErrPipelineRunning)
 	}
 
@@ -124,7 +124,7 @@ func (c *ConnectorOrchestrator) Delete(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	if pl.Status == pipeline.StatusRunning {
+	if *pl.Status.Load() == pipeline.StatusRunning {
 		return pipeline.ErrPipelineRunning
 	}
 	err = c.connectors.Delete(ctx, id, c.connectorPlugins)
@@ -171,7 +171,7 @@ func (c *ConnectorOrchestrator) Update(ctx context.Context, id string, config co
 	if err != nil {
 		return nil, err
 	}
-	if pl.Status == pipeline.StatusRunning {
+	if *pl.Status.Load() == pipeline.StatusRunning {
 		return nil, pipeline.ErrPipelineRunning
 	}
 

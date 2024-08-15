@@ -16,6 +16,7 @@ package mock
 
 import (
 	"context"
+	"github.com/conduitio/conduit-commons/lang"
 	"io"
 	"sync/atomic"
 	"testing"
@@ -170,8 +171,7 @@ func SourcePluginWithStop() ConfigurableSourcePluginOption {
 				p.isStopped.Store(true)
 				lastPosition := p.lastPosition.Load()
 				if lastPosition == nil {
-					var empty opencdc.Position
-					lastPosition = &empty
+					lastPosition = lang.Ptr(opencdc.Position{})
 				}
 				return pconnector.SourceStopResponse{LastPosition: *lastPosition}, nil
 			})

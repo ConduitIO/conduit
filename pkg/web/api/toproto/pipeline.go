@@ -24,7 +24,7 @@ func Pipeline(in *pipeline.Instance) *apiv1.Pipeline {
 	return &apiv1.Pipeline{
 		Id: in.ID,
 		State: &apiv1.Pipeline_State{
-			Status: PipelineStatus(in.Status),
+			Status: PipelineStatus(*in.Status.Load()),
 			Error:  in.Error,
 		},
 		Config:       PipelineConfig(in.Config),
