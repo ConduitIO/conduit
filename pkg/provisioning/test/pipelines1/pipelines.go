@@ -15,97 +15,106 @@
 package pipelines1
 
 import (
-	"time"
-
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	"github.com/conduitio/conduit/pkg/processor"
+	"time"
 )
 
-var P1 = &pipeline.Instance{
-	ID: "pipeline1",
-	Config: pipeline.Config{
-		Name:        "name1",
-		Description: "desc1",
-	},
-	Status: pipeline.StatusRunning,
-	Error:  "",
-	DLQ: pipeline.DLQ{
-		Plugin:              pipeline.DefaultDLQ.Plugin,
-		Settings:            pipeline.DefaultDLQ.Settings,
-		WindowSize:          20,
-		WindowNackThreshold: 10,
-	},
-	ConnectorIDs: []string{"pipeline1:con1", "pipeline1:con2"},
-	ProcessorIDs: []string{"pipeline1:proc1"},
+var (
+	P1     *pipeline.Instance
+	P1C1   *connector.Instance
+	P1C2   *connector.Instance
+	P1P1   *processor.Instance
+	P1C2P1 *processor.Instance
+)
 
-	ProvisionedBy: pipeline.ProvisionTypeConfig,
-	CreatedAt:     time.Now(),
-	UpdatedAt:     time.Now(),
-}
+func init() {
+	P1 = &pipeline.Instance{
+		ID: "pipeline1",
+		Config: pipeline.Config{
+			Name:        "name1",
+			Description: "desc1",
+		},
+		Error: "",
+		DLQ: pipeline.DLQ{
+			Plugin:              pipeline.DefaultDLQ.Plugin,
+			Settings:            pipeline.DefaultDLQ.Settings,
+			WindowSize:          20,
+			WindowNackThreshold: 10,
+		},
+		ConnectorIDs: []string{"pipeline1:con1", "pipeline1:con2"},
+		ProcessorIDs: []string{"pipeline1:proc1"},
 
-var P1C1 = &connector.Instance{
-	ID:   "pipeline1:con1",
-	Type: connector.TypeSource,
-	Config: connector.Config{
-		Name:     "source",
-		Settings: map[string]string{"path": "my/path/file1.txt"},
-	},
-	PipelineID:   "pipeline1",
-	Plugin:       "builtin:file",
-	ProcessorIDs: nil,
+		ProvisionedBy: pipeline.ProvisionTypeConfig,
+		CreatedAt:     time.Now(),
+		UpdatedAt:     time.Now(),
+	}
+	P1.SetStatus(pipeline.StatusRunning)
 
-	ProvisionedBy: connector.ProvisionTypeConfig,
-	CreatedAt:     time.Now(),
-	UpdatedAt:     time.Now(),
-}
+	P1C1 = &connector.Instance{
+		ID:   "pipeline1:con1",
+		Type: connector.TypeSource,
+		Config: connector.Config{
+			Name:     "source",
+			Settings: map[string]string{"path": "my/path/file1.txt"},
+		},
+		PipelineID:   "pipeline1",
+		Plugin:       "builtin:file",
+		ProcessorIDs: nil,
 
-var P1C2 = &connector.Instance{
-	ID:   "pipeline1:con2",
-	Type: connector.TypeDestination,
-	Config: connector.Config{
-		Name:     "dest",
-		Settings: map[string]string{"path": "my/path/file2.txt"},
-	},
-	PipelineID:   "pipeline1",
-	Plugin:       "builtin:file",
-	ProcessorIDs: []string{"pipeline1:con2:proc1con"},
+		ProvisionedBy: connector.ProvisionTypeConfig,
+		CreatedAt:     time.Now(),
+		UpdatedAt:     time.Now(),
+	}
 
-	ProvisionedBy: connector.ProvisionTypeConfig,
-	CreatedAt:     time.Now(),
-	UpdatedAt:     time.Now(),
-}
-
-var P1P1 = &processor.Instance{
-	ID:     "pipeline1:proc1",
-	Plugin: "js",
-	Parent: processor.Parent{
-		ID:   "pipeline1",
-		Type: processor.ParentTypePipeline,
-	},
-	Config: processor.Config{
-		Workers:  1,
-		Settings: map[string]string{"additionalProp1": "string"},
-	},
-
-	ProvisionedBy: processor.ProvisionTypeConfig,
-	CreatedAt:     time.Now(),
-	UpdatedAt:     time.Now(),
-}
-
-var P1C2P1 = &processor.Instance{
-	ID:     "pipeline1:con2:proc1con",
-	Plugin: "js",
-	Parent: processor.Parent{
+	P1C2 = &connector.Instance{
 		ID:   "pipeline1:con2",
-		Type: processor.ParentTypeConnector,
-	},
-	Config: processor.Config{
-		Workers:  10,
-		Settings: map[string]string{"additionalProp1": "string"},
-	},
+		Type: connector.TypeDestination,
+		Config: connector.Config{
+			Name:     "dest",
+			Settings: map[string]string{"path": "my/path/file2.txt"},
+		},
+		PipelineID:   "pipeline1",
+		Plugin:       "builtin:file",
+		ProcessorIDs: []string{"pipeline1:con2:proc1con"},
 
-	ProvisionedBy: processor.ProvisionTypeConfig,
-	CreatedAt:     time.Now(),
-	UpdatedAt:     time.Now(),
+		ProvisionedBy: connector.ProvisionTypeConfig,
+		CreatedAt:     time.Now(),
+		UpdatedAt:     time.Now(),
+	}
+
+	P1P1 = &processor.Instance{
+		ID:     "pipeline1:proc1",
+		Plugin: "js",
+		Parent: processor.Parent{
+			ID:   "pipeline1",
+			Type: processor.ParentTypePipeline,
+		},
+		Config: processor.Config{
+			Workers:  1,
+			Settings: map[string]string{"additionalProp1": "string"},
+		},
+
+		ProvisionedBy: processor.ProvisionTypeConfig,
+		CreatedAt:     time.Now(),
+		UpdatedAt:     time.Now(),
+	}
+
+	P1C2P1 = &processor.Instance{
+		ID:     "pipeline1:con2:proc1con",
+		Plugin: "js",
+		Parent: processor.Parent{
+			ID:   "pipeline1:con2",
+			Type: processor.ParentTypeConnector,
+		},
+		Config: processor.Config{
+			Workers:  10,
+			Settings: map[string]string{"additionalProp1": "string"},
+		},
+
+		ProvisionedBy: processor.ProvisionTypeConfig,
+		CreatedAt:     time.Now(),
+		UpdatedAt:     time.Now(),
+	}
 }

@@ -65,6 +65,7 @@ var (
 			WindowNackThreshold: 1,
 		},
 	}
+
 	oldConnector1Instance = &connector.Instance{
 		ID:         "pipeline1:con1",
 		Type:       connector.TypeSource,
@@ -534,7 +535,7 @@ func TestService_IntegrationTestServices(t *testing.T) {
 		got, err := plService.Get(ctx, want.ID)
 		is.NoErr(err)
 		is.Equal(got.Config, want.Config)
-		is.Equal(got.Status, want.Status)
+		is.Equal(got.GetStatus(), want.GetStatus())
 		is.Equal(got.ProvisionedBy, want.ProvisionedBy)
 		is.Equal(got.ConnectorIDs, want.ConnectorIDs)
 		is.Equal(got.ProcessorIDs, want.ProcessorIDs)

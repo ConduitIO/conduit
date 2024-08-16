@@ -37,9 +37,10 @@ func TestProcessorOrchestrator_CreateOnPipeline_Success(t *testing.T) {
 	plsMock, consMock, procsMock, connPluginMock, procPluginMock := newMockServices(t)
 
 	pl := &pipeline.Instance{
-		ID:     uuid.NewString(),
-		Status: pipeline.StatusSystemStopped,
+		ID: uuid.NewString(),
 	}
+	pl.SetStatus(pipeline.StatusSystemStopped)
+
 	want := &processor.Instance{
 		ID:     uuid.NewString(),
 		Plugin: "test-processor",
@@ -108,9 +109,10 @@ func TestProcessorOrchestrator_CreateOnPipeline_PipelineRunning(t *testing.T) {
 	plsMock, consMock, procsMock, connPluginMock, procPluginMock := newMockServices(t)
 
 	pl := &pipeline.Instance{
-		ID:     uuid.NewString(),
-		Status: pipeline.StatusRunning,
+		ID: uuid.NewString(),
 	}
+	pl.SetStatus(pipeline.StatusRunning)
+
 	parent := processor.Parent{
 		ID:   pl.ID,
 		Type: processor.ParentTypePipeline,
@@ -135,9 +137,10 @@ func TestProcessorOrchestrator_CreateOnPipeline_PipelineProvisionedByConfig(t *t
 
 	pl := &pipeline.Instance{
 		ID:            uuid.NewString(),
-		Status:        pipeline.StatusUserStopped,
 		ProvisionedBy: pipeline.ProvisionTypeConfig,
 	}
+	pl.SetStatus(pipeline.StatusUserStopped)
+
 	parent := processor.Parent{
 		ID:   pl.ID,
 		Type: processor.ParentTypePipeline,
@@ -161,9 +164,10 @@ func TestProcessorOrchestrator_CreateOnPipeline_CreateProcessorError(t *testing.
 	plsMock, consMock, procsMock, connPluginMock, procPluginMock := newMockServices(t)
 
 	pl := &pipeline.Instance{
-		ID:     uuid.NewString(),
-		Status: pipeline.StatusSystemStopped,
+		ID: uuid.NewString(),
 	}
+	pl.SetStatus(pipeline.StatusSystemStopped)
+
 	parent := processor.Parent{
 		ID:   pl.ID,
 		Type: processor.ParentTypePipeline,
@@ -200,9 +204,10 @@ func TestProcessorOrchestrator_CreateOnPipeline_AddProcessorError(t *testing.T) 
 	plsMock, consMock, procsMock, connPluginMock, procPluginMock := newMockServices(t)
 
 	pl := &pipeline.Instance{
-		ID:     uuid.NewString(),
-		Status: pipeline.StatusSystemStopped,
+		ID: uuid.NewString(),
 	}
+	pl.SetStatus(pipeline.StatusSystemStopped)
+
 	proc := &processor.Instance{
 		ID:     uuid.NewString(),
 		Plugin: "test-processor",
@@ -254,9 +259,10 @@ func TestProcessorOrchestrator_CreateOnConnector_Success(t *testing.T) {
 	plsMock, consMock, procsMock, connPluginMock, procPluginMock := newMockServices(t)
 
 	pl := &pipeline.Instance{
-		ID:     uuid.NewString(),
-		Status: pipeline.StatusSystemStopped,
+		ID: uuid.NewString(),
 	}
+	pl.SetStatus(pipeline.StatusSystemStopped)
+
 	conn := &connector.Instance{
 		ID:         uuid.NewString(),
 		PipelineID: pl.ID,
@@ -332,9 +338,10 @@ func TestProcessorOrchestrator_UpdateOnPipeline_Success(t *testing.T) {
 	plsMock, consMock, procsMock, connPluginMock, procPluginMock := newMockServices(t)
 
 	pl := &pipeline.Instance{
-		ID:     uuid.NewString(),
-		Status: pipeline.StatusSystemStopped,
+		ID: uuid.NewString(),
 	}
+	pl.SetStatus(pipeline.StatusSystemStopped)
+
 	before := &processor.Instance{
 		ID:     uuid.NewString(),
 		Plugin: "test-processor",
@@ -385,9 +392,10 @@ func TestProcessorOrchestrator_UpdateOnPipeline_ProcessorNotExist(t *testing.T) 
 	plsMock, consMock, procsMock, connPluginMock, procPluginMock := newMockServices(t)
 
 	pl := &pipeline.Instance{
-		ID:     uuid.NewString(),
-		Status: pipeline.StatusSystemStopped,
+		ID: uuid.NewString(),
 	}
+	pl.SetStatus(pipeline.StatusSystemStopped)
+
 	before := &processor.Instance{
 		ID:     uuid.NewString(),
 		Plugin: "test-processor",
@@ -423,9 +431,10 @@ func TestProcessorOrchestrator_UpdateOnPipeline_PipelineRunning(t *testing.T) {
 	plsMock, consMock, procsMock, connPluginMock, procPluginMock := newMockServices(t)
 
 	pl := &pipeline.Instance{
-		ID:     uuid.NewString(),
-		Status: pipeline.StatusRunning,
+		ID: uuid.NewString(),
 	}
+	pl.SetStatus(pipeline.StatusRunning)
+
 	before := &processor.Instance{
 		ID:     uuid.NewString(),
 		Plugin: "test-processor",
@@ -464,9 +473,10 @@ func TestProcessorOrchestrator_UpdateOnPipeline_ProcessorProvisionedByConfig(t *
 
 	pl := &pipeline.Instance{
 		ID:            uuid.NewString(),
-		Status:        pipeline.StatusRunning,
 		ProvisionedBy: pipeline.ProvisionTypeConfig,
 	}
+	pl.SetStatus(pipeline.StatusRunning)
+
 	before := &processor.Instance{
 		ID:     uuid.NewString(),
 		Plugin: "test-processor",
@@ -502,9 +512,10 @@ func TestProcessorOrchestrator_UpdateOnPipeline_UpdateFail(t *testing.T) {
 	plsMock, consMock, procsMock, connPluginMock, procPluginMock := newMockServices(t)
 
 	pl := &pipeline.Instance{
-		ID:     uuid.NewString(),
-		Status: pipeline.StatusSystemStopped,
+		ID: uuid.NewString(),
 	}
+	pl.SetStatus(pipeline.StatusSystemStopped)
+
 	before := &processor.Instance{
 		ID:     uuid.NewString(),
 		Plugin: "test-processor",
@@ -589,9 +600,10 @@ func TestProcessorOrchestrator_DeleteOnPipeline_Success(t *testing.T) {
 	plsMock, consMock, procsMock, connPluginMock, procPluginMock := newMockServices(t)
 
 	pl := &pipeline.Instance{
-		ID:     uuid.NewString(),
-		Status: pipeline.StatusSystemStopped,
+		ID: uuid.NewString(),
 	}
+	pl.SetStatus(pipeline.StatusSystemStopped)
+
 	want := &processor.Instance{
 		ID:     uuid.NewString(),
 		Plugin: "test-processor",
@@ -630,9 +642,10 @@ func TestProcessorOrchestrator_DeleteOnPipeline_ProcessorNotExist(t *testing.T) 
 	plsMock, consMock, procsMock, connPluginMock, procPluginMock := newMockServices(t)
 
 	pl := &pipeline.Instance{
-		ID:     uuid.NewString(),
-		Status: pipeline.StatusSystemStopped,
+		ID: uuid.NewString(),
 	}
+	pl.SetStatus(pipeline.StatusSystemStopped)
+
 	want := &processor.Instance{
 		ID:     uuid.NewString(),
 		Plugin: "test-processor",
@@ -664,9 +677,9 @@ func TestProcessorOrchestrator_DeleteOnPipeline_PipelineRunning(t *testing.T) {
 	plsMock, consMock, procsMock, connPluginMock, procPluginMock := newMockServices(t)
 
 	pl := &pipeline.Instance{
-		ID:     uuid.NewString(),
-		Status: pipeline.StatusRunning,
+		ID: uuid.NewString(),
 	}
+	pl.SetStatus(pipeline.StatusRunning)
 	want := &processor.Instance{
 		ID:     uuid.NewString(),
 		Plugin: "test-processor",
@@ -700,9 +713,10 @@ func TestProcessorOrchestrator_DeleteOnPipeline_Fail(t *testing.T) {
 	plsMock, consMock, procsMock, connPluginMock, procPluginMock := newMockServices(t)
 
 	pl := &pipeline.Instance{
-		ID:     uuid.NewString(),
-		Status: pipeline.StatusSystemStopped,
+		ID: uuid.NewString(),
 	}
+	pl.SetStatus(pipeline.StatusSystemStopped)
+
 	want := &processor.Instance{
 		ID:     uuid.NewString(),
 		Plugin: "test-processor",
@@ -740,9 +754,10 @@ func TestProcessorOrchestrator_DeleteOnPipeline_RemoveProcessorFail(t *testing.T
 	plsMock, consMock, procsMock, connPluginMock, procPluginMock := newMockServices(t)
 
 	pl := &pipeline.Instance{
-		ID:     uuid.NewString(),
-		Status: pipeline.StatusSystemStopped,
+		ID: uuid.NewString(),
 	}
+	pl.SetStatus(pipeline.StatusSystemStopped)
+
 	want := &processor.Instance{
 		ID:     uuid.NewString(),
 		Plugin: "test-processor",
@@ -795,9 +810,10 @@ func TestProcessorOrchestrator_DeleteOnConnector_Fail(t *testing.T) {
 	plsMock, consMock, procsMock, connPluginMock, procPluginMock := newMockServices(t)
 
 	pl := &pipeline.Instance{
-		ID:     uuid.NewString(),
-		Status: pipeline.StatusSystemStopped,
+		ID: uuid.NewString(),
 	}
+	pl.SetStatus(pipeline.StatusSystemStopped)
+
 	conn := &connector.Instance{
 		ID:         uuid.NewString(),
 		PipelineID: pl.ID,

@@ -53,7 +53,7 @@ func (p *ProcessorOrchestrator) Create(
 		return nil, cerrors.Errorf("cannot add a processor to the pipeline %q: %w", pl.ID, ErrImmutableProvisionedByConfig)
 	}
 
-	if pl.Status == pipeline.StatusRunning {
+	if pl.GetStatus() == pipeline.StatusRunning {
 		return nil, pipeline.ErrPipelineRunning
 	}
 
@@ -164,7 +164,7 @@ func (p *ProcessorOrchestrator) Update(ctx context.Context, id string, cfg proce
 		return nil, err
 	}
 
-	if pl.Status == pipeline.StatusRunning {
+	if pl.GetStatus() == pipeline.StatusRunning {
 		return nil, pipeline.ErrPipelineRunning
 	}
 
@@ -212,7 +212,7 @@ func (p *ProcessorOrchestrator) Delete(ctx context.Context, id string) error {
 		return err
 	}
 
-	if pl.Status == pipeline.StatusRunning {
+	if pl.GetStatus() == pipeline.StatusRunning {
 		return pipeline.ErrPipelineRunning
 	}
 

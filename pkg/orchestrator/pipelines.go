@@ -57,7 +57,7 @@ func (po *PipelineOrchestrator) Update(ctx context.Context, id string, cfg pipel
 		return nil, cerrors.Errorf("pipeline %q cannot be updated: %w", pl.ID, ErrImmutableProvisionedByConfig)
 	}
 	// TODO lock pipeline
-	if pl.Status == pipeline.StatusRunning {
+	if pl.GetStatus() == pipeline.StatusRunning {
 		return nil, pipeline.ErrPipelineRunning
 	}
 	return po.pipelines.Update(ctx, pl.ID, cfg)
@@ -72,7 +72,7 @@ func (po *PipelineOrchestrator) Delete(ctx context.Context, id string) error {
 	if pl.ProvisionedBy != pipeline.ProvisionTypeAPI {
 		return cerrors.Errorf("pipeline %q cannot be deleted: %w", pl.ID, ErrImmutableProvisionedByConfig)
 	}
-	if pl.Status == pipeline.StatusRunning {
+	if pl.GetStatus() == pipeline.StatusRunning {
 		return pipeline.ErrPipelineRunning
 	}
 	if len(pl.ConnectorIDs) != 0 {
@@ -94,7 +94,7 @@ func (po *PipelineOrchestrator) UpdateDLQ(ctx context.Context, id string, dlq pi
 		return nil, cerrors.Errorf("pipeline %q cannot be updated: %w", pl.ID, ErrImmutableProvisionedByConfig)
 	}
 	// TODO lock pipeline
-	if pl.Status == pipeline.StatusRunning {
+	if pl.GetStatus() == pipeline.StatusRunning {
 		return nil, pipeline.ErrPipelineRunning
 	}
 

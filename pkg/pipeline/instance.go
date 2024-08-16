@@ -17,6 +17,7 @@
 package pipeline
 
 import (
+	"sync"
 	"time"
 
 	"github.com/conduitio/conduit/pkg/pipeline/stream"
@@ -48,7 +49,6 @@ type (
 type Instance struct {
 	ID            string
 	Config        Config
-	Status        Status
 	Error         string
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
@@ -57,6 +57,9 @@ type Instance struct {
 
 	ConnectorIDs []string
 	ProcessorIDs []string
+
+	status     Status
+	statusLock sync.RWMutex
 
 	n map[string]stream.Node
 	t *tomb.Tomb
@@ -91,4 +94,18 @@ func (p *Instance) Wait() error {
 		return nil
 	}
 	return p.t.Wait()
+}
+
+func (p *Instance) SetStatus(s Status) {
+	p.statusLock.Lock()
+	defer p.statusLock.Unlock()
+
+	p.status = s
+}
+
+func (p *Instance) GetStatus() Status {
+	p.statusLock.RLock()
+	defer p.statusLock.RUnlock()
+
+	return p.status
 }
