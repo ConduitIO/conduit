@@ -2,7 +2,7 @@
 
 Unless specified otherwise, we should follow the guidelines outlined in
 [Effective Go](https://golang.org/doc/effective_go) and
-[Go Code Review Comments](https://github.com/golang/go/wiki/CodeReviewComments).
+[Go Code Review Comments](https://go.dev/wiki/CodeReviewComments).
 
 Conduit is using [golangci-lint](https://golangci-lint.run/) to ensure the code conforms to our code guidelines. Part of
 the guidelines are outlined below.
