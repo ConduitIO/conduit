@@ -37,7 +37,7 @@
     "@glimmer/tracking": "^1.1.2",
     "@meroxa/ui-base": "https://github.com/meroxa/ui-base.git#2.0.0",
     "autoprefixer": "^10.4.19",
-    "axios": "^1.6.8",
+    "axios": "^1.7.4",
     "broccoli-asset-rev": "^3.0.0",
     "concurrently": "^8.2.2",
     "d3-selection": "^3.0.0",
