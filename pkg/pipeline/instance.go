@@ -65,6 +65,8 @@ type Instance struct {
 	t *tomb.Tomb
 }
 
+// encodableInstance is an encodable "view" of Instance
+// through which we can also encode an Instance's unexported fields.
 type encodableInstance struct {
 	*Instance
 	Status Status

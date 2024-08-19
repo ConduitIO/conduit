@@ -15,10 +15,11 @@
 package pipelines1
 
 import (
+	"time"
+
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	"github.com/conduitio/conduit/pkg/processor"
-	"time"
 )
 
 var (
