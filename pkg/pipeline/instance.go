@@ -28,6 +28,7 @@ const (
 	StatusSystemStopped
 	StatusUserStopped
 	StatusDegraded
+	StatusRecovering
 )
 
 const (

@@ -52,6 +52,8 @@ func PipelineStatus(in pipeline.Status) apiv1.Pipeline_Status {
 		return apiv1.Pipeline_STATUS_STOPPED
 	case pipeline.StatusDegraded:
 		return apiv1.Pipeline_STATUS_DEGRADED
+	case pipeline.StatusRecovering:
+		return apiv1.Pipeline_STATUS_RECOVERING
 	}
 	return apiv1.Pipeline_STATUS_UNSPECIFIED
 }

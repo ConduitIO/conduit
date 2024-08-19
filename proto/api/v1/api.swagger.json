@@ -2201,10 +2201,11 @@
         "STATUS_UNSPECIFIED",
         "STATUS_RUNNING",
         "STATUS_STOPPED",
-        "STATUS_DEGRADED"
+        "STATUS_DEGRADED",
+        "STATUS_RECOVERING"
       ],
       "default": "STATUS_UNSPECIFIED",
-      "description": "Status describes the pipeline status.\n\n - STATUS_RUNNING: Pipeline is running.\n - STATUS_STOPPED: Pipeline gracefully stopped.\n - STATUS_DEGRADED: Pipeline stopped with an error (see State.error)."
+      "description": "Status describes the pipeline status.\n\n - STATUS_RUNNING: Pipeline is running.\n - STATUS_STOPPED: Pipeline gracefully stopped.\n - STATUS_DEGRADED: Pipeline stopped with an error (see State.error).\n - STATUS_RECOVERING: Pipeline stopped with an error (see State.error)."
     },
     "v1PluginSpecifications": {
       "type": "object",

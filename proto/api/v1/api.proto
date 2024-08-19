@@ -48,6 +48,8 @@ message Pipeline {
     STATUS_STOPPED = 2;
     // Pipeline stopped with an error (see State.error).
     STATUS_DEGRADED = 3;
+    // Pipeline stopped with an error (see State.error).
+    STATUS_RECOVERING = 4;
   }
 
   message State {

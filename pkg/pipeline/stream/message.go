@@ -279,7 +279,10 @@ func (m *Message) StatusError() error {
 		return m.Ack()
 	case MessageStatusNacked:
 		return m.Nack(nil, "")
+	case MessageStatusOpen:
+		return nil
 	}
+
 	return nil
 }
 
