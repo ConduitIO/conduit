@@ -401,9 +401,10 @@ func TestService_Init_PipelineProvisionedFromAPI(t *testing.T) {
 	logger := log.Nop()
 	ctrl := gomock.NewController(t)
 
-	tmp := *oldPipelineInstance
-	APIPipelineInstance := &tmp
-	APIPipelineInstance.ProvisionedBy = pipeline.ProvisionTypeAPI // change the test pipeline to be API provisioned
+	APIPipelineInstance := &pipeline.Instance{
+		ID:            p1.P1.ID,
+		ProvisionedBy: pipeline.ProvisionTypeAPI,
+	}
 
 	service, pipelineService, _, _, _ := newTestService(ctrl, logger)
 	service.pipelinesPath = "./test/pipelines1"
