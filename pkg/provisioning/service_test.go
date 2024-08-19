@@ -48,23 +48,27 @@ import (
 var (
 	anyCtx = gomock.Any()
 
-	oldPipelineInstance = &pipeline.Instance{
-		ID: p1.P1.ID,
-		Config: pipeline.Config{
-			Name:        "name1",
-			Description: "desc1",
-		},
-		Status:        pipeline.StatusRunning,
-		ProvisionedBy: pipeline.ProvisionTypeConfig,
-		ConnectorIDs:  []string{"pipeline1:con1", "pipeline1:con2"},
-		ProcessorIDs:  []string{"pipeline1:proc1"},
-		DLQ: pipeline.DLQ{
-			Plugin:              "builtin:file",
-			Settings:            map[string]string{"path": "dlq.out"},
-			WindowSize:          2,
-			WindowNackThreshold: 1,
-		},
-	}
+	oldPipelineInstance = func() *pipeline.Instance {
+		pl := &pipeline.Instance{
+			ID: p1.P1.ID,
+			Config: pipeline.Config{
+				Name:        "name1",
+				Description: "desc1",
+			},
+			ProvisionedBy: pipeline.ProvisionTypeConfig,
+			ConnectorIDs:  []string{"pipeline1:con1", "pipeline1:con2"},
+			ProcessorIDs:  []string{"pipeline1:proc1"},
+			DLQ: pipeline.DLQ{
+				Plugin:              "builtin:file",
+				Settings:            map[string]string{"path": "dlq.out"},
+				WindowSize:          2,
+				WindowNackThreshold: 1,
+			},
+		}
+		pl.SetStatus(pipeline.StatusRunning)
+
+		return pl
+	}()
 
 	oldConnector1Instance = &connector.Instance{
 		ID:         "pipeline1:con1",

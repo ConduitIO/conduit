@@ -132,7 +132,11 @@ func (*Store) trimKeyPrefix(key string) string {
 func (*Store) encode(instance *Instance) ([]byte, error) {
 	var b bytes.Buffer
 	enc := json.NewEncoder(&b)
-	err := enc.Encode(instance)
+	encInst := encodableInstance{
+		Instance: instance,
+		Status:   instance.GetStatus(),
+	}
+	err := enc.Encode(encInst)
 	if err != nil {
 		return nil, err
 	}
@@ -141,12 +145,16 @@ func (*Store) encode(instance *Instance) ([]byte, error) {
 
 // decode an instance from []byte to *Instance.
 func (s *Store) decode(raw []byte) (*Instance, error) {
-	var i *Instance
+	var i *encodableInstance
 	r := bytes.NewReader(raw)
 	dec := json.NewDecoder(r)
 	err := dec.Decode(&i)
 	if err != nil {
 		return nil, err
 	}
-	return i, nil
+
+	inst := i.Instance
+	inst.SetStatus(i.Status)
+
+	return inst, nil
 }

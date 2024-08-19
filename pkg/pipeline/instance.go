@@ -65,6 +65,11 @@ type Instance struct {
 	t *tomb.Tomb
 }
 
+type encodableInstance struct {
+	*Instance
+	Status Status
+}
+
 // Config holds configuration data for building a pipeline.
 type Config struct {
 	Name        string
