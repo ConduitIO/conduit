@@ -91,6 +91,11 @@ In case the nack threshold is set to 0 (default), then any record sent to the
 DLQ will cause the pipeline to stop. In that case, the recovery mechanism should
 try to restart the pipeline, since the DLQ is essentially disabled.
 
+A pipeline restart might lead to some records being re-delivered, which implies
+that the same records could land in the DLQ multiple times. This is currently
+considered an edge case and will be tackled as part
+of [record deduplication](#record-deduplication).
+
 ### Processor errors
 
 Most of the processors are stateless and always behave the same, which is why
@@ -203,14 +208,3 @@ and control to the user. This
 includes [record deduplication](#record-deduplication) and
 the [audit log](#audit-log), which are bigger topics and will require a separate
 design document.
-
-## Open questions
-
-- **How does this functionality interact with a DLQ, especially with a nack
-  threshold?**
-  - There is a potential risk that restarting a pipeline with a nack threshold
-    DLQ could result in records being continuously sent to the DLQ until the
-    threshold is reached, triggering a restart loop. Since some records might be
-    re-delivered, the same records could land in the DLQ multiple times. I
-    propose documenting this edge case for now and tackling the solution as part
-    of [record deduplication](#record-deduplication).
