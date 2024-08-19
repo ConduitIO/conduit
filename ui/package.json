@@ -32,7 +32,7 @@
     "@babel/plugin-proposal-decorators": "^7.24.1",
     "@ember/optional-features": "^2.1.0",
     "@ember/render-modifiers": "^2.1.0",
-    "@ember/test-helpers": "^3.3.0",
+    "@ember/test-helpers": "^3.3.1",
     "@glimmer/component": "^1.1.2",
     "@glimmer/tracking": "^1.1.2",
     "@meroxa/ui-base": "https://github.com/meroxa/ui-base.git#2.0.0",
@@ -93,7 +93,7 @@
     "qunit-dom": "^3.1.2",
     "stylelint": "^16.3.1",
     "stylelint-config-standard": "^36.0.0",
-    "stylelint-prettier": "^5.0.0",
+    "stylelint-prettier": "^5.0.2",
     "tailwindcss": "^3.4.3",
     "webpack": "^5.91.0"
   },
