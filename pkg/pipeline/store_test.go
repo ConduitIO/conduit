@@ -26,8 +26,7 @@ import (
 	"github.com/matryer/is"
 )
 
-type boringError struct {
-}
+type boringError struct{}
 
 func (e boringError) Error() string {
 	return "a very, very boring error"

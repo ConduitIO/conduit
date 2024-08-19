@@ -21,9 +21,33 @@
           }
         ]
       },
+      "sdk.schema.decode.key.enabled": {
+        "default": "true",
+        "description": "Whether to decode the record key using its corresponding schema from the schema registry.",
+        "type": "bool",
+        "validations": null
+      },
+      "sdk.schema.decode.payload.enabled": {
+        "default": "true",
+        "description": "Whether to decode the record payload using its corresponding schema from the schema registry.",
+        "type": "bool",
+        "validations": null
+      },
+      "sdk.schema.encode.key.enabled": {
+        "default": "true",
+        "description": "Whether to encode the record key using its corresponding schema from the schema registry.",
+        "type": "bool",
+        "validations": null
+      },
+      "sdk.schema.encode.payload.enabled": {
+        "default": "true",
+        "description": "Whether to encode the record payload using its corresponding schema from the schema registry.",
+        "type": "bool",
+        "validations": null
+      },
       "type": {
         "default": "",
-        "description": "Type is the target field type after conversion, available options are: string, int, float, bool.",
+        "description": "Type is the target field type after conversion, available options are: `string`, `int`, `float`, `bool`, `time`.",
         "type": "string",
         "validations": [
           {
@@ -32,13 +56,49 @@
           },
           {
             "type": "inclusion",
-            "value": "string,int,float,bool"
+            "value": "string,int,float,bool,time"
           }
         ]
       }
     }
   },
   "examples": [
+    {
+      "summary": "Convert `int` to `time`",
+      "description": "This example takes an `int` in field `.Payload.After.createdAt` and parses it as a unix timestamp into a `time.Time` value.",
+      "config": {
+        "field": ".Payload.After.createdAt",
+        "type": "time"
+      },
+      "have": {
+        "position": null,
+        "operation": "create",
+        "metadata": null,
+        "key": {
+          "id": 123.345
+        },
+        "payload": {
+          "before": null,
+          "after": {
+            "createdAt": 1704198896123456789
+          }
+        }
+      },
+      "want": {
+        "position": null,
+        "operation": "create",
+        "metadata": null,
+        "key": {
+          "id": 123.345
+        },
+        "payload": {
+          "before": null,
+          "after": {
+            "createdAt": "2024-01-02T12:34:56.123456789Z"
+          }
+        }
+      }
+    },
     {
       "summary": "Convert `float` to `string`",
       "description": "This example takes the `float` in field `.Key.id` and changes its data type to `string`.",

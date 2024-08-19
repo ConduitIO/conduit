@@ -38,9 +38,7 @@ const (
 	MessageStatusOpen
 )
 
-var (
-	ErrUnexpectedMessageStatus = cerrors.New("unexpected message status")
-)
+var ErrUnexpectedMessageStatus = cerrors.New("unexpected message status")
 
 // Message represents a single message flowing through a pipeline. Only a single
 // node is allowed to hold a message and access its fields at a specific point

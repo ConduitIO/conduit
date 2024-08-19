@@ -19,8 +19,10 @@ import (
 	"github.com/conduitio/conduit/pkg/provisioning/config/yaml/internal"
 )
 
-const LatestVersion = "1.1"
-const MajorVersion = "1"
+const (
+	LatestVersion = "1.1"
+	MajorVersion  = "1"
+)
 
 // Changelog should be adjusted every time we change the pipeline config and add
 // a new config version. Based on the changelog the parser will output warnings.
@@ -113,6 +115,7 @@ func (p Pipeline) connectorsToConfig() []config.Connector {
 	}
 	return connectors
 }
+
 func (p Pipeline) processorsToConfig() []config.Processor {
 	if len(p.Processors) == 0 {
 		return nil
@@ -138,6 +141,7 @@ func (c Connector) ToConfig() config.Connector {
 		Processors: c.processorsToConfig(),
 	}
 }
+
 func (c Connector) processorsToConfig() []config.Processor {
 	if len(c.Processors) == 0 {
 		return nil

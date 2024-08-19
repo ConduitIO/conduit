@@ -36,6 +36,7 @@ Conduit was created and open-sourced by [Meroxa](https://meroxa.io).
 - [Quick start](#quick-start)
 - [Installation guide](#installation-guide)
 - [Configuring Conduit](#configuring-conduit)
+- [Storage](#storage)
 - [Connectors](#connectors)
 - [Processors](#processors)
 - [API](#api)
@@ -114,7 +115,7 @@ Download the right `.deb` file for your machine architecture from the
 [latest release](https://github.com/conduitio/conduit/releases/latest), then run:
 
 ```sh
-dpkg -i conduit_0.8.0_Linux_x86_64.deb
+dpkg -i conduit_0.10.0_Linux_x86_64.deb
 ```
 
 ### RPM
@@ -123,7 +124,7 @@ Download the right `.rpm` file for your machine architecture from the
 [latest release](https://github.com/conduitio/conduit/releases/latest), then run:
 
 ```sh
-rpm -i conduit_0.8.0_Linux_x86_64.rpm
+rpm -i conduit_0.10.0_Linux_x86_64.rpm
 ```
 
 ### Build from source
@@ -189,6 +190,34 @@ each configuration option based on the following priorities:
       connection-string: postgres://localhost:5432/conduitdb # -db.postgres.connection-string or CONDUIT_DB_POSTGRES_CONNECTION_STRING
   ```
 
+## Storage
+
+Conduit's own data (information about pipelines, connectors, etc.) can be stored
+in the following databases:
+
+- BadgerDB (default)
+- PostgreSQL
+- SQLite
+
+It's also possible to store all the data in memory, which is sometimes useful
+for development purposes.
+
+The database type used can be configured with the `db.type` parameter (through
+any of the [configuration](#configuring-conduit) options in Conduit).
+For example, the CLI flag to use a PostgresSQL database with Conduit is as
+follows: `-db.type=postgres`.
+
+Changing database parameters (e.g. the PostgreSQL connection string) is done
+through parameters of the following form: `db.<db type>.<parameter name>`. For
+example, the CLI flag to use a PostgreSQL instance listening on `localhost:5432`
+would be: `-db.postgres.connection-string=postgres://localhost:5432/conduitdb`.
+
+The full example in our case would be:
+
+```shell
+./conduit -db.type=postgres -db.postgres.connection-string="postgresql://localhost:5432/conduitdb"
+```
+
 ## Connectors
 
 For the full list of available connectors, see
@@ -215,7 +244,9 @@ Conduit ships with a number of built-in connectors:
   source/destination for AWS S3.
 - [Generator connector](https://github.com/ConduitIO/conduit-connector-generator)
   provides a source which generates random data (useful for testing).
-
+- [Log connector](https://github.com/ConduitIO/conduit-connector-log)
+  provides a destination which logs all records (useful for testing).
+  
 Additionally, we have prepared
 a [Kafka Connect wrapper](https://github.com/conduitio/conduit-kafka-connect-wrapper)
 that allows you to run any Apache Kafka Connect connector as part of a Conduit
@@ -279,21 +310,23 @@ For more information about the UI refer to the [Readme](ui/README.md) in `/ui`.
 ## Documentation
 
 To learn more about how to use Conduit
-visit [docs.Conduit.io](https://docs.conduit.io).
+visit [Conduit.io/docs](https://conduit.io/docs).
 
 If you are interested in internals of Conduit we have prepared some technical
 documentation:
 
-- [Pipeline Semantics](docs/pipeline_semantics.md) explains the internals of how
+- [Pipeline Semantics](https://conduit.io/docs/features/pipeline-semantics) explains the internals of how
   a Conduit pipeline works.
-- [Pipeline Configuration Files](docs/pipeline_configuration_files.md)
+- [Pipeline Configuration Files](https://conduit.io/docs/pipeline-configuration-files)
   explains how you can define pipelines using YAML files.
 - [Processors](https://conduit.io/docs/processors/getting-started) contains examples and more information about
   Conduit processors.
-- [Conduit Architecture](docs/architecture.md)
+- [Conduit Architecture](https://conduit.io/docs/getting-started/architecture)
   will give you a high-level overview of Conduit.
 - [Conduit Metrics](docs/metrics.md)
   provides more information about how Conduit exposes metrics.
+- [Conduit Package structure](docs/package_structure.md)
+  provides more information about the different packages in Conduit.
 
 ## Contributing
 
@@ -314,8 +347,7 @@ We also value contributions in form of pull requests. When opening a PR please
 ensure:
 
 - You have followed
-  the [Code Guidelines](https://github.com/ConduitIO/conduit/blob/main/docs/code_guidelines.md)
-  .
+  the [Code Guidelines](https://github.com/ConduitIO/conduit/blob/main/docs/code_guidelines.md).
 - There is no other [pull request](https://github.com/ConduitIO/conduit/pulls)
   for the same update/change.
 - You have written unit tests.

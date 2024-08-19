@@ -18,6 +18,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -29,22 +30,22 @@ import (
 func TestKafkaConnectProcessor_Configure(t *testing.T) {
 	testCases := []struct {
 		name    string
-		config  map[string]string
+		config  config.Config
 		wantErr string
 	}{
 		{
 			name:    "optional parameter not provided",
-			config:  map[string]string{},
+			config:  config.Config{},
 			wantErr: "",
 		},
 		{
 			name:    "valid field (within .Payload)",
-			config:  map[string]string{"field": ".Payload.After.something"},
+			config:  config.Config{"field": ".Payload.After.something"},
 			wantErr: "",
 		},
 		{
 			name:    "invalid field",
-			config:  map[string]string{"field": ".Key"},
+			config:  config.Config{"field": ".Key"},
 			wantErr: `config invalid: error validating "field": ".Key" should match the regex "^.Payload": regex validation failed`,
 		},
 	}
@@ -63,16 +64,17 @@ func TestKafkaConnectProcessor_Configure(t *testing.T) {
 		})
 	}
 }
+
 func TestKafkaConnectProcessor_Process(t *testing.T) {
 	testCases := []struct {
 		name   string
-		config map[string]string
+		config config.Config
 		record opencdc.Record
 		want   sdk.ProcessedRecord
 	}{
 		{
 			name:   "structured payload",
-			config: map[string]string{},
+			config: config.Config{},
 			record: opencdc.Record{
 				Metadata: map[string]string{},
 				Payload: opencdc.Change{
@@ -103,7 +105,7 @@ func TestKafkaConnectProcessor_Process(t *testing.T) {
 		},
 		{
 			name:   "raw payload",
-			config: map[string]string{},
+			config: config.Config{},
 			record: opencdc.Record{
 				Position:  opencdc.Position("test position"),
 				Operation: opencdc.OperationSnapshot,

@@ -33,7 +33,6 @@ func newUIAssetFS() (http.FileSystem, error) {
 
 func assetFS(embeddedFS embed.FS, dir string) (http.FileSystem, error) {
 	subFS, err := fs.Sub(embeddedFS, dir)
-
 	if err != nil {
 		panic(cerrors.Errorf("couldn't create sub filesystem: %w", err))
 	}

@@ -15,6 +15,7 @@
 package impl
 
 import (
+	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -30,7 +31,7 @@ func ExampleErrorProcessor() {
 		Summary: `Error record with custom error message`,
 		Description: `This example shows how to configure the error processor to
 return a custom error message for a record using a Go template.`,
-		Config: map[string]string{
+		Config: config.Config{
 			"message": "custom error message with data from record: {{.Metadata.foo}}",
 		},
 		Have: opencdc.Record{
@@ -40,7 +41,8 @@ return a custom error message for a record using a Go template.`,
 		},
 		Want: sdk.ErrorRecord{
 			Error: cerrors.New("custom error message with data from record: bar"),
-		}})
+		},
+	})
 
 	// Output:
 	// processor returned error: custom error message with data from record: bar

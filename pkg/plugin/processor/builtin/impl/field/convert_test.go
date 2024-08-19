@@ -18,7 +18,9 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -46,7 +48,8 @@ func TestConvertField_Process(t *testing.T) {
 			want: sdk.SingleRecord{
 				Key: opencdc.StructuredData{"id": 54},
 			},
-		}, {
+		},
+		{
 			name:  "string to float",
 			field: ".Key.id",
 			typ:   "float",
@@ -56,7 +59,8 @@ func TestConvertField_Process(t *testing.T) {
 			want: sdk.SingleRecord{
 				Key: opencdc.StructuredData{"id": 54.0},
 			},
-		}, {
+		},
+		{
 			name:  "string to bool",
 			field: ".Key.id",
 			typ:   "bool",
@@ -66,7 +70,8 @@ func TestConvertField_Process(t *testing.T) {
 			want: sdk.SingleRecord{
 				Key: opencdc.StructuredData{"id": true},
 			},
-		}, {
+		},
+		{
 			name:  "string to string",
 			field: ".Key.id",
 			typ:   "string",
@@ -87,7 +92,8 @@ func TestConvertField_Process(t *testing.T) {
 			want: sdk.SingleRecord{
 				Key: opencdc.StructuredData{"id": 54},
 			},
-		}, {
+		},
+		{
 			name:  "int to float",
 			field: ".Key.id",
 			typ:   "float",
@@ -97,7 +103,8 @@ func TestConvertField_Process(t *testing.T) {
 			want: sdk.SingleRecord{
 				Key: opencdc.StructuredData{"id": 54.0},
 			},
-		}, {
+		},
+		{
 			name:  "int to bool",
 			field: ".Key.id",
 			typ:   "bool",
@@ -107,7 +114,8 @@ func TestConvertField_Process(t *testing.T) {
 			want: sdk.SingleRecord{
 				Key: opencdc.StructuredData{"id": true},
 			},
-		}, {
+		},
+		{
 			name:  "int to string",
 			field: ".Key.id",
 			typ:   "string",
@@ -117,7 +125,8 @@ func TestConvertField_Process(t *testing.T) {
 			want: sdk.SingleRecord{
 				Key: opencdc.StructuredData{"id": "54"},
 			},
-		}, {
+		},
+		{
 			name:  "float to int",
 			field: ".Key.id",
 			typ:   "int",
@@ -127,7 +136,8 @@ func TestConvertField_Process(t *testing.T) {
 			want: sdk.SingleRecord{
 				Key: opencdc.StructuredData{"id": 54},
 			},
-		}, {
+		},
+		{
 			name:  "float to float",
 			field: ".Key.id",
 			typ:   "float",
@@ -137,7 +147,8 @@ func TestConvertField_Process(t *testing.T) {
 			want: sdk.SingleRecord{
 				Key: opencdc.StructuredData{"id": 54.0},
 			},
-		}, {
+		},
+		{
 			name:  "float to bool",
 			field: ".Key.id",
 			typ:   "bool",
@@ -147,7 +158,8 @@ func TestConvertField_Process(t *testing.T) {
 			want: sdk.SingleRecord{
 				Key: opencdc.StructuredData{"id": true},
 			},
-		}, {
+		},
+		{
 			name:  "float to string",
 			field: ".Key.id",
 			typ:   "string",
@@ -157,7 +169,8 @@ func TestConvertField_Process(t *testing.T) {
 			want: sdk.SingleRecord{
 				Key: opencdc.StructuredData{"id": "54"},
 			},
-		}, {
+		},
+		{
 			name:  "bool to int",
 			field: ".Key.id",
 			typ:   "int",
@@ -167,7 +180,8 @@ func TestConvertField_Process(t *testing.T) {
 			want: sdk.SingleRecord{
 				Key: opencdc.StructuredData{"id": 1},
 			},
-		}, {
+		},
+		{
 			name:  "bool to float",
 			field: ".Key.id",
 			typ:   "float",
@@ -177,7 +191,8 @@ func TestConvertField_Process(t *testing.T) {
 			want: sdk.SingleRecord{
 				Key: opencdc.StructuredData{"id": 0.0},
 			},
-		}, {
+		},
+		{
 			name:  "bool to bool",
 			field: ".Key.id",
 			typ:   "bool",
@@ -187,7 +202,8 @@ func TestConvertField_Process(t *testing.T) {
 			want: sdk.SingleRecord{
 				Key: opencdc.StructuredData{"id": true},
 			},
-		}, {
+		},
+		{
 			name:  "bool to string",
 			field: ".Key.id",
 			typ:   "string",
@@ -197,7 +213,8 @@ func TestConvertField_Process(t *testing.T) {
 			want: sdk.SingleRecord{
 				Key: opencdc.StructuredData{"id": "false"},
 			},
-		}, {
+		},
+		{
 			name:  "bytes to string",
 			field: ".Key.id",
 			typ:   "string",
@@ -206,6 +223,28 @@ func TestConvertField_Process(t *testing.T) {
 			},
 			want: sdk.SingleRecord{
 				Key: opencdc.StructuredData{"id": "foo"},
+			},
+		},
+		{
+			name:  "int to time",
+			field: ".Key.id",
+			typ:   "time",
+			record: opencdc.Record{
+				Key: opencdc.StructuredData{"id": 1611254412345678999},
+			},
+			want: sdk.SingleRecord{
+				Key: opencdc.StructuredData{"id": time.Date(2021, 1, 21, 18, 40, 12, 345678999, time.UTC)},
+			},
+		},
+		{
+			name:  "string to time",
+			field: ".Key.id",
+			typ:   "time",
+			record: opencdc.Record{
+				Key: opencdc.StructuredData{"id": "2021-01-21T18:40:12.345678999Z"},
+			},
+			want: sdk.SingleRecord{
+				Key: opencdc.StructuredData{"id": time.Date(2021, 1, 21, 18, 40, 12, 345678999, time.UTC)},
 			},
 		},
 	}
@@ -250,7 +289,8 @@ func TestConvertField_ProcessFail(t *testing.T) {
 				Key: opencdc.StructuredData{"id": "nan"},
 			},
 			wantErr: "invalid syntax",
-		}, {
+		},
+		{
 			name:  "float to int, float is out of range",
 			field: ".Key.id",
 			typ:   "int",
@@ -258,6 +298,15 @@ func TestConvertField_ProcessFail(t *testing.T) {
 				Key: opencdc.StructuredData{"id": 9999999999999999999.0},
 			},
 			wantErr: "value out of range",
+		},
+		{
+			name:  "string to time, invalid format",
+			field: ".Key.id",
+			typ:   "time",
+			record: opencdc.Record{
+				Key: opencdc.StructuredData{"id": "21.01.2021 18:40:12"},
+			},
+			wantErr: `parsing time "21.01.2021 18:40:12" as "2006-01-02T15:04:05.999999999Z07:00": cannot parse "21.01.2021 18:40:12" as "2006"`,
 		},
 	}
 	for _, tc := range testCases {
@@ -280,28 +329,28 @@ func TestConvertField_Configure(t *testing.T) {
 	ctx := context.Background()
 	testCases := []struct {
 		name    string
-		cfg     map[string]string
+		cfg     config.Config
 		wantErr bool
 	}{
 		{
 			name:    "valid config",
-			cfg:     map[string]string{"field": ".Payload.After.foo", "type": "int"},
+			cfg:     config.Config{"field": ".Payload.After.foo", "type": "int"},
 			wantErr: false,
 		}, {
 			name:    "invalid config, contains an invalid prefix for the field",
-			cfg:     map[string]string{"field": ".Metadata.foo", "type": "int"},
+			cfg:     config.Config{"field": ".Metadata.foo", "type": "int"},
 			wantErr: true,
 		}, {
 			name:    "invalid config, invalid prefix",
-			cfg:     map[string]string{"field": "aPayload.foo", "type": "int"},
+			cfg:     config.Config{"field": "aPayload.foo", "type": "int"},
 			wantErr: true,
 		}, {
 			name:    "invalid config, invalid type",
-			cfg:     map[string]string{"field": ".Key.foo", "type": "map"},
+			cfg:     config.Config{"field": ".Key.foo", "type": "map"},
 			wantErr: true,
 		}, {
 			name:    "missing param",
-			cfg:     map[string]string{},
+			cfg:     config.Config{},
 			wantErr: true,
 		},
 	}

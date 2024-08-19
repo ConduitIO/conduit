@@ -18,6 +18,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
@@ -27,20 +28,18 @@ import (
 func TestConfig_Parse(t *testing.T) {
 	testCases := []struct {
 		name    string
-		input   map[string]string
+		input   config.Config
 		want    encodeConfig
 		wantErr error
 	}{
 		{
 			name: "preRegistered",
-			input: map[string]string{
-				"url":                          "http://localhost",
+			input: config.Config{
 				"schema.strategy":              "preRegistered",
 				"schema.preRegistered.subject": "testsubject",
 				"schema.preRegistered.version": "123",
 			},
 			want: encodeConfig{
-				URL:   "http://localhost",
 				Field: ".Payload.After",
 				Schema: schemaConfig{
 					StrategyType: "preRegistered",
@@ -53,8 +52,7 @@ func TestConfig_Parse(t *testing.T) {
 		},
 		{
 			name: "preRegistered without version",
-			input: map[string]string{
-				"url":                          "http://localhost",
+			input: config.Config{
 				"schema.strategy":              "preRegistered",
 				"schema.preRegistered.subject": "testsubject",
 			},
@@ -62,8 +60,7 @@ func TestConfig_Parse(t *testing.T) {
 		},
 		{
 			name: "preRegistered without subject",
-			input: map[string]string{
-				"url":                          "http://localhost",
+			input: config.Config{
 				"schema.strategy":              "preRegistered",
 				"schema.preRegistered.version": "123",
 			},
@@ -71,13 +68,11 @@ func TestConfig_Parse(t *testing.T) {
 		},
 		{
 			name: "autoRegister",
-			input: map[string]string{
-				"url":                         "http://localhost",
+			input: config.Config{
 				"schema.strategy":             "autoRegister",
 				"schema.autoRegister.subject": "testsubject",
 			},
 			want: encodeConfig{
-				URL:   "http://localhost",
 				Field: ".Payload.After",
 				Schema: schemaConfig{
 					StrategyType:          "autoRegister",
@@ -87,112 +82,29 @@ func TestConfig_Parse(t *testing.T) {
 		},
 		{
 			name: "autoRegister without subject",
-			input: map[string]string{
-				"url":             "http://localhost",
+			input: config.Config{
 				"schema.strategy": "autoRegister",
 			},
 			wantErr: cerrors.New("failed parsing schema strategy: subject required for schema strategy 'autoRegister'"),
 		},
 		{
 			name: "non-default target field",
-			input: map[string]string{
-				"url":                         "http://localhost",
+			input: config.Config{
 				"schema.strategy":             "autoRegister",
 				"schema.autoRegister.subject": "testsubject",
 				"field":                       ".Payload.After.something",
 			},
 			want: encodeConfig{
 				Field: ".Payload.After.something",
-				URL:   "http://localhost",
 				Schema: schemaConfig{
 					StrategyType:          "autoRegister",
 					AutoRegisteredSubject: "testsubject",
-				},
-			},
-		},
-		{
-			name: "valid auth",
-			input: map[string]string{
-				"url":                         "http://localhost",
-				"schema.strategy":             "autoRegister",
-				"schema.autoRegister.subject": "testsubject",
-				"auth.basic.username":         "user@example.com",
-				"auth.basic.password":         "Passw0rd",
-			},
-			want: encodeConfig{
-				URL:   "http://localhost",
-				Field: ".Payload.After",
-				Schema: schemaConfig{
-					StrategyType:          "autoRegister",
-					AutoRegisteredSubject: "testsubject",
-				},
-				Auth: authConfig{
-					Username: "user@example.com",
-					Password: "Passw0rd",
-				},
-			},
-		},
-		{
-			name: "auth -- no username",
-			input: map[string]string{
-				"url":                         "http://localhost",
-				"schema.strategy":             "autoRegister",
-				"schema.autoRegister.subject": "testsubject",
-				"auth.basic.password":         "Passw0rd",
-			},
-			wantErr: cerrors.New("invalid basic auth: specify a username to enable basic auth or remove field password"),
-		},
-		{
-			name: "auth -- no password",
-			input: map[string]string{
-				"url":                         "http://localhost",
-				"schema.strategy":             "autoRegister",
-				"schema.autoRegister.subject": "testsubject",
-				"auth.basic.username":         "username@example.com",
-			},
-			wantErr: cerrors.New("invalid basic auth: specify a password to enable basic auth or remove field username"),
-		},
-		{
-			name: "tls: missing client cert and key",
-			input: map[string]string{
-				"url":                         "http://localhost",
-				"schema.strategy":             "autoRegister",
-				"schema.autoRegister.subject": "testsubject",
-				"tls.ca.cert":                 "/tmp/something",
-			},
-			wantErr: cerrors.New(`failed parsing TLS: invalid TLS config
-missing field: tls.client.cert
-missing field: tls.client.key`),
-		},
-		{
-			name: "valid tls",
-			input: map[string]string{
-				"url":                         "http://localhost",
-				"schema.strategy":             "autoRegister",
-				"schema.autoRegister.subject": "testsubject",
-				"tls.ca.cert":                 "testdata/cert.pem",
-				"tls.client.cert":             "testdata/ca.pem",
-				"tls.client.key":              "testdata/ca-key.pem",
-			},
-			want: encodeConfig{
-				Field: ".Payload.After",
-				URL:   "http://localhost",
-				Schema: schemaConfig{
-					StrategyType:          "autoRegister",
-					AutoRegisteredSubject: "testsubject",
-				},
-				TLS: tlsConfig{
-					CACert: "testdata/cert.pem",
-					Client: clientCert{
-						Cert: "testdata/ca.pem",
-						Key:  "testdata/ca-key.pem",
-					},
 				},
 			},
 		},
 	}
 
-	cmpOpts := cmpopts.IgnoreUnexported(encodeConfig{}, schemaConfig{}, tlsConfig{})
+	cmpOpts := cmpopts.IgnoreUnexported(encodeConfig{}, schemaConfig{})
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			is := is.New(t)

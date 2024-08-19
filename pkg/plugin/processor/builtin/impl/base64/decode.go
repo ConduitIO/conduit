@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/base64"
 
+	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -57,8 +58,8 @@ result in the target field. It is not allowed to decode the ` + "`.Position`" + 
 	}, nil
 }
 
-func (p *decodeProcessor) Configure(ctx context.Context, m map[string]string) error {
-	err := sdk.ParseConfig(ctx, m, &p.config, p.config.Parameters())
+func (p *decodeProcessor) Configure(ctx context.Context, c config.Config) error {
+	err := sdk.ParseConfig(ctx, c, &p.config, p.config.Parameters())
 	if err != nil {
 		return cerrors.Errorf("failed to parse configuration: %w", err)
 	}

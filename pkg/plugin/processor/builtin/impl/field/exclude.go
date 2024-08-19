@@ -19,6 +19,7 @@ package field
 import (
 	"context"
 
+	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -61,8 +62,8 @@ to parse it into structured data first.`,
 	}, nil
 }
 
-func (p *excludeProcessor) Configure(ctx context.Context, m map[string]string) error {
-	err := sdk.ParseConfig(ctx, m, &p.config, excludeConfig{}.Parameters())
+func (p *excludeProcessor) Configure(ctx context.Context, c config.Config) error {
+	err := sdk.ParseConfig(ctx, c, &p.config, excludeConfig{}.Parameters())
 	if err != nil {
 		return cerrors.Errorf("failed to parse configuration: %w", err)
 	}

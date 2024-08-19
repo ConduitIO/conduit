@@ -492,11 +492,11 @@ func TestService_IntegrationTestServices(t *testing.T) {
 	schemaRegistry, err := schemaregistry.NewSchemaRegistry(db)
 	is.NoErr(err)
 
-	schemaService := connutils.NewSchemaService(logger, schemaRegistry, tokenService)
+	connSchemaService := connutils.NewSchemaService(logger, schemaRegistry, tokenService)
 
 	connPluginService := conn_plugin.NewPluginService(
 		logger,
-		builtin.NewRegistry(logger, builtin.DefaultBuiltinConnectors, schemaService),
+		builtin.NewRegistry(logger, builtin.DefaultBuiltinConnectors, connSchemaService),
 		standalone.NewRegistry(logger, ""),
 		tokenService,
 	)
@@ -504,7 +504,7 @@ func TestService_IntegrationTestServices(t *testing.T) {
 
 	procPluginService := proc_plugin.NewPluginService(
 		logger,
-		proc_builtin.NewRegistry(logger, proc_builtin.DefaultBuiltinProcessors),
+		proc_builtin.NewRegistry(logger, proc_builtin.DefaultBuiltinProcessors, schemaRegistry),
 		nil,
 	)
 

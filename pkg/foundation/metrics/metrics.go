@@ -98,12 +98,10 @@ type LabeledHistogram interface {
 	WithValues(labels ...string) Histogram
 }
 
-var (
-	global = struct {
-		metrics    []metric
-		registries []Registry
-	}{}
-)
+var global = struct {
+	metrics    []metric
+	registries []Registry
+}{}
 
 // Register adds a Registry to the global registries. Any metrics that were
 // created prior or after this call will also be created in this registry. This
@@ -243,6 +241,7 @@ func (mt *counter) New(r Registry) {
 	m := r.NewCounter(mt.name, mt.help, mt.opts...)
 	mt.metrics = append(mt.metrics, m)
 }
+
 func (mt *counter) Inc(vs ...float64) {
 	for _, m := range mt.metrics {
 		m.Inc(vs...)
@@ -258,6 +257,7 @@ func (mt *labeledCounter) New(r Registry) {
 	m := r.NewLabeledCounter(mt.name, mt.help, mt.labels, mt.opts...)
 	mt.metrics = append(mt.metrics, m)
 }
+
 func (mt *labeledCounter) WithValues(vs ...string) Counter {
 	c := &counter{
 		spec:    mt.spec,
@@ -278,16 +278,19 @@ func (mt *gauge) New(r Registry) {
 	m := r.NewGauge(mt.name, mt.help, mt.opts...)
 	mt.metrics = append(mt.metrics, m)
 }
+
 func (mt *gauge) Inc(f ...float64) {
 	for _, m := range mt.metrics {
 		m.Inc(f...)
 	}
 }
+
 func (mt *gauge) Dec(f ...float64) {
 	for _, m := range mt.metrics {
 		m.Dec(f...)
 	}
 }
+
 func (mt *gauge) Set(f float64) {
 	for _, m := range mt.metrics {
 		m.Set(f)
@@ -303,6 +306,7 @@ func (mt *labeledGauge) New(r Registry) {
 	m := r.NewLabeledGauge(mt.name, mt.help, mt.labels, mt.opts...)
 	mt.metrics = append(mt.metrics, m)
 }
+
 func (mt *labeledGauge) WithValues(vs ...string) Gauge {
 	g := &gauge{
 		spec:    mt.spec,
@@ -323,11 +327,13 @@ func (mt *timer) New(r Registry) {
 	m := r.NewTimer(mt.name, mt.help, mt.opts...)
 	mt.metrics = append(mt.metrics, m)
 }
+
 func (mt *timer) Update(d time.Duration) {
 	for _, m := range mt.metrics {
 		m.Update(d)
 	}
 }
+
 func (mt *timer) UpdateSince(t time.Time) {
 	for _, m := range mt.metrics {
 		m.UpdateSince(t)
@@ -343,6 +349,7 @@ func (mt *labeledTimer) New(r Registry) {
 	m := r.NewLabeledTimer(mt.name, mt.help, mt.labels, mt.opts...)
 	mt.metrics = append(mt.metrics, m)
 }
+
 func (mt *labeledTimer) WithValues(vs ...string) Timer {
 	t := &timer{
 		spec:    mt.spec,
@@ -363,6 +370,7 @@ func (mt *histogram) New(r Registry) {
 	m := r.NewHistogram(mt.name, mt.help, mt.opts...)
 	mt.metrics = append(mt.metrics, m)
 }
+
 func (mt *histogram) Observe(v float64) {
 	for _, m := range mt.metrics {
 		m.Observe(v)
@@ -378,6 +386,7 @@ func (mt *labeledHistogram) New(r Registry) {
 	m := r.NewLabeledHistogram(mt.name, mt.help, mt.labels, mt.opts...)
 	mt.metrics = append(mt.metrics, m)
 }
+
 func (mt *labeledHistogram) WithValues(vs ...string) Histogram {
 	t := &histogram{
 		spec:    mt.spec,
