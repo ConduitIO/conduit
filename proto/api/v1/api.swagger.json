@@ -2205,7 +2205,7 @@
         "STATUS_RECOVERING"
       ],
       "default": "STATUS_UNSPECIFIED",
-      "description": "Status describes the pipeline status.\n\n - STATUS_RUNNING: Pipeline is running.\n - STATUS_STOPPED: Pipeline gracefully stopped.\n - STATUS_DEGRADED: Pipeline stopped with an error (see State.error).\n - STATUS_RECOVERING: Pipeline stopped with an error (see State.error)."
+      "description": "Status describes the pipeline status.\n\n - STATUS_RUNNING: Pipeline is running.\n - STATUS_STOPPED: Pipeline gracefully stopped.\n - STATUS_DEGRADED: Pipeline stopped with an error (see State.error).\n - STATUS_RECOVERING: Pipeline is recovering. This case on of following:\n(1) pipeline is being restarted\n(2) Conduit is backing off and pipeline will be restarted later\n(3) pipeline was restarted, but Conduit is checking if the pipeline is healthy."
     },
     "v1PluginSpecifications": {
       "type": "object",

@@ -36,7 +36,10 @@ const (
 	Pipeline_STATUS_STOPPED Pipeline_Status = 2
 	// Pipeline stopped with an error (see State.error).
 	Pipeline_STATUS_DEGRADED Pipeline_Status = 3
-	// Pipeline stopped with an error (see State.error).
+	// Pipeline is recovering. This case on of following:
+	// (1) pipeline is being restarted
+	// (2) Conduit is backing off and pipeline will be restarted later
+	// (3) pipeline was restarted, but Conduit is checking if the pipeline is healthy.
 	Pipeline_STATUS_RECOVERING Pipeline_Status = 4
 )
 
