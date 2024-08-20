@@ -124,7 +124,7 @@ func (s *Service) Stop(ctx context.Context, pipelineID string, force bool) error
 		return err
 	}
 
-	if pl.Status != StatusRunning {
+	if pl.Status != StatusRunning && pl.Status != StatusRecovering {
 		return cerrors.Errorf("can't stop pipeline with status %q: %w", pl.Status, ErrPipelineNotRunning)
 	}
 
@@ -138,7 +138,10 @@ func (s *Service) Stop(ctx context.Context, pipelineID string, force bool) error
 }
 
 func (s *Service) stopGraceful(ctx context.Context, pl *Instance, reason error) error {
-	s.logger.Info(ctx).Str(log.PipelineIDField, pl.ID).Msg("gracefully stopping pipeline")
+	s.logger.Info(ctx).
+		Str(log.PipelineIDField, pl.ID).
+		Any(log.PipelineStatusField, pl.Status).
+		Msg("gracefully stopping pipeline")
 	var errs []error
 	for _, n := range pl.n {
 		if node, ok := n.(stream.StoppableNode); ok {
@@ -155,8 +158,11 @@ func (s *Service) stopGraceful(ctx context.Context, pl *Instance, reason error) 
 }
 
 func (s *Service) stopForceful(ctx context.Context, pl *Instance) error {
-	s.logger.Info(ctx).Str(log.PipelineIDField, pl.ID).Msg("force stopping pipeline")
-	pl.t.Kill(cerrors.New("force stop"))
+	s.logger.Info(ctx).
+		Str(log.PipelineIDField, pl.ID).
+		Any(log.PipelineStatusField, pl.Status).
+		Msg("force stopping pipeline")
+	pl.t.Kill(ErrForceStop)
 	for _, n := range pl.n {
 		if node, ok := n.(stream.ForceStoppableNode); ok {
 			// stop all pub nodes
@@ -171,7 +177,7 @@ func (s *Service) stopForceful(ctx context.Context, pl *Instance) error {
 // (i.e. that existing messages get processed but not new messages get produced).
 func (s *Service) StopAll(ctx context.Context, reason error) {
 	for _, pl := range s.instances {
-		if pl.Status != StatusRunning {
+		if pl.Status != StatusRunning && pl.Status != StatusRecovering {
 			continue
 		}
 		err := s.stopGraceful(ctx, pl, reason)

@@ -353,6 +353,128 @@ func TestServiceLifecycle_PipelineError(t *testing.T) {
 	is.True(cerrors.Is(event.Error, wantErr))
 }
 
+func TestServiceLifecycle_StopAll_Recovering(t *testing.T) {
+	type testCase struct {
+		name   string
+		stopFn func(ctx context.Context, is *is.I, pipelineService *Service, pipelineID string)
+		// whether we expect the source plugin's Stop() function to be called
+		// (doesn't happen when force-stopping)
+		wantSourceStop bool
+		want           Status
+		wantErr        error
+	}
+
+	runTest := func(t *testing.T, tc testCase) {
+		is := is.New(t)
+		ctx, killAll := context.WithCancel(context.Background())
+		defer killAll()
+		logger := log.New(zerolog.Nop())
+		db := &inmemory.DB{}
+		persister := connector.NewPersister(logger, db, time.Second, 3)
+
+		ps := NewService(logger, db)
+
+		// create a host pipeline
+		pl, err := ps.Create(ctx, uuid.NewString(), Config{Name: "test pipeline"}, ProvisionTypeAPI)
+		is.NoErr(err)
+
+		// create mocked connectors
+		// source will stop and return ErrGracefulShutdown which should signal to the
+		// service that everything went well and the pipeline was gracefully shutdown
+		ctrl := gomock.NewController(t)
+		wantRecords := generateRecords(0)
+		source, sourceDispenser := generatorSource(ctrl, persister, wantRecords, nil, tc.wantSourceStop)
+		destination, destDispenser := asserterDestination(ctrl, persister, wantRecords)
+		dlq, dlqDispenser := asserterDestination(ctrl, persister, nil)
+		pl.DLQ.Plugin = dlq.Plugin
+
+		pl, err = ps.AddConnector(ctx, pl.ID, source.ID)
+		is.NoErr(err)
+		pl, err = ps.AddConnector(ctx, pl.ID, destination.ID)
+		is.NoErr(err)
+
+		// start the pipeline now that everything is set up
+		err = ps.Start(
+			ctx,
+			testConnectorFetcher{
+				source.ID:      source,
+				destination.ID: destination,
+				testDLQID:      dlq,
+			},
+			testProcessorFetcher{},
+			testPluginFetcher{
+				source.Plugin:      sourceDispenser,
+				destination.Plugin: destDispenser,
+				dlq.Plugin:         dlqDispenser,
+			},
+			pl.ID,
+		)
+		is.NoErr(err)
+
+		// wait for pipeline to finish consuming records from the source
+		time.Sleep(100 * time.Millisecond)
+
+		pl.Status = StatusRecovering
+		tc.stopFn(ctx, is, ps, pl.ID)
+
+		// wait for pipeline to finish
+		err = pl.Wait()
+		if tc.wantErr != nil {
+			is.True(err != nil)
+		} else {
+			is.NoErr(err)
+			is.Equal("", pl.Error)
+		}
+
+		is.Equal(tc.want, pl.Status)
+	}
+
+	testCases := []testCase{
+		{
+			name: "system stop (graceful shutdown err)",
+			stopFn: func(ctx context.Context, is *is.I, ps *Service, pipelineID string) {
+				ps.StopAll(ctx, ErrGracefulShutdown)
+			},
+			wantSourceStop: true,
+			want:           StatusSystemStopped,
+		},
+		{
+			name: "system stop (terrible err)",
+			stopFn: func(ctx context.Context, is *is.I, ps *Service, pipelineID string) {
+				ps.StopAll(ctx, cerrors.New("terrible err"))
+			},
+			wantSourceStop: true,
+			want:           StatusDegraded,
+			wantErr:        cerrors.New("terrible err"),
+		},
+		{
+			name: "user stop (graceful)",
+			stopFn: func(ctx context.Context, is *is.I, ps *Service, pipelineID string) {
+				err := ps.Stop(ctx, pipelineID, false)
+				is.NoErr(err)
+			},
+			wantSourceStop: true,
+			want:           StatusUserStopped,
+		},
+		{
+			name: "user stop (force)",
+			stopFn: func(ctx context.Context, is *is.I, ps *Service, pipelineID string) {
+				err := ps.Stop(ctx, pipelineID, true)
+				is.NoErr(err)
+			},
+			wantSourceStop: false,
+			want:           StatusDegraded,
+			wantErr:        ErrForceStop,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			runTest(t, tc)
+		})
+	}
+}
+
 func TestServiceLifecycle_PipelineStop(t *testing.T) {
 	is := is.New(t)
 	ctx, killAll := context.WithCancel(context.Background())
