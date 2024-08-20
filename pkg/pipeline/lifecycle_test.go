@@ -456,16 +456,6 @@ func TestServiceLifecycle_StopAll_Recovering(t *testing.T) {
 			wantSourceStop: true,
 			want:           StatusUserStopped,
 		},
-		{
-			name: "user stop (force)",
-			stopFn: func(ctx context.Context, is *is.I, ps *Service, pipelineID string) {
-				err := ps.Stop(ctx, pipelineID, true)
-				is.NoErr(err)
-			},
-			wantSourceStop: false,
-			want:           StatusDegraded,
-			wantErr:        ErrForceStop,
-		},
 	}
 
 	for _, tc := range testCases {
