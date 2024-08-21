@@ -414,7 +414,7 @@ func TestServiceLifecycle_StopAll_Recovering(t *testing.T) {
 		// wait for pipeline to finish consuming records from the source
 		time.Sleep(100 * time.Millisecond)
 
-		pl.Status = StatusRecovering
+		pl.SetStatus(StatusRecovering)
 		tc.stopFn(ctx, is, ps, pl.ID)
 
 		// wait for pipeline to finish
@@ -426,7 +426,7 @@ func TestServiceLifecycle_StopAll_Recovering(t *testing.T) {
 			is.Equal("", pl.Error)
 		}
 
-		is.Equal(tc.want, pl.Status)
+		is.Equal(tc.want, pl.GetStatus())
 	}
 
 	testCases := []testCase{
