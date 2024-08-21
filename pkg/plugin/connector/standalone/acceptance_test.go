@@ -18,8 +18,7 @@ import (
 	"testing"
 
 	"github.com/conduitio/conduit-connector-protocol/pconnector/mock"
-	//nolint:staticcheck // backwards compatibility
-	v1 "github.com/conduitio/conduit-connector-protocol/pconnector/v1"
+	v1 "github.com/conduitio/conduit-connector-protocol/pconnector/v1" //nolint:staticcheck // backwards compatibility
 	v2 "github.com/conduitio/conduit-connector-protocol/pconnector/v2"
 	"github.com/conduitio/conduit/pkg/plugin/connector"
 	"github.com/rs/zerolog"
