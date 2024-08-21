@@ -42,8 +42,8 @@ func TestPipelineAPIv1_CreatePipeline(t *testing.T) {
 	pl := &pipeline.Instance{
 		ID:     uuid.NewString(),
 		Config: config,
-		Status: pipeline.StatusSystemStopped,
 	}
+	pl.SetStatus(pipeline.StatusSystemStopped)
 
 	psMock.EXPECT().Create(ctx, config).Return(pl, nil).Times(1)
 
