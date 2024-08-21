@@ -21,51 +21,59 @@ import (
 	"github.com/conduitio/conduit/pkg/pipeline"
 )
 
-var P1 = &pipeline.Instance{
-	ID: "pipeline1",
-	Config: pipeline.Config{
-		Name:        "name1",
-		Description: "desc1",
-	},
-	Status:       pipeline.StatusRunning,
-	Error:        "",
-	DLQ:          pipeline.DefaultDLQ,
-	ConnectorIDs: []string{"pipeline1:con1", "pipeline1:con2"},
-	ProcessorIDs: nil,
+var (
+	P1   *pipeline.Instance
+	P1C1 *connector.Instance
+	P1C2 *connector.Instance
+)
 
-	ProvisionedBy: pipeline.ProvisionTypeConfig,
-	CreatedAt:     time.Now(),
-	UpdatedAt:     time.Now(),
-}
+func init() {
+	P1 = &pipeline.Instance{
+		ID: "pipeline1",
+		Config: pipeline.Config{
+			Name:        "name1",
+			Description: "desc1",
+		},
+		Error:        "",
+		DLQ:          pipeline.DefaultDLQ,
+		ConnectorIDs: []string{"pipeline1:con1", "pipeline1:con2"},
+		ProcessorIDs: nil,
 
-var P1C1 = &connector.Instance{
-	ID:   "pipeline1:con1",
-	Type: connector.TypeSource,
-	Config: connector.Config{
-		Name:     "source",
-		Settings: map[string]string{"path": "my/path/file1.txt"},
-	},
-	PipelineID:   "pipeline1",
-	Plugin:       "builtin:file",
-	ProcessorIDs: nil,
+		ProvisionedBy: pipeline.ProvisionTypeConfig,
+		CreatedAt:     time.Now(),
+		UpdatedAt:     time.Now(),
+	}
+	P1.SetStatus(pipeline.StatusRunning)
 
-	ProvisionedBy: connector.ProvisionTypeConfig,
-	CreatedAt:     time.Now(),
-	UpdatedAt:     time.Now(),
-}
+	P1C1 = &connector.Instance{
+		ID:   "pipeline1:con1",
+		Type: connector.TypeSource,
+		Config: connector.Config{
+			Name:     "source",
+			Settings: map[string]string{"path": "my/path/file1.txt"},
+		},
+		PipelineID:   "pipeline1",
+		Plugin:       "builtin:file",
+		ProcessorIDs: nil,
 
-var P1C2 = &connector.Instance{
-	ID:   "pipeline1:con2",
-	Type: connector.TypeDestination,
-	Config: connector.Config{
-		Name:     "dest",
-		Settings: map[string]string{"path": "my/path/file2.txt"},
-	},
-	PipelineID:   "pipeline1",
-	Plugin:       "builtin:file",
-	ProcessorIDs: nil,
+		ProvisionedBy: connector.ProvisionTypeConfig,
+		CreatedAt:     time.Now(),
+		UpdatedAt:     time.Now(),
+	}
 
-	ProvisionedBy: connector.ProvisionTypeConfig,
-	CreatedAt:     time.Now(),
-	UpdatedAt:     time.Now(),
+	P1C2 = &connector.Instance{
+		ID:   "pipeline1:con2",
+		Type: connector.TypeDestination,
+		Config: connector.Config{
+			Name:     "dest",
+			Settings: map[string]string{"path": "my/path/file2.txt"},
+		},
+		PipelineID:   "pipeline1",
+		Plugin:       "builtin:file",
+		ProcessorIDs: nil,
+
+		ProvisionedBy: connector.ProvisionTypeConfig,
+		CreatedAt:     time.Now(),
+		UpdatedAt:     time.Now(),
+	}
 }

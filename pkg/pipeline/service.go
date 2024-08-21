@@ -81,11 +81,11 @@ func (s *Service) Init(ctx context.Context) error {
 	// some instances may be in a running state, put them in StatusSystemStopped state for now
 	for _, instance := range instances {
 		s.instanceNames[instance.Config.Name] = true
-		if instance.Status == StatusRunning {
+		if instance.GetStatus() == StatusRunning {
 			// change status to "systemStopped" to mark which pipeline was running
-			instance.Status = StatusSystemStopped
+			instance.SetStatus(StatusSystemStopped)
 		}
-		measure.PipelinesGauge.WithValues(strings.ToLower(instance.Status.String())).Inc()
+		measure.PipelinesGauge.WithValues(strings.ToLower(instance.GetStatus().String())).Inc()
 	}
 
 	s.logger.Info(ctx).Int("count", len(s.instances)).Msg("pipelines initialized")
@@ -129,7 +129,7 @@ func (s *Service) Create(ctx context.Context, id string, cfg Config, p Provision
 	pl := &Instance{
 		ID:            id,
 		Config:        cfg,
-		Status:        StatusUserStopped,
+		status:        StatusUserStopped,
 		CreatedAt:     t,
 		UpdatedAt:     t,
 		ProvisionedBy: p,
@@ -143,7 +143,7 @@ func (s *Service) Create(ctx context.Context, id string, cfg Config, p Provision
 
 	s.instances[pl.ID] = pl
 	s.instanceNames[cfg.Name] = true
-	measure.PipelinesGauge.WithValues(strings.ToLower(pl.Status.String())).Inc()
+	measure.PipelinesGauge.WithValues(strings.ToLower(pl.GetStatus().String())).Inc()
 
 	return pl, nil
 }
@@ -308,7 +308,7 @@ func (s *Service) Delete(ctx context.Context, pipelineID string) error {
 
 	delete(s.instances, pl.ID)
 	delete(s.instanceNames, pl.Config.Name)
-	measure.PipelinesGauge.WithValues(strings.ToLower(pl.Status.String())).Dec()
+	measure.PipelinesGauge.WithValues(strings.ToLower(pl.GetStatus().String())).Dec()
 
 	return nil
 }

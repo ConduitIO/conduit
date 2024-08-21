@@ -74,7 +74,7 @@ func testConfigStoreSetGet(t *testing.T, e error) {
 			Name:        "test-pipeline",
 			Description: "test pipeline description",
 		},
-		Status:       StatusSystemStopped,
+		status:       StatusSystemStopped,
 		ConnectorIDs: []string{uuid.NewString(), uuid.NewString(), uuid.NewString()},
 		ProcessorIDs: []string{uuid.NewString(), uuid.NewString()},
 		Error:        fmt.Sprintf("%+v", e),

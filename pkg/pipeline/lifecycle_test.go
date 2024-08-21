@@ -59,7 +59,7 @@ func TestServiceLifecycle_buildNodes(t *testing.T) {
 	pl := &Instance{
 		ID:     uuid.NewString(),
 		Config: Config{Name: "test-pipeline"},
-		Status: StatusUserStopped,
+		status: StatusUserStopped,
 		DLQ: DLQ{
 			Plugin:              dlq.Plugin,
 			Settings:            map[string]string{},
@@ -143,7 +143,7 @@ func TestService_buildNodes_NoSourceNode(t *testing.T) {
 	pl := &Instance{
 		ID:     uuid.NewString(),
 		Config: Config{Name: "test-pipeline"},
-		Status: StatusUserStopped,
+		status: StatusUserStopped,
 		DLQ: DLQ{
 			Plugin:              dlq.Plugin,
 			Settings:            map[string]string{},
@@ -191,7 +191,7 @@ func TestService_buildNodes_NoDestinationNode(t *testing.T) {
 	pl := &Instance{
 		ID:     uuid.NewString(),
 		Config: Config{Name: "test-pipeline"},
-		Status: StatusUserStopped,
+		status: StatusUserStopped,
 		DLQ: DLQ{
 			Plugin:              dlq.Plugin,
 			Settings:            map[string]string{},
@@ -269,7 +269,7 @@ func TestServiceLifecycle_PipelineSuccess(t *testing.T) {
 	// wait for pipeline to finish consuming records from the source
 	time.Sleep(100 * time.Millisecond)
 
-	is.Equal(StatusRunning, pl.Status)
+	is.Equal(StatusRunning, pl.GetStatus())
 	is.Equal("", pl.Error)
 
 	// stop pipeline before ending test
@@ -334,7 +334,7 @@ func TestServiceLifecycle_PipelineError(t *testing.T) {
 	err = pl.Wait()
 	is.True(err != nil)
 
-	is.Equal(StatusDegraded, pl.Status)
+	is.Equal(StatusDegraded, pl.GetStatus())
 	// pipeline errors contain only string messages, so we can only compare the errors by the messages
 	t.Log(pl.Error)
 
@@ -520,7 +520,7 @@ func TestServiceLifecycle_PipelineStop(t *testing.T) {
 	err = pl.Wait()
 	is.NoErr(err)
 
-	is.Equal(StatusSystemStopped, pl.Status)
+	is.Equal(StatusSystemStopped, pl.GetStatus())
 	is.Equal("", pl.Error)
 }
 
@@ -563,7 +563,7 @@ func TestService_Run_Rerun(t *testing.T) {
 
 		// update internal fields, they will be stored when we add the connectors
 		pl.DLQ.Plugin = dlq.Plugin
-		pl.Status = status
+		pl.SetStatus(status)
 
 		pl, err = ps.AddConnector(ctx, pl.ID, source.ID)
 		is.NoErr(err)
@@ -596,7 +596,7 @@ func TestService_Run_Rerun(t *testing.T) {
 		got := ps.List(ctx)
 		is.Equal(len(got), 1)
 		is.True(got[pl.ID] != nil)
-		is.Equal(got[pl.ID].Status, expected)
+		is.Equal(got[pl.ID].GetStatus(), expected)
 
 		if expected == StatusRunning {
 			pl, _ = ps.Get(ctx, pl.ID)

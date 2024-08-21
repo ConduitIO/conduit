@@ -36,13 +36,13 @@ require (
 	github.com/neilotoole/slogt v1.1.0
 	github.com/peterbourgon/ff/v3 v3.4.0
 	github.com/piotrkowalczuk/promgrpc/v4 v4.1.3
-	github.com/prometheus/client_golang v1.20.0
+	github.com/prometheus/client_golang v1.20.1
 	github.com/prometheus/client_model v0.6.1
 	github.com/prometheus/common v0.55.0
 	github.com/rs/zerolog v1.33.0
 	github.com/stealthrocket/wazergo v0.19.1
 	github.com/tetratelabs/wazero v1.8.0
-	github.com/twmb/franz-go/pkg/sr v1.0.1
+	github.com/twmb/franz-go/pkg/sr v1.1.0
 	github.com/twmb/go-cache v1.2.1
 	go.uber.org/mock v0.4.0
 	golang.org/x/exp v0.0.0-20240808152545-0cdaa3abc0fa

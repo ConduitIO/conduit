@@ -114,7 +114,7 @@ func TestService_CreateSuccess(t *testing.T) {
 				Description: "pipeline description",
 			},
 			DLQ:    DefaultDLQ,
-			Status: StatusUserStopped,
+			status: StatusUserStopped,
 		},
 	}, {
 		id:   uuid.NewString(),
@@ -129,7 +129,7 @@ func TestService_CreateSuccess(t *testing.T) {
 				Description: "",
 			},
 			DLQ:    DefaultDLQ,
-			Status: StatusUserStopped,
+			status: StatusUserStopped,
 		},
 	}}
 

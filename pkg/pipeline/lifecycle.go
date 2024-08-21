@@ -63,7 +63,7 @@ func (s *Service) Run(
 
 	// run pipelines that are in the StatusSystemStopped state
 	for _, instance := range s.instances {
-		if instance.Status == StatusSystemStopped {
+		if instance.GetStatus() == StatusSystemStopped {
 			err := s.Start(ctx, connFetcher, procService, pluginFetcher, instance.ID)
 			if err != nil {
 				// try to start remaining pipelines and gather errors
@@ -88,7 +88,7 @@ func (s *Service) Start(
 	if err != nil {
 		return err
 	}
-	if pl.Status == StatusRunning {
+	if pl.GetStatus() == StatusRunning {
 		return cerrors.Errorf("can't start pipeline %s: %w", pl.ID, ErrPipelineRunning)
 	}
 
@@ -124,8 +124,8 @@ func (s *Service) Stop(ctx context.Context, pipelineID string, force bool) error
 		return err
 	}
 
-	if pl.Status != StatusRunning && pl.Status != StatusRecovering {
-		return cerrors.Errorf("can't stop pipeline with status %q: %w", pl.Status, ErrPipelineNotRunning)
+	if pl.GetStatus() != StatusRunning && pl.GetStatus() != StatusRecovering {
+		return cerrors.Errorf("can't stop pipeline with status %q: %w", pl.GetStatus(), ErrPipelineNotRunning)
 	}
 
 	switch force {
@@ -140,7 +140,7 @@ func (s *Service) Stop(ctx context.Context, pipelineID string, force bool) error
 func (s *Service) stopGraceful(ctx context.Context, pl *Instance, reason error) error {
 	s.logger.Info(ctx).
 		Str(log.PipelineIDField, pl.ID).
-		Any(log.PipelineStatusField, pl.Status).
+		Any(log.PipelineStatusField, pl.GetStatus()).
 		Msg("gracefully stopping pipeline")
 	var errs []error
 	for _, n := range pl.n {
@@ -160,7 +160,7 @@ func (s *Service) stopGraceful(ctx context.Context, pl *Instance, reason error) 
 func (s *Service) stopForceful(ctx context.Context, pl *Instance) error {
 	s.logger.Info(ctx).
 		Str(log.PipelineIDField, pl.ID).
-		Any(log.PipelineStatusField, pl.Status).
+		Any(log.PipelineStatusField, pl.GetStatus()).
 		Msg("force stopping pipeline")
 	pl.t.Kill(ErrForceStop)
 	for _, n := range pl.n {
@@ -177,7 +177,7 @@ func (s *Service) stopForceful(ctx context.Context, pl *Instance) error {
 // (i.e. that existing messages get processed but not new messages get produced).
 func (s *Service) StopAll(ctx context.Context, reason error) {
 	for _, pl := range s.instances {
-		if pl.Status != StatusRunning && pl.Status != StatusRecovering {
+		if pl.GetStatus() != StatusRunning && pl.GetStatus() != StatusRecovering {
 			continue
 		}
 		err := s.stopGraceful(ctx, pl, reason)
@@ -593,10 +593,10 @@ func (s *Service) runPipeline(ctx context.Context, pl *Instance) error {
 		})
 	}
 
-	measure.PipelinesGauge.WithValues(strings.ToLower(pl.Status.String())).Dec()
-	pl.Status = StatusRunning
+	measure.PipelinesGauge.WithValues(strings.ToLower(pl.GetStatus().String())).Dec()
+	pl.SetStatus(StatusRunning)
 	pl.Error = ""
-	measure.PipelinesGauge.WithValues(strings.ToLower(pl.Status.String())).Inc()
+	measure.PipelinesGauge.WithValues(strings.ToLower(pl.GetStatus().String())).Inc()
 
 	err := s.store.Set(ctx, pl.ID, pl)
 	if err != nil {
@@ -613,7 +613,7 @@ func (s *Service) runPipeline(ctx context.Context, pl *Instance) error {
 		nodesWg.Wait()
 		err := pl.t.Err()
 
-		measure.PipelinesGauge.WithValues(strings.ToLower(pl.Status.String())).Dec()
+		measure.PipelinesGauge.WithValues(strings.ToLower(pl.GetStatus().String())).Dec()
 
 		switch err {
 		case tomb.ErrStillAlive:
@@ -621,13 +621,13 @@ func (s *Service) runPipeline(ctx context.Context, pl *Instance) error {
 			err = nil
 			if isGracefulShutdown.Load() {
 				// it was triggered by a graceful shutdown of Conduit
-				pl.Status = StatusSystemStopped
+				pl.SetStatus(StatusSystemStopped)
 			} else {
 				// it was manually triggered by a user
-				pl.Status = StatusUserStopped
+				pl.SetStatus(StatusUserStopped)
 			}
 		default:
-			pl.Status = StatusDegraded
+			pl.SetStatus(StatusDegraded)
 			// we use %+v to get the stack trace too
 			pl.Error = fmt.Sprintf("%+v", err)
 		}
@@ -640,7 +640,7 @@ func (s *Service) runPipeline(ctx context.Context, pl *Instance) error {
 		s.notify(pl.ID, err)
 		// It's important to update the metrics before we handle the error from s.Store.Set() (if any),
 		// since the source of the truth is the actual pipeline (stored in memory).
-		measure.PipelinesGauge.WithValues(strings.ToLower(pl.Status.String())).Inc()
+		measure.PipelinesGauge.WithValues(strings.ToLower(pl.GetStatus().String())).Inc()
 
 		storeErr := s.store.Set(ctx, pl.ID, pl)
 		if storeErr != nil {

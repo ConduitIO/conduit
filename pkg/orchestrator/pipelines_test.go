@@ -34,9 +34,10 @@ func TestPipelineOrchestrator_Start_Success(t *testing.T) {
 	plsMock, consMock, procsMock, connPluginMock, procPluginMock := newMockServices(t)
 
 	plBefore := &pipeline.Instance{
-		ID:     uuid.NewString(),
-		Status: pipeline.StatusSystemStopped,
+		ID: uuid.NewString(),
 	}
+	plBefore.SetStatus(pipeline.StatusSystemStopped)
+
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, connPluginMock, procPluginMock)
 
 	plsMock.EXPECT().
@@ -54,9 +55,9 @@ func TestPipelineOrchestrator_Start_Fail(t *testing.T) {
 	plsMock, consMock, procsMock, connPluginMock, procPluginMock := newMockServices(t)
 
 	plBefore := &pipeline.Instance{
-		ID:     uuid.NewString(),
-		Status: pipeline.StatusSystemStopped,
+		ID: uuid.NewString(),
 	}
+	plBefore.SetStatus(pipeline.StatusSystemStopped)
 
 	wantErr := cerrors.New("pipeline doesn't exist")
 	plsMock.EXPECT().
@@ -75,9 +76,9 @@ func TestPipelineOrchestrator_Stop_Success(t *testing.T) {
 	plsMock, consMock, procsMock, connPluginMock, procPluginMock := newMockServices(t)
 
 	plBefore := &pipeline.Instance{
-		ID:     uuid.NewString(),
-		Status: pipeline.StatusRunning,
+		ID: uuid.NewString(),
 	}
+	plBefore.SetStatus(pipeline.StatusRunning)
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, connPluginMock, procPluginMock)
 	plsMock.EXPECT().
@@ -95,9 +96,9 @@ func TestPipelineOrchestrator_Stop_Fail(t *testing.T) {
 	plsMock, consMock, procsMock, connPluginMock, procPluginMock := newMockServices(t)
 
 	plBefore := &pipeline.Instance{
-		ID:     uuid.NewString(),
-		Status: pipeline.StatusRunning,
+		ID: uuid.NewString(),
 	}
+	plBefore.SetStatus(pipeline.StatusRunning)
 
 	wantErr := cerrors.New("pipeline doesn't exist")
 	plsMock.EXPECT().
@@ -117,15 +118,16 @@ func TestPipelineOrchestrator_Update_Success(t *testing.T) {
 
 	plBefore := &pipeline.Instance{
 		ID:     uuid.NewString(),
-		Status: pipeline.StatusSystemStopped,
 		Config: pipeline.Config{Name: "old pipeline"},
 	}
+	plBefore.SetStatus(pipeline.StatusSystemStopped)
+
 	newConfig := pipeline.Config{Name: "new pipeline"}
 	want := &pipeline.Instance{
 		ID:     plBefore.ID,
-		Status: pipeline.StatusSystemStopped,
 		Config: pipeline.Config{Name: "new pipeline"},
 	}
+	want.SetStatus(pipeline.StatusSystemStopped)
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, connPluginMock, procPluginMock)
 	plsMock.EXPECT().
@@ -148,9 +150,10 @@ func TestPipelineOrchestrator_Update_PipelineRunning(t *testing.T) {
 
 	plBefore := &pipeline.Instance{
 		ID:     uuid.NewString(),
-		Status: pipeline.StatusRunning,
 		Config: pipeline.Config{Name: "old pipeline"},
 	}
+	plBefore.SetStatus(pipeline.StatusRunning)
+
 	newConfig := pipeline.Config{Name: "new pipeline"}
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, connPluginMock, procPluginMock)
@@ -171,10 +174,11 @@ func TestPipelineOrchestrator_Update_PipelineProvisionedByConfig(t *testing.T) {
 
 	plBefore := &pipeline.Instance{
 		ID:            uuid.NewString(),
-		Status:        pipeline.StatusUserStopped,
 		Config:        pipeline.Config{Name: "old pipeline"},
 		ProvisionedBy: pipeline.ProvisionTypeConfig,
 	}
+	plBefore.SetStatus(pipeline.StatusUserStopped)
+
 	newConfig := pipeline.Config{Name: "new pipeline"}
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, connPluginMock, procPluginMock)
@@ -194,9 +198,9 @@ func TestPipelineOrchestrator_Delete_Success(t *testing.T) {
 	plsMock, consMock, procsMock, connPluginMock, procPluginMock := newMockServices(t)
 
 	plBefore := &pipeline.Instance{
-		ID:     uuid.NewString(),
-		Status: pipeline.StatusSystemStopped,
+		ID: uuid.NewString(),
 	}
+	plBefore.SetStatus(pipeline.StatusSystemStopped)
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, connPluginMock, procPluginMock)
 	plsMock.EXPECT().
@@ -217,9 +221,9 @@ func TestPipelineOrchestrator_Delete_PipelineRunning(t *testing.T) {
 	plsMock, consMock, procsMock, connPluginMock, procPluginMock := newMockServices(t)
 
 	plBefore := &pipeline.Instance{
-		ID:     uuid.NewString(),
-		Status: pipeline.StatusRunning,
+		ID: uuid.NewString(),
 	}
+	plBefore.SetStatus(pipeline.StatusRunning)
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, connPluginMock, procPluginMock)
 	plsMock.EXPECT().
@@ -238,9 +242,9 @@ func TestPipelineOrchestrator_Delete_PipelineProvisionedByConfig(t *testing.T) {
 
 	plBefore := &pipeline.Instance{
 		ID:            uuid.NewString(),
-		Status:        pipeline.StatusUserStopped,
 		ProvisionedBy: pipeline.ProvisionTypeConfig,
 	}
+	plBefore.SetStatus(pipeline.StatusUserStopped)
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, connPluginMock, procPluginMock)
 	plsMock.EXPECT().
@@ -259,9 +263,9 @@ func TestPipelineOrchestrator_Delete_PipelineHasProcessorsAttached(t *testing.T)
 
 	plBefore := &pipeline.Instance{
 		ID:           uuid.NewString(),
-		Status:       pipeline.StatusSystemStopped,
 		ProcessorIDs: []string{uuid.NewString()},
 	}
+	plBefore.SetStatus(pipeline.StatusSystemStopped)
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, connPluginMock, procPluginMock)
 	plsMock.EXPECT().
@@ -280,9 +284,9 @@ func TestPipelineOrchestrator_Delete_PipelineHasConnectorsAttached(t *testing.T)
 
 	plBefore := &pipeline.Instance{
 		ID:           uuid.NewString(),
-		Status:       pipeline.StatusSystemStopped,
 		ConnectorIDs: []string{uuid.NewString()},
 	}
+	plBefore.SetStatus(pipeline.StatusSystemStopped)
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, connPluginMock, procPluginMock)
 	plsMock.EXPECT().
@@ -317,7 +321,6 @@ func TestPipelineOrchestrator_UpdateDLQ_Success(t *testing.T) {
 
 	plBefore := &pipeline.Instance{
 		ID:     uuid.NewString(),
-		Status: pipeline.StatusSystemStopped,
 		Config: pipeline.Config{Name: "test-pipeline"},
 		DLQ: pipeline.DLQ{
 			Plugin:              "old-plugin",
@@ -326,6 +329,8 @@ func TestPipelineOrchestrator_UpdateDLQ_Success(t *testing.T) {
 			WindowNackThreshold: 1,
 		},
 	}
+	plBefore.SetStatus(pipeline.StatusSystemStopped)
+
 	newDLQ := pipeline.DLQ{
 		Plugin:              "new-plugin",
 		Settings:            map[string]string{"baz": "qux"},
@@ -334,10 +339,10 @@ func TestPipelineOrchestrator_UpdateDLQ_Success(t *testing.T) {
 	}
 	want := &pipeline.Instance{
 		ID:     plBefore.ID,
-		Status: plBefore.Status,
 		Config: plBefore.Config,
 		DLQ:    newDLQ,
 	}
+	want.SetStatus(plBefore.GetStatus())
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, connPluginMock, procPluginMock)
 	plsMock.EXPECT().
@@ -362,9 +367,9 @@ func TestPipelineOrchestrator_UpdateDLQ_PipelineRunning(t *testing.T) {
 	plsMock, consMock, procsMock, connPluginMock, procPluginMock := newMockServices(t)
 
 	plBefore := &pipeline.Instance{
-		ID:     uuid.NewString(),
-		Status: pipeline.StatusRunning,
+		ID: uuid.NewString(),
 	}
+	plBefore.SetStatus(pipeline.StatusRunning)
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, connPluginMock, procPluginMock)
 	plsMock.EXPECT().
@@ -384,9 +389,9 @@ func TestPipelineOrchestrator_UpdateDLQ_PipelineProvisionedByConfig(t *testing.T
 
 	plBefore := &pipeline.Instance{
 		ID:            uuid.NewString(),
-		Status:        pipeline.StatusUserStopped,
 		ProvisionedBy: pipeline.ProvisionTypeConfig,
 	}
+	plBefore.SetStatus(pipeline.StatusUserStopped)
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, connPluginMock, procPluginMock)
 	plsMock.EXPECT().
@@ -406,9 +411,10 @@ func TestConnectorOrchestrator_UpdateDLQ_InvalidConfig(t *testing.T) {
 
 	plBefore := &pipeline.Instance{
 		ID:     uuid.NewString(),
-		Status: pipeline.StatusSystemStopped,
 		Config: pipeline.Config{Name: "test-pipeline"},
 	}
+	plBefore.SetStatus(pipeline.StatusSystemStopped)
+
 	newDLQ := pipeline.DLQ{
 		Plugin:              "new-plugin",
 		Settings:            map[string]string{"baz": "qux"},
