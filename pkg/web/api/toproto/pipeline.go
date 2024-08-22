@@ -24,7 +24,7 @@ func Pipeline(in *pipeline.Instance) *apiv1.Pipeline {
 	return &apiv1.Pipeline{
 		Id: in.ID,
 		State: &apiv1.Pipeline_State{
-			Status: PipelineStatus(in.Status),
+			Status: PipelineStatus(in.GetStatus()),
 			Error:  in.Error,
 		},
 		Config:       PipelineConfig(in.Config),
@@ -52,6 +52,8 @@ func PipelineStatus(in pipeline.Status) apiv1.Pipeline_Status {
 		return apiv1.Pipeline_STATUS_STOPPED
 	case pipeline.StatusDegraded:
 		return apiv1.Pipeline_STATUS_DEGRADED
+	case pipeline.StatusRecovering:
+		return apiv1.Pipeline_STATUS_RECOVERING
 	}
 	return apiv1.Pipeline_STATUS_UNSPECIFIED
 }

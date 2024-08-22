@@ -36,9 +36,10 @@ func TestConnectorOrchestrator_Create_Success(t *testing.T) {
 	plsMock, consMock, procsMock, connPluginMock, procPluginMock := newMockServices(t)
 
 	pl := &pipeline.Instance{
-		ID:     uuid.NewString(),
-		Status: pipeline.StatusSystemStopped,
+		ID: uuid.NewString(),
 	}
+	pl.SetStatus(pipeline.StatusSystemStopped)
+
 	want := &connector.Instance{
 		ID:   uuid.NewString(),
 		Type: connector.TypeSource,
@@ -110,9 +111,9 @@ func TestConnectorOrchestrator_Create_PipelineRunning(t *testing.T) {
 	plsMock, consMock, procsMock, connPluginMock, procPluginMock := newMockServices(t)
 
 	pl := &pipeline.Instance{
-		ID:     uuid.NewString(),
-		Status: pipeline.StatusRunning,
+		ID: uuid.NewString(),
 	}
+	pl.SetStatus(pipeline.StatusRunning)
 
 	plsMock.EXPECT().
 		Get(gomock.AssignableToTypeOf(ctxType), pl.ID).
@@ -133,9 +134,9 @@ func TestConnectorOrchestrator_Create_PipelineProvisionByConfig(t *testing.T) {
 
 	pl := &pipeline.Instance{
 		ID:            uuid.NewString(),
-		Status:        pipeline.StatusRunning,
 		ProvisionedBy: pipeline.ProvisionTypeConfig,
 	}
+	pl.SetStatus(pipeline.StatusRunning)
 
 	plsMock.EXPECT().
 		Get(gomock.AssignableToTypeOf(ctxType), pl.ID).
@@ -155,9 +156,10 @@ func TestConnectorOrchestrator_Create_CreateConnectorError(t *testing.T) {
 	plsMock, consMock, procsMock, connPluginMock, procPluginMock := newMockServices(t)
 
 	pl := &pipeline.Instance{
-		ID:     uuid.NewString(),
-		Status: pipeline.StatusSystemStopped,
+		ID: uuid.NewString(),
 	}
+	pl.SetStatus(pipeline.StatusSystemStopped)
+
 	config := connector.Config{}
 	wantErr := cerrors.New("test error")
 	plsMock.EXPECT().
@@ -195,9 +197,10 @@ func TestConnectorOrchestrator_Create_AddConnectorError(t *testing.T) {
 	plsMock, consMock, procsMock, connPluginMock, procPluginMock := newMockServices(t)
 
 	pl := &pipeline.Instance{
-		ID:     uuid.NewString(),
-		Status: pipeline.StatusSystemStopped,
+		ID: uuid.NewString(),
 	}
+	pl.SetStatus(pipeline.StatusSystemStopped)
+
 	conn := &connector.Instance{
 		ID:   uuid.NewString(),
 		Type: connector.TypeSource,
@@ -257,9 +260,10 @@ func TestConnectorOrchestrator_Delete_Success(t *testing.T) {
 	plsMock, consMock, procsMock, connPluginMock, procPluginMock := newMockServices(t)
 
 	pl := &pipeline.Instance{
-		ID:     uuid.NewString(),
-		Status: pipeline.StatusSystemStopped,
+		ID: uuid.NewString(),
 	}
+	pl.SetStatus(pipeline.StatusSystemStopped)
+
 	conn := &connector.Instance{
 		ID:         uuid.NewString(),
 		PipelineID: pl.ID,
@@ -308,9 +312,10 @@ func TestConnectorOrchestrator_Delete_PipelineRunning(t *testing.T) {
 	plsMock, consMock, procsMock, connPluginMock, procPluginMock := newMockServices(t)
 
 	pl := &pipeline.Instance{
-		ID:     uuid.NewString(),
-		Status: pipeline.StatusRunning,
+		ID: uuid.NewString(),
 	}
+	pl.SetStatus(pipeline.StatusRunning)
+
 	conn := &connector.Instance{
 		ID:         uuid.NewString(),
 		PipelineID: pl.ID,
@@ -336,9 +341,10 @@ func TestConnectorOrchestrator_Delete_ProcessorAttached(t *testing.T) {
 	plsMock, consMock, procsMock, connPluginMock, procPluginMock := newMockServices(t)
 
 	pl := &pipeline.Instance{
-		ID:     uuid.NewString(),
-		Status: pipeline.StatusRunning,
+		ID: uuid.NewString(),
 	}
+	pl.SetStatus(pipeline.StatusRunning)
+
 	conn := &connector.Instance{
 		ID:           uuid.NewString(),
 		PipelineID:   pl.ID,
@@ -362,9 +368,10 @@ func TestConnectorOrchestrator_Delete_Fail(t *testing.T) {
 	plsMock, consMock, procsMock, connPluginMock, procPluginMock := newMockServices(t)
 
 	pl := &pipeline.Instance{
-		ID:     uuid.NewString(),
-		Status: pipeline.StatusSystemStopped,
+		ID: uuid.NewString(),
 	}
+	pl.SetStatus(pipeline.StatusSystemStopped)
+
 	conn := &connector.Instance{
 		ID:         uuid.NewString(),
 		PipelineID: pl.ID,
@@ -394,9 +401,10 @@ func TestConnectorOrchestrator_Delete_RemoveConnectorFailed(t *testing.T) {
 	plsMock, consMock, procsMock, connPluginMock, procPluginMock := newMockServices(t)
 
 	pl := &pipeline.Instance{
-		ID:     uuid.NewString(),
-		Status: pipeline.StatusSystemStopped,
+		ID: uuid.NewString(),
 	}
+	pl.SetStatus(pipeline.StatusSystemStopped)
+
 	conn := &connector.Instance{
 		ID:         uuid.NewString(),
 		Plugin:     "test-plugin",
@@ -442,9 +450,10 @@ func TestConnectorOrchestrator_Update_Success(t *testing.T) {
 	plsMock, consMock, procsMock, connPluginMock, procPluginMock := newMockServices(t)
 
 	pl := &pipeline.Instance{
-		ID:     uuid.NewString(),
-		Status: pipeline.StatusSystemStopped,
+		ID: uuid.NewString(),
 	}
+	pl.SetStatus(pipeline.StatusSystemStopped)
+
 	conn := &connector.Instance{
 		ID:         uuid.NewString(),
 		Plugin:     "test-plugin",
@@ -511,9 +520,10 @@ func TestConnectorOrchestrator_Update_PipelineRunning(t *testing.T) {
 	plsMock, consMock, procsMock, connPluginMock, procPluginMock := newMockServices(t)
 
 	pl := &pipeline.Instance{
-		ID:     uuid.NewString(),
-		Status: pipeline.StatusRunning,
+		ID: uuid.NewString(),
 	}
+	pl.SetStatus(pipeline.StatusRunning)
+
 	conn := &connector.Instance{
 		ID:         uuid.NewString(),
 		PipelineID: pl.ID,
@@ -540,9 +550,10 @@ func TestConnectorOrchestrator_Update_Fail(t *testing.T) {
 	plsMock, consMock, procsMock, connPluginMock, procPluginMock := newMockServices(t)
 
 	pl := &pipeline.Instance{
-		ID:     uuid.NewString(),
-		Status: pipeline.StatusSystemStopped,
+		ID: uuid.NewString(),
 	}
+	pl.SetStatus(pipeline.StatusSystemStopped)
+
 	conn := &connector.Instance{
 		ID:         uuid.NewString(),
 		Type:       connector.TypeDestination,

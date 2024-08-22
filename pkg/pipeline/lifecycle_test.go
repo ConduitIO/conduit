@@ -59,7 +59,7 @@ func TestServiceLifecycle_buildNodes(t *testing.T) {
 	pl := &Instance{
 		ID:     uuid.NewString(),
 		Config: Config{Name: "test-pipeline"},
-		Status: StatusUserStopped,
+		status: StatusUserStopped,
 		DLQ: DLQ{
 			Plugin:              dlq.Plugin,
 			Settings:            map[string]string{},
@@ -143,7 +143,7 @@ func TestService_buildNodes_NoSourceNode(t *testing.T) {
 	pl := &Instance{
 		ID:     uuid.NewString(),
 		Config: Config{Name: "test-pipeline"},
-		Status: StatusUserStopped,
+		status: StatusUserStopped,
 		DLQ: DLQ{
 			Plugin:              dlq.Plugin,
 			Settings:            map[string]string{},
@@ -191,7 +191,7 @@ func TestService_buildNodes_NoDestinationNode(t *testing.T) {
 	pl := &Instance{
 		ID:     uuid.NewString(),
 		Config: Config{Name: "test-pipeline"},
-		Status: StatusUserStopped,
+		status: StatusUserStopped,
 		DLQ: DLQ{
 			Plugin:              dlq.Plugin,
 			Settings:            map[string]string{},
@@ -269,7 +269,7 @@ func TestServiceLifecycle_PipelineSuccess(t *testing.T) {
 	// wait for pipeline to finish consuming records from the source
 	time.Sleep(100 * time.Millisecond)
 
-	is.Equal(StatusRunning, pl.Status)
+	is.Equal(StatusRunning, pl.GetStatus())
 	is.Equal("", pl.Error)
 
 	// stop pipeline before ending test
@@ -334,7 +334,7 @@ func TestServiceLifecycle_PipelineError(t *testing.T) {
 	err = pl.Wait()
 	is.True(err != nil)
 
-	is.Equal(StatusDegraded, pl.Status)
+	is.Equal(StatusDegraded, pl.GetStatus())
 	// pipeline errors contain only string messages, so we can only compare the errors by the messages
 	t.Log(pl.Error)
 
@@ -351,6 +351,118 @@ func TestServiceLifecycle_PipelineError(t *testing.T) {
 		strings.Contains(pl.Error, wantErr.Error()),
 	)
 	is.True(cerrors.Is(event.Error, wantErr))
+}
+
+func TestServiceLifecycle_StopAll_Recovering(t *testing.T) {
+	type testCase struct {
+		name   string
+		stopFn func(ctx context.Context, is *is.I, pipelineService *Service, pipelineID string)
+		// whether we expect the source plugin's Stop() function to be called
+		// (doesn't happen when force-stopping)
+		wantSourceStop bool
+		want           Status
+		wantErr        error
+	}
+
+	runTest := func(t *testing.T, tc testCase) {
+		is := is.New(t)
+		ctx, killAll := context.WithCancel(context.Background())
+		defer killAll()
+		logger := log.New(zerolog.Nop())
+		db := &inmemory.DB{}
+		persister := connector.NewPersister(logger, db, time.Second, 3)
+
+		ps := NewService(logger, db)
+
+		// create a host pipeline
+		pl, err := ps.Create(ctx, uuid.NewString(), Config{Name: "test pipeline"}, ProvisionTypeAPI)
+		is.NoErr(err)
+
+		// create mocked connectors
+		// source will stop and return ErrGracefulShutdown which should signal to the
+		// service that everything went well and the pipeline was gracefully shutdown
+		ctrl := gomock.NewController(t)
+		wantRecords := generateRecords(0)
+		source, sourceDispenser := generatorSource(ctrl, persister, wantRecords, nil, tc.wantSourceStop)
+		destination, destDispenser := asserterDestination(ctrl, persister, wantRecords)
+		dlq, dlqDispenser := asserterDestination(ctrl, persister, nil)
+		pl.DLQ.Plugin = dlq.Plugin
+
+		pl, err = ps.AddConnector(ctx, pl.ID, source.ID)
+		is.NoErr(err)
+		pl, err = ps.AddConnector(ctx, pl.ID, destination.ID)
+		is.NoErr(err)
+
+		// start the pipeline now that everything is set up
+		err = ps.Start(
+			ctx,
+			testConnectorFetcher{
+				source.ID:      source,
+				destination.ID: destination,
+				testDLQID:      dlq,
+			},
+			testProcessorFetcher{},
+			testPluginFetcher{
+				source.Plugin:      sourceDispenser,
+				destination.Plugin: destDispenser,
+				dlq.Plugin:         dlqDispenser,
+			},
+			pl.ID,
+		)
+		is.NoErr(err)
+
+		// wait for pipeline to finish consuming records from the source
+		time.Sleep(100 * time.Millisecond)
+
+		pl.SetStatus(StatusRecovering)
+		tc.stopFn(ctx, is, ps, pl.ID)
+
+		// wait for pipeline to finish
+		err = pl.Wait()
+		if tc.wantErr != nil {
+			is.True(err != nil)
+		} else {
+			is.NoErr(err)
+			is.Equal("", pl.Error)
+		}
+
+		is.Equal(tc.want, pl.GetStatus())
+	}
+
+	testCases := []testCase{
+		{
+			name: "system stop (graceful shutdown err)",
+			stopFn: func(ctx context.Context, is *is.I, ps *Service, pipelineID string) {
+				ps.StopAll(ctx, ErrGracefulShutdown)
+			},
+			wantSourceStop: true,
+			want:           StatusSystemStopped,
+		},
+		{
+			name: "system stop (terrible err)",
+			stopFn: func(ctx context.Context, is *is.I, ps *Service, pipelineID string) {
+				ps.StopAll(ctx, cerrors.New("terrible err"))
+			},
+			wantSourceStop: true,
+			want:           StatusDegraded,
+			wantErr:        cerrors.New("terrible err"),
+		},
+		{
+			name: "user stop (graceful)",
+			stopFn: func(ctx context.Context, is *is.I, ps *Service, pipelineID string) {
+				err := ps.Stop(ctx, pipelineID, false)
+				is.NoErr(err)
+			},
+			wantSourceStop: true,
+			want:           StatusUserStopped,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			runTest(t, tc)
+		})
+	}
 }
 
 func TestServiceLifecycle_PipelineStop(t *testing.T) {
@@ -408,7 +520,7 @@ func TestServiceLifecycle_PipelineStop(t *testing.T) {
 	err = pl.Wait()
 	is.NoErr(err)
 
-	is.Equal(StatusSystemStopped, pl.Status)
+	is.Equal(StatusSystemStopped, pl.GetStatus())
 	is.Equal("", pl.Error)
 }
 
@@ -451,7 +563,7 @@ func TestService_Run_Rerun(t *testing.T) {
 
 		// update internal fields, they will be stored when we add the connectors
 		pl.DLQ.Plugin = dlq.Plugin
-		pl.Status = status
+		pl.SetStatus(status)
 
 		pl, err = ps.AddConnector(ctx, pl.ID, source.ID)
 		is.NoErr(err)
@@ -484,7 +596,7 @@ func TestService_Run_Rerun(t *testing.T) {
 		got := ps.List(ctx)
 		is.Equal(len(got), 1)
 		is.True(got[pl.ID] != nil)
-		is.Equal(got[pl.ID].Status, expected)
+		is.Equal(got[pl.ID].GetStatus(), expected)
 
 		if expected == StatusRunning {
 			pl, _ = ps.Get(ctx, pl.ID)

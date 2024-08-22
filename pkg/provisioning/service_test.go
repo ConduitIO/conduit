@@ -48,23 +48,28 @@ import (
 var (
 	anyCtx = gomock.Any()
 
-	oldPipelineInstance = &pipeline.Instance{
-		ID: p1.P1.ID,
-		Config: pipeline.Config{
-			Name:        "name1",
-			Description: "desc1",
-		},
-		Status:        pipeline.StatusRunning,
-		ProvisionedBy: pipeline.ProvisionTypeConfig,
-		ConnectorIDs:  []string{"pipeline1:con1", "pipeline1:con2"},
-		ProcessorIDs:  []string{"pipeline1:proc1"},
-		DLQ: pipeline.DLQ{
-			Plugin:              "builtin:file",
-			Settings:            map[string]string{"path": "dlq.out"},
-			WindowSize:          2,
-			WindowNackThreshold: 1,
-		},
-	}
+	oldPipelineInstance = func() *pipeline.Instance {
+		pl := &pipeline.Instance{
+			ID: p1.P1.ID,
+			Config: pipeline.Config{
+				Name:        "name1",
+				Description: "desc1",
+			},
+			ProvisionedBy: pipeline.ProvisionTypeConfig,
+			ConnectorIDs:  []string{"pipeline1:con1", "pipeline1:con2"},
+			ProcessorIDs:  []string{"pipeline1:proc1"},
+			DLQ: pipeline.DLQ{
+				Plugin:              "builtin:file",
+				Settings:            map[string]string{"path": "dlq.out"},
+				WindowSize:          2,
+				WindowNackThreshold: 1,
+			},
+		}
+		pl.SetStatus(pipeline.StatusRunning)
+
+		return pl
+	}()
+
 	oldConnector1Instance = &connector.Instance{
 		ID:         "pipeline1:con1",
 		Type:       connector.TypeSource,
@@ -396,9 +401,10 @@ func TestService_Init_PipelineProvisionedFromAPI(t *testing.T) {
 	logger := log.Nop()
 	ctrl := gomock.NewController(t)
 
-	tmp := *oldPipelineInstance
-	APIPipelineInstance := &tmp
-	APIPipelineInstance.ProvisionedBy = pipeline.ProvisionTypeAPI // change the test pipeline to be API provisioned
+	APIPipelineInstance := &pipeline.Instance{
+		ID:            p1.P1.ID,
+		ProvisionedBy: pipeline.ProvisionTypeAPI,
+	}
 
 	service, pipelineService, _, _, _ := newTestService(ctrl, logger)
 	service.pipelinesPath = "./test/pipelines1"
@@ -534,7 +540,7 @@ func TestService_IntegrationTestServices(t *testing.T) {
 		got, err := plService.Get(ctx, want.ID)
 		is.NoErr(err)
 		is.Equal(got.Config, want.Config)
-		is.Equal(got.Status, want.Status)
+		is.Equal(got.GetStatus(), want.GetStatus())
 		is.Equal(got.ProvisionedBy, want.ProvisionedBy)
 		is.Equal(got.ConnectorIDs, want.ConnectorIDs)
 		is.Equal(got.ProcessorIDs, want.ProcessorIDs)
