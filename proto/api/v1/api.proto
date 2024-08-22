@@ -48,6 +48,11 @@ message Pipeline {
     STATUS_STOPPED = 2;
     // Pipeline stopped with an error (see State.error).
     STATUS_DEGRADED = 3;
+    // Pipeline is recovering. This case on of following:
+    // (1) pipeline is being restarted
+    // (2) Conduit is backing off and pipeline will be restarted later
+    // (3) pipeline was restarted, but Conduit is checking if the pipeline is healthy.
+    STATUS_RECOVERING = 4;
   }
 
   message State {

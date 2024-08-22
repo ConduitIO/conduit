@@ -12,11 +12,12 @@ func _() {
 	_ = x[StatusSystemStopped-2]
 	_ = x[StatusUserStopped-3]
 	_ = x[StatusDegraded-4]
+	_ = x[StatusRecovering-5]
 }
 
-const _Status_name = "RunningSystemStoppedUserStoppedDegraded"
+const _Status_name = "RunningSystemStoppedUserStoppedDegradedRecovering"
 
-var _Status_index = [...]uint8{0, 7, 20, 31, 39}
+var _Status_index = [...]uint8{0, 7, 20, 31, 39, 49}
 
 func (i Status) String() string {
 	i -= 1
