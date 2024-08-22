@@ -19,6 +19,7 @@ import "github.com/conduitio/conduit/pkg/foundation/cerrors"
 var (
 	ErrTimeout              = cerrors.New("operation timed out")
 	ErrGracefulShutdown     = cerrors.New("graceful shutdown")
+	ErrForceStop            = cerrors.New("force stop")
 	ErrPipelineRunning      = cerrors.New("pipeline is running")
 	ErrPipelineNotRunning   = cerrors.New("pipeline not running")
 	ErrInstanceNotFound     = cerrors.New("pipeline instance not found")
