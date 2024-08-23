@@ -197,27 +197,6 @@ func TestService_Create_BuilderFail(t *testing.T) {
 	is.Equal(i, nil)
 }
 
-func TestService_Create_WorkersNegative(t *testing.T) {
-	is := is.New(t)
-	ctx := context.Background()
-	db := &inmemory.DB{}
-
-	service := NewService(log.Nop(), db, &proc_plugin.PluginService{})
-
-	got, err := service.Create(
-		ctx,
-		uuid.NewString(),
-		"processor-type",
-		Parent{},
-		Config{Workers: -1},
-		ProvisionTypeAPI,
-		"{{true}}",
-	)
-	is.True(err != nil) // expected workers error
-	is.Equal("processor workers can't be negative", err.Error())
-	is.Equal(got, nil)
-}
-
 func TestService_Delete_Success(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()

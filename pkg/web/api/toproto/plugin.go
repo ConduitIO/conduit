@@ -60,7 +60,7 @@ func PluginParamsMap(in map[string]config.Parameter) map[string]*apiv1.PluginSpe
 		out[k] = &apiv1.PluginSpecifications_Parameter{
 			Description: v.Description,
 			Default:     v.Default,
-			Type:        apiv1.PluginSpecifications_Parameter_Type(v.Type),
+			Type:        apiv1.PluginSpecifications_Parameter_Type(v.Type), //nolint:gosec // this is deprecated
 			Validations: PluginParamValidations(v.Validations),
 		}
 	}

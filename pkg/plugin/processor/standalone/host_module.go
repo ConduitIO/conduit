@@ -106,7 +106,7 @@ func (*hostModuleInstance) Close(context.Context) error { return nil }
 // message. If the buffer is too small, it returns the size of the command
 // request message and parks the command request. The next call to this function
 // will return the same command request.
-func (m *hostModuleInstance) commandRequest(ctx context.Context, buf types.Bytes) types.Uint32 {
+func (m *hostModuleInstance) commandRequest(ctx context.Context, buf types.Bytes) types.Uint64 {
 	m.logger.Trace(ctx).Msg("executing command_request")
 
 	if m.parkedCommandRequest == nil {
@@ -126,7 +126,7 @@ func (m *hostModuleInstance) commandRequest(ctx context.Context, buf types.Bytes
 			Int("command_bytes", size).
 			Int("allocated_bytes", len(buf)).
 			Msgf("insufficient memory, command will be parked until next call to command_request")
-		return types.Uint32(size)
+		return types.Uint64(size)
 	}
 
 	// If the buffer is large enough, we marshal the command into the buffer and
@@ -140,7 +140,7 @@ func (m *hostModuleInstance) commandRequest(ctx context.Context, buf types.Bytes
 	m.parkedCommandRequest = nil
 
 	m.logger.Trace(ctx).Msg("returning next command")
-	return types.Uint32(len(out))
+	return types.Uint64(len(out))
 }
 
 // commandResponse is the exported function that is called by the WASM module to

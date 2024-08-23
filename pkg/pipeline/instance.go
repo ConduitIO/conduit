@@ -83,8 +83,8 @@ type DLQ struct {
 	Plugin   string
 	Settings map[string]string
 
-	WindowSize          int
-	WindowNackThreshold int
+	WindowSize          uint64
+	WindowNackThreshold uint64
 }
 
 var DefaultDLQ = DLQ{

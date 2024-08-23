@@ -32,8 +32,8 @@ type ParallelNode struct {
 	Name string
 	// NewNode is the constructor of the wrapped PubSubNode, it should create
 	// the i-th node (useful for distinguishing nodes in logs).
-	NewNode func(i int) PubSubNode
-	Workers int
+	NewNode func(i uint64) PubSubNode
+	Workers uint64
 
 	base   pubSubNodeBase
 	logger log.CtxLogger
@@ -73,7 +73,7 @@ func (n *ParallelNode) Run(ctx context.Context) error {
 	// buffered, so it blocks when all workers are busy
 	workerJobs := make(chan parallelNodeJob)
 	var workerWg sync.WaitGroup
-	for i := 0; i < n.Workers; i++ {
+	for i := uint64(0); i < n.Workers; i++ {
 		node := n.NewNode(i)
 		worker := newParallelNodeWorker(node, workerJobs, n.logger)
 		workerWg.Add(1)

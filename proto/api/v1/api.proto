@@ -154,7 +154,7 @@ message Processor {
   }
   message Config {
     map<string, string> settings = 1;
-    int32 workers = 2;
+    uint64 workers = 2;
   }
 
   string id = 1 [(google.api.field_behavior) = OUTPUT_ONLY];

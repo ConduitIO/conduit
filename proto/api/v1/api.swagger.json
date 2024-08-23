@@ -2316,8 +2316,8 @@
           }
         },
         "workers": {
-          "type": "integer",
-          "format": "int32"
+          "type": "string",
+          "format": "uint64"
         }
       }
     },

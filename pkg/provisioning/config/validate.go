@@ -97,9 +97,6 @@ func validateProcessors(mp []Processor) []error {
 		if cfg.Plugin == "" {
 			errs = append(errs, cerrors.Errorf("processor %q: \"plugin\" is mandatory: %w", cfg.ID, ErrMandatoryField))
 		}
-		if cfg.Workers < 0 {
-			errs = append(errs, cerrors.Errorf("processor %q: \"workers\" can't be negative: %w", cfg.ID, ErrInvalidField))
-		}
 		if ids[cfg.ID] {
 			errs = append(errs, cerrors.Errorf("processor %q: \"id\" must be unique: %w", cfg.ID, ErrDuplicateID))
 		}

@@ -119,9 +119,6 @@ func (s *Service) Create(
 	pt ProvisionType,
 	cond string,
 ) (*Instance, error) {
-	if cfg.Workers < 0 {
-		return nil, cerrors.New("processor workers can't be negative")
-	}
 	if cfg.Workers == 0 {
 		cfg.Workers = 1
 	}

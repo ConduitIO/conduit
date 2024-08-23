@@ -68,14 +68,14 @@ type Connector struct {
 type Processor struct {
 	Type     string            `yaml:"type"`
 	Settings map[string]string `yaml:"settings"`
-	Workers  int               `yaml:"workers"`
+	Workers  uint64            `yaml:"workers"`
 }
 
 type DLQ struct {
 	Plugin              string            `yaml:"plugin"`
 	Settings            map[string]string `yaml:"settings"`
-	WindowSize          *int              `yaml:"window-size"`
-	WindowNackThreshold *int              `yaml:"window-nack-threshold"`
+	WindowSize          *uint64
+	WindowNackThreshold *uint64 `yaml:"window-nack-threshold"`
 }
 
 func (c Configuration) ToConfig() []config.Pipeline {

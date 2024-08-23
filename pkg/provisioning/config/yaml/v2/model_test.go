@@ -23,7 +23,7 @@ import (
 
 func TestConfiguration_JSON(t *testing.T) {
 	is := is.New(t)
-	intPtr := func(i int) *int { return &i }
+	uint64Ptr := func(i uint64) *uint64 { return &i }
 	p := Pipeline{
 		ID:          "pipeline1",
 		Status:      "running",
@@ -67,8 +67,8 @@ func TestConfiguration_JSON(t *testing.T) {
 			Settings: map[string]string{
 				"foo": "bar",
 			},
-			WindowSize:          intPtr(4),
-			WindowNackThreshold: intPtr(2),
+			WindowSize:          uint64Ptr(4),
+			WindowNackThreshold: uint64Ptr(2),
 		},
 	}
 

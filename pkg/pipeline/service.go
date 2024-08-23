@@ -187,12 +187,6 @@ func (s *Service) UpdateDLQ(ctx context.Context, pipelineID string, cfg DLQ) (*I
 	if cfg.Plugin == "" {
 		return nil, cerrors.New("DLQ plugin must be provided")
 	}
-	if cfg.WindowSize < 0 {
-		return nil, cerrors.New("DLQ window size must be non-negative")
-	}
-	if cfg.WindowNackThreshold < 0 {
-		return nil, cerrors.New("DLQ window nack threshold must be non-negative")
-	}
 	if cfg.WindowSize > 0 && cfg.WindowSize <= cfg.WindowNackThreshold {
 		return nil, cerrors.New("DLQ window nack threshold must be lower than window size")
 	}

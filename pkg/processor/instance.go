@@ -94,5 +94,5 @@ type Parent struct {
 // Config holds configuration data for building a processor.
 type Config struct {
 	Settings map[string]string
-	Workers  int
+	Workers  uint64
 }

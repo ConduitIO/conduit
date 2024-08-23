@@ -42,15 +42,15 @@ type Processor struct {
 	ID        string
 	Plugin    string
 	Settings  map[string]string
-	Workers   int
+	Workers   uint64
 	Condition string
 }
 
 type DLQ struct {
 	Plugin              string
 	Settings            map[string]string
-	WindowSize          *int
-	WindowNackThreshold *int
+	WindowSize          *uint64
+	WindowNackThreshold *uint64
 }
 
 // Classify fields as immutable, mutable or ignored. This is used by the

@@ -806,7 +806,7 @@ func TestActionsBuilder_PrepareProcessorActions_Recreate(t *testing.T) {
 // -- HELPERS --
 // -------------
 
-func intPtr(i int) *int { return &i }
+func uint64Ptr(i uint64) *uint64 { return &i }
 
 func newTestService(ctrl *gomock.Controller, logger log.CtxLogger) (*Service, *mock.PipelineService, *mock.ConnectorService, *mock.ProcessorService, *mock.ConnectorPluginService) {
 	db := &inmemory.DB{}

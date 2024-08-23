@@ -324,9 +324,9 @@ func (s *Service) buildParallelProcessorNode(
 ) *stream.ParallelNode {
 	return &stream.ParallelNode{
 		Name: proc.ID + "-parallel",
-		NewNode: func(i int) stream.PubSubNode {
+		NewNode: func(i uint64) stream.PubSubNode {
 			n := s.buildProcessorNode(pl, proc)
-			n.Name = n.Name + "-" + strconv.Itoa(i) // add suffix to name
+			n.Name = n.Name + "-" + strconv.FormatUint(i, 10) // add suffix to name
 			return n
 		},
 		Workers: proc.Config.Workers,

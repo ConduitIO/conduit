@@ -209,22 +209,6 @@ func TestValidator_InvalidFields(t *testing.T) {
 			}},
 		},
 		wantErr: ErrInvalidField,
-	}, {
-		name: "processor workers is negative",
-		config: Pipeline{
-			ID:          "pipeline1",
-			Status:      "running",
-			Name:        "pipeline1",
-			Description: "desc1",
-			Processors: []Processor{{
-				ID:       "proc1",
-				Plugin:   "js",
-				Settings: map[string]string{},
-				// invalid field
-				Workers: -1,
-			}},
-		},
-		wantErr: ErrInvalidField,
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

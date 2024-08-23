@@ -57,7 +57,7 @@ func ConnectorConfig(in connector.Config) *apiv1.Connector_Config {
 }
 
 func ConnectorType(in connector.Type) apiv1.Connector_Type {
-	return apiv1.Connector_Type(in)
+	return apiv1.Connector_Type(in) //nolint:gosec // this is deprecated
 }
 
 func ConnectorDestinationState(in connector.DestinationState) *apiv1.Connector_DestinationState_ {

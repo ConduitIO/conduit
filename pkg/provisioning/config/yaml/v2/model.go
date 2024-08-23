@@ -94,14 +94,14 @@ type Processor struct {
 	Plugin    string            `yaml:"plugin" json:"plugin"`
 	Condition string            `yaml:"condition" json:"condition"`
 	Settings  map[string]string `yaml:"settings" json:"settings"`
-	Workers   int               `yaml:"workers" json:"workers"`
+	Workers   uint64            `yaml:"workers" json:"workers"`
 }
 
 type DLQ struct {
 	Plugin              string            `yaml:"plugin" json:"plugin"`
 	Settings            map[string]string `yaml:"settings" json:"settings"`
-	WindowSize          *int              `yaml:"window-size" json:"window-size"`
-	WindowNackThreshold *int              `yaml:"window-nack-threshold" json:"window-nack-threshold"`
+	WindowSize          *uint64           `yaml:"window-size" json:"window-size"`
+	WindowNackThreshold *uint64           `yaml:"window-nack-threshold" json:"window-nack-threshold"`
 }
 
 func (c Configuration) ToConfig() []config.Pipeline {

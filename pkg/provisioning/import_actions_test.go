@@ -42,8 +42,8 @@ func TestCreatePipelineAction_Do(t *testing.T) {
 		DLQ: config.DLQ{
 			Plugin:              "dlq-plugin",
 			Settings:            map[string]string{"foo": "bar"},
-			WindowSize:          intPtr(1),
-			WindowNackThreshold: intPtr(2),
+			WindowSize:          uint64Ptr(1),
+			WindowNackThreshold: uint64Ptr(2),
 		},
 	}
 	wantCfg := pipeline.Config{
@@ -87,8 +87,8 @@ func TestCreatePipelineAction_Rollback(t *testing.T) {
 		DLQ: config.DLQ{
 			Plugin:              "dlq-plugin",
 			Settings:            map[string]string{"foo": "bar"},
-			WindowSize:          intPtr(1),
-			WindowNackThreshold: intPtr(2),
+			WindowSize:          uint64Ptr(1),
+			WindowNackThreshold: uint64Ptr(2),
 		},
 	}
 
@@ -113,8 +113,8 @@ func TestUpdatePipelineAction(t *testing.T) {
 		DLQ: config.DLQ{
 			Plugin:              "dlq-plugin",
 			Settings:            map[string]string{"foo": "bar"},
-			WindowSize:          intPtr(1),
-			WindowNackThreshold: intPtr(2),
+			WindowSize:          uint64Ptr(1),
+			WindowNackThreshold: uint64Ptr(2),
 		},
 	}
 
@@ -198,8 +198,8 @@ func TestDeletePipelineAction_Do(t *testing.T) {
 		DLQ: config.DLQ{
 			Plugin:              "dlq-plugin",
 			Settings:            map[string]string{"foo": "bar"},
-			WindowSize:          intPtr(1),
-			WindowNackThreshold: intPtr(2),
+			WindowSize:          uint64Ptr(1),
+			WindowNackThreshold: uint64Ptr(2),
 		},
 	}
 
@@ -228,8 +228,8 @@ func TestDeletePipelineAction_Rollback(t *testing.T) {
 		DLQ: config.DLQ{
 			Plugin:              "dlq-plugin",
 			Settings:            map[string]string{"foo": "bar"},
-			WindowSize:          intPtr(1),
-			WindowNackThreshold: intPtr(2),
+			WindowSize:          uint64Ptr(1),
+			WindowNackThreshold: uint64Ptr(2),
 		},
 	}
 	wantCfg := pipeline.Config{

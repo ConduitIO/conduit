@@ -42,7 +42,7 @@ func Processor(in *processor.Instance) *apiv1.Processor {
 func ProcessorConfig(in processor.Config) *apiv1.Processor_Config {
 	return &apiv1.Processor_Config{
 		Settings: in.Settings,
-		Workers:  int32(in.Workers),
+		Workers:  in.Workers,
 	}
 }
 

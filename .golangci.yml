@@ -62,7 +62,7 @@ linters:
   # inverted configuration with `enable-all` and `disable` is not scalable during updates of golangci-lint
   disable-all: true
   enable:
-    # We plan to enable all of the linters which are commented out.
+    # We plan to enable all the linters which are commented out.
     # However, we want to enable them one by one (so we don't have to fix many issues at once).
     - bodyclose
     - depguard

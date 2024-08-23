@@ -236,7 +236,7 @@ func TestDLQHandlerNode_Nack_ForwardToDLQ_Success(t *testing.T) {
 		is.NoErr(err)
 	}()
 
-	for i := 0; i < n.WindowNackThreshold; i++ {
+	for i := uint64(0); i < n.WindowNackThreshold; i++ {
 		msg := &Message{
 			Ctx:    ctx,
 			Record: opencdc.Record{Position: []byte(uuid.NewString())},
@@ -326,8 +326,8 @@ func TestDLQWindow_WindowDisabled(t *testing.T) {
 
 func TestDLQWindow_NackThresholdExceeded(t *testing.T) {
 	testCases := []struct {
-		windowSize    int
-		nackThreshold int
+		windowSize    uint64
+		nackThreshold uint64
 	}{
 		{1, 0},
 		{2, 0},
@@ -344,19 +344,19 @@ func TestDLQWindow_NackThresholdExceeded(t *testing.T) {
 				w := newDLQWindow(tc.windowSize, tc.nackThreshold)
 
 				// fill up window with nacks up to the threshold
-				for i := 0; i < tc.nackThreshold; i++ {
+				for i := uint64(0); i < tc.nackThreshold; i++ {
 					ok := w.Nack()
 					is.True(ok)
 				}
 
 				// fill up window again with acks
-				for i := 0; i < tc.windowSize; i++ {
+				for i := uint64(0); i < tc.windowSize; i++ {
 					w.Ack()
 				}
 
 				// since window is full of acks we should be able to fill up
 				// the window with nacks again
-				for i := 0; i < tc.nackThreshold; i++ {
+				for i := uint64(0); i < tc.nackThreshold; i++ {
 					ok := w.Nack()
 					is.True(ok)
 				}
@@ -367,7 +367,7 @@ func TestDLQWindow_NackThresholdExceeded(t *testing.T) {
 
 				// adding acks after that should make no difference, all nacks
 				// need to fail after the threshold is reached
-				for i := 0; i < tc.windowSize; i++ {
+				for i := uint64(0); i < tc.windowSize; i++ {
 					w.Ack()
 				}
 				ok = w.Nack()

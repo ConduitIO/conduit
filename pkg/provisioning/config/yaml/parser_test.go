@@ -35,7 +35,8 @@ func TestParser_V1_Success(t *testing.T) {
 	is := is.New(t)
 	parser := NewParser(log.Nop())
 	filepath := "./v1/testdata/pipelines1-success.yml"
-	intPtr := func(i int) *int { return &i }
+
+	uint64Ptr := func(i uint64) *uint64 { return &i }
 	want := Configurations{
 		v1.Configuration{
 			Version: "1.0",
@@ -78,8 +79,8 @@ func TestParser_V1_Success(t *testing.T) {
 						Settings: map[string]string{
 							"foo": "bar",
 						},
-						WindowSize:          intPtr(4),
-						WindowNackThreshold: intPtr(2),
+						WindowSize:          uint64Ptr(4),
+						WindowNackThreshold: uint64Ptr(2),
 					},
 				},
 			},
@@ -274,7 +275,8 @@ func TestParser_V2_Success(t *testing.T) {
 	is := is.New(t)
 	parser := NewParser(log.Nop())
 	filepath := "./v2/testdata/pipelines1-success.yml"
-	intPtr := func(i int) *int { return &i }
+
+	uint64Ptr := func(i uint64) *uint64 { return &i }
 	want := Configurations{
 		v2.Configuration{
 			Version: "2.2",
@@ -321,8 +323,8 @@ func TestParser_V2_Success(t *testing.T) {
 						Settings: map[string]string{
 							"foo": "bar",
 						},
-						WindowSize:          intPtr(4),
-						WindowNackThreshold: intPtr(2),
+						WindowSize:          uint64Ptr(4),
+						WindowNackThreshold: uint64Ptr(2),
 					},
 				},
 			},

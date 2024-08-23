@@ -34,7 +34,7 @@ func TestConfiguration_FromConfig(t *testing.T) {
 }
 
 func testPipelineConfigs() []config.Pipeline {
-	intPtr := func(i int) *int { return &i }
+	uint64Ptr := func(i uint64) *uint64 { return &i }
 
 	return []config.Pipeline{
 		{
@@ -88,8 +88,8 @@ func testPipelineConfigs() []config.Pipeline {
 					"level":   "error",
 					"message": "record delivery failed",
 				},
-				WindowSize:          intPtr(4),
-				WindowNackThreshold: intPtr(2),
+				WindowSize:          uint64Ptr(4),
+				WindowNackThreshold: uint64Ptr(2),
 			},
 		},
 		{
@@ -124,7 +124,7 @@ func testPipelineConfigs() []config.Pipeline {
 }
 
 func expectedModelConfiguration() Configuration {
-	intPtr := func(i int) *int { return &i }
+	uint64Ptr := func(i uint64) *uint64 { return &i }
 
 	return Configuration{
 		Version: "2.2",
@@ -181,8 +181,8 @@ func expectedModelConfiguration() Configuration {
 						"level":   "error",
 						"message": "record delivery failed",
 					},
-					WindowSize:          intPtr(4),
-					WindowNackThreshold: intPtr(2),
+					WindowSize:          uint64Ptr(4),
+					WindowNackThreshold: uint64Ptr(2),
 				},
 			},
 			{

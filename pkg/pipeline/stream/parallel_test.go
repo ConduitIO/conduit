@@ -343,7 +343,7 @@ func TestParallelNode_Success(t *testing.T) {
 
 	const workerCount = 10
 
-	newPubSubNode := func(i int) PubSubNode {
+	newPubSubNode := func(i uint64) PubSubNode {
 		return &parallelTestNode{
 			Name: fmt.Sprintf("test-node-%d", i),
 			F: func(ctx context.Context, sub <-chan *Message, pub chan<- *Message) error {
@@ -422,7 +422,7 @@ func TestParallelNode_ErrorAll(t *testing.T) {
 
 	const workerCount = 10
 
-	newPubSubNode := func(i int) PubSubNode {
+	newPubSubNode := func(i uint64) PubSubNode {
 		name := fmt.Sprintf("test-node-%d", i)
 		return &parallelTestNode{
 			Name: name,
@@ -483,7 +483,7 @@ func TestParallelNode_ErrorSingle(t *testing.T) {
 
 	const workerCount = 10
 
-	newPubSubNode := func(i int) PubSubNode {
+	newPubSubNode := func(i uint64) PubSubNode {
 		name := fmt.Sprintf("test-node-%d", i)
 		return &parallelTestNode{
 			Name: name,
@@ -585,7 +585,7 @@ func TestParallelNode_Processor(t *testing.T) {
 		Teardown(gomock.Any()).
 		Times(workerCount)
 
-	newProcNode := func(i int) PubSubNode {
+	newProcNode := func(i uint64) PubSubNode {
 		return &ProcessorNode{
 			Name:           fmt.Sprintf("test-%d", i),
 			Processor:      proc,

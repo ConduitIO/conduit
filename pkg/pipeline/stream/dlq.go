@@ -42,8 +42,8 @@ type DLQHandlerNode struct {
 	Name    string
 	Handler DLQHandler
 
-	WindowSize          int
-	WindowNackThreshold int
+	WindowSize          uint64
+	WindowNackThreshold uint64
 
 	Timer     metrics.Timer
 	Histogram metrics.RecordBytesHistogram
@@ -212,13 +212,13 @@ type dlqWindow struct {
 	// nackThreshold represents the number of tolerated nacks, if the threshold
 	// is exceeded the window is frozen and returns an error for all further
 	// nacks.
-	nackThreshold int
+	nackThreshold uint64
 
-	ackCount  int
-	nackCount int
+	ackCount  uint64
+	nackCount uint64
 }
 
-func newDLQWindow(size, threshold int) *dlqWindow {
+func newDLQWindow(size, threshold uint64) *dlqWindow {
 	if size > 0 && threshold == 0 {
 		// optimization - if threshold is 0 the window size does not matter,
 		// setting it to 1 ensures we don't use more memory than needed
