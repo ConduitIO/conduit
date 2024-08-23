@@ -42,13 +42,13 @@ func Processor(in *processor.Instance) *apiv1.Processor {
 func ProcessorConfig(in processor.Config) *apiv1.Processor_Config {
 	return &apiv1.Processor_Config{
 		Settings: in.Settings,
-		Workers:  int32(in.Workers),
+		Workers:  int32(in.Workers), //nolint:gosec // no risk of overflow
 	}
 }
 
 func ProcessorParent(in processor.Parent) *apiv1.Processor_Parent {
 	return &apiv1.Processor_Parent{
 		Id:   in.ID,
-		Type: apiv1.Processor_Parent_Type(in.Type),
+		Type: apiv1.Processor_Parent_Type(in.Type), //nolint:gosec // no risk of overflow
 	}
 }
