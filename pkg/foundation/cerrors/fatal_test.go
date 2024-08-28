@@ -15,14 +15,13 @@
 package cerrors_test
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 )
 
 func TestNewFatalError(t *testing.T) {
-	err := errors.New("test error")
+	err := cerrors.New("test error")
 	fatalErr := cerrors.NewFatalError(err)
 
 	if fatalErr.Error() != err.Error() {
@@ -31,7 +30,7 @@ func TestNewFatalError(t *testing.T) {
 }
 
 func TestIsFatalError(t *testing.T) {
-	err := errors.New("test error")
+	err := cerrors.New("test error")
 
 	testCases := []struct {
 		name string
@@ -45,7 +44,7 @@ func TestIsFatalError(t *testing.T) {
 		},
 		{
 			name: "No Fatal Error",
-			err:  errors.New("test error"),
+			err:  cerrors.New("test error"),
 			want: false,
 		},
 	}
@@ -61,16 +60,16 @@ func TestIsFatalError(t *testing.T) {
 }
 
 func TestUnwrap(t *testing.T) {
-	err := errors.New("test error")
+	err := cerrors.New("test error")
 	fatalErr := cerrors.NewFatalError(err)
 
-	if errors.Unwrap(fatalErr) != err {
-		t.Errorf("expected error to unwrap to %s, got %s", err.Error(), errors.Unwrap(fatalErr).Error())
+	if cerrors.Unwrap(fatalErr) != err {
+		t.Errorf("expected error to unwrap to %s, got %s", err.Error(), cerrors.Unwrap(fatalErr).Error())
 	}
 }
 
 func TestFatalError(t *testing.T) {
-	err := errors.New("test error")
+	err := cerrors.New("test error")
 	fatalErr := cerrors.NewFatalError(err)
 
 	if fatalErr.Error() != err.Error() {
