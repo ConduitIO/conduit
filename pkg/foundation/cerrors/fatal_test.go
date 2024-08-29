@@ -15,6 +15,7 @@
 package cerrors_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -22,9 +23,9 @@ import (
 
 func TestNewFatalError(t *testing.T) {
 	err := cerrors.New("test error")
-	fatalErr := cerrors.FatalError(err)
+	fatalErr := cerrors.NewFatalError(err)
 
-	if fatalErr.Error() != err.Error() {
+	if fatalErr.Error() != fmt.Sprintf("fatal error: %v", err) {
 		t.Errorf("expected error message to be %s, got %s", err.Error(), fatalErr.Error())
 	}
 }
@@ -38,8 +39,8 @@ func TestIsFatalError(t *testing.T) {
 		want bool
 	}{
 		{
-			name: "FatalErr",
-			err:  cerrors.FatalError(err),
+			name: "FatalError",
+			err:  cerrors.NewFatalError(err),
 			want: true,
 		},
 		{
@@ -61,7 +62,7 @@ func TestIsFatalError(t *testing.T) {
 
 func TestUnwrap(t *testing.T) {
 	err := cerrors.New("test error")
-	fatalErr := cerrors.FatalError(err)
+	fatalErr := cerrors.NewFatalError(err)
 
 	if cerrors.Unwrap(fatalErr) != err {
 		t.Errorf("expected error to unwrap to %s, got %s", err.Error(), cerrors.Unwrap(fatalErr).Error())
@@ -70,9 +71,9 @@ func TestUnwrap(t *testing.T) {
 
 func TestFatalError(t *testing.T) {
 	err := cerrors.New("test error")
-	fatalErr := cerrors.FatalError(err)
+	fatalErr := cerrors.NewFatalError(err)
 
-	if fatalErr.Error() != err.Error() {
+	if fatalErr.Error() != fmt.Sprintf("fatal error: %v", err) {
 		t.Errorf("expected error message to be %s, got %s", err.Error(), fatalErr.Error())
 	}
 }
