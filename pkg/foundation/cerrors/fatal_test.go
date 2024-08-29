@@ -47,6 +47,11 @@ func TestIsFatalError(t *testing.T) {
 			want: true,
 		},
 		{
+			name: "when it's wrapped in",
+			err:  fmt.Errorf("something went wrong: %w", cerrors.NewFatalError(cerrors.New("fatal error"))),
+			want: true,
+		},
+		{
 			name: "when it's not a FatalError",
 			err:  err,
 			want: false,

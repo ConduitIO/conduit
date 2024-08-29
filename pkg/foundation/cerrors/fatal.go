@@ -46,6 +46,6 @@ func (f *FatalError) Error() string {
 
 // IsFatalError checks if the error is a FatalError.
 func IsFatalError(err error) bool {
-	_, ok := err.(*FatalError)
-	return ok
+	var fatalErr *FatalError
+	return As(err, &fatalErr)
 }
