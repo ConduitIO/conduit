@@ -112,7 +112,7 @@ func (n *ProcessorNode) Run(ctx context.Context) error {
 		case sdk.ErrorRecord:
 			err = msg.Nack(v.Error, n.ID())
 			if err != nil {
-				return cerrors.FatalError(cerrors.Errorf("error executing processor: %w", err))
+				return cerrors.NewFatalError(cerrors.Errorf("error executing processor: %w", err))
 			}
 		}
 	}

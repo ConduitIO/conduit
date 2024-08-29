@@ -26,7 +26,7 @@ func TestNewFatalError(t *testing.T) {
 	is := is.New(t)
 
 	err := cerrors.New("test error")
-	fatalErr := cerrors.FatalError(err)
+	fatalErr := cerrors.NewFatalError(err)
 	wantErr := fmt.Sprintf("fatal error: %v", err)
 
 	is.Equal(fatalErr.Error(), wantErr)
@@ -42,12 +42,12 @@ func TestIsFatalError(t *testing.T) {
 		want bool
 	}{
 		{
-			name: "Fatal",
-			err:  cerrors.FatalError(err),
+			name: "when it's a FatalError",
+			err:  cerrors.NewFatalError(err),
 			want: true,
 		},
 		{
-			name: "No Fatal Error",
+			name: "when it's not a FatalError",
 			err:  err,
 			want: false,
 		},
@@ -65,7 +65,7 @@ func TestUnwrap(t *testing.T) {
 	is := is.New(t)
 
 	err := cerrors.New("test error")
-	fatalErr := cerrors.FatalError(err)
+	fatalErr := cerrors.NewFatalError(err)
 
 	is.Equal(cerrors.Unwrap(fatalErr), err)
 }
@@ -74,7 +74,7 @@ func TestFatalError(t *testing.T) {
 	is := is.New(t)
 
 	err := cerrors.New("test error")
-	fatalErr := cerrors.FatalError(err)
+	fatalErr := cerrors.NewFatalError(err)
 	wantErr := fmt.Sprintf("fatal error: %v", err)
 
 	is.Equal(fatalErr.Error(), wantErr)
