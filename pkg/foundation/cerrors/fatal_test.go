@@ -19,18 +19,21 @@ import (
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/matryer/is"
 )
 
 func TestNewFatalError(t *testing.T) {
+	is := is.New(t)
+
 	err := cerrors.New("test error")
 	fatalErr := cerrors.NewFatalError(err)
+	wantErr := fmt.Sprintf("fatal error: %v", err)
 
-	if fatalErr.Error() != fmt.Sprintf("fatal error: %v", err) {
-		t.Errorf("expected error message to be %s, got %s", err.Error(), fatalErr.Error())
-	}
+	is.Equal(fatalErr.Error(), wantErr)
 }
 
 func TestIsFatalError(t *testing.T) {
+	is := is.New(t)
 	err := cerrors.New("test error")
 
 	testCases := []struct {
@@ -45,7 +48,7 @@ func TestIsFatalError(t *testing.T) {
 		},
 		{
 			name: "No Fatal Error",
-			err:  cerrors.New("test error"),
+			err:  err,
 			want: false,
 		},
 	}
@@ -53,27 +56,26 @@ func TestIsFatalError(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			got := cerrors.IsFatalError(tc.err)
-			if got != tc.want {
-				t.Errorf("IsFatalError(%v) = %v; want %v", tc.err, got, tc.want)
-			}
+			is.Equal(got, tc.want)
 		})
 	}
 }
 
 func TestUnwrap(t *testing.T) {
+	is := is.New(t)
+
 	err := cerrors.New("test error")
 	fatalErr := cerrors.NewFatalError(err)
 
-	if cerrors.Unwrap(fatalErr) != err {
-		t.Errorf("expected error to unwrap to %s, got %s", err.Error(), cerrors.Unwrap(fatalErr).Error())
-	}
+	is.Equal(cerrors.Unwrap(fatalErr), err)
 }
 
 func TestFatalError(t *testing.T) {
+	is := is.New(t)
+
 	err := cerrors.New("test error")
 	fatalErr := cerrors.NewFatalError(err)
+	wantErr := fmt.Sprintf("fatal error: %v", err)
 
-	if fatalErr.Error() != fmt.Sprintf("fatal error: %v", err) {
-		t.Errorf("expected error message to be %s, got %s", err.Error(), fatalErr.Error())
-	}
+	is.Equal(fatalErr.Error(), wantErr)
 }
