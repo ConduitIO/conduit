@@ -22,7 +22,7 @@ import (
 
 func TestNewFatalError(t *testing.T) {
 	err := cerrors.New("test error")
-	fatalErr := cerrors.NewFatalError(err)
+	fatalErr := cerrors.FatalError(err)
 
 	if fatalErr.Error() != err.Error() {
 		t.Errorf("expected error message to be %s, got %s", err.Error(), fatalErr.Error())
@@ -38,8 +38,8 @@ func TestIsFatalError(t *testing.T) {
 		want bool
 	}{
 		{
-			name: "FatalError",
-			err:  cerrors.NewFatalError(err),
+			name: "FatalErr",
+			err:  cerrors.FatalError(err),
 			want: true,
 		},
 		{
@@ -61,7 +61,7 @@ func TestIsFatalError(t *testing.T) {
 
 func TestUnwrap(t *testing.T) {
 	err := cerrors.New("test error")
-	fatalErr := cerrors.NewFatalError(err)
+	fatalErr := cerrors.FatalError(err)
 
 	if cerrors.Unwrap(fatalErr) != err {
 		t.Errorf("expected error to unwrap to %s, got %s", err.Error(), cerrors.Unwrap(fatalErr).Error())
@@ -70,7 +70,7 @@ func TestUnwrap(t *testing.T) {
 
 func TestFatalError(t *testing.T) {
 	err := cerrors.New("test error")
-	fatalErr := cerrors.NewFatalError(err)
+	fatalErr := cerrors.FatalError(err)
 
 	if fatalErr.Error() != err.Error() {
 		t.Errorf("expected error message to be %s, got %s", err.Error(), fatalErr.Error())

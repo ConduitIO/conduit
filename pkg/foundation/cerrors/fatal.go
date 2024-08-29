@@ -14,28 +14,36 @@
 
 package cerrors
 
-// FatalError is an error type that will diferentiate these from other errors that could be retried.
-type FatalError struct {
+import "fmt"
+
+// FatalErr is an error type that will diferentiate these from other errors that could be retried.
+type FatalErr struct {
 	Err error
 }
 
-// NewFatalError creates a new FatalError.
-func NewFatalError(err error) *FatalError {
-	return &FatalError{Err: err}
+// FatalError creates a new FatalErr.
+func FatalError(err error) *FatalErr {
+	return &FatalErr{Err: err}
 }
 
 // Unwrap returns the wrapped error.
-func (f *FatalError) Unwrap() error {
+func (f *FatalErr) Unwrap() error {
+	if f == nil {
+		return nil
+	}
 	return f.Err
 }
 
 // Error returns the error message.
-func (f *FatalError) Error() string {
-	return f.Err.Error()
+func (f *FatalErr) Error() string {
+	if f.Err == nil {
+		return ""
+	}
+	return fmt.Sprintf("fatal error: %v", f.Err)
 }
 
-// IsFatalError checks if the error is a FatalError.
+// IsFatalError checks if the error is a FatalErr.
 func IsFatalError(err error) bool {
-	_, ok := err.(*FatalError)
+	_, ok := err.(*FatalErr)
 	return ok
 }
