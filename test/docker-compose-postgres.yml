@@ -1,4 +1,3 @@
-version: '3'
 services:
   pg-0:
     image: postgres:16
