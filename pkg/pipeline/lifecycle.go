@@ -627,9 +627,16 @@ func (s *Service) runPipeline(ctx context.Context, pl *Instance) error {
 				pl.SetStatus(StatusUserStopped)
 			}
 		default:
-			pl.SetStatus(StatusDegraded)
-			// we use %+v to get the stack trace too
-			pl.Error = fmt.Sprintf("%+v", err)
+			if cerrors.IsFatalError(err) {
+				pl.SetStatus(StatusDegraded)
+				// we use %+v to get the stack trace too
+				pl.Error = fmt.Sprintf("%+v", err)
+			} else {
+				pl.SetStatus(StatusRecovering)
+				// TODO: Implement backoff strategy
+				// check backoff strategy
+
+			}
 		}
 
 		s.logger.

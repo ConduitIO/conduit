@@ -24,6 +24,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/measure"
+	"github.com/jpillora/backoff"
 )
 
 var idRegex = regexp.MustCompile(`^[A-Za-z0-9-_:.]*$`)
@@ -51,15 +52,17 @@ type Service struct {
 	instances     map[string]*Instance
 	instanceNames map[string]bool
 	handlers      []FailureHandler
+	backoffCfg    *backoff.Backoff
 }
 
 // NewService initializes and returns a pipeline Service.
-func NewService(logger log.CtxLogger, db database.DB) *Service {
+func NewService(logger log.CtxLogger, db database.DB, backoffCfg *backoff.Backoff) *Service {
 	return &Service{
 		logger:        logger.WithComponent("pipeline.Service"),
 		store:         NewStore(db),
 		instances:     make(map[string]*Instance),
 		instanceNames: make(map[string]bool),
+		backoffCfg:    backoffCfg,
 	}
 }
 

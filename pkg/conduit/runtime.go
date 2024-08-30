@@ -62,6 +62,7 @@ import (
 	"github.com/conduitio/conduit/pkg/web/ui"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	grpcruntime "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"github.com/jpillora/backoff"
 	"github.com/piotrkowalczuk/promgrpc/v4"
 	promclient "github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -197,7 +198,15 @@ func createServices(r *Runtime) error {
 		tokenService,
 	)
 
-	plService := pipeline.NewService(r.logger, r.DB)
+	// TODO: remove me once this is coming from configuration
+	backoffCfg := &backoff.Backoff{
+		Min:    100 * time.Millisecond,
+		Max:    10 * time.Second,
+		Factor: 2,
+		Jitter: true,
+	}
+
+	plService := pipeline.NewService(r.logger, r.DB, backoffCfg)
 	connService := connector.NewService(r.logger, r.DB, r.connectorPersister)
 	procService := processor.NewService(r.logger, r.DB, procPluginService)
 
