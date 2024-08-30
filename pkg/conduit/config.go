@@ -16,6 +16,7 @@ package conduit
 
 import (
 	"os"
+	"time"
 
 	"github.com/conduitio/conduit-commons/database"
 	sdk "github.com/conduitio/conduit-connector-sdk"
@@ -81,8 +82,15 @@ type Config struct {
 	}
 
 	Pipelines struct {
-		Path        string
-		ExitOnError bool
+		Path          string
+		ExitOnError   bool
+		ErrorRecovery struct {
+			MinDelay      time.Duration
+			MaxDelay      time.Duration
+			BackoffFactor int
+			MaxRetries    int
+			HealthyAfter  time.Duration
+		}
 	}
 
 	ConnectorPlugins map[string]sdk.Connector
@@ -104,19 +112,30 @@ type Config struct {
 
 func DefaultConfig() Config {
 	var cfg Config
+
 	cfg.DB.Type = DBTypeBadger
 	cfg.DB.Badger.Path = "conduit.db"
 	cfg.DB.Postgres.Table = "conduit_kv_store"
 	cfg.DB.SQLite.Path = "conduit.db"
 	cfg.DB.SQLite.Table = "conduit_kv_store"
+
 	cfg.API.Enabled = true
 	cfg.API.HTTP.Address = ":8080"
 	cfg.API.GRPC.Address = ":8084"
+
 	cfg.Log.Level = "info"
 	cfg.Log.Format = "cli"
+
 	cfg.Connectors.Path = "./connectors"
+
 	cfg.Processors.Path = "./processors"
+
 	cfg.Pipelines.Path = "./pipelines"
+	cfg.Pipelines.ErrorRecovery.MinDelay = time.Second
+	cfg.Pipelines.ErrorRecovery.MaxDelay = 10 * time.Minute
+	cfg.Pipelines.ErrorRecovery.BackoffFactor = 2
+	cfg.Pipelines.ErrorRecovery.MaxRetries = 0
+
 	cfg.SchemaRegistry.Type = SchemaRegistryTypeBuiltin
 
 	cfg.ConnectorPlugins = builtin.DefaultBuiltinConnectors
