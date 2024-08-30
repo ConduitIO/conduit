@@ -42,7 +42,7 @@ func TestIsFatalError(t *testing.T) {
 		want bool
 	}{
 		{
-			name: "when it's a FatalError",
+			name: "when it's a fatalError",
 			err:  cerrors.NewFatalError(err),
 			want: true,
 		},
@@ -52,7 +52,7 @@ func TestIsFatalError(t *testing.T) {
 			want: true,
 		},
 		{
-			name: "when it's not a FatalError",
+			name: "when it's not a fatalError",
 			err:  err,
 			want: false,
 		},
