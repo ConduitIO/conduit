@@ -634,8 +634,6 @@ func (s *Service) runPipeline(ctx context.Context, pl *Instance) error {
 			} else {
 				pl.SetStatus(StatusRecovering)
 				// TODO: Implement backoff strategy
-				// check backoff strategy
-
 			}
 		}
 

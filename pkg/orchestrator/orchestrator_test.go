@@ -37,6 +37,7 @@ import (
 	proc_builtin "github.com/conduitio/conduit/pkg/plugin/processor/builtin"
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/google/go-cmp/cmp"
+	"github.com/jpillora/backoff"
 	"github.com/matryer/is"
 	"github.com/rs/zerolog"
 	"go.uber.org/mock/gomock"
@@ -90,10 +91,12 @@ func TestPipelineSimple(t *testing.T) {
 		nil,
 	)
 
+	b := &backoff.Backoff{}
+
 	orc := NewOrchestrator(
 		db,
 		logger,
-		pipeline.NewService(logger, db),
+		pipeline.NewService(logger, db, b),
 		connector.NewService(logger, db, connector.NewPersister(logger, db, time.Second, 3)),
 		processor.NewService(logger, db, procPluginService),
 		connPluginService,

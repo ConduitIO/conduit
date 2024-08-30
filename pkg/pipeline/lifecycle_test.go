@@ -35,6 +35,7 @@ import (
 	pmock "github.com/conduitio/conduit/pkg/plugin/connector/mock"
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/google/uuid"
+	"github.com/jpillora/backoff"
 	"github.com/matryer/is"
 	"github.com/rs/zerolog"
 	"go.uber.org/mock/gomock"
@@ -50,8 +51,9 @@ func TestServiceLifecycle_buildNodes(t *testing.T) {
 	logger := log.New(zerolog.Nop())
 	db := &inmemory.DB{}
 	persister := connector.NewPersister(logger, db, time.Second, 3)
+	b := &backoff.Backoff{}
 
-	ps := NewService(logger, db)
+	ps := NewService(logger, db, b)
 
 	source := dummySource(persister)
 	destination := dummyDestination(persister)
@@ -133,8 +135,9 @@ func TestService_buildNodes_NoSourceNode(t *testing.T) {
 	logger := log.New(zerolog.Nop())
 	db := &inmemory.DB{}
 	persister := connector.NewPersister(logger, db, time.Second, 3)
+	b := &backoff.Backoff{}
 
-	ps := NewService(logger, db)
+	ps := NewService(logger, db, b)
 
 	wantErr := "can't build pipeline without any source connectors"
 
@@ -180,8 +183,9 @@ func TestService_buildNodes_NoDestinationNode(t *testing.T) {
 	logger := log.New(zerolog.Nop())
 	db := &inmemory.DB{}
 	persister := connector.NewPersister(logger, db, time.Second, 3)
+	b := &backoff.Backoff{}
 
-	ps := NewService(logger, db)
+	ps := NewService(logger, db, b)
 
 	wantErr := "can't build pipeline without any destination connectors"
 
@@ -228,8 +232,9 @@ func TestServiceLifecycle_PipelineSuccess(t *testing.T) {
 	db := &inmemory.DB{}
 	persister := connector.NewPersister(logger, db, time.Second, 3)
 	defer persister.Wait()
+	b := &backoff.Backoff{}
 
-	ps := NewService(logger, db)
+	ps := NewService(logger, db, b)
 
 	// create a host pipeline
 	pl, err := ps.Create(ctx, uuid.NewString(), Config{Name: "test pipeline"}, ProvisionTypeAPI)
@@ -287,8 +292,9 @@ func TestServiceLifecycle_PipelineError(t *testing.T) {
 	logger := log.Test(t)
 	db := &inmemory.DB{}
 	persister := connector.NewPersister(logger, db, time.Second, 3)
+	b := &backoff.Backoff{}
 
-	ps := NewService(logger, db)
+	ps := NewService(logger, db, b)
 
 	// create a host pipeline
 	pl, err := ps.Create(ctx, uuid.NewString(), Config{Name: "test pipeline"}, ProvisionTypeAPI)
@@ -371,8 +377,9 @@ func TestServiceLifecycle_StopAll_Recovering(t *testing.T) {
 		logger := log.New(zerolog.Nop())
 		db := &inmemory.DB{}
 		persister := connector.NewPersister(logger, db, time.Second, 3)
+		b := &backoff.Backoff{}
 
-		ps := NewService(logger, db)
+		ps := NewService(logger, db, b)
 
 		// create a host pipeline
 		pl, err := ps.Create(ctx, uuid.NewString(), Config{Name: "test pipeline"}, ProvisionTypeAPI)
@@ -472,8 +479,9 @@ func TestServiceLifecycle_PipelineStop(t *testing.T) {
 	logger := log.New(zerolog.Nop())
 	db := &inmemory.DB{}
 	persister := connector.NewPersister(logger, db, time.Second, 3)
+	b := &backoff.Backoff{}
 
-	ps := NewService(logger, db)
+	ps := NewService(logger, db, b)
 
 	// create a host pipeline
 	pl, err := ps.Create(ctx, uuid.NewString(), Config{Name: "test pipeline"}, ProvisionTypeAPI)
@@ -533,8 +541,9 @@ func TestService_Run_Rerun(t *testing.T) {
 		logger := log.Test(t)
 		db := &inmemory.DB{}
 		persister := connector.NewPersister(logger, db, time.Second, 3)
+		b := &backoff.Backoff{}
 
-		ps := NewService(logger, db)
+		ps := NewService(logger, db, b)
 
 		// create a host pipeline
 		pl, err := ps.Create(ctx, uuid.NewString(), Config{Name: "test pipeline"}, ProvisionTypeAPI)
@@ -571,7 +580,7 @@ func TestService_Run_Rerun(t *testing.T) {
 		is.NoErr(err)
 
 		// create a new pipeline service and initialize it
-		ps = NewService(logger, db)
+		ps = NewService(logger, db, b)
 		err = ps.Init(ctx)
 		is.NoErr(err)
 		err = ps.Run(
