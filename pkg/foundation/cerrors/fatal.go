@@ -30,9 +30,6 @@ func NewFatalError(err error) *FatalError {
 
 // Unwrap returns the wrapped error.
 func (f *FatalError) Unwrap() error {
-	if f == nil {
-		return nil
-	}
 	return f.Err
 }
 
