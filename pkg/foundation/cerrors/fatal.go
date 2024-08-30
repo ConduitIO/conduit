@@ -23,8 +23,8 @@ type fatalError struct {
 	Err error
 }
 
-// NewFatalError creates a new fatalError.
-func NewFatalError(err error) *fatalError {
+// FatalError creates a new fatalError.
+func FatalError(err error) *fatalError {
 	return &fatalError{Err: err}
 }
 
