@@ -81,7 +81,7 @@
     "eslint-plugin-ember": "^12.2.0",
     "eslint-plugin-n": "^17.7.0",
     "eslint-plugin-prettier": "^5.1.3",
-    "eslint-plugin-qunit": "^8.1.1",
+    "eslint-plugin-qunit": "^8.1.2",
     "loader.js": "^4.7.0",
     "miragejs": "~0.1.48",
     "mx-ui-components": "https://github.com/ConduitIO/mx-ui-components.git#v3.0.0",
