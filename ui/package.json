@@ -32,7 +32,7 @@
     "@babel/plugin-proposal-decorators": "^7.24.1",
     "@ember/optional-features": "^2.1.0",
     "@ember/render-modifiers": "^2.1.0",
-    "@ember/test-helpers": "^3.3.1",
+    "@ember/test-helpers": "^4.0.2",
     "@glimmer/component": "^1.1.2",
     "@glimmer/tracking": "^1.1.2",
     "@meroxa/ui-base": "https://github.com/meroxa/ui-base.git#2.0.0",
