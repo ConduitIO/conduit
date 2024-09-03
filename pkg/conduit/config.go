@@ -15,8 +15,6 @@
 package conduit
 
 import (
-	"errors"
-	"golang.org/x/exp/constraints"
 	"os"
 	"time"
 
@@ -26,6 +24,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin/connector/builtin"
 	"github.com/rs/zerolog"
+	"golang.org/x/exp/constraints"
 )
 
 const (
@@ -212,7 +211,7 @@ func (c Config) validateErrorRecovery() error {
 		errs = append(errs, err)
 	}
 
-	return errors.Join(errs...)
+	return cerrors.Join(errs...)
 }
 
 func (c Config) Validate() error {
