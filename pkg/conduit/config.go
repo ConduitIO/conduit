@@ -15,6 +15,8 @@
 package conduit
 
 import (
+	"errors"
+	"golang.org/x/exp/constraints"
 	"os"
 	"time"
 
@@ -135,6 +137,7 @@ func DefaultConfig() Config {
 	cfg.Pipelines.ErrorRecovery.MaxDelay = 10 * time.Minute
 	cfg.Pipelines.ErrorRecovery.BackoffFactor = 2
 	cfg.Pipelines.ErrorRecovery.MaxRetries = 0
+	cfg.Pipelines.ErrorRecovery.HealthyAfter = 5 * time.Minute
 
 	cfg.SchemaRegistry.Type = SchemaRegistryTypeBuiltin
 
@@ -186,6 +189,32 @@ func (c Config) validateSchemaRegistryConfig() error {
 	return nil
 }
 
+func (c Config) validateErrorRecovery() error {
+	errRecoveryCfg := c.Pipelines.ErrorRecovery
+	var errs []error
+
+	if err := requirePositiveValue("min-delay", errRecoveryCfg.MinDelay); err != nil {
+		errs = append(errs, err)
+	}
+	if err := requirePositiveValue("max-delay", errRecoveryCfg.MaxDelay); err != nil {
+		errs = append(errs, err)
+	}
+	if errRecoveryCfg.MaxDelay > 0 && errRecoveryCfg.MinDelay > errRecoveryCfg.MaxDelay {
+		errs = append(errs, cerrors.New(`"min-delay" should be smaller than "max-delay"`))
+	}
+	if err := requireNonNegativeValue("backoff-factor", errRecoveryCfg.BackoffFactor); err != nil {
+		errs = append(errs, err)
+	}
+	if err := requireNonNegativeValue("max-retries", errRecoveryCfg.MaxRetries); err != nil {
+		errs = append(errs, err)
+	}
+	if err := requirePositiveValue("healthy-after", errRecoveryCfg.HealthyAfter); err != nil {
+		errs = append(errs, err)
+	}
+
+	return errors.Join(errs...)
+}
+
 func (c Config) Validate() error {
 	// TODO simplify validation with struct tags
 
@@ -231,6 +260,9 @@ func (c Config) Validate() error {
 		return invalidConfigFieldErr("pipelines.path")
 	}
 
+	if err := c.validateErrorRecovery(); err != nil {
+		return cerrors.Errorf("invalid error recovery config: %w", err)
+	}
 	return nil
 }
 
@@ -240,4 +272,20 @@ func invalidConfigFieldErr(name string) error {
 
 func requiredConfigFieldErr(name string) error {
 	return cerrors.Errorf("%q config value is required", name)
+}
+
+func requireNonNegativeValue[T constraints.Integer](name string, value T) error {
+	if value < 0 {
+		return cerrors.Errorf("%q config value mustn't be negative (got: %v)", name, value)
+	}
+
+	return nil
+}
+
+func requirePositiveValue[T constraints.Integer](name string, value T) error {
+	if value <= 0 {
+		return cerrors.Errorf("%q config value must be positive (got: %v)", name, value)
+	}
+
+	return nil
 }
