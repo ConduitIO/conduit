@@ -198,11 +198,11 @@ func createServices(r *Runtime) error {
 		tokenService,
 	)
 
-	// TODO: remove me once this is coming from configuration
+	errRecovery := r.Config.Pipelines.ErrorRecovery
 	backoffCfg := &backoff.Backoff{
-		Min:    100 * time.Millisecond,
-		Max:    10 * time.Second,
-		Factor: 2,
+		Min:    errRecovery.MinDelay,
+		Max:    errRecovery.MaxDelay,
+		Factor: float64(errRecovery.BackoffFactor),
 		Jitter: true,
 	}
 
