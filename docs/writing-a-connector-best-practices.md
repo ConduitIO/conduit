@@ -70,6 +70,10 @@ connector.
 4. If there's no native way in a 3rd party system to get changes, a timestamp
    based query can be used.
 
+#### Iterator pattern
+
+TBD
+
 ### Destination
 
 #### Batching
