@@ -1,15 +1,25 @@
-The following are some high-level guidelines when writing a connector.
+Certain patterns have proven useful when writing connectors. Over the past
+couple of years we've refined some of those and also improved our process for
+writing connectors. The result are guidelines for writing a new Conduit
+connector.
 
 ## Start with the connector template
 
-1. Can be found at https://github.com/ConduitIO/conduit-connector-template/
-2. The template provides a basic project setup that includes placeholders for
-   the source connector, destination connector code, connector specifications,
-   example of a configuration etc.
-3. The template also sets up commonly used GitHub workflow for testing, linting,
-   etc.
+The GitHub
+repository [template](https://github.com/ConduitIO/conduit-connector-template/)
+for Conduit connectors provides a basic project setup that includes placeholders
+for the source connector code, destination connector code, connector
+specifications, example of a configuration etc.
+
+Also included is a `Makefile` with commonly used target, GitHub workflow for
+linting the code, running unit tests, automatically merging minor dependabot
+upgrades, etc.
 
 ## Research the 3rd party system
+
+Researching the 3rd party system for which a Conduit connector is built helps
+understand the capabilities and limitations of the system, which in turn results
+in a better connector design and better work organization.
 
 Some questions that typically need to be answered:
 
