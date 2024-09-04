@@ -112,6 +112,11 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 	}
 
 	logger := cfg.Log.NewLogger(cfg.Log.Level, cfg.Log.Format)
+	logger.Logger = logger.
+		Hook(ctxutil.MessageIDLogCtxHook{}).
+		Hook(ctxutil.RequestIDLogCtxHook{}).
+		Hook(ctxutil.FilepathLogCtxHook{})
+	zerolog.DefaultContextLogger = &logger.Logger
 
 	var db database.DB
 	db = cfg.DB.Driver
@@ -254,13 +259,7 @@ func newLogger(level string, format string) log.CtxLogger {
 	// TODO make logger hooks configurable
 	l, _ := zerolog.ParseLevel(level)
 	f, _ := log.ParseFormat(format)
-	logger := log.InitLogger(l, f)
-	logger.Logger = logger.
-		Hook(ctxutil.MessageIDLogCtxHook{}).
-		Hook(ctxutil.RequestIDLogCtxHook{}).
-		Hook(ctxutil.FilepathLogCtxHook{})
-	zerolog.DefaultContextLogger = &logger.Logger
-	return logger
+	return log.InitLogger(l, f)
 }
 
 func configurePrometheus() {
