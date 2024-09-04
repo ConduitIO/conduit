@@ -15,23 +15,46 @@
 package conduit_test
 
 import (
+	"bytes"
 	"context"
+	"io"
+	"os"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/conduitio/conduit-commons/cchan"
 	"github.com/conduitio/conduit/pkg/conduit"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/log"
+
 	"github.com/matryer/is"
+	"github.com/rs/zerolog"
 )
 
 func TestRuntime(t *testing.T) {
-	is := is.New(t)
+	var (
+		is   = is.New(t)
+		logs = bytes.Buffer{}
+		w    = io.MultiWriter(&logs, os.Stdout)
+	)
 
 	cfg := conduit.DefaultConfig()
 	cfg.DB.Badger.Path = t.TempDir() + "/testing.app.db"
 	cfg.API.GRPC.Address = ":0"
 	cfg.API.HTTP.Address = ":0"
+	cfg.Log.NewLogger = func(level, _ string) log.CtxLogger {
+		l, _ := zerolog.ParseLevel(level)
+		zl := zerolog.New(w).
+			With().
+			Timestamp().
+			Stack().
+			Logger().
+			Level(l)
+
+		return log.New(zl)
+	}
+
 	r, err := conduit.NewRuntime(cfg)
 	is.NoErr(err)
 	is.True(r != nil)
@@ -53,4 +76,5 @@ func TestRuntime(t *testing.T) {
 	if !cerrors.Is(err, context.Canceled) {
 		t.Logf("expected error '%v', got '%v'", context.Canceled, err)
 	}
+	is.True(strings.Contains(logs.String(), "grpc API started"))
 }
