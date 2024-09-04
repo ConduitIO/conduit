@@ -68,7 +68,12 @@ type Gauge interface {
 
 // LabeledGauge describes a gauge that must have values populated before use.
 type LabeledGauge interface {
+	// WithValues returns the Gauge for the given slice of label
+	// values (same order as the label names used when creating this LabeledGauge).
+	// If that combination of label values is accessed for the first time,
+	// a new Gauge is created.
 	WithValues(labels ...string) Gauge
+	DeleteLabels(labels ...string) bool
 }
 
 // Timer is a metric that allows collecting the duration of an action in
@@ -316,6 +321,15 @@ func (mt *labeledGauge) WithValues(vs ...string) Gauge {
 		g.metrics[i] = m.WithValues(vs...)
 	}
 	return g
+}
+
+func (mt *labeledGauge) DeleteLabels(labels ...string) bool {
+	deleted := len(labels) > 0
+	for _, m := range mt.metrics {
+		deleted = deleted && m.DeleteLabels(labels...)
+	}
+
+	return deleted
 }
 
 type timer struct {

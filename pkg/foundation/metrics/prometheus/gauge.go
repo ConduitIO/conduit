@@ -27,6 +27,10 @@ func (lg *labeledGauge) WithValues(labels ...string) metrics.Gauge {
 	return &gauge{pg: lg.pg.WithLabelValues(labels...)}
 }
 
+func (lg *labeledGauge) DeleteLabels(labels ...string) bool {
+	return lg.pg.DeleteLabelValues(labels...)
+}
+
 func (lg *labeledGauge) Describe(c chan<- *prometheus.Desc) {
 	lg.pg.Describe(c)
 }
@@ -44,7 +48,6 @@ func (g *gauge) Inc(vs ...float64) {
 		g.pg.Inc()
 		return
 	}
-
 	g.pg.Add(sumFloat64(vs...))
 }
 
