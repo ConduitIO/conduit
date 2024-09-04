@@ -111,7 +111,7 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 		return nil, cerrors.Errorf("invalid config: %w", err)
 	}
 
-	logger := newLogger(cfg.Log.Level, cfg.Log.Format)
+	logger := cfg.Log.NewLogger(cfg.Log.Level, cfg.Log.Format)
 
 	var db database.DB
 	db = cfg.DB.Driver
