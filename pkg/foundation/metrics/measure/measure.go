@@ -28,9 +28,16 @@ var (
 	PipelinesGauge = metrics.NewLabeledGauge("conduit_pipelines",
 		"Number of pipelines by status.",
 		[]string{"status"})
-	PipelineStatusGauge = metrics.NewLabeledGauge("conduit_pipeline_status",
+	PipelineStatusGauge = metrics.NewLabeledGauge(
+		"conduit_pipeline_status",
 		"Pipeline statuses.",
-		[]string{"pipeline_name", "status"})
+		[]string{"pipeline_name", "status"},
+	)
+	PipelineRecoveringCount = metrics.NewLabeledCounter(
+		"pipeline_recovering_count",
+		"Number of times pipelines have been recovering (by by pipeline name)",
+		[]string{"pipeline_name"},
+	)
 	ConnectorsGauge = metrics.NewLabeledGauge("conduit_connectors",
 		"Number of connectors by type.",
 		[]string{"type"})
