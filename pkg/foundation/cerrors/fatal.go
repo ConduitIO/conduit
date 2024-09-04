@@ -24,7 +24,13 @@ type fatalError struct {
 }
 
 // FatalError creates a new fatalError.
-func FatalError(err error) *fatalError {
+func FatalError(err error) error {
+	if err == nil {
+		return nil
+	}
+	if IsFatalError(err) {
+		return err // already a fatal error
+	}
 	return &fatalError{Err: err}
 }
 
@@ -35,10 +41,7 @@ func (f *fatalError) Unwrap() error {
 
 // Error returns the error message.
 func (f *fatalError) Error() string {
-	if f.Err == nil {
-		return ""
-	}
-	return fmt.Sprintf("fatal error: %v", f.Err)
+	return fmt.Sprintf("fatal error: %s", f.Err.Error())
 }
 
 // IsFatalError checks if the error is a fatalError.
