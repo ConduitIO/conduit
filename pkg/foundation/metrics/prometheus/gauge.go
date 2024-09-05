@@ -27,10 +27,6 @@ func (lg *labeledGauge) WithValues(labels ...string) metrics.Gauge {
 	return &gauge{pg: lg.pg.WithLabelValues(labels...)}
 }
 
-func (lg *labeledGauge) DeleteLabels(labels ...string) bool {
-	return lg.pg.DeleteLabelValues(labels...)
-}
-
 func (lg *labeledGauge) Describe(c chan<- *prometheus.Desc) {
 	lg.pg.Describe(c)
 }

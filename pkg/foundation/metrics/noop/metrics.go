@@ -40,7 +40,6 @@ func (Gauge) Set(float64)    {}
 type LabeledGauge struct{}
 
 func (LabeledGauge) WithValues(...string) metrics.Gauge { return Gauge{} }
-func (LabeledGauge) DeleteLabels(...string) bool        { return true }
 
 type Timer struct{}
 

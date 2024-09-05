@@ -73,10 +73,6 @@ type LabeledGauge interface {
 	// If that combination of label values is accessed for the first time,
 	// a new Gauge is created.
 	WithValues(labels ...string) Gauge
-	// DeleteLabels removes the metric where the variable labels are the same
-	// as those passed in as labels (same order as the label names used when creating this LabeledGauge).
-	// It returns true if a metric was deleted.
-	DeleteLabels(labels ...string) bool
 }
 
 // Timer is a metric that allows collecting the duration of an action in
@@ -324,15 +320,6 @@ func (mt *labeledGauge) WithValues(vs ...string) Gauge {
 		g.metrics[i] = m.WithValues(vs...)
 	}
 	return g
-}
-
-func (mt *labeledGauge) DeleteLabels(labels ...string) bool {
-	deleted := len(labels) > 0
-	for _, m := range mt.metrics {
-		deleted = deleted && m.DeleteLabels(labels...)
-	}
-
-	return deleted
 }
 
 type timer struct {

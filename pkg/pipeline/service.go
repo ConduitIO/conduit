@@ -370,11 +370,10 @@ func (s *Service) validatePipeline(cfg Config, id string) error {
 func (s *Service) updateOldStatusMetrics(pl *Instance) {
 	status := strings.ToLower(pl.GetStatus().String())
 	measure.PipelinesGauge.WithValues(status).Dec()
-	measure.PipelineStatusGauge.DeleteLabels(pl.Config.Name, status)
 }
 
 func (s *Service) updateNewStatusMetrics(pl *Instance) {
 	status := strings.ToLower(pl.GetStatus().String())
 	measure.PipelinesGauge.WithValues(status).Inc()
-	measure.PipelineStatusGauge.WithValues(pl.Config.Name, status).Set(1)
+	measure.PipelineStatusGauge.WithValues(pl.Config.Name).Set(float64(pl.GetStatus()))
 }
