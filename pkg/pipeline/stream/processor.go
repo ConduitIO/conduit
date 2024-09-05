@@ -90,9 +90,9 @@ func (n *ProcessorNode) Run(ctx context.Context) error {
 			// make sure that we ack as many records as possible
 			// (here we simply nack all of them, which is always only one)
 			if nackErr := msg.Nack(err, n.ID()); nackErr != nil {
-				return nackErr
+				return cerrors.FatalError(nackErr)
 			}
-			return err
+			return cerrors.FatalError(err)
 		}
 
 		switch v := recsOut[0].(type) {
@@ -114,6 +114,12 @@ func (n *ProcessorNode) Run(ctx context.Context) error {
 			if err != nil {
 				return cerrors.FatalError(cerrors.Errorf("error executing processor: %w", err))
 			}
+		default:
+			err := cerrors.Errorf("processor returned unknown record type: %T", v)
+			if nackErr := msg.Nack(err, n.ID()); nackErr != nil {
+				return cerrors.FatalError(nackErr)
+			}
+			return cerrors.FatalError(err)
 		}
 	}
 }
