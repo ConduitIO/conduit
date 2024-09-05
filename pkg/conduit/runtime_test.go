@@ -20,6 +20,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -35,7 +36,7 @@ import (
 func TestRuntime(t *testing.T) {
 	var (
 		is   = is.New(t)
-		logs = bytes.Buffer{}
+		logs = safeBuffer{}
 		w    = io.MultiWriter(&logs, os.Stdout)
 	)
 
@@ -77,4 +78,34 @@ func TestRuntime(t *testing.T) {
 		t.Logf("expected error '%v', got '%v'", context.Canceled, err)
 	}
 	is.True(strings.Contains(logs.String(), "grpc API started"))
+}
+
+// safeBuffer wraps bytes.Buffer and makes it safe for concurrent use.
+type safeBuffer struct {
+	b bytes.Buffer
+	m sync.RWMutex
+}
+
+func (b *safeBuffer) Read(p []byte) (n int, err error) {
+	b.m.Lock()
+	defer b.m.Unlock()
+	return b.b.Read(p)
+}
+
+func (b *safeBuffer) Write(p []byte) (n int, err error) {
+	b.m.Lock()
+	defer b.m.Unlock()
+	return b.b.Write(p)
+}
+
+func (b *safeBuffer) String() string {
+	b.m.RLock()
+	defer b.m.RUnlock()
+	return b.b.String()
+}
+
+func (b *safeBuffer) Len() int {
+	b.m.RLock()
+	defer b.m.RUnlock()
+	return b.b.Len()
 }
