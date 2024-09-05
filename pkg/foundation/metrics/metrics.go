@@ -73,6 +73,9 @@ type LabeledGauge interface {
 	// If that combination of label values is accessed for the first time,
 	// a new Gauge is created.
 	WithValues(labels ...string) Gauge
+	// DeleteLabels removes the metric where the variable labels are the same
+	// as those passed in as labels (same order as the label names used when creating this LabeledGauge).
+	// It returns true if a metric was deleted.
 	DeleteLabels(labels ...string) bool
 }
 
