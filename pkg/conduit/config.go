@@ -70,8 +70,9 @@ type Config struct {
 	}
 
 	Log struct {
-		Level  string
-		Format string
+		NewLogger func(level, format string) log.CtxLogger
+		Level     string
+		Format    string
 	}
 
 	Connectors struct {
@@ -124,6 +125,7 @@ func DefaultConfig() Config {
 	cfg.API.HTTP.Address = ":8080"
 	cfg.API.GRPC.Address = ":8084"
 
+	cfg.Log.NewLogger = newLogger
 	cfg.Log.Level = "info"
 	cfg.Log.Format = "cli"
 
