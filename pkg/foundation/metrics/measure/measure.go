@@ -35,7 +35,7 @@ var (
 	)
 	PipelineRecoveringCount = metrics.NewLabeledCounter(
 		"pipeline_recovering_count",
-		"Number of times pipelines have been recovering (by by pipeline name)",
+		"Number of times a pipeline have been recovering (by pipeline name)",
 		[]string{"pipeline_name"},
 	)
 	ConnectorsGauge = metrics.NewLabeledGauge("conduit_connectors",
