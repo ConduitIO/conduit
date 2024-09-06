@@ -23,16 +23,42 @@ in a better connector design and better work organization.
 
 Some questions that typically need to be answered:
 
-1. How is the data organized in the system (buckets, tables, collections,
-   indexes, etc.)? What's the hierarchy?
-2. How can we connect to the system? Connection strings/URIs are preferred.
-3. What drivers are available? Pure Go drivers are preferred.
-4. What authentications methods are supported (basic auth, TLS, tokens, etc.)?
-   Clarify which auth. methods need to be supported in the driver.
+1. **How is the data organized in the system?**
+
+   The way data is organized in the system will affect how the connector is
+   configured (e.g. what data is a user able to read or write to) and how the
+   hierarchy is mapped to records and collections in Conduit.
+2. **What parameters are needed to connect to the system?**
+
+   We generally recommend using connection strings/URIs, if available. The
+   reason for this is that modifying a connector's parameters is a matter of
+   changing an existing string, and not separate configuration parameters in a
+   connector. 
+3. **What APIs or drivers are available?**
+
+   If a public API **and** a driver are available, we recommend using a driver,
+   since it's a higher level of abstraction. However, the choice is influenced
+   by other factors, such as:
+   - In which language should the connector be written?
+   - If the language of choice is Go, is a pure Go driver available? A CGo
+     driver may make the usage and deployment of a connector more complex.
+   - Does the driver expose all the functionality needed?
+   - How mature is the driver?
+4. **What authentication methods should be supported?**
+
+   If multiple authentication methods are available, then a decision needs to be
+   made about the methods that should be implemented first. Additionally, it
+   should be understood how expired credentials should be handled. For example,
+   a connector won't be able to handle an expired password, but a token can
+   sometimes be refreshed. 
 5. Investigate how can the connector read/write to the source without affecting
    other clients (e.g. when getting messages from a message broker's queue, the
    message will be delivered to the connector, while other clients might expect
    the message).
+6. How to perform a snapshot?
+7. How to perform change data capture (CDC)?
+8. How to resume reading from a source system?
+6. **Can the 3rd party system be run as a containerized application?**
 
 ## Development
 
