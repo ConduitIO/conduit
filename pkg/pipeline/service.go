@@ -121,7 +121,7 @@ func (s *Service) Get(_ context.Context, id string) (*Instance, error) {
 }
 
 // Create will create a new pipeline instance with the given config and return
-// it if it was successfully saved to the database.
+// if it was successfully saved to the database.
 func (s *Service) Create(ctx context.Context, id string, cfg Config, p ProvisionType) (*Instance, error) {
 	err := s.validatePipeline(cfg, id)
 	if err != nil {
@@ -365,4 +365,9 @@ func (s *Service) validatePipeline(cfg Config, id string) error {
 	}
 
 	return cerrors.Join(errs...)
+}
+
+// GetInstances returns all pipeline instances.
+func (s *Service) GetInstances() map[string]*Instance {
+	return s.instances
 }

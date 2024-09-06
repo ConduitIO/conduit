@@ -46,6 +46,7 @@ func NewOrchestrator(
 	processors ProcessorService,
 	connectorPlugins ConnectorPluginService,
 	processorPlugins ProcessorPluginService,
+	lifecycle LifecycleService,
 ) *Orchestrator {
 	b := base{
 		db:               db,
@@ -55,6 +56,7 @@ func NewOrchestrator(
 		processors:       processors,
 		connectorPlugins: connectorPlugins,
 		processorPlugins: processorPlugins,
+		lifecycle:        lifecycle,
 	}
 
 	return &Orchestrator{
@@ -75,19 +77,10 @@ type base struct {
 	processors       ProcessorService
 	connectorPlugins ConnectorPluginService
 	processorPlugins ProcessorPluginService
+	lifecycle        LifecycleService
 }
 
 type PipelineService interface {
-	Start(ctx context.Context, connFetcher lifecycle.ConnectorFetcher, procService lifecycle.ProcessorService, pluginFetcher lifecycle.PluginDispenserFetcher, pipelineID string) error
-	// Stop initiates a stop of the given pipeline. The method does not wait for
-	// the pipeline (and its nodes) to actually stop.
-	// When force is false the pipeline will try to stop gracefully and drain
-	// any in-flight messages that have not yet reached the destination. When
-	// force is true the pipeline will stop without draining in-flight messages.
-	// It is allowed to execute a force stop even after a graceful stop was
-	// requested.
-	Stop(ctx context.Context, pipelineID string, force bool) error
-
 	List(ctx context.Context) map[string]*pipeline.Instance
 	Get(ctx context.Context, id string) (*pipeline.Instance, error)
 	Create(ctx context.Context, id string, cfg pipeline.Config, p pipeline.ProvisionType) (*pipeline.Instance, error)
@@ -132,4 +125,16 @@ type ProcessorPluginService interface {
 	List(ctx context.Context) (map[string]processorSdk.Specification, error)
 	NewProcessor(ctx context.Context, pluginName string, id string) (processorSdk.Processor, error)
 	RegisterStandalonePlugin(ctx context.Context, path string) (string, error)
+}
+
+type LifecycleService interface {
+	Start(ctx context.Context, connFetcher lifecycle.ConnectorFetcher, procService lifecycle.ProcessorService, pluginFetcher lifecycle.PluginDispenserFetcher, pipelineID string) error
+	// Stop initiates a stop of the given pipeline. The method does not wait for
+	// the pipeline (and its nodes) to actually stop.
+	// When force is false the pipeline will try to stop gracefully and drain
+	// any in-flight messages that have not yet reached the destination. When
+	// force is true the pipeline will stop without draining in-flight messages.
+	// It is allowed to execute a force stop even after a graceful stop was
+	// requested.
+	Stop(ctx context.Context, pipelineID string, force bool) error
 }

@@ -253,6 +253,8 @@ func (s *Service) provisionPipeline(ctx context.Context, cfg config.Pipeline) er
 	// check if pipeline should be running
 	if cfg.Status == config.StatusRunning {
 		// TODO set status and let the pipeline service start it
+
+		// TODO: Use the lifecycle service (not the pipeline service) to start the pipeline
 		err := s.pipelineService.Start(ctx, s.connectorService, s.processorService, s.connectorPluginService, cfg.ID)
 		if err != nil {
 			return cerrors.Errorf("could not start the pipeline %q: %w", cfg.ID, err)

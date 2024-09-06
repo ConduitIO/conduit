@@ -58,19 +58,26 @@ type Service struct {
 
 	store *Store
 
-	instances     map[string]*pipeline.Instance
-	instanceNames map[string]bool
-	backoffCfg    *backoff.Backoff
+	// PipelineService
+	//instances     map[string]*pipeline.Instance
+	//instanceNames map[string]bool
+	backoffCfg *backoff.Backoff
+
+	// TODO:
+	// add the other services
+	pipelines        pipeline.Service
+	connectors       ConnectorService
+	processors       ProcessorService
+	connectorPlugins ConnectorPluginService
+	processorPlugins ProcessorPluginService
 }
 
 // NewService initializes and returns a pipeline Service.
 func NewService(logger log.CtxLogger, db database.DB, backoffCfg *backoff.Backoff) *Service {
 	return &Service{
-		logger:        logger.WithComponent("pipeline.Service"),
-		store:         NewStore(db),
-		instances:     make(map[string]*pipeline.Instance),
-		instanceNames: make(map[string]bool),
-		backoffCfg:    backoffCfg,
+		logger:     logger.WithComponent("pipeline.Service"),
+		store:      NewStore(db),
+		backoffCfg: backoffCfg,
 	}
 }
 
@@ -91,20 +98,28 @@ type PluginDispenserFetcher interface {
 	NewDispenser(logger log.CtxLogger, name string, connectorID string) (connectorPlugin.Dispenser, error)
 }
 
+// PipelineService can fetch a pipeline instance.
+type PipelineService interface {
+	Get(ctx context.Context, pipelineID string) (*pipeline.Instance, error)
+	GetInstances() map[string]*pipeline.Instance
+}
+
 // Run runs pipelines that had the running state in store.
 func (s *Service) Run(
 	ctx context.Context,
 	connFetcher ConnectorFetcher,
 	procService ProcessorService,
 	pluginFetcher PluginDispenserFetcher,
+	pipelineService PipelineService,
 ) error {
 	var errs []error
 	s.logger.Debug(ctx).Msg("initializing pipelines statuses")
 
 	// run pipelines that are in the StatusSystemStopped state
-	for _, instance := range s.instances {
+	instances := pipelineService.GetInstances()
+	for _, instance := range instances {
 		if instance.GetStatus() == pipeline.StatusSystemStopped {
-			err := s.Start(ctx, connFetcher, procService, pluginFetcher, instance.ID)
+			err := s.Start(ctx, connFetcher, procService, pluginFetcher, pipelineService, instance.ID)
 			if err != nil {
 				// try to start remaining pipelines and gather errors
 				errs = append(errs, err)
@@ -122,9 +137,10 @@ func (s *Service) Start(
 	connFetcher ConnectorFetcher,
 	procService ProcessorService,
 	pluginFetcher PluginDispenserFetcher,
+	ps PipelineService,
 	pipelineID string,
 ) error {
-	pl, err := s.Get(ctx, pipelineID)
+	pl, err := ps.Get(ctx, pipelineID)
 	if err != nil {
 		return err
 	}
@@ -158,8 +174,8 @@ func (s *Service) Start(
 // Stop function. If force is set to true the pipeline won't stop gracefully,
 // instead the context for all nodes will be canceled which causes them to stop
 // running as soon as possible.
-func (s *Service) Stop(ctx context.Context, pipelineID string, force bool) error {
-	pl, err := s.Get(ctx, pipelineID)
+func (s *Service) Stop(ctx context.Context, pipelineID string, force bool, ps PipelineService) error {
+	pl, err := ps.Get(ctx, pipelineID)
 	if err != nil {
 		return err
 	}
