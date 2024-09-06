@@ -51,14 +51,17 @@ Some questions that typically need to be answered:
    should be understood how expired credentials should be handled. For example,
    a connector won't be able to handle an expired password, but a token can
    sometimes be refreshed. 
-5. Investigate how can the connector read/write to the source without affecting
-   other clients (e.g. when getting messages from a message broker's queue, the
+5. **Can the connector be isolated from other clients of the system?**
+
+   In some cases a connector, as a client using a system, might affect other
+   clients, for example when getting messages from a message broker's queue, the
    message will be delivered to the connector, while other clients might expect
-   the message).
-6. How to perform a snapshot?
-7. How to perform change data capture (CDC)?
-8. How to resume reading from a source system?
-6. **Can the 3rd party system be run as a containerized application?**
+   the message.
+6. **Are the source/destination specific features supported?**
+
+   Source and destination connectors may have specific requirements (some of
+   them are outlined in later sections). When researching, attention should be
+   paid if those requirements can be met.
 
 ## Development
 
@@ -77,20 +80,26 @@ functionality. A connector developer should be familiar with the middleware.
 
 #### Snapshot
 
-Investigate how snapshots (i.e. pulling all the existing data can be done).
-Clarify if that's actually possible or a requirement for the connector (in some
-situations it can be quite complex).
+Firstly, it should be clarified if supporting snapshots is a requirement or if
+possible to do. If a connector is required to support snapshots, then it's
+recommended to make it possible to turn off snapshots.
 
-In snapshots should be supported by the source connector, make sure to implement
-consistent snapshoting. An example of that can be found in the Postgres
-connector.
+Performing a snapshot can, in some cases, be a complex process. The following things need to be taken into account when implementing a snapshot procedure:
+- The snapshot needs to be consistent.
+- The set of the existing data can be quite large.
+- Restarting a connector during a snapshot should not require re-reading all the
+  data again. This is because it in some destination connectors it may cause
+  data duplication, and it could be a significant performance overhead.
 
 #### Change Data Capture (CDC)
 
-1. In a snapshot is needed, make sure to capture changes that happened while the
-   snapshot is running.
-2. Investigate how to support different types of changes: creates, updates,
-   deletes.
+Change Data Capture (CDC) should be implemented so that the following criteria
+is met:
+1. In a snapshot is needed, changes that happened while the
+   snapshot is running should be captured too.
+2. Different types of changes might be possible (new data inserted, existing
+   data updated or deleted).
+3. Some systems may offer a change log while
 3. For example, for some RDBMs (Postgres, MySQL) there's a changelog (
    WAL/binlog). In some RDBMs, triggers can be used.
 4. If there's no native way in a 3rd party system to get changes, a timestamp
