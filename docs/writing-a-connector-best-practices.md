@@ -1,3 +1,5 @@
+# Writing a connector: Best practices
+
 Certain patterns have proven useful when writing connectors. Over the past
 couple of years we've refined some of those and also improved our process for
 writing connectors. The result are guidelines for writing a new Conduit
@@ -33,7 +35,7 @@ Some questions that typically need to be answered:
    We generally recommend using connection strings/URIs, if available. The
    reason for this is that modifying a connector's parameters is a matter of
    changing an existing string, and not separate configuration parameters in a
-   connector. 
+   connector.
 3. **What APIs or drivers are available?**
 
    If a public API **and** a driver are available, we recommend using a driver,
@@ -50,7 +52,7 @@ Some questions that typically need to be answered:
    made about the methods that should be implemented first. Additionally, it
    should be understood how expired credentials should be handled. For example,
    a connector won't be able to handle an expired password, but a token can
-   sometimes be refreshed. 
+   sometimes be refreshed.
 5. **Can the connector be isolated from other clients of the system?**
 
    In some cases a connector, as a client using a system, might affect other
@@ -61,7 +63,7 @@ Some questions that typically need to be answered:
 
    Source and destination connectors may have specific requirements (some of
    them are outlined in later sections). When researching, attention should be
-   paid if those requirements can be met.
+   paid if those requirements can be fulfilled.
 
 ## Development
 
@@ -74,7 +76,9 @@ can be used.
 ### Middleware
 
 Conduit's Connector SDK adds default middleware that, by default, enables some
-functionality. A connector developer should be familiar with the middleware.
+functionality. A connector developer should be familiar with the middleware,
+especially with
+the [schema related middleware](https://conduit.io/docs/connectors/configuration-parameters/schema-extraction).
 
 ### Source
 
@@ -84,7 +88,9 @@ Firstly, it should be clarified if supporting snapshots is a requirement or if
 possible to do. If a connector is required to support snapshots, then it's
 recommended to make it possible to turn off snapshots.
 
-Performing a snapshot can, in some cases, be a complex process. The following things need to be taken into account when implementing a snapshot procedure:
+Performing a snapshot can, in some cases, be a complex process. The following
+things need to be taken into account when implementing a snapshot procedure:
+
 - The snapshot needs to be consistent.
 - The set of the existing data can be quite large.
 - Restarting a connector during a snapshot should not require re-reading all the
@@ -95,13 +101,18 @@ Performing a snapshot can, in some cases, be a complex process. The following th
 
 Change Data Capture (CDC) should be implemented so that the following criteria
 is met:
-1. In a snapshot is needed, changes that happened while the
-   snapshot is running should be captured too.
+
+1. If a snapshot is needed, changes that happened while the
+   snapshot was running should be captured too.
 2. Different types of changes might be possible (new data inserted, existing
    data updated or deleted).
-3. Some systems may offer a change log while
-3. For example, for some RDBMs (Postgres, MySQL) there's a changelog (
-   WAL/binlog). In some RDBMs, triggers can be used.
+3. Changes that happened while a connector was stopped need to be read by the
+   connector when it starts up (assuming that the changes are still present in
+   the source system).
+
+3. Some systems may offer a change log (e.g. WAL in PostgreSQL, binlog in MySQL,
+   etc.). Others may not and a different way to capture changes is needed.
+3. In some RDBMs, triggers can be used.
 4. If there's no native way in a 3rd party system to get changes, a timestamp
    based query can be used.
 
@@ -118,5 +129,6 @@ provides batching middleware. A destination connector should take advantage of
 this if possible.
 
 ### Debugging the connector
+
 
 https://github.com/ConduitIO/conduit/discussions/1724#discussioncomment-10178484
