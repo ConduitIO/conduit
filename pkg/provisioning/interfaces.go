@@ -19,6 +19,7 @@ import (
 
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/lifecycle"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	connectorPlugin "github.com/conduitio/conduit/pkg/plugin/connector"
 	"github.com/conduitio/conduit/pkg/processor"
@@ -34,7 +35,7 @@ type PipelineService interface {
 	Delete(ctx context.Context, pipelineID string) error
 	UpdateDLQ(ctx context.Context, pipelineID string, cfg pipeline.DLQ) (*pipeline.Instance, error)
 
-	Start(ctx context.Context, connFetcher pipeline.ConnectorFetcher, procService pipeline.ProcessorService, pluginFetcher pipeline.PluginDispenserFetcher, pipelineID string) error
+	Start(ctx context.Context, connFetcher lifecycle.ConnectorFetcher, procService lifecycle.ProcessorService, pluginFetcher lifecycle.PluginDispenserFetcher, pipelineID string) error
 	Stop(ctx context.Context, pipelineID string, force bool) error
 
 	AddConnector(ctx context.Context, pipelineID string, connectorID string) (*pipeline.Instance, error)

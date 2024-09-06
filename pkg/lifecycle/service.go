@@ -1,4 +1,4 @@
-// Copyright © 2022 Meroxa, Inc.
+// Copyright © 2024 Meroxa, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,7 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package pipeline
+// Package lifecycle wires up everything under the hood of a Conduit instance
+// including metrics, telemetry, logging, and server construction.
+// It should only ever interact with the Orchestrator, never individual
+// services. All of that responsibility should be left to the Orchestrator.
+package lifecycle
 
 import (
 	"context"
@@ -23,16 +27,52 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/conduitio/conduit-commons/database"
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/measure"
+	"github.com/conduitio/conduit/pkg/pipeline"
 	"github.com/conduitio/conduit/pkg/pipeline/stream"
 	connectorPlugin "github.com/conduitio/conduit/pkg/plugin/connector"
 	"github.com/conduitio/conduit/pkg/processor"
+	"github.com/jpillora/backoff"
 	"gopkg.in/tomb.v2"
 )
+
+// Store handles the persistence and fetching of pipeline instances.
+type Store struct {
+	db database.DB
+}
+
+func NewStore(db database.DB) *Store {
+	return &Store{
+		db: db,
+	}
+}
+
+// Service manages pipelines.
+type Service struct {
+	logger log.CtxLogger
+
+	store *Store
+
+	instances     map[string]*pipeline.Instance
+	instanceNames map[string]bool
+	backoffCfg    *backoff.Backoff
+}
+
+// NewService initializes and returns a pipeline Service.
+func NewService(logger log.CtxLogger, db database.DB, backoffCfg *backoff.Backoff) *Service {
+	return &Service{
+		logger:        logger.WithComponent("pipeline.Service"),
+		store:         NewStore(db),
+		instances:     make(map[string]*pipeline.Instance),
+		instanceNames: make(map[string]bool),
+		backoffCfg:    backoffCfg,
+	}
+}
 
 // ConnectorFetcher can fetch a connector instance.
 type ConnectorFetcher interface {
@@ -63,7 +103,7 @@ func (s *Service) Run(
 
 	// run pipelines that are in the StatusSystemStopped state
 	for _, instance := range s.instances {
-		if instance.GetStatus() == StatusSystemStopped {
+		if instance.GetStatus() == pipeline.StatusSystemStopped {
 			err := s.Start(ctx, connFetcher, procService, pluginFetcher, instance.ID)
 			if err != nil {
 				// try to start remaining pipelines and gather errors
@@ -88,8 +128,8 @@ func (s *Service) Start(
 	if err != nil {
 		return err
 	}
-	if pl.GetStatus() == StatusRunning {
-		return cerrors.Errorf("can't start pipeline %s: %w", pl.ID, ErrPipelineRunning)
+	if pl.GetStatus() == pipeline.StatusRunning {
+		return cerrors.Errorf("can't start pipeline %s: %w", pl.ID, pipeline.ErrPipelineRunning)
 	}
 
 	s.logger.Debug(ctx).Str(log.PipelineIDField, pl.ID).Msg("starting pipeline")
@@ -124,8 +164,8 @@ func (s *Service) Stop(ctx context.Context, pipelineID string, force bool) error
 		return err
 	}
 
-	if pl.GetStatus() != StatusRunning && pl.GetStatus() != StatusRecovering {
-		return cerrors.Errorf("can't stop pipeline with status %q: %w", pl.GetStatus(), ErrPipelineNotRunning)
+	if pl.GetStatus() != pipeline.StatusRunning && pl.GetStatus() != pipeline.StatusRecovering {
+		return cerrors.Errorf("can't stop pipeline with status %q: %w", pl.GetStatus(), pipeline.ErrPipelineNotRunning)
 	}
 
 	switch force {
@@ -137,7 +177,7 @@ func (s *Service) Stop(ctx context.Context, pipelineID string, force bool) error
 	panic("unreachable code")
 }
 
-func (s *Service) stopGraceful(ctx context.Context, pl *Instance, reason error) error {
+func (s *Service) stopGraceful(ctx context.Context, pl *pipeline.Instance, reason error) error {
 	s.logger.Info(ctx).
 		Str(log.PipelineIDField, pl.ID).
 		Any(log.PipelineStatusField, pl.GetStatus()).
@@ -157,12 +197,12 @@ func (s *Service) stopGraceful(ctx context.Context, pl *Instance, reason error) 
 	return cerrors.Join(errs...)
 }
 
-func (s *Service) stopForceful(ctx context.Context, pl *Instance) error {
+func (s *Service) stopForceful(ctx context.Context, pl *pipeline.Instance) error {
 	s.logger.Info(ctx).
 		Str(log.PipelineIDField, pl.ID).
 		Any(log.PipelineStatusField, pl.GetStatus()).
 		Msg("force stopping pipeline")
-	pl.t.Kill(ErrForceStop)
+	pl.t.Kill(pipeline.ErrForceStop)
 	for _, n := range pl.n {
 		if node, ok := n.(stream.ForceStoppableNode); ok {
 			// stop all pub nodes
@@ -177,7 +217,7 @@ func (s *Service) stopForceful(ctx context.Context, pl *Instance) error {
 // (i.e. that existing messages get processed but not new messages get produced).
 func (s *Service) StopAll(ctx context.Context, reason error) {
 	for _, pl := range s.instances {
-		if pl.GetStatus() != StatusRunning && pl.GetStatus() != StatusRecovering {
+		if pl.GetStatus() != pipeline.StatusRunning && pl.GetStatus() != pipeline.StatusRecovering {
 			continue
 		}
 		err := s.stopGraceful(ctx, pl, reason)
@@ -211,7 +251,7 @@ func (s *Service) Wait(timeout time.Duration) error {
 	case <-gracefullyStopped:
 		return err
 	case <-time.After(timeout):
-		return ErrTimeout
+		return pipeline.ErrTimeout
 	}
 }
 
@@ -234,7 +274,7 @@ func (s *Service) buildNodes(
 	connFetcher ConnectorFetcher,
 	procService ProcessorService,
 	pluginFetcher PluginDispenserFetcher,
-	pl *Instance,
+	pl *pipeline.Instance,
 ) ([]stream.Node, error) {
 	// setup many to many channels
 	fanIn := stream.FaninNode{Name: "fanin"}
@@ -282,7 +322,7 @@ func (s *Service) buildNodes(
 func (s *Service) buildProcessorNodes(
 	ctx context.Context,
 	procService ProcessorService,
-	pl *Instance,
+	pl *pipeline.Instance,
 	processorIDs []string,
 	first stream.PubNode,
 	last stream.SubNode,
@@ -319,7 +359,7 @@ func (s *Service) buildProcessorNodes(
 }
 
 func (s *Service) buildParallelProcessorNode(
-	pl *Instance,
+	pl *pipeline.Instance,
 	proc *processor.RunnableProcessor,
 ) *stream.ParallelNode {
 	return &stream.ParallelNode{
@@ -334,7 +374,7 @@ func (s *Service) buildParallelProcessorNode(
 }
 
 func (s *Service) buildProcessorNode(
-	pl *Instance,
+	pl *pipeline.Instance,
 	proc *processor.RunnableProcessor,
 ) *stream.ProcessorNode {
 	return &stream.ProcessorNode{
@@ -349,7 +389,7 @@ func (s *Service) buildSourceNodes(
 	connFetcher ConnectorFetcher,
 	procService ProcessorService,
 	pluginFetcher PluginDispenserFetcher,
-	pl *Instance,
+	pl *pipeline.Instance,
 	next stream.SubNode,
 ) ([]stream.Node, error) {
 	var nodes []stream.Node
@@ -417,7 +457,7 @@ func (s *Service) buildDLQHandlerNode(
 	ctx context.Context,
 	connFetcher ConnectorFetcher,
 	pluginFetcher PluginDispenserFetcher,
-	pl *Instance,
+	pl *pipeline.Instance,
 ) (*stream.DLQHandlerNode, error) {
 	conn, err := connFetcher.Create(
 		ctx,
@@ -461,7 +501,7 @@ func (s *Service) buildDLQHandlerNode(
 }
 
 func (s *Service) buildMetricsNode(
-	pl *Instance,
+	pl *pipeline.Instance,
 	conn *connector.Instance,
 ) *stream.MetricsNode {
 	return &stream.MetricsNode{
@@ -490,7 +530,7 @@ func (s *Service) buildDestinationNodes(
 	connFetcher ConnectorFetcher,
 	procService ProcessorService,
 	pluginFetcher PluginDispenserFetcher,
-	pl *Instance,
+	pl *pipeline.Instance,
 	prev stream.PubNode,
 ) ([]stream.Node, error) {
 	var nodes []stream.Node
@@ -536,9 +576,9 @@ func (s *Service) buildDestinationNodes(
 	return nodes, nil
 }
 
-func (s *Service) runPipeline(ctx context.Context, pl *Instance) error {
+func (s *Service) runPipeline(ctx context.Context, pl *pipeline.Instance) error {
 	if pl.t != nil && pl.t.Alive() {
-		return ErrPipelineRunning
+		return pipeline.ErrPipelineRunning
 	}
 
 	// the tomb is responsible for running goroutines related to the pipeline
@@ -577,7 +617,7 @@ func (s *Service) runPipeline(ctx context.Context, pl *Instance) error {
 			defer nodesWg.Done()
 
 			err := node.Run(ctx)
-			if cerrors.Is(err, ErrGracefulShutdown) {
+			if cerrors.Is(err, pipeline.ErrGracefulShutdown) {
 				// This node was shutdown because of ErrGracefulShutdown, we
 				// need to stop this goroutine without returning an error to let
 				// other nodes stop gracefully. We set a boolean that lets the
@@ -594,7 +634,7 @@ func (s *Service) runPipeline(ctx context.Context, pl *Instance) error {
 	}
 
 	measure.PipelinesGauge.WithValues(strings.ToLower(pl.GetStatus().String())).Dec()
-	pl.SetStatus(StatusRunning)
+	pl.SetStatus(pipeline.StatusRunning)
 	pl.Error = ""
 	measure.PipelinesGauge.WithValues(strings.ToLower(pl.GetStatus().String())).Inc()
 
@@ -621,19 +661,22 @@ func (s *Service) runPipeline(ctx context.Context, pl *Instance) error {
 			err = nil
 			if isGracefulShutdown.Load() {
 				// it was triggered by a graceful shutdown of Conduit
-				pl.SetStatus(StatusSystemStopped)
+				pl.SetStatus(pipeline.StatusSystemStopped)
 			} else {
 				// it was manually triggered by a user
-				pl.SetStatus(StatusUserStopped)
+				pl.SetStatus(pipeline.StatusUserStopped)
 			}
 		default:
 			if cerrors.IsFatalError(err) {
-				pl.SetStatus(StatusDegraded)
+				pl.SetStatus(pipeline.StatusDegraded)
 				// we use %+v to get the stack trace too
 				pl.Error = fmt.Sprintf("%+v", err)
 			} else {
-				pl.SetStatus(StatusRecovering)
-				// TODO: Implement backoff strategy
+				pl.SetStatus(pipeline.StatusRecovering)
+				err = s.store.Set(ctx, pl.ID, pl)
+				if err != nil {
+					return cerrors.Errorf("failed to save pipeline with ID %q: %w", pl.ID, err)
+				}
 			}
 		}
 

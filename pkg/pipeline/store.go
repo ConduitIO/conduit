@@ -31,11 +31,13 @@ const (
 	storeKeyPrefix = "pipeline:instance:"
 )
 
+// TODO: remove?
 // Store handles the persistence and fetching of pipeline instances.
 type Store struct {
 	db database.DB
 }
 
+// TODO: remove?
 func NewStore(db database.DB) *Store {
 	return &Store{
 		db: db,
