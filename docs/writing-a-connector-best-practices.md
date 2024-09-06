@@ -80,9 +80,14 @@ functionality. A connector developer should be familiar with the middleware,
 especially with
 the [schema related middleware](https://conduit.io/docs/connectors/configuration-parameters/schema-extraction).
 
-### Source
+### Source connectors
 
-#### Snapshot
+The following section summarizes best practices that are specific to source
+connectors.
+
+#### Deciding how should a record position look like
+
+#### Implementing snapshots
 
 Firstly, it should be clarified if supporting snapshots is a requirement or if
 possible to do. If a connector is required to support snapshots, then it's
@@ -93,11 +98,11 @@ things need to be taken into account when implementing a snapshot procedure:
 
 - The snapshot needs to be consistent.
 - The set of the existing data can be quite large.
-- Restarting a connector during a snapshot should not require re-reading all the
+- Restarting a connector during a snapshot should **not** require re-reading all the
   data again. This is because it in some destination connectors it may cause
   data duplication, and it could be a significant performance overhead.
 
-#### Change Data Capture (CDC)
+#### Implementing change data capture (CDC)
 
 Change Data Capture (CDC) should be implemented so that the following criteria
 is met:
@@ -110,17 +115,31 @@ is met:
    connector when it starts up (assuming that the changes are still present in
    the source system).
 
-3. Some systems may offer a change log (e.g. WAL in PostgreSQL, binlog in MySQL,
-   etc.). Others may not and a different way to capture changes is needed.
-3. In some RDBMs, triggers can be used.
-4. If there's no native way in a 3rd party system to get changes, a timestamp
-   based query can be used.
+Some source systems may provide a change log (e.g. WAL in PostgreSQL, binlog in
+MySQL, etc.). Others may not and a different way to capture changes is needed.
+Specifically, for connectors written for SQL databases, two patterns can be used in such a case:
+
+1. **Triggers**
+
+   With triggers, it's possible to capture all types of changes (creates,
+   updates and deletes). A trigger will write the event with necessary
+   metadata (operation performed, timestamp, etc.) into a "trigger table", that
+   will be read by the connector.
+
+   An advantage of this approach is that all types of operations can be
+   captures. However, it may incur a performance penalty.
+2. **A timestamp-based query**
+
+   If the table a source connector is reading from has a timestamp column that
+   is updated whenever a new row is inserted or an existing row is updated, then
+   a query can be used to fetch changes. A disadvantage of this approach is that
+   delete operations cannot be captured.
 
 #### Iterator pattern
 
 TBD
 
-### Destination
+### Destination connectors
 
 #### Batching
 
@@ -130,5 +149,5 @@ this if possible.
 
 ### Debugging the connector
 
-
-https://github.com/ConduitIO/conduit/discussions/1724#discussioncomment-10178484
+The steps for debugging a standalone connector have been
+described [here](https://github.com/ConduitIO/conduit/discussions/1724#discussioncomment-10178484).
