@@ -24,6 +24,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/measure"
+	"github.com/conduitio/conduit/pkg/lifecycle"
 	"github.com/jpillora/backoff"
 )
 
@@ -35,14 +36,6 @@ const (
 	DescriptionLengthLimit = 8192
 )
 
-type FailureEvent struct {
-	// ID is the ID of the pipeline which failed.
-	ID    string
-	Error error
-}
-
-type FailureHandler func(FailureEvent)
-
 // Service manages pipelines.
 type Service struct {
 	logger log.CtxLogger
@@ -51,7 +44,7 @@ type Service struct {
 
 	instances     map[string]*Instance
 	instanceNames map[string]bool
-	handlers      []FailureHandler
+	handlers      []lifecycle.FailureHandler
 	backoffCfg    *backoff.Backoff
 }
 
@@ -319,22 +312,8 @@ func (s *Service) Delete(ctx context.Context, pipelineID string) error {
 // OnFailure registers a handler for a pipeline.FailureEvent.
 // Only errors which happen after a pipeline has been started
 // are being sent.
-func (s *Service) OnFailure(handler FailureHandler) {
+func (s *Service) OnFailure(handler lifecycle.FailureHandler) {
 	s.handlers = append(s.handlers, handler)
-}
-
-// notify notifies all registered FailureHandlers about an error.
-func (s *Service) notify(pipelineID string, err error) {
-	if err == nil {
-		return
-	}
-	e := FailureEvent{
-		ID:    pipelineID,
-		Error: err,
-	}
-	for _, handler := range s.handlers {
-		handler(e)
-	}
 }
 
 func (s *Service) validatePipeline(cfg Config, id string) error {

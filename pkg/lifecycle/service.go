@@ -33,13 +33,21 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/measure"
+	"github.com/conduitio/conduit/pkg/lifecycle/stream"
 	"github.com/conduitio/conduit/pkg/pipeline"
-	"github.com/conduitio/conduit/pkg/pipeline/stream"
 	connectorPlugin "github.com/conduitio/conduit/pkg/plugin/connector"
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/jpillora/backoff"
 	"gopkg.in/tomb.v2"
 )
+
+type FailureEvent struct {
+	// ID is the ID of the pipeline which failed.
+	ID    string
+	Error error
+}
+
+type FailureHandler func(FailureEvent)
 
 // Store handles the persistence and fetching of pipeline instances.
 type Store struct {
@@ -63,13 +71,11 @@ type Service struct {
 	//instanceNames map[string]bool
 	backoffCfg *backoff.Backoff
 
-	// TODO:
-	// add the other services
-	pipelines        pipeline.Service
-	connectors       ConnectorService
-	processors       ProcessorService
-	connectorPlugins ConnectorPluginService
-	processorPlugins ProcessorPluginService
+	pipelines pipeline.Service
+	//connectors       ConnectorService
+	processors ProcessorService
+	//connectorPlugins ConnectorPluginService
+	//processorPlugins ProcessorPluginService
 }
 
 // NewService initializes and returns a pipeline Service.
@@ -232,7 +238,8 @@ func (s *Service) stopForceful(ctx context.Context, pl *pipeline.Instance) error
 // StopAll will ask all the pipelines to stop gracefully
 // (i.e. that existing messages get processed but not new messages get produced).
 func (s *Service) StopAll(ctx context.Context, reason error) {
-	for _, pl := range s.instances {
+	instances := s.pipelines.GetInstances()
+	for _, pl := range instances {
 		if pl.GetStatus() != pipeline.StatusRunning && pl.GetStatus() != pipeline.StatusRecovering {
 			continue
 		}
@@ -275,7 +282,8 @@ func (s *Service) Wait(timeout time.Duration) error {
 // the pipelines failed to stop gracefully.
 func (s *Service) waitInternal() error {
 	var errs []error
-	for _, pl := range s.instances {
+	instances := s.pipelines.GetInstances()
+	for _, pl := range instances {
 		err := pl.Wait()
 		if err != nil {
 			errs = append(errs, err)
@@ -715,4 +723,18 @@ func (s *Service) runPipeline(ctx context.Context, pl *pipeline.Instance) error 
 	})
 
 	return nil
+}
+
+// notify notifies all registered FailureHandlers about an error.
+func (s *Service) notify(pipelineID string, err error) {
+	if err == nil {
+		return
+	}
+	e := FailureEvent{
+		ID:    pipelineID,
+		Error: err,
+	}
+	for _, handler := range s.handlers {
+		handler(e)
+	}
 }

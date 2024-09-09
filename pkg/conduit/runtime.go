@@ -44,6 +44,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/metrics"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/measure"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/prometheus"
+	"github.com/conduitio/conduit/pkg/lifecycle"
 	"github.com/conduitio/conduit/pkg/orchestrator"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	conn_plugin "github.com/conduitio/conduit/pkg/plugin/connector"
@@ -209,10 +210,10 @@ func createServices(r *Runtime) error {
 	plService := pipeline.NewService(r.logger, r.DB, backoffCfg)
 	connService := connector.NewService(r.logger, r.DB, r.connectorPersister)
 	procService := processor.NewService(r.logger, r.DB, procPluginService)
-
+	lifecycleService := lifecycle.NewService(r.logger, r.DB, backoffCfg)
 	provisionService := provisioning.NewService(r.DB, r.logger, plService, connService, procService, connPluginService, r.Config.Pipelines.Path)
 
-	orc := orchestrator.NewOrchestrator(r.DB, r.logger, plService, connService, procService, connPluginService, procPluginService)
+	orc := orchestrator.NewOrchestrator(r.DB, r.logger, plService, connService, procService, connPluginService, procPluginService, lifecycleService)
 
 	r.Orchestrator = orc
 	r.ProvisionService = provisionService
@@ -762,7 +763,7 @@ func (r *Runtime) initServices(ctx context.Context, t *tomb.Tomb) error {
 	}
 
 	if r.Config.Pipelines.ExitOnError {
-		r.pipelineService.OnFailure(func(e pipeline.FailureEvent) {
+		r.pipelineService.OnFailure(func(e lifecycle.FailureEvent) {
 			r.logger.Warn(ctx).
 				Err(e.Error).
 				Str(log.PipelineIDField, e.ID).
