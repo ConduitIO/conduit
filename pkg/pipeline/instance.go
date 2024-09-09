@@ -20,7 +20,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/conduitio/conduit/pkg/pipeline/stream"
+	"github.com/conduitio/conduit/pkg/lifecycle/stream"
 	"gopkg.in/tomb.v2"
 )
 
