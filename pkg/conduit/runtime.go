@@ -87,6 +87,8 @@ type Runtime struct {
 	ProvisionService *provisioning.Service
 	SchemaRegistry   schemaregistry.Registry
 
+	PrometheusRegistry *promclient.Registry
+
 	// Ready will be closed when Runtime has successfully started
 	Ready chan struct{}
 
@@ -141,7 +143,8 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 		}
 	}
 
-	configurePrometheus()
+	promRegistry := promclient.NewRegistry()
+	configureMetrics(promRegistry)
 	measure.ConduitInfo.WithValues(Version(true)).Inc()
 
 	// Start the connector persister
@@ -157,8 +160,10 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 
 		connectorPersister: connectorPersister,
 
-		gRPCStatsHandler: newGRPCStatsHandler(),
+		gRPCStatsHandler: newGRPCStatsHandler(promRegistry),
 		logger:           logger,
+
+		PrometheusRegistry: promRegistry,
 	}
 
 	err := createServices(r)
@@ -248,9 +253,9 @@ func createSchemaRegistry(config Config, logger log.CtxLogger, db database.DB) (
 	return schemaRegistry, nil
 }
 
-func newGRPCStatsHandler() *promgrpc.StatsHandler {
+func newGRPCStatsHandler(registry promclient.Registerer) *promgrpc.StatsHandler {
 	h := promgrpc.ServerStatsHandler()
-	promclient.MustRegister(h)
+	registry.MustRegister(h)
 
 	return h
 }
@@ -262,10 +267,10 @@ func newLogger(level string, format string) log.CtxLogger {
 	return log.InitLogger(l, f)
 }
 
-func configurePrometheus() {
-	registry := prometheus.NewRegistry(nil)
-	promclient.MustRegister(registry)
-	metrics.Register(registry)
+func configureMetrics(registry promclient.Registerer) {
+	conduitRegistry := prometheus.NewRegistry(nil)
+	metrics.Register(conduitRegistry)
+	registry.MustRegister(conduitRegistry)
 }
 
 // Run initializes all of Conduit's underlying services and starts the GRPC and
@@ -420,7 +425,7 @@ func (r *Runtime) registerCleanup(t *tomb.Tomb) {
 }
 
 func (r *Runtime) newHTTPMetricsHandler() http.Handler {
-	return promhttp.Handler()
+	return promhttp.InstrumentMetricHandler(r.PrometheusRegistry, promhttp.HandlerFor(r.PrometheusRegistry, promhttp.HandlerOpts{}))
 }
 
 func (r *Runtime) serveGRPCAPI(ctx context.Context, t *tomb.Tomb) (net.Addr, error) {
