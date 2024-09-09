@@ -3,7 +3,7 @@
 Certain patterns have proven useful when writing connectors. Over the past
 couple of years we've refined some of those and also improved our process for
 writing connectors. The result are guidelines for writing a new Conduit
-connector.
+connector. This document assumes basic knowledge about how Conduit works.
 
 ## Start with the connector template
 
@@ -108,7 +108,16 @@ connectors.
 
 #### Deciding how should a record position look like
 
-TBD
+Every record read by a source connector has
+a [position](https://conduit.io/docs/features/opencdc-record#fields) attached.
+If a connector is stopped after that record is read, its position will be given
+to the connector's `Open()` method the next time it starts. Hence, a position
+needs to contain enough information for a source connector to resume reading
+records from where it exactly stopped.
+
+A position is a slice of bytes that can represent any data structure. In Conduit
+connectors, it's common to see that a position is actually a `struct`, that's
+marshalled into a JSON string.
 
 #### Implementing snapshots
 
