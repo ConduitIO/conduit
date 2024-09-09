@@ -67,18 +67,39 @@ Some questions that typically need to be answered:
 
 ## Development
 
+## Familiarize with the Connector SDK/connector protocol
+
+Conduit's Connector SDK is the Go software development kit for implementing a
+connector for Conduit. If you want to implement a connector in another language
+please have a look at
+the [connector protocol](https://github.com/conduitio/conduit-connector-protocol).
+
 ### Test pipeline
 
-When working on a source connector, a file or log destination can be used to
-build a test pipeline. When working on a destination, a file or generator source
-can be used.
+Having a test pipeline helps see the results of development sooner rather than
+later. When working on a source connector, a file or log destination can be used
+to build a test pipeline. When working on a destination, a file or generator
+source can be used to manually or automatically generate some test data for the
+destination connector.
 
-### Middleware
+### Examples
 
-Conduit's Connector SDK adds default middleware that, by default, enables some
-functionality. A connector developer should be familiar with the middleware,
-especially with
-the [schema related middleware](https://conduit.io/docs/connectors/configuration-parameters/schema-extraction).
+Conduit's [built-in connectors](https://conduit.io/docs/connectors/connector-list/)
+are great references that can be used when writing connectors. They are also the
+first ones to be updated with latest SDK and protocol changes.
+
+### Configuration
+
+A connector's configuration is a map in which keys are parameter names and
+values are parameter values. Every source and destination needs to return the
+parameters that it accepts, and, optionally, the validations that need to be run
+on those. 
+
+Conduit
+offers [ParamGen](https://github.com/ConduitIO/conduit-commons/tree/main/paramgen),
+a tool that generates the parameters map from a configuration struct. The SDK
+contains a function, `sdk.Util.ParseConfig`, that can parse and validate a
+user's configuration map into the configuration struct.
 
 ### Source connectors
 
@@ -87,19 +108,21 @@ connectors.
 
 #### Deciding how should a record position look like
 
+TBD
+
 #### Implementing snapshots
 
 Firstly, it should be clarified if supporting snapshots is a requirement or if
-possible to do. If a connector is required to support snapshots, then it's
-recommended to make it possible to turn off snapshots.
+it's possible to do at all. If a connector is required to support snapshots,
+then it's recommended to make it possible to turn off snapshots.
 
 Performing a snapshot can, in some cases, be a complex process. The following
 things need to be taken into account when implementing a snapshot procedure:
 
 - The snapshot needs to be consistent.
 - The set of the existing data can be quite large.
-- Restarting a connector during a snapshot should **not** require re-reading all the
-  data again. This is because it in some destination connectors it may cause
+- Restarting a connector during a snapshot should **not** require re-reading all
+  the data again. This is because it in some destination connectors it may cause
   data duplication, and it could be a significant performance overhead.
 
 #### Implementing change data capture (CDC)
@@ -184,6 +207,17 @@ take care of switching from snapshot mode to CDC mode.
 Batching can considerably improve the write performance. The Connector SDK
 provides batching middleware. A destination connector should take advantage of
 this if possible.
+
+### Middleware
+
+Conduit's Connector SDK adds default middleware that, by default, enables some
+functionality. A connector developer should be familiar with the middleware,
+especially with
+the [schema related middleware](https://conduit.io/docs/connectors/configuration-parameters/schema-extraction).
+
+### Acceptance tests
+
+TBD
 
 ### Debugging the connector
 
