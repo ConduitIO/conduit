@@ -226,7 +226,15 @@ the [schema related middleware](https://conduit.io/docs/connectors/configuration
 
 ### Acceptance tests
 
-TBD
+Conduit's Connector SDK contains a set of acceptance tests that verify many of a
+connector's methods, such as:
+
+- Are missing configuration parameters detected?
+- Can a source that is stopped during CDC be successfully restarted?
+- Can a destination write a batch of records?
+
+An example of implemented acceptance tests can be found in
+the [Kafka connector](https://github.com/ConduitIO/conduit-connector-kafka/blob/3233c37392e7249e9d64c9cae0374a0b47ca840f/acceptance_test.go).
 
 ### Debugging the connector
 
