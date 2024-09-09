@@ -93,7 +93,7 @@ first ones to be updated with latest SDK and protocol changes.
 A connector's configuration is a map in which keys are parameter names and
 values are parameter values. Every source and destination needs to return the
 parameters that it accepts, and, optionally, the validations that need to be run
-on those. 
+on those.
 
 Conduit
 offers [ParamGen](https://github.com/ConduitIO/conduit-commons/tree/main/paramgen),
