@@ -249,8 +249,10 @@ func createSchemaRegistry(config Config, logger log.CtxLogger, db database.DB) (
 }
 
 func newGRPCStatsHandler() *promgrpc.StatsHandler {
+	reg := promclient.NewRegistry()
 	h := promgrpc.ServerStatsHandler()
-	promclient.MustRegister(h)
+	promclient.MustRegister(reg)
+	reg.MustRegister(h)
 
 	return h
 }
