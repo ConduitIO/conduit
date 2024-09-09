@@ -16,6 +16,7 @@ package conduit
 
 import (
 	"os"
+	"time"
 
 	"github.com/conduitio/conduit-commons/database"
 	sdk "github.com/conduitio/conduit-connector-sdk"
@@ -23,6 +24,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin/connector/builtin"
 	"github.com/rs/zerolog"
+	"golang.org/x/exp/constraints"
 )
 
 const (
@@ -68,8 +70,9 @@ type Config struct {
 	}
 
 	Log struct {
-		Level  string
-		Format string
+		NewLogger func(level, format string) log.CtxLogger
+		Level     string
+		Format    string
 	}
 
 	Connectors struct {
@@ -81,8 +84,15 @@ type Config struct {
 	}
 
 	Pipelines struct {
-		Path        string
-		ExitOnError bool
+		Path          string
+		ExitOnError   bool
+		ErrorRecovery struct {
+			MinDelay      time.Duration
+			MaxDelay      time.Duration
+			BackoffFactor int
+			MaxRetries    int
+			HealthyAfter  time.Duration
+		}
 	}
 
 	ConnectorPlugins map[string]sdk.Connector
@@ -104,19 +114,32 @@ type Config struct {
 
 func DefaultConfig() Config {
 	var cfg Config
+
 	cfg.DB.Type = DBTypeBadger
 	cfg.DB.Badger.Path = "conduit.db"
 	cfg.DB.Postgres.Table = "conduit_kv_store"
 	cfg.DB.SQLite.Path = "conduit.db"
 	cfg.DB.SQLite.Table = "conduit_kv_store"
+
 	cfg.API.Enabled = true
 	cfg.API.HTTP.Address = ":8080"
 	cfg.API.GRPC.Address = ":8084"
+
+	cfg.Log.NewLogger = newLogger
 	cfg.Log.Level = "info"
 	cfg.Log.Format = "cli"
+
 	cfg.Connectors.Path = "./connectors"
+
 	cfg.Processors.Path = "./processors"
+
 	cfg.Pipelines.Path = "./pipelines"
+	cfg.Pipelines.ErrorRecovery.MinDelay = time.Second
+	cfg.Pipelines.ErrorRecovery.MaxDelay = 10 * time.Minute
+	cfg.Pipelines.ErrorRecovery.BackoffFactor = 2
+	cfg.Pipelines.ErrorRecovery.MaxRetries = 0
+	cfg.Pipelines.ErrorRecovery.HealthyAfter = 5 * time.Minute
+
 	cfg.SchemaRegistry.Type = SchemaRegistryTypeBuiltin
 
 	cfg.ConnectorPlugins = builtin.DefaultBuiltinConnectors
@@ -167,6 +190,32 @@ func (c Config) validateSchemaRegistryConfig() error {
 	return nil
 }
 
+func (c Config) validateErrorRecovery() error {
+	errRecoveryCfg := c.Pipelines.ErrorRecovery
+	var errs []error
+
+	if err := requirePositiveValue("min-delay", errRecoveryCfg.MinDelay); err != nil {
+		errs = append(errs, err)
+	}
+	if err := requirePositiveValue("max-delay", errRecoveryCfg.MaxDelay); err != nil {
+		errs = append(errs, err)
+	}
+	if errRecoveryCfg.MaxDelay > 0 && errRecoveryCfg.MinDelay > errRecoveryCfg.MaxDelay {
+		errs = append(errs, cerrors.New(`"min-delay" should be smaller than "max-delay"`))
+	}
+	if err := requireNonNegativeValue("backoff-factor", errRecoveryCfg.BackoffFactor); err != nil {
+		errs = append(errs, err)
+	}
+	if err := requireNonNegativeValue("max-retries", errRecoveryCfg.MaxRetries); err != nil {
+		errs = append(errs, err)
+	}
+	if err := requirePositiveValue("healthy-after", errRecoveryCfg.HealthyAfter); err != nil {
+		errs = append(errs, err)
+	}
+
+	return cerrors.Join(errs...)
+}
+
 func (c Config) Validate() error {
 	// TODO simplify validation with struct tags
 
@@ -212,6 +261,9 @@ func (c Config) Validate() error {
 		return invalidConfigFieldErr("pipelines.path")
 	}
 
+	if err := c.validateErrorRecovery(); err != nil {
+		return cerrors.Errorf("invalid error recovery config: %w", err)
+	}
 	return nil
 }
 
@@ -221,4 +273,20 @@ func invalidConfigFieldErr(name string) error {
 
 func requiredConfigFieldErr(name string) error {
 	return cerrors.Errorf("%q config value is required", name)
+}
+
+func requireNonNegativeValue[T constraints.Integer](name string, value T) error {
+	if value < 0 {
+		return cerrors.Errorf("%q config value mustn't be negative (got: %v)", name, value)
+	}
+
+	return nil
+}
+
+func requirePositiveValue[T constraints.Integer](name string, value T) error {
+	if value <= 0 {
+		return cerrors.Errorf("%q config value must be positive (got: %v)", name, value)
+	}
+
+	return nil
 }

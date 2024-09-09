@@ -22,11 +22,17 @@ import (
 	"github.com/matryer/is"
 )
 
-func TestNewFatalError(t *testing.T) {
+func TestFatalError(t *testing.T) {
 	is := is.New(t)
 
 	err := cerrors.New("test error")
+
+	// wrapping the error multiple times should not change the error message
 	fatalErr := cerrors.FatalError(err)
+	fatalErr = cerrors.FatalError(fatalErr)
+	fatalErr = cerrors.FatalError(fatalErr)
+	fatalErr = cerrors.FatalError(fatalErr)
+
 	wantErr := fmt.Sprintf("fatal error: %v", err)
 
 	is.Equal(fatalErr.Error(), wantErr)
@@ -56,6 +62,16 @@ func TestIsFatalError(t *testing.T) {
 			err:  err,
 			want: false,
 		},
+		{
+			name: "when it's nil",
+			err:  nil,
+			want: false,
+		},
+		{
+			name: "when underlying is nil",
+			err:  cerrors.FatalError(nil),
+			want: false,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -73,14 +89,4 @@ func TestUnwrap(t *testing.T) {
 	fatalErr := cerrors.FatalError(err)
 
 	is.Equal(cerrors.Unwrap(fatalErr), err)
-}
-
-func TestFatalError(t *testing.T) {
-	is := is.New(t)
-
-	err := cerrors.New("test error")
-	fatalErr := cerrors.FatalError(err)
-	wantErr := fmt.Sprintf("fatal error: %v", err)
-
-	is.Equal(fatalErr.Error(), wantErr)
 }

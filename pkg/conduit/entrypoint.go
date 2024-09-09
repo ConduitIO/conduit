@@ -98,8 +98,49 @@ func (*Entrypoint) Flags(cfg *Config) *flag.FlagSet {
 	flags.StringVar(&cfg.Connectors.Path, "connectors.path", cfg.Connectors.Path, "path to standalone connectors' directory")
 	flags.StringVar(&cfg.Processors.Path, "processors.path", cfg.Processors.Path, "path to standalone processors' directory")
 
-	flags.StringVar(&cfg.Pipelines.Path, "pipelines.path", cfg.Pipelines.Path, "path to the directory that has the yaml pipeline configuration files, or a single pipeline configuration file")
-	flags.BoolVar(&cfg.Pipelines.ExitOnError, "pipelines.exit-on-error", cfg.Pipelines.ExitOnError, "exit Conduit if a pipeline experiences an error while running")
+	// Pipeline configuration
+	flags.StringVar(
+		&cfg.Pipelines.Path,
+		"pipelines.path",
+		cfg.Pipelines.Path,
+		"path to the directory that has the yaml pipeline configuration files, or a single pipeline configuration file",
+	)
+	flags.BoolVar(
+		&cfg.Pipelines.ExitOnError,
+		"pipelines.exit-on-error",
+		cfg.Pipelines.ExitOnError,
+		"exit Conduit if a pipeline experiences an error while running",
+	)
+	flags.DurationVar(
+		&cfg.Pipelines.ErrorRecovery.MinDelay,
+		"pipelines.error-recovery.min-delay",
+		cfg.Pipelines.ErrorRecovery.MinDelay,
+		"minimum delay before restart",
+	)
+	flags.DurationVar(
+		&cfg.Pipelines.ErrorRecovery.MaxDelay,
+		"pipelines.error-recovery.max-delay",
+		cfg.Pipelines.ErrorRecovery.MaxDelay,
+		"maximum delay before restart",
+	)
+	flags.IntVar(
+		&cfg.Pipelines.ErrorRecovery.BackoffFactor,
+		"pipelines.error-recovery.backoff-factor",
+		cfg.Pipelines.ErrorRecovery.BackoffFactor,
+		"backoff factor applied to the last delay",
+	)
+	flags.IntVar(
+		&cfg.Pipelines.ErrorRecovery.MaxRetries,
+		"pipelines.error-recovery.max-retries",
+		cfg.Pipelines.ErrorRecovery.MaxRetries,
+		"maximum number of retries",
+	)
+	flags.DurationVar(
+		&cfg.Pipelines.ErrorRecovery.HealthyAfter,
+		"pipelines.error-recovery.healthy-after",
+		cfg.Pipelines.ErrorRecovery.HealthyAfter,
+		"amount of time running without any errors after which a pipeline is considered healthy",
+	)
 
 	flags.StringVar(&cfg.SchemaRegistry.Type, "schema-registry.type", cfg.SchemaRegistry.Type, "schema registry type; accepts builtin,confluent")
 	flags.StringVar(&cfg.SchemaRegistry.Confluent.ConnectionString, "schema-registry.confluent.connection-string", cfg.SchemaRegistry.Confluent.ConnectionString, "confluent schema registry connection string")
