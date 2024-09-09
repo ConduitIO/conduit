@@ -160,7 +160,7 @@ func (s *Source) Read(ctx context.Context) (opencdc.Record, error) {
 }
 ```
 
-There are three implementations of the iterator interface: 
+There are three implementations of the iterator interface:
 
 - `SnapshotIterator`: used when performing a snapshot
 - `CDCIterator`: used in CDC
