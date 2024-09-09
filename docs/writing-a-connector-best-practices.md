@@ -117,7 +117,8 @@ is met:
 
 Some source systems may provide a change log (e.g. WAL in PostgreSQL, binlog in
 MySQL, etc.). Others may not and a different way to capture changes is needed.
-Specifically, for connectors written for SQL databases, two patterns can be used in such a case:
+Specifically, for connectors written for SQL databases, two patterns can be
+used:
 
 1. **Triggers**
 
@@ -137,7 +138,44 @@ Specifically, for connectors written for SQL databases, two patterns can be used
 
 #### Iterator pattern
 
-TBD
+A pattern that we found to be useful when writing source connectors is the
+iterator pattern. The basic idea is that a source connector's `Read()` method
+reads records through an iterator:
+
+```go
+type Iterator interface {
+	HasNext() bool
+	Next() opencdc.Record
+}
+
+type Source struct {
+	
+}
+func (s *Source) Read(ctx context.Context) (opencdc.Record, error) {
+   if s.iterator.HasNext(ctx) {
+   return opencdc.Record{}, sdk.ErrBackoffRetry
+   }
+   
+   return s.iterator.Next(ctx)
+}
+```
+
+There are three implementations of the iterator interface: 
+
+- `SnapshotIterator`: used when performing a snapshot
+- `CDCIterator`: used in CDC
+- `CombinedIterator`: an iterator that combines the above two and is able to
+  perform a snapshot and then switch to CDC.
+
+The iterator to be used is determined in the source's `Open()` method based on
+the connector's configuration: if a snapshot is required, then a
+`CombinedIterator` will be used, if not, then the `CDCIterator` will be used.
+
+There are multiple advantages of this approach. The source connector remains "
+focused" on the higher level operations, such as configuration, opening the
+connectors, tearing down, etc. The iterators contain the code that deals with
+the source system itself and convert the data into `opencdc.Record`s. They also
+take care of switching from snapshot mode to CDC mode.
 
 ### Destination connectors
 
