@@ -1,9 +1,8 @@
 # Writing a connector: Best practices
 
-Certain patterns have proven useful when writing connectors. Over the past
-couple of years we've refined some of those and also improved our process for
-writing connectors. The result are guidelines for writing a new Conduit
-connector. This document assumes basic knowledge about how Conduit works.
+This document describes patterns and processes that have been successfully used
+in many Conduit connectors over the past few years.The document assumes basic
+knowledge about how Conduit works.
 
 ## Start with the connector template
 
@@ -74,7 +73,7 @@ connector for Conduit. If you want to implement a connector in another language
 please have a look at
 the [connector protocol](https://github.com/conduitio/conduit-connector-protocol).
 
-### Test pipeline
+### Write a test pipeline
 
 Having a test pipeline helps see the results of development sooner rather than
 later. When working on a source connector, a file or log destination can be used
@@ -82,7 +81,7 @@ to build a test pipeline. When working on a destination, a file or generator
 source can be used to manually or automatically generate some test data for the
 destination connector.
 
-### Examples
+### Use built-in connectors as examples
 
 Conduit's [built-in connectors](https://conduit.io/docs/connectors/connector-list/)
 are great references that can be used when writing connectors. They are also the
