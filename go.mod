@@ -7,7 +7,7 @@ require (
 	github.com/Masterminds/semver/v3 v3.3.0
 	github.com/Masterminds/sprig/v3 v3.3.0
 	github.com/NYTimes/gziphandler v1.1.1
-	github.com/bufbuild/buf v1.40.0
+	github.com/bufbuild/buf v1.40.1
 	github.com/conduitio/conduit-commons v0.3.0
 	github.com/conduitio/conduit-connector-file v0.7.0
 	github.com/conduitio/conduit-connector-generator v0.7.0
@@ -36,9 +36,9 @@ require (
 	github.com/neilotoole/slogt v1.1.0
 	github.com/peterbourgon/ff/v3 v3.4.0
 	github.com/piotrkowalczuk/promgrpc/v4 v4.1.4
-	github.com/prometheus/client_golang v1.20.2
+	github.com/prometheus/client_golang v1.20.3
 	github.com/prometheus/client_model v0.6.1
-	github.com/prometheus/common v0.58.0
+	github.com/prometheus/common v0.59.1
 	github.com/rs/zerolog v1.33.0
 	github.com/stealthrocket/wazergo v0.19.1
 	github.com/tetratelabs/wazero v1.8.0
