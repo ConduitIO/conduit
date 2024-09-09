@@ -95,6 +95,7 @@ type Runtime struct {
 	pipelineService  *pipeline.Service
 	connectorService *connector.Service
 	processorService *processor.Service
+	lifecycleService *lifecycle.Service
 
 	connectorPluginService *conn_plugin.PluginService
 	processorPluginService *proc_plugin.PluginService
@@ -226,6 +227,7 @@ func createServices(r *Runtime) error {
 	r.processorPluginService = procPluginService
 	r.connSchemaService = connSchemaService
 	r.procSchemaService = procSchemaService
+	r.lifecycleService = lifecycleService
 
 	return nil
 }
@@ -416,12 +418,12 @@ func (r *Runtime) registerCleanup(t *tomb.Tomb) {
 		// t.Err() can be nil, when we had a call: t.Kill(nil)
 		// t.Err() will be context.Canceled, if the tomb's context was canceled
 		if t.Err() == nil || cerrors.Is(t.Err(), context.Canceled) {
-			r.pipelineService.StopAll(ctx, pipeline.ErrGracefulShutdown)
+			r.lifecycleService.StopAll(ctx, pipeline.ErrGracefulShutdown)
 		} else {
 			// tomb died due to a real error
-			r.pipelineService.StopAll(ctx, cerrors.Errorf("conduit experienced an error: %w", t.Err()))
+			r.lifecycleService.StopAll(ctx, cerrors.Errorf("conduit experienced an error: %w", t.Err()))
 		}
-		err := r.pipelineService.Wait(exitTimeout)
+		err := r.lifecycleService.Wait(exitTimeout)
 		t.Go(func() error {
 			r.connectorPersister.Wait()
 			return r.DB.Close()
@@ -790,7 +792,7 @@ func (r *Runtime) initServices(ctx context.Context, t *tomb.Tomb) error {
 		}
 	}
 
-	err = r.pipelineService.Run(ctx, r.connectorService, r.processorService, r.connectorPluginService)
+	err = r.lifecycleService.Run(ctx, r.connectorService, r.processorService, r.connectorPluginService)
 	if err != nil {
 		cerrors.ForEach(err, func(err error) {
 			r.logger.Err(ctx, err).Msg("pipeline failed to be started")

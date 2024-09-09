@@ -72,6 +72,6 @@ type ConnectorPluginService interface {
 }
 
 type LifecycleService interface {
-	Start(ctx context.Context, connFetcher lifecycle.ConnectorFetcher, procService lifecycle.ProcessorService, pluginFetcher lifecycle.PluginDispenserFetcher, lifecycleService lifecycle.Service, pipelineID string) error
+	Start(ctx context.Context, connFetcher lifecycle.ConnectorFetcher, procService lifecycle.ProcessorService, pluginFetcher lifecycle.PluginDispenserFetcher, pipelineID string) error
 	Stop(ctx context.Context, pipelineID string, force bool) error
 }

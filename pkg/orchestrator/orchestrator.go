@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:generate mockgen -typed -destination=mock/orchestrator.go -package=mock -mock_names=PipelineService=PipelineService,ConnectorService=ConnectorService,ProcessorService=ProcessorService,ConnectorPluginService=ConnectorPluginService,ProcessorPluginService=ProcessorPluginService . PipelineService,ConnectorService,ProcessorService,ConnectorPluginService,ProcessorPluginService
+//go:generate mockgen -typed -destination=mock/orchestrator.go -package=mock -mock_names=PipelineService,ConnectorService,ProcessorService,ConnectorPluginService,ProcessorPluginService,LifecycleService
 
 package orchestrator
 
@@ -128,7 +128,7 @@ type ProcessorPluginService interface {
 }
 
 type LifecycleService interface {
-	Start(ctx context.Context, connFetcher lifecycle.ConnectorFetcher, procService lifecycle.ProcessorService, pluginFetcher lifecycle.PluginDispenserFetcher, lifecycleService lifecycle.Service, pipelineID string) error
+	Start(ctx context.Context, connFetcher lifecycle.ConnectorFetcher, procService lifecycle.ProcessorService, pluginFetcher lifecycle.PluginDispenserFetcher, pipelineID string) error
 	// Stop initiates a stop of the given pipeline. The method does not wait for
 	// the pipeline (and its nodes) to actually stop.
 	// When force is false the pipeline will try to stop gracefully and drain
