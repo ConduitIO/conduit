@@ -78,6 +78,10 @@ func TestRuntime(t *testing.T) {
 		t.Logf("expected error '%v', got '%v'", context.Canceled, err)
 	}
 	is.True(strings.Contains(logs.String(), "grpc API started"))
+
+	// creating a second runtime should succeed
+	_, err = conduit.NewRuntime(cfg)
+	is.NoErr(err)
 }
 
 // safeBuffer wraps bytes.Buffer and makes it safe for concurrent use.
