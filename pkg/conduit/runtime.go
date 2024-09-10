@@ -26,6 +26,7 @@ import (
 	"runtime"
 	"runtime/pprof"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/conduitio/conduit-commons/database"
@@ -87,8 +88,6 @@ type Runtime struct {
 	ProvisionService *provisioning.Service
 	SchemaRegistry   schemaregistry.Registry
 
-	PrometheusRegistry *promclient.Registry
-
 	// Ready will be closed when Runtime has successfully started
 	Ready chan struct{}
 
@@ -103,8 +102,7 @@ type Runtime struct {
 	connectorPersister *connector.Persister
 	procSchemaService  *procutils.SchemaService
 
-	logger           log.CtxLogger
-	gRPCStatsHandler *promgrpc.StatsHandler
+	logger log.CtxLogger
 }
 
 // NewRuntime sets up a Runtime instance and primes it for start.
@@ -143,8 +141,7 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 		}
 	}
 
-	promRegistry := promclient.NewRegistry()
-	configureMetrics(promRegistry)
+	configureMetrics()
 	measure.ConduitInfo.WithValues(Version(true)).Inc()
 
 	// Start the connector persister
@@ -160,10 +157,7 @@ func NewRuntime(cfg Config) (*Runtime, error) {
 
 		connectorPersister: connectorPersister,
 
-		gRPCStatsHandler: newGRPCStatsHandler(promRegistry),
-		logger:           logger,
-
-		PrometheusRegistry: promRegistry,
+		logger: logger,
 	}
 
 	err := createServices(r)
@@ -253,13 +247,6 @@ func createSchemaRegistry(config Config, logger log.CtxLogger, db database.DB) (
 	return schemaRegistry, nil
 }
 
-func newGRPCStatsHandler(registry promclient.Registerer) *promgrpc.StatsHandler {
-	h := promgrpc.ServerStatsHandler()
-	registry.MustRegister(h)
-
-	return h
-}
-
 func newLogger(level string, format string) log.CtxLogger {
 	// TODO make logger hooks configurable
 	l, _ := zerolog.ParseLevel(level)
@@ -267,10 +254,24 @@ func newLogger(level string, format string) log.CtxLogger {
 	return log.InitLogger(l, f)
 }
 
-func configureMetrics(registry promclient.Registerer) {
-	conduitRegistry := prometheus.NewRegistry(nil)
-	metrics.Register(conduitRegistry)
-	registry.MustRegister(conduitRegistry)
+var (
+	metricsConfigureOnce    sync.Once
+	metricsGrpcStatsHandler *promgrpc.StatsHandler
+)
+
+// configureMetrics
+func configureMetrics() *promgrpc.StatsHandler {
+	metricsConfigureOnce.Do(func() {
+		// conduit metrics
+		reg := prometheus.NewRegistry(nil)
+		metrics.Register(reg)
+		promclient.MustRegister(reg)
+
+		// grpc metrics
+		metricsGrpcStatsHandler = promgrpc.ServerStatsHandler()
+		promclient.MustRegister(metricsGrpcStatsHandler)
+	})
+	return metricsGrpcStatsHandler
 }
 
 // Run initializes all of Conduit's underlying services and starts the GRPC and
@@ -425,7 +426,7 @@ func (r *Runtime) registerCleanup(t *tomb.Tomb) {
 }
 
 func (r *Runtime) newHTTPMetricsHandler() http.Handler {
-	return promhttp.InstrumentMetricHandler(r.PrometheusRegistry, promhttp.HandlerFor(r.PrometheusRegistry, promhttp.HandlerOpts{}))
+	return promhttp.Handler()
 }
 
 func (r *Runtime) serveGRPCAPI(ctx context.Context, t *tomb.Tomb) (net.Addr, error) {
@@ -434,7 +435,7 @@ func (r *Runtime) serveGRPCAPI(ctx context.Context, t *tomb.Tomb) (net.Addr, err
 			grpcutil.RequestIDUnaryServerInterceptor(r.logger),
 			grpcutil.LoggerUnaryServerInterceptor(r.logger),
 		),
-		grpc.StatsHandler(r.gRPCStatsHandler),
+		grpc.StatsHandler(metricsGrpcStatsHandler),
 	)
 
 	pipelineAPIv1 := api.NewPipelineAPIv1(r.Orchestrator.Pipelines)
@@ -486,7 +487,7 @@ func (r *Runtime) startConnectorUtils(ctx context.Context, t *tomb.Tomb) (net.Ad
 			grpcutil.RequestIDUnaryServerInterceptor(r.logger),
 			grpcutil.LoggerUnaryServerInterceptor(r.logger),
 		),
-		grpc.StatsHandler(r.gRPCStatsHandler),
+		grpc.StatsHandler(metricsGrpcStatsHandler),
 	)
 
 	schemaServiceAPI := pconnutils.NewSchemaServiceServer(r.connSchemaService)
