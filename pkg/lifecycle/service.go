@@ -110,7 +110,7 @@ type PluginDispenserFetcher interface {
 type PipelineService interface {
 	Get(ctx context.Context, pipelineID string) (*pipeline.Instance, error)
 	GetInstances() map[string]*pipeline.Instance
-	UpdateStatus(ctx context.Context, pipelineID string, status pipeline.Status) error
+	UpdateStatus(ctx context.Context, pipelineID string, status pipeline.Status, errMsg string) error
 }
 
 // OnFailure registers a handler for a pipeline.FailureEvent.
@@ -659,7 +659,7 @@ func (s *Service) runPipeline(ctx context.Context, rp *runnablePipeline) error {
 		})
 	}
 
-	err := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusRunning)
+	err := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusRunning, "")
 	if err != nil {
 		return err
 	}
@@ -682,18 +682,23 @@ func (s *Service) runPipeline(ctx context.Context, rp *runnablePipeline) error {
 			err = nil
 			if isGracefulShutdown.Load() {
 				// it was triggered by a graceful shutdown of Conduit
-				rp.pipeline.SetStatus(pipeline.StatusSystemStopped)
+				err = s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusSystemStopped, "")
 			} else {
 				// it was manually triggered by a user
-				rp.pipeline.SetStatus(pipeline.StatusUserStopped)
+				err = s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusUserStopped, "")
+			}
+			if err != nil {
+				return err
 			}
 		default:
 			if cerrors.IsFatalError(err) {
-				rp.pipeline.SetStatus(pipeline.StatusDegraded)
 				// we use %+v to get the stack trace too
-				rp.pipeline.Error = fmt.Sprintf("%+v", err)
+				err = s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusDegraded, fmt.Sprintf("%+v", err))
+				if err != nil {
+					return err
+				}
 			} else {
-				err = s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusRecovering)
+				err = s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusRecovering, "")
 				if err != nil {
 					return err
 				}
@@ -709,8 +714,7 @@ func (s *Service) runPipeline(ctx context.Context, rp *runnablePipeline) error {
 		// It's important to update the metrics before we handle the error from s.Store.Set() (if any),
 		// since the source of the truth is the actual pipeline (stored in memory).
 		measure.PipelinesGauge.WithValues(strings.ToLower(rp.pipeline.GetStatus().String())).Inc()
-
-		return s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, rp.pipeline.GetStatus())
+		return s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, rp.pipeline.GetStatus(), "")
 	})
 	return nil
 }

@@ -342,7 +342,8 @@ func (s *Service) GetInstances() map[string]*Instance {
 	return s.instances
 }
 
-func (s *Service) UpdateStatus(ctx context.Context, id string, status Status) error {
+// UpdateStatus updates the status of a pipeline by the ID.
+func (s *Service) UpdateStatus(ctx context.Context, id string, status Status, errMsg string) error {
 	pipeline, err := s.Get(ctx, id)
 	if err != nil {
 		return err
@@ -350,7 +351,7 @@ func (s *Service) UpdateStatus(ctx context.Context, id string, status Status) er
 	measure.PipelinesGauge.WithValues(strings.ToLower(pipeline.GetStatus().String())).Dec()
 	pipeline.SetStatus(status)
 
-	pipeline.Error = ""
+	pipeline.Error = errMsg
 	measure.PipelinesGauge.WithValues(strings.ToLower(pipeline.GetStatus().String())).Inc()
 
 	err = s.store.Set(ctx, pipeline.ID, pipeline)
