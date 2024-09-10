@@ -68,7 +68,7 @@ func (n *DLQHandlerNode) ID() string {
 
 // Run runs the DLQ handler node until all components depending on this node
 // call Done. Dependents can be added or removed while the node is running.
-func (n *DLQHandlerNode) Run(ctx context.Context) (err error) {
+func (n *DLQHandlerNode) Run(ctx context.Context) error {
 	defer n.state.Set(nodeStateStopped)
 	n.window = newDLQWindow(n.WindowSize, n.WindowNackThreshold)
 
@@ -78,7 +78,7 @@ func (n *DLQHandlerNode) Run(ctx context.Context) (err error) {
 	handlerCtx, n.handlerCtxCancel = context.WithCancel(context.Background())
 	defer n.handlerCtxCancel()
 
-	err = n.Handler.Open(handlerCtx)
+	err := n.Handler.Open(handlerCtx)
 	if err != nil {
 		return cerrors.Errorf("could not open DLQ handler: %w", err)
 	}
@@ -128,7 +128,7 @@ func (n *DLQHandlerNode) Ack(msg *Message) {
 	n.window.Ack()
 }
 
-func (n *DLQHandlerNode) Nack(msg *Message, nackMetadata NackMetadata) (err error) {
+func (n *DLQHandlerNode) Nack(msg *Message, nackMetadata NackMetadata) error {
 	state, err := n.state.Watch(msg.Ctx,
 		csync.WatchValues(nodeStateRunning, nodeStateStopped, dlqHandlerNodeStateBroken))
 	if err != nil {
@@ -146,10 +146,19 @@ func (n *DLQHandlerNode) Nack(msg *Message, nackMetadata NackMetadata) (err erro
 
 	ok := n.window.Nack()
 	if !ok {
-		return cerrors.Errorf(
-			"DLQ nack threshold exceeded (%d/%d), original error: %w",
-			n.WindowNackThreshold, n.WindowSize, nackMetadata.Reason,
-		)
+		if n.WindowNackThreshold > 0 {
+			// if the threshold is greater than 0 the DLQ is enabled and we
+			// need to respect the threshold by stopping the pipeline with a
+			// fatal error
+			return cerrors.FatalError(
+				cerrors.Errorf(
+					"DLQ nack threshold exceeded (%d/%d), original error: %w",
+					n.WindowNackThreshold, n.WindowSize, nackMetadata.Reason,
+				),
+			)
+		}
+		// DLQ is disabled, we don't need to wrap the error message
+		return nackMetadata.Reason
 	}
 
 	defer func() {

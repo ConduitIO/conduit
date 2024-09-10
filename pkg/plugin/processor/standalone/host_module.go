@@ -126,7 +126,7 @@ func (m *hostModuleInstance) commandRequest(ctx context.Context, buf types.Bytes
 			Int("command_bytes", size).
 			Int("allocated_bytes", len(buf)).
 			Msgf("insufficient memory, command will be parked until next call to command_request")
-		return types.Uint32(size)
+		return types.Uint32(size) //nolint:gosec // no risk of overflow
 	}
 
 	// If the buffer is large enough, we marshal the command into the buffer and
@@ -140,7 +140,7 @@ func (m *hostModuleInstance) commandRequest(ctx context.Context, buf types.Bytes
 	m.parkedCommandRequest = nil
 
 	m.logger.Trace(ctx).Msg("returning next command")
-	return types.Uint32(len(out))
+	return types.Uint32(len(out)) //nolint:gosec // no risk of overflow
 }
 
 // commandResponse is the exported function that is called by the WASM module to
@@ -202,7 +202,7 @@ func (m *hostModuleInstance) handleWasmRequest(
 			Int("response_bytes", size).
 			Int("allocated_bytes", len(buf)).
 			Msgf("insufficient memory, response will be parked until next call to %s", serviceMethod)
-		return types.Uint32(size)
+		return types.Uint32(size) //nolint:gosec // no risk of overflow
 	}
 
 	out, err := proto.MarshalOptions{}.MarshalAppend(buf[:0], parkedResponse)
@@ -214,7 +214,7 @@ func (m *hostModuleInstance) handleWasmRequest(
 	m.lastRequestBytes[serviceMethod] = nil
 	m.parkedResponses[serviceMethod] = nil
 
-	return types.Uint32(len(out))
+	return types.Uint32(len(out)) //nolint:gosec // no risk of overflow
 }
 
 // createSchema is the exported function that is called by the WASM module to

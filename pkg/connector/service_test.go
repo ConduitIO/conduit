@@ -119,7 +119,6 @@ func TestService_Check(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			is := is.New(t)
 			db.EXPECT().GetKeys(gomock.Any(), gomock.Any()).Return(nil, nil)

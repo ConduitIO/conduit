@@ -60,7 +60,7 @@ func PluginParamsMap(in map[string]config.Parameter) map[string]*apiv1.PluginSpe
 		out[k] = &apiv1.PluginSpecifications_Parameter{
 			Description: v.Description,
 			Default:     v.Default,
-			Type:        apiv1.PluginSpecifications_Parameter_Type(v.Type),
+			Type:        apiv1.PluginSpecifications_Parameter_Type(v.Type), //nolint:gosec // deprecated
 			Validations: PluginParamValidations(v.Validations),
 		}
 	}
@@ -73,7 +73,7 @@ func PluginParamValidations(in []config.Validation) []*apiv1.PluginSpecification
 	out := make([]*apiv1.PluginSpecifications_Parameter_Validation, 0)
 	for _, v := range in {
 		out = append(out, &apiv1.PluginSpecifications_Parameter_Validation{
-			Type:  apiv1.PluginSpecifications_Parameter_Validation_Type(v.Type()),
+			Type:  apiv1.PluginSpecifications_Parameter_Validation_Type(v.Type()), //nolint:gosec // deprecated
 			Value: v.Value(),
 		})
 	}
@@ -97,7 +97,7 @@ func ConnectorPluginParamsMap(in map[string]config.Parameter) map[string]*config
 		out[k] = &configv1.Parameter{
 			Description: v.Description,
 			Default:     v.Default,
-			Type:        configv1.Parameter_Type(v.Type),
+			Type:        configv1.Parameter_Type(v.Type), //nolint:gosec // no risk of overflow
 			Validations: ConnectorPluginParamValidations(v.Validations),
 		}
 	}
@@ -109,7 +109,7 @@ func ConnectorPluginParamValidations(in []config.Validation) []*configv1.Validat
 	out := make([]*configv1.Validation, 0)
 	for _, v := range in {
 		out = append(out, &configv1.Validation{
-			Type:  configv1.Validation_Type(v.Type()),
+			Type:  configv1.Validation_Type(v.Type()), //nolint:gosec // no risk of overflow
 			Value: v.Value(),
 		})
 	}
