@@ -356,7 +356,7 @@ func (c *PipelineServiceRemoveProcessorCall) DoAndReturn(f func(context.Context,
 }
 
 // Start mocks base method.
-func (m *PipelineService) Start(arg0 context.Context, arg1 lifecycle.ConnectorFetcher, arg2 lifecycle.ProcessorService, arg3 lifecycle.PluginDispenserFetcher, arg4 string) error {
+func (m *PipelineService) Start(arg0 context.Context, arg1 lifecycle.ConnectorService, arg2 lifecycle.ProcessorService, arg3 lifecycle.ConnectorPluginService, arg4 string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Start", arg0, arg1, arg2, arg3, arg4)
 	ret0, _ := ret[0].(error)
@@ -382,13 +382,13 @@ func (c *PipelineServiceStartCall) Return(arg0 error) *PipelineServiceStartCall 
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *PipelineServiceStartCall) Do(f func(context.Context, lifecycle.ConnectorFetcher, lifecycle.ProcessorService, lifecycle.PluginDispenserFetcher, string) error) *PipelineServiceStartCall {
+func (c *PipelineServiceStartCall) Do(f func(context.Context, lifecycle.ConnectorService, lifecycle.ProcessorService, lifecycle.ConnectorPluginService, string) error) *PipelineServiceStartCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *PipelineServiceStartCall) DoAndReturn(f func(context.Context, lifecycle.ConnectorFetcher, lifecycle.ProcessorService, lifecycle.PluginDispenserFetcher, string) error) *PipelineServiceStartCall {
+func (c *PipelineServiceStartCall) DoAndReturn(f func(context.Context, lifecycle.ConnectorService, lifecycle.ProcessorService, lifecycle.ConnectorPluginService, string) error) *PipelineServiceStartCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

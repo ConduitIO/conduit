@@ -12,8 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:generate mockgen -typed -destination=mock/orchestrator.go -package=mock -mock_names=PipelineService,ConnectorService,ProcessorService,ConnectorPluginService,ProcessorPluginService,LifecycleService
-
+//go:generate mockgen -typed -destination=mock/orchestrator.go -package=mock -mock_names=PipelineService=PipelineService,ConnectorService=ConnectorService,ProcessorService=ProcessorService,ConnectorPluginService=ConnectorPluginService,ProcessorPluginService=ProcessorPluginService,LifecycleService=LifecycleService . PipelineService,ConnectorService,ProcessorService,ConnectorPluginService,ProcessorPluginService,LifecycleService
 package orchestrator
 
 import (

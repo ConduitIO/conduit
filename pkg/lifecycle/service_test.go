@@ -54,8 +54,6 @@ func TestServiceLifecycle_buildNodes(t *testing.T) {
 	persister := connector.NewPersister(logger, db, time.Second, 3)
 	b := &backoff.Backoff{}
 
-	ls := NewService(logger, db, b)
-
 	source := dummySource(persister)
 	destination := dummyDestination(persister)
 	dlq := dummyDestination(persister)
@@ -72,9 +70,10 @@ func TestServiceLifecycle_buildNodes(t *testing.T) {
 	}
 	pl.SetStatus(pipeline.StatusUserStopped)
 
+	ls := NewService(logger, db, b)
 	got, err := ls.buildRunnablePipeline(
 		ctx,
-		testConnectorFetcher{
+		testConnectorService{
 			source.ID:      source,
 			destination.ID: destination,
 			testDLQID:      dlq,
@@ -159,7 +158,7 @@ func TestService_buildNodes_NoSourceNode(t *testing.T) {
 
 	got, err := ls.buildRunnablePipeline(
 		ctx,
-		testConnectorFetcher{
+		testConnectorService{
 			destination.ID: destination,
 			testDLQID:      dlq,
 		},
@@ -208,7 +207,7 @@ func TestService_buildNodes_NoDestinationNode(t *testing.T) {
 
 	got, err := ls.buildRunnablePipeline(
 		ctx,
-		testConnectorFetcher{
+		testConnectorService{
 			source.ID: source,
 			testDLQID: dlq,
 		},
@@ -259,7 +258,7 @@ func TestServiceLifecycle_PipelineSuccess(t *testing.T) {
 	// start the pipeline now that everything is set up
 	err = ls.Start(
 		ctx,
-		testConnectorFetcher{
+		testConnectorService{
 			source.ID:      source,
 			destination.ID: destination,
 			testDLQID:      dlq,
@@ -327,7 +326,7 @@ func TestServiceLifecycle_PipelineError(t *testing.T) {
 	// start the pipeline now that everything is set up
 	err = ls.Start(
 		ctx,
-		testConnectorFetcher{
+		testConnectorService{
 			source.ID:      source,
 			destination.ID: destination,
 			testDLQID:      dlq,
@@ -411,7 +410,7 @@ func TestServiceLifecycle_StopAll_Recovering(t *testing.T) {
 		// start the pipeline now that everything is set up
 		err = ls.Start(
 			ctx,
-			testConnectorFetcher{
+			testConnectorService{
 				source.ID:      source,
 				destination.ID: destination,
 				testDLQID:      dlq,
@@ -513,7 +512,7 @@ func TestServiceLifecycle_PipelineStop(t *testing.T) {
 	// start the pipeline now that everything is set up
 	err = ps.Start(
 		ctx,
-		testConnectorFetcher{
+		testConnectorService{
 			source.ID:      source,
 			destination.ID: destination,
 			testDLQID:      dlq,
@@ -595,7 +594,7 @@ func TestService_Run_Rerun(t *testing.T) {
 		// TODO: create a new instance of the lifecycle service
 		err = ls.Run(
 			ctx,
-			testConnectorFetcher{
+			testConnectorService{
 				source.ID:      source,
 				destination.ID: destination,
 				testDLQID:      dlq,
@@ -752,10 +751,10 @@ func dummyDestination(persister *connector.Persister) *connector.Instance {
 	return destination
 }
 
-// testConnectorFetcher fulfills the ConnectorFetcher interface.
-type testConnectorFetcher map[string]*connector.Instance
+// testConnectorService fulfills the ConnectorService interface.
+type testConnectorService map[string]*connector.Instance
 
-func (tcf testConnectorFetcher) Get(_ context.Context, id string) (*connector.Instance, error) {
+func (tcf testConnectorService) Get(_ context.Context, id string) (*connector.Instance, error) {
 	conn, ok := tcf[id]
 	if !ok {
 		return nil, connector.ErrInstanceNotFound
@@ -763,7 +762,7 @@ func (tcf testConnectorFetcher) Get(_ context.Context, id string) (*connector.In
 	return conn, nil
 }
 
-func (tcf testConnectorFetcher) Create(context.Context, string, connector.Type, string, string, connector.Config, connector.ProvisionType) (*connector.Instance, error) {
+func (tcf testConnectorService) Create(context.Context, string, connector.Type, string, string, connector.Config, connector.ProvisionType) (*connector.Instance, error) {
 	return tcf[testDLQID], nil
 }
 

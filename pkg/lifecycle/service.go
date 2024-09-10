@@ -55,10 +55,10 @@ type Service struct {
 	backoffCfg *backoff.Backoff
 
 	pipelines  PipelineService
-	connectors ConnectorFetcher
+	connectors ConnectorService
 
 	processors       ProcessorService
-	connectorPlugins PluginDispenserFetcher
+	connectorPlugins ConnectorPluginService
 
 	handlers         []FailureHandler
 	runningPipelines map[string]*runnablePipeline
@@ -68,9 +68,9 @@ type Service struct {
 func NewService(
 	logger log.CtxLogger,
 	backoffCfg *backoff.Backoff,
-	connectors ConnectorFetcher,
+	connectors ConnectorService,
 	processors ProcessorService,
-	connectorPlugins PluginDispenserFetcher,
+	connectorPlugins ConnectorPluginService,
 	pipelines PipelineService,
 ) *Service {
 	return &Service{
@@ -89,8 +89,8 @@ type runnablePipeline struct {
 	t        *tomb.Tomb
 }
 
-// ConnectorFetcher can fetch a connector instance.
-type ConnectorFetcher interface {
+// ConnectorService can fetch a connector instance.
+type ConnectorService interface {
 	Get(ctx context.Context, id string) (*connector.Instance, error)
 	Create(ctx context.Context, id string, t connector.Type, plugin string, pipelineID string, cfg connector.Config, p connector.ProvisionType) (*connector.Instance, error)
 }
@@ -101,8 +101,8 @@ type ProcessorService interface {
 	MakeRunnableProcessor(ctx context.Context, i *processor.Instance) (*processor.RunnableProcessor, error)
 }
 
-// PluginDispenserFetcher can fetch a plugin.
-type PluginDispenserFetcher interface {
+// ConnectorPluginService can fetch a plugin.
+type ConnectorPluginService interface {
 	NewDispenser(logger log.CtxLogger, name string, connectorID string) (connectorPlugin.Dispenser, error)
 }
 
