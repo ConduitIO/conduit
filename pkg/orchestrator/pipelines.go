@@ -27,12 +27,12 @@ type PipelineOrchestrator base
 
 func (po *PipelineOrchestrator) Start(ctx context.Context, id string) error {
 	// TODO lock pipeline
-	return po.pipelines.Start(ctx, po.connectors, po.processors, po.connectorPlugins, id)
+	return po.lifecycle.Start(ctx, id)
 }
 
 func (po *PipelineOrchestrator) Stop(ctx context.Context, id string, force bool) error {
 	// TODO lock pipeline
-	return po.pipelines.Stop(ctx, id, force)
+	return po.lifecycle.Stop(ctx, id, force)
 }
 
 func (po *PipelineOrchestrator) List(ctx context.Context) map[string]*pipeline.Instance {

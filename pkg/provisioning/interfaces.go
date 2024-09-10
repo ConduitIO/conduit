@@ -19,7 +19,6 @@ import (
 
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/conduitio/conduit/pkg/lifecycle"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	connectorPlugin "github.com/conduitio/conduit/pkg/plugin/connector"
 	"github.com/conduitio/conduit/pkg/processor"
@@ -72,6 +71,6 @@ type ConnectorPluginService interface {
 }
 
 type LifecycleService interface {
-	Start(ctx context.Context, connFetcher lifecycle.ConnectorFetcher, procService lifecycle.ProcessorService, pluginFetcher lifecycle.PluginDispenserFetcher, pipelineID string) error
+	Start(ctx context.Context, pipelineID string) error
 	Stop(ctx context.Context, pipelineID string, force bool) error
 }
