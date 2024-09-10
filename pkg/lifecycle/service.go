@@ -166,15 +166,12 @@ func (s *Service) Start(
 		return cerrors.Errorf("could not build nodes for pipeline %s: %w", pl.ID, err)
 	}
 
-	s.runningPipelines[pl.ID] = rp
-
 	s.logger.Trace(ctx).Str(log.PipelineIDField, pl.ID).Msg("running nodes")
 	if err := s.runPipeline(ctx, rp); err != nil {
 		return cerrors.Errorf("failed to run pipeline %s: %w", pl.ID, err)
 	}
 	s.logger.Info(ctx).Str(log.PipelineIDField, pl.ID).Msg("pipeline started")
-
-	// TODO: store which pipelines are actually running
+	s.runningPipelines[pl.ID] = rp
 
 	return nil
 }
@@ -294,9 +291,11 @@ func (s *Service) Wait(timeout time.Duration) error {
 // the pipelines failed to stop gracefully.
 func (s *Service) waitInternal() error {
 	var errs []error
-	instances := s.pipelines.GetInstances()
-	for _, pl := range instances {
-		err := pl.Wait()
+	for _, rp := range s.runningPipelines {
+		if rp.t == nil {
+			continue
+		}
+		err := rp.t.Wait()
 		if err != nil {
 			errs = append(errs, err)
 		}

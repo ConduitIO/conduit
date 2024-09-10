@@ -91,13 +91,6 @@ var DefaultDLQ = DLQ{
 	WindowNackThreshold: 0,
 }
 
-func (p *Instance) Wait() error {
-	if p.t == nil {
-		return nil
-	}
-	return p.t.Wait()
-}
-
 func (p *Instance) SetStatus(s Status) {
 	p.statusLock.Lock()
 	defer p.statusLock.Unlock()
