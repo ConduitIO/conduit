@@ -1,7 +1,7 @@
-# Writing a connector: Best practices
+# Guidelines for writing a connector
 
 This document describes patterns and processes that have been successfully used
-in many Conduit connectors over the past few years.The document assumes basic
+in many Conduit connectors over the past few years. The document assumes basic
 knowledge about how Conduit works.
 
 ## Start with the connector template
@@ -37,9 +37,9 @@ Some questions that typically need to be answered:
    connector.
 3. **What APIs or drivers are available?**
 
-   If a public API **and** a driver are available, we recommend using a driver,
-   since it's a higher level of abstraction. However, the choice is influenced
-   by other factors, such as:
+   The choice is influenced by a number of factors, such as:
+   - Is there a driver available? If a public API and a driver are available, we
+     recommend using a driver, since it's a higher level of abstraction.
    - In which language should the connector be written?
    - If the language of choice is Go, is a pure Go driver available? A CGo
      driver may make the usage and deployment of a connector more complex.
@@ -100,6 +100,13 @@ a tool that generates the parameters map from a configuration struct. The SDK
 contains a function, `sdk.Util.ParseConfig`, that can parse and validate a
 user's configuration map into the configuration struct.
 
+### Middleware
+
+Conduit's Connector SDK adds default middleware that, by default, enables some
+functionality. A connector developer should be familiar with the middleware,
+especially with
+the [schema related middleware](https://conduit.io/docs/connectors/configuration-parameters/schema-extraction).
+
 ### Source connectors
 
 The following section summarizes best practices that are specific to source
@@ -122,10 +129,11 @@ marshalled into a JSON string.
 
 Firstly, it should be clarified if supporting snapshots is a requirement or if
 it's possible to do at all. If a connector is required to support snapshots,
-then it's recommended to make it possible to turn off snapshots.
+then it's recommended to make it possible to turn off snapshots through the
+connector configuration.
 
-Performing a snapshot can, in some cases, be a complex process. The following
-things need to be taken into account when implementing a snapshot procedure:
+The following things need to be taken into account when implementing a snapshot
+procedure:
 
 - The snapshot needs to be consistent.
 - The set of the existing data can be quite large.
@@ -179,15 +187,13 @@ type Iterator interface {
 	Next() opencdc.Record
 }
 
-type Source struct {
-	
-}
+type Source struct {}
 func (s *Source) Read(ctx context.Context) (opencdc.Record, error) {
-   if s.iterator.HasNext(ctx) {
-   return opencdc.Record{}, sdk.ErrBackoffRetry
+	if s.iterator.HasNext(ctx) {
+        return opencdc.Record{}, sdk.ErrBackoffRetry
    }
-   
-   return s.iterator.Next(ctx)
+       
+    return s.iterator.Next(ctx)
 }
 ```
 
@@ -212,16 +218,32 @@ take care of switching from snapshot mode to CDC mode.
 
 #### Batching
 
-Batching can considerably improve the write performance. The Connector SDK
-provides batching middleware. A destination connector should take advantage of
-this if possible.
+Batching can considerably improve the write performance and should be considered
+when developing a destination connector. The Connector SDK
+provides [batching middleware](https://conduit.io/docs/connectors/configuration-parameters/batching)
+that automatically builds batches.
 
-### Middleware
+When writing batches into a destination system, the order of records should
+**not** be changed, even if grouping records would be useful in a way. For
+example, in some connectors, it's useful to group records by operation, because
+the destination system has different procedures for those operations.
 
-Conduit's Connector SDK adds default middleware that, by default, enables some
-functionality. A connector developer should be familiar with the middleware,
-especially with
-the [schema related middleware](https://conduit.io/docs/connectors/configuration-parameters/schema-extraction).
+If a destination connector receives the following batch:
+
+```
+[create_1, update_1, update_2, create_2]
+```
+
+then this batch can be split into following batches:
+
+```
+Batch 1: [create_1]
+Batch 2: [update_1, update_2]
+Batch 3: [create_2]
+```
+
+This way, ordering is preserved and the connector can still take advantage of
+batching.
 
 ### Acceptance tests
 
