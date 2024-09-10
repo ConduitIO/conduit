@@ -72,7 +72,7 @@ func TestServiceLifecycle_buildNodes(t *testing.T) {
 	}
 	pl.SetStatus(pipeline.StatusUserStopped)
 
-	got, err := ls.buildNodes(
+	got, err := ls.buildRunnablePipeline(
 		ctx,
 		testConnectorFetcher{
 			source.ID:      source,
@@ -157,7 +157,7 @@ func TestService_buildNodes_NoSourceNode(t *testing.T) {
 	}
 	pl.SetStatus(pipeline.StatusUserStopped)
 
-	got, err := ls.buildNodes(
+	got, err := ls.buildRunnablePipeline(
 		ctx,
 		testConnectorFetcher{
 			destination.ID: destination,
@@ -206,7 +206,7 @@ func TestService_buildNodes_NoDestinationNode(t *testing.T) {
 	}
 	pl.SetStatus(pipeline.StatusUserStopped)
 
-	got, err := ls.buildNodes(
+	got, err := ls.buildRunnablePipeline(
 		ctx,
 		testConnectorFetcher{
 			source.ID: source,

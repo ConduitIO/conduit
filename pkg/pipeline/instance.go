@@ -19,9 +19,6 @@ package pipeline
 import (
 	"sync"
 	"time"
-
-	"github.com/conduitio/conduit/pkg/lifecycle/stream"
-	"gopkg.in/tomb.v2"
 )
 
 const (
@@ -61,9 +58,6 @@ type Instance struct {
 
 	status     Status
 	statusLock sync.RWMutex
-
-	n map[string]stream.Node
-	t *tomb.Tomb
 }
 
 // encodableInstance is an encodable "view" of Instance

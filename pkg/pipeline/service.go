@@ -24,7 +24,6 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/measure"
-	"github.com/conduitio/conduit/pkg/lifecycle"
 	"github.com/jpillora/backoff"
 )
 
@@ -44,7 +43,6 @@ type Service struct {
 
 	instances     map[string]*Instance
 	instanceNames map[string]bool
-	handlers      []lifecycle.FailureHandler
 	backoffCfg    *backoff.Backoff
 }
 
@@ -309,13 +307,6 @@ func (s *Service) Delete(ctx context.Context, pipelineID string) error {
 	return nil
 }
 
-// OnFailure registers a handler for a pipeline.FailureEvent.
-// Only errors which happen after a pipeline has been started
-// are being sent.
-func (s *Service) OnFailure(handler lifecycle.FailureHandler) {
-	s.handlers = append(s.handlers, handler)
-}
-
 func (s *Service) validatePipeline(cfg Config, id string) error {
 	// contains all the errors occurred while provisioning configuration files.
 	var errs []error
@@ -349,4 +340,22 @@ func (s *Service) validatePipeline(cfg Config, id string) error {
 // GetInstances returns all pipeline instances.
 func (s *Service) GetInstances() map[string]*Instance {
 	return s.instances
+}
+
+func (s *Service) UpdateStatus(ctx context.Context, id string, status Status) error {
+	pipeline, err := s.Get(ctx, id)
+	if err != nil {
+		return err
+	}
+	measure.PipelinesGauge.WithValues(strings.ToLower(pipeline.GetStatus().String())).Dec()
+	pipeline.SetStatus(status)
+
+	pipeline.Error = ""
+	measure.PipelinesGauge.WithValues(strings.ToLower(pipeline.GetStatus().String())).Inc()
+
+	err = s.store.Set(ctx, pipeline.ID, pipeline)
+	if err != nil {
+		return cerrors.Errorf("pipeline not updated: %w", err)
+	}
+	return nil
 }
