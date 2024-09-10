@@ -72,7 +72,7 @@ func (n *FanoutNode) Run(ctx context.Context) error {
 
 			// remainingAcks tracks how many acks we are still waiting for
 			// before the ack can be propagated upstream to the original message
-			remainingAcks := int32(len(n.out))
+			remainingAcks := int32(len(n.out)) //nolint:gosec // no risk of overflow
 
 			wg.Add(len(n.out))
 			for i := range n.out {
