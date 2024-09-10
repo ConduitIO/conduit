@@ -60,9 +60,11 @@ func PipelineStatus(in pipeline.Status) apiv1.Pipeline_Status {
 
 func PipelineDLQ(in pipeline.DLQ) *apiv1.Pipeline_DLQ {
 	return &apiv1.Pipeline_DLQ{
-		Plugin:              in.Plugin,
-		Settings:            in.Settings,
-		WindowSize:          uint64(in.WindowSize),
+		Plugin:   in.Plugin,
+		Settings: in.Settings,
+		//nolint:gosec // no risk of overflow, existing pipeline that's already been validated
+		WindowSize: uint64(in.WindowSize),
+		//nolint:gosec // no risk of overflow, existing pipeline that's already been validated
 		WindowNackThreshold: uint64(in.WindowNackThreshold),
 	}
 }
