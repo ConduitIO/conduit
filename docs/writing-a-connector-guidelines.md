@@ -230,13 +230,13 @@ the destination system has different procedures for those operations.
 
 If a destination connector receives the following batch:
 
-```
+```text
 [create_1, update_1, update_2, create_2]
 ```
 
 then this batch can be split into following batches:
 
-```
+```text
 Batch 1: [create_1]
 Batch 2: [update_1, update_2]
 Batch 3: [create_2]
