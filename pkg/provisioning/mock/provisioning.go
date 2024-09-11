@@ -15,7 +15,6 @@ import (
 
 	connector "github.com/conduitio/conduit/pkg/connector"
 	log "github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/conduitio/conduit/pkg/lifecycle"
 	pipeline "github.com/conduitio/conduit/pkg/pipeline"
 	connector0 "github.com/conduitio/conduit/pkg/plugin/connector"
 	processor "github.com/conduitio/conduit/pkg/processor"
@@ -351,82 +350,6 @@ func (c *PipelineServiceRemoveProcessorCall) Do(f func(context.Context, string, 
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
 func (c *PipelineServiceRemoveProcessorCall) DoAndReturn(f func(context.Context, string, string) (*pipeline.Instance, error)) *PipelineServiceRemoveProcessorCall {
-	c.Call = c.Call.DoAndReturn(f)
-	return c
-}
-
-// Start mocks base method.
-func (m *PipelineService) Start(arg0 context.Context, arg1 lifecycle.ConnectorService, arg2 lifecycle.ProcessorService, arg3 lifecycle.ConnectorPluginService, arg4 string) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Start", arg0, arg1, arg2, arg3, arg4)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// Start indicates an expected call of Start.
-func (mr *PipelineServiceMockRecorder) Start(arg0, arg1, arg2, arg3, arg4 any) *PipelineServiceStartCall {
-	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*PipelineService)(nil).Start), arg0, arg1, arg2, arg3, arg4)
-	return &PipelineServiceStartCall{Call: call}
-}
-
-// PipelineServiceStartCall wrap *gomock.Call
-type PipelineServiceStartCall struct {
-	*gomock.Call
-}
-
-// Return rewrite *gomock.Call.Return
-func (c *PipelineServiceStartCall) Return(arg0 error) *PipelineServiceStartCall {
-	c.Call = c.Call.Return(arg0)
-	return c
-}
-
-// Do rewrite *gomock.Call.Do
-func (c *PipelineServiceStartCall) Do(f func(context.Context, lifecycle.ConnectorService, lifecycle.ProcessorService, lifecycle.ConnectorPluginService, string) error) *PipelineServiceStartCall {
-	c.Call = c.Call.Do(f)
-	return c
-}
-
-// DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *PipelineServiceStartCall) DoAndReturn(f func(context.Context, lifecycle.ConnectorService, lifecycle.ProcessorService, lifecycle.ConnectorPluginService, string) error) *PipelineServiceStartCall {
-	c.Call = c.Call.DoAndReturn(f)
-	return c
-}
-
-// Stop mocks base method.
-func (m *PipelineService) Stop(arg0 context.Context, arg1 string, arg2 bool) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Stop", arg0, arg1, arg2)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// Stop indicates an expected call of Stop.
-func (mr *PipelineServiceMockRecorder) Stop(arg0, arg1, arg2 any) *PipelineServiceStopCall {
-	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*PipelineService)(nil).Stop), arg0, arg1, arg2)
-	return &PipelineServiceStopCall{Call: call}
-}
-
-// PipelineServiceStopCall wrap *gomock.Call
-type PipelineServiceStopCall struct {
-	*gomock.Call
-}
-
-// Return rewrite *gomock.Call.Return
-func (c *PipelineServiceStopCall) Return(arg0 error) *PipelineServiceStopCall {
-	c.Call = c.Call.Return(arg0)
-	return c
-}
-
-// Do rewrite *gomock.Call.Do
-func (c *PipelineServiceStopCall) Do(f func(context.Context, string, bool) error) *PipelineServiceStopCall {
-	c.Call = c.Call.Do(f)
-	return c
-}
-
-// DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *PipelineServiceStopCall) DoAndReturn(f func(context.Context, string, bool) error) *PipelineServiceStopCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
