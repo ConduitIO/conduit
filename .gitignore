@@ -91,3 +91,6 @@ escape_analysis.txt
 
 # Compiled test wasm processors
 pkg/plugin/processor/standalone/test/wasm_processors/*/processor.wasm
+
+# Test data
+**/test/*.txt
