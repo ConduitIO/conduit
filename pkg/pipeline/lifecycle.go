@@ -593,10 +593,12 @@ func (s *Service) runPipeline(ctx context.Context, pl *Instance) error {
 		})
 	}
 
-	measure.PipelinesGauge.WithValues(strings.ToLower(pl.GetStatus().String())).Dec()
+	s.updateOldStatusMetrics(pl)
+
 	pl.SetStatus(StatusRunning)
 	pl.Error = ""
-	measure.PipelinesGauge.WithValues(strings.ToLower(pl.GetStatus().String())).Inc()
+
+	s.updateNewStatusMetrics(pl)
 
 	err := s.store.Set(ctx, pl.ID, pl)
 	if err != nil {
@@ -613,7 +615,7 @@ func (s *Service) runPipeline(ctx context.Context, pl *Instance) error {
 		nodesWg.Wait()
 		err := pl.t.Err()
 
-		measure.PipelinesGauge.WithValues(strings.ToLower(pl.GetStatus().String())).Dec()
+		s.updateOldStatusMetrics(pl)
 
 		switch err {
 		case tomb.ErrStillAlive:
@@ -640,7 +642,7 @@ func (s *Service) runPipeline(ctx context.Context, pl *Instance) error {
 		s.notify(pl.ID, err)
 		// It's important to update the metrics before we handle the error from s.Store.Set() (if any),
 		// since the source of the truth is the actual pipeline (stored in memory).
-		measure.PipelinesGauge.WithValues(strings.ToLower(pl.GetStatus().String())).Inc()
+		s.updateNewStatusMetrics(pl)
 
 		storeErr := s.store.Set(ctx, pl.ID, pl)
 		if storeErr != nil {

@@ -44,7 +44,6 @@ func (g *gauge) Inc(vs ...float64) {
 		g.pg.Inc()
 		return
 	}
-
 	g.pg.Add(sumFloat64(vs...))
 }
 

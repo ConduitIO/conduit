@@ -28,6 +28,16 @@ var (
 	PipelinesGauge = metrics.NewLabeledGauge("conduit_pipelines",
 		"Number of pipelines by status.",
 		[]string{"status"})
+	PipelineStatusGauge = metrics.NewLabeledGauge(
+		"conduit_pipeline_status",
+		"A pipeline's status (as specified in the gRPC API: https://buf.build/conduitio/conduit/docs/main:api.v1#api.v1.Pipeline.State).",
+		[]string{"pipeline_name"},
+	)
+	PipelineRecoveringCount = metrics.NewLabeledCounter(
+		"pipeline_recovering_count",
+		"Number of times a pipeline have been recovering (by pipeline name)",
+		[]string{"pipeline_name"},
+	)
 	ConnectorsGauge = metrics.NewLabeledGauge("conduit_connectors",
 		"Number of connectors by type.",
 		[]string{"type"})
