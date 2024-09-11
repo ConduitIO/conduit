@@ -51,6 +51,7 @@ func NewService(
 	connService ConnectorService,
 	procService ProcessorService,
 	connPluginService ConnectorPluginService,
+	lifecycleService LifecycleService,
 	pipelinesDir string,
 ) *Service {
 	return &Service{
@@ -61,6 +62,7 @@ func NewService(
 		connectorService:       connService,
 		processorService:       procService,
 		connectorPluginService: connPluginService,
+		lifecycleService:       lifecycleService,
 		pipelinesPath:          pipelinesDir,
 	}
 }

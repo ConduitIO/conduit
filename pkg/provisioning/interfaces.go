@@ -24,7 +24,7 @@ import (
 	"github.com/conduitio/conduit/pkg/processor"
 )
 
-//go:generate mockgen -typed -destination=mock/provisioning.go -package=mock -mock_names=PipelineService=PipelineService,ConnectorService=ConnectorService,ProcessorService=ProcessorService,ConnectorPluginService=ConnectorPluginService . PipelineService,ConnectorService,ProcessorService,ConnectorPluginService
+//go:generate mockgen -typed -destination=mock/provisioning.go -package=mock -mock_names=PipelineService=PipelineService,ConnectorService=ConnectorService,ProcessorService=ProcessorService,ConnectorPluginService=ConnectorPluginService,LifecycleService=LifecycleService . PipelineService,ConnectorService,ProcessorService,ConnectorPluginService,LifecycleService
 
 type PipelineService interface {
 	Get(ctx context.Context, id string) (*pipeline.Instance, error)

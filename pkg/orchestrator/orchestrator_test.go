@@ -47,14 +47,15 @@ import (
 // a context is passed to a function.
 var ctxType = reflect.TypeOf((*context.Context)(nil)).Elem()
 
-func newMockServices(t *testing.T) (*mock.PipelineService, *mock.ConnectorService, *mock.ProcessorService, *mock.ConnectorPluginService, *mock.ProcessorPluginService) {
+func newMockServices(t *testing.T) (*mock.PipelineService, *mock.ConnectorService, *mock.ProcessorService, *mock.ConnectorPluginService, *mock.ProcessorPluginService, *mock.LifecycleService) {
 	ctrl := gomock.NewController(t)
 
 	return mock.NewPipelineService(ctrl),
 		mock.NewConnectorService(ctrl),
 		mock.NewProcessorService(ctrl),
 		mock.NewConnectorPluginService(ctrl),
-		mock.NewProcessorPluginService(ctrl)
+		mock.NewProcessorPluginService(ctrl),
+		mock.NewLifecycleService(ctrl)
 }
 
 func TestPipelineSimple(t *testing.T) {
@@ -91,6 +92,8 @@ func TestPipelineSimple(t *testing.T) {
 		nil,
 	)
 
+	lifecycleService := mock.NewLifecycleService(gomock.NewController(t))
+
 	b := &backoff.Backoff{}
 
 	orc := NewOrchestrator(
@@ -101,6 +104,7 @@ func TestPipelineSimple(t *testing.T) {
 		processor.NewService(logger, db, procPluginService),
 		connPluginService,
 		procPluginService,
+		lifecycleService,
 	)
 
 	// create a host pipeline
@@ -161,7 +165,7 @@ func TestPipelineSimple(t *testing.T) {
 	err = orc.Pipelines.Stop(ctx, pl.ID, false)
 	is.NoErr(err)
 	t.Log("waiting")
-	err = pl.Wait()
+	err = lifecycleService.Wait()
 	is.NoErr(err)
 	t.Log("successfully stopped pipeline")
 

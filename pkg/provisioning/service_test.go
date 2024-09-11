@@ -26,6 +26,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/ctxutil"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/lifecycle"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	conn_plugin "github.com/conduitio/conduit/pkg/plugin/connector"
 	"github.com/conduitio/conduit/pkg/plugin/connector/builtin"
@@ -117,7 +118,7 @@ func TestService_Init_Create(t *testing.T) {
 	logger := log.Nop()
 	ctrl := gomock.NewController(t)
 
-	service, pipelineService, connService, procService, plugService := newTestService(ctrl, logger)
+	service, pipelineService, connService, procService, _, lifecycleService := newTestService(ctrl, logger)
 	service.pipelinesPath = "./test/pipelines1"
 
 	// return a pipeline not provisioned by API
@@ -141,7 +142,7 @@ func TestService_Init_Create(t *testing.T) {
 	procService.EXPECT().CreateWithInstance(anyCtx, p1.P1P1)
 
 	// start pipeline
-	pipelineService.EXPECT().Start(anyCtx, connService, procService, plugService, p1.P1.ID)
+	lifecycleService.EXPECT().Start(anyCtx, p1.P1.ID)
 
 	err := service.Init(context.Background())
 	is.NoErr(err)
@@ -152,7 +153,7 @@ func TestService_Init_Update(t *testing.T) {
 	logger := log.Nop()
 	ctrl := gomock.NewController(t)
 
-	service, pipelineService, connService, procService, plugService := newTestService(ctrl, logger)
+	service, pipelineService, connService, procService, _, lifecycleService := newTestService(ctrl, logger)
 	service.pipelinesPath = "./test/pipelines1"
 
 	pipelineService.EXPECT().List(anyCtx)
@@ -176,7 +177,7 @@ func TestService_Init_Update(t *testing.T) {
 	procService.EXPECT().Update(anyCtx, p1.P1P1.ID, p1.P1P1.Config)
 
 	// start pipeline
-	pipelineService.EXPECT().Start(anyCtx, connService, procService, plugService, p1.P1.ID)
+	lifecycleService.EXPECT().Start(anyCtx, p1.P1.ID)
 
 	err := service.Init(context.Background())
 	is.NoErr(err)
@@ -187,7 +188,7 @@ func TestService_Init_Delete(t *testing.T) {
 	logger := log.Nop()
 	ctrl := gomock.NewController(t)
 
-	service, pipelineService, connService, procService, plugService := newTestService(ctrl, logger)
+	service, pipelineService, connService, procService, plugService, _ := newTestService(ctrl, logger)
 	service.pipelinesPath = "" // don't init any pipelines, delete existing ones
 
 	// old pipeline exists
@@ -216,7 +217,7 @@ func TestService_Init_NoRollbackOnFailedStart(t *testing.T) {
 	logger := log.Nop()
 	ctrl := gomock.NewController(t)
 
-	service, pipelineService, connService, procService, plugService := newTestService(ctrl, logger)
+	service, pipelineService, connService, procService, _, lifecycleService := newTestService(ctrl, logger)
 	service.pipelinesPath = "./test/pipelines1"
 
 	// return a pipeline not provisioned by API
@@ -241,7 +242,7 @@ func TestService_Init_NoRollbackOnFailedStart(t *testing.T) {
 
 	// returns an error, no rollback needed
 	wantErr := cerrors.New("error")
-	pipelineService.EXPECT().Start(anyCtx, connService, procService, plugService, p1.P1.ID).Return(wantErr)
+	lifecycleService.EXPECT().Start(anyCtx, p1.P1.ID).Return(wantErr)
 
 	err := service.Init(context.Background())
 	is.True(cerrors.Is(err, wantErr))
@@ -252,7 +253,7 @@ func TestService_Init_RollbackCreate(t *testing.T) {
 	logger := log.Nop()
 	ctrl := gomock.NewController(t)
 
-	service, pipelineService, connService, procService, plugService := newTestService(ctrl, logger)
+	service, pipelineService, connService, procService, plugService, _ := newTestService(ctrl, logger)
 	service.pipelinesPath = "./test/pipelines1"
 
 	// return a pipeline not provisioned by API
@@ -291,7 +292,7 @@ func TestService_Init_RollbackUpdate(t *testing.T) {
 	logger := log.Nop()
 	ctrl := gomock.NewController(t)
 
-	service, pipelineService, connService, procService, _ := newTestService(ctrl, logger)
+	service, pipelineService, connService, procService, _, _ := newTestService(ctrl, logger)
 	service.pipelinesPath = "./test/pipelines1"
 
 	// return a pipeline not provisioned by API
@@ -331,7 +332,7 @@ func TestService_Init_MultiplePipelinesDuplicatedPipelineID(t *testing.T) {
 	logger := log.Nop()
 	ctrl := gomock.NewController(t)
 
-	service, pipelineService, connService, procService, plugService := newTestService(ctrl, logger)
+	service, pipelineService, connService, _, _, lifecycleService := newTestService(ctrl, logger)
 	service.pipelinesPath = "./test/pipelines2"
 
 	// return a pipeline not provisioned by API
@@ -349,7 +350,7 @@ func TestService_Init_MultiplePipelinesDuplicatedPipelineID(t *testing.T) {
 	connService.EXPECT().CreateWithInstance(anyCtx, p2.P2C1)
 	connService.EXPECT().CreateWithInstance(anyCtx, p2.P2C2)
 
-	pipelineService.EXPECT().Start(anyCtx, connService, procService, plugService, p2.P2.ID)
+	lifecycleService.EXPECT().Start(anyCtx, p2.P2.ID)
 
 	err := service.Init(context.Background())
 	is.True(cerrors.Is(err, ErrDuplicatedPipelineID)) // duplicated pipeline id
@@ -360,7 +361,7 @@ func TestService_Init_MultiplePipelines(t *testing.T) {
 	logger := log.Nop()
 	ctrl := gomock.NewController(t)
 
-	service, pipelineService, connService, procService, plugService := newTestService(ctrl, logger)
+	service, pipelineService, connService, _, _, lifecycleService := newTestService(ctrl, logger)
 	service.pipelinesPath = "./test/pipelines3"
 
 	// return a pipeline not provisioned by API
@@ -380,7 +381,7 @@ func TestService_Init_MultiplePipelines(t *testing.T) {
 	connService.EXPECT().CreateWithInstance(anyCtx, p3.P1C1)
 	connService.EXPECT().CreateWithInstance(anyCtx, p3.P1C2)
 
-	pipelineService.EXPECT().Start(anyCtx, connService, procService, plugService, p3.P1.ID)
+	lifecycleService.EXPECT().Start(anyCtx, p3.P1.ID)
 
 	// create pipeline2
 	pipelineService.EXPECT().CreateWithInstance(anyCtx, p3.P2)
@@ -391,7 +392,7 @@ func TestService_Init_MultiplePipelines(t *testing.T) {
 	connService.EXPECT().CreateWithInstance(anyCtx, p3.P2C1)
 	connService.EXPECT().CreateWithInstance(anyCtx, p3.P2C2)
 
-	pipelineService.EXPECT().Start(anyCtx, connService, procService, plugService, p3.P2.ID)
+	lifecycleService.EXPECT().Start(anyCtx, p3.P2.ID)
 
 	err := service.Init(context.Background())
 	is.NoErr(err)
@@ -407,7 +408,7 @@ func TestService_Init_PipelineProvisionedFromAPI(t *testing.T) {
 		ProvisionedBy: pipeline.ProvisionTypeAPI,
 	}
 
-	service, pipelineService, _, _, _ := newTestService(ctrl, logger)
+	service, pipelineService, _, _, _, _ := newTestService(ctrl, logger)
 	service.pipelinesPath = "./test/pipelines1"
 
 	// pipeline provisioned by API
@@ -425,7 +426,7 @@ func TestService_Init_PipelineProvisionedFromAPI_Error(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	otherErr := cerrors.New("GetError")
 
-	service, pipelineService, connService, procService, plugService := newTestService(ctrl, logger)
+	service, pipelineService, connService, procService, _, lifecycleService := newTestService(ctrl, logger)
 	service.pipelinesPath = "./test/pipelines1"
 
 	// error from calling Get
@@ -449,7 +450,7 @@ func TestService_Init_PipelineProvisionedFromAPI_Error(t *testing.T) {
 	procService.EXPECT().CreateWithInstance(anyCtx, p1.P1P1)
 
 	// start pipeline
-	pipelineService.EXPECT().Start(anyCtx, connService, procService, plugService, p1.P1.ID)
+	lifecycleService.EXPECT().Start(anyCtx, p1.P1.ID)
 
 	err := service.Init(context.Background())
 	is.True(cerrors.Is(err, otherErr))
@@ -460,7 +461,7 @@ func TestService_Delete(t *testing.T) {
 	logger := log.Nop()
 	ctrl := gomock.NewController(t)
 
-	service, pipelineService, connService, procService, plugService := newTestService(ctrl, logger)
+	service, pipelineService, connService, procService, plugService, _ := newTestService(ctrl, logger)
 
 	// export pipeline
 	pipelineService.EXPECT().Get(anyCtx, oldPipelineInstance.ID).Return(oldPipelineInstance, nil).Times(2)
@@ -523,6 +524,7 @@ func TestService_IntegrationTestServices(t *testing.T) {
 	plService := pipeline.NewService(logger, db, b)
 	connService := connector.NewService(logger, db, connector.NewPersister(logger, db, time.Second, 3))
 	procService := processor.NewService(logger, db, procPluginService)
+	lifecycleService := lifecycle.NewService(logger, b, connService, procService, connPluginService, plService)
 
 	// create destination file
 	destFile := "./test/dest-file.txt"
@@ -533,7 +535,7 @@ func TestService_IntegrationTestServices(t *testing.T) {
 		is.NoErr(err)
 	})
 
-	service := NewService(db, logger, plService, connService, procService, connPluginService, "./test/pipelines4-integration-test")
+	service := NewService(db, logger, plService, connService, procService, connPluginService, lifecycleService, "./test/pipelines4-integration-test")
 	err = service.Init(context.Background())
 	is.NoErr(err)
 

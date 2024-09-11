@@ -1,0 +1,1 @@
+{"position":"MjU=","operation":"create","metadata":{"conduit.source.connector.id":"pipeline1:con1","file.path":"./test/source-file.txt"},"key":"MQ==","payload":{"before":null,"after":"anVzdCBzb21lIHRlc3RpbmcgZGF0YSA6RA=="}}
