@@ -218,7 +218,7 @@ func (s *Service) stopGraceful(ctx context.Context, rp *runnablePipeline, reason
 	}
 
 	if len(errs) == 0 {
-		s.runningPipelines[rp.pipeline.ID] = nil
+		delete(s.runningPipelines, rp.pipeline.ID)
 		return nil
 	}
 
@@ -239,7 +239,7 @@ func (s *Service) stopForceful(ctx context.Context, rp *runnablePipeline) error 
 		}
 	}
 
-	s.runningPipelines[rp.pipeline.ID] = nil
+	delete(s.runningPipelines, rp.pipeline.ID)
 	return nil
 }
 
