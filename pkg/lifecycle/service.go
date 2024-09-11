@@ -303,6 +303,13 @@ func (s *Service) waitInternal() error {
 	return cerrors.Join(errs...)
 }
 
+func (s *Service) WaitPipeline(id string) error {
+	if s.runningPipelines[id].t == nil {
+		return nil
+	}
+	return s.runningPipelines[id].t.Wait()
+}
+
 // buildRunnablePipeline will build and connect all nodes configured in the pipeline.
 func (s *Service) buildRunnablePipeline(
 	ctx context.Context,
