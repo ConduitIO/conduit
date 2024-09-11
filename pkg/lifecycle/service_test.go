@@ -799,17 +799,17 @@ type testPluginFetcher map[string]connectorPlugin.Dispenser
 type testPipelineService map[string]*pipeline.Instance
 
 func (t testPipelineService) Get(ctx context.Context, pipelineID string) (*pipeline.Instance, error) {
-	//TODO implement me
+	// TODO implement me
 	panic("implement me")
 }
 
 func (t testPipelineService) GetInstances() map[string]*pipeline.Instance {
-	//TODO implement me
+	// TODO implement me
 	panic("implement me")
 }
 
 func (t testPipelineService) UpdateStatus(ctx context.Context, pipelineID string, status pipeline.Status, errMsg string) error {
-	//TODO implement me
+	// TODO implement me
 	panic("implement me")
 }
 
