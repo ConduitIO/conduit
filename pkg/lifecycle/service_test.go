@@ -803,7 +803,7 @@ func (t testPipelineService) Get(ctx context.Context, pipelineID string) (*pipel
 	panic("implement me")
 }
 
-func (t testPipelineService) GetInstances() map[string]*pipeline.Instance {
+func (t testPipelineService) List(ctx context.Context) map[string]*pipeline.Instance {
 	// TODO implement me
 	panic("implement me")
 }

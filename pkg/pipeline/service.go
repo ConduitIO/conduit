@@ -337,11 +337,6 @@ func (s *Service) validatePipeline(cfg Config, id string) error {
 	return cerrors.Join(errs...)
 }
 
-// GetInstances returns all pipeline instances.
-func (s *Service) GetInstances() map[string]*Instance {
-	return s.instances
-}
-
 // UpdateStatus updates the status of a pipeline by the ID.
 func (s *Service) UpdateStatus(ctx context.Context, id string, status Status, errMsg string) error {
 	pipeline, err := s.Get(ctx, id)

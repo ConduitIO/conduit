@@ -109,7 +109,7 @@ type ConnectorPluginService interface {
 // PipelineService can fetch a pipeline instance.
 type PipelineService interface {
 	Get(ctx context.Context, pipelineID string) (*pipeline.Instance, error)
-	GetInstances() map[string]*pipeline.Instance
+	List(ctx context.Context) map[string]*pipeline.Instance
 	UpdateStatus(ctx context.Context, pipelineID string, status pipeline.Status, errMsg string) error
 }
 
@@ -128,7 +128,7 @@ func (s *Service) Run(
 	s.logger.Debug(ctx).Msg("initializing pipelines statuses")
 
 	// run pipelines that are in the StatusSystemStopped state
-	instances := s.pipelines.GetInstances()
+	instances := s.pipelines.List(ctx)
 	for _, instance := range instances {
 		if instance.GetStatus() == pipeline.StatusSystemStopped {
 			err := s.Start(ctx, instance.ID)
@@ -246,7 +246,7 @@ func (s *Service) stopForceful(ctx context.Context, rp *runnablePipeline) error 
 // StopAll will ask all the pipelines to stop gracefully
 // (i.e. that existing messages get processed but not new messages get produced).
 func (s *Service) StopAll(ctx context.Context, reason error) {
-	instances := s.pipelines.GetInstances()
+	instances := s.pipelines.List(ctx)
 	for _, pl := range instances {
 		rp, ok := s.runningPipelines[pl.ID]
 		if !ok || (pl.GetStatus() != pipeline.StatusRunning && pl.GetStatus() != pipeline.StatusRecovering) {
