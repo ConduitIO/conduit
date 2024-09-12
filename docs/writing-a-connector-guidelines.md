@@ -43,7 +43,7 @@ Some questions that typically need to be answered:
    - In which language should the connector be written?
    - If the language of choice is Go, is a pure Go driver available? A CGo
      driver may make the usage and deployment of a connector more complex.
-   - Does the driver expose all the functionality needed?
+   - Does the driver expose all the functionalities needed?
    - How mature is the driver?
 4. **What authentication methods should be supported?**
 
