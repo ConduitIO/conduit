@@ -231,11 +231,6 @@ func TestService_buildRunnablePipeline_NoDestinationNode(t *testing.T) {
 	is.Equal(got, nil)
 }
 
-// TODO: Fix
-// destination.go:117: err: context deadline exceeded // run didn't finish
-// destination.go:117: err: context deadline exceeded // run didn't finish
-// source.go:145: 0 != 10 // number of expected acks don't match
-// source.go:116: not true: done.Load() // run didn't finish
 func TestServiceLifecycle_PipelineSuccess(t *testing.T) {
 	is := is.New(t)
 	ctx, killAll := context.WithCancel(context.Background())
@@ -275,7 +270,7 @@ func TestServiceLifecycle_PipelineSuccess(t *testing.T) {
 			source.Plugin:      sourceDispenser,
 			destination.Plugin: destDispenser,
 			dlq.Plugin:         dlqDispenser,
-		}, testPipelineService{})
+		}, ps)
 
 	// start the pipeline now that everything is set up
 	err = ls.Start(
@@ -796,11 +791,23 @@ func (tpf testProcessorFetcher) Get(_ context.Context, id string) (*processor.In
 // testPluginFetcher fulfills the PluginFetcher interface.
 type testPluginFetcher map[string]connectorPlugin.Dispenser
 
+func (tpf testPluginFetcher) NewDispenser(_ log.CtxLogger, name string, _ string) (connectorPlugin.Dispenser, error) {
+	plug, ok := tpf[name]
+	if !ok {
+		return nil, plugin.ErrPluginNotFound
+	}
+	return plug, nil
+}
+
+// testPipelineService fulfills the PipelineService interface.
 type testPipelineService map[string]*pipeline.Instance
 
-func (t testPipelineService) Get(ctx context.Context, pipelineID string) (*pipeline.Instance, error) {
-	// TODO implement me
-	panic("implement me")
+func (t testPipelineService) Get(_ context.Context, pipelineID string) (*pipeline.Instance, error) {
+	pi, ok := t[pipelineID]
+	if !ok {
+		return nil, processor.ErrInstanceNotFound
+	}
+	return pi, nil
 }
 
 func (t testPipelineService) List(ctx context.Context) map[string]*pipeline.Instance {
@@ -811,12 +818,4 @@ func (t testPipelineService) List(ctx context.Context) map[string]*pipeline.Inst
 func (t testPipelineService) UpdateStatus(ctx context.Context, pipelineID string, status pipeline.Status, errMsg string) error {
 	// TODO implement me
 	panic("implement me")
-}
-
-func (tpf testPluginFetcher) NewDispenser(_ log.CtxLogger, name string, _ string) (connectorPlugin.Dispenser, error) {
-	plug, ok := tpf[name]
-	if !ok {
-		return nil, plugin.ErrPluginNotFound
-	}
-	return plug, nil
 }

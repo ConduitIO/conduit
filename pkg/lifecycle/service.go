@@ -81,6 +81,7 @@ func NewService(
 		processors:       processors,
 		connectorPlugins: connectorPlugins,
 		pipelines:        pipelines,
+		runningPipelines: make(map[string]*runnablePipeline),
 	}
 }
 
@@ -174,8 +175,8 @@ func (s *Service) Start(
 	s.logger.Info(ctx).Str(log.PipelineIDField, pl.ID).Msg("pipeline started")
 
 	s.m.Lock()
-	defer s.m.Unlock()
 	s.runningPipelines[pl.ID] = rp
+	s.m.Unlock()
 
 	return nil
 }
@@ -221,13 +222,6 @@ func (s *Service) stopGraceful(ctx context.Context, rp *runnablePipeline, reason
 		}
 	}
 
-	if len(errs) == 0 {
-		s.m.Lock()
-		defer s.m.Unlock()
-		delete(s.runningPipelines, rp.pipeline.ID)
-		return nil
-	}
-
 	return cerrors.Join(errs...)
 }
 
@@ -244,10 +238,6 @@ func (s *Service) stopForceful(ctx context.Context, rp *runnablePipeline) error 
 			node.ForceStop(ctx)
 		}
 	}
-
-	s.m.Lock()
-	defer s.m.Unlock()
-	delete(s.runningPipelines, rp.pipeline.ID)
 	return nil
 }
 
@@ -723,6 +713,11 @@ func (s *Service) runPipeline(ctx context.Context, rp *runnablePipeline) error {
 			Err(ctx, err).
 			Str(log.PipelineIDField, rp.pipeline.ID).
 			Msg("pipeline stopped")
+
+		// confirmed that all nodes stopped, we can now remove the pipeline from the running pipelines
+		s.m.Lock()
+		delete(s.runningPipelines, rp.pipeline.ID)
+		s.m.Unlock()
 
 		s.notify(rp.pipeline.ID, err)
 		// It's important to update the metrics before we handle the error from s.Store.Set() (if any),
