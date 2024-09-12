@@ -65,8 +65,11 @@ func enrichConnectors(mp []Connector, pipelineID string) []Connector {
 		if cfg.Settings == nil {
 			cfg.Settings = make(map[string]string)
 		}
-		// attach the pipelineID to the connectorID
-		cfg.ID = pipelineID + ":" + cfg.ID
+		if cfg.ID != "" {
+			// attach the pipelineID to the connectorID only if the connectorID
+			// is actually provided, otherwise the validation will miss it later
+			cfg.ID = pipelineID + ":" + cfg.ID
+		}
 		cfg.Processors = enrichProcessors(cfg.Processors, cfg.ID)
 		out[i] = cfg
 	}
@@ -86,7 +89,11 @@ func enrichProcessors(mp []Processor, parentID string) []Processor {
 		if cfg.Settings == nil {
 			cfg.Settings = make(map[string]string)
 		}
-		cfg.ID = parentID + ":" + cfg.ID
+		if cfg.ID != "" {
+			// attach the parentID to the processorID only if the processorID
+			// is actually provided, otherwise the validation will miss it later
+			cfg.ID = parentID + ":" + cfg.ID
+		}
 		out[i] = cfg
 	}
 	return out

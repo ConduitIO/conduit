@@ -132,7 +132,7 @@ func TestEnrich_DefaultValues(t *testing.T) {
 			Status:      "stopped",
 			Description: "empty",
 			Connectors: []Connector{
-				{ID: "con1"},
+				{ID: ""},
 			},
 			Processors: []Processor{
 				{ID: "proc1"},
@@ -151,8 +151,8 @@ func TestEnrich_DefaultValues(t *testing.T) {
 			},
 			Connectors: []Connector{
 				{
-					ID:       "pipeline3:con1",
-					Name:     "con1",
+					ID:       "",
+					Name:     "",
 					Settings: map[string]string{},
 				},
 			},

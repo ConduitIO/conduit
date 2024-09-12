@@ -97,18 +97,18 @@ type Config struct {
 
 	ConnectorPlugins map[string]sdk.Connector
 
-	dev struct {
-		cpuprofile   string
-		memprofile   string
-		blockprofile string
-	}
-
 	SchemaRegistry struct {
 		Type string
 
 		Confluent struct {
 			ConnectionString string
 		}
+	}
+
+	dev struct {
+		cpuprofile   string
+		memprofile   string
+		blockprofile string
 	}
 }
 
