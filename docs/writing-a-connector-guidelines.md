@@ -138,7 +138,7 @@ procedure:
 - The snapshot needs to be consistent.
 - The set of the existing data can be quite large.
 - Restarting a connector during a snapshot should **not** require re-reading all
-  the data again. This is because it in some destination connectors it may cause
+  the data again. This is because in some destination connectors it may cause
   data duplication, and it could be a significant performance overhead.
 
 #### Implementing change data capture (CDC)
