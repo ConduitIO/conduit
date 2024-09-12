@@ -70,7 +70,7 @@ Some questions that typically need to be answered:
 
 Conduit's Connector SDK is the Go software development kit for implementing a
 connector for Conduit. If you want to implement a connector in another language
-please have a look at
+please check
 the [connector protocol](https://github.com/conduitio/conduit-connector-protocol).
 
 ### Write a test pipeline
