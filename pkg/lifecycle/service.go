@@ -62,6 +62,7 @@ type Service struct {
 
 	handlers         []FailureHandler
 	runningPipelines map[string]*runnablePipeline
+	m                sync.Mutex
 }
 
 // NewService initializes and returns a pipeline Service.
@@ -171,6 +172,9 @@ func (s *Service) Start(
 		return cerrors.Errorf("failed to run pipeline %s: %w", pl.ID, err)
 	}
 	s.logger.Info(ctx).Str(log.PipelineIDField, pl.ID).Msg("pipeline started")
+
+	s.m.Lock()
+	defer s.m.Unlock()
 	s.runningPipelines[pl.ID] = rp
 
 	return nil
@@ -218,6 +222,8 @@ func (s *Service) stopGraceful(ctx context.Context, rp *runnablePipeline, reason
 	}
 
 	if len(errs) == 0 {
+		s.m.Lock()
+		defer s.m.Unlock()
 		delete(s.runningPipelines, rp.pipeline.ID)
 		return nil
 	}
@@ -239,6 +245,8 @@ func (s *Service) stopForceful(ctx context.Context, rp *runnablePipeline) error 
 		}
 	}
 
+	s.m.Lock()
+	defer s.m.Unlock()
 	delete(s.runningPipelines, rp.pipeline.ID)
 	return nil
 }
@@ -307,6 +315,8 @@ func (s *Service) WaitPipeline(id string) error {
 	if s.runningPipelines[id].t == nil {
 		return nil
 	}
+	s.m.Lock()
+	defer s.m.Unlock()
 	return s.runningPipelines[id].t.Wait()
 }
 
