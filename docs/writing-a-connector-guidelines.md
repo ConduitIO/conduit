@@ -66,7 +66,7 @@ Some questions that typically need to be answered:
 
 ## Development
 
-## Familiarize with the Connector SDK/connector protocol
+### Familiarize with the Connector SDK/connector protocol
 
 Conduit's Connector SDK is the Go software development kit for implementing a
 connector for Conduit. If you want to implement a connector in another language
