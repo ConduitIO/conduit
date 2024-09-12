@@ -70,8 +70,9 @@ type Config struct {
 	}
 
 	Log struct {
-		Level  string
-		Format string
+		NewLogger func(level, format string) log.CtxLogger
+		Level     string
+		Format    string
 	}
 
 	Connectors struct {
@@ -96,18 +97,18 @@ type Config struct {
 
 	ConnectorPlugins map[string]sdk.Connector
 
-	dev struct {
-		cpuprofile   string
-		memprofile   string
-		blockprofile string
-	}
-
 	SchemaRegistry struct {
 		Type string
 
 		Confluent struct {
 			ConnectionString string
 		}
+	}
+
+	dev struct {
+		cpuprofile   string
+		memprofile   string
+		blockprofile string
 	}
 }
 
@@ -124,6 +125,7 @@ func DefaultConfig() Config {
 	cfg.API.HTTP.Address = ":8080"
 	cfg.API.GRPC.Address = ":8084"
 
+	cfg.Log.NewLogger = newLogger
 	cfg.Log.Level = "info"
 	cfg.Log.Format = "cli"
 

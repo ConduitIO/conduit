@@ -681,8 +681,6 @@ func (s *Service) runPipeline(ctx context.Context, rp *runnablePipeline) error {
 		nodesWg.Wait()
 		err := rp.t.Err()
 
-		measure.PipelinesGauge.WithValues(strings.ToLower(rp.pipeline.GetStatus().String())).Dec()
-
 		switch err {
 		case tomb.ErrStillAlive:
 			// not an actual error, the pipeline stopped gracefully
@@ -719,7 +717,6 @@ func (s *Service) runPipeline(ctx context.Context, rp *runnablePipeline) error {
 		s.notify(rp.pipeline.ID, err)
 		// It's important to update the metrics before we handle the error from s.Store.Set() (if any),
 		// since the source of the truth is the actual pipeline (stored in memory).
-		measure.PipelinesGauge.WithValues(strings.ToLower(rp.pipeline.GetStatus().String())).Inc()
 		return s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, rp.pipeline.GetStatus(), "")
 	})
 	return nil

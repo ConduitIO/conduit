@@ -79,7 +79,8 @@ func (s *Service) Init(ctx context.Context) error {
 			// change status to "systemStopped" to mark which pipeline was running
 			instance.SetStatus(StatusSystemStopped)
 		}
-		measure.PipelinesGauge.WithValues(strings.ToLower(instance.GetStatus().String())).Inc()
+
+		s.updateNewStatusMetrics(instance)
 	}
 
 	s.logger.Info(ctx).Int("count", len(s.instances)).Msg("pipelines initialized")
@@ -137,7 +138,8 @@ func (s *Service) Create(ctx context.Context, id string, cfg Config, p Provision
 
 	s.instances[pl.ID] = pl
 	s.instanceNames[cfg.Name] = true
-	measure.PipelinesGauge.WithValues(strings.ToLower(pl.GetStatus().String())).Inc()
+
+	s.updateNewStatusMetrics(pl)
 
 	return pl, nil
 }
@@ -302,7 +304,8 @@ func (s *Service) Delete(ctx context.Context, pipelineID string) error {
 
 	delete(s.instances, pl.ID)
 	delete(s.instanceNames, pl.Config.Name)
-	measure.PipelinesGauge.WithValues(strings.ToLower(pl.GetStatus().String())).Dec()
+
+	s.updateOldStatusMetrics(pl)
 
 	return nil
 }
@@ -343,15 +346,26 @@ func (s *Service) UpdateStatus(ctx context.Context, id string, status Status, er
 	if err != nil {
 		return err
 	}
-	measure.PipelinesGauge.WithValues(strings.ToLower(pipeline.GetStatus().String())).Dec()
+	s.updateOldStatusMetrics(pipeline)
 	pipeline.SetStatus(status)
 
 	pipeline.Error = errMsg
-	measure.PipelinesGauge.WithValues(strings.ToLower(pipeline.GetStatus().String())).Inc()
+	s.updateNewStatusMetrics(pipeline)
 
 	err = s.store.Set(ctx, pipeline.ID, pipeline)
 	if err != nil {
 		return cerrors.Errorf("pipeline not updated: %w", err)
 	}
 	return nil
+}
+
+func (s *Service) updateOldStatusMetrics(pl *Instance) {
+	status := strings.ToLower(pl.GetStatus().String())
+	measure.PipelinesGauge.WithValues(status).Dec()
+}
+
+func (s *Service) updateNewStatusMetrics(pl *Instance) {
+	status := strings.ToLower(pl.GetStatus().String())
+	measure.PipelinesGauge.WithValues(status).Inc()
+	measure.PipelineStatusGauge.WithValues(pl.Config.Name).Set(float64(pl.GetStatus()))
 }
