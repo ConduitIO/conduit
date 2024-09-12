@@ -12,8 +12,8 @@ for Conduit connectors provides a basic project setup that includes placeholders
 for the source connector code, destination connector code, connector
 specifications, an example of a configuration, etc.
 
-Also included is a `Makefile` with commonly used target, GitHub workflow for
-linting the code, running unit tests, automatically merging minor dependabot
+Also included is a `Makefile` with commonly used targets and GitHub workflows
+for linting the code, running unit tests, automatically merging minor dependabot
 upgrades, etc.
 
 ## Research the 3rd party system
