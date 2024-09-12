@@ -10,7 +10,7 @@ The GitHub
 repository [template](https://github.com/ConduitIO/conduit-connector-template/)
 for Conduit connectors provides a basic project setup that includes placeholders
 for the source connector code, destination connector code, connector
-specifications, and an example of a configuration, etc.
+specifications, an example of a configuration, etc.
 
 Also included is a `Makefile` with commonly used target, GitHub workflow for
 linting the code, running unit tests, automatically merging minor dependabot
