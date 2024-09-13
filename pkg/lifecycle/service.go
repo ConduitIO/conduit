@@ -120,7 +120,7 @@ func (s *Service) OnFailure(handler FailureHandler) {
 	s.handlers = append(s.handlers, handler)
 }
 
-// Init start all pipelines that have the StatusSystemStopped.
+// Init starts all pipelines that have the StatusSystemStopped.
 func (s *Service) Init(
 	ctx context.Context,
 ) error {
