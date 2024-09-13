@@ -25,6 +25,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/conduitio/conduit-commons/csync"
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -59,8 +60,7 @@ type Service struct {
 	connectorPlugins ConnectorPluginService
 
 	handlers         []FailureHandler
-	runningPipelines map[string]*runnablePipeline
-	m                sync.Mutex
+	runningPipelines *csync.Map[string, *runnablePipeline]
 }
 
 // NewService initializes and returns a lifecycle.Service.
@@ -79,7 +79,7 @@ func NewService(
 		processors:       processors,
 		connectorPlugins: connectorPlugins,
 		pipelines:        pipelines,
-		runningPipelines: make(map[string]*runnablePipeline),
+		runningPipelines: csync.NewMap[string, *runnablePipeline](),
 	}
 }
 
@@ -171,9 +171,7 @@ func (s *Service) Start(
 	}
 	s.logger.Info(ctx).Str(log.PipelineIDField, pl.ID).Msg("pipeline started")
 
-	s.m.Lock()
-	s.runningPipelines[pl.ID] = rp
-	s.m.Unlock()
+	s.runningPipelines.Set(pl.ID, rp)
 
 	return nil
 }
@@ -183,9 +181,7 @@ func (s *Service) Start(
 // instead the context for all nodes will be canceled which causes them to stop
 // running as soon as possible.
 func (s *Service) Stop(ctx context.Context, pipelineID string, force bool) error {
-	s.m.Lock()
-	rp, ok := s.runningPipelines[pipelineID]
-	s.m.Unlock()
+	rp, ok := s.runningPipelines.Get(pipelineID)
 
 	if !ok {
 		return cerrors.Errorf("pipeline %s is not running: %w", pipelineID, pipeline.ErrPipelineNotRunning)
@@ -244,13 +240,10 @@ func (s *Service) stopForceful(ctx context.Context, rp *runnablePipeline) error 
 // StopAll will ask all the running pipelines to stop gracefully
 // (i.e. that existing messages get processed but not new messages get produced).
 func (s *Service) StopAll(ctx context.Context, reason error) {
-	s.m.Lock()
-	defer s.m.Unlock()
-
-	for _, rp := range s.runningPipelines {
+	s.runningPipelines.Range(func(_ string, rp *runnablePipeline) bool {
 		p := rp.pipeline
 		if p.GetStatus() != pipeline.StatusRunning && p.GetStatus() != pipeline.StatusRecovering {
-			continue
+			return true
 		}
 		err := s.stopGraceful(ctx, rp, reason)
 		if err != nil {
@@ -259,7 +252,8 @@ func (s *Service) StopAll(ctx context.Context, reason error) {
 				Str(log.PipelineIDField, p.ID).
 				Msg("could not stop pipeline")
 		}
-	}
+		return true
+	})
 	// TODO stop pipelines forcefully after timeout if they are still running
 }
 
@@ -292,29 +286,25 @@ func (s *Service) Wait(timeout time.Duration) error {
 func (s *Service) waitInternal() error {
 	var errs []error
 
-	s.m.Lock()
-	pipelines := s.runningPipelines
-	s.m.Unlock()
+	pipelines := s.runningPipelines.Copy()
 
-	for _, rp := range pipelines {
+	pipelines.Range(func(_ string, rp *runnablePipeline) bool {
 		if rp.t == nil {
-			continue
+			return true
 		}
 		err := rp.t.Wait()
 		if err != nil {
 			errs = append(errs, err)
 		}
-	}
+		return true
+	})
 	return cerrors.Join(errs...)
 }
 
 // WaitPipeline blocks until the pipeline with the given ID is stopped.
 func (s *Service) WaitPipeline(id string) error {
-	s.m.Lock()
-	p := s.runningPipelines[id]
-	s.m.Unlock()
-
-	if p.t == nil {
+	p, ok := s.runningPipelines.Get(id)
+	if !ok || p.t == nil {
 		return nil
 	}
 	return p.t.Wait()
@@ -724,9 +714,7 @@ func (s *Service) runPipeline(ctx context.Context, rp *runnablePipeline) error {
 			Msg("pipeline stopped")
 
 		// confirmed that all nodes stopped, we can now remove the pipeline from the running pipelines
-		s.m.Lock()
-		delete(s.runningPipelines, rp.pipeline.ID)
-		s.m.Unlock()
+		s.runningPipelines.Delete(rp.pipeline.ID)
 
 		s.notify(rp.pipeline.ID, err)
 		return err
