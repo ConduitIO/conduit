@@ -212,7 +212,7 @@ func createServices(r *Runtime) error {
 		Jitter: true,
 	}
 
-	plService := pipeline.NewService(r.logger, r.DB, backoffCfg)
+	plService := pipeline.NewService(r.logger, r.DB)
 	connService := connector.NewService(r.logger, r.DB, r.connectorPersister)
 	procService := processor.NewService(r.logger, r.DB, procPluginService)
 	lifecycleService := lifecycle.NewService(r.logger, backoffCfg, connService, procService, connPluginService, plService)

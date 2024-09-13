@@ -241,7 +241,7 @@ func TestServiceLifecycle_PipelineSuccess(t *testing.T) {
 	defer persister.Wait()
 	b := &backoff.Backoff{}
 
-	ps := pipeline.NewService(logger, db, b)
+	ps := pipeline.NewService(logger, db)
 
 	// create a host pipeline
 	pl, err := ps.Create(ctx, uuid.NewString(), pipeline.Config{Name: "test pipeline"}, pipeline.ProvisionTypeAPI)
@@ -303,7 +303,7 @@ func TestServiceLifecycle_PipelineError(t *testing.T) {
 	persister := connector.NewPersister(logger, db, time.Second, 3)
 	b := &backoff.Backoff{}
 
-	ps := pipeline.NewService(logger, db, b)
+	ps := pipeline.NewService(logger, db)
 
 	// create a host pipeline
 	pl, err := ps.Create(ctx, uuid.NewString(), pipeline.Config{Name: "test pipeline"}, pipeline.ProvisionTypeAPI)
@@ -390,7 +390,7 @@ func TestServiceLifecycle_StopAll_Recovering(t *testing.T) {
 		persister := connector.NewPersister(logger, db, time.Second, 3)
 		b := &backoff.Backoff{}
 
-		ps := pipeline.NewService(logger, db, b)
+		ps := pipeline.NewService(logger, db)
 
 		// create a host pipeline
 		pl, err := ps.Create(ctx, uuid.NewString(), pipeline.Config{Name: "test pipeline"}, pipeline.ProvisionTypeAPI)
@@ -502,7 +502,7 @@ func TestServiceLifecycle_PipelineStop(t *testing.T) {
 	persister := connector.NewPersister(logger, db, time.Second, 3)
 	b := &backoff.Backoff{}
 
-	ps := pipeline.NewService(logger, db, b)
+	ps := pipeline.NewService(logger, db)
 
 	// create a host pipeline
 	pl, err := ps.Create(ctx, uuid.NewString(), pipeline.Config{Name: "test pipeline"}, pipeline.ProvisionTypeAPI)
@@ -565,7 +565,7 @@ func TestServiceLifecycle_Run_Rerun(t *testing.T) {
 		persister := connector.NewPersister(logger, db, time.Second, 3)
 		b := &backoff.Backoff{}
 
-		ps := pipeline.NewService(logger, db, b)
+		ps := pipeline.NewService(logger, db)
 
 		// create a host pipeline
 		pl, err := ps.Create(ctx, uuid.NewString(), pipeline.Config{Name: "test pipeline"}, pipeline.ProvisionTypeAPI)
@@ -602,7 +602,7 @@ func TestServiceLifecycle_Run_Rerun(t *testing.T) {
 		is.NoErr(err)
 
 		// create a new pipeline service and initialize it
-		ps = pipeline.NewService(logger, db, b)
+		ps = pipeline.NewService(logger, db)
 		err = ps.Init(ctx)
 		is.NoErr(err)
 

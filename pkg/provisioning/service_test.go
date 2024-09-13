@@ -521,7 +521,7 @@ func TestService_IntegrationTestServices(t *testing.T) {
 		Max:    time.Second, // 8 tries
 	}
 
-	plService := pipeline.NewService(logger, db, b)
+	plService := pipeline.NewService(logger, db)
 	connService := connector.NewService(logger, db, connector.NewPersister(logger, db, time.Second, 3))
 	procService := processor.NewService(logger, db, procPluginService)
 	lifecycleService := lifecycle.NewService(logger, b, connService, procService, connPluginService, plService)

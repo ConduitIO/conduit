@@ -25,7 +25,6 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/google/uuid"
-	"github.com/jpillora/backoff"
 	"github.com/matryer/is"
 	"go.uber.org/mock/gomock"
 )
@@ -35,16 +34,15 @@ func TestService_Init_Simple(t *testing.T) {
 	ctx := context.Background()
 	logger := log.Nop()
 	db := &inmemory.DB{}
-	b := &backoff.Backoff{}
 
-	service := NewService(logger, db, b)
+	service := NewService(logger, db)
 	_, err := service.Create(ctx, uuid.NewString(), Config{Name: "test-pipeline"}, ProvisionTypeAPI)
 	is.NoErr(err)
 
 	want := service.List(ctx)
 
 	// create a new pipeline service and initialize it
-	service = NewService(logger, db, b)
+	service = NewService(logger, db)
 	err = service.Init(ctx)
 	is.NoErr(err)
 
@@ -63,7 +61,6 @@ func TestService_Check(t *testing.T) {
 	ctx := context.Background()
 	logger := log.Nop()
 	db := mock.NewDB(gomock.NewController(t))
-	b := &backoff.Backoff{}
 
 	testCases := []struct {
 		name    string
@@ -83,7 +80,7 @@ func TestService_Check(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			is := is.New(t)
 			db.EXPECT().Ping(gomock.Any()).Return(tc.wantErr)
-			service := NewService(logger, db, b)
+			service := NewService(logger, db)
 
 			gotErr := service.Check(ctx)
 			is.Equal(tc.wantErr, gotErr)
@@ -95,9 +92,8 @@ func TestService_CreateSuccess(t *testing.T) {
 	ctx := context.Background()
 	logger := log.Nop()
 	db := &inmemory.DB{}
-	b := &backoff.Backoff{}
 
-	service := NewService(logger, db, b)
+	service := NewService(logger, db)
 
 	testCases := []struct {
 		id     string
@@ -155,9 +151,8 @@ func TestService_Create_ValidateSuccess(t *testing.T) {
 	ctx := context.Background()
 	logger := log.Nop()
 	db := &inmemory.DB{}
-	b := &backoff.Backoff{}
 
-	service := NewService(logger, db, b)
+	service := NewService(logger, db)
 
 	testCases := []struct {
 		name string
@@ -198,9 +193,8 @@ func TestService_Create_ValidateError(t *testing.T) {
 	ctx := context.Background()
 	logger := log.Nop()
 	db := &inmemory.DB{}
-	b := &backoff.Backoff{}
 
-	service := NewService(logger, db, b)
+	service := NewService(logger, db)
 
 	testCases := []struct {
 		name    string
@@ -268,9 +262,8 @@ func TestService_Create_PipelineNameExists(t *testing.T) {
 	ctx := context.Background()
 	logger := log.Nop()
 	db := &inmemory.DB{}
-	b := &backoff.Backoff{}
 
-	service := NewService(logger, db, b)
+	service := NewService(logger, db)
 
 	conf := Config{Name: "test-pipeline"}
 	got, err := service.Create(ctx, uuid.NewString(), conf, ProvisionTypeAPI)
@@ -286,9 +279,8 @@ func TestService_CreateEmptyName(t *testing.T) {
 	ctx := context.Background()
 	logger := log.Nop()
 	db := &inmemory.DB{}
-	b := &backoff.Backoff{}
 
-	service := NewService(logger, db, b)
+	service := NewService(logger, db)
 	got, err := service.Create(ctx, uuid.NewString(), Config{Name: ""}, ProvisionTypeAPI)
 	is.True(err != nil)
 	is.Equal(got, nil)
@@ -299,9 +291,8 @@ func TestService_GetSuccess(t *testing.T) {
 	ctx := context.Background()
 	logger := log.Nop()
 	db := &inmemory.DB{}
-	b := &backoff.Backoff{}
 
-	service := NewService(logger, db, b)
+	service := NewService(logger, db)
 	want, err := service.Create(ctx, uuid.NewString(), Config{Name: "test-pipeline"}, ProvisionTypeAPI)
 	is.NoErr(err)
 
@@ -315,9 +306,8 @@ func TestService_GetInstanceNotFound(t *testing.T) {
 	ctx := context.Background()
 	logger := log.Nop()
 	db := &inmemory.DB{}
-	b := &backoff.Backoff{}
 
-	service := NewService(logger, db, b)
+	service := NewService(logger, db)
 
 	// get pipeline instance that does not exist
 	got, err := service.Get(ctx, uuid.NewString())
@@ -331,9 +321,8 @@ func TestService_DeleteSuccess(t *testing.T) {
 	ctx := context.Background()
 	logger := log.Nop()
 	db := &inmemory.DB{}
-	b := &backoff.Backoff{}
 
-	service := NewService(logger, db, b)
+	service := NewService(logger, db)
 	instance, err := service.Create(ctx, uuid.NewString(), Config{Name: "test-pipeline"}, ProvisionTypeAPI)
 	is.NoErr(err)
 
@@ -350,9 +339,8 @@ func TestService_List(t *testing.T) {
 	ctx := context.Background()
 	logger := log.Nop()
 	db := &inmemory.DB{}
-	b := &backoff.Backoff{}
 
-	service := NewService(logger, db, b)
+	service := NewService(logger, db)
 
 	want := make(map[string]*Instance)
 	for i := 0; i < 10; i++ {
@@ -370,9 +358,8 @@ func TestService_UpdateSuccess(t *testing.T) {
 	ctx := context.Background()
 	logger := log.Nop()
 	db := &inmemory.DB{}
-	b := &backoff.Backoff{}
 
-	service := NewService(logger, db, b)
+	service := NewService(logger, db)
 	instance, err := service.Create(ctx, uuid.NewString(), Config{Name: "test-pipeline"}, ProvisionTypeAPI)
 	is.NoErr(err)
 
@@ -391,9 +378,8 @@ func TestService_Update_PipelineNameExists(t *testing.T) {
 	ctx := context.Background()
 	logger := log.Nop()
 	db := &inmemory.DB{}
-	b := &backoff.Backoff{}
 
-	service := NewService(logger, db, b)
+	service := NewService(logger, db)
 	_, err := service.Create(ctx, uuid.NewString(), Config{Name: "test-pipeline"}, ProvisionTypeAPI)
 	is.NoErr(err)
 	instance2, err2 := service.Create(ctx, uuid.NewString(), Config{Name: "test-pipeline2"}, ProvisionTypeAPI)
@@ -414,9 +400,8 @@ func TestService_UpdateInvalidConfig(t *testing.T) {
 	ctx := context.Background()
 	logger := log.Nop()
 	db := &inmemory.DB{}
-	b := &backoff.Backoff{}
 
-	service := NewService(logger, db, b)
+	service := NewService(logger, db)
 	instance, err := service.Create(ctx, uuid.NewString(), Config{Name: "test-pipeline"}, ProvisionTypeAPI)
 	is.NoErr(err)
 

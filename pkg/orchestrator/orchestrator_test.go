@@ -97,7 +97,7 @@ func TestPipelineSimple(t *testing.T) {
 
 	connectorService := connector.NewService(logger, db, connector.NewPersister(logger, db, time.Second, 3))
 	processorService := processor.NewService(logger, db, procPluginService)
-	pipelineService := pipeline.NewService(logger, db, b)
+	pipelineService := pipeline.NewService(logger, db)
 
 	lifecycleService := lifecycle.NewService(logger, b, connectorService, processorService, connPluginService, pipelineService)
 
