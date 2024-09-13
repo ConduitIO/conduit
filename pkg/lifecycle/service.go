@@ -103,7 +103,7 @@ type ProcessorService interface {
 	MakeRunnableProcessor(ctx context.Context, i *processor.Instance) (*processor.RunnableProcessor, error)
 }
 
-// ConnectorPluginService can fetch a plugin.
+// ConnectorPluginService can create a connector plugin dispenser.
 type ConnectorPluginService interface {
 	NewDispenser(logger log.CtxLogger, name string, connectorID string) (connectorPlugin.Dispenser, error)
 }
