@@ -245,15 +245,11 @@ func (s *Service) stopForceful(ctx context.Context, rp *runnablePipeline) error 
 // (i.e. that existing messages get processed but not new messages get produced).
 func (s *Service) StopAll(ctx context.Context, reason error) {
 	s.m.Lock()
-	instances := s.runningPipelines
-	s.m.Unlock()
+	defer s.m.Unlock()
 
-	for _, rp := range instances {
+	for _, rp := range s.runningPipelines {
 		p := rp.pipeline
 		if p.GetStatus() != pipeline.StatusRunning && p.GetStatus() != pipeline.StatusRecovering {
-			s.m.Lock()
-			delete(s.runningPipelines, p.ID)
-			s.m.Unlock()
 			continue
 		}
 		err := s.stopGraceful(ctx, rp, reason)
