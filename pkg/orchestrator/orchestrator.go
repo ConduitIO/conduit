@@ -126,6 +126,7 @@ type ProcessorPluginService interface {
 }
 
 type LifecycleService interface {
+	// Start initiates a start of the given pipeline.
 	Start(ctx context.Context, pipelineID string) error
 	// Stop initiates a stop of the given pipeline. The method does not wait for
 	// the pipeline (and its nodes) to actually stop.
