@@ -183,7 +183,10 @@ func (s *Service) Start(
 // instead the context for all nodes will be canceled which causes them to stop
 // running as soon as possible.
 func (s *Service) Stop(ctx context.Context, pipelineID string, force bool) error {
+	s.m.Lock()
 	rp, ok := s.runningPipelines[pipelineID]
+	s.m.Unlock()
+
 	if !ok {
 		return cerrors.Errorf("pipeline %s is not running: %w", pipelineID, pipeline.ErrPipelineNotRunning)
 	}
@@ -238,20 +241,26 @@ func (s *Service) stopForceful(ctx context.Context, rp *runnablePipeline) error 
 	return nil
 }
 
-// StopAll will ask all the pipelines to stop gracefully
+// StopAll will ask all the running pipelines to stop gracefully
 // (i.e. that existing messages get processed but not new messages get produced).
 func (s *Service) StopAll(ctx context.Context, reason error) {
-	instances := s.pipelines.List(ctx)
-	for _, pl := range instances {
-		rp, ok := s.runningPipelines[pl.ID]
-		if !ok || (pl.GetStatus() != pipeline.StatusRunning && pl.GetStatus() != pipeline.StatusRecovering) {
+	s.m.Lock()
+	instances := s.runningPipelines
+	s.m.Unlock()
+
+	for _, rp := range instances {
+		p := rp.pipeline
+		if p.GetStatus() != pipeline.StatusRunning && p.GetStatus() != pipeline.StatusRecovering {
+			s.m.Lock()
+			delete(s.runningPipelines, p.ID)
+			s.m.Unlock()
 			continue
 		}
 		err := s.stopGraceful(ctx, rp, reason)
 		if err != nil {
 			s.logger.Warn(ctx).
 				Err(err).
-				Str(log.PipelineIDField, pl.ID).
+				Str(log.PipelineIDField, p.ID).
 				Msg("could not stop pipeline")
 		}
 	}
@@ -286,7 +295,12 @@ func (s *Service) Wait(timeout time.Duration) error {
 // the pipelines failed to stop gracefully.
 func (s *Service) waitInternal() error {
 	var errs []error
-	for _, rp := range s.runningPipelines {
+
+	s.m.Lock()
+	pipelines := s.runningPipelines
+	s.m.Unlock()
+
+	for _, rp := range pipelines {
 		if rp.t == nil {
 			continue
 		}
