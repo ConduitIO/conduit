@@ -26,7 +26,7 @@ import (
 	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/noop"
-	"github.com/conduitio/conduit/pkg/pipeline/stream/mock"
+	"github.com/conduitio/conduit/pkg/lifecycle/stream/mock"
 	connectorPlugin "github.com/conduitio/conduit/pkg/plugin/connector"
 	"github.com/google/uuid"
 	"github.com/matryer/is"

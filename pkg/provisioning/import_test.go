@@ -35,7 +35,7 @@ func TestService_ExecuteActions_Success(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	ctx := context.Background()
 
-	srv, _, _, _, _ := newTestService(ctrl, logger)
+	srv, _, _, _, _, _ := newTestService(ctrl, logger)
 
 	var actionCount int
 	countingAction := fakeAction{do: func(ctx context.Context) error {
@@ -57,7 +57,7 @@ func TestService_ExecuteActions_Fail(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	ctx := context.Background()
 
-	srv, _, _, _, _ := newTestService(ctrl, logger)
+	srv, _, _, _, _, _ := newTestService(ctrl, logger)
 
 	var actionCount int
 	countingAction := fakeAction{do: func(ctx context.Context) error {
@@ -85,7 +85,7 @@ func TestService_RollbackActions_Success(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	ctx := context.Background()
 
-	srv, _, _, _, _ := newTestService(ctrl, logger)
+	srv, _, _, _, _, _ := newTestService(ctrl, logger)
 
 	var actionCount int
 	countingAction := fakeAction{rollback: func(ctx context.Context) error {
@@ -106,7 +106,7 @@ func TestService_RollbackActions_Fail(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	ctx := context.Background()
 
-	srv, _, _, _, _ := newTestService(ctrl, logger)
+	srv, _, _, _, _, _ := newTestService(ctrl, logger)
 
 	var actionCount int
 	countingAction := fakeAction{rollback: func(ctx context.Context) error {
@@ -131,7 +131,7 @@ func TestActionBuilder_Build(t *testing.T) {
 	logger := log.Nop()
 	ctrl := gomock.NewController(t)
 
-	srv, pipSrv, connSrv, procSrv, connPlugSrv := newTestService(ctrl, logger)
+	srv, pipSrv, connSrv, procSrv, connPlugSrv, _ := newTestService(ctrl, logger)
 
 	oldConfig := config.Pipeline{
 		ID:   "config-id",
@@ -353,7 +353,7 @@ func TestActionsBuilder_PreparePipelineActions_Create(t *testing.T) {
 	logger := log.Nop()
 	ctrl := gomock.NewController(t)
 
-	srv, pipSrv, _, _, _ := newTestService(ctrl, logger)
+	srv, pipSrv, _, _, _, _ := newTestService(ctrl, logger)
 
 	oldConfig := config.Pipeline{}
 	newConfig := config.Pipeline{ID: "config-id"}
@@ -372,7 +372,7 @@ func TestActionsBuilder_PreparePipelineActions_Delete(t *testing.T) {
 	logger := log.Nop()
 	ctrl := gomock.NewController(t)
 
-	srv, pipSrv, _, _, _ := newTestService(ctrl, logger)
+	srv, pipSrv, _, _, _, _ := newTestService(ctrl, logger)
 
 	oldConfig := config.Pipeline{ID: "config-id"}
 	newConfig := config.Pipeline{}
@@ -390,7 +390,7 @@ func TestActionsBuilder_PreparePipelineActions_NoAction(t *testing.T) {
 	logger := log.Nop()
 	ctrl := gomock.NewController(t)
 
-	srv, _, _, _, _ := newTestService(ctrl, logger)
+	srv, _, _, _, _, _ := newTestService(ctrl, logger)
 
 	testCases := []struct {
 		name      string
@@ -451,7 +451,7 @@ func TestActionsBuilder_PreparePipelineActions_Update(t *testing.T) {
 	logger := log.Nop()
 	ctrl := gomock.NewController(t)
 
-	srv, pipSrv, _, _, _ := newTestService(ctrl, logger)
+	srv, pipSrv, _, _, _, _ := newTestService(ctrl, logger)
 
 	testCases := []struct {
 		name      string
@@ -503,7 +503,7 @@ func TestActionsBuilder_PrepareConnectorActions_Create(t *testing.T) {
 	logger := log.Nop()
 	ctrl := gomock.NewController(t)
 
-	srv, _, connSrv, _, connPlugSrv := newTestService(ctrl, logger)
+	srv, _, connSrv, _, connPlugSrv, _ := newTestService(ctrl, logger)
 
 	oldConfig := config.Connector{}
 	newConfig := config.Connector{ID: "config-id"}
@@ -525,7 +525,7 @@ func TestActionsBuilder_PrepareConnectorActions_Delete(t *testing.T) {
 	logger := log.Nop()
 	ctrl := gomock.NewController(t)
 
-	srv, _, connSrv, _, connPlugSrv := newTestService(ctrl, logger)
+	srv, _, connSrv, _, connPlugSrv, _ := newTestService(ctrl, logger)
 
 	oldConfig := config.Connector{ID: "config-id"}
 	newConfig := config.Connector{}
@@ -546,7 +546,7 @@ func TestActionsBuilder_PrepareConnectorActions_NoAction(t *testing.T) {
 	logger := log.Nop()
 	ctrl := gomock.NewController(t)
 
-	srv, _, _, _, _ := newTestService(ctrl, logger)
+	srv, _, _, _, _, _ := newTestService(ctrl, logger)
 
 	testCases := []struct {
 		name      string
@@ -585,7 +585,7 @@ func TestActionsBuilder_PrepareConnectorActions_Update(t *testing.T) {
 	logger := log.Nop()
 	ctrl := gomock.NewController(t)
 
-	srv, _, connSrv, _, _ := newTestService(ctrl, logger)
+	srv, _, connSrv, _, _, _ := newTestService(ctrl, logger)
 
 	testCases := []struct {
 		name      string
@@ -623,7 +623,7 @@ func TestActionsBuilder_PrepareConnectorActions_Recreate(t *testing.T) {
 	logger := log.Nop()
 	ctrl := gomock.NewController(t)
 
-	srv, _, connSrv, _, connPlugSrv := newTestService(ctrl, logger)
+	srv, _, connSrv, _, connPlugSrv, _ := newTestService(ctrl, logger)
 	pipelineID := uuid.NewString()
 
 	testCases := []struct {
@@ -665,7 +665,7 @@ func TestActionsBuilder_PrepareProcessorActions_Create(t *testing.T) {
 	logger := log.Nop()
 	ctrl := gomock.NewController(t)
 
-	srv, _, _, procSrv, _ := newTestService(ctrl, logger)
+	srv, _, _, procSrv, _, _ := newTestService(ctrl, logger)
 
 	oldConfig := config.Processor{}
 	newConfig := config.Processor{ID: "config-id"}
@@ -689,7 +689,7 @@ func TestActionsBuilder_PrepareProcessorActions_Delete(t *testing.T) {
 	logger := log.Nop()
 	ctrl := gomock.NewController(t)
 
-	srv, _, _, procSrv, _ := newTestService(ctrl, logger)
+	srv, _, _, procSrv, _, _ := newTestService(ctrl, logger)
 
 	oldConfig := config.Processor{ID: "config-id"}
 	newConfig := config.Processor{}
@@ -713,7 +713,7 @@ func TestActionsBuilder_PrepareProcessorActions_NoAction(t *testing.T) {
 	logger := log.Nop()
 	ctrl := gomock.NewController(t)
 
-	srv, _, _, _, _ := newTestService(ctrl, logger)
+	srv, _, _, _, _, _ := newTestService(ctrl, logger)
 
 	oldConfig := config.Processor{ID: "config-id"}
 	newConfig := config.Processor{ID: "config-id"}
@@ -730,7 +730,7 @@ func TestActionsBuilder_PrepareProcessorActions_Update(t *testing.T) {
 	logger := log.Nop()
 	ctrl := gomock.NewController(t)
 
-	srv, _, _, procSrv, _ := newTestService(ctrl, logger)
+	srv, _, _, procSrv, _, _ := newTestService(ctrl, logger)
 	parent := processor.Parent{
 		ID:   uuid.NewString(),
 		Type: processor.ParentTypeConnector,
@@ -768,7 +768,7 @@ func TestActionsBuilder_PrepareProcessorActions_Recreate(t *testing.T) {
 	logger := log.Nop()
 	ctrl := gomock.NewController(t)
 
-	srv, _, _, procSrv, _ := newTestService(ctrl, logger)
+	srv, _, _, procSrv, _, _ := newTestService(ctrl, logger)
 	parent := processor.Parent{
 		ID:   uuid.NewString(),
 		Type: processor.ParentTypePipeline,
@@ -808,16 +808,17 @@ func TestActionsBuilder_PrepareProcessorActions_Recreate(t *testing.T) {
 
 func intPtr(i int) *int { return &i }
 
-func newTestService(ctrl *gomock.Controller, logger log.CtxLogger) (*Service, *mock.PipelineService, *mock.ConnectorService, *mock.ProcessorService, *mock.ConnectorPluginService) {
+func newTestService(ctrl *gomock.Controller, logger log.CtxLogger) (*Service, *mock.PipelineService, *mock.ConnectorService, *mock.ProcessorService, *mock.ConnectorPluginService, *mock.LifecycleService) {
 	db := &inmemory.DB{}
 	pipSrv := mock.NewPipelineService(ctrl)
 	connSrv := mock.NewConnectorService(ctrl)
 	procSrv := mock.NewProcessorService(ctrl)
 	connPlugSrv := mock.NewConnectorPluginService(ctrl)
+	lifecycleSrv := mock.NewLifecycleService(ctrl)
 
-	srv := NewService(db, logger, pipSrv, connSrv, procSrv, connPlugSrv, "")
+	srv := NewService(db, logger, pipSrv, connSrv, procSrv, connPlugSrv, lifecycleSrv, "")
 
-	return srv, pipSrv, connSrv, procSrv, connPlugSrv
+	return srv, pipSrv, connSrv, procSrv, connPlugSrv, lifecycleSrv
 }
 
 type fakeAction struct {

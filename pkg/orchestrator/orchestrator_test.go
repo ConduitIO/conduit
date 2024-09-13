@@ -27,6 +27,7 @@ import (
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/ctxutil"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/lifecycle"
 	"github.com/conduitio/conduit/pkg/orchestrator/mock"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	conn_plugin "github.com/conduitio/conduit/pkg/plugin/connector"
@@ -37,6 +38,7 @@ import (
 	proc_builtin "github.com/conduitio/conduit/pkg/plugin/processor/builtin"
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/google/go-cmp/cmp"
+	"github.com/jpillora/backoff"
 	"github.com/matryer/is"
 	"github.com/rs/zerolog"
 	"go.uber.org/mock/gomock"
@@ -46,14 +48,15 @@ import (
 // a context is passed to a function.
 var ctxType = reflect.TypeOf((*context.Context)(nil)).Elem()
 
-func newMockServices(t *testing.T) (*mock.PipelineService, *mock.ConnectorService, *mock.ProcessorService, *mock.ConnectorPluginService, *mock.ProcessorPluginService) {
+func newMockServices(t *testing.T) (*mock.PipelineService, *mock.ConnectorService, *mock.ProcessorService, *mock.ConnectorPluginService, *mock.ProcessorPluginService, *mock.LifecycleService) {
 	ctrl := gomock.NewController(t)
 
 	return mock.NewPipelineService(ctrl),
 		mock.NewConnectorService(ctrl),
 		mock.NewProcessorService(ctrl),
 		mock.NewConnectorPluginService(ctrl),
-		mock.NewProcessorPluginService(ctrl)
+		mock.NewProcessorPluginService(ctrl),
+		mock.NewLifecycleService(ctrl)
 }
 
 func TestPipelineSimple(t *testing.T) {
@@ -90,14 +93,23 @@ func TestPipelineSimple(t *testing.T) {
 		nil,
 	)
 
+	b := &backoff.Backoff{}
+
+	connectorService := connector.NewService(logger, db, connector.NewPersister(logger, db, time.Second, 3))
+	processorService := processor.NewService(logger, db, procPluginService)
+	pipelineService := pipeline.NewService(logger, db)
+
+	lifecycleService := lifecycle.NewService(logger, b, connectorService, processorService, connPluginService, pipelineService)
+
 	orc := NewOrchestrator(
 		db,
 		logger,
-		pipeline.NewService(logger, db),
-		connector.NewService(logger, db, connector.NewPersister(logger, db, time.Second, 3)),
-		processor.NewService(logger, db, procPluginService),
+		pipelineService,
+		connectorService,
+		processorService,
 		connPluginService,
 		procPluginService,
+		lifecycleService,
 	)
 
 	// create a host pipeline
@@ -158,7 +170,7 @@ func TestPipelineSimple(t *testing.T) {
 	err = orc.Pipelines.Stop(ctx, pl.ID, false)
 	is.NoErr(err)
 	t.Log("waiting")
-	err = pl.Wait()
+	err = lifecycleService.WaitPipeline(pl.ID)
 	is.NoErr(err)
 	t.Log("successfully stopped pipeline")
 

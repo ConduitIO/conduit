@@ -24,7 +24,7 @@ import (
 	"github.com/conduitio/conduit/pkg/processor"
 )
 
-//go:generate mockgen -typed -destination=mock/provisioning.go -package=mock -mock_names=PipelineService=PipelineService,ConnectorService=ConnectorService,ProcessorService=ProcessorService,ConnectorPluginService=ConnectorPluginService . PipelineService,ConnectorService,ProcessorService,ConnectorPluginService
+//go:generate mockgen -typed -destination=mock/provisioning.go -package=mock -mock_names=PipelineService=PipelineService,ConnectorService=ConnectorService,ProcessorService=ProcessorService,ConnectorPluginService=ConnectorPluginService,LifecycleService=LifecycleService . PipelineService,ConnectorService,ProcessorService,ConnectorPluginService,LifecycleService
 
 type PipelineService interface {
 	Get(ctx context.Context, id string) (*pipeline.Instance, error)
@@ -33,9 +33,6 @@ type PipelineService interface {
 	Update(ctx context.Context, pipelineID string, cfg pipeline.Config) (*pipeline.Instance, error)
 	Delete(ctx context.Context, pipelineID string) error
 	UpdateDLQ(ctx context.Context, pipelineID string, cfg pipeline.DLQ) (*pipeline.Instance, error)
-
-	Start(ctx context.Context, connFetcher pipeline.ConnectorFetcher, procService pipeline.ProcessorService, pluginFetcher pipeline.PluginDispenserFetcher, pipelineID string) error
-	Stop(ctx context.Context, pipelineID string, force bool) error
 
 	AddConnector(ctx context.Context, pipelineID string, connectorID string) (*pipeline.Instance, error)
 	RemoveConnector(ctx context.Context, pipelineID string, connectorID string) (*pipeline.Instance, error)
@@ -71,4 +68,9 @@ type ProcessorService interface {
 
 type ConnectorPluginService interface {
 	NewDispenser(ctx log.CtxLogger, name string, connectorID string) (connectorPlugin.Dispenser, error)
+}
+
+type LifecycleService interface {
+	Start(ctx context.Context, pipelineID string) error
+	Stop(ctx context.Context, pipelineID string, force bool) error
 }

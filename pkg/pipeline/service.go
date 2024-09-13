@@ -34,14 +34,6 @@ const (
 	DescriptionLengthLimit = 8192
 )
 
-type FailureEvent struct {
-	// ID is the ID of the pipeline which failed.
-	ID    string
-	Error error
-}
-
-type FailureHandler func(FailureEvent)
-
 // Service manages pipelines.
 type Service struct {
 	logger log.CtxLogger
@@ -50,7 +42,6 @@ type Service struct {
 
 	instances     map[string]*Instance
 	instanceNames map[string]bool
-	handlers      []FailureHandler
 }
 
 // NewService initializes and returns a pipeline Service.
@@ -119,7 +110,7 @@ func (s *Service) Get(_ context.Context, id string) (*Instance, error) {
 }
 
 // Create will create a new pipeline instance with the given config and return
-// it if it was successfully saved to the database.
+// if it was successfully saved to the database.
 func (s *Service) Create(ctx context.Context, id string, cfg Config, p ProvisionType) (*Instance, error) {
 	err := s.validatePipeline(cfg, id)
 	if err != nil {
@@ -316,27 +307,6 @@ func (s *Service) Delete(ctx context.Context, pipelineID string) error {
 	return nil
 }
 
-// OnFailure registers a handler for a pipeline.FailureEvent.
-// Only errors which happen after a pipeline has been started
-// are being sent.
-func (s *Service) OnFailure(handler FailureHandler) {
-	s.handlers = append(s.handlers, handler)
-}
-
-// notify notifies all registered FailureHandlers about an error.
-func (s *Service) notify(pipelineID string, err error) {
-	if err == nil {
-		return
-	}
-	e := FailureEvent{
-		ID:    pipelineID,
-		Error: err,
-	}
-	for _, handler := range s.handlers {
-		handler(e)
-	}
-}
-
 func (s *Service) validatePipeline(cfg Config, id string) error {
 	// contains all the errors occurred while provisioning configuration files.
 	var errs []error
@@ -365,6 +335,25 @@ func (s *Service) validatePipeline(cfg Config, id string) error {
 	}
 
 	return cerrors.Join(errs...)
+}
+
+// UpdateStatus updates the status of a pipeline by the ID.
+func (s *Service) UpdateStatus(ctx context.Context, id string, status Status, errMsg string) error {
+	pipeline, err := s.Get(ctx, id)
+	if err != nil {
+		return err
+	}
+	s.updateOldStatusMetrics(pipeline)
+	pipeline.SetStatus(status)
+
+	pipeline.Error = errMsg
+	s.updateNewStatusMetrics(pipeline)
+
+	err = s.store.Set(ctx, pipeline.ID, pipeline)
+	if err != nil {
+		return cerrors.Errorf("pipeline not updated: %w", err)
+	}
+	return nil
 }
 
 func (s *Service) updateOldStatusMetrics(pl *Instance) {

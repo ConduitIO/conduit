@@ -26,7 +26,7 @@ import (
 	"github.com/conduitio/conduit-commons/csync"
 	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/pipeline/stream/mock"
+	"github.com/conduitio/conduit/pkg/lifecycle/stream/mock"
 	"github.com/matryer/is"
 	"go.uber.org/mock/gomock"
 )

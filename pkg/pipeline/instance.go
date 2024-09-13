@@ -19,9 +19,6 @@ package pipeline
 import (
 	"sync"
 	"time"
-
-	"github.com/conduitio/conduit/pkg/pipeline/stream"
-	"gopkg.in/tomb.v2"
 )
 
 const (
@@ -61,9 +58,6 @@ type Instance struct {
 
 	status     Status
 	statusLock sync.RWMutex
-
-	n map[string]stream.Node
-	t *tomb.Tomb
 }
 
 // encodableInstance is an encodable "view" of Instance
@@ -95,13 +89,6 @@ var DefaultDLQ = DLQ{
 	},
 	WindowSize:          1,
 	WindowNackThreshold: 0,
-}
-
-func (p *Instance) Wait() error {
-	if p.t == nil {
-		return nil
-	}
-	return p.t.Wait()
 }
 
 func (p *Instance) SetStatus(s Status) {

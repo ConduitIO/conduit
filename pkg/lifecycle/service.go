@@ -1,4 +1,4 @@
-// Copyright © 2022 Meroxa, Inc.
+// Copyright © 2024 Meroxa, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,7 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package pipeline
+// Package lifecycle contains the logic to manage the lifecycle of pipelines.
+// It is responsible for starting, stopping and managing pipelines.
+package lifecycle
 
 import (
 	"context"
@@ -23,19 +25,72 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/conduitio/conduit-commons/csync"
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/measure"
-	"github.com/conduitio/conduit/pkg/pipeline/stream"
+	"github.com/conduitio/conduit/pkg/lifecycle/stream"
+	"github.com/conduitio/conduit/pkg/pipeline"
 	connectorPlugin "github.com/conduitio/conduit/pkg/plugin/connector"
 	"github.com/conduitio/conduit/pkg/processor"
+	"github.com/jpillora/backoff"
 	"gopkg.in/tomb.v2"
 )
 
-// ConnectorFetcher can fetch a connector instance.
-type ConnectorFetcher interface {
+type FailureEvent struct {
+	// ID is the ID of the pipeline which failed.
+	ID    string
+	Error error
+}
+
+type FailureHandler func(FailureEvent)
+
+// Service manages pipelines.
+type Service struct {
+	logger log.CtxLogger
+
+	backoffCfg *backoff.Backoff
+
+	pipelines  PipelineService
+	connectors ConnectorService
+
+	processors       ProcessorService
+	connectorPlugins ConnectorPluginService
+
+	handlers         []FailureHandler
+	runningPipelines *csync.Map[string, *runnablePipeline]
+}
+
+// NewService initializes and returns a lifecycle.Service.
+func NewService(
+	logger log.CtxLogger,
+	backoffCfg *backoff.Backoff,
+	connectors ConnectorService,
+	processors ProcessorService,
+	connectorPlugins ConnectorPluginService,
+	pipelines PipelineService,
+) *Service {
+	return &Service{
+		logger:           logger.WithComponent("lifecycle.Service"),
+		backoffCfg:       backoffCfg,
+		connectors:       connectors,
+		processors:       processors,
+		connectorPlugins: connectorPlugins,
+		pipelines:        pipelines,
+		runningPipelines: csync.NewMap[string, *runnablePipeline](),
+	}
+}
+
+type runnablePipeline struct {
+	pipeline *pipeline.Instance
+	n        []stream.Node
+	t        *tomb.Tomb
+}
+
+// ConnectorService can fetch and create a connector instance.
+type ConnectorService interface {
 	Get(ctx context.Context, id string) (*connector.Instance, error)
 	Create(ctx context.Context, id string, t connector.Type, plugin string, pipelineID string, cfg connector.Config, p connector.ProvisionType) (*connector.Instance, error)
 }
@@ -46,25 +101,36 @@ type ProcessorService interface {
 	MakeRunnableProcessor(ctx context.Context, i *processor.Instance) (*processor.RunnableProcessor, error)
 }
 
-// PluginDispenserFetcher can fetch a plugin.
-type PluginDispenserFetcher interface {
+// ConnectorPluginService can create a connector plugin dispenser.
+type ConnectorPluginService interface {
 	NewDispenser(logger log.CtxLogger, name string, connectorID string) (connectorPlugin.Dispenser, error)
 }
 
-// Run runs pipelines that had the running state in store.
-func (s *Service) Run(
+// PipelineService can fetch, list and update the status of a pipeline instance.
+type PipelineService interface {
+	Get(ctx context.Context, pipelineID string) (*pipeline.Instance, error)
+	List(ctx context.Context) map[string]*pipeline.Instance
+	UpdateStatus(ctx context.Context, pipelineID string, status pipeline.Status, errMsg string) error
+}
+
+// OnFailure registers a handler for a lifecycle.FailureEvent.
+// Only errors which happen after a pipeline has been started
+// are being sent.
+func (s *Service) OnFailure(handler FailureHandler) {
+	s.handlers = append(s.handlers, handler)
+}
+
+// Init starts all pipelines that have the StatusSystemStopped.
+func (s *Service) Init(
 	ctx context.Context,
-	connFetcher ConnectorFetcher,
-	procService ProcessorService,
-	pluginFetcher PluginDispenserFetcher,
 ) error {
 	var errs []error
 	s.logger.Debug(ctx).Msg("initializing pipelines statuses")
 
-	// run pipelines that are in the StatusSystemStopped state
-	for _, instance := range s.instances {
-		if instance.GetStatus() == StatusSystemStopped {
-			err := s.Start(ctx, connFetcher, procService, pluginFetcher, instance.ID)
+	instances := s.pipelines.List(ctx)
+	for _, instance := range instances {
+		if instance.GetStatus() == pipeline.StatusSystemStopped {
+			err := s.Start(ctx, instance.ID)
 			if err != nil {
 				// try to start remaining pipelines and gather errors
 				errs = append(errs, err)
@@ -79,37 +145,33 @@ func (s *Service) Run(
 // If the pipeline is already running, Start returns ErrPipelineRunning.
 func (s *Service) Start(
 	ctx context.Context,
-	connFetcher ConnectorFetcher,
-	procService ProcessorService,
-	pluginFetcher PluginDispenserFetcher,
 	pipelineID string,
 ) error {
-	pl, err := s.Get(ctx, pipelineID)
+	pl, err := s.pipelines.Get(ctx, pipelineID)
 	if err != nil {
 		return err
 	}
-	if pl.GetStatus() == StatusRunning {
-		return cerrors.Errorf("can't start pipeline %s: %w", pl.ID, ErrPipelineRunning)
+
+	if pl.GetStatus() == pipeline.StatusRunning {
+		return cerrors.Errorf("can't start pipeline %s: %w", pl.ID, pipeline.ErrPipelineRunning)
 	}
 
 	s.logger.Debug(ctx).Str(log.PipelineIDField, pl.ID).Msg("starting pipeline")
 
 	s.logger.Trace(ctx).Str(log.PipelineIDField, pl.ID).Msg("building nodes")
-	nodes, err := s.buildNodes(ctx, connFetcher, procService, pluginFetcher, pl)
+
+	rp, err := s.buildRunnablePipeline(ctx, pl)
 	if err != nil {
 		return cerrors.Errorf("could not build nodes for pipeline %s: %w", pl.ID, err)
 	}
 
-	pl.n = make(map[string]stream.Node)
-	for _, node := range nodes {
-		pl.n[node.ID()] = node
-	}
-
 	s.logger.Trace(ctx).Str(log.PipelineIDField, pl.ID).Msg("running nodes")
-	if err := s.runPipeline(ctx, pl); err != nil {
+	if err := s.runPipeline(ctx, rp); err != nil {
 		return cerrors.Errorf("failed to run pipeline %s: %w", pl.ID, err)
 	}
 	s.logger.Info(ctx).Str(log.PipelineIDField, pl.ID).Msg("pipeline started")
+
+	s.runningPipelines.Set(pl.ID, rp)
 
 	return nil
 }
@@ -119,31 +181,32 @@ func (s *Service) Start(
 // instead the context for all nodes will be canceled which causes them to stop
 // running as soon as possible.
 func (s *Service) Stop(ctx context.Context, pipelineID string, force bool) error {
-	pl, err := s.Get(ctx, pipelineID)
-	if err != nil {
-		return err
+	rp, ok := s.runningPipelines.Get(pipelineID)
+
+	if !ok {
+		return cerrors.Errorf("pipeline %s is not running: %w", pipelineID, pipeline.ErrPipelineNotRunning)
 	}
 
-	if pl.GetStatus() != StatusRunning && pl.GetStatus() != StatusRecovering {
-		return cerrors.Errorf("can't stop pipeline with status %q: %w", pl.GetStatus(), ErrPipelineNotRunning)
+	if rp.pipeline.GetStatus() != pipeline.StatusRunning && rp.pipeline.GetStatus() != pipeline.StatusRecovering {
+		return cerrors.Errorf("can't stop pipeline with status %q: %w", rp.pipeline.GetStatus(), pipeline.ErrPipelineNotRunning)
 	}
 
 	switch force {
 	case false:
-		return s.stopGraceful(ctx, pl, nil)
+		return s.stopGraceful(ctx, rp, nil)
 	case true:
-		return s.stopForceful(ctx, pl)
+		return s.stopForceful(ctx, rp)
 	}
 	panic("unreachable code")
 }
 
-func (s *Service) stopGraceful(ctx context.Context, pl *Instance, reason error) error {
+func (s *Service) stopGraceful(ctx context.Context, rp *runnablePipeline, reason error) error {
 	s.logger.Info(ctx).
-		Str(log.PipelineIDField, pl.ID).
-		Any(log.PipelineStatusField, pl.GetStatus()).
+		Str(log.PipelineIDField, rp.pipeline.ID).
+		Any(log.PipelineStatusField, rp.pipeline.GetStatus()).
 		Msg("gracefully stopping pipeline")
 	var errs []error
-	for _, n := range pl.n {
+	for _, n := range rp.n {
 		if node, ok := n.(stream.StoppableNode); ok {
 			// stop all pub nodes
 			s.logger.Trace(ctx).Str(log.NodeIDField, n.ID()).Msg("stopping node")
@@ -154,16 +217,17 @@ func (s *Service) stopGraceful(ctx context.Context, pl *Instance, reason error) 
 			}
 		}
 	}
+
 	return cerrors.Join(errs...)
 }
 
-func (s *Service) stopForceful(ctx context.Context, pl *Instance) error {
+func (s *Service) stopForceful(ctx context.Context, rp *runnablePipeline) error {
 	s.logger.Info(ctx).
-		Str(log.PipelineIDField, pl.ID).
-		Any(log.PipelineStatusField, pl.GetStatus()).
+		Str(log.PipelineIDField, rp.pipeline.ID).
+		Any(log.PipelineStatusField, rp.pipeline.GetStatus()).
 		Msg("force stopping pipeline")
-	pl.t.Kill(ErrForceStop)
-	for _, n := range pl.n {
+	rp.t.Kill(pipeline.ErrForceStop)
+	for _, n := range rp.n {
 		if node, ok := n.(stream.ForceStoppableNode); ok {
 			// stop all pub nodes
 			s.logger.Trace(ctx).Str(log.NodeIDField, n.ID()).Msg("force stopping node")
@@ -173,18 +237,19 @@ func (s *Service) stopForceful(ctx context.Context, pl *Instance) error {
 	return nil
 }
 
-// StopAll will ask all the pipelines to stop gracefully
+// StopAll will ask all the running pipelines to stop gracefully
 // (i.e. that existing messages get processed but not new messages get produced).
 func (s *Service) StopAll(ctx context.Context, reason error) {
-	for _, pl := range s.instances {
-		if pl.GetStatus() != StatusRunning && pl.GetStatus() != StatusRecovering {
+	for _, rp := range s.runningPipelines.All() {
+		p := rp.pipeline
+		if p.GetStatus() != pipeline.StatusRunning && p.GetStatus() != pipeline.StatusRecovering {
 			continue
 		}
-		err := s.stopGraceful(ctx, pl, reason)
+		err := s.stopGraceful(ctx, rp, reason)
 		if err != nil {
 			s.logger.Warn(ctx).
 				Err(err).
-				Str(log.PipelineIDField, pl.ID).
+				Str(log.PipelineIDField, p.ID).
 				Msg("could not stop pipeline")
 		}
 	}
@@ -211,7 +276,7 @@ func (s *Service) Wait(timeout time.Duration) error {
 	case <-gracefullyStopped:
 		return err
 	case <-time.After(timeout):
-		return ErrTimeout
+		return pipeline.ErrTimeout
 	}
 }
 
@@ -219,8 +284,15 @@ func (s *Service) Wait(timeout time.Duration) error {
 // the pipelines failed to stop gracefully.
 func (s *Service) waitInternal() error {
 	var errs []error
-	for _, pl := range s.instances {
-		err := pl.Wait()
+
+	// copy pipelines to keep the map unlocked while we iterate it
+	pipelines := s.runningPipelines.Copy()
+
+	for _, rp := range pipelines.All() {
+		if rp.t == nil {
+			continue
+		}
+		err := rp.t.Wait()
 		if err != nil {
 			errs = append(errs, err)
 		}
@@ -228,19 +300,25 @@ func (s *Service) waitInternal() error {
 	return cerrors.Join(errs...)
 }
 
-// buildsNodes will build and connect all nodes configured in the pipeline.
-func (s *Service) buildNodes(
+// WaitPipeline blocks until the pipeline with the given ID is stopped.
+func (s *Service) WaitPipeline(id string) error {
+	p, ok := s.runningPipelines.Get(id)
+	if !ok || p.t == nil {
+		return nil
+	}
+	return p.t.Wait()
+}
+
+// buildRunnablePipeline will build and connect all nodes configured in the pipeline.
+func (s *Service) buildRunnablePipeline(
 	ctx context.Context,
-	connFetcher ConnectorFetcher,
-	procService ProcessorService,
-	pluginFetcher PluginDispenserFetcher,
-	pl *Instance,
-) ([]stream.Node, error) {
+	pl *pipeline.Instance,
+) (*runnablePipeline, error) {
 	// setup many to many channels
 	fanIn := stream.FaninNode{Name: "fanin"}
 	fanOut := stream.FanoutNode{Name: "fanout"}
 
-	sourceNodes, err := s.buildSourceNodes(ctx, connFetcher, procService, pluginFetcher, pl, &fanIn)
+	sourceNodes, err := s.buildSourceNodes(ctx, pl, &fanIn)
 	if err != nil {
 		return nil, cerrors.Errorf("could not build source nodes: %w", err)
 	}
@@ -248,12 +326,12 @@ func (s *Service) buildNodes(
 		return nil, cerrors.New("can't build pipeline without any source connectors")
 	}
 
-	processorNodes, err := s.buildProcessorNodes(ctx, procService, pl, pl.ProcessorIDs, &fanIn, &fanOut)
+	processorNodes, err := s.buildProcessorNodes(ctx, pl, pl.ProcessorIDs, &fanIn, &fanOut)
 	if err != nil {
 		return nil, cerrors.Errorf("could not build processor nodes: %w", err)
 	}
 
-	destinationNodes, err := s.buildDestinationNodes(ctx, connFetcher, procService, pluginFetcher, pl, &fanOut)
+	destinationNodes, err := s.buildDestinationNodes(ctx, pl, &fanOut)
 	if err != nil {
 		return nil, cerrors.Errorf("could not build destination nodes: %w", err)
 	}
@@ -276,13 +354,15 @@ func (s *Service) buildNodes(
 		stream.SetLogger(n, nodeLogger)
 	}
 
-	return nodes, nil
+	return &runnablePipeline{
+		pipeline: pl,
+		n:        nodes,
+	}, nil
 }
 
 func (s *Service) buildProcessorNodes(
 	ctx context.Context,
-	procService ProcessorService,
-	pl *Instance,
+	pl *pipeline.Instance,
 	processorIDs []string,
 	first stream.PubNode,
 	last stream.SubNode,
@@ -291,12 +371,12 @@ func (s *Service) buildProcessorNodes(
 
 	prev := first
 	for _, procID := range processorIDs {
-		instance, err := procService.Get(ctx, procID)
+		instance, err := s.processors.Get(ctx, procID)
 		if err != nil {
 			return nil, cerrors.Errorf("could not fetch processor: %w", err)
 		}
 
-		runnableProc, err := procService.MakeRunnableProcessor(ctx, instance)
+		runnableProc, err := s.processors.MakeRunnableProcessor(ctx, instance)
 		if err != nil {
 			return nil, err
 		}
@@ -319,7 +399,7 @@ func (s *Service) buildProcessorNodes(
 }
 
 func (s *Service) buildParallelProcessorNode(
-	pl *Instance,
+	pl *pipeline.Instance,
 	proc *processor.RunnableProcessor,
 ) *stream.ParallelNode {
 	return &stream.ParallelNode{
@@ -334,7 +414,7 @@ func (s *Service) buildParallelProcessorNode(
 }
 
 func (s *Service) buildProcessorNode(
-	pl *Instance,
+	pl *pipeline.Instance,
 	proc *processor.RunnableProcessor,
 ) *stream.ProcessorNode {
 	return &stream.ProcessorNode{
@@ -346,21 +426,18 @@ func (s *Service) buildProcessorNode(
 
 func (s *Service) buildSourceNodes(
 	ctx context.Context,
-	connFetcher ConnectorFetcher,
-	procService ProcessorService,
-	pluginFetcher PluginDispenserFetcher,
-	pl *Instance,
+	pl *pipeline.Instance,
 	next stream.SubNode,
 ) ([]stream.Node, error) {
 	var nodes []stream.Node
 
-	dlqHandlerNode, err := s.buildDLQHandlerNode(ctx, connFetcher, pluginFetcher, pl)
+	dlqHandlerNode, err := s.buildDLQHandlerNode(ctx, pl)
 	if err != nil {
 		return nil, err
 	}
 
 	for _, connID := range pl.ConnectorIDs {
-		instance, err := connFetcher.Get(ctx, connID)
+		instance, err := s.connectors.Get(ctx, connID)
 		if err != nil {
 			return nil, cerrors.Errorf("could not fetch connector: %w", err)
 		}
@@ -369,7 +446,7 @@ func (s *Service) buildSourceNodes(
 			continue // skip any connector that's not a source
 		}
 
-		src, err := instance.Connector(ctx, pluginFetcher)
+		src, err := instance.Connector(ctx, s.connectorPlugins)
 		if err != nil {
 			return nil, err
 		}
@@ -387,7 +464,7 @@ func (s *Service) buildSourceNodes(
 		metricsNode := s.buildMetricsNode(pl, instance)
 		metricsNode.Sub(ackerNode.Pub())
 
-		procNodes, err := s.buildProcessorNodes(ctx, procService, pl, instance.ProcessorIDs, metricsNode, next)
+		procNodes, err := s.buildProcessorNodes(ctx, pl, instance.ProcessorIDs, metricsNode, next)
 		if err != nil {
 			return nil, cerrors.Errorf("could not build processor nodes for connector %s: %w", instance.ID, err)
 		}
@@ -415,11 +492,9 @@ func (s *Service) buildSourceAckerNode(
 
 func (s *Service) buildDLQHandlerNode(
 	ctx context.Context,
-	connFetcher ConnectorFetcher,
-	pluginFetcher PluginDispenserFetcher,
-	pl *Instance,
+	pl *pipeline.Instance,
 ) (*stream.DLQHandlerNode, error) {
-	conn, err := connFetcher.Create(
+	conn, err := s.connectors.Create(
 		ctx,
 		pl.ID+"-dlq",
 		connector.TypeDestination,
@@ -435,7 +510,7 @@ func (s *Service) buildDLQHandlerNode(
 		return nil, cerrors.Errorf("failed to create DLQ destination: %w", err)
 	}
 
-	dest, err := conn.Connector(ctx, pluginFetcher)
+	dest, err := conn.Connector(ctx, s.connectorPlugins)
 	if err != nil {
 		return nil, err
 	}
@@ -461,7 +536,7 @@ func (s *Service) buildDLQHandlerNode(
 }
 
 func (s *Service) buildMetricsNode(
-	pl *Instance,
+	pl *pipeline.Instance,
 	conn *connector.Instance,
 ) *stream.MetricsNode {
 	return &stream.MetricsNode{
@@ -487,16 +562,13 @@ func (s *Service) buildDestinationAckerNode(
 
 func (s *Service) buildDestinationNodes(
 	ctx context.Context,
-	connFetcher ConnectorFetcher,
-	procService ProcessorService,
-	pluginFetcher PluginDispenserFetcher,
-	pl *Instance,
+	pl *pipeline.Instance,
 	prev stream.PubNode,
 ) ([]stream.Node, error) {
 	var nodes []stream.Node
 
 	for _, connID := range pl.ConnectorIDs {
-		instance, err := connFetcher.Get(ctx, connID)
+		instance, err := s.connectors.Get(ctx, connID)
 		if err != nil {
 			return nil, cerrors.Errorf("could not fetch connector: %w", err)
 		}
@@ -505,7 +577,7 @@ func (s *Service) buildDestinationNodes(
 			continue // skip any connector that's not a destination
 		}
 
-		dest, err := instance.Connector(ctx, pluginFetcher)
+		dest, err := instance.Connector(ctx, s.connectorPlugins)
 		if err != nil {
 			return nil, err
 		}
@@ -524,7 +596,7 @@ func (s *Service) buildDestinationNodes(
 		destinationNode.Sub(metricsNode.Pub())
 		ackerNode.Sub(destinationNode.Pub())
 
-		connNodes, err := s.buildProcessorNodes(ctx, procService, pl, instance.ProcessorIDs, prev, metricsNode)
+		connNodes, err := s.buildProcessorNodes(ctx, pl, instance.ProcessorIDs, prev, metricsNode)
 		if err != nil {
 			return nil, cerrors.Errorf("could not build processor nodes for connector %s: %w", instance.ID, err)
 		}
@@ -536,18 +608,18 @@ func (s *Service) buildDestinationNodes(
 	return nodes, nil
 }
 
-func (s *Service) runPipeline(ctx context.Context, pl *Instance) error {
-	if pl.t != nil && pl.t.Alive() {
-		return ErrPipelineRunning
+func (s *Service) runPipeline(ctx context.Context, rp *runnablePipeline) error {
+	if rp.t != nil && rp.t.Alive() {
+		return pipeline.ErrPipelineRunning
 	}
 
 	// the tomb is responsible for running goroutines related to the pipeline
-	pl.t = &tomb.Tomb{}
+	rp.t = &tomb.Tomb{}
 
 	// keep tomb alive until the end of this function, this way we guarantee we
 	// can run the cleanup goroutine even if all nodes stop before we get to it
 	keepAlive := make(chan struct{})
-	pl.t.Go(func() error {
+	rp.t.Go(func() error {
 		<-keepAlive
 		return nil
 	})
@@ -556,16 +628,15 @@ func (s *Service) runPipeline(ctx context.Context, pl *Instance) error {
 	// nodesWg is done once all nodes stop running
 	var nodesWg sync.WaitGroup
 	var isGracefulShutdown atomic.Bool
-	for id := range pl.n {
+	for _, node := range rp.n {
 		nodesWg.Add(1)
-		node := pl.n[id]
 
-		pl.t.Go(func() (errOut error) {
+		rp.t.Go(func() (errOut error) {
 			// If any of the nodes stop, the tomb will be put into a dying state
 			// and ctx will be cancelled.
 			// This way, the other nodes will be notified that they need to stop too.
 			//nolint:staticcheck // nil used to use the default (parent provided via WithContext)
-			ctx := pl.t.Context(nil)
+			ctx := rp.t.Context(nil)
 			s.logger.Trace(ctx).Str(log.NodeIDField, node.ID()).Msg("running node")
 			defer func() {
 				e := s.logger.Trace(ctx)
@@ -577,7 +648,7 @@ func (s *Service) runPipeline(ctx context.Context, pl *Instance) error {
 			defer nodesWg.Done()
 
 			err := node.Run(ctx)
-			if cerrors.Is(err, ErrGracefulShutdown) {
+			if cerrors.Is(err, pipeline.ErrGracefulShutdown) {
 				// This node was shutdown because of ErrGracefulShutdown, we
 				// need to stop this goroutine without returning an error to let
 				// other nodes stop gracefully. We set a boolean that lets the
@@ -593,64 +664,73 @@ func (s *Service) runPipeline(ctx context.Context, pl *Instance) error {
 		})
 	}
 
-	s.updateOldStatusMetrics(pl)
-
-	pl.SetStatus(StatusRunning)
-	pl.Error = ""
-
-	s.updateNewStatusMetrics(pl)
-
-	err := s.store.Set(ctx, pl.ID, pl)
+	err := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusRunning, "")
 	if err != nil {
-		return cerrors.Errorf("pipeline not updated: %w", err)
+		return err
 	}
 
 	// cleanup function updates the metrics and pipeline status once all nodes
 	// stop running
-	pl.t.Go(func() error {
+	rp.t.Go(func() error {
 		// use fresh context for cleanup function, otherwise the updated status
 		// won't be stored
 		ctx := context.Background()
 
 		nodesWg.Wait()
-		err := pl.t.Err()
-
-		s.updateOldStatusMetrics(pl)
+		err := rp.t.Err()
 
 		switch err {
 		case tomb.ErrStillAlive:
 			// not an actual error, the pipeline stopped gracefully
-			err = nil
 			if isGracefulShutdown.Load() {
 				// it was triggered by a graceful shutdown of Conduit
-				pl.SetStatus(StatusSystemStopped)
+				err = s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusSystemStopped, "")
 			} else {
 				// it was manually triggered by a user
-				pl.SetStatus(StatusUserStopped)
+				err = s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusUserStopped, "")
+			}
+			if err != nil {
+				return err
 			}
 		default:
-			pl.SetStatus(StatusDegraded)
-			// we use %+v to get the stack trace too
-			pl.Error = fmt.Sprintf("%+v", err)
+			if cerrors.IsFatalError(err) {
+				// we use %+v to get the stack trace too
+				err = s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusDegraded, fmt.Sprintf("%+v", err))
+				if err != nil {
+					return err
+				}
+			} else {
+				err = s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusRecovering, "")
+				if err != nil {
+					return err
+				}
+			}
 		}
 
 		s.logger.
 			Err(ctx, err).
-			Str(log.PipelineIDField, pl.ID).
+			Str(log.PipelineIDField, rp.pipeline.ID).
 			Msg("pipeline stopped")
 
-		s.notify(pl.ID, err)
-		// It's important to update the metrics before we handle the error from s.Store.Set() (if any),
-		// since the source of the truth is the actual pipeline (stored in memory).
-		s.updateNewStatusMetrics(pl)
+		// confirmed that all nodes stopped, we can now remove the pipeline from the running pipelines
+		s.runningPipelines.Delete(rp.pipeline.ID)
 
-		storeErr := s.store.Set(ctx, pl.ID, pl)
-		if storeErr != nil {
-			return cerrors.Errorf("pipeline not updated: %w", storeErr)
-		}
-
+		s.notify(rp.pipeline.ID, err)
 		return err
 	})
-
 	return nil
+}
+
+// notify notifies all registered FailureHandlers about an error.
+func (s *Service) notify(pipelineID string, err error) {
+	if err == nil {
+		return
+	}
+	e := FailureEvent{
+		ID:    pipelineID,
+		Error: err,
+	}
+	for _, handler := range s.handlers {
+		handler(e)
+	}
 }

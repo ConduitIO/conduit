@@ -40,6 +40,7 @@ type Service struct {
 	connectorService       ConnectorService
 	processorService       ProcessorService
 	connectorPluginService ConnectorPluginService
+	lifecycleService       LifecycleService
 	pipelinesPath          string
 }
 
@@ -50,6 +51,7 @@ func NewService(
 	connService ConnectorService,
 	procService ProcessorService,
 	connPluginService ConnectorPluginService,
+	lifecycleService LifecycleService,
 	pipelinesDir string,
 ) *Service {
 	return &Service{
@@ -60,6 +62,7 @@ func NewService(
 		connectorService:       connService,
 		processorService:       procService,
 		connectorPluginService: connPluginService,
+		lifecycleService:       lifecycleService,
 		pipelinesPath:          pipelinesDir,
 	}
 }
@@ -253,7 +256,8 @@ func (s *Service) provisionPipeline(ctx context.Context, cfg config.Pipeline) er
 	// check if pipeline should be running
 	if cfg.Status == config.StatusRunning {
 		// TODO set status and let the pipeline service start it
-		err := s.pipelineService.Start(ctx, s.connectorService, s.processorService, s.connectorPluginService, cfg.ID)
+
+		err := s.lifecycleService.Start(ctx, cfg.ID)
 		if err != nil {
 			return cerrors.Errorf("could not start the pipeline %q: %w", cfg.ID, err)
 		}

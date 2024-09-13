@@ -45,6 +45,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/metrics"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/measure"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/prometheus"
+	"github.com/conduitio/conduit/pkg/lifecycle"
 	"github.com/conduitio/conduit/pkg/orchestrator"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	conn_plugin "github.com/conduitio/conduit/pkg/plugin/connector"
@@ -63,6 +64,7 @@ import (
 	"github.com/conduitio/conduit/pkg/web/ui"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	grpcruntime "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"github.com/jpillora/backoff"
 	"github.com/piotrkowalczuk/promgrpc/v4"
 	promclient "github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -94,6 +96,7 @@ type Runtime struct {
 	pipelineService  *pipeline.Service
 	connectorService *connector.Service
 	processorService *processor.Service
+	lifecycleService *lifecycle.Service
 
 	connectorPluginService *conn_plugin.PluginService
 	processorPluginService *proc_plugin.PluginService
@@ -201,13 +204,21 @@ func createServices(r *Runtime) error {
 		tokenService,
 	)
 
+	errRecovery := r.Config.Pipelines.ErrorRecovery
+	backoffCfg := &backoff.Backoff{
+		Min:    errRecovery.MinDelay,
+		Max:    errRecovery.MaxDelay,
+		Factor: float64(errRecovery.BackoffFactor),
+		Jitter: true,
+	}
+
 	plService := pipeline.NewService(r.logger, r.DB)
 	connService := connector.NewService(r.logger, r.DB, r.connectorPersister)
 	procService := processor.NewService(r.logger, r.DB, procPluginService)
+	lifecycleService := lifecycle.NewService(r.logger, backoffCfg, connService, procService, connPluginService, plService)
+	provisionService := provisioning.NewService(r.DB, r.logger, plService, connService, procService, connPluginService, lifecycleService, r.Config.Pipelines.Path)
 
-	provisionService := provisioning.NewService(r.DB, r.logger, plService, connService, procService, connPluginService, r.Config.Pipelines.Path)
-
-	orc := orchestrator.NewOrchestrator(r.DB, r.logger, plService, connService, procService, connPluginService, procPluginService)
+	orc := orchestrator.NewOrchestrator(r.DB, r.logger, plService, connService, procService, connPluginService, procPluginService, lifecycleService)
 
 	r.Orchestrator = orc
 	r.ProvisionService = provisionService
@@ -220,6 +231,7 @@ func createServices(r *Runtime) error {
 	r.processorPluginService = procPluginService
 	r.connSchemaService = connSchemaService
 	r.procSchemaService = procSchemaService
+	r.lifecycleService = lifecycleService
 
 	return nil
 }
@@ -411,12 +423,12 @@ func (r *Runtime) registerCleanup(t *tomb.Tomb) {
 		// t.Err() can be nil, when we had a call: t.Kill(nil)
 		// t.Err() will be context.Canceled, if the tomb's context was canceled
 		if t.Err() == nil || cerrors.Is(t.Err(), context.Canceled) {
-			r.pipelineService.StopAll(ctx, pipeline.ErrGracefulShutdown)
+			r.lifecycleService.StopAll(ctx, pipeline.ErrGracefulShutdown)
 		} else {
 			// tomb died due to a real error
-			r.pipelineService.StopAll(ctx, cerrors.Errorf("conduit experienced an error: %w", t.Err()))
+			r.lifecycleService.StopAll(ctx, cerrors.Errorf("conduit experienced an error: %w", t.Err()))
 		}
-		err := r.pipelineService.Wait(exitTimeout)
+		err := r.lifecycleService.Wait(exitTimeout)
 		t.Go(func() error {
 			r.connectorPersister.Wait()
 			return r.DB.Close()
@@ -758,7 +770,7 @@ func (r *Runtime) initServices(ctx context.Context, t *tomb.Tomb) error {
 	}
 
 	if r.Config.Pipelines.ExitOnError {
-		r.pipelineService.OnFailure(func(e pipeline.FailureEvent) {
+		r.lifecycleService.OnFailure(func(e lifecycle.FailureEvent) {
 			r.logger.Warn(ctx).
 				Err(e.Error).
 				Str(log.PipelineIDField, e.ID).
@@ -785,7 +797,7 @@ func (r *Runtime) initServices(ctx context.Context, t *tomb.Tomb) error {
 		}
 	}
 
-	err = r.pipelineService.Run(ctx, r.connectorService, r.processorService, r.connectorPluginService)
+	err = r.lifecycleService.Init(ctx)
 	if err != nil {
 		cerrors.ForEach(err, func(err error) {
 			r.logger.Err(ctx, err).Msg("pipeline failed to be started")
