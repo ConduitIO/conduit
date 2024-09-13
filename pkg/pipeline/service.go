@@ -120,6 +120,8 @@ func (s *Service) Get(_ context.Context, id string) (*Instance, error) {
 // Create will create a new pipeline instance with the given config and return
 // it if it was successfully saved to the database.
 func (s *Service) Create(ctx context.Context, id string, cfg Config, p ProvisionType) (*Instance, error) {
+	s.logger.Debug(ctx).Str(log.PipelineIDField, id).Msg("creating pipeline")
+
 	err := s.validatePipeline(cfg, id)
 	if err != nil {
 		return nil, cerrors.Errorf("pipeline is invalid: %w", err)
@@ -145,6 +147,7 @@ func (s *Service) Create(ctx context.Context, id string, cfg Config, p Provision
 	s.instanceNames[cfg.Name] = true
 	measure.PipelinesGauge.WithValues(strings.ToLower(pl.Status.String())).Inc()
 
+	s.logger.Debug(ctx).Str(log.PipelineIDField, id).Msg("pipeline created")
 	return pl, nil
 }
 
