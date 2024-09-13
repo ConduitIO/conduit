@@ -240,10 +240,10 @@ func (s *Service) stopForceful(ctx context.Context, rp *runnablePipeline) error 
 // StopAll will ask all the running pipelines to stop gracefully
 // (i.e. that existing messages get processed but not new messages get produced).
 func (s *Service) StopAll(ctx context.Context, reason error) {
-	s.runningPipelines.Range(func(_ string, rp *runnablePipeline) bool {
+	for _, rp := range s.runningPipelines.All() {
 		p := rp.pipeline
 		if p.GetStatus() != pipeline.StatusRunning && p.GetStatus() != pipeline.StatusRecovering {
-			return true
+			continue
 		}
 		err := s.stopGraceful(ctx, rp, reason)
 		if err != nil {
@@ -252,8 +252,7 @@ func (s *Service) StopAll(ctx context.Context, reason error) {
 				Str(log.PipelineIDField, p.ID).
 				Msg("could not stop pipeline")
 		}
-		return true
-	})
+	}
 	// TODO stop pipelines forcefully after timeout if they are still running
 }
 
@@ -286,18 +285,18 @@ func (s *Service) Wait(timeout time.Duration) error {
 func (s *Service) waitInternal() error {
 	var errs []error
 
+	// copy pipelines to keep the map unlocked while we iterate it
 	pipelines := s.runningPipelines.Copy()
 
-	pipelines.Range(func(_ string, rp *runnablePipeline) bool {
+	for _, rp := range pipelines.All() {
 		if rp.t == nil {
-			return true
+			continue
 		}
 		err := rp.t.Wait()
 		if err != nil {
 			errs = append(errs, err)
 		}
-		return true
-	})
+	}
 	return cerrors.Join(errs...)
 }
 
