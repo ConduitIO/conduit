@@ -56,24 +56,24 @@ func Validate(cfg Pipeline) error {
 func validateConnectors(mp []Connector) []error {
 	var errs []error
 	ids := make(map[string]bool)
-	for _, cfg := range mp {
+	for i, cfg := range mp {
 		if cfg.ID == "" {
-			errs = append(errs, cerrors.Errorf(`id is mandatory: %w`, ErrMandatoryField))
+			errs = append(errs, cerrors.Errorf("connector %d: id is mandatory: %w", i+1, ErrMandatoryField))
 		}
 		if len(cfg.ID) > connector.IDLengthLimit {
-			errs = append(errs, connector.ErrIDOverLimit)
+			errs = append(errs, cerrors.Errorf("connector %q: %w", cfg.ID, connector.ErrIDOverLimit))
 		}
 		if len(cfg.Name) > connector.NameLengthLimit {
-			errs = append(errs, connector.ErrNameOverLimit)
+			errs = append(errs, cerrors.Errorf("connector %q: %w", cfg.ID, connector.ErrNameOverLimit))
 		}
 		if cfg.Plugin == "" {
-			errs = append(errs, cerrors.Errorf("connector %q: \"plugin\" is mandatory: %w", cfg.ID, ErrMandatoryField))
+			errs = append(errs, cerrors.Errorf(`connector %q: "plugin" is mandatory: %w`, cfg.ID, ErrMandatoryField))
 		}
 		if cfg.Type == "" {
-			errs = append(errs, cerrors.Errorf("connector %q: \"type\" is mandatory: %w", cfg.ID, ErrMandatoryField))
+			errs = append(errs, cerrors.Errorf(`connector %q: "type" is mandatory: %w`, cfg.ID, ErrMandatoryField))
 		}
 		if cfg.Type != "" && cfg.Type != TypeSource && cfg.Type != TypeDestination {
-			errs = append(errs, cerrors.Errorf("connector %q: \"type\" is invalid: %w", cfg.ID, ErrInvalidField))
+			errs = append(errs, cerrors.Errorf(`connector %q: "type" is invalid: %w`, cfg.ID, ErrInvalidField))
 		}
 
 		pErrs := validateProcessors(cfg.Processors)
@@ -82,7 +82,7 @@ func validateConnectors(mp []Connector) []error {
 		}
 
 		if ids[cfg.ID] {
-			errs = append(errs, cerrors.Errorf("connector %q: \"id\" must be unique: %w", cfg.ID, ErrDuplicateID))
+			errs = append(errs, cerrors.Errorf(`connector %q: "id" must be unique: %w`, cfg.ID, ErrDuplicateID))
 		}
 		ids[cfg.ID] = true
 	}
@@ -93,15 +93,18 @@ func validateConnectors(mp []Connector) []error {
 func validateProcessors(mp []Processor) []error {
 	var errs []error
 	ids := make(map[string]bool)
-	for _, cfg := range mp {
+	for i, cfg := range mp {
+		if cfg.ID == "" {
+			errs = append(errs, cerrors.Errorf("processor %d: id is mandatory: %w", i+1, ErrMandatoryField))
+		}
 		if cfg.Plugin == "" {
-			errs = append(errs, cerrors.Errorf("processor %q: \"plugin\" is mandatory: %w", cfg.ID, ErrMandatoryField))
+			errs = append(errs, cerrors.Errorf(`processor %q: "plugin" is mandatory: %w`, cfg.ID, ErrMandatoryField))
 		}
 		if cfg.Workers < 0 {
-			errs = append(errs, cerrors.Errorf("processor %q: \"workers\" can't be negative: %w", cfg.ID, ErrInvalidField))
+			errs = append(errs, cerrors.Errorf(`processor %q: "workers" can't be negative: %w`, cfg.ID, ErrInvalidField))
 		}
 		if ids[cfg.ID] {
-			errs = append(errs, cerrors.Errorf("processor %q: \"id\" must be unique: %w", cfg.ID, ErrDuplicateID))
+			errs = append(errs, cerrors.Errorf(`processor %q: "id" must be unique: %w`, cfg.ID, ErrDuplicateID))
 		}
 		ids[cfg.ID] = true
 	}
