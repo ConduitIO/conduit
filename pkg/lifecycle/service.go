@@ -611,7 +611,6 @@ func (s *Service) buildDestinationNodes(
 }
 
 func (s *Service) runPipeline(ctx context.Context, rp *runnablePipeline) error {
-	// TODO: Handle the tomb outside and after maybe checking the status
 	if rp.t != nil && rp.t.Alive() {
 		return pipeline.ErrPipelineRunning
 	}
