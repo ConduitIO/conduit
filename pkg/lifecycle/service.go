@@ -302,12 +302,15 @@ func (s *Service) waitInternal() error {
 }
 
 // WaitPipeline blocks until the pipeline with the given ID is stopped.
-// This is only used in tests to ensure that a pipeline is stopped before
 func (s *Service) WaitPipeline(id string) error {
-	if s.runningPipelines[id].t == nil {
+	s.m.Lock()
+	p := s.runningPipelines[id]
+	s.m.Unlock()
+
+	if p.t == nil {
 		return nil
 	}
-	return s.runningPipelines[id].t.Wait()
+	return p.t.Wait()
 }
 
 // buildRunnablePipeline will build and connect all nodes configured in the pipeline.
