@@ -229,6 +229,9 @@ func (s *Service) deleteIndexes(configs []config.Pipeline, indexes []int) []conf
 // provisionPipeline provisions a single pipeline and returns an error if
 // any failure happened during provisioning.
 func (s *Service) provisionPipeline(ctx context.Context, cfg config.Pipeline) error {
+	s.logger.Debug(ctx).
+		Str(log.PipelineIDField, cfg.ID).
+		Msg("provisioning pipeline")
 	// enrich and validate config
 	cfg = config.Enrich(cfg)
 	err := config.Validate(cfg)

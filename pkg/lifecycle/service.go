@@ -370,6 +370,9 @@ func (s *Service) buildProcessorNodes(
 	var nodes []stream.Node
 
 	prev := first
+	s.logger.Debug(ctx).
+		Any("processor_ids", processorIDs).
+		Msg("building processor nodes")
 	for _, procID := range processorIDs {
 		instance, err := s.processors.Get(ctx, procID)
 		if err != nil {
@@ -451,6 +454,7 @@ func (s *Service) buildSourceNodes(
 			return nil, err
 		}
 
+		s.logger.Debug(ctx).Str(log.ConnectorIDField, instance.ID).Msg("building source node")
 		sourceNode := stream.SourceNode{
 			Name:   instance.ID,
 			Source: src.(*connector.Source),
@@ -464,6 +468,10 @@ func (s *Service) buildSourceNodes(
 		metricsNode := s.buildMetricsNode(pl, instance)
 		metricsNode.Sub(ackerNode.Pub())
 
+		s.logger.Debug(ctx).
+			Str(log.ConnectorIDField, instance.ID).
+			Any("processor_ids", instance.ProcessorIDs).
+			Msg("building processor nodes for source connector")
 		procNodes, err := s.buildProcessorNodes(ctx, pl, instance.ProcessorIDs, metricsNode, next)
 		if err != nil {
 			return nil, cerrors.Errorf("could not build processor nodes for connector %s: %w", instance.ID, err)
@@ -609,6 +617,8 @@ func (s *Service) buildDestinationNodes(
 }
 
 func (s *Service) runPipeline(ctx context.Context, rp *runnablePipeline) error {
+	s.logger.Debug(ctx).Str(log.PipelineIDField, rp.pipeline.ID).Msg("running pipeline")
+
 	if rp.t != nil && rp.t.Alive() {
 		return pipeline.ErrPipelineRunning
 	}

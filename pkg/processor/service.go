@@ -92,6 +92,10 @@ func (s *Service) Get(_ context.Context, id string) (*Instance, error) {
 }
 
 func (s *Service) MakeRunnableProcessor(ctx context.Context, i *Instance) (*RunnableProcessor, error) {
+	s.logger.Debug(ctx).
+		Str(log.ProcessorIDField, i.ID).
+		Msg("making runnable processor")
+
 	if i.running {
 		return nil, ErrProcessorRunning
 	}
