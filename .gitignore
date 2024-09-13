@@ -94,3 +94,6 @@ pkg/plugin/processor/standalone/test/wasm_processors/*/processor.wasm
 
 # Test data
 **/test/*.txt
+
+# this one is needed for integration tests
+!pkg/provisioning/test/source-file.txt
