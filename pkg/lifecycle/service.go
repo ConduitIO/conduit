@@ -12,10 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package lifecycle wires up everything under the hood of a Conduit instance
-// including metrics, telemetry, logging, and server construction.
-// It should only ever interact with the Orchestrator, never individual
-// services. All of that responsibility should be left to the Orchestrator.
+// Package lifecycle contains the logic to manage the lifecycle of pipelines.
+// It is responsible for starting, stopping and managing pipelines.
 package lifecycle
 
 import (
