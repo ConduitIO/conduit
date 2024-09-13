@@ -733,9 +733,7 @@ func (s *Service) runPipeline(ctx context.Context, rp *runnablePipeline) error {
 		s.m.Unlock()
 
 		s.notify(rp.pipeline.ID, err)
-		// It's important to update the metrics before we handle the error from s.Store.Set() (if any),
-		// since the source of the truth is the actual pipeline (stored in memory).
-		return s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, rp.pipeline.GetStatus(), "")
+		return err
 	})
 	return nil
 }
