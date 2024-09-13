@@ -78,8 +78,8 @@ func TestServiceLifecycle_buildRunnablePipeline(t *testing.T) {
 			destination.ID: destination,
 			testDLQID:      dlq,
 		},
-		testProcessorFetcher{},
-		testPluginFetcher{
+		testProcessorService{},
+		testConnectorPluginService{
 			source.Plugin:      pmock.NewDispenser(ctrl),
 			destination.Plugin: pmock.NewDispenser(ctrl),
 			dlq.Plugin:         pmock.NewDispenser(ctrl),
@@ -165,8 +165,8 @@ func TestService_buildRunnablePipeline_NoSourceNode(t *testing.T) {
 	ls := NewService(logger, b, testConnectorService{
 		destination.ID: destination,
 		testDLQID:      dlq,
-	}, testProcessorFetcher{},
-		testPluginFetcher{
+	}, testProcessorService{},
+		testConnectorPluginService{
 			destination.Plugin: pmock.NewDispenser(ctrl),
 			dlq.Plugin:         pmock.NewDispenser(ctrl),
 		}, testPipelineService{})
@@ -200,8 +200,8 @@ func TestService_buildRunnablePipeline_NoDestinationNode(t *testing.T) {
 		source.ID: source,
 		testDLQID: dlq,
 	},
-		testProcessorFetcher{},
-		testPluginFetcher{
+		testProcessorService{},
+		testConnectorPluginService{
 			source.Plugin: pmock.NewDispenser(ctrl),
 			dlq.Plugin:    pmock.NewDispenser(ctrl),
 		}, testPipelineService{})
@@ -265,8 +265,8 @@ func TestServiceLifecycle_PipelineSuccess(t *testing.T) {
 		destination.ID: destination,
 		testDLQID:      dlq,
 	},
-		testProcessorFetcher{},
-		testPluginFetcher{
+		testProcessorService{},
+		testConnectorPluginService{
 			source.Plugin:      sourceDispenser,
 			destination.Plugin: destDispenser,
 			dlq.Plugin:         dlqDispenser,
@@ -288,6 +288,7 @@ func TestServiceLifecycle_PipelineSuccess(t *testing.T) {
 	// stop pipeline before ending test
 	err = ls.Stop(ctx, pl.ID, false)
 	is.NoErr(err)
+
 	is.NoErr(ls.WaitPipeline(pl.ID))
 }
 
@@ -327,12 +328,12 @@ func TestServiceLifecycle_PipelineError(t *testing.T) {
 		destination.ID: destination,
 		testDLQID:      dlq,
 	},
-		testProcessorFetcher{},
-		testPluginFetcher{
+		testProcessorService{},
+		testConnectorPluginService{
 			source.Plugin:      sourceDispenser,
 			destination.Plugin: destDispenser,
 			dlq.Plugin:         dlqDispenser,
-		}, testPipelineService{})
+		}, ps)
 
 	events := make(chan FailureEvent, 1)
 	ls.OnFailure(func(e FailureEvent) {
@@ -369,10 +370,6 @@ func TestServiceLifecycle_PipelineError(t *testing.T) {
 	is.True(cerrors.Is(event.Error, wantErr))
 }
 
-// TODO: Fix
-// destination.go:117: err: context deadline exceeded // run didn't finish
-// destination.go:117: err: context deadline exceeded // run didn't finish
-// source.go:116: not true: done.Load() // run didn't finish
 func TestServiceLifecycle_StopAll_Recovering(t *testing.T) {
 	type testCase struct {
 		name   string
@@ -419,12 +416,12 @@ func TestServiceLifecycle_StopAll_Recovering(t *testing.T) {
 			destination.ID: destination,
 			testDLQID:      dlq,
 		},
-			testProcessorFetcher{},
-			testPluginFetcher{
+			testProcessorService{},
+			testConnectorPluginService{
 				source.Plugin:      sourceDispenser,
 				destination.Plugin: destDispenser,
 				dlq.Plugin:         dlqDispenser,
-			}, testPipelineService{})
+			}, ps)
 
 		// start the pipeline now that everything is set up
 		err = ls.Start(
@@ -461,13 +458,22 @@ func TestServiceLifecycle_StopAll_Recovering(t *testing.T) {
 			want:           pipeline.StatusSystemStopped,
 		},
 		{
-			name: "system stop (terrible err)",
+			name: "system stop (fatal err)",
 			stopFn: func(ctx context.Context, is *is.I, ls *Service, pipelineID string) {
-				ls.StopAll(ctx, cerrors.New("terrible err"))
+				ls.StopAll(ctx, cerrors.FatalError(cerrors.New("terrible err")))
 			},
 			wantSourceStop: true,
 			want:           pipeline.StatusDegraded,
 			wantErr:        cerrors.New("terrible err"),
+		},
+		{
+			name: "connection error",
+			stopFn: func(ctx context.Context, is *is.I, ls *Service, pipelineID string) {
+				ls.StopAll(ctx, cerrors.New("lost connection to database"))
+			},
+			wantSourceStop: true,
+			want:           pipeline.StatusRecovering,
+			wantErr:        cerrors.New("lost connection to database"),
 		},
 		{
 			name: "user stop (graceful)",
@@ -487,7 +493,6 @@ func TestServiceLifecycle_StopAll_Recovering(t *testing.T) {
 	}
 }
 
-// TODO: Fix errors
 func TestServiceLifecycle_PipelineStop(t *testing.T) {
 	is := is.New(t)
 	ctx, killAll := context.WithCancel(context.Background())
@@ -523,8 +528,8 @@ func TestServiceLifecycle_PipelineStop(t *testing.T) {
 		destination.ID: destination,
 		testDLQID:      dlq,
 	},
-		testProcessorFetcher{},
-		testPluginFetcher{
+		testProcessorService{},
+		testConnectorPluginService{
 			source.Plugin:      sourceDispenser,
 			destination.Plugin: destDispenser,
 			dlq.Plugin:         dlqDispenser,
@@ -549,8 +554,7 @@ func TestServiceLifecycle_PipelineStop(t *testing.T) {
 	is.Equal("", pl.Error)
 }
 
-// TODO: Fix errors
-func TestService_Run_Rerun(t *testing.T) {
+func TestServiceLifecycle_Run_Rerun(t *testing.T) {
 	runTest := func(t *testing.T, status pipeline.Status, expected pipeline.Status) {
 		is := is.New(t)
 		ctx, killAll := context.WithCancel(context.Background())
@@ -607,8 +611,8 @@ func TestService_Run_Rerun(t *testing.T) {
 			destination.ID: destination,
 			testDLQID:      dlq,
 		},
-			testProcessorFetcher{},
-			testPluginFetcher{
+			testProcessorService{},
+			testConnectorPluginService{
 				source.Plugin:      sourceDispenser,
 				destination.Plugin: destDispenser,
 				dlq.Plugin:         dlqDispenser,
@@ -761,38 +765,38 @@ func dummyDestination(persister *connector.Persister) *connector.Instance {
 // testConnectorService fulfills the ConnectorService interface.
 type testConnectorService map[string]*connector.Instance
 
-func (tcf testConnectorService) Get(_ context.Context, id string) (*connector.Instance, error) {
-	conn, ok := tcf[id]
+func (s testConnectorService) Get(_ context.Context, id string) (*connector.Instance, error) {
+	conn, ok := s[id]
 	if !ok {
 		return nil, connector.ErrInstanceNotFound
 	}
 	return conn, nil
 }
 
-func (tcf testConnectorService) Create(context.Context, string, connector.Type, string, string, connector.Config, connector.ProvisionType) (*connector.Instance, error) {
-	return tcf[testDLQID], nil
+func (s testConnectorService) Create(context.Context, string, connector.Type, string, string, connector.Config, connector.ProvisionType) (*connector.Instance, error) {
+	return s[testDLQID], nil
 }
 
-// testProcessorFetcher fulfills the ProcessorService interface.
-type testProcessorFetcher map[string]*processor.Instance
+// testProcessorService fulfills the ProcessorService interface.
+type testProcessorService map[string]*processor.Instance
 
-func (tpf testProcessorFetcher) MakeRunnableProcessor(context.Context, *processor.Instance) (*processor.RunnableProcessor, error) {
+func (s testProcessorService) MakeRunnableProcessor(context.Context, *processor.Instance) (*processor.RunnableProcessor, error) {
 	return nil, cerrors.New("not implemented")
 }
 
-func (tpf testProcessorFetcher) Get(_ context.Context, id string) (*processor.Instance, error) {
-	proc, ok := tpf[id]
+func (s testProcessorService) Get(_ context.Context, id string) (*processor.Instance, error) {
+	proc, ok := s[id]
 	if !ok {
 		return nil, processor.ErrInstanceNotFound
 	}
 	return proc, nil
 }
 
-// testPluginFetcher fulfills the PluginFetcher interface.
-type testPluginFetcher map[string]connectorPlugin.Dispenser
+// testConnectorPluginService fulfills the ConnectorPluginService interface.
+type testConnectorPluginService map[string]connectorPlugin.Dispenser
 
-func (tpf testPluginFetcher) NewDispenser(_ log.CtxLogger, name string, _ string) (connectorPlugin.Dispenser, error) {
-	plug, ok := tpf[name]
+func (s testConnectorPluginService) NewDispenser(_ log.CtxLogger, name string, _ string) (connectorPlugin.Dispenser, error) {
+	plug, ok := s[name]
 	if !ok {
 		return nil, plugin.ErrPluginNotFound
 	}
@@ -802,20 +806,25 @@ func (tpf testPluginFetcher) NewDispenser(_ log.CtxLogger, name string, _ string
 // testPipelineService fulfills the PipelineService interface.
 type testPipelineService map[string]*pipeline.Instance
 
-func (t testPipelineService) Get(_ context.Context, pipelineID string) (*pipeline.Instance, error) {
-	pi, ok := t[pipelineID]
+func (s testPipelineService) Get(_ context.Context, pipelineID string) (*pipeline.Instance, error) {
+	p, ok := s[pipelineID]
 	if !ok {
 		return nil, processor.ErrInstanceNotFound
 	}
-	return pi, nil
+	return p, nil
 }
 
-func (t testPipelineService) List(ctx context.Context) map[string]*pipeline.Instance {
-	// TODO implement me
-	panic("implement me")
+func (s testPipelineService) List(_ context.Context) map[string]*pipeline.Instance {
+	instances := make(map[string]*pipeline.Instance)
+	return instances
 }
 
-func (t testPipelineService) UpdateStatus(ctx context.Context, pipelineID string, status pipeline.Status, errMsg string) error {
-	// TODO implement me
-	panic("implement me")
+func (s testPipelineService) UpdateStatus(_ context.Context, pipelineID string, status pipeline.Status, errMsg string) error {
+	p, ok := s[pipelineID]
+	if !ok {
+		return processor.ErrInstanceNotFound
+	}
+	p.SetStatus(status)
+	p.Error = errMsg
+	return nil
 }

@@ -65,7 +65,7 @@ type Service struct {
 	m                sync.Mutex
 }
 
-// NewService initializes and returns a pipeline Service.
+// NewService initializes and returns a lifecycle.Service.
 func NewService(
 	logger log.CtxLogger,
 	backoffCfg *backoff.Backoff,
@@ -75,7 +75,7 @@ func NewService(
 	pipelines PipelineService,
 ) *Service {
 	return &Service{
-		logger:           logger.WithComponent("pipeline.Service"),
+		logger:           logger.WithComponent("lifecycle.Service"),
 		backoffCfg:       backoffCfg,
 		connectors:       connectors,
 		processors:       processors,
@@ -91,7 +91,7 @@ type runnablePipeline struct {
 	t        *tomb.Tomb
 }
 
-// ConnectorService can fetch a connector instance.
+// ConnectorService can fetch and create a connector instance.
 type ConnectorService interface {
 	Get(ctx context.Context, id string) (*connector.Instance, error)
 	Create(ctx context.Context, id string, t connector.Type, plugin string, pipelineID string, cfg connector.Config, p connector.ProvisionType) (*connector.Instance, error)
@@ -108,14 +108,14 @@ type ConnectorPluginService interface {
 	NewDispenser(logger log.CtxLogger, name string, connectorID string) (connectorPlugin.Dispenser, error)
 }
 
-// PipelineService can fetch a pipeline instance.
+// PipelineService can fetch, list and update the status of a pipeline instance.
 type PipelineService interface {
 	Get(ctx context.Context, pipelineID string) (*pipeline.Instance, error)
 	List(ctx context.Context) map[string]*pipeline.Instance
 	UpdateStatus(ctx context.Context, pipelineID string, status pipeline.Status, errMsg string) error
 }
 
-// OnFailure registers a handler for a pipeline.FailureEvent.
+// OnFailure registers a handler for a lifecycle.FailureEvent.
 // Only errors which happen after a pipeline has been started
 // are being sent.
 func (s *Service) OnFailure(handler FailureHandler) {
@@ -301,12 +301,12 @@ func (s *Service) waitInternal() error {
 	return cerrors.Join(errs...)
 }
 
+// WaitPipeline blocks until the pipeline with the given ID is stopped.
+// This is only used in tests to ensure that a pipeline is stopped before
 func (s *Service) WaitPipeline(id string) error {
 	if s.runningPipelines[id].t == nil {
 		return nil
 	}
-	s.m.Lock()
-	defer s.m.Unlock()
 	return s.runningPipelines[id].t.Wait()
 }
 
