@@ -797,7 +797,7 @@ func (r *Runtime) initServices(ctx context.Context, t *tomb.Tomb) error {
 		}
 	}
 
-	err = r.lifecycleService.Run(ctx)
+	err = r.lifecycleService.Init(ctx)
 	if err != nil {
 		cerrors.ForEach(err, func(err error) {
 			r.logger.Err(ctx, err).Msg("pipeline failed to be started")

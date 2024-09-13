@@ -617,7 +617,7 @@ func TestServiceLifecycle_Run_Rerun(t *testing.T) {
 				destination.Plugin: destDispenser,
 				dlq.Plugin:         dlqDispenser,
 			}, ps)
-		err = ls.Run(ctx)
+		err = ls.Init(ctx)
 		is.NoErr(err)
 
 		// give pipeline a chance to start if needed

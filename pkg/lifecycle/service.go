@@ -120,14 +120,13 @@ func (s *Service) OnFailure(handler FailureHandler) {
 	s.handlers = append(s.handlers, handler)
 }
 
-// Run runs pipelines that had the running state in store.
-func (s *Service) Run(
+// Init start all pipelines that have the StatusSystemStopped.
+func (s *Service) Init(
 	ctx context.Context,
 ) error {
 	var errs []error
 	s.logger.Debug(ctx).Msg("initializing pipelines statuses")
 
-	// run pipelines that are in the StatusSystemStopped state
 	instances := s.pipelines.List(ctx)
 	for _, instance := range instances {
 		if instance.GetStatus() == pipeline.StatusSystemStopped {
