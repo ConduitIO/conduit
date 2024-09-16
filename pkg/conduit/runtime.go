@@ -64,7 +64,6 @@ import (
 	"github.com/conduitio/conduit/pkg/web/ui"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	grpcruntime "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
-	"github.com/jpillora/backoff"
 	"github.com/piotrkowalczuk/promgrpc/v4"
 	promclient "github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -204,18 +203,19 @@ func createServices(r *Runtime) error {
 		tokenService,
 	)
 
-	errRecovery := r.Config.Pipelines.ErrorRecovery
-	backoffCfg := &backoff.Backoff{
-		Min:    errRecovery.MinDelay,
-		Max:    errRecovery.MaxDelay,
-		Factor: float64(errRecovery.BackoffFactor),
-		Jitter: true,
+	// Error recovery configuration
+	errRecoveryCfg := &lifecycle.ErrRecoveryCfg{
+		MinDelay:      r.Config.Pipelines.ErrorRecovery.MinDelay,
+		MaxDelay:      r.Config.Pipelines.ErrorRecovery.MaxDelay,
+		BackoffFactor: r.Config.Pipelines.ErrorRecovery.BackoffFactor,
+		MaxRetries:    r.Config.Pipelines.ErrorRecovery.MaxRetries,
+		HealthyAfter:  r.Config.Pipelines.ErrorRecovery.HealthyAfter,
 	}
 
 	plService := pipeline.NewService(r.logger, r.DB)
 	connService := connector.NewService(r.logger, r.DB, r.connectorPersister)
 	procService := processor.NewService(r.logger, r.DB, procPluginService)
-	lifecycleService := lifecycle.NewService(r.logger, backoffCfg, connService, procService, connPluginService, plService)
+	lifecycleService := lifecycle.NewService(r.logger, errRecoveryCfg, connService, procService, connPluginService, plService)
 	provisionService := provisioning.NewService(r.DB, r.logger, plService, connService, procService, connPluginService, lifecycleService, r.Config.Pipelines.Path)
 
 	orc := orchestrator.NewOrchestrator(r.DB, r.logger, plService, connService, procService, connPluginService, procPluginService, lifecycleService)

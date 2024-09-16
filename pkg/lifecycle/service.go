@@ -47,11 +47,22 @@ type FailureEvent struct {
 
 type FailureHandler func(FailureEvent)
 
+// TODO: Move to commons?
+type ErrRecoveryCfg struct {
+	MinDelay          time.Duration
+	MaxDelay          time.Duration
+	BackoffFactor     int
+	MaxRetries        int
+	HealthyAfter      time.Duration
+	backoffRetryCount float64
+}
+
 // Service manages pipelines.
 type Service struct {
 	logger log.CtxLogger
 
-	backoffCfg *backoff.Backoff
+	backoffCfg     *backoff.Backoff
+	errRecoveryCfg *ErrRecoveryCfg
 
 	pipelines  PipelineService
 	connectors ConnectorService
@@ -66,14 +77,22 @@ type Service struct {
 // NewService initializes and returns a lifecycle.Service.
 func NewService(
 	logger log.CtxLogger,
-	backoffCfg *backoff.Backoff,
+	errRecoveryCfg *ErrRecoveryCfg,
 	connectors ConnectorService,
 	processors ProcessorService,
 	connectorPlugins ConnectorPluginService,
 	pipelines PipelineService,
 ) *Service {
+	backoffCfg := &backoff.Backoff{
+		Min:    errRecoveryCfg.MinDelay,
+		Max:    errRecoveryCfg.MaxDelay,
+		Factor: float64(errRecoveryCfg.BackoffFactor),
+		Jitter: true,
+	}
+
 	return &Service{
 		logger:           logger.WithComponent("lifecycle.Service"),
+		errRecoveryCfg:   errRecoveryCfg,
 		backoffCfg:       backoffCfg,
 		connectors:       connectors,
 		processors:       processors,
@@ -174,6 +193,62 @@ func (s *Service) Start(
 	s.runningPipelines.Set(pl.ID, rp)
 
 	return nil
+}
+
+// Restart stops an existing pipeline and starts a new one with the same configuration.
+func (s *Service) Restart(ctx context.Context, pipelineID string) error {
+	rp, ok := s.runningPipelines.Get(pipelineID)
+	if !ok {
+		return cerrors.Errorf("pipeline %s can't be restarted: %w", pipelineID, pipeline.ErrInstanceNotFound)
+	}
+
+	switch rp.pipeline.GetStatus() {
+	case pipeline.StatusRecovering: // let it recover
+		return nil
+	case pipeline.StatusRunning:
+		if err := s.Stop(ctx, pipelineID, true); err != nil {
+			return cerrors.Errorf("could not stop pipeline %s: %w", pipelineID, err)
+		}
+	}
+
+	return s.Start(ctx, pipelineID)
+}
+
+// RestartWithBackoff restarts a pipeline with a backoff.
+func (s *Service) RestartWithBackoff(ctx context.Context, pipelineID string) error {
+	for {
+		err := s.Restart(ctx, pipelineID)
+		attempt := s.backoffCfg.Attempt()
+		duration := s.backoffCfg.Duration()
+
+		if err != nil && attempt < s.errRecoveryCfg.backoffRetryCount {
+			s.logger.Debug(ctx).
+				Str(log.PipelineIDField, pipelineID).
+				Float64("attempt", attempt).
+				Float64("backoffRetry.count", s.errRecoveryCfg.backoffRetryCount).
+				Int64("backoffRetry.duration", duration.Milliseconds()).
+				Msg("retrying pipeline recovery")
+
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(duration):
+				continue
+			}
+		}
+
+		s.backoffCfg.Reset()
+		return err
+
+		// TODO: Utilize
+		// MaxRetries
+		// HealthyAfter
+
+		//if attempt >= s.errRecoveryCfg.MaxRetries {
+		//	return cerrors.Errorf("failed to restart pipeline %s after %d attempts: %w", pipelineID, s.backoffCfg.Max, err)
+		//}
+
+	}
 }
 
 // Stop will attempt to gracefully stop a given pipeline by calling each node's
@@ -701,6 +776,11 @@ func (s *Service) runPipeline(ctx context.Context, rp *runnablePipeline) error {
 				}
 			} else {
 				err = s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusRecovering, "")
+				if err != nil {
+					return err
+				}
+
+				err = s.RestartWithBackoff(ctx, rp.pipeline.ID)
 				if err != nil {
 					return err
 				}
