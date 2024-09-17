@@ -217,17 +217,43 @@ func (s *Service) Restart(ctx context.Context, pipelineID string) error {
 // RestartWithBackoff restarts a pipeline with a backoff.
 func (s *Service) RestartWithBackoff(ctx context.Context, pipelineID string) error {
 	for {
-		err := s.Restart(ctx, pipelineID)
 		attempt := s.backoffCfg.Attempt()
 		duration := s.backoffCfg.Duration()
 
-		if err != nil && attempt < s.errRecoveryCfg.backoffRetryCount {
+		p, err := s.pipelines.Get(ctx, pipelineID)
+		if err != nil {
+			return fmt.Errorf("could not fetch pipeline %s: %w", pipelineID, err)
+		}
+
+		if p.GetStatus() == pipeline.StatusRunning {
+			s.logger.Debug(ctx).
+				Str(log.PipelineIDField, pipelineID).
+				Float64("attempt", attempt).
+				Float64("backoffRetry.count", s.errRecoveryCfg.backoffRetryCount).
+				Int64("backoffRetry.duration", duration.Milliseconds()).
+				Msg("pipeline recovered")
+			s.backoffCfg.Reset()
+			return nil
+		}
+
+		// HealthyAfter needs to be reset elsewhere
+		if duration > s.errRecoveryCfg.HealthyAfter {
+			s.backoffCfg.Reset()
+			return nil
+		}
+
+		if attempt < s.errRecoveryCfg.backoffRetryCount {
 			s.logger.Debug(ctx).
 				Str(log.PipelineIDField, pipelineID).
 				Float64("attempt", attempt).
 				Float64("backoffRetry.count", s.errRecoveryCfg.backoffRetryCount).
 				Int64("backoffRetry.duration", duration.Milliseconds()).
 				Msg("retrying pipeline recovery")
+
+			err := s.Restart(ctx, pipelineID)
+			if err == nil {
+				return err
+			}
 
 			select {
 			case <-ctx.Done():
@@ -237,17 +263,10 @@ func (s *Service) RestartWithBackoff(ctx context.Context, pipelineID string) err
 			}
 		}
 
-		s.backoffCfg.Reset()
+		if attempt >= float64(s.errRecoveryCfg.MaxRetries) {
+			return cerrors.Errorf("failed to restart pipeline %s after %d attempts: %w", pipelineID, attempt, err)
+		}
 		return err
-
-		// TODO: Utilize
-		// MaxRetries
-		// HealthyAfter
-
-		//if attempt >= s.errRecoveryCfg.MaxRetries {
-		//	return cerrors.Errorf("failed to restart pipeline %s after %d attempts: %w", pipelineID, s.backoffCfg.Max, err)
-		//}
-
 	}
 }
 
@@ -779,7 +798,6 @@ func (s *Service) runPipeline(ctx context.Context, rp *runnablePipeline) error {
 				if err != nil {
 					return err
 				}
-
 				err = s.RestartWithBackoff(ctx, rp.pipeline.ID)
 				if err != nil {
 					return err

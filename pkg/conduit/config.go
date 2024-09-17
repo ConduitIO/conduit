@@ -87,11 +87,16 @@ type Config struct {
 		Path          string
 		ExitOnError   bool
 		ErrorRecovery struct {
-			MinDelay      time.Duration
-			MaxDelay      time.Duration
+			// MinDelay is the minimum delay before restart: Default: 1 second
+			MinDelay time.Duration
+			// MaxDelay is the maximum delay before restart: Default: 10 minutes
+			MaxDelay time.Duration
+			// BackoffFactor is the factor by which the delay is multiplied after each restart: Default: 2
 			BackoffFactor int
-			MaxRetries    int
-			HealthyAfter  time.Duration
+			// MaxRetries is the maximum number of restarts before the pipeline is considered unhealthy: Default: 0 (infinite)
+			MaxRetries int
+			// HealthyAfter is the time after which the pipeline is considered healthy: Default: 5 minutes
+			HealthyAfter time.Duration
 		}
 	}
 
