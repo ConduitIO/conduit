@@ -245,7 +245,7 @@ func TestServiceLifecycle_PipelineSuccess(t *testing.T) {
 	// create mocked connectors
 	ctrl := gomock.NewController(t)
 	wantRecords := generateRecords(10)
-	source, sourceDispenser := generatorSource(ctrl, persister, wantRecords, nil, true)
+	source, srcDispenser := asserterSource(ctrl, persister, wantRecords, nil, true)
 	destination, destDispenser := asserterDestination(ctrl, persister, wantRecords)
 	dlq, dlqDispenser := asserterDestination(ctrl, persister, nil)
 	pl.DLQ.Plugin = dlq.Plugin
@@ -262,7 +262,7 @@ func TestServiceLifecycle_PipelineSuccess(t *testing.T) {
 	},
 		testProcessorService{},
 		testConnectorPluginService{
-			source.Plugin:      sourceDispenser,
+			source.Plugin:      srcDispenser,
 			destination.Plugin: destDispenser,
 			dlq.Plugin:         dlqDispenser,
 		}, ps)
@@ -307,7 +307,7 @@ func TestServiceLifecycle_PipelineError(t *testing.T) {
 	wantErr := cerrors.New("source connector error")
 	ctrl := gomock.NewController(t)
 	wantRecords := generateRecords(10)
-	source, sourceDispenser := generatorSource(ctrl, persister, wantRecords, wantErr, false)
+	source, srcDispenser := asserterSource(ctrl, persister, wantRecords, wantErr, false)
 	destination, destDispenser := asserterDestination(ctrl, persister, wantRecords)
 	dlq, dlqDispenser := asserterDestination(ctrl, persister, nil)
 	pl.DLQ.Plugin = dlq.Plugin
@@ -324,7 +324,7 @@ func TestServiceLifecycle_PipelineError(t *testing.T) {
 	},
 		testProcessorService{},
 		testConnectorPluginService{
-			source.Plugin:      sourceDispenser,
+			source.Plugin:      srcDispenser,
 			destination.Plugin: destDispenser,
 			dlq.Plugin:         dlqDispenser,
 		}, ps)
@@ -364,7 +364,7 @@ func TestServiceLifecycle_PipelineError(t *testing.T) {
 	is.True(cerrors.Is(event.Error, wantErr))
 }
 
-func TestServiceLifecycle_StopAll_Recovering(t *testing.T) {
+func TestServiceLifecycle_StopAll(t *testing.T) {
 	type testCase struct {
 		name   string
 		stopFn func(ctx context.Context, is *is.I, lifecycleService *Service, pipelineID string)
@@ -394,7 +394,7 @@ func TestServiceLifecycle_StopAll_Recovering(t *testing.T) {
 		// service that everything went well and the pipeline was gracefully shutdown
 		ctrl := gomock.NewController(t)
 		wantRecords := generateRecords(0)
-		source, sourceDispenser := generatorSource(ctrl, persister, wantRecords, nil, tc.wantSourceStop)
+		source, srcDispenser := asserterSource(ctrl, persister, wantRecords, nil, tc.wantSourceStop)
 		destination, destDispenser := asserterDestination(ctrl, persister, wantRecords)
 		dlq, dlqDispenser := asserterDestination(ctrl, persister, nil)
 		pl.DLQ.Plugin = dlq.Plugin
@@ -414,7 +414,7 @@ func TestServiceLifecycle_StopAll_Recovering(t *testing.T) {
 			},
 			testProcessorService{},
 			testConnectorPluginService{
-				source.Plugin:      sourceDispenser,
+				source.Plugin:      srcDispenser,
 				destination.Plugin: destDispenser,
 				dlq.Plugin:         dlqDispenser,
 			}, ps)
@@ -429,7 +429,6 @@ func TestServiceLifecycle_StopAll_Recovering(t *testing.T) {
 		// wait for pipeline to finish consuming records from the source
 		time.Sleep(100 * time.Millisecond)
 
-		pl.SetStatus(pipeline.StatusRecovering)
 		tc.stopFn(ctx, is, ls, pl.ID)
 
 		// wait for pipeline to finish
@@ -508,7 +507,7 @@ func TestServiceLifecycle_PipelineStop(t *testing.T) {
 	// service that everything went well and the pipeline was gracefully shutdown
 	ctrl := gomock.NewController(t)
 	wantRecords := generateRecords(10)
-	source, sourceDispenser := generatorSource(ctrl, persister, wantRecords, nil, true)
+	source, srcDispenser := asserterSource(ctrl, persister, wantRecords, nil, true)
 	destination, destDispenser := asserterDestination(ctrl, persister, wantRecords)
 	dlq, dlqDispenser := asserterDestination(ctrl, persister, nil)
 	pl.DLQ.Plugin = dlq.Plugin
@@ -525,7 +524,7 @@ func TestServiceLifecycle_PipelineStop(t *testing.T) {
 	},
 		testProcessorService{},
 		testConnectorPluginService{
-			source.Plugin:      sourceDispenser,
+			source.Plugin:      srcDispenser,
 			destination.Plugin: destDispenser,
 			dlq.Plugin:         dlqDispenser,
 		}, ps)
@@ -567,16 +566,16 @@ func TestServiceLifecycle_Run_Rerun(t *testing.T) {
 
 		// create mocked connectors
 		var (
-			source          *connector.Instance
-			sourceDispenser *pmock.Dispenser
-			destination     *connector.Instance
-			destDispenser   *pmock.Dispenser
-			dlq             *connector.Instance
-			dlqDispenser    *pmock.Dispenser
+			source        *connector.Instance
+			srcDispenser  *pmock.Dispenser
+			destination   *connector.Instance
+			destDispenser *pmock.Dispenser
+			dlq           *connector.Instance
+			dlqDispenser  *pmock.Dispenser
 		)
 		if expected == pipeline.StatusRunning {
 			// mocked connectors that are expected to be started
-			source, sourceDispenser = generatorSource(ctrl, persister, nil, nil, true)
+			source, srcDispenser = asserterSource(ctrl, persister, nil, nil, true)
 			destination, destDispenser = asserterDestination(ctrl, persister, nil)
 			dlq, dlqDispenser = asserterDestination(ctrl, persister, nil)
 		} else {
@@ -607,7 +606,7 @@ func TestServiceLifecycle_Run_Rerun(t *testing.T) {
 		},
 			testProcessorService{},
 			testConnectorPluginService{
-				source.Plugin:      sourceDispenser,
+				source.Plugin:      srcDispenser,
 				destination.Plugin: destDispenser,
 				dlq.Plugin:         dlqDispenser,
 			}, ps)
@@ -646,6 +645,17 @@ func TestServiceLifecycle_Run_Rerun(t *testing.T) {
 	}
 }
 
+func TestServiceLifecycle_Restart(t *testing.T) {
+	t.Skipf("implement me")
+}
+
+func TestServiceLifecycle_RestartWithBackoff(t *testing.T) {
+	t.Skipf("implement me")
+
+	// 1. create a runnable pipeline with existing nodes
+	// 2. stop the pipeline
+}
+
 func generateRecords(count int) []opencdc.Record {
 	records := make([]opencdc.Record, count)
 	for i := 0; i < count; i++ {
@@ -661,10 +671,10 @@ func generateRecords(count int) []opencdc.Record {
 	return records
 }
 
-// generatorSource creates a connector source that fills up the returned slice
+// asserterSource creates a connector source that fills up the returned slice
 // with generated records as they are produced. After producing the requested
 // number of records it returns wantErr.
-func generatorSource(
+func asserterSource(
 	ctrl *gomock.Controller,
 	persister *connector.Persister,
 	records []opencdc.Record,
@@ -694,7 +704,7 @@ func generatorSource(
 }
 
 // asserterDestination creates a connector destination that checks if the records it gets
-// match the expected records. On teardown it also makes sure that it received
+// match the expected records. On teardown, it also makes sure that it received
 // all expected records.
 func asserterDestination(
 	ctrl *gomock.Controller,

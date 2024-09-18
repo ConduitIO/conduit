@@ -207,6 +207,7 @@ func (s *Service) Restart(ctx context.Context, rp *runnablePipeline) error {
 		return cerrors.Errorf("could not build new nodes for pipeline %s: %w", rp.pipeline.ID, err)
 	}
 
+	// Replaces the old nodes with the new ones.
 	rp.n = nodes
 
 	s.logger.Trace(ctx).Str(log.PipelineIDField, rp.pipeline.ID).Msg("running nodes")
@@ -219,6 +220,8 @@ func (s *Service) Restart(ctx context.Context, rp *runnablePipeline) error {
 }
 
 // RestartWithBackoff restarts a pipeline with a backoff.
+// It'll check the number of times the pipeline has been restarted and the duration of the backoff.
+// When the pipeline has reached out the maximum number of retries, it'll return a fatal error.
 func (s *Service) RestartWithBackoff(ctx context.Context, rp *runnablePipeline) error {
 	// backoffCfg.Attempt() returns a float64
 	attempt := int(rp.backoffCfg.Attempt())
