@@ -47,21 +47,18 @@ type FailureEvent struct {
 
 type FailureHandler func(FailureEvent)
 
-// TODO: Move to commons?
 type ErrRecoveryCfg struct {
-	MinDelay          time.Duration
-	MaxDelay          time.Duration
-	BackoffFactor     int
-	MaxRetries        int
-	HealthyAfter      time.Duration
-	backoffRetryCount float64
+	MinDelay      time.Duration
+	MaxDelay      time.Duration
+	BackoffFactor int
+	MaxRetries    int
+	HealthyAfter  time.Duration
 }
 
 // Service manages pipelines.
 type Service struct {
 	logger log.CtxLogger
 
-	backoffCfg     *backoff.Backoff
 	errRecoveryCfg *ErrRecoveryCfg
 
 	pipelines  PipelineService
@@ -83,17 +80,9 @@ func NewService(
 	connectorPlugins ConnectorPluginService,
 	pipelines PipelineService,
 ) *Service {
-	backoffCfg := &backoff.Backoff{
-		Min:    errRecoveryCfg.MinDelay,
-		Max:    errRecoveryCfg.MaxDelay,
-		Factor: float64(errRecoveryCfg.BackoffFactor),
-		Jitter: true,
-	}
-
 	return &Service{
 		logger:           logger.WithComponent("lifecycle.Service"),
 		errRecoveryCfg:   errRecoveryCfg,
-		backoffCfg:       backoffCfg,
 		connectors:       connectors,
 		processors:       processors,
 		connectorPlugins: connectorPlugins,
@@ -103,9 +92,10 @@ func NewService(
 }
 
 type runnablePipeline struct {
-	pipeline *pipeline.Instance
-	n        []stream.Node
-	t        *tomb.Tomb
+	pipeline   *pipeline.Instance
+	n          []stream.Node
+	t          *tomb.Tomb
+	backoffCfg backoff.Backoff
 }
 
 // ConnectorService can fetch and create a connector instance.
@@ -195,79 +185,75 @@ func (s *Service) Start(
 	return nil
 }
 
-// Restart stops an existing pipeline and starts a new one with the same configuration.
-func (s *Service) Restart(ctx context.Context, pipelineID string) error {
-	rp, ok := s.runningPipelines.Get(pipelineID)
+// Restart stops an existing pipeline and replaces their nodes.
+func (s *Service) Restart(ctx context.Context, rp *runnablePipeline) error {
+	rp, ok := s.runningPipelines.Get(rp.pipeline.ID)
 	if !ok {
-		return cerrors.Errorf("pipeline %s can't be restarted: %w", pipelineID, pipeline.ErrInstanceNotFound)
+		return cerrors.Errorf("pipeline %s can't be restarted: %w", rp.pipeline.ID, pipeline.ErrInstanceNotFound)
 	}
 
-	switch rp.pipeline.GetStatus() {
-	case pipeline.StatusRecovering: // let it recover
-		return nil
-	case pipeline.StatusRunning:
-		if err := s.Stop(ctx, pipelineID, true); err != nil {
-			return cerrors.Errorf("could not stop pipeline %s: %w", pipelineID, err)
+	// In case we want to restart a running pipeline.
+	if rp.pipeline.GetStatus() == pipeline.StatusRunning {
+		if err := s.Stop(ctx, rp.pipeline.ID, true); err != nil {
+			return cerrors.Errorf("could not stop pipeline %s: %w", rp.pipeline.ID, err)
 		}
 	}
 
-	return s.Start(ctx, pipelineID)
+	s.logger.Debug(ctx).Str(log.PipelineIDField, rp.pipeline.ID).Msg("restarting pipeline")
+	s.logger.Trace(ctx).Str(log.PipelineIDField, rp.pipeline.ID).Msg("swapping nodes")
+
+	nodes, err := s.buildNodes(ctx, rp.pipeline)
+	if err != nil {
+		return cerrors.Errorf("could not build new nodes for pipeline %s: %w", rp.pipeline.ID, err)
+	}
+
+	rp.n = nodes
+
+	s.logger.Trace(ctx).Str(log.PipelineIDField, rp.pipeline.ID).Msg("running nodes")
+	if err := s.runPipeline(ctx, rp); err != nil {
+		return cerrors.Errorf("failed to run pipeline %s: %w", rp.pipeline.ID, err)
+	}
+	s.logger.Info(ctx).Str(log.PipelineIDField, rp.pipeline.ID).Msg("pipeline re-started ")
+
+	return nil
 }
 
 // RestartWithBackoff restarts a pipeline with a backoff.
-func (s *Service) RestartWithBackoff(ctx context.Context, pipelineID string) error {
-	for {
-		attempt := s.backoffCfg.Attempt()
-		duration := s.backoffCfg.Duration()
+func (s *Service) RestartWithBackoff(ctx context.Context, rp *runnablePipeline) error {
+	// backoffCfg.Attempt() returns a float64
+	attempt := int(rp.backoffCfg.Attempt())
+	duration := rp.backoffCfg.Duration()
 
-		p, err := s.pipelines.Get(ctx, pipelineID)
-		if err != nil {
-			return fmt.Errorf("could not fetch pipeline %s: %w", pipelineID, err)
-		}
-
-		if p.GetStatus() == pipeline.StatusRunning {
-			s.logger.Debug(ctx).
-				Str(log.PipelineIDField, pipelineID).
-				Float64("attempt", attempt).
-				Float64("backoffRetry.count", s.errRecoveryCfg.backoffRetryCount).
-				Int64("backoffRetry.duration", duration.Milliseconds()).
-				Msg("pipeline recovered")
-			s.backoffCfg.Reset()
-			return nil
-		}
-
-		// HealthyAfter needs to be reset elsewhere
-		if duration > s.errRecoveryCfg.HealthyAfter {
-			s.backoffCfg.Reset()
-			return nil
-		}
-
-		if attempt < s.errRecoveryCfg.backoffRetryCount {
-			s.logger.Debug(ctx).
-				Str(log.PipelineIDField, pipelineID).
-				Float64("attempt", attempt).
-				Float64("backoffRetry.count", s.errRecoveryCfg.backoffRetryCount).
-				Int64("backoffRetry.duration", duration.Milliseconds()).
-				Msg("retrying pipeline recovery")
-
-			err := s.Restart(ctx, pipelineID)
-			if err == nil {
-				return err
-			}
-
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-time.After(duration):
-				continue
-			}
-		}
-
-		if attempt >= float64(s.errRecoveryCfg.MaxRetries) {
-			return cerrors.Errorf("failed to restart pipeline %s after %d attempts: %w", pipelineID, attempt, err)
-		}
-		return err
+	if attempt > s.errRecoveryCfg.MaxRetries {
+		return cerrors.FatalError(cerrors.Errorf("failed to recover pipeline %s after %d attempts: %w", rp.pipeline.ID, attempt, pipeline.ErrPipelineCannotRecover))
 	}
+
+	// This results in a default delay progression of 1s, 2s, 4s, 8s, 16s, [...], 10m, 10m,... balancing the need for recovery time and minimizing downtime.
+	timer := time.NewTimer(duration)
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(duration):
+		<-timer.C
+	}
+
+	// Get status of pipeline, if it recovers (it's running),
+	pl, err := s.pipelines.Get(ctx, rp.pipeline.ID)
+	if err != nil {
+		return cerrors.FatalError(fmt.Errorf("could not fetch pipeline %s: %w", rp.pipeline.ID, err))
+	}
+
+	if pl.GetStatus() == pipeline.StatusRunning {
+		s.logger.Debug(ctx).
+			Str(log.PipelineIDField, rp.pipeline.ID).
+			Int("attempt", attempt).
+			Int("backoffRetry.count", s.errRecoveryCfg.BackoffFactor).
+			Int64("backoffRetry.duration", duration.Milliseconds()).
+			Msg("pipeline recovered")
+		return nil
+	}
+
+	return s.Restart(ctx, rp)
 }
 
 // Stop will attempt to gracefully stop a given pipeline by calling each node's
@@ -403,11 +389,8 @@ func (s *Service) WaitPipeline(id string) error {
 	return p.t.Wait()
 }
 
-// buildRunnablePipeline will build and connect all nodes configured in the pipeline.
-func (s *Service) buildRunnablePipeline(
-	ctx context.Context,
-	pl *pipeline.Instance,
-) (*runnablePipeline, error) {
+// buildsNodes will build and connect all nodes configured in the pipeline.
+func (s *Service) buildNodes(ctx context.Context, pl *pipeline.Instance) ([]stream.Node, error) {
 	// setup many to many channels
 	fanIn := stream.FaninNode{Name: "fanin"}
 	fanOut := stream.FanoutNode{Name: "fanout"}
@@ -447,10 +430,31 @@ func (s *Service) buildRunnablePipeline(
 	for _, n := range nodes {
 		stream.SetLogger(n, nodeLogger)
 	}
+	return nodes, nil
+}
+
+// buildRunnablePipeline will build and connect all nodes configured in the pipeline.
+func (s *Service) buildRunnablePipeline(
+	ctx context.Context,
+	pl *pipeline.Instance,
+) (*runnablePipeline, error) {
+	// Each pipeline will utilize this backoff configuration to recover from errors.
+	backoffCfg := &backoff.Backoff{
+		Min:    s.errRecoveryCfg.MinDelay,
+		Max:    s.errRecoveryCfg.MaxDelay,
+		Factor: float64(s.errRecoveryCfg.BackoffFactor),
+		Jitter: true,
+	}
+
+	nodes, err := s.buildNodes(ctx, pl)
+	if err != nil {
+		return nil, err
+	}
 
 	return &runnablePipeline{
-		pipeline: pl,
-		n:        nodes,
+		pipeline:   pl,
+		n:          nodes,
+		backoffCfg: *backoffCfg,
 	}, nil
 }
 
@@ -798,10 +802,9 @@ func (s *Service) runPipeline(ctx context.Context, rp *runnablePipeline) error {
 				if err != nil {
 					return err
 				}
-				err = s.RestartWithBackoff(ctx, rp.pipeline.ID)
-				if err != nil {
-					return err
-				}
+
+				// Exit the goroutine and attempt to restart the pipeline
+				return s.RestartWithBackoff(ctx, rp)
 			}
 		}
 
