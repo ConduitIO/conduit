@@ -19,7 +19,10 @@ import (
 	"fmt"
 	"strconv"
 	"sync"
+	"testing"
 	"time"
+
+	"github.com/conduitio/conduit-commons/cchan"
 
 	"github.com/conduitio/conduit-commons/csync"
 	"github.com/conduitio/conduit-commons/opencdc"
@@ -51,7 +54,7 @@ func Example_simpleStream() {
 	dlqNode.Add(1) // 1 source
 	node1 := &stream.SourceNode{
 		Name:          "generator",
-		Source:        generatorSource(ctrl, logger, "generator", 10, time.Millisecond*10),
+		Source:        generatorSource(ctrl, logger, "generator", 10, time.Millisecond*10, nil),
 		PipelineTimer: noop.Timer{},
 	}
 	node2 := &stream.SourceAckerNode{
@@ -125,6 +128,80 @@ func Example_simpleStream() {
 	// INF finished successfully
 }
 
+func BenchmarkStreamOld(b *testing.B) {
+	ctx, killAll := context.WithCancel(context.Background())
+	defer killAll()
+
+	logger := newLogger()
+	ctrl := gomockCtrl(logger)
+
+	b.ReportAllocs()
+	b.StopTimer()
+	for i := 0; i < b.N; i++ {
+		recordCount := b.N * 1000
+
+		dlqNode := &stream.DLQHandlerNode{
+			Name:                "dlq",
+			Handler:             noopDLQHandler(ctrl),
+			WindowSize:          1,
+			WindowNackThreshold: 0,
+		}
+		dlqNode.Add(1) // 1 source
+		done := make(chan struct{})
+		node1 := &stream.SourceNode{
+			Name:          "generator",
+			Source:        generatorSource(ctrl, logger, "generator", recordCount, time.Millisecond*10, done),
+			PipelineTimer: noop.Timer{},
+		}
+		node2 := &stream.SourceAckerNode{
+			Name:           "generator-acker",
+			Source:         node1.Source,
+			DLQHandlerNode: dlqNode,
+		}
+		node3 := &stream.DestinationNode{
+			Name:           "printer",
+			Destination:    printerDestination(ctrl, logger, "printer"),
+			ConnectorTimer: noop.Timer{},
+		}
+		node4 := &stream.DestinationAckerNode{
+			Name:        "printer-acker",
+			Destination: node3.Destination,
+		}
+
+		stream.SetLogger(node1, logger)
+		stream.SetLogger(node2, logger)
+		stream.SetLogger(node3, logger)
+		stream.SetLogger(node4, logger)
+
+		// put everything together
+		node2.Sub(node1.Pub())
+		node3.Sub(node2.Pub())
+		node4.Sub(node3.Pub())
+
+		b.StartTimer()
+		var wg sync.WaitGroup
+		wg.Add(5)
+		go runNode(ctx, &wg, dlqNode)
+		go runNode(ctx, &wg, node4)
+		go runNode(ctx, &wg, node3)
+		go runNode(ctx, &wg, node2)
+		go runNode(ctx, &wg, node1)
+
+		_, _, err := cchan.ChanOut[struct{}](done).RecvTimeout(ctx, 10*time.Second)
+		if err != nil {
+			panic(err)
+		}
+		_ = node1.Stop(ctx, nil)
+
+		// give the node some time to process the records, plus a bit of time to stop
+		if (*csync.WaitGroup)(&wg).WaitTimeout(ctx, 10*time.Second) != nil {
+			killAll()
+			panic("timeout")
+		}
+		b.StopTimer()
+	}
+}
+
 func Example_complexStream() {
 	ctx, killAll := context.WithCancel(context.Background())
 	defer killAll()
@@ -143,7 +220,7 @@ func Example_complexStream() {
 	dlqNode.Add(2) // 2 sources
 	node1 := &stream.SourceNode{
 		Name:          "generator1",
-		Source:        generatorSource(ctrl, logger, "generator1", 10, time.Millisecond*10),
+		Source:        generatorSource(ctrl, logger, "generator1", 10, time.Millisecond*10, nil),
 		PipelineTimer: noop.Timer{},
 	}
 	node2 := &stream.SourceAckerNode{
@@ -153,7 +230,7 @@ func Example_complexStream() {
 	}
 	node3 := &stream.SourceNode{
 		Name:          "generator2",
-		Source:        generatorSource(ctrl, logger, "generator2", 10, time.Millisecond*10),
+		Source:        generatorSource(ctrl, logger, "generator2", 10, time.Millisecond*10, nil),
 		PipelineTimer: noop.Timer{},
 	}
 	node4 := &stream.SourceAckerNode{
@@ -317,14 +394,14 @@ func newLogger() log.CtxLogger {
 	w.PartsExclude = []string{zerolog.TimestampFieldName}
 
 	zlogger := zerolog.New(w)
-	zlogger = zlogger.Level(zerolog.DebugLevel)
+	zlogger = zlogger.Level(zerolog.WarnLevel)
 	logger := log.New(zlogger)
 	logger.Logger = logger.Hook(ctxutil.MessageIDLogCtxHook{})
 
 	return logger
 }
 
-func generatorSource(ctrl *gomock.Controller, logger log.CtxLogger, nodeID string, recordCount int, delay time.Duration) stream.Source {
+func generatorSource(ctrl *gomock.Controller, logger log.CtxLogger, nodeID string, recordCount int, delay time.Duration, done chan struct{}) stream.Source {
 	position := 0
 
 	teardown := make(chan struct{})
@@ -340,10 +417,10 @@ func generatorSource(ctrl *gomock.Controller, logger log.CtxLogger, nodeID strin
 		return nil
 	}).Times(recordCount)
 	source.EXPECT().Read(gomock.Any()).DoAndReturn(func(ctx context.Context) ([]opencdc.Record, error) {
-		time.Sleep(delay)
-
+		// time.Sleep(delay)
 		if position == recordCount {
 			// block until Teardown is called
+			close(done)
 			<-teardown
 			return nil, connectorPlugin.ErrStreamNotOpen
 		}
