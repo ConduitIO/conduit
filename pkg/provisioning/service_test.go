@@ -518,7 +518,15 @@ func TestService_IntegrationTestServices(t *testing.T) {
 	plService := pipeline.NewService(logger, db)
 	connService := connector.NewService(logger, db, connector.NewPersister(logger, db, time.Second, 3))
 	procService := processor.NewService(logger, db, procPluginService)
-	lifecycleService := lifecycle.NewService(logger, nil, connService, procService, connPluginService, plService)
+
+	errRecoveryCfg := &lifecycle.ErrRecoveryCfg{
+		MinDelay:      time.Second,
+		MaxDelay:      10 * time.Minute,
+		BackoffFactor: 2,
+		MaxRetries:    0,
+		HealthyAfter:  5 * time.Minute,
+	}
+	lifecycleService := lifecycle.NewService(logger, errRecoveryCfg, connService, procService, connPluginService, plService)
 
 	// create destination file
 	destFile := "./test/dest-file.txt"
