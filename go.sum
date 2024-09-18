@@ -234,8 +234,8 @@ github.com/conduitio/conduit-connector-protocol v0.7.0 h1:h8gc7fcxJaQbdL/oqC2q0q
 github.com/conduitio/conduit-connector-protocol v0.7.0/go.mod h1:cnTjjLCX5dEex/7blKvcjTkoy10DXPD+J3Ok/zRycJw=
 github.com/conduitio/conduit-connector-s3 v0.6.0 h1:zPtRyHgHNjsI1OEkWgDMyLOT+7SiX3NkxBGG6vhnG7o=
 github.com/conduitio/conduit-connector-s3 v0.6.0/go.mod h1:qt1l3zpL+/V7sVy5KD5N2vFbVreLxiZokcYGcGxtabg=
-github.com/conduitio/conduit-connector-sdk v0.10.0 h1:cUXYtG9JlBEDprsLOgLly+hppPO00TAlMuyeLPfmnC8=
-github.com/conduitio/conduit-connector-sdk v0.10.0/go.mod h1:tPg02DCZBF69Ek8rvx8R5FGsw02qnJA9h3G9HKpuKro=
+github.com/conduitio/conduit-connector-sdk v0.10.1 h1:buqbpymeQzLbLIMByPnNLZ+8Ec6MiFKczJSK1CzqJKc=
+github.com/conduitio/conduit-connector-sdk v0.10.1/go.mod h1:wKz/So3848xIFSw45swE6N0JNgqLloqE1gVkadK6aOI=
 github.com/conduitio/conduit-processor-sdk v0.2.0 h1:qhcMdU8kVueKPiMfvFtS771J0KN7a6pD06HIYYKnCuw=
 github.com/conduitio/conduit-processor-sdk v0.2.0/go.mod h1:cgJSPN8w6s8FvH8mN8zYN79BaFk+i7fJjI9mMRByXjI=
 github.com/conduitio/conduit-schema-registry v0.1.0 h1:PNj7mMAKt5vWsSxCaIGS31LYMOnuWqEzYzwBBXThZFI=
@@ -735,8 +735,8 @@ github.com/polyfloyd/go-errorlint v1.6.0 h1:tftWV9DE7txiFzPpztTAwyoRLKNj9gpVm2cg
 github.com/polyfloyd/go-errorlint v1.6.0/go.mod h1:HR7u8wuP1kb1NeN1zqTd1ZMlqUKPPHF+Id4vIPvDqVw=
 github.com/prashantv/gostub v1.1.0 h1:BTyx3RfQjRHnUWaGF9oQos79AlQ5k8WNktv7VGvVH4g=
 github.com/prashantv/gostub v1.1.0/go.mod h1:A5zLQHz7ieHGG7is6LLXLz7I8+3LZzsrV0P1IAHhP5U=
-github.com/prometheus/client_golang v1.20.3 h1:oPksm4K8B+Vt35tUhw6GbSNSgVlVSBH0qELP/7u83l4=
-github.com/prometheus/client_golang v1.20.3/go.mod h1:PIEt8X02hGcP8JWbeHyeZ53Y/jReSnHgO035n//V5WE=
+github.com/prometheus/client_golang v1.20.4 h1:Tgh3Yr67PaOv/uTqloMsCEdeuFTatm5zIq5+qNN23vI=
+github.com/prometheus/client_golang v1.20.4/go.mod h1:PIEt8X02hGcP8JWbeHyeZ53Y/jReSnHgO035n//V5WE=
 github.com/prometheus/client_model v0.0.0-20190812154241-14fe0d1b01d4/go.mod h1:xMI15A0UPsDsEKsMN9yxemIoYk6Tm2C1GtYGdfGttqA=
 github.com/prometheus/client_model v0.6.1 h1:ZKSh/rekM+n3CeS952MLRAdFwIKqeY8b62p8ais2e9E=
 github.com/prometheus/client_model v0.6.1/go.mod h1:OrxVMOVHjw3lKMa8+x6HeMGkHMQyHDk9E3jmP2AmGiY=
