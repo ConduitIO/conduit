@@ -16,7 +16,7 @@ require (
 	github.com/conduitio/conduit-connector-postgres v0.8.0
 	github.com/conduitio/conduit-connector-protocol v0.7.0
 	github.com/conduitio/conduit-connector-s3 v0.6.0
-	github.com/conduitio/conduit-connector-sdk v0.10.0
+	github.com/conduitio/conduit-connector-sdk v0.10.1
 	github.com/conduitio/conduit-processor-sdk v0.2.0
 	github.com/conduitio/conduit-schema-registry v0.1.0
 	github.com/conduitio/yaml/v3 v3.3.0
@@ -36,7 +36,7 @@ require (
 	github.com/neilotoole/slogt v1.1.0
 	github.com/peterbourgon/ff/v3 v3.4.0
 	github.com/piotrkowalczuk/promgrpc/v4 v4.1.4
-	github.com/prometheus/client_golang v1.20.3
+	github.com/prometheus/client_golang v1.20.4
 	github.com/prometheus/client_model v0.6.1
 	github.com/prometheus/common v0.59.1
 	github.com/rs/zerolog v1.33.0
