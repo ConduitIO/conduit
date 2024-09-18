@@ -50,6 +50,8 @@ func NewSourceTask(
 	timer metrics.Timer,
 	histogram metrics.Histogram,
 ) *SourceTask {
+	logger = logger.WithComponent("task:source")
+	logger.Logger = logger.With().Str(log.ConnectorIDField, id).Logger()
 	return &SourceTask{
 		id:        id,
 		source:    source,
@@ -64,10 +66,12 @@ func (t *SourceTask) ID() string {
 }
 
 func (t *SourceTask) Open(ctx context.Context) error {
+	t.logger.Debug(ctx).Msg("opening source")
 	err := t.source.Open(ctx)
 	if err != nil {
 		return cerrors.Errorf("failed to open source connector: %w", err)
 	}
+	t.logger.Debug(ctx).Msg("source open")
 	return nil
 }
 

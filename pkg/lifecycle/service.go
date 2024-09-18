@@ -25,6 +25,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/conduitio/conduit/pkg/lifecycle/funnel"
+
 	"github.com/conduitio/conduit-commons/csync"
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -86,6 +88,7 @@ func NewService(
 type runnablePipeline struct {
 	pipeline *pipeline.Instance
 	n        []stream.Node
+	w        *funnel.Worker
 	t        *tomb.Tomb
 }
 
@@ -166,7 +169,11 @@ func (s *Service) Start(
 	}
 
 	s.logger.Trace(ctx).Str(log.PipelineIDField, pl.ID).Msg("running nodes")
-	if err := s.runPipeline(ctx, rp); err != nil {
+	// if err := s.runPipeline(ctx, rp); err != nil {
+	// 	return cerrors.Errorf("failed to run pipeline %s: %w", pl.ID, err)
+	// }
+
+	if err := s.runPipelineWithWorker(ctx, rp); err != nil {
 		return cerrors.Errorf("failed to run pipeline %s: %w", pl.ID, err)
 	}
 	s.logger.Info(ctx).Str(log.PipelineIDField, pl.ID).Msg("pipeline started")
@@ -314,49 +321,107 @@ func (s *Service) buildRunnablePipeline(
 	ctx context.Context,
 	pl *pipeline.Instance,
 ) (*runnablePipeline, error) {
-	// setup many to many channels
-	fanIn := stream.FaninNode{Name: "fanin"}
-	fanOut := stream.FanoutNode{Name: "fanout"}
+	// // setup many to many channels
+	// fanIn := stream.FaninNode{Name: "fanin"}
+	// fanOut := stream.FanoutNode{Name: "fanout"}
+	//
+	// sourceNodes, err := s.buildSourceNodes(ctx, pl, &fanIn)
+	// if err != nil {
+	// 	return nil, cerrors.Errorf("could not build source nodes: %w", err)
+	// }
+	// if len(sourceNodes) == 0 {
+	// 	return nil, cerrors.New("can't build pipeline without any source connectors")
+	// }
+	//
+	// processorNodes, err := s.buildProcessorNodes(ctx, pl, pl.ProcessorIDs, &fanIn, &fanOut)
+	// if err != nil {
+	// 	return nil, cerrors.Errorf("could not build processor nodes: %w", err)
+	// }
+	//
+	// destinationNodes, err := s.buildDestinationNodes(ctx, pl, &fanOut)
+	// if err != nil {
+	// 	return nil, cerrors.Errorf("could not build destination nodes: %w", err)
+	// }
+	// if len(destinationNodes) == 0 {
+	// 	return nil, cerrors.New("can't build pipeline without any destination connectors")
+	// }
+	//
+	// // gather nodes and add our fan in and fan out nodes
+	// nodes := make([]stream.Node, 0, len(processorNodes)+len(sourceNodes)+len(destinationNodes)+2)
+	// nodes = append(nodes, sourceNodes...)
+	// nodes = append(nodes, &fanIn)
+	// nodes = append(nodes, processorNodes...)
+	// nodes = append(nodes, &fanOut)
+	// nodes = append(nodes, destinationNodes...)
 
-	sourceNodes, err := s.buildSourceNodes(ctx, pl, &fanIn)
-	if err != nil {
-		return nil, cerrors.Errorf("could not build source nodes: %w", err)
-	}
-	if len(sourceNodes) == 0 {
-		return nil, cerrors.New("can't build pipeline without any source connectors")
-	}
-
-	processorNodes, err := s.buildProcessorNodes(ctx, pl, pl.ProcessorIDs, &fanIn, &fanOut)
-	if err != nil {
-		return nil, cerrors.Errorf("could not build processor nodes: %w", err)
-	}
-
-	destinationNodes, err := s.buildDestinationNodes(ctx, pl, &fanOut)
-	if err != nil {
-		return nil, cerrors.Errorf("could not build destination nodes: %w", err)
-	}
-	if len(destinationNodes) == 0 {
-		return nil, cerrors.New("can't build pipeline without any destination connectors")
-	}
-
-	// gather nodes and add our fan in and fan out nodes
-	nodes := make([]stream.Node, 0, len(processorNodes)+len(sourceNodes)+len(destinationNodes)+2)
-	nodes = append(nodes, sourceNodes...)
-	nodes = append(nodes, &fanIn)
-	nodes = append(nodes, processorNodes...)
-	nodes = append(nodes, &fanOut)
-	nodes = append(nodes, destinationNodes...)
-
-	// set up logger for all nodes that need it
 	nodeLogger := s.logger
 	nodeLogger.Logger = nodeLogger.Logger.With().Str(log.PipelineIDField, pl.ID).Logger()
-	for _, n := range nodes {
-		stream.SetLogger(n, nodeLogger)
+
+	var (
+		srcTask  *funnel.SourceTask
+		destTask *funnel.DestinationTask
+	)
+
+	for _, connID := range pl.ConnectorIDs {
+		instance, err := s.connectors.Get(ctx, connID)
+		if err != nil {
+			return nil, cerrors.Errorf("could not fetch connector: %w", err)
+		}
+
+		if instance.Type != connector.TypeSource {
+			continue // skip any connector that's not a source
+		}
+
+		src, err := instance.Connector(ctx, s.connectorPlugins)
+		if err != nil {
+			return nil, err
+		}
+
+		srcTask = funnel.NewSourceTask(
+			instance.ID,
+			src.(*connector.Source),
+			nodeLogger,
+			measure.PipelineExecutionDurationTimer.WithValues(pl.Config.Name),
+			measure.ConnectorBytesHistogram.WithValues(
+				pl.Config.Name,
+				instance.Plugin,
+				strings.ToLower(instance.Type.String()),
+			),
+		)
+		break
+	}
+
+	for _, connID := range pl.ConnectorIDs {
+		instance, err := s.connectors.Get(ctx, connID)
+		if err != nil {
+			return nil, cerrors.Errorf("could not fetch connector: %w", err)
+		}
+
+		if instance.Type != connector.TypeDestination {
+			continue // skip any connector that's not a destination
+		}
+
+		dest, err := instance.Connector(ctx, s.connectorPlugins)
+		if err != nil {
+			return nil, err
+		}
+
+		destTask = funnel.NewDestinationTask(
+			instance.ID,
+			dest.(*connector.Destination),
+			nodeLogger,
+			measure.PipelineExecutionDurationTimer.WithValues(pl.Config.Name),
+			measure.ConnectorBytesHistogram.WithValues(
+				pl.Config.Name,
+				instance.Plugin,
+				strings.ToLower(instance.Type.String()),
+			),
+		)
 	}
 
 	return &runnablePipeline{
 		pipeline: pl,
-		n:        nodes,
+		w:        funnel.NewWorker(funnel.Tasks{srcTask, destTask}),
 	}, nil
 }
 
@@ -606,6 +671,32 @@ func (s *Service) buildDestinationNodes(
 	}
 
 	return nodes, nil
+}
+
+func (s *Service) runPipelineWithWorker(ctx context.Context, rp *runnablePipeline) error {
+	if rp.t != nil && rp.t.Alive() {
+		return pipeline.ErrPipelineRunning
+	}
+
+	// the tomb is responsible for running goroutines related to the pipeline
+	rp.t = &tomb.Tomb{}
+
+	err := rp.w.Open(context.Background())
+	if err != nil {
+		return cerrors.Errorf("failed to open worker: %w", err)
+	}
+
+	rp.t.Go(func() error {
+		ctx := context.Background()
+		for {
+			_, err := rp.w.Do(ctx, nil)
+			if err != nil {
+				return cerrors.Errorf("worker stopped with error: %w", err)
+			}
+		}
+	})
+
+	return s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusRunning, "")
 }
 
 func (s *Service) runPipeline(ctx context.Context, rp *runnablePipeline) error {

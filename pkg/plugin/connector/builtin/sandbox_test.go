@@ -87,7 +87,7 @@ func TestRunSandbox(t *testing.T) {
 
 	for _, td := range testData {
 		t.Run(td.name, func(t *testing.T) {
-			gotResp, gotErr := runSandbox(td.f, ctx, td.req, logger)
+			gotResp, gotErr := runSandbox(td.f, ctx, td.req, logger, "test")
 			is.Equal(gotResp, td.resp)
 			if td.strict {
 				// strict mode means we expect a very specific error

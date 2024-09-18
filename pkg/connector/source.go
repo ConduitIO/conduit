@@ -153,6 +153,7 @@ func (s *Source) Teardown(ctx context.Context) error {
 		return plugin.ErrPluginNotRunning
 	}
 
+	s.Instance.logger.Debug(ctx).Msg("closing stream")
 	// close stream
 	if s.stopStream != nil {
 		s.stopStream()

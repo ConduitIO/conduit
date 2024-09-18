@@ -52,6 +52,8 @@ func NewDestinationTask(
 	timer metrics.Timer,
 	histogram metrics.Histogram,
 ) *DestinationTask {
+	logger = logger.WithComponent("task:source")
+	logger.Logger = logger.With().Str(log.ConnectorIDField, id).Logger()
 	return &DestinationTask{
 		id:          id,
 		destination: destination,
@@ -66,10 +68,12 @@ func (t *DestinationTask) ID() string {
 }
 
 func (t *DestinationTask) Open(ctx context.Context) error {
+	t.logger.Debug(ctx).Msg("opening destination")
 	err := t.destination.Open(ctx)
 	if err != nil {
 		return cerrors.Errorf("failed to open destination connector: %w", err)
 	}
+	t.logger.Debug(ctx).Msg("destination open")
 	return nil
 }
 

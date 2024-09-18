@@ -18,6 +18,8 @@ import (
 	"context"
 	"sync"
 
+	"gopkg.in/tomb.v2"
+
 	"github.com/conduitio/conduit-commons/opencdc"
 )
 
@@ -52,6 +54,16 @@ func NewWorker(tasks Tasks) *Worker {
 	return &Worker{
 		tasks: tasks,
 	}
+}
+
+func (w *Worker) Open(ctx context.Context) error {
+	t, ctx := tomb.WithContext(ctx) // TODO use conc instead
+	for _, task := range w.tasks {
+		t.Go(func() error {
+			return task.Open(context.Background()) // TODO use proper context
+		})
+	}
+	return t.Wait()
 }
 
 func (w *Worker) Do(ctx context.Context, data []opencdc.Record) ([]opencdc.Record, error) {
