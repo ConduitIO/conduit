@@ -36,7 +36,6 @@ import (
 	pmock "github.com/conduitio/conduit/pkg/plugin/connector/mock"
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/google/uuid"
-	"github.com/jpillora/backoff"
 	"github.com/matryer/is"
 	"github.com/rs/zerolog"
 	"go.uber.org/mock/gomock"
@@ -52,7 +51,6 @@ func TestServiceLifecycle_buildRunnablePipeline(t *testing.T) {
 	logger := log.New(zerolog.Nop())
 	db := &inmemory.DB{}
 	persister := connector.NewPersister(logger, db, time.Second, 3)
-	b := &backoff.Backoff{}
 
 	source := dummySource(persister)
 	destination := dummyDestination(persister)
@@ -72,7 +70,7 @@ func TestServiceLifecycle_buildRunnablePipeline(t *testing.T) {
 
 	ls := NewService(
 		logger,
-		b,
+		nil,
 		testConnectorService{
 			source.ID:      source,
 			destination.ID: destination,
@@ -145,7 +143,6 @@ func TestService_buildRunnablePipeline_NoSourceNode(t *testing.T) {
 	logger := log.New(zerolog.Nop())
 	db := &inmemory.DB{}
 	persister := connector.NewPersister(logger, db, time.Second, 3)
-	b := &backoff.Backoff{}
 
 	destination := dummyDestination(persister)
 	dlq := dummyDestination(persister)
@@ -162,7 +159,7 @@ func TestService_buildRunnablePipeline_NoSourceNode(t *testing.T) {
 	}
 	pl.SetStatus(pipeline.StatusUserStopped)
 
-	ls := NewService(logger, b, testConnectorService{
+	ls := NewService(logger, nil, testConnectorService{
 		destination.ID: destination,
 		testDLQID:      dlq,
 	}, testProcessorService{},
@@ -191,12 +188,11 @@ func TestService_buildRunnablePipeline_NoDestinationNode(t *testing.T) {
 	logger := log.New(zerolog.Nop())
 	db := &inmemory.DB{}
 	persister := connector.NewPersister(logger, db, time.Second, 3)
-	b := &backoff.Backoff{}
 
 	source := dummySource(persister)
 	dlq := dummyDestination(persister)
 
-	ls := NewService(logger, b, testConnectorService{
+	ls := NewService(logger, nil, testConnectorService{
 		source.ID: source,
 		testDLQID: dlq,
 	},
@@ -239,7 +235,6 @@ func TestServiceLifecycle_PipelineSuccess(t *testing.T) {
 	db := &inmemory.DB{}
 	persister := connector.NewPersister(logger, db, time.Second, 3)
 	defer persister.Wait()
-	b := &backoff.Backoff{}
 
 	ps := pipeline.NewService(logger, db)
 
@@ -260,7 +255,7 @@ func TestServiceLifecycle_PipelineSuccess(t *testing.T) {
 	pl, err = ps.AddConnector(ctx, pl.ID, destination.ID)
 	is.NoErr(err)
 
-	ls := NewService(logger, b, testConnectorService{
+	ls := NewService(logger, nil, testConnectorService{
 		source.ID:      source,
 		destination.ID: destination,
 		testDLQID:      dlq,
@@ -301,7 +296,6 @@ func TestServiceLifecycle_PipelineError(t *testing.T) {
 	logger := log.Test(t)
 	db := &inmemory.DB{}
 	persister := connector.NewPersister(logger, db, time.Second, 3)
-	b := &backoff.Backoff{}
 
 	ps := pipeline.NewService(logger, db)
 
@@ -323,7 +317,7 @@ func TestServiceLifecycle_PipelineError(t *testing.T) {
 	pl, err = ps.AddConnector(ctx, pl.ID, destination.ID)
 	is.NoErr(err)
 
-	ls := NewService(logger, b, testConnectorService{
+	ls := NewService(logger, nil, testConnectorService{
 		source.ID:      source,
 		destination.ID: destination,
 		testDLQID:      dlq,
@@ -388,7 +382,6 @@ func TestServiceLifecycle_StopAll_Recovering(t *testing.T) {
 		logger := log.New(zerolog.Nop())
 		db := &inmemory.DB{}
 		persister := connector.NewPersister(logger, db, time.Second, 3)
-		b := &backoff.Backoff{}
 
 		ps := pipeline.NewService(logger, db)
 
@@ -411,7 +404,7 @@ func TestServiceLifecycle_StopAll_Recovering(t *testing.T) {
 		pl, err = ps.AddConnector(ctx, pl.ID, destination.ID)
 		is.NoErr(err)
 
-		ls := NewService(logger, b, testConnectorService{
+		ls := NewService(logger, nil, testConnectorService{
 			source.ID:      source,
 			destination.ID: destination,
 			testDLQID:      dlq,
@@ -500,7 +493,6 @@ func TestServiceLifecycle_PipelineStop(t *testing.T) {
 	logger := log.New(zerolog.Nop())
 	db := &inmemory.DB{}
 	persister := connector.NewPersister(logger, db, time.Second, 3)
-	b := &backoff.Backoff{}
 
 	ps := pipeline.NewService(logger, db)
 
@@ -523,7 +515,7 @@ func TestServiceLifecycle_PipelineStop(t *testing.T) {
 	pl, err = ps.AddConnector(ctx, pl.ID, destination.ID)
 	is.NoErr(err)
 
-	ls := NewService(logger, b, testConnectorService{
+	ls := NewService(logger, nil, testConnectorService{
 		source.ID:      source,
 		destination.ID: destination,
 		testDLQID:      dlq,
@@ -563,7 +555,6 @@ func TestServiceLifecycle_Run_Rerun(t *testing.T) {
 		logger := log.Test(t)
 		db := &inmemory.DB{}
 		persister := connector.NewPersister(logger, db, time.Second, 3)
-		b := &backoff.Backoff{}
 
 		ps := pipeline.NewService(logger, db)
 
@@ -606,7 +597,7 @@ func TestServiceLifecycle_Run_Rerun(t *testing.T) {
 		err = ps.Init(ctx)
 		is.NoErr(err)
 
-		ls := NewService(logger, b, testConnectorService{
+		ls := NewService(logger, nil, testConnectorService{
 			source.ID:      source,
 			destination.ID: destination,
 			testDLQID:      dlq,

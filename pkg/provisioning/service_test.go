@@ -41,7 +41,6 @@ import (
 	p4 "github.com/conduitio/conduit/pkg/provisioning/test/pipelines4-integration-test"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/jpillora/backoff"
 	"github.com/matryer/is"
 	"github.com/rs/zerolog"
 	"go.uber.org/mock/gomock"
@@ -515,16 +514,11 @@ func TestService_IntegrationTestServices(t *testing.T) {
 		proc_builtin.NewRegistry(logger, proc_builtin.DefaultBuiltinProcessors, schemaRegistry),
 		nil,
 	)
-	b := &backoff.Backoff{
-		Factor: 2,
-		Min:    time.Millisecond * 100,
-		Max:    time.Second, // 8 tries
-	}
 
 	plService := pipeline.NewService(logger, db)
 	connService := connector.NewService(logger, db, connector.NewPersister(logger, db, time.Second, 3))
 	procService := processor.NewService(logger, db, procPluginService)
-	lifecycleService := lifecycle.NewService(logger, b, connService, procService, connPluginService, plService)
+	lifecycleService := lifecycle.NewService(logger, nil, connService, procService, connPluginService, plService)
 
 	// create destination file
 	destFile := "./test/dest-file.txt"
