@@ -70,7 +70,7 @@ func TestServiceLifecycle_buildRunnablePipeline(t *testing.T) {
 
 	ls := NewService(
 		logger,
-		nil,
+		testErrRecoveryCfg(),
 		testConnectorService{
 			source.ID:      source,
 			destination.ID: destination,
@@ -159,7 +159,7 @@ func TestService_buildRunnablePipeline_NoSourceNode(t *testing.T) {
 	}
 	pl.SetStatus(pipeline.StatusUserStopped)
 
-	ls := NewService(logger, nil, testConnectorService{
+	ls := NewService(logger, testErrRecoveryCfg(), testConnectorService{
 		destination.ID: destination,
 		testDLQID:      dlq,
 	}, testProcessorService{},
@@ -192,7 +192,7 @@ func TestService_buildRunnablePipeline_NoDestinationNode(t *testing.T) {
 	source := dummySource(persister)
 	dlq := dummyDestination(persister)
 
-	ls := NewService(logger, nil, testConnectorService{
+	ls := NewService(logger, testErrRecoveryCfg(), testConnectorService{
 		source.ID: source,
 		testDLQID: dlq,
 	},
@@ -255,7 +255,7 @@ func TestServiceLifecycle_PipelineSuccess(t *testing.T) {
 	pl, err = ps.AddConnector(ctx, pl.ID, destination.ID)
 	is.NoErr(err)
 
-	ls := NewService(logger, nil, testConnectorService{
+	ls := NewService(logger, testErrRecoveryCfg(), testConnectorService{
 		source.ID:      source,
 		destination.ID: destination,
 		testDLQID:      dlq,
@@ -317,7 +317,7 @@ func TestServiceLifecycle_PipelineError(t *testing.T) {
 	pl, err = ps.AddConnector(ctx, pl.ID, destination.ID)
 	is.NoErr(err)
 
-	ls := NewService(logger, nil, testConnectorService{
+	ls := NewService(logger, testErrRecoveryCfg(), testConnectorService{
 		source.ID:      source,
 		destination.ID: destination,
 		testDLQID:      dlq,
@@ -404,11 +404,14 @@ func TestServiceLifecycle_StopAll_Recovering(t *testing.T) {
 		pl, err = ps.AddConnector(ctx, pl.ID, destination.ID)
 		is.NoErr(err)
 
-		ls := NewService(logger, nil, testConnectorService{
-			source.ID:      source,
-			destination.ID: destination,
-			testDLQID:      dlq,
-		},
+		ls := NewService(
+			logger,
+			testErrRecoveryCfg(),
+			testConnectorService{
+				source.ID:      source,
+				destination.ID: destination,
+				testDLQID:      dlq,
+			},
 			testProcessorService{},
 			testConnectorPluginService{
 				source.Plugin:      sourceDispenser,
@@ -515,7 +518,7 @@ func TestServiceLifecycle_PipelineStop(t *testing.T) {
 	pl, err = ps.AddConnector(ctx, pl.ID, destination.ID)
 	is.NoErr(err)
 
-	ls := NewService(logger, nil, testConnectorService{
+	ls := NewService(logger, testErrRecoveryCfg(), testConnectorService{
 		source.ID:      source,
 		destination.ID: destination,
 		testDLQID:      dlq,
@@ -597,7 +600,7 @@ func TestServiceLifecycle_Run_Rerun(t *testing.T) {
 		err = ps.Init(ctx)
 		is.NoErr(err)
 
-		ls := NewService(logger, nil, testConnectorService{
+		ls := NewService(logger, testErrRecoveryCfg(), testConnectorService{
 			source.ID:      source,
 			destination.ID: destination,
 			testDLQID:      dlq,
@@ -751,6 +754,16 @@ func dummyDestination(persister *connector.Persister) *connector.Instance {
 	destination.Init(log.Nop(), persister)
 
 	return destination
+}
+
+func testErrRecoveryCfg() *ErrRecoveryCfg {
+	return &ErrRecoveryCfg{
+		MinDelay:      time.Second,
+		MaxDelay:      10 * time.Minute,
+		BackoffFactor: 2,
+		MaxRetries:    0, // infinite retries
+		HealthyAfter:  5 * time.Minute,
+	}
 }
 
 // testConnectorService fulfills the ConnectorService interface.

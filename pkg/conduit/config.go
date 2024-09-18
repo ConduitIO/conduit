@@ -142,7 +142,7 @@ func DefaultConfig() Config {
 	cfg.Pipelines.ErrorRecovery.MinDelay = time.Second
 	cfg.Pipelines.ErrorRecovery.MaxDelay = 10 * time.Minute
 	cfg.Pipelines.ErrorRecovery.BackoffFactor = 2
-	cfg.Pipelines.ErrorRecovery.MaxRetries = 0
+	cfg.Pipelines.ErrorRecovery.MaxRetries = 0 // infinite retries
 	cfg.Pipelines.ErrorRecovery.HealthyAfter = 5 * time.Minute
 
 	cfg.SchemaRegistry.Type = SchemaRegistryTypeBuiltin
