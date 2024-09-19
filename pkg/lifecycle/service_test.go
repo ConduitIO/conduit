@@ -717,14 +717,61 @@ func TestServiceLifecycle_Run_Rerun(t *testing.T) {
 }
 
 func TestServiceLifecycle_Restart(t *testing.T) {
-	t.Skipf("implement me")
-}
+	is := is.New(t)
+	ctx, killAll := context.WithCancel(context.Background())
+	defer killAll()
+	logger := log.New(zerolog.Nop())
+	db := &inmemory.DB{}
+	persister := connector.NewPersister(logger, db, time.Second, 3)
 
-func TestServiceLifecycle_RestartWithBackoff(t *testing.T) {
-	t.Skipf("implement me")
+	ps := pipeline.NewService(logger, db)
 
-	// 1. create a runnable pipeline with existing nodes
-	// 2. stop the pipeline
+	// create a host pipeline
+	pl, err := ps.Create(ctx, uuid.NewString(), pipeline.Config{Name: "test pipeline"}, pipeline.ProvisionTypeAPI)
+	is.NoErr(err)
+
+	// create mocked connectors
+	ctrl := gomock.NewController(t)
+	wantRecords := generateRecords(10)
+	source, srcDispenser := asserterSource(ctrl, persister, wantRecords, nil, true)
+	destination, destDispenser := asserterDestination(ctrl, persister, wantRecords)
+	dlq, dlqDispenser := asserterDestination(ctrl, persister, nil)
+	pl.DLQ.Plugin = dlq.Plugin
+
+	pl, err = ps.AddConnector(ctx, pl.ID, source.ID)
+	is.NoErr(err)
+	pl, err = ps.AddConnector(ctx, pl.ID, destination.ID)
+	is.NoErr(err)
+
+	ls := NewService(logger, testErrRecoveryCfg(), testConnectorService{
+		source.ID:      source,
+		destination.ID: destination,
+		testDLQID:      dlq,
+	},
+		testProcessorService{},
+		testConnectorPluginService{
+			source.Plugin:      srcDispenser,
+			destination.Plugin: destDispenser,
+			dlq.Plugin:         dlqDispenser,
+		}, ps)
+
+	// start the pipeline
+	err = ls.Start(ctx, pl.ID)
+	is.NoErr(err)
+
+	// wait for pipeline to start
+	time.Sleep(100 * time.Millisecond)
+
+	// restart the pipeline
+	rp, ok := ls.runningPipelines.Get(pl.ID)
+	is.True(ok)
+
+	err = ls.Restart(ctx, rp)
+	is.NoErr(err)
+
+	// wait for pipeline to restart
+	time.Sleep(100 * time.Millisecond)
+
 }
 
 func generateRecords(count int) []opencdc.Record {
