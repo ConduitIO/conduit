@@ -187,13 +187,6 @@ func (s *Service) Start(
 
 // Restart stops an existing pipeline and replaces their nodes.
 func (s *Service) Restart(ctx context.Context, rp *runnablePipeline) error {
-	// In case we want to restart a running pipeline.
-	if rp.pipeline.GetStatus() == pipeline.StatusRunning {
-		if err := s.Stop(ctx, rp.pipeline.ID, true); err != nil {
-			return cerrors.Errorf("could not stop pipeline %s: %w", rp.pipeline.ID, err)
-		}
-	}
-
 	s.logger.Debug(ctx).Str(log.PipelineIDField, rp.pipeline.ID).Msg("restarting pipeline")
 	s.logger.Trace(ctx).Str(log.PipelineIDField, rp.pipeline.ID).Msg("swapping nodes")
 
