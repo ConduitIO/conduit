@@ -240,7 +240,7 @@ func (s *Service) RestartWithBackoff(ctx context.Context, rp *runnablePipeline) 
 		<-timer.C
 	}
 
-	// Get status of pipeline, if it recovers (it's running),
+	// Get status of pipeline to check if it already recovered.
 	pl, err := s.pipelines.Get(ctx, rp.pipeline.ID)
 	if err != nil {
 		return cerrors.FatalError(fmt.Errorf("could not fetch pipeline %s: %w", rp.pipeline.ID, err))
