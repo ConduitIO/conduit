@@ -559,14 +559,16 @@ func TestServiceLifecycle_StopAll_Recovering(t *testing.T) {
 		wantErr error
 	}
 
+	wantErr := cerrors.New("lost connection to database")
+
 	testCases := []testCase{
 		{
 			name: "connection error",
 			stopFn: func(ctx context.Context, is *is.I, ls *Service, pipelineID string) {
-				ls.StopAll(ctx, cerrors.New("lost connection to database"))
+				ls.StopAll(ctx, wantErr)
 			},
 			want:    pipeline.StatusRunning,
-			wantErr: cerrors.New("lost connection to database"),
+			wantErr: wantErr,
 		},
 	}
 
@@ -575,7 +577,8 @@ func TestServiceLifecycle_StopAll_Recovering(t *testing.T) {
 			is := is.New(t)
 			ctx, killAll := context.WithCancel(context.Background())
 			defer killAll()
-			logger := log.New(zerolog.Nop())
+			logger := log.New(zerolog.New(zerolog.NewTestWriter(t)))
+			logger.Logger = logger.Level(zerolog.TraceLevel)
 			db := &inmemory.DB{}
 			persister := connector.NewPersister(logger, db, time.Second, 3)
 
@@ -590,9 +593,9 @@ func TestServiceLifecycle_StopAll_Recovering(t *testing.T) {
 			// service that everything went well and the pipeline was gracefully shutdown
 			ctrl := gomock.NewController(t)
 			wantRecords := generateRecords(0)
-			source, srcDispenser := asserterSource(ctrl, persister, wantRecords, nil, true, 1)
-			destination, destDispenser := asserterDestination(ctrl, persister, wantRecords, 1)
-			dlq, dlqDispenser := asserterDestination(ctrl, persister, nil, 1)
+			source, srcDispenser := asserterSource(ctrl, persister, wantRecords, nil, true, 2)
+			destination, destDispenser := asserterDestination(ctrl, persister, wantRecords, 2)
+			dlq, dlqDispenser := asserterDestination(ctrl, persister, nil, 2)
 			pl.DLQ.Plugin = dlq.Plugin
 
 			pl, err = ps.AddConnector(ctx, pl.ID, source.ID)
@@ -625,18 +628,44 @@ func TestServiceLifecycle_StopAll_Recovering(t *testing.T) {
 			// wait for pipeline to finish consuming records from the source
 			time.Sleep(100 * time.Millisecond)
 
-			tc.stopFn(ctx, is, ls, pl.ID)
+			c := make(cchan.Chan[error])
+			go func() {
+				c <- ls.WaitPipeline(pl.ID)
+			}()
 
-			// wait for pipeline to finish
-			err = ls.WaitPipeline(pl.ID)
+			tc.stopFn(ctx, is, ls, pl.ID)
+			err, _, err2 := c.RecvTimeout(ctx, 10000*time.Millisecond)
+
+			is.NoErr(err2)
+
 			if tc.wantErr != nil {
-				is.True(err != nil)
+				logger.Info(ctx).Msgf("%+v", err.(interface{ Unwrap() error }).Unwrap())
+				logger.Info(ctx).Msgf("%+v", tc.wantErr)
+				is.True(cerrors.Is(err, tc.wantErr))
 			} else {
 				is.NoErr(err)
 				is.Equal("", pl.Error)
 			}
 
+			go func() {
+				c <- ls.WaitPipeline(pl.ID)
+			}()
+
+			_, _, err = c.RecvTimeout(ctx, 1000*time.Millisecond)
+			is.True(cerrors.Is(err, context.DeadlineExceeded))
+
+			err = ls.Stop(ctx, pl.ID, false)
+			is.NoErr(err)
+
+			// Check pipeline ended in a running state
 			is.Equal(tc.want, pl.GetStatus())
+
+			go func() {
+				c <- ls.WaitPipeline(pl.ID)
+			}()
+			err, _, _ = c.RecvTimeout(ctx, 1000*time.Millisecond)
+			is.NoErr(err)
+			is.Equal(pipeline.StatusUserStopped, pl.GetStatus())
 		})
 	}
 }
