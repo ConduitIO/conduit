@@ -399,7 +399,7 @@ func TestServiceLifecycle_Stop(t *testing.T) {
 			is := is.New(t)
 			ctx, killAll := context.WithCancel(context.Background())
 			defer killAll()
-			logger := log.New(zerolog.Nop())
+			logger := log.Test(t)
 			db := &inmemory.DB{}
 			persister := connector.NewPersister(logger, db, time.Second, 3)
 
@@ -716,7 +716,7 @@ func TestServiceLifecycle_Run_Rerun(t *testing.T) {
 		ctx, killAll := context.WithCancel(context.Background())
 		defer killAll()
 		ctrl := gomock.NewController(t)
-		logger := log.New(zerolog.Nop())
+		logger := log.Test(t)
 		db := &inmemory.DB{}
 		persister := connector.NewPersister(logger, db, time.Second, 3)
 
