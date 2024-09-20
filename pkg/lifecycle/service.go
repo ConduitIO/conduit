@@ -202,7 +202,7 @@ func (s *Service) Restart(ctx context.Context, rp *runnablePipeline) error {
 	if err := s.runPipeline(ctx, rp); err != nil {
 		return cerrors.Errorf("failed to run pipeline %s: %w", rp.pipeline.ID, err)
 	}
-	s.logger.Info(ctx).Str(log.PipelineIDField, rp.pipeline.ID).Msg("pipeline re-started ")
+	s.logger.Info(ctx).Str(log.PipelineIDField, rp.pipeline.ID).Msg("pipeline restarted ")
 
 	return nil
 }
@@ -292,7 +292,7 @@ func (s *Service) stopForceful(ctx context.Context, rp *runnablePipeline) error 
 		Str(log.PipelineIDField, rp.pipeline.ID).
 		Any(log.PipelineStatusField, rp.pipeline.GetStatus()).
 		Msg("force stopping pipeline")
-	rp.t.Kill(pipeline.ErrForceStop)
+	rp.t.Kill(cerrors.FatalError(pipeline.ErrForceStop))
 	for _, n := range rp.n {
 		if node, ok := n.(stream.ForceStoppableNode); ok {
 			// stop all pub nodes
