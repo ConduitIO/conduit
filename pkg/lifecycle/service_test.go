@@ -562,15 +562,15 @@ func TestServiceLifecycle_StopAll(t *testing.T) {
 	}
 }
 
+// Creates first a pipeline that will stop with a recoverable error, to check later that it restarted and it's running.
 func TestServiceLifecycle_StopAll_Recovering(t *testing.T) {
-	wantErr := cerrors.New("lost connection to database")
-
 	is := is.New(t)
 	ctx, killAll := context.WithCancel(context.Background())
 	defer killAll()
 	logger := log.New(zerolog.Nop())
 	db := &inmemory.DB{}
 	persister := connector.NewPersister(logger, db, time.Second, 3)
+	wantErr := cerrors.New("lost connection to database")
 
 	ps := pipeline.NewService(logger, db)
 
@@ -623,10 +623,12 @@ func TestServiceLifecycle_StopAll_Recovering(t *testing.T) {
 		c <- ls.WaitPipeline(pl.ID)
 	}()
 
+	// force the pipeline to stop with a recoverable error
 	ls.StopAll(ctx, wantErr)
-	err, _, err2 := c.RecvTimeout(ctx, 10000*time.Millisecond)
+	err, _, ctxErr := c.RecvTimeout(ctx, 10000*time.Millisecond)
+	is.NoErr(ctxErr)
 
-	is.NoErr(err2)
+	// check the first pipeline stopped with the error that caused the restart
 	is.True(cerrors.Is(err, wantErr))
 
 	go func() {
@@ -636,6 +638,7 @@ func TestServiceLifecycle_StopAll_Recovering(t *testing.T) {
 	_, _, err = c.RecvTimeout(ctx, 1000*time.Millisecond)
 	is.True(cerrors.Is(err, context.DeadlineExceeded))
 
+	// stop the running pipeline
 	err = ls.Stop(ctx, pl.ID, false)
 	is.NoErr(err)
 
@@ -647,6 +650,8 @@ func TestServiceLifecycle_StopAll_Recovering(t *testing.T) {
 	}()
 	err, _, _ = c.RecvTimeout(ctx, 1000*time.Millisecond)
 	is.NoErr(err)
+
+	// This is to demonstrate the test indeed stopped the pipeline
 	is.Equal(pipeline.StatusUserStopped, pl.GetStatus())
 }
 

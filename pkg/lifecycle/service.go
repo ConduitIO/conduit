@@ -185,7 +185,7 @@ func (s *Service) Start(
 	return nil
 }
 
-// Restart stops an existing pipeline and replaces their nodes.
+// Restart replaces the nodes of a pipeline and starts it again.
 func (s *Service) Restart(ctx context.Context, rp *runnablePipeline) error {
 	s.logger.Debug(ctx).Str(log.PipelineIDField, rp.pipeline.ID).Msg("restarting pipeline")
 	s.logger.Trace(ctx).Str(log.PipelineIDField, rp.pipeline.ID).Msg("swapping nodes")
@@ -211,7 +211,6 @@ func (s *Service) Restart(ctx context.Context, rp *runnablePipeline) error {
 // It'll check the number of times the pipeline has been restarted and the duration of the backoff.
 // When the pipeline has reached out the maximum number of retries, it'll return a fatal error.
 func (s *Service) RestartWithBackoff(ctx context.Context, rp *runnablePipeline) error {
-	// backoffCfg.Attempt() returns a float64
 	attempt := int(rp.backoffCfg.Attempt())
 	duration := rp.backoffCfg.Duration()
 
@@ -292,6 +291,8 @@ func (s *Service) stopForceful(ctx context.Context, rp *runnablePipeline) error 
 		Str(log.PipelineIDField, rp.pipeline.ID).
 		Any(log.PipelineStatusField, rp.pipeline.GetStatus()).
 		Msg("force stopping pipeline")
+
+	// Creates a FatalError to prevent the pipeline from recovering.
 	rp.t.Kill(cerrors.FatalError(pipeline.ErrForceStop))
 	for _, n := range rp.n {
 		if node, ok := n.(stream.ForceStoppableNode); ok {
@@ -375,7 +376,7 @@ func (s *Service) WaitPipeline(id string) error {
 	return p.t.Wait()
 }
 
-// buildsNodes will build and connect all nodes configured in the pipeline.
+// buildsNodes will build new nodes that will be assigned to the pipeline.Instance.
 func (s *Service) buildNodes(ctx context.Context, pl *pipeline.Instance) ([]stream.Node, error) {
 	// setup many to many channels
 	fanIn := stream.FaninNode{Name: "fanin"}
@@ -748,6 +749,7 @@ func (s *Service) runPipeline(ctx context.Context, rp *runnablePipeline) error {
 		})
 	}
 
+	// TODO: When it's recovering, we should only update the status back to running once HealthyAfter has passed.
 	err := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusRunning, "")
 	if err != nil {
 		return err
