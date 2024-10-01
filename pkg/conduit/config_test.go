@@ -196,12 +196,12 @@ func TestConfig_Validate(t *testing.T) {
 			want: cerrors.New(`invalid error recovery config: "backoff-factor" config value mustn't be negative (got: -1)`),
 		},
 		{
-			name: "error recovery: negative max-retries",
+			name: "error recovery: max-retries smaller than -1",
 			setupConfig: func(c Config) Config {
-				c.Pipelines.ErrorRecovery.MaxRetries = -1
+				c.Pipelines.ErrorRecovery.MaxRetries = InfiniteRetriesErrRecovery - 1
 				return c
 			},
-			want: cerrors.New(`invalid error recovery config: "max-retries" config value mustn't be negative (got: -1)`),
+			want: cerrors.New(`invalid error recovery config: "max-retries" can't be smaller than -1 (infinite retries)`),
 		},
 		{
 			name: "error recovery: negative healthy-after",

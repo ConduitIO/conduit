@@ -39,6 +39,8 @@ import (
 	"gopkg.in/tomb.v2"
 )
 
+const InfiniteRetriesErrRecovery = -1
+
 type FailureEvent struct {
 	// ID is the ID of the pipeline which failed.
 	ID    string
@@ -51,7 +53,7 @@ type ErrRecoveryCfg struct {
 	MinDelay      time.Duration
 	MaxDelay      time.Duration
 	BackoffFactor int
-	MaxRetries    int
+	MaxRetries    int64
 	HealthyAfter  time.Duration
 }
 
@@ -216,15 +218,14 @@ func (s *Service) Restart(ctx context.Context, rp *runnablePipeline) error {
 func (s *Service) RestartWithBackoff(ctx context.Context, rp *runnablePipeline) error {
 	s.logger.Trace(ctx).Str(log.PipelineIDField, rp.pipeline.ID).Msg("restarting with backoff")
 
-	attempt := int(rp.backoffCfg.Attempt())
+	attempt := int64(rp.backoffCfg.Attempt())
 	duration := rp.backoffCfg.Duration()
 
-	// maxRetries 0 means infinite retries
-	if attempt > s.errRecoveryCfg.MaxRetries && s.errRecoveryCfg.MaxRetries != 0 {
+	if s.errRecoveryCfg.MaxRetries != InfiniteRetriesErrRecovery && attempt > s.errRecoveryCfg.MaxRetries {
 		return cerrors.FatalError(cerrors.Errorf("failed to recover pipeline %s after %d attempts: %w", rp.pipeline.ID, attempt, pipeline.ErrPipelineCannotRecover))
 	}
 
-	s.logger.Trace(ctx).Dur(log.DurationField, duration).Int("attempt", attempt).Msg("backoff configuration")
+	s.logger.Trace(ctx).Dur(log.DurationField, duration).Int64(log.AttemptField, attempt).Msg("backoff configuration")
 
 	// This results in a default delay progression of 1s, 2s, 4s, 8s, 16s, [...], 10m, 10m,... balancing the need for recovery time and minimizing downtime.
 	timer := time.NewTimer(duration)
@@ -239,7 +240,7 @@ func (s *Service) RestartWithBackoff(ctx context.Context, rp *runnablePipeline) 
 	if rp.pipeline.GetStatus() == pipeline.StatusRunning {
 		s.logger.Debug(ctx).
 			Str(log.PipelineIDField, rp.pipeline.ID).
-			Int("attempt", attempt).
+			Int64("attempt", attempt).
 			Int("backoffRetry.count", s.errRecoveryCfg.BackoffFactor).
 			Int64("backoffRetry.duration", duration.Milliseconds()).
 			Msg("pipeline recovered")

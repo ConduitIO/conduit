@@ -129,7 +129,7 @@ func (*Entrypoint) Flags(cfg *Config) *flag.FlagSet {
 		cfg.Pipelines.ErrorRecovery.BackoffFactor,
 		"backoff factor applied to the last delay",
 	)
-	flags.IntVar(
+	flags.Int64Var(
 		&cfg.Pipelines.ErrorRecovery.MaxRetries,
 		"pipelines.error-recovery.max-retries",
 		cfg.Pipelines.ErrorRecovery.MaxRetries,

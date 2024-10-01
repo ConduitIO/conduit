@@ -35,6 +35,8 @@ const (
 
 	SchemaRegistryTypeConfluent = "confluent"
 	SchemaRegistryTypeBuiltin   = "builtin"
+
+	InfiniteRetriesErrRecovery = -1
 )
 
 // Config holds all configurable values for Conduit.
@@ -93,8 +95,8 @@ type Config struct {
 			MaxDelay time.Duration
 			// BackoffFactor is the factor by which the delay is multiplied after each restart: Default: 2
 			BackoffFactor int
-			// MaxRetries is the maximum number of restarts before the pipeline is considered unhealthy: Default: 0 (infinite)
-			MaxRetries int
+			// MaxRetries is the maximum number of restarts before the pipeline is considered unhealthy: Default: -1 (infinite)
+			MaxRetries int64
 			// HealthyAfter is the time after which the pipeline is considered healthy: Default: 5 minutes
 			HealthyAfter time.Duration
 		}
@@ -142,7 +144,7 @@ func DefaultConfig() Config {
 	cfg.Pipelines.ErrorRecovery.MinDelay = time.Second
 	cfg.Pipelines.ErrorRecovery.MaxDelay = 10 * time.Minute
 	cfg.Pipelines.ErrorRecovery.BackoffFactor = 2
-	cfg.Pipelines.ErrorRecovery.MaxRetries = 0 // infinite retries
+	cfg.Pipelines.ErrorRecovery.MaxRetries = InfiniteRetriesErrRecovery
 	cfg.Pipelines.ErrorRecovery.HealthyAfter = 5 * time.Minute
 
 	cfg.SchemaRegistry.Type = SchemaRegistryTypeBuiltin
@@ -211,8 +213,8 @@ func (c Config) validateErrorRecovery() error {
 	if err := requireNonNegativeValue("backoff-factor", errRecoveryCfg.BackoffFactor); err != nil {
 		errs = append(errs, err)
 	}
-	if err := requireNonNegativeValue("max-retries", errRecoveryCfg.MaxRetries); err != nil {
-		errs = append(errs, err)
+	if errRecoveryCfg.MaxRetries < InfiniteRetriesErrRecovery {
+		errs = append(errs, cerrors.Errorf(`"max-retries" can't be smaller than %d (infinite retries)`, InfiniteRetriesErrRecovery))
 	}
 	if err := requirePositiveValue("healthy-after", errRecoveryCfg.HealthyAfter); err != nil {
 		errs = append(errs, err)
