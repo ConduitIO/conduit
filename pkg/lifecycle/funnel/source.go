@@ -21,7 +21,6 @@ import (
 	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/conduitio/conduit/pkg/foundation/metrics"
 )
 
 type SourceTask struct {
@@ -29,8 +28,9 @@ type SourceTask struct {
 	source Source
 	logger log.CtxLogger
 
-	timer     metrics.Timer
-	histogram metrics.RecordBytesHistogram
+	// timer     metrics.Timer
+	// histogram metrics.RecordBytesHistogram
+	// lastRead  time.Time
 }
 
 type Source interface {
@@ -47,17 +47,13 @@ func NewSourceTask(
 	id string,
 	source Source,
 	logger log.CtxLogger,
-	timer metrics.Timer,
-	histogram metrics.Histogram,
 ) *SourceTask {
 	logger = logger.WithComponent("task:source")
 	logger.Logger = logger.With().Str(log.ConnectorIDField, id).Logger()
 	return &SourceTask{
-		id:        id,
-		source:    source,
-		logger:    logger,
-		timer:     timer,
-		histogram: metrics.NewRecordBytesHistogram(histogram),
+		id:     id,
+		source: source,
+		logger: logger,
 	}
 }
 
@@ -75,44 +71,6 @@ func (t *SourceTask) Open(ctx context.Context) error {
 	return nil
 }
 
-func (t *SourceTask) Do(ctx context.Context, _ []opencdc.Record, next Tasks) ([]opencdc.Record, error) {
-	recs, err := t.source.Read(ctx)
-	if err != nil {
-		return nil, cerrors.Errorf("failed to read from source: %w", err)
-	}
-
-	positions := make([]opencdc.Position, len(recs))
-	for i, rec := range recs {
-		positions[i] = rec.Position
-	}
-
-	start := time.Now()
-	out, err := next.Do(ctx, recs)
-	if err != nil {
-		return nil, cerrors.Errorf("failed to process records: %w", err)
-	}
-
-	// Acknowledge the records.
-	err = t.source.Ack(ctx, positions)
-	if err != nil {
-		return nil, cerrors.Errorf("failed to ack records: %w", err)
-	}
-
-	// Update metrics.
-	for _, rec := range recs {
-		readAt, err := rec.Metadata.GetReadAt()
-		if err != nil {
-			// If the plugin did not set the field fallback to the time Conduit
-			// received the record (now).
-			readAt = start
-		}
-		t.timer.UpdateSince(readAt)
-		t.histogram.Observe(rec)
-	}
-
-	return out, nil
-}
-
 func (t *SourceTask) Close(ctx context.Context) error {
 	var errs []error
 
@@ -122,4 +80,33 @@ func (t *SourceTask) Close(ctx context.Context) error {
 	errs = append(errs, err)
 
 	return cerrors.Join(errs...)
+}
+
+func (t *SourceTask) Do(ctx context.Context, b *Batch) error {
+	recs, err := t.source.Read(ctx)
+	if err != nil {
+		return cerrors.Errorf("failed to read from source: %w", err)
+	}
+
+	now := time.Now()
+	for i, rec := range recs {
+		if rec.Metadata == nil {
+			rec.Metadata = opencdc.Metadata{}
+		}
+		if _, err := rec.Metadata.GetReadAt(); err != nil {
+			rec.Metadata.SetReadAt(now)
+		}
+		if _, err := rec.Metadata.GetConduitSourceConnectorID(); err != nil {
+			rec.Metadata.SetConduitSourceConnectorID(t.source.ID())
+		}
+		recs[i] = rec
+	}
+
+	// Overwrite the batch with the new records.
+	*b = *NewBatch(recs)
+	return nil
+}
+
+func (t *SourceTask) GetSource() Source {
+	return t.source
 }

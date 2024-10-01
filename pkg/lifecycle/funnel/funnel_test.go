@@ -16,13 +16,12 @@ package funnel
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"testing"
-	"time"
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/connector"
-	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/ctxutil"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/noop"
@@ -43,12 +42,19 @@ func Example_simpleStream() {
 	batchCount := 10
 	batchSize := 1
 
-	srcTask := NewSourceTask(
-		"generator",
-		generatorSource(ctrl, logger, "generator", batchSize, batchCount, time.Millisecond*10),
+	dlq := NewDLQ(
+		"dlq",
+		noopDLQDestination(ctrl),
 		logger,
 		noop.Timer{},
 		noop.Histogram{},
+		1,
+		0,
+	)
+	srcTask := NewSourceTask(
+		"generator",
+		generatorSource(ctrl, logger, "generator", batchSize, batchCount),
+		logger,
 	)
 	destTask := NewDestinationTask(
 		"printer",
@@ -58,43 +64,59 @@ func Example_simpleStream() {
 		noop.Histogram{},
 	)
 
-	w := NewWorker(Tasks{srcTask, destTask})
+	w, err := NewWorker(
+		[]Task{srcTask, destTask},
+		[][]int{{1}, {}},
+		dlq,
+		logger,
+	)
+	if err != nil {
+		panic(err)
+	}
 
+	err = w.Open(ctx)
+	if err != nil {
+		panic(err)
+	}
 	for i := 0; i < batchCount; i++ {
-		_, err := w.Do(ctx, nil)
+		err := w.Do(ctx)
 		if err != nil {
 			panic(err)
 		}
 	}
 
+	err = w.Close(ctx)
+	if err != nil {
+		panic(err)
+	}
+
 	logger.Info(ctx).Msg("finished successfully")
 
 	// Output:
-	// DBG got record message_id=generator/1 node_id=printer
-	// DBG received ack message_id=generator/1 node_id=generator
-	// DBG got record message_id=generator/2 node_id=printer
-	// DBG received ack message_id=generator/2 node_id=generator
-	// DBG got record message_id=generator/3 node_id=printer
-	// DBG received ack message_id=generator/3 node_id=generator
-	// DBG got record message_id=generator/4 node_id=printer
-	// DBG received ack message_id=generator/4 node_id=generator
-	// DBG got record message_id=generator/5 node_id=printer
-	// DBG received ack message_id=generator/5 node_id=generator
-	// DBG got record message_id=generator/6 node_id=printer
-	// DBG received ack message_id=generator/6 node_id=generator
-	// DBG got record message_id=generator/7 node_id=printer
-	// DBG received ack message_id=generator/7 node_id=generator
-	// DBG got record message_id=generator/8 node_id=printer
-	// DBG received ack message_id=generator/8 node_id=generator
-	// DBG got record message_id=generator/9 node_id=printer
-	// DBG received ack message_id=generator/9 node_id=generator
-	// DBG got record message_id=generator/10 node_id=printer
-	// DBG received ack message_id=generator/10 node_id=generator
-	// INF stopping source connector component=SourceNode node_id=generator
-	// INF stopping source node component=SourceNode node_id=generator record_position=10
-	// DBG incoming messages channel closed component=SourceAckerNode node_id=generator-acker
-	// DBG incoming messages channel closed component=DestinationNode node_id=printer
-	// DBG incoming messages channel closed component=DestinationAckerNode node_id=printer-acker
+	// DBG opening source component=task:source connector_id=generator
+	// DBG source open component=task:source connector_id=generator
+	// DBG opening destination component=task:destination connector_id=printer
+	// DBG destination open component=task:destination connector_id=printer
+	// DBG got record node_id=printer position=generator/0
+	// DBG received ack node_id=generator
+	// DBG got record node_id=printer position=generator/1
+	// DBG received ack node_id=generator
+	// DBG got record node_id=printer position=generator/2
+	// DBG received ack node_id=generator
+	// DBG got record node_id=printer position=generator/3
+	// DBG received ack node_id=generator
+	// DBG got record node_id=printer position=generator/4
+	// DBG received ack node_id=generator
+	// DBG got record node_id=printer position=generator/5
+	// DBG received ack node_id=generator
+	// DBG got record node_id=printer position=generator/6
+	// DBG received ack node_id=generator
+	// DBG got record node_id=printer position=generator/7
+	// DBG received ack node_id=generator
+	// DBG got record node_id=printer position=generator/8
+	// DBG received ack node_id=generator
+	// DBG got record node_id=printer position=generator/9
+	// DBG received ack node_id=generator
 	// INF finished successfully
 }
 
@@ -102,7 +124,7 @@ func BenchmarkStreamNew(b *testing.B) {
 	ctx, killAll := context.WithCancel(context.Background())
 	defer killAll()
 
-	logger := newLogger()
+	logger := log.Nop()
 	ctrl := gomockCtrl(logger)
 
 	b.ReportAllocs()
@@ -111,12 +133,19 @@ func BenchmarkStreamNew(b *testing.B) {
 		batchCount := b.N
 		batchSize := 1000
 
-		srcTask := NewSourceTask(
-			"generator",
-			generatorSource(ctrl, logger, "generator", batchSize, batchCount, time.Millisecond*10),
+		dlq := NewDLQ(
+			"dlq",
+			noopDLQDestination(ctrl),
 			logger,
 			noop.Timer{},
 			noop.Histogram{},
+			1,
+			0,
+		)
+		srcTask := NewSourceTask(
+			"generator",
+			generatorSource(ctrl, logger, "generator", batchSize, batchCount),
+			logger,
 		)
 		destTask := NewDestinationTask(
 			"printer",
@@ -126,28 +155,32 @@ func BenchmarkStreamNew(b *testing.B) {
 			noop.Histogram{},
 		)
 
-		w := NewWorker(Tasks{srcTask, destTask})
+		w, err := NewWorker(
+			[]Task{srcTask, destTask},
+			[][]int{{1}, {}},
+			dlq,
+			logger,
+		)
+		if err != nil {
+			panic(err)
+		}
 
 		b.StartTimer()
 
-		var errs []error
-		errs = append(errs, srcTask.Open(ctx))
-		errs = append(errs, destTask.Open(ctx))
-		if err := cerrors.Join(errs...); err != nil {
+		err = w.Open(ctx)
+		if err != nil {
 			panic(err)
 		}
 
 		for i := 0; i < batchCount; i++ {
-			_, err := w.Do(ctx, nil)
+			err := w.Do(ctx)
 			if err != nil {
 				panic(err)
 			}
 		}
 
-		errs = errs[:0]
-		errs = append(errs, srcTask.Close(ctx))
-		errs = append(errs, destTask.Close(ctx))
-		if err := cerrors.Join(errs...); err != nil {
+		err = w.Close(ctx)
+		if err != nil {
 			panic(err)
 		}
 		b.StopTimer()
@@ -167,7 +200,7 @@ func newLogger() log.CtxLogger {
 	return logger
 }
 
-func generatorSource(ctrl *gomock.Controller, logger log.CtxLogger, nodeID string, batchSize, batchCount int, delay time.Duration) stream.Source {
+func generatorSource(ctrl *gomock.Controller, logger log.CtxLogger, nodeID string, batchSize, batchCount int) stream.Source {
 	position := 0
 
 	teardown := make(chan struct{})
@@ -183,8 +216,6 @@ func generatorSource(ctrl *gomock.Controller, logger log.CtxLogger, nodeID strin
 		return nil
 	}).Times(batchCount * batchSize)
 	source.EXPECT().Read(gomock.Any()).DoAndReturn(func(ctx context.Context) ([]opencdc.Record, error) {
-		// time.Sleep(delay)
-
 		if position == batchCount*batchSize {
 			// block until Teardown is called
 			<-teardown
@@ -217,7 +248,9 @@ func printerDestination(ctrl *gomock.Controller, logger log.CtxLogger, nodeID st
 	destination.EXPECT().Open(gomock.Any()).Return(nil)
 	destination.EXPECT().Write(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, recs []opencdc.Record) error {
 		for _, r := range recs {
+			connID, _ := r.Metadata.GetConduitSourceConnectorID()
 			logger.Debug(ctx).
+				Str("position", fmt.Sprintf("%s/%s", connID, r.Position)).
 				Str("node_id", nodeID).
 				Msg("got record")
 			lastPosition = r.Position
@@ -248,6 +281,13 @@ func printerDestination(ctrl *gomock.Controller, logger log.CtxLogger, nodeID st
 	})
 	destination.EXPECT().Errors().Return(make(chan error))
 
+	return destination
+}
+
+func noopDLQDestination(ctrl *gomock.Controller) stream.Destination {
+	destination := streammock.NewDestination(ctrl)
+	destination.EXPECT().Open(gomock.Any()).Return(nil)
+	destination.EXPECT().Teardown(gomock.Any()).Return(nil)
 	return destination
 }
 

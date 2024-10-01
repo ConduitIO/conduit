@@ -52,7 +52,7 @@ func NewDestinationTask(
 	timer metrics.Timer,
 	histogram metrics.Histogram,
 ) *DestinationTask {
-	logger = logger.WithComponent("task:source")
+	logger = logger.WithComponent("task:destination")
 	logger.Logger = logger.With().Str(log.ConnectorIDField, id).Logger()
 	return &DestinationTask{
 		id:          id,
@@ -77,38 +77,57 @@ func (t *DestinationTask) Open(ctx context.Context) error {
 	return nil
 }
 
-func (t *DestinationTask) Do(ctx context.Context, recs []opencdc.Record, _ Tasks) ([]opencdc.Record, error) {
-	positions := make([]opencdc.Position, len(recs))
-	for i, rec := range recs {
+func (t *DestinationTask) Close(ctx context.Context) error {
+	var errs []error
+
+	err := t.destination.Stop(ctx, nil)
+	errs = append(errs, err)
+	err = t.destination.Teardown(ctx)
+	errs = append(errs, err)
+
+	return cerrors.Join(errs...)
+}
+
+func (t *DestinationTask) Do(ctx context.Context, batch *Batch) error {
+	records := batch.ActiveRecords()
+	positions := make([]opencdc.Position, len(records))
+	for i, rec := range records {
 		positions[i] = rec.Position
 	}
 
 	start := time.Now()
-	err := t.destination.Write(ctx, recs)
+	err := t.destination.Write(ctx, records)
 	if err != nil {
-		return nil, cerrors.Errorf("failed to write records to destination: %w", err)
+		return cerrors.Errorf("failed to write %d records to destination: %w", len(positions), err)
 	}
 
 	acks, err := t.destination.Ack(ctx)
 	if err != nil {
-		return nil, cerrors.Errorf("failed to ack records: %w", err)
+		return cerrors.Errorf("failed to ack %d records: %w", len(positions), err)
 	}
 
 	if len(acks) != len(positions) {
-		return nil, cerrors.Errorf("expected %d acks, got %d", len(positions), len(acks))
+		// TODO wrap in loop and retrieve acks one by one for backward compatibility
+		return cerrors.Errorf("expected %d acks, got %d", len(positions), len(acks))
 	}
+
 	var errs []error
+	var n int
 	for i, ack := range acks {
 		if !bytes.Equal(positions[i], ack.Position) {
-			return nil, cerrors.Errorf("received unexpected ack, expected position %q but got %q", positions[i], ack.Position)
+			// TODO is this a fatal error? Looks like a bug in the connector
+			return cerrors.Errorf("received unexpected ack, expected position %q but got %q", positions[i], ack.Position)
 		}
 		if ack.Error != nil {
 			errs = append(errs, ack.Error)
+		} else if n == i {
+			n++
 		}
+		// TODO mark batch
 	}
 
 	// Update metrics.
-	for _, rec := range recs {
+	for _, rec := range records {
 		readAt, err := rec.Metadata.GetReadAt()
 		if err != nil {
 			// If the plugin did not set the field fallback to the time Conduit
@@ -118,17 +137,6 @@ func (t *DestinationTask) Do(ctx context.Context, recs []opencdc.Record, _ Tasks
 		t.timer.UpdateSince(readAt)
 		t.histogram.Observe(rec)
 	}
-
-	return recs, cerrors.Join(errs...)
-}
-
-func (t *DestinationTask) Close(ctx context.Context) error {
-	var errs []error
-
-	err := t.destination.Stop(ctx, nil)
-	errs = append(errs, err)
-	err = t.destination.Teardown(ctx)
-	errs = append(errs, err)
 
 	return cerrors.Join(errs...)
 }

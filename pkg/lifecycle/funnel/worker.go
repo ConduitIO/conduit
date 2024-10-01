@@ -16,80 +16,326 @@ package funnel
 
 import (
 	"context"
-	"sync"
+	"sync/atomic"
 
-	"gopkg.in/tomb.v2"
+	"github.com/conduitio/conduit/pkg/foundation/log"
 
-	"github.com/conduitio/conduit-commons/opencdc"
+	"github.com/conduitio/conduit-commons/rollback"
+
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+
+	"github.com/sourcegraph/conc/pool"
 )
 
+// TODO update docs once done.
 type Task interface {
 	// ID returns the identifier of this Task. Each Task in a pipeline must be
 	// uniquely identified by the ID.
 	ID() string
 
-	Open(ctx context.Context) error
-	Do(ctx context.Context, data []opencdc.Record, next Tasks) ([]opencdc.Record, error)
-	Close(ctx context.Context) error
-}
+	Open(context.Context) error
+	Close(context.Context) error
 
-type Tasks []Task
-
-func (t Tasks) Do(ctx context.Context, data []opencdc.Record) ([]opencdc.Record, error) {
-	var next Tasks
-	if len(t) > 1 {
-		next = t[1:]
-	}
-	return t[0].Do(ctx, data, next)
+	// Do processes the given batch of records. It returns the count of
+	// successfully processed records, the count of failed records, and an error
+	// that caused the failed records. Conduit interprets the counts as
+	// continuous regions in the batch, so the first `successCount` records are
+	// considered successfully processed, and the next `failCount` records are
+	// considered failed, the rest are considered skipped entirely. The failed
+	// records are sent to the DLQ and if the nack limit is not reached, the
+	// rest is retried.
+	Do(context.Context, *Batch) error
 }
 
 // Worker is a collection of tasks that are executed sequentially. It is safe
 // for concurrent use.
 type Worker struct {
-	tasks Tasks
-	m     sync.Mutex
+	Source Source
+	Tasks  []Task
+	// TasksOrder show next task to be executed. Multiple indices are used to
+	// show parallel execution of tasks.
+	//
+	// Example:
+	// [[1], [2], [3], [4,6], [5], [], [7], []]
+	//
+	//                   /-> 4, 5
+	// 0 -> 1 -> 2 -> 3 --
+	//                   \-> 6, 7
+	Order [][]int
+	DLQ   *DLQ
+
+	logger log.CtxLogger
 }
 
-func NewWorker(tasks Tasks) *Worker {
-	return &Worker{
-		tasks: tasks,
+func NewWorker(
+	tasks []Task,
+	order [][]int,
+	dlq *DLQ,
+	logger log.CtxLogger,
+) (*Worker, error) {
+	// TODO validate order so it's not a cycle and all tasks are included
+	st, ok := tasks[0].(interface{ GetSource() Source })
+	if !ok {
+		return nil, cerrors.Errorf("first task must be a source task, got %T", tasks[0])
 	}
+
+	return &Worker{
+		Source: st.GetSource(),
+		Tasks:  tasks,
+		Order:  order,
+		DLQ:    dlq,
+		logger: logger.WithComponent("funnel.Worker"),
+	}, nil
 }
 
-func (w *Worker) Open(ctx context.Context) error {
-	t, ctx := tomb.WithContext(ctx) // TODO use conc instead
-	for _, task := range w.tasks {
-		t.Go(func() error {
-			return task.Open(context.Background()) // TODO use proper context
+func (w *Worker) Open(ctx context.Context) (err error) {
+	var r rollback.R
+	defer func() {
+		rollbackErr := r.Execute()
+		err = cerrors.LogOrReplace(err, rollbackErr, func() {
+			w.logger.Err(ctx, rollbackErr).Msg("failed to execute rollback")
+		})
+	}()
+
+	for _, task := range w.Tasks {
+		err = task.Open(ctx)
+		if err != nil {
+			return cerrors.Errorf("task %s failed to open: %w", task.ID(), err)
+		}
+
+		r.Append(func() error {
+			return task.Close(ctx)
 		})
 	}
-	return t.Wait()
+
+	r.Skip()
+	return nil
 }
 
-func (w *Worker) Do(ctx context.Context, data []opencdc.Record) ([]opencdc.Record, error) {
-	// Lock the worker to prevent concurrent access to the tasks.
-	w.m.Lock()
-	defer w.m.Unlock()
+func (w *Worker) Close(ctx context.Context) error {
+	var errs []error
 
-	return w.tasks.Do(ctx, data)
+	for _, task := range w.Tasks {
+		err := task.Close(ctx)
+		if err != nil {
+			errs = append(errs, cerrors.Errorf("task %s failed to close: %w", task.ID(), err))
+		}
+	}
+
+	return cerrors.Join(errs...)
 }
 
-// func (w *Worker) Do(ctx context.Context, data []opencdc.Record, next Tasks) ([]opencdc.Record, error) {
-// 	// Lock the worker to prevent concurrent access to the tasks.
-// 	w.m.Lock()
-// 	defer w.m.Unlock()
-//
-// 	tasks := w.tasks
-// 	if len(next) > 0 {
-// 		if cap(w.tasks) < len(w.tasks)+len(next) {
-// 			// allocate a new slice with extra slots for next tasks, so we don't have to
-// 			// reallocate the slice every time we call it with next tasks
-// 			tasks = make(Tasks, len(w.tasks), len(w.tasks)+len(next))
-// 			copy(tasks, w.tasks)
-// 			w.tasks = tasks
-// 		}
-// 		tasks = append(tasks, next...)
-// 	}
-//
-// 	return tasks.Do(ctx, data)
-// }
+func (w *Worker) Do(ctx context.Context) error {
+	return w.doTask(ctx, 0, &Batch{}, w)
+}
+
+func (w *Worker) doTask(ctx context.Context, currentIndex int, b *Batch, acker ackNacker) error {
+	t := w.Tasks[currentIndex]
+
+	err := t.Do(ctx, b)
+	if err != nil {
+		return cerrors.Errorf("task %s: %w", t.ID(), err)
+	}
+
+	if !b.tainted {
+		// Shortcut.
+		if !w.hasNextTask(currentIndex) {
+			// This is the last task, the batch has made it end-to-end, let's ack!
+			return acker.Ack(ctx, b)
+		}
+		// There is at least one task after this one, let's continue.
+		return w.nextTask(ctx, currentIndex, b, acker)
+	}
+
+	// Batch is tainted, we need to go through all statuses and group them by
+	// status before further processing.
+	idx := 0
+	for {
+		subBatch := w.subBatchByFlag(b, idx)
+		if subBatch == nil {
+			// No more records to process.
+			break
+		}
+
+		switch subBatch.recordStatuses[0].Flag {
+		case RecordFlagAck, RecordFlagSkip:
+			if !w.hasNextTask(currentIndex) {
+				// This is the last task, the batch has made it end-to-end, let's ack!
+				// We need to ack all the records in the batch, not only active
+				// ones, filtered ones should also be acked.
+				err := acker.Ack(ctx, subBatch)
+				if err != nil {
+					return err
+				}
+				break // break switch
+			}
+			// There is at least one task after this one, let's continue.
+			err := w.nextTask(ctx, currentIndex, subBatch, acker)
+			if err != nil {
+				return err
+			}
+		case RecordFlagNack:
+			err := acker.Nack(ctx, subBatch, t.ID())
+			if err != nil {
+				return err
+			}
+		case RecordFlagRetry:
+			err := w.doTask(ctx, currentIndex, subBatch, acker)
+			if err != nil {
+				return err
+			}
+		}
+
+		idx = idx + len(subBatch.positions)
+	}
+
+	return nil
+}
+
+// subBatchByFlag collects a sub-batch of records with the same status starting
+// from the given index. It returns nil if firstIndex is out of bounds.
+func (w *Worker) subBatchByFlag(b *Batch, firstIndex int) *Batch {
+	if firstIndex >= len(b.recordStatuses) {
+		return nil
+	}
+
+	flags := make([]RecordFlag, 0, 2)
+	flags = append(flags, b.recordStatuses[firstIndex].Flag)
+	// Collect Skips and Acks together in the same batch.
+	if flags[0] == RecordFlagSkip {
+		flags = append(flags, RecordFlagAck)
+	} else if flags[0] == RecordFlagAck {
+		flags = append(flags, RecordFlagSkip)
+	}
+
+	lastIndex := firstIndex
+OUTER:
+	for _, status := range b.recordStatuses[firstIndex:] {
+		for _, f := range flags {
+			if status.Flag == f {
+				lastIndex++
+				// Record has matching status, let's continue.
+				continue OUTER
+			}
+		}
+		// Record has a different status, we're done.
+		break
+	}
+
+	return b.sub(firstIndex, lastIndex)
+}
+
+func (w *Worker) hasNextTask(currentIndex int) bool {
+	return len(w.Order[currentIndex]) > 0
+}
+
+func (w *Worker) nextTask(ctx context.Context, currentIndex int, b *Batch, acker ackNacker) error {
+	nextIndices := w.Order[currentIndex]
+	switch len(nextIndices) {
+	case 0:
+		// no next task, we're done
+		return nil
+	case 1:
+		// single next task, let's pass the batch to it
+		return w.doTask(ctx, nextIndices[0], b, acker)
+	default:
+		// multiple next tasks, let's clone the batch and pass it to them
+		// concurrently
+		multiAcker := newMultiAckNacker(acker, len(nextIndices))
+		p := pool.New().WithErrors() // TODO WithContext?
+		for _, i := range nextIndices {
+			b := b.clone()
+			p.Go(func() error {
+				return w.doTask(ctx, i, b, multiAcker)
+			})
+		}
+		err := p.Wait()
+		if err != nil {
+			return err // no need to wrap, it already contains the task ID
+		}
+
+		// TODO merge batch statuses?
+		return nil
+	}
+}
+
+func (w *Worker) Ack(ctx context.Context, batch *Batch) error {
+	err := w.Source.Ack(ctx, batch.positions)
+	if err != nil {
+		return cerrors.Errorf("failed to ack %d records in source: %w", len(batch.records), err)
+	}
+	w.DLQ.Ack(ctx, batch)
+
+	// TODO metrics
+	// for _, rec := range b.records {
+	// 	readAt, err := rec.Metadata.GetReadAt()
+	// 	if err != nil {
+	// 	// If the record metadata has changed and does not include ReadAt
+	// 	// fallback to the time Conduit received the record.
+	// 	readAt = t.lastRead
+	// }
+	// 	t.timer.UpdateSince(readAt)
+	// 	t.histogram.Observe(rec)
+	// }
+
+	return nil
+}
+
+func (w *Worker) Nack(ctx context.Context, batch *Batch, taskID string) error {
+	n, err := w.DLQ.Nack(ctx, batch, taskID)
+	if n > 0 {
+		// Successfully nacked n records, let's ack them, as they reached
+		// the end of the pipeline (in this case the DLQ).
+		err := w.Source.Ack(ctx, batch.positions[:n])
+		if err != nil {
+			return cerrors.Errorf("task %s failed to ack %d records in source: %w", n, err)
+		}
+
+		// TODO metrics
+		// for _, rec := range b.records {
+		// 	readAt, err := rec.Metadata.GetReadAt()
+		// 	if err != nil {
+		// 	// If the record metadata has changed and does not include ReadAt
+		// 	// fallback to the time Conduit received the record.
+		// 	readAt = t.lastRead
+		// }
+		// 	t.timer.UpdateSince(readAt)
+		// 	t.histogram.Observe(rec)
+		// }
+	}
+
+	if err != nil {
+		return cerrors.Errorf("failed to nack %d records: %w", len(batch.records)-n, err)
+	}
+	return nil
+}
+
+type ackNacker interface {
+	Ack(context.Context, *Batch) error
+	Nack(context.Context, *Batch, string) error
+}
+
+// multiAckNacker is an ackNacker that expects multiple acks/nacks for the same
+// batch. It keeps track of the number of acks/nacks and only acks/nacks the
+// batch when all expected acks/nacks are received.
+type multiAckNacker struct {
+	parent ackNacker
+	count  *atomic.Int32
+}
+
+func newMultiAckNacker(parent ackNacker, count int) *multiAckNacker {
+	c := atomic.Int32{}
+	c.Add(int32(count))
+	return &multiAckNacker{
+		parent: parent,
+		count:  &c,
+	}
+}
+
+func (m *multiAckNacker) Ack(ctx context.Context, batch *Batch) error {
+	panic("not implemented")
+}
+
+func (m *multiAckNacker) Nack(ctx context.Context, batch *Batch, taskID string) error {
+	panic("not implemented")
+}
