@@ -176,7 +176,30 @@ pipelines:
 
 ---
 
-## Test Case 07: Recovery triggered with the --pipelines.exit-on-error flag
+## Test Case 07: Conduit exits with --pipelines.exit-on-error=true and a pipeline failing after recovery
+
+**Priority** (low/medium/high):
+
+**Description**:
+
+**Automated** (yes/no)
+
+**Setup**:
+
+**Pipeline configuration file**:
+
+```yaml
+```
+
+**Steps**:
+
+**Expected Result**:
+
+**Additional comments**:
+
+---
+
+## Test Case 08: Conduit doesn't exit with --pipelines.exit-on-error=true and a pipeline that recovers after a few retries
 
 **Priority** (low/medium/high):
 
