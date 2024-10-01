@@ -214,12 +214,17 @@ func (s *Service) Restart(ctx context.Context, rp *runnablePipeline) error {
 // It'll check the number of times the pipeline has been restarted and the duration of the backoff.
 // When the pipeline has reached out the maximum number of retries, it'll return a fatal error.
 func (s *Service) RestartWithBackoff(ctx context.Context, rp *runnablePipeline) error {
+	s.logger.Trace(ctx).Str(log.PipelineIDField, rp.pipeline.ID).Msg("restarting with backoff")
+
 	attempt := int(rp.backoffCfg.Attempt())
 	duration := rp.backoffCfg.Duration()
 
-	if attempt > s.errRecoveryCfg.MaxRetries {
+	// maxRetries 0 means infinite retries
+	if attempt > s.errRecoveryCfg.MaxRetries && s.errRecoveryCfg.MaxRetries != 0 {
 		return cerrors.FatalError(cerrors.Errorf("failed to recover pipeline %s after %d attempts: %w", rp.pipeline.ID, attempt, pipeline.ErrPipelineCannotRecover))
 	}
+
+	s.logger.Trace(ctx).Dur(log.DurationField, duration).Int("attempt", attempt).Msg("backoff configuration")
 
 	// This results in a default delay progression of 1s, 2s, 4s, 8s, 16s, [...], 10m, 10m,... balancing the need for recovery time and minimizing downtime.
 	timer := time.NewTimer(duration)
@@ -771,6 +776,8 @@ func (s *Service) runPipeline(ctx context.Context, rp *runnablePipeline) error {
 		switch err {
 		case tomb.ErrStillAlive:
 			// not an actual error, the pipeline stopped gracefully
+			err = nil
+
 			if isGracefulShutdown.Load() {
 				// it was triggered by a graceful shutdown of Conduit
 				err = s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusSystemStopped, "")
@@ -809,6 +816,8 @@ func (s *Service) runPipeline(ctx context.Context, rp *runnablePipeline) error {
 
 // recoverPipeline attempts to recover a pipeline that has stopped running.
 func (s *Service) recoverPipeline(ctx context.Context, rp *runnablePipeline) error {
+	s.logger.Trace(ctx).Str(log.PipelineIDField, rp.pipeline.ID).Msg("recovering pipeline")
+
 	err := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusRecovering, "")
 	if err != nil {
 		return err
