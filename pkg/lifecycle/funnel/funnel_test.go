@@ -130,7 +130,7 @@ func BenchmarkStreamNew(b *testing.B) {
 	b.ReportAllocs()
 	b.StopTimer()
 	for i := 0; i < b.N; i++ {
-		batchCount := b.N
+		batchCount := 100
 		batchSize := 1000
 
 		dlq := NewDLQ(

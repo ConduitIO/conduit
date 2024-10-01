@@ -93,10 +93,10 @@ func (t *SourceTask) Do(ctx context.Context, b *Batch) error {
 		if rec.Metadata == nil {
 			rec.Metadata = opencdc.Metadata{}
 		}
-		if _, err := rec.Metadata.GetReadAt(); err != nil {
+		if rec.Metadata[opencdc.MetadataReadAt] == "" {
 			rec.Metadata.SetReadAt(now)
 		}
-		if _, err := rec.Metadata.GetConduitSourceConnectorID(); err != nil {
+		if rec.Metadata[opencdc.MetadataConduitSourceConnectorID] == "" {
 			rec.Metadata.SetConduitSourceConnectorID(t.source.ID())
 		}
 		recs[i] = rec
