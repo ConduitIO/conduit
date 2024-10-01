@@ -18,9 +18,6 @@ Recovery is not triggered when there is an error writing to a DLQ.
 
 **Steps**:
 
-1. Step 1
-2. Step 2
-
 **Expected Result**:
 
 **Additional comments**:
@@ -44,9 +41,6 @@ Recovery is not triggered when there is an error processing a record.
 ```
 
 **Steps**:
-
-1. Step 1
-2. Step 2
 
 **Expected Result**:
 
@@ -73,9 +67,6 @@ typing Ctrl+C in the terminal where Conduit is running, or sending a SIGINT).
 
 **Steps**:
 
-1. Step 1
-2. Step 2
-
 **Expected Result**:
 
 **Additional comments**:
@@ -100,9 +91,6 @@ Recovery is not triggered if a user stops a pipeline (via the HTTP API's
 ```
 
 **Steps**:
-
-1. Step 1
-2. Step 2
 
 **Expected Result**:
 
@@ -146,9 +134,6 @@ pipelines:
 
 **Steps**:
 
-1. Step 1
-2. Step 2
-
 **Expected Result**:
 
 **Additional comments**:
@@ -185,8 +170,28 @@ pipelines:
 
 **Steps**:
 
-1. Step 1
-2. Step 2
+**Expected Result**:
+
+**Additional comments**:
+
+---
+
+## Test Case 07: Recovery triggered with the --pipelines.exit-on-error flag
+
+**Priority** (low/medium/high):
+
+**Description**:
+
+**Automated** (yes/no)
+
+**Setup**:
+
+**Pipeline configuration file**:
+
+```yaml
+```
+
+**Steps**:
 
 **Expected Result**:
 
