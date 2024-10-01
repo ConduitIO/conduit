@@ -16,6 +16,7 @@ package funnel
 
 import (
 	"context"
+	"strconv"
 	"time"
 
 	"github.com/conduitio/conduit-commons/opencdc"
@@ -88,16 +89,21 @@ func (t *SourceTask) Do(ctx context.Context, b *Batch) error {
 		return cerrors.Errorf("failed to read from source: %w", err)
 	}
 
-	now := time.Now()
+	sourceID := t.source.ID()
+	now := strconv.FormatInt(time.Now().UnixNano(), 10)
 	for i, rec := range recs {
 		if rec.Metadata == nil {
-			rec.Metadata = opencdc.Metadata{}
-		}
-		if rec.Metadata[opencdc.MetadataReadAt] == "" {
-			rec.Metadata.SetReadAt(now)
-		}
-		if rec.Metadata[opencdc.MetadataConduitSourceConnectorID] == "" {
-			rec.Metadata.SetConduitSourceConnectorID(t.source.ID())
+			rec.Metadata = opencdc.Metadata{
+				opencdc.MetadataReadAt:                   now,
+				opencdc.MetadataConduitSourceConnectorID: sourceID,
+			}
+		} else {
+			if rec.Metadata[opencdc.MetadataReadAt] == "" {
+				rec.Metadata[opencdc.MetadataReadAt] = now
+			}
+			if rec.Metadata[opencdc.MetadataConduitSourceConnectorID] == "" {
+				rec.Metadata[opencdc.MetadataConduitSourceConnectorID] = sourceID
+			}
 		}
 		recs[i] = rec
 	}

@@ -126,6 +126,9 @@ func (b *Batch) sub(from, to int) *Batch {
 
 // ActiveRecords returns the records that are not skipped.
 func (b *Batch) ActiveRecords() []opencdc.Record {
+	if b.skipCount == 0 {
+		return b.records
+	}
 	active := make([]opencdc.Record, 0, len(b.records)-b.skipCount)
 	for i, r := range b.records {
 		if b.recordStatuses[i].Flag != RecordFlagSkip {
