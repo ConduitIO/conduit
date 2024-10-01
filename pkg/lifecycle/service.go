@@ -776,8 +776,6 @@ func (s *Service) runPipeline(ctx context.Context, rp *runnablePipeline) error {
 		switch err {
 		case tomb.ErrStillAlive:
 			// not an actual error, the pipeline stopped gracefully
-			err = nil
-
 			if isGracefulShutdown.Load() {
 				// it was triggered by a graceful shutdown of Conduit
 				err = s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusSystemStopped, "")
