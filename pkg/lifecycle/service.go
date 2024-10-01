@@ -381,12 +381,6 @@ func (s *Service) buildRunnablePipeline(
 			instance.ID,
 			src.(*connector.Source),
 			nodeLogger,
-			measure.PipelineExecutionDurationTimer.WithValues(pl.Config.Name),
-			measure.ConnectorBytesHistogram.WithValues(
-				pl.Config.Name,
-				instance.Plugin,
-				strings.ToLower(instance.Type.String()),
-			),
 		)
 		break
 	}
@@ -419,9 +413,62 @@ func (s *Service) buildRunnablePipeline(
 		)
 	}
 
+	conn, err := s.connectors.Create(
+		ctx,
+		pl.ID+"-dlq",
+		connector.TypeDestination,
+		pl.DLQ.Plugin,
+		pl.ID,
+		connector.Config{
+			Name:     pl.ID + "-dlq",
+			Settings: pl.DLQ.Settings,
+		},
+		connector.ProvisionTypeDLQ, // the provision type ensures the connector won't be persisted
+	)
+	if err != nil {
+		return nil, cerrors.Errorf("failed to create DLQ destination: %w", err)
+	}
+
+	dest, err := conn.Connector(ctx, s.connectorPlugins)
+	if err != nil {
+		return nil, err
+	}
+
+	dlq := funnel.NewDLQ(
+		"dlq",
+		dest.(*connector.Destination),
+		nodeLogger,
+		measure.PipelineExecutionDurationTimer.WithValues(pl.Config.Name),
+		measure.ConnectorBytesHistogram.WithValues(
+			pl.Config.Name,
+			conn.Plugin,
+			strings.ToLower(conn.Type.String()),
+		),
+		pl.DLQ.WindowSize,
+		pl.DLQ.WindowNackThreshold,
+	)
+
+	worker, err := funnel.NewWorker(
+		[]funnel.Task{srcTask, destTask},
+		[][]int{{1}, {}},
+		dlq,
+		nodeLogger,
+	)
+	if err != nil {
+		return nil, cerrors.Errorf("failed to create worker: %w", err)
+	}
 	return &runnablePipeline{
 		pipeline: pl,
-		w:        funnel.NewWorker(funnel.Tasks{srcTask, destTask}),
+		w:        worker,
+		/*
+
+			measure.PipelineExecutionDurationTimer.WithValues(pl.Config.Name),
+			measure.ConnectorBytesHistogram.WithValues(
+				pl.Config.Name,
+				instance.Plugin,
+				strings.ToLower(instance.Type.String()),
+			),
+		*/
 	}, nil
 }
 
@@ -689,7 +736,7 @@ func (s *Service) runPipelineWithWorker(ctx context.Context, rp *runnablePipelin
 	rp.t.Go(func() error {
 		ctx := context.Background()
 		for {
-			_, err := rp.w.Do(ctx, nil)
+			err := rp.w.Do(ctx)
 			if err != nil {
 				return cerrors.Errorf("worker stopped with error: %w", err)
 			}

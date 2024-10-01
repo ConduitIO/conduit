@@ -28,10 +28,6 @@ type SourceTask struct {
 	id     string
 	source Source
 	logger log.CtxLogger
-
-	// timer     metrics.Timer
-	// histogram metrics.RecordBytesHistogram
-	// lastRead  time.Time
 }
 
 type Source interface {

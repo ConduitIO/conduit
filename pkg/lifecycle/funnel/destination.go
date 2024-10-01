@@ -128,6 +128,7 @@ func (t *DestinationTask) Do(ctx context.Context, batch *Batch) error {
 
 	// Update metrics.
 	for _, rec := range records {
+		// TODO is this correct? Rethink if we should rather use "start" all the time
 		readAt, err := rec.Metadata.GetReadAt()
 		if err != nil {
 			// If the plugin did not set the field fallback to the time Conduit
