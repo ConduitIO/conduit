@@ -176,11 +176,13 @@ pipelines:
 
 ---
 
-## Test Case 07: Conduit exits with --pipelines.exit-on-error=true and a pipeline failing after recovery
+## Test Case 07: Conduit exits with --pipelines.exit-on-degraded=true and a pipeline failing after recovery
 
 **Priority** (low/medium/high):
 
-**Description**:
+**Description**: Given a Conduit instance with
+`--pipelines.exit-on-degraded=true`, and a pipeline that's failing after the
+maximum number of retries configured, Conduit should shut down gracefully.
 
 **Automated** (yes/no)
 
@@ -199,11 +201,13 @@ pipelines:
 
 ---
 
-## Test Case 08: Conduit doesn't exit with --pipelines.exit-on-error=true and a pipeline that recovers after a few retries
+## Test Case 08: Conduit doesn't exit with --pipelines.exit-on-degraded=true and a pipeline that recovers after a few retries
 
 **Priority** (low/medium/high):
 
 **Description**:
+Given a Conduit instance with `--pipelines.exit-on-degraded=true`, and a
+pipeline that recovers after a few retries, Conduit should still be running.
 
 **Automated** (yes/no)
 
