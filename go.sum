@@ -228,8 +228,8 @@ github.com/conduitio/conduit-connector-kafka v0.9.0 h1:VFmq58vS57ch++GP6bC12SQF1
 github.com/conduitio/conduit-connector-kafka v0.9.0/go.mod h1:9zqc2Be3w2xsSM8LMUWhVWWW80C6coRIX9ttyIhlEkM=
 github.com/conduitio/conduit-connector-log v0.4.0 h1:oTzZsdX4bOgvWkR5xlc2SzMKTyO7UI1dG5a3wDe5NhY=
 github.com/conduitio/conduit-connector-log v0.4.0/go.mod h1:Y2zzkm2cBFlqVJcrEMZe7HfwYOAgC8aAjUTGv/HgKQk=
-github.com/conduitio/conduit-connector-postgres v0.8.1-0.20240916163312-a9ac30476125 h1:Kedo3hWUHGJJ5CUfQHSM77T9bmHQRJDG8dTR7Pu8+Jg=
-github.com/conduitio/conduit-connector-postgres v0.8.1-0.20240916163312-a9ac30476125/go.mod h1:Zh278rQLXfsCz1WzgARm+CuthU5c8xUzBmywG7cCqsI=
+github.com/conduitio/conduit-connector-postgres v0.8.1-0.20241002095000-f9da1503d618 h1:UDPquEgVdxvYhL8K6bybC8OuE4NnkB6zvMq49DaSES4=
+github.com/conduitio/conduit-connector-postgres v0.8.1-0.20241002095000-f9da1503d618/go.mod h1:9q5yebugfUWaVwlwSfx0t4la0uO+pBaXOEkPhq4k47Q=
 github.com/conduitio/conduit-connector-protocol v0.7.0 h1:h8gc7fcxJaQbdL/oqC2q0q4ulR9Z7PwOTZqfdg6jYcE=
 github.com/conduitio/conduit-connector-protocol v0.7.0/go.mod h1:cnTjjLCX5dEex/7blKvcjTkoy10DXPD+J3Ok/zRycJw=
 github.com/conduitio/conduit-connector-s3 v0.6.0 h1:zPtRyHgHNjsI1OEkWgDMyLOT+7SiX3NkxBGG6vhnG7o=
@@ -493,8 +493,8 @@ github.com/gostaticanalysis/testutil v0.4.0 h1:nhdCmubdmDF6VEatUNjgUZBJKWRqugoIS
 github.com/gostaticanalysis/testutil v0.4.0/go.mod h1:bLIoPefWXrRi/ssLFWX1dx7Repi5x3CuviD3dgAZaBU=
 github.com/grpc-ecosystem/grpc-gateway/v2 v2.22.0 h1:asbCHRVmodnJTuQ3qamDwqVOIjwqUPTYmYuemVOx+Ys=
 github.com/grpc-ecosystem/grpc-gateway/v2 v2.22.0/go.mod h1:ggCgvZ2r7uOoQjOyu2Y1NhHmEPPzzuhWgcza5M1Ji1I=
-github.com/hamba/avro/v2 v2.25.2 h1:28dqbOCB7wA/3+J1ZN4GQ40tzsFtbtItkTPWgl97el0=
-github.com/hamba/avro/v2 v2.25.2/go.mod h1:I8glyswHnpED3Nlx2ZdUe+4LJnCOOyiCzLMno9i/Uu0=
+github.com/hamba/avro/v2 v2.26.0 h1:IaT5l6W3zh7K67sMrT2+RreJyDTllBGVJm4+Hedk9qE=
+github.com/hamba/avro/v2 v2.26.0/go.mod h1:I8glyswHnpED3Nlx2ZdUe+4LJnCOOyiCzLMno9i/Uu0=
 github.com/hashicorp/go-hclog v1.6.3 h1:Qr2kF+eVWjTiYmU7Y31tYlP1h0q/X3Nl3tPGdaB11/k=
 github.com/hashicorp/go-hclog v1.6.3/go.mod h1:W4Qnvbt70Wk/zYJryRzDRU/4r0kIg0PVHBcfoyhpF5M=
 github.com/hashicorp/go-plugin v1.6.1 h1:P7MR2UP6gNKGPp+y7EZw2kOiq4IR9WiqLvp0XOsVdwI=
