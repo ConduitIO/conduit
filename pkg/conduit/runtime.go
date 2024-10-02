@@ -774,8 +774,8 @@ func (r *Runtime) initServices(ctx context.Context, t *tomb.Tomb) error {
 			r.logger.Warn(ctx).
 				Err(e.Error).
 				Str(log.PipelineIDField, e.ID).
-				Msg("Conduit will shut down due to a pipeline failure and 'exit on error' enabled")
-			t.Kill(cerrors.Errorf("shut down due to 'exit on error' enabled: %w", e.Error))
+				Msg("Conduit will shut down due to a pipeline failure and 'exit-on-degraded' enabled")
+			t.Kill(cerrors.Errorf("shut down due to 'exit-on-degraded' error: %w", e.Error))
 		})
 	}
 	err = r.pipelineService.Init(ctx)

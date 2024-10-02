@@ -218,7 +218,7 @@ func (s *Service) RestartWithBackoff(ctx context.Context, rp *runnablePipeline) 
 	attempt := int64(rp.backoffCfg.Attempt())
 	duration := rp.backoffCfg.Duration()
 
-	if s.errRecoveryCfg.MaxRetries != InfiniteRetriesErrRecovery && attempt > s.errRecoveryCfg.MaxRetries {
+	if s.errRecoveryCfg.MaxRetries != InfiniteRetriesErrRecovery && attempt >= s.errRecoveryCfg.MaxRetries {
 		return cerrors.FatalError(cerrors.Errorf("failed to recover pipeline %s after %d attempts: %w", rp.pipeline.ID, attempt, pipeline.ErrPipelineCannotRecover))
 	}
 
