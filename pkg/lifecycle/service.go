@@ -795,7 +795,13 @@ func (s *Service) runPipeline(ctx context.Context, rp *runnablePipeline) error {
 					return err
 				}
 			} else {
-				return s.recoverPipeline(ctx, rp)
+				err := s.recoverPipeline(ctx, rp)
+				if err != nil {
+					err := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusDegraded, fmt.Sprintf("%+v", err))
+					if err != nil {
+						return err
+					}
+				}
 			}
 		}
 

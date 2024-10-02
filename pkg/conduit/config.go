@@ -22,6 +22,7 @@ import (
 	sdk "github.com/conduitio/conduit-connector-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/lifecycle"
 	"github.com/conduitio/conduit/pkg/plugin/connector/builtin"
 	"github.com/rs/zerolog"
 	"golang.org/x/exp/constraints"
@@ -35,8 +36,6 @@ const (
 
 	SchemaRegistryTypeConfluent = "confluent"
 	SchemaRegistryTypeBuiltin   = "builtin"
-
-	InfiniteRetriesErrRecovery = -1
 )
 
 // Config holds all configurable values for Conduit.
@@ -144,7 +143,7 @@ func DefaultConfig() Config {
 	cfg.Pipelines.ErrorRecovery.MinDelay = time.Second
 	cfg.Pipelines.ErrorRecovery.MaxDelay = 10 * time.Minute
 	cfg.Pipelines.ErrorRecovery.BackoffFactor = 2
-	cfg.Pipelines.ErrorRecovery.MaxRetries = InfiniteRetriesErrRecovery
+	cfg.Pipelines.ErrorRecovery.MaxRetries = lifecycle.InfiniteRetriesErrRecovery
 	cfg.Pipelines.ErrorRecovery.HealthyAfter = 5 * time.Minute
 
 	cfg.SchemaRegistry.Type = SchemaRegistryTypeBuiltin
@@ -213,8 +212,8 @@ func (c Config) validateErrorRecovery() error {
 	if err := requireNonNegativeValue("backoff-factor", errRecoveryCfg.BackoffFactor); err != nil {
 		errs = append(errs, err)
 	}
-	if errRecoveryCfg.MaxRetries < InfiniteRetriesErrRecovery {
-		errs = append(errs, cerrors.Errorf(`"max-retries" can't be smaller than %d (infinite retries)`, InfiniteRetriesErrRecovery))
+	if errRecoveryCfg.MaxRetries < lifecycle.InfiniteRetriesErrRecovery {
+		errs = append(errs, cerrors.Errorf(`"max-retries" can't be smaller than %d (infinite retries)`, lifecycle.InfiniteRetriesErrRecovery))
 	}
 	if err := requirePositiveValue("healthy-after", errRecoveryCfg.HealthyAfter); err != nil {
 		errs = append(errs, err)
