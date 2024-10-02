@@ -86,9 +86,9 @@ type Config struct {
 	}
 
 	Pipelines struct {
-		Path          string
-		ExitOnError   bool
-		ErrorRecovery struct {
+		Path           string
+		ExitOnDegraded bool
+		ErrorRecovery  struct {
 			// MinDelay is the minimum delay before restart: Default: 1 second
 			MinDelay time.Duration
 			// MaxDelay is the maximum delay before restart: Default: 10 minutes

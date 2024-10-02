@@ -769,7 +769,7 @@ func (r *Runtime) initServices(ctx context.Context, t *tomb.Tomb) error {
 		return cerrors.Errorf("failed to init connector service: %w", err)
 	}
 
-	if r.Config.Pipelines.ExitOnError {
+	if r.Config.Pipelines.ExitOnDegraded {
 		r.lifecycleService.OnFailure(func(e lifecycle.FailureEvent) {
 			r.logger.Warn(ctx).
 				Err(e.Error).
@@ -788,7 +788,7 @@ func (r *Runtime) initServices(ctx context.Context, t *tomb.Tomb) error {
 		cerrors.ForEach(err, func(err error) {
 			r.logger.Err(ctx, err).Msg("provisioning failed")
 		})
-		if r.Config.Pipelines.ExitOnError {
+		if r.Config.Pipelines.ExitOnDegraded {
 			r.logger.Warn(ctx).
 				Err(err).
 				Msg("Conduit will shut down due to a pipeline provisioning failure and 'exit on error' enabled")

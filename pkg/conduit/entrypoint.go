@@ -71,6 +71,16 @@ func (e *Entrypoint) Serve(cfg Config) {
 	}
 }
 
+func deprecatedFlag(name string) bool {
+	deprecatedFlags := []string{"pipelines.exit-on-error"}
+	for _, flag := range deprecatedFlags {
+		if name == flag {
+			return true
+		}
+	}
+	return false
+}
+
 // Flags returns a flag set that, when parsed, stores the values in the provided
 // config struct.
 func (*Entrypoint) Flags(cfg *Config) *flag.FlagSet {
@@ -105,12 +115,23 @@ func (*Entrypoint) Flags(cfg *Config) *flag.FlagSet {
 		cfg.Pipelines.Path,
 		"path to the directory that has the yaml pipeline configuration files, or a single pipeline configuration file",
 	)
+
+	// Deprecated: use `pipelines.exit-on-degraded` instead
+	// Note: If both `pipeline.exit-on-error` and `pipeline.exit-on-degraded` are set, `pipeline.exit-on-degraded` will take precedence
 	flags.BoolVar(
-		&cfg.Pipelines.ExitOnError,
+		&cfg.Pipelines.ExitOnDegraded,
 		"pipelines.exit-on-error",
-		cfg.Pipelines.ExitOnError,
-		"exit Conduit if a pipeline experiences an error while running",
+		cfg.Pipelines.ExitOnDegraded,
+		"Deprecated: use `exit-on-degraded` instead.\nexit Conduit if a pipeline experiences an error while running",
 	)
+
+	flags.BoolVar(
+		&cfg.Pipelines.ExitOnDegraded,
+		"pipelines.exit-on-degraded",
+		cfg.Pipelines.ExitOnDegraded,
+		"exit Conduit if a pipeline enters a degraded state",
+	)
+
 	flags.DurationVar(
 		&cfg.Pipelines.ErrorRecovery.MinDelay,
 		"pipelines.error-recovery.min-delay",
@@ -155,7 +176,7 @@ func (*Entrypoint) Flags(cfg *Config) *flag.FlagSet {
 	flags.Usage = func() {
 		tmpFlags := flag.NewFlagSet("conduit", flag.ExitOnError)
 		flags.VisitAll(func(f *flag.Flag) {
-			if f.Name == "dev" || strings.HasPrefix(f.Name, "dev.") != *showDevHelp {
+			if f.Name == "dev" || strings.HasPrefix(f.Name, "dev.") != *showDevHelp || deprecatedFlag(f.Name) {
 				return // hide flag from output
 			}
 			// reset value to its default, to ensure default is shown correctly
