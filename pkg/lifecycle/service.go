@@ -776,31 +776,28 @@ func (s *Service) runPipeline(ctx context.Context, rp *runnablePipeline) error {
 			// not an actual error, the pipeline stopped gracefully
 			if isGracefulShutdown.Load() {
 				// it was triggered by a graceful shutdown of Conduit
-				err = s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusSystemStopped, "")
+				if err := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusSystemStopped, ""); err != nil {
+					return err
+				}
 			} else {
 				// it was manually triggered by a user
-				err = s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusUserStopped, "")
-			}
-			if err != nil {
-				return err
+				if err := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusUserStopped, ""); err != nil {
+					return err
+				}
 			}
 		default:
 			if cerrors.IsFatalError(err) {
 				// we use %+v to get the stack trace too
-				err = s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusDegraded, fmt.Sprintf("%+v", err))
-				if err != nil {
+				if err := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusDegraded, fmt.Sprintf("%+v", err)); err != nil {
 					return err
 				}
 			} else {
 				// try to recover the pipeline
-				err := s.recoverPipeline(ctx, rp)
-				if err != nil {
-					err := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusDegraded, fmt.Sprintf("%+v", err))
-					if err != nil {
+				if err := s.recoverPipeline(ctx, rp); err != nil {
+					if err := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusDegraded, fmt.Sprintf("%+v", err)); err != nil {
 						return err
 					}
 				}
-				return nil
 			}
 		}
 
