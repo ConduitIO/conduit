@@ -35,7 +35,6 @@ type Source interface {
 	Open(context.Context) error
 	Read(context.Context) ([]opencdc.Record, error)
 	Ack(context.Context, []opencdc.Position) error
-	Stop(context.Context) (opencdc.Position, error)
 	Teardown(context.Context) error
 	Errors() <-chan error // TODO use
 }
@@ -69,14 +68,7 @@ func (t *SourceTask) Open(ctx context.Context) error {
 }
 
 func (t *SourceTask) Close(ctx context.Context) error {
-	var errs []error
-
-	_, err := t.source.Stop(ctx)
-	errs = append(errs, err)
-	err = t.source.Teardown(ctx)
-	errs = append(errs, err)
-
-	return cerrors.Join(errs...)
+	return t.source.Teardown(ctx)
 }
 
 func (t *SourceTask) Do(ctx context.Context, b *Batch) error {

@@ -17,13 +17,13 @@ package funnel
 import (
 	"context"
 	"sync/atomic"
+	"time"
 
-	"github.com/conduitio/conduit/pkg/foundation/log"
-
+	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit-commons/rollback"
-
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-
+	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/foundation/metrics"
 	"github.com/sourcegraph/conc/pool"
 )
 
@@ -64,6 +64,10 @@ type Worker struct {
 	Order [][]int
 	DLQ   *DLQ
 
+	lastReadAt time.Time
+	timer      metrics.Timer
+	stop       atomic.Bool
+
 	logger log.CtxLogger
 }
 
@@ -72,8 +76,13 @@ func NewWorker(
 	order [][]int,
 	dlq *DLQ,
 	logger log.CtxLogger,
+	timer metrics.Timer,
 ) (*Worker, error) {
-	// TODO validate order so it's not a cycle and all tasks are included
+	err := validateTaskOrder(tasks, order)
+	if err != nil {
+		return nil, cerrors.Errorf("invalid task order: %w", err)
+	}
+
 	st, ok := tasks[0].(interface{ GetSource() Source })
 	if !ok {
 		return nil, cerrors.Errorf("first task must be a source task, got %T", tasks[0])
@@ -85,7 +94,47 @@ func NewWorker(
 		Order:  order,
 		DLQ:    dlq,
 		logger: logger.WithComponent("funnel.Worker"),
+		timer:  timer,
 	}, nil
+}
+
+func validateTaskOrder(tasks []Task, order [][]int) error {
+	// Traverse the tasks according to the order and validate that each task
+	// is included exactly once.
+	if len(order) != len(tasks) {
+		return cerrors.Errorf("order length (%d) does not match tasks length (%d)", len(order), len(tasks))
+	}
+	seenCount := make([]int, len(tasks))
+	var traverse func(i int) error
+	traverse = func(i int) error {
+		if i < 0 || i >= len(tasks) {
+			return cerrors.Errorf("invalid index (%d), expected a number between 0 and %d", i, len(tasks)-1)
+		}
+		seenCount[i]++
+		if seenCount[i] > 1 {
+			return cerrors.Errorf("task %d included multiple times in order", i)
+		}
+		for _, nextIdx := range order[i] {
+			if nextIdx == i {
+				return cerrors.Errorf("task %d cannot call itself as next task", i)
+			}
+			err := traverse(nextIdx)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	err := traverse(0)
+	if err != nil {
+		return err
+	}
+	for i, count := range seenCount {
+		if count == 0 {
+			return cerrors.Errorf("task %d not included in order", i)
+		}
+	}
+	return nil
 }
 
 func (w *Worker) Open(ctx context.Context) (err error) {
@@ -108,8 +157,19 @@ func (w *Worker) Open(ctx context.Context) (err error) {
 		})
 	}
 
+	err = w.DLQ.Open(ctx)
+	if err != nil {
+		return cerrors.Errorf("failed to open DLQ: %w", err)
+	}
+
 	r.Skip()
 	return nil
+}
+
+// Stop stops the worker from processing more records. It does not stop the
+// current batch from being processed.
+func (w *Worker) Stop() {
+	w.stop.Store(true)
 }
 
 func (w *Worker) Close(ctx context.Context) error {
@@ -122,22 +182,49 @@ func (w *Worker) Close(ctx context.Context) error {
 		}
 	}
 
+	err := w.DLQ.Close(ctx)
+	if err != nil {
+		errs = append(errs, cerrors.Errorf("failed to close DLQ: %w", err))
+	}
+
 	return cerrors.Join(errs...)
 }
 
+// Do processes records from the source until the worker is stopped. It returns
+// no error if the worker is stopped gracefully.
 func (w *Worker) Do(ctx context.Context) error {
-	return w.doTask(ctx, 0, &Batch{}, w)
+	for {
+		if w.stop.Load() || ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if err := w.doTask(ctx, 0, &Batch{}, w); err != nil {
+			return err
+		}
+	}
 }
 
 func (w *Worker) doTask(ctx context.Context, currentIndex int, b *Batch, acker ackNacker) error {
 	t := w.Tasks[currentIndex]
 
+	w.logger.Trace(ctx).
+		Str("task_id", t.ID()).
+		Int("batch_size", len(b.records)).
+		Msg("executing task")
+
 	err := t.Do(ctx, b)
 	if err != nil {
 		return cerrors.Errorf("task %s: %w", t.ID(), err)
 	}
+	if currentIndex == 0 {
+		// Store last time we read a batch from the source for metrics.
+		w.lastReadAt = time.Now()
+	}
 
 	if !b.tainted {
+		w.logger.Trace(ctx).
+			Str("task_id", t.ID()).
+			Msg("task returned clean batch")
+
 		// Shortcut.
 		if !w.hasNextTask(currentIndex) {
 			// This is the last task, the batch has made it end-to-end, let's ack!
@@ -147,15 +234,25 @@ func (w *Worker) doTask(ctx context.Context, currentIndex int, b *Batch, acker a
 		return w.nextTask(ctx, currentIndex, b, acker)
 	}
 
+	w.logger.Trace(ctx).
+		Str("task_id", t.ID()).
+		Msg("task returned tainted batch, splitting into sub-batches")
+
 	// Batch is tainted, we need to go through all statuses and group them by
 	// status before further processing.
 	idx := 0
 	for {
 		subBatch := w.subBatchByFlag(b, idx)
 		if subBatch == nil {
-			// No more records to process.
+			w.logger.Trace(ctx).Msg("processed last batch")
 			break
 		}
+
+		w.logger.Trace(ctx).
+			Str("task_id", t.ID()).
+			Int("batch_size", len(b.records)).
+			Str("record_flag", b.recordStatuses[0].Flag.String()).
+			Msg("collected sub-batch")
 
 		switch subBatch.recordStatuses[0].Flag {
 		case RecordFlagAck, RecordFlagSkip:
@@ -239,6 +336,9 @@ func (w *Worker) nextTask(ctx context.Context, currentIndex int, b *Batch, acker
 		// single next task, let's pass the batch to it
 		return w.doTask(ctx, nextIndices[0], b, acker)
 	default:
+		// TODO(multi-connector): remove error
+		return cerrors.Errorf("multiple next tasks not supported yet")
+
 		// multiple next tasks, let's clone the batch and pass it to them
 		// concurrently
 		multiAcker := newMultiAckNacker(acker, len(nextIndices))
@@ -264,20 +364,9 @@ func (w *Worker) Ack(ctx context.Context, batch *Batch) error {
 	if err != nil {
 		return cerrors.Errorf("failed to ack %d records in source: %w", len(batch.records), err)
 	}
+
 	w.DLQ.Ack(ctx, batch)
-
-	// TODO metrics
-	// for _, rec := range b.records {
-	// 	readAt, err := rec.Metadata.GetReadAt()
-	// 	if err != nil {
-	// 	// If the record metadata has changed and does not include ReadAt
-	// 	// fallback to the time Conduit received the record.
-	// 	readAt = t.lastRead
-	// }
-	// 	t.timer.UpdateSince(readAt)
-	// 	t.histogram.Observe(rec)
-	// }
-
+	w.updateTimer(batch.records)
 	return nil
 }
 
@@ -291,23 +380,25 @@ func (w *Worker) Nack(ctx context.Context, batch *Batch, taskID string) error {
 			return cerrors.Errorf("task %s failed to ack %d records in source: %w", n, err)
 		}
 
-		// TODO metrics
-		// for _, rec := range b.records {
-		// 	readAt, err := rec.Metadata.GetReadAt()
-		// 	if err != nil {
-		// 	// If the record metadata has changed and does not include ReadAt
-		// 	// fallback to the time Conduit received the record.
-		// 	readAt = t.lastRead
-		// }
-		// 	t.timer.UpdateSince(readAt)
-		// 	t.histogram.Observe(rec)
-		// }
+		w.updateTimer(batch.records[:n])
 	}
 
 	if err != nil {
 		return cerrors.Errorf("failed to nack %d records: %w", len(batch.records)-n, err)
 	}
 	return nil
+}
+
+func (w *Worker) updateTimer(records []opencdc.Record) {
+	for _, rec := range records {
+		readAt, err := rec.Metadata.GetReadAt()
+		if err != nil {
+			// If the record metadata has changed and does not include ReadAt
+			// fallback to the time the worker received the record.
+			readAt = w.lastReadAt
+		}
+		w.timer.UpdateSince(readAt)
+	}
 }
 
 type ackNacker interface {

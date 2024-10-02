@@ -18,21 +18,16 @@ package lifecycle
 
 import (
 	"context"
-	"fmt"
 	"strconv"
 	"strings"
-	"sync"
-	"sync/atomic"
 	"time"
-
-	"github.com/conduitio/conduit/pkg/lifecycle/funnel"
 
 	"github.com/conduitio/conduit-commons/csync"
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/conduitio/conduit/pkg/foundation/metrics"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/measure"
+	"github.com/conduitio/conduit/pkg/lifecycle/funnel"
 	"github.com/conduitio/conduit/pkg/lifecycle/stream"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	connectorPlugin "github.com/conduitio/conduit/pkg/plugin/connector"
@@ -87,7 +82,6 @@ func NewService(
 
 type runnablePipeline struct {
 	pipeline *pipeline.Instance
-	n        []stream.Node
 	w        *funnel.Worker
 	t        *tomb.Tomb
 }
@@ -160,20 +154,16 @@ func (s *Service) Start(
 	}
 
 	s.logger.Debug(ctx).Str(log.PipelineIDField, pl.ID).Msg("starting pipeline")
-
-	s.logger.Trace(ctx).Str(log.PipelineIDField, pl.ID).Msg("building nodes")
+	s.logger.Trace(ctx).Str(log.PipelineIDField, pl.ID).Msg("building tasks")
 
 	rp, err := s.buildRunnablePipeline(ctx, pl)
 	if err != nil {
-		return cerrors.Errorf("could not build nodes for pipeline %s: %w", pl.ID, err)
+		return cerrors.Errorf("could not build tasks for pipeline %s: %w", pl.ID, err)
 	}
 
-	s.logger.Trace(ctx).Str(log.PipelineIDField, pl.ID).Msg("running nodes")
-	// if err := s.runPipeline(ctx, rp); err != nil {
-	// 	return cerrors.Errorf("failed to run pipeline %s: %w", pl.ID, err)
-	// }
+	s.logger.Trace(ctx).Str(log.PipelineIDField, pl.ID).Msg("running pipeline")
 
-	if err := s.runPipelineWithWorker(ctx, rp); err != nil {
+	if err := s.runPipeline(rp); err != nil {
 		return cerrors.Errorf("failed to run pipeline %s: %w", pl.ID, err)
 	}
 	s.logger.Info(ctx).Str(log.PipelineIDField, pl.ID).Msg("pipeline started")
@@ -183,10 +173,9 @@ func (s *Service) Start(
 	return nil
 }
 
-// Stop will attempt to gracefully stop a given pipeline by calling each node's
-// Stop function. If force is set to true the pipeline won't stop gracefully,
-// instead the context for all nodes will be canceled which causes them to stop
-// running as soon as possible.
+// Stop will attempt to gracefully stop a given pipeline by calling each worker's
+// Stop method. If the force flag is set to true, the pipeline will be stopped
+// forcefully by cancelling the context.
 func (s *Service) Stop(ctx context.Context, pipelineID string, force bool) error {
 	rp, ok := s.runningPipelines.Get(pipelineID)
 
@@ -200,67 +189,74 @@ func (s *Service) Stop(ctx context.Context, pipelineID string, force bool) error
 
 	switch force {
 	case false:
-		return s.stopGraceful(ctx, rp, nil)
+		s.logger.Info(ctx).
+			Str(log.PipelineIDField, rp.pipeline.ID).
+			Any(log.PipelineStatusField, rp.pipeline.GetStatus()).
+			Msg("gracefully stopping pipeline")
+		rp.w.Stop()
 	case true:
-		return s.stopForceful(ctx, rp)
-	}
-	panic("unreachable code")
-}
-
-func (s *Service) stopGraceful(ctx context.Context, rp *runnablePipeline, reason error) error {
-	s.logger.Info(ctx).
-		Str(log.PipelineIDField, rp.pipeline.ID).
-		Any(log.PipelineStatusField, rp.pipeline.GetStatus()).
-		Msg("gracefully stopping pipeline")
-	var errs []error
-	for _, n := range rp.n {
-		if node, ok := n.(stream.StoppableNode); ok {
-			// stop all pub nodes
-			s.logger.Trace(ctx).Str(log.NodeIDField, n.ID()).Msg("stopping node")
-			err := node.Stop(ctx, reason)
-			if err != nil {
-				s.logger.Err(ctx, err).Str(log.NodeIDField, n.ID()).Msg("stop failed")
-				errs = append(errs, err)
-			}
-		}
-	}
-
-	return cerrors.Join(errs...)
-}
-
-func (s *Service) stopForceful(ctx context.Context, rp *runnablePipeline) error {
-	s.logger.Info(ctx).
-		Str(log.PipelineIDField, rp.pipeline.ID).
-		Any(log.PipelineStatusField, rp.pipeline.GetStatus()).
-		Msg("force stopping pipeline")
-	rp.t.Kill(pipeline.ErrForceStop)
-	for _, n := range rp.n {
-		if node, ok := n.(stream.ForceStoppableNode); ok {
-			// stop all pub nodes
-			s.logger.Trace(ctx).Str(log.NodeIDField, n.ID()).Msg("force stopping node")
-			node.ForceStop(ctx)
-		}
+		s.logger.Info(ctx).
+			Str(log.PipelineIDField, rp.pipeline.ID).
+			Any(log.PipelineStatusField, rp.pipeline.GetStatus()).
+			Msg("force stopping pipeline")
+		rp.t.Kill(pipeline.ErrForceStop)
 	}
 	return nil
+}
+
+func (s *Service) stopGraceful(ctx context.Context, rp *runnablePipeline) {
 }
 
 // StopAll will ask all the running pipelines to stop gracefully
 // (i.e. that existing messages get processed but not new messages get produced).
 func (s *Service) StopAll(ctx context.Context, reason error) {
+	if s.runningPipelines.Len() == 0 {
+		return
+	}
+
 	for _, rp := range s.runningPipelines.All() {
-		p := rp.pipeline
-		if p.GetStatus() != pipeline.StatusRunning && p.GetStatus() != pipeline.StatusRecovering {
+		if rp.pipeline.GetStatus() != pipeline.StatusRunning && rp.pipeline.GetStatus() != pipeline.StatusRecovering {
 			continue
 		}
-		err := s.stopGraceful(ctx, rp, reason)
-		if err != nil {
-			s.logger.Warn(ctx).
-				Err(err).
-				Str(log.PipelineIDField, p.ID).
-				Msg("could not stop pipeline")
+
+		s.logger.Info(ctx).
+			Str(log.PipelineIDField, rp.pipeline.ID).
+			Any(log.PipelineStatusField, rp.pipeline.GetStatus()).
+			Msg("gracefully stopping pipeline")
+		rp.w.Stop()
+	}
+
+	// Wait for the pipelines to stop
+	const (
+		interval = time.Second * 10
+		count    = 6
+	)
+
+	var err error
+	for i := count; i > 0; i-- {
+		if i == 1 {
+			// on last try, stop forcefully
+			running := s.runningPipelines.Len()
+			s.logger.Warn(ctx).Msgf("Stopping (%d) pipelines forcefully", running)
+
+			for _, rp := range s.runningPipelines.All() {
+				rp.t.Kill(pipeline.ErrForceStop)
+			}
+		}
+
+		s.logger.Info(ctx).Msgf("Waiting for %d pipelines to stop (time left: %s)", s.runningPipelines.Len(), time.Duration(i)*interval)
+		err = s.Wait(interval)
+		if err == nil {
+			break
 		}
 	}
-	// TODO stop pipelines forcefully after timeout if they are still running
+
+	if err != nil {
+		s.logger.Warn(ctx).Msgf("Some pipelines failed to stop (%d)", s.runningPipelines.Len())
+		return
+	}
+
+	s.logger.Info(ctx).Msg("All pipelines stopped")
 }
 
 // Wait blocks until all pipelines are stopped or until the timeout is reached.
@@ -316,143 +312,49 @@ func (s *Service) WaitPipeline(id string) error {
 	return p.t.Wait()
 }
 
-// buildRunnablePipeline will build and connect all nodes configured in the pipeline.
+// buildRunnablePipeline will build and connect all tasks configured in the pipeline.
 func (s *Service) buildRunnablePipeline(
 	ctx context.Context,
 	pl *pipeline.Instance,
 ) (*runnablePipeline, error) {
-	// // setup many to many channels
-	// fanIn := stream.FaninNode{Name: "fanin"}
-	// fanOut := stream.FanoutNode{Name: "fanout"}
-	//
-	// sourceNodes, err := s.buildSourceNodes(ctx, pl, &fanIn)
-	// if err != nil {
-	// 	return nil, cerrors.Errorf("could not build source nodes: %w", err)
-	// }
-	// if len(sourceNodes) == 0 {
-	// 	return nil, cerrors.New("can't build pipeline without any source connectors")
-	// }
-	//
-	// processorNodes, err := s.buildProcessorNodes(ctx, pl, pl.ProcessorIDs, &fanIn, &fanOut)
-	// if err != nil {
-	// 	return nil, cerrors.Errorf("could not build processor nodes: %w", err)
-	// }
-	//
-	// destinationNodes, err := s.buildDestinationNodes(ctx, pl, &fanOut)
-	// if err != nil {
-	// 	return nil, cerrors.Errorf("could not build destination nodes: %w", err)
-	// }
-	// if len(destinationNodes) == 0 {
-	// 	return nil, cerrors.New("can't build pipeline without any destination connectors")
-	// }
-	//
-	// // gather nodes and add our fan in and fan out nodes
-	// nodes := make([]stream.Node, 0, len(processorNodes)+len(sourceNodes)+len(destinationNodes)+2)
-	// nodes = append(nodes, sourceNodes...)
-	// nodes = append(nodes, &fanIn)
-	// nodes = append(nodes, processorNodes...)
-	// nodes = append(nodes, &fanOut)
-	// nodes = append(nodes, destinationNodes...)
+	pipelineLogger := s.logger
+	pipelineLogger.Logger = pipelineLogger.Logger.With().Str(log.PipelineIDField, pl.ID).Logger()
 
-	nodeLogger := s.logger
-	nodeLogger.Logger = nodeLogger.Logger.With().Str(log.PipelineIDField, pl.ID).Logger()
-
-	var (
-		srcTask  *funnel.SourceTask
-		destTask *funnel.DestinationTask
-	)
-
-	for _, connID := range pl.ConnectorIDs {
-		instance, err := s.connectors.Get(ctx, connID)
-		if err != nil {
-			return nil, cerrors.Errorf("could not fetch connector: %w", err)
-		}
-
-		if instance.Type != connector.TypeSource {
-			continue // skip any connector that's not a source
-		}
-
-		src, err := instance.Connector(ctx, s.connectorPlugins)
-		if err != nil {
-			return nil, err
-		}
-
-		srcTask = funnel.NewSourceTask(
-			instance.ID,
-			src.(*connector.Source),
-			nodeLogger,
-		)
-		break
-	}
-
-	for _, connID := range pl.ConnectorIDs {
-		instance, err := s.connectors.Get(ctx, connID)
-		if err != nil {
-			return nil, cerrors.Errorf("could not fetch connector: %w", err)
-		}
-
-		if instance.Type != connector.TypeDestination {
-			continue // skip any connector that's not a destination
-		}
-
-		dest, err := instance.Connector(ctx, s.connectorPlugins)
-		if err != nil {
-			return nil, err
-		}
-
-		destTask = funnel.NewDestinationTask(
-			instance.ID,
-			dest.(*connector.Destination),
-			nodeLogger,
-			measure.PipelineExecutionDurationTimer.WithValues(pl.Config.Name),
-			measure.ConnectorBytesHistogram.WithValues(
-				pl.Config.Name,
-				instance.Plugin,
-				strings.ToLower(instance.Type.String()),
-			),
-		)
-	}
-
-	conn, err := s.connectors.Create(
-		ctx,
-		pl.ID+"-dlq",
-		connector.TypeDestination,
-		pl.DLQ.Plugin,
-		pl.ID,
-		connector.Config{
-			Name:     pl.ID + "-dlq",
-			Settings: pl.DLQ.Settings,
-		},
-		connector.ProvisionTypeDLQ, // the provision type ensures the connector won't be persisted
-	)
+	srcTasks, err := s.buildSourceTasks(ctx, pl, pipelineLogger)
 	if err != nil {
-		return nil, cerrors.Errorf("failed to create DLQ destination: %w", err)
+		return nil, cerrors.Errorf("failed to build source tasks: %w", err)
+	}
+	if len(srcTasks) == 0 {
+		return nil, cerrors.New("can't build pipeline without any source connectors")
+	}
+	if len(srcTasks) > 1 {
+		// TODO(multi-connector): remove check
+		return nil, cerrors.New("pipelines with multiple source connectors currently not supported, please disable the experimental feature flag")
 	}
 
-	dest, err := conn.Connector(ctx, s.connectorPlugins)
+	destTasks, err := s.buildDestinationTasks(ctx, pl, pipelineLogger)
 	if err != nil {
-		return nil, err
+		return nil, cerrors.Errorf("failed to build destination tasks: %w", err)
+	}
+	if len(destTasks) == 0 {
+		return nil, cerrors.New("can't build pipeline without any destination connectors")
+	}
+	if len(destTasks) > 1 {
+		// TODO(multi-connector): remove check
+		return nil, cerrors.New("pipelines with multiple destination connectors currently not supported, please disable the experimental feature flag")
 	}
 
-	dlq := funnel.NewDLQ(
-		"dlq",
-		dest.(*connector.Destination),
-		nodeLogger,
-		measure.PipelineExecutionDurationTimer.WithValues(pl.Config.Name),
-		measure.ConnectorBytesHistogram.WithValues(
-			pl.Config.Name,
-			conn.Plugin,
-			strings.ToLower(conn.Type.String()),
-		),
-		pl.DLQ.WindowSize,
-		pl.DLQ.WindowNackThreshold,
-	)
+	dlq, err := s.buildDLQ(ctx, pl, pipelineLogger)
+	if err != nil {
+		return nil, cerrors.Errorf("failed to build DLQ: %w", err)
+	}
 
 	worker, err := funnel.NewWorker(
-		[]funnel.Task{srcTask, destTask},
+		[]funnel.Task{srcTasks[0], destTasks[0]},
 		[][]int{{1}, {}},
 		dlq,
-		nodeLogger,
+		pipelineLogger,
+		measure.PipelineExecutionDurationTimer.WithValues(pl.Config.Name),
 	)
 	if err != nil {
 		return nil, cerrors.Errorf("failed to create worker: %w", err)
@@ -460,15 +362,6 @@ func (s *Service) buildRunnablePipeline(
 	return &runnablePipeline{
 		pipeline: pl,
 		w:        worker,
-		/*
-
-			measure.PipelineExecutionDurationTimer.WithValues(pl.Config.Name),
-			measure.ConnectorBytesHistogram.WithValues(
-				pl.Config.Name,
-				instance.Plugin,
-				strings.ToLower(instance.Type.String()),
-			),
-		*/
 	}, nil
 }
 
@@ -536,17 +429,12 @@ func (s *Service) buildProcessorNode(
 	}
 }
 
-func (s *Service) buildSourceNodes(
+func (s *Service) buildSourceTasks(
 	ctx context.Context,
 	pl *pipeline.Instance,
-	next stream.SubNode,
-) ([]stream.Node, error) {
-	var nodes []stream.Node
-
-	dlqHandlerNode, err := s.buildDLQHandlerNode(ctx, pl)
-	if err != nil {
-		return nil, err
-	}
+	logger log.CtxLogger,
+) ([]funnel.Task, error) {
+	var tasks []funnel.Task
 
 	for _, connID := range pl.ConnectorIDs {
 		instance, err := s.connectors.Get(ctx, connID)
@@ -563,49 +451,69 @@ func (s *Service) buildSourceNodes(
 			return nil, err
 		}
 
-		sourceNode := stream.SourceNode{
-			Name:   instance.ID,
-			Source: src.(*connector.Source),
-			PipelineTimer: measure.PipelineExecutionDurationTimer.WithValues(
-				pl.Config.Name,
+		tasks = append(
+			tasks,
+			funnel.NewSourceTask(
+				instance.ID,
+				src.(*connector.Source),
+				logger,
 			),
-		}
-		dlqHandlerNode.Add(1)
-		ackerNode := s.buildSourceAckerNode(src.(*connector.Source), dlqHandlerNode)
-		ackerNode.Sub(sourceNode.Pub())
-		metricsNode := s.buildMetricsNode(pl, instance)
-		metricsNode.Sub(ackerNode.Pub())
-
-		procNodes, err := s.buildProcessorNodes(ctx, pl, instance.ProcessorIDs, metricsNode, next)
-		if err != nil {
-			return nil, cerrors.Errorf("could not build processor nodes for connector %s: %w", instance.ID, err)
-		}
-
-		nodes = append(nodes, &sourceNode, ackerNode, metricsNode)
-		nodes = append(nodes, procNodes...)
+		)
 	}
 
-	if len(nodes) != 0 {
-		nodes = append(nodes, dlqHandlerNode)
-	}
-	return nodes, nil
+	return tasks, nil
 }
 
-func (s *Service) buildSourceAckerNode(
-	src *connector.Source,
-	dlqHandlerNode *stream.DLQHandlerNode,
-) *stream.SourceAckerNode {
-	return &stream.SourceAckerNode{
-		Name:           src.Instance.ID + "-acker",
-		Source:         src,
-		DLQHandlerNode: dlqHandlerNode,
-	}
-}
-
-func (s *Service) buildDLQHandlerNode(
+func (s *Service) buildDestinationTasks(
 	ctx context.Context,
 	pl *pipeline.Instance,
-) (*stream.DLQHandlerNode, error) {
+	logger log.CtxLogger,
+) ([]funnel.Task, error) {
+	var tasks []funnel.Task
+
+	for _, connID := range pl.ConnectorIDs {
+		instance, err := s.connectors.Get(ctx, connID)
+		if err != nil {
+			return nil, cerrors.Errorf("could not fetch connector: %w", err)
+		}
+
+		if instance.Type != connector.TypeDestination {
+			continue // skip any connector that's not a destination
+		}
+
+		dest, err := instance.Connector(ctx, s.connectorPlugins)
+		if err != nil {
+			return nil, err
+		}
+
+		tasks = append(
+			tasks,
+			funnel.NewDestinationTask(
+				instance.ID,
+				dest.(*connector.Destination),
+				logger,
+				measure.ConnectorExecutionDurationTimer.WithValues(
+					pl.Config.Name,
+					instance.Plugin,
+					strings.ToLower(instance.Type.String()),
+				),
+				measure.ConnectorBytesHistogram.WithValues(
+					pl.Config.Name,
+					instance.Plugin,
+					strings.ToLower(instance.Type.String()),
+				),
+			),
+		)
+	}
+
+	return tasks, nil
+}
+
+func (s *Service) buildDLQ(
+	ctx context.Context,
+	pl *pipeline.Instance,
+	logger log.CtxLogger,
+) (*funnel.DLQ, error) {
 	conn, err := s.connectors.Create(
 		ctx,
 		pl.ID+"-dlq",
@@ -627,236 +535,45 @@ func (s *Service) buildDLQHandlerNode(
 		return nil, err
 	}
 
-	return &stream.DLQHandlerNode{
-		Name:    conn.ID,
-		Handler: &DLQDestination{Destination: dest.(*connector.Destination)},
-
-		WindowSize:          pl.DLQ.WindowSize,
-		WindowNackThreshold: pl.DLQ.WindowNackThreshold,
-
-		Timer: measure.DLQExecutionDurationTimer.WithValues(
-			pl.Config.Name,
-			pl.DLQ.Plugin,
-		),
-		Histogram: metrics.NewRecordBytesHistogram(
-			measure.DLQBytesHistogram.WithValues(
-				pl.Config.Name,
-				pl.DLQ.Plugin,
-			),
-		),
-	}, nil
+	return funnel.NewDLQ(
+		"dlq",
+		dest.(*connector.Destination),
+		logger,
+		measure.DLQExecutionDurationTimer.WithValues(pl.Config.Name, conn.Plugin),
+		measure.DLQBytesHistogram.WithValues(pl.Config.Name, conn.Plugin),
+		pl.DLQ.WindowSize,
+		pl.DLQ.WindowNackThreshold,
+	), nil
 }
 
-func (s *Service) buildMetricsNode(
-	pl *pipeline.Instance,
-	conn *connector.Instance,
-) *stream.MetricsNode {
-	return &stream.MetricsNode{
-		Name: conn.ID + "-metrics",
-		Histogram: metrics.NewRecordBytesHistogram(
-			measure.ConnectorBytesHistogram.WithValues(
-				pl.Config.Name,
-				conn.Plugin,
-				strings.ToLower(conn.Type.String()),
-			),
-		),
-	}
-}
-
-func (s *Service) buildDestinationAckerNode(
-	dest *connector.Destination,
-) *stream.DestinationAckerNode {
-	return &stream.DestinationAckerNode{
-		Name:        dest.Instance.ID + "-acker",
-		Destination: dest,
-	}
-}
-
-func (s *Service) buildDestinationNodes(
-	ctx context.Context,
-	pl *pipeline.Instance,
-	prev stream.PubNode,
-) ([]stream.Node, error) {
-	var nodes []stream.Node
-
-	for _, connID := range pl.ConnectorIDs {
-		instance, err := s.connectors.Get(ctx, connID)
-		if err != nil {
-			return nil, cerrors.Errorf("could not fetch connector: %w", err)
-		}
-
-		if instance.Type != connector.TypeDestination {
-			continue // skip any connector that's not a destination
-		}
-
-		dest, err := instance.Connector(ctx, s.connectorPlugins)
-		if err != nil {
-			return nil, err
-		}
-
-		ackerNode := s.buildDestinationAckerNode(dest.(*connector.Destination))
-		destinationNode := stream.DestinationNode{
-			Name:        instance.ID,
-			Destination: dest.(*connector.Destination),
-			ConnectorTimer: measure.ConnectorExecutionDurationTimer.WithValues(
-				pl.Config.Name,
-				instance.Plugin,
-				strings.ToLower(instance.Type.String()),
-			),
-		}
-		metricsNode := s.buildMetricsNode(pl, instance)
-		destinationNode.Sub(metricsNode.Pub())
-		ackerNode.Sub(destinationNode.Pub())
-
-		connNodes, err := s.buildProcessorNodes(ctx, pl, instance.ProcessorIDs, prev, metricsNode)
-		if err != nil {
-			return nil, cerrors.Errorf("could not build processor nodes for connector %s: %w", instance.ID, err)
-		}
-
-		nodes = append(nodes, connNodes...)
-		nodes = append(nodes, metricsNode, &destinationNode, ackerNode)
-	}
-
-	return nodes, nil
-}
-
-func (s *Service) runPipelineWithWorker(ctx context.Context, rp *runnablePipeline) error {
+func (s *Service) runPipeline(rp *runnablePipeline) error {
 	if rp.t != nil && rp.t.Alive() {
 		return pipeline.ErrPipelineRunning
 	}
 
 	// the tomb is responsible for running goroutines related to the pipeline
 	rp.t = &tomb.Tomb{}
+	ctx := rp.t.Context(nil)
 
-	err := rp.w.Open(context.Background())
+	err := rp.w.Open(ctx)
 	if err != nil {
 		return cerrors.Errorf("failed to open worker: %w", err)
 	}
 
 	rp.t.Go(func() error {
-		ctx := context.Background()
-		for {
-			err := rp.w.Do(ctx)
-			if err != nil {
-				return cerrors.Errorf("worker stopped with error: %w", err)
-			}
+		doErr := rp.w.Do(ctx)
+		s.logger.Err(ctx, doErr).Str(log.PipelineIDField, rp.pipeline.ID).Msg("Pipeline worker stopped")
+
+		closeErr := rp.w.Close(context.Background())
+		err := cerrors.Join(doErr, closeErr)
+		if err != nil {
+			return cerrors.Errorf("worker stopped with error: %w", err)
 		}
+
+		return nil
 	})
 
 	return s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusRunning, "")
-}
-
-func (s *Service) runPipeline(ctx context.Context, rp *runnablePipeline) error {
-	if rp.t != nil && rp.t.Alive() {
-		return pipeline.ErrPipelineRunning
-	}
-
-	// the tomb is responsible for running goroutines related to the pipeline
-	rp.t = &tomb.Tomb{}
-
-	// keep tomb alive until the end of this function, this way we guarantee we
-	// can run the cleanup goroutine even if all nodes stop before we get to it
-	keepAlive := make(chan struct{})
-	rp.t.Go(func() error {
-		<-keepAlive
-		return nil
-	})
-	defer close(keepAlive)
-
-	// nodesWg is done once all nodes stop running
-	var nodesWg sync.WaitGroup
-	var isGracefulShutdown atomic.Bool
-	for _, node := range rp.n {
-		nodesWg.Add(1)
-
-		rp.t.Go(func() (errOut error) {
-			// If any of the nodes stop, the tomb will be put into a dying state
-			// and ctx will be cancelled.
-			// This way, the other nodes will be notified that they need to stop too.
-			//nolint:staticcheck // nil used to use the default (parent provided via WithContext)
-			ctx := rp.t.Context(nil)
-			s.logger.Trace(ctx).Str(log.NodeIDField, node.ID()).Msg("running node")
-			defer func() {
-				e := s.logger.Trace(ctx)
-				if errOut != nil {
-					e = s.logger.Err(ctx, errOut) // increase the log level to error
-				}
-				e.Str(log.NodeIDField, node.ID()).Msg("node stopped")
-			}()
-			defer nodesWg.Done()
-
-			err := node.Run(ctx)
-			if cerrors.Is(err, pipeline.ErrGracefulShutdown) {
-				// This node was shutdown because of ErrGracefulShutdown, we
-				// need to stop this goroutine without returning an error to let
-				// other nodes stop gracefully. We set a boolean that lets the
-				// cleanup routine know this was a graceful shutdown in case no
-				// other error is returned.
-				isGracefulShutdown.Store(true)
-				return nil
-			}
-			if err != nil {
-				return cerrors.Errorf("node %s stopped with error: %w", node.ID(), err)
-			}
-			return nil
-		})
-	}
-
-	err := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusRunning, "")
-	if err != nil {
-		return err
-	}
-
-	// cleanup function updates the metrics and pipeline status once all nodes
-	// stop running
-	rp.t.Go(func() error {
-		// use fresh context for cleanup function, otherwise the updated status
-		// won't be stored
-		ctx := context.Background()
-
-		nodesWg.Wait()
-		err := rp.t.Err()
-
-		switch err {
-		case tomb.ErrStillAlive:
-			// not an actual error, the pipeline stopped gracefully
-			if isGracefulShutdown.Load() {
-				// it was triggered by a graceful shutdown of Conduit
-				err = s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusSystemStopped, "")
-			} else {
-				// it was manually triggered by a user
-				err = s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusUserStopped, "")
-			}
-			if err != nil {
-				return err
-			}
-		default:
-			if cerrors.IsFatalError(err) {
-				// we use %+v to get the stack trace too
-				err = s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusDegraded, fmt.Sprintf("%+v", err))
-				if err != nil {
-					return err
-				}
-			} else {
-				err = s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusRecovering, "")
-				if err != nil {
-					return err
-				}
-			}
-		}
-
-		s.logger.
-			Err(ctx, err).
-			Str(log.PipelineIDField, rp.pipeline.ID).
-			Msg("pipeline stopped")
-
-		// confirmed that all nodes stopped, we can now remove the pipeline from the running pipelines
-		s.runningPipelines.Delete(rp.pipeline.ID)
-
-		s.notify(rp.pipeline.ID, err)
-		return err
-	})
-	return nil
 }
 
 // notify notifies all registered FailureHandlers about an error.

@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//go:generate stringer -type=RecordFlag -linecomment
+
 package funnel
 
 import (
@@ -146,8 +148,8 @@ type RecordStatus struct {
 type RecordFlag int
 
 const (
-	RecordFlagAck RecordFlag = iota
-	RecordFlagNack
-	RecordFlagRetry
-	RecordFlagSkip
+	RecordFlagAck   RecordFlag = iota // ack
+	RecordFlagNack                    // nack
+	RecordFlagRetry                   // retry
+	RecordFlagSkip                    // skip
 )

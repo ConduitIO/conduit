@@ -40,7 +40,6 @@ type Destination interface {
 	Open(context.Context) error
 	Write(context.Context, []opencdc.Record) error
 	Ack(context.Context) ([]connector.DestinationAck, error)
-	Stop(context.Context, opencdc.Position) error
 	Teardown(context.Context) error
 	Errors() <-chan error // TODO use
 }
@@ -78,14 +77,7 @@ func (t *DestinationTask) Open(ctx context.Context) error {
 }
 
 func (t *DestinationTask) Close(ctx context.Context) error {
-	var errs []error
-
-	err := t.destination.Stop(ctx, nil)
-	errs = append(errs, err)
-	err = t.destination.Teardown(ctx)
-	errs = append(errs, err)
-
-	return cerrors.Join(errs...)
+	return t.destination.Teardown(ctx)
 }
 
 func (t *DestinationTask) Do(ctx context.Context, batch *Batch) error {
@@ -126,18 +118,19 @@ func (t *DestinationTask) Do(ctx context.Context, batch *Batch) error {
 		// TODO mark batch
 	}
 
-	// Update metrics.
-	for _, rec := range records {
-		// TODO is this correct? Rethink if we should rather use "start" all the time
-		readAt, err := rec.Metadata.GetReadAt()
-		if err != nil {
-			// If the plugin did not set the field fallback to the time Conduit
-			// received the record (now).
-			readAt = start
-		}
-		t.timer.UpdateSince(readAt)
-		t.histogram.Observe(rec)
-	}
+	// TODO update connector metrics
+	_ = start
+	// for _, rec := range records {
+	// 	// TODO is this correct? Rethink if we should rather use "start" all the time
+	// 	readAt, err := rec.Metadata[opencdc.MetadataReadAt]
+	// 	if err != nil {
+	// 		// If the plugin did not set the field fallback to the time Conduit
+	// 		// received the record (now).
+	// 		readAt = start
+	// 	}
+	// 	t.timer.UpdateSince(readAt)
+	// 	t.histogram.Observe(rec)
+	// }
 
 	return cerrors.Join(errs...)
 }
