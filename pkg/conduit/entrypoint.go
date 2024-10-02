@@ -71,16 +71,6 @@ func (e *Entrypoint) Serve(cfg Config) {
 	}
 }
 
-func deprecatedFlag(name string) bool {
-	deprecatedFlags := []string{"pipelines.exit-on-error"}
-	for _, flag := range deprecatedFlags {
-		if name == flag {
-			return true
-		}
-	}
-	return false
-}
-
 // Flags returns a flag set that, when parsed, stores the values in the provided
 // config struct.
 func (*Entrypoint) Flags(cfg *Config) *flag.FlagSet {
@@ -172,11 +162,16 @@ func (*Entrypoint) Flags(cfg *Config) *flag.FlagSet {
 	flags.StringVar(&cfg.dev.memprofile, "dev.memprofile", "", "write memory profile to file")
 	flags.StringVar(&cfg.dev.blockprofile, "dev.blockprofile", "", "write block profile to file")
 
+	// Deprecated flags that are hidden from help output
+	deprecatedFlags := map[string]bool{
+		"pipelines.exit-on-error": true,
+	}
+
 	// show user or dev flags
 	flags.Usage = func() {
 		tmpFlags := flag.NewFlagSet("conduit", flag.ExitOnError)
 		flags.VisitAll(func(f *flag.Flag) {
-			if f.Name == "dev" || strings.HasPrefix(f.Name, "dev.") != *showDevHelp || deprecatedFlag(f.Name) {
+			if f.Name == "dev" || strings.HasPrefix(f.Name, "dev.") != *showDevHelp || deprecatedFlags[f.Name] {
 				return // hide flag from output
 			}
 			// reset value to its default, to ensure default is shown correctly
