@@ -200,9 +200,6 @@ func (s *Service) Restart(ctx context.Context, rp *runnablePipeline) error {
 	// Replaces the old nodes with the new ones.
 	rp.n = nodes
 
-	// clears out the tomb
-	rp.t.Kill(cerrors.New("restarting pipeline"))
-
 	s.logger.Trace(ctx).Str(log.PipelineIDField, rp.pipeline.ID).Msg("running nodes")
 	if err := s.runPipeline(ctx, rp); err != nil {
 		return cerrors.Errorf("failed to run pipeline %s: %w", rp.pipeline.ID, err)
