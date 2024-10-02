@@ -929,7 +929,7 @@ func testErrRecoveryCfg() *ErrRecoveryCfg {
 		MinDelay:      time.Second,
 		MaxDelay:      10 * time.Minute,
 		BackoffFactor: 2,
-		MaxRetries:    0, // infinite retries
+		MaxRetries:    InfiniteRetriesErrRecovery,
 		HealthyAfter:  5 * time.Minute,
 	}
 }
