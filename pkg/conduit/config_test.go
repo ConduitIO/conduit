@@ -205,6 +205,14 @@ func TestConfig_Validate(t *testing.T) {
 			want: cerrors.New(`invalid error recovery config: "max-retries" can't be smaller than -1 (infinite retries)`),
 		},
 		{
+			name: "error recovery: with 0 max-retries ",
+			setupConfig: func(c Config) Config {
+				c.Pipelines.ErrorRecovery.MaxRetries = 0
+				return c
+			},
+			want: nil,
+		},
+		{
 			name: "error recovery: negative healthy-after",
 			setupConfig: func(c Config) Config {
 				c.Pipelines.ErrorRecovery.HealthyAfter = -time.Second
