@@ -1,3 +1,4 @@
+<!-- markdownlint-disable MD013 -->
 # Test case for the pipeline recovery feature
 
 ## Test Case 01: Recovery not triggered for fatal error - DLQ
@@ -14,6 +15,30 @@ Recovery is not triggered when there is an error writing to a DLQ.
 **Pipeline configuration file**:
 
 ```yaml
+version: "2.2"
+pipelines:
+  - id: file-pipeline
+    status: running
+    name: file-pipeline
+    description: test pipline
+    connectors:
+      - id: chaos-src
+        type: source
+        plugin: standalone:chaos
+        name: chaos-src
+        settings:
+          readMode: error
+      - id: log-dst
+        type: destination
+        plugin: builtin:log
+        log: file-dst
+    dead-letter-queue:
+      plugin: "builtin:postgres"
+      settings:
+        table: non_existing_table_so_that_dlq_fails
+        url: postgresql://meroxauser:meroxapass@localhost/meroxadb?sslmode=disable
+      window-size: 3
+      window-nack-threshold: 2
 ```
 
 **Steps**:
@@ -208,6 +233,33 @@ maximum number of retries configured, Conduit should shut down gracefully.
 **Description**:
 Given a Conduit instance with `--pipelines.exit-on-degraded=true`, and a
 pipeline that recovers after a few retries, Conduit should still be running.
+
+**Automated** (yes/no)
+
+**Setup**:
+
+**Pipeline configuration file**:
+
+```yaml
+```
+
+**Steps**:
+
+**Expected Result**:
+
+**Additional comments**:
+
+---
+
+## Test Case 09: Conduit exits with --pipelines.exit-on-degraded=true, --pipelines.error-recovery.max-retries=0, and a degraded pipeline
+
+**Priority** (low/medium/high):
+
+**Description**:
+Given a Conduit instance with
+`--pipelines.exit-on-degraded=true --pipelines.error-recovery.max-retries=0`,
+and a pipeline that goes into a degraded state, the Conduit instance will
+gracefully shut down. This is due `max-retries=0` disabling the recovery.
 
 **Automated** (yes/no)
 
