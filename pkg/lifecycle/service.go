@@ -803,13 +803,13 @@ func (s *Service) runPipeline(ctx context.Context, rp *runnablePipeline) error {
 						return updateErr
 					}
 
-					return recoveryErr
+					// we assign it to err so it's returned and notified by the cleanup function
+					err = recoveryErr
+				} else {
+					// recovery was triggered didn't error, so no cleanup
+					// this is why we return nil to skip the cleanup below.
+					return nil
 				}
-				// recovery was triggered, so no cleanup
-				// (remove running pipeline, notify failure handlers, etc.)
-				// is needed
-				// this is why we return nil to skip the cleanup below.
-				return nil
 			}
 		}
 
