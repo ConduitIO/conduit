@@ -22,12 +22,16 @@ import (
 	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/foundation/metrics"
 )
 
 type SourceTask struct {
 	id     string
 	source Source
 	logger log.CtxLogger
+
+	timer     metrics.Timer
+	histogram metrics.RecordBytesHistogram
 }
 
 type Source interface {
@@ -43,13 +47,17 @@ func NewSourceTask(
 	id string,
 	source Source,
 	logger log.CtxLogger,
+	timer metrics.Timer,
+	histogram metrics.Histogram,
 ) *SourceTask {
 	logger = logger.WithComponent("task:source")
 	logger.Logger = logger.With().Str(log.ConnectorIDField, id).Logger()
 	return &SourceTask{
-		id:     id,
-		source: source,
-		logger: logger,
+		id:        id,
+		source:    source,
+		logger:    logger,
+		timer:     timer,
+		histogram: metrics.NewRecordBytesHistogram(histogram),
 	}
 }
 
@@ -72,10 +80,14 @@ func (t *SourceTask) Close(ctx context.Context) error {
 }
 
 func (t *SourceTask) Do(ctx context.Context, b *Batch) error {
+	start := time.Now()
+
 	recs, err := t.source.Read(ctx)
 	if err != nil {
 		return cerrors.Errorf("failed to read from source: %w", err)
 	}
+
+	t.observeMetrics(recs, start)
 
 	sourceID := t.source.ID()
 	now := strconv.FormatInt(time.Now().UnixNano(), 10)
@@ -99,6 +111,22 @@ func (t *SourceTask) Do(ctx context.Context, b *Batch) error {
 	// Overwrite the batch with the new records.
 	*b = *NewBatch(recs)
 	return nil
+}
+
+func (t *SourceTask) observeMetrics(records []opencdc.Record, start time.Time) {
+	// Precalculate sizes so that we don't need to hold a reference to records
+	// and observations can happen in a goroutine.
+	sizes := make([]float64, len(records))
+	for i, rec := range records {
+		sizes[i] = t.histogram.SizeOf(rec)
+	}
+	tookPerRecord := time.Since(start) / time.Duration(len(sizes))
+	go func() {
+		for i := range len(sizes) {
+			t.timer.Update(tookPerRecord)
+			t.histogram.H.Observe(sizes[i])
+		}
+	}()
 }
 
 func (t *SourceTask) GetSource() Source {

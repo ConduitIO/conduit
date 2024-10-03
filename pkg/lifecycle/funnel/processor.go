@@ -77,48 +77,82 @@ func (t *ProcessorTask) Close(ctx context.Context) error {
 }
 
 func (t *ProcessorTask) Do(ctx context.Context, b *Batch) error {
-	executeTime := time.Now()
+	start := time.Now()
 	recsIn := b.ActiveRecords()
 	recsOut := t.processor.Process(ctx, recsIn)
 
-	// TODO should this be called N times for each record? It's what we do in the destination
-	t.timer.Update(time.Since(executeTime))
-
-	if len(recsIn) != len(recsOut) {
-		// TODO accept this and mark the rest as skipped
-		err := cerrors.Errorf("processor was given %v record(s), but returned %v", len(recsIn), len(recsOut))
-		return cerrors.FatalError(err)
+	if len(recsOut) == 0 {
+		return cerrors.Errorf("processor didn't return any records")
 	}
+	t.observeMetrics(len(recsOut), start)
 
-	// TODO mark records
-	/*
-		switch v := recsOut[0].(type) {
+	// Mark records in the batch as processed, filtered or errored.
+	// We do this a bit smarter, by collecting ranges of records that are
+	// processed, filtered or errored, and then marking them in one go.
+
+	from := 0      // Start of the current range of records with the same type
+	rangeType := 0 // 0 = SingleRecord, 1 = FilterRecord, 2 = ErrorRecord
+
+	for i, rec := range recsOut {
+		var currentType int
+		switch rec.(type) {
 		case sdk.SingleRecord:
-			err := n.handleSingleRecord(ctx, msg, v)
-			// handleSingleRecord already checks the nack error (if any)
-			// so it's enough to just return the error from it
-			if err != nil {
-				return err
-			}
+			currentType = 0
 		case sdk.FilterRecord:
-			// NB: Ack skipped messages since they've been correctly handled
-			err := msg.Ack()
-			if err != nil {
-				return cerrors.Errorf("failed to ack skipped message: %w", err)
-			}
+			currentType = 1
 		case sdk.ErrorRecord:
-			err = msg.Nack(v.Error, n.ID())
-			if err != nil {
-				return cerrors.FatalError(cerrors.Errorf("error executing processor: %w", err))
-			}
+			currentType = 2
 		default:
-			err := cerrors.Errorf("processor returned unknown record type: %T", v)
-			if nackErr := msg.Nack(err, n.ID()); nackErr != nil {
-				return cerrors.FatalError(nackErr)
-			}
+			err := cerrors.Errorf("processor returned unknown record type: %T", rec)
 			return cerrors.FatalError(err)
 		}
-	*/
+
+		if currentType == rangeType {
+			continue
+		}
+
+		t.markBatchRecords(b, from, recsOut[from:i])
+		from, rangeType = i, currentType
+	}
+
+	// Mark the last range of records.
+	t.markBatchRecords(b, from, recsOut[from:])
+
+	if len(recsIn) > len(recsOut) {
+		// Processor skipped some records, mark them to be retried.
+		b.Retry(len(recsOut), len(recsIn))
+	}
 
 	return nil
+}
+
+func (t *ProcessorTask) markBatchRecords(b *Batch, from int, records []sdk.ProcessedRecord) {
+	if len(records) == 0 {
+		return // This can happen if the first record is not a SingleRecord.
+	}
+	switch records[0].(type) {
+	case sdk.SingleRecord:
+		recs := make([]opencdc.Record, len(records))
+		for i, rec := range records {
+			recs[i] = opencdc.Record(rec.(sdk.SingleRecord))
+		}
+		b.SetRecords(from, recs)
+	case sdk.FilterRecord:
+		b.Filter(from, len(records))
+	case sdk.ErrorRecord:
+		errs := make([]error, len(records))
+		for i, rec := range records {
+			errs[i] = rec.(sdk.ErrorRecord).Error
+		}
+		b.Nack(from, errs...)
+	}
+}
+
+func (t *ProcessorTask) observeMetrics(n int, start time.Time) {
+	tookPerRecord := time.Since(start) / time.Duration(n)
+	go func() {
+		for range n {
+			t.timer.Update(tookPerRecord)
+		}
+	}()
 }

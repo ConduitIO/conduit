@@ -98,6 +98,8 @@ func (t *DestinationTask) Do(ctx context.Context, batch *Batch) error {
 		return cerrors.Errorf("failed to ack %d records: %w", len(positions), err)
 	}
 
+	t.observeMetrics(records[:len(acks)], start)
+
 	if len(acks) != len(positions) {
 		// TODO wrap in loop and retrieve acks one by one for backward compatibility
 		return cerrors.Errorf("expected %d acks, got %d", len(positions), len(acks))
@@ -118,19 +120,21 @@ func (t *DestinationTask) Do(ctx context.Context, batch *Batch) error {
 		// TODO mark batch
 	}
 
-	// TODO update connector metrics
-	_ = start
-	// for _, rec := range records {
-	// 	// TODO is this correct? Rethink if we should rather use "start" all the time
-	// 	readAt, err := rec.Metadata[opencdc.MetadataReadAt]
-	// 	if err != nil {
-	// 		// If the plugin did not set the field fallback to the time Conduit
-	// 		// received the record (now).
-	// 		readAt = start
-	// 	}
-	// 	t.timer.UpdateSince(readAt)
-	// 	t.histogram.Observe(rec)
-	// }
-
 	return cerrors.Join(errs...)
+}
+
+func (t *DestinationTask) observeMetrics(records []opencdc.Record, start time.Time) {
+	// Precalculate sizes so that we don't need to hold a reference to records
+	// and observations can happen in a goroutine.
+	sizes := make([]float64, len(records))
+	for i, rec := range records {
+		sizes[i] = t.histogram.SizeOf(rec)
+	}
+	tookPerRecord := time.Since(start) / time.Duration(len(sizes))
+	go func() {
+		for i := range len(sizes) {
+			t.timer.Update(tookPerRecord)
+			t.histogram.H.Observe(sizes[i])
+		}
+	}()
 }

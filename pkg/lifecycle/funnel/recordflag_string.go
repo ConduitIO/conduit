@@ -11,12 +11,12 @@ func _() {
 	_ = x[RecordFlagAck-0]
 	_ = x[RecordFlagNack-1]
 	_ = x[RecordFlagRetry-2]
-	_ = x[RecordFlagSkip-3]
+	_ = x[RecordFlagFilter-3]
 }
 
-const _RecordFlag_name = "acknackretryskip"
+const _RecordFlag_name = "acknackretryfilter"
 
-var _RecordFlag_index = [...]uint8{0, 3, 7, 12, 16}
+var _RecordFlag_index = [...]uint8{0, 3, 7, 12, 18}
 
 func (i RecordFlag) String() string {
 	if i < 0 || i >= RecordFlag(len(_RecordFlag_index)-1) {

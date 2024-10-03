@@ -255,7 +255,7 @@ func (w *Worker) doTask(ctx context.Context, currentIndex int, b *Batch, acker a
 			Msg("collected sub-batch")
 
 		switch subBatch.recordStatuses[0].Flag {
-		case RecordFlagAck, RecordFlagSkip:
+		case RecordFlagAck, RecordFlagFilter:
 			if !w.hasNextTask(currentIndex) {
 				// This is the last task, the batch has made it end-to-end, let's ack!
 				// We need to ack all the records in the batch, not only active
@@ -298,11 +298,11 @@ func (w *Worker) subBatchByFlag(b *Batch, firstIndex int) *Batch {
 
 	flags := make([]RecordFlag, 0, 2)
 	flags = append(flags, b.recordStatuses[firstIndex].Flag)
-	// Collect Skips and Acks together in the same batch.
-	if flags[0] == RecordFlagSkip {
+	// Collect Filters and Acks together in the same batch.
+	if flags[0] == RecordFlagFilter {
 		flags = append(flags, RecordFlagAck)
 	} else if flags[0] == RecordFlagAck {
-		flags = append(flags, RecordFlagSkip)
+		flags = append(flags, RecordFlagFilter)
 	}
 
 	lastIndex := firstIndex

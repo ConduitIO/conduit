@@ -457,6 +457,16 @@ func (s *Service) buildSourceTasks(
 				instance.ID,
 				src.(*connector.Source),
 				logger,
+				measure.ConnectorExecutionDurationTimer.WithValues(
+					pl.Config.Name,
+					instance.Plugin,
+					strings.ToLower(instance.Type.String()),
+				),
+				measure.ConnectorBytesHistogram.WithValues(
+					pl.Config.Name,
+					instance.Plugin,
+					strings.ToLower(instance.Type.String()),
+				),
 			),
 		)
 	}
