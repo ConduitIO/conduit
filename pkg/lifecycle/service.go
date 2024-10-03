@@ -57,6 +57,15 @@ type ErrRecoveryCfg struct {
 	HealthyAfter  time.Duration
 }
 
+func (e *ErrRecoveryCfg) toBackoff() *backoff.Backoff {
+	return &backoff.Backoff{
+		Min:    e.MinDelay,
+		Max:    e.MaxDelay,
+		Factor: float64(e.BackoffFactor),
+		Jitter: true,
+	}
+}
+
 // Service manages pipelines.
 type Service struct {
 	logger log.CtxLogger
@@ -168,10 +177,25 @@ func (s *Service) Start(
 	}
 
 	s.logger.Debug(ctx).Str(log.PipelineIDField, pl.ID).Msg("starting pipeline")
-
 	s.logger.Trace(ctx).Str(log.PipelineIDField, pl.ID).Msg("building nodes")
 
-	rp, err := s.buildRunnablePipeline(ctx, pl)
+	var backoffCfg *backoff.Backoff
+
+	// We check if the pipeline was previously running and get the backoff configuration from it.
+	oldRp, ok := s.runningPipelines.Get(pipelineID)
+	if !ok {
+		// default backoff configuration
+		backoffCfg = &backoff.Backoff{
+			Min:    s.errRecoveryCfg.MinDelay,
+			Max:    s.errRecoveryCfg.MaxDelay,
+			Factor: float64(s.errRecoveryCfg.BackoffFactor),
+			Jitter: true,
+		}
+	} else {
+		backoffCfg = &oldRp.backoffCfg
+	}
+
+	rp, err := s.buildRunnablePipeline(ctx, pl, backoffCfg)
 	if err != nil {
 		return cerrors.Errorf("could not build nodes for pipeline %s: %w", pl.ID, err)
 	}
@@ -187,32 +211,10 @@ func (s *Service) Start(
 	return nil
 }
 
-// Restart replaces the nodes of a pipeline and starts it again.
-func (s *Service) Restart(ctx context.Context, rp *runnablePipeline) error {
-	s.logger.Debug(ctx).Str(log.PipelineIDField, rp.pipeline.ID).Msg("restarting pipeline")
-	s.logger.Trace(ctx).Str(log.PipelineIDField, rp.pipeline.ID).Msg("swapping nodes")
-
-	nodes, err := s.buildNodes(ctx, rp.pipeline)
-	if err != nil {
-		return cerrors.Errorf("could not build new nodes for pipeline %s: %w", rp.pipeline.ID, err)
-	}
-
-	// Replaces the old nodes with the new ones.
-	rp.n = nodes
-
-	s.logger.Trace(ctx).Str(log.PipelineIDField, rp.pipeline.ID).Msg("running nodes")
-	if err := s.runPipeline(ctx, rp); err != nil {
-		return cerrors.Errorf("failed to run pipeline %s: %w", rp.pipeline.ID, err)
-	}
-	s.logger.Info(ctx).Str(log.PipelineIDField, rp.pipeline.ID).Msg("pipeline restarted ")
-
-	return nil
-}
-
-// RestartWithBackoff restarts a pipeline with a backoff.
+// StartWithBackoff starts a pipeline with a backoff.
 // It'll check the number of times the pipeline has been restarted and the duration of the backoff.
 // When the pipeline has reached out the maximum number of retries, it'll return a fatal error.
-func (s *Service) RestartWithBackoff(ctx context.Context, rp *runnablePipeline) error {
+func (s *Service) StartWithBackoff(ctx context.Context, rp *runnablePipeline) error {
 	s.logger.Trace(ctx).Str(log.PipelineIDField, rp.pipeline.ID).Msg("restarting with backoff")
 
 	attempt := int64(rp.backoffCfg.Attempt())
@@ -244,7 +246,7 @@ func (s *Service) RestartWithBackoff(ctx context.Context, rp *runnablePipeline) 
 		return nil
 	}
 
-	return s.Restart(ctx, rp)
+	return s.Start(ctx, rp.pipeline.ID)
 }
 
 // Stop will attempt to gracefully stop a given pipeline by calling each node's
@@ -430,15 +432,8 @@ func (s *Service) buildNodes(ctx context.Context, pl *pipeline.Instance) ([]stre
 func (s *Service) buildRunnablePipeline(
 	ctx context.Context,
 	pl *pipeline.Instance,
+	backoffCfg *backoff.Backoff,
 ) (*runnablePipeline, error) {
-	// Each pipeline will utilize this backoff configuration to recover from errors.
-	backoffCfg := &backoff.Backoff{
-		Min:    s.errRecoveryCfg.MinDelay,
-		Max:    s.errRecoveryCfg.MaxDelay,
-		Factor: float64(s.errRecoveryCfg.BackoffFactor),
-		Jitter: true,
-	}
-
 	nodes, err := s.buildNodes(ctx, pl)
 	if err != nil {
 		return nil, err
@@ -756,6 +751,10 @@ func (s *Service) runPipeline(ctx context.Context, rp *runnablePipeline) error {
 	}
 
 	// TODO: When it's recovering, we should only update the status back to running once HealthyAfter has passed.
+	// now:
+	//		running -> (error) -> recovering (restart) -> running
+	// future (with the HealthyAfter mechanism):
+	//		running -> (error) -> recovering (restart) -> recovering (wait for HealthyAfter) -> running
 	err := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusRunning, "")
 	if err != nil {
 		return err
@@ -825,7 +824,7 @@ func (s *Service) recoverPipeline(ctx context.Context, rp *runnablePipeline) err
 	}
 
 	// Exit the goroutine and attempt to restart the pipeline
-	return s.RestartWithBackoff(ctx, rp)
+	return s.StartWithBackoff(ctx, rp)
 }
 
 // notify notifies all registered FailureHandlers about an error.

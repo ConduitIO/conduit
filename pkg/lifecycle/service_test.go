@@ -88,6 +88,7 @@ func TestServiceLifecycle_buildRunnablePipeline(t *testing.T) {
 	got, err := ls.buildRunnablePipeline(
 		ctx,
 		pl,
+		ls.errRecoveryCfg.toBackoff(),
 	)
 
 	is.NoErr(err)
@@ -173,6 +174,7 @@ func TestService_buildRunnablePipeline_NoSourceNode(t *testing.T) {
 	got, err := ls.buildRunnablePipeline(
 		ctx,
 		pl,
+		ls.errRecoveryCfg.toBackoff(),
 	)
 
 	is.True(err != nil)
@@ -220,6 +222,7 @@ func TestService_buildRunnablePipeline_NoDestinationNode(t *testing.T) {
 	got, err := ls.buildRunnablePipeline(
 		ctx,
 		pl,
+		ls.errRecoveryCfg.toBackoff(),
 	)
 
 	is.True(err != nil)
