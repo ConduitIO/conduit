@@ -61,7 +61,7 @@ type Worker struct {
 	//                   /-> 4, 5
 	// 0 -> 1 -> 2 -> 3 --
 	//                   \-> 6, 7
-	Order [][]int
+	Order Order
 	DLQ   *DLQ
 
 	lastReadAt time.Time
@@ -73,7 +73,7 @@ type Worker struct {
 
 func NewWorker(
 	tasks []Task,
-	order [][]int,
+	order Order,
 	dlq *DLQ,
 	logger log.CtxLogger,
 	timer metrics.Timer,
@@ -98,7 +98,7 @@ func NewWorker(
 	}, nil
 }
 
-func validateTaskOrder(tasks []Task, order [][]int) error {
+func validateTaskOrder(tasks []Task, order Order) error {
 	// Traverse the tasks according to the order and validate that each task
 	// is included exactly once.
 	if len(order) != len(tasks) {
@@ -399,6 +399,45 @@ func (w *Worker) updateTimer(records []opencdc.Record) {
 		}
 		w.timer.UpdateSince(readAt)
 	}
+}
+
+// Order represents the order of tasks in a pipeline. Each index in the slice
+// represents a task, and the value at that index is a slice of indices of the
+// next tasks to be executed. If the slice is empty, the task is the last one in
+// the pipeline.
+type Order [][]int
+
+// AppendSingle appends a single element to the current order.
+func (o Order) AppendSingle(next []int) Order {
+	if len(o) == 0 {
+		return Order{next}
+	}
+	o[len(o)-1] = append(o[len(o)-1], len(o))
+	return append(o, next)
+}
+
+// AppendOrder appends the next order to the current order. The next order indices
+// are adjusted to match the new order length.
+func (o Order) AppendOrder(next Order) Order {
+	if len(o) == 0 {
+		return next
+	} else if len(next) == 0 {
+		return o
+	}
+
+	next.Increase(len(o))
+	o[len(o)-1] = append(o[len(o)-1], len(o))
+	return append(o, next...)
+}
+
+// Increase increases all indices in the order by the given increment.
+func (o Order) Increase(incr int) Order {
+	for _, v := range o {
+		for i := range v {
+			v[i] += incr
+		}
+	}
+	return o
 }
 
 type ackNacker interface {
