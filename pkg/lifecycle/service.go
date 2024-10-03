@@ -39,6 +39,8 @@ import (
 	"gopkg.in/tomb.v2"
 )
 
+const InfiniteRetriesErrRecovery = -1
+
 type FailureEvent struct {
 	// ID is the ID of the pipeline which failed.
 	ID    string
@@ -51,7 +53,7 @@ type ErrRecoveryCfg struct {
 	MinDelay      time.Duration
 	MaxDelay      time.Duration
 	BackoffFactor int
-	MaxRetries    int
+	MaxRetries    int64
 	HealthyAfter  time.Duration
 }
 
@@ -198,9 +200,6 @@ func (s *Service) Restart(ctx context.Context, rp *runnablePipeline) error {
 	// Replaces the old nodes with the new ones.
 	rp.n = nodes
 
-	// clears out the tomb
-	rp.t.Kill(cerrors.New("restarting pipeline"))
-
 	s.logger.Trace(ctx).Str(log.PipelineIDField, rp.pipeline.ID).Msg("running nodes")
 	if err := s.runPipeline(ctx, rp); err != nil {
 		return cerrors.Errorf("failed to run pipeline %s: %w", rp.pipeline.ID, err)
@@ -216,15 +215,14 @@ func (s *Service) Restart(ctx context.Context, rp *runnablePipeline) error {
 func (s *Service) RestartWithBackoff(ctx context.Context, rp *runnablePipeline) error {
 	s.logger.Trace(ctx).Str(log.PipelineIDField, rp.pipeline.ID).Msg("restarting with backoff")
 
-	attempt := int(rp.backoffCfg.Attempt())
+	attempt := int64(rp.backoffCfg.Attempt())
 	duration := rp.backoffCfg.Duration()
 
-	// maxRetries 0 means infinite retries
-	if attempt > s.errRecoveryCfg.MaxRetries && s.errRecoveryCfg.MaxRetries != 0 {
+	if s.errRecoveryCfg.MaxRetries != InfiniteRetriesErrRecovery && attempt >= s.errRecoveryCfg.MaxRetries {
 		return cerrors.FatalError(cerrors.Errorf("failed to recover pipeline %s after %d attempts: %w", rp.pipeline.ID, attempt, pipeline.ErrPipelineCannotRecover))
 	}
 
-	s.logger.Trace(ctx).Dur(log.DurationField, duration).Int("attempt", attempt).Msg("backoff configuration")
+	s.logger.Trace(ctx).Dur(log.DurationField, duration).Int64(log.AttemptField, attempt).Msg("backoff configuration")
 
 	// This results in a default delay progression of 1s, 2s, 4s, 8s, 16s, [...], 10m, 10m,... balancing the need for recovery time and minimizing downtime.
 	timer := time.NewTimer(duration)
@@ -239,7 +237,7 @@ func (s *Service) RestartWithBackoff(ctx context.Context, rp *runnablePipeline) 
 	if rp.pipeline.GetStatus() == pipeline.StatusRunning {
 		s.logger.Debug(ctx).
 			Str(log.PipelineIDField, rp.pipeline.ID).
-			Int("attempt", attempt).
+			Int64("attempt", attempt).
 			Int("backoffRetry.count", s.errRecoveryCfg.BackoffFactor).
 			Int64("backoffRetry.duration", duration.Milliseconds()).
 			Msg("pipeline recovered")
@@ -778,23 +776,28 @@ func (s *Service) runPipeline(ctx context.Context, rp *runnablePipeline) error {
 			// not an actual error, the pipeline stopped gracefully
 			if isGracefulShutdown.Load() {
 				// it was triggered by a graceful shutdown of Conduit
-				err = s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusSystemStopped, "")
+				if err := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusSystemStopped, ""); err != nil {
+					return err
+				}
 			} else {
 				// it was manually triggered by a user
-				err = s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusUserStopped, "")
-			}
-			if err != nil {
-				return err
+				if err := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusUserStopped, ""); err != nil {
+					return err
+				}
 			}
 		default:
 			if cerrors.IsFatalError(err) {
 				// we use %+v to get the stack trace too
-				err = s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusDegraded, fmt.Sprintf("%+v", err))
-				if err != nil {
+				if err := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusDegraded, fmt.Sprintf("%+v", err)); err != nil {
 					return err
 				}
 			} else {
-				return s.recoverPipeline(ctx, rp)
+				// try to recover the pipeline
+				if err := s.recoverPipeline(ctx, rp); err != nil {
+					if err := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusDegraded, fmt.Sprintf("%+v", err)); err != nil {
+						return err
+					}
+				}
 			}
 		}
 
