@@ -773,16 +773,17 @@ func (s *Service) runPipeline(ctx context.Context, rp *runnablePipeline) error {
 		switch err {
 		case tomb.ErrStillAlive:
 			// not an actual error, the pipeline stopped gracefully
+			err = nil
+			var status pipeline.Status
 			if isGracefulShutdown.Load() {
 				// it was triggered by a graceful shutdown of Conduit
-				if err := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusSystemStopped, ""); err != nil {
-					return err
-				}
+				status = pipeline.StatusSystemStopped
 			} else {
 				// it was manually triggered by a user
-				if err := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusUserStopped, ""); err != nil {
-					return err
-				}
+				status = pipeline.StatusUserStopped
+			}
+			if err := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, status, ""); err != nil {
+				return err
 			}
 		default:
 			if cerrors.IsFatalError(err) {
@@ -792,11 +793,21 @@ func (s *Service) runPipeline(ctx context.Context, rp *runnablePipeline) error {
 				}
 			} else {
 				// try to recover the pipeline
-				if err := s.recoverPipeline(ctx, rp); err != nil {
-					if err := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusDegraded, fmt.Sprintf("%+v", err)); err != nil {
-						return err
+				if recoveryErr := s.recoverPipeline(ctx, rp); recoveryErr != nil {
+					s.logger.
+						Err(ctx, err).
+						Str(log.PipelineIDField, rp.pipeline.ID).
+						Msg("pipeline recovery failed stopped")
+
+					if updateErr := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusDegraded, fmt.Sprintf("%+v", recoveryErr)); updateErr != nil {
+						return updateErr
 					}
 				}
+				// recovery was triggered, so no cleanup
+				// (remove running pipeline, notify failure handlers, etc.)
+				// is needed
+				// this is why we return nil to skip the cleanup below.
+				return nil
 			}
 		}
 
