@@ -1,3 +1,4 @@
+<!-- markdownlint-disable MD013 -->
 # Test case for the pipeline recovery feature
 
 ## Test Case 01: Recovery not triggered for fatal error - DLQ
