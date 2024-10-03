@@ -17,25 +17,28 @@ Recovery is not triggered when there is an error writing to a DLQ.
 ```yaml
 version: "2.2"
 pipelines:
-    - id: file-pipeline
-      status: running
-      name: file-pipeline
-      description: test pipline
-      connectors:
-        - id: source-connector
-          type: source
-          plugin: builtin:file
-          name: source-connector
-          settings:
-            path: "/tmp/file-destination.txt"
-        - id: destination-connector
-          type: destination
-          plugin: builtin:file
-          name: destination-connector
-          settings:
-            path: "/tmp/file-destination.txt"
-      dead-letter-queue:
-        plugin: "builtin:postgres"
+  - id: file-pipeline
+    status: running
+    name: file-pipeline
+    description: test pipline
+    connectors:
+      - id: chaos-src
+        type: source
+        plugin: standalone:chaos
+        name: chaos-src
+        settings:
+          readMode: error
+      - id: log-dst
+        type: destination
+        plugin: builtin:log
+        log: file-dst
+    dead-letter-queue:
+      plugin: "builtin:postgres"
+      settings:
+        table: non_existing_table_so_that_dlq_fails
+        url: postgresql://meroxauser:meroxapass@localhost/meroxadb?sslmode=disable
+      window-size: 3
+      window-nack-threshold: 2
 ```
 
 **Steps**:
