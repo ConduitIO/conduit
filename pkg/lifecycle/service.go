@@ -185,12 +185,7 @@ func (s *Service) Start(
 	oldRp, ok := s.runningPipelines.Get(pipelineID)
 	if !ok {
 		// default backoff configuration
-		backoffCfg = &backoff.Backoff{
-			Min:    s.errRecoveryCfg.MinDelay,
-			Max:    s.errRecoveryCfg.MaxDelay,
-			Factor: float64(s.errRecoveryCfg.BackoffFactor),
-			Jitter: true,
-		}
+		backoffCfg = s.errRecoveryCfg.toBackoff()
 	} else {
 		backoffCfg = &oldRp.backoffCfg
 	}
