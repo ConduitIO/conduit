@@ -225,3 +225,30 @@ pipeline that recovers after a few retries, Conduit should still be running.
 **Additional comments**:
 
 ---
+
+## Test Case 09: Conduit exits with --pipelines.exit-on-degraded=true, --pipelines.error-recovery.max-retries=0, and a degraded pipeline
+
+**Priority** (low/medium/high):
+
+**Description**:
+Given a Conduit instance with
+`--pipelines.exit-on-degraded=true --pipelines.error-recovery.max-retries=0`,
+and a pipeline that goes into a degraded state, the Conduit instance will
+gracefully shut down. This is due `max-retries=0` disabling the recovery.
+
+**Automated** (yes/no)
+
+**Setup**:
+
+**Pipeline configuration file**:
+
+```yaml
+```
+
+**Steps**:
+
+**Expected Result**:
+
+**Additional comments**:
+
+---
