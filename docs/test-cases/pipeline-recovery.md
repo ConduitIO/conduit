@@ -1,12 +1,14 @@
 <!-- markdownlint-disable MD013 -->
 # Test case for the pipeline recovery feature
 
-## Test Case 01: Recovery not triggered for fatal error - DLQ
+## Test Case 01: Recovery triggered for on a DLQ write error
 
 **Priority** (low/medium/high):
 
 **Description**:
-Recovery is not triggered when there is an error writing to a DLQ.
+Recovery is triggered when there is an error writing to a DLQ. As for a normal
+destination, a DLQ write error can be a temporary error that can be solved after
+a retry.
 
 **Automated** (yes/no)
 
@@ -20,7 +22,7 @@ pipelines:
   - id: file-pipeline
     status: running
     name: file-pipeline
-    description: test pipline
+    description: dlq write error
     connectors:
       - id: chaos-src
         type: source
@@ -268,6 +270,55 @@ gracefully shut down. This is due `max-retries=0` disabling the recovery.
 **Pipeline configuration file**:
 
 ```yaml
+```
+
+**Steps**:
+
+**Expected Result**:
+
+**Additional comments**:
+
+---
+
+## Test Case 10: Recovery not triggered for fatal error - DLQ threshold exceeded
+
+**Priority** (low/medium/high):
+
+**Description**:
+Recovery is not triggered when the DLQ threshold is exceeded.
+
+**Automated** (yes/no)
+
+**Setup**:
+
+**Pipeline configuration file**:
+
+```yaml
+version: "2.2"
+pipelines:
+  - id: pipeline1
+    status: running
+    name: pipeline1
+    description: chaos destination with write errors, DLQ threshold specified
+    connectors:
+      - id: generator-src
+        type: source
+        plugin: builtin:generator
+        name: generator-src
+        settings:
+          format.type: structured
+          format.options.id: int
+          format.options.name: string
+          rate: "1"
+      - id: chaos-destination-1
+        type: destination
+        plugin: standalone:chaos
+        name: chaos-destination-1
+        settings:
+          writeMode: error
+    dead-letter-queue:
+      window-size: 2
+      window-nack-threshold: 1
 ```
 
 **Steps**:

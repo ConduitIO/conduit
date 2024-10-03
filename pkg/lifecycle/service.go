@@ -215,7 +215,7 @@ func (s *Service) Start(
 // It'll check the number of times the pipeline has been restarted and the duration of the backoff.
 // When the pipeline has reached out the maximum number of retries, it'll return a fatal error.
 func (s *Service) StartWithBackoff(ctx context.Context, rp *runnablePipeline) error {
-	s.logger.Trace(ctx).Str(log.PipelineIDField, rp.pipeline.ID).Msg("restarting with backoff")
+	s.logger.Info(ctx).Str(log.PipelineIDField, rp.pipeline.ID).Msg("restarting with backoff")
 
 	attempt := int64(rp.backoffCfg.Attempt())
 	duration := rp.backoffCfg.Duration()
