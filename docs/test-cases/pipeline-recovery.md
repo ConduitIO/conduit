@@ -15,6 +15,27 @@ Recovery is not triggered when there is an error writing to a DLQ.
 **Pipeline configuration file**:
 
 ```yaml
+version: "2.2"
+pipelines:
+    - id: file-pipeline
+      status: running
+      name: file-pipeline
+      description: test pipline
+      connectors:
+        - id: source-connector
+          type: source
+          plugin: builtin:file
+          name: source-connector
+          settings:
+            path: "/tmp/file-destination.txt"
+        - id: destination-connector
+          type: destination
+          plugin: builtin:file
+          name: destination-connector
+          settings:
+            path: "/tmp/file-destination.txt"
+      dead-letter-queue:
+        plugin: "builtin:postgres"
 ```
 
 **Steps**:
