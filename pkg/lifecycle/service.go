@@ -218,11 +218,11 @@ func (s *Service) RestartWithBackoff(ctx context.Context, rp *runnablePipeline) 
 	attempt := int64(rp.backoffCfg.Attempt())
 	duration := rp.backoffCfg.Duration()
 
+	s.logger.Trace(ctx).Dur(log.DurationField, duration).Int64(log.AttemptField, attempt).Msg("backoff configuration")
+
 	if s.errRecoveryCfg.MaxRetries != InfiniteRetriesErrRecovery && attempt >= s.errRecoveryCfg.MaxRetries {
 		return cerrors.FatalError(cerrors.Errorf("failed to recover pipeline %s after %d attempts: %w", rp.pipeline.ID, attempt, pipeline.ErrPipelineCannotRecover))
 	}
-
-	s.logger.Trace(ctx).Dur(log.DurationField, duration).Int64(log.AttemptField, attempt).Msg("backoff configuration")
 
 	// This results in a default delay progression of 1s, 2s, 4s, 8s, 16s, [...], 10m, 10m,... balancing the need for recovery time and minimizing downtime.
 	timer := time.NewTimer(duration)
