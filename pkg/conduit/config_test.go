@@ -202,7 +202,7 @@ func TestConfig_Validate(t *testing.T) {
 				c.Pipelines.ErrorRecovery.MaxRetries = lifecycle.InfiniteRetriesErrRecovery - 1
 				return c
 			},
-			want: cerrors.New(`invalid error recovery config: "max-retries" can't be smaller than -1 (infinite retries)`),
+			want: cerrors.New(`invalid error recovery config: invalid "max-retries" value. It must be -1 for infinite retries or >= 0`),
 		},
 		{
 			name: "error recovery: with 0 max-retries ",

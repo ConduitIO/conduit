@@ -213,7 +213,7 @@ func (c Config) validateErrorRecovery() error {
 		errs = append(errs, err)
 	}
 	if errRecoveryCfg.MaxRetries < lifecycle.InfiniteRetriesErrRecovery {
-		errs = append(errs, cerrors.Errorf(`"max-retries" can't be smaller than %d (infinite retries)`, lifecycle.InfiniteRetriesErrRecovery))
+		errs = append(errs, cerrors.Errorf(`invalid "max-retries" value. It must be %d for infinite retries or >= 0`, lifecycle.InfiniteRetriesErrRecovery))
 	}
 	if err := requirePositiveValue("healthy-after", errRecoveryCfg.HealthyAfter); err != nil {
 		errs = append(errs, err)
