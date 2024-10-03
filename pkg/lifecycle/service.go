@@ -802,6 +802,8 @@ func (s *Service) runPipeline(ctx context.Context, rp *runnablePipeline) error {
 					if updateErr := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusDegraded, fmt.Sprintf("%+v", recoveryErr)); updateErr != nil {
 						return updateErr
 					}
+
+					return recoveryErr
 				}
 				// recovery was triggered, so no cleanup
 				// (remove running pipeline, notify failure handlers, etc.)

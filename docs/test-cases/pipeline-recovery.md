@@ -20,7 +20,7 @@ pipelines:
   - id: file-pipeline
     status: running
     name: file-pipeline
-    description: test pipline
+    description: test pipeline
     connectors:
       - id: chaos-src
         type: source
