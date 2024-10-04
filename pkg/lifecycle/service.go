@@ -845,6 +845,9 @@ func (s *Service) recoverPipeline(ctx context.Context, rp *runnablePipeline) err
 			}
 
 			if pi.pipeline.GetStatus() == pipeline.StatusRecovering && pi.t.Alive() {
+				// reset backoff configuration
+				pi.backoffCfg.Reset()
+
 				err := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusRunning, "")
 				if err != nil {
 					s.logger.Err(ctx, err).Str(log.PipelineIDField, pi.pipeline.ID).Msg("could not update pipeline status from recovering to running")
