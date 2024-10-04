@@ -745,14 +745,12 @@ func (s *Service) runPipeline(ctx context.Context, rp *runnablePipeline) error {
 		})
 	}
 
-	// TODO: When it's recovering, we should only update the status back to running once HealthyAfter has passed.
-	// now:
-	//		running -> (error) -> recovering (restart) -> running
-	// future (with the HealthyAfter mechanism):
-	//		running -> (error) -> recovering (restart) -> recovering (wait for HealthyAfter) -> running
-	err := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusRunning, "")
-	if err != nil {
-		return err
+	// If we're not trying to recover it, we update the status to running
+	if rp.backoffCfg.Attempt() == 0 {
+		err := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusRunning, "")
+		if err != nil {
+			return err
+		}
 	}
 
 	// cleanup function updates the metrics and pipeline status once all nodes
@@ -826,12 +824,36 @@ func (s *Service) runPipeline(ctx context.Context, rp *runnablePipeline) error {
 func (s *Service) recoverPipeline(ctx context.Context, rp *runnablePipeline) error {
 	s.logger.Trace(ctx).Str(log.PipelineIDField, rp.pipeline.ID).Msg("recovering pipeline")
 
-	err := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusRecovering, "")
-	if err != nil {
-		return err
+	attempt := int64(rp.backoffCfg.Attempt())
+
+	// first time we try to recover it
+	if attempt == 0 {
+		// update the status to recovering
+		err := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusRecovering, "")
+		if err != nil {
+			return err
+		}
+
+		// will set status to running after the configured HealthyAfter time
+		go func() {
+			time.Sleep(s.errRecoveryCfg.HealthyAfter)
+
+			pi, ok := s.runningPipelines.Get(rp.pipeline.ID)
+			if !ok {
+				// stop the go routine because pipeline is not running anymore
+				return
+			}
+
+			if pi.pipeline.GetStatus() == pipeline.StatusRecovering && pi.t.Alive() {
+				err := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusRunning, "")
+				if err != nil {
+					s.logger.Err(ctx, err).Str(log.PipelineIDField, pi.pipeline.ID).Msg("could not update pipeline status from recovering to running")
+				}
+			}
+			return
+		}()
 	}
 
-	// Exit the goroutine and attempt to restart the pipeline
 	return s.StartWithBackoff(ctx, rp)
 }
 
