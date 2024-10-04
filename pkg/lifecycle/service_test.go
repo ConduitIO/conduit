@@ -85,11 +85,7 @@ func TestServiceLifecycle_buildRunnablePipeline(t *testing.T) {
 		testPipelineService{},
 	)
 
-	got, err := ls.buildRunnablePipeline(
-		ctx,
-		pl,
-		ls.errRecoveryCfg.toBackoff(),
-	)
+	got, err := ls.buildRunnablePipeline(ctx, pl)
 
 	is.NoErr(err)
 
@@ -171,11 +167,7 @@ func TestService_buildRunnablePipeline_NoSourceNode(t *testing.T) {
 
 	wantErr := "can't build pipeline without any source connectors"
 
-	got, err := ls.buildRunnablePipeline(
-		ctx,
-		pl,
-		ls.errRecoveryCfg.toBackoff(),
-	)
+	got, err := ls.buildRunnablePipeline(ctx, pl)
 
 	is.True(err != nil)
 	is.Equal(err.Error(), wantErr)
@@ -219,11 +211,7 @@ func TestService_buildRunnablePipeline_NoDestinationNode(t *testing.T) {
 	}
 	pl.SetStatus(pipeline.StatusUserStopped)
 
-	got, err := ls.buildRunnablePipeline(
-		ctx,
-		pl,
-		ls.errRecoveryCfg.toBackoff(),
-	)
+	got, err := ls.buildRunnablePipeline(ctx, pl)
 
 	is.True(err != nil)
 	is.Equal(err.Error(), wantErr)
