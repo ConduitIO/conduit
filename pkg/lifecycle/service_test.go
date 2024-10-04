@@ -36,7 +36,6 @@ import (
 	pmock "github.com/conduitio/conduit/pkg/plugin/connector/mock"
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/google/uuid"
-	"github.com/jpillora/backoff"
 	"github.com/matryer/is"
 	"github.com/rs/zerolog"
 	"go.uber.org/mock/gomock"
@@ -52,7 +51,6 @@ func TestServiceLifecycle_buildRunnablePipeline(t *testing.T) {
 	logger := log.New(zerolog.Nop())
 	db := &inmemory.DB{}
 	persister := connector.NewPersister(logger, db, time.Second, 3)
-	b := &backoff.Backoff{}
 
 	source := dummySource(persister)
 	destination := dummyDestination(persister)
@@ -72,7 +70,7 @@ func TestServiceLifecycle_buildRunnablePipeline(t *testing.T) {
 
 	ls := NewService(
 		logger,
-		b,
+		testErrRecoveryCfg(),
 		testConnectorService{
 			source.ID:      source,
 			destination.ID: destination,
@@ -90,6 +88,7 @@ func TestServiceLifecycle_buildRunnablePipeline(t *testing.T) {
 	got, err := ls.buildRunnablePipeline(
 		ctx,
 		pl,
+		ls.errRecoveryCfg.toBackoff(),
 	)
 
 	is.NoErr(err)
@@ -145,7 +144,6 @@ func TestService_buildRunnablePipeline_NoSourceNode(t *testing.T) {
 	logger := log.New(zerolog.Nop())
 	db := &inmemory.DB{}
 	persister := connector.NewPersister(logger, db, time.Second, 3)
-	b := &backoff.Backoff{}
 
 	destination := dummyDestination(persister)
 	dlq := dummyDestination(persister)
@@ -162,7 +160,7 @@ func TestService_buildRunnablePipeline_NoSourceNode(t *testing.T) {
 	}
 	pl.SetStatus(pipeline.StatusUserStopped)
 
-	ls := NewService(logger, b, testConnectorService{
+	ls := NewService(logger, testErrRecoveryCfg(), testConnectorService{
 		destination.ID: destination,
 		testDLQID:      dlq,
 	}, testProcessorService{},
@@ -176,6 +174,7 @@ func TestService_buildRunnablePipeline_NoSourceNode(t *testing.T) {
 	got, err := ls.buildRunnablePipeline(
 		ctx,
 		pl,
+		ls.errRecoveryCfg.toBackoff(),
 	)
 
 	is.True(err != nil)
@@ -191,12 +190,11 @@ func TestService_buildRunnablePipeline_NoDestinationNode(t *testing.T) {
 	logger := log.New(zerolog.Nop())
 	db := &inmemory.DB{}
 	persister := connector.NewPersister(logger, db, time.Second, 3)
-	b := &backoff.Backoff{}
 
 	source := dummySource(persister)
 	dlq := dummyDestination(persister)
 
-	ls := NewService(logger, b, testConnectorService{
+	ls := NewService(logger, testErrRecoveryCfg(), testConnectorService{
 		source.ID: source,
 		testDLQID: dlq,
 	},
@@ -224,6 +222,7 @@ func TestService_buildRunnablePipeline_NoDestinationNode(t *testing.T) {
 	got, err := ls.buildRunnablePipeline(
 		ctx,
 		pl,
+		ls.errRecoveryCfg.toBackoff(),
 	)
 
 	is.True(err != nil)
@@ -239,7 +238,6 @@ func TestServiceLifecycle_PipelineSuccess(t *testing.T) {
 	db := &inmemory.DB{}
 	persister := connector.NewPersister(logger, db, time.Second, 3)
 	defer persister.Wait()
-	b := &backoff.Backoff{}
 
 	ps := pipeline.NewService(logger, db)
 
@@ -250,9 +248,9 @@ func TestServiceLifecycle_PipelineSuccess(t *testing.T) {
 	// create mocked connectors
 	ctrl := gomock.NewController(t)
 	wantRecords := generateRecords(10)
-	source, sourceDispenser := generatorSource(ctrl, persister, wantRecords, nil, true)
-	destination, destDispenser := asserterDestination(ctrl, persister, wantRecords)
-	dlq, dlqDispenser := asserterDestination(ctrl, persister, nil)
+	source, srcDispenser := asserterSource(ctrl, persister, wantRecords, nil, true, 1)
+	destination, destDispenser := asserterDestination(ctrl, persister, wantRecords, 1)
+	dlq, dlqDispenser := asserterDestination(ctrl, persister, nil, 1)
 	pl.DLQ.Plugin = dlq.Plugin
 
 	pl, err = ps.AddConnector(ctx, pl.ID, source.ID)
@@ -260,14 +258,14 @@ func TestServiceLifecycle_PipelineSuccess(t *testing.T) {
 	pl, err = ps.AddConnector(ctx, pl.ID, destination.ID)
 	is.NoErr(err)
 
-	ls := NewService(logger, b, testConnectorService{
+	ls := NewService(logger, testErrRecoveryCfg(), testConnectorService{
 		source.ID:      source,
 		destination.ID: destination,
 		testDLQID:      dlq,
 	},
 		testProcessorService{},
 		testConnectorPluginService{
-			source.Plugin:      sourceDispenser,
+			source.Plugin:      srcDispenser,
 			destination.Plugin: destDispenser,
 			dlq.Plugin:         dlqDispenser,
 		}, ps)
@@ -301,7 +299,6 @@ func TestServiceLifecycle_PipelineError(t *testing.T) {
 	logger := log.Test(t)
 	db := &inmemory.DB{}
 	persister := connector.NewPersister(logger, db, time.Second, 3)
-	b := &backoff.Backoff{}
 
 	ps := pipeline.NewService(logger, db)
 
@@ -313,9 +310,9 @@ func TestServiceLifecycle_PipelineError(t *testing.T) {
 	wantErr := cerrors.New("source connector error")
 	ctrl := gomock.NewController(t)
 	wantRecords := generateRecords(10)
-	source, sourceDispenser := generatorSource(ctrl, persister, wantRecords, wantErr, false)
-	destination, destDispenser := asserterDestination(ctrl, persister, wantRecords)
-	dlq, dlqDispenser := asserterDestination(ctrl, persister, nil)
+	source, srcDispenser := asserterSource(ctrl, persister, wantRecords, wantErr, false, 1)
+	destination, destDispenser := asserterDestination(ctrl, persister, wantRecords, 1)
+	dlq, dlqDispenser := asserterDestination(ctrl, persister, nil, 1)
 	pl.DLQ.Plugin = dlq.Plugin
 
 	pl, err = ps.AddConnector(ctx, pl.ID, source.ID)
@@ -323,14 +320,14 @@ func TestServiceLifecycle_PipelineError(t *testing.T) {
 	pl, err = ps.AddConnector(ctx, pl.ID, destination.ID)
 	is.NoErr(err)
 
-	ls := NewService(logger, b, testConnectorService{
+	ls := NewService(logger, testErrRecoveryCfg(), testConnectorService{
 		source.ID:      source,
 		destination.ID: destination,
 		testDLQID:      dlq,
 	},
 		testProcessorService{},
 		testConnectorPluginService{
-			source.Plugin:      sourceDispenser,
+			source.Plugin:      srcDispenser,
 			destination.Plugin: destDispenser,
 			dlq.Plugin:         dlqDispenser,
 		}, ps)
@@ -370,82 +367,113 @@ func TestServiceLifecycle_PipelineError(t *testing.T) {
 	is.True(cerrors.Is(event.Error, wantErr))
 }
 
-func TestServiceLifecycle_StopAll_Recovering(t *testing.T) {
+func TestServiceLifecycle_Stop(t *testing.T) {
 	type testCase struct {
-		name   string
-		stopFn func(ctx context.Context, is *is.I, lifecycleService *Service, pipelineID string)
-		// whether we expect the source plugin's Stop() function to be called
-		// (doesn't happen when force-stopping)
-		wantSourceStop bool
-		want           pipeline.Status
-		wantErr        error
+		name      string
+		stopFn    func(ctx context.Context, is *is.I, lifecycleService *Service, pipelineID string)
+		forceStop bool
+		want      pipeline.Status
+		wantErr   error
 	}
 
-	runTest := func(t *testing.T, tc testCase) {
-		is := is.New(t)
-		ctx, killAll := context.WithCancel(context.Background())
-		defer killAll()
-		logger := log.New(zerolog.Nop())
-		db := &inmemory.DB{}
-		persister := connector.NewPersister(logger, db, time.Second, 3)
-		b := &backoff.Backoff{}
-
-		ps := pipeline.NewService(logger, db)
-
-		// create a host pipeline
-		pl, err := ps.Create(ctx, uuid.NewString(), pipeline.Config{Name: "test pipeline"}, pipeline.ProvisionTypeAPI)
-		is.NoErr(err)
-
-		// create mocked connectors
-		// source will stop and return ErrGracefulShutdown which should signal to the
-		// service that everything went well and the pipeline was gracefully shutdown
-		ctrl := gomock.NewController(t)
-		wantRecords := generateRecords(0)
-		source, sourceDispenser := generatorSource(ctrl, persister, wantRecords, nil, tc.wantSourceStop)
-		destination, destDispenser := asserterDestination(ctrl, persister, wantRecords)
-		dlq, dlqDispenser := asserterDestination(ctrl, persister, nil)
-		pl.DLQ.Plugin = dlq.Plugin
-
-		pl, err = ps.AddConnector(ctx, pl.ID, source.ID)
-		is.NoErr(err)
-		pl, err = ps.AddConnector(ctx, pl.ID, destination.ID)
-		is.NoErr(err)
-
-		ls := NewService(logger, b, testConnectorService{
-			source.ID:      source,
-			destination.ID: destination,
-			testDLQID:      dlq,
+	testCases := []testCase{
+		{
+			name: "user stop: graceful",
+			stopFn: func(ctx context.Context, is *is.I, ls *Service, pipelineID string) {
+				err := ls.Stop(ctx, pipelineID, false)
+				is.NoErr(err)
+			},
+			want: pipeline.StatusUserStopped,
 		},
-			testProcessorService{},
-			testConnectorPluginService{
-				source.Plugin:      sourceDispenser,
-				destination.Plugin: destDispenser,
-				dlq.Plugin:         dlqDispenser,
-			}, ps)
+		{
+			name: "user stop: forceful",
+			stopFn: func(ctx context.Context, is *is.I, ls *Service, pipelineID string) {
+				err := ls.Stop(ctx, pipelineID, true)
+				is.NoErr(err)
+			},
+			forceStop: true,
+			wantErr:   cerrors.FatalError(pipeline.ErrForceStop),
+			want:      pipeline.StatusDegraded,
+		},
+	}
 
-		// start the pipeline now that everything is set up
-		err = ls.Start(
-			ctx,
-			pl.ID,
-		)
-		is.NoErr(err)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			is := is.New(t)
+			ctx, killAll := context.WithCancel(context.Background())
+			defer killAll()
+			logger := log.Test(t)
+			db := &inmemory.DB{}
+			persister := connector.NewPersister(logger, db, time.Second, 3)
 
-		// wait for pipeline to finish consuming records from the source
-		time.Sleep(100 * time.Millisecond)
+			ps := pipeline.NewService(logger, db)
 
-		pl.SetStatus(pipeline.StatusRecovering)
-		tc.stopFn(ctx, is, ls, pl.ID)
-
-		// wait for pipeline to finish
-		err = ls.WaitPipeline(pl.ID)
-		if tc.wantErr != nil {
-			is.True(err != nil)
-		} else {
+			// create a host pipeline
+			pl, err := ps.Create(ctx, uuid.NewString(), pipeline.Config{Name: "test pipeline"}, pipeline.ProvisionTypeAPI)
 			is.NoErr(err)
-			is.Equal("", pl.Error)
-		}
 
-		is.Equal(tc.want, pl.GetStatus())
+			// create mocked connectors
+			// source will stop and return ErrGracefulShutdown which should signal to the
+			// service that everything went well and the pipeline was gracefully shutdown
+			ctrl := gomock.NewController(t)
+			wantRecords := generateRecords(0)
+			source, srcDispenser := asserterSource(ctrl, persister, wantRecords, nil, !tc.forceStop, 1)
+			destination, destDispenser := asserterDestination(ctrl, persister, wantRecords, 1)
+			dlq, dlqDispenser := asserterDestination(ctrl, persister, nil, 1)
+			pl.DLQ.Plugin = dlq.Plugin
+
+			pl, err = ps.AddConnector(ctx, pl.ID, source.ID)
+			is.NoErr(err)
+			pl, err = ps.AddConnector(ctx, pl.ID, destination.ID)
+			is.NoErr(err)
+
+			ls := NewService(
+				logger,
+				testErrRecoveryCfg(),
+				testConnectorService{
+					source.ID:      source,
+					destination.ID: destination,
+					testDLQID:      dlq,
+				},
+				testProcessorService{},
+				testConnectorPluginService{
+					source.Plugin:      srcDispenser,
+					destination.Plugin: destDispenser,
+					dlq.Plugin:         dlqDispenser,
+				}, ps)
+
+			// start the pipeline now that everything is set up
+			err = ls.Start(
+				ctx,
+				pl.ID,
+			)
+			is.NoErr(err)
+
+			// wait for pipeline to finish consuming records from the source
+			time.Sleep(100 * time.Millisecond)
+
+			tc.stopFn(ctx, is, ls, pl.ID)
+
+			// wait for pipeline to finish
+			err = ls.WaitPipeline(pl.ID)
+			if tc.wantErr != nil {
+				is.True(err != nil)
+			} else {
+				is.NoErr(err)
+				is.Equal("", pl.Error)
+			}
+
+			is.Equal(tc.want, pl.GetStatus())
+		})
+	}
+}
+
+func TestServiceLifecycle_StopAll(t *testing.T) {
+	type testCase struct {
+		name    string
+		stopFn  func(ctx context.Context, is *is.I, lifecycleService *Service, pipelineID string)
+		want    pipeline.Status
+		wantErr error
 	}
 
 	testCases := []testCase{
@@ -454,43 +482,180 @@ func TestServiceLifecycle_StopAll_Recovering(t *testing.T) {
 			stopFn: func(ctx context.Context, is *is.I, ls *Service, pipelineID string) {
 				ls.StopAll(ctx, pipeline.ErrGracefulShutdown)
 			},
-			wantSourceStop: true,
-			want:           pipeline.StatusSystemStopped,
+			want: pipeline.StatusSystemStopped,
 		},
 		{
-			name: "system stop (fatal err)",
+			name: "system stop (fatal error)",
 			stopFn: func(ctx context.Context, is *is.I, ls *Service, pipelineID string) {
 				ls.StopAll(ctx, cerrors.FatalError(cerrors.New("terrible err")))
 			},
-			wantSourceStop: true,
-			want:           pipeline.StatusDegraded,
-			wantErr:        cerrors.New("terrible err"),
-		},
-		{
-			name: "connection error",
-			stopFn: func(ctx context.Context, is *is.I, ls *Service, pipelineID string) {
-				ls.StopAll(ctx, cerrors.New("lost connection to database"))
-			},
-			wantSourceStop: true,
-			want:           pipeline.StatusRecovering,
-			wantErr:        cerrors.New("lost connection to database"),
-		},
-		{
-			name: "user stop (graceful)",
-			stopFn: func(ctx context.Context, is *is.I, ls *Service, pipelineID string) {
-				err := ls.Stop(ctx, pipelineID, false)
-				is.NoErr(err)
-			},
-			wantSourceStop: true,
-			want:           pipeline.StatusUserStopped,
+			want:    pipeline.StatusDegraded,
+			wantErr: cerrors.New("terrible err"),
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			runTest(t, tc)
+			is := is.New(t)
+			ctx, killAll := context.WithCancel(context.Background())
+			defer killAll()
+			logger := log.New(zerolog.Nop())
+			db := &inmemory.DB{}
+			persister := connector.NewPersister(logger, db, time.Second, 3)
+
+			ps := pipeline.NewService(logger, db)
+
+			// create a host pipeline
+			pl, err := ps.Create(ctx, uuid.NewString(), pipeline.Config{Name: "test pipeline"}, pipeline.ProvisionTypeAPI)
+			is.NoErr(err)
+
+			// create mocked connectors
+			// source will stop and return ErrGracefulShutdown which should signal to the
+			// service that everything went well and the pipeline was gracefully shutdown
+			ctrl := gomock.NewController(t)
+			wantRecords := generateRecords(0)
+			source, srcDispenser := asserterSource(ctrl, persister, wantRecords, nil, true, 1)
+			destination, destDispenser := asserterDestination(ctrl, persister, wantRecords, 1)
+			dlq, dlqDispenser := asserterDestination(ctrl, persister, nil, 1)
+			pl.DLQ.Plugin = dlq.Plugin
+
+			pl, err = ps.AddConnector(ctx, pl.ID, source.ID)
+			is.NoErr(err)
+			pl, err = ps.AddConnector(ctx, pl.ID, destination.ID)
+			is.NoErr(err)
+
+			ls := NewService(
+				logger,
+				testErrRecoveryCfg(),
+				testConnectorService{
+					source.ID:      source,
+					destination.ID: destination,
+					testDLQID:      dlq,
+				},
+				testProcessorService{},
+				testConnectorPluginService{
+					source.Plugin:      srcDispenser,
+					destination.Plugin: destDispenser,
+					dlq.Plugin:         dlqDispenser,
+				}, ps)
+
+			// start the pipeline now that everything is set up
+			err = ls.Start(
+				ctx,
+				pl.ID,
+			)
+			is.NoErr(err)
+
+			// wait for pipeline to finish consuming records from the source
+			time.Sleep(100 * time.Millisecond)
+
+			tc.stopFn(ctx, is, ls, pl.ID)
+
+			// wait for pipeline to finish
+			err = ls.WaitPipeline(pl.ID)
+			if tc.wantErr != nil {
+				is.True(err != nil)
+			} else {
+				is.NoErr(err)
+				is.Equal("", pl.Error)
+			}
+
+			is.Equal(tc.want, pl.GetStatus())
 		})
 	}
+}
+
+// Creates first a pipeline that will stop with a recoverable error, to check later that it restarted and it's running.
+func TestServiceLifecycle_StopAll_Recovering(t *testing.T) {
+	is := is.New(t)
+	ctx, killAll := context.WithCancel(context.Background())
+	defer killAll()
+	logger := log.New(zerolog.Nop())
+	db := &inmemory.DB{}
+	persister := connector.NewPersister(logger, db, time.Second, 3)
+	wantErr := cerrors.New("lost connection to database")
+
+	ps := pipeline.NewService(logger, db)
+
+	// create a host pipeline
+	pl, err := ps.Create(ctx, uuid.NewString(), pipeline.Config{Name: "test pipeline"}, pipeline.ProvisionTypeAPI)
+	is.NoErr(err)
+
+	// create mocked connectors
+	// source will stop and return ErrGracefulShutdown which should signal to the
+	// service that everything went well and the pipeline was gracefully shutdown
+	ctrl := gomock.NewController(t)
+	wantRecords := generateRecords(0)
+	source, srcDispenser := asserterSource(ctrl, persister, wantRecords, nil, true, 2)
+	destination, destDispenser := asserterDestination(ctrl, persister, wantRecords, 2)
+	dlq, dlqDispenser := asserterDestination(ctrl, persister, nil, 2)
+	pl.DLQ.Plugin = dlq.Plugin
+
+	pl, err = ps.AddConnector(ctx, pl.ID, source.ID)
+	is.NoErr(err)
+	pl, err = ps.AddConnector(ctx, pl.ID, destination.ID)
+	is.NoErr(err)
+
+	ls := NewService(
+		logger,
+		testErrRecoveryCfg(),
+		testConnectorService{
+			source.ID:      source,
+			destination.ID: destination,
+			testDLQID:      dlq,
+		},
+		testProcessorService{},
+		testConnectorPluginService{
+			source.Plugin:      srcDispenser,
+			destination.Plugin: destDispenser,
+			dlq.Plugin:         dlqDispenser,
+		}, ps)
+
+	// start the pipeline now that everything is set up
+	err = ls.Start(
+		ctx,
+		pl.ID,
+	)
+	is.NoErr(err)
+
+	// wait for pipeline to finish consuming records from the source
+	time.Sleep(100 * time.Millisecond)
+
+	c := make(cchan.Chan[error])
+	go func() {
+		c <- ls.WaitPipeline(pl.ID)
+	}()
+
+	// force the pipeline to stop with a recoverable error
+	ls.StopAll(ctx, wantErr)
+	err, _, ctxErr := c.RecvTimeout(ctx, 10000*time.Millisecond)
+	is.NoErr(ctxErr)
+
+	// check the first pipeline stopped with the error that caused the restart
+	is.True(cerrors.Is(err, wantErr))
+
+	go func() {
+		c <- ls.WaitPipeline(pl.ID)
+	}()
+
+	_, _, err = c.RecvTimeout(ctx, 1000*time.Millisecond)
+	is.True(cerrors.Is(err, context.DeadlineExceeded))
+
+	// stop the running pipeline
+	err = ls.Stop(ctx, pl.ID, false)
+	is.NoErr(err)
+
+	// Check pipeline ended in a running state
+	is.Equal(pipeline.StatusRunning, pl.GetStatus())
+
+	go func() {
+		c <- ls.WaitPipeline(pl.ID)
+	}()
+	err, _, _ = c.RecvTimeout(ctx, 1000*time.Millisecond)
+	is.NoErr(err)
+
+	// This is to demonstrate the test indeed stopped the pipeline
+	is.Equal(pipeline.StatusUserStopped, pl.GetStatus())
 }
 
 func TestServiceLifecycle_PipelineStop(t *testing.T) {
@@ -500,7 +665,6 @@ func TestServiceLifecycle_PipelineStop(t *testing.T) {
 	logger := log.New(zerolog.Nop())
 	db := &inmemory.DB{}
 	persister := connector.NewPersister(logger, db, time.Second, 3)
-	b := &backoff.Backoff{}
 
 	ps := pipeline.NewService(logger, db)
 
@@ -513,9 +677,9 @@ func TestServiceLifecycle_PipelineStop(t *testing.T) {
 	// service that everything went well and the pipeline was gracefully shutdown
 	ctrl := gomock.NewController(t)
 	wantRecords := generateRecords(10)
-	source, sourceDispenser := generatorSource(ctrl, persister, wantRecords, nil, true)
-	destination, destDispenser := asserterDestination(ctrl, persister, wantRecords)
-	dlq, dlqDispenser := asserterDestination(ctrl, persister, nil)
+	source, srcDispenser := asserterSource(ctrl, persister, wantRecords, nil, true, 1)
+	destination, destDispenser := asserterDestination(ctrl, persister, wantRecords, 1)
+	dlq, dlqDispenser := asserterDestination(ctrl, persister, nil, 1)
 	pl.DLQ.Plugin = dlq.Plugin
 
 	pl, err = ps.AddConnector(ctx, pl.ID, source.ID)
@@ -523,14 +687,14 @@ func TestServiceLifecycle_PipelineStop(t *testing.T) {
 	pl, err = ps.AddConnector(ctx, pl.ID, destination.ID)
 	is.NoErr(err)
 
-	ls := NewService(logger, b, testConnectorService{
+	ls := NewService(logger, testErrRecoveryCfg(), testConnectorService{
 		source.ID:      source,
 		destination.ID: destination,
 		testDLQID:      dlq,
 	},
 		testProcessorService{},
 		testConnectorPluginService{
-			source.Plugin:      sourceDispenser,
+			source.Plugin:      srcDispenser,
 			destination.Plugin: destDispenser,
 			dlq.Plugin:         dlqDispenser,
 		}, ps)
@@ -563,7 +727,6 @@ func TestServiceLifecycle_Run_Rerun(t *testing.T) {
 		logger := log.Test(t)
 		db := &inmemory.DB{}
 		persister := connector.NewPersister(logger, db, time.Second, 3)
-		b := &backoff.Backoff{}
 
 		ps := pipeline.NewService(logger, db)
 
@@ -573,18 +736,18 @@ func TestServiceLifecycle_Run_Rerun(t *testing.T) {
 
 		// create mocked connectors
 		var (
-			source          *connector.Instance
-			sourceDispenser *pmock.Dispenser
-			destination     *connector.Instance
-			destDispenser   *pmock.Dispenser
-			dlq             *connector.Instance
-			dlqDispenser    *pmock.Dispenser
+			source        *connector.Instance
+			srcDispenser  *pmock.Dispenser
+			destination   *connector.Instance
+			destDispenser *pmock.Dispenser
+			dlq           *connector.Instance
+			dlqDispenser  *pmock.Dispenser
 		)
 		if expected == pipeline.StatusRunning {
 			// mocked connectors that are expected to be started
-			source, sourceDispenser = generatorSource(ctrl, persister, nil, nil, true)
-			destination, destDispenser = asserterDestination(ctrl, persister, nil)
-			dlq, dlqDispenser = asserterDestination(ctrl, persister, nil)
+			source, srcDispenser = asserterSource(ctrl, persister, nil, nil, true, 1)
+			destination, destDispenser = asserterDestination(ctrl, persister, nil, 1)
+			dlq, dlqDispenser = asserterDestination(ctrl, persister, nil, 1)
 		} else {
 			// dummy connectors that are not expected to be started
 			source = dummySource(persister)
@@ -606,14 +769,14 @@ func TestServiceLifecycle_Run_Rerun(t *testing.T) {
 		err = ps.Init(ctx)
 		is.NoErr(err)
 
-		ls := NewService(logger, b, testConnectorService{
+		ls := NewService(logger, testErrRecoveryCfg(), testConnectorService{
 			source.ID:      source,
 			destination.ID: destination,
 			testDLQID:      dlq,
 		},
 			testProcessorService{},
 			testConnectorPluginService{
-				source.Plugin:      sourceDispenser,
+				source.Plugin:      srcDispenser,
 				destination.Plugin: destDispenser,
 				dlq.Plugin:         dlqDispenser,
 			}, ps)
@@ -667,15 +830,16 @@ func generateRecords(count int) []opencdc.Record {
 	return records
 }
 
-// generatorSource creates a connector source that fills up the returned slice
+// asserterSource creates a connector source that fills up the returned slice
 // with generated records as they are produced. After producing the requested
 // number of records it returns wantErr.
-func generatorSource(
+func asserterSource(
 	ctrl *gomock.Controller,
 	persister *connector.Persister,
 	records []opencdc.Record,
 	wantErr error,
 	stop bool,
+	times int,
 ) (*connector.Instance, *pmock.Dispenser) {
 	sourcePluginOptions := []pmock.ConfigurableSourcePluginOption{
 		pmock.SourcePluginWithConfigure(),
@@ -689,23 +853,24 @@ func generatorSource(
 	if stop {
 		sourcePluginOptions = append(sourcePluginOptions, pmock.SourcePluginWithStop())
 	}
-	sourcePlugin := pmock.NewConfigurableSourcePlugin(ctrl, sourcePluginOptions...)
-
 	source := dummySource(persister)
 
 	dispenser := pmock.NewDispenser(ctrl)
-	dispenser.EXPECT().DispenseSource().Return(sourcePlugin, nil)
+	dispenser.EXPECT().DispenseSource().DoAndReturn(func() (connectorPlugin.SourcePlugin, error) {
+		return pmock.NewConfigurableSourcePlugin(ctrl, sourcePluginOptions...), nil
+	}).Times(times)
 
 	return source, dispenser
 }
 
 // asserterDestination creates a connector destination that checks if the records it gets
-// match the expected records. On teardown it also makes sure that it received
+// match the expected records. On teardown, it also makes sure that it received
 // all expected records.
 func asserterDestination(
 	ctrl *gomock.Controller,
 	persister *connector.Persister,
 	records []opencdc.Record,
+	times int,
 ) (*connector.Instance, *pmock.Dispenser) {
 	var lastPosition opencdc.Position
 	if len(records) > 0 {
@@ -721,12 +886,12 @@ func asserterDestination(
 		pmock.DestinationPluginWithTeardown(),
 	}
 
-	destinationPlugin := pmock.NewConfigurableDestinationPlugin(ctrl, destinationPluginOptions...)
-
 	dest := dummyDestination(persister)
 
 	dispenser := pmock.NewDispenser(ctrl)
-	dispenser.EXPECT().DispenseDestination().Return(destinationPlugin, nil)
+	dispenser.EXPECT().DispenseDestination().DoAndReturn(func() (connectorPlugin.DestinationPlugin, error) {
+		return pmock.NewConfigurableDestinationPlugin(ctrl, destinationPluginOptions...), nil
+	}).Times(times)
 
 	return dest, dispenser
 }
@@ -760,6 +925,16 @@ func dummyDestination(persister *connector.Persister) *connector.Instance {
 	destination.Init(log.Nop(), persister)
 
 	return destination
+}
+
+func testErrRecoveryCfg() *ErrRecoveryCfg {
+	return &ErrRecoveryCfg{
+		MinDelay:      time.Second,
+		MaxDelay:      10 * time.Minute,
+		BackoffFactor: 2,
+		MaxRetries:    InfiniteRetriesErrRecovery,
+		HealthyAfter:  5 * time.Minute,
+	}
 }
 
 // testConnectorService fulfills the ConnectorService interface.

@@ -22,6 +22,7 @@ import (
 	sdk "github.com/conduitio/conduit-connector-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/lifecycle"
 	"github.com/conduitio/conduit/pkg/plugin/connector/builtin"
 	"github.com/rs/zerolog"
 	"golang.org/x/exp/constraints"
@@ -84,14 +85,19 @@ type Config struct {
 	}
 
 	Pipelines struct {
-		Path          string
-		ExitOnError   bool
-		ErrorRecovery struct {
-			MinDelay      time.Duration
-			MaxDelay      time.Duration
+		Path           string
+		ExitOnDegraded bool
+		ErrorRecovery  struct {
+			// MinDelay is the minimum delay before restart: Default: 1 second
+			MinDelay time.Duration
+			// MaxDelay is the maximum delay before restart: Default: 10 minutes
+			MaxDelay time.Duration
+			// BackoffFactor is the factor by which the delay is multiplied after each restart: Default: 2
 			BackoffFactor int
-			MaxRetries    int
-			HealthyAfter  time.Duration
+			// MaxRetries is the maximum number of restarts before the pipeline is considered unhealthy: Default: -1 (infinite)
+			MaxRetries int64
+			// HealthyAfter is the time after which the pipeline is considered healthy: Default: 5 minutes
+			HealthyAfter time.Duration
 		}
 	}
 
@@ -137,7 +143,7 @@ func DefaultConfig() Config {
 	cfg.Pipelines.ErrorRecovery.MinDelay = time.Second
 	cfg.Pipelines.ErrorRecovery.MaxDelay = 10 * time.Minute
 	cfg.Pipelines.ErrorRecovery.BackoffFactor = 2
-	cfg.Pipelines.ErrorRecovery.MaxRetries = 0
+	cfg.Pipelines.ErrorRecovery.MaxRetries = lifecycle.InfiniteRetriesErrRecovery
 	cfg.Pipelines.ErrorRecovery.HealthyAfter = 5 * time.Minute
 
 	cfg.SchemaRegistry.Type = SchemaRegistryTypeBuiltin
@@ -206,8 +212,8 @@ func (c Config) validateErrorRecovery() error {
 	if err := requireNonNegativeValue("backoff-factor", errRecoveryCfg.BackoffFactor); err != nil {
 		errs = append(errs, err)
 	}
-	if err := requireNonNegativeValue("max-retries", errRecoveryCfg.MaxRetries); err != nil {
-		errs = append(errs, err)
+	if errRecoveryCfg.MaxRetries < lifecycle.InfiniteRetriesErrRecovery {
+		errs = append(errs, cerrors.Errorf(`invalid "max-retries" value. It must be %d for infinite retries or >= 0`, lifecycle.InfiniteRetriesErrRecovery))
 	}
 	if err := requirePositiveValue("healthy-after", errRecoveryCfg.HealthyAfter); err != nil {
 		errs = append(errs, err)

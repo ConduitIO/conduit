@@ -20,6 +20,7 @@ import (
 
 	"github.com/conduitio/conduit-commons/database/inmemory"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/lifecycle"
 	"github.com/matryer/is"
 )
 
@@ -196,12 +197,20 @@ func TestConfig_Validate(t *testing.T) {
 			want: cerrors.New(`invalid error recovery config: "backoff-factor" config value mustn't be negative (got: -1)`),
 		},
 		{
-			name: "error recovery: negative max-retries",
+			name: "error recovery: max-retries smaller than -1",
 			setupConfig: func(c Config) Config {
-				c.Pipelines.ErrorRecovery.MaxRetries = -1
+				c.Pipelines.ErrorRecovery.MaxRetries = lifecycle.InfiniteRetriesErrRecovery - 1
 				return c
 			},
-			want: cerrors.New(`invalid error recovery config: "max-retries" config value mustn't be negative (got: -1)`),
+			want: cerrors.New(`invalid error recovery config: invalid "max-retries" value. It must be -1 for infinite retries or >= 0`),
+		},
+		{
+			name: "error recovery: with 0 max-retries ",
+			setupConfig: func(c Config) Config {
+				c.Pipelines.ErrorRecovery.MaxRetries = 0
+				return c
+			},
+			want: nil,
 		},
 		{
 			name: "error recovery: negative healthy-after",

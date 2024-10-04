@@ -105,12 +105,23 @@ func (*Entrypoint) Flags(cfg *Config) *flag.FlagSet {
 		cfg.Pipelines.Path,
 		"path to the directory that has the yaml pipeline configuration files, or a single pipeline configuration file",
 	)
+
+	// Deprecated: use `pipelines.exit-on-degraded` instead
+	// Note: If both `pipeline.exit-on-error` and `pipeline.exit-on-degraded` are set, `pipeline.exit-on-degraded` will take precedence
 	flags.BoolVar(
-		&cfg.Pipelines.ExitOnError,
+		&cfg.Pipelines.ExitOnDegraded,
 		"pipelines.exit-on-error",
-		cfg.Pipelines.ExitOnError,
-		"exit Conduit if a pipeline experiences an error while running",
+		cfg.Pipelines.ExitOnDegraded,
+		"Deprecated: use `exit-on-degraded` instead.\nexit Conduit if a pipeline experiences an error while running",
 	)
+
+	flags.BoolVar(
+		&cfg.Pipelines.ExitOnDegraded,
+		"pipelines.exit-on-degraded",
+		cfg.Pipelines.ExitOnDegraded,
+		"exit Conduit if a pipeline enters a degraded state",
+	)
+
 	flags.DurationVar(
 		&cfg.Pipelines.ErrorRecovery.MinDelay,
 		"pipelines.error-recovery.min-delay",
@@ -129,7 +140,7 @@ func (*Entrypoint) Flags(cfg *Config) *flag.FlagSet {
 		cfg.Pipelines.ErrorRecovery.BackoffFactor,
 		"backoff factor applied to the last delay",
 	)
-	flags.IntVar(
+	flags.Int64Var(
 		&cfg.Pipelines.ErrorRecovery.MaxRetries,
 		"pipelines.error-recovery.max-retries",
 		cfg.Pipelines.ErrorRecovery.MaxRetries,
@@ -151,11 +162,16 @@ func (*Entrypoint) Flags(cfg *Config) *flag.FlagSet {
 	flags.StringVar(&cfg.dev.memprofile, "dev.memprofile", "", "write memory profile to file")
 	flags.StringVar(&cfg.dev.blockprofile, "dev.blockprofile", "", "write block profile to file")
 
+	// Deprecated flags that are hidden from help output
+	deprecatedFlags := map[string]bool{
+		"pipelines.exit-on-error": true,
+	}
+
 	// show user or dev flags
 	flags.Usage = func() {
 		tmpFlags := flag.NewFlagSet("conduit", flag.ExitOnError)
 		flags.VisitAll(func(f *flag.Flag) {
-			if f.Name == "dev" || strings.HasPrefix(f.Name, "dev.") != *showDevHelp {
+			if f.Name == "dev" || strings.HasPrefix(f.Name, "dev.") != *showDevHelp || deprecatedFlags[f.Name] {
 				return // hide flag from output
 			}
 			// reset value to its default, to ensure default is shown correctly

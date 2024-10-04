@@ -17,6 +17,7 @@ package log
 const (
 	ComponentField        = "component"
 	ConnectorIDField      = "connector_id"
+	AttemptField          = "attempt"
 	DurationField         = "duration"
 	MessageIDField        = "message_id"
 	NodeIDField           = "node_id"
