@@ -234,7 +234,7 @@ func (s *Service) StartWithBackoff(ctx context.Context, rp *runnablePipeline) er
 	if rp.pipeline.GetStatus() == pipeline.StatusRunning {
 		s.logger.Debug(ctx).
 			Str(log.PipelineIDField, rp.pipeline.ID).
-			Int64("attempt", attempt).
+			Int64(log.AttemptField, attempt).
 			Int("backoffRetry.count", s.errRecoveryCfg.BackoffFactor).
 			Int64("backoffRetry.duration", duration.Milliseconds()).
 			Msg("pipeline recovered")
