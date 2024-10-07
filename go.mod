@@ -41,7 +41,7 @@ require (
 	github.com/prometheus/common v0.60.0
 	github.com/rs/zerolog v1.33.0
 	github.com/stealthrocket/wazergo v0.19.1
-	github.com/tetratelabs/wazero v1.8.0
+	github.com/tetratelabs/wazero v1.8.1
 	github.com/twmb/franz-go/pkg/sr v1.1.0
 	github.com/twmb/go-cache v1.2.1
 	go.uber.org/mock v0.4.0
