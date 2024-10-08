@@ -81,7 +81,7 @@ func (s *sourcePluginAdapter) Run(ctx context.Context, stream pconnector.SourceR
 
 	s.logger.Debug(ctx).Msg("calling Run")
 	go func() {
-		err := runSandboxNoResp(s.impl.Run, s.withLogger(ctx), stream, s.logger)
+		err := s.impl.Run(s.withLogger(ctx), stream)
 		if err != nil {
 			if !inmemStream.Close(err) {
 				s.logger.Err(ctx, err).Msg("stream already stopped")

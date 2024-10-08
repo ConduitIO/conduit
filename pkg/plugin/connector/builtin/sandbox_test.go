@@ -99,13 +99,3 @@ func TestRunSandbox(t *testing.T) {
 		})
 	}
 }
-
-func TestRunSandboxNoResp(t *testing.T) {
-	ctx := context.Background()
-	is := is.New(t)
-	logger := log.New(zerolog.New(zerolog.NewTestWriter(t)))
-
-	wantErr := cerrors.New("test error")
-	gotErr := runSandboxNoResp(func(context.Context, any) error { panic(wantErr) }, ctx, nil, logger)
-	is.Equal(gotErr, wantErr)
-}
