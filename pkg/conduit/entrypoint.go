@@ -147,9 +147,9 @@ func (*Entrypoint) Flags(cfg *Config) *flag.FlagSet {
 		"maximum number of retries",
 	)
 	flags.DurationVar(
-		&cfg.Pipelines.ErrorRecovery.HealthyAfter,
-		"pipelines.error-recovery.healthy-after",
-		cfg.Pipelines.ErrorRecovery.HealthyAfter,
+		&cfg.Pipelines.ErrorRecovery.MaxRetriesWindow,
+		"pipelines.error-recovery.max-retries-window",
+		cfg.Pipelines.ErrorRecovery.MaxRetriesWindow,
 		"amount of time running without any errors after which a pipeline is considered healthy",
 	)
 

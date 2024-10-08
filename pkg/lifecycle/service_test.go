@@ -85,11 +85,7 @@ func TestServiceLifecycle_buildRunnablePipeline(t *testing.T) {
 		testPipelineService{},
 	)
 
-	got, err := ls.buildRunnablePipeline(
-		ctx,
-		pl,
-		ls.errRecoveryCfg.toBackoff(),
-	)
+	got, err := ls.buildRunnablePipeline(ctx, pl)
 
 	is.NoErr(err)
 
@@ -171,11 +167,7 @@ func TestService_buildRunnablePipeline_NoSourceNode(t *testing.T) {
 
 	wantErr := "can't build pipeline without any source connectors"
 
-	got, err := ls.buildRunnablePipeline(
-		ctx,
-		pl,
-		ls.errRecoveryCfg.toBackoff(),
-	)
+	got, err := ls.buildRunnablePipeline(ctx, pl)
 
 	is.True(err != nil)
 	is.Equal(err.Error(), wantErr)
@@ -219,11 +211,7 @@ func TestService_buildRunnablePipeline_NoDestinationNode(t *testing.T) {
 	}
 	pl.SetStatus(pipeline.StatusUserStopped)
 
-	got, err := ls.buildRunnablePipeline(
-		ctx,
-		pl,
-		ls.errRecoveryCfg.toBackoff(),
-	)
+	got, err := ls.buildRunnablePipeline(ctx, pl)
 
 	is.True(err != nil)
 	is.Equal(err.Error(), wantErr)
@@ -929,11 +917,11 @@ func dummyDestination(persister *connector.Persister) *connector.Instance {
 
 func testErrRecoveryCfg() *ErrRecoveryCfg {
 	return &ErrRecoveryCfg{
-		MinDelay:      time.Second,
-		MaxDelay:      10 * time.Minute,
-		BackoffFactor: 2,
-		MaxRetries:    InfiniteRetriesErrRecovery,
-		HealthyAfter:  5 * time.Minute,
+		MinDelay:         time.Second,
+		MaxDelay:         10 * time.Minute,
+		BackoffFactor:    2,
+		MaxRetries:       InfiniteRetriesErrRecovery,
+		MaxRetriesWindow: 5 * time.Minute,
 	}
 }
 
