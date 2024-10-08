@@ -386,9 +386,9 @@ pipelines:
 
 **Steps**:
 
-1. Run conduit with `--pipelines.error-recovery.backoff-factor 1 --pipelines.error-recovery.min-delay 10s --pipelines.error-recovery.max-retries 2 --pipelines.error-recovery.max-retries-window 25s`
+1. Run Conduit with `--pipelines.error-recovery.backoff-factor 1 --pipelines.error-recovery.min-delay 10s --pipelines.error-recovery.max-retries 2 --pipelines.error-recovery.max-retries-window 25s`
 2. Stop postgres database
-3. Leave it stopped and notice pipeline goes to degraded on attempt 3 (after ~20 seconds) 
+3. Leave it stopped and notice pipeline goes to degraded on attempt 3 (after ~20 seconds)
 
 **Expected Result**:
 
@@ -434,7 +434,7 @@ pipelines:
 
 **Steps**:
 
-1. Run conduit with `--pipelines.error-recovery.backoff-factor 1 --pipelines.error-recovery.min-delay 10s --pipelines.error-recovery.max-retries 2 --pipelines.error-recovery.max-retries-window 25s`
+1. Run Conduit with `--pipelines.error-recovery.backoff-factor 1 --pipelines.error-recovery.min-delay 10s --pipelines.error-recovery.max-retries 2 --pipelines.error-recovery.max-retries-window 25s`
 2. Stop postgres database
 3. Leave it stopped until backoff attempts are 2
 4. Start postgres database again
