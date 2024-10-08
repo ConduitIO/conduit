@@ -221,6 +221,11 @@ func (s *Service) StartWithBackoff(ctx context.Context, rp *runnablePipeline) er
 		Msg("restarting with backoff")
 
 	time.AfterFunc(duration+s.errRecoveryCfg.MaxRetriesWindow, func() {
+		s.logger.Info(ctx).
+			Str(log.PipelineIDField, rp.pipeline.ID).
+			Dur(log.DurationField, duration).
+			Int64(log.AttemptField, attempt).
+			Msg("decreasing recovery attempts")
 		rp.recoveryAttempts.Add(-1) // Decrement the number of attempts after delay.
 	})
 
@@ -741,11 +746,6 @@ func (s *Service) runPipeline(ctx context.Context, rp *runnablePipeline) error {
 		})
 	}
 
-	// TODO: When it's recovering, we should only update the status back to running once MaxRetriesWindow has passed.
-	// now:
-	//		running -> (error) -> recovering (restart) -> running
-	// future (with the MaxRetriesWindow mechanism):
-	//		running -> (error) -> recovering (restart) -> recovering (wait for MaxRetriesWindow) -> running
 	err := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusRunning, "")
 	if err != nil {
 		return err

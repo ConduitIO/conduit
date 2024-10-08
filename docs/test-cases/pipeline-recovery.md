@@ -19,28 +19,24 @@ a retry.
 ```yaml
 version: "2.2"
 pipelines:
-  - id: file-pipeline
+  - id: chaos-to-log
     status: running
-    name: file-pipeline
-    description: dlq write error
+    description: Postgres source, file destination
+    dead-letter-queue:
+      plugin: standalone:chaos
+      settings:
+        writeMode: error
     connectors:
-      - id: chaos-src
+      - id: chaos
         type: source
         plugin: standalone:chaos
-        name: chaos-src
+        name: source
         settings:
           readMode: error
-      - id: log-dst
+      - id: destination
         type: destination
         plugin: builtin:log
-        log: file-dst
-    dead-letter-queue:
-      plugin: "builtin:postgres"
-      settings:
-        table: non_existing_table_so_that_dlq_fails
-        url: postgresql://meroxauser:meroxapass@localhost/meroxadb?sslmode=disable
-      window-size: 3
-      window-nack-threshold: 2
+        name: destination
 ```
 
 **Steps**:
@@ -65,6 +61,28 @@ Recovery is not triggered when there is an error processing a record.
 **Pipeline configuration file**:
 
 ```yaml
+version: "2.2"
+pipelines:
+  - id: generator-to-log
+    status: running
+    description: Postgres source, file destination
+    connectors:
+      - id: generator
+        type: source
+        plugin: builtin:generator
+        name: source
+        settings:
+          format.type: structured
+          format.options.id: int
+          format.options.name: string
+          operations: create
+      - id: destination
+        type: destination
+        plugin: builtin:log
+        name: destination
+    processors:
+      - id: error
+        plugin: "error"
 ```
 
 **Steps**:
@@ -324,6 +342,109 @@ pipelines:
 **Steps**:
 
 **Expected Result**:
+
+**Additional comments**:
+
+---
+
+## Test Case 11: Recovery triggered during a specific max-retries-window, after that pipeline is degraded  
+
+**Priority** (low/medium/high):
+
+**Description**:
+
+A pipeline will be allowed to fail during a specific time window, after that it will be degraded.
+Combining `max-retries` and `max-retries-window` we can control how many times a pipeline can fail during a specific time window.
+
+**Automated** (yes/no)
+
+**Setup**:
+
+**Pipeline configuration file**:
+
+```yaml
+version: "2.2"
+pipelines:
+  - id: generator-to-log
+    status: running
+    description: Postgres source, file destination
+    connectors:
+      - id: postgres-source
+        type: source
+        plugin: builtin:postgres
+        name: source
+        settings:
+          cdcMode: logrepl
+          snapshotMode: never
+          table: employees
+          url: postgresql://meroxauser:meroxapass@localhost/meroxadb?sslmode=disable
+      - id: destination
+        type: destination
+        plugin: builtin:log
+        name: destination
+```
+
+**Steps**:
+
+1. Run conduit with `--pipelines.error-recovery.backoff-factor 1 --pipelines.error-recovery.min-delay 10s --pipelines.error-recovery.max-retries 2 --pipelines.error-recovery.max-retries-window 25s`
+2. Stop postgres database
+3. Leave it stopped and notice pipeline goes to degraded on attempt 3 (after ~20 seconds) 
+
+**Expected Result**:
+
+After 20 seconds the pipeline should be degraded.
+
+**Additional comments**:
+
+---
+
+## Test Case 12: Recovery triggered during a specific max-retries-window, pipeline is resilient during a specific time window
+
+**Priority** (low/medium/high):
+
+**Description**:
+
+**Automated** (yes/no)
+
+**Setup**:
+
+**Pipeline configuration file**:
+
+```yaml
+version: "2.2"
+pipelines:
+  - id: generator-to-log
+    status: running
+    description: Postgres source, file destination
+    connectors:
+      - id: postgres-source
+        type: source
+        plugin: builtin:postgres
+        name: source
+        settings:
+          cdcMode: logrepl
+          snapshotMode: never
+          table: employees
+          url: postgresql://meroxauser:meroxapass@localhost/meroxadb?sslmode=disable
+      - id: destination
+        type: destination
+        plugin: builtin:log
+        name: destination
+```
+
+**Steps**:
+
+1. Run conduit with `--pipelines.error-recovery.backoff-factor 1 --pipelines.error-recovery.min-delay 10s --pipelines.error-recovery.max-retries 2 --pipelines.error-recovery.max-retries-window 25s`
+2. Stop postgres database
+3. Leave it stopped until backoff attempts are 2
+4. Start postgres database again
+5. Leave it running for another 15 seconds
+6. Notice backoff attempts are going back to 1
+   (repeat if needed to see how backoff attempts are increasing and decreasing)
+
+**Expected Result**:
+
+Pipeline should be able to recover.
 
 **Additional comments**:
 
