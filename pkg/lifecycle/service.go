@@ -221,7 +221,7 @@ func (s *Service) StartWithBackoff(ctx context.Context, rp *runnablePipeline) er
 		Msg("restarting with backoff")
 
 	time.AfterFunc(duration+s.errRecoveryCfg.MaxRetriesWindow, func() {
-		s.logger.Info(ctx).
+		s.logger.Debug(ctx).
 			Str(log.PipelineIDField, rp.pipeline.ID).
 			Dur(log.DurationField, duration).
 			Int64(log.AttemptField, attempt).
