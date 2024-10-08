@@ -741,11 +741,11 @@ func (s *Service) runPipeline(ctx context.Context, rp *runnablePipeline) error {
 		})
 	}
 
-	// TODO: When it's recovering, we should only update the status back to running once HealthyAfter has passed.
+	// TODO: When it's recovering, we should only update the status back to running once MaxRetriesDuration has passed.
 	// now:
 	//		running -> (error) -> recovering (restart) -> running
-	// future (with the HealthyAfter mechanism):
-	//		running -> (error) -> recovering (restart) -> recovering (wait for HealthyAfter) -> running
+	// future (with the MaxRetriesDuration mechanism):
+	//		running -> (error) -> recovering (restart) -> recovering (wait for MaxRetriesDuration) -> running
 	err := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusRunning, "")
 	if err != nil {
 		return err

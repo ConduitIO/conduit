@@ -209,7 +209,7 @@ func createServices(r *Runtime) error {
 		MaxDelay:      r.Config.Pipelines.ErrorRecovery.MaxDelay,
 		BackoffFactor: r.Config.Pipelines.ErrorRecovery.BackoffFactor,
 		MaxRetries:    r.Config.Pipelines.ErrorRecovery.MaxRetries,
-		HealthyAfter:  r.Config.Pipelines.ErrorRecovery.HealthyAfter, // TODO: possibly create a go routine to continuously check health and reset status when needed
+		HealthyAfter:  r.Config.Pipelines.ErrorRecovery.MaxRetriesDuration,
 	}
 
 	plService := pipeline.NewService(r.logger, r.DB)
