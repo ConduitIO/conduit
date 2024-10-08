@@ -917,11 +917,11 @@ func dummyDestination(persister *connector.Persister) *connector.Instance {
 
 func testErrRecoveryCfg() *ErrRecoveryCfg {
 	return &ErrRecoveryCfg{
-		MinDelay:      time.Second,
-		MaxDelay:      10 * time.Minute,
-		BackoffFactor: 2,
-		MaxRetries:    InfiniteRetriesErrRecovery,
-		HealthyAfter:  5 * time.Minute,
+		MinDelay:         time.Second,
+		MaxDelay:         10 * time.Minute,
+		BackoffFactor:    2,
+		MaxRetries:       InfiniteRetriesErrRecovery,
+		MaxRetriesWindow: 5 * time.Minute,
 	}
 }
 

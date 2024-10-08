@@ -96,8 +96,8 @@ type Config struct {
 			BackoffFactor int
 			// MaxRetries is the maximum number of restarts before the pipeline is considered unhealthy: Default: -1 (infinite)
 			MaxRetries int64
-			// MaxRetriesDuration is the time window in which the max retries are counted: Default: 5 minutes
-			MaxRetriesDuration time.Duration
+			// MaxRetriesWindow is the duration window in which the max retries are counted: Default: 5 minutes
+			MaxRetriesWindow time.Duration
 		}
 	}
 
@@ -144,7 +144,7 @@ func DefaultConfig() Config {
 	cfg.Pipelines.ErrorRecovery.MaxDelay = 10 * time.Minute
 	cfg.Pipelines.ErrorRecovery.BackoffFactor = 2
 	cfg.Pipelines.ErrorRecovery.MaxRetries = lifecycle.InfiniteRetriesErrRecovery
-	cfg.Pipelines.ErrorRecovery.MaxRetriesDuration = 5 * time.Minute
+	cfg.Pipelines.ErrorRecovery.MaxRetriesWindow = 5 * time.Minute
 
 	cfg.SchemaRegistry.Type = SchemaRegistryTypeBuiltin
 
@@ -215,7 +215,7 @@ func (c Config) validateErrorRecovery() error {
 	if errRecoveryCfg.MaxRetries < lifecycle.InfiniteRetriesErrRecovery {
 		errs = append(errs, cerrors.Errorf(`invalid "max-retries" value. It must be %d for infinite retries or >= 0`, lifecycle.InfiniteRetriesErrRecovery))
 	}
-	if err := requirePositiveValue("max-retries-duration", errRecoveryCfg.MaxRetriesDuration); err != nil {
+	if err := requirePositiveValue("max-retries-window", errRecoveryCfg.MaxRetriesWindow); err != nil {
 		errs = append(errs, err)
 	}
 

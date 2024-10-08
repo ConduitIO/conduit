@@ -97,11 +97,11 @@ func TestPipelineSimple(t *testing.T) {
 	pipelineService := pipeline.NewService(logger, db)
 
 	errRecoveryCfg := &lifecycle.ErrRecoveryCfg{
-		MinDelay:      time.Second,
-		MaxDelay:      10 * time.Minute,
-		BackoffFactor: 2,
-		MaxRetries:    0,
-		HealthyAfter:  5 * time.Minute,
+		MinDelay:         time.Second,
+		MaxDelay:         10 * time.Minute,
+		BackoffFactor:    2,
+		MaxRetries:       0,
+		MaxRetriesWindow: 5 * time.Minute,
 	}
 
 	lifecycleService := lifecycle.NewService(logger, errRecoveryCfg, connectorService, processorService, connPluginService, pipelineService)

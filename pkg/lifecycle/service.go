@@ -50,11 +50,11 @@ type FailureEvent struct {
 type FailureHandler func(FailureEvent)
 
 type ErrRecoveryCfg struct {
-	MinDelay      time.Duration
-	MaxDelay      time.Duration
-	BackoffFactor int
-	MaxRetries    int64
-	HealthyAfter  time.Duration
+	MinDelay         time.Duration
+	MaxDelay         time.Duration
+	BackoffFactor    int
+	MaxRetries       int64
+	MaxRetriesWindow time.Duration
 }
 
 func (e *ErrRecoveryCfg) toBackoff() *backoff.Backoff {
@@ -209,7 +209,7 @@ func (s *Service) StartWithBackoff(ctx context.Context, rp *runnablePipeline) er
 	// Increment number of recovery attempts.
 	attempt := rp.recoveryAttempts.Add(1)
 
-	if s.errRecoveryCfg.MaxRetries != InfiniteRetriesErrRecovery && attempt >= s.errRecoveryCfg.MaxRetries {
+	if s.errRecoveryCfg.MaxRetries != InfiniteRetriesErrRecovery && attempt > s.errRecoveryCfg.MaxRetries {
 		return cerrors.FatalError(cerrors.Errorf("failed to recover pipeline %s after %d attempts: %w", rp.pipeline.ID, attempt, pipeline.ErrPipelineCannotRecover))
 	}
 
@@ -220,7 +220,7 @@ func (s *Service) StartWithBackoff(ctx context.Context, rp *runnablePipeline) er
 		Int64(log.AttemptField, attempt).
 		Msg("restarting with backoff")
 
-	time.AfterFunc(duration+s.errRecoveryCfg.HealthyAfter, func() {
+	time.AfterFunc(duration+s.errRecoveryCfg.MaxRetriesWindow, func() {
 		rp.recoveryAttempts.Add(-1) // Decrement the number of attempts after delay.
 	})
 
@@ -741,11 +741,11 @@ func (s *Service) runPipeline(ctx context.Context, rp *runnablePipeline) error {
 		})
 	}
 
-	// TODO: When it's recovering, we should only update the status back to running once MaxRetriesDuration has passed.
+	// TODO: When it's recovering, we should only update the status back to running once MaxRetriesWindow has passed.
 	// now:
 	//		running -> (error) -> recovering (restart) -> running
-	// future (with the MaxRetriesDuration mechanism):
-	//		running -> (error) -> recovering (restart) -> recovering (wait for MaxRetriesDuration) -> running
+	// future (with the MaxRetriesWindow mechanism):
+	//		running -> (error) -> recovering (restart) -> recovering (wait for MaxRetriesWindow) -> running
 	err := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusRunning, "")
 	if err != nil {
 		return err

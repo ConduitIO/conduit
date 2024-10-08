@@ -213,12 +213,12 @@ func TestConfig_Validate(t *testing.T) {
 			want: nil,
 		},
 		{
-			name: "error recovery: negative max-retries-duration",
+			name: "error recovery: negative max-retries-window",
 			setupConfig: func(c Config) Config {
-				c.Pipelines.ErrorRecovery.MaxRetriesDuration = -time.Second
+				c.Pipelines.ErrorRecovery.MaxRetriesWindow = -time.Second
 				return c
 			},
-			want: cerrors.New(`invalid error recovery config: "max-retries-duration" config value must be positive (got: -1s)`),
+			want: cerrors.New(`invalid error recovery config: "max-retries-window" config value must be positive (got: -1s)`),
 		},
 	}
 
