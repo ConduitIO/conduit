@@ -224,8 +224,8 @@ github.com/conduitio/conduit-commons v0.4.0 h1:YlvBKyfvgOa0SMu3jA1NzA5xhQ1Y5GQ+0
 github.com/conduitio/conduit-commons v0.4.0/go.mod h1:hAvCne646OtmiZx6XDNumyKVNM5JlqyRGp6WYegAEpo=
 github.com/conduitio/conduit-connector-file v0.8.0 h1:6Hfvod95ag4FEZvy4oS+OiOgqiGwm3Bfm2SCuVg/kLQ=
 github.com/conduitio/conduit-connector-file v0.8.0/go.mod h1:+sjby/XY9XEh0RTGttBXLWKmIw6UOl1TyywZrIdDiRo=
-github.com/conduitio/conduit-connector-generator v0.7.0 h1:Bqsh/ak7gw6k5E8m0PxXOib0zhNlKbrJcIoLLQ0+S08=
-github.com/conduitio/conduit-connector-generator v0.7.0/go.mod h1:8VPNiW2lHJ2mIgCqJnjr0CeIfIxr4CtAIhfvA+H65VM=
+github.com/conduitio/conduit-connector-generator v0.8.0 h1:KUTCLTre/DZLx5az0Wj1B+dKt6oZ4gzAnv6jpHRGb0w=
+github.com/conduitio/conduit-connector-generator v0.8.0/go.mod h1:O9yjFaFv9mfjem3oBSm+lhSPswui9jsHhXzVEQysdeA=
 github.com/conduitio/conduit-connector-kafka v0.9.0 h1:VFmq58vS57ch++GP6bC12SQF1ObWhJq4xKeGiQ9qB8w=
 github.com/conduitio/conduit-connector-kafka v0.9.0/go.mod h1:9zqc2Be3w2xsSM8LMUWhVWWW80C6coRIX9ttyIhlEkM=
 github.com/conduitio/conduit-connector-log v0.4.0 h1:oTzZsdX4bOgvWkR5xlc2SzMKTyO7UI1dG5a3wDe5NhY=
