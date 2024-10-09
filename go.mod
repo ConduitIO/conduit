@@ -1,6 +1,7 @@
 module github.com/conduitio/conduit
 
-go 1.23.1
+go 1.23.2
+
 require (
 	buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go v1.35.1-20240617172850-a48fcebcf8f1.1
 	github.com/Masterminds/semver/v3 v3.3.0
