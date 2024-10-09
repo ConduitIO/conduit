@@ -94,16 +94,3 @@ func returnResponse(ctx context.Context, res any, err error, c chan<- any, logge
 		c <- err
 	}
 }
-
-func runSandboxNoResp[REQ any](
-	f func(context.Context, REQ) error,
-	ctx context.Context,
-	req REQ,
-	logger log.CtxLogger,
-) error {
-	_, err := runSandbox(func(ctx context.Context, req REQ) (any, error) {
-		err := f(ctx, req)
-		return nil, err
-	}, ctx, req, logger)
-	return err
-}
