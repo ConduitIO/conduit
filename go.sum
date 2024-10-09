@@ -238,8 +238,8 @@ github.com/conduitio/conduit-connector-s3 v0.6.0 h1:zPtRyHgHNjsI1OEkWgDMyLOT+7Si
 github.com/conduitio/conduit-connector-s3 v0.6.0/go.mod h1:qt1l3zpL+/V7sVy5KD5N2vFbVreLxiZokcYGcGxtabg=
 github.com/conduitio/conduit-connector-sdk v0.10.1 h1:buqbpymeQzLbLIMByPnNLZ+8Ec6MiFKczJSK1CzqJKc=
 github.com/conduitio/conduit-connector-sdk v0.10.1/go.mod h1:wKz/So3848xIFSw45swE6N0JNgqLloqE1gVkadK6aOI=
-github.com/conduitio/conduit-processor-sdk v0.2.0 h1:qhcMdU8kVueKPiMfvFtS771J0KN7a6pD06HIYYKnCuw=
-github.com/conduitio/conduit-processor-sdk v0.2.0/go.mod h1:cgJSPN8w6s8FvH8mN8zYN79BaFk+i7fJjI9mMRByXjI=
+github.com/conduitio/conduit-processor-sdk v0.3.0 h1:ZLvkPrgjnHc/fkivHi959mN9QWwLAPNCsaGpdPs48u4=
+github.com/conduitio/conduit-processor-sdk v0.3.0/go.mod h1:tnep/roIO45cxU8F9YpgjtZpQ1y4CBXZU8+YV963bUs=
 github.com/conduitio/conduit-schema-registry v0.1.0 h1:PNj7mMAKt5vWsSxCaIGS31LYMOnuWqEzYzwBBXThZFI=
 github.com/conduitio/conduit-schema-registry v0.1.0/go.mod h1:5xF5XwXUan9Gz5yiHKg7nMy/ZCTrXSua3/PdEpnwfUs=
 github.com/conduitio/yaml/v3 v3.3.0 h1:kbbaOSHcuH39gP4+rgbJGl6DSbLZcJgEaBvkEXJlCsI=
@@ -951,8 +951,8 @@ go.opentelemetry.io/otel/sdk/metric v1.19.0 h1:EJoTO5qysMsYCa+w4UghwFV/ptQgqSL/8
 go.opentelemetry.io/otel/sdk/metric v1.19.0/go.mod h1:XjG0jQyFJrv2PbMvwND7LwCEhsJzCzV5210euduKcKY=
 go.opentelemetry.io/otel/trace v1.30.0 h1:7UBkkYzeg3C7kQX8VAidWh2biiQbtAKjyIML8dQ9wmc=
 go.opentelemetry.io/otel/trace v1.30.0/go.mod h1:5EyKqTzzmyqB9bwtCCq6pDLktPK6fmGf/Dph+8VI02o=
-go.opentelemetry.io/proto/otlp v1.0.0 h1:T0TX0tmXU8a3CbNXzEKGeU5mIVOdf0oykP+u2lIVU/I=
-go.opentelemetry.io/proto/otlp v1.0.0/go.mod h1:Sy6pihPLfYHkr3NkUbEhGHFhINUSI/v80hjKIs5JXpM=
+go.opentelemetry.io/proto/otlp v1.1.0 h1:2Di21piLrCqJ3U3eXGCTPHE9R8Nh+0uglSnOyxikMeI=
+go.opentelemetry.io/proto/otlp v1.1.0/go.mod h1:GpBHCBWiqvVLDqmHZsoMM3C5ySeKTC7ej/RNTae6MdY=
 go.uber.org/atomic v1.11.0 h1:ZvwS0R+56ePWxUNi+Atn9dWONBPp/AUETXlHW0DxSjE=
 go.uber.org/atomic v1.11.0/go.mod h1:LUxbIzbOniOlMKjJjyPfpl4v+PKK2cNJn91OQbhoJI0=
 go.uber.org/automaxprocs v1.5.3 h1:kWazyxZUrS3Gs4qUpbwo5kEIMGe/DAvi5Z4tl2NW4j8=
