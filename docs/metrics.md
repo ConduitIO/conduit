@@ -53,7 +53,7 @@ A labeled metric is one where labels must be set before usage. In many cases,
 the already present metric types should be sufficient.
 
 Adding a new metric of an existing type is simple. Let's say we want to count
-number of message processed, per pipeline. To do so we will define a labeled
+number of messages processed, per pipeline. To do so we will define a labeled
 counter and increase the counter in source nodes, each time a message is read.
 
 ### Create a new labeled counter
