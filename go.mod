@@ -9,7 +9,7 @@ require (
 	github.com/NYTimes/gziphandler v1.1.1
 	github.com/bufbuild/buf v1.45.0
 	github.com/conduitio/conduit-commons v0.4.0
-	github.com/conduitio/conduit-connector-file v0.7.0
+	github.com/conduitio/conduit-connector-file v0.8.0
 	github.com/conduitio/conduit-connector-generator v0.7.0
 	github.com/conduitio/conduit-connector-kafka v0.9.0
 	github.com/conduitio/conduit-connector-log v0.4.0
