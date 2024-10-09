@@ -15,13 +15,13 @@ connectors themselves (using their gRPC API).
 
 ## Referencing connectors
 
-The name used to reference a connector in API requests (e.g. to createa new connector) comes in the following format:
+The name used to reference a connector in API requests (e.g. to create a new connector) comes in the following format:
 
 `[PLUGIN-TYPE:]PLUGIN-NAME[@VERSION]`
 
 - `PLUGIN-TYPE` (`builtin`, `standalone` or `any`)
-  - Defines if the specified plugin should be builtin or standalone.
-  - If `any`, Conduit will use a standalone plugin if it exists and fall back to a builtin plugin.
+  - Defines if the specified plugin should be built-in or standalone.
+  - If `any`, Conduit will use a standalone plugin if it exists and fall back to a built-in plugin.
   - Default is `any`.
 - `PLUGIN-NAME`
   - Defines the name of the plugin as specified in the plugin specifications, it has to be an exact match.
