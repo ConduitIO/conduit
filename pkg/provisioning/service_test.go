@@ -520,11 +520,11 @@ func TestService_IntegrationTestServices(t *testing.T) {
 	procService := processor.NewService(logger, db, procPluginService)
 
 	errRecoveryCfg := &lifecycle.ErrRecoveryCfg{
-		MinDelay:      time.Second,
-		MaxDelay:      10 * time.Minute,
-		BackoffFactor: 2,
-		MaxRetries:    0,
-		HealthyAfter:  5 * time.Minute,
+		MinDelay:         time.Second,
+		MaxDelay:         10 * time.Minute,
+		BackoffFactor:    2,
+		MaxRetries:       0,
+		MaxRetriesWindow: 5 * time.Minute,
 	}
 	lifecycleService := lifecycle.NewService(logger, errRecoveryCfg, connService, procService, connPluginService, plService)
 

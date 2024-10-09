@@ -50,11 +50,11 @@ type FailureEvent struct {
 type FailureHandler func(FailureEvent)
 
 type ErrRecoveryCfg struct {
-	MinDelay      time.Duration
-	MaxDelay      time.Duration
-	BackoffFactor int
-	MaxRetries    int64
-	HealthyAfter  time.Duration
+	MinDelay         time.Duration
+	MaxDelay         time.Duration
+	BackoffFactor    int
+	MaxRetries       int64
+	MaxRetriesWindow time.Duration
 }
 
 func (e *ErrRecoveryCfg) toBackoff() *backoff.Backoff {
@@ -103,10 +103,11 @@ func NewService(
 }
 
 type runnablePipeline struct {
-	pipeline   *pipeline.Instance
-	n          []stream.Node
-	t          *tomb.Tomb
-	backoffCfg backoff.Backoff
+	pipeline         *pipeline.Instance
+	n                []stream.Node
+	t                *tomb.Tomb
+	backoff          *backoff.Backoff
+	recoveryAttempts *atomic.Int64
 }
 
 // ConnectorService can fetch and create a connector instance.
@@ -179,20 +180,15 @@ func (s *Service) Start(
 	s.logger.Debug(ctx).Str(log.PipelineIDField, pl.ID).Msg("starting pipeline")
 	s.logger.Trace(ctx).Str(log.PipelineIDField, pl.ID).Msg("building nodes")
 
-	var backoffCfg *backoff.Backoff
-
-	// We check if the pipeline was previously running and get the backoff configuration from it.
-	oldRp, ok := s.runningPipelines.Get(pipelineID)
-	if !ok {
-		// default backoff configuration
-		backoffCfg = s.errRecoveryCfg.toBackoff()
-	} else {
-		backoffCfg = &oldRp.backoffCfg
-	}
-
-	rp, err := s.buildRunnablePipeline(ctx, pl, backoffCfg)
+	rp, err := s.buildRunnablePipeline(ctx, pl)
 	if err != nil {
 		return cerrors.Errorf("could not build nodes for pipeline %s: %w", pl.ID, err)
+	}
+
+	// We check if the pipeline was previously running and get the backoff configuration from it.
+	if oldRp, ok := s.runningPipelines.Get(pipelineID); ok {
+		rp.backoff = oldRp.backoff
+		rp.recoveryAttempts = oldRp.recoveryAttempts
 	}
 
 	s.logger.Trace(ctx).Str(log.PipelineIDField, pl.ID).Msg("running nodes")
@@ -210,34 +206,39 @@ func (s *Service) Start(
 // It'll check the number of times the pipeline has been restarted and the duration of the backoff.
 // When the pipeline has reached out the maximum number of retries, it'll return a fatal error.
 func (s *Service) StartWithBackoff(ctx context.Context, rp *runnablePipeline) error {
-	s.logger.Info(ctx).Str(log.PipelineIDField, rp.pipeline.ID).Msg("restarting with backoff")
+	// Increment number of recovery attempts.
+	attempt := rp.recoveryAttempts.Add(1)
 
-	attempt := int64(rp.backoffCfg.Attempt())
-	duration := rp.backoffCfg.Duration()
-
-	s.logger.Trace(ctx).Dur(log.DurationField, duration).Int64(log.AttemptField, attempt).Msg("backoff configuration")
-
-	if s.errRecoveryCfg.MaxRetries != InfiniteRetriesErrRecovery && attempt >= s.errRecoveryCfg.MaxRetries {
+	if s.errRecoveryCfg.MaxRetries != InfiniteRetriesErrRecovery && attempt > s.errRecoveryCfg.MaxRetries {
 		return cerrors.FatalError(cerrors.Errorf("failed to recover pipeline %s after %d attempts: %w", rp.pipeline.ID, attempt, pipeline.ErrPipelineCannotRecover))
 	}
 
+	duration := rp.backoff.ForAttempt(float64(attempt))
+	s.logger.Info(ctx).
+		Str(log.PipelineIDField, rp.pipeline.ID).
+		Dur(log.DurationField, duration).
+		Int64(log.AttemptField, attempt).
+		Msg("restarting with backoff")
+
+	time.AfterFunc(duration+s.errRecoveryCfg.MaxRetriesWindow, func() {
+		s.logger.Debug(ctx).
+			Str(log.PipelineIDField, rp.pipeline.ID).
+			Dur(log.DurationField, duration).
+			Int64(log.AttemptField, attempt).
+			Msg("decreasing recovery attempts")
+		rp.recoveryAttempts.Add(-1) // Decrement the number of attempts after delay.
+	})
+
 	// This results in a default delay progression of 1s, 2s, 4s, 8s, 16s, [...], 10m, 10m,... balancing the need for recovery time and minimizing downtime.
-	timer := time.NewTimer(duration)
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-time.After(duration):
-		<-timer.C
 	}
 
-	// Get status of pipeline to check if it already recovered.
-	if rp.pipeline.GetStatus() == pipeline.StatusRunning {
-		s.logger.Debug(ctx).
-			Str(log.PipelineIDField, rp.pipeline.ID).
-			Int64(log.AttemptField, attempt).
-			Int("backoffRetry.count", s.errRecoveryCfg.BackoffFactor).
-			Int64("backoffRetry.duration", duration.Milliseconds()).
-			Msg("pipeline recovered")
+	// The user may have stopped or restarted the pipeline while we were waiting.
+	actualRp, ok := s.runningPipelines.Get(rp.pipeline.ID)
+	if !ok || actualRp != rp {
 		return nil
 	}
 
@@ -427,7 +428,6 @@ func (s *Service) buildNodes(ctx context.Context, pl *pipeline.Instance) ([]stre
 func (s *Service) buildRunnablePipeline(
 	ctx context.Context,
 	pl *pipeline.Instance,
-	backoffCfg *backoff.Backoff,
 ) (*runnablePipeline, error) {
 	nodes, err := s.buildNodes(ctx, pl)
 	if err != nil {
@@ -435,9 +435,10 @@ func (s *Service) buildRunnablePipeline(
 	}
 
 	return &runnablePipeline{
-		pipeline:   pl,
-		n:          nodes,
-		backoffCfg: *backoffCfg,
+		pipeline:         pl,
+		n:                nodes,
+		backoff:          s.errRecoveryCfg.toBackoff(),
+		recoveryAttempts: &atomic.Int64{},
 	}, nil
 }
 
@@ -745,11 +746,6 @@ func (s *Service) runPipeline(ctx context.Context, rp *runnablePipeline) error {
 		})
 	}
 
-	// TODO: When it's recovering, we should only update the status back to running once HealthyAfter has passed.
-	// now:
-	//		running -> (error) -> recovering (restart) -> running
-	// future (with the HealthyAfter mechanism):
-	//		running -> (error) -> recovering (restart) -> recovering (wait for HealthyAfter) -> running
 	err := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusRunning, "")
 	if err != nil {
 		return err
@@ -792,7 +788,7 @@ func (s *Service) runPipeline(ctx context.Context, rp *runnablePipeline) error {
 					s.logger.
 						Err(ctx, err).
 						Str(log.PipelineIDField, rp.pipeline.ID).
-						Msg("pipeline recovery failed stopped")
+						Msg("pipeline recovery failed")
 
 					if updateErr := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusDegraded, fmt.Sprintf("%+v", recoveryErr)); updateErr != nil {
 						return updateErr
