@@ -24,7 +24,7 @@ Conduit pipelines are built out of simple building blocks which run in their own
 goroutines and are connected using Go channels. This makes Conduit pipelines
 incredibly performant on multi-core machines. Conduit guarantees the order of
 received records won't change, it also takes care of consistency by propagating
-acknowledgments to the start of the pipeline only when a record is successfully
+acknowledgements to the start of the pipeline only when a record is successfully
 processed on all destinations.
 
 Conduit connectors are plugins that communicate with Conduit via a gRPC
@@ -204,7 +204,7 @@ for development purposes.
 
 The database type used can be configured with the `db.type` parameter (through
 any of the [configuration](#configuring-conduit) options in Conduit).
-For example, the CLI flag to use a PostgresSQL database with Conduit is as
+For example, the CLI flag to use a PostgreSQL database with Conduit is as
 follows: `-db.type=postgres`.
 
 Changing database parameters (e.g. the PostgreSQL connection string) is done
@@ -265,12 +265,12 @@ A processor is a component that operates on a single record that flows through a
 pipeline. It can either change the record (i.e. **transform** it) or **filter**
 it out based on some criteria.
 
-Conduit provides a number of builtin processors, which can be used to manipulate fields,
+Conduit provides a number of built-in processors, which can be used to manipulate fields,
 send requests to HTTP endpoints, and more, check [Builtin processors](https://conduit.io/docs/processors/builtin/)
-for the list of builtin processors and documentations.
+for the list of built-in processors and documentations.
 
 Conduit also provides the ability to write your own [Standalone Processor](https://conduit.io/docs/processors/standalone/building),
-or you can use the builtin processor [`custom.javascript`](https://conduit.io/docs/processors/builtin/custom.javascript)
+or you can use the built-in processor [`custom.javascript`](https://conduit.io/docs/processors/builtin/custom.javascript)
 to write custom processors in JavaScript.
 
 More detailed information as well as examples can be found in
@@ -343,7 +343,7 @@ and let us know. When you are not sure how to do something
 please [open a discussion](https://github.com/ConduitIO/conduit/discussions) or
 hit us up on [Discord](https://discord.meroxa.com).
 
-We also value contributions in form of pull requests. When opening a PR please
+We also value contributions in the form of pull requests. When opening a PR please
 ensure:
 
 - You have followed
