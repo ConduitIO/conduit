@@ -57,8 +57,7 @@ the same directory.
 ## Documentation
 
 1. Write a blog post.
-2. Regenerate processor documentation on [
-   `conduit-site`](https://github.com/ConduitIO/conduit-site).
+2. Regenerate processor documentation on [ `conduit-site`](https://github.com/ConduitIO/conduit-site).
 3. Update banner on the
    web-site ([example](https://github.com/ConduitIO/conduit-site/pull/47/files#diff-cc8abb6104e21d495dc8f64639c7b03419226d920d1c545df51be9b0b73b2784)).
 4. Search for the latest version in `conduit-site` and replace with new
