@@ -192,19 +192,18 @@ func (s *Service) Stop(ctx context.Context, pipelineID string, force bool) error
 		return cerrors.Errorf("can't stop pipeline with status %q: %w", rp.pipeline.GetStatus(), pipeline.ErrPipelineNotRunning)
 	}
 
-	s.stopRunnablePipeline(ctx, rp, force)
-	return nil
+	return s.stopRunnablePipeline(ctx, rp, force)
 }
 
 // StopAll will ask all the running pipelines to stop gracefully
 // (i.e. that existing messages get processed but not new messages get produced).
-func (s *Service) StopAll(ctx context.Context, force bool) {
+func (s *Service) StopAll(ctx context.Context, force bool) error {
 	// Set graceful shutdown flag to true, so pipelines know the system triggered the stop.
 	s.isGracefulShutdown.Store(true)
 
 	l := s.runningPipelines.Len()
 	if l == 0 {
-		return
+		return nil
 	}
 
 	switch force {
@@ -214,29 +213,33 @@ func (s *Service) StopAll(ctx context.Context, force bool) {
 		s.logger.Info(ctx).Msgf("stopping %d pipelines forcefully", l)
 	}
 
+	var errs []error
 	for _, rp := range s.runningPipelines.All() {
 		if rp.pipeline.GetStatus() != pipeline.StatusRunning && rp.pipeline.GetStatus() != pipeline.StatusRecovering {
 			continue
 		}
-		s.stopRunnablePipeline(ctx, rp, force)
+		errs = append(errs, s.stopRunnablePipeline(ctx, rp, force))
 	}
+	return cerrors.Join(errs...)
 }
 
-func (s *Service) stopRunnablePipeline(ctx context.Context, rp *runnablePipeline, force bool) {
+func (s *Service) stopRunnablePipeline(ctx context.Context, rp *runnablePipeline, force bool) error {
 	switch force {
 	case false:
 		s.logger.Info(ctx).
 			Str(log.PipelineIDField, rp.pipeline.ID).
 			Any(log.PipelineStatusField, rp.pipeline.GetStatus()).
 			Msg("gracefully stopping pipeline")
-		rp.w.Stop(ctx)
+		return rp.w.Stop(ctx)
 	case true:
 		s.logger.Info(ctx).
 			Str(log.PipelineIDField, rp.pipeline.ID).
 			Any(log.PipelineStatusField, rp.pipeline.GetStatus()).
 			Msg("force stopping pipeline")
 		rp.t.Kill(pipeline.ErrForceStop)
+		return nil
 	}
+	panic("unreachable")
 }
 
 // Wait blocks until all pipelines are stopped or until the timeout is reached.

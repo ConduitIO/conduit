@@ -19,7 +19,9 @@ import (
 	"fmt"
 	"strconv"
 	"testing"
+	"time"
 
+	"github.com/conduitio/conduit-commons/csync"
 	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/ctxutil"
@@ -27,7 +29,6 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/metrics/noop"
 	"github.com/conduitio/conduit/pkg/lifecycle/stream"
 	streammock "github.com/conduitio/conduit/pkg/lifecycle/stream/mock"
-	connectorPlugin "github.com/conduitio/conduit/pkg/plugin/connector"
 	"github.com/rs/zerolog"
 	"go.uber.org/mock/gomock"
 )
@@ -55,6 +56,8 @@ func Example_simpleStream() {
 		"generator",
 		generatorSource(ctrl, logger, "generator", batchSize, batchCount),
 		logger,
+		noop.Timer{},
+		noop.Histogram{},
 	)
 	destTask := NewDestinationTask(
 		"printer",
@@ -69,6 +72,7 @@ func Example_simpleStream() {
 		[][]int{{1}, {}},
 		dlq,
 		logger,
+		noop.Timer{},
 	)
 	if err != nil {
 		panic(err)
@@ -78,11 +82,24 @@ func Example_simpleStream() {
 	if err != nil {
 		panic(err)
 	}
-	for i := 0; i < batchCount; i++ {
+
+	var wg csync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
 		err := w.Do(ctx)
 		if err != nil {
 			panic(err)
 		}
+	}()
+
+	// stop node after 150ms, which should be enough to process the 10 messages
+	time.AfterFunc(150*time.Millisecond, func() { _ = w.Stop(ctx) })
+
+	if err := wg.WaitTimeout(ctx, time.Second); err != nil {
+		killAll()
+	} else {
+		logger.Info(ctx).Msg("finished successfully")
 	}
 
 	err = w.Close(ctx)
@@ -90,13 +107,13 @@ func Example_simpleStream() {
 		panic(err)
 	}
 
-	logger.Info(ctx).Msg("finished successfully")
-
 	// Output:
 	// DBG opening source component=task:source connector_id=generator
 	// DBG source open component=task:source connector_id=generator
 	// DBG opening destination component=task:destination connector_id=printer
 	// DBG destination open component=task:destination connector_id=printer
+	// DBG opening destination component=task:destination connector_id=dlq
+	// DBG destination open component=task:destination connector_id=dlq
 	// DBG got record node_id=printer position=generator/0
 	// DBG received ack node_id=generator
 	// DBG got record node_id=printer position=generator/1
@@ -146,6 +163,8 @@ func BenchmarkStreamNew(b *testing.B) {
 			"generator",
 			generatorSource(ctrl, logger, "generator", batchSize, batchCount),
 			logger,
+			noop.Timer{},
+			noop.Histogram{},
 		)
 		destTask := NewDestinationTask(
 			"printer",
@@ -160,6 +179,7 @@ func BenchmarkStreamNew(b *testing.B) {
 			[][]int{{1}, {}},
 			dlq,
 			logger,
+			noop.Timer{},
 		)
 		if err != nil {
 			panic(err)
@@ -167,22 +187,28 @@ func BenchmarkStreamNew(b *testing.B) {
 
 		b.StartTimer()
 
-		err = w.Open(ctx)
-		if err != nil {
-			panic(err)
-		}
-
-		for i := 0; i < batchCount; i++ {
+		var wg csync.WaitGroup
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
 			err := w.Do(ctx)
 			if err != nil {
 				panic(err)
 			}
+		}()
+
+		// stop node after 150ms, which should be enough to process the 10 messages
+		time.AfterFunc(150*time.Millisecond, func() { _ = w.Stop(ctx) })
+
+		if err := wg.WaitTimeout(ctx, time.Second); err != nil {
+			killAll()
 		}
 
 		err = w.Close(ctx)
 		if err != nil {
 			panic(err)
 		}
+
 		b.StopTimer()
 	}
 }
@@ -219,12 +245,15 @@ func generatorSource(ctrl *gomock.Controller, logger log.CtxLogger, nodeID strin
 		if position == batchCount*batchSize {
 			// block until Teardown is called
 			<-teardown
-			return nil, connectorPlugin.ErrStreamNotOpen
+			return nil, context.Canceled
 		}
 
 		recs := make([]opencdc.Record, batchSize)
 		for i := 0; i < batchSize; i++ {
 			recs[i] = opencdc.Record{
+				Metadata: opencdc.Metadata{
+					opencdc.MetadataConduitSourceConnectorID: nodeID,
+				},
 				Position: opencdc.Position(strconv.Itoa(position)),
 			}
 			position++
@@ -303,18 +332,4 @@ func (g gomockLogger) Errorf(format string, args ...interface{}) {
 
 func (g gomockLogger) Fatalf(format string, args ...interface{}) {
 	g.Fatal().Msgf(format, args...)
-}
-
-func EqLazy(x func() interface{}) gomock.Matcher { return eqMatcherLazy{x} }
-
-type eqMatcherLazy struct {
-	x func() interface{}
-}
-
-func (e eqMatcherLazy) Matches(x interface{}) bool {
-	return gomock.Eq(e.x()).Matches(x)
-}
-
-func (e eqMatcherLazy) String() string {
-	return gomock.Eq(e.x()).String()
 }

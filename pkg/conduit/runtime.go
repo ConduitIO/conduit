@@ -419,7 +419,10 @@ func (r *Runtime) registerCleanup(t *tomb.Tomb) {
 		<-t.Dying()
 		// start cleanup with a fresh context
 		ctx := context.Background()
-		r.lifecycleService.StopAll(ctx, false)
+		err := r.lifecycleService.StopAll(ctx, false)
+		if err != nil {
+			r.logger.Err(ctx, err).Msg("some pipelines stopped with an error")
+		}
 
 		// Wait for the pipelines to stop
 		const (
@@ -432,7 +435,7 @@ func (r *Runtime) registerCleanup(t *tomb.Tomb) {
 			for i := count; i > 0; i-- {
 				if i == 1 {
 					// on last try, stop forcefully
-					r.lifecycleService.StopAll(ctx, true)
+					_ = r.lifecycleService.StopAll(ctx, true)
 				}
 
 				r.logger.Info(ctx).Msgf("waiting for pipelines to stop running (time left: %s)", time.Duration(i)*interval)
@@ -444,7 +447,7 @@ func (r *Runtime) registerCleanup(t *tomb.Tomb) {
 			}
 		}()
 
-		err := r.lifecycleService.Wait(exitTimeout)
+		err = r.lifecycleService.Wait(exitTimeout)
 		if err != nil && err != context.DeadlineExceeded {
 			r.logger.Warn(ctx).Err(err).Msg("some pipelines stopped with an error")
 		} else if err == context.DeadlineExceeded {
