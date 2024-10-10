@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/conduitio/conduit-commons/csync"
@@ -59,6 +61,8 @@ type Service struct {
 
 	handlers         []FailureHandler
 	runningPipelines *csync.Map[string, *runnablePipeline]
+
+	isGracefulShutdown atomic.Bool
 }
 
 // NewService initializes and returns a lifecycle.Service.
@@ -188,13 +192,44 @@ func (s *Service) Stop(ctx context.Context, pipelineID string, force bool) error
 		return cerrors.Errorf("can't stop pipeline with status %q: %w", rp.pipeline.GetStatus(), pipeline.ErrPipelineNotRunning)
 	}
 
+	s.stopRunnablePipeline(ctx, rp, force)
+	return nil
+}
+
+// StopAll will ask all the running pipelines to stop gracefully
+// (i.e. that existing messages get processed but not new messages get produced).
+func (s *Service) StopAll(ctx context.Context, force bool) {
+	// Set graceful shutdown flag to true, so pipelines know the system triggered the stop.
+	s.isGracefulShutdown.Store(true)
+
+	l := s.runningPipelines.Len()
+	if l == 0 {
+		return
+	}
+
+	switch force {
+	case false:
+		s.logger.Info(ctx).Msgf("stopping %d pipelines gracefully", l)
+	case true:
+		s.logger.Info(ctx).Msgf("stopping %d pipelines forcefully", l)
+	}
+
+	for _, rp := range s.runningPipelines.All() {
+		if rp.pipeline.GetStatus() != pipeline.StatusRunning && rp.pipeline.GetStatus() != pipeline.StatusRecovering {
+			continue
+		}
+		s.stopRunnablePipeline(ctx, rp, force)
+	}
+}
+
+func (s *Service) stopRunnablePipeline(ctx context.Context, rp *runnablePipeline, force bool) {
 	switch force {
 	case false:
 		s.logger.Info(ctx).
 			Str(log.PipelineIDField, rp.pipeline.ID).
 			Any(log.PipelineStatusField, rp.pipeline.GetStatus()).
 			Msg("gracefully stopping pipeline")
-		rp.w.Stop()
+		rp.w.Stop(ctx)
 	case true:
 		s.logger.Info(ctx).
 			Str(log.PipelineIDField, rp.pipeline.ID).
@@ -202,62 +237,6 @@ func (s *Service) Stop(ctx context.Context, pipelineID string, force bool) error
 			Msg("force stopping pipeline")
 		rp.t.Kill(pipeline.ErrForceStop)
 	}
-	return nil
-}
-
-func (s *Service) stopGraceful(ctx context.Context, rp *runnablePipeline) {
-}
-
-// StopAll will ask all the running pipelines to stop gracefully
-// (i.e. that existing messages get processed but not new messages get produced).
-func (s *Service) StopAll(ctx context.Context, reason error) {
-	if s.runningPipelines.Len() == 0 {
-		return
-	}
-
-	for _, rp := range s.runningPipelines.All() {
-		if rp.pipeline.GetStatus() != pipeline.StatusRunning && rp.pipeline.GetStatus() != pipeline.StatusRecovering {
-			continue
-		}
-
-		s.logger.Info(ctx).
-			Str(log.PipelineIDField, rp.pipeline.ID).
-			Any(log.PipelineStatusField, rp.pipeline.GetStatus()).
-			Msg("gracefully stopping pipeline")
-		rp.w.Stop()
-	}
-
-	// Wait for the pipelines to stop
-	const (
-		interval = time.Second * 10
-		count    = 6
-	)
-
-	var err error
-	for i := count; i > 0; i-- {
-		if i == 1 {
-			// on last try, stop forcefully
-			running := s.runningPipelines.Len()
-			s.logger.Warn(ctx).Msgf("Stopping (%d) pipelines forcefully", running)
-
-			for _, rp := range s.runningPipelines.All() {
-				rp.t.Kill(pipeline.ErrForceStop)
-			}
-		}
-
-		s.logger.Info(ctx).Msgf("Waiting for %d pipelines to stop (time left: %s)", s.runningPipelines.Len(), time.Duration(i)*interval)
-		err = s.Wait(interval)
-		if err == nil {
-			break
-		}
-	}
-
-	if err != nil {
-		s.logger.Warn(ctx).Msgf("Some pipelines failed to stop (%d)", s.runningPipelines.Len())
-		return
-	}
-
-	s.logger.Info(ctx).Msg("All pipelines stopped")
 }
 
 // Wait blocks until all pipelines are stopped or until the timeout is reached.
@@ -267,7 +246,7 @@ func (s *Service) StopAll(ctx context.Context, reason error) {
 //
 // (2) an error, if the pipelines could not have been gracefully stopped,
 //
-// (3) ErrTimeout if the pipelines were not stopped within the given timeout.
+// (3) context.DeadlineExceeded if the pipelines were not stopped within the given timeout.
 func (s *Service) Wait(timeout time.Duration) error {
 	gracefullyStopped := make(chan struct{})
 	var err error
@@ -280,7 +259,7 @@ func (s *Service) Wait(timeout time.Duration) error {
 	case <-gracefullyStopped:
 		return err
 	case <-time.After(timeout):
-		return pipeline.ErrTimeout
+		return context.DeadlineExceeded
 	}
 }
 
@@ -298,7 +277,7 @@ func (s *Service) waitInternal() error {
 		}
 		err := rp.t.Wait()
 		if err != nil {
-			errs = append(errs, err)
+			errs = append(errs, cerrors.Errorf("pipeline %s: %w", rp.pipeline.ID, err))
 		}
 	}
 	return cerrors.Join(errs...)
@@ -656,9 +635,15 @@ func (s *Service) runPipeline(rp *runnablePipeline) error {
 		return cerrors.Errorf("failed to open worker: %w", err)
 	}
 
+	var workersWg sync.WaitGroup
+
+	// TODO(multi-connector): when we have multiple connectors spawn a worker for each source
+	workersWg.Add(1)
 	rp.t.Go(func() error {
+		defer workersWg.Done()
+
 		doErr := rp.w.Do(ctx)
-		s.logger.Err(ctx, doErr).Str(log.PipelineIDField, rp.pipeline.ID).Msg("Pipeline worker stopped")
+		s.logger.Err(ctx, doErr).Str(log.PipelineIDField, rp.pipeline.ID).Msg("pipeline worker stopped")
 
 		closeErr := rp.w.Close(context.Background())
 		err := cerrors.Join(doErr, closeErr)
@@ -667,6 +652,68 @@ func (s *Service) runPipeline(rp *runnablePipeline) error {
 		}
 
 		return nil
+	})
+	rp.t.Go(func() error {
+		// Use fresh context for cleanup function, otherwise the updated status
+		// will potentially fail to be stored.
+		ctx := context.Background()
+
+		workersWg.Wait()
+		err := rp.t.Err()
+
+		switch err {
+		case tomb.ErrStillAlive:
+			// not an actual error, the pipeline stopped gracefully
+			err = nil
+			var status pipeline.Status
+			if s.isGracefulShutdown.Load() {
+				// it was triggered by a graceful shutdown of Conduit
+				status = pipeline.StatusSystemStopped
+			} else {
+				// it was manually triggered by a user
+				status = pipeline.StatusUserStopped
+			}
+			if err := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, status, ""); err != nil {
+				return err
+			}
+		default:
+			if cerrors.IsFatalError(err) {
+				// we use %+v to get the stack trace too
+				if err := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusDegraded, fmt.Sprintf("%+v", err)); err != nil {
+					return err
+				}
+			} else {
+				// try to recover the pipeline
+				// if recoveryErr := s.recoverPipeline(ctx, rp); recoveryErr != nil {
+				// 	s.logger.
+				// 		Err(ctx, err).
+				// 		Str(log.PipelineIDField, rp.pipeline.ID).
+				// 		Msg("pipeline recovery failed")
+				//
+				// 	if updateErr := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusDegraded, fmt.Sprintf("%+v", recoveryErr)); updateErr != nil {
+				// 		return updateErr
+				// 	}
+				//
+				// 	// we assign it to err so it's returned and notified by the cleanup function
+				// 	err = recoveryErr
+				// } else {
+				// 	// recovery was triggered didn't error, so no cleanup
+				// 	// this is why we return nil to skip the cleanup below.
+				// 	return nil
+				// }
+			}
+		}
+
+		s.logger.
+			Err(ctx, err).
+			Str(log.PipelineIDField, rp.pipeline.ID).
+			Msg("pipeline stopped")
+
+		// confirmed that all nodes stopped, we can now remove the pipeline from the running pipelines
+		s.runningPipelines.Delete(rp.pipeline.ID)
+
+		s.notify(rp.pipeline.ID, err)
+		return err
 	})
 
 	return s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusRunning, "")

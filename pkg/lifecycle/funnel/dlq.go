@@ -115,7 +115,6 @@ func (d *DLQ) Nack(ctx context.Context, batch *Batch, taskID string) (int, error
 			)
 		}
 		// DLQ is disabled, we don't need to wrap the error message
-		// TODO still wrap the reason into a DLQ error, so DoHelper can ignore them.
 		return nacked, batch.recordStatuses[nacked].Error
 	}
 

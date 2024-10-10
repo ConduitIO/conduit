@@ -41,7 +41,11 @@ type Destination interface {
 	Write(context.Context, []opencdc.Record) error
 	Ack(context.Context) ([]connector.DestinationAck, error)
 	Teardown(context.Context) error
-	Errors() <-chan error // TODO use
+	// TODO figure out if we want to handle these errors. This returns errors
+	//  coming from the persister, which persists the connector asynchronously.
+	//  Are we even interested in these errors in the pipeline? Sounds like
+	//  something we could surface and handle globally in the runtime instead.
+	Errors() <-chan error
 }
 
 func NewDestinationTask(
@@ -93,34 +97,27 @@ func (t *DestinationTask) Do(ctx context.Context, batch *Batch) error {
 		return cerrors.Errorf("failed to write %d records to destination: %w", len(positions), err)
 	}
 
-	acks, err := t.destination.Ack(ctx)
-	if err != nil {
-		return cerrors.Errorf("failed to ack %d records: %w", len(positions), err)
+	acks := make([]connector.DestinationAck, 0, len(positions))
+	for len(acks) != len(positions) {
+		acksResp, err := t.destination.Ack(ctx)
+		if err != nil {
+			return cerrors.Errorf("failed to receive acks for %d records from destination: %w", len(positions), err)
+		}
+		t.observeMetrics(records[len(acks):len(acks)+len(acksResp)], start)
+		acks = append(acks, acksResp...)
 	}
 
-	t.observeMetrics(records[:len(acks)], start)
-
-	if len(acks) != len(positions) {
-		// TODO wrap in loop and retrieve acks one by one for backward compatibility
-		return cerrors.Errorf("expected %d acks, got %d", len(positions), len(acks))
-	}
-
-	var errs []error
-	var n int
 	for i, ack := range acks {
 		if !bytes.Equal(positions[i], ack.Position) {
 			// TODO is this a fatal error? Looks like a bug in the connector
 			return cerrors.Errorf("received unexpected ack, expected position %q but got %q", positions[i], ack.Position)
 		}
 		if ack.Error != nil {
-			errs = append(errs, ack.Error)
-		} else if n == i {
-			n++
+			batch.Nack(i, ack.Error)
 		}
-		// TODO mark batch
 	}
 
-	return cerrors.Join(errs...)
+	return nil
 }
 
 func (t *DestinationTask) observeMetrics(records []opencdc.Record, start time.Time) {

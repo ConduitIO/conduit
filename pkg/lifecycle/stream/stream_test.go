@@ -23,7 +23,6 @@ import (
 	"time"
 
 	"github.com/conduitio/conduit-commons/cchan"
-
 	"github.com/conduitio/conduit-commons/csync"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"

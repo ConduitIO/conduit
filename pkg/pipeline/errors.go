@@ -17,7 +17,6 @@ package pipeline
 import "github.com/conduitio/conduit/pkg/foundation/cerrors"
 
 var (
-	ErrTimeout              = cerrors.New("operation timed out")
 	ErrGracefulShutdown     = cerrors.New("graceful shutdown")
 	ErrForceStop            = cerrors.New("force stop")
 	ErrPipelineRunning      = cerrors.New("pipeline is running")

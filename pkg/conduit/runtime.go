@@ -78,7 +78,7 @@ import (
 )
 
 const (
-	exitTimeout = 10 * time.Second
+	exitTimeout = 30 * time.Second
 )
 
 // Runtime sets up all services for serving and monitoring a Conduit instance.
@@ -419,21 +419,48 @@ func (r *Runtime) registerCleanup(t *tomb.Tomb) {
 		<-t.Dying()
 		// start cleanup with a fresh context
 		ctx := context.Background()
+		r.lifecycleService.StopAll(ctx, false)
 
-		// t.Err() can be nil, when we had a call: t.Kill(nil)
-		// t.Err() will be context.Canceled, if the tomb's context was canceled
-		if t.Err() == nil || cerrors.Is(t.Err(), context.Canceled) {
-			r.lifecycleService.StopAll(ctx, pipeline.ErrGracefulShutdown)
-		} else {
-			// tomb died due to a real error
-			r.lifecycleService.StopAll(ctx, cerrors.Errorf("conduit experienced an error: %w", t.Err()))
-		}
+		// Wait for the pipelines to stop
+		const (
+			count    = 6
+			interval = exitTimeout / count
+		)
+
+		pipelinesStopped := make(chan struct{})
+		go func() {
+			for i := count; i > 0; i-- {
+				if i == 1 {
+					// on last try, stop forcefully
+					r.lifecycleService.StopAll(ctx, true)
+				}
+
+				r.logger.Info(ctx).Msgf("waiting for pipelines to stop running (time left: %s)", time.Duration(i)*interval)
+				select {
+				case <-time.After(interval):
+				case <-pipelinesStopped:
+					return
+				}
+			}
+		}()
+
 		err := r.lifecycleService.Wait(exitTimeout)
+		if err != nil && err != context.DeadlineExceeded {
+			r.logger.Warn(ctx).Err(err).Msg("some pipelines stopped with an error")
+		} else if err == context.DeadlineExceeded {
+			r.logger.Warn(ctx).Msg("some pipelines did not stop in time")
+		} else {
+			r.logger.Info(ctx).Msg("all pipelines stopped gracefully")
+		}
+
+		pipelinesStopped <- struct{}{}
+
 		t.Go(func() error {
 			r.connectorPersister.Wait()
 			return r.DB.Close()
 		})
-		return err
+
+		return nil
 	})
 }
 

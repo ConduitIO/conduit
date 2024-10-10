@@ -24,49 +24,53 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics"
+	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/sourcegraph/conc/pool"
 )
 
-// TODO update docs once done.
+// Task is a unit of work that can be executed by a Worker. Each Task in a
+// pipeline is executed sequentially, except for tasks related to different
+// destinations, which can be executed in parallel.
 type Task interface {
 	// ID returns the identifier of this Task. Each Task in a pipeline must be
 	// uniquely identified by the ID.
 	ID() string
 
+	// Open opens the Task for processing. It is called once before the worker
+	// starts processing records.
 	Open(context.Context) error
+	// Close closes the Task. It is called once after the worker has stopped
+	// processing records.
 	Close(context.Context) error
-
-	// Do processes the given batch of records. It returns the count of
-	// successfully processed records, the count of failed records, and an error
-	// that caused the failed records. Conduit interprets the counts as
-	// continuous regions in the batch, so the first `successCount` records are
-	// considered successfully processed, and the next `failCount` records are
-	// considered failed, the rest are considered skipped entirely. The failed
-	// records are sent to the DLQ and if the nack limit is not reached, the
-	// rest is retried.
+	// Do processes the given batch of records. It is called for each batch of
+	// records that the worker processes.
 	Do(context.Context, *Batch) error
 }
 
-// Worker is a collection of tasks that are executed sequentially. It is safe
-// for concurrent use.
+// Worker is a collection of tasks that are executed sequentially.
 type Worker struct {
 	Source Source
 	Tasks  []Task
-	// TasksOrder show next task to be executed. Multiple indices are used to
+	// Order defines the next task to be executed. Multiple indices are used to
 	// show parallel execution of tasks.
 	//
 	// Example:
-	// [[1], [2], [3], [4,6], [5], [], [7], []]
+	// [[1], [2], [3,5], [4], [], []]
 	//
-	//                   /-> 4, 5
-	// 0 -> 1 -> 2 -> 3 --
-	//                   \-> 6, 7
+	//            /-> 3 -> 4
+	// 0 -> 1 -> 2
+	//            \-> 5
 	Order Order
 	DLQ   *DLQ
 
 	lastReadAt time.Time
 	timer      metrics.Timer
-	stop       atomic.Bool
+
+	// stopLock is a lock in form of a channel with a buffer size of 1 to be able
+	// to acquire the lock with a context timeout.
+	stopLock chan struct{}
+	// stop stores the information if a graceful stop was triggered.
+	stop atomic.Bool
 
 	logger log.CtxLogger
 }
@@ -95,6 +99,8 @@ func NewWorker(
 		DLQ:    dlq,
 		logger: logger.WithComponent("funnel.Worker"),
 		timer:  timer,
+
+		stopLock: make(chan struct{}, 1),
 	}, nil
 }
 
@@ -168,8 +174,34 @@ func (w *Worker) Open(ctx context.Context) (err error) {
 
 // Stop stops the worker from processing more records. It does not stop the
 // current batch from being processed.
-func (w *Worker) Stop() {
+func (w *Worker) Stop(ctx context.Context) error {
+	// The lock is locked every time a batch is being processed. We lock it
+	// to be sure no batch is currently being processed.
+	release, err := w.acquireStopLock(ctx)
+	if err != nil {
+		return err
+	}
+	defer release()
+
+	// Lock acquired, teardown the source and set stop to true to signal the
+	// worker it should stop processing, since it won't be able to deliver
+	// any acks.
+	err = w.Source.Teardown(ctx)
+	if err != nil {
+		return cerrors.Errorf("failed to tear down source: %w", err)
+	}
 	w.stop.Store(true)
+	return nil
+}
+
+func (w *Worker) acquireStopLock(ctx context.Context) (release func(), err error) {
+	select {
+	case w.stopLock <- struct{}{}:
+		return func() { <-w.stopLock }, nil
+	case <-ctx.Done():
+		// lock not acquired
+		return func() {}, ctx.Err()
+	}
 }
 
 func (w *Worker) Close(ctx context.Context) error {
@@ -193,14 +225,14 @@ func (w *Worker) Close(ctx context.Context) error {
 // Do processes records from the source until the worker is stopped. It returns
 // no error if the worker is stopped gracefully.
 func (w *Worker) Do(ctx context.Context) error {
-	for {
-		if w.stop.Load() || ctx.Err() != nil {
-			return ctx.Err()
-		}
+	for !w.stop.Load() {
+		w.logger.Trace(ctx).Msg("starting next batch")
 		if err := w.doTask(ctx, 0, &Batch{}, w); err != nil {
 			return err
 		}
+		w.logger.Trace(ctx).Msg("batch done")
 	}
+	return nil
 }
 
 func (w *Worker) doTask(ctx context.Context, currentIndex int, b *Batch, acker ackNacker) error {
@@ -212,12 +244,51 @@ func (w *Worker) doTask(ctx context.Context, currentIndex int, b *Batch, acker a
 		Msg("executing task")
 
 	err := t.Do(ctx, b)
+
+	w.logger.Trace(ctx).
+		Err(err).
+		Str("task_id", t.ID()).
+		Int("batch_size", len(b.records)).
+		Msg("task done")
+
 	if err != nil {
+		// Canceled error can be returned if the worker is stopped while reading
+		// the next batch from the source (graceful stop).
+		// ErrPluginNotRunning can be returned if the plugin is stopped before
+		// trying to read the next batch.
+		// Both are considered as graceful stop, just return the context error, if any.
+		if currentIndex == 0 && (cerrors.Is(err, context.Canceled) ||
+			(cerrors.Is(err, plugin.ErrPluginNotRunning) && w.stop.Load())) {
+			return ctx.Err()
+		}
 		return cerrors.Errorf("task %s: %w", t.ID(), err)
 	}
+
 	if currentIndex == 0 {
-		// Store last time we read a batch from the source for metrics.
+		// The first task has some specifics:
+		// - Store last time we read a batch from the source for metrics.
+		// - It locks the stop lock, so that no stop signal can be received while
+		//   the batch is being processed.
+		// - It checks if the source was torn down after receiving the batch and
+		//   before acquiring the lock.
 		w.lastReadAt = time.Now()
+
+		release, err := w.acquireStopLock(ctx)
+		if err != nil {
+			return err
+		}
+		// Unlock after the batch is end-to-end processed.
+		defer release()
+
+		if w.stop.Load() {
+			// The source was already torn down, we won't be able to deliver
+			// any acks so throw away the batch and gracefully return.
+			w.logger.Warn(ctx).
+				Str("task_id", t.ID()).
+				Int("batch_size", len(b.records)).
+				Msg("stop signal received just before starting to process next batch, gracefully stopping without flushing the batch")
+			return nil
+		}
 	}
 
 	if !b.tainted {
