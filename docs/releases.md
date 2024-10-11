@@ -63,7 +63,7 @@ the same directory.
 4. Search for the latest version in `conduit-site` and replace with new
    version (e.g. search for 0.11.1 and replace with 0.12.0)
 5. Search for the latest version in [README.md](../README.md) and replace with
-   new version (e.g. search for 0.11.1 and replace with 0.12.0)
+   new version (e.g. search for 0.11 and replace with 0.12)
 
 ## Releasing Conduit
 
