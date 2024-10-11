@@ -26,7 +26,7 @@ on [Discord](https://discord.meroxa.com)!
 
 ## Submitting changes
 
-We also value contributions in form of pull requests. When opening a PR please ensure:
+We also value contributions in the form of pull requests. When opening a PR please ensure:
 
 - You have followed the [Code Guidelines](https://github.com/ConduitIO/conduit/blob/main/docs/code_guidelines.md).
 - There is no other [pull request](https://github.com/ConduitIO/conduit/pulls) for the same update/change.

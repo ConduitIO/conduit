@@ -45,7 +45,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/metrics"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/measure"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/prometheus"
-	lifecycle_poc "github.com/conduitio/conduit/pkg/lifecycle-poc"
+	"github.com/conduitio/conduit/pkg/lifecycle"
 	"github.com/conduitio/conduit/pkg/orchestrator"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	conn_plugin "github.com/conduitio/conduit/pkg/plugin/connector"
@@ -64,7 +64,6 @@ import (
 	"github.com/conduitio/conduit/pkg/web/ui"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	grpcruntime "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
-	"github.com/jpillora/backoff"
 	"github.com/piotrkowalczuk/promgrpc/v4"
 	promclient "github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -96,7 +95,8 @@ type Runtime struct {
 	pipelineService  *pipeline.Service
 	connectorService *connector.Service
 	processorService *processor.Service
-	lifecycleService *lifecycle_poc.Service
+	lifecycleService *lifecycle.Service
+	// lifecycleService *lifecycle_poc.Service
 
 	connectorPluginService *conn_plugin.PluginService
 	processorPluginService *proc_plugin.PluginService
@@ -204,18 +204,20 @@ func createServices(r *Runtime) error {
 		tokenService,
 	)
 
-	errRecovery := r.Config.Pipelines.ErrorRecovery
-	backoffCfg := &backoff.Backoff{
-		Min:    errRecovery.MinDelay,
-		Max:    errRecovery.MaxDelay,
-		Factor: float64(errRecovery.BackoffFactor),
-		Jitter: true,
+	// Error recovery configuration
+	errRecoveryCfg := &lifecycle.ErrRecoveryCfg{
+		MinDelay:         r.Config.Pipelines.ErrorRecovery.MinDelay,
+		MaxDelay:         r.Config.Pipelines.ErrorRecovery.MaxDelay,
+		BackoffFactor:    r.Config.Pipelines.ErrorRecovery.BackoffFactor,
+		MaxRetries:       r.Config.Pipelines.ErrorRecovery.MaxRetries,
+		MaxRetriesWindow: r.Config.Pipelines.ErrorRecovery.MaxRetriesWindow,
 	}
 
 	plService := pipeline.NewService(r.logger, r.DB)
 	connService := connector.NewService(r.logger, r.DB, r.connectorPersister)
 	procService := processor.NewService(r.logger, r.DB, procPluginService)
-	lifecycleService := lifecycle_poc.NewService(r.logger, backoffCfg, connService, procService, connPluginService, plService)
+	// lifecycleService := lifecycle_poc.NewService(r.logger, backoffCfg, connService, procService, connPluginService, plService)
+	lifecycleService := lifecycle.NewService(r.logger, errRecoveryCfg, connService, procService, connPluginService, plService)
 	provisionService := provisioning.NewService(r.DB, r.logger, plService, connService, procService, connPluginService, lifecycleService, r.Config.Pipelines.Path)
 
 	orc := orchestrator.NewOrchestrator(r.DB, r.logger, plService, connService, procService, connPluginService, procPluginService, lifecycleService)
@@ -800,13 +802,13 @@ func (r *Runtime) initServices(ctx context.Context, t *tomb.Tomb) error {
 		return cerrors.Errorf("failed to init connector service: %w", err)
 	}
 
-	if r.Config.Pipelines.ExitOnError {
-		r.lifecycleService.OnFailure(func(e lifecycle_poc.FailureEvent) {
+	if r.Config.Pipelines.ExitOnDegraded {
+		r.lifecycleService.OnFailure(func(e lifecycle.FailureEvent) {
 			r.logger.Warn(ctx).
 				Err(e.Error).
 				Str(log.PipelineIDField, e.ID).
-				Msg("Conduit will shut down due to a pipeline failure and 'exit on error' enabled")
-			t.Kill(cerrors.Errorf("shut down due to 'exit on error' enabled: %w", e.Error))
+				Msg("Conduit will shut down due to a pipeline failure and 'exit-on-degraded' enabled")
+			t.Kill(cerrors.Errorf("shut down due to 'exit-on-degraded' error: %w", e.Error))
 		})
 	}
 	err = r.pipelineService.Init(ctx)
@@ -819,7 +821,7 @@ func (r *Runtime) initServices(ctx context.Context, t *tomb.Tomb) error {
 		cerrors.ForEach(err, func(err error) {
 			r.logger.Err(ctx, err).Msg("provisioning failed")
 		})
-		if r.Config.Pipelines.ExitOnError {
+		if r.Config.Pipelines.ExitOnDegraded {
 			r.logger.Warn(ctx).
 				Err(err).
 				Msg("Conduit will shut down due to a pipeline provisioning failure and 'exit on error' enabled")

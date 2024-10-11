@@ -334,7 +334,7 @@ func (s *Service) StopAll(ctx context.Context, reason error) {
 //
 // (2) an error, if the pipelines could not have been gracefully stopped,
 //
-// (3) ErrTimeout if the pipelines were not stopped within the given timeout.
+// (3) context.DeadlineExceeded if the pipelines were not stopped within the given timeout.
 func (s *Service) Wait(timeout time.Duration) error {
 	gracefullyStopped := make(chan struct{})
 	var err error
@@ -347,7 +347,7 @@ func (s *Service) Wait(timeout time.Duration) error {
 	case <-gracefullyStopped:
 		return err
 	case <-time.After(timeout):
-		return pipeline.ErrTimeout
+		return context.DeadlineExceeded
 	}
 }
 
