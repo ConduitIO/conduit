@@ -27,8 +27,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/ctxutil"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/noop"
-	"github.com/conduitio/conduit/pkg/lifecycle-poc/stream"
-	streammock "github.com/conduitio/conduit/pkg/lifecycle-poc/stream/mock"
+	funnelmock "github.com/conduitio/conduit/pkg/lifecycle-poc/funnel/mock"
 	"github.com/rs/zerolog"
 	"go.uber.org/mock/gomock"
 )
@@ -226,11 +225,11 @@ func newLogger() log.CtxLogger {
 	return logger
 }
 
-func generatorSource(ctrl *gomock.Controller, logger log.CtxLogger, nodeID string, batchSize, batchCount int) stream.Source {
+func generatorSource(ctrl *gomock.Controller, logger log.CtxLogger, nodeID string, batchSize, batchCount int) Source {
 	position := 0
 
 	teardown := make(chan struct{})
-	source := streammock.NewSource(ctrl)
+	source := funnelmock.NewSource(ctrl)
 	source.EXPECT().ID().Return(nodeID).AnyTimes()
 	source.EXPECT().Open(gomock.Any()).Return(nil)
 	source.EXPECT().Teardown(gomock.Any()).DoAndReturn(func(context.Context) error {
@@ -261,19 +260,16 @@ func generatorSource(ctrl *gomock.Controller, logger log.CtxLogger, nodeID strin
 
 		return recs, nil
 	}).MinTimes(batchCount + 1)
-	source.EXPECT().Stop(gomock.Any()).DoAndReturn(func(context.Context) (opencdc.Position, error) {
-		return opencdc.Position(strconv.Itoa(position)), nil
-	})
 	source.EXPECT().Errors().Return(make(chan error))
 
 	return source
 }
 
-func printerDestination(ctrl *gomock.Controller, logger log.CtxLogger, nodeID string, batchSize int) stream.Destination {
+func printerDestination(ctrl *gomock.Controller, logger log.CtxLogger, nodeID string, batchSize int) Destination {
 	var lastPosition opencdc.Position
 	_ = lastPosition
 	rchan := make(chan opencdc.Record, batchSize)
-	destination := streammock.NewDestination(ctrl)
+	destination := funnelmock.NewDestination(ctrl)
 	destination.EXPECT().Open(gomock.Any()).Return(nil)
 	destination.EXPECT().Write(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, recs []opencdc.Record) error {
 		for _, r := range recs {
@@ -303,7 +299,6 @@ func printerDestination(ctrl *gomock.Controller, logger log.CtxLogger, nodeID st
 			}
 		}
 	}).AnyTimes()
-	destination.EXPECT().Stop(gomock.Any(), gomock.Any()).Return(nil)
 	destination.EXPECT().Teardown(gomock.Any()).DoAndReturn(func(ctx context.Context) error {
 		close(rchan)
 		return nil
@@ -313,8 +308,8 @@ func printerDestination(ctrl *gomock.Controller, logger log.CtxLogger, nodeID st
 	return destination
 }
 
-func noopDLQDestination(ctrl *gomock.Controller) stream.Destination {
-	destination := streammock.NewDestination(ctrl)
+func noopDLQDestination(ctrl *gomock.Controller) Destination {
+	destination := funnelmock.NewDestination(ctrl)
 	destination.EXPECT().Open(gomock.Any()).Return(nil)
 	destination.EXPECT().Teardown(gomock.Any()).Return(nil)
 	return destination

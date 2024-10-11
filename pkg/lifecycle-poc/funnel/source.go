@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//go:generate mockgen -typed -destination=mock/source.go -package=mock -mock_names=Source=Source . Source
+
 package funnel
 
 import (

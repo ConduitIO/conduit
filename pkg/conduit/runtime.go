@@ -421,10 +421,13 @@ func (r *Runtime) registerCleanup(t *tomb.Tomb) {
 		<-t.Dying()
 		// start cleanup with a fresh context
 		ctx := context.Background()
-		err := r.lifecycleService.StopAll(ctx, false)
-		if err != nil {
-			r.logger.Err(ctx, err).Msg("some pipelines stopped with an error")
-		}
+		r.lifecycleService.StopAll(ctx, pipeline.ErrGracefulShutdown)
+
+		// TODO: uncomment this when we are using the new lifecycle service
+		// err := r.lifecycleService.StopAll(ctx, false)
+		// if err != nil {
+		// 	r.logger.Err(ctx, err).Msg("some pipelines stopped with an error")
+		// }
 
 		// Wait for the pipelines to stop
 		const (
@@ -435,10 +438,11 @@ func (r *Runtime) registerCleanup(t *tomb.Tomb) {
 		pipelinesStopped := make(chan struct{})
 		go func() {
 			for i := count; i > 0; i-- {
-				if i == 1 {
-					// on last try, stop forcefully
-					_ = r.lifecycleService.StopAll(ctx, true)
-				}
+				// TODO: uncomment this when we are using the new lifecycle service
+				// if i == 1 {
+				// 	// on last try, stop forcefully
+				// 	_ = r.lifecycleService.StopAll(ctx, true)
+				// }
 
 				r.logger.Info(ctx).Msgf("waiting for pipelines to stop running (time left: %s)", time.Duration(i)*interval)
 				select {
@@ -449,7 +453,7 @@ func (r *Runtime) registerCleanup(t *tomb.Tomb) {
 			}
 		}()
 
-		err = r.lifecycleService.Wait(exitTimeout)
+		err := r.lifecycleService.Wait(exitTimeout)
 		switch {
 		case err != nil && err != context.DeadlineExceeded:
 			r.logger.Warn(ctx).Err(err).Msg("some pipelines stopped with an error")
