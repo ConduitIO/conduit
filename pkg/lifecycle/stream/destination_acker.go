@@ -32,8 +32,12 @@ type DestinationAckerNode struct {
 
 	// queue is used to store messages
 	queue deque.Deque[*Message]
+
 	// m guards access to queue
 	m sync.Mutex
+
+	// mctx guards access to the contextCtxCancel function
+	mctx sync.Mutex
 
 	base   subNodeBase
 	logger log.CtxLogger
@@ -49,7 +53,9 @@ func (n *DestinationAckerNode) Run(ctx context.Context) (err error) {
 	// start a fresh connector context to make sure the connector is running
 	// until this method returns
 	var connectorCtx context.Context
+	n.mctx.Lock()
 	connectorCtx, n.connectorCtxCancel = context.WithCancel(context.Background())
+	n.mctx.Unlock()
 	defer n.connectorCtxCancel()
 
 	// signalChan is buffered to ensure signals don't get lost if worker is busy
@@ -226,5 +232,7 @@ func (n *DestinationAckerNode) SetLogger(logger log.CtxLogger) {
 
 func (n *DestinationAckerNode) ForceStop(ctx context.Context) {
 	n.logger.Warn(ctx).Msg("force stopping destination acker node")
+	n.mctx.Lock()
 	n.connectorCtxCancel()
+	n.mctx.Unlock()
 }
