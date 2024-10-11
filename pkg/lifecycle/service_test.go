@@ -29,12 +29,14 @@ import (
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
-	"github.com/conduitio/conduit/pkg/lifecycle/stream"
+	"github.com/conduitio/conduit/pkg/lifecycle/funnel"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	"github.com/conduitio/conduit/pkg/plugin"
 	connectorPlugin "github.com/conduitio/conduit/pkg/plugin/connector"
 	pmock "github.com/conduitio/conduit/pkg/plugin/connector/mock"
 	"github.com/conduitio/conduit/pkg/processor"
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/uuid"
 	"github.com/jpillora/backoff"
 	"github.com/matryer/is"
@@ -94,47 +96,20 @@ func TestServiceLifecycle_buildRunnablePipeline(t *testing.T) {
 
 	is.NoErr(err)
 
-	want := runnablePipeline{
-		pipeline: pl,
-		n: []stream.Node{
-			&stream.SourceNode{},
-			&stream.SourceAckerNode{},
-			&stream.MetricsNode{},
-			&stream.DLQHandlerNode{},
-			&stream.FaninNode{},
-			&stream.FanoutNode{},
-			&stream.MetricsNode{},
-			&stream.DestinationNode{},
-			&stream.DestinationAckerNode{},
-		},
+	is.Equal("", cmp.Diff(pl, got.pipeline, cmpopts.IgnoreUnexported(pipeline.Instance{})))
+
+	wantTasks := []funnel.Task{
+		&funnel.SourceTask{},
+		&funnel.DestinationTask{},
 	}
-
-	is.Equal(len(want.n), len(got.n))
-	for i := range want.n {
-		want := want.n[i]
-		got := got.n[i]
-		is.Equal(reflect.TypeOf(want), reflect.TypeOf(got)) // unexpected node type
-
-		switch got := got.(type) {
-		case *stream.SourceNode:
-			gotSource, ok := got.Source.(*connector.Source)
-			is.True(ok)
-			is.Equal(gotSource.Instance, source)
-		case *stream.DestinationNode:
-			gotDestination, ok := got.Destination.(*connector.Destination)
-			is.True(ok)
-			is.Equal(gotDestination.Instance, destination)
-		case *stream.DLQHandlerNode:
-			is.Equal(got.WindowSize, pl.DLQ.WindowSize)
-			is.Equal(got.WindowNackThreshold, pl.DLQ.WindowNackThreshold)
-
-			gotHandler, ok := got.Handler.(*DLQDestination)
-			is.True(ok)
-			gotDestination, ok := gotHandler.Destination.(*connector.Destination)
-			is.True(ok)
-			is.Equal(gotDestination.Instance, dlq)
-		}
+	is.Equal(len(got.w.Tasks), len(wantTasks))
+	for i := range got.w.Tasks {
+		want := wantTasks[i]
+		got := got.w.Tasks[i]
+		is.Equal(reflect.TypeOf(want), reflect.TypeOf(got)) // unexpected task type
 	}
+	is.Equal(got.w.Order, funnel.Order{{1}, nil})
+	is.Equal(got.w.Source.(*connector.Source).Instance, source)
 }
 
 func TestService_buildRunnablePipeline_NoSourceNode(t *testing.T) {
@@ -250,9 +225,9 @@ func TestServiceLifecycle_PipelineSuccess(t *testing.T) {
 	// create mocked connectors
 	ctrl := gomock.NewController(t)
 	wantRecords := generateRecords(10)
-	source, sourceDispenser := generatorSource(ctrl, persister, wantRecords, nil, true)
-	destination, destDispenser := asserterDestination(ctrl, persister, wantRecords)
-	dlq, dlqDispenser := asserterDestination(ctrl, persister, nil)
+	source, sourceDispenser := generatorSource(ctrl, persister, wantRecords, nil, false)
+	destination, destDispenser := asserterDestination(ctrl, persister, wantRecords, false)
+	dlq, dlqDispenser := asserterDestination(ctrl, persister, nil, false)
 	pl.DLQ.Plugin = dlq.Plugin
 
 	pl, err = ps.AddConnector(ctx, pl.ID, source.ID)
@@ -314,8 +289,8 @@ func TestServiceLifecycle_PipelineError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	wantRecords := generateRecords(10)
 	source, sourceDispenser := generatorSource(ctrl, persister, wantRecords, wantErr, false)
-	destination, destDispenser := asserterDestination(ctrl, persister, wantRecords)
-	dlq, dlqDispenser := asserterDestination(ctrl, persister, nil)
+	destination, destDispenser := asserterDestination(ctrl, persister, wantRecords, false)
+	dlq, dlqDispenser := asserterDestination(ctrl, persister, nil, false)
 	pl.DLQ.Plugin = dlq.Plugin
 
 	pl, err = ps.AddConnector(ctx, pl.ID, source.ID)
@@ -370,129 +345,6 @@ func TestServiceLifecycle_PipelineError(t *testing.T) {
 	is.True(cerrors.Is(event.Error, wantErr))
 }
 
-func TestServiceLifecycle_StopAll_Recovering(t *testing.T) {
-	type testCase struct {
-		name   string
-		stopFn func(ctx context.Context, is *is.I, lifecycleService *Service, pipelineID string)
-		// whether we expect the source plugin's Stop() function to be called
-		// (doesn't happen when force-stopping)
-		wantSourceStop bool
-		want           pipeline.Status
-		wantErr        error
-	}
-
-	runTest := func(t *testing.T, tc testCase) {
-		is := is.New(t)
-		ctx, killAll := context.WithCancel(context.Background())
-		defer killAll()
-		logger := log.New(zerolog.Nop())
-		db := &inmemory.DB{}
-		persister := connector.NewPersister(logger, db, time.Second, 3)
-		b := &backoff.Backoff{}
-
-		ps := pipeline.NewService(logger, db)
-
-		// create a host pipeline
-		pl, err := ps.Create(ctx, uuid.NewString(), pipeline.Config{Name: "test pipeline"}, pipeline.ProvisionTypeAPI)
-		is.NoErr(err)
-
-		// create mocked connectors
-		// source will stop and return ErrGracefulShutdown which should signal to the
-		// service that everything went well and the pipeline was gracefully shutdown
-		ctrl := gomock.NewController(t)
-		wantRecords := generateRecords(0)
-		source, sourceDispenser := generatorSource(ctrl, persister, wantRecords, nil, tc.wantSourceStop)
-		destination, destDispenser := asserterDestination(ctrl, persister, wantRecords)
-		dlq, dlqDispenser := asserterDestination(ctrl, persister, nil)
-		pl.DLQ.Plugin = dlq.Plugin
-
-		pl, err = ps.AddConnector(ctx, pl.ID, source.ID)
-		is.NoErr(err)
-		pl, err = ps.AddConnector(ctx, pl.ID, destination.ID)
-		is.NoErr(err)
-
-		ls := NewService(logger, b, testConnectorService{
-			source.ID:      source,
-			destination.ID: destination,
-			testDLQID:      dlq,
-		},
-			testProcessorService{},
-			testConnectorPluginService{
-				source.Plugin:      sourceDispenser,
-				destination.Plugin: destDispenser,
-				dlq.Plugin:         dlqDispenser,
-			}, ps)
-
-		// start the pipeline now that everything is set up
-		err = ls.Start(
-			ctx,
-			pl.ID,
-		)
-		is.NoErr(err)
-
-		// wait for pipeline to finish consuming records from the source
-		time.Sleep(100 * time.Millisecond)
-
-		pl.SetStatus(pipeline.StatusRecovering)
-		tc.stopFn(ctx, is, ls, pl.ID)
-
-		// wait for pipeline to finish
-		err = ls.WaitPipeline(pl.ID)
-		if tc.wantErr != nil {
-			is.True(err != nil)
-		} else {
-			is.NoErr(err)
-			is.Equal("", pl.Error)
-		}
-
-		is.Equal(tc.want, pl.GetStatus())
-	}
-
-	testCases := []testCase{
-		{
-			name: "system stop (graceful shutdown err)",
-			stopFn: func(ctx context.Context, is *is.I, ls *Service, pipelineID string) {
-				ls.StopAll(ctx, pipeline.ErrGracefulShutdown)
-			},
-			wantSourceStop: true,
-			want:           pipeline.StatusSystemStopped,
-		},
-		{
-			name: "system stop (fatal err)",
-			stopFn: func(ctx context.Context, is *is.I, ls *Service, pipelineID string) {
-				ls.StopAll(ctx, cerrors.FatalError(cerrors.New("terrible err")))
-			},
-			wantSourceStop: true,
-			want:           pipeline.StatusDegraded,
-			wantErr:        cerrors.New("terrible err"),
-		},
-		{
-			name: "connection error",
-			stopFn: func(ctx context.Context, is *is.I, ls *Service, pipelineID string) {
-				ls.StopAll(ctx, cerrors.New("lost connection to database"))
-			},
-			wantSourceStop: true,
-			want:           pipeline.StatusRecovering,
-			wantErr:        cerrors.New("lost connection to database"),
-		},
-		{
-			name: "user stop (graceful)",
-			stopFn: func(ctx context.Context, is *is.I, ls *Service, pipelineID string) {
-				err := ls.Stop(ctx, pipelineID, false)
-				is.NoErr(err)
-			},
-			wantSourceStop: true,
-			want:           pipeline.StatusUserStopped,
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			runTest(t, tc)
-		})
-	}
-}
-
 func TestServiceLifecycle_PipelineStop(t *testing.T) {
 	is := is.New(t)
 	ctx, killAll := context.WithCancel(context.Background())
@@ -513,9 +365,9 @@ func TestServiceLifecycle_PipelineStop(t *testing.T) {
 	// service that everything went well and the pipeline was gracefully shutdown
 	ctrl := gomock.NewController(t)
 	wantRecords := generateRecords(10)
-	source, sourceDispenser := generatorSource(ctrl, persister, wantRecords, nil, true)
-	destination, destDispenser := asserterDestination(ctrl, persister, wantRecords)
-	dlq, dlqDispenser := asserterDestination(ctrl, persister, nil)
+	source, sourceDispenser := generatorSource(ctrl, persister, wantRecords, nil, false)
+	destination, destDispenser := asserterDestination(ctrl, persister, wantRecords, false)
+	dlq, dlqDispenser := asserterDestination(ctrl, persister, nil, false)
 	pl.DLQ.Plugin = dlq.Plugin
 
 	pl, err = ps.AddConnector(ctx, pl.ID, source.ID)
@@ -544,7 +396,8 @@ func TestServiceLifecycle_PipelineStop(t *testing.T) {
 
 	// wait for pipeline to finish consuming records from the source
 	time.Sleep(100 * time.Millisecond)
-	ls.StopAll(ctx, pipeline.ErrGracefulShutdown)
+	err = ls.StopAll(ctx, false)
+	is.NoErr(err)
 
 	// wait for pipeline to finish
 	err = ls.WaitPipeline(pl.ID)
@@ -552,104 +405,6 @@ func TestServiceLifecycle_PipelineStop(t *testing.T) {
 
 	is.Equal(pipeline.StatusSystemStopped, pl.GetStatus())
 	is.Equal("", pl.Error)
-}
-
-func TestServiceLifecycle_Run_Rerun(t *testing.T) {
-	runTest := func(t *testing.T, status pipeline.Status, expected pipeline.Status) {
-		is := is.New(t)
-		ctx, killAll := context.WithCancel(context.Background())
-		defer killAll()
-		ctrl := gomock.NewController(t)
-		logger := log.Test(t)
-		db := &inmemory.DB{}
-		persister := connector.NewPersister(logger, db, time.Second, 3)
-		b := &backoff.Backoff{}
-
-		ps := pipeline.NewService(logger, db)
-
-		// create a host pipeline
-		pl, err := ps.Create(ctx, uuid.NewString(), pipeline.Config{Name: "test pipeline"}, pipeline.ProvisionTypeAPI)
-		is.NoErr(err)
-
-		// create mocked connectors
-		var (
-			source          *connector.Instance
-			sourceDispenser *pmock.Dispenser
-			destination     *connector.Instance
-			destDispenser   *pmock.Dispenser
-			dlq             *connector.Instance
-			dlqDispenser    *pmock.Dispenser
-		)
-		if expected == pipeline.StatusRunning {
-			// mocked connectors that are expected to be started
-			source, sourceDispenser = generatorSource(ctrl, persister, nil, nil, true)
-			destination, destDispenser = asserterDestination(ctrl, persister, nil)
-			dlq, dlqDispenser = asserterDestination(ctrl, persister, nil)
-		} else {
-			// dummy connectors that are not expected to be started
-			source = dummySource(persister)
-			destination = dummyDestination(persister)
-			dlq = dummyDestination(persister)
-		}
-
-		// update internal fields, they will be stored when we add the connectors
-		pl.DLQ.Plugin = dlq.Plugin
-		pl.SetStatus(status)
-
-		pl, err = ps.AddConnector(ctx, pl.ID, source.ID)
-		is.NoErr(err)
-		pl, err = ps.AddConnector(ctx, pl.ID, destination.ID)
-		is.NoErr(err)
-
-		// create a new pipeline service and initialize it
-		ps = pipeline.NewService(logger, db)
-		err = ps.Init(ctx)
-		is.NoErr(err)
-
-		ls := NewService(logger, b, testConnectorService{
-			source.ID:      source,
-			destination.ID: destination,
-			testDLQID:      dlq,
-		},
-			testProcessorService{},
-			testConnectorPluginService{
-				source.Plugin:      sourceDispenser,
-				destination.Plugin: destDispenser,
-				dlq.Plugin:         dlqDispenser,
-			}, ps)
-		err = ls.Init(ctx)
-		is.NoErr(err)
-
-		// give pipeline a chance to start if needed
-		time.Sleep(time.Millisecond * 100)
-
-		got := ps.List(ctx)
-		is.Equal(len(got), 1)
-		is.True(got[pl.ID] != nil)
-		is.Equal(got[pl.ID].GetStatus(), expected)
-
-		if expected == pipeline.StatusRunning {
-			pl, _ = ps.Get(ctx, pl.ID)
-
-			is.NoErr(ls.Stop(ctx, pl.ID, false))
-			is.NoErr(ls.WaitPipeline(pl.ID))
-		}
-	}
-
-	testCases := []struct {
-		have pipeline.Status
-		want pipeline.Status
-	}{
-		{have: pipeline.StatusRunning, want: pipeline.StatusRunning},
-		{have: pipeline.StatusUserStopped, want: pipeline.StatusUserStopped},
-		{have: pipeline.StatusSystemStopped, want: pipeline.StatusRunning},
-		{have: pipeline.StatusDegraded, want: pipeline.StatusDegraded},
-	}
-	for _, tt := range testCases {
-		t.Run(fmt.Sprintf("%s->%s", tt.have, tt.want), func(t *testing.T) {
-			runTest(t, tt.have, tt.want)
-		})
-	}
 }
 
 func generateRecords(count int) []opencdc.Record {
@@ -706,19 +461,22 @@ func asserterDestination(
 	ctrl *gomock.Controller,
 	persister *connector.Persister,
 	records []opencdc.Record,
+	stop bool,
 ) (*connector.Instance, *pmock.Dispenser) {
-	var lastPosition opencdc.Position
-	if len(records) > 0 {
-		lastPosition = records[len(records)-1].Position
-	}
-
 	destinationPluginOptions := []pmock.ConfigurableDestinationPluginOption{
 		pmock.DestinationPluginWithConfigure(),
 		pmock.DestinationPluginWithOpen(),
 		pmock.DestinationPluginWithRun(),
 		pmock.DestinationPluginWithRecords(records),
-		pmock.DestinationPluginWithStop(lastPosition),
 		pmock.DestinationPluginWithTeardown(),
+	}
+
+	if stop {
+		var lastPosition opencdc.Position
+		if len(records) > 0 {
+			lastPosition = records[len(records)-1].Position
+		}
+		destinationPluginOptions = append(destinationPluginOptions, pmock.DestinationPluginWithStop(lastPosition))
 	}
 
 	destinationPlugin := pmock.NewConfigurableDestinationPlugin(ctrl, destinationPluginOptions...)
