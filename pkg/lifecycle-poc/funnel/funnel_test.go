@@ -27,8 +27,8 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/ctxutil"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/noop"
-	"github.com/conduitio/conduit/pkg/lifecycle/stream"
-	streammock "github.com/conduitio/conduit/pkg/lifecycle/stream/mock"
+	"github.com/conduitio/conduit/pkg/lifecycle-poc/stream"
+	streammock "github.com/conduitio/conduit/pkg/lifecycle-poc/stream/mock"
 	"github.com/rs/zerolog"
 	"go.uber.org/mock/gomock"
 )

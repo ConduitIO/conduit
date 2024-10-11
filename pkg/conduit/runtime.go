@@ -45,7 +45,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/metrics"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/measure"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/prometheus"
-	"github.com/conduitio/conduit/pkg/lifecycle"
+	lifecycle_poc "github.com/conduitio/conduit/pkg/lifecycle-poc"
 	"github.com/conduitio/conduit/pkg/orchestrator"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	conn_plugin "github.com/conduitio/conduit/pkg/plugin/connector"
@@ -96,7 +96,7 @@ type Runtime struct {
 	pipelineService  *pipeline.Service
 	connectorService *connector.Service
 	processorService *processor.Service
-	lifecycleService *lifecycle.Service
+	lifecycleService *lifecycle_poc.Service
 
 	connectorPluginService *conn_plugin.PluginService
 	processorPluginService *proc_plugin.PluginService
@@ -215,7 +215,7 @@ func createServices(r *Runtime) error {
 	plService := pipeline.NewService(r.logger, r.DB)
 	connService := connector.NewService(r.logger, r.DB, r.connectorPersister)
 	procService := processor.NewService(r.logger, r.DB, procPluginService)
-	lifecycleService := lifecycle.NewService(r.logger, backoffCfg, connService, procService, connPluginService, plService)
+	lifecycleService := lifecycle_poc.NewService(r.logger, backoffCfg, connService, procService, connPluginService, plService)
 	provisionService := provisioning.NewService(r.DB, r.logger, plService, connService, procService, connPluginService, lifecycleService, r.Config.Pipelines.Path)
 
 	orc := orchestrator.NewOrchestrator(r.DB, r.logger, plService, connService, procService, connPluginService, procPluginService, lifecycleService)
@@ -801,7 +801,7 @@ func (r *Runtime) initServices(ctx context.Context, t *tomb.Tomb) error {
 	}
 
 	if r.Config.Pipelines.ExitOnError {
-		r.lifecycleService.OnFailure(func(e lifecycle.FailureEvent) {
+		r.lifecycleService.OnFailure(func(e lifecycle_poc.FailureEvent) {
 			r.logger.Warn(ctx).
 				Err(e.Error).
 				Str(log.PipelineIDField, e.ID).
