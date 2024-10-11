@@ -32,7 +32,7 @@ type DLQ struct {
 	windowNackThreshold int
 
 	// window keeps track of the last N acks and nacks
-	window dlqWindow
+	window *dlqWindow
 	m      sync.Mutex
 }
 
@@ -50,6 +50,8 @@ func NewDLQ(
 		t:                   NewDestinationTask(id, destination, logger, timer, histogram),
 		windowSize:          windowSize,
 		windowNackThreshold: windowNackThreshold,
+
+		window: newDLQWindow(windowSize, windowNackThreshold),
 	}
 }
 

@@ -235,6 +235,7 @@ func (w *Worker) Do(ctx context.Context) error {
 	return nil
 }
 
+//nolint:gocyclo // TODO: refactor
 func (w *Worker) doTask(ctx context.Context, currentIndex int, b *Batch, acker ackNacker) error {
 	t := w.Tasks[currentIndex]
 
@@ -354,7 +355,7 @@ func (w *Worker) doTask(ctx context.Context, currentIndex int, b *Batch, acker a
 			}
 		}
 
-		idx = idx + len(subBatch.positions)
+		idx += len(subBatch.positions)
 	}
 
 	return nil
@@ -412,6 +413,7 @@ func (w *Worker) nextTask(ctx context.Context, currentIndex int, b *Batch, acker
 
 		// multiple next tasks, let's clone the batch and pass it to them
 		// concurrently
+		//nolint:govet // TODO implement multi ack nacker
 		multiAcker := newMultiAckNacker(acker, len(nextIndices))
 		p := pool.New().WithErrors() // TODO WithContext?
 		for _, i := range nextIndices {
@@ -526,7 +528,7 @@ type multiAckNacker struct {
 
 func newMultiAckNacker(parent ackNacker, count int) *multiAckNacker {
 	c := atomic.Int32{}
-	c.Add(int32(count))
+	c.Add(int32(count)) //nolint:gosec // no risk of overflow
 	return &multiAckNacker{
 		parent: parent,
 		count:  &c,

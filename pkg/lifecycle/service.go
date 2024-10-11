@@ -19,7 +19,6 @@ package lifecycle
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -31,7 +30,6 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/measure"
 	"github.com/conduitio/conduit/pkg/lifecycle/funnel"
-	"github.com/conduitio/conduit/pkg/lifecycle/stream"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	connectorPlugin "github.com/conduitio/conduit/pkg/plugin/connector"
 	"github.com/conduitio/conduit/pkg/processor"
@@ -358,7 +356,9 @@ func (s *Service) combineTasksAndOrders(
 	srcTasks, destTasks, procTasks []funnel.Task,
 	srcOrder, destOrder, procOrder funnel.Order,
 ) ([]funnel.Task, funnel.Order) {
-	tasks := append(srcTasks, procTasks...)
+	tasks := make([]funnel.Task, 0, len(srcTasks)+len(procTasks)+len(destTasks))
+	tasks = append(tasks, srcTasks...)
+	tasks = append(tasks, procTasks...)
 	tasks = append(tasks, destTasks...)
 
 	// TODO(multi-connector): when we have multiple connectors this will not be as straight forward
@@ -523,70 +523,6 @@ func (s *Service) buildProcessorTasks(
 	return tasks, order, nil
 }
 
-func (s *Service) buildProcessorNodes(
-	ctx context.Context,
-	pl *pipeline.Instance,
-	processorIDs []string,
-	first stream.PubNode,
-	last stream.SubNode,
-) ([]stream.Node, error) {
-	var nodes []stream.Node
-
-	prev := first
-	for _, procID := range processorIDs {
-		instance, err := s.processors.Get(ctx, procID)
-		if err != nil {
-			return nil, cerrors.Errorf("could not fetch processor: %w", err)
-		}
-
-		runnableProc, err := s.processors.MakeRunnableProcessor(ctx, instance)
-		if err != nil {
-			return nil, err
-		}
-
-		var node stream.PubSubNode
-		if instance.Config.Workers > 1 {
-			node = s.buildParallelProcessorNode(pl, runnableProc)
-		} else {
-			node = s.buildProcessorNode(pl, runnableProc)
-		}
-
-		node.Sub(prev.Pub())
-		prev = node
-
-		nodes = append(nodes, node)
-	}
-
-	last.Sub(prev.Pub())
-	return nodes, nil
-}
-
-func (s *Service) buildParallelProcessorNode(
-	pl *pipeline.Instance,
-	proc *processor.RunnableProcessor,
-) *stream.ParallelNode {
-	return &stream.ParallelNode{
-		Name: proc.ID + "-parallel",
-		NewNode: func(i int) stream.PubSubNode {
-			n := s.buildProcessorNode(pl, proc)
-			n.Name = n.Name + "-" + strconv.Itoa(i) // add suffix to name
-			return n
-		},
-		Workers: proc.Config.Workers,
-	}
-}
-
-func (s *Service) buildProcessorNode(
-	pl *pipeline.Instance,
-	proc *processor.RunnableProcessor,
-) *stream.ProcessorNode {
-	return &stream.ProcessorNode{
-		Name:           proc.ID,
-		Processor:      proc,
-		ProcessorTimer: measure.ProcessorExecutionDurationTimer.WithValues(pl.Config.Name, proc.Plugin),
-	}
-}
-
 func (s *Service) buildDLQ(
 	ctx context.Context,
 	pl *pipeline.Instance,
@@ -631,7 +567,7 @@ func (s *Service) runPipeline(rp *runnablePipeline) error {
 
 	// the tomb is responsible for running goroutines related to the pipeline
 	rp.t = &tomb.Tomb{}
-	ctx := rp.t.Context(nil)
+	ctx := rp.t.Context(nil) //nolint:staticcheck // this is the correct usage of tomb
 
 	err := rp.w.Open(ctx)
 	if err != nil {
@@ -685,8 +621,8 @@ func (s *Service) runPipeline(rp *runnablePipeline) error {
 				if err := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusDegraded, fmt.Sprintf("%+v", err)); err != nil {
 					return err
 				}
-			} else {
-				// try to recover the pipeline
+			} else { //nolint:staticcheck // TODO: implement recovery
+				// // try to recover the pipeline
 				// if recoveryErr := s.recoverPipeline(ctx, rp); recoveryErr != nil {
 				// 	s.logger.
 				// 		Err(ctx, err).

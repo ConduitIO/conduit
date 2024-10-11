@@ -448,11 +448,12 @@ func (r *Runtime) registerCleanup(t *tomb.Tomb) {
 		}()
 
 		err = r.lifecycleService.Wait(exitTimeout)
-		if err != nil && err != context.DeadlineExceeded {
+		switch {
+		case err != nil && err != context.DeadlineExceeded:
 			r.logger.Warn(ctx).Err(err).Msg("some pipelines stopped with an error")
-		} else if err == context.DeadlineExceeded {
+		case err == context.DeadlineExceeded:
 			r.logger.Warn(ctx).Msg("some pipelines did not stop in time")
-		} else {
+		default:
 			r.logger.Info(ctx).Msg("all pipelines stopped gracefully")
 		}
 
