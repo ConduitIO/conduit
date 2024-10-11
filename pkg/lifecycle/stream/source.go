@@ -47,6 +47,9 @@ type SourceNode struct {
 	state              csync.ValueWatcher[nodeState]
 	connectorCtxCancel context.CancelFunc
 
+	// mctx guards access to the connector context
+	mctx sync.Mutex
+
 	stop struct {
 		sync.Mutex
 		position        opencdc.Position
@@ -102,7 +105,10 @@ func (n *SourceNode) Run(ctx context.Context) (err error) {
 	// start a fresh connector context to make sure the connector is running
 	// until this method returns
 	var connectorCtx context.Context
+
+	n.mctx.Lock()
 	connectorCtx, n.connectorCtxCancel = context.WithCancel(context.Background())
+	n.mctx.Unlock()
 	defer n.connectorCtxCancel()
 
 	// openMsgTracker tracks open messages until they are acked or nacked
@@ -241,7 +247,9 @@ func (n *SourceNode) stopGraceful(ctx context.Context, reason error) (err error)
 
 func (n *SourceNode) ForceStop(ctx context.Context) {
 	n.logger.Warn(ctx).Msg("force stopping source connector")
+	n.mctx.Lock()
 	n.connectorCtxCancel()
+	n.mctx.Unlock()
 }
 
 func (n *SourceNode) Pub() <-chan *Message {
