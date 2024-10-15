@@ -19,6 +19,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/gammazero/deque"
@@ -122,6 +123,8 @@ func (n *DestinationAckerNode) worker(
 		errChan <- err
 	}
 
+	var acks []connector.DestinationAck
+
 	defer close(errChan)
 	for range signalChan {
 		// signal is received when a new message is in the queue
@@ -136,21 +139,28 @@ func (n *DestinationAckerNode) worker(
 			msg := n.queue.PopFront()
 			n.m.Unlock()
 
-			acks, err := n.Destination.Ack(ctx)
-			if err != nil {
-				handleError(msg, cerrors.Errorf("error while fetching acks: %w", err))
+			if len(acks) == 0 {
+				// Ack can return multiple acks, store them and check the position
+				// for the current message
+				var err error
+				acks, err = n.Destination.Ack(ctx)
+				if err != nil {
+					handleError(msg, cerrors.Errorf("error while fetching acks: %w", err))
+					return
+				}
+			}
+
+			ack := acks[0]
+			acks = acks[1:]
+
+			if !bytes.Equal(msg.Record.Position, ack.Position) {
+				handleError(msg, cerrors.Errorf("received unexpected ack, expected position %q but got %q", msg.Record.Position, ack.Position))
 				return
 			}
-			for _, ack := range acks {
-				if !bytes.Equal(msg.Record.Position, ack.Position) {
-					handleError(msg, cerrors.Errorf("received unexpected ack, expected position %q but got %q", msg.Record.Position, ack.Position))
-					return
-				}
-				err = n.handleAck(msg, ack.Error)
-				if err != nil {
-					errChan <- err
-					return
-				}
+			err := n.handleAck(msg, ack.Error)
+			if err != nil {
+				errChan <- err
+				return
 			}
 		}
 	}

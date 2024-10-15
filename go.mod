@@ -42,7 +42,7 @@ require (
 	github.com/rs/zerolog v1.33.0
 	github.com/stealthrocket/wazergo v0.19.1
 	github.com/tetratelabs/wazero v1.8.1
-	github.com/twmb/franz-go/pkg/sr v1.1.0
+	github.com/twmb/franz-go/pkg/sr v1.2.0
 	github.com/twmb/go-cache v1.2.1
 	go.uber.org/mock v0.4.0
 	golang.org/x/exp v0.0.0-20241004190924-225e2abe05e6
