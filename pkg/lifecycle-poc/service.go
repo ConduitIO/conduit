@@ -33,7 +33,6 @@ import (
 	"github.com/conduitio/conduit/pkg/pipeline"
 	connectorPlugin "github.com/conduitio/conduit/pkg/plugin/connector"
 	"github.com/conduitio/conduit/pkg/processor"
-	"github.com/jpillora/backoff"
 	"gopkg.in/tomb.v2"
 )
 
@@ -48,8 +47,6 @@ type FailureHandler func(FailureEvent)
 // Service manages pipelines.
 type Service struct {
 	logger log.CtxLogger
-
-	backoffCfg *backoff.Backoff
 
 	pipelines  PipelineService
 	connectors ConnectorService
@@ -66,7 +63,6 @@ type Service struct {
 // NewService initializes and returns a lifecycle.Service.
 func NewService(
 	logger log.CtxLogger,
-	backoffCfg *backoff.Backoff,
 	connectors ConnectorService,
 	processors ProcessorService,
 	connectorPlugins ConnectorPluginService,
@@ -74,7 +70,6 @@ func NewService(
 ) *Service {
 	return &Service{
 		logger:           logger.WithComponent("lifecycle.Service"),
-		backoffCfg:       backoffCfg,
 		connectors:       connectors,
 		processors:       processors,
 		connectorPlugins: connectorPlugins,

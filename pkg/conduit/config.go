@@ -111,6 +111,11 @@ type Config struct {
 		}
 	}
 
+	Preview struct {
+		// PipelineArchV2 enables the new pipeline architecture.
+		PipelineArchV2 bool
+	}
+
 	dev struct {
 		cpuprofile   string
 		memprofile   string

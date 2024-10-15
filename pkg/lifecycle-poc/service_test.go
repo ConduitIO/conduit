@@ -38,7 +38,6 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/uuid"
-	"github.com/jpillora/backoff"
 	"github.com/matryer/is"
 	"github.com/rs/zerolog"
 	"go.uber.org/mock/gomock"
@@ -54,7 +53,6 @@ func TestServiceLifecycle_buildRunnablePipeline(t *testing.T) {
 	logger := log.New(zerolog.Nop())
 	db := &inmemory.DB{}
 	persister := connector.NewPersister(logger, db, time.Second, 3)
-	b := &backoff.Backoff{}
 
 	source := dummySource(persister)
 	destination := dummyDestination(persister)
@@ -74,7 +72,6 @@ func TestServiceLifecycle_buildRunnablePipeline(t *testing.T) {
 
 	ls := NewService(
 		logger,
-		b,
 		testConnectorService{
 			source.ID:      source,
 			destination.ID: destination,
@@ -120,7 +117,6 @@ func TestService_buildRunnablePipeline_NoSourceNode(t *testing.T) {
 	logger := log.New(zerolog.Nop())
 	db := &inmemory.DB{}
 	persister := connector.NewPersister(logger, db, time.Second, 3)
-	b := &backoff.Backoff{}
 
 	destination := dummyDestination(persister)
 	dlq := dummyDestination(persister)
@@ -137,14 +133,18 @@ func TestService_buildRunnablePipeline_NoSourceNode(t *testing.T) {
 	}
 	pl.SetStatus(pipeline.StatusUserStopped)
 
-	ls := NewService(logger, b, testConnectorService{
-		destination.ID: destination,
-		testDLQID:      dlq,
-	}, testProcessorService{},
+	ls := NewService(logger,
+		testConnectorService{
+			destination.ID: destination,
+			testDLQID:      dlq,
+		},
+		testProcessorService{},
 		testConnectorPluginService{
 			destination.Plugin: pmock.NewDispenser(ctrl),
 			dlq.Plugin:         pmock.NewDispenser(ctrl),
-		}, testPipelineService{})
+		},
+		testPipelineService{},
+	)
 
 	wantErr := "can't build pipeline without any source connectors"
 
@@ -166,20 +166,22 @@ func TestService_buildRunnablePipeline_NoDestinationNode(t *testing.T) {
 	logger := log.New(zerolog.Nop())
 	db := &inmemory.DB{}
 	persister := connector.NewPersister(logger, db, time.Second, 3)
-	b := &backoff.Backoff{}
 
 	source := dummySource(persister)
 	dlq := dummyDestination(persister)
 
-	ls := NewService(logger, b, testConnectorService{
-		source.ID: source,
-		testDLQID: dlq,
-	},
+	ls := NewService(logger,
+		testConnectorService{
+			source.ID: source,
+			testDLQID: dlq,
+		},
 		testProcessorService{},
 		testConnectorPluginService{
 			source.Plugin: pmock.NewDispenser(ctrl),
 			dlq.Plugin:    pmock.NewDispenser(ctrl),
-		}, testPipelineService{})
+		},
+		testPipelineService{},
+	)
 
 	wantErr := "can't build pipeline without any destination connectors"
 
@@ -214,7 +216,6 @@ func TestServiceLifecycle_PipelineSuccess(t *testing.T) {
 	db := &inmemory.DB{}
 	persister := connector.NewPersister(logger, db, time.Second, 3)
 	defer persister.Wait()
-	b := &backoff.Backoff{}
 
 	ps := pipeline.NewService(logger, db)
 
@@ -235,17 +236,20 @@ func TestServiceLifecycle_PipelineSuccess(t *testing.T) {
 	pl, err = ps.AddConnector(ctx, pl.ID, destination.ID)
 	is.NoErr(err)
 
-	ls := NewService(logger, b, testConnectorService{
-		source.ID:      source,
-		destination.ID: destination,
-		testDLQID:      dlq,
-	},
+	ls := NewService(logger,
+		testConnectorService{
+			source.ID:      source,
+			destination.ID: destination,
+			testDLQID:      dlq,
+		},
 		testProcessorService{},
 		testConnectorPluginService{
 			source.Plugin:      sourceDispenser,
 			destination.Plugin: destDispenser,
 			dlq.Plugin:         dlqDispenser,
-		}, ps)
+		},
+		ps,
+	)
 
 	// start the pipeline now that everything is set up
 	err = ls.Start(
@@ -276,7 +280,6 @@ func TestServiceLifecycle_PipelineError(t *testing.T) {
 	logger := log.Test(t)
 	db := &inmemory.DB{}
 	persister := connector.NewPersister(logger, db, time.Second, 3)
-	b := &backoff.Backoff{}
 
 	ps := pipeline.NewService(logger, db)
 
@@ -298,17 +301,20 @@ func TestServiceLifecycle_PipelineError(t *testing.T) {
 	pl, err = ps.AddConnector(ctx, pl.ID, destination.ID)
 	is.NoErr(err)
 
-	ls := NewService(logger, b, testConnectorService{
-		source.ID:      source,
-		destination.ID: destination,
-		testDLQID:      dlq,
-	},
+	ls := NewService(logger,
+		testConnectorService{
+			source.ID:      source,
+			destination.ID: destination,
+			testDLQID:      dlq,
+		},
 		testProcessorService{},
 		testConnectorPluginService{
 			source.Plugin:      sourceDispenser,
 			destination.Plugin: destDispenser,
 			dlq.Plugin:         dlqDispenser,
-		}, ps)
+		},
+		ps,
+	)
 
 	events := make(chan FailureEvent, 1)
 	ls.OnFailure(func(e FailureEvent) {
@@ -352,7 +358,6 @@ func TestServiceLifecycle_PipelineStop(t *testing.T) {
 	logger := log.New(zerolog.Nop())
 	db := &inmemory.DB{}
 	persister := connector.NewPersister(logger, db, time.Second, 3)
-	b := &backoff.Backoff{}
 
 	ps := pipeline.NewService(logger, db)
 
@@ -375,17 +380,20 @@ func TestServiceLifecycle_PipelineStop(t *testing.T) {
 	pl, err = ps.AddConnector(ctx, pl.ID, destination.ID)
 	is.NoErr(err)
 
-	ls := NewService(logger, b, testConnectorService{
-		source.ID:      source,
-		destination.ID: destination,
-		testDLQID:      dlq,
-	},
+	ls := NewService(logger,
+		testConnectorService{
+			source.ID:      source,
+			destination.ID: destination,
+			testDLQID:      dlq,
+		},
 		testProcessorService{},
 		testConnectorPluginService{
 			source.Plugin:      sourceDispenser,
 			destination.Plugin: destDispenser,
 			dlq.Plugin:         dlqDispenser,
-		}, ps)
+		},
+		ps,
+	)
 
 	// start the pipeline now that everything is set up
 	err = ls.Start(
