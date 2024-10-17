@@ -43,9 +43,9 @@ initArch() {
 initOS() {
 	OS=$(echo `uname`)
   # We support Linux and Darwin, Windows (mingw, msys) are not supported.
-  if [[ "$OS" != "Linux" && "$OS" != "Darwin" ]]; then
-      fail "Error: Unsupported operating system: $OS"
-  fi
+	if [[ "$OS" != "Linux" && "$OS" != "Darwin" ]]; then
+		fail "Error: Unsupported operating system: $OS"
+	fi
 
 	echo "OS=$OS"
 }
