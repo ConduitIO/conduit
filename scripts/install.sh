@@ -42,12 +42,11 @@ initArch() {
 
 initOS() {
 	OS=$(echo `uname`)
+  # We support Linux and Darwin, Windows (mingw, msys) are not supported.
+  if [[ "$OS" != "Linux" && "$OS" != "Darwin" ]]; then
+      fail "Error: Unsupported operating system: $OS"
+  fi
 
-	case "$OS" in
-		# Minimalist GNU for Windows
-		mingw*) OS='Windows';;
-		msys*) OS='Windows';;
-	esac
 	echo "OS=$OS"
 }
 
@@ -152,7 +151,6 @@ detectPackageManager() {
     # Get the OS information
     os=$(uname)
 
-    # todo add support for Windows
     if [[ "$os" == "Darwin" ]]; then
         PKG_MGR="brew"
     elif [[ -f /etc/debian_version ]]; then
