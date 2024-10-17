@@ -26,18 +26,18 @@ fail() {
 }
 
 initArch() {
-	ARCH=$(uname -m)
-	case $ARCH in
-		armv5*) ARCH="armv5";;
-		armv6*) ARCH="armv6";;
-		armv7*) ARCH="armv7";;
-		aarch64) ARCH="arm64";;
-		x86) ARCH="i386";;
-		x86_64) ARCH="x86_64";;
-		i686) ARCH="i386";;
-		i386) ARCH="i386";;
-	esac
-	echo "ARCH=$ARCH"
+    ARCH=$(uname -m)
+    case $ARCH in
+        aarch64) ARCH="arm64";;
+        x86) ARCH="i386";;
+        x86_64) ARCH="x86_64";;
+        i686) ARCH="i386";;
+        i386) ARCH="i386";;
+        *)
+            fail "Error: Unsupported architecture: $ARCH"
+            ;;
+    esac
+    echo "ARCH=$ARCH"
 }
 
 initOS() {
