@@ -167,7 +167,7 @@ detectPackageManager() {
 
 installWithBrew() {
     echo "Installing using Homebrew..."
-    # Add your brew installation logic here
+    brew install conduit
 }
 
 installWithDPKG() {
