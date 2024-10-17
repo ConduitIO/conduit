@@ -153,6 +153,7 @@ detectPackageManager() {
     # Get the OS information
     os=$(uname)
 
+    # todo add support for Windows
     if [[ "$os" == "Darwin" ]]; then
         PKG_MGR="brew"
     elif [[ -f /etc/debian_version ]]; then
