@@ -76,8 +76,7 @@ getLatestTag() {
         # Use wget to get the redirected link
         latest_url=$(wget --spider --server-response --max-redirect=10 2>&1 "$url" | grep "Location" | tail -1 | awk '{print $2}')
     else
-        echo "Error: DOWNLOAD_TOOL is not set or not recognized. Use 'curl' or 'wget'."
-        exit 1
+        fail "Error: DOWNLOAD_TOOL is not set or not recognized. Use 'curl' or 'wget'."
     fi
 
     # Extract the tag from the redirected URL (everything after the last "/")
@@ -161,8 +160,7 @@ detectPackageManager() {
     elif [[ -f /etc/redhat-release || -f /etc/fedora-release ]]; then
         PKG_MGR="rpm"
     else
-        echo "Unsupported OS"
-        exit 1
+        fail "Unsupported OS"
     fi
 }
 
@@ -194,8 +192,7 @@ checkPkgMgrAndInstall() {
     elif [[ "$PKG_MGR" == "rpm" ]]; then
         installWithRPM
     else
-        echo "Error: PKG_MGR is not set or not recognized. Use 'brew', 'dpkg', or 'rpm'."
-        exit 1
+        fail "Error: PKG_MGR is not set or not recognized. Use 'brew', 'dpkg', or 'rpm'."
     fi
 }
 
