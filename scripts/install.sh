@@ -73,7 +73,7 @@ getLatestTag() {
         latest_url=$(curl -sL -o /dev/null -w "%{url_effective}" "$url")
     elif [[ "$DOWNLOAD_TOOL" == "wget" ]]; then
         # Use wget to get the redirected link
-        latest_url=$(wget --spider --server-response --max-redirect=10 2>&1 "$url" | grep "Location" | tail -1 | awk '{print $2}')
+        latest_url=$(wget --spider --server-response --max-redirect=2 2>&1 "$url" | grep "Location" | tail -1 | awk '{print $2}')
     else
         fail "Error: DOWNLOAD_TOOL is not set or not recognized. Use 'curl' or 'wget'."
     fi
