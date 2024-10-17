@@ -167,6 +167,7 @@ detectPackageManager() {
 
 installWithBrew() {
     echo "Installing using Homebrew..."
+    brew upgrade conduit
     brew install conduit
 }
 
