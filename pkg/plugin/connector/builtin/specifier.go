@@ -38,5 +38,5 @@ func newSpecifierPluginAdapter(impl pconnector.SpecifierPlugin, logger log.CtxLo
 }
 
 func (s *specifierPluginAdapter) Specify(ctx context.Context, in pconnector.SpecifierSpecifyRequest) (pconnector.SpecifierSpecifyResponse, error) {
-	return runSandbox(s.impl.Specify, ctx, in, s.logger)
+	return runSandbox(s.impl.Specify, ctx, in, s.logger, "Specify")
 }
