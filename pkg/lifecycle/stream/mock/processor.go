@@ -22,6 +22,7 @@ import (
 type Processor struct {
 	ctrl     *gomock.Controller
 	recorder *ProcessorMockRecorder
+	isgomock struct{}
 }
 
 // ProcessorMockRecorder is the mock recorder for Processor.
@@ -42,17 +43,17 @@ func (m *Processor) EXPECT() *ProcessorMockRecorder {
 }
 
 // Open mocks base method.
-func (m *Processor) Open(arg0 context.Context) error {
+func (m *Processor) Open(ctx context.Context) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Open", arg0)
+	ret := m.ctrl.Call(m, "Open", ctx)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Open indicates an expected call of Open.
-func (mr *ProcessorMockRecorder) Open(arg0 any) *ProcessorOpenCall {
+func (mr *ProcessorMockRecorder) Open(ctx any) *ProcessorOpenCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Open", reflect.TypeOf((*Processor)(nil).Open), arg0)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Open", reflect.TypeOf((*Processor)(nil).Open), ctx)
 	return &ProcessorOpenCall{Call: call}
 }
 

@@ -22,6 +22,7 @@ import (
 type ProcessorService_InspectProcessorInServer struct {
 	ctrl     *gomock.Controller
 	recorder *ProcessorService_InspectProcessorInServerMockRecorder
+	isgomock struct{}
 }
 
 // ProcessorService_InspectProcessorInServerMockRecorder is the mock recorder for ProcessorService_InspectProcessorInServer.
@@ -80,17 +81,17 @@ func (c *ProcessorService_InspectProcessorInServerContextCall) DoAndReturn(f fun
 }
 
 // RecvMsg mocks base method.
-func (m *ProcessorService_InspectProcessorInServer) RecvMsg(arg0 any) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RecvMsg", arg0)
+func (m_2 *ProcessorService_InspectProcessorInServer) RecvMsg(m any) error {
+	m_2.ctrl.T.Helper()
+	ret := m_2.ctrl.Call(m_2, "RecvMsg", m)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // RecvMsg indicates an expected call of RecvMsg.
-func (mr *ProcessorService_InspectProcessorInServerMockRecorder) RecvMsg(arg0 any) *ProcessorService_InspectProcessorInServerRecvMsgCall {
+func (mr *ProcessorService_InspectProcessorInServerMockRecorder) RecvMsg(m any) *ProcessorService_InspectProcessorInServerRecvMsgCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecvMsg", reflect.TypeOf((*ProcessorService_InspectProcessorInServer)(nil).RecvMsg), arg0)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecvMsg", reflect.TypeOf((*ProcessorService_InspectProcessorInServer)(nil).RecvMsg), m)
 	return &ProcessorService_InspectProcessorInServerRecvMsgCall{Call: call}
 }
 
@@ -194,17 +195,17 @@ func (c *ProcessorService_InspectProcessorInServerSendHeaderCall) DoAndReturn(f 
 }
 
 // SendMsg mocks base method.
-func (m *ProcessorService_InspectProcessorInServer) SendMsg(arg0 any) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SendMsg", arg0)
+func (m_2 *ProcessorService_InspectProcessorInServer) SendMsg(m any) error {
+	m_2.ctrl.T.Helper()
+	ret := m_2.ctrl.Call(m_2, "SendMsg", m)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // SendMsg indicates an expected call of SendMsg.
-func (mr *ProcessorService_InspectProcessorInServerMockRecorder) SendMsg(arg0 any) *ProcessorService_InspectProcessorInServerSendMsgCall {
+func (mr *ProcessorService_InspectProcessorInServerMockRecorder) SendMsg(m any) *ProcessorService_InspectProcessorInServerSendMsgCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendMsg", reflect.TypeOf((*ProcessorService_InspectProcessorInServer)(nil).SendMsg), arg0)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendMsg", reflect.TypeOf((*ProcessorService_InspectProcessorInServer)(nil).SendMsg), m)
 	return &ProcessorService_InspectProcessorInServerSendMsgCall{Call: call}
 }
 

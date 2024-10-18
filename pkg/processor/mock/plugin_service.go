@@ -21,6 +21,7 @@ import (
 type PluginService struct {
 	ctrl     *gomock.Controller
 	recorder *PluginServiceMockRecorder
+	isgomock struct{}
 }
 
 // PluginServiceMockRecorder is the mock recorder for PluginService.
@@ -41,18 +42,18 @@ func (m *PluginService) EXPECT() *PluginServiceMockRecorder {
 }
 
 // NewProcessor mocks base method.
-func (m *PluginService) NewProcessor(arg0 context.Context, arg1, arg2 string) (sdk.Processor, error) {
+func (m *PluginService) NewProcessor(ctx context.Context, pluginName, id string) (sdk.Processor, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "NewProcessor", arg0, arg1, arg2)
+	ret := m.ctrl.Call(m, "NewProcessor", ctx, pluginName, id)
 	ret0, _ := ret[0].(sdk.Processor)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // NewProcessor indicates an expected call of NewProcessor.
-func (mr *PluginServiceMockRecorder) NewProcessor(arg0, arg1, arg2 any) *PluginServiceNewProcessorCall {
+func (mr *PluginServiceMockRecorder) NewProcessor(ctx, pluginName, id any) *PluginServiceNewProcessorCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewProcessor", reflect.TypeOf((*PluginService)(nil).NewProcessor), arg0, arg1, arg2)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewProcessor", reflect.TypeOf((*PluginService)(nil).NewProcessor), ctx, pluginName, id)
 	return &PluginServiceNewProcessorCall{Call: call}
 }
 

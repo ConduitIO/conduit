@@ -21,6 +21,7 @@ import (
 type ProcessorPluginOrchestrator struct {
 	ctrl     *gomock.Controller
 	recorder *ProcessorPluginOrchestratorMockRecorder
+	isgomock struct{}
 }
 
 // ProcessorPluginOrchestratorMockRecorder is the mock recorder for ProcessorPluginOrchestrator.
@@ -41,18 +42,18 @@ func (m *ProcessorPluginOrchestrator) EXPECT() *ProcessorPluginOrchestratorMockR
 }
 
 // List mocks base method.
-func (m *ProcessorPluginOrchestrator) List(arg0 context.Context) (map[string]sdk.Specification, error) {
+func (m *ProcessorPluginOrchestrator) List(ctx context.Context) (map[string]sdk.Specification, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "List", arg0)
+	ret := m.ctrl.Call(m, "List", ctx)
 	ret0, _ := ret[0].(map[string]sdk.Specification)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // List indicates an expected call of List.
-func (mr *ProcessorPluginOrchestratorMockRecorder) List(arg0 any) *ProcessorPluginOrchestratorListCall {
+func (mr *ProcessorPluginOrchestratorMockRecorder) List(ctx any) *ProcessorPluginOrchestratorListCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "List", reflect.TypeOf((*ProcessorPluginOrchestrator)(nil).List), arg0)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "List", reflect.TypeOf((*ProcessorPluginOrchestrator)(nil).List), ctx)
 	return &ProcessorPluginOrchestratorListCall{Call: call}
 }
 

@@ -22,6 +22,7 @@ import (
 type ConnectorService_InspectConnectorServer struct {
 	ctrl     *gomock.Controller
 	recorder *ConnectorService_InspectConnectorServerMockRecorder
+	isgomock struct{}
 }
 
 // ConnectorService_InspectConnectorServerMockRecorder is the mock recorder for ConnectorService_InspectConnectorServer.
@@ -80,17 +81,17 @@ func (c *ConnectorService_InspectConnectorServerContextCall) DoAndReturn(f func(
 }
 
 // RecvMsg mocks base method.
-func (m *ConnectorService_InspectConnectorServer) RecvMsg(arg0 any) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RecvMsg", arg0)
+func (m_2 *ConnectorService_InspectConnectorServer) RecvMsg(m any) error {
+	m_2.ctrl.T.Helper()
+	ret := m_2.ctrl.Call(m_2, "RecvMsg", m)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // RecvMsg indicates an expected call of RecvMsg.
-func (mr *ConnectorService_InspectConnectorServerMockRecorder) RecvMsg(arg0 any) *ConnectorService_InspectConnectorServerRecvMsgCall {
+func (mr *ConnectorService_InspectConnectorServerMockRecorder) RecvMsg(m any) *ConnectorService_InspectConnectorServerRecvMsgCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecvMsg", reflect.TypeOf((*ConnectorService_InspectConnectorServer)(nil).RecvMsg), arg0)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecvMsg", reflect.TypeOf((*ConnectorService_InspectConnectorServer)(nil).RecvMsg), m)
 	return &ConnectorService_InspectConnectorServerRecvMsgCall{Call: call}
 }
 
@@ -194,17 +195,17 @@ func (c *ConnectorService_InspectConnectorServerSendHeaderCall) DoAndReturn(f fu
 }
 
 // SendMsg mocks base method.
-func (m *ConnectorService_InspectConnectorServer) SendMsg(arg0 any) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SendMsg", arg0)
+func (m_2 *ConnectorService_InspectConnectorServer) SendMsg(m any) error {
+	m_2.ctrl.T.Helper()
+	ret := m_2.ctrl.Call(m_2, "SendMsg", m)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // SendMsg indicates an expected call of SendMsg.
-func (mr *ConnectorService_InspectConnectorServerMockRecorder) SendMsg(arg0 any) *ConnectorService_InspectConnectorServerSendMsgCall {
+func (mr *ConnectorService_InspectConnectorServerMockRecorder) SendMsg(m any) *ConnectorService_InspectConnectorServerSendMsgCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendMsg", reflect.TypeOf((*ConnectorService_InspectConnectorServer)(nil).SendMsg), arg0)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendMsg", reflect.TypeOf((*ConnectorService_InspectConnectorServer)(nil).SendMsg), m)
 	return &ConnectorService_InspectConnectorServerSendMsgCall{Call: call}
 }
 

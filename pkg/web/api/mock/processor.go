@@ -22,6 +22,7 @@ import (
 type ProcessorOrchestrator struct {
 	ctrl     *gomock.Controller
 	recorder *ProcessorOrchestratorMockRecorder
+	isgomock struct{}
 }
 
 // ProcessorOrchestratorMockRecorder is the mock recorder for ProcessorOrchestrator.
@@ -42,18 +43,18 @@ func (m *ProcessorOrchestrator) EXPECT() *ProcessorOrchestratorMockRecorder {
 }
 
 // Create mocks base method.
-func (m *ProcessorOrchestrator) Create(arg0 context.Context, arg1 string, arg2 processor.Parent, arg3 processor.Config, arg4 string) (*processor.Instance, error) {
+func (m *ProcessorOrchestrator) Create(ctx context.Context, procType string, parent processor.Parent, cfg processor.Config, condition string) (*processor.Instance, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Create", arg0, arg1, arg2, arg3, arg4)
+	ret := m.ctrl.Call(m, "Create", ctx, procType, parent, cfg, condition)
 	ret0, _ := ret[0].(*processor.Instance)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Create indicates an expected call of Create.
-func (mr *ProcessorOrchestratorMockRecorder) Create(arg0, arg1, arg2, arg3, arg4 any) *ProcessorOrchestratorCreateCall {
+func (mr *ProcessorOrchestratorMockRecorder) Create(ctx, procType, parent, cfg, condition any) *ProcessorOrchestratorCreateCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*ProcessorOrchestrator)(nil).Create), arg0, arg1, arg2, arg3, arg4)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*ProcessorOrchestrator)(nil).Create), ctx, procType, parent, cfg, condition)
 	return &ProcessorOrchestratorCreateCall{Call: call}
 }
 
@@ -81,17 +82,17 @@ func (c *ProcessorOrchestratorCreateCall) DoAndReturn(f func(context.Context, st
 }
 
 // Delete mocks base method.
-func (m *ProcessorOrchestrator) Delete(arg0 context.Context, arg1 string) error {
+func (m *ProcessorOrchestrator) Delete(ctx context.Context, id string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Delete", arg0, arg1)
+	ret := m.ctrl.Call(m, "Delete", ctx, id)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Delete indicates an expected call of Delete.
-func (mr *ProcessorOrchestratorMockRecorder) Delete(arg0, arg1 any) *ProcessorOrchestratorDeleteCall {
+func (mr *ProcessorOrchestratorMockRecorder) Delete(ctx, id any) *ProcessorOrchestratorDeleteCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Delete", reflect.TypeOf((*ProcessorOrchestrator)(nil).Delete), arg0, arg1)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Delete", reflect.TypeOf((*ProcessorOrchestrator)(nil).Delete), ctx, id)
 	return &ProcessorOrchestratorDeleteCall{Call: call}
 }
 
@@ -119,18 +120,18 @@ func (c *ProcessorOrchestratorDeleteCall) DoAndReturn(f func(context.Context, st
 }
 
 // Get mocks base method.
-func (m *ProcessorOrchestrator) Get(arg0 context.Context, arg1 string) (*processor.Instance, error) {
+func (m *ProcessorOrchestrator) Get(ctx context.Context, id string) (*processor.Instance, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Get", arg0, arg1)
+	ret := m.ctrl.Call(m, "Get", ctx, id)
 	ret0, _ := ret[0].(*processor.Instance)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Get indicates an expected call of Get.
-func (mr *ProcessorOrchestratorMockRecorder) Get(arg0, arg1 any) *ProcessorOrchestratorGetCall {
+func (mr *ProcessorOrchestratorMockRecorder) Get(ctx, id any) *ProcessorOrchestratorGetCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*ProcessorOrchestrator)(nil).Get), arg0, arg1)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*ProcessorOrchestrator)(nil).Get), ctx, id)
 	return &ProcessorOrchestratorGetCall{Call: call}
 }
 
@@ -158,18 +159,18 @@ func (c *ProcessorOrchestratorGetCall) DoAndReturn(f func(context.Context, strin
 }
 
 // InspectIn mocks base method.
-func (m *ProcessorOrchestrator) InspectIn(arg0 context.Context, arg1 string) (*inspector.Session, error) {
+func (m *ProcessorOrchestrator) InspectIn(ctx context.Context, id string) (*inspector.Session, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "InspectIn", arg0, arg1)
+	ret := m.ctrl.Call(m, "InspectIn", ctx, id)
 	ret0, _ := ret[0].(*inspector.Session)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // InspectIn indicates an expected call of InspectIn.
-func (mr *ProcessorOrchestratorMockRecorder) InspectIn(arg0, arg1 any) *ProcessorOrchestratorInspectInCall {
+func (mr *ProcessorOrchestratorMockRecorder) InspectIn(ctx, id any) *ProcessorOrchestratorInspectInCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InspectIn", reflect.TypeOf((*ProcessorOrchestrator)(nil).InspectIn), arg0, arg1)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InspectIn", reflect.TypeOf((*ProcessorOrchestrator)(nil).InspectIn), ctx, id)
 	return &ProcessorOrchestratorInspectInCall{Call: call}
 }
 
@@ -197,18 +198,18 @@ func (c *ProcessorOrchestratorInspectInCall) DoAndReturn(f func(context.Context,
 }
 
 // InspectOut mocks base method.
-func (m *ProcessorOrchestrator) InspectOut(arg0 context.Context, arg1 string) (*inspector.Session, error) {
+func (m *ProcessorOrchestrator) InspectOut(ctx context.Context, id string) (*inspector.Session, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "InspectOut", arg0, arg1)
+	ret := m.ctrl.Call(m, "InspectOut", ctx, id)
 	ret0, _ := ret[0].(*inspector.Session)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // InspectOut indicates an expected call of InspectOut.
-func (mr *ProcessorOrchestratorMockRecorder) InspectOut(arg0, arg1 any) *ProcessorOrchestratorInspectOutCall {
+func (mr *ProcessorOrchestratorMockRecorder) InspectOut(ctx, id any) *ProcessorOrchestratorInspectOutCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InspectOut", reflect.TypeOf((*ProcessorOrchestrator)(nil).InspectOut), arg0, arg1)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InspectOut", reflect.TypeOf((*ProcessorOrchestrator)(nil).InspectOut), ctx, id)
 	return &ProcessorOrchestratorInspectOutCall{Call: call}
 }
 
@@ -236,17 +237,17 @@ func (c *ProcessorOrchestratorInspectOutCall) DoAndReturn(f func(context.Context
 }
 
 // List mocks base method.
-func (m *ProcessorOrchestrator) List(arg0 context.Context) map[string]*processor.Instance {
+func (m *ProcessorOrchestrator) List(ctx context.Context) map[string]*processor.Instance {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "List", arg0)
+	ret := m.ctrl.Call(m, "List", ctx)
 	ret0, _ := ret[0].(map[string]*processor.Instance)
 	return ret0
 }
 
 // List indicates an expected call of List.
-func (mr *ProcessorOrchestratorMockRecorder) List(arg0 any) *ProcessorOrchestratorListCall {
+func (mr *ProcessorOrchestratorMockRecorder) List(ctx any) *ProcessorOrchestratorListCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "List", reflect.TypeOf((*ProcessorOrchestrator)(nil).List), arg0)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "List", reflect.TypeOf((*ProcessorOrchestrator)(nil).List), ctx)
 	return &ProcessorOrchestratorListCall{Call: call}
 }
 
@@ -274,18 +275,18 @@ func (c *ProcessorOrchestratorListCall) DoAndReturn(f func(context.Context) map[
 }
 
 // Update mocks base method.
-func (m *ProcessorOrchestrator) Update(arg0 context.Context, arg1 string, arg2 processor.Config) (*processor.Instance, error) {
+func (m *ProcessorOrchestrator) Update(ctx context.Context, id string, cfg processor.Config) (*processor.Instance, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Update", arg0, arg1, arg2)
+	ret := m.ctrl.Call(m, "Update", ctx, id, cfg)
 	ret0, _ := ret[0].(*processor.Instance)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Update indicates an expected call of Update.
-func (mr *ProcessorOrchestratorMockRecorder) Update(arg0, arg1, arg2 any) *ProcessorOrchestratorUpdateCall {
+func (mr *ProcessorOrchestratorMockRecorder) Update(ctx, id, cfg any) *ProcessorOrchestratorUpdateCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Update", reflect.TypeOf((*ProcessorOrchestrator)(nil).Update), arg0, arg1, arg2)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Update", reflect.TypeOf((*ProcessorOrchestrator)(nil).Update), ctx, id, cfg)
 	return &ProcessorOrchestratorUpdateCall{Call: call}
 }
 
