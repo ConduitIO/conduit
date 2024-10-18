@@ -21,6 +21,7 @@ import (
 type PipelineOrchestrator struct {
 	ctrl     *gomock.Controller
 	recorder *PipelineOrchestratorMockRecorder
+	isgomock struct{}
 }
 
 // PipelineOrchestratorMockRecorder is the mock recorder for PipelineOrchestrator.
@@ -41,18 +42,18 @@ func (m *PipelineOrchestrator) EXPECT() *PipelineOrchestratorMockRecorder {
 }
 
 // Create mocks base method.
-func (m *PipelineOrchestrator) Create(arg0 context.Context, arg1 pipeline.Config) (*pipeline.Instance, error) {
+func (m *PipelineOrchestrator) Create(ctx context.Context, cfg pipeline.Config) (*pipeline.Instance, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Create", arg0, arg1)
+	ret := m.ctrl.Call(m, "Create", ctx, cfg)
 	ret0, _ := ret[0].(*pipeline.Instance)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Create indicates an expected call of Create.
-func (mr *PipelineOrchestratorMockRecorder) Create(arg0, arg1 any) *PipelineOrchestratorCreateCall {
+func (mr *PipelineOrchestratorMockRecorder) Create(ctx, cfg any) *PipelineOrchestratorCreateCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*PipelineOrchestrator)(nil).Create), arg0, arg1)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*PipelineOrchestrator)(nil).Create), ctx, cfg)
 	return &PipelineOrchestratorCreateCall{Call: call}
 }
 
@@ -80,17 +81,17 @@ func (c *PipelineOrchestratorCreateCall) DoAndReturn(f func(context.Context, pip
 }
 
 // Delete mocks base method.
-func (m *PipelineOrchestrator) Delete(arg0 context.Context, arg1 string) error {
+func (m *PipelineOrchestrator) Delete(ctx context.Context, id string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Delete", arg0, arg1)
+	ret := m.ctrl.Call(m, "Delete", ctx, id)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Delete indicates an expected call of Delete.
-func (mr *PipelineOrchestratorMockRecorder) Delete(arg0, arg1 any) *PipelineOrchestratorDeleteCall {
+func (mr *PipelineOrchestratorMockRecorder) Delete(ctx, id any) *PipelineOrchestratorDeleteCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Delete", reflect.TypeOf((*PipelineOrchestrator)(nil).Delete), arg0, arg1)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Delete", reflect.TypeOf((*PipelineOrchestrator)(nil).Delete), ctx, id)
 	return &PipelineOrchestratorDeleteCall{Call: call}
 }
 
@@ -118,18 +119,18 @@ func (c *PipelineOrchestratorDeleteCall) DoAndReturn(f func(context.Context, str
 }
 
 // Get mocks base method.
-func (m *PipelineOrchestrator) Get(arg0 context.Context, arg1 string) (*pipeline.Instance, error) {
+func (m *PipelineOrchestrator) Get(ctx context.Context, id string) (*pipeline.Instance, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Get", arg0, arg1)
+	ret := m.ctrl.Call(m, "Get", ctx, id)
 	ret0, _ := ret[0].(*pipeline.Instance)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Get indicates an expected call of Get.
-func (mr *PipelineOrchestratorMockRecorder) Get(arg0, arg1 any) *PipelineOrchestratorGetCall {
+func (mr *PipelineOrchestratorMockRecorder) Get(ctx, id any) *PipelineOrchestratorGetCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*PipelineOrchestrator)(nil).Get), arg0, arg1)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*PipelineOrchestrator)(nil).Get), ctx, id)
 	return &PipelineOrchestratorGetCall{Call: call}
 }
 
@@ -157,17 +158,17 @@ func (c *PipelineOrchestratorGetCall) DoAndReturn(f func(context.Context, string
 }
 
 // List mocks base method.
-func (m *PipelineOrchestrator) List(arg0 context.Context) map[string]*pipeline.Instance {
+func (m *PipelineOrchestrator) List(ctx context.Context) map[string]*pipeline.Instance {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "List", arg0)
+	ret := m.ctrl.Call(m, "List", ctx)
 	ret0, _ := ret[0].(map[string]*pipeline.Instance)
 	return ret0
 }
 
 // List indicates an expected call of List.
-func (mr *PipelineOrchestratorMockRecorder) List(arg0 any) *PipelineOrchestratorListCall {
+func (mr *PipelineOrchestratorMockRecorder) List(ctx any) *PipelineOrchestratorListCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "List", reflect.TypeOf((*PipelineOrchestrator)(nil).List), arg0)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "List", reflect.TypeOf((*PipelineOrchestrator)(nil).List), ctx)
 	return &PipelineOrchestratorListCall{Call: call}
 }
 
@@ -195,17 +196,17 @@ func (c *PipelineOrchestratorListCall) DoAndReturn(f func(context.Context) map[s
 }
 
 // Start mocks base method.
-func (m *PipelineOrchestrator) Start(arg0 context.Context, arg1 string) error {
+func (m *PipelineOrchestrator) Start(ctx context.Context, id string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Start", arg0, arg1)
+	ret := m.ctrl.Call(m, "Start", ctx, id)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Start indicates an expected call of Start.
-func (mr *PipelineOrchestratorMockRecorder) Start(arg0, arg1 any) *PipelineOrchestratorStartCall {
+func (mr *PipelineOrchestratorMockRecorder) Start(ctx, id any) *PipelineOrchestratorStartCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*PipelineOrchestrator)(nil).Start), arg0, arg1)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*PipelineOrchestrator)(nil).Start), ctx, id)
 	return &PipelineOrchestratorStartCall{Call: call}
 }
 
@@ -233,17 +234,17 @@ func (c *PipelineOrchestratorStartCall) DoAndReturn(f func(context.Context, stri
 }
 
 // Stop mocks base method.
-func (m *PipelineOrchestrator) Stop(arg0 context.Context, arg1 string, arg2 bool) error {
+func (m *PipelineOrchestrator) Stop(ctx context.Context, id string, force bool) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Stop", arg0, arg1, arg2)
+	ret := m.ctrl.Call(m, "Stop", ctx, id, force)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Stop indicates an expected call of Stop.
-func (mr *PipelineOrchestratorMockRecorder) Stop(arg0, arg1, arg2 any) *PipelineOrchestratorStopCall {
+func (mr *PipelineOrchestratorMockRecorder) Stop(ctx, id, force any) *PipelineOrchestratorStopCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*PipelineOrchestrator)(nil).Stop), arg0, arg1, arg2)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*PipelineOrchestrator)(nil).Stop), ctx, id, force)
 	return &PipelineOrchestratorStopCall{Call: call}
 }
 
@@ -271,18 +272,18 @@ func (c *PipelineOrchestratorStopCall) DoAndReturn(f func(context.Context, strin
 }
 
 // Update mocks base method.
-func (m *PipelineOrchestrator) Update(arg0 context.Context, arg1 string, arg2 pipeline.Config) (*pipeline.Instance, error) {
+func (m *PipelineOrchestrator) Update(ctx context.Context, id string, cfg pipeline.Config) (*pipeline.Instance, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Update", arg0, arg1, arg2)
+	ret := m.ctrl.Call(m, "Update", ctx, id, cfg)
 	ret0, _ := ret[0].(*pipeline.Instance)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Update indicates an expected call of Update.
-func (mr *PipelineOrchestratorMockRecorder) Update(arg0, arg1, arg2 any) *PipelineOrchestratorUpdateCall {
+func (mr *PipelineOrchestratorMockRecorder) Update(ctx, id, cfg any) *PipelineOrchestratorUpdateCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Update", reflect.TypeOf((*PipelineOrchestrator)(nil).Update), arg0, arg1, arg2)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Update", reflect.TypeOf((*PipelineOrchestrator)(nil).Update), ctx, id, cfg)
 	return &PipelineOrchestratorUpdateCall{Call: call}
 }
 
@@ -310,18 +311,18 @@ func (c *PipelineOrchestratorUpdateCall) DoAndReturn(f func(context.Context, str
 }
 
 // UpdateDLQ mocks base method.
-func (m *PipelineOrchestrator) UpdateDLQ(arg0 context.Context, arg1 string, arg2 pipeline.DLQ) (*pipeline.Instance, error) {
+func (m *PipelineOrchestrator) UpdateDLQ(ctx context.Context, id string, dlq pipeline.DLQ) (*pipeline.Instance, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateDLQ", arg0, arg1, arg2)
+	ret := m.ctrl.Call(m, "UpdateDLQ", ctx, id, dlq)
 	ret0, _ := ret[0].(*pipeline.Instance)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // UpdateDLQ indicates an expected call of UpdateDLQ.
-func (mr *PipelineOrchestratorMockRecorder) UpdateDLQ(arg0, arg1, arg2 any) *PipelineOrchestratorUpdateDLQCall {
+func (mr *PipelineOrchestratorMockRecorder) UpdateDLQ(ctx, id, dlq any) *PipelineOrchestratorUpdateDLQCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDLQ", reflect.TypeOf((*PipelineOrchestrator)(nil).UpdateDLQ), arg0, arg1, arg2)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDLQ", reflect.TypeOf((*PipelineOrchestrator)(nil).UpdateDLQ), ctx, id, dlq)
 	return &PipelineOrchestratorUpdateDLQCall{Call: call}
 }
 

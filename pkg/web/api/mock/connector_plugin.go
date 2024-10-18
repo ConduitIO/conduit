@@ -21,6 +21,7 @@ import (
 type ConnectorPluginOrchestrator struct {
 	ctrl     *gomock.Controller
 	recorder *ConnectorPluginOrchestratorMockRecorder
+	isgomock struct{}
 }
 
 // ConnectorPluginOrchestratorMockRecorder is the mock recorder for ConnectorPluginOrchestrator.
@@ -41,18 +42,18 @@ func (m *ConnectorPluginOrchestrator) EXPECT() *ConnectorPluginOrchestratorMockR
 }
 
 // List mocks base method.
-func (m *ConnectorPluginOrchestrator) List(arg0 context.Context) (map[string]pconnector.Specification, error) {
+func (m *ConnectorPluginOrchestrator) List(ctx context.Context) (map[string]pconnector.Specification, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "List", arg0)
+	ret := m.ctrl.Call(m, "List", ctx)
 	ret0, _ := ret[0].(map[string]pconnector.Specification)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // List indicates an expected call of List.
-func (mr *ConnectorPluginOrchestratorMockRecorder) List(arg0 any) *ConnectorPluginOrchestratorListCall {
+func (mr *ConnectorPluginOrchestratorMockRecorder) List(ctx any) *ConnectorPluginOrchestratorListCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "List", reflect.TypeOf((*ConnectorPluginOrchestrator)(nil).List), arg0)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "List", reflect.TypeOf((*ConnectorPluginOrchestrator)(nil).List), ctx)
 	return &ConnectorPluginOrchestratorListCall{Call: call}
 }
 

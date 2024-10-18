@@ -21,6 +21,7 @@ import (
 type DLQHandler struct {
 	ctrl     *gomock.Controller
 	recorder *DLQHandlerMockRecorder
+	isgomock struct{}
 }
 
 // DLQHandlerMockRecorder is the mock recorder for DLQHandler.
