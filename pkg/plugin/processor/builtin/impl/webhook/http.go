@@ -67,12 +67,12 @@ type httpConfig struct {
 	RequestBodyTmpl string `json:"request.body"`
 	// Specifies in which field should the response body be saved.
 	//
-	// For more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).
+	// For more information about the format, see [Referencing fields](https://conduit.io/docs/using/processors/referencing-fields).
 	ResponseBodyRef string `json:"response.body" default:".Payload.After"`
 	// Specifies in which field should the response status be saved. If no value
 	// is set, then the response status will NOT be saved.
 	//
-	// For more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).
+	// For more information about the format, see [Referencing fields](https://conduit.io/docs/using/processors/referencing-fields).
 	ResponseStatusRef string `json:"response.status"`
 }
 

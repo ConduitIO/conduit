@@ -83,7 +83,7 @@ destination connector.
 
 ### Use built-in connectors as examples
 
-Conduit's [built-in connectors](https://conduit.io/docs/connectors/connector-list/)
+Conduit's [built-in connectors](https://conduit.io/docs/using/connectors/list/)
 are great references that can be used when writing connectors. They are also the
 first ones to be updated with latest SDK and protocol changes.
 

@@ -36,7 +36,7 @@ type decoder interface {
 type decodeConfig struct {
 	// The field that will be decoded.
 	//
-	// For more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).
+	// For more information about the format, see [Referencing fields](https://conduit.io/docs/using/processors/referencing-fields).
 	Field string `json:"field" default:".Payload.After"`
 
 	fieldResolver sdk.ReferenceResolver

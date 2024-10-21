@@ -46,7 +46,7 @@ type renameConfig struct {
 	//
 	// For example: `.Metadata.key:id,.Payload.After.foo:bar`.
 	//
-	// For more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).
+	// For more information about the format, see [Referencing fields](https://conduit.io/docs/using/processors/referencing-fields).
 	Mapping []string `json:"mapping" validate:"required"`
 }
 
