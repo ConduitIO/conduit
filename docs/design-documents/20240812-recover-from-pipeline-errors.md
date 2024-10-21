@@ -81,7 +81,7 @@ reset.
 
 ### Dead-letter queue errors
 
-If a DLQ ([Dead-letter queue](https://conduit.io/docs/features/dead-letter-queue))
+If a DLQ ([Dead-letter queue](https://conduit.io/docs/using/other-features/dead-letter-queue))
 is configured with a nack threshold greater than 0, the user has configured a
 DLQ and we should respect that. This means that if the nack threshold gets
 exceeded and the DLQ returns an error, that error should degrade the pipeline
