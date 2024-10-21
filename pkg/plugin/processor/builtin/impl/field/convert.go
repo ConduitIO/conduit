@@ -45,7 +45,7 @@ type convertConfig struct {
 	// Note that you can only convert fields in structured data under `.Key` and
 	// `.Payload`.
 	//
-	// For more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).
+	// For more information about the format, see [Referencing fields](https://conduit.io/docs/using/processors/referencing-fields).
 	Field string `json:"field" validate:"required,regex=^\\.(Payload|Key).*"`
 	// Type is the target field type after conversion, available options are: `string`, `int`, `float`, `bool`, `time`.
 	Type string `json:"type" validate:"required,inclusion=string|int|float|bool|time"`

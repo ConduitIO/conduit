@@ -44,7 +44,7 @@ type setConfig struct {
 	// Field is the target field that will be set. Note that it is not allowed
 	// to set the `.Position` field.
 	//
-	// For more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).
+	// For more information about the format, see [Referencing fields](https://conduit.io/docs/using/processors/referencing-fields).
 	Field string `json:"field" validate:"required,exclusion=.Position"`
 	// Value is a Go template expression which will be evaluated and stored in `field` (e.g. `{{ .Payload.After }}`).
 	Value string `json:"value" validate:"required"`

@@ -19,7 +19,7 @@ func (encodeConfig) Parameters() map[string]config.Parameter {
 	return map[string]config.Parameter{
 		encodeConfigField: {
 			Default:     ".Payload.After",
-			Description: "The field that will be encoded.\n\nFor more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).",
+			Description: "The field that will be encoded.\n\nFor more information about the format, see [Referencing fields](https://conduit.io/docs/using/processors/referencing-fields).",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},

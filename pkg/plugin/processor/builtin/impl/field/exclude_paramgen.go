@@ -15,7 +15,7 @@ func (excludeConfig) Parameters() map[string]config.Parameter {
 	return map[string]config.Parameter{
 		excludeConfigFields: {
 			Default:     "",
-			Description: "Fields is a comma separated list of target fields which should be excluded.\n\nFor more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).",
+			Description: "Fields is a comma separated list of target fields which should be excluded.\n\nFor more information about the format, see [Referencing fields](https://conduit.io/docs/using/processors/referencing-fields).",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{
 				config.ValidationRequired{},

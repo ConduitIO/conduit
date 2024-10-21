@@ -40,7 +40,7 @@ func (p *filterProcessor) Specification() (sdk.Specification, error) {
 the records will be filtered out if the condition provided to the processor is
 evaluated to ` + "`true`" + `.
 
-**Important:** Make sure to add a [condition](https://conduit.io/docs/processors/conditions)
+**Important:** Make sure to add a [condition](https://conduit.io/docs/using/processors/conditions)
 to this processor, otherwise all records will be filtered out.`,
 		Version:    "v0.1.0",
 		Author:     "Meroxa, Inc.",
