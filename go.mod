@@ -30,7 +30,7 @@ require (
 	github.com/gorilla/websocket v1.5.3
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.22.0
 	github.com/hashicorp/go-hclog v1.6.3
-	github.com/hashicorp/go-plugin v1.6.1
+	github.com/hashicorp/go-plugin v1.6.2
 	github.com/jpillora/backoff v1.0.0
 	github.com/matryer/is v1.4.1
 	github.com/neilotoole/slogt v1.1.0
@@ -247,7 +247,6 @@ require (
 	github.com/mgechev/revive v1.3.9 // indirect
 	github.com/mitchellh/copystructure v1.2.0 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
-	github.com/mitchellh/go-testing-interface v1.14.1 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect
