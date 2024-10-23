@@ -182,7 +182,7 @@ func (b pipelineBuilder) buildDemoPipeline() PipelineTemplate {
 func (b pipelineBuilder) getOutput() *os.File {
 	path := "/tmp/example-pipeline.yaml"
 
-	output, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
+	output, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
 		log.Fatalf("error: failed to open %s: %v", path, err)
 	}
