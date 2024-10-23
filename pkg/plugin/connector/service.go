@@ -117,6 +117,25 @@ func (s *PluginService) List(context.Context) (map[string]pconnector.Specificati
 	return specs, nil
 }
 
+func (s *PluginService) GetSpecifications(ctx context.Context, name string) (pconnector.Specification, error) {
+	dispenser, err := s.NewDispenser(s.logger, name, "get-specifications")
+	if err != nil {
+		return pconnector.Specification{}, cerrors.Errorf("could not create dispenser: %w", err)
+	}
+
+	specifier, err := dispenser.DispenseSpecifier()
+	if err != nil {
+		return pconnector.Specification{}, cerrors.Errorf("could not dispense specifier: %w", err)
+	}
+
+	response, err := specifier.Specify(ctx, pconnector.SpecifierSpecifyRequest{})
+	if err != nil {
+		return pconnector.Specification{}, cerrors.Errorf("could not get specification: %w", err)
+	}
+
+	return response.Specification, err
+}
+
 func (s *PluginService) ValidateSourceConfig(ctx context.Context, name string, settings map[string]string) (err error) {
 	d, err := s.NewDispenser(s.logger, name, "validate-source-config")
 	if err != nil {

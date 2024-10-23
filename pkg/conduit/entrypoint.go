@@ -63,6 +63,19 @@ func (e *Entrypoint) Serve(cfg Config) {
 		e.exitWithError(cerrors.Errorf("failed to set up conduit runtime: %w", err))
 	}
 
+	if cfg.PipelineInit.Init {
+		pb := pipelineBuilder{
+			connectorPluginService: runtime.connectorPluginService,
+			config:                 cfg.PipelineInit,
+		}
+
+		err := pb.build()
+		if err != nil {
+			e.exitWithError(cerrors.Errorf("failed to build pipeline: %w", err))
+		}
+		os.Exit(0)
+	}
+
 	// As per the docs, the signals SIGKILL and SIGSTOP may not be caught by a program
 	ctx := e.CancelOnInterrupt(context.Background())
 	err = runtime.Run(ctx)
@@ -161,6 +174,11 @@ func (*Entrypoint) Flags(cfg *Config) *flag.FlagSet {
 	flags.StringVar(&cfg.dev.cpuprofile, "dev.cpuprofile", "", "write cpu profile to file")
 	flags.StringVar(&cfg.dev.memprofile, "dev.memprofile", "", "write memory profile to file")
 	flags.StringVar(&cfg.dev.blockprofile, "dev.blockprofile", "", "write block profile to file")
+
+	// todo update descriptions
+	flags.BoolVar(&cfg.PipelineInit.Init, "init", false, "initialize a pipeline")
+	flags.StringVar(&cfg.PipelineInit.Source, "source", "", "source connector")
+	flags.StringVar(&cfg.PipelineInit.Destination, "destination", "", "destination connector")
 
 	// Deprecated flags that are hidden from help output
 	deprecatedFlags := map[string]bool{

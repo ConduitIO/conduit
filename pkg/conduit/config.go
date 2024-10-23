@@ -111,6 +111,11 @@ type Config struct {
 		}
 	}
 
+	PipelineInit struct {
+		Init        bool
+		Source      string
+		Destination string
+	}
 	dev struct {
 		cpuprofile   string
 		memprofile   string

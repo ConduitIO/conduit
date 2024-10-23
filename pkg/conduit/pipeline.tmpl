@@ -1,0 +1,30 @@
+version: "2.2"
+pipelines:
+  - id: example-pipeline
+    status: running
+    name: example-pipeline
+    description: Example pipeline
+    connectors:
+      - id: example-source
+        type: source
+        plugin: "{{ .SourceSpec.Name }}"
+        {{ if gt (len .SourceSpec.SourceParams) 0 -}}
+        settings:
+          {{- range $name, $param := .SourceSpec.SourceParams }}
+          {{ formatParameterDescriptionYAML $param.Description }}
+          # Type: {{ $param.Type }}
+          {{ $name }}: {{ formatParameterValueYAML $param.Default }}
+          {{- end }}
+        {{- end }}
+      - id: example-destination
+        type: destination
+        plugin: "{{ .DestinationSpec.Name }}"
+        {{ if gt (len .DestinationSpec.DestinationParams) 0 -}}
+        settings:
+          {{- range $name, $param := .DestinationSpec.DestinationParams }}
+          {{ formatParameterDescriptionYAML $param.Description }}
+          # Type: {{ $param.Type }}
+          {{ $name }}: {{ formatParameterValueYAML $param.Default }}
+          {{- end }}
+        {{- end }}
+
