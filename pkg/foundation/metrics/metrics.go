@@ -405,14 +405,18 @@ func (mt *labeledHistogram) WithValues(vs ...string) Histogram {
 // RecordBytesHistogram wraps a histrogram metric and allows to observe record
 // sizes in bytes.
 type RecordBytesHistogram struct {
-	h Histogram
+	H Histogram
 }
 
 func NewRecordBytesHistogram(h Histogram) RecordBytesHistogram {
-	return RecordBytesHistogram{h}
+	return RecordBytesHistogram{H: h}
 }
 
 func (m RecordBytesHistogram) Observe(r opencdc.Record) {
+	m.H.Observe(m.SizeOf(r))
+}
+
+func (m RecordBytesHistogram) SizeOf(r opencdc.Record) float64 {
 	// TODO for now we call method Bytes() on key and payload to get the
 	//  bytes representation. In case of a structured payload or key it
 	//  is marshaled into JSON, which might not be the correct way to
@@ -429,5 +433,5 @@ func (m RecordBytesHistogram) Observe(r opencdc.Record) {
 	if r.Payload.After != nil {
 		bytes += len(r.Payload.After.Bytes())
 	}
-	m.h.Observe(float64(bytes))
+	return float64(bytes)
 }
