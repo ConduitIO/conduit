@@ -209,6 +209,16 @@ func (s *Service) Update(ctx context.Context, id string, data Config) (*Instance
 	return conn, nil
 }
 
+// Saves the connector instance
+func (s *Service) Save(ctx context.Context, id string, conn *Instance) error {
+	// persist conn
+	if err := s.store.Set(ctx, id, conn); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // AddProcessor adds a processor to a connector.
 func (s *Service) AddProcessor(ctx context.Context, connectorID string, processorID string) (*Instance, error) {
 	conn, err := s.Get(ctx, connectorID)

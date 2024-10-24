@@ -324,6 +324,13 @@ func (a updateConnectorAction) update(ctx context.Context, cfg config.Connector)
 		return cerrors.Errorf("failed to update connector: %w", err)
 	}
 
+	if c.Plugin != cfg.Plugin {
+		c.Plugin = cfg.Plugin
+		if err := a.connectorService.Save(ctx, cfg.ID, c); err != nil {
+			return err
+		}
+	}
+
 	// update processor IDs
 	if !a.isEqual(c.ProcessorIDs, cfg.Processors) {
 		// recreate all processor IDs
