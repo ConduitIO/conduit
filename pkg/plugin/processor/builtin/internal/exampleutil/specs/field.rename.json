@@ -2,7 +2,7 @@
   "specification": {
     "name": "field.rename",
     "summary": "Rename a group of fields.",
-    "description": "Rename a group of field names to new names. It is not\nallowed to rename top-level fields (`.Operation`, `.Position`, \n`.Key`, `.Metadata`, `.Payload.Before`, `.Payload.After`).\n\nNote that this processor only runs on structured data, if the record contains raw\nJSON data, then use the processor [`json.decode`](/docs/processors/builtin/json.decode)\nto parse it into structured data first.",
+    "description": "Rename a group of field names to new names. It is not\nallowed to rename top-level fields (`.Operation`, `.Position`, \n`.Key`, `.Metadata`, `.Payload.Before`, `.Payload.After`).\n\nNote that this processor only runs on structured data, if the record contains raw\nJSON data, then use the processor [`json.decode`](/docs/using/processors/builtin/json.decode)\nto parse it into structured data first.",
     "version": "v0.1.0",
     "author": "Meroxa, Inc.",
     "parameters": {

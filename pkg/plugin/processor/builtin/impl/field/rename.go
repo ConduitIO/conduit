@@ -59,7 +59,7 @@ allowed to rename top-level fields (` + "`.Operation`" + `, ` + "`.Position`" + 
 ` + "`.Key`" + `, ` + "`.Metadata`" + `, ` + "`.Payload.Before`" + `, ` + "`.Payload.After`" + `).
 
 Note that this processor only runs on structured data, if the record contains raw
-JSON data, then use the processor [` + "`json.decode`" + `](/docs/processors/builtin/json.decode)
+JSON data, then use the processor [` + "`json.decode`" + `](/docs/using/processors/builtin/json.decode)
 to parse it into structured data first.`,
 		Version:    "v0.1.0",
 		Author:     "Meroxa, Inc.",
