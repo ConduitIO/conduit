@@ -8,9 +8,9 @@ pipelines:
       - id: example-source
         type: source
         plugin: "{{ .SourceSpec.Name }}"
-        {{ if gt (len .SourceSpec.SourceParams) 0 -}}
+        {{ if gt (len .SourceSpec.Params) 0 -}}
         settings:
-          {{- range $name, $param := .SourceSpec.SourceParams }}
+          {{- range $name, $param := .SourceSpec.Params }}
           {{ formatParameterDescriptionYAML $param.Description }}
           # Type: {{ $param.Type }}
           {{ $name }}: {{ formatParameterValueYAML $param.Default }}
@@ -19,9 +19,9 @@ pipelines:
       - id: example-destination
         type: destination
         plugin: "{{ .DestinationSpec.Name }}"
-        {{ if gt (len .DestinationSpec.DestinationParams) 0 -}}
+        {{ if gt (len .DestinationSpec.Params) 0 -}}
         settings:
-          {{- range $name, $param := .DestinationSpec.DestinationParams }}
+          {{- range $name, $param := .DestinationSpec.Params }}
           {{ formatParameterDescriptionYAML $param.Description }}
           # Type: {{ $param.Type }}
           {{ $name }}: {{ formatParameterValueYAML $param.Default }}

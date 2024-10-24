@@ -12,10 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package conduit
+package internal
 
 import (
-	"context"
 	_ "embed"
 	"fmt"
 	"log"
@@ -23,9 +22,10 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/conduitio/conduit-connector-protocol/pconnector"
+	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/plugin/connector"
+	"github.com/conduitio/conduit/pkg/plugin"
+	"github.com/conduitio/conduit/pkg/plugin/connector/builtin"
 )
 
 //go:embed pipeline.tmpl
@@ -122,28 +122,30 @@ func formatParameterValueYAML(value string) string {
 	}
 }
 
-type PipelineTemplate struct {
-	SourceSpec      pconnector.Specification
-	DestinationSpec pconnector.Specification
+type pipelineTemplate struct {
+	SourceSpec      connectorTemplate
+	DestinationSpec connectorTemplate
 }
 
-type pipelineBuilder struct {
-	connectorPluginService *connector.PluginService
-	config                 struct {
-		Init        bool
-		Source      string
-		Destination string
-	}
+type connectorTemplate struct {
+	Name   string
+	Params config.Parameters
 }
 
-func (b pipelineBuilder) build() error {
-	var pipeline PipelineTemplate
-	if b.config.Source == "" && b.config.Destination == "" {
+type PipelineBuilder struct {
+	Source      string
+	Destination string
+	OutPath     string
+}
+
+func (b PipelineBuilder) Build() error {
+	var pipeline pipelineTemplate
+	if b.Source == "" && b.Destination == "" {
 		pipeline = b.buildDemoPipeline()
 	} else {
 		p, err := b.buildTemplatePipeline()
 		if err != nil {
-			return cerrors.Errorf("failed building pipeline: %w", err)
+			return err
 		}
 		pipeline = p
 	}
@@ -155,42 +157,44 @@ func (b pipelineBuilder) build() error {
 	return nil
 }
 
-func (b pipelineBuilder) buildTemplatePipeline() (PipelineTemplate, error) {
-	ctx := context.Background()
-
-	b.connectorPluginService.Init(ctx, "")
-	sourceSpec, err := b.connectorPluginService.GetSpecifications(ctx, b.config.Source)
+func (b PipelineBuilder) buildTemplatePipeline() (pipelineTemplate, error) {
+	source, err := b.getSourceParams(b.Source)
 	if err != nil {
-		return PipelineTemplate{}, err
+		return pipelineTemplate{}, cerrors.Errorf("failed getting source params: %w", err)
 	}
 
-	destSpec, err := b.connectorPluginService.GetSpecifications(ctx, b.config.Destination)
+	destination, err := b.getDestinationParams(b.Destination)
 	if err != nil {
-		return PipelineTemplate{}, err
+		return pipelineTemplate{}, cerrors.Errorf("failed getting destination params: %w", err)
 	}
 
-	return PipelineTemplate{
-		SourceSpec:      sourceSpec,
-		DestinationSpec: destSpec,
+	return pipelineTemplate{
+		SourceSpec:      source,
+		DestinationSpec: destination,
 	}, nil
 }
 
-func (b pipelineBuilder) buildDemoPipeline() PipelineTemplate {
-	return PipelineTemplate{}
+func (b PipelineBuilder) buildDemoPipeline() pipelineTemplate {
+	return pipelineTemplate{
+		SourceSpec:      connectorTemplate{},
+		DestinationSpec: connectorTemplate{},
+	}
 }
 
-func (b pipelineBuilder) getOutput() *os.File {
-	path := "/tmp/example-pipeline.yaml"
+func (b PipelineBuilder) getOutput() *os.File {
+	if b.OutPath == "" {
+		return os.Stdout
+	}
 
-	output, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	output, err := os.OpenFile(b.OutPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
-		log.Fatalf("error: failed to open %s: %v", path, err)
+		log.Fatalf("error: failed to open %s: %v", b.OutPath, err)
 	}
 
 	return output
 }
 
-func (b pipelineBuilder) write(pipeline PipelineTemplate) error {
+func (b PipelineBuilder) write(pipeline pipelineTemplate) error {
 	t, err := template.New("").Funcs(funcMap).Option("missingkey=zero").Parse(pipelineCfgTmpl)
 	if err != nil {
 		return cerrors.Errorf("failed parsing template: %w", err)
@@ -205,4 +209,40 @@ func (b pipelineBuilder) write(pipeline PipelineTemplate) error {
 	}
 
 	return nil
+}
+
+func (b PipelineBuilder) getSourceParams(pluginName string) (connectorTemplate, error) {
+	for _, conn := range builtin.DefaultBuiltinConnectors {
+		specs := conn.NewSpecification()
+		if specs.Name == pluginName || specs.Name == "builtin:"+pluginName {
+			if conn.NewSource == nil {
+				return connectorTemplate{}, cerrors.Errorf("plugin %v has no source", pluginName)
+			}
+
+			return connectorTemplate{
+				Name:   specs.Name,
+				Params: conn.NewSource().Parameters(),
+			}, nil
+		}
+	}
+
+	return connectorTemplate{}, cerrors.Errorf("%v: %w", pluginName, plugin.ErrPluginNotFound)
+}
+
+func (b PipelineBuilder) getDestinationParams(pluginName string) (connectorTemplate, error) {
+	for _, conn := range builtin.DefaultBuiltinConnectors {
+		specs := conn.NewSpecification()
+		if specs.Name == pluginName || specs.Name == "builtin:"+pluginName {
+			if conn.NewDestination == nil {
+				return connectorTemplate{}, cerrors.Errorf("plugin %v has no source", pluginName)
+			}
+
+			return connectorTemplate{
+				Name:   specs.Name,
+				Params: conn.NewDestination().Parameters(),
+			}, nil
+		}
+	}
+
+	return connectorTemplate{}, cerrors.Errorf("%v: %w", pluginName, plugin.ErrPluginNotFound)
 }

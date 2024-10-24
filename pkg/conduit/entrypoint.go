@@ -18,6 +18,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"github.com/conduitio/conduit/pkg/conduit/internal"
 	"os"
 	"os/signal"
 	"strings"
@@ -54,6 +55,11 @@ type Entrypoint struct{}
 func (e *Entrypoint) Serve(cfg Config) {
 	flags := e.Flags(&cfg)
 	e.ParseConfig(flags)
+	if cfg.cliMode() {
+		e.switchToCLI(cfg)
+		os.Exit(0)
+	}
+
 	if cfg.Log.Format == "cli" {
 		_, _ = fmt.Fprintf(os.Stdout, "%s\n", e.Splash())
 	}
@@ -61,19 +67,6 @@ func (e *Entrypoint) Serve(cfg Config) {
 	runtime, err := NewRuntime(cfg)
 	if err != nil {
 		e.exitWithError(cerrors.Errorf("failed to set up conduit runtime: %w", err))
-	}
-
-	if cfg.PipelineInit.Init {
-		pb := pipelineBuilder{
-			connectorPluginService: runtime.connectorPluginService,
-			config:                 cfg.PipelineInit,
-		}
-
-		err := pb.build()
-		if err != nil {
-			e.exitWithError(cerrors.Errorf("failed to build pipeline: %w", err))
-		}
-		os.Exit(0)
 	}
 
 	// As per the docs, the signals SIGKILL and SIGSTOP may not be caught by a program
@@ -175,10 +168,10 @@ func (*Entrypoint) Flags(cfg *Config) *flag.FlagSet {
 	flags.StringVar(&cfg.dev.memprofile, "dev.memprofile", "", "write memory profile to file")
 	flags.StringVar(&cfg.dev.blockprofile, "dev.blockprofile", "", "write block profile to file")
 
-	// todo update descriptions
-	flags.BoolVar(&cfg.PipelineInit.Init, "init", false, "initialize a pipeline")
-	flags.StringVar(&cfg.PipelineInit.Source, "source", "", "source connector")
-	flags.StringVar(&cfg.PipelineInit.Destination, "destination", "", "destination connector")
+	flags.BoolVar(&cfg.BuildPipeline.Enabled, "build-pipeline", false, "build a new pipeline")
+	flags.StringVar(&cfg.BuildPipeline.Source, "source", "", "source connector (only used with --build-pipeline)")
+	flags.StringVar(&cfg.BuildPipeline.Destination, "destination", "", "destination connector (only used with --build-pipeline)")
+	flags.StringVar(&cfg.BuildPipeline.OutPath, "out-path", "", "path where the pipeline will be written to (only used with --build-pipeline)")
 
 	// Deprecated flags that are hidden from help output
 	deprecatedFlags := map[string]bool{
@@ -251,6 +244,11 @@ func (*Entrypoint) exitWithError(err error) {
 	os.Exit(exitCodeErr)
 }
 
+func (*Entrypoint) exitWithErrorNoStack(err error) {
+	_, _ = fmt.Fprintf(os.Stderr, "error: %v\n", err)
+	os.Exit(exitCodeErr)
+}
+
 func (*Entrypoint) Splash() string {
 	const splash = "" +
 		"             ....            \n" +
@@ -264,4 +262,23 @@ func (*Entrypoint) Splash() string {
 		"         `::::::::::‘        Conduit %s\n" +
 		"             ‘‘‘‘            "
 	return fmt.Sprintf(splash, Version(true))
+}
+
+func (e *Entrypoint) switchToCLI(cfg Config) {
+	if err := cfg.validateCLI(); err != nil {
+		e.exitWithErrorNoStack(cerrors.Errorf("invalid configuration: %w", err))
+	}
+
+	if cfg.BuildPipeline.Enabled {
+		pb := internal.PipelineBuilder{
+			Source:      cfg.BuildPipeline.Source,
+			Destination: cfg.BuildPipeline.Destination,
+			OutPath:     cfg.BuildPipeline.OutPath,
+		}
+
+		err := pb.Build()
+		if err != nil {
+			e.exitWithErrorNoStack(cerrors.Errorf("failed to build pipeline: %w", err))
+		}
+	}
 }
