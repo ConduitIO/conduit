@@ -87,7 +87,7 @@ and decodes the payload. The schema is cached locally after it's first downloade
 
 If the processor encounters structured data or the data can't be decoded it returns an error.
 
-This processor is the counterpart to [` + "`avro.encode`" + `](/docs/processors/builtin/avro.encode).`,
+This processor is the counterpart to [` + "`avro.encode`" + `](/docs/using/processors/builtin/avro.encode).`,
 		Version:    "v0.1.0",
 		Author:     "Meroxa, Inc.",
 		Parameters: decodeConfig{}.Parameters(),
