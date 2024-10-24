@@ -100,13 +100,19 @@ func (t *DestinationTask) Do(ctx context.Context, batch *Batch) error {
 	}
 
 	acks := make([]connector.DestinationAck, 0, len(positions))
-	for len(acks) != len(positions) {
+	for range len(positions) {
 		acksResp, err := t.destination.Ack(ctx)
 		if err != nil {
 			return cerrors.Errorf("failed to receive acks for %d records from destination: %w", len(positions), err)
 		}
 		t.observeMetrics(records[len(acks):len(acks)+len(acksResp)], start)
 		acks = append(acks, acksResp...)
+		if len(acks) >= len(positions) {
+			break
+		}
+	}
+	if len(acks) != len(positions) {
+		return cerrors.Errorf("received %d acks, but expected %d", len(acks), len(positions))
 	}
 
 	for i, ack := range acks {
