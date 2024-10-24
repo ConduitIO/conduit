@@ -47,7 +47,31 @@ type Task interface {
 	Do(context.Context, *Batch) error
 }
 
-// Worker is a collection of tasks that are executed sequentially.
+// Worker collects the tasks that need to be executed in a pipeline for a
+// specific source. It processes records from the source through the tasks until
+// it is stopped. The worker is responsible for coordinating tasks and
+// acking/nacking records.
+//
+// Batches are processed in the following way:
+//   - The first task is always a source task which reads a batch of records
+//     from the source. The batch is then passed to the next task.
+//   - Any task between the source and the destination can process the batch by
+//     updating the records or their status (see [RecordStatus]). If a record in
+//     the batch is marked as filtered, the next task will skip processing it
+//     and consider it as already processed. If a record is marked as nacked,
+//     the record will be sent to the DLQ. If a record is marked as retry, the
+//     record will be reprocessed by the same task (relevant if a task processed
+//     only part of the batch, experienced an error and skipped the rest).
+//   - The last task is always a destination task which writes the batch of
+//     records to the destination. The batch is then acked.
+//
+// Note that if a task marks a record in the middle of a batch as nacked, the
+// batch is split into sub-batches. The records that were successfully processed
+// continue to the next task (and ideally to the end of the pipeline), because
+// Conduit provides ordering guarantees. Only once the records before the nacked
+// record are end-to-end processed, will the nacked record be sent to the DLQ.
+// The rest of the records are processed as a sub-batch, and the same rules
+// apply to them.
 type Worker struct {
 	Source Source
 	Tasks  []Task
@@ -66,9 +90,9 @@ type Worker struct {
 	lastReadAt time.Time
 	timer      metrics.Timer
 
-	// stopLock is a lock in form of a channel with a buffer size of 1 to be able
-	// to acquire the lock with a context timeout.
-	stopLock chan struct{}
+	// processingLock is a lock in form of a channel with a buffer size of 1 to
+	// be able to acquire the lock with a context timeout.
+	processingLock chan struct{}
 	// stop stores the information if a graceful stop was triggered.
 	stop atomic.Bool
 
@@ -100,7 +124,7 @@ func NewWorker(
 		logger: logger.WithComponent("funnel.Worker"),
 		timer:  timer,
 
-		stopLock: make(chan struct{}, 1),
+		processingLock: make(chan struct{}, 1),
 	}, nil
 }
 
@@ -143,6 +167,10 @@ func validateTaskOrder(tasks []Task, order Order) error {
 	return nil
 }
 
+// Open opens the worker for processing. It opens all tasks and the DLQ. If any
+// task fails to open, the worker is not opened and the error is returned.
+// Once a worker is opened, it can start processing records. The worker should
+// be closed using Close after it is no longer needed.
 func (w *Worker) Open(ctx context.Context) (err error) {
 	var r rollback.R
 	defer func() {
@@ -173,11 +201,12 @@ func (w *Worker) Open(ctx context.Context) (err error) {
 }
 
 // Stop stops the worker from processing more records. It does not stop the
-// current batch from being processed.
+// current batch from being processed. If a batch is currently being processed,
+// the method will block and trigger the stop after the batch is processed.
 func (w *Worker) Stop(ctx context.Context) error {
 	// The lock is locked every time a batch is being processed. We lock it
 	// to be sure no batch is currently being processed.
-	release, err := w.acquireStopLock(ctx)
+	release, err := w.acquireProcessingLock(ctx)
 	if err != nil {
 		return err
 	}
@@ -194,10 +223,13 @@ func (w *Worker) Stop(ctx context.Context) error {
 	return nil
 }
 
-func (w *Worker) acquireStopLock(ctx context.Context) (release func(), err error) {
+// acquireProcessingLock tries to acquire the processing lock. It returns a
+// release function that should be called to release the lock. If the context is
+// canceled before the lock is acquired, it returns the context error.
+func (w *Worker) acquireProcessingLock(ctx context.Context) (release func(), err error) {
 	select {
-	case w.stopLock <- struct{}{}:
-		return func() { <-w.stopLock }, nil
+	case w.processingLock <- struct{}{}:
+		return func() { <-w.processingLock }, nil
 	case <-ctx.Done():
 		// lock not acquired
 		return func() {}, ctx.Err()
@@ -274,7 +306,7 @@ func (w *Worker) doTask(ctx context.Context, currentIndex int, b *Batch, acker a
 		//   before acquiring the lock.
 		w.lastReadAt = time.Now()
 
-		release, err := w.acquireStopLock(ctx)
+		release, err := w.acquireProcessingLock(ctx)
 		if err != nil {
 			return err
 		}

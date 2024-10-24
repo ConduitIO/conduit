@@ -26,7 +26,7 @@ import (
 )
 
 type DLQ struct {
-	t *DestinationTask
+	task *DestinationTask
 
 	windowSize          int
 	windowNackThreshold int
@@ -47,7 +47,7 @@ func NewDLQ(
 	windowNackThreshold int,
 ) *DLQ {
 	return &DLQ{
-		t:                   NewDestinationTask(id, destination, logger, timer, histogram),
+		task:                NewDestinationTask(id, destination, logger, timer, histogram),
 		windowSize:          windowSize,
 		windowNackThreshold: windowNackThreshold,
 
@@ -56,15 +56,15 @@ func NewDLQ(
 }
 
 func (d *DLQ) ID() string {
-	return d.t.id
+	return d.task.id
 }
 
 func (d *DLQ) Open(ctx context.Context) error {
-	return d.t.Open(ctx)
+	return d.task.Open(ctx)
 }
 
 func (d *DLQ) Close(ctx context.Context) error {
-	return d.t.Close(ctx)
+	return d.task.Close(ctx)
 }
 
 func (d *DLQ) Ack(_ context.Context, batch *Batch) {
@@ -131,7 +131,7 @@ func (d *DLQ) sendToDLQ(ctx context.Context, batch *Batch, taskID string) (int, 
 	}
 	dlqBatch := NewBatch(dlqRecords)
 
-	err := d.t.Do(ctx, dlqBatch)
+	err := d.task.Do(ctx, dlqBatch)
 	if err != nil {
 		return 0, cerrors.Errorf("failed to write %d records to the DLQ: %w", len(dlqRecords), err)
 	}

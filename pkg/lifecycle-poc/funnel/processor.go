@@ -128,6 +128,9 @@ func (t *ProcessorTask) Do(ctx context.Context, b *Batch) error {
 	return nil
 }
 
+// markBatchRecords marks a range of records in a batch as processed, filtered or
+// errored, based on the type of records returned by the processor. The worker
+// can then use this information to continue processing the batch.
 func (t *ProcessorTask) markBatchRecords(b *Batch, from int, records []sdk.ProcessedRecord) {
 	if len(records) == 0 {
 		return // This can happen if the first record is not a SingleRecord.

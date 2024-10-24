@@ -23,6 +23,9 @@ import (
 	"github.com/conduitio/conduit-commons/opencdc"
 )
 
+// Batch represents a batch of records that are processed together. It keeps
+// track of the status of each record in the batch, and provides methods to
+// update the status of records.
 type Batch struct {
 	records        []opencdc.Record
 	recordStatuses []RecordStatus
@@ -55,16 +58,24 @@ func NewBatch(records []opencdc.Record) *Batch {
 	}
 }
 
+// Nack marks the record at index i as nacked. If multiple errors are provided,
+// they are assigned to the records starting at index i.
 func (b *Batch) Nack(i int, errs ...error) {
 	b.setFlagWithErr(RecordFlagNack, i, errs)
 	b.tainted = true
 }
 
+// Retry marks the record at index i to be retried. If a second index is
+// provided, all records between i and j are marked as acked. If multiple
+// indices are provided, the method panics.
 func (b *Batch) Retry(i int, j ...int) {
 	b.setFlagNoErr(RecordFlagRetry, i, j...)
 	b.tainted = true
 }
 
+// Filter marks the record at index i as filtered out. If a second index is
+// provided, all records between i and j are marked as filtered. If multiple
+// indices are provided, the method panics.
 func (b *Batch) Filter(i int, j ...int) {
 	b.setFlagNoErr(RecordFlagFilter, i, j...)
 	end := i + 1
@@ -74,6 +85,8 @@ func (b *Batch) Filter(i int, j ...int) {
 	b.filterCount += end - i
 }
 
+// SetRecords replaces the records in the batch starting at index i with the
+// provided records.
 func (b *Batch) SetRecords(i int, recs []opencdc.Record) {
 	copy(b.records[i:], recs)
 }
@@ -112,6 +125,7 @@ func (b *Batch) clone() *Batch {
 	return &Batch{
 		records:        records,
 		recordStatuses: slices.Clone(b.recordStatuses),
+		positions:      b.positions,
 		tainted:        b.tainted,
 		filterCount:    b.filterCount,
 	}
@@ -147,6 +161,8 @@ func (b *Batch) ActiveRecords() []opencdc.Record {
 	return active
 }
 
+// RecordStatus holds the status of a record in a batch. The flag indicates the
+// status of the record, and the error is set if the record was nacked.
 type RecordStatus struct {
 	Flag  RecordFlag
 	Error error
