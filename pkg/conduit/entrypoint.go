@@ -22,6 +22,7 @@ import (
 	"os/signal"
 	"strings"
 
+	"github.com/conduitio/conduit/pkg/conduit/internal"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/peterbourgon/ff/v3"
 	"github.com/peterbourgon/ff/v3/ffyaml"
@@ -54,6 +55,11 @@ type Entrypoint struct{}
 func (e *Entrypoint) Serve(cfg Config) {
 	flags := e.Flags(&cfg)
 	e.ParseConfig(flags)
+	if cfg.cliMode() {
+		e.switchToCLI(cfg)
+		os.Exit(0)
+	}
+
 	if cfg.Log.Format == "cli" {
 		_, _ = fmt.Fprintf(os.Stdout, "%s\n", e.Splash())
 	}
@@ -162,6 +168,11 @@ func (*Entrypoint) Flags(cfg *Config) *flag.FlagSet {
 	flags.StringVar(&cfg.dev.memprofile, "dev.memprofile", "", "write memory profile to file")
 	flags.StringVar(&cfg.dev.blockprofile, "dev.blockprofile", "", "write block profile to file")
 
+	flags.BoolVar(&cfg.BuildPipeline.Enabled, "build-pipeline", false, "build a new pipeline")
+	flags.StringVar(&cfg.BuildPipeline.Source, "source", "", "source connector (only used with --build-pipeline)")
+	flags.StringVar(&cfg.BuildPipeline.Destination, "destination", "", "destination connector (only used with --build-pipeline)")
+	flags.StringVar(&cfg.BuildPipeline.OutPath, "out-path", "", "path where the pipeline will be written to (only used with --build-pipeline)")
+
 	// Deprecated flags that are hidden from help output
 	deprecatedFlags := map[string]bool{
 		"pipelines.exit-on-error": true,
@@ -233,6 +244,11 @@ func (*Entrypoint) exitWithError(err error) {
 	os.Exit(exitCodeErr)
 }
 
+func (*Entrypoint) exitWithErrorNoStack(err error) {
+	_, _ = fmt.Fprintf(os.Stderr, "error: %v\n", err)
+	os.Exit(exitCodeErr)
+}
+
 func (*Entrypoint) Splash() string {
 	const splash = "" +
 		"             ....            \n" +
@@ -246,4 +262,23 @@ func (*Entrypoint) Splash() string {
 		"         `::::::::::‘        Conduit %s\n" +
 		"             ‘‘‘‘            "
 	return fmt.Sprintf(splash, Version(true))
+}
+
+func (e *Entrypoint) switchToCLI(cfg Config) {
+	if err := cfg.validateCLI(); err != nil {
+		e.exitWithErrorNoStack(cerrors.Errorf("invalid configuration: %w", err))
+	}
+
+	if cfg.BuildPipeline.Enabled {
+		pb := internal.PipelineBuilder{
+			Source:      cfg.BuildPipeline.Source,
+			Destination: cfg.BuildPipeline.Destination,
+			OutPath:     cfg.BuildPipeline.OutPath,
+		}
+
+		err := pb.Build()
+		if err != nil {
+			e.exitWithErrorNoStack(cerrors.Errorf("failed to build pipeline: %w", err))
+		}
+	}
 }
