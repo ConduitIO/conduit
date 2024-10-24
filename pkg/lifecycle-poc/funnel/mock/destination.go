@@ -22,6 +22,7 @@ import (
 type Destination struct {
 	ctrl     *gomock.Controller
 	recorder *DestinationMockRecorder
+	isgomock struct{}
 }
 
 // DestinationMockRecorder is the mock recorder for Destination.
