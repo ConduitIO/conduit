@@ -221,7 +221,7 @@ The full example in our case would be:
 ## Connectors
 
 For the full list of available connectors, see
-the [Connector List](https://conduit.io/docs/connectors/connector-list). If
+the [Connector List](https://conduit.io/docs/using/connectors/list). If
 there's a connector that you're looking for that isn't available in Conduit,
 please file an [issue](https://github.com/ConduitIO/conduit/issues/new?assignees=&labels=triage&template=3-connector-request.yml&title=Connector%3A+%3Cresource%3E+%5BSource%2FDestination%5D)
 .
@@ -266,15 +266,15 @@ pipeline. It can either change the record (i.e. **transform** it) or **filter**
 it out based on some criteria.
 
 Conduit provides a number of built-in processors, which can be used to manipulate fields,
-send requests to HTTP endpoints, and more, check [Builtin processors](https://conduit.io/docs/processors/builtin/)
+send requests to HTTP endpoints, and more, check [Builtin processors](https://conduit.io/docs/using/processors/builtin/)
 for the list of built-in processors and documentations.
 
-Conduit also provides the ability to write your own [Standalone Processor](https://conduit.io/docs/processors/standalone/building),
-or you can use the built-in processor [`custom.javascript`](https://conduit.io/docs/processors/builtin/custom.javascript)
+Conduit also provides the ability to write your own [Standalone Processor](https://conduit.io/docs/developing/processors/building),
+or you can use the built-in processor [`custom.javascript`](https://conduit.io/docs/using/processors/builtin/custom.javascript)
 to write custom processors in JavaScript.
 
 More detailed information as well as examples can be found in
-the [Processors documentation](https://conduit.io/docs/processors/getting-started).
+the [Processors documentation](https://conduit.io/docs/using/processors/getting-started).
 
 ## API
 
@@ -315,13 +315,13 @@ visit [Conduit.io/docs](https://conduit.io/docs).
 If you are interested in internals of Conduit we have prepared some technical
 documentation:
 
-- [Pipeline Semantics](https://conduit.io/docs/features/pipeline-semantics) explains the internals of how
+- [Pipeline Semantics](https://conduit.io/docs/core-concepts/pipeline-semantics) explains the internals of how
   a Conduit pipeline works.
-- [Pipeline Configuration Files](https://conduit.io/docs/pipeline-configuration-files)
+- [Pipeline Configuration Files](https://conduit.io/docs/using/pipelines/configuration-file)
   explains how you can define pipelines using YAML files.
-- [Processors](https://conduit.io/docs/processors/getting-started) contains examples and more information about
+- [Processors](https://conduit.io/docs/using/processors/getting-started) contains examples and more information about
   Conduit processors.
-- [Conduit Architecture](https://conduit.io/docs/getting-started/architecture)
+- [Conduit Architecture](https://conduit.io/docs/core-concepts/architecture)
   will give you a high-level overview of Conduit.
 - [Conduit Metrics](docs/metrics.md)
   provides more information about how Conduit exposes metrics.

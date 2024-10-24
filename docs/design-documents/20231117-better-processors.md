@@ -180,7 +180,7 @@ plugin. We propose a similar approach to pluggable processors as we already have
 pluggable connectors. This means that processors would be loaded at startup and added
 to the processor plugin registry. Processors would be addressable using a similar naming
 scheme as connectors (more on
-[referencing connectors](https://conduit.io/docs/connectors/referencing)). Built-in
+[referencing connectors](https://conduit.io/docs/using/connectors/referencing)). Built-in
 processors would be created in a similar manner as built-in connectors, in that they
 would implement the same interface and could essentially be extracted into standalone
 processors (more info on
@@ -289,7 +289,7 @@ is to use Go comments for this purpose. We want to take a similar approach like
 [paramgen](https://github.com/ConduitIO/conduit-connector-sdk/tree/main/cmd/paramgen)
 in the connector SDK. The developer should be able to write the documentation once in
 a Go idiomatic way and use a tool to extract it into a format that can be used on the
-[documentation website](https://conduit.io/docs/introduction/getting-started/).
+[documentation website](https://conduit.io/docs).
 
 We can use the same tool to extract the documentation into the connector specification
 (see [processor lifecycle](#processor-lifecycle)). This way the same documentation can
@@ -577,7 +577,7 @@ processors:
 ### `decode.avro`
 
 This processor is the same as the old processor
-[`decodewithschema`](https://conduit.io/docs/processors/builtin/#decodewithschemakey),
+[`decodewithschema`](https://conduit.io/docs/using/processors/builtin/#decodewithschemakey),
 except that it focuses solely on decoding Avro values. If we add support for more
 formats in the future it will be in the shape of new processors. This way the
 processors will be easier to discover and we can tailor the processor configuration
@@ -586,7 +586,7 @@ we can still reuse the same code for most of the processor.
 
 #### Configuration
 
-Taken from [existing docs](https://conduit.io/docs/processors/builtin/#configuration).
+Taken from [existing docs](https://conduit.io/docs/using/processors/builtin/#configuration).
 
 - `url` (required) - URL of the schema registry (e.g. `http://localhost:8085`).
 - `auth.basic.username` (optional) - Configures the username to use with basic
@@ -608,7 +608,7 @@ Taken from [existing docs](https://conduit.io/docs/processors/builtin/#configura
 
 #### Example
 
-Taken from [existing docs](https://conduit.io/docs/processors/builtin/#example).
+Taken from [existing docs](https://conduit.io/docs/using/processors/builtin/#example).
 
 ```yaml
 processors:
@@ -626,7 +626,7 @@ processors:
 ### `decode.json`
 
 This processor replaces the existing
-[`parsejson`](https://conduit.io/docs/processors/builtin/#parsejsonkey) processor
+[`parsejson`](https://conduit.io/docs/using/processors/builtin/#parsejsonkey) processor
 and additionally gives the user the ability to specify which field should be decoded.
 It takes raw data (string) from the target field, parses it as JSON and stores the
 decoded structured data in the target field.
@@ -651,7 +651,7 @@ processors:
 ### `encode.avro`
 
 This processor is the same as the old processor
-[`encodewithschema`](https://conduit.io/docs/processors/builtin/#encodewithschemakey),
+[`encodewithschema`](https://conduit.io/docs/using/processors/builtin/#encodewithschemakey),
 except that it focuses solely on encoding Avro values. If we add support for more
 formats in the future it will be in the shape of new processors. This way the
 processors will be easier to discover and we can tailor the processor configuration
@@ -664,7 +664,7 @@ Differences compared to the old processor:
 
 #### Configuration
 
-Taken from [existing docs](https://conduit.io/docs/processors/builtin/#configuration-1).
+Taken from [existing docs](https://conduit.io/docs/using/processors/builtin/#configuration-1).
 
 - `url` (required) - URL of the schema registry (e.g. `http://localhost:8085`).
 - `schema.strategy` (required, Enum: `preRegistered`,`autoRegister`) - Specifies which
@@ -701,7 +701,7 @@ Taken from [existing docs](https://conduit.io/docs/processors/builtin/#configura
 
 #### Example
 
-Taken from [existing docs](https://conduit.io/docs/processors/builtin/#example-1).
+Taken from [existing docs](https://conduit.io/docs/using/processors/builtin/#example-1).
 
 ```yaml
 processors:
@@ -749,7 +749,7 @@ We are skipping the design of this processor, as it will not be part of the
 ### `unwrap.kafkaconnect`
 
 This processor together with `unwrap.debezium` replaces the existing
-[`unwrap`](https://conduit.io/docs/processors/builtin/#unwrap) processor, but works
+[`unwrap`](https://conduit.io/docs/using/processors/builtin/#unwrap) processor, but works
 the same way under the hood. It additionally gives the user the ability to specify
 which field is the source of the kafkaconnect record.
 
@@ -774,7 +774,7 @@ processors:
 ### `unwrap.debezium`
 
 This processor together with `unwrap.kafkaconnect` replaces the existing
-[`unwrap`](https://conduit.io/docs/processors/builtin/#unwrap) processor, but works
+[`unwrap`](https://conduit.io/docs/using/processors/builtin/#unwrap) processor, but works
 the same way under the hood. It additionally gives the user the ability to specify
 which field is the source of the debezium record.
 
@@ -799,14 +799,14 @@ processors:
 ### `webhook.http`
 
 This processor replaces the existing
-[`httprequest`](https://conduit.io/docs/processors/builtin/#httprequest) processor,
+[`httprequest`](https://conduit.io/docs/using/processors/builtin/#httprequest) processor,
 but works the same way under the hood. It additionally gives the user the ability
 to specify what is sent as the body and where the response body and status are
 stored (configuration options `request.body`, `response.body` and `response.status`).
 
 #### Configuration
 
-Taken from [existing docs](https://conduit.io/docs/processors/builtin/#configuration-5).
+Taken from [existing docs](https://conduit.io/docs/using/processors/builtin/#configuration-5).
 
 - `request.url` (required) - URL used in the HTTP request.
 - `request.method` (optional, default=`POST`) - HTTP request method to be used.

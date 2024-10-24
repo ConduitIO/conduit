@@ -22,6 +22,7 @@ import (
 type Dispenser struct {
 	ctrl     *gomock.Controller
 	recorder *DispenserMockRecorder
+	isgomock struct{}
 }
 
 // DispenserMockRecorder is the mock recorder for Dispenser.
@@ -162,6 +163,7 @@ func (c *DispenserDispenseSpecifierCall) DoAndReturn(f func() (connector.Specifi
 type DestinationPlugin struct {
 	ctrl     *gomock.Controller
 	recorder *DestinationPluginMockRecorder
+	isgomock struct{}
 }
 
 // DestinationPluginMockRecorder is the mock recorder for DestinationPlugin.
@@ -534,6 +536,7 @@ func (c *DestinationPluginTeardownCall) DoAndReturn(f func(context.Context, pcon
 type SourcePlugin struct {
 	ctrl     *gomock.Controller
 	recorder *SourcePluginMockRecorder
+	isgomock struct{}
 }
 
 // SourcePluginMockRecorder is the mock recorder for SourcePlugin.
@@ -906,6 +909,7 @@ func (c *SourcePluginTeardownCall) DoAndReturn(f func(context.Context, pconnecto
 type SpecifierPlugin struct {
 	ctrl     *gomock.Controller
 	recorder *SpecifierPluginMockRecorder
+	isgomock struct{}
 }
 
 // SpecifierPluginMockRecorder is the mock recorder for SpecifierPlugin.

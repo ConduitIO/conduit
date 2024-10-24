@@ -46,7 +46,7 @@ const (
 type debeziumConfig struct {
 	// Field is a reference to the field that contains the Debezium record.
 	//
-	// For more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).
+	// For more information about the format, see [Referencing fields](https://conduit.io/docs/using/processors/referencing-fields).
 	Field string `json:"field" validate:"regex=^.Payload" default:".Payload.After"`
 }
 
@@ -64,14 +64,14 @@ func NewDebeziumProcessor(logger log.CtxLogger) sdk.Processor {
 func (d *debeziumProcessor) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
 		Name:    "unwrap.debezium",
-		Summary: "Unwraps a Debezium record from the input [OpenCDC record](https://conduit.io/docs/features/opencdc-record).",
+		Summary: "Unwraps a Debezium record from the input [OpenCDC record](https://conduit.io/docs/using/opencdc-record).",
 		Description: `In this processor, the wrapped (Debezium) record replaces the wrapping record (being processed) 
 completely, except for the position.
 
 The Debezium record's metadata and the wrapping record's metadata is merged, with the Debezium metadata having precedence.
 
 This is useful in cases where Conduit acts as an intermediary between a Debezium source and a Debezium destination. 
-In such cases, the Debezium record is set as the [OpenCDC record](https://conduit.io/docs/features/opencdc-record)'s payload,` +
+In such cases, the Debezium record is set as the [OpenCDC record](https://conduit.io/docs/using/opencdc-record)'s payload,` +
 			`and needs to be unwrapped for further usage.`,
 		Version:    "v0.1.0",
 		Author:     "Meroxa, Inc.",

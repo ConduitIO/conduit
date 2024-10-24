@@ -40,7 +40,7 @@ and it can be run by others, as is, without them having to follow any additional
 If you want to create your own Conduit binary with a different set of built-in connectors,
 you can build-in an [existing connector](#the-list).
 Alternatively, you can also create your own
-[using the Conduit connector template or the Conduit Connector SDK](https://conduit.io/docs/connectors/building/).
+[using the Conduit connector template or the Conduit Connector SDK](https://conduit.io/docs/developing/connectors).
 
 Once you have chosen a connector to be built-in, you can:
 
@@ -80,7 +80,7 @@ In addition to built-in connectors, Conduit can be used together with standalone
 to enable even more data streaming use cases.
 The Conduit team and other community developers create and maintain standalone connectors.
 
-Learn more about how you can install [standalone connectors to Conduit here](https://conduit.io/docs/connectors/installing).
+Learn more about how you can install [standalone connectors to Conduit here](https://conduit.io/docs/using/connectors/installing).
 
 ### Source & Destination
 
@@ -89,4 +89,4 @@ to write to a downstream data store.
 
 ### The List
 
-A full list of connectors is hosted here: <https://conduit.io/docs/connectors/connector-list/>.
+A full list of connectors is hosted here: <https://conduit.io/docs/using/connectors/list/>.

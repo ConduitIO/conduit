@@ -22,6 +22,7 @@ import (
 type ConnectorOrchestrator struct {
 	ctrl     *gomock.Controller
 	recorder *ConnectorOrchestratorMockRecorder
+	isgomock struct{}
 }
 
 // ConnectorOrchestratorMockRecorder is the mock recorder for ConnectorOrchestrator.
@@ -42,18 +43,18 @@ func (m *ConnectorOrchestrator) EXPECT() *ConnectorOrchestratorMockRecorder {
 }
 
 // Create mocks base method.
-func (m *ConnectorOrchestrator) Create(arg0 context.Context, arg1 connector.Type, arg2, arg3 string, arg4 connector.Config) (*connector.Instance, error) {
+func (m *ConnectorOrchestrator) Create(ctx context.Context, t connector.Type, plugin, pipelineID string, config connector.Config) (*connector.Instance, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Create", arg0, arg1, arg2, arg3, arg4)
+	ret := m.ctrl.Call(m, "Create", ctx, t, plugin, pipelineID, config)
 	ret0, _ := ret[0].(*connector.Instance)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Create indicates an expected call of Create.
-func (mr *ConnectorOrchestratorMockRecorder) Create(arg0, arg1, arg2, arg3, arg4 any) *ConnectorOrchestratorCreateCall {
+func (mr *ConnectorOrchestratorMockRecorder) Create(ctx, t, plugin, pipelineID, config any) *ConnectorOrchestratorCreateCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*ConnectorOrchestrator)(nil).Create), arg0, arg1, arg2, arg3, arg4)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*ConnectorOrchestrator)(nil).Create), ctx, t, plugin, pipelineID, config)
 	return &ConnectorOrchestratorCreateCall{Call: call}
 }
 
@@ -81,17 +82,17 @@ func (c *ConnectorOrchestratorCreateCall) DoAndReturn(f func(context.Context, co
 }
 
 // Delete mocks base method.
-func (m *ConnectorOrchestrator) Delete(arg0 context.Context, arg1 string) error {
+func (m *ConnectorOrchestrator) Delete(ctx context.Context, id string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Delete", arg0, arg1)
+	ret := m.ctrl.Call(m, "Delete", ctx, id)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Delete indicates an expected call of Delete.
-func (mr *ConnectorOrchestratorMockRecorder) Delete(arg0, arg1 any) *ConnectorOrchestratorDeleteCall {
+func (mr *ConnectorOrchestratorMockRecorder) Delete(ctx, id any) *ConnectorOrchestratorDeleteCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Delete", reflect.TypeOf((*ConnectorOrchestrator)(nil).Delete), arg0, arg1)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Delete", reflect.TypeOf((*ConnectorOrchestrator)(nil).Delete), ctx, id)
 	return &ConnectorOrchestratorDeleteCall{Call: call}
 }
 
@@ -119,18 +120,18 @@ func (c *ConnectorOrchestratorDeleteCall) DoAndReturn(f func(context.Context, st
 }
 
 // Get mocks base method.
-func (m *ConnectorOrchestrator) Get(arg0 context.Context, arg1 string) (*connector.Instance, error) {
+func (m *ConnectorOrchestrator) Get(ctx context.Context, id string) (*connector.Instance, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Get", arg0, arg1)
+	ret := m.ctrl.Call(m, "Get", ctx, id)
 	ret0, _ := ret[0].(*connector.Instance)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Get indicates an expected call of Get.
-func (mr *ConnectorOrchestratorMockRecorder) Get(arg0, arg1 any) *ConnectorOrchestratorGetCall {
+func (mr *ConnectorOrchestratorMockRecorder) Get(ctx, id any) *ConnectorOrchestratorGetCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*ConnectorOrchestrator)(nil).Get), arg0, arg1)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*ConnectorOrchestrator)(nil).Get), ctx, id)
 	return &ConnectorOrchestratorGetCall{Call: call}
 }
 
@@ -158,18 +159,18 @@ func (c *ConnectorOrchestratorGetCall) DoAndReturn(f func(context.Context, strin
 }
 
 // Inspect mocks base method.
-func (m *ConnectorOrchestrator) Inspect(arg0 context.Context, arg1 string) (*inspector.Session, error) {
+func (m *ConnectorOrchestrator) Inspect(ctx context.Context, id string) (*inspector.Session, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Inspect", arg0, arg1)
+	ret := m.ctrl.Call(m, "Inspect", ctx, id)
 	ret0, _ := ret[0].(*inspector.Session)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Inspect indicates an expected call of Inspect.
-func (mr *ConnectorOrchestratorMockRecorder) Inspect(arg0, arg1 any) *ConnectorOrchestratorInspectCall {
+func (mr *ConnectorOrchestratorMockRecorder) Inspect(ctx, id any) *ConnectorOrchestratorInspectCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Inspect", reflect.TypeOf((*ConnectorOrchestrator)(nil).Inspect), arg0, arg1)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Inspect", reflect.TypeOf((*ConnectorOrchestrator)(nil).Inspect), ctx, id)
 	return &ConnectorOrchestratorInspectCall{Call: call}
 }
 
@@ -197,17 +198,17 @@ func (c *ConnectorOrchestratorInspectCall) DoAndReturn(f func(context.Context, s
 }
 
 // List mocks base method.
-func (m *ConnectorOrchestrator) List(arg0 context.Context) map[string]*connector.Instance {
+func (m *ConnectorOrchestrator) List(ctx context.Context) map[string]*connector.Instance {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "List", arg0)
+	ret := m.ctrl.Call(m, "List", ctx)
 	ret0, _ := ret[0].(map[string]*connector.Instance)
 	return ret0
 }
 
 // List indicates an expected call of List.
-func (mr *ConnectorOrchestratorMockRecorder) List(arg0 any) *ConnectorOrchestratorListCall {
+func (mr *ConnectorOrchestratorMockRecorder) List(ctx any) *ConnectorOrchestratorListCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "List", reflect.TypeOf((*ConnectorOrchestrator)(nil).List), arg0)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "List", reflect.TypeOf((*ConnectorOrchestrator)(nil).List), ctx)
 	return &ConnectorOrchestratorListCall{Call: call}
 }
 
@@ -235,18 +236,18 @@ func (c *ConnectorOrchestratorListCall) DoAndReturn(f func(context.Context) map[
 }
 
 // Update mocks base method.
-func (m *ConnectorOrchestrator) Update(arg0 context.Context, arg1 string, arg2 connector.Config) (*connector.Instance, error) {
+func (m *ConnectorOrchestrator) Update(ctx context.Context, id string, config connector.Config) (*connector.Instance, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Update", arg0, arg1, arg2)
+	ret := m.ctrl.Call(m, "Update", ctx, id, config)
 	ret0, _ := ret[0].(*connector.Instance)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Update indicates an expected call of Update.
-func (mr *ConnectorOrchestratorMockRecorder) Update(arg0, arg1, arg2 any) *ConnectorOrchestratorUpdateCall {
+func (mr *ConnectorOrchestratorMockRecorder) Update(ctx, id, config any) *ConnectorOrchestratorUpdateCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Update", reflect.TypeOf((*ConnectorOrchestrator)(nil).Update), arg0, arg1, arg2)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Update", reflect.TypeOf((*ConnectorOrchestrator)(nil).Update), ctx, id, config)
 	return &ConnectorOrchestratorUpdateCall{Call: call}
 }
 
@@ -274,17 +275,17 @@ func (c *ConnectorOrchestratorUpdateCall) DoAndReturn(f func(context.Context, st
 }
 
 // Validate mocks base method.
-func (m *ConnectorOrchestrator) Validate(arg0 context.Context, arg1 connector.Type, arg2 string, arg3 connector.Config) error {
+func (m *ConnectorOrchestrator) Validate(ctx context.Context, t connector.Type, plugin string, config connector.Config) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Validate", arg0, arg1, arg2, arg3)
+	ret := m.ctrl.Call(m, "Validate", ctx, t, plugin, config)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Validate indicates an expected call of Validate.
-func (mr *ConnectorOrchestratorMockRecorder) Validate(arg0, arg1, arg2, arg3 any) *ConnectorOrchestratorValidateCall {
+func (mr *ConnectorOrchestratorMockRecorder) Validate(ctx, t, plugin, config any) *ConnectorOrchestratorValidateCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Validate", reflect.TypeOf((*ConnectorOrchestrator)(nil).Validate), arg0, arg1, arg2, arg3)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Validate", reflect.TypeOf((*ConnectorOrchestrator)(nil).Validate), ctx, t, plugin, config)
 	return &ConnectorOrchestratorValidateCall{Call: call}
 }
 

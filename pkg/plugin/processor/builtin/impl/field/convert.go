@@ -45,7 +45,7 @@ type convertConfig struct {
 	// Note that you can only convert fields in structured data under `.Key` and
 	// `.Payload`.
 	//
-	// For more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).
+	// For more information about the format, see [Referencing fields](https://conduit.io/docs/using/processors/referencing-fields).
 	Field string `json:"field" validate:"required,regex=^\\.(Payload|Key).*"`
 	// Type is the target field type after conversion, available options are: `string`, `int`, `float`, `bool`, `time`.
 	Type string `json:"type" validate:"required,inclusion=string|int|float|bool|time"`
@@ -59,7 +59,7 @@ func (p *convertProcessor) Specification() (sdk.Specification, error) {
 The applicable types are string, int, float and bool. Converting can be done between any combination of types. Note that
 booleans will be converted to numeric values 1 (true) and 0 (false). Processor is only applicable to ` + "`.Key`" + `, ` + "`.Payload.Before`" + `
 and ` + "`.Payload.After`" + ` prefixes, and only applicable if said fields contain structured data.
-If the record contains raw JSON data, then use the processor [` + "`json.decode`" + `](/docs/processors/builtin/json.decode)
+If the record contains raw JSON data, then use the processor [` + "`json.decode`" + `](/docs/using/processors/builtin/json.decode)
 to parse it into structured data first.`,
 		Version:    "v0.1.0",
 		Author:     "Meroxa, Inc.",

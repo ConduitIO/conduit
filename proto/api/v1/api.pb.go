@@ -2019,7 +2019,7 @@ type CreateConnectorRequest struct {
 	// PLUGIN-TYPE: One of: builtin, standalone or any (default).
 	// PLUGIN-NAME: The name of the plugin as specified in the plugin specifications.
 	// VERSION: The plugin version as specified in the plugin specifications or latest (default).
-	// For more information, see: https://conduit.io/docs/connectors/referencing/
+	// For more information, see: https://conduit.io/docs/using/connectors/referencing
 	Plugin string `protobuf:"bytes,2,opt,name=plugin,proto3" json:"plugin,omitempty"`
 	// ID of the pipeline to which the connector will get attached.
 	PipelineId string            `protobuf:"bytes,3,opt,name=pipeline_id,json=pipelineId,proto3" json:"pipeline_id,omitempty"`

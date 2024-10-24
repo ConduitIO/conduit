@@ -32,7 +32,7 @@ import (
 type openCDCConfig struct {
 	// Field is a reference to the field that contains the OpenCDC record.
 	//
-	// For more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).
+	// For more information about the format, see [Referencing fields](https://conduit.io/docs/using/processors/referencing-fields).
 	Field string `json:"field" default:".Payload.After"`
 }
 
@@ -50,12 +50,12 @@ func NewOpenCDCProcessor(logger log.CtxLogger) sdk.Processor {
 func (u *openCDCProcessor) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
 		Name:    "unwrap.opencdc",
-		Summary: "Unwraps an [OpenCDC record](https://conduit.io/docs/features/opencdc-record) saved in one of the record's fields.",
+		Summary: "Unwraps an [OpenCDC record](https://conduit.io/docs/using/opencdc-record) saved in one of the record's fields.",
 		Description: `The ` + "`unwrap.opencdc`" + ` processor is useful in situations where a record goes through intermediate
-systems before being written to a final destination. In these cases, the original [OpenCDC record](https://conduit.io/docs/features/opencdc-record) is part of the payload
+systems before being written to a final destination. In these cases, the original [OpenCDC record](https://conduit.io/docs/using/opencdc-record) is part of the payload
 read from the intermediate system and needs to be unwrapped before being written.
 
-Note: if the wrapped [OpenCDC record](https://conduit.io/docs/features/opencdc-record) is not in a structured data field, then it's assumed that it's stored in JSON format.`,
+Note: if the wrapped [OpenCDC record](https://conduit.io/docs/using/opencdc-record) is not in a structured data field, then it's assumed that it's stored in JSON format.`,
 		Version:    "v0.1.0",
 		Author:     "Meroxa, Inc.",
 		Parameters: openCDCConfig{}.Parameters(),

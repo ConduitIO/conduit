@@ -1,14 +1,14 @@
 {
   "specification": {
     "name": "unwrap.kafkaconnect",
-    "summary": "Unwraps a Kafka Connect record from an [OpenCDC record](https://conduit.io/docs/features/opencdc-record).",
-    "description": "This processor unwraps a Kafka Connect record from the input [OpenCDC record](https://conduit.io/docs/features/opencdc-record).\n\nThe input record's payload is replaced with the Kafka Connect record.\n\nThis is useful in cases where Conduit acts as an intermediary between a Debezium source and a Debezium destination. \nIn such cases, the Debezium record is set as the [OpenCDC record](https://conduit.io/docs/features/opencdc-record)'s payload, and needs to be unwrapped for further usage.",
+    "summary": "Unwraps a Kafka Connect record from an [OpenCDC record](https://conduit.io/docs/using/opencdc-record).",
+    "description": "This processor unwraps a Kafka Connect record from the input [OpenCDC record](https://conduit.io/docs/using/opencdc-record).\n\nThe input record's payload is replaced with the Kafka Connect record.\n\nThis is useful in cases where Conduit acts as an intermediary between a Debezium source and a Debezium destination. \nIn such cases, the Debezium record is set as the [OpenCDC record](https://conduit.io/docs/using/opencdc-record)'s payload, and needs to be unwrapped for further usage.",
     "version": "v0.1.0",
     "author": "Meroxa, Inc.",
     "parameters": {
       "field": {
         "default": ".Payload.After",
-        "description": "Field is a reference to the field that contains the Kafka Connect record.\n\nFor more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).",
+        "description": "Field is a reference to the field that contains the Kafka Connect record.\n\nFor more information about the format, see [Referencing fields](https://conduit.io/docs/using/processors/referencing-fields).",
         "type": "string",
         "validations": [
           {
@@ -46,7 +46,7 @@
   "examples": [
     {
       "summary": "Unwrap a Kafka Connect record",
-      "description": "This example shows how to unwrap a Kafka Connect record.\n\nThe Kafka Connect record is serialized as a JSON string in the `.Payload.After` field (raw data).\nThe Kafka Connect record's payload will replace the [OpenCDC record](https://conduit.io/docs/features/opencdc-record)'s payload.\n\nWe also see how the key is unwrapped too. In this case, the key comes in as structured data.",
+      "description": "This example shows how to unwrap a Kafka Connect record.\n\nThe Kafka Connect record is serialized as a JSON string in the `.Payload.After` field (raw data).\nThe Kafka Connect record's payload will replace the [OpenCDC record](https://conduit.io/docs/using/opencdc-record)'s payload.\n\nWe also see how the key is unwrapped too. In this case, the key comes in as structured data.",
       "config": {
         "field": ".Payload.After"
       },

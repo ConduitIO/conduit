@@ -1907,7 +1907,7 @@
         },
         "plugin": {
           "type": "string",
-          "title": "Used to reference a plugin. Its format is as follows:\n[PLUGIN-TYPE:]PLUGIN-NAME[@VERSION]\nPLUGIN-TYPE: One of: builtin, standalone or any (default).\nPLUGIN-NAME: The name of the plugin as specified in the plugin specifications.\nVERSION: The plugin version as specified in the plugin specifications or latest (default).\nFor more information, see: https://conduit.io/docs/connectors/referencing/"
+          "title": "Used to reference a plugin. Its format is as follows:\n[PLUGIN-TYPE:]PLUGIN-NAME[@VERSION]\nPLUGIN-TYPE: One of: builtin, standalone or any (default).\nPLUGIN-NAME: The name of the plugin as specified in the plugin specifications.\nVERSION: The plugin version as specified in the plugin specifications or latest (default).\nFor more information, see: https://conduit.io/docs/using/connectors/referencing"
         },
         "pipelineId": {
           "type": "string",

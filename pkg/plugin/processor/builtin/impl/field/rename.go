@@ -46,7 +46,7 @@ type renameConfig struct {
 	//
 	// For example: `.Metadata.key:id,.Payload.After.foo:bar`.
 	//
-	// For more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).
+	// For more information about the format, see [Referencing fields](https://conduit.io/docs/using/processors/referencing-fields).
 	Mapping []string `json:"mapping" validate:"required"`
 }
 
@@ -59,7 +59,7 @@ allowed to rename top-level fields (` + "`.Operation`" + `, ` + "`.Position`" + 
 ` + "`.Key`" + `, ` + "`.Metadata`" + `, ` + "`.Payload.Before`" + `, ` + "`.Payload.After`" + `).
 
 Note that this processor only runs on structured data, if the record contains raw
-JSON data, then use the processor [` + "`json.decode`" + `](/docs/processors/builtin/json.decode)
+JSON data, then use the processor [` + "`json.decode`" + `](/docs/using/processors/builtin/json.decode)
 to parse it into structured data first.`,
 		Version:    "v0.1.0",
 		Author:     "Meroxa, Inc.",

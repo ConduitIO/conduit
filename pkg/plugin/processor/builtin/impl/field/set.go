@@ -44,7 +44,7 @@ type setConfig struct {
 	// Field is the target field that will be set. Note that it is not allowed
 	// to set the `.Position` field.
 	//
-	// For more information about the format, see [Referencing fields](https://conduit.io/docs/processors/referencing-fields).
+	// For more information about the format, see [Referencing fields](https://conduit.io/docs/using/processors/referencing-fields).
 	Field string `json:"field" validate:"required,exclusion=.Position"`
 	// Value is a Go template expression which will be evaluated and stored in `field` (e.g. `{{ .Payload.After }}`).
 	Value string `json:"value" validate:"required"`
@@ -59,7 +59,7 @@ The new value can be a Go template expression, the processor will evaluate the o
 If the provided ` + "`field`" + ` doesn't exist, the processor will create that field and assign its value.
 This processor can be used for multiple purposes, like extracting fields, hoisting data, inserting fields, copying fields, masking fields, etc.
 Note that this processor only runs on structured data, if the record contains raw JSON data, then use the processor
-[` + "`json.decode`" + `](/docs/processors/builtin/json.decode) to parse it into structured data first.`,
+[` + "`json.decode`" + `](/docs/using/processors/builtin/json.decode) to parse it into structured data first.`,
 		Version:    "v0.1.0",
 		Author:     "Meroxa, Inc.",
 		Parameters: setConfig{}.Parameters(),
