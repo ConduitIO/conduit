@@ -13,6 +13,7 @@ pipelines:
           {{- range $name, $param := .SourceSpec.Params }}
           {{ formatParameterDescriptionYAML $param.Description }}
           # Type: {{ $param.Type }}
+          # {{ formatParameterRequired $param }}
           {{ $name }}: {{ formatParameterValueYAML $param.Default }}
           {{- end }}
         {{- end }}
@@ -24,6 +25,7 @@ pipelines:
           {{- range $name, $param := .DestinationSpec.Params }}
           {{ formatParameterDescriptionYAML $param.Description }}
           # Type: {{ $param.Type }}
+          # {{ formatParameterRequired $param }}
           {{ $name }}: {{ formatParameterValueYAML $param.Default }}
           {{- end }}
         {{- end }}

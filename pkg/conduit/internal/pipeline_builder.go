@@ -35,6 +35,17 @@ var funcMap = template.FuncMap{
 	"formatParameterValueTable":      formatParameterValueTable,
 	"formatParameterValueYAML":       formatParameterValueYAML,
 	"formatParameterDescriptionYAML": formatParameterDescriptionYAML,
+	"formatParameterRequired":        formatParameterRequired,
+}
+
+func formatParameterRequired(param config.Parameter) string {
+	for _, v := range param.Validations {
+		if v.Type() == config.ValidationTypeRequired {
+			return "Required"
+		}
+	}
+
+	return "Optional"
 }
 
 // formatParameterValue formats the value of a configuration parameter.
@@ -175,9 +186,37 @@ func (b PipelineBuilder) buildTemplatePipeline() (pipelineTemplate, error) {
 }
 
 func (b PipelineBuilder) buildDemoPipeline() pipelineTemplate {
+	srcParams, _ := b.getSourceParams("generator")
 	return pipelineTemplate{
-		SourceSpec:      connectorTemplate{},
-		DestinationSpec: connectorTemplate{},
+		SourceSpec: connectorTemplate{
+			Name: "generator",
+			Params: map[string]config.Parameter{
+				"format.type": {
+					Description: srcParams.Params["format.type"].Description,
+					Type:        srcParams.Params["format.type"].Type,
+					Default:     "structured",
+					Validations: srcParams.Params["format.type"].Validations,
+				},
+				"format.options.id": {
+					Description: "Generate field 'id' that's of the int type",
+					Type:        config.ParameterTypeString,
+					Default:     "int",
+				},
+				"format.options.name": {
+					Description: "Generate field 'name' that's of the string type",
+					Type:        config.ParameterTypeString,
+					Default:     "string",
+				},
+				"rate": {
+					Description: srcParams.Params["rate"].Description,
+					Type:        srcParams.Params["rate"].Type,
+					Default:     "1",
+				},
+			},
+		},
+		DestinationSpec: connectorTemplate{
+			Name: "log",
+		},
 	}
 }
 
