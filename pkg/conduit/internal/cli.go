@@ -71,7 +71,12 @@ func buildInitCmd() *cobra.Command {
 			return ConduitInit{Path: initArgs.Path}.Run()
 		},
 	}
-	initCmd.Flags().StringVar(&initArgs.Path, "path", "", "path where Conduit will be initialized")
+	initCmd.Flags().StringVar(
+		&initArgs.Path,
+		"path",
+		"",
+		"path where Conduit will be initialized",
+	)
 
 	return initCmd
 }
