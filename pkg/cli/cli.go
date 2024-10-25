@@ -48,12 +48,17 @@ func init() {
 	rootCmd = buildRootCmd()
 }
 
+// Enabled checks if the CLI should be enabled by
+// checking if the first command is a known command.
 func Enabled() bool {
-	for _, cmd := range os.Args[1:] {
-		for _, sub := range rootCmd.Commands() {
-			if sub.Name() == cmd || slices.Contains(sub.Aliases, cmd) {
-				return true
-			}
+	if len(os.Args) == 0 {
+		return false
+	}
+
+	cmd := os.Args[1]
+	for _, sub := range rootCmd.Commands() {
+		if sub.Name() == cmd || slices.Contains(sub.Aliases, cmd) {
+			return true
 		}
 	}
 
