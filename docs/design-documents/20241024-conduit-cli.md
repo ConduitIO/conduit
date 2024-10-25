@@ -53,34 +53,25 @@ Usage of conduit:
 
 ### `conduit init`
 
-- This command will initialize a conduit pipeline that demonstrates some basic features of Conduit. 
+- This command will initialize a Conduit working environment. 
 - It won't require flags or arguments.
-- Additional flags could be provided to specify a source and a destination
-- Optional argument will be for
-
-#### Arguments
-
-|Argument name | Description  | Required  |
-|---|---|---|
-| Name  | Pipeline name | No |
+- Additional flags could be provided to specify the path.
 
 #### Flags
 
-|Flag name | Description | Required  |
-|---|---|---|
-| source  |  Connector name | No |
-| destination  |   |  No |
+|Flag name | Description | Required  | Default  |
+|---|---|---|---|
+| path  |  Connector name | No | `.` (current directory) |
 
 
 #### `--help`
 
 ```bash
-$ conduit init [NAME] [--source plugin@version] [--destination plugin@version]
+$ conduit init [--path PATH]
 
 EXAMPLES
   $ conduit init
-  $ conduit init my-first-pipeline
+  $ conduit init --path ~/code/conduit-dir
 ```
-
 
 ### Global flags
