@@ -227,9 +227,19 @@ $ conduit pipelines describe [ID]
 EXAMPLE:
 
 $ conduit pipelines describe my-pipeline
-Source: kafka
-  Processor: avro.encode
-Destination: kafka
+ID: generator-to-log
+State:
+  Status: STATUS_STOPPED
+Config:
+  Name: generator-to-log
+  Description: Postgres source, file destination
+Connector IDs:
+  - generator-to-log:postgres-source
+  - generator-to-log:destination
+Processor IDs:
+  - my-processor:avro.encode
+Created At: 2024-10-09T13:55:17.113068Z
+Updated At: 2024-10-09T13:55:17.113802Z
 ```
 
 ### `conduit connectors ls`
