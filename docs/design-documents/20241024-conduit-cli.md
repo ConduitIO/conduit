@@ -217,12 +217,17 @@ It requires the pipeline id as argument.
 | Name | Description | Required | Default Value |
 |------|-------------|----------|---------------|
 | id  |  pipeline id to describe | Yes | |
+
+
+#### Flags
+
+| Name | Description | Required | Default Value |
 | grpc.address | address for serving the gRPC API | No | ":8084" |
 
 #### `--help`
 
 ```bash
-$ conduit pipelines describe [ID]
+$ conduit pipelines describe ID
 
 EXAMPLE:
 
@@ -263,6 +268,13 @@ This command will describe the existing running connector.
 
 It requires having Conduit previously running.
 
+#### Arguments
+
+| Name | Description | Required | Default Value |
+|------|-------------|----------|---------------|
+| id  |  connector id to describe | Yes | |
+
+
 #### Flags
 
 | Name | Description | Required | Default Value |
@@ -301,6 +313,13 @@ conduit-connector-http@0.1.0
 This command will describe the configuration for that connector plugin.
 
 It does not require having Conduit previously running.
+
+#### Arguments
+
+| Name | Description | Required | Default Value |
+|------|-------------|----------|---------------|
+| PLUGIN  |  connector plugin to describe | Yes | |
+
 
 #### `--help`
 
@@ -346,7 +365,7 @@ It requires having Conduit previously running.
 
 | Name | Description | Required | Default Value |
 |------|-------------|----------|---------------|
-| ID  |  processor ID | Yes | |
+| id  |  processor ID | Yes | |
 
 #### `--help`
 
@@ -386,7 +405,7 @@ It does not require having Conduit previously running.
 
 | Name | Description | Required | Default Value |
 |------|-------------|----------|---------------|
-| PLUGIN  |  processor plugin name | Yes | |
+| plugin  |  processor plugin name | Yes | |
 
 #### `--help`
 
