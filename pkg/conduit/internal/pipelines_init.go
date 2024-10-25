@@ -134,6 +134,7 @@ func formatParameterValueYAML(value string) string {
 }
 
 type pipelineTemplate struct {
+	Name            string
 	SourceSpec      connectorTemplate
 	DestinationSpec connectorTemplate
 }
@@ -181,6 +182,7 @@ func (b PipelinesInit) buildTemplatePipeline() (pipelineTemplate, error) {
 	}
 
 	return pipelineTemplate{
+		Name:            b.Name,
 		SourceSpec:      source,
 		DestinationSpec: destination,
 	}, nil
@@ -189,6 +191,7 @@ func (b PipelinesInit) buildTemplatePipeline() (pipelineTemplate, error) {
 func (b PipelinesInit) buildDemoPipeline() pipelineTemplate {
 	srcParams, _ := b.getSourceParams("generator")
 	return pipelineTemplate{
+		Name: b.Name,
 		SourceSpec: connectorTemplate{
 			Name: "generator",
 			Params: map[string]config.Parameter{

@@ -26,6 +26,7 @@ type InitArgs struct {
 }
 
 type PipelinesInitArgs struct {
+	Name        string
 	Source      string
 	Destination string
 	Path        string
@@ -36,6 +37,7 @@ var (
 		Path: ".",
 	}
 	pipelinesInitArgs = PipelinesInitArgs{
+		Name: "example-pipeline",
 		Path: "./pipelines/generator-to-log.yaml",
 	}
 )
@@ -92,12 +94,11 @@ func buildPipelinesInitCmd() *cobra.Command {
 		Short: "Initialize pipeline",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			pipelineName := ""
 			if len(args) > 0 {
-				pipelineName = args[0]
+				pipelinesInitArgs.Name = args[0]
 			}
 			return PipelinesInit{
-				Name:        pipelineName,
+				Name:        pipelinesInitArgs.Name,
 				Source:      pipelinesInitArgs.Source,
 				Destination: pipelinesInitArgs.Destination,
 				Path:        pipelinesInitArgs.Path,
