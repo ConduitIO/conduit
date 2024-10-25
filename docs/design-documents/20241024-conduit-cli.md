@@ -88,7 +88,7 @@ EXAMPLES
 
 #### Description
 
-- This command will output Conduit configuration (what db is configured, etc)
+- This command will output the [Conduit configuration](https://github.com/ConduitIO/conduit/blob/05dbc275a724526f02779abb47b0ecc53f711485/pkg/conduit/config.go#L34) based on the default values and the user's configured settings that Conduit would use.
 - It does not require having conduit running.
 
 
@@ -107,8 +107,8 @@ $ conduit config
 
 #### Description
 
-- This command will start Conduit with all the available pipelines.
-- It is equivalent to the current `conduit`.
+- This command will start Conduit with all the configured pipelines, connectors, etc.
+- It is equivalent to the current `conduit` command.
 
 #### Flags
 
@@ -141,7 +141,7 @@ $ conduit start
 <br/>
 
 <details>
-<summary><code style="font-size: 19px; font-weight:bold;">conduit pipelines init [--pipelines.path] [...]</code></summary>
+<summary><code style="font-size: 19px; font-weight:bold;">conduit pipelines init [--path] [...]</code></summary>
 
 #### Description
 
@@ -213,7 +213,7 @@ Destination: kafka
 
 <br/>
 
-<details>
+<details open>
 <summary><code style="font-size: 19px; font-weight:bold;">conduit connectors ls</code></summary>
 
 #### Description
@@ -225,6 +225,9 @@ Destination: kafka
 
 ```bash
 $ conduit connectors ls
+PLUGIN                          TYPE         PIPELINE
+postgres@v0.2.0	                builtin      file-to-postgres
+conduit-connector-http@0.1.0.   standalone   my-other-pipeline
 ```
 </details>
 
@@ -273,6 +276,10 @@ url    HTTP URL to send requests to.     true		                  https://...
 
 ```bash
 $ conduit processors ls
+NAME			    TYPE      PIPELINE
+avro.decode 	builtin   my-pipeline
+avro.encode		builtin   my-pipeline
+base64.decode	builtin   my-other-pipeline
 ```
 </details>
 <br/>
