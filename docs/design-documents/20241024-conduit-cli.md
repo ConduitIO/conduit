@@ -49,11 +49,17 @@ Usage of conduit:
     	prints current Conduit version
 ```
 
-## Implementation plan
+## Suggested commands for Conduit 0.13
 
-### `conduit init`
+The following list contains the suggested commands we propose to include in the first iteration. New and more complex commands will be added later.
+
+<details>
+<summary><code style="font-size: 19px; font-weight:bold;">conduit init</code></summary>
+
+#### Description
 
 - This command will initialize a Conduit working environment. 
+- It does not require having conduit running.
 - It won't require flags or arguments.
 - Additional flags could be provided to specify the path.
 
@@ -61,8 +67,7 @@ Usage of conduit:
 
 |Flag name | Description | Required  | Default  |
 |---|---|---|---|
-| path  |  Connector name | No | `.` (current directory) |
-
+| path  |  Where to initialize Conduit | No | `.` (current directory) |
 
 #### `--help`
 
@@ -74,4 +79,304 @@ EXAMPLES
   $ conduit init --path ~/code/conduit-dir
 ```
 
-### Global flags
+</details>
+
+<br/>
+
+<details>
+<summary><code style="font-size: 19px; font-weight:bold;">conduit config</code></summary>
+
+#### Description
+
+- This command will output Conduit configuration (what db is configured, etc)
+- It does not require having conduit running.
+
+
+#### `--help`
+
+```bash
+$ conduit config
+```
+
+</details>
+
+<br/>
+
+<details>
+<summary><code style="font-size: 19px; font-weight:bold;">conduit start [--pipelines.path] [...]</code></summary>
+
+#### Description
+
+- This command will start Conduit with all the available pipelines.
+- It is equivalent to the current `conduit`.
+
+#### Flags
+
+| Name | Description | Required | Default Value |
+|------|-------------|----------|---------------|
+| api.enabled | enable HTTP and gRPC API | No | true |
+| config | global config file | No | "conduit.yaml" |
+| connectors.path | path to standalone connectors' directory | No | "./connectors" |
+| db.badger.path | path to badger DB | No | "conduit.db" |
+| db.postgres.connection-string | postgres connection string | Yes |  |
+| db.postgres.table | postgres table in which to store data | No | "conduit_kv_store" |
+| db.type | database type; accepts badger,postgres,inmemory | No | "badger" |
+| grpc.address | address for serving the gRPC API | No | ":8084" |
+| http.address | address for serving the HTTP API | No | ":8080" |
+| log.format | sets the format of the logging; accepts json, cli | No | "cli" |
+| log.level | sets logging level; accepts debug, info, warn, error, trace | No | "info" |
+| pipelines.exit-on-error | exit Conduit if a pipeline experiences an error while running | No |  |
+| pipelines.path | path to the directory that has the yaml pipeline configuration files, or a single pipeline configuration file | No | "./pipelines" |
+| processors.path | path to standalone processors' directory | No | "./processors" |
+| version | prints current Conduit version | No |  |
+
+
+#### `--help`
+
+```bash
+$ conduit start
+```
+</details>
+
+<br/>
+
+<details>
+<summary><code style="font-size: 19px; font-weight:bold;">conduit pipelines init [--pipelines.path] [...]</code></summary>
+
+#### Description
+
+- This command will initialize a pipeline.
+- It does not require having conduit running.
+
+#### Flags
+
+| Name | Description | Required | Default Value |
+|------|-------------|----------|---------------|
+| path  |  Where to initialize a new pipeline | No | `.` (current directory) |
+
+#### `--help`
+
+```bash
+$ conduit pipelines init
+$ conduit pipelines init my-first-pipeline
+```
+</details>
+
+<br/>
+
+<details>
+<summary><code style="font-size: 19px; font-weight:bold;">conduit pipelines ls</code></summary>
+
+#### Description
+
+- This command will list the running pipelines.
+- It requires having conduit previously running.
+
+#### `--help`
+
+```bash
+$ conduit pipelines ls
+```
+</details>
+
+<br/>
+
+<details>
+<summary><code style="font-size: 19px; font-weight:bold;">conduit pipelines describe [NAME]</code></summary>
+
+#### Description
+
+- This command will describe the topology of the pipeline.
+- It requires having conduit previously running.
+- It requires the pipeline name as argument.
+
+#### Arguments
+
+| Name | Description | Required | Default Value |
+|------|-------------|----------|---------------|
+| name  |  pipeline name to describe | Yes | |
+
+
+#### `--help`
+
+```bash
+$ conduit pipelines describe [NAME]
+
+EXAMPLE:
+
+$ conduit pipelines describe my-pipeline
+Source: kafka
+  Processor: avro.encode
+Destination: kafka
+```
+</details>
+
+<br/>
+
+<details>
+<summary><code style="font-size: 19px; font-weight:bold;">conduit connectors ls</code></summary>
+
+#### Description
+
+- This command will list all the available connectors.
+- It requires having conduit previously running.
+
+#### `--help`
+
+```bash
+$ conduit connectors ls
+```
+</details>
+
+<br/>
+
+<details>
+<summary><code style="font-size: 19px; font-weight:bold;">conduit connectors describe [PLUGIN]</code></summary>
+
+#### Description
+
+- This command will describe the connector configuration available.
+- It requires having conduit previously running.
+
+#### Arguments
+
+| Name | Description | Required | Default Value |
+|------|-------------|----------|---------------|
+| plugin  |  plugin name and version | Yes | |
+
+
+#### `--help`
+
+```bash
+$ conduit connnectors describe [PLUGIN]
+
+EXAMPLE:
+
+$ conduit connectors describe conduit-connector-http@0.1.0
+NAME   DESCRIPTION                       REQUIRED  DEFAULT VALUE	EXAMPLE
+url    HTTP URL to send requests to.     true		                  https://...
+...
+```
+</details>
+
+<br/>
+
+<details>
+<summary><code style="font-size: 19px; font-weight:bold;">conduit processors ls</code></summary>
+
+#### Description
+
+- This command will list all the available processors.
+- It requires having conduit previously running.
+
+#### `--help`
+
+```bash
+$ conduit processors ls
+```
+</details>
+<br/>
+
+<details>
+<summary><code style="font-size: 19px; font-weight:bold;">conduit processor describe [NAME]</code></summary>
+
+#### Description
+
+- This command will describe the processor configuration available.
+- It requires having conduit previously running.
+- It requires the processor name as argument.
+
+#### Arguments
+
+| Name | Description | Required | Default Value |
+|------|-------------|----------|---------------|
+| name  |  processor name | Yes | |
+
+
+#### `--help`
+
+```bash
+$ conduit processor describe [NAME]
+
+EXAMPLE:
+
+$ conduit connectors describe avro.decode
+# auth.basic.password
+type: string
+description: This option is required if auth.basic.username contains a value. If both auth.basic.username and auth.basic.password are empty basic authentication is disabled.
+
+# auth.basic.username
+type: string
+...
+```
+</details>
+
+<br/>
+
+<details>
+<summary><code style="font-size: 19px; font-weight:bold;">conduit doctor</code></summary>
+
+#### Description
+
+- This will check whether there’s a more up to date version of conduit and if some connectors / processors could also be updated.
+- It requires having conduit previously running.
+
+#### `--help`
+
+```bash
+$ conduit doctor
+# returns version, checks if there's a newer version of conduit, plugin versions, etc.
+```
+</details>
+
+<br/>
+
+<details>
+<summary><code style="font-size: 19px; font-weight:bold;">conduit version</code></summary>
+
+#### Description
+
+- This will return the existing Conduit version.
+- It requires having conduit previously running.
+
+#### `--help`
+
+```bash
+$ conduit version
+```
+</details>
+
+<br/>
+
+#### Global flags
+
+| Name | Description | Required | Default Value |
+|------|-------------|----------|---------------|
+| api.enabled | enable HTTP and gRPC API | No | true |
+| config | global config file | No | "conduit.yaml" |
+| connectors.path | path to standalone connectors' directory | No | "./connectors" |
+| db.badger.path | path to badger DB | No | "conduit.db" |
+| db.postgres.connection-string | postgres connection string | Yes |  |
+| db.postgres.table | postgres table in which to store data | No | "conduit_kv_store" |
+| db.type | database type; accepts badger,postgres,inmemory | No | "badger" |
+| grpc.address | address for serving the gRPC API | No | ":8084" |
+| http.address | address for serving the HTTP API | No | ":8080" |
+| log.format | sets the format of the logging; accepts json, cli | No | "cli" |
+| log.level | sets logging level; accepts debug, info, warn, error, trace | No | "info" |
+| pipelines.exit-on-error | exit Conduit if a pipeline experiences an error while running | No |  |
+| pipelines.path | path to the directory that has the yaml pipeline configuration files, or a single pipeline configuration file | No | "./pipelines" |
+| processors.path | path to standalone processors' directory | No | "./processors" |
+| version | prints current Conduit version | No |  |
+
+
+### TBD
+
+1. What about these?
+- `connectors install`
+- `connectors uninstall`
+- `pipelines edit`  
+- `processor build`
+- Other processor utilities?
+1. Global flags?
+1. Actions such as `pipelines start | stop`?
+1. `config` vs `doctor`? 
