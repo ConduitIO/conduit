@@ -253,42 +253,67 @@ It requires having Conduit previously running.
 ```bash
 $ conduit connectors ls
 ID                PLUGIN                          TYPE         PIPELINE
-my-source         postgres@v0.2.0                  builtin      file-to-postgres
+my-source         postgres@v0.2.0                 builtin      file-to-postgres
 my-destination    conduit-connector-http@0.1.0.   standalone   my-other-pipeline
 ```
 
-### `conduit connectors describe [--plugin] [--id]`
+### `conduit connectors describe ID`
 
-This command will describe the connector configuration available.
+This command will describe the existing running connector.
 
-When using `--plugin` will describe the configuration for that connector plugin.
-
-When using `--id` will require having Conduit previously running since it'll describe the existing running connector.
+It requires having Conduit previously running.
 
 #### Flags
 
 | Name | Description | Required | Default Value |
 |------|-------------|----------|---------------|
-| id  |  connector identifier (returned by `connectors ls`) | Yes | |
-| plugin  |  plugin name and version | Yes | |
 | grpc.address | address for serving the gRPC API | No | ":8084" |
 
 #### `--help`
 
 ```bash
-$ conduit connnectors describe [--plugin] [--id] [--grpc.address]
+$ conduit connnectors describe ID [--grpc.address]
 
 EXAMPLE:
 
-$ conduit connectors describe --plugin conduit-connector-http@0.1.0
+$ conduit connectors describe my-source
+NAME        URL             PIPELINE        PLUGIN
+my-source   https://...     my-pipeline     postgres@v0.2.0
+```
+
+### `conduit connector-plugins ls`
+
+This command will list all the available connector plugins.
+
+It does not require having Conduit previously running.
+
+#### `--help`
+
+```bash
+$ conduit connector-plugins ls
+PLUGIN                          
+postgres@v0.2.0                 
+conduit-connector-http@0.1.0
+```
+
+### `conduit connector-plugins PLUGIN`
+
+This command will describe the configuration for that connector plugin.
+
+It does not require having Conduit previously running.
+
+#### `--help`
+
+```bash
+$ conduit connnector-plugins describe PLUGIN
+
+EXAMPLE:
+
+$ conduit connector-plugins describe conduit-connector-http@0.1.0
 NAME   DESCRIPTION                       REQUIRED  DEFAULT VALUE  EXAMPLE
 url    HTTP URL to send requests to.     true                     https://...
-...
-
-$ conduit connectors describe --id my-source
-NAME        URL             PIPELINE
-my-source   https://...     my-pipeline
 ```
+
 
 ### `conduit processors ls`
 
