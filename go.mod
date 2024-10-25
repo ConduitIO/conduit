@@ -38,7 +38,7 @@ require (
 	github.com/piotrkowalczuk/promgrpc/v4 v4.1.4
 	github.com/prometheus/client_golang v1.20.5
 	github.com/prometheus/client_model v0.6.1
-	github.com/prometheus/common v0.60.0
+	github.com/prometheus/common v0.60.1
 	github.com/rs/zerolog v1.33.0
 	github.com/spf13/cobra v1.8.1
 	github.com/stealthrocket/wazergo v0.19.1
