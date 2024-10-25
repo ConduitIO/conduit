@@ -224,6 +224,7 @@ func (c Config) validateErrorRecovery() error {
 
 func (c Config) Validate() error {
 	// TODO simplify validation with struct tags
+
 	if err := c.validateDBConfig(); err != nil {
 		return err
 	}
