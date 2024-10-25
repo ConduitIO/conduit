@@ -59,6 +59,7 @@ func (e *Entrypoint) Serve(cfg Config) {
 		os.Exit(0)
 	}
 
+	// cli is needed to print the full usage (CLI commands + Conduit flags)
 	flags := e.Flags(cli, &cfg)
 	e.ParseConfig(flags)
 

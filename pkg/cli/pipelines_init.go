@@ -155,13 +155,25 @@ type PipelinesInit struct {
 	Args PipelinesInitArgs
 }
 
-func (b PipelinesInit) Run() error {
+func NewPipelinesInit(args PipelinesInitArgs) *PipelinesInit {
+	// set defaults
+	if args.Name == "" {
+		args.Name = "example-pipeline"
+	}
+	if args.Path == "" {
+		args.Path = "./pipelines/generator-to-log.yaml"
+	}
+
+	return &PipelinesInit{Args: args}
+}
+
+func (pi *PipelinesInit) Run() error {
 	var pipeline pipelineTemplate
 	switch {
-	case b.Args.Source == "" && b.Args.Destination == "":
-		pipeline = b.buildDemoPipeline()
-	case b.Args.Source != "" && b.Args.Destination != "":
-		p, err := b.buildTemplatePipeline()
+	case pi.Args.Source == "" && pi.Args.Destination == "":
+		pipeline = pi.buildDemoPipeline()
+	case pi.Args.Source != "" && pi.Args.Destination != "":
+		p, err := pi.buildTemplatePipeline()
 		if err != nil {
 			return err
 		}
@@ -170,35 +182,35 @@ func (b PipelinesInit) Run() error {
 		return cerrors.Errorf("only one of --source, --destination was provided")
 	}
 
-	err := b.write(pipeline)
+	err := pi.write(pipeline)
 	if err != nil {
 		return cerrors.Errorf("could not write pipeline: %w", err)
 	}
 	return nil
 }
 
-func (b PipelinesInit) buildTemplatePipeline() (pipelineTemplate, error) {
-	source, err := b.getSourceParams(b.Args.Source)
+func (pi *PipelinesInit) buildTemplatePipeline() (pipelineTemplate, error) {
+	source, err := pi.getSourceParams(pi.Args.Source)
 	if err != nil {
 		return pipelineTemplate{}, cerrors.Errorf("failed getting source params: %w", err)
 	}
 
-	destination, err := b.getDestinationParams(b.Args.Destination)
+	destination, err := pi.getDestinationParams(pi.Args.Destination)
 	if err != nil {
 		return pipelineTemplate{}, cerrors.Errorf("failed getting destination params: %w", err)
 	}
 
 	return pipelineTemplate{
-		Name:            b.Args.Name,
+		Name:            pi.Args.Name,
 		SourceSpec:      source,
 		DestinationSpec: destination,
 	}, nil
 }
 
-func (b PipelinesInit) buildDemoPipeline() pipelineTemplate {
-	srcParams, _ := b.getSourceParams("generator")
+func (pi *PipelinesInit) buildDemoPipeline() pipelineTemplate {
+	srcParams, _ := pi.getSourceParams("generator")
 	return pipelineTemplate{
-		Name: b.Args.Name,
+		Name: pi.Args.Name,
 		SourceSpec: connectorTemplate{
 			Name: "generator",
 			Params: map[string]config.Parameter{
@@ -231,26 +243,26 @@ func (b PipelinesInit) buildDemoPipeline() pipelineTemplate {
 	}
 }
 
-func (b PipelinesInit) getOutput() *os.File {
-	if b.Args.Path == "" {
+func (pi *PipelinesInit) getOutput() *os.File {
+	if pi.Args.Path == "" {
 		return os.Stdout
 	}
 
-	output, err := os.OpenFile(b.Args.Path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	output, err := os.OpenFile(pi.Args.Path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
-		log.Fatalf("error: failed to open %s: %v", b.Args.Path, err)
+		log.Fatalf("error: failed to open %s: %v", pi.Args.Path, err)
 	}
 
 	return output
 }
 
-func (b PipelinesInit) write(pipeline pipelineTemplate) error {
+func (pi *PipelinesInit) write(pipeline pipelineTemplate) error {
 	t, err := template.New("").Funcs(funcMap).Option("missingkey=zero").Parse(pipelineCfgTmpl)
 	if err != nil {
 		return cerrors.Errorf("failed parsing template: %w", err)
 	}
 
-	output := b.getOutput()
+	output := pi.getOutput()
 	defer output.Close()
 
 	err = t.Execute(output, pipeline)
@@ -261,7 +273,7 @@ func (b PipelinesInit) write(pipeline pipelineTemplate) error {
 	return nil
 }
 
-func (b PipelinesInit) getSourceParams(pluginName string) (connectorTemplate, error) {
+func (pi *PipelinesInit) getSourceParams(pluginName string) (connectorTemplate, error) {
 	for _, conn := range builtin.DefaultBuiltinConnectors {
 		specs := conn.NewSpecification()
 		if specs.Name == pluginName || specs.Name == "builtin:"+pluginName {
@@ -279,7 +291,7 @@ func (b PipelinesInit) getSourceParams(pluginName string) (connectorTemplate, er
 	return connectorTemplate{}, cerrors.Errorf("%v: %w", pluginName, plugin.ErrPluginNotFound)
 }
 
-func (b PipelinesInit) getDestinationParams(pluginName string) (connectorTemplate, error) {
+func (pi *PipelinesInit) getDestinationParams(pluginName string) (connectorTemplate, error) {
 	for _, conn := range builtin.DefaultBuiltinConnectors {
 		specs := conn.NewSpecification()
 		if specs.Name == pluginName || specs.Name == "builtin:"+pluginName {

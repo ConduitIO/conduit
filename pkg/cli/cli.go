@@ -23,13 +23,8 @@ import (
 )
 
 var (
-	initArgs = InitArgs{
-		Path: ".",
-	}
-	pipelinesInitArgs = PipelinesInitArgs{
-		Name: "example-pipeline",
-		Path: "./pipelines/generator-to-log.yaml",
-	}
+	initArgs          InitArgs
+	pipelinesInitArgs PipelinesInitArgs
 )
 
 type Instance struct {
@@ -88,7 +83,7 @@ func buildInitCmd() *cobra.Command {
 		Short: "Initialize Conduit with a configuration file and directories.",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return ConduitInit{Args: initArgs}.Run()
+			return NewConduitInit(initArgs).Run()
 		},
 	}
 	initCmd.Flags().StringVar(
@@ -125,7 +120,7 @@ func buildPipelinesInitCmd() *cobra.Command {
 			if len(args) > 0 {
 				pipelinesInitArgs.Name = args[0]
 			}
-			return PipelinesInit{Args: pipelinesInitArgs}.Run()
+			return NewPipelinesInit(pipelinesInitArgs).Run()
 		},
 	}
 

@@ -28,7 +28,15 @@ type ConduitInit struct {
 	Args InitArgs
 }
 
-func (i ConduitInit) Run() error {
+func NewConduitInit(args InitArgs) *ConduitInit {
+	// set defaults
+	if args.Path == "" {
+		args.Path = "."
+	}
+	return &ConduitInit{Args: args}
+}
+
+func (i *ConduitInit) Run() error {
 	// Define the directories to create
 	dirs := []string{"processors", "connectors", "pipelines"}
 
@@ -58,6 +66,6 @@ func (i ConduitInit) Run() error {
 	return nil
 }
 
-func (i ConduitInit) createConfigYAML() error {
+func (i *ConduitInit) createConfigYAML() error {
 	return nil
 }
