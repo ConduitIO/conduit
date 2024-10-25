@@ -14,10 +14,46 @@
 
 package cli
 
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+)
+
 type ConduitInit struct {
-	Path string
+	Args InitArgs
 }
 
 func (i ConduitInit) Run() error {
+	// Define the directories to create
+	dirs := []string{"processors", "connectors", "pipelines"}
+
+	for _, dir := range dirs {
+		path := filepath.Join(i.Args.Path, dir)
+
+		// Attempt to create the directory, skipping if it already exists
+		if err := os.Mkdir(path, os.ModePerm); err != nil {
+			if os.IsExist(err) {
+				fmt.Printf("Directory '%s' already exists, skipping...\n", path)
+				continue
+			}
+			return fmt.Errorf("failed to create directory '%s': %w", path, err)
+		}
+
+		fmt.Printf("Created directory: %s\n", path)
+	}
+
+	err := i.createConfigYAML()
+	if err != nil {
+		return fmt.Errorf("failed to create config YAML: %w", err)
+	}
+
+	fmt.Println("Conduit has been initialized!")
+	fmt.Println("To quickly create an example pipeline, run `conduit pipelines init`.")
+	fmt.Println("To see how you can customize your first pipeline, run `conduit pipelines init --help`.")
+	return nil
+}
+
+func (i ConduitInit) createConfigYAML() error {
 	return nil
 }

@@ -16,9 +16,10 @@ package cli
 
 import (
 	"fmt"
+	"os"
+
 	"github.com/spf13/cobra"
 	"golang.org/x/exp/slices"
-	"os"
 )
 
 type InitArgs struct {
@@ -68,24 +69,24 @@ func SwitchToCLI() {
 }
 
 func buildRootCmd() *cobra.Command {
-	var rootCmd = &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "conduit",
-		Short: "Conuit CLI",
+		Short: "Conduit CLI",
 	}
 
-	rootCmd.AddCommand(buildInitCmd())
-	rootCmd.AddCommand(buildPipelinesCmd())
+	cmd.AddCommand(buildInitCmd())
+	cmd.AddCommand(buildPipelinesCmd())
 
-	return rootCmd
+	return cmd
 }
 
 func buildInitCmd() *cobra.Command {
-	var initCmd = &cobra.Command{
+	initCmd := &cobra.Command{
 		Use:   "init",
 		Short: "Initialize Conduit with a configuration file and directories.",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return ConduitInit{Path: initArgs.Path}.Run()
+			return ConduitInit{Args: initArgs}.Run()
 		},
 	}
 	initCmd.Flags().StringVar(
@@ -99,7 +100,7 @@ func buildInitCmd() *cobra.Command {
 }
 
 func buildPipelinesCmd() *cobra.Command {
-	var pipelinesCmd = &cobra.Command{
+	pipelinesCmd := &cobra.Command{
 		Use:   "pipelines",
 		Short: "Manage pipelines",
 		Args:  cobra.NoArgs,
@@ -111,10 +112,10 @@ func buildPipelinesCmd() *cobra.Command {
 }
 
 func buildPipelinesInitCmd() *cobra.Command {
-	var pipelinesInitCmd = &cobra.Command{
+	pipelinesInitCmd := &cobra.Command{
 		Use:   "init [pipeline-name]",
-		Short: "Initializes an example pipeline.",
-		Long: "Initializes an example pipeline. If a source or destination connector is specified, all of its parameters" +
+		Short: "Initialize an example pipeline.",
+		Long: "Initialize an example pipeline. If a source or destination connector is specified, all of its parameters" +
 			" and their descriptions, types and default values are shown.",
 		Args:    cobra.MaximumNArgs(1),
 		Example: "  conduit pipelines init my-pipeline-name --source postgres --destination kafka --path pipelines/pg-to-kafka.yaml",
@@ -122,12 +123,7 @@ func buildPipelinesInitCmd() *cobra.Command {
 			if len(args) > 0 {
 				pipelinesInitArgs.Name = args[0]
 			}
-			return PipelinesInit{
-				Name:        pipelinesInitArgs.Name,
-				Source:      pipelinesInitArgs.Source,
-				Destination: pipelinesInitArgs.Destination,
-				Path:        pipelinesInitArgs.Path,
-			}.Run()
+			return PipelinesInit{Args: pipelinesInitArgs}.Run()
 		},
 	}
 

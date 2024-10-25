@@ -145,18 +145,15 @@ type connectorTemplate struct {
 }
 
 type PipelinesInit struct {
-	Name        string
-	Source      string
-	Destination string
-	Path        string
+	Args PipelinesInitArgs
 }
 
 func (b PipelinesInit) Run() error {
 	var pipeline pipelineTemplate
 	switch {
-	case b.Source == "" && b.Destination == "":
+	case b.Args.Source == "" && b.Args.Destination == "":
 		pipeline = b.buildDemoPipeline()
-	case b.Source != "" && b.Destination != "":
+	case b.Args.Source != "" && b.Args.Destination != "":
 		p, err := b.buildTemplatePipeline()
 		if err != nil {
 			return err
@@ -174,18 +171,18 @@ func (b PipelinesInit) Run() error {
 }
 
 func (b PipelinesInit) buildTemplatePipeline() (pipelineTemplate, error) {
-	source, err := b.getSourceParams(b.Source)
+	source, err := b.getSourceParams(b.Args.Source)
 	if err != nil {
 		return pipelineTemplate{}, cerrors.Errorf("failed getting source params: %w", err)
 	}
 
-	destination, err := b.getDestinationParams(b.Destination)
+	destination, err := b.getDestinationParams(b.Args.Destination)
 	if err != nil {
 		return pipelineTemplate{}, cerrors.Errorf("failed getting destination params: %w", err)
 	}
 
 	return pipelineTemplate{
-		Name:            b.Name,
+		Name:            b.Args.Name,
 		SourceSpec:      source,
 		DestinationSpec: destination,
 	}, nil
@@ -194,7 +191,7 @@ func (b PipelinesInit) buildTemplatePipeline() (pipelineTemplate, error) {
 func (b PipelinesInit) buildDemoPipeline() pipelineTemplate {
 	srcParams, _ := b.getSourceParams("generator")
 	return pipelineTemplate{
-		Name: b.Name,
+		Name: b.Args.Name,
 		SourceSpec: connectorTemplate{
 			Name: "generator",
 			Params: map[string]config.Parameter{
@@ -228,13 +225,13 @@ func (b PipelinesInit) buildDemoPipeline() pipelineTemplate {
 }
 
 func (b PipelinesInit) getOutput() *os.File {
-	if b.Path == "" {
+	if b.Args.Path == "" {
 		return os.Stdout
 	}
 
-	output, err := os.OpenFile(b.Path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	output, err := os.OpenFile(b.Args.Path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
-		log.Fatalf("error: failed to open %s: %v", b.Path, err)
+		log.Fatalf("error: failed to open %s: %v", b.Args.Path, err)
 	}
 
 	return output

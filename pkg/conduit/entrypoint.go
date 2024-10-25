@@ -18,11 +18,11 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"github.com/conduitio/conduit/pkg/cli"
 	"os"
 	"os/signal"
 	"strings"
 
+	"github.com/conduitio/conduit/pkg/cli"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/peterbourgon/ff/v3"
 	"github.com/peterbourgon/ff/v3/ffyaml"
