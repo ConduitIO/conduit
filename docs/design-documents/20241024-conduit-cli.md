@@ -7,9 +7,12 @@ The intention is to provide a good starting experience and evolve it over time w
 
 ### Goals
 
-- We aim to provide our users with an interface that empowers them to use the **main** Conduit features effortlessly. While we have envisioned some complex features, they will be available in future releases.
-- We will maintain the current installation methods by incorporating the CLI through the same established processes.
-- The CLI needs to feel intuitive and align with our standards.
+We aim to provide our users with an interface that empowers them to use the **main** Conduit features effortlessly. 
+While we have envisioned some complex features, they will be available in future releases.
+
+We will maintain the current installation methods by incorporating the CLI through the same established processes.
+
+The CLI needs to feel intuitive and align with our standards.
 
 ## Background
 
@@ -56,10 +59,13 @@ The following list contains the suggested commands we propose to include in the 
 
 ### `conduit init`
 
-- This command will initialize a Conduit working environment creating the `conduit.yaml` configuration file, and the three necessary directories: processors, pipelines, and connectors.
-- It does not require having a Conduit instance running.
-- It won't require flags or arguments.
-- An additional global flag named `--config.path` could specify the path where this configuration will be created.
+This command will initialize a Conduit working environment creating the `conduit.yaml` configuration file, and the three necessary directories: processors, pipelines, and connectors.
+
+It does not require having a Conduit instance running.
+
+It won't require flags or arguments.
+
+An additional global flag named `--config.path` could specify the path where this configuration will be created.
 
 #### `--help`
 
@@ -73,7 +79,9 @@ EXAMPLES
 
 ### `conduit config`
 
-- This command will output the [Conduit configuration](https://github.com/ConduitIO/conduit/blob/05dbc275a724526f02779abb47b0ecc53f711485/pkg/conduit/config.go#L34) based on the existing configuration. 
+This command will output the [Conduit configuration](https://github.com/ConduitIO/conduit/blob/05dbc275a724526f02779abb47b0ecc53f711485/pkg/conduit/config.go#L34) 
+based on the existing configuration. 
+
 This will take into account the default values and the user's configured settings that Conduit will use.
 
 - It does not require having Conduit running.
@@ -90,9 +98,11 @@ API.HTTP: ...
 
 ### `conduit run [--connectors.path] [...]`
 
-- This command will run Conduit with all the configured pipelines, connectors, and processors.
-- It is equivalent to the current `conduit` command as of time of this writing.
-- Conduit will run based on `--config.path` or current directory. Example:
+This command will run Conduit with all the configured pipelines, connectors, and processors.
+
+It is equivalent to the current `conduit` command as of time of this writing.
+
+Conduit will run based on `--config.path` or current directory. Example:
 
 ```bash
 $ pwd
@@ -105,7 +115,8 @@ pipelines/
 processors/
 ```
 
-- Other flags such as `connectors.path`, etc. will overwrite the existing configuration on `conduit.yaml`. This will need to be evaluated before specifying to Conduit to accomodate both scenarios (absolute and relative paths).
+Other flags such as `connectors.path`, etc. will overwrite the existing configuration on `conduit.yaml`. 
+This will need to be evaluated before specifying to Conduit to accomodate both scenarios (absolute and relative paths).
 
 #### Flags
 
@@ -126,10 +137,16 @@ processors/
 
 ### `conduit pipelines init [NAME] [--pipelines.path] [--source] [--destination]`
 
-- This command will initialize a pipeline based on the working environment. Optionally, a user could provide a different flag if they want to specify a different path.
-- In the event of not being able to to read a `conduit.yaml` configuration file based on current directory or `--config.path`, we should prompt to set up a working Conduit environment via `conduit init`.
-- It does not require having Conduit running.
-- A source and a destination could be provided using the same connectors reference as described [here](https://conduit.io/docs/using/connectors/referencing).
+This command will initialize a pipeline based on the working environment. Optionally, a user could provide a different flag 
+if they want to specify a different path.
+
+In the event of not being able to to read a `conduit.yaml` configuration file based on current directory or `--config.path`, 
+we should prompt to set up a working Conduit environment via `conduit init`.
+
+It does not require having Conduit running.
+
+A source and a destination could be provided using the same connectors reference as described 
+[here](https://conduit.io/docs/using/connectors/referencing).
 
 #### Arguments
 
@@ -216,9 +233,11 @@ my-destination    conduit-connector-http@0.1.0.   standalone   my-other-pipeline
 
 ### `conduit connectors describe [--plugin] [--id]`
 
-- This command will describe the connector configuration available.
-- When using `--plugin` will describe the configuration for that connector plugin.
-- When using `--id` will require having Conduit previously running since it'll describe the existing running connector.
+1This command will describe the connector configuration available.
+
+When using `--plugin` will describe the configuration for that connector plugin.
+
+When using `--id` will require having Conduit previously running since it'll describe the existing running connector.
 
 #### Flags
 
@@ -268,9 +287,11 @@ base64.decode  builtin   my-other-pipeline
 
 ### `conduit processor describe [NAME]`
 
-- This command will describe the processor configuration available.
-- It requires having Conduit previously running.
-- It requires the processor name as argument.
+This command will describe the processor configuration available.
+
+It requires having Conduit previously running.
+
+It requires the processor name as argument.
 
 #### Arguments
 
@@ -297,8 +318,11 @@ type: string
 
 ### `conduit doctor`
 
-- This will check whether there’s a more up to date version of Conduit and if some connectors / processors could also be updated.
-- It requires having Conduit previously running.
+This will check whether there’s a more up to date version of Conduit.
+
+Also will check iff some connectors or processors could be updated.
+
+It requires having Conduit previously running.
 
 #### Flags
 
