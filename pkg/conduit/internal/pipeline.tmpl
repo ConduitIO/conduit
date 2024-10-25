@@ -2,7 +2,7 @@ version: "2.2"
 pipelines:
   - id: example-pipeline
     status: running
-    name: example-pipeline
+    name: "{{ .Name }}"
     description: Example pipeline
     connectors:
       - id: example-source

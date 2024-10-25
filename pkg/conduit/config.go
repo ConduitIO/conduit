@@ -16,7 +16,6 @@ package conduit
 
 import (
 	"os"
-	"slices"
 	"time"
 
 	"github.com/conduitio/conduit-commons/database"
@@ -112,12 +111,6 @@ type Config struct {
 		}
 	}
 
-	BuildPipeline struct {
-		Enabled     bool
-		Source      string
-		Destination string
-		OutPath     string
-	}
 	dev struct {
 		cpuprofile   string
 		memprofile   string
@@ -277,27 +270,6 @@ func (c Config) Validate() error {
 		return cerrors.Errorf("invalid error recovery config: %w", err)
 	}
 	return nil
-}
-
-func (c Config) validateCLI() error {
-	if !c.BuildPipeline.Enabled && c.hasBuildPipelineOptions() {
-		return cerrors.New("options --source, --destination, --out-path can only be used with --build-pipeline")
-	}
-
-	return nil
-}
-
-func (c Config) hasBuildPipelineOptions() bool {
-	return slices.ContainsFunc(
-		[]string{c.BuildPipeline.Source, c.BuildPipeline.Destination, c.BuildPipeline.OutPath},
-		func(s string) bool {
-			return s != ""
-		},
-	)
-}
-
-func (c Config) cliMode() bool {
-	return c.BuildPipeline.Enabled || c.hasBuildPipelineOptions()
 }
 
 func invalidConfigFieldErr(name string) error {

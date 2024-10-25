@@ -143,13 +143,14 @@ type connectorTemplate struct {
 	Params config.Parameters
 }
 
-type PipelineBuilder struct {
+type PipelinesInit struct {
+	Name        string
 	Source      string
 	Destination string
-	OutPath     string
+	Path        string
 }
 
-func (b PipelineBuilder) Build() error {
+func (b PipelinesInit) Run() error {
 	var pipeline pipelineTemplate
 	if b.Source == "" && b.Destination == "" {
 		pipeline = b.buildDemoPipeline()
@@ -168,7 +169,7 @@ func (b PipelineBuilder) Build() error {
 	return nil
 }
 
-func (b PipelineBuilder) buildTemplatePipeline() (pipelineTemplate, error) {
+func (b PipelinesInit) buildTemplatePipeline() (pipelineTemplate, error) {
 	source, err := b.getSourceParams(b.Source)
 	if err != nil {
 		return pipelineTemplate{}, cerrors.Errorf("failed getting source params: %w", err)
@@ -185,7 +186,7 @@ func (b PipelineBuilder) buildTemplatePipeline() (pipelineTemplate, error) {
 	}, nil
 }
 
-func (b PipelineBuilder) buildDemoPipeline() pipelineTemplate {
+func (b PipelinesInit) buildDemoPipeline() pipelineTemplate {
 	srcParams, _ := b.getSourceParams("generator")
 	return pipelineTemplate{
 		SourceSpec: connectorTemplate{
@@ -220,20 +221,20 @@ func (b PipelineBuilder) buildDemoPipeline() pipelineTemplate {
 	}
 }
 
-func (b PipelineBuilder) getOutput() *os.File {
-	if b.OutPath == "" {
+func (b PipelinesInit) getOutput() *os.File {
+	if b.Path == "" {
 		return os.Stdout
 	}
 
-	output, err := os.OpenFile(b.OutPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	output, err := os.OpenFile(b.Path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
-		log.Fatalf("error: failed to open %s: %v", b.OutPath, err)
+		log.Fatalf("error: failed to open %s: %v", b.Path, err)
 	}
 
 	return output
 }
 
-func (b PipelineBuilder) write(pipeline pipelineTemplate) error {
+func (b PipelinesInit) write(pipeline pipelineTemplate) error {
 	t, err := template.New("").Funcs(funcMap).Option("missingkey=zero").Parse(pipelineCfgTmpl)
 	if err != nil {
 		return cerrors.Errorf("failed parsing template: %w", err)
@@ -250,7 +251,7 @@ func (b PipelineBuilder) write(pipeline pipelineTemplate) error {
 	return nil
 }
 
-func (b PipelineBuilder) getSourceParams(pluginName string) (connectorTemplate, error) {
+func (b PipelinesInit) getSourceParams(pluginName string) (connectorTemplate, error) {
 	for _, conn := range builtin.DefaultBuiltinConnectors {
 		specs := conn.NewSpecification()
 		if specs.Name == pluginName || specs.Name == "builtin:"+pluginName {
@@ -268,7 +269,7 @@ func (b PipelineBuilder) getSourceParams(pluginName string) (connectorTemplate, 
 	return connectorTemplate{}, cerrors.Errorf("%v: %w", pluginName, plugin.ErrPluginNotFound)
 }
 
-func (b PipelineBuilder) getDestinationParams(pluginName string) (connectorTemplate, error) {
+func (b PipelinesInit) getDestinationParams(pluginName string) (connectorTemplate, error) {
 	for _, conn := range builtin.DefaultBuiltinConnectors {
 		specs := conn.NewSpecification()
 		if specs.Name == pluginName || specs.Name == "builtin:"+pluginName {
