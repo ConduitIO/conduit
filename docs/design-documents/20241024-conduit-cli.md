@@ -218,7 +218,6 @@ It requires the pipeline id as argument.
 |------|-------------|----------|---------------|
 | id  |  pipeline id to describe | Yes | |
 
-
 #### Flags
 
 | Name | Description | Required | Default Value |
@@ -274,7 +273,6 @@ It requires having Conduit previously running.
 |------|-------------|----------|---------------|
 | id  |  connector id to describe | Yes | |
 
-
 #### Flags
 
 | Name | Description | Required | Default Value |
@@ -319,7 +317,6 @@ It does not require having Conduit previously running.
 | Name | Description | Required | Default Value |
 |------|-------------|----------|---------------|
 | PLUGIN  |  connector plugin to describe | Yes | |
-
 
 #### `--help`
 
