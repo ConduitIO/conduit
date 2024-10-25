@@ -17,21 +17,10 @@ package cli
 import (
 	"fmt"
 	"os"
+	"slices"
 
 	"github.com/spf13/cobra"
-	"golang.org/x/exp/slices"
 )
-
-type InitArgs struct {
-	Path string
-}
-
-type PipelinesInitArgs struct {
-	Name        string
-	Source      string
-	Destination string
-	Path        string
-}
 
 var (
 	initArgs = InitArgs{
@@ -41,22 +30,27 @@ var (
 		Name: "example-pipeline",
 		Path: "./pipelines/generator-to-log.yaml",
 	}
-	rootCmd *cobra.Command
 )
 
-func init() {
-	rootCmd = buildRootCmd()
+type Instance struct {
+	rootCmd *cobra.Command
 }
 
-// Enabled checks if the CLI should be enabled by
+func New() *Instance {
+	return &Instance{
+		rootCmd: buildRootCmd(),
+	}
+}
+
+// ShouldRun checks if the CLI should be enabled by
 // checking if the first command is a known command.
-func Enabled() bool {
+func (i *Instance) ShouldRun() bool {
 	if len(os.Args) == 0 {
 		return false
 	}
 
 	cmd := os.Args[1]
-	for _, sub := range rootCmd.Commands() {
+	for _, sub := range i.rootCmd.Commands() {
 		if sub.Name() == cmd || slices.Contains(sub.Aliases, cmd) {
 			return true
 		}
@@ -65,12 +59,15 @@ func Enabled() bool {
 	return false
 }
 
-func SwitchToCLI() {
-	rootCmd := buildRootCmd()
-	if err := rootCmd.Execute(); err != nil {
+func (i *Instance) Run() {
+	if err := i.rootCmd.Execute(); err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)
 	}
+}
+
+func (i *Instance) Usage() string {
+	return i.rootCmd.UsageString()
 }
 
 func buildRootCmd() *cobra.Command {

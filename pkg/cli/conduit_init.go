@@ -20,6 +20,10 @@ import (
 	"path/filepath"
 )
 
+type InitArgs struct {
+	Path string
+}
+
 type ConduitInit struct {
 	Args InitArgs
 }

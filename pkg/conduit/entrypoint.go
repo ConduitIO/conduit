@@ -53,12 +53,13 @@ type Entrypoint struct{}
 //   - environment variables
 //   - config file (lowest priority)
 func (e *Entrypoint) Serve(cfg Config) {
-	if cli.Enabled() {
-		cli.SwitchToCLI()
+	cli := cli.New()
+	if cli.ShouldRun() {
+		cli.Run()
 		os.Exit(0)
 	}
 
-	flags := e.Flags(&cfg)
+	flags := e.Flags(cli, &cfg)
 	e.ParseConfig(flags)
 
 	if cfg.Log.Format == "cli" {
@@ -80,7 +81,7 @@ func (e *Entrypoint) Serve(cfg Config) {
 
 // Flags returns a flag set that, when parsed, stores the values in the provided
 // config struct.
-func (*Entrypoint) Flags(cfg *Config) *flag.FlagSet {
+func (*Entrypoint) Flags(cli *cli.Instance, cfg *Config) *flag.FlagSet {
 	// TODO extract flags from config struct rather than defining flags manually
 	flags := flag.NewFlagSet("conduit", flag.ExitOnError)
 
@@ -185,6 +186,7 @@ func (*Entrypoint) Flags(cfg *Config) *flag.FlagSet {
 			_ = f.Value.Set(f.DefValue)
 			tmpFlags.Var(f.Value, f.Name, f.Usage)
 		})
+		fmt.Println("Conduit CLI " + cli.Usage())
 		tmpFlags.Usage()
 	}
 

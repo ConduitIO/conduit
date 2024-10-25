@@ -144,6 +144,13 @@ type connectorTemplate struct {
 	Params config.Parameters
 }
 
+type PipelinesInitArgs struct {
+	Name        string
+	Source      string
+	Destination string
+	Path        string
+}
+
 type PipelinesInit struct {
 	Args PipelinesInitArgs
 }
