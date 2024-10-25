@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package internal
+package cli
 
 import (
 	"fmt"
-	"os"
-
 	"github.com/spf13/cobra"
+	"golang.org/x/exp/slices"
+	"os"
 )
 
 type InitArgs struct {
@@ -40,17 +40,34 @@ var (
 		Name: "example-pipeline",
 		Path: "./pipelines/generator-to-log.yaml",
 	}
+	rootCmd *cobra.Command
 )
 
+func init() {
+	rootCmd = buildRootCmd()
+}
+
+func Enabled() bool {
+	for _, cmd := range os.Args[1:] {
+		for _, sub := range rootCmd.Commands() {
+			if sub.Name() == cmd || slices.Contains(sub.Aliases, cmd) {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
 func SwitchToCLI() {
-	rootCmd := cmd()
+	rootCmd := buildRootCmd()
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Println(err)
+		_, _ = fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)
 	}
 }
 
-func cmd() *cobra.Command {
+func buildRootCmd() *cobra.Command {
 	var rootCmd = &cobra.Command{
 		Use:   "conduit",
 		Short: "Conuit CLI",

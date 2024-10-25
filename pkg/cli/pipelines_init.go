@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package internal
+package cli
 
 import (
 	_ "embed"
@@ -153,14 +153,17 @@ type PipelinesInit struct {
 
 func (b PipelinesInit) Run() error {
 	var pipeline pipelineTemplate
-	if b.Source == "" && b.Destination == "" {
+	switch {
+	case b.Source == "" && b.Destination == "":
 		pipeline = b.buildDemoPipeline()
-	} else {
+	case b.Source != "" && b.Destination != "":
 		p, err := b.buildTemplatePipeline()
 		if err != nil {
 			return err
 		}
 		pipeline = p
+	default:
+		return cerrors.Errorf("only one of --source, --destination was provided")
 	}
 
 	err := b.write(pipeline)

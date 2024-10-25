@@ -18,11 +18,11 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"github.com/conduitio/conduit/pkg/cli"
 	"os"
 	"os/signal"
 	"strings"
 
-	"github.com/conduitio/conduit/pkg/conduit/internal"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/peterbourgon/ff/v3"
 	"github.com/peterbourgon/ff/v3/ffyaml"
@@ -53,8 +53,8 @@ type Entrypoint struct{}
 //   - environment variables
 //   - config file (lowest priority)
 func (e *Entrypoint) Serve(cfg Config) {
-	if e.cliMode() {
-		internal.SwitchToCLI()
+	if cli.Enabled() {
+		cli.SwitchToCLI()
 		os.Exit(0)
 	}
 
@@ -205,6 +205,12 @@ func (e *Entrypoint) ParseConfig(flags *flag.FlagSet) {
 	if err != nil {
 		e.exitWithError(err)
 	}
+	// Check the arguments that weren't parsed
+	if len(flags.Args()) > 0 {
+		_, _ = fmt.Fprintf(os.Stderr, "Unknown flag(s): %v\n", flags.Args())
+		flags.Usage()
+		os.Exit(exitCodeErr)
+	}
 
 	// check if the -version flag is set
 	if *version {
@@ -253,8 +259,4 @@ func (*Entrypoint) Splash() string {
 		"         `::::::::::‘        Conduit %s\n" +
 		"             ‘‘‘‘            "
 	return fmt.Sprintf(splash, Version(true))
-}
-
-func (e *Entrypoint) cliMode() bool {
-	return len(os.Args) > 1 && (os.Args[1] == "init" || os.Args[1] == "pipelines")
 }
