@@ -296,7 +296,7 @@ postgres@v0.2.0
 conduit-connector-http@0.1.0
 ```
 
-### `conduit connector-plugins PLUGIN`
+### `conduit connector-plugins describe PLUGIN`
 
 This command will describe the configuration for that connector plugin.
 
