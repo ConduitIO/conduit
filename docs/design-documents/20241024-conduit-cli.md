@@ -405,27 +405,6 @@ type: string
 ...
 ```
 
-### `conduit doctor`
-
-This will check whether there’s a more up to date version of Conduit.
-
-Also will check iff some connectors or processors could be updated.
-
-It requires having Conduit previously running.
-
-#### Flags
-
-| Name | Description | Required | Default Value |
-|------|-------------|----------|---------------|
-| grpc.address | address for serving the gRPC API | No | ":8084" |
-
-#### `--help`
-
-```bash
-$ conduit doctor
-# returns version, checks if there's a newer version of conduit, plugin versions, etc.
-```
-
 ### `conduit version`
 
 This will return the existing Conduit version.
