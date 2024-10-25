@@ -213,7 +213,7 @@ Destination: kafka
 
 <br/>
 
-<details open>
+<details>
 <summary><code style="font-size: 19px; font-weight:bold;">conduit connectors ls</code></summary>
 
 #### Description
