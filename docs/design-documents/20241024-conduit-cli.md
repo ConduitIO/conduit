@@ -90,7 +90,13 @@ based on the existing configuration.
 
 This will take into account the default values and the user's configured settings that Conduit will use.
 
-It does not require having Conduit running.
+It requires having Conduit running.
+
+#### Flags
+
+| Name | Description | Required | Default Value |
+|------|-------------|----------|---------------|
+| grpc.address | address for serving the gRPC API | No | ":8084" |
 
 #### `--help`
 
