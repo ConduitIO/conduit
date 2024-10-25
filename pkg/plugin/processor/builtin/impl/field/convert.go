@@ -59,7 +59,7 @@ func (p *convertProcessor) Specification() (sdk.Specification, error) {
 The applicable types are string, int, float and bool. Converting can be done between any combination of types. Note that
 booleans will be converted to numeric values 1 (true) and 0 (false). Processor is only applicable to ` + "`.Key`" + `, ` + "`.Payload.Before`" + `
 and ` + "`.Payload.After`" + ` prefixes, and only applicable if said fields contain structured data.
-If the record contains raw JSON data, then use the processor [` + "`json.decode`" + `](/docs/processors/builtin/json.decode)
+If the record contains raw JSON data, then use the processor [` + "`json.decode`" + `](/docs/using/processors/builtin/json.decode)
 to parse it into structured data first.`,
 		Version:    "v0.1.0",
 		Author:     "Meroxa, Inc.",
