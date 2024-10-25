@@ -30,7 +30,7 @@ func ExampleDecodeProcessor() {
 		Description: `This example decodes the base64 encoded string stored in
 ` + "`.Payload.After`" + `. Note that the result is a string, so if you want to
 further process the result (e.g. parse the string as JSON), you need to chain
-other processors (e.g. [` + "`json.decode`" + `](/docs/processors/builtin/json.decode)).`,
+other processors (e.g. [` + "`json.decode`" + `](/docs/using/processors/builtin/json.decode)).`,
 		Config: config.Config{
 			"field": ".Payload.After.foo",
 		},

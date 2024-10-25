@@ -2,7 +2,7 @@
   "specification": {
     "name": "field.set",
     "summary": "Set the value of a certain field.",
-    "description": "Set the value of a certain field to any value. It is not allowed to set the `.Position` field.\nThe new value can be a Go template expression, the processor will evaluate the output and assign the value to the target field.\nIf the provided `field` doesn't exist, the processor will create that field and assign its value.\nThis processor can be used for multiple purposes, like extracting fields, hoisting data, inserting fields, copying fields, masking fields, etc.\nNote that this processor only runs on structured data, if the record contains raw JSON data, then use the processor\n[`json.decode`](/docs/processors/builtin/json.decode) to parse it into structured data first.",
+    "description": "Set the value of a certain field to any value. It is not allowed to set the `.Position` field.\nThe new value can be a Go template expression, the processor will evaluate the output and assign the value to the target field.\nIf the provided `field` doesn't exist, the processor will create that field and assign its value.\nThis processor can be used for multiple purposes, like extracting fields, hoisting data, inserting fields, copying fields, masking fields, etc.\nNote that this processor only runs on structured data, if the record contains raw JSON data, then use the processor\n[`json.decode`](/docs/using/processors/builtin/json.decode) to parse it into structured data first.",
     "version": "v0.1.0",
     "author": "Meroxa, Inc.",
     "parameters": {

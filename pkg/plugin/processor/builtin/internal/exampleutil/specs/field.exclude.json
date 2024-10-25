@@ -2,7 +2,7 @@
   "specification": {
     "name": "field.exclude",
     "summary": "Remove a subset of fields from the record.",
-    "description": "Remove a subset of fields from the record, all the other fields are left untouched.\nIf a field is excluded that contains nested data, the whole tree will be removed.\nIt is not allowed to exclude `.Position` or `.Operation` fields.\n\nNote that this processor only runs on structured data, if the record contains\nraw JSON data, then use the processor [`json.decode`](/docs/processors/builtin/json.decode)\nto parse it into structured data first.",
+    "description": "Remove a subset of fields from the record, all the other fields are left untouched.\nIf a field is excluded that contains nested data, the whole tree will be removed.\nIt is not allowed to exclude `.Position` or `.Operation` fields.\n\nNote that this processor only runs on structured data, if the record contains\nraw JSON data, then use the processor [`json.decode`](/docs/using/processors/builtin/json.decode)\nto parse it into structured data first.",
     "version": "v0.1.0",
     "author": "Meroxa, Inc.",
     "parameters": {
