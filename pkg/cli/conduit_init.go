@@ -37,7 +37,27 @@ func NewConduitInit(args InitArgs) *ConduitInit {
 }
 
 func (i *ConduitInit) Run() error {
-	// Define the directories to create
+	err := i.createDirs()
+	if err != nil {
+		return err
+	}
+
+	err = i.createConfigYAML()
+	if err != nil {
+		return fmt.Errorf("failed to create config YAML: %w", err)
+	}
+
+	fmt.Println("Conduit has been initialized!")
+	fmt.Println("To quickly create an example pipeline, run `conduit pipelines init`.")
+	fmt.Println("To see how you can customize your first pipeline, run `conduit pipelines init --help`.")
+	return nil
+}
+
+func (i *ConduitInit) createConfigYAML() error {
+	return nil
+}
+
+func (i *ConduitInit) createDirs() error {
 	dirs := []string{"processors", "connectors", "pipelines"}
 
 	for _, dir := range dirs {
@@ -55,17 +75,5 @@ func (i *ConduitInit) Run() error {
 		fmt.Printf("Created directory: %s\n", path)
 	}
 
-	err := i.createConfigYAML()
-	if err != nil {
-		return fmt.Errorf("failed to create config YAML: %w", err)
-	}
-
-	fmt.Println("Conduit has been initialized!")
-	fmt.Println("To quickly create an example pipeline, run `conduit pipelines init`.")
-	fmt.Println("To see how you can customize your first pipeline, run `conduit pipelines init --help`.")
-	return nil
-}
-
-func (i *ConduitInit) createConfigYAML() error {
 	return nil
 }

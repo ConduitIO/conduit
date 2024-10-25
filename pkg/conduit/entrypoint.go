@@ -30,8 +30,14 @@ import (
 
 // Serve is a shortcut for Entrypoint.Serve.
 func Serve(cfg Config) {
+	cli := cli.New()
+	if cli.ShouldRun() {
+		cli.Run()
+		os.Exit(0)
+	}
+
 	e := &Entrypoint{}
-	e.Serve(cfg)
+	e.Serve(cli, cfg)
 }
 
 const (
@@ -52,13 +58,7 @@ type Entrypoint struct{}
 //   - command line flags (highest priority)
 //   - environment variables
 //   - config file (lowest priority)
-func (e *Entrypoint) Serve(cfg Config) {
-	cli := cli.New()
-	if cli.ShouldRun() {
-		cli.Run()
-		os.Exit(0)
-	}
-
+func (e *Entrypoint) Serve(cli *cli.Instance, cfg Config) {
 	// cli is needed to print the full usage (CLI commands + Conduit flags)
 	flags := e.Flags(cli, &cfg)
 	e.ParseConfig(flags)

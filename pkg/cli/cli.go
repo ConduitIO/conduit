@@ -37,8 +37,8 @@ func New() *Instance {
 	}
 }
 
-// ShouldRun checks if the CLI should be enabled by
-// checking if the first command is a known command.
+// ShouldRun checks if the CLI should be run by
+// checking if the first command is a known CLI command.
 func (i *Instance) ShouldRun() bool {
 	if len(os.Args) == 0 {
 		return false
