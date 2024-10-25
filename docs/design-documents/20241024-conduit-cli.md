@@ -2,7 +2,8 @@
 
 ## Introduction
 
-The goal of this design document is to clarify which part of this [Conduit discussion](https://github.com/ConduitIO/conduit/discussions/1642) will be part of the upcoming [0.13 release](https://github.com/ConduitIO/conduit/milestone/15). The intention is to provide a good starting experience and evolve it over time with more complex and advanced features.
+The goal of this design document is to clarify which part of this [Conduit discussion](https://github.com/ConduitIO/conduit/discussions/1642) will be part of the upcoming [0.13 release](https://github.com/ConduitIO/conduit/milestone/15). 
+The intention is to provide a good starting experience and evolve it over time with more complex and advanced features.
 
 ### Goals
 
@@ -72,7 +73,8 @@ EXAMPLES
 
 ### `conduit config`
 
-- This command will output the [Conduit configuration](https://github.com/ConduitIO/conduit/blob/05dbc275a724526f02779abb47b0ecc53f711485/pkg/conduit/config.go#L34) based on the existing configuration. This will take into account the default values and the user's configured settings that Conduit will use.
+- This command will output the [Conduit configuration](https://github.com/ConduitIO/conduit/blob/05dbc275a724526f02779abb47b0ecc53f711485/pkg/conduit/config.go#L34) based on the existing configuration. 
+This will take into account the default values and the user's configured settings that Conduit will use.
 
 - It does not require having Conduit running.
 
