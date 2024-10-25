@@ -90,9 +90,12 @@ func buildPipelinesCmd() *cobra.Command {
 
 func buildPipelinesInitCmd() *cobra.Command {
 	var pipelinesInitCmd = &cobra.Command{
-		Use:   "init",
-		Short: "Initialize pipeline",
-		Args:  cobra.MaximumNArgs(1),
+		Use:   "init [pipeline-name]",
+		Short: "Initializes an example pipeline.",
+		Long: "Initializes an example pipeline. If a source or destination connector is specified, all of its parameters" +
+			" and their descriptions, types and default values are shown.",
+		Args:    cobra.MaximumNArgs(1),
+		Example: "  conduit pipelines init my-pipeline-name --source postgres --destination kafka --path pipelines/pg-to-kafka.yaml",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) > 0 {
 				pipelinesInitArgs.Name = args[0]
@@ -107,9 +110,24 @@ func buildPipelinesInitCmd() *cobra.Command {
 	}
 
 	// Add flags to pipelines init command
-	pipelinesInitCmd.Flags().StringVar(&pipelinesInitArgs.Source, "source", "", "Specify the source")
-	pipelinesInitCmd.Flags().StringVar(&pipelinesInitArgs.Destination, "destination", "", "Specify the destination")
-	pipelinesInitCmd.Flags().StringVar(&pipelinesInitArgs.Path, "path", "", "Specify the path")
+	pipelinesInitCmd.Flags().StringVar(
+		&pipelinesInitArgs.Source,
+		"source",
+		"",
+		"Source connector (any of the built-in connectors).",
+	)
+	pipelinesInitCmd.Flags().StringVar(
+		&pipelinesInitArgs.Destination,
+		"destination",
+		"",
+		"Destination connector (any of the built-in connectors).",
+	)
+	pipelinesInitCmd.Flags().StringVar(
+		&pipelinesInitArgs.Path,
+		"path",
+		"",
+		"Path where the pipeline will be saved. If no path is specified, prints to stdout.",
+	)
 
 	return pipelinesInitCmd
 }
