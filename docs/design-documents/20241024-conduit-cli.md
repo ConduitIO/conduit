@@ -314,7 +314,6 @@ NAME   DESCRIPTION                       REQUIRED  DEFAULT VALUE  EXAMPLE
 url    HTTP URL to send requests to.     true                     https://...
 ```
 
-
 ### `conduit processors ls`
 
 This command will list all the available processors.
@@ -337,28 +336,66 @@ avro.encode    builtin   my-pipeline
 base64.decode  builtin   my-other-pipeline
 ```
 
-### `conduit processor describe [NAME]`
+### `conduit processors describe ID`
 
-This command will describe the processor configuration available.
+This command will describe the existing running processor.
 
 It requires having Conduit previously running.
-
-It requires the processor name as argument.
 
 #### Arguments
 
 | Name | Description | Required | Default Value |
 |------|-------------|----------|---------------|
-| name  |  processor name | Yes | |
+| ID  |  processor ID | Yes | |
 
 #### `--help`
 
 ```bash
-$ conduit processor describe [NAME]
+$ conduit processors describe ID
 
 EXAMPLE:
 
-$ conduit connectors describe avro.decode
+$ conduit processors describe my-processor
+NAME            PLUGIN            PIPELINE
+my-processor    base64.decode     my-pipeline
+```
+
+### `conduit processor-plugins ls`
+
+This command will list all the available processors.
+
+It does not require having Conduit previously running.
+
+#### `--help`
+
+```bash
+$ conduit processor-plugins ls
+NAME
+avro.decode
+avro.encode
+base64.decode
+```
+
+### `conduit processor-plugins describe PLUGIN`
+
+This command will describe the processor plugin configuration available.
+
+It does not require having Conduit previously running.
+
+#### Arguments
+
+| Name | Description | Required | Default Value |
+|------|-------------|----------|---------------|
+| PLUGIN  |  processor plugin name | Yes | |
+
+#### `--help`
+
+```bash
+$ conduit processor-plugins describe PLUGIN
+
+EXAMPLE:
+
+$ conduit processor-plugins describe avro.decode
 # auth.basic.password
 type: string
 description: This option is required if auth.basic.username contains a value. If both auth.basic.username and auth.basic.password are empty basic authentication is disabled.
