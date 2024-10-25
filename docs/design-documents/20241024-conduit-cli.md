@@ -2,12 +2,15 @@
 
 ## Introduction
 
-The goal of this design document is to clarify which part of this [Conduit discussion](https://github.com/ConduitIO/conduit/discussions/1642) will be part of the upcoming [0.13 release](https://github.com/ConduitIO/conduit/milestone/15). 
+The goal of this design document is to clarify which part of this
+[Conduit discussion](https://github.com/ConduitIO/conduit/discussions/1642) will be part of the
+upcoming [0.13 release](https://github.com/ConduitIO/conduit/milestone/15).
+
 The intention is to provide a good starting experience and evolve it over time with more complex and advanced features.
 
 ### Goals
 
-We aim to provide our users with an interface that empowers them to use the **main** Conduit features effortlessly. 
+We aim to provide our users with an interface that empowers them to use the **main** Conduit features effortlessly.
 While we have envisioned some complex features, they will be available in future releases.
 
 We will maintain the current installation methods by incorporating the CLI through the same established processes.
@@ -55,11 +58,14 @@ Usage of conduit:
 
 ## Suggested commands for Conduit 0.13
 
-The following list contains the suggested commands we propose to include in the first iteration. New and more complex commands will be added later.
+The following list contains the suggested commands we propose to include in the first iteration. 
+
+New and more complex commands will be added later.
 
 ### `conduit init`
 
-This command will initialize a Conduit working environment creating the `conduit.yaml` configuration file, and the three necessary directories: processors, pipelines, and connectors.
+This command will initialize a Conduit working environment creating the `conduit.yaml` configuration file, 
+and the three necessary directories: processors, pipelines, and connectors.
 
 It does not require having a Conduit instance running.
 
@@ -79,8 +85,7 @@ EXAMPLES
 
 ### `conduit config`
 
-This command will output the [Conduit configuration](https://github.com/ConduitIO/conduit/blob/05dbc275a724526f02779abb47b0ecc53f711485/pkg/conduit/config.go#L34) 
-based on the existing configuration. 
+This command will output the [Conduit configuration](https://github.com/ConduitIO/conduit/blob/05dbc275a724526f02779abb47b0ecc53f711485/pkg/conduit/config.go#L34) based on the existing configuration.
 
 This will take into account the default values and the user's configured settings that Conduit will use.
 
@@ -115,7 +120,7 @@ pipelines/
 processors/
 ```
 
-Other flags such as `connectors.path`, etc. will overwrite the existing configuration on `conduit.yaml`. 
+Other flags such as `connectors.path`, etc. will overwrite the existing configuration on `conduit.yaml`.
 This will need to be evaluated before specifying to Conduit to accomodate both scenarios (absolute and relative paths).
 
 #### Flags
@@ -137,7 +142,7 @@ This will need to be evaluated before specifying to Conduit to accomodate both s
 
 ### `conduit pipelines init [NAME] [--pipelines.path] [--source] [--destination]`
 
-This command will initialize a pipeline based on the working environment. Optionally, a user could provide a different flag 
+This command will initialize a pipeline based on the working environment. Optionally, a user could provide a different flag
 if they want to specify a different path.
 
 In the event of not being able to to read a `conduit.yaml` configuration file based on current directory or `--config.path`, 
