@@ -53,63 +53,44 @@ Usage of conduit:
 
 The following list contains the suggested commands we propose to include in the first iteration. New and more complex commands will be added later.
 
-<details>
-<summary><code style="font-size: 19px; font-weight:bold;">conduit init</code></summary>
+### `conduit init`
 
-#### Description
-
-- This command will initialize a Conduit working environment creating the `conduit.yaml` configuration file, and the three directories: processors, pipelines, and connectors.
-- It does not require having conduit running.
+- This command will initialize a Conduit working environment creating the `conduit.yaml` configuration file, and the three necessary directories: processors, pipelines, and connectors.
+- It does not require having a conduit instance running.
 - It won't require flags or arguments.
-- Additional flags could be provided to specify the path.
-
-#### Flags
-
-|Flag name | Description | Required  | Default  |
-|---|---|---|---|
-| path  |  Where to initialize Conduit | No | `.` (current directory) |
+- An additional global flag named `--config.path` could specify the path where this configuration will be created.
 
 #### `--help`
 
 ```bash
-$ conduit init [--path PATH]
+$ conduit init [--config.path PATH]
 
 EXAMPLES
   $ conduit init
-  $ conduit init --path ~/code/conduit-dir
+  $ conduit init --config.path ~/code/conduit-dir
 ```
 
-</details>
+### `conduit config`
 
-<br/>
+- This command will output the [Conduit configuration](https://github.com/ConduitIO/conduit/blob/05dbc275a724526f02779abb47b0ecc53f711485/pkg/conduit/config.go#L34) based on the existing configuration. This will take into account the default values and the user's configured settings that Conduit will use.
 
-<details>
-<summary><code style="font-size: 19px; font-weight:bold;">conduit config</code></summary>
-
-#### Description
-
-- This command will output the [Conduit configuration](https://github.com/ConduitIO/conduit/blob/05dbc275a724526f02779abb47b0ecc53f711485/pkg/conduit/config.go#L34) based on the default values and the user's configured settings that Conduit would use.
 - It does not require having conduit running.
-
 
 #### `--help`
 
 ```bash
 $ conduit config
+
+DB ...
+API.HTTP: ...
+...
 ```
 
-</details>
+### `conduit run [--connectors.path] [...]`
 
-<br/>
-
-<details>
-<summary><code style="font-size: 19px; font-weight:bold;">conduit run [...]</code></summary>
-
-#### Description
-
-- This command will run Conduit with all the configured pipelines, connectors, etc.
-- It is equivalent to the current `conduit` command.
-- `config.path` will be the root of the working enviornment. Example:
+- This command will run Conduit with all the configured pipelines, connectors, and processors.
+- It is equivalent to the current `conduit` command as of time of this writing.
+- Conduit will run based on `--config.path` or current directory. Example:
 
 ```bash
 $ pwd
@@ -141,23 +122,12 @@ processors/
 | log.level | sets logging level; accepts debug, info, warn, error, trace | No | "info" |
 | pipelines.exit-on-error | exit Conduit if a pipeline experiences an error while running | No |  |
 
-#### `--help`
+### `conduit pipelines init [NAME] [--pipelines.path] [--source] [--destination]`
 
-```bash
-$ conduit run
-```
-</details>
-
-<br/>
-
-<details>
-<summary><code style="font-size: 19px; font-weight:bold;">conduit pipelines init [NAME] [--pipelines.path]</code></summary>
-
-#### Description
-
-- This command will initialize a pipeline in the previously configured pipelines path (existing on `conduit.yaml`). In other words, even if you aren't on the pipelines directory, this pipeline will be initialized there.
-- In the event of not having a `conduit.yaml` configuration file already, we should prompt to initialize a working conduit environment.
+- This command will initialize a pipeline based on the working environment. Optionally, a user could provide a different flag if they want to specify a different path.
+- In the event of not being able to to read a `conduit.yaml` configuration file based on current directory or `--config.path`, we should prompt to set up a working conduit environment via `conduit init`.
 - It does not require having conduit running.
+- A source and a destination could be provided using the same connectors reference as described [here](https://conduit.io/docs/using/connectors/referencing).
 
 #### Arguments
 
@@ -183,14 +153,7 @@ $ conduit pipelines init my-first-pipeline --pipelines.path ~/my-other-path
 $ conduit pipelines init --source file@v1.0 --destination file
 ```
 
-</details>
-
-<br/>
-
-<details>
-<summary><code style="font-size: 19px; font-weight:bold;">conduit pipelines ls</code></summary>
-
-#### Description
+### conduit pipelines ls
 
 - This command will list the running pipelines.
 - It requires having conduit previously running.
@@ -205,15 +168,12 @@ $ conduit pipelines init --source file@v1.0 --destination file
 
 ```bash
 $ conduit pipelines ls
+NAME            STATUS
+my-pipeline     running
+my-other        degraded      
 ```
-</details>
 
-<br/>
-
-<details>
-<summary><code style="font-size: 19px; font-weight:bold;">conduit pipelines describe [ID]</code></summary>
-
-#### Description
+### `conduit pipelines describe ID`
 
 - This command will describe the topology of the pipeline.
 - It requires having conduit previously running.
@@ -225,7 +185,6 @@ $ conduit pipelines ls
 |------|-------------|----------|---------------|
 | id  |  pipeline id to describe | Yes | |
 | grpc.address | address for serving the gRPC API | No | ":8084" |
-
 
 #### `--help`
 
@@ -239,14 +198,8 @@ Source: kafka
   Processor: avro.encode
 Destination: kafka
 ```
-</details>
 
-<br/>
-
-<details>
-<summary><code style="font-size: 19px; font-weight:bold;">conduit connectors ls</code></summary>
-
-#### Description
+### `conduit connectors ls`
 
 - This command will list all the available connectors.
 - It requires having conduit previously running.
@@ -255,26 +208,22 @@ Destination: kafka
 
 ```bash
 $ conduit connectors ls
-PLUGIN                          TYPE         PIPELINE
-postgres@v0.2.0	                builtin      file-to-postgres
-conduit-connector-http@0.1.0.   standalone   my-other-pipeline
+ID                PLUGIN                          TYPE         PIPELINE
+my-source         postgres@v0.2.0	                builtin      file-to-postgres
+my-destination    conduit-connector-http@0.1.0.   standalone   my-other-pipeline
 ```
-</details>
 
-<br/>
-
-<details>
-<summary><code style="font-size: 19px; font-weight:bold;">conduit connectors describe [PLUGIN]</code></summary>
-
-#### Description
+### `conduit connectors describe [--plugin] [--id]`
 
 - This command will describe the connector configuration available.
-- It requires having conduit previously running.
+- When using `--plugin` will describe the configuration for that connector plugin.
+- When using `--id` will require having conduit previously running since it'll describe the existing running connector.
 
-#### Arguments
+#### Flags
 
 | Name | Description | Required | Default Value |
 |------|-------------|----------|---------------|
+| id  |  connector identifier (returned by `connectors ls`) | Yes | |
 | plugin  |  plugin name and version | Yes | |
 | grpc.address | address for serving the gRPC API | No | ":8084" |
 
@@ -282,26 +231,30 @@ conduit-connector-http@0.1.0.   standalone   my-other-pipeline
 #### `--help`
 
 ```bash
-$ conduit connnectors describe [PLUGIN]
+$ conduit connnectors describe [--plugin] [--id] [--grpc.address]
 
 EXAMPLE:
 
-$ conduit connectors describe conduit-connector-http@0.1.0
+$ conduit connectors describe --plugin conduit-connector-http@0.1.0
 NAME   DESCRIPTION                       REQUIRED  DEFAULT VALUE	EXAMPLE
 url    HTTP URL to send requests to.     true		                 https://...
 ...
+
+$ conduit connectors describe --id my-source
+NAME        URL             PIPELINE
+my-source   https://...     my-pipeline
 ```
-</details>
 
-<br/>
-
-<details>
-<summary><code style="font-size: 19px; font-weight:bold;">conduit processors ls</code></summary>
-
-#### Description
+### `conduit processors ls`
 
 - This command will list all the available processors.
 - It requires having conduit previously running.
+
+#### Flags
+
+| Name | Description | Required | Default Value |
+|------|-------------|----------|---------------|
+| grpc.address | address for serving the gRPC API | No | ":8084" |
 
 #### `--help`
 
@@ -312,13 +265,8 @@ avro.decode 	builtin   my-pipeline
 avro.encode		builtin   my-pipeline
 base64.decode	builtin   my-other-pipeline
 ```
-</details>
-<br/>
 
-<details>
-<summary><code style="font-size: 19px; font-weight:bold;">conduit processor describe [NAME]</code></summary>
-
-#### Description
+### `conduit processor describe [NAME]`
 
 - This command will describe the processor configuration available.
 - It requires having conduit previously running.
@@ -329,8 +277,6 @@ base64.decode	builtin   my-other-pipeline
 | Name | Description | Required | Default Value |
 |------|-------------|----------|---------------|
 | name  |  processor name | Yes | |
-
-
 
 #### `--help`
 
@@ -348,17 +294,17 @@ description: This option is required if auth.basic.username contains a value. If
 type: string
 ...
 ```
-</details>
 
-<br/>
-
-<details>
-<summary><code style="font-size: 19px; font-weight:bold;">conduit doctor</code></summary>
-
-#### Description
+### `conduit doctor`
 
 - This will check whether there’s a more up to date version of conduit and if some connectors / processors could also be updated.
 - It requires having conduit previously running.
+
+#### Flags
+
+| Name | Description | Required | Default Value |
+|------|-------------|----------|---------------|
+| grpc.address | address for serving the gRPC API | No | ":8084" |
 
 #### `--help`
 
@@ -366,14 +312,8 @@ type: string
 $ conduit doctor
 # returns version, checks if there's a newer version of conduit, plugin versions, etc.
 ```
-</details>
 
-<br/>
-
-<details>
-<summary><code style="font-size: 19px; font-weight:bold;">conduit version</code></summary>
-
-#### Description
+### conduit version
 
 - This will return the existing Conduit version.
 - It requires having conduit previously running.
@@ -383,30 +323,11 @@ $ conduit doctor
 ```bash
 $ conduit version
 ```
-</details>
-
-<br/>
 
 #### Global flags
 
 | Name | Description | Required | Default Value |
 |------|-------------|----------|---------------|
-| config.path | path to the conduit working environment | No | "." |
+| config.path | path to the conduit working environment | No | `.` |
+| json | output json | No |  |
 | version | prints current Conduit version (alias to `conduit version`) | No |  |
-
-
-<!-- 
-| grpc.address | address for serving the gRPC API | No | ":8084" |
--->
-
-
-<!-- 
-| connectors.path | path to standalone connectors' directory | No | "./connectors" |
-| pipelines.path | path to the directory that has the yaml pipeline configuration files, or a single pipeline configuration file | No | "./pipelines" |
-| processors.path | path to standalone processors' directory | No | "./processors" | -->
-
-
-### TBD
-
-1. `config` vs `doctor`? 
-1. Plugins vs Names (for connectors and processors)
