@@ -58,13 +58,13 @@ Usage of conduit:
 
 ## Suggested commands for Conduit 0.13
 
-The following list contains the suggested commands we propose to include in the first iteration. 
+The following list contains the suggested commands we propose to include in the first iteration.
 
 New and more complex commands will be added later.
 
 ### `conduit init`
 
-This command will initialize a Conduit working environment creating the `conduit.yaml` configuration file, 
+This command will initialize a Conduit working environment creating the `conduit.yaml` configuration file,
 and the three necessary directories: processors, pipelines, and connectors.
 
 It does not require having a Conduit instance running.
@@ -85,7 +85,8 @@ EXAMPLES
 
 ### `conduit config`
 
-This command will output the [Conduit configuration](https://github.com/ConduitIO/conduit/blob/05dbc275a724526f02779abb47b0ecc53f711485/pkg/conduit/config.go#L34) based on the existing configuration.
+This command will output the [Conduit configuration](https://github.com/ConduitIO/conduit/blob/05dbc275a724526f02779abb47b0ecc53f711485/pkg/conduit/config.go#L34)
+based on the existing configuration.
 
 This will take into account the default values and the user's configured settings that Conduit will use.
 
@@ -145,12 +146,12 @@ This will need to be evaluated before specifying to Conduit to accomodate both s
 This command will initialize a pipeline based on the working environment. Optionally, a user could provide a different flag
 if they want to specify a different path.
 
-In the event of not being able to to read a `conduit.yaml` configuration file based on current directory or `--config.path`, 
+In the event of not being able to to read a `conduit.yaml` configuration file based on current directory or `--config.path`,
 we should prompt to set up a working Conduit environment via `conduit init`.
 
 It does not require having Conduit running.
 
-A source and a destination could be provided using the same connectors reference as described 
+A source and a destination could be provided using the same connectors reference as described
 [here](https://conduit.io/docs/using/connectors/referencing).
 
 #### Arguments
