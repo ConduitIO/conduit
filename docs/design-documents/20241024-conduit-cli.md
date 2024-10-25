@@ -84,7 +84,7 @@ based on the existing configuration.
 
 This will take into account the default values and the user's configured settings that Conduit will use.
 
-- It does not require having Conduit running.
+It does not require having Conduit running.
 
 #### `--help`
 
@@ -171,10 +171,11 @@ conduit pipelines init my-first-pipeline --pipelines.path ~/my-other-path
 conduit pipelines init --source file@v1.0 --destination file
 ```
 
-### Conduit pipelines ls
+### `conduit pipelines ls`
 
-- This command will list the running pipelines.
-- It requires having Conduit previously running.
+This command will list the running pipelines.
+
+It requires having Conduit previously running.
 
 #### Flags
 
@@ -193,9 +194,11 @@ my-other        degraded
 
 ### `conduit pipelines describe ID`
 
-- This command will describe the topology of the pipeline.
-- It requires having Conduit previously running.
-- It requires the pipeline id as argument.
+This command will describe the topology of the pipeline.
+
+It requires having Conduit previously running.
+
+It requires the pipeline id as argument.
 
 #### Arguments
 
@@ -219,8 +222,9 @@ Destination: kafka
 
 ### `conduit connectors ls`
 
-- This command will list all the available connectors.
-- It requires having Conduit previously running.
+This command will list all the available connectors.
+
+It requires having Conduit previously running.
 
 #### `--help`
 
@@ -233,7 +237,7 @@ my-destination    conduit-connector-http@0.1.0.   standalone   my-other-pipeline
 
 ### `conduit connectors describe [--plugin] [--id]`
 
-1This command will describe the connector configuration available.
+This command will describe the connector configuration available.
 
 When using `--plugin` will describe the configuration for that connector plugin.
 
@@ -266,8 +270,9 @@ my-source   https://...     my-pipeline
 
 ### `conduit processors ls`
 
-- This command will list all the available processors.
-- It requires having Conduit previously running.
+This command will list all the available processors.
+
+It requires having Conduit previously running.
 
 #### Flags
 
@@ -337,10 +342,11 @@ $ conduit doctor
 # returns version, checks if there's a newer version of conduit, plugin versions, etc.
 ```
 
-### Conduit version
+### `conduit version`
 
-- This will return the existing Conduit version.
-- It requires having Conduit previously running.
+This will return the existing Conduit version.
+
+It requires having Conduit previously running.
 
 #### `--help`
 
