@@ -15,7 +15,11 @@
 package cli
 
 import (
+	"flag"
 	"fmt"
+	"github.com/conduitio/conduit/pkg/cli/internal"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/yaml/v3"
 	"os"
 	"path/filepath"
 )
@@ -25,15 +29,16 @@ type InitArgs struct {
 }
 
 type ConduitInit struct {
-	Args InitArgs
+	Args            InitArgs
+	ConduitCfgFlags *flag.FlagSet
 }
 
-func NewConduitInit(args InitArgs) *ConduitInit {
+func NewConduitInit(args InitArgs, conduitCfgFlags *flag.FlagSet) *ConduitInit {
 	// set defaults
 	if args.Path == "" {
 		args.Path = "."
 	}
-	return &ConduitInit{Args: args}
+	return &ConduitInit{Args: args, ConduitCfgFlags: conduitCfgFlags}
 }
 
 func (i *ConduitInit) Run() error {
@@ -54,6 +59,21 @@ func (i *ConduitInit) Run() error {
 }
 
 func (i *ConduitInit) createConfigYAML() error {
+	cfgYAML := internal.NewYAMLTree()
+	i.ConduitCfgFlags.VisitAll(func(f *flag.Flag) {
+		cfgYAML.Insert(f.Name, f.DefValue, f.Usage)
+	})
+
+	yamlData, err := yaml.Marshal(cfgYAML.Root)
+	if err != nil {
+		return cerrors.Errorf("error marshaling YAML: %w\n", err)
+	}
+
+	err = os.WriteFile("conduit.yaml", yamlData, 0644)
+	if err != nil {
+		return cerrors.Errorf("error writing conduit.yaml: %w", err)
+	}
+
 	return nil
 }
 

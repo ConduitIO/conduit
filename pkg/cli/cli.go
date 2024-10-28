@@ -15,6 +15,7 @@
 package cli
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"slices"
@@ -31,9 +32,12 @@ type Instance struct {
 	rootCmd *cobra.Command
 }
 
-func New() *Instance {
+// New creates a new CLI Instance.
+// conduitCfgFlags is the list of flags the Conduit server accepts
+// (needed so we can print the usage and initialize the Conduit configuration file).
+func New(conduitCfgFlags *flag.FlagSet, version string) *Instance {
 	return &Instance{
-		rootCmd: buildRootCmd(),
+		rootCmd: buildRootCmd(conduitCfgFlags, version),
 	}
 }
 
@@ -51,6 +55,10 @@ func (i *Instance) ShouldRun() bool {
 		}
 	}
 
+	if cmd == "--help" || cmd == "-h" {
+		return true
+	}
+
 	return false
 }
 
@@ -61,29 +69,36 @@ func (i *Instance) Run() {
 	}
 }
 
-func (i *Instance) Usage() string {
-	return i.rootCmd.UsageString()
+func (i *Instance) Usage() {
+	_ = i.rootCmd.Usage()
 }
 
-func buildRootCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "conduit",
-		Short: "Conduit CLI",
-	}
+func (i *Instance) ValidateArgs() error {
+	return i.rootCmd.ParseFlags(os.Args[1:])
+}
 
-	cmd.AddCommand(buildInitCmd())
+func buildRootCmd(flags *flag.FlagSet, version string) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:     "conduit",
+		Short:   "Conduit CLI",
+		Version: version,
+	}
+	cmd.CompletionOptions.DisableDefaultCmd = true
+	flags.VisitAll(cmd.Flags().AddGoFlag)
+
+	cmd.AddCommand(buildInitCmd(flags))
 	cmd.AddCommand(buildPipelinesCmd())
 
 	return cmd
 }
 
-func buildInitCmd() *cobra.Command {
+func buildInitCmd(conduitCfgFlags *flag.FlagSet) *cobra.Command {
 	initCmd := &cobra.Command{
 		Use:   "init",
 		Short: "Initialize Conduit with a configuration file and directories.",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return NewConduitInit(initArgs).Run()
+			return NewConduitInit(initArgs, conduitCfgFlags).Run()
 		},
 	}
 	initCmd.Flags().StringVar(
