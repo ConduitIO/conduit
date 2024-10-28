@@ -17,11 +17,12 @@ package cli
 import (
 	"flag"
 	"fmt"
+	"os"
+	"path/filepath"
+
 	"github.com/conduitio/conduit/pkg/cli/internal"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/yaml/v3"
-	"os"
-	"path/filepath"
 )
 
 type InitArgs struct {
@@ -69,7 +70,7 @@ func (i *ConduitInit) createConfigYAML() error {
 		return cerrors.Errorf("error marshaling YAML: %w\n", err)
 	}
 
-	err = os.WriteFile("conduit.yaml", yamlData, 0644)
+	err = os.WriteFile("conduit.yaml", yamlData, 0o644)
 	if err != nil {
 		return cerrors.Errorf("error writing conduit.yaml: %w", err)
 	}
