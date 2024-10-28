@@ -73,7 +73,6 @@ func buildRootCmd() *cobra.Command {
 
 	cmd.AddCommand(buildInitCmd())
 	cmd.AddCommand(buildPipelinesCmd())
-	cmd.
 
 	return cmd
 }
