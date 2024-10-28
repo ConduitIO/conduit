@@ -22,7 +22,6 @@ import (
 	"os/signal"
 	"strings"
 
-	"github.com/conduitio/conduit/pkg/cli"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/peterbourgon/ff/v3"
 	"github.com/peterbourgon/ff/v3/ffyaml"
@@ -30,14 +29,8 @@ import (
 
 // Serve is a shortcut for Entrypoint.Serve.
 func Serve(cfg Config) {
-	cli := cli.New()
-	if cli.ShouldRun() {
-		cli.Run()
-		os.Exit(0)
-	}
-
 	e := &Entrypoint{}
-	e.Serve(cli, cfg)
+	e.Serve(cfg)
 }
 
 const (
@@ -58,9 +51,9 @@ type Entrypoint struct{}
 //   - command line flags (highest priority)
 //   - environment variables
 //   - config file (lowest priority)
-func (e *Entrypoint) Serve(cli *cli.Instance, cfg Config) {
+func (e *Entrypoint) Serve(cfg Config) {
 	// cli is needed to print the full usage (CLI commands + Conduit flags)
-	flags := e.Flags(cli, &cfg)
+	flags := e.Flags(&cfg)
 	e.ParseConfig(flags)
 
 	if cfg.Log.Format == "cli" {
@@ -82,7 +75,7 @@ func (e *Entrypoint) Serve(cli *cli.Instance, cfg Config) {
 
 // Flags returns a flag set that, when parsed, stores the values in the provided
 // config struct.
-func (*Entrypoint) Flags(cli *cli.Instance, cfg *Config) *flag.FlagSet {
+func (*Entrypoint) Flags(cfg *Config) *flag.FlagSet {
 	// TODO extract flags from config struct rather than defining flags manually
 	flags := flag.NewFlagSet("conduit", flag.ExitOnError)
 
@@ -187,7 +180,6 @@ func (*Entrypoint) Flags(cli *cli.Instance, cfg *Config) *flag.FlagSet {
 			_ = f.Value.Set(f.DefValue)
 			tmpFlags.Var(f.Value, f.Name, f.Usage)
 		})
-		fmt.Println("Conduit CLI " + cli.Usage())
 		tmpFlags.Usage()
 	}
 
