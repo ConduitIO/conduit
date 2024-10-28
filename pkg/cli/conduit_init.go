@@ -70,7 +70,7 @@ func (i *ConduitInit) createConfigYAML() error {
 		return cerrors.Errorf("error marshaling YAML: %w\n", err)
 	}
 
-	err = os.WriteFile("conduit.yaml", yamlData, 0o644)
+	err = os.WriteFile("conduit.yaml", yamlData, 0o600)
 	if err != nil {
 		return cerrors.Errorf("error writing conduit.yaml: %w", err)
 	}
