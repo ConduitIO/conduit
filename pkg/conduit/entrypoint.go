@@ -22,7 +22,6 @@ import (
 	"os/signal"
 	"strings"
 
-	"github.com/conduitio/conduit/pkg/cli"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/peterbourgon/ff/v3"
 	"github.com/peterbourgon/ff/v3/ffyaml"
@@ -31,20 +30,7 @@ import (
 // Serve is a shortcut for Entrypoint.Serve.
 func Serve(cfg Config) {
 	e := &Entrypoint{}
-	cli := cli.New(e.Flags(&cfg), Version(true))
-	if err := cli.ValidateArgs(); err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "%v\n", err)
-		cli.Usage()
-		os.Exit(0)
-	}
-
-	// two separate code paths: one for the CLI, one for the server
-	if cli.ShouldRun() {
-		cli.Run()
-		os.Exit(0)
-	}
-
-	e.Serve(cli, cfg)
+	e.Serve(cfg)
 }
 
 const (
@@ -65,8 +51,7 @@ type Entrypoint struct{}
 //   - command line flags (highest priority)
 //   - environment variables
 //   - config file (lowest priority)
-func (e *Entrypoint) Serve(cli *cli.Instance, cfg Config) {
-	// cli is needed to print the full usage (CLI commands + Conduit flags)
+func (e *Entrypoint) Serve(cfg Config) {
 	flags := e.Flags(&cfg)
 	e.ParseConfig(flags)
 

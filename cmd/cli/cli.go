@@ -18,12 +18,13 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"slices"
 
+	"github.com/conduitio/conduit/pkg/conduit"
 	"github.com/spf13/cobra"
 )
 
 var (
+	conduitCfg        = conduit.DefaultConfig()
 	initArgs          InitArgs
 	pipelinesInitArgs PipelinesInitArgs
 )
@@ -35,31 +36,11 @@ type Instance struct {
 // New creates a new CLI Instance.
 // conduitCfgFlags is the list of flags the Conduit server accepts
 // (needed so we can print the usage and initialize the Conduit configuration file).
-func New(conduitCfgFlags *flag.FlagSet, version string) *Instance {
+func New() *Instance {
+	conduitCfgFlags := (&conduit.Entrypoint{}).Flags(&conduitCfg)
 	return &Instance{
-		rootCmd: buildRootCmd(conduitCfgFlags, version),
+		rootCmd: buildRootCmd(conduitCfgFlags, conduit.Version(true)),
 	}
-}
-
-// ShouldRun checks if the CLI should be run by
-// checking if the first command is a known CLI command.
-func (i *Instance) ShouldRun() bool {
-	if len(os.Args) == 0 {
-		return false
-	}
-
-	cmd := os.Args[1]
-	for _, sub := range i.rootCmd.Commands() {
-		if sub.Name() == cmd || slices.Contains(sub.Aliases, cmd) {
-			return true
-		}
-	}
-
-	if cmd == "--help" || cmd == "-h" || cmd == "help" {
-		return true
-	}
-
-	return false
 }
 
 func (i *Instance) Run() {
@@ -69,19 +50,14 @@ func (i *Instance) Run() {
 	}
 }
 
-func (i *Instance) Usage() {
-	_ = i.rootCmd.Usage()
-}
-
-func (i *Instance) ValidateArgs() error {
-	return i.rootCmd.ParseFlags(os.Args[1:])
-}
-
 func buildRootCmd(flags *flag.FlagSet, version string) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "conduit",
 		Short:   "Conduit CLI",
 		Version: version,
+		Run: func(cmd *cobra.Command, args []string) {
+			(&conduit.Entrypoint{}).Serve(conduitCfg)
+		},
 	}
 	cmd.CompletionOptions.DisableDefaultCmd = true
 	flags.VisitAll(cmd.Flags().AddGoFlag)

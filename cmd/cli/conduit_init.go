@@ -20,7 +20,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/conduitio/conduit/pkg/cli/internal"
+	"github.com/conduitio/conduit/cmd/cli/internal"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/yaml/v3"
 )
@@ -70,7 +70,7 @@ func (i *ConduitInit) createConfigYAML() error {
 		return cerrors.Errorf("error marshaling YAML: %w\n", err)
 	}
 
-	err = os.WriteFile("conduit.yaml", yamlData, 0o600)
+	err = os.WriteFile(filepath.Join(i.Args.Path, "conduit.yaml"), yamlData, 0o600)
 	if err != nil {
 		return cerrors.Errorf("error writing conduit.yaml: %w", err)
 	}
