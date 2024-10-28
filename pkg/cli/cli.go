@@ -55,7 +55,7 @@ func (i *Instance) ShouldRun() bool {
 		}
 	}
 
-	if cmd == "--help" || cmd == "-h" {
+	if cmd == "--help" || cmd == "-h" || cmd == "help" {
 		return true
 	}
 

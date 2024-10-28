@@ -214,12 +214,6 @@ func (e *Entrypoint) ParseConfig(flags *flag.FlagSet) {
 	if err != nil {
 		e.exitWithError(err)
 	}
-	// Check the arguments that weren't parsed
-	if len(flags.Args()) > 0 {
-		_, _ = fmt.Fprintf(os.Stderr, "Unknown flag(s): %v\n", flags.Args())
-		flags.Usage()
-		os.Exit(exitCodeErr)
-	}
 
 	// check if the -version flag is set
 	if *version {
