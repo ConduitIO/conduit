@@ -34,8 +34,6 @@ type Instance struct {
 }
 
 // New creates a new CLI Instance.
-// conduitCfgFlags is the list of flags the Conduit server accepts
-// (needed so we can print the usage and initialize the Conduit configuration file).
 func New() *Instance {
 	conduitCfgFlags := (&conduit.Entrypoint{}).Flags(&conduitCfg)
 	return &Instance{
@@ -79,7 +77,7 @@ func buildInitCmd(conduitCfgFlags *flag.FlagSet) *cobra.Command {
 	}
 	initCmd.Flags().StringVar(
 		&initArgs.Path,
-		"",
+		"path",
 		"",
 		"path where Conduit will be initialized",
 	)
