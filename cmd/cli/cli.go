@@ -52,6 +52,7 @@ func buildRootCmd(flags *flag.FlagSet, version string) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "conduit",
 		Short:   "Conduit CLI",
+		Long:    "Conduit CLI is a command-line that helps you interact with and manage Conduit.",
 		Version: version,
 		Run: func(cmd *cobra.Command, args []string) {
 			(&conduit.Entrypoint{}).Serve(conduitCfg)
@@ -61,6 +62,11 @@ func buildRootCmd(flags *flag.FlagSet, version string) *cobra.Command {
 	flags.VisitAll(cmd.Flags().AddGoFlag)
 
 	cmd.AddCommand(buildInitCmd(flags))
+
+	cmd.AddGroup(&cobra.Group{
+		ID:    "pipelines",
+		Title: "Pipelines",
+	})
 	cmd.AddCommand(buildPipelinesCmd())
 
 	return cmd
@@ -87,9 +93,10 @@ func buildInitCmd(conduitCfgFlags *flag.FlagSet) *cobra.Command {
 
 func buildPipelinesCmd() *cobra.Command {
 	pipelinesCmd := &cobra.Command{
-		Use:   "pipelines",
-		Short: "Manage pipelines",
-		Args:  cobra.NoArgs,
+		Use:     "pipelines",
+		Short:   "Initialize and manage pipelines",
+		Args:    cobra.NoArgs,
+		GroupID: "pipelines",
 	}
 
 	pipelinesCmd.AddCommand(buildPipelinesInitCmd())
@@ -105,7 +112,7 @@ func buildPipelinesInitCmd() *cobra.Command {
 initialized and described. The source and destination connector can be chosen via flags. If no connectors are chosen, then
 a simple and runnable generator-to-log pipeline is configured.`,
 		Args:    cobra.MaximumNArgs(1),
-		Example: "  conduit pipelines init my-pipeline-name --source postgres --destination kafka --path pipelines/pg-to-kafka.yaml",
+		Example: "  conduit pipelines init awesome-pipeline-name --source postgres --destination kafka --path pipelines/pg-to-kafka.yaml",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) > 0 {
 				pipelinesInitArgs.Name = args[0]
