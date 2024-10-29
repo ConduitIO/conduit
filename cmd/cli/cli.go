@@ -61,8 +61,10 @@ func buildRootCmd(flags *flag.FlagSet, version string) *cobra.Command {
 	cmd.CompletionOptions.DisableDefaultCmd = true
 	flags.VisitAll(cmd.Flags().AddGoFlag)
 
+	// init
 	cmd.AddCommand(buildInitCmd(flags))
 
+	// pipelines
 	cmd.AddGroup(&cobra.Group{
 		ID:    "pipelines",
 		Title: "Pipelines",

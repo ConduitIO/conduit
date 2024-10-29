@@ -152,7 +152,7 @@ type PipelinesInitArgs struct {
 }
 
 type PipelinesInit struct {
-	Args PipelinesInitArgs
+	args PipelinesInitArgs
 }
 
 func NewPipelinesInit(args PipelinesInitArgs) *PipelinesInit {
@@ -164,14 +164,14 @@ func NewPipelinesInit(args PipelinesInitArgs) *PipelinesInit {
 		args.Path = "./pipelines/generator-to-log.yaml"
 	}
 
-	return &PipelinesInit{Args: args}
+	return &PipelinesInit{args: args}
 }
 
 func (pi *PipelinesInit) Run() error {
 	var pipeline pipelineTemplate
 	// if no source/destination arguments are provided,
 	// we build a runnable example pipeline
-	if pi.Args.Source == "" && pi.Args.Destination == "" {
+	if pi.args.Source == "" && pi.args.Destination == "" {
 		pipeline = pi.buildDemoPipeline()
 	} else {
 		p, err := pi.buildTemplatePipeline()
@@ -190,8 +190,8 @@ func (pi *PipelinesInit) Run() error {
 
 func (pi *PipelinesInit) buildTemplatePipeline() (pipelineTemplate, error) {
 	src := "generator"
-	if pi.Args.Source != "" {
-		src = pi.Args.Source
+	if pi.args.Source != "" {
+		src = pi.args.Source
 	}
 	srcParams, err := pi.getSourceParams(src)
 	if err != nil {
@@ -199,8 +199,8 @@ func (pi *PipelinesInit) buildTemplatePipeline() (pipelineTemplate, error) {
 	}
 
 	dst := "log"
-	if pi.Args.Destination != "" {
-		dst = pi.Args.Destination
+	if pi.args.Destination != "" {
+		dst = pi.args.Destination
 	}
 	dstParams, err := pi.getDestinationParams(dst)
 	if err != nil {
@@ -208,7 +208,7 @@ func (pi *PipelinesInit) buildTemplatePipeline() (pipelineTemplate, error) {
 	}
 
 	return pipelineTemplate{
-		Name:            pi.Args.Name,
+		Name:            pi.args.Name,
 		SourceSpec:      srcParams,
 		DestinationSpec: dstParams,
 	}, nil
@@ -217,7 +217,7 @@ func (pi *PipelinesInit) buildTemplatePipeline() (pipelineTemplate, error) {
 func (pi *PipelinesInit) buildDemoPipeline() pipelineTemplate {
 	srcParams, _ := pi.getSourceParams("generator")
 	return pipelineTemplate{
-		Name: pi.Args.Name,
+		Name: pi.args.Name,
 		SourceSpec: connectorTemplate{
 			Name: "generator",
 			Params: map[string]config.Parameter{
@@ -251,13 +251,13 @@ func (pi *PipelinesInit) buildDemoPipeline() pipelineTemplate {
 }
 
 func (pi *PipelinesInit) getOutput() *os.File {
-	if pi.Args.Path == "" {
+	if pi.args.Path == "" {
 		return os.Stdout
 	}
 
-	output, err := os.OpenFile(pi.Args.Path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	output, err := os.OpenFile(pi.args.Path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
-		log.Fatalf("error: failed to open %s: %v", pi.Args.Path, err)
+		log.Fatalf("error: failed to open %s: %v", pi.args.Path, err)
 	}
 
 	return output

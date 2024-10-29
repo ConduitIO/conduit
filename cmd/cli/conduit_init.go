@@ -19,8 +19,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/conduitio/conduit/cmd/cli/internal"
+	"github.com/conduitio/conduit/pkg/conduit"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/yaml/v3"
 )
@@ -30,8 +32,8 @@ type InitArgs struct {
 }
 
 type ConduitInit struct {
-	Args            InitArgs
-	ConduitCfgFlags *flag.FlagSet
+	args            InitArgs
+	conduitCfgFlags *flag.FlagSet
 }
 
 func NewConduitInit(args InitArgs, conduitCfgFlags *flag.FlagSet) *ConduitInit {
@@ -39,7 +41,7 @@ func NewConduitInit(args InitArgs, conduitCfgFlags *flag.FlagSet) *ConduitInit {
 	if args.Path == "" {
 		args.Path = "."
 	}
-	return &ConduitInit{Args: args, ConduitCfgFlags: conduitCfgFlags}
+	return &ConduitInit{args: args, conduitCfgFlags: conduitCfgFlags}
 }
 
 func (i *ConduitInit) Run() error {
@@ -53,15 +55,21 @@ func (i *ConduitInit) Run() error {
 		return fmt.Errorf("failed to create config YAML: %w", err)
 	}
 
-	fmt.Println("Conduit has been initialized!")
-	fmt.Println("To quickly create an example pipeline, run `conduit pipelines init`.")
-	fmt.Println("To see how you can customize your first pipeline, run `conduit pipelines init --help`.")
+	fmt.Println(`
+Conduit has been initialized!
+
+To quickly create an example pipeline, run 'conduit pipelines init'.
+To see how you can customize your first pipeline, run 'conduit pipelines init --help'.`)
+
 	return nil
 }
 
 func (i *ConduitInit) createConfigYAML() error {
 	cfgYAML := internal.NewYAMLTree()
-	i.ConduitCfgFlags.VisitAll(func(f *flag.Flag) {
+	i.conduitCfgFlags.VisitAll(func(f *flag.Flag) {
+		if f.Name == "dev" || strings.HasPrefix(f.Name, "dev.") || conduit.DeprecatedFlags[f.Name] {
+			return // hide flag from output
+		}
 		cfgYAML.Insert(f.Name, f.DefValue, f.Usage)
 	})
 
@@ -70,7 +78,7 @@ func (i *ConduitInit) createConfigYAML() error {
 		return cerrors.Errorf("error marshaling YAML: %w\n", err)
 	}
 
-	path := filepath.Join(i.Args.Path, "conduit.yaml")
+	path := filepath.Join(i.args.Path, "conduit.yaml")
 	err = os.WriteFile(path, yamlData, 0o600)
 	if err != nil {
 		return cerrors.Errorf("error writing conduit.yaml: %w", err)
@@ -84,7 +92,7 @@ func (i *ConduitInit) createDirs() error {
 	dirs := []string{"processors", "connectors", "pipelines"}
 
 	for _, dir := range dirs {
-		path := filepath.Join(i.Args.Path, dir)
+		path := filepath.Join(i.args.Path, dir)
 
 		// Attempt to create the directory, skipping if it already exists
 		if err := os.Mkdir(path, os.ModePerm); err != nil {
