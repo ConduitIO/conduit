@@ -3,7 +3,6 @@ pipelines:
   - id: example-pipeline
     status: running
     name: "{{ .Name }}"
-    description: Example pipeline
     connectors:
       - id: example-source
         type: source
@@ -29,4 +28,3 @@ pipelines:
           {{ $name }}: {{ formatParameterValueYAML $param.Default }}
           {{- end }}
         {{- end }}
-

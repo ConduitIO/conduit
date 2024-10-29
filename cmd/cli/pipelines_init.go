@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 	"text/template"
 
@@ -156,14 +157,6 @@ type PipelinesInit struct {
 }
 
 func NewPipelinesInit(args PipelinesInitArgs) *PipelinesInit {
-	// set defaults
-	if args.Name == "" {
-		args.Name = "example-pipeline"
-	}
-	if args.Path == "" {
-		args.Path = "./pipelines/generator-to-log.yaml"
-	}
-
 	return &PipelinesInit{args: args}
 }
 
@@ -189,35 +182,27 @@ func (pi *PipelinesInit) Run() error {
 }
 
 func (pi *PipelinesInit) buildTemplatePipeline() (pipelineTemplate, error) {
-	src := "generator"
-	if pi.args.Source != "" {
-		src = pi.args.Source
-	}
-	srcParams, err := pi.getSourceParams(src)
+	srcParams, err := pi.getSourceParams()
 	if err != nil {
 		return pipelineTemplate{}, cerrors.Errorf("failed getting source params: %w", err)
 	}
 
-	dst := "log"
-	if pi.args.Destination != "" {
-		dst = pi.args.Destination
-	}
-	dstParams, err := pi.getDestinationParams(dst)
+	dstParams, err := pi.getDestinationParams()
 	if err != nil {
 		return pipelineTemplate{}, cerrors.Errorf("failed getting destination params: %w", err)
 	}
 
 	return pipelineTemplate{
-		Name:            pi.args.Name,
+		Name:            pi.pipelineName(),
 		SourceSpec:      srcParams,
 		DestinationSpec: dstParams,
 	}, nil
 }
 
 func (pi *PipelinesInit) buildDemoPipeline() pipelineTemplate {
-	srcParams, _ := pi.getSourceParams("generator")
+	srcParams, _ := pi.getSourceParams()
 	return pipelineTemplate{
-		Name: pi.args.Name,
+		Name: pi.pipelineName(),
 		SourceSpec: connectorTemplate{
 			Name: "generator",
 			Params: map[string]config.Parameter{
@@ -251,11 +236,7 @@ func (pi *PipelinesInit) buildDemoPipeline() pipelineTemplate {
 }
 
 func (pi *PipelinesInit) getOutput() *os.File {
-	if pi.args.Path == "" {
-		return os.Stdout
-	}
-
-	output, err := os.OpenFile(pi.args.Path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	output, err := os.OpenFile(pi.configFilePath(), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
 		log.Fatalf("error: failed to open %s: %v", pi.args.Path, err)
 	}
@@ -280,12 +261,12 @@ func (pi *PipelinesInit) write(pipeline pipelineTemplate) error {
 	return nil
 }
 
-func (pi *PipelinesInit) getSourceParams(pluginName string) (connectorTemplate, error) {
+func (pi *PipelinesInit) getSourceParams() (connectorTemplate, error) {
 	for _, conn := range builtin.DefaultBuiltinConnectors {
 		specs := conn.NewSpecification()
-		if specs.Name == pluginName || specs.Name == "builtin:"+pluginName {
+		if specs.Name == pi.sourceConnector() || specs.Name == "builtin:"+pi.sourceConnector() {
 			if conn.NewSource == nil {
-				return connectorTemplate{}, cerrors.Errorf("plugin %v has no source", pluginName)
+				return connectorTemplate{}, cerrors.Errorf("plugin %v has no source", pi.sourceConnector())
 			}
 
 			return connectorTemplate{
@@ -295,15 +276,15 @@ func (pi *PipelinesInit) getSourceParams(pluginName string) (connectorTemplate, 
 		}
 	}
 
-	return connectorTemplate{}, cerrors.Errorf("%v: %w", pluginName, plugin.ErrPluginNotFound)
+	return connectorTemplate{}, cerrors.Errorf("%v: %w", pi.sourceConnector(), plugin.ErrPluginNotFound)
 }
 
-func (pi *PipelinesInit) getDestinationParams(pluginName string) (connectorTemplate, error) {
+func (pi *PipelinesInit) getDestinationParams() (connectorTemplate, error) {
 	for _, conn := range builtin.DefaultBuiltinConnectors {
 		specs := conn.NewSpecification()
-		if specs.Name == pluginName || specs.Name == "builtin:"+pluginName {
+		if specs.Name == pi.destinationConnector() || specs.Name == "builtin:"+pi.destinationConnector() {
 			if conn.NewDestination == nil {
-				return connectorTemplate{}, cerrors.Errorf("plugin %v has no source", pluginName)
+				return connectorTemplate{}, cerrors.Errorf("plugin %v has no source", pi.destinationConnector())
 			}
 
 			return connectorTemplate{
@@ -313,5 +294,42 @@ func (pi *PipelinesInit) getDestinationParams(pluginName string) (connectorTempl
 		}
 	}
 
-	return connectorTemplate{}, cerrors.Errorf("%v: %w", pluginName, plugin.ErrPluginNotFound)
+	return connectorTemplate{}, cerrors.Errorf("%v: %w", pi.destinationConnector(), plugin.ErrPluginNotFound)
+}
+
+func (pi *PipelinesInit) configFilePath() string {
+	path := pi.args.Path
+	if path == "" {
+		path = "."
+	}
+
+	return filepath.Join(path, pi.configFileName())
+}
+
+func (pi *PipelinesInit) configFileName() string {
+	return fmt.Sprintf("pipeline-%s.yaml", pi.pipelineName())
+}
+
+func (pi *PipelinesInit) sourceConnector() string {
+	if pi.args.Source != "" {
+		return pi.args.Source
+	}
+
+	return "generator"
+}
+
+func (pi *PipelinesInit) destinationConnector() string {
+	if pi.args.Destination != "" {
+		return pi.args.Destination
+	}
+
+	return "log"
+}
+
+func (pi *PipelinesInit) pipelineName() string {
+	if pi.args.Name != "" {
+		return pi.args.Name
+	}
+
+	return fmt.Sprintf("%s-to-%s", pi.sourceConnector(), pi.destinationConnector())
 }
