@@ -20,12 +20,12 @@ import (
 	"github.com/conduitio/yaml/v3"
 )
 
-// YAMLTree represents the complete YAML structure
+// YAMLTree represents a YAML document.
+// It makes it possible to insert value nodes with comments.
 type YAMLTree struct {
 	Root *yaml.Node
 }
 
-// NewYAMLTree creates a new YAML tree
 func NewYAMLTree() *YAMLTree {
 	return &YAMLTree{
 		Root: &yaml.Node{
