@@ -129,7 +129,7 @@ func formatParameterValueYAML(value string) string {
 		formattedValue := formatMultiline(value, "            ", 10000)
 		return fmt.Sprintf("|\n%s", formattedValue)
 	default:
-		return fmt.Sprintf(`"%s"`, value)
+		return fmt.Sprintf(`'%s'`, value)
 	}
 }
 
