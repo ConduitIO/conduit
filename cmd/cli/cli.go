@@ -101,8 +101,9 @@ func buildPipelinesInitCmd() *cobra.Command {
 	pipelinesInitCmd := &cobra.Command{
 		Use:   "init [pipeline-name]",
 		Short: "Initialize an example pipeline.",
-		Long: "Initialize an example pipeline. If a source or destination connector is specified, all of its parameters" +
-			" and their descriptions, types and default values are shown.",
+		Long: `Initialize a pipeline configuration file, with all of parameters for source and destination connectors 
+initialized and described. The source and destination connector can be chosen via flags. If no connectors are chosen, then
+a simple and runnable generator-to-log pipeline is configured.`,
 		Args:    cobra.MaximumNArgs(1),
 		Example: "  conduit pipelines init my-pipeline-name --source postgres --destination kafka --path pipelines/pg-to-kafka.yaml",
 		RunE: func(cmd *cobra.Command, args []string) error {
