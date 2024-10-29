@@ -214,14 +214,15 @@ It requires the pipeline id as argument.
 
 #### Arguments
 
-| Name | Description | Required | Default Value |
-|------|-------------|----------|---------------|
-| id  |  pipeline id to describe | Yes | |
+| Name | Description             | Required | Default Value |
+|------|-------------------------|----------|---------------|
+| id   | pipeline id to describe | Yes      |               |
 
 #### Flags
 
-| Name | Description | Required | Default Value |
-| grpc.address | address for serving the gRPC API | No | ":8084" |
+| Name         | Description                      | Required | Default Value |
+|--------------|----------------------------------|----------|---------------|
+| grpc.address | address for serving the gRPC API | No       | ":8084"       |
 
 #### `--help`
 
@@ -269,15 +270,15 @@ It requires having Conduit previously running.
 
 #### Arguments
 
-| Name | Description | Required | Default Value |
-|------|-------------|----------|---------------|
-| id  |  connector id to describe | Yes | |
+| Name | Description              | Required | Default Value |
+|------|--------------------------|----------|---------------|
+| id   | connector id to describe | Yes      |               |
 
 #### Flags
 
-| Name | Description | Required | Default Value |
-|------|-------------|----------|---------------|
-| grpc.address | address for serving the gRPC API | No | ":8084" |
+| Name         | Description                      | Required | Default Value |
+|--------------|----------------------------------|----------|---------------|
+| grpc.address | address for serving the gRPC API | No       | ":8084"       |
 
 #### `--help`
 
@@ -314,9 +315,9 @@ It does not require having Conduit previously running.
 
 #### Arguments
 
-| Name | Description | Required | Default Value |
-|------|-------------|----------|---------------|
-| PLUGIN  |  connector plugin to describe | Yes | |
+| Name   | Description                  | Required | Default Value |
+|--------|------------------------------|----------|---------------|
+| PLUGIN | connector plugin to describe | Yes      |               |
 
 #### `--help`
 
@@ -338,9 +339,9 @@ It requires having Conduit previously running.
 
 #### Flags
 
-| Name | Description | Required | Default Value |
-|------|-------------|----------|---------------|
-| grpc.address | address for serving the gRPC API | No | ":8084" |
+| Name         | Description                      | Required | Default Value |
+|--------------|----------------------------------|----------|---------------|
+| grpc.address | address for serving the gRPC API | No       | ":8084"       |
 
 #### `--help`
 
@@ -360,9 +361,9 @@ It requires having Conduit previously running.
 
 #### Arguments
 
-| Name | Description | Required | Default Value |
-|------|-------------|----------|---------------|
-| id  |  processor ID | Yes | |
+| Name | Description  | Required | Default Value |
+|------|--------------|----------|---------------|
+| id   | processor ID | Yes      |               |
 
 #### `--help`
 
@@ -400,9 +401,9 @@ It does not require having Conduit previously running.
 
 #### Arguments
 
-| Name | Description | Required | Default Value |
-|------|-------------|----------|---------------|
-| plugin  |  processor plugin name | Yes | |
+| Name   | Description           | Required | Default Value |
+|--------|-----------------------|----------|---------------|
+| plugin | processor plugin name | Yes      |               |
 
 #### `--help`
 
@@ -435,8 +436,8 @@ conduit version
 
 #### Global flags
 
-| Name | Description | Required | Default Value |
-|------|-------------|----------|---------------|
-| config.path | path to the Conduit working environment | No | `.` |
-| json | output json | No |  |
-| version | prints current Conduit version (alias to `conduit version`) | No |  |
+| Name        | Description                                                 | Required | Default Value |
+|-------------|-------------------------------------------------------------|----------|---------------|
+| config.path | path to the Conduit working environment                     | No       | `.`           |
+| json        | output json                                                 | No       |               |
+| version     | prints current Conduit version (alias to `conduit version`) | No       |               |
