@@ -169,17 +169,16 @@ func NewPipelinesInit(args PipelinesInitArgs) *PipelinesInit {
 
 func (pi *PipelinesInit) Run() error {
 	var pipeline pipelineTemplate
-	switch {
-	case pi.Args.Source == "" && pi.Args.Destination == "":
+	// if no source/destination arguments are provided,
+	// we build a runnable example pipeline
+	if pi.Args.Source == "" && pi.Args.Destination == "" {
 		pipeline = pi.buildDemoPipeline()
-	case pi.Args.Source != "" && pi.Args.Destination != "":
+	} else {
 		p, err := pi.buildTemplatePipeline()
 		if err != nil {
 			return err
 		}
 		pipeline = p
-	default:
-		return cerrors.Errorf("only one of --source, --destination was provided")
 	}
 
 	err := pi.write(pipeline)
@@ -190,20 +189,28 @@ func (pi *PipelinesInit) Run() error {
 }
 
 func (pi *PipelinesInit) buildTemplatePipeline() (pipelineTemplate, error) {
-	source, err := pi.getSourceParams(pi.Args.Source)
+	src := "generator"
+	if pi.Args.Source != "" {
+		src = pi.Args.Source
+	}
+	srcParams, err := pi.getSourceParams(src)
 	if err != nil {
 		return pipelineTemplate{}, cerrors.Errorf("failed getting source params: %w", err)
 	}
 
-	destination, err := pi.getDestinationParams(pi.Args.Destination)
+	dst := "log"
+	if pi.Args.Destination != "" {
+		dst = pi.Args.Destination
+	}
+	dstParams, err := pi.getDestinationParams(dst)
 	if err != nil {
 		return pipelineTemplate{}, cerrors.Errorf("failed getting destination params: %w", err)
 	}
 
 	return pipelineTemplate{
 		Name:            pi.Args.Name,
-		SourceSpec:      source,
-		DestinationSpec: destination,
+		SourceSpec:      srcParams,
+		DestinationSpec: dstParams,
 	}, nil
 }
 

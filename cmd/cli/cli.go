@@ -79,7 +79,7 @@ func buildInitCmd(conduitCfgFlags *flag.FlagSet) *cobra.Command {
 	}
 	initCmd.Flags().StringVar(
 		&initArgs.Path,
-		"path",
+		"",
 		"",
 		"path where Conduit will be initialized",
 	)
@@ -130,7 +130,7 @@ func buildPipelinesInitCmd() *cobra.Command {
 	)
 	pipelinesInitCmd.Flags().StringVar(
 		&pipelinesInitArgs.Path,
-		"path",
+		"pipelines.path",
 		"",
 		"Path where the pipeline will be saved. If no path is specified, prints to stdout.",
 	)
