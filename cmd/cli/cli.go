@@ -85,7 +85,7 @@ func buildInitCmd(conduitCfgFlags *flag.FlagSet) *cobra.Command {
 	}
 	initCmd.Flags().StringVar(
 		&initArgs.Path,
-		"path",
+		"config.path",
 		"",
 		"path where Conduit will be initialized",
 	)
