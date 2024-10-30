@@ -139,8 +139,8 @@ a simple and runnable generator-to-log pipeline is configured.`,
 	pipelinesInitCmd.Flags().StringVar(
 		&pipelinesInitArgs.Path,
 		"pipelines.path",
-		"",
-		"Path where the pipeline will be saved. If no path is specified, prints to stdout.",
+		"./pipelines",
+		"Path where the pipeline will be saved.",
 	)
 
 	return pipelinesInitCmd

@@ -300,7 +300,7 @@ func (pi *PipelinesInit) getDestinationParams() (connectorTemplate, error) {
 func (pi *PipelinesInit) configFilePath() string {
 	path := pi.args.Path
 	if path == "" {
-		path = "."
+		path = "./pipelines"
 	}
 
 	return filepath.Join(path, pi.configFileName())
