@@ -56,7 +56,7 @@ type Entrypoint struct{}
 //   - environment variables
 //   - config file (lowest priority)
 func (e *Entrypoint) Serve(cfg Config) {
-	flags := e.Flags(&cfg)
+	flags := Flags(&cfg)
 	e.ParseConfig(flags)
 
 	if cfg.Log.Format == "cli" {
@@ -78,7 +78,7 @@ func (e *Entrypoint) Serve(cfg Config) {
 
 // Flags returns a flag set that, when parsed, stores the values in the provided
 // config struct.
-func (*Entrypoint) Flags(cfg *Config) *flag.FlagSet {
+func Flags(cfg *Config) *flag.FlagSet {
 	// TODO extract flags from config struct rather than defining flags manually
 	flags := flag.NewFlagSet("conduit", flag.ExitOnError)
 

@@ -32,16 +32,11 @@ type InitArgs struct {
 }
 
 type ConduitInit struct {
-	args            InitArgs
-	conduitCfgFlags *flag.FlagSet
+	args InitArgs
 }
 
-func NewConduitInit(args InitArgs, conduitCfgFlags *flag.FlagSet) *ConduitInit {
-	// set defaults
-	if args.Path == "" {
-		args.Path = "."
-	}
-	return &ConduitInit{args: args, conduitCfgFlags: conduitCfgFlags}
+func NewConduitInit(args InitArgs) *ConduitInit {
+	return &ConduitInit{args: args}
 }
 
 func (i *ConduitInit) Run() error {
@@ -66,8 +61,8 @@ To see how you can customize your first pipeline, run 'conduit pipelines init --
 
 func (i *ConduitInit) createConfigYAML() error {
 	cfgYAML := internal.NewYAMLTree()
-	i.conduitCfgFlags.VisitAll(func(f *flag.Flag) {
-		if f.Name == "dev" || strings.HasPrefix(f.Name, "dev.") || conduit.DeprecatedFlags[f.Name] {
+	i.conduitCfgFlags().VisitAll(func(f *flag.Flag) {
+		if i.isHiddenFlag(f.Name) {
 			return // hide flag from output
 		}
 		cfgYAML.Insert(f.Name, f.DefValue, f.Usage)
@@ -78,7 +73,7 @@ func (i *ConduitInit) createConfigYAML() error {
 		return cerrors.Errorf("error marshaling YAML: %w\n", err)
 	}
 
-	path := filepath.Join(i.args.Path, "conduit.yaml")
+	path := filepath.Join(i.path(), "conduit.yaml")
 	err = os.WriteFile(path, yamlData, 0o600)
 	if err != nil {
 		return cerrors.Errorf("error writing conduit.yaml: %w", err)
@@ -92,7 +87,7 @@ func (i *ConduitInit) createDirs() error {
 	dirs := []string{"processors", "connectors", "pipelines"}
 
 	for _, dir := range dirs {
-		path := filepath.Join(i.args.Path, dir)
+		path := filepath.Join(i.path(), dir)
 
 		// Attempt to create the directory, skipping if it already exists
 		if err := os.Mkdir(path, os.ModePerm); err != nil {
@@ -107,4 +102,28 @@ func (i *ConduitInit) createDirs() error {
 	}
 
 	return nil
+}
+
+func (i *ConduitInit) isHiddenFlag(name string) bool {
+	return name == "dev" ||
+		strings.HasPrefix(name, "dev.") ||
+		conduit.DeprecatedFlags[name]
+}
+
+func (i *ConduitInit) conduitCfgFlags() *flag.FlagSet {
+	cfg := conduit.DefaultConfigWithBasePath(i.path())
+	return conduit.Flags(&cfg)
+}
+
+func (i *ConduitInit) path() string {
+	if i.args.Path != "" {
+		return i.args.Path
+	}
+
+	path, err := os.Getwd()
+	if err != nil {
+		panic(cerrors.Errorf("failed to get current working directory: %w", err))
+	}
+
+	return path
 }

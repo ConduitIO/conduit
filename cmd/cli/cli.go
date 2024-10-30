@@ -15,7 +15,6 @@
 package cli
 
 import (
-	"flag"
 	"fmt"
 	"os"
 
@@ -24,7 +23,6 @@ import (
 )
 
 var (
-	conduitCfg        = conduit.DefaultConfig()
 	initArgs          InitArgs
 	pipelinesInitArgs PipelinesInitArgs
 )
@@ -35,9 +33,8 @@ type Instance struct {
 
 // New creates a new CLI Instance.
 func New() *Instance {
-	conduitCfgFlags := (&conduit.Entrypoint{}).Flags(&conduitCfg)
 	return &Instance{
-		rootCmd: buildRootCmd(conduitCfgFlags, conduit.Version(true)),
+		rootCmd: buildRootCmd(),
 	}
 }
 
@@ -48,21 +45,24 @@ func (i *Instance) Run() {
 	}
 }
 
-func buildRootCmd(flags *flag.FlagSet, version string) *cobra.Command {
+func buildRootCmd() *cobra.Command {
+	cfg := conduit.DefaultConfig()
+
 	cmd := &cobra.Command{
 		Use:     "conduit",
 		Short:   "Conduit CLI",
 		Long:    "Conduit CLI is a command-line that helps you interact with and manage Conduit.",
-		Version: version,
+		Version: conduit.Version(true),
 		Run: func(cmd *cobra.Command, args []string) {
-			(&conduit.Entrypoint{}).Serve(conduitCfg)
+			e := &conduit.Entrypoint{}
+			e.Serve(cfg)
 		},
 	}
 	cmd.CompletionOptions.DisableDefaultCmd = true
-	flags.VisitAll(cmd.Flags().AddGoFlag)
+	conduit.Flags(&cfg).VisitAll(cmd.Flags().AddGoFlag)
 
 	// init
-	cmd.AddCommand(buildInitCmd(flags))
+	cmd.AddCommand(buildInitCmd())
 
 	// pipelines
 	cmd.AddGroup(&cobra.Group{
@@ -74,13 +74,13 @@ func buildRootCmd(flags *flag.FlagSet, version string) *cobra.Command {
 	return cmd
 }
 
-func buildInitCmd(conduitCfgFlags *flag.FlagSet) *cobra.Command {
+func buildInitCmd() *cobra.Command {
 	initCmd := &cobra.Command{
 		Use:   "init",
 		Short: "Initialize Conduit with a configuration file and directories.",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return NewConduitInit(initArgs, conduitCfgFlags).Run()
+			return NewConduitInit(initArgs).Run()
 		},
 	}
 	initCmd.Flags().StringVar(
