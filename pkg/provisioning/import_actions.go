@@ -316,7 +316,7 @@ func (a updateConnectorAction) Rollback(ctx context.Context) error {
 }
 
 func (a updateConnectorAction) update(ctx context.Context, cfg config.Connector) error {
-	c, err := a.connectorService.Update(ctx, cfg.ID, connector.Config{
+	c, err := a.connectorService.Update(ctx, cfg.ID, cfg.Plugin, connector.Config{
 		Name:     cfg.Name,
 		Settings: cfg.Settings,
 	})

@@ -821,6 +821,7 @@ message GetConnectorResponse {
 message UpdateConnectorRequest {
   string id = 1;
   Connector.Config config = 2;
+  string plugin = 3;
 }
 message UpdateConnectorResponse {
   Connector connector = 1;

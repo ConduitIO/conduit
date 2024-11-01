@@ -652,18 +652,18 @@ func (c *ConnectorServiceRemoveProcessorCall) DoAndReturn(f func(context.Context
 }
 
 // Update mocks base method.
-func (m *ConnectorService) Update(ctx context.Context, id string, c connector.Config) (*connector.Instance, error) {
+func (m *ConnectorService) Update(ctx context.Context, id, plugin string, c connector.Config) (*connector.Instance, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Update", ctx, id, c)
+	ret := m.ctrl.Call(m, "Update", ctx, id, plugin, c)
 	ret0, _ := ret[0].(*connector.Instance)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Update indicates an expected call of Update.
-func (mr *ConnectorServiceMockRecorder) Update(ctx, id, c any) *ConnectorServiceUpdateCall {
+func (mr *ConnectorServiceMockRecorder) Update(ctx, id, plugin, c any) *ConnectorServiceUpdateCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Update", reflect.TypeOf((*ConnectorService)(nil).Update), ctx, id, c)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Update", reflect.TypeOf((*ConnectorService)(nil).Update), ctx, id, plugin, c)
 	return &ConnectorServiceUpdateCall{Call: call}
 }
 
@@ -679,13 +679,13 @@ func (c_2 *ConnectorServiceUpdateCall) Return(arg0 *connector.Instance, arg1 err
 }
 
 // Do rewrite *gomock.Call.Do
-func (c_2 *ConnectorServiceUpdateCall) Do(f func(context.Context, string, connector.Config) (*connector.Instance, error)) *ConnectorServiceUpdateCall {
+func (c_2 *ConnectorServiceUpdateCall) Do(f func(context.Context, string, string, connector.Config) (*connector.Instance, error)) *ConnectorServiceUpdateCall {
 	c_2.Call = c_2.Call.Do(f)
 	return c_2
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c_2 *ConnectorServiceUpdateCall) DoAndReturn(f func(context.Context, string, connector.Config) (*connector.Instance, error)) *ConnectorServiceUpdateCall {
+func (c_2 *ConnectorServiceUpdateCall) DoAndReturn(f func(context.Context, string, string, connector.Config) (*connector.Instance, error)) *ConnectorServiceUpdateCall {
 	c_2.Call = c_2.Call.DoAndReturn(f)
 	return c_2
 }

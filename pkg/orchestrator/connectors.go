@@ -151,7 +151,7 @@ func (c *ConnectorOrchestrator) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-func (c *ConnectorOrchestrator) Update(ctx context.Context, id string, config connector.Config) (*connector.Instance, error) {
+func (c *ConnectorOrchestrator) Update(ctx context.Context, id string, plugin string, config connector.Config) (*connector.Instance, error) {
 	var r rollback.R
 	defer r.MustExecute()
 	txn, ctx, err := c.db.NewTransaction(ctx, true)
@@ -181,12 +181,12 @@ func (c *ConnectorOrchestrator) Update(ctx context.Context, id string, config co
 	}
 
 	oldConfig := conn.Config
-	conn, err = c.connectors.Update(ctx, id, config)
+	conn, err = c.connectors.Update(ctx, id, plugin, config)
 	if err != nil {
 		return nil, err
 	}
 	r.Append(func() error {
-		_, err = c.connectors.Update(ctx, id, oldConfig)
+		_, err = c.connectors.Update(ctx, id, conn.Plugin, oldConfig)
 		return err
 	})
 	err = txn.Commit()

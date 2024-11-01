@@ -39,7 +39,7 @@ type ConnectorOrchestrator interface {
 	List(ctx context.Context) map[string]*connector.Instance
 	Get(ctx context.Context, id string) (*connector.Instance, error)
 	Delete(ctx context.Context, id string) error
-	Update(ctx context.Context, id string, config connector.Config) (*connector.Instance, error)
+	Update(ctx context.Context, id string, plugin string, config connector.Config) (*connector.Instance, error)
 	Validate(ctx context.Context, t connector.Type, plugin string, config connector.Config) error
 	Inspect(ctx context.Context, id string) (*inspector.Session, error)
 }
@@ -163,7 +163,7 @@ func (c *ConnectorAPIv1) UpdateConnector(
 		return nil, cerrors.ErrEmptyID
 	}
 
-	updated, err := c.connectorOrchestrator.Update(ctx, req.Id, fromproto.ConnectorConfig(req.Config))
+	updated, err := c.connectorOrchestrator.Update(ctx, req.Id, req.Plugin, fromproto.ConnectorConfig(req.Config))
 	if err != nil {
 		return nil, status.ConnectorError(cerrors.Errorf("failed to update connector: %w", err))
 	}

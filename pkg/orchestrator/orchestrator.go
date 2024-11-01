@@ -97,7 +97,7 @@ type ConnectorService interface {
 	Get(ctx context.Context, id string) (*connector.Instance, error)
 	Create(ctx context.Context, id string, t connector.Type, plugin string, pipelineID string, c connector.Config, p connector.ProvisionType) (*connector.Instance, error)
 	Delete(ctx context.Context, id string, dispenserFetcher connector.PluginDispenserFetcher) error
-	Update(ctx context.Context, id string, c connector.Config) (*connector.Instance, error)
+	Update(ctx context.Context, id string, plugin string, c connector.Config) (*connector.Instance, error)
 
 	AddProcessor(ctx context.Context, connectorID string, processorID string) (*connector.Instance, error)
 	RemoveProcessor(ctx context.Context, connectorID string, processorID string) (*connector.Instance, error)
