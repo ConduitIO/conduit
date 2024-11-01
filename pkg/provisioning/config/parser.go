@@ -63,9 +63,6 @@ var (
 
 	ConnectorImmutableFields = []string{"Type"}
 	ConnectorMutableFields   = []string{"Name", "Settings", "Processors", "Plugin"}
-
-	ProcessorImmutableFields = []string{"Plugin"}
-	ProcessorMutableFields   = []string{"Settings", "Workers", "Condition"}
 )
 
 // Parser reads data from reader and parses all pipelines defined in the

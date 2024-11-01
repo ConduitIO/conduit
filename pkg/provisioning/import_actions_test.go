@@ -18,6 +18,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/conduitio/conduit-commons/lang"
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	"github.com/conduitio/conduit/pkg/processor"
@@ -42,8 +43,8 @@ func TestCreatePipelineAction_Do(t *testing.T) {
 		DLQ: config.DLQ{
 			Plugin:              "dlq-plugin",
 			Settings:            map[string]string{"foo": "bar"},
-			WindowSize:          intPtr(1),
-			WindowNackThreshold: intPtr(2),
+			WindowSize:          lang.Ptr(1),
+			WindowNackThreshold: lang.Ptr(2),
 		},
 	}
 	wantCfg := pipeline.Config{
@@ -87,8 +88,8 @@ func TestCreatePipelineAction_Rollback(t *testing.T) {
 		DLQ: config.DLQ{
 			Plugin:              "dlq-plugin",
 			Settings:            map[string]string{"foo": "bar"},
-			WindowSize:          intPtr(1),
-			WindowNackThreshold: intPtr(2),
+			WindowSize:          lang.Ptr(1),
+			WindowNackThreshold: lang.Ptr(2),
 		},
 	}
 
@@ -113,8 +114,8 @@ func TestUpdatePipelineAction(t *testing.T) {
 		DLQ: config.DLQ{
 			Plugin:              "dlq-plugin",
 			Settings:            map[string]string{"foo": "bar"},
-			WindowSize:          intPtr(1),
-			WindowNackThreshold: intPtr(2),
+			WindowSize:          lang.Ptr(1),
+			WindowNackThreshold: lang.Ptr(2),
 		},
 	}
 
@@ -198,8 +199,8 @@ func TestDeletePipelineAction_Do(t *testing.T) {
 		DLQ: config.DLQ{
 			Plugin:              "dlq-plugin",
 			Settings:            map[string]string{"foo": "bar"},
-			WindowSize:          intPtr(1),
-			WindowNackThreshold: intPtr(2),
+			WindowSize:          lang.Ptr(1),
+			WindowNackThreshold: lang.Ptr(2),
 		},
 	}
 
@@ -228,8 +229,8 @@ func TestDeletePipelineAction_Rollback(t *testing.T) {
 		DLQ: config.DLQ{
 			Plugin:              "dlq-plugin",
 			Settings:            map[string]string{"foo": "bar"},
-			WindowSize:          intPtr(1),
-			WindowNackThreshold: intPtr(2),
+			WindowSize:          lang.Ptr(1),
+			WindowNackThreshold: lang.Ptr(2),
 		},
 	}
 	wantCfg := pipeline.Config{
