@@ -260,17 +260,10 @@ func TestActionBuilder_Build(t *testing.T) {
 			newConfig:       newConfig,
 			pipelineService: pipSrv,
 		},
-		deleteConnectorAction{
-			cfg:                    oldConfig.Connectors[1],
-			pipelineID:             oldConfig.ID,
-			connectorService:       connSrv,
-			connectorPluginService: connPlugSrv,
-		},
-		createConnectorAction{
-			cfg:                    newConfig.Connectors[1],
-			pipelineID:             newConfig.ID,
-			connectorService:       connSrv,
-			connectorPluginService: connPlugSrv,
+		updateConnectorAction{
+			oldConfig:        oldConfig.Connectors[1],
+			newConfig:        newConfig.Connectors[1],
+			connectorService: connSrv,
 		},
 		updateConnectorAction{
 			oldConfig:        oldConfig.Connectors[2],
@@ -638,10 +631,6 @@ func TestActionsBuilder_PrepareConnectorActions_Recreate(t *testing.T) {
 		name:      "different Type",
 		oldConfig: config.Connector{ID: "config-id", Type: config.TypeSource},
 		newConfig: config.Connector{ID: "config-id", Type: config.TypeDestination},
-	}, {
-		name:      "different Plugin",
-		oldConfig: config.Connector{ID: "config-id", Plugin: "old-plugin"},
-		newConfig: config.Connector{ID: "config-id", Plugin: "new-plugin"},
 	}}
 
 	for _, tc := range testCases {

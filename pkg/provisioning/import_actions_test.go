@@ -381,7 +381,7 @@ func TestUpdateConnectorAction(t *testing.T) {
 			}
 
 			connSrv := mock.NewConnectorService(ctrl)
-			connSrv.EXPECT().Update(ctx, haveCfg.ID, wantCfg).Return(instance, nil)
+			connSrv.EXPECT().Update(ctx, haveCfg.ID, haveCfg.Plugin, wantCfg).Return(instance, nil)
 			connSrv.EXPECT().RemoveProcessor(ctx, haveCfg.ID, instance.ProcessorIDs[0])
 			connSrv.EXPECT().RemoveProcessor(ctx, haveCfg.ID, instance.ProcessorIDs[1])
 			connSrv.EXPECT().AddProcessor(ctx, haveCfg.ID, haveCfg.Processors[0].ID)
