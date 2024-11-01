@@ -596,6 +596,10 @@ func TestActionsBuilder_PrepareConnectorActions_Update(t *testing.T) {
 		oldConfig: config.Connector{ID: "config-id", Name: "old-name"},
 		newConfig: config.Connector{ID: "config-id", Name: "new-name"},
 	}, {
+		name:      "different Plugin",
+		oldConfig: config.Connector{ID: "config-id", Plugin: "old-plugin"},
+		newConfig: config.Connector{ID: "config-id", Plugin: "new-plugin"},
+	}, {
 		name:      "different Settings",
 		oldConfig: config.Connector{ID: "config-id", Settings: map[string]string{"foo": "bar"}},
 		newConfig: config.Connector{ID: "config-id", Settings: map[string]string{"foo": "baz"}},
