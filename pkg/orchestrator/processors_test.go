@@ -375,11 +375,11 @@ func TestProcessorOrchestrator_UpdateOnPipeline_Success(t *testing.T) {
 		Get(gomock.AssignableToTypeOf(ctxType), pl.ID).
 		Return(pl, nil)
 	procsMock.EXPECT().
-		Update(gomock.AssignableToTypeOf(ctxType), want.ID, want.Config).
+		Update(gomock.AssignableToTypeOf(ctxType), want.ID, want.Plugin, want.Config).
 		Return(want, nil)
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, connPluginMock, procPluginMock, lifecycleMock)
-	got, err := orc.Processors.Update(ctx, before.ID, newConfig)
+	got, err := orc.Processors.Update(ctx, before.ID, before.Plugin, newConfig)
 	is.NoErr(err)
 	is.Equal(want, got)
 }
@@ -417,7 +417,7 @@ func TestProcessorOrchestrator_UpdateOnPipeline_ProcessorNotExist(t *testing.T) 
 		Return(nil, wantErr)
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, connPluginMock, procPluginMock, lifecycleMock)
-	got, err := orc.Processors.Update(ctx, before.ID, newConfig)
+	got, err := orc.Processors.Update(ctx, before.ID, before.Plugin, newConfig)
 	is.True(err != nil)
 	is.True(cerrors.Is(err, wantErr)) // errors did not match")
 	is.True(got == nil)
@@ -458,7 +458,7 @@ func TestProcessorOrchestrator_UpdateOnPipeline_PipelineRunning(t *testing.T) {
 		Return(pl, nil)
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, connPluginMock, procPluginMock, lifecycleMock)
-	got, err := orc.Processors.Update(ctx, before.ID, newConfig)
+	got, err := orc.Processors.Update(ctx, before.ID, before.Plugin, newConfig)
 	is.True(err != nil)
 	is.Equal(pipeline.ErrPipelineRunning, err)
 	is.True(got == nil)
@@ -498,7 +498,7 @@ func TestProcessorOrchestrator_UpdateOnPipeline_ProcessorProvisionedByConfig(t *
 		Return(before, nil)
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, connPluginMock, procPluginMock, lifecycleMock)
-	got, err := orc.Processors.Update(ctx, before.ID, newConfig)
+	got, err := orc.Processors.Update(ctx, before.ID, before.Plugin, newConfig)
 	is.Equal(got, nil)
 	is.True(err != nil)
 	is.True(cerrors.Is(err, ErrImmutableProvisionedByConfig)) // expected ErrImmutableProvisionedByConfig
@@ -550,11 +550,11 @@ func TestProcessorOrchestrator_UpdateOnPipeline_UpdateFail(t *testing.T) {
 		Get(gomock.AssignableToTypeOf(ctxType), pl.ID).
 		Return(pl, nil)
 	procsMock.EXPECT().
-		Update(gomock.AssignableToTypeOf(ctxType), want.ID, want.Config).
+		Update(gomock.AssignableToTypeOf(ctxType), want.ID, want.Plugin, want.Config).
 		Return(nil, wantErr)
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, connPluginMock, procPluginMock, lifecycleMock)
-	got, err := orc.Processors.Update(ctx, before.ID, newConfig)
+	got, err := orc.Processors.Update(ctx, before.ID, before.Plugin, newConfig)
 	is.True(err != nil)
 	is.Equal(wantErr, err)
 	is.True(got == nil)
@@ -586,7 +586,7 @@ func TestProcessorOrchestrator_UpdateOnConnector_ConnectorNotExist(t *testing.T)
 		Return(nil, wantErr)
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, connPluginMock, procPluginMock, lifecycleMock)
-	got, err := orc.Processors.Update(ctx, want.ID, processor.Config{})
+	got, err := orc.Processors.Update(ctx, want.ID, want.Plugin, processor.Config{})
 	is.True(err != nil)
 	is.True(cerrors.Is(err, wantErr)) // errors did not match
 	is.True(got == nil)

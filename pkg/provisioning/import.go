@@ -290,7 +290,7 @@ func (ab actionsBuilder) prepareConnectorActions(oldConfig, newConfig config.Con
 
 func (ab actionsBuilder) prepareProcessorActions(oldConfig, newConfig config.Processor, parent processor.Parent) []action {
 	if oldConfig.ID == "" {
-		// no old config, it's a brand new processor
+		// no old config, it's a brand-new processor
 		return []action{createProcessorAction{
 			cfg:              newConfig,
 			parent:           parent,

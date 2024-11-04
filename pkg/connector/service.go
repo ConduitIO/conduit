@@ -198,7 +198,8 @@ func (s *Service) Update(ctx context.Context, id string, plugin string, data Con
 	}
 
 	if conn.Plugin != plugin {
-		s.logger.Warn(ctx).Msgf("connector pluging changing from %v to %v, this may lead to unexpected behavior and configuration issues.")
+		s.logger.Warn(ctx).Msgf("connector plugin changing from %v to %v, "+
+			"this may lead to unexpected behavior and configuration issues.", conn.Plugin, plugin)
 	}
 	conn.Plugin = plugin
 	conn.Config = data

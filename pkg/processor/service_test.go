@@ -389,7 +389,7 @@ func TestService_Update_Success(t *testing.T) {
 		},
 	}
 
-	got, err := service.Update(ctx, want.ID, newConfig)
+	got, err := service.Update(ctx, want.ID, procType, newConfig)
 	is.NoErr(err)
 	is.Equal(want, got)             // same instance is returned
 	is.Equal(newConfig, got.Config) // config was updated
@@ -399,13 +399,24 @@ func TestService_Update_Success(t *testing.T) {
 	is.Equal(newConfig, got.Config)
 }
 
-func TestService_Update_Fail(t *testing.T) {
+func TestService_Update_NonExistentProcessor(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	service := NewService(log.Nop(), db, &proc_plugin.PluginService{})
 
-	got, err := service.Update(ctx, "non-existent processor", Config{})
+	got, err := service.Update(ctx, "non-existent processor", "test-processor", Config{})
+	is.True(cerrors.Is(err, ErrInstanceNotFound)) // expected instance not found error
+	is.Equal(got, nil)
+}
+
+func TestService_Update_EmptyPluginName(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	db := &inmemory.DB{}
+	service := NewService(log.Nop(), db, &proc_plugin.PluginService{})
+
+	got, err := service.Update(ctx, "non-existent processor", "test-processor", Config{})
 	is.True(cerrors.Is(err, ErrInstanceNotFound)) // expected instance not found error
 	is.Equal(got, nil)
 }

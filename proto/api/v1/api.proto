@@ -1023,6 +1023,7 @@ message GetProcessorResponse {
 message UpdateProcessorRequest {
   string id = 1;
   Processor.Config config = 2;
+  string plugin = 3;
 }
 message UpdateProcessorResponse {
   Processor processor = 1;
