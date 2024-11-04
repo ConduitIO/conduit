@@ -134,6 +134,11 @@ func formatParameterValueYAML(value string) string {
 	}
 }
 
+const (
+	defaultDestination = "file"
+	defaultSource      = "generator"
+)
+
 type pipelineTemplate struct {
 	Name            string
 	SourceSpec      connectorTemplate
@@ -201,10 +206,12 @@ func (pi *PipelinesInit) buildTemplatePipeline() (pipelineTemplate, error) {
 
 func (pi *PipelinesInit) buildDemoPipeline() pipelineTemplate {
 	srcParams, _ := pi.getSourceParams()
+	dstParams, _ := pi.getDestinationParams()
+
 	return pipelineTemplate{
 		Name: pi.pipelineName(),
 		SourceSpec: connectorTemplate{
-			Name: "generator",
+			Name: defaultSource,
 			Params: map[string]config.Parameter{
 				"format.type": {
 					Description: srcParams.Params["format.type"].Description,
@@ -230,7 +237,14 @@ func (pi *PipelinesInit) buildDemoPipeline() pipelineTemplate {
 			},
 		},
 		DestinationSpec: connectorTemplate{
-			Name: "log",
+			Name: defaultDestination,
+			Params: map[string]config.Parameter{
+				"path": {
+					Description: dstParams.Params["path"].Description,
+					Type:        dstParams.Params["path"].Type,
+					Default:     "./destination.txt",
+				},
+			},
 		},
 	}
 }
@@ -315,7 +329,7 @@ func (pi *PipelinesInit) sourceConnector() string {
 		return pi.args.Source
 	}
 
-	return "generator"
+	return defaultSource
 }
 
 func (pi *PipelinesInit) destinationConnector() string {
@@ -323,7 +337,7 @@ func (pi *PipelinesInit) destinationConnector() string {
 		return pi.args.Destination
 	}
 
-	return "log"
+	return defaultDestination
 }
 
 func (pi *PipelinesInit) pipelineName() string {
