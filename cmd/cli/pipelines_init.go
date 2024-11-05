@@ -219,13 +219,13 @@ func (pi *PipelinesInit) buildDemoPipeline() pipelineTemplate {
 					Default:     "structured",
 					Validations: srcParams.Params["format.type"].Validations,
 				},
-				"format.options.id": {
-					Description: "Generate field 'id' that's of the int type",
+				"format.options.scheduledDeparture": {
+					Description: "Generate field 'scheduledDeparture' of type 'time'",
 					Type:        config.ParameterTypeString,
-					Default:     "int",
+					Default:     "time",
 				},
-				"format.options.name": {
-					Description: "Generate field 'name' that's of the string type",
+				"format.options.airline": {
+					Description: "Generate field 'airline' of type string",
 					Type:        config.ParameterTypeString,
 					Default:     "string",
 				},
