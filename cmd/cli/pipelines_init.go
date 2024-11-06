@@ -183,6 +183,14 @@ func (pi *PipelinesInit) Run() error {
 	if err != nil {
 		return cerrors.Errorf("could not write pipeline: %w", err)
 	}
+
+	fmt.Printf(`Your pipeline has been initialized and written to %s.
+
+To run the pipeline, execute:
+
+conduit --pipelines.path %s`,
+		pi.configFilePath(), pi.configFilePath())
+
 	return nil
 }
 
