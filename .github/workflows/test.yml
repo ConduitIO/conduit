@@ -17,4 +17,10 @@ jobs:
           go-version-file: 'go.mod'
 
       - name: Test
-        run: make test-integration GOTEST_FLAGS="-v -count=1"
+        run: make test-integration GOTEST_FLAGS="-v -count=1 -coverprofile coverage.out" 2>&1 | tee test-report.out
+
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarcloud-github-action@v3.1.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Needed to get PR information, if any
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
