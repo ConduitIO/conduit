@@ -1,6 +1,13 @@
 run:
   timeout: 3m
 
+output:
+  formats:
+    - format: colored-line-number
+      path: stdout
+    - format: checkstyle
+      path: golangci-report.xml
+
 linters-settings:
   depguard:
     rules:
