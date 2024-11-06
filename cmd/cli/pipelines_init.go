@@ -184,7 +184,7 @@ func (pi *PipelinesInit) Run() error {
 		return cerrors.Errorf("could not write pipeline: %w", err)
 	}
 
-	fmt.Printf(`Your pipeline has been initialized and written to %s.
+	fmt.Printf(`Your pipeline has been initialized and created at %s.
 
 To run the pipeline, execute:
 
