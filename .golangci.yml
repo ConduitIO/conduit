@@ -5,6 +5,7 @@ output:
   formats:
     - format: colored-line-number
       path: stdout
+    # Needed for the SonarCloud analysis
     - format: checkstyle
       path: golangci-report.xml
 

@@ -19,6 +19,7 @@ jobs:
           go-version-file: 'go.mod'
 
       - name: Test
+        # The test coverate and the test report are needed for the SonarCloud analysis
         run: make test-integration GOTEST_FLAGS="-v -count=1 -coverprofile coverage.out" 2>&1 | tee test-report.out
 
       - name: SonarCloud Scan
