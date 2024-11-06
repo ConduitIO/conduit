@@ -14,8 +14,10 @@
 
 package main
 
-import "github.com/conduitio/conduit/pkg/conduit"
+import (
+	"github.com/conduitio/conduit/cmd/cli"
+)
 
 func main() {
-	conduit.Serve(conduit.DefaultConfig())
+	cli.New().Run()
 }

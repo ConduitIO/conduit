@@ -97,3 +97,5 @@ pkg/plugin/processor/standalone/test/wasm_processors/*/processor.wasm
 
 # this one is needed for integration tests
 !pkg/provisioning/test/source-file.txt
+
+golangci-report.xml
