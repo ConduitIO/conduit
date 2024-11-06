@@ -16,9 +16,9 @@ require (
 	github.com/conduitio/conduit-connector-postgres v0.9.1
 	github.com/conduitio/conduit-connector-protocol v0.8.0
 	github.com/conduitio/conduit-connector-s3 v0.7.0
-	github.com/conduitio/conduit-connector-sdk v0.11.0
+	github.com/conduitio/conduit-connector-sdk v0.11.1
 	github.com/conduitio/conduit-processor-sdk v0.3.0
-	github.com/conduitio/conduit-schema-registry v0.2.0
+	github.com/conduitio/conduit-schema-registry v0.2.1
 	github.com/conduitio/yaml/v3 v3.3.0
 	github.com/dop251/goja v0.0.0-20240806095544-3491d4a58fbe
 	github.com/dop251/goja_nodejs v0.0.0-20231122114759-e84d9a924c5c

@@ -236,12 +236,12 @@ github.com/conduitio/conduit-connector-protocol v0.8.0 h1:HnuvFC30H3v/aw/czEvKFe
 github.com/conduitio/conduit-connector-protocol v0.8.0/go.mod h1:qCRWXzp1vMN3PjuacY8FTLizp7gyE8wzgk6ieujB1zg=
 github.com/conduitio/conduit-connector-s3 v0.7.0 h1:dRRvk++hlSQ+F36r1D4s1Ob9qpmT+IyaD8MEwH0M9ac=
 github.com/conduitio/conduit-connector-s3 v0.7.0/go.mod h1:IjipaXERahO3hP6yBBia9FINkoYAsUdDMdszZQGTSEM=
-github.com/conduitio/conduit-connector-sdk v0.11.0 h1:u4zEOJl/FHqWY/m7CYIhKk8N0J2bwAo5AGp0lEzAqcE=
-github.com/conduitio/conduit-connector-sdk v0.11.0/go.mod h1:wuy6E77sR5GRbi3sYh81WFemJaUWT/KDBxQKvkaHpA4=
+github.com/conduitio/conduit-connector-sdk v0.11.1 h1:UzwburNYLYRDfJV06x1K7JXAdQ+HnxLkm4vnEq3c+pY=
+github.com/conduitio/conduit-connector-sdk v0.11.1/go.mod h1:aAgT+uw0IJBNDI4KIOiQW7vhR7tC2r+ETK1BL2bIC28=
 github.com/conduitio/conduit-processor-sdk v0.3.0 h1:ZLvkPrgjnHc/fkivHi959mN9QWwLAPNCsaGpdPs48u4=
 github.com/conduitio/conduit-processor-sdk v0.3.0/go.mod h1:tnep/roIO45cxU8F9YpgjtZpQ1y4CBXZU8+YV963bUs=
-github.com/conduitio/conduit-schema-registry v0.2.0 h1:OVgjiyXxQEup1jTmFYrKHcetWL7Dmw7h5w8jGlWkB1I=
-github.com/conduitio/conduit-schema-registry v0.2.0/go.mod h1:lKvHtr1bvV9SD+5JkheXo2EG+nmEGaVoIgZw0zFfbcw=
+github.com/conduitio/conduit-schema-registry v0.2.1 h1:VAJ4mvYCyGqBO4d4DjGoUDGQ12OTEWEQ5nMgN38W9Cg=
+github.com/conduitio/conduit-schema-registry v0.2.1/go.mod h1:l8H2Ci4xtLuv8M15DvGQtmDYppdJT/P5DywO03WcLm4=
 github.com/conduitio/yaml/v3 v3.3.0 h1:kbbaOSHcuH39gP4+rgbJGl6DSbLZcJgEaBvkEXJlCsI=
 github.com/conduitio/yaml/v3 v3.3.0/go.mod h1:JNgFMOX1t8W4YJuRZOh6GggVtSMsgP9XgTw+7dIenpc=
 github.com/containerd/cgroups/v3 v3.0.3 h1:S5ByHZ/h9PMe5IOQoN7E+nMc2UcLEM/V48DGDJ9kip0=
