@@ -18,6 +18,7 @@ package field
 
 import (
 	"context"
+	"slices"
 	"strings"
 
 	"github.com/conduitio/conduit-commons/config"
@@ -26,7 +27,6 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal"
-	"golang.org/x/exp/slices"
 )
 
 type renameProcessor struct {
