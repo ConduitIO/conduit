@@ -821,6 +821,7 @@ func (s *Service) runPipeline(ctx context.Context, rp *runnablePipeline) error {
 // recoverPipeline attempts to recover a pipeline that has stopped running.
 func (s *Service) recoverPipeline(ctx context.Context, rp *runnablePipeline) error {
 	s.logger.Trace(ctx).Str(log.PipelineIDField, rp.pipeline.ID).Msg("recovering pipeline")
+	measure.PipelineRecoveringCount.WithValues(rp.pipeline.Config.Name).Inc()
 
 	err := s.pipelines.UpdateStatus(ctx, rp.pipeline.ID, pipeline.StatusRecovering, "")
 	if err != nil {
