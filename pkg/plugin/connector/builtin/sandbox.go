@@ -37,6 +37,7 @@ func runSandbox[REQ any, RES any](
 	ctx context.Context,
 	req REQ,
 	logger log.CtxLogger,
+	name string,
 ) (RES, error) {
 	c := sandboxChanPool.Get().(chan any)
 
@@ -61,7 +62,7 @@ func runSandbox[REQ any, RES any](
 	select {
 	case <-ctx.Done():
 		// Context was cancelled, detach from calling goroutine and return.
-		logger.Error(ctx).Msg("context cancelled while waiting for builtin connector plugin to respond, detaching from plugin")
+		logger.Error(ctx).Msgf("context cancelled while waiting for builtin connector plugin to respond to %q, detaching from plugin", name)
 		var emptyRes RES
 		return emptyRes, ctx.Err()
 	case v := <-c:

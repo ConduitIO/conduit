@@ -46,6 +46,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/metrics/measure"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/prometheus"
 	"github.com/conduitio/conduit/pkg/lifecycle"
+	lifecycle_v2 "github.com/conduitio/conduit/pkg/lifecycle-poc"
 	"github.com/conduitio/conduit/pkg/orchestrator"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	conn_plugin "github.com/conduitio/conduit/pkg/plugin/connector"
@@ -77,7 +78,7 @@ import (
 )
 
 const (
-	exitTimeout = 10 * time.Second
+	exitTimeout = 30 * time.Second
 )
 
 // Runtime sets up all services for serving and monitoring a Conduit instance.
@@ -95,7 +96,7 @@ type Runtime struct {
 	pipelineService  *pipeline.Service
 	connectorService *connector.Service
 	processorService *processor.Service
-	lifecycleService *lifecycle.Service
+	lifecycleService lifecycleService
 
 	connectorPluginService *conn_plugin.PluginService
 	processorPluginService *proc_plugin.PluginService
@@ -105,6 +106,14 @@ type Runtime struct {
 	procSchemaService  *procutils.SchemaService
 
 	logger log.CtxLogger
+}
+
+// lifecycleService is an interface that we use temporarily to allow for
+// both the old and new lifecycle services to be used interchangeably.
+type lifecycleService interface {
+	Start(ctx context.Context, pipelineID string) error
+	Stop(ctx context.Context, pipelineID string, force bool) error
+	Init(ctx context.Context) error
 }
 
 // NewRuntime sets up a Runtime instance and primes it for start.
@@ -203,21 +212,28 @@ func createServices(r *Runtime) error {
 		tokenService,
 	)
 
-	// Error recovery configuration
-	errRecoveryCfg := &lifecycle.ErrRecoveryCfg{
-		MinDelay:         r.Config.Pipelines.ErrorRecovery.MinDelay,
-		MaxDelay:         r.Config.Pipelines.ErrorRecovery.MaxDelay,
-		BackoffFactor:    r.Config.Pipelines.ErrorRecovery.BackoffFactor,
-		MaxRetries:       r.Config.Pipelines.ErrorRecovery.MaxRetries,
-		MaxRetriesWindow: r.Config.Pipelines.ErrorRecovery.MaxRetriesWindow,
-	}
-
 	plService := pipeline.NewService(r.logger, r.DB)
 	connService := connector.NewService(r.logger, r.DB, r.connectorPersister)
 	procService := processor.NewService(r.logger, r.DB, procPluginService)
-	lifecycleService := lifecycle.NewService(r.logger, errRecoveryCfg, connService, procService, connPluginService, plService)
-	provisionService := provisioning.NewService(r.DB, r.logger, plService, connService, procService, connPluginService, lifecycleService, r.Config.Pipelines.Path)
 
+	var lifecycleService lifecycleService
+	if r.Config.Preview.PipelineArchV2 {
+		r.logger.Info(context.Background()).Msg("using lifecycle service v2")
+		lifecycleService = lifecycle_v2.NewService(r.logger, connService, procService, connPluginService, plService)
+	} else {
+		// Error recovery configuration
+		errRecoveryCfg := &lifecycle.ErrRecoveryCfg{
+			MinDelay:         r.Config.Pipelines.ErrorRecovery.MinDelay,
+			MaxDelay:         r.Config.Pipelines.ErrorRecovery.MaxDelay,
+			BackoffFactor:    r.Config.Pipelines.ErrorRecovery.BackoffFactor,
+			MaxRetries:       r.Config.Pipelines.ErrorRecovery.MaxRetries,
+			MaxRetriesWindow: r.Config.Pipelines.ErrorRecovery.MaxRetriesWindow,
+		}
+
+		lifecycleService = lifecycle.NewService(r.logger, errRecoveryCfg, connService, procService, connPluginService, plService)
+	}
+
+	provisionService := provisioning.NewService(r.DB, r.logger, plService, connService, procService, connPluginService, lifecycleService, r.Config.Pipelines.Path)
 	orc := orchestrator.NewOrchestrator(r.DB, r.logger, plService, connService, procService, connPluginService, procPluginService, lifecycleService)
 
 	r.Orchestrator = orc
@@ -415,6 +431,15 @@ func (r *Runtime) initProfiling(ctx context.Context) (deferred func(), err error
 }
 
 func (r *Runtime) registerCleanup(t *tomb.Tomb) {
+	if r.Config.Preview.PipelineArchV2 {
+		r.registerCleanupV2(t)
+	} else {
+		r.registerCleanupV1(t)
+	}
+}
+
+func (r *Runtime) registerCleanupV1(t *tomb.Tomb) {
+	ls := r.lifecycleService.(*lifecycle.Service)
 	t.Go(func() error {
 		<-t.Dying()
 		// start cleanup with a fresh context
@@ -423,17 +448,73 @@ func (r *Runtime) registerCleanup(t *tomb.Tomb) {
 		// t.Err() can be nil, when we had a call: t.Kill(nil)
 		// t.Err() will be context.Canceled, if the tomb's context was canceled
 		if t.Err() == nil || cerrors.Is(t.Err(), context.Canceled) {
-			r.lifecycleService.StopAll(ctx, pipeline.ErrGracefulShutdown)
+			ls.StopAll(ctx, pipeline.ErrGracefulShutdown)
 		} else {
 			// tomb died due to a real error
-			r.lifecycleService.StopAll(ctx, cerrors.Errorf("conduit experienced an error: %w", t.Err()))
+			ls.StopAll(ctx, cerrors.Errorf("conduit experienced an error: %w", t.Err()))
 		}
-		err := r.lifecycleService.Wait(exitTimeout)
+		err := ls.Wait(exitTimeout)
 		t.Go(func() error {
 			r.connectorPersister.Wait()
 			return r.DB.Close()
 		})
 		return err
+	})
+}
+
+func (r *Runtime) registerCleanupV2(t *tomb.Tomb) {
+	ls := r.lifecycleService.(*lifecycle_v2.Service)
+	t.Go(func() error {
+		<-t.Dying()
+		// start cleanup with a fresh context
+		ctx := context.Background()
+
+		err := ls.StopAll(ctx, false)
+		if err != nil {
+			r.logger.Err(ctx, err).Msg("some pipelines stopped with an error")
+		}
+
+		// Wait for the pipelines to stop
+		const (
+			count    = 6
+			interval = exitTimeout / count
+		)
+
+		pipelinesStopped := make(chan struct{})
+		go func() {
+			for i := count; i > 0; i-- {
+				if i == 1 {
+					// on last try, stop forcefully
+					_ = ls.StopAll(ctx, true)
+				}
+
+				r.logger.Info(ctx).Msgf("waiting for pipelines to stop running (time left: %s)", time.Duration(i)*interval)
+				select {
+				case <-time.After(interval):
+				case <-pipelinesStopped:
+					return
+				}
+			}
+		}()
+
+		err = ls.Wait(exitTimeout)
+		switch {
+		case err != nil && err != context.DeadlineExceeded:
+			r.logger.Warn(ctx).Err(err).Msg("some pipelines stopped with an error")
+		case err == context.DeadlineExceeded:
+			r.logger.Warn(ctx).Msg("some pipelines did not stop in time")
+		default:
+			r.logger.Info(ctx).Msg("all pipelines stopped gracefully")
+		}
+
+		pipelinesStopped <- struct{}{}
+
+		t.Go(func() error {
+			r.connectorPersister.Wait()
+			return r.DB.Close()
+		})
+
+		return nil
 	})
 }
 
@@ -770,13 +851,25 @@ func (r *Runtime) initServices(ctx context.Context, t *tomb.Tomb) error {
 	}
 
 	if r.Config.Pipelines.ExitOnDegraded {
-		r.lifecycleService.OnFailure(func(e lifecycle.FailureEvent) {
-			r.logger.Warn(ctx).
-				Err(e.Error).
-				Str(log.PipelineIDField, e.ID).
-				Msg("Conduit will shut down due to a pipeline failure and 'exit-on-degraded' enabled")
-			t.Kill(cerrors.Errorf("shut down due to 'exit-on-degraded' error: %w", e.Error))
-		})
+		if r.Config.Preview.PipelineArchV2 {
+			ls := r.lifecycleService.(*lifecycle_v2.Service)
+			ls.OnFailure(func(e lifecycle_v2.FailureEvent) {
+				r.logger.Warn(ctx).
+					Err(e.Error).
+					Str(log.PipelineIDField, e.ID).
+					Msg("Conduit will shut down due to a pipeline failure and 'exit-on-degraded' enabled")
+				t.Kill(cerrors.Errorf("shut down due to 'exit-on-degraded' error: %w", e.Error))
+			})
+		} else {
+			ls := r.lifecycleService.(*lifecycle.Service)
+			ls.OnFailure(func(e lifecycle.FailureEvent) {
+				r.logger.Warn(ctx).
+					Err(e.Error).
+					Str(log.PipelineIDField, e.ID).
+					Msg("Conduit will shut down due to a pipeline failure and 'exit-on-degraded' enabled")
+				t.Kill(cerrors.Errorf("shut down due to 'exit-on-degraded' error: %w", e.Error))
+			})
+		}
 	}
 	err = r.pipelineService.Init(ctx)
 	if err != nil {
