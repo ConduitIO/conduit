@@ -12,69 +12,6 @@ A Conduit release has the following parts:
 - a GitHub package, which is the official Docker image for Conduit. It's available on GitHub's Container Registry. The
 latest Docker image which is not a nightly is tagged with `latest`.
 
-## Before a release
-
-### Update dependencies
-
-Dependencies should be updated in the order described below. The instructions
-assume that this repository and the other Conduit repositories are all cloned in
-the same directory.
-
-1. [`conduit-commons`](https://github.com/ConduitIO/conduit-commons)
-    - Run `scripts/get-compare-link.sh ../conduit-commons/` to compare the latest tag and the `main` branch.
-    - If the changes should be released/tagged, push a new tag.
-2. [`conduit-connector-protocol`](https://github.com/conduitio/conduit-connector-protocol)
-    - Update `conduit-commons` if needed: `go get github.com/conduitio/conduit-commons@vX.Y.Z`
-    - Run `scripts/get-compare-link.sh ../conduit-connector-protocol/` to compare the latest tag and the `main` branch.
-    - If the changes should be released/tagged, push a new tag.
-3. [`conduit-connector-sdk`](https://github.com/ConduitIO/conduit-connector-sdk)
-    - Update `conduit-commons` if needed: `go get github.com/conduitio/conduit-commons@vX.Y.Z`
-    - Update `conduit-connector-protocol` if needed: `go get github.com/conduitio/conduit-connector-protocol@vX.Y.Z`
-    - Run `scripts/get-compare-link.sh ../conduit-connector-sdk/` to compare the latest tag and the `main` branch.
-    - If the changes should be released/tagged, push a new tag.
-4. [`conduit-processor-sdk`](https://github.com/ConduitIO/conduit-processor-sdk)
-    - Update `conduit-commons` if needed: `go get github.com/conduitio/conduit-commons@vX.Y.Z`
-    - Run `scripts/get-compare-link.sh ../conduit-processor-sdk/` to compare the latest tag and the `main` branch.
-    - If the changes should be released/tagged, push a new tag.
-5. [`conduit-schema-registry`](https://github.com/ConduitIO/conduit-schema-registry/)
-   - Update `conduit-commons` if needed: `go get github.com/conduitio/conduit-commons@vX.Y.Z`
-   - Run `scripts/get-compare-link.sh ../conduit-schema-registry/` to compare the latest tag and the `main` branch.
-   - If the changes should be released/tagged, push a new tag.
-6. Bump the Connector SDK dependency on [`conduit-connector-template`](https://github.com/ConduitIO/conduit-connector-template)
-7. Bump the Connector SDK in all the built-in connectors: `scripts/bump-sdk-in-connectors.sh vX.Y.Z`
-8. For each of the built-in connectors (file, kafka, generator, s3, postgres, log):
-    - Run `scripts/get-compare-link.sh ../conduit-processor-sdk/` to compare the latest tag and the `main` branch.
-    - If the changes should be released/tagged, push a new tag.
-9. Bump the built-in connectors: `scripts/bump-builtin-connectors.sh`
-10. Conduit itself
-    - Update `conduit-schema-registry` if needed
-    - Update `conduit-connector-sdk` if needed
-    - Update `conduit-processor-sdk` if needed
-    - Update `conduit-connector-protocol` if needed
-    - Update `conduit-commons` if needed
-    - Release Conduit (see instructions below)
-
-## Documentation
-
-1. Write a blog post.
-2. Regenerate processor documentation on [`conduit-site`](https://github.com/ConduitIO/conduit-site).
-3. Update banner on the
-   web-site ([example](https://github.com/ConduitIO/conduit-site/pull/47/files#diff-cc8abb6104e21d495dc8f64639c7b03419226d920d1c545df51be9b0b73b2784)).
-4. Search for the latest version in `conduit-site` and replace with new
-   version (e.g. search for 0.11.1 and replace with 0.12.0)
-5. Search for the latest version in [README.md](../README.md) and replace with
-   new version (e.g. search for 0.11 and replace with 0.12)
-
-## Releasing Conduit
-
-A release is triggered by pushing a new tag which starts with `v` (for example `v1.2.3`). Everything else is then
-handled by GoReleaser and GitHub actions. To push a new tag, please use the script [scripts/tag.sh](https://github.com/ConduitIO/conduit/blob/main/scripts/tag.sh),
-which also checks if the version conforms to SemVer. Example:
-
-```sh
-scripts/tag.sh 1.2.3
-```
-
 ## Nightly builds
 
 We provide nightly builds (binaries and Docker images) and keep them for 7 days. The latest nightly Docker image is tagged
@@ -94,3 +31,11 @@ Docker images.
 The "Trigger nightly build" GH action requires a personal access token, and _not_ a GitHub token provided by Actions. The
 reason is that a workflow which produces an event using a GitHub token cannot trigger another workflow through that event.
 For more information, please check [Triggering a workflow from a workflow](https://docs.github.com/en/actions/using-workflows/triggering-a-workflow#triggering-a-workflow-from-a-workflow).
+
+## How to release
+
+In order to create a new Conduit release, you'll need to create a new issue using the ["Release" template](https://github.com/ConduitIO/conduit/issues/new?template=release-checklist.yml&title=%5BRelease%5D%20Conduit%20vX.Y.Z).
+
+The issue will guide you through the process of creating a new release. 
+
+It will also provide you with a checklist to make sure you don't forget anything.
