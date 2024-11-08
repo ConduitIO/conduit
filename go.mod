@@ -8,15 +8,15 @@ require (
 	github.com/Masterminds/sprig/v3 v3.3.0
 	github.com/NYTimes/gziphandler v1.1.1
 	github.com/bufbuild/buf v1.46.0
-	github.com/conduitio/conduit-commons v0.4.0
+	github.com/conduitio/conduit-commons v0.5.0
 	github.com/conduitio/conduit-connector-file v0.8.0
 	github.com/conduitio/conduit-connector-generator v0.8.0
 	github.com/conduitio/conduit-connector-kafka v0.10.0
 	github.com/conduitio/conduit-connector-log v0.5.0
 	github.com/conduitio/conduit-connector-postgres v0.9.1
-	github.com/conduitio/conduit-connector-protocol v0.8.0
+	github.com/conduitio/conduit-connector-protocol v0.9.0
 	github.com/conduitio/conduit-connector-s3 v0.7.0
-	github.com/conduitio/conduit-connector-sdk v0.11.1
+	github.com/conduitio/conduit-connector-sdk v0.12.0
 	github.com/conduitio/conduit-processor-sdk v0.3.0
 	github.com/conduitio/conduit-schema-registry v0.2.1
 	github.com/conduitio/yaml/v3 v3.3.0
@@ -201,7 +201,7 @@ require (
 	github.com/gostaticanalysis/comment v1.4.2 // indirect
 	github.com/gostaticanalysis/forcetypeassert v0.1.0 // indirect
 	github.com/gostaticanalysis/nilerr v0.1.1 // indirect
-	github.com/hamba/avro/v2 v2.26.0 // indirect
+	github.com/hamba/avro/v2 v2.27.0 // indirect
 	github.com/hashicorp/go-version v1.7.0 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
@@ -364,11 +364,11 @@ require (
 	golang.org/x/exp/typeparams v0.0.0-20240613232115-7f521ea00fb8 // indirect
 	golang.org/x/mod v0.21.0 // indirect
 	golang.org/x/net v0.30.0 // indirect
-	golang.org/x/sync v0.8.0 // indirect
+	golang.org/x/sync v0.9.0 // indirect
 	golang.org/x/sys v0.26.0 // indirect
 	golang.org/x/term v0.25.0 // indirect
 	golang.org/x/text v0.19.0 // indirect
-	golang.org/x/time v0.7.0 // indirect
+	golang.org/x/time v0.8.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20241021214115-324edc3d5d38 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
