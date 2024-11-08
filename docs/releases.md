@@ -36,6 +36,6 @@ For more information, please check [Triggering a workflow from a workflow](https
 
 In order to create a new Conduit release, you'll need to create a new issue using the ["Release" template](https://github.com/ConduitIO/conduit/issues/new?template=release-checklist.yml&title=%5BRelease%5D%20Conduit%20vX.Y.Z).
 
-The issue will guide you through the process of creating a new release. 
+The issue will guide you through the process of creating a new release.
 
 It will also provide you with a checklist to make sure you don't forget anything.
