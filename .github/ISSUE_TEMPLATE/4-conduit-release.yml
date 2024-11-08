@@ -48,11 +48,6 @@ body:
         - label: 'conduit-connector-postgres: Bump the Connector SDK `scripts/bump-sdk-in-connectors.sh vX.Y.Z`. Run `scripts/get-compare-link.sh ../conduit-processor-sdk/` and tag if needed.'
         - label: 'conduit-connector-log: Bump the Connector SDK `scripts/bump-sdk-in-connectors.sh vX.Y.Z`. Run `scripts/get-compare-link.sh ../conduit-processor-sdk/` and tag if needed.'
         - label: 'Bump built-in connectors on Conduit: Run `scripts/bump-builtin-connectors.sh`'
-        - label: 'conduit-schema-registry: Update conduit dependencies if needed.'
-        - label: 'conduit-connector-sdk: Update conduit dependencies if needed.'
-        - label: 'conduit-processor-sdk: Update conduit dependencies if needed.'
-        - label: 'conduit-connector-protocol: Update conduit dependencies if needed.'
-        - label: 'conduit-commons: Update conduit dependencies if needed.'
         - label: 'Release Conduit (see instructions below).'
 
   - type: markdown
