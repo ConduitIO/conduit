@@ -125,7 +125,12 @@ type Config struct {
 }
 
 func DefaultConfig() Config {
-	return DefaultConfigWithBasePath(".")
+	dir, err := os.Getwd()
+	if err != nil {
+		panic(cerrors.Errorf("failed to get current directory: %w", err))
+	}
+
+	return DefaultConfigWithBasePath(dir)
 }
 
 func DefaultConfigWithBasePath(basePath string) Config {
@@ -273,7 +278,7 @@ func (c Config) Validate() error {
 	}
 	// check if folder exists
 	_, err = os.Stat(c.Pipelines.Path)
-	if c.Pipelines.Path != "pipelines" && os.IsNotExist(err) {
+	if c.Pipelines.Path != DefaultConfig().Pipelines.Path && os.IsNotExist(err) {
 		return invalidConfigFieldErr("pipelines.path")
 	}
 
