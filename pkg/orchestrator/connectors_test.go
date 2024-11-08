@@ -485,11 +485,11 @@ func TestConnectorOrchestrator_Update_Success(t *testing.T) {
 		ValidateSourceConfig(gomock.Any(), conn.Plugin, newConfig.Settings).
 		Return(nil)
 	consMock.EXPECT().
-		Update(gomock.AssignableToTypeOf(ctxType), conn.ID, newConfig).
+		Update(gomock.AssignableToTypeOf(ctxType), conn.ID, conn.Plugin, newConfig).
 		Return(want, nil)
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, connPluginMock, procPluginMock, lifecycleMock)
-	got, err := orc.Connectors.Update(ctx, conn.ID, newConfig)
+	got, err := orc.Connectors.Update(ctx, conn.ID, conn.Plugin, newConfig)
 	is.NoErr(err)
 	is.Equal(got, want)
 }
@@ -507,7 +507,7 @@ func TestConnectorOrchestrator_Update_ConnectorNotExist(t *testing.T) {
 		Return(nil, wantErr)
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, connPluginMock, procPluginMock, lifecycleMock)
-	got, err := orc.Connectors.Update(ctx, id, connector.Config{})
+	got, err := orc.Connectors.Update(ctx, id, "test-plugin", connector.Config{})
 	is.True(got == nil)
 	is.True(err != nil)
 	is.True(cerrors.Is(err, wantErr))
@@ -537,7 +537,7 @@ func TestConnectorOrchestrator_Update_PipelineRunning(t *testing.T) {
 		Return(pl, nil)
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, connPluginMock, procPluginMock, lifecycleMock)
-	got, err := orc.Connectors.Update(ctx, conn.ID, connector.Config{})
+	got, err := orc.Connectors.Update(ctx, conn.ID, conn.Plugin, connector.Config{})
 	is.True(got == nil)
 	is.True(err != nil)
 	is.Equal(pipeline.ErrPipelineRunning, err)
@@ -571,11 +571,11 @@ func TestConnectorOrchestrator_Update_Fail(t *testing.T) {
 		ValidateDestinationConfig(gomock.Any(), conn.Plugin, conn.Config.Settings).
 		Return(nil)
 	consMock.EXPECT().
-		Update(gomock.AssignableToTypeOf(ctxType), conn.ID, connector.Config{}).
+		Update(gomock.AssignableToTypeOf(ctxType), conn.ID, conn.Plugin, connector.Config{}).
 		Return(nil, wantErr)
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, connPluginMock, procPluginMock, lifecycleMock)
-	got, err := orc.Connectors.Update(ctx, conn.ID, connector.Config{})
+	got, err := orc.Connectors.Update(ctx, conn.ID, conn.Plugin, connector.Config{})
 	is.True(got == nil)
 	is.True(err != nil)
 	is.True(cerrors.Is(err, wantErr))

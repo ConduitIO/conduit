@@ -191,12 +191,17 @@ func (s *Service) Delete(ctx context.Context, id string, dispenserFetcher Plugin
 }
 
 // Update updates the connector config.
-func (s *Service) Update(ctx context.Context, id string, data Config) (*Instance, error) {
+func (s *Service) Update(ctx context.Context, id string, plugin string, data Config) (*Instance, error) {
 	conn, err := s.Get(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 
+	if conn.Plugin != plugin {
+		s.logger.Warn(ctx).Msgf("connector plugin changing from %v to %v, "+
+			"this may lead to unexpected behavior and configuration issues.", conn.Plugin, plugin)
+	}
+	conn.Plugin = plugin
 	conn.Config = data
 	conn.UpdatedAt = time.Now().UTC()
 

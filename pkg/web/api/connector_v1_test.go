@@ -401,13 +401,14 @@ func TestConnectorAPIv1_UpdateConnector(t *testing.T) {
 	before := newTestSource()
 	after := newTestSource()
 	after.ID = before.ID
+	after.Plugin = "test-plugin"
 	after.Config = connector.Config{
 		Name:     "A source connector",
 		Settings: map[string]string{"path": "path/to"},
 	}
 	after.State = connector.SourceState{Position: []byte("irrelevant")}
 
-	csMock.EXPECT().Update(ctx, before.ID, after.Config).Return(after, nil).Times(1)
+	csMock.EXPECT().Update(ctx, before.ID, after.Plugin, after.Config).Return(after, nil).Times(1)
 
 	now := time.Now()
 	want := &apiv1.UpdateConnectorResponse{Connector: &apiv1.Connector{
@@ -432,6 +433,7 @@ func TestConnectorAPIv1_UpdateConnector(t *testing.T) {
 		&apiv1.UpdateConnectorRequest{
 			Id:     want.Connector.Id,
 			Config: want.Connector.Config,
+			Plugin: want.Connector.Plugin,
 		},
 	)
 	is.NoErr(err)

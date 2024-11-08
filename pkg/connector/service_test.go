@@ -514,6 +514,7 @@ func TestService_UpdateSuccess(t *testing.T) {
 		Name:     "changed-name",
 		Settings: map[string]string{"foo": "bar"},
 	}
+	wantPlugin := "changed-plugin"
 
 	conn, err := service.Create(
 		ctx,
@@ -530,10 +531,11 @@ func TestService_UpdateSuccess(t *testing.T) {
 	is.NoErr(err)
 
 	beforeUpdate := time.Now()
-	got, err := service.Update(ctx, conn.ID, want)
+	got, err := service.Update(ctx, conn.ID, wantPlugin, want)
 	is.NoErr(err)
 
 	is.Equal(got.Config, want)
+	is.Equal(got.Plugin, wantPlugin)
 	is.True(!got.UpdatedAt.Before(beforeUpdate))
 }
 
@@ -545,7 +547,7 @@ func TestService_UpdateInstanceNotFound(t *testing.T) {
 
 	service := NewService(logger, db, nil)
 	// update connector that does not exist
-	got, err := service.Update(ctx, uuid.NewString(), Config{})
+	got, err := service.Update(ctx, uuid.NewString(), "foo-plugin", Config{})
 	is.True(err != nil)
 	is.True(cerrors.Is(err, ErrInstanceNotFound))
 	is.Equal(got, nil)
