@@ -62,7 +62,8 @@ body:
       options:
         - label: 'Write a blog post.'
         - label: 'Regenerate processor documentation on [conduit-site](https://github.com/ConduitIO/conduit-site).'
-        - label: 'Update the banner on the website.'
+        - label: 'Update the banner on the [website](https://github.com/ConduitIO/conduit-site).'
+        - label: 'Create a changelog on the [website](https://github.com/ConduitIO/conduit-site).'
         - label: 'Search and replace the latest version in `conduit-site`.'
         - label: 'Search and replace the latest version in [README.md](../README.md).'
 
