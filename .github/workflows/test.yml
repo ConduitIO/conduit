@@ -10,6 +10,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Shallow clones should be disabled for a better relevancy of analysis
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -17,4 +19,11 @@ jobs:
           go-version-file: 'go.mod'
 
       - name: Test
-        run: make test-integration GOTEST_FLAGS="-v -count=1"
+        # The test coverate and the test report are needed for the SonarCloud analysis
+        run: make test-integration GOTEST_FLAGS="-v -count=1 -coverprofile coverage.out" 2>&1 | tee test-report.out
+
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarcloud-github-action@v3.1.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Needed to get PR information, if any
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}

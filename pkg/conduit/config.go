@@ -16,6 +16,7 @@ package conduit
 
 import (
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/conduitio/conduit-commons/database"
@@ -111,6 +112,11 @@ type Config struct {
 		}
 	}
 
+	Preview struct {
+		// PipelineArchV2 enables the new pipeline architecture.
+		PipelineArchV2 bool
+	}
+
 	dev struct {
 		cpuprofile   string
 		memprofile   string
@@ -119,12 +125,16 @@ type Config struct {
 }
 
 func DefaultConfig() Config {
+	return DefaultConfigWithBasePath(".")
+}
+
+func DefaultConfigWithBasePath(basePath string) Config {
 	var cfg Config
 
 	cfg.DB.Type = DBTypeBadger
-	cfg.DB.Badger.Path = "conduit.db"
+	cfg.DB.Badger.Path = filepath.Join(basePath, "conduit.db")
 	cfg.DB.Postgres.Table = "conduit_kv_store"
-	cfg.DB.SQLite.Path = "conduit.db"
+	cfg.DB.SQLite.Path = filepath.Join(basePath, "conduit.db")
 	cfg.DB.SQLite.Table = "conduit_kv_store"
 
 	cfg.API.Enabled = true
@@ -135,11 +145,11 @@ func DefaultConfig() Config {
 	cfg.Log.Level = "info"
 	cfg.Log.Format = "cli"
 
-	cfg.Connectors.Path = "./connectors"
+	cfg.Connectors.Path = filepath.Join(basePath, "connectors")
 
-	cfg.Processors.Path = "./processors"
+	cfg.Processors.Path = filepath.Join(basePath, "processors")
 
-	cfg.Pipelines.Path = "./pipelines"
+	cfg.Pipelines.Path = filepath.Join(basePath, "pipelines")
 	cfg.Pipelines.ErrorRecovery.MinDelay = time.Second
 	cfg.Pipelines.ErrorRecovery.MaxDelay = 10 * time.Minute
 	cfg.Pipelines.ErrorRecovery.BackoffFactor = 2
@@ -263,7 +273,7 @@ func (c Config) Validate() error {
 	}
 	// check if folder exists
 	_, err = os.Stat(c.Pipelines.Path)
-	if c.Pipelines.Path != "./pipelines" && os.IsNotExist(err) {
+	if c.Pipelines.Path != "pipelines" && os.IsNotExist(err) {
 		return invalidConfigFieldErr("pipelines.path")
 	}
 
