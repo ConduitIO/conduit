@@ -186,10 +186,7 @@ func (pi *PipelinesInit) Run() error {
 
 	fmt.Printf(`Your pipeline has been initialized and created at %s.
 
-To run the pipeline, execute:
-
-conduit --pipelines.path %s`,
-		pi.configFilePath(), pi.configFilePath())
+To run the pipeline, simply run 'conduit'.`, pi.configFilePath())
 
 	return nil
 }
