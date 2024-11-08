@@ -3,7 +3,7 @@ description: Use this template to guide you through the Conduit release process.
 title: '[Release] Conduit vX.Y.Z'
 labels:
   - release
-assignees: ""
+assignees: []
 
 body:
   - type: markdown
