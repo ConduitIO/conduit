@@ -125,7 +125,12 @@ type Config struct {
 }
 
 func DefaultConfig() Config {
-	return DefaultConfigWithBasePath(".")
+	dir, err := os.Getwd()
+	if err != nil {
+		panic(cerrors.Errorf("failed to get current directory: %w", err))
+	}
+
+	return DefaultConfigWithBasePath(dir)
 }
 
 func DefaultConfigWithBasePath(basePath string) Config {
