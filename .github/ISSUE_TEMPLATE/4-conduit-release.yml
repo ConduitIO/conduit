@@ -65,7 +65,7 @@ body:
         - label: 'Update the banner on the [website](https://github.com/ConduitIO/conduit-site).'
         - label: 'Create a changelog on the [website](https://github.com/ConduitIO/conduit-site).'
         - label: 'Search and replace the latest version in `conduit-site`.'
-        - label: 'Search and replace the latest version in [README.md](../README.md).'
+        - label: 'Search and replace the latest version in [README.md](https://github.com/ConduitIO/conduit/blob/main/README.md).'
 
   - type: markdown
     attributes:
@@ -76,7 +76,6 @@ body:
     attributes:
       label: Releasing Conduit
       options:
-        - label: 'Trigger a release by pushing a new tag starting with `v` (e.g., `v1.2.3`).'
         - label: 'Use the script [scripts/tag.sh](https://github.com/ConduitIO/conduit/blob/main/scripts/tag.sh) to ensure version conformity.'
 
   - type: markdown
