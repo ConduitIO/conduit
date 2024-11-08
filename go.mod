@@ -8,13 +8,13 @@ require (
 	github.com/Masterminds/sprig/v3 v3.3.0
 	github.com/NYTimes/gziphandler v1.1.1
 	github.com/bufbuild/buf v1.46.0
-	github.com/conduitio/conduit-commons v0.4.0
+	github.com/conduitio/conduit-commons v0.5.0
 	github.com/conduitio/conduit-connector-file v0.8.0
 	github.com/conduitio/conduit-connector-generator v0.8.0
 	github.com/conduitio/conduit-connector-kafka v0.10.0
 	github.com/conduitio/conduit-connector-log v0.5.0
 	github.com/conduitio/conduit-connector-postgres v0.9.1
-	github.com/conduitio/conduit-connector-protocol v0.8.0
+	github.com/conduitio/conduit-connector-protocol v0.9.0
 	github.com/conduitio/conduit-connector-s3 v0.7.0
 	github.com/conduitio/conduit-connector-sdk v0.11.1
 	github.com/conduitio/conduit-processor-sdk v0.3.0
@@ -201,7 +201,7 @@ require (
 	github.com/gostaticanalysis/comment v1.4.2 // indirect
 	github.com/gostaticanalysis/forcetypeassert v0.1.0 // indirect
 	github.com/gostaticanalysis/nilerr v0.1.1 // indirect
-	github.com/hamba/avro/v2 v2.26.0 // indirect
+	github.com/hamba/avro/v2 v2.27.0 // indirect
 	github.com/hashicorp/go-version v1.7.0 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
