@@ -115,7 +115,7 @@ Download the right `.deb` file for your machine architecture from the
 [latest release](https://github.com/conduitio/conduit/releases/latest), then run:
 
 ```sh
-dpkg -i conduit_0.12.0_Linux_x86_64.deb
+dpkg -i conduit_0.12.2_Linux_x86_64.deb
 ```
 
 ### RPM
@@ -124,7 +124,7 @@ Download the right `.rpm` file for your machine architecture from the
 [latest release](https://github.com/conduitio/conduit/releases/latest), then run:
 
 ```sh
-rpm -i conduit_0.12.0_Linux_x86_64.rpm
+rpm -i conduit_0.12.2_Linux_x86_64.rpm
 ```
 
 ### Build from source
