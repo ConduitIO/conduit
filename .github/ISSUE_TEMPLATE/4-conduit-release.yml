@@ -61,8 +61,8 @@ body:
       label: Documentation
       options:
         - label: 'Write a blog post.'
-        - label: 'Regenerate processor documentation on [conduit-site](https://github.com/ConduitIO/conduit-site).'
-        - label: 'Update the banner on the [website](https://github.com/ConduitIO/conduit-site). ⚠️ Remember to bump the `announcementBar.id`.'
+        - label: 'Regenerate processor documentation on [conduit-site](https://github.com/ConduitIO/conduit-site) by running `cd src/processorgen/ && make generate`.'
+        - label: 'Update the banner on the [website](https://github.com/ConduitIO/conduit-site). ⚠️ Remember to bump the `announcementBar.id` in `docusaurus.config.ts`.'
         - label: 'Create a changelog on the [website](https://github.com/ConduitIO/conduit-site).'
         - label: 'Search and replace the latest version in [`conduit-site`](https://github.com/ConduitIO/conduit-site).'
         - label: 'Search and replace the latest version in [README.md](https://github.com/ConduitIO/conduit/blob/main/README.md).'
