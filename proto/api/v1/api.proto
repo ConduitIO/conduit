@@ -821,6 +821,7 @@ message GetConnectorResponse {
 message UpdateConnectorRequest {
   string id = 1;
   Connector.Config config = 2;
+  string plugin = 3;
 }
 message UpdateConnectorResponse {
   Connector connector = 1;
@@ -1022,6 +1023,7 @@ message GetProcessorResponse {
 message UpdateProcessorRequest {
   string id = 1;
   Processor.Config config = 2;
+  string plugin = 3;
 }
 message UpdateProcessorResponse {
   Processor processor = 1;

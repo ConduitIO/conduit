@@ -372,7 +372,7 @@ func TestProcessorAPIv1_UpdateProcessor(t *testing.T) {
 		UpdatedAt: now,
 		CreatedAt: now,
 	}
-	psMock.EXPECT().Update(ctx, pr.ID, config).Return(pr, nil).Times(1)
+	psMock.EXPECT().Update(ctx, pr.ID, pr.Plugin, config).Return(pr, nil).Times(1)
 
 	want := &apiv1.UpdateProcessorResponse{Processor: &apiv1.Processor{
 		Id:     pr.ID,
@@ -392,6 +392,7 @@ func TestProcessorAPIv1_UpdateProcessor(t *testing.T) {
 		ctx,
 		&apiv1.UpdateProcessorRequest{
 			Id:     want.Processor.Id,
+			Plugin: want.Processor.Plugin,
 			Config: want.Processor.Config,
 		},
 	)

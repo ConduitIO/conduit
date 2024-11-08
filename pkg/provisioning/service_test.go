@@ -171,9 +171,9 @@ func TestService_Init_Update(t *testing.T) {
 	// update pipeline
 	pipelineService.EXPECT().Update(anyCtx, p1.P1.ID, p1.P1.Config).Return(oldPipelineInstance, nil)
 	pipelineService.EXPECT().UpdateDLQ(anyCtx, p1.P1.ID, p1.P1.DLQ)
-	connService.EXPECT().Update(anyCtx, p1.P1C1.ID, p1.P1C1.Config).Return(oldConnector1Instance, nil)
-	procService.EXPECT().Update(anyCtx, p1.P1C2P1.ID, p1.P1C2P1.Config)
-	procService.EXPECT().Update(anyCtx, p1.P1P1.ID, p1.P1P1.Config)
+	connService.EXPECT().Update(anyCtx, p1.P1C1.ID, p1.P1C1.Plugin, p1.P1C1.Config).Return(oldConnector1Instance, nil)
+	procService.EXPECT().Update(anyCtx, p1.P1C2P1.ID, p1.P1C2P1.Plugin, p1.P1C2P1.Config)
+	procService.EXPECT().Update(anyCtx, p1.P1P1.ID, p1.P1P1.Plugin, p1.P1P1.Config)
 
 	// start pipeline
 	lifecycleService.EXPECT().Start(anyCtx, p1.P1.ID)
@@ -310,15 +310,15 @@ func TestService_Init_RollbackUpdate(t *testing.T) {
 	// update pipeline
 	pipelineService.EXPECT().Update(anyCtx, p1.P1.ID, p1.P1.Config).Return(oldPipelineInstance, nil)
 	pipelineService.EXPECT().UpdateDLQ(anyCtx, p1.P1.ID, p1.P1.DLQ)
-	connService.EXPECT().Update(anyCtx, p1.P1C1.ID, p1.P1C1.Config).Return(oldConnector1Instance, nil)
-	procService.EXPECT().Update(anyCtx, p1.P1C2P1.ID, p1.P1C2P1.Config)
+	connService.EXPECT().Update(anyCtx, p1.P1C1.ID, p1.P1C1.Plugin, p1.P1C1.Config).Return(oldConnector1Instance, nil)
+	procService.EXPECT().Update(anyCtx, p1.P1C2P1.ID, p1.P1C2P1.Plugin, p1.P1C2P1.Config)
 	wantErr := cerrors.New("err")
-	procService.EXPECT().Update(anyCtx, p1.P1P1.ID, p1.P1P1.Config).Return(nil, wantErr) // fails
+	procService.EXPECT().Update(anyCtx, p1.P1P1.ID, p1.P1P1.Plugin, p1.P1P1.Config).Return(nil, wantErr) // fails
 
 	// rollback changes
-	procService.EXPECT().Update(anyCtx, oldPipelineProcessorInstance.ID, oldPipelineProcessorInstance.Config)
-	procService.EXPECT().Update(anyCtx, oldConnectorProcessorInstance.ID, oldConnectorProcessorInstance.Config)
-	connService.EXPECT().Update(anyCtx, oldConnector1Instance.ID, oldConnector1Instance.Config).Return(oldConnector1Instance, nil)
+	procService.EXPECT().Update(anyCtx, oldPipelineProcessorInstance.ID, oldPipelineProcessorInstance.Plugin, oldPipelineProcessorInstance.Config)
+	procService.EXPECT().Update(anyCtx, oldConnectorProcessorInstance.ID, oldPipelineProcessorInstance.Plugin, oldConnectorProcessorInstance.Config)
+	connService.EXPECT().Update(anyCtx, oldConnector1Instance.ID, oldConnector1Instance.Plugin, oldConnector1Instance.Config).Return(oldConnector1Instance, nil)
 	pipelineService.EXPECT().Update(anyCtx, oldPipelineInstance.ID, oldPipelineInstance.Config).Return(oldPipelineInstance, nil)
 	pipelineService.EXPECT().UpdateDLQ(anyCtx, oldPipelineInstance.ID, oldPipelineInstance.DLQ)
 

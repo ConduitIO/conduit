@@ -2,7 +2,7 @@ version: v1
 name: buf.build/conduitio/conduit
 lint:
   use:
-    - DEFAULT
+    - STANDARD
 breaking:
   use:
     - FILE

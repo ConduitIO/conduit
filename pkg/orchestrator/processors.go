@@ -137,7 +137,7 @@ func (p *ProcessorOrchestrator) Get(ctx context.Context, id string) (*processor.
 	return p.processors.Get(ctx, id)
 }
 
-func (p *ProcessorOrchestrator) Update(ctx context.Context, id string, cfg processor.Config) (*processor.Instance, error) {
+func (p *ProcessorOrchestrator) Update(ctx context.Context, id string, plugin string, cfg processor.Config) (*processor.Instance, error) {
 	var r rollback.R
 	defer r.MustExecute()
 
@@ -157,6 +157,7 @@ func (p *ProcessorOrchestrator) Update(ctx context.Context, id string, cfg proce
 		return nil, cerrors.Errorf("processor %q cannot be updated: %w", proc.ID, ErrImmutableProvisionedByConfig)
 	}
 	// provisioned by API
+	oldPlugin := proc.Plugin
 	oldConfig := proc.Config
 
 	pl, err := p.getProcessorsPipeline(ctx, proc.Parent)
@@ -168,12 +169,12 @@ func (p *ProcessorOrchestrator) Update(ctx context.Context, id string, cfg proce
 		return nil, pipeline.ErrPipelineRunning
 	}
 
-	proc, err = p.processors.Update(ctx, id, cfg)
+	proc, err = p.processors.Update(ctx, id, plugin, cfg)
 	if err != nil {
 		return nil, err
 	}
 	r.Append(func() error {
-		_, err = p.processors.Update(ctx, proc.ID, oldConfig)
+		_, err = p.processors.Update(ctx, proc.ID, oldPlugin, oldConfig)
 		return err
 	})
 

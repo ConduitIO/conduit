@@ -236,18 +236,18 @@ func (c *ConnectorOrchestratorListCall) DoAndReturn(f func(context.Context) map[
 }
 
 // Update mocks base method.
-func (m *ConnectorOrchestrator) Update(ctx context.Context, id string, config connector.Config) (*connector.Instance, error) {
+func (m *ConnectorOrchestrator) Update(ctx context.Context, id, plugin string, config connector.Config) (*connector.Instance, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Update", ctx, id, config)
+	ret := m.ctrl.Call(m, "Update", ctx, id, plugin, config)
 	ret0, _ := ret[0].(*connector.Instance)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Update indicates an expected call of Update.
-func (mr *ConnectorOrchestratorMockRecorder) Update(ctx, id, config any) *ConnectorOrchestratorUpdateCall {
+func (mr *ConnectorOrchestratorMockRecorder) Update(ctx, id, plugin, config any) *ConnectorOrchestratorUpdateCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Update", reflect.TypeOf((*ConnectorOrchestrator)(nil).Update), ctx, id, config)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Update", reflect.TypeOf((*ConnectorOrchestrator)(nil).Update), ctx, id, plugin, config)
 	return &ConnectorOrchestratorUpdateCall{Call: call}
 }
 
@@ -263,13 +263,13 @@ func (c *ConnectorOrchestratorUpdateCall) Return(arg0 *connector.Instance, arg1 
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *ConnectorOrchestratorUpdateCall) Do(f func(context.Context, string, connector.Config) (*connector.Instance, error)) *ConnectorOrchestratorUpdateCall {
+func (c *ConnectorOrchestratorUpdateCall) Do(f func(context.Context, string, string, connector.Config) (*connector.Instance, error)) *ConnectorOrchestratorUpdateCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *ConnectorOrchestratorUpdateCall) DoAndReturn(f func(context.Context, string, connector.Config) (*connector.Instance, error)) *ConnectorOrchestratorUpdateCall {
+func (c *ConnectorOrchestratorUpdateCall) DoAndReturn(f func(context.Context, string, string, connector.Config) (*connector.Instance, error)) *ConnectorOrchestratorUpdateCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

@@ -44,7 +44,7 @@ type ProcessorOrchestrator interface {
 	// Create will make a new processor.
 	Create(ctx context.Context, procType string, parent processor.Parent, cfg processor.Config, condition string) (*processor.Instance, error)
 	// Update will update a processor's config.
-	Update(ctx context.Context, id string, cfg processor.Config) (*processor.Instance, error)
+	Update(ctx context.Context, id string, plugin string, cfg processor.Config) (*processor.Instance, error)
 	// Delete removes a processor
 	Delete(ctx context.Context, id string) error
 	// InspectIn starts an inspector session for the records coming into the processor with given ID.
@@ -218,7 +218,7 @@ func (p *ProcessorAPIv1) UpdateProcessor(
 		return nil, cerrors.ErrEmptyID
 	}
 
-	updated, err := p.processorOrchestrator.Update(ctx, req.Id, fromproto.ProcessorConfig(req.Config))
+	updated, err := p.processorOrchestrator.Update(ctx, req.Id, req.Plugin, fromproto.ProcessorConfig(req.Config))
 	if err != nil {
 		return nil, status.ProcessorError(cerrors.Errorf("failed to update processor: %w", err))
 	}
