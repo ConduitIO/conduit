@@ -16,9 +16,9 @@ package connector_test
 
 import (
 	"context"
-	"github.com/conduitio/conduit-connector-protocol/pconnector"
 	"testing"
 
+	"github.com/conduitio/conduit-connector-protocol/pconnector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
