@@ -43,7 +43,7 @@ type PipelineService interface {
 type ConnectorService interface {
 	Get(ctx context.Context, id string) (*connector.Instance, error)
 	Create(ctx context.Context, id string, t connector.Type, plugin string, pipelineID string, c connector.Config, p connector.ProvisionType) (*connector.Instance, error)
-	Update(ctx context.Context, id string, c connector.Config) (*connector.Instance, error)
+	Update(ctx context.Context, id string, plugin string, c connector.Config) (*connector.Instance, error)
 	Delete(ctx context.Context, id string, dispenserFetcher connector.PluginDispenserFetcher) error
 
 	AddProcessor(ctx context.Context, connectorID string, processorID string) (*connector.Instance, error)
@@ -62,7 +62,7 @@ type ProcessorService interface {
 		condition string,
 	) (*processor.Instance, error)
 	MakeRunnableProcessor(ctx context.Context, i *processor.Instance) (*processor.RunnableProcessor, error)
-	Update(ctx context.Context, id string, cfg processor.Config) (*processor.Instance, error)
+	Update(ctx context.Context, id string, plugin string, cfg processor.Config) (*processor.Instance, error)
 	Delete(ctx context.Context, id string) error
 }
 

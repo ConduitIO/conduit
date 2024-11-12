@@ -1528,6 +1528,9 @@
       "properties": {
         "config": {
           "$ref": "#/definitions/v1ConnectorConfig"
+        },
+        "plugin": {
+          "type": "string"
         }
       }
     },
@@ -1647,6 +1650,9 @@
       "properties": {
         "config": {
           "$ref": "#/definitions/v1ProcessorConfig"
+        },
+        "plugin": {
+          "type": "string"
         }
       }
     },

@@ -275,18 +275,18 @@ func (c *ProcessorOrchestratorListCall) DoAndReturn(f func(context.Context) map[
 }
 
 // Update mocks base method.
-func (m *ProcessorOrchestrator) Update(ctx context.Context, id string, cfg processor.Config) (*processor.Instance, error) {
+func (m *ProcessorOrchestrator) Update(ctx context.Context, id, plugin string, cfg processor.Config) (*processor.Instance, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Update", ctx, id, cfg)
+	ret := m.ctrl.Call(m, "Update", ctx, id, plugin, cfg)
 	ret0, _ := ret[0].(*processor.Instance)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Update indicates an expected call of Update.
-func (mr *ProcessorOrchestratorMockRecorder) Update(ctx, id, cfg any) *ProcessorOrchestratorUpdateCall {
+func (mr *ProcessorOrchestratorMockRecorder) Update(ctx, id, plugin, cfg any) *ProcessorOrchestratorUpdateCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Update", reflect.TypeOf((*ProcessorOrchestrator)(nil).Update), ctx, id, cfg)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Update", reflect.TypeOf((*ProcessorOrchestrator)(nil).Update), ctx, id, plugin, cfg)
 	return &ProcessorOrchestratorUpdateCall{Call: call}
 }
 
@@ -302,13 +302,13 @@ func (c *ProcessorOrchestratorUpdateCall) Return(arg0 *processor.Instance, arg1 
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *ProcessorOrchestratorUpdateCall) Do(f func(context.Context, string, processor.Config) (*processor.Instance, error)) *ProcessorOrchestratorUpdateCall {
+func (c *ProcessorOrchestratorUpdateCall) Do(f func(context.Context, string, string, processor.Config) (*processor.Instance, error)) *ProcessorOrchestratorUpdateCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *ProcessorOrchestratorUpdateCall) DoAndReturn(f func(context.Context, string, processor.Config) (*processor.Instance, error)) *ProcessorOrchestratorUpdateCall {
+func (c *ProcessorOrchestratorUpdateCall) DoAndReturn(f func(context.Context, string, string, processor.Config) (*processor.Instance, error)) *ProcessorOrchestratorUpdateCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

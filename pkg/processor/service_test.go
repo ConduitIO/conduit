@@ -16,6 +16,7 @@ package processor
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/conduitio/conduit-commons/database/inmemory"
@@ -388,8 +389,9 @@ func TestService_Update_Success(t *testing.T) {
 			"processor-config-field-2": "bar",
 		},
 	}
+	newProcType := "new-proc-type"
 
-	got, err := service.Update(ctx, want.ID, newConfig)
+	got, err := service.Update(ctx, want.ID, newProcType, newConfig)
 	is.NoErr(err)
 	is.Equal(want, got)             // same instance is returned
 	is.Equal(newConfig, got.Config) // config was updated
@@ -397,17 +399,39 @@ func TestService_Update_Success(t *testing.T) {
 	got, err = service.Get(ctx, want.ID)
 	is.NoErr(err)
 	is.Equal(newConfig, got.Config)
+	is.Equal(newProcType, got.Plugin)
 }
 
-func TestService_Update_Fail(t *testing.T) {
+func TestService_Update_NonExistentProcessor(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
 	db := &inmemory.DB{}
 	service := NewService(log.Nop(), db, &proc_plugin.PluginService{})
 
-	got, err := service.Update(ctx, "non-existent processor", Config{})
+	got, err := service.Update(ctx, "non-existent processor", "test-processor", Config{})
 	is.True(cerrors.Is(err, ErrInstanceNotFound)) // expected instance not found error
 	is.Equal(got, nil)
+}
+
+func TestService_Update_EmptyPluginName(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	db := &inmemory.DB{}
+
+	procType := "processor-type"
+	p := proc_mock.NewProcessor(gomock.NewController(t))
+	p.EXPECT().Teardown(ctx).Return(nil)
+
+	registry := newPluginService(t, map[string]sdk.Processor{procType: p})
+	service := NewService(log.Nop(), db, registry)
+
+	// create a processor instance
+	want, err := service.Create(ctx, uuid.NewString(), procType, Parent{}, Config{}, ProvisionTypeAPI, "")
+	is.NoErr(err)
+
+	_, err = service.Update(ctx, want.ID, "", Config{})
+	is.True(err != nil)
+	is.True(strings.Contains(err.Error(), "plugin name is empty"))
 }
 
 // newPluginService creates a registry with builders for the supplied

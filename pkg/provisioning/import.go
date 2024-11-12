@@ -290,7 +290,7 @@ func (ab actionsBuilder) prepareConnectorActions(oldConfig, newConfig config.Con
 
 func (ab actionsBuilder) prepareProcessorActions(oldConfig, newConfig config.Processor, parent processor.Parent) []action {
 	if oldConfig.ID == "" {
-		// no old config, it's a brand new processor
+		// no old config, it's a brand-new processor
 		return []action{createProcessorAction{
 			cfg:              newConfig,
 			parent:           parent,
@@ -305,40 +305,17 @@ func (ab actionsBuilder) prepareProcessorActions(oldConfig, newConfig config.Pro
 		}}
 	}
 
-	// first compare whole configs
+	// configs match, no need to do anything
 	if cmp.Equal(oldConfig, newConfig) {
-		// configs match, no need to do anything
 		return nil
 	}
 
-	// compare them again but ignore mutable fields, if configs are still
-	// different an update is not possible, we have to entirely recreate the
-	// processor
-	opts := []cmp.Option{
-		cmpopts.IgnoreFields(config.Processor{}, config.ProcessorMutableFields...),
-	}
-	if cmp.Equal(oldConfig, newConfig, opts...) {
-		// only updatable fields don't match, we can update the processor
-		return []action{updateProcessorAction{
-			oldConfig:        oldConfig,
-			newConfig:        newConfig,
-			processorService: ab.processorService,
-		}}
-	}
-
-	// we have to delete the old processor and create a new one
-	return []action{
-		deleteProcessorAction{
-			cfg:              oldConfig,
-			parent:           parent,
-			processorService: ab.processorService,
-		},
-		createProcessorAction{
-			cfg:              newConfig,
-			parent:           parent,
-			processorService: ab.processorService,
-		},
-	}
+	// the processor changed, and all parts of a processor are updateable
+	return []action{updateProcessorAction{
+		oldConfig:        oldConfig,
+		newConfig:        newConfig,
+		processorService: ab.processorService,
+	}}
 }
 
 func reverseActions(actions []action) {

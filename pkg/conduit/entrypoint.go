@@ -27,16 +27,20 @@ import (
 	"github.com/peterbourgon/ff/v3/ffyaml"
 )
 
-// Serve is a shortcut for Entrypoint.Serve.
-func Serve(cfg Config) {
-	e := &Entrypoint{}
-	e.Serve(cfg)
+var DeprecatedFlags = map[string]bool{
+	"pipelines.exit-on-error": true,
 }
 
 const (
 	exitCodeErr       = 1
 	exitCodeInterrupt = 2
 )
+
+// Serve is a shortcut for Entrypoint.Serve.
+func Serve(cfg Config) {
+	e := &Entrypoint{}
+	e.Serve(cfg)
+}
 
 // Entrypoint provides methods related to the Conduit entrypoint (parsing
 // config, managing interrupt signals etc.).
@@ -52,8 +56,9 @@ type Entrypoint struct{}
 //   - environment variables
 //   - config file (lowest priority)
 func (e *Entrypoint) Serve(cfg Config) {
-	flags := e.Flags(&cfg)
+	flags := Flags(&cfg)
 	e.ParseConfig(flags)
+
 	if cfg.Log.Format == "cli" {
 		_, _ = fmt.Fprintf(os.Stdout, "%s\n", e.Splash())
 	}
@@ -73,7 +78,7 @@ func (e *Entrypoint) Serve(cfg Config) {
 
 // Flags returns a flag set that, when parsed, stores the values in the provided
 // config struct.
-func (*Entrypoint) Flags(cfg *Config) *flag.FlagSet {
+func Flags(cfg *Config) *flag.FlagSet {
 	// TODO extract flags from config struct rather than defining flags manually
 	flags := flag.NewFlagSet("conduit", flag.ExitOnError)
 
@@ -156,22 +161,19 @@ func (*Entrypoint) Flags(cfg *Config) *flag.FlagSet {
 	flags.StringVar(&cfg.SchemaRegistry.Type, "schema-registry.type", cfg.SchemaRegistry.Type, "schema registry type; accepts builtin,confluent")
 	flags.StringVar(&cfg.SchemaRegistry.Confluent.ConnectionString, "schema-registry.confluent.connection-string", cfg.SchemaRegistry.Confluent.ConnectionString, "confluent schema registry connection string")
 
+	flags.BoolVar(&cfg.Preview.PipelineArchV2, "preview.pipeline-arch-v2", cfg.Preview.PipelineArchV2, "enables experimental pipeline architecture v2 (note that the new architecture currently supports only 1 source and 1 destination per pipeline)")
+
 	// NB: flags with prefix dev.* are hidden from help output by default, they only show up using '-dev -help'
 	showDevHelp := flags.Bool("dev", false, "used together with the dev flag it shows dev flags")
 	flags.StringVar(&cfg.dev.cpuprofile, "dev.cpuprofile", "", "write cpu profile to file")
 	flags.StringVar(&cfg.dev.memprofile, "dev.memprofile", "", "write memory profile to file")
 	flags.StringVar(&cfg.dev.blockprofile, "dev.blockprofile", "", "write block profile to file")
 
-	// Deprecated flags that are hidden from help output
-	deprecatedFlags := map[string]bool{
-		"pipelines.exit-on-error": true,
-	}
-
 	// show user or dev flags
 	flags.Usage = func() {
 		tmpFlags := flag.NewFlagSet("conduit", flag.ExitOnError)
 		flags.VisitAll(func(f *flag.Flag) {
-			if f.Name == "dev" || strings.HasPrefix(f.Name, "dev.") != *showDevHelp || deprecatedFlags[f.Name] {
+			if f.Name == "dev" || strings.HasPrefix(f.Name, "dev.") != *showDevHelp || DeprecatedFlags[f.Name] {
 				return // hide flag from output
 			}
 			// reset value to its default, to ensure default is shown correctly

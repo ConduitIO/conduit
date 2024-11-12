@@ -316,7 +316,7 @@ func (a updateConnectorAction) Rollback(ctx context.Context) error {
 }
 
 func (a updateConnectorAction) update(ctx context.Context, cfg config.Connector) error {
-	c, err := a.connectorService.Update(ctx, cfg.ID, connector.Config{
+	c, err := a.connectorService.Update(ctx, cfg.ID, cfg.Plugin, connector.Config{
 		Name:     cfg.Name,
 		Settings: cfg.Settings,
 	})
@@ -376,10 +376,15 @@ func (a updateProcessorAction) Rollback(ctx context.Context) error {
 }
 
 func (a updateProcessorAction) update(ctx context.Context, cfg config.Processor) error {
-	_, err := a.processorService.Update(ctx, cfg.ID, processor.Config{
-		Settings: cfg.Settings,
-		Workers:  cfg.Workers,
-	})
+	_, err := a.processorService.Update(
+		ctx,
+		cfg.ID,
+		cfg.Plugin,
+		processor.Config{
+			Settings: cfg.Settings,
+			Workers:  cfg.Workers,
+		},
+	)
 	if err != nil {
 		return cerrors.Errorf("failed to update processor: %w", err)
 	}

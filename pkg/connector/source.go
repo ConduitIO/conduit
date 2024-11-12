@@ -16,7 +16,9 @@ package connector
 
 import (
 	"context"
+	"strconv"
 	"sync"
+	"time"
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit-connector-protocol/pconnector"
@@ -153,6 +155,7 @@ func (s *Source) Teardown(ctx context.Context) error {
 		return plugin.ErrPluginNotRunning
 	}
 
+	s.Instance.logger.Debug(ctx).Msg("closing stream")
 	// close stream
 	if s.stopStream != nil {
 		s.stopStream()
@@ -192,8 +195,9 @@ func (s *Source) Read(ctx context.Context) ([]opencdc.Record, error) {
 		return nil, err
 	}
 
+	now := strconv.FormatInt(time.Now().UnixNano(), 10)
 	for _, r := range resp.Records {
-		s.sanitizeRecord(&r)
+		s.sanitizeRecord(&r, now)
 	}
 
 	s.Instance.inspector.Send(ctx, resp.Records)
@@ -375,7 +379,7 @@ func (s *Source) triggerLifecycleEvent(ctx context.Context, oldConfig, newConfig
 	}
 }
 
-func (s *Source) sanitizeRecord(r *opencdc.Record) {
+func (s *Source) sanitizeRecord(r *opencdc.Record, now string) {
 	if r.Key == nil {
 		r.Key = opencdc.RawData{}
 	}
@@ -385,12 +389,19 @@ func (s *Source) sanitizeRecord(r *opencdc.Record) {
 	if r.Payload.After == nil {
 		r.Payload.After = opencdc.RawData{}
 	}
-
 	if r.Metadata == nil {
-		r.Metadata = opencdc.Metadata{}
+		r.Metadata = opencdc.Metadata{
+			opencdc.MetadataReadAt:                   now,
+			opencdc.MetadataConduitSourceConnectorID: s.Instance.ID,
+		}
+	} else {
+		if r.Metadata[opencdc.MetadataReadAt] == "" {
+			r.Metadata[opencdc.MetadataReadAt] = now
+		}
+		if r.Metadata[opencdc.MetadataConduitSourceConnectorID] == "" {
+			r.Metadata[opencdc.MetadataConduitSourceConnectorID] = s.Instance.ID
+		}
 	}
-	// source connector ID is added to all records
-	r.Metadata.SetConduitSourceConnectorID(s.Instance.ID)
 }
 
 func (*Source) isEqual(cfg1, cfg2 map[string]string) bool {

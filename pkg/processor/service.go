@@ -162,16 +162,25 @@ func (s *Service) Create(
 }
 
 // Update will update a processor instance config.
-func (s *Service) Update(ctx context.Context, id string, cfg Config) (*Instance, error) {
+func (s *Service) Update(ctx context.Context, id string, plugin string, cfg Config) (*Instance, error) {
 	instance, err := s.Get(ctx, id)
 	if err != nil {
 		return nil, err
+	}
+	if plugin == "" {
+		return nil, cerrors.Errorf("could not update processor instance (ID: %s): plugin name is empty", id)
 	}
 
 	if instance.running {
 		return nil, cerrors.Errorf("could not update processor instance (ID: %s): %w", id, ErrProcessorRunning)
 	}
 
+	if instance.Plugin != plugin {
+		s.logger.Warn(ctx).Msgf("processor plugin changing from %v to %v, "+
+			"this may lead to unexpected behavior and configuration issues.", instance.Plugin, plugin)
+	}
+
+	instance.Plugin = plugin
 	instance.Config = cfg
 	instance.UpdatedAt = time.Now()
 
