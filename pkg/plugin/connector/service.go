@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//go:generate mockgen -typed -source=service.go -destination=mock/registry.go -package=mock -mock_names=builtinReg=BuiltinReg,standaloneReg=StandaloneReg . builtinReg,standaloneReg
+
 package connector
 
 import (
@@ -56,20 +58,20 @@ type PluginService struct {
 
 	builtinReg    builtinReg
 	standaloneReg standaloneReg
-	tokenService  *connutils.AuthManager
+	authManager   *connutils.AuthManager
 }
 
 func NewPluginService(
 	logger log.CtxLogger,
 	builtin builtinReg,
 	standalone standaloneReg,
-	tokenService *connutils.AuthManager,
+	authManager *connutils.AuthManager,
 ) *PluginService {
 	return &PluginService{
 		logger:        logger.WithComponent("connector.PluginService"),
 		builtinReg:    builtin,
 		standaloneReg: standalone,
-		tokenService:  tokenService,
+		authManager:   authManager,
 	}
 }
 
@@ -86,7 +88,7 @@ func (s *PluginService) NewDispenser(logger log.CtxLogger, name string, connecto
 	logger = logger.WithComponent("plugin")
 
 	cfg := pconnector.PluginConfig{
-		Token:       s.tokenService.GenerateNew(connectorID),
+		Token:       s.authManager.GenerateNew(connectorID),
 		ConnectorID: connectorID,
 		LogLevel:    logger.GetLevel().String(),
 	}
@@ -98,7 +100,7 @@ func (s *PluginService) NewDispenser(logger log.CtxLogger, name string, connecto
 
 	return DispenserWithCleanup(
 		dispenser,
-		func() { s.tokenService.Deregister(cfg.Token) },
+		func() { s.authManager.Deregister(cfg.Token) },
 	), nil
 }
 
