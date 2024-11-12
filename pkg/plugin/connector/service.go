@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:generate mockgen -typed -source=service.go -destination=mock/registry.go -package=mock -mock_names=builtinReg=BuiltinReg,standaloneReg=StandaloneReg . builtinReg,standaloneReg
+//go:generate mockgen -typed -source=service.go -destination=mock/source_interface_mocks.go -package=mock -mock_names=builtinReg=BuiltinReg,standaloneReg=StandaloneReg,authManager=AuthManager . builtinReg,standaloneReg,authManager
 
 package connector
 
@@ -23,7 +23,6 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
-	"github.com/conduitio/conduit/pkg/plugin/connector/connutils"
 )
 
 // registry is an object that can create new plugin dispensers. We need to use
@@ -53,19 +52,24 @@ type standaloneReg interface {
 	Init(ctx context.Context, connUtilsAddr string)
 }
 
+type authManager interface {
+	GenerateNew(connectorID string) string
+	Deregister(token string)
+}
+
 type PluginService struct {
 	logger log.CtxLogger
 
 	builtinReg    builtinReg
 	standaloneReg standaloneReg
-	authManager   *connutils.AuthManager
+	authManager   authManager
 }
 
 func NewPluginService(
 	logger log.CtxLogger,
 	builtin builtinReg,
 	standalone standaloneReg,
-	authManager *connutils.AuthManager,
+	authManager authManager,
 ) *PluginService {
 	return &PluginService{
 		logger:        logger.WithComponent("connector.PluginService"),
