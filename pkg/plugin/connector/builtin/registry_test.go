@@ -16,14 +16,14 @@ package builtin
 
 import (
 	"context"
+	"testing"
+
 	"github.com/conduitio/conduit-connector-protocol/pconnector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"testing"
-
 	"github.com/matryer/is"
 )
 
@@ -107,5 +107,4 @@ func TestRegistry_NewDispenser_PluginNotFound(t *testing.T) {
 			is.True(dispenser != nil)
 		})
 	}
-
 }

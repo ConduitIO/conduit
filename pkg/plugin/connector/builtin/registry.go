@@ -16,7 +16,6 @@ package builtin
 
 import (
 	"context"
-	"github.com/conduitio/conduit-connector-sdk/schema"
 	"runtime/debug"
 
 	file "github.com/conduitio/conduit-connector-file"
@@ -27,6 +26,7 @@ import (
 	"github.com/conduitio/conduit-connector-protocol/pconnector"
 	s3 "github.com/conduitio/conduit-connector-s3"
 	sdk "github.com/conduitio/conduit-connector-sdk"
+	"github.com/conduitio/conduit-connector-sdk/schema"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
