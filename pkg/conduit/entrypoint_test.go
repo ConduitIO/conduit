@@ -36,6 +36,9 @@ func TestFlags_HelpOutput(t *testing.T) {
 		"db.postgres.table",
 		"db.sqlite.path",
 		"db.sqlite.table",
+		"dev.blockprofileblockprofile",
+		"dev.cpuprofile",
+		"dev.memprofile",
 		"api.enabled",
 		"http.address",
 		"grpc.address",
@@ -57,10 +60,6 @@ func TestFlags_HelpOutput(t *testing.T) {
 
 	unexpectedFlags := []string{
 		FlagPipelinesExitOnError,
-		"dev",
-		"dev.cpuprofile",
-		"dev.memprofile",
-		"dev.blockprofile",
 	}
 
 	for _, flag := range expectedFlags {

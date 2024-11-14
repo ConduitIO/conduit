@@ -61,7 +61,7 @@ To see how you can customize your first pipeline, run 'conduit pipelines init --
 func (i *ConduitInit) createConfigYAML() error {
 	cfgYAML := internal.NewYAMLTree()
 	i.conduitCfgFlags().VisitAll(func(f *flag.Flag) {
-		if isHiddenFlag(f.Name) {
+		if conduit.HiddenFlags[f.Name] {
 			return // hide flag from output
 		}
 		cfgYAML.Insert(f.Name, f.DefValue, f.Usage)
