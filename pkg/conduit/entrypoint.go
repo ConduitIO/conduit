@@ -168,7 +168,7 @@ func Flags(cfg *Config) *flag.FlagSet {
 
 	flags.StringVar(&cfg.dev.cpuprofile, "dev.cpuprofile", "", "write cpu profile to file")
 	flags.StringVar(&cfg.dev.memprofile, "dev.memprofile", "", "write memory profile to file")
-	flags.StringVar(&cfg.dev.blockprofile, "dev.blockprofileblockprofile", "", "write block profile to file")
+	flags.StringVar(&cfg.dev.blockprofile, "dev.blockprofile", "", "write block profile to file")
 
 	// show user or dev flags
 	flags.Usage = func() {
