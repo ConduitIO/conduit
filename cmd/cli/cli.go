@@ -17,9 +17,11 @@ package cli
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/conduitio/conduit/pkg/conduit"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 var (
@@ -29,6 +31,11 @@ var (
 
 type Instance struct {
 	rootCmd *cobra.Command
+}
+
+func isHiddenFlag(name string) bool {
+	return strings.HasPrefix(name, "dev.") ||
+		conduit.HiddenFlags[name]
 }
 
 // New creates a new CLI Instance.
@@ -72,12 +79,11 @@ func buildRootCmd() *cobra.Command {
 	cmd.AddCommand(buildPipelinesCmd())
 
 	// mark hidden flags
-	for flagName := range conduit.HiddenFlags {
-		err := cmd.Flags().MarkHidden(flagName)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "%v\n", err)
+	cmd.Flags().VisitAll(func(f *pflag.Flag) {
+		if isHiddenFlag(f.Name) {
+			cmd.Flags().MarkHidden(f.Name)
 		}
-	}
+	})
 
 	return cmd
 }

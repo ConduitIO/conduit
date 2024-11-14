@@ -64,9 +64,10 @@ func TestBuildRootCmd_HelpOutput(t *testing.T) {
 
 	unexpectedFlags := []string{
 		conduit.FlagPipelinesExitOnError, // nolint:staticcheck // this will be completely removed before Conduit 1.0
-		conduit.FlagDevBlockProfile,
-		conduit.FlagDevCPUProfile,
-		conduit.FlagDevMemProfile,
+		"dev",
+		"dev.cpuprofile",
+		"dev.memprofile",
+		"dev.blockprofile",
 	}
 
 	for _, flag := range expectedFlags {

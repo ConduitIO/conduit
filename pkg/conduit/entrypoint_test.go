@@ -57,9 +57,10 @@ func TestFlags_HelpOutput(t *testing.T) {
 
 	unexpectedFlags := []string{
 		FlagPipelinesExitOnError,
-		FlagDevBlockProfile,
-		FlagDevCPUProfile,
-		FlagDevMemProfile,
+		"dev",
+		"dev.cpuprofile",
+		"dev.memprofile",
+		"dev.blockprofile",
 	}
 
 	for _, flag := range expectedFlags {

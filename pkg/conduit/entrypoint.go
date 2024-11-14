@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/peterbourgon/ff/v3"
@@ -30,10 +31,6 @@ const (
 	exitCodeErr       = 1
 	exitCodeInterrupt = 2
 
-	FlagDevCPUProfile   = "dev.cpuprofile"
-	FlagDevMemProfile   = "dev.memprofile"
-	FlagDevBlockProfile = "dev.blockprofile"
-
 	// Deprecated: Use `pipelines.error-recovery.exit-on-degraded` instead.
 	FlagPipelinesExitOnError = "pipelines.exit-on-error"
 )
@@ -41,9 +38,7 @@ const (
 // HiddenFlags is a map of flags that should not be shown in the help output.
 var HiddenFlags = map[string]bool{
 	FlagPipelinesExitOnError: true,
-	FlagDevCPUProfile:        true,
-	FlagDevMemProfile:        true,
-	FlagDevBlockProfile:      true,
+	"dev":                    true,
 }
 
 // Serve is a shortcut for Entrypoint.Serve.
@@ -173,9 +168,11 @@ func Flags(cfg *Config) *flag.FlagSet {
 
 	flags.BoolVar(&cfg.Preview.PipelineArchV2, "preview.pipeline-arch-v2", cfg.Preview.PipelineArchV2, "enables experimental pipeline architecture v2 (note that the new architecture currently supports only 1 source and 1 destination per pipeline)")
 
-	flags.StringVar(&cfg.dev.cpuprofile, FlagDevCPUProfile, "", "write cpu profile to file")
-	flags.StringVar(&cfg.dev.memprofile, FlagDevMemProfile, "", "write memory profile to file")
-	flags.StringVar(&cfg.dev.blockprofile, FlagDevBlockProfile, "", "write block profile to file")
+	// NB: flags with prefix dev.* are hidden from help output by default, they only show up using '-dev -help'
+	showDevHelp := flags.Bool("dev", false, "used together with the dev flag it shows dev flags")
+	flags.StringVar(&cfg.dev.cpuprofile, "dev.cpuprofile", "", "write cpu profile to file")
+	flags.StringVar(&cfg.dev.memprofile, "dev.memprofile", "", "write memory profile to file")
+	flags.StringVar(&cfg.dev.blockprofile, "dev.blockprofileblockprofile", "", "write block profile to file")
 
 	// show user or dev flags
 	flags.Usage = func() {
@@ -185,8 +182,7 @@ func Flags(cfg *Config) *flag.FlagSet {
 		tmpFlags.SetOutput(flags.Output())
 
 		flags.VisitAll(func(f *flag.Flag) {
-			// skip hidden flags
-			if HiddenFlags[f.Name] {
+			if f.Name == "dev" || strings.HasPrefix(f.Name, "dev.") != *showDevHelp || HiddenFlags[f.Name] {
 				return
 			}
 			// reset value to its default, to ensure default is shown correctly
