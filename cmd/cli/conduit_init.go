@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/conduitio/conduit/cmd/cli/internal"
 	"github.com/conduitio/conduit/pkg/conduit"
@@ -105,9 +104,7 @@ func (i *ConduitInit) createDirs() error {
 }
 
 func (i *ConduitInit) isHiddenFlag(name string) bool {
-	return name == "dev" ||
-		strings.HasPrefix(name, "dev.") ||
-		conduit.DeprecatedFlags[name]
+	return conduit.HiddenFlags[name]
 }
 
 func (i *ConduitInit) conduitCfgFlags() *flag.FlagSet {

@@ -71,6 +71,11 @@ func buildRootCmd() *cobra.Command {
 	})
 	cmd.AddCommand(buildPipelinesCmd())
 
+	// mark hidden flags
+	for flagName := range conduit.HiddenFlags {
+		cmd.Flags().MarkHidden(flagName)
+	}
+
 	return cmd
 }
 
