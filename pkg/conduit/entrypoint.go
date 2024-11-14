@@ -30,7 +30,7 @@ const (
 	exitCodeErr       = 1
 	exitCodeInterrupt = 2
 
-	FlagDevCpuProfile   = "dev.cpuprofile"
+	FlagDevCPUProfile   = "dev.cpuprofile"
 	FlagDevMemProfile   = "dev.memprofile"
 	FlagDevBlockProfile = "dev.blockprofile"
 
@@ -41,7 +41,7 @@ const (
 // HiddenFlags is a map of flags that should not be shown in the help output.
 var HiddenFlags = map[string]bool{
 	FlagPipelinesExitOnError: true,
-	FlagDevCpuProfile:        true,
+	FlagDevCPUProfile:        true,
 	FlagDevMemProfile:        true,
 	FlagDevBlockProfile:      true,
 }
@@ -173,7 +173,7 @@ func Flags(cfg *Config) *flag.FlagSet {
 
 	flags.BoolVar(&cfg.Preview.PipelineArchV2, "preview.pipeline-arch-v2", cfg.Preview.PipelineArchV2, "enables experimental pipeline architecture v2 (note that the new architecture currently supports only 1 source and 1 destination per pipeline)")
 
-	flags.StringVar(&cfg.dev.cpuprofile, FlagDevCpuProfile, "", "write cpu profile to file")
+	flags.StringVar(&cfg.dev.cpuprofile, FlagDevCPUProfile, "", "write cpu profile to file")
 	flags.StringVar(&cfg.dev.memprofile, FlagDevMemProfile, "", "write memory profile to file")
 	flags.StringVar(&cfg.dev.blockprofile, FlagDevBlockProfile, "", "write block profile to file")
 
