@@ -75,7 +75,7 @@ func buildRootCmd() *cobra.Command {
 	for flagName := range conduit.HiddenFlags {
 		err := cmd.Flags().MarkHidden(flagName)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "%v\n", err)conduit.FlagPipelinesExitOnError
+			fmt.Fprintf(os.Stderr, "%v\n", err)
 		}
 	}
 
