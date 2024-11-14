@@ -20,21 +20,24 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"strings"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/peterbourgon/ff/v3"
 	"github.com/peterbourgon/ff/v3/ffyaml"
 )
 
-var DeprecatedFlags = map[string]bool{
-	"pipelines.exit-on-error": true,
-}
-
 const (
 	exitCodeErr       = 1
 	exitCodeInterrupt = 2
+
+	// Deprecated: Use `pipelines.error-recovery.exit-on-degraded` instead.
+	FlagPipelinesExitOnError = "pipelines.exit-on-error"
 )
+
+// HiddenFlags is a map of flags that should not be shown in the help output.
+var HiddenFlags = map[string]bool{
+	FlagPipelinesExitOnError: true,
+}
 
 // Serve is a shortcut for Entrypoint.Serve.
 func Serve(cfg Config) {
@@ -115,7 +118,7 @@ func Flags(cfg *Config) *flag.FlagSet {
 	// Note: If both `pipeline.exit-on-error` and `pipeline.exit-on-degraded` are set, `pipeline.exit-on-degraded` will take precedence
 	flags.BoolVar(
 		&cfg.Pipelines.ExitOnDegraded,
-		"pipelines.exit-on-error",
+		FlagPipelinesExitOnError,
 		cfg.Pipelines.ExitOnDegraded,
 		"Deprecated: use `exit-on-degraded` instead.\nexit Conduit if a pipeline experiences an error while running",
 	)
@@ -163,8 +166,6 @@ func Flags(cfg *Config) *flag.FlagSet {
 
 	flags.BoolVar(&cfg.Preview.PipelineArchV2, "preview.pipeline-arch-v2", cfg.Preview.PipelineArchV2, "enables experimental pipeline architecture v2 (note that the new architecture currently supports only 1 source and 1 destination per pipeline)")
 
-	// NB: flags with prefix dev.* are hidden from help output by default, they only show up using '-dev -help'
-	showDevHelp := flags.Bool("dev", false, "used together with the dev flag it shows dev flags")
 	flags.StringVar(&cfg.dev.cpuprofile, "dev.cpuprofile", "", "write cpu profile to file")
 	flags.StringVar(&cfg.dev.memprofile, "dev.memprofile", "", "write memory profile to file")
 	flags.StringVar(&cfg.dev.blockprofile, "dev.blockprofile", "", "write block profile to file")
@@ -172,9 +173,13 @@ func Flags(cfg *Config) *flag.FlagSet {
 	// show user or dev flags
 	flags.Usage = func() {
 		tmpFlags := flag.NewFlagSet("conduit", flag.ExitOnError)
+
+		// preserve original flag's output to the same writer
+		tmpFlags.SetOutput(flags.Output())
+
 		flags.VisitAll(func(f *flag.Flag) {
-			if f.Name == "dev" || strings.HasPrefix(f.Name, "dev.") != *showDevHelp || DeprecatedFlags[f.Name] {
-				return // hide flag from output
+			if HiddenFlags[f.Name] {
+				return
 			}
 			// reset value to its default, to ensure default is shown correctly
 			_ = f.Value.Set(f.DefValue)

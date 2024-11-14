@@ -20,6 +20,7 @@ import (
 
 	"github.com/conduitio/conduit/pkg/conduit"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 var (
@@ -70,6 +71,16 @@ func buildRootCmd() *cobra.Command {
 		Title: "Pipelines",
 	})
 	cmd.AddCommand(buildPipelinesCmd())
+
+	// mark hidden flags
+	cmd.Flags().VisitAll(func(f *pflag.Flag) {
+		if conduit.HiddenFlags[f.Name] {
+			err := cmd.Flags().MarkHidden(f.Name)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "failed to mark flag %q as hidden: %v", f.Name, err)
+			}
+		}
+	})
 
 	return cmd
 }
