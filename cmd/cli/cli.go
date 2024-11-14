@@ -81,7 +81,10 @@ func buildRootCmd() *cobra.Command {
 	// mark hidden flags
 	cmd.Flags().VisitAll(func(f *pflag.Flag) {
 		if isHiddenFlag(f.Name) {
-			cmd.Flags().MarkHidden(f.Name)
+			err := cmd.Flags().MarkHidden(f.Name)
+			if err != nil {
+				fmt.Errorf("failed to mark flag %q as hidden: %v", f.Name, err) // nolint:staticcheck
+			}
 		}
 	})
 

@@ -63,7 +63,7 @@ func TestBuildRootCmd_HelpOutput(t *testing.T) {
 	}
 
 	unexpectedFlags := []string{
-		conduit.FlagPipelinesExitOnError, // nolint:staticcheck // this will be completely removed before Conduit 1.0
+		conduit.FlagPipelinesExitOnError, //nolint:staticcheck // this will be completely removed before Conduit 1.0
 		"dev",
 		"dev.cpuprofile",
 		"dev.memprofile",
