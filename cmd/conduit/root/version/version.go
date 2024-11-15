@@ -12,19 +12,30 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package main
+package version
 
 import (
-	"log"
+	"context"
+	"fmt"
 
-	"github.com/conduitio/conduit/cmd/conduit/root"
 	"github.com/conduitio/ecdysis"
 )
 
-func main() {
-	e := ecdysis.New()
-	cmd := e.MustBuildCobraCommand(&root.RootCommand{})
-	if err := cmd.Execute(); err != nil {
-		log.Fatal(err)
+type VersionCommand struct{}
+
+var (
+	_ ecdysis.CommandWithExecute = (*VersionCommand)(nil)
+	_ ecdysis.CommandWithDocs    = (*VersionCommand)(nil)
+)
+
+func (c *VersionCommand) Usage() string { return "version" }
+func (c *VersionCommand) Docs() ecdysis.Docs {
+	return ecdysis.Docs{
+		Short: "Print the version number of conduit",
 	}
+}
+
+func (c *VersionCommand) Execute(context.Context) error {
+	fmt.Println("conduit v0.1.0")
+	return nil
 }

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cli
+package global
 
 import (
 	"flag"
@@ -20,7 +20,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/conduitio/conduit/cmd/cli/internal"
+	"github.com/conduitio/conduit/cmd/conduit/internal"
 	"github.com/conduitio/conduit/pkg/conduit"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/yaml/v3"
