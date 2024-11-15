@@ -7,7 +7,7 @@ require (
 	github.com/Masterminds/semver/v3 v3.3.0
 	github.com/Masterminds/sprig/v3 v3.3.0
 	github.com/NYTimes/gziphandler v1.1.1
-	github.com/bufbuild/buf v1.47.0
+	github.com/bufbuild/buf v1.47.2
 	github.com/conduitio/conduit-commons v0.5.0
 	github.com/conduitio/conduit-connector-file v0.9.0
 	github.com/conduitio/conduit-connector-generator v0.9.1
