@@ -13,3 +13,18 @@
 // limitations under the License.
 
 package pipelines
+
+import "github.com/spf13/cobra"
+
+func BuildPipelinesCmd() *cobra.Command {
+	pipelinesCmd := &cobra.Command{
+		Use:     "pipelines",
+		Short:   "Initialize and manage pipelines",
+		Args:    cobra.NoArgs,
+		GroupID: "pipelines",
+	}
+
+	pipelinesCmd.AddCommand(BuildPipelinesInitCmd())
+
+	return pipelinesCmd
+}

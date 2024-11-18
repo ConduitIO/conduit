@@ -14,17 +14,8 @@
 
 package main
 
-import (
-	"log"
-
-	"github.com/conduitio/conduit/cmd/conduit/root"
-	"github.com/conduitio/ecdysis"
-)
+import "github.com/conduitio/conduit/cmd/conduit/root"
 
 func main() {
-	e := ecdysis.New()
-	cmd := e.MustBuildCobraCommand(&root.RootCommand{})
-	if err := cmd.Execute(); err != nil {
-		log.Fatal(err)
-	}
+	root.New().Run()
 }

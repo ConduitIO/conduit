@@ -15,54 +15,72 @@
 package root
 
 import (
-	"context"
+	"fmt"
+	"os"
 
-	"github.com/conduitio/conduit/cmd/conduit/global"
-	"github.com/conduitio/conduit/cmd/conduit/root/version"
-	"github.com/conduitio/ecdysis"
+	"github.com/conduitio/conduit/cmd/conduit/root/pipelines"
+	"github.com/conduitio/conduit/pkg/conduit"
+	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
-
-type RootFlags struct {
-	Config  string `long:"config" usage:"config file (default is $HOME/.conduit.yaml)" persistent:"true"`
-	Author  string `long:"author" short:"a" usage:"author name for copyright attribution" persistent:"true"`
-	License string `long:"license" short:"l" usage:"name of license for the project" persistent:"true"`
-	Viper   bool   `long:"viper" usage:"use Viper for configuration" persistent:"true"`
-}
-
-type RootCommand struct {
-	flags RootFlags
-}
-
-func (c *RootCommand) Execute(ctx context.Context) error {
-	global.New().Run()
-	return nil
-}
 
 var (
-	_ ecdysis.CommandWithFlags       = (*RootCommand)(nil)
-	_ ecdysis.CommandWithDocs        = (*RootCommand)(nil)
-	_ ecdysis.CommandWithSubCommands = (*RootCommand)(nil)
-	_ ecdysis.CommandWithExecute     = (*RootCommand)(nil)
+	initArgs InitArgs
 )
 
-func (c *RootCommand) Usage() string { return "conduit" }
-func (c *RootCommand) Flags() []ecdysis.Flag {
-	flags := ecdysis.BuildFlags(&c.flags)
-
-	flags.SetDefault("author", "YOUR NAME")
-	flags.SetDefault("viper", true)
-	return flags
+type Instance struct {
+	rootCmd *cobra.Command
 }
 
-func (c *RootCommand) Docs() ecdysis.Docs {
-	return ecdysis.Docs{
-		Short: "Conduit CLI",
-		Long:  `Conduit CLI is a command-line that helps you interact with and manage Conduit.`,
+// New creates a new CLI Instance.
+func New() *Instance {
+	return &Instance{
+		rootCmd: buildRootCmd(),
 	}
 }
 
-func (c *RootCommand) SubCommands() []ecdysis.Command {
-	return []ecdysis.Command{
-		&version.VersionCommand{},
+func (i *Instance) Run() {
+	if err := i.rootCmd.Execute(); err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(1)
 	}
+}
+
+func buildRootCmd() *cobra.Command {
+	cfg := conduit.DefaultConfig()
+
+	cmd := &cobra.Command{
+		Use:     "conduit",
+		Short:   "Conduit CLI",
+		Long:    "Conduit CLI is a command-line that helps you interact with and manage Conduit.",
+		Version: conduit.Version(true),
+		Run: func(cmd *cobra.Command, args []string) {
+			e := &conduit.Entrypoint{}
+			e.Serve(cfg)
+		},
+	}
+	cmd.CompletionOptions.DisableDefaultCmd = true
+	conduit.Flags(&cfg).VisitAll(cmd.Flags().AddGoFlag)
+
+	// init
+	cmd.AddCommand(buildInitCmd())
+
+	// pipelines
+	cmd.AddGroup(&cobra.Group{
+		ID:    "pipelines",
+		Title: "Pipelines",
+	})
+	cmd.AddCommand(pipelines.BuildPipelinesCmd())
+
+	// mark hidden flags
+	cmd.Flags().VisitAll(func(f *pflag.Flag) {
+		if conduit.HiddenFlags[f.Name] {
+			err := cmd.Flags().MarkHidden(f.Name)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "failed to mark flag %q as hidden: %v", f.Name, err)
+			}
+		}
+	})
+
+	return cmd
 }
