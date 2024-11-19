@@ -59,11 +59,13 @@ func buildRootCmd() *cobra.Command {
 			e.Serve(cfg)
 		},
 	}
+
 	cmd.CompletionOptions.DisableDefaultCmd = true
 	conduit.Flags(&cfg).VisitAll(cmd.Flags().AddGoFlag)
 
 	// init
-	cmd.AddCommand(buildInitCmd())
+	initCmd := buildInitCmd()
+	cmd.AddCommand(initCmd)
 
 	// pipelines
 	cmd.AddGroup(&cobra.Group{

@@ -14,8 +14,19 @@
 
 package main
 
-import "github.com/conduitio/conduit/cmd/conduit/root"
+import (
+	"fmt"
+	"os"
+
+	"github.com/conduitio/conduit/cmd/conduit/root"
+	"github.com/conduitio/ecdysis"
+)
 
 func main() {
-	root.New().Run()
+	e := ecdysis.New()
+	cmd := e.MustBuildCobraCommand(&root.RootCommand{})
+	if err := cmd.Execute(); err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(1)
+	}
 }
