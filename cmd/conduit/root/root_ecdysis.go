@@ -138,6 +138,6 @@ func (c *RootCommand) Docs() ecdysis.Docs {
 
 func (c *RootCommand) SubCommands() []ecdysis.Command {
 	return []ecdysis.Command{
-		// inject root flags in sub-command
+		&InitCommand{},
 	}
 }

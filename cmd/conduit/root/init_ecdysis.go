@@ -16,8 +16,16 @@ package root
 
 import (
 	"context"
+	"flag"
+	"fmt"
+	"os"
+	"path/filepath"
 
+	"github.com/conduitio/conduit/cmd/conduit/internal"
+	"github.com/conduitio/conduit/pkg/conduit"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/ecdysis"
+	"github.com/conduitio/yaml/v3"
 )
 
 var (
@@ -42,12 +50,85 @@ func (c *InitCommand) Docs() ecdysis.Docs {
 	}
 }
 
+func (c *InitCommand) createDirs() error {
+	dirs := []string{"processors", "connectors", "pipelines"}
+
+	for _, dir := range dirs {
+		path := filepath.Join(c.flags.ConfigPath, dir)
+
+		// Attempt to create the directory, skipping if it already exists
+		if err := os.Mkdir(path, os.ModePerm); err != nil {
+			if os.IsExist(err) {
+				fmt.Printf("Directory '%s' already exists, skipping...\n", path)
+				continue
+			}
+			return fmt.Errorf("failed to create directory '%s': %w", path, err)
+		}
+
+		fmt.Printf("Created directory: %s\n", path)
+	}
+
+	return nil
+}
+
+func (c *InitCommand) conduitCfgFlags() *flag.FlagSet {
+	cfg := conduit.DefaultConfigWithBasePath(c.flags.ConfigPath)
+	return conduit.Flags(&cfg)
+}
+
+func (c *InitCommand) createConfigYAML() error {
+	cfgYAML := internal.NewYAMLTree()
+	c.conduitCfgFlags().VisitAll(func(f *flag.Flag) {
+		cfgYAML.Insert(f.Name, f.DefValue, f.Usage)
+	})
+
+	yamlData, err := yaml.Marshal(cfgYAML.Root)
+	if err != nil {
+		return cerrors.Errorf("error marshaling YAML: %w\n", err)
+	}
+
+	path := filepath.Join(c.flags.ConfigPath, "conduit.yaml")
+	err = os.WriteFile(path, yamlData, 0o600)
+	if err != nil {
+		return cerrors.Errorf("error writing conduit.yaml: %w", err)
+	}
+	fmt.Printf("Configuration file written to %v\n", path)
+
+	return nil
+}
+
 func (c *InitCommand) Execute(ctx context.Context) error {
-	//TODO implement me
-	panic("implement me")
+	err := c.createDirs()
+	if err != nil {
+		return err
+	}
+
+	err = c.createConfigYAML()
+	if err != nil {
+		return fmt.Errorf("failed to create config YAML: %w", err)
+	}
+
+	fmt.Println(`
+Conduit has been initialized!
+
+To quickly create an example pipeline, run 'conduit pipelines init'.
+To see how you can customize your first pipeline, run 'conduit pipelines init --help'.`)
+
+	return nil
+
 }
 
 func (c *InitCommand) Flags() []ecdysis.Flag {
-	//TODO implement me
-	panic("implement me")
+	flags := ecdysis.BuildFlags(&c.flags)
+
+	// Set current working directory as default
+	currentPath, err := os.Getwd()
+	if err != nil {
+		panic(cerrors.Errorf("failed to get current working directory: %w", err))
+	}
+
+	flags.SetDefault("config.path", currentPath)
+
+	return flags
+
 }
