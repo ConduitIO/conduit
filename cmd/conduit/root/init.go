@@ -15,6 +15,7 @@
 package root
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -23,71 +24,37 @@ import (
 	"github.com/conduitio/conduit/cmd/conduit/internal"
 	"github.com/conduitio/conduit/pkg/conduit"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/ecdysis"
 	"github.com/conduitio/yaml/v3"
-	"github.com/spf13/cobra"
 )
 
-type InitArgs struct {
-	Path string
+var (
+	_ ecdysis.CommandWithFlags   = (*InitCommand)(nil)
+	_ ecdysis.CommandWithExecute = (*InitCommand)(nil)
+	_ ecdysis.CommandWithDocs    = (*InitCommand)(nil)
+)
+
+type InitFlags struct {
+	ConfigPath string `flag:"config.path" usage:"path where Conduit will be initialized"`
 }
 
-type ConduitInit struct {
-	args InitArgs
+type InitCommand struct {
+	flags InitFlags
 }
 
-func NewConduitInit(args InitArgs) *ConduitInit {
-	return &ConduitInit{args: args}
-}
+func (c *InitCommand) Usage() string { return "init" }
 
-func (i *ConduitInit) Run() error {
-	err := i.createDirs()
-	if err != nil {
-		return err
+func (c *InitCommand) Docs() ecdysis.Docs {
+	return ecdysis.Docs{
+		Short: `Initialize Conduit with a configuration file and directories.`,
 	}
-
-	err = i.createConfigYAML()
-	if err != nil {
-		return fmt.Errorf("failed to create config YAML: %w", err)
-	}
-
-	fmt.Println(`
-Conduit has been initialized!
-
-To quickly create an example pipeline, run 'conduit pipelines init'.
-To see how you can customize your first pipeline, run 'conduit pipelines init --help'.`)
-
-	return nil
 }
 
-func (i *ConduitInit) createConfigYAML() error {
-	cfgYAML := internal.NewYAMLTree()
-	i.conduitCfgFlags().VisitAll(func(f *flag.Flag) {
-		if conduit.HiddenFlags[f.Name] {
-			return // hide flag from output
-		}
-		cfgYAML.Insert(f.Name, f.DefValue, f.Usage)
-	})
-
-	yamlData, err := yaml.Marshal(cfgYAML.Root)
-	if err != nil {
-		return cerrors.Errorf("error marshaling YAML: %w\n", err)
-	}
-
-	path := filepath.Join(i.path(), "conduit.yaml")
-	err = os.WriteFile(path, yamlData, 0o600)
-	if err != nil {
-		return cerrors.Errorf("error writing conduit.yaml: %w", err)
-	}
-	fmt.Printf("Configuration file written to %v\n", path)
-
-	return nil
-}
-
-func (i *ConduitInit) createDirs() error {
+func (c *InitCommand) createDirs() error {
 	dirs := []string{"processors", "connectors", "pipelines"}
 
 	for _, dir := range dirs {
-		path := filepath.Join(i.path(), dir)
+		path := filepath.Join(c.flags.ConfigPath, dir)
 
 		// Attempt to create the directory, skipping if it already exists
 		if err := os.Mkdir(path, os.ModePerm); err != nil {
@@ -104,39 +71,64 @@ func (i *ConduitInit) createDirs() error {
 	return nil
 }
 
-func (i *ConduitInit) conduitCfgFlags() *flag.FlagSet {
-	cfg := conduit.DefaultConfigWithBasePath(i.path())
+func (c *InitCommand) conduitCfgFlags() *flag.FlagSet {
+	cfg := conduit.DefaultConfigWithBasePath(c.flags.ConfigPath)
 	return conduit.Flags(&cfg)
 }
 
-func (i *ConduitInit) path() string {
-	if i.args.Path != "" {
-		return i.args.Path
+func (c *InitCommand) createConfigYAML() error {
+	cfgYAML := internal.NewYAMLTree()
+	c.conduitCfgFlags().VisitAll(func(f *flag.Flag) {
+		cfgYAML.Insert(f.Name, f.DefValue, f.Usage)
+	})
+
+	yamlData, err := yaml.Marshal(cfgYAML.Root)
+	if err != nil {
+		return cerrors.Errorf("error marshaling YAML: %w\n", err)
 	}
 
-	path, err := os.Getwd()
+	path := filepath.Join(c.flags.ConfigPath, "conduit.yaml")
+	err = os.WriteFile(path, yamlData, 0o600)
+	if err != nil {
+		return cerrors.Errorf("error writing conduit.yaml: %w", err)
+	}
+	fmt.Printf("Configuration file written to %v\n", path)
+
+	return nil
+}
+
+func (c *InitCommand) Execute(ctx context.Context) error {
+	err := c.createDirs()
+	if err != nil {
+		return err
+	}
+
+	err = c.createConfigYAML()
+	if err != nil {
+		return fmt.Errorf("failed to create config YAML: %w", err)
+	}
+
+	fmt.Println(`
+Conduit has been initialized!
+
+To quickly create an example pipeline, run 'conduit pipelines init'.
+To see how you can customize your first pipeline, run 'conduit pipelines init --help'.`)
+
+	return nil
+
+}
+
+func (c *InitCommand) Flags() []ecdysis.Flag {
+	flags := ecdysis.BuildFlags(&c.flags)
+
+	// Set current working directory as default
+	currentPath, err := os.Getwd()
 	if err != nil {
 		panic(cerrors.Errorf("failed to get current working directory: %w", err))
 	}
 
-	return path
-}
+	flags.SetDefault("config.path", currentPath)
 
-func buildInitCmd() *cobra.Command {
-	initCmd := &cobra.Command{
-		Use:   "init",
-		Short: "Initialize Conduit with a configuration file and directories.",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return NewConduitInit(initArgs).Run()
-		},
-	}
-	initCmd.Flags().StringVar(
-		&initArgs.Path,
-		"config.path",
-		"",
-		"path where Conduit will be initialized",
-	)
+	return flags
 
-	return initCmd
 }

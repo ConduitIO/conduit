@@ -15,209 +15,131 @@
 package pipelines
 
 import (
-	_ "embed"
+	"context"
 	"fmt"
 	"log"
 	"os"
 	"path/filepath"
-	"strings"
 	"text/template"
 
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/conduitio/conduit/pkg/plugin/connector/builtin"
-	"github.com/spf13/cobra"
+	"github.com/conduitio/ecdysis"
 )
-
-//go:embed pipeline.tmpl
-var pipelineCfgTmpl string
-
-var pipelinesInitArgs PipelinesInitArgs
-
-var funcMap = template.FuncMap{
-	"formatParameterValueTable":      formatParameterValueTable,
-	"formatParameterValueYAML":       formatParameterValueYAML,
-	"formatParameterDescriptionYAML": formatParameterDescriptionYAML,
-	"formatParameterRequired":        formatParameterRequired,
-}
-
-func formatParameterRequired(param config.Parameter) string {
-	for _, v := range param.Validations {
-		if v.Type() == config.ValidationTypeRequired {
-			return "Required"
-		}
-	}
-
-	return "Optional"
-}
-
-// formatParameterValue formats the value of a configuration parameter.
-func formatParameterValueTable(value string) string {
-	switch {
-	case value == "":
-		return `<Chip label="null" />`
-	case strings.Contains(value, "\n"):
-		// specifically used in the javascript processor
-		return fmt.Sprintf("\n```js\n%s\n```\n", value)
-	default:
-		return fmt.Sprintf("`%s`", value)
-	}
-}
-
-func formatParameterDescriptionYAML(description string) string {
-	const (
-		indentLen  = 10
-		prefix     = "# "
-		lineLen    = 80
-		tmpNewLine = "〠"
-	)
-
-	// remove markdown new lines
-	description = strings.ReplaceAll(description, "\n\n", tmpNewLine)
-	description = strings.ReplaceAll(description, "\n", " ")
-	description = strings.ReplaceAll(description, tmpNewLine, "\n")
-
-	formattedDescription := formatMultiline(description, strings.Repeat(" ", indentLen)+prefix, lineLen)
-	// remove first indent and last new line
-	formattedDescription = formattedDescription[indentLen : len(formattedDescription)-1]
-	return formattedDescription
-}
-
-func formatMultiline(
-	input string,
-	prefix string,
-	maxLineLen int,
-) string {
-	textLen := maxLineLen - len(prefix)
-
-	// split the input into lines of length textLen
-	lines := strings.Split(input, "\n")
-	var formattedLines []string
-	for _, line := range lines {
-		if len(line) <= textLen {
-			formattedLines = append(formattedLines, line)
-			continue
-		}
-
-		// split the line into multiple lines, don't break words
-		words := strings.Fields(line)
-		var formattedLine string
-		for _, word := range words {
-			if len(formattedLine)+len(word) > textLen {
-				formattedLines = append(formattedLines, formattedLine[1:])
-				formattedLine = ""
-			}
-			formattedLine += " " + word
-		}
-		if formattedLine != "" {
-			formattedLines = append(formattedLines, formattedLine[1:])
-		}
-	}
-
-	// combine lines including indent and prefix
-	var formatted string
-	for _, line := range formattedLines {
-		formatted += prefix + line + "\n"
-	}
-
-	return formatted
-}
-
-func formatParameterValueYAML(value string) string {
-	switch {
-	case value == "":
-		return `""`
-	case strings.Contains(value, "\n"):
-		// specifically used in the javascript processor
-		formattedValue := formatMultiline(value, "            ", 10000)
-		return fmt.Sprintf("|\n%s", formattedValue)
-	default:
-		return fmt.Sprintf(`'%s'`, value)
-	}
-}
 
 const (
 	defaultDestination = "file"
 	defaultSource      = "generator"
 )
 
-type pipelineTemplate struct {
-	Name            string
-	SourceSpec      connectorTemplate
-	DestinationSpec connectorTemplate
+var (
+	_ ecdysis.CommandWithDocs    = (*InitCommand)(nil)
+	_ ecdysis.CommandWithFlags   = (*InitCommand)(nil)
+	_ ecdysis.CommandWithArgs    = (*InitCommand)(nil)
+	_ ecdysis.CommandWithExecute = (*InitCommand)(nil)
+
+	pipelineCfgTmpl string
+)
+
+type InitArgs struct {
+	name string
 }
 
-type connectorTemplate struct {
-	Name   string
-	Params config.Parameters
+type InitFlags struct {
+	Source      string `long:"source" usage:"Source connector (any of the built-in connectors)."`
+	Destination string `long:"destination" usage:"Destination connector (any of the built-in connectors)."`
+	Path        string `long:"pipelines.path" usage:"Path where the pipeline will be saved." default:"./pipelines"`
 }
 
-type PipelinesInitArgs struct {
-	Name        string
-	Source      string
-	Destination string
-	Path        string
+type InitCommand struct {
+	args  InitArgs
+	flags InitFlags
 }
 
-type PipelinesInit struct {
-	args PipelinesInitArgs
+func (c *InitCommand) configFilePath() string {
+	return filepath.Join(c.flags.Path, c.configFileName())
 }
 
-func NewPipelinesInit(args PipelinesInitArgs) *PipelinesInit {
-	return &PipelinesInit{args: args}
+func (c *InitCommand) configFileName() string {
+	return fmt.Sprintf("pipeline-%s.yaml", c.args.name)
 }
 
-func (pi *PipelinesInit) Run() error {
-	var pipeline pipelineTemplate
-	// if no source/destination arguments are provided,
-	// we build a runnable example pipeline
-	if pi.args.Source == "" && pi.args.Destination == "" {
-		pipeline = pi.buildDemoPipeline()
-	} else {
-		p, err := pi.buildTemplatePipeline()
-		if err != nil {
-			return err
-		}
-		pipeline = p
+func (c *InitCommand) Flags() []ecdysis.Flag {
+	flags := ecdysis.BuildFlags(&InitFlags{})
+
+	flags.SetDefault("pipelines.path", "./pipelines")
+
+	return flags
+}
+
+func (c *InitCommand) Args(args []string) error {
+	if len(args) == 0 {
+		return cerrors.Errorf("requires a pipeline name")
 	}
 
-	err := pi.write(pipeline)
-	if err != nil {
-		return cerrors.Errorf("could not write pipeline: %w", err)
+	if len(args) > 1 {
+		return cerrors.Errorf("too many arguments")
 	}
-
-	fmt.Printf(`Your pipeline has been initialized and created at %s.
-
-To run the pipeline, simply run 'conduit'.`, pi.configFilePath())
-
+	c.args.name = args[0]
 	return nil
 }
 
-func (pi *PipelinesInit) buildTemplatePipeline() (pipelineTemplate, error) {
-	srcParams, err := pi.getSourceParams()
-	if err != nil {
-		return pipelineTemplate{}, cerrors.Errorf("failed getting source params: %w", err)
-	}
+func (c *InitCommand) Usage() string { return "init" }
 
-	dstParams, err := pi.getDestinationParams()
-	if err != nil {
-		return pipelineTemplate{}, cerrors.Errorf("failed getting destination params: %w", err)
+func (c *InitCommand) Docs() ecdysis.Docs {
+	return ecdysis.Docs{
+		Short: "Initialize an example pipeline.",
+		Long: `Initialize a pipeline configuration file, with all of parameters for source and destination connectors 
+initialized and described. The source and destination connector can be chosen via flags. If no connectors are chosen, then
+a simple and runnable generator-to-log pipeline is configured.`,
+		Example: "conduit pipelines init awesome-pipeline-name --source postgres --destination kafka --path pipelines/pg-to-kafka.yaml",
 	}
-
-	return pipelineTemplate{
-		Name:            pi.pipelineName(),
-		SourceSpec:      srcParams,
-		DestinationSpec: dstParams,
-	}, nil
 }
 
-func (pi *PipelinesInit) buildDemoPipeline() pipelineTemplate {
-	srcParams, _ := pi.getSourceParams()
-	dstParams, _ := pi.getDestinationParams()
+func (c *InitCommand) getSourceParams() (connectorTemplate, error) {
+	for _, conn := range builtin.DefaultBuiltinConnectors {
+		specs := conn.NewSpecification()
+		if specs.Name == c.flags.Source || specs.Name == "builtin:"+c.flags.Source {
+			if conn.NewSource == nil {
+				return connectorTemplate{}, cerrors.Errorf("plugin %v has no source", c.flags.Source)
+			}
+
+			return connectorTemplate{
+				Name:   specs.Name,
+				Params: conn.NewSource().Parameters(),
+			}, nil
+		}
+	}
+
+	return connectorTemplate{}, cerrors.Errorf("%v: %w", c.flags.Source, plugin.ErrPluginNotFound)
+}
+
+func (c *InitCommand) getDestinationParams() (connectorTemplate, error) {
+	for _, conn := range builtin.DefaultBuiltinConnectors {
+		specs := conn.NewSpecification()
+		if specs.Name == c.flags.Destination || specs.Name == "builtin:"+c.flags.Destination {
+			if conn.NewDestination == nil {
+				return connectorTemplate{}, cerrors.Errorf("plugin %v has no source", c.flags.Destination)
+			}
+
+			return connectorTemplate{
+				Name:   specs.Name,
+				Params: conn.NewDestination().Parameters(),
+			}, nil
+		}
+	}
+
+	return connectorTemplate{}, cerrors.Errorf("%v: %w", c.flags.Destination, plugin.ErrPluginNotFound)
+}
+
+func (c *InitCommand) buildDemoPipeline() pipelineTemplate {
+	srcParams, _ := c.getSourceParams()
+	dstParams, _ := c.getDestinationParams()
 
 	return pipelineTemplate{
-		Name: pi.pipelineName(),
+		Name: c.args.name,
 		SourceSpec: connectorTemplate{
 			Name: defaultSource,
 			Params: map[string]config.Parameter{
@@ -257,22 +179,40 @@ func (pi *PipelinesInit) buildDemoPipeline() pipelineTemplate {
 	}
 }
 
-func (pi *PipelinesInit) getOutput() *os.File {
-	output, err := os.OpenFile(pi.configFilePath(), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+func (c *InitCommand) buildTemplatePipeline() (pipelineTemplate, error) {
+	srcParams, err := c.getSourceParams()
 	if err != nil {
-		log.Fatalf("error: failed to open %s: %v", pi.args.Path, err)
+		return pipelineTemplate{}, cerrors.Errorf("failed getting source params: %w", err)
+	}
+
+	dstParams, err := c.getDestinationParams()
+	if err != nil {
+		return pipelineTemplate{}, cerrors.Errorf("failed getting destination params: %w", err)
+	}
+
+	return pipelineTemplate{
+		Name:            c.args.name,
+		SourceSpec:      srcParams,
+		DestinationSpec: dstParams,
+	}, nil
+}
+
+func (c *InitCommand) getOutput() *os.File {
+	output, err := os.OpenFile(c.configFilePath(), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	if err != nil {
+		log.Fatalf("error: failed to open %s: %v", c.configFilePath(), err)
 	}
 
 	return output
 }
 
-func (pi *PipelinesInit) write(pipeline pipelineTemplate) error {
+func (c *InitCommand) write(pipeline pipelineTemplate) error {
 	t, err := template.New("").Funcs(funcMap).Option("missingkey=zero").Parse(pipelineCfgTmpl)
 	if err != nil {
 		return cerrors.Errorf("failed parsing template: %w", err)
 	}
 
-	output := pi.getOutput()
+	output := c.getOutput()
 	defer output.Close()
 
 	err = t.Execute(output, pipeline)
@@ -283,115 +223,28 @@ func (pi *PipelinesInit) write(pipeline pipelineTemplate) error {
 	return nil
 }
 
-func (pi *PipelinesInit) getSourceParams() (connectorTemplate, error) {
-	for _, conn := range builtin.DefaultBuiltinConnectors {
-		specs := conn.NewSpecification()
-		if specs.Name == pi.sourceConnector() || specs.Name == "builtin:"+pi.sourceConnector() {
-			if conn.NewSource == nil {
-				return connectorTemplate{}, cerrors.Errorf("plugin %v has no source", pi.sourceConnector())
-			}
-
-			return connectorTemplate{
-				Name:   specs.Name,
-				Params: conn.NewSource().Parameters(),
-			}, nil
+func (c *InitCommand) Execute(_ context.Context) error {
+	var pipeline pipelineTemplate
+	// if no source/destination arguments are provided,
+	// we build a runnable example pipeline
+	if c.flags.Source == "" && c.flags.Destination == "" {
+		pipeline = c.buildDemoPipeline()
+	} else {
+		p, err := c.buildTemplatePipeline()
+		if err != nil {
+			return err
 		}
+		pipeline = p
 	}
 
-	return connectorTemplate{}, cerrors.Errorf("%v: %w", pi.sourceConnector(), plugin.ErrPluginNotFound)
-}
-
-func (pi *PipelinesInit) getDestinationParams() (connectorTemplate, error) {
-	for _, conn := range builtin.DefaultBuiltinConnectors {
-		specs := conn.NewSpecification()
-		if specs.Name == pi.destinationConnector() || specs.Name == "builtin:"+pi.destinationConnector() {
-			if conn.NewDestination == nil {
-				return connectorTemplate{}, cerrors.Errorf("plugin %v has no source", pi.destinationConnector())
-			}
-
-			return connectorTemplate{
-				Name:   specs.Name,
-				Params: conn.NewDestination().Parameters(),
-			}, nil
-		}
+	err := c.write(pipeline)
+	if err != nil {
+		return cerrors.Errorf("could not write pipeline: %w", err)
 	}
 
-	return connectorTemplate{}, cerrors.Errorf("%v: %w", pi.destinationConnector(), plugin.ErrPluginNotFound)
-}
+	fmt.Printf(`Your pipeline has been initialized and created at %s.
 
-func (pi *PipelinesInit) configFilePath() string {
-	path := pi.args.Path
-	if path == "" {
-		path = "./pipelines"
-	}
+To run the pipeline, simply run 'conduit'.`, c.configFilePath())
 
-	return filepath.Join(path, pi.configFileName())
-}
-
-func (pi *PipelinesInit) configFileName() string {
-	return fmt.Sprintf("pipeline-%s.yaml", pi.pipelineName())
-}
-
-func (pi *PipelinesInit) sourceConnector() string {
-	if pi.args.Source != "" {
-		return pi.args.Source
-	}
-
-	return defaultSource
-}
-
-func (pi *PipelinesInit) destinationConnector() string {
-	if pi.args.Destination != "" {
-		return pi.args.Destination
-	}
-
-	return defaultDestination
-}
-
-func (pi *PipelinesInit) pipelineName() string {
-	if pi.args.Name != "" {
-		return pi.args.Name
-	}
-
-	return fmt.Sprintf("%s-to-%s", pi.sourceConnector(), pi.destinationConnector())
-}
-
-func BuildPipelinesInitCmd() *cobra.Command {
-	pipelinesInitCmd := &cobra.Command{
-		Use:   "init [pipeline-name]",
-		Short: "Initialize an example pipeline.",
-		Long: `Initialize a pipeline configuration file, with all of parameters for source and destination connectors 
-initialized and described. The source and destination connector can be chosen via flags. If no connectors are chosen, then
-a simple and runnable generator-to-log pipeline is configured.`,
-		Args:    cobra.MaximumNArgs(1),
-		Example: "  conduit pipelines init awesome-pipeline-name --source postgres --destination kafka --path pipelines/pg-to-kafka.yaml",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if len(args) > 0 {
-				pipelinesInitArgs.Name = args[0]
-			}
-			return NewPipelinesInit(pipelinesInitArgs).Run()
-		},
-	}
-
-	// Add flags to pipelines init command
-	pipelinesInitCmd.Flags().StringVar(
-		&pipelinesInitArgs.Source,
-		"source",
-		"",
-		"Source connector (any of the built-in connectors).",
-	)
-	pipelinesInitCmd.Flags().StringVar(
-		&pipelinesInitArgs.Destination,
-		"destination",
-		"",
-		"Destination connector (any of the built-in connectors).",
-	)
-	pipelinesInitCmd.Flags().StringVar(
-		&pipelinesInitArgs.Path,
-		"pipelines.path",
-		"./pipelines",
-		"Path where the pipeline will be saved.",
-	)
-
-	return pipelinesInitCmd
+	return nil
 }

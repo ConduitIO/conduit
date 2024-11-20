@@ -14,17 +14,28 @@
 
 package pipelines
 
-import "github.com/spf13/cobra"
+import (
+	"github.com/conduitio/ecdysis"
+)
 
-func BuildPipelinesCmd() *cobra.Command {
-	pipelinesCmd := &cobra.Command{
-		Use:     "pipelines",
-		Short:   "Initialize and manage pipelines",
-		Args:    cobra.NoArgs,
-		GroupID: "pipelines",
+var (
+	_ ecdysis.CommandWithDocs        = (*PipelinesCommand)(nil)
+	_ ecdysis.CommandWithSubCommands = (*PipelinesCommand)(nil)
+)
+
+type PipelinesCommand struct {
+}
+
+func (c *PipelinesCommand) SubCommands() []ecdysis.Command {
+	return []ecdysis.Command{
+		&InitCommand{},
 	}
+}
 
-	pipelinesCmd.AddCommand(BuildPipelinesInitCmd())
+func (p *PipelinesCommand) Usage() string { return "pipelines" }
 
-	return pipelinesCmd
+func (p *PipelinesCommand) Docs() ecdysis.Docs {
+	return ecdysis.Docs{
+		Short: "Initialize and manage pipelines",
+	}
 }
