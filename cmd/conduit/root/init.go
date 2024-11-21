@@ -115,7 +115,6 @@ To quickly create an example pipeline, run 'conduit pipelines init'.
 To see how you can customize your first pipeline, run 'conduit pipelines init --help'.`)
 
 	return nil
-
 }
 
 func (c *InitCommand) Flags() []ecdysis.Flag {
@@ -130,5 +129,4 @@ func (c *InitCommand) Flags() []ecdysis.Flag {
 	flags.SetDefault("config.path", currentPath)
 
 	return flags
-
 }

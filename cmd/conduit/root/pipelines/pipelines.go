@@ -23,8 +23,7 @@ var (
 	_ ecdysis.CommandWithSubCommands = (*PipelinesCommand)(nil)
 )
 
-type PipelinesCommand struct {
-}
+type PipelinesCommand struct{}
 
 func (c *PipelinesCommand) SubCommands() []ecdysis.Command {
 	return []ecdysis.Command{
@@ -32,9 +31,9 @@ func (c *PipelinesCommand) SubCommands() []ecdysis.Command {
 	}
 }
 
-func (p *PipelinesCommand) Usage() string { return "pipelines" }
+func (c *PipelinesCommand) Usage() string { return "pipelines" }
 
-func (p *PipelinesCommand) Docs() ecdysis.Docs {
+func (c *PipelinesCommand) Docs() ecdysis.Docs {
 	return ecdysis.Docs{
 		Short: "Initialize and manage pipelines",
 	}
