@@ -25,6 +25,9 @@ import (
 func main() {
 	e := ecdysis.New()
 	cmd := e.MustBuildCobraCommand(&root.RootCommand{})
+
+	cmd.CompletionOptions.DisableDefaultCmd = true
+
 	if err := cmd.Execute(); err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)
