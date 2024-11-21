@@ -31,7 +31,6 @@ var (
 	_ ecdysis.CommandWithSubCommands = (*RootCommand)(nil)
 )
 
-// TODO: Check which ones are really global from the design document
 type RootFlags struct {
 	// Database configuration
 	DBType                     string `long:"db.type" usage:"database type; accepts badger,postgres,inmemory,sqlite"`
