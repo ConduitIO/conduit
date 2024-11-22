@@ -16,12 +16,12 @@ package stream
 
 import (
 	"context"
-	"github.com/conduitio/conduit-commons/cchan"
-	"github.com/conduitio/conduit-commons/csync"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/conduitio/conduit-commons/cchan"
+	"github.com/conduitio/conduit-commons/csync"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -324,6 +324,7 @@ func TestProcessorNode_HandleFilteredRecord(t *testing.T) {
 
 	// after the node stops the out channel should be closed
 	msg, msgReceived, err = cchan.ChanOut[*Message](out).RecvTimeout(ctx, 100*time.Millisecond)
+	is.NoErr(err)
 	is.True(!msgReceived)
 	is.Equal(msg, nil)
 }
@@ -397,6 +398,7 @@ func TestProcessorNode_ReceivedFilteredMessage(t *testing.T) {
 
 	// after the node stops the out channel should be closed
 	msg, msgReceived, err = cchan.ChanOut[*Message](out).RecvTimeout(ctx, 100*time.Millisecond)
+	is.NoErr(err)
 	is.True(!msgReceived)
 	is.Equal(msg, nil)
 }
