@@ -79,6 +79,16 @@ func (n *ProcessorNode) Run(ctx context.Context) error {
 			return err
 		}
 
+		if msg.filtered {
+			n.logger.Info(ctx).Str(log.MessageIDField, msg.ID()).
+				Msg("message marked as filtered, sending directly to next node")
+			err = n.base.Send(ctx, n.logger, msg)
+			if err != nil {
+				return msg.Nack(err, n.ID())
+			}
+			continue
+		}
+
 		executeTime := time.Now()
 		recsIn := []opencdc.Record{msg.Record}
 		recsOut := n.Processor.Process(msg.Ctx, recsIn)
@@ -104,10 +114,17 @@ func (n *ProcessorNode) Run(ctx context.Context) error {
 				return err
 			}
 		case sdk.FilterRecord:
-			// NB: Ack skipped messages since they've been correctly handled
-			err := msg.Ack()
+			n.logger.Info(ctx).
+				Str(log.MessageIDField, msg.ID()).
+				Msg("marking message as filtered")
+			msg.filtered = true
+
+			n.logger.Info(ctx).
+				Str(log.MessageIDField, msg.ID()).
+				Msg("message marked as filtered, sending directly to next node")
+			err = n.base.Send(ctx, n.logger, msg)
 			if err != nil {
-				return cerrors.Errorf("failed to ack skipped message: %w", err)
+				return msg.Nack(err, n.ID())
 			}
 		case sdk.ErrorRecord:
 			err = msg.Nack(v.Error, n.ID())

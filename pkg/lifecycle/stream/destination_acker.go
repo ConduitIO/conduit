@@ -34,8 +34,7 @@ type DestinationAckerNode struct {
 	// queue is used to store messages
 	queue deque.Deque[*Message]
 
-	// m guards access to queue
-	m sync.Mutex
+	queueMutex sync.Mutex
 
 	// mctx guards access to the contextCtxCancel function
 	mctx sync.Mutex
@@ -96,9 +95,9 @@ func (n *DestinationAckerNode) Run(ctx context.Context) (err error) {
 			return err
 		}
 
-		n.m.Lock()
+		n.queueMutex.Lock()
 		n.queue.PushBack(msg)
-		n.m.Unlock()
+		n.queueMutex.Unlock()
 		select {
 		case signalChan <- struct{}{}:
 			// triggered the start of listening to acks in worker goroutine
@@ -116,9 +115,9 @@ func (n *DestinationAckerNode) worker(
 ) {
 	handleError := func(msg *Message, err error) {
 		// push message back to the front of the queue and return error
-		n.m.Lock()
+		n.queueMutex.Lock()
 		n.queue.PushFront(msg)
-		n.m.Unlock()
+		n.queueMutex.Unlock()
 
 		errChan <- err
 	}
@@ -131,13 +130,25 @@ func (n *DestinationAckerNode) worker(
 		// let's start fetching acks for messages in the queue
 		for {
 			// check if there are more messages waiting in the queue
-			n.m.Lock()
+			n.queueMutex.Lock()
 			if n.queue.Len() == 0 {
-				n.m.Unlock()
+				n.queueMutex.Unlock()
 				break
 			}
 			msg := n.queue.PopFront()
-			n.m.Unlock()
+			n.queueMutex.Unlock()
+
+			if msg.filtered {
+				n.logger.Info(ctx).
+					Str(log.MessageIDField, msg.ID()).
+					Msg("acking filtered message")
+				err := n.handleAck(msg, nil)
+				if err != nil {
+					errChan <- err
+					return
+				}
+				continue
+			}
 
 			if len(acks) == 0 {
 				// Ack can return multiple acks, store them and check the position
