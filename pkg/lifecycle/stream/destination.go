@@ -102,7 +102,7 @@ func (n *DestinationNode) Run(ctx context.Context) (err error) {
 			return err
 		}
 		if msg.filtered {
-			n.logger.Info(ctx).Str(log.MessageIDField, msg.ID()).
+			n.logger.Debug(ctx).Str(log.MessageIDField, msg.ID()).
 				Msg("message marked as filtered, sending directly to next node")
 			err = n.base.Send(ctx, n.logger, msg)
 			if err != nil {

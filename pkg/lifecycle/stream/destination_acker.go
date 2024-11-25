@@ -139,7 +139,7 @@ func (n *DestinationAckerNode) worker(
 			n.queueMutex.Unlock()
 
 			if msg.filtered {
-				n.logger.Info(ctx).
+				n.logger.Trace(ctx).
 					Str(log.MessageIDField, msg.ID()).
 					Msg("acking filtered message")
 				err := n.handleAck(msg, nil)

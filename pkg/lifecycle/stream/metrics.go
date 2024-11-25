@@ -47,7 +47,7 @@ func (n *MetricsNode) Run(ctx context.Context) error {
 		}
 
 		if msg.filtered {
-			n.logger.Info(ctx).Str(log.MessageIDField, msg.ID()).
+			n.logger.Trace(ctx).Str(log.MessageIDField, msg.ID()).
 				Msg("message marked as filtered, sending directly to next node")
 			err = n.base.Send(ctx, n.logger, msg)
 			if err != nil {
