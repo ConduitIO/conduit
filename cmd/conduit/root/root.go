@@ -39,7 +39,7 @@ type RootFlags struct {
 	// Global flags -----------------------------------------------------------
 
 	// Conduit configuration file
-	ConduitConfigPath string `long:"config" usage:"global conduit configuration file" persistent:"true" default:"./conduit.yaml"`
+	ConduitConfigPath string `long:"config.path" usage:"global conduit configuration file" persistent:"true" default:"./conduit.yaml"`
 
 	// Version
 	Version bool `long:"version" short:"v" usage:"show current Conduit version" persistent:"true"`
