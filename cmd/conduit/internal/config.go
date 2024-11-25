@@ -1,3 +1,17 @@
+// Copyright © 2024 Meroxa, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package internal
 
 import (
@@ -10,7 +24,7 @@ import (
 )
 
 const (
-	CONDUIT_PREFIX = "CONDUIT"
+	ConduitPrefix = "CONDUIT"
 )
 
 // LoadConfigFromFile loads on cfg, the configuration from the file at path.
@@ -20,10 +34,8 @@ func LoadConfigFromFile(filePath string, cfg *conduit.Config) error {
 	// Set the file name and path
 	v.SetConfigFile(filePath)
 
-	// Attempt to read the configuration file
+	// Attempt to read the configuration file.
 	if err := v.ReadInConfig(); err != nil {
-		// here we could simply log conduit.yaml file doesn't exist since this is optional
-		//return fmt.Errorf("error reading config file: %w", err)
 		return nil
 	}
 
@@ -40,7 +52,7 @@ func LoadConfigFromEnv(cfg *conduit.Config) error {
 	v := viper.New()
 
 	// Set environment variable prefix
-	v.SetEnvPrefix(CONDUIT_PREFIX)
+	v.SetEnvPrefix(ConduitPrefix)
 
 	// Automatically map environment variables
 	v.AutomaticEnv()
@@ -52,9 +64,9 @@ func LoadConfigFromEnv(cfg *conduit.Config) error {
 		value := pair[1]
 
 		// Check if the environment variable has the desired prefix
-		if strings.HasPrefix(key, fmt.Sprintf("%s_", CONDUIT_PREFIX)) {
+		if strings.HasPrefix(key, fmt.Sprintf("%s_", ConduitPrefix)) {
 			// Strip the prefix and replace underscores with dots
-			strippedKey := strings.ToLower(strings.TrimPrefix(key, fmt.Sprintf("%s_", CONDUIT_PREFIX)))
+			strippedKey := strings.ToLower(strings.TrimPrefix(key, fmt.Sprintf("%s_", ConduitPrefix)))
 			strippedKey = strings.ReplaceAll(strippedKey, "_", ".")
 
 			// Set the value in Viper
