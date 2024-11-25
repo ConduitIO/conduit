@@ -117,10 +117,10 @@ type Config struct {
 		PipelineArchV2 bool
 	}
 
-	dev struct {
-		cpuprofile   string
-		memprofile   string
-		blockprofile string
+	Dev struct {
+		CPUProfile   string
+		MemProfile   string
+		BlockProfile string
 	}
 }
 

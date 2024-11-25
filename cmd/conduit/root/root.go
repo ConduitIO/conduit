@@ -17,10 +17,14 @@ package root
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 
+	"github.com/conduitio/conduit/cmd/conduit/internal"
 	"github.com/conduitio/conduit/cmd/conduit/root/pipelines"
 	"github.com/conduitio/conduit/pkg/conduit"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/ecdysis"
 )
 
@@ -32,6 +36,16 @@ var (
 )
 
 type RootFlags struct {
+	// Global flags -----------------------------------------------------------
+
+	// Conduit configuration file
+	ConduitConfigPath string `long:"config" usage:"global conduit configuration file" persistent:"true" default:"./conduit.yaml"`
+
+	// Version
+	Version bool `long:"version" short:"v" usage:"show current Conduit version" persistent:"true"`
+
+	// Root flags -------------------------------------------------------------
+
 	// Database configuration
 	DBType                     string `long:"db.type" usage:"database type; accepts badger,postgres,inmemory,sqlite"`
 	DBBadgerPath               string `long:"db.badger.path" usage:"path to badger DB"`
@@ -73,9 +87,6 @@ type RootFlags struct {
 	DevCPUProfile   string `long:"dev.cpuprofile" usage:"write CPU profile to file"`
 	DevMemProfile   string `long:"dev.memprofile" usage:"write memory profile to file"`
 	DevBlockProfile string `long:"dev.blockprofile" usage:"write block profile to file"`
-
-	// Version
-	Version bool `long:"version" short:"v" usage:"show version" persistent:"true"`
 }
 
 type RootCommand struct {
@@ -83,16 +94,117 @@ type RootCommand struct {
 	cfg   conduit.Config
 }
 
+func (c *RootCommand) updateConfigFromFlags() {
+	c.cfg.DB.Type = c.flags.DBType
+	c.cfg.DB.Postgres.ConnectionString = c.flags.DBPostgresConnectionString
+	c.cfg.DB.Postgres.Table = c.flags.DBPostgresTable
+	c.cfg.DB.SQLite.Table = c.flags.DBSQLiteTable
+
+	// Map API configuration
+	c.cfg.API.Enabled = c.flags.APIEnabled
+	c.cfg.API.HTTP.Address = c.flags.APIHTTPAddress
+	c.cfg.API.GRPC.Address = c.flags.APIGRPCAddress
+
+	// Map logging configuration
+	c.cfg.Log.Level = c.flags.LogLevel
+	c.cfg.Log.Format = c.flags.LogFormat
+
+	// Map pipeline configuration
+	c.cfg.Pipelines.ExitOnDegraded = c.flags.PipelinesExitOnDegraded
+	c.cfg.Pipelines.ErrorRecovery.MinDelay = c.flags.PipelinesErrorRecoveryMinDelay
+	c.cfg.Pipelines.ErrorRecovery.MaxDelay = c.flags.PipelinesErrorRecoveryMaxDelay
+	c.cfg.Pipelines.ErrorRecovery.BackoffFactor = c.flags.PipelinesErrorRecoveryBackoffFactor
+	c.cfg.Pipelines.ErrorRecovery.MaxRetries = c.flags.PipelinesErrorRecoveryMaxRetries
+	c.cfg.Pipelines.ErrorRecovery.MaxRetriesWindow = c.flags.PipelinesErrorRecoveryMaxRetriesWindow
+
+	// Map schema registry configuration
+	c.cfg.SchemaRegistry.Type = c.flags.SchemaRegistryType
+	c.cfg.SchemaRegistry.Confluent.ConnectionString = c.flags.SchemaRegistryConfluentConnectionString
+
+	// Map preview features
+	c.cfg.Preview.PipelineArchV2 = c.flags.PreviewPipelineArchV2
+
+	// Map development profiling
+	c.cfg.Dev.CPUProfile = c.flags.DevCPUProfile
+	c.cfg.Dev.MemProfile = c.flags.DevMemProfile
+	c.cfg.Dev.BlockProfile = c.flags.DevBlockProfile
+
+	// Update paths
+	c.cfg.DB.SQLite.Path = c.flags.DBSQLitePath
+	c.cfg.DB.Badger.Path = c.flags.DBBadgerPath
+	c.cfg.Pipelines.Path = c.flags.PipelinesPath
+	c.cfg.Connectors.Path = c.flags.ConnectorsPath
+	c.cfg.Processors.Path = c.flags.ProcessorsPath
+}
+
+func (c *RootCommand) updateFlagValuesFromConfig() {
+	// Map database configuration
+	c.flags.DBType = c.cfg.DB.Type
+	c.flags.DBPostgresConnectionString = c.cfg.DB.Postgres.ConnectionString
+	c.flags.DBPostgresTable = c.cfg.DB.Postgres.Table
+	c.flags.DBSQLiteTable = c.cfg.DB.SQLite.Table
+
+	// Map API configuration
+	c.flags.APIEnabled = c.cfg.API.Enabled
+	c.flags.APIHTTPAddress = c.cfg.API.HTTP.Address
+	c.flags.APIGRPCAddress = c.cfg.API.GRPC.Address
+
+	// Map logging configuration
+	c.flags.LogLevel = c.cfg.Log.Level
+	c.flags.LogFormat = c.cfg.Log.Format
+
+	// Map pipeline configuration
+	c.flags.PipelinesExitOnDegraded = c.cfg.Pipelines.ExitOnDegraded
+	c.flags.PipelinesErrorRecoveryMinDelay = c.cfg.Pipelines.ErrorRecovery.MinDelay
+	c.flags.PipelinesErrorRecoveryMaxDelay = c.cfg.Pipelines.ErrorRecovery.MaxDelay
+	c.flags.PipelinesErrorRecoveryBackoffFactor = c.cfg.Pipelines.ErrorRecovery.BackoffFactor
+	c.flags.PipelinesErrorRecoveryMaxRetries = c.cfg.Pipelines.ErrorRecovery.MaxRetries
+	c.flags.PipelinesErrorRecoveryMaxRetriesWindow = c.cfg.Pipelines.ErrorRecovery.MaxRetriesWindow
+
+	// Map schema registry configuration
+	c.flags.SchemaRegistryType = c.cfg.SchemaRegistry.Type
+	c.flags.SchemaRegistryConfluentConnectionString = c.cfg.SchemaRegistry.Confluent.ConnectionString
+
+	// Map preview features
+	c.flags.PreviewPipelineArchV2 = c.cfg.Preview.PipelineArchV2
+
+	// Map development profiling
+	c.flags.DevCPUProfile = c.cfg.Dev.CPUProfile
+	c.flags.DevMemProfile = c.cfg.Dev.MemProfile
+	c.flags.DevBlockProfile = c.cfg.Dev.BlockProfile
+
+	// Update paths
+	c.flags.DBSQLitePath = c.cfg.DB.SQLite.Path
+	c.flags.DBBadgerPath = c.cfg.DB.Badger.Path
+	c.flags.PipelinesPath = c.cfg.Pipelines.Path
+	c.flags.ConnectorsPath = c.cfg.Connectors.Path
+	c.flags.ProcessorsPath = c.cfg.Processors.Path
+}
+
 func (c *RootCommand) Execute(ctx context.Context) error {
 	if c.flags.Version {
-		// TODO: use the logger instead
-		fmt.Print(conduit.Version(true))
+		_, _ = fmt.Fprintf(os.Stdout, "%s\n", conduit.Version(true))
 		return nil
 	}
 
+	// 1. Load conduit configuration file and update general config.
+	if err := internal.LoadConfigFromFile(c.flags.ConduitConfigPath, &c.cfg); err != nil {
+		return err
+	}
+
+	// 2. Load environment variables and update general config.
+	if err := internal.LoadConfigFromEnv(&c.cfg); err != nil {
+		return err
+	}
+
+	// 3. Update the general config from flags.
+	c.updateConfigFromFlags()
+
+	// 4. Update flags from global configuration (this will be needed for conduit init)
+	c.updateFlagValuesFromConfig()
+
 	e := &conduit.Entrypoint{}
 	e.Serve(c.cfg)
-
 	return nil
 }
 
@@ -100,8 +212,14 @@ func (c *RootCommand) Usage() string { return "conduit" }
 func (c *RootCommand) Flags() []ecdysis.Flag {
 	flags := ecdysis.BuildFlags(&c.flags)
 
-	c.cfg = conduit.DefaultConfig()
+	currentPath, err := os.Getwd()
+	if err != nil {
+		panic(cerrors.Errorf("failed to get current working directory: %w", err))
+	}
+	c.cfg = conduit.DefaultConfigWithBasePath(currentPath)
 
+	conduitConfigPath := filepath.Join(currentPath, "conduit.yaml")
+	flags.SetDefault("config.path", conduitConfigPath)
 	flags.SetDefault("db.type", c.cfg.DB.Type)
 	flags.SetDefault("db.badger.path", c.cfg.DB.Badger.Path)
 	flags.SetDefault("db.postgres.connection-string", c.cfg.DB.Postgres.ConnectionString)
@@ -138,7 +256,7 @@ func (c *RootCommand) Docs() ecdysis.Docs {
 
 func (c *RootCommand) SubCommands() []ecdysis.Command {
 	return []ecdysis.Command{
-		&InitCommand{},
+		&InitCommand{rootFlags: &c.flags},
 		&pipelines.PipelinesCommand{},
 	}
 }

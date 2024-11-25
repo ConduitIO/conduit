@@ -388,8 +388,8 @@ func (r *Runtime) initProfiling(ctx context.Context) (deferred func(), err error
 		}
 	}()
 
-	if r.Config.dev.cpuprofile != "" {
-		f, err := os.Create(r.Config.dev.cpuprofile)
+	if r.Config.Dev.CPUProfile != "" {
+		f, err := os.Create(r.Config.Dev.CPUProfile)
 		if err != nil {
 			return deferred, cerrors.Errorf("could not create CPU profile: %w", err)
 		}
@@ -399,9 +399,9 @@ func (r *Runtime) initProfiling(ctx context.Context) (deferred func(), err error
 		}
 		deferFunc(pprof.StopCPUProfile)
 	}
-	if r.Config.dev.memprofile != "" {
+	if r.Config.Dev.MemProfile != "" {
 		deferFunc(func() {
-			f, err := os.Create(r.Config.dev.memprofile)
+			f, err := os.Create(r.Config.Dev.MemProfile)
 			if err != nil {
 				r.logger.Err(ctx, err).Msg("could not create memory profile")
 				return
@@ -413,10 +413,10 @@ func (r *Runtime) initProfiling(ctx context.Context) (deferred func(), err error
 			}
 		})
 	}
-	if r.Config.dev.blockprofile != "" {
+	if r.Config.Dev.BlockProfile != "" {
 		runtime.SetBlockProfileRate(1)
 		deferFunc(func() {
-			f, err := os.Create(r.Config.dev.blockprofile)
+			f, err := os.Create(r.Config.Dev.BlockProfile)
 			if err != nil {
 				r.logger.Err(ctx, err).Msg("could not create block profile")
 				return

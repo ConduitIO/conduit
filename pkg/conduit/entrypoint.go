@@ -16,34 +16,17 @@ package conduit
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"os"
 	"os/signal"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/peterbourgon/ff/v3"
-	"github.com/peterbourgon/ff/v3/ffyaml"
 )
 
 const (
 	exitCodeErr       = 1
 	exitCodeInterrupt = 2
-
-	// Deprecated: Use `pipelines.error-recovery.exit-on-degraded` instead.
-	FlagPipelinesExitOnError = "pipelines.exit-on-error"
 )
-
-// HiddenFlags is a map of flags that should not be shown in the help output.
-var HiddenFlags = map[string]bool{
-	FlagPipelinesExitOnError: true,
-}
-
-// Serve is a shortcut for Entrypoint.Serve.
-func Serve(cfg Config) {
-	e := &Entrypoint{}
-	e.Serve(cfg)
-}
 
 // Entrypoint provides methods related to the Conduit entrypoint (parsing
 // config, managing interrupt signals etc.).
@@ -59,9 +42,6 @@ type Entrypoint struct{}
 //   - environment variables
 //   - config file (lowest priority)
 func (e *Entrypoint) Serve(cfg Config) {
-	flags := Flags(&cfg)
-	e.ParseConfig(flags)
-
 	if cfg.Log.Format == "cli" {
 		_, _ = fmt.Fprintf(os.Stdout, "%s\n", e.Splash())
 	}
@@ -76,140 +56,6 @@ func (e *Entrypoint) Serve(cfg Config) {
 	err = runtime.Run(ctx)
 	if err != nil && !cerrors.Is(err, context.Canceled) {
 		e.exitWithError(cerrors.Errorf("conduit runtime error: %w", err))
-	}
-}
-
-// Flags returns a flag set that, when parsed, stores the values in the provided
-// config struct.
-func Flags(cfg *Config) *flag.FlagSet {
-	// TODO extract flags from config struct rather than defining flags manually
-	flags := flag.NewFlagSet("conduit", flag.ExitOnError)
-
-	flags.StringVar(&cfg.DB.Type, "db.type", cfg.DB.Type, "database type; accepts badger,postgres,inmemory,sqlite")
-	flags.StringVar(&cfg.DB.Badger.Path, "db.badger.path", cfg.DB.Badger.Path, "path to badger DB")
-	flags.StringVar(
-		&cfg.DB.Postgres.ConnectionString,
-		"db.postgres.connection-string",
-		cfg.DB.Postgres.ConnectionString,
-		"postgres connection string, may be a database URL or in PostgreSQL keyword/value format",
-	)
-	flags.StringVar(&cfg.DB.Postgres.Table, "db.postgres.table", cfg.DB.Postgres.Table, "postgres table in which to store data (will be created if it does not exist)")
-	flags.StringVar(&cfg.DB.SQLite.Path, "db.sqlite.path", cfg.DB.SQLite.Path, "path to sqlite3 DB")
-	flags.StringVar(&cfg.DB.SQLite.Table, "db.sqlite.table", cfg.DB.SQLite.Table, "sqlite3 table in which to store data (will be created if it does not exist)")
-	flags.BoolVar(&cfg.API.Enabled, "api.enabled", cfg.API.Enabled, "enable HTTP and gRPC API")
-	flags.StringVar(&cfg.API.HTTP.Address, "http.address", cfg.API.HTTP.Address, "address for serving the HTTP API")
-	flags.StringVar(&cfg.API.GRPC.Address, "grpc.address", cfg.API.GRPC.Address, "address for serving the gRPC API")
-
-	flags.StringVar(&cfg.Log.Level, "log.level", cfg.Log.Level, "sets logging level; accepts debug, info, warn, error, trace")
-	flags.StringVar(&cfg.Log.Format, "log.format", cfg.Log.Format, "sets the format of the logging; accepts json, cli")
-
-	flags.StringVar(&cfg.Connectors.Path, "connectors.path", cfg.Connectors.Path, "path to standalone connectors' directory")
-	flags.StringVar(&cfg.Processors.Path, "processors.path", cfg.Processors.Path, "path to standalone processors' directory")
-
-	// Pipeline configuration
-	flags.StringVar(
-		&cfg.Pipelines.Path,
-		"pipelines.path",
-		cfg.Pipelines.Path,
-		"path to the directory that has the yaml pipeline configuration files, or a single pipeline configuration file",
-	)
-
-	// Deprecated: use `pipelines.exit-on-degraded` instead
-	// Note: If both `pipeline.exit-on-error` and `pipeline.exit-on-degraded` are set, `pipeline.exit-on-degraded` will take precedence
-	flags.BoolVar(
-		&cfg.Pipelines.ExitOnDegraded,
-		FlagPipelinesExitOnError,
-		cfg.Pipelines.ExitOnDegraded,
-		"Deprecated: use `exit-on-degraded` instead.\nexit Conduit if a pipeline experiences an error while running",
-	)
-
-	flags.BoolVar(
-		&cfg.Pipelines.ExitOnDegraded,
-		"pipelines.exit-on-degraded",
-		cfg.Pipelines.ExitOnDegraded,
-		"exit Conduit if a pipeline enters a degraded state",
-	)
-
-	flags.DurationVar(
-		&cfg.Pipelines.ErrorRecovery.MinDelay,
-		"pipelines.error-recovery.min-delay",
-		cfg.Pipelines.ErrorRecovery.MinDelay,
-		"minimum delay before restart",
-	)
-	flags.DurationVar(
-		&cfg.Pipelines.ErrorRecovery.MaxDelay,
-		"pipelines.error-recovery.max-delay",
-		cfg.Pipelines.ErrorRecovery.MaxDelay,
-		"maximum delay before restart",
-	)
-	flags.IntVar(
-		&cfg.Pipelines.ErrorRecovery.BackoffFactor,
-		"pipelines.error-recovery.backoff-factor",
-		cfg.Pipelines.ErrorRecovery.BackoffFactor,
-		"backoff factor applied to the last delay",
-	)
-	flags.Int64Var(
-		&cfg.Pipelines.ErrorRecovery.MaxRetries,
-		"pipelines.error-recovery.max-retries",
-		cfg.Pipelines.ErrorRecovery.MaxRetries,
-		"maximum number of retries",
-	)
-	flags.DurationVar(
-		&cfg.Pipelines.ErrorRecovery.MaxRetriesWindow,
-		"pipelines.error-recovery.max-retries-window",
-		cfg.Pipelines.ErrorRecovery.MaxRetriesWindow,
-		"amount of time running without any errors after which a pipeline is considered healthy",
-	)
-
-	flags.StringVar(&cfg.SchemaRegistry.Type, "schema-registry.type", cfg.SchemaRegistry.Type, "schema registry type; accepts builtin,confluent")
-	flags.StringVar(&cfg.SchemaRegistry.Confluent.ConnectionString, "schema-registry.confluent.connection-string", cfg.SchemaRegistry.Confluent.ConnectionString, "confluent schema registry connection string")
-
-	flags.BoolVar(&cfg.Preview.PipelineArchV2, "preview.pipeline-arch-v2", cfg.Preview.PipelineArchV2, "enables experimental pipeline architecture v2 (note that the new architecture currently supports only 1 source and 1 destination per pipeline)")
-
-	flags.StringVar(&cfg.dev.cpuprofile, "dev.cpuprofile", "", "write cpu profile to file")
-	flags.StringVar(&cfg.dev.memprofile, "dev.memprofile", "", "write memory profile to file")
-	flags.StringVar(&cfg.dev.blockprofile, "dev.blockprofile", "", "write block profile to file")
-
-	// show user or dev flags
-	flags.Usage = func() {
-		tmpFlags := flag.NewFlagSet("conduit", flag.ExitOnError)
-
-		// preserve original flag's output to the same writer
-		tmpFlags.SetOutput(flags.Output())
-
-		flags.VisitAll(func(f *flag.Flag) {
-			if HiddenFlags[f.Name] {
-				return
-			}
-			// reset value to its default, to ensure default is shown correctly
-			_ = f.Value.Set(f.DefValue)
-			tmpFlags.Var(f.Value, f.Name, f.Usage)
-		})
-		tmpFlags.Usage()
-	}
-
-	return flags
-}
-
-func (e *Entrypoint) ParseConfig(flags *flag.FlagSet) {
-	_ = flags.String("config", "conduit.yaml", "global config file")
-	version := flags.Bool("version", false, "prints current Conduit version")
-
-	// flags is set up to exit on error, we can safely ignore the error
-	err := ff.Parse(flags, os.Args[1:],
-		ff.WithEnvVarPrefix("CONDUIT"),
-		ff.WithConfigFileFlag("config"),
-		ff.WithConfigFileParser(ffyaml.Parser),
-		ff.WithAllowMissingConfigFile(true),
-	)
-	if err != nil {
-		e.exitWithError(err)
-	}
-
-	// check if the -version flag is set
-	if *version {
-		_, _ = fmt.Fprintf(os.Stdout, "%s\n", Version(true))
-		os.Exit(0)
 	}
 }
 
