@@ -46,6 +46,16 @@ func (n *MetricsNode) Run(ctx context.Context) error {
 			return err
 		}
 
+		if msg.filtered {
+			n.logger.Trace(ctx).Str(log.MessageIDField, msg.ID()).
+				Msg("message marked as filtered, sending directly to next node")
+			err = n.base.Send(ctx, n.logger, msg)
+			if err != nil {
+				return msg.Nack(err, n.ID())
+			}
+			continue
+		}
+
 		msg.RegisterAckHandler(func(msg *Message) error {
 			n.Histogram.Observe(msg.Record)
 			return nil

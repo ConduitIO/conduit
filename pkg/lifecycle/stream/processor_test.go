@@ -18,7 +18,10 @@ import (
 	"context"
 	"sync"
 	"testing"
+	"time"
 
+	"github.com/conduitio/conduit-commons/cchan"
+	"github.com/conduitio/conduit-commons/csync"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -251,7 +254,11 @@ func testNodeWithError(is *is.I, processor *mock.Processor, nackHandler NackHand
 	is.Equal(false, ok)
 }
 
-func TestProcessorNode_Skip(t *testing.T) {
+// TestProcessorNode_HandleFilteredRecord tests the following case:
+// If a processor returns a filtered record, then the message should
+// be passed to the next node (published to the outgoing channel)
+// and also marked with `filtered`.
+func TestProcessorNode_HandleFilteredRecord(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
@@ -275,6 +282,9 @@ func TestProcessorNode_Skip(t *testing.T) {
 	n.Sub(in)
 	out := n.Pub()
 
+	var nodeStoppedWG sync.WaitGroup
+	nodeStoppedWG.Add(1)
+
 	// send a message on the pipeline that will be skipped
 	msg := &Message{Ctx: ctx, Record: opencdc.Record{}}
 
@@ -297,12 +307,98 @@ func TestProcessorNode_Skip(t *testing.T) {
 		close(in)
 	}()
 
-	// run the pipeline and assert that there are no underlying pipeline errors
-	err := n.Run(ctx)
-	is.Equal(err, nil)
-	is.Equal(counter, 1)
+	go func() {
+		defer nodeStoppedWG.Done()
+		err := n.Run(ctx)
+		is.NoErr(err)
+	}()
+
+	gotMsg, msgReceived, err := cchan.ChanOut[*Message](out).RecvTimeout(ctx, 100*time.Millisecond)
+	is.True(msgReceived)
+	is.NoErr(err)
+	is.Equal(msg, gotMsg)
+	is.True(msg.filtered)
+
+	err = (*csync.WaitGroup)(&nodeStoppedWG).WaitTimeout(ctx, 100*time.Millisecond)
+	is.NoErr(err) // timed out waiting for node to be done running
 
 	// after the node stops the out channel should be closed
-	_, ok := <-out
-	is.Equal(false, ok)
+	msg, msgReceived, err = cchan.ChanOut[*Message](out).RecvTimeout(ctx, 100*time.Millisecond)
+	is.NoErr(err)
+	is.True(!msgReceived)
+	is.Equal(msg, nil)
+}
+
+// TestProcessorNode_HandleFilteredRecord tests the following case:
+// If a processor node receives a filtered message, it should be
+// passed to the next node and the processor should NOT be called.
+func TestProcessorNode_ReceivedFilteredMessage(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+
+	// create a dummy processor
+	proc := mock.NewProcessor(ctrl)
+	proc.EXPECT().Open(gomock.Any())
+	proc.EXPECT().Teardown(gomock.Any())
+
+	n := ProcessorNode{
+		Name:           "test",
+		Processor:      proc,
+		ProcessorTimer: noop.Timer{},
+	}
+
+	// setup the test pipeline
+	in := make(chan *Message)
+	n.Sub(in)
+	out := n.Pub()
+
+	var nodeStopped sync.WaitGroup
+	nodeStopped.Add(1)
+
+	// send a message on the pipeline that will be skipped
+	msg := &Message{
+		Ctx:      ctx,
+		Record:   opencdc.Record{},
+		filtered: true,
+	}
+
+	// register a dummy AckHandler and NackHandler for tests.
+	msg.RegisterAckHandler(func(msg *Message) error {
+		is.Fail() // message should not be ack-ed
+		return nil
+	})
+	msg.RegisterNackHandler(func(msg *Message, nm NackMetadata) error {
+		// Our NackHandler shouldn't ever be hit if we're correctly skipping
+		// so fail the test if we get here at all.
+		is.Fail() // message should not be nack-ed
+		return nil
+	})
+
+	go func() {
+		// publisher
+		in <- msg
+		close(in)
+	}()
+
+	go func() {
+		defer nodeStopped.Done()
+		err := n.Run(ctx)
+		is.NoErr(err)
+	}()
+
+	gotMsg, msgReceived, err := cchan.ChanOut[*Message](out).RecvTimeout(ctx, 100*time.Millisecond)
+	is.True(msgReceived)
+	is.NoErr(err)
+	is.Equal(msg, gotMsg)
+	is.True(msg.filtered)
+
+	err = (*csync.WaitGroup)(&nodeStopped).WaitTimeout(ctx, 100*time.Millisecond)
+	is.NoErr(err) // timed out waiting for node to be done running
+
+	// after the node stops the out channel should be closed
+	msg, msgReceived, err = cchan.ChanOut[*Message](out).RecvTimeout(ctx, 100*time.Millisecond)
+	is.NoErr(err)
+	is.True(!msgReceived)
+	is.Equal(msg, nil)
 }

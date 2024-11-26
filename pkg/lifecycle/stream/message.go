@@ -65,14 +65,21 @@ type Message struct {
 	acked  chan struct{}
 	nacked chan struct{}
 
+	// filtered indicates whether the message holds a filtered record.
+	// Such a message needs to be acknowledged.
+	// This is done by letting the message pass through all the nodes
+	// (without being processed by them), until the destination acker
+	// node acknowledges it.
+	filtered bool
+
 	// handler is executed when Ack or Nack is called.
 	handler StatusChangeHandler
+
 	// hasNackHandler is true if at least one nack handler was registered.
 	hasNackHandler bool
 
 	// ackNackReturnValue is cached the first time Ack or Nack is executed.
 	ackNackReturnValue error
-
 	// initOnce is guarding the initialization logic of a message.
 	initOnce sync.Once
 	// ackNackOnce is guarding the acking/nacking logic of a message.
