@@ -188,5 +188,5 @@ func TestDestinationNode_HandleFilteredMessage(t *testing.T) {
 	is.Equal(msg, gotMsg)
 
 	err = (*csync.WaitGroup)(&nodeStopped).WaitTimeout(ctx, 100*time.Millisecond)
-	is.NoErr(err) // timed out waiting for node to be done running}
+	is.NoErr(err) // timed out waiting for node to be done running
 }
