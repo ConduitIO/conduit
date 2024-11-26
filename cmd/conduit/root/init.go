@@ -75,7 +75,6 @@ func (c *InitCommand) createConfigYAML() error {
 
 	ignoreKeys := map[string]bool{
 		"ConduitConfigPath": true,
-		"DBType":            true,
 		"Version":           true,
 		"DevCPUProfile":     true,
 		"DevMemProfile":     true,

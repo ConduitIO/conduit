@@ -47,7 +47,6 @@ func LoadConfigFromFile(filePath string, cfg *conduit.Config) error {
 	return nil
 }
 
-// TODO: check if logger is correct
 func LoadConfigFromEnv(cfg *conduit.Config) error {
 	v := viper.New()
 
