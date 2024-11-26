@@ -73,7 +73,20 @@ func (c *InitCommand) createConfigYAML() error {
 	v := reflect.Indirect(reflect.ValueOf(c.rootFlags))
 	t := v.Type()
 
+	ignoreKeys := map[string]bool{
+		"ConduitConfigPath": true,
+		"DBType":            true,
+		"Version":           true,
+		"DevCPUProfile":     true,
+		"DevMemProfile":     true,
+		"DevBlockProfile":   true,
+	}
+
 	for i := 0; i < v.NumField(); i++ {
+		if ignoreKeys[t.Field(i).Name] {
+			continue
+		}
+
 		field := t.Field(i)
 		value := fmt.Sprintf("%v", v.Field(i).Interface())
 		usage := field.Tag.Get("usage")
