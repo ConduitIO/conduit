@@ -16,6 +16,7 @@ package pipelines
 
 import (
 	"context"
+	_ "embed"
 	"fmt"
 	"log"
 	"os"
@@ -35,7 +36,13 @@ var (
 	_ ecdysis.CommandWithArgs    = (*InitCommand)(nil)
 	_ ecdysis.CommandWithExecute = (*InitCommand)(nil)
 
+	//go:embed pipeline.tmpl
 	pipelineCfgTmpl string
+)
+
+const (
+	defaultSource      = "generator"
+	defaultDestination = "file"
 )
 
 type InitArgs struct {
@@ -49,16 +56,9 @@ type InitFlags struct {
 }
 
 type InitCommand struct {
-	args  InitArgs
-	flags InitFlags
-}
-
-func (c *InitCommand) configFilePath() string {
-	return filepath.Join(c.flags.PipelinesPath, c.configFileName())
-}
-
-func (c *InitCommand) configFileName() string {
-	return fmt.Sprintf("pipeline-%s.yaml", c.args.name)
+	args           InitArgs
+	flags          InitFlags
+	configFilePath string
 }
 
 func (c *InitCommand) Flags() []ecdysis.Flag {
@@ -70,8 +70,8 @@ func (c *InitCommand) Flags() []ecdysis.Flag {
 	}
 
 	flags.SetDefault("pipelines.path", filepath.Join(currentPath, "./pipelines"))
-	flags.SetDefault("source", "generator")
-	flags.SetDefault("destination", "file")
+	flags.SetDefault("source", defaultSource)
+	flags.SetDefault("destination", defaultDestination)
 
 	return flags
 }
@@ -143,7 +143,7 @@ func (c *InitCommand) buildDemoPipeline() pipelineTemplate {
 	return pipelineTemplate{
 		Name: c.args.name,
 		SourceSpec: connectorTemplate{
-			Name: c.flags.Source,
+			Name: defaultSource,
 			Params: map[string]config.Parameter{
 				"format.type": {
 					Description: srcParams.Params["format.type"].Description,
@@ -169,7 +169,7 @@ func (c *InitCommand) buildDemoPipeline() pipelineTemplate {
 			},
 		},
 		DestinationSpec: connectorTemplate{
-			Name: c.flags.Destination,
+			Name: defaultDestination,
 			Params: map[string]config.Parameter{
 				"path": {
 					Description: dstParams.Params["path"].Description,
@@ -200,9 +200,9 @@ func (c *InitCommand) buildTemplatePipeline() (pipelineTemplate, error) {
 }
 
 func (c *InitCommand) getOutput() *os.File {
-	output, err := os.OpenFile(c.configFilePath(), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	output, err := os.OpenFile(c.configFilePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
-		log.Fatalf("error: failed to open %s: %v", c.configFilePath(), err)
+		log.Fatalf("error: failed to open %s: %v", c.configFilePath, err)
 	}
 
 	return output
@@ -226,29 +226,22 @@ func (c *InitCommand) write(pipeline pipelineTemplate) error {
 }
 
 func (c *InitCommand) Execute(_ context.Context) error {
-	var pipeline pipelineTemplate
-	// if no source/destination arguments are provided,
-	// we build a runnable example pipeline
-	fmt.Printf("pipelines path %s\n", c.flags.PipelinesPath)
-	// TODO: validate presence of either or.
-	if c.flags.Source == "" || c.flags.Destination == "" {
-		pipeline = c.buildDemoPipeline()
-	} else {
-		p, err := c.buildTemplatePipeline()
-		if err != nil {
-			return err
-		}
-		pipeline = p
+	c.configFilePath = filepath.Join(c.flags.PipelinesPath, fmt.Sprintf("pipeline-%s.yaml", c.args.name))
+
+	// TODO: utilize buildDemoPipeline if source and destination are the default ones
+
+	pipeline, err := c.buildTemplatePipeline()
+	if err != nil {
+		return err
 	}
 
-	err := c.write(pipeline)
-	if err != nil {
+	if err := c.write(pipeline); err != nil {
 		return cerrors.Errorf("could not write pipeline: %w", err)
 	}
 
 	fmt.Printf(`Your pipeline has been initialized and created at %s.
 
-To run the pipeline, simply run 'conduit'.`, c.configFilePath())
+To run the pipeline, simply run 'conduit'.`, c.configFilePath)
 
 	return nil
 }
