@@ -100,102 +100,110 @@ a simple and runnable generator-to-log pipeline is configured.`,
 	}
 }
 
-func (c *InitCommand) getSourceParams() (connectorTemplate, error) {
+func (c *InitCommand) getSourceSpec() (connectorSpec, error) {
 	for _, conn := range builtin.DefaultBuiltinConnectors {
 		specs := conn.NewSpecification()
 		if specs.Name == c.flags.Source || specs.Name == "builtin:"+c.flags.Source {
 			if conn.NewSource == nil {
-				return connectorTemplate{}, cerrors.Errorf("plugin %v has no source", c.flags.Source)
+				return connectorSpec{}, cerrors.Errorf("plugin %v has no source", c.flags.Source)
 			}
 
-			return connectorTemplate{
+			return connectorSpec{
 				Name:   specs.Name,
 				Params: conn.NewSource().Parameters(),
 			}, nil
 		}
 	}
 
-	return connectorTemplate{}, cerrors.Errorf("%v: %w", c.flags.Source, plugin.ErrPluginNotFound)
+	return connectorSpec{}, cerrors.Errorf("%v: %w", c.flags.Source, plugin.ErrPluginNotFound)
 }
 
-func (c *InitCommand) getDestinationParams() (connectorTemplate, error) {
+func (c *InitCommand) getDestinationSpec() (connectorSpec, error) {
 	for _, conn := range builtin.DefaultBuiltinConnectors {
 		specs := conn.NewSpecification()
 		if specs.Name == c.flags.Destination || specs.Name == "builtin:"+c.flags.Destination {
 			if conn.NewDestination == nil {
-				return connectorTemplate{}, cerrors.Errorf("plugin %v has no source", c.flags.Destination)
+				return connectorSpec{}, cerrors.Errorf("plugin %v has no source", c.flags.Destination)
 			}
 
-			return connectorTemplate{
+			return connectorSpec{
 				Name:   specs.Name,
 				Params: conn.NewDestination().Parameters(),
 			}, nil
 		}
 	}
-
-	return connectorTemplate{}, cerrors.Errorf("%v: %w", c.flags.Destination, plugin.ErrPluginNotFound)
+	return connectorSpec{}, cerrors.Errorf("%v: %w", c.flags.Destination, plugin.ErrPluginNotFound)
 }
 
-func (c *InitCommand) buildDemoPipeline() pipelineTemplate {
-	srcParams, _ := c.getSourceParams()
-	dstParams, _ := c.getDestinationParams()
-
-	return pipelineTemplate{
-		Name: c.args.name,
-		SourceSpec: connectorTemplate{
-			Name: defaultSource,
-			Params: map[string]config.Parameter{
-				"format.type": {
-					Description: srcParams.Params["format.type"].Description,
-					Type:        srcParams.Params["format.type"].Type,
-					Default:     "structured",
-					Validations: srcParams.Params["format.type"].Validations,
-				},
-				"format.options.scheduledDeparture": {
-					Description: "Generate field 'scheduledDeparture' of type 'time'",
-					Type:        config.ParameterTypeString,
-					Default:     "time",
-				},
-				"format.options.airline": {
-					Description: "Generate field 'airline' of type string",
-					Type:        config.ParameterTypeString,
-					Default:     "string",
-				},
-				"rate": {
-					Description: srcParams.Params["rate"].Description,
-					Type:        srcParams.Params["rate"].Type,
-					Default:     "1",
-				},
+// getDemoSourceGeneratorSpec returns a simplified version of the source generator connector.
+func (c *InitCommand) getDemoSourceGeneratorSpec(spec connectorSpec) connectorSpec {
+	return connectorSpec{
+		Name: defaultSource,
+		Params: map[string]config.Parameter{
+			"format.type": {
+				Description: spec.Params["format.type"].Description,
+				Type:        spec.Params["format.type"].Type,
+				Default:     "structured",
+				Validations: spec.Params["format.type"].Validations,
+			},
+			"format.options.scheduledDeparture": {
+				Description: "Generate field 'scheduledDeparture' of type 'time'",
+				Type:        config.ParameterTypeString,
+				Default:     "time",
+			},
+			"format.options.airline": {
+				Description: "Generate field 'airline' of type string",
+				Type:        config.ParameterTypeString,
+				Default:     "string",
+			},
+			"rate": {
+				Description: spec.Params["rate"].Description,
+				Type:        spec.Params["rate"].Type,
+				Default:     "1",
 			},
 		},
-		DestinationSpec: connectorTemplate{
-			Name: defaultDestination,
-			Params: map[string]config.Parameter{
-				"path": {
-					Description: dstParams.Params["path"].Description,
-					Type:        dstParams.Params["path"].Type,
-					Default:     "./destination.txt",
-				},
+	}
+}
+
+// getDemoDestinationFileSpec returns a simplified version of the destination file connector.
+func (c *InitCommand) getDemoDestinationFileSpec(spec connectorSpec) connectorSpec {
+	return connectorSpec{
+		Name: defaultDestination,
+		Params: map[string]config.Parameter{
+			"path": {
+				Description: spec.Params["path"].Description,
+				Type:        spec.Params["path"].Type,
+				Default:     "./destination.txt",
 			},
 		},
 	}
 }
 
 func (c *InitCommand) buildTemplatePipeline() (pipelineTemplate, error) {
-	srcParams, err := c.getSourceParams()
+	srcSpec, err := c.getSourceSpec()
 	if err != nil {
 		return pipelineTemplate{}, cerrors.Errorf("failed getting source params: %w", err)
 	}
 
-	dstParams, err := c.getDestinationParams()
+	// provide a simplified version
+	if c.flags.Source == defaultSource {
+		srcSpec = c.getDemoSourceGeneratorSpec(srcSpec)
+	}
+
+	dstSpec, err := c.getDestinationSpec()
 	if err != nil {
 		return pipelineTemplate{}, cerrors.Errorf("failed getting destination params: %w", err)
 	}
 
+	// provide a simplified version
+	if c.flags.Destination == defaultDestination {
+		dstSpec = c.getDemoDestinationFileSpec(dstSpec)
+	}
+
 	return pipelineTemplate{
 		Name:            c.args.name,
-		SourceSpec:      srcParams,
-		DestinationSpec: dstParams,
+		SourceSpec:      srcSpec,
+		DestinationSpec: dstSpec,
 	}, nil
 }
 
@@ -227,8 +235,6 @@ func (c *InitCommand) write(pipeline pipelineTemplate) error {
 
 func (c *InitCommand) Execute(_ context.Context) error {
 	c.configFilePath = filepath.Join(c.flags.PipelinesPath, fmt.Sprintf("pipeline-%s.yaml", c.args.name))
-
-	// TODO: utilize buildDemoPipeline if source and destination are the default ones
 
 	pipeline, err := c.buildTemplatePipeline()
 	if err != nil {
