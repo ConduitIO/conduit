@@ -181,7 +181,7 @@ func (c *RootCommand) updateFlagValuesFromConfig() {
 	c.flags.ProcessorsPath = c.cfg.Processors.Path
 }
 
-func (c *RootCommand) Execute(ctx context.Context) error {
+func (c *RootCommand) Execute(_ context.Context) error {
 	if c.flags.Version {
 		_, _ = fmt.Fprintf(os.Stdout, "%s\n", conduit.Version(true))
 		return nil

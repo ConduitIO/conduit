@@ -29,11 +29,6 @@ import (
 	"github.com/conduitio/ecdysis"
 )
 
-const (
-	defaultDestination = "file"
-	defaultSource      = "generator"
-)
-
 var (
 	_ ecdysis.CommandWithDocs    = (*InitCommand)(nil)
 	_ ecdysis.CommandWithFlags   = (*InitCommand)(nil)
@@ -48,9 +43,9 @@ type InitArgs struct {
 }
 
 type InitFlags struct {
-	Source      string `long:"source" usage:"Source connector (any of the built-in connectors)."`
-	Destination string `long:"destination" usage:"Destination connector (any of the built-in connectors)."`
-	Path        string `long:"pipelines.path" usage:"Path where the pipeline will be saved." default:"./pipelines"`
+	Source        string `long:"source" usage:"Source connector (any of the built-in connectors)." default:"generator"`
+	Destination   string `long:"destination" usage:"Destination connector (any of the built-in connectors)." default:"file"`
+	PipelinesPath string `long:"pipelines.path" usage:"Path where the pipeline will be saved." default:"./pipelines"`
 }
 
 type InitCommand struct {
@@ -59,7 +54,7 @@ type InitCommand struct {
 }
 
 func (c *InitCommand) configFilePath() string {
-	return filepath.Join(c.flags.Path, c.configFileName())
+	return filepath.Join(c.flags.PipelinesPath, c.configFileName())
 }
 
 func (c *InitCommand) configFileName() string {
@@ -67,9 +62,16 @@ func (c *InitCommand) configFileName() string {
 }
 
 func (c *InitCommand) Flags() []ecdysis.Flag {
-	flags := ecdysis.BuildFlags(&InitFlags{})
+	flags := ecdysis.BuildFlags(&c.flags)
 
-	flags.SetDefault("pipelines.path", "./pipelines")
+	currentPath, err := os.Getwd()
+	if err != nil {
+		panic(cerrors.Errorf("failed to get current working directory: %w", err))
+	}
+
+	flags.SetDefault("pipelines.path", filepath.Join(currentPath, "./pipelines"))
+	flags.SetDefault("source", "generator")
+	flags.SetDefault("destination", "file")
 
 	return flags
 }
@@ -94,7 +96,7 @@ func (c *InitCommand) Docs() ecdysis.Docs {
 		Long: `Initialize a pipeline configuration file, with all of parameters for source and destination connectors 
 initialized and described. The source and destination connector can be chosen via flags. If no connectors are chosen, then
 a simple and runnable generator-to-log pipeline is configured.`,
-		Example: "conduit pipelines init awesome-pipeline-name --source postgres --destination kafka --path pipelines/pg-to-kafka.yaml",
+		Example: "conduit pipelines init awesome-pipeline-name --source postgres --destination kafka --pipelines.path pipelines/pg-to-kafka.yaml",
 	}
 }
 
@@ -141,7 +143,7 @@ func (c *InitCommand) buildDemoPipeline() pipelineTemplate {
 	return pipelineTemplate{
 		Name: c.args.name,
 		SourceSpec: connectorTemplate{
-			Name: defaultSource,
+			Name: c.flags.Source,
 			Params: map[string]config.Parameter{
 				"format.type": {
 					Description: srcParams.Params["format.type"].Description,
@@ -167,7 +169,7 @@ func (c *InitCommand) buildDemoPipeline() pipelineTemplate {
 			},
 		},
 		DestinationSpec: connectorTemplate{
-			Name: defaultDestination,
+			Name: c.flags.Destination,
 			Params: map[string]config.Parameter{
 				"path": {
 					Description: dstParams.Params["path"].Description,
@@ -227,7 +229,9 @@ func (c *InitCommand) Execute(_ context.Context) error {
 	var pipeline pipelineTemplate
 	// if no source/destination arguments are provided,
 	// we build a runnable example pipeline
-	if c.flags.Source == "" && c.flags.Destination == "" {
+	fmt.Printf("pipelines path %s\n", c.flags.PipelinesPath)
+	// TODO: validate presence of either or.
+	if c.flags.Source == "" || c.flags.Destination == "" {
 		pipeline = c.buildDemoPipeline()
 	} else {
 		p, err := c.buildTemplatePipeline()
