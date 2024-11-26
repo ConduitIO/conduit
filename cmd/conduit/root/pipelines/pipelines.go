@@ -1,4 +1,4 @@
-// Copyright © 2022 Meroxa, Inc.
+// Copyright © 2024 Meroxa, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,25 +12,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package main
+package pipelines
 
 import (
-	"fmt"
-	"os"
-
-	"github.com/conduitio/conduit/cmd/conduit/root"
 	"github.com/conduitio/ecdysis"
 )
 
-func main() {
-	e := ecdysis.New()
+var (
+	_ ecdysis.CommandWithDocs        = (*PipelinesCommand)(nil)
+	_ ecdysis.CommandWithSubCommands = (*PipelinesCommand)(nil)
+)
 
-	cmd := e.MustBuildCobraCommand(&root.RootCommand{})
-	cmd.CompletionOptions.DisableDefaultCmd = true
+type PipelinesCommand struct{}
 
-	if err := cmd.Execute(); err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "%v\n", err)
-		os.Exit(1)
+func (c *PipelinesCommand) SubCommands() []ecdysis.Command {
+	return []ecdysis.Command{
+		&InitCommand{},
 	}
-	os.Exit(0)
+}
+
+func (c *PipelinesCommand) Usage() string { return "pipelines" }
+
+func (c *PipelinesCommand) Docs() ecdysis.Docs {
+	return ecdysis.Docs{
+		Short: "Initialize and manage pipelines",
+	}
 }

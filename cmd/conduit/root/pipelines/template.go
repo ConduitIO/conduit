@@ -1,4 +1,4 @@
-// Copyright © 2022 Meroxa, Inc.
+// Copyright © 2024 Meroxa, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,25 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package main
+package pipelines
 
-import (
-	"fmt"
-	"os"
+import "github.com/conduitio/conduit-commons/config"
 
-	"github.com/conduitio/conduit/cmd/conduit/root"
-	"github.com/conduitio/ecdysis"
-)
+type connectorSpec struct {
+	Name   string
+	Params config.Parameters
+}
 
-func main() {
-	e := ecdysis.New()
-
-	cmd := e.MustBuildCobraCommand(&root.RootCommand{})
-	cmd.CompletionOptions.DisableDefaultCmd = true
-
-	if err := cmd.Execute(); err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "%v\n", err)
-		os.Exit(1)
-	}
-	os.Exit(0)
+type pipelineTemplate struct {
+	Name            string
+	SourceSpec      connectorSpec
+	DestinationSpec connectorSpec
 }
