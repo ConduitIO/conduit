@@ -65,6 +65,11 @@ type Message struct {
 	acked  chan struct{}
 	nacked chan struct{}
 
+	// filtered indicates whether the message holds a filtered record.
+	// Such a message needs to be acknowledged.
+	// This is done by letting the message pass through all the nodes
+	// (without being processed by them), until the destination acker
+	// node acknowledges it.
 	filtered bool
 
 	// handler is executed when Ack or Nack is called.
