@@ -353,8 +353,8 @@ func TestProcessorNode_ReceivedFilteredMessage(t *testing.T) {
 	n.Sub(in)
 	out := n.Pub()
 
-	var nodeStoppedWG sync.WaitGroup
-	nodeStoppedWG.Add(1)
+	var nodeStopped sync.WaitGroup
+	nodeStopped.Add(1)
 
 	// send a message on the pipeline that will be skipped
 	msg := &Message{
@@ -382,7 +382,7 @@ func TestProcessorNode_ReceivedFilteredMessage(t *testing.T) {
 	}()
 
 	go func() {
-		defer nodeStoppedWG.Done()
+		defer nodeStopped.Done()
 		err := n.Run(ctx)
 		is.NoErr(err)
 	}()
@@ -393,7 +393,7 @@ func TestProcessorNode_ReceivedFilteredMessage(t *testing.T) {
 	is.Equal(msg, gotMsg)
 	is.True(msg.filtered)
 
-	err = (*csync.WaitGroup)(&nodeStoppedWG).WaitTimeout(ctx, 100*time.Millisecond)
+	err = (*csync.WaitGroup)(&nodeStopped).WaitTimeout(ctx, 100*time.Millisecond)
 	is.NoErr(err) // timed out waiting for node to be done running
 
 	// after the node stops the out channel should be closed

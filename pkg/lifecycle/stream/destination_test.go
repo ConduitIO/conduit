@@ -16,7 +16,9 @@ package stream
 
 import (
 	"context"
+	"github.com/conduitio/conduit-commons/csync"
 	"io"
+	"sync"
 	"testing"
 	"time"
 
@@ -40,15 +42,15 @@ func TestDestinationNode_ForceStop(t *testing.T) {
 	}{{
 		name: "Destination.Open blocks",
 		mockDestination: func(onStuck chan struct{}) *mock.Destination {
-			src := mock.NewDestination(ctrl)
-			src.EXPECT().ID().Return("destination-connector").AnyTimes()
-			src.EXPECT().Errors().Return(make(chan error))
-			src.EXPECT().Open(gomock.Any()).DoAndReturn(func(ctx context.Context) error {
+			dest := mock.NewDestination(ctrl)
+			dest.EXPECT().ID().Return("destination-connector").AnyTimes()
+			dest.EXPECT().Errors().Return(make(chan error))
+			dest.EXPECT().Open(gomock.Any()).DoAndReturn(func(ctx context.Context) error {
 				close(onStuck)
 				<-ctx.Done() // block until context is done
 				return ctx.Err()
 			})
-			return src
+			return dest
 		},
 		wantMsg: false,
 		wantErr: context.Canceled,
@@ -56,23 +58,23 @@ func TestDestinationNode_ForceStop(t *testing.T) {
 		name: "Destination.Write blocks",
 		mockDestination: func(onStuck chan struct{}) *mock.Destination {
 			var connectorCtx context.Context
-			src := mock.NewDestination(ctrl)
-			src.EXPECT().ID().Return("destination-connector").AnyTimes()
-			src.EXPECT().Errors().Return(make(chan error))
-			src.EXPECT().Teardown(gomock.Any()).Return(nil)
-			src.EXPECT().Open(gomock.Any()).DoAndReturn(func(ctx context.Context) error {
+			dest := mock.NewDestination(ctrl)
+			dest.EXPECT().ID().Return("destination-connector").AnyTimes()
+			dest.EXPECT().Errors().Return(make(chan error))
+			dest.EXPECT().Teardown(gomock.Any()).Return(nil)
+			dest.EXPECT().Open(gomock.Any()).DoAndReturn(func(ctx context.Context) error {
 				// the connector opens the stream in open and keeps it open
 				// until the context is open
 				connectorCtx = ctx
 				return nil
 			})
-			src.EXPECT().Write(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, r []opencdc.Record) error {
+			dest.EXPECT().Write(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, r []opencdc.Record) error {
 				close(onStuck)
 				<-connectorCtx.Done() // block until connector stream is closed
 				return io.EOF         // io.EOF is returned when the stream is closed
 			})
-			src.EXPECT().Stop(gomock.Any(), gomock.Any()).Return(nil)
-			return src
+			dest.EXPECT().Stop(gomock.Any(), gomock.Any()).Return(nil)
+			return dest
 		},
 		wantMsg: true,
 		wantErr: io.EOF,
@@ -132,4 +134,59 @@ func TestDestinationNode_ForceStop(t *testing.T) {
 			is.True(!ok)  // expected node to close outgoing channel
 		})
 	}
+}
+
+func TestDestinationNode_HandleFilteredMessage(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+	dest := mock.NewDestination(ctrl)
+	// A filtered message is passing through this node without being sent
+	// to the destination, hence no Destination.Write() call here.
+	dest.EXPECT().Errors().Return(make(chan error))
+	dest.EXPECT().Open(gomock.Any()).Return(nil)
+	dest.EXPECT().Stop(gomock.Any(), gomock.Any()).Return(nil)
+	dest.EXPECT().Teardown(gomock.Any()).Return(nil)
+
+	node := &DestinationNode{
+		Name:        "destination-acker-node",
+		Destination: dest,
+	}
+
+	in := make(chan *Message)
+	node.Sub(in)
+	out := node.Pub()
+
+	var nodeStopped sync.WaitGroup
+	nodeStopped.Add(1)
+
+	go func() {
+		defer nodeStopped.Done()
+		err := node.Run(ctx)
+		is.NoErr(err)
+	}()
+
+	// up to this point there should have been no calls to the destination
+	// only after a received message should the node try to fetch the ack
+	msg := &Message{
+		filtered: true,
+		Record:   opencdc.Record{Position: opencdc.Position("test-position")},
+	}
+	go func() {
+		// send message to incoming channel
+		err := cchan.ChanIn[*Message](in).SendTimeout(ctx, msg, time.Second*100)
+		is.NoErr(err) // expected message to be sent to the destination node's Sub channel
+
+		// note that there should be no calls to the destination at all if the node
+		// didn't receive any messages
+		close(in)
+	}()
+
+	gotMsg, gotMsgBool, err := cchan.ChanOut[*Message](out).RecvTimeout(ctx, 100*time.Second)
+	is.NoErr(err)       // expected node to close outgoing channel
+	is.True(gotMsgBool) // expected node to close outgoing channel
+	is.Equal(msg, gotMsg)
+
+	err = (*csync.WaitGroup)(&nodeStopped).WaitTimeout(ctx, 100*time.Second)
+	is.NoErr(err) // timed out waiting for node to be done running}
 }
