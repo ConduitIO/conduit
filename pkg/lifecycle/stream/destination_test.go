@@ -16,13 +16,13 @@ package stream
 
 import (
 	"context"
-	"github.com/conduitio/conduit-commons/csync"
 	"io"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/conduitio/conduit-commons/cchan"
+	"github.com/conduitio/conduit-commons/csync"
 	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/noop"
@@ -174,7 +174,7 @@ func TestDestinationNode_HandleFilteredMessage(t *testing.T) {
 	}
 	go func() {
 		// send message to incoming channel
-		err := cchan.ChanIn[*Message](in).SendTimeout(ctx, msg, time.Second*100)
+		err := cchan.ChanIn[*Message](in).SendTimeout(ctx, msg, 100*time.Millisecond)
 		is.NoErr(err) // expected message to be sent to the destination node's Sub channel
 
 		// note that there should be no calls to the destination at all if the node
@@ -182,11 +182,11 @@ func TestDestinationNode_HandleFilteredMessage(t *testing.T) {
 		close(in)
 	}()
 
-	gotMsg, gotMsgBool, err := cchan.ChanOut[*Message](out).RecvTimeout(ctx, 100*time.Second)
+	gotMsg, gotMsgBool, err := cchan.ChanOut[*Message](out).RecvTimeout(ctx, 100*time.Millisecond)
 	is.NoErr(err)       // expected node to close outgoing channel
 	is.True(gotMsgBool) // expected node to close outgoing channel
 	is.Equal(msg, gotMsg)
 
-	err = (*csync.WaitGroup)(&nodeStopped).WaitTimeout(ctx, 100*time.Second)
+	err = (*csync.WaitGroup)(&nodeStopped).WaitTimeout(ctx, 100*time.Millisecond)
 	is.NoErr(err) // timed out waiting for node to be done running}
 }
