@@ -22,6 +22,7 @@ import (
 	"reflect"
 
 	"github.com/conduitio/conduit/cmd/conduit/internal"
+	"github.com/conduitio/conduit/pkg/conduit"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/ecdysis"
 	"github.com/conduitio/yaml/v3"
@@ -33,6 +34,7 @@ var (
 )
 
 type InitCommand struct {
+	cfg       *conduit.Config
 	rootFlags *RootFlags
 }
 
@@ -70,28 +72,26 @@ func (c *InitCommand) createDirs() error {
 func (c *InitCommand) createConfigYAML() error {
 	cfgYAML := internal.NewYAMLTree()
 
-	v := reflect.Indirect(reflect.ValueOf(c.rootFlags))
+	v := reflect.Indirect(reflect.ValueOf(c.cfg))
 	t := v.Type()
 
-	ignoreKeys := map[string]bool{
-		"ConduitConfigPath": true,
-		"Version":           true,
-		"DevCPUProfile":     true,
-		"DevMemProfile":     true,
-		"DevBlockProfile":   true,
-	}
-
 	for i := 0; i < v.NumField(); i++ {
-		if ignoreKeys[t.Field(i).Name] {
-			continue
-		}
-
 		field := t.Field(i)
-		value := fmt.Sprintf("%v", v.Field(i).Interface())
-		usage := field.Tag.Get("usage")
-		longName := field.Tag.Get("long")
-		cfgYAML.Insert(longName, value, usage)
+		fieldValue := v.Field(i)
+
+		if fieldValue.Kind() == reflect.Struct {
+			embedStructYAML(fieldValue, field, cfgYAML)
+		} else {
+			value := fmt.Sprintf("%v", fieldValue.Interface())
+			usage := field.Tag.Get("usage")
+			longName := field.Tag.Get("long")
+
+			if longName != "" {
+				cfgYAML.Insert(longName, value, usage)
+			}
+		}
 	}
+
 	yamlData, err := yaml.Marshal(cfgYAML.Root)
 	if err != nil {
 		return cerrors.Errorf("error marshaling YAML: %w\n", err)
@@ -104,6 +104,26 @@ func (c *InitCommand) createConfigYAML() error {
 	fmt.Printf("Configuration file written to %v\n", c.rootFlags.ConduitConfigPath)
 
 	return nil
+}
+
+func embedStructYAML(v reflect.Value, field reflect.StructField, cfgYAML *internal.YAMLTree) {
+	t := v.Type()
+	for i := 0; i < v.NumField(); i++ {
+		subField := t.Field(i)
+		subFieldValue := v.Field(i)
+
+		if subFieldValue.Kind() == reflect.Struct {
+			embedStructYAML(subFieldValue, subField, cfgYAML)
+		} else {
+			value := fmt.Sprintf("%v", subFieldValue.Interface())
+			usage := subField.Tag.Get("usage")
+			longName := subField.Tag.Get("long")
+
+			if longName != "" {
+				cfgYAML.Insert(longName, value, usage)
+			}
+		}
+	}
 }
 
 func (c *InitCommand) Execute(ctx context.Context) error {

@@ -98,7 +98,7 @@ func (c *RootCommand) updateFlagValuesFromConfig() {
 	c.flags.Processors.Path = c.cfg.Processors.Path
 }
 
-func (c *RootCommand) LoadConfig() error {
+func (c *RootCommand) updateConfig() error {
 	v := viper.New()
 
 	// Set default values
@@ -125,16 +125,15 @@ func (c *RootCommand) LoadConfig() error {
 
 	// Read configuration from file
 	v.SetConfigFile(c.flags.ConduitConfigPath)
-	if err := v.ReadInConfig(); err != nil {
-		//return fmt.Errorf("error reading config file: %w", err)
-	}
+
+	// ignore if file doesn't exist. Maybe we could check if user is trying read from a file that doesn't exist.
+	_ = v.ReadInConfig()
 
 	// Set environment variable prefix and automatic mapping
 	v.SetEnvPrefix(ConduitPrefix)
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	v.AutomaticEnv()
 
-	// Bind flags to Viper
 	v.BindEnv("db.type")
 	v.BindEnv("db.badger.path")
 	v.BindEnv("db.postgres.connection-string")
@@ -162,22 +161,9 @@ func (c *RootCommand) LoadConfig() error {
 	v.BindEnv("dev.memprofile")
 	v.BindEnv("dev.blockprofile")
 
-	// Unmarshal into the configuration struct
 	if err := v.Unmarshal(&c.cfg); err != nil {
-		return fmt.Errorf("unable to decode into struct: %w", err)
+		return fmt.Errorf("unable to unmarshal the configuration: %w", err)
 	}
-
-	return nil
-}
-
-func (c *RootCommand) updateConfiguration() error {
-	// 1. Load conduit configuration file and update general config.
-	if err := c.LoadConfig(); err != nil {
-		return err
-	}
-
-	// 4. Update flags from global configuration (this will be needed for conduit init)
-	c.updateFlagValuesFromConfig()
 
 	return nil
 }
@@ -188,7 +174,7 @@ func (c *RootCommand) Execute(_ context.Context) error {
 		return nil
 	}
 
-	if err := c.updateConfiguration(); err != nil {
+	if err := c.updateConfig(); err != nil {
 		return err
 	}
 
@@ -245,7 +231,7 @@ func (c *RootCommand) Docs() ecdysis.Docs {
 
 func (c *RootCommand) SubCommands() []ecdysis.Command {
 	return []ecdysis.Command{
-		&InitCommand{rootFlags: &c.flags},
+		&InitCommand{cfg: &c.cfg, rootFlags: &c.flags},
 		&pipelines.PipelinesCommand{},
 	}
 }
