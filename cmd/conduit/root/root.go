@@ -19,13 +19,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"time"
+	"strings"
 
-	"github.com/conduitio/conduit/cmd/conduit/internal"
 	"github.com/conduitio/conduit/cmd/conduit/root/pipelines"
 	"github.com/conduitio/conduit/pkg/conduit"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/ecdysis"
+	"github.com/spf13/viper"
 )
 
 var (
@@ -34,6 +34,8 @@ var (
 	_ ecdysis.CommandWithDocs        = (*RootCommand)(nil)
 	_ ecdysis.CommandWithSubCommands = (*RootCommand)(nil)
 )
+
+const ConduitPrefix = "CONDUIT"
 
 type RootFlags struct {
 	// Global flags -----------------------------------------------------------
@@ -44,49 +46,7 @@ type RootFlags struct {
 	// Version
 	Version bool `long:"version" short:"v" usage:"show current Conduit version" persistent:"true"`
 
-	// Root flags -------------------------------------------------------------
-
-	// Database configuration
-	DBType                     string `long:"db.type" usage:"database type; accepts badger,postgres,inmemory,sqlite"`
-	DBBadgerPath               string `long:"db.badger.path" usage:"path to badger DB"`
-	DBPostgresConnectionString string `long:"db.postgres.connection-string" usage:"postgres connection string, may be a database URL or in PostgreSQL keyword/value format"`
-	DBPostgresTable            string `long:"db.postgres.table" usage:"postgres table in which to store data (will be created if it does not exist)"`
-	DBSQLitePath               string `long:"db.sqlite.path" usage:"path to sqlite3 DB"`
-	DBSQLiteTable              string `long:"db.sqlite.table" usage:"sqlite3 table in which to store data (will be created if it does not exist)"`
-
-	// API configuration
-	APIEnabled     bool   `long:"api.enabled" usage:"enable HTTP and gRPC API"`
-	APIHTTPAddress string `long:"http.address" usage:"address for serving the HTTP API"`
-	APIGRPCAddress string `long:"grpc.address" usage:"address for serving the gRPC API"`
-
-	// Logging configuration
-	LogLevel  string `long:"log.level" usage:"sets logging level; accepts debug, info, warn, error, trace"`
-	LogFormat string `long:"log.format" usage:"sets the format of the logging; accepts json, cli"`
-
-	// Connectors and Processors paths
-	ConnectorsPath string `long:"connectors.path" usage:"path to standalone connectors' directory"`
-	ProcessorsPath string `long:"processors.path" usage:"path to standalone processors' directory"`
-
-	// Pipeline configuration
-	PipelinesPath                          string        `long:"pipelines.path" usage:"path to the directory that has the yaml pipeline configuration files, or a single pipeline configuration file"`
-	PipelinesExitOnDegraded                bool          `long:"pipelines.exit-on-degraded" usage:"exit Conduit if a pipeline enters a degraded state"`
-	PipelinesErrorRecoveryMinDelay         time.Duration `long:"pipelines.error-recovery.min-delay" usage:"minimum delay before restart"`
-	PipelinesErrorRecoveryMaxDelay         time.Duration `long:"pipelines.error-recovery.max-delay" usage:"maximum delay before restart"`
-	PipelinesErrorRecoveryBackoffFactor    int           `long:"pipelines.error-recovery.backoff-factor" usage:"backoff factor applied to the last delay"`
-	PipelinesErrorRecoveryMaxRetries       int64         `long:"pipelines.error-recovery.max-retries" usage:"maximum number of retries"`
-	PipelinesErrorRecoveryMaxRetriesWindow time.Duration `long:"pipelines.error-recovery.max-retries-window" usage:"amount of time running without any errors after which a pipeline is considered healthy"`
-
-	// Schema registry configuration
-	SchemaRegistryType                      string `long:"schema-registry.type" usage:"schema registry type; accepts builtin,confluent"`
-	SchemaRegistryConfluentConnectionString string `long:"schema-registry.confluent.connection-string" usage:"confluent schema registry connection string"`
-
-	// Preview features
-	PreviewPipelineArchV2 bool `long:"preview.pipeline-arch-v2" usage:"enables experimental pipeline architecture v2 (note that the new architecture currently supports only 1 source and 1 destination per pipeline)"`
-
-	// Development profiling
-	DevCPUProfile   string `long:"dev.cpuprofile" usage:"write CPU profile to file"`
-	DevMemProfile   string `long:"dev.memprofile" usage:"write memory profile to file"`
-	DevBlockProfile string `long:"dev.blockprofile" usage:"write block profile to file"`
+	conduit.Config
 }
 
 type RootCommand struct {
@@ -94,91 +54,132 @@ type RootCommand struct {
 	cfg   conduit.Config
 }
 
-func (c *RootCommand) updateConfigFromFlags() {
-	c.cfg.DB.Type = c.flags.DBType
-	c.cfg.DB.Postgres.ConnectionString = c.flags.DBPostgresConnectionString
-	c.cfg.DB.Postgres.Table = c.flags.DBPostgresTable
-	c.cfg.DB.SQLite.Table = c.flags.DBSQLiteTable
-
-	// Map API configuration
-	c.cfg.API.Enabled = c.flags.APIEnabled
-	c.cfg.API.HTTP.Address = c.flags.APIHTTPAddress
-	c.cfg.API.GRPC.Address = c.flags.APIGRPCAddress
-
-	// Map logging configuration
-	c.cfg.Log.Level = c.flags.LogLevel
-	c.cfg.Log.Format = c.flags.LogFormat
-
-	// Map pipeline configuration
-	c.cfg.Pipelines.ExitOnDegraded = c.flags.PipelinesExitOnDegraded
-	c.cfg.Pipelines.ErrorRecovery.MinDelay = c.flags.PipelinesErrorRecoveryMinDelay
-	c.cfg.Pipelines.ErrorRecovery.MaxDelay = c.flags.PipelinesErrorRecoveryMaxDelay
-	c.cfg.Pipelines.ErrorRecovery.BackoffFactor = c.flags.PipelinesErrorRecoveryBackoffFactor
-	c.cfg.Pipelines.ErrorRecovery.MaxRetries = c.flags.PipelinesErrorRecoveryMaxRetries
-	c.cfg.Pipelines.ErrorRecovery.MaxRetriesWindow = c.flags.PipelinesErrorRecoveryMaxRetriesWindow
-
-	// Map schema registry configuration
-	c.cfg.SchemaRegistry.Type = c.flags.SchemaRegistryType
-	c.cfg.SchemaRegistry.Confluent.ConnectionString = c.flags.SchemaRegistryConfluentConnectionString
-
-	// Map preview features
-	c.cfg.Preview.PipelineArchV2 = c.flags.PreviewPipelineArchV2
-
-	// Map development profiling
-	c.cfg.Dev.CPUProfile = c.flags.DevCPUProfile
-	c.cfg.Dev.MemProfile = c.flags.DevMemProfile
-	c.cfg.Dev.BlockProfile = c.flags.DevBlockProfile
-
-	// Update paths
-	c.cfg.DB.SQLite.Path = c.flags.DBSQLitePath
-	c.cfg.DB.Badger.Path = c.flags.DBBadgerPath
-	c.cfg.Pipelines.Path = c.flags.PipelinesPath
-	c.cfg.Connectors.Path = c.flags.ConnectorsPath
-	c.cfg.Processors.Path = c.flags.ProcessorsPath
-}
-
 func (c *RootCommand) updateFlagValuesFromConfig() {
 	// Map database configuration
-	c.flags.DBType = c.cfg.DB.Type
-	c.flags.DBPostgresConnectionString = c.cfg.DB.Postgres.ConnectionString
-	c.flags.DBPostgresTable = c.cfg.DB.Postgres.Table
-	c.flags.DBSQLiteTable = c.cfg.DB.SQLite.Table
+	c.flags.DB.Type = c.cfg.DB.Type
+	c.flags.DB.Postgres.ConnectionString = c.cfg.DB.Postgres.ConnectionString
+	c.flags.DB.Postgres.Table = c.cfg.DB.Postgres.Table
+	c.flags.DB.SQLite.Table = c.cfg.DB.SQLite.Table
 
 	// Map API configuration
-	c.flags.APIEnabled = c.cfg.API.Enabled
-	c.flags.APIHTTPAddress = c.cfg.API.HTTP.Address
-	c.flags.APIGRPCAddress = c.cfg.API.GRPC.Address
+	c.flags.API.Enabled = c.cfg.API.Enabled
+	c.flags.API.HTTP.Address = c.cfg.API.HTTP.Address
+	c.flags.API.GRPC.Address = c.cfg.API.GRPC.Address
 
 	// Map logging configuration
-	c.flags.LogLevel = c.cfg.Log.Level
-	c.flags.LogFormat = c.cfg.Log.Format
+	c.flags.Log.Level = c.cfg.Log.Level
+	c.flags.Log.Format = c.cfg.Log.Format
 
 	// Map pipeline configuration
-	c.flags.PipelinesExitOnDegraded = c.cfg.Pipelines.ExitOnDegraded
-	c.flags.PipelinesErrorRecoveryMinDelay = c.cfg.Pipelines.ErrorRecovery.MinDelay
-	c.flags.PipelinesErrorRecoveryMaxDelay = c.cfg.Pipelines.ErrorRecovery.MaxDelay
-	c.flags.PipelinesErrorRecoveryBackoffFactor = c.cfg.Pipelines.ErrorRecovery.BackoffFactor
-	c.flags.PipelinesErrorRecoveryMaxRetries = c.cfg.Pipelines.ErrorRecovery.MaxRetries
-	c.flags.PipelinesErrorRecoveryMaxRetriesWindow = c.cfg.Pipelines.ErrorRecovery.MaxRetriesWindow
+	c.flags.Pipelines.ExitOnDegraded = c.cfg.Pipelines.ExitOnDegraded
+	c.flags.Pipelines.ErrorRecovery.MinDelay = c.cfg.Pipelines.ErrorRecovery.MinDelay
+	c.flags.Pipelines.ErrorRecovery.MaxDelay = c.cfg.Pipelines.ErrorRecovery.MaxDelay
+	c.flags.Pipelines.ErrorRecovery.BackoffFactor = c.cfg.Pipelines.ErrorRecovery.BackoffFactor
+	c.flags.Pipelines.ErrorRecovery.MaxRetries = c.cfg.Pipelines.ErrorRecovery.MaxRetries
+	c.flags.Pipelines.ErrorRecovery.MaxRetriesWindow = c.cfg.Pipelines.ErrorRecovery.MaxRetriesWindow
 
 	// Map schema registry configuration
-	c.flags.SchemaRegistryType = c.cfg.SchemaRegistry.Type
-	c.flags.SchemaRegistryConfluentConnectionString = c.cfg.SchemaRegistry.Confluent.ConnectionString
+	c.flags.SchemaRegistry.Type = c.cfg.SchemaRegistry.Type
+	c.flags.SchemaRegistry.Confluent.ConnectionString = c.cfg.SchemaRegistry.Confluent.ConnectionString
 
 	// Map preview features
-	c.flags.PreviewPipelineArchV2 = c.cfg.Preview.PipelineArchV2
+	c.flags.Preview.PipelineArchV2 = c.cfg.Preview.PipelineArchV2
 
 	// Map development profiling
-	c.flags.DevCPUProfile = c.cfg.Dev.CPUProfile
-	c.flags.DevMemProfile = c.cfg.Dev.MemProfile
-	c.flags.DevBlockProfile = c.cfg.Dev.BlockProfile
+	c.flags.Dev.CPUProfile = c.cfg.Dev.CPUProfile
+	c.flags.Dev.MemProfile = c.cfg.Dev.MemProfile
+	c.flags.Dev.BlockProfile = c.cfg.Dev.BlockProfile
 
 	// Update paths
-	c.flags.DBSQLitePath = c.cfg.DB.SQLite.Path
-	c.flags.DBBadgerPath = c.cfg.DB.Badger.Path
-	c.flags.PipelinesPath = c.cfg.Pipelines.Path
-	c.flags.ConnectorsPath = c.cfg.Connectors.Path
-	c.flags.ProcessorsPath = c.cfg.Processors.Path
+	c.flags.DB.SQLite.Path = c.cfg.DB.SQLite.Path
+	c.flags.DB.Badger.Path = c.cfg.DB.Badger.Path
+	c.flags.Pipelines.Path = c.cfg.Pipelines.Path
+	c.flags.Connectors.Path = c.cfg.Connectors.Path
+	c.flags.Processors.Path = c.cfg.Processors.Path
+}
+
+func (c *RootCommand) LoadConfig() error {
+	v := viper.New()
+
+	// Set default values
+	v.SetDefault("config.path", c.flags.ConduitConfigPath)
+	v.SetDefault("db.type", c.flags.DB.Type)
+	v.SetDefault("api.enabled", c.flags.API.Enabled)
+	v.SetDefault("log.level", c.flags.Log.Level)
+	v.SetDefault("log.format", c.flags.Log.Format)
+	v.SetDefault("connectors.path", c.flags.Connectors.Path)
+	v.SetDefault("processors.path", c.flags.Processors.Path)
+	v.SetDefault("pipelines.path", c.flags.Pipelines.Path)
+	v.SetDefault("pipelines.exit-on-degraded", c.flags.Pipelines.ExitOnDegraded)
+	v.SetDefault("pipelines.error-recovery.min-delay", c.flags.Pipelines.ErrorRecovery.MinDelay)
+	v.SetDefault("pipelines.error-recovery.max-delay", c.flags.Pipelines.ErrorRecovery.MaxDelay)
+	v.SetDefault("pipelines.error-recovery.backoff-factor", c.flags.Pipelines.ErrorRecovery.BackoffFactor)
+	v.SetDefault("pipelines.error-recovery.max-retries", c.flags.Pipelines.ErrorRecovery.MaxRetries)
+	v.SetDefault("pipelines.error-recovery.max-retries-window", c.flags.Pipelines.ErrorRecovery.MaxRetriesWindow)
+	v.SetDefault("schema-registry.type", c.flags.SchemaRegistry.Type)
+	v.SetDefault("schema-registry.confluent.connection-string", c.flags.SchemaRegistry.Confluent.ConnectionString)
+	v.SetDefault("preview.pipeline-arch-v2", c.flags.Preview.PipelineArchV2)
+	v.SetDefault("dev.cpuprofile", c.flags.Dev.CPUProfile)
+	v.SetDefault("dev.memprofile", c.flags.Dev.MemProfile)
+	v.SetDefault("dev.blockprofile", c.flags.Dev.BlockProfile)
+
+	// Read configuration from file
+	v.SetConfigFile(c.flags.ConduitConfigPath)
+	if err := v.ReadInConfig(); err != nil {
+		//return fmt.Errorf("error reading config file: %w", err)
+	}
+
+	// Set environment variable prefix and automatic mapping
+	v.SetEnvPrefix(ConduitPrefix)
+	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	v.AutomaticEnv()
+
+	// Bind flags to Viper
+	v.BindEnv("db.type")
+	v.BindEnv("db.badger.path")
+	v.BindEnv("db.postgres.connection-string")
+	v.BindEnv("db.postgres.table")
+	v.BindEnv("db.sqlite.path")
+	v.BindEnv("db.sqlite.table")
+	v.BindEnv("api.enabled")
+	v.BindEnv("http.address")
+	v.BindEnv("grpc.address")
+	v.BindEnv("log.level")
+	v.BindEnv("log.format")
+	v.BindEnv("connectors.path")
+	v.BindEnv("processors.path")
+	v.BindEnv("pipelines.path")
+	v.BindEnv("pipelines.exit-on-degraded")
+	v.BindEnv("pipelines.error-recovery.min-delay")
+	v.BindEnv("pipelines.error-recovery.max-delay")
+	v.BindEnv("pipelines.error-recovery.backoff-factor")
+	v.BindEnv("pipelines.error-recovery.max-retries")
+	v.BindEnv("pipelines.error-recovery.max-retries-window")
+	v.BindEnv("schema-registry.type")
+	v.BindEnv("schema-registry.confluent.connection-string")
+	v.BindEnv("preview.pipeline-arch-v2")
+	v.BindEnv("dev.cpuprofile")
+	v.BindEnv("dev.memprofile")
+	v.BindEnv("dev.blockprofile")
+
+	// Unmarshal into the configuration struct
+	if err := v.Unmarshal(&c.cfg); err != nil {
+		return fmt.Errorf("unable to decode into struct: %w", err)
+	}
+
+	return nil
+}
+
+func (c *RootCommand) updateConfiguration() error {
+	// 1. Load conduit configuration file and update general config.
+	if err := c.LoadConfig(); err != nil {
+		return err
+	}
+
+	// 4. Update flags from global configuration (this will be needed for conduit init)
+	c.updateFlagValuesFromConfig()
+
+	return nil
 }
 
 func (c *RootCommand) Execute(_ context.Context) error {
@@ -187,21 +188,9 @@ func (c *RootCommand) Execute(_ context.Context) error {
 		return nil
 	}
 
-	// 1. Load conduit configuration file and update general config.
-	if err := internal.LoadConfigFromFile(c.flags.ConduitConfigPath, &c.cfg); err != nil {
+	if err := c.updateConfiguration(); err != nil {
 		return err
 	}
-
-	// 2. Load environment variables and update general config.
-	if err := internal.LoadConfigFromEnv(&c.cfg); err != nil {
-		return err
-	}
-
-	// 3. Update the general config from flags.
-	c.updateConfigFromFlags()
-
-	// 4. Update flags from global configuration (this will be needed for conduit init)
-	c.updateFlagValuesFromConfig()
 
 	e := &conduit.Entrypoint{}
 	e.Serve(c.cfg)

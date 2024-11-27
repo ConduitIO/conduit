@@ -244,8 +244,6 @@ github.com/conduitio/conduit-processor-sdk v0.4.0 h1:wF1Fj31aneNixNbW5rJ0/5Q3vwW
 github.com/conduitio/conduit-processor-sdk v0.4.0/go.mod h1:Jj9ZBTee7nO0XeociDxe9gSvLFN1GbPWP1Aj04DPeZQ=
 github.com/conduitio/conduit-schema-registry v0.2.2 h1:Q0uL8egRAzJlRV7Ed5nEcqZ1yE/UQeZJad3VmhgTSFE=
 github.com/conduitio/conduit-schema-registry v0.2.2/go.mod h1:EmT4ylkz15LYddL6qU4wDX52n1Yp0aHvEDRIWOYYzFs=
-github.com/conduitio/ecdysis v0.0.0-20241104140515-1031f323f080 h1:Pd5uzNGyPy/Va3rCFp0Ni2xzohrpvgsqbdbAyeFpoZs=
-github.com/conduitio/ecdysis v0.0.0-20241104140515-1031f323f080/go.mod h1:JWjm2WhbGExspVAOH+8tb1t9iu+RxKrHiMvWgtPsUI8=
 github.com/conduitio/yaml/v3 v3.3.0 h1:kbbaOSHcuH39gP4+rgbJGl6DSbLZcJgEaBvkEXJlCsI=
 github.com/conduitio/yaml/v3 v3.3.0/go.mod h1:JNgFMOX1t8W4YJuRZOh6GggVtSMsgP9XgTw+7dIenpc=
 github.com/containerd/cgroups/v3 v3.0.3 h1:S5ByHZ/h9PMe5IOQoN7E+nMc2UcLEM/V48DGDJ9kip0=
