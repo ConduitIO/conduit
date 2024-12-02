@@ -110,6 +110,8 @@ api:
 	err = os.WriteFile(configPath, []byte(configFileContent), 0644)
 	is.NoErr(err)
 
+	defaultCfg := conduit.DefaultConfigWithBasePath(tmpDir)
+
 	tests := []struct {
 		name       string
 		flags      *RootFlags
@@ -121,9 +123,13 @@ api:
 			name: "default values only",
 			flags: &RootFlags{
 				ConduitConfigPath: "nonexistent.yaml",
+				Config: conduit.Config{
+					DB:  conduit.DefaultConfig().DB,
+					Log: conduit.DefaultConfig().Log,
+					API: conduit.DefaultConfig().API,
+				},
 			},
 			assertFunc: func(is *isT.I, cfg conduit.Config) {
-				defaultCfg := conduit.DefaultConfigWithBasePath(tmpDir)
 				is.Equal(cfg.DB.Type, defaultCfg.DB.Type)
 				is.Equal(cfg.Log.Level, defaultCfg.Log.Level)
 				is.Equal(cfg.API.Enabled, defaultCfg.API.Enabled)
@@ -165,9 +171,16 @@ api:
 			flags: &RootFlags{
 				ConduitConfigPath: configPath,
 				Config: conduit.Config{
-					DB:  conduit.Config{}.DB,
-					Log: conduit.Config{}.Log,
-					API: conduit.Config{}.API,
+					DB: conduit.ConfigDB{
+						Type: "sqlite",
+					},
+					Log: conduit.ConfigLog{
+						Level:  "error",
+						Format: "text",
+					},
+					API: conduit.ConfigAPI{
+						Enabled: true,
+					},
 				},
 			},
 			envVars: map[string]string{
@@ -176,7 +189,7 @@ api:
 				"CONDUIT_API_ENABLED": "false",
 			},
 			assertFunc: func(is *isT.I, cfg conduit.Config) {
-				is.Equal(cfg.DB.Type, "badger")
+				is.Equal(cfg.DB.Type, "sqlite")
 				is.Equal(cfg.Log.Level, "error")
 				is.Equal(cfg.Log.Format, "text")
 				is.Equal(cfg.API.Enabled, true)
@@ -187,7 +200,7 @@ api:
 			flags: &RootFlags{
 				ConduitConfigPath: configPath,
 				Config: conduit.Config{
-					Log: conduit.Config{}.Log,
+					Log: conduit.ConfigLog{Level: "warn"},
 				},
 			},
 			envVars: map[string]string{
@@ -195,9 +208,9 @@ api:
 			},
 			assertFunc: func(is *isT.I, cfg conduit.Config) {
 				is.Equal(cfg.DB.Type, "postgres")
-				is.Equal(cfg.Log.Level, "error")
+				is.Equal(cfg.Log.Level, "warn")
 				is.Equal(cfg.Log.Format, "json")
-				is.Equal(cfg.API.Enabled, false)
+				is.Equal(cfg.API.Enabled, defaultCfg.API.Enabled)
 			},
 		},
 	}
@@ -220,6 +233,8 @@ api:
 			c := &RootCommand{
 				flags: *tt.flags,
 			}
+
+			c.cfg = conduit.DefaultConfigWithBasePath(tmpDir)
 
 			err := c.updateConfig()
 			is.NoErr(err)

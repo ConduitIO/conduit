@@ -54,50 +54,6 @@ type RootCommand struct {
 	cfg   conduit.Config
 }
 
-func (c *RootCommand) updateFlagValuesFromConfig() {
-	// Map database configuration
-	c.flags.DB.Type = c.cfg.DB.Type
-	c.flags.DB.Postgres.ConnectionString = c.cfg.DB.Postgres.ConnectionString
-	c.flags.DB.Postgres.Table = c.cfg.DB.Postgres.Table
-	c.flags.DB.SQLite.Table = c.cfg.DB.SQLite.Table
-
-	// Map API configuration
-	c.flags.API.Enabled = c.cfg.API.Enabled
-	c.flags.API.HTTP.Address = c.cfg.API.HTTP.Address
-	c.flags.API.GRPC.Address = c.cfg.API.GRPC.Address
-
-	// Map logging configuration
-	c.flags.Log.Level = c.cfg.Log.Level
-	c.flags.Log.Format = c.cfg.Log.Format
-
-	// Map pipeline configuration
-	c.flags.Pipelines.ExitOnDegraded = c.cfg.Pipelines.ExitOnDegraded
-	c.flags.Pipelines.ErrorRecovery.MinDelay = c.cfg.Pipelines.ErrorRecovery.MinDelay
-	c.flags.Pipelines.ErrorRecovery.MaxDelay = c.cfg.Pipelines.ErrorRecovery.MaxDelay
-	c.flags.Pipelines.ErrorRecovery.BackoffFactor = c.cfg.Pipelines.ErrorRecovery.BackoffFactor
-	c.flags.Pipelines.ErrorRecovery.MaxRetries = c.cfg.Pipelines.ErrorRecovery.MaxRetries
-	c.flags.Pipelines.ErrorRecovery.MaxRetriesWindow = c.cfg.Pipelines.ErrorRecovery.MaxRetriesWindow
-
-	// Map schema registry configuration
-	c.flags.SchemaRegistry.Type = c.cfg.SchemaRegistry.Type
-	c.flags.SchemaRegistry.Confluent.ConnectionString = c.cfg.SchemaRegistry.Confluent.ConnectionString
-
-	// Map preview features
-	c.flags.Preview.PipelineArchV2 = c.cfg.Preview.PipelineArchV2
-
-	// Map development profiling
-	c.flags.Dev.CPUProfile = c.cfg.Dev.CPUProfile
-	c.flags.Dev.MemProfile = c.cfg.Dev.MemProfile
-	c.flags.Dev.BlockProfile = c.cfg.Dev.BlockProfile
-
-	// Update paths
-	c.flags.DB.SQLite.Path = c.cfg.DB.SQLite.Path
-	c.flags.DB.Badger.Path = c.cfg.DB.Badger.Path
-	c.flags.Pipelines.Path = c.cfg.Pipelines.Path
-	c.flags.Connectors.Path = c.cfg.Connectors.Path
-	c.flags.Processors.Path = c.cfg.Processors.Path
-}
-
 func (c *RootCommand) updateConfig() error {
 	v := viper.New()
 
