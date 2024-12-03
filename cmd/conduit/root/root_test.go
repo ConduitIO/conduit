@@ -15,6 +15,7 @@
 package root
 
 import (
+	"flag"
 	"os"
 	"path/filepath"
 	"testing"
@@ -92,7 +93,10 @@ func TestRootCommand_updateConfig(t *testing.T) {
 
 	tmpDir, err := os.MkdirTemp("", "config-test")
 	is.NoErr(err)
-	defer os.RemoveAll(tmpDir)
+	defer func(path string) {
+		err := os.RemoveAll(path)
+		is.NoErr(err)
+	}(tmpDir)
 
 	configFileContent := `
 db:
@@ -123,11 +127,6 @@ api:
 			name: "default values only",
 			flags: &RootFlags{
 				ConduitConfigPath: "nonexistent.yaml",
-				Config: conduit.Config{
-					DB:  conduit.DefaultConfig().DB,
-					Log: conduit.DefaultConfig().Log,
-					API: conduit.DefaultConfig().API,
-				},
 			},
 			assertFunc: func(is *isT.I, cfg conduit.Config) {
 				is.Equal(cfg.DB.Type, defaultCfg.DB.Type)
@@ -210,7 +209,7 @@ api:
 				is.Equal(cfg.DB.Type, "postgres")
 				is.Equal(cfg.Log.Level, "warn")
 				is.Equal(cfg.Log.Format, "json")
-				is.Equal(cfg.API.Enabled, defaultCfg.API.Enabled)
+				is.Equal(cfg.API.Enabled, false)
 			},
 		},
 	}
@@ -222,11 +221,13 @@ api:
 			os.Clearenv()
 
 			for k, v := range tt.envVars {
-				os.Setenv(k, v)
+				err := os.Setenv(k, v)
+				is.NoErr(err)
 			}
 			defer func() {
 				for k := range tt.envVars {
-					os.Unsetenv(k)
+					err := os.Unsetenv(k)
+					is.NoErr(err)
 				}
 			}()
 
@@ -234,12 +235,18 @@ api:
 				flags: *tt.flags,
 			}
 
-			c.cfg = conduit.DefaultConfigWithBasePath(tmpDir)
+			flagSet := flag.NewFlagSet("testFlags", flag.ContinueOnError)
 
-			err := c.updateConfig()
+			err := c.parseConfig(flagSet)
 			is.NoErr(err)
-
 			tt.assertFunc(is, c.cfg)
 		})
+	}
+}
+
+func returnFlagsWithDefaultValues() RootFlags {
+	return RootFlags{
+		ConduitConfigPath: "./conduit.yaml",
+		Config:            conduit.DefaultConfig(),
 	}
 }

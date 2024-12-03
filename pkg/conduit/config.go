@@ -76,9 +76,10 @@ type ConfigLog struct {
 
 // Config holds all configurable values for Conduit.
 type Config struct {
-	DB  ConfigDB
-	API ConfigAPI
-	Log ConfigLog
+	ConduitCfgPath string
+	DB             ConfigDB
+	API            ConfigAPI
+	Log            ConfigLog
 
 	Connectors struct {
 		Path string `long:"connectors.path" usage:"path to standalone connectors' directory"`
@@ -138,6 +139,8 @@ func DefaultConfig() Config {
 
 func DefaultConfigWithBasePath(basePath string) Config {
 	var cfg Config
+
+	cfg.ConduitCfgPath = filepath.Join(basePath, "conduit.yaml")
 
 	cfg.DB.Type = DBTypeBadger
 	cfg.DB.Badger.Path = filepath.Join(basePath, "conduit.db")
