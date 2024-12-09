@@ -19,7 +19,7 @@ COPY . .
 RUN GOOS=linux GOARCH=amd64 CGO_ENABLED=0 make build
 
 # Copy built binaries to production slim image.
-FROM alpine:3.20 AS final
+FROM alpine:3.21 AS final
 # HTTP API
 EXPOSE 8080/tcp
 # gRPC API
