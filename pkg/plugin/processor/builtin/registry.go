@@ -31,7 +31,7 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/custom"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/field"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/json"
-	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/openaiembedding"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/openai"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/unwrap"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/webhook"
 	"github.com/conduitio/conduit/pkg/plugin/processor/procutils"
@@ -56,7 +56,8 @@ var DefaultBuiltinProcessors = map[string]ProcessorPluginConstructor{
 	"unwrap.kafkaconnect": unwrap.NewKafkaConnectProcessor,
 	"unwrap.opencdc":      unwrap.NewOpenCDCProcessor,
 	"webhook.http":        webhook.NewHTTPProcessor,
-	"openai.embedding":    openaiembedding.NewProcessor,
+	"openai.embedding":    openai.NewEmbeddingProcessor,
+	"openai.prompt":       openai.NewPromptProcessor,
 }
 
 type schemaRegistryProcessor interface {

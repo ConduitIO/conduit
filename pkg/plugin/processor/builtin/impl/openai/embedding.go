@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:generate paramgen -output=config_paramgen.go procConfig
+//go:generate paramgen -output=embedding_config_paramgen.go embeddingProcConfig
 
-package openaiembedding
+package openai
 
 import (
 	"context"
@@ -23,53 +23,53 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/ai/azopenai"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/conduitio/conduit-commons/config"
+	"github.com/conduitio/conduit-commons/lang"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 )
 
-type procConfig struct {
-	APIKey                  string `json:"apiKey" validate:"required"`
-	Endpoint                string `json:"endpoint" default:"https://api.openai.com/v1"`
-	EmbeddingEncodingFormat string `json:"embeddingEncodingFormat" default:"float" validate:"inclusion=float|base64"`
-	Model                   string `json:"model" validate:"required,inclusion=text-embedding-3-small|text-embedding-3-large"`
-	InputField              string `json:"inputField" validate:"regex=^\\.(Payload|Key).*" default:".Payload.After"`
-	OutputField             string `json:"outputField" validate:"regex=^\\.(Payload|Key).*" default:".Payload.After.vectors"`
+const EmbeddingMetadataBase64 = "openai.embedding.base64"
+
+type embeddingProcConfig struct {
+	APIKey     string `json:"apiKey" validate:"required"`
+	Endpoint   string `json:"endpoint" default:"https://api.openai.com/v1"`
+	Model      string `json:"model" validate:"required,inclusion=gpt-4|gpt-4-turbo|gpt-3.5-turbo|text-davinci-003|text-davinci-002|text-curie-001|text-babbage-001|text-ada-001"`
+	InputField string `json:"inputField" validate:"regex=^\\.(Payload|Key).*" default:".Payload.After"`
 }
 
-type processor struct {
+type embeddingProcessor struct {
 	sdk.UnimplementedProcessor
 
-	cfg procConfig
+	cfg embeddingProcConfig
 
-	inputFieldRefResolver  sdk.ReferenceResolver
-	outputFieldRefResolver sdk.ReferenceResolver
+	inputFieldRefResolver sdk.ReferenceResolver
 
 	client *azopenai.Client
 	logger log.CtxLogger
 }
 
-func NewProcessor(log log.CtxLogger) sdk.Processor {
-	return &processor{
+func NewEmbeddingProcessor(log log.CtxLogger) sdk.Processor {
+	return &embeddingProcessor{
 		logger: log.WithComponent("openai_embedding"),
 	}
 }
 
-func (p *processor) Specification() (sdk.Specification, error) {
+func (p *embeddingProcessor) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
 		Name:        "openai.embedding",
 		Summary:     "Generate OpenAI embeddings.",
 		Description: "",
 		Version:     "v0.1.0",
 		Author:      "Meroxa, Inc.",
-		Parameters:  procConfig{}.Parameters(),
+		Parameters:  embeddingProcConfig{}.Parameters(),
 	}, nil
 }
 
-func (p *processor) Configure(ctx context.Context, c config.Config) error {
-	cfg := procConfig{}
-	err := sdk.ParseConfig(ctx, c, &cfg, procConfig{}.Parameters())
+func (p *embeddingProcessor) Configure(ctx context.Context, c config.Config) error {
+	cfg := embeddingProcConfig{}
+	err := sdk.ParseConfig(ctx, c, &cfg, embeddingProcConfig{}.Parameters())
 	if err != nil {
 		return cerrors.Errorf("failed to parse configuration: %w", err)
 	}
@@ -80,17 +80,11 @@ func (p *processor) Configure(ctx context.Context, c config.Config) error {
 	}
 	p.inputFieldRefResolver = inputResolver
 
-	outputResolver, err := sdk.NewReferenceResolver(cfg.OutputField)
-	if err != nil {
-		return cerrors.Errorf(`failed to create a field resolver for %v parameter: %w`, cfg.OutputField, err)
-	}
-	p.outputFieldRefResolver = outputResolver
-
 	p.cfg = cfg
 	return nil
 }
 
-func (p *processor) Open(ctx context.Context) error {
+func (p *embeddingProcessor) Open(ctx context.Context) error {
 	keyCredential := azcore.NewKeyCredential(p.cfg.APIKey)
 
 	// NOTE: this constructor creates a client that connects to the public OpenAI endpoint.
@@ -104,10 +98,10 @@ func (p *processor) Open(ctx context.Context) error {
 	return nil
 }
 
-func (p *processor) Process(ctx context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
+func (p *embeddingProcessor) Process(ctx context.Context, records []opencdc.Record) []sdk.ProcessedRecord {
 	out := make([]sdk.ProcessedRecord, 0, len(records))
 
-	// Prepare request (embedding inputs)
+	// Prepare request (batch all embedding inputs)
 	var embeddingInputs []string
 	for _, record := range records {
 		inRef, err := p.inputFieldRefResolver.Resolve(&record)
@@ -124,14 +118,12 @@ func (p *processor) Process(ctx context.Context, records []opencdc.Record) []sdk
 		ctx,
 		azopenai.EmbeddingsOptions{
 			Input:          embeddingInputs,
-			Dimensions:     nil,
-			EncodingFormat: (*azopenai.EmbeddingEncodingFormat)(&p.cfg.EmbeddingEncodingFormat),
+			EncodingFormat: lang.Ptr(azopenai.EmbeddingEncodingFormatBase64),
 			DeploymentName: &p.cfg.Model,
-			InputType:      nil,
-			User:           nil,
 		},
 		nil,
 	)
+
 	// If the request failed, declare processing for all records as failed
 	if err != nil {
 		for range len(records) {
@@ -147,34 +139,19 @@ func (p *processor) Process(ctx context.Context, records []opencdc.Record) []sdk
 		Msg("got embeddings")
 
 	for i, record := range records {
-		outRef, err := p.outputFieldRefResolver.Resolve(&record)
-		if err != nil {
-			out = append(out, sdk.ErrorRecord{Error: cerrors.Errorf("failed to resolve reference %v: %w", p.cfg.OutputField, err)})
-			continue
-		}
-
-		embeddingsMap := opencdc.StructuredData{
-			// todo if the encoding format is base64, this needs to change
-			"embeddings": embeddings.Data[i].Embedding,
-		}
-		err = outRef.Set(embeddingsMap)
-		if err != nil {
-			out = append(out, sdk.ErrorRecord{Error: cerrors.Errorf("failed to set embeddings to %v: %w", p.cfg.OutputField, err)})
-			continue
-		}
-
-		// todo add metadata related to the embeddings
+		record.Metadata[EmbeddingMetadataBase64] = embeddings.Data[i].EmbeddingBase64
+		// todo add more metadata related to the embeddings
 		out = append(out, sdk.SingleRecord(record))
 	}
 
 	return out
 }
 
-func (p *processor) Teardown(ctx context.Context) error {
+func (p *embeddingProcessor) Teardown(context.Context) error {
 	return nil
 }
 
-func (p *processor) getEmbeddingInput(val any) string {
+func (p *embeddingProcessor) getEmbeddingInput(val any) string {
 	switch v := val.(type) {
 	case opencdc.RawData:
 		return string(v)
