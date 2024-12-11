@@ -393,10 +393,12 @@ func (s *Service) buildNodes(ctx context.Context, pl *pipeline.Instance) ([]stre
 	if len(sourceNodes) == 0 {
 		return nil, cerrors.New("can't build pipeline without any source connectors")
 	}
+
 	processorNodes, err := s.buildProcessorNodes(ctx, pl, pl.ProcessorIDs, &fanIn, &fanOut)
 	if err != nil {
 		return nil, cerrors.Errorf("could not build processor nodes: %w", err)
 	}
+
 	destinationNodes, err := s.buildDestinationNodes(ctx, pl, &fanOut)
 	if err != nil {
 		return nil, cerrors.Errorf("could not build destination nodes: %w", err)
