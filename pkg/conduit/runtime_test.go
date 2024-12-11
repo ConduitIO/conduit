@@ -71,7 +71,7 @@ func TestRuntime(t *testing.T) {
 	go func() {
 		errC <- r.Run(ctx)
 	}()
-	err, got, recvErr := cchan.ChanOut[error](errC).RecvTimeout(context.Background(), 100*time.Second)
+	err, got, recvErr := cchan.ChanOut[error](errC).RecvTimeout(context.Background(), time.Second)
 	is.NoErr(recvErr)
 	is.True(got)
 	if !cerrors.Is(err, context.Canceled) {

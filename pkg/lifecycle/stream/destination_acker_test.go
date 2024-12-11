@@ -96,6 +96,60 @@ func TestDestinationAckerNode_Cache(t *testing.T) {
 	ackHandlerWg.Wait() // all ack handler should be called by now
 }
 
+func TestDestinationAckerNode_AckFilteredRecords(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+	dest := mock.NewDestination(ctrl)
+
+	node := &DestinationAckerNode{
+		Name:        "destination-acker-node",
+		Destination: dest,
+	}
+
+	in := make(chan *Message)
+	node.Sub(in)
+
+	nodeDone := make(chan struct{})
+	go func() {
+		defer close(nodeDone)
+		err := node.Run(ctx)
+		is.NoErr(err)
+	}()
+
+	// up to this point there should have been no calls to the destination
+	// only after a received message should the node try to fetch the ack
+	msg := &Message{
+		filtered: true,
+		Record:   opencdc.Record{Position: opencdc.Position("test-position")},
+	}
+	ackHandlerDone := make(chan struct{})
+	msg.RegisterAckHandler(func(got *Message) error {
+		defer close(ackHandlerDone)
+		is.Equal(msg, got)
+		return nil
+	})
+	in <- msg // send message to incoming channel
+
+	select {
+	case <-time.After(time.Second):
+		is.Fail() // expected ack handler to be called
+	case <-ackHandlerDone:
+		// all good
+	}
+
+	// note that there should be no calls to the destination at all if the node
+	// didn't receive any messages
+	close(in)
+
+	select {
+	case <-time.After(time.Second):
+		is.Fail() // expected node to stop running
+	case <-nodeDone:
+		// all good
+	}
+}
+
 func TestDestinationAckerNode_ForwardAck(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()

@@ -36,7 +36,7 @@ func TestFlags_HelpOutput(t *testing.T) {
 		"db.postgres.table",
 		"db.sqlite.path",
 		"db.sqlite.table",
-		"dev.blockprofileblockprofile",
+		"dev.blockprofile",
 		"dev.cpuprofile",
 		"dev.memprofile",
 		"api.enabled",
