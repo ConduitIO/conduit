@@ -123,7 +123,6 @@ func (p *embeddingProcessor) Process(ctx context.Context, records []opencdc.Reco
 		},
 		nil,
 	)
-
 	// If the request failed, declare processing for all records as failed
 	if err != nil {
 		for range len(records) {
