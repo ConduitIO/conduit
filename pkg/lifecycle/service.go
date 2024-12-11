@@ -460,7 +460,6 @@ func (s *Service) buildProcessorNodes(
 
 		runnableProc, err := s.processors.MakeRunnableProcessor(ctx, instance)
 		if err != nil {
-
 			return nil, err
 		}
 
