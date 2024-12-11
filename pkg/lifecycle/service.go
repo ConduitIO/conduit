@@ -382,46 +382,74 @@ func (s *Service) WaitPipeline(id string) error {
 
 // buildsNodes will build new nodes that will be assigned to the pipeline.Instance.
 func (s *Service) buildNodes(ctx context.Context, pl *pipeline.Instance) ([]stream.Node, error) {
-	// setup many to many channels
+	// setup many-to-many channels
 	fanIn := stream.FaninNode{Name: "fanin"}
 	fanOut := stream.FanoutNode{Name: "fanout"}
 
+	var nodes []stream.Node
+	defer func() {
+		if err := s.cleanNodes(ctx, nodes, nil); err != nil {
+			s.logger.Trace(ctx).Msg("cleaning up nodes from unprovisioned pipeline")
+		}
+	}()
+
+	// Build source nodes
 	sourceNodes, err := s.buildSourceNodes(ctx, pl, &fanIn)
 	if err != nil {
+		s.cleanNodes(ctx, nodes, nil)
 		return nil, cerrors.Errorf("could not build source nodes: %w", err)
 	}
 	if len(sourceNodes) == 0 {
+		s.cleanNodes(ctx, nodes, nil)
 		return nil, cerrors.New("can't build pipeline without any source connectors")
 	}
+	nodes = append(nodes, sourceNodes...)
+	nodes = append(nodes, &fanIn)
 
+	// Build processor nodes
 	processorNodes, err := s.buildProcessorNodes(ctx, pl, pl.ProcessorIDs, &fanIn, &fanOut)
 	if err != nil {
+		s.cleanNodes(ctx, nodes, nil)
 		return nil, cerrors.Errorf("could not build processor nodes: %w", err)
 	}
+	nodes = append(nodes, processorNodes...)
 
+	// Build destination nodes
 	destinationNodes, err := s.buildDestinationNodes(ctx, pl, &fanOut)
 	if err != nil {
+		s.cleanNodes(ctx, nodes, nil)
 		return nil, cerrors.Errorf("could not build destination nodes: %w", err)
 	}
 	if len(destinationNodes) == 0 {
+		s.cleanNodes(ctx, nodes, nil)
 		return nil, cerrors.New("can't build pipeline without any destination connectors")
 	}
-
-	// gather nodes and add our fan in and fan out nodes
-	nodes := make([]stream.Node, 0, len(processorNodes)+len(sourceNodes)+len(destinationNodes)+2)
-	nodes = append(nodes, sourceNodes...)
-	nodes = append(nodes, &fanIn)
-	nodes = append(nodes, processorNodes...)
-	nodes = append(nodes, &fanOut)
 	nodes = append(nodes, destinationNodes...)
+	nodes = append(nodes, &fanOut)
 
-	// set up logger for all nodes that need it
+	// set up logger for all nodes
 	nodeLogger := s.logger
 	nodeLogger.Logger = nodeLogger.Logger.With().Str(log.PipelineIDField, pl.ID).Logger()
 	for _, n := range nodes {
 		stream.SetLogger(n, nodeLogger)
 	}
+
 	return nodes, nil
+}
+
+// cleanNodes attempts to stop and clean up all nodes provided in the slice.
+func (s *Service) cleanNodes(ctx context.Context, nodes []stream.Node, reason error) error {
+	var errs []error
+	for _, n := range nodes {
+		if node, ok := n.(stream.StoppableNode); ok {
+			s.logger.Trace(ctx).Str(log.NodeIDField, n.ID()).Msg("stopping node")
+			if err := node.Stop(ctx, reason); err != nil {
+				s.logger.Err(ctx, err).Str(log.NodeIDField, n.ID()).Msg("stop failed")
+				errs = append(errs, err)
+			}
+		}
+	}
+	return cerrors.Join(errs...)
 }
 
 // buildRunnablePipeline will build and connect all nodes configured in the pipeline.
@@ -431,6 +459,7 @@ func (s *Service) buildRunnablePipeline(
 ) (*runnablePipeline, error) {
 	nodes, err := s.buildNodes(ctx, pl)
 	if err != nil {
+		pl.SetStatus(pipeline.StatusDegraded)
 		return nil, err
 	}
 
@@ -460,6 +489,7 @@ func (s *Service) buildProcessorNodes(
 
 		runnableProc, err := s.processors.MakeRunnableProcessor(ctx, instance)
 		if err != nil {
+
 			return nil, err
 		}
 
