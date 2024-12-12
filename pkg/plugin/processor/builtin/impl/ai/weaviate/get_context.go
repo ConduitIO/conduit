@@ -150,7 +150,6 @@ func (p *getContextProcessor) getContext(ctx context.Context, targetEmbedding []
 		).
 		WithLimit(5).
 		Do(ctx)
-
 	if err != nil {
 		return "", fmt.Errorf("vector search failed: %v", err)
 	}
