@@ -26,12 +26,13 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/ai/openai"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/ai/weaviate"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/avro"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/base64"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/custom"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/field"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/json"
-	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/openai"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/unwrap"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/webhook"
 	"github.com/conduitio/conduit/pkg/plugin/processor/procutils"
@@ -58,6 +59,7 @@ var DefaultBuiltinProcessors = map[string]ProcessorPluginConstructor{
 	"webhook.http":        webhook.NewHTTPProcessor,
 	"openai.embedding":    openai.NewEmbeddingProcessor,
 	"openai.prompt":       openai.NewPromptProcessor,
+	"weaviate.getContext": weaviate.NewGetContextProcessor,
 }
 
 type schemaRegistryProcessor interface {
