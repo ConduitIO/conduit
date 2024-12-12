@@ -34,7 +34,8 @@ import (
 )
 
 type getContextConfig struct {
-	ClassName string `json:"className"`
+	ClassName    string `json:"className" validate:"required"`
+	ContextField string `json:"contextField" validate:"required"`
 }
 
 type getContextProcessor struct {
@@ -43,7 +44,7 @@ type getContextProcessor struct {
 	client *weaviate.Client
 }
 
-func NewGetContextProcessor(logger log.CtxLogger) sdk.Processor {
+func NewGetContextProcessor(_ log.CtxLogger) sdk.Processor {
 	return &getContextProcessor{}
 }
 
@@ -115,8 +116,6 @@ func (p *getContextProcessor) setContext(ctx context.Context, rec opencdc.Record
 }
 
 func (p *getContextProcessor) decodeEmbeddings(base64Str string) ([]float32, error) {
-	return []float32{0.1}, nil
-	
 	// Decode the base64 string
 	decodedBytes, err := base64.StdEncoding.DecodeString(base64Str)
 	if err != nil {
@@ -138,7 +137,7 @@ func (p *getContextProcessor) decodeEmbeddings(base64Str string) ([]float32, err
 func (p *getContextProcessor) getContext(ctx context.Context, targetEmbedding []float32) (string, error) {
 	// Prepare the GraphQL query for vector search
 	fields := []graphql.Field{
-		{Name: "content"},
+		{Name: p.cfg.ContextField},
 		{Name: "_additional { distance }"},
 	}
 
@@ -171,9 +170,11 @@ func (p *getContextProcessor) getContext(ctx context.Context, targetEmbedding []
 	fmt.Println("Top 5 Closest Texts:")
 	for _, item := range data {
 		itemMap := item.(map[string]interface{})
-		text := itemMap["text"].(string)
+		text := itemMap[p.cfg.ContextField].(string)
 
 		sb.WriteString(text)
+		sb.WriteRune('\n')
+		sb.WriteRune('\n')
 	}
 
 	return sb.String(), nil

@@ -8,7 +8,8 @@ import (
 )
 
 const (
-	getContextConfigClassName = "className"
+	getContextConfigClassName    = "className"
+	getContextConfigContextField = "contextField"
 )
 
 func (getContextConfig) Parameters() map[string]config.Parameter {
@@ -17,7 +18,17 @@ func (getContextConfig) Parameters() map[string]config.Parameter {
 			Default:     "",
 			Description: "",
 			Type:        config.ParameterTypeString,
-			Validations: []config.Validation{},
+			Validations: []config.Validation{
+				config.ValidationRequired{},
+			},
+		},
+		getContextConfigContextField: {
+			Default:     "",
+			Description: "",
+			Type:        config.ParameterTypeString,
+			Validations: []config.Validation{
+				config.ValidationRequired{},
+			},
 		},
 	}
 }
