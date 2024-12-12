@@ -42,10 +42,13 @@ type getContextProcessor struct {
 	sdk.UnimplementedProcessor
 	cfg    getContextConfig
 	client *weaviate.Client
+	logger log.CtxLogger
 }
 
-func NewGetContextProcessor(_ log.CtxLogger) sdk.Processor {
-	return &getContextProcessor{}
+func NewGetContextProcessor(logger log.CtxLogger) sdk.Processor {
+	return &getContextProcessor{
+		logger: logger.WithComponent("weaviate.getContextProcessor"),
+	}
 }
 
 func (p *getContextProcessor) Specification() (sdk.Specification, error) {
@@ -166,6 +169,7 @@ func (p *getContextProcessor) getContext(ctx context.Context, targetEmbedding []
 	data := result.Data["Get"].(map[string]interface{})[p.cfg.ClassName].([]interface{})
 
 	sb := strings.Builder{}
+	p.logger.Info(ctx).Msg("found closest texts")
 	fmt.Println("Top 5 Closest Texts:")
 	for _, item := range data {
 		itemMap := item.(map[string]interface{})
@@ -176,5 +180,8 @@ func (p *getContextProcessor) getContext(ctx context.Context, targetEmbedding []
 		sb.WriteRune('\n')
 	}
 
+	p.logger.Info(ctx).
+		Str("context", sb.String()).
+		Msg("context built")
 	return sb.String(), nil
 }
