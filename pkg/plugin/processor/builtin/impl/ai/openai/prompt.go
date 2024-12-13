@@ -30,7 +30,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/log"
 )
 
-const MetadataPromptContext = "openai.prompt.context"
+const MetadataPromptContext = "weaviate.context"
 
 type promptProcConfig struct {
 	APIKey      string `json:"apiKey" validate:"required"`
