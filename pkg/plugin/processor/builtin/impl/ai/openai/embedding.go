@@ -35,7 +35,7 @@ const EmbeddingMetadataBase64 = "openai.embedding.base64"
 type embeddingProcConfig struct {
 	APIKey     string `json:"apiKey" validate:"required"`
 	Endpoint   string `json:"endpoint" default:"https://api.openai.com/v1"`
-	Model      string `json:"model" validate:"required,inclusion=gpt-4|gpt-4-turbo|gpt-3.5-turbo|text-davinci-003|text-davinci-002|text-curie-001|text-babbage-001|text-ada-001"`
+	Model      string `json:"model" validate:"required,inclusion=text-embedding-3-large|text-embedding-3-small|text-embedding-ada-002"`
 	InputField string `json:"inputField" validate:"regex=^\\.(Payload|Key).*" default:".Payload.After"`
 }
 
