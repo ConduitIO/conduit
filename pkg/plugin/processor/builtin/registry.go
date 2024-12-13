@@ -26,6 +26,8 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/ai/openai"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/ai/weaviate"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/avro"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/base64"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/custom"
@@ -38,23 +40,35 @@ import (
 )
 
 var DefaultBuiltinProcessors = map[string]ProcessorPluginConstructor{
-	"avro.decode":         avro.NewDecodeProcessor,
-	"avro.encode":         avro.NewEncodeProcessor,
-	"base64.decode":       base64.NewDecodeProcessor,
-	"base64.encode":       base64.NewEncodeProcessor,
-	"custom.javascript":   custom.NewJavascriptProcessor,
-	"error":               impl.NewErrorProcessor,
-	"filter":              impl.NewFilterProcessor,
-	"field.convert":       field.NewConvertProcessor,
-	"field.exclude":       field.NewExcludeProcessor,
-	"field.rename":        field.NewRenameProcessor,
-	"field.set":           field.NewSetProcessor,
-	"json.decode":         json.NewDecodeProcessor,
-	"json.encode":         json.NewEncodeProcessor,
+	"avro.decode": avro.NewDecodeProcessor,
+	"avro.encode": avro.NewEncodeProcessor,
+
+	"base64.decode": base64.NewDecodeProcessor,
+	"base64.encode": base64.NewEncodeProcessor,
+
+	"custom.javascript": custom.NewJavascriptProcessor,
+	"error":             impl.NewErrorProcessor,
+
+	"filter": impl.NewFilterProcessor,
+
+	"field.convert": field.NewConvertProcessor,
+	"field.exclude": field.NewExcludeProcessor,
+	"field.rename":  field.NewRenameProcessor,
+	"field.set":     field.NewSetProcessor,
+
+	"json.decode": json.NewDecodeProcessor,
+	"json.encode": json.NewEncodeProcessor,
+
 	"unwrap.debezium":     unwrap.NewDebeziumProcessor,
 	"unwrap.kafkaconnect": unwrap.NewKafkaConnectProcessor,
 	"unwrap.opencdc":      unwrap.NewOpenCDCProcessor,
-	"webhook.http":        webhook.NewHTTPProcessor,
+
+	"webhook.http": webhook.NewHTTPProcessor,
+
+	"openai.embedding": openai.NewEmbeddingProcessor,
+	"openai.prompt":    openai.NewPromptProcessor,
+
+	"weaviate.getContext": weaviate.NewGetContextProcessor,
 }
 
 type schemaRegistryProcessor interface {
