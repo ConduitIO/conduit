@@ -10,6 +10,8 @@ import (
 const (
 	getContextConfigClassName    = "className"
 	getContextConfigContextField = "contextField"
+	getContextConfigEndpoint     = "endpoint"
+	getContextConfigScheme       = "scheme"
 )
 
 func (getContextConfig) Parameters() map[string]config.Parameter {
@@ -29,6 +31,18 @@ func (getContextConfig) Parameters() map[string]config.Parameter {
 			Validations: []config.Validation{
 				config.ValidationRequired{},
 			},
+		},
+		getContextConfigEndpoint: {
+			Default:     "localhost:18080",
+			Description: "",
+			Type:        config.ParameterTypeString,
+			Validations: []config.Validation{},
+		},
+		getContextConfigScheme: {
+			Default:     "http",
+			Description: "",
+			Type:        config.ParameterTypeString,
+			Validations: []config.Validation{},
 		},
 	}
 }

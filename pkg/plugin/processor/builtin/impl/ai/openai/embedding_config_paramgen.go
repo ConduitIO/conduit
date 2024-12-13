@@ -46,7 +46,7 @@ func (embeddingProcConfig) Parameters() map[string]config.Parameter {
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{
 				config.ValidationRequired{},
-				config.ValidationInclusion{List: []string{"gpt-4", "gpt-4-turbo", "gpt-3.5-turbo", "text-davinci-003", "text-davinci-002", "text-curie-001", "text-babbage-001", "text-ada-001"}},
+				config.ValidationInclusion{List: []string{"text-embedding-3-large", "text-embedding-3-small", "text-embedding-ada-002"}},
 			},
 		},
 	}

@@ -18,6 +18,7 @@ import (
 	"context"
 	"runtime/debug"
 
+	weaviate "github.com/conduitio-labs/conduit-connector-weaviate"
 	file "github.com/conduitio/conduit-connector-file"
 	generator "github.com/conduitio/conduit-connector-generator"
 	kafka "github.com/conduitio/conduit-connector-kafka"
@@ -38,12 +39,13 @@ import (
 // The key of the map is the import path of the module
 // containing the connector implementation.
 var DefaultBuiltinConnectors = map[string]sdk.Connector{
-	"github.com/conduitio/conduit-connector-file":      file.Connector,
-	"github.com/conduitio/conduit-connector-generator": generator.Connector,
-	"github.com/conduitio/conduit-connector-kafka":     kafka.Connector,
-	"github.com/conduitio/conduit-connector-log":       connLog.Connector,
-	"github.com/conduitio/conduit-connector-postgres":  postgres.Connector,
-	"github.com/conduitio/conduit-connector-s3":        s3.Connector,
+	"github.com/conduitio/conduit-connector-file":          file.Connector,
+	"github.com/conduitio/conduit-connector-generator":     generator.Connector,
+	"github.com/conduitio/conduit-connector-kafka":         kafka.Connector,
+	"github.com/conduitio/conduit-connector-log":           connLog.Connector,
+	"github.com/conduitio/conduit-connector-postgres":      postgres.Connector,
+	"github.com/conduitio/conduit-connector-s3":            s3.Connector,
+	"github.com/conduitio-labs/conduit-connector-weaviate": weaviate.Connector,
 }
 
 type blueprint struct {

@@ -237,6 +237,8 @@ github.com/ckaznocha/intrange v0.2.1/go.mod h1:7NEhVyf8fzZO5Ds7CRaqPEm52Ut83hsTi
 github.com/client9/misspell v0.3.4/go.mod h1:qj6jICC3Q7zFZvVWo7KLAzC3yx5G7kyvSDkc90ppPyw=
 github.com/cncf/udpa/go v0.0.0-20191209042840-269d4d468f6f/go.mod h1:M8M6+tZqaGXZJjfX53e64911xZQV5JYwmTeXPW+k8Sc=
 github.com/colinmarc/hdfs/v2 v2.1.1/go.mod h1:M3x+k8UKKmxtFu++uAZ0OtDU8jR3jnaZIAc6yK4Ue0c=
+github.com/conduitio-labs/conduit-connector-weaviate v0.1.2-0.20241125183412-ae12206633d7 h1:DnugxVjYVSCX2pvLlQAlTK2AEopieV0LjUKtnAedStE=
+github.com/conduitio-labs/conduit-connector-weaviate v0.1.2-0.20241125183412-ae12206633d7/go.mod h1:rIJkVcS9cfFcy5rrimYu3wzaQJypkmXDNMmWqJKbGeg=
 github.com/conduitio/conduit-commons v0.5.0 h1:28UIuOIo+6WvBZ4EU54KfPhSf44I1/Y65zQ9dC0Ps1E=
 github.com/conduitio/conduit-commons v0.5.0/go.mod h1:xyT6XpGvj79gdtsn3qaD2KxadhsAYS+mmBOdln08Wio=
 github.com/conduitio/conduit-connector-file v0.9.0 h1:bp6mU5hMbWS5QK9hh3Vt+AigXSPFfc62lzHZKJZkscg=

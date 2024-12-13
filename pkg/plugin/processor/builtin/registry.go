@@ -40,25 +40,34 @@ import (
 )
 
 var DefaultBuiltinProcessors = map[string]ProcessorPluginConstructor{
-	"avro.decode":         avro.NewDecodeProcessor,
-	"avro.encode":         avro.NewEncodeProcessor,
-	"base64.decode":       base64.NewDecodeProcessor,
-	"base64.encode":       base64.NewEncodeProcessor,
-	"custom.javascript":   custom.NewJavascriptProcessor,
-	"error":               impl.NewErrorProcessor,
-	"filter":              impl.NewFilterProcessor,
-	"field.convert":       field.NewConvertProcessor,
-	"field.exclude":       field.NewExcludeProcessor,
-	"field.rename":        field.NewRenameProcessor,
-	"field.set":           field.NewSetProcessor,
-	"json.decode":         json.NewDecodeProcessor,
-	"json.encode":         json.NewEncodeProcessor,
+	"avro.decode": avro.NewDecodeProcessor,
+	"avro.encode": avro.NewEncodeProcessor,
+
+	"base64.decode": base64.NewDecodeProcessor,
+	"base64.encode": base64.NewEncodeProcessor,
+
+	"custom.javascript": custom.NewJavascriptProcessor,
+	"error":             impl.NewErrorProcessor,
+
+	"filter": impl.NewFilterProcessor,
+
+	"field.convert": field.NewConvertProcessor,
+	"field.exclude": field.NewExcludeProcessor,
+	"field.rename":  field.NewRenameProcessor,
+	"field.set":     field.NewSetProcessor,
+
+	"json.decode": json.NewDecodeProcessor,
+	"json.encode": json.NewEncodeProcessor,
+
 	"unwrap.debezium":     unwrap.NewDebeziumProcessor,
 	"unwrap.kafkaconnect": unwrap.NewKafkaConnectProcessor,
 	"unwrap.opencdc":      unwrap.NewOpenCDCProcessor,
-	"webhook.http":        webhook.NewHTTPProcessor,
-	"openai.embedding":    openai.NewEmbeddingProcessor,
-	"openai.prompt":       openai.NewPromptProcessor,
+
+	"webhook.http": webhook.NewHTTPProcessor,
+
+	"openai.embedding": openai.NewEmbeddingProcessor,
+	"openai.prompt":    openai.NewPromptProcessor,
+
 	"weaviate.getContext": weaviate.NewGetContextProcessor,
 }
 

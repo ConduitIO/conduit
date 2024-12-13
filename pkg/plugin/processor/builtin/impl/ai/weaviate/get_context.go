@@ -34,6 +34,8 @@ import (
 )
 
 type getContextConfig struct {
+	Endpoint     string `json:"endpoint" default:"localhost:18080"`
+	Scheme       string `json:"scheme" default:"http"`
 	ClassName    string `json:"className" validate:"required"`
 	ContextField string `json:"contextField" validate:"required"`
 }
@@ -76,8 +78,8 @@ func (p *getContextProcessor) Configure(ctx context.Context, c config.Config) er
 func (p *getContextProcessor) Open(ctx context.Context) error {
 	// Configure Weaviate client
 	cfg := weaviate.Config{
-		Host:   "localhost:8080", // Replace with your Weaviate instance URL
-		Scheme: "http",
+		Host:   p.cfg.Endpoint, // Replace with your Weaviate instance URL
+		Scheme: p.cfg.Scheme,
 	}
 	client, err := weaviate.NewClient(cfg)
 	if err != nil {

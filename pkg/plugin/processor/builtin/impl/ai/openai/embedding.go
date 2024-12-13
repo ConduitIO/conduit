@@ -52,7 +52,7 @@ type embeddingProcessor struct {
 
 func NewEmbeddingProcessor(log log.CtxLogger) sdk.Processor {
 	return &embeddingProcessor{
-		logger: log.WithComponent("openai_embedding"),
+		logger: log.WithComponent("openai.embedding"),
 	}
 }
 
@@ -138,6 +138,7 @@ func (p *embeddingProcessor) Process(ctx context.Context, records []opencdc.Reco
 		Msg("got embeddings")
 
 	for i, record := range records {
+		// todo this is huge
 		record.Metadata[EmbeddingMetadataBase64] = embeddings.Data[i].EmbeddingBase64
 		// todo add more metadata related to the embeddings
 		out = append(out, sdk.SingleRecord(record))
