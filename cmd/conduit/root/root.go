@@ -16,36 +16,26 @@ package root
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"os"
-	"strings"
+	"path/filepath"
 
 	"github.com/conduitio/conduit/cmd/conduit/root/pipelines"
 	"github.com/conduitio/conduit/pkg/conduit"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/ecdysis"
-	"github.com/spf13/viper"
 )
 
 var (
-	_ ecdysis.CommandWithFlags       = (*RootCommand)(nil)
-	_ ecdysis.CommandWithExecute     = (*RootCommand)(nil)
-	_ ecdysis.CommandWithDocs        = (*RootCommand)(nil)
-	_ ecdysis.CommandWithSubCommands = (*RootCommand)(nil)
+	_ ecdysis.CommandWithFlags         = (*RootCommand)(nil)
+	_ ecdysis.CommandWithExecute       = (*RootCommand)(nil)
+	_ ecdysis.CommandWithDocs          = (*RootCommand)(nil)
+	_ ecdysis.CommandWithSubCommands   = (*RootCommand)(nil)
+	_ ecdysis.CommandWithParsingConfig = (*RootCommand)(nil)
 )
 
-const ConduitPrefix = "CONDUIT"
-
 type RootFlags struct {
-	// Global flags -----------------------------------------------------------
-
-	// Conduit configuration file
-	ConduitConfigPath string `long:"config.path" usage:"global conduit configuration file" persistent:"true" default:"./conduit.yaml"`
-
-	// Version
 	Version bool `long:"version" short:"v" usage:"show current Conduit version" persistent:"true"`
-
 	conduit.Config
 }
 
@@ -54,72 +44,10 @@ type RootCommand struct {
 	cfg   conduit.Config
 }
 
-func (c *RootCommand) parseConfig(flagSet *flag.FlagSet) error {
-	v := viper.New()
-
-	// set configuration based on either the default or the provided value by the user.
-	c.cfg = conduit.DefaultConfigWithBasePath(c.flags.ConduitCfgPath)
-
-	configMap := map[string]interface{}{
-		"api.enabled":                c.cfg.API.Enabled,
-		"config.path":                c.cfg.ConduitCfgPath,
-		"connectors.path":            c.cfg.Connectors.Path,
-		"db.type":                    c.cfg.DB.Type,
-		"dev.blockprofile":           c.cfg.Dev.BlockProfile,
-		"dev.cpuprofile":             c.cfg.Dev.CPUProfile,
-		"dev.memprofile":             c.cfg.Dev.MemProfile,
-		"log.format":                 c.cfg.Log.Format,
-		"log.level":                  c.cfg.Log.Level,
-		"pipelines.exit-on-degraded": c.cfg.Pipelines.ExitOnDegraded,
-		"pipelines.error-recovery.backoff-factor":     c.cfg.Pipelines.ErrorRecovery.BackoffFactor,
-		"pipelines.error-recovery.max-delay":          c.cfg.Pipelines.ErrorRecovery.MaxDelay,
-		"pipelines.error-recovery.max-retries":        c.cfg.Pipelines.ErrorRecovery.MaxRetries,
-		"pipelines.error-recovery.max-retries-window": c.cfg.Pipelines.ErrorRecovery.MaxRetriesWindow,
-		"pipelines.error-recovery.min-delay":          c.cfg.Pipelines.ErrorRecovery.MinDelay,
-		"pipelines.path":                              c.cfg.Pipelines.Path,
-		"preview.pipeline-arch-v2":                    c.cfg.Preview.PipelineArchV2,
-		"processors.path":                             c.cfg.Processors.Path,
-		"schema-registry.confluent.connection-string": c.cfg.SchemaRegistry.Confluent.ConnectionString,
-		"schema-registry.type":                        c.cfg.SchemaRegistry.Type,
-	}
-
-	for key, value := range configMap {
-		v.SetDefault(key, value)
-	}
-
-	// Read configuration from file
-	v.SetConfigFile(c.flags.ConduitConfigPath)
-
-	// ignore if file doesn't exist. Maybe we could check if user is trying read from a file that doesn't exist.
-	_ = v.ReadInConfig()
-
-	// Set environment variable prefix and automatic mapping
-	v.SetEnvPrefix(ConduitPrefix)
-	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
-	v.AutomaticEnv()
-
-	for key := range configMap {
-		if err := v.BindEnv(key); err != nil {
-			return cerrors.Errorf("error binding environment variable for key %q: %v\n", key, err)
-		}
-	}
-
-	if err := v.Unmarshal(&c.cfg); err != nil {
-		return fmt.Errorf("unable to unmarshal the configuration: %w", err)
-	}
-
-	return nil
-}
-
 func (c *RootCommand) Execute(_ context.Context) error {
 	if c.flags.Version {
 		_, _ = fmt.Fprintf(os.Stdout, "%s\n", conduit.Version(true))
 		return nil
-	}
-
-	flagSet := flag.NewFlagSet("conduit", flag.ContinueOnError)
-	if err := c.parseConfig(flagSet); err != nil {
-		return err
 	}
 
 	e := &conduit.Entrypoint{}
@@ -127,12 +55,53 @@ func (c *RootCommand) Execute(_ context.Context) error {
 	return nil
 }
 
+func (c *RootCommand) Config() ecdysis.UserConfig {
+	path := filepath.Dir(c.flags.ConduitCfgPath)
+	c.cfg = conduit.DefaultConfigWithBasePath(path)
+
+	return ecdysis.UserConfig{
+		Prefix:        "CONDUIT",
+		ParsedConfig:  &c.cfg,
+		ConfigPath:    c.flags.ConduitCfgPath,
+		DefaultConfig: c.cfg,
+	}
+}
+
 func (c *RootCommand) Usage() string { return "conduit" }
+
 func (c *RootCommand) Flags() []ecdysis.Flag {
 	flags := ecdysis.BuildFlags(&c.flags)
 
-	defaultCfg := conduit.DefaultConfig()
-	flags.SetDefault("config.path", defaultCfg.ConduitCfgPath)
+	currentPath, err := os.Getwd()
+	if err != nil {
+		panic(cerrors.Errorf("failed to get current working directory: %w", err))
+	}
+
+	c.cfg = conduit.DefaultConfigWithBasePath(currentPath)
+	flags.SetDefault("config.path", c.cfg.ConduitCfgPath)
+	flags.SetDefault("db.type", c.cfg.DB.Type)
+	flags.SetDefault("db.badger.path", c.cfg.DB.Badger.Path)
+	flags.SetDefault("db.postgres.connection-string", c.cfg.DB.Postgres.ConnectionString)
+	flags.SetDefault("db.postgres.table", c.cfg.DB.Postgres.Table)
+	flags.SetDefault("db.sqlite.path", c.cfg.DB.SQLite.Path)
+	flags.SetDefault("db.sqlite.table", c.cfg.DB.SQLite.Table)
+	flags.SetDefault("api.enabled", c.cfg.API.Enabled)
+	flags.SetDefault("http.address", c.cfg.API.HTTP.Address)
+	flags.SetDefault("grpc.address", c.cfg.API.GRPC.Address)
+	flags.SetDefault("log.level", c.cfg.Log.Level)
+	flags.SetDefault("log.format", c.cfg.Log.Format)
+	flags.SetDefault("connectors.path", c.cfg.Connectors.Path)
+	flags.SetDefault("processors.path", c.cfg.Processors.Path)
+	flags.SetDefault("pipelines.path", c.cfg.Pipelines.Path)
+	flags.SetDefault("pipelines.exit-on-degraded", c.cfg.Pipelines.ExitOnDegraded)
+	flags.SetDefault("pipelines.error-recovery.min-delay", c.cfg.Pipelines.ErrorRecovery.MinDelay)
+	flags.SetDefault("pipelines.error-recovery.max-delay", c.cfg.Pipelines.ErrorRecovery.MaxDelay)
+	flags.SetDefault("pipelines.error-recovery.backoff-factor", c.cfg.Pipelines.ErrorRecovery.BackoffFactor)
+	flags.SetDefault("pipelines.error-recovery.max-retries", c.cfg.Pipelines.ErrorRecovery.MaxRetries)
+	flags.SetDefault("pipelines.error-recovery.max-retries-window", c.cfg.Pipelines.ErrorRecovery.MaxRetriesWindow)
+	flags.SetDefault("schema-registry.type", c.cfg.SchemaRegistry.Type)
+	flags.SetDefault("schema-registry.confluent.connection-string", c.cfg.SchemaRegistry.Confluent.ConnectionString)
+	flags.SetDefault("preview.pipeline-arch-v2", c.cfg.Preview.PipelineArchV2)
 	return flags
 }
 

@@ -76,7 +76,7 @@ type ConfigLog struct {
 
 // Config holds all configurable values for Conduit.
 type Config struct {
-	ConduitCfgPath string
+	ConduitCfgPath string `long:"config.path" usage:"global conduit configuration file" persistent:"true" default:"./conduit.yaml"`
 	DB             ConfigDB
 	API            ConfigAPI
 	Log            ConfigLog
@@ -90,8 +90,8 @@ type Config struct {
 	}
 
 	Pipelines struct {
-		Path           string
-		ExitOnDegraded bool
+		Path           string `long:"pipelines.path" usage:"path to pipelines' directory"`
+		ExitOnDegraded bool   `long:"pipelines.exit-on-degraded" usage:"exit Conduit if a pipeline is degraded"`
 		ErrorRecovery  struct {
 			// MinDelay is the minimum delay before restart: Default: 1 second
 			MinDelay time.Duration `long:"pipelines.error-recovery.min-delay" usage:"minimum delay before restart"`
