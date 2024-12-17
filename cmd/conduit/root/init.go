@@ -15,6 +15,7 @@
 package root
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -31,11 +32,22 @@ import (
 var (
 	_ ecdysis.CommandWithExecute = (*InitCommand)(nil)
 	_ ecdysis.CommandWithDocs    = (*InitCommand)(nil)
+	_ ecdysis.CommandWithFlags   = (*InitCommand)(nil)
 )
 
+type InitFlags struct {
+	Path string `long:"path" usage:"Path where Conduit will be initialized." default:"."`
+}
+
 type InitCommand struct {
-	cfg       *conduit.Config
-	rootFlags *RootFlags
+	flags InitFlags
+	cfg   *conduit.Config
+}
+
+func (c *InitCommand) Flags() []ecdysis.Flag {
+	flags := ecdysis.BuildFlags(&c.flags)
+	flags.SetDefault("path", filepath.Dir(c.cfg.ConduitCfgPath))
+	return flags
 }
 
 func (c *InitCommand) Usage() string { return "init" }
@@ -49,7 +61,7 @@ func (c *InitCommand) Docs() ecdysis.Docs {
 func (c *InitCommand) createDirs() error {
 	// These could be used based on the root flags if those were global
 	dirs := []string{"processors", "connectors", "pipelines"}
-	conduitPath := filepath.Dir(c.rootFlags.ConduitConfigPath)
+	conduitPath := filepath.Dir(c.flags.Path)
 
 	for _, dir := range dirs {
 		path := filepath.Join(conduitPath, dir)
@@ -71,56 +83,73 @@ func (c *InitCommand) createDirs() error {
 
 func (c *InitCommand) createConfigYAML() error {
 	cfgYAML := internal.NewYAMLTree()
+	processConfigStruct(reflect.ValueOf(c.cfg).Elem(), "", cfgYAML)
 
-	v := reflect.Indirect(reflect.ValueOf(c.cfg))
-	t := v.Type()
+	// Create encoder with custom indentation
+	var buf bytes.Buffer
+	encoder := yaml.NewEncoder(&buf)
+	encoder.SetIndent(2) // Set indentation to 2 spaces
 
-	for i := 0; i < v.NumField(); i++ {
-		field := t.Field(i)
-		fieldValue := v.Field(i)
-
-		if fieldValue.Kind() == reflect.Struct {
-			embedStructYAML(fieldValue, field, cfgYAML)
-		} else {
-			value := fmt.Sprintf("%v", fieldValue.Interface())
-			usage := field.Tag.Get("usage")
-			longName := field.Tag.Get("long")
-
-			if longName != "" {
-				cfgYAML.Insert(longName, value, usage)
-			}
-		}
-	}
-
-	yamlData, err := yaml.Marshal(cfgYAML.Root)
+	err := encoder.Encode(cfgYAML.Root)
 	if err != nil {
 		return cerrors.Errorf("error marshaling YAML: %w\n", err)
 	}
 
-	err = os.WriteFile(c.rootFlags.ConduitConfigPath, yamlData, 0o600)
+	conduitYAML := filepath.Join(c.flags.Path, "conduit.yaml")
+	err = os.WriteFile(conduitYAML, buf.Bytes(), 0o600)
 	if err != nil {
 		return cerrors.Errorf("error writing conduit.yaml: %w", err)
 	}
-	fmt.Printf("Configuration file written to %v\n", c.rootFlags.ConduitConfigPath)
+	fmt.Printf("Config file written to %v\n", conduitYAML)
 
 	return nil
 }
 
-func embedStructYAML(v reflect.Value, field reflect.StructField, cfgYAML *internal.YAMLTree) {
+func processConfigStruct(v reflect.Value, parentPath string, cfgYAML *internal.YAMLTree) {
 	t := v.Type()
 	for i := 0; i < v.NumField(); i++ {
-		subField := t.Field(i)
-		subFieldValue := v.Field(i)
+		field := t.Field(i)
+		fieldValue := v.Field(i)
 
-		if subFieldValue.Kind() == reflect.Struct {
-			embedStructYAML(subFieldValue, subField, cfgYAML)
-		} else {
-			value := fmt.Sprintf("%v", subFieldValue.Interface())
-			usage := subField.Tag.Get("usage")
-			longName := subField.Tag.Get("long")
+		longName := field.Tag.Get("long")
 
+		if fieldValue.Kind() == reflect.Struct {
 			if longName != "" {
-				cfgYAML.Insert(longName, value, usage)
+				fullPath := longName
+				if parentPath != "" {
+					fullPath = parentPath + "." + longName
+				}
+				processConfigStruct(fieldValue, fullPath, cfgYAML)
+			} else {
+				processConfigStruct(fieldValue, parentPath, cfgYAML)
+			}
+			continue
+		}
+
+		// For pointer types that point to structs
+		if fieldValue.Kind() == reflect.Ptr && !fieldValue.IsNil() && fieldValue.Elem().Kind() == reflect.Struct {
+			if longName != "" {
+				fullPath := longName
+				if parentPath != "" {
+					fullPath = parentPath + "." + longName
+				}
+				processConfigStruct(fieldValue.Elem(), fullPath, cfgYAML)
+			} else {
+				processConfigStruct(fieldValue.Elem(), parentPath, cfgYAML)
+			}
+			continue
+		}
+
+		// For non-struct fields, only process if they have a long tag
+		if longName != "" {
+			fullPath := longName
+			if parentPath != "" {
+				fullPath = parentPath + "." + longName
+			}
+			value := fmt.Sprintf("%v", fieldValue.Interface())
+			usage := field.Tag.Get("usage")
+			if value != "" { // Only insert non-empty values
+				cfgYAML.Insert(fullPath, value, usage)
 			}
 		}
 	}

@@ -76,7 +76,7 @@ type ConfigLog struct {
 
 // Config holds all configurable values for Conduit.
 type Config struct {
-	ConduitCfgPath string `long:"config.path" usage:"global conduit configuration file" persistent:"true" default:"./conduit.yaml"`
+	ConduitCfgPath string `long:"config.path" usage:"global conduit configuration file" default:"./conduit.yaml"`
 	DB             ConfigDB
 	API            ConfigAPI
 	Log            ConfigLog
