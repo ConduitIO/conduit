@@ -31,7 +31,7 @@ var (
 	_ ecdysis.CommandWithExecute       = (*RootCommand)(nil)
 	_ ecdysis.CommandWithDocs          = (*RootCommand)(nil)
 	_ ecdysis.CommandWithSubCommands   = (*RootCommand)(nil)
-	_ ecdysis.CommandWithParsingConfig = (*RootCommand)(nil)
+	_ ecdysis.CommandWithConfiguration = (*RootCommand)(nil)
 )
 
 type RootFlags struct {
@@ -55,15 +55,15 @@ func (c *RootCommand) Execute(_ context.Context) error {
 	return nil
 }
 
-func (c *RootCommand) Config() ecdysis.UserConfig {
+func (c *RootCommand) ParseConfig() ecdysis.Config {
 	path := filepath.Dir(c.flags.ConduitCfgPath)
 	c.cfg = conduit.DefaultConfigWithBasePath(path)
 
-	return ecdysis.UserConfig{
-		Prefix:        "CONDUIT",
-		ParsedConfig:  &c.cfg,
-		ConfigPath:    c.flags.ConduitCfgPath,
-		DefaultConfig: c.cfg,
+	return ecdysis.Config{
+		EnvPrefix:  "CONDUIT",
+		ParsedCfg:  &c.cfg,
+		ConfigPath: c.flags.ConduitCfgPath,
+		DefaultCfg: c.cfg,
 	}
 }
 
