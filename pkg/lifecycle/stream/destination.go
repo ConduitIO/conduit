@@ -101,6 +101,15 @@ func (n *DestinationNode) Run(ctx context.Context) (err error) {
 		if err != nil || msg == nil {
 			return err
 		}
+		if msg.filtered {
+			n.logger.Debug(ctx).Str(log.MessageIDField, msg.ID()).
+				Msg("message marked as filtered, sending directly to next node")
+			err = n.base.Send(ctx, n.logger, msg)
+			if err != nil {
+				return msg.Nack(err, n.ID())
+			}
+			continue
+		}
 
 		n.logger.Trace(msg.Ctx).Msg("writing record to destination connector")
 
