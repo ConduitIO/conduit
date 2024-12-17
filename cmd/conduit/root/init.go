@@ -106,46 +106,30 @@ func (c *InitCommand) createConfigYAML() error {
 }
 
 func processConfigStruct(v reflect.Value, parentPath string, cfgYAML *internal.YAMLTree) {
+	if v.Kind() == reflect.Ptr {
+		v = v.Elem() // Dereference pointer to get the actual value
+	}
+
 	t := v.Type()
 	for i := 0; i < v.NumField(); i++ {
 		field := t.Field(i)
 		fieldValue := v.Field(i)
-
 		longName := field.Tag.Get("long")
 
-		if fieldValue.Kind() == reflect.Struct {
-			if longName != "" {
-				fullPath := longName
-				if parentPath != "" {
-					fullPath = parentPath + "." + longName
-				}
-				processConfigStruct(fieldValue, fullPath, cfgYAML)
-			} else {
-				processConfigStruct(fieldValue, parentPath, cfgYAML)
-			}
+		// Determine the full path for the YAML key
+		fullPath := longName
+		if parentPath != "" && longName != "" {
+			fullPath = parentPath + "." + longName
+		}
+
+		// Recursively process struct fields
+		if fieldValue.Kind() == reflect.Struct || (fieldValue.Kind() == reflect.Ptr && !fieldValue.IsNil() && fieldValue.Elem().Kind() == reflect.Struct) {
+			processConfigStruct(fieldValue, fullPath, cfgYAML)
 			continue
 		}
 
-		// For pointer types that point to structs
-		if fieldValue.Kind() == reflect.Ptr && !fieldValue.IsNil() && fieldValue.Elem().Kind() == reflect.Struct {
-			if longName != "" {
-				fullPath := longName
-				if parentPath != "" {
-					fullPath = parentPath + "." + longName
-				}
-				processConfigStruct(fieldValue.Elem(), fullPath, cfgYAML)
-			} else {
-				processConfigStruct(fieldValue.Elem(), parentPath, cfgYAML)
-			}
-			continue
-		}
-
-		// For non-struct fields, only process if they have a long tag
+		// Process non-struct fields with a long tag
 		if longName != "" {
-			fullPath := longName
-			if parentPath != "" {
-				fullPath = parentPath + "." + longName
-			}
 			value := fmt.Sprintf("%v", fieldValue.Interface())
 			usage := field.Tag.Get("usage")
 			if value != "" { // Only insert non-empty values
