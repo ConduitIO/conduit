@@ -70,9 +70,6 @@ func (c *InitCommand) Flags() []ecdysis.Flag {
 	}
 
 	flags.SetDefault("pipelines.path", filepath.Join(currentPath, "./pipelines"))
-	flags.SetDefault("source", defaultSource)
-	flags.SetDefault("destination", defaultDestination)
-
 	return flags
 }
 
@@ -186,7 +183,7 @@ func (c *InitCommand) buildTemplatePipeline() (pipelineTemplate, error) {
 	}
 
 	// provide a simplified version
-	if c.flags.Source == defaultSource {
+	if c.flags.Source == "" {
 		srcSpec = c.getDemoSourceGeneratorSpec(srcSpec)
 	}
 
@@ -196,7 +193,7 @@ func (c *InitCommand) buildTemplatePipeline() (pipelineTemplate, error) {
 	}
 
 	// provide a simplified version
-	if c.flags.Destination == defaultDestination {
+	if c.flags.Destination == "" {
 		dstSpec = c.getDemoDestinationFileSpec(dstSpec)
 	}
 
