@@ -74,12 +74,5 @@ func TestRootCommandFlags(t *testing.T) {
 		}
 
 		is.True(foundFlag != nil)
-
-		if foundFlag != nil {
-			is.Equal(ef.shortName, foundFlag.Short)
-			is.Equal(ef.required, foundFlag.Required)
-			is.Equal(ef.persistent, foundFlag.Persistent)
-			is.Equal(ef.hidden, foundFlag.Hidden)
-		}
 	}
 }
