@@ -12,31 +12,24 @@ import (
 	"github.com/matryer/is"
 )
 
-type TestStruct struct {
-	Name   string        `long:"name"`
-	Age    int           `long:"age"`
-	Active bool          `long:"active"`
-	Nested *NestedStruct `long:"nested"`
-}
-
-type NestedStruct struct {
-	City string `long:"city"`
-}
-
-func TestPrintStruct(t *testing.T) {
+func TestPrintStructOutput(t *testing.T) {
 	is := is.New(t)
 
 	cfg := conduit.DefaultConfig()
 
 	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
+	defer func() { os.Stdout = oldStdout }()
+
+	r, w, err := os.Pipe()
+	is.NoErr(err)
+
 	os.Stdout = w
+	t.Cleanup(func() { os.Stdout = oldStdout })
 
 	printStruct(reflect.ValueOf(cfg), "")
 
-	err := w.Close()
+	err = w.Close()
 	is.NoErr(err)
-	os.Stdout = oldStdout
 
 	var buf bytes.Buffer
 	_, err = io.Copy(&buf, r)
