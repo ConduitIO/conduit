@@ -113,6 +113,10 @@ func (c *RootCommand) Docs() ecdysis.Docs {
 
 func (c *RootCommand) SubCommands() []ecdysis.Command {
 	return []ecdysis.Command{
+		&ConfigCommand{
+			cfg:   &c.cfg,
+			flags: &c.flags,
+		},
 		&InitCommand{cfg: &c.cfg},
 		&pipelines.PipelinesCommand{},
 	}
