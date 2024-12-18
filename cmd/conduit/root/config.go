@@ -18,18 +18,26 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/conduitio/conduit/pkg/conduit"
 	"github.com/conduitio/ecdysis"
 )
 
 var (
 	_ ecdysis.CommandWithExecute = (*ConfigCommand)(nil)
 	_ ecdysis.CommandWithDocs    = (*ConfigCommand)(nil)
+	_ ecdysis.CommandWithFlags   = (*ConfigCommand)(nil)
+	_ ecdysis.CommandWithConfig  = (*ConfigCommand)(nil)
 )
 
 type ConfigCommand struct {
-	flags *RootFlags
-	cfg   *conduit.Config
+	rootCmd *RootCommand
+}
+
+func (c *ConfigCommand) Config() ecdysis.Config {
+	return c.rootCmd.Config()
+}
+
+func (c *ConfigCommand) Flags() []ecdysis.Flag {
+	return c.rootCmd.Flags()
 }
 
 func (c *ConfigCommand) Docs() ecdysis.Docs {
@@ -43,6 +51,6 @@ the set environment variables, and the flags used. This command will show the co
 func (c *ConfigCommand) Usage() string { return "config" }
 
 func (c ConfigCommand) Execute(_ context.Context) error {
-	fmt.Print(c.cfg)
+	fmt.Print(c.rootCmd.cfg.DB.Postgres.Table)
 	return nil
 }
