@@ -19,7 +19,7 @@ require (
 	github.com/conduitio/conduit-connector-sdk v0.12.0
 	github.com/conduitio/conduit-processor-sdk v0.4.0
 	github.com/conduitio/conduit-schema-registry v0.2.2
-	github.com/conduitio/ecdysis v0.0.0-20241217205706-d372dbe18745
+	github.com/conduitio/ecdysis v0.0.0-20241218142415-9853ff79b597
 	github.com/conduitio/yaml/v3 v3.3.0
 	github.com/dop251/goja v0.0.0-20240806095544-3491d4a58fbe
 	github.com/dop251/goja_nodejs v0.0.0-20231122114759-e84d9a924c5c
@@ -41,6 +41,7 @@ require (
 	github.com/prometheus/common v0.61.0
 	github.com/rs/zerolog v1.33.0
 	github.com/sourcegraph/conc v0.3.0
+	github.com/spf13/pflag v1.0.5
 	github.com/stealthrocket/wazergo v0.19.1
 	github.com/tetratelabs/wazero v1.8.2
 	github.com/twmb/franz-go/pkg/sr v1.2.0
@@ -319,7 +320,6 @@ require (
 	github.com/spf13/afero v1.11.0 // indirect
 	github.com/spf13/cast v1.7.0 // indirect
 	github.com/spf13/cobra v1.8.1 // indirect
-	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/spf13/viper v1.19.0 // indirect
 	github.com/ssgreg/nlreturn/v2 v2.2.1 // indirect
 	github.com/stbenjam/no-sprintf-host-port v0.1.1 // indirect
