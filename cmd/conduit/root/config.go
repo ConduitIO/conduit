@@ -17,6 +17,7 @@ package root
 import (
 	"context"
 	"fmt"
+	"reflect"
 
 	"github.com/conduitio/ecdysis"
 )
@@ -37,6 +38,7 @@ func (c *ConfigCommand) Config() ecdysis.Config {
 }
 
 func (c *ConfigCommand) Flags() []ecdysis.Flag {
+
 	return c.rootCmd.Flags()
 }
 
@@ -44,13 +46,44 @@ func (c *ConfigCommand) Docs() ecdysis.Docs {
 	return ecdysis.Docs{
 		Short: "Shows the Conduit Configuration to be used when running conduit",
 		Long: `Conduit will run based on the default configuration jointly with a provided configuration file (optional), 
-the set environment variables, and the flags used. This command will show the configuration that will be used. `,
+the set environment variables, and the flags used. This command will show the configuration that will be used.`,
+	}
+}
+
+func printStruct(v reflect.Value, parentPath string) {
+	if v.Kind() == reflect.Ptr {
+		v = v.Elem()
+	}
+
+	t := v.Type()
+	for i := 0; i < v.NumField(); i++ {
+		field := t.Field(i)
+		fieldValue := v.Field(i)
+		longName := field.Tag.Get("long")
+
+		fullPath := longName
+		if parentPath != "" && longName != "" {
+			fullPath = parentPath + "." + longName
+		}
+
+		if fieldValue.Kind() == reflect.Struct ||
+			(fieldValue.Kind() == reflect.Ptr && !fieldValue.IsNil() && fieldValue.Elem().Kind() == reflect.Struct) {
+			printStruct(fieldValue, fullPath)
+			continue
+		}
+
+		if longName != "" {
+			value := fmt.Sprintf("%v", fieldValue.Interface())
+			if value != "" {
+				fmt.Printf("%s: %s\n", fullPath, value)
+			}
+		}
 	}
 }
 
 func (c *ConfigCommand) Usage() string { return "config" }
 
 func (c ConfigCommand) Execute(_ context.Context) error {
-	fmt.Print(c.rootCmd.cfg.DB.Postgres.Table)
+	printStruct(reflect.ValueOf(c.rootCmd.cfg), "")
 	return nil
 }
