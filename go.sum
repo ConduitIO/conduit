@@ -244,6 +244,8 @@ github.com/conduitio/conduit-processor-sdk v0.4.0 h1:wF1Fj31aneNixNbW5rJ0/5Q3vwW
 github.com/conduitio/conduit-processor-sdk v0.4.0/go.mod h1:Jj9ZBTee7nO0XeociDxe9gSvLFN1GbPWP1Aj04DPeZQ=
 github.com/conduitio/conduit-schema-registry v0.2.2 h1:Q0uL8egRAzJlRV7Ed5nEcqZ1yE/UQeZJad3VmhgTSFE=
 github.com/conduitio/conduit-schema-registry v0.2.2/go.mod h1:EmT4ylkz15LYddL6qU4wDX52n1Yp0aHvEDRIWOYYzFs=
+github.com/conduitio/ecdysis v0.0.1 h1:u6lX5bFqvxaXy4RqdNFI69OAYpzPJPVtCshGA/zAato=
+github.com/conduitio/ecdysis v0.0.1/go.mod h1:k0i+Krn8g63HNFnGNnkf8YWf+Lg0KrHRRQtkE0I4MRE=
 github.com/conduitio/yaml/v3 v3.3.0 h1:kbbaOSHcuH39gP4+rgbJGl6DSbLZcJgEaBvkEXJlCsI=
 github.com/conduitio/yaml/v3 v3.3.0/go.mod h1:JNgFMOX1t8W4YJuRZOh6GggVtSMsgP9XgTw+7dIenpc=
 github.com/containerd/cgroups/v3 v3.0.3 h1:S5ByHZ/h9PMe5IOQoN7E+nMc2UcLEM/V48DGDJ9kip0=
@@ -718,8 +720,6 @@ github.com/otiai10/mint v1.3.1/go.mod h1:/yxELlJQ0ufhjUwhshSj+wFjZ78CnZ48/1wtmBH
 github.com/pborman/getopt v0.0.0-20180729010549-6fdd0a2c7117/go.mod h1:85jBQOZwpVEaDAr341tbn15RS4fCAsIst0qp7i8ex1o=
 github.com/pelletier/go-toml/v2 v2.2.3 h1:YmeHyLY8mFWbdkNWwpr+qIL2bEqT0o95WSdkNHvL12M=
 github.com/pelletier/go-toml/v2 v2.2.3/go.mod h1:MfCQTFTvCcUyyvvwm1+G6H/jORL20Xlb6rzQu9GuUkc=
-github.com/peterbourgon/ff/v3 v3.4.0 h1:QBvM/rizZM1cB0p0lGMdmR7HxZeI/ZrBWB4DqLkMUBc=
-github.com/peterbourgon/ff/v3 v3.4.0/go.mod h1:zjJVUhx+twciwfDl0zBcFzl4dW8axCRyXE/eKY9RztQ=
 github.com/pierrec/lz4/v4 v4.1.8/go.mod h1:gZWDp/Ze/IJXGXf23ltt2EXimqmTUXEy0GFuRQyBid4=
 github.com/pierrec/lz4/v4 v4.1.21 h1:yOVMLb6qSIDP67pl/5F7RepeKYu/VmTyEXvuMI5d9mQ=
 github.com/pierrec/lz4/v4 v4.1.21/go.mod h1:gZWDp/Ze/IJXGXf23ltt2EXimqmTUXEy0GFuRQyBid4=

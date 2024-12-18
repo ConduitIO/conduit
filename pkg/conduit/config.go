@@ -39,88 +39,92 @@ const (
 	SchemaRegistryTypeBuiltin   = "builtin"
 )
 
+type ConfigDB struct {
+	// When Driver is specified it takes precedence over other DB related
+	// fields.
+	Driver database.DB
+
+	Type   string `long:"db.type" usage:"database type; accepts badger,postgres,inmemory,sqlite"`
+	Badger struct {
+		Path string `long:"db.badger.path" usage:"path to badger DB"`
+	}
+	Postgres struct {
+		ConnectionString string `long:"db.postgres.connection-string" usage:"postgres connection string, may be a database URL or in PostgreSQL keyword/value format"`
+		Table            string `long:"db.postgres.table" usage:"postgres table in which to store data (will be created if it does not exist)"`
+	}
+	SQLite struct {
+		Path  string `long:"db.sqlite.path" usage:"path to sqlite3 DB"`
+		Table string `long:"db.sqlite.table" usage:"sqlite3 table in which to store data (will be created if it does not exist)"`
+	}
+}
+
+type ConfigAPI struct {
+	Enabled bool `long:"api.enabled" usage:"enable HTTP and gRPC API"`
+	HTTP    struct {
+		Address string `long:"http.address" usage:"address for serving the HTTP API"`
+	}
+	GRPC struct {
+		Address string `long:"grpc.address" usage:"address for serving the gRPC API"`
+	}
+}
+
+type ConfigLog struct {
+	NewLogger func(level, format string) log.CtxLogger
+	Level     string `long:"log.level" usage:"sets logging level; accepts debug, info, warn, error, trace"`
+	Format    string `long:"log.format" usage:"sets the format of the logging; accepts json, cli"`
+}
+
 // Config holds all configurable values for Conduit.
 type Config struct {
-	DB struct {
-		// When Driver is specified it takes precedence over other DB related
-		// fields.
-		Driver database.DB
-
-		Type   string
-		Badger struct {
-			Path string
-		}
-		Postgres struct {
-			ConnectionString string
-			Table            string
-		}
-		SQLite struct {
-			Path  string
-			Table string
-		}
-	}
-
-	API struct {
-		Enabled bool
-
-		HTTP struct {
-			Address string
-		}
-		GRPC struct {
-			Address string
-		}
-	}
-
-	Log struct {
-		NewLogger func(level, format string) log.CtxLogger
-		Level     string
-		Format    string
-	}
+	ConduitCfgPath string `long:"config.path" usage:"global conduit configuration file" default:"./conduit.yaml"`
+	DB             ConfigDB
+	API            ConfigAPI
+	Log            ConfigLog
 
 	Connectors struct {
-		Path string
+		Path string `long:"connectors.path" usage:"path to standalone connectors' directory"`
 	}
 
 	Processors struct {
-		Path string
+		Path string `long:"processors.path" usage:"path to standalone processors' directory"`
 	}
 
 	Pipelines struct {
-		Path           string
-		ExitOnDegraded bool
+		Path           string `long:"pipelines.path" usage:"path to pipelines' directory"`
+		ExitOnDegraded bool   `long:"pipelines.exit-on-degraded" usage:"exit Conduit if a pipeline is degraded"`
 		ErrorRecovery  struct {
 			// MinDelay is the minimum delay before restart: Default: 1 second
-			MinDelay time.Duration
+			MinDelay time.Duration `long:"pipelines.error-recovery.min-delay" usage:"minimum delay before restart"`
 			// MaxDelay is the maximum delay before restart: Default: 10 minutes
-			MaxDelay time.Duration
+			MaxDelay time.Duration `long:"pipelines.error-recovery.max-delay" usage:"maximum delay before restart"`
 			// BackoffFactor is the factor by which the delay is multiplied after each restart: Default: 2
-			BackoffFactor int
+			BackoffFactor int `long:"pipelines.error-recovery.backoff-factor" usage:"backoff factor applied to the last delay"`
 			// MaxRetries is the maximum number of restarts before the pipeline is considered unhealthy: Default: -1 (infinite)
-			MaxRetries int64
+			MaxRetries int64 `long:"pipelines.error-recovery.max-retries" usage:"maximum number of retries"`
 			// MaxRetriesWindow is the duration window in which the max retries are counted: Default: 5 minutes
-			MaxRetriesWindow time.Duration
+			MaxRetriesWindow time.Duration `long:"pipelines.error-recovery.max-retries-window" usage:"amount of time running without any errors after which a pipeline is considered healthy"`
 		}
 	}
 
 	ConnectorPlugins map[string]sdk.Connector
 
 	SchemaRegistry struct {
-		Type string
+		Type string `long:"schema-registry.type" usage:"schema registry type; accepts builtin,confluent"`
 
 		Confluent struct {
-			ConnectionString string
+			ConnectionString string `long:"schema-registry.confluent.connection-string" usage:"confluent schema registry connection string"`
 		}
 	}
 
 	Preview struct {
 		// PipelineArchV2 enables the new pipeline architecture.
-		PipelineArchV2 bool
+		PipelineArchV2 bool `long:"preview.pipeline-arch-v2" usage:"enables experimental pipeline architecture v2 (note that the new architecture currently supports only 1 source and 1 destination per pipeline)"`
 	}
 
-	dev struct {
-		cpuprofile   string
-		memprofile   string
-		blockprofile string
+	Dev struct {
+		CPUProfile   string `long:"dev.cpuprofile" usage:"write CPU profile to file"`
+		MemProfile   string `long:"dev.memprofile" usage:"write memory profile to file"`
+		BlockProfile string `long:"dev.blockprofile" usage:"write block profile to file"`
 	}
 }
 
@@ -135,6 +139,8 @@ func DefaultConfig() Config {
 
 func DefaultConfigWithBasePath(basePath string) Config {
 	var cfg Config
+
+	cfg.ConduitCfgPath = filepath.Join(basePath, "conduit.yaml")
 
 	cfg.DB.Type = DBTypeBadger
 	cfg.DB.Badger.Path = filepath.Join(basePath, "conduit.db")

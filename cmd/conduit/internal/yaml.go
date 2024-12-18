@@ -39,47 +39,43 @@ func (t *YAMLTree) Insert(path, value, comment string) {
 	parts := strings.Split(path, ".")
 	current := t.Root
 
-	// For each part of the path
 	for i, part := range parts {
-		// Create key node
+		isLast := i == len(parts)-1
 		keyNode := &yaml.Node{
 			Kind:  yaml.ScalarNode,
 			Value: part,
 		}
 
-		// Find or create value node
+		if comment != "" && isLast {
+			keyNode.HeadComment = "# " + comment
+		}
+
 		var valueNode *yaml.Node
 		found := false
 
-		// Look for existing key in current mapping
-		for i := 0; i < len(current.Content); i += 2 {
-			if current.Content[i].Value == part {
-				valueNode = current.Content[i+1]
+		// Search for existing key
+		for j := 0; j < len(current.Content); j += 2 {
+			if current.Content[j].Value == part {
+				valueNode = current.Content[j+1]
 				found = true
 				break
 			}
 		}
 
-		// If not found, create new node
 		if !found {
-			// If this is the last part, create scalar value node
-			if i == len(parts)-1 {
+			if isLast {
 				valueNode = &yaml.Node{
 					Kind:  yaml.ScalarNode,
 					Value: value,
 				}
-				keyNode.HeadComment = comment
 			} else {
-				// Otherwise create mapping node for nesting
 				valueNode = &yaml.Node{
 					Kind: yaml.MappingNode,
 				}
 			}
-			// Add key-value pair to current node's content
 			current.Content = append(current.Content, keyNode, valueNode)
 		}
 
-		// Move to next level
 		current = valueNode
 	}
 }
