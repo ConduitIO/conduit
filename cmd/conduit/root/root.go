@@ -21,6 +21,7 @@ import (
 	"path/filepath"
 
 	"github.com/conduitio/conduit/cmd/conduit/root/pipelines"
+	"github.com/conduitio/conduit/cmd/conduit/root/version"
 	"github.com/conduitio/conduit/pkg/conduit"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/ecdysis"
@@ -113,11 +114,9 @@ func (c *RootCommand) Docs() ecdysis.Docs {
 
 func (c *RootCommand) SubCommands() []ecdysis.Command {
 	return []ecdysis.Command{
-		&ConfigCommand{
-			rootCmd: c,
-		},
+		&ConfigCommand{rootCmd: c},
 		&InitCommand{cfg: &c.cfg},
-		&VersionCommand{},
+		&version.VersionCommand{},
 		&pipelines.PipelinesCommand{},
 	}
 }
