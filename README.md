@@ -16,7 +16,7 @@ _Data Integration for Production Data Stores. :dizzy:_
 ## Overview
 
 Conduit is a data streaming tool written in Go. It aims to provide the best user
-experience for building and running real-time data pipelines. Conduit comes with 
+experience for building and running real-time data pipelines. Conduit comes with
 common connectors, processors and observability data out of the box.
 
 Conduit pipelines are built out of simple building blocks which run in their own
@@ -44,7 +44,7 @@ Conduit was created and open-sourced by [Meroxa](https://meroxa.io).
 
 ## Quick start
 
-https://conduit.io/docs/getting-started
+<https://conduit.io/docs/getting-started>
 
 ## Installation guide
 
@@ -58,7 +58,7 @@ simply run it!
 ./conduit
 ```
 
-Once you see that the service is running, the configured pipeline should start 
+Once you see that the service is running, the configured pipeline should start
 processing records automatically. You can also interact with
 the [Conduit API](#api) directly, we recommend navigating
 to `http://localhost:8080/openapi` and exploring the HTTP API through Swagger
@@ -147,8 +147,8 @@ each configuration option based on the following priorities:
       connection-string: postgres://localhost:5432/conduitdb # -db.postgres.connection-string or CONDUIT_DB_POSTGRES_CONNECTION_STRING
   ```
 
-This parsing configuration is provided thanks to our own CLI library [ecdysis](https://github.com/conduitio/ecdysis), 
-which builds on top of [Cobra](https://github.com/spf13/cobra) and uses [Viper](https://github.com/spf13/viper) under the hood. 
+This parsing configuration is provided thanks to our own CLI library [ecdysis](https://github.com/conduitio/ecdysis),
+which builds on top of [Cobra](https://github.com/spf13/cobra) and uses [Viper](https://github.com/spf13/viper) under the hood.
 
 ## Storage
 
