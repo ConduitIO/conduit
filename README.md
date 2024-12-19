@@ -148,7 +148,7 @@ each configuration option based on the following priorities:
   ```
 
 This parsing configuration is provided thanks to our own CLI library [ecdysis](https://github.com/conduitio/ecdysis),
-which builds on top of [Cobra](https://github.com/spf13/cobra) and uses [Viper](https://github.com/spf13/viper) 
+which builds on top of [Cobra](https://github.com/spf13/cobra) and uses [Viper](https://github.com/spf13/viper)
 under the hood.
 
 ## Storage
