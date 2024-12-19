@@ -12,13 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package root
+package config
 
 import (
 	"context"
 	"fmt"
 	"reflect"
 
+	"github.com/conduitio/conduit/cmd/conduit/root/run"
 	"github.com/conduitio/ecdysis"
 )
 
@@ -30,15 +31,15 @@ var (
 )
 
 type ConfigCommand struct {
-	rootCmd *RootCommand
+	RunCmd *run.RunCommand
 }
 
 func (c *ConfigCommand) Config() ecdysis.Config {
-	return c.rootCmd.Config()
+	return c.RunCmd.Config()
 }
 
 func (c *ConfigCommand) Flags() []ecdysis.Flag {
-	return c.rootCmd.Flags()
+	return c.RunCmd.Flags()
 }
 
 func (c *ConfigCommand) Docs() ecdysis.Docs {
@@ -83,6 +84,6 @@ func printStruct(v reflect.Value, parentPath string) {
 func (c *ConfigCommand) Usage() string { return "config" }
 
 func (c ConfigCommand) Execute(_ context.Context) error {
-	printStruct(reflect.ValueOf(c.rootCmd.cfg), "")
+	printStruct(reflect.ValueOf(c.RunCmd.Cfg), "")
 	return nil
 }
