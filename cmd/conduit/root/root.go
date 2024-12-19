@@ -35,7 +35,7 @@ var (
 )
 
 type RootFlags struct {
-	Version bool `long:"version" short:"v" usage:"show current Conduit version" persistent:"true"`
+	Version bool `long:"version" short:"v" usage:"show the current Conduit version"`
 	conduit.Config
 }
 
@@ -117,6 +117,7 @@ func (c *RootCommand) SubCommands() []ecdysis.Command {
 			rootCmd: c,
 		},
 		&InitCommand{cfg: &c.cfg},
+		&VersionCommand{},
 		&pipelines.PipelinesCommand{},
 	}
 }

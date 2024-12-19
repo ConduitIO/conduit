@@ -32,7 +32,7 @@ func TestRootCommandFlags(t *testing.T) {
 		persistent bool
 	}{
 		{longName: "config.path", usage: "global conduit configuration file"},
-		{longName: "version", shortName: "v", usage: "show current Conduit version", persistent: true},
+		{longName: "version", shortName: "v", usage: "show the current Conduit version"},
 		{longName: "db.type", usage: "database type; accepts badger,postgres,inmemory,sqlite"},
 		{longName: "db.badger.path", usage: "path to badger DB"},
 		{longName: "db.postgres.connection-string", usage: "postgres connection string, may be a database URL or in PostgreSQL keyword/value format"},
