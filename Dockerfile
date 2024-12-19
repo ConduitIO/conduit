@@ -7,12 +7,6 @@ RUN apt-get update &&\
     apt-get install -y build-essential &&\
     apt-get install -y git
 
-# Install Node@v18
-RUN curl -sL https://deb.nodesource.com/setup_18.x | bash - &&\
-    apt-get install -y nodejs &&\
-    npm update &&\
-    npm i -g yarn@1.22.22
-
 # Build the full app binary
 WORKDIR /app
 COPY . .

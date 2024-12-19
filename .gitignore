@@ -28,41 +28,6 @@ conduit.db
 /conduit
 /conduit-pipeline-check
 
-### Conduit UI ###
-
-# compiled output
-/ui/dist/
-/ui/tmp/
-/pkg/web/ui/dist/*
-!/pkg/web/ui/dist/.keep
-
-# dependencies
-/.github/actions/node_modules/
-/ui/node_modules/
-
-# misc
-/ui/.env*
-/ui/.pnp*
-/ui/.sass-cache
-/ui/.eslintcache
-/ui/connect.lock
-/ui/coverage/
-/ui/libpeerconnection.log
-/ui/npm-debug.log*
-/ui/testem.log
-/ui/yarn-error.log
-
-# ember-try
-/ui/.node_modules.ember-try/
-/ui/bower.json.ember-try
-/ui/npm-shrinkwrap.json.ember-try
-/ui/package.json.ember-try
-/ui/package-lock.json.ember-try
-/ui/yarn.lock.ember-try
-
-# Local Netlify folder
-/ui/.netlify
-
 ### OS ###
 .DS_Store
 
