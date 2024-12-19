@@ -8,8 +8,8 @@ GO_VERSION_CHECK=`./scripts/check-go-version.sh`
 
 # The build target should stay at the top since we want it to be the default target.
 .PHONY: build
-build: check-go-version pkg/web/ui/dist
-	go build -ldflags "-X 'github.com/conduitio/conduit/pkg/conduit.version=${VERSION}'" -o conduit -tags ui ./cmd/conduit/main.go
+build: check-go-version
+	go build -ldflags "-X 'github.com/conduitio/conduit/pkg/conduit.version=${VERSION}'" -o conduit ./cmd/conduit/main.go
 	@echo "\nBuild complete. Enjoy using Conduit!"
 	@echo "Get started by running:"
 	@echo " ./conduit"
@@ -40,11 +40,6 @@ fmt:
 lint:
 	golangci-lint run -v
 
-.PHONY: build-server
-build-server: check-go-version
-	go build -ldflags "-X 'github.com/conduitio/conduit/pkg/conduit.version=${VERSION}'" -o conduit ./cmd/conduit/main.go
-	@echo "build version: ${VERSION}"
-
 .PHONY: run
 run:
 	go run ./cmd/conduit/main.go
@@ -64,7 +59,6 @@ proto-lint:
 .PHONY: clean
 clean:
 	@rm -f conduit
-	@rm -rf pkg/web/ui/dist
 
 .PHONY: download
 download:
@@ -81,12 +75,6 @@ install-tools: download
 generate:
 	go generate -x ./...
 
-pkg/web/ui/dist:
-	make ui-dist
-
-ui-%:
-	@cd ui && make $*
-
 .PHONY: check-go-version
 check-go-version:
 	@if [ "${GO_VERSION_CHECK}" != "" ]; then\
@@ -96,4 +84,4 @@ check-go-version:
 
 .PHONY: markdown-lint
 markdown-lint:
-	markdownlint-cli2 "**/*.md" "#ui/node_modules" "#LICENSE.md" "#pkg/web/openapi/**" "#.github/*.md"
+	markdownlint-cli2 "**/*.md" "#LICENSE.md" "#pkg/web/openapi/**" "#.github/*.md"
