@@ -38,13 +38,12 @@ func (c *ConfigCommand) Config() ecdysis.Config {
 }
 
 func (c *ConfigCommand) Flags() []ecdysis.Flag {
-
 	return c.rootCmd.Flags()
 }
 
 func (c *ConfigCommand) Docs() ecdysis.Docs {
 	return ecdysis.Docs{
-		Short: "Shows the Conduit configuration to be used when running Conduit.",
+		Short: "Shows the configuration to be used when running Conduit.",
 		Long: `Conduit will run based on the default configuration jointly with a provided configuration file (optional), 
 the set environment variables, and the flags used. This command will show the configuration that will be used.`,
 	}
