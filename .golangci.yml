@@ -40,7 +40,6 @@ issues:
   exclude-dirs-use-default: false
   exclude-dirs:
     - ^examples/
-    - ^ui/
     - ^pkg/plugin/processor/builtin/internal/diff # external code
 
   exclude-rules:

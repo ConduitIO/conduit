@@ -14,7 +14,6 @@ jobs:
         with:
           globs: |
             **/*.md
-            !ui/node_modules
             !LICENSE.md
             !pkg/web/openapi/**
             !.github/*.md
