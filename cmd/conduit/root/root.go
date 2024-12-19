@@ -21,6 +21,7 @@ import (
 	"path/filepath"
 
 	"github.com/conduitio/conduit/cmd/conduit/root/pipelines"
+	"github.com/conduitio/conduit/cmd/conduit/root/version"
 	"github.com/conduitio/conduit/pkg/conduit"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/ecdysis"
@@ -35,7 +36,7 @@ var (
 )
 
 type RootFlags struct {
-	Version bool `long:"version" short:"v" usage:"show current Conduit version" persistent:"true"`
+	Version bool `long:"version" short:"v" usage:"show the current Conduit version"`
 	conduit.Config
 }
 
@@ -113,10 +114,9 @@ func (c *RootCommand) Docs() ecdysis.Docs {
 
 func (c *RootCommand) SubCommands() []ecdysis.Command {
 	return []ecdysis.Command{
-		&ConfigCommand{
-			rootCmd: c,
-		},
+		&ConfigCommand{rootCmd: c},
 		&InitCommand{cfg: &c.cfg},
+		&version.VersionCommand{},
 		&pipelines.PipelinesCommand{},
 	}
 }
