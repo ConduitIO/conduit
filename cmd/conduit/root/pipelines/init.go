@@ -244,7 +244,7 @@ func (c *InitCommand) Execute(_ context.Context) error {
 
 	fmt.Printf(`Your pipeline has been initialized and created at %s.
 
-To run the pipeline, simply run 'conduit'.`, c.configFilePath)
+To run the pipeline, simply run 'conduit run'.`, c.configFilePath)
 
 	return nil
 }
