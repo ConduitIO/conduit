@@ -12,7 +12,7 @@ build: check-go-version
 	go build -ldflags "-X 'github.com/conduitio/conduit/pkg/conduit.version=${VERSION}'" -o conduit ./cmd/conduit/main.go
 	@echo "\nBuild complete. Enjoy using Conduit!"
 	@echo "Get started by running:"
-	@echo " ./conduit"
+	@echo " ./conduit run"
 
 .PHONY: test
 test:
