@@ -106,7 +106,7 @@ Requirements:
 git clone git@github.com:ConduitIO/conduit.git
 cd conduit
 make
-./conduit
+./conduit run
 ```
 
 ### Docker
