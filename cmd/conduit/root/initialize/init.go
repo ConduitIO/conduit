@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package root
+package initialize
 
 import (
 	"bytes"
@@ -41,12 +41,12 @@ type InitFlags struct {
 
 type InitCommand struct {
 	flags InitFlags
-	cfg   *conduit.Config
+	Cfg   *conduit.Config
 }
 
 func (c *InitCommand) Flags() []ecdysis.Flag {
 	flags := ecdysis.BuildFlags(&c.flags)
-	flags.SetDefault("path", filepath.Dir(c.cfg.ConduitCfgPath))
+	flags.SetDefault("path", filepath.Dir(c.Cfg.ConduitCfgPath))
 	return flags
 }
 
@@ -83,7 +83,7 @@ func (c *InitCommand) createDirs() error {
 
 func (c *InitCommand) createConfigYAML() error {
 	cfgYAML := internal.NewYAMLTree()
-	processConfigStruct(reflect.ValueOf(c.cfg).Elem(), "", cfgYAML)
+	processConfigStruct(reflect.ValueOf(c.Cfg).Elem(), "", cfgYAML)
 
 	// Create encoder with custom indentation
 	var buf bytes.Buffer
@@ -139,7 +139,7 @@ func processConfigStruct(v reflect.Value, parentPath string, cfgYAML *internal.Y
 	}
 }
 
-func (c *InitCommand) Execute(ctx context.Context) error {
+func (c *InitCommand) Execute(_ context.Context) error {
 	err := c.createDirs()
 	if err != nil {
 		return err
