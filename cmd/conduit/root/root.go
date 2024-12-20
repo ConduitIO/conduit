@@ -22,6 +22,7 @@ import (
 	"github.com/conduitio/conduit/cmd/conduit/root/config"
 	"github.com/conduitio/conduit/cmd/conduit/root/initialize"
 	"github.com/conduitio/conduit/cmd/conduit/root/pipelines"
+	"github.com/conduitio/conduit/cmd/conduit/root/run"
 	"github.com/conduitio/conduit/cmd/conduit/root/version"
 	"github.com/conduitio/conduit/pkg/conduit"
 	"github.com/conduitio/ecdysis"
@@ -36,7 +37,6 @@ var (
 
 type RootFlags struct {
 	Version bool `long:"version" short:"v" usage:"show the current Conduit version"`
-	conduit.Config
 }
 
 type RootCommand struct {
