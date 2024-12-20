@@ -25,7 +25,6 @@ import (
 	"github.com/conduitio/conduit/cmd/conduit/root/run"
 	"github.com/conduitio/conduit/pkg/conduit"
 	"github.com/conduitio/ecdysis"
-	"github.com/spf13/cobra"
 )
 
 var (
@@ -49,7 +48,7 @@ func (c *RootCommand) Execute(ctx context.Context) error {
 		return nil
 	}
 
-	if cmd, ok := ctx.Value(ecdysis.CobraCtxCmd{}).(*cobra.Command); ok {
+	if cmd := ecdysis.CobraCmdFromContext(ctx); cmd != nil {
 		return cmd.Help()
 	}
 
