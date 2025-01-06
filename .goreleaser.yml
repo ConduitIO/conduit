@@ -1,7 +1,4 @@
 version: 2
-before:
-  hooks:
-    - make ui-dist
 builds:
   - main: ./cmd/conduit/main.go
     id: conduit
