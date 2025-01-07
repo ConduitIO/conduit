@@ -17,8 +17,7 @@ _Data Integration for Production Data Stores. :dizzy:_
 
 Conduit is a data streaming tool written in Go. It aims to provide the best user
 experience for building and running real-time data pipelines. Conduit comes with
-batteries included, it provides a UI, common connectors, processors and
-observability data out of the box.
+common connectors, processors and observability data out of the box.
 
 Conduit pipelines are built out of simple building blocks which run in their own
 goroutines and are connected using Go channels. This makes Conduit pipelines
@@ -40,43 +39,12 @@ Conduit was created and open-sourced by [Meroxa](https://meroxa.io).
 - [Connectors](#connectors)
 - [Processors](#processors)
 - [API](#api)
-- [UI](#ui)
 - [Documentation](#documentation)
 - [Contributing](#contributing)
 
 ## Quick start
 
-1. Download and extract
-   the [latest release](https://github.com/conduitio/conduit/releases/latest).
-2. Download
-   the [example pipeline](/examples/pipelines/file-to-file.yaml)
-   and put it in the directory named `pipelines` in the same directory as the
-   Conduit binary.
-3. Run Conduit (`./conduit`). The example pipeline will start automatically.
-4. Write something to file `example.in` in the same directory as the Conduit
-   binary.
-
-   ```sh
-   echo "hello conduit" >> example.in
-   ```
-
-5. Read the contents of `example.out` and notice an OpenCDC record:
-
-   ```sh
-   $ cat example.out
-   {"position":"MTQ=","operation":"create","metadata":{"file.path":"./example.in","opencdc.readAt":"1663858188836816000","opencdc.version":"v1"},"key":"MQ==","payload":{"before":null,"after":"aGVsbG8gY29uZHVpdA=="}}
-   ```
-
-6. The string `hello conduit` is a base64 encoded string stored in the field
-   `payload.after`, let's decode it:
-
-   ```sh
-   $ cat example.out | jq ".payload.after | @base64d"
-   "hello conduit"
-   ```
-
-7. Explore the UI by opening `http://localhost:8080` and build your own
-   pipeline!
+<https://conduit.io/docs/getting-started>
 
 ## Installation guide
 
@@ -90,8 +58,8 @@ simply run it!
 ./conduit
 ```
 
-Once you see that the service is running you may access a user-friendly web
-interface at `http://localhost:8080`. You can also interact with
+Once you see that the service is running, the configured pipeline should start
+processing records automatically. You can also interact with
 the [Conduit API](#api) directly, we recommend navigating
 to `http://localhost:8080/openapi` and exploring the HTTP API through Swagger
 UI.
@@ -132,22 +100,14 @@ rpm -i conduit_0.12.2_Linux_x86_64.rpm
 Requirements:
 
 - [Go](https://golang.org/)
-- [Node.js](https://nodejs.org/) (18.x)
-- [Yarn](https://yarnpkg.com/) (latest 1.x)
-- [Ember CLI](https://ember-cli.com/)
 - [Make](https://www.gnu.org/software/make/)
 
 ```shell
 git clone git@github.com:ConduitIO/conduit.git
 cd conduit
 make
-./conduit
+./conduit run
 ```
-
-Note that you can also build Conduit with `make build-server`, which only
-compiles the server and skips the UI. This command requires only Go and builds
-the binary much faster. That makes it useful for development purposes or for
-running Conduit as a simple backend service.
 
 ### Docker
 
@@ -157,9 +117,6 @@ Conduit version, you should run the following command:
 ```sh
 docker run -p 8080:8080 conduit.docker.scarf.sh/conduitio/conduit:latest
 ```
-
-The Docker image includes the [UI](#ui), you can access it by navigating
-to `http://localhost:8080`.
 
 ## Configuring Conduit
 
@@ -189,6 +146,10 @@ each configuration option based on the following priorities:
     postgres:
       connection-string: postgres://localhost:5432/conduitdb # -db.postgres.connection-string or CONDUIT_DB_POSTGRES_CONNECTION_STRING
   ```
+
+This parsing configuration is provided thanks to our own CLI library [ecdysis](https://github.com/conduitio/ecdysis),
+which builds on top of [Cobra](https://github.com/spf13/cobra) and uses [Viper](https://github.com/spf13/viper)
+under the hood.
 
 ## Storage
 
@@ -295,17 +256,6 @@ API please have a look at the [API documentation](https://www.conduit.io/api),
 or run Conduit and navigate to `http://localhost:8080/openapi` to open
 a [Swagger UI](https://github.com/swagger-api/swagger-ui) which makes it easy to
 try it out.
-
-## UI
-
-Conduit comes with a web UI that makes building data pipelines a breeze, you can
-access it at `http://localhost:8080`. See
-the [installation guide](#build-from-source) for instructions on how to build
-Conduit with the UI.
-
-For more information about the UI refer to the [Readme](ui/README.md) in `/ui`.
-
-![animation](docs/data/animation.gif)
 
 ## Documentation
 

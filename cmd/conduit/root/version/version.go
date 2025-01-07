@@ -1,4 +1,4 @@
-// Copyright © 2022 Meroxa, Inc.
+// Copyright © 2024 Meroxa, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,25 +12,33 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package main
+package version
 
 import (
+	"context"
 	"fmt"
 	"os"
 
-	"github.com/conduitio/conduit/cmd/conduit/root"
+	"github.com/conduitio/conduit/pkg/conduit"
 	"github.com/conduitio/ecdysis"
 )
 
-func main() {
-	e := ecdysis.New()
+var (
+	_ ecdysis.CommandWithExecute = (*VersionCommand)(nil)
+	_ ecdysis.CommandWithDocs    = (*VersionCommand)(nil)
+)
 
-	cmd := e.MustBuildCobraCommand(&root.RootCommand{})
-	cmd.CompletionOptions.DisableDefaultCmd = true
+type VersionCommand struct{}
 
-	if err := cmd.Execute(); err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "%v\n", err)
-		os.Exit(1)
+func (c *VersionCommand) Usage() string { return "version" }
+
+func (c *VersionCommand) Execute(_ context.Context) error {
+	_, _ = fmt.Fprintf(os.Stdout, "%s\n", conduit.Version(true))
+	return nil
+}
+
+func (c *VersionCommand) Docs() ecdysis.Docs {
+	return ecdysis.Docs{
+		Short: "Show the current version of Conduit.",
 	}
-	os.Exit(0)
 }

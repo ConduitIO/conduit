@@ -62,7 +62,6 @@ import (
 	"github.com/conduitio/conduit/pkg/schemaregistry"
 	"github.com/conduitio/conduit/pkg/web/api"
 	"github.com/conduitio/conduit/pkg/web/openapi"
-	"github.com/conduitio/conduit/pkg/web/ui"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	grpcruntime "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/piotrkowalczuk/promgrpc/v4"
@@ -352,7 +351,6 @@ func (r *Runtime) Run(ctx context.Context) (err error) {
 			port = tcpAddr.Port
 		}
 		r.logger.Info(ctx).Send()
-		r.logger.Info(ctx).Msgf("click here to navigate to Conduit UI: http://localhost:%d/ui", port)
 		r.logger.Info(ctx).Msgf("click here to navigate to explore the HTTP API: http://localhost:%d/openapi", port)
 		r.logger.Info(ctx).Send()
 	}
@@ -388,8 +386,8 @@ func (r *Runtime) initProfiling(ctx context.Context) (deferred func(), err error
 		}
 	}()
 
-	if r.Config.dev.cpuprofile != "" {
-		f, err := os.Create(r.Config.dev.cpuprofile)
+	if r.Config.Dev.CPUProfile != "" {
+		f, err := os.Create(r.Config.Dev.CPUProfile)
 		if err != nil {
 			return deferred, cerrors.Errorf("could not create CPU profile: %w", err)
 		}
@@ -399,9 +397,9 @@ func (r *Runtime) initProfiling(ctx context.Context) (deferred func(), err error
 		}
 		deferFunc(pprof.StopCPUProfile)
 	}
-	if r.Config.dev.memprofile != "" {
+	if r.Config.Dev.MemProfile != "" {
 		deferFunc(func() {
-			f, err := os.Create(r.Config.dev.memprofile)
+			f, err := os.Create(r.Config.Dev.MemProfile)
 			if err != nil {
 				r.logger.Err(ctx, err).Msg("could not create memory profile")
 				return
@@ -413,10 +411,10 @@ func (r *Runtime) initProfiling(ctx context.Context) (deferred func(), err error
 			}
 		})
 	}
-	if r.Config.dev.blockprofile != "" {
+	if r.Config.Dev.BlockProfile != "" {
 		runtime.SetBlockProfileRate(1)
 		deferFunc(func() {
-			f, err := os.Create(r.Config.dev.blockprofile)
+			f, err := os.Create(r.Config.Dev.BlockProfile)
 			if err != nil {
 				r.logger.Err(ctx, err).Msg("could not create block profile")
 				return
@@ -674,35 +672,6 @@ func (r *Runtime) serveHTTPAPI(
 	)
 	if err != nil {
 		return nil, cerrors.Errorf("failed to register openapi redirect handler: %w", err)
-	}
-
-	uiHandler, err := ui.Handler()
-	if err != nil {
-		return nil, cerrors.Errorf("failed to set up ui handler: %w", err)
-	}
-
-	uiHandler = http.StripPrefix("/ui", uiHandler)
-
-	err = gwmux.HandlePath(
-		"GET",
-		"/ui/**",
-		func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
-			uiHandler.ServeHTTP(w, req)
-		},
-	)
-	if err != nil {
-		return nil, cerrors.Errorf("failed to register ui handler: %w", err)
-	}
-
-	err = gwmux.HandlePath(
-		"GET",
-		"/",
-		func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
-			http.Redirect(w, req, "/ui", http.StatusFound)
-		},
-	)
-	if err != nil {
-		return nil, cerrors.Errorf("failed to register redirect handler: %w", err)
 	}
 
 	metricsHandler := r.newHTTPMetricsHandler()
