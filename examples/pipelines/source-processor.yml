@@ -15,7 +15,10 @@ pipelines:
         plugin: builtin:generator
         settings:
           format.type: "structured"
-          format.options: "id:int,name:string,company:string,trial:bool"
+          format.options.id: int
+          format.options.name: string
+          format.options.company: string
+          format.options.trial: bool
           recordCount: "1"
         processors:
           - id: extract-name
@@ -28,7 +31,10 @@ pipelines:
         plugin: builtin:generator
         settings:
           format.type: "structured"
-          format.options: "id:int,name:string,company:string,trial:bool"
+          format.options.id: int
+          format.options.name: string
+          format.options.company: string
+          format.options.trial: bool
           recordCount: "2"
       - id: file-destination
         type: destination
