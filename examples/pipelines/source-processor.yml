@@ -14,12 +14,11 @@ pipelines:
         type: source
         plugin: builtin:generator
         settings:
-          # employees collection
-          collections.employees.format.type: "structured"
-          collections.employees.format.options.id: int
-          collections.employees.format.options.name: string
-          collections.employees.format.options.company: string
-          collections.employees.format.options.trial: bool
+          format.type: "structured"
+          format.options.id: int
+          format.options.name: string
+          format.options.company: string
+          format.options.trial: bool
           recordCount: "1"
         processors:
           - id: extract-name
@@ -31,12 +30,11 @@ pipelines:
         type: source
         plugin: builtin:generator
         settings:
-          # employees collection
-          collections.employees.format.type: "structured"
-          collections.employees.format.options.id: int
-          collections.employees.format.options.name: string
-          collections.employees.format.options.company: string
-          collections.employees.format.options.trial: bool
+          format.type: "structured"
+          format.options.id: int
+          format.options.name: string
+          format.options.company: string
+          format.options.trial: bool
           recordCount: "2"
       - id: file-destination
         type: destination
