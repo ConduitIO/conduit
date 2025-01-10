@@ -6,6 +6,7 @@ require (
 	buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go v1.36.2-20241220201140-4c5ba75caaf8.1
 	github.com/Masterminds/semver/v3 v3.3.1
 	github.com/Masterminds/sprig/v3 v3.3.0
+	github.com/alexeyco/simpletable v1.0.0
 	github.com/bufbuild/buf v1.49.0
 	github.com/conduitio/conduit-commons v0.5.0
 	github.com/conduitio/conduit-connector-file v0.9.0

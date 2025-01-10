@@ -17,9 +17,12 @@ package pipelines
 import (
 	"context"
 	"fmt"
+	"strings"
 
+	"github.com/alexeyco/simpletable"
 	"github.com/conduitio/conduit/cmd/conduit/api"
 	"github.com/conduitio/conduit/cmd/conduit/root/run"
+	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	"github.com/conduitio/ecdysis"
 	healthgrpc "google.golang.org/grpc/health/grpc_health_v1"
 )
@@ -53,6 +56,10 @@ func (c *ListCommand) Usage() string { return "list" }
 func (c *ListCommand) Execute(ctx context.Context) error {
 	// TODO: Move this elsewhere since it'll be common for all commands that require having Conduit Running
 	// --------- START
+
+	conduitNotRunning := "Notice: To inspect the API, Conduit needs to be running" +
+		"\nPlease execute `conduit run`"
+
 	conduitGRPCAddr := c.RunCmd.GRPCAddress()
 
 	conduitClient, err := api.NewClient(ctx, conduitGRPCAddr)
@@ -63,16 +70,55 @@ func (c *ListCommand) Execute(ctx context.Context) error {
 
 	sourceHealthResp, err := conduitClient.HealthService.Check(ctx, &healthgrpc.HealthCheckRequest{})
 	if err != nil {
-		// TODO: Improve error message
-		fmt.Printf("source Conduit server is not running at %s", conduitGRPCAddr)
+		fmt.Println(conduitNotRunning)
 		return nil
 	}
 	if sourceHealthResp.Status != healthgrpc.HealthCheckResponse_SERVING {
-		// TODO: Improve error message
-		fmt.Printf("source Conduit server is not ready, status: %s", sourceHealthResp.Status)
+		fmt.Println(conduitNotRunning)
 		return nil
 	}
-	fmt.Printf("Conduit server is running at %s\n", conduitGRPCAddr)
 	// --------- END
+
+	resp, err := conduitClient.ListPipelines(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to list pipelines: %w", err)
+	}
+
+	displayPipelines(resp.Pipelines)
+
 	return nil
+}
+
+func displayPipelines(pipelines []*apiv1.Pipeline) {
+	if len(pipelines) != 0 {
+		table := simpletable.New()
+
+		table.Header = &simpletable.Header{
+			Cells: []*simpletable.Cell{
+				{Align: simpletable.AlignCenter, Text: "ID"},
+				{Align: simpletable.AlignCenter, Text: "STATE"},
+				{Align: simpletable.AlignCenter, Text: "CONNECTORS"},
+				{Align: simpletable.AlignCenter, Text: "PROCESSORS"},
+				//{Align: simpletable.AlignCenter, Text: "DESCRIPTION"},
+				{Align: simpletable.AlignCenter, Text: "CREATED"},
+				{Align: simpletable.AlignCenter, Text: "LAST_UPDATED"},
+			},
+		}
+
+		for _, p := range pipelines {
+			r := []*simpletable.Cell{
+				{Align: simpletable.AlignRight, Text: p.Id},
+				{Align: simpletable.AlignLeft, Text: p.State.Status.String()},
+				{Align: simpletable.AlignLeft, Text: strings.Join(p.ConnectorIds, ",")},
+				{Align: simpletable.AlignLeft, Text: strings.Join(p.ProcessorIds, ",")},
+				//{Align: simpletable.AlignLeft, Text: p.Config.Description},
+				{Align: simpletable.AlignLeft, Text: p.CreatedAt.AsTime().String()},
+				{Align: simpletable.AlignLeft, Text: p.UpdatedAt.AsTime().String()},
+			}
+
+			table.Body.Cells = append(table.Body.Cells, r)
+		}
+		table.SetStyle(simpletable.StyleCompact)
+		fmt.Println(table.String())
+	}
 }
