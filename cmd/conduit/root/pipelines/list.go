@@ -56,7 +56,6 @@ func (c *ListCommand) Usage() string { return "list" }
 func (c *ListCommand) Execute(ctx context.Context) error {
 	// TODO: Move this elsewhere since it'll be common for all commands that require having Conduit Running
 	// --------- START
-
 	conduitNotRunning := "Notice: To inspect the API, Conduit needs to be running" +
 		"\nPlease execute `conduit run`"
 
@@ -69,11 +68,7 @@ func (c *ListCommand) Execute(ctx context.Context) error {
 	defer conduitClient.Close()
 
 	sourceHealthResp, err := conduitClient.HealthService.Check(ctx, &healthgrpc.HealthCheckRequest{})
-	if err != nil {
-		fmt.Println(conduitNotRunning)
-		return nil
-	}
-	if sourceHealthResp.Status != healthgrpc.HealthCheckResponse_SERVING {
+	if err != nil || sourceHealthResp.Status != healthgrpc.HealthCheckResponse_SERVING {
 		fmt.Println(conduitNotRunning)
 		return nil
 	}
@@ -98,8 +93,8 @@ func displayPipelines(pipelines []*apiv1.Pipeline) {
 				{Align: simpletable.AlignCenter, Text: "ID"},
 				{Align: simpletable.AlignCenter, Text: "STATE"},
 				{Align: simpletable.AlignCenter, Text: "CONNECTORS"},
-				{Align: simpletable.AlignCenter, Text: "PROCESSORS"},
-				//{Align: simpletable.AlignCenter, Text: "DESCRIPTION"},
+				// TODO: Fix PipelineService to include Processors
+				//{Align: simpletable.AlignCenter, Text: "PROCESSORS"},
 				{Align: simpletable.AlignCenter, Text: "CREATED"},
 				{Align: simpletable.AlignCenter, Text: "LAST_UPDATED"},
 			},
@@ -110,8 +105,7 @@ func displayPipelines(pipelines []*apiv1.Pipeline) {
 				{Align: simpletable.AlignRight, Text: p.Id},
 				{Align: simpletable.AlignLeft, Text: p.State.Status.String()},
 				{Align: simpletable.AlignLeft, Text: strings.Join(p.ConnectorIds, ",")},
-				{Align: simpletable.AlignLeft, Text: strings.Join(p.ProcessorIds, ",")},
-				//{Align: simpletable.AlignLeft, Text: p.Config.Description},
+				//{Align: simpletable.AlignLeft, Text: strings.Join(p.ProcessorIds, ",")},
 				{Align: simpletable.AlignLeft, Text: p.CreatedAt.AsTime().String()},
 				{Align: simpletable.AlignLeft, Text: p.UpdatedAt.AsTime().String()},
 			}
