@@ -16,6 +16,7 @@ package run
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -42,6 +43,12 @@ type RunCommand struct {
 
 func (c *RunCommand) Execute(_ context.Context) error {
 	e := &conduit.Entrypoint{}
+
+	if !c.Cfg.API.Enabled {
+		fmt.Print("Warning: API is currently disabled. Most Conduit CLI commands won't work without the API enabled." +
+			"To enable it, run conduit with `--api.enabled=true` or set `CONDUIT_API_ENABLED=true` in your environment.")
+	}
+
 	e.Serve(c.Cfg)
 	return nil
 }
@@ -100,4 +107,8 @@ func (c *RunCommand) Docs() ecdysis.Docs {
 		Short: "Run Conduit",
 		Long:  `Starts the Conduit server and runs the configured pipelines.`,
 	}
+}
+
+func (c *RunCommand) GRPCAddress() string {
+	return c.Cfg.API.GRPC.Address
 }

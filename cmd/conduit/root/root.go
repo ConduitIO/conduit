@@ -76,7 +76,7 @@ func (c *RootCommand) SubCommands() []ecdysis.Command {
 		&config.ConfigCommand{RunCmd: runCmd},
 		&initialize.InitCommand{Cfg: &runCmd.Cfg},
 		&version.VersionCommand{},
-		&pipelines.PipelinesCommand{},
-		&run.RunCommand{},
+		&pipelines.PipelinesCommand{RunCmd: runCmd},
+		runCmd,
 	}
 }

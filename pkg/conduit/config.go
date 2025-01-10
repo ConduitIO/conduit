@@ -59,7 +59,7 @@ type ConfigDB struct {
 }
 
 type ConfigAPI struct {
-	Enabled bool `long:"api.enabled" usage:"enable HTTP and gRPC API"`
+	Enabled bool `long:"api.enabled" usage:"enable HTTP and gRPC API (this is required for the Conduit CLI)"`
 	HTTP    struct {
 		Address string `long:"http.address" usage:"address for serving the HTTP API"`
 	}
