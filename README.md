@@ -134,9 +134,9 @@ each configuration option based on the following priorities:
   hyphens (e.g. the flag `-db.postgres.connection-string` corresponds to
   `CONDUIT_DB_POSTGRES_CONNECTION_STRING`).
 - **Configuration file (lowest priority)** - By default, Conduit loads a
-  configuration file named conduit.yaml located in the same directory as the
+  configuration file named `conduit.yaml` located in the same directory as the
   Conduit binary. You can customize the directory path to this file using the
-  CLI flag --config.path. The configuration file is optional, as any value
+  CLI flag `--config.path`. The configuration file is optional, as any value
   specified within it can be overridden by an environment variable or a CLI
   flag.
 
