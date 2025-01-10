@@ -55,7 +55,7 @@ the [latest release](https://github.com/conduitio/conduit/releases/latest) and
 simply run it!
 
 ```sh
-./conduit
+./conduit run
 ```
 
 Once you see that the service is running, the configured pipeline should start
@@ -65,7 +65,7 @@ to `http://localhost:8080/openapi` and exploring the HTTP API through Swagger
 UI.
 
 Conduit can be configured through command line parameters. To view the full list
-of available options, run `./conduit --help` or see
+of available options, run `./conduit run --help` or see
 [configuring Conduit](#configuring-conduit).
 
 ### Homebrew
@@ -176,7 +176,7 @@ would be: `-db.postgres.connection-string=postgres://localhost:5432/conduitdb`.
 The full example in our case would be:
 
 ```shell
-./conduit -db.type=postgres -db.postgres.connection-string="postgresql://localhost:5432/conduitdb"
+./conduit run -db.type=postgres -db.postgres.connection-string="postgresql://localhost:5432/conduitdb"
 ```
 
 ## Connectors
