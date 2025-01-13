@@ -234,7 +234,7 @@ it out based on some criteria.
 
 Conduit provides a number of built-in processors, which can be used to
 manipulate fields, send requests to HTTP endpoints, and more,
-check [Builtin processors](https://conduit.io/docs/using/processors/builtin/)
+check [built-in processors](https://conduit.io/docs/using/processors/builtin/)
 for the list of built-in processors and documentations.
 
 Conduit also provides the ability to write your
