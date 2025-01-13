@@ -288,7 +288,7 @@ documentation:
 ## Contributing
 
 For a complete guide to contributing to Conduit, see
-the [Contribution Guide](https://github.com/ConduitIO/conduit/blob/master/CONTRIBUTING.md).
+the [contribution guide](https://github.com/ConduitIO/conduit/blob/master/CONTRIBUTING.md).
 
 We welcome you to join the community and contribute to Conduit to make it
 better! When something does not work as intended please check if there is
