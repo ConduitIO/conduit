@@ -238,7 +238,7 @@ check [built-in processors](https://conduit.io/docs/using/processors/builtin/)
 for the list of built-in processors and documentations.
 
 Conduit also provides the ability to write your
-own [Standalone Processor](https://conduit.io/docs/developing/processors/building),
+own [standalone processor](https://conduit.io/docs/developing/processors/building),
 or you can use the built-in processor [`custom.javascript`](https://conduit.io/docs/using/processors/builtin/custom.javascript)
 to write custom processors in JavaScript.
 
