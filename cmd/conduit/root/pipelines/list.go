@@ -17,7 +17,6 @@ package pipelines
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/alexeyco/simpletable"
 	"github.com/conduitio/conduit/cmd/conduit/api"
@@ -92,9 +91,6 @@ func displayPipelines(pipelines []*apiv1.Pipeline) {
 			Cells: []*simpletable.Cell{
 				{Align: simpletable.AlignCenter, Text: "ID"},
 				{Align: simpletable.AlignCenter, Text: "STATE"},
-				{Align: simpletable.AlignCenter, Text: "CONNECTORS"},
-				// TODO: Fix PipelineService to include Processors
-				//{Align: simpletable.AlignCenter, Text: "PROCESSORS"},
 				{Align: simpletable.AlignCenter, Text: "CREATED"},
 				{Align: simpletable.AlignCenter, Text: "LAST_UPDATED"},
 			},
@@ -104,8 +100,6 @@ func displayPipelines(pipelines []*apiv1.Pipeline) {
 			r := []*simpletable.Cell{
 				{Align: simpletable.AlignRight, Text: p.Id},
 				{Align: simpletable.AlignLeft, Text: p.State.Status.String()},
-				{Align: simpletable.AlignLeft, Text: strings.Join(p.ConnectorIds, ",")},
-				//{Align: simpletable.AlignLeft, Text: strings.Join(p.ProcessorIds, ",")},
 				{Align: simpletable.AlignLeft, Text: p.CreatedAt.AsTime().String()},
 				{Align: simpletable.AlignLeft, Text: p.UpdatedAt.AsTime().String()},
 			}
