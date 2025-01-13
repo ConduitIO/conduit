@@ -22,11 +22,14 @@ import (
 var (
 	_ ecdysis.CommandWithDocs        = (*PipelinesCommand)(nil)
 	_ ecdysis.CommandWithSubCommands = (*PipelinesCommand)(nil)
+	_ ecdysis.CommandWithAliases     = (*PipelinesCommand)(nil)
 )
 
 type PipelinesCommand struct {
 	RunCmd *run.RunCommand
 }
+
+func (c *PipelinesCommand) Aliases() []string { return []string{"pipeline"} }
 
 func (c *PipelinesCommand) SubCommands() []ecdysis.Command {
 	return []ecdysis.Command{
