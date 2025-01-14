@@ -62,9 +62,6 @@ type Config struct {
 		}
 	}
 
-	// TODO: Remove
-	Test bool `long:"test" usage:"testing" default:"true"`
-
 	API struct {
 		Enabled bool `long:"api.enabled" usage:"enable HTTP and gRPC API"`
 		HTTP    struct {
@@ -168,9 +165,6 @@ func DefaultConfigWithBasePath(basePath string) Config {
 	cfg.Pipelines.ErrorRecovery.MaxRetriesWindow = 5 * time.Minute
 
 	cfg.SchemaRegistry.Type = SchemaRegistryTypeBuiltin
-
-	// TODO: remove once https://github.com/ConduitIO/conduit/issues/2062 is fixed (testing)
-	cfg.Test = true
 
 	cfg.ConnectorPlugins = builtin.DefaultBuiltinConnectors
 	return cfg
