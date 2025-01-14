@@ -26,7 +26,7 @@ import (
 
 type Client struct {
 	conn            *grpc.ClientConn
-	pipelineService apiv1.PipelineServiceClient
+	PipelineService apiv1.PipelineServiceClient
 	HealthService   healthgrpc.HealthClient
 }
 
@@ -41,13 +41,9 @@ func NewClient(_ context.Context, address string) (*Client, error) {
 
 	return &Client{
 		conn:            conn,
-		pipelineService: apiv1.NewPipelineServiceClient(conn),
+		PipelineService: apiv1.NewPipelineServiceClient(conn),
 		HealthService:   healthgrpc.NewHealthClient(conn),
 	}, nil
-}
-
-func (c *Client) ListPipelines(ctx context.Context) (*apiv1.ListPipelinesResponse, error) {
-	return c.pipelineService.ListPipelines(ctx, &apiv1.ListPipelinesRequest{})
 }
 
 func (c *Client) Close() error {

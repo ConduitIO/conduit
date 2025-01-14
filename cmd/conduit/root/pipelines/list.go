@@ -73,7 +73,7 @@ func (c *ListCommand) Execute(ctx context.Context) error {
 	}
 	// --------- END
 
-	resp, err := conduitClient.ListPipelines(ctx)
+	resp, err := conduitClient.PipelineService.ListPipelines(ctx, &apiv1.ListPipelinesRequest{})
 	if err != nil {
 		return fmt.Errorf("failed to list pipelines: %w", err)
 	}
