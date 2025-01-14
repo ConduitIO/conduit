@@ -55,7 +55,7 @@ the [latest release](https://github.com/conduitio/conduit/releases/latest) and
 simply run it!
 
 ```sh
-./conduit
+./conduit run
 ```
 
 Once you see that the service is running, the configured pipeline should start
@@ -65,7 +65,7 @@ to `http://localhost:8080/openapi` and exploring the HTTP API through Swagger
 UI.
 
 Conduit can be configured through command line parameters. To view the full list
-of available options, run `./conduit --help` or see
+of available options, run `./conduit run --help` or see
 [configuring Conduit](#configuring-conduit).
 
 ### Homebrew
@@ -125,20 +125,23 @@ configure its behavior. Each CLI flag has a corresponding environment variable
 and a corresponding field in the configuration file. Conduit uses the value for
 each configuration option based on the following priorities:
 
-- CLI flags (highest priority) - if a CLI flag is provided it will always be
+- **CLI flags (highest priority)** - if a CLI flag is provided it will always be
   respected, regardless of the environment variable or configuration file. To
-  see a full list of available flags run `conduit --help`.
-- Environment variables (lower priority) - an environment variable is only used
-  if no CLI flag is provided for the same option. Environment variables have
-  the prefix `CONDUIT` and contain underscores instead of dots and hyphens (e.g.
-  the flag `-db.postgres.connection-string` corresponds to
+  see a full list of available flags run `conduit run --help`.
+- **Environment variables (lower priority)** - an environment variable is only
+  used if no CLI flag is provided for the same option. Environment variables
+  have the prefix `CONDUIT` and contain underscores instead of dots and
+  hyphens (e.g. the flag `-db.postgres.connection-string` corresponds to
   `CONDUIT_DB_POSTGRES_CONNECTION_STRING`).
-- Configuration file (lowest priority) - Conduit by default loads the file
-  `conduit.yaml` placed in the same folder as Conduit. The path to the file can
-  be customized using the CLI flag `-config`. It is not required to provide a
-  configuration file and any value in the configuration file can be overridden
-  by an environment variable or a flag. The file content should be a YAML
-  document where keys can be hierarchically split on `.`. For example:
+- **Configuration file (lowest priority)** - By default, Conduit loads a
+  configuration file named `conduit.yaml` located in the same directory as the
+  Conduit binary. You can customize the directory path to this file using the
+  CLI flag `--config.path`. The configuration file is optional, as any value
+  specified within it can be overridden by an environment variable or a CLI
+  flag.
+
+  The file must be a YAML document, and keys can be hierarchically structured
+  using `.`. For example:
 
   ```yaml
   db:
@@ -147,9 +150,13 @@ each configuration option based on the following priorities:
       connection-string: postgres://localhost:5432/conduitdb # -db.postgres.connection-string or CONDUIT_DB_POSTGRES_CONNECTION_STRING
   ```
 
-This parsing configuration is provided thanks to our own CLI library [ecdysis](https://github.com/conduitio/ecdysis),
-which builds on top of [Cobra](https://github.com/spf13/cobra) and uses [Viper](https://github.com/spf13/viper)
-under the hood.
+  To generate a configuration file with default values, use:
+  `conduit init --path <directory where conduit.yaml will be created>`.
+
+This parsing configuration is provided thanks to our own CLI
+library [ecdysis](https://github.com/conduitio/ecdysis), which builds on top
+of [Cobra](https://github.com/spf13/cobra) and
+uses [Viper](https://github.com/spf13/viper) under the hood.
 
 ## Storage
 
@@ -176,7 +183,7 @@ would be: `-db.postgres.connection-string=postgres://localhost:5432/conduitdb`.
 The full example in our case would be:
 
 ```shell
-./conduit -db.type=postgres -db.postgres.connection-string="postgresql://localhost:5432/conduitdb"
+./conduit run -db.type=postgres -db.postgres.connection-string="postgresql://localhost:5432/conduitdb"
 ```
 
 ## Connectors
@@ -213,12 +220,11 @@ a [Kafka Connect wrapper](https://github.com/conduitio/conduit-kafka-connect-wra
 that allows you to run any Apache Kafka Connect connector as part of a Conduit
 pipeline.
 
-If you are interested in writing a connector yourself, have a look at our
-[Go Connector SDK](https://github.com/ConduitIO/conduit-connector-sdk). Since
-standalone connectors communicate with Conduit through gRPC they can be written
-in virtually any programming language, as long as the connector follows
-the [Conduit Connector Protocol](https://github.com/ConduitIO/conduit-connector-protocol)
-.
+If you are interested in writing a connector yourself, have a look at
+our [Go Connector SDK](https://github.com/ConduitIO/conduit-connector-sdk).
+Since standalone connectors communicate with Conduit through gRPC they can be
+written in virtually any programming language, as long as the connector follows
+the [Conduit Connector Protocol](https://github.com/ConduitIO/conduit-connector-protocol).
 
 ## Processors
 
@@ -226,11 +232,13 @@ A processor is a component that operates on a single record that flows through a
 pipeline. It can either change the record (i.e. **transform** it) or **filter**
 it out based on some criteria.
 
-Conduit provides a number of built-in processors, which can be used to manipulate fields,
-send requests to HTTP endpoints, and more, check [Builtin processors](https://conduit.io/docs/using/processors/builtin/)
+Conduit provides a number of built-in processors, which can be used to
+manipulate fields, send requests to HTTP endpoints, and more,
+check [built-in processors](https://conduit.io/docs/using/processors/builtin/)
 for the list of built-in processors and documentations.
 
-Conduit also provides the ability to write your own [Standalone Processor](https://conduit.io/docs/developing/processors/building),
+Conduit also provides the ability to write your
+own [standalone processor](https://conduit.io/docs/developing/processors/building),
 or you can use the built-in processor [`custom.javascript`](https://conduit.io/docs/using/processors/builtin/custom.javascript)
 to write custom processors in JavaScript.
 
@@ -244,8 +252,7 @@ Conduit exposes a gRPC API and an HTTP API.
 The gRPC API is by default running on port 8084. You can define a custom address
 using the CLI flag `-grpc.address`. To learn more about the gRPC API please have
 a look at
-the [protobuf file](https://github.com/ConduitIO/conduit/blob/main/proto/api/v1/api.proto)
-.
+the [protobuf file](https://github.com/ConduitIO/conduit/blob/main/proto/api/v1/api.proto).
 
 The HTTP API is by default running on port 8080. You can define a custom address
 using the CLI flag `-http.address`. It is generated
@@ -281,8 +288,7 @@ documentation:
 ## Contributing
 
 For a complete guide to contributing to Conduit, see
-the [Contribution Guide](https://github.com/ConduitIO/conduit/blob/master/CONTRIBUTING.md)
-.
+the [contribution guide](https://github.com/ConduitIO/conduit/blob/master/CONTRIBUTING.md).
 
 We welcome you to join the community and contribute to Conduit to make it
 better! When something does not work as intended please check if there is
