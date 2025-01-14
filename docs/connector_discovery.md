@@ -7,7 +7,7 @@ relative to the Conduit binary so Conduit can find them. Alternatively, the path
 adjusted using the CLI flag `-connectors.path`, for example:
 
 ```shell
-./conduit -connectors.path=/path/to/connectors/
+./conduit run -connectors.path=/path/to/connectors/
 ```
 
 Names of the connector binaries are not important, since Conduit is getting the information about connectors from
