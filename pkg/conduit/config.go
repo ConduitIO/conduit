@@ -39,47 +39,47 @@ const (
 	SchemaRegistryTypeBuiltin   = "builtin"
 )
 
-type ConfigDB struct {
-	// When Driver is specified it takes precedence over other DB related
-	// fields.
-	Driver database.DB
-
-	Type   string `long:"db.type" usage:"database type; accepts badger,postgres,inmemory,sqlite"`
-	Badger struct {
-		Path string `long:"db.badger.path" usage:"path to badger DB"`
-	}
-	Postgres struct {
-		ConnectionString string `long:"db.postgres.connection-string" usage:"postgres connection string, may be a database URL or in PostgreSQL keyword/value format"`
-		Table            string `long:"db.postgres.table" usage:"postgres table in which to store data (will be created if it does not exist)"`
-	}
-	SQLite struct {
-		Path  string `long:"db.sqlite.path" usage:"path to sqlite3 DB"`
-		Table string `long:"db.sqlite.table" usage:"sqlite3 table in which to store data (will be created if it does not exist)"`
-	}
-}
-
-type ConfigAPI struct {
-	Enabled bool `long:"api.enabled" usage:"enable HTTP and gRPC API (this is required for the Conduit CLI)"`
-	HTTP    struct {
-		Address string `long:"http.address" usage:"address for serving the HTTP API"`
-	}
-	GRPC struct {
-		Address string `long:"grpc.address" usage:"address for serving the gRPC API"`
-	}
-}
-
-type ConfigLog struct {
-	NewLogger func(level, format string) log.CtxLogger
-	Level     string `long:"log.level" usage:"sets logging level; accepts debug, info, warn, error, trace"`
-	Format    string `long:"log.format" usage:"sets the format of the logging; accepts json, cli"`
-}
-
 // Config holds all configurable values for Conduit.
 type Config struct {
 	ConduitCfgPath string `long:"config.path" usage:"global conduit configuration file" default:"./conduit.yaml"`
-	DB             ConfigDB
-	API            ConfigAPI
-	Log            ConfigLog
+
+	DB struct {
+		// When Driver is specified it takes precedence over other DB related
+		// fields.
+		Driver database.DB
+
+		Type   string `long:"db.type" usage:"database type; accepts badger,postgres,inmemory,sqlite"`
+		Badger struct {
+			Path string `long:"badger.path" usage:"path to badger DB"`
+		}
+		Postgres struct {
+			ConnectionString string `long:"db.postgres.connection-string" usage:"postgres connection string, may be a database URL or in PostgreSQL keyword/value format"`
+			Table            string `long:"db.postgres.table" usage:"postgres table in which to store data (will be created if it does not exist)"`
+		}
+		SQLite struct {
+			Path  string `long:"db.sqlite.path" usage:"path to sqlite3 DB"`
+			Table string `long:"db.sqlite.table" usage:"sqlite3 table in which to store data (will be created if it does not exist)"`
+		}
+	}
+
+	// TODO: Remove
+	Test bool `long:"test" usage:"testing" default:"true"`
+
+	API struct {
+		Enabled bool `long:"api.enabled" usage:"enable HTTP and gRPC API"`
+		HTTP    struct {
+			Address string `long:"api.http.address" usage:"address for serving the HTTP API"`
+		}
+		GRPC struct {
+			Address string `long:"api.grpc.address" usage:"address for serving the gRPC API"`
+		}
+	}
+
+	Log struct {
+		NewLogger func(level, format string) log.CtxLogger
+		Level     string `long:"log.level" usage:"sets logging level; accepts debug, info, warn, error, trace"`
+		Format    string `long:"log.format" usage:"sets the format of the logging; accepts json, cli"`
+	}
 
 	Connectors struct {
 		Path string `long:"connectors.path" usage:"path to standalone connectors' directory"`
@@ -168,6 +168,9 @@ func DefaultConfigWithBasePath(basePath string) Config {
 	cfg.Pipelines.ErrorRecovery.MaxRetriesWindow = 5 * time.Minute
 
 	cfg.SchemaRegistry.Type = SchemaRegistryTypeBuiltin
+
+	// TODO: remove once https://github.com/ConduitIO/conduit/issues/2062 is fixed (testing)
+	cfg.Test = true
 
 	cfg.ConnectorPlugins = builtin.DefaultBuiltinConnectors
 	return cfg
