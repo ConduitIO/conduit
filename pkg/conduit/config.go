@@ -259,10 +259,10 @@ func (c Config) Validate() error {
 
 	if c.API.Enabled {
 		if c.API.GRPC.Address == "" {
-			return requiredConfigFieldErr("grpc.address")
+			return requiredConfigFieldErr("api.grpc.address")
 		}
 		if c.API.HTTP.Address == "" {
-			return requiredConfigFieldErr("http.address")
+			return requiredConfigFieldErr("api.http.address")
 		}
 	}
 
