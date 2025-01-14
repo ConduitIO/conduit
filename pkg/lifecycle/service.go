@@ -431,7 +431,6 @@ func (s *Service) buildRunnablePipeline(
 ) (*runnablePipeline, error) {
 	nodes, err := s.buildNodes(ctx, pl)
 	if err != nil {
-		delete(s.pipelines.List(ctx), pl.ID)
 		pl.SetStatus(pipeline.StatusDegraded)
 		return nil, err
 	}
