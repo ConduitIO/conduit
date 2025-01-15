@@ -37,8 +37,10 @@ var (
 
 type RootFlags struct {
 	Version bool `long:"version" short:"v" usage:"show the current Conduit version"`
-	// This one is global and will be replaced automatically by those commands that use conduit.Config (run, config and init)
+
+	// Global Flags
 	GRPCAddress string `long:"api.grpc.address" usage:"address where Conduit is running" persistent:"true"`
+	ConfigPath  string `long:"config.path" usage:"path to the configuration file" persistent:"true"`
 }
 
 type RootCommand struct {

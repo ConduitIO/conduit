@@ -23,6 +23,7 @@ import (
 	"github.com/conduitio/conduit/pkg/conduit"
 	"github.com/conduitio/ecdysis"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 // ------------------- CommandWithClient
@@ -54,10 +55,9 @@ func (CommandWithExecuteWithClientDecorator) Decorate(_ *ecdysis.Ecdysis, cmd *c
 			}
 		}
 
-		// TODO: Need to parse the whole configuration so I can read from also a file and env vars
-		grpcAddress, err := cmd.Flags().GetString("api.grpc.address")
+		grpcAddress, err := getGRPCAddress(cmd)
 		if err != nil {
-			grpcAddress = conduit.DefaultGRPCAddress
+			return fmt.Errorf("error reading gRPC address: %w", err)
 		}
 
 		client, err := api.NewClient(cmd.Context(), grpcAddress)
@@ -68,8 +68,56 @@ func (CommandWithExecuteWithClientDecorator) Decorate(_ *ecdysis.Ecdysis, cmd *c
 		}
 		defer client.Close()
 
-		return v.ExecuteWithClient(cmd.Context(), client)
+		ctx := ecdysis.ContextWithCobraCommand(cmd.Context(), cmd)
+		return v.ExecuteWithClient(ctx, client)
 	}
 
 	return nil
+}
+
+func getGRPCAddress(cmd *cobra.Command) (string, error) {
+	var (
+		path string
+		err  error
+	)
+
+	path, err = cmd.Flags().GetString("config.path")
+	if err != nil || path == "" {
+		path = conduit.DefaultConfig().ConduitCfgPath
+	}
+
+	// TODO REMOVE
+	type Config struct {
+		Path string
+		API  struct {
+			GRPC struct {
+				Address string
+			}
+		}
+	}
+
+	var usrCfg *Config
+	defaultConfigValues := conduit.DefaultConfigWithBasePath(path)
+
+	cfg := ecdysis.Config{
+		EnvPrefix:     "CONDUIT",
+		Parsed:        &usrCfg,
+		Path:          path,
+		DefaultValues: defaultConfigValues,
+	}
+
+	viper := viper.New()
+
+	viper.SetDefault("config.path", path)
+	viper.SetDefault("api.grpc.address", defaultConfigValues.API.GRPC.Address)
+
+	if err := ecdysis.ParseConfig(viper, cfg, cmd); err != nil {
+		return "", fmt.Errorf("error parsing config: %w", err)
+	}
+
+	if err := viper.Unmarshal(cfg.Parsed); err != nil {
+		return "", fmt.Errorf("error unmarshalling config: %w", err)
+	}
+
+	return usrCfg.API.GRPC.Address, nil
 }
