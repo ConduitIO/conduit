@@ -78,7 +78,7 @@ func printStruct(ctx context.Context, v reflect.Value, parentPath string) {
 				cobraCmd := ecdysis.CobraCmdFromContext(ctx)
 				_, err := fmt.Fprintf(cobraCmd.OutOrStdout(), "%s: %s\n", fullPath, value)
 				if err != nil {
-					fmt.Errorf("failed writing to out: %v", err)
+					fmt.Errorf("failed writing config value to out: %v", err)
 				}
 			}
 		}
