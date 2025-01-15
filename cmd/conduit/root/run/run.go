@@ -75,7 +75,6 @@ func (c *RunCommand) Flags() []ecdysis.Flag {
 	}
 
 	c.Cfg = conduit.DefaultConfigWithBasePath(currentPath)
-	flags.SetDefault("test", true)
 	flags.SetDefault("config.path", c.Cfg.ConduitCfgPath)
 	flags.SetDefault("db.type", c.Cfg.DB.Type)
 	flags.SetDefault("db.badger.path", c.Cfg.DB.Badger.Path)
