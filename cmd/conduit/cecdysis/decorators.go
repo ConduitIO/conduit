@@ -16,6 +16,8 @@ package cecdysis
 
 import (
 	"context"
+	"fmt"
+	"os"
 
 	"github.com/conduitio/conduit/cmd/conduit/api"
 	"github.com/conduitio/ecdysis"
@@ -54,7 +56,10 @@ func (CommandWithExecuteWithClientDecorator) Decorate(_ *ecdysis.Ecdysis, cmd *c
 		// TODO: Make sure address is fetched from flags
 		client, err := api.NewClient(cmd.Context(), ":8084")
 		if err != nil {
-			cmd.SilenceUsage = true
+			_, _ = fmt.Fprintf(os.Stderr, "%v\n", err)
+
+			// exit to avoid printing the connection error twice
+			os.Exit(1)
 			return err
 		}
 		defer client.Close()
