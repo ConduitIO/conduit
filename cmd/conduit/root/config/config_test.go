@@ -51,6 +51,7 @@ func TestConfig_WithFlags(t *testing.T) {
 				"--log.level", "debug",
 			},
 			wantLines: []string{
+				"config.path: /etc/conduit/config.yaml",
 				"db.type: postgres",
 				"db.postgres.table: my_conduit_store",
 				"db.sqlite.table: my_sqlite_store",

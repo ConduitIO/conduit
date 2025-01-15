@@ -47,12 +47,12 @@ func (c *RunCommand) Execute(_ context.Context) error {
 }
 
 func (c *RunCommand) Config() ecdysis.Config {
-	path := filepath.Dir(c.flags.ConduitCfgPath)
+	path := filepath.Dir(c.flags.ConduitCfg.Path)
 
 	return ecdysis.Config{
 		EnvPrefix:     "CONDUIT",
 		Parsed:        &c.Cfg,
-		Path:          c.flags.ConduitCfgPath,
+		Path:          c.flags.ConduitCfg.Path,
 		DefaultValues: conduit.DefaultConfigWithBasePath(path),
 	}
 }
@@ -68,7 +68,7 @@ func (c *RunCommand) Flags() []ecdysis.Flag {
 	}
 
 	c.Cfg = conduit.DefaultConfigWithBasePath(currentPath)
-	flags.SetDefault("config.path", c.Cfg.ConduitCfgPath)
+	flags.SetDefault("config.path", c.Cfg.ConduitCfg.Path)
 	flags.SetDefault("db.type", c.Cfg.DB.Type)
 	flags.SetDefault("db.badger.path", c.Cfg.DB.Badger.Path)
 	flags.SetDefault("db.postgres.connection-string", c.Cfg.DB.Postgres.ConnectionString)
