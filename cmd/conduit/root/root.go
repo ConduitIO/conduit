@@ -37,6 +37,8 @@ var (
 
 type RootFlags struct {
 	Version bool `long:"version" short:"v" usage:"show the current Conduit version"`
+	// This one is global and will be replaced automatically by those commands that use conduit.Config (run, config and init)
+	GRPCAddress string `long:"api.grpc.address" usage:"address where Conduit is running" persistent:"true"`
 }
 
 type RootCommand struct {
@@ -76,7 +78,7 @@ func (c *RootCommand) SubCommands() []ecdysis.Command {
 		&config.ConfigCommand{RunCmd: runCmd},
 		&initialize.InitCommand{Cfg: &runCmd.Cfg},
 		&version.VersionCommand{},
-		&pipelines.PipelinesCommand{RunCmd: runCmd},
+		&pipelines.PipelinesCommand{},
 		runCmd,
 	}
 }

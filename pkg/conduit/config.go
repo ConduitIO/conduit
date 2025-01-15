@@ -37,6 +37,8 @@ const (
 
 	SchemaRegistryTypeConfluent = "confluent"
 	SchemaRegistryTypeBuiltin   = "builtin"
+
+	DefaultGRPCAddress = ":8084"
 )
 
 // Config holds all configurable values for Conduit.
@@ -147,7 +149,7 @@ func DefaultConfigWithBasePath(basePath string) Config {
 
 	cfg.API.Enabled = true
 	cfg.API.HTTP.Address = ":8080"
-	cfg.API.GRPC.Address = ":8084"
+	cfg.API.GRPC.Address = DefaultGRPCAddress
 
 	cfg.Log.NewLogger = newLogger
 	cfg.Log.Level = "info"

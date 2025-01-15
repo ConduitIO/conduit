@@ -15,7 +15,6 @@
 package pipelines
 
 import (
-	"github.com/conduitio/conduit/cmd/conduit/root/run"
 	"github.com/conduitio/ecdysis"
 )
 
@@ -25,16 +24,14 @@ var (
 	_ ecdysis.CommandWithAliases     = (*PipelinesCommand)(nil)
 )
 
-type PipelinesCommand struct {
-	RunCmd *run.RunCommand
-}
+type PipelinesCommand struct{}
 
 func (c *PipelinesCommand) Aliases() []string { return []string{"pipeline"} }
 
 func (c *PipelinesCommand) SubCommands() []ecdysis.Command {
 	return []ecdysis.Command{
 		&InitCommand{},
-		&ListCommand{RunCmd: c.RunCmd},
+		&ListCommand{},
 	}
 }
 

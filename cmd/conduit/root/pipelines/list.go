@@ -21,7 +21,6 @@ import (
 	"github.com/alexeyco/simpletable"
 	"github.com/conduitio/conduit/cmd/conduit/api"
 	"github.com/conduitio/conduit/cmd/conduit/cecdysis"
-	"github.com/conduitio/conduit/cmd/conduit/root/run"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	"github.com/conduitio/ecdysis"
 )
@@ -32,9 +31,7 @@ var (
 	_ ecdysis.CommandWithDocs               = (*ListCommand)(nil)
 )
 
-type ListCommand struct {
-	RunCmd *run.RunCommand
-}
+type ListCommand struct{}
 
 func (c *ListCommand) Docs() ecdysis.Docs {
 	return ecdysis.Docs{

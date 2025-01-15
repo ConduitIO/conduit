@@ -20,6 +20,7 @@ import (
 	"os"
 
 	"github.com/conduitio/conduit/cmd/conduit/api"
+	"github.com/conduitio/conduit/pkg/conduit"
 	"github.com/conduitio/ecdysis"
 	"github.com/spf13/cobra"
 )
@@ -53,10 +54,15 @@ func (CommandWithExecuteWithClientDecorator) Decorate(_ *ecdysis.Ecdysis, cmd *c
 			}
 		}
 
-		// TODO: Make sure address is fetched from flags
-		client, err := api.NewClient(cmd.Context(), ":8084")
+		// TODO: Need to parse the whole configuration so I can read from also a file and env vars
+		grpcAddress, err := cmd.Flags().GetString("api.grpc.address")
 		if err != nil {
-			// This is not an error we need to bubble up to the main CLI execution. We print out and don't execute further
+			grpcAddress = conduit.DefaultGRPCAddress
+		}
+
+		client, err := api.NewClient(cmd.Context(), grpcAddress)
+		if err != nil {
+			// Not an error we need to escalate to the main CLI execution. We'll print it out and not execute further.
 			_, _ = fmt.Fprintf(os.Stderr, "%v\n", err)
 			return nil
 		}
