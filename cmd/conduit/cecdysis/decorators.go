@@ -97,7 +97,8 @@ func getGRPCAddress(cmd *cobra.Command) (string, error) {
 	}
 
 	// If it can't be parsed, we return the default value
-	if err := ecdysis.ParseConfig(cfg, cmd); err != nil {
+	err = ecdysis.ParseConfig(cfg, cmd)
+	if err != nil || usrCfg.API.GRPC.Address == "" {
 		return defaultConfigValues.API.GRPC.Address, nil
 	}
 
