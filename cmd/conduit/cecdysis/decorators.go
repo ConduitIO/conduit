@@ -56,6 +56,7 @@ func (CommandWithExecuteWithClientDecorator) Decorate(_ *ecdysis.Ecdysis, cmd *c
 		// TODO: Make sure address is fetched from flags
 		client, err := api.NewClient(cmd.Context(), ":8084")
 		if err != nil {
+			// This is not an error we need to bubble up to the main CLI execution. We print out and don't execute further
 			_, _ = fmt.Fprintf(os.Stderr, "%v\n", err)
 			return nil
 		}
