@@ -35,11 +35,10 @@ func TestPrintStructOutput(t *testing.T) {
 	e := ecdysis.New()
 	cmd := e.MustBuildCobraCommand(&ConfigCommand{RunCmd: &run.RunCommand{}})
 	cmd.SetArgs([]string{
-		"--api.enabled", "true",
 		"--grpc.address", "localhost:1234",
-		"--http.address", "localhost:5678",
 	})
 	cmd.SetOut(writeTo)
+	cmd.SetErr(writeTo)
 
 	err = cmd.Execute()
 	is.NoErr(err)
@@ -52,6 +51,7 @@ func TestPrintStructOutput(t *testing.T) {
 	is.NoErr(err)
 
 	output := buf.String()
+	is.True(output != "")
 
 	expectedLines := []string{
 		"db.type: badger",
