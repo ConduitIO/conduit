@@ -109,7 +109,3 @@ func (c *RunCommand) Docs() ecdysis.Docs {
 		Long:  `Starts the Conduit server and runs the configured pipelines.`,
 	}
 }
-
-func (c *RunCommand) GRPCAddress() string {
-	return c.Cfg.API.GRPC.Address
-}

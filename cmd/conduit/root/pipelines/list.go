@@ -20,21 +20,19 @@ import (
 
 	"github.com/alexeyco/simpletable"
 	"github.com/conduitio/conduit/cmd/conduit/api"
+	"github.com/conduitio/conduit/cmd/conduit/cecdysis"
 	"github.com/conduitio/conduit/cmd/conduit/root/run"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	"github.com/conduitio/ecdysis"
-	healthgrpc "google.golang.org/grpc/health/grpc_health_v1"
 )
 
 var (
-	_ ecdysis.CommandWithExecute = (*ListCommand)(nil)
-	_ ecdysis.CommandWithAliases = (*ListCommand)(nil)
-	_ ecdysis.CommandWithDocs    = (*ListCommand)(nil)
-	// with API client ?
+	_ cecdysis.CommandWithExecuteWithClient = (*ListCommand)(nil)
+	_ ecdysis.CommandWithAliases            = (*ListCommand)(nil)
+	_ ecdysis.CommandWithDocs               = (*ListCommand)(nil)
 )
 
 type ListCommand struct {
-	client *api.Client
 	RunCmd *run.RunCommand
 }
 
@@ -52,28 +50,8 @@ func (c *ListCommand) Aliases() []string { return []string{"ls"} }
 
 func (c *ListCommand) Usage() string { return "list" }
 
-func (c *ListCommand) Execute(ctx context.Context) error {
-	// TODO: Move this elsewhere since it'll be common for all commands that require having Conduit Running
-	// --------- START
-	conduitNotRunning := "Notice: To inspect the API, Conduit needs to be running" +
-		"\nPlease execute `conduit run`"
-
-	conduitGRPCAddr := c.RunCmd.GRPCAddress()
-
-	conduitClient, err := api.NewClient(ctx, conduitGRPCAddr)
-	if err != nil {
-		return fmt.Errorf("failed to connect to Conduit server: %w", err)
-	}
-	defer conduitClient.Close()
-
-	sourceHealthResp, err := conduitClient.HealthService.Check(ctx, &healthgrpc.HealthCheckRequest{})
-	if err != nil || sourceHealthResp.Status != healthgrpc.HealthCheckResponse_SERVING {
-		fmt.Println(conduitNotRunning)
-		return nil
-	}
-	// --------- END
-
-	resp, err := conduitClient.PipelineService.ListPipelines(ctx, &apiv1.ListPipelinesRequest{})
+func (c *ListCommand) ExecuteWithClient(ctx context.Context, client *api.Client) error {
+	resp, err := client.PipelineServiceClient.ListPipelines(ctx, &apiv1.ListPipelinesRequest{})
 	if err != nil {
 		return fmt.Errorf("failed to list pipelines: %w", err)
 	}

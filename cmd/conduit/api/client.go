@@ -25,12 +25,12 @@ import (
 )
 
 type Client struct {
-	conn            *grpc.ClientConn
-	PipelineService apiv1.PipelineServiceClient
-	HealthService   healthgrpc.HealthClient
+	conn *grpc.ClientConn
+	apiv1.PipelineServiceClient
+	healthgrpc.HealthClient
 }
 
-func NewClient(_ context.Context, address string) (*Client, error) {
+func NewClient(ctx context.Context, address string) (*Client, error) {
 	conn, err := grpc.NewClient(
 		address,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
@@ -39,11 +39,26 @@ func NewClient(_ context.Context, address string) (*Client, error) {
 		return nil, fmt.Errorf("failed to create gRPC client: %w", err)
 	}
 
-	return &Client{
-		conn:            conn,
-		PipelineService: apiv1.NewPipelineServiceClient(conn),
-		HealthService:   healthgrpc.NewHealthClient(conn),
-	}, nil
+	client := &Client{
+		conn:                  conn,
+		PipelineServiceClient: apiv1.NewPipelineServiceClient(conn),
+		HealthClient:          healthgrpc.NewHealthClient(conn),
+	}
+
+	if err := client.CheckHealth(ctx); err != nil {
+		client.Close()
+		return nil, err
+	}
+
+	return client, nil
+}
+
+func (c *Client) CheckHealth(ctx context.Context) error {
+	healthResp, err := c.HealthClient.Check(ctx, &healthgrpc.HealthCheckRequest{})
+	if err != nil || healthResp.Status != healthgrpc.HealthCheckResponse_SERVING {
+		return fmt.Errorf("notice: to inspect the API, Conduit needs to be running\nPlease execute `conduit run`")
+	}
+	return nil
 }
 
 func (c *Client) Close() error {
