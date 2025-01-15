@@ -68,8 +68,7 @@ func (CommandWithExecuteWithClientDecorator) Decorate(_ *ecdysis.Ecdysis, cmd *c
 		}
 		defer client.Close()
 
-		v.ExecuteWithClient(cmd.Context(), client)
-		return nil
+		return v.ExecuteWithClient(cmd.Context(), client)
 	}
 
 	return nil
