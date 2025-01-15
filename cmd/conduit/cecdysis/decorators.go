@@ -57,10 +57,7 @@ func (CommandWithExecuteWithClientDecorator) Decorate(_ *ecdysis.Ecdysis, cmd *c
 		client, err := api.NewClient(cmd.Context(), ":8084")
 		if err != nil {
 			_, _ = fmt.Fprintf(os.Stderr, "%v\n", err)
-
-			// exit to avoid printing the connection error twice
-			os.Exit(1)
-			return err
+			return nil
 		}
 		defer client.Close()
 
