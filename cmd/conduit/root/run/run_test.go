@@ -75,9 +75,9 @@ func TestRunCommandFlags(t *testing.T) {
 			cf = cmdFlags.Lookup(wantFlag.longName)
 		}
 		if cf == nil {
-			t.Errorf("flag %q expected, but not found", wantFlag.longName)
+			t.Logf("flag %q expected, but not found", wantFlag.longName)
+			t.FailNow()
 		}
-		is.True(cf != nil)
 		is.Equal(wantFlag.longName, cf.Name)
 		is.Equal(wantFlag.shortName, cf.Shorthand)
 		is.Equal(cf.Usage, wantFlag.usage)
