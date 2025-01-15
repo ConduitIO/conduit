@@ -353,6 +353,8 @@ func (r *Runtime) Run(ctx context.Context) (err error) {
 		r.logger.Info(ctx).Send()
 		r.logger.Info(ctx).Msgf("click here to navigate to explore the HTTP API: http://localhost:%d/openapi", port)
 		r.logger.Info(ctx).Send()
+	} else {
+		r.logger.Info(ctx).Msg("API is disabled")
 	}
 
 	close(r.Ready)
