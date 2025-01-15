@@ -18,12 +18,12 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/conduitio/conduit/cmd/conduit/api"
 	"github.com/conduitio/conduit/pkg/conduit"
 	"github.com/conduitio/ecdysis"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 // ------------------- CommandWithClient
@@ -86,18 +86,8 @@ func getGRPCAddress(cmd *cobra.Command) (string, error) {
 		path = conduit.DefaultConfig().ConduitCfgPath
 	}
 
-	// TODO REMOVE
-	type Config struct {
-		Path string
-		API  struct {
-			GRPC struct {
-				Address string
-			}
-		}
-	}
-
-	var usrCfg *Config
-	defaultConfigValues := conduit.DefaultConfigWithBasePath(path)
+	var usrCfg conduit.Config
+	defaultConfigValues := conduit.DefaultConfigWithBasePath(filepath.Dir(path))
 
 	cfg := ecdysis.Config{
 		EnvPrefix:     "CONDUIT",
@@ -106,18 +96,6 @@ func getGRPCAddress(cmd *cobra.Command) (string, error) {
 		DefaultValues: defaultConfigValues,
 	}
 
-	viper := viper.New()
-
-	viper.SetDefault("config.path", path)
-	viper.SetDefault("api.grpc.address", defaultConfigValues.API.GRPC.Address)
-
-	if err := ecdysis.ParseConfig(viper, cfg, cmd); err != nil {
-		return "", fmt.Errorf("error parsing config: %w", err)
-	}
-
-	if err := viper.Unmarshal(cfg.Parsed); err != nil {
-		return "", fmt.Errorf("error unmarshalling config: %w", err)
-	}
-
+	ecdysis.ParseConfig(cfg, cmd)
 	return usrCfg.API.GRPC.Address, nil
 }
