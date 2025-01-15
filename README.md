@@ -250,12 +250,12 @@ the [Processors documentation](https://conduit.io/docs/using/processors/getting-
 Conduit exposes a gRPC API and an HTTP API.
 
 The gRPC API is by default running on port 8084. You can define a custom address
-using the CLI flag `-grpc.address`. To learn more about the gRPC API please have
+using the CLI flag `-api.grpc.address`. To learn more about the gRPC API please have
 a look at
 the [protobuf file](https://github.com/ConduitIO/conduit/blob/main/proto/api/v1/api.proto).
 
 The HTTP API is by default running on port 8080. You can define a custom address
-using the CLI flag `-http.address`. It is generated
+using the CLI flag `-api.http.address`. It is generated
 using [gRPC gateway](https://github.com/grpc-ecosystem/grpc-gateway) and is thus
 providing the same functionality as the gRPC API. To learn more about the HTTP
 API please have a look at the [API documentation](https://www.conduit.io/api),

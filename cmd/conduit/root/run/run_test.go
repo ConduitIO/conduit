@@ -25,7 +25,7 @@ import (
 func TestRunCommandFlags(t *testing.T) {
 	is := is.New(t)
 
-	expectedFlags := []struct {
+	wantFlags := []struct {
 		longName   string
 		shortName  string
 		usage      string
@@ -39,8 +39,8 @@ func TestRunCommandFlags(t *testing.T) {
 		{longName: "db.sqlite.path", usage: "path to sqlite3 DB"},
 		{longName: "db.sqlite.table", usage: "sqlite3 table in which to store data (will be created if it does not exist)"},
 		{longName: "api.enabled", usage: "enable HTTP and gRPC API"},
-		{longName: "http.address", usage: "address for serving the HTTP API"},
-		{longName: "grpc.address", usage: "address for serving the gRPC API"},
+		{longName: "api.http.address", usage: "address for serving the HTTP API"},
+		{longName: "api.grpc.address", usage: "address for serving the gRPC API"},
 		{longName: "log.level", usage: "sets logging level; accepts debug, info, warn, error, trace"},
 		{longName: "log.format", usage: "sets the format of the logging; accepts json, cli"},
 		{longName: "connectors.path", usage: "path to standalone connectors' directory"},
@@ -66,17 +66,20 @@ func TestRunCommandFlags(t *testing.T) {
 	persistentFlags := c.PersistentFlags()
 	cmdFlags := c.Flags()
 
-	for _, f := range expectedFlags {
+	for _, wantFlag := range wantFlags {
 		var cf *pflag.Flag
 
-		if f.persistent {
-			cf = persistentFlags.Lookup(f.longName)
+		if wantFlag.persistent {
+			cf = persistentFlags.Lookup(wantFlag.longName)
 		} else {
-			cf = cmdFlags.Lookup(f.longName)
+			cf = cmdFlags.Lookup(wantFlag.longName)
+		}
+		if cf == nil {
+			t.Errorf("flag %q expected, but not found", wantFlag.longName)
 		}
 		is.True(cf != nil)
-		is.Equal(f.longName, cf.Name)
-		is.Equal(f.shortName, cf.Shorthand)
-		is.Equal(cf.Usage, f.usage)
+		is.Equal(wantFlag.longName, cf.Name)
+		is.Equal(wantFlag.shortName, cf.Shorthand)
+		is.Equal(cf.Usage, wantFlag.usage)
 	}
 }
