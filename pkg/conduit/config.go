@@ -52,7 +52,7 @@ type Config struct {
 
 		Type   string `long:"db.type" usage:"database type; accepts badger,postgres,inmemory,sqlite"`
 		Badger struct {
-			Path string `long:"badger.path" usage:"path to badger DB"`
+			Path string `long:"db.badger.path" usage:"path to badger DB"`
 		}
 		Postgres struct {
 			ConnectionString string `long:"db.postgres.connection-string" usage:"postgres connection string, may be a database URL or in PostgreSQL keyword/value format"`
@@ -70,6 +70,8 @@ type Config struct {
 			Address string `long:"api.http.address" usage:"address for serving the HTTP API"`
 		}
 		GRPC struct {
+			// This is the address where the gRPC API will be served which is shared as a global flag
+			// for the Conduit CLI.
 			Address string `long:"api.grpc.address" usage:"address for serving the gRPC API"`
 		}
 	}
