@@ -18,35 +18,37 @@ import (
 	"bytes"
 	"io"
 	"os"
-	"reflect"
 	"strings"
 	"testing"
 
-	"github.com/conduitio/conduit/pkg/conduit"
+	"github.com/conduitio/conduit/cmd/conduit/root/run"
+	"github.com/conduitio/ecdysis"
 	"github.com/matryer/is"
 )
 
 func TestPrintStructOutput(t *testing.T) {
 	is := is.New(t)
 
-	cfg := conduit.DefaultConfig()
-
-	oldStdout := os.Stdout
-	defer func() { os.Stdout = oldStdout }()
-
-	r, w, err := os.Pipe()
+	readFrom, writeTo, err := os.Pipe()
 	is.NoErr(err)
 
-	os.Stdout = w
-	t.Cleanup(func() { os.Stdout = oldStdout })
+	e := ecdysis.New()
+	cmd := e.MustBuildCobraCommand(&ConfigCommand{RunCmd: &run.RunCommand{}})
+	cmd.SetArgs([]string{
+		"--api.enabled", "true",
+		"--grpc.address", "localhost:1234",
+		"--http.address", "localhost:5678",
+	})
+	cmd.SetOut(writeTo)
 
-	printStruct(reflect.ValueOf(cfg), "")
+	err = cmd.Execute()
+	is.NoErr(err)
 
-	err = w.Close()
+	err = writeTo.Close()
 	is.NoErr(err)
 
 	var buf bytes.Buffer
-	_, err = io.Copy(&buf, r)
+	_, err = io.Copy(&buf, readFrom)
 	is.NoErr(err)
 
 	output := buf.String()
@@ -57,7 +59,7 @@ func TestPrintStructOutput(t *testing.T) {
 		"db.sqlite.table: conduit_kv_store",
 		"api.enabled: true",
 		"http.address: :8080",
-		"grpc.address: :8084",
+		"grpc.address: localhost:1234",
 		"log.level: info",
 		"log.format: cli",
 		"pipelines.exit-on-degraded: false",
@@ -71,6 +73,8 @@ func TestPrintStructOutput(t *testing.T) {
 	}
 
 	for _, line := range expectedLines {
-		is.True(strings.Contains(output, line))
+		if !strings.Contains(output, line) {
+			t.Errorf("output does not contain expected line: %q", line)
+		}
 	}
 }
