@@ -63,7 +63,7 @@ func (c *ListCommand) ExecuteWithClient(ctx context.Context, client *api.Client)
 		Name: regex,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to list pipelines: %w", err)
+		return fmt.Errorf("failed to list connector plugins: %w", err)
 	}
 
 	displayConnectorPlugins(resp.Plugins)
