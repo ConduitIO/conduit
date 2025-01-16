@@ -46,11 +46,10 @@ func (c *ListCommand) Flags() []ecdysis.Flag {
 
 func (c *ListCommand) Docs() ecdysis.Docs {
 	return ecdysis.Docs{
-		Short: "List existing Conduit pipelines",
-		Long: `This command requires Conduit to be already running since it will list all pipelines registered 
-by Conduit. This will depend on the configured pipelines directory, which by default is /pipelines; however, it could 
-be configured via --pipelines.path at the time of running Conduit.`,
-		Example: "conduit pipelines ls",
+		Short: "List existing Conduit Connector Plugins",
+		Long: `This command requires Conduit to be already running since it will list all connector plugins that 
+could be added to your pipelines.`,
+		Example: "conduit connector-plugins list\nconduit connector-plugins ls",
 	}
 }
 
