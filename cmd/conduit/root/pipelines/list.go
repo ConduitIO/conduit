@@ -59,29 +59,31 @@ func (c *ListCommand) ExecuteWithClient(ctx context.Context, client *api.Client)
 }
 
 func displayPipelines(pipelines []*apiv1.Pipeline) {
-	if len(pipelines) != 0 {
-		table := simpletable.New()
-
-		table.Header = &simpletable.Header{
-			Cells: []*simpletable.Cell{
-				{Align: simpletable.AlignCenter, Text: "ID"},
-				{Align: simpletable.AlignCenter, Text: "STATE"},
-				{Align: simpletable.AlignCenter, Text: "CREATED"},
-				{Align: simpletable.AlignCenter, Text: "LAST_UPDATED"},
-			},
-		}
-
-		for _, p := range pipelines {
-			r := []*simpletable.Cell{
-				{Align: simpletable.AlignRight, Text: p.Id},
-				{Align: simpletable.AlignLeft, Text: p.State.Status.String()},
-				{Align: simpletable.AlignLeft, Text: p.CreatedAt.AsTime().String()},
-				{Align: simpletable.AlignLeft, Text: p.UpdatedAt.AsTime().String()},
-			}
-
-			table.Body.Cells = append(table.Body.Cells, r)
-		}
-		table.SetStyle(simpletable.StyleCompact)
-		fmt.Println(table.String())
+	if len(pipelines) == 0 {
+		return
 	}
+
+	table := simpletable.New()
+
+	table.Header = &simpletable.Header{
+		Cells: []*simpletable.Cell{
+			{Align: simpletable.AlignCenter, Text: "ID"},
+			{Align: simpletable.AlignCenter, Text: "STATE"},
+			{Align: simpletable.AlignCenter, Text: "CREATED"},
+			{Align: simpletable.AlignCenter, Text: "LAST_UPDATED"},
+		},
+	}
+
+	for _, p := range pipelines {
+		r := []*simpletable.Cell{
+			{Align: simpletable.AlignRight, Text: p.Id},
+			{Align: simpletable.AlignLeft, Text: p.State.Status.String()},
+			{Align: simpletable.AlignLeft, Text: p.CreatedAt.AsTime().String()},
+			{Align: simpletable.AlignLeft, Text: p.UpdatedAt.AsTime().String()},
+		}
+
+		table.Body.Cells = append(table.Body.Cells, r)
+	}
+	table.SetStyle(simpletable.StyleCompact)
+	fmt.Println(table.String())
 }
