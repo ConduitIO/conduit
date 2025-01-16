@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package connector_plugins
+package connectorplugins
 
 import (
 	"github.com/conduitio/ecdysis"
