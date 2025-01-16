@@ -145,12 +145,7 @@ func displayPipeline(ctx context.Context, pipeline *apiv1.Pipeline, connectors [
 }
 
 func getConnectorType(conn *apiv1.Connector) string {
-	switch conn.Type {
-	case apiv1.Connector_TYPE_SOURCE:
-		return "source"
-	case apiv1.Connector_TYPE_DESTINATION:
-		return "destination"
-	default:
-		return "unspecified"
-	}
+	return strings.ToLower(
+		strings.ReplaceAll(conn.Type.String(), "TYPE_", ""),
+	)
 }
