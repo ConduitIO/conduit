@@ -26,10 +26,10 @@ import (
 	"github.com/conduitio/conduit-connector-protocol/pconnector"
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/http/api/fromproto"
+	"github.com/conduitio/conduit/pkg/http/api/status"
+	"github.com/conduitio/conduit/pkg/http/api/toproto"
 	"github.com/conduitio/conduit/pkg/inspector"
-	"github.com/conduitio/conduit/pkg/web/api/fromproto"
-	"github.com/conduitio/conduit/pkg/web/api/status"
-	"github.com/conduitio/conduit/pkg/web/api/toproto"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	"google.golang.org/grpc"
 )

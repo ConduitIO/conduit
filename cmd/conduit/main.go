@@ -18,12 +18,13 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/conduitio/conduit/cmd/conduit/cecdysis"
 	"github.com/conduitio/conduit/cmd/conduit/root"
 	"github.com/conduitio/ecdysis"
 )
 
 func main() {
-	e := ecdysis.New()
+	e := ecdysis.New(ecdysis.WithDecorators(cecdysis.CommandWithExecuteWithClientDecorator{}))
 
 	cmd := e.MustBuildCobraCommand(&root.RootCommand{})
 	cmd.CompletionOptions.DisableDefaultCmd = true

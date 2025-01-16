@@ -95,7 +95,7 @@ func TestConfig_Validate(t *testing.T) {
 				c.API.HTTP.Address = ""
 				return c
 			},
-			want: requiredConfigFieldErr("http.address"),
+			want: requiredConfigFieldErr("api.http.address"),
 		},
 		{
 			name: "required GRPC address",
@@ -103,7 +103,7 @@ func TestConfig_Validate(t *testing.T) {
 				c.API.GRPC.Address = ""
 				return c
 			},
-			want: requiredConfigFieldErr("grpc.address"),
+			want: requiredConfigFieldErr("api.grpc.address"),
 		},
 		{
 			name: "disabled API valid",
