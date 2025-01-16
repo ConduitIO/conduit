@@ -32,6 +32,7 @@ func (c *PipelinesCommand) SubCommands() []ecdysis.Command {
 	return []ecdysis.Command{
 		&InitCommand{},
 		&ListCommand{},
+		&DescribeCommand{},
 	}
 }
 
