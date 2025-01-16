@@ -19,8 +19,8 @@ import (
 	"regexp"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/web/api/status"
-	"github.com/conduitio/conduit/pkg/web/api/toproto"
+	"github.com/conduitio/conduit/pkg/http/api/status"
+	"github.com/conduitio/conduit/pkg/http/api/toproto"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	"google.golang.org/grpc"
 )

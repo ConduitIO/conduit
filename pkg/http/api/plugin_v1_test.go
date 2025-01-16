@@ -21,8 +21,8 @@ import (
 
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-connector-protocol/pconnector"
-	"github.com/conduitio/conduit/pkg/web/api/mock"
-	"github.com/conduitio/conduit/pkg/web/api/toproto"
+	"github.com/conduitio/conduit/pkg/http/api/mock"
+	"github.com/conduitio/conduit/pkg/http/api/toproto"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	"github.com/matryer/is"
 	"go.uber.org/mock/gomock"

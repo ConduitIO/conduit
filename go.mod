@@ -3,9 +3,10 @@ module github.com/conduitio/conduit
 go 1.23.2
 
 require (
-	buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go v1.36.2-20241220201140-4c5ba75caaf8.1
+	buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go v1.36.3-20241220201140-4c5ba75caaf8.1
 	github.com/Masterminds/semver/v3 v3.3.1
 	github.com/Masterminds/sprig/v3 v3.3.0
+	github.com/alexeyco/simpletable v1.0.0
 	github.com/bufbuild/buf v1.49.0
 	github.com/conduitio/conduit-commons v0.5.0
 	github.com/conduitio/conduit-connector-file v0.9.0
@@ -18,7 +19,7 @@ require (
 	github.com/conduitio/conduit-connector-sdk v0.12.0
 	github.com/conduitio/conduit-processor-sdk v0.4.0
 	github.com/conduitio/conduit-schema-registry v0.2.2
-	github.com/conduitio/ecdysis v0.1.0
+	github.com/conduitio/ecdysis v0.2.0
 	github.com/conduitio/yaml/v3 v3.3.0
 	github.com/dop251/goja v0.0.0-20240806095544-3491d4a58fbe
 	github.com/dop251/goja_nodejs v0.0.0-20231122114759-e84d9a924c5c
@@ -40,6 +41,7 @@ require (
 	github.com/prometheus/common v0.61.0
 	github.com/rs/zerolog v1.33.0
 	github.com/sourcegraph/conc v0.3.0
+	github.com/spf13/cobra v1.8.1
 	github.com/spf13/pflag v1.0.5
 	github.com/stealthrocket/wazergo v0.19.1
 	github.com/tetratelabs/wazero v1.8.2
@@ -51,7 +53,7 @@ require (
 	golang.org/x/xerrors v0.0.0-20231012003039-104605ab7028
 	google.golang.org/genproto/googleapis/api v0.0.0-20250102185135-69823020774d
 	google.golang.org/grpc v1.69.4
-	google.golang.org/protobuf v1.36.2
+	google.golang.org/protobuf v1.36.3
 	gopkg.in/tomb.v2 v2.0.0-20161208151619-d5d1b5820637
 	mvdan.cc/gofumpt v0.7.0
 )
@@ -322,7 +324,6 @@ require (
 	github.com/sourcegraph/go-diff v0.7.0 // indirect
 	github.com/spf13/afero v1.11.0 // indirect
 	github.com/spf13/cast v1.7.0 // indirect
-	github.com/spf13/cobra v1.8.1 // indirect
 	github.com/spf13/viper v1.19.0 // indirect
 	github.com/ssgreg/nlreturn/v2 v2.2.1 // indirect
 	github.com/stbenjam/no-sprintf-host-port v0.2.0 // indirect

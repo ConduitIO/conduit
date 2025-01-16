@@ -19,8 +19,8 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/conduitio/conduit/pkg/http/api/mock"
 	"github.com/conduitio/conduit/pkg/pipeline"
-	"github.com/conduitio/conduit/pkg/web/api/mock"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	"github.com/google/uuid"
 	"github.com/matryer/is"

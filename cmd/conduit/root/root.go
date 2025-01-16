@@ -37,6 +37,10 @@ var (
 
 type RootFlags struct {
 	Version bool `long:"version" short:"v" usage:"show the current Conduit version"`
+
+	// Global Flags
+	GRPCAddress string `long:"api.grpc.address" usage:"address where Conduit is running" persistent:"true"`
+	ConfigPath  string `long:"config.path" usage:"path to the configuration file" persistent:"true"`
 }
 
 type RootCommand struct {
@@ -77,6 +81,6 @@ func (c *RootCommand) SubCommands() []ecdysis.Command {
 		&initialize.InitCommand{Cfg: &runCmd.Cfg},
 		&version.VersionCommand{},
 		&pipelines.PipelinesCommand{},
-		&run.RunCommand{},
+		runCmd,
 	}
 }
