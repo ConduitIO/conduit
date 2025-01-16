@@ -100,41 +100,39 @@ func displayPipeline(ctx context.Context, pipeline *apiv1.Pipeline, connectors [
 	fmt.Fprintf(&b, "ID: %s\n", pipeline.Id)
 
 	// Build State
-	b.WriteString("State:\n")
 	if pipeline.State != nil {
-		fmt.Fprintf(&b, "  Status: %s\n", pipeline.State.Status)
+		fmt.Fprintf(&b, "\nStatus: %s\n", pipeline.State.Status)
 	}
 
 	// Build Config
-	b.WriteString("Config:\n")
 	if pipeline.Config != nil {
-		fmt.Fprintf(&b, "  Name: %s\n", pipeline.Config.Name)
-		fmt.Fprintf(&b, "  Description: %s\n", pipeline.Config.Description)
+		fmt.Fprintf(&b, "\nName: %s\n", pipeline.Config.Name)
+		fmt.Fprintf(&b, "\nDescription: %s\n", pipeline.Config.Description)
 	}
 
 	// Build Connector IDs
-	b.WriteString("Connector IDs:\n")
+	b.WriteString("\nConnector IDs:\n")
 	for _, id := range pipeline.ConnectorIds {
 		fmt.Fprintf(&b, "  - %s\n", id)
 	}
 
 	// Build Processor IDs
-	b.WriteString("Processor IDs:\n")
+	b.WriteString("\nProcessor IDs:\n")
 	for _, id := range pipeline.ProcessorIds {
 		fmt.Fprintf(&b, "  - %s\n", id)
 	}
 	for _, conn := range connectors {
 		for _, id := range conn.ProcessorIds {
-			fmt.Fprintf(&b, "  - %s (attached to %s connector %s)\n", id, conn.Type, conn.Id)
+			fmt.Fprintf(&b, "  - %s (attached to %s connector %s)\n", id, getConnectorType(conn), conn.Id)
 		}
 	}
 
 	// Build timestamps
 	if pipeline.CreatedAt != nil {
-		fmt.Fprintf(&b, "Created At: %s\n", pipeline.CreatedAt.AsTime().Format("2006-01-02T15:04:05.999999Z"))
+		fmt.Fprintf(&b, " \nCreated At: %s\n", pipeline.CreatedAt.AsTime().Format("2006-01-02T15:04:05Z"))
 	}
 	if pipeline.UpdatedAt != nil {
-		fmt.Fprintf(&b, "Updated At: %s\n", pipeline.UpdatedAt.AsTime().Format("2006-01-02T15:04:05.999999Z"))
+		fmt.Fprintf(&b, "\nUpdated At: %s\n", pipeline.UpdatedAt.AsTime().Format("2006-01-02T15:04:05Z"))
 	}
 
 	// Write the complete string to the writer
@@ -144,4 +142,15 @@ func displayPipeline(ctx context.Context, pipeline *apiv1.Pipeline, connectors [
 	}
 
 	return nil
+}
+
+func getConnectorType(conn *apiv1.Connector) string {
+	switch conn.Type {
+	case apiv1.Connector_TYPE_SOURCE:
+		return "source"
+	case apiv1.Connector_TYPE_DESTINATION:
+		return "destination"
+	default:
+		return "unspecified"
+	}
 }
