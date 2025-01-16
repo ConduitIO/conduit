@@ -46,7 +46,7 @@ type InitCommand struct {
 
 func (c *InitCommand) Flags() []ecdysis.Flag {
 	flags := ecdysis.BuildFlags(&c.flags)
-	flags.SetDefault("path", filepath.Dir(c.Cfg.ConduitCfgPath))
+	flags.SetDefault("path", filepath.Dir(c.Cfg.ConduitCfg.Path))
 	return flags
 }
 

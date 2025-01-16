@@ -83,7 +83,7 @@ func getGRPCAddress(cmd *cobra.Command) (string, error) {
 
 	path, err = cmd.Flags().GetString("config.path")
 	if err != nil || path == "" {
-		path = conduit.DefaultConfig().ConduitCfgPath
+		path = conduit.DefaultConfig().ConduitCfg.Path
 	}
 
 	var usrCfg conduit.Config

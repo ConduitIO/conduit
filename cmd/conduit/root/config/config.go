@@ -50,7 +50,7 @@ the set environment variables, and the flags used. This command will show the co
 	}
 }
 
-func printStruct(v reflect.Value, parentPath string) {
+func printStruct(ctx context.Context, v reflect.Value, parentPath string) {
 	if v.Kind() == reflect.Ptr {
 		v = v.Elem()
 	}
@@ -68,14 +68,18 @@ func printStruct(v reflect.Value, parentPath string) {
 
 		if fieldValue.Kind() == reflect.Struct ||
 			(fieldValue.Kind() == reflect.Ptr && !fieldValue.IsNil() && fieldValue.Elem().Kind() == reflect.Struct) {
-			printStruct(fieldValue, fullPath)
+			printStruct(ctx, fieldValue, fullPath)
 			continue
 		}
 
 		if longName != "" {
 			value := fmt.Sprintf("%v", fieldValue.Interface())
 			if value != "" {
-				fmt.Printf("%s: %s\n", fullPath, value)
+				cobraCmd := ecdysis.CobraCmdFromContext(ctx)
+				_, err := fmt.Fprintf(cobraCmd.OutOrStdout(), "%s: %s\n", fullPath, value)
+				if err != nil {
+					fmt.Printf("failed writing config value to out: %v", err)
+				}
 			}
 		}
 	}
@@ -83,7 +87,7 @@ func printStruct(v reflect.Value, parentPath string) {
 
 func (c *ConfigCommand) Usage() string { return "config" }
 
-func (c ConfigCommand) Execute(_ context.Context) error {
-	printStruct(reflect.ValueOf(c.RunCmd.Cfg), "")
+func (c ConfigCommand) Execute(ctx context.Context) error {
+	printStruct(ctx, reflect.ValueOf(c.RunCmd.Cfg), "")
 	return nil
 }

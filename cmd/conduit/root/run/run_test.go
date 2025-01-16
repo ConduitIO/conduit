@@ -25,7 +25,7 @@ import (
 func TestRunCommandFlags(t *testing.T) {
 	is := is.New(t)
 
-	expectedFlags := []struct {
+	wantFlags := []struct {
 		longName   string
 		shortName  string
 		usage      string
@@ -66,17 +66,20 @@ func TestRunCommandFlags(t *testing.T) {
 	persistentFlags := c.PersistentFlags()
 	cmdFlags := c.Flags()
 
-	for _, f := range expectedFlags {
+	for _, wantFlag := range wantFlags {
 		var cf *pflag.Flag
 
-		if f.persistent {
-			cf = persistentFlags.Lookup(f.longName)
+		if wantFlag.persistent {
+			cf = persistentFlags.Lookup(wantFlag.longName)
 		} else {
-			cf = cmdFlags.Lookup(f.longName)
+			cf = cmdFlags.Lookup(wantFlag.longName)
 		}
-		is.True(cf != nil)
-		is.Equal(f.longName, cf.Name)
-		is.Equal(f.shortName, cf.Shorthand)
-		is.Equal(cf.Usage, f.usage)
+		if cf == nil {
+			t.Logf("flag %q expected, but not found", wantFlag.longName)
+			t.FailNow()
+		}
+		is.Equal(wantFlag.longName, cf.Name)
+		is.Equal(wantFlag.shortName, cf.Shorthand)
+		is.Equal(cf.Usage, wantFlag.usage)
 	}
 }

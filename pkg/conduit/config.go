@@ -41,7 +41,9 @@ const (
 
 // Config holds all configurable values for Conduit.
 type Config struct {
-	ConduitCfgPath string `long:"config.path" usage:"global conduit configuration file" default:"./conduit.yaml"`
+	ConduitCfg struct {
+		Path string `long:"config.path" usage:"global conduit configuration file" default:"./conduit.yaml"`
+	} `mapstructure:"config"`
 
 	DB struct {
 		// When Driver is specified it takes precedence over other DB related
@@ -90,19 +92,19 @@ type Config struct {
 
 	Pipelines struct {
 		Path           string `long:"pipelines.path" usage:"path to pipelines' directory"`
-		ExitOnDegraded bool   `long:"pipelines.exit-on-degraded" usage:"exit Conduit if a pipeline is degraded"`
+		ExitOnDegraded bool   `long:"pipelines.exit-on-degraded" mapstructure:"exit-on-degraded" usage:"exit Conduit if a pipeline is degraded"`
 		ErrorRecovery  struct {
 			// MinDelay is the minimum delay before restart: Default: 1 second
-			MinDelay time.Duration `long:"pipelines.error-recovery.min-delay" usage:"minimum delay before restart"`
+			MinDelay time.Duration `long:"pipelines.error-recovery.min-delay" mapstructure:"min-delay" usage:"minimum delay before restart"`
 			// MaxDelay is the maximum delay before restart: Default: 10 minutes
-			MaxDelay time.Duration `long:"pipelines.error-recovery.max-delay" usage:"maximum delay before restart"`
+			MaxDelay time.Duration `long:"pipelines.error-recovery.max-delay" mapstructure:"max-delay" usage:"maximum delay before restart"`
 			// BackoffFactor is the factor by which the delay is multiplied after each restart: Default: 2
-			BackoffFactor int `long:"pipelines.error-recovery.backoff-factor" usage:"backoff factor applied to the last delay"`
+			BackoffFactor int `long:"pipelines.error-recovery.backoff-factor" mapstructure:"backoff-factor" usage:"backoff factor applied to the last delay"`
 			// MaxRetries is the maximum number of restarts before the pipeline is considered unhealthy: Default: -1 (infinite)
-			MaxRetries int64 `long:"pipelines.error-recovery.max-retries" usage:"maximum number of retries"`
+			MaxRetries int64 `long:"pipelines.error-recovery.max-retries" mapstructure:"max-retries" usage:"maximum number of retries"`
 			// MaxRetriesWindow is the duration window in which the max retries are counted: Default: 5 minutes
-			MaxRetriesWindow time.Duration `long:"pipelines.error-recovery.max-retries-window" usage:"amount of time running without any errors after which a pipeline is considered healthy"`
-		}
+			MaxRetriesWindow time.Duration `long:"pipelines.error-recovery.max-retries-window" mapstructure:"max-retries-window" usage:"amount of time running without any errors after which a pipeline is considered healthy"`
+		} `mapstructure:"error-recovery"`
 	}
 
 	ConnectorPlugins map[string]sdk.Connector
@@ -111,9 +113,9 @@ type Config struct {
 		Type string `long:"schema-registry.type" usage:"schema registry type; accepts builtin,confluent"`
 
 		Confluent struct {
-			ConnectionString string `long:"schema-registry.confluent.connection-string" usage:"confluent schema registry connection string"`
+			ConnectionString string `long:"schema-registry.confluent.connection-string" mapstructure:"connection-string" usage:"confluent schema registry connection string"`
 		}
-	}
+	} `mapstructure:"schema-registry"`
 
 	Preview struct {
 		// PipelineArchV2 enables the new pipeline architecture.
@@ -139,7 +141,7 @@ func DefaultConfig() Config {
 func DefaultConfigWithBasePath(basePath string) Config {
 	var cfg Config
 
-	cfg.ConduitCfgPath = filepath.Join(basePath, "conduit.yaml")
+	cfg.ConduitCfg.Path = filepath.Join(basePath, "conduit.yaml")
 
 	cfg.DB.Type = DBTypeBadger
 	cfg.DB.Badger.Path = filepath.Join(basePath, "conduit.db")
