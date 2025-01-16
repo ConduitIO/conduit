@@ -65,8 +65,8 @@ func (c *DescribeCommand) Args(args []string) error {
 
 func (c *DescribeCommand) ExecuteWithClient(ctx context.Context, client *api.Client) error {
 	pipelineResp, err := client.PipelineServiceClient.GetPipeline(ctx, &apiv1.GetPipelineRequest{
-		Id: c.PipelineID},
-	)
+		Id: c.PipelineID,
+	})
 	if err != nil {
 		return fmt.Errorf("failed to list pipelines: %w", err)
 	}
