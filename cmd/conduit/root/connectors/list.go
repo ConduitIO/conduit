@@ -33,7 +33,7 @@ var (
 )
 
 type ListFlags struct {
-	PipelineId string `long:"pipeline-id" usage:"filter connectors by pipeline ID"`
+	PipelineID string `long:"pipeline-id" usage:"filter connectors by pipeline ID"`
 }
 
 type ListCommand struct {
@@ -59,7 +59,7 @@ func (c *ListCommand) Usage() string { return "list" }
 
 func (c *ListCommand) ExecuteWithClient(ctx context.Context, client *api.Client) error {
 	resp, err := client.ConnectorServiceClient.ListConnectors(ctx, &apiv1.ListConnectorsRequest{
-		PipelineId: c.flags.PipelineId,
+		PipelineId: c.flags.PipelineID,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to list connectors: %w", err)
