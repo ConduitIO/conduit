@@ -64,31 +64,24 @@ func (c *DescribeCommand) Args(args []string) error {
 }
 
 func (c *DescribeCommand) ExecuteWithClient(ctx context.Context, client *api.Client) error {
-	pipelineResp, err := client.PipelineServiceClient.GetPipeline(
-		ctx,
-		&apiv1.GetPipelineRequest{Id: c.PipelineID},
+	pipelineResp, err := client.PipelineServiceClient.GetPipeline(ctx, &apiv1.GetPipelineRequest{
+		Id: c.PipelineID},
 	)
 	if err != nil {
 		return fmt.Errorf("failed to list pipelines: %w", err)
 	}
 
 	// needed to show processors in connectors too
-	connectorsResp, err := client.ConnectorServiceClient.ListConnectors(
-		ctx,
-		&apiv1.ListConnectorsRequest{
-			PipelineId: c.PipelineID,
-		},
-	)
+	connectorsResp, err := client.ConnectorServiceClient.ListConnectors(ctx, &apiv1.ListConnectorsRequest{
+		PipelineId: c.PipelineID,
+	})
 	if err != nil {
 		return fmt.Errorf("failed to list connectors for pipeline %s: %w", c.PipelineID, err)
 	}
 
-	dlq, err := client.PipelineServiceClient.GetDLQ(
-		ctx,
-		&apiv1.GetDLQRequest{
-			Id: c.PipelineID,
-		},
-	)
+	dlq, err := client.PipelineServiceClient.GetDLQ(ctx, &apiv1.GetDLQRequest{
+		Id: c.PipelineID,
+	})
 	if err != nil {
 		return fmt.Errorf("failed to fetch DLQ for pipeline %s: %w", c.PipelineID, err)
 	}
