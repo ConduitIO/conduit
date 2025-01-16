@@ -32,6 +32,8 @@ func TestRootCommandFlags(t *testing.T) {
 		persistent bool
 	}{
 		{longName: "version", shortName: "v", usage: "show the current Conduit version"},
+		{longName: "api.grpc.address", usage: "address where Conduit is running", persistent: true},
+		{longName: "config.path", usage: "path to the configuration file", persistent: true},
 	}
 
 	e := ecdysis.New()

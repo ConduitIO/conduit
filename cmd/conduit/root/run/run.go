@@ -16,6 +16,7 @@ package run
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -42,6 +43,12 @@ type RunCommand struct {
 
 func (c *RunCommand) Execute(_ context.Context) error {
 	e := &conduit.Entrypoint{}
+
+	if !c.Cfg.API.Enabled {
+		fmt.Print("Warning: API is currently disabled. Most Conduit CLI commands won't work without the API enabled." +
+			"To enable it, run conduit with `--api.enabled=true` or set `CONDUIT_API_ENABLED=true` in your environment.")
+	}
+
 	e.Serve(c.Cfg)
 	return nil
 }
@@ -76,8 +83,8 @@ func (c *RunCommand) Flags() []ecdysis.Flag {
 	flags.SetDefault("db.sqlite.path", c.Cfg.DB.SQLite.Path)
 	flags.SetDefault("db.sqlite.table", c.Cfg.DB.SQLite.Table)
 	flags.SetDefault("api.enabled", c.Cfg.API.Enabled)
-	flags.SetDefault("http.address", c.Cfg.API.HTTP.Address)
-	flags.SetDefault("grpc.address", c.Cfg.API.GRPC.Address)
+	flags.SetDefault("api.http.address", c.Cfg.API.HTTP.Address)
+	flags.SetDefault("api.grpc.address", c.Cfg.API.GRPC.Address)
 	flags.SetDefault("log.level", c.Cfg.Log.Level)
 	flags.SetDefault("log.format", c.Cfg.Log.Format)
 	flags.SetDefault("connectors.path", c.Cfg.Connectors.Path)
