@@ -33,7 +33,7 @@ var (
 )
 
 type ListFlags struct {
-	PipelineId string `long:"pipeline-id" usage:"Filter connectors by pipeline ID"`
+	PipelineId string `long:"pipeline-id" usage:"filter connectors by pipeline ID"`
 }
 
 type ListCommand struct {
