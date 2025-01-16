@@ -63,7 +63,6 @@ func (c *ListCommand) ExecuteWithClient(ctx context.Context, client *api.Client)
 	resp, err := client.ConnectorServiceClient.ListConnectorPlugins(ctx, &apiv1.ListConnectorPluginsRequest{
 		Name: regex,
 	})
-
 	if err != nil {
 		return fmt.Errorf("failed to list pipelines: %w", err)
 	}
