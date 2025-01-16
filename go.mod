@@ -3,7 +3,7 @@ module github.com/conduitio/conduit
 go 1.23.2
 
 require (
-	buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go v1.36.2-20241220201140-4c5ba75caaf8.1
+	buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go v1.36.3-20241220201140-4c5ba75caaf8.1
 	github.com/Masterminds/semver/v3 v3.3.1
 	github.com/Masterminds/sprig/v3 v3.3.0
 	github.com/alexeyco/simpletable v1.0.0
@@ -53,7 +53,7 @@ require (
 	golang.org/x/xerrors v0.0.0-20231012003039-104605ab7028
 	google.golang.org/genproto/googleapis/api v0.0.0-20250102185135-69823020774d
 	google.golang.org/grpc v1.69.4
-	google.golang.org/protobuf v1.36.2
+	google.golang.org/protobuf v1.36.3
 	gopkg.in/tomb.v2 v2.0.0-20161208151619-d5d1b5820637
 	mvdan.cc/gofumpt v0.7.0
 )
