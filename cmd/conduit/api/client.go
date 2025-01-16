@@ -45,7 +45,7 @@ func NewClient(ctx context.Context, address string) (*Client, error) {
 		HealthClient:          healthgrpc.NewHealthClient(conn),
 	}
 
-	if err := client.CheckHealth(ctx); err != nil {
+	if err := client.CheckHealth(ctx, address); err != nil {
 		client.Close()
 		return nil, err
 	}
@@ -53,10 +53,12 @@ func NewClient(ctx context.Context, address string) (*Client, error) {
 	return client, nil
 }
 
-func (c *Client) CheckHealth(ctx context.Context) error {
+func (c *Client) CheckHealth(ctx context.Context, address string) error {
 	healthResp, err := c.HealthClient.Check(ctx, &healthgrpc.HealthCheckRequest{})
 	if err != nil || healthResp.Status != healthgrpc.HealthCheckResponse_SERVING {
-		return fmt.Errorf("notice: to inspect the API, Conduit needs to be running\nPlease execute `conduit run`")
+		return fmt.Errorf("We couldn't connect to Conduit at the configured address %q\n"+
+			"Please execute `conduit run` to start it.\nTo check the current configured `api.grpc.address`, run `conduit config`\n\n"+
+			"Error details: %v", address, err)
 	}
 	return nil
 }
