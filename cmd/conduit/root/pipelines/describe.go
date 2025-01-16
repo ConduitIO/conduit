@@ -83,7 +83,17 @@ func (c *DescribeCommand) ExecuteWithClient(ctx context.Context, client *api.Cli
 		return fmt.Errorf("failed to list connectors for pipeline %s: %w", c.PipelineID, err)
 	}
 
-	err = displayPipeline(ctx, pipelineResp.Pipeline, connectorsResp.Connectors)
+	dlq, err := client.PipelineServiceClient.GetDLQ(
+		ctx,
+		&apiv1.GetDLQRequest{
+			Id: c.PipelineID,
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("failed to fetch DLQ for pipeline %s: %w", c.PipelineID, err)
+	}
+
+	err = displayPipeline(ctx, pipelineResp.Pipeline, connectorsResp.Connectors, dlq.Dlq)
 	if err != nil {
 		return fmt.Errorf("failed to display pipeline %s: %w", c.PipelineID, err)
 	}
@@ -91,48 +101,48 @@ func (c *DescribeCommand) ExecuteWithClient(ctx context.Context, client *api.Cli
 	return nil
 }
 
-func displayPipeline(ctx context.Context, pipeline *apiv1.Pipeline, connectors []*apiv1.Connector) error {
+func displayPipeline(ctx context.Context, pipeline *apiv1.Pipeline, connectors []*apiv1.Connector, dlq *apiv1.Pipeline_DLQ) error {
 	cobraCmd := ecdysis.CobraCmdFromContext(ctx)
 	w := cobraCmd.OutOrStdout()
 	var b strings.Builder
 
-	// Build ID
+	// ID
 	fmt.Fprintf(&b, "ID: %s\n", pipeline.Id)
 
-	// Build State
+	// State
 	if pipeline.State != nil {
-		fmt.Fprintf(&b, "\nStatus: %s\n", pipeline.State.Status)
-	}
-
-	// Build Config
-	if pipeline.Config != nil {
-		fmt.Fprintf(&b, "\nName: %s\n", pipeline.Config.Name)
-		fmt.Fprintf(&b, "\nDescription: %s\n", pipeline.Config.Description)
-	}
-
-	// Build Connector IDs
-	b.WriteString("\nConnector IDs:\n")
-	for _, id := range pipeline.ConnectorIds {
-		fmt.Fprintf(&b, "  - %s\n", id)
-	}
-
-	// Build Processor IDs
-	b.WriteString("\nProcessor IDs:\n")
-	for _, id := range pipeline.ProcessorIds {
-		fmt.Fprintf(&b, "  - %s\n", id)
-	}
-	for _, conn := range connectors {
-		for _, id := range conn.ProcessorIds {
-			fmt.Fprintf(&b, "  - %s (attached to %s connector %s)\n", id, getConnectorType(conn), conn.Id)
+		fmt.Fprintf(&b, "Status: %s\n", getPipelineStatus(pipeline))
+		if pipeline.State.Error != "" {
+			fmt.Fprintf(&b, "Error: %s\n", pipeline.State.Error)
 		}
 	}
 
-	// Build timestamps
+	// Config
+	if pipeline.Config != nil {
+		fmt.Fprintf(&b, "Name: %s\n", pipeline.Config.Name)
+		fmt.Fprintf(&b, "Description: %s\n", pipeline.Config.Description)
+	}
+
+	// Connectors
+	b.WriteString("Sources:\n")
+	printConnectors(&b, connectors, apiv1.Connector_TYPE_SOURCE)
+
+	printProcessors(&b, pipeline.ProcessorIds, 0)
+
+	b.WriteString("Destinations:\n")
+	printConnectors(&b, connectors, apiv1.Connector_TYPE_DESTINATION)
+
+	b.WriteString("Destinations:\n")
+	printConnectors(&b, connectors, apiv1.Connector_TYPE_DESTINATION)
+
+	printDLQ(&b, dlq)
+
+	// Timestamps
 	if pipeline.CreatedAt != nil {
-		fmt.Fprintf(&b, " \nCreated At: %s\n", pipeline.CreatedAt.AsTime().Format("2006-01-02T15:04:05Z"))
+		fmt.Fprintf(&b, "Created At: %s\n", printTime(pipeline.CreatedAt))
 	}
 	if pipeline.UpdatedAt != nil {
-		fmt.Fprintf(&b, "\nUpdated At: %s\n", pipeline.UpdatedAt.AsTime().Format("2006-01-02T15:04:05Z"))
+		fmt.Fprintf(&b, "Updated At: %s\n", pipeline.UpdatedAt.AsTime().Format("2006-01-02T15:04:05Z"))
 	}
 
 	// Write the complete string to the writer
@@ -144,8 +154,27 @@ func displayPipeline(ctx context.Context, pipeline *apiv1.Pipeline, connectors [
 	return nil
 }
 
-func getConnectorType(conn *apiv1.Connector) string {
-	return strings.ToLower(
-		strings.ReplaceAll(conn.Type.String(), "TYPE_", ""),
-	)
+func printDLQ(b *strings.Builder, dlq *apiv1.Pipeline_DLQ) {
+	b.WriteString("Dead-letter queue:\n")
+	fmt.Fprintf(b, "%sPlugin: %s\n", indentation(1), dlq.Plugin)
+}
+
+func printConnectors(b *strings.Builder, connectors []*apiv1.Connector, connType apiv1.Connector_Type) {
+	for _, conn := range connectors {
+		if conn.Type == connType {
+			fmt.Fprintf(b, "%s- %s (%s)\n", indentation(1), conn.Id, conn.Plugin)
+			printProcessors(b, conn.ProcessorIds, 2)
+		}
+	}
+}
+
+func printProcessors(b *strings.Builder, ids []string, indent int) {
+	if len(ids) == 0 {
+		return
+	}
+
+	fmt.Fprintf(b, "%sProcessors:\n", indentation(indent))
+	for _, id := range ids {
+		fmt.Fprintf(b, "%s- %s\n", indentation(indent+1), id)
+	}
 }

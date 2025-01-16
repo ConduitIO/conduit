@@ -77,9 +77,9 @@ func displayPipelines(pipelines []*apiv1.Pipeline) {
 	for _, p := range pipelines {
 		r := []*simpletable.Cell{
 			{Align: simpletable.AlignRight, Text: p.Id},
-			{Align: simpletable.AlignLeft, Text: p.State.Status.String()},
-			{Align: simpletable.AlignLeft, Text: p.CreatedAt.AsTime().String()},
-			{Align: simpletable.AlignLeft, Text: p.UpdatedAt.AsTime().String()},
+			{Align: simpletable.AlignLeft, Text: getPipelineStatus(p)},
+			{Align: simpletable.AlignLeft, Text: printTime(p.CreatedAt)},
+			{Align: simpletable.AlignLeft, Text: printTime(p.UpdatedAt)},
 		}
 
 		table.Body.Cells = append(table.Body.Cells, r)

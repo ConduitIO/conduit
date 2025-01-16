@@ -1,4 +1,4 @@
-version: 2.2
+version: "2.2"
 pipelines:
   - id: pipeline-with-dlq
     status: running
@@ -13,7 +13,8 @@ pipelines:
         plugin: builtin:generator
         settings:
           format.type: "structured"
-          format.options: "id:int,name:string"
+          format.options.id: "int"
+          format.options.name: "string"
           recordCount: "1"
         processors:
           - id: convert-name
