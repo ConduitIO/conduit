@@ -33,8 +33,11 @@ var (
 	_ ecdysis.CommandWithArgs               = (*DescribeCommand)(nil)
 )
 
-type DescribeCommand struct {
+type DescribeArgs struct {
 	PipelineID string
+}
+type DescribeCommand struct {
+	args DescribeArgs
 }
 
 func (c *DescribeCommand) Docs() ecdysis.Docs {
@@ -60,13 +63,13 @@ func (c *DescribeCommand) Args(args []string) error {
 		return cerrors.Errorf("too many arguments")
 	}
 
-	c.PipelineID = args[0]
+	c.args.PipelineID = args[0]
 	return nil
 }
 
 func (c *DescribeCommand) ExecuteWithClient(ctx context.Context, client *api.Client) error {
 	pipelineResp, err := client.PipelineServiceClient.GetPipeline(ctx, &apiv1.GetPipelineRequest{
-		Id: c.PipelineID,
+		Id: c.args.PipelineID,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to get pipeline: %w", err)
@@ -74,22 +77,22 @@ func (c *DescribeCommand) ExecuteWithClient(ctx context.Context, client *api.Cli
 
 	// needed to show processors in connectors too
 	connectorsResp, err := client.ConnectorServiceClient.ListConnectors(ctx, &apiv1.ListConnectorsRequest{
-		PipelineId: c.PipelineID,
+		PipelineId: c.args.PipelineID,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to list connectors for pipeline %s: %w", c.PipelineID, err)
+		return fmt.Errorf("failed to list connectors for pipeline %s: %w", c.args.PipelineID, err)
 	}
 
 	dlq, err := client.PipelineServiceClient.GetDLQ(ctx, &apiv1.GetDLQRequest{
-		Id: c.PipelineID,
+		Id: c.args.PipelineID,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to fetch DLQ for pipeline %s: %w", c.PipelineID, err)
+		return fmt.Errorf("failed to fetch DLQ for pipeline %s: %w", c.args.PipelineID, err)
 	}
 
 	err = displayPipeline(ctx, pipelineResp.Pipeline, connectorsResp.Connectors, dlq.Dlq)
 	if err != nil {
-		return fmt.Errorf("failed to display pipeline %s: %w", c.PipelineID, err)
+		return fmt.Errorf("failed to display pipeline %s: %w", c.args.PipelineID, err)
 	}
 
 	return nil
@@ -114,7 +117,9 @@ func displayPipeline(ctx context.Context, pipeline *apiv1.Pipeline, connectors [
 	// Config
 	if pipeline.Config != nil {
 		fmt.Fprintf(&b, "Name: %s\n", pipeline.Config.Name)
-		fmt.Fprintf(&b, "Description: %s\n", pipeline.Config.Description)
+		// no new line after description, as it's always added
+		// when parsed from the YAML config file
+		fmt.Fprintf(&b, "Description: %s", pipeline.Config.Description)
 	}
 
 	// Connectors
