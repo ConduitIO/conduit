@@ -30,6 +30,7 @@ var (
 	_ cecdysis.CommandWithExecuteWithClient = (*DescribeCommand)(nil)
 	_ ecdysis.CommandWithAliases            = (*DescribeCommand)(nil)
 	_ ecdysis.CommandWithDocs               = (*DescribeCommand)(nil)
+	_ ecdysis.CommandWithArgs               = (*DescribeCommand)(nil)
 )
 
 type DescribeCommand struct {
@@ -38,7 +39,7 @@ type DescribeCommand struct {
 
 func (c *DescribeCommand) Docs() ecdysis.Docs {
 	return ecdysis.Docs{
-		Short: "Describe an existing ",
+		Short: "Describe an existing pipeline",
 		Long: `This command requires Conduit to be already running since it will list all pipelines registered 
 by Conduit. This will depend on the configured pipelines directory, which by default is /pipelines; however, it could 
 be configured via --pipelines.path at the time of running Conduit.`,
@@ -121,9 +122,6 @@ func displayPipeline(ctx context.Context, pipeline *apiv1.Pipeline, connectors [
 	printConnectors(&b, connectors, apiv1.Connector_TYPE_SOURCE)
 
 	printProcessors(&b, pipeline.ProcessorIds, 0)
-
-	b.WriteString("Destinations:\n")
-	printConnectors(&b, connectors, apiv1.Connector_TYPE_DESTINATION)
 
 	b.WriteString("Destinations:\n")
 	printConnectors(&b, connectors, apiv1.Connector_TYPE_DESTINATION)
