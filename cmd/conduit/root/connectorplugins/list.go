@@ -87,7 +87,7 @@ func displayConnectorPlugins(connectorPlugins []*apiv1.ConnectorPluginSpecificat
 
 	for _, p := range connectorPlugins {
 		r := []*simpletable.Cell{
-			{Align: simpletable.AlignRight, Text: p.Name},
+			{Align: simpletable.AlignLeft, Text: p.Name},
 			{Align: simpletable.AlignLeft, Text: p.Description},
 		}
 
