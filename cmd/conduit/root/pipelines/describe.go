@@ -46,7 +46,7 @@ func (c *DescribeCommand) Docs() ecdysis.Docs {
 		Long: `This command requires Conduit to be already running since it will list all pipelines registered 
 by Conduit. This will depend on the configured pipelines directory, which by default is /pipelines; however, it could 
 be configured via --pipelines.path at the time of running Conduit.`,
-		Example: "conduit pipelines describe",
+		Example: "conduit pipelines describe\nconduit pipelines desc",
 	}
 }
 
