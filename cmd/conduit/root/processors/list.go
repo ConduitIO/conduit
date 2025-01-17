@@ -76,7 +76,7 @@ func displayProcessors(processors []*apiv1.Processor) {
 
 	for _, p := range processors {
 		r := []*simpletable.Cell{
-			{Align: simpletable.AlignRight, Text: p.Id},
+			{Align: simpletable.AlignLeft, Text: p.Id},
 			{Align: simpletable.AlignLeft, Text: p.Plugin},
 			{Align: simpletable.AlignLeft, Text: p.Condition},
 			{Align: simpletable.AlignLeft, Text: p.CreatedAt.AsTime().String()},
