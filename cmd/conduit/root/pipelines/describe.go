@@ -36,6 +36,7 @@ var (
 type DescribeArgs struct {
 	PipelineID string
 }
+
 type DescribeCommand struct {
 	args DescribeArgs
 }
@@ -43,10 +44,9 @@ type DescribeCommand struct {
 func (c *DescribeCommand) Docs() ecdysis.Docs {
 	return ecdysis.Docs{
 		Short: "Describe an existing pipeline",
-		Long: `This command requires Conduit to be already running since it will list all pipelines registered 
-by Conduit. This will depend on the configured pipelines directory, which by default is /pipelines; however, it could 
-be configured via --pipelines.path at the time of running Conduit.`,
-		Example: "conduit pipelines describe\nconduit pipelines desc",
+		Long: `This command requires Conduit to be already running since it will describe a pipeline registered 
+by Conduit. You can list existing pipelines with the 'conduit pipelines ls' command.`,
+		Example: "conduit pipelines describe pipeline-with-dlq\nconduit pipelines desc multiple-source-with-processor",
 	}
 }
 
@@ -119,7 +119,7 @@ func displayPipeline(ctx context.Context, pipeline *apiv1.Pipeline, connectors [
 		fmt.Fprintf(&b, "Name: %s\n", pipeline.Config.Name)
 		// no new line after description, as it's always added
 		// when parsed from the YAML config file
-		fmt.Fprintf(&b, "Description: %s", pipeline.Config.Description)
+		fmt.Fprintf(&b, "Description: %s\n", pipeline.Config.Description)
 	}
 
 	// Connectors
@@ -138,7 +138,7 @@ func displayPipeline(ctx context.Context, pipeline *apiv1.Pipeline, connectors [
 		fmt.Fprintf(&b, "Created At: %s\n", printTime(pipeline.CreatedAt))
 	}
 	if pipeline.UpdatedAt != nil {
-		fmt.Fprintf(&b, "Updated At: %s\n", pipeline.UpdatedAt.AsTime().Format("2006-01-02T15:04:05Z"))
+		fmt.Fprintf(&b, "Updated At: %s\n", printTime(pipeline.UpdatedAt))
 	}
 
 	// Write the complete string to the writer
