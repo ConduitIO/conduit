@@ -1,6 +1,6 @@
 version: 2.2
 pipelines:
-  - id: file-to-file
+  - id: chaos-to-file
     status: running
     description: >
       An example pipeline reading from the standalone chaos connector and writing into a file destination.

@@ -1,6 +1,6 @@
 version: 2.2
 pipelines:
-  - id: add-department
+  - id: multiple-source-with-processor
     status: running
     description: >
       An example pipeline that reads data (imaginary employees) from two generator
@@ -13,14 +13,20 @@ pipelines:
         plugin: builtin:generator
         settings:
           format.type: "structured"
-          format.options: "id:int,name:string,company:string,trial:bool"
+          format.options.id: "int"
+          format.options.name: "string"
+          format.options.company: "string"
+          format.options.trial: "bool"
           recordCount: "1"
       - id: employees-2
         type: source
         plugin: builtin:generator
         settings:
           format.type: "structured"
-          format.options: "id:int,name:string,company:string,trial:bool"
+          format.options.id: "int"
+          format.options.name: "string"
+          format.options.company: "string"
+          format.options.trial: "bool"
           recordCount: "2"
       - id: file-destination
         type: destination
