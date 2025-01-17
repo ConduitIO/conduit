@@ -12,32 +12,32 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package processors
+package processorplugins
 
 import (
 	"github.com/conduitio/ecdysis"
 )
 
 var (
-	_ ecdysis.CommandWithDocs        = (*ProcessorsCommand)(nil)
-	_ ecdysis.CommandWithSubCommands = (*ProcessorsCommand)(nil)
-	_ ecdysis.CommandWithAliases     = (*ProcessorsCommand)(nil)
+	_ ecdysis.CommandWithDocs        = (*ProcessorPluginsCommand)(nil)
+	_ ecdysis.CommandWithSubCommands = (*ProcessorPluginsCommand)(nil)
+	_ ecdysis.CommandWithAliases     = (*ProcessorPluginsCommand)(nil)
 )
 
-type ProcessorsCommand struct{}
+type ProcessorPluginsCommand struct{}
 
-func (c *ProcessorsCommand) Aliases() []string { return []string{"processor"} }
+func (c *ProcessorPluginsCommand) Aliases() []string { return []string{"processor-plugin"} }
 
-func (c *ProcessorsCommand) SubCommands() []ecdysis.Command {
+func (c *ProcessorPluginsCommand) SubCommands() []ecdysis.Command {
 	return []ecdysis.Command{
 		&ListCommand{},
 	}
 }
 
-func (c *ProcessorsCommand) Usage() string { return "processors" }
+func (c *ProcessorPluginsCommand) Usage() string { return "processor-plugins" }
 
-func (c *ProcessorsCommand) Docs() ecdysis.Docs {
+func (c *ProcessorPluginsCommand) Docs() ecdysis.Docs {
 	return ecdysis.Docs{
-		Short: "Manage Processors",
+		Short: "Manage Processor Plugins",
 	}
 }
