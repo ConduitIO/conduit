@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package pipelines
+package connectorplugins
 
 import (
 	"context"
@@ -29,17 +29,27 @@ var (
 	_ cecdysis.CommandWithExecuteWithClient = (*ListCommand)(nil)
 	_ ecdysis.CommandWithAliases            = (*ListCommand)(nil)
 	_ ecdysis.CommandWithDocs               = (*ListCommand)(nil)
+	_ ecdysis.CommandWithFlags              = (*ListCommand)(nil)
 )
 
-type ListCommand struct{}
+type ListFlags struct {
+	Name string `long:"name" usage:"name to filter connector plugins by"`
+}
+
+type ListCommand struct {
+	flags ListFlags
+}
+
+func (c *ListCommand) Flags() []ecdysis.Flag {
+	return ecdysis.BuildFlags(&c.flags)
+}
 
 func (c *ListCommand) Docs() ecdysis.Docs {
 	return ecdysis.Docs{
-		Short: "List existing Conduit pipelines",
-		Long: `This command requires Conduit to be already running since it will list all pipelines registered 
-by Conduit. This will depend on the configured pipelines directory, which by default is /pipelines; however, it could 
-be configured via --pipelines.path at the time of running Conduit.`,
-		Example: "conduit pipelines list\nconduit pipelines ls",
+		Short: "List existing Conduit Connector Plugins",
+		Long: `This command requires Conduit to be already running since it will list all connector plugins that 
+could be added to your pipelines.`,
+		Example: "conduit connector-plugins list\nconduit connector-plugins ls",
 	}
 }
 
@@ -48,18 +58,21 @@ func (c *ListCommand) Aliases() []string { return []string{"ls"} }
 func (c *ListCommand) Usage() string { return "list" }
 
 func (c *ListCommand) ExecuteWithClient(ctx context.Context, client *api.Client) error {
-	resp, err := client.PipelineServiceClient.ListPipelines(ctx, &apiv1.ListPipelinesRequest{})
+	regex := fmt.Sprintf(".*%s.*", c.flags.Name)
+	resp, err := client.ConnectorServiceClient.ListConnectorPlugins(ctx, &apiv1.ListConnectorPluginsRequest{
+		Name: regex,
+	})
 	if err != nil {
-		return fmt.Errorf("failed to list pipelines: %w", err)
+		return fmt.Errorf("failed to list connector plugins: %w", err)
 	}
 
-	displayPipelines(resp.Pipelines)
+	displayConnectorPlugins(resp.Plugins)
 
 	return nil
 }
 
-func displayPipelines(pipelines []*apiv1.Pipeline) {
-	if len(pipelines) == 0 {
+func displayConnectorPlugins(connectorPlugins []*apiv1.ConnectorPluginSpecifications) {
+	if len(connectorPlugins) == 0 {
 		return
 	}
 
@@ -67,19 +80,15 @@ func displayPipelines(pipelines []*apiv1.Pipeline) {
 
 	table.Header = &simpletable.Header{
 		Cells: []*simpletable.Cell{
-			{Align: simpletable.AlignCenter, Text: "ID"},
-			{Align: simpletable.AlignCenter, Text: "STATE"},
-			{Align: simpletable.AlignCenter, Text: "CREATED"},
-			{Align: simpletable.AlignCenter, Text: "LAST_UPDATED"},
+			{Align: simpletable.AlignCenter, Text: "NAME"},
+			{Align: simpletable.AlignCenter, Text: "DESCRIPTION"},
 		},
 	}
 
-	for _, p := range pipelines {
+	for _, p := range connectorPlugins {
 		r := []*simpletable.Cell{
-			{Align: simpletable.AlignRight, Text: p.Id},
-			{Align: simpletable.AlignLeft, Text: getPipelineStatus(p)},
-			{Align: simpletable.AlignLeft, Text: printTime(p.CreatedAt)},
-			{Align: simpletable.AlignLeft, Text: printTime(p.UpdatedAt)},
+			{Align: simpletable.AlignLeft, Text: p.Name},
+			{Align: simpletable.AlignLeft, Text: p.Description},
 		}
 
 		table.Body.Cells = append(table.Body.Cells, r)

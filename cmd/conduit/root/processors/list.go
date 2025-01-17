@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package pipelines
+package processors
 
 import (
 	"context"
@@ -35,11 +35,10 @@ type ListCommand struct{}
 
 func (c *ListCommand) Docs() ecdysis.Docs {
 	return ecdysis.Docs{
-		Short: "List existing Conduit pipelines",
-		Long: `This command requires Conduit to be already running since it will list all pipelines registered 
-by Conduit. This will depend on the configured pipelines directory, which by default is /pipelines; however, it could 
-be configured via --pipelines.path at the time of running Conduit.`,
-		Example: "conduit pipelines list\nconduit pipelines ls",
+		Short: "List existing Conduit processors",
+		Long: `This command requires Conduit to be already running since it will list all processors registered 
+by Conduit.`,
+		Example: "conduit processors list\nconduit processors ls",
 	}
 }
 
@@ -48,18 +47,18 @@ func (c *ListCommand) Aliases() []string { return []string{"ls"} }
 func (c *ListCommand) Usage() string { return "list" }
 
 func (c *ListCommand) ExecuteWithClient(ctx context.Context, client *api.Client) error {
-	resp, err := client.PipelineServiceClient.ListPipelines(ctx, &apiv1.ListPipelinesRequest{})
+	resp, err := client.ProcessorServiceClient.ListProcessors(ctx, &apiv1.ListProcessorsRequest{})
 	if err != nil {
-		return fmt.Errorf("failed to list pipelines: %w", err)
+		return fmt.Errorf("failed to list processors: %w", err)
 	}
 
-	displayPipelines(resp.Pipelines)
+	displayProcessors(resp.Processors)
 
 	return nil
 }
 
-func displayPipelines(pipelines []*apiv1.Pipeline) {
-	if len(pipelines) == 0 {
+func displayProcessors(processors []*apiv1.Processor) {
+	if len(processors) == 0 {
 		return
 	}
 
@@ -68,18 +67,20 @@ func displayPipelines(pipelines []*apiv1.Pipeline) {
 	table.Header = &simpletable.Header{
 		Cells: []*simpletable.Cell{
 			{Align: simpletable.AlignCenter, Text: "ID"},
-			{Align: simpletable.AlignCenter, Text: "STATE"},
+			{Align: simpletable.AlignCenter, Text: "PLUGIN"},
+			{Align: simpletable.AlignCenter, Text: "CONDITION"},
 			{Align: simpletable.AlignCenter, Text: "CREATED"},
 			{Align: simpletable.AlignCenter, Text: "LAST_UPDATED"},
 		},
 	}
 
-	for _, p := range pipelines {
+	for _, p := range processors {
 		r := []*simpletable.Cell{
-			{Align: simpletable.AlignRight, Text: p.Id},
-			{Align: simpletable.AlignLeft, Text: getPipelineStatus(p)},
-			{Align: simpletable.AlignLeft, Text: printTime(p.CreatedAt)},
-			{Align: simpletable.AlignLeft, Text: printTime(p.UpdatedAt)},
+			{Align: simpletable.AlignLeft, Text: p.Id},
+			{Align: simpletable.AlignLeft, Text: p.Plugin},
+			{Align: simpletable.AlignLeft, Text: p.Condition},
+			{Align: simpletable.AlignLeft, Text: p.CreatedAt.AsTime().String()},
+			{Align: simpletable.AlignLeft, Text: p.UpdatedAt.AsTime().String()},
 		}
 
 		table.Body.Cells = append(table.Body.Cells, r)
