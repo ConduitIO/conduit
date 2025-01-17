@@ -21,6 +21,7 @@ import (
 
 	"github.com/conduitio/conduit/cmd/conduit/root/config"
 	"github.com/conduitio/conduit/cmd/conduit/root/connectors"
+	"github.com/conduitio/conduit/cmd/conduit/root/connectorplugins"
 	"github.com/conduitio/conduit/cmd/conduit/root/initialize"
 	"github.com/conduitio/conduit/cmd/conduit/root/pipelines"
 	"github.com/conduitio/conduit/cmd/conduit/root/run"
@@ -83,6 +84,7 @@ func (c *RootCommand) SubCommands() []ecdysis.Command {
 		&version.VersionCommand{},
 		&pipelines.PipelinesCommand{},
 		&connectors.ConnectorsCommand{},
+		&connectorplugins.ConnectorPluginsCommand{},
 		runCmd,
 	}
 }
