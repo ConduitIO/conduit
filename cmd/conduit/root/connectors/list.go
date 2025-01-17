@@ -81,7 +81,7 @@ func displayConnectors(connectors []*apiv1.Connector) {
 		Cells: []*simpletable.Cell{
 			{Align: simpletable.AlignCenter, Text: "ID"},
 			{Align: simpletable.AlignCenter, Text: "PLUGIN"},
-			{Align: simpletable.AlignCenter, Text: "PIPELINES_ID"},
+			{Align: simpletable.AlignCenter, Text: "PIPELINE_ID"},
 			{Align: simpletable.AlignCenter, Text: "CREATED"},
 			{Align: simpletable.AlignCenter, Text: "LAST_UPDATED"},
 		},
