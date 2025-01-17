@@ -89,7 +89,7 @@ func displayConnectors(connectors []*apiv1.Connector) {
 
 	for _, p := range connectors {
 		r := []*simpletable.Cell{
-			{Align: simpletable.AlignRight, Text: p.Id},
+			{Align: simpletable.AlignLeft, Text: p.Id},
 			{Align: simpletable.AlignLeft, Text: p.Plugin},
 			{Align: simpletable.AlignLeft, Text: p.PipelineId},
 			{Align: simpletable.AlignLeft, Text: p.CreatedAt.AsTime().String()},
