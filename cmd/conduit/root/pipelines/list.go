@@ -39,7 +39,7 @@ func (c *ListCommand) Docs() ecdysis.Docs {
 		Long: `This command requires Conduit to be already running since it will list all pipelines registered 
 by Conduit. This will depend on the configured pipelines directory, which by default is /pipelines; however, it could 
 be configured via --pipelines.path at the time of running Conduit.`,
-		Example: "conduit pipelines ls",
+		Example: "conduit pipelines list\nconduit pipelines ls",
 	}
 }
 
@@ -76,7 +76,7 @@ func displayPipelines(pipelines []*apiv1.Pipeline) {
 
 	for _, p := range pipelines {
 		r := []*simpletable.Cell{
-			{Align: simpletable.AlignRight, Text: p.Id},
+			{Align: simpletable.AlignLeft, Text: p.Id},
 			{Align: simpletable.AlignLeft, Text: p.State.Status.String()},
 			{Align: simpletable.AlignLeft, Text: p.CreatedAt.AsTime().String()},
 			{Align: simpletable.AlignLeft, Text: p.UpdatedAt.AsTime().String()},
