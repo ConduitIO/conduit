@@ -431,6 +431,7 @@ func (s *Service) buildRunnablePipeline(
 ) (*runnablePipeline, error) {
 	nodes, err := s.buildNodes(ctx, pl)
 	if err != nil {
+		pl.SetStatus(pipeline.StatusDegraded)
 		return nil, err
 	}
 
