@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package connectorplugins
+package processorplugins
 
 import (
 	"context"
@@ -26,14 +26,14 @@ import (
 )
 
 var (
-	_ cecdysis.CommandWithExecuteWithClient = (*ListCommand)(nil)
 	_ ecdysis.CommandWithAliases            = (*ListCommand)(nil)
 	_ ecdysis.CommandWithDocs               = (*ListCommand)(nil)
 	_ ecdysis.CommandWithFlags              = (*ListCommand)(nil)
+	_ cecdysis.CommandWithExecuteWithClient = (*ListCommand)(nil)
 )
 
 type ListFlags struct {
-	Name string `long:"name" usage:"name to filter connector plugins by"`
+	Name string `long:"name" usage:"name to filter processor plugins by"`
 }
 
 type ListCommand struct {
@@ -46,10 +46,10 @@ func (c *ListCommand) Flags() []ecdysis.Flag {
 
 func (c *ListCommand) Docs() ecdysis.Docs {
 	return ecdysis.Docs{
-		Short: "List existing Conduit Connector Plugins",
-		Long: `This command requires Conduit to be already running since it will list all connector plugins that 
+		Short: "List existing Conduit Processor Plugins",
+		Long: `This command requires Conduit to be already running since it will list all processor plugins that 
 could be added to your pipelines.`,
-		Example: "conduit connector-plugins list\nconduit connector-plugins ls",
+		Example: "conduit processor-plugins list\nconduit processor-plugins ls",
 	}
 }
 
@@ -59,20 +59,20 @@ func (c *ListCommand) Usage() string { return "list" }
 
 func (c *ListCommand) ExecuteWithClient(ctx context.Context, client *api.Client) error {
 	regex := fmt.Sprintf(".*%s.*", c.flags.Name)
-	resp, err := client.ConnectorServiceClient.ListConnectorPlugins(ctx, &apiv1.ListConnectorPluginsRequest{
+	resp, err := client.ProcessorServiceClient.ListProcessorPlugins(ctx, &apiv1.ListProcessorPluginsRequest{
 		Name: regex,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to list connector plugins: %w", err)
+		return fmt.Errorf("failed to list processor plugins: %w", err)
 	}
 
-	displayConnectorPlugins(resp.Plugins)
+	displayProcessorPlugins(resp.Plugins)
 
 	return nil
 }
 
-func displayConnectorPlugins(connectorPlugins []*apiv1.ConnectorPluginSpecifications) {
-	if len(connectorPlugins) == 0 {
+func displayProcessorPlugins(processorPlugins []*apiv1.ProcessorPluginSpecifications) {
+	if len(processorPlugins) == 0 {
 		return
 	}
 
@@ -85,7 +85,7 @@ func displayConnectorPlugins(connectorPlugins []*apiv1.ConnectorPluginSpecificat
 		},
 	}
 
-	for _, p := range connectorPlugins {
+	for _, p := range processorPlugins {
 		r := []*simpletable.Cell{
 			{Align: simpletable.AlignLeft, Text: p.Name},
 			{Align: simpletable.AlignLeft, Text: p.Summary},
