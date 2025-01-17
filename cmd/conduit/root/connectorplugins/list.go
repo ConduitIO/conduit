@@ -81,14 +81,14 @@ func displayConnectorPlugins(connectorPlugins []*apiv1.ConnectorPluginSpecificat
 	table.Header = &simpletable.Header{
 		Cells: []*simpletable.Cell{
 			{Align: simpletable.AlignCenter, Text: "NAME"},
-			{Align: simpletable.AlignCenter, Text: "DESCRIPTION"},
+			{Align: simpletable.AlignCenter, Text: "SUMMARY"},
 		},
 	}
 
 	for _, p := range connectorPlugins {
 		r := []*simpletable.Cell{
 			{Align: simpletable.AlignLeft, Text: p.Name},
-			{Align: simpletable.AlignLeft, Text: p.Description},
+			{Align: simpletable.AlignLeft, Text: p.Summary},
 		}
 
 		table.Body.Cells = append(table.Body.Cells, r)
