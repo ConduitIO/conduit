@@ -68,7 +68,7 @@ func (c *DescribeCommand) ExecuteWithClient(ctx context.Context, client *api.Cli
 		Id: c.PipelineID,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to list pipelines: %w", err)
+		return fmt.Errorf("failed to get pipeline: %w", err)
 	}
 
 	// needed to show processors in connectors too
