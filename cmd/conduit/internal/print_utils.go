@@ -30,7 +30,7 @@ func PrintStatusFromProtoString(protoStatus string) string {
 
 func PrettyProtoEnum(prefix, protoEnum string) string {
 	return strings.ToLower(
-		strings.ReplaceAll(protoEnum, prefix, ""),
+		strings.TrimPrefix(protoEnum, prefix),
 	)
 }
 
