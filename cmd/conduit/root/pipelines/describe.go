@@ -17,7 +17,6 @@ package pipelines
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/conduitio/conduit/cmd/conduit/api"
 	"github.com/conduitio/conduit/cmd/conduit/cecdysis"
@@ -77,12 +76,43 @@ func (c *DescribeCommand) ExecuteWithClient(ctx context.Context, client *api.Cli
 		return fmt.Errorf("failed to get pipeline: %w", err)
 	}
 
+	// Fetch pipeline processors
+	var pipelineProcessors []*apiv1.Processor
+
+	for _, processorID := range pipelineResp.Pipeline.ProcessorIds {
+		processor, err := client.ProcessorServiceClient.GetProcessor(ctx, &apiv1.GetProcessorRequest{
+			Id: processorID,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to get processor: %w", err)
+		}
+		pipelineProcessors = append(pipelineProcessors, processor.Processor)
+	}
+
 	// needed to show processors in connectors too
 	connectorsResp, err := client.ConnectorServiceClient.ListConnectors(ctx, &apiv1.ListConnectorsRequest{
 		PipelineId: c.args.PipelineID,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to list connectors for pipeline %s: %w", c.args.PipelineID, err)
+	}
+
+	// store processors for each connector
+	var connectorProcesors = make(map[string][]*apiv1.Processor, len(connectorsResp.Connectors))
+
+	for _, conn := range connectorsResp.Connectors {
+		var processors []*apiv1.Processor
+
+		for _, processorID := range conn.ProcessorIds {
+			processor, err := client.ProcessorServiceClient.GetProcessor(ctx, &apiv1.GetProcessorRequest{
+				Id: processorID,
+			})
+			if err != nil {
+				return fmt.Errorf("failed to get processor: %w", err)
+			}
+			processors = append(processors, processor.Processor)
+		}
+		connectorProcesors[conn.Id] = processors
 	}
 
 	dlq, err := client.PipelineServiceClient.GetDLQ(ctx, &apiv1.GetDLQRequest{
@@ -92,7 +122,7 @@ func (c *DescribeCommand) ExecuteWithClient(ctx context.Context, client *api.Cli
 		return fmt.Errorf("failed to fetch DLQ for pipeline %s: %w", c.args.PipelineID, err)
 	}
 
-	err = displayPipeline(ctx, pipelineResp.Pipeline, connectorsResp.Connectors, dlq.Dlq)
+	err = displayPipeline(pipelineResp.Pipeline, pipelineProcessors, connectorsResp.Connectors, connectorProcesors, dlq.Dlq)
 	if err != nil {
 		return fmt.Errorf("failed to display pipeline %s: %w", c.args.PipelineID, err)
 	}
@@ -100,79 +130,61 @@ func (c *DescribeCommand) ExecuteWithClient(ctx context.Context, client *api.Cli
 	return nil
 }
 
-func displayPipeline(ctx context.Context, pipeline *apiv1.Pipeline, connectors []*apiv1.Connector, dlq *apiv1.Pipeline_DLQ) error {
-	cobraCmd := ecdysis.CobraCmdFromContext(ctx)
-	w := cobraCmd.OutOrStdout()
-	var b strings.Builder
-
+func displayPipeline(pipeline *apiv1.Pipeline, pipelineProcessors []*apiv1.Processor, connectors []*apiv1.Connector, connectorProcessors map[string][]*apiv1.Processor, dlq *apiv1.Pipeline_DLQ) error {
 	// ID
-	fmt.Fprintf(&b, "ID: %s\n", pipeline.Id)
+	fmt.Printf("ID: %s\n", pipeline.Id)
 
 	// State
 	if pipeline.State != nil {
-		fmt.Fprintf(&b, "Status: %s\n", internal.PrintStatusFromProtoString(pipeline.State.Status.String()))
+		fmt.Printf("Status: %s\n", internal.PrintStatusFromProtoString(pipeline.State.Status.String()))
 		if pipeline.State.Error != "" {
-			fmt.Fprintf(&b, "Error: %s\n", pipeline.State.Error)
+			fmt.Printf("Error: %s\n", pipeline.State.Error)
 		}
 	}
 
 	// Config
 	if pipeline.Config != nil {
-		fmt.Fprintf(&b, "Name: %s\n", pipeline.Config.Name)
+		fmt.Printf("Name: %s\n", pipeline.Config.Name)
 		// no new line after description, as it's always added
 		// when parsed from the YAML config file
-		fmt.Fprintf(&b, "Description: %s\n", pipeline.Config.Description)
+		fmt.Printf("Description: %s\n", pipeline.Config.Description)
 	}
 
 	// Connectors
-	b.WriteString("Sources:\n")
-	printConnectors(&b, connectors, apiv1.Connector_TYPE_SOURCE)
+	fmt.Println("Sources:")
+	printConnectors(connectors, connectorProcessors, apiv1.Connector_TYPE_SOURCE)
 
-	printProcessors(&b, pipeline.ProcessorIds, 0)
+	internal.DisplayProcessors(pipelineProcessors, 0)
 
-	b.WriteString("Destinations:\n")
-	printConnectors(&b, connectors, apiv1.Connector_TYPE_DESTINATION)
+	fmt.Println("Destinations:")
+	printConnectors(connectors, connectorProcessors, apiv1.Connector_TYPE_DESTINATION)
 
-	printDLQ(&b, dlq)
+	printDLQ(dlq)
 
 	// Timestamps
 	if pipeline.CreatedAt != nil {
-		fmt.Fprintf(&b, "Created At: %s\n", internal.PrintTime(pipeline.CreatedAt))
+		fmt.Printf("Created At: %s\n", internal.PrintTime(pipeline.CreatedAt))
 	}
 	if pipeline.UpdatedAt != nil {
-		fmt.Fprintf(&b, "Updated At: %s\n", internal.PrintTime(pipeline.UpdatedAt))
-	}
-
-	// Write the complete string to the writer
-	_, err := w.Write([]byte(b.String()))
-	if err != nil {
-		return fmt.Errorf("writing output: %w", err)
+		fmt.Printf("Updated At: %s\n", internal.PrintTime(pipeline.UpdatedAt))
 	}
 
 	return nil
 }
 
-func printDLQ(b *strings.Builder, dlq *apiv1.Pipeline_DLQ) {
-	b.WriteString("Dead-letter queue:\n")
-	fmt.Fprintf(b, "%sPlugin: %s\n", internal.Indentation(1), dlq.Plugin)
+func printDLQ(dlq *apiv1.Pipeline_DLQ) {
+	fmt.Println("Dead-letter queue:")
+	fmt.Printf("%sPlugin: %s\n", internal.Indentation(1), dlq.Plugin)
 }
 
-func printConnectors(b *strings.Builder, connectors []*apiv1.Connector, connType apiv1.Connector_Type) {
+func printConnectors(connectors []*apiv1.Connector, connectorProcessors map[string][]*apiv1.Processor, connType apiv1.Connector_Type) {
 	for _, conn := range connectors {
 		if conn.Type == connType {
-			fmt.Fprintf(b, "%s- %s (%s)\n", internal.Indentation(1), conn.Id, conn.Plugin)
-			printProcessors(b, conn.ProcessorIds, 2)
+			fmt.Printf("%s- %s (%s)\n", internal.Indentation(1), conn.Id, conn.Plugin)
+
+			if processors, ok := connectorProcessors[conn.Id]; ok {
+				internal.DisplayProcessors(processors, 2)
+			}
 		}
-	}
-}
-
-func printProcessors(b *strings.Builder, ids []string, indent int) {
-	if len(ids) == 0 {
-		return
-	}
-
-	fmt.Fprintf(b, "%sProcessors:\n", internal.Indentation(indent))
-	for _, id := range ids {
-		fmt.Fprintf(b, "%s- %s\n", internal.Indentation(indent+1), id)
 	}
 }

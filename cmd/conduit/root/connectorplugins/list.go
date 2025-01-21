@@ -17,6 +17,7 @@ package connectorplugins
 import (
 	"context"
 	"fmt"
+	"sort"
 
 	"github.com/alexeyco/simpletable"
 	"github.com/conduitio/conduit/cmd/conduit/api"
@@ -65,6 +66,10 @@ func (c *ListCommand) ExecuteWithClient(ctx context.Context, client *api.Client)
 	if err != nil {
 		return fmt.Errorf("failed to list connector plugins: %w", err)
 	}
+
+	sort.Slice(resp.Plugins, func(i, j int) bool {
+		return resp.Plugins[i].Name < resp.Plugins[j].Name
+	})
 
 	displayConnectorPlugins(resp.Plugins)
 

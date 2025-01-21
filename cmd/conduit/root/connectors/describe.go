@@ -121,7 +121,7 @@ func displayConnector(connector *apiv1.Connector, processors []*apiv1.Processor)
 	fmt.Printf("Created At: %s\n", internal.PrintTime(connector.CreatedAt))
 	fmt.Printf("Updated At: %s\n", internal.PrintTime(connector.UpdatedAt))
 
-	displayProcessors(processors)
+	internal.DisplayProcessors(processors, 0)
 }
 
 func displayConnectorConfig(cfg *apiv1.Connector_Config) {
@@ -129,31 +129,5 @@ func displayConnectorConfig(cfg *apiv1.Connector_Config) {
 
 	for name, value := range cfg.Settings {
 		fmt.Printf("%s%s: %s\n", internal.Indentation(1), name, value)
-	}
-}
-
-func displayProcessors(processors []*apiv1.Processor) {
-	if len(processors) == 0 {
-		return
-	}
-
-	fmt.Println("Processors:")
-
-	for _, p := range processors {
-		fmt.Printf("%s- ID: %s\n", internal.Indentation(1), p.Id)
-		fmt.Printf("%sPlugin: %s\n", internal.Indentation(2), p.Plugin)
-
-		if p.Condition != "" {
-			fmt.Printf("%sCondition: %s\n", internal.Indentation(2), p.Condition)
-		}
-
-		fmt.Printf("%sConfig:\n", internal.Indentation(2))
-		for name, value := range p.Config.Settings {
-			fmt.Printf("%s%s: %s\n", internal.Indentation(3), name, value)
-		}
-		fmt.Printf("%sWorkers: %d\n", internal.Indentation(3), p.Config.Workers)
-
-		fmt.Printf("%sCreated At: %s\n", internal.Indentation(2), internal.PrintTime(p.CreatedAt))
-		fmt.Printf("%sUpdated At: %s\n", internal.Indentation(2), internal.PrintTime(p.UpdatedAt))
 	}
 }

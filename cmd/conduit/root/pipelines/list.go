@@ -17,6 +17,7 @@ package pipelines
 import (
 	"context"
 	"fmt"
+	"sort"
 
 	"github.com/alexeyco/simpletable"
 	"github.com/conduitio/conduit/cmd/conduit/api"
@@ -54,6 +55,10 @@ func (c *ListCommand) ExecuteWithClient(ctx context.Context, client *api.Client)
 		return fmt.Errorf("failed to list pipelines: %w", err)
 	}
 
+	sort.Slice(resp.Pipelines, func(i, j int) bool {
+		return resp.Pipelines[i].Id < resp.Pipelines[j].Id
+	})
+
 	displayPipelines(resp.Pipelines)
 
 	return nil
@@ -77,7 +82,7 @@ func displayPipelines(pipelines []*apiv1.Pipeline) {
 
 	for _, p := range pipelines {
 		r := []*simpletable.Cell{
-			{Align: simpletable.AlignRight, Text: p.Id},
+			{Align: simpletable.AlignLeft, Text: p.Id},
 			{Align: simpletable.AlignLeft, Text: internal.PrintStatusFromProtoString(p.State.Status.String())},
 			{Align: simpletable.AlignLeft, Text: internal.PrintTime(p.CreatedAt)},
 			{Align: simpletable.AlignLeft, Text: internal.PrintTime(p.UpdatedAt)},
