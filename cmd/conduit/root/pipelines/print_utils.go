@@ -15,25 +15,8 @@
 package pipelines
 
 import (
-	"strings"
-
-	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
-
-func indentation(level int) string {
-	return strings.Repeat("  ", level)
-}
-
-func getPipelineStatus(pipeline *apiv1.Pipeline) string {
-	return prettyProtoEnum("STATUS_", pipeline.State.Status.String())
-}
-
-func prettyProtoEnum(prefix, protoEnum string) string {
-	return strings.ToLower(
-		strings.ReplaceAll(protoEnum, prefix, ""),
-	)
-}
 
 func printTime(ts *timestamppb.Timestamp) string {
 	return ts.AsTime().Format("2006-01-02T15:04:05Z")

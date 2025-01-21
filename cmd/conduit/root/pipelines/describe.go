@@ -21,6 +21,7 @@ import (
 
 	"github.com/conduitio/conduit/cmd/conduit/api"
 	"github.com/conduitio/conduit/cmd/conduit/cecdysis"
+	"github.com/conduitio/conduit/cmd/conduit/internal"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	"github.com/conduitio/ecdysis"
@@ -46,7 +47,8 @@ func (c *DescribeCommand) Docs() ecdysis.Docs {
 		Short: "Describe an existing pipeline",
 		Long: `This command requires Conduit to be already running since it will describe a pipeline registered 
 by Conduit. You can list existing pipelines with the 'conduit pipelines ls' command.`,
-		Example: "conduit pipelines describe pipeline-with-dlq\nconduit pipelines desc multiple-source-with-processor",
+		Example: "conduit pipelines describe pipeline-with-dlq\n" +
+			"conduit pipelines desc multiple-source-with-processor",
 	}
 }
 
@@ -108,7 +110,7 @@ func displayPipeline(ctx context.Context, pipeline *apiv1.Pipeline, connectors [
 
 	// State
 	if pipeline.State != nil {
-		fmt.Fprintf(&b, "Status: %s\n", getPipelineStatus(pipeline))
+		fmt.Fprintf(&b, "Status: %s\n", internal.PrintStatusFromProto(pipeline.State.Status.String()))
 		if pipeline.State.Error != "" {
 			fmt.Fprintf(&b, "Error: %s\n", pipeline.State.Error)
 		}
@@ -135,10 +137,10 @@ func displayPipeline(ctx context.Context, pipeline *apiv1.Pipeline, connectors [
 
 	// Timestamps
 	if pipeline.CreatedAt != nil {
-		fmt.Fprintf(&b, "Created At: %s\n", printTime(pipeline.CreatedAt))
+		fmt.Fprintf(&b, "Created At: %s\n", internal.PrintTime(pipeline.CreatedAt))
 	}
 	if pipeline.UpdatedAt != nil {
-		fmt.Fprintf(&b, "Updated At: %s\n", printTime(pipeline.UpdatedAt))
+		fmt.Fprintf(&b, "Updated At: %s\n", internal.PrintTime(pipeline.UpdatedAt))
 	}
 
 	// Write the complete string to the writer
@@ -152,13 +154,13 @@ func displayPipeline(ctx context.Context, pipeline *apiv1.Pipeline, connectors [
 
 func printDLQ(b *strings.Builder, dlq *apiv1.Pipeline_DLQ) {
 	b.WriteString("Dead-letter queue:\n")
-	fmt.Fprintf(b, "%sPlugin: %s\n", indentation(1), dlq.Plugin)
+	fmt.Fprintf(b, "%sPlugin: %s\n", internal.Indentation(1), dlq.Plugin)
 }
 
 func printConnectors(b *strings.Builder, connectors []*apiv1.Connector, connType apiv1.Connector_Type) {
 	for _, conn := range connectors {
 		if conn.Type == connType {
-			fmt.Fprintf(b, "%s- %s (%s)\n", indentation(1), conn.Id, conn.Plugin)
+			fmt.Fprintf(b, "%s- %s (%s)\n", internal.Indentation(1), conn.Id, conn.Plugin)
 			printProcessors(b, conn.ProcessorIds, 2)
 		}
 	}
@@ -169,8 +171,8 @@ func printProcessors(b *strings.Builder, ids []string, indent int) {
 		return
 	}
 
-	fmt.Fprintf(b, "%sProcessors:\n", indentation(indent))
+	fmt.Fprintf(b, "%sProcessors:\n", internal.Indentation(indent))
 	for _, id := range ids {
-		fmt.Fprintf(b, "%s- %s\n", indentation(indent+1), id)
+		fmt.Fprintf(b, "%s- %s\n", internal.Indentation(indent+1), id)
 	}
 }
