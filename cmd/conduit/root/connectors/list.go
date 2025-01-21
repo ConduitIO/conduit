@@ -17,10 +17,12 @@ package connectors
 import (
 	"context"
 	"fmt"
+	"sort"
 
 	"github.com/alexeyco/simpletable"
 	"github.com/conduitio/conduit/cmd/conduit/api"
 	"github.com/conduitio/conduit/cmd/conduit/cecdysis"
+	"github.com/conduitio/conduit/cmd/conduit/internal"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	"github.com/conduitio/ecdysis"
 )
@@ -65,6 +67,10 @@ func (c *ListCommand) ExecuteWithClient(ctx context.Context, client *api.Client)
 		return fmt.Errorf("failed to list connectors: %w", err)
 	}
 
+	sort.Slice(resp.Connectors, func(i, j int) bool {
+		return resp.Connectors[i].Id < resp.Connectors[j].Id
+	})
+
 	displayConnectors(resp.Connectors)
 
 	return nil
@@ -92,8 +98,8 @@ func displayConnectors(connectors []*apiv1.Connector) {
 			{Align: simpletable.AlignLeft, Text: p.Id},
 			{Align: simpletable.AlignLeft, Text: p.Plugin},
 			{Align: simpletable.AlignLeft, Text: p.PipelineId},
-			{Align: simpletable.AlignLeft, Text: p.CreatedAt.AsTime().String()},
-			{Align: simpletable.AlignLeft, Text: p.UpdatedAt.AsTime().String()},
+			{Align: simpletable.AlignLeft, Text: internal.PrintTime(p.CreatedAt)},
+			{Align: simpletable.AlignLeft, Text: internal.PrintTime(p.UpdatedAt)},
 		}
 
 		table.Body.Cells = append(table.Body.Cells, r)

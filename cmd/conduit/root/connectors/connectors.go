@@ -31,6 +31,7 @@ func (c *ConnectorsCommand) Aliases() []string { return []string{"connector"} }
 func (c *ConnectorsCommand) SubCommands() []ecdysis.Command {
 	return []ecdysis.Command{
 		&ListCommand{},
+		&DescribeCommand{},
 	}
 }
 

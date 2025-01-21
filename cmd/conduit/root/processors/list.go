@@ -17,10 +17,12 @@ package processors
 import (
 	"context"
 	"fmt"
+	"sort"
 
 	"github.com/alexeyco/simpletable"
 	"github.com/conduitio/conduit/cmd/conduit/api"
 	"github.com/conduitio/conduit/cmd/conduit/cecdysis"
+	"github.com/conduitio/conduit/cmd/conduit/internal"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	"github.com/conduitio/ecdysis"
 )
@@ -52,6 +54,10 @@ func (c *ListCommand) ExecuteWithClient(ctx context.Context, client *api.Client)
 		return fmt.Errorf("failed to list processors: %w", err)
 	}
 
+	sort.Slice(resp.Processors, func(i, j int) bool {
+		return resp.Processors[i].Id < resp.Processors[j].Id
+	})
+
 	displayProcessors(resp.Processors)
 
 	return nil
@@ -79,8 +85,8 @@ func displayProcessors(processors []*apiv1.Processor) {
 			{Align: simpletable.AlignLeft, Text: p.Id},
 			{Align: simpletable.AlignLeft, Text: p.Plugin},
 			{Align: simpletable.AlignLeft, Text: p.Condition},
-			{Align: simpletable.AlignLeft, Text: p.CreatedAt.AsTime().String()},
-			{Align: simpletable.AlignLeft, Text: p.UpdatedAt.AsTime().String()},
+			{Align: simpletable.AlignLeft, Text: internal.PrintTime(p.CreatedAt)},
+			{Align: simpletable.AlignLeft, Text: internal.PrintTime(p.UpdatedAt)},
 		}
 
 		table.Body.Cells = append(table.Body.Cells, r)
