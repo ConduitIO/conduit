@@ -47,7 +47,7 @@ func (c *DescribeCommand) Docs() ecdysis.Docs {
 	return ecdysis.Docs{
 		Short: "Describe an existing connector",
 		Long: `This command requires Conduit to be already running since it will describe a connector registered
-by Conduit. You can list existing connectors with the 'conduit connectors ls' command.`,
+by Conduit. You can list existing connectors with the 'conduit connectors list' command.`,
 		Example: "conduit connectors describe connector:source\n" +
 			"conduit connectors desc connector:destination",
 	}
