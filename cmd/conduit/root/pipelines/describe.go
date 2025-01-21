@@ -110,7 +110,7 @@ func displayPipeline(ctx context.Context, pipeline *apiv1.Pipeline, connectors [
 
 	// State
 	if pipeline.State != nil {
-		fmt.Fprintf(&b, "Status: %s\n", internal.PrintStatusFromProto(pipeline.State.Status.String()))
+		fmt.Fprintf(&b, "Status: %s\n", internal.PrintStatusFromProtoString(pipeline.State.Status.String()))
 		if pipeline.State.Error != "" {
 			fmt.Fprintf(&b, "Error: %s\n", pipeline.State.Error)
 		}
