@@ -46,7 +46,7 @@ func (c *DescribeCommand) Docs() ecdysis.Docs {
 	return ecdysis.Docs{
 		Short: "Describe an existing pipeline",
 		Long: `This command requires Conduit to be already running since it will describe a pipeline registered 
-by Conduit. You can list existing pipelines with the 'conduit pipelines ls' command.`,
+by Conduit. You can list existing pipelines with the 'conduit pipelines list' command.`,
 		Example: "conduit pipelines describe pipeline-with-dlq\n" +
 			"conduit pipelines desc multiple-source-with-processor",
 	}
