@@ -70,3 +70,32 @@ func DisplayProcessors(processors []*apiv1.Processor, indent int) {
 		fmt.Printf("%sUpdated At: %s\n", Indentation(indent+2), PrintTime(p.UpdatedAt))
 	}
 }
+
+// FormatLongString splits a string into multiple lines depending on the maxLineLength.
+func FormatLongString(paragraph string, maxLineLength int) string {
+	if len(paragraph) <= maxLineLength {
+		return paragraph
+	}
+
+	var result strings.Builder
+	var currentLine strings.Builder
+	words := strings.Fields(paragraph)
+	for _, word := range words {
+		// check if adding the next word would exceed the line length
+		if currentLine.Len()+len(word)+1 > maxLineLength {
+			result.WriteString(currentLine.String() + "\n")
+			currentLine.Reset()
+		}
+		if currentLine.Len() > 0 {
+			currentLine.WriteString(" ")
+		}
+		currentLine.WriteString(word)
+	}
+
+	// add the last line if it's not empty
+	if currentLine.Len() > 0 {
+		result.WriteString(currentLine.String())
+	}
+
+	return result.String()
+}
