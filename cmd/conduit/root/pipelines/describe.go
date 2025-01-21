@@ -98,7 +98,7 @@ func (c *DescribeCommand) ExecuteWithClient(ctx context.Context, client *api.Cli
 	}
 
 	// store processors for each connector
-	var connectorProcesors = make(map[string][]*apiv1.Processor, len(connectorsResp.Connectors))
+	connectorProcesors := make(map[string][]*apiv1.Processor, len(connectorsResp.Connectors))
 
 	for _, conn := range connectorsResp.Connectors {
 		var processors []*apiv1.Processor
