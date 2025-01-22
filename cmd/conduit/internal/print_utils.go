@@ -46,6 +46,11 @@ func PrintTime(ts *timestamppb.Timestamp) string {
 	return ts.AsTime().Format("2006-01-02T15:04:05Z")
 }
 
+// IsEmpty checks if a string is empty
+func IsEmpty(s string) bool {
+	return strings.TrimSpace(s) == ""
+}
+
 // DisplayProcessors prints the processors in a human-readable format
 func DisplayProcessors(processors []*apiv1.Processor, indent int) {
 	if len(processors) == 0 {
