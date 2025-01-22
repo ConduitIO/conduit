@@ -31,6 +31,7 @@ func (c *ConnectorPluginsCommand) Aliases() []string { return []string{"connecto
 func (c *ConnectorPluginsCommand) SubCommands() []ecdysis.Command {
 	return []ecdysis.Command{
 		&ListCommand{},
+		&DescribeCommand{},
 	}
 }
 
