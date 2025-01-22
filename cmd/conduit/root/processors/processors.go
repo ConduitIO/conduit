@@ -31,6 +31,7 @@ func (c *ProcessorsCommand) Aliases() []string { return []string{"processor"} }
 func (c *ProcessorsCommand) SubCommands() []ecdysis.Command {
 	return []ecdysis.Command{
 		&ListCommand{},
+		&DescribeCommand{},
 	}
 }
 
