@@ -98,6 +98,6 @@ func displayConnectorPlugins(connectorPlugins []*apiv1.ConnectorPluginSpecificat
 
 		table.Body.Cells = append(table.Body.Cells, r)
 	}
-	table.SetStyle(simpletable.StyleCompact)
+	table.SetStyle(simpletable.StyleDefault)
 	fmt.Println(table.String())
 }

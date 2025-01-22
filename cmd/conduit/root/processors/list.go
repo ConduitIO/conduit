@@ -91,6 +91,6 @@ func displayProcessors(processors []*apiv1.Processor) {
 
 		table.Body.Cells = append(table.Body.Cells, r)
 	}
-	table.SetStyle(simpletable.StyleCompact)
+	table.SetStyle(simpletable.StyleDefault)
 	fmt.Println(table.String())
 }
