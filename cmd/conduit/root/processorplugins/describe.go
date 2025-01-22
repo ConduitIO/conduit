@@ -86,11 +86,21 @@ func (c *DescribeCommand) ExecuteWithClient(ctx context.Context, client *api.Cli
 }
 
 func displayConnectorPluginsDescription(p *apiv1.ProcessorPluginSpecifications) {
-	fmt.Printf("Name: %s\n", p.Name)
-	fmt.Printf("Summary: %s\n", p.Summary)
-	fmt.Printf("Description: %s\n", p.Description)
-	fmt.Printf("Author: %s\n", p.Author)
-	fmt.Printf("Version: %s\n", p.Version)
+	if !internal.IsEmpty(p.Name) {
+		fmt.Printf("Name: %s\n", p.Name)
+	}
+	if !internal.IsEmpty(p.Summary) {
+		fmt.Printf("Summary: %s\n", p.Summary)
+	}
+	if !internal.IsEmpty(p.Description) {
+		fmt.Printf("Description: %s\n", p.Description)
+	}
+	if !internal.IsEmpty(p.Author) {
+		fmt.Printf("Author: %s\n", p.Author)
+	}
+	if !internal.IsEmpty(p.Version) {
+		fmt.Printf("Version: %s\n", p.Version)
+	}
 
 	if len(p.Parameters) > 0 {
 		fmt.Println("\nParameters:")
