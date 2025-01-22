@@ -63,7 +63,7 @@ func DisplayProcessors(processors []*apiv1.Processor, indent int) {
 		fmt.Printf("%s- ID: %s\n", Indentation(indent+1), p.Id)
 		fmt.Printf("%sPlugin: %s\n", Indentation(indent+2), p.Plugin)
 
-		if p.Condition != "" {
+		if !IsEmpty(p.Condition) {
 			fmt.Printf("%sCondition: %s\n", Indentation(indent+2), p.Condition)
 		}
 

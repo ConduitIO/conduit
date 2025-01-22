@@ -96,13 +96,15 @@ func displayProcessor(p *apiv1.Processor) {
 
 	fmt.Printf("%s: %s\n", processorType, p.Parent.Id)
 
-	if p.Condition != "" {
+	if !internal.IsEmpty(p.Condition) {
 		fmt.Printf("Condition: %s\n", p.Condition)
 	}
 
-	fmt.Println("Config:")
-	for name, value := range p.Config.Settings {
-		fmt.Printf("%s%s: %s\n", internal.Indentation(1), name, value)
+	if len(p.Config.Settings) > 0 {
+		fmt.Println("Config:")
+		for name, value := range p.Config.Settings {
+			fmt.Printf("%s%s: %s\n", internal.Indentation(1), name, value)
+		}
 	}
 	fmt.Printf("Workers: %d\n", p.Config.Workers)
 
