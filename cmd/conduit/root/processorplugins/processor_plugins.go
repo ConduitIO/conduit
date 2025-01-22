@@ -31,6 +31,7 @@ func (c *ProcessorPluginsCommand) Aliases() []string { return []string{"processo
 func (c *ProcessorPluginsCommand) SubCommands() []ecdysis.Command {
 	return []ecdysis.Command{
 		&ListCommand{},
+		&DescribeCommand{},
 	}
 }
 
