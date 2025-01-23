@@ -87,19 +87,21 @@ func displayConnectors(connectors []*apiv1.Connector) {
 		Cells: []*simpletable.Cell{
 			{Align: simpletable.AlignCenter, Text: "ID"},
 			{Align: simpletable.AlignCenter, Text: "PLUGIN"},
+			{Align: simpletable.AlignCenter, Text: "TYPE"},
 			{Align: simpletable.AlignCenter, Text: "PIPELINE_ID"},
 			{Align: simpletable.AlignCenter, Text: "CREATED"},
 			{Align: simpletable.AlignCenter, Text: "LAST_UPDATED"},
 		},
 	}
 
-	for _, p := range connectors {
+	for _, c := range connectors {
 		r := []*simpletable.Cell{
-			{Align: simpletable.AlignLeft, Text: p.Id},
-			{Align: simpletable.AlignLeft, Text: p.Plugin},
-			{Align: simpletable.AlignLeft, Text: p.PipelineId},
-			{Align: simpletable.AlignLeft, Text: internal.PrintTime(p.CreatedAt)},
-			{Align: simpletable.AlignLeft, Text: internal.PrintTime(p.UpdatedAt)},
+			{Align: simpletable.AlignLeft, Text: c.Id},
+			{Align: simpletable.AlignLeft, Text: c.Plugin},
+			{Align: simpletable.AlignLeft, Text: internal.ConnectorTypeToString(c.Type)},
+			{Align: simpletable.AlignLeft, Text: c.PipelineId},
+			{Align: simpletable.AlignLeft, Text: internal.PrintTime(c.CreatedAt)},
+			{Align: simpletable.AlignLeft, Text: internal.PrintTime(c.UpdatedAt)},
 		}
 
 		table.Body.Cells = append(table.Body.Cells, r)
