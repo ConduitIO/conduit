@@ -117,17 +117,9 @@ func displayConnector(connector *apiv1.Connector, processors []*apiv1.Processor)
 	fmt.Printf("Plugin: %s\n", connector.Plugin)
 	fmt.Printf("Pipeline ID: %s\n", connector.PipelineId)
 
-	displayConnectorConfig(connector.Config)
+	internal.DisplayConnectorConfig(connector.Config, 0)
 	fmt.Printf("Created At: %s\n", internal.PrintTime(connector.CreatedAt))
 	fmt.Printf("Updated At: %s\n", internal.PrintTime(connector.UpdatedAt))
 
 	internal.DisplayProcessors(processors, 0)
-}
-
-func displayConnectorConfig(cfg *apiv1.Connector_Config) {
-	fmt.Println("Config:")
-
-	for name, value := range cfg.Settings {
-		fmt.Printf("%s%s: %s\n", internal.Indentation(1), name, value)
-	}
 }
