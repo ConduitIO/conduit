@@ -26,9 +26,12 @@ const ConduitDocsURL = "https://conduit.io/docs"
 var (
 	_ ecdysis.CommandWithDocs    = (*DocsCommand)(nil)
 	_ ecdysis.CommandWithExecute = (*DocsCommand)(nil)
+	_ ecdysis.CommandWithAliases = (*DocsCommand)(nil)
 )
 
 type DocsCommand struct{}
+
+func (c *DocsCommand) Aliases() []string { return []string{"documentation", "docs"} }
 
 func (c *DocsCommand) Execute(_ context.Context) error {
 	browser.OpenURL(ConduitDocsURL)
