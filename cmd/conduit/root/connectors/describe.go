@@ -100,20 +100,7 @@ func displayConnector(connector *apiv1.Connector, processors []*apiv1.Processor)
 
 	fmt.Printf("ID: %s\n", connector.Id)
 
-	var connectorType string
-
-	switch connector.Type {
-	case apiv1.Connector_TYPE_SOURCE:
-		connectorType = "Source"
-	case apiv1.Connector_TYPE_DESTINATION:
-		connectorType = "Destination"
-	case apiv1.Connector_TYPE_UNSPECIFIED:
-		connectorType = "Unspecified"
-	default:
-		connectorType = "Unknown"
-	}
-
-	fmt.Printf("Type: %s\n", connectorType)
+	fmt.Printf("Type: %s\n", internal.ConnectorTypeToString(connector.Type))
 	fmt.Printf("Plugin: %s\n", connector.Plugin)
 	fmt.Printf("Pipeline ID: %s\n", connector.PipelineId)
 

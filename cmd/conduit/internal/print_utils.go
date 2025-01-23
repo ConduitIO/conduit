@@ -203,3 +203,18 @@ func DisplayConnectorConfig(cfg *apiv1.Connector_Config, indentation int) {
 		fmt.Printf("%s%s: %s\n", Indentation(indentation+1), name, value)
 	}
 }
+
+// ConnectorTypeToString returns a human-readable string from a connector type
+func ConnectorTypeToString(connectorType apiv1.Connector_Type) string {
+	switch connectorType {
+	case apiv1.Connector_TYPE_SOURCE:
+		return "source"
+	case apiv1.Connector_TYPE_DESTINATION:
+		return "destination"
+	case apiv1.Connector_TYPE_UNSPECIFIED:
+		return "unspecified"
+	default:
+		return "unknown"
+	}
+}
+
