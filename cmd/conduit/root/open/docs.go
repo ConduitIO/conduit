@@ -34,8 +34,7 @@ type DocsCommand struct{}
 func (c *DocsCommand) Aliases() []string { return []string{"documentation", "docs"} }
 
 func (c *DocsCommand) Execute(_ context.Context) error {
-	browser.OpenURL(ConduitDocsURL)
-	return nil
+	return browser.OpenURL(ConduitDocsURL)
 }
 
 func (c *DocsCommand) Usage() string { return "docs" }
