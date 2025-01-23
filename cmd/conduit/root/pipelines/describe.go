@@ -97,6 +97,19 @@ func (c *DescribeCommand) ExecuteWithClient(ctx context.Context, client *api.Cli
 		return fmt.Errorf("failed to list connectors for pipeline %s: %w", c.args.PipelineID, err)
 	}
 
+	connectors := make([]*apiv1.Connector, 0, len(connectorsResp.Connectors))
+
+	for _, conn := range connectorsResp.Connectors {
+		connDetails, err := client.ConnectorServiceClient.GetConnector(ctx, &apiv1.GetConnectorRequest{
+			Id: conn.Id,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to get connector: %w", err)
+		}
+
+		connectors = append(connectors, connDetails.Connector)
+	}
+
 	// store processors for each connector
 	connectorProcesors := make(map[string][]*apiv1.Processor, len(connectorsResp.Connectors))
 
@@ -122,7 +135,7 @@ func (c *DescribeCommand) ExecuteWithClient(ctx context.Context, client *api.Cli
 		return fmt.Errorf("failed to fetch DLQ for pipeline %s: %w", c.args.PipelineID, err)
 	}
 
-	err = displayPipeline(pipelineResp.Pipeline, pipelineProcessors, connectorsResp.Connectors, connectorProcesors, dlq.Dlq)
+	err = displayPipeline(pipelineResp.Pipeline, pipelineProcessors, connectors, connectorProcesors, dlq.Dlq)
 	if err != nil {
 		return fmt.Errorf("failed to display pipeline %s: %w", c.args.PipelineID, err)
 	}
@@ -152,14 +165,14 @@ func displayPipeline(pipeline *apiv1.Pipeline, pipelineProcessors []*apiv1.Proce
 
 	// Connectors
 	fmt.Println("Sources:")
-	printConnectors(connectors, connectorProcessors, apiv1.Connector_TYPE_SOURCE)
+	displayConnectorsAndProcessors(connectors, connectorProcessors, apiv1.Connector_TYPE_SOURCE)
 
 	internal.DisplayProcessors(pipelineProcessors, 0)
 
 	fmt.Println("Destinations:")
-	printConnectors(connectors, connectorProcessors, apiv1.Connector_TYPE_DESTINATION)
+	displayConnectorsAndProcessors(connectors, connectorProcessors, apiv1.Connector_TYPE_DESTINATION)
 
-	printDLQ(dlq)
+	displayDLQ(dlq)
 
 	// Timestamps
 	if pipeline.CreatedAt != nil {
@@ -172,19 +185,23 @@ func displayPipeline(pipeline *apiv1.Pipeline, pipelineProcessors []*apiv1.Proce
 	return nil
 }
 
-func printDLQ(dlq *apiv1.Pipeline_DLQ) {
+func displayDLQ(dlq *apiv1.Pipeline_DLQ) {
 	fmt.Println("Dead-letter queue:")
 	fmt.Printf("%sPlugin: %s\n", internal.Indentation(1), dlq.Plugin)
 }
 
-func printConnectors(connectors []*apiv1.Connector, connectorProcessors map[string][]*apiv1.Processor, connType apiv1.Connector_Type) {
+func displayConnectorsAndProcessors(connectors []*apiv1.Connector, connectorProcessors map[string][]*apiv1.Processor, connType apiv1.Connector_Type) {
 	for _, conn := range connectors {
 		if conn.Type == connType {
-			fmt.Printf("%s- %s (%s)\n", internal.Indentation(1), conn.Id, conn.Plugin)
-
+			fmt.Printf("%s- ID: %s\n", internal.Indentation(1), conn.Id)
+			fmt.Printf("%sPlugin: %s\n", internal.Indentation(2), conn.Plugin)
+			fmt.Printf("%sPipeline ID: %s\n", internal.Indentation(2), conn.PipelineId)
+			internal.DisplayConnectorConfig(conn.Config, 2)
 			if processors, ok := connectorProcessors[conn.Id]; ok {
 				internal.DisplayProcessors(processors, 2)
 			}
+			fmt.Printf("%sCreated At: %s\n", internal.Indentation(2), internal.PrintTime(conn.CreatedAt))
+			fmt.Printf("%sUpdated At: %s\n", internal.Indentation(2), internal.PrintTime(conn.UpdatedAt))
 		}
 	}
 }

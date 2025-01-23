@@ -196,6 +196,14 @@ func formatValidations(v []*configv1.Validation) string {
 	return result.String()
 }
 
+// DisplayConnectorConfig prints the connector config in a human-readable format
+func DisplayConnectorConfig(cfg *apiv1.Connector_Config, indentation int) {
+	fmt.Printf("%sConfig:\n", Indentation(indentation))
+	for name, value := range cfg.Settings {
+		fmt.Printf("%s%s: %s\n", Indentation(indentation+1), name, value)
+	}
+}
+
 // ConnectorTypeToString returns a human-readable string from a connector type
 func ConnectorTypeToString(connectorType apiv1.Connector_Type) string {
 	switch connectorType {
