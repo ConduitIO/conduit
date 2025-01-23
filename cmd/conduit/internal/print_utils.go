@@ -223,4 +223,3 @@ func ConnectorTypeToString(connectorType apiv1.Connector_Type) string {
 		return "unknown"
 	}
 }
-
