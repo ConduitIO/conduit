@@ -14,8 +14,19 @@
 
 package docs
 
-import "github.com/conduitio/conduit/cmd/conduit/root/open"
+import (
+	"github.com/conduitio/conduit/cmd/conduit/root/open"
+	"github.com/conduitio/ecdysis"
+)
+
+var (
+	_ ecdysis.CommandWithHidden = (*DocsCommand)(nil)
+)
 
 type DocsCommand struct {
 	open.DocsCommand
+}
+
+func (d *DocsCommand) Hidden() bool {
+	return true
 }
