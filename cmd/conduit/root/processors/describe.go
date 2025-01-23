@@ -84,17 +84,7 @@ func displayProcessor(p *apiv1.Processor) {
 	fmt.Printf("ID: %s\n", p.Id)
 	fmt.Printf("Plugin: %s\n", p.Plugin)
 
-	processorType := "Processor "
-	switch p.Parent.Type.String() {
-	case "TYPE_PIPELINE":
-		processorType += "for Pipeline"
-	case "TYPE_CONNECTOR":
-		processorType += "for Connector"
-	default:
-		processorType += "associated to"
-	}
-
-	fmt.Printf("%s: %s\n", processorType, p.Parent.Id)
+	fmt.Printf("Type: %s (%s)\n", internal.ProcessorTypeToString(p.Parent.Type), p.Parent.Id)
 
 	if !internal.IsEmpty(p.Condition) {
 		fmt.Printf("Condition: %s\n", p.Condition)
