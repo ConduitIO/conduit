@@ -51,3 +51,34 @@ func TestConnectorTypeToString(t *testing.T) {
 		})
 	}
 }
+
+func TestProcessorParentTypeToString(t *testing.T) {
+	is := is.New(t)
+
+	tests := []struct {
+		name                string
+		processorParentType apiv1.Processor_Parent_Type
+		want                string
+	}{
+		{
+			name:                "Connector",
+			processorParentType: apiv1.Processor_Parent_TYPE_CONNECTOR,
+			want:                "connector",
+		},
+		{
+			name:                "Pipeline",
+			processorParentType: apiv1.Processor_Parent_TYPE_PIPELINE,
+			want:                "pipeline",
+		},
+		{
+			name:                "Unspecified",
+			processorParentType: apiv1.Processor_Parent_TYPE_UNSPECIFIED,
+			want:                "unspecified",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			is.Equal(ProcessorParentToString(tt.processorParentType), tt.want)
+		})
+	}
+}

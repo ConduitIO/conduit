@@ -217,3 +217,17 @@ func ConnectorTypeToString(connectorType apiv1.Connector_Type) string {
 		return "unknown"
 	}
 }
+
+// ProcessorParentToString returns a human-readable string from a processor parent type
+func ProcessorParentToString(processorParentType apiv1.Processor_Parent_Type) string {
+	switch processorParentType {
+	case apiv1.Processor_Parent_TYPE_CONNECTOR:
+		return "connector"
+	case apiv1.Processor_Parent_TYPE_PIPELINE:
+		return "pipeline"
+	case apiv1.Processor_Parent_TYPE_UNSPECIFIED:
+		return "unspecified"
+	default:
+		return "unknown"
+	}
+}
