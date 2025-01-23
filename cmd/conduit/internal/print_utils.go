@@ -196,8 +196,8 @@ func formatValidations(v []*configv1.Validation) string {
 	return result.String()
 }
 
-// ProcessorTypeToString returns a human-readable string from a processor parent type
-func ProcessorTypeToString(processorParentType apiv1.Processor_Parent_Type) string {
+// ProcessorParentToString returns a human-readable string from a processor parent type
+func ProcessorParentToString(processorParentType apiv1.Processor_Parent_Type) string {
 	switch processorParentType {
 	case apiv1.Processor_Parent_TYPE_CONNECTOR:
 		return "connector"

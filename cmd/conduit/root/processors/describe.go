@@ -84,7 +84,7 @@ func displayProcessor(p *apiv1.Processor) {
 	fmt.Printf("ID: %s\n", p.Id)
 	fmt.Printf("Plugin: %s\n", p.Plugin)
 
-	fmt.Printf("Type: %s (%s)\n", internal.ProcessorTypeToString(p.Parent.Type), p.Parent.Id)
+	fmt.Printf("Parent: %s (%s)\n", internal.ProcessorParentToString(p.Parent.Type), p.Parent.Id)
 
 	if !internal.IsEmpty(p.Condition) {
 		fmt.Printf("Condition: %s\n", p.Condition)

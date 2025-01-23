@@ -74,7 +74,7 @@ func displayProcessors(processors []*apiv1.Processor) {
 		Cells: []*simpletable.Cell{
 			{Align: simpletable.AlignCenter, Text: "ID"},
 			{Align: simpletable.AlignCenter, Text: "PLUGIN"},
-			{Align: simpletable.AlignCenter, Text: "TYPE"},
+			{Align: simpletable.AlignCenter, Text: "PARENT"},
 			{Align: simpletable.AlignCenter, Text: "CONDITION"},
 			{Align: simpletable.AlignCenter, Text: "CREATED"},
 			{Align: simpletable.AlignCenter, Text: "LAST_UPDATED"},
@@ -82,11 +82,11 @@ func displayProcessors(processors []*apiv1.Processor) {
 	}
 
 	for _, p := range processors {
-		processorType := fmt.Sprintf("%s (%s)", internal.ProcessorTypeToString(p.Parent.Type), p.Parent.Id)
+		processorParent := fmt.Sprintf("%s (%s)", internal.ProcessorParentToString(p.Parent.Type), p.Parent.Id)
 		r := []*simpletable.Cell{
 			{Align: simpletable.AlignLeft, Text: p.Id},
 			{Align: simpletable.AlignLeft, Text: p.Plugin},
-			{Align: simpletable.AlignLeft, Text: processorType},
+			{Align: simpletable.AlignLeft, Text: processorParent},
 			{Align: simpletable.AlignLeft, Text: p.Condition},
 			{Align: simpletable.AlignLeft, Text: internal.PrintTime(p.CreatedAt)},
 			{Align: simpletable.AlignLeft, Text: internal.PrintTime(p.UpdatedAt)},

@@ -21,7 +21,7 @@ import (
 	"github.com/matryer/is"
 )
 
-func TestProcessorTypeToString(t *testing.T) {
+func TestProcessorParentTypeToString(t *testing.T) {
 	is := is.New(t)
 
 	tests := []struct {
@@ -47,7 +47,7 @@ func TestProcessorTypeToString(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			is.Equal(ProcessorTypeToString(tt.processorParentType), tt.want)
+			is.Equal(ProcessorParentToString(tt.processorParentType), tt.want)
 		})
 	}
 }
