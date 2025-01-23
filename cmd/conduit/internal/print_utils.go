@@ -196,17 +196,11 @@ func formatValidations(v []*configv1.Validation) string {
 	return result.String()
 }
 
-// ProcessorParentToString returns a human-readable string from a processor parent type
-func ProcessorParentToString(processorParentType apiv1.Processor_Parent_Type) string {
-	switch processorParentType {
-	case apiv1.Processor_Parent_TYPE_CONNECTOR:
-		return "connector"
-	case apiv1.Processor_Parent_TYPE_PIPELINE:
-		return "pipeline"
-	case apiv1.Processor_Parent_TYPE_UNSPECIFIED:
-		return "unspecified"
-	default:
-		return "unknown"
+// DisplayConnectorConfig prints the connector config in a human-readable format
+func DisplayConnectorConfig(cfg *apiv1.Connector_Config, indentation int) {
+	fmt.Printf("%sConfig:\n", Indentation(indentation))
+	for name, value := range cfg.Settings {
+		fmt.Printf("%s%s: %s\n", Indentation(indentation+1), name, value)
 	}
 }
 
@@ -218,6 +212,20 @@ func ConnectorTypeToString(connectorType apiv1.Connector_Type) string {
 	case apiv1.Connector_TYPE_DESTINATION:
 		return "destination"
 	case apiv1.Connector_TYPE_UNSPECIFIED:
+		return "unspecified"
+	default:
+		return "unknown"
+	}
+}
+
+// ProcessorParentToString returns a human-readable string from a processor parent type
+func ProcessorParentToString(processorParentType apiv1.Processor_Parent_Type) string {
+	switch processorParentType {
+	case apiv1.Processor_Parent_TYPE_CONNECTOR:
+		return "connector"
+	case apiv1.Processor_Parent_TYPE_PIPELINE:
+		return "pipeline"
+	case apiv1.Processor_Parent_TYPE_UNSPECIFIED:
 		return "unspecified"
 	default:
 		return "unknown"
