@@ -19,9 +19,7 @@ import (
 	"github.com/conduitio/ecdysis"
 )
 
-var (
-	_ ecdysis.CommandWithHidden = (*DocsCommand)(nil)
-)
+var _ ecdysis.CommandWithHidden = (*DocsCommand)(nil)
 
 type DocsCommand struct {
 	open.DocsCommand
