@@ -27,7 +27,7 @@ import (
 	"github.com/matryer/is"
 )
 
-func TestConfig_WithFlags(t *testing.T) {
+func TestConfigWithFlags(t *testing.T) {
 	testCases := []struct {
 		name      string
 		args      []string

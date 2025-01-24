@@ -15,6 +15,11 @@
 package root
 
 import (
+	"bytes"
+	"context"
+	"fmt"
+	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/conduitio/ecdysis"
@@ -55,4 +60,29 @@ func TestRootCommandFlags(t *testing.T) {
 		is.Equal(f.shortName, cf.Shorthand)
 		is.Equal(cf.Usage, f.usage)
 	}
+}
+
+func TestRootCommandExecuteWithVersionFlag(t *testing.T) {
+	is := is.New(t)
+
+	buf := new(bytes.Buffer)
+
+	out := &ecdysis.DefaultOutput{}
+	out.Output(buf, nil)
+
+	cmd := &RootCommand{
+		flags: RootFlags{
+			Version: true,
+		},
+	}
+	cmd.Output(out)
+
+	expectedOutput := fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH)
+
+	err := cmd.Execute(context.Background())
+	is.NoErr(err)
+
+	actualOutput := strings.TrimSpace(buf.String())
+
+	is.Equal(actualOutput, expectedOutput)
 }

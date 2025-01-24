@@ -26,7 +26,7 @@ import (
 	"github.com/matryer/is"
 )
 
-func TestVersion_Execute(t *testing.T) {
+func TestVersionCommandExecute(t *testing.T) {
 	is := is.New(t)
 
 	buf := new(bytes.Buffer)
