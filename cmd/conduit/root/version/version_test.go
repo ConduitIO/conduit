@@ -31,11 +31,11 @@ func TestVersion_Execute(t *testing.T) {
 
 	buf := new(bytes.Buffer)
 
-	display := &ecdysis.DefaultDisplay{}
-	display.SetOutput(buf, nil)
+	out := &ecdysis.DefaultOutput{}
+	out.Output(buf, nil)
 
 	cmd := &VersionCommand{}
-	cmd.SetDisplay(display)
+	cmd.Output(out)
 
 	expectedOutput := fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH)
 

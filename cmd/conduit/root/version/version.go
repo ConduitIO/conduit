@@ -29,18 +29,17 @@ var (
 )
 
 type VersionCommand struct {
-	display ecdysis.Display
+	output ecdysis.Output
 }
 
-func (c *VersionCommand) SetDisplay(display ecdysis.Display) {
-	c.display = display
+func (c *VersionCommand) Output(output ecdysis.Output) {
+	c.output = output
 }
 
 func (c *VersionCommand) Usage() string { return "version" }
 
 func (c *VersionCommand) Execute(_ context.Context) error {
-	c.display.Stdout(fmt.Sprintf("%s\n", conduit.Version(true)))
-
+	c.output.Stdout(fmt.Sprintf("%s\n", conduit.Version(true)))
 	return nil
 }
 
