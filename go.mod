@@ -394,3 +394,5 @@ require (
 	mvdan.cc/unparam v0.0.0-20240528143540-8a5130ca722f // indirect
 	pluginrpc.com/pluginrpc v0.5.0 // indirect
 )
+
+replace github.com/conduitio/ecdysis => ../ecdysis
