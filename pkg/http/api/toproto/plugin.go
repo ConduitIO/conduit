@@ -85,6 +85,7 @@ func ConnectorPluginSpecifications(name string, in pconnector.Specification) *ap
 		Name:              name,
 		Summary:           in.Summary,
 		Description:       in.Description,
+		Author:            in.Author,
 		Version:           in.Version,
 		DestinationParams: ConnectorPluginParamsMap(in.DestinationParams),
 		SourceParams:      ConnectorPluginParamsMap(in.SourceParams),
@@ -123,6 +124,7 @@ func ProcessorPluginSpecifications(name string, in processorSdk.Specification) *
 		Name:        name,
 		Summary:     in.Summary,
 		Description: in.Description,
+		Author:      in.Author,
 		Version:     in.Version,
 		Parameters:  params,
 	}
