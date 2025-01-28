@@ -246,8 +246,8 @@ github.com/conduitio/conduit-processor-sdk v0.4.0 h1:wF1Fj31aneNixNbW5rJ0/5Q3vwW
 github.com/conduitio/conduit-processor-sdk v0.4.0/go.mod h1:Jj9ZBTee7nO0XeociDxe9gSvLFN1GbPWP1Aj04DPeZQ=
 github.com/conduitio/conduit-schema-registry v0.2.2 h1:Q0uL8egRAzJlRV7Ed5nEcqZ1yE/UQeZJad3VmhgTSFE=
 github.com/conduitio/conduit-schema-registry v0.2.2/go.mod h1:EmT4ylkz15LYddL6qU4wDX52n1Yp0aHvEDRIWOYYzFs=
-github.com/conduitio/ecdysis v0.2.0 h1:sH1rc5icJBzwUU51yYMMFfcOez0bSeEpmJ+NrmYpU/8=
-github.com/conduitio/ecdysis v0.2.0/go.mod h1:CRQ3QxTsu/hhFepToP8InsBltZMfGIncbWvUNnNJSC4=
+github.com/conduitio/ecdysis v0.3.0 h1:vBoh60M1/d2CUnWG964OT6uhr3NSO90SFW9RRPCKt9A=
+github.com/conduitio/ecdysis v0.3.0/go.mod h1:8ztJTkL5AfCm2qFMzaSUO/IItvJ3z7Jj1PWLcgqmT14=
 github.com/conduitio/yaml/v3 v3.3.0 h1:kbbaOSHcuH39gP4+rgbJGl6DSbLZcJgEaBvkEXJlCsI=
 github.com/conduitio/yaml/v3 v3.3.0/go.mod h1:JNgFMOX1t8W4YJuRZOh6GggVtSMsgP9XgTw+7dIenpc=
 github.com/containerd/cgroups/v3 v3.0.5 h1:44na7Ud+VwyE7LIoJ8JTNQOa549a8543BmzaJHo6Bzo=
