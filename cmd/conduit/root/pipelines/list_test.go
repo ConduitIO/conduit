@@ -29,7 +29,7 @@ import (
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 )
 
-func TestListCommandExecuteWithClient(t *testing.T) {
+func TestListCommandExecuteWithClient_WithPipelines(t *testing.T) {
 	is := is.New(t)
 
 	buf := new(bytes.Buffer)
@@ -75,4 +75,33 @@ func TestListCommandExecuteWithClient(t *testing.T) {
 	is.True(strings.Contains(output, "recovering"))
 	is.True(strings.Contains(output, "4"))
 	is.True(strings.Contains(output, "degraded"))
+}
+
+func TestListCommandExecuteWithClient_EmptyResponse(t *testing.T) {
+	is := is.New(t)
+
+	buf := new(bytes.Buffer)
+	out := &ecdysis.DefaultOutput{}
+	out.Output(buf, nil)
+
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock.NewMockPipelineService(ctrl)
+
+	mockService.EXPECT().ListPipelines(gomock.Any(), gomock.Any()).Return(&apiv1.ListPipelinesResponse{}, nil)
+
+	client := &api.Client{
+		PipelineServiceClient: mockService,
+	}
+
+	cmd := &ListCommand{}
+	cmd.Output(out)
+
+	err := cmd.ExecuteWithClient(ctx, client)
+	is.NoErr(err)
+
+	output := buf.String()
+	is.True(len(output) == 0)
 }
