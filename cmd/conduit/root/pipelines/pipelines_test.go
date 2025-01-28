@@ -17,15 +17,16 @@ package pipelines
 import (
 	"bytes"
 	"context"
-	"github.com/conduitio/conduit/cmd/conduit/api/mock"
-	"github.com/conduitio/ecdysis"
 	"strings"
 	"testing"
 
-	"github.com/conduitio/conduit/cmd/conduit/api"
-	"github.com/conduitio/conduit/proto/api/v1"
+	"github.com/conduitio/ecdysis"
 	"github.com/matryer/is"
 	"go.uber.org/mock/gomock"
+
+	"github.com/conduitio/conduit/cmd/conduit/api"
+	"github.com/conduitio/conduit/cmd/conduit/api/mock"
+	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 )
 
 func TestListCommandExecuteWithClient(t *testing.T) {
