@@ -90,6 +90,5 @@ func displayPipelines(pipelines []*apiv1.Pipeline) {
 
 		table.Body.Cells = append(table.Body.Cells, r)
 	}
-	table.SetStyle(simpletable.StyleDefault)
 	fmt.Println(table.String())
 }

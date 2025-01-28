@@ -162,7 +162,6 @@ func DisplayConfigParams(cfg map[string]*configv1.Parameter) {
 		table.Body.Cells = append(table.Body.Cells, r)
 	}
 
-	table.SetStyle(simpletable.StyleDefault)
 	fmt.Println(table.String())
 }
 
