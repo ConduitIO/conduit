@@ -31,9 +31,12 @@ var (
 	_ cecdysis.CommandWithExecuteWithClient = (*ListCommand)(nil)
 	_ ecdysis.CommandWithAliases            = (*ListCommand)(nil)
 	_ ecdysis.CommandWithDocs               = (*ListCommand)(nil)
+	_ ecdysis.CommandWithOutput             = (*ListCommand)(nil)
 )
 
-type ListCommand struct{}
+type ListCommand struct {
+	output ecdysis.Output
+}
 
 func (c *ListCommand) Docs() ecdysis.Docs {
 	return ecdysis.Docs{
@@ -43,6 +46,10 @@ by Conduit. This will depend on the configured pipelines directory, which by def
 be configured via --pipelines.path at the time of running Conduit.`,
 		Example: "conduit pipelines list\nconduit pipelines ls",
 	}
+}
+
+func (c *ListCommand) Output(output ecdysis.Output) {
+	c.output = output
 }
 
 func (c *ListCommand) Aliases() []string { return []string{"ls"} }
@@ -59,14 +66,14 @@ func (c *ListCommand) ExecuteWithClient(ctx context.Context, client *api.Client)
 		return resp.Pipelines[i].Id < resp.Pipelines[j].Id
 	})
 
-	displayPipelines(resp.Pipelines)
+	c.output.Stdout(getPipelinesTable(resp.Pipelines))
 
 	return nil
 }
 
-func displayPipelines(pipelines []*apiv1.Pipeline) {
+func getPipelinesTable(pipelines []*apiv1.Pipeline) string {
 	if len(pipelines) == 0 {
-		return
+		return ""
 	}
 
 	table := simpletable.New()
@@ -90,5 +97,5 @@ func displayPipelines(pipelines []*apiv1.Pipeline) {
 
 		table.Body.Cells = append(table.Body.Cells, r)
 	}
-	fmt.Println(table.String())
+	return table.String()
 }

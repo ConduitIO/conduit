@@ -103,7 +103,6 @@ func displayConnectors(connectors []*apiv1.Connector) {
 			{Align: simpletable.AlignLeft, Text: internal.PrintTime(c.CreatedAt)},
 			{Align: simpletable.AlignLeft, Text: internal.PrintTime(c.UpdatedAt)},
 		}
-
 		table.Body.Cells = append(table.Body.Cells, r)
 	}
 	fmt.Println(table.String())

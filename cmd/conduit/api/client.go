@@ -25,8 +25,8 @@ import (
 )
 
 type Client struct {
-	conn *grpc.ClientConn
-	apiv1.PipelineServiceClient
+	conn                  *grpc.ClientConn
+	PipelineServiceClient PipelineService
 	apiv1.ProcessorServiceClient
 	apiv1.ConnectorServiceClient
 	healthgrpc.HealthClient
