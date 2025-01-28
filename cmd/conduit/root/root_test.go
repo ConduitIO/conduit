@@ -17,8 +17,7 @@ package root
 import (
 	"bytes"
 	"context"
-	"fmt"
-	"runtime"
+	"github.com/conduitio/conduit/pkg/conduit"
 	"strings"
 	"testing"
 
@@ -77,7 +76,7 @@ func TestRootCommandExecuteWithVersionFlag(t *testing.T) {
 	}
 	cmd.Output(out)
 
-	expectedOutput := fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH)
+	expectedOutput := strings.TrimSpace(conduit.Version(true))
 
 	err := cmd.Execute(context.Background())
 	is.NoErr(err)
