@@ -17,7 +17,6 @@ package root
 import (
 	"context"
 	"fmt"
-	"os"
 
 	"github.com/conduitio/conduit/cmd/conduit/root/config"
 	"github.com/conduitio/conduit/cmd/conduit/root/connectorplugins"
@@ -39,6 +38,7 @@ var (
 	_ ecdysis.CommandWithExecute     = (*RootCommand)(nil)
 	_ ecdysis.CommandWithDocs        = (*RootCommand)(nil)
 	_ ecdysis.CommandWithSubCommands = (*RootCommand)(nil)
+	_ ecdysis.CommandWithOutput      = (*RootCommand)(nil)
 )
 
 type RootFlags struct {
@@ -50,12 +50,17 @@ type RootFlags struct {
 }
 
 type RootCommand struct {
-	flags RootFlags
+	flags  RootFlags
+	output ecdysis.Output
+}
+
+func (c *RootCommand) Output(output ecdysis.Output) {
+	c.output = output
 }
 
 func (c *RootCommand) Execute(ctx context.Context) error {
 	if c.flags.Version {
-		_, _ = fmt.Fprintf(os.Stdout, "%s\n", conduit.Version(true))
+		c.output.Stdout(fmt.Sprintf("%s\n", conduit.Version(true)))
 		return nil
 	}
 

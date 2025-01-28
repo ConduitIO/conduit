@@ -17,7 +17,6 @@ package version
 import (
 	"context"
 	"fmt"
-	"os"
 
 	"github.com/conduitio/conduit/pkg/conduit"
 	"github.com/conduitio/ecdysis"
@@ -26,14 +25,21 @@ import (
 var (
 	_ ecdysis.CommandWithExecute = (*VersionCommand)(nil)
 	_ ecdysis.CommandWithDocs    = (*VersionCommand)(nil)
+	_ ecdysis.CommandWithOutput  = (*VersionCommand)(nil)
 )
 
-type VersionCommand struct{}
+type VersionCommand struct {
+	output ecdysis.Output
+}
+
+func (c *VersionCommand) Output(output ecdysis.Output) {
+	c.output = output
+}
 
 func (c *VersionCommand) Usage() string { return "version" }
 
 func (c *VersionCommand) Execute(_ context.Context) error {
-	_, _ = fmt.Fprintf(os.Stdout, "%s\n", conduit.Version(true))
+	c.output.Stdout(fmt.Sprintf("%s\n", conduit.Version(true)))
 	return nil
 }
 
