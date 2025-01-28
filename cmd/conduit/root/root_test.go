@@ -17,10 +17,10 @@ package root
 import (
 	"bytes"
 	"context"
-	"github.com/conduitio/conduit/pkg/conduit"
 	"strings"
 	"testing"
 
+	"github.com/conduitio/conduit/pkg/conduit"
 	"github.com/conduitio/ecdysis"
 	"github.com/matryer/is"
 	"github.com/spf13/pflag"
