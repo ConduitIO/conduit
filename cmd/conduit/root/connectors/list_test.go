@@ -15,11 +15,19 @@
 package connectors
 
 import (
+	"bytes"
+	"context"
+	"strings"
 	"testing"
 
+	"github.com/conduitio/conduit/cmd/conduit/api"
+	"github.com/conduitio/conduit/cmd/conduit/api/mock"
+	"github.com/conduitio/conduit/cmd/conduit/internal/testutils"
+	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	"github.com/conduitio/ecdysis"
 	"github.com/matryer/is"
 	"github.com/spf13/pflag"
+	"go.uber.org/mock/gomock"
 )
 
 func TestConnectorsListCommandFlags(t *testing.T) {
@@ -53,4 +61,148 @@ func TestConnectorsListCommandFlags(t *testing.T) {
 		is.Equal(f.shortName, cf.Shorthand)
 		is.Equal(cf.Usage, f.usage)
 	}
+}
+
+func TestListCommandExecuteWithClient_WithConnectorsAndNoFlags(t *testing.T) {
+	is := is.New(t)
+
+	buf := new(bytes.Buffer)
+	out := &ecdysis.DefaultOutput{}
+	out.Output(buf, nil)
+
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock.NewMockConnectorService(ctrl)
+
+	testutils.MockGetListConnectors(mockService, "", []*apiv1.Connector{
+		{
+			Id:           "conn1",
+			Type:         apiv1.Connector_TYPE_SOURCE,
+			Plugin:       "plugin1",
+			ProcessorIds: []string{"proc3"},
+			PipelineId:   "pipeline1",
+			CreatedAt:    testutils.GetDateTime(),
+			UpdatedAt:    testutils.GetDateTime(),
+		},
+		{
+			Id:         "conn2",
+			Type:       apiv1.Connector_TYPE_DESTINATION,
+			Plugin:     "plugin2",
+			PipelineId: "pipeline2",
+			CreatedAt:  testutils.GetDateTime(),
+			UpdatedAt:  testutils.GetDateTime(),
+		},
+	})
+
+	client := &api.Client{
+		ConnectorServiceClient: mockService,
+	}
+
+	cmd := &ListCommand{}
+	cmd.Output(out)
+
+	err := cmd.ExecuteWithClient(ctx, client)
+	is.NoErr(err)
+
+	output := buf.String()
+	is.True(len(output) > 0)
+
+	is.True(strings.Contains(output, "ID"))
+	is.True(strings.Contains(output, "PLUGIN"))
+	is.True(strings.Contains(output, "TYPE"))
+	is.True(strings.Contains(output, "PIPELINE_ID"))
+	is.True(strings.Contains(output, "CREATED"))
+	is.True(strings.Contains(output, "LAST_UPDATED"))
+
+	is.True(strings.Contains(output, "conn1"))
+	is.True(strings.Contains(output, "plugin1"))
+	is.True(strings.Contains(output, "pipeline1"))
+	is.True(strings.Contains(output, "conn2"))
+	is.True(strings.Contains(output, "plugin2"))
+	is.True(strings.Contains(output, "destination"))
+	is.True(strings.Contains(output, "pipeline2"))
+
+	is.True(strings.Contains(output, "1970-01-01T00:00:00Z"))
+}
+
+func TestListCommandExecuteWithClient_WithConnectorsAndFlags(t *testing.T) {
+	is := is.New(t)
+
+	buf := new(bytes.Buffer)
+	out := &ecdysis.DefaultOutput{}
+	out.Output(buf, nil)
+
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock.NewMockConnectorService(ctrl)
+
+	client := &api.Client{
+		ConnectorServiceClient: mockService,
+	}
+
+	cmd := &ListCommand{
+		flags: ListFlags{PipelineID: "pipeline1"},
+	}
+	cmd.Output(out)
+
+	testutils.MockGetListConnectors(mockService, cmd.flags.PipelineID, []*apiv1.Connector{
+		{
+			Id:           "conn1",
+			Type:         apiv1.Connector_TYPE_SOURCE,
+			Plugin:       "plugin1",
+			ProcessorIds: []string{"proc3"},
+			PipelineId:   "pipeline1",
+			CreatedAt:    testutils.GetDateTime(),
+			UpdatedAt:    testutils.GetDateTime(),
+		},
+	})
+
+	err := cmd.ExecuteWithClient(ctx, client)
+	is.NoErr(err)
+
+	output := buf.String()
+	is.True(len(output) > 0)
+
+	is.True(strings.Contains(output, "ID"))
+	is.True(strings.Contains(output, "PLUGIN"))
+	is.True(strings.Contains(output, "TYPE"))
+	is.True(strings.Contains(output, "PIPELINE_ID"))
+	is.True(strings.Contains(output, "CREATED"))
+	is.True(strings.Contains(output, "LAST_UPDATED"))
+
+	is.True(strings.Contains(output, "conn1"))
+	is.True(strings.Contains(output, "plugin1"))
+	is.True(strings.Contains(output, "pipeline1"))
+
+	is.True(strings.Contains(output, "1970-01-01T00:00:00Z"))
+}
+
+func TestListCommandExecuteWithClient_EmptyResponse(t *testing.T) {
+	is := is.New(t)
+
+	buf := new(bytes.Buffer)
+	out := &ecdysis.DefaultOutput{}
+	out.Output(buf, nil)
+
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock.NewMockConnectorService(ctrl)
+
+	testutils.MockGetListConnectors(mockService, "", []*apiv1.Connector{})
+	client := &api.Client{ConnectorServiceClient: mockService}
+
+	cmd := &ListCommand{}
+	cmd.Output(out)
+
+	err := cmd.ExecuteWithClient(ctx, client)
+	is.NoErr(err)
+
+	output := buf.String()
+	is.True(len(output) == 0)
 }

@@ -23,7 +23,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func getDateTime() *timestamppb.Timestamp {
+func GetDateTime() *timestamppb.Timestamp {
 	parsedTime, _ := time.Parse(time.RFC3339, "1970-01-01T00:00:00Z")
 	return timestamppb.New(parsedTime)
 }
@@ -43,8 +43,8 @@ func MockGetPipeline(mockService *mock.MockPipelineService, pipelineID string, c
 			},
 			ConnectorIds: connectorIds,
 			ProcessorIds: processorIds,
-			CreatedAt:    getDateTime(),
-			UpdatedAt:    getDateTime(),
+			CreatedAt:    GetDateTime(),
+			UpdatedAt:    GetDateTime(),
 		},
 	}, nil).Times(1)
 }
