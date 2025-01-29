@@ -172,5 +172,7 @@ func TestDescribeCommandExecuteWithClient_WithPipelineDetails(t *testing.T) {
 		"    Created At: 1970-01-01T00:00:00Z\n"+
 		"    Updated At: 1970-01-01T00:00:00Z\n"+
 		"Dead-letter queue:\n"+
-		"  Plugin: dlq-plugin"))
+		"  Plugin: dlq-plugin\n"+
+		"Created At: 1970-01-01T00:00:00Z\n"+
+		"Updated At: 1970-01-01T00:00:00Z"))
 }
