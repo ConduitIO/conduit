@@ -24,33 +24,6 @@ import (
 	healthgrpc "google.golang.org/grpc/health/grpc_health_v1"
 )
 
-//go:generate mockgen -destination=mock/connector_service.go -package=mock . ConnectorService
-
-// ConnectorService defines the methods of the ConnectorServiceClient that are currently used by the CLI.
-type ConnectorService interface {
-	ListConnectors(ctx context.Context, in *apiv1.ListConnectorsRequest, opts ...grpc.CallOption) (*apiv1.ListConnectorsResponse, error)
-	GetConnector(ctx context.Context, in *apiv1.GetConnectorRequest, opts ...grpc.CallOption) (*apiv1.GetConnectorResponse, error)
-	ListConnectorPlugins(ctx context.Context, in *apiv1.ListConnectorPluginsRequest, opts ...grpc.CallOption) (*apiv1.ListConnectorPluginsResponse, error)
-}
-
-//go:generate mockgen -destination=mock/pipeline_service.go -package=mock . PipelineService
-
-// PipelineService defines the methods of the PipelineServiceClient that are currently used by the CLI.
-type PipelineService interface {
-	ListPipelines(ctx context.Context, in *apiv1.ListPipelinesRequest, opts ...grpc.CallOption) (*apiv1.ListPipelinesResponse, error)
-	GetPipeline(ctx context.Context, in *apiv1.GetPipelineRequest, opts ...grpc.CallOption) (*apiv1.GetPipelineResponse, error)
-	GetDLQ(ctx context.Context, in *apiv1.GetDLQRequest, opts ...grpc.CallOption) (*apiv1.GetDLQResponse, error)
-}
-
-//go:generate mockgen -destination=mock/processor_service.go -package=mock . ProcessorService
-
-// ProcessorService defines the methods of the ProcessorServiceClient that are currently used by the CLI.
-type ProcessorService interface {
-	ListProcessors(ctx context.Context, in *apiv1.ListProcessorsRequest, opts ...grpc.CallOption) (*apiv1.ListProcessorsResponse, error)
-	GetProcessor(ctx context.Context, in *apiv1.GetProcessorRequest, opts ...grpc.CallOption) (*apiv1.GetProcessorResponse, error)
-	ListProcessorPlugins(ctx context.Context, in *apiv1.ListProcessorPluginsRequest, opts ...grpc.CallOption) (*apiv1.ListProcessorPluginsResponse, error)
-}
-
 type Client struct {
 	conn                   *grpc.ClientConn
 	PipelineServiceClient  PipelineService
