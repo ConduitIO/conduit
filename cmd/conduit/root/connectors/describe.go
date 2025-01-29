@@ -17,7 +17,6 @@ package connectors
 import (
 	"context"
 	"fmt"
-
 	"github.com/conduitio/conduit/cmd/conduit/api"
 	"github.com/conduitio/conduit/cmd/conduit/cecdysis"
 	"github.com/conduitio/conduit/cmd/conduit/internal"
@@ -31,6 +30,7 @@ var (
 	_ ecdysis.CommandWithAliases            = (*DescribeCommand)(nil)
 	_ ecdysis.CommandWithDocs               = (*DescribeCommand)(nil)
 	_ ecdysis.CommandWithArgs               = (*DescribeCommand)(nil)
+	_ ecdysis.CommandWithOutput             = (*DescribeCommand)(nil)
 )
 
 type DescribeArgs struct {
@@ -38,7 +38,12 @@ type DescribeArgs struct {
 }
 
 type DescribeCommand struct {
-	args DescribeArgs
+	args   DescribeArgs
+	output ecdysis.Output
+}
+
+func (c *DescribeCommand) Output(output ecdysis.Output) {
+	c.output = output
 }
 
 func (c *DescribeCommand) Usage() string { return "describe" }
@@ -88,25 +93,25 @@ func (c *DescribeCommand) ExecuteWithClient(ctx context.Context, client *api.Cli
 		processors = append(processors, processor.Processor)
 	}
 
-	displayConnector(resp.Connector, processors)
+	displayConnector(c.output, resp.Connector, processors)
 
 	return nil
 }
 
-func displayConnector(connector *apiv1.Connector, processors []*apiv1.Processor) {
+func displayConnector(out ecdysis.Output, connector *apiv1.Connector, processors []*apiv1.Processor) {
 	if connector == nil {
 		return
 	}
 
-	fmt.Printf("ID: %s\n", connector.Id)
+	out.Stdout(fmt.Sprintf("ID: %s\n", connector.Id))
 
-	fmt.Printf("Type: %s\n", internal.ConnectorTypeToString(connector.Type))
-	fmt.Printf("Plugin: %s\n", connector.Plugin)
-	fmt.Printf("Pipeline ID: %s\n", connector.PipelineId)
+	out.Stdout(fmt.Sprintf("Type: %s\n", internal.ConnectorTypeToString(connector.Type)))
+	out.Stdout(fmt.Sprintf("Plugin: %s\n", connector.Plugin))
+	out.Stdout(fmt.Sprintf("Pipeline ID: %s\n", connector.PipelineId))
 
-	internal.DisplayConnectorConfig(connector.Config, 0)
-	fmt.Printf("Created At: %s\n", internal.PrintTime(connector.CreatedAt))
-	fmt.Printf("Updated At: %s\n", internal.PrintTime(connector.UpdatedAt))
+	internal.DisplayConnectorConfig(out, connector.Config, 0)
+	out.Stdout(fmt.Sprintf("Created At: %s\n", internal.PrintTime(connector.CreatedAt)))
+	out.Stdout(fmt.Sprintf("Updated At: %s\n", internal.PrintTime(connector.UpdatedAt)))
 
-	internal.DisplayProcessors(processors, 0)
+	internal.DisplayProcessors(out, processors, 0)
 }

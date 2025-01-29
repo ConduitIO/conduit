@@ -17,7 +17,6 @@ package pipelines
 import (
 	"context"
 	"fmt"
-
 	"github.com/conduitio/conduit/cmd/conduit/api"
 	"github.com/conduitio/conduit/cmd/conduit/cecdysis"
 	"github.com/conduitio/conduit/cmd/conduit/internal"
@@ -31,6 +30,7 @@ var (
 	_ ecdysis.CommandWithAliases            = (*DescribeCommand)(nil)
 	_ ecdysis.CommandWithDocs               = (*DescribeCommand)(nil)
 	_ ecdysis.CommandWithArgs               = (*DescribeCommand)(nil)
+	_ ecdysis.CommandWithOutput             = (*DescribeCommand)(nil)
 )
 
 type DescribeArgs struct {
@@ -38,7 +38,8 @@ type DescribeArgs struct {
 }
 
 type DescribeCommand struct {
-	args DescribeArgs
+	args   DescribeArgs
+	output ecdysis.Output
 }
 
 func (c *DescribeCommand) Docs() ecdysis.Docs {
@@ -49,6 +50,10 @@ by Conduit. You can list existing pipelines with the 'conduit pipelines list' co
 		Example: "conduit pipelines describe pipeline-with-dlq\n" +
 			"conduit pipelines desc multiple-source-with-processor",
 	}
+}
+
+func (c *DescribeCommand) Output(output ecdysis.Output) {
+	c.output = output
 }
 
 func (c *DescribeCommand) Aliases() []string { return []string{"desc"} }
@@ -111,7 +116,7 @@ func (c *DescribeCommand) ExecuteWithClient(ctx context.Context, client *api.Cli
 	}
 
 	// store processors for each connector
-	connectorProcesors := make(map[string][]*apiv1.Processor, len(connectorsResp.Connectors))
+	connectorProcessors := make(map[string][]*apiv1.Processor, len(connectorsResp.Connectors))
 
 	for _, conn := range connectorsResp.Connectors {
 		var processors []*apiv1.Processor
@@ -125,7 +130,7 @@ func (c *DescribeCommand) ExecuteWithClient(ctx context.Context, client *api.Cli
 			}
 			processors = append(processors, processor.Processor)
 		}
-		connectorProcesors[conn.Id] = processors
+		connectorProcessors[conn.Id] = processors
 	}
 
 	dlq, err := client.PipelineServiceClient.GetDLQ(ctx, &apiv1.GetDLQRequest{
@@ -135,7 +140,7 @@ func (c *DescribeCommand) ExecuteWithClient(ctx context.Context, client *api.Cli
 		return fmt.Errorf("failed to fetch DLQ for pipeline %s: %w", c.args.PipelineID, err)
 	}
 
-	err = displayPipeline(pipelineResp.Pipeline, pipelineProcessors, connectors, connectorProcesors, dlq.Dlq)
+	err = displayPipeline(c.output, pipelineResp.Pipeline, pipelineProcessors, connectors, connectorProcessors, dlq.Dlq)
 	if err != nil {
 		return fmt.Errorf("failed to display pipeline %s: %w", c.args.PipelineID, err)
 	}
@@ -143,65 +148,65 @@ func (c *DescribeCommand) ExecuteWithClient(ctx context.Context, client *api.Cli
 	return nil
 }
 
-func displayPipeline(pipeline *apiv1.Pipeline, pipelineProcessors []*apiv1.Processor, connectors []*apiv1.Connector, connectorProcessors map[string][]*apiv1.Processor, dlq *apiv1.Pipeline_DLQ) error {
+func displayPipeline(out ecdysis.Output, pipeline *apiv1.Pipeline, pipelineProcessors []*apiv1.Processor, connectors []*apiv1.Connector, connectorProcessors map[string][]*apiv1.Processor, dlq *apiv1.Pipeline_DLQ) error {
 	// ID
-	fmt.Printf("ID: %s\n", pipeline.Id)
+	out.Stdout(fmt.Sprintf("ID: %s\n", pipeline.Id))
 
 	// State
 	if pipeline.State != nil {
-		fmt.Printf("Status: %s\n", internal.PrintStatusFromProtoString(pipeline.State.Status.String()))
+		out.Stdout(fmt.Sprintf("Status: %s\n", internal.PrintStatusFromProtoString(pipeline.State.Status.String())))
 		if pipeline.State.Error != "" {
-			fmt.Printf("Error: %s\n", pipeline.State.Error)
+			out.Stdout(fmt.Sprintf("Error: %s\n", pipeline.State.Error))
 		}
 	}
 
 	// Config
 	if pipeline.Config != nil {
-		fmt.Printf("Name: %s\n", pipeline.Config.Name)
+		out.Stdout(fmt.Sprintf("Name: %s\n", pipeline.Config.Name))
 		// no new line after description, as it's always added
 		// when parsed from the YAML config file
-		fmt.Printf("Description: %s\n", pipeline.Config.Description)
+		out.Stdout(fmt.Sprintf("Description: %s\n", pipeline.Config.Description))
 	}
 
 	// Connectors
-	fmt.Println("Sources:")
-	displayConnectorsAndProcessors(connectors, connectorProcessors, apiv1.Connector_TYPE_SOURCE)
+	out.Stdout("Sources:\n")
+	displayConnectorsAndProcessors(out, connectors, connectorProcessors, apiv1.Connector_TYPE_SOURCE)
 
-	internal.DisplayProcessors(pipelineProcessors, 0)
+	internal.DisplayProcessors(out, pipelineProcessors, 0)
 
-	fmt.Println("Destinations:")
-	displayConnectorsAndProcessors(connectors, connectorProcessors, apiv1.Connector_TYPE_DESTINATION)
+	out.Stdout("Destinations:\n")
+	displayConnectorsAndProcessors(out, connectors, connectorProcessors, apiv1.Connector_TYPE_DESTINATION)
 
-	displayDLQ(dlq)
+	displayDLQ(out, dlq)
 
 	// Timestamps
 	if pipeline.CreatedAt != nil {
-		fmt.Printf("Created At: %s\n", internal.PrintTime(pipeline.CreatedAt))
+		out.Stdout(fmt.Sprintf("Created At: %s\n", internal.PrintTime(pipeline.CreatedAt)))
 	}
 	if pipeline.UpdatedAt != nil {
-		fmt.Printf("Updated At: %s\n", internal.PrintTime(pipeline.UpdatedAt))
+		out.Stdout(fmt.Sprintf("Updated At: %s\n", internal.PrintTime(pipeline.UpdatedAt)))
 	}
 
 	return nil
 }
 
-func displayDLQ(dlq *apiv1.Pipeline_DLQ) {
-	fmt.Println("Dead-letter queue:")
-	fmt.Printf("%sPlugin: %s\n", internal.Indentation(1), dlq.Plugin)
+func displayDLQ(out ecdysis.Output, dlq *apiv1.Pipeline_DLQ) {
+	out.Stdout("Dead-letter queue:\n")
+	out.Stdout(fmt.Sprintf("%sPlugin: %s\n", internal.Indentation(1), dlq.Plugin))
 }
 
-func displayConnectorsAndProcessors(connectors []*apiv1.Connector, connectorProcessors map[string][]*apiv1.Processor, connType apiv1.Connector_Type) {
+func displayConnectorsAndProcessors(out ecdysis.Output, connectors []*apiv1.Connector, connectorProcessors map[string][]*apiv1.Processor, connType apiv1.Connector_Type) {
 	for _, conn := range connectors {
 		if conn.Type == connType {
-			fmt.Printf("%s- ID: %s\n", internal.Indentation(1), conn.Id)
-			fmt.Printf("%sPlugin: %s\n", internal.Indentation(2), conn.Plugin)
-			fmt.Printf("%sPipeline ID: %s\n", internal.Indentation(2), conn.PipelineId)
-			internal.DisplayConnectorConfig(conn.Config, 2)
+			out.Stdout(fmt.Sprintf("%s- ID: %s\n", internal.Indentation(1), conn.Id))
+			out.Stdout(fmt.Sprintf("%sPlugin: %s\n", internal.Indentation(2), conn.Plugin))
+			out.Stdout(fmt.Sprintf("%sPipeline ID: %s\n", internal.Indentation(2), conn.PipelineId))
+			internal.DisplayConnectorConfig(out, conn.Config, 2)
 			if processors, ok := connectorProcessors[conn.Id]; ok {
-				internal.DisplayProcessors(processors, 2)
+				internal.DisplayProcessors(out, processors, 2)
 			}
-			fmt.Printf("%sCreated At: %s\n", internal.Indentation(2), internal.PrintTime(conn.CreatedAt))
-			fmt.Printf("%sUpdated At: %s\n", internal.Indentation(2), internal.PrintTime(conn.UpdatedAt))
+			out.Stdout(fmt.Sprintf("%sCreated At: %s\n", internal.Indentation(2), internal.PrintTime(conn.CreatedAt)))
+			out.Stdout(fmt.Sprintf("%sUpdated At: %s\n", internal.Indentation(2), internal.PrintTime(conn.UpdatedAt)))
 		}
 	}
 }
