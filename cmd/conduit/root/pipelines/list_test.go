@@ -26,6 +26,7 @@ import (
 
 	"github.com/conduitio/conduit/cmd/conduit/api"
 	"github.com/conduitio/conduit/cmd/conduit/api/mock"
+	"github.com/conduitio/conduit/cmd/conduit/internal/testutils"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 )
 
@@ -42,14 +43,12 @@ func TestListCommandExecuteWithClient_WithPipelines(t *testing.T) {
 
 	mockService := mock.NewMockPipelineService(ctrl)
 
-	mockService.EXPECT().ListPipelines(gomock.Any(), gomock.Any()).Return(&apiv1.ListPipelinesResponse{
-		Pipelines: []*apiv1.Pipeline{
-			{Id: "1", State: &apiv1.Pipeline_State{Status: apiv1.Pipeline_STATUS_RUNNING}},
-			{Id: "2", State: &apiv1.Pipeline_State{Status: apiv1.Pipeline_STATUS_STOPPED}},
-			{Id: "3", State: &apiv1.Pipeline_State{Status: apiv1.Pipeline_STATUS_RECOVERING}},
-			{Id: "4", State: &apiv1.Pipeline_State{Status: apiv1.Pipeline_STATUS_DEGRADED}},
-		},
-	}, nil)
+	testutils.MockListPipelines(mockService, []*apiv1.Pipeline{
+		{Id: "1", State: &apiv1.Pipeline_State{Status: apiv1.Pipeline_STATUS_RUNNING}},
+		{Id: "2", State: &apiv1.Pipeline_State{Status: apiv1.Pipeline_STATUS_STOPPED}},
+		{Id: "3", State: &apiv1.Pipeline_State{Status: apiv1.Pipeline_STATUS_RECOVERING}},
+		{Id: "4", State: &apiv1.Pipeline_State{Status: apiv1.Pipeline_STATUS_DEGRADED}},
+	})
 
 	client := &api.Client{
 		PipelineServiceClient: mockService,
@@ -90,8 +89,7 @@ func TestListCommandExecuteWithClient_EmptyResponse(t *testing.T) {
 
 	mockService := mock.NewMockPipelineService(ctrl)
 
-	mockService.EXPECT().ListPipelines(gomock.Any(), gomock.Any()).Return(&apiv1.ListPipelinesResponse{}, nil)
-
+	testutils.MockListPipelines(mockService, []*apiv1.Pipeline{})
 	client := &api.Client{
 		PipelineServiceClient: mockService,
 	}

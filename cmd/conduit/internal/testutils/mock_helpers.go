@@ -20,6 +20,8 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
+// PipelineService --------------------------------------------
+
 func MockGetPipeline(mockService *mock.MockPipelineService, pipelineID string, connectorIds, processorIds []string) {
 	mockService.EXPECT().GetPipeline(gomock.Any(), &apiv1.GetPipelineRequest{
 		Id: pipelineID,
@@ -37,6 +39,22 @@ func MockGetPipeline(mockService *mock.MockPipelineService, pipelineID string, c
 	}, nil).Times(1)
 }
 
+func MockGetDLQ(mockService *mock.MockPipelineService, pipelineID, plugin string) {
+	mockService.EXPECT().GetDLQ(gomock.Any(), &apiv1.GetDLQRequest{
+		Id: pipelineID,
+	}).Return(&apiv1.GetDLQResponse{
+		Dlq: &apiv1.Pipeline_DLQ{Plugin: plugin},
+	}, nil).Times(1)
+}
+
+func MockListPipelines(mockService *mock.MockPipelineService, pipelines []*apiv1.Pipeline) {
+	mockService.EXPECT().ListPipelines(gomock.Any(), gomock.Any()).Return(&apiv1.ListPipelinesResponse{
+		Pipelines: pipelines,
+	}, nil).Times(1)
+}
+
+// ProcessorService --------------------------------------------
+
 func MockGetProcessor(mockService *mock.MockProcessorService, processorID, plugin string, settings map[string]string) {
 	mockService.EXPECT().GetProcessor(gomock.Any(), &apiv1.GetProcessorRequest{
 		Id: processorID,
@@ -50,6 +68,8 @@ func MockGetProcessor(mockService *mock.MockProcessorService, processorID, plugi
 		},
 	}, nil).Times(1)
 }
+
+// ConnectorService --------------------------------------------
 
 func MockGetListConnectors(mockService *mock.MockConnectorService, pipelineID string, connectors []*apiv1.Connector) {
 	mockService.EXPECT().ListConnectors(gomock.Any(), &apiv1.ListConnectorsRequest{
@@ -77,13 +97,5 @@ func MockGetConnector(
 			Config:       config,
 			ProcessorIds: processorIds,
 		},
-	}, nil).Times(1)
-}
-
-func MockGetDLQ(mockService *mock.MockPipelineService, pipelineID, plugin string) {
-	mockService.EXPECT().GetDLQ(gomock.Any(), &apiv1.GetDLQRequest{
-		Id: pipelineID,
-	}).Return(&apiv1.GetDLQResponse{
-		Dlq: &apiv1.Pipeline_DLQ{Plugin: plugin},
 	}, nil).Times(1)
 }
