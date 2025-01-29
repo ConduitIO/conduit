@@ -19,7 +19,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/conduitio/conduit/cmd/conduit/internal/output"
+	"github.com/conduitio/conduit/cmd/conduit/internal/display"
 
 	"github.com/alexeyco/simpletable"
 	"github.com/conduitio/conduit/cmd/conduit/api"
@@ -91,9 +91,9 @@ func getPipelinesTable(pipelines []*apiv1.Pipeline) string {
 	for _, p := range pipelines {
 		r := []*simpletable.Cell{
 			{Align: simpletable.AlignLeft, Text: p.Id},
-			{Align: simpletable.AlignLeft, Text: output.PrintStatusFromProtoString(p.State.Status.String())},
-			{Align: simpletable.AlignLeft, Text: output.PrintTime(p.CreatedAt)},
-			{Align: simpletable.AlignLeft, Text: output.PrintTime(p.UpdatedAt)},
+			{Align: simpletable.AlignLeft, Text: display.PrintStatusFromProtoString(p.State.Status.String())},
+			{Align: simpletable.AlignLeft, Text: display.PrintTime(p.CreatedAt)},
+			{Align: simpletable.AlignLeft, Text: display.PrintTime(p.UpdatedAt)},
 		}
 
 		table.Body.Cells = append(table.Body.Cells, r)

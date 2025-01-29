@@ -57,7 +57,7 @@ func MockGetDLQ(mockService *mock.MockPipelineService, pipelineID, plugin string
 	}, nil).Times(1)
 }
 
-func MockListPipelines(mockService *mock.MockPipelineService, pipelines []*apiv1.Pipeline) {
+func MockGetListPipelines(mockService *mock.MockPipelineService, pipelines []*apiv1.Pipeline) {
 	mockService.EXPECT().ListPipelines(gomock.Any(), gomock.Any()).Return(&apiv1.ListPipelinesResponse{
 		Pipelines: pipelines,
 	}, nil).Times(1)

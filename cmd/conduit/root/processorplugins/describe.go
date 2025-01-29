@@ -18,7 +18,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/conduitio/conduit/cmd/conduit/internal/output"
+	"github.com/conduitio/conduit/cmd/conduit/internal/display"
 
 	"github.com/conduitio/conduit/cmd/conduit/api"
 	"github.com/conduitio/conduit/cmd/conduit/cecdysis"
@@ -87,24 +87,24 @@ func (c *DescribeCommand) ExecuteWithClient(ctx context.Context, client *api.Cli
 }
 
 func displayConnectorPluginsDescription(p *apiv1.ProcessorPluginSpecifications) {
-	if !output.IsEmpty(p.Name) {
+	if !display.IsEmpty(p.Name) {
 		fmt.Printf("Name: %s\n", p.Name)
 	}
-	if !output.IsEmpty(p.Summary) {
+	if !display.IsEmpty(p.Summary) {
 		fmt.Printf("Summary: %s\n", p.Summary)
 	}
-	if !output.IsEmpty(p.Description) {
+	if !display.IsEmpty(p.Description) {
 		fmt.Printf("Description: %s\n", p.Description)
 	}
-	if !output.IsEmpty(p.Author) {
+	if !display.IsEmpty(p.Author) {
 		fmt.Printf("Author: %s\n", p.Author)
 	}
-	if !output.IsEmpty(p.Version) {
+	if !display.IsEmpty(p.Version) {
 		fmt.Printf("Version: %s\n", p.Version)
 	}
 
 	if len(p.Parameters) > 0 {
 		fmt.Println("\nParameters:")
-		output.DisplayConfigParams(p.Parameters)
+		display.DisplayConfigParams(p.Parameters)
 	}
 }

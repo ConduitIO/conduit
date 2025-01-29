@@ -43,7 +43,7 @@ func TestListCommandExecuteWithClient_WithPipelines(t *testing.T) {
 
 	mockService := mock.NewMockPipelineService(ctrl)
 
-	testutils.MockListPipelines(mockService, []*apiv1.Pipeline{
+	testutils.MockGetListPipelines(mockService, []*apiv1.Pipeline{
 		{Id: "1", State: &apiv1.Pipeline_State{Status: apiv1.Pipeline_STATUS_RUNNING}},
 		{Id: "2", State: &apiv1.Pipeline_State{Status: apiv1.Pipeline_STATUS_STOPPED}},
 		{Id: "3", State: &apiv1.Pipeline_State{Status: apiv1.Pipeline_STATUS_RECOVERING}},
@@ -89,7 +89,7 @@ func TestListCommandExecuteWithClient_EmptyResponse(t *testing.T) {
 
 	mockService := mock.NewMockPipelineService(ctrl)
 
-	testutils.MockListPipelines(mockService, []*apiv1.Pipeline{})
+	testutils.MockGetListPipelines(mockService, []*apiv1.Pipeline{})
 	client := &api.Client{
 		PipelineServiceClient: mockService,
 	}
