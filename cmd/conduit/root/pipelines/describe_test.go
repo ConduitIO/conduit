@@ -20,13 +20,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/conduitio/conduit/cmd/conduit/api"
-	"github.com/conduitio/conduit/cmd/conduit/api/mock"
-	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	"github.com/conduitio/ecdysis"
+	"github.com/matryer/is"
 	"go.uber.org/mock/gomock"
 
-	"github.com/matryer/is"
+	"github.com/conduitio/conduit/cmd/conduit/api"
+	"github.com/conduitio/conduit/cmd/conduit/api/mock"
+	"github.com/conduitio/conduit/cmd/conduit/internal/testutils"
+	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 )
 
 func TestDescribeExecutionNoArgs(t *testing.T) {
@@ -78,111 +79,47 @@ func TestDescribeCommandExecuteWithClient_WithPipelineDetails(t *testing.T) {
 	cmd := &DescribeCommand{args: DescribeArgs{PipelineID: "1"}}
 	cmd.Output(out)
 
-	mockService := mock.NewMockPipelineService(ctrl)
+	mockPipelineService := mock.NewMockPipelineService(ctrl)
 	mockProcessorService := mock.NewMockProcessorService(ctrl)
 	mockConnectorService := mock.NewMockConnectorService(ctrl)
 
-	mockService.EXPECT().GetPipeline(ctx, &apiv1.GetPipelineRequest{
-		Id: cmd.args.PipelineID,
-	}).Return(&apiv1.GetPipelineResponse{
-		Pipeline: &apiv1.Pipeline{
-			Id:    cmd.args.PipelineID,
-			State: &apiv1.Pipeline_State{Status: apiv1.Pipeline_STATUS_RUNNING},
-			Config: &apiv1.Pipeline_Config{
-				Name:        "Test Pipeline",
-				Description: "A test pipeline description",
+	testutils.MockGetPipeline(mockPipelineService, cmd.args.PipelineID, []string{"conn1", "conn2"}, []string{"proc1", "proc2"})
+
+	testutils.MockGetProcessor(mockProcessorService, "proc1", "field.set", map[string]string{
+		".Payload.After.department": "finance",
+	})
+
+	testutils.MockGetProcessor(mockProcessorService, "proc2", "custom.javascript", map[string]string{})
+
+	testutils.MockGetListConnectors(mockConnectorService, cmd.args.PipelineID, []*apiv1.Connector{
+		{Id: "conn1", Type: apiv1.Connector_TYPE_SOURCE, Plugin: "plugin1", ProcessorIds: []string{"proc3"}},
+		{Id: "conn2", Type: apiv1.Connector_TYPE_DESTINATION, Plugin: "plugin2"},
+	})
+
+	testutils.MockGetConnector(
+		mockConnectorService, "conn1", "plugin1", cmd.args.PipelineID, apiv1.Connector_TYPE_SOURCE,
+		&apiv1.Connector_Config{
+			Name: "Test Pipeline",
+			Settings: map[string]string{
+				"foo": "bar",
 			},
-			ConnectorIds: []string{"conn1", "conn2"},
-			ProcessorIds: []string{"proc1", "proc2"},
-		},
-	}, nil).Times(1)
+		}, []string{"proc3"})
 
-	mockProcessorService.EXPECT().GetProcessor(ctx, &apiv1.GetProcessorRequest{
-		Id: "proc1",
-	}).Return(&apiv1.GetProcessorResponse{
-		Processor: &apiv1.Processor{
-			Id:     "proc1",
-			Plugin: "field.set",
-			Config: &apiv1.Processor_Config{
-				Settings: map[string]string{
-					".Payload.After.department": "finance",
-				},
+	testutils.MockGetProcessor(mockProcessorService, "proc3", "custom.javascript", map[string]string{})
+
+	testutils.MockGetConnector(
+		mockConnectorService, "conn2", "plugin2", cmd.args.PipelineID, apiv1.Connector_TYPE_DESTINATION,
+		&apiv1.Connector_Config{
+			Name: "Test Pipeline",
+			Settings: map[string]string{
+				"foo": "bar",
 			},
-		},
-	}, nil).Times(1)
+		}, []string{"proc3"})
 
-	mockProcessorService.EXPECT().GetProcessor(ctx, &apiv1.GetProcessorRequest{
-		Id: "proc2",
-	}).Return(&apiv1.GetProcessorResponse{
-		Processor: &apiv1.Processor{
-			Id:     "proc2",
-			Plugin: "custom.javascript",
-			Config: &apiv1.Processor_Config{},
-		},
-	}, nil).Times(1)
-
-	mockConnectorService.EXPECT().ListConnectors(ctx, &apiv1.ListConnectorsRequest{
-		PipelineId: cmd.args.PipelineID,
-	}).Return(&apiv1.ListConnectorsResponse{
-		Connectors: []*apiv1.Connector{
-			{Id: "conn1", Type: apiv1.Connector_TYPE_SOURCE, Plugin: "plugin1", ProcessorIds: []string{"proc3"}},
-			{Id: "conn2", Type: apiv1.Connector_TYPE_DESTINATION, Plugin: "plugin2"},
-		},
-	}, nil).Times(1)
-
-	mockConnectorService.EXPECT().GetConnector(ctx, &apiv1.GetConnectorRequest{
-		Id: "conn1",
-	}).Return(&apiv1.GetConnectorResponse{
-		Connector: &apiv1.Connector{
-			Id:         "conn1",
-			Type:       apiv1.Connector_TYPE_SOURCE,
-			Plugin:     "plugin1",
-			PipelineId: "1",
-			Config: &apiv1.Connector_Config{
-				Name: "Test Pipeline",
-				Settings: map[string]string{
-					"foo": "bar",
-				},
-			},
-			ProcessorIds: []string{"proc3"},
-		},
-	}, nil).Times(1)
-
-	mockProcessorService.EXPECT().GetProcessor(ctx, &apiv1.GetProcessorRequest{
-		Id: "proc3",
-	}).Return(&apiv1.GetProcessorResponse{
-		Processor: &apiv1.Processor{
-			Id:     "proc3",
-			Plugin: "custom.javascript",
-			Config: &apiv1.Processor_Config{},
-		},
-	}, nil).Times(1)
-
-	mockConnectorService.EXPECT().GetConnector(ctx, &apiv1.GetConnectorRequest{
-		Id: "conn2",
-	}).Return(&apiv1.GetConnectorResponse{
-		Connector: &apiv1.Connector{
-			Id:         "conn2",
-			Type:       apiv1.Connector_TYPE_DESTINATION,
-			Plugin:     "plugin2",
-			PipelineId: "1",
-			Config: &apiv1.Connector_Config{
-				Name: "Test Pipeline",
-				Settings: map[string]string{
-					"foo": "bar",
-				},
-			},
-		},
-	}, nil).Times(1)
-
-	mockService.EXPECT().GetDLQ(ctx, &apiv1.GetDLQRequest{
-		Id: cmd.args.PipelineID,
-	}).Return(&apiv1.GetDLQResponse{
-		Dlq: &apiv1.Pipeline_DLQ{Plugin: "dlq-plugin"},
-	}, nil).Times(1)
+	testutils.MockGetDLQ(mockPipelineService, cmd.args.PipelineID, "dlq-plugin")
 
 	client := &api.Client{
-		PipelineServiceClient:  mockService,
+		PipelineServiceClient:  mockPipelineService,
 		ProcessorServiceClient: mockProcessorService,
 		ConnectorServiceClient: mockConnectorService,
 	}

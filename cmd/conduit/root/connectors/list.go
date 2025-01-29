@@ -22,7 +22,7 @@ import (
 	"github.com/alexeyco/simpletable"
 	"github.com/conduitio/conduit/cmd/conduit/api"
 	"github.com/conduitio/conduit/cmd/conduit/cecdysis"
-	"github.com/conduitio/conduit/cmd/conduit/internal"
+	"github.com/conduitio/conduit/cmd/conduit/internal/output"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	"github.com/conduitio/ecdysis"
 )
@@ -98,10 +98,10 @@ func displayConnectors(connectors []*apiv1.Connector) {
 		r := []*simpletable.Cell{
 			{Align: simpletable.AlignLeft, Text: c.Id},
 			{Align: simpletable.AlignLeft, Text: c.Plugin},
-			{Align: simpletable.AlignLeft, Text: internal.ConnectorTypeToString(c.Type)},
+			{Align: simpletable.AlignLeft, Text: output.ConnectorTypeToString(c.Type)},
 			{Align: simpletable.AlignLeft, Text: c.PipelineId},
-			{Align: simpletable.AlignLeft, Text: internal.PrintTime(c.CreatedAt)},
-			{Align: simpletable.AlignLeft, Text: internal.PrintTime(c.UpdatedAt)},
+			{Align: simpletable.AlignLeft, Text: output.PrintTime(c.CreatedAt)},
+			{Align: simpletable.AlignLeft, Text: output.PrintTime(c.UpdatedAt)},
 		}
 		table.Body.Cells = append(table.Body.Cells, r)
 	}

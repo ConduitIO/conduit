@@ -18,9 +18,10 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/conduitio/conduit/cmd/conduit/internal/output"
+
 	"github.com/conduitio/conduit/cmd/conduit/api"
 	"github.com/conduitio/conduit/cmd/conduit/cecdysis"
-	"github.com/conduitio/conduit/cmd/conduit/internal"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	"github.com/conduitio/ecdysis"
@@ -86,24 +87,24 @@ func (c *DescribeCommand) ExecuteWithClient(ctx context.Context, client *api.Cli
 }
 
 func displayConnectorPluginsDescription(p *apiv1.ProcessorPluginSpecifications) {
-	if !internal.IsEmpty(p.Name) {
+	if !output.IsEmpty(p.Name) {
 		fmt.Printf("Name: %s\n", p.Name)
 	}
-	if !internal.IsEmpty(p.Summary) {
+	if !output.IsEmpty(p.Summary) {
 		fmt.Printf("Summary: %s\n", p.Summary)
 	}
-	if !internal.IsEmpty(p.Description) {
+	if !output.IsEmpty(p.Description) {
 		fmt.Printf("Description: %s\n", p.Description)
 	}
-	if !internal.IsEmpty(p.Author) {
+	if !output.IsEmpty(p.Author) {
 		fmt.Printf("Author: %s\n", p.Author)
 	}
-	if !internal.IsEmpty(p.Version) {
+	if !output.IsEmpty(p.Version) {
 		fmt.Printf("Version: %s\n", p.Version)
 	}
 
 	if len(p.Parameters) > 0 {
 		fmt.Println("\nParameters:")
-		internal.DisplayConfigParams(p.Parameters)
+		output.DisplayConfigParams(p.Parameters)
 	}
 }

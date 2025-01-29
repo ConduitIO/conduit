@@ -18,9 +18,10 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/conduitio/conduit/cmd/conduit/internal/output"
+
 	"github.com/conduitio/conduit/cmd/conduit/api"
 	"github.com/conduitio/conduit/cmd/conduit/cecdysis"
-	"github.com/conduitio/conduit/cmd/conduit/internal"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	"github.com/conduitio/ecdysis"
@@ -155,7 +156,7 @@ func displayPipeline(out ecdysis.Output, pipeline *apiv1.Pipeline, pipelineProce
 
 	// State
 	if pipeline.State != nil {
-		out.Stdout(fmt.Sprintf("Status: %s\n", internal.PrintStatusFromProtoString(pipeline.State.Status.String())))
+		out.Stdout(fmt.Sprintf("Status: %s\n", output.PrintStatusFromProtoString(pipeline.State.Status.String())))
 		if pipeline.State.Error != "" {
 			out.Stdout(fmt.Sprintf("Error: %s\n", pipeline.State.Error))
 		}
@@ -173,7 +174,7 @@ func displayPipeline(out ecdysis.Output, pipeline *apiv1.Pipeline, pipelineProce
 	out.Stdout("Sources:\n")
 	displayConnectorsAndProcessors(out, connectors, connectorProcessors, apiv1.Connector_TYPE_SOURCE)
 
-	internal.DisplayProcessors(out, pipelineProcessors, 0)
+	output.DisplayProcessors(out, pipelineProcessors, 0)
 
 	out.Stdout("Destinations:\n")
 	displayConnectorsAndProcessors(out, connectors, connectorProcessors, apiv1.Connector_TYPE_DESTINATION)
@@ -182,10 +183,10 @@ func displayPipeline(out ecdysis.Output, pipeline *apiv1.Pipeline, pipelineProce
 
 	// Timestamps
 	if pipeline.CreatedAt != nil {
-		out.Stdout(fmt.Sprintf("Created At: %s\n", internal.PrintTime(pipeline.CreatedAt)))
+		out.Stdout(fmt.Sprintf("Created At: %s\n", output.PrintTime(pipeline.CreatedAt)))
 	}
 	if pipeline.UpdatedAt != nil {
-		out.Stdout(fmt.Sprintf("Updated At: %s\n", internal.PrintTime(pipeline.UpdatedAt)))
+		out.Stdout(fmt.Sprintf("Updated At: %s\n", output.PrintTime(pipeline.UpdatedAt)))
 	}
 
 	return nil
@@ -193,21 +194,21 @@ func displayPipeline(out ecdysis.Output, pipeline *apiv1.Pipeline, pipelineProce
 
 func displayDLQ(out ecdysis.Output, dlq *apiv1.Pipeline_DLQ) {
 	out.Stdout("Dead-letter queue:\n")
-	out.Stdout(fmt.Sprintf("%sPlugin: %s\n", internal.Indentation(1), dlq.Plugin))
+	out.Stdout(fmt.Sprintf("%sPlugin: %s\n", output.Indentation(1), dlq.Plugin))
 }
 
 func displayConnectorsAndProcessors(out ecdysis.Output, connectors []*apiv1.Connector, connectorProcessors map[string][]*apiv1.Processor, connType apiv1.Connector_Type) {
 	for _, conn := range connectors {
 		if conn.Type == connType {
-			out.Stdout(fmt.Sprintf("%s- ID: %s\n", internal.Indentation(1), conn.Id))
-			out.Stdout(fmt.Sprintf("%sPlugin: %s\n", internal.Indentation(2), conn.Plugin))
-			out.Stdout(fmt.Sprintf("%sPipeline ID: %s\n", internal.Indentation(2), conn.PipelineId))
-			internal.DisplayConnectorConfig(out, conn.Config, 2)
+			out.Stdout(fmt.Sprintf("%s- ID: %s\n", output.Indentation(1), conn.Id))
+			out.Stdout(fmt.Sprintf("%sPlugin: %s\n", output.Indentation(2), conn.Plugin))
+			out.Stdout(fmt.Sprintf("%sPipeline ID: %s\n", output.Indentation(2), conn.PipelineId))
+			output.DisplayConnectorConfig(out, conn.Config, 2)
 			if processors, ok := connectorProcessors[conn.Id]; ok {
-				internal.DisplayProcessors(out, processors, 2)
+				output.DisplayProcessors(out, processors, 2)
 			}
-			out.Stdout(fmt.Sprintf("%sCreated At: %s\n", internal.Indentation(2), internal.PrintTime(conn.CreatedAt)))
-			out.Stdout(fmt.Sprintf("%sUpdated At: %s\n", internal.Indentation(2), internal.PrintTime(conn.UpdatedAt)))
+			out.Stdout(fmt.Sprintf("%sCreated At: %s\n", output.Indentation(2), output.PrintTime(conn.CreatedAt)))
+			out.Stdout(fmt.Sprintf("%sUpdated At: %s\n", output.Indentation(2), output.PrintTime(conn.UpdatedAt)))
 		}
 	}
 }

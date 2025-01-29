@@ -18,9 +18,10 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/conduitio/conduit/cmd/conduit/internal/output"
+
 	"github.com/conduitio/conduit/cmd/conduit/api"
 	"github.com/conduitio/conduit/cmd/conduit/cecdysis"
-	"github.com/conduitio/conduit/cmd/conduit/internal"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	"github.com/conduitio/ecdysis"
@@ -106,13 +107,13 @@ func displayConnector(out ecdysis.Output, connector *apiv1.Connector, processors
 
 	out.Stdout(fmt.Sprintf("ID: %s\n", connector.Id))
 
-	out.Stdout(fmt.Sprintf("Type: %s\n", internal.ConnectorTypeToString(connector.Type)))
+	out.Stdout(fmt.Sprintf("Type: %s\n", output.ConnectorTypeToString(connector.Type)))
 	out.Stdout(fmt.Sprintf("Plugin: %s\n", connector.Plugin))
 	out.Stdout(fmt.Sprintf("Pipeline ID: %s\n", connector.PipelineId))
 
-	internal.DisplayConnectorConfig(out, connector.Config, 0)
-	out.Stdout(fmt.Sprintf("Created At: %s\n", internal.PrintTime(connector.CreatedAt)))
-	out.Stdout(fmt.Sprintf("Updated At: %s\n", internal.PrintTime(connector.UpdatedAt)))
+	output.DisplayConnectorConfig(out, connector.Config, 0)
+	out.Stdout(fmt.Sprintf("Created At: %s\n", output.PrintTime(connector.CreatedAt)))
+	out.Stdout(fmt.Sprintf("Updated At: %s\n", output.PrintTime(connector.UpdatedAt)))
 
-	internal.DisplayProcessors(out, processors, 0)
+	output.DisplayProcessors(out, processors, 0)
 }

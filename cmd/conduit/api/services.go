@@ -16,6 +16,7 @@ package api
 
 import (
 	"context"
+
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	"google.golang.org/grpc"
 )

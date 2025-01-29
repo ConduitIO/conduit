@@ -18,9 +18,10 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/conduitio/conduit/cmd/conduit/internal/output"
+
 	"github.com/conduitio/conduit/cmd/conduit/api"
 	"github.com/conduitio/conduit/cmd/conduit/cecdysis"
-	"github.com/conduitio/conduit/cmd/conduit/internal"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	"github.com/conduitio/ecdysis"
@@ -90,20 +91,20 @@ func displayProcessor(out ecdysis.Output, p *apiv1.Processor) {
 	out.Stdout(fmt.Sprintf("ID: %s\n", p.Id))
 	out.Stdout(fmt.Sprintf("Plugin: %s\n", p.Plugin))
 
-	out.Stdout(fmt.Sprintf("Parent: %s (%s)\n", internal.ProcessorParentToString(p.Parent.Type), p.Parent.Id))
+	out.Stdout(fmt.Sprintf("Parent: %s (%s)\n", output.ProcessorParentToString(p.Parent.Type), p.Parent.Id))
 
-	if !internal.IsEmpty(p.Condition) {
+	if !output.IsEmpty(p.Condition) {
 		out.Stdout(fmt.Sprintf("Condition: %s\n", p.Condition))
 	}
 
 	if len(p.Config.Settings) > 0 {
 		out.Stdout("Config:\n")
 		for name, value := range p.Config.Settings {
-			out.Stdout(fmt.Sprintf("%s%s: %s\n", internal.Indentation(1), name, value))
+			out.Stdout(fmt.Sprintf("%s%s: %s\n", output.Indentation(1), name, value))
 		}
 	}
 	out.Stdout(fmt.Sprintf("Workers: %d\n", p.Config.Workers))
 
-	out.Stdout(fmt.Sprintf("Created At: %s\n", internal.PrintTime(p.CreatedAt)))
-	out.Stdout(fmt.Sprintf("Updated At: %s\n", internal.PrintTime(p.UpdatedAt)))
+	out.Stdout(fmt.Sprintf("Created At: %s\n", output.PrintTime(p.CreatedAt)))
+	out.Stdout(fmt.Sprintf("Updated At: %s\n", output.PrintTime(p.UpdatedAt)))
 }

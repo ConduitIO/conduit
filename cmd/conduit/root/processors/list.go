@@ -19,10 +19,11 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/conduitio/conduit/cmd/conduit/internal/output"
+
 	"github.com/alexeyco/simpletable"
 	"github.com/conduitio/conduit/cmd/conduit/api"
 	"github.com/conduitio/conduit/cmd/conduit/cecdysis"
-	"github.com/conduitio/conduit/cmd/conduit/internal"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	"github.com/conduitio/ecdysis"
 )
@@ -82,14 +83,14 @@ func displayProcessors(processors []*apiv1.Processor) {
 	}
 
 	for _, p := range processors {
-		processorParent := fmt.Sprintf("%s (%s)", internal.ProcessorParentToString(p.Parent.Type), p.Parent.Id)
+		processorParent := fmt.Sprintf("%s (%s)", output.ProcessorParentToString(p.Parent.Type), p.Parent.Id)
 		r := []*simpletable.Cell{
 			{Align: simpletable.AlignLeft, Text: p.Id},
 			{Align: simpletable.AlignLeft, Text: p.Plugin},
 			{Align: simpletable.AlignLeft, Text: processorParent},
 			{Align: simpletable.AlignLeft, Text: p.Condition},
-			{Align: simpletable.AlignLeft, Text: internal.PrintTime(p.CreatedAt)},
-			{Align: simpletable.AlignLeft, Text: internal.PrintTime(p.UpdatedAt)},
+			{Align: simpletable.AlignLeft, Text: output.PrintTime(p.CreatedAt)},
+			{Align: simpletable.AlignLeft, Text: output.PrintTime(p.UpdatedAt)},
 		}
 
 		table.Body.Cells = append(table.Body.Cells, r)
