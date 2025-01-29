@@ -16,12 +16,12 @@ package internal
 
 import (
 	"fmt"
-	"github.com/conduitio/ecdysis"
 	"strings"
 
 	"github.com/alexeyco/simpletable"
 	configv1 "github.com/conduitio/conduit-commons/proto/config/v1"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
+	"github.com/conduitio/ecdysis"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 

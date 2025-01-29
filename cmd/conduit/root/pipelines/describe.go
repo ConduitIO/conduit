@@ -17,6 +17,7 @@ package pipelines
 import (
 	"context"
 	"fmt"
+
 	"github.com/conduitio/conduit/cmd/conduit/api"
 	"github.com/conduitio/conduit/cmd/conduit/cecdysis"
 	"github.com/conduitio/conduit/cmd/conduit/internal"
